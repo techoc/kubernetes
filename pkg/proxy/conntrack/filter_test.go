@@ -26,7 +26,11 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestFlowFilter 验证 flowFilter 只匹配过滤器中已存在的连接，
+// 覆盖命中、未命中以及空连接与具体过滤器不匹配三种场景。
 func TestFlowFilter(t *testing.T) {
+	// 这里只构造 Forward 元组：flowKey 会把缺失的 Reverse 字段按零值编码，
+	// 足以验证基本的匹配/不匹配逻辑。
 	flow1 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			SrcIP:    netutils.ParseIPSloppy("1.1.1.1"),
@@ -81,6 +85,7 @@ func TestFlowFilter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFlowFilter(tc.filterFlows)
 			match := f.MatchConntrackFlow(tc.matchFlow)
+			// 断言实际匹配结果与用例期望一致，防止过滤集合的键编码出现偏差。
 			if match != tc.expectedMatch {
 				t.Errorf("MatchConntrackFlow() = %v, want %v", match, tc.expectedMatch)
 			}
@@ -88,7 +93,11 @@ func TestFlowFilter(t *testing.T) {
 	}
 }
 
+// TestFlowFilter_Exhaustive 在正反向元组都填充的场景下验证 flowFilter，
+// 额外覆盖过滤器自身也为空连接时应当命中的情形。
 func TestFlowFilter_Exhaustive(t *testing.T) {
+	// 正反向元组都填充，模拟真实的 conntrack 连接；
+	// 这样可以验证 flowKey 同时考虑两个方向的地址与端口。
 	flow1 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			SrcIP:    netutils.ParseIPSloppy("1.1.1.1"),
@@ -155,6 +164,7 @@ func TestFlowFilter_Exhaustive(t *testing.T) {
 			expectedMatch: false,
 		},
 		{
+			// 两边都是零值连接时键相同也必须命中，验证编码不依赖具体地址值。
 			name:          "Match empty flow if filter has empty flow",
 			filterFlows:   []*netlink.ConntrackFlow{flowEmpty},
 			matchFlow:     flowEmpty,

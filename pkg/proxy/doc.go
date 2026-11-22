@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package proxy implements the layer-3 network proxy.
+// Package proxy 实现三层（L3）网络代理。
 package proxy

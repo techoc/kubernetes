@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package scheme 提供 kube-proxy 配置 API 的 Scheme 与 Codecs，
+// 集中完成内部版本与外部版本的注册，供序列化、默认值和校验流程共用。
 package scheme
 
 import (
@@ -25,18 +27,22 @@ import (
 )
 
 var (
-	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 定义了 API 对象的序列化与反序列化方法。
 	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
+	// Codecs 提供了获取特定版本和内容类型的 codec 与 serializer 的方法。
+	// 启用严格模式可避免解码时静默丢弃未知字段。
 	Codecs = serializer.NewCodecFactory(Scheme, serializer.EnableStrict)
 )
 
+// init 在包初始化时注册全部类型，确保直接使用 Scheme/Codecs 的调用方无需显式初始化。
 func init() {
+	// 包初始化时即注册全部类型，确保直接使用 Scheme/Codecs 的调用方无需显式初始化。
 	AddToScheme(Scheme)
 }
 
-// AddToScheme adds the types of this group into the given scheme.
+// AddToScheme 将该 API 组的类型注册到给定的 scheme 中。
+// 同时注册外部版本（v1alpha1）和内部版本，以支持两者之间的转换、默认值与序列化；
+// utilruntime.Must 保证注册失败时立即 panic，避免出现“看似正常但类型缺失”的 scheme。
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(kubeproxyconfigv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kubeproxyconfig.AddToScheme(scheme))

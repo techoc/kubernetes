@@ -34,20 +34,21 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/metrics"
 )
 
-// Kubernetes UDP services can be affected by stale conntrack entries.
-// These entries may point to endpoints that no longer exist,
-// leading to packet loss and connectivity problems.
+// Kubernetes UDP 服务可能受到过期 conntrack 条目的影响：
+// 这些条目可能指向已不存在的端点，导致丢包和连接问题。
 
-// CleanStaleEntries scans conntrack table and removes any entries
-// for a service that do not correspond to a serving endpoint.
-// List existing conntrack entries and calculate the desired conntrack state
-// based on the current Services and Endpoints.
+// CleanStaleEntries 扫描 conntrack 表，清理那些服务对应的、
+// 与当前 serving 端点不符的条目。它先列出现有的 conntrack 条目，
+// 再根据当前的 Service 和 Endpoints 计算期望的 conntrack 状态。
 func CleanStaleEntries(ct Interface, ipFamily v1.IPFamily,
 	svcPortMap proxy.ServicePortMap, endpointsMap proxy.EndpointsMap) {
 
+	// 记录耗时用于观测指标，也便于故障排查时评估清理开销。
 	start := time.Now()
 	klog.V(4).InfoS("Started to reconcile conntrack entries", "ipFamily", ipFamily)
 
+	// 遍历可能返回部分结果：EINTR 表示列举被信号中断，
+	// 此时仍用已拿到的部分结果继续清理，避免遗留过期条目。
 	entries, err := ct.ListEntries(ipFamilyMap[ipFamily])
 	if err != nil {
 		if errors.Is(err, unix.EINTR) {
@@ -58,97 +59,87 @@ func CleanStaleEntries(ct Interface, ipFamily v1.IPFamily,
 		}
 	}
 
-	// serviceIPEndpoints maps service IPs (ClusterIP, LoadBalancerIPs and ExternalIPs) and Service Port
-	// to the set of serving endpoints (Endpoint IP and Port).
+	// serviceIPEndpoints 将服务 IP（ClusterIP、LoadBalancerIP、ExternalIP）与服务端口
+	// 映射到 serving 端点（端点 IP 和端口）的集合。
 	serviceIPEndpoints := make(map[string]sets.Set[string])
-	// serviceNodePortEndpoints maps service NodePort to the set of serving endpoints  (Endpoint IP and Port).
+	// serviceNodePortEndpoints 将服务的 NodePort 映射到 serving 端点（端点 IP 和端口）的集合。
 	serviceNodePortEndpoints := make(map[int]sets.Set[string])
 
 	for svcName, svc := range svcPortMap {
-		// we are only interested in UDP services
+		// TCP 有连接状态可感知端点变化，只有 UDP 需要靠 conntrack 清理。
 		if svc.Protocol() != v1.ProtocolUDP {
 			continue
 		}
 
 		endpoints := sets.New[string]()
 		for _, endpoint := range endpointsMap[svcName] {
-			// We need to remove all the conntrack entries for a Service (IP or NodePort)
-			// that are not pointing to a serving endpoint.
-			// We map all the serving endpoints of the service and clear all the conntrack
-			// entries which are destined for the service and are not DNATed to these endpoints.
-			// Changes to the service should not affect existing flows, so we do not take
-			// traffic policies, topology, or terminating status of the service into account.
-			// This ensures that the behavior of UDP services remains consistent with TCP
-			// services.
+			// 需要清理服务（IP 或 NodePort）对应的所有未指向 serving 端点的 conntrack 条目：
+			// 收集所有 serving 端点，并清除那些目标是该服务、但 DNAT 后不指向这些端点的条目。
+			// 服务的配置变化不应影响已有连接，因此这里不考虑流量策略、拓扑或端点的
+			// terminating 状态，以保证 UDP 服务的行为与 TCP 服务一致。
 			if endpoint.IsServing() {
 				portStr := strconv.Itoa(int(endpoint.Port()))
 				endpoints.Insert(net.JoinHostPort(endpoint.IP(), portStr))
 			}
 		}
 
-		// Note: a Service without any serving endpoints is processed too, with an
-		// empty endpoints set, so that all the existing entries directed to its
-		// frontends are removed. The REJECT (iptables) / reject (nftables) rule
-		// installed for a Service with no endpoints does not cover the previously
-		// established flows: those are DNATed to the (deleted) endpoint IP before
-		// the reject rule, which matches on the Service IP, can be evaluated.
-		// One-way UDP flows (e.g. statsd) refresh the conntrack entry timeout with
-		// every packet, so without this cleanup they keep sending traffic to the
-		// deleted endpoint IP indefinitely.
+		// 注意：即使服务没有任何 serving 端点，也会以空端点集合参与处理，
+		// 从而清理指向其前端的所有已有条目。无端点服务安装的 REJECT（iptables）/
+		// reject（nftables）规则无法覆盖此前已建立的连接：这些连接在匹配服务 IP 的
+		// reject 规则生效之前就已被 DNAT 到（已删除的）端点 IP。单向 UDP 流
+		// （如 statsd）每个包都会刷新 conntrack 超时，若不清理就会一直向已删除的
+		// 端点 IP 发送流量。
 
-		// we need to filter entries that are directed to a Service IP:Port frontend
-		// that does not have an Endpoint IP:Port backend as part of the serving endpoints
+		// 需要筛出目标是服务 IP:Port 前端、但其后端不属于 serving 端点的条目。
 		portStr := strconv.Itoa(svc.Port())
-		// clusterIP:Port
+		// ClusterIP:Port 前端。
 		serviceIPEndpoints[net.JoinHostPort(svc.ClusterIP().String(), portStr)] = endpoints
-		// loadbalancerIP:Port
+		// LoadBalancerIP:Port 前端。
 		for _, loadBalancerIP := range svc.LoadBalancerVIPs() {
 			serviceIPEndpoints[net.JoinHostPort(loadBalancerIP.String(), portStr)] = endpoints
 		}
-		// externalIP:Port
+		// ExternalIP:Port 前端。
 		for _, externalIP := range svc.ExternalIPs() {
 			serviceIPEndpoints[net.JoinHostPort(externalIP.String(), portStr)] = endpoints
 		}
-		// we need to filter entries that are directed to a *:NodePort that does not have
-		// an Endpoint IP:Port backend as part of the serving endpoints.
-		// NodePort entries are matched on the destination port only, so with an
-		// empty endpoints set every UDP flow towards that port number would be
-		// removed, including flows not owned by kube-proxy (e.g. traffic to an
-		// unrelated host on the same port). Skip NodePort cleanup for services
-		// without serving endpoints until the match can be restricted to node IPs.
+		// 需要筛出目标是 *:NodePort、但后端不属于 serving 端点的条目。
+		// NodePort 条目只按目的端口匹配，若端点集合为空，则会删除该端口上的
+		// 所有 UDP 流，包括不属于 kube-proxy 的流量（例如访问同端口上无关主机的
+		// 流量）。因此在能够把匹配范围限定到节点 IP 之前，对无 serving 端点的
+		// 服务跳过 NodePort 清理。
 		if svc.NodePort() != 0 && endpoints.Len() > 0 {
-			// *:NodePort
+			// *:NodePort 前端。
 			serviceNodePortEndpoints[svc.NodePort()] = endpoints
 		}
 	}
 
 	var flows []*netlink.ConntrackFlow
 	for _, entry := range entries {
-		// we only deal with UDP protocol entries
+		// 只处理 UDP 协议的 conntrack 条目。
 		if entry.Forward.Protocol != unix.IPPROTO_UDP {
 			continue
 		}
 
-		origDst := entry.Forward.DstIP.String()   // match Service IP
-		origPortDst := int(entry.Forward.DstPort) // match Service Port
+		origDst := entry.Forward.DstIP.String()   // 匹配服务 IP
+		origPortDst := int(entry.Forward.DstPort) // 匹配服务端口
 		origPortDstStr := strconv.Itoa(origPortDst)
-		replySrc := entry.Reverse.SrcIP.String()   // match Serving Endpoint IP
-		replyPortSrc := int(entry.Reverse.SrcPort) // match Serving Endpoint Port
+		replySrc := entry.Reverse.SrcIP.String()   // 匹配 serving 端点 IP
+		replyPortSrc := int(entry.Reverse.SrcPort) // 匹配 serving 端点端口
 		replyPortSrcStr := strconv.Itoa(replyPortSrc)
 
-		// if the original destination (--orig-dst) of the entry is service IP (ClusterIP,
-		// LoadBalancerIPs or ExternalIPs) and (--orig-port-dst) is service Port and
-		// the reply source IP (--reply-src) and port (--reply-port-src) does not
-		// represent a serving endpoint of the service, we clear the entry.
+		// 若条目的原始目的地址（--orig-dst）是服务 IP（ClusterIP、LoadBalancerIP
+		// 或 ExternalIP）、原始目的端口（--orig-port-dst）是服务端口，而响应源 IP
+		// （--reply-src）和端口（--reply-port-src）不属于该服务的 serving 端点，
+		// 则清理该条目。
 		endpoints, ok := serviceIPEndpoints[net.JoinHostPort(origDst, origPortDstStr)]
 		if ok && !endpoints.Has(net.JoinHostPort(replySrc, replyPortSrcStr)) {
 			flows = append(flows, entry)
 			continue
 		}
 
-		// if the original destination port (--orig-port-dst) of the entry is service
-		// NodePort and the reply source IP (--reply-src) and port (--reply-port-src)
-		// does not represent a serving endpoint of the service, we clear the entry.
+		// 若条目的原始目的端口（--orig-port-dst）是服务 NodePort，而响应源 IP
+		// （--reply-src）和端口（--reply-port-src）不属于该服务的 serving 端点，
+		// 则清理该条目。
 		endpoints, ok = serviceNodePortEndpoints[origPortDst]
 		if ok && !endpoints.Has(net.JoinHostPort(replySrc, replyPortSrcStr)) {
 			flows = append(flows, entry)
@@ -166,7 +157,7 @@ func CleanStaleEntries(ct Interface, ipFamily v1.IPFamily,
 	metrics.ReconcileConntrackFlowsDeletedEntriesTotal.WithLabelValues(string(ipFamily)).Add(float64(n))
 }
 
-// ipFamilyMap maps v1.IPFamily to the corresponding unix constant.
+// ipFamilyMap 将 v1.IPFamily 映射到对应的 unix 地址族常量。
 var ipFamilyMap = map[v1.IPFamily]uint8{
 	v1.IPv4Protocol: unix.AF_INET,
 	v1.IPv6Protocol: unix.AF_INET6,

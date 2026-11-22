@@ -18,46 +18,45 @@ limitations under the License.
 
 package ipset
 
-// Type represents the ipset type
+// Type 表示 ipset 集合的类型。
 type Type string
 
 const (
-	// HashIPPort represents the `hash:ip,port` type ipset.  The hash:ip,port is similar to hash:ip but
-	// you can store IP address and protocol-port pairs in it.  TCP, SCTP, UDP, UDPLITE, ICMP and ICMPv6 are supported
-	// with port numbers/ICMP(v6) types and other protocol numbers without port information.
+	// HashIPPort 表示 `hash:ip,port` 类型的 ipset。它与 hash:ip 类似，
+	// 但可存放 IP 地址与"协议-端口"的组合。支持带端口号的 TCP、SCTP、UDP、UDPLITE、ICMP 和 ICMPv6，
+	// 也支持 ICMP(v6) 类型，其他协议号则不带端口信息。
 	HashIPPort Type = "hash:ip,port"
-	// HashIPPortIP represents the `hash:ip,port,ip` type ipset.  The hash:ip,port,ip set type uses a hash to store
-	// IP address, port number and a second IP address triples.  The port number is interpreted together with a
-	// protocol (default TCP) and zero protocol number cannot be used.
+	// HashIPPortIP 表示 `hash:ip,port,ip` 类型的 ipset。它用哈希表存放
+	// IP 地址、端口号和第二个 IP 地址组成的三元组。端口号需与协议（默认 TCP）一起解释，且协议号不能为 0。
 	HashIPPortIP Type = "hash:ip,port,ip"
-	// HashIPPortNet represents the `hash:ip,port,net` type ipset.  The hash:ip,port,net set type uses a hash to store IP address, port number and IP network address triples.  The port
-	// number is interpreted together with a protocol (default TCP) and zero protocol number cannot be used.   Network address
-	// with zero prefix size cannot be stored either.
+	// HashIPPortNet 表示 `hash:ip,port,net` 类型的 ipset。它用哈希表存放
+	// IP 地址、端口号和 IP 网段组成的三元组。端口号需与协议（默认 TCP）一起解释，协议号不能为 0；
+	// 前缀长度为 0 的网络地址同样无法存入。
 	HashIPPortNet Type = "hash:ip,port,net"
-	// BitmapPort represents the `bitmap:port` type ipset.  The bitmap:port set type uses a memory range, where each bit
-	// represents one TCP/UDP port.  A bitmap:port type of set can store up to 65535 ports.
+	// BitmapPort 表示 `bitmap:port` 类型的 ipset。它用一段连续内存存放位图，每个 bit 代表一个 TCP/UDP 端口，
+	// 最多可存储 65535 个端口。
 	BitmapPort Type = "bitmap:port"
-	// HashIP represents the `hash:ip` type ipset.
+	// HashIP 表示 `hash:ip` 类型的 ipset。
 	HashIP Type = "hash:ip"
 )
 
-// DefaultPortRange defines the default bitmap:port valid port range.
+// DefaultPortRange 定义 bitmap:port 集合默认的有效端口范围。
 const DefaultPortRange string = "0-65535"
 
 const (
-	// ProtocolFamilyIPV4 represents IPv4 protocol.
+	// ProtocolFamilyIPV4 表示 IPv4 协议族。
 	ProtocolFamilyIPV4 = "inet"
-	// ProtocolFamilyIPV6 represents IPv6 protocol.
+	// ProtocolFamilyIPV6 表示 IPv6 协议族。
 	ProtocolFamilyIPV6 = "inet6"
-	// ProtocolTCP represents TCP protocol.
+	// ProtocolTCP 表示 TCP 协议。
 	ProtocolTCP = "tcp"
-	// ProtocolUDP represents UDP protocol.
+	// ProtocolUDP 表示 UDP 协议。
 	ProtocolUDP = "udp"
-	// ProtocolSCTP represents SCTP protocol.
+	// ProtocolSCTP 表示 SCTP 协议。
 	ProtocolSCTP = "sctp"
 )
 
-// ValidIPSetTypes defines the supported ip set type.
+// ValidIPSetTypes 列出当前支持的 ipset 类型。
 var ValidIPSetTypes = []Type{
 	HashIPPort,
 	HashIPPortIP,

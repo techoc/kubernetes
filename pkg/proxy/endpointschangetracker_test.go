@@ -30,28 +30,37 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// addEndpointSlice 直接向变更跟踪器提交一个 EndpointSlice 的新增（remove=false）。
+// 通过 FakeProxier 转发，让测试无需关心跟踪器的具体调用方式。
 func (proxier *FakeProxier) addEndpointSlice(slice *discovery.EndpointSlice) {
 	proxier.endpointsChanges.EndpointSliceUpdate(slice, false)
 }
 
+// updateEndpointSlice 模拟 EndpointSlice 的更新。
+// 跟踪器按名字缓存 slice，因此 oldSlice 仅体现调用方语义，实际提交的仍是新 slice。
 func (proxier *FakeProxier) updateEndpointSlice(oldSlice, slice *discovery.EndpointSlice) {
 	proxier.endpointsChanges.EndpointSliceUpdate(slice, false)
 }
 
+// deleteEndpointSlice 向变更跟踪器提交一次 EndpointSlice 删除（remove=true）。
+// 删除与新增走同一更新入口，仅由 remove 标志区分。
 func (proxier *FakeProxier) deleteEndpointSlice(slice *discovery.EndpointSlice) {
 	proxier.endpointsChanges.EndpointSliceUpdate(slice, true)
 }
 
+// TestGetLocalEndpointIPs 验证 getLocalReadyEndpointIPs 能按服务聚合本机就绪端点的 IP。
+// 覆盖空映射、未命名端口、多端口去重、多服务以及未就绪/终止端点被排除等场景；
+// 同一 IP 出现在多个端口时只应计入一次，因此结果用集合表示。
 func TestGetLocalEndpointIPs(t *testing.T) {
 	testCases := []struct {
 		endpointsMap EndpointsMap
 		expected     map[types.NamespacedName]sets.Set[string]
 	}{{
-		// Case[0]: nothing
+		// 用例[0]：空映射，结果应为空。
 		endpointsMap: EndpointsMap{},
 		expected:     map[types.NamespacedName]sets.Set[string]{},
 	}, {
-		// Case[1]: unnamed port
+		// 用例[1]：未命名端口，且端点不在本机，结果应为空。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: false, ready: true, serving: true, terminating: false},
@@ -59,7 +68,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 		},
 		expected: map[types.NamespacedName]sets.Set[string]{},
 	}, {
-		// Case[2]: unnamed port local
+		// 用例[2]：未命名端口的端点在本机，应返回其 IP。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: true, ready: true, serving: true, terminating: false},
@@ -69,7 +78,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 			{Namespace: "ns1", Name: "ep1"}: sets.New[string]("1.1.1.1"),
 		},
 	}, {
-		// Case[3]: named local and non-local ports for the same IP.
+		// 用例[3]：同一服务下两个命名端口，分别含非本机与本机端点，应只返回本机 IP。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "p11", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: false, ready: true, serving: true, terminating: false},
@@ -84,7 +93,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 			{Namespace: "ns1", Name: "ep1"}: sets.New[string]("1.1.1.2"),
 		},
 	}, {
-		// Case[4]: named local and non-local ports for different IPs.
+		// 用例[4]：多命名端口、多 IP、多服务混合，逐服务聚合本机 IP，并排除非本机端点。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "p11", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: false, ready: true, serving: true, terminating: false},
@@ -109,7 +118,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 			{Namespace: "ns4", Name: "ep4"}: sets.New[string]("4.4.4.4", "4.4.4.6"),
 		},
 	}, {
-		// Case[5]: named local and non-local ports for different IPs, some not ready.
+		// 用例[5]：在上例基础上加入未就绪且正在终止的端点，验证这类端点不会计入本机就绪 IP。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "p11", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: false, ready: true, serving: true, terminating: false},
@@ -134,7 +143,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 			{Namespace: "ns4", Name: "ep4"}: sets.New[string]("4.4.4.4", "4.4.4.6"),
 		},
 	}, {
-		// Case[6]: all endpoints are terminating,, so getLocalReadyEndpointIPs should return 0 ready endpoints
+		// 用例[6]：所有端点都在终止中，因此不应返回任何本机就绪 IP。
 		endpointsMap: EndpointsMap{
 			makeServicePortName("ns1", "ep1", "p11", v1.ProtocolTCP): []Endpoint{
 				&BaseEndpointInfo{ip: "1.1.1.1", port: 11, endpoint: "1.1.1.1:11", isLocal: false, ready: false, serving: true, terminating: true},
@@ -158,7 +167,7 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 	}}
 
 	for tci, tc := range testCases {
-		// outputs
+		// 执行被测函数并比对期望结果。
 		localIPs := tc.endpointsMap.getLocalReadyEndpointIPs()
 
 		if !reflect.DeepEqual(localIPs, tc.expected) {
@@ -167,6 +176,9 @@ func TestGetLocalEndpointIPs(t *testing.T) {
 	}
 }
 
+// makeTestEndpointSlice 构造一个最小可用的 EndpointSlice 测试夹具：
+// 用 name 和序号拼出唯一名字，打上服务名标签并指定 IPv4 地址类型；
+// epsFunc 让每个用例只填充自己关心的端点/端口字段，避免重复样板代码。
 func makeTestEndpointSlice(namespace, name string, slice int, epsFunc func(*discovery.EndpointSlice)) *discovery.EndpointSlice {
 	eps := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -183,6 +195,10 @@ func makeTestEndpointSlice(namespace, name string, slice int, epsFunc func(*disc
 	return eps
 }
 
+// TestUpdateEndpointsMap 是端点映射增量更新的主表驱动测试。
+// 对每个用例先把此前的 EndpointSlice 灌入缓存并断言初始映射正确（否则后续差异无法归因），
+// 再按 nil 与否调用新增/删除/更新处理器，最后同时校验：结果映射、变更服务集合、
+// 是否需要清理 conntrack，以及本机就绪端点计数。
 func TestUpdateEndpointsMap(t *testing.T) {
 	emptyEndpoint := func(eps *discovery.EndpointSlice) {
 		eps.Endpoints = []discovery.Endpoint{}
@@ -522,9 +538,9 @@ func TestUpdateEndpointsMap(t *testing.T) {
 	}
 
 	testCases := []struct {
-		// previousEndpointSlices and currentEndpointSlices are used to call appropriate
-		// handlers OnEndpointSlice* (based on whether corresponding values are nil
-		// or non-nil) and must be of equal length.
+		// previousEndpointSlices 与 currentEndpointSlices 按位置成对使用，
+		// 根据同一位置的值是否为 nil 决定调用哪个 OnEndpointSlice* 处理器，
+		// 两者长度必须相等；nil/nil 表示无变化，nil/非 nil 表示新增，非 nil/nil 表示删除。
 		name                             string
 		previousEndpointSlices           []*discovery.EndpointSlice
 		currentEndpointSlices            []*discovery.EndpointSlice
@@ -1036,19 +1052,24 @@ func TestUpdateEndpointsMap(t *testing.T) {
 
 	for tci, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用零值时间启动跟踪器：早于该时间的注解事件应被忽略，
+			// 避免历史事件污染 triggerTime 断言。
 			fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
-			// First check that after adding all previous versions of endpoints,
-			// the fp.previousEndpointsMap is as we expect.
+			// 先灌入全部旧版 slice，确认初始映射与用例声明一致；
+			// 否则后续观察到的差异可能来自初始状态而非本次更新。
 			for i := range tc.previousEndpointSlices {
 				if tc.previousEndpointSlices[i] != nil {
 					fp.addEndpointSlice(tc.previousEndpointSlices[i])
 				}
 			}
+			// 先消费一次更新，建立“旧状态”基线；
+			// 后面的差异才能确定来自本次 slice 变更。
 			fp.endpointsMap.Update(fp.endpointsChanges)
 			compareEndpointsMapsStr(t, fp.endpointsMap, tc.previousEndpointsMap)
 
-			// Now let's call appropriate handlers to get to state we want to be.
+			// 随后按位置调用对应的增/删/改处理器，把状态推进到目标状态。
+			// 两个切片必须按位置配对，否则无法判断每个位置是新增、删除还是更新。
 			if len(tc.previousEndpointSlices) != len(tc.currentEndpointSlices) {
 				t.Fatalf("[%d] different lengths of previous and current endpoints", tci)
 				return
@@ -1057,6 +1078,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			for i := range tc.previousEndpointSlices {
 				prev, curr := tc.previousEndpointSlices[i], tc.currentEndpointSlices[i]
 				switch {
+				// 两侧都为 nil 表示这个位置没有 slice，跳过即可。
 				case prev == nil && curr == nil:
 					continue
 				case prev == nil:
@@ -1071,12 +1093,15 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			result := fp.endpointsMap.Update(fp.endpointsChanges)
 			newMap := fp.endpointsMap
 			compareEndpointsMapsStr(t, newMap, tc.expectedResult)
+			// 变更服务集合决定是否触发代理刷新，必须精确匹配，不能多报也不能漏报。
 			if !result.UpdatedServices.Equal(tc.expectedChangedEndpoints) {
 				t.Errorf("[%d] expected changed endpoints %q, got %q", tci, tc.expectedChangedEndpoints.UnsortedList(), result.UpdatedServices.UnsortedList())
 			}
+			// conntrack 清理是昂贵的副作用，端点变化时不应误报也不应漏报。
 			if result.ConntrackCleanupRequired != tc.expectedConntrackCleanupRequired {
 				t.Errorf("[%d] expected conntrackCleanupRequired to be %t, got %t", tci, tc.expectedConntrackCleanupRequired, result.ConntrackCleanupRequired)
 			}
+			// 本机就绪端点计数用于 topology aware routing，需单独校验。
 			localReadyEndpoints := fp.endpointsMap.LocalReadyEndpoints()
 			if !reflect.DeepEqual(localReadyEndpoints, tc.expectedLocalEndpoints) {
 				t.Errorf("[%d] expected local ready endpoints %v, got %v", tci, tc.expectedLocalEndpoints, localReadyEndpoints)
@@ -1085,6 +1110,10 @@ func TestUpdateEndpointsMap(t *testing.T) {
 	}
 }
 
+// TestLastChangeTriggerTime 验证 EndpointsMap.Update 能从带注解的 EndpointSlice 中提取
+// 最后变更触发时间，并按服务分别记录时间列表。
+// 覆盖仅新增、新增后更新、多服务独立记录、缺少注解、早于跟踪器启动的旧事件、
+// 增删抵消以及删除后重新新增等情形。
 func TestLastChangeTriggerTime(t *testing.T) {
 	startTime := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
 	t_1 := startTime.Add(-time.Second)
@@ -1093,6 +1122,8 @@ func TestLastChangeTriggerTime(t *testing.T) {
 	t2 := t1.Add(time.Second)
 	t3 := t2.Add(time.Second)
 
+	// 构造带 LastChangeTriggerTime 注解的 slice，注解值按 RFC3339Nano 格式化，
+	// 与生产代码中 EndpointSlice 的注解格式保持一致。
 	createEndpoints := func(namespace, name string, triggerTime time.Time) *discovery.EndpointSlice {
 		return &discovery.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1121,6 +1152,8 @@ func TestLastChangeTriggerTime(t *testing.T) {
 		return types.NamespacedName{Namespace: namespace, Name: name}
 	}
 
+	// 深拷贝后修改端口并刷新触发时间，模拟一次真实的端点更新；
+	// 端口变化确保更新本身是可被检测到的。
 	modifyEndpoints := func(slice *discovery.EndpointSlice, triggerTime time.Time) *discovery.EndpointSlice {
 		e := slice.DeepCopy()
 		(*e.Ports[0].Port)++
@@ -1214,6 +1247,7 @@ func TestLastChangeTriggerTime(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 用固定 startTime 启动，保证“早于启动时间”的触发时间能被稳定识别。
 		fp := newFakeProxier(v1.IPv4Protocol, startTime)
 
 		tc.scenario(fp)
@@ -1228,7 +1262,11 @@ func TestLastChangeTriggerTime(t *testing.T) {
 	}
 }
 
+// TestEndpointSliceUpdate 直接测试 EndpointsChangeTracker.EndpointSliceUpdate：
+// 校验对空状态新增、重复新增、非法地址类型、部分重叠的新增/删除、就绪状态迁移等场景
+// 的返回值（是否产生变更）以及 checkoutChanges 得到的前后映射。
 func TestEndpointSliceUpdate(t *testing.T) {
+	// 把地址类型改为 FQDN，用于验证 IPv4 跟踪器会忽略不匹配的 slice。
 	fqdnSlice := generateEndpointSlice("svc1", "ns1", 2, 5, 999, 999, []string{"host1"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)})
 	fqdnSlice.AddressType = discovery.AddressTypeFQDN
 
@@ -1241,7 +1279,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 		expectedReturnVal      bool
 		expectedCurrentChange  map[ServicePortName][]*BaseEndpointInfo
 	}{
-		// test starting from an empty state
+		// 从空状态开始：加入一个尚不存在的简单 slice 应产生变更。
 		"add a simple slice that doesn't already exist": {
 			startingSlices:         []*discovery.EndpointSlice{},
 			endpointsChangeTracker: NewEndpointsChangeTracker(v1.IPv4Protocol, "host1", nil, nil),
@@ -1262,7 +1300,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// test no modification to state - current change should be nil as nothing changes
+		// 重复加入已有 slice 属于无变化，current 变更应为 nil。
 		"add the same slice that already exists": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1274,7 +1312,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 			expectedReturnVal:      false,
 			expectedCurrentChange:  nil,
 		},
-		// ensure that only valide address types are processed
+		// IPv4 跟踪器应忽略 FQDN 类型的 slice，确保只处理有效地址类型。
 		"add an FQDN slice (invalid address type)": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1286,7 +1324,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 			expectedReturnVal:      false,
 			expectedCurrentChange:  nil,
 		},
-		// test additions to existing state
+		// 向已有状态加入与现有 slice 部分重叠的新 slice，验证端点按 IP 合并。
 		"add a slice that overlaps with existing state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1318,7 +1356,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// test additions to existing state with partially overlapping slices and ports
+		// slice 与端口都部分重叠时，仅在对应端口上补齐端点，其余端口保持原值。
 		"add a slice that overlaps with existing state and partial ports": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1348,7 +1386,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// test deletions from existing state with partially overlapping slices and ports
+		// 删除与现有状态部分重叠的 slice：只移除该 slice 贡献的端点，保留其他 slice 的端点。
 		"remove a slice that overlaps with existing state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1370,7 +1408,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// ensure a removal that has no effect turns into a no-op
+		// 删除一个根本不存在的 slice 应是无操作，不产生变更。
 		"remove a slice that doesn't even exist in current state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 5, 999, 999, []string{"host1"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1383,7 +1421,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 			expectedReturnVal:      false,
 			expectedCurrentChange:  nil,
 		},
-		// start with all endpoints ready, transition to no endpoints ready
+		// 从全部就绪迁移到全部未就绪，验证 ready/serving 标志变化会被报告。
 		"transition all endpoints to unready state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 999, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1406,7 +1444,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// start with no endpoints ready, transition to all endpoints ready
+		// 从全部未就绪迁移到全部就绪，验证状态恢复同样被报告。
 		"transition all endpoints to ready state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 2, 1, 999, []string{"host1", "host2"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1427,7 +1465,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// start with some endpoints ready, transition to more endpoints ready
+		// 从部分就绪迁移到更多就绪，验证只有状态变化的端点被更新。
 		"transition some endpoints to ready state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 2, 999, []string{"host1"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1455,7 +1493,7 @@ func TestEndpointSliceUpdate(t *testing.T) {
 				},
 			},
 		},
-		// start with some endpoints ready, transition to some terminating
+		// 从部分就绪迁移到部分终止，验证 terminating 与 ready/serving 标志的组合正确。
 		"transition some endpoints to terminating state": {
 			startingSlices: []*discovery.EndpointSlice{
 				generateEndpointSlice("svc1", "ns1", 1, 3, 2, 2, []string{"host1"}, []*int32{ptr.To[int32](80), ptr.To[int32](443)}),
@@ -1487,13 +1525,16 @@ func TestEndpointSliceUpdate(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 先把起始 slice 提升为已应用状态，确保之前的操作不会混入本次变更。
 			initializeCache(tc.endpointsChangeTracker.endpointSliceCache, tc.startingSlices)
 
+			// 被测调用：返回值表示这次更新是否真的改变了跟踪器状态。
 			got := tc.endpointsChangeTracker.EndpointSliceUpdate(tc.paramEndpointSlice, tc.paramRemoveSlice)
 			if !reflect.DeepEqual(got, tc.expectedReturnVal) {
 				t.Errorf("EndpointSliceUpdate return value got: %v, want %v", got, tc.expectedReturnVal)
 			}
 
+			// 取出由 pendingSlices 产生的变更，校验其 previous/current 映射。
 			changes := tc.endpointsChangeTracker.checkoutChanges()
 			if tc.expectedCurrentChange == nil {
 				if len(changes) != 0 {
@@ -1509,6 +1550,9 @@ func TestEndpointSliceUpdate(t *testing.T) {
 	}
 }
 
+// TestCheckoutChanges 验证 checkoutChanges 的行为：
+// 先应用一批 slice 并取出（清空）变更，再提交待处理 slice，
+// 确认第二次取出时只得到以已应用状态为 previous、新提交状态为 current 的变更记录。
 func TestCheckoutChanges(t *testing.T) {
 	svcPortName0 := ServicePortName{types.NamespacedName{Namespace: "ns1", Name: "svc1"}, "port-0", v1.ProtocolTCP}
 	svcPortName1 := ServicePortName{types.NamespacedName{Namespace: "ns1", Name: "svc1"}, "port-1", v1.ProtocolTCP}
@@ -1580,6 +1624,8 @@ func TestCheckoutChanges(t *testing.T) {
 			for _, slice := range tc.appliedSlices {
 				tc.endpointsChangeTracker.EndpointSliceUpdate(slice, false)
 			}
+			// 先取出并清空上一批 slice 产生的变更，
+			// 这样下一次 checkout 只包含 pendingSlices 引入的新变化。
 			tc.endpointsChangeTracker.checkoutChanges()
 			for _, slice := range tc.pendingSlices {
 				tc.endpointsChangeTracker.EndpointSliceUpdate(slice, false)
@@ -1591,8 +1637,8 @@ func TestCheckoutChanges(t *testing.T) {
 			}
 
 			for _, change := range changes {
-				// All of the test cases have 0 or 1 changes, so if we're
-				// here, then expectedChanges[0] is what we expect.
+				// 所有用例最多只有一个服务的变更，因此只要进入循环，
+				// 用 expectedChanges[0] 作为唯一期望值即可。
 				expectedChange := tc.expectedChanges[0]
 
 				if !reflect.DeepEqual(change.previous, expectedChange.previous) {
@@ -1607,8 +1653,11 @@ func TestCheckoutChanges(t *testing.T) {
 	}
 }
 
-// Test helpers
+// 测试辅助函数。
 
+// compareEndpointsMapsStr 逐服务、逐端口、逐端点比较实际映射与期望映射。
+// 端点比较聚焦 endpoint、isLocal、ready、serving、terminating 这些测试关心的字段；
+// 失败时输出足够详细的上下文，便于定位是数量、顺序还是标志位不符。
 func compareEndpointsMapsStr(t *testing.T, newMap EndpointsMap, expected map[ServicePortName][]*BaseEndpointInfo) {
 	t.Helper()
 	if len(newMap) != len(expected) {
@@ -1638,6 +1687,8 @@ func compareEndpointsMapsStr(t *testing.T, newMap EndpointsMap, expected map[Ser
 	}
 }
 
+// initializeCache 用给定 slice 预填缓存，然后把 pending 提升为 applied 并清空 pending，
+// 从而构造出“这些 slice 已经被消费过”的状态，供后续增量更新测试使用。
 func initializeCache(endpointSliceCache *EndpointSliceCache, endpointSlices []*discovery.EndpointSlice) {
 	for _, endpointSlice := range endpointSlices {
 		endpointSliceCache.updatePending(endpointSlice, false)

@@ -16,6 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件为 nftables proxier 的测试辅助代码：对事务做规范化排序比较，
+// 并以虚拟数据包追踪的方式校验规则链的最终行为。
 package nftables
 
 import (
@@ -37,10 +39,10 @@ import (
 	"sigs.k8s.io/knftables"
 )
 
-// getLine returns a string containing the file and line number of the caller, if
-// possible. This is useful in tests with a large number of cases - when something goes
-// wrong you can find which case more easily.
+// getLine 返回调用方的文件名与行号（若可获取）。用例很多时，
+// 报错信息带上位置才能快速定位到具体是哪一处断言失败。
 func getLine() string {
+	// Caller(1) 取调用者而非 getLine 自身的位置，才能指向真正的测试代码行。
 	_, file, line, ok := runtime.Caller(1)
 	if !ok {
 		return ""
@@ -48,9 +50,8 @@ func getLine() string {
 	return fmt.Sprintf(" (from %s:%d)", file, line)
 }
 
-// objectOrder defines the order we sort different types into (higher = earlier); while
-// not necessary just for comparison purposes, it's more intuitive in the Diff output to
-// see rules/sets/maps before chains/elements.
+// objectOrder 定义对象类型的排序权重（数值越大越靠前）。比较本身不依赖顺序，
+// 但让规则/集合/映射排在链/元素之前能显著提升 Diff 的可读性。
 var objectOrder = map[string]int{
 	"table":   10,
 	"chain":   9,
@@ -58,14 +59,13 @@ var objectOrder = map[string]int{
 	"set":     7,
 	"map":     6,
 	"element": 5,
-	// anything else: 0
 }
 
-// sortNFTablesTransaction sorts an nftables transaction into a standard order for comparison
+// sortNFTablesTransaction 将 nftables 事务规范化为固定顺序，便于忽略无关顺序差异后比较。
 func sortNFTablesTransaction(tx string) string {
 	lines := strings.Split(tx, "\n")
 
-	// strip blank lines and comments
+	// 空行与注释对规则语义无影响，先剔除，避免干扰逐行排序。
 	for i := 0; i < len(lines); {
 		if lines[i] == "" || lines[i][0] == '#' {
 			lines = append(lines[:i], lines[i+1:]...)
@@ -74,44 +74,42 @@ func sortNFTablesTransaction(tx string) string {
 		}
 	}
 
-	// sort remaining lines
+	// 使用稳定排序以保留比较键相同的行之间的原始相对顺序。
 	sort.SliceStable(lines, func(i, j int) bool {
 		li := lines[i]
 		wi := strings.Split(li, " ")
 		lj := lines[j]
 		wj := strings.Split(lj, " ")
 
-		// All lines will start with "add OBJECTTYPE ip kube-proxy". Everything
-		// except "add table" will have an object name after the table name, and
-		// "add table" will have a comment after the table name. So every line
-		// should have at least 5 words.
+		// 所有行都以 "add OBJECTTYPE ip kube-proxy" 开头；除 table 外都有对象名，
+		// table 行则在表名后跟注释，因此每行至少 5 个词，可安全按索引取字段。
 		if len(wi) < 5 || len(wj) < 5 {
 			return false
 		}
 
-		// Sort by object type first.
+		// 先按对象类型分组；权重高的类型排前面。
 		if wi[1] != wj[1] {
 			return objectOrder[wi[1]] >= objectOrder[wj[1]]
 		}
 
-		// Sort by object name when object type is identical.
+		// 同类型再按对象名排序，使相同对象的行彼此相邻。
 		if wi[4] != wj[4] {
 			return wi[4] < wj[4]
 		}
 
-		// Leave rules in the order they were originally added.
+		// 规则顺序决定匹配优先级，必须保持原始顺序，不能按文本重排。
 		if wi[1] == "rule" {
 			return false
 		}
 
-		// Sort by the whole line when object type and name is identical. (e.g.,
-		// individual "add rule" and "add element" lines in a chain/set/map.)
+		// 类型与名称都相同（例如同一链上的元素）时再按整行排序，保证结果确定。
 		return li < lj
 	})
 	return strings.Join(lines, "\n")
 }
 
-// diffNFTablesTransaction is a (testable) helper function for assertNFTablesTransactionEqual
+// diffNFTablesTransaction 是 assertNFTablesTransactionEqual 的可单测辅助函数，
+// 返回规范化后两段事务的差异文本。
 func diffNFTablesTransaction(expected, result string) string {
 	expected = sortNFTablesTransaction(expected)
 	result = sortNFTablesTransaction(result)
@@ -119,8 +117,7 @@ func diffNFTablesTransaction(expected, result string) string {
 	return cmp.Diff(expected, result)
 }
 
-// assertNFTablesTransactionEqual asserts that expected and result are equal, ignoring
-// irrelevant differences.
+// assertNFTablesTransactionEqual 断言期望与实际事务相等，忽略排序、空行和注释等无关差异。
 func assertNFTablesTransactionEqual(t *testing.T, line string, expected, result string) {
 	diff := diffNFTablesTransaction(expected, result)
 	if diff != "" {
@@ -128,8 +125,10 @@ func assertNFTablesTransactionEqual(t *testing.T, line string, expected, result 
 	}
 }
 
-// diffNFTablesChain is a (testable) helper function for assertNFTablesChainEqual
+// diffNFTablesChain 是链比较的可单测辅助函数：取出 Fake 中链的规则文本，
+// 去掉首尾空白后与期望文本比较并返回差异。
 func diffNFTablesChain(nft *knftables.Fake, chain, expected string) string {
+	// 期望文本允许首尾换行；链不存在时按空规则列表处理，而不是直接失败。
 	expected = strings.TrimSpace(expected)
 	result := ""
 	if ch := nft.Table.Chains[chain]; ch != nil {
@@ -144,30 +143,28 @@ func diffNFTablesChain(nft *knftables.Fake, chain, expected string) string {
 	return cmp.Diff(expected, result)
 }
 
-// nftablesTracer holds data used while virtually tracing a packet through a set of
-// iptables rules
+// nftablesTracer 保存虚拟追踪数据包穿过 nftables 规则链时的状态：
+// Fake 表、节点 IP 集合、匹配记录、终点输出以及 masq/DNAT 标志。
 type nftablesTracer struct {
 	nft     *knftables.Fake
 	nodeIPs sets.Set[string]
 	t       *testing.T
 
-	// matches accumulates the list of rules that were matched, for debugging purposes.
+	// matches 累计实际命中的规则，失败时打印可快速定位是哪条规则导致结果不符。
 	matches []string
 
-	// outputs accumulates the list of matched terminal rule targets (endpoint
-	// IP:ports, or a special target like "REJECT") and is eventually used to generate
-	// the return value of tracePacket.
+	// outputs 累计命中的终止目标（端点 IP:端口或 REJECT 等特殊目标），
+	// 最终拼成 tracePacket 的返回值。
 	outputs []string
 
-	// additional info about rules we've hit
+	// 记录已命中规则的附加状态，供后续规则（如清除标记、hairpin 检查）判断条件。
 	markMasq   bool
 	masquerade bool
 	dnat       bool
 }
 
-// newNFTablesTracer creates an nftablesTracer. nodeIPs are the IP to treat as local node
-// IPs (for determining whether rules with "fib saddr type local" or "fib daddr type
-// local" match).
+// newNFTablesTracer 创建追踪器。nodeIPs 视为本地节点 IP，
+// 用于判断 "fib saddr type local" 与 "fib daddr type local" 规则是否命中。
 func newNFTablesTracer(t *testing.T, nft *knftables.Fake, nodeIPs []string) *nftablesTracer {
 	return &nftablesTracer{
 		nft:     nft,
@@ -176,6 +173,8 @@ func newNFTablesTracer(t *testing.T, nft *knftables.Fake, nodeIPs []string) *nft
 	}
 }
 
+// addressMatches 判断规则中的字面 IP/CIDR 与给定 IP 的匹配结果是否符合预期；
+// 格式错误直接在测试中报错，以免假阴性掩盖规则问题。
 func (tracer *nftablesTracer) addressMatches(ipStr string, wantMatch bool, ruleAddress string) bool {
 	ip := netutils.ParseIPSloppy(ipStr)
 	if ip == nil {
@@ -183,6 +182,7 @@ func (tracer *nftablesTracer) addressMatches(ipStr string, wantMatch bool, ruleA
 	}
 
 	var match bool
+	// 带斜杠按 CIDR 解析，否则按单个 IP 精确比较。
 	if strings.Contains(ruleAddress, "/") {
 		_, cidr, err := netutils.ParseCIDRSloppy(ruleAddress)
 		if err != nil {
@@ -200,6 +200,8 @@ func (tracer *nftablesTracer) addressMatches(ipStr string, wantMatch bool, ruleA
 	return match == wantMatch
 }
 
+// addressMatchesSet 判断 IP 与匿名集合中的每个地址是否都满足 wantMatch；
+// 集合元素以逗号分隔，空格需先去掉。
 func (tracer *nftablesTracer) addressMatchesSet(ipStr string, wantMatch bool, ruleAddress string) bool {
 	ruleAddress = strings.ReplaceAll(ruleAddress, " ", "")
 	addresses := strings.Split(ruleAddress, ",")
@@ -213,8 +215,7 @@ func (tracer *nftablesTracer) addressMatchesSet(ipStr string, wantMatch bool, ru
 	return true
 }
 
-// matchDestIPOnly checks an "ip daddr" against a set/map, and returns the matching
-// Element, if found.
+// matchDestIPOnly 在集合/映射中查找 key 仅含目的 IP 的条目，返回匹配的元素或 nil。
 func (tracer *nftablesTracer) matchDestIPOnly(elements []*knftables.Element, destIP string) *knftables.Element {
 	for _, element := range elements {
 		if element.Key[0] == destIP {
@@ -224,8 +225,7 @@ func (tracer *nftablesTracer) matchDestIPOnly(elements []*knftables.Element, des
 	return nil
 }
 
-// matchDest checks an "ip daddr . meta l4proto . th dport" against a set/map, and returns
-// the matching Element, if found.
+// matchDest 在集合/映射中查找由目的 IP、协议、目的端口组成的 key，返回匹配元素或 nil。
 func (tracer *nftablesTracer) matchDest(elements []*knftables.Element, destIP, protocol, destPort string) *knftables.Element {
 	for _, element := range elements {
 		if element.Key[0] == destIP && element.Key[1] == protocol && element.Key[2] == destPort {
@@ -235,8 +235,7 @@ func (tracer *nftablesTracer) matchDest(elements []*knftables.Element, destIP, p
 	return nil
 }
 
-// matchDestPort checks an "meta l4proto . th dport" against a set/map, and returns the
-// matching Element, if found.
+// matchDestPort 在集合/映射中查找由协议与目的端口组成的 key，返回匹配元素或 nil。
 func (tracer *nftablesTracer) matchDestPort(elements []*knftables.Element, protocol, destPort string) *knftables.Element {
 	for _, element := range elements {
 		if element.Key[0] == protocol && element.Key[1] == destPort {
@@ -246,16 +245,11 @@ func (tracer *nftablesTracer) matchDestPort(elements []*knftables.Element, proto
 	return nil
 }
 
-// We intentionally don't try to parse arbitrary nftables rules, as the syntax is quite
-// complicated and context sensitive. (E.g., "ip daddr" could be the start of an address
-// comparison, or it could be the start of a set/map lookup.) Instead, we just have
-// regexps to recognize the specific pieces of rules that we create in proxier.go.
-// Anything matching ignoredRegexp gets stripped out of the rule, and then what's left
-// *must* match one of the cases in runChain or an error will be logged. In cases where
-// the regexp doesn't end with `$`, and the matched rule succeeds against the input data,
-// runChain will continue trying to match the rest of the rule. E.g., "ip daddr 10.0.0.1
-// drop" would first match destAddrRegexp, and then (assuming destIP was "10.0.0.1") would
-// match verdictRegexp.
+// 这里刻意不解析任意 nftables 规则：其语法复杂且与上下文相关（例如 "ip daddr"
+// 既可能引出地址比较，也可能引出集合/映射查找）。只针对 proxier.go 生成的规则片段
+// 写正则：先剔除 ignoredRegexp 匹配的部分，剩余内容必须命中 runChain 的某个分支，
+// 否则报错。正则未以 $ 结尾时，runChain 会在匹配成功后继续处理剩余部分——例如
+// "ip daddr 10.0.0.1 drop" 先命中 destAddrRegexp，再命中 verdictRegexp。
 
 var destAddrRegexp = regexp.MustCompile(`^ip6* daddr (!= )?(\S+)`)
 var destAddrLookupRegexp = regexp.MustCompile(`^ip6* daddr (!= )?\{([^}]*)\}`)
@@ -289,19 +283,19 @@ var dnatRegexp = regexp.MustCompile(`^dnat to (\S+)$`)
 
 var ignoredRegexp = regexp.MustCompile(strings.Join(
 	[]string{
-		// Ignore comments (which can only appear at the end of a rule).
+		// 注释只出现在规则末尾，对匹配结果无影响。
 		` *comment "[^"]*"$`,
 
-		// The trace tests only check new connections, so for our purposes, this
-		// check always succeeds (and thus can be ignored).
+		// 追踪测试只关心新连接，故此检查恒为真，可忽略。
 		`^ct state new`,
 	},
 	"|",
 ))
 
-// runChain runs the given packet through the rules in the given table and chain, updating
-// tracer's internal state accordingly. It returns true if it hits a terminal action.
+// runChain 让给定数据包依次经过指定链的每条规则并更新追踪状态；
+// 命中终止动作（DNAT、drop、reject 等）时返回 true。
 func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destPort string) bool {
+	// 链不存在说明测试规则数据有误，报错并按终止处理，防止后续访问空链。
 	ch := tracer.nft.Table.Chains[chname]
 	if ch == nil {
 		tracer.t.Errorf("unknown chain %q", chname)
@@ -309,17 +303,17 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 	}
 
 	for _, ruleObj := range ch.Rules {
+		// 先剔除注释与恒真的连接状态检查，再逐段解析剩余规则文本。
 		rule := ignoredRegexp.ReplaceAllLiteralString(ruleObj.Rule, "")
 		for rule != "" {
 			rule = strings.TrimLeft(rule, " ")
 
-			// Note that the order of (some of) the cases is important since
-			// some of the regexes might match parts of others.
+			// 部分正则互为前后缀（集合查找与字面量地址等），顺序错误会误匹配，不能随意调整。
 
 			switch {
 			case dnatCheckRegexp.MatchString(rule):
 				// `^ct status dnat`
-				// Part of the hairpin check
+				// hairpin 检查的一部分：仅已 DNAT 的包才可能命中。
 				match := dnatCheckRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if !tracer.dnat {
@@ -329,19 +323,18 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case hairpinCheckRegexp.MatchString(rule):
 				// `^ip6* saddr \. ip6* daddr \. meta l4proto \. th dport @hairpin-connections`
-				// Tests whether the packet is hairpinning back to its client.
+				// 判断包是否发回自身客户端（hairpin）。
 				match := hairpinCheckRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if sourceIP != destIP {
 					rule = ""
 					break
 				}
-				// HACK: we don't actually bother doing the full lookup; we
-				// assume that if src and dst matched, it's hairpin.
+				// 简化处理：不查 hairpin 连接表，假定源目的相同即为 hairpin。
 
 			case destIPOnlyLookupRegexp.MatchString(rule):
 				// `^ip6* daddr @(\S+)`
-				// Tests whether destIP is a member of the indicated set.
+				// 判断目的 IP 是否属于指定集合。
 				match := destIPOnlyLookupRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				set := match[1]
@@ -352,8 +345,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destDispatchRegexp.MatchString(rule):
 				// `^ip6* daddr \. meta l4proto \. th dport vmap @(\S+)$`
-				// Looks up "destIP . protocol . destPort" in the indicated
-				// verdict map, and if found, runs the associated verdict.
+				// 以 "目的IP . 协议 . 端口" 查 verdict 映射，命中则执行对应动作。
 				match := destDispatchRegexp.FindStringSubmatch(rule)
 				mapName := match[1]
 				element := tracer.matchDest(tracer.nft.Table.Maps[mapName].Elements, destIP, protocol, destPort)
@@ -366,8 +358,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destPortDispatchRegexp.MatchString(rule):
 				// `^meta l4proto \. th dport vmap @(\S+)$`
-				// Looks up "protocol . destPort" in the indicated verdict map,
-				// and if found, runs the assocated verdict.
+				// 以 "协议 . 端口" 查 verdict 映射，命中则执行对应动作。
 				match := destPortDispatchRegexp.FindStringSubmatch(rule)
 				mapName := match[1]
 				element := tracer.matchDestPort(tracer.nft.Table.Maps[mapName].Elements, protocol, destPort)
@@ -380,7 +371,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destAddrLookupRegexp.MatchString(rule):
 				// `^ip6* daddr (!= )?\{([^}]*)\}`
-				// Tests whether destIP doesn't match an anonymous set.
+				// 判断目的 IP 是否与匿名集合匹配（支持 != 取反）。
 				match := destAddrLookupRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				wantMatch, set := match[1] != "!= ", match[2]
@@ -391,7 +382,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destAddrRegexp.MatchString(rule):
 				// `^ip6* daddr (!= )?(\S+)`
-				// Tests whether destIP does/doesn't match a literal.
+				// 判断目的 IP 是否与字面量地址相等（支持 != 取反）。
 				match := destAddrRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				wantMatch, ip := match[1] != "!= ", match[2]
@@ -402,7 +393,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destAddrLocalRegexp.MatchString(rule):
 				// `^fib daddr type local`
-				// Tests whether destIP is a local IP.
+				// 判断目的 IP 是否属于本地节点 IP。
 				match := destAddrLocalRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if !tracer.nodeIPs.Has(destIP) {
@@ -412,7 +403,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case destPortRegexp.MatchString(rule):
 				// `^(tcp|udp|sctp) dport (\d+)`
-				// Tests whether destPort matches a literal.
+				// 同时校验协议与端口，任一不符则不命中该规则。
 				match := destPortRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				proto, port := match[1], match[2]
@@ -423,7 +414,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case sourceAddrLookupRegexp.MatchString(rule):
 				// `^ip6* saddr (!= )?\{([^}]*)\}`
-				// Tests whether sourceIP doesn't match an anonymous set.
+				// 判断源 IP 是否与匿名集合匹配（支持 != 取反）。
 				match := sourceAddrLookupRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				wantMatch, set := match[1] != "!= ", match[2]
@@ -434,7 +425,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case sourceAddrRegexp.MatchString(rule):
 				// `^ip6* saddr (!= )?(\S+)`
-				// Tests whether sourceIP does/doesn't match a literal.
+				// 判断源 IP 是否与字面量地址相等（支持 != 取反）。
 				match := sourceAddrRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				wantMatch, ip := match[1] != "!= ", match[2]
@@ -445,7 +436,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case sourceAddrLocalRegexp.MatchString(rule):
 				// `^fib saddr type local`
-				// Tests whether sourceIP is a local IP.
+				// 判断源 IP 是否属于本地节点 IP。
 				match := sourceAddrLocalRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if !tracer.nodeIPs.Has(sourceIP) {
@@ -455,6 +446,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case l4protoRegexp.MatchString(rule):
 				// `meta l4proto (tcp|udp|sctp)`
+				// 校验数据包的四层协议。
 				match := l4protoRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if match[1] != protocol {
@@ -464,7 +456,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case masqMarkRegexp.MatchString(rule):
 				// `^mark set mark or 0x[[:xdigit:]]+$`
-				// Mark for masquerade.
+				// 打上待伪装标记，后续规则据此决定是否 masquerade。
 				match := masqMarkRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 
@@ -472,8 +464,8 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 				tracer.markMasq = true
 
 			case masqCheckRegexp.MatchString(rule):
-				// `^mark and 0x[[:xdigit:]]+ != 0 mark set mark xor 0x[[:xdigit:]]+
-				// Checks and clears the mark
+				// `^mark and 0x[[:xdigit:]]+ != 0 mark set mark xor 0x[[:xdigit:]]+`
+				// 检查并清除伪装标记：只有前面打过标记才会继续执行。
 				match := masqCheckRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if !tracer.markMasq {
@@ -484,7 +476,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case masqueradeRegexp.MatchString(rule):
 				// ^masquerade fully-random$
-				// Actually perform the masquerading
+				// 真正执行伪装，记录最终返回值使用的标志。
 				match := masqueradeRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 
@@ -493,27 +485,25 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case jumpRegexp.MatchString(rule):
 				// `^(jump|goto) (\S+)$`
-				// Jumps to another chain.
+				// 跳转到另一条链；jump 可返回继续，goto 则不返回。
 				match := jumpRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				action, destChain := match[1], match[2]
 
 				tracer.matches = append(tracer.matches, ruleObj.Rule)
+				// 被调链若已终止，则整条路径也终止。
 				terminated := tracer.runChain(destChain, sourceIP, protocol, destIP, destPort)
 				if terminated {
-					// destChain reached a terminal statement, so we
-					// terminate too.
 					return true
 				} else if action == "goto" {
-					// After a goto, return to our calling chain
-					// (without terminating) rather than continuing
-					// with this chain.
+					// goto 不返回调用链：直接结束当前链的处理，
+					// 与 jump 继续执行后续规则区分开。
 					return false
 				}
 
 			case verdictRegexp.MatchString(rule):
 				// `^(drop|reject)$`
-				// Drop/reject the packet and terminate processing.
+				// 丢弃/拒绝包并终止处理，同时记入 outputs 供断言。
 				match := verdictRegexp.FindStringSubmatch(rule)
 				verdict := match[1]
 
@@ -523,13 +513,13 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case returnRegexp.MatchString(rule):
 				// `^return$`
-				// Returns to the calling chain.
+				// 返回调用链，未产生终止动作。
 				tracer.matches = append(tracer.matches, ruleObj.Rule)
 				return false
 
 			case dnatRegexp.MatchString(rule):
 				// `^dnat to (\S+)$`
-				// DNAT to an endpoint IP and terminate processing.
+				// 直接 DNAT 到端点地址并终止处理。
 				match := dnatRegexp.FindStringSubmatch(rule)
 				destEndpoint := match[1]
 
@@ -539,8 +529,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case endpointVMapRegexp.MatchString(rule):
 				// `^numgen random mod \d+ vmap \{(.*)\}$`
-				// Selects a random endpoint and jumps to it. For tracePacket's
-				// purposes, we jump to *all* of the endpoints.
+				// 实际是随机选一个端点；追踪时覆盖所有端点以便断言全部候选结果。
 				match := endpointVMapRegexp.FindStringSubmatch(rule)
 				elements := match[1]
 
@@ -549,17 +538,14 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 					destChain := match[1]
 
 					tracer.matches = append(tracer.matches, ruleObj.Rule)
-					// Ignore return value; we know each endpoint has a
-					// terminating dnat verdict, but we want to gather all
-					// of the endpoints into tracer.output.
+					// 每个端点链都以 dnat 终止，故忽略返回值，仅需收集所有端点。
 					_ = tracer.runChain(destChain, sourceIP, protocol, destIP, destPort)
 				}
 				return true
 
 			case endpointDNATRegexp.MatchString(rule):
 				// `^dnat ip6* addr \. port to numgen random mod \d+ map \{(.*)\}$`
-				// Selects a random endpoint and DNATs to it. For tracePacket's
-				// purposes, we DNAT to *all* of the endpoints.
+				// 实际随机选一个端点做 DNAT；此处收集所有候选以覆盖随机结果。
 				match := endpointDNATRegexp.FindStringSubmatch(rule)
 				elements := match[1]
 
@@ -574,7 +560,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case singleEndpointDNATRegexp.MatchString(rule):
 				// `^dnat ip6* addr \. port to (\S+) \. (\d+)$`
-				// DNATs directly to a single endpoint and terminates processing.
+				// 直接 DNAT 到唯一端点并终止处理。
 				match := singleEndpointDNATRegexp.FindStringSubmatch(rule)
 				endpointIP, endpointPort := match[1], match[2]
 
@@ -583,6 +569,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 				return true
 
 			default:
+				// 规则未被任何已知模式识别：要么规则格式变了，要么追踪器遗漏了分支。
 				tracer.t.Errorf("unmatched rule: %s", ruleObj.Rule)
 				rule = ""
 			}
@@ -592,25 +579,20 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 	return false
 }
 
-// tracePacket determines what would happen to a packet with the given sourceIP, destIP,
-// and destPort, given the indicated iptables ruleData. nodeIPs are the local node IPs (for
-// rules matching "local"). (The protocol value should be lowercase as in nftables
-// rules, not uppercase as in corev1.)
-//
-// The return values are: an array of matched rules (for debugging), the final packet
-// destinations (a comma-separated list of IPs, or one of the special targets "ACCEPT",
-// "DROP", or "REJECT"), and whether the packet would be masqueraded.
+// tracePacket 模拟给定源/目的 IP 与端口的数据包在规则集中的走向。nodeIPs 为本地节点 IP，
+// 用于匹配 "local" 规则；protocol 必须是 nftables 中的小写形式，而非 corev1 的大写值。
+// 返回值为：命中的规则列表（便于调试）、最终目的地（逗号分隔的 IP 或 ACCEPT/DROP/REJECT
+// 等特殊目标），以及数据包是否会被伪装。
 func tracePacket(t *testing.T, nft *knftables.Fake, sourceIP, protocol, destIP, destPort string, nodeIPs []string) ([]string, string, bool) {
 	var err error
 	tracer := newNFTablesTracer(t, nft, nodeIPs)
 
-	// filter-prerouting-pre-dnat goes first, then nat-prerouting if not terminated.
+	// 按 netfilter 实际钩子顺序：先 pre-DNAT 过滤链，命中终止动作则不再执行后续链。
 	if tracer.runChain("filter-prerouting-pre-dnat", sourceIP, protocol, destIP, destPort) {
 		return tracer.matches, strings.Join(tracer.outputs, ", "), tracer.markMasq
 	}
 	tracer.runChain("nat-prerouting", sourceIP, protocol, destIP, destPort)
-	// After the prerouting rules run, pending DNATs are processed (which would affect
-	// the destination IP that later rules match against).
+	// prerouting 产生的 DNAT 会改变后续规则看到的目的 IP，故先提取并标记 dnat 状态。
 	if len(tracer.outputs) != 0 {
 		destIP, _, err = net.SplitHostPort(tracer.outputs[0])
 		if err != nil {
@@ -619,22 +601,21 @@ func tracePacket(t *testing.T, nft *knftables.Fake, sourceIP, protocol, destIP, 
 		tracer.dnat = true
 	}
 
-	// Run filter-forward, return if packet is terminated.
 	if tracer.runChain("filter-forward", sourceIP, protocol, destIP, destPort) {
 		return tracer.matches, strings.Join(tracer.outputs, ", "), tracer.markMasq
 	}
 
-	// Run filter-input
 	tracer.runChain("filter-input", sourceIP, protocol, destIP, destPort)
 
-	// Skip filter-output-pre-dnat, filter-output and nat-output as they ought to be fully redundant with the prerouting chains.
+	// output 链在测试场景中与 prerouting 链完全冗余，跳过以简化追踪。
 
-	// Run nat-postrouting to handle masquerading
+	// 最后跑 postrouting 链处理伪装；返回值取 masquerade 而非前面的 markMasq。
 	tracer.runChain("nat-postrouting", sourceIP, protocol, destIP, destPort)
 
 	return tracer.matches, strings.Join(tracer.outputs, ", "), tracer.masquerade
 }
 
+// packetFlowTest 描述一条数据包流向用例：源/目的、协议、端口及期望的输出与是否伪装。
 type packetFlowTest struct {
 	name     string
 	sourceIP string
@@ -645,14 +626,18 @@ type packetFlowTest struct {
 	masq     bool
 }
 
+// runPacketFlowTests 逐条执行数据包流向用例，以子测试报告结果；
+// line 用于把调用位置附加到失败信息，便于定位用例来源。
 func runPacketFlowTests(t *testing.T, line string, nft *knftables.Fake, nodeIPs []string, testCases []packetFlowTest) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 协议默认按 TCP 处理，与 nftables 规则中的小写形式保持一致。
 			protocol := strings.ToLower(string(tc.protocol))
 			if protocol == "" {
 				protocol = "tcp"
 			}
 			matches, output, masq := tracePacket(t, nft, tc.sourceIP, protocol, tc.destIP, fmt.Sprintf("%d", tc.destPort), nodeIPs)
+			// 收集全部差异后一次报错，避免反复运行用例才能看全问题。
 			var errors []string
 			if output != tc.output {
 				errors = append(errors, fmt.Sprintf("wrong output: expected %q got %q", tc.output, output))
@@ -660,6 +645,7 @@ func runPacketFlowTests(t *testing.T, line string, nft *knftables.Fake, nodeIPs 
 			if masq != tc.masq {
 				errors = append(errors, fmt.Sprintf("wrong masq: expected %v got %v", tc.masq, masq))
 			}
+			// 失败时连同命中的规则一起打印，方便判断是规则生成还是匹配逻辑出错。
 			if errors != nil {
 				t.Errorf("Test %q of a packet from %s to %s:%d%s got result:\n%s\n\nBy matching:\n%s\n\n",
 					tc.name, tc.sourceIP, tc.destIP, tc.destPort, line, strings.Join(errors, "\n"), strings.Join(matches, "\n"))
@@ -668,7 +654,7 @@ func runPacketFlowTests(t *testing.T, line string, nft *knftables.Fake, nodeIPs 
 	}
 }
 
-// helpers_test unit tests
+// helpers_test 单元测试的公共夹具：一份未排序的 nftables 事务及其规范化后的期望结果。
 
 var testInput = dedent.Dedent(`
 	add table ip testing { comment "rules for kube-proxy" ; }
@@ -717,6 +703,7 @@ var testInput = dedent.Dedent(`
 	add element ip testing no-endpoint-services { 192.168.99.22 . tcp . 80 comment "ns2/svc2:p80" : drop }
 	`)
 
+// testExpected 是 testInput 规范化排序后的期望文本，供排序与比较相关测试复用。
 var testExpected = dedent.Dedent(`
 	add table ip testing { comment "rules for kube-proxy" ; }
 	add chain ip testing endpoint-5OJB2KTY-ns1/svc1/tcp/p80__10.180.0.1/80
@@ -754,8 +741,10 @@ var testExpected = dedent.Dedent(`
 	add element ip testing service-nodeports { tcp . 3001 : goto external-42NFTM6N-ns2/svc2/tcp/p80 }
 	`)
 
+// 测试 sortNFTablesTransaction：规范化后的事务应与 testExpected 完全一致。
 func Test_sortNFTablesTransaction(t *testing.T) {
 	output := sortNFTablesTransaction(testInput)
+	// 常量原始文本带首尾换行，规范化结果不含，需先 TrimSpace 再比较。
 	expected := strings.TrimSpace(testExpected)
 
 	diff := cmp.Diff(expected, output)
@@ -764,12 +753,14 @@ func Test_sortNFTablesTransaction(t *testing.T) {
 	}
 }
 
+// 测试 diffNFTablesTransaction：相同事务应无差异，删掉一行的变体应能被检出差异。
 func Test_diffNFTablesTransaction(t *testing.T) {
 	diff := diffNFTablesTransaction(testInput, testExpected)
 	if diff != "" {
 		t.Errorf("found diff in inputs that should have been equal:\n%s", diff)
 	}
 
+	// 去掉 testExpected 的前两行制造差异，验证 diff 函数确实能发现内容缺失。
 	notExpected := strings.Join(strings.Split(testExpected, "\n")[2:], "\n")
 	diff = diffNFTablesTransaction(testInput, notExpected)
 	if diff == "" {
@@ -777,6 +768,7 @@ func Test_diffNFTablesTransaction(t *testing.T) {
 	}
 }
 
+// 测试 diffNFTablesChain：覆盖规则完全匹配、尾部换行、规则缺失与空链等情形。
 func Test_diffNFTablesChain(t *testing.T) {
 	fake := knftables.NewFake(knftables.IPv4Family, "testing")
 	tx := fake.NewTransaction()
@@ -810,6 +802,7 @@ func Test_diffNFTablesChain(t *testing.T) {
 		Rule:  "masquerade fully-random",
 	})
 
+	// 必须先把事务应用到 Fake，规则才会出现在链的 Dump 中供比较。
 	err := fake.Run(context.Background(), tx)
 	if err != nil {
 		t.Fatalf("Unexpected error running transaction: %v", err)
@@ -828,6 +821,7 @@ func Test_diffNFTablesChain(t *testing.T) {
 	if diff != "" {
 		t.Errorf("unexpected difference in masquerade-chain:\n%s", diff)
 	}
+	// 故意漏掉第一条规则，确保差异检测不是恒为空。
 	diff = diffNFTablesChain(fake, "masquerade-chain", "mark set mark xor 0x4000\nmasquerade fully-random")
 	if diff == "" {
 		t.Errorf("unexpected lack of difference in wrong masquerade-chain")
@@ -843,10 +837,9 @@ func Test_diffNFTablesChain(t *testing.T) {
 	}
 }
 
-// This tests tracePacket against static data, just to make sure we match things in the
-// way we expect to. We need separate tests for ipv4 and ipv6 because knftables.Fake only supports
-// one address family at a time.
-// The test data is based on the TestOverallNFTablesRules.
+// 基于静态规则数据测试 tracePacket，验证匹配行为符合预期。
+// knftables.Fake 一次仅支持一种地址族，因此 IPv4/IPv6 分开测试；
+// 测试数据取自 TestOverallNFTablesRules。
 func TestTracePacketV4(t *testing.T) {
 	rules := dedent.Dedent(`
 		add table ip kube-proxy { comment "rules for kube-proxy" ; }
@@ -986,9 +979,10 @@ func TestTracePacketV4(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to parse given nftables rules: %v", err)
 	}
-	// ensure rules were parsed correctly
+	// 先确认规则被正确解析：否则后续追踪失败无法区分是解析问题还是规则逻辑问题。
 	assertNFTablesTransactionEqual(t, getLine(), rules, nft.Dump())
 	runPacketFlowTests(t, getLine(), nft, testNodeIPs, []packetFlowTest{
+		// 目的 IP 不在任何映射中，应保持无输出。
 		{
 			name:     "no match",
 			sourceIP: "10.0.0.2",
@@ -1003,6 +997,7 @@ func TestTracePacketV4(t *testing.T) {
 			destPort: 80,
 			output:   "10.180.0.1:80",
 		},
+		// svc4 有两个端点，追踪器应把随机选择的两种结果都收集到。
 		{
 			name:     "multiple endpoints",
 			sourceIP: "10.0.0.2",
@@ -1010,6 +1005,7 @@ func TestTracePacketV4(t *testing.T) {
 			destPort: 80,
 			output:   "10.180.0.4:80, 10.180.0.5:80",
 		},
+		// 来自节点自身的流量应打上伪装标记。
 		{
 			name:     "local, mark for masquerade",
 			sourceIP: testNodeIP,
@@ -1018,6 +1014,7 @@ func TestTracePacketV4(t *testing.T) {
 			output:   "10.180.0.2:80",
 			masq:     true,
 		},
+		// 外部客户端被 LoadBalancerSourceRanges 拦截，应命中 DROP。
 		{
 			name:     "DROP",
 			sourceIP: testExternalClient,
@@ -1025,6 +1022,7 @@ func TestTracePacketV4(t *testing.T) {
 			destPort: 80,
 			output:   "DROP",
 		},
+		// svc6 无端点且配置为 reject，应命中 REJECT。
 		{
 			name:     "REJECT",
 			sourceIP: "10.0.0.2",
@@ -1049,10 +1047,8 @@ func TestTracePacketV4(t *testing.T) {
 	})
 }
 
-// This tests tracePacket against static data, just to make sure we match things in the
-// way we expect to. We need separate tests for ipv4 and ipv6 because knftables.Fake only supports
-// one address family at a time.
-// The test data is based on "basic tests" of TestNodePorts for ipv6.
+// 与 TestTracePacketV4 同理，用 IPv6 静态规则验证追踪逻辑；
+// 数据取自 TestNodePorts 的 IPv6 "basic tests"，因 Fake 只支持单地址族而独立成用例。
 func TestTracePacketV6(t *testing.T) {
 	rules := dedent.Dedent(`
 		add table ip6 kube-proxy { comment "rules for kube-proxy" ; }
@@ -1123,7 +1119,7 @@ func TestTracePacketV6(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to parse given nftables rules: %v", err)
 	}
-	// ensure rules were parsed correctly
+	// 解析正确性先行校验；两个端点都收集到一个输出字符串中便于期望值书写。
 	assertNFTablesTransactionEqual(t, getLine(), rules, nft.Dump())
 	output := "[fd00:10:180::1]:80, [fd00:10:180::2:1]:80"
 
@@ -1136,6 +1132,7 @@ func TestTracePacketV6(t *testing.T) {
 			output:   output,
 			masq:     false,
 		},
+		// 外部访问 NodePort 需要伪装，确保跨节点回程地址正确。
 		{
 			name:     "external to nodePort",
 			sourceIP: "2600:5200::1",
@@ -1144,6 +1141,8 @@ func TestTracePacketV6(t *testing.T) {
 			output:   output,
 			masq:     true,
 		},
+		// 节点自身访问本机 NodePort 同样走伪装路径；
+		// V6 规则中无 hairpin 表查，靠源目的相同即可覆盖此路径。
 		{
 			name:     "node to nodePort",
 			sourceIP: testNodeIPv6,

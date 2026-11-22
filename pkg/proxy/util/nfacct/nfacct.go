@@ -16,21 +16,21 @@ limitations under the License.
 
 package nfacct
 
-// Counter represents a nfacct accounting object.
+// Counter 表示一个 nfacct 计数对象。
 type Counter struct {
 	Name    string
 	Packets uint64
 	Bytes   uint64
 }
 
-// Interface is an injectable interface for running nfacct commands.
+// Interface 是可注入的 nfacct 命令操作接口。
 type Interface interface {
-	// Ensure checks the existence of a nfacct counter with the provided name and creates it if absent.
+	// Ensure 检查指定名称的 nfacct 计数器是否存在，不存在则创建。
 	Ensure(name string) error
-	// Add creates a nfacct counter with the given name, returning an error if it already exists.
+	// Add 创建指定名称的 nfacct 计数器，若已存在则返回错误。
 	Add(name string) error
-	// Get retrieves the nfacct counter with the specified name, returning an error if it doesn't exist.
+	// Get 获取指定名称的 nfacct 计数器，不存在则返回错误。
 	Get(name string) (*Counter, error)
-	// List retrieves nfacct counters, it could receive all counters or a subset of them with an unix.EINTR error.
+	// List 获取 nfacct 计数器列表；可能被 unix.EINTR 中断，此时只返回部分计数器。
 	List() ([]*Counter, error)
 }

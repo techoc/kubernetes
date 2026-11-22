@@ -36,6 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCleanupLeftovers 验证 cleanupLeftovers 只清除 Kubernetes 管理的规则，
+// 同时保留其他人添加的 iptables 规则。
 func TestCleanupLeftovers(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -45,7 +47,8 @@ func TestCleanupLeftovers(t *testing.T) {
 	ipvs := ipvstest.NewFake()
 	ipset := ipsettest.NewFake(testIPSetVersion)
 
-	// Preload some iptables rules
+	// 预置一些 iptables 规则，其中包含带 "someone else's" 注释的非 Kubernetes 规则，
+	// 用于验证清理时不会误删这些规则。
 	initial := dedent.Dedent(`
 		*filter
 		:INPUT - [0:0]
@@ -113,9 +116,10 @@ func TestCleanupLeftovers(t *testing.T) {
 		}),
 	)
 
+	// 先同步一次规则，制造需要清理的 Kubernetes 遗留状态；此处不关心同步本身的结果
 	_ = fp.syncProxyRules()
 
-	// test cleanup left over
+	// 执行清理，并检查是否报告错误
 	encounteredError := cleanupLeftovers(ctx, ipvs, ipts, ipset)
 	if encounteredError {
 		t.Errorf("Cleanup leftovers failed")

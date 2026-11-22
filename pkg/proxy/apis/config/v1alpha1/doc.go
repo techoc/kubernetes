@@ -22,4 +22,5 @@ limitations under the License.
 // +k8s:validation-gen=false
 // +groupName=kubeproxy.config.k8s.io
 
+// Package v1alpha1 定义 kube-proxy 配置的 v1alpha1 版本类型及其生成规则。
 package v1alpha1

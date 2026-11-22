@@ -17,7 +17,7 @@ limitations under the License.
 package apis
 
 const (
-	// LabelServiceProxyName indicates that an alternative service
-	// proxy will implement this Service.
+	// LabelServiceProxyName 表示此 Service 将由另一个 service proxy 实现，
+	// 而不是由默认的 kube-proxy 处理。
 	LabelServiceProxyName = "service.kubernetes.io/service-proxy-name"
 )

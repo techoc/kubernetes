@@ -23,21 +23,20 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// IPPart returns just the IP part of an IP or IP:port or endpoint string. If the IP
-// part is an IPv6 address enclosed in brackets (e.g. "[fd00:1::5]:9999"),
-// then the brackets are stripped as well.
+// IPPart 从 IP、IP:port 或 endpoint 字符串中只提取 IP 部分。
+// 如果输入是方括号包裹的 IPv6 地址加端口（如 "[fd00:1::5]:9999"），方括号也会被去掉。
 func IPPart(s string) string {
 	if ip := netutils.ParseIPSloppy(s); ip != nil {
-		// IP address without port
+		// 整个字符串能被解析为 IP，说明它本来就不含端口，原样返回即可。
 		return s
 	}
-	// Must be IP:port
+	// 否则按 IP:port 形式拆分。
 	host, _, err := net.SplitHostPort(s)
 	if err != nil {
 		klog.ErrorS(err, "Failed to parse host-port", "input", s)
 		return ""
 	}
-	// Check if host string is a valid IP address
+	// SplitHostPort 只做字符串拆分，还需确认 host 确实是合法 IP，避免把主机名当成地址返回。
 	ip := netutils.ParseIPSloppy(host)
 	if ip == nil {
 		klog.ErrorS(nil, "Failed to parse IP", "input", host)

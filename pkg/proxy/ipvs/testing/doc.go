@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This is an empty file to avoid "build constraints exclude all Go files" error while running unit tests on non-linux platforms.
+// 本文件是空文件，仅用于在非 Linux 平台运行单元测试时避免
+// “build constraints exclude all Go files” 错误：同目录的其他文件带有 linux 构建约束，
+// 若无此文件，非 Linux 平台会因包内没有任何 Go 文件而报错。
 
 package testing

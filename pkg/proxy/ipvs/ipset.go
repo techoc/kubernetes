@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// MinIPSetCheckVersion is the min ipset version we need.  IPv6 is supported in ipset 6.x
+	// MinIPSetCheckVersion 是我们要求的最低 ipset 版本；IPv6 从 ipset 6.x 起才受支持。
 	MinIPSetCheckVersion = "6.0"
 
 	kubeLoopBackIPSetComment = "Kubernetes endpoints dst ip:port, source ip for solving hairpin purpose"
@@ -84,33 +84,32 @@ const (
 	kubeIPVSSet        = "KUBE-IPVS-IPS"
 )
 
-// IPSetVersioner can query the current ipset version.
+// IPSetVersioner 可以查询当前 ipset 的版本。
 type IPSetVersioner interface {
-	// returns "X.Y"
+	// GetVersion 以 "X.Y" 形式返回版本号。
 	GetVersion() (string, error)
 }
 
-// IPSet wraps util/ipset which is used by IPVS proxier.
+// IPSet 对 IPVS proxier 使用的 util/ipset 做了封装。
 type IPSet struct {
 	utilipset.IPSet
-	// activeEntries is the current active entries of the ipset.
+	// activeEntries 是该 ipset 当前期望的活跃条目集合。
 	activeEntries sets.Set[string]
-	// handle is the util ipset interface handle.
+	// handle 是调用 util ipset 的句柄。
 	handle utilipset.Interface
 }
 
-// NewIPSet initialize a new IPSet struct
+// NewIPSet 初始化一个新的 IPSet 结构。
+// 双栈环境下 IPv4 与 IPv6 集合共存，IPv6 集合改用 "KUBE-6-" 前缀保证名称唯一；
+// 因为 ipset 名称最长 31 个字符，改名后还需截断，而 IPv4 名称保持不变以降低升级风险。
 func NewIPSet(handle utilipset.Interface, name string, setType utilipset.Type, isIPv6 bool, comment string) *IPSet {
 	hashFamily := utilipset.ProtocolFamilyIPV4
 	if isIPv6 {
 		hashFamily = utilipset.ProtocolFamilyIPV6
-		// In dual-stack both ipv4 and ipv6 ipset's can co-exist. To
-		// ensure unique names the prefix for ipv6 is changed from
-		// "KUBE-" to "KUBE-6-". The "KUBE-" prefix is kept for
-		// backward compatibility. The maximum name length of an ipset
-		// is 31 characters which must be taken into account.  The
-		// ipv4 names are not altered to minimize the risk for
-		// problems on upgrades.
+		// 双栈环境下 IPv4 与 IPv6 的 ipset 可以共存。为保证名称唯一，
+		// IPv6 前缀由 "KUBE-" 改为 "KUBE-6-"；保留 "KUBE-" 前缀是为了向后兼容。
+		// ipset 名称最长为 31 个字符，改名时必须考虑这一限制。
+		// IPv4 名称保持不变，以尽量降低升级过程中出问题的风险。
 		if strings.HasPrefix(name, "KUBE-") {
 			name = strings.Replace(name, "KUBE-", "KUBE-6-", 1)
 			if len(name) > 31 {
@@ -132,22 +131,31 @@ func NewIPSet(handle utilipset.Interface, name string, setType utilipset.Type, i
 	return set
 }
 
+// validateEntry 校验条目是否与本集合的类型、地址族等参数兼容。
 func (set *IPSet) validateEntry(entry *utilipset.Entry) bool {
 	return entry.Validate(&set.IPSet)
 }
 
+// isEmpty 报告期望的活跃条目集合是否为空，供 proxier 决定是否生成关联规则。
 func (set *IPSet) isEmpty() bool {
 	return set.activeEntries.Len() == 0
 }
 
+// getComment 返回带引号的 ipset 注释，供 iptables 规则中的 comment 匹配使用。
 func (set *IPSet) getComment() string {
 	return fmt.Sprintf("\"%s\"", set.Comment)
 }
 
+// resetEntries 在每轮同步开始时清空缓存的期望条目，
+// 避免上一轮遗留的条目影响本轮的差量计算。
 func (set *IPSet) resetEntries() {
 	set.activeEntries = sets.New[string]()
 }
 
+// syncIPSetEntries 把内核中实际的集合条目与期望的 activeEntries 做差量同步：
+// 先删除内核中多余的旧条目，再补齐缺失的新条目。同步是串行执行的，
+// 因为对同一 ipset 的并发增删改会相互干扰；"not found" 错误被忽略，
+// 因为条目可能已被其他路径删除，删除操作本身是幂等的。
 func (set *IPSet) syncIPSetEntries() {
 	appliedEntries, err := set.handle.ListEntries(set.Name)
 	if err != nil {
@@ -155,14 +163,14 @@ func (set *IPSet) syncIPSetEntries() {
 		return
 	}
 
-	// currentIPSetEntries represents Endpoints watched from API Server.
+	// currentIPSetEntries 表示内核中实际存在的条目集合。
 	currentIPSetEntries := sets.New[string]()
 	for _, appliedEntry := range appliedEntries {
 		currentIPSetEntries.Insert(appliedEntry)
 	}
 
 	if !set.activeEntries.Equal(currentIPSetEntries) {
-		// Clean legacy entries
+		// 先清理内核中已不再期望的旧条目。
 		for _, entry := range currentIPSetEntries.Difference(set.activeEntries).UnsortedList() {
 			if err := set.handle.DelEntry(entry, set.Name); err != nil {
 				if !utilipset.IsNotFoundError(err) {
@@ -172,7 +180,7 @@ func (set *IPSet) syncIPSetEntries() {
 				klog.V(3).InfoS("Successfully deleted legacy ip set entry from ip set", "ipSetEntry", entry, "ipSet", set.Name)
 			}
 		}
-		// Create active entries
+		// 再补齐期望存在但内核中缺失的条目。
 		for _, entry := range set.activeEntries.Difference(currentIPSetEntries).UnsortedList() {
 			if err := set.handle.AddEntry(entry, &set.IPSet, true); err != nil {
 				klog.ErrorS(err, "Failed to add ip set entry to ip set", "ipSetEntry", entry, "ipSet", set.Name)
@@ -183,6 +191,8 @@ func (set *IPSet) syncIPSetEntries() {
 	}
 }
 
+// ensureIPSet 确保 ipset 集合存在；ignoreExistErr 为 true 时，
+// 同名同参数的集合已存在不会被当作错误，便于重复调用。
 func ensureIPSet(set *IPSet) error {
 	if err := set.handle.CreateSet(&set.IPSet, true); err != nil {
 		klog.ErrorS(err, "Failed to make sure existence of ip set", "ipSet", set)
@@ -191,7 +201,8 @@ func ensureIPSet(set *IPSet) error {
 	return nil
 }
 
-// checkMinVersion checks if ipset current version satisfies required min version
+// checkMinVersion 检查当前 ipset 版本是否满足最低版本要求；
+// 版本字符串无法解析时按不满足处理，以免在未知版本上启用不兼容特性。
 func checkMinVersion(vstring string) bool {
 	version, err := utilversion.ParseGeneric(vstring)
 	if err != nil {

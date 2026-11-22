@@ -22,6 +22,8 @@ import (
 	"testing"
 )
 
+// TestLineBufferWrite 验证 LineBuffer.Write 把字符串和字符串切片拼接为一行，
+// 以空格分隔并在末尾补换行；Reset 后缓冲区可复用且行数始终为 1。
 func TestLineBufferWrite(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -52,6 +54,7 @@ func TestLineBufferWrite(t *testing.T) {
 	testBuffer := NewLineBuffer()
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 所有子用例共用一个缓冲区，必须重置，否则前一行内容会污染断言。
 			testBuffer.Reset()
 			testBuffer.Write(testCase.input...)
 			if want, got := testCase.expected, testBuffer.String(); !strings.EqualFold(want, got) {
@@ -64,16 +67,21 @@ func TestLineBufferWrite(t *testing.T) {
 	}
 }
 
+// TestLineBufferWritePanic 验证 Write 遇到不支持的类型（如 int）时会 panic，
+// 避免静默丢弃本应记录的日志内容。
 func TestLineBufferWritePanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("did not panic")
 		}
 	}()
+	// 前两个参数类型合法，panic 只能来自第三个 int 参数。
 	testBuffer := NewLineBuffer()
 	testBuffer.Write("string", []string{"a", "slice"}, 1234)
 }
 
+// TestLineBufferWriteBytes 验证 WriteBytes 原样写入字节内容并自动补上换行，
+// 空字节输入只产生一个换行。
 func TestLineBufferWriteBytes(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -95,6 +103,7 @@ func TestLineBufferWriteBytes(t *testing.T) {
 	testBuffer := NewLineBuffer()
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// WriteBytes 与 Write 共用缓冲区，重置可隔离各子用例的结果。
 			testBuffer.Reset()
 			testBuffer.WriteBytes(testCase.bytes)
 			if want, got := testCase.expected, testBuffer.String(); !strings.EqualFold(want, got) {
@@ -104,9 +113,10 @@ func TestLineBufferWriteBytes(t *testing.T) {
 	}
 }
 
-// obtained from https://stackoverflow.com/a/22892986
+// 字符集取自 https://stackoverflow.com/a/22892986，仅用于生成随机测试内容。
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
+// randSeq 生成一个由大小写字母组成的 30 字符随机串，避免重复内容影响行数统计。
 func randSeq() string {
 	b := make([]rune, 30)
 	for i := range b {
@@ -115,6 +125,8 @@ func randSeq() string {
 	return string(b)
 }
 
+// TestWriteCountLines 验证写入 N 行后 Lines() 返回 N，
+// 同时检查普通 LineBuffer 与 DiscardLineBuffer 的计数一致性，覆盖到十万行规模。
 func TestWriteCountLines(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -149,9 +161,11 @@ func TestWriteCountLines(t *testing.T) {
 	discardBuffer := NewDiscardLineBuffer()
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 两个缓冲区在子用例间复用，重置确保计数从零开始累积。
 			testBuffer.Reset()
 			discardBuffer.Reset()
 			for i := 0; i < testCase.expected; i++ {
+				// 每行使用随机内容，防止因内容相同而掩盖行数统计错误。
 				testBuffer.Write(randSeq())
 				discardBuffer.Write(randSeq())
 			}

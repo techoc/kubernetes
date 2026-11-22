@@ -28,9 +28,10 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// addr builds a netlink.Addr suitable for use in filterAddrsExcept tests.
+// addr 构造供 filterAddrsExcept 测试使用的 netlink.Addr。
 func addr(ip string, mask, linkIndex int) netlink.Addr {
 	parsed := netutils.ParseIPSloppy(ip)
+	// CIDRMask 需要按地址族指定总位数：IPv4 为 32 位，IPv6 为 128 位。
 	bits := 32
 	if parsed.To4() == nil {
 		bits = 128
@@ -41,6 +42,7 @@ func addr(ip string, mask, linkIndex int) netlink.Addr {
 	}
 }
 
+// collectIPs 提取地址列表中的 IP 字符串并排序，避免地址顺序影响断言结果。
 func collectIPs(addrs []net.Addr) []string {
 	out := make([]string, 0, len(addrs))
 	for _, a := range addrs {
@@ -54,6 +56,8 @@ func collectIPs(addrs []net.Addr) []string {
 	return out
 }
 
+// TestFilterAddrsExcept 验证 filterAddrsExcept 按 LinkIndex 过滤地址的行为，
+// 同时覆盖无匹配地址、nil IPNet 和空输入等边界情况。
 func TestFilterAddrsExcept(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -98,10 +102,12 @@ func TestFilterAddrsExcept(t *testing.T) {
 			expected: []string{},
 		},
 	}
+	// 每个用例作为子测试独立运行，失败时能直接定位到具体场景。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := collectIPs(filterAddrsExcept(tc.addrs, tc.devIndex))
 			want := tc.expected
+			// nil 与空切片语义不同，统一为空切片再比较。
 			if want == nil {
 				want = []string{}
 			}

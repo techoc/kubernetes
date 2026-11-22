@@ -29,10 +29,15 @@ import (
 	iptablestest "k8s.io/kubernetes/pkg/util/iptables/testing"
 )
 
+// TestCleanupLeftovers 验证 cleanupLeftoversForFamily 能从一份包含
+// kube-proxy 链及第三方规则的初始状态中，删除应由 kube-proxy 清理的链和跳转规则，
+// 同时保留非 Kubernetes 规则以及由 kubelet 与 kube-proxy 共建的链。
 func TestCleanupLeftovers(t *testing.T) {
 	_, ctx := klogtesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
 
+	// 构造包含 filter/nat/mangle 三张表的初始状态，其中夹杂第三方规则，
+	// 以便验证清理只针对 kube-proxy 自身的规则。
 	initial := dedent.Dedent(`
 		*filter
 		:INPUT - [0:0]
@@ -157,6 +162,7 @@ func TestCleanupLeftovers(t *testing.T) {
 		COMMIT
 		`)
 
+	// 用 NoFlushTables 恢复初始状态，避免覆盖 fake 的默认表结构。
 	err := ipt.RestoreAll([]byte(initial), utiliptables.NoFlushTables, utiliptables.NoRestoreCounters)
 	if err != nil {
 		t.Fatalf("Unexpected error setting up iptables state: %v", err)
@@ -173,6 +179,8 @@ func TestCleanupLeftovers(t *testing.T) {
 		t.Fatalf("Unexpected error reading filter table: %v", err)
 	}
 
+	// 期望的输出只包含内建链、共享的 canary 链和第三方规则，
+	// 其余 kube-proxy 链应已被全部删除。
 	expected := dedent.Dedent(`
 		*filter
 		:INPUT - [0:0]
@@ -207,6 +215,7 @@ func TestCleanupLeftovers(t *testing.T) {
 		:KUBE-KUBELET-CANARY - [0:0]
 		COMMIT
 		`)
+	// 保存的输出顺序可能不同，先按统一规则排序再比较，避免顺序差异导致误报。
 	expected, err = sortIPTablesRules(expected)
 	if err != nil {
 		t.Fatalf("Unexpected error sorting expected output: %v", err)

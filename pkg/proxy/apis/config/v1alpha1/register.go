@@ -21,23 +21,23 @@ import (
 	kubeproxyconfigv1alpha1 "k8s.io/kube-proxy/config/v1alpha1"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "kubeproxy.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的 group version。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
-	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 在 SchemeBuilder 实例上扩展外部类型；
+	// 本包还会在此注册默认值设置和转换相关的 init 函数。
 	localSchemeBuilder = &kubeproxyconfigv1alpha1.SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是全局函数，用于将该 API group 和 version 注册到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
+// init 将手动编写的默认值设置函数注册到 scheme builder。
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处只注册手写的函数；自动生成的函数由生成的文件负责注册。
+	// 这样即使生成的文件缺失，包也仍然可以编译。
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }

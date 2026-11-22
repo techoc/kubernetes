@@ -29,6 +29,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// Test_toVirtualServer 验证 toVirtualServer 把 libipvs.Service 转换为 VirtualServer：
+// 剔除内核总会设置的 FlagHashed、映射协议名、并对无效 Flags 报错。
 func Test_toVirtualServer(t *testing.T) {
 	Tests := []struct {
 		ipvsService   libipvs.Service
@@ -198,6 +200,7 @@ func Test_toVirtualServer(t *testing.T) {
 		},
 	}
 
+	// 前两个用例缺少 FlagHashed，转换必须失败；其余用例同时核对各字段的映射结果。
 	for i := range Tests {
 		got, err := toVirtualServer(&Tests[i].ipvsService)
 		if Tests[i].expectError && err == nil {
@@ -206,6 +209,7 @@ func Test_toVirtualServer(t *testing.T) {
 		if !Tests[i].expectError && err != nil {
 			t.Errorf("case: %d, unexpected error: %v", i, err)
 		}
+		// 只在转换成功时比较结构体，错误用例的零值结果没有比较意义。
 		if got != nil {
 			if !reflect.DeepEqual(*got, Tests[i].virtualServer) {
 				t.Errorf("case: %d, got %#v, want %#v", i, *got, Tests[i].virtualServer)
@@ -214,6 +218,8 @@ func Test_toVirtualServer(t *testing.T) {
 	}
 }
 
+// Test_toIPVSService 验证 toIPVSService 把 VirtualServer 转换为 libipvs.Service，
+// 包括协议号映射以及按 IPv4/IPv6 设置地址族与网络掩码。
 func Test_toIPVSService(t *testing.T) {
 	Tests := []struct {
 		ipvsService   libipvs.Service
@@ -309,6 +315,7 @@ func Test_toIPVSService(t *testing.T) {
 		},
 	}
 
+	// 期望值包含 Netmask/AddressFamily，防止转换时只关注地址和端口。
 	for i := range Tests {
 		got, err := toIPVSService(&Tests[i].virtualServer)
 		if err != nil {
@@ -320,6 +327,8 @@ func Test_toIPVSService(t *testing.T) {
 	}
 }
 
+// Test_toRealServer 验证 toRealServer 把 libipvs.Destination 转换为 RealServer，
+// 覆盖 IPv4 与 IPv6 后端地址。
 func Test_toRealServer(t *testing.T) {
 	Tests := []struct {
 		ipvsDestination libipvs.Destination
@@ -352,6 +361,7 @@ func Test_toRealServer(t *testing.T) {
 			},
 		},
 	}
+	// 转换不应修改端口、权重和地址，逐字段深度比较以避免遗漏。
 	for i := range Tests {
 		got, err := toRealServer(&Tests[i].ipvsDestination)
 		if err != nil {
@@ -363,6 +373,8 @@ func Test_toRealServer(t *testing.T) {
 	}
 }
 
+// Test_toIPVSDestination 验证 toIPVSDestination 把 RealServer 转换为 libipvs.Destination，
+// 覆盖 IPv4 与 IPv6 后端地址。
 func Test_toIPVSDestination(t *testing.T) {
 	Tests := []struct {
 		realServer      RealServer
@@ -395,6 +407,7 @@ func Test_toIPVSDestination(t *testing.T) {
 			},
 		},
 	}
+	// 反向转换的期望值与 toRealServer 用例对称，保证往返转换不丢字段。
 	for i := range Tests {
 		got, err := toIPVSDestination(&Tests[i].realServer)
 		if err != nil {
@@ -406,10 +419,13 @@ func Test_toIPVSDestination(t *testing.T) {
 	}
 }
 
+// Test_stringToProtocol 验证 stringToProtocol 把 TCP/UDP/ICMP/SCTP 名称映射为协议号，
+// 其中 ICMP 及未知协议映射到 0。
 func Test_stringToProtocol(t *testing.T) {
 	tests := []string{
 		"TCP", "UDP", "ICMP", "SCTP",
 	}
+	// ICMP 没有对应的 IPVS 协议号，实现返回 0，这里显式固定该行为。
 	expected := []uint16{
 		uint16(unix.IPPROTO_TCP), uint16(unix.IPPROTO_UDP), uint16(0), uint16(unix.IPPROTO_SCTP),
 	}
@@ -422,10 +438,13 @@ func Test_stringToProtocol(t *testing.T) {
 	}
 }
 
+// Test_protocolToString 验证 protocolToString 是 stringToProtocol 的逆映射：
+// 协议 0 映射为空串，未知协议同样返回空串。
 func Test_protocolToString(t *testing.T) {
 	tests := []Protocol{
 		unix.IPPROTO_TCP, unix.IPPROTO_UDP, Protocol(0), unix.IPPROTO_SCTP,
 	}
+	// 协议 0 代表未设置，逆映射为空串，与正向转换的约定保持一致。
 	expected := []string{
 		"TCP", "UDP", "", "SCTP",
 	}

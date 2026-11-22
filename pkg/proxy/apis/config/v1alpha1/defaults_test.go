@@ -30,15 +30,22 @@ import (
 	kubeproxyconfigv1alpha1 "k8s.io/kube-proxy/config/v1alpha1"
 )
 
+// TestDefaultsKubeProxyConfiguration 验证 SetDefaults_KubeProxyConfiguration
+// 能为空配置填写正确的默认值，并在用户只给出部分字段（如不带端口的监听地址）
+// 时补齐其余字段。expected 中显式断言了 bind address、各类同步周期、OOM 分数、
+// conntrack 超时和日志配置，防止默认值被无意改动。
 func TestDefaultsKubeProxyConfiguration(t *testing.T) {
+	// 用变量取地址，作为 OOM、conntrack 相关指针字段的期望值。
 	oomScore := int32(-999)
 	ctMaxPerCore := int32(32768)
 	ctMin := int32(131072)
+	// 表驱动用例：original 为输入配置，expected 为期望的默认化结果。
 	testCases := []struct {
 		name     string
 		original *kubeproxyconfigv1alpha1.KubeProxyConfiguration
 		expected *kubeproxyconfigv1alpha1.KubeProxyConfiguration
 	}{
+		// 全空配置场景：所有字段都应被填成默认常量值。
 		{
 			name:     "empty-config",
 			original: &kubeproxyconfigv1alpha1.KubeProxyConfiguration{},
@@ -82,6 +89,8 @@ func TestDefaultsKubeProxyConfiguration(t *testing.T) {
 				},
 			},
 		},
+		// 只给了 IP 没给端口：默认化必须补上标准端口，
+		// 否则监听地址会被误判为不完整。
 		{
 			name: "metrics and healthz address with no port",
 			original: &kubeproxyconfigv1alpha1.KubeProxyConfiguration{
@@ -131,7 +140,10 @@ func TestDefaultsKubeProxyConfiguration(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 就地默认化输入配置。
 			SetDefaults_KubeProxyConfiguration(tc.original)
+			// 逐字段比较，输出差异便于定位哪个默认值发生变化；
+			// -want +got 的顺序与输出格式一致。
 			if diff := cmp.Diff(tc.expected, tc.original); diff != "" {
 				t.Errorf("Got unexpected defaults (-want, +got):\n%s", diff)
 			}

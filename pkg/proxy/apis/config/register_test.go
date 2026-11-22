@@ -25,6 +25,7 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 )
 
+// TestComponentConfigSetup 校验 kube-proxy 内部配置包符合 component config 的约定。
 func TestComponentConfigSetup(t *testing.T) {
 	pkginfo := &componentconfigtesting.ComponentConfigPackage{
 		ComponentName:      "kube-proxy",

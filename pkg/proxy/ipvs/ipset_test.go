@@ -25,6 +25,8 @@ import (
 	fakeipset "k8s.io/kubernetes/pkg/proxy/ipvs/ipset/testing"
 )
 
+// TestCheckIPSetVersion 校验 ipset 版本检查逻辑：ipvs 代理依赖 ipset 6.0 及以上版本的特性，
+// 低于 6.0 或无法解析的版本字符串必须被拒绝，否则后续命令会失败。
 func TestCheckIPSetVersion(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -44,6 +46,7 @@ func TestCheckIPSetVersion(t *testing.T) {
 		{"not a valid semantic version", "total junk", false},
 	}
 
+	// 逐项比对版本判定结果，包括非法版本号与多段版本号。
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			valid := checkMinVersion(testCase.vstring)
@@ -54,8 +57,12 @@ func TestCheckIPSetVersion(t *testing.T) {
 	}
 }
 
+// 测试用的 ipset 版本，满足 ipvs 代理的最低版本要求。
 const testIPSetVersion = "v6.19"
 
+// TestSyncIPSetEntries 验证 syncIPSetEntries 能把 ipset 的实际内容与期望集合对齐：
+// 覆盖新增、删除、替换条目以及 IPv4/IPv6、hash/bitmap 类型和多种协议（TCP/UDP/SCTP）。
+// ipvs 规则依赖这些集合做匹配，集合不同步会导致流量转发错误。
 func TestSyncIPSetEntries(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -219,6 +226,7 @@ func TestSyncIPSetEntries(t *testing.T) {
 		},
 	}
 
+	// 用假 ipset 句柄创建集合并预置 currentEntries，模拟内核中已存在的条目。
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			set := NewIPSet(fakeipset.NewFake(testIPSetVersion), testCase.set.Name, testCase.setType, testCase.ipv6, "comment-"+testCase.set.Name)
@@ -227,6 +235,8 @@ func TestSyncIPSetEntries(t *testing.T) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 
+			// 预置“当前已有”的条目，再写入“期望存在”的条目，最后执行同步；
+			// 只有新增和保留的条目应存在于集合中，陈旧条目必须被删除。
 			for _, entry := range testCase.currentEntries {
 				set.handle.AddEntry(entry, testCase.set, true)
 			}

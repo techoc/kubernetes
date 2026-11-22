@@ -28,21 +28,25 @@ import (
 	"sigs.k8s.io/knftables"
 )
 
+// TestNFTCounterMetricCollector 验证 nftables 计数器指标按协议和 IP 族导出正确的包数。
 func TestNFTCounterMetricCollector(t *testing.T) {
 	udpCounter := LocalhostNodePortRejectedCounterName(v1.ProtocolUDP)
 	sctpCounter := LocalhostNodePortRejectedCounterName(v1.ProtocolSCTP)
 
 	fake := knftables.NewFake(knftables.IPv4Family, "kube-proxy")
 	tx := fake.NewTransaction()
+	// fake nftables 必须先在事务中创建表和计数器，收集器才有可读取的对象。
 	tx.Add(&knftables.Table{})
 	tx.Add(&knftables.Counter{Name: udpCounter})
 	tx.Add(&knftables.Counter{Name: sctpCounter})
 	if err := fake.Run(context.Background(), tx); err != nil {
 		t.Fatalf("failed to set up fake nftables: %v", err)
 	}
+	// 写入非零包数，确保校验的是收集器读到的真实值而非零值。
 	fake.Table.Counters[udpCounter].Packets = new(uint64(7))
 	fake.Table.Counters[sctpCounter].Packets = new(uint64(3))
 
+	// 收集器依赖协议到计数器名的映射来决定读取哪些计数器。
 	c := &nftCounterMetricCollector{
 		clients: map[v1.IPFamily]knftables.Interface{v1.IPv4Protocol: fake},
 		counters: map[string]string{

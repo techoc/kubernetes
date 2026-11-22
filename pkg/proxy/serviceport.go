@@ -31,49 +31,48 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// ServicePort is an interface which abstracts information about a service.
+// ServicePort 是抽象服务信息的接口。
 type ServicePort interface {
-	// String returns service string.  An example format can be: `IP:Port/Protocol`.
+	// String 返回服务的字符串表示，示例格式为：`IP:Port/Protocol`。
 	String() string
-	// ClusterIP returns service cluster IP in net.IP format.
+	// ClusterIP 以 net.IP 格式返回服务的集群 IP。
 	ClusterIP() net.IP
-	// Port returns service port if present. If return 0 means not present.
+	// Port 返回服务端口；返回 0 表示未设置端口。
 	Port() int
-	// SessionAffinityType returns service session affinity type
+	// SessionAffinityType 返回服务的会话亲和性类型
 	SessionAffinityType() v1.ServiceAffinity
-	// StickyMaxAgeSeconds returns service max connection age
+	// StickyMaxAgeSeconds 返回服务的最大连接保持时长（秒）
 	StickyMaxAgeSeconds() int
-	// ExternalIPs returns service ExternalIPs
+	// ExternalIPs 返回服务的 ExternalIPs
 	ExternalIPs() []net.IP
-	// LoadBalancerVIPs returns service LoadBalancerIPs which are VIP mode
+	// LoadBalancerVIPs 返回服务中处于 VIP 模式的 LoadBalancerIP。
 	LoadBalancerVIPs() []net.IP
-	// Protocol returns service protocol.
+	// Protocol 返回服务协议。
 	Protocol() v1.Protocol
-	// LoadBalancerSourceRanges returns service LoadBalancerSourceRanges if present empty array if not
+	// LoadBalancerSourceRanges 返回服务的 LoadBalancerSourceRanges；未设置时返回空数组。
 	LoadBalancerSourceRanges() []*net.IPNet
-	// HealthCheckNodePort returns service health check node port if present.  If return 0, it means not present.
+	// HealthCheckNodePort 返回服务的健康检查节点端口；返回 0 表示未设置。
 	HealthCheckNodePort() int
-	// NodePort returns a service Node port if present. If return 0, it means not present.
+	// NodePort 返回服务的节点端口；返回 0 表示未设置。
 	NodePort() int
-	// ExternalPolicyLocal returns if a service has only node local endpoints for external traffic.
+	// ExternalPolicyLocal 返回服务对外部流量是否仅使用节点本地端点。
 	ExternalPolicyLocal() bool
-	// InternalPolicyLocal returns if a service has only node local endpoints for internal traffic.
+	// InternalPolicyLocal 返回服务对内部流量是否仅使用节点本地端点。
 	InternalPolicyLocal() bool
-	// ExternallyAccessible returns true if the service port is reachable via something
-	// other than ClusterIP (NodePort/ExternalIP/LoadBalancer)
+	// ExternallyAccessible 返回该服务端口是否可通过 ClusterIP 之外的方式
+	// （NodePort/ExternalIP/LoadBalancer）访问。
 	ExternallyAccessible() bool
-	// UsesClusterEndpoints returns true if the service port ever sends traffic to
-	// endpoints based on "Cluster" traffic policy
+	// UsesClusterEndpoints 返回该服务端口是否会基于 "Cluster" 流量策略
+	// 向端点发送流量。
 	UsesClusterEndpoints() bool
-	// UsesLocalEndpoints returns true if the service port ever sends traffic to
-	// endpoints based on "Local" traffic policy
+	// UsesLocalEndpoints 返回该服务端口是否会基于 "Local" 流量策略
+	// 向端点发送流量。
 	UsesLocalEndpoints() bool
 }
 
-// BaseServicePortInfo contains base information that defines a service.
-// This could be used directly by proxier while processing services,
-// or can be used for constructing a more specific ServiceInfo struct
-// defined by the proxier if needed.
+// BaseServicePortInfo 包含定义一个服务所需的基础信息。
+// proxier 处理服务时可以直接使用它，也可以在需要时基于它
+// 构造各 proxier 自定义的、更具体的 ServiceInfo 结构。
 type BaseServicePortInfo struct {
 	clusterIP                net.IP
 	port                     int
@@ -89,102 +88,108 @@ type BaseServicePortInfo struct {
 	internalPolicyLocal      bool
 }
 
+// 编译期断言：确保 BaseServicePortInfo 实现了 ServicePort 接口。
 var _ ServicePort = &BaseServicePortInfo{}
 
-// String is part of ServicePort interface.
+// String 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) String() string {
 	return fmt.Sprintf("%s:%d/%s", bsvcPortInfo.clusterIP, bsvcPortInfo.port, bsvcPortInfo.protocol)
 }
 
-// ClusterIP is part of ServicePort interface.
+// ClusterIP 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) ClusterIP() net.IP {
 	return bsvcPortInfo.clusterIP
 }
 
-// Port is part of ServicePort interface.
+// Port 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) Port() int {
 	return bsvcPortInfo.port
 }
 
-// SessionAffinityType is part of the ServicePort interface.
+// SessionAffinityType 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) SessionAffinityType() v1.ServiceAffinity {
 	return bsvcPortInfo.sessionAffinityType
 }
 
-// StickyMaxAgeSeconds is part of the ServicePort interface
+// StickyMaxAgeSeconds 是 ServicePort 接口的一部分
 func (bsvcPortInfo *BaseServicePortInfo) StickyMaxAgeSeconds() int {
 	return bsvcPortInfo.stickyMaxAgeSeconds
 }
 
-// Protocol is part of ServicePort interface.
+// Protocol 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) Protocol() v1.Protocol {
 	return bsvcPortInfo.protocol
 }
 
-// LoadBalancerSourceRanges is part of ServicePort interface
+// LoadBalancerSourceRanges 是 ServicePort 接口的一部分
 func (bsvcPortInfo *BaseServicePortInfo) LoadBalancerSourceRanges() []*net.IPNet {
 	return bsvcPortInfo.loadBalancerSourceRanges
 }
 
-// HealthCheckNodePort is part of ServicePort interface.
+// HealthCheckNodePort 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) HealthCheckNodePort() int {
 	return bsvcPortInfo.healthCheckNodePort
 }
 
-// NodePort is part of the ServicePort interface.
+// NodePort 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) NodePort() int {
 	return bsvcPortInfo.nodePort
 }
 
-// ExternalIPs is part of ServicePort interface.
+// ExternalIPs 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) ExternalIPs() []net.IP {
-	// Only program rules for externalIPs if the feature gate is enabled
+	// 只有特性开关启用时才为 externalIPs 下发规则；开关关闭时这些 IP 不应生效。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.AllowServiceExternalIPs) {
 		return []net.IP{}
 	}
 	return bsvcPortInfo.externalIPs
 }
 
-// LoadBalancerVIPs is part of ServicePort interface.
+// LoadBalancerVIPs 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) LoadBalancerVIPs() []net.IP {
 	return bsvcPortInfo.loadBalancerVIPs
 }
 
-// ExternalPolicyLocal is part of ServicePort interface.
+// ExternalPolicyLocal 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) ExternalPolicyLocal() bool {
 	return bsvcPortInfo.externalPolicyLocal
 }
 
-// InternalPolicyLocal is part of ServicePort interface
+// InternalPolicyLocal 是 ServicePort 接口的一部分
 func (bsvcPortInfo *BaseServicePortInfo) InternalPolicyLocal() bool {
 	return bsvcPortInfo.internalPolicyLocal
 }
 
-// ExternallyAccessible is part of ServicePort interface.
+// ExternallyAccessible 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) ExternallyAccessible() bool {
 	return bsvcPortInfo.nodePort != 0 || len(bsvcPortInfo.loadBalancerVIPs) != 0 || len(bsvcPortInfo.externalIPs) != 0
 }
 
-// UsesClusterEndpoints is part of ServicePort interface.
+// UsesClusterEndpoints 是 ServicePort 接口的一部分。
+// UsesClusterEndpoints 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) UsesClusterEndpoints() bool {
-	// The service port uses Cluster endpoints if the internal traffic policy is "Cluster",
-	// or if it accepts external traffic at all. (Even if the external traffic policy is
-	// "Local", we need Cluster endpoints to implement short circuiting.)
+	// 内部流量策略为 "Cluster"，或者服务接受外部流量时，都需要 Cluster 端点；
+	// 即使外部流量策略为 "Local"，也要靠 Cluster 端点来实现短路（short circuiting），
+	// 因此两种情况都算作使用 Cluster 端点。
 	return !bsvcPortInfo.internalPolicyLocal || bsvcPortInfo.ExternallyAccessible()
 }
 
-// UsesLocalEndpoints is part of ServicePort interface.
+// UsesLocalEndpoints 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) UsesLocalEndpoints() bool {
 	return bsvcPortInfo.internalPolicyLocal || (bsvcPortInfo.externalPolicyLocal && bsvcPortInfo.ExternallyAccessible())
 }
 
+// newBaseServiceInfo 根据 Service、地址族和 ServicePort 构造 BaseServicePortInfo。
+// 各类 IP 都按地址族过滤，因为每个 proxier 只负责单一地址族的规则；
+// 健康检查端口只在服务确实需要健康检查时才会读取。
 func newBaseServiceInfo(service *v1.Service, ipFamily v1.IPFamily, port *v1.ServicePort) *BaseServicePortInfo {
 	externalPolicyLocal := apiservice.ExternalPolicyLocal(service)
 	internalPolicyLocal := apiservice.InternalPolicyLocal(service)
 
 	var stickyMaxAgeSeconds int
 	if service.Spec.SessionAffinity == v1.ServiceAffinityClientIP {
-		// Kube-apiserver side guarantees SessionAffinityConfig won't be nil when session affinity type is ClientIP
+		// kube-apiserver 保证会话亲和类型为 ClientIP 时 SessionAffinityConfig 不为 nil，
+		// 因此这里可以直接解引用。
 		stickyMaxAgeSeconds = int(*service.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds)
 	}
 
@@ -200,12 +205,12 @@ func newBaseServiceInfo(service *v1.Service, ipFamily v1.IPFamily, port *v1.Serv
 		internalPolicyLocal: internalPolicyLocal,
 	}
 
-	// Filter ExternalIPs to correct IP family
+	// 按地址族过滤 ExternalIPs：本 proxier 只处理该地址族的规则。
 	ipFamilyMap := proxyutil.MapIPsByIPFamily(service.Spec.ExternalIPs)
 	info.externalIPs = ipFamilyMap[ipFamily]
 
-	// Filter source ranges to correct IP family. Also deal with the fact that
-	// LoadBalancerSourceRanges validation mistakenly allows whitespace padding
+	// 按地址族过滤源地址段；同时处理 LoadBalancerSourceRanges 校验时
+	// 错误地允许首尾空白的问题。
 	loadBalancerSourceRanges := make([]string, len(service.Spec.LoadBalancerSourceRanges))
 	for i, sourceRange := range service.Spec.LoadBalancerSourceRanges {
 		loadBalancerSourceRanges[i] = strings.TrimSpace(sourceRange)
@@ -213,22 +218,21 @@ func newBaseServiceInfo(service *v1.Service, ipFamily v1.IPFamily, port *v1.Serv
 
 	cidrFamilyMap := proxyutil.MapCIDRsByIPFamily(loadBalancerSourceRanges)
 	cidrs := cidrFamilyMap[ipFamily]
-	// zero-masked cidr means "allow any", which same as the empty loadBalancerSourceRanges.
+	// 全零掩码的 CIDR 表示"允许任意来源"，这与未设置 LoadBalancerSourceRanges 等价。
 	if slices.ContainsFunc(cidrs, proxyutil.IsZeroCIDR) {
 		cidrs = []*net.IPNet{}
 	}
 	info.loadBalancerSourceRanges = cidrs
 
-	// Filter Load Balancer Ingress IPs to correct IP family. While proxying load
-	// balancers might choose to proxy connections from an LB IP of one family to a
-	// service IP of another family, that's irrelevant to kube-proxy, which only
-	// creates rules for VIP-style load balancers.
+	// 按地址族过滤 LoadBalancer Ingress IP。虽然负载均衡器可能把某一地址族的
+	// LB IP 上的连接代理到另一地址族的服务 IP，但这与 kube-proxy 无关：
+	// 它只为 VIP 模式的负载均衡器创建规则。
 	for _, ing := range service.Status.LoadBalancer.Ingress {
 		if ing.IP == "" || !proxyutil.IsVIPMode(ing) {
 			continue
 		}
 
-		ip := netutils.ParseIPSloppy(ing.IP) // (already verified as an IP-address)
+		ip := netutils.ParseIPSloppy(ing.IP) // 此前已校验该字符串是 IP 地址
 		if ingFamily := proxyutil.GetIPFamilyFromIP(ip); ingFamily == ipFamily {
 			info.loadBalancerVIPs = append(info.loadBalancerVIPs, ip)
 		}

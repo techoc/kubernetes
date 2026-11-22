@@ -48,6 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试用固定常量：节点名、网络名、前缀长度、MAC 地址及各网关端点标识，供各测试场景共享。
 const (
 	testNodeName      = "test-node"
 	testNetwork       = "TestNetwork"
@@ -71,10 +72,13 @@ const (
 	epMacAddressGw    = "00-11-22-33-44-66"
 )
 
+// 双栈测试按创建顺序使用的负载均衡器 ID 列表。
 var (
 	loadbalancerGuids = []string{emptyLbID, "LBID-1", "LBID-2", "LBID-3", "LBID-4", "LBID-5", "LBID-6", "LBID-7", "LBID-8"}
 )
 
+// newHnsNetwork 根据 hnsNetworkInfo 构造模拟的 HostComputeNetwork，
+// 将每个远端子网转换为 RemoteSubnetRoute 类型的网络策略。
 func newHnsNetwork(networkInfo *hnsNetworkInfo) *hcn.HostComputeNetwork {
 	var policies []hcn.NetworkPolicy
 	for _, remoteSubnet := range networkInfo.remoteSubnets {
@@ -101,10 +105,12 @@ func newHnsNetwork(networkInfo *hnsNetworkInfo) *hcn.HostComputeNetwork {
 	return network
 }
 
+// NewFakeProxier 创建一个基于 HCN mock 的测试用 Proxier。
+// 默认使用 IPv4 与指定网络类型，并可按需开启 DSR、指定 IP 家族。
 func NewFakeProxier(t *testing.T, nodeName string, nodeIP net.IP, networkType string, enableDSR bool, ipFamily ...v1.IPFamily) *Proxier {
 	sourceVip := "192.168.1.2"
 
-	// Default to IPv4 if no ipFamily is provided
+	// 如果未提供 ipFamily，则默认使用 IPv4
 	family := v1.IPv4Protocol
 	if len(ipFamily) > 0 {
 		family = ipFamily[0]
@@ -114,7 +120,7 @@ func NewFakeProxier(t *testing.T, nodeName string, nodeIP net.IP, networkType st
 		sourceVip = "192::1:2"
 	}
 
-	// enable `WinDSR` feature gate
+	// 启用 `WinDSR` 特性门控
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.WinDSR, true)
 
 	config := kubeproxyconfig.KubeProxyWinkernelConfiguration{
@@ -126,6 +132,7 @@ func NewFakeProxier(t *testing.T, nodeName string, nodeIP net.IP, networkType st
 
 	hcnMock := getHcnMock(networkType)
 
+	// 注入 mock HCN 与固定 MAC 地址，避免测试依赖真实的主机网络状态。
 	proxier, _ := newProxierInternal(
 		family,
 		nodeName,
@@ -142,6 +149,8 @@ func NewFakeProxier(t *testing.T, nodeName string, nodeIP net.IP, networkType st
 	return proxier
 }
 
+// getHcnMock 创建带有一个预设远端子网的 HCN mock，
+// 使测试无需依赖真实 Windows HNS 即可查询网络信息。
 func getHcnMock(networkType string) *fakehcn.HcnMock {
 	var remoteSubnets []*remoteSubnetInfo
 	rs := &remoteSubnetInfo{
@@ -162,6 +171,7 @@ func getHcnMock(networkType string) *fakehcn.HcnMock {
 	return hcnMock
 }
 
+// TestCreateServiceVip 验证服务创建后 ClusterIP 被记录为 VIP（远端端点）且 serviceInfo 正确。
 func TestCreateServiceVip(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -197,6 +207,7 @@ func TestCreateServiceVip(t *testing.T) {
 			}}
 		}),
 	)
+	// 先标记已初始化，否则 syncProxyRules 会跳过规则同步。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
@@ -215,6 +226,7 @@ func TestCreateServiceVip(t *testing.T) {
 	}
 }
 
+// TestCreateRemoteEndpointOverlay 验证 overlay 网络中远端端点的 HNS ID 分配与引用计数初始化。
 func TestCreateRemoteEndpointOverlay(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, false)
 	if proxier == nil {
@@ -279,6 +291,7 @@ func TestCreateRemoteEndpointOverlay(t *testing.T) {
 	}
 }
 
+// TestCreateRemoteEndpointL2Bridge 验证 L2Bridge 网络中远端端点的 HNS ID 与引用计数初始化。
 func TestCreateRemoteEndpointL2Bridge(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), "L2Bridge", false)
 	if proxier == nil {
@@ -341,6 +354,7 @@ func TestCreateRemoteEndpointL2Bridge(t *testing.T) {
 	}
 }
 
+// TestDsrEndpointsAreCreatedCorrectly 验证开启 DSR 时端点能被正确创建并获得 HNS ID。
 func TestDsrEndpointsAreCreatedCorrectly(t *testing.T) {
 	proxier := NewFakeProxier(t, "testhost", netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -395,6 +409,7 @@ func TestDsrEndpointsAreCreatedCorrectly(t *testing.T) {
 	}
 }
 
+// TestDsrNotAppliedToClusterTrafficPolicy 验证 ExternalTrafficPolicy=Cluster 时不会启用本地流量 DSR。
 func TestDsrNotAppliedToClusterTrafficPolicy(t *testing.T) {
 	proxier := NewFakeProxier(t, "testhost", netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -436,12 +451,14 @@ func TestDsrNotAppliedToClusterTrafficPolicy(t *testing.T) {
 	}
 }
 
-// TestClusterIPSvcWithITPLocal tests the following scenarios for a ClusterIP service with InternalTrafficPolicy=Local:
-//  1. When a local endpoint is added to the service, the service should continue to use the local endpoints and existing loadbalancer.
-//     If no existing loadbalancer is present, a new loadbalancer should be created.
-//  2. When one more local endpoint is added to the service, the service should delete existing loadbalancer and create a new loadbalancer.
-//  3. When a remote endpoint is added to the service, the service should continue to use the local endpoints and existing loadbalancer,
-//     since it's a InternalTrafficPolicy=Local service.
+// TestClusterIPSvcWithITPLocal 测试 InternalTrafficPolicy=Local 的 ClusterIP 服务的以下场景：
+//  1. 添加本地端点时，服务应继续使用本地端点和现有负载均衡器；
+//     若当前没有负载均衡器，则应新建一个。
+//  2. 再添加一个本地端点时，服务应删除现有负载均衡器并新建一个。
+//  3. 添加远端端点时，服务应继续使用本地端点和现有负载均衡器，
+//     因为这是 InternalTrafficPolicy=Local 服务。
+//
+// 流量策略为 Cluster 时不使用 DSR，随后验证 localTrafficDSR 保持为 false。
 func TestClusterIPSvcWithITPLocal(t *testing.T) {
 	proxier := NewFakeProxier(t, "testhost", netutils.ParseIPSloppy("10.0.0.1"), "L2Bridge", true)
 	if proxier == nil {
@@ -456,13 +473,14 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 		Protocol:       v1.ProtocolTCP,
 	}
 
+	// 使用 CNI 管理的本地端点需预置到 mock 中，否则代理无法查询到它。
 	itpLocal := v1.ServiceInternalTrafficPolicyLocal
 
 	makeServiceMap(proxier,
 		makeTestService(svcPortName.Namespace, svcPortName.Name, func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
 			svc.Spec.ClusterIP = svcIP
-			svc.Spec.InternalTrafficPolicy = &itpLocal // Setting the InternalTrafficPolicy to Local
+			svc.Spec.InternalTrafficPolicy = &itpLocal // 将 InternalTrafficPolicy 设为 Local
 			svc.Spec.Ports = []v1.ServicePort{{
 				Name:     svcPortName.Port,
 				Port:     int32(svcPort),
@@ -476,7 +494,7 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{
 				{
-					Addresses: []string{epIpAddressLocal1}, // Local Endpoint 1
+					Addresses: []string{epIpAddressLocal1}, // 本地端点 1
 				},
 			}
 			eps.Ports = []discovery.EndpointPort{{
@@ -488,14 +506,15 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 	)
 
 	hcn := (proxier.hcn).(*fakehcn.HcnMock)
-	// Populating the endpoint to the cache, since it's a local endpoint and local endpoints are managed by CNI and not KubeProxy
-	// Populating here marks the endpoint to local
+	// 本地端点由 CNI 创建，这里靠预填充 mock 来模拟这一前提。
+	// 将该端点填充到缓存中，因为它是本地端点，而本地端点由 CNI 而非 kube-proxy 管理；
+	// 在此填充即将其标记为本地端点。
 	hcn.PopulateQueriedEndpoints(endpointLocal1, networkId, epIpAddressLocal1, macAddressLocal1, prefixLen)
 
 	proxier.setInitialized(true)
 
-	// Test 1: When a local endpoint is added to the service, the service should continue to use the local endpoints and existing loadbalancer.
-	// If no existing loadbalancer is present, a new loadbalancer should be created.
+	// 测试 1：添加本地端点时，服务应继续使用本地端点和现有负载均衡器；
+	// 若当前没有负载均衡器，则应新建一个。
 	proxier.syncProxyRules()
 
 	ep := proxier.endpointsMap[svcPortName][0]
@@ -511,8 +530,9 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 	assert.Equal(t, nil, err, fmt.Sprintf("Failed to fetch loadbalancer: %s. Error: %v", loadbalancerGuid1, err))
 	assert.NotNil(t, lb, "Loadbalancer object should not be nil")
 
-	// Test 2: When one more local endpoint is added to the service, the service should delete existing loadbalancer and create a new loadbalancer.
+	// 测试 2：再添加一个本地端点时，服务应删除现有负载均衡器并新建一个。
 
+	// 重置初始化状态，使下一次同步按变更后的端点重建负载均衡器。
 	proxier.setInitialized(false)
 
 	proxier.OnEndpointSliceUpdate(
@@ -534,7 +554,7 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 					Addresses: []string{epIpAddressLocal1},
 				},
 				{
-					Addresses: []string{epIpAddressLocal2}, // Adding one more local endpoint
+					Addresses: []string{epIpAddressLocal2}, // 再增加一个本地端点
 				},
 			}
 			eps.Ports = []discovery.EndpointPort{{
@@ -544,15 +564,16 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 			}}
 		}))
 
+	// 修改内部状态需要持锁，避免与 syncProxyRules 并发访问产生数据竞争。
 	proxier.mu.Lock()
 	proxier.endpointSlicesSynced = true
 	proxier.mu.Unlock()
 
 	proxier.setInitialized(true)
 
-	// Creating the second local endpoint
+	// 创建第二个本地端点
 	hcn.PopulateQueriedEndpoints(endpointLocal2, networkId, epIpAddressLocal2, macAddressLocal2, prefixLen)
-	// Reinitiating the syncProxyRules to create new loadbalancer with the new local endpoint
+	// 重新执行 syncProxyRules，用新的本地端点创建新的负载均衡器
 	proxier.syncProxyRules()
 	svc = proxier.svcPortMap[svcPortName]
 	svcInfo, ok = svc.(*serviceInfo)
@@ -565,9 +586,10 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 	lb, _ = proxier.hcn.GetLoadBalancerByID(loadbalancerGuid1)
 	assert.Nil(t, lb, fmt.Sprintf("Loadbalancer object should be nil: %s", loadbalancerGuid1))
 
-	// Test 3: When a remote endpoint is added to the service, the service should continue to use the local endpoints and existing loadbalancer,
-	// since it's a InternalTrafficPolicy=Local service.
+	// 测试 3：添加远端端点时，服务应继续使用本地端点和现有负载均衡器，
+	// 因为这是 InternalTrafficPolicy=Local 服务。
 
+	// 再次重置初始化，使远端端点加入后的同步重新计算规则。
 	proxier.setInitialized(false)
 
 	proxier.OnEndpointSliceUpdate(
@@ -594,10 +616,10 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 					Addresses: []string{epIpAddressLocal1},
 				},
 				{
-					Addresses: []string{epIpAddressLocal2}, // Adding one more local endpoint
+					Addresses: []string{epIpAddressLocal2}, // 再增加一个本地端点
 				},
 				{
-					Addresses: []string{epIpAddressRemote}, // Adding one more remote endpoint to the slice
+					Addresses: []string{epIpAddressRemote}, // 向 slice 中再增加一个远端端点
 				},
 			}
 			eps.Ports = []discovery.EndpointPort{{
@@ -623,6 +645,7 @@ func TestClusterIPSvcWithITPLocal(t *testing.T) {
 	assert.NotNil(t, lb, "Loadbalancer object should not be nil")
 }
 
+// TestSharedRemoteEndpointDelete 验证两个服务共享远端端点时，删除其一后引用计数递减且端点保留。
 func TestSharedRemoteEndpointDelete(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), "L2Bridge", true)
 	if proxier == nil {
@@ -693,6 +716,7 @@ func TestSharedRemoteEndpointDelete(t *testing.T) {
 			}}
 		}),
 	)
+	// 同一 HNS 端点被两个服务共享，引用计数应为 2。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 	ep := proxier.endpointsMap[svcPortName1][0]
@@ -714,6 +738,7 @@ func TestSharedRemoteEndpointDelete(t *testing.T) {
 		t.Errorf("Global refCount: %v does not match endpoint refCount: %v", *proxier.endPointsRefCount[endpointGuid1], *epInfo.refCount)
 	}
 
+	// 删除一个服务后重新同步，验证引用计数递减而非立即删除共享端点。
 	proxier.setInitialized(false)
 	deleteServices(proxier,
 		makeTestService(svcPortName2.Namespace, svcPortName2.Name, func(svc *v1.Service) {
@@ -764,6 +789,8 @@ func TestSharedRemoteEndpointDelete(t *testing.T) {
 		t.Errorf("Global refCount: %v does not match endpoint refCount: %v", *proxier.endPointsRefCount[endpointGuid1], *epInfo.refCount)
 	}
 }
+
+// TestSharedRemoteEndpointUpdate 验证服务与 EndpointSlice 更新后共享远端端点的引用计数保持一致。
 func TestSharedRemoteEndpointUpdate(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), "L2Bridge", true)
 	if proxier == nil {
@@ -857,6 +884,7 @@ func TestSharedRemoteEndpointUpdate(t *testing.T) {
 		t.Errorf("Global refCount: %v does not match endpoint refCount: %v", *proxier.endPointsRefCount[endpointGuid1], *epInfo.refCount)
 	}
 
+	// 更新服务前先重置初始化，使后续同步走增量变更路径。
 	proxier.setInitialized(false)
 
 	proxier.OnServiceUpdate(
@@ -910,6 +938,7 @@ func TestSharedRemoteEndpointUpdate(t *testing.T) {
 				}}
 		}))
 
+	// 手动标记 EndpointSlice 已同步，跳过 informer 的同步门槛。
 	proxier.mu.Lock()
 	proxier.endpointSlicesSynced = true
 	proxier.mu.Unlock()
@@ -938,6 +967,7 @@ func TestSharedRemoteEndpointUpdate(t *testing.T) {
 	}
 }
 
+// TestCreateLoadBalancerWithoutDSR 验证未开启 DSR 时负载均衡器标志为 LoadBalancerFlagsNone。
 func TestCreateLoadBalancerWithoutDSR(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, false)
 	if proxier == nil {
@@ -979,6 +1009,7 @@ func TestCreateLoadBalancerWithoutDSR(t *testing.T) {
 		}),
 	)
 
+	// 校验标志为 None，防止关闭 DSR 时误用 DSR 标志。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
@@ -1007,6 +1038,7 @@ func TestCreateLoadBalancerWithoutDSR(t *testing.T) {
 	}
 }
 
+// TestCreateLoadBalancerWithDSR 验证开启 DSR 时负载均衡器标志为 LoadBalancerFlagsDSR。
 func TestCreateLoadBalancerWithDSR(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -1048,6 +1080,7 @@ func TestCreateLoadBalancerWithDSR(t *testing.T) {
 		}),
 	)
 
+	// 校验标志为 DSR，确保开启 DSR 的配置真正生效。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
@@ -1076,12 +1109,14 @@ func TestCreateLoadBalancerWithDSR(t *testing.T) {
 	}
 }
 
+// TestUpdateLoadBalancerWhenSupported 验证 HCN 支持修改时端点变更原地更新负载均衡器，ID 保持不变。
 func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
 		t.Error()
 	}
 
+	// 显式开启 ModifyLoadbalancer，模拟支持原地更新的 HCN 版本。
 	proxier.supportedFeatures.ModifyLoadbalancer = true
 
 	svcIP := "10.20.30.41"
@@ -1133,6 +1168,7 @@ func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 		}
 	}
 
+	// 先同步建立基线，再更新端点以触发增量更新路径。
 	proxier.setInitialized(false)
 
 	proxier.OnEndpointSliceUpdate(
@@ -1159,6 +1195,7 @@ func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 			}}
 		}))
 
+	// 持锁设置同步标志，避免与可能的并发同步发生数据竞争。
 	proxier.mu.Lock()
 	proxier.endpointSlicesSynced = true
 	proxier.mu.Unlock()
@@ -1170,9 +1207,10 @@ func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 		t.Errorf("Failed to fetch endpoint: EPID-3")
 	}
 
+	// 触发同步，使端点变更应用到 HNS。
 	proxier.syncProxyRules()
 
-	// The endpoint should be deleted as it is not present in the new endpoint slice
+	// 该端点应被删除，因为它已不在新的 EndpointSlice 中
 	epObj, err = proxier.hcn.GetEndpointByID("EPID-3")
 	if err == nil || epObj != nil {
 		t.Errorf("Failed to fetch endpoint: EPID-3")
@@ -1209,7 +1247,7 @@ func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 		t.Errorf("Failed to cast serviceInfo %q", svcPortName.String())
 
 	} else {
-		// Loadbalancer id should not change after the update
+		// 更新后负载均衡器 ID 不应改变
 		if svcInfo.hnsID != loadbalancerGuid1 {
 			t.Errorf("%v does not match %v", svcInfo.hnsID, loadbalancerGuid1)
 		}
@@ -1217,13 +1255,15 @@ func TestUpdateLoadBalancerWhenSupported(t *testing.T) {
 
 }
 
+// TestUpdateLoadBalancerWhenUnsupported 验证 HCN 不支持修改时会重建负载均衡器并分配新 ID。
 func TestUpdateLoadBalancerWhenUnsupported(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
 		t.Error()
 	}
 
-	// By default the value is false, for the readibility of the test case setting it to false again
+	// 该值默认为 false，为提升测试可读性在此显式再次设为 false
+	// 显式置为 false 以覆盖不支持修改负载均衡器的分支。
 	proxier.supportedFeatures.ModifyLoadbalancer = false
 
 	svcIP := "10.20.30.41"
@@ -1314,7 +1354,7 @@ func TestUpdateLoadBalancerWhenUnsupported(t *testing.T) {
 
 	proxier.syncProxyRules()
 
-	// The endpoint should be deleted as it is not present in the new endpoint slice
+	// 该端点应被删除，因为它已不在新的 EndpointSlice 中
 	epObj, err = proxier.hcn.GetEndpointByID("EPID-3")
 	if err == nil || epObj != nil {
 		t.Errorf("Failed to fetch endpoint: EPID-3")
@@ -1351,7 +1391,7 @@ func TestUpdateLoadBalancerWhenUnsupported(t *testing.T) {
 		t.Errorf("Failed to cast serviceInfo %q", svcPortName.String())
 
 	} else {
-		// Loadbalancer id should change after the update
+		// 更新后负载均衡器 ID 应改变
 		if svcInfo.hnsID != "LBID-3" {
 			t.Errorf("%v does not match %v", svcInfo.hnsID, "LBID-3")
 		}
@@ -1359,6 +1399,7 @@ func TestUpdateLoadBalancerWhenUnsupported(t *testing.T) {
 
 }
 
+// TestCreateDsrLoadBalancer 验证 ExternalTrafficPolicy=Local 时创建 DSR 负载均衡器及健康检查 LB。
 func TestCreateDsrLoadBalancer(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -1407,6 +1448,7 @@ func TestCreateDsrLoadBalancer(t *testing.T) {
 	)
 
 	hcn := (proxier.hcn).(*fakehcn.HcnMock)
+	// 预填充网关端点，供 DSR 规则引用。
 	proxier.rootHnsEndpointName = endpointGw
 	hcn.PopulateQueriedEndpoints(endpointLocal1, guid, epIpAddressRemote, macAddress, prefixLen)
 	hcn.PopulateQueriedEndpoints(endpointGw, guid, epIpAddressGw, epMacAddressGw, prefixLen)
@@ -1425,6 +1467,7 @@ func TestCreateDsrLoadBalancer(t *testing.T) {
 		if svcInfo.localTrafficDSR != true {
 			t.Errorf("Failed to create DSR loadbalancer with local traffic policy")
 		}
+		// 断言 Ingress IP 对应的健康检查负载均衡器 ID 已建立。
 		if len(svcInfo.loadBalancerIngressIPs) == 0 {
 			t.Errorf("svcInfo does not have any loadBalancerIngressIPs, %+v", svcInfo)
 		}
@@ -1434,9 +1477,10 @@ func TestCreateDsrLoadBalancer(t *testing.T) {
 	}
 }
 
-// TestClusterIPLBInCreateDsrLoadBalancer tests, if the available endpoints are remote,
-// syncproxyrules only creates ClusterIP Loadbalancer and no NodePort, External IP or IngressIP
-// loadbalancers will be created.
+// TestClusterIPLBInCreateDsrLoadBalancer 测试：当可用端点均为远端端点时，
+// syncProxyRules 只创建 ClusterIP 负载均衡器，不会创建 NodePort、ExternalIP 或 IngressIP
+// 负载均衡器。
+// TestClusterIPLBInCreateDsrLoadBalancer 验证远端端点场景下只创建 ClusterIP 负载均衡器。
 func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, false)
 
@@ -1475,7 +1519,7 @@ func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
 				Addresses: []string{epIpAddressRemote},
-				NodeName:  ptr.To("testhost2"), // This will make this endpoint as a remote endpoint
+				NodeName:  ptr.To("testhost2"), // 该 NodeName 与代理主机名不同，使该端点成为远端端点
 			}}
 			eps.Ports = []discovery.EndpointPort{{
 				Name:     ptr.To(svcPortName.Port),
@@ -1485,6 +1529,7 @@ func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 		}),
 	)
 
+	// 端点全为远端时不应创建 NodePort/ExternalIP/IngressIP 负载均衡器。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
@@ -1494,21 +1539,21 @@ func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 		t.Errorf("Failed to cast serviceInfo %q", svcPortName.String())
 
 	} else {
-		// Checking ClusterIP Loadbalancer is created
+		// 检查 ClusterIP 负载均衡器已创建
 		if svcInfo.hnsID != loadbalancerGuid1 {
 			t.Errorf("%v does not match %v", svcInfo.hnsID, loadbalancerGuid1)
 		}
-		// Verifying NodePort Loadbalancer is not created
+		// 验证 NodePort 负载均衡器未创建
 		if svcInfo.nodePorthnsID != "" {
 			t.Errorf("NodePortHnsID %v is not empty.", svcInfo.nodePorthnsID)
 		}
-		// Verifying ExternalIP Loadbalancer is not created
+		// 验证 ExternalIP 负载均衡器未创建
 		for _, externalIP := range svcInfo.externalIPs {
 			if externalIP.hnsID != "" {
 				t.Errorf("ExternalLBID %v is not empty.", externalIP.hnsID)
 			}
 		}
-		// Verifying IngressIP Loadbalancer is not created
+		// 验证 IngressIP 负载均衡器未创建
 		for _, ingressIP := range svcInfo.loadBalancerIngressIPs {
 			if ingressIP.hnsID != "" {
 				t.Errorf("IngressLBID %v is not empty.", ingressIP.hnsID)
@@ -1517,10 +1562,12 @@ func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 	}
 }
 
+// TestEndpointSliceWithInternalPortDifferentFromServicePort 验证端口映射使用容器端口作内部端口。
 func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	assert.NotNil(t, proxier, "Failed to create proxier")
 
+	// 手动标记资源已同步，使 Add 事件中的变更进入缓存。
 	proxier.servicesSynced = true
 	proxier.endpointSlicesSynced = true
 
@@ -1534,7 +1581,7 @@ func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 		ClusterIP: "172.20.1.1",
 		Selector:  map[string]string{"foo": "bar"},
 		Ports: []v1.ServicePort{
-			{Name: svcPortName.Port, Port: 80, TargetPort: intstr.FromInt32(80), Protocol: v1.ProtocolTCP}, // Mocking TargetPort as to same as service port (80)
+			{Name: svcPortName.Port, Port: 80, TargetPort: intstr.FromInt32(80), Protocol: v1.ProtocolTCP}, // 模拟 TargetPort 与服务端口一致（80）
 		},
 	}
 
@@ -1543,7 +1590,7 @@ func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 		Spec:       svcSpec,
 	})
 
-	// Add initial endpoint slice
+	// 添加初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", svcPortName.Name),
@@ -1552,7 +1599,7 @@ func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 		},
 		Ports: []discovery.EndpointPort{{
 			Name:     &svcPortName.Port,
-			Port:     ptr.To[int32](8080), // Using container port 8080 which is different from service port 80
+			Port:     ptr.To[int32](8080), // 使用与服务端口 80 不同的容器端口 8080
 			Protocol: ptr.To(v1.ProtocolTCP),
 		}},
 		AddressType: discovery.AddressTypeIPv4,
@@ -1563,6 +1610,7 @@ func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 		}},
 	}
 
+	// 添加切片后同步规则，验证端口映射由 EndpointSlice 端口决定。
 	proxier.OnEndpointSliceAdd(endpointSlice)
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
@@ -1585,12 +1633,14 @@ func TestEndpointSliceWithInternalPortDifferentFromServicePort(t *testing.T) {
 	assert.Equal(t, epInfo.hnsID, "EPID-3", "Hns EndpointId %v does not match %v. ServicePortName %q", epInfo.hnsID, endpointGuid1, svcPortName.String())
 }
 
+// TestEndpointSlice 验证 Add 事件后同步规则能创建正确的负载均衡器与端点。
 func TestEndpointSlice(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
 		t.Error()
 	}
 
+	// 直接设置同步标志，避免依赖完整 informer 启动流程。
 	proxier.servicesSynced = true
 	proxier.endpointSlicesSynced = true
 
@@ -1609,7 +1659,7 @@ func TestEndpointSlice(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 添加初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", svcPortName.Name),
@@ -1656,7 +1706,9 @@ func TestEndpointSlice(t *testing.T) {
 	}
 }
 
+// TestNoopEndpointSlice 验证空 EndpointSlice 事件不会让空 Proxier panic。
 func TestNoopEndpointSlice(t *testing.T) {
+	// 仅初始化变更跟踪器即可，无需完整 Proxier。
 	p := Proxier{}
 	p.endpointsChanges = proxy.NewEndpointsChangeTracker(v1.IPv4Protocol, "", nil, nil)
 	p.OnEndpointSliceAdd(&discovery.EndpointSlice{})
@@ -1665,12 +1717,14 @@ func TestNoopEndpointSlice(t *testing.T) {
 	p.OnEndpointSlicesSynced()
 }
 
+// TestFindRemoteSubnetProviderAddress 验证按 provider address 或子网 IP 均可查到 provider address。
 func TestFindRemoteSubnetProviderAddress(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
 		t.Error()
 	}
 
+	// 使用 mock 中预置的远端子网，避免依赖真实网络配置。
 	networkInfo, _ := proxier.hns.getNetworkByName(testNetwork)
 	pa := networkInfo.findRemoteSubnetProviderAddress(providerAddress)
 
@@ -1691,6 +1745,7 @@ func TestFindRemoteSubnetProviderAddress(t *testing.T) {
 	}
 }
 
+// TestWinDSRWithOverlayEnabled 验证 overlay 下 WinDSR 门控开启后本地流量 DSR 生效。
 func TestWinDSRWithOverlayEnabled(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, true)
 	if proxier == nil {
@@ -1734,12 +1789,15 @@ func TestWinDSRWithOverlayEnabled(t *testing.T) {
 	}
 }
 
+// testDualStackService 为双栈服务分别构造 IPv4/IPv6 Proxier 并共享 HCN mock，
+// 按流量策略与 IP 家族策略验证各负载均衡器的 ID、标志与端点数量。
 func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1.IPFamilyPolicy, trafficPolicy v1.ServiceExternalTrafficPolicy) {
 	baseFlag := hcn.LoadBalancerFlagsNone
 	if trafficPolicy == v1.ServiceExternalTrafficPolicyLocal {
 		baseFlag = hcn.LoadBalancerFlagsDSR
 	}
 
+	// 分别构造 v4/v6 Proxier，模拟双栈服务在两个地址族上的同步。
 	v4Proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, enableDsr)
 	if v4Proxier == nil {
 		t.Error()
@@ -1748,7 +1806,7 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	if v6Proxier == nil {
 		t.Error()
 	}
-	v6Proxier.hcn = v4Proxier.hcn // Share the same HCN mock to simulate dual stack behavior
+	v6Proxier.hcn = v4Proxier.hcn // 共享同一个 HCN mock 以模拟双栈行为
 
 	svcPort := 80
 	svcNodePort := 3001
@@ -1825,6 +1883,7 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	populateEndpointSlices(v4Proxier, testEpSliceV4)
 	populateEndpointSlices(v6Proxier, testEpSliceV6)
 
+	// 共享同一 mock 才能验证两个 Proxier 对同一 HNS 状态的操作顺序。
 	hcnMock := (v4Proxier.hcn).(*fakehcn.HcnMock)
 	v4Proxier.rootHnsEndpointName = endpointGw
 	v6Proxier.rootHnsEndpointName = endpointGw
@@ -1833,6 +1892,7 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	hcnMock.PopulateQueriedEndpoints(endpointGw, guid, epIpAddressGw, epMacAddressGw, prefixLen)
 	hcnMock.PopulateQueriedEndpoints(endpointGw, guid, epIpAddressGwv6, epMacAddressGw, prefixLen)
 	v4Proxier.setInitialized(true)
+	// 先同步 v4 再同步 v6，模拟真实双栈同步顺序。
 	v4Proxier.syncProxyRules()
 
 	v4Svc := v4Proxier.svcPortMap[svcPortName]
@@ -1845,19 +1905,19 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	assert.Equal(t, loadbalancerGuids[3], v4SvcInfo.loadBalancerIngressIPs[0].hnsID, "The Hns Loadbalancer Ingress Id %v does not match %v. ServicePortName %q", v4SvcInfo.loadBalancerIngressIPs[0].hnsID, loadbalancerGuids[3], svcPortName.String())
 	assert.Equal(t, loadbalancerGuids[4], v4SvcInfo.loadBalancerIngressIPs[0].healthCheckHnsID, "The Hns Loadbalancer HealthCheck Id %v does not match %v. ServicePortName %q", v4SvcInfo.loadBalancerIngressIPs[0].healthCheckHnsID, loadbalancerGuids[4], svcPortName.String())
 
-	// Validating ClusterIP Loadbalancer
+	// 验证 ClusterIP 负载均衡器
 	clusterIPLb, err := v4Proxier.hcn.GetLoadBalancerByID(v4SvcInfo.hnsID)
 	assert.Equal(t, nil, err, "Failed to fetch loadbalancer: %v", err)
 	assert.NotEqual(t, nil, clusterIPLb, "Loadbalancer object should not be nil")
 	assert.Equal(t, baseFlag, clusterIPLb.Flags, "Loadbalancer Flags should be %v for IPv4 stack", baseFlag)
 
-	// Validating NodePort Loadbalancer
+	// 验证 NodePort 负载均衡器
 	nodePortLb, err := v4Proxier.hcn.GetLoadBalancerByID(v4SvcInfo.nodePorthnsID)
 	assert.Equal(t, nil, err, "Failed to fetch NodePort loadbalancer: %v", err)
 	assert.NotEqual(t, nil, nodePortLb, "NodePort Loadbalancer object should not be nil")
 	assert.Equal(t, baseFlag, nodePortLb.Flags, "NodePort Loadbalancer Flags should be %v for IPv4 stack", baseFlag)
 
-	// Validating V4 IngressIP Loadbalancer
+	// 验证 IPv4 IngressIP 负载均衡器
 	ingressLb, err := v4Proxier.hcn.GetLoadBalancerByID(v4SvcInfo.loadBalancerIngressIPs[0].hnsID)
 	assert.Equal(t, nil, err, "Failed to fetch IngressIP loadbalancer: %v", err)
 	assert.NotEqual(t, nil, ingressLb, "IngressIP Loadbalancer object should not be nil")
@@ -1873,7 +1933,7 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 		assert.Equal(t, 2, len(ingressLb.HostComputeEndpoints), "Expected 2 endpoints for cluster traffic policy, found %d", len(ingressLb.HostComputeEndpoints))
 	}
 
-	// Initiating v6 tests.
+	// 开始 IPv6 测试。
 	v6Proxier.setInitialized(true)
 	v6Proxier.syncProxyRules()
 
@@ -1887,18 +1947,19 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	assert.Equal(t, loadbalancerGuids[7], v6SvcInfo.loadBalancerIngressIPs[0].hnsID, "The Hns Loadbalancer Ingress Id %v does not match %v for IPv6 LB. ServicePortName %q", v6SvcInfo.loadBalancerIngressIPs[0].hnsID, loadbalancerGuids[7], svcPortName.String())
 	assert.Equal(t, loadbalancerGuids[8], v6SvcInfo.loadBalancerIngressIPs[0].healthCheckHnsID, "The Hns Loadbalancer HealthCheck Id %v does not match %v. ServicePortName %q", v6SvcInfo.loadBalancerIngressIPs[0].healthCheckHnsID, loadbalancerGuids[8], svcPortName.String())
 
-	// Validating ClusterIP Loadbalancer
+	// 验证 ClusterIP 负载均衡器
 	clusterIPLb, err = v6Proxier.hcn.GetLoadBalancerByID(v6SvcInfo.hnsID)
 	assert.Equal(t, nil, err, "Failed to fetch loadbalancer: %v", err)
 	assert.NotEqual(t, nil, clusterIPLb, "Loadbalancer object should not be nil")
 	assert.Equal(t, baseFlag|hcn.LoadBalancerFlagsIPv6, clusterIPLb.Flags, "Loadbalancer Flags should be %v for IPv6 stack", baseFlag|hcn.LoadBalancerFlagsIPv6)
 
-	// Validating V6 IngressIP Loadbalancer
+	// 验证 IPv6 IngressIP 负载均衡器
 	ingressLb, err = v6Proxier.hcn.GetLoadBalancerByID(v6SvcInfo.loadBalancerIngressIPs[0].hnsID)
 	assert.Equal(t, nil, err, "Failed to fetch IngressIP loadbalancer: %v", err)
 	assert.NotEqual(t, nil, ingressLb, "IngressIP Loadbalancer object should not be nil")
 	assert.Equal(t, baseFlag|hcn.LoadBalancerFlagsIPv6, ingressLb.Flags, "IngressIP Loadbalancer Flags should be %v for IPv6 stack", baseFlag|hcn.LoadBalancerFlagsIPv6)
 
+	// 汇总 HNS 端点数量，验证不同流量策略下创建的端点总数。
 	eps, _ := hcnMock.ListEndpoints()
 	if trafficPolicy == v1.ServiceExternalTrafficPolicyLocal {
 		assert.Equal(t, 10, len(eps), "Expected 10 endpoints for local traffic policy, found %d", len(eps))
@@ -1915,26 +1976,32 @@ func testDualStackService(t *testing.T, enableDsr bool, dualStackFamilyPolicy v1
 	}
 }
 
+// TestETPLocalIngressIPServiceWithPreferDualStack 验证 PreferDualStack 且 Local 流量策略的双栈服务。
 func TestETPLocalIngressIPServiceWithPreferDualStack(t *testing.T) {
 	testDualStackService(t, true, v1.IPFamilyPolicyPreferDualStack, v1.ServiceExternalTrafficPolicyLocal)
 }
 
+// TestETPLocalIngressIPServiceWithRequireDualStack 验证 RequireDualStack 且 Local 流量策略的双栈服务。
 func TestETPLocalIngressIPServiceWithRequireDualStack(t *testing.T) {
 	testDualStackService(t, true, v1.IPFamilyPolicyRequireDualStack, v1.ServiceExternalTrafficPolicyLocal)
 }
 
+// TestETPClusterIngressIPServiceWithPreferDualStack 验证 PreferDualStack 且 Cluster 流量策略的双栈服务。
 func TestETPClusterIngressIPServiceWithPreferDualStack(t *testing.T) {
 	testDualStackService(t, false, v1.IPFamilyPolicyPreferDualStack, v1.ServiceExternalTrafficPolicyCluster)
 }
 
+// TestETPClusterIngressIPServiceWithRequireDualStack 验证 RequireDualStack 且 Cluster 流量策略的双栈服务。
 func TestETPClusterIngressIPServiceWithRequireDualStack(t *testing.T) {
 	testDualStackService(t, false, v1.IPFamilyPolicyRequireDualStack, v1.ServiceExternalTrafficPolicyCluster)
 }
 
+// makeNSN 将命名空间和名称组合成 NamespacedName，简化测试数据构造。
 func makeNSN(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
 }
 
+// makeServiceMap 批量添加服务并标记已同步，避免依赖 informer 回调。
 func makeServiceMap(proxier *Proxier, allServices ...*v1.Service) {
 	for i := range allServices {
 		proxier.OnServiceAdd(allServices[i])
@@ -1944,6 +2011,8 @@ func makeServiceMap(proxier *Proxier, allServices ...*v1.Service) {
 	defer proxier.mu.Unlock()
 	proxier.servicesSynced = true
 }
+
+// deleteServices 批量删除服务并标记已同步，模拟 informer 删除事件后的状态。
 func deleteServices(proxier *Proxier, allServices ...*v1.Service) {
 	for i := range allServices {
 		proxier.OnServiceDelete(allServices[i])
@@ -1954,6 +2023,7 @@ func deleteServices(proxier *Proxier, allServices ...*v1.Service) {
 	proxier.servicesSynced = true
 }
 
+// makeTestService 构造带指定命名空间、名称的服务，其余字段由回调按需填充。
 func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Service {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1968,6 +2038,7 @@ func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Serv
 	return svc
 }
 
+// deleteEndpointSlices 批量删除 EndpointSlice 并标记已同步，模拟删除事件。
 func deleteEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.EndpointSlice) {
 	for i := range allEndpointSlices {
 		proxier.OnEndpointSliceDelete(allEndpointSlices[i])
@@ -1978,6 +2049,7 @@ func deleteEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.Endp
 	proxier.endpointSlicesSynced = true
 }
 
+// populateEndpointSlices 批量添加 EndpointSlice 并标记已同步，模拟新增事件。
 func populateEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.EndpointSlice) {
 	for i := range allEndpointSlices {
 		proxier.OnEndpointSliceAdd(allEndpointSlices[i])
@@ -1988,6 +2060,7 @@ func populateEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.En
 	proxier.endpointSlicesSynced = true
 }
 
+// makeTestEndpointSlice 构造带服务标签与序号的 EndpointSlice，其余字段由回调填充。
 func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*discovery.EndpointSlice)) *discovery.EndpointSlice {
 	eps := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2000,27 +2073,30 @@ func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*d
 	return eps
 }
 
+// testHostMacProvider 为测试提供固定的主机 MAC 地址，避免读取真实主机接口。
 type testHostMacProvider struct {
 	macAddress string
 }
 
+// GetHostMac 返回预设 MAC 地址；nodeIP 参数在此固定实现中被忽略。
 func (r *testHostMacProvider) GetHostMac(nodeIP net.IP) string {
 	return r.macAddress
 }
 
-// TestRemoteAndLocalEndpointsSameIP demonstrates a reference counting issue
-// when two services share an endpoint with the same IP address, where one
-// service treats it as local (NodeName matches proxy hostname) and the other
-// treats it as remote (NodeName doesn't match). The remote proxy endpoint
-// resolves to the local HNS endpoint, causing its refCount to never be
-// incremented via the shared endPointsRefCount map.
+// TestRemoteAndLocalEndpointsSameIP 演示一个引用计数问题：
+// 两个服务共享同一 IP 地址的端点，其中一个服务
+// 将其视为本地端点（NodeName 与代理主机名一致），另一个
+// 视为远端端点（NodeName 不一致）。远端代理端点
+// 会解析到本地 HNS 端点，导致其 refCount 从未通过
+// 共享的 endPointsRefCount map 递增。
+// 共享 IP 但本地/远端判定不同，会导致远端端点的引用计数遗漏。
 func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_L2BRIDGE, false)
 	if proxier == nil {
 		t.Error("Failed to create proxier")
 	}
 
-	sharedEPIP := epIpAddressLocal1 // "192.168.4.4" — same IP for both services
+	sharedEPIP := epIpAddressLocal1 // "192.168.4.4" —— 两个服务共用同一 IP
 
 	svcIP1 := "10.20.30.41"
 	svcPort1 := 80
@@ -2039,7 +2115,7 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 	}
 
 	makeServiceMap(proxier,
-		// svc1 uses the endpoint as LOCAL
+		// svc1 将该端点作为本地端点使用
 		makeTestService(svcPortName1.Namespace, svcPortName1.Name, func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
 			svc.Spec.ClusterIP = svcIP1
@@ -2049,7 +2125,7 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 				Protocol: v1.ProtocolTCP,
 			}}
 		}),
-		// svc2 uses the endpoint as REMOTE
+		// svc2 将该端点作为远端端点使用
 		makeTestService(svcPortName2.Namespace, svcPortName2.Name, func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
 			svc.Spec.ClusterIP = svcIP2
@@ -2062,7 +2138,7 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 	)
 
 	populateEndpointSlices(proxier,
-		// svc1's endpoint: local (NodeName = "testhost" matches proxy hostname)
+		// svc1 的端点：本地（NodeName = "testhost" 与代理主机名一致）
 		makeTestEndpointSlice(svcPortName1.Namespace, svcPortName1.Name, 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -2075,7 +2151,7 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 				Protocol: ptr.To(v1.ProtocolTCP),
 			}}
 		}),
-		// svc2's endpoint: remote (NodeName = "testhost2" doesn't match proxy hostname)
+		// svc2 的端点：远端（NodeName = "testhost2" 与代理主机名不一致）
 		makeTestEndpointSlice(svcPortName2.Namespace, svcPortName2.Name, 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -2090,14 +2166,15 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 		}),
 	)
 
-	// Pre-populate the local HNS endpoint at sharedEPIP (as CNI would create it)
+	// 预填充 sharedEPIP 处的本地 HNS 端点（模拟 CNI 创建该端点的行为）
 	hcnMock := (proxier.hcn).(*fakehcn.HcnMock)
 	hcnMock.PopulateQueriedEndpoints(endpointLocal1, networkId, sharedEPIP, macAddressLocal1, prefixLen)
 
 	proxier.setInitialized(true)
+	// 预填充后同步，确保本地与远端端点解析到同一 HNS 端点。
 	proxier.syncProxyRules()
 
-	// Find each service's endpoint
+	// 查找每个服务的端点
 	var localEp, remoteEp *endpointInfo
 	for _, ep := range proxier.endpointsMap[svcPortName1] {
 		if epI, ok := ep.(*endpointInfo); ok && epI.ip == sharedEPIP {
@@ -2113,48 +2190,51 @@ func TestRemoteAndLocalEndpointsSameIP(t *testing.T) {
 	assert.NotNil(t, localEp, "Expected to find local endpoint for svc1")
 	assert.NotNil(t, remoteEp, "Expected to find remote endpoint for svc2")
 
-	// Both should resolve to the same local HNS endpoint
+	// 两者都应解析到同一个本地 HNS 端点
 	assert.Equal(t, endpointLocal1, localEp.hnsID,
 		"Local ep should have the pre-populated HNS endpoint ID")
 	assert.Equal(t, endpointLocal1, remoteEp.hnsID,
 		"Remote ep should resolve to the same local HNS endpoint ID")
 
-	// Verify the endpoint locality as seen by the proxy layer
+	// 从代理层视角验证端点的本地/远端属性
 	assert.True(t, localEp.IsLocal(), "svc1's endpoint should be local")
 	assert.False(t, remoteEp.IsLocal(), "svc2's endpoint should be remote")
 
-	// The remote ep's refCount was never incremented via endPointsRefCount
-	// because the resolved HNS endpoint is local (newHnsEndpoint.IsLocal()=true),
-	// so the code took the hnsLocalEndpoints branch instead of incrementing the
-	// shared refCount. The remote ep retains its private refCount (value 0).
+	// 远端端点的 refCount 从未通过 endPointsRefCount 递增，
+	// 因为解析到的 HNS 端点是本地端点（newHnsEndpoint.IsLocal()=true），
+	// 代码走了 hnsLocalEndpoints 分支，而不是递增
+	// 共享 refCount。该远端端点保留其私有 refCount（值为 0）。
+	// 断言远端端点保留私有 refCount 0，暴露引用计数遗漏。
 	assert.NotNil(t, remoteEp.refCount, "Remote ep refCount pointer should not be nil")
 	assert.Equal(t, uint16(0), *remoteEp.refCount,
 		"Remote ep refCount should be 0 — it was never incremented because "+
 			"the HNS endpoint is local, exposing a refCount tracking gap")
 
-	// The shared endPointsRefCount map should not have an entry for this
-	// HNS endpoint (or if it does from some other path, it should be 0),
-	// because refCounts are only tracked for remote HNS endpoints.
+	// 共享的 endPointsRefCount map 中不应有该 HNS 端点的条目
+	// （若因其他路径存在条目，其值也应为 0），
+	// 因为只有远端 HNS 端点才纳入 refCount 统计。
 	if refCountPtr, exists := proxier.endPointsRefCount[endpointLocal1]; exists {
 		assert.Equal(t, uint16(0), *refCountPtr,
 			"Shared refCount for the local HNS endpoint should be 0")
 	}
-	// If the entry doesn't exist at all, that also confirms the issue:
-	// the remote proxy endpoint has no shared refCount tracking.
+	// 若该条目完全不存在，同样可以证实此问题：
+	// 远端代理端点没有共享 refCount 记录。
 }
 
-// TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP verifies that
-// when a remote endpoint is deleted (due to endpoint map changes), a local
-// endpoint with the same IP address is not incorrectly deleted.
+// TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP 验证：
+// 远端端点因端点映射变化被删除时，相同 IP 地址的本地端点不会被误删。
+// 场景涉及两个服务共用的远端端点与第三个服务的本地端点 IP 重叠。
 //
-// Flow:
-//  1. Create a local endpoint (IP-A) and a remote endpoint (IP-B).
-//  2. Two services (svc1, svc2) both use IP-A and IP-B. Remote endpoint refCount = 2.
-//  3. Add a third service (svc3) with a local endpoint at IP-B (same IP as the remote).
-//     Remote refCount stays 2; local endpoint refCount is 0 (locals are not ref-counted).
-//  4. Remove endpoints for svc1 and svc2. The remote endpoint at IP-B should be
-//     cleaned up (refCount drops to 0), but the local endpoint at IP-B for svc3
-//     must survive.
+// 流程：
+//  1. 创建本地端点（IP-A）和远端端点（IP-B）。
+//  2. 服务 svc1、svc2 同时使用 IP-A 和 IP-B，远端端点 refCount = 2。
+//  3. 新增服务 svc3，其本地端点位于 IP-B（与远端端点 IP 相同）；
+//     远端 refCount 保持 2，本地端点 refCount 为 0（本地端点不参与引用计数）。
+//  4. 移除 svc1、svc2 的端点，IP-B 处的远端端点应被清理（refCount 降为 0），
+//     而 svc3 的本地端点必须保留。
+//
+// 这验证了按 HNS ID 清理远端端点时不会误删同 IP 的本地端点。
+// 远端端点被清理时，不能误删同 IP 的本地端点（两者由 CNI/HNS 分别管理）。
 func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_L2BRIDGE, false)
 	if proxier == nil {
@@ -2190,8 +2270,8 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 		Protocol:       v1.ProtocolTCP,
 	}
 
-	// Step 1+2: Create two services (svc1, svc2) each with a local endpoint (IP-A)
-	// and a remote endpoint (IP-B).
+	// 步骤 1+2：创建两个服务（svc1、svc2），各含一个本地端点（IP-A）
+	// 和一个远端端点（IP-B）。
 	makeServiceMap(proxier,
 		makeTestService(svcPortName1.Namespace, svcPortName1.Name, func(svc *v1.Service) {
 			svc.Spec.Type = "NodePort"
@@ -2252,14 +2332,15 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 		}),
 	)
 
-	// Pre-populate the local HNS endpoint (as CNI would create it).
+	// 预填充本地 HNS 端点（模拟 CNI 创建该端点）。
 	hcnMock := (proxier.hcn).(*fakehcn.HcnMock)
 	hcnMock.PopulateQueriedEndpoints(endpointLocal1, networkId, localIP, macAddressLocal1, prefixLen)
 
+	// 首次同步建立引用计数基线。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
-	// Find the remote endpoint for svc1 and assert refCount == 2.
+	// 查找 svc1 的远端端点并断言 refCount == 2。
 	var remoteEpInfo *endpointInfo
 	var remoteEpHnsID string
 	for _, ep := range proxier.endpointsMap[svcPortName1] {
@@ -2276,7 +2357,7 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	assert.Equal(t, *proxier.endPointsRefCount[remoteEpHnsID], *remoteEpInfo.refCount,
 		"Global and endpoint refCounts should match")
 
-	// Step 3: Add svc3 with a local endpoint at IP-B (same IP as the remote endpoint).
+	// 步骤 3：新增 svc3，其本地端点位于 IP-B（与远端端点 IP 相同）。
 	proxier.setInitialized(false)
 
 	proxier.OnServiceAdd(
@@ -2298,7 +2379,7 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
 				Addresses: []string{remoteIP},
-				NodeName:  ptr.To(testNodeName), // Local because NodeName matches
+				NodeName:  ptr.To(testNodeName), // NodeName 匹配，因此是本地端点
 			}}
 			eps.Ports = []discovery.EndpointPort{{
 				Name:     ptr.To(svcPortName3.Port),
@@ -2310,13 +2391,14 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	proxier.endpointSlicesSynced = true
 	proxier.mu.Unlock()
 
-	// Pre-populate the new local HNS endpoint at IP-B.
+	// 预填充 IP-B 处新的本地 HNS 端点。
 	hcnMock.PopulateQueriedEndpoints(endpointLocal2, networkId, remoteIP, macAddressLocal2, prefixLen)
 
+	// 重新同步，验证新增本地端点不影响共享远端端点的引用计数。
 	proxier.setInitialized(true)
 	proxier.syncProxyRules()
 
-	// The remote endpoint refCount should still be 2 (svc1 and svc2 still reference it).
+	// 远端端点 refCount 仍应为 2（svc1 和 svc2 仍引用它）。
 	remoteEpInfo = nil
 	for _, ep := range proxier.endpointsMap[svcPortName1] {
 		epI, ok := ep.(*endpointInfo)
@@ -2328,8 +2410,8 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	assert.Equal(t, uint16(2), *remoteEpInfo.refCount,
 		"Remote endpoint refCount should still be 2 after adding local endpoint with same IP")
 
-	// Find svc3's local endpoint at IP-B. Its refCount should be 0
-	// (local endpoints are not ref-counted).
+	// 查找 svc3 在 IP-B 处的本地端点；其 refCount 应为 0
+	// （本地端点不参与引用计数）。
 	var localEpAtRemoteIP *endpointInfo
 	for _, ep := range proxier.endpointsMap[svcPortName3] {
 		epI, ok := ep.(*endpointInfo)
@@ -2343,9 +2425,9 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	assert.Equal(t, uint16(0), *localEpAtRemoteIP.refCount,
 		"Local endpoint refCount should be 0 (locals are not ref-counted)")
 
-	// Step 4: Remove endpoint slices for svc1 and svc2 (IPs A and B disappear).
-	// This should cause the remote endpoint at IP-B to be cleaned up,
-	// but the local endpoint at IP-B (used by svc3) must NOT be deleted.
+	// 步骤 4：移除 svc1 和 svc2 的 EndpointSlice（IP-A 和 IP-B 随之消失）。
+	// 这应使 IP-B 处的远端端点被清理，
+	// 但 svc3 在 IP-B 处的本地端点不得被删除。
 	proxier.setInitialized(false)
 
 	deleteEndpointSlices(proxier,
@@ -2386,15 +2468,16 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	)
 
 	proxier.setInitialized(true)
+	// 同步后验证远端端点已清理，而本地端点仍存在。
 	proxier.syncProxyRules()
 
-	// svc1 and svc2 should have no endpoints now.
+	// 此时 svc1 和 svc2 应没有任何端点。
 	assert.Empty(t, proxier.endpointsMap[svcPortName1],
 		"svc1 should have no endpoints after deletion")
 	assert.Empty(t, proxier.endpointsMap[svcPortName2],
 		"svc2 should have no endpoints after deletion")
 
-	// svc3's local endpoint at IP-B should still be present and functional.
+	// svc3 在 IP-B 处的本地端点仍应存在且可用。
 	var svc3Ep *endpointInfo
 	for _, ep := range proxier.endpointsMap[svcPortName3] {
 		epI, ok := ep.(*endpointInfo)
@@ -2406,24 +2489,26 @@ func TestRemoteEndpointDeleteDoesNotAffectLocalEndpointWithSameIP(t *testing.T) 
 	assert.True(t, svc3Ep.IsLocal(), "svc3's endpoint should still be local")
 	assert.NotEmpty(t, svc3Ep.hnsID, "svc3's local endpoint should still have a valid HNS ID")
 
-	// Verify the local HNS endpoint was NOT deleted from HNS.
+	// 验证本地 HNS 端点并未从 HNS 中被删除。
 	_, err := hcnMock.GetEndpointByID(svc3Ep.hnsID)
 	assert.NoError(t, err, "Local HNS endpoint at IP-B should still exist in HNS (not deleted)")
 }
 
-// TestEndpointTransitionWithLBFailures verifies endpoint reference counting
-// when an endpoint set transitions from [A,B,C,D] to [A,B] while load
-// balancer delete and create operations both fail.
+// TestEndpointTransitionWithLBFailures 验证以下场景的端点引用计数：
+// 端点集合从 [A,B,C,D] 变为 [A,B]，且负载均衡器删除与创建
+// 操作均失败时，引用计数是否仍然正确。
 //
-// Flow:
-//  1. Create a local endpoint (A) and 3 remote endpoints (B, C, D).
-//  2. Two services (svc1, svc2) each reference all 4 endpoints.
-//     Assert remote endpoint refCounts B=2, C=2, D=2.
-//  3. Transition endpoints from [A,B,C,D] to [A,B] while LB delete is
-//     injected to fail. LB create then also fails because the old LB
-//     (same VIP:port) was never removed.
-//  4. Assert that C and D refCounts drop from 2 to 0. B gets a new HNS
-//     endpoint with refCount=2. A remains local with refCount=0.
+// 流程：
+//  1. 创建本地端点 A 和三个远端端点 B、C、D。
+//  2. 两个服务（svc1、svc2）各引用全部 4 个端点，
+//     断言远端端点 refCount 均为 2。
+//  3. 注入 LB 删除失败，同时将端点从 [A,B,C,D] 变为 [A,B]；
+//     旧 LB（相同 VIP:port）未被移除，导致 LB 创建也失败。
+//  4. 断言 C、D 的 refCount 从 2 降为 0，B 复用 HNS 端点且 refCount 为 2，
+//     A 仍为本地端点且 refCount 为 0。
+//
+// 该测试覆盖异常路径下引用计数与清理逻辑的正确性。
+// 注入 LB 删除失败来验证异常路径下端点引用计数仍能正确收敛。
 func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_L2BRIDGE, false)
 	if proxier == nil {
@@ -2453,8 +2538,8 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 		Protocol:       v1.ProtocolTCP,
 	}
 
-	// Step 1+2: Create two services with a local endpoint (A) and
-	// three remote endpoints (B, C, D).
+	// 步骤 1+2：创建两个服务，各含一个本地端点（A）
+	// 和三个远端端点（B、C、D）。
 	makeServiceMap(proxier,
 		makeTestService(svcPortName1.Namespace, svcPortName1.Name, func(svc *v1.Service) {
 			svc.Spec.Type = "NodePort"
@@ -2509,16 +2594,18 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 		}),
 	)
 
-	// Pre-populate the local HNS endpoint (as CNI would create it).
+	// 预填充本地 HNS 端点（模拟 CNI 创建该端点）。
 	hcnMock := (proxier.hcn).(*fakehcn.HcnMock)
 	hcnMock.PopulateQueriedEndpoints(endpointLocal1, networkId, localIP, macAddressLocal1, prefixLen)
 
 	proxier.setInitialized(true)
+	// 首次同步后记录端点 HNS ID 与引用计数基线。
 	proxier.syncProxyRules()
 
-	// Collect the HNS IDs for B, C, D after the first sync.
-	// For L2Bridge without overlay, remote endpoints are created sequentially:
-	// B → EPID-1, C → EPID-2, D → EPID-3
+	// 收集首次同步后 B、C、D 的 HNS ID。
+	// 对于无 overlay 的 L2Bridge，远端端点按顺序创建：
+	// B → EPID-1，C → EPID-2，D → EPID-3
+	// 用闭包复用端点查找逻辑，避免在多处重复遍历端点映射。
 	findRemoteEp := func(svcPortName proxy.ServicePortName, ip string) *endpointInfo {
 		for _, ep := range proxier.endpointsMap[svcPortName] {
 			if epI, ok := ep.(*endpointInfo); ok && epI.ip == ip {
@@ -2542,7 +2629,7 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	hnsIDC := epC.hnsID
 	hnsIDD := epD.hnsID
 
-	// Assert all remote endpoint refCounts are 2 (shared by svc1 and svc2).
+	// 断言所有远端端点的 refCount 均为 2（由 svc1 和 svc2 共享）。
 	assert.Equal(t, uint16(2), *proxier.endPointsRefCount[hnsIDB],
 		"B refCount should be 2")
 	assert.Equal(t, uint16(2), *proxier.endPointsRefCount[hnsIDC],
@@ -2550,7 +2637,7 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	assert.Equal(t, uint16(2), *proxier.endPointsRefCount[hnsIDD],
 		"D refCount should be 2")
 
-	// Record the old LB IDs for both services.
+	// 记录两个服务的旧 LB ID。
 	svc1Info := proxier.svcPortMap[svcPortName1].(*serviceInfo)
 	svc2Info := proxier.svcPortMap[svcPortName2].(*serviceInfo)
 	oldLBID1 := svc1Info.hnsID
@@ -2558,12 +2645,13 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	assert.NotEmpty(t, oldLBID1, "svc1 should have a ClusterIP LB after first sync")
 	assert.NotEmpty(t, oldLBID2, "svc2 should have a ClusterIP LB after first sync")
 
-	// Step 3: Inject LB delete failure and transition endpoints from
-	// [A,B,C,D] to [A,B].
+	// 步骤 3：注入 LB 删除失败，并将端点从 [A,B,C,D] 变为 [A,B]。
+	// 此后旧的负载均衡器将无法被清除。
+	// 注入删除失败，模拟 HCN 删除操作失败的异常路径。
 	hcnMock.ShouldFailDeleteLoadBalancer = true
 	proxier.setInitialized(false)
 
-	// Build the old and new endpoint slices for the update.
+	// 构造更新用的旧、新 EndpointSlice。
 	oldSlice1 := makeTestEndpointSlice(svcPortName1.Namespace, svcPortName1.Name, 1, func(eps *discovery.EndpointSlice) {
 		eps.AddressType = discovery.AddressTypeIPv4
 		eps.Endpoints = []discovery.Endpoint{
@@ -2625,21 +2713,23 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	proxier.mu.Unlock()
 
 	proxier.setInitialized(true)
+	// 同步后 LB 因旧 LB 未删除而创建失败，验证失败路径下的引用计数。
 	proxier.syncProxyRules()
 
-	// Step 4: Assert the results.
+	// 步骤 4：断言结果。
 	//
-	// LB delete was injected to fail, so the old LBs are still in HNS.
-	// LB create naturally fails because the old LBs (same VIP:port) were
-	// never removed, causing a "port already exists" conflict.
+	// 注入 LB 删除失败，因此旧 LB 仍留在 HNS 中。
+	// 由于旧 LB（相同 VIP:port）从未移除，LB 创建自然失败，
+	// 并引发 "port already exists" 冲突。
+	// 删除失败、创建被跳过时，hnsID 应保持为空。
 	svc1Info = proxier.svcPortMap[svcPortName1].(*serviceInfo)
 	svc2Info = proxier.svcPortMap[svcPortName2].(*serviceInfo)
 
-	// svcInfo.hnsID should still hold the old stale LB ID (delete failed, create skipped).
+	// svcInfo.hnsID 应为空：删除失败且创建被跳过。
 	assert.Empty(t, svc1Info.hnsID, "svc1 LB ID should be empty because create failed due to existing LB")
 	assert.Empty(t, svc2Info.hnsID, "svc2 LB ID should be empty because create failed due to existing LB")
 
-	// The old LBs should still exist in HNS because deletion failed.
+	// 由于删除失败，旧 LB 应仍存在于 HNS 中。
 	lb1, err1 := hcnMock.GetLoadBalancerByID(oldLBID1)
 	assert.NoError(t, err1, "Old LB for svc1 should still exist in HNS (delete failed)")
 	assert.NotNil(t, lb1)
@@ -2647,12 +2737,12 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	assert.NoError(t, err2, "Old LB for svc2 should still exist in HNS (delete failed)")
 	assert.NotNil(t, lb2)
 
-	// C and D refCounts should have dropped from 2 to 0.
-	// The endpointsMapChange callback calls cleanupAllPolicies with the
-	// OLD endpoint set (since the map hasn't been updated yet at callback time).
-	// This decrements C and D's refCounts twice (once per service), reaching 0.
-	// They stay in terminatedEndpoints (not in the new map) and get deleted by
-	// cleanupTerminatedEndpoints.
+	// C 和 D 的 refCount 应从 2 降为 0。
+	// endpointsMapChange 回调使用旧端点集调用 cleanupAllPolicies
+	// （回调时映射尚未更新），因此每个服务各递减一次，共两次，降为 0。
+	// 它们留在 terminatedEndpoints（不在新映射中），并由 cleanupTerminatedEndpoints 删除。
+	// 这一点验证了失败路径下引用计数仍能被正确清理。
+	//
 	assert.Equal(t, uint16(2), *proxier.endPointsRefCount[hnsIDB],
 		"B refCount should be 2")
 	assert.Equal(t, uint16(0), *proxier.endPointsRefCount[hnsIDC],
@@ -2660,7 +2750,7 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	assert.Equal(t, uint16(0), *proxier.endPointsRefCount[hnsIDD],
 		"D refCount should be 0 after transition")
 
-	// C and D HNS endpoints should have been deleted by cleanupTerminatedEndpoints.
+	// C 和 D 的 HNS 端点应已被 cleanupTerminatedEndpoints 删除。
 	_, errC := hcnMock.GetEndpointByID(hnsIDC)
 	assert.Error(t, errC, "C HNS endpoint should have been deleted")
 	_, errD := hcnMock.GetEndpointByID(hnsIDD)
@@ -2673,17 +2763,18 @@ func TestEndpointTransitionWithLBFailures(t *testing.T) {
 	assert.Equal(t, uint16(2), *proxier.endPointsRefCount[hnsIDB],
 		"B refCount should be 2 after reuse by both services")
 
-	// A is local — its private refCount should be 0 (locals are not ref-counted).
+	// A 是本地端点 —— 其私有 refCount 应为 0（本地端点不参与引用计数）。
 	epANew := findRemoteEp(svcPortName1, localIP)
 	assert.NotNil(t, epANew, "Local endpoint A should still exist")
 	assert.True(t, epANew.IsLocal(), "A should be local")
 }
 
+// TestClassifyLBError 验证错误分类函数在 nil、通用错误及 shim 错误类型下的行为。
 func TestClassifyLBError(t *testing.T) {
-	// Note: classifyLBError uses hcn.Is*Error functions which check for *hcn.HcnError
-	// with specific error codes. Since HcnError can only be created internally by the
-	// hcn package, we can only test nil and generic error cases here. The actual HCN
-	// error classification is tested through the hcn package's own tests.
+	// 注意：classifyLBError 使用 hcn.Is*Error 函数，这些函数检查带有特定错误码的
+	// *hcn.HcnError。由于 HcnError 只能由 hcn 包内部创建，
+	// 这里只能测试 nil 和通用错误两种情况。
+	// 真正的 HCN 错误分类由 hcn 包自身的测试覆盖。
 	tests := []struct {
 		name     string
 		err      error
@@ -2700,9 +2791,9 @@ func TestClassifyLBError(t *testing.T) {
 			expected: lbErrOther,
 		},
 		{
-			// hcn.NetworkNotFoundError is a shim error type, not an HCN system error.
-			// hcn.IsNetworkNotFoundError checks for HcnError with HCN_E_NETWORK_NOT_FOUND code,
-			// so this returns lbErrOther.
+			// hcn.NetworkNotFoundError 是 shim 错误类型，不是 HCN 系统错误。
+			// hcn.IsNetworkNotFoundError 检查带有 HCN_E_NETWORK_NOT_FOUND 错误码的 HcnError，
+			// 因此返回 lbErrOther。
 			name:     "hcn NetworkNotFoundError shim type returns other",
 			err:      hcn.NetworkNotFoundError{NetworkName: "testnet"},
 			expected: lbErrOther,
@@ -2726,14 +2817,16 @@ func TestClassifyLBError(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子用例独立验证一种错误类型的分类结果。
 			result := classifyLBError(tc.err)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
 
+// TestLoadBalancerTypeConstants 验证所有负载均衡器类型常量非空且互不重复。
 func TestLoadBalancerTypeConstants(t *testing.T) {
-	// Verify all loadBalancerType constants have non-empty string values.
+	// 验证所有 loadBalancerType 常量的字符串值均非空。
 	lbTypes := []loadBalancerType{
 		lbTypeClusterIP,
 		lbTypeNodePort,
@@ -2749,8 +2842,9 @@ func TestLoadBalancerTypeConstants(t *testing.T) {
 	}
 }
 
+// TestLBErrorTypeConstants 验证所有错误类型常量非空且互不重复。
 func TestLBErrorTypeConstants(t *testing.T) {
-	// Verify all lbErrorType constants have non-empty, unique string values.
+	// 验证所有 lbErrorType 常量的字符串值非空且唯一。
 	errTypes := []lbErrorType{
 		lbErrNetworkNotFound,
 		lbErrPortAlreadyExists,
@@ -2767,7 +2861,9 @@ func TestLBErrorTypeConstants(t *testing.T) {
 	}
 }
 
+// TestLBMetricEmission 验证指标按 IP 家族、LB 类型与错误类型正确打标签并计数。
 func TestLBMetricEmission(t *testing.T) {
+	// 先注册指标，否则获取指标向量失败。
 	metrics.RegisterMetrics(kubeproxyconfig.ProxyModeKernelspace)
 
 	tests := []struct {
@@ -2802,6 +2898,7 @@ func TestLBMetricEmission(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试前重置计数器，避免用例之间互相污染。
 			tc.metricVec.Reset()
 
 			tc.metricVec.WithLabelValues(tc.ipFamily, string(tc.lbType), string(tc.errType)).Inc()
@@ -2810,7 +2907,8 @@ func TestLBMetricEmission(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, float64(1), val)
 
-			// Verify a different label combination was not incremented.
+			// 验证其他标签组合的计数未被递增。
+			// 其他标签组合的计数应为 0，证明指标按标签隔离。
 			val, err = testutil.GetCounterMetricValue(tc.metricVec.WithLabelValues(tc.ipFamily, string(lbTypeHealthCheck), string(lbErrInvalidIP)))
 			assert.NoError(t, err)
 			assert.Equal(t, float64(0), val)
@@ -2818,10 +2916,11 @@ func TestLBMetricEmission(t *testing.T) {
 	}
 }
 
-// TestCreateServiceWhereFrontEndSameAsExistingLB validates service creation scenarios
-// where the frontend IP and port match those of an existing load balancer.
-// When a match is detected, the existing load balancer is expected to be deleted
-// and recreated with new configuration to ensure it is correctly associated with the new service.
+// TestCreateServiceWhereFrontEndSameAsExistingLB 验证前端 IP 和端口
+// 与现有负载均衡器一致时的服务创建场景。
+// 检测到匹配时，应删除现有负载均衡器并按新配置重建，
+// 以确保其与新服务正确关联。
+// 预置的服务前端若与现有 LB 冲突，需要删除旧 LB 并按新配置重建。
 func TestCreateServiceWhereFrontEndSameAsExistingLB(t *testing.T) {
 	proxier := NewFakeProxier(t, "testhost", netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_L2BRIDGE, true)
 	if proxier == nil {
@@ -2855,7 +2954,7 @@ func TestCreateServiceWhereFrontEndSameAsExistingLB(t *testing.T) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{
 				{
-					Addresses: []string{epIpAddressLocal1}, // Local Endpoint 1
+					Addresses: []string{epIpAddressLocal1}, // 本地端点 1
 				},
 			}
 			eps.Ports = []discovery.EndpointPort{{
@@ -2867,15 +2966,17 @@ func TestCreateServiceWhereFrontEndSameAsExistingLB(t *testing.T) {
 	)
 
 	hcn := (proxier.hcn).(*fakehcn.HcnMock)
-	// Populating the endpoint to the cache, since it's a local endpoint and local endpoints are managed by CNI and not KubeProxy
-	// Populating here marks the endpoint to local
+	// 将该端点填充到缓存中，因为它是本地端点，而本地端点由 CNI 而非 kube-proxy 管理；
+	// 在此填充即将其标记为本地端点。
 	hcn.PopulateQueriedEndpoints(endpointLocal1, networkId, epIpAddressLocal1, macAddressLocal1, prefixLen)
+	// 预置一个与待创建服务前端 IP:端口相同的负载均衡器，制造前端冲突。
 	hcn.PopulateQueriedLoadbalancers(loadbalancerGuid2, svcIP, 6, uint16(svcPort), uint16(svcPort), false, endpointLocal2)
 
 	proxier.setInitialized(true)
 
-	// Test 1: When a local endpoint is added to the service, the service should continue to use the local endpoints and existing loadbalancer.
-	// If no existing loadbalancer is present, a new loadbalancer should be created.
+	// 测试 1：添加本地端点时，服务应继续使用本地端点和现有负载均衡器；
+	// 若当前没有负载均衡器，则应新建一个。
+	// 同步后应删除旧 LB 并新建，避免前端 IP:端口冲突。
 	proxier.syncProxyRules()
 
 	ep := proxier.endpointsMap[svcPortName][0]

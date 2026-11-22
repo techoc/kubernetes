@@ -31,19 +31,19 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// 代理规则同步中常用的常量。
 const (
-	// IPv4ZeroCIDR is the CIDR block for the whole IPv4 address space
+	// IPv4ZeroCIDR 表示整个 IPv4 地址空间（全零掩码的网段）。
 	IPv4ZeroCIDR = "0.0.0.0/0"
 
-	// IPv6ZeroCIDR is the CIDR block for the whole IPv6 address space
+	// IPv6ZeroCIDR 表示整个 IPv6 地址空间。
 	IPv6ZeroCIDR = "::/0"
 
-	// FullSyncPeriod is iptables and nftables proxier full sync period
+	// FullSyncPeriod 是 iptables 与 nftables 代理执行全量同步的周期。
 	FullSyncPeriod = 1 * time.Hour
 )
 
-// IsZeroCIDR checks whether the input CIDR string is either
-// the IPv4 or IPv6 zero CIDR
+// IsZeroCIDR 判断给定 CIDR 是否为 IPv4 或 IPv6 的零 CIDR（掩码长度为 0）。
 func IsZeroCIDR(cidr *net.IPNet) bool {
 	if cidr == nil {
 		return false
@@ -52,14 +52,14 @@ func IsZeroCIDR(cidr *net.IPNet) bool {
 	return prefixLen == 0
 }
 
-// ShouldSkipService checks if a given service should skip proxying
+// ShouldSkipService 判断给定 Service 是否应跳过代理。
 func ShouldSkipService(service *v1.Service) bool {
-	// if ClusterIP is "None" or empty, skip proxying
+	// headless 服务（ClusterIP 为 None）或无 ClusterIP 的服务无需代理。
 	if !helper.IsServiceIPSet(service) {
 		klog.V(3).InfoS("Skipping service due to cluster IP", "service", klog.KObj(service), "clusterIP", service.Spec.ClusterIP)
 		return true
 	}
-	// Even if ClusterIP is set, ServiceTypeExternalName services don't get proxied
+	// ExternalName 服务由 DNS 解析处理，即使设置了 ClusterIP 也不建立代理规则。
 	if service.Spec.Type == v1.ServiceTypeExternalName {
 		klog.V(3).InfoS("Skipping service due to Type=ExternalName", "service", klog.KObj(service))
 		return true
@@ -67,8 +67,7 @@ func ShouldSkipService(service *v1.Service) bool {
 	return false
 }
 
-// AddressSet validates the addresses in the slice using the "isValid" function.
-// Addresses that pass the validation are returned as a string Set.
+// AddressSet 用 isValid 过滤地址切片，并把通过校验的地址以字符串集合返回。
 func AddressSet(isValid func(ip net.IP) bool, addrs []net.Addr) sets.Set[string] {
 	ips := sets.New[string]()
 	for _, a := range addrs {
@@ -79,6 +78,7 @@ func AddressSet(isValid func(ip net.IP) bool, addrs []net.Addr) sets.Set[string]
 		case *net.IPNet:
 			ip = v.IP
 		default:
+			// 非 IP 地址类型直接跳过。
 			continue
 		}
 		if isValid(ip) {
@@ -88,19 +88,18 @@ func AddressSet(isValid func(ip net.IP) bool, addrs []net.Addr) sets.Set[string]
 	return ips
 }
 
-// MapIPsByIPFamily maps a slice of IPs to their respective IP families (v4 or v6)
+// MapIPsByIPFamily 将 IP 字符串按所属 IP 族（IPv4/IPv6）分组。
 func MapIPsByIPFamily(ipStrings []string) map[v1.IPFamily][]net.IP {
 	ipFamilyMap := map[v1.IPFamily][]net.IP{}
 	for _, ipStr := range ipStrings {
 		ip := netutils.ParseIPSloppy(ipStr)
 		if ip != nil {
-			// Since ip is parsed ok, GetIPFamilyFromIP will never return v1.IPFamilyUnknown
+			// 解析成功意味着 IP 族必定已知。
 			ipFamily := GetIPFamilyFromIP(ip)
 			ipFamilyMap[ipFamily] = append(ipFamilyMap[ipFamily], ip)
 		} else {
-			// ExternalIPs may not be validated by the api-server.
-			// Specifically empty strings validation, which yields into a lot
-			// of bad error logs.
+			// ExternalIP 可能未经 API Server 校验，尤其空字符串很常见；
+			// 为其打印错误日志会产生大量噪音，因此静默忽略。
 			if len(strings.TrimSpace(ipStr)) != 0 {
 				klog.ErrorS(nil, "Skipping invalid IP", "ip", ipStr)
 			}
@@ -109,32 +108,32 @@ func MapIPsByIPFamily(ipStrings []string) map[v1.IPFamily][]net.IP {
 	return ipFamilyMap
 }
 
-// MapCIDRsByIPFamily maps a slice of CIDRs to their respective IP families (v4 or v6)
+// MapCIDRsByIPFamily 将 CIDR 字符串按所属 IP 族（IPv4/IPv6）分组。
 func MapCIDRsByIPFamily(cidrsStrings []string) map[v1.IPFamily][]*net.IPNet {
 	ipFamilyMap := map[v1.IPFamily][]*net.IPNet{}
 	for _, cidrStrUntrimmed := range cidrsStrings {
 		cidrStr := strings.TrimSpace(cidrStrUntrimmed)
 		_, cidr, err := netutils.ParseCIDRSloppy(cidrStr)
 		if err != nil {
-			// Ignore empty strings. Same as in MapIPsByIPFamily
+			// 与 MapIPsByIPFamily 一致，空字符串无需记录错误日志。
 			if len(cidrStr) != 0 {
 				klog.ErrorS(err, "Invalid CIDR ignored", "CIDR", cidrStr)
 			}
 			continue
 		}
-		// since we just succefully parsed the CIDR, IPFamilyOfCIDR will never return "IPFamilyUnknown"
+		// 刚成功解析过，IP 族不可能是未知值。
 		ipFamily := convertToV1IPFamily(netutils.IPFamilyOfCIDR(cidr))
 		ipFamilyMap[ipFamily] = append(ipFamilyMap[ipFamily], cidr)
 	}
 	return ipFamilyMap
 }
 
-// GetIPFamilyFromIP Returns the IP family of ipStr, or IPFamilyUnknown if ipStr can't be parsed as an IP
+// GetIPFamilyFromIP 返回 IP 所属的族；无法识别时返回 IPFamilyUnknown。
 func GetIPFamilyFromIP(ip net.IP) v1.IPFamily {
 	return convertToV1IPFamily(netutils.IPFamilyOf(ip))
 }
 
-// Convert netutils.IPFamily to v1.IPFamily
+// convertToV1IPFamily 把 netutils 的 IP 族类型转换为 API 的 v1.IPFamily。
 func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 	switch ipFamily {
 	case netutils.IPv4:
@@ -146,7 +145,7 @@ func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 	return v1.IPFamilyUnknown
 }
 
-// OtherIPFamily returns the other ip family
+// OtherIPFamily 返回与给定 IP 族相对的另一种族（IPv4 与 IPv6 互换）。
 func OtherIPFamily(ipFamily v1.IPFamily) v1.IPFamily {
 	if ipFamily == v1.IPv6Protocol {
 		return v1.IPv4Protocol
@@ -155,25 +154,24 @@ func OtherIPFamily(ipFamily v1.IPFamily) v1.IPFamily {
 	return v1.IPv6Protocol
 }
 
-// AppendPortIfNeeded appends the given port to IP address unless it is already in
-// "ipv4:port" or "[ipv6]:port" format.
+// AppendPortIfNeeded 在地址尚未包含端口时追加端口，保留已有的 "ipv4:port" 或 "[ipv6]:port" 格式。
 func AppendPortIfNeeded(addr string, port int32) string {
-	// Return if address is already in "ipv4:port" or "[ipv6]:port" format.
+	// 已带端口的地址直接返回，避免重复追加。
 	if _, _, err := net.SplitHostPort(addr); err == nil {
 		return addr
 	}
 
-	// Simply return for invalid case. This should be caught by validation instead.
+	// 非法地址应由前置校验拦截；这里原样返回，避免生成无意义的规则。
 	ip := netutils.ParseIPSloppy(addr)
 	if ip == nil {
 		return addr
 	}
 
-	// Append port to address.
+	// JoinHostPort 会自动为 IPv6 地址加上方括号。
 	return net.JoinHostPort(addr, strconv.Itoa(int(port)))
 }
 
-// EnsureSysctl sets a kernel sysctl to a given numeric value.
+// EnsureSysctl 在内核 sysctl 当前值与目标值不同时进行设置，避免不必要的写入。
 func EnsureSysctl(sysctl utilsysctl.Interface, name string, newVal int) error {
 	if oldVal, _ := sysctl.GetSysctl(name); oldVal != newVal {
 		if err := sysctl.SetSysctl(name, newVal); err != nil {
@@ -184,9 +182,9 @@ func EnsureSysctl(sysctl utilsysctl.Interface, name string, newVal int) error {
 	return nil
 }
 
-// GetClusterIPByFamily returns a service clusterip by family
+// GetClusterIPByFamily 返回 Service 在指定 IP 族上的 ClusterIP。
 func GetClusterIPByFamily(ipFamily v1.IPFamily, service *v1.Service) string {
-	// allowing skew
+	// 兼容版本偏差：旧版本 Service 可能尚未填写 IPFamilies，需回退到 ClusterIP 字段推断。
 	if len(service.Spec.IPFamilies) == 0 {
 		if len(service.Spec.ClusterIP) == 0 || service.Spec.ClusterIP == v1.ClusterIPNone {
 			return ""
@@ -211,6 +209,7 @@ func GetClusterIPByFamily(ipFamily v1.IPFamily, service *v1.Service) string {
 	return ""
 }
 
+// IsVIPMode 判断负载均衡入口是否使用 VIP 模式；未显式设置 IPMode 时按 VIP 处理。
 func IsVIPMode(ing v1.LoadBalancerIngress) bool {
 	if ing.IPMode == nil {
 		return true

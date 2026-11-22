@@ -23,118 +23,119 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// Endpoint in an interface which abstracts information about an endpoint.
+// Endpoint 是一个抽象端点信息的接口。
+// 它屏蔽了不同 proxier 实现之间的差异，使规则生成逻辑只依赖统一的端点视图。
 type Endpoint interface {
-	// String returns endpoint string.  An example format can be: `IP:Port`.
-	// We take the returned value as ServiceEndpoint.Endpoint.
+	// String 返回端点的字符串表示，示例格式为 `IP:Port`。
+	// 返回值会被用作 ServiceEndpoint.Endpoint，作为端点在全过程中的稳定标识。
 	String() string
-	// IP returns IP part of the endpoint.
+	// IP 返回端点中的 IP 部分。
 	IP() string
-	// Port returns the Port part of the endpoint.
+	// Port 返回端点中的端口部分。
 	Port() int
 
-	// IsLocal returns true if the endpoint is running on the same host as kube-proxy.
+	// IsLocal 在端点与 kube-proxy 运行于同一节点时返回 true。
+	// 该信息用于优先将流量路由到本地端点，避免额外的跨节点转发。
 	IsLocal() bool
-	// IsReady returns true if an endpoint is ready and not terminating, or
-	// if PublishNotReadyAddresses is set on the service.
+	// IsReady 在端点就绪且未处于终止状态时返回 true；
+	// 若 Service 设置了 PublishNotReadyAddresses，则总是返回 true。
 	IsReady() bool
-	// IsServing returns true if an endpoint is ready. It does not account
-	// for terminating state.
+	// IsServing 在端点就绪时返回 true，不区分其是否处于终止状态。
+	// 这样终止中的端点仍可继续接收已有连接。
 	IsServing() bool
-	// IsTerminating returns true if an endpoint is terminating. For pods,
-	// that is any pod with a deletion timestamp.
+	// IsTerminating 在端点处于终止状态时返回 true。对 Pod 而言，
+	// 即带有删除时间戳的 Pod。
 	IsTerminating() bool
 
-	// ZoneHints returns the zone hint for the endpoint. This is based on
-	// endpoint.hints.forZones[*].name in the EndpointSlice API.
+	// ZoneHints 返回端点的可用区提示，来源于 EndpointSlice API 中的
+	// endpoint.hints.forZones[*].name，用于拓扑感知路由。
 	ZoneHints() sets.Set[string]
-	// NodeHints returns the node hint for the endpoint. This is based on
-	// endpoint.hints.forNodes[*].name in the EndpointSlice API.
+	// NodeHints 返回端点的节点提示，来源于 EndpointSlice API 中的
+	// endpoint.hints.forNodes[*].name，用于拓扑感知路由。
 	NodeHints() sets.Set[string]
 }
 
-// BaseEndpointInfo contains base information that defines an endpoint.
-// This could be used directly by proxier while processing endpoints,
-// or can be used for constructing a more specific EndpointInfo struct
-// defined by the proxier if needed.
+// BaseEndpointInfo 包含定义一个端点所需的基础信息。
+// proxier 可以直接使用它处理端点，也可以基于它构造自己专属的、
+// 携带更多字段的 EndpointInfo 结构体。
 type BaseEndpointInfo struct {
-	// Cache this values to improve performance
+	// 缓存这些值以避免每次调用 String/IP/Port 时重复拼接和转换，提升性能。
 	ip   string
 	port int
-	// endpoint is the same as net.JoinHostPort(ip,port)
+	// endpoint 等价于 net.JoinHostPort(ip, port)。
 	endpoint string
 
-	// isLocal indicates whether the endpoint is running on same host as kube-proxy.
+	// isLocal 表示端点是否与 kube-proxy 运行在同一节点。
 	isLocal bool
 
-	// ready indicates whether this endpoint is ready and NOT terminating, unless
-	// PublishNotReadyAddresses is set on the service, in which case it will just
-	// always be true.
+	// ready 表示端点就绪且未处于终止状态；若 Service 设置了
+	// PublishNotReadyAddresses，则该值恒为 true。
 	ready bool
-	// serving indicates whether this endpoint is ready regardless of its terminating state.
-	// For pods this is true if it has a ready status regardless of its deletion timestamp.
+	// serving 表示端点是否就绪，与其终止状态无关。
+	// 对 Pod 而言，只要状态为 Ready，即使带有删除时间戳也为 true。
 	serving bool
-	// terminating indicates whether this endpoint is terminating.
-	// For pods this is true if it has a non-nil deletion timestamp.
+	// terminating 表示端点是否正在终止。对 Pod 而言，
+	// 即带有非空删除时间戳的 Pod。
 	terminating bool
 
-	// zoneHints represent the zone hints for the endpoint. This is based on
-	// endpoint.hints.forZones[*].name in the EndpointSlice API.
+	// zoneHints 是端点的可用区提示，来源于 EndpointSlice API 中的
+	// endpoint.hints.forZones[*].name。
 	zoneHints sets.Set[string]
-	// nodeHints represent the node hints for the endpoint. This is based on
-	// endpoint.hints.forNodes[*].name in the EndpointSlice API.
+	// nodeHints 是端点的节点提示，来源于 EndpointSlice API 中的
+	// endpoint.hints.forNodes[*].name。
 	nodeHints sets.Set[string]
 }
 
 var _ Endpoint = &BaseEndpointInfo{}
 
-// String is part of proxy.Endpoint interface.
+// String 实现 proxy.Endpoint 接口的 String 方法。
 func (info *BaseEndpointInfo) String() string {
 	return info.endpoint
 }
 
-// IP returns just the IP part of the endpoint, it's a part of proxy.Endpoint interface.
+// IP 实现 proxy.Endpoint 接口，仅返回端点的 IP 部分。
 func (info *BaseEndpointInfo) IP() string {
 	return info.ip
 }
 
-// Port returns just the Port part of the endpoint.
+// Port 返回端点的端口部分。
 func (info *BaseEndpointInfo) Port() int {
 	return info.port
 }
 
-// IsLocal is part of proxy.Endpoint interface.
+// IsLocal 实现 proxy.Endpoint 接口，报告端点是否在本节点。
 func (info *BaseEndpointInfo) IsLocal() bool {
 	return info.isLocal
 }
 
-// IsReady returns true if an endpoint is ready and not terminating.
+// IsReady 在端点就绪且未终止时返回 true。
 func (info *BaseEndpointInfo) IsReady() bool {
 	return info.ready
 }
 
-// IsServing returns true if an endpoint is ready, regardless of if the
-// endpoint is terminating.
+// IsServing 在端点就绪时返回 true，不区分其是否处于终止状态。
 func (info *BaseEndpointInfo) IsServing() bool {
 	return info.serving
 }
 
-// IsTerminating retruns true if an endpoint is terminating. For pods,
-// that is any pod with a deletion timestamp.
+// IsTerminating 在端点处于终止状态时返回 true。对 Pod 而言，
+// 即带有删除时间戳的 Pod。
 func (info *BaseEndpointInfo) IsTerminating() bool {
 	return info.terminating
 }
 
-// ZoneHints returns the zone hints for the endpoint.
+// ZoneHints 返回端点的可用区提示。
 func (info *BaseEndpointInfo) ZoneHints() sets.Set[string] {
 	return info.zoneHints
 }
 
-// NodeHints returns the node hints for the endpoint.
+// NodeHints 返回端点的节点提示。
 func (info *BaseEndpointInfo) NodeHints() sets.Set[string] {
 	return info.nodeHints
 }
 
+// newBaseEndpointInfo 根据给定的 IP、端口和状态标志构造 BaseEndpointInfo。
+// 这里提前算好 endpoint 字符串，避免后续生成规则时反复拼接。
 func newBaseEndpointInfo(ip string, port int, isLocal, ready, serving, terminating bool, zoneHints, nodeHints sets.Set[string]) *BaseEndpointInfo {
 	return &BaseEndpointInfo{
 		ip:          ip,

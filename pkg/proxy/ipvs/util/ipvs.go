@@ -25,33 +25,33 @@ import (
 	"time"
 )
 
-// Interface is an injectable interface for running ipvs commands.  Implementations must be goroutine-safe.
+// Interface 是可注入的 ipvs 命令操作接口，实现必须保证并发安全（goroutine-safe）。
 type Interface interface {
-	// Flush clears all virtual servers in system. return occurred error immediately.
+	// Flush 清空系统中的所有虚拟服务器，一旦出错立即返回该错误。
 	Flush() error
-	// AddVirtualServer creates the specified virtual server.
+	// AddVirtualServer 创建指定的虚拟服务器
 	AddVirtualServer(*VirtualServer) error
-	// UpdateVirtualServer updates an already existing virtual server.  If the virtual server does not exist, return error.
+	// UpdateVirtualServer 更新一个已存在的虚拟服务器；若该虚拟服务器不存在则返回错误。
 	UpdateVirtualServer(*VirtualServer) error
-	// DeleteVirtualServer deletes the specified virtual server.  If the virtual server does not exist, return error.
+	// DeleteVirtualServer 删除指定的虚拟服务器；若该虚拟服务器不存在则返回错误。
 	DeleteVirtualServer(*VirtualServer) error
-	// Given a partial virtual server, GetVirtualServer will return the specified virtual server information in the system.
+	// GetVirtualServer 接收一个部分指定的虚拟服务器，返回系统中与之匹配的虚拟服务器信息。
 	GetVirtualServer(*VirtualServer) (*VirtualServer, error)
-	// GetVirtualServers lists all virtual servers in the system.
+	// GetVirtualServers 列出系统中的所有虚拟服务器
 	GetVirtualServers() ([]*VirtualServer, error)
-	// AddRealServer creates the specified real server for the specified virtual server.
+	// AddRealServer 为指定的虚拟服务器创建真实服务器
 	AddRealServer(*VirtualServer, *RealServer) error
-	// GetRealServers returns all real servers for the specified virtual server.
+	// GetRealServers 返回指定虚拟服务器下的所有真实服务器
 	GetRealServers(*VirtualServer) ([]*RealServer, error)
-	// DeleteRealServer deletes the specified real server from the specified virtual server.
+	// DeleteRealServer 从指定的虚拟服务器中删除真实服务器
 	DeleteRealServer(*VirtualServer, *RealServer) error
-	// UpdateRealServer updates the specified real server from the specified virtual server.
+	// UpdateRealServer 更新指定虚拟服务器下的真实服务器
 	UpdateRealServer(*VirtualServer, *RealServer) error
-	// ConfigureTimeouts is the equivalent to running "ipvsadm --set" to configure tcp, tcpfin and udp timeouts
+	// ConfigureTimeouts 等价于执行 "ipvsadm --set" 来配置 tcp、tcpfin 和 udp 的超时时间
 	ConfigureTimeouts(time.Duration, time.Duration, time.Duration) error
 }
 
-// VirtualServer is an user-oriented definition of an IPVS virtual server in its entirety.
+// VirtualServer 是面向用户的 IPVS 虚拟服务器完整定义
 type VirtualServer struct {
 	Address   net.IP
 	Protocol  string
@@ -61,20 +61,21 @@ type VirtualServer struct {
 	Timeout   uint32
 }
 
-// ServiceFlags is used to specify session affinity, ip hash etc.
+// ServiceFlags 用于指定会话保持、IP 哈希等服务标志
 type ServiceFlags uint32
 
+// 以下常量定义 IPVS 服务的标志位
 const (
-	// FlagPersistent specify IPVS service session affinity
+	// FlagPersistent 指定 IPVS 服务的会话保持（session affinity）
 	FlagPersistent = 0x1
-	// FlagHashed specify IPVS service hash flag
+	// FlagHashed 指定 IPVS 服务的哈希标志
 	FlagHashed = 0x2
-	// FlagSourceHash enables IPVS service hashing on source port and source IP
+	// FlagSourceHash 基于源端口和源 IP 对 IPVS 服务启用哈希
 	FlagSourceHash = 0x10
 )
 
-// Equal check the equality of virtual server.
-// We don't use struct == since it doesn't work because of slice.
+// Equal 检查两个虚拟服务器是否相等。
+// 由于结构体中包含切片，不能用 struct == 直接比较。
 func (svc *VirtualServer) Equal(other *VirtualServer) bool {
 	return svc.Address.Equal(other.Address) &&
 		svc.Protocol == other.Protocol &&
@@ -84,11 +85,12 @@ func (svc *VirtualServer) Equal(other *VirtualServer) bool {
 		svc.Timeout == other.Timeout
 }
 
+// String 返回虚拟服务器的可读表示，格式为 "地址:端口/协议"
 func (svc *VirtualServer) String() string {
 	return net.JoinHostPort(svc.Address.String(), strconv.Itoa(int(svc.Port))) + "/" + svc.Protocol
 }
 
-// RealServer is an user-oriented definition of an IPVS real server in its entirety.
+// RealServer 是面向用户的 IPVS 真实服务器完整定义
 type RealServer struct {
 	Address      net.IP
 	Port         uint16
@@ -97,18 +99,19 @@ type RealServer struct {
 	InactiveConn int
 }
 
+// String 返回真实服务器的可读表示，格式为 "地址:端口"
 func (rs *RealServer) String() string {
 	return net.JoinHostPort(rs.Address.String(), strconv.Itoa(int(rs.Port)))
 }
 
-// Equal check the equality of real server.
-// We don't use struct == since it doesn't work because of slice.
+// Equal 检查两个真实服务器是否相等。
+// 由于结构体中包含切片，不能用 struct == 直接比较。
 func (rs *RealServer) Equal(other *RealServer) bool {
 	return rs.Address.Equal(other.Address) &&
 		rs.Port == other.Port
 }
 
-// IsRsGracefulTerminationNeeded returns true if protocol requires graceful termination for the stale connections
+// IsRsGracefulTerminationNeeded 当协议需要为残留连接执行优雅终止时返回 true
 func IsRsGracefulTerminationNeeded(proto string) bool {
 	return !strings.EqualFold(proto, "UDP") && !strings.EqualFold(proto, "SCTP")
 }

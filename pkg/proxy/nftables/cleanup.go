@@ -25,12 +25,13 @@ import (
 	"sigs.k8s.io/knftables"
 )
 
-// CleanupLeftovers removes all nftables rules and chains created by the Proxier
-// It returns true if an error was encountered. Errors are logged.
+// CleanupLeftovers 删除 Proxier 创建的所有 nftables 规则和 chain。
+// 遇到错误时记录日志并返回 true。
 func CleanupLeftovers(ctx context.Context) (encounteredError bool) {
 	for _, family := range []knftables.Family{knftables.IPv4Family, knftables.IPv6Family} {
 		nft, err := knftables.New(family, kubeProxyTable)
 		if err != nil {
+			// 该地址族不可用时直接跳过，另一种地址族仍可能被清理。
 			continue
 		}
 		encounteredError = cleanupLeftoversForFamily(ctx, nft) || encounteredError
@@ -38,12 +39,14 @@ func CleanupLeftovers(ctx context.Context) (encounteredError bool) {
 	return
 }
 
+// cleanupLeftoversForFamily 删除给定地址族下 kube-proxy 的整张 table（连带其中的 chain 和规则）。
 func cleanupLeftoversForFamily(ctx context.Context, nft knftables.Interface) (encounteredError bool) {
 	logger := klog.FromContext(ctx)
 
 	tx := nft.NewTransaction()
 	tx.Delete(&knftables.Table{})
 	err := nft.Run(ctx, tx)
+	// 表不存在属于正常情况，只有其它错误才算清理失败。
 	if err != nil && !knftables.IsNotFound(err) {
 		logger.Error(err, "Error cleaning up nftables rules")
 		return true

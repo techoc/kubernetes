@@ -30,8 +30,10 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// testHostname 是构造 EndpointsChangeTracker 时使用的节点主机名。
 const testHostname = "test-hostname"
 
+// makeTestServiceInfo 构造测试期望的 BaseServicePortInfo，可传入函数继续设置字段。
 func makeTestServiceInfo(clusterIP string, port int, protocol string, healthcheckNodePort int, svcInfoFuncs ...func(*BaseServicePortInfo)) *BaseServicePortInfo {
 	bsvcPortInfo := &BaseServicePortInfo{
 		clusterIP: netutils.ParseIPSloppy(clusterIP),
@@ -47,6 +49,7 @@ func makeTestServiceInfo(clusterIP string, port int, protocol string, healthchec
 	return bsvcPortInfo
 }
 
+// makeTestService 构造一个最小可用的 Service，并用 svcFunc 填充用例特有字段。
 func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Service {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -61,6 +64,7 @@ func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Serv
 	return svc
 }
 
+// addTestPort 向端口列表追加一个测试用 ServicePort。
 func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port, nodeport int32, targetPort int) []v1.ServicePort {
 	svcPort := v1.ServicePort{
 		Name:       name,
@@ -72,10 +76,12 @@ func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port
 	return append(array, svcPort)
 }
 
+// makeNSN 由命名空间和名称构造 NamespacedName。
 func makeNSN(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
 }
 
+// makeServicePortName 构造 ServicePortName，作为 service map 的键。
 func makeServicePortName(ns, name, port string, protocol v1.Protocol) ServicePortName {
 	return ServicePortName{
 		NamespacedName: makeNSN(ns, name),
@@ -83,6 +89,8 @@ func makeServicePortName(ns, name, port string, protocol v1.Protocol) ServicePor
 		Protocol:       protocol,
 	}
 }
+
+// makeIPs 将字符串形式的 IP 列表解析为 net.IP 切片。
 func makeIPs(ipStr ...string) []net.IP {
 	var ips []net.IP
 	for _, s := range ipStr {
@@ -90,6 +98,8 @@ func makeIPs(ipStr ...string) []net.IP {
 	}
 	return ips
 }
+
+// mustMakeCIDRs 解析 CIDR 字符串；解析失败会让测试立即崩溃以便定位。
 func mustMakeCIDRs(cidrStr ...string) []*net.IPNet {
 	var cidrs []*net.IPNet
 	for _, s := range cidrStr {
@@ -102,6 +112,7 @@ func mustMakeCIDRs(cidrStr ...string) []*net.IPNet {
 	return cidrs
 }
 
+// TestServiceToServiceMap 验证 Service 到 service map 的转换，重点覆盖 IP 族过滤。
 func TestServiceToServiceMap(t *testing.T) {
 	testClusterIPv4 := "10.0.0.1"
 	testExternalIPv4 := "8.8.8.8"
@@ -118,6 +129,7 @@ func TestServiceToServiceMap(t *testing.T) {
 		expected map[ServicePortName]*BaseServicePortInfo
 		ipFamily v1.IPFamily
 	}{
+		// 空输入不应产生任何映射。
 		{
 			desc:     "nothing",
 			ipFamily: v1.IPv4Protocol,
@@ -125,6 +137,7 @@ func TestServiceToServiceMap(t *testing.T) {
 			service:  nil,
 			expected: map[ServicePortName]*BaseServicePortInfo{},
 		},
+		// Headless Service 应被忽略。
 		{
 			desc:     "headless service",
 			ipFamily: v1.IPv4Protocol,
@@ -136,6 +149,7 @@ func TestServiceToServiceMap(t *testing.T) {
 			}),
 			expected: map[ServicePortName]*BaseServicePortInfo{},
 		},
+		// SCTP 协议的 Headless Service 同样被忽略。
 		{
 			desc:     "headless sctp service",
 			ipFamily: v1.IPv4Protocol,
@@ -157,6 +171,7 @@ func TestServiceToServiceMap(t *testing.T) {
 			}),
 			expected: map[ServicePortName]*BaseServicePortInfo{},
 		},
+		// 普通 ClusterIP Service 的每个端口都生成一条映射。
 		{
 			desc:     "cluster ip service",
 			ipFamily: v1.IPv4Protocol,
@@ -172,6 +187,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				makeServicePortName("ns2", "cluster-ip", "p2", v1.ProtocolUDP): makeTestServiceInfo("172.16.55.4", 1235, "UDP", 0),
 			},
 		},
+		// NodePort Service 的映射使用 ClusterIP 与端口信息。
 		{
 			desc:     "nodeport service",
 			ipFamily: v1.IPv4Protocol,
@@ -187,6 +203,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				makeServicePortName("ns2", "node-port", "port2", v1.ProtocolTCP): makeTestServiceInfo("172.16.55.10", 344, "TCP", 0),
 			},
 		},
+		// LoadBalancer Ingress IP 会出现在 loadBalancerVIPs 中。
 		{
 			desc:     "load balancer service",
 			ipFamily: v1.IPv4Protocol,
@@ -208,6 +225,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// ipMode=VIP 时保留 LoadBalancer VIP。
 		{
 			desc:     "load balancer service ipMode VIP",
 			ipFamily: v1.IPv4Protocol,
@@ -229,6 +247,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// ipMode=Proxy 时不设置 LoadBalancer VIP，避免绕过 kube-proxy。
 		{
 			desc:     "load balancer service ipMode Proxy",
 			ipFamily: v1.IPv4Protocol,
@@ -248,6 +267,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// 仅本地流量策略的 LoadBalancer Service 需要记录健康检查端口。
 		{
 			desc:     "load balancer service with only local traffic policy",
 			ipFamily: v1.IPv4Protocol,
@@ -271,18 +291,20 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// ExternalName Service 即使带有 ClusterIP 和端口，也不应被代理。
 		{
 			desc:     "external name service",
 			ipFamily: v1.IPv4Protocol,
 
 			service: makeTestService("ns2", "external-name", func(svc *v1.Service) {
 				svc.Spec.Type = v1.ServiceTypeExternalName
-				svc.Spec.ClusterIP = "172.16.55.4" // Should be ignored
+				svc.Spec.ClusterIP = "172.16.55.4" // 应被忽略：ExternalName 类型不使用 ClusterIP
 				svc.Spec.ExternalName = "foo2.bar.com"
 				svc.Spec.Ports = addTestPort(svc.Spec.Ports, "portz", "UDP", 1235, 5321, 0)
 			}),
 			expected: map[ServicePortName]*BaseServicePortInfo{},
 		},
+		// IPv4 模式下应过滤掉 IPv6 的 ClusterIP。
 		{
 			desc:     "service with ipv6 clusterIP under ipv4 mode, service should be filtered",
 			ipFamily: v1.IPv4Protocol,
@@ -312,6 +334,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				},
 			},
 		},
+		// IPv6 模式下应过滤掉 IPv4 的 ClusterIP。
 		{
 			desc:     "service with ipv4 clusterIP under ipv6 mode, service should be filtered",
 			ipFamily: v1.IPv6Protocol,
@@ -341,6 +364,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				},
 			},
 		},
+		// IPv4 模式下，仅保留 IPv4 的 ExternalIP、LB 源范围和 Ingress IP。
 		{
 			desc:     "service with ipv4 configurations under ipv4 mode",
 			ipFamily: v1.IPv4Protocol,
@@ -379,6 +403,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// IPv6 模式下，仅保留 IPv6 地址相关字段。
 		{
 			desc:     "service with ipv6 configurations under ipv6 mode",
 			ipFamily: v1.IPv6Protocol,
@@ -417,6 +442,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// 双栈配置下，IPv4 模式必须丢弃所有 IPv6 字段。
 		{
 			desc:     "service with both ipv4 and ipv6 configurations under ipv4 mode, ipv6 fields should be filtered",
 			ipFamily: v1.IPv4Protocol,
@@ -455,6 +481,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// 双栈配置下，IPv6 模式必须丢弃所有 IPv4 字段。
 		{
 			desc:     "service with both ipv4 and ipv6 configurations under ipv6 mode, ipv4 fields should be filtered",
 			ipFamily: v1.IPv6Protocol,
@@ -493,6 +520,7 @@ func TestServiceToServiceMap(t *testing.T) {
 				}),
 			},
 		},
+		// CIDR 前后的空白会被解析逻辑清理。
 		{
 			desc:     "service with extra space in LoadBalancerSourceRanges",
 			ipFamily: v1.IPv4Protocol,
@@ -524,13 +552,16 @@ func TestServiceToServiceMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// 使用与用例匹配的 IP 族构造 tracker，避免地址族过滤干扰断言。
 			svcTracker := NewServiceChangeTracker(tc.ipFamily, nil, nil)
-			// outputs
+			// 输出：转换后的服务映射。
+			// 先核对数量，防止多余条目被逐项检查遗漏。
 			newServices := svcTracker.serviceToServiceMap(tc.service)
 
 			if len(newServices) != len(tc.expected) {
 				t.Fatalf("expected %d new, got %d: %v", len(tc.expected), len(newServices), dump.Pretty(newServices))
 			}
+			// 逐字段比较，覆盖 IP 族过滤后的 ExternalIP、LB VIP 等列表。
 			for svcKey, expectedInfo := range tc.expected {
 				svcInfo, exists := newServices[svcKey].(*BaseServicePortInfo)
 				if !exists {
@@ -546,6 +577,7 @@ func TestServiceToServiceMap(t *testing.T) {
 					!reflect.DeepEqual(svcInfo.loadBalancerVIPs, expectedInfo.loadBalancerVIPs) {
 					t.Errorf("[%s] expected new[%v]to be %v, got %v", tc.desc, svcKey, expectedInfo, *svcInfo)
 				}
+				// 再完整遍历一次期望结果，避免外层断言提前分支导致漏检。
 				for svcKey, expectedInfo := range tc.expected {
 					svcInfo, _ := newServices[svcKey].(*BaseServicePortInfo)
 					if !svcInfo.clusterIP.Equal(expectedInfo.clusterIP) ||
@@ -563,6 +595,7 @@ func TestServiceToServiceMap(t *testing.T) {
 	}
 }
 
+// FakeProxier 聚合 change tracker 与映射，供测试驱动增量更新流程。
 type FakeProxier struct {
 	endpointsChanges *EndpointsChangeTracker
 	serviceChanges   *ServiceChangeTracker
@@ -570,7 +603,9 @@ type FakeProxier struct {
 	endpointsMap     EndpointsMap
 }
 
+// newFakeProxier 创建测试用 FakeProxier，并可指定 tracker 起始时间。
 func newFakeProxier(ipFamily v1.IPFamily, t time.Time) *FakeProxier {
+	// 固定 trackerStartTime，使基于时间的判断在测试中可预测。
 	ect := NewEndpointsChangeTracker(ipFamily, testHostname, nil, nil)
 	ect.trackerStartTime = t
 	return &FakeProxier{
@@ -581,27 +616,33 @@ func newFakeProxier(ipFamily v1.IPFamily, t time.Time) *FakeProxier {
 	}
 }
 
+// makeServiceMap 将多个 Service 批量写入 change tracker。
 func makeServiceMap(fake *FakeProxier, allServices ...*v1.Service) {
 	for i := range allServices {
 		fake.addService(allServices[i])
 	}
 }
 
+// addService 模拟 Service 新增事件。
 func (proxier *FakeProxier) addService(service *v1.Service) {
 	proxier.serviceChanges.Update(nil, service)
 }
 
+// updateService 模拟 Service 更新事件。
 func (proxier *FakeProxier) updateService(oldService *v1.Service, service *v1.Service) {
 	proxier.serviceChanges.Update(oldService, service)
 }
 
+// deleteService 模拟 Service 删除事件（newService 为 nil）。
 func (proxier *FakeProxier) deleteService(service *v1.Service) {
 	proxier.serviceChanges.Update(service, nil)
 }
 
+// TestServiceMapUpdateHeadless 验证 Headless Service 不会进入 service map。
 func TestServiceMapUpdateHeadless(t *testing.T) {
 	fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
+	// 同时覆盖带端口和不带端口的 Headless Service。
 	makeServiceMap(fp,
 		makeTestService("ns2", "headless", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
@@ -614,7 +655,7 @@ func TestServiceMapUpdateHeadless(t *testing.T) {
 		}),
 	)
 
-	// Headless service should be ignored
+	// Headless Service 没有可代理的 ClusterIP，应被忽略。
 	result := fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 0 {
 		t.Errorf("expected service map length 0, got %d", len(fp.svcPortMap))
@@ -624,20 +665,22 @@ func TestServiceMapUpdateHeadless(t *testing.T) {
 		t.Errorf("expected 0 updated services, got %d", len(result.UpdatedServices))
 	}
 
-	// No proxied services, so no healthchecks
+	// 没有被代理的 Service，因此不应产生健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %d", len(healthCheckNodePorts))
 	}
 }
 
+// TestUpdateServiceTypeExternalName 验证 ExternalName Service 不会被代理。
 func TestUpdateServiceTypeExternalName(t *testing.T) {
 	fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
+	// 即使设置了 ClusterIP 与端口，ExternalName Service 也应被跳过。
 	makeServiceMap(fp,
 		makeTestService("ns2", "external-name", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeExternalName
-			svc.Spec.ClusterIP = "172.16.55.4" // Should be ignored
+			svc.Spec.ClusterIP = "172.16.55.4" // 应被忽略：ExternalName 类型不使用 ClusterIP
 			svc.Spec.ExternalName = "foo2.bar.com"
 			svc.Spec.Ports = addTestPort(svc.Spec.Ports, "blah", "UDP", 1235, 5321, 0)
 		}),
@@ -651,16 +694,18 @@ func TestUpdateServiceTypeExternalName(t *testing.T) {
 		t.Errorf("expected 0 updated services, got %v", result.UpdatedServices)
 	}
 
-	// No proxied services, so no healthchecks
+	// 没有被代理的 Service，因此不应产生健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
 	}
 }
 
+// TestBuildServiceMapAddRemove 验证 Service 的批量添加、修改与删除。
 func TestBuildServiceMapAddRemove(t *testing.T) {
 	fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
+	// 准备多种类型的 Service，覆盖映射与删除路径。
 	services := []*v1.Service{
 		makeTestService("ns2", "cluster-ip", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
@@ -702,14 +747,17 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		}),
 	}
 
+	// 先批量添加所有 Service。
 	for i := range services {
 		fp.addService(services[i])
 	}
 
+	// 首次 Update 应把所有新增 Service 都报告为已更新。
 	result := fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 8 {
 		t.Errorf("expected service map length 2, got %v", fp.svcPortMap)
 	}
+	// 每个 Service 都应出现在 UpdatedServices 中。
 	for i := range services {
 		name := makeNSN(services[i].Namespace, services[i].Name)
 		if !result.UpdatedServices.Has(name) {
@@ -720,8 +768,9 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		t.Errorf("expected %d updated services, got %d", len(services), len(result.UpdatedServices))
 	}
 
-	// The only-local-loadbalancer ones get added
+	// 只有 ExternalTrafficPolicy=Local 的 LoadBalancer Service 才需要健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
+	// 删除后不应再有健康检查端口残留。
 	if len(healthCheckNodePorts) != 1 {
 		t.Errorf("expected 1 healthcheck port, got %v", healthCheckNodePorts)
 	} else {
@@ -731,19 +780,21 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		}
 	}
 
-	// Remove some stuff
-	// oneService is a modification of services[0] with removed first port.
+	// 删除部分 Service 并修改其中一个，验证映射能收敛到正确状态。
+	// oneService 基于 services[0] 构造，只移除了第一个端口。
 	oneService := makeTestService("ns2", "cluster-ip", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
 		svc.Spec.ClusterIP = "172.16.55.4"
 		svc.Spec.Ports = addTestPort(svc.Spec.Ports, "p2", "UDP", 1235, 5321, 0)
 	})
 
+	// 修改一个 Service 的端口，并删除其余三个。
 	fp.updateService(services[0], oneService)
 	fp.deleteService(services[1])
 	fp.deleteService(services[2])
 	fp.deleteService(services[3])
 
+	// 第二次 Update 只反映实际发生的变更。
 	result = fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 1 {
 		t.Errorf("expected service map length 1, got %v", fp.svcPortMap)
@@ -752,15 +803,18 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		t.Errorf("expected 4 updated services, got %d", len(result.UpdatedServices))
 	}
 
+	// 删除 Local 策略的 LoadBalancer 后，健康检查端口应清空。
 	healthCheckNodePorts = fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected 0 healthcheck ports, got %v", healthCheckNodePorts)
 	}
 }
 
+// TestBuildServiceMapServiceUpdate 验证 Service 类型变更时映射与健康检查端口的同步。
 func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
+	// 准备同一 Service 的两个版本：ClusterIP 与仅本地 LoadBalancer。
 	servicev1 := makeTestService("ns1", "svc1", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
 		svc.Spec.ClusterIP = "172.16.55.4"
@@ -782,8 +836,10 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		svc.Spec.HealthCheckNodePort = 345
 	})
 
+	// 初始状态为 ClusterIP 类型。
 	fp.addService(servicev1)
 
+	// 首次 Update 建立两个端口的映射。
 	result := fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
 		t.Errorf("expected service map length 2, got %v", fp.svcPortMap)
@@ -792,13 +848,15 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected 1 updated service, got %d", len(result.UpdatedServices))
 	}
 
+	// ClusterIP 类型没有健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
 	}
 
-	// Change service to load-balancer
+	// 将 Service 改为 LoadBalancer 类型，观察健康检查端口是否出现。
 	fp.updateService(servicev1, servicev2)
+	// 更新后端口数不变，但应新增健康检查端口。
 	result = fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
 		t.Errorf("expected service map length 2, got %v", fp.svcPortMap)
@@ -807,14 +865,16 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected 1 updated service, got %d", len(result.UpdatedServices))
 	}
 
+	// Local 流量策略下应出现健康检查端口。
 	healthCheckNodePorts = fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 1 {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// No change; make sure the service map stays the same and there are
-	// no health-check changes
+	// 无实际变更时，service map 与健康检查端口都应保持不变；
+	// 这里用相同对象再次 Update 来模拟反复同步的场景。
 	fp.updateService(servicev2, servicev2)
+	// 无变更的 Update 不应报告任何更新。
 	result = fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
 		t.Errorf("expected service map length 2, got %v", fp.svcPortMap)
@@ -828,8 +888,9 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// And back to ClusterIP
+	// 再改回 ClusterIP 类型，确认健康检查端口随之移除。
 	fp.updateService(servicev2, servicev1)
+	// 回到 ClusterIP 后健康检查端口应消失。
 	result = fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
 		t.Errorf("expected service map length 2, got %v", fp.svcPortMap)
@@ -844,6 +905,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	}
 }
 
+// TestServiceCacheLeaks 验证 Service 删除后 change tracker 缓存不会保留条目。
 func TestServiceCacheLeaks(t *testing.T) {
 	fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
@@ -853,11 +915,13 @@ func TestServiceCacheLeaks(t *testing.T) {
 		svc.Spec.Ports = addTestPort(svc.Spec.Ports, "p1", "UDP", 1234, 4321, 0)
 		svc.Spec.Ports = addTestPort(svc.Spec.Ports, "p2", "TCP", 1235, 5321, 0)
 	})
+	// 添加后缓存中应恰好有一个条目。
 	fp.addService(service)
 	if len(fp.serviceChanges.items) != 1 {
 		t.Errorf("Found %d items on the cache, 1 expected", len(fp.serviceChanges.items))
 	}
 
+	// 删除后缓存应被清空，避免长期运行时发生内存泄漏。
 	fp.deleteService(service)
 	if len(fp.serviceChanges.items) > 0 {
 		t.Errorf("Found %d items on the cache, 0 expected", len(fp.serviceChanges.items))

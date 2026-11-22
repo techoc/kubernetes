@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This is an empty file to avoid "build constraints exclude all Go files" error while running unit tests on non-linux platforms.
-
+// Package ipset 是 ipset 相关实现的包。
+// 这是一个空文件，目的是在非 Linux 平台运行单元测试时，
+// 避免其他文件均受构建约束排除而导致 “build constraints exclude all Go files” 错误。
 package ipset

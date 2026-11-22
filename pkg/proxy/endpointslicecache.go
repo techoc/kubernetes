@@ -31,43 +31,38 @@ import (
 	utilnet "k8s.io/utils/net"
 )
 
-// EndpointSliceCache is used as a cache of EndpointSlice information.
+// EndpointSliceCache 缓存代理所需的 EndpointSlice 信息，区分已应用与待应用的变更。
 type EndpointSliceCache struct {
-	// lock protects trackerByServiceMap.
+	// lock 保护 trackerByServiceMap 的并发访问。
 	lock sync.Mutex
 
-	// trackerByServiceMap is the basis of this cache. It contains endpoint
-	// slice trackers grouped by service name and endpoint slice name. The first
-	// key represents a namespaced service name while the second key represents
-	// an endpoint slice name. Since endpoints can move between slices, we
-	// require slice specific caching to prevent endpoints being removed from
-	// the cache when they may have just moved to a different slice.
+	// trackerByServiceMap 是本缓存的核心，按 Service 名称（第一层键，含命名空间）
+	// 和 EndpointSlice 名称（第二层键）分组保存切片跟踪器。端点可能在切片间迁移，
+	// 因此必须按切片分别缓存，避免把刚迁移到其他切片的端点误判为已删除。
 	trackerByServiceMap map[types.NamespacedName]*endpointSliceTracker
 
 	makeEndpointInfo makeEndpointFunc
 	nodeName         string
 }
 
-// endpointSliceTracker keeps track of EndpointSlices as they have been applied
-// by a proxier along with any pending EndpointSlices that have been updated
-// in this cache but not yet applied by a proxier.
+// endpointSliceTracker 分别记录已被代理应用的 EndpointSlice 与已更新但尚未应用的待处理切片。
 type endpointSliceTracker struct {
 	applied endpointSliceDataByName
 	pending endpointSliceDataByName
 }
 
-// endpointSliceDataByName groups endpointSliceData by the names of the
-// corresponding EndpointSlices.
+// endpointSliceDataByName 按 EndpointSlice 名称索引其数据。
 type endpointSliceDataByName map[string]*endpointSliceData
 
-// endpointSliceData contains information about a single EndpointSlice update or removal.
+// endpointSliceData 表示单个 EndpointSlice 的更新或删除；remove 为 true 表示删除。
 type endpointSliceData struct {
 	endpointSlice *discovery.EndpointSlice
 	remove        bool
 }
 
-// NewEndpointSliceCache initializes an EndpointSliceCache.
+// NewEndpointSliceCache 初始化 EndpointSliceCache；未指定构造函数时使用默认的端点信息构造方式。
 func NewEndpointSliceCache(nodeName string, makeEndpointInfo makeEndpointFunc) *EndpointSliceCache {
+	// 调用方未定制时回退到默认实现，保证缓存始终能构造 Endpoint 信息。
 	if makeEndpointInfo == nil {
 		makeEndpointInfo = standardEndpointInfo
 	}
@@ -78,7 +73,7 @@ func NewEndpointSliceCache(nodeName string, makeEndpointInfo makeEndpointFunc) *
 	}
 }
 
-// newEndpointSliceTracker initializes an endpointSliceTracker.
+// newEndpointSliceTracker 初始化一个空的 endpointSliceTracker。
 func newEndpointSliceTracker() *endpointSliceTracker {
 	return &endpointSliceTracker{
 		applied: endpointSliceDataByName{},
@@ -86,12 +81,12 @@ func newEndpointSliceTracker() *endpointSliceTracker {
 	}
 }
 
-// standardEndpointInfo is the default makeEndpointFunc.
+// standardEndpointInfo 是默认的 makeEndpointFunc，直接返回基础端点信息。
 func standardEndpointInfo(ep *BaseEndpointInfo, _ *ServicePortName) Endpoint {
 	return ep
 }
 
-// updatePending updates a pending slice in the cache.
+// updatePending 把 EndpointSlice 的新增、更新或删除记录到待处理集合，返回是否产生了实际变化。
 func (cache *EndpointSliceCache) updatePending(endpointSlice *discovery.EndpointSlice, remove bool) bool {
 	serviceKey, sliceKey, err := endpointSliceCacheKeys(endpointSlice)
 	if err != nil {
@@ -104,10 +99,12 @@ func (cache *EndpointSliceCache) updatePending(endpointSlice *discovery.Endpoint
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 
+	// 该 Service 首次出现时先建立对应的跟踪器。
 	if _, ok := cache.trackerByServiceMap[serviceKey]; !ok {
 		cache.trackerByServiceMap[serviceKey] = newEndpointSliceTracker()
 	}
 
+	// 数据没变时不入队，避免触发无意义的代理规则重算。
 	changed := cache.esDataChanged(serviceKey, sliceKey, esData)
 
 	if changed {
@@ -117,8 +114,7 @@ func (cache *EndpointSliceCache) updatePending(endpointSlice *discovery.Endpoint
 	return changed
 }
 
-// checkoutChanges returns a map of all endpointsChanges that are
-// pending and then marks them as applied.
+// checkoutChanges 取出所有待处理的端点变更并把它们标记为已应用。
 func (cache *EndpointSliceCache) checkoutChanges() map[types.NamespacedName]*endpointsChange {
 	changes := make(map[types.NamespacedName]*endpointsChange)
 
@@ -126,12 +122,14 @@ func (cache *EndpointSliceCache) checkoutChanges() map[types.NamespacedName]*end
 	defer cache.lock.Unlock()
 
 	for serviceNN, esTracker := range cache.trackerByServiceMap {
+		// 没有待处理变更的 Service 无需生成 diff。
 		if len(esTracker.pending) == 0 {
 			continue
 		}
 
 		change := &endpointsChange{}
 
+		// 先用已应用的状态计算变更前的端点快照。
 		change.previous = cache.getEndpointsMap(serviceNN, esTracker.applied)
 
 		for name, sliceData := range esTracker.pending {
@@ -142,6 +140,7 @@ func (cache *EndpointSliceCache) checkoutChanges() map[types.NamespacedName]*end
 			}
 
 			delete(esTracker.pending, name)
+			// 该 Service 已无任何切片数据时回收跟踪器，防止缓存无限增长。
 			if len(esTracker.applied) == 0 && len(esTracker.pending) == 0 {
 				delete(cache.trackerByServiceMap, serviceNN)
 			}
@@ -154,27 +153,28 @@ func (cache *EndpointSliceCache) checkoutChanges() map[types.NamespacedName]*end
 	return changes
 }
 
-// spToEndpointMap stores groups Endpoint objects by ServicePortName and
-// endpoint string (returned by Endpoint.String()).
+// spToEndpointMap 先按 ServicePortName、再按端点的字符串表示对 Endpoint 分组。
 type spToEndpointMap map[ServicePortName]map[string]Endpoint
 
-// getEndpointsMap computes an EndpointsMap for a given set of EndpointSlices.
+// getEndpointsMap 根据给定的 EndpointSlice 集合计算对应的 EndpointsMap。
 func (cache *EndpointSliceCache) getEndpointsMap(serviceNN types.NamespacedName, sliceDataByName endpointSliceDataByName) EndpointsMap {
 	endpointInfoBySP := cache.endpointInfoByServicePort(serviceNN, sliceDataByName)
 	return endpointsMapFromEndpointInfo(endpointInfoBySP)
 }
 
-// endpointInfoByServicePort groups endpoint info by service port name and address.
+// endpointInfoByServicePort 按 Service 端口名称和端点地址对端点信息分组。
 func (cache *EndpointSliceCache) endpointInfoByServicePort(serviceNN types.NamespacedName, sliceDataByName endpointSliceDataByName) spToEndpointMap {
 	endpointInfoBySP := spToEndpointMap{}
 
 	for _, sliceData := range sliceDataByName {
 		for _, port := range sliceData.endpointSlice.Ports {
+			// 端口名是构造 ServicePortName 的必要条件，缺失时只能忽略该端口。
 			if port.Name == nil {
 				klog.ErrorS(nil, "Ignoring port with nil name", "portName", port.Name)
 				continue
 			}
 			// TODO: handle nil ports to mean "all"
+			// 零值或空端口无法用于建立转发规则，跳过。
 			if port.Port == nil || *port.Port == int32(0) {
 				klog.ErrorS(nil, "Ignoring invalid endpoint port", "portName", *port.Name)
 				continue
@@ -193,14 +193,14 @@ func (cache *EndpointSliceCache) endpointInfoByServicePort(serviceNN types.Names
 	return endpointInfoBySP
 }
 
-// addEndpoints adds an Endpoint for each unique endpoint.
+// addEndpoints 把切片中的端点按唯一地址加入端点集合，并应用本地性、就绪状态等语义。
 func (cache *EndpointSliceCache) addEndpoints(svcPortName *ServicePortName, portNum int, endpointSet map[string]Endpoint, endpoints []discovery.Endpoint) map[string]Endpoint {
 	if endpointSet == nil {
 		endpointSet = map[string]Endpoint{}
 	}
 
-	// iterate through endpoints to add them to endpointSet.
 	for _, endpoint := range endpoints {
+		// 没有地址的端点无法用于转发，直接忽略。
 		if len(endpoint.Addresses) == 0 {
 			klog.ErrorS(nil, "Ignoring invalid endpoint port with empty address", "endpoint", endpoint)
 			continue
@@ -213,6 +213,7 @@ func (cache *EndpointSliceCache) addEndpoints(svcPortName *ServicePortName, port
 		terminating := endpoint.Conditions.Terminating != nil && *endpoint.Conditions.Terminating
 
 		var zoneHints, nodeHints sets.Set[string]
+		// 拓扑提示仅在存在时收集；节点提示还受特性门控限制。
 		if endpoint.Hints != nil {
 			if len(endpoint.Hints.ForZones) > 0 {
 				zoneHints = sets.New[string]()
@@ -232,18 +233,9 @@ func (cache *EndpointSliceCache) addEndpoints(svcPortName *ServicePortName, port
 		endpointInfo := newBaseEndpointInfo(endpointIP, portNum, isLocal,
 			ready, serving, terminating, zoneHints, nodeHints)
 
-		// If an Endpoint gets moved from one slice to another, we may temporarily
-		// see it in both slices. Ideally we want to prefer the Endpoint from the
-		// more-recently-updated EndpointSlice, since it may have newer
-		// conditions. But we can't easily figure that out, and the situation will
-		// resolve itself once we receive the second EndpointSlice update anyway.
-		//
-		// On the other hand, there maybe also be two *different* Endpoints (i.e.,
-		// with different targetRefs) that point to the same IP, if the pod
-		// network reuses the IP from a terminating pod before the Pod object is
-		// fully deleted. In this case we want to prefer the running pod over the
-		// terminating one. (If there are multiple non-terminating pods with the
-		// same podIP, then the result is undefined.)
+		// 端点在切片间迁移期间可能短暂同时出现在两个切片中；无法可靠判断哪个更新，
+		// 但第二次切片更新到达后该状态会自行消解。另一方面，Pod 网络可能在旧 Pod
+		// 完全删除前复用其 IP，导致两个不同端点指向同一地址；此时优先选择非终止中的端点。
 		if _, exists := endpointSet[endpointInfo.String()]; !exists || !terminating {
 			endpointSet[endpointInfo.String()] = cache.makeEndpointInfo(endpointInfo, svcPortName)
 		}
@@ -252,46 +244,42 @@ func (cache *EndpointSliceCache) addEndpoints(svcPortName *ServicePortName, port
 	return endpointSet
 }
 
+// isLocal 判断端点所在节点是否为当前节点。
 func (cache *EndpointSliceCache) isLocal(nodeName string) bool {
 	return len(cache.nodeName) > 0 && nodeName == cache.nodeName
 }
 
-// esDataChanged returns true if the esData parameter should be set as a new
-// pending value in the cache.
+// esDataChanged 判断 esData 是否需要作为新的待处理值写入缓存。
 func (cache *EndpointSliceCache) esDataChanged(serviceKey types.NamespacedName, sliceKey string, esData *endpointSliceData) bool {
 	if _, ok := cache.trackerByServiceMap[serviceKey]; ok {
 		appliedData, appliedOk := cache.trackerByServiceMap[serviceKey].applied[sliceKey]
 		pendingData, pendingOk := cache.trackerByServiceMap[serviceKey].pending[sliceKey]
 
-		// If there's already a pending value, return whether or not this would
-		// change that.
+		// 已有待处理值时，只需判断是否与其相同，避免覆盖尚未应用的更新。
 		if pendingOk {
 			return !reflect.DeepEqual(esData, pendingData)
 		}
 
-		// If there's already an applied value, return whether or not this would
-		// change that.
+		// 没有待处理值时，再与已应用的值比较。
 		if appliedOk {
 			return !reflect.DeepEqual(esData, appliedData)
 		}
 	}
 
-	// If this is marked for removal and does not exist in the cache, no changes
-	// are necessary.
+	// 缓存中不存在且标记为删除，说明无需任何处理。
 	if esData.remove {
 		return false
 	}
 
-	// If not in the cache, and not marked for removal, it should be added.
+	// 缓存中不存在且不是删除操作，说明这是新增数据。
 	return true
 }
 
-// endpointsMapFromEndpointInfo computes an endpointsMap from endpointInfo that
-// has been grouped by service port and IP.
+// endpointsMapFromEndpointInfo 根据按 Service 端口和地址分组的端点信息生成 EndpointsMap。
 func endpointsMapFromEndpointInfo(endpointInfoBySP map[ServicePortName]map[string]Endpoint) EndpointsMap {
 	endpointsMap := EndpointsMap{}
 
-	// transform endpointInfoByServicePort into an endpointsMap with sorted IPs.
+	// 将分组结果转换为端点列表，并对 IP 排序。
 	for svcPortName, endpointSet := range endpointInfoBySP {
 		if len(endpointSet) > 0 {
 			endpointsMap[svcPortName] = []Endpoint{}
@@ -299,7 +287,7 @@ func endpointsMapFromEndpointInfo(endpointInfoBySP map[ServicePortName]map[strin
 				endpointsMap[svcPortName] = append(endpointsMap[svcPortName], endpointInfo)
 
 			}
-			// Ensure endpoints are always returned in the same order to simplify diffing.
+			// 固定端点顺序，使前后快照的 diff 结果稳定。
 			sort.Sort(byEndpoint(endpointsMap[svcPortName]))
 		}
 	}
@@ -307,10 +295,11 @@ func endpointsMapFromEndpointInfo(endpointInfoBySP map[ServicePortName]map[strin
 	return endpointsMap
 }
 
-// endpointSliceCacheKeys returns cache keys used for a given EndpointSlice.
+// endpointSliceCacheKeys 从 EndpointSlice 提取缓存所需的 Service 键和切片键。
 func endpointSliceCacheKeys(endpointSlice *discovery.EndpointSlice) (types.NamespacedName, string, error) {
 	var err error
 	serviceName, ok := endpointSlice.Labels[discovery.LabelServiceName]
+	// 缺少 Service 名称标签的切片无法归属到任何 Service，必须报错。
 	if !ok || serviceName == "" {
 		err = fmt.Errorf("no %s label set on endpoint slice: %s", discovery.LabelServiceName, endpointSlice.Name)
 	} else if endpointSlice.Namespace == "" || endpointSlice.Name == "" {
@@ -319,15 +308,20 @@ func endpointSliceCacheKeys(endpointSlice *discovery.EndpointSlice) (types.Names
 	return types.NamespacedName{Namespace: endpointSlice.Namespace, Name: serviceName}, endpointSlice.Name, err
 }
 
-// byEndpoint helps sort endpoints by endpoint string.
+// byEndpoint 按端点的字符串表示排序，实现 sort.Interface。
 type byEndpoint []Endpoint
 
+// Len 返回待排序端点的数量。
 func (e byEndpoint) Len() int {
 	return len(e)
 }
+
+// Swap 交换两个端点的位置。
 func (e byEndpoint) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
+
+// Less 按端点字符串表示确定排序顺序。
 func (e byEndpoint) Less(i, j int) bool {
 	return e[i].String() < e[j].String()
 }

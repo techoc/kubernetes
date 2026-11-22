@@ -18,12 +18,16 @@ limitations under the License.
 
 package metrics
 
+// 非 Linux 平台没有 nftables netfilter 计数器设施，这里提供空实现，
+// 使 metrics.go 中的注册逻辑在所有平台上都能编译通过。
 import "k8s.io/component-base/metrics"
 
+// newNFAcctMetricCollector 在非 Linux 平台返回 nil，表示无需注册 nfacct 指标采集器。
 func newNFAcctMetricCollector(counter string, description *metrics.Desc) metrics.StableCollector {
 	return nil
 }
 
+// newNFTablesCounterMetricCollector 在非 Linux 平台返回 nil，表示无需注册 nftables 命名计数器采集器。
 func newNFTablesCounterMetricCollector(counters map[string]string, description *metrics.Desc) metrics.StableCollector {
 	return nil
 }

@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package winkernel implements the Windows-kernel-based proxy
+// Package winkernel 实现基于 Windows 内核的代理。
 package winkernel

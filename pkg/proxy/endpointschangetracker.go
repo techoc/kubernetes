@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package proxy 提供代理规则同步所需的公共数据结构：
+// EndpointsChangeTracker 缓存尚未应用的 EndpointSlice 变更，
+// EndpointsMap 维护当前 ServicePort 到 Endpoint 的映射。
 package proxy
 
 import (
@@ -28,39 +31,40 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/metrics"
 )
 
-// EndpointsChangeTracker carries state about uncommitted changes to an arbitrary number of
-// Endpoints, keyed by their namespace and name.
+// EndpointsChangeTracker 保存任意数量 Endpoint 的未提交变更状态，按命名空间和名字索引。
 type EndpointsChangeTracker struct {
-	// lock protects lastChangeTriggerTimes
+	// lock 保护 lastChangeTriggerTimes
 	lock sync.Mutex
 
-	// processEndpointsMapChange is invoked by the apply function on every change.
-	// This function should not modify the EndpointsMaps, but just use the changes for
-	// any Proxier-specific cleanup.
+	// processEndpointsMapChange 在应用变更时由 Update 对每处变更调用。
+	// 该回调不应修改 EndpointsMap，只能利用变更信息做 proxier 特有的清理工作。
 	processEndpointsMapChange processEndpointsMapChangeFunc
 
-	// addressType is the type of EndpointSlice this proxy tracks
+	// addressType 是本代理跟踪的 EndpointSlice 地址族类型
 	addressType discovery.AddressType
 
-	// endpointSliceCache holds a simplified version of endpoint slices.
+	// endpointSliceCache 保存 EndpointSlice 的简化表示。
 	endpointSliceCache *EndpointSliceCache
 
-	// lastChangeTriggerTimes maps from the Service's NamespacedName to the times of
-	// the triggers that caused its EndpointSlice objects to change. Used to calculate
-	// the network-programming-latency metric.
+	// lastChangeTriggerTimes 记录 Service 的 NamespacedName 到触发其 EndpointSlice
+	// 变更的各触发时刻的映射，用于计算 network-programming-latency 指标。
 	lastChangeTriggerTimes map[types.NamespacedName][]time.Time
-	// trackerStartTime is the time when the EndpointsChangeTracker was created, so
-	// we can avoid generating network-programming-latency metrics for changes that
-	// occurred before that.
+	// trackerStartTime 是 EndpointsChangeTracker 的创建时刻；
+	// 借助它可以忽略 tracker 创建之前发生的变更，避免产生无意义的延迟指标。
 	trackerStartTime time.Time
 }
 
+// makeEndpointFunc 让 proxier 可以基于基础 endpoint 信息构造自定义的 Endpoint 实现。
 type makeEndpointFunc func(info *BaseEndpointInfo, svcPortName *ServicePortName) Endpoint
+
+// processEndpointsMapChangeFunc 在应用 EndpointSlice 变更时通知 proxier 做特定清理。
 type processEndpointsMapChangeFunc func(oldEndpointsMap, newEndpointsMap EndpointsMap)
 
-// NewEndpointsChangeTracker initializes an EndpointsChangeTracker
+// NewEndpointsChangeTracker 创建一个 EndpointsChangeTracker。
+// 根据 IP 地址族选择要跟踪的 EndpointSlice 类型，并记录创建时刻用于过滤过期的触发时间。
 func NewEndpointsChangeTracker(ipFamily v1.IPFamily, nodeName string, makeEndpointInfo makeEndpointFunc, processEndpointsMapChange processEndpointsMapChangeFunc) *EndpointsChangeTracker {
 	addressType := discovery.AddressTypeIPv4
+	// 一个 tracker 只处理单一地址族，IPv6 与 IPv4 的 EndpointSlice 不能混用。
 	if ipFamily == v1.IPv6Protocol {
 		addressType = discovery.AddressTypeIPv6
 	}
@@ -74,11 +78,11 @@ func NewEndpointsChangeTracker(ipFamily v1.IPFamily, nodeName string, makeEndpoi
 	}
 }
 
-// EndpointSliceUpdate updates the EndpointsChangeTracker by adding/updating or removing
-// endpointSlice (depending on removeSlice). It returns true if this update contained a
-// change that needs to be synced; note that this is different from the return value of
-// ServiceChangeTracker.Update().
+// EndpointSliceUpdate 根据 removeSlice 添加/更新或删除 EndpointSlice，更新待处理变更。
+// 返回值表示本次更新是否引入了需要同步的变更；
+// 注意它与 ServiceChangeTracker.Update() 的返回值语义不同：后者表示 tracker 中是否还有待同步的变更。
 func (ect *EndpointsChangeTracker) EndpointSliceUpdate(endpointSlice *discovery.EndpointSlice, removeSlice bool) bool {
+	// 每个 tracker 只处理一种地址族，其余的由对应地址族的 tracker 负责。
 	if endpointSlice.AddressType != ect.addressType {
 		klog.V(4).InfoS("Ignoring unsupported EndpointSlice", "endpointSlice", klog.KObj(endpointSlice), "type", endpointSlice.AddressType, "expected", ect.addressType)
 		return false
@@ -98,12 +102,14 @@ func (ect *EndpointsChangeTracker) EndpointSliceUpdate(endpointSlice *discovery.
 	changeNeeded := ect.endpointSliceCache.updatePending(endpointSlice, removeSlice)
 
 	if changeNeeded {
+		// 只有在确实产生变更时才增加待处理计数，避免重复事件抬高指标。
 		metrics.EndpointChangesPending.Inc()
-		// In case of Endpoints deletion, the LastChangeTriggerTime annotation is
-		// by-definition coming from the time of last update, which is not what
-		// we want to measure. So we simply ignore it in this cases.
+		// 删除场景下注解里的 LastChangeTriggerTime 必然来自上一次更新时间，
+		// 并非我们想度量的触发时刻，因此直接丢弃。
 		// TODO(wojtek-t, robscott): Address the problem for EndpointSlice deletion
 		// when other EndpointSlice for that service still exist.
+		// 删除时旧注解时间戳没有意义，直接丢弃；新增/更新时只接受 tracker 启动之后的时间戳，
+		// 避免重启前遗留的注解被算作本次的编程延迟。
 		if removeSlice {
 			delete(ect.lastChangeTriggerTimes, namespacedName)
 		} else if t := getLastChangeTriggerTime(endpointSlice.Annotations); !t.IsZero() && t.After(ect.trackerStartTime) {
@@ -115,16 +121,16 @@ func (ect *EndpointsChangeTracker) EndpointSliceUpdate(endpointSlice *discovery.
 	return changeNeeded
 }
 
-// checkoutChanges returns a map of pending endpointsChanges and marks them as
-// applied.
+// checkoutChanges 返回所有待处理的 endpointsChange 映射；调用后这些变更即视为已取出。
+// 由于规则同步期间不允许并发写入，此处不需要加锁。
 func (ect *EndpointsChangeTracker) checkoutChanges() map[types.NamespacedName]*endpointsChange {
 	metrics.EndpointChangesPending.Set(0)
 
 	return ect.endpointSliceCache.checkoutChanges()
 }
 
-// checkoutTriggerTimes applies the locally cached trigger times to a map of
-// trigger times that have been passed in and empties the local cache.
+// checkoutTriggerTimes 把本地缓存的触发时间合并到传入的映射中，并清空本地缓存。
+// 相同 key 的时间切片会在尾部追加，而不是覆盖已有记录。
 func (ect *EndpointsChangeTracker) checkoutTriggerTimes(lastChangeTriggerTimes *map[types.NamespacedName][]time.Time) {
 	ect.lock.Lock()
 	defer ect.lock.Unlock()
@@ -140,56 +146,47 @@ func (ect *EndpointsChangeTracker) checkoutTriggerTimes(lastChangeTriggerTimes *
 	ect.lastChangeTriggerTimes = make(map[types.NamespacedName][]time.Time)
 }
 
-// getLastChangeTriggerTime returns the time.Time value of the
-// EndpointsLastChangeTriggerTime annotation stored in the given endpoints
-// object or the "zero" time if the annotation wasn't set or was set
-// incorrectly.
+// getLastChangeTriggerTime 解析 EndpointsLastChangeTriggerTime 注解并返回对应的 time.Time；
+// 注解缺失或格式错误时返回零值时间（上游代码会忽略零值）。
 func getLastChangeTriggerTime(annotations map[string]string) time.Time {
 	// TODO(#81360): ignore case when Endpoint is deleted.
 	if _, ok := annotations[v1.EndpointsLastChangeTriggerTime]; !ok {
-		// It's possible that the Endpoints object won't have the
-		// EndpointsLastChangeTriggerTime annotation set. In that case return
-		// the 'zero value', which is ignored in the upstream code.
+		// Endpoints 对象可能根本没有该注解；此时返回零值，由上游代码忽略。
 		return time.Time{}
 	}
 	val, err := time.Parse(time.RFC3339Nano, annotations[v1.EndpointsLastChangeTriggerTime])
 	if err != nil {
 		klog.ErrorS(err, "Error while parsing EndpointsLastChangeTriggerTimeAnnotation",
 			"value", annotations[v1.EndpointsLastChangeTriggerTime])
-		// In case of error val = time.Zero, which is ignored in the upstream code.
+		// 解析失败时 val 为零值，上游代码会忽略它。
 	}
 	return val
 }
 
-// endpointsChange contains all changes to endpoints that happened since proxy
-// rules were synced.  For a single object, changes are accumulated, i.e.
-// previous is state from before applying the changes, current is state after
-// applying the changes.
+// endpointsChange 保存自上次规则同步以来某个 Service 的全部 endpoint 变更。
+// 变更是累积的：previous 是应用变更前的状态，current 是应用变更后的状态。
 type endpointsChange struct {
 	previous EndpointsMap
 	current  EndpointsMap
 }
 
-// UpdateEndpointsMapResult is the updated results after applying endpoints changes.
+// UpdateEndpointsMapResult 是应用 endpoints 变更后的结果汇总。
 type UpdateEndpointsMapResult struct {
-	// UpdatedServices lists the names of all services with added/updated/deleted
-	// endpoints since the last Update.
+	// UpdatedServices 列出自上次 Update 以来 endpoint 有增删改变更的所有 Service。
 	UpdatedServices sets.Set[types.NamespacedName]
-	// ConntrackCleanupRequired will be true if any UDP ServicePort changed endpoints, false otherwise.
-	// It's used to minimise conntrack cleanup calls.
+	// 只要有任一 UDP ServicePort 的 endpoint 发生变化就置 true，用于尽量减少 conntrack 清理调用次数。
 	ConntrackCleanupRequired bool
-	// List of the trigger times for all endpoints objects that changed. It's used to export the
-	// network programming latency.
+	// 所有发生变更的 endpoints 对象的触发时间列表，用于导出 network programming latency。
 	// NOTE(oxddr): this can be simplified to []time.Time if memory consumption becomes an issue.
 	LastChangeTriggerTimes map[types.NamespacedName][]time.Time
 }
 
-// EndpointsMap maps a service name to a list of all its Endpoints.
+// EndpointsMap 将 ServicePortName 映射到该端口对应的全部 Endpoint。
 type EndpointsMap map[ServicePortName][]Endpoint
 
-// Update updates em based on the changes in ect, returns information about the diff since
-// the last Update, triggers processEndpointsMapChange on every change, and clears the
-// changes map.
+// Update 根据 ect 中的待处理变更更新 em，返回自上次 Update 以来的差异信息，
+// 对每处变更触发 processEndpointsMapChange 回调，并清空待处理变更。
+// 通过先 unmerge 旧状态再 merge 新状态，保证映射内容与最新的 EndpointSlice 一致。
 func (em EndpointsMap) Update(ect *EndpointsChangeTracker) UpdateEndpointsMapResult {
 	result := UpdateEndpointsMapResult{
 		UpdatedServices:        sets.New[types.NamespacedName](),
@@ -209,19 +206,18 @@ func (em EndpointsMap) Update(ect *EndpointsChangeTracker) UpdateEndpointsMapRes
 		em.unmerge(change.previous)
 		em.merge(change.current)
 
-		// result.ConntrackCleanupRequired should be true if any one of the UDP
-		// ServicePort changed endpoint. Once true, we don't update the value.
+		// 只要有一个 UDP ServicePort 变更就足够触发清理；置 true 后无需再检查后续变更。
 		if result.ConntrackCleanupRequired {
 			continue
 		}
-		// Check if the changed service had any UDP ServicePort
+		// 变更前存在 UDP 端口时，也可能需要清理旧连接。
 		for svcPort := range change.previous {
 			if svcPort.NamespacedName == nn && svcPort.Protocol == v1.ProtocolUDP {
 				result.ConntrackCleanupRequired = true
 				break
 			}
 		}
-		// Check if the changed service has any UDP ServicePort
+		// 变更后新增 UDP 端口同样需要清理标记。
 		for svcPort := range change.current {
 			if svcPort.NamespacedName == nn && svcPort.Protocol == v1.ProtocolUDP {
 				result.ConntrackCleanupRequired = true
@@ -234,7 +230,8 @@ func (em EndpointsMap) Update(ect *EndpointsChangeTracker) UpdateEndpointsMapRes
 	return result
 }
 
-// Merge ensures that the current EndpointsMap contains all <service, endpoints> pairs from the EndpointsMap passed in.
+// merge 确保当前 EndpointsMap 包含传入映射中的所有 <service, endpoints> 对；
+// 同名 ServicePort 直接被新列表覆盖。
 func (em EndpointsMap) merge(other EndpointsMap) {
 	for svcPortName := range other {
 		epList := other[svcPortName]
@@ -247,7 +244,7 @@ func (em EndpointsMap) merge(other EndpointsMap) {
 	}
 }
 
-// Unmerge removes the <service, endpoints> pairs from the current EndpointsMap which are contained in the EndpointsMap passed in.
+// unmerge 从当前 EndpointsMap 中删除传入映射包含的所有 <service, endpoints> 对。
 func (em EndpointsMap) unmerge(other EndpointsMap) {
 	for svcPortName := range other {
 		klog.V(3).InfoS("Removing service endpoints", "portName", svcPortName)
@@ -255,7 +252,7 @@ func (em EndpointsMap) unmerge(other EndpointsMap) {
 	}
 }
 
-// formatEndpointsList returns a string list converted from an endpoints list.
+// formatEndpointsList 将 Endpoint 列表转换为字符串列表，便于日志输出。
 func formatEndpointsList(endpoints []Endpoint) []string {
 	var formattedList []string
 	for _, ep := range endpoints {
@@ -264,13 +261,14 @@ func formatEndpointsList(endpoints []Endpoint) []string {
 	return formattedList
 }
 
-// getLocalEndpointIPs returns endpoints IPs if given endpoint is local - local means the endpoint is running in same host as kube-proxy.
+// getLocalReadyEndpointIPs 返回每个 Service 的本地就绪 endpoint IP 集合；
+// “本地”指 endpoint 与 kube-proxy 运行在同一节点上。
 func (em EndpointsMap) getLocalReadyEndpointIPs() map[types.NamespacedName]sets.Set[string] {
 	localIPs := make(map[types.NamespacedName]sets.Set[string])
 	for svcPortName, epList := range em {
 		for _, ep := range epList {
-			// Only add ready endpoints for health checking. Terminating endpoints may still serve traffic
-			// but the health check signal should fail if there are only terminating endpoints on a node.
+			// 只有就绪 endpoint 才计入健康检查信号：终止中的 endpoint 虽可能仍在承载流量，
+			// 但节点上若只剩这类 endpoint，健康检查就应当失败。
 			if !ep.IsReady() {
 				continue
 			}
@@ -287,16 +285,13 @@ func (em EndpointsMap) getLocalReadyEndpointIPs() map[types.NamespacedName]sets.
 	return localIPs
 }
 
-// LocalReadyEndpoints returns a map of Service names to the number of local ready
-// endpoints for that service.
+// LocalReadyEndpoints 返回每个 Service 名字到其本地就绪 endpoint 数量的映射。
 func (em EndpointsMap) LocalReadyEndpoints() map[types.NamespacedName]int {
 	// TODO: If this will appear to be computationally expensive, consider
 	// computing this incrementally similarly to endpointsMap.
 
-	// (Note that we need to call getLocalEndpointIPs first to squash the data by IP,
-	// because the EndpointsMap is sorted by IP+port, not just IP, and we want to
-	// consider a Service pointing to 10.0.0.1:80 and 10.0.0.1:443 to have 1 endpoint,
-	// not 2.)
+	// 必须先通过 getLocalEndpointIPs 按 IP 去重：EndpointsMap 按 IP+端口组织，
+	// 而指向 10.0.0.1:80 和 10.0.0.1:443 的 Service 应算作 1 个而非 2 个 endpoint。
 
 	eps := make(map[types.NamespacedName]int)
 	localIPs := em.getLocalReadyEndpointIPs()

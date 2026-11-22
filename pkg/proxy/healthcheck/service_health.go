@@ -36,30 +36,26 @@ import (
 	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
 )
 
-// ServiceHealthServer serves HTTP endpoints for each service name, with results
-// based on the endpoints.  If there are 0 endpoints for a service, it returns a
-// 503 "Service Unavailable" error (telling LBs not to use this node).  If there
-// are 1 or more endpoints, it returns a 200 "OK".
+// ServiceHealthServer 为每个 Service 提供 HTTP 健康检查端点，结果取决于本地端点数量：
+// 没有端点时返回 503 Service Unavailable（告知负载均衡器不要使用本节点），
+// 存在一个或多个端点时返回 200 OK。
 type ServiceHealthServer interface {
-	// Make the new set of services be active.  Services that were open before
-	// will be closed.  Services that are new will be opened.  Service that
-	// existed and are in the new set will be left alone.  The value of the map
-	// is the healthcheck-port to listen on.
+	// SyncServices 使新的 Service 集合生效：关闭已不需要的、开启新增的，
+	// 保留仍在新集合中的；map 的值为要监听的健康检查端口。
 	SyncServices(newServices map[types.NamespacedName]uint16) error
-	// Make the new set of endpoints be active.  Endpoints for services that do
-	// not exist will be dropped.  The value of the map is the number of
-	// endpoints the service has on this node.
+	// SyncEndpoints 更新各 Service 的本地端点数；不存在于服务集合中的端点会被忽略。
 	SyncEndpoints(newEndpoints map[types.NamespacedName]int) error
 }
 
+// proxyHealthChecker 提供代理的健康状态查询能力。
 type proxyHealthChecker interface {
-	// Health returns the proxy's health state and last updated time.
+	// Health 返回代理的健康状态及上次更新时间。
 	Health() ProxyHealth
 }
 
+// newServiceHealthServer 根据 IP 族选择监听地址和网络类型，构造可注入依赖的服务健康检查服务器。
 func newServiceHealthServer(nodeName string, recorder events.EventRecorder, listener listener, factory httpServerFactory, nodePortAddresses *proxyutil.NodePortAddresses, healthzServer proxyHealthChecker, serviceFamily v1.IPFamily) ServiceHealthServer {
-	// Set listen addresses and network based on IP family; if unknown,
-	// let the system choose
+	// 监听地址与网络类型由 Service 的 IP 族决定；未知时交给系统选择。
 	var nodeIPs []net.IP
 	var network string
 
@@ -71,11 +67,12 @@ func newServiceHealthServer(nodeName string, recorder events.EventRecorder, list
 		nodeIPs = []net.IP{net.IPv6zero}
 		network = "tcp6"
 	default:
-		// Let the system choose
+		// 未知 IP 族时让系统自行选择双栈或其他可用网络。
 		nodeIPs = []net.IP{net.IPv4zero}
 		network = "tcp"
 	}
 
+	// 配置了 NodePort 地址范围时只监听匹配的节点 IP，减少暴露面。
 	if !nodePortAddresses.MatchAll() {
 		ips, err := nodePortAddresses.GetNodeIPs(proxyutil.RealNetwork{})
 		if err == nil {
@@ -97,14 +94,15 @@ func newServiceHealthServer(nodeName string, recorder events.EventRecorder, list
 	}
 }
 
-// NewServiceHealthServer allocates a new service healthcheck server manager
+// NewServiceHealthServer 使用标准网络实现创建服务健康检查服务器管理器。
 func NewServiceHealthServer(nodeName string, recorder events.EventRecorder, nodePortAddresses *proxyutil.NodePortAddresses, healthzServer proxyHealthChecker, serviceFamily v1.IPFamily) ServiceHealthServer {
 	return newServiceHealthServer(nodeName, recorder, stdNetListener{}, stdHTTPServerFactory{}, nodePortAddresses, healthzServer, serviceFamily)
 }
 
+// server 是 ServiceHealthServer 的默认实现，管理每个 Service 对应的健康检查监听器。
 type server struct {
 	nodeName string
-	// node addresses where health check port will listen on
+	// 健康检查端口所监听的节点地址。
 	nodeIPs     []net.IP
 	recorder    events.EventRecorder // can be nil
 	listener    listener
@@ -115,20 +113,21 @@ type server struct {
 	lock     sync.RWMutex
 	services map[types.NamespacedName]*hcInstance
 
-	// network type of the socket when listening for health checks
+	// 健康检查监听套接字使用的网络类型（tcp/tcp4/tcp6）。
 	network string
 }
 
+// SyncServices 调整监听集合：关闭端口变化或已删除的 Service，为新增的 Service 开启监听。
 func (hcs *server) SyncServices(newServices map[types.NamespacedName]uint16) error {
 	hcs.lock.Lock()
 	defer hcs.lock.Unlock()
 
-	// Remove any that are not needed any more.
+	// 先清理不再需要的监听器，避免同一端口被重复占用。
 	for nsn, svc := range hcs.services {
 		if port, found := newServices[nsn]; !found || port != svc.port {
 			klog.V(2).InfoS("Closing healthcheck", "service", nsn, "port", svc.port)
 
-			// errors are loged in closeAll()
+			// 关闭错误由 closeAll() 统一记录，这里无需重复处理。
 			_ = svc.closeAll()
 
 			delete(hcs.services, nsn)
@@ -136,7 +135,7 @@ func (hcs *server) SyncServices(newServices map[types.NamespacedName]uint16) err
 		}
 	}
 
-	// Add any that are needed.
+	// 再为尚未监听的 Service 启动健康检查。
 	for nsn, port := range newServices {
 		if hcs.services[nsn] != nil {
 			klog.V(3).InfoS("Existing healthcheck", "service", nsn, "port", port)
@@ -149,6 +148,7 @@ func (hcs *server) SyncServices(newServices map[types.NamespacedName]uint16) err
 		err := svc.listenAndServeAll(hcs)
 
 		if err != nil {
+			// 单个 Service 监听失败不应阻断其他 Service 的同步，记录事件后继续。
 			msg := fmt.Sprintf("node %s failed to start healthcheck %q on port %d: %v", hcs.nodeName, nsn.String(), port, err)
 
 			if hcs.recorder != nil {
@@ -168,39 +168,39 @@ func (hcs *server) SyncServices(newServices map[types.NamespacedName]uint16) err
 	return nil
 }
 
+// hcInstance 保存单个 Service 的健康检查监听器及其当前本地端点数。
 type hcInstance struct {
 	nsn  types.NamespacedName
 	port uint16
 
 	httpServers []httpServer
 
-	endpoints int // number of local endpoints for a service
+	endpoints int // 该 Service 在本节点上的端点数量
 }
 
-// listenAll opens health check port on all the addresses provided
+// listenAndServeAll 在给定的每个节点地址上开启健康检查端口并启动 HTTP 服务。
 func (hcI *hcInstance) listenAndServeAll(hcs *server) error {
 	var err error
 	var listener net.Listener
 
 	hcI.httpServers = make([]httpServer, 0, len(hcs.nodeIPs))
 
-	// for each of the node addresses start listening and serving
+	// 每个节点地址独立监听；任一地址失败都要回滚已打开的连接，便于重试。
 	for _, ip := range hcs.nodeIPs {
 		addr := net.JoinHostPort(ip.String(), fmt.Sprint(hcI.port))
-		// create http server
+		// 创建绑定到该 Service 处理逻辑的 HTTP 服务器。
 		httpSrv := hcs.httpFactory.New(hcHandler{name: hcI.nsn, hcs: hcs})
-		// start listener
+		// 在指定地址端口上开始监听。
 		listener, err = hcs.listener.Listen(context.TODO(), hcs.network, addr)
 		if err != nil {
-			// must close whatever have been previously opened
-			// to allow a retry/or port ownership change as needed
+			// 失败时关闭此前已打开的所有监听，避免端口被占用阻碍后续重试。
 			_ = hcI.closeAll()
 			return err
 		}
 
-		// start serving
+		// 在独立协程中提供服务，Serve 会阻塞直到服务器被关闭。
 		go func(hcI *hcInstance, listener net.Listener, httpSrv httpServer) {
-			// Serve() will exit and return ErrServerClosed when the http server is closed.
+			// 正常关闭时 Serve 返回 ErrServerClosed，不应视为错误。
 			klog.V(3).InfoS("Starting goroutine for healthcheck", "service", hcI.nsn, "address", listener.Addr())
 			if err := httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
 				klog.ErrorS(err, "Healthcheck closed", "service", hcI.nsn)
@@ -215,6 +215,7 @@ func (hcI *hcInstance) listenAndServeAll(hcs *server) error {
 	return nil
 }
 
+// closeAll 关闭该 Service 的所有健康检查 HTTP 服务器，聚合关闭过程中出现的错误。
 func (hcI *hcInstance) closeAll() error {
 	errors := []error{}
 	for _, server := range hcI.httpServers {
@@ -231,14 +232,19 @@ func (hcI *hcInstance) closeAll() error {
 	return nil
 }
 
+// hcHandler 是单个 Service 健康检查端口的 HTTP 请求处理器。
 type hcHandler struct {
 	name types.NamespacedName
 	hcs  *server
 }
 
+// 编译期断言 hcHandler 满足 http.Handler 接口。
 var _ http.Handler = hcHandler{}
 
+// ServeHTTP 返回当前 Service 的本地端点数与代理健康状态：
+// 两者都正常时返回 200，否则返回 503，让负载均衡器避开本节点。
 func (h hcHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	// 使用读锁读取端点数；服务可能已被 SyncServices 删除。
 	h.hcs.lock.RLock()
 	svc, ok := h.hcs.services[h.name]
 	if !ok || svc == nil {
@@ -248,12 +254,14 @@ func (h hcHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	count := svc.endpoints
 	h.hcs.lock.RUnlock()
+	// 代理自身不健康时，即使有本地端点也应返回不可用。
 	kubeProxyHealthy := h.hcs.healthzServer.Health().Healthy
 
 	resp.Header().Set("Content-Type", "application/json")
 	resp.Header().Set("X-Content-Type-Options", "nosniff")
 	resp.Header().Set("X-Load-Balancing-Endpoint-Weight", strconv.Itoa(count))
 
+	// 端点权重通过响应头暴露给负载均衡器，供其按端点数分配流量。
 	if count != 0 && kubeProxyHealthy {
 		resp.WriteHeader(http.StatusOK)
 	} else {
@@ -271,17 +279,20 @@ func (h hcHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		`, h.name.Namespace, h.name.Name, count, kubeProxyHealthy)), "\n"))
 }
 
+// SyncEndpoints 更新各 Service 的本地端点数；未出现在新映射中的 Service 端点数归零。
 func (hcs *server) SyncEndpoints(newEndpoints map[types.NamespacedName]int) error {
 	hcs.lock.Lock()
 	defer hcs.lock.Unlock()
 
 	for nsn, count := range newEndpoints {
+		// 健康检查端口尚未开启的 Service 无需记录端点数。
 		if hcs.services[nsn] == nil {
 			continue
 		}
 		klog.V(3).InfoS("Reporting endpoints for healthcheck", "endpointCount", count, "service", nsn)
 		hcs.services[nsn].endpoints = count
 	}
+	// 新映射中缺失的 Service 说明其端点已全部消失，需归零以触发 503。
 	for nsn, hci := range hcs.services {
 		if _, found := newEndpoints[nsn]; !found {
 			hci.endpoints = 0
@@ -290,20 +301,20 @@ func (hcs *server) SyncEndpoints(newEndpoints map[types.NamespacedName]int) erro
 	return nil
 }
 
-// FakeServiceHealthServer is a fake ServiceHealthServer for test programs
+// FakeServiceHealthServer 是供测试使用的 ServiceHealthServer 空实现。
 type FakeServiceHealthServer struct{}
 
-// NewFakeServiceHealthServer allocates a new fake service healthcheck server manager
+// NewFakeServiceHealthServer 创建一个新的伪服务健康检查服务器管理器。
 func NewFakeServiceHealthServer() ServiceHealthServer {
 	return FakeServiceHealthServer{}
 }
 
-// SyncServices is part of ServiceHealthServer
+// SyncServices 实现 ServiceHealthServer；伪实现不做任何事。
 func (fake FakeServiceHealthServer) SyncServices(_ map[types.NamespacedName]uint16) error {
 	return nil
 }
 
-// SyncEndpoints is part of ServiceHealthServer
+// SyncEndpoints 实现 ServiceHealthServer；伪实现不做任何事。
 func (fake FakeServiceHealthServer) SyncEndpoints(_ map[types.NamespacedName]int) error {
 	return nil
 }

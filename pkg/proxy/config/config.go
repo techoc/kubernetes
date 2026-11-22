@@ -35,48 +35,38 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// ServiceHandler is an abstract interface of objects which receive
-// notifications about service object changes.
+// ServiceHandler 是接收 Service 对象变更通知的对象的抽象接口。
 type ServiceHandler interface {
-	// OnServiceAdd is called whenever creation of new service object
-	// is observed.
+	// OnServiceAdd 在观察到新建 Service 对象时调用。
 	OnServiceAdd(service *v1.Service)
-	// OnServiceUpdate is called whenever modification of an existing
-	// service object is observed.
+	// OnServiceUpdate 在观察到已有 Service 对象被修改时调用。
 	OnServiceUpdate(oldService, service *v1.Service)
-	// OnServiceDelete is called whenever deletion of an existing service
-	// object is observed.
+	// OnServiceDelete 在观察到已有 Service 对象被删除时调用。
 	OnServiceDelete(service *v1.Service)
-	// OnServiceSynced is called once all the initial event handlers were
-	// called and the state is fully propagated to local cache.
+	// OnServiceSynced 在初始事件全部处理完毕、状态完全同步到本地缓存后调用一次。
 	OnServiceSynced()
 }
 
-// EndpointSliceHandler is an abstract interface of objects which receive
-// notifications about endpoint slice object changes.
+// EndpointSliceHandler 是接收 EndpointSlice 对象变更通知的对象的抽象接口。
 type EndpointSliceHandler interface {
-	// OnEndpointSliceAdd is called whenever creation of new endpoint slice
-	// object is observed.
+	// OnEndpointSliceAdd 在观察到新建 EndpointSlice 对象时调用。
 	OnEndpointSliceAdd(endpointSlice *discoveryv1.EndpointSlice)
-	// OnEndpointSliceUpdate is called whenever modification of an existing
-	// endpoint slice object is observed.
+	// OnEndpointSliceUpdate 在观察到已有 EndpointSlice 对象被修改时调用。
 	OnEndpointSliceUpdate(oldEndpointSlice, newEndpointSlice *discoveryv1.EndpointSlice)
-	// OnEndpointSliceDelete is called whenever deletion of an existing
-	// endpoint slice object is observed.
+	// OnEndpointSliceDelete 在观察到已有 EndpointSlice 对象被删除时调用。
 	OnEndpointSliceDelete(endpointSlice *discoveryv1.EndpointSlice)
-	// OnEndpointSlicesSynced is called once all the initial event handlers were
-	// called and the state is fully propagated to local cache.
+	// OnEndpointSlicesSynced 在初始事件全部处理完毕、状态完全同步到本地缓存后调用一次。
 	OnEndpointSlicesSynced()
 }
 
-// EndpointSliceConfig tracks a set of endpoints configurations.
+// EndpointSliceConfig 跟踪一组 EndpointSlice 配置，并把变更分发给已注册的处理程序。
 type EndpointSliceConfig struct {
 	listerSynced  cache.InformerSynced
 	eventHandlers []EndpointSliceHandler
 	logger        klog.Logger
 }
 
-// NewEndpointSliceConfig creates a new EndpointSliceConfig.
+// NewEndpointSliceConfig 创建新的 EndpointSliceConfig，并向 informer 注册事件回调。
 func NewEndpointSliceConfig(ctx context.Context, endpointSliceInformer discoveryv1informers.EndpointSliceInformer, resyncPeriod time.Duration) *EndpointSliceConfig {
 	result := &EndpointSliceConfig{
 		logger: klog.FromContext(ctx),
@@ -96,12 +86,12 @@ func NewEndpointSliceConfig(ctx context.Context, endpointSliceInformer discovery
 	return result
 }
 
-// RegisterEventHandler registers a handler which is called on every endpoint slice change.
+// RegisterEventHandler 注册在每次 EndpointSlice 变更时调用的处理程序。
 func (c *EndpointSliceConfig) RegisterEventHandler(handler EndpointSliceHandler) {
 	c.eventHandlers = append(c.eventHandlers, handler)
 }
 
-// Run waits for cache synced and invokes handlers after syncing.
+// Run 等待缓存同步完成后通知所有处理程序。
 func (c *EndpointSliceConfig) Run(stopCh <-chan struct{}) {
 	c.logger.Info("Starting endpoint slice config controller")
 
@@ -115,6 +105,7 @@ func (c *EndpointSliceConfig) Run(stopCh <-chan struct{}) {
 	}
 }
 
+// handleAddEndpointSlice 处理 EndpointSlice 新增事件并通知所有处理程序。
 func (c *EndpointSliceConfig) handleAddEndpointSlice(obj interface{}) {
 	endpointSlice, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
@@ -127,6 +118,7 @@ func (c *EndpointSliceConfig) handleAddEndpointSlice(obj interface{}) {
 	}
 }
 
+// handleUpdateEndpointSlice 处理 EndpointSlice 更新事件，同时传递新旧对象。
 func (c *EndpointSliceConfig) handleUpdateEndpointSlice(oldObj, newObj interface{}) {
 	oldEndpointSlice, ok := oldObj.(*discoveryv1.EndpointSlice)
 	if !ok {
@@ -144,9 +136,11 @@ func (c *EndpointSliceConfig) handleUpdateEndpointSlice(oldObj, newObj interface
 	}
 }
 
+// handleDeleteEndpointSlice 处理 EndpointSlice 删除事件并通知所有处理程序。
 func (c *EndpointSliceConfig) handleDeleteEndpointSlice(obj interface{}) {
 	endpointSlice, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
+		// informer 漏掉删除事件时会用 tombstone 包裹最后已知状态，需从其中取回原对象。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("unexpected object type: %T", obj))
@@ -163,14 +157,14 @@ func (c *EndpointSliceConfig) handleDeleteEndpointSlice(obj interface{}) {
 	}
 }
 
-// ServiceConfig tracks a set of service configurations.
+// ServiceConfig 跟踪一组 Service 配置，并把变更分发给已注册的处理程序。
 type ServiceConfig struct {
 	listerSynced  cache.InformerSynced
 	eventHandlers []ServiceHandler
 	logger        klog.Logger
 }
 
-// NewServiceConfig creates a new ServiceConfig.
+// NewServiceConfig 创建新的 ServiceConfig，并向 informer 注册事件回调。
 func NewServiceConfig(ctx context.Context, serviceInformer v1informers.ServiceInformer, resyncPeriod time.Duration) *ServiceConfig {
 	result := &ServiceConfig{
 		logger: klog.FromContext(ctx),
@@ -190,12 +184,12 @@ func NewServiceConfig(ctx context.Context, serviceInformer v1informers.ServiceIn
 	return result
 }
 
-// RegisterEventHandler registers a handler which is called on every service change.
+// RegisterEventHandler 注册在每次 Service 变更时调用的处理程序。
 func (c *ServiceConfig) RegisterEventHandler(handler ServiceHandler) {
 	c.eventHandlers = append(c.eventHandlers, handler)
 }
 
-// Run waits for cache synced and invokes handlers after syncing.
+// Run 等待缓存同步完成后通知所有处理程序。
 func (c *ServiceConfig) Run(stopCh <-chan struct{}) {
 	c.logger.Info("Starting service config controller")
 
@@ -209,6 +203,7 @@ func (c *ServiceConfig) Run(stopCh <-chan struct{}) {
 	}
 }
 
+// handleAddService 处理 Service 新增事件并通知所有处理程序。
 func (c *ServiceConfig) handleAddService(obj interface{}) {
 	service, ok := obj.(*v1.Service)
 	if !ok {
@@ -221,6 +216,7 @@ func (c *ServiceConfig) handleAddService(obj interface{}) {
 	}
 }
 
+// handleUpdateService 处理 Service 更新事件，同时传递新旧对象。
 func (c *ServiceConfig) handleUpdateService(oldObj, newObj interface{}) {
 	oldService, ok := oldObj.(*v1.Service)
 	if !ok {
@@ -238,9 +234,11 @@ func (c *ServiceConfig) handleUpdateService(oldObj, newObj interface{}) {
 	}
 }
 
+// handleDeleteService 处理 Service 删除事件并通知所有处理程序。
 func (c *ServiceConfig) handleDeleteService(obj interface{}) {
 	service, ok := obj.(*v1.Service)
 	if !ok {
+		// 删除事件可能以 tombstone 形式送达，需要解包后才能交给处理程序。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("unexpected object type: %v", obj))
@@ -257,29 +255,24 @@ func (c *ServiceConfig) handleDeleteService(obj interface{}) {
 	}
 }
 
-// NodeHandler is an abstract interface of objects which receive
-// notifications about node object changes.
+// NodeHandler 是接收 Node 对象变更通知的对象的抽象接口。
 type NodeHandler interface {
-	// OnNodeChange is called whenever creation or modification
-	// of node object is observed.
+	// OnNodeChange 在观察到 Node 对象新建或修改时调用。
 	OnNodeChange(node *v1.Node)
-	// OnNodeDelete is called whenever deletion of an existing node
-	// object is observed.
+	// OnNodeDelete 在观察到已有 Node 对象被删除时调用。
 	OnNodeDelete(node *v1.Node)
-	// OnNodeSynced is called once all the initial event handlers were
-	// called and the state is fully propagated to local cache.
+	// OnNodeSynced 在初始事件全部处理完毕、状态完全同步到本地缓存后调用一次。
 	OnNodeSynced()
 }
 
-// NodeConfig tracks a set of node configurations.
-// It accepts "set", "add" and "remove" operations of node via channels, and invokes registered handlers on change.
+// NodeConfig 跟踪一组 Node 配置，通过通道接收节点的设置、新增和删除操作，并在变更时调用已注册的处理程序。
 type NodeConfig struct {
 	listerSynced  cache.InformerSynced
 	eventHandlers []NodeHandler
 	logger        klog.Logger
 }
 
-// NewNodeConfig creates a new NodeConfig.
+// NewNodeConfig 创建新的 NodeConfig，并向 informer 注册事件回调。
 func NewNodeConfig(ctx context.Context, nodeInformer v1informers.NodeInformer, resyncPeriod time.Duration) *NodeConfig {
 	result := &NodeConfig{
 		logger: klog.FromContext(ctx),
@@ -299,12 +292,12 @@ func NewNodeConfig(ctx context.Context, nodeInformer v1informers.NodeInformer, r
 	return result
 }
 
-// RegisterEventHandler registers a handler which is called on every node change.
+// RegisterEventHandler 注册在每次 Node 变更时调用的处理程序。
 func (c *NodeConfig) RegisterEventHandler(handler NodeHandler) {
 	c.eventHandlers = append(c.eventHandlers, handler)
 }
 
-// Run starts the goroutine responsible for calling registered handlers.
+// Run 等待缓存同步完成后通知所有处理程序。
 func (c *NodeConfig) Run(stopCh <-chan struct{}) {
 	c.logger.Info("Starting node config controller")
 
@@ -318,6 +311,7 @@ func (c *NodeConfig) Run(stopCh <-chan struct{}) {
 	}
 }
 
+// handleChangeNode 把节点新增和更新事件统一作为变更通知分发。
 func (c *NodeConfig) handleChangeNode(obj interface{}) {
 	node, ok := obj.(*v1.Node)
 	if !ok {
@@ -330,9 +324,11 @@ func (c *NodeConfig) handleChangeNode(obj interface{}) {
 	}
 }
 
+// handleDeleteNode 处理 Node 删除事件并通知所有处理程序。
 func (c *NodeConfig) handleDeleteNode(obj interface{}) {
 	node, ok := obj.(*v1.Node)
 	if !ok {
+		// 缓存不同步时删除事件只有 tombstone，需解包出被删除的 Node。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("unexpected object type: %v", obj))
@@ -349,15 +345,13 @@ func (c *NodeConfig) handleDeleteNode(obj interface{}) {
 	}
 }
 
-// ServiceCIDRHandler is an abstract interface of objects which receive
-// notifications about ServiceCIDR object changes.
+// ServiceCIDRHandler 是接收 ServiceCIDR 对象变更通知的对象的抽象接口。
 type ServiceCIDRHandler interface {
-	// OnServiceCIDRsChanged is called whenever a change is observed
-	// in any of the ServiceCIDRs, and provides complete list of service cidrs.
+	// OnServiceCIDRsChanged 在任意 ServiceCIDR 发生变更时调用，并提供完整的 CIDR 列表。
 	OnServiceCIDRsChanged(cidrs []string)
 }
 
-// ServiceCIDRConfig tracks a set of service configurations.
+// ServiceCIDRConfig 跟踪集群中所有 ServiceCIDR 对象的 CIDR 集合。
 type ServiceCIDRConfig struct {
 	listerSynced  cache.InformerSynced
 	eventHandlers []ServiceCIDRHandler
@@ -366,7 +360,7 @@ type ServiceCIDRConfig struct {
 	logger        klog.Logger
 }
 
-// NewServiceCIDRConfig creates a new ServiceCIDRConfig.
+// NewServiceCIDRConfig 创建新的 ServiceCIDRConfig，并把增删改事件归并到同一个处理函数。
 func NewServiceCIDRConfig(ctx context.Context, serviceCIDRInformer networkingv1informers.ServiceCIDRInformer, resyncPeriod time.Duration) *ServiceCIDRConfig {
 	result := &ServiceCIDRConfig{
 		cidrs:  sets.New[string](),
@@ -393,23 +387,23 @@ func NewServiceCIDRConfig(ctx context.Context, serviceCIDRInformer networkingv1i
 	return result
 }
 
-// RegisterEventHandler registers a handler which is called on every ServiceCIDR change.
+// RegisterEventHandler 注册在每次 ServiceCIDR 变更时调用的处理程序。
 func (c *ServiceCIDRConfig) RegisterEventHandler(handler ServiceCIDRHandler) {
 	c.eventHandlers = append(c.eventHandlers, handler)
 }
 
-// Run waits for cache synced and invokes handlers after syncing.
+// Run 等待缓存同步完成后通知所有处理程序。
 func (c *ServiceCIDRConfig) Run(stopCh <-chan struct{}) {
 	c.logger.Info("Starting serviceCIDR config controller")
 
 	if !cache.WaitForNamedCacheSync("serviceCIDR config", stopCh, c.listerSynced) {
 		return
 	}
+	// 同步完成后主动触发一次，确保初始状态（哪怕是空集合）也能通知到处理程序。
 	c.handleServiceCIDREvent(nil, nil)
 }
 
-// handleServiceCIDREvent is a helper function to handle Add, Update and Delete
-// events on ServiceCIDR objects and call downstream event handlers.
+// handleServiceCIDREvent 统一处理 ServiceCIDR 的新增、更新和删除事件，并通知下游处理程序。
 func (c *ServiceCIDRConfig) handleServiceCIDREvent(oldObj, newObj interface{}) {
 	var oldServiceCIDR, newServiceCIDR *networkingv1.ServiceCIDR
 	var ok bool
@@ -430,6 +424,7 @@ func (c *ServiceCIDRConfig) handleServiceCIDREvent(oldObj, newObj interface{}) {
 		}
 	}
 
+	// 多个 informer 回调可能并发到达，加锁保护共享的 cidrs 集合及其一致快照。
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -447,15 +442,13 @@ func (c *ServiceCIDRConfig) handleServiceCIDREvent(oldObj, newObj interface{}) {
 	}
 }
 
-// NodeTopologyHandler is an abstract interface for objects which receive
-// notifications about changes in proxy relevant node topology labels.
+// NodeTopologyHandler 是接收与代理相关的节点拓扑标签变更通知的对象的抽象接口。
 type NodeTopologyHandler interface {
-	// OnTopologyChange is called whenever a change is observed in proxy
-	// relevant node topology labels, and provides the observed change.
+	// OnTopologyChange 在代理相关的节点拓扑标签发生变化时调用，并提供变更后的标签集合。
 	OnTopologyChange(topologyLabels map[string]string)
 }
 
-// NodeTopologyConfig tracks node topology labels.
+// NodeTopologyConfig 跟踪与代理路由相关的节点拓扑标签（如拓扑区域）。
 type NodeTopologyConfig struct {
 	listerSynced   cache.InformerSynced
 	eventHandlers  []NodeTopologyHandler
@@ -463,13 +456,12 @@ type NodeTopologyConfig struct {
 	logger         klog.Logger
 }
 
-// NewNodeTopologyConfig creates a new NodeTopologyConfig.
+// NewNodeTopologyConfig 创建新的 NodeTopologyConfig。
 func NewNodeTopologyConfig(ctx context.Context, nodeInformer v1informers.NodeInformer, resyncPeriod time.Duration) *NodeTopologyConfig {
 	return newNodeTopologyConfig(ctx, nodeInformer, resyncPeriod, nil)
 }
 
-// newNodeTopologyConfig implements NewNodeTopologyConfig by additionally consuming a callback function which is invoked when
-// event handler completes processing and is only used for testing.
+// newNodeTopologyConfig 实现 NewNodeTopologyConfig，额外接收一个在事件处理完成后调用的回调，仅供测试使用。
 func newNodeTopologyConfig(ctx context.Context, nodeInformer v1informers.NodeInformer, resyncPeriod time.Duration, callback func()) *NodeTopologyConfig {
 	result := &NodeTopologyConfig{
 		logger:         klog.FromContext(ctx),
@@ -490,6 +482,7 @@ func newNodeTopologyConfig(ctx context.Context, nodeInformer v1informers.NodeInf
 					callback()
 				}
 			},
+			// 节点删除不会改变集群级拓扑标签，因此无需处理删除事件。
 			DeleteFunc: func(_ interface{}) {},
 		},
 		resyncPeriod,
@@ -499,13 +492,12 @@ func newNodeTopologyConfig(ctx context.Context, nodeInformer v1informers.NodeInf
 	return result
 }
 
-// RegisterEventHandler registers a handler which is called on Node object change.
+// RegisterEventHandler 注册在 Node 对象变更时调用的处理程序。
 func (n *NodeTopologyConfig) RegisterEventHandler(handler NodeTopologyHandler) {
 	n.eventHandlers = append(n.eventHandlers, handler)
 }
 
-// handleNodeEvent is a helper function to handle Add, Update and Delete
-// events on Node objects and call downstream event handlers.
+// handleNodeEvent 从 Node 对象中提取代理相关的拓扑标签，并在标签变化时通知下游处理程序。
 func (n *NodeTopologyConfig) handleNodeEvent(obj interface{}) {
 	node, ok := obj.(*v1.Node)
 	if !ok {
@@ -518,7 +510,7 @@ func (n *NodeTopologyConfig) handleNodeEvent(obj interface{}) {
 		topologyLabels[v1.LabelTopologyZone] = node.Labels[v1.LabelTopologyZone]
 	}
 
-	// skip calling event handlers when no change in topology labels
+	// 拓扑标签未变化时跳过通知，避免触发无意义的路由重建。
 	if reflect.DeepEqual(n.topologyLabels, topologyLabels) {
 		return
 	}

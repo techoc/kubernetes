@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config provides decoupling between various configuration sources (etcd, files,...) and
-// the pieces that actually care about them (loadbalancer, proxy). Config takes 1 or more
-// configuration sources and allows for incremental (add/remove) and full replace (set)
-// changes from each of the sources, then creates a union of the configuration and provides
-// a unified view for both service handlers as well as endpoint handlers. There is no attempt
-// to resolve conflicts of any sort. Basic idea is that each configuration source gets a channel
-// from the Config service and pushes updates to it via that channel. Config then keeps track of
-// incremental & replace changes and distributes them to listeners as appropriate.
+// Package config 将各种配置来源（etcd、文件等）与真正关心这些配置的组件
+// （负载均衡器、代理）解耦。Config 接收一个或多个配置来源，支持来自各来源的
+// 增量（添加/删除）和全量替换（set）变更，然后对这些配置取并集，
+// 为 service 处理器和 endpoint 处理器提供统一视图。它不尝试解决任何形式的配置冲突。
+// 基本思路是：每个配置来源从 Config 服务获得一个 channel，并通过该 channel 推送更新；
+// Config 记录增量与替换变更，再酌情分发给各个监听者。
 package config

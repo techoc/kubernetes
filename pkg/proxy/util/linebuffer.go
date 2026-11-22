@@ -24,46 +24,48 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// LineBuffer is an interface for writing lines of input to a bytes.Buffer
+// LineBuffer 是将一行行输入写入 bytes.Buffer 的接口。
 type LineBuffer interface {
-	// Write takes a list of arguments, each a string or []string, joins all the
-	// individual strings with spaces, terminates with newline, and writes them to the
-	// buffer. Any other argument type will panic.
+	// Write 接收一系列参数，每个参数为 string 或 []string；它把所有单独的字符串用空格连接，
+	// 以换行符结尾后写入缓冲区。任何其他类型的参数都会引发 panic。
 	Write(args ...interface{})
 
-	// WriteBytes writes bytes to the buffer, and terminates with newline.
+	// WriteBytes 将字节写入缓冲区，并以换行符结尾。
 	WriteBytes(bytes []byte)
 
-	// Reset clears the buffer
+	// Reset 清空缓冲区。
 	Reset()
 
-	// Bytes returns the contents of the buffer as a []byte
+	// Bytes 以 []byte 形式返回缓冲区的内容。
 	Bytes() []byte
 
-	// String returns the contents of the buffer as a string
+	// String 以字符串形式返回缓冲区的内容。
 	String() string
 
-	// Lines returns the number of lines in the buffer. Note that more precisely, this
-	// returns the number of times Write() or WriteBytes() was called; it assumes that
-	// you never wrote any newlines to the buffer yourself.
+	// Lines 返回缓冲区的行数。更准确地说，它返回 Write() 或 WriteBytes() 被调用的次数；
+	// 这里假定调用方从未自行向缓冲区写入过换行符。
 	Lines() int
 }
 
+// 编译期断言：确保 realLineBuffer 实现 logr.Marshaler，便于日志系统按行输出内容。
 var _ logr.Marshaler = &realLineBuffer{}
 
+// realLineBuffer 是真正保存数据的 LineBuffer 实现。
+// 内部使用 bytes.Buffer，其容量会按需自动增长，因此不需要预先估算并分配空间。
 type realLineBuffer struct {
 	b     bytes.Buffer
 	lines int
 }
 
-// NewLineBuffer returns a new "real" LineBuffer
+// NewLineBuffer 返回一个新的“真实” LineBuffer。
 func NewLineBuffer() LineBuffer {
 	return &realLineBuffer{}
 }
 
-// Write is part of LineBuffer
+// Write 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) Write(args ...interface{}) {
 	for i, arg := range args {
+		// 除第一个参数外，在每个参数前补一个空格，使同一行内的各参数彼此分隔。
 		if i > 0 {
 			buf.b.WriteByte(' ')
 		}
@@ -72,6 +74,7 @@ func (buf *realLineBuffer) Write(args ...interface{}) {
 			buf.b.WriteString(x)
 		case []string:
 			for j, s := range x {
+				// 切片内的元素之间同样用空格分隔。
 				if j > 0 {
 					buf.b.WriteByte(' ')
 				}
@@ -81,80 +84,87 @@ func (buf *realLineBuffer) Write(args ...interface{}) {
 			panic(fmt.Sprintf("unknown argument type: %T", x))
 		}
 	}
+	// 一次 Write 对应一行：补上换行符并同步增加计数，保证 Lines() 与写入次数一致。
 	buf.b.WriteByte('\n')
 	buf.lines++
 }
 
-// WriteBytes is part of LineBuffer
+// WriteBytes 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) WriteBytes(bytes []byte) {
 	buf.b.Write(bytes)
+	// 与 Write 保持一致：原始字节之后同样补换行并计入行数。
 	buf.b.WriteByte('\n')
 	buf.lines++
 }
 
-// Reset is part of LineBuffer
+// Reset 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) Reset() {
 	buf.b.Reset()
+	// 缓冲区清空后计数必须归零，否则 Lines() 会与实际内容不符。
 	buf.lines = 0
 }
 
-// Bytes is part of LineBuffer
+// Bytes 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) Bytes() []byte {
 	return buf.b.Bytes()
 }
 
-// String is part of LineBuffer
+// String 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) String() string {
 	return buf.b.String()
 }
 
-// Lines is part of LineBuffer
+// Lines 是 LineBuffer 接口的组成部分。
 func (buf *realLineBuffer) Lines() int {
 	return buf.lines
 }
 
-// Implements the logs.Marshaler interface
+// 实现 logs.Marshaler 接口，让日志系统按行展示缓冲区内容。
 func (buf *realLineBuffer) MarshalLog() any {
 	return strings.Split(buf.b.String(), "\n")
 }
 
+// discardLineBuffer 只统计写入次数而不保留数据，用于无需真实生成规则内容的场景。
 type discardLineBuffer struct {
 	lines int
 }
 
-// NewDiscardLineBuffer returns a dummy LineBuffer that counts the number of writes but
-// throws away the data. (This is used for iptables proxy partial syncs, to keep track of
-// how many rules we managed to avoid having to sync.)
+// NewDiscardLineBuffer 返回一个假的 LineBuffer：它只统计写入次数，却丢弃全部数据。
+// （用于 iptables 代理的部分同步，以统计我们成功避免了多少条规则的同步。）
 func NewDiscardLineBuffer() LineBuffer {
 	return &discardLineBuffer{}
 }
 
-// Write is part of LineBuffer
+// Write 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) Write(args ...interface{}) {
+	// 参数内容无需保存，只为统计同步量而累加次数。
 	buf.lines++
 }
 
-// WriteBytes is part of LineBuffer
+// WriteBytes 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) WriteBytes(bytes []byte) {
+	// 同上：字节内容被丢弃，仅记录写入次数。
 	buf.lines++
 }
 
-// Reset is part of LineBuffer
+// Reset 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) Reset() {
 	buf.lines = 0
 }
 
-// Bytes is part of LineBuffer
+// Bytes 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) Bytes() []byte {
+	// 不保存任何内容，因此始终返回空切片。
 	return []byte{}
 }
 
-// String is part of LineBuffer
+// String 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) String() string {
+	// 不保存任何内容，因此始终返回空字符串。
 	return ""
 }
 
-// Lines is part of LineBuffer
+// Lines 是 LineBuffer 接口的组成部分。
 func (buf *discardLineBuffer) Lines() int {
 	return buf.lines
 }

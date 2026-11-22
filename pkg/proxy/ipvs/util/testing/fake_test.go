@@ -25,10 +25,11 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestVirtualServer 验证 fake IPVS 对虚拟服务器的增、查、改、删及 Flush 行为
 func TestVirtualServer(t *testing.T) {
-	// Initialize
+	// 初始化一个空的 fake ipvs 缓存
 	fake := NewFake()
-	// Add a virtual server
+	// 添加一个 IPv4 虚拟服务器
 	vs1 := &utilipvs.VirtualServer{
 		Address:  netutils.ParseIPSloppy("1.2.3.4"),
 		Port:     uint16(80),
@@ -39,7 +40,7 @@ func TestVirtualServer(t *testing.T) {
 	if err != nil {
 		t.Errorf("Fail to add virtual server, error: %v", err)
 	}
-	// Get a specific virtual server
+	// 按同一 Key 查询刚添加的虚拟服务器
 	got1, err := fake.GetVirtualServer(vs1)
 	if err != nil {
 		t.Errorf("Fail to get virtual server, error: %v", err)
@@ -47,7 +48,7 @@ func TestVirtualServer(t *testing.T) {
 	if !vs1.Equal(got1) {
 		t.Errorf("Expect virtual server: %v, got: %v", vs1, got1)
 	}
-	// Update virtual server
+	// 更新虚拟服务器的 Flags，Key 保持不变
 	vs12 := &utilipvs.VirtualServer{
 		Address:  netutils.ParseIPSloppy("1.2.3.4"),
 		Port:     uint16(80),
@@ -58,7 +59,7 @@ func TestVirtualServer(t *testing.T) {
 	if err != nil {
 		t.Errorf("Fail to update virtual server, error: %v", err)
 	}
-	// Check the updated virtual server
+	// 用原 Key 查询，确认取回的是更新后的内容
 	got12, err := fake.GetVirtualServer(vs1)
 	if err != nil {
 		t.Errorf("Fail to get virtual server, error: %v", err)
@@ -66,7 +67,7 @@ func TestVirtualServer(t *testing.T) {
 	if !got12.Equal(vs12) {
 		t.Errorf("Expect virtual server: %v, got: %v", vs12, got12)
 	}
-	// Add another virtual server
+	// 再添加一个 IPv6/UDP 虚拟服务器
 	vs2 := &utilipvs.VirtualServer{
 		Address:  netutils.ParseIPSloppy("10::40"),
 		Port:     uint16(8080),
@@ -76,7 +77,7 @@ func TestVirtualServer(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when add virtual server, error: %v", err)
 	}
-	// Add another virtual server
+	// 继续添加同 IP 不同端口的 SCTP 虚拟服务器
 	vs3 := &utilipvs.VirtualServer{
 		Address:  netutils.ParseIPSloppy("10::40"),
 		Port:     uint16(7777),
@@ -86,7 +87,7 @@ func TestVirtualServer(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when add virtual server, error: %v", err)
 	}
-	// List all virtual servers
+	// 列出全部虚拟服务器，验证 IPv4/IPv6 多个服务都已注册
 	list, err := fake.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Fail to list virtual servers, error: %v", err)
@@ -94,22 +95,22 @@ func TestVirtualServer(t *testing.T) {
 	if len(list) != 3 {
 		t.Errorf("Expect 2 virtual servers, got: %d", len(list))
 	}
-	// Delete a virtual server
+	// 删除其中一个虚拟服务器
 	err = fake.DeleteVirtualServer(vs1)
 	if err != nil {
 		t.Errorf("Fail to delete virtual server: %v, error: %v", vs1, err)
 	}
-	// Check the deleted virtual server no longer exists
+	// 忽略查询错误，只关心删除后结果应为 nil
 	got, _ := fake.GetVirtualServer(vs1)
 	if got != nil {
 		t.Errorf("Expect nil, got: %v", got)
 	}
-	// Flush all virtual servers
+	// Flush 应清空所有虚拟服务器
 	err = fake.Flush()
 	if err != nil {
 		t.Errorf("Fail to flush virtual servers, error: %v", err)
 	}
-	// List all virtual servers
+	// 再次列出，确认 Flush 后缓存为空
 	list, err = fake.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Fail to list virtual servers, error: %v", err)
@@ -119,10 +120,11 @@ func TestVirtualServer(t *testing.T) {
 	}
 }
 
+// TestRealServer 验证 fake IPVS 对真实服务器的增删行为，包括任意位置删除及错误路径
 func TestRealServer(t *testing.T) {
-	// Initialize
+	// 初始化一个空的 fake ipvs 缓存
 	fake := NewFake()
-	// Add a virtual server
+	// 先添加一个虚拟服务器作为真实服务器的宿主
 	vs := &utilipvs.VirtualServer{
 		Address:  netutils.ParseIPSloppy("10.20.30.40"),
 		Port:     uint16(80),
@@ -137,17 +139,16 @@ func TestRealServer(t *testing.T) {
 	if err != nil {
 		t.Errorf("Fail to add virtual server, error: %v", err)
 	}
-	// Add real server to the virtual server
+	// 依次添加三个真实服务器
 	for i := range rss {
 		if err = fake.AddRealServer(vs, rss[i]); err != nil {
 			t.Errorf("Fail to add real server, error: %v", err)
 		}
 	}
-	// Delete a real server of the virtual server
-	// Make sure any position of the list can be real deleted
+	// 逐个删除真实服务器，确保列表中任意位置的元素都能被正确删除
 	rssLen := len(rss)
 	for i := range rss {
-		// List all real servers of the virtual server
+		// 每轮都重新获取列表，因为上一轮删除后可能已重新添加
 		list, err := fake.GetRealServers(vs)
 		if err != nil {
 			t.Errorf("Fail to get real servers of the virtual server, error: %v", err)
@@ -173,7 +174,7 @@ func TestRealServer(t *testing.T) {
 			}
 		}
 	}
-	// Test delete real server that not exist
+	// 删除不存在的真实服务器应返回错误
 	rs := &utilipvs.RealServer{
 		Address: netutils.ParseIPSloppy("172.16.2.4"),
 		Port:    uint16(8080),
@@ -182,7 +183,7 @@ func TestRealServer(t *testing.T) {
 	if err = fake.DeleteRealServer(vs, rs); err == nil {
 		t.Errorf("Delete real server that not exist, Expect error, got nil")
 	}
-	// Delete the virtual server
+	// 删除虚拟服务器后，其下的真实服务器也应随之不可访问
 	err = fake.DeleteVirtualServer(vs)
 	if err != nil {
 		t.Errorf("Fail to delete virtual server, error: %v", err)

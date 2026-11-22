@@ -23,31 +23,26 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// CategorizeEndpoints returns:
+// CategorizeEndpoints 把一个 Service 的 Endpoint 按流量策略和拓扑位置归类，返回：
 //
-//   - The service's usable Cluster-traffic-policy endpoints (taking topology into account, if
-//     relevant). This will be nil if the service does not ever use Cluster traffic policy.
+//   - 该 Service 可用的 Cluster 策略 Endpoint（必要时考虑拓扑）；若 Service 从不使用 Cluster 策略则为 nil。
 //
-//   - The service's usable Local-traffic-policy endpoints. This will be nil if the
-//     service does not ever use Local traffic policy.
+//   - 该 Service 可用的 Local 策略 Endpoint；若 Service 从不使用 Local 策略则为 nil。
 //
-//   - The combined list of all endpoints reachable from this node (which is the union of the
-//     previous two lists, but in the case where it is identical to one or the other, we avoid
-//     allocating a separate list).
+//   - 从本节点可达的全部 Endpoint（前两个列表的并集；若与其中之一完全相同，则直接复用该列表，
+//     避免额外分配）。
 //
-//   - An indication of whether the service has any endpoints reachable from anywhere in the
-//     cluster. (This may be true even if allReachableEndpoints is empty.)
+//   - 该 Service 在整个集群范围内是否存在任何可用 Endpoint 的标志（即使 allReachableEndpoints 为空，
+//     该标志也可能为真，例如 Endpoint 存在于其他节点上）。
 //
-// "Usable endpoints" means Ready endpoints by default, but will fall back to
-// Serving-Terminating endpoints (independently for Cluster and Local) if no Ready
-// endpoints are available.
+// “可用 Endpoint” 默认指 Ready 端点；若没有 Ready 端点，则退而使用 Serving-Terminating 端点，
+// Cluster 与 Local 两个策略分别独立判断。
 //
-// Note: NodeTopologyConfig.handleNodeEvent (pkg/proxy/config) filters topology labels
-// before notifying proxiers. If you modify the logic over here to  watch other endpoint
-// types or labels, ensure the filtering logic in NodeTopologyConfig is updated accordingly.
+// 注意：NodeTopologyConfig.handleNodeEvent（pkg/proxy/config）在通知 proxier 之前会过滤拓扑标签。
+// 如果这里改为关注其他 Endpoint 类型或标签，必须同步更新 NodeTopologyConfig 中的过滤逻辑。
 func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName string, topologyLabels map[string]string) (clusterEndpoints, localEndpoints, allReachableEndpoints []Endpoint, hasAnyEndpoints bool) {
 	if len(endpoints) == 0 {
-		// If there are no endpoints, we have nothing to categorize
+		// 没有 Endpoint 时无需分类，直接返回全零值（含 hasAnyEndpoints=false）。
 		return
 	}
 
@@ -55,6 +50,7 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 	var useServingTerminatingEndpoints bool
 
 	if svcInfo.UsesClusterEndpoints() {
+		// 先根据 Endpoint 提示和本节点拓扑确定分发模式，再据此过滤 Cluster 端点。
 		zone := topologyLabels[v1.LabelTopologyZone]
 		topologyMode = topologyModeFromHints(svcInfo, endpoints, nodeName, zone)
 		clusterEndpoints = filterEndpoints(endpoints, func(ep Endpoint) bool {
@@ -67,10 +63,8 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 			return true
 		})
 
-		// If we didn't get any endpoints, try again using terminating endpoints.
-		// (Note that we would already have chosen to ignore topology if there
-		// were no ready endpoints for the given topology, so the problem at this
-		// point must be that there are no ready endpoints anywhere.)
+		// 没有任何端点通过过滤时，改用正在终止但仍可服务的端点再试一次。
+		// 满足拓扑约束的 Ready 端点为空时回退到正在终止但仍在服务的端点，避免流量被完全丢弃。
 		if len(clusterEndpoints) == 0 {
 			clusterEndpoints = filterEndpoints(endpoints, func(ep Endpoint) bool {
 				if ep.IsServing() && ep.IsTerminating() {
@@ -81,21 +75,20 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 			})
 		}
 
-		// If there are any Ready endpoints anywhere in the cluster, we are
-		// guaranteed to get one in clusterEndpoints.
+		// 集群内只要存在 Ready 端点，Cluster 过滤结果必不为空，可据此认定“集群内可用”。
 		if len(clusterEndpoints) > 0 {
 			hasAnyEndpoints = true
 		}
 	}
 
+	// 服务不使用 Local 策略时，可达端点就是 Cluster 端点；直接复用切片，省一次分配。
 	if !svcInfo.UsesLocalEndpoints() {
 		allReachableEndpoints = clusterEndpoints
 		return
 	}
 
-	// Pre-scan the endpoints, to figure out which type of endpoint Local
-	// traffic policy will use, and also to see if there are any usable
-	// endpoints anywhere in the cluster.
+	// 预扫描一次：判定 Local 策略应使用哪类端点（Ready 优先，否则用 Serving-Terminating），
+	// 同时确认集群内是否任何位置存在可用端点（包括远端节点上的端点）。
 	var hasLocalReadyEndpoints, hasLocalServingTerminatingEndpoints bool
 	for _, ep := range endpoints {
 		if ep.IsReady() {
@@ -111,6 +104,7 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 		}
 	}
 
+	// Ready 本地端点优先；只有完全没有时才回退到本节点上正在终止的端点。
 	if hasLocalReadyEndpoints {
 		localEndpoints = filterEndpoints(endpoints, func(ep Endpoint) bool {
 			return ep.IsLocal() && ep.IsReady()
@@ -122,22 +116,20 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 		})
 	}
 
+	// 只使用 Local 策略时，可达端点就是 Local 端点。
 	if !svcInfo.UsesClusterEndpoints() {
 		allReachableEndpoints = localEndpoints
 		return
 	}
 
+	// 两个集合存在包含关系时直接复用 Cluster 列表，避免为 allReachableEndpoints 再分配内存。
 	if topologyMode == "" && !useServingTerminatingEndpoints {
-		// !useServingTerminatingEndpoints means that localEndpoints contains only
-		// Ready endpoints. topologyMode=="" means that clusterEndpoints contains *every*
-		// Ready endpoint. So clusterEndpoints must be a superset of localEndpoints.
 		allReachableEndpoints = clusterEndpoints
 		return
 	}
 
-	// clusterEndpoints may contain remote endpoints that aren't in localEndpoints, while
-	// localEndpoints may contain terminating or topologically-unavailable local endpoints
-	// that aren't in clusterEndpoints. So we have to merge the two lists.
+	// Cluster 列表含有远端端点，Local 列表可能含有因拓扑过滤或终止状态而未进入 Cluster 列表的本节点端点，
+	// 两者互不包含，因此必须用字符串键做并集合并（同时天然去重）。
 	endpointsMap := make(map[string]Endpoint, len(clusterEndpoints)+len(localEndpoints))
 	for _, ep := range clusterEndpoints {
 		endpointsMap[ep.String()] = ep
@@ -153,20 +145,21 @@ func CategorizeEndpoints(endpoints []Endpoint, svcInfo ServicePort, nodeName str
 	return
 }
 
-// topologyModeFromHints returns a topology mode ("", "PreferSameZone", or
-// "PreferSameNode") based on the Endpoint hints:
-//   - If the PreferSameTrafficDistribution feature gate is enabled, and every ready
-//     endpoint has a node hint, and at least one endpoint is hinted for this node, then
-//     it returns "PreferSameNode".
-//   - Otherwise, if every ready endpoint has a zone hint, and at least one endpoint is
-//     hinted for this node's zone, then it returns "PreferSameZone".
-//   - Otherwise it returns "" (meaning, no topology / default traffic distribution).
+// topologyModeFromHints 根据 Endpoint 提示决定拓扑模式（""、"PreferSameZone" 或 "PreferSameNode"）：
+//   - 若启用 PreferSameTrafficDistribution 特性门控，且所有 Ready 端点都有节点提示，
+//     并且至少一个端点提示了本节点，则返回 "PreferSameNode"。
+//   - 否则，若所有 Ready 端点都有区域提示，且至少一个端点提示了本节点所在区域，
+//     则返回 "PreferSameZone"。
+//   - 其他情况返回 ""（即不按拓扑分发，使用默认策略）。
+//
+// 只有“所有” Ready 端点都带同类提示时才启用同节点/同区域模式，避免部分端点无提示时把流量全压到少数端点。
 func topologyModeFromHints(svcInfo ServicePort, endpoints []Endpoint, nodeName, zone string) string {
 	hasReadyEndpoints := false
 	hasEndpointForNode := false
 	allEndpointsHaveNodeHints := true
 	hasEndpointForZone := false
 	allEndpointsHaveZoneHints := true
+	// 只统计 Ready 端点：未就绪端点的提示不应影响模式判定。
 	for _, endpoint := range endpoints {
 		if !endpoint.IsReady() {
 			continue
@@ -186,11 +179,12 @@ func topologyModeFromHints(svcInfo ServicePort, endpoints []Endpoint, nodeName, 
 		}
 	}
 
-	// If no ready endpoints exist, there are no hints to consider
+	// 没有 Ready 端点就没有提示可依据，退化为默认分发（后续会用 Serving-Terminating 端点）。
 	if !hasReadyEndpoints {
 		return ""
 	}
 
+	// 特性门控关闭时完全跳过同节点逻辑；即便开启，只要有一个端点缺节点提示也不能启用该模式。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PreferSameTrafficDistribution) {
 		if allEndpointsHaveNodeHints {
 			if hasEndpointForNode {
@@ -201,6 +195,7 @@ func topologyModeFromHints(svcInfo ServicePort, endpoints []Endpoint, nodeName, 
 			klog.V(7).InfoS("Ignoring same-node topology hints for service since one or more endpoints is missing a node hint", "service", svcInfo)
 		}
 	}
+	// 同理：区域提示也必须覆盖全部 Ready 端点且命中本节点区域，才启用同区域模式。
 	if allEndpointsHaveZoneHints {
 		if hasEndpointForZone {
 			return v1.ServiceTrafficDistributionPreferSameZone
@@ -217,10 +212,11 @@ func topologyModeFromHints(svcInfo ServicePort, endpoints []Endpoint, nodeName, 
 	return ""
 }
 
-// availableForTopology checks if this endpoint is available for use on this node when
-// using the given topologyMode. (Note that there's no fallback here; the fallback happens
-// when deciding which mode to use, not when applying that decision.)
+// availableForTopology 判断在给定拓扑模式下，某个 Endpoint 是否可供本节点使用。
+// 这里不做回退：回退逻辑发生在“选择模式”时（topologyModeFromHints），而不是应用模式时，
+// 否则同一批端点会出现部分过滤、部分不过滤的不一致结果。
 func availableForTopology(endpoint Endpoint, topologyMode, nodeName, zone string) bool {
+	// 默认模式接受所有端点；同节点/同区域模式要求 Endpoint 的提示集合命中本节点/本区域。
 	switch topologyMode {
 	case "":
 		return true
@@ -233,7 +229,7 @@ func availableForTopology(endpoint Endpoint, topologyMode, nodeName, zone string
 	}
 }
 
-// filterEndpoints filters endpoints according to predicate
+// filterEndpoints 按 predicate 过滤 Endpoint 列表，预先分配足够容量以避免逐个追加时的多次扩容。
 func filterEndpoints(endpoints []Endpoint, predicate func(Endpoint) bool) []Endpoint {
 	filteredEndpoints := make([]Endpoint, 0, len(endpoints))
 

@@ -22,238 +22,205 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 )
 
-// KubeProxyLinuxConfiguration contains Linux platform related configuration details for the
-// Kubernetes proxy server that aren't specific to a particular backend.
+// KubeProxyLinuxConfiguration 包含 Kubernetes proxy server 与 Linux 平台相关、
+// 但不专属于某个具体后端（如 iptables、ipvs、nftables）的配置细节。
 type KubeProxyLinuxConfiguration struct {
-	// conntrack contains conntrack-related configuration options.
+	// conntrack 包含与 conntrack 相关的配置项。
 	Conntrack KubeProxyConntrackConfiguration
-	// masqueradeAll tells kube-proxy to SNAT all traffic sent to Service cluster IPs. This may
-	// be required with some CNI plugins.
+	// masqueradeAll 指示 kube-proxy 对发往 Service cluster IP 的所有流量执行 SNAT。
+	// 某些 CNI 插件可能需要开启此选项。
 	MasqueradeAll bool
-	// oomScoreAdj is the oom-score-adj value for kube-proxy process. Values must be within
-	// the range [-1000, 1000]
+	// oomScoreAdj 是 kube-proxy 进程的 oom-score-adj 值。取值范围必须在 [-1000, 1000] 内。
 	OOMScoreAdj *int32
 }
 
-// KubeProxyWindowsConfiguration contains Windows platform related configuration details for the
-// Kubernetes proxy server that aren't specific to a particular backend
+// KubeProxyWindowsConfiguration 包含 Kubernetes proxy server 与 Windows 平台相关、
+// 但不专属于某个具体后端的配置细节。
 type KubeProxyWindowsConfiguration struct {
-	// runAsService, if true, enables Windows service control manager API integration.
+	// runAsService 为 true 时，启用与 Windows service control manager API 的集成。
 	RunAsService bool
 }
 
-// KubeProxyIPTablesConfiguration contains iptables-related configuration
-// details for the Kubernetes proxy server.
+// KubeProxyIPTablesConfiguration 包含 Kubernetes proxy server 与 iptables 相关的配置细节。
 type KubeProxyIPTablesConfiguration struct {
-	// masqueradeBit is the bit of the iptables fwmark space to use for SNAT if using
-	// the iptables or ipvs proxy mode. Values must be within the range [0, 31].
+	// masqueradeBit 是在 iptables 或 ipvs 代理模式下用于 SNAT 的 iptables fwmark 位。
+	// 取值范围必须在 [0, 31] 内。
 	MasqueradeBit *int32
-	// localhostNodePorts, if false, tells kube-proxy to disable the legacy behavior
-	// of allowing NodePort services to be accessed via localhost. (Applies only to
-	// iptables mode and IPv4; localhost NodePorts are never allowed with other proxy
-	// modes or with IPv6.)
+	// localhostNodePorts 为 false 时，指示 kube-proxy 禁用允许通过 localhost 访问
+	// NodePort Service 的旧有行为。（仅适用于 iptables 模式和 IPv4；其他代理模式或
+	// IPv6 下永远不允许 localhost NodePort。）
 	LocalhostNodePorts *bool
 }
 
-// KubeProxyIPVSConfiguration contains ipvs-related configuration
-// details for the Kubernetes proxy server.
+// KubeProxyIPVSConfiguration 包含 Kubernetes proxy server 与 ipvs 相关的配置细节。
 type KubeProxyIPVSConfiguration struct {
-	// scheduler is the IPVS scheduler to use
+	// scheduler 是要使用的 IPVS 调度器。
 	Scheduler string
-	// excludeCIDRs is a list of CIDRs which the ipvs proxier should not touch
-	// when cleaning up ipvs services.
+	// excludeCIDRs 是 ipvs proxier 在清理 ipvs Service 时不应触碰的 CIDR 列表。
 	ExcludeCIDRs []string
-	// strictARP configures arp_ignore and arp_announce to avoid answering ARP queries
-	// from kube-ipvs0 interface
+	// strictARP 用于配置 arp_ignore 和 arp_announce，以避免从 kube-ipvs0 接口
+	// 应答 ARP 查询。
 	StrictARP bool
-	// tcpTimeout is the timeout value used for idle IPVS TCP sessions.
-	// The default value is 0, which preserves the current timeout value on the system.
+	// tcpTimeout 是空闲 IPVS TCP 会话使用的超时值。默认值为 0，表示保留系统当前的
+	// 超时值。
 	TCPTimeout metav1.Duration
-	// tcpFinTimeout is the timeout value used for IPVS TCP sessions after receiving a FIN.
-	// The default value is 0, which preserves the current timeout value on the system.
+	// tcpFinTimeout 是收到 FIN 后 IPVS TCP 会话使用的超时值。默认值为 0，表示保留
+	// 系统当前的超时值。
 	TCPFinTimeout metav1.Duration
-	// udpTimeout is the timeout value used for IPVS UDP packets.
-	// The default value is 0, which preserves the current timeout value on the system.
+	// udpTimeout 是 IPVS UDP 报文使用的超时值。默认值为 0，表示保留系统当前的
+	// 超时值。
 	UDPTimeout metav1.Duration
 }
 
-// KubeProxyNFTablesConfiguration contains nftables-related configuration
-// details for the Kubernetes proxy server.
+// KubeProxyNFTablesConfiguration 包含 Kubernetes proxy server 与 nftables 相关的配置细节。
 type KubeProxyNFTablesConfiguration struct {
-	// masqueradeBit is the bit of the iptables fwmark space to use for SNAT if using
-	// the nftables proxy mode. Values must be within the range [0, 31].
+	// masqueradeBit 是在 nftables 代理模式下用于 SNAT 的 iptables fwmark 位。
+	// 取值范围必须在 [0, 31] 内。
 	MasqueradeBit *int32
 }
 
-// KubeProxyConntrackConfiguration contains conntrack settings for
-// the Kubernetes proxy server.
+// KubeProxyConntrackConfiguration 包含 Kubernetes proxy server 的 conntrack 设置。
 type KubeProxyConntrackConfiguration struct {
-	// maxPerCore is the maximum number of NAT connections to track
-	// per CPU core (0 to leave the limit as-is and ignore min).
+	// maxPerCore 是每个 CPU 核心可跟踪的 NAT 连接数上限（0 表示保持现有限制并忽略 min）。
 	MaxPerCore *int32
-	// min is the minimum value of connect-tracking records to allocate,
-	// regardless of maxPerCore (set maxPerCore=0 to leave the limit as-is).
+	// min 是要分配的连接跟踪记录的最小数量，不受 maxPerCore 影响
+	// （将 maxPerCore 设为 0 则保持现有限制）。
 	Min *int32
-	// tcpEstablishedTimeout is how long an idle TCP connection will be kept open
-	// (e.g. '2s').  Must be greater than 0 to set.
+	// tcpEstablishedTimeout 是空闲 TCP 连接保持打开的时间（例如 '2s'）。
+	// 设置时必须大于 0。
 	TCPEstablishedTimeout *metav1.Duration
-	// tcpCloseWaitTimeout is how long an idle conntrack entry
-	// in CLOSE_WAIT state will remain in the conntrack
-	// table. (e.g. '60s'). Must be greater than 0 to set.
+	// tcpCloseWaitTimeout 是处于 CLOSE_WAIT 状态的空闲 conntrack 条目在 conntrack
+	// 表中保留的时间（例如 '60s'）。设置时必须大于 0。
 	TCPCloseWaitTimeout *metav1.Duration
-	// tcpBeLiberal, if true, kube-proxy will configure conntrack
-	// to run in liberal mode for TCP connections and packets with
-	// out-of-window sequence numbers won't be marked INVALID.
+	// tcpBeLiberal 为 true 时，kube-proxy 会将 TCP 连接的 conntrack 配置为宽松模式，
+	// 序列号超出窗口的数据包不会被标记为 INVALID。
 	TCPBeLiberal bool
-	// udpTimeout is how long an idle UDP conntrack entry in
-	// UNREPLIED state will remain in the conntrack table
-	// (e.g. '30s'). Must be greater than 0 to set.
+	// udpTimeout 是处于 UNREPLIED 状态的空闲 UDP conntrack 条目在 conntrack 表中
+	// 保留的时间（例如 '30s'）。设置时必须大于 0。
 	UDPTimeout metav1.Duration
-	// udpStreamTimeout is how long an idle UDP conntrack entry in
-	// ASSURED state will remain in the conntrack table
-	// (e.g. '300s'). Must be greater than 0 to set.
+	// udpStreamTimeout 是处于 ASSURED 状态的空闲 UDP conntrack 条目在 conntrack 表中
+	// 保留的时间（例如 '300s'）。设置时必须大于 0。
 	UDPStreamTimeout metav1.Duration
 }
 
-// KubeProxyWinkernelConfiguration contains Windows/HNS settings for
-// the Kubernetes proxy server.
+// KubeProxyWinkernelConfiguration 包含 Kubernetes proxy server 的 Windows/HNS 设置。
 type KubeProxyWinkernelConfiguration struct {
-	// networkName is the name of the network kube-proxy will use
-	// to create endpoints and policies
+	// networkName 是 kube-proxy 用于创建 endpoint 和 policy 的网络名称。
 	NetworkName string
-	// sourceVip is the IP address of the source VIP endpoint used for
-	// NAT when loadbalancing
+	// sourceVip 是负载均衡时用于 NAT 的源 VIP endpoint 的 IP 地址。
 	SourceVip string
-	// enableDSR tells kube-proxy whether HNS policies should be created
-	// with DSR
+	// enableDSR 指示 kube-proxy 创建 HNS policy 时是否启用 DSR。
 	EnableDSR bool
-	// rootHnsEndpointName is the name of hnsendpoint that is attached to
-	// l2bridge for root network namespace
+	// rootHnsEndpointName 是挂载到 root 网络命名空间 l2bridge 上的 hnsendpoint 名称。
 	RootHnsEndpointName string
-	// forwardHealthCheckVip forwards service VIP for health check port on
-	// Windows
+	// forwardHealthCheckVip 表示在 Windows 上为健康检查端口转发 Service VIP。
 	ForwardHealthCheckVip bool
 }
 
-// DetectLocalConfiguration contains optional settings related to DetectLocalMode option
+// DetectLocalConfiguration 包含与 DetectLocalMode 选项相关的可选设置。
 type DetectLocalConfiguration struct {
-	// bridgeInterface is a bridge interface name. When DetectLocalMode is set to
-	// LocalModeBridgeInterface, kube-proxy will consider traffic to be local if
-	// it originates from this bridge.
+	// bridgeInterface 是网桥接口名称。当 DetectLocalMode 设为 LocalModeBridgeInterface 时，
+	// kube-proxy 会将来自该网桥的流量视为本地流量。
 	BridgeInterface string
-	// clusterCIDRs is the dual-stack list of CIDR ranges of the pods in the cluster. When
-	// DetectLocalMode is set to LocalModeClusterCIDR, kube-proxy will consider
-	// traffic to be local if its source IP is in the range of any given CIDR.
+	// clusterCIDRs 是集群中 Pod 的 CIDR 范围列表（支持双栈）。当 DetectLocalMode 设为
+	// LocalModeClusterCIDR 时，kube-proxy 会将源 IP 落在任一 CIDR 范围内的流量视为本地流量。
 	ClusterCIDRs []string
-	// interfaceNamePrefix is an interface name prefix. When DetectLocalMode is set to
-	// LocalModeInterfaceNamePrefix, kube-proxy will consider traffic to be local if
-	// it originates from any interface whose name begins with this prefix.
+	// interfaceNamePrefix 是接口名称前缀。当 DetectLocalMode 设为 LocalModeInterfaceNamePrefix 时，
+	// kube-proxy 会将来自名称以该前缀开头的任意接口的流量视为本地流量。
 	InterfaceNamePrefix string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeProxyConfiguration contains everything necessary to configure the
-// Kubernetes proxy server.
+// KubeProxyConfiguration 包含配置 Kubernetes proxy server 所需的全部内容。
 type KubeProxyConfiguration struct {
 	metav1.TypeMeta
 
-	// linux contains Linux-related configuration options.
+	// linux 包含与 Linux 相关的配置项。
 	Linux KubeProxyLinuxConfiguration
 
-	// windows contains Windows-related configuration options.
+	// windows 包含与 Windows 相关的配置项。
 	Windows KubeProxyWindowsConfiguration
 
-	// featureGates is a map of feature names to bools that enable or disable alpha/experimental features.
+	// featureGates 是功能名称到布尔值的映射，用于启用或禁用 alpha/实验性功能。
 	FeatureGates map[string]bool
 
-	// clientConnection specifies the kubeconfig file and client connection settings for the proxy
-	// server to use when communicating with the apiserver.
+	// clientConnection 指定 proxy server 与 apiserver 通信时使用的 kubeconfig 文件
+	// 及客户端连接设置。
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
-	// logging specifies the options of logging.
-	// Refer to [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go)
-	// for more information.
+	// logging 指定日志选项。
+	// 更多信息请参阅 [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go)。
 	Logging logsapi.LoggingConfiguration
 
-	// hostnameOverride, if non-empty, will be used as the name of the Node that
-	// kube-proxy is running on. If unset, the node name is assumed to be the same as
-	// the node's hostname.
+	// hostnameOverride 非空时，将作为 kube-proxy 所在 Node 的名称。未设置时，
+	// 假定节点名称与节点的 hostname 相同。
 	HostnameOverride string
-	// bindAddress can be used to override kube-proxy's idea of what its node's
-	// primary IP is. Note that the name is a historical artifact, and kube-proxy does
-	// not actually bind any sockets to this IP.
+	// bindAddress 用于覆盖 kube-proxy 所认为的节点主 IP。注意该名称是历史遗留，
+	// kube-proxy 实际上并不会在该 IP 上监听任何 socket。
 	BindAddress string
-	// healthzBindAddress is the IP address and port for the health check server to
-	// serve on, defaulting to "0.0.0.0:10256" (if bindAddress is unset or IPv4), or
-	// "[::]:10256" (if bindAddress is IPv6).
+	// healthzBindAddress 是健康检查 server 监听的 IP 地址和端口，默认为
+	// "0.0.0.0:10256"（bindAddress 未设置或为 IPv4 时），或 "[::]:10256"（bindAddress 为 IPv6 时）。
 	HealthzBindAddress string
-	// metricsBindAddress is the IP address and port for the metrics server to serve
-	// on, defaulting to "127.0.0.1:10249" (if bindAddress is unset or IPv4), or
-	// "[::1]:10249" (if bindAddress is IPv6). (Set to "0.0.0.0:10249" / "[::]:10249"
-	// to bind on all interfaces.)
+	// metricsBindAddress 是 metrics server 监听的 IP 地址和端口，默认为
+	// "127.0.0.1:10249"（bindAddress 未设置或为 IPv4 时），或 "[::1]:10249"（bindAddress 为 IPv6 时）。
+	// （设置为 "0.0.0.0:10249" / "[::]:10249" 可监听所有接口。）
 	MetricsBindAddress string
-	// bindAddressHardFail, if true, tells kube-proxy to treat failure to bind to a
-	// port as fatal and exit
+	// bindAddressHardFail 为 true 时，指示 kube-proxy 将端口绑定失败视为致命错误并退出。
 	BindAddressHardFail bool
-	// enableProfiling enables profiling via web interface on /debug/pprof handler.
-	// Profiling handlers will be handled by metrics server.
+	// enableProfiling 通过 /debug/pprof handler 的 web 接口启用性能分析。
+	// 性能分析 handler 由 metrics server 处理。
 	EnableProfiling bool
-	// showHiddenMetricsForVersion is the version for which you want to show hidden metrics.
+	// showHiddenMetricsForVersion 是要显示隐藏指标所针对的版本。
 	ShowHiddenMetricsForVersion string
 
-	// mode specifies which proxy mode to use.
+	// mode 指定要使用的代理模式。
 	Mode ProxyMode
-	// iptables contains iptables-related configuration options.
+	// iptables 包含与 iptables 相关的配置项。
 	IPTables KubeProxyIPTablesConfiguration
-	// ipvs contains ipvs-related configuration options.
+	// ipvs 包含与 ipvs 相关的配置项。
 	IPVS KubeProxyIPVSConfiguration
-	// winkernel contains winkernel-related configuration options.
+	// winkernel 包含与 winkernel 相关的配置项。
 	Winkernel KubeProxyWinkernelConfiguration
-	// nftables contains nftables-related configuration options.
+	// nftables 包含与 nftables 相关的配置项。
 	NFTables KubeProxyNFTablesConfiguration
 
-	// detectLocalMode determines mode to use for detecting local traffic, defaults to LocalModeClusterCIDR
+	// detectLocalMode 决定检测本地流量所使用的模式，默认为 LocalModeClusterCIDR。
 	DetectLocalMode LocalMode
-	// detectLocal contains optional configuration settings related to DetectLocalMode.
+	// detectLocal 包含与 DetectLocalMode 相关的可选配置设置。
 	DetectLocal DetectLocalConfiguration
 
-	// nodePortAddresses is a list of CIDR ranges and/or keywords that expand to CIDR
-	// ranges. NodePort services are only accessible on node IPs covered by the list.
-	// Supported keywords: 'primary' (the Node object's primary IPv4 and/or IPv6
-	// addresses), 'localhost' (127.0.0.0/8 and ::1/128), and 'all' (0.0.0.0/0 and ::/0).
-	// Any combination of valid keywords and CIDRs may be included in the list.
+	// nodePortAddresses 是 CIDR 范围和/或可展开为 CIDR 范围的关键字的列表。
+	// 只有列表中覆盖的节点 IP 才能访问 NodePort Service。
+	// 支持的关键字：'primary'（Node 对象的主 IPv4 和/或 IPv6 地址）、
+	// 'localhost'（127.0.0.0/8 和 ::1/128）以及 'all'（0.0.0.0/0 和 ::/0）。
+	// 列表中可以包含有效关键字与 CIDR 的任意组合。
 	//
-	// Serving NodePorts on loopback IPs is only supported in iptables mode (IPv4
-	// only, see iptables.localhostNodePorts), and, only for TCP, in nftables mode when
-	// the KubeProxyNFTablesLocalhostNodePorts feature gate is enabled and the list
-	// explicitly includes loopback (e.g. 'localhost').
+	// 在 loopback IP 上提供 NodePort 仅在 iptables 模式下受支持（仅限 IPv4，
+	// 参见 iptables.localhostNodePorts）；在 nftables 模式下仅对 TCP 受支持，
+	// 且需要启用 KubeProxyNFTablesLocalhostNodePorts feature gate，并在列表中
+	// 显式包含 loopback（例如 'localhost'）。
 	//
-	// If unset, this defaults to 'all' in iptables and ipvs mode, and to 'primary' in
-	// nftables mode.
+	// 未设置时，iptables 和 ipvs 模式默认为 'all'，nftables 模式默认为 'primary'。
 	NodePortAddresses []string
 
-	// syncPeriod is an interval (e.g. '5s', '1m', '2h22m') indicating how frequently
-	// various re-synchronizing and cleanup operations are performed. Must be greater
-	// than 0.
+	// syncPeriod 是一个时间间隔（例如 '5s'、'1m'、'2h22m'），表示执行各种重新同步
+	// 和清理操作的频率。必须大于 0。
 	SyncPeriod metav1.Duration
-	// minSyncPeriod is the minimum period between proxier rule resyncs (e.g. '5s',
-	// '1m', '2h22m'). A value of 0 means every Service or EndpointSlice change will
-	// result in an immediate proxier resync.
+	// minSyncPeriod 是 proxier 规则重新同步之间的最小周期（例如 '5s'、'1m'、'2h22m'）。
+	// 值为 0 表示每次 Service 或 EndpointSlice 变更都会立即触发 proxier 重新同步。
 	MinSyncPeriod metav1.Duration
-	// configSyncPeriod is how often configuration from the apiserver is refreshed. Must be greater
-	// than 0.
+	// configSyncPeriod 是从 apiserver 刷新配置的频率。必须大于 0。
 	ConfigSyncPeriod metav1.Duration
 }
 
-// ProxyMode represents modes used by the Kubernetes proxy server.
+// ProxyMode 表示 Kubernetes proxy server 使用的代理模式。
 //
-// Three modes of proxy are available on Linux platforms: `iptables`, `ipvs`, and
-// `nftables`. One mode of proxy is available on Windows platforms: `kernelspace`.
+// Linux 平台上有三种代理模式：`iptables`、`ipvs` 和 `nftables`。
+// Windows 平台上只有一种代理模式：`kernelspace`。
 //
-// If the proxy mode is unspecified, a default proxy mode will be used (currently this
-// is `iptables` on Linux and `kernelspace` on Windows). If the selected proxy mode cannot be
-// used (due to lack of kernel support, missing userspace components, etc) then kube-proxy
-// will exit with an error.
+// 如果未指定代理模式，将使用默认模式（目前 Linux 上为 `iptables`，Windows 上为
+// `kernelspace`）。如果选定的代理模式无法使用（例如内核支持不足、缺少用户态组件等），
+// kube-proxy 将报错退出。
 type ProxyMode string
 
 const (
@@ -263,11 +230,13 @@ const (
 	ProxyModeKernelspace ProxyMode = "kernelspace"
 )
 
+// Set 实现 pflag.Value 接口，将字符串值设置为 ProxyMode。
 func (m *ProxyMode) Set(s string) error {
 	*m = ProxyMode(s)
 	return nil
 }
 
+// String 实现 pflag.Value 接口，返回 ProxyMode 的字符串表示；接收者为 nil 时返回空串。
 func (m *ProxyMode) String() string {
 	if m != nil {
 		return string(*m)
@@ -275,14 +244,15 @@ func (m *ProxyMode) String() string {
 	return ""
 }
 
+// Type 实现 pflag.Value 接口，返回该标志值的类型名。
 func (m *ProxyMode) Type() string {
 	return "ProxyMode"
 }
 
-// LocalMode represents modes to detect local traffic from the node
+// LocalMode 表示从节点检测本地流量的模式。
 type LocalMode string
 
-// Currently supported modes for LocalMode
+// LocalMode 当前支持的模式。
 const (
 	LocalModeClusterCIDR         LocalMode = "ClusterCIDR"
 	LocalModeNodeCIDR            LocalMode = "NodeCIDR"
@@ -290,11 +260,13 @@ const (
 	LocalModeInterfaceNamePrefix LocalMode = "InterfaceNamePrefix"
 )
 
+// Set 实现 pflag.Value 接口，将字符串值设置为 LocalMode。
 func (m *LocalMode) Set(s string) error {
 	*m = LocalMode(s)
 	return nil
 }
 
+// String 实现 pflag.Value 接口，返回 LocalMode 的字符串表示；接收者为 nil 时返回空串。
 func (m *LocalMode) String() string {
 	if m != nil {
 		return string(*m)
@@ -302,17 +274,18 @@ func (m *LocalMode) String() string {
 	return ""
 }
 
+// Type 实现 pflag.Value 接口，返回该标志值的类型名。
 func (m *LocalMode) Type() string {
 	return "LocalMode"
 }
 
-// NodePortAddresses keywords are symbolic values for NodePortAddresses that are
-// resolved to concrete CIDRs. They may be combined with each other and with literal CIDRs.
+// NodePortAddresses 关键字是 NodePortAddresses 的符号值，会被解析为具体的 CIDR。
+// 它们可以相互组合，也可以与字面量的 CIDR 组合使用。
 const (
-	// NodePortAddressesPrimary resolves to the primary IPs of the node's IP families.
+	// NodePortAddressesPrimary 解析为节点各 IP 族的主 IP。
 	NodePortAddressesPrimary string = "primary"
-	// NodePortAddressesLocalhost resolves to the loopback CIDRs.
+	// NodePortAddressesLocalhost 解析为 loopback CIDR。
 	NodePortAddressesLocalhost string = "localhost"
-	// NodePortAddressesAll resolves to the zero CIDRs.
+	// NodePortAddressesAll 解析为全零 CIDR。
 	NodePortAddressesAll string = "all"
 )

@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestEndpointsMapFromESC 验证从 EndpointSlice 生成 EndpointsMap 的行为，
+// 覆盖多端口、切片重叠、重复 IP、就绪/终止状态以及跨命名空间过滤等场景。
 func TestEndpointsMapFromESC(t *testing.T) {
 	testCases := map[string]struct {
 		endpointSlices []*discovery.EndpointSlice
@@ -73,8 +75,8 @@ func TestEndpointsMapFromESC(t *testing.T) {
 				},
 			},
 		},
-		// 2 slices, with some overlapping endpoints, result should be a union
-		// of the 2.
+		// 两个切片存在部分重叠端点时，结果应为两者端点的并集。
+		// 重叠部分只保留一份。
 		"2 overlapping slices, same port": {
 			namespacedName: types.NamespacedName{Name: "svc1", Namespace: "ns1"},
 			endpointSlices: []*discovery.EndpointSlice{
@@ -90,10 +92,10 @@ func TestEndpointsMapFromESC(t *testing.T) {
 				},
 			},
 		},
-		// 2 slices with all endpoints overlapping, more unready in first than
-		// second. If an endpoint is marked ready, we add it to the
-		// EndpointsMap, even if conditions.Ready isn't true for another
-		// matching endpoint
+		// 两个切片的端点完全重叠，但第一个切片的未就绪端点更多。
+		// 只要某个端点被标记为就绪就应加入 EndpointsMap，
+		// 即使另一个匹配端点的 conditions.Ready 不为 true。
+		// 该场景用于验证去重时“就绪优先”的语义。
 		"2 slices, overlapping endpoints, some endpoints unready in 1 or both": {
 			namespacedName: types.NamespacedName{Name: "svc1", Namespace: "ns1"},
 			endpointSlices: []*discovery.EndpointSlice{
@@ -115,7 +117,7 @@ func TestEndpointsMapFromESC(t *testing.T) {
 				},
 			},
 		},
-		// 2 slices with all endpoints overlapping, some unready and terminating.
+		// 两个切片端点完全重叠，其中部分未就绪、部分正在终止。
 		"2 slices, overlapping endpoints, some endpoints unready and some endpoints terminating": {
 			namespacedName: types.NamespacedName{Name: "svc1", Namespace: "ns1"},
 			endpointSlices: []*discovery.EndpointSlice{
@@ -173,9 +175,9 @@ func TestEndpointsMapFromESC(t *testing.T) {
 				},
 			},
 		},
-		// Ensuring that nil port value will not break things. This will
-		// represent all ports in the future, but that has not been implemented
-		// yet.
+		// 确保 nil 端口值不会导致异常。将来它可能表示“所有端口”，
+		// 但该行为目前尚未实现。
+		// 这里期望为空映射，避免实现变更时静默通过。
 		"Nil port should not break anything": {
 			namespacedName: types.NamespacedName{Name: "svc1", Namespace: "ns1"},
 			hostname:       "host1",
@@ -184,7 +186,7 @@ func TestEndpointsMapFromESC(t *testing.T) {
 			},
 			expectedMap: map[ServicePortName][]*BaseEndpointInfo{},
 		},
-		// Make sure that different endpoints with duplicate IPs are returned correctly.
+		// 确保 IP 相同但端口不同的端点都能被正确返回。
 		"Different endpoints with duplicate IPs should not be filtered": {
 			namespacedName: types.NamespacedName{Name: "svc1", Namespace: "ns1"},
 			hostname:       "host1",
@@ -207,17 +209,21 @@ func TestEndpointsMapFromESC(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			esCache := NewEndpointSliceCache(tc.hostname, nil)
 
+			// 先建立深拷贝基线，稍后断言缓存没有改动输入的切片。
 			cmc := newCacheMutationCheck(tc.endpointSlices)
 			for _, endpointSlice := range tc.endpointSlices {
 				esCache.updatePending(endpointSlice, false)
 			}
 
+			// 从 pending 快照生成映射，避免已 checkout 的状态干扰断言。
 			compareEndpointsMapsStr(t, esCache.getEndpointsMap(tc.namespacedName, esCache.trackerByServiceMap[tc.namespacedName].pending), tc.expectedMap)
 			cmc.Check(t)
 		})
 	}
 }
 
+// TestEndpointInfoByServicePort 验证端点按服务端口分组去重的逻辑，
+// 尤其检查重复 IP 与重复端点时优先选择非终止端点。
 func TestEndpointInfoByServicePort(t *testing.T) {
 	testCases := map[string]struct {
 		namespacedName types.NamespacedName
@@ -318,7 +324,7 @@ func TestEndpointInfoByServicePort(t *testing.T) {
 				func() *discovery.EndpointSlice {
 					es := generateEndpointSliceWithOffset("svc1", "ns1", 1, 1, 1, 999, 999, []string{"host1"}, []*int32{ptr.To[int32](80)})
 
-					// Duplicate the endpoint
+					// 复制同一个端点，构造仅有条件不同的重复项
 					ep1 := es.Endpoints[0]
 					ep1.Conditions.Ready = ptr.To(false)
 					ep1.Conditions.Serving = ptr.To(true)
@@ -334,7 +340,7 @@ func TestEndpointInfoByServicePort(t *testing.T) {
 					ep3.Conditions.Serving = ptr.To(false)
 					ep3.Conditions.Terminating = ptr.To(true)
 
-					//  ep2 should win since it's the non-terminating one
+					// ep2 是非终止端点，应被优先选中
 					es.Endpoints = []discovery.Endpoint{ep1, ep2, ep3}
 					return es
 				}(),
@@ -363,6 +369,7 @@ func TestEndpointInfoByServicePort(t *testing.T) {
 				esCache.updatePending(endpointSlice, false)
 			}
 
+			// 断言按 IP:端口 去重后，重复端点中保留了非终止的那一个。
 			got := esCache.endpointInfoByServicePort(tc.namespacedName, esCache.trackerByServiceMap[tc.namespacedName].pending)
 			if !reflect.DeepEqual(got, tc.expectedMap) {
 				t.Errorf("endpointInfoByServicePort does not match. Want: %+v, Got: %+v", tc.expectedMap, got)
@@ -371,6 +378,8 @@ func TestEndpointInfoByServicePort(t *testing.T) {
 	}
 }
 
+// TestEsDataChanged 验证 esDataChanged 能识别端口与端点的内容及顺序变化，
+// 同时确认顺序未变时不会产生误判。
 func TestEsDataChanged(t *testing.T) {
 	p80 := int32(80)
 	p443 := int32(443)
@@ -487,6 +496,7 @@ func TestEsDataChanged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cmc := newCacheMutationCheck([]*discovery.EndpointSlice{tc.initialSlice})
 
+			// 先把初始切片写入缓存并提交，使其进入可比较的基线状态。
 			if tc.initialSlice != nil {
 				tc.cache.updatePending(tc.initialSlice, false)
 				tc.cache.checkoutChanges()
@@ -497,6 +507,7 @@ func TestEsDataChanged(t *testing.T) {
 				t.Fatalf("Expected no error calling endpointSliceCacheKeys(): %v", err)
 			}
 
+			// 用新切片的包装对象与缓存基线比较，且不修改缓存中的原始对象。
 			esData := &endpointSliceData{tc.updatedSlice, false}
 			changed := tc.cache.esDataChanged(serviceKey, sliceKey, esData)
 
@@ -509,6 +520,9 @@ func TestEsDataChanged(t *testing.T) {
 	}
 }
 
+// generateEndpointSliceWithOffset 生成测试用 EndpointSlice：
+// 端点 IP 的第三段由 offset 决定，就绪与终止状态按给定模数周期性设置，
+// hosts 则用于给端点分配节点名。
 func generateEndpointSliceWithOffset(serviceName, namespace string, sliceNum, offset, numEndpoints, unreadyMod int, terminatingMod int, hosts []string, portNums []*int32) *discovery.EndpointSlice {
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -557,24 +571,26 @@ func generateEndpointSliceWithOffset(serviceName, namespace string, sliceNum, of
 	return endpointSlice
 }
 
+// generateEndpointSlice 是 generateEndpointSliceWithOffset 的便捷封装，
+// 默认用切片编号同时作为 IP 段的偏移量。
 func generateEndpointSlice(serviceName, namespace string, sliceNum, numEndpoints, unreadyMod int, terminatingMod int, hosts []string, portNums []*int32) *discovery.EndpointSlice {
 	return generateEndpointSliceWithOffset(serviceName, namespace, sliceNum, sliceNum, numEndpoints, unreadyMod, terminatingMod, hosts, portNums)
 }
 
-// cacheMutationCheck helps ensure that cached objects have not been changed
-// in any way throughout a test run.
+// cacheMutationCheck 用于确保缓存中的对象在整个测试过程中未被修改。
+// 它为每个对象保存一份深拷贝作为比较基线。
 type cacheMutationCheck struct {
 	objects []cacheObject
 }
 
-// cacheObject stores a reference to an original object as well as a deep copy
-// of that object to track any mutations in the original object.
+// cacheObject 同时保存原对象及其深拷贝，
+// 以便检测原对象是否被意外修改。
 type cacheObject struct {
 	original runtime.Object
 	deepCopy runtime.Object
 }
 
-// newCacheMutationCheck initializes a cacheMutationCheck with EndpointSlices.
+// newCacheMutationCheck 用一组 EndpointSlice 初始化 cacheMutationCheck。
 func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutationCheck {
 	cmc := cacheMutationCheck{}
 	for _, endpointSlice := range endpointSlices {
@@ -583,8 +599,8 @@ func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutat
 	return cmc
 }
 
-// Add appends a runtime.Object and a deep copy of that object into the
-// cacheMutationCheck.
+// Add 把 runtime.Object 及其深拷贝一并登记到 cacheMutationCheck 中。
+// 深拷贝必须在对象尚未被修改前创建。
 func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	cmc.objects = append(cmc.objects, cacheObject{
 		original: o,
@@ -592,18 +608,21 @@ func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	})
 }
 
-// Check verifies that no objects in the cacheMutationCheck have been mutated.
+// Check 断言登记的所有对象都未被修改。
 func (cmc *cacheMutationCheck) Check(t *testing.T) {
 	for _, o := range cmc.objects {
 		if !reflect.DeepEqual(o.original, o.deepCopy) {
-			// Cached objects can't be safely mutated and instead should be deep
-			// copied before changed in any way.
+			// 缓存对象不可原地修改，任何变更都必须先深拷贝。
+			// 否则共享引用的调用方会看到意外的数据变化。
 			t.Errorf("Cached object was unexpectedly mutated. Original: %+v, Mutated: %+v", o.deepCopy, o.original)
 		}
 	}
 }
 
+// TestEndpointSliceCacheClearedCorrectly 验证删除全部 EndpointSlice 后，
+// 缓存中的服务跟踪条目会被彻底清理。
 func TestEndpointSliceCacheClearedCorrectly(t *testing.T) {
+	// 该初始化函数给切片填入一个带节点名的端点和一个 UDP 端口。
 	initEndpointsPorts := func(eps *discovery.EndpointSlice) {
 		eps.Endpoints = []discovery.Endpoint{{
 			Addresses: []string{"1.1.1.1"},
@@ -651,6 +670,7 @@ func TestEndpointSliceCacheClearedCorrectly(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 走完“添加并提交、再删除并提交”的完整流程后再检查残留。
 			fp := newFakeProxier(v1.IPv4Protocol, time.Time{})
 
 			for _, epSlice := range tc.currEndpointSlices {
@@ -663,6 +683,7 @@ func TestEndpointSliceCacheClearedCorrectly(t *testing.T) {
 			}
 			fp.endpointsMap.Update(fp.endpointsChanges)
 
+			// 断言服务跟踪条目已被彻底清除，避免残留影响后续同步。
 			if len(fp.endpointsChanges.endpointSliceCache.trackerByServiceMap) != 0 {
 				t.Errorf("expected: endpointSliceCache does not have any entries, got: %v", fp.endpointsChanges.endpointSliceCache.trackerByServiceMap)
 			}
@@ -670,7 +691,10 @@ func TestEndpointSliceCacheClearedCorrectly(t *testing.T) {
 	}
 }
 
+// TestSameServiceEndpointSliceCacheClearedCorrectly 验证同一服务下有多个切片时，
+// 只删除其中一个不会把整个服务的缓存条目清掉。
 func TestSameServiceEndpointSliceCacheClearedCorrectly(t *testing.T) {
+	// 同样给切片填入完整数据，确保删除一个切片后该服务仍有端点。
 	initEndpointsPorts := func(eps *discovery.EndpointSlice) {
 		eps.Endpoints = []discovery.Endpoint{{
 			Addresses: []string{"1.1.1.1"},
@@ -695,11 +719,12 @@ func TestSameServiceEndpointSliceCacheClearedCorrectly(t *testing.T) {
 	}
 	fp.endpointsMap.Update(fp.endpointsChanges)
 
-	// only delete the first endpoint slice
+	// 只删除第一个切片，服务本身仍然存在。
 	fp.deleteEndpointSlice(currEndpointSlices[0])
 
 	fp.endpointsMap.Update(fp.endpointsChanges)
 
+	// 期望仍保留该服务的一个条目。
 	if len(fp.endpointsChanges.endpointSliceCache.trackerByServiceMap) != 1 {
 		t.Errorf("expected: endpointSliceCache to have one entries, got: %v", fp.endpointsChanges.endpointSliceCache.trackerByServiceMap)
 	}

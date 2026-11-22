@@ -33,10 +33,10 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/util"
 )
 
-// MaxLength represents the maximum length allowed for the name in a nfacct counter.
+// MaxLength 表示 nfacct 计数器名称允许的最大长度。
 const MaxLength = 31
 
-// nf netlink nfacct commands, these should strictly match with the ones defined in kernel headers.
+// nf netlink nfacct 命令字，必须与内核头文件中的定义严格一致。
 // (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink_acct.h#L9-L16)
 const (
 	// NFNL_MSG_ACCT_NEW
@@ -45,7 +45,7 @@ const (
 	cmdGet = 1
 )
 
-// nf netlink nfacct attribute, these should strictly match with the ones defined in kernel headers.
+// nf netlink nfacct 属性类型，必须与内核头文件中的定义严格一致。
 // (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink_acct.h#L24-L35)
 const (
 	// NFACCT_NAME
@@ -56,13 +56,12 @@ const (
 	attrBytes = 3
 )
 
-// runner implements the Interface and depends on the handler for execution.
+// runner 实现 Interface，所有 netlink 通信都委托给 handler 完成。
 type runner struct {
 	handler handler
 }
 
-// New returns a new Interface. If the netfilter_nfacct subsystem is
-// not available in the kernel it will return error.
+// New 返回一个新的 Interface。若内核不支持 netfilter_nfacct 子系统则返回错误。
 func New() (Interface, error) {
 	hndlr, err := newNetlinkHandler()
 	if err != nil {
@@ -74,8 +73,8 @@ func New() (Interface, error) {
 		return nil, err
 	}
 
-	// check if nfacct is supported on the current kernel by attempting to retrieve a counter.
-	// the following GET call should either succeed or return ENOENT.
+	// 通过尝试读取计数器来探测当前内核是否支持 nfacct：
+	// 支持时 GET 要么成功，要么因计数器不存在返回 ENOENT。
 	_, err = rnr.Get("IMayExist")
 	if err != nil && !errors.Is(err, ErrObjectNotFound) {
 		return nil, ErrNotSupported
@@ -83,14 +82,15 @@ func New() (Interface, error) {
 	return rnr, nil
 }
 
-// newInternal returns a new Interface with the given handler.
+// newInternal 使用给定的 handler 构造 Interface，便于测试时注入模拟实现。
 func newInternal(hndlr handler) (Interface, error) {
 	return &runner{handler: hndlr}, nil
 
 }
 
-// Ensure is part of the interface.
+// Ensure 确保指定名称的计数器存在，不存在时创建。
 func (r *runner) Ensure(name string) error {
+	// 已存在的计数器直接视为满足要求，幂等创建避免重复 Add 返回 EEXIST。
 	counter, err := r.Get(name)
 	if counter != nil {
 		return nil
@@ -105,11 +105,12 @@ func (r *runner) Ensure(name string) error {
 	}
 }
 
-// Add is part of the interface.
+// Add 创建一个指定名称的 nfacct 计数器。
 func (r *runner) Add(name string) error {
 	if name == "" {
 		return ErrEmptyName
 	}
+	// 内核的 NFACCT_NAME 属性使用零终止字符串，超长名称会被截断或拒绝。
 	if len(name) > MaxLength {
 		return ErrNameExceedsMaxLength
 	}
@@ -123,7 +124,7 @@ func (r *runner) Add(name string) error {
 	return nil
 }
 
-// Get is part of the interface.
+// Get 按名称查询 nfacct 计数器，计数器不存在时返回 ErrObjectNotFound。
 func (r *runner) Get(name string) (*Counter, error) {
 	if len(name) > MaxLength {
 		return nil, ErrNameExceedsMaxLength
@@ -146,10 +147,11 @@ func (r *runner) Get(name string) (*Counter, error) {
 	return counter, nil
 }
 
-// List is part of the interface.
+// List 列出所有 nfacct 计数器；转储过程被信号打断时，返回已收到的部分结果。
 func (r *runner) List() ([]*Counter, error) {
 	var err error
 	var msgs [][]byte
+	// DUMP 可能被 EINTR 中断，此时重试；其他错误不做重试。
 	err = retry.OnError(util.MaxAttemptsEINTR, util.ShouldRetryOnEINTR, func() error {
 		req := r.handler.newRequest(cmdGet, unix.NLM_F_REQUEST|unix.NLM_F_DUMP)
 		msgs, err = req.Execute(unix.NETLINK_NETFILTER, 0)
@@ -171,19 +173,33 @@ func (r *runner) List() ([]*Counter, error) {
 	return counters, err
 }
 
+// ErrObjectNotFound 表示计数器不存在，由内核的 ENOENT 转换而来。
 var ErrObjectNotFound = errors.New("object not found")
+
+// ErrObjectAlreadyExists 表示计数器已存在，由内核的 EBUSY 转换而来。
 var ErrObjectAlreadyExists = errors.New("object already exists")
+
+// ErrNameExceedsMaxLength 表示名称超过 MaxLength 限制。
 var ErrNameExceedsMaxLength = fmt.Errorf("object name exceeds the maximum allowed length of %d characters", MaxLength)
+
+// ErrEmptyName 表示计数器名称为空。
 var ErrEmptyName = errors.New("object name cannot be empty")
+
+// ErrUnexpected 用于包装未能归类到已知内核错误码的错误。
 var ErrUnexpected = errors.New("unexpected error")
+
+// ErrNotSupported 表示当前内核不支持 nfacct 子系统。
 var ErrNotSupported = errors.New("nfacct sub-system not available")
 
+// handleError 将内核返回的系统错误映射为包内定义的可判别错误，便于调用方用 errors.Is 判断。
 func handleError(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	// ENOENT 表示计数器不存在，探测内核支持情况时属于正常结果。
 	case errors.Is(err, syscall.ENOENT):
 		return ErrObjectNotFound
+	// 内核用 EBUSY 表示同名计数器已经存在。
 	case errors.Is(err, syscall.EBUSY):
 		return ErrObjectAlreadyExists
 	default:
@@ -191,28 +207,27 @@ func handleError(err error) error {
 	}
 }
 
-// decode function processes a byte stream, requiring the 'strict' parameter to be true in production and
-// false only for testing purposes. If in strict mode and any of the relevant attributes (name, packets, or bytes)
-// have not been processed, an error is returned indicating a failure to decode the byte stream.
+// decode 解析 netlink 字节流并构造 Counter。strict 在生产环境中必须为 true，
+// 仅测试时可传 false：严格模式下若名称、包数、字节数三个属性有任一未处理完，
+// 就认为字节流解析失败并返回错误。
 //
-// Parse the netlink message as per the documentation outlined in:
+// netlink 消息格式参见：
 // https://docs.kernel.org/userspace-api/netlink/intro.html
 //
-// Message Components:
-//   - netfilter generic message [4 bytes]
-//     struct nfgenmsg (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink.h#L32-L38)
-//   - attributes [variable-sized, must align to 4 bytes from the start of attribute]
-//     struct nlattr (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L220-L232)
+// 消息组成：
+//   - netfilter 通用消息 [4 字节]
+//     struct nfgenmsg（定义：https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink.h#L32-L38）
+//   - 属性 [变长，每个属性起始处需按 4 字节对齐]
+//     struct nlattr（定义：https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L220-L232）
 //
-// Attribute Components:
-//   - length [2 bytes]
-//     length includes bytes for defining the length itself, bytes for defining the type,
-//     and the actual bytes of data without any padding.
-//   - type [2 bytes]
-//   - data [variable-sized]
-//   - padding [optional]
+// 属性组成：
+//   - 长度 [2 字节]
+//     包含长度字段自身、类型字段以及不含填充的实际数据所占的字节数。
+//   - 类型 [2 字节]
+//   - 数据 [变长]
+//   - 填充 [可选]
 //
-// Example. Counter{Name: "dummy-metric", Packets: 123, Bytes: 54321} in netlink message:
+// 示例：Counter{Name: "dummy-metric", Packets: 123, Bytes: 54321} 对应的 netlink 消息：
 //
 //	struct nfgenmsg{
 //	    __u8  nfgen_family: AF_NETLINK
@@ -243,76 +258,69 @@ func handleError(err error) error {
 func decode(msg []byte, strict bool) (*Counter, error) {
 	counter := &Counter{}
 	reader := bytes.NewReader(msg)
-	// skip the first 4 bytes (netfilter generic message).
+	// 前 4 字节是与计数器内容无关的 netfilter 通用消息头，必须跳过。
 	if _, err := reader.Seek(nl.SizeofNfgenmsg, io.SeekCurrent); err != nil {
 		return nil, err
 	}
 
-	// attrsProcessed tracks the number of processed attributes.
+	// 记录已处理的必需属性个数，严格模式下据此判断字节流是否完整。
 	var attrsProcessed int
 
-	// length and type of netlink attribute.
+	// netlink 属性的长度与类型各占 2 字节。
 	var length, attrType uint16
 
-	// now we are just left with the attributes(struct nlattr) after skipping netlink generic
-	// message; we iterate over all the attributes one by one to construct our Counter object.
+	// 跳过通用消息头后剩下的都是 struct nlattr 属性，逐个解析以填充 Counter。
 	for reader.Len() > 0 {
-		// netlink attributes are in LTV(length, type and value) format.
+		// 属性采用 LTV（长度、类型、值）格式，顺序读取即可定位下一个属性。
 
-		// STEP 1. parse length [2 bytes]
+		// 第 1 步：读取 2 字节长度。
 		if err := binary.Read(reader, binary.NativeEndian, &length); err != nil {
 			return nil, err
 		}
 
-		// STEP 2. parse type   [2 bytes]
+		// 第 2 步：读取 2 字节类型。
 		if err := binary.Read(reader, binary.NativeEndian, &attrType); err != nil {
 			return nil, err
 		}
 
-		// STEP 3. adjust the length
-		// adjust the length to consider the header bytes read in step(1) and step(2); the actual
-		// length of data will be 4 bytes less than the originally read value.
+		// 第 3 步：修正长度。nla_len 包含刚读过的 4 字节头部，
+		// 因此数据部分实际长度要减去 4。
 		length -= 4
 
-		// STEP 4. parse value  [variable sized]
-		// The value can assume any data-type. To read it into the appropriate data structure, we need
-		// to know the data type in advance. We achieve this by switching on the attribute-type, and we
-		// allocate the 'adjusted length' bytes (as done in step(3)) for the data-structure.
+		// 第 4 步：读取变长的值。只有先根据属性类型确定数据类型，才能正确解码，
+		// 变长数据按第 3 步得到的修正长度分配空间。
 		switch attrType {
 		case attrName:
-			// NFACCT_NAME has a variable size, so we allocate a slice of 'adjusted length' bytes
-			// and read the next 'adjusted length' bytes into this slice.
+			// NFACCT_NAME 是变长字段，按修正后的长度读取；末尾的零终止符不属于名称。
 			data := make([]byte, length)
 			if err := binary.Read(reader, binary.NativeEndian, data); err != nil {
 				return nil, err
 			}
+			// 去掉内核附加的零终止符，否则名称比较会失败。
 			counter.Name = string(data[:length-1])
 			attrsProcessed++
 		case attrPackets:
-			// NFACCT_PKTS holds 8 bytes of data, so we directly read the next 8 bytes into a 64-bit
-			// unsigned integer (counter.Packets).
+			// NFACCT_PKTS 固定为 8 字节，按网络字节序读成 uint64。
 			if err := binary.Read(reader, binary.BigEndian, &counter.Packets); err != nil {
 				return nil, err
 			}
 			attrsProcessed++
 		case attrBytes:
-			// NFACCT_BYTES holds 8 bytes of data, so we directly read the next 8 bytes into a 64-bit
-			// unsigned integer (counter.Bytes).
+			// NFACCT_BYTES 固定为 8 字节，按网络字节序读成 uint64。
 			if err := binary.Read(reader, binary.BigEndian, &counter.Bytes); err != nil {
 				return nil, err
 			}
 			attrsProcessed++
 		default:
-			// skip the data part for unknown attribute
+			// 未知属性只跳过其值，保证后续属性仍能从正确偏移开始解析。
 			if _, err := reader.Seek(int64(length), io.SeekCurrent); err != nil {
 				return nil, err
 			}
 		}
 
-		// Move past the padding to align with the fixed-size length, always a multiple of 4.
-		// If, for instance, the length is 9, skip 3 bytes of padding to reach the start of
-		// the next attribute.
-		// (ref: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L220-L227)
+		// 每个属性都按 4 字节对齐，例如长度为 9 时需跳过 3 字节填充，
+		// 否则下一个属性会被从填充字节开始误读。
+		// （参考：https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L220-L227）
 		if length%4 != 0 {
 			padding := 4 - length%4
 			if _, err := reader.Seek(int64(padding), io.SeekCurrent); err != nil {
@@ -321,7 +329,7 @@ func decode(msg []byte, strict bool) (*Counter, error) {
 		}
 	}
 
-	// return err if any of the required attribute is not processed.
+	// 严格模式下必须收齐三个属性，否则消息不完整，不能交给调用方使用。
 	if strict && attrsProcessed != 3 {
 		return nil, errors.New("failed to decode byte-stream")
 	}

@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package healthcheck provides tools for serving kube-proxy healthchecks.
+// Package healthcheck 提供用于对外提供 kube-proxy 健康检查服务的工具。
 package healthcheck

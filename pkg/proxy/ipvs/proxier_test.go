@@ -60,15 +60,18 @@ import (
 
 const testNodeName = "test-node"
 
-// fakeIpvs implements utilipvs.Interface
+// fakeIpvs 实现 utilipvs.Interface，用于在不触碰内核 IPVS 的情况下驱动 proxier。
 type fakeIpvs struct {
 	ipvsErr   string
 	vsCreated bool
 }
 
+// Flush 是空实现：fake 状态由各字段直接保存，无需清空内核状态。
 func (f *fakeIpvs) Flush() error {
 	return nil
 }
+
+// AddVirtualServer 在 ipvsErr 指定时返回错误，用于验证添加失败路径；否则记录已创建虚拟服务。
 func (f *fakeIpvs) AddVirtualServer(*utilipvs.VirtualServer) error {
 	if f.ipvsErr == "AddVirtualServer" {
 		return fmt.Errorf("oops")
@@ -76,18 +79,26 @@ func (f *fakeIpvs) AddVirtualServer(*utilipvs.VirtualServer) error {
 	f.vsCreated = true
 	return nil
 }
+
+// UpdateVirtualServer 是空实现，仅满足接口要求。
 func (f *fakeIpvs) UpdateVirtualServer(*utilipvs.VirtualServer) error {
 	return nil
 }
+
+// DeleteVirtualServer 在 ipvsErr 指定时返回错误，用于验证删除失败路径。
 func (f *fakeIpvs) DeleteVirtualServer(*utilipvs.VirtualServer) error {
 	if f.ipvsErr == "DeleteVirtualServer" {
 		return fmt.Errorf("oops")
 	}
 	return nil
 }
+
+// GetVirtualServer 总是返回空结果：测试通过 GetVirtualServers 检查状态。
 func (f *fakeIpvs) GetVirtualServer(*utilipvs.VirtualServer) (*utilipvs.VirtualServer, error) {
 	return nil, nil
 }
+
+// GetVirtualServers 在 ipvsErr 指定时返回错误；否则按 vsCreated 返回置位符虚拟服务，供清理逻辑测试使用。
 func (f *fakeIpvs) GetVirtualServers() ([]*utilipvs.VirtualServer, error) {
 	if f.ipvsErr == "GetVirtualServers" {
 		return nil, fmt.Errorf("oops")
@@ -98,38 +109,51 @@ func (f *fakeIpvs) GetVirtualServers() ([]*utilipvs.VirtualServer, error) {
 	}
 	return nil, nil
 }
+
+// AddRealServer 是空实现：真实服务器的状态由 ipvstest.FakeIPVS 维护。
 func (f *fakeIpvs) AddRealServer(*utilipvs.VirtualServer, *utilipvs.RealServer) error {
 	return nil
 }
+
+// GetRealServers 返回空结果，fake 的真实服务器状态由 ipvstest.FakeIPVS 提供。
 func (f *fakeIpvs) GetRealServers(*utilipvs.VirtualServer) ([]*utilipvs.RealServer, error) {
 	return nil, nil
 }
+
+// DeleteRealServer 是空实现，仅满足接口要求。
 func (f *fakeIpvs) DeleteRealServer(*utilipvs.VirtualServer, *utilipvs.RealServer) error {
 	return nil
 }
+
+// UpdateRealServer 是空实现；权重测试直接读取并修改 ipvstest.FakeIPVS 中的对象。
 func (f *fakeIpvs) UpdateRealServer(*utilipvs.VirtualServer, *utilipvs.RealServer) error {
 	return nil
 }
+
+// ConfigureTimeouts 是空实现，fake 不需要配置内核超时参数。
 func (f *fakeIpvs) ConfigureTimeouts(time.Duration, time.Duration, time.Duration) error {
 	return nil
 }
 
-// fakeIPSetVersioner implements IPSetVersioner.
+// fakeIPSetVersioner 实现 IPSetVersioner，用于让测试注入 ipset 版本及其查询错误。
 type fakeIPSetVersioner struct {
 	version string
 	err     error
 }
 
+// GetVersion 返回预设的版本号或错误，用于覆盖版本探测失败分支。
 func (fake *fakeIPSetVersioner) GetVersion() (string, error) {
 	return fake.version, fake.err
 }
 
+// NewFakeProxier 用 fake 的 iptables、IPVS、ipset 和 netlink 接口构造 Proxier；
+// 使用假的 netlink 句柄是为了让测试无需真实网卡与 root 权限。
 func NewFakeProxier(ctx context.Context, ipt utiliptables.Interface, ipvs utilipvs.Interface, ipset utilipset.Interface, nodeIPs []string, excludeCIDRs []*net.IPNet, ipFamily v1.IPFamily) *Proxier {
 
 	netlinkHandle := netlinktest.NewFakeNetlinkHandle(ipFamily == v1.IPv6Protocol)
 	netlinkHandle.SetLocalAddresses("eth0", nodeIPs...)
 
-	// initialize ipsetList with all sets we needed
+	// 用测试所需的全部 ipset 集合初始化 ipsetList
 	ipsetList := make(map[string]*IPSet)
 	for _, is := range ipsetInfo {
 		ipsetList[is.name] = NewIPSet(ipset, is.name, is.setType, false, is.comment)
@@ -166,10 +190,13 @@ func NewFakeProxier(ctx context.Context, ipt utiliptables.Interface, ipvs utilip
 	return p
 }
 
+// makeNSN 构造 NamespaceName，避免测试中重复书写 {Namespace, Name}。
 func makeNSN(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
 }
 
+// makeServiceMap 先投递 Service 事件，再置 servicesSynced；
+// 只有同步标志置位后 syncProxyRules 才会真正应用变更。
 func makeServiceMap(proxier *Proxier, allServices ...*v1.Service) {
 	for i := range allServices {
 		proxier.OnServiceAdd(allServices[i])
@@ -180,6 +207,7 @@ func makeServiceMap(proxier *Proxier, allServices ...*v1.Service) {
 	proxier.servicesSynced = true
 }
 
+// makeEndpointSliceMap 投递 EndpointSlice 事件并置 endpointSlicesSynced，使后续 Sync 能应用 endpoint 变更。
 func makeEndpointSliceMap(proxier *Proxier, allEpSlices ...*discovery.EndpointSlice) {
 	for i := range allEpSlices {
 		proxier.OnEndpointSliceAdd(allEpSlices[i])
@@ -189,6 +217,7 @@ func makeEndpointSliceMap(proxier *Proxier, allEpSlices ...*discovery.EndpointSl
 	proxier.endpointSlicesSynced = true
 }
 
+// makeTestService 构造最小 Service 对象，再交给 svcFunc 填充测试所需字段。
 func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Service {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -203,12 +232,14 @@ func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Serv
 	return svc
 }
 
+// populateEndpointSlices 仅投递 EndpointSlice 事件，不置同步标志，便于测试 Event 处理前后的增量状态。
 func populateEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.EndpointSlice) {
 	for i := range allEndpointSlices {
 		proxier.OnEndpointSliceAdd(allEndpointSlices[i])
 	}
 }
 
+// makeTestEndpointSlice 按名称与序号构造 EndpointSlice，序号保证同一 Service 的多个 slice 名称唯一。
 func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*discovery.EndpointSlice)) *discovery.EndpointSlice {
 	eps := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -221,69 +252,70 @@ func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*d
 	return eps
 }
 
+// TestGetNodeIPs 验证候选节点地址过滤：排除回环和 kube-ipvs0 上的地址，且按地址族筛选。
 func TestGetNodeIPs(t *testing.T) {
 	testCases := []struct {
 		isIPv6       bool
 		devAddresses map[string][]string
 		expectIPs    []string
 	}{
-		// case 0
+		// 场景 0
 		{
 			devAddresses: map[string][]string{"eth0": {"1.2.3.4"}, "lo": {"127.0.0.1"}},
 			expectIPs:    []string{"1.2.3.4"},
 		},
-		// case 1
+		// 场景 1
 		{
 			devAddresses: map[string][]string{"lo": {"127.0.0.1"}},
 			expectIPs:    []string{},
 		},
-		// case 2
+		// 场景 2
 		{
 			devAddresses: map[string][]string{},
 			expectIPs:    []string{},
 		},
-		// case 3
+		// 场景 3
 		{
 			devAddresses: map[string][]string{"encap0": {"10.20.30.40", "fe80::200:ff:fe01:1"}, "lo": {"127.0.0.1", "::1"}, "docker0": {"172.17.0.1"}},
 			expectIPs:    []string{"10.20.30.40", "172.17.0.1"},
 		},
-		// case 4
+		// 场景 4
 		{
 			devAddresses: map[string][]string{"encaps9": {"10.20.30.40"}, "lo": {"127.0.0.1", "::1"}, "encap7": {"1000::", "10.20.30.31"}},
 			expectIPs:    []string{"10.20.30.40", "10.20.30.31"},
 		},
-		// case 5
+		// 场景 5
 		{
 			devAddresses: map[string][]string{"kube-ipvs0": {"2000::", "1.2.3.4"}, "lo": {"127.0.0.1", "::1"}, "encap7": {"1000::", "10.20.30.31"}},
 			expectIPs:    []string{"10.20.30.31"},
 		},
-		// case 6
+		// 场景 6
 		{
 			devAddresses: map[string][]string{"kube-ipvs0": {"1.2.3.4", "2.3.4.5"}, "lo": {"127.0.0.1", "::1"}},
 			expectIPs:    []string{},
 		},
-		// case 7
+		// 场景 7
 		{
 			devAddresses: map[string][]string{"kube-ipvs0": {"1.2.3.4", "2.3.4.5"}},
 			expectIPs:    []string{},
 		},
-		// case 8
+		// 场景 8
 		{
 			devAddresses: map[string][]string{"kube-ipvs0": {"1.2.3.4", "2.3.4.5"}, "eth5": {"3.4.5.6"}, "lo": {"127.0.0.1", "::1"}},
 			expectIPs:    []string{"3.4.5.6"},
 		},
-		// case 9
+		// 场景 9
 		{
 			devAddresses: map[string][]string{"ipvs0": {"1.2.3.4"}, "lo": {"127.0.0.1", "::1"}, "encap7": {"10.20.30.31"}},
 			expectIPs:    []string{"10.20.30.31", "1.2.3.4"},
 		},
-		// case 10
+		// 场景 10
 		{
 			isIPv6:       true,
 			devAddresses: map[string][]string{"ipvs0": {"1.2.3.4", "1000::"}, "lo": {"127.0.0.1", "::1"}, "encap7": {"10.20.30.31", "2000::", "fe80::200:ff:fe01:1"}},
 			expectIPs:    []string{"1000::", "2000::"},
 		},
-		// case 11
+		// 场景 11
 		{
 			isIPv6:       true,
 			devAddresses: map[string][]string{"ipvs0": {"1.2.3.4", "1000::"}, "lo": {"127.0.0.1", "::1"}, "encap7": {"10.20.30.31", "2000::", "fe80::200:ff:fe01:1"}, "kube-ipvs0": {"1.2.3.4", "2.3.4.5", "2000::"}},
@@ -304,6 +336,7 @@ func TestGetNodeIPs(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
+		// 减去 kube-ipvs0 的地址：这些地址由 kube-proxy 自己绑定，不能当作对外节点地址。
 		ips = ips.Difference(devIps)
 		if !ips.Equal(sets.New(tc.expectIPs...)) {
 			t.Errorf("case[%d], unexpected mismatch, expected: %v, got: %v", i, tc.expectIPs, ips)
@@ -311,6 +344,8 @@ func TestGetNodeIPs(t *testing.T) {
 	}
 }
 
+// TestNodePortIPv4 验证 IPv4 NodePort 服务的 IPVS 虚拟服务及配套 ipset/iptables 规则，
+// 覆盖多节点 IP、多协议以及 externalTrafficPolicy=Local 等场景。
 func TestNodePortIPv4(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -839,6 +874,7 @@ func TestNodePortIPv4(t *testing.T) {
 			ipvs := ipvstest.NewFake()
 			ipset := ipsettest.NewFake(testIPSetVersion)
 			fp := NewFakeProxier(ctx, ipt, ipvs, ipset, test.nodeIPs, nil, v1.IPv4Protocol)
+			// 注入 nodePortAddresses 而不是使用默认值，便于逐用例验证地址白名单的过滤效果。
 			fp.nodePortAddresses = proxyutil.NewNodePortAddresses(v1.IPv4Protocol, test.nodePortAddresses)
 
 			makeServiceMap(fp, test.services...)
@@ -852,6 +888,7 @@ func TestNodePortIPv4(t *testing.T) {
 				t.Errorf("unexpected IPVS state")
 			}
 
+			// 仅当用例声明了期望 ipset 时才检查，避免把没有 ipset 变更的用例误判为失败。
 			if test.expectedIPSets != nil {
 				checkIPSet(t, fp, test.expectedIPSets)
 			}
@@ -863,6 +900,7 @@ func TestNodePortIPv4(t *testing.T) {
 	}
 }
 
+// TestNodePortIPv6 验证 IPv6 NodePort 服务的输出，并确认 IPv6 Proxier 会忽略纯 IPv4 的服务和 endpoint。
 func TestNodePortIPv6(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -1181,6 +1219,7 @@ func TestNodePortIPv6(t *testing.T) {
 			ipt := iptablestest.NewFake()
 			ipvs := ipvstest.NewFake()
 			ipset := ipsettest.NewFake(testIPSetVersion)
+			// 构造 IPv6 Proxier，使只有 IPv6 地址族的 Service/endpoint 进入规则。
 			fp := NewFakeProxier(ctx, ipt, ipvs, ipset, test.nodeIPs, nil, v1.IPv6Protocol)
 			fp.nodePortAddresses = proxyutil.NewNodePortAddresses(v1.IPv6Protocol, test.nodePortAddresses)
 
@@ -1206,6 +1245,8 @@ func TestNodePortIPv6(t *testing.T) {
 	}
 }
 
+// Test_syncEndpoint_updateWeightsOnRestart 验证进程重启后首次同步会重置权重，
+// 避免权重为 0 的 RealServer 在按下线状态终止后永久不再承接流量。
 func Test_syncEndpoint_updateWeightsOnRestart(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -1233,7 +1274,7 @@ func Test_syncEndpoint_updateWeightsOnRestart(t *testing.T) {
 		}}
 	})
 
-	// sync proxy rules to get to the desired initial state
+	// 同步代理规则，先进入测试所需的初始状态
 	makeServiceMap(fp, svc1)
 	makeEndpointSliceMap(fp, epSlice1)
 	fp.syncProxyRules()
@@ -1255,13 +1296,15 @@ func Test_syncEndpoint_updateWeightsOnRestart(t *testing.T) {
 		t.Errorf("failed to get real servers, err: %v", err)
 	}
 	for _, rs := range rss {
+		// 人为把权重改成 0，模拟上一次进程退出前 realserver 处于下线状态。
 		rs.Weight = 0
 		if err = fp.ipvs.UpdateRealServer(vs, rs); err != nil {
 			t.Errorf("failed to update real server: %v, err: %v", rs, err)
 		}
 	}
 
-	// simulate a restart by enabling initial sync logic.
+	// 打开 initialSync 模拟重启后的首次同步，验证权重被恢复。
+	// 借助初始同步逻辑模拟重启，以验证重启时的权重处理。
 	fp.initialSync = true
 	err = fp.syncEndpoint(proxy.ServicePortName{
 		NamespacedName: types.NamespacedName{
@@ -1287,6 +1330,7 @@ func Test_syncEndpoint_updateWeightsOnRestart(t *testing.T) {
 	}
 }
 
+// TestIPv4Proxier 验证 IPv4 地址族下 ClusterIP 服务只使用同地址族的 Service 和 endpoint。
 func TestIPv4Proxier(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1411,6 +1455,7 @@ func TestIPv4Proxier(t *testing.T) {
 			ipset := ipsettest.NewFake(testIPSetVersion)
 			fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 
+			// 同时加入 IPv4 与 IPv6 服务，断言 IPv4 Proxier 只处理前者。
 			makeServiceMap(fp, test.services...)
 			populateEndpointSlices(fp, test.endpoints...)
 
@@ -1425,6 +1470,7 @@ func TestIPv4Proxier(t *testing.T) {
 	}
 }
 
+// TestIPv6Proxier 验证 IPv6 地址族下 ClusterIP 服务只使用同地址族的 Service 和 endpoint。
 func TestIPv6Proxier(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1549,6 +1595,7 @@ func TestIPv6Proxier(t *testing.T) {
 			ipset := ipsettest.NewFake(testIPSetVersion)
 			fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv6Protocol)
 
+			// 同时加入 IPv4 与 IPv6 服务，断言 IPv6 Proxier 只处理后者。
 			makeServiceMap(fp, test.services...)
 			populateEndpointSlices(fp, test.endpoints...)
 
@@ -1563,6 +1610,7 @@ func TestIPv6Proxier(t *testing.T) {
 	}
 }
 
+// TestExternalIPsNoEndpoint 验证没有 endpoint 时 ExternalIP 仍会创建虚拟服务，但没有任何 RealServer。
 func TestExternalIPsNoEndpoint(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -1592,11 +1640,12 @@ func TestExternalIPsNoEndpoint(t *testing.T) {
 	)
 	fp.syncProxyRules()
 
-	// check ipvs service and destinations
+	// 校验 IPVS 虚拟服务及其后端目的地
 	services, err := ipvs.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
 	}
+	// ClusterIP 与 ExternalIP 各对应一个虚拟服务，因此期望条目数为 2。
 	if len(services) != 2 {
 		t.Errorf("Expect 2 ipvs services, got %d", len(services))
 	}
@@ -1616,6 +1665,7 @@ func TestExternalIPsNoEndpoint(t *testing.T) {
 	}
 }
 
+// TestExternalIPs 验证 IPv4 Proxier 为 ExternalIP 建立虚拟服务及 RealServer，并过滤其他地址族。
 func TestExternalIPs(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -1661,11 +1711,12 @@ func TestExternalIPs(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// check ipvs service and destinations
+	// 校验 IPVS 虚拟服务及其后端目的地
 	services, err := ipvs.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
 	}
+	// 期望 3 个：ClusterIP、IPv4 ExternalIP、回环 ExternalIP；IPv6 ExternalIP 被地址族过滤。
 	if len(services) != 3 { // ipvs filters out by ipfamily
 		t.Errorf("Expect 3 ipvs services, got %d", len(services))
 	}
@@ -1687,6 +1738,7 @@ func TestExternalIPs(t *testing.T) {
 	}
 }
 
+// TestOnlyLocalExternalIPs 验证 ExternalTrafficPolicy=Local 时 ExternalIP 的虚拟服务只包含本节点 endpoint。
 func TestOnlyLocalExternalIPs(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -1740,7 +1792,7 @@ func TestOnlyLocalExternalIPs(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// check ipvs service and destinations
+	// 校验 IPVS 虚拟服务及其后端目的地
 	services, err := ipvs.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
@@ -1753,6 +1805,7 @@ func TestOnlyLocalExternalIPs(t *testing.T) {
 		if svcExternalIPs.Has(svc.Address.String()) && svc.Port == uint16(svcPort) && svc.Protocol == string(v1.ProtocolTCP) {
 			found = true
 			destinations, _ := ipvs.GetRealServers(svc)
+			// Local 策略下只允许本节点 endpoint，因此期望 1 个 RealServer。
 			if len(destinations) != 1 {
 				t.Errorf("Expect only 1 local endpoint. but got %v", len(destinations))
 			}
@@ -1769,6 +1822,7 @@ func TestOnlyLocalExternalIPs(t *testing.T) {
 	}
 }
 
+// TestLoadBalancer 验证 LoadBalancer 场景下 IPVS 服务、ipset 与 iptables 规则的完整输出。
 func TestLoadBalancer(t *testing.T) {
 	ipt, fp := buildFakeProxier(t)
 	svcIP := "10.20.30.41"
@@ -1813,7 +1867,7 @@ func TestLoadBalancer(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// Expect 2 services and 1 destination
+	// 期望存在 2 个虚拟服务和 1 个目的地
 	epVS := &netlinktest.ExpectedVirtualServer{
 		VSNum: 2, IP: svcLBIP, Port: uint16(svcNodePort), Protocol: string(v1.ProtocolTCP),
 		RS: []netlinktest.ExpectedRealServer{{
@@ -1821,7 +1875,7 @@ func TestLoadBalancer(t *testing.T) {
 		}}}
 	checkIPVS(t, fp, epVS)
 
-	// check ipSet rules
+	// 校验 ipset 条目
 	epIPSet := netlinktest.ExpectedIPSet{
 		kubeLoadBalancerSet: {{
 			IP:       svcLBIP,
@@ -1832,7 +1886,7 @@ func TestLoadBalancer(t *testing.T) {
 	}
 	checkIPSet(t, fp, epIPSet)
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeServicesChain): {{
 			JumpChain: "RETURN", SourceAddress: "127.0.0.0/8",
@@ -1854,6 +1908,7 @@ func TestLoadBalancer(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// TestOnlyLocalNodePorts 验证 Local 策略下 NodePort 只转发到本节点 endpoint，且 ipset/iptables 联动正确。
 func TestOnlyLocalNodePorts(t *testing.T) {
 	nodeIP := netutils.ParseIPSloppy("100.101.102.103")
 	ipt, fp := buildFakeProxier(t)
@@ -1907,11 +1962,12 @@ func TestOnlyLocalNodePorts(t *testing.T) {
 	addrs1 := []net.Addr{&net.IPNet{IP: netutils.ParseIPSloppy("2001:db8::"), Mask: net.CIDRMask(64, 128)}}
 	fp.networkInterfacer.(*proxyutiltest.FakeNetwork).AddInterfaceAddr(&itf, addrs)
 	fp.networkInterfacer.(*proxyutiltest.FakeNetwork).AddInterfaceAddr(&itf1, addrs1)
+	// 限定 nodePortAddresses 为 eth0 所在网段，验证 NodePort 只绑定到白名单内的地址。
 	fp.nodePortAddresses = proxyutil.NewNodePortAddresses(v1.IPv4Protocol, []string{"100.101.102.0/24"})
 
 	fp.syncProxyRules()
 
-	// Expect 2 services and 1 destination
+	// 期望存在 2 个虚拟服务和 1 个目的地
 	epVS := &netlinktest.ExpectedVirtualServer{
 		VSNum: 2, IP: nodeIP.String(), Port: uint16(svcNodePort), Protocol: string(v1.ProtocolTCP),
 		RS: []netlinktest.ExpectedRealServer{{
@@ -1919,7 +1975,7 @@ func TestOnlyLocalNodePorts(t *testing.T) {
 		}}}
 	checkIPVS(t, fp, epVS)
 
-	// check ipSet rules
+	// 校验 ipset 条目
 	epEntry := &utilipset.Entry{
 		Port:     svcNodePort,
 		Protocol: strings.ToLower(string(v1.ProtocolTCP)),
@@ -1931,7 +1987,7 @@ func TestOnlyLocalNodePorts(t *testing.T) {
 	}
 	checkIPSet(t, fp, epIPSet)
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeServicesChain): {{
 			JumpChain: "RETURN", SourceAddress: "127.0.0.0/8",
@@ -1953,6 +2009,7 @@ func TestOnlyLocalNodePorts(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// TestHealthCheckNodePort 验证健康检查端口只允许 Local 策略的服务，且健康端口集合随无效服务被排除。
 func TestHealthCheckNodePort(t *testing.T) {
 	ipt, fp := buildFakeProxier(t)
 
@@ -1979,7 +2036,8 @@ func TestHealthCheckNodePort(t *testing.T) {
 	svc1, svc2, invalidSvc3 := *sampleSvc, *sampleSvc, *sampleSvc
 	svc1.Name, svc1.Spec.HealthCheckNodePort = "valid-svc1", 30000
 	svc2.Name, svc2.Spec.HealthCheckNodePort = "valid-svc2", 30001
-	// make svc3 invalid by setting external traffic policy to cluster
+	// 把 svc3 的策略改成 Cluster：Cluster 策略不启用节点健康检查，因此应被排除。
+	// 将 externalTrafficPolicy 改为 Cluster，使 svc3 不再是合法的本地流量服务
 	invalidSvc3.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyCluster
 	invalidSvc3.Name, invalidSvc3.Spec.HealthCheckNodePort = "invalid-svc3", 30002
 
@@ -1999,7 +2057,7 @@ func TestHealthCheckNodePort(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// check ipSet rules
+	// 校验 ipset 条目
 	makeTCPEntry := func(port int) *utilipset.Entry {
 		return &utilipset.Entry{
 			Port:     port,
@@ -2008,12 +2066,12 @@ func TestHealthCheckNodePort(t *testing.T) {
 		}
 	}
 	epIPSet := netlinktest.ExpectedIPSet{
-		// healthcheck node port set should only contain valid HC node ports
+		// 健康检查节点端口集合只应包含有效的 HC 节点端口
 		kubeHealthCheckNodePortSet: {makeTCPEntry(30000), makeTCPEntry(30001)},
 	}
 	checkIPSet(t, fp, epIPSet)
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeNodePortChain): {{
 			JumpChain: "RETURN", MatchSet: kubeNodePortLocalSetTCP,
@@ -2026,6 +2084,7 @@ func TestHealthCheckNodePort(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// TestLoadBalancerSourceRanges 验证 LoadBalancerSourceRanges 生成源 CIDR ipset 与防火墙链。
 func TestLoadBalancerSourceRanges(t *testing.T) {
 	ipt, fp := buildFakeProxier(t)
 
@@ -2072,7 +2131,7 @@ func TestLoadBalancerSourceRanges(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// Check ipvs service and destinations
+	// 校验 IPVS 虚拟服务及其后端目的地
 	epVS := &netlinktest.ExpectedVirtualServer{
 		VSNum: 2, IP: svcLBIP, Port: uint16(svcPort), Protocol: string(v1.ProtocolTCP),
 		RS: []netlinktest.ExpectedRealServer{{
@@ -2080,7 +2139,7 @@ func TestLoadBalancerSourceRanges(t *testing.T) {
 		}}}
 	checkIPVS(t, fp, epVS)
 
-	// Check ipset entry
+	// 校验 ipset 条目
 	epIPSet := netlinktest.ExpectedIPSet{
 		kubeLoadBalancerSet: {{
 			IP:       svcLBIP,
@@ -2104,7 +2163,7 @@ func TestLoadBalancerSourceRanges(t *testing.T) {
 	}
 	checkIPSet(t, fp, epIPSet)
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeServicesChain): {{
 			JumpChain: "RETURN", SourceAddress: "127.0.0.0/8",
@@ -2131,6 +2190,7 @@ func TestLoadBalancerSourceRanges(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// TestAcceptIPVSTraffic 验证 iptables 规则能放行由 IPVS 转发的流量，覆盖 ClusterIP、ExternalIP、LoadBalancer、NodePort 服务。
 func TestAcceptIPVSTraffic(t *testing.T) {
 	ipt, fp := buildFakeProxier(t)
 
@@ -2184,7 +2244,7 @@ func TestAcceptIPVSTraffic(t *testing.T) {
 	}
 	fp.syncProxyRules()
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeServicesChain): {
 			{JumpChain: "RETURN", SourceAddress: "127.0.0.0/8"},
@@ -2201,6 +2261,7 @@ func TestAcceptIPVSTraffic(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// TestOnlyLocalLoadBalancing 验证 Local 策略下 LoadBalancer 只使用本节点 endpoint，并生成对应的本地 ipset 和规则。
 func TestOnlyLocalLoadBalancing(t *testing.T) {
 	ipt, fp := buildFakeProxier(t)
 
@@ -2255,7 +2316,7 @@ func TestOnlyLocalLoadBalancing(t *testing.T) {
 
 	fp.syncProxyRules()
 
-	// Expect 2 services and 1 destination
+	// 期望存在 2 个虚拟服务和 1 个目的地
 	epVS := &netlinktest.ExpectedVirtualServer{
 		VSNum: 2, IP: svcLBIP, Port: uint16(svcPort), Protocol: string(v1.ProtocolTCP),
 		RS: []netlinktest.ExpectedRealServer{{
@@ -2263,7 +2324,7 @@ func TestOnlyLocalLoadBalancing(t *testing.T) {
 		}}}
 	checkIPVS(t, fp, epVS)
 
-	// check ipSet rules
+	// 校验 ipset 条目
 	epIPSet := netlinktest.ExpectedIPSet{
 		kubeLoadBalancerSet: {{
 			IP:       svcLBIP,
@@ -2280,7 +2341,7 @@ func TestOnlyLocalLoadBalancing(t *testing.T) {
 	}
 	checkIPSet(t, fp, epIPSet)
 
-	// Check iptables chain and rules
+	// 校验 iptables 链和规则
 	epIpt := netlinktest.ExpectedIptablesChain{
 		string(kubeServicesChain): {{
 			JumpChain: "RETURN", SourceAddress: "127.0.0.0/8",
@@ -2304,6 +2365,7 @@ func TestOnlyLocalLoadBalancing(t *testing.T) {
 	checkIptables(t, ipt, epIpt)
 }
 
+// addTestPort 向端口列表追加一个 ServicePort，targetPort 按整数构造。
 func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port, nodeport int32, targetPort int) []v1.ServicePort {
 	svcPort := v1.ServicePort{
 		Name:       name,
@@ -2315,6 +2377,7 @@ func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port
 	return append(array, svcPort)
 }
 
+// TestBuildServiceMapAddRemove 验证 Service 增删改后 svcPortMap 与健康检查端口集合的增量更新。
 func TestBuildServiceMapAddRemove(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -2370,12 +2433,13 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 	for i := range services {
 		fp.OnServiceAdd(services[i])
 	}
+	// Update 将挂起的 Service 事件应用到 svcPortMap，是断言的中间步骤。
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 12 {
 		t.Errorf("expected service map length 12, got %v", fp.svcPortMap)
 	}
 
-	// The only-local-loadbalancer ones get added
+	// 仅将 only-local 的 LoadBalancer 服务规则加入
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 1 {
 		t.Errorf("expected 1 healthcheck port, got %v", healthCheckNodePorts)
@@ -2386,8 +2450,8 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		}
 	}
 
-	// Remove some stuff
-	// oneService is a modification of services[0] with removed first port.
+	// 删除部分服务和端点，验证规则随之收敛
+	// oneService 是 services[0] 去掉第一个端口后的副本，用于测试端口变更
 	oneService := makeTestService("somewhere-else", "cluster-ip", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
 		svc.Spec.ClusterIP = "172.16.55.4"
@@ -2409,6 +2473,7 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 	}
 }
 
+// TestBuildServiceMapServiceHeadless 验证 headless Service 不会进入 svcPortMap，也不产生健康检查端口。
 func TestBuildServiceMapServiceHeadless(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -2433,19 +2498,20 @@ func TestBuildServiceMapServiceHeadless(t *testing.T) {
 		}),
 	)
 
-	// Headless service should be ignored
+	// Headless 服务没有 ClusterIP，应被忽略
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 0 {
 		t.Errorf("expected service map length 0, got %d", len(fp.svcPortMap))
 	}
 
-	// No proxied services, so no healthchecks
+	// 没有需要代理的服务，因此不应存在健康检查
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %d", len(healthCheckNodePorts))
 	}
 }
 
+// TestBuildServiceMapServiceTypeExternalName 验证 ExternalName 服务被忽略，即使它携带 ClusterIP 和端口。
 func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -2467,13 +2533,14 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 		t.Errorf("expected service map length 0, got %v", fp.svcPortMap)
 	}
 
-	// No proxied services, so no healthchecks
+	// 没有需要代理的服务，因此不应存在健康检查
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
 	}
 }
 
+// TestBuildServiceMapServiceUpdate 验证服务在 ClusterIP 与 LoadBalancer 之间来回切换时端口映射与健康端口正确同步。
 func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -2513,7 +2580,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
 	}
 
-	// Change service to load-balancer
+	// 将服务改为 LoadBalancer 类型
 	fp.OnServiceUpdate(servicev1, servicev2)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -2525,8 +2592,8 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// No change; make sure the service map stays the same and there are
-	// no health-check changes
+	// 服务未变化，确认服务映射与健康检查配置均保持不变
+	// （承接上一行）健康检查也不发生变化
 	fp.OnServiceUpdate(servicev2, servicev2)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -2538,7 +2605,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// And back to ClusterIP
+	// 再将服务改回 ClusterIP 类型
 	fp.OnServiceUpdate(servicev2, servicev1)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -2551,6 +2618,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	}
 }
 
+// TestSessionAffinity 验证 ClientIP 会话保持超时被写入 IPVS 虚拟服务。
 func TestSessionAffinity(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -2588,11 +2656,12 @@ func TestSessionAffinity(t *testing.T) {
 	)
 	fp.syncProxyRules()
 
-	// check ipvs service and destinations
+	// 校验 IPVS 虚拟服务及其后端目的地
 	services, err := ipvs.GetVirtualServers()
 	if err != nil {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
 	}
+	// 遍历所有虚拟服务逐一检查超时，确保 ExternalIP 与 ClusterIP 的虚拟服务都被覆盖。
 	for _, svc := range services {
 		if svc.Timeout != uint32(v1.DefaultClientIPServiceAffinitySeconds) {
 			t.Errorf("Unexpected mismatch ipvs service session affinity timeout: %d, expected: %d", svc.Timeout, v1.DefaultClientIPServiceAffinitySeconds)
@@ -2600,6 +2669,7 @@ func TestSessionAffinity(t *testing.T) {
 	}
 }
 
+// makeServicePortName 构造带协议的服务端口标识，与 proxier 内部键保持一致。
 func makeServicePortName(ns, name, port string, protocol v1.Protocol) proxy.ServicePortName {
 	return proxy.ServicePortName{
 		NamespacedName: makeNSN(ns, name),
@@ -2608,6 +2678,7 @@ func makeServicePortName(ns, name, port string, protocol v1.Protocol) proxy.Serv
 	}
 }
 
+// Test_updateEndpointsMap 表驱动验证 EndpointSlice 增删改后 endpointsMap 的内容、conntrack 清理标记与本地就绪端点计数。
 func Test_updateEndpointsMap(t *testing.T) {
 	emptyEndpointSlices := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1, func(*discovery.EndpointSlice) {}),
@@ -2634,6 +2705,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			Protocol: ptr.To(v1.ProtocolUDP),
 		}}
 	}
+	// 命名端口且端点位于本节点，用于验证本地端点判定。
 	namedPortLocal := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1,
 			func(eps *discovery.EndpointSlice) {
@@ -2652,6 +2724,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 	namedPort := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1, subset1),
 	}
+	// 端口名称变更但编号不变，用于验证命名端口映射更新。
 	namedPortRenamed := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1,
 			func(eps *discovery.EndpointSlice) {
@@ -2666,6 +2739,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 				}}
 			}),
 	}
+	// 端口编号变更但名称不变，用于验证命名端口映射更新。
 	namedPortRenumbered := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1,
 			func(eps *discovery.EndpointSlice) {
@@ -2680,6 +2754,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 				}}
 			}),
 	}
+	// 同一命名端口同时包含本地与非本地端点，用于验证本地优先策略。
 	namedPortsLocalNoLocal := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1,
 			func(eps *discovery.EndpointSlice) {
@@ -2936,9 +3011,9 @@ func Test_updateEndpointsMap(t *testing.T) {
 	}
 
 	testCases := []struct {
-		// previousEndpoints and currentEndpoints are used to call appropriate
-		// handlers OnEndpoints* (based on whether corresponding values are nil
-		// or non-nil) and must be of equal length.
+		// previousEndpoints 与 currentEndpoints 用于调用对应的
+		// OnEndpoints* 处理函数（依据对应值是否为 nil 决定调用哪一个），
+		// 两者长度必须一致。
 		name                             string
 		previousEndpoints                []*discovery.EndpointSlice
 		currentEndpoints                 []*discovery.EndpointSlice
@@ -2947,14 +3022,14 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired bool
 		expectedReadyEndpoints           map[types.NamespacedName]int
 	}{{
-		// Case[0]: nothing
+		// 场景[0]：无变化
 		name:                             "nothing",
 		oldEndpoints:                     map[proxy.ServicePortName][]endpointExpectation{},
 		expectedResult:                   map[proxy.ServicePortName][]endpointExpectation{},
 		expectedConntrackCleanupRequired: false,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[1]: no change, named port, local
+		// 场景[1]：无变化，命名端口，本地端点
 		name:              "no change, named port, local",
 		previousEndpoints: namedPortLocal,
 		currentEndpoints:  namedPortLocal,
@@ -2973,7 +3048,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[2]: no change, multiple subsets
+		// 场景[2]：无变化，多个子集
 		name:              "no change, multiple subsets",
 		previousEndpoints: multipleSubsets,
 		currentEndpoints:  multipleSubsets,
@@ -2996,7 +3071,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: false,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[3]: no change, multiple subsets, multiple ports, local
+		// 场景[3]：无变化，多个子集与端口，本地端点
 		name:              "no change, multiple subsets, multiple ports, local",
 		previousEndpoints: multipleSubsetsMultiplePortsLocal,
 		currentEndpoints:  multipleSubsetsMultiplePortsLocal,
@@ -3027,7 +3102,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[4]: no change, multiple endpoints, subsets, IPs, and ports
+		// 场景[4]：无变化，多个端点、子集、IP 和端口
 		name:              "no change, multiple endpoints, subsets, IPs, and ports",
 		previousEndpoints: multipleSubsetsIPsPorts,
 		currentEndpoints:  multipleSubsetsIPsPorts,
@@ -3089,7 +3164,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns2", "ep2"): 1,
 		},
 	}, {
-		// Case[5]: add an Endpoints
+		// 场景[5]：新增一个 Endpoints
 		name:              "add an Endpoints",
 		previousEndpoints: []*discovery.EndpointSlice{nil},
 		currentEndpoints:  namedPortLocal,
@@ -3104,7 +3179,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[6]: remove an Endpoints
+		// 场景[6]：删除一个 Endpoints
 		name:              "remove an Endpoints",
 		previousEndpoints: namedPortLocal,
 		currentEndpoints:  []*discovery.EndpointSlice{nil},
@@ -3117,7 +3192,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedResult:                   map[proxy.ServicePortName][]endpointExpectation{},
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[7]: add an IP and port
+		// 场景[7]：新增一个 IP 和端口
 		name:              "add an IP and port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortsLocalNoLocal,
@@ -3141,7 +3216,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[8]: remove an IP and port
+		// 场景[8]：删除一个 IP 和端口
 		name:              "remove an IP and port",
 		previousEndpoints: namedPortsLocalNoLocal,
 		currentEndpoints:  namedPort,
@@ -3163,7 +3238,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[9]: add a subset
+		// 场景[9]：新增一个子集
 		name:              "add a subset",
 		previousEndpoints: []*discovery.EndpointSlice{namedPort[0], nil},
 		currentEndpoints:  multipleSubsetsWithLocal,
@@ -3185,7 +3260,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[10]: remove a subset
+		// 场景[10]：删除一个子集
 		name:              "remove a subset",
 		previousEndpoints: multipleSubsets,
 		currentEndpoints:  []*discovery.EndpointSlice{namedPort[0], nil},
@@ -3205,7 +3280,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[11]: rename a port
+		// 场景[11]：重命名端口
 		name:              "rename a port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortRenamed,
@@ -3222,7 +3297,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[12]: renumber a port
+		// 场景[12]：修改端口编号
 		name:              "renumber a port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortRenumbered,
@@ -3239,7 +3314,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedReadyEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[13]: complex add and remove
+		// 场景[13]：复杂的增删混合变更
 		name:              "complex add and remove",
 		previousEndpoints: complexBefore,
 		currentEndpoints:  complexAfter,
@@ -3285,7 +3360,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 			makeNSN("ns4", "ep4"): 1,
 		},
 	}, {
-		// Case[14]: change from 0 endpoint address to 1 named port
+		// 场景[14]：从 0 个端点地址变为 1 个命名端口
 		name:              "change from 0 endpoint address to 1 named port",
 		previousEndpoints: emptyEndpointSlices,
 		currentEndpoints:  namedPort,
@@ -3308,17 +3383,18 @@ func Test_updateEndpointsMap(t *testing.T) {
 			ipset := ipsettest.NewFake(testIPSetVersion)
 			fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 
-			// First check that after adding all previous versions of endpoints,
-			// the fp.oldEndpoints is as we expect.
+			// 先确认加入所有历史版本的端点后，
+			// fp.oldEndpoints 与预期一致。
 			for i := range tc.previousEndpoints {
 				if tc.previousEndpoints[i] != nil {
 					fp.OnEndpointSliceAdd(tc.previousEndpoints[i])
 				}
 			}
+			// 先灌入上一版本的 endpoint，构建 oldEndpoints 断言所依赖的初始状态。
 			fp.endpointsMap.Update(fp.endpointsChanges)
 			checkEndpointExpectations(t, tci, fp.endpointsMap, tc.oldEndpoints)
 
-			// Now let's call appropriate handlers to get to state we want to be.
+			// 接着调用相应的处理函数，将状态推进到测试目标状态。
 			if len(tc.previousEndpoints) != len(tc.currentEndpoints) {
 				t.Fatalf("[%d] different lengths of previous and current endpoints", tci)
 			}
@@ -3334,6 +3410,7 @@ func Test_updateEndpointsMap(t *testing.T) {
 					fp.OnEndpointSliceUpdate(prev, curr)
 				}
 			}
+			// Update 的返回值决定是否需要清理 conntrack，必须按用例期望逐项核对。
 			result := fp.endpointsMap.Update(fp.endpointsChanges)
 			newMap := fp.endpointsMap
 			checkEndpointExpectations(t, tci, newMap, tc.expectedResult)
@@ -3348,11 +3425,13 @@ func Test_updateEndpointsMap(t *testing.T) {
 	}
 }
 
+// endpointExpectation 描述一个期望的 endpoint 及其是否位于本节点。
 type endpointExpectation struct {
 	endpoint string
 	isLocal  bool
 }
 
+// 检查同步结果EndpointExpectations 比较 map 中各端口的 endpoint 数量、地址和 local 标记，出错时带用例序号输出。
 func checkEndpointExpectations(t *testing.T, tci int, newMap proxy.EndpointsMap, expected map[proxy.ServicePortName][]endpointExpectation) {
 	if len(newMap) != len(expected) {
 		t.Errorf("[%d] expected %d results, got %d: %v", tci, len(expected), len(newMap), newMap)
@@ -3372,6 +3451,7 @@ func checkEndpointExpectations(t *testing.T, tci int, newMap proxy.EndpointsMap,
 	}
 }
 
+// Test_syncService 表驱动验证虚拟服务同步：相同配置不更新、配置变化则重建、绑定地址时去重。
 func Test_syncService(t *testing.T) {
 	testCases := []struct {
 		oldVirtualServer  *utilipvs.VirtualServer
@@ -3381,7 +3461,7 @@ func Test_syncService(t *testing.T) {
 		alreadyBoundAddrs sets.Set[string]
 	}{
 		{
-			// case 0, old virtual server is same as new virtual server
+			// 场景 0, old virtual server is same as new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3401,7 +3481,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 1, old virtual server is different from new virtual server
+			// 场景 1, old virtual server is different from new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3421,7 +3501,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 2, old virtual server is different from new virtual server
+			// 场景 2, old virtual server is different from new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3441,7 +3521,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 3, old virtual server is nil, and create new virtual server
+			// 场景 3, old virtual server is nil, and create new virtual server
 			oldVirtualServer: nil,
 			svcName:          "baz",
 			newVirtualServer: &utilipvs.VirtualServer{
@@ -3455,7 +3535,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 4, SCTP, old virtual server is same as new virtual server
+			// 场景 4, SCTP, old virtual server is same as new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3475,7 +3555,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 5, old virtual server is different from new virtual server
+			// 场景 5, old virtual server is different from new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3495,7 +3575,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 6, old virtual server is different from new virtual server
+			// 场景 6, old virtual server is different from new virtual server
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3515,7 +3595,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// case 7, old virtual server is nil, and create new virtual server
+			// 场景 7, old virtual server is nil, and create new virtual server
 			oldVirtualServer: nil,
 			svcName:          "baz",
 			newVirtualServer: &utilipvs.VirtualServer{
@@ -3529,7 +3609,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: sets.New[string](),
 		},
 		{
-			// case 8, virtual server address already binded, skip sync
+			// 场景 8, virtual server address already binded, skip sync
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3566,7 +3646,7 @@ func Test_syncService(t *testing.T) {
 		if err := proxier.syncService(testCases[i].svcName, testCases[i].newVirtualServer, testCases[i].bindAddr, testCases[i].alreadyBoundAddrs); err != nil {
 			t.Errorf("Case [%d], unexpected sync IPVS virtual server error: %v", i, err)
 		}
-		// check
+		// 检查同步结果
 		list, err := proxier.ipvs.GetVirtualServers()
 		if err != nil {
 			t.Errorf("Case [%d], unexpected list IPVS virtual server error: %v", i, err)
@@ -3581,6 +3661,7 @@ func Test_syncService(t *testing.T) {
 	}
 }
 
+// buildFakeProxier 返回 fake iptables 与配置好的 Proxier，供需要检查规则的测试复用。
 func buildFakeProxier(t *testing.T) (*iptablestest.FakeIPTables, *Proxier) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3589,6 +3670,7 @@ func buildFakeProxier(t *testing.T) (*iptablestest.FakeIPTables, *Proxier) {
 	return ipt, NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 }
 
+// getRules 从 fake iptables 的 nat/filter 表中提取指定链的规则，便于按链断言规则内容。
 func getRules(ipt *iptablestest.FakeIPTables, chain utiliptables.Chain) []*iptablestest.Rule {
 	var rules []*iptablestest.Rule
 
@@ -3608,8 +3690,7 @@ func getRules(ipt *iptablestest.FakeIPTables, chain utiliptables.Chain) []*iptab
 	return rules
 }
 
-// checkIptables to check expected iptables chain and rules. The got rules must have same number and order as the
-// expected rules.
+// 检查同步结果Iptables 检查期望的 iptables 链和规则；实际规则的数量和顺序必须与期望完全一致。
 func checkIptables(t *testing.T, ipt *iptablestest.FakeIPTables, epIpt netlinktest.ExpectedIptablesChain) {
 	for epChain, epRules := range epIpt {
 		rules := getRules(ipt, utiliptables.Chain(epChain))
@@ -3629,7 +3710,7 @@ func checkIptables(t *testing.T, ipt *iptablestest.FakeIPTables, epIpt netlinkte
 	}
 }
 
-// checkIPSet to check expected ipset and entries
+// 检查同步结果IPSet 检查期望的 ipset 及其条目，比较前对字符串排序以消除集合遍历顺序的影响。
 func checkIPSet(t *testing.T, fp *Proxier, ipSet netlinktest.ExpectedIPSet) {
 	for set, entries := range ipSet {
 		ents, err := fp.ipset.ListEntries(set)
@@ -3649,7 +3730,7 @@ func checkIPSet(t *testing.T, fp *Proxier, ipSet netlinktest.ExpectedIPSet) {
 	}
 }
 
-// checkIPVS to check expected ipvs service and destination
+// 检查同步结果IPVS 检查期望的 IPVS 虚拟服务数量和指定服务的 RealServer 地址与端口。
 func checkIPVS(t *testing.T, fp *Proxier, vs *netlinktest.ExpectedVirtualServer) {
 	t.Helper()
 	services, err := fp.ipvs.GetVirtualServers()
@@ -3674,6 +3755,7 @@ func checkIPVS(t *testing.T, fp *Proxier, vs *netlinktest.ExpectedVirtualServer)
 	}
 }
 
+// TestCleanLegacyService 验证遗留服务清理：只保留本轮活跃服务及 excludeCIDRs 覆盖的外部服务。
 func TestCleanLegacyService(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3682,11 +3764,11 @@ func TestCleanLegacyService(t *testing.T) {
 	excludeCIDRs, _ := netutils.ParseCIDRs([]string{"3.3.3.0/24", "4.4.4.0/24"})
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, excludeCIDRs, v1.IPv4Protocol)
 
-	// All ipvs services that were processed in the latest sync loop.
+	// 最近一次同步循环中处理过的全部 IPVS 虚拟服务。
 	activeServices := sets.New("ipvs0", "ipvs1")
-	// All ipvs services in the system.
+	// 系统中当前存在的全部 IPVS 虚拟服务。
 	currentServices := map[string]*utilipvs.VirtualServer{
-		// Created by kube-proxy.
+		// 由 kube-proxy 创建。
 		"ipvs0": {
 			Address:   netutils.ParseIPSloppy("1.1.1.1"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3694,7 +3776,7 @@ func TestCleanLegacyService(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by kube-proxy.
+		// 由 kube-proxy 创建。
 		"ipvs1": {
 			Address:   netutils.ParseIPSloppy("2.2.2.2"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3702,7 +3784,7 @@ func TestCleanLegacyService(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs2": {
 			Address:   netutils.ParseIPSloppy("3.3.3.3"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3710,7 +3792,7 @@ func TestCleanLegacyService(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs3": {
 			Address:   netutils.ParseIPSloppy("4.4.4.4"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3718,7 +3800,7 @@ func TestCleanLegacyService(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs4": {
 			Address:   netutils.ParseIPSloppy("5.5.5.5"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3726,7 +3808,7 @@ func TestCleanLegacyService(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by kube-proxy, but now stale.
+		// 由 kube-proxy 创建，但已过期，需要被清理。
 		"ipvs5": {
 			Address:   netutils.ParseIPSloppy("6.6.6.6"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3739,14 +3821,15 @@ func TestCleanLegacyService(t *testing.T) {
 		fp.ipvs.AddVirtualServer(currentServices[v])
 	}
 
+	// 清理后剩余 ipvs2（活跃）、ipvs3 与 ipvs4（被 excludeCIDRs 排除），仅 ipvs4/ipvs5 应被删除。
 	fp.cleanLegacyService(activeServices, currentServices)
-	// ipvs4 and ipvs5 should have been cleaned.
+	// ipvs4 和 ipvs5 应当已被清理。
 	remainingVirtualServers, _ := fp.ipvs.GetVirtualServers()
 	if len(remainingVirtualServers) != 4 {
 		t.Errorf("Expected number of remaining IPVS services after cleanup to be %v. Got %v", 4, len(remainingVirtualServers))
 	}
 	for _, vs := range remainingVirtualServers {
-		// Checking that ipvs4 and ipvs5 were removed.
+		// 验证 ipvs4 和 ipvs5 已被移除。
 		if vs.Port == 57 {
 			t.Errorf("Expected ipvs4 to be removed after cleanup. It still remains")
 		}
@@ -3756,6 +3839,7 @@ func TestCleanLegacyService(t *testing.T) {
 	}
 }
 
+// TestCleanLegacyServiceWithRealServers 验证即使虚拟服务仍挂有 RealServer，只要服务被删除也应清理。
 func TestCleanLegacyServiceWithRealServers(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3763,9 +3847,9 @@ func TestCleanLegacyServiceWithRealServers(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 
-	// all deleted expect ipvs2
+	// 除 ipvs2 外，其余虚拟服务都应被删除
 	activeServices := sets.New("ipvs2")
-	// All ipvs services in the system.
+	// 系统中当前存在的全部 IPVS 虚拟服务。
 	currentServices := map[string]*utilipvs.VirtualServer{
 		"ipvs0": { // deleted with real servers
 			Address:   netutils.ParseIPSloppy("1.1.1.1"),
@@ -3790,7 +3874,7 @@ func TestCleanLegacyServiceWithRealServers(t *testing.T) {
 		},
 	}
 
-	// "ipvs0" has a real server, but it should still be deleted since the Service is deleted
+	// 即使 ipvs0 还有后端，对应的 Service 被删除后它仍应被清理
 	realServers := map[*utilipvs.VirtualServer]*utilipvs.RealServer{
 		{
 			Address:   netutils.ParseIPSloppy("1.1.1.1"),
@@ -3826,6 +3910,7 @@ func TestCleanLegacyServiceWithRealServers(t *testing.T) {
 	}
 }
 
+// TestCleanLegacyRealServersExcludeCIDRs 验证 excludeCIDRs 生效时优雅删除不会移除仍被排除网段覆盖的 RealServer。
 func TestCleanLegacyRealServersExcludeCIDRs(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3879,6 +3964,7 @@ func TestCleanLegacyRealServersExcludeCIDRs(t *testing.T) {
 	}
 }
 
+// TestCleanLegacyService6 验证 IPv6 场景下的遗留服务清理，规则与 IPv4 一致。
 func TestCleanLegacyService6(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3888,11 +3974,11 @@ func TestCleanLegacyService6(t *testing.T) {
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, excludeCIDRs, v1.IPv6Protocol)
 	fp.nodeIP = netutils.ParseIPSloppy("::1")
 
-	// All ipvs services that were processed in the latest sync loop.
+	// 最近一次同步循环中处理过的全部 IPVS 虚拟服务。
 	activeServices := sets.New("ipvs0", "ipvs1")
-	// All ipvs services in the system.
+	// 系统中当前存在的全部 IPVS 虚拟服务。
 	currentServices := map[string]*utilipvs.VirtualServer{
-		// Created by kube-proxy.
+		// 由 kube-proxy 创建。
 		"ipvs0": {
 			Address:   netutils.ParseIPSloppy("1000::1"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3900,7 +3986,7 @@ func TestCleanLegacyService6(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by kube-proxy.
+		// 由 kube-proxy 创建。
 		"ipvs1": {
 			Address:   netutils.ParseIPSloppy("1000::2"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3908,7 +3994,7 @@ func TestCleanLegacyService6(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs2": {
 			Address:   netutils.ParseIPSloppy("3000::1"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3916,7 +4002,7 @@ func TestCleanLegacyService6(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs3": {
 			Address:   netutils.ParseIPSloppy("4000::1"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3924,7 +4010,7 @@ func TestCleanLegacyService6(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by an external party.
+		// 由外部组件创建，kube-proxy 不应擅自清理。
 		"ipvs4": {
 			Address:   netutils.ParseIPSloppy("5000::1"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3932,7 +4018,7 @@ func TestCleanLegacyService6(t *testing.T) {
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		// Created by kube-proxy, but now stale.
+		// 由 kube-proxy 创建，但已过期，需要被清理。
 		"ipvs5": {
 			Address:   netutils.ParseIPSloppy("1000::6"),
 			Protocol:  string(v1.ProtocolUDP),
@@ -3946,13 +4032,13 @@ func TestCleanLegacyService6(t *testing.T) {
 	}
 
 	fp.cleanLegacyService(activeServices, currentServices)
-	// ipvs4 and ipvs5 should have been cleaned.
+	// ipvs4 和 ipvs5 应当已被清理。
 	remainingVirtualServers, _ := fp.ipvs.GetVirtualServers()
 	if len(remainingVirtualServers) != 4 {
 		t.Errorf("Expected number of remaining IPVS services after cleanup to be %v. Got %v", 4, len(remainingVirtualServers))
 	}
 	for _, vs := range remainingVirtualServers {
-		// Checking that ipvs4 and ipvs5 were removed.
+		// 验证 ipvs4 和 ipvs5 已被移除。
 		if vs.Port == 57 {
 			t.Errorf("Expected ipvs4 to be removed after cleanup. It still remains")
 		}
@@ -3962,6 +4048,7 @@ func TestCleanLegacyService6(t *testing.T) {
 	}
 }
 
+// TestMultiPortServiceBindAddr 验证多端口服务增删改时 ClusterIP 只绑定一次且删除后完全解绑。
 func TestMultiPortServiceBindAddr(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -3990,11 +4077,12 @@ func TestMultiPortServiceBindAddr(t *testing.T) {
 
 	fp.servicesSynced = true
 
-	// first, add multi-port service1
+	// 首先加入多端口服务 service1
 	fp.OnServiceAdd(service1)
 	fp.syncProxyRules()
 	remainingAddrs, _ := fp.netlinkHandle.ListBindAddress(defaultDummyDevice)
-	// should only remain address "172.16.55.4"
+	// 绑定地址应只剩下 "172.16.55.4"
+	// 每个服务只应绑定一个 ClusterIP，端口增减不能造成地址重复绑定或提前解绑。
 	if len(remainingAddrs) != 1 {
 		t.Errorf("Expected number of remaining bound addrs after cleanup to be %v. Got %v", 1, len(remainingAddrs))
 	}
@@ -4002,38 +4090,39 @@ func TestMultiPortServiceBindAddr(t *testing.T) {
 		t.Errorf("Expected remaining address should be %s, got %s", "172.16.55.4", remainingAddrs[0])
 	}
 
-	// update multi-port service1 to single-port service2
+	// 将多端口 service1 更新为单端口 service2
 	fp.OnServiceUpdate(service1, service2)
 	fp.syncProxyRules()
 	remainingAddrs, _ = fp.netlinkHandle.ListBindAddress(defaultDummyDevice)
-	// should still only remain address "172.16.55.4"
+	// 绑定地址仍应只有 "172.16.55.4"
 	if len(remainingAddrs) != 1 {
 		t.Errorf("Expected number of remaining bound addrs after cleanup to be %v. Got %v", 1, len(remainingAddrs))
 	} else if remainingAddrs[0] != "172.16.55.4" {
 		t.Errorf("Expected remaining address should be %s, got %s", "172.16.55.4", remainingAddrs[0])
 	}
 
-	// update single-port service2 to multi-port service3
+	// 将单端口 service2 更新为多端口 service3
 	fp.OnServiceUpdate(service2, service3)
 	fp.syncProxyRules()
 	remainingAddrs, _ = fp.netlinkHandle.ListBindAddress(defaultDummyDevice)
-	// should still only remain address "172.16.55.4"
+	// 绑定地址仍应只有 "172.16.55.4"
 	if len(remainingAddrs) != 1 {
 		t.Errorf("Expected number of remaining bound addrs after cleanup to be %v. Got %v", 1, len(remainingAddrs))
 	} else if remainingAddrs[0] != "172.16.55.4" {
 		t.Errorf("Expected remaining address should be %s, got %s", "172.16.55.4", remainingAddrs[0])
 	}
 
-	// delete multi-port service3
+	// 删除多端口服务 service3
 	fp.OnServiceDelete(service3)
 	fp.syncProxyRules()
 	remainingAddrs, _ = fp.netlinkHandle.ListBindAddress(defaultDummyDevice)
-	// all addresses should be unbound
+	// 所有绑定地址都应被释放
 	if len(remainingAddrs) != 0 {
 		t.Errorf("Expected number of remaining bound addrs after cleanup to be %v. Got %v", 0, len(remainingAddrs))
 	}
 }
 
+// Test_getFirstColumn 验证 getFirstColumn 能解析内核模块列表并提取第一列名称。
 func Test_getFirstColumn(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -4064,9 +4153,8 @@ raid10 57344 0 - Live 0xffffffffc0597000`,
 	}
 }
 
-// The majority of EndpointSlice specific tests are not ipvs specific and focus on
-// the shared EndpointsChangeTracker and EndpointSliceCache. This test ensures that the
-// ipvs proxier supports translating EndpointSlices to ipvs output.
+// 大多数 EndpointSlice 相关测试关注共享的 EndpointsChangeTracker 与 EndpointSliceCache，并非 IPVS 专有；
+// 这里专门验证 IPVS proxier 能把 EndpointSlice 转换成正确的 IPVS 状态。
 func TestEndpointSliceE2E(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4076,7 +4164,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 	fp.servicesSynced = true
 	fp.endpointSlicesSynced = true
 
-	// Add initial service
+	// 加入初始 Service
 	serviceName := "svc1"
 	namespaceName := "ns1"
 	fp.OnServiceAdd(&v1.Service{
@@ -4088,7 +4176,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 加入初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4121,9 +4209,10 @@ func TestEndpointSliceE2E(t *testing.T) {
 	}
 
 	fp.OnEndpointSliceAdd(endpointSlice)
+	// 先删除 EndpointSlice，再确认 KUBE-LOOP-BACK 条目清空且 RealServer 被移除。
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+	// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 1, activeEntries1.Len(), "Expected 1 active entry in KUBE-LOOP-BACK")
@@ -4133,6 +4222,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 	assert.Len(t, virtualServers1, 1, "Expected 1 virtual server")
 	realServers1, rsErr1 := ipvs.GetRealServers(virtualServers1[0])
 	assert.NoError(t, rsErr1, "Expected no error getting real servers")
+	// 三个就绪 endpoint 都应进入 RealServer，未就绪的 10.0.1.4 必须被忽略。
 	assert.Len(t, realServers1, 3, "Expected 3 real servers")
 	assert.Equal(t, "10.0.1.1:80", realServers1[0].String())
 	assert.Equal(t, "10.0.1.2:80", realServers1[1].String())
@@ -4141,7 +4231,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 	fp.OnEndpointSliceDelete(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries2 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 0, activeEntries2.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -4153,6 +4243,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 	assert.Empty(t, realServers2, "Expected 0 real servers")
 }
 
+// TestHealthCheckNodePortE2E 验证健康检查端口随服务创建、更新、删除同步到 ipset。
 func TestHealthCheckNodePortE2E(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4162,7 +4253,7 @@ func TestHealthCheckNodePortE2E(t *testing.T) {
 	fp.servicesSynced = true
 	fp.endpointSlicesSynced = true
 
-	// Add initial service
+	// 加入初始 Service
 	serviceName := "svc1"
 	namespaceName := "ns1"
 
@@ -4180,19 +4271,19 @@ func TestHealthCheckNodePortE2E(t *testing.T) {
 	fp.OnServiceAdd(&svc)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after service's being created
+	// 验证 Service 创建后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"])
 	activeEntries1 := fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"].activeEntries
 	assert.Equal(t, 1, activeEntries1.Len(), "Expected 1 active entry in KUBE-HEALTH-CHECK-NODE-PORT")
 	assert.True(t, activeEntries1.Has("30000"), "Expected activeEntries to reference hc node port in spec")
 
-	// Update health check node port in the spec
+	// 更新 spec 中的健康检查节点端口
 	newSvc := svc
 	newSvc.Spec.HealthCheckNodePort = 30001
 	fp.OnServiceUpdate(&svc, &newSvc)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after service's being updated
+	// 验证 Service 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"])
 	activeEntries2 := fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"].activeEntries
 	assert.Equal(t, 1, activeEntries2.Len(), "Expected 1 active entry in KUBE-HEALTH-CHECK-NODE-PORT")
@@ -4201,13 +4292,13 @@ func TestHealthCheckNodePortE2E(t *testing.T) {
 	fp.OnServiceDelete(&svc)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"])
 	activeEntries3 := fp.ipsetList["KUBE-HEALTH-CHECK-NODE-PORT"].activeEntries
 	assert.Equal(t, 0, activeEntries3.Len(), "Expected 0 active entries in KUBE-HEALTH-CHECK-NODE-PORT")
 }
 
-// Test_HealthCheckNodePortWhenTerminating tests that health check node ports are not enabled when all local endpoints are terminating
+// Test_HealthCheckNodePortWhenTerminating 验证所有本地 endpoint 都处于 terminating 时不应启用健康检查端口。
 func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4215,7 +4306,7 @@ func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 	fp.servicesSynced = true
-	// fp.endpointsSynced = true
+	// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 	fp.endpointSlicesSynced = true
 
 	serviceName := "svc1"
@@ -4262,12 +4353,13 @@ func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 
 	fp.OnEndpointSliceAdd(endpointSlice)
 	_ = fp.endpointsMap.Update(fp.endpointsChanges)
+	// 初始状态下有两个本地就绪 endpoint，因此本地就绪计数应为 1（按服务去重）。
 	localReadyEndpoints := fp.endpointsMap.LocalReadyEndpoints()
 	if len(localReadyEndpoints) != 1 {
 		t.Errorf("unexpected number of health check node ports, expected 1 but got: %d", len(localReadyEndpoints))
 	}
 
-	// set all endpoints to terminating
+	// 将所有端点标记为终止中，验证终止场景下的路由行为
 	endpointSliceTerminating := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4323,6 +4415,7 @@ func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 	}
 }
 
+// TestFilterCIDRs 验证 filterCIDRs 能按地址族过滤 CIDR 列表，空列表仍返回空。
 func TestFilterCIDRs(t *testing.T) {
 	var cidrList []string
 	var cidrs []string
@@ -4353,6 +4446,7 @@ func TestFilterCIDRs(t *testing.T) {
 	}
 }
 
+// TestCreateAndLinkKubeChain 验证 nat/filter 表中创建并链接的 Kube 链名称与顺序。
 func TestCreateAndLinkKubeChain(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4377,8 +4471,7 @@ func TestCreateAndLinkKubeChain(t *testing.T) {
 	assert.Equal(t, expectedFilterChains, fp.filterChains.String())
 }
 
-// This test ensures that the iptables proxier supports translating Endpoints to
-// iptables output when internalTrafficPolicy is specified
+// 验证指定 internalTrafficPolicy 时 EndpointSlice 能被转换为期望的 iptables 输出。
 func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 	type endpoint struct {
 		ip       string
@@ -4464,10 +4557,10 @@ func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 		ipset := ipsettest.NewFake(testIPSetVersion)
 		fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 		fp.servicesSynced = true
-		// fp.endpointsSynced = true
+		// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 		fp.endpointSlicesSynced = true
 
-		// Add initial service
+		// 加入初始 Service
 		serviceName := "svc1"
 		namespaceName := "ns1"
 
@@ -4485,7 +4578,7 @@ func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 
 		fp.OnServiceAdd(svc)
 
-		// Add initial endpoint slice
+		// 加入初始 EndpointSlice
 		endpointSlice := &discovery.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4511,11 +4604,12 @@ func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 		fp.OnEndpointSliceAdd(endpointSlice)
 		fp.syncProxyRules()
 
-		// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+		// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 		assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 
 		activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 
+		// 期望条目数随 internalTrafficPolicy 变化：Local 时只保留本节点相关的回环条目。
 		if tc.expectLocalEntries {
 			assert.Equal(t, 1, activeEntries1.Len(), "Expected 1 active entry in KUBE-LOOP-BACK")
 		} else {
@@ -4539,7 +4633,7 @@ func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 		fp.OnEndpointSliceDelete(endpointSlice)
 		fp.syncProxyRules()
 
-		// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+		// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 		assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 		activeEntries3 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 		assert.Equal(t, 0, activeEntries3.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -4552,8 +4646,7 @@ func TestTestInternalTrafficPolicyE2E(t *testing.T) {
 	}
 }
 
-// Test_EndpointSliceReadyAndTerminatingCluster tests that when there are ready and ready + terminating
-// endpoints and the traffic policy is "Cluster", only the ready endpoints are used.
+// Test_EndpointSliceReadyAndTerminatingCluster 验证流量策略为 Cluster 时，存在就绪端点则只使用就绪端点。
 func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4561,11 +4654,11 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 	fp.servicesSynced = true
-	// fp.endpointsSynced = true
+	// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 	fp.endpointSlicesSynced = true
 
 	serviceName := "svc1"
-	// Add initial service
+	// 加入初始 Service
 	namespaceName := "ns1"
 	fp.OnServiceAdd(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: namespaceName},
@@ -4589,7 +4682,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 加入初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4654,7 +4747,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	fp.OnEndpointSliceAdd(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+	// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 4, activeEntries1.Len(), "Expected 4 active entry in KUBE-LOOP-BACK")
@@ -4678,7 +4771,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 		}
 	}
 
-	// clusterIP should route to cluster-wide ready endpoints
+	// ClusterIP 应路由到集群范围内就绪的端点
 	realServers1, rsErr1 := ipvs.GetRealServers(clusterIPServer)
 	assert.NoError(t, rsErr1, "Expected no error getting real servers")
 	assert.Len(t, realServers1, 3, "Expected 3 real servers")
@@ -4686,7 +4779,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	assert.Equal(t, "10.0.1.2:80", realServers1[1].String())
 	assert.Equal(t, "10.0.1.5:80", realServers1[2].String())
 
-	// externalIP should route to cluster-wide ready endpoints
+	// ExternalIP 应路由到集群范围内就绪的端点
 	realServers2, rsErr2 := ipvs.GetRealServers(externalIPServer)
 	assert.NoError(t, rsErr2, "Expected no error getting real servers")
 	assert.Len(t, realServers2, 3, "Expected 3 real servers")
@@ -4697,7 +4790,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	fp.OnEndpointSliceDelete(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries2 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 0, activeEntries2.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -4725,8 +4818,7 @@ func Test_EndpointSliceReadyAndTerminatingCluster(t *testing.T) {
 	assert.Empty(t, realServers2, "Expected 0 real servers")
 }
 
-// Test_EndpointSliceReadyAndTerminatingLocal tests that when there are local ready and ready + terminating
-// endpoints, only the ready endpoints are used.
+// Test_EndpointSliceReadyAndTerminatingLocal 验证流量策略为 Local 时，本地流量只使用就绪端点。
 func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4734,11 +4826,11 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 	fp.servicesSynced = true
-	// fp.endpointsSynced = true
+	// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 	fp.endpointSlicesSynced = true
 
 	serviceName := "svc1"
-	// Add initial service
+	// 加入初始 Service
 	namespaceName := "ns1"
 	fp.OnServiceAdd(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: namespaceName},
@@ -4762,7 +4854,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 加入初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4827,7 +4919,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	fp.OnEndpointSliceAdd(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+	// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 4, activeEntries1.Len(), "Expected 3 active entry in KUBE-LOOP-BACK")
@@ -4851,7 +4943,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 		}
 	}
 
-	// clusterIP should route to cluster-wide ready endpoints
+	// ClusterIP 应路由到集群范围内就绪的端点
 	realServers1, rsErr1 := ipvs.GetRealServers(clusterIPServer)
 	assert.NoError(t, rsErr1, "Expected no error getting real servers")
 	assert.Len(t, realServers1, 3, "Expected 3 real servers")
@@ -4859,7 +4951,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	assert.Equal(t, "10.0.1.2:80", realServers1[1].String())
 	assert.Equal(t, "10.0.1.5:80", realServers1[2].String())
 
-	// externalIP should route to local ready + non-terminating endpoints if they exist
+	// 若存在本地就绪且非终止的端点，ExternalIP 应优先路由到它们
 	realServers2, rsErr2 := ipvs.GetRealServers(externalIPServer)
 	assert.NoError(t, rsErr2, "Expected no error getting real servers")
 	assert.Len(t, realServers2, 2, "Expected 2 real servers")
@@ -4869,7 +4961,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	fp.OnEndpointSliceDelete(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries2 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 0, activeEntries2.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -4897,8 +4989,7 @@ func Test_EndpointSliceReadyAndTerminatingLocal(t *testing.T) {
 	assert.Empty(t, realServers2, "Expected 0 real servers")
 }
 
-// Test_EndpointSliceOnlyReadyTerminatingCluster tests that when there are only ready terminating
-// endpoints and the traffic policy is "Cluster",  we fall back to terminating endpoints.
+// Test_EndpointSliceOnlyReadyAndTerminatingCluster 验证流量策略为 Cluster 且只有终止中就绪端点时，回退使用这些端点。
 func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -4906,10 +4997,10 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 	fp.servicesSynced = true
-	// fp.endpointsSynced = true
+	// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 	fp.endpointSlicesSynced = true
 
-	// Add initial service
+	// 加入初始 Service
 	serviceName := "svc1"
 	namespaceName := "ns1"
 	fp.OnServiceAdd(&v1.Service{
@@ -4934,7 +5025,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 加入初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4999,7 +5090,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	fp.OnEndpointSliceAdd(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+	// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 3, activeEntries1.Len(), "Expected 3 active entry in KUBE-LOOP-BACK")
@@ -5022,7 +5113,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 		}
 	}
 
-	// clusterIP should fall back to cluster-wide ready + terminating endpoints
+	// 没有非终止端点时，ClusterIP 应回退到就绪且终止中的端点
 	realServers1, rsErr1 := ipvs.GetRealServers(clusterIPServer)
 	assert.NoError(t, rsErr1, "Expected no error getting real servers")
 	assert.Len(t, realServers1, 3, "Expected 1 real servers")
@@ -5030,7 +5121,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	assert.Equal(t, "10.0.1.2:80", realServers1[1].String())
 	assert.Equal(t, "10.0.1.4:80", realServers1[2].String())
 
-	// externalIP should fall back to ready + terminating endpoints
+	// 没有非终止端点时，ExternalIP 应回退到就绪且终止中的端点
 	realServers2, rsErr2 := ipvs.GetRealServers(externalIPServer)
 	assert.NoError(t, rsErr2, "Expected no error getting real servers")
 	assert.Len(t, realServers2, 3, "Expected 2 real servers")
@@ -5041,7 +5132,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	fp.OnEndpointSliceDelete(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries2 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 0, activeEntries2.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -5069,8 +5160,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingCluster(t *testing.T) {
 	assert.Empty(t, realServers2, "Expected 0 real servers")
 }
 
-// Test_EndpointSliceOnlyReadyTerminatingLocal tests that when there are only local ready terminating
-// endpoints, we fall back to those endpoints.
+// Test_EndpointSliceOnlyReadyAndTerminatingLocal 验证本地只有终止中就绪端点时回退使用这些本地端点。
 func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -5078,10 +5168,10 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 	ipset := ipsettest.NewFake(testIPSetVersion)
 	fp := NewFakeProxier(ctx, ipt, ipvs, ipset, nil, nil, v1.IPv4Protocol)
 	fp.servicesSynced = true
-	// fp.endpointsSynced = true
+	// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 	fp.endpointSlicesSynced = true
 
-	// Add initial service
+	// 加入初始 Service
 	serviceName := "svc1"
 	namespaceName := "ns1"
 	fp.OnServiceAdd(&v1.Service{
@@ -5106,7 +5196,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 		},
 	})
 
-	// Add initial endpoint slice
+	// 加入初始 EndpointSlice
 	endpointSlice := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -5171,7 +5261,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 	fp.OnEndpointSliceAdd(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice update
+	// 验证 EndpointSlice 更新后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries1 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 3, activeEntries1.Len(), "Expected 3 active entry in KUBE-LOOP-BACK")
@@ -5194,13 +5284,13 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 		}
 	}
 
-	// clusterIP should route to cluster-wide Ready endpoints
+	// ClusterIP 应路由到集群范围内就绪的端点
 	realServers1, rsErr1 := ipvs.GetRealServers(clusterIPServer)
 	assert.NoError(t, rsErr1, "Expected no error getting real servers")
 	assert.Len(t, realServers1, 1, "Expected 1 real servers")
 	assert.Equal(t, "10.0.1.5:80", realServers1[0].String())
 
-	// externalIP should fall back to local ready + terminating endpoints
+	// ExternalIP 应回退到本地就绪且终止中的端点
 	realServers2, rsErr2 := ipvs.GetRealServers(externalIPServer)
 	assert.NoError(t, rsErr2, "Expected no error getting real servers")
 	assert.Len(t, realServers2, 2, "Expected 2 real servers")
@@ -5210,7 +5300,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 	fp.OnEndpointSliceDelete(endpointSlice)
 	fp.syncProxyRules()
 
-	// Ensure that Proxier updates ipvs appropriately after EndpointSlice delete
+	// 验证 EndpointSlice 删除后 Proxier 正确更新 IPVS 规则
 	assert.NotNil(t, fp.ipsetList["KUBE-LOOP-BACK"])
 	activeEntries2 := fp.ipsetList["KUBE-LOOP-BACK"].activeEntries
 	assert.Equal(t, 0, activeEntries2.Len(), "Expected 0 active entries in KUBE-LOOP-BACK")
@@ -5238,6 +5328,7 @@ func Test_EndpointSliceOnlyReadyAndTerminatingLocal(t *testing.T) {
 	assert.Empty(t, realServers2, "Expected 0 real servers")
 }
 
+// TestIpIsValidForSet 验证地址过滤：排除回环和链路本地地址，按地址族区分 IPv4 映射地址的处理。
 func TestIpIsValidForSet(t *testing.T) {
 	testCases := []struct {
 		isIPv6 bool
@@ -5276,7 +5367,7 @@ func TestIpIsValidForSet(t *testing.T) {
 		},
 		{
 			false,
-			"::ffff:169.254.0.0", // IPv6 mapped IPv4
+			"::ffff:169.254.0.0", // IPv6 场景 mapped IPv4
 			true,
 		},
 		{
@@ -5284,7 +5375,7 @@ func TestIpIsValidForSet(t *testing.T) {
 			"1000::",
 			false,
 		},
-		// IPv6
+		// IPv6 场景
 		{
 			true,
 			"::1",
@@ -5329,6 +5420,7 @@ func TestIpIsValidForSet(t *testing.T) {
 	}
 }
 
+// TestNoEndpointsMetric 验证 Local 流量策略下没有本地 endpoint 时指标被正确设置。
 func TestNoEndpointsMetric(t *testing.T) {
 	type endpoint struct {
 		ip       string
@@ -5421,10 +5513,10 @@ func TestNoEndpointsMetric(t *testing.T) {
 		ipset := ipsettest.NewFake(testIPSetVersion)
 		fp := NewFakeProxier(ctx, ipt, ipvs, ipset, []string{"10.0.0.1"}, nil, v1.IPv4Protocol)
 		fp.servicesSynced = true
-		// fp.endpointsSynced = true
+		// 将 fp.endpointsSynced 置为 true，模拟端点已同步完成
 		fp.endpointSlicesSynced = true
 
-		// Add initial service
+		// 加入初始 Service
 		serviceName := "svc1"
 		namespaceName := "ns1"
 
@@ -5446,7 +5538,7 @@ func TestNoEndpointsMetric(t *testing.T) {
 
 		fp.OnServiceAdd(svc)
 
-		// Add initial endpoint slice
+		// 加入初始 EndpointSlice
 		endpointSlice := &discovery.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-1", serviceName),
@@ -5492,6 +5584,7 @@ func TestNoEndpointsMetric(t *testing.T) {
 	}
 }
 
+// TestDismissLocalhostRuleExist 验证 KUBE-SERVICES 链首条规则直接 RETURN 环回地址流量，IPv4/IPv6 均覆盖。
 func TestDismissLocalhostRuleExist(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -5534,6 +5627,7 @@ func TestDismissLocalhostRuleExist(t *testing.T) {
 	}
 }
 
+// TestLoadBalancerIngressRouteTypeProxy 验证 ipMode=Proxy 时不为 LoadBalancer IP 创建虚拟服务（由数据面直接路由）。
 func TestLoadBalancerIngressRouteTypeProxy(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -5612,6 +5706,7 @@ func TestLoadBalancerIngressRouteTypeProxy(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to get ipvs services, err: %v", err)
 			}
+			// Proxy 模式期望 1 个（仅 ClusterIP），VIP/nil 模式期望 2 个（ClusterIP 与 LoadBalancer IP）。
 			if len(services) != testCase.expectedServices {
 				t.Errorf("Expected %d ipvs services, got %d", testCase.expectedServices, len(services))
 			}

@@ -20,20 +20,19 @@ import (
 	"net"
 )
 
-// NetworkInterfacer defines an interface for several net library functions. Production
-// code will forward to net library functions, and unit tests will override the methods
-// for testing purposes.
+// NetworkInterfacer 封装若干 net 标准库函数。生产代码直接转发给标准库，
+// 单元测试则替换该实现来模拟网络接口状态，避免依赖测试机器真实的网络配置。
 type NetworkInterfacer interface {
 	InterfaceAddrs() ([]net.Addr, error)
 }
 
-// RealNetwork implements the NetworkInterfacer interface for production code, just
-// wrapping the underlying net library function calls.
+// RealNetwork 是 NetworkInterfacer 的生产实现，仅对底层 net 库调用做一层薄封装。
 type RealNetwork struct{}
 
-// InterfaceAddrs wraps net.InterfaceAddrs(), it's a part of NetworkInterfacer interface.
+// InterfaceAddrs 转发到 net.InterfaceAddrs()，是 NetworkInterfacer 接口的一部分。
 func (RealNetwork) InterfaceAddrs() ([]net.Addr, error) {
 	return net.InterfaceAddrs()
 }
 
+// 编译期断言：确保生产实现不会遗漏接口方法，从而能随时替换测试桩。
 var _ NetworkInterfacer = &RealNetwork{}

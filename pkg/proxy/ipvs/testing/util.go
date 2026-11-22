@@ -22,10 +22,9 @@ import (
 	utilipset "k8s.io/kubernetes/pkg/proxy/ipvs/ipset"
 )
 
-// ExpectedVirtualServer is the expected ipvs rules with VirtualServer and RealServer
-// VSNum is the expected ipvs virtual server number
-// IP:Port protocol is the expected ipvs vs info
-// RS is the RealServer of this expected VirtualServer
+// ExpectedVirtualServer 描述测试中期望的 ipvs 规则，包含虚拟服务器（VS）及其真实服务器（RS）。
+// VSNum 是期望的 ipvs 虚拟服务器数量，IP、Port、Protocol 描述该虚拟服务器的信息；
+// RS 是该虚拟服务器对应的真实服务器列表。
 type ExpectedVirtualServer struct {
 	VSNum    int
 	IP       string
@@ -34,21 +33,21 @@ type ExpectedVirtualServer struct {
 	RS       []ExpectedRealServer
 }
 
-// ExpectedRealServer is the expected ipvs RealServer
+// ExpectedRealServer 描述一条期望的 ipvs 真实服务器（RS）记录。
 type ExpectedRealServer struct {
 	IP   string
 	Port uint16
 }
 
-// ExpectedIptablesChain is a map of expected iptables chain and jump rules
+// ExpectedIptablesChain 以链名为键，保存该链上期望出现的跳转规则列表。
 type ExpectedIptablesChain map[string][]ExpectedIptablesRule
 
-// ExpectedIptablesRule is the expected iptables rules with jump chain and match ipset name
+// ExpectedIptablesRule 描述一条期望的 iptables 规则，包括源地址、跳转目标链及要匹配的 ipset 名称。
 type ExpectedIptablesRule struct {
 	SourceAddress string
 	JumpChain     string
 	MatchSet      string
 }
 
-// ExpectedIPSet is the expected ipset with set name and entries name
+// ExpectedIPSet 以集合名为键，保存该集合中期望存在的条目列表。
 type ExpectedIPSet map[string][]*utilipset.Entry

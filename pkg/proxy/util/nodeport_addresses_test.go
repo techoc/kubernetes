@@ -27,11 +27,15 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// InterfaceAddrsPair 将模拟网卡与它的一组地址配对，
+// 用于给 FakeNetwork 注入确定性的网卡地址数据，避免依赖宿主机真实网卡。
 type InterfaceAddrsPair struct {
 	itf   net.Interface
 	addrs []net.Addr
 }
 
+// checkNodeIPs 比较期望的 IP 集合与实际返回的 IP 列表：
+// 期望中缺失的和多出来的地址都视为不一致；用集合比较是因为遍历网卡的顺序不保证稳定。
 func checkNodeIPs(expected sets.Set[string], actual []net.IP) error {
 	notFound := expected.Clone()
 	extra := sets.New[string]()
@@ -49,6 +53,9 @@ func checkNodeIPs(expected sets.Set[string], actual []net.IP) error {
 	return nil
 }
 
+// TestGetNodeIPs 验证 GetNodeIPs 会按地址族过滤网卡地址：
+// 覆盖单栈/双栈、零 CIDR 通配、回环地址、多 CIDR 及无匹配等场景，
+// 并同时检查 MatchAll 的判定和返回 IP 集合。
 func TestGetNodeIPs(t *testing.T) {
 	type expectation struct {
 		matchAll bool
@@ -371,6 +378,8 @@ func TestGetNodeIPs(t *testing.T) {
 		},
 	}
 
+	// 每组用例都要新建 FakeNetwork：它模拟 InterfaceAddrs，
+	// 让测试不依赖运行机器的真实网络配置。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			nw := fake.NewFakeNetwork()
@@ -378,9 +387,13 @@ func TestGetNodeIPs(t *testing.T) {
 				nw.AddInterfaceAddr(&pair.itf, pair.addrs)
 			}
 
+			// 对同一组网卡数据分别按 IPv4/IPv6 构造 NodePortAddresses，
+			// 以验证两个地址族被独立处理。
 			for _, family := range []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol} {
 				npa := NewNodePortAddresses(family, tc.cidrs)
 
+				// MatchAll 决定 kube-proxy 是否监听所有节点 IP，
+				// 判定错误会直接影响端口开放范围，因此需单独校验。
 				if npa.MatchAll() != tc.expected[family].matchAll {
 					t.Errorf("unexpected MatchAll(%s), expected: %v", family, tc.expected[family].matchAll)
 				}
@@ -388,9 +401,9 @@ func TestGetNodeIPs(t *testing.T) {
 				ips, err := npa.GetNodeIPs(nw)
 				expectedIPs := tc.expected[family].ips
 
-				// The fake InterfaceAddrs() never returns an error, so
-				// the only error GetNodeIPs will return is "no
-				// addresses found".
+				// 假的 InterfaceAddrs() 从不返回错误，
+				// 因此 GetNodeIPs 唯一可能返回的错误就是 "no
+				// addresses found"（没有找到地址）。
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -403,6 +416,9 @@ func TestGetNodeIPs(t *testing.T) {
 	}
 }
 
+// TestContainsExplicitLoopback 验证 ContainsExplicitLoopback 只识别真正指向回环的 CIDR
+// （如 127.0.0.0/8、::1/128），而不把 0.0.0.0/0、::/0 这类通配 CIDR 算作显式回环；
+// 同时覆盖地址族过滤和 CIDR 排列顺序对判定结果的影响。
 func TestContainsExplicitLoopback(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -475,6 +491,9 @@ func TestContainsExplicitLoopback(t *testing.T) {
 	}
 }
 
+// TestContainsIPv4Loopback 验证 ContainsIPv4Loopback 能识别 IPv4 回环地址及包含它的网段，
+// 不把仅包含 IPv6 回环或不覆盖回环范围的 CIDR 算作 IPv4 回环；
+// 并断言对 IPv6 地址族该判定始终为 false。
 func TestContainsIPv4Loopback(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -527,7 +546,8 @@ func TestContainsIPv4Loopback(t *testing.T) {
 			if got := npa.ContainsIPv4Loopback(); got != tt.want {
 				t.Errorf("IPv4 ContainsIPv4Loopback() = %v, want %v", got, tt.want)
 			}
-			// ContainsIPv4Loopback should always be false for family=IPv6
+			// 对 IPv6 地址族，ContainsIPv4Loopback 必须始终返回 false，
+			// 因为 IPv6 CIDR 不可能包含 IPv4 回环地址。
 			npa = NewNodePortAddresses(v1.IPv6Protocol, tt.cidrStrings)
 			if got := npa.ContainsIPv4Loopback(); got {
 				t.Errorf("IPv6 ContainsIPv4Loopback() = %v, want %v", got, false)

@@ -26,5 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// MaxAttemptsEINTR 限定了因 EINTR（被信号中断的系统调用）而重试的最大次数，
+// 避免系统调用在持续收到信号时无限重试。
 var MaxAttemptsEINTR = wait.Backoff{Steps: 5}
+
+// ShouldRetryOnEINTR 判断错误是否为 EINTR：Linux 系统调用可能因信号被中断，
+// 这类错误可以安全地重试，其他错误则不应重试。
 var ShouldRetryOnEINTR = func(err error) bool { return errors.Is(err, unix.EINTR) }

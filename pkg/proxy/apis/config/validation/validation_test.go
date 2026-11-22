@@ -36,6 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateKubeProxyConfiguration 用表驱动用例校验整体配置的合法性与错误路径，
+// 从合法基线配置出发逐项修改，验证校验器只报告预期的字段错误。
 func TestValidateKubeProxyConfiguration(t *testing.T) {
 	baseConfig := &kubeproxyconfig.KubeProxyConfiguration{
 		BindAddress:        "192.168.59.103",
@@ -66,12 +68,14 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 
 	testCases := map[string]struct {
+		// 每个用例只改一个字段，便于把错误精确定位到单个校验规则。
 		mutateConfigFunc func(*kubeproxyconfig.KubeProxyConfiguration)
 		expectedErrs     field.ErrorList
 	}{
 		"basic config, unspecified Mode": {
 			mutateConfigFunc: func(_ *kubeproxyconfig.KubeProxyConfiguration) {},
 		},
+		// Windows 与 Linux 支持不同的模式，按运行时平台选择合法值。
 		"Mode specified, extra mode-specific configs": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				if runtime.GOOS == "windows" {
@@ -99,11 +103,13 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 				config.HealthzBindAddress = "0.0.0.0:12345"
 			},
 		},
+		// 基线是 IPv4，此处换成 IPv6 CIDR，验证 IP 族不匹配时报错。
 		"ClusterCIDR is wrong IP family": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				config.DetectLocal.ClusterCIDRs = []string{"fd00:192:168:59::/64"}
 			},
 		},
+		// DetectLocal 的 ClusterCIDRs 只接受单栈，双栈组合应被拒绝。
 		"ClusterCIDR is dual-stack": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				config.DetectLocal.ClusterCIDRs = []string{"192.168.59.0/24", "fd00:192:168::/64"}
@@ -143,6 +149,7 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 			},
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("MetricsBindAddress"), "127.0.0.1", "must be IP:port")},
 		},
+		// 周期类字段的零值和负数都不允许。
 		"ConfigSyncPeriod must be > 0": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				config.ConfigSyncPeriod = metav1.Duration{Duration: -1 * time.Second}
@@ -156,12 +163,14 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("SyncPeriod"), metav1.Duration{Duration: -5 * time.Second}, "must be greater than 0"),
 				field.Invalid(newPath.Child("SyncPeriod"), metav1.Duration{Duration: 2 * time.Second}, "must be greater than or equal to KubeProxyConfiguration.MinSyncPeriod")},
 		},
+		// MinSyncPeriod 为负数时必须报错，与校验规则保持一致。
 		"MinSyncPeriod must be > 0": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				config.MinSyncPeriod = metav1.Duration{Duration: -2 * time.Second}
 			},
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("MinSyncPeriod"), metav1.Duration{Duration: -2 * time.Second}, "must be greater than or equal to 0")},
 		},
+		// 同时调整两个周期，让 SyncPeriod 小于 MinSyncPeriod，触发关联性校验。
 		"SyncPeriod must be >= MinSyncPeriod": {
 			mutateConfigFunc: func(config *kubeproxyconfig.KubeProxyConfiguration) {
 				config.SyncPeriod = metav1.Duration{Duration: 1 * time.Second}
@@ -188,10 +197,12 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 从基线配置深拷贝，避免用例间相互污染。
 			config := baseConfig.DeepCopy()
 			testCase.mutateConfigFunc(config)
 			errs := Validate(config)
 			if len(testCase.expectedErrs) == 0 {
+				// 合法配置必须返回空错误列表（而非 nil），与校验器约定保持一致。
 				assert.Equal(t, field.ErrorList{}, errs, "expected no validation errors")
 			} else {
 				assert.Equal(t, testCase.expectedErrs, errs, "did not get expected validation errors")
@@ -200,6 +211,8 @@ func TestValidateKubeProxyConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateKubeProxyIPTablesConfiguration 校验 iptables 相关配置，
+// 重点是 MasqueradeBit 的取值范围。
 func TestValidateKubeProxyIPTablesConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 
@@ -227,6 +240,8 @@ func TestValidateKubeProxyIPTablesConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateKubeProxyIPVSConfiguration 校验 IPVS 超时配置，
+// 覆盖超时为 0（允许）与负数（非法）两种边界。
 func TestValidateKubeProxyIPVSConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -267,6 +282,8 @@ func TestValidateKubeProxyIPVSConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateKubeProxyLinuxConfiguration 校验 Linux 专有配置，
+// 覆盖 conntrack 各超时、MaxPerCore/Min 以及 OOMScoreAdj 的合法区间。
 func TestValidateKubeProxyLinuxConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -421,6 +438,7 @@ func TestValidateKubeProxyLinuxConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateProxyMode 按操作系统分发到 Linux 或 Windows 的代理模式校验用例。
 func TestValidateProxyMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		testValidateProxyModeWindows(t)
@@ -429,6 +447,8 @@ func TestValidateProxyMode(t *testing.T) {
 	}
 }
 
+// testValidateProxyModeLinux 校验 Linux 上允许的代理模式，
+// 同时验证 KubeProxyIPVS 特性门控开启/关闭时 ipvs 模式的接受情况。
 func testValidateProxyModeLinux(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -484,6 +504,7 @@ func testValidateProxyModeLinux(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			// 特性门控在同一进程中是全局状态，测试框架会保证用例结束后恢复。
 			if testCase.enableKubeProxyIPVS != nil {
 				featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 					features.KubeProxyIPVS: *testCase.enableKubeProxyIPVS,
@@ -496,6 +517,8 @@ func testValidateProxyModeLinux(t *testing.T) {
 	}
 }
 
+// testValidateProxyModeWindows 校验 Windows 上仅允许 kernelspace（或空）模式，
+// 其余模式均应被拒绝。
 func testValidateProxyModeWindows(t *testing.T) {
 	// TODO: remove skip once the test has been fixed.
 	if runtime.GOOS == "windows" {
@@ -536,6 +559,8 @@ func testValidateProxyModeWindows(t *testing.T) {
 	}
 }
 
+// TestValidateClientConnectionConfiguration 校验客户端连接配置的 Burst 参数，
+// 使用 cmp.Diff 忽略字段错误的 Origin 并排序后比较，避免顺序不稳定的干扰。
 func TestValidateClientConnectionConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -557,6 +582,7 @@ func TestValidateClientConnectionConfiguration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			errs := validateClientConnectionConfiguration(testCase.ccc, newPath)
+			// Origin 字段含调用栈信息，忽略它才能稳定地比较错误内容。
 			cmpOpts := []cmp.Option{cmpopts.IgnoreFields(field.Error{}, "Origin"), cmpopts.SortSlices(func(a, b *field.Error) bool { return a.Error() < b.Error() })}
 			if diff := cmp.Diff(testCase.expectedErrs, errs, cmpOpts...); diff != "" {
 				t.Errorf("did not get expected validation errors (-want,+got):\n%s", diff)
@@ -565,6 +591,8 @@ func TestValidateClientConnectionConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateHostPort 校验 IP:Port 地址格式，覆盖缺省端口、非法 IP、命名端口、
+// 端口 0 及越界端口等错误路径。
 func TestValidateHostPort(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -584,18 +612,22 @@ func TestValidateHostPort(t *testing.T) {
 			ip:           "10.10.10.10",
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("HealthzBindAddress"), "10.10.10.10", "must be IP:port")},
 		},
+		// 每段 IP 必须在 0-255 之间。
 		"digits outside of 1-255": {
 			ip:           "123.456.789.10:12345",
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("HealthzBindAddress"), "123.456.789.10", "must be a valid IP")},
 		},
+		// 端口必须是数字，不能是服务名。
 		"invalid named-port": {
 			ip:           "10.10.10.10:foo",
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("HealthzBindAddress"), "foo", "must be a valid port")},
 		},
+		// 0 不是可监听的有效端口。
 		"port cannot be 0": {
 			ip:           "10.10.10.10:0",
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("HealthzBindAddress"), "0", "must be a valid port")},
 		},
+		// 端口上限是 65535，越界必须拒绝。
 		"port is greater than allowed range": {
 			ip:           "10.10.10.10:65536",
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("HealthzBindAddress"), "65536", "must be a valid port")},
@@ -604,6 +636,7 @@ func TestValidateHostPort(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			errs := validateHostPort(testCase.ip, newPath.Child("HealthzBindAddress"))
 			if len(testCase.expectedErrs) == 0 {
+				// 合法配置必须返回空错误列表（而非 nil），与校验器约定保持一致。
 				assert.Equal(t, field.ErrorList{}, errs, "expected no validation errors")
 			} else {
 				assert.Equal(t, testCase.expectedErrs, errs, "did not get expected validation errors")
@@ -612,6 +645,8 @@ func TestValidateHostPort(t *testing.T) {
 	}
 }
 
+// TestValidateKubeProxyNodePortAddress 校验 NodePortAddresses 列表：
+// 既接受 CIDR，也接受 primary/localhost/all 关键字，并检查重复关键字。
 func TestValidateKubeProxyNodePortAddress(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -673,10 +708,12 @@ func TestValidateKubeProxyNodePortAddress(t *testing.T) {
 			addresses:    []string{kubeproxyconfig.NodePortAddressesLocalhost, kubeproxyconfig.NodePortAddressesLocalhost},
 			expectedErrs: field.ErrorList{field.Duplicate(newPath.Child("NodePortAddresses[1]"), kubeproxyconfig.NodePortAddressesLocalhost)},
 		},
+		// 即使关键字之间夹了合法 CIDR，重复仍会被检测出来。
 		"duplicate keyword separated by other values": {
 			addresses:    []string{kubeproxyconfig.NodePortAddressesPrimary, "10.0.0.0/8", kubeproxyconfig.NodePortAddressesPrimary},
 			expectedErrs: field.ErrorList{field.Duplicate(newPath.Child("NodePortAddresses[2]"), kubeproxyconfig.NodePortAddressesPrimary)},
 		},
+		// 与关键字不同，重复的 CIDR 是允许的，验证校验器的宽松策略。
 		"duplicate CIDRs are allowed": {
 			addresses: []string{"10.0.0.0/8", "10.0.0.0/8", kubeproxyconfig.NodePortAddressesLocalhost},
 		},
@@ -686,6 +723,7 @@ func TestValidateKubeProxyNodePortAddress(t *testing.T) {
 		"keyword combined with CIDR": {
 			addresses: []string{kubeproxyconfig.NodePortAddressesPrimary, "127.0.0.1/32"},
 		},
+		// 关键字大小写敏感，拼写错误应给出合法值提示。
 		"typo'd keyword": {
 			addresses:    []string{"Localhost"},
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("NodePortAddresses[0]"), "Localhost", "must be a valid CIDR or one of the keywords 'primary', 'localhost', 'all'")},
@@ -715,6 +753,7 @@ func TestValidateKubeProxyNodePortAddress(t *testing.T) {
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("NodePortAddresses[0]"), "::0", "must be a valid CIDR or one of the keywords 'primary', 'localhost', 'all'"),
 				field.Invalid(newPath.Child("NodePortAddresses[1]"), "::1", "must be a valid CIDR or one of the keywords 'primary', 'localhost', 'all'")},
 		},
+		// IPv6 CIDR 中的非十六进制字符应被拒绝。
 		"invalid ipv6 ip format": {
 			addresses:    []string{"::1/128", "2001:db8::/32", "2001:db8:xyz/64"},
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("NodePortAddresses[2]"), "2001:db8:xyz/64", "must be a valid CIDR or one of the keywords 'primary', 'localhost', 'all'")},
@@ -731,6 +770,8 @@ func TestValidateKubeProxyNodePortAddress(t *testing.T) {
 	}
 }
 
+// TestValidateKubeProxyExcludeCIDRs 校验 ExcludeCIDRs 必须为合法 CIDR，
+// 且与 NodePortAddresses 不同，这里不允许关键字。
 func TestValidateKubeProxyExcludeCIDRs(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 	for name, testCase := range map[string]struct {
@@ -810,6 +851,8 @@ func TestValidateKubeProxyExcludeCIDRs(t *testing.T) {
 	}
 }
 
+// TestValidateDetectLocalConfiguration 校验不同 DetectLocalMode 下对应字段的必填性，
+// 例如前缀模式下 InterfaceNamePrefix 不能为空。
 func TestValidateDetectLocalConfiguration(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 
@@ -887,6 +930,7 @@ func TestValidateDetectLocalConfiguration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 按错误文本逐一比较，避免依赖 field.Error 的内部字段。
 			errs := validateDetectLocalConfiguration(tc.mode, tc.config, newPath.Child("DetectLocal"))
 			assert.Equalf(t, len(tc.expectedErrs), len(errs),
 				"expected %d errors, got %d errors: %v", len(tc.expectedErrs), len(errs), errs,
@@ -898,6 +942,8 @@ func TestValidateDetectLocalConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateDualStackCIDRStrings 校验双栈 CIDR 列表：
+// 允许单个 CIDR 或一对 IPv4/IPv6 CIDR，拒绝多于两个或格式错误的条目。
 func TestValidateDualStackCIDRStrings(t *testing.T) {
 	newPath := field.NewPath("KubeProxyConfiguration")
 
@@ -950,6 +996,7 @@ func TestValidateDualStackCIDRStrings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 校验器可能返回多个错误，先比对数量再逐条比较文本。
 			errs := validateDualStackCIDRStrings(tc.cidrStrings, newPath.Child("DualStackCIDRList"))
 			assert.Equalf(t, len(tc.expectedErrs), len(errs),
 				"expected %d errors, got %d errors: %v", len(tc.expectedErrs), len(errs), errs,

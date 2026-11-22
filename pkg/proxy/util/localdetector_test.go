@@ -21,6 +21,7 @@ import (
 	"testing"
 )
 
+// TestNoOpLocalDetector 验证空实现不生成任何本地流量匹配规则。
 func TestNoOpLocalDetector(t *testing.T) {
 	localDetector := NewNoOpLocalDetector()
 	if localDetector.IsImplemented() {
@@ -38,6 +39,7 @@ func TestNoOpLocalDetector(t *testing.T) {
 	}
 }
 
+// TestDetectLocalByCIDR 验证按 CIDR 生成的 iptables 匹配参数，覆盖 IPv4 与 IPv6 地址族。
 func TestDetectLocalByCIDR(t *testing.T) {
 	cases := []struct {
 		cidr                     string
@@ -50,6 +52,7 @@ func TestDetectLocalByCIDR(t *testing.T) {
 			expectedIfNotLocalOutput: []string{"!", "-s", "10.0.0.0/14"},
 		},
 		{
+			// 同时覆盖 IPv6 CIDR：两种地址族在 iptables 中的写法一致。
 			cidr:                     "2002:0:0:1234::/64",
 			expectedIfLocalOutput:    []string{"-s", "2002:0:0:1234::/64"},
 			expectedIfNotLocalOutput: []string{"!", "-s", "2002:0:0:1234::/64"},
@@ -74,6 +77,7 @@ func TestDetectLocalByCIDR(t *testing.T) {
 	}
 }
 
+// TestDetectLocalByBridgeInterface 验证按网桥接口名生成的 iptables 匹配参数。
 func TestDetectLocalByBridgeInterface(t *testing.T) {
 	cases := []struct {
 		ifaceName               string
@@ -105,6 +109,7 @@ func TestDetectLocalByBridgeInterface(t *testing.T) {
 	}
 }
 
+// TestDetectLocalNFTByBridgeInterface 验证按网桥接口名生成的 nftables 匹配参数。
 func TestDetectLocalNFTByBridgeInterface(t *testing.T) {
 	cases := []struct {
 		ifaceName               string
@@ -136,6 +141,7 @@ func TestDetectLocalNFTByBridgeInterface(t *testing.T) {
 	}
 }
 
+// TestDetectLocalByInterfaceNamePrefix 验证接口名前缀会转换成 iptables 的通配匹配后缀。
 func TestDetectLocalByInterfaceNamePrefix(t *testing.T) {
 	cases := []struct {
 		ifacePrefix             string
@@ -169,6 +175,7 @@ func TestDetectLocalByInterfaceNamePrefix(t *testing.T) {
 	}
 }
 
+// TestDetectLocalNFTByInterfaceNamePrefix 验证接口名前缀会转换成 nftables 的通配匹配后缀。
 func TestDetectLocalNFTByInterfaceNamePrefix(t *testing.T) {
 	cases := []struct {
 		ifacePrefix             string

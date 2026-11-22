@@ -32,16 +32,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// runner implements ipvs.Interface.
+// runner 是 ipvs.Interface 的具体实现，封装 libipvs 句柄。
 type runner struct {
 	ipvsHandle *libipvs.Handle
-	mu         sync.Mutex // Protect Netlink calls
+	mu         sync.Mutex // 保护 Netlink 调用，避免并发修改内核 IPVS 状态
 }
 
-// Protocol is the IPVS service protocol type
+// Protocol 表示 IPVS 服务的协议类型。
 type Protocol uint16
 
-// New returns a new Interface which will call ipvs APIs.
+// New 创建并返回一个调用 IPVS API 的 Interface 实例。
+// 初始化失败时返回 nil，由调用方按不可用后端处理。
 func New() Interface {
 	handle, err := libipvs.New("")
 	if err != nil {
@@ -53,7 +54,7 @@ func New() Interface {
 	}
 }
 
-// AddVirtualServer is part of ipvs.Interface.
+// AddVirtualServer 实现 ipvs.Interface，新增一个 IPVS 虚拟服务。
 func (runner *runner) AddVirtualServer(vs *VirtualServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -64,7 +65,7 @@ func (runner *runner) AddVirtualServer(vs *VirtualServer) error {
 	return runner.ipvsHandle.NewService(svc)
 }
 
-// UpdateVirtualServer is part of ipvs.Interface.
+// UpdateVirtualServer 实现 ipvs.Interface，更新已有 IPVS 虚拟服务。
 func (runner *runner) UpdateVirtualServer(vs *VirtualServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -75,7 +76,7 @@ func (runner *runner) UpdateVirtualServer(vs *VirtualServer) error {
 	return runner.ipvsHandle.UpdateService(svc)
 }
 
-// DeleteVirtualServer is part of ipvs.Interface.
+// DeleteVirtualServer 实现 ipvs.Interface，删除一个 IPVS 虚拟服务。
 func (runner *runner) DeleteVirtualServer(vs *VirtualServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -86,7 +87,7 @@ func (runner *runner) DeleteVirtualServer(vs *VirtualServer) error {
 	return runner.ipvsHandle.DelService(svc)
 }
 
-// GetVirtualServer is part of ipvs.Interface.
+// GetVirtualServer 实现 ipvs.Interface，查询指定的 IPVS 虚拟服务。
 func (runner *runner) GetVirtualServer(vs *VirtualServer) (*VirtualServer, error) {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -106,7 +107,7 @@ func (runner *runner) GetVirtualServer(vs *VirtualServer) (*VirtualServer, error
 	return vServ, nil
 }
 
-// GetVirtualServers is part of ipvs.Interface.
+// GetVirtualServers 实现 ipvs.Interface，列出所有 IPVS 虚拟服务。
 func (runner *runner) GetVirtualServers() ([]*VirtualServer, error) {
 	runner.mu.Lock()
 	ipvsSvcs, err := runner.ipvsHandle.GetServices()
@@ -125,14 +126,15 @@ func (runner *runner) GetVirtualServers() ([]*VirtualServer, error) {
 	return vss, nil
 }
 
-// Flush is part of ipvs.Interface. Currently we delete IPVS services one by one
+// Flush 实现 ipvs.Interface，清空全部 IPVS 服务。
+// 当前实现是逐个删除 IPVS 服务，而不是一次性重置内核表。
 func (runner *runner) Flush() error {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.ipvsHandle.Flush()
 }
 
-// AddRealServer is part of ipvs.Interface.
+// AddRealServer 实现 ipvs.Interface，为虚拟服务新增一个真实后端。
 func (runner *runner) AddRealServer(vs *VirtualServer, rs *RealServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -147,7 +149,7 @@ func (runner *runner) AddRealServer(vs *VirtualServer, rs *RealServer) error {
 	return runner.ipvsHandle.NewDestination(svc, dst)
 }
 
-// DeleteRealServer is part of ipvs.Interface.
+// DeleteRealServer 实现 ipvs.Interface，从虚拟服务删除一个真实后端。
 func (runner *runner) DeleteRealServer(vs *VirtualServer, rs *RealServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -162,6 +164,7 @@ func (runner *runner) DeleteRealServer(vs *VirtualServer, rs *RealServer) error 
 	return runner.ipvsHandle.DelDestination(svc, dst)
 }
 
+// UpdateRealServer 实现 ipvs.Interface，更新虚拟服务下某个真实后端的配置。
 func (runner *runner) UpdateRealServer(vs *VirtualServer, rs *RealServer) error {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -176,7 +179,7 @@ func (runner *runner) UpdateRealServer(vs *VirtualServer, rs *RealServer) error 
 	return runner.ipvsHandle.UpdateDestination(svc, dst)
 }
 
-// GetRealServers is part of ipvs.Interface.
+// GetRealServers 实现 ipvs.Interface，查询虚拟服务下的全部真实后端。
 func (runner *runner) GetRealServers(vs *VirtualServer) ([]*RealServer, error) {
 	svc, err := toIPVSService(vs)
 	if err != nil {
@@ -200,7 +203,7 @@ func (runner *runner) GetRealServers(vs *VirtualServer) ([]*RealServer, error) {
 	return rss, nil
 }
 
-// ConfigureTimeouts is the equivalent to running "ipvsadm --set" to configure tcp, tcpfin and udp timeouts
+// ConfigureTimeouts 等价于执行 "ipvsadm --set"，设置 tcp、tcpfin 和 udp 的超时时间。
 func (runner *runner) ConfigureTimeouts(tcpTimeout, tcpFinTimeout, udpTimeout time.Duration) error {
 	ipvsConfig := &libipvs.Config{
 		TimeoutTCP:    tcpTimeout,
@@ -211,7 +214,7 @@ func (runner *runner) ConfigureTimeouts(tcpTimeout, tcpFinTimeout, udpTimeout ti
 	return runner.ipvsHandle.SetConfig(ipvsConfig)
 }
 
-// toVirtualServer converts an IPVS Service to the equivalent VirtualServer structure.
+// toVirtualServer 将 IPVS Service 转换为对应的 VirtualServer 结构。
 func toVirtualServer(svc *libipvs.Service) (*VirtualServer, error) {
 	if svc == nil {
 		return nil, errors.New("ipvs svc should not be empty")
@@ -224,14 +227,15 @@ func toVirtualServer(svc *libipvs.Service) (*VirtualServer, error) {
 		Timeout:   svc.Timeout,
 	}
 
-	// Test FlagHashed (0x2). A valid flag must include FlagHashed
+	// 校验 FlagHashed (0x2)：每个服务都会被哈希进服务表，因此该标志必须置位。
 	if svc.Flags&FlagHashed == 0 {
 		return nil, fmt.Errorf("Flags of successfully created IPVS service should enable the flag (%x) since every service is hashed into the service table", FlagHashed)
 	}
-	// Sub Flags to 0x2
-	// 011 -> 001, 010 -> 000
+	// 去掉 FlagHashed 位后再保存自定义标志。
+	// 011 -> 001，010 -> 000
 	vs.Flags = ServiceFlags(svc.Flags &^ uint32(FlagHashed))
 
+	// 内核返回空地址时按地址族补零，避免下游拿到 nil 地址。
 	if vs.Address == nil {
 		if svc.AddressFamily == unix.AF_INET {
 			vs.Address = net.IPv4zero
@@ -242,7 +246,7 @@ func toVirtualServer(svc *libipvs.Service) (*VirtualServer, error) {
 	return vs, nil
 }
 
-// toRealServer converts an IPVS Destination to the equivalent RealServer structure.
+// toRealServer 将 IPVS Destination 转换为对应的 RealServer 结构。
 func toRealServer(dst *libipvs.Destination) (*RealServer, error) {
 	if dst == nil {
 		return nil, errors.New("ipvs destination should not be empty")
@@ -256,7 +260,7 @@ func toRealServer(dst *libipvs.Destination) (*RealServer, error) {
 	}, nil
 }
 
-// toIPVSService converts a VirtualServer to the equivalent IPVS Service structure.
+// toIPVSService 将 VirtualServer 转换为对应的 IPVS Service 结构。
 func toIPVSService(vs *VirtualServer) (*libipvs.Service, error) {
 	if vs == nil {
 		return nil, errors.New("virtual server should not be empty")
@@ -270,6 +274,7 @@ func toIPVSService(vs *VirtualServer) (*libipvs.Service, error) {
 		Timeout:   vs.Timeout,
 	}
 
+	// Linux 内核 IPVS 接口要求显式指定地址族与掩码：IPv4 用 32 位全 1，IPv6 用前缀长度 128。
 	if ip4 := vs.Address.To4(); ip4 != nil {
 		ipvsSvc.AddressFamily = unix.AF_INET
 		ipvsSvc.Netmask = 0xffffffff
@@ -280,7 +285,7 @@ func toIPVSService(vs *VirtualServer) (*libipvs.Service, error) {
 	return ipvsSvc, nil
 }
 
-// toIPVSDestination converts a RealServer to the equivalent IPVS Destination structure.
+// toIPVSDestination 将 RealServer 转换为对应的 IPVS Destination 结构。
 func toIPVSDestination(rs *RealServer) (*libipvs.Destination, error) {
 	if rs == nil {
 		return nil, errors.New("real server should not be empty")
@@ -292,7 +297,7 @@ func toIPVSDestination(rs *RealServer) (*libipvs.Destination, error) {
 	}, nil
 }
 
-// stringToProtocolType returns the protocol type for the given name
+// stringToProtocol 返回给定协议名称对应的协议编号。
 func stringToProtocol(protocol string) uint16 {
 	switch strings.ToLower(protocol) {
 	case "tcp":
@@ -305,7 +310,7 @@ func stringToProtocol(protocol string) uint16 {
 	return uint16(0)
 }
 
-// protocolTypeToString returns the name for the given protocol.
+// protocolToString 返回给定协议编号对应的名称。
 func protocolToString(proto Protocol) string {
 	switch proto {
 	case unix.IPPROTO_TCP:

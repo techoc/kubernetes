@@ -29,7 +29,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// generateRandomIP is copied from pkg/apis/networking/fuzzer/fuzzer.go
+// generateRandomIP 生成随机 IP 字符串，实现复制自 pkg/apis/networking/fuzzer/fuzzer.go。
 func generateRandomIP(is6 bool, c randfill.Continue) string {
 	n := 4
 	if is6 {
@@ -44,15 +44,15 @@ func generateRandomIP(is6 bool, c randfill.Continue) string {
 	if ok {
 		return ip.String()
 	}
-	// this should not happen
+	// 由合法字节构造的地址必然有效，走到这里说明出现了意外情况。
 	panic(fmt.Sprintf("invalid IP %v", bytes))
 }
 
-// generateRandomCIDR is copied from pkg/apis/networking/fuzzer/fuzzer.go
+// generateRandomCIDR 生成随机 CIDR 字符串，实现复制自 pkg/apis/networking/fuzzer/fuzzer.go。
 func generateRandomCIDR(is6 bool, c randfill.Continue) string {
 	ip, err := netip.ParseAddr(generateRandomIP(is6, c))
 	if err != nil {
-		// generateRandomIP already panics if returns a not valid ip
+		// generateRandomIP 在生成非法 IP 时会直接 panic，这里只是防御性处理。
 		panic(err)
 	}
 
@@ -61,27 +61,30 @@ func generateRandomCIDR(is6 bool, c randfill.Continue) string {
 		n = 128
 	}
 
+	// 掩码长度取 [0, n) 区间；PrefixFrom/Masked 会规范化为网络地址。
 	bits := c.Rand.Intn(n)
 	prefix := netip.PrefixFrom(ip, bits)
 	return prefix.Masked().String()
 }
 
-// getRandomDualStackCIDR returns a random dual-stack CIDR.
+// getRandomDualStackCIDR 返回随机的双栈 CIDR 列表：IPv4/IPv6 顺序随机，数量为一个或两个。
 func getRandomDualStackCIDR(c randfill.Continue) []string {
 	cidrIPv4 := generateRandomCIDR(false, c)
 	cidrIPv6 := generateRandomCIDR(true, c)
 
 	cidrs := []string{cidrIPv4, cidrIPv6}
+	// 随机打乱两个地址族的顺序，覆盖不同的配置排列。
 	if c.Bool() {
 		cidrs = []string{cidrIPv6, cidrIPv4}
 	}
 	return cidrs[:1+c.Intn(2)]
 }
 
-// Funcs returns the fuzzer functions for the kube-proxy apis.
+// Funcs 返回 kube-proxy API 的 fuzzer 函数，用于 round-trip 测试中的随机对象生成。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(obj *kubeproxyconfig.KubeProxyConfiguration, c randfill.Continue) {
+			// 先随机填充通用字段，再针对需要合法格式或特定语义的字段单独赋值。
 			c.FillNoCustom(obj)
 			obj.BindAddress = fmt.Sprintf("%d.%d.%d.%d", c.Intn(256), c.Intn(256), c.Intn(256), c.Intn(256))
 			obj.ClientConnection.ContentType = c.String(0)
@@ -99,6 +102,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			obj.Linux.OOMScoreAdj = ptr.To(c.Int31())
 			obj.ClientConnection.ContentType = "bar"
 			obj.NodePortAddresses = []string{"1.2.3.0/24"}
+			// 日志格式为空会导致校验失败，需补一个合法值。
 			if obj.Logging.Format == "" {
 				obj.Logging.Format = "text"
 			}

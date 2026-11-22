@@ -58,11 +58,11 @@ import (
 )
 
 const (
-	// Our nftables table. All of our chains/sets/maps are created inside this table,
-	// so they don't need any "kube-" or "kube-proxy-" prefix of their own.
+	// 我们的 nftables table。所有 chain/set/map 都建在该 table 内，
+	// 因此它们的名字无需再加 "kube-" 或 "kube-proxy-" 前缀。
 	kubeProxyTable = "kube-proxy"
 
-	// base chains
+	// base chain（直接挂载到 hook 的链）
 	filterPreroutingPreDNATChain = "filter-prerouting-pre-dnat"
 	filterOutputPreDNATChain     = "filter-output-pre-dnat"
 	filterInputChain             = "filter-input"
@@ -72,46 +72,46 @@ const (
 	natOutputChain               = "nat-output"
 	natPostroutingChain          = "nat-postrouting"
 
-	// service dispatch
+	// service 分发
 	servicesChain       = "services"
 	serviceIPsMap       = "service-ips"
 	serviceNodePortsMap = "service-nodeports"
 
-	// set of IPs that accept NodePort traffic
+	// 允许接收 NodePort 流量的 IP 集合
 	nodePortIPsSet = "nodeport-ips"
 
-	// set of active ClusterIPs.
+	// 活跃的 ClusterIP 集合。
 	clusterIPsSet = "cluster-ips"
 
-	// handling for services with no endpoints
+	// 无 Endpoint 的 service 处理
 	serviceEndpointsCheckChain  = "service-endpoints-check"
 	nodePortEndpointsCheckChain = "nodeport-endpoints-check"
 	noEndpointServicesMap       = "no-endpoint-services"
 	noEndpointNodePortsMap      = "no-endpoint-nodeports"
 	rejectChain                 = "reject-chain"
 
-	// handling traffic to unallocated ClusterIPs and undefined ports of ClusterIPs
+	// 处理发往未分配 ClusterIP 以及 ClusterIP 未定义端口的流量
 	clusterIPsCheckChain = "cluster-ips-check"
 
-	// LoadBalancerSourceRanges handling
+	// LoadBalancerSourceRanges 处理
 	firewallIPsMap     = "firewall-ips"
 	firewallCheckChain = "firewall-check"
 
-	// masquerading
+	// 伪装（masquerade）
 	masqueradingChain     = "masquerading"
 	hairpinConnectionsSet = "hairpin-connections"
 
-	// reject handling for localhost NodePorts kube-proxy doesn't serve
+	// 对 kube-proxy 不提供服务的 localhost NodePort 进行 reject
 	localhostNodePortRejectMap = "localhost-nodeport-reject-ports"
 )
 
-// localhostNodePortRejectChainName returns the name of the per-protocol chain
-// that counts and rejects localhost NodePort traffic kube-proxy doesn't serve.
+// localhostNodePortRejectChainName 返回按协议划分的 chain 名称，
+// 该 chain 用于对 kube-proxy 不提供服务的 localhost NodePort 流量计数并拒绝。
 func localhostNodePortRejectChainName(protocol v1.Protocol) string {
 	return "localhost-nodeport-reject-" + strings.ToLower(string(protocol))
 }
 
-// NewDualStackProxier creates a MetaProxier instance, with IPv4 and IPv6 proxies.
+// NewDualStackProxier 创建一个包含 IPv4 和 IPv6 代理的 MetaProxier 实例。
 func NewDualStackProxier(
 	ctx context.Context,
 	config *kubeproxyconfig.KubeProxyConfiguration,
@@ -122,7 +122,7 @@ func NewDualStackProxier(
 	healthzServer *healthcheck.ProxyHealthServer,
 	initOnly bool,
 ) (proxy.Provider, error) {
-	// Create an ipv4 instance of the single-stack proxier
+	// 先创建单栈 IPv4 proxier。
 	ipv4Proxier, err := NewProxier(ctx, config, v1.IPv4Protocol,
 		localDetectors[v1.IPv4Protocol], nodeName, nodeIPs[v1.IPv4Protocol],
 		recorder, healthzServer, initOnly)
@@ -136,41 +136,40 @@ func NewDualStackProxier(
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ipv6 proxier: %v", err)
 	}
+	// init-only 模式下只需完成环境初始化，无需构建 MetaProxier。
 	if initOnly {
 		return nil, nil
 	}
 	return metaproxier.NewMetaProxier(ipv4Proxier, ipv6Proxier), nil
 }
 
-// Proxier is an nftables-based proxy
+// Proxier 是基于 nftables 的代理实现。
 type Proxier struct {
-	// ipFamily defines the IP family which this proxier is tracking.
+	// ipFamily 表示该 proxier 所跟踪的 IP 协议族。
 	ipFamily v1.IPFamily
 
-	// endpointsChanges and serviceChanges contains all changes to endpoints and
-	// services that happened since nftables was synced. For a single object,
-	// changes are accumulated, i.e. previous is state from before all of them,
-	// current is state after applying all of those.
+	// endpointsChanges 和 serviceChanges 保存自上次 nftables 同步以来 Endpoint 和 Service 的所有变化。
+	// 对单个对象，变化会被累积：previous 是所有这些变化之前的状态，
+	// current 是应用所有这些变化之后的状态。
 	endpointsChanges *proxy.EndpointsChangeTracker
 	serviceChanges   *proxy.ServiceChangeTracker
 
-	mu             sync.Mutex // protects the following fields
+	mu             sync.Mutex // 保护以下字段
 	svcPortMap     proxy.ServicePortMap
 	endpointsMap   proxy.EndpointsMap
 	topologyLabels map[string]string
-	// endpointSlicesSynced, and servicesSynced are set to true
-	// when corresponding objects are synced after startup. This is used to avoid
-	// updating nftables with some partial data after kube-proxy restart.
+	// endpointSlicesSynced 和 servicesSynced 在启动后同步完相应对象时置为 true。
+	// 用于避免 kube-proxy 重启后用不完整的数据更新 nftables。
 	endpointSlicesSynced bool
 	servicesSynced       bool
 	lastFullSync         time.Time
 	needFullSync         bool
 	initialized          int32
-	syncRunner           *runner.BoundedFrequencyRunner // governs calls to syncProxyRules
+	syncRunner           *runner.BoundedFrequencyRunner // 控制 syncProxyRules 的调用频率
 	syncPeriod           time.Duration
 	flushed              bool
 
-	// These are effectively const and do not need the mutex to be held.
+	// 这些字段实际上等同于常量，无需持有互斥锁。
 	nftables       knftables.Interface
 	masqueradeAll  bool
 	masqueradeMark string
@@ -183,17 +182,17 @@ type Proxier struct {
 	serviceHealthServer healthcheck.ServiceHealthServer
 	healthzServer       *healthcheck.ProxyHealthServer
 
-	// nodePortAddresses selects the interfaces where nodePort works.
+	// nodePortAddresses 选择 NodePort 生效的网卡。
 	nodePortAddresses *proxyutil.NodePortAddresses
-	// networkInterfacer defines an interface for several net library functions.
-	// Inject for test purpose.
+	// networkInterfacer 封装若干 net 库函数，
+	// 测试时可注入替身。
 	networkInterfacer proxyutil.NetworkInterfacer
 
-	// staleChains contains information about chains to be deleted later
+	// staleChains 记录后续需要删除的 chain 及其时间。
 	staleChains map[string]time.Time
 
-	// serviceCIDRs is a comma separated list of ServiceCIDRs belonging to the IPFamily
-	// which proxier is operating on, can be directly consumed by knftables.
+	// serviceCIDRs 是本 proxier 所在 IP 协议族的 Service CIDR 列表（逗号分隔），
+	// 可以直接被 knftables 使用。
 	serviceCIDRs string
 
 	logger         klog.Logger
@@ -207,22 +206,22 @@ type Proxier struct {
 	serviceNodePorts    *nftElementStorage
 	hairpinConnections  *nftElementStorage
 
-	// localhostNodePortRejects holds the (proto . port) keys of localhost NodePorts
-	// that kube-proxy rejects rather than serving.
+	// localhostNodePortRejects 保存 kube-proxy 选择拒绝而非提供服务的
+	// localhost NodePort 的 (协议 . 端口) 键。
 	localhostNodePortRejects *nftElementStorage
 
-	// localhostNodePortProxy handles userspace proxying of NodePorts on localhost
+	// localhostNodePortProxy 负责 localhost 上 NodePort 的用户态代理。
 	localhostNodePortProxy *localnodeportproxy.LocalNodePortProxy
 
-	// localhostNodePortsEnabled is set when the KubeProxyNFTablesLocalhostNodePorts
-	// feature is enabled
+	// localhostNodePortsEnabled 在 KubeProxyNFTablesLocalhostNodePorts 特性
+	// 开启时置位。
 	localhostNodePortsEnabled bool
 }
 
-// Proxier implements proxy.Provider
+// Proxier 实现 proxy.Provider 接口。
 var _ proxy.Provider = &Proxier{}
 
-// NewProxier returns a new single-stack NFTables proxier.
+// NewProxier 返回一个单栈 NFTables proxier。
 func NewProxier(ctx context.Context,
 	config *kubeproxyconfig.KubeProxyConfiguration,
 	ipFamily v1.IPFamily,
@@ -240,12 +239,13 @@ func NewProxier(ctx context.Context,
 		return nil, err
 	}
 
+	// init-only 模式只验证环境、不启动代理。
 	if initOnly {
 		logger.Info("System initialized and --init-only specified")
 		return nil, nil
 	}
 
-	// Generate the masquerade mark to use for SNAT rules.
+	// 生成用于 SNAT 规则的 masquerade mark。
 	masqueradeValue := 1 << uint(*config.NFTables.MasqueradeBit)
 	masqueradeMark := fmt.Sprintf("%#08x", masqueradeValue)
 	logger.V(2).Info("Using nftables mark for masquerade", "mark", masqueradeMark)
@@ -292,26 +292,27 @@ func NewProxier(ctx context.Context,
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeProxyNFTablesLocalhostNodePorts) {
 		proxier.localhostNodePortsEnabled = true
+		// 只有显式配置 loopback 地址时才需要用户态代理，其余情况由 reject 规则处理。
 		if useLocalhostNodePortProxy(nodePortAddresses) {
 			proxier.localhostNodePortProxy = localnodeportproxy.NewLocalNodePortProxy(ctx, ipFamily)
 		}
 	}
 
 	logger.V(2).Info("NFTables sync params", "minSyncPeriod", minSyncPeriod, "syncPeriod", syncPeriod, "maxSyncPeriod", proxyutil.FullSyncPeriod)
-	// We need to pass *some* maxInterval to NewBoundedFrequencyRunner. time.Hour is arbitrary.
+	// 传给 NewBoundedFrequencyRunner 的 maxInterval 取任意值即可，这里用 time.Hour。
 	proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, proxyutil.FullSyncPeriod)
 
 	return proxier, nil
 }
 
+// useLocalhostNodePortProxy 判断是否需要用户态代理 localhost 上的 NodePort。
 func useLocalhostNodePortProxy(nodePortAddresses *proxyutil.NodePortAddresses) bool {
 	return nodePortAddresses.ContainsExplicitLoopback()
 }
 
-// localhostNodePortRejectProtocols returns the localhost NodePort protocols whose
-// traffic kube-proxy rejects and counts, or nil if it rejects none. When the
-// userspace proxy serves localhost NodePorts only the protocols it cannot serve
-// are rejected; when the feature is enabled without the proxy, all are rejected.
+// localhostNodePortRejectProtocols 返回 kube-proxy 会拒绝并计数的 localhost NodePort 协议列表；
+// 若一个都不拒绝则返回 nil。启用用户态代理时，只拒绝代理无法服务的协议；
+// 只开启特性但没有代理时，则全部拒绝。
 func (proxier *Proxier) localhostNodePortRejectProtocols() []v1.Protocol {
 	switch {
 	case !proxier.localhostNodePortsEnabled:
@@ -323,16 +324,15 @@ func (proxier *Proxier) localhostNodePortRejectProtocols() []v1.Protocol {
 	}
 }
 
-// rejectsLocalhostNodePort reports whether kube-proxy rejects localhost NodePort
-// traffic for the given protocol.
+// rejectsLocalhostNodePort 报告对给定协议，kube-proxy 是否拒绝 localhost NodePort 流量。
 func (proxier *Proxier) rejectsLocalhostNodePort(protocol v1.Protocol) bool {
 	return slices.Contains(proxier.localhostNodePortRejectProtocols(), protocol)
 }
 
-// internal struct for string service information
+// 保存 Service 信息的内部结构体，用于替代 serviceInfo。
 type servicePortInfo struct {
 	*proxy.BaseServicePortInfo
-	// The following fields are computed and stored for performance reasons.
+	// 以下字段预先算好并缓存，避免每次同步重复计算。
 	nameString             string
 	clusterPolicyChainName string
 	localPolicyChainName   string
@@ -340,11 +340,11 @@ type servicePortInfo struct {
 	firewallChainName      string
 }
 
-// returns a new proxy.ServicePort which abstracts a serviceInfo
+// newServiceInfo 返回一个封装 serviceInfo 的 proxy.ServicePort。
 func newServiceInfo(port *v1.ServicePort, service *v1.Service, bsvcPortInfo *proxy.BaseServicePortInfo) proxy.ServicePort {
 	svcPort := &servicePortInfo{BaseServicePortInfo: bsvcPortInfo}
 
-	// Store the following for performance reasons.
+	// 预先算好并缓存以下字段，避免重复计算。
 	svcName := types.NamespacedName{Namespace: service.Namespace, Name: service.Name}
 	svcPortName := proxy.ServicePortName{NamespacedName: svcName, Port: port.Name}
 	svcPort.nameString = svcPortName.String()
@@ -358,7 +358,7 @@ func newServiceInfo(port *v1.ServicePort, service *v1.Service, bsvcPortInfo *pro
 	return svcPort
 }
 
-// internal struct for endpoints information
+// 保存 Endpoint 信息的内部结构体。
 type endpointInfo struct {
 	*proxy.BaseEndpointInfo
 
@@ -366,7 +366,7 @@ type endpointInfo struct {
 	affinitySetName string
 }
 
-// returns a new proxy.Endpoint which abstracts a endpointInfo
+// newEndpointInfo 返回一个封装 endpointInfo 的 proxy.Endpoint。
 func newEndpointInfo(baseInfo *proxy.BaseEndpointInfo, svcPortName *proxy.ServicePortName) proxy.Endpoint {
 	chainNameBase := servicePortEndpointChainNameBase(svcPortName, strings.ToLower(string(svcPortName.Protocol)), baseInfo.String())
 	return &endpointInfo{
@@ -376,15 +376,13 @@ func newEndpointInfo(baseInfo *proxy.BaseEndpointInfo, svcPortName *proxy.Servic
 	}
 }
 
-// nftablesBaseChains lists our "base chains"; those that are directly connected to the
-// netfilter hooks (e.g., "postrouting", "input", etc.), as opposed to "regular" chains,
-// which are only run when a rule jumps to them. See
-// https://wiki.nftables.org/wiki-nftables/index.php/Configuring_chains.
+// nftablesBaseChain 描述 "base chain"：直接挂载到 netfilter hook（如 postrouting、input
+// 等）的链，区别于只有被规则 jump 到才会执行的 "普通" chain。参见
+// https://wiki.nftables.org/wiki-nftables/index.php/Configuring_chains。
 //
-// These are set up from setupNFTables() and then not directly referenced by
-// syncProxyRules().
+// 这些链由 setupNFTables() 创建，之后 syncProxyRules() 不会直接引用它们。
 //
-// All of our base chains have names that are just "${type}-${hook}". e.g., "nat-prerouting".
+// 所有 base chain 的命名规则都是 "${type}-${hook}"，例如 "nat-prerouting"。
 type nftablesBaseChain struct {
 	name      string
 	chainType knftables.BaseChainType
@@ -392,35 +390,35 @@ type nftablesBaseChain struct {
 	priority  knftables.BaseChainPriority
 }
 
+// nftablesBaseChains 定义需要创建的 base chain 及其 hook/优先级。
 var nftablesBaseChains = []nftablesBaseChain{
-	// filter base chains (pre-dnat priority) to operate on pre-DNAT dest IPs and Port for filtering load-balancer source ranges.
+	// filter base chain（pre-dnat 优先级）：在 DNAT 前按原始目的 IP 和端口过滤 LoadBalancer source range。
 	{filterPreroutingPreDNATChain, knftables.FilterType, knftables.PreroutingHook, knftables.DNATPriority + "-10"},
 	{filterOutputPreDNATChain, knftables.FilterType, knftables.OutputHook, knftables.DNATPriority + "-10"},
 
-	// filter base chains (filter priority)
+	// filter base chain（filter 优先级）
 	{filterInputChain, knftables.FilterType, knftables.InputHook, knftables.FilterPriority},
 	{filterForwardChain, knftables.FilterType, knftables.ForwardHook, knftables.FilterPriority},
 	{filterOutputChain, knftables.FilterType, knftables.OutputHook, knftables.FilterPriority},
 
-	// nat base chains (dnat priority)
+	// nat base chain（dnat 优先级）
 	{natPreroutingChain, knftables.NATType, knftables.PreroutingHook, knftables.DNATPriority},
 	{natOutputChain, knftables.NATType, knftables.OutputHook, knftables.DNATPriority},
 	{natPostroutingChain, knftables.NATType, knftables.PostroutingHook, knftables.SNATPriority},
 }
 
-// nftablesJumpChains lists our top-level "regular chains" that are jumped to directly
-// from one of the base chains. These are set up from setupNFTables(), and some of them
-// are also referenced in syncProxyRules().
+// nftablesJumpChains 定义从 base chain 跳转到的顶层 chain。
 type nftablesJumpChain struct {
 	dstChain  string
 	srcChain  string
 	extraArgs string
 }
 
+// nftablesJumpChains 定义从 base chain 直接 jump 过来的顶层 "普通 chain"。
+// 这些链由 setupNFTables() 创建，其中一部分也会被 syncProxyRules() 引用。
 var nftablesJumpChains = []nftablesJumpChain{
-	// We can't jump to endpointsCheckChain from filter-prerouting-pre-dnat like
-	// firewallCheckChain because reject action is only valid in chains using the
-	// input, forward or output hooks with kernels before 5.9.
+	// 不能像 firewallCheckChain 那样从 filter-prerouting-pre-dnat 跳到 endpointsCheckChain：
+	// 在 5.9 之前的内核上，reject 动作只在 input/forward/output hook 的链里合法。
 	{nodePortEndpointsCheckChain, filterInputChain, "ct state new"},
 	{serviceEndpointsCheckChain, filterInputChain, "ct state new"},
 	{serviceEndpointsCheckChain, filterForwardChain, "ct state new"},
@@ -437,11 +435,10 @@ var nftablesJumpChains = []nftablesJumpChain{
 	{clusterIPsCheckChain, filterOutputChain, "ct state new"},
 }
 
-// ensureChain adds commands to tx to ensure that chain exists and doesn't contain
-// anything from before this transaction (using createdChains to ensure that we don't
-// Flush a chain more than once and lose *new* rules as well.)
-// If skipCreation is true, chain will not be added to the transaction, but will be added to the createdChains
-// for proper cleanup in the end of the sync iteration.
+// ensureChain 向 tx 添加命令，确保 chain 存在且不含本 transaction 之前的残留内容
+// （用 createdChains 避免重复 Flush 同一条链，否则会把本次事务新加的规则也清掉）。
+// skipCreation 为 true 时不会把 chain 加入事务，但仍会记入 createdChains，
+// 以便在本轮同步结束时正确清理。
 func ensureChain(chain string, tx *knftables.Transaction, createdChains sets.Set[string], skipCreation bool) {
 	if createdChains.Has(chain) {
 		return
@@ -458,6 +455,7 @@ func ensureChain(chain string, tx *knftables.Transaction, createdChains sets.Set
 	})
 }
 
+// setupNFTables 在事务中创建 kube-proxy table、base chain 和所有全局对象。
 func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 	ipX := "ip"
 	ipvX_addr := "ipv4_addr" //nolint:staticcheck // var name intentionally resembles value
@@ -474,9 +472,8 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		Comment: ptr.To("rules for kube-proxy"),
 	})
 
-	// Do an extra "add+delete" once to ensure all previous base chains in the table
-	// will be recreated. Otherwise, altering properties (e.g. priority) of these
-	// chains would fail the transaction.
+	// 额外做一次 add+delete，确保 table 里旧的 base chain 都会重建。
+	// 否则修改这些 chain 的属性（如 priority）会导致事务失败。
 	if !proxier.flushed {
 		for _, bc := range nftablesBaseChains {
 			chain := &knftables.Chain{
@@ -488,7 +485,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		proxier.flushed = true
 	}
 
-	// Create and flush base chains
+	// 创建并清空 base chain
 	for _, bc := range nftablesBaseChains {
 		chain := &knftables.Chain{
 			Name:     bc.name,
@@ -500,7 +497,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		tx.Flush(chain)
 	}
 
-	// Create and flush ordinary chains and add rules jumping to them
+	// 创建并清空普通 chain，并添加 jump 到这些 chain 的规则
 	createdChains := sets.New[string]()
 	for _, c := range nftablesJumpChains {
 		ensureChain(c.dstChain, tx, createdChains, false)
@@ -513,19 +510,19 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		})
 	}
 
-	// Ensure all of our other "top-level" chains exist
+	// 确保其它 "顶层" chain 都存在
 	for _, chain := range []string{servicesChain, clusterIPsCheckChain, masqueradingChain} {
 		ensureChain(chain, tx, createdChains, false)
 	}
 
-	// add hairpin-connections set
+	// 添加 hairpin-connections 集合
 	tx.Add(&knftables.Set{
 		Name:    hairpinConnectionsSet,
 		Type:    ipvX_addr + " . " + ipvX_addr + " . inet_proto . inet_service",
 		Comment: ptr.To("service hairpin connections"),
 	})
 
-	// Add the rules in the masquerading chain
+	// 在 masquerading chain 中添加规则
 	tx.Add(&knftables.Rule{
 		Chain: masqueradingChain,
 		Rule: knftables.Concat(
@@ -543,14 +540,14 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		),
 	})
 
-	// add cluster-ips set.
+	// 添加 cluster-ips 集合。
 	tx.Add(&knftables.Set{
 		Name:    clusterIPsSet,
 		Type:    ipvX_addr,
 		Comment: ptr.To("Active ClusterIPs"),
 	})
 
-	// reject traffic to invalid ports of ClusterIPs.
+	// 拒绝发往 ClusterIP 无效端口的流量。
 	tx.Add(&knftables.Rule{
 		Chain: clusterIPsCheckChain,
 		Rule: knftables.Concat(
@@ -559,7 +556,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		Comment: ptr.To("Reject traffic to invalid ports of ClusterIPs"),
 	})
 
-	// drop traffic to unallocated ClusterIPs.
+	// 丢弃发往未分配 ClusterIP 的流量。
 	if len(proxier.serviceCIDRs) > 0 {
 		tx.Add(&knftables.Rule{
 			Chain: clusterIPsCheckChain,
@@ -571,9 +568,8 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		})
 	}
 
-	// Fill in nodeport-ips set if needed (or delete it if not). (We do "add+delete"
-	// rather than just "delete" when we want to ensure the set doesn't exist, because
-	// doing just "delete" would return an error if the set didn't exist.)
+	// 按需填充 nodeport-ips 集合（不需要时删除它）。删除前先 add 再 delete，
+	// 是因为集合本来就不存在时直接 delete 会报错。
 	tx.Add(&knftables.Set{
 		Name:    nodePortIPsSet,
 		Type:    ipvX_addr,
@@ -604,7 +600,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		}
 	}
 
-	// Set up "no endpoints" drop/reject handling
+	// 设置 "无 Endpoint" 时的 drop/reject 处理
 	tx.Add(&knftables.Map{
 		Name:    noEndpointServicesMap,
 		Type:    ipvX_addr + " . inet_proto . inet_service : verdict",
@@ -688,10 +684,9 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 	} else {
 		tx.Delete(&knftables.Map{Name: localhostNodePortRejectMap})
 	}
-	// Ensure reject objects for protocols we are not currently rejecting (e.g. left
-	// over from a previous sync with different config) are gone, in dependency
-	// order: each chain's rule references its counter. Add-then-delete so the delete
-	// succeeds whether or not the object currently exists.
+	// 清理当前不再拒绝的协议对应的 reject 对象（例如上一次同步配置不同留下的）。
+	// 按依赖顺序删除：每条 chain 的规则依赖它的 counter。仍使用 add-then-delete，
+	// 这样无论对象当前是否存在，delete 都能成功。
 	for _, protocol := range metrics.LocalhostNodePortRejectableProtocols {
 		if rejected[protocol] {
 			continue
@@ -704,7 +699,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		tx.Delete(rejectCounter)
 	}
 
-	// Set up LoadBalancerSourceRanges firewalling
+	// 设置 LoadBalancerSourceRanges 防火墙
 	tx.Add(&knftables.Map{
 		Name:    firewallIPsMap,
 		Type:    ipvX_addr + " . inet_proto . inet_service : verdict",
@@ -720,7 +715,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		),
 	})
 
-	// Set up service dispatch
+	// 设置 service 分发
 	tx.Add(&knftables.Map{
 		Name:    serviceIPsMap,
 		Type:    ipvX_addr + " . inet_proto . inet_service : verdict",
@@ -742,11 +737,9 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 			Comment: ptr.To("masquerade all clusterIP traffic"),
 		})
 	} else if proxier.localDetector.IsImplemented() {
-		// This masquerades off-cluster traffic to a service VIP. The
-		// idea is that you can establish a static route for your
-		// Service range, routing to any node, and that node will
-		// bridge into the Service for you. Since that might bounce
-		// off-node, we masquerade here.
+		// 对集群外访问 Service VIP 的流量做 masquerade。
+		// 思路是可以为 Service 网段配置一条静态路由，把流量引到任意节点，
+		// 由该节点代为转发；由于流量可能再次跨节点，因此这里需要伪装源地址。
 		tx.Add(&knftables.Rule{
 			Chain: servicesChain,
 			Rule: knftables.Concat(
@@ -786,7 +779,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 		})
 	}
 
-	// read or flush containers
+	// 读回或清空集合：读回已有元素以支持增量更新，读失败则清空并重建。
 	proxier.clusterIPs.readOrReset(tx, proxier.nftables, proxier.logger)
 	proxier.serviceIPs.readOrReset(tx, proxier.nftables, proxier.logger)
 	proxier.firewallIPs.readOrReset(tx, proxier.nftables, proxier.logger)
@@ -799,7 +792,7 @@ func (proxier *Proxier) setupNFTables(tx *knftables.Transaction) {
 	}
 }
 
-// Sync is called to synchronize the proxier state to nftables as soon as possible.
+// Sync 用于尽快将 proxier 的状态同步到 nftables。
 func (proxier *Proxier) Sync() {
 	if proxier.healthzServer != nil {
 		proxier.healthzServer.QueuedUpdate(proxier.ipFamily)
@@ -808,18 +801,19 @@ func (proxier *Proxier) Sync() {
 	proxier.syncRunner.Run()
 }
 
-// SyncLoop runs periodic work.  This is expected to run as a goroutine or as the main loop of the app.  It does not return.
+// SyncLoop 执行周期性任务。应作为 goroutine 或应用主循环运行，不会返回。
 func (proxier *Proxier) SyncLoop() {
-	// Update healthz timestamp at beginning in case Sync() never succeeds.
+	// 同步开始时先更新 healthz 时间戳，防止 Sync() 一直未成功时状态失真。
 	if proxier.healthzServer != nil {
 		proxier.healthzServer.Updated(proxier.ipFamily)
 	}
 
-	// synthesize "last change queued" time as the informers are syncing.
+	// informer 正在同步期间，合成一个 "最后一次变更入队" 的时间戳。
 	metrics.SyncProxyRulesLastQueuedTimestamp.WithLabelValues(string(proxier.ipFamily)).SetToCurrentTime()
 	proxier.syncRunner.Loop(wait.NeverStop)
 }
 
+// setInitialized 原子地设置 proxier 的初始化标志。
 func (proxier *Proxier) setInitialized(value bool) {
 	var initialized int32
 	if value {
@@ -828,79 +822,72 @@ func (proxier *Proxier) setInitialized(value bool) {
 	atomic.StoreInt32(&proxier.initialized, initialized)
 }
 
+// isInitialized 原子地读取 proxier 的初始化标志。
 func (proxier *Proxier) isInitialized() bool {
 	return atomic.LoadInt32(&proxier.initialized) > 0
 }
 
-// OnServiceAdd is called whenever creation of new service object
-// is observed.
+// OnServiceAdd 在观察到新 Service 对象创建时调用。
 func (proxier *Proxier) OnServiceAdd(service *v1.Service) {
 	proxier.OnServiceUpdate(nil, service)
 }
 
-// OnServiceUpdate is called whenever modification of an existing
-// service object is observed.
+// OnServiceUpdate 在观察到已有 Service 对象被修改时调用。
 func (proxier *Proxier) OnServiceUpdate(oldService, service *v1.Service) {
 	if proxier.serviceChanges.Update(oldService, service) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnServiceDelete is called whenever deletion of an existing service
-// object is observed.
+// OnServiceDelete 在观察到已有 Service 对象被删除时调用。
 func (proxier *Proxier) OnServiceDelete(service *v1.Service) {
 	proxier.OnServiceUpdate(service, nil)
 }
 
-// OnServiceSynced is called once all the initial event handlers were
-// called and the state is fully propagated to local cache.
+// OnServiceSynced 在所有初始事件回调完成、状态已完整写入本地缓存后调用。
 func (proxier *Proxier) OnServiceSynced() {
 	proxier.mu.Lock()
 	proxier.servicesSynced = true
 	proxier.setInitialized(proxier.endpointSlicesSynced)
 	proxier.mu.Unlock()
 
-	// Sync unconditionally - this is called once per lifetime.
+	// 无条件同步：该方法每个生命周期只调用一次。
 	proxier.syncProxyRules()
 }
 
-// OnEndpointSliceAdd is called whenever creation of a new endpoint slice object
-// is observed.
+// OnEndpointSliceAdd 在观察到新 EndpointSlice 对象创建时调用。
 func (proxier *Proxier) OnEndpointSliceAdd(endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, false) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSliceUpdate is called whenever modification of an existing endpoint
-// slice object is observed.
+// OnEndpointSliceUpdate 在观察到已有 EndpointSlice 对象被修改时调用。
 func (proxier *Proxier) OnEndpointSliceUpdate(_, endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, false) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSliceDelete is called whenever deletion of an existing endpoint slice
-// object is observed.
+// OnEndpointSliceDelete 在观察到已有 EndpointSlice 对象被删除时调用。
 func (proxier *Proxier) OnEndpointSliceDelete(endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, true) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSlicesSynced is called once all the initial event handlers were
-// called and the state is fully propagated to local cache.
+// OnEndpointSlicesSynced 在所有初始事件回调完成、状态已完整写入本地缓存后调用。
 func (proxier *Proxier) OnEndpointSlicesSynced() {
 	proxier.mu.Lock()
 	proxier.endpointSlicesSynced = true
 	proxier.setInitialized(proxier.servicesSynced)
 	proxier.mu.Unlock()
 
-	// Sync unconditionally - this is called once per lifetime.
+	// 无条件同步：该方法每个生命周期只调用一次。
 	proxier.syncProxyRules()
 }
 
-// OnTopologyChange is called whenever this node's proxy relevant topology-related labels change.
+// OnTopologyChange 在本节点与代理相关的拓扑标签发生变化时调用。
 func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
 	proxier.mu.Lock()
 	proxier.topologyLabels = topologyLabels
@@ -910,8 +897,7 @@ func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
 	proxier.Sync()
 }
 
-// OnServiceCIDRsChanged is called whenever a change is observed
-// in any of the ServiceCIDRs, and provides complete list of service cidrs.
+// OnServiceCIDRsChanged 在 ServiceCIDR 发生变化时调用，参数为完整的 CIDR 列表。
 func (proxier *Proxier) OnServiceCIDRsChanged(cidrs []string) {
 	proxier.mu.Lock()
 	defer proxier.mu.Unlock()
@@ -931,15 +917,14 @@ func (proxier *Proxier) OnServiceCIDRsChanged(cidrs []string) {
 }
 
 const (
-	// Maximum length for one of our chain name prefixes, including the trailing
-	// hyphen.
+	// chain name 前缀（含末尾连字符）的最大长度。
 	chainNamePrefixLengthMax = 16
 
-	// Maximum length of the string returned from servicePortChainNameBase or
-	// servicePortEndpointChainNameBase.
+	// servicePortChainNameBase 或 servicePortEndpointChainNameBase 返回的字符串的最大长度。
 	chainNameBaseLengthMax = knftables.NameLengthMax - chainNamePrefixLengthMax
 )
 
+// 各类服务/Endpoint chain 与 affinity 集合的名称前缀。
 const (
 	servicePortPolicyClusterChainNamePrefix = "service-"
 	servicePortPolicyLocalChainNamePrefix   = "local-"
@@ -949,11 +934,9 @@ const (
 	servicePortFirewallChainNamePrefix      = "firewall-"
 )
 
-// hashAndTruncate prefixes name with a hash of itself and then truncates to
-// chainNameBaseLengthMax. The hash ensures that (a) the name is still unique if we have
-// to truncate the end, and (b) it's visually distinguishable from other chains that would
-// otherwise have nearly identical names (e.g., different endpoint chains for a given
-// service that differ in only a single digit).
+// hashAndTruncate 在 name 前加哈希前缀后截断到 chainNameBaseLengthMax。
+// 哈希保证：(a) 截断尾部后名字仍唯一；(b) 与仅差一位数字的 endpoint chain 等
+// 名字相近的链在视觉上也能区分开。
 func hashAndTruncate(name string) string {
 	hash := sha256.Sum256([]byte(name))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
@@ -964,8 +947,8 @@ func hashAndTruncate(name string) string {
 	return name
 }
 
-// truncateNFTablesComment truncates s to the maximum byte length accepted by
-// nftables. Comments are cosmetic, so truncation does not affect routing.
+// truncateNFTablesComment 将 s 截断到 nftables 接受的最大字节长度。
+// 注释只用于展示，截断不会影响转发行为。
 func truncateNFTablesComment(s string) string {
 	if len(s) > knftables.CommentLengthMax {
 		return s[:knftables.CommentLengthMax]
@@ -973,23 +956,18 @@ func truncateNFTablesComment(s string) string {
 	return s
 }
 
-// servicePortChainNameBase returns the base name for a chain for the given ServicePort.
-// This is something like "HASH-namespace/serviceName/protocol/portName", e.g,
-// "ULMVA6XW-ns1/svc1/tcp/p80".
+// servicePortChainNameBase 返回给定 ServicePort 对应 chain 的基础名，
+// 形如 "HASH-namespace/serviceName/protocol/portName"，例如
+// "ULMVA6XW-ns1/svc1/tcp/p80"。
 func servicePortChainNameBase(servicePortName *proxy.ServicePortName, protocol string) string {
-	// nftables chains can contain the characters [A-Za-z0-9_./-] (but must start with
-	// a letter, underscore, or dot).
+	// nftables chain 名可包含 [A-Za-z0-9_./-]（但首字符必须是字母、下划线或点）。
 	//
-	// Namespace, Service, and Port names can contain [a-z0-9-] (with some additional
-	// restrictions that aren't relevant here).
+	// Namespace、Service 和 Port 名可包含 [a-z0-9-]（还有其它限制，但这里无关）。
 	//
-	// Protocol is /(tcp|udp|sctp)/.
+	// Protocol 取值为 /(tcp|udp|sctp)/。
 	//
-	// Thus, we can safely use all Namespace names, Service names, protocol values,
-	// and Port names directly in nftables chain names (though note that this assumes
-	// that the chain name won't *start* with any of those strings, since that might
-	// be illegal). We use "/" to separate the parts of the name, which is one of the
-	// two characters allowed in a chain name that isn't allowed in our input strings.
+	// 因此可以原样把这些字段拼进 chain 名（前提是名字不会以这些字段开头，否则可能非法）。
+	// 用 "/" 分隔各部分：这是 chain 名允许、而输入字段不允许的两个字符之一。
 
 	name := fmt.Sprintf("%s/%s/%s/%s",
 		servicePortName.NamespacedName.Namespace,
@@ -998,32 +976,27 @@ func servicePortChainNameBase(servicePortName *proxy.ServicePortName, protocol s
 		servicePortName.Port,
 	)
 
-	// The namespace, service, and port name can each be up to 63 characters, protocol
-	// can be up to 4, plus 8 for the hash and 4 additional punctuation characters.
-	// That's a total of 205, which is less than chainNameBaseLengthMax (240). So this
-	// will never actually return a truncated name.
+	// Namespace、Service、Port 名最长各 63 字符，Protocol 最长 4，
+	// 加上 8 字符哈希和 4 个标点，总计 205，小于 chainNameBaseLengthMax (240)。
+	// 因此这里实际上永远不会触发截断。
 	return hashAndTruncate(name)
 }
 
-// servicePortEndpointChainNameBase returns the suffix for chain names for the given
-// endpoint. This is something like
-// "HASH-namespace/serviceName/protocol/portName__endpointIP/endpointport", e.g.,
-// "5OJB2KTY-ns1/svc1/tcp/p80__10.180.0.1/80".
+// servicePortEndpointChainNameBase 返回给定 Endpoint 的 chain 名后缀，形如
+// "HASH-namespace/serviceName/protocol/portName__endpointIP/endpointport"，例如
+// "5OJB2KTY-ns1/svc1/tcp/p80__10.180.0.1/80"。
 func servicePortEndpointChainNameBase(servicePortName *proxy.ServicePortName, protocol, endpoint string) string {
-	// As above in servicePortChainNameBase: Namespace, Service, Port, Protocol, and
-	// EndpointPort are all safe to copy into the chain name directly. But if
-	// EndpointIP is IPv6 then it will contain colons, which aren't allowed in a chain
-	// name. IPv6 IPs are also quite long, but we can't safely truncate them (e.g. to
-	// only the final segment) because (especially for manually-created external
-	// endpoints), we can't know for sure that any part of them is redundant.
+	// 与 servicePortChainNameBase 相同：Namespace、Service、Port、Protocol 和
+	// EndpointPort 都可原样拼进 chain 名。但 IPv6 EndpointIP 含冒号，chain 名不允许；
+	// IPv6 地址也很长，但不能安全地截断（例如只留最后一段），因为（尤其是手工创建的
+	// external endpoint）无法确定哪一部分是冗余的。
 
 	endpointIP, endpointPort, _ := net.SplitHostPort(endpoint)
 	if strings.Contains(endpointIP, ":") {
 		endpointIP = strings.ReplaceAll(endpointIP, ":", ".")
 	}
 
-	// As above, we use "/" to separate parts of the name, and "__" to separate the
-	// "service" part from the "endpoint" part.
+	// 同样用 "/" 分隔各部分，用 "__" 分隔 service 部分和 endpoint 部分。
 	name := fmt.Sprintf("%s/%s/%s/%s__%s/%s",
 		servicePortName.NamespacedName.Namespace,
 		servicePortName.NamespacedName.Name,
@@ -1033,27 +1006,25 @@ func servicePortEndpointChainNameBase(servicePortName *proxy.ServicePortName, pr
 		endpointPort,
 	)
 
-	// The part of name before the "__" can be up to 205 characters (as with
-	// servicePortChainNameBase above). An IPv6 address can be up to 39 characters, and
-	// a port can be up to 5 digits, plus 3 punctuation characters gives a max total
-	// length of 252, well over chainNameBaseLengthMax (240), so truncation is
-	// theoretically possible (though incredibly unlikely).
+	// "__" 之前的部分最长 205 字符（同 servicePortChainNameBase）。IPv6 地址最长
+	// 39 字符，端口最长 5 位，再加 3 个标点，总长 252，超过 chainNameBaseLengthMax (240)，
+	// 因此理论上可能触发截断（尽管极其罕见）。
 	return hashAndTruncate(name)
 }
 
+// isServiceChainName 通过 chain 名中是否含 "/" 判断是否为服务相关的 chain。
 func isServiceChainName(chainString string) bool {
-	// The chains returned from servicePortChainNameBase and
-	// servicePortEndpointChainNameBase will always have at least one "/" in them.
-	// Since none of our "stock" chain names use slashes, we can distinguish them this
-	// way.
+	// servicePortChainNameBase 和 servicePortEndpointChainNameBase 返回的 chain 名
+	// 一定至少包含一个 "/"，而内置 chain 名都不含斜杠，据此即可区分。
 	return strings.Contains(chainString, "/")
 }
 
+// isAffinitySetName 判断集合是否为 endpoint affinity 集合。
 func isAffinitySetName(set string) bool {
 	return strings.HasPrefix(set, servicePortEndpointAffinityNamePrefix)
 }
 
-// nftElementStorage is an internal representation of nftables map or set.
+// nftElementStorage 是 nftables map 或 set 的内部表示。
 type nftElementStorage struct {
 	elements      map[string]string
 	leftoverKeys  sets.Set[string]
@@ -1061,19 +1032,19 @@ type nftElementStorage struct {
 	containerName string
 }
 
-// joinNFTSlice converts nft element key or value (type []string) to string to store in the nftElementStorage.
-// The separator is the same as the one used by nft commands, so we know that the parsing is going to be unambiguous.
+// joinNFTSlice 把 nft 元素 key/value（[]string）拼接成字符串存入 nftElementStorage。
+// 分隔符与 nft 命令一致，因此解析不会有歧义。
 func joinNFTSlice(k []string) string {
 	return strings.Join(k, " . ")
 }
 
-// splitNFTSlice converts nftElementStorage key or value string representation back to slice.
+// splitNFTSlice 把 nftElementStorage 中的 key/value 字符串还原成切片。
 func splitNFTSlice(k string) []string {
 	return strings.Split(k, " . ")
 }
 
-// newNFTElementStorage creates an empty nftElementStorage.
-// nftElementStorage.reset() must be called before the first usage.
+// newNFTElementStorage 创建一个空的 nftElementStorage。
+// 首次使用前必须调用 nftElementStorage.reset()。
 func newNFTElementStorage(containerType, containerName string) *nftElementStorage {
 	c := &nftElementStorage{
 		elements:      make(map[string]string),
@@ -1084,12 +1055,14 @@ func newNFTElementStorage(containerType, containerName string) *nftElementStorag
 	return c
 }
 
-// readOrReset updates the existing elements from the nftables map/set.
-// If reading fails, it clears the internal state and flushes the nftables map/set.
+// readOrReset 从 nftables map/set 读回现有元素。
+// 读取失败时清空内部状态并 flush nftables 中的 map/set，随后重建。
 func (s *nftElementStorage) readOrReset(tx *knftables.Transaction, nftables knftables.Interface, logger klog.Logger) {
 	clear(s.elements)
+	// 无论读取成功与否都重置残留键集合，保证调用方看到的状态一致。
 	defer s.resetLeftoverKeys()
 	elems, err := nftables.ListElements(context.TODO(), s.containerType, s.containerName)
+	// 集合不存在说明没有旧元素，属于正常情况，不需要走失败分支。
 	if err != nil && !knftables.IsNotFound(err) {
 		if s.containerType == "set" {
 			tx.Flush(&knftables.Set{
@@ -1110,7 +1083,7 @@ func (s *nftElementStorage) readOrReset(tx *knftables.Transaction, nftables knft
 	}
 }
 
-// resetLeftoverKeys is only called internally by nftElementStorage methods.
+// resetLeftoverKeys 只能由 nftElementStorage 内部方法调用。
 func (s *nftElementStorage) resetLeftoverKeys() {
 	clear(s.leftoverKeys)
 	for key := range s.elements {
@@ -1118,15 +1091,14 @@ func (s *nftElementStorage) resetLeftoverKeys() {
 	}
 }
 
-// ensureElem adds elem to the transaction if elem is not present in the container, and updates internal
-// leftoverKeys set to track unused elements.
+// ensureElem 若元素不在容器中则加入事务，并更新内部 leftoverKeys 以跟踪未使用的元素。
 func (s *nftElementStorage) ensureElem(tx *knftables.Transaction, elem *knftables.Element) {
 	newKey := joinNFTSlice(elem.Key)
 	newValue := joinNFTSlice(elem.Value)
 	existingValue, exists := s.elements[newKey]
 	if exists {
 		if existingValue != newValue {
-			// value is different, delete and re-add
+			// 值不同则先删再加：nftables 不支持原地修改元素值。
 			tx.Delete(elem)
 			tx.Add(elem)
 			s.elements[newKey] = newValue
@@ -1138,6 +1110,7 @@ func (s *nftElementStorage) ensureElem(tx *knftables.Transaction, elem *knftable
 	}
 }
 
+// cleanupLeftoverKeys 删除上一轮残留、本轮未使用的元素。
 func (s *nftElementStorage) cleanupLeftoverKeys(tx *knftables.Transaction) {
 	for key := range s.leftoverKeys {
 		e := &knftables.Element{
@@ -1154,11 +1127,11 @@ func (s *nftElementStorage) cleanupLeftoverKeys(tx *knftables.Transaction) {
 	s.resetLeftoverKeys()
 }
 
-// logFailure logs the transaction and the full table with a rate limit.
+// logFailure 以受限频率打印失败的事务及整张 table。
 func (proxier *Proxier) logFailure(tx *knftables.Transaction) {
 	if klogV4 := klog.V(4); klogV4.Enabled() && proxier.logRateLimiter.Allow() {
 		klogV4.InfoS("Failed transaction", "transaction", tx.String())
-		// knftables doesn't supporting listing the full table yet, this is a workaround.
+		// knftables 暂不支持列出整表，这里用 nft 命令绕过。
 		cmd := exec.Command("nft", "list", "table", kubeProxyTable)
 		out, err := cmd.Output()
 		if err != nil {
@@ -1169,25 +1142,24 @@ func (proxier *Proxier) logFailure(tx *knftables.Transaction) {
 	}
 }
 
-// This is where all of the nftables calls happen.
-// This assumes proxier.mu is NOT held
+// syncProxyRules 是所有 nftables 调用的入口。
+// 调用时假定未持有 proxier.mu（函数内部自行加锁）。
 func (proxier *Proxier) syncProxyRules() (retryError error) {
 	proxier.mu.Lock()
 	defer proxier.mu.Unlock()
 
-	// don't sync rules till we've received services and endpoints
+	// 收到 Service 和 Endpoint 之前不写规则。
 	if !proxier.isInitialized() {
 		proxier.logger.V(2).Info("Not syncing nftables until Services and Endpoints have been received from master")
 		return
 	}
 
-	// Keep track of how long syncs take.
+	// 记录每次同步耗时。
 	start := time.Now()
 
-	//
-	// Below this point we will not return until we try to write the nftables rules.
-	//
+	// 从此处开始，直到尝试写入 nftables 规则之前都不会提前返回。
 
+	// 显式请求或距上次全量同步超时时，执行全量同步。
 	doFullSync := proxier.needFullSync || (time.Since(proxier.lastFullSync) > proxyutil.FullSyncPeriod)
 
 	defer func() {
@@ -1210,17 +1182,15 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		if !success {
 			proxier.logger.Info("Sync failed", "retryingTime", proxier.syncPeriod)
 			retryError = fmt.Errorf("Sync failed")
-			// proxier.serviceChanges and proxier.endpointChanges have already
-			// been flushed, so we've lost the state needed to be able to do
-			// a partial sync.
+			// serviceChanges 和 endpointChanges 已经被清空，无法再做增量同步，
+			// 因此失败后下一轮必须走全量同步。
 			proxier.needFullSync = true
 		} else if doFullSync {
 			proxier.lastFullSync = time.Now()
 		}
 	}()
 
-	// If there are sufficiently-stale chains left over from previous transactions,
-	// try to delete them now.
+	// 若上一轮事务留下足够旧的 chain，趁现在尝试删除。
 	if len(proxier.staleChains) > 0 {
 		oneSecondAgo := start.Add(-time.Second)
 		tx := proxier.nftables.NewTransaction()
@@ -1238,26 +1208,25 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			proxier.logger.Info("Deleting stale nftables chains", "numChains", deleted)
 			err := proxier.nftables.Run(context.TODO(), tx)
 			if err != nil {
-				// We already deleted the entries from staleChains, but if
-				// the chains still exist, they'll just get added back
-				// (with a later timestamp) at the end of the sync.
+				// 条目已经从 staleChains 移除，但如果 chain 实际还在，
+				// 本轮结束时会带上更新的时间戳重新加入。
 				proxier.logger.Error(err, "Unable to delete stale chains; will retry later")
 				metrics.NFTablesCleanupFailuresTotal.WithLabelValues(string(proxier.ipFamily)).Inc()
 				doFullSync = true
 
-				// Log failed transaction and list full kube-proxy table.
+				// 打印失败的事务并列出完整的 kube-proxy table。
 				proxier.logFailure(tx)
 			}
 		}
 	}
 
-	// Now start the actual syncing transaction
+	// 开始本轮真正的事务。
 	tx := proxier.nftables.NewTransaction()
 	if doFullSync {
 		proxier.setupNFTables(tx)
 	}
 
-	// We need to use, eg, "ip daddr" for IPv4 but "ip6 daddr" for IPv6
+	// IPv4 用 "ip daddr"，IPv6 用 "ip6 daddr"。
 	ipX := "ip"
 	ipvX_addr := "ipv4_addr" //nolint:staticcheck // var name intentionally resembles value
 	if proxier.ipFamily == v1.IPv6Protocol {
@@ -1267,6 +1236,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 
 	var existingChains sets.Set[string]
 	existingChainsList, err := proxier.nftables.List(context.TODO(), "chain")
+	// 列取失败只记录日志，按空集合继续，避免中断本轮同步。
 	if err == nil {
 		existingChains = sets.New(existingChainsList...)
 	} else {
@@ -1274,6 +1244,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	}
 	var existingAffinitySets sets.Set[string]
 	existingSets, err := proxier.nftables.List(context.TODO(), "sets")
+	// affinity set 列表失败同样降级为空集合处理。
 	if err == nil {
 		existingAffinitySets = sets.New[string]()
 		for _, set := range existingSets {
@@ -1285,25 +1256,23 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		proxier.logger.Error(err, "Failed to list existing sets")
 	}
 
-	// Accumulate service/endpoint chains and affinity sets to keep.
+	// 收集需要保留的 service/endpoint chain 和 affinity set。
 	activeChains := sets.New[string]()
 	activeAffinitySets := sets.New[string]()
 
-	// Compute total number of endpoint chains across all services
-	// to get a sense of how big the cluster is.
+	// 统计所有 service 的 endpoint 总数，用于估算集群规模。
 	totalEndpoints := 0
 	for svcName := range proxier.svcPortMap {
 		totalEndpoints += len(proxier.endpointsMap[svcName])
 	}
 
-	// These two variables are used to publish the sync_proxy_rules_no_endpoints_total
-	// metric.
+	// 这两个变量用于上报 sync_proxy_rules_no_endpoints_total 指标。
 	serviceNoLocalEndpointsTotalInternal := 0
 	serviceNoLocalEndpointsTotalExternal := 0
 
 	var localhostNodePorts []localnodeportproxy.NodePortSpec
 
-	// Build rules for each service-port.
+	// 逐个 service-port 生成规则。
 	for svcName, svc := range proxier.svcPortMap {
 		svcInfo, ok := svc.(*servicePortInfo)
 		if !ok {
@@ -1314,37 +1283,36 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		protocol := strings.ToLower(string(svcInfo.Protocol()))
 		svcPortComment := truncateNFTablesComment(svcInfo.nameString)
 
-		// Figure out the endpoints for Cluster and Local traffic policy.
-		// allLocallyReachableEndpoints is the set of all endpoints that can be routed to
-		// from this node, given the service's traffic policies. hasEndpoints is true
-		// if the service has any usable endpoints on any node, not just this one.
+		// 分别计算 Cluster 和 Local 流量策略可用的 Endpoint。
+		// allLocallyReachableEndpoints 是在给定服务流量策略下，从本节点可达的
+		// 所有 Endpoint；hasEndpoints 表示任意节点上是否存在可用 Endpoint。
 		allEndpoints := proxier.endpointsMap[svcName]
 		clusterEndpoints, localEndpoints, allLocallyReachableEndpoints, hasEndpoints := proxy.CategorizeEndpoints(allEndpoints, svcInfo, proxier.nodeName, proxier.topologyLabels)
 
-		// skipServiceUpdate is used for all service-related chains and their elements.
-		// If no changes were done to the service or its endpoints, these objects may be skipped.
+		// skipServiceUpdate 控制该服务所有 chain 及元素是否可以跳过：
+		// 服务和 Endpoint 都没变化时无需重写。
 		skipServiceUpdate := !doFullSync &&
 			!serviceUpdateResult.UpdatedServices.Has(svcName.NamespacedName) &&
 			!endpointUpdateResult.UpdatedServices.Has(svcName.NamespacedName)
 
-		// We only use separate endpoint chains when adding affinity rules
+		// 只有配置会话亲和性时才使用独立的 endpoint chain。
 		serviceUsesAffinity := svcInfo.SessionAffinityType() == v1.ServiceAffinityClientIP
 
-		// Note the endpoints that will be used
+		// 标记本轮实际会用到的 Endpoint。
 		for _, ep := range allLocallyReachableEndpoints {
 			epInfo, ok := ep.(*endpointInfo)
 			if !ok {
 				continue
 			}
 
-			// If using affinity, note the endpoint chain and affinity set
-			// names, and ensure that the chain exists.
+			// 使用亲和性时，记下 endpoint chain 和 affinity set 的名字，
+			// 并确保 chain 存在。
 			if serviceUsesAffinity {
 				ensureChain(epInfo.chainName, tx, activeChains, skipServiceUpdate)
 				activeAffinitySets.Insert(epInfo.affinitySetName)
 			}
 
-			// Add local endpoints to the hairpin set.
+			// 本地 Endpoint 加入 hairpin 集合。
 			if epInfo.IsLocal() {
 				proxier.hairpinConnections.ensureElem(tx, &knftables.Element{
 					Set: hairpinConnectionsSet,
@@ -1358,26 +1326,24 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 
-		// clusterPolicyChain contains the endpoints used with "Cluster" traffic policy
+		// clusterPolicyChain 存放 "Cluster" 策略使用的 Endpoint。
 		clusterPolicyChain := svcInfo.clusterPolicyChainName
 		usesClusterPolicyChain := len(clusterEndpoints) > 0 && svcInfo.UsesClusterEndpoints()
 		if usesClusterPolicyChain {
 			ensureChain(clusterPolicyChain, tx, activeChains, skipServiceUpdate)
 		}
 
-		// localPolicyChain contains the endpoints used with "Local" traffic policy
+		// localPolicyChain 存放 "Local" 策略使用的 Endpoint。
 		localPolicyChain := svcInfo.localPolicyChainName
 		usesLocalPolicyChain := len(localEndpoints) > 0 && svcInfo.UsesLocalEndpoints()
 		if usesLocalPolicyChain {
 			ensureChain(localPolicyChain, tx, activeChains, skipServiceUpdate)
 		}
 
-		// internalPolicyChain is the chain containing the endpoints for
-		// "internal" (ClusterIP) traffic. internalTrafficChain is the chain that
-		// internal traffic is routed to (which is always the same as
-		// internalPolicyChain). hasInternalEndpoints is true if we should
-		// generate rules pointing to internalTrafficChain, or false if there are
-		// no available internal endpoints.
+		// internalPolicyChain 存放 "internal"（ClusterIP）流量的 Endpoint；
+		// internalTrafficChain 是内部流量跳转的目标（两者始终相同）。
+		// hasInternalEndpoints 表示是否应生成指向 internalTrafficChain 的规则，
+		// 即是否存在可用的内部 Endpoint。
 		internalPolicyChain := clusterPolicyChain
 		hasInternalEndpoints := hasEndpoints
 		if svcInfo.InternalPolicyLocal() {
@@ -1388,14 +1354,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 		internalTrafficChain := internalPolicyChain
 
-		// Similarly, externalPolicyChain is the chain containing the endpoints
-		// for "external" (NodePort, LoadBalancer, and ExternalIP) traffic.
-		// externalTrafficChain is the chain that external traffic is routed to
-		// (which is always the service's "EXT" chain). hasExternalEndpoints is
-		// true if there are endpoints that will be reached by external traffic.
-		// (But we may still have to generate externalTrafficChain even if there
-		// are no external endpoints, to ensure that the short-circuit rules for
-		// local traffic are set up.)
+		// 类似地，externalPolicyChain 存放 "external"（NodePort、LoadBalancer、
+		// ExternalIP）流量的 Endpoint；externalTrafficChain 是外部流量跳转的目标
+		// （始终是该服务的 "EXT" chain）。hasExternalEndpoints 表示外部流量能否
+		// 到达 Endpoint。即使没有外部 Endpoint，也可能需要生成 externalTrafficChain，
+		// 以便设置本地流量的短路规则。
 		externalPolicyChain := clusterPolicyChain
 		hasExternalEndpoints := hasEndpoints
 		if svcInfo.ExternalPolicyLocal() {
@@ -1406,9 +1369,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 		externalTrafficChain := svcInfo.externalChainName // eventually jumps to externalPolicyChain
 
-		// usesExternalTrafficChain is based on hasEndpoints, not hasExternalEndpoints,
-		// because we need the local-traffic-short-circuiting rules even when there
-		// are no externally-usable endpoints.
+		// usesExternalTrafficChain 依据 hasEndpoints 而非 hasExternalEndpoints，
+		// 因为即使没有外部可用 Endpoint，也需要本地流量短路规则。
 		usesExternalTrafficChain := hasEndpoints && svcInfo.ExternallyAccessible()
 		if usesExternalTrafficChain {
 			ensureChain(externalTrafficChain, tx, activeChains, skipServiceUpdate)
@@ -1416,32 +1378,26 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 
 		var internalTrafficFilterVerdict, externalTrafficFilterVerdict string
 		if !hasEndpoints {
-			// The service has no endpoints at all; hasInternalEndpoints and
-			// hasExternalEndpoints will also be false, and we will not
-			// generate any chains in the "nat" table for the service; only
-			// rules in the "filter" table rejecting incoming packets for
-			// the service's IPs.
+			// 服务完全无 Endpoint：internal/external 都为 false，不在 nat 表生成
+			// 任何 chain，只在 filter 表用规则拒绝发往服务 IP 的报文。
 			internalTrafficFilterVerdict = fmt.Sprintf("goto %s", rejectChain)
 			externalTrafficFilterVerdict = fmt.Sprintf("goto %s", rejectChain)
 		} else {
 			if !hasInternalEndpoints {
-				// The internalTrafficPolicy is "Local" but there are no local
-				// endpoints. Traffic to the clusterIP will be dropped, but
-				// external traffic may still be accepted.
+				// internalTrafficPolicy 为 Local 但无本地 Endpoint：发往 clusterIP
+				// 的流量被丢弃，外部流量仍可能被接受。
 				internalTrafficFilterVerdict = "drop"
 				serviceNoLocalEndpointsTotalInternal++
 			}
 			if !hasExternalEndpoints {
-				// The externalTrafficPolicy is "Local" but there are no
-				// local endpoints. Traffic to "external" IPs from outside
-				// the cluster will be dropped, but traffic from inside
-				// the cluster may still be accepted.
+				// externalTrafficPolicy 为 Local 但无本地 Endpoint：集群外发往
+				// "external" IP 的流量被丢弃，集群内流量仍可能被接受。
 				externalTrafficFilterVerdict = "drop"
 				serviceNoLocalEndpointsTotalExternal++
 			}
 		}
 
-		// Capture the clusterIP.
+		// 记录 clusterIP。
 		proxier.clusterIPs.ensureElem(tx, &knftables.Element{
 			Set: clusterIPsSet,
 			Key: []string{svcInfo.ClusterIP().String()},
@@ -1459,7 +1415,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				},
 			})
 		} else {
-			// No endpoints.
+			// 无 Endpoint。
 			proxier.noEndpointServices.ensureElem(tx, &knftables.Element{
 				Map: noEndpointServicesMap,
 				Key: []string{
@@ -1474,11 +1430,10 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			})
 		}
 
-		// Capture externalIPs.
+		// 记录 externalIP。
 		for _, externalIP := range svcInfo.ExternalIPs() {
 			if hasEndpoints {
-				// Send traffic bound for external IPs to the "external
-				// destinations" chain.
+				// 发往 external IP 的流量跳转到 "external destinations" chain。
 				proxier.serviceIPs.ensureElem(tx, &knftables.Element{
 					Map: serviceIPsMap,
 					Key: []string{
@@ -1492,9 +1447,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				})
 			}
 			if !hasExternalEndpoints {
-				// Either no endpoints at all (REJECT) or no endpoints for
-				// external traffic (DROP anything that didn't get
-				// short-circuited by the EXT chain.)
+				// 要么完全没有 Endpoint（REJECT），要么没有外部流量可用的
+				// Endpoint（DROP 所有未被 EXT chain 短路的流量）。
 				proxier.noEndpointServices.ensureElem(tx, &knftables.Element{
 					Map: noEndpointServicesMap,
 					Key: []string{
@@ -1516,7 +1470,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			ensureChain(fwChain, tx, activeChains, skipServiceUpdate)
 		}
 
-		// Capture load-balancer ingress.
+		// 记录 load-balancer ingress。
 		for _, lbip := range svcInfo.LoadBalancerVIPs() {
 			if hasEndpoints {
 				proxier.serviceIPs.ensureElem(tx, &knftables.Element{
@@ -1547,9 +1501,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 		if !hasExternalEndpoints {
-			// Either no endpoints at all (REJECT) or no endpoints for
-			// external traffic (DROP anything that didn't get short-circuited
-			// by the EXT chain.)
+			// 要么完全没有 Endpoint（REJECT），要么没有外部流量可用的
+			// Endpoint（DROP 所有未被 EXT chain 短路的流量）。
 			for _, lbip := range svcInfo.LoadBalancerVIPs() {
 				proxier.noEndpointServices.ensureElem(tx, &knftables.Element{
 					Map: noEndpointServicesMap,
@@ -1566,7 +1519,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 
-		// Capture nodeports.
+		// 记录 NodePort。
 		if svcInfo.NodePort() != 0 {
 			if proxier.localhostNodePortProxy != nil && svcInfo.Protocol() == v1.ProtocolTCP {
 				eps := clusterEndpoints
@@ -1599,9 +1552,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				})
 			}
 			if hasEndpoints {
-				// Jump to the external destination chain.  For better or for
-				// worse, nodeports are not subject to loadBalancerSourceRanges,
-				// and we can't change that.
+				// 无论是好是坏，NodePort 不受 loadBalancerSourceRanges 约束，
+				// 现有行为无法更改。
 				proxier.serviceNodePorts.ensureElem(tx, &knftables.Element{
 					Map: serviceNodePortsMap,
 					Key: []string{
@@ -1614,9 +1566,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				})
 			}
 			if !hasExternalEndpoints {
-				// Either no endpoints at all (REJECT) or no endpoints for
-				// external traffic (DROP anything that didn't get
-				// short-circuited by the EXT chain.)
+				// 要么完全没有 Endpoint（REJECT），要么没有外部流量可用的
+				// Endpoint（DROP 所有未被 EXT chain 短路的流量）。
 				proxier.noEndpointNodePorts.ensureElem(tx, &knftables.Element{
 					Map: noEndpointNodePortsMap,
 					Key: []string{
@@ -1631,20 +1582,16 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 
-		// All the following operations are service-chain related and may be skipped if no svc or endpoint
-		// changes are required.
+		// 以下操作都与 service chain 相关；服务及 Endpoint 无变化时全部跳过。
 		if skipServiceUpdate {
 			continue
 		}
 
-		// Set up external traffic handling (if any "external" destinations are
-		// enabled). All captured traffic for all external destinations should
-		// jump to externalTrafficChain, which will handle some special cases and
-		// then jump to externalPolicyChain.
+		// 设置外部流量处理（如果有 "external" 目的地）。所有外部目的地的流量
+		// 都跳到 externalTrafficChain，它处理特殊情况后再跳到 externalPolicyChain。
 		if usesExternalTrafficChain {
 			if !svcInfo.ExternalPolicyLocal() {
-				// If we are using non-local endpoints we need to masquerade,
-				// in case we cross nodes.
+				// 使用非本地 Endpoint 时必须 masquerade，因为流量可能跨节点。
 				tx.Add(&knftables.Rule{
 					Chain: externalTrafficChain,
 					Rule: knftables.Concat(
@@ -1653,14 +1600,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					Comment: ptr.To("masquerade"),
 				})
 			} else {
-				// If we are only using same-node endpoints, we can retain the
-				// source IP in most cases.
+				// 只使用同节点 Endpoint 时，多数情况下可以保留源 IP。
 
 				if proxier.localDetector.IsImplemented() {
-					// Treat all locally-originated pod -> external destination
-					// traffic as a special-case.  It is subject to neither
-					// form of traffic policy, which simulates going up-and-out
-					// to an external load-balancer and coming back in.
+					// 本节点 Pod 发往外部目的地的流量单独处理：不受任何流量策略
+					// 约束，模拟先出到外部负载均衡器再从外部进来的路径。
 					tx.Add(&knftables.Rule{
 						Chain: externalTrafficChain,
 						Rule: knftables.Concat(
@@ -1671,9 +1615,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					})
 				}
 
-				// Locally originated traffic (not a pod, but the host node)
-				// still needs masquerade because the LBIP itself is a local
-				// address, so that will be the chosen source IP.
+				// 本机（非 Pod）发起的流量仍需 masquerade：LBIP 是本地地址，
+				// 会被选作源 IP。
 				tx.Add(&knftables.Rule{
 					Chain: externalTrafficChain,
 					Rule: knftables.Concat(
@@ -1683,9 +1626,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					Comment: ptr.To("masquerade local traffic"),
 				})
 
-				// Redirect all src-type=LOCAL -> external destination to the
-				// policy=cluster chain. This allows traffic originating
-				// from the host to be redirected to the service correctly.
+				// 把 src-type=LOCAL 发往外部目的地的流量重定向到 policy=cluster
+				// chain，使本机发起的流量也能正确到达服务。
 				tx.Add(&knftables.Rule{
 					Chain: externalTrafficChain,
 					Rule: knftables.Concat(
@@ -1696,7 +1638,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				})
 			}
 
-			// Anything else falls thru to the appropriate policy chain.
+			// 其余流量落到相应的 policy chain。
 			if hasExternalEndpoints {
 				tx.Add(&knftables.Rule{
 					Chain: externalTrafficChain,
@@ -1719,11 +1661,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					allowFromNode = true
 				}
 			}
-			// For VIP-like LBs, the VIP is often added as a local
-			// address (via an IP route rule).  In that case, a request
-			// from a node to the VIP will not hit the loadbalancer but
-			// will loop back with the source IP set to the VIP.  We
-			// need the following rules to allow requests from this node.
+			// 对 VIP 型 LB，VIP 常通过路由规则被配置成本地地址。此时节点
+			// 访问 VIP 不会走到负载均衡器，而是回环并把源 IP 设为 VIP。
+			// 因此需要下面的规则放行来自本节点的请求。
 			if allowFromNode {
 				for _, lbip := range svcInfo.LoadBalancerVIPs() {
 					sources = append(sources, ",", lbip.String())
@@ -1739,7 +1679,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 
 		if svcInfo.SessionAffinityType() == v1.ServiceAffinityClientIP {
-			// Generate the per-endpoint affinity sets
+			// 为每个 Endpoint 生成 affinity 集合。
 			for _, ep := range allLocallyReachableEndpoints {
 				epInfo, ok := ep.(*endpointInfo)
 				if !ok {
@@ -1747,25 +1687,17 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					continue
 				}
 
-				// Create a set to store current affinity mappings. As
-				// with the iptables backend, endpoint affinity is
-				// recorded for connections from a particular source IP
-				// (without regard to source port) to a particular
-				// ServicePort (without regard to which service IP was
-				// used to reach the service). This may be changed in the
-				// future.
+				// 创建存放当前 affinity 映射的集合。与 iptables 后端一致，
+				// affinity 按源 IP（不区分源端口）到某个 ServicePort（不区分
+				// 具体服务 IP）记录连接。今后可能改变这一行为。
 				tx.Add(&knftables.Set{
 					Name: epInfo.affinitySetName,
 					Type: ipvX_addr,
 					Flags: []knftables.SetFlag{
-						// The nft docs say "dynamic" is only
-						// needed for sets containing stateful
-						// objects (eg counters), but (at least on
-						// RHEL8) if we create the set without
-						// "dynamic", it later gets mutated to
-						// have it, and then the next attempt to
-						// tx.Add() it here fails because it looks
-						// like we're trying to change the flags.
+						// nft 文档说 "dynamic" 只对含状态对象（如 counter）的
+						// 集合有必要，但至少在 RHEL8 上，不带 "dynamic" 创建的
+						// 集合后续会被内核自动加上该标志，导致下次 tx.Add()
+						// 因看起来在修改 flags 而失败。
 						knftables.DynamicFlag,
 						knftables.TimeoutFlag,
 					},
@@ -1774,11 +1706,12 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 
-		// Write the endpoint rules and/or chains
+		// 写入 endpoint 规则/chain
 		if !serviceUsesAffinity {
 			if usesClusterPolicyChain {
 				proxier.writeServiceToEndpointDNATs(tx, svcInfo, clusterPolicyChain, clusterEndpoints)
 			}
+			// 使用亲和性时，改写为跳到各 endpoint chain 的规则。
 			if usesLocalPolicyChain {
 				proxier.writeServiceToEndpointDNATs(tx, svcInfo, localPolicyChain, localEndpoints)
 			}
@@ -1790,7 +1723,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				proxier.writeServiceToEndpointJumps(tx, svcInfo, localPolicyChain, localEndpoints)
 			}
 
-			// And generate the per-endpoint chains and affinity sets
+			// 生成每个 Endpoint 的 chain 和 affinity 集合
 			for _, ep := range allLocallyReachableEndpoints {
 				epInfo, ok := ep.(*endpointInfo)
 				if !ok {
@@ -1799,7 +1732,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 
 				endpointChain := epInfo.chainName
 
-				// Handle session affinity
+				// 处理会话亲和性
 				tx.Add(&knftables.Rule{
 					Chain: endpointChain,
 					Rule: knftables.Concat(
@@ -1808,7 +1741,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					),
 				})
 
-				// DNAT to final destination.
+				// DNAT 到最终目标。
 				tx.Add(&knftables.Rule{
 					Chain: endpointChain,
 					Rule: knftables.Concat(
@@ -1820,12 +1753,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// Figure out which chains are now stale. Unfortunately, we can't delete them
-	// right away, because with kernels before 6.2, if there is a map element pointing
-	// to a chain, and you delete that map element, the kernel doesn't notice until a
-	// short amount of time later that the chain is now unreferenced. So we flush them
-	// now, and record the time that they become stale in staleChains so they can be
-	// deleted later.
+	// 判断哪些 chain 已过期。不能立即删除：6.2 之前的内核在删除指向 chain 的
+	// map 元素后，要过一小段时间才意识到该 chain 已无引用。因此这里先 flush，
+	// 并把变旧的时间记入 staleChains，稍后再删除。
 	for chain := range existingChains {
 		if isServiceChainName(chain) {
 			if !activeChains.Has(chain) {
@@ -1839,7 +1769,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// OTOH, we can immediately delete any stale affinity sets
+	// 另一方面，过期的 affinity set 可以立即删除。
 	for set := range existingAffinitySets {
 		if !activeAffinitySets.Has(set) {
 			tx.Delete(&knftables.Set{
@@ -1859,7 +1789,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		proxier.localhostNodePortRejects.cleanupLeftoverKeys(tx)
 	}
 
-	// Sync rules.
+	// 同步规则。
 	proxier.logger.V(2).Info("Reloading service nftables data",
 		"numServices", len(proxier.svcPortMap),
 		"numEndpoints", totalEndpoints,
@@ -1874,10 +1804,10 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		proxier.logger.Error(err, "nftables sync failed")
 		metrics.NFTablesSyncFailuresTotal.WithLabelValues(string(proxier.ipFamily)).Inc()
 
-		// staleChains is now incorrect since we didn't actually flush the
-		// chains in it. We can recompute it next time.
+		// 事务未执行成功，staleChains 的记录已不准确（chain 并未被 flush）。
+		// 下一轮重新计算即可。
 		clear(proxier.staleChains)
-		// Log failed transaction and list full kube-proxy table.
+		// 打印失败的事务并列出完整的 kube-proxy table。
 		proxier.logFailure(tx)
 		return
 	}
@@ -1899,9 +1829,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	}
 	metrics.SyncProxyRulesLastTimestamp.WithLabelValues(string(proxier.ipFamily)).SetToCurrentTime()
 
-	// Update service healthchecks.  The endpoints list might include services that are
-	// not "OnlyLocal", but the services list will not, and the serviceHealthServer
-	// will just drop those endpoints.
+	// 更新服务健康检查。Endpoint 列表可能包含非 "OnlyLocal" 服务，但服务列表
+	// 不会包含它们，serviceHealthServer 会直接忽略这些 Endpoint。
 	if err := proxier.serviceHealthServer.SyncServices(proxier.svcPortMap.HealthCheckNodePorts()); err != nil {
 		proxier.logger.Error(err, "Error syncing healthcheck services")
 	}
@@ -1914,20 +1843,21 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	}
 
 	if endpointUpdateResult.ConntrackCleanupRequired {
-		// Finish housekeeping, clear stale conntrack entries for UDP Services
+		// 收尾工作：清理 UDP Service 的过期 conntrack 条目。
 		conntrack.CleanStaleEntries(proxier.conntrack, proxier.ipFamily, proxier.svcPortMap, proxier.endpointsMap)
 	}
 	return
 }
 
+// writeServiceToEndpointDNATs 在 svcChain 中写入到各 Endpoint 的 DNAT 规则。
 func (proxier *Proxier) writeServiceToEndpointDNATs(tx *knftables.Transaction, svcInfo *servicePortInfo, svcChain string, endpoints []proxy.Endpoint) {
 	ipX := "ip"
 	if proxier.ipFamily == v1.IPv6Protocol {
 		ipX = "ip6"
 	}
 
-	// Special case for single endpoint services
-	// Inserting maps into nftables is a O(n) (or worse) operation, so we want to avoid it for single endpoint services.
+	// 单 Endpoint 服务特殊处理：向 nftables 插入 map 是 O(n) 甚至更差的操作，
+	// 单 Endpoint 时直接用规则 DNAT，避免引入 map。
 	if len(endpoints) == 1 {
 		ep := endpoints[0]
 		epInfo, ok := ep.(*endpointInfo)
@@ -1956,6 +1886,7 @@ func (proxier *Proxier) writeServiceToEndpointDNATs(tx *knftables.Transaction, s
 		elements = append(elements,
 			strconv.Itoa(i), ":", epInfo.IP(), ".", strconv.Itoa(epInfo.Port()),
 		)
+		// numgen map 元素之间需要逗号分隔，最后一个除外。
 		if i != len(endpoints)-1 {
 			elements = append(elements, ",")
 		}
@@ -1971,6 +1902,7 @@ func (proxier *Proxier) writeServiceToEndpointDNATs(tx *knftables.Transaction, s
 	})
 }
 
+// writeServiceToEndpointJumps 在启用会话亲和性时写入到每 Endpoint chain 的跳转规则。
 func (proxier *Proxier) writeServiceToEndpointJumps(tx *knftables.Transaction, svcInfo *servicePortInfo, svcChain string, endpoints []proxy.Endpoint) {
 	ipX := "ip"
 	if proxier.ipFamily == v1.IPv6Protocol {
@@ -1978,7 +1910,7 @@ func (proxier *Proxier) writeServiceToEndpointJumps(tx *knftables.Transaction, s
 	}
 
 	var elements []string
-	// Write the affinity rules, construct the vmap elements
+	// 写入 affinity 规则，构造 vmap 元素
 	for i, ep := range endpoints {
 		epInfo, ok := ep.(*endpointInfo)
 		if !ok {
@@ -2000,7 +1932,7 @@ func (proxier *Proxier) writeServiceToEndpointJumps(tx *knftables.Transaction, s
 			elements = append(elements, ",")
 		}
 	}
-	// Now write the vmap, for the case where no affinity rule matched
+	// 没有 affinity 规则命中时走这个 vmap。
 	tx.Add(&knftables.Rule{
 		Chain: svcChain,
 		Rule: knftables.Concat(

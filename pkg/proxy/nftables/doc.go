@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This is an empty file to avoid "build constraints exclude all Go files" error while running unit tests on non-linux platforms.
+// 这是一个空文件，用于避免在非 Linux 平台运行单元测试时出现 "build constraints exclude all Go files" 错误。
 
 package nftables

@@ -24,14 +24,17 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/apis/config/fuzzer"
 )
 
+// TestRoundTripFuzzing 验证 Scheme 中注册的类型经随机对象序列化后往返保持一致。
 func TestRoundTripFuzzing(t *testing.T) {
 	roundtrip.RoundTripTestForScheme(t, Scheme, fuzzer.Funcs)
 }
 
+// TestRoundTripYAML 验证配置对象经 YAML 编解码后往返保持一致。
 func TestRoundTripYAML(t *testing.T) {
 	componentconfigtesting.RoundTripTest(t, Scheme, Codecs)
 }
 
+// TestDefaults 验证 Scheme 中注册的默认值函数行为正确。
 func TestDefaults(t *testing.T) {
 	componentconfigtesting.DefaultingTest(t, Scheme, Codecs)
 }

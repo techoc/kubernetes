@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package conntrack 提供 conntrack（连接跟踪）表项的查询与清理能力，
+// 供 kube-proxy 在服务或端点变化后回收不再有效的连接跟踪条目。
 package conntrack

@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Skip s390x: This test is disabled on s390x due to failures caused by little-endian specific input data.
-// See issue: https://github.com/kubernetes/kubernetes/issues/130343
+// s390x 跳过：该测试在 s390x 上因小端序特定的输入数据导致失败而被禁用。
+// 详见 issue: https://github.com/kubernetes/kubernetes/issues/130343
 
 package nfacct
 
@@ -30,30 +30,30 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// fakeHandler is a mock implementation of the handler interface, designed for testing.
+// fakeHandler 是 handler 接口的模拟实现，用于在测试中替换真实的 netlink 处理器。
 type fakeHandler struct {
-	// requests stores instances of fakeRequest, capturing new requests.
+	// requests 保存所有 fakeRequest 实例，用于断言测试发出的 netlink 请求。
 	requests []*fakeRequest
-	// responses holds responses for the subsequent fakeRequest.Execute calls.
+	// responses 按调用顺序排列，为后续的 fakeRequest.Execute 提供预置响应报文。
 	responses [][][]byte
-	// errs holds errors for the subsequent fakeRequest.Execute calls.
+	// errs 按调用顺序排列，为后续的 fakeRequest.Execute 提供预置错误。
 	errs []error
 }
 
-// newRequest creates a request object with the given cmd, flags, predefined response and error.
-// It additionally records the created request object.
+// newRequest 按给定的 cmd、flags、预置响应和错误创建请求对象。
+// 同时将创建的请求记录下来，供测试结束后断言。
 func (fh *fakeHandler) newRequest(cmd int, flags uint16) request {
 	var response [][]byte
 	if fh.responses != nil && len(fh.responses) > 0 {
 		response = fh.responses[0]
-		// remove the response from the list of predefined responses and add it to request object for mocking.
+		// 从预置响应队列中取出第一条，放入请求对象，使每次 Execute 返回不同响应。
 		fh.responses = fh.responses[1:]
 	}
 
 	var err error
 	if fh.errs != nil && len(fh.errs) > 0 {
 		err = fh.errs[0]
-		// remove the error from the list of predefined errors and add it to request object for mocking.
+		// 从预置错误队列中取出第一条，放入请求对象，以模拟连续调用返回不同错误。
 		fh.errs = fh.errs[1:]
 	}
 
@@ -62,40 +62,43 @@ func (fh *fakeHandler) newRequest(cmd int, flags uint16) request {
 	return req
 }
 
-// fakeRequest records information about the cmd and flags used when creating a new request,
-// maintains a list for netlink attributes, and stores a predefined response and an optional
-// error for subsequent execution.
+// fakeRequest 记录创建请求时使用的 cmd 和 flags，
+// 保存 netlink 属性列表，并持有预置的响应报文和可选错误，
+// 供后续 Execute 调用返回。
 type fakeRequest struct {
-	// cmd and flags which were used to create the request.
+	// cmd 和 flags 是创建请求时传入的参数。
 	cmd   int
 	flags uint16
 
-	// data holds netlink attributes.
+	// data 保存请求携带的 netlink 属性。
 	data []nl.NetlinkRequestData
 
-	// response and err are the predefined output of execution.
+	// response 和 err 是 Execute 的预置返回值。
 	response [][]byte
 	err      error
 }
 
-// Serialize is part of request interface.
+// Serialize 是 request 接口方法；假请求无需序列化真实字节。
 func (fr *fakeRequest) Serialize() []byte { return nil }
 
-// AddData is part of request interface.
+// AddData 是 request 接口方法；在此记录属性以便断言。
 func (fr *fakeRequest) AddData(data nl.NetlinkRequestData) {
 	fr.data = append(fr.data, data)
 }
 
-// AddRawData is part of request interface.
+// AddRawData 是 request 接口方法；假请求忽略原始字节数据。
 func (fr *fakeRequest) AddRawData(_ []byte) {}
 
-// Execute is part of request interface.
+// Execute 是 request 接口方法；直接返回预置响应和错误。
 func (fr *fakeRequest) Execute(_ int, _ uint16) ([][]byte, error) {
 	return fr.response, fr.err
 }
 
+// TestRunner_Add 验证 Add 能正确构造 NFNL_MSG_ACCT_NEW 请求，
+// 并覆盖 EBUSY/EPERM/名称长度等错误路径：本地校验失败时不应发出任何 netlink 请求。
 func TestRunner_Add(t *testing.T) {
 	testCases := []struct {
+		// 表驱动用例覆盖成功、重复创建、权限不足及名称长度边界。
 		name         string
 		counterName  string
 		handler      *fakeHandler
@@ -106,7 +109,7 @@ func TestRunner_Add(t *testing.T) {
 			name:        "valid",
 			counterName: "metric-1",
 			handler:     &fakeHandler{},
-			// expected calls: NFNL_MSG_ACCT_NEW
+			// 期望发出一次 NFNL_MSG_ACCT_NEW 请求。
 			netlinkCalls: 1,
 		},
 		{
@@ -116,7 +119,7 @@ func TestRunner_Add(t *testing.T) {
 				errs: []error{syscall.EBUSY},
 			},
 			err: ErrObjectAlreadyExists,
-			// expected calls: NFNL_MSG_ACCT_NEW
+			// 期望发出一次 NFNL_MSG_ACCT_NEW 请求。
 			netlinkCalls: 1,
 		},
 		{
@@ -126,7 +129,7 @@ func TestRunner_Add(t *testing.T) {
 				errs: []error{syscall.EPERM},
 			},
 			err: ErrUnexpected,
-			// expected calls: NFNL_MSG_ACCT_NEW
+			// 期望发出一次 NFNL_MSG_ACCT_NEW 请求。
 			netlinkCalls: 1,
 		},
 		{
@@ -134,7 +137,7 @@ func TestRunner_Add(t *testing.T) {
 			counterName: "this-is-a-string-with-more-than-32-characters",
 			handler:     &fakeHandler{},
 			err:         ErrNameExceedsMaxLength,
-			// expected calls: zero (the error should be returned by this library)
+			// 期望不发出 netlink 请求：错误应在库内完成本地校验后直接返回。
 			netlinkCalls: 0,
 		},
 		{
@@ -142,7 +145,7 @@ func TestRunner_Add(t *testing.T) {
 			counterName: "",
 			handler:     &fakeHandler{},
 			err:         ErrEmptyName,
-			// expected calls: zero (the error should be returned by this library)
+			// 期望不发出 netlink 请求：错误应在本地校验阶段直接返回。
 			netlinkCalls: 0,
 		},
 	}
@@ -159,15 +162,15 @@ func TestRunner_Add(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			// validate number of requests
+			// 断言发出的请求数量，防止重复或漏发 netlink 消息。
 			assert.Len(t, tc.handler.requests, tc.netlinkCalls)
 
 			if tc.netlinkCalls > 0 {
-				// validate request
+				// 校验请求的命令类型与标志位。
 				assert.Equal(t, cmdNew, tc.handler.requests[0].cmd)
 				assert.Equal(t, uint16(unix.NLM_F_REQUEST|unix.NLM_F_CREATE|unix.NLM_F_ACK), tc.handler.requests[0].flags)
 
-				// validate attribute(NFACCT_NAME)
+				// 校验 NFACCT_NAME 属性：名称必须以 NUL 结尾，符合 netlink 报文约定。
 				assert.Len(t, tc.handler.requests[0].data, 1)
 				assert.Equal(t,
 					tc.handler.requests[0].data[0].Serialize(),
@@ -177,6 +180,9 @@ func TestRunner_Add(t *testing.T) {
 		})
 	}
 }
+
+// TestRunner_Get 验证 Get 对 netlink 响应的解析：
+// 覆盖带/不带填充的报文、缺失属性、内核错误码以及名称长度校验。
 func TestRunner_Get(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -201,7 +207,7 @@ func TestRunner_Get(t *testing.T) {
 					0x00, 0x00, 0x00, 0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 		},
 		{
@@ -218,7 +224,7 @@ func TestRunner_Get(t *testing.T) {
 					0x08, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 		},
 		{
@@ -235,7 +241,7 @@ func TestRunner_Get(t *testing.T) {
 					0x00, 0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -254,7 +260,7 @@ func TestRunner_Get(t *testing.T) {
 					0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -271,7 +277,7 @@ func TestRunner_Get(t *testing.T) {
 					0x08, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -288,7 +294,7 @@ func TestRunner_Get(t *testing.T) {
 					0x08, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -303,7 +309,7 @@ func TestRunner_Get(t *testing.T) {
 					0x00, 0x00, 0x00, 0x00,
 				}}},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -313,7 +319,7 @@ func TestRunner_Get(t *testing.T) {
 			handler: &fakeHandler{
 				errs: []error{syscall.ENOENT},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrObjectNotFound,
 		},
@@ -323,7 +329,7 @@ func TestRunner_Get(t *testing.T) {
 			handler: &fakeHandler{
 				errs: []error{syscall.EMFILE},
 			},
-			// expected calls: NFNL_MSG_ACCT_GET
+			// 期望发出一次 NFNL_MSG_ACCT_GET 请求。
 			netlinkCalls: 1,
 			err:          ErrUnexpected,
 		},
@@ -331,7 +337,7 @@ func TestRunner_Get(t *testing.T) {
 			name:        "exceeds max length",
 			counterName: "this-is-a-string-with-more-than-32-characters",
 			handler:     &fakeHandler{},
-			// expected calls: zero (the error should be returned by this library)
+			// 期望不发出 netlink 请求：错误应在本地校验阶段直接返回。
 			netlinkCalls: 0,
 			err:          ErrNameExceedsMaxLength,
 		},
@@ -344,20 +350,20 @@ func TestRunner_Get(t *testing.T) {
 
 			counter, err := rnr.Get(tc.counterName)
 
-			// validate number of requests
+			// 断言请求数量，防止重复或漏发 netlink 消息。
 			assert.Len(t, tc.handler.requests, tc.netlinkCalls)
 			if tc.netlinkCalls > 0 {
-				// validate request
+				// 校验请求的命令类型与标志位。
 				assert.Equal(t, cmdGet, tc.handler.requests[0].cmd)
 				assert.Equal(t, uint16(unix.NLM_F_REQUEST|unix.NLM_F_ACK), tc.handler.requests[0].flags)
 
-				// validate attribute(NFACCT_NAME)
+				// 校验 NFACCT_NAME 属性：名称以 NUL 结尾，符合 netlink 报文约定。
 				assert.Len(t, tc.handler.requests[0].data, 1)
 				assert.Equal(t,
 					tc.handler.requests[0].data[0].Serialize(),
 					nl.NewRtAttr(attrName, nl.ZeroTerminated(tc.counterName)).Serialize())
 
-				// validate response
+				// 根据是否预期错误，分别校验错误返回或解析出的计数器字段。
 				if tc.err != nil {
 					assert.Nil(t, counter)
 					assert.ErrorContains(t, err, tc.err.Error())
@@ -373,6 +379,7 @@ func TestRunner_Get(t *testing.T) {
 	}
 }
 
+// TestRunner_Ensure 验证 Ensure 的幂等行为：计数器不存在时先 GET 再 NEW，已存在时只发 GET。
 func TestRunner_Ensure(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -386,7 +393,7 @@ func TestRunner_Ensure(t *testing.T) {
 			handler: &fakeHandler{
 				errs: []error{syscall.ENOENT},
 			},
-			// expected calls - NFNL_MSG_ACCT_GET + NFNL_MSG_ACCT_NEW
+			// 计数器不存在：期望先 GET 再 NEW，共两次调用。
 			netlinkCalls: 2,
 		},
 		{
@@ -405,7 +412,7 @@ func TestRunner_Ensure(t *testing.T) {
 					0x00, 0x00, 0x00, 0x01,
 				}}},
 			},
-			// expected calls - NFNL_MSG_ACCT_GET
+			// 计数器已存在：期望只发一次 GET，不应重复创建。
 			netlinkCalls: 1,
 		},
 	}
@@ -418,14 +425,16 @@ func TestRunner_Ensure(t *testing.T) {
 			err = rnr.Ensure(tc.counterName)
 			assert.NoError(t, err)
 
-			// validate number of netlink requests
+			// 通过请求数量验证 Ensure 是否走对了创建分支。
 			assert.Len(t, tc.handler.requests, tc.netlinkCalls)
 		})
 	}
 
 }
 
+// TestRunner_List 验证 List 使用 DUMP 标志一次拉取所有计数器，并逐条解析属性。
 func TestRunner_List(t *testing.T) {
+	// 四个预置报文分别包含不同的属性组合和字节对齐方式。
 	hndlr := &fakeHandler{
 		responses: [][][]byte{{
 			{
@@ -482,15 +491,15 @@ func TestRunner_List(t *testing.T) {
 
 	counters, err := rnr.List()
 
-	// validate request(NFNL_MSG_ACCT_GET)
+	// 校验 DUMP 请求：NLM_F_DUMP 标志表示一次性列出全部计数器。
 	assert.Len(t, hndlr.requests, 1)
 	assert.Equal(t, cmdGet, hndlr.requests[0].cmd)
 	assert.Equal(t, uint16(unix.NLM_F_REQUEST|unix.NLM_F_DUMP), hndlr.requests[0].flags)
 
-	// validate attributes
+	// DUMP 请求不应携带任何过滤器属性。
 	assert.Empty(t, hndlr.requests[0].data)
 
-	// validate response
+	// 按响应顺序逐一比对计数器名称、包数和字节数。
 	assert.NoError(t, err)
 	assert.NotNil(t, counters)
 	assert.Equal(t, len(expected), len(counters))
@@ -501,8 +510,11 @@ func TestRunner_List(t *testing.T) {
 	}
 }
 
+// TestDecode 验证 decode 对原始 netlink 报文的容错性：
+// 缺字段时返回零值而非报错，对未知新属性保持向前兼容。
 func TestDecode(t *testing.T) {
 	testCases := []struct {
+		// 覆盖完整报文、缺失单个属性、仅有头部及未知属性的情形。
 		name     string
 		msg      []byte
 		expected *Counter
@@ -618,6 +630,7 @@ func TestDecode(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// decode 用于测试原始字节解析；第二个参数控制是否解析名称。
 			counter, err := decode(tc.msg, false)
 			assert.NoError(t, err)
 			assert.NotNil(t, counter)

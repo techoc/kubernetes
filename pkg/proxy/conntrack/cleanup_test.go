@@ -54,18 +54,17 @@ const (
 	testNonServingEndpointIP = "10.240.1.5"
 	testDeletedEndpointIP    = "10.240.2.6"
 
-	// testOldEndpointPort is used to cover cases when endpoint changes port,
-	// but IP remains same.
+	// testOldEndpointPort 用于覆盖端点端口变化但 IP 不变的场景。
 	testOldEndpointPort = 8080
 	testEndpointPort    = 9090
 	testServicePort     = 8000
 	testServiceNodePort = 32000
-	// testNonServicePort is used to mock conntrack flow entries which are not owned by
-	// kube-proxy and reconciler should not consider these for cleanup
+	// testNonServicePort 用于模拟不属于 kube-proxy 管理的 conntrack 表项，
+	// 这些表项不应被清理器纳入回收范围。
 	testNonServicePort = 3000
 )
 
-// generateConntrackEntry generates *netlink.ConntrackFlow for unit-testing.
+// generateConntrackEntry 构造单测用的 *netlink.ConntrackFlow。
 func generateConntrackEntry(origDst string, origPortDst uint16, replySrc string, replyPortSrc uint16, proto uint8) *netlink.ConntrackFlow {
 	entry := &netlink.ConntrackFlow{
 		FamilyType: unix.AF_INET,
@@ -79,20 +78,19 @@ func generateConntrackEntry(origDst string, origPortDst uint16, replySrc string,
 			SrcPort:  replyPortSrc,
 		},
 	}
-	// we don't match on --orig-dst for node port services (*:NodePort), --orig-dst is thus handled separately
+	// NodePort 服务只按目的端口匹配，不按 --orig-dst 匹配，因此这里单独处理 origDst。
 	if origDst != "" {
 		entry.Forward.DstIP = netutils.ParseIPSloppy(origDst)
 	}
 	return entry
 }
 
+// TestCleanStaleEntries 验证清理器删除过期 conntrack 表项、保留合法表项并上报删除计数。
 func TestCleanStaleEntries(t *testing.T) {
-	// We need to construct proxy.ServicePortMap and proxy.EndpointsMap to pass to
-	// CleanStaleEntries. ServicePortMap and EndpointsMap are just maps, but there are
-	// no public constructors for any implementation of proxy.ServicePort and
-	// proxy.EndpointsMap, so we have to either provide our own implementation of that
-	// interface, or else use a proxy.ServiceChangeTracker and proxy.NewEndpointsChangeTracker
-	// to construct them and fill in the maps for us.
+	// 需要构造 proxy.ServicePortMap 和 proxy.EndpointsMap 传给 CleanStaleEntries。
+	// 这两个类型本质上是 map，但 proxy.ServicePort 等接口没有公开的构造入口，
+	// 因此借助 proxy.ServiceChangeTracker 和 proxy.NewEndpointsChangeTracker
+	// 生成实现并填充映射，而不是自己实现一套接口。
 
 	sct := proxy.NewServiceChangeTracker(v1.IPv4Protocol, nil, nil)
 	svc := &v1.Service{
@@ -205,7 +203,7 @@ func TestCleanStaleEntries(t *testing.T) {
 		Protocol: svc.Spec.Ports[2].Protocol,
 	}
 
-	// Sanity-check to make sure we constructed the ServicePortMap correctly
+	// 先确认 ServicePortMap 构造正确，避免把构造错误误判为清理逻辑的错误。
 	if len(svcPortMap) != 3 {
 		t.Fatalf("expected svcPortMap to have 2 entries, got %+v", svcPortMap)
 	}
@@ -222,7 +220,7 @@ func TestCleanStaleEntries(t *testing.T) {
 		t.Fatalf("expected svcPortMap[%q] to be \"172.30.1.1:8000/SCTP\", got %q", sctpPortName.String(), servicePort.String())
 	}
 
-	// Sanity-check to make sure we constructed the EndpointsMap map correctly
+	// 同理确认 EndpointsMap 的数量、IP 与就绪状态符合预期。
 	if len(endpointsMap) != 3 {
 		t.Fatalf("expected endpointsMap to have 3 entries, got %+v", endpointsMap)
 	}
@@ -244,23 +242,19 @@ func TestCleanStaleEntries(t *testing.T) {
 		}
 	}
 
-	// The following mock conntrack flow entries `entriesBeforeCleanup` and `entriesAfterCleanup`
-	// represent conntrack flow entries before and after reconciler cleanup loop. Before cleanup,
-	// reconciler lists the conntrack flows, receiving `entriesBeforeCleanup` and after cleanup,
-	// we list the conntrack flows and assert them to match with `entriesAfterCleanup`.
-	// {entriesBeforeCleanup} - {entriesAfterCleanup} = entries cleared by conntrack reconciler
+	// entriesBeforeCleanup 与 entriesAfterCleanup 分别表示清理前后的 conntrack 表项快照：
+	// 清理器读取前者，测试断言清理后的实际表项与后者一致。
+	// 二者之差即为清理器应删除的表项。
 	var entriesBeforeCleanup []*netlink.ConntrackFlow
-	// entriesBeforeCleanup - entriesAfterCleanup = entries cleared by conntrack reconciler
 	var entriesAfterCleanup []*netlink.ConntrackFlow
 
-	// we create 6 fake flow entries with `testOldEndpointPort`, this simulates the case when
-	// endpoints change port without changing IP. These entries should be cleared by reconciler.
+	// 构造 6 条旧端口表项，模拟端点 IP 不变但端口变化的场景，这些表项应被清理。
 	for _, origDest := range []string{testClusterIP, testLoadBalancerIP, testExternalIP} {
 		entry := generateConntrackEntry(origDest, testServicePort, testServingEndpointIP, testOldEndpointPort, unix.IPPROTO_UDP)
 		entriesBeforeCleanup = append(entriesBeforeCleanup, entry)
 	}
 
-	// we create 63 fake flow entries ( 3 Endpoints * 3 Protocols * ( 3 (ServiceIP:ServicePort) + 3 (ServiceIP:NonServicePort) + 1 (NodePort))
+	// 构造 63 条表项：3 个端点 × 3 种协议 × (3 条 ServiceIP:ServicePort + 3 条 ServiceIP:非服务端口 + 1 条 NodePort)。
 	for _, dnatDest := range []string{testServingEndpointIP, testNonServingEndpointIP, testDeletedEndpointIP} {
 		for _, proto := range []uint8{unix.IPPROTO_TCP, unix.IPPROTO_UDP, unix.IPPROTO_SCTP} {
 			for _, origDest := range []string{testClusterIP, testLoadBalancerIP, testExternalIP} {
@@ -268,8 +262,7 @@ func TestCleanStaleEntries(t *testing.T) {
 					entry := generateConntrackEntry(origDest, port, dnatDest, testEndpointPort, proto)
 					entriesBeforeCleanup = append(entriesBeforeCleanup, entry)
 					if proto == unix.IPPROTO_UDP && port == testServicePort && dnatDest != testServingEndpointIP {
-						// we do not expect UDP entries with destination port `testServicePort` and DNATed destination
-						// address not an address of serving endpoint to be present after cleanup.
+						// UDP 表项目的是 testServicePort 但 DNAT 目标不是就绪端点时，清理后不应保留。
 					} else {
 						entriesAfterCleanup = append(entriesAfterCleanup, entry)
 					}
@@ -279,17 +272,15 @@ func TestCleanStaleEntries(t *testing.T) {
 			entry := generateConntrackEntry("", testServiceNodePort, dnatDest, testEndpointPort, proto)
 			entriesBeforeCleanup = append(entriesBeforeCleanup, entry)
 			if proto == unix.IPPROTO_UDP && dnatDest != testServingEndpointIP {
-				// we do not expect UDP entries with DNATed destination address not
-				// an address of serving endpoint to be present after cleanup.
+				// DNAT 目标不是就绪端点的 UDP NodePort 表项，清理后同样不应保留。
 			} else {
 				entriesAfterCleanup = append(entriesAfterCleanup, entry)
 			}
 		}
 	}
 
-	// add 6 non-DNATed mock entries which should be cleared up by reconciler
-	// These will exist if the proxy don't have DROP/REJECT rule for service with
-	// no endpoints, --orig-dst and --reply-src will be same for these entries.
+	// 补充 6 条未做 DNAT 的表项，这些也应被清理：
+	// 服务没有端点且代理缺少 DROP/REJECT 规则时会留下这类表项，其 --orig-dst 与 --reply-src 相同。
 	for _, ip := range []string{testClusterIP, testLoadBalancerIP, testExternalIP} {
 		for _, port := range []uint16{testServicePort, testNonServicePort} {
 			entry := &netlink.ConntrackFlow{
@@ -306,8 +297,7 @@ func TestCleanStaleEntries(t *testing.T) {
 			}
 
 			entriesBeforeCleanup = append(entriesBeforeCleanup, entry)
-			// we do not expect entries with destination port `testServicePort` to be
-			// present after cleanup.
+			// 目的端口为 testServicePort 的表项属于服务流量，清理后不应保留。
 			if port != testServicePort {
 				entriesAfterCleanup = append(entriesAfterCleanup, entry)
 			}
@@ -332,11 +322,11 @@ func TestCleanStaleEntries(t *testing.T) {
 
 	require.Equal(t, len(entriesAfterCleanup), len(actualEntries))
 
-	// sort the actual flows before comparison
+	// 表项顺序不确定，比较前先排序。
 	sort.Slice(actualEntries, func(i, j int) bool {
 		return actualEntries[i].String() < actualEntries[j].String()
 	})
-	// sort the expected flows before comparison
+	// 期望表项同样排序，保证 diff 不受插入顺序影响。
 	sort.Slice(entriesAfterCleanup, func(i, j int) bool {
 		return entriesAfterCleanup[i].String() < entriesAfterCleanup[j].String()
 	})
@@ -346,6 +336,7 @@ func TestCleanStaleEntries(t *testing.T) {
 	}
 }
 
+// TestPerformanceCleanStaleEntries 验证百万级表项下清理请求数只随过期表项增长，不随表规模爆炸。
 func TestPerformanceCleanStaleEntries(t *testing.T) {
 	sct := proxy.NewServiceChangeTracker(v1.IPv4Protocol, nil, nil)
 	svc := &v1.Service{
@@ -410,13 +401,13 @@ func TestPerformanceCleanStaleEntries(t *testing.T) {
 	_ = endpointsMap.Update(ect)
 
 	flows := []*netlink.ConntrackFlow{}
-	// 1 valid entry
+	// 1 条合法表项。
 	flows = append(flows, generateConntrackEntry(testExternalIP, testServicePort, testServingEndpointIP, testEndpointPort, unix.IPPROTO_UDP))
 	expectedEntries := 1
-	// 1 stale entry
+	// 1 条过期表项。
 	flows = append(flows, generateConntrackEntry(testExternalIP, testServicePort, testDeletedEndpointIP, testEndpointPort, unix.IPPROTO_UDP))
 	expectedDeleted := 1
-	// 1 M to the Service IP with random ports
+	// 构造百万条随源端口变化的表项，用于压测清理路径的开销。
 	for i := 0; i < 1000*1000; i++ {
 		port := uint16(rand.Intn(65535))
 		if port == testServicePort {
@@ -435,15 +426,15 @@ func TestPerformanceCleanStaleEntries(t *testing.T) {
 	if len(actualEntries) != expectedEntries {
 		t.Errorf("unexpected number of entries, got %d expected %d", len(actualEntries), expectedEntries)
 	}
-	// expected conntrack entries
-	// 1 for CleanStaleEntries + 1 for ListEntries + 1 for ConntrackDeleteFilters to dump the conntrack table
-	// n for the expected deleted stale entries
+	// 预期 netlink 请求数：1 次 CleanStaleEntries 列表 + 1 次 ListEntries + 1 次 ConntrackDeleteFilters dump，
+	// 再加上每条待删除过期表项各一次删除请求。
 	t.Logf("expected deleted %d", expectedDeleted)
 	if fake.netlinkRequests != 3+expectedDeleted {
 		t.Errorf("expected %d netlink requests, got %d", 3+expectedDeleted, fake.netlinkRequests)
 	}
 }
 
+// TestServiceWithoutEndpoints 验证服务无就绪端点时的清理边界：只删除自有 UDP 前端表项，保留其余表项。
 func TestServiceWithoutEndpoints(t *testing.T) {
 	sct := proxy.NewServiceChangeTracker(v1.IPv4Protocol, nil, nil)
 	svc := &v1.Service{
@@ -511,32 +502,26 @@ func TestServiceWithoutEndpoints(t *testing.T) {
 	flows := []*netlink.ConntrackFlow{}
 	var entriesAfterCleanup []*netlink.ConntrackFlow
 
-	// All UDP entries directed to the frontends of a service without serving
-	// endpoints are stale and must be cleared, regardless of which (deleted)
-	// endpoint they are DNATed to: established flows bypass the REJECT rule
-	// installed for services with no endpoints and would otherwise keep
-	// blackholing traffic to the deleted endpoint IP indefinitely.
+	// 无就绪端点的服务，其指向前端的 UDP 表项都是过期的，无论 DNAT 到哪个已删除端点都应清理。
+	// 已建立的连接会绕过为无端点服务安装的 REJECT 规则，否则会持续把流量黑洞到已删除的端点 IP。
 	for _, origDest := range []string{testClusterIP, testLoadBalancerIP, testExternalIP} {
 		for _, dnatDest := range []string{testServingEndpointIP, testDeletedEndpointIP} {
 			flows = append(flows, generateConntrackEntry(origDest, testServicePort, dnatDest, testEndpointPort, unix.IPPROTO_UDP))
 		}
 	}
 
-	// UDP entries not directed to a service frontend are not owned by
-	// kube-proxy and must be preserved.
+	// 不指向服务前端的 UDP 表项不属于 kube-proxy，必须保留。
 	entry := generateConntrackEntry(testExternalIP, testNonServicePort, testDeletedEndpointIP, testEndpointPort, unix.IPPROTO_UDP)
 	flows = append(flows, entry)
 	entriesAfterCleanup = append(entriesAfterCleanup, entry)
 
-	// non-UDP entries must be preserved.
+	// 非 UDP 表项不在清理范围内，必须保留。
 	entry = generateConntrackEntry(testExternalIP, testServicePort, testDeletedEndpointIP, testEndpointPort, unix.IPPROTO_TCP)
 	flows = append(flows, entry)
 	entriesAfterCleanup = append(entriesAfterCleanup, entry)
 
-	// *:NodePort entries are matched on the destination port only, which with an
-	// empty endpoints set would also remove flows not owned by kube-proxy, so
-	// NodePort cleanup is skipped for services without serving endpoints and
-	// these entries must be preserved.
+	// *:NodePort 表项只按目的端口匹配；端点为空时按此规则清理会误删非 kube-proxy 表项，
+	// 因此无就绪端点时跳过 NodePort 清理，这类表项必须保留。
 	entry = generateConntrackEntry("", testServiceNodePort, testDeletedEndpointIP, testEndpointPort, unix.IPPROTO_UDP)
 	flows = append(flows, entry)
 	entriesAfterCleanup = append(entriesAfterCleanup, entry)
@@ -552,11 +537,11 @@ func TestServiceWithoutEndpoints(t *testing.T) {
 
 	require.Len(t, actualEntries, len(entriesAfterCleanup))
 
-	// sort the actual flows before comparison
+	// 表项顺序不确定，比较前先排序。
 	sort.Slice(actualEntries, func(i, j int) bool {
 		return actualEntries[i].String() < actualEntries[j].String()
 	})
-	// sort the expected flows before comparison
+	// 期望表项同样排序，保证 diff 不受插入顺序影响。
 	sort.Slice(entriesAfterCleanup, func(i, j int) bool {
 		return entriesAfterCleanup[i].String() < entriesAfterCleanup[j].String()
 	})

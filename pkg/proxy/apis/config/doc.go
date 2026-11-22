@@ -17,4 +17,5 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=kubeproxy.config.k8s.io
 
+// Package config 定义 kube-proxy 的内部配置类型与编解码方案。
 package config

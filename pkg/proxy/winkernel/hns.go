@@ -29,11 +29,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// HostNetworkService 封装 proxier 需要的网络、端点与负载均衡器操作。
+// 以接口形式暴露便于在测试中注入模拟的 HNS 实现。
 type HostNetworkService interface {
 	getNetworkByName(name string) (*hnsNetworkInfo, error)
-	// Returns a map of endpoints keyed by both endpoint ID and IP address for all endpoints on the specified network, and a map of remote endpoints with duplicate IPs to be deleted.
+	// getAllEndpointsByNetwork 返回指定网络上的全部端点，分别以端点 ID 和 IP 地址为键；
+	// 同时返回 IP 冲突、需要删除的远端端点集合。
 	getAllEndpointsByNetwork(networkName string) (map[string]*endpointInfo, map[string]bool, error)
-	// deleteAllRemoteEndpointsWithDupIP deletes all remote endpoints with duplicate IPs that were found in getAllEndpointsByNetwork. This is needed to clean up stale remote endpoints that can be left behind due to a Windows bug.
+	// deleteAllRemoteEndpointsWithDupIP 删除 getAllEndpointsByNetwork 发现的 IP 重复的远端端点。
+	// Windows 的缺陷可能遗留此类陈旧端点，需要显式清理。
 	deleteAllRemoteEndpointsWithDupIP(remoteEPsWithDupIP map[string]bool)
 	getEndpointByID(id string) (*endpointInfo, error)
 	getEndpointByIpAddress(ip string, networkName string) (*endpointInfo, error)
@@ -47,38 +51,39 @@ type HostNetworkService interface {
 	deleteLoadBalancer(hnsID string) error
 }
 
+// hns 是基于 HCN 实现的 HostNetworkService。
 type hns struct {
 	hcn HcnService
 }
 
+// 供 HCN 负载均衡器与端口映射使用的扩展标志位。
 var (
-	// LoadBalancerFlagsIPv6 enables IPV6.
+	// LoadBalancerFlagsIPv6 表示 IPv6 负载均衡器。
 	LoadBalancerFlagsIPv6 hcn.LoadBalancerFlags = 2
-	// LoadBalancerPortMappingFlagsVipExternalIP enables VipExternalIP.
+	// LoadBalancerPortMappingFlagsVipExternalIP 表示端口映射使用 VIP 外部 IP。
 	LoadBalancerPortMappingFlagsVipExternalIP hcn.LoadBalancerPortMappingFlags = 16
 )
 
+// 用于识别 HCN/HNS 特定错误的 Win32 错误码（取自错误消息文本）。
 const (
 
-	// 0x6b5 is a standard Win32 RPC error (RPC_S_UNKNOWN_IF).
-	// It is returned by the RPC runtime when the target service's
-	// RPC interface is not registered. In this context, it typically
-	// indicates that the HNS service is not running or not yet initialized.
+	// 0x6b5 是标准的 Win32 RPC 错误（RPC_S_UNKNOWN_IF）：
+	// 当目标服务的 RPC 接口未注册时由 RPC 运行时返回；在此场景下通常意味着
+	// HNS 服务未运行或尚未完成初始化。
 	errorCodeHnsNotRunning = "0x6b5"
 
-	// 0xb7 (ERROR_ALREADY_EXISTS): Object already exists.
-	// Returned when attempting to create a resource that already exists.
+	// 0xb7（ERROR_ALREADY_EXISTS）表示对象已存在：
+	// 在创建同名资源时由系统返回。
 	errorCodeFileAlreadyExists = "0xb7"
 )
 
-// IsHnsNotRunningError checks if the error is due to HNS service not running by looking for the specific error code in the error message.
+// IsHnsNotRunningError 通过错误消息中的特定错误码判断错误是否由 HNS 服务未运行引起。
 func IsHnsNotRunningError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), errorCodeHnsNotRunning)
 }
 
-// IsPolicyAlreadyExists checks if the error is due to a load balancer policy already existing with
-// the same frontend configuration by checking for specific error conditions, including the presence
-// of a specific error code or message indicating a resource already exists.
+// IsPolicyAlreadyExists 判断错误是否由前端配置相同的负载均衡器策略已存在引起：
+// 既检查 HCN 的端口冲突错误，也匹配表示资源已存在的错误码。
 func IsPolicyAlreadyExists(err error) bool {
 	if err == nil {
 		return false
@@ -86,7 +91,7 @@ func IsPolicyAlreadyExists(err error) bool {
 	return hcn.IsPortAlreadyExistsError(err) || strings.Contains(err.Error(), errorCodeFileAlreadyExists)
 }
 
-// findExistingLBIdByFrontend finds the ID of an existing load balancer that matches the frontend configuration of the proposed load balancer.
+// findExistingLBIdByFrontend 查找前端配置与待创建负载均衡器相同的现存策略 ID。
 func findExistingLBIdByFrontend(proposedLB *hcn.HostComputeLoadBalancer, existingLBs map[loadBalancerIdentifier]*loadBalancerInfo) string {
 	if len(proposedLB.PortMappings) == 0 {
 		return ""
@@ -99,7 +104,7 @@ func findExistingLBIdByFrontend(proposedLB *hcn.HostComputeLoadBalancer, existin
 	for id, lbInfo := range existingLBs {
 		if id.vip == frontEndVIP && id.protocol == uint16(proposedLB.PortMappings[0].Protocol) && id.internalPort == proposedLB.PortMappings[0].InternalPort && id.externalPort == proposedLB.PortMappings[0].ExternalPort && id.isIPv6 == isProposedLbIPv6 {
 			if lbID != "" {
-				// More than 1 existing LB has the same frontend configuration, return no match to avoid deleting any of them
+				// 多个现存策略匹配同一前端配置时返回空 ID，避免误删其中任何一个。
 				klog.Warning("More than 1 existing lb has matching frontend, will not delete any existing lbs", "existingLBID1", lbID, "existingLBID2", lbInfo.hnsID, "frontendVIP", frontEndVIP, "protocol", proposedLB.PortMappings[0].Protocol, "internalPort", proposedLB.PortMappings[0].InternalPort, "externalPort", proposedLB.PortMappings[0].ExternalPort, "isIPv6", isProposedLbIPv6)
 				return ""
 			}
@@ -110,6 +115,7 @@ func findExistingLBIdByFrontend(proposedLB *hcn.HostComputeLoadBalancer, existin
 	return lbID
 }
 
+// getLoadBalancerPolicyFlags 将内部标志转换为 HCN 的端口映射标志和负载均衡器标志。
 func getLoadBalancerPolicyFlags(flags loadBalancerFlags) (lbPortMappingFlags hcn.LoadBalancerPortMappingFlags, lbFlags hcn.LoadBalancerFlags) {
 	lbPortMappingFlags = hcn.LoadBalancerPortMappingFlagsNone
 	if flags.isILB {
@@ -137,6 +143,7 @@ func getLoadBalancerPolicyFlags(flags loadBalancerFlags) (lbPortMappingFlags hcn
 	return
 }
 
+// getNetworkByName 查询 HNS 网络，并解析其中携带的远程子网路由策略。
 func (hns hns) getNetworkByName(name string) (*hnsNetworkInfo, error) {
 	hnsnetwork, err := hns.hcn.GetNetworkByName(name)
 	if err != nil {
@@ -170,6 +177,8 @@ func (hns hns) getNetworkByName(name string) (*hnsNetworkInfo, error) {
 	}, nil
 }
 
+// getAllEndpointsByNetwork 查询网络上的全部端点，按 ID 和 IP 建立索引，
+// 并返回 IP 重复、需要清理的远端端点集合。
 func (hns hns) getAllEndpointsByNetwork(networkName string) (map[string]*(endpointInfo), map[string]bool, error) {
 	hcnnetwork, err := hns.hcn.GetNetworkByName(networkName)
 	if err != nil {
@@ -194,9 +203,8 @@ func (hns hns) getAllEndpointsByNetwork(networkName string) (map[string]*(endpoi
 		for index, ipConfig := range ep.IpConfigurations {
 
 			if index > 1 {
-				// Expecting only ipv4 and ipv6 ipaddresses
-				// This is highly unlikely to happen, but if it does, we should log a warning
-				// and break out of the loop
+				// 预期最多只有 IPv4 和 IPv6 两个地址；
+				// 出现更多地址属于异常情况，记录警告后跳出循环，避免使用意外数据。
 				klog.Warning("Endpoint ipconfiguration holds more than 2 IP addresses.", "hnsID", ep.Id, "IP", ipConfig.IpAddress, "ipConfigCount", len(ep.IpConfigurations))
 				break
 			}
@@ -205,30 +213,30 @@ func (hns hns) getAllEndpointsByNetwork(networkName string) (map[string]*(endpoi
 
 			if existingEp, ok := endpointInfos[ipConfig.IpAddress]; ok {
 				if curEpIsLocal && !existingEp.isLocal {
-					// Local found, stale remote in map → delete remote from HNS, overwrite
+					// 本地端点优先：发现残留的远端端点时标记删除，并用本地端点覆盖。
 					remoteEPsWithDupIP[existingEp.hnsID] = true
 					delete(endpointInfos, existingEp.hnsID)
 					delete(endpointInfos, existingEp.ip)
-					// fall through to add local
+					// 继续执行下面的逻辑，用本地端点更新映射。
 				} else if !curEpIsLocal && existingEp.isLocal {
-					// Local already in map, remote arriving → delete remote from HNS, skip
+					// 映射中已有本地端点时，后到的远端端点标记删除并跳过。
 					remoteEPsWithDupIP[ep.Id] = true
 					continue
 				} else {
-					continue // same type, keep existing
+					continue // 同类端点保留首次记录即可
 				}
 			}
 
-			// Add to map with key endpoint ID or IP address
-			// Storing this is expensive in terms of memory, however there is a bug in Windows Server 2019 and 2022 that can cause two endpoints (local and remote) to be created with the same IP address.
-			// TODO: Store by IP only and remove any lookups by endpoint ID.
+			// 同时以端点 ID 和 IP 作为键存入映射：虽然额外占用内存，但 Windows Server 2019/2022
+			// 存在本地与远端端点使用相同 IP 的缺陷，必须支持两种查找方式。
+			// TODO: 仅按 IP 存储，并移除所有按端点 ID 的查找。
 			epInfo := &endpointInfo{
 				ip:         ipConfig.IpAddress,
 				isLocal:    curEpIsLocal,
 				macAddress: ep.MacAddress,
 				hnsID:      ep.Id,
 				hns:        hns,
-				// only ready and not terminating endpoints were added to HNS
+				// 只有 ready 且非 terminating 的端点才会写入 HNS，这里直接置为服务状态。
 				ready:       true,
 				serving:     true,
 				terminating: false,
@@ -242,6 +250,7 @@ func (hns hns) getAllEndpointsByNetwork(networkName string) (map[string]*(endpoi
 	return endpointInfos, remoteEPsWithDupIP, nil
 }
 
+// deleteAllRemoteEndpointsWithDupIP 清理 IP 重复、已不再使用的远端端点。
 func (hns hns) deleteAllRemoteEndpointsWithDupIP(remoteEPsWithDupIP map[string]bool) {
 	for hnsID := range remoteEPsWithDupIP {
 		klog.V(3).InfoS("Deleting stale remote endpoint with duplicate IP", "hnsID", hnsID)
@@ -252,6 +261,7 @@ func (hns hns) deleteAllRemoteEndpointsWithDupIP(remoteEPsWithDupIP map[string]b
 	}
 }
 
+// getEndpointByID 按 HNS ID 查询端点并转换为内部表示。
 func (hns hns) getEndpointByID(id string) (*endpointInfo, error) {
 	hnsendpoint, err := hns.hcn.GetEndpointByID(id)
 	if err != nil {
@@ -265,6 +275,8 @@ func (hns hns) getEndpointByID(id string) (*endpointInfo, error) {
 		hns:        hns,
 	}, nil
 }
+
+// getEndpointByIpAddress 在指定网络中按 IP 查找端点。
 func (hns hns) getEndpointByIpAddress(ip string, networkName string) (*endpointInfo, error) {
 	hnsnetwork, err := hns.hcn.GetNetworkByName(networkName)
 	if err != nil {
@@ -297,6 +309,8 @@ func (hns hns) getEndpointByIpAddress(ip string, networkName string) (*endpointI
 	}
 	return nil, fmt.Errorf("Endpoint %v not found on network %s", ip, networkName)
 }
+
+// getEndpointByName 按名称查询端点并转换为内部表示。
 func (hns hns) getEndpointByName(name string) (*endpointInfo, error) {
 	hnsendpoint, err := hns.hcn.GetEndpointByName(name)
 	if err != nil {
@@ -310,6 +324,9 @@ func (hns hns) getEndpointByName(name string) (*endpointInfo, error) {
 		hns:        hns,
 	}, nil
 }
+
+// createEndpoint 在指定网络上创建本地或远端端点；
+// 远端端点会附带 ProviderAddress 策略以供 Overlay 网络路由使用。
 func (hns hns) createEndpoint(ep *endpointInfo, networkName string) (*endpointInfo, error) {
 	hnsNetwork, err := hns.hcn.GetNetworkByName(networkName)
 	if err != nil {
@@ -369,6 +386,8 @@ func (hns hns) createEndpoint(ep *endpointInfo, networkName string) (*endpointIn
 		hns:             hns,
 	}, nil
 }
+
+// deleteEndpoint 按 HNS ID 删除端点。
 func (hns hns) deleteEndpoint(hnsID string) error {
 	hnsendpoint, err := hns.hcn.GetEndpointByID(hnsID)
 	if err != nil {
@@ -381,9 +400,9 @@ func (hns hns) deleteEndpoint(hnsID string) error {
 	return err
 }
 
-// findLoadBalancerID will construct a id from the provided loadbalancer fields
+// findLoadBalancerID 根据负载均衡器字段构造唯一标识，后端集合以哈希形式参与标识。
 func findLoadBalancerID(endpoints []endpointInfo, vip string, protocol, internalPort, externalPort uint16, isIpv6 bool) (loadBalancerIdentifier, error) {
-	// Compute hash from backends (endpoint IDs)
+	// 对后端端点 ID 求解哈希，使后端集合变化能够反映到标识中。
 	hash, err := hashEndpoints(endpoints)
 	if err != nil {
 		klog.V(2).ErrorS(err, "Error hashing endpoints", "endpoints", endpoints)
@@ -392,6 +411,7 @@ func findLoadBalancerID(endpoints []endpointInfo, vip string, protocol, internal
 	return loadBalancerIdentifier{protocol: protocol, internalPort: internalPort, externalPort: externalPort, vip: vip, endpointsHash: hash, isIPv6: isIpv6}, nil
 }
 
+// getAllLoadBalancers 查询所有 HCN 负载均衡器，按前端配置与后端哈希建立索引。
 func (hns hns) getAllLoadBalancers() (map[loadBalancerIdentifier]*loadBalancerInfo, error) {
 	lbs, err := hns.hcn.ListLoadBalancers()
 	var id loadBalancerIdentifier
@@ -400,22 +420,22 @@ func (hns hns) getAllLoadBalancers() (map[loadBalancerIdentifier]*loadBalancerIn
 	}
 	loadBalancers := make(map[loadBalancerIdentifier]*(loadBalancerInfo))
 	for _, lb := range lbs {
-		// PortMappings is populated by HNS and can be empty, for example when a load
-		// balancer is partially created. Such an entry cannot be keyed by port.
+		// PortMappings 由 HNS 填充，在策略只创建了一半时可能为空；
+		// 这种条目无法按端口建立索引，只能跳过。
 		if len(lb.PortMappings) == 0 {
 			klog.V(2).InfoS("Skipping load balancer with no port mappings", "hnsLbID", lb.Id)
 			continue
 		}
 		portMap := lb.PortMappings[0]
 		isIPv6 := (lb.Flags & LoadBalancerFlagsIPv6) == LoadBalancerFlagsIPv6
-		// Compute hash from backends (endpoint IDs)
+		// 对后端端点 ID 求解哈希，使后端集合变化能够反映到标识中。
 		hash, err := hashEndpoints(lb.HostComputeEndpoints)
 		if err != nil {
 			klog.V(2).ErrorS(err, "Error hashing endpoints", "policy", lb)
 			return nil, err
 		}
 		if len(lb.FrontendVIPs) == 0 {
-			// Leave VIP uninitialized
+			// 没有前端 VIP 时保持该字段为空。
 			id = loadBalancerIdentifier{protocol: uint16(portMap.Protocol), internalPort: portMap.InternalPort, externalPort: portMap.ExternalPort, endpointsHash: hash, isIPv6: isIPv6}
 		} else {
 			id = loadBalancerIdentifier{protocol: uint16(portMap.Protocol), internalPort: portMap.InternalPort, externalPort: portMap.ExternalPort, vip: lb.FrontendVIPs[0], endpointsHash: hash, isIPv6: isIPv6}
@@ -428,6 +448,7 @@ func (hns hns) getAllLoadBalancers() (map[loadBalancerIdentifier]*loadBalancerIn
 	return loadBalancers, nil
 }
 
+// createOrReplaceLoadbalancer 创建负载均衡器；若前端配置冲突，则删除冲突的旧策略后重试。
 func (hns hns) createOrReplaceLoadbalancer(proposedLB *hcn.HostComputeLoadBalancer, existingLBs map[loadBalancerIdentifier]*loadBalancerInfo) (*hcn.HostComputeLoadBalancer, error) {
 	lb, err := hns.hcn.CreateLoadBalancer(proposedLB)
 	if IsPolicyAlreadyExists(err) && len(proposedLB.PortMappings) > 0 {
@@ -451,6 +472,7 @@ func (hns hns) createOrReplaceLoadbalancer(proposedLB *hcn.HostComputeLoadBalanc
 	return lb, err
 }
 
+// getLoadBalancer 优先复用缓存中的策略，未命中时按配置创建 HNS 负载均衡器。
 func (hns hns) getLoadBalancer(endpoints []endpointInfo, flags loadBalancerFlags, sourceVip string, vip string, protocol uint16, internalPort uint16, externalPort uint16, previousLoadBalancers map[loadBalancerIdentifier]*loadBalancerInfo) (*loadBalancerInfo, error) {
 	var id loadBalancerIdentifier
 	vips := []string{}
@@ -543,11 +565,12 @@ func (hns hns) getLoadBalancer(endpoints []endpointInfo, flags loadBalancerFlags
 	lbInfo := &loadBalancerInfo{
 		hnsID: lb.Id,
 	}
-	// Add to map of load balancers
+	// 写入缓存，供本轮后续同步复用。
 	previousLoadBalancers[id] = lbInfo
 	return lbInfo, err
 }
 
+// updateLoadBalancer 原地更新指定 HNS ID 的负载均衡器策略。
 func (hns hns) updateLoadBalancer(hnsID string,
 	sourceVip,
 	vip string,
@@ -561,7 +584,7 @@ func (hns hns) updateLoadBalancer(hnsID string,
 
 	var id loadBalancerIdentifier
 	vips := []string{}
-	// Compute hash from backends (endpoint IDs)
+	// 对后端端点 ID 求解哈希，使后端集合变化能够反映到标识中。
 	hash, err := hashEndpoints(endpoints)
 	if err != nil {
 		klog.V(2).ErrorS(err, "Error hashing endpoints", "endpoints", endpoints)
@@ -621,17 +644,18 @@ func (hns hns) updateLoadBalancer(hnsID string,
 	lbInfo := &loadBalancerInfo{
 		hnsID: lb.Id,
 	}
-	// Add to map of load balancers
+	// 写入缓存，供本轮后续同步复用。
 	previousLoadBalancers[id] = lbInfo
 	return lbInfo, err
 }
 
+// deleteLoadBalancer 按 HNS ID 删除负载均衡器策略；对偶发失败重试一次。
 func (hns hns) deleteLoadBalancer(hnsID string) error {
 	lb, err := hns.hcn.GetLoadBalancerByID(hnsID)
 	if err != nil {
 		if hcn.IsNotFoundError(err) {
 			klog.V(1).InfoS("LoadBalancer policy resource not found, may have already been deleted", "lbID", hnsID)
-			// Return silently
+			// 策略已经不存在，视为删除成功。
 			return nil
 		}
 		if IsHnsNotRunningError(err) {
@@ -644,8 +668,8 @@ func (hns hns) deleteLoadBalancer(hnsID string) error {
 
 	err = hns.hcn.DeleteLoadBalancer(lb)
 	if err != nil {
-		// There is a bug in Windows Server 2019, that can cause the delete call to fail sometimes. We retry one more time.
-		// TODO: The logic in syncProxyRules  should be rewritten in the future to better stage and handle a call like this failing using the policyApplied fields.
+		// Windows Server 2019 的缺陷会导致删除调用偶发失败，这里再重试一次。
+		// TODO: 未来应重写 syncProxyRules 的逻辑，借助 policyApplied 字段分阶段处理此类失败。
 		klog.V(1).ErrorS(err, "Error deleting Hns loadbalancer policy resource. Attempting one more time...", "loadBalancer", lb)
 		err = hns.hcn.DeleteLoadBalancer(lb)
 	}
@@ -657,10 +681,10 @@ func (hns hns) deleteLoadBalancer(hnsID string) error {
 	return err
 }
 
-// Calculates a hash from the given endpoint IDs.
+// hashEndpoints 根据给定的端点 ID 计算哈希（使用 SHA-1）。
 func hashEndpoints[T string | endpointInfo](endpoints []T) (hash [20]byte, err error) {
 	var id string
-	// Recover in case something goes wrong. Return error and null byte array.
+	// 捕获处理过程中的 panic：出错时返回错误和空哈希，避免拖垮同步流程。
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
@@ -668,7 +692,7 @@ func hashEndpoints[T string | endpointInfo](endpoints []T) (hash [20]byte, err e
 		}
 	}()
 
-	// Iterate over endpoints, compute hash
+	// 遍历端点并计算哈希。
 	for _, ep := range endpoints {
 		switch x := any(ep).(type) {
 		case endpointInfo:
@@ -677,14 +701,15 @@ func hashEndpoints[T string | endpointInfo](endpoints []T) (hash [20]byte, err e
 			id = strings.ToUpper(x)
 		}
 		if len(id) > 0 {
-			// We XOR the hashes of endpoints, since they are an unordered set.
-			// This can cause collisions, but is sufficient since we are using other keys to identify the load balancer.
+			// 端点是无序集合，因此对各端点哈希做异或；
+			// 这样可能产生碰撞，但还有其他键共同标识负载均衡器，因此可以接受。
 			hash = xor(hash, sha1.Sum(([]byte(id))))
 		}
 	}
 	return
 }
 
+// xor 逐字节对两个 20 字节数组做异或。
 func xor(b1 [20]byte, b2 [20]byte) (xorbytes [20]byte) {
 	for i := 0; i < 20; i++ {
 		xorbytes[i] = b1[i] ^ b2[i]

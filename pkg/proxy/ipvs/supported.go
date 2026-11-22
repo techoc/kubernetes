@@ -27,23 +27,21 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// CanUseIPVSProxier checks if we can use the ipvs Proxier.
-// The ipset version and the scheduler are checked. If any virtual servers (VS)
-// already exist with the configured scheduler, we just return. Otherwise
-// we check if a dummy VS can be configured with the configured scheduler.
-// Kernel modules will be loaded automatically if necessary.
+// CanUseIPVSProxier 检查当前环境能否使用 ipvs Proxier。
+// 检查内容包括 ipset 版本和调度器：若已存在使用所配置调度器的虚拟服务器（VS），
+// 则直接返回成功；否则尝试用所配置的调度器创建一个测试 VS，以验证调度器确实可用。
+// 如有必要，所需内核模块会被自动加载。
 func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IPSetVersioner, scheduler string) error {
 	logger := klog.FromContext(ctx)
 	// BUG: https://github.com/moby/ipvs/issues/27
-	// If ipvs is not compiled into the kernel no error is returned and handle==nil.
-	// This in turn causes ipvs.GetVirtualServers and ipvs.AddVirtualServer
-	// to return ok (err==nil). If/when this bug is fixed parameter "ipvs" will be nil
-	// if ipvs is not supported by the kernel. Until then a re-read work-around is used.
+	// 内核未编译 ipvs 时，moby/ipvs 不返回错误而是返回 handle==nil，
+	// 这会让 ipvs.GetVirtualServers 和 ipvs.AddVirtualServer 误报成功（err==nil）。
+	// 该 bug 修复后，内核不支持 ipvs 时传入的 "ipvs" 会是 nil；修复前只能用"重新读取"来绕过。
 	if ipvs == nil {
 		return fmt.Errorf("ipvs not supported by the kernel")
 	}
 
-	// Check ipset version
+	// 检查 ipset 版本：IPv6 能力要求 ipset 不低于 6.0，版本过低必须直接拒绝。
 	versionString, err := ipsetver.GetVersion()
 	if err != nil {
 		return fmt.Errorf("error getting ipset version, error: %w", err)
@@ -56,7 +54,7 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 		scheduler = defaultScheduler
 	}
 
-	// If any virtual server (VS) using the scheduler exist we skip the checks.
+	// 若已有使用目标调度器的 VS，说明 ipvs 在本节点确定可用，可以跳过后续探测。
 	vservers, err := ipvs.GetVirtualServers()
 	if err != nil {
 		logger.Error(err, "Can't read the ipvs")
@@ -64,8 +62,8 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 	}
 	logger.V(5).Info("Virtual Servers", "count", len(vservers))
 	if len(vservers) > 0 {
-		// This is most likely a kube-proxy re-start. We know that ipvs works
-		// and if any VS uses the configured scheduler, we are done.
+		// 存在 VS 多半意味着 kube-proxy 刚刚重启：VS 还在即说明 ipvs 可用；
+		// 若其中一个 VS 恰好使用配置的调度器，调度器也无需再验证。
 		for _, vs := range vservers {
 			if vs.Scheduler == scheduler {
 				logger.V(5).Info("VS exist, Skipping checks")
@@ -75,17 +73,14 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 		logger.V(5).Info("No existing VS uses the configured scheduler", "scheduler", scheduler)
 	}
 
-	// Try to insert a dummy VS with the passed scheduler.
-	// We should use a VIP address that is not used on the node.
-	// An address "198.51.100.0" from the TEST-NET-2 rage in https://datatracker.ietf.org/doc/html/rfc5737
-	// is used. These addresses are reserved for documentation. If the user is using
-	// this address for a VS anyway we *will* mess up, but that would be an invalid configuration.
-	// If the user have configured the address to an interface on the node (but not a VS)
-	// then traffic will temporary be routed to ipvs during the probe and dropped.
-	// The later case is also and invalid configuration, but the traffic impact will be minor.
-	// This should not be a problem if users honors reserved addresses, but cut/paste
-	// from documentation is not unheard of, so the restriction to not use the TEST-NET-2 range
-	// must be documented.
+	// 尝试用传入的调度器创建一个测试用虚拟服务器（dummy VS）。
+	// 必须选用节点上未被占用的 VIP：这里使用 https://datatracker.ietf.org/doc/html/rfc5737
+	// 中 TEST-NET-2 段的 "198.51.100.0"，该地址段保留给文档示例使用。
+	// 如果用户执意把这个地址配置成 VS，探测确实会破坏它，但这本身已是非法配置。
+	// 如果用户把它配到节点网卡上（而非配成 VS），探测期间流量会被临时路由到 ipvs 并被丢弃；
+	// 这同样是非法配置，只是影响较小。
+	// 只要用户遵守保留地址约定就不会有问题，但从文档复制粘贴地址并不少见，
+	// 因此必须明确说明不得使用 TEST-NET-2 段的地址。
 	vs := utilipvs.VirtualServer{
 		Address:   netutils.ParseIPSloppy("198.51.100.0"),
 		Protocol:  "TCP",
@@ -97,7 +92,7 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 		return err
 	}
 
-	// To overcome the BUG described above we check that the VS is *really* added.
+	// 为绕过上述 BUG，必须重新读取 VS 列表确认测试 VS 真的创建成功，不能只信任 AddVirtualServer 的返回值。
 	vservers, err = ipvs.GetVirtualServers()
 	if err != nil {
 		logger.Error(err, "ipvs.GetVirtualServers")
@@ -106,7 +101,7 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 	logger.V(5).Info("Virtual Servers after adding dummy", "count", len(vservers))
 	if len(vservers) == 0 {
 		logger.Info("Dummy VS not created", "scheduler", scheduler)
-		return fmt.Errorf("ipvs not supported") // This is a BUG work-around
+		return fmt.Errorf("ipvs not supported") // 该错误判断是对上述 BUG 的绕过措施
 	}
 	logger.V(5).Info("Dummy VS created", "vs", vs)
 

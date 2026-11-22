@@ -20,29 +20,29 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// NetLinkHandle for revoke netlink interface
+// NetLinkHandle 封装用于操作 netlink 网络接口的接口
 type NetLinkHandle interface {
-	// EnsureAddressBind checks if address is bound to the interface and, if not, binds it.  If the address is already bound, return true.
+	// EnsureAddressBind 检查地址是否已绑定到接口，若未绑定则绑定它；若已绑定则返回 true。
 	EnsureAddressBind(address, devName string) (exist bool, err error)
-	// UnbindAddress unbind address from the interface
+	// UnbindAddress 从接口上解绑指定地址
 	UnbindAddress(address, devName string) error
-	// EnsureDummyDevice checks if dummy device is exist and, if not, create one.  If the dummy device is already exist, return true.
+	// EnsureDummyDevice 检查 dummy 设备是否存在，若不存在则创建一个；若已存在则返回 true。
 	EnsureDummyDevice(devName string) (exist bool, err error)
-	// DeleteDummyDevice deletes the given dummy device by name.
+	// DeleteDummyDevice 按名称删除指定的 dummy 设备
 	DeleteDummyDevice(devName string) error
-	// ListBindAddress will list all IP addresses which are bound in a given interface
+	// ListBindAddress 列出指定接口上绑定的所有 IP 地址
 	ListBindAddress(devName string) ([]string, error)
-	// GetAllLocalAddresses return all local addresses on the node.
-	// Only the addresses of the current family are returned.
-	// IPv6 link-local and loopback addresses are excluded.
+	// GetAllLocalAddresses 返回节点上的所有本地地址。
+	// 仅返回当前地址族（IPv4 或 IPv6）的地址。
+	// 不包括 IPv6 链路本地地址和回环地址。
 	GetAllLocalAddresses() (sets.Set[string], error)
-	// GetLocalAddresses return all local addresses for an interface.
-	// Only the addresses of the current family are returned.
-	// IPv6 link-local and loopback addresses are excluded.
+	// GetLocalAddresses 返回指定接口上的所有本地地址。
+	// 仅返回当前地址族（IPv4 或 IPv6）的地址。
+	// 不包括 IPv6 链路本地地址和回环地址。
 	GetLocalAddresses(dev string) (sets.Set[string], error)
-	// GetAllLocalAddressesExcept return all local addresses on the node, except from the passed dev.
-	// This is not the same as to take the diff between GetAllLocalAddresses and GetLocalAddresses
-	// since an address can be assigned to many interfaces. This problem raised
+	// GetAllLocalAddressesExcept 返回节点上除指定接口之外的所有本地地址。
+	// 这不同于直接对 GetAllLocalAddresses 和 GetLocalAddresses 的结果做差集，
+	// 因为同一个地址可能同时分配给多个接口。相关背景见
 	// https://github.com/kubernetes/kubernetes/issues/114815
 	GetAllLocalAddressesExcept(dev string) (sets.Set[string], error)
 }

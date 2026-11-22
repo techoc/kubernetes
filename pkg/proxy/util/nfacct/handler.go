@@ -24,27 +24,31 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// handler is an injectable interface for creating netlink request.
+// handler 封装 netlink 请求的创建，便于在测试中替换。
 type handler interface {
+	// newRequest 创建携带指定命令与标志位的 netlink 请求。
 	newRequest(cmd int, flags uint16) request
 }
 
-// request is an injectable interface representing a netlink request.
+// request 表示可注入的 netlink 请求接口。
 type request interface {
+	// Serialize 将请求序列化为可发送的字节流。
 	Serialize() []byte
+	// AddData 向请求追加结构化的 netlink 数据。
 	AddData(data nl.NetlinkRequestData)
+	// AddRawData 向请求追加原始字节数据。
 	AddRawData(data []byte)
+	// Execute 发送请求并返回各条响应的原始字节。
 	Execute(sockType int, resType uint16) ([][]byte, error)
 }
 
-// netlinkHandler is an implementation of the handler interface. It maintains a netlink socket
-// for communication with the NFAcct subsystem.
+// netlinkHandler 是 handler 接口的默认实现，持有与 NFAcct 子系统通信的 netlink socket。
 type netlinkHandler struct {
 	socket *nl.NetlinkSocket
 }
 
-// newNetlinkHandler initializes a netlink socket in the current network namespace and returns
-// an instance of netlinkHandler with the initialized socket.
+// newNetlinkHandler 在当前网络命名空间内创建 netlink socket，
+// 并返回持有该 socket 的 netlinkHandler。
 func newNetlinkHandler() (handler, error) {
 	socket, err := nl.GetNetlinkSocketAt(netns.None(), netns.None(), unix.NETLINK_NETFILTER)
 	if err != nil {
@@ -53,13 +57,12 @@ func newNetlinkHandler() (handler, error) {
 	return &netlinkHandler{socket: socket}, nil
 }
 
-// newRequest creates a netlink request tailored for the NFAcct subsystem encapsulating the
-// specified cmd and flags. It incorporates the netlink header and netfilter generic header
-// into the resulting request.
+// newRequest 创建面向 NFAcct 子系统的 netlink 请求，封装指定的 cmd 与 flags，
+// 并在请求中填入 netlink 消息头和 netfilter 通用消息头。
 func (n *netlinkHandler) newRequest(cmd int, flags uint16) request {
 	req := &nl.NetlinkRequest{
-		// netlink message header
-		// (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L44-L58)
+		// netlink 消息类型的高 8 位必须是子系统编号，内核据此把请求分发给 NFAcct 模块。
+		// netlink 消息头（定义见 https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netlink.h#L44-L58）
 		NlMsghdr: unix.NlMsghdr{
 			Len:   uint32(unix.SizeofNlMsghdr),
 			Type:  uint16(cmd | (unix.NFNL_SUBSYS_ACCT << 8)),
@@ -69,8 +72,8 @@ func (n *netlinkHandler) newRequest(cmd int, flags uint16) request {
 			unix.NETLINK_NETFILTER: {Socket: n.socket},
 		},
 		Data: []nl.NetlinkRequestData{
-			// netfilter generic message
-			// (definition: https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink.h#L32-L38)
+			// netfilter 通用消息头
+			// （定义见 https://github.com/torvalds/linux/blob/v6.7/include/uapi/linux/netfilter/nfnetlink.h#L32-L38）
 			&nl.Nfgenmsg{
 				NfgenFamily: uint8(unix.AF_NETLINK),
 				Version:     nl.NFNETLINK_V0,

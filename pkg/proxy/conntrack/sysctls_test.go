@@ -35,6 +35,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestGetConntrackMax 覆盖 conntrack 表最大值的计算逻辑：默认返回 0（保留系统设置）、
+// 按每核数乘以 MaxPerCore 计算、受 Min 下限保护，以及不超过硬编码上限 1048576。
+// 该值直接写入内核 sysctl，算错会导致 conntrack 表过早满或占用过多内存。
 func TestGetConntrackMax(t *testing.T) {
 	ncores := runtime.NumCPU()
 	const maxLimit = 1048576
@@ -48,17 +51,20 @@ func TestGetConntrackMax(t *testing.T) {
 			expected: 0,
 		},
 		{
-			maxPerCore: 67890, // use this if Max is 0
-			min:        1,     // avoid 0 default
+			// Max 为 0 时按每核数计算，并受内核允许的最大值约束。
+			maxPerCore: 67890, // 使用这个值，因为 Max 为 0
+			min:        1,     // 避免取到 0 默认值
 			expected:   min(67890*ncores, maxLimit),
 		},
 		{
-			maxPerCore: 1, // ensure that Min is considered
+			// 每核值很小时结果不应低于 Min 下限。
+			maxPerCore: 1, // 确保考虑 Min 下限
 			min:        123456,
 			expected:   123456,
 		},
 		{
-			maxPerCore: 0, // leave system setting
+			// 为 0 意味着不动系统现有设置。
+			maxPerCore: 0,
 			min:        123456,
 			expected:   0,
 		},
@@ -69,6 +75,7 @@ func TestGetConntrackMax(t *testing.T) {
 			Min:        ptr.To(tc.min),
 			MaxPerCore: ptr.To(tc.maxPerCore),
 		}
+		// 传入测试上下文与真实 CPU 核数，逐项比对计算结果或预期错误。
 		_, ctx := ktesting.NewTestContext(t)
 		x, e := getConntrackMax(ctx, &cfg, ncores)
 		if e != nil {
@@ -83,6 +90,8 @@ func TestGetConntrackMax(t *testing.T) {
 	}
 }
 
+// fakeConntracker 是 conntracker 接口的假实现：记录所有设置类调用的名称与参数，
+// 从而让 setSysctls 测试可以断言“哪些 sysctl 被写入、写入了什么值”，无需改动真实内核参数。
 type fakeConntracker struct {
 	max      int
 	hashsize int
@@ -91,44 +100,65 @@ type fakeConntracker struct {
 	called []string
 }
 
+// GetMax 返回预设的 conntrack 最大值，用于模拟已写入的 sysctl 状态。
 func (fc *fakeConntracker) GetMax(ctx context.Context) (int, error) {
 	return fc.max, fc.err
 }
+
+// SetMax 记录一次最大值设置调用；返回的 err 用于模拟写入失败的错误路径。
 func (fc *fakeConntracker) SetMax(ctx context.Context, max int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetMax(%d)", max))
 	return fc.err
 }
+
+// SetTCPEstablishedTimeout 记录 TCP established 超时设置调用。
 func (fc *fakeConntracker) SetTCPEstablishedTimeout(ctx context.Context, seconds int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetTCPEstablishedTimeout(%d)", seconds))
 	return fc.err
 }
+
+// SetTCPCloseWaitTimeout 记录 TCP close-wait 超时设置调用。
 func (fc *fakeConntracker) SetTCPCloseWaitTimeout(ctx context.Context, seconds int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetTCPCloseWaitTimeout(%d)", seconds))
 	return fc.err
 }
+
+// SetTCPBeLiberal 记录 nf_conntrack_tcp_be_liberal 开关的设置调用。
 func (fc *fakeConntracker) SetTCPBeLiberal(ctx context.Context, value int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetTCPBeLiberal(%d)", value))
 	return fc.err
 }
+
+// SetUDPTimeout 记录 UDP 超时设置调用。
 func (fc *fakeConntracker) SetUDPTimeout(ctx context.Context, seconds int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetUDPTimeout(%d)", seconds))
 	return fc.err
 }
+
+// SetUDPStreamTimeout 记录 UDP stream 超时设置调用。
 func (fc *fakeConntracker) SetUDPStreamTimeout(ctx context.Context, seconds int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetUDPStreamTimeout(%d)", seconds))
 	return fc.err
 }
+
+// GetHashsize 返回预设的 hash 表大小，用于判断是否已有合适的 sysctl 值。
 func (fc *fakeConntracker) GetHashsize(ctx context.Context) (int, error) {
 	return fc.hashsize, fc.err
 }
+
+// SetHashsize 记录一次 hash 表大小设置调用。
 func (fc *fakeConntracker) SetHashsize(ctx context.Context, value int) error {
 	fc.called = append(fc.called, fmt.Sprintf("SetHashsize(%d)", value))
 	return fc.err
 }
+
+// DetectNumCPU 返回固定的 8 核，使 MaxPerCore 相关预期值不依赖测试机器的真实核数。
 func (fc *fakeConntracker) DetectNumCPU() int {
 	return 8
 }
 
+// TestSetupConntrack 验证 setSysctls 只在配置显式要求、且当前 sysctl 值不满足要求时才写内核参数：
+// 已正确或偏大的值不会被下调，为 0 的配置表示“不动系统设置”；同时覆盖设置失败时的错误传播。
 func TestSetupConntrack(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -287,6 +317,7 @@ func TestSetupConntrack(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 用预设的当前值构造假 conntracker，确保误差检查与“只写必要的 sysctl”语义都被验证。
 			fc := &fakeConntracker{max: test.max, hashsize: test.hashsize, err: test.conntrackErr}
 			err := setSysctls(ctx, fc, &test.config)
 			if test.wantErr && err == nil {
@@ -302,8 +333,10 @@ func TestSetupConntrack(t *testing.T) {
 	}
 }
 
+// TestGetConntrackMax_Capped 验证核数很多时 conntrack 最大值仍被 1048576 截断，
+// 防止在大规模机器上计算出过大的表项数而耗尽内存。
 func TestGetConntrackMax_Capped(t *testing.T) {
-	// Simulate 512 cores
+	// 模拟 512 核机器，使每核计算值远超上限。
 	numCPU := 512
 
 	maxPerCore := int32(32768)
@@ -318,7 +351,7 @@ func TestGetConntrackMax_Capped(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// 512 * 32768 = 16,777,216. Cap is 1,048,576
+	// 512 * 32768 = 16,777,216，但上限是 1,048,576；写错会压垮内核内存。
 	expected := 1048576
 	if val != expected {
 		t.Errorf("Expected capped value %d, got %d", expected, val)

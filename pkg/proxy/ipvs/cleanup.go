@@ -29,11 +29,11 @@ import (
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 )
 
-// CleanupIptablesLeftovers removes all iptables rules and chains created by the Proxier
-// It returns true if an error was encountered. Errors are logged.
+// cleanupIptablesLeftovers 移除 ipvs Proxier 创建的所有 iptables 规则和链。
+// 遇到错误时返回 true；错误会记录到日志中。
 func cleanupIptablesLeftovers(ctx context.Context, ipt utiliptables.Interface) (encounteredError bool) {
 	logger := klog.FromContext(ctx)
-	// Unlink the iptables chains created by ipvs Proxier
+	// 先删除跳转规则，解除 ipvs Proxier 创建的自定义链与其他链的引用关系。
 	for _, jc := range iptablesJumpChain {
 		args := []string{
 			"-m", "comment", "--comment", jc.comment,
@@ -47,7 +47,7 @@ func cleanupIptablesLeftovers(ctx context.Context, ipt utiliptables.Interface) (
 		}
 	}
 
-	// Flush and remove all of our chains. Flushing all chains before removing them also removes all links between chains first.
+	// 先清空再删除自定义链：清空所有链可以同时移除链之间的全部引用。
 	for _, ch := range iptablesCleanupChains {
 		if err := ipt.FlushChain(ch.table, ch.chain); err != nil {
 			if !utiliptables.IsNotFoundError(err) {
@@ -57,7 +57,7 @@ func cleanupIptablesLeftovers(ctx context.Context, ipt utiliptables.Interface) (
 		}
 	}
 
-	// Remove all of our chains.
+	// 删除我们创建的所有链。
 	for _, ch := range iptablesCleanupChains {
 		if err := ipt.DeleteChain(ch.table, ch.chain); err != nil {
 			if !utiliptables.IsNotFoundError(err) {
@@ -70,13 +70,13 @@ func cleanupIptablesLeftovers(ctx context.Context, ipt utiliptables.Interface) (
 	return encounteredError
 }
 
-// CleanupLeftovers clean up all ipvs and iptables rules created by ipvs Proxier.
+// CleanupLeftovers 清理 ipvs Proxier 创建的所有 ipvs 和 iptables 规则。
 func CleanupLeftovers(ctx context.Context) (encounteredError bool) {
-	// libipvs.New() will log errors if the "ip_vs" kernel module (or the "modprobe"
-	// binary) is not available. Logging an extra error is fine if we were actually
-	// trying to run the ipvs proxier, but it's confusing to see when just doing
-	// best-effort cleanup (eg, when starting the nftables proxier), so we do the same
-	// check libipvs does here, and bail out without calling libipvs if it fails.
+	// libipvs.New() 在 "ip_vs" 内核模块（或 "modprobe" 命令）不可用时
+	// 会打印错误日志。确实要运行 ipvs proxier 时多打一条错误无妨，
+	// 但这里只是尽力而为的清理（例如启动 nftables proxier 时），
+	// 多余的错误日志会让人困惑，因此先做与 libipvs 相同的检查，
+	// 失败时直接返回，不再调用 libipvs。
 	if _, err := exec.Command("modprobe", "-va", "ip_vs").CombinedOutput(); err != nil {
 		return false
 	}
@@ -88,9 +88,11 @@ func CleanupLeftovers(ctx context.Context) (encounteredError bool) {
 	return cleanupLeftovers(ctx, ipvsInterface, ipts, ipsetInterface)
 }
 
+// cleanupLeftovers 借助传入的 ipvs、iptables、ipset 接口执行尽力而为的清理，
+// 返回清理过程中是否遇到错误；接口由调用方注入，便于测试替换。
 func cleanupLeftovers(ctx context.Context, ipvs utilipvs.Interface, ipts map[v1.IPFamily]utiliptables.Interface, ipset utilipset.Interface) (encounteredError bool) {
 	logger := klog.FromContext(ctx)
-	// Clear all ipvs rules
+	// 清空所有 ipvs 规则。
 	if ipvs != nil {
 		err := ipvs.Flush()
 		if err != nil {
@@ -98,7 +100,7 @@ func cleanupLeftovers(ctx context.Context, ipvs utilipvs.Interface, ipts map[v1.
 			encounteredError = true
 		}
 	}
-	// Delete dummy interface created by ipvs Proxier.
+	// 删除 ipvs Proxier 创建的 dummy 虚拟设备。
 	nl := NewNetLinkHandle(false)
 	err := nl.DeleteDummyDevice(defaultDummyDevice)
 	if err != nil {
@@ -106,13 +108,13 @@ func cleanupLeftovers(ctx context.Context, ipvs utilipvs.Interface, ipts map[v1.
 		encounteredError = true
 	}
 
-	// Clear iptables created by ipvs Proxier.
+	// 清理 ipvs Proxier 创建的 iptables 规则。
 	for _, ipt := range ipts {
 		encounteredError = cleanupIptablesLeftovers(ctx, ipt) || encounteredError
 	}
 
-	// Destroy ip sets created by ipvs Proxier.  We should call it after cleaning up
-	// iptables since we can NOT delete ip set which is still referenced by iptables.
+	// 销毁 ipvs Proxier 创建的 ipset。必须在清理 iptables 之后调用，
+	// 因为仍被 iptables 引用的 ipset 无法删除。
 	if _, err := ipset.GetVersion(); err == nil {
 		for _, set := range ipsetInfo {
 			err = ipset.DestroySet(set.name)

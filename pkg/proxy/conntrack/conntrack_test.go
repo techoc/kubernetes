@@ -27,8 +27,14 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestConntracker_DeleteEntries 验证 DeleteEntries 只删除匹配的 conntrack 表项：
+// 覆盖单条/多条删除、不存在的流、字段不全的流以及空删除列表，
+// 既检查返回的删除数量，也用 ListEntries 检查剩余表项，确保误删能被发现。
 func TestConntracker_DeleteEntries(t *testing.T) {
+	// 定义几条公共测试流：TCP(6)、UDP(17) 和其他协议(132)，
+	// 正反元组互为镜像，用于模拟真实的 conntrack 双向流。
 	// Define some common flows
+	// 正向与反向元组端口、地址互换，协议为 TCP(6)。
 	flow1 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			SrcIP:    netutils.ParseIPSloppy("1.1.1.1"),
@@ -45,6 +51,7 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 			Protocol: 6,
 		},
 	}
+	// 协议为 UDP(17) 的第二条流，用于验证按协议区分表项。
 	flow2 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			SrcIP:    netutils.ParseIPSloppy("3.3.3.3"),
@@ -61,6 +68,7 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 			Protocol: 17,
 		},
 	}
+	// 协议 132 的第三条流，验证非 TCP/UDP 协议同样可被处理。
 	flow3 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			SrcIP:    netutils.ParseIPSloppy("5.5.5.5"),
@@ -77,6 +85,7 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 			Protocol: 132,
 		},
 	}
+	// 边界情况：只有协议的残缺流，用于验证不完整的元组不会误匹配任何表项。
 	// Edge case: Partial flow (missing some fields)
 	flowEmpty := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
@@ -84,6 +93,8 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 		},
 	}
 
+	// 表驱动测试：expectedDeleted 校验删除计数，
+	// expectedLeft 校验 ListEntries 看到的剩余数量，两者共同防止多删或漏删。
 	testCases := []struct {
 		name            string
 		initialEntries  []*netlink.ConntrackFlow
@@ -137,15 +148,18 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 拷贝切片，避免前面用例的删除操作改动共享指针切片影响后续用例。
 			// avoid mutations of entries between tests
 			entries := make([]*netlink.ConntrackFlow, len(tc.initialEntries))
 			copy(entries, tc.initialEntries)
 
+			// 用假 handler 装载初始表项，使测试不依赖真实 conntrack 子系统。
 			handler := &fakeHandler{
 				entries: entries,
 			}
 			ct := newConntracker(handler)
 
+			// 用构造好的流列表执行删除，检查返回值和错误。
 			n, err := ct.DeleteEntries(unix.AF_INET, tc.deleteFlows)
 			if err != nil {
 				t.Fatalf("DeleteEntries() error = %v, want nil", err)
@@ -155,6 +169,7 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 				t.Errorf("DeleteEntries() = %d, want %d", n, tc.expectedDeleted)
 			}
 
+			// 再列出剩余表项，确认删除操作确实只作用于预期条目。
 			left, err := ct.ListEntries(unix.AF_INET)
 			if err != nil {
 				t.Fatalf("ListEntries() error = %v", err)

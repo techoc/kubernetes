@@ -25,8 +25,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestCanUseIPVSProxier 覆盖 CanUseIPVSProxier 的正常路径及各类失败路径：
+// ipset 版本查询失败、版本过低，以及三个 ipvs 操作分别失败的情况。
 func TestCanUseIPVSProxier(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
+	// 除刻意构造的低版本用例外均使用 MinIPSetCheckVersion，避免版本校验掩盖被测的失败路径。
 	testCases := []struct {
 		name         string
 		scheduler    string
@@ -73,6 +76,7 @@ func TestCanUseIPVSProxier(t *testing.T) {
 		},
 	}
 
+	// ipvsErr 字符串决定 fakeIpvs 在哪个方法上注入错误，ok 表示期望成功与否。
 	for _, tc := range testCases {
 		ipvs := &fakeIpvs{tc.ipvsErr, false}
 		versioner := &fakeIPSetVersioner{version: tc.ipsetVersion, err: tc.ipsetErr}

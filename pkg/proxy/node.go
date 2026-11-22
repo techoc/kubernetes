@@ -40,16 +40,17 @@ import (
 	utilnode "k8s.io/kubernetes/pkg/util/node"
 )
 
-// NodeManager handles the life cycle of kube-proxy based on the NodeIPs and PodCIDRs handles
-// node watch events and crashes kube-proxy if there are any changes in NodeIPs or PodCIDRs.
-// Note: It only crashes on change on PodCIDR when watchPodCIDRs is set to true.
+// NodeManager 根据 NodeIPs 和 PodCIDRs 管理 kube-proxy 的生命周期：
+// 它监听 Node 变更事件，并在 NodeIPs 或 PodCIDRs 发生变化时让 kube-proxy 退出重启，
+// 以便重新初始化依赖这些地址的规则。
+// 注意：只有当 watchPodCIDRs 为 true 时，PodCIDR 的变化才会触发退出。
 type NodeManager struct {
 	nodeInformer  v1informers.NodeInformer
 	nodeLister    corelisters.NodeLister
 	exitFunc      func(exitCode int)
 	watchPodCIDRs bool
 
-	// These are constant after construct time
+	// 以下字段在构造完成后不再改变，仅在重启进程时重新获取。
 	nodeIPs  []net.IP
 	podCIDRs []string
 
@@ -57,11 +58,10 @@ type NodeManager struct {
 	node *v1.Node
 }
 
-// NewNodeManager initializes node informer that selects for the given node, waits for cache sync
-// and returns NodeManager after waiting some amount of time for the node object to exist
-// and have NodeIPs (and PodCIDRs if watchPodCIDRs is true). Note: for backward compatibility,
-// NewNodeManager doesn't return any error if it failed to retrieve NodeIPs and watchPodCIDRs
-// is false.
+// NewNodeManager 初始化一个只监听指定 Node 的 informer，等待缓存同步，
+// 并在等待 Node 对象出现且具备 NodeIPs（当 watchPodCIDRs 为 true 时还包括 PodCIDRs）后
+// 返回 NodeManager。
+// 注意：为保持向后兼容，当 watchPodCIDRs 为 false 时，即使未能获取 NodeIPs 也不会返回错误。
 func NewNodeManager(ctx context.Context, client clientset.Interface,
 	nodeName string, config *kubeproxyconfig.KubeProxyConfiguration,
 ) (*NodeManager, error) {
@@ -70,16 +70,16 @@ func NewNodeManager(ctx context.Context, client clientset.Interface,
 	return newNodeManager(ctx, client, resyncInterval, nodeName, watchPodCIDRs, os.Exit, time.Second, 30*time.Second, 5*time.Minute)
 }
 
-// newNodeManager implements NewNodeManager with configurable exit function, poll interval and timeouts.
+// newNodeManager 是 NewNodeManager 的实现，允许注入退出函数、轮询间隔和超时时间，便于测试。
 func newNodeManager(ctx context.Context, client clientset.Interface, resyncInterval time.Duration,
 	nodeName string, watchPodCIDRs bool, exitFunc func(int),
 	pollInterval, nodeIPsTimeout, podCIDRsTimeout time.Duration,
 ) (*NodeManager, error) {
-	// make an informer that selects for the given node
+	// 创建一个只选择指定 Node 的 informer，避免缓存集群中所有节点带来的内存开销。
 	thisNodeInformerFactory := informers.NewSharedInformerFactoryWithOptions(client, resyncInterval,
 		informers.WithTransform(func(obj interface{}) (interface{}, error) {
-			// kube-proxy never needs the managed fields metadata, so strip it
-			// from all cached objects to reduce memory usage.
+			// kube-proxy 从不需要 managedFields 元数据，因此在此处剥离，
+			// 以降低缓存内存占用。
 			if accessor, err := meta.Accessor(obj); err == nil {
 				accessor.SetManagedFields(nil)
 			}
@@ -91,7 +91,7 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 	nodeInformer := thisNodeInformerFactory.Core().V1().Nodes()
 	nodeLister := nodeInformer.Lister()
 
-	// initialize the informer and wait for cache sync
+	// 启动 informer 并等待其缓存完成同步。
 	thisNodeInformerFactory.Start(wait.NeverStop)
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, nodeInformer.Informer().HasSynced) {
 		return nil, fmt.Errorf("can not sync node informer")
@@ -100,7 +100,7 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 	node, nodeIPs, podCIDRs := getNodeInfo(nodeLister, nodeName)
 
 	if len(nodeIPs) == 0 {
-		// wait for the node object to exist and have NodeIPs.
+		// 等待 Node 对象创建并被分配 NodeIPs，因为规则初始化依赖这些地址。
 		ctx, cancel := context.WithTimeout(ctx, nodeIPsTimeout)
 		defer cancel()
 		_ = wait.PollUntilContextCancel(ctx, pollInterval, false, func(context.Context) (bool, error) {
@@ -110,7 +110,7 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 	}
 
 	if watchPodCIDRs && len(podCIDRs) == 0 {
-		// wait some additional time for the PodCIDRs.
+		// 再额外等待 PodCIDRs：它可能晚于 NodeIPs 才由控制器分配。
 		ctx, cancel := context.WithTimeout(ctx, podCIDRsTimeout)
 		defer cancel()
 		_ = wait.PollUntilContextCancel(ctx, pollInterval, false, func(context.Context) (bool, error) {
@@ -127,8 +127,8 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 		}
 	}
 
-	// For backward-compatibility, we keep going even if we didn't find a node (in
-	// non-watchPodCIDRs mode) or it didn't have IPs.
+	// 为向后兼容，即使没有找到 Node（非 watchPodCIDRs 模式）或其没有 IP，
+	// 也继续运行，仅记录错误而不让启动失败。
 	if node == nil {
 		klog.FromContext(ctx).Error(nil, "Timed out waiting for node to exist", "node", klog.KRef("", nodeName))
 	} else if len(nodeIPs) == 0 {
@@ -147,6 +147,8 @@ func newNodeManager(ctx context.Context, client clientset.Interface, resyncInter
 	}, nil
 }
 
+// getNodeInfo 从 lister 缓存中读取指定 Node，提取其 NodeIPs 与 PodCIDRs。
+// Node 不存在时返回全 nil，调用方据此判断是否需要继续等待。
 func getNodeInfo(nodeLister corelisters.NodeLister, nodeName string) (*v1.Node, []net.IP, []string) {
 	node, _ := nodeLister.Get(nodeName)
 	if node == nil {
@@ -156,18 +158,19 @@ func getNodeInfo(nodeLister corelisters.NodeLister, nodeName string) (*v1.Node, 
 	return node, nodeIPs, node.Spec.PodCIDRs
 }
 
-// NodeIPs returns the NodeIPs polled in NewNodeManager(). (This may be empty if
-// NewNodeManager timed out without getting any IPs.)
+// NodeIPs 返回 NewNodeManager 中轮询到的 NodeIPs。
+// 若 NewNodeManager 超时仍未获得任何 IP，则返回空切片。
 func (n *NodeManager) NodeIPs() []net.IP {
 	return n.nodeIPs
 }
 
-// PodCIDRs returns the PodCIDRs polled in NewNodeManager().
+// PodCIDRs 返回 NewNodeManager 中轮询到的 PodCIDRs。
 func (n *NodeManager) PodCIDRs() []string {
 	return n.podCIDRs
 }
 
-// Node returns a copy of the latest node object, or nil if the Node has not yet been seen.
+// Node 返回最近一次观察到的 Node 对象的深拷贝；若尚未观察到 Node 则返回 nil。
+// 使用深拷贝可避免调用方修改共享缓存中的对象。
 func (n *NodeManager) Node() *v1.Node {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -178,20 +181,22 @@ func (n *NodeManager) Node() *v1.Node {
 	return n.node.DeepCopy()
 }
 
-// NodeInformer returns the NodeInformer.
+// NodeInformer 返回该 NodeManager 使用的 NodeInformer。
 func (n *NodeManager) NodeInformer() v1informers.NodeInformer {
 	return n.nodeInformer
 }
 
-// OnNodeChange is a handler for Node creation and update.
+// OnNodeChange 是 Node 创建与更新事件的处理函数。
+// 当 NodeIPs 或（启用了 watchPodCIDRs 时的）PodCIDRs 发生变化时，
+// 主动让 kube-proxy 退出，由外部监督机制重启以重建规则。
 func (n *NodeManager) OnNodeChange(node *v1.Node) {
-	// update the node object
+	// 更新缓存的 Node 对象；写入需加锁，因为读取方可能并发访问。
 	n.mu.Lock()
 	n.node = node
 	n.mu.Unlock()
 
-	// We exit whenever there is a change in PodCIDRs detected initially, and PodCIDRs received
-	// on node watch event if the node manager is configured with watchPodCIDRs.
+	// 当 watchPodCIDRs 开启时，一旦发现事件中的 PodCIDRs 与初始化时不同就退出，
+	// 因为 PodCIDR 变化会影响本地端点判定逻辑，必须重建规则。
 	if n.watchPodCIDRs {
 		if !reflect.DeepEqual(n.podCIDRs, node.Spec.PodCIDRs) {
 			klog.InfoS("PodCIDRs changed for the node",
@@ -203,8 +208,8 @@ func (n *NodeManager) OnNodeChange(node *v1.Node) {
 
 	nodeIPs, _ := utilnode.GetNodeHostIPs(node)
 
-	// We exit whenever there is a change in NodeIPs detected initially, and NodeIPs received
-	// on node watch event.
+	// 只要事件中的 NodeIPs 与初始化时不同就退出；
+	// 因为大量 iptables/IPVS 规则直接绑定节点 IP，必须先刷新缓存再重建。
 	if !reflect.DeepEqual(n.nodeIPs, nodeIPs) {
 		klog.InfoS("NodeIPs changed for the node",
 			"node", klog.KObj(node), "newNodeIPs", nodeIPs, "oldNodeIPs", n.nodeIPs)
@@ -213,12 +218,14 @@ func (n *NodeManager) OnNodeChange(node *v1.Node) {
 	}
 }
 
-// OnNodeDelete is a handler for Node deletes.
+// OnNodeDelete 是 Node 删除事件的处理函数。
+// 节点消失意味着本机网络身份可能失效，因此直接退出以触发重建。
 func (n *NodeManager) OnNodeDelete(node *v1.Node) {
 	klog.InfoS("Node is being deleted", "node", klog.KObj(node))
 	klog.Flush()
 	n.exitFunc(1)
 }
 
-// OnNodeSynced is called after the cache is synced and all pre-existing Nodes have been reported
+// OnNodeSynced 在缓存同步完成且所有既有 Node 都已通知后调用。
+// 当前无需执行额外工作，保留空实现以满足接口约定。
 func (n *NodeManager) OnNodeSynced() {}

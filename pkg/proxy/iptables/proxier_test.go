@@ -59,16 +59,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Conventions for tests using NewFakeProxier:
+// 使用 NewFakeProxier 的测试约定：
 //
-// Pod IPs:             10.0.0.0/8
-// Service ClusterIPs:  172.30.0.0/16
-// Node IPs:            192.168.0.0/24
-// Local Node IP:       192.168.0.2
-// Service ExternalIPs: 192.168.99.0/24
-// LoadBalancer IPs:    1.2.3.4, 5.6.7.8, 9.10.11.12
-// Non-cluster IPs:     203.0.113.0/24
-// LB Source Range:     203.0.113.0/25
+// Pod IP：10.0.0.0/8
+// Service ClusterIP：172.30.0.0/16
+// Node IP：192.168.0.0/24
+// 本机 Node IP：192.168.0.2
+// Service ExternalIP：192.168.99.0/24
+// LoadBalancer IP：1.2.3.4、5.6.7.8、9.10.11.12
+// 集群外 IP：203.0.113.0/24
+// LB 来源范围：203.0.113.0/25
 
 const testNodeName = "test-node"
 const testNodeIP = "192.168.0.2"
@@ -81,6 +81,9 @@ const testExternalClientBlocked = "203.0.113.130"
 
 var testNodeIPs = []string{testNodeIP, testNodeIPAlt, testExternalIP, testNodeIPv6, testNodeIPv6Alt}
 
+// NewFakeProxier 构造测试用 Proxier，使用 FakeIPTables 与模拟网络接口，
+// 并预置 IP 族、伪装标记、conntrack 和健康检查服务等最小可用状态。
+// 由于依赖 goroutine 的初始化逻辑尚未拆分，这里手工组装而不调用 NewProxier。
 func NewFakeProxier(ipt utiliptables.Interface) *Proxier {
 	// TODO: Call NewProxier after refactoring out the goroutine
 	// invocation into a Run() method.
@@ -90,8 +93,10 @@ func NewFakeProxier(ipt utiliptables.Interface) *Proxier {
 		ipfamily = v1.IPv6Protocol
 		podCIDR = "fd00:10::/64"
 	}
+	// 用 Pod CIDR 判定流量来源是否本地，CIDR 随 IP 族而变化。
 	detectLocal := proxyutil.NewDetectLocalByCIDR(podCIDR)
 
+	// 伪造回环及节点网络接口，供 NodePort 地址过滤等逻辑查询。
 	networkInterfacer := proxyutiltest.NewFakeNetwork()
 	itf := net.Interface{Index: 0, MTU: 0, Name: "lo", HardwareAddr: nil, Flags: 0}
 	addrs := []net.Addr{
@@ -109,6 +114,7 @@ func NewFakeProxier(ipt utiliptables.Interface) *Proxier {
 	}
 	networkInterfacer.AddInterfaceAddr(&itf1, addrs1)
 
+	// 手工装配 Proxier：缓冲区、变更跟踪器等都必须是测试可用的内存实现。
 	p := &Proxier{
 		ipFamily:                 ipfamily,
 		svcPortMap:               make(proxy.ServicePortMap),
@@ -138,16 +144,18 @@ func NewFakeProxier(ipt utiliptables.Interface) *Proxier {
 			metrics.LocalhostNodePortAcceptedNFAcctCounter:     true,
 		},
 	}
+	// 标记为已初始化，否则 syncProxyRules 会提前返回。
 	p.setInitialized(true)
+	// 使用零最小间隔的同步器，便于测试中立即触发同步。
 	p.syncRunner = runner.NewBoundedFrequencyRunner("test-sync-runner", p.syncProxyRules, 0, 30*time.Second, time.Minute)
 	return p
 }
 
-// parseIPTablesData takes iptables-save output and returns a map of table name to array of lines.
+// parseIPTablesData 解析 iptables-save 的输出，返回表名到该表规则行数组的映射。
 func parseIPTablesData(ruleData string) (map[string][]string, error) {
-	// Split ruleData at the "COMMIT" lines; given valid input, this will result in
-	// one element for each table plus an extra empty element (since the ruleData
-	// should end with a "COMMIT" line).
+	// 按 "COMMIT" 行切分 ruleData：合法输入下每个表对应一个元素，
+	// 由于输入以 "COMMIT" 行结尾，末尾还会多出一个空元素。
+	// （因为输入以 "COMMIT" 行结尾）。
 	rawTables := strings.Split(strings.TrimPrefix(ruleData, "\n"), "COMMIT\n")
 	nTables := len(rawTables) - 1
 	if nTables < 2 || rawTables[nTables] != "" {
@@ -157,11 +165,11 @@ func parseIPTablesData(ruleData string) (map[string][]string, error) {
 	tables := make(map[string][]string, nTables)
 	for i, table := range rawTables[:nTables] {
 		lines := strings.Split(strings.Trim(table, "\n"), "\n")
-		// The first line should be, eg, "*nat" or "*filter"
+		// 首行应为 "*nat" 或 "*filter" 这样的表头。
 		if lines[0][0] != '*' {
 			return nil, fmt.Errorf("bad ruleData (table %d starts with %q)", i+1, lines[0])
 		}
-		// add back the "COMMIT" line that got eaten by the strings.Split above
+		// 切分时丢掉了 "COMMIT" 行，这里补回以保持输出完整。
 		lines = append(lines, "COMMIT")
 		tables[lines[0][1:]] = lines
 	}
@@ -175,6 +183,8 @@ func parseIPTablesData(ruleData string) (map[string][]string, error) {
 	return tables, nil
 }
 
+// TestParseIPTablesData 验证 iptables-save 输出解析：覆盖正常解析，以及表数量不足、
+// 尾部多余内容、表头格式错误、缺少 nat/filter 表等错误场景。
 func TestParseIPTablesData(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -371,6 +381,7 @@ func TestParseIPTablesData(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 逐用例解析并比对结果：期望错误只校验前缀，避免依赖完整错误文本。
 			out, err := parseIPTablesData(tc.input)
 			if err == nil {
 				if tc.error != "" {
@@ -389,6 +400,7 @@ func TestParseIPTablesData(t *testing.T) {
 	}
 }
 
+// countRules 统计指定表中所有链的规则总数，解析或查表失败时返回 -1 以便测试区分。
 func countRules(logger klog.Logger, tableName utiliptables.Table, ruleData string) int {
 	dump, err := iptablestest.ParseIPTablesDump(ruleData)
 	if err != nil {
@@ -409,6 +421,7 @@ func countRules(logger klog.Logger, tableName utiliptables.Table, ruleData strin
 	return rules
 }
 
+// countRulesFromMetric 从 IPTablesRulesTotal 指标读取指定表的规则数；指标未注册时返回 -1。
 func countRulesFromMetric(logger klog.Logger, tableName utiliptables.Table, ipFamily string) int {
 	numRulesFloat, err := testutil.GetGaugeMetricValue(metrics.IPTablesRulesTotal.WithLabelValues(string(tableName), ipFamily))
 	if err != nil {
@@ -418,6 +431,7 @@ func countRulesFromMetric(logger klog.Logger, tableName utiliptables.Table, ipFa
 	return int(numRulesFloat)
 }
 
+// countRulesFromLastSyncMetric 从 IPTablesRulesLastSync 指标读取上次同步的规则数，未注册返回 -1。
 func countRulesFromLastSyncMetric(logger klog.Logger, tableName utiliptables.Table, ipFamily string) int {
 	numRulesFloat, err := testutil.GetGaugeMetricValue(metrics.IPTablesRulesLastSync.WithLabelValues(string(tableName), ipFamily))
 	if err != nil {
@@ -427,8 +441,8 @@ func countRulesFromLastSyncMetric(logger klog.Logger, tableName utiliptables.Tab
 	return int(numRulesFloat)
 }
 
-// findAllMatches takes an array of lines and a pattern with one parenthesized group, and
-// returns a sorted array of all of the unique matches of the parenthesized group.
+// findAllMatches 提取所有匹配项：pattern 必须恰好包含一个捕获组，
+// 返回该捕获组的全部唯一匹配，并排序以保证结果稳定。
 func findAllMatches(lines []string, pattern string) []string {
 	regex := regexp.MustCompile(pattern)
 	allMatches := sets.New[string]()
@@ -441,8 +455,8 @@ func findAllMatches(lines []string, pattern string) []string {
 	return sets.List(allMatches)
 }
 
-// checkIPTablesRuleJumps checks that every `-j` in the given rules jumps to a chain
-// that we created and added rules to
+// checkIPTablesRuleJumps 检查规则中的所有 -j 跳转目标都是已创建且写入过规则的链，
+// 否则 iptables-restore 加载时会因跳转目标不存在而失败。
 func checkIPTablesRuleJumps(ruleData string) error {
 	tables, err := parseIPTablesData(ruleData)
 	if err != nil {
@@ -450,45 +464,45 @@ func checkIPTablesRuleJumps(ruleData string) error {
 	}
 
 	for tableName, lines := range tables {
-		// Find all of the lines like ":KUBE-SERVICES", indicating chains that
-		// iptables-restore would create when loading the data.
+		// 形如 ":KUBE-SERVICES" 的行表示 iptables-restore 加载时会创建的链。
+		// 这些链定义供 iptables-restore 加载时创建。
 		createdChains := sets.New[string](findAllMatches(lines, `^:([^ ]*)`)...)
-		// Find all of the lines like "-X KUBE-SERVICES ..." indicating chains
-		// that we are deleting because they are no longer used, and remove
-		// those chains from createdChains.
+		// 形如 "-X KUBE-SERVICES ..." 的行表示待删除的废弃链，
+		// 这些链不应算作已创建。
+		// 需要从已创建集合中将它们剔除。
 		createdChains = createdChains.Delete(findAllMatches(lines, `-X ([^ ]*)`)...)
 
-		// Find all of the lines like "-A KUBE-SERVICES ..." indicating chains
-		// that we are adding at least one rule to.
+		// 形如 "-A KUBE-SERVICES ..." 的行表示该链至少写入了一条规则。
+		// 表示该链至少写入了一条规则。
 		filledChains := sets.New[string](findAllMatches(lines, `-A ([^ ]*)`)...)
 
-		// Find all of the chains that are jumped to by some rule so we can make
-		// sure we only jump to valid chains.
+		// 收集所有规则跳转的目标链，
+		// 以便与已创建和已填充的链做校验。
 		jumpedChains := sets.New[string](findAllMatches(lines, `-j ([^ ]*)`)...)
-		// Ignore jumps to chains that we expect to exist even if kube-proxy
-		// didn't create them itself.
+		// ACCEPT/DROP 等是内核内置目标，无需 kube-proxy 创建，
+		// 因此不参与自定义链的一致性检查。
 		jumpedChains.Delete("ACCEPT", "REJECT", "DROP", "MARK", "RETURN", "DNAT", "SNAT", "MASQUERADE")
 
-		// Find cases where we have "-A FOO ... -j BAR" but no ":BAR", meaning
-		// that we are jumping to a chain that was not created.
+		// 存在 "-A FOO ... -j BAR" 但没有 ":BAR"，
+		// 说明跳转到了未创建的链，这会导致 restore 失败。
 		missingChains := jumpedChains.Difference(createdChains)
 		missingChains = missingChains.Union(filledChains.Difference(createdChains))
 		if len(missingChains) > 0 {
 			return fmt.Errorf("some chains in %s are used but were not created: %v", tableName, missingChains.UnsortedList())
 		}
 
-		// Find cases where we have "-A FOO ... -j BAR", but no "-A BAR ...",
-		// meaning that we are jumping to a chain that we didn't write out any
-		// rules for, which is normally a bug. (Except that KUBE-SERVICES always
-		// jumps to KUBE-NODEPORTS, even when there are no NodePort rules.)
+		// 有跳转但没有对应规则通常意味着漏写规则；
+		// 例外是 KUBE-SERVICES 总会跳转到 KUBE-NODEPORTS，
+		// 即使没有任何 NodePort 规则也是如此。
+		// KUBE-NODEPORTS 例外：即使没有 NodePort 规则也会被跳转。
 		emptyChains := jumpedChains.Difference(filledChains)
 		emptyChains.Delete(string(kubeNodePortsChain))
 		if len(emptyChains) > 0 {
 			return fmt.Errorf("some chains in %s are jumped to but have no rules: %v", tableName, emptyChains.UnsortedList())
 		}
 
-		// Find cases where we have ":BAR" but no "-A FOO ... -j BAR", meaning
-		// that we are creating an empty chain but not using it for anything.
+		// 创建了链却无人跳转，说明是无用链，同样属于异常；
+		// 下面排除 kube-proxy 预置的、允许为空的链。
 		extraChains := createdChains.Difference(jumpedChains)
 		extraChains.Delete(string(kubeServicesChain), string(kubeExternalServicesChain), string(kubeNodePortsChain), string(kubePostroutingChain), string(kubeForwardChain), string(kubeMarkMasqChain), string(kubeProxyFirewallChain), string(kubeletFirewallChain))
 		if len(extraChains) > 0 {
@@ -499,7 +513,10 @@ func checkIPTablesRuleJumps(ruleData string) error {
 	return nil
 }
 
+// TestCheckIPTablesRuleJumps 测试跳转一致性检查：既覆盖合法规则集，
+// 也覆盖跳转到未创建链、跳转到空链以及创建无用链等异常。
 func TestCheckIPTablesRuleJumps(t *testing.T) {
+	// 表格覆盖四种一致性问题：正常规则、跳转到未创建/空链、创建未使用的链。
 	for _, tc := range []struct {
 		name  string
 		input string
@@ -615,6 +632,7 @@ func TestCheckIPTablesRuleJumps(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 仅校验错误前缀，使断言不依赖完整错误文本。
 			err := checkIPTablesRuleJumps(tc.input)
 			if err == nil {
 				if tc.error != "" {
@@ -631,16 +649,17 @@ func TestCheckIPTablesRuleJumps(t *testing.T) {
 	}
 }
 
-// orderByCommentServiceName is a helper function that orders two IPTables rules
-// based on the service name in their comment. (If either rule has no comment then the
-// return value is undefined.)
+// orderByCommentServiceName 按规则注释中的服务名对两条 iptables 规则排序。
+// 若任一规则没有注释，返回值无意义。
+// orderByCommentServiceName 按规则注释中的服务名对两条 iptables 规则排序，
+// 使期望规则的比较不受服务处理顺序影响。
 func orderByCommentServiceName(rule1, rule2 *iptablestest.Rule) bool {
 	if rule1.Comment == nil || rule2.Comment == nil {
 		return false
 	}
 	name1, name2 := rule1.Comment.Value, rule2.Comment.Value
 
-	// The service name is the comment up to the first space or colon
+	// 服务名是注释中第一个空格或冒号之前的部分。
 	i := strings.IndexAny(name1, " :")
 	if i != -1 {
 		name1 = name1[:i]
@@ -653,20 +672,22 @@ func orderByCommentServiceName(rule1, rule2 *iptablestest.Rule) bool {
 	return name1 < name2
 }
 
-// sortIPTablesRules sorts `iptables-restore` output so as to not depend on the order that
-// Services get processed in, while preserving the relative ordering of related rules.
+// sortIPTablesRules 对 iptables-restore 的输出排序，消除服务处理顺序带来的差异，
+// 同时保留相关规则之间的相对次序，便于测试进行稳定的字符串比较。
+// sortIPTablesRules 对 iptables-restore 的输出进行规范化排序：
+// 按表、链和服务名排序，但保留同一服务内规则的相对次序。
 func sortIPTablesRules(ruleData string) (string, error) {
 	dump, err := iptablestest.ParseIPTablesDump(ruleData)
 	if err != nil {
 		return "", err
 	}
 
-	// Sort tables
+	// 先按表、再按链分组排序。
 	sort.Slice(dump.Tables, func(i, j int) bool {
 		return dump.Tables[i].Name < dump.Tables[j].Name
 	})
 
-	// Sort chains
+	// KUBE-NODEPORTS 排在最前。
 	for t := range dump.Tables {
 		table := &dump.Tables[t]
 		sort.Slice(table.Chains, func(i, j int) bool {
@@ -675,29 +696,29 @@ func sortIPTablesRules(ruleData string) (string, error) {
 				// KUBE-NODEPORTS comes before anything
 				return true
 			case table.Chains[j].Name == kubeNodePortsChain:
-				// anything goes after KUBE-NODEPORTS
+				// 其他链排在 KUBE-NODEPORTS 之后。
 				return false
 			case table.Chains[i].Name == kubeServicesChain:
-				// KUBE-SERVICES comes before anything (except KUBE-NODEPORTS)
+				// KUBE-SERVICES 排在除 KUBE-NODEPORTS 之外的链之前。
 				return true
 			case table.Chains[j].Name == kubeServicesChain:
-				// anything (except KUBE-NODEPORTS) goes after KUBE-SERVICES
+				// 其他链排在 KUBE-SERVICES 之后。
 				return false
 			case strings.HasPrefix(string(table.Chains[i].Name), "KUBE-") && !strings.HasPrefix(string(table.Chains[j].Name), "KUBE-"):
-				// KUBE-* comes before non-KUBE-*
+				// KUBE-* 链排在非 KUBE-* 链之前。
 				return true
 			case !strings.HasPrefix(string(table.Chains[i].Name), "KUBE-") && strings.HasPrefix(string(table.Chains[j].Name), "KUBE-"):
-				// non-KUBE-* goes after KUBE-*
+				// 非 KUBE-* 链排在 KUBE-* 链之后。
 				return false
 			default:
-				// We have two KUBE-* chains or two non-KUBE-* chains; either
-				// way they sort alphabetically
+				// 两条链同为 KUBE-* 或同为非 KUBE-* 时，
+				// 按名称字典序排列，保证顺序确定。
 				return table.Chains[i].Name < table.Chains[j].Name
 			}
 		})
 	}
 
-	// Sort KUBE-NODEPORTS chains by service name
+	// 按服务名对 KUBE-NODEPORTS 链中的规则排序。
 	chain, _ := dump.GetChain(utiliptables.TableFilter, kubeNodePortsChain)
 	if chain != nil {
 		sort.SliceStable(chain.Rules, func(i, j int) bool {
@@ -711,8 +732,8 @@ func sortIPTablesRules(ruleData string) (string, error) {
 		})
 	}
 
-	// Sort KUBE-SERVICES chains by service name (but keeping the "must be the last
-	// rule" rule in the "nat" table's KUBE-SERVICES chain last).
+	// 按服务名对 KUBE-SERVICES 链中的规则排序，但 "nat" 表中的
+	// "must be the last rule" 规则必须保持在最后。
 	chain, _ = dump.GetChain(utiliptables.TableFilter, kubeServicesChain)
 	if chain != nil {
 		sort.SliceStable(chain.Rules, func(i, j int) bool {
@@ -734,7 +755,10 @@ func sortIPTablesRules(ruleData string) (string, error) {
 	return dump.String(), nil
 }
 
+// TestSortIPTablesRules 验证排序函数能消除服务处理顺序差异，
+// 同时维持 KUBE-NODEPORTS 在前、"must be last" 规则在后的语义约束。
 func TestSortIPTablesRules(t *testing.T) {
+	// 表格中的输入刻意打乱规则顺序，期望输出为规范化后的稳定顺序。
 	for _, tc := range []struct {
 		name   string
 		input  string
@@ -1050,6 +1074,7 @@ func TestSortIPTablesRules(t *testing.T) {
 				`),
 		},
 	} {
+		// 逐用例排序并比较；期望输出去掉前导换行以匹配 Dedent 的结果。
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := sortIPTablesRules(tc.input)
 			if err == nil {
@@ -1069,9 +1094,10 @@ func TestSortIPTablesRules(t *testing.T) {
 	}
 }
 
-// getLine returns the line number of the caller, if possible.  This is useful in
-// tests with a large number of cases - when something goes wrong you can find
+// getLine 返回调用方的行号（如可取得），便于在用例很多的测试中
+// 定位失败发生在哪个用例。
 // which case more easily.
+// getLine 记录调用处行号，供下面的断言辅助函数在失败信息中定位用例位置。
 func getLine() int {
 	_, _, line, ok := stdruntime.Caller(1)
 	if ok {
@@ -1080,10 +1106,10 @@ func getLine() int {
 	return 0
 }
 
-// assertIPTablesRulesEqual asserts that the generated rules in result match the rules in
-// expected, ignoring irrelevant ordering differences. By default this also checks the
-// rules for consistency (eg, no jumps to chains that aren't defined), but that can be
-// disabled by passing false for checkConsistency if you are passing a partial set of rules.
+// assertIPTablesRulesEqual 断言 result 中的规则与 expected 一致，忽略无关紧要的顺序差异。
+// 默认还会检查规则的一致性（例如不存在指向未定义链的跳转）；
+// 若只传入部分规则，可传入 false 关闭该检查。
+// assertIPTablesRulesEqual 比较规则文本；失败时通过调用行号定位具体用例。
 func assertIPTablesRulesEqual(t *testing.T, line int, checkConsistency bool, expected, result string) {
 	expected = strings.TrimLeft(expected, " \t\n")
 
@@ -1108,8 +1134,9 @@ func assertIPTablesRulesEqual(t *testing.T, line int, checkConsistency bool, exp
 	}
 }
 
-// assertIPTablesChainEqual asserts that the indicated chain in the indicated table in
-// result contains exactly the rules in expected (in that order).
+// assertIPTablesChainEqual 断言 result 中指定表的指定链恰好包含 expected 中的规则，
+// 且顺序一致。
+// assertIPTablesChainEqual 比较单条链的规则文本；失败时打印调用行号便于定位。
 func assertIPTablesChainEqual(t *testing.T, line int, table utiliptables.Table, chain utiliptables.Chain, expected, result string) {
 	expected = strings.TrimLeft(expected, " \t\n")
 
@@ -1134,9 +1161,10 @@ func assertIPTablesChainEqual(t *testing.T, line int, table utiliptables.Table, 
 	}
 }
 
-// addressMatches helps test whether an iptables rule such as "! -s 192.168.0.0/16" matches
-// ipStr. address.Value is either an IP address ("1.2.3.4") or a CIDR string
+// addressMatches 判断诸如 "! -s 192.168.0.0/16" 的 iptables 规则是否匹配 ipStr。
+// address.Value 可以是单个 IP（如 "1.2.3.4"）或 CIDR（如 "1.2.3.0/24"）。
 // ("1.2.3.0/24").
+// addressMatches 处理带 "!" 取反的地址匹配，以及 IP 与 CIDR 两种值形式。
 func addressMatches(t *testing.T, address *iptablestest.IPTablesValue, ipStr string) bool {
 	ip := netutils.ParseIPSloppy(ipStr)
 	if ip == nil {
@@ -1160,28 +1188,29 @@ func addressMatches(t *testing.T, address *iptablestest.IPTablesValue, ipStr str
 	return (!address.Negated && matches) || (address.Negated && !matches)
 }
 
-// iptablesTracer holds data used while virtually tracing a packet through a set of
+// iptablesTracer 保存虚拟数据包穿越 iptables 规则时所需的状态。
 // iptables rules
 type iptablesTracer struct {
 	ipt      *iptablestest.FakeIPTables
 	localIPs sets.Set[string]
 	t        *testing.T
 
-	// matches accumulates the list of rules that were matched, for debugging purposes.
+	// matches 记录匹配到的规则列表，仅用于调试输出。
 	matches []string
 
-	// outputs accumulates the list of matched terminal rule targets (endpoint
-	// IP:ports, or a special target like "REJECT") and is eventually used to generate
-	// the return value of tracePacket.
+	// outputs 记录匹配到的终结目标（端点 IP:端口或 "REJECT" 等特殊目标），
+	// 最终用于构造 tracePacket 的返回值。
+	// 这些目标最终构成 tracePacket 的返回值。
 	outputs []string
 
-	// markMasq tracks whether the packet has been marked for masquerading
+	// markMasq 记录数据包是否已被标记需要伪装（MASQUERADE）。
 	markMasq bool
 }
 
-// newIPTablesTracer creates an iptablesTracer. nodeIPs are the IPs to treat as local
-// node IPs (for determining whether rules with "--src-type LOCAL" or "--dst-type LOCAL"
+// newIPTablesTracer 创建 iptablesTracer。nodeIPs 是应被视为本机节点 IP 的地址列表，
+// 用于判断 "--src-type LOCAL" / "--dst-type LOCAL" 规则是否匹配。
 // match).
+// newIPTablesTracer 创建 iptablesTracer。nodeIPs 用于模拟 --src-type/--dst-type LOCAL 的匹配。
 func newIPTablesTracer(t *testing.T, ipt *iptablestest.FakeIPTables, nodeIPs []string) *iptablesTracer {
 	localIPs := sets.New("127.0.0.1", "::1")
 	localIPs.Insert(nodeIPs...)
@@ -1193,11 +1222,12 @@ func newIPTablesTracer(t *testing.T, ipt *iptablestest.FakeIPTables, nodeIPs []s
 	}
 }
 
-// ruleMatches checks if the given iptables rule matches (at least probabilistically) a
-// packet with the given sourceIP, destIP, and destPort.
+// ruleMatches 检查给定规则是否（至少在概率意义上）匹配具有指定源 IP、目的 IP、
+// 目的端口的数据包。
+// ruleMatches 逐个子条件检查规则是否匹配模拟数据包。
 func (tracer *iptablesTracer) ruleMatches(rule *iptablestest.Rule, sourceIP, protocol, destIP, destPort string) bool {
-	// The sub-rules within an iptables rule are ANDed together, so the rule only
-	// matches if all of them match. So go through the subrules, and if any of them
+	// 一条规则内的各子条件是「与」关系，只要有任一子条件不匹配，
+	// 整条规则就不匹配；因此逐个子规则检查并在失配时立即返回。
 	// DON'T match, then fail.
 
 	if rule.SourceAddress != nil && !addressMatches(tracer.t, rule.SourceAddress, sourceIP) {
@@ -1233,17 +1263,18 @@ func (tracer *iptablesTracer) ruleMatches(rule *iptablestest.Rule, sourceIP, pro
 		return false
 	}
 
-	// Any rule that checks for past state/history does not match
+	// 任何依赖历史状态/连接状态的检查都不匹配。
 	if rule.AffinityCheck != nil || rule.MarkCheck != nil || rule.CTStateCheck != nil {
 		return false
 	}
 
-	// Anything else is assumed to match
+	// 其他条件默认视为匹配，因为模拟器不跟踪这些状态。
 	return true
 }
 
-// runChain runs the given packet through the rules in the given table and chain, updating
-// tracer's internal state accordingly. It returns true if it hits a terminal action.
+// runChain 让数据包依次通过指定表和链中的规则，并相应更新 tracer 的内部状态。
+// 若命中终结动作则返回 true。
+// runChain 递归执行一条链的规则，处理跳转、MARK、MASQUERADE 和 DNAT 等动作。
 func (tracer *iptablesTracer) runChain(table utiliptables.Table, chain utiliptables.Chain, sourceIP, protocol, destIP, destPort string) bool {
 	c, _ := tracer.ipt.Dump.GetChain(table, chain)
 	if c == nil {
@@ -1258,7 +1289,7 @@ func (tracer *iptablesTracer) runChain(table utiliptables.Table, chain utiliptab
 		if !tracer.ruleMatches(rule, sourceIP, protocol, destIP, destPort) {
 			continue
 		}
-		// record the matched rule for debugging purposes
+		// 记录命中的规则，便于调试。
 		tracer.matches = append(tracer.matches, rule.Raw)
 
 		switch rule.Jump.Value {
@@ -1267,23 +1298,23 @@ func (tracer *iptablesTracer) runChain(table utiliptables.Table, chain utiliptab
 			continue
 
 		case "ACCEPT", "REJECT", "DROP":
-			// (only valid in filter)
+			// 仅在 filter 表中有效。
 			tracer.outputs = append(tracer.outputs, rule.Jump.Value)
 			return true
 
 		case "DNAT":
-			// (only valid in nat)
+			// 仅在 nat 表中有效。
 			tracer.outputs = append(tracer.outputs, rule.DNATDestination.Value)
 			return true
 
 		default:
-			// We got a "-j KUBE-SOMETHING", so process that chain
+			// 跳转到 KUBE-XXX 链时，递归处理该链。
 			terminated := tracer.runChain(table, utiliptables.Chain(rule.Jump.Value), sourceIP, protocol, destIP, destPort)
 
-			// If the subchain hit a terminal rule AND the rule that sent us
-			// to that chain was non-probabilistic, then this chain terminates
-			// as well. But if we went there because of a --probability rule,
-			// then we want to keep accumulating further matches against this
+			// 若子链命中终结规则且跳转自身的规则不含概率条件，
+			// 则当前链也终止；但若是通过 --probability 跳转过去的，
+			// 还要继续拿后续规则与本包匹配，以模拟负载均衡的随机分流。
+			// 还要继续收集后续匹配规则，以模拟概率分流。
 			// chain.
 			if terminated && rule.Probability == nil {
 				return true
@@ -1294,37 +1325,34 @@ func (tracer *iptablesTracer) runChain(table utiliptables.Table, chain utiliptab
 	return false
 }
 
-// tracePacket determines what would happen to a packet with the given sourceIP, protocol,
-// destIP, and destPort, given the indicated iptables ruleData. nodeIP is the local node
-// IP (for rules matching "LOCAL"). (The protocol value should be lowercase as in iptables
-// rules, not uppercase as in corev1.)
+// tracePacket 模拟具有给定源 IP、协议、目的 IP 和目的端口的数据包在指定 iptables
+// 规则中的走向。nodeIPs 是视为本地节点的 IP 列表（用于 "LOCAL" 匹配）。
+// 协议值应为 iptables 规则中的小写形式，而非 corev1 中的大写形式。
 //
-// The return values are: an array of matched rules (for debugging), the final packet
-// destinations (a comma-separated list of IPs, or one of the special targets "ACCEPT",
-// "DROP", or "REJECT"), and whether the packet would be masqueraded.
+// 返回值为：命中的规则列表（便于调试）、最终目的地址
+// （逗号分隔的 IP 列表，或 "ACCEPT"、"DROP"、"REJECT" 等特殊目标），
+// 以及数据包是否会被伪装。
+// tracePacket 模拟数据包依次经过 nat:PREROUTING、filter 与 nat:POSTROUTING 的走向。
 func tracePacket(t *testing.T, ipt *iptablestest.FakeIPTables, sourceIP, protocol, destIP, destPort string, nodeIPs []string) ([]string, string, bool) {
 	tracer := newIPTablesTracer(t, ipt, nodeIPs)
 
-	// nat:PREROUTING goes first
+	// nat:PREROUTING 的规则最先执行。
 	tracer.runChain(utiliptables.TableNAT, utiliptables.ChainPrerouting, sourceIP, protocol, destIP, destPort)
 
-	// After the PREROUTING rules run, pending DNATs are processed (which would affect
-	// the destination IP that later rules match against).
+	// PREROUTING 结束后处理待执行的 DNAT，这会影响后续规则匹配到的目的 IP。
 	if len(tracer.outputs) != 0 {
 		destIP = strings.Split(tracer.outputs[0], ":")[0]
 	}
 
-	// Now the filter rules get run; exactly which ones depend on whether this is an
-	// inbound, outbound, or intra-host packet, which we don't know. So we just run
-	// the interesting tables manually. (Theoretically this could cause conflicts in
-	// the future in which case we'd have to do something more complicated.)
+	// 接下来执行 filter 规则；具体执行哪些规则取决于数据包是入站、出站还是本机内部流量，
+	// 而模拟器无法得知这一点，因此手工选择相关的链执行。
+	// 理论上未来这可能导致与真实行为冲突，届时需要更复杂的模拟。
 	tracer.runChain(utiliptables.TableFilter, kubeServicesChain, sourceIP, protocol, destIP, destPort)
 	tracer.runChain(utiliptables.TableFilter, kubeExternalServicesChain, sourceIP, protocol, destIP, destPort)
 	tracer.runChain(utiliptables.TableFilter, kubeNodePortsChain, sourceIP, protocol, destIP, destPort)
 	tracer.runChain(utiliptables.TableFilter, kubeProxyFirewallChain, sourceIP, protocol, destIP, destPort)
 
-	// Finally, the nat:POSTROUTING rules run, but the only interesting thing that
-	// happens there is that the masquerade mark gets turned into actual masquerading.
+	// 最后执行 nat:POSTROUTING；此处唯一关心的是伪装标记转化为实际伪装。
 
 	return tracer.matches, strings.Join(tracer.outputs, ", "), tracer.markMasq
 }
@@ -1339,6 +1367,7 @@ type packetFlowTest struct {
 	masq     bool
 }
 
+// runPacketFlowTests 对一批模拟流量场景逐一执行 tracePacket，并核对目的与伪装结果。
 func runPacketFlowTests(t *testing.T, line int, ipt *iptablestest.FakeIPTables, nodeIPs []string, testCases []packetFlowTest) {
 	lineStr := ""
 	if line != 0 {
@@ -1366,9 +1395,10 @@ func runPacketFlowTests(t *testing.T, line int, ipt *iptablestest.FakeIPTables, 
 	}
 }
 
-// This tests tracePacket against static data, just to make sure we match things in the
-// way we expect to.
+// 使用静态数据测试 tracePacket，确保模拟结果符合预期。
+// TestTracePacket 使用静态规则集验证数据包模拟的各类匹配路径。
 func TestTracePacket(t *testing.T) {
+	// 静态规则集覆盖 ACCEPT/DROP/REJECT、健康检查端口以及各服务的 DNAT 路径。
 	rules := dedent.Dedent(`
 		*filter
 		:INPUT - [0:0]
@@ -1530,6 +1560,7 @@ func TestTracePacket(t *testing.T) {
 			output:   "ACCEPT",
 		},
 		{
+			// 无端点的 ClusterIP 应 REJECT，而不是静默丢弃。
 			name:     "REJECT",
 			sourceIP: "10.0.0.2",
 			destIP:   "172.30.0.46",
@@ -1539,8 +1570,8 @@ func TestTracePacket(t *testing.T) {
 	})
 }
 
-// TestOverallIPTablesRules creates a variety of services and verifies that the generated
-// rules are exactly as expected.
+// TestOverallIPTablesRules 创建多种类型的 Service，并校验生成的 iptables 规则完全符合预期。
+// 每个用例独立创建 Proxier，避免规则状态在场景之间相互污染。
 func TestOverallIPTablesRules(t *testing.T) {
 	logger, _ := klogtesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -1548,7 +1579,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 	metrics.RegisterMetrics(kubeproxyconfig.ProxyModeIPTables)
 
 	makeServiceMap(fp,
-		// create ClusterIP service
+		// 创建 ClusterIP 类型的 Service。
 		makeTestService("ns1", "svc1", func(svc *v1.Service) {
 			svc.Spec.ClusterIP = "172.30.0.41"
 			svc.Spec.Ports = []v1.ServicePort{{
@@ -1557,7 +1588,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				Protocol: v1.ProtocolTCP,
 			}}
 		}),
-		// create LoadBalancer service with Local traffic policy
+		// 创建流量策略为 Local 的 LoadBalancer Service。
 		makeTestService("ns2", "svc2", func(svc *v1.Service) {
 			svc.Spec.Type = "LoadBalancer"
 			svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyLocal
@@ -1574,7 +1605,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 			svc.Spec.ExternalIPs = []string{"192.168.99.22"}
 			svc.Spec.HealthCheckNodePort = 30000
 		}),
-		// create NodePort service
+		// 创建 NodePort 类型的 Service。
 		makeTestService("ns3", "svc3", func(svc *v1.Service) {
 			svc.Spec.Type = "NodePort"
 			svc.Spec.ClusterIP = "172.30.0.43"
@@ -1585,7 +1616,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				NodePort: 3003,
 			}}
 		}),
-		// create ExternalIP service
+		// 创建带 ExternalIP 的 Service。
 		makeTestService("ns4", "svc4", func(svc *v1.Service) {
 			svc.Spec.Type = "NodePort"
 			svc.Spec.ClusterIP = "172.30.0.44"
@@ -1597,8 +1628,8 @@ func TestOverallIPTablesRules(t *testing.T) {
 				TargetPort: intstr.FromInt32(80),
 			}}
 		}),
-		// create LoadBalancer service with Cluster traffic policy, source ranges,
-		// and session affinity
+		// 创建流量策略为 Cluster、带来源范围和会话亲和性的 LoadBalancer Service。
+		// 同时验证会话亲和性。
 		makeTestService("ns5", "svc5", func(svc *v1.Service) {
 			svc.Spec.Type = "LoadBalancer"
 			svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyCluster
@@ -1613,8 +1644,8 @@ func TestOverallIPTablesRules(t *testing.T) {
 				IP: "5.6.7.8",
 			}}
 			svc.Spec.HealthCheckNodePort = 30000
-			// Extra whitespace to ensure that invalid value will not result
-			// in a crash, for backward compatibility.
+			// 故意插入多余空白，验证兼容性：非法格式不会导致 panic，
+			// 只会被忽略。
 			svc.Spec.LoadBalancerSourceRanges = []string{" 203.0.113.0/25"}
 
 			svc.Spec.SessionAffinity = v1.ServiceAffinityClientIP
@@ -1624,7 +1655,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				},
 			}
 		}),
-		// create ClusterIP service with no endpoints
+		// 创建没有端点的 ClusterIP Service。
 		makeTestService("ns6", "svc6", func(svc *v1.Service) {
 			svc.Spec.Type = "ClusterIP"
 			svc.Spec.ClusterIP = "172.30.0.46"
@@ -1637,7 +1668,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 		}),
 	)
 	populateEndpointSlices(fp,
-		// create ClusterIP service endpoints
+		// 创建 ClusterIP Service 的端点。
 		makeTestEndpointSlice("ns1", "svc1", 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -1649,8 +1680,8 @@ func TestOverallIPTablesRules(t *testing.T) {
 				Protocol: ptr.To(v1.ProtocolTCP),
 			}}
 		}),
-		// create Local LoadBalancer endpoints. Note that since we aren't setting
-		// its NodeName, this endpoint will be considered non-local and ignored.
+		// 创建 Local 策略 LoadBalancer 的端点；由于未设置 NodeName，
+		// 该端点会被视为非本地端点而忽略。
 		makeTestEndpointSlice("ns2", "svc2", 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -1662,7 +1693,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				Protocol: ptr.To(v1.ProtocolTCP),
 			}}
 		}),
-		// create NodePort service endpoints
+		// 创建 NodePort Service 的端点。
 		makeTestEndpointSlice("ns3", "svc3", 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -1674,7 +1705,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				Protocol: ptr.To(v1.ProtocolTCP),
 			}}
 		}),
-		// create ExternalIP service endpoints
+		// 创建 ExternalIP Service 的端点。
 		makeTestEndpointSlice("ns4", "svc4", 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -1689,7 +1720,7 @@ func TestOverallIPTablesRules(t *testing.T) {
 				Protocol: ptr.To(v1.ProtocolTCP),
 			}}
 		}),
-		// create Cluster LoadBalancer endpoints
+		// 创建 Cluster 策略 LoadBalancer 的端点。
 		makeTestEndpointSlice("ns5", "svc5", 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{{
@@ -1813,10 +1844,13 @@ func TestOverallIPTablesRules(t *testing.T) {
 	}
 }
 
-// TestNoEndpointsReject tests that a service with no endpoints rejects connections to
-// its ClusterIP, ExternalIPs, NodePort, and LoadBalancer IP.
+// TestNoEndpointsReject 验证没有端点时，ClusterIP、ExternalIP、NodePort 和 LoadBalancer IP
+// 上的连接都会被 REJECT。
+// 分别验证四种外部入口在无端点时都被 REJECT，而不是丢弃或放行。
 func TestNoEndpointsReject(t *testing.T) {
+	// 同一 Service 同时暴露 ClusterIP、ExternalIP、NodePort 和 LB IP，
 	ipt := iptablestest.NewFake()
+	// 以便用一组数据包场景覆盖四类入口的无端点行为。
 	fp := NewFakeProxier(ipt)
 	svcIP := "172.30.0.41"
 	svcPort := 80
@@ -1844,6 +1878,7 @@ func TestNoEndpointsReject(t *testing.T) {
 			}}
 		}),
 	)
+	// 只建 Service 不建端点，模拟服务刚创建、后端尚未就绪的状态。
 	fp.syncProxyRules()
 
 	runPacketFlowTests(t, getLine(), ipt, testNodeIPs, []packetFlowTest{
@@ -1892,7 +1927,9 @@ func TestNoEndpointsReject(t *testing.T) {
 	})
 }
 
-// TestClusterIPGeneral tests various basic features of a ClusterIP service
+// TestClusterIPGeneral 测试 ClusterIP Service 的各项基本特性。
+// 覆盖 ClusterIP 规则、端口协议差异、会话亲和性与端点变更等场景。
+// 同一 Service 声明 TCP/UDP/SCTP 端口，便于验证协议匹配的规则差异。
 func TestClusterIPGeneral(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -1929,8 +1966,8 @@ func TestClusterIPGeneral(t *testing.T) {
 					Name:     "dns-tcp",
 					Port:     53,
 					Protocol: v1.ProtocolTCP,
-					// We use TargetPort on TCP but not UDP/SCTP to
-					// help disambiguate the output.
+					// TCP 使用 TargetPort 而 UDP/SCTP 不使用，
+					// 以便在期望输出中区分协议。
 					TargetPort: intstr.FromInt32(5353),
 				},
 				{
@@ -2077,6 +2114,8 @@ func TestClusterIPGeneral(t *testing.T) {
 	})
 }
 
+// TestLoadBalancer 验证 LoadBalancer Service 的规则生成，包括来源范围、会话亲和性和
+// 本地/集群流量策略下的差异。
 func TestLoadBalancer(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -2108,7 +2147,7 @@ func TestLoadBalancer(t *testing.T) {
 			svc.Spec.LoadBalancerSourceRanges = []string{
 				"192.168.0.0/24",
 
-				// Regression test that excess whitespace gets ignored
+				// 回归测试：多余的空白应被忽略，而不是生成额外规则。
 				" 203.0.113.0/25",
 			}
 		}),
@@ -2217,10 +2256,9 @@ func TestLoadBalancer(t *testing.T) {
 			masq:     true,
 		},
 
-		// The LB rules assume that when you connect from a node to a LB IP, that
-		// something external to kube-proxy will cause the connection to be
-		// SNATted to the LB IP, so if the LoadBalancerSourceRanges include the
-		// node IP, then we add a rule allowing traffic from the LB IP as well...
+		// LB 规则假定从节点访问 LB IP 时，kube-proxy 之外还会有组件把连接
+		// SNAT 成 LB IP；因此如果 LoadBalancerSourceRanges 包含节点 IP，
+		// 还要额外放行来自 LB IP 本身的流量，避免自己被规则拒绝。
 		{
 			name:     "same node to LB1, SNATted to LB1 (implicitly allowed)",
 			sourceIP: svcLBIP1,
@@ -2240,8 +2278,9 @@ func TestLoadBalancer(t *testing.T) {
 	})
 }
 
-// TestNodePorts tests NodePort services under various combinations of the
-// --nodeport-addresses and --localhost-nodeports flags.
+// TestNodePorts 在 --nodeport-addresses 与 --localhost-nodeports 的各种组合下测试 NodePort Service。
+// 通过表格覆盖 --nodeport-addresses 与 --localhost-nodeports 的组合，
+// 并分别为 IPv4/IPv6 构造期望规则。
 func TestNodePorts(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -2250,11 +2289,10 @@ func TestNodePorts(t *testing.T) {
 		localhostNodePorts bool
 		nodePortAddresses  []string
 
-		// allowAltNodeIP is true if we expect NodePort traffic on the alternate
-		// node IP to be accepted
+		// allowAltNodeIP 表示期望备用节点 IP 上的 NodePort 流量被接受。
 		allowAltNodeIP bool
 
-		// expectFirewall is true if we expect KUBE-FIREWALL to be filled in with
+		// expectFirewall 表示期望 KUBE-FIREWALL 链中包含反伪造（anti-martian）规则。
 		// an anti-martian-packet rule
 		expectFirewall bool
 	}{
@@ -2404,7 +2442,7 @@ func TestNodePorts(t *testing.T) {
 			}
 			output := net.JoinHostPort(epIP1, "80") + ", " + net.JoinHostPort(epIP2, "80")
 
-			// Basic tests are the same for all cases
+			// 各用例的基础规则一致，先统一构造。
 			runPacketFlowTests(t, getLine(), ipt, testNodeIPs, []packetFlowTest{
 				{
 					name:     "pod to cluster IP",
@@ -2432,7 +2470,7 @@ func TestNodePorts(t *testing.T) {
 				},
 			})
 
-			// localhost to NodePort is only allowed in IPv4, and only if not disabled
+			// 仅 IPv4 允许从 localhost 访问 NodePort，且未被显式禁用时才行。
 			if tc.family == v1.IPv4Protocol && tc.localhostNodePorts {
 				runPacketFlowTests(t, getLine(), ipt, testNodeIPs, []packetFlowTest{
 					{
@@ -2456,7 +2494,7 @@ func TestNodePorts(t *testing.T) {
 				})
 			}
 
-			// NodePort on altNodeIP should be allowed, unless
+			// 除非 nodePortAddresses 排除了备用 IP，否则备用 IP 上的 NodePort 应可用。
 			// nodePortAddressess excludes altNodeIP
 			if tc.allowAltNodeIP {
 				runPacketFlowTests(t, getLine(), ipt, testNodeIPs, []packetFlowTest{
@@ -2481,8 +2519,8 @@ func TestNodePorts(t *testing.T) {
 				})
 			}
 
-			// We have to check the firewall rule manually rather than via
-			// runPacketFlowTests(), because the packet tracer doesn't
+			// 防火墙规则需手工检查：数据包模拟器不实现 conntrack 状态判断，
+			// 因此无法通过 runPacketFlowTests 验证。
 			// implement conntrack states.
 			var expected string
 			if tc.expectFirewall {
@@ -2493,6 +2531,7 @@ func TestNodePorts(t *testing.T) {
 	}
 }
 
+// TestHealthCheckNodePort 验证健康检查 NodePort 服务生成专用的 ACCEPT 规则。
 func TestHealthCheckNodePort(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -2548,6 +2587,7 @@ func TestHealthCheckNodePort(t *testing.T) {
 	})
 }
 
+// TestDropInvalidRule 验证用于丢弃 INVALID 状态连接的规则按配置生成。
 func TestDropInvalidRule(t *testing.T) {
 	kubeForwardChainRules := dedent.Dedent(`
 				-A KUBE-FORWARD -m comment --comment "kubernetes forwarding rules" -m mark --mark 0x4000/0x4000 -j ACCEPT
@@ -2595,10 +2635,10 @@ func TestDropInvalidRule(t *testing.T) {
 	}
 }
 
-// TestExternalTrafficPolicyLocal tests that traffic to externally-facing IPs does not get
-// masqueraded when using Local traffic policy. For traffic from external sources, that
-// means it can also only be routed to local endpoints, but for traffic from internal
-// sources, it gets routed to all endpoints.
+// TestExternalTrafficPolicyLocal 验证 Local 策略下访问外部 IP 的流量不会被伪装。
+// 对外部来源的流量，这意味着只能路由到本地端点；
+// 对内部来源的流量，则仍可路由到所有端点。
+// 组合外部/内部来源与本地/集群端点分布，逐场景模拟数据包验证路由和伪装行为。
 func TestExternalTrafficPolicyLocal(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -2615,6 +2655,7 @@ func TestExternalTrafficPolicyLocal(t *testing.T) {
 	}
 
 	makeServiceMap(fp,
+		// eTP:Local 要求节点上启用健康检查 NodePort。
 		makeTestService(svcPortName.Namespace, svcPortName.Name, func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeLoadBalancer
 			svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyLocal
@@ -2634,8 +2675,10 @@ func TestExternalTrafficPolicyLocal(t *testing.T) {
 		}),
 	)
 
+	// 本地端点 epIP1 与远端端点 epIP2 并存，用于区分内外部来源的路由差异。
 	epIP1 := "10.180.0.1"
 	epIP2 := "10.180.2.1"
+	// 两次同步之间修改端点分布，验证规则随端点状态变化而变化。
 	populateEndpointSlices(fp,
 		makeTestEndpointSlice(svcPortName.Namespace, svcPortName.Name, 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
@@ -2715,10 +2758,11 @@ func TestExternalTrafficPolicyLocal(t *testing.T) {
 	})
 }
 
-// TestExternalTrafficPolicyCluster tests that traffic to an externally-facing IP gets
-// masqueraded when using Cluster traffic policy.
+// TestExternalTrafficPolicyCluster 验证 Cluster 策略下访问外部 IP 的流量会被伪装。
+// 用数据包模拟确认外部来源流量被伪装，且可按策略负载均衡到所有端点。
 func TestExternalTrafficPolicyCluster(t *testing.T) {
 	ipt := iptablestest.NewFake()
+	// 与 Local 策略使用相同的服务拓扑，便于对比两种策略的伪装与路由差异。
 	fp := NewFakeProxier(ipt)
 
 	svcIP := "172.30.0.41"
@@ -2749,6 +2793,7 @@ func TestExternalTrafficPolicyCluster(t *testing.T) {
 			svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyCluster
 		}),
 	)
+	// Cluster 策略下内外来源都可到达全部端点，但来自集群外的流量必须伪装。
 
 	epIP1 := "10.180.0.1"
 	epIP2 := "10.180.2.1"
@@ -2832,6 +2877,7 @@ func TestExternalTrafficPolicyCluster(t *testing.T) {
 	})
 }
 
+// TestComputeProbability 验证预计算的分流概率字符串在端点数量变化时保持正确。
 func TestComputeProbability(t *testing.T) {
 	expectedProbabilities := map[int]string{
 		1:      "1.0000000000",
@@ -2864,6 +2910,7 @@ func TestComputeProbability(t *testing.T) {
 	}
 }
 
+// makeTestService 构造用于测试的 Service，允许通过 svcFunc 按需修改字段。
 func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Service {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2878,6 +2925,7 @@ func makeTestService(namespace, name string, svcFunc func(*v1.Service)) *v1.Serv
 	return svc
 }
 
+// addTestPort 向端口切片追加一个指定名称、协议、端口和 NodePort 的测试端口。
 func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port, nodeport int32, targetPort int) []v1.ServicePort {
 	svcPort := v1.ServicePort{
 		Name:       name,
@@ -2889,6 +2937,7 @@ func addTestPort(array []v1.ServicePort, name string, protocol v1.Protocol, port
 	return append(array, svcPort)
 }
 
+// TestBuildServiceMapAddRemove 验证 Service 变更跟踪器能正确处理服务的添加与删除。
 func TestBuildServiceMapAddRemove(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -2944,7 +2993,7 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		t.Errorf("expected service map length 10, got %v", fp.svcPortMap)
 	}
 
-	// The only-local-loadbalancer ones get added
+	// 只有 loadBalancerSourceRanges 为 only-local 的服务会生成健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 1 {
 		t.Errorf("expected 1 healthcheck port, got %v", healthCheckNodePorts)
@@ -2956,7 +3005,7 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 	}
 
 	// Remove some stuff
-	// oneService is a modification of services[0] with removed first port.
+	// oneService 由 services[0] 删除首个端口后构造，用于测试端口删除。
 	oneService := makeTestService("somewhere-else", "cluster-ip", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
 		svc.Spec.ClusterIP = "172.30.55.4"
@@ -2979,6 +3028,7 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 	}
 }
 
+// TestBuildServiceMapServiceHeadless 验证 Headless Service 不会进入代理的 ServiceMap。
 func TestBuildServiceMapServiceHeadless(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -2995,7 +3045,7 @@ func TestBuildServiceMapServiceHeadless(t *testing.T) {
 		}),
 	)
 
-	// Headless service should be ignored
+	// Headless Service 没有 ClusterIP，应被忽略。
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 0 {
 		t.Errorf("expected service map length 0, got %d", len(fp.svcPortMap))
@@ -3008,6 +3058,7 @@ func TestBuildServiceMapServiceHeadless(t *testing.T) {
 	}
 }
 
+// TestBuildServiceMapServiceTypeExternalName 验证 ExternalName 类型的 Service 被忽略。
 func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -3032,6 +3083,7 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	}
 }
 
+// TestBuildServiceMapServiceUpdate 验证服务更新后 ServiceMap 与健康检查服务的状态正确。
 func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -3068,7 +3120,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
 	}
 
-	// Change service to load-balancer
+	// 将 Service 改为 LoadBalancer 类型。
 	fp.OnServiceUpdate(servicev1, servicev2)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -3079,8 +3131,8 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// No change; make sure the service map stays the same and there are
-	// no health-check changes
+	// 无变更：确认 ServiceMap 与健康检查端口都不发生改变。
+	// 这是防止 Update 误清理状态的回归检查。
 	fp.OnServiceUpdate(servicev2, servicev2)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -3091,7 +3143,7 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 		t.Errorf("expected healthcheck ports length 1, got %v", healthCheckNodePorts)
 	}
 
-	// And back to ClusterIP
+	// 再将 Service 改回 ClusterIP。
 	fp.OnServiceUpdate(servicev2, servicev1)
 	fp.svcPortMap.Update(fp.serviceChanges)
 	if len(fp.svcPortMap) != 2 {
@@ -3103,12 +3155,14 @@ func TestBuildServiceMapServiceUpdate(t *testing.T) {
 	}
 }
 
+// populateEndpointSlices 将给定的 EndpointSlice 批量写入 proxier 的端点变更跟踪器。
 func populateEndpointSlices(proxier *Proxier, allEndpointSlices ...*discovery.EndpointSlice) {
 	for i := range allEndpointSlices {
 		proxier.OnEndpointSliceAdd(allEndpointSlices[i])
 	}
 }
 
+// makeTestEndpointSlice 构造测试用 EndpointSlice，sliceNum 用于生成稳定的名称。
 func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*discovery.EndpointSlice)) *discovery.EndpointSlice {
 	eps := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3121,10 +3175,12 @@ func makeTestEndpointSlice(namespace, name string, sliceNum int, epsFunc func(*d
 	return eps
 }
 
+// makeNSN 构造 namespace/name 形式的 NamespacedName，便于编写期望值。
 func makeNSN(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
 }
 
+// makeServicePortName 构造 ServicePortName，供构造期望的端点映射使用。
 func makeServicePortName(ns, name, port string, protocol v1.Protocol) proxy.ServicePortName {
 	return proxy.ServicePortName{
 		NamespacedName: makeNSN(ns, name),
@@ -3133,6 +3189,7 @@ func makeServicePortName(ns, name, port string, protocol v1.Protocol) proxy.Serv
 	}
 }
 
+// makeServiceMap 将一组 Service 写入 proxier 的服务变更跟踪器并触发同步。
 func makeServiceMap(proxier *Proxier, allServices ...*v1.Service) {
 	for i := range allServices {
 		proxier.OnServiceAdd(allServices[i])
@@ -3148,6 +3205,7 @@ type endpointExpectation struct {
 	isLocal  bool
 }
 
+// checkEndpointExpectations 逐个端口核对实际端点与期望端点是否一致。
 func checkEndpointExpectations(t *testing.T, tci int, newMap proxy.EndpointsMap, expected map[proxy.ServicePortName][]endpointExpectation) {
 	if len(newMap) != len(expected) {
 		t.Errorf("[%d] expected %d results, got %d: %v", tci, len(expected), len(newMap), newMap)
@@ -3167,6 +3225,7 @@ func checkEndpointExpectations(t *testing.T, tci int, newMap proxy.EndpointsMap,
 	}
 }
 
+// TestUpdateEndpointsMap 验证端点变更跟踪器在 EndpointSlice 增删、端口变化等场景下的行为。
 func TestUpdateEndpointsMap(t *testing.T) {
 	emptyEndpointSlices := []*discovery.EndpointSlice{
 		makeTestEndpointSlice("ns1", "ep1", 1, func(*discovery.EndpointSlice) {}),
@@ -3495,9 +3554,8 @@ func TestUpdateEndpointsMap(t *testing.T) {
 	}
 
 	testCases := []struct {
-		// previousEndpoints and currentEndpoints are used to call appropriate
-		// handlers OnEndpoints* (based on whether corresponding values are nil
-		// or non-nil) and must be of equal length.
+		// previousEndpoints 与 currentEndpoints 决定调用哪个 OnEndpoints* 回调
+		// （依据对应值为 nil 与否），两者长度必须相同。
 		name                             string
 		previousEndpoints                []*discovery.EndpointSlice
 		currentEndpoints                 []*discovery.EndpointSlice
@@ -3506,14 +3564,14 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired bool
 		expectedLocalEndpoints           map[types.NamespacedName]int
 	}{{
-		// Case[0]: nothing
+		// Case[0]：无任何变更。
 		name:                             "nothing",
 		oldEndpoints:                     map[proxy.ServicePortName][]endpointExpectation{},
 		expectedResult:                   map[proxy.ServicePortName][]endpointExpectation{},
 		expectedConntrackCleanupRequired: false,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[1]: no change, named port, local
+		// Case[1]：无变更，命名端口，本地端点。
 		name:              "no change, named port, local",
 		previousEndpoints: namedPortLocal,
 		currentEndpoints:  namedPortLocal,
@@ -3532,7 +3590,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[2]: no change, multiple subsets
+		// Case[2]：无变更，多个 subset。
 		name:              "no change, multiple subsets",
 		previousEndpoints: multipleSubsets,
 		currentEndpoints:  multipleSubsets,
@@ -3555,7 +3613,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: false,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[3]: no change, multiple subsets, multiple ports, local
+		// Case[3]：无变更，多个 subset、多个端口、本地端点。
 		name:              "no change, multiple subsets, multiple ports, local",
 		previousEndpoints: multipleSubsetsMultiplePortsLocal,
 		currentEndpoints:  multipleSubsetsMultiplePortsLocal,
@@ -3586,7 +3644,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[4]: no change, multiple endpoints, subsets, IPs, and ports
+		// Case[4]：无变更，多个端点、subset、IP 和端口。
 		name:              "no change, multiple endpoints, subsets, IPs, and ports",
 		previousEndpoints: multipleSubsetsIPsPorts,
 		currentEndpoints:  multipleSubsetsIPsPorts,
@@ -3648,7 +3706,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns2", "ep2"): 1,
 		},
 	}, {
-		// Case[5]: add an Endpoints
+		// Case[5]：新增一个 Endpoints。
 		name:              "add an Endpoints",
 		previousEndpoints: []*discovery.EndpointSlice{nil},
 		currentEndpoints:  namedPortLocal,
@@ -3663,7 +3721,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[6]: remove an Endpoints
+		// Case[6]：删除一个 Endpoints。
 		name:              "remove an Endpoints",
 		previousEndpoints: namedPortLocal,
 		currentEndpoints:  []*discovery.EndpointSlice{nil},
@@ -3676,7 +3734,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedResult:                   map[proxy.ServicePortName][]endpointExpectation{},
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[7]: add an IP and port
+		// Case[7]：增加一个 IP 和端口。
 		name:              "add an IP and port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortsLocalNoLocal,
@@ -3700,7 +3758,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[8]: remove an IP and port
+		// Case[8]：删除一个 IP 和端口。
 		name:              "remove an IP and port",
 		previousEndpoints: namedPortsLocalNoLocal,
 		currentEndpoints:  namedPort,
@@ -3722,7 +3780,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[9]: add a subset
+		// Case[9]：增加一个 subset。
 		name:              "add a subset",
 		previousEndpoints: []*discovery.EndpointSlice{namedPort[0], nil},
 		currentEndpoints:  multipleSubsetsWithLocal,
@@ -3744,7 +3802,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns1", "ep1"): 1,
 		},
 	}, {
-		// Case[10]: remove a subset
+		// Case[10]：删除一个 subset。
 		name:              "remove a subset",
 		previousEndpoints: multipleSubsets,
 		currentEndpoints:  []*discovery.EndpointSlice{namedPort[0], nil},
@@ -3764,7 +3822,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[11]: rename a port
+		// Case[11]：重命名端口。
 		name:              "rename a port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortRenamed,
@@ -3781,7 +3839,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[12]: renumber a port
+		// Case[12]：修改端口编号。
 		name:              "renumber a port",
 		previousEndpoints: namedPort,
 		currentEndpoints:  namedPortRenumbered,
@@ -3798,7 +3856,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 		expectedConntrackCleanupRequired: true,
 		expectedLocalEndpoints:           map[types.NamespacedName]int{},
 	}, {
-		// Case[13]: complex add and remove
+		// Case[13]：复杂的增删混合场景。
 		name:              "complex add and remove",
 		previousEndpoints: complexBefore,
 		currentEndpoints:  complexAfter,
@@ -3844,7 +3902,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			makeNSN("ns4", "ep4"): 1,
 		},
 	}, {
-		// Case[14]: change from 0 endpoint address to 1 unnamed port
+		// Case[14]：从 0 个端点地址变为 1 个未命名端口。
 		name:              "change from 0 endpoint address to 1 unnamed port",
 		previousEndpoints: emptyEndpointSlices,
 		currentEndpoints:  namedPort,
@@ -3864,8 +3922,8 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			ipt := iptablestest.NewFake()
 			fp := NewFakeProxier(ipt)
 
-			// First check that after adding all previous versions of endpoints,
-			// the fp.oldEndpoints is as we expect.
+			// 先逐个应用历史版本的端点，检查 oldEndpoints 的状态
+			// 是否与预期一致。
 			for i := range tc.previousEndpoints {
 				if tc.previousEndpoints[i] != nil {
 					fp.OnEndpointSliceAdd(tc.previousEndpoints[i])
@@ -3874,7 +3932,7 @@ func TestUpdateEndpointsMap(t *testing.T) {
 			fp.endpointsMap.Update(fp.endpointsChanges)
 			checkEndpointExpectations(t, tci, fp.endpointsMap, tc.oldEndpoints)
 
-			// Now let's call appropriate handlers to get to state we want to be.
+			// 再调用相应的回调，把状态推进到目标场景。
 			if len(tc.previousEndpoints) != len(tc.currentEndpoints) {
 				t.Fatalf("[%d] different lengths of previous and current endpoints", tci)
 			}
@@ -3904,8 +3962,10 @@ func TestUpdateEndpointsMap(t *testing.T) {
 	}
 }
 
-// TestHealthCheckNodePortWhenTerminating tests that health check node ports are not enabled when all local endpoints are terminating
+// TestHealthCheckNodePortWhenTerminating 验证所有本地端点都在终止时不会启用健康检查 NodePort。
+// 验证 terminating 端点不会触发健康检查端口的创建。
 func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
+	// 同一 Service 的本地端点先处于正常状态，再全部切换为 terminating。
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
 	fp.OnServiceSynced()
@@ -3914,6 +3974,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 	serviceName := "svc1"
 	namespaceName := "ns1"
 
+	// 逐个构建 EndpointSlice，避免手工维护冗长的端点对象字面量。
 	fp.OnServiceAdd(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: namespaceName},
 		Spec: v1.ServiceSpec{
@@ -3961,7 +4022,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 		t.Errorf("unexpected number of local ready endpoints, expected 1 but got: %d", len(localReadyEndpoints))
 	}
 
-	// set all endpoints to terminating
+	// 将所有端点设置为 terminating。
 	endpointSliceTerminating := &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-1", serviceName),
@@ -4009,15 +4070,19 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 		}},
 	}
 
+	// 全部本地端点都在终止时，应视作没有可用本地端点。
 	fp.OnEndpointSliceUpdate(endpointSlice, endpointSliceTerminating)
 	_ = fp.endpointsMap.Update(fp.endpointsChanges)
+	// 同时断言 LocalReadyEndpoints 为空，确保健康检查端口不会被启用。
 	localReadyEndpoints = fp.endpointsMap.LocalReadyEndpoints()
 	if len(localReadyEndpoints) != 0 {
 		t.Errorf("unexpected number of local ready endpoints, expected 0 but got: %d", len(localReadyEndpoints))
 	}
 }
 
+// TestProxierMetricsIPTablesTotalRules 验证规则总数指标与实际生成规则数一致。
 func TestProxierMetricsIPTablesTotalRules(t *testing.T) {
+	// 对比解析出的规则数与指标值，确认计数器在一次同步后保持准确。
 	logger, _ := klogtesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -4028,6 +4093,7 @@ func TestProxierMetricsIPTablesTotalRules(t *testing.T) {
 	svcPort := 80
 	nodePort := 31201
 	svcPortName := proxy.ServicePortName{
+		// 两次同步但规则数不变，验证指标是同步后的快照而非累加值。
 		NamespacedName: makeNSN("ns1", "svc1"),
 		Port:           "p80",
 		Protocol:       v1.ProtocolTCP,
@@ -4095,10 +4161,11 @@ func TestProxierMetricsIPTablesTotalRules(t *testing.T) {
 	}
 }
 
-// TODO(thockin): add *more* tests for syncProxyRules() or break it down further and test the pieces.
+// TODO(thockin): 为 syncProxyRules() 增加更多测试，或将其拆分后逐块测试。
 
-// This test ensures that the iptables proxier supports translating Endpoints to
-// iptables output when internalTrafficPolicy is specified
+// 本测试确保 iptables 代理在指定了 internalTrafficPolicy 时，
+// 能把端点正确转换成 iptables 规则。
+// TestInternalTrafficPolicy 验证 internalTrafficPolicy=Local 时，ClusterIP 流量只转发到本地端点。
 func TestInternalTrafficPolicy(t *testing.T) {
 	type endpoint struct {
 		ip       string
@@ -4238,6 +4305,7 @@ func TestInternalTrafficPolicy(t *testing.T) {
 				})
 			}
 
+			// 添加端点后同步并模拟流量，然后删除端点再次验证 REJECT 规则恢复。
 			fp.OnEndpointSliceAdd(endpointSlice)
 			fp.syncProxyRules()
 			runPacketFlowTests(t, tc.line, ipt, testNodeIPs, tc.flowTests)
@@ -4257,8 +4325,9 @@ func TestInternalTrafficPolicy(t *testing.T) {
 	}
 }
 
-// TestTerminatingEndpointsTrafficPolicyLocal tests that when there are local ready and
-// ready + terminating endpoints, only the ready endpoints are used.
+// TestTerminatingEndpointsTrafficPolicyLocal 验证 Local 策略下，同时存在就绪端点与
+// 就绪+终止中端点时，流量只使用就绪端点。
+// 通过数据包模拟验证：就绪端点优先，只有全部就绪端点都在终止中时才回退使用它们。
 func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc1", Namespace: "ns1"},
@@ -4294,6 +4363,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 		{
 			name: "ready endpoints exist",
 			line: getLine(),
+			// 场景：存在本地就绪端点，且另有就绪但终止中的端点。
 			endpointslice: &discovery.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("%s-1", "svc1"),
@@ -4326,7 +4396,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be ignored for external since there are ready non-terminating endpoints
+						// 已有就绪且未终止的端点，该端点对外部流量应被忽略。
 						Addresses: []string{"10.0.1.3"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4336,7 +4406,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be ignored for external since there are ready non-terminating endpoints
+						// 已有就绪且未终止的端点，该端点对外部流量应被忽略。
 						Addresses: []string{"10.0.1.4"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4346,7 +4416,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be ignored for external since it's not local
+						// 该端点不是本地端点，对外部流量应被忽略。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(true),
@@ -4393,7 +4463,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 				AddressType: discovery.AddressTypeIPv4,
 				Endpoints: []discovery.Endpoint{
 					{
-						// this endpoint should be used since there are only ready terminating endpoints
+						// 只有就绪的终止中端点可用，因此该端点应被使用。
 						Addresses: []string{"10.0.1.2"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4403,7 +4473,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be used since there are only ready terminating endpoints
+						// 只有就绪的终止中端点可用，因此该端点应被使用。
 						Addresses: []string{"10.0.1.3"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4413,7 +4483,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should not be used since it is both terminating and not ready.
+						// 该端点既在终止中又未就绪，不应被使用。
 						Addresses: []string{"10.0.1.4"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4423,7 +4493,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be ignored for external since it's not local
+						// 该端点不是本地端点，对外部流量应被忽略。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(true),
@@ -4470,8 +4540,8 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 				AddressType: discovery.AddressTypeIPv4,
 				Endpoints: []discovery.Endpoint{
 					{
-						// this endpoint won't be used because it's not local,
-						// but it will prevent a REJECT rule from being created
+						// 该端点不是本地端点，因此不会被使用；
+						// 但它的存在会阻止生成 REJECT 规则。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4516,7 +4586,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 				AddressType: discovery.AddressTypeIPv4,
 				Endpoints: []discovery.Endpoint{
 					{
-						// Local but not ready or serving
+						// 本地但既未就绪也未提供服务的端点。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4526,7 +4596,7 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// Remote and not ready or serving
+						// 远端且既未就绪也未提供服务的端点。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4591,14 +4661,16 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 	}
 }
 
-// TestTerminatingEndpointsTrafficPolicyCluster tests that when there are cluster-wide
-// ready and ready + terminating endpoints, only the ready endpoints are used.
+// TestTerminatingEndpointsTrafficPolicyCluster 验证 Cluster 策略下，同时存在集群级就绪端点与
+// 通过数据包模拟验证：就绪端点优先，只有全部就绪端点都在终止中时才回退使用它们。
+// TestTerminatingEndpointsTrafficPolicyCluster 验证 Cluster 策略下 terminating 端点的流量处理规则。
 func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc1", Namespace: "ns1"},
 		Spec: v1.ServiceSpec{
-			ClusterIP:             "172.30.1.1",
-			Type:                  v1.ServiceTypeLoadBalancer,
+			ClusterIP: "172.30.1.1",
+			Type:      v1.ServiceTypeLoadBalancer,
+			// 场景：存在集群级就绪端点，且另有就绪但终止中的端点。
 			ExternalTrafficPolicy: v1.ServiceExternalTrafficPolicyCluster,
 			Ports: []v1.ServicePort{
 				{
@@ -4660,7 +4732,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be ignored since there are ready non-terminating endpoints
+						// 已有就绪且未终止的端点，该端点应被忽略。
 						Addresses: []string{"10.0.1.3"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4670,7 +4742,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To("another-node"),
 					},
 					{
-						// this endpoint should be ignored since it is not "serving"
+						// 该端点未标记为 serving，应被忽略。
 						Addresses: []string{"10.0.1.4"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4726,7 +4798,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 				AddressType: discovery.AddressTypeIPv4,
 				Endpoints: []discovery.Endpoint{
 					{
-						// this endpoint should be used since there are only ready terminating endpoints
+						// 只有就绪的终止中端点可用，因此该端点应被使用。
 						Addresses: []string{"10.0.1.2"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4736,7 +4808,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should be used since there are only ready terminating endpoints
+						// 只有就绪的终止中端点可用，因此该端点应被使用。
 						Addresses: []string{"10.0.1.3"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4746,7 +4818,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// this endpoint should not be used since it is both terminating and not ready.
+						// 该端点既在终止中又未就绪，不应被使用。
 						Addresses: []string{"10.0.1.4"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4756,7 +4828,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To("another-node"),
 					},
 					{
-						// this endpoint should be used since there are only ready terminating endpoints
+						// 只有就绪的终止中端点可用，因此该端点应被使用。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4849,7 +4921,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 				AddressType: discovery.AddressTypeIPv4,
 				Endpoints: []discovery.Endpoint{
 					{
-						// Local, not ready or serving
+						// 本地但既未就绪也未提供服务的端点。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4859,7 +4931,7 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 						NodeName: ptr.To(testNodeName),
 					},
 					{
-						// Remote, not ready or serving
+						// 远端且既未就绪也未提供服务的端点。
 						Addresses: []string{"10.0.1.5"},
 						Conditions: discovery.EndpointConditions{
 							Ready:       ptr.To(false),
@@ -4925,9 +4997,11 @@ func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 	}
 }
 
+// TestInternalExternalMasquerade 验证内部/外部流量在 internalTrafficPolicy 与
+// externalTrafficPolicy 各取值下是否伪装、选中哪些端点的完整矩阵。
 func TestInternalExternalMasquerade(t *testing.T) {
-	// (Put the test setup code in an internal function so we can have it here at the
-	// top, before the test cases that will be run against it.)
+	// 将测试准备代码放进内部函数，使其位于测试场景之前；
+	// 这样各场景共享同一套初始 Service/EndpointSlice 状态。
 	setupTest := func(fp *Proxier) {
 		makeServiceMap(fp,
 			makeTestService("ns1", "svc1", func(svc *v1.Service) {
@@ -5036,8 +5110,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 		fp.syncProxyRules()
 	}
 
-	// We use the same flowTests for all of the testCases. The "output" and "masq"
-	// values here represent the normal case (working localDetector, no masqueradeAll)
+	// 所有场景共用 flowTests；其中 output/masq 描述的是正常情况
+	// （本地检测可用、未开启 masqueradeAll）。
 	flowTests := []packetFlowTest{
 		{
 			name:     "pod to ClusterIP",
@@ -5125,8 +5199,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.42",
 			destPort: 80,
 
-			// externalTrafficPolicy does not apply to ClusterIP traffic, so same
-			// as "Pod to ClusterIP"
+			// externalTrafficPolicy 不适用于 ClusterIP 流量，
+			// 因此与「Pod 访问 ClusterIP」相同。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   false,
 		},
@@ -5136,11 +5210,11 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3002,
 
-			// See the comment below in the "pod to LB with eTP:Local" case.
-			// It doesn't actually make sense to short-circuit here, since if
-			// you connect directly to a NodePort from outside the cluster,
-			// you only get the local endpoints. But it's simpler for us and
-			// slightly more convenient for users to have this case get
+			// 参见下方「Pod 访问 eTP:Local 的 LB」用例的注释。
+			// 从集群外直连 NodePort 时其实只会到达本地端点，
+			// 所以这里的短路在语义上并不完全等价；
+			// 但对实现而言更简单，对用户也更方便，
+			// 因此该场景同样按短路处理。
 			// short-circuited too.
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   false,
@@ -5151,13 +5225,13 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "5.6.7.8",
 			destPort: 80,
 
-			// The short-circuit rule is supposed to make this behave the same
-			// way it would if the packet actually went out to the LB and then
-			// came back into the cluster. So it gets routed to all endpoints,
-			// not just local ones. In reality, if the packet actually left
-			// the cluster, it would have to get masqueraded, but since we can
-			// avoid doing that in the short-circuit case, and not masquerading
-			// is more useful, we avoid masquerading.
+			// 短路规则的目的是模拟数据包真的出集群再访问 LB 后返回的效果，
+			// 因此流量应被路由到所有端点，而非仅本地端点。
+			// 实际上若数据包真的离开集群，需要经过伪装；
+			// 但短路场景可以避免伪装，而不伪装对用户更有用，
+			// 所以这里选择不伪装。
+			// 短路场景可以避免伪装，而不伪装对用户更有用，
+			// 所以这里选择不伪装。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   false,
 		},
@@ -5167,8 +5241,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.42",
 			destPort: 80,
 
-			// externalTrafficPolicy does not apply to ClusterIP traffic, so same
-			// as "node to ClusterIP"
+			// externalTrafficPolicy 不适用于 ClusterIP 流量，
+			// 因此与「节点访问 ClusterIP」相同。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   true,
 		},
@@ -5178,8 +5252,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3001,
 
-			// The traffic gets short-circuited, ignoring externalTrafficPolicy, so
-			// same as "node to NodePort" above.
+			// 流量被短路，忽略 externalTrafficPolicy，
+			// 因此与上文「节点访问 NodePort」相同。
 			output: "10.180.0.1:80, 10.180.1.1:80",
 			masq:   true,
 		},
@@ -5189,8 +5263,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "127.0.0.1",
 			destPort: 3002,
 
-			// The traffic gets short-circuited, ignoring externalTrafficPolicy, so
-			// same as "localhost to NodePort" above.
+			// 流量被短路，忽略 externalTrafficPolicy，
+			// 因此与上文「localhost 访问 NodePort」相同。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   true,
 		},
@@ -5200,8 +5274,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "5.6.7.8",
 			destPort: 80,
 
-			// The traffic gets short-circuited, ignoring externalTrafficPolicy, so
-			// same as "node to LB" above.
+			// 流量被短路，忽略 externalTrafficPolicy，
+			// 因此与上文「节点访问 LB」相同。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   true,
 		},
@@ -5211,8 +5285,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.42",
 			destPort: 80,
 
-			// externalTrafficPolicy does not apply to ClusterIP traffic, so same
-			// as "external to ClusterIP" above.
+			// externalTrafficPolicy 不适用于 ClusterIP 流量，
+			// 因此与上文「外部访问 ClusterIP」相同。
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   true,
 		},
@@ -5222,8 +5296,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3002,
 
-			// externalTrafficPolicy applies; only the local endpoint is
-			// selected, and we don't masquerade.
+			// externalTrafficPolicy 生效：只选中本地端点，且不进行伪装。
+			// 只选中本地端点，且不进行伪装。
 			output: "10.180.0.2:80",
 			masq:   false,
 		},
@@ -5233,8 +5307,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "5.6.7.8",
 			destPort: 80,
 
-			// externalTrafficPolicy applies; only the local endpoint is
-			// selected, and we don't masquerade.
+			// externalTrafficPolicy 生效：只选中本地端点，且不进行伪装。
+			// 只选中本地端点，且不进行伪装。
 			output: "10.180.0.2:80",
 			masq:   false,
 		},
@@ -5244,7 +5318,7 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.43",
 			destPort: 80,
 
-			// internalTrafficPolicy applies; only the local endpoint is
+			// internalTrafficPolicy 生效：只选中本地端点。
 			// selected.
 			output: "10.180.0.3:80",
 			masq:   false,
@@ -5255,8 +5329,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3003,
 
-			// internalTrafficPolicy does not apply to NodePort traffic, so same as
-			// "pod to NodePort" above.
+			// internalTrafficPolicy 不适用于 NodePort 流量，
+			// 因此与「Pod 访问 NodePort」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5266,8 +5340,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "9.10.11.12",
 			destPort: 80,
 
-			// internalTrafficPolicy does not apply to LoadBalancer traffic, so
-			// same as "pod to LB" above.
+			// internalTrafficPolicy 不适用于 LoadBalancer 流量，
+			// 因此与「Pod 访问 LB」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5277,9 +5351,9 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.43",
 			destPort: 80,
 
-			// internalTrafficPolicy applies; only the local endpoint is selected.
-			// Traffic is masqueraded as in the "node to ClusterIP" case because
-			// internalTrafficPolicy does not affect masquerading.
+			// internalTrafficPolicy 生效：只选中本地端点。
+			// 与「节点访问 ClusterIP」一样会被伪装，
+			// 因为 internalTrafficPolicy 不影响是否伪装。
 			output: "10.180.0.3:80",
 			masq:   true,
 		},
@@ -5289,8 +5363,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3003,
 
-			// internalTrafficPolicy does not apply to NodePort traffic, so same as
-			// "node to NodePort" above.
+			// internalTrafficPolicy 不适用于 NodePort 流量，
+			// 因此与「节点访问 NodePort」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5300,8 +5374,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "127.0.0.1",
 			destPort: 3003,
 
-			// internalTrafficPolicy does not apply to NodePort traffic, so same as
-			// "localhost to NodePort" above.
+			// internalTrafficPolicy 不适用于 NodePort 流量，
+			// 因此与「localhost 访问 NodePort」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5311,8 +5385,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "9.10.11.12",
 			destPort: 80,
 
-			// internalTrafficPolicy does not apply to LoadBalancer traffic, so
-			// same as "node to LB" above.
+			// internalTrafficPolicy 不适用于 LoadBalancer 流量，
+			// 因此与「节点访问 LB」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5322,9 +5396,9 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "172.30.0.43",
 			destPort: 80,
 
-			// internalTrafficPolicy applies; only the local endpoint is selected.
-			// Traffic is masqueraded as in the "external to ClusterIP" case
-			// because internalTrafficPolicy does not affect masquerading.
+			// internalTrafficPolicy 生效：只选中本地端点。
+			// 与「外部访问 ClusterIP」一样会被伪装，
+			// 因为 internalTrafficPolicy 不影响是否伪装。
 			output: "10.180.0.3:80",
 			masq:   true,
 		},
@@ -5334,8 +5408,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   testNodeIP,
 			destPort: 3003,
 
-			// internalTrafficPolicy does not apply to NodePort traffic, so same as
-			// "external to NodePort" above.
+			// internalTrafficPolicy 不适用于 NodePort 流量，
+			// 因此与「外部访问 NodePort」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5345,8 +5419,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destIP:   "9.10.11.12",
 			destPort: 80,
 
-			// internalTrafficPolicy does not apply to LoadBalancer traffic, so
-			// same as "external to LB" above.
+			// internalTrafficPolicy 不适用于 LoadBalancer 流量，
+			// 因此与「外部访问 LB」相同。
 			output: "10.180.0.3:80, 10.180.1.3:80",
 			masq:   true,
 		},
@@ -5377,8 +5451,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			masqueradeAll: false,
 			localDetector: false,
 			overrides: map[string]packetFlowTestOverride{
-				// With no LocalTrafficDetector, all traffic to a
-				// ClusterIP is assumed to be from a pod, and thus to not
+				// 注入空 LocalTrafficDetector 时，所有访问 ClusterIP 的流量
+				// 都被当作来自 Pod，因此无需伪装。
 				// require masquerading.
 				"node to ClusterIP": {
 					masq: ptr.To(false),
@@ -5399,8 +5473,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 					masq: ptr.To(false),
 				},
 
-				// And there's no eTP:Local short-circuit for pod traffic,
-				// so pods get only the local endpoints.
+				// 此时也不存在 eTP:Local 对 Pod 流量的短路，
+				// 因此 Pod 只能访问本地端点。
 				"pod to NodePort with eTP:Local": {
 					output: ptr.To("10.180.0.2:80"),
 				},
@@ -5415,7 +5489,7 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			masqueradeAll: true,
 			localDetector: true,
 			overrides: map[string]packetFlowTestOverride{
-				// All "to ClusterIP" traffic gets masqueraded when using
+				// 开启 --masquerade-all 后，所有访问 ClusterIP 的流量都会被伪装。
 				// --masquerade-all.
 				"pod to ClusterIP": {
 					masq: ptr.To(true),
@@ -5434,7 +5508,8 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			masqueradeAll: true,
 			localDetector: false,
 			overrides: map[string]packetFlowTestOverride{
-				// As in "masqueradeAll"
+				// 即使有 eTP:Local，Pod 流量也不会触发短路，因此只选中本地端点。
+				// 与 "masqueradeAll" 场景一致：
 				"pod to ClusterIP": {
 					masq: ptr.To(true),
 				},
@@ -5445,7 +5520,7 @@ func TestInternalExternalMasquerade(t *testing.T) {
 					masq: ptr.To(true),
 				},
 
-				// As in "no LocalTrafficDetector"
+				// 同「注入空 LocalTrafficDetector」场景。
 				"pod to NodePort with eTP:Local": {
 					output: ptr.To("10.180.0.2:80"),
 				},
@@ -5466,7 +5541,7 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			}
 			setupTest(fp)
 
-			// Merge base flowTests with per-test-case overrides
+			// 合并基础 flowTests 与每个场景特有的覆盖值。
 			tcFlowTests := make([]packetFlowTest, len(flowTests))
 			overridesApplied := 0
 			for i := range flowTests {
@@ -5495,6 +5570,7 @@ func TestInternalExternalMasquerade(t *testing.T) {
 	}
 }
 
+// countEndpointsAndComments 统计规则文本中匹配给定端点的规则数与注释数。
 func countEndpointsAndComments(iptablesData string, matchEndpoint string) (string, int, int) {
 	var numEndpoints, numComments int
 	var matched string
@@ -5512,6 +5588,8 @@ func countEndpointsAndComments(iptablesData string, matchEndpoint string) (strin
 	return matched, numEndpoints, numComments
 }
 
+// TestSyncProxyRulesLargeClusterMode 验证大集群模式下只同步变化过的服务，
+// 以及全量同步与延迟清理过时链的行为。
 func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)
@@ -5606,9 +5684,8 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 
 	firstEndpoint, numEndpoints, numComments = countEndpointsAndComments(fp.iptablesData.String(), "203.0.113.4")
 	assert.Equal(t, "-A KUBE-SEP-RUVVH7YV3PHQBDOS -m tcp -p tcp -j DNAT --to-destination 203.0.113.4:8081", firstEndpoint)
-	// syncProxyRules will only have output the endpoints for svc3, since the others
-	// didn't change (and syncProxyRules doesn't automatically do a full resync when you
-	// cross the largeClusterEndpointsThreshold).
+	// 由于 svc1/svc2 没有变化，syncProxyRules 只会输出 svc3 的端点；
+	// 跨过 largeClusterEndpointsThreshold 时不会自动触发全量同步。
 	if numEndpoints != 3 {
 		t.Errorf("Found wrong number of endpoints on partial resync: expected %d, got %d", 3, numEndpoints)
 	}
@@ -5616,8 +5693,8 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 		t.Errorf("numComments (%d) != 0 after partial resync when numEndpoints (%d) > threshold (%d)", numComments, expectedEndpoints+3, largeClusterEndpointsThreshold)
 	}
 
-	// Even if FullSyncPeriod has elapsed, large-cluster mode should keep this as
-	// a partial resync when there are no explicit changes requiring a full sync.
+	// 即使 FullSyncPeriod 已到，只要没有显式变化需要全量同步，
+	// 大集群模式下仍保持部分同步。
 	if !fp.largeClusterMode {
 		t.Fatalf("expected to be in large cluster mode")
 	}
@@ -5631,8 +5708,8 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 		t.Fatalf("expected periodic sync in large cluster mode to skip full sync: lastFullSync changed from %v to %v", expectedLastFullSync, fp.lastFullSync)
 	}
 
-	// Now force a full resync and confirm that it rewrites the older services with
-	// no comments as well.
+	// 强制全量同步，确认较早创建的、无注释的服务规则也会被重写。
+	// 全量同步也会重写旧服务的规则，移除其中的注释。
 	fp.forceSyncProxyRules()
 	expectedEndpoints += 3
 
@@ -5645,8 +5722,8 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 		t.Errorf("numComments (%d) != 0 when numEndpoints (%d) > threshold (%d)", numComments, numEndpoints, largeClusterEndpointsThreshold)
 	}
 
-	// Now test service deletion; we have to create another service to do this though,
-	// because if we deleted any of the existing services, we'd fall back out of large
+	// 测试删除服务：需要新建一个服务，因为一旦删除现有服务，
+	// 端点数会跌破阈值，退出大集群模式。
 	// cluster mode.
 	svc4 := makeTestService("ns4", "svc4", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
@@ -5673,26 +5750,26 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 
 	svc4Endpoint, numEndpoints, _ := countEndpointsAndComments(fp.iptablesData.String(), "10.4.0.1")
 	assert.Equal(t, "-A KUBE-SEP-SU5STNODRYEWJAUF -m tcp -p tcp -j DNAT --to-destination 10.4.0.1:8082", svc4Endpoint, "svc4 endpoint was not created")
-	// should only sync svc4
+	// 此时应只同步 svc4。
 	if numEndpoints != 1 {
 		t.Errorf("Found wrong number of endpoints after svc4 creation: expected %d, got %d", 1, numEndpoints)
 	}
 
-	// In large-cluster mode, if we delete a service, it will not re-sync its chains
-	// but it will not delete them immediately either.
+	// 大集群模式下删除服务时不会重写其链，
+	// 但也不会立刻删除链。
 	fp.lastIPTablesCleanup = time.Now()
 	fp.OnServiceDelete(svc4)
 	fp.syncProxyRules()
 
 	svc4Endpoint, numEndpoints, _ = countEndpointsAndComments(fp.iptablesData.String(), "10.4.0.1")
 	assert.Equal(t, "", svc4Endpoint, "svc4 endpoint was still created!")
-	// should only sync svc4, and shouldn't output its endpoints
+	// 应只同步 svc4，且不输出它的端点。
 	if numEndpoints != 0 {
 		t.Errorf("Found wrong number of endpoints after service deletion: expected %d, got %d", 0, numEndpoints)
 	}
 	assert.NotContains(t, fp.iptablesData.String(), "-X ", "iptables data unexpectedly contains chain deletions")
 
-	// But resyncing after a long-enough delay will delete the stale chains
+	// 等待足够长时间后再同步，过时的链才会被删除。
 	fp.lastIPTablesCleanup = time.Now().Add(-fp.syncPeriod).Add(-1)
 	fp.syncProxyRules()
 
@@ -5704,7 +5781,7 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 	assert.Contains(t, fp.iptablesData.String(), "-X KUBE-SVC-EBDQOQU5SJFXRIL3", "iptables data does not contain chain deletion")
 	assert.Contains(t, fp.iptablesData.String(), "-X KUBE-SEP-SU5STNODRYEWJAUF", "iptables data does not contain endpoint deletions")
 
-	// force a full sync and count
+	// 强制全量同步并重新统计，确认链被彻底清理。
 	fp.forceSyncProxyRules()
 	_, numEndpoints, _ = countEndpointsAndComments(fp.iptablesData.String(), "10.0.0.0")
 	if numEndpoints != expectedEndpoints {
@@ -5712,7 +5789,8 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 	}
 }
 
-// Test calling syncProxyRules() multiple times with various changes
+// 测试在各种变更下多次调用 syncProxyRules() 的行为。
+// TestSyncProxyRulesRepeated 验证反复同步时规则稳定性和增量/全量同步的计数。
 func TestSyncProxyRulesRepeated(t *testing.T) {
 	logger, _ := klogtesting.NewTestContext(t)
 	ipt := iptablestest.NewFake()
@@ -5720,7 +5798,7 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 	metrics.RegisterMetrics(kubeproxyconfig.ProxyModeIPTables)
 	defer legacyregistry.Reset()
 
-	// Create initial state
+	// 建立初始状态。
 	var svc2 *v1.Service
 
 	makeServiceMap(fp,
@@ -5825,8 +5903,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Add a new service and its endpoints. (This will only sync the SVC and SEP rules
-	// for the new service, not the existing ones.)
+	// 新增 Service 及其端点：同步只会重写新服务的 SVC 与 SEP 规则，
+	// 已有服务的规则保持不变。
 	makeServiceMap(fp,
 		makeTestService("ns3", "svc3", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeClusterIP
@@ -5897,15 +5975,15 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We added 1 KUBE-SERVICES rule, 2 KUBE-SVC-X27LE4BHSL4DOUIK rules, and 2
-	// KUBE-SEP-BSWRHOQ77KEXZLNL rules.
+	// 新增了 1 条 KUBE-SERVICES 规则、2 条 KUBE-SVC-X27LE4BHSL4DOUIK 规则，
+	// 以及 2 条 KUBE-SEP-BSWRHOQ77KEXZLNL 规则。
 	rulesTotal += 5
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Delete a service. (Won't update the other services.)
+	// 删除 Service：其他 Service 的规则不受影响。
 	fp.OnServiceDelete(svc2)
 	fp.syncProxyRules()
 
@@ -5948,16 +6026,16 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We deleted 1 KUBE-SERVICES rule, 2 KUBE-SVC-2VJB64SDSIJUP5T6 rules, and 2
-	// KUBE-SEP-UHEGFW77JX3KXTOV rules
+	// 删除了 1 条 KUBE-SERVICES 规则、2 条 KUBE-SVC-2VJB64SDSIJUP5T6 规则，
+	// 以及 2 条 KUBE-SEP-UHEGFW77JX3KXTOV 规则。
 	rulesTotal -= 5
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Add a service, sync, then add its endpoints. (The first sync will be a no-op other
-	// than adding the REJECT rule. The second sync will create the new service.)
+	// 先新增 Service 并同步，再新增其端点：第一次同步除 REJECT 规则外是空操作，
+	// 第二次同步才会创建新服务的规则。
 	var svc4 *v1.Service
 	makeServiceMap(fp,
 		makeTestService("ns4", "svc4", func(svc *v1.Service) {
@@ -6008,7 +6086,7 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// The REJECT rule is in "filter", not NAT, so the number of NAT rules hasn't
+	// REJECT 规则位于 filter 表而非 nat 表，因此 nat 规则数没有变化。
 	// changed.
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
@@ -6071,16 +6149,15 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We added 1 KUBE-SERVICES rule, 2 KUBE-SVC-4SW47YFZTEDKD3PK rules, and
-	// 2 KUBE-SEP-AYCN5HPXMIRJNJXU rules
+	// 新增了 1 条 KUBE-SERVICES 规则、2 条 KUBE-SVC-4SW47YFZTEDKD3PK 规则，
+	// 以及 2 条 KUBE-SEP-AYCN5HPXMIRJNJXU 规则。
 	rulesTotal += 5
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Change an endpoint of an existing service. This will cause its SVC and SEP
-	// chains to be rewritten.
+	// 修改某 Service 的端点：其 SVC 与 SEP 链会被重写。
 	eps3update := eps3.DeepCopy()
 	eps3update.Endpoints[0].Addresses[0] = "10.0.3.2"
 	fp.OnEndpointSliceUpdate(eps3, eps3update)
@@ -6130,13 +6207,13 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We rewrote existing rules but did not change the overall number of rules.
+	// 规则被重写但总数不变，因此还需比对内容以确认更新生效。
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Add an endpoint to a service. This will cause its SVC and SEP chains to be rewritten.
+	// 为 Service 增加一个端点：SVC 与 SEP 链会被重写。
 	eps3update2 := eps3update.DeepCopy()
 	eps3update2.Endpoints = append(eps3update2.Endpoints, discovery.Endpoint{Addresses: []string{"10.0.3.3"}})
 	fp.OnEndpointSliceUpdate(eps3update, eps3update2)
@@ -6188,16 +6265,16 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We added 2 KUBE-SEP-JVVZVJ7BSEPPRNBS rules and 1 KUBE-SVC-X27LE4BHSL4DOUIK rule
-	// jumping to the new SEP chain. The other rules related to svc3 got rewritten,
-	// but that does not change the count of rules.
+	// 新增了 2 条 KUBE-SEP-JVVZVJ7BSEPPRNBS 规则和 1 条跳转到新 SEP 链的
+	// KUBE-SVC-X27LE4BHSL4DOUIK 规则；svc3 的其他规则也被重写，
+	// 但规则总数不变。
 	rulesTotal += 3
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Sync with no new changes... This will not rewrite any SVC or SEP chains
+	// 无变更时再次同步：不应重写任何 SVC 或 SEP 链。
 	fp.syncProxyRules()
 
 	expected = dedent.Dedent(`
@@ -6236,13 +6313,13 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// (No changes)
+	// 无变更。
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)
 	}
 
-	// Now force a partial resync error and ensure that it recovers correctly
+	// 制造一次部分同步失败，并确认能够正确恢复。
 	if fp.needFullSync {
 		t.Fatalf("Proxier unexpectedly already needs a full sync?")
 	}
@@ -6254,16 +6331,15 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("Already did a partial resync? Something failed earlier!")
 	}
 
-	// Add a rule jumping from svc3's service chain to svc4's endpoint, then try to
-	// delete svc4. This will fail because the partial resync won't rewrite svc3's
-	// rules and so the partial restore would leave a dangling jump from there to
-	// svc4's endpoint. The proxier will then queue a full resync in response to the
-	// partial resync failure, and the full resync will succeed (since it will rewrite
-	// svc3's rules as well).
+	// 添加一条从 svc3 服务链跳转到 svc4 端点的规则，然后尝试删除 svc4。
+	// 部分同步不会重写 svc3 的规则，若按部分恢复执行会留下悬空跳转，
+	// 因此该操作应失败；作为响应，proxier 会排队一次全量同步，
+	// 全量同步会重写 svc3 的规则，从而成功删除 svc4。
+	// 部分同步不会重写 svc3 的规则，若按部分恢复执行会留下悬空跳转，
+	// 因此该操作应失败；全量同步重写 svc3 的规则后才会成功。
 	//
-	// This is an absurd scenario, but it has to be; partial resync failures are
-	// supposed to be impossible; if we knew of any non-absurd scenario that would
-	// cause such a failure, then that would be a bug and we would fix it.
+	// 这个场景很荒谬，但也只能如此：部分同步失败本应不可能发生；
+	// 若存在不荒谬的触发场景，那就是 bug，应予以修复。
 	if _, err := fp.iptables.ChainExists(utiliptables.TableNAT, utiliptables.Chain("KUBE-SEP-AYCN5HPXMIRJNJXU")); err != nil {
 		t.Fatalf("svc4's endpoint chain unexpected already does not exist!")
 	}
@@ -6288,7 +6364,7 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("Partial restore failures metric was not incremented after failed partial resync (expected %.02f, got %.02f)", partialRestoreFailures+1.0, updatedPartialRestoreFailures)
 	}
 
-	// On retry we should do a full resync, which should succeed (and delete svc4)
+	// 重试时应执行全量同步并成功删除 svc4。
 	fp.syncProxyRules()
 
 	expected = dedent.Dedent(`
@@ -6346,8 +6422,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		t.Errorf("metric shows %d rules synced but iptables data shows %d", rulesSyncedMetric, rulesSynced)
 	}
 
-	// We deleted 1 KUBE-SERVICES rule, 2 KUBE-SVC-4SW47YFZTEDKD3PK rules, and 2
-	// KUBE-SEP-AYCN5HPXMIRJNJXU rules
+	// 删除了 1 条 KUBE-SERVICES 规则、2 条 KUBE-SVC-4SW47YFZTEDKD3PK 规则，
+	// 以及 2 条 KUBE-SEP-AYCN5HPXMIRJNJXU 规则。
 	rulesTotal -= 5
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
@@ -6355,6 +6431,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 	}
 }
 
+// 分别构造有/无端点的服务，检查无端点计数指标按服务而非端口累加。
+// TestNoEndpointsMetric 验证无端点服务的指标统计与 REJECT 规则一致。
 func TestNoEndpointsMetric(t *testing.T) {
 	type endpoint struct {
 		ip       string
@@ -6377,6 +6455,7 @@ func TestNoEndpointsMetric(t *testing.T) {
 				{"10.0.1.1", testNodeName},
 				{"10.0.1.2", "node1"},
 				{"10.0.1.3", "node2"},
+				// 多个端口的服务只应计一次无端点，避免把端口数误当成服务数。
 			},
 		},
 		{
@@ -6386,6 +6465,7 @@ func TestNoEndpointsMetric(t *testing.T) {
 				{"10.0.1.1", testNodeName},
 				{"10.0.1.2", "node1"},
 				{"10.0.1.3", "node2"},
+				// 逐场景更新 EndpointSlice 并同步，再读取 gauge 指标进行核对。
 			},
 		},
 		{
@@ -6512,6 +6592,9 @@ func TestNoEndpointsMetric(t *testing.T) {
 	}
 }
 
+// 验证 Proxy 模式下仅 LB IP 自身的规则存在，不会为 ingress 地址生成额外规则。
+
+// TestLoadBalancerIngressRouteTypeProxy 验证 ingress 路由模式为 Proxy 时 LoadBalancer 的规则生成。
 func TestLoadBalancerIngressRouteTypeProxy(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -6540,6 +6623,7 @@ func TestLoadBalancerIngressRouteTypeProxy(t *testing.T) {
 			svcLBIP:      "1.2.3.6",
 			ipMode:       nil,
 			expectedRule: true,
+			// 对每个 LB IP 单独建服务并同步，避免相互干扰规则检查。
 		},
 	}
 
@@ -6602,8 +6686,10 @@ func TestLoadBalancerIngressRouteTypeProxy(t *testing.T) {
 	}
 }
 
-// TestBadIPs tests that "bad" IPs and CIDRs in Services/Endpoints are rewritten to
-// be "good" in the input provided to iptables-restore
+// 用非法 IP/CIDR 构造 Service 与 EndpointSlice，检查生成的规则仍然合法。
+// 会被修正为合法值。
+// 用非法 IP/CIDR 构造 Service 与 EndpointSlice，检查生成的规则仍然合法。
+// 不合法的 IP 会被规范化为合法地址，否则 iptables-restore 会拒绝整批规则。
 func TestBadIPs(t *testing.T) {
 	ipt := iptablestest.NewFake()
 	fp := NewFakeProxier(ipt)

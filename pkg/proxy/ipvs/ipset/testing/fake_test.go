@@ -27,6 +27,7 @@ import (
 
 const testVersion = "v6.19"
 
+// TestSetEntry 覆盖 fake ipset 的集合创建、条目增删查、Flush、列举与销毁全流程。
 func TestSetEntry(t *testing.T) {
 	fake := NewFake(testVersion)
 	version, err := fake.GetVersion()
@@ -36,7 +37,8 @@ func TestSetEntry(t *testing.T) {
 	if version != testVersion {
 		t.Errorf("Unexpected version mismatch, expected: %s, got: %s", testVersion, version)
 	}
-	// create a set
+	// 创建 hash:ip,port 类型的 IPv4 集合；后续条目格式依集合类型而定。
+	// 创建一个 ipset 集合
 	set := &ipset.IPSet{
 		Name:       "foo",
 		SetType:    ipset.HashIPPort,
@@ -46,7 +48,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// add two entries
+	// 加入两个条目，之后用 ListEntries 验证集合内容与顺序无关。
+	// 向集合中加入两个条目
 	err = fake.AddEntry("192.168.1.1,tcp:8080", set, true)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -67,7 +70,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected entries mismatch, expected: %v, got: %v", expectedEntries, entries)
 	}
 
-	// test entries
+	// TestEntry 既校验存在性也校验错误值，确保 fake 的查询语义与真实 ipset 一致。
+	// 校验集合中的条目
 	found, err := fake.TestEntry("192.168.1.1,tcp:8080", set.Name)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -84,7 +88,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected entry 192.168.1.2,tcp:8081 not found")
 	}
 
-	// delete entry from a given set
+	// 删除单个条目后，集合中只应剩下另一个条目。
+	// 从指定集合中删除条目
 	if err := fake.DelEntry("192.168.1.1,tcp:8080", set.Name); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -100,7 +105,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected entries mismatch, expected: %v, got: %v", expectedEntries, entries)
 	}
 
-	// Flush set
+	// FlushSet 只清空条目、保留集合本身，这与 DestroySet 的行为不同。
+	// 清空集合中的所有条目
 	if err := fake.FlushSet(set.Name); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -112,7 +118,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Expected 0 entries, got %d, entries: %v", len(entries), entries)
 	}
 
-	// create another set
+	// 再建一个 IPv6 集合，验证 ListSets 能同时列出两个集合。
+	// 创建另一个集合，验证多集合场景
 	set2 := &ipset.IPSet{
 		Name:       "bar",
 		SetType:    ipset.HashIPPortIP,
@@ -134,7 +141,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected sets mismatch, expected: %v, got: %v", expectedSets, setList)
 	}
 
-	// Destroy a given set
+	// 销毁单个集合时，集合本身和它的条目记录都必须被清除。
+	// 销毁指定的集合
 	if err := fake.DestroySet(set.Name); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -145,7 +153,8 @@ func TestSetEntry(t *testing.T) {
 		t.Errorf("Unexpected entries: %v", fake.Entries[set.Name])
 	}
 
-	// Destroy all sets
+	// 销毁所有集合后，两个内部 map 都应为空。
+	// 销毁所有集合
 	if err := fake.DestroyAllSets(); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}

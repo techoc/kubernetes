@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// checkExpectedEndpoints 比较期望端点集合与实际端点列表，汇总多余和缺失的端点错误。
 func checkExpectedEndpoints(expected sets.Set[string], actual []Endpoint) error {
 	var errs []error
 
@@ -46,6 +47,7 @@ func checkExpectedEndpoints(expected sets.Set[string], actual []Endpoint) error 
 	return kerrors.NewAggregate(errs)
 }
 
+// TestCategorizeEndpoints 验证拓扑提示、流量策略与节点亲和性组合下 CategorizeEndpoints 的分类结果。
 func TestCategorizeEndpoints(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -55,12 +57,9 @@ func TestCategorizeEndpoints(t *testing.T) {
 		serviceInfo       ServicePort
 		endpoints         []Endpoint
 
-		// We distinguish `nil` ("service doesn't use this kind of endpoints") from
-		// `sets.Set[string]()` ("service uses this kind of endpoints but has no endpoints").
-		// allEndpoints can be left unset if only one of clusterEndpoints and
-		// localEndpoints is set, and allEndpoints is identical to it.
-		// onlyRemoteEndpoints should be true if CategorizeEndpoints returns true for
-		// hasAnyEndpoints despite allEndpoints being empty.
+		// 需区分 nil（服务不使用该类端点）与空集合 sets.Set[string]()（服务使用但当前无端点）。
+		// clusterEndpoints 与 localEndpoints 只设置其一、且 allEndpoints 与之相同时，allEndpoints 可省略。
+		// 即使 allEndpoints 为空，只要 CategorizeEndpoints 返回 true，onlyRemoteEndpoints 就应为 true。
 		clusterEndpoints    sets.Set[string]
 		localEndpoints      sets.Set[string]
 		allEndpoints        sets.Set[string]
@@ -412,6 +411,7 @@ func TestCategorizeEndpoints(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if !tc.preferSameEnabled {
+				// 将特性模拟版本固定在 1.34，使后续开关设置对该特性的行为确定可控。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PreferSameTrafficDistribution, tc.preferSameEnabled)

@@ -32,18 +32,22 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// addDefaultingFuncs 向 scheme 注册本包的默认值生成函数。
 func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_KubeProxyConfiguration 为 KubeProxyConfiguration 中未设置的字段填充默认值。
 func SetDefaults_KubeProxyConfiguration(obj *kubeproxyconfigv1alpha1.KubeProxyConfiguration) {
 
+	// 未指定绑定地址时监听所有 IPv4 地址。
 	if len(obj.BindAddress) == 0 {
 		obj.BindAddress = "0.0.0.0"
 	}
 
 	defaultHealthzAddress, defaultMetricsAddress := getDefaultAddresses(obj.BindAddress)
 
+	// healthz/metrics 默认地址跟随绑定地址的 IP 族，但仅监听本地回环。
 	if obj.HealthzBindAddress == "" {
 		obj.HealthzBindAddress = fmt.Sprintf("%s:%v", defaultHealthzAddress, ports.ProxyHealthzPort)
 	} else {
@@ -55,6 +59,7 @@ func SetDefaults_KubeProxyConfiguration(obj *kubeproxyconfigv1alpha1.KubeProxyCo
 		obj.MetricsBindAddress = proxyutil.AppendPortIfNeeded(obj.MetricsBindAddress, ports.ProxyStatusPort)
 	}
 
+	// OOM 分值沿用 kubelet 的默认设置，保证关键组件优先级一致。
 	if obj.OOMScoreAdj == nil {
 		temp := int32(qos.KubeProxyOOMScoreAdj)
 		obj.OOMScoreAdj = &temp
@@ -78,6 +83,7 @@ func SetDefaults_KubeProxyConfiguration(obj *kubeproxyconfigv1alpha1.KubeProxyCo
 		obj.NFTables.MinSyncPeriod = metav1.Duration{Duration: 1 * time.Second}
 	}
 
+	// Conntrack 容量按每核数设置，并设下限以覆盖小规模节点。
 	if obj.Conntrack.MaxPerCore == nil {
 		obj.Conntrack.MaxPerCore = ptr.To[int32](32 * 1024)
 	}
@@ -97,32 +103,20 @@ func SetDefaults_KubeProxyConfiguration(obj *kubeproxyconfigv1alpha1.KubeProxyCo
 		obj.Conntrack.TCPEstablishedTimeout = &metav1.Duration{Duration: 24 * time.Hour} // 1 day (1/5 default)
 	}
 	if obj.Conntrack.TCPCloseWaitTimeout == nil {
-		// See https://github.com/kubernetes/kubernetes/issues/32551.
-		//
-		// CLOSE_WAIT conntrack state occurs when the Linux kernel
-		// sees a FIN from the remote server. Note: this is a half-close
-		// condition that persists as long as the local side keeps the
-		// socket open. The condition is rare as it is typical in most
-		// protocols for both sides to issue a close; this typically
-		// occurs when the local socket is lazily garbage collected.
-		//
-		// If the CLOSE_WAIT conntrack entry expires, then FINs from the
-		// local socket will not be properly SNAT'd and will not reach the
-		// remote server (if the connection was subject to SNAT). If the
-		// remote timeouts for FIN_WAIT* states exceed the CLOSE_WAIT
-		// timeout, then there will be an inconsistency in the state of
-		// the connection and a new connection reusing the SNAT (src,
-		// port) pair may be rejected by the remote side with RST. This
-		// can cause new calls to connect(2) to return with ECONNREFUSED.
-		//
-		// We set CLOSE_WAIT to one hour by default to better match
-		// typical server timeouts.
+		// 参见 https://github.com/kubernetes/kubernetes/issues/32551。
+		// CLOSE_WAIT 出现在内核收到远端 FIN 且本地套未关闭时（半关闭状态），
+		// 通常在本地套被延迟回收时才会发生。若该 conntrack 记录过期，本地发出的
+		// FIN 将无法正确 SNAT 而到不了对端；若对端 FIN_WAIT* 的超时长于此值，
+		// 双方连接状态会不一致，复用同一 SNAT（源地址、端口）的新连接可能被 RST，
+		// 导致 connect(2) 返回 ECONNREFUSED。故默认设为 1 小时以匹配常见的服务端超时。
 		obj.Conntrack.TCPCloseWaitTimeout = &metav1.Duration{Duration: 1 * time.Hour}
 	}
+	// 配置同步周期默认 15 分钟，兼顾配置更新及时性与 API 压力。
 	if obj.ConfigSyncPeriod.Duration == 0 {
 		obj.ConfigSyncPeriod.Duration = 15 * time.Minute
 	}
 
+	// 默认使用 protobuf 与 API Server 通信，减少序列化开销。
 	if len(obj.ClientConnection.ContentType) == 0 {
 		obj.ClientConnection.ContentType = "application/vnd.kubernetes.protobuf"
 	}
@@ -135,14 +129,14 @@ func SetDefaults_KubeProxyConfiguration(obj *kubeproxyconfigv1alpha1.KubeProxyCo
 	if obj.FeatureGates == nil {
 		obj.FeatureGates = make(map[string]bool)
 	}
-	// Use the Default LoggingConfiguration option
+	// 日志配置采用组件库推荐的默认项。
 	logsapi.SetRecommendedLoggingConfiguration(&obj.Logging)
 }
 
-// getDefaultAddresses returns default address of healthz and metrics server
-// based on the given bind address. IPv6 addresses are enclosed in square
-// brackets for appending port.
+// getDefaultAddresses 根据绑定地址的 IP 族返回 healthz 和 metrics 的默认监听地址；
+// IPv6 地址会用方括号包裹，以便后续追加端口。
 func getDefaultAddresses(bindAddress string) (defaultHealthzAddress, defaultMetricsAddress string) {
+	// IPv4 使用通配地址与回环地址；IPv6 则对应全零与回环地址。
 	if netutils.ParseIPSloppy(bindAddress).To4() != nil {
 		return "0.0.0.0", "127.0.0.1"
 	}

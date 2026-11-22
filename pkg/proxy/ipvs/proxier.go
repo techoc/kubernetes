@@ -56,46 +56,46 @@ import (
 )
 
 const (
-	// kubeServicesChain is the services portal chain
+	// kubeServicesChain 是 Service 的访问入口链（services portal chain）。
 	kubeServicesChain utiliptables.Chain = "KUBE-SERVICES"
 
-	// kubeProxyFirewallChain is the kube-proxy firewall chain.
+	// kubeProxyFirewallChain 是 kube-proxy 的防火墙链。
 	kubeProxyFirewallChain utiliptables.Chain = "KUBE-PROXY-FIREWALL"
 
-	// kubeSourceRangesFirewallChain is the firewall subchain for LoadBalancerSourceRanges.
+	// kubeSourceRangesFirewallChain 是 LoadBalancerSourceRanges 使用的防火墙子链。
 	kubeSourceRangesFirewallChain utiliptables.Chain = "KUBE-SOURCE-RANGES-FIREWALL"
 
-	// kubePostroutingChain is the kubernetes postrouting chain
+	// kubePostroutingChain 是 Kubernetes 的 postrouting 链。
 	kubePostroutingChain utiliptables.Chain = "KUBE-POSTROUTING"
 
-	// kubeMarkMasqChain is the mark-for-masquerade chain
+	// kubeMarkMasqChain 用于给需要伪装（masquerade）的数据包打标记。
 	kubeMarkMasqChain utiliptables.Chain = "KUBE-MARK-MASQ"
 
-	// kubeNodePortChain is the kubernetes node port chain
+	// kubeNodePortChain 是 Kubernetes 的 NodePort 链。
 	kubeNodePortChain utiliptables.Chain = "KUBE-NODE-PORT"
 
-	// kubeForwardChain is the kubernetes forward chain
+	// kubeForwardChain 是 Kubernetes 的 FORWARD 链。
 	kubeForwardChain utiliptables.Chain = "KUBE-FORWARD"
 
-	// kubeLoadBalancerChain is the kubernetes chain for loadbalancer type service
+	// kubeLoadBalancerChain 是 Kubernetes 为 LoadBalancer 类型 Service 创建的链。
 	kubeLoadBalancerChain utiliptables.Chain = "KUBE-LOAD-BALANCER"
 
-	// kubeIPVSFilterChain filters external access to main netns
+	// kubeIPVSFilterChain 用于过滤从外部访问主机主网络命名空间的行为。
 	// https://github.com/kubernetes/kubernetes/issues/72236
 	kubeIPVSFilterChain utiliptables.Chain = "KUBE-IPVS-FILTER"
 
-	// kubeIPVSOutFilterChain filters access to load balancer services from node.
+	// kubeIPVSOutFilterChain 用于过滤从节点访问 LoadBalancer Service 的行为。
 	// https://github.com/kubernetes/kubernetes/issues/119656
 	kubeIPVSOutFilterChain utiliptables.Chain = "KUBE-IPVS-OUT-FILTER"
 
-	// defaultScheduler is the default ipvs scheduler algorithm - round robin.
+	// defaultScheduler 是默认的 IPVS 调度算法：轮询（round robin）。
 	defaultScheduler = "rr"
 
-	// defaultDummyDevice is the default dummy interface which ipvs service address will bind to it.
+	// defaultDummyDevice 是默认的 dummy 网卡，IPVS 的 Service 地址会绑定到它上面。
 	defaultDummyDevice = "kube-ipvs0"
 )
 
-// In IPVS proxy mode, the following flags need to be set
+// 在 IPVS 代理模式下，需要设置以下 sysctl 参数。
 const (
 	sysctlVSConnTrack             = "net/ipv4/vs/conntrack"
 	sysctlConnReuse               = "net/ipv4/vs/conn_reuse_mode"
@@ -106,7 +106,7 @@ const (
 	sysctlArpAnnounce             = "net/ipv4/conf/all/arp_announce"
 )
 
-// NewDualStackProxier returns a new Proxier for dual-stack operation
+// NewDualStackProxier 返回一个用于双栈（dual-stack）场景的 Proxier。
 func NewDualStackProxier(
 	ctx context.Context,
 	config *kubeproxyconfig.KubeProxyConfiguration,
@@ -121,7 +121,7 @@ func NewDualStackProxier(
 	healthzServer *healthcheck.ProxyHealthServer,
 	initOnly bool,
 ) (proxy.Provider, error) {
-	// Create an ipv4 instance of the single-stack proxier
+	// 先创建 IPv4 的单栈 Proxier 实例。
 	ipv4Proxier, err := NewProxier(ctx, config, v1.IPv4Protocol, ipts[v1.IPv4Protocol], ipvs, ipset, sysctl,
 		localDetectors[v1.IPv4Protocol], nodeName, nodeIPs[v1.IPv4Protocol], recorder,
 		healthzServer, initOnly)
@@ -135,49 +135,50 @@ func NewDualStackProxier(
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ipv6 proxier: %v", err)
 	}
+	// --init-only 只完成系统级初始化（sysctl 与超时），不构建 Proxier 对象。
 	if initOnly {
 		return nil, nil
 	}
 
-	// Return a meta-proxier that dispatch calls between the two
-	// single-stack proxier instances
+	// 返回一个 meta-proxier，由它在两个单栈 Proxier 实例之间分发调用。
+	// 两个实例分别负责一个 IP 协议族。
 	return metaproxier.NewMetaProxier(ipv4Proxier, ipv6Proxier), nil
 }
 
-// Proxier is an ipvs-based proxy
+// Proxier 是基于 IPVS 实现的代理。
 type Proxier struct {
-	// the ipfamily on which this proxy is operating on.
+	// ipFamily 是该代理所服务的 IP 协议族。
 	ipFamily v1.IPFamily
-	// endpointsChanges and serviceChanges contains all changes to endpoints and
-	// services that happened since last syncProxyRules call. For a single object,
-	// changes are accumulated, i.e. previous is state from before all of them,
-	// current is state after applying all of those.
+	// endpointsChanges 和 serviceChanges 保存自上次 syncProxyRules 以来，
+	// Endpoint 与 Service 发生的全部变更。对单个对象而言，变更会被累积：
+	// previous 是这一批变更发生之前的状态，
+	// current 是应用全部变更之后的状态。
 	endpointsChanges *proxy.EndpointsChangeTracker
 	serviceChanges   *proxy.ServiceChangeTracker
 
-	mu             sync.Mutex // protects the following fields
+	mu             sync.Mutex // 保护以下字段。
 	svcPortMap     proxy.ServicePortMap
 	endpointsMap   proxy.EndpointsMap
 	topologyLabels map[string]string
-	// initialSync is a bool indicating if the proxier is syncing for the first time.
-	// It is set to true when a new proxier is initialized and then set to false on all
-	// future syncs.
-	// This lets us run specific logic that's required only during proxy startup.
-	// For eg: it enables us to update weights of existing destinations only on startup
-	// saving us the cost of querying and updating real servers during every sync.
+	// initialSync 表示 Proxier 当前是否在进行首次同步。
+	// 新建 Proxier 时置为 true，之后的所有同步都会将其置为 false。
+	// （即只有第一次同步时该标志为 true。）
+	// 这样可以执行一些仅在代理启动阶段需要的特殊逻辑。
+	// 例如，只在启动时更新已有 RealServer 的权重，
+	// 避免每次同步都查询并更新 RealServer，从而节省开销。
 	initialSync bool
-	// endpointSlicesSynced, and servicesSynced are set to true when
-	// corresponding objects are synced after startup. This is used to avoid updating
-	// ipvs rules with some partial data after kube-proxy restart.
+	// endpointSlicesSynced 与 servicesSynced 在启动后对应对象
+	// 完成同步时置为 true，用于避免 kube-proxy 重启后
+	// 使用不完整的数据更新 IPVS 规则。
 	endpointSlicesSynced bool
 	servicesSynced       bool
 	initialized          int32
 	syncRunner           *runner.BoundedFrequencyRunner // governs calls to syncProxyRules
 
-	// These are effectively const and do not need the mutex to be held.
+	// 以下字段实际上是常量，访问时无需持有互斥锁。
 	syncPeriod    time.Duration
 	minSyncPeriod time.Duration
-	// Values are CIDR's to exclude when cleaning up IPVS rules.
+	// excludeCIDRs 是清理 IPVS 规则时需要排除的 CIDR 列表。
 	excludeCIDRs []*net.IPNet
 
 	iptables       utiliptables.Interface
@@ -194,51 +195,51 @@ type Proxier struct {
 	healthzServer       *healthcheck.ProxyHealthServer
 
 	ipvsScheduler string
-	// The following buffers are used to reuse memory and avoid allocations
-	// that are significantly impacting performance.
+	// 以下缓冲区用于复用内存，避免频繁分配，
+	// 否则会对性能造成明显影响。
 	iptablesData     *bytes.Buffer
 	filterChainsData *bytes.Buffer
 	natChains        proxyutil.LineBuffer
 	filterChains     proxyutil.LineBuffer
 	natRules         proxyutil.LineBuffer
 	filterRules      proxyutil.LineBuffer
-	// Added as a member to the struct to allow injection for testing.
+	// 将其作为结构体成员，便于在测试中注入替身实现。
 	netlinkHandle NetLinkHandle
-	// ipsetList is the list of ipsets that ipvs proxier used.
+	// ipsetList 是 IPVS Proxier 使用的 ipset 集合列表。
 	ipsetList map[string]*IPSet
-	// nodePortAddresses selects the interfaces where nodePort works.
+	// nodePortAddresses 用于选择 NodePort 生效的网卡。
 	nodePortAddresses *proxyutil.NodePortAddresses
-	// networkInterfacer defines an interface for several net library functions.
-	// Inject for test purpose.
+	// networkInterfacer 封装了若干 net 库函数的接口，
+	// 注入它以便测试。
 	networkInterfacer     proxyutil.NetworkInterfacer
 	gracefuldeleteManager *GracefulTerminationManager
-	// serviceNoLocalEndpointsInternal represents the set of services that couldn't be applied
-	// due to the absence of local endpoints when the internal traffic policy is "Local".
-	// It is used to publish the sync_proxy_rules_no_endpoints_total
-	// metric with the traffic_policy label set to "internal".
-	// A Set is used here since we end up calculating endpoint topology multiple times for the same Service
-	// if it has multiple ports but each Service should only be counted once.
+	// serviceNoLocalEndpointsInternal 记录因 internalTrafficPolicy 为 "Local" 但缺少
+	// 本地 Endpoint 而无法生效的 Service 集合。
+	// 它用于上报 sync_proxy_rules_no_endpoints_total 指标，
+	// 其中 traffic_policy 标签取值为 "internal"。
+	// 使用 Set 是因为同一个 Service 有多个端口时会被多次计算 Endpoint 拓扑，
+	// 但每个 Service 在指标中只应被统计一次。
 	serviceNoLocalEndpointsInternal sets.Set[string]
-	// serviceNoLocalEndpointsExternal represents the set of services that couldn't be applied
-	// due to the absence of any endpoints when the external traffic policy is "Local".
-	// It is used to publish the sync_proxy_rules_no_endpoints_total
-	// metric with the traffic_policy label set to "external".
-	// A Set is used here since we end up calculating endpoint topology multiple times for the same Service
-	// if it has multiple ports but each Service should only be counted once.
+	// serviceNoLocalEndpointsExternal 记录因 externalTrafficPolicy 为 "Local" 但缺少
+	// 任何 Endpoint 而无法生效的 Service 集合。
+	// 它用于上报 sync_proxy_rules_no_endpoints_total 指标，
+	// 其中 traffic_policy 标签取值为 "external"。
+	// 使用 Set 是因为同一个 Service 有多个端口时会被多次计算 Endpoint 拓扑，
+	// 但每个 Service 在指标中只应被统计一次。
 	serviceNoLocalEndpointsExternal sets.Set[string]
-	// lbNoNodeAccessIPPortProtocolEntries represents the set of loadBalancers IP + Port + Protocol that should not be accessible from K8s nodes
-	// We cannot directly restrict LB access from node using LoadBalancerSourceRanges, we need to install
-	// additional iptables rules.
+	// lbNoNodeAccessIPPortProtocolEntries 记录不允许从 K8s 节点访问的 LoadBalancer IP+端口+协议组合。
+	// LoadBalancerSourceRanges 无法直接限制来自节点的访问，因此需要额外安装
+	// iptables 规则。
 	// (ref: https://github.com/kubernetes/kubernetes/issues/119656)
 	lbNoNodeAccessIPPortProtocolEntries []*utilipset.Entry
 
 	logger klog.Logger
 }
 
-// Proxier implements proxy.Provider
+// Proxier 实现了 proxy.Provider 接口。
 var _ proxy.Provider = &Proxier{}
 
-// NewProxier returns a new single-stack IPVS proxier.
+// NewProxier 返回一个单栈 IPVS Proxier。
 func NewProxier(
 	ctx context.Context,
 	config *kubeproxyconfig.KubeProxyConfiguration,
@@ -255,7 +256,8 @@ func NewProxier(
 	initOnly bool,
 ) (*Proxier, error) {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "ipFamily", ipFamily)
-	// Set the conntrack sysctl we need for
+	// 设置 IPVS 所需的 conntrack sysctl 参数。
+	// 连接跟踪是 conntrack 清理与 NAT 逻辑的基础，必须先开启。
 	if err := proxyutil.EnsureSysctl(sysctl, sysctlVSConnTrack, 1); err != nil {
 		return nil, err
 	}
@@ -265,69 +267,74 @@ func NewProxier(
 		return nil, fmt.Errorf("failed to get kernel version: %w", err)
 	}
 
+	// conn_reuse_mode 在不同内核版本上行为不同，需要按版本分别处理。
 	if kernelVersion.LessThan(version.MustParseGeneric(utilkernel.IPVSConnReuseModeMinSupportedKernelVersion)) {
 		logger.Error(nil, "Can't set sysctl, kernel version doesn't satisfy minimum version requirements", "sysctl", sysctlConnReuse, "minimumKernelVersion", utilkernel.IPVSConnReuseModeMinSupportedKernelVersion)
 	} else if kernelVersion.AtLeast(version.MustParseGeneric(utilkernel.IPVSConnReuseModeFixedKernelVersion)) {
 		// https://github.com/kubernetes/kubernetes/issues/93297
 		logger.V(2).Info("Left as-is", "sysctl", sysctlConnReuse)
 	} else {
-		// Set the connection reuse mode
+		// 设置连接复用模式。
 		if err := proxyutil.EnsureSysctl(sysctl, sysctlConnReuse, 0); err != nil {
 			return nil, err
 		}
 	}
 
-	// Set the expire_nodest_conn sysctl we need for
+	// 设置 expire_nodest_conn，使后端消失后能尽快断开旧连接。
 	if err := proxyutil.EnsureSysctl(sysctl, sysctlExpireNoDestConn, 1); err != nil {
 		return nil, err
 	}
 
-	// Set the expire_quiescent_template sysctl we need for
+	// 设置 expire_quiescent_template，使权重为 0 的后端连接能被及时清理。
 	if err := proxyutil.EnsureSysctl(sysctl, sysctlExpireQuiescentTemplate, 1); err != nil {
 		return nil, err
 	}
 
-	// Set the ip_forward sysctl we need for
+	// 开启 IP 转发，IPVS 才能把报文转发给后端。
 	if err := proxyutil.EnsureSysctl(sysctl, sysctlForward, 1); err != nil {
 		return nil, err
 	}
 
+	// StrictARP 模式下必须调整 ARP 参数，避免其他节点抢答 Service IP 的 ARP 请求。
 	if config.IPVS.StrictARP {
-		// Set the arp_ignore sysctl we need for
+		// 设置 arp_ignore，避免节点响应不属于自己的 VIP 的 ARP 请求。
 		if err := proxyutil.EnsureSysctl(sysctl, sysctlArpIgnore, 1); err != nil {
 			return nil, err
 		}
 
-		// Set the arp_announce sysctl we need for
+		// 设置 arp_announce，使 ARP 应答使用正确的源地址。
 		if err := proxyutil.EnsureSysctl(sysctl, sysctlArpAnnounce, 2); err != nil {
 			return nil, err
 		}
 	}
 
-	// Configure IPVS timeouts if any one of the timeout parameters have been set.
-	// This is the equivalent to running ipvsadm --set, a value of 0 indicates the
-	// current system timeout should be preserved
+	// 只要设置了任意一个超时参数，就统一配置 IPVS 的超时时间。
+	// 效果等同于执行 ipvsadm --set；取值为 0 表示保留
+	// 系统当前的超时设置。
 	tcpTimeout := config.IPVS.TCPTimeout.Duration
 	tcpFinTimeout := config.IPVS.TCPFinTimeout.Duration
 	udpTimeout := config.IPVS.UDPTimeout.Duration
+	// 三个超时值中任意一个非零才需要调用 ConfigureTimeouts；0 代表沿用系统默认值。
 	if tcpTimeout > 0 || tcpFinTimeout > 0 || udpTimeout > 0 {
 		if err := ipvs.ConfigureTimeouts(tcpTimeout, tcpFinTimeout, udpTimeout); err != nil {
 			logger.Error(err, "Failed to configure IPVS timeouts")
 		}
 	}
 
+	// --init-only 只完成系统级初始化（sysctl 与超时），不构建 Proxier 对象。
 	if initOnly {
 		logger.Info("System initialized and --init-only specified")
 		return nil, nil
 	}
 
-	// Generate the masquerade mark to use for SNAT rules.
+	// 生成供 SNAT 规则使用的 masquerade 标记。
 	masqueradeValue := 1 << uint(*config.IPTables.MasqueradeBit)
 	masqueradeMark := fmt.Sprintf("%#08x", masqueradeValue)
 
 	logger.V(2).Info("Record nodeIP and family", "nodeIP", nodeIP, "family", ipFamily)
 
 	scheduler := config.IPVS.Scheduler
+	// 用户未指定调度算法时回退到默认的轮询算法。
 	if len(scheduler) == 0 {
 		logger.Info("IPVS scheduler not specified, use rr by default")
 		scheduler = defaultScheduler
@@ -343,6 +350,7 @@ func NewProxier(
 	excludeCIDRs := filterCIDRs(ipFamily == v1.IPv6Protocol, config.IPVS.ExcludeCIDRs)
 	parsedExcludeCIDRs, _ := netutils.ParseCIDRs(excludeCIDRs)
 
+	// initialSync 初始为 true，仅首次同步会重置已有 RealServer 的权重。
 	proxier := &Proxier{
 		ipFamily:              ipFamily,
 		svcPortMap:            make(proxy.ServicePortMap),
@@ -377,7 +385,7 @@ func NewProxier(
 		gracefuldeleteManager: NewGracefulTerminationManager(ipvs),
 		logger:                logger,
 	}
-	// initialize ipsetList with all sets we needed
+	// 用所需的全部 ipset 初始化 ipsetList。
 	proxier.ipsetList = make(map[string]*IPSet)
 	for _, is := range ipsetInfo {
 		proxier.ipsetList[is.name] = NewIPSet(ipset, is.name, is.setType, (ipFamily == v1.IPv6Protocol), is.comment)
@@ -386,10 +394,12 @@ func NewProxier(
 	logger.V(2).Info("ipvs sync params", "minSyncPeriod", minSyncPeriod, "syncPeriod", syncPeriod, "maxSyncPeriod", syncPeriod)
 	proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, syncPeriod)
 
+	// 启动优雅删除管理器，由它异步处理处于 termination 状态的 RealServer。
 	proxier.gracefuldeleteManager.Run()
 	return proxier, nil
 }
 
+// filterCIDRs 从 CIDR 列表中筛出与指定 IP 协议族匹配的条目。
 func filterCIDRs(wantIPv6 bool, cidrs []string) []string {
 	var filteredCIDRs []string
 	for _, cidr := range cidrs {
@@ -400,9 +410,9 @@ func filterCIDRs(wantIPv6 bool, cidrs []string) []string {
 	return filteredCIDRs
 }
 
-// iptablesJumpChain is tables of iptables chains that ipvs proxier used to install iptables or cleanup iptables.
-// `to` is the iptables chain we want to operate.
-// `from` is the source iptables chain
+// iptablesJumpChain 记录了 IPVS Proxier 安装或清理 iptables 规则时涉及的链跳转关系。
+// `to` 是目标 iptables 链。
+// `from` 是源 iptables 链。
 var iptablesJumpChain = []struct {
 	table   utiliptables.Table
 	from    utiliptables.Chain
@@ -420,6 +430,7 @@ var iptablesJumpChain = []struct {
 	{utiliptables.TableFilter, utiliptables.ChainOutput, kubeIPVSOutFilterChain, "kubernetes ipvs access filter"},
 }
 
+// iptablesChains 列出需要创建并写入 iptables-restore 输入的 kube 链。
 var iptablesChains = []struct {
 	table utiliptables.Table
 	chain utiliptables.Chain
@@ -437,6 +448,7 @@ var iptablesChains = []struct {
 	{utiliptables.TableFilter, kubeIPVSOutFilterChain},
 }
 
+// iptablesCleanupChains 列出清理阶段需要处理的 kube 链。
 var iptablesCleanupChains = []struct {
 	table utiliptables.Table
 	chain utiliptables.Chain
@@ -454,7 +466,7 @@ var iptablesCleanupChains = []struct {
 	{utiliptables.TableFilter, kubeIPVSOutFilterChain},
 }
 
-// ipsetInfo is all ipset we needed in ipvs proxier
+// ipsetInfo 列出 IPVS Proxier 所需的全部 ipset 及其类型和注释。
 var ipsetInfo = []struct {
 	name    string
 	setType utilipset.Type
@@ -479,11 +491,12 @@ var ipsetInfo = []struct {
 	{kubeIPVSSet, utilipset.HashIP, kubeIPVSSetComment},
 }
 
-// ipsetWithIptablesChain is the ipsets list with iptables source chain and the chain jump to
+// ipsetWithIptablesChain 定义了 ipset 与 iptables 源链、目标跳链之间的对应关系。
 // `iptables -t nat -A <from> -m set --match-set <name> <matchType> -j <to>`
-// example: iptables -t nat -A KUBE-SERVICES -m set --match-set KUBE-NODE-PORT-TCP dst -j KUBE-NODE-PORT
-// ipsets with other match rules will be created Individually.
-// Note: kubeNodePortLocalSetTCP must be prior to kubeNodePortSetTCP, the same for UDP.
+// 示例：iptables -t nat -A KUBE-SERVICES -m set --match-set KUBE-NODE-PORT-TCP dst -j KUBE-NODE-PORT
+// 需要其他匹配规则的 ipset 会单独创建。
+// 注意：kubeNodePortLocalSetTCP 必须排在 kubeNodePortSetTCP 之前，UDP 同理；
+// 这样本地流量先命中 RETURN，而不会被后续的 MASQUERADE 规则改写。
 var ipsetWithIptablesChain = []struct {
 	name          string
 	table         utiliptables.Table
@@ -507,18 +520,18 @@ var ipsetWithIptablesChain = []struct {
 	{kubeLoadBalancerSourceIPSet, utiliptables.TableFilter, string(kubeSourceRangesFirewallChain), "RETURN", "dst,dst,src", ""},
 }
 
-// internal struct for string service information
+// servicePortInfo 是 ServicePort 的内部实现，缓存了字符串形式的名称以提升性能。
 type servicePortInfo struct {
 	*proxy.BaseServicePortInfo
-	// The following fields are computed and stored for performance reasons.
+	// 以下字段提前计算并缓存，避免热路径上的重复计算。
 	nameString string
 }
 
-// returns a new proxy.ServicePort which abstracts a serviceInfo
+// newServiceInfo 返回一个封装 serviceInfo 的 proxy.ServicePort。
 func newServiceInfo(port *v1.ServicePort, service *v1.Service, bsvcPortInfo *proxy.BaseServicePortInfo) proxy.ServicePort {
 	svcPort := &servicePortInfo{BaseServicePortInfo: bsvcPortInfo}
 
-	// Store the following for performance reasons.
+	// 提前计算并保存，避免后续反复拼接名称字符串。
 	svcName := types.NamespacedName{Namespace: service.Namespace, Name: service.Name}
 	svcPortName := proxy.ServicePortName{NamespacedName: svcName, Port: port.Name}
 	svcPort.nameString = svcPortName.String()
@@ -526,8 +539,8 @@ func newServiceInfo(port *v1.ServicePort, service *v1.Service, bsvcPortInfo *pro
 	return svcPort
 }
 
-// getFirstColumn reads all the content from r into memory and return a
-// slice which consists of the first word from each line.
+// getFirstColumn 读取 r 的全部内容，并返回由每行第一个字段组成的切片。
+// 每行按空白切分后取第一个词；调用方需确保 r 的内容规模可控。
 func getFirstColumn(r io.Reader) ([]string, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
@@ -545,26 +558,29 @@ func getFirstColumn(r io.Reader) ([]string, error) {
 	return words, nil
 }
 
-// Sync is called to synchronize the proxier state to iptables and ipvs as soon as possible.
+// Sync 用于尽快将 Proxier 的内部状态同步到 iptables 与 IPVS。
 func (proxier *Proxier) Sync() {
 	if proxier.healthzServer != nil {
 		proxier.healthzServer.QueuedUpdate(proxier.ipFamily)
 	}
+	// 记录排队时间，供同步延迟指标统计。
 	metrics.SyncProxyRulesLastQueuedTimestamp.WithLabelValues(string(proxier.ipFamily)).SetToCurrentTime()
 	proxier.syncRunner.Run()
 }
 
-// SyncLoop runs periodic work.  This is expected to run as a goroutine or as the main loop of the app.  It does not return.
+// SyncLoop 执行周期性同步任务，通常作为 goroutine 或应用主循环运行，且不会返回。
 func (proxier *Proxier) SyncLoop() {
-	// Update healthz timestamp at beginning in case Sync() never succeeds.
+	// 一开始就更新 healthz 时间戳，避免 Sync() 从未成功时健康检查误判。
 	if proxier.healthzServer != nil {
 		proxier.healthzServer.Updated(proxier.ipFamily)
 	}
-	// synthesize "last change queued" time as the informers are syncing.
+	// informer 正在同步时没有真实的变更事件，这里人为写入一个“最后排队时间”。
+	// 记录排队时间，供同步延迟指标统计。
 	metrics.SyncProxyRulesLastQueuedTimestamp.WithLabelValues(string(proxier.ipFamily)).SetToCurrentTime()
 	proxier.syncRunner.Loop(wait.NeverStop)
 }
 
+// setInitialized 以原子方式设置 Proxier 的初始化状态，避免与读取端产生数据竞争。
 func (proxier *Proxier) setInitialized(value bool) {
 	var initialized int32
 	if value {
@@ -573,75 +589,76 @@ func (proxier *Proxier) setInitialized(value bool) {
 	atomic.StoreInt32(&proxier.initialized, initialized)
 }
 
+// isInitialized 以原子方式读取 Proxier 是否已完成初始化。
 func (proxier *Proxier) isInitialized() bool {
 	return atomic.LoadInt32(&proxier.initialized) > 0
 }
 
-// OnServiceAdd is called whenever creation of new service object is observed.
+// OnServiceAdd 在观察到新建 Service 对象时被调用。
 func (proxier *Proxier) OnServiceAdd(service *v1.Service) {
 	proxier.OnServiceUpdate(nil, service)
 }
 
-// OnServiceUpdate is called whenever modification of an existing service object is observed.
+// OnServiceUpdate 在观察到已有 Service 对象被修改时被调用。
 func (proxier *Proxier) OnServiceUpdate(oldService, service *v1.Service) {
 	if proxier.serviceChanges.Update(oldService, service) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnServiceDelete is called whenever deletion of an existing service object is observed.
+// OnServiceDelete 在观察到已有 Service 对象被删除时被调用。
 func (proxier *Proxier) OnServiceDelete(service *v1.Service) {
 	proxier.OnServiceUpdate(service, nil)
 }
 
-// OnServiceSynced is called once all the initial event handlers were called and the state is fully propagated to local cache.
+// OnServiceSynced 在所有初始事件处理函数都已调用、状态完全同步到本地缓存后调用一次。
 func (proxier *Proxier) OnServiceSynced() {
 	proxier.mu.Lock()
 	proxier.servicesSynced = true
 	proxier.setInitialized(proxier.endpointSlicesSynced)
 	proxier.mu.Unlock()
 
-	// Sync unconditionally - this is called once per lifetime.
+	// 这里无条件触发同步：该回调在整个生命周期中只调用一次。
 	proxier.syncProxyRules()
 }
 
-// OnEndpointSliceAdd is called whenever creation of a new endpoint slice object
-// is observed.
+// OnEndpointSliceAdd 在观察到新的 EndpointSlice 对象
+// 时被调用。
 func (proxier *Proxier) OnEndpointSliceAdd(endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, false) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSliceUpdate is called whenever modification of an existing endpoint
-// slice object is observed.
+// OnEndpointSliceUpdate 在观察到已有 EndpointSlice 对象
+// 被修改时被调用。
 func (proxier *Proxier) OnEndpointSliceUpdate(_, endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, false) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSliceDelete is called whenever deletion of an existing endpoint slice
-// object is observed.
+// OnEndpointSliceDelete 在观察到已有 EndpointSlice 对象
+// 被删除时被调用。
 func (proxier *Proxier) OnEndpointSliceDelete(endpointSlice *discovery.EndpointSlice) {
 	if proxier.endpointsChanges.EndpointSliceUpdate(endpointSlice, true) && proxier.isInitialized() {
 		proxier.Sync()
 	}
 }
 
-// OnEndpointSlicesSynced is called once all the initial event handlers were
-// called and the state is fully propagated to local cache.
+// OnEndpointSlicesSynced 在所有初始事件处理函数都已调用、
+// 且状态完全同步到本地缓存后调用一次。
 func (proxier *Proxier) OnEndpointSlicesSynced() {
 	proxier.mu.Lock()
 	proxier.endpointSlicesSynced = true
 	proxier.setInitialized(proxier.servicesSynced)
 	proxier.mu.Unlock()
 
-	// Sync unconditionally - this is called once per lifetime.
+	// 这里无条件触发同步：该回调在整个生命周期中只调用一次。
 	proxier.syncProxyRules()
 }
 
-// OnTopologyChange is called whenever this node's proxy relevant topology-related labels change.
+// OnTopologyChange 在本节点与代理相关的拓扑标签发生变化时被调用。
 func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
 	proxier.mu.Lock()
 	proxier.topologyLabels = topologyLabels
@@ -650,38 +667,39 @@ func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
 	proxier.Sync()
 }
 
-// OnServiceCIDRsChanged is called whenever a change is observed
-// in any of the ServiceCIDRs, and provides complete list of service cidrs.
+// OnServiceCIDRsChanged 在 Service CIDR 发生变化时被调用，
+// 参数提供完整的 Service CIDR 列表；IPVS 代理无需处理，故为空实现。
 func (proxier *Proxier) OnServiceCIDRsChanged(_ []string) {}
 
-// This is where all of the ipvs calls happen.
+// syncProxyRules 是实际下发 IPVS 与 iptables 规则的核心逻辑。
 func (proxier *Proxier) syncProxyRules() (retryError error) {
 	proxier.mu.Lock()
 	defer proxier.mu.Unlock()
 
-	// don't sync rules till we've received services and endpoints
+	// 在 Service 与 EndpointSlice 都完成初始同步前不下发规则，避免写入不完整数据。
 	if !proxier.isInitialized() {
 		proxier.logger.V(2).Info("Not syncing ipvs rules until Services and Endpoints have been received from master")
 		return
 	}
 
-	// its safe to set initialSync to false as it acts as a flag for startup actions
-	// and the mutex is held.
+	// 此时可以安全地清除 initialSync：它只用于启动阶段，
+	// 而且此处已经持有互斥锁。
 	defer func() {
 		proxier.initialSync = false
 	}()
 
-	// Keep track of how long syncs take.
+	// 记录本次同步耗时，用于指标与日志。
 	start := time.Now()
 	defer func() {
 		metrics.SyncProxyRulesLatency.WithLabelValues(string(proxier.ipFamily)).Observe(metrics.SinceInSeconds(start))
 		proxier.logger.V(4).Info("syncProxyRules complete", "elapsed", time.Since(start))
 	}()
 
-	// We assume that if this was called, we really want to sync them,
-	// even if nothing changed in the meantime. In other words, callers are
-	// responsible for detecting no-op changes and not calling this function.
+	// 调用本函数即表示确实需要同步，
+	// 即使期间没有任何变更也是如此；换句话说，调用方需要
+	// 自行判断是否为无效变更，避免不必要的调用。
 	_ = proxier.svcPortMap.Update(proxier.serviceChanges)
+	// 先把累积的变更应用到内存中的 Service/Endpoint 映射，后续规则全部基于新快照生成。
 	endpointUpdateResult := proxier.endpointsMap.Update(proxier.endpointsChanges)
 
 	proxier.logger.V(3).Info("Syncing ipvs proxier rules")
@@ -691,51 +709,54 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 
 	proxier.lbNoNodeAccessIPPortProtocolEntries = make([]*utilipset.Entry, 0)
 
-	// Begin install iptables
+	// 开始准备 iptables 规则。
 
-	// Reset all buffers used later.
-	// This is to avoid memory reallocations and thus improve performance.
+	// 复用缓冲区前先清空，
+	// 避免反复分配内存，从而提升性能。
 	proxier.natChains.Reset()
 	proxier.natRules.Reset()
 	proxier.filterChains.Reset()
 	proxier.filterRules.Reset()
 
-	// Write table headers.
+	// 写入 iptables-restore 所需的表头。
 	proxier.filterChains.Write("*filter")
 	proxier.natChains.Write("*nat")
 
 	proxier.createAndLinkKubeChain()
 
-	// make sure dummy interface exists in the system where ipvs Proxier will bind service address on it
+	// 确保 dummy 网卡存在，IPVS 的 Service 地址需要绑定到它上面。
+	// dummy 网卡是 VIP 的承载点，创建失败时后续规则无法生效，直接返回。
 	_, err := proxier.netlinkHandle.EnsureDummyDevice(defaultDummyDevice)
 	if err != nil {
 		proxier.logger.Error(err, "Failed to create dummy interface", "interface", defaultDummyDevice)
 		return
 	}
 
-	// make sure ip sets exists in the system.
+	// 确保所需的 ipset 都已存在；每次同步都会重建其条目。
 	for _, set := range proxier.ipsetList {
+		// ipset 不存在时先创建，失败则中止本轮同步，避免生成引用不存在集合的规则。
 		if err := ensureIPSet(set); err != nil {
 			return
 		}
 		set.resetEntries()
 	}
 
-	// activeIPVSServices represents IPVS service successfully created in this round of sync
+	// activeIPVSServices 记录本轮同步中成功创建的 IPVS Service。
 	activeIPVSServices := sets.New[string]()
-	// activeBindAddrs Represents addresses we want on the defaultDummyDevice after this round of sync
+	// activeBindAddrs 记录本轮同步结束后应保留在 dummy 网卡上的地址。
 	activeBindAddrs := sets.New[string]()
-	// alreadyBoundAddrs Represents addresses currently assigned to the dummy interface
+	// alreadyBoundAddrs 是 dummy 网卡当前已有的地址，用于判断是否需要重新绑定。
 	alreadyBoundAddrs, err := proxier.netlinkHandle.GetLocalAddresses(defaultDummyDevice)
 	if err != nil {
 		proxier.logger.Error(err, "Error listing addresses binded to dummy interface")
 	}
-	// nodeAddressSet All addresses *except* those on the dummy interface
+	// nodeAddressSet 是节点上除 dummy 网卡之外的所有地址。
 	nodeAddressSet, err := proxier.netlinkHandle.GetAllLocalAddressesExcept(defaultDummyDevice)
 	if err != nil {
 		proxier.logger.Error(err, "Error listing node addresses")
 	}
 
+	// 先判断是否存在 NodePort 服务，只有存在时才需要计算节点 IP 列表。
 	hasNodePort := false
 	for _, svc := range proxier.svcPortMap {
 		svcInfo, ok := svc.(*servicePortInfo)
@@ -745,8 +766,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// List of node IP addresses to be used as IPVS services if nodePort is set. This
-	// can be reused for all nodePort services.
+	// 存在 NodePort 服务时，同一批节点 IP 可复用于所有 NodePort Service，
+	// 因此这里只计算一次。
 	var nodeIPs []net.IP
 	if hasNodePort {
 		if proxier.nodePortAddresses.MatchAll() {
@@ -767,7 +788,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// Build IPVS rules for each service.
+	// 逐个 Service 构建 IPVS 规则。
 	for svcPortName, svcPort := range proxier.svcPortMap {
 		svcInfo, ok := svcPort.(*servicePortInfo)
 		if !ok {
@@ -776,11 +797,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 
 		protocol := strings.ToLower(string(svcInfo.Protocol()))
-		// Precompute svcNameString; with many services the many calls
-		// to ServicePortName.String() show up in CPU profiles.
+		// 预先计算名称字符串：Service 数量较多时，
+		// 反复调用 ServicePortName.String() 会在 CPU profile 中显现。
 		svcPortNameString := svcPortName.String()
 
-		// Handle traffic that loops back to the originator with SNAT.
+		// 处理发端自身的回环流量（hairpin），通过 SNAT 改写源地址。
 		for _, e := range proxier.endpointsMap[svcPortName] {
 			ep, ok := e.(*proxy.BaseEndpointInfo)
 			if !ok {
@@ -792,7 +813,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 			epIP := ep.IP()
 			epPort := ep.Port()
-			// Error parsing this endpoint has been logged. Skip to next endpoint.
+			// 解析失败的 Endpoint 已记录日志，跳过即可。
 			if epIP == "" || epPort == 0 {
 				continue
 			}
@@ -810,43 +831,43 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			proxier.ipsetList[kubeLoopBackIPSet].activeEntries.Insert(entry.String())
 		}
 
-		// Capture the clusterIP.
-		// ipset call
+		// 处理 ClusterIP，为其建立 IPVS 虚拟服务。
+		// 调用 ipset 接口。
 		entry := &utilipset.Entry{
 			IP:       svcInfo.ClusterIP().String(),
 			Port:     svcInfo.Port(),
 			Protocol: protocol,
 			SetType:  utilipset.HashIPPort,
 		}
-		// add service Cluster IP:Port to kubeServiceAccess ip set for the purpose of solving hairpin.
+		// 将 ClusterIP:Port 加入 ipset，供 iptables 识别需要处理 hairpin 的流量。
 		// proxier.kubeServiceAccessSet.activeEntries.Insert(entry.String())
 		if valid := proxier.ipsetList[kubeClusterIPSet].validateEntry(entry); !valid {
 			proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeClusterIPSet].Name)
 			continue
 		}
 		proxier.ipsetList[kubeClusterIPSet].activeEntries.Insert(entry.String())
-		// ipvs call
+		// 调用 IPVS 接口。
 		serv := &utilipvs.VirtualServer{
 			Address:   svcInfo.ClusterIP(),
 			Port:      uint16(svcInfo.Port()),
 			Protocol:  string(svcInfo.Protocol()),
 			Scheduler: proxier.ipvsScheduler,
 		}
-		// Set session affinity flag and timeout for IPVS service
+		// 为 IPVS Service 设置会话保持标志与超时时间。
 		if svcInfo.SessionAffinityType() == v1.ServiceAffinityClientIP {
 			serv.Flags |= utilipvs.FlagPersistent
 			serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 		}
-		// Set the source hash flag needed for the distribution method "mh"
+		// "mh"（源地址哈希）调度算法需要额外设置 source hash 标志。
 		if proxier.ipvsScheduler == "mh" {
 			serv.Flags |= utilipvs.FlagSourceHash
 		}
-		// We need to bind ClusterIP to dummy interface, so set `bindAddr` parameter to `true` in syncService()
+		// ClusterIP 必须绑定到 dummy 网卡，因此 syncService() 的 bindAddr 传 true。
 		if err := proxier.syncService(svcPortNameString, serv, true, alreadyBoundAddrs); err == nil {
 			activeIPVSServices.Insert(serv.String())
 			activeBindAddrs.Insert(serv.Address.String())
-			// ExternalTrafficPolicy only works for NodePort and external LB traffic, does not affect ClusterIP
-			// So we still need clusterIP rules in onlyNodeLocalEndpoints mode.
+			// ExternalTrafficPolicy 只作用于 NodePort 与外部 LB 流量，不影响 ClusterIP，
+			// 因此即使 externalTrafficPolicy=Local，也仍需创建 ClusterIP 规则。
 			internalNodeLocal := false
 			if svcInfo.InternalPolicyLocal() {
 				internalNodeLocal = true
@@ -858,9 +879,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			proxier.logger.Error(err, "Failed to sync service", "servicePortName", svcPortName, "virtualServer", serv)
 		}
 
-		// Capture externalIPs.
+		// 处理 ExternalIP，为每个外部地址建立 IPVS 虚拟服务。
 		for _, externalIP := range svcInfo.ExternalIPs() {
-			// ipset call
+			// 调用 ipset 接口。
 			entry := &utilipset.Entry{
 				IP:       externalIP.String(),
 				Port:     svcInfo.Port(),
@@ -875,7 +896,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				}
 				proxier.ipsetList[kubeExternalIPLocalSet].activeEntries.Insert(entry.String())
 			} else {
-				// We have to SNAT packets to external IPs.
+				// 访问 ExternalIP 的数据包需要 SNAT。
 				if valid := proxier.ipsetList[kubeExternalIPSet].validateEntry(entry); !valid {
 					proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeExternalIPSet].Name)
 					continue
@@ -883,7 +904,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				proxier.ipsetList[kubeExternalIPSet].activeEntries.Insert(entry.String())
 			}
 
-			// ipvs call
+			// 调用 IPVS 接口。
 			serv := &utilipvs.VirtualServer{
 				Address:   externalIP,
 				Port:      uint16(svcInfo.Port()),
@@ -894,11 +915,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				serv.Flags |= utilipvs.FlagPersistent
 				serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 			}
-			// Set the source hash flag needed for the distribution method "mh"
+			// "mh"（源地址哈希）调度算法需要额外设置 source hash 标志。
 			if proxier.ipvsScheduler == "mh" {
 				serv.Flags |= utilipvs.FlagSourceHash
 			}
-			// We must not add the address to the dummy device if it exist on another interface
+			// 地址已存在于其他网卡时不能再绑定到 dummy 网卡，否则会造成冲突。
 			shouldBind := !nodeAddressSet.Has(serv.Address.String())
 			if err := proxier.syncService(svcPortNameString, serv, shouldBind, alreadyBoundAddrs); err == nil {
 				activeIPVSServices.Insert(serv.String())
@@ -913,25 +934,25 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			}
 		}
 
-		// Capture load-balancer ingress.
+		// 处理 LoadBalancer 的 ingress IP，为其建立 IPVS 虚拟服务。
 		for _, ingress := range svcInfo.LoadBalancerVIPs() {
-			// ipset call
+			// 调用 ipset 接口。
 			entry = &utilipset.Entry{
 				IP:       ingress.String(),
 				Port:     svcInfo.Port(),
 				Protocol: protocol,
 				SetType:  utilipset.HashIPPort,
 			}
-			// add service load balancer ingressIP:Port to kubeServiceAccess ip set for the purpose of solving hairpin.
+			// 将 LB 的 ingressIP:Port 加入 ipset，用于识别 hairpin 流量。
 			// proxier.kubeServiceAccessSet.activeEntries.Insert(entry.String())
-			// If we are proxying globally, we need to masquerade in case we cross nodes.
-			// If we are proxying only locally, we can retain the source IP.
+			// 全局代理时流量可能跨节点，因此需要 masquerade；
+			// 仅本地代理时可以保留源 IP。
 			if valid := proxier.ipsetList[kubeLoadBalancerSet].validateEntry(entry); !valid {
 				proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeLoadBalancerSet].Name)
 				continue
 			}
 			proxier.ipsetList[kubeLoadBalancerSet].activeEntries.Insert(entry.String())
-			// insert loadbalancer entry to lbIngressLocalSet if service externaltrafficpolicy=local
+			// externalTrafficPolicy=Local 时，还要把 LB 条目加入本地集合。
 			if svcInfo.ExternalPolicyLocal() {
 				if valid := proxier.ipsetList[kubeLoadBalancerLocalSet].validateEntry(entry); !valid {
 					proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeLoadBalancerLocalSet].Name)
@@ -940,9 +961,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				proxier.ipsetList[kubeLoadBalancerLocalSet].activeEntries.Insert(entry.String())
 			}
 			if len(svcInfo.LoadBalancerSourceRanges()) != 0 {
-				// The service firewall rules are created based on ServiceSpec.loadBalancerSourceRanges field.
-				// This currently works for loadbalancers that preserves source ips.
-				// For loadbalancers which direct traffic to service NodePort, the firewall rules will not apply.
+				// 服务防火墙规则依据 spec.loadBalancerSourceRanges 生成；
+				// 目前只适用于保留源 IP 的负载均衡器，
+				// 对把流量转发到 NodePort 的负载均衡器，这些规则不会生效。
 				if valid := proxier.ipsetList[kubeLoadBalancerFWSet].validateEntry(entry); !valid {
 					proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeLoadBalancerFWSet].Name)
 					continue
@@ -950,7 +971,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				proxier.ipsetList[kubeLoadBalancerFWSet].activeEntries.Insert(entry.String())
 				allowFromNode := false
 				for _, cidr := range svcInfo.LoadBalancerSourceRanges() {
-					// ipset call
+					// 调用 ipset 接口。
 					entry = &utilipset.Entry{
 						IP:       ingress.String(),
 						Port:     svcInfo.Port(),
@@ -958,7 +979,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 						Net:      cidr.String(),
 						SetType:  utilipset.HashIPPortNet,
 					}
-					// enumerate all white list source cidr
+					// 枚举所有允许访问的源 CIDR。
 					if valid := proxier.ipsetList[kubeLoadBalancerSourceCIDRSet].validateEntry(entry); !valid {
 						proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeLoadBalancerSourceCIDRSet].Name)
 						continue
@@ -969,9 +990,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 						allowFromNode = true
 					}
 				}
-				// generally, ip route rule was added to intercept request to loadbalancer vip from the
-				// loadbalancer's backend hosts. In this case, request will not hit the loadbalancer but loop back directly.
-				// Need to add the following rule to allow request on host.
+				// 通常会有 ip route 规则拦截后端主机访问 LB VIP 的请求，
+				// 此时请求不经过负载均衡器，而是直接回环到本机。
+				// 因此需要额外放行本机发出的这类请求。
 				if allowFromNode {
 					entry = &utilipset.Entry{
 						IP:       ingress.String(),
@@ -980,19 +1001,19 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 						IP2:      ingress.String(),
 						SetType:  utilipset.HashIPPortIP,
 					}
-					// enumerate all white list source ip
+					// 枚举所有允许访问的源 IP。
 					if valid := proxier.ipsetList[kubeLoadBalancerSourceIPSet].validateEntry(entry); !valid {
 						proxier.logger.Error(nil, "Error adding entry to ipset", "entry", entry, "ipset", proxier.ipsetList[kubeLoadBalancerSourceIPSet].Name)
 						continue
 					}
 					proxier.ipsetList[kubeLoadBalancerSourceIPSet].activeEntries.Insert(entry.String())
 				} else {
-					// since nodeIP is not covered in any of SourceRange we need to explicitly block the lbIP access from k8s nodes.
+					// nodeIP 不在任何 SourceRange 内，必须显式禁止节点访问该 LB IP。
 					proxier.lbNoNodeAccessIPPortProtocolEntries = append(proxier.lbNoNodeAccessIPPortProtocolEntries, entry)
 
 				}
 			}
-			// ipvs call
+			// 调用 IPVS 接口。
 			serv := &utilipvs.VirtualServer{
 				Address:   ingress,
 				Port:      uint16(svcInfo.Port()),
@@ -1003,11 +1024,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				serv.Flags |= utilipvs.FlagPersistent
 				serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 			}
-			// Set the source hash flag needed for the distribution method "mh"
+			// "mh"（源地址哈希）调度算法需要额外设置 source hash 标志。
 			if proxier.ipvsScheduler == "mh" {
 				serv.Flags |= utilipvs.FlagSourceHash
 			}
-			// We must not add the address to the dummy device if it exist on another interface
+			// 地址已存在于其他网卡时不能再绑定到 dummy 网卡，否则会造成冲突。
 			shouldBind := !nodeAddressSet.Has(serv.Address.String())
 			if err := proxier.syncService(svcPortNameString, serv, shouldBind, alreadyBoundAddrs); err == nil {
 				activeIPVSServices.Insert(serv.String())
@@ -1024,13 +1045,13 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 
 		if svcInfo.NodePort() != 0 {
 			if len(nodeIPs) == 0 {
-				// Skip nodePort configuration since an error occurred when
-				// computing nodeAddresses or nodeIPs.
+				// 计算节点地址失败时跳过 NodePort 配置，
+				// 避免用错误的地址下发规则。
 				continue
 			}
 
-			// Nodeports need SNAT, unless they're local.
-			// ipset call
+			// NodePort 流量通常需要 SNAT，本地流量除外。
+			// 调用 ipset 接口。
 
 			var (
 				nodePortSet *IPSet
@@ -1041,7 +1062,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			case utilipset.ProtocolTCP:
 				nodePortSet = proxier.ipsetList[kubeNodePortSetTCP]
 				entries = []*utilipset.Entry{{
-					// No need to provide ip info
+					// bitmap 类型的 ipset 只需端口，无需提供 IP 信息。
 					Port:     svcInfo.NodePort(),
 					Protocol: protocol,
 					SetType:  utilipset.BitmapPort,
@@ -1049,14 +1070,14 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			case utilipset.ProtocolUDP:
 				nodePortSet = proxier.ipsetList[kubeNodePortSetUDP]
 				entries = []*utilipset.Entry{{
-					// No need to provide ip info
+					// bitmap 类型的 ipset 只需端口，无需提供 IP 信息。
 					Port:     svcInfo.NodePort(),
 					Protocol: protocol,
 					SetType:  utilipset.BitmapPort,
 				}}
 			case utilipset.ProtocolSCTP:
 				nodePortSet = proxier.ipsetList[kubeNodePortSetSCTP]
-				// Since hash ip:port is used for SCTP, all the nodeIPs to be used in the SCTP ipset entries.
+				// SCTP 使用 hash:ip,port 类型的 ipset，因此每个节点 IP 都要生成一条条目。
 				entries = []*utilipset.Entry{}
 				for _, nodeIP := range nodeIPs {
 					entries = append(entries, &utilipset.Entry{
@@ -1067,7 +1088,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					})
 				}
 			default:
-				// It should never hit
+				// 理论上不会走到这里（协议类型已经过校验）。
 				proxier.logger.Error(nil, "Unsupported protocol type", "protocol", protocol)
 			}
 			if nodePortSet != nil {
@@ -1085,7 +1106,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				}
 			}
 
-			// Add externaltrafficpolicy=local type nodeport entry
+			// 添加 externalTrafficPolicy=Local 对应的 NodePort 条目。
 			if svcInfo.ExternalPolicyLocal() {
 				var nodePortLocalSet *IPSet
 				switch protocol {
@@ -1096,7 +1117,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				case utilipset.ProtocolSCTP:
 					nodePortLocalSet = proxier.ipsetList[kubeNodePortLocalSetSCTP]
 				default:
-					// It should never hit
+					// 理论上不会走到这里（协议类型已经过校验）。
 					proxier.logger.Error(nil, "Unsupported protocol type", "protocol", protocol)
 				}
 				if nodePortLocalSet != nil {
@@ -1115,9 +1136,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				}
 			}
 
-			// Build ipvs kernel routes for each node ip address
+			// 为每个节点 IP 建立 IPVS 内核虚拟服务。
 			for _, nodeIP := range nodeIPs {
-				// ipvs call
+				// 调用 IPVS 接口。
 				serv := &utilipvs.VirtualServer{
 					Address:   nodeIP,
 					Port:      uint16(svcInfo.NodePort()),
@@ -1128,11 +1149,11 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 					serv.Flags |= utilipvs.FlagPersistent
 					serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 				}
-				// Set the source hash flag needed for the distribution method "mh"
+				// "mh"（源地址哈希）调度算法需要额外设置 source hash 标志。
 				if proxier.ipvsScheduler == "mh" {
 					serv.Flags |= utilipvs.FlagSourceHash
 				}
-				// There is no need to bind Node IP to dummy interface, so set parameter `bindAddr` to `false`.
+				// 节点 IP 已存在于真实网卡上，无需绑定到 dummy 网卡，故 bindAddr 传 false。
 				if err := proxier.syncService(svcPortNameString, serv, false, alreadyBoundAddrs); err == nil {
 					activeIPVSServices.Insert(serv.String())
 					if err := proxier.syncEndpoint(svcPortName, svcInfo.ExternalPolicyLocal(), serv); err != nil {
@@ -1147,7 +1168,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		if svcInfo.HealthCheckNodePort() != 0 {
 			nodePortSet := proxier.ipsetList[kubeHealthCheckNodePortSet]
 			entry := &utilipset.Entry{
-				// No need to provide ip info
+				// bitmap 类型的 ipset 只需端口，无需提供 IP 信息。
 				Port:     svcInfo.HealthCheckNodePort(),
 				Protocol: "tcp",
 				SetType:  utilipset.BitmapPort,
@@ -1161,20 +1182,21 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// Set the KUBE-IPVS-IPS set to the "activeBindAddrs"
+	// KUBE-IPVS-IPS 集合保存本轮需要保留在 dummy 网卡上的地址。
 	proxier.ipsetList[kubeIPVSSet].activeEntries = activeBindAddrs
 
-	// sync ipset entries
+	// 同步 ipset 条目（对内核中的实际集合做增量更新）。
 	for _, set := range proxier.ipsetList {
+		// 先同步 ipset，再生成引用这些集合的 iptables 规则，顺序不能颠倒。
 		set.syncIPSetEntries()
 	}
 
-	// Tail call iptables rules for ipset, make sure only call iptables once
-	// in a single loop per ip set.
+	// 根据 ipset 内容生成对应的 iptables 跳转规则，
+	// 每个 ipset 只遍历一次，避免重复调用 iptables。
 	proxier.writeIptablesRules()
 
-	// Sync iptables rules.
-	// NOTE: NoFlushTables is used so we don't flush non-kubernetes chains in the table.
+	// 下发 iptables 规则。
+	// 使用 NoFlushTables，避免清空表中非 Kubernetes 创建的链。
 	proxier.iptablesData.Reset()
 	proxier.iptablesData.Write(proxier.natChains.Bytes())
 	proxier.iptablesData.Write(proxier.natRules.Bytes())
@@ -1185,6 +1207,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		"Restoring iptables", "natChains", proxier.natChains,
 		"natRules", proxier.natRules, "filterChains", proxier.filterChains,
 		"filterRules", proxier.filterRules)
+	// 一次性原子替换规则；解析失败时打印出错位置附近的规则便于排查。
 	err = proxier.iptables.RestoreAll(proxier.iptablesData.Bytes(), utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
 		if pErr, ok := err.(utiliptables.ParseError); ok {
@@ -1204,7 +1227,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// Remove superfluous addresses from the dummy device
+	// 清理 dummy 网卡上不再需要的地址。
 	superfluousAddresses := alreadyBoundAddrs.Difference(activeBindAddrs)
 	if superfluousAddresses.Len() > 0 {
 		proxier.logger.V(2).Info("Removing addresses", "interface", defaultDummyDevice, "addresses", superfluousAddresses)
@@ -1215,8 +1238,8 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		}
 	}
 
-	// currentIPVSServices represent IPVS services listed from the system
-	// (including any we have created in this sync)
+	// currentIPVSServices 是从系统查询到的 IPVS Service，
+	// 其中包含本轮刚创建的 Service。
 	currentIPVSServices := make(map[string]*utilipvs.VirtualServer)
 	appliedSvcs, err := proxier.ipvs.GetVirtualServers()
 	if err == nil {
@@ -1226,6 +1249,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	} else {
 		proxier.logger.Error(err, "Failed to get ipvs service")
 	}
+	// 对比期望集合与系统实际集合，删除本轮不再需要的旧 Service。
 	proxier.cleanLegacyService(activeIPVSServices, currentIPVSServices)
 
 	if proxier.healthzServer != nil {
@@ -1233,9 +1257,9 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	}
 	metrics.SyncProxyRulesLastTimestamp.WithLabelValues(string(proxier.ipFamily)).SetToCurrentTime()
 
-	// Update service healthchecks.  The endpoints list might include services that are
-	// not "OnlyLocal", but the services list will not, and the serviceHealthServer
-	// will just drop those endpoints.
+	// 更新健康检查服务：Endpoint 列表可能包含非 OnlyLocal 的 Service，
+	// 但 Service 列表只包含 OnlyLocal 的；serviceHealthServer
+	// 会自动忽略多余的 Endpoint。
 	if err := proxier.serviceHealthServer.SyncServices(proxier.svcPortMap.HealthCheckNodePorts()); err != nil {
 		proxier.logger.Error(err, "Error syncing healthcheck services")
 	}
@@ -1247,34 +1271,34 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 	metrics.SyncProxyRulesNoLocalEndpointsTotal.WithLabelValues("external", string(proxier.ipFamily)).Set(float64(proxier.serviceNoLocalEndpointsExternal.Len()))
 
 	if endpointUpdateResult.ConntrackCleanupRequired {
-		// Finish housekeeping, clear stale conntrack entries for UDP Services
+		// 收尾工作：清理 UDP Service 的过期 conntrack 条目。
 		conntrack.CleanStaleEntries(proxier.conntrack, proxier.ipFamily, proxier.svcPortMap, proxier.endpointsMap)
 	}
 	return
 }
 
-// writeIptablesRules write all iptables rules to proxier.natRules or proxier.FilterRules that ipvs proxier needed
-// according to proxier.ipsetList information and the ipset match relationship that `ipsetWithIptablesChain` specified.
-// some ipset(kubeClusterIPSet for example) have particular match rules and iptables jump relation should be sync separately.
+// writeIptablesRules 根据 ipsetList 与 ipsetWithIptablesChain 的对应关系，
+// 将 IPVS Proxier 所需的 iptables 规则写入 natRules 或 filterRules。
+// 部分 ipset（如 kubeClusterIPSet）有特殊的匹配与跳转规则，需要单独同步。
 func (proxier *Proxier) writeIptablesRules() {
 
-	// Dismiss connects to localhost early in the service chain
+	// 在 Service 链的开头提前放行来自本地回环地址的连接。
 	loAddr := "127.0.0.0/8"
 	if proxier.ipFamily == v1.IPv6Protocol {
 		loAddr = "::1/128"
 	}
 	proxier.natRules.Write("-A", string(kubeServicesChain), "-s", loAddr, "-j", "RETURN")
 
-	// We are creating those slices ones here to avoid memory reallocations
-	// in every loop. Note that reuse the memory, instead of doing:
+	// 在循环外一次性创建参数切片，避免每轮重新分配内存。
+	// 复用内存时应采用下面的写法，而不是：
 	//   slice = <some new slice>
-	// you should always do one of the below:
-	//   slice = slice[:0] // and then append to it
+	// 应当始终使用以下两种方式之一：
+	//   slice = slice[:0] // 然后继续 append
 	//   slice = append(slice[:0], ...)
-	// To avoid growing this slice, we arbitrarily set its size to 64,
-	// there is never more than that many arguments for a single line.
-	// Note that even if we go over 64, it will still be correct - it
-	// is just for efficiency, not correctness.
+	// 预分配 64 个槽位以避免扩容；
+	// 单行规则的参数数量不会超过这个数值。
+	// 即便超过 64 也仍然正确（append 会自动扩容），
+	// 这里只是出于效率考虑，而非正确性要求。
 	args := make([]string, 64)
 
 	for _, set := range ipsetWithIptablesChain {
@@ -1307,47 +1331,47 @@ func (proxier *Proxier) writeIptablesRules() {
 				args, "dst,dst",
 				"-j", string(kubeMarkMasqChain))
 		} else if proxier.localDetector.IsImplemented() {
-			// This masquerades off-cluster traffic to a service VIP.  The idea
-			// is that you can establish a static route for your Service range,
-			// routing to any node, and that node will bridge into the Service
-			// for you.  Since that might bounce off-node, we masquerade here.
-			// If/when we support "Local" policy for VIPs, we should update this.
+			// 这会对集群外部访问 Service VIP 的流量做 masquerade。思路是：
+			// 为 Service 网段配置一条静态路由，
+			// 将流量导向任意节点，由该节点把流量转入 Service。
+			// 由于流量可能被转发到其他节点，因此在这里做 masquerade。
+			// 如果将来支持 VIP 的 "Local" 策略，需要同步调整这里。
 			proxier.natRules.Write(
 				args, "dst,dst",
 				proxier.localDetector.IfNotLocal(),
 				"-j", string(kubeMarkMasqChain))
 		} else {
-			// Masquerade all OUTPUT traffic coming from a service ip.
-			// The kube dummy interface has all service VIPs assigned which
-			// results in the service VIP being picked as the source IP to reach
-			// a VIP. This leads to a connection from VIP:<random port> to
-			// VIP:<service port>.
-			// Always masquerading OUTPUT (node-originating) traffic with a VIP
-			// source ip and service port destination fixes the outgoing connections.
+			// 对所有源地址为 Service IP 的 OUTPUT 流量做 masquerade。
+			// dummy 网卡上绑定了所有 Service VIP，
+			// 这会导致内核选择 Service VIP 作为访问另一 VIP 时的源 IP，
+			// 从而形成 VIP:<随机端口> 到 VIP:<服务端口> 的连接。
+			// （即 VIP 到自身的连接。）
+			// 对节点主动发出、源 IP 为 VIP 的 OUTPUT 流量一律做 masquerade，
+			// 可以修复这类出站连接。
 			proxier.natRules.Write(
 				args, "src,dst",
 				"-j", string(kubeMarkMasqChain))
 		}
 	}
 
-	// externalIPRules adds iptables rules applies to Service ExternalIPs
+	// externalIPRules 写入适用于 Service ExternalIP 的 iptables 规则。
 	externalIPRules := func(args []string) {
-		// Allow traffic for external IPs that does not come from a bridge (i.e. not from a container)
-		// nor from a local process to be forwarded to the service.
-		// This rule roughly translates to "all traffic from off-machine".
-		// This is imperfect in the face of network plugins that might not use a bridge, but we can revisit that later.
+		// 放行来自机器外部（既不来自网桥，也不来自本地进程）访问 ExternalIP 的流量，
+		// 使这些流量可以被转发到 Service。
+		// 该规则大致等价于“所有来自本机之外的流量”。
+		// 对不使用网桥的网络插件，这一判断并不精确，后续可以再完善。
 		externalTrafficOnlyArgs := append(args,
 			"-m", "physdev", "!", "--physdev-is-in",
 			"-m", "addrtype", "!", "--src-type", "LOCAL")
 		proxier.natRules.Write(externalTrafficOnlyArgs, "-j", "ACCEPT")
 		dstLocalOnlyArgs := append(args, "-m", "addrtype", "--dst-type", "LOCAL")
-		// Allow traffic bound for external IPs that happen to be recognized as local IPs to stay local.
-		// This covers cases like GCE load-balancers which get added to the local routing table.
+		// 某些 ExternalIP（如 GCE 负载均衡器地址）会出现在本地路由表中，
+		// 此时需要放行这些目标地址为本机地址的流量，使其保持本地转发。
 		proxier.natRules.Write(dstLocalOnlyArgs, "-j", "ACCEPT")
 	}
 
 	if !proxier.ipsetList[kubeExternalIPSet].isEmpty() {
-		// Build masquerade rules for packets to external IPs.
+		// 为访问 ExternalIP 的数据包构建 masquerade 规则。
 		args = append(args[:0],
 			"-A", string(kubeServicesChain),
 			"-m", "comment", "--comment", proxier.ipsetList[kubeExternalIPSet].getComment(),
@@ -1375,20 +1399,20 @@ func (proxier *Proxier) writeIptablesRules() {
 	)
 	proxier.natRules.Write(args, "-j", string(kubeNodePortChain))
 
-	// mark for masquerading for KUBE-LOAD-BALANCER
+	// 为 KUBE-LOAD-BALANCER 中的数据包打上 masquerade 标记。
 	proxier.natRules.Write(
 		"-A", string(kubeLoadBalancerChain),
 		"-j", string(kubeMarkMasqChain),
 	)
 
-	// drop packets filtered by KUBE-SOURCE-RANGES-FIREWALL
+	// 丢弃被 KUBE-SOURCE-RANGES-FIREWALL 过滤的数据包。
 	proxier.filterRules.Write(
 		"-A", string(kubeSourceRangesFirewallChain),
 		"-j", "DROP",
 	)
 
-	// disable LB access from node
-	// for IPVS src and dst both would be lbIP
+	// 禁止从节点访问 LoadBalancer VIP。
+	// IPVS 模式下源地址和目的地址都是 lbIP，因此需要按此特征匹配。
 	for _, entry := range proxier.lbNoNodeAccessIPPortProtocolEntries {
 		proxier.filterRules.Write(
 			"-A", string(kubeIPVSOutFilterChain),
@@ -1398,14 +1422,15 @@ func (proxier *Proxier) writeIptablesRules() {
 		)
 	}
 
-	// Accept all traffic with destination of ipvs virtual service, in case other iptables rules
-	// block the traffic, that may result in ipvs rules invalid.
-	// Those rules must be in the end of KUBE-SERVICE chain
+	// 放行所有目的地址为 IPVS 虚拟服务的数据包，避免被其他 iptables 规则
+	// 拦截而导致 IPVS 规则失效。
+	// 这些规则必须位于 KUBE-SERVICES 链的末尾。
+	// ACCEPT 规则必须最后写入，以免前面的规则抢先丢弃 IPVS 流量。
 	proxier.acceptIPVSTraffic()
 
-	// If the masqueradeMark has been added then we want to forward that same
-	// traffic, this allows NodePort traffic to be forwarded even if the default
-	// FORWARD policy is not accept.
+	// 已打上 masqueradeMark 的流量同样予以放行，
+	// 这样即使 FORWARD 链的默认策略不是 ACCEPT，NodePort 流量仍能被转发。
+	// （该规则写入 FORWARD 链。）
 	proxier.filterRules.Write(
 		"-A", string(kubeForwardChain),
 		"-m", "comment", "--comment", `"kubernetes forwarding rules"`,
@@ -1413,8 +1438,8 @@ func (proxier *Proxier) writeIptablesRules() {
 		"-j", "ACCEPT",
 	)
 
-	// The following rule ensures the traffic after the initial packet accepted
-	// by the "kubernetes forwarding rules" rule above will be accepted.
+	// 后续规则确保被上面 “kubernetes forwarding rules” 放行的连接，
+	// 其后续报文（RELATED/ESTABLISHED）也能被接受。
 	proxier.filterRules.Write(
 		"-A", string(kubeForwardChain),
 		"-m", "comment", "--comment", `"kubernetes forwarding conntrack rule"`,
@@ -1423,7 +1448,7 @@ func (proxier *Proxier) writeIptablesRules() {
 		"-j", "ACCEPT",
 	)
 
-	// Add rule to accept traffic towards health check node port
+	// 添加放行健康检查 NodePort 流量的规则。
 	proxier.filterRules.Write(
 		"-A", string(kubeNodePortChain),
 		"-m", "comment", "--comment", proxier.ipsetList[kubeHealthCheckNodePortSet].getComment(),
@@ -1431,7 +1456,7 @@ func (proxier *Proxier) writeIptablesRules() {
 		"-j", "ACCEPT",
 	)
 
-	// Add rules to the filter/KUBE-IPVS-FILTER chain to prevent access to ports on the host through VIP addresses.
+	// 在 filter/KUBE-IPVS-FILTER 链中添加规则，防止通过 VIP 访问节点主机上的端口。
 	// https://github.com/kubernetes/kubernetes/issues/72236
 	proxier.filterRules.Write(
 		"-A", string(kubeIPVSFilterChain),
@@ -1453,19 +1478,19 @@ func (proxier *Proxier) writeIptablesRules() {
 		"-m", "conntrack", "--ctstate", "NEW",
 		"-m", "set", "--match-set", proxier.ipsetList[kubeIPVSSet].Name, "dst", "-j", "REJECT")
 
-	// Install the kubernetes-specific postrouting rules. We use a whole chain for
-	// this so that it is easier to flush and change, for example if the mark
-	// value should ever change.
+	// 安装 Kubernetes 专用的 postrouting 规则；
+	// 使用独立的链便于整体刷新和修改（例如标记值变化时）。
+	// （例如标记值发生变化时。）
 
 	proxier.natRules.Write(
 		"-A", string(kubePostroutingChain),
 		"-m", "mark", "!", "--mark", fmt.Sprintf("%s/%s", proxier.masqueradeMark, proxier.masqueradeMark),
 		"-j", "RETURN",
 	)
-	// Clear the mark to avoid re-masquerading if the packet re-traverses the network stack.
+	// 清除标记，避免数据包再次经过网络栈时被重复 masquerade。
 	proxier.natRules.Write(
 		"-A", string(kubePostroutingChain),
-		// XOR proxier.masqueradeMark to unset it
+		// 通过 XOR 操作清除 masqueradeMark 标记位。
 		"-j", "MARK", "--xor-mark", proxier.masqueradeMark,
 	)
 	proxier.natRules.Write(
@@ -1475,19 +1500,21 @@ func (proxier *Proxier) writeIptablesRules() {
 		"--random-fully",
 	)
 
-	// Install the kubernetes-specific masquerade mark rule. We use a whole chain for
-	// this so that it is easier to flush and change, for example if the mark
-	// value should ever change.
+	// 安装 Kubernetes 专用的 masquerade 标记规则；
+	// 使用独立的链便于整体刷新和修改（例如标记值变化时）。
+	// （例如标记值发生变化时。）
 	proxier.natRules.Write(
 		"-A", string(kubeMarkMasqChain),
 		"-j", "MARK", "--or-mark", proxier.masqueradeMark,
 	)
 
-	// Write the end-of-table markers.
+	// 写入表结束标记 COMMIT。
 	proxier.filterRules.Write("COMMIT")
 	proxier.natRules.Write("COMMIT")
 }
 
+// acceptIPVSTraffic 为 ClusterIP 与 LoadBalancer 的 ipset 写入 ACCEPT 规则，
+// 防止其他 iptables 规则误拦截 IPVS 流量。
 func (proxier *Proxier) acceptIPVSTraffic() {
 	sets := []string{kubeClusterIPSet, kubeLoadBalancerSet}
 	for _, set := range sets {
@@ -1508,7 +1535,7 @@ func (proxier *Proxier) acceptIPVSTraffic() {
 	}
 }
 
-// createAndLinkKubeChain create all kube chains that ipvs proxier need and write basic link.
+// createAndLinkKubeChain 创建 IPVS Proxier 所需的所有 kube 链，并建立基本的跳转关系。
 func (proxier *Proxier) createAndLinkKubeChain() {
 	for _, ch := range iptablesChains {
 		if _, err := proxier.iptables.EnsureChain(ch.table, ch.chain); err != nil {
@@ -1531,19 +1558,20 @@ func (proxier *Proxier) createAndLinkKubeChain() {
 
 }
 
+// syncService 确保 IPVS 虚拟服务存在且与期望状态一致，并按需将服务地址绑定到 dummy 网卡。
 func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, bindAddr bool, alreadyBoundAddrs sets.Set[string]) error {
 	appliedVirtualServer, _ := proxier.ipvs.GetVirtualServer(vs)
 	if appliedVirtualServer == nil || !appliedVirtualServer.Equal(vs) {
 		if appliedVirtualServer == nil {
-			// IPVS service is not found, create a new service
+			// 系统中不存在该 IPVS Service，需要新建。
 			proxier.logger.V(3).Info("Adding new service", "serviceName", svcName, "virtualServer", vs)
 			if err := proxier.ipvs.AddVirtualServer(vs); err != nil {
 				proxier.logger.Error(err, "Failed to add IPVS service", "serviceName", svcName)
 				return err
 			}
 		} else {
-			// IPVS service was changed, update the existing one
-			// During updates, service VIP will not go down
+			// IPVS Service 配置发生变化，更新已有服务；
+			// 更新过程中 VIP 不会中断服务。
 			proxier.logger.V(3).Info("IPVS service was changed", "serviceName", svcName)
 			if err := proxier.ipvs.UpdateVirtualServer(vs); err != nil {
 				proxier.logger.Error(err, "Failed to update IPVS service")
@@ -1552,10 +1580,10 @@ func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, 
 		}
 	}
 
-	// bind service address to dummy interface
+	// 将 Service 地址绑定到 dummy 网卡，使内核能够接收发往该 VIP 的流量。
 	if bindAddr {
-		// always attempt to bind if alreadyBoundAddrs is nil,
-		// otherwise check if it's already binded and return early
+		// alreadyBoundAddrs 为 nil 时总是尝试绑定；
+		// 否则先检查是否已绑定，已绑定则直接返回。
 		if alreadyBoundAddrs != nil && alreadyBoundAddrs.Has(vs.Address.String()) {
 			return nil
 		}
@@ -1571,6 +1599,8 @@ func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, 
 	return nil
 }
 
+// syncEndpoint 使 IPVS 虚拟服务的 RealServer 列表与当前 Endpoint 集合保持一致，
+// 并按流量策略与拓扑规则过滤 Endpoint。
 func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNodeLocalEndpoints bool, vs *utilipvs.VirtualServer) error {
 	appliedVirtualServer, err := proxier.ipvs.GetVirtualServer(vs)
 	if err != nil {
@@ -1581,7 +1611,7 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 		return errors.New("IPVS virtual service does not exist")
 	}
 
-	// curEndpoints represents IPVS destinations listed from current system.
+	// curEndpoints 是从系统查询到的当前 RealServer 集合。
 	curEndpoints := sets.New[string]()
 	curDests, err := proxier.ipvs.GetRealServers(appliedVirtualServer)
 	if err != nil {
@@ -1594,10 +1624,10 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 
 	endpoints := proxier.endpointsMap[svcPortName]
 
-	// Filtering for topology aware endpoints. This function will only
-	// filter endpoints if appropriate feature gates are enabled and the
-	// Service does not have conflicting configuration such as
-	// externalTrafficPolicy=Local.
+	// 按拓扑感知规则过滤 Endpoint；只有在相关特性门控开启、
+	// 且 Service 配置没有冲突时才会实际过滤，
+	// 例如 externalTrafficPolicy=Local 就是冲突配置。
+	// （此时直接按 Local 策略处理。）
 	svcInfo, ok := proxier.svcPortMap[svcPortName]
 	if !ok {
 		proxier.logger.Info("Unable to filter endpoints due to missing service info", "servicePortName", svcPortName)
@@ -1608,9 +1638,9 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 				endpoints = localEndpoints
 			} else {
 				// https://github.com/kubernetes/kubernetes/pull/97081
-				// Allow access from local PODs even if no local endpoints exist.
-				// Traffic from an external source will be routed but the reply
-				// will have the POD address and will be discarded.
+				// 即使没有本地 Endpoint，也要允许本机 Pod 访问；
+				// 否则外部流量仍会被转发，但回包的源地址是 Pod IP，
+				// 最终会被丢弃。
 				endpoints = clusterEndpoints
 
 				if hasAnyEndpoints && svcInfo.InternalPolicyLocal() {
@@ -1631,7 +1661,7 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 		newEndpoints.Insert(epInfo.String())
 	}
 
-	// Create new endpoints
+	// 添加新增的 Endpoint。
 	for _, ep := range newEndpoints.UnsortedList() {
 		ip, port, err := net.SplitHostPort(ep)
 		if err != nil {
@@ -1651,8 +1681,8 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 		}
 
 		if curEndpoints.Has(ep) {
-			// if we are syncing for the first time, loop through all current destinations and
-			// reset their weight.
+			// 首次同步时遍历已有 RealServer，
+			// 将其权重重置为期望值。
 			if proxier.initialSync {
 				for _, dest := range curDests {
 					if dest.Weight != newDest.Weight {
@@ -1664,7 +1694,7 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 					}
 				}
 			}
-			// check if newEndpoint is in gracefulDelete list, if true, delete this ep immediately
+			// 若该 Endpoint 还在优雅删除列表中，需先移出再立即重建。
 			uniqueRS := GetUniqueRSName(vs, newDest)
 			if !proxier.gracefuldeleteManager.InTerminationList(uniqueRS) {
 				continue
@@ -1683,9 +1713,9 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 		}
 	}
 
-	// Delete old endpoints
+	// 删除已消失的 Endpoint。
 	for _, ep := range curEndpoints.Difference(newEndpoints).UnsortedList() {
-		// if curEndpoint is in gracefulDelete, skip
+		// 已进入优雅删除流程的 RealServer 不再重复处理。
 		uniqueRS := vs.String() + "/" + ep
 		if proxier.gracefuldeleteManager.InTerminationList(uniqueRS) {
 			continue
@@ -1716,13 +1746,14 @@ func (proxier *Proxier) syncEndpoint(svcPortName proxy.ServicePortName, onlyNode
 	return nil
 }
 
+// cleanLegacyService 删除本轮同步中不再需要的存量 IPVS Service。
 func (proxier *Proxier) cleanLegacyService(activeServices sets.Set[string], currentServices map[string]*utilipvs.VirtualServer) {
 	for cs, svc := range currentServices {
 		if proxier.isIPInExcludeCIDRs(svc.Address) {
 			continue
 		}
 		if getIPFamily(svc.Address) != proxier.ipFamily {
-			// Not our family
+			// 属于其他 IP 协议族，由对应的 Proxier 负责清理。
 			continue
 		}
 		if !activeServices.Has(cs) {
@@ -1734,8 +1765,9 @@ func (proxier *Proxier) cleanLegacyService(activeServices sets.Set[string], curr
 	}
 }
 
+// isIPInExcludeCIDRs 判断 IP 是否落在用户配置的排除 CIDR 范围内。
 func (proxier *Proxier) isIPInExcludeCIDRs(ip net.IP) bool {
-	// make sure it does not fall within an excluded CIDR range.
+	// 排除范围内的地址由用户自行管理，Proxier 不得清理。
 	for _, excludedCIDR := range proxier.excludeCIDRs {
 		if excludedCIDR.Contains(ip) {
 			return true
@@ -1744,6 +1776,7 @@ func (proxier *Proxier) isIPInExcludeCIDRs(ip net.IP) bool {
 	return false
 }
 
+// getIPFamily 返回给定 IP 所属的协议族（IPv4 或 IPv6）。
 func getIPFamily(ip net.IP) v1.IPFamily {
 	if netutils.IsIPv4(ip) {
 		return v1.IPv4Protocol
@@ -1751,21 +1784,21 @@ func getIPFamily(ip net.IP) v1.IPFamily {
 	return v1.IPv6Protocol
 }
 
-// ipvs Proxier fall back on iptables when it needs to do SNAT for engress packets
-// It will only operate iptables *nat table.
-// Create and link the kube postrouting chain for SNAT packets.
-// Chain POSTROUTING (policy ACCEPT)
+// IPVS Proxier 在需要对出口（egress）报文做 SNAT 时会回退到 iptables，
+// 且只操作 iptables 的 *nat 表。
+// 为需要 SNAT 的报文创建并链接 kube postrouting 链。
+// Chain POSTROUTING（策略为 ACCEPT）
 // target     prot opt source               destination
 // KUBE-POSTROUTING  all  --  0.0.0.0/0            0.0.0.0/0            /* kubernetes postrouting rules *
-// Maintain by kubelet network sync loop
+// 由 kubelet 的网络同步循环维护。
 
 // *nat
 // :KUBE-POSTROUTING - [0:0]
-// Chain KUBE-POSTROUTING (1 references)
+// Chain KUBE-POSTROUTING（1 处引用）
 // target     prot opt source               destination
 // MASQUERADE  all  --  0.0.0.0/0            0.0.0.0/0            /* kubernetes service traffic requiring SNAT */ mark match 0x4000/0x4000
 
 // :KUBE-MARK-MASQ - [0:0]
-// Chain KUBE-MARK-MASQ (0 references)
+// Chain KUBE-MARK-MASQ（0 处引用）
 // target     prot opt source               destination
 // MARK       all  --  0.0.0.0/0            0.0.0.0/0            MARK or 0x4000

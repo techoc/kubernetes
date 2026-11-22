@@ -20,28 +20,26 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// LocalTrafficDetector generates iptables or nftables rules to detect traffic from local pods.
+// LocalTrafficDetector 生成用于识别来自本地 Pod 流量的 iptables 或 nftables 规则参数。
 type LocalTrafficDetector interface {
-	// IsImplemented returns true if the implementation does something, false
-	// otherwise. You should not call the other methods if IsImplemented() returns
-	// false.
+	// IsImplemented 在实现会生成规则时返回 true，否则返回 false。
+	// 返回 false 时不应调用其余方法。
 	IsImplemented() bool
 
-	// IfLocal returns iptables arguments that will match traffic from a local pod.
+	// IfLocal 返回匹配来自本地 Pod 流量的 iptables 参数。
 	IfLocal() []string
 
-	// IfNotLocal returns iptables arguments that will match traffic that is not from
-	// a local pod.
+	// IfNotLocal 返回匹配非本地 Pod 流量的 iptables 参数。
 	IfNotLocal() []string
 
-	// IfLocalNFT returns nftables arguments that will match traffic from a local pod.
+	// IfLocalNFT 返回匹配来自本地 Pod 流量的 nftables 参数。
 	IfLocalNFT() []string
 
-	// IfNotLocalNFT returns nftables arguments that will match traffic that is not
-	// from a local pod.
+	// IfNotLocalNFT 返回匹配非本地 Pod 流量的 nftables 参数。
 	IfNotLocalNFT() []string
 }
 
+// detectLocal 缓存以 iptables 与 nftables 参数形式表示的本地流量判定条件。
 type detectLocal struct {
 	ifLocal       []string
 	ifNotLocal    []string
@@ -49,35 +47,40 @@ type detectLocal struct {
 	ifNotLocalNFT []string
 }
 
+// IsImplemented 根据是否存在本地匹配参数判断探测器是否实际生效。
 func (d *detectLocal) IsImplemented() bool {
 	return len(d.ifLocal) > 0
 }
 
+// IfLocal 返回匹配本地 Pod 流量的 iptables 参数。
 func (d *detectLocal) IfLocal() []string {
 	return d.ifLocal
 }
 
+// IfNotLocal 返回匹配非本地 Pod 流量的 iptables 参数。
 func (d *detectLocal) IfNotLocal() []string {
 	return d.ifNotLocal
 }
 
+// IfLocalNFT 返回匹配本地 Pod 流量的 nftables 参数。
 func (d *detectLocal) IfLocalNFT() []string {
 	return d.ifLocalNFT
 }
 
+// IfNotLocalNFT 返回匹配非本地 Pod 流量的 nftables 参数。
 func (d *detectLocal) IfNotLocalNFT() []string {
 	return d.ifNotLocalNFT
 }
 
-// NewNoOpLocalDetector returns a no-op implementation of LocalTrafficDetector.
+// NewNoOpLocalDetector 返回一个不生成任何规则的 LocalTrafficDetector。
 func NewNoOpLocalDetector() LocalTrafficDetector {
 	return &detectLocal{}
 }
 
-// NewDetectLocalByCIDR returns a LocalTrafficDetector that considers traffic from the
-// provided cidr to be from a local pod, and other traffic to be non-local. cidr is
-// assumed to be valid.
+// NewDetectLocalByCIDR 返回一个将来自 cidr 的流量视为本地 Pod 流量的探测器，
+// 其余流量视为非本地流量；cidr 应当是合法值。
 func NewDetectLocalByCIDR(cidr string) LocalTrafficDetector {
+	// nftables 要求显式指定地址族，而 iptables 的 -s 参数本身不区分 IPv4 与 IPv6。
 	nftFamily := "ip"
 	if netutils.IsIPv6CIDRString(cidr) {
 		nftFamily = "ip6"
@@ -91,9 +94,8 @@ func NewDetectLocalByCIDR(cidr string) LocalTrafficDetector {
 	}
 }
 
-// NewDetectLocalByBridgeInterface returns a LocalTrafficDetector that considers traffic
-// from interfaceName to be from a local pod, and traffic from other interfaces to be
-// non-local.
+// NewDetectLocalByBridgeInterface 返回一个将来自 interfaceName 的流量视为本地 Pod 流量的探测器，
+// 来自其他接口的流量则被视为非本地流量。
 func NewDetectLocalByBridgeInterface(interfaceName string) LocalTrafficDetector {
 	return &detectLocal{
 		ifLocal:       []string{"-i", interfaceName},
@@ -103,10 +105,11 @@ func NewDetectLocalByBridgeInterface(interfaceName string) LocalTrafficDetector 
 	}
 }
 
-// NewDetectLocalByInterfaceNamePrefix returns a LocalTrafficDetector that considers
-// traffic from interfaces starting with interfacePrefix to be from a local pod, and
-// traffic from other interfaces to be non-local.
+// NewDetectLocalByInterfaceNamePrefix 返回一个将来自以 interfacePrefix 开头的接口的流量视为本地 Pod 流量的探测器，
+// 来自其他接口的流量则被视为非本地流量。
 func NewDetectLocalByInterfaceNamePrefix(interfacePrefix string) LocalTrafficDetector {
+	// iptables 的 "+" 与 nftables 的 "*" 都是后缀通配符：veth 等接口名带有后缀，
+	// 只写前缀无法匹配，因此必须在前缀后追加通配符。
 	return &detectLocal{
 		ifLocal:       []string{"-i", interfacePrefix + "+"},
 		ifNotLocal:    []string{"!", "-i", interfacePrefix + "+"},

@@ -32,18 +32,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// kube-proxy generates iptables rules to forward traffic from Services to Endpoints
-// kube-proxy uses iptables-restore to configure the rules atomically, however,
-// this has the downside that large number of rules take a long time to be processed,
-// causing disruption.
-// There are different parameters than influence the number of rules generated:
-// - ServiceType
-// - Number of Services
-// - Number of Endpoints per Service
-// This test will fail when the number of rules change, so the person
-// that is modifying the code can have feedback about the performance impact
-// on their changes. It also runs multiple number of rules test cases to check
-// if the number of rules grows linearly.
+// TestNumberIptablesRules 统计 kube-proxy 为将 Service 流量转发到 Endpoint 而生成的 iptables 规则数量。
+// kube-proxy 通过 iptables-restore 原子地配置规则；但规则数量过大时，提交耗时很长，会造成流量中断。
+// 影响规则数量的主要参数有：Service 类型、Service 数量以及每个 Service 的 Endpoint 数量。
+// 当规则数量发生变化时本测试会失败，这样修改代码的人能立即得到性能影响的反馈；
+// 同时通过多组不同规模的用例，检查规则数量是否随 Service/Endpoint 数量线性增长。
 func TestNumberIptablesRules(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -265,11 +258,13 @@ func TestNumberIptablesRules(t *testing.T) {
 			makeServiceMap(fp, svcs...)
 			populateEndpointSlices(fp, eps...)
 
+			// 记录同步耗时：规则体量越大，iptables-restore 的提交时间越长。
 			now := time.Now()
 			fp.syncProxyRules()
 			t.Logf("time to sync rule: %v", time.Since(now))
 			t.Logf("iptables data size: %d bytes", fp.iptablesData.Len())
 
+			// 固定预期值：规则数一旦意外增加，就是性能回归的信号。
 			if fp.filterRules.Lines() != test.expectedFilterRules {
 				t.Errorf("expected number of Filter rules: %d, got: %d", test.expectedFilterRules, fp.filterRules.Lines())
 			}
@@ -278,12 +273,15 @@ func TestNumberIptablesRules(t *testing.T) {
 				t.Errorf("expected number of NAT rules: %d, got: %d", test.expectedNatRules, fp.natRules.Lines())
 			}
 
-			// print generated iptables data
+			// 需要排查规则数变化时，可打开下面的日志打印实际生成的规则。
 			// t.Logf("Generated rules:\n %s", fp.iptablesData.String())
 		})
 	}
 }
 
+// Test_generateServiceEndpoints 验证测试数据工厂：生成的 Service/EndpointSlice 数量、
+// Service 类型、Service 名称与 EndpointSlice 的关联标签，以及注入的 Endpoint 节点名都符合预期。
+// 该工厂被规则数量测试复用，若生成的数据不符合预期，规则计数也就失去意义。
 func Test_generateServiceEndpoints(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -307,11 +305,11 @@ func Test_generateServiceEndpoints(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			// test the function to mutate services
+			// 注入 Service 类型变更函数，覆盖非默认类型的规则生成路径。
 			svcFunc := func(svc *v1.Service) {
 				svc.Spec.Type = test.svcType
 			}
-			// test the function to mutate endpoint slices
+			// 注入 EndpointSlice 变更函数，为每个 Endpoint 设置节点名（拓扑提示所需）。
 			epsFunc := func(eps *discovery.EndpointSlice) {
 				for i := range eps.Endpoints {
 					nodeName := fmt.Sprintf("node-%d", i)
@@ -350,16 +348,18 @@ func Test_generateServiceEndpoints(t *testing.T) {
 
 }
 
-// generateServiceEndpoints generate Services with the Type specified and it creates N Endpoints per Service
+// generateServiceEndpoints 生成指定数量的 Service，每个 Service 带 N 个 Endpoint，
+// 并通过 epsFunc/svcFunc 让调用方注入自定义变更（如 Service 类型、节点名）。
+// 它返回的 Service 与 EndpointSlice 一一对应，供规则数量测试构造稳定可复现的输入。
 func generateServiceEndpoints(nServices, nEndpoints int, epsFunc func(eps *discovery.EndpointSlice), svcFunc func(svc *v1.Service)) ([]*v1.Service, []*discovery.EndpointSlice) {
 	services := make([]*v1.Service, nServices)
 	endpointSlices := make([]*discovery.EndpointSlice, nServices)
 
-	// base parameters
+	// 基地址+偏移量保证多次运行生成的 IP 稳定且不冲突。
 	basePort := 80
 	base := netutils.BigForIP(netutils.ParseIPSloppy("10.0.0.1"))
 
-	// generate a base endpoint slice object
+	// 先构造一个 EndpointSlice 模板，再深拷贝给每个 Service，避免重复构造。
 	baseEp := netutils.BigForIP(netutils.ParseIPSloppy("172.16.0.1"))
 	epPort := 8080
 
@@ -388,7 +388,7 @@ func generateServiceEndpoints(nServices, nEndpoints int, epsFunc func(eps *disco
 		epsFunc(eps)
 	}
 
-	// generate a base service object
+	// Service 模板同理；调用方注入的类型变更在深拷贝之前完成。
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "svc",
@@ -403,7 +403,8 @@ func generateServiceEndpoints(nServices, nEndpoints int, epsFunc func(eps *disco
 		svcFunc(svc)
 	}
 
-	// Create the Services and associate and endpoint slice object to each one
+	// 逐个深拷贝模板并为每个 Service 分配独立的 ClusterIP 和端口，
+	// 这样规则计数反映的是真实多 Service 场景而非重复对象。
 	for i := 0; i < nServices; i++ {
 		ip := netutils.AddIPOffset(base, i)
 		services[i] = svc.DeepCopy()

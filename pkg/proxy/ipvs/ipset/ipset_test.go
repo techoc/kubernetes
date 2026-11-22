@@ -27,10 +27,12 @@ import (
 	fakeexec "k8s.io/utils/exec/testing"
 )
 
+// newInternal 用给定的 fake exec 构造 ipset runner，便于断言实际执行的命令
 func newInternal(fexec *fakeexec.FakeExec) Interface {
 	return &runner{fexec}
 }
 
+// TestCheckIPSetVersion 验证从 ipset --version 输出中解析版本字符串，包括无效输入
 func TestCheckIPSetVersion(t *testing.T) {
 	testCases := []struct {
 		vstring string
@@ -48,7 +50,7 @@ func TestCheckIPSetVersion(t *testing.T) {
 	for i := range testCases {
 		fcmd := fakeexec.FakeCmd{
 			CombinedOutputScript: []fakeexec.FakeAction{
-				// ipset version response
+				// 模拟 ipset 对版本查询命令的响应
 				func() ([]byte, []byte, error) { return []byte(testCases[i].vstring), nil, nil },
 			},
 		}
@@ -60,9 +62,11 @@ func TestCheckIPSetVersion(t *testing.T) {
 		}
 
 		gotVersion, err := getIPSetVersionString(fexec)
+		// 先校验错误预期，避免对无效输入继续断言版本号
 		if (err != nil) != testCases[i].Err {
 			t.Errorf("Expected error: %v, Got error: %v", testCases[i].Err, err)
 		}
+		// 只有解析成功时才比较版本号
 		if err == nil {
 			if testCases[i].Expect != gotVersion {
 				t.Errorf("Expected result: %v, Got result: %v", testCases[i].Expect, gotVersion)
@@ -71,12 +75,13 @@ func TestCheckIPSetVersion(t *testing.T) {
 	}
 }
 
+// TestFlushSet 验证 FlushSet 调用 ipset flush 命令，且可重复执行
 func TestFlushSet(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 第一次调用成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Success
+			// 第二次调用成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
 		},
 	}
@@ -87,30 +92,33 @@ func TestFlushSet(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Success.
+	// 首次 flush 应成功
 	err := runner.FlushSet("FOOBAR")
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
 	}
+	// 必须恰好调用一次 ipset，防止实现重复执行命令
 	if fcmd.CombinedOutputCalls != 1 {
 		t.Errorf("expected 1 CombinedOutput() calls, got %d", fcmd.CombinedOutputCalls)
 	}
+	// 用集合比较参数，避免依赖参数的排列顺序
 	if !sets.NewString(fcmd.CombinedOutputLog[0]...).HasAll("ipset", "flush", "FOOBAR") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[0])
 	}
-	// Flush again
+	// 再次 flush，验证该操作可重复执行
 	err = runner.FlushSet("FOOBAR")
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
 	}
 }
 
+// TestDestroySet 验证 DestroySet 的成功路径，以及集合不存在时的错误路径
 func TestDestroySet(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 第一次销毁成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Failure
+			// 第二次销毁失败：集合不存在
 			func() ([]byte, []byte, error) {
 				return []byte("ipset v6.19: The set with the given name does not exist"), nil, &fakeexec.FakeExitError{Status: 1}
 			},
@@ -123,30 +131,33 @@ func TestDestroySet(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Success
+	// 销毁存在的集合应成功
 	err := runner.DestroySet("FOOBAR")
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
 	}
+	// 必须恰好调用一次 ipset，防止重复执行销毁命令
 	if fcmd.CombinedOutputCalls != 1 {
 		t.Errorf("expected 1 CombinedOutput() calls, got %d", fcmd.CombinedOutputCalls)
 	}
+	// 用集合比较参数，避免依赖参数的排列顺序
 	if !sets.NewString(fcmd.CombinedOutputLog[0]...).HasAll("ipset", "destroy", "FOOBAR") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[0])
 	}
-	// Failure
+	// 销毁不存在的集合应报错
 	err = runner.DestroySet("FOOBAR")
 	if err == nil {
 		t.Errorf("expected failure, got nil")
 	}
 }
 
+// TestDestroyAllSets 验证 DestroyAllSets 调用 ipset destroy，且可重复执行
 func TestDestroyAllSets(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 第一次调用成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Success
+			// 第二次调用成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
 		},
 	}
@@ -157,7 +168,7 @@ func TestDestroyAllSets(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Success
+	// 第一次销毁全部成功
 	err := runner.DestroyAllSets()
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -168,13 +179,14 @@ func TestDestroyAllSets(t *testing.T) {
 	if !sets.NewString(fcmd.CombinedOutputLog[0]...).HasAll("ipset", "destroy") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[0])
 	}
-	// Success
+	// 再次销毁全部仍成功
 	err = runner.DestroyAllSets()
 	if err != nil {
 		t.Errorf("Unexpected failure: %v", err)
 	}
 }
 
+// TestCreateSet 验证 CreateSet 在 ignoreExistErr 取不同值时的命令参数与错误处理
 func TestCreateSet(t *testing.T) {
 	testSet := IPSet{
 		Name:       "FOOBAR",
@@ -184,11 +196,11 @@ func TestCreateSet(t *testing.T) {
 
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 第一次创建成功
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Success
+			// 第二次创建成功（带 -exist）
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Failure
+			// 第三次失败：模拟集合已存在，用于验证错误未被吞掉
 			func() ([]byte, []byte, error) {
 				return []byte("ipset v6.19: Set cannot be created: set with the same name already exists"), nil, &fakeexec.FakeExitError{Status: 1}
 			},
@@ -202,7 +214,7 @@ func TestCreateSet(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Create with ignoreExistErr = false, expect success
+	// ignoreExistErr 为 false 时，创建成功
 	err := runner.CreateSet(&testSet, false)
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -213,7 +225,7 @@ func TestCreateSet(t *testing.T) {
 	if !sets.NewString(fcmd.CombinedOutputLog[0]...).HasAll("ipset", "create", "FOOBAR", "hash:ip,port", "family", "inet", "hashsize", "1024", "maxelem", "65536") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[0])
 	}
-	// Create with ignoreExistErr = true, expect success
+	// ignoreExistErr 为 true 时，命令应带 -exist 参数且创建成功
 	err = runner.CreateSet(&testSet, true)
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -224,13 +236,15 @@ func TestCreateSet(t *testing.T) {
 	if !sets.NewString(fcmd.CombinedOutputLog[1]...).HasAll("ipset", "create", "FOOBAR", "hash:ip,port", "family", "inet", "hashsize", "1024", "maxelem", "65536", "-exist") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[1])
 	}
-	// Create with ignoreExistErr = false, expect failure
+	// ignoreExistErr 为 false 时，若 ipset 报错应把错误透传给调用方
 	err = runner.CreateSet(&testSet, false)
 	if err == nil {
 		t.Errorf("expected failure, got nil")
 	}
 }
 
+// testCases 是供 AddEntry/DelEntry 测试共用的用例，
+// 每条用例包含条目、所属集合以及期望的 ipset 命令日志。
 var testCases = []struct {
 	entry                *Entry
 	set                  *IPSet
@@ -370,15 +384,16 @@ var testCases = []struct {
 	},
 }
 
+// TestAddEntry 验证 AddEntry 对不同 set 类型的命令构造及 ignoreExistErr 行为
 func TestAddEntry(t *testing.T) {
 	for i := range testCases {
 		fcmd := fakeexec.FakeCmd{
 			CombinedOutputScript: []fakeexec.FakeAction{
-				// Success
+				// 第一次添加成功
 				func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-				// Success
+				// 第二次添加成功（带 -exist）
 				func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-				// Failure
+				// 第三次失败：模拟元素已存在，验证错误透传
 				func() ([]byte, []byte, error) {
 					return []byte("ipset v6.19: Set cannot be created: set with the same name already exists"), nil, &fakeexec.FakeExitError{Status: 1}
 				},
@@ -392,7 +407,7 @@ func TestAddEntry(t *testing.T) {
 			},
 		}
 		runner := newInternal(fexec)
-		// Create with ignoreExistErr = false, expect success
+		// ignoreExistErr 为 false 时，添加成功
 		err := runner.AddEntry(testCases[i].entry.String(), testCases[i].set, false)
 		if err != nil {
 			t.Errorf("expected success, got %v", err)
@@ -403,7 +418,7 @@ func TestAddEntry(t *testing.T) {
 		if !sets.NewString(fcmd.CombinedOutputLog[0]...).HasAll(testCases[i].addCombinedOutputLog[0]...) {
 			t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[0])
 		}
-		// Create with ignoreExistErr = true, expect success
+		// ignoreExistErr 为 true 时，命令应带 -exist 参数且添加成功
 		err = runner.AddEntry(testCases[i].entry.String(), testCases[i].set, true)
 		if err != nil {
 			t.Errorf("expected success, got %v", err)
@@ -414,7 +429,7 @@ func TestAddEntry(t *testing.T) {
 		if !sets.NewString(fcmd.CombinedOutputLog[1]...).HasAll(testCases[i].addCombinedOutputLog[1]...) {
 			t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[1])
 		}
-		// Create with ignoreExistErr = false, expect failure
+		// ignoreExistErr 为 false 时，ipset 的错误应透传给调用方
 		err = runner.AddEntry(testCases[i].entry.String(), testCases[i].set, false)
 		if err == nil {
 			t.Errorf("expected failure, got nil")
@@ -422,13 +437,14 @@ func TestAddEntry(t *testing.T) {
 	}
 }
 
+// TestDelEntry 验证 DelEntry 的命令构造，以及删除不存在元素时的错误路径
 func TestDelEntry(t *testing.T) {
 	for i := range testCases {
 		fcmd := fakeexec.FakeCmd{
 			CombinedOutputScript: []fakeexec.FakeAction{
-				// Success
+				// 第一次删除成功
 				func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-				// Failure
+				// 第二次失败：模拟元素不在集合中
 				func() ([]byte, []byte, error) {
 					return []byte("ipset v6.19: Element cannot be deleted from the set: it's not added"), nil, &fakeexec.FakeExitError{Status: 1}
 				},
@@ -459,6 +475,7 @@ func TestDelEntry(t *testing.T) {
 	}
 }
 
+// TestTestEntry 验证 TestEntry 能正确判断 IPv4 元素是否在集合中
 func TestTestEntry(t *testing.T) {
 	testEntry := &Entry{
 		IP:       "10.120.7.100",
@@ -469,11 +486,11 @@ func TestTestEntry(t *testing.T) {
 	setName := "NOT"
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 模拟元素存在：ipset test 以退出码 0 表示命中
 			func() ([]byte, []byte, error) {
 				return []byte("10.120.7.100,tcp:8080 is in set " + setName + "."), nil, nil
 			},
-			// Failure
+			// 模拟元素不存在：ipset test 以非零退出码表示未命中
 			func() ([]byte, []byte, error) {
 				return []byte("192.168.1.3,tcp:8080 is NOT in set " + setName + "."), nil, &fakeexec.FakeExitError{Status: 1}
 			},
@@ -486,7 +503,7 @@ func TestTestEntry(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Success
+	// 元素存在时应返回 ok=true
 	ok, err := runner.TestEntry(testEntry.String(), setName)
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -500,13 +517,14 @@ func TestTestEntry(t *testing.T) {
 	if !ok {
 		t.Errorf("expect entry exists in test set, got not")
 	}
-	// Failure
+	// 元素不存在时应返回错误或 ok=false
 	ok, err = runner.TestEntry(testEntry.String(), "FOOBAR")
 	if err == nil || ok {
 		t.Errorf("expect entry doesn't exist in test set")
 	}
 }
 
+// TestTestEntryIPv6 验证 TestEntry 对 IPv6 元素的判断逻辑与 IPv4 一致
 func TestTestEntryIPv6(t *testing.T) {
 	testEntry := &Entry{
 		IP:       "fd00:1234:5678:dead:beaf::1",
@@ -517,11 +535,11 @@ func TestTestEntryIPv6(t *testing.T) {
 	setName := "NOT"
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 模拟 IPv6 元素存在，退出码为 0
 			func() ([]byte, []byte, error) {
 				return []byte("fd00:1234:5678:dead:beaf::1,tcp:8080 is in set " + setName + "."), nil, nil
 			},
-			// Failure
+			// 模拟 IPv6 元素不存在，退出码非 0
 			func() ([]byte, []byte, error) {
 				return []byte("fd00::2,tcp:8080 is NOT in set FOOBAR."), nil, &fakeexec.FakeExitError{Status: 1}
 			},
@@ -534,7 +552,7 @@ func TestTestEntryIPv6(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec)
-	// Success
+	// 元素存在时应返回 ok=true
 	ok, err := runner.TestEntry(testEntry.String(), setName)
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -548,13 +566,14 @@ func TestTestEntryIPv6(t *testing.T) {
 	if !ok {
 		t.Errorf("expect entry exists in test set, got not")
 	}
-	// Failure
+	// 元素不存在时应返回错误或 ok=false
 	ok, err = runner.TestEntry(testEntry.String(), "FOOBAR")
 	if err == nil || ok {
 		t.Errorf("expect entry doesn't exist in test set")
 	}
 }
 
+// TestListEntries 验证从 ipset list 输出中解析成员列表，包括空集合的情况
 func TestListEntries(t *testing.T) {
 
 	output := `Name: foobar
@@ -594,7 +613,7 @@ Members:
 	for i := range testCases {
 		fcmd := fakeexec.FakeCmd{
 			CombinedOutputScript: []fakeexec.FakeAction{
-				// Success
+				// 模拟 ipset list 的原始文本输出
 				func() ([]byte, []byte, error) {
 					return []byte(testCases[i].output), nil, nil
 				},
@@ -608,7 +627,7 @@ Members:
 			},
 		}
 		runner := newInternal(fexec)
-		// Success
+		// 解析 ipset list 的输出，期望得到 Members 段的条目
 		entries, err := runner.ListEntries("foobar")
 		if err != nil {
 			t.Errorf("expected success, got: %v", err)
@@ -628,6 +647,7 @@ Members:
 	}
 }
 
+// TestListSets 验证 ListSets 使用 -n 选项并正确解析集合名称列表
 func TestListSets(t *testing.T) {
 	output := `foo
 bar
@@ -637,7 +657,7 @@ baz`
 
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success
+			// 模拟 ipset list -n 的输出，每行一个集合名
 			func() ([]byte, []byte, error) { return []byte(output), nil, nil },
 		},
 	}
@@ -647,7 +667,7 @@ baz`
 		},
 	}
 	runner := newInternal(fexec)
-	// Success
+	// 期望按输出顺序返回集合名称
 	list, err := runner.ListSets()
 	if err != nil {
 		t.Errorf("expected success, got: %v", err)
@@ -666,6 +686,7 @@ baz`
 	}
 }
 
+// Test_validIPSetType 验证 validateIPSetType 仅接受已知的 ipset 类型
 func Test_validIPSetType(t *testing.T) {
 	testCases := []struct {
 		setType   Type
@@ -697,6 +718,7 @@ func Test_validIPSetType(t *testing.T) {
 		},
 	}
 	for i := range testCases {
+		// 只关注"本应成功却报错"的情况；期望失败的用例由 expectErr 标识并跳过
 		err := validateIPSetType(testCases[i].setType)
 		if err != nil {
 			if !testCases[i].expectErr {
@@ -707,6 +729,7 @@ func Test_validIPSetType(t *testing.T) {
 	}
 }
 
+// Test_validatePortRange 验证端口范围字符串的格式校验，包括分隔符和边界情况
 func Test_validatePortRange(t *testing.T) {
 	testCases := []struct {
 		portRange string
@@ -795,6 +818,7 @@ func Test_validatePortRange(t *testing.T) {
 	}
 }
 
+// Test_validateFamily 验证 validateHashFamily 只接受 inet/inet6 协议族
 func Test_validateFamily(t *testing.T) {
 	testCases := []struct {
 		family    string
@@ -848,6 +872,7 @@ func Test_validateFamily(t *testing.T) {
 	}
 }
 
+// Test_validateProtocol 验证协议名称校验：仅接受小写 tcp/udp/sctp
 func Test_validateProtocol(t *testing.T) {
 	testCases := []struct {
 		protocol string
@@ -901,6 +926,7 @@ func Test_validateProtocol(t *testing.T) {
 	}
 }
 
+// TestValidateIPSet 验证 IPSet.Validate 对集合类型、协议族和大小参数的综合校验
 func TestValidateIPSet(t *testing.T) {
 	testCases := []struct {
 		ipset     *IPSet
@@ -997,6 +1023,7 @@ func TestValidateIPSet(t *testing.T) {
 	}
 }
 
+// Test_setIPSetDefaults 验证 setIPSetDefaults 只填充缺失字段，不覆盖已有配置
 func Test_setIPSetDefaults(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -1065,6 +1092,7 @@ func Test_setIPSetDefaults(t *testing.T) {
 	}
 }
 
+// Test_checkIPandProtocol 验证条目的 IP 地址与协议组合是否合法
 func Test_checkIPandProtocol(t *testing.T) {
 	testset := &IPSet{
 		Name:       "test1",
@@ -1141,6 +1169,7 @@ func Test_checkIPandProtocol(t *testing.T) {
 	}
 }
 
+// Test_parsePortRange 验证端口范围解析与规范化（如颠倒的起止端口会被交换）
 func Test_parsePortRange(t *testing.T) {
 	testCases := []struct {
 		portRange string
@@ -1242,7 +1271,8 @@ func Test_parsePortRange(t *testing.T) {
 	}
 }
 
-// This is a coarse test, but it offers some modicum of confidence as the code is evolved.
+// TestValidateEntry 是一个粗粒度的测试，覆盖各类 entry 的校验，
+// 为代码演进提供基本的信心。
 func TestValidateEntry(t *testing.T) {
 	testCases := []struct {
 		entry *Entry
@@ -1697,6 +1727,7 @@ func TestValidateEntry(t *testing.T) {
 	}
 }
 
+// TestEntryString 验证不同 set 类型下 Entry.String() 生成的 ipset 元素格式
 func TestEntryString(t *testing.T) {
 	testCases := []struct {
 		name   string

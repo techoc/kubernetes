@@ -28,26 +28,25 @@ import (
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 )
 
-// KernelCompatTester tests whether the required kernel capabilities are
-// present to run the windows kernel proxier.
+// KernelCompatTester 用于判断当前 Windows 内核是否具备运行内核模式 proxier 所需的能力。
 type KernelCompatTester interface {
 	IsCompatible() error
 }
 
-// CanUseWinKernelProxier returns true if we should use the Kernel Proxier
-// instead of the "classic" userspace Proxier.  This is determined by checking
-// the windows kernel version and for the existence of kernel features.
+// CanUseWinKernelProxier 判断是否应该使用内核模式 Proxier，而不是传统的 userspace Proxier；
+// 判断依据是 Windows 内核版本以及所需内核特性是否存在。
 func CanUseWinKernelProxier(kcompat KernelCompatTester) (bool, error) {
-	// Check that the kernel supports what we need.
+	// 先让兼容性检查器验证内核版本与所需能力，避免在不兼容的系统上启用内核模式。
 	if err := kcompat.IsCompatible(); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
+// WindowsKernelCompatTester 是 KernelCompatTester 的生产实现，通过 HNS 请求判断内核是否兼容。
 type WindowsKernelCompatTester struct{}
 
-// IsCompatible returns true if winkernel can support this mode of proxy
+// IsCompatible 检查 HNS 是否支持策略列表请求；缺少该能力时内核模式代理无法工作。
 func (lkct WindowsKernelCompatTester) IsCompatible() error {
 	_, err := hnslib.HNSListPolicyListRequest()
 	if err != nil {
@@ -56,29 +55,30 @@ func (lkct WindowsKernelCompatTester) IsCompatible() error {
 	return nil
 }
 
-// StackCompatTester tests whether the required kernel and network are dualstack capable
+// StackCompatTester 用于判断内核与指定网络是否具备双栈能力。
 type StackCompatTester interface {
 	DualStackCompatible(networkName string) bool
 }
 
+// DualStackCompatTester 是 StackCompatTester 的生产实现，基于 HCN/HNS 查询系统与网络能力。
 type DualStackCompatTester struct{}
 
+// DualStackCompatible 判断指定网络能否以双栈模式工作；任一前置检查失败都回退到单栈。
 func (t DualStackCompatTester) DualStackCompatible(networkName string) bool {
 	hcnImpl := newHcnImpl()
-	// First tag of hnslib that has a proper check for dual stack support is v0.8.22 due to a bug.
+	// 由于早期版本存在 bug，首个能正确检查双栈支持的 hnslib 标签是 v0.8.22；因此必须显式调用该检查。
 	if err := hcnImpl.Ipv6DualStackSupported(); err != nil {
-		// Hcn *can* fail the query to grab the version of hcn itself (which this call will do internally before parsing
-		// to see if dual stack is supported), but the only time this can happen, at least that can be discerned, is if the host
-		// is pre-1803 and hcn didn't exist. hnslib should truthfully return a known error if this happened that we can
-		// check against, and the case where 'err != this known error' would be the 'this feature isn't supported' case, as is being
-		// used here. For now, seeming as how nothing before ws2019 (1809) is listed as supported for k8s we can pretty much assume
-		// any error here isn't because the query failed, it's just that dualstack simply isn't supported on the host. With all
-		// that in mind, just log as info and not error to let the user know we're falling back.
+		// HCN 查询自身版本（该调用内部先做这件事，再解析是否支持双栈）理论上也可能失败，
+		// 但至少从已知情况看，唯一可能的场景是主机早于 1803、当时还不存在 HCN。
+		// 若真遇到这种情况，hnslib 理应返回可识别的已知错误供比对；
+		// 因此这里把"非该已知错误"的 err 视为"特性不受支持"。
+		// 鉴于 k8s 支持的最低版本是 ws2019（1809），基本可以断定此处错误表示主机不支持双栈，
+		// 而不是查询本身失败。所以只记 Info 日志告知用户正在回退，不按错误处理。
 		klog.InfoS("This version of Windows does not support dual-stack, falling back to single-stack", "err", err.Error())
 		return false
 	}
 
-	// check if network is using overlay
+	// 再检查网络是否为 overlay：overlay 模式下还需要结合特性门控判断。
 	hns, _ := newHostNetworkService(hcnImpl)
 	networkName, err := getNetworkName(networkName)
 	if err != nil {
@@ -92,7 +92,7 @@ func (t DualStackCompatTester) DualStackCompatible(networkName string) bool {
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.WinOverlay) && isOverlay(networkInfo) {
-		// Overlay (VXLAN) networks on Windows do not support dual-stack networking today
+		// Windows 上的 overlay（VXLAN）网络目前不支持双栈，必须回退到单栈。
 		klog.InfoS("Winoverlay does not support dual-stack, falling back to single-stack")
 		return false
 	}

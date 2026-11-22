@@ -24,6 +24,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestVirtualServerEqual 验证 VirtualServer.Equal 对 IPv4/IPv6 地址、协议、端口、调度算法、Flags 和超时时间的比较。
 func TestVirtualServerEqual(t *testing.T) {
 	Tests := []struct {
 		svcA   *VirtualServer
@@ -241,6 +242,7 @@ func TestVirtualServerEqual(t *testing.T) {
 	}
 }
 
+// TestRealServerEqual 验证 RealServer.Equal 对 IPv4/IPv6 地址和端口的比较。
 func TestRealServerEqual(t *testing.T) {
 	Tests := []struct {
 		rsA    *RealServer
@@ -318,6 +320,7 @@ func TestRealServerEqual(t *testing.T) {
 	}
 }
 
+// TestFrontendServiceString 验证 VirtualServer.String 对 IPv4/IPv6 地址的输出格式。
 func TestFrontendServiceString(t *testing.T) {
 	Tests := []struct {
 		svc      *VirtualServer
@@ -356,6 +359,7 @@ func TestFrontendServiceString(t *testing.T) {
 	}
 }
 
+// TestFrontendDestinationString 验证 RealServer.String 对 IPv4/IPv6 地址的输出格式。
 func TestFrontendDestinationString(t *testing.T) {
 	Tests := []struct {
 		svc      *RealServer

@@ -20,9 +20,12 @@ import (
 	"testing"
 )
 
+// TestIPPart 验证 IPPart 能从 IP、IP:port 和 endpoint 字符串中提取 IP，并正确处理格式错误。
 func TestIPPart(t *testing.T) {
+	// 用空串表示“期望成功”，以便与“期望解析失败”区分开。
 	const noError = ""
 
+	// 覆盖纯 IP、IPv4/IPv6 带端口及多种畸形输入，确保错误分支也被测到。
 	testCases := []struct {
 		endpoint      string
 		expectedIP    string
@@ -37,6 +40,7 @@ func TestIPPart(t *testing.T) {
 		{"1.2.3:8080", "", "invalid ip part"},
 	}
 
+	// 期望失败时只校验返回空串，具体错误信息由日志给出。
 	for _, tc := range testCases {
 		ip := IPPart(tc.endpoint)
 		if tc.expectedError == noError {

@@ -37,8 +37,10 @@ const (
 	testNodeName = "test-node"
 )
 
+// nodeTweak 定义 Node 对象的修改函数，便于测试用例按需拼装节点。
 type nodeTweak func(n *v1.Node)
 
+// makeNode 创建一个测试用 Node，并依次应用所有 tweaks。
 func makeNode(tweaks ...nodeTweak) *v1.Node {
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -51,6 +53,7 @@ func makeNode(tweaks ...nodeTweak) *v1.Node {
 	return n
 }
 
+// tweakNodeIPs 返回一个向 Node 状态追加 InternalIP 地址的修改函数。
 func tweakNodeIPs(nodeIPs ...string) nodeTweak {
 	return func(n *v1.Node) {
 		for _, ip := range nodeIPs {
@@ -59,18 +62,21 @@ func tweakNodeIPs(nodeIPs ...string) nodeTweak {
 	}
 }
 
+// tweakPodCIDRs 返回一个向 Node 规格追加 PodCIDR 的修改函数。
 func tweakPodCIDRs(podCIDRs ...string) nodeTweak {
 	return func(n *v1.Node) {
 		n.Spec.PodCIDRs = append(n.Spec.PodCIDRs, podCIDRs...)
 	}
 }
 
+// tweakResourceVersion 返回一个设置 Node ResourceVersion 的修改函数。
 func tweakResourceVersion(resourceVersion string) nodeTweak {
 	return func(n *v1.Node) {
 		n.ResourceVersion = resourceVersion
 	}
 }
 
+// TestNewNodeManager 验证 Node 与 PodCIDR 不同就绪状态下 newNodeManager 的等待、超时与错误处理。
 func TestNewNodeManager(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -82,44 +88,49 @@ func TestNewNodeManager(t *testing.T) {
 	}{
 		{
 			name: "node object doesn't exist",
-			// times out and ignores the error
+			// 等待条件始终未满足：超时后忽略错误。
 			expectedNodeIPs: nil,
 		},
 		{
 			name:          "node object doesn't exist, with watchPodCIDRs",
 			watchPodCIDRs: true,
-			// assert on error thrown by newNodeManager()
+			// 断言 watchPodCIDRs 时 newNodeManager 返回的错误。
 			expectedError: "timeout waiting for node \"test-node\" to exist",
 		},
 		{
 			name: "node object exist without NodeIP",
 			nodeUpdates: []func(ctx context.Context, client clientset.Interface){
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object doesn't exist initially
+					// 初始时节点对象尚不存在。
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object now exists but without NodeIP
+					// 此时节点已创建但还没有 NodeIP 或 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Create(ctx, makeNode(), metav1.CreateOptions{})
 				},
 			},
-			// times out and ignores the error
+			// 等待条件始终未满足：超时后忽略错误。
 			expectedNodeIPs: nil,
 		},
 		{
 			name: "node object exist with NodeIP",
 			nodeUpdates: []func(ctx context.Context, client clientset.Interface){
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object doesn't exist initially
+					// 初始时节点对象尚不存在。
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object now exists but without NodeIP
+					// 此时节点已创建但还没有 NodeIP 或 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Create(ctx, makeNode(), metav1.CreateOptions{})
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object got updated with NodeIPs
+					// 节点更新后带上 NodeIP。
 					_, _ = client.CoreV1().Nodes().Update(ctx, makeNode(
 						tweakNodeIPs("192.168.1.10"),
 					), metav1.UpdateOptions{})
@@ -131,45 +142,52 @@ func TestNewNodeManager(t *testing.T) {
 			name:          "watchPodCIDRs and node object exist without PodCIDRs",
 			watchPodCIDRs: true,
 			nodeUpdates: []func(ctx context.Context, client clientset.Interface){
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object doesn't exist initially
+					// 初始时节点对象尚不存在。
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object now exists but without NodeIP
+					// 此时节点已创建但还没有 NodeIP 或 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Create(ctx, makeNode(), metav1.CreateOptions{})
 				},
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object got updated with NodeIPs
+					// 节点更新后带上 NodeIP。
 					_, _ = client.CoreV1().Nodes().Update(ctx, makeNode(
 						tweakNodeIPs("192.168.1.10"),
 					), metav1.UpdateOptions{})
 				},
 			},
-			// assert on error thrown by newNodeManager()
+			// 断言 watchPodCIDRs 时 newNodeManager 返回的错误。
 			expectedError: "timeout waiting for PodCIDR allocation on node \"test-node\"",
 		},
 		{
 			name:          "watchPodCIDRs and node object exist with NodeIP and PodCIDR",
 			watchPodCIDRs: true,
 			nodeUpdates: []func(ctx context.Context, client clientset.Interface){
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object doesn't exist initially
+					// 初始时节点对象尚不存在。
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object now exists but without NodeIP
+					// 此时节点已创建但还没有 NodeIP 或 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Create(ctx, makeNode(), metav1.CreateOptions{})
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object got updated with NodeIPs
+					// 节点更新后带上 NodeIP。
 					_, _ = client.CoreV1().Nodes().Update(ctx, makeNode(
 						tweakNodeIPs("192.168.1.10"),
 					), metav1.UpdateOptions{})
 				},
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node updated with PodCIDRs
+					// 节点更新后分配了 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Update(ctx, makeNode(
 						tweakNodeIPs("192.168.1.1"),
 						tweakPodCIDRs("10.0.0.0/24"),
@@ -183,22 +201,25 @@ func TestNewNodeManager(t *testing.T) {
 			name:          "watchPodCIDRs and node object exist without NodeIP and with PodCIDR",
 			watchPodCIDRs: true,
 			nodeUpdates: []func(ctx context.Context, client clientset.Interface){
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object doesn't exist initially
+					// 初始时节点对象尚不存在。
 				},
 
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node object now exists but without NodeIP
+					// 此时节点已创建但还没有 NodeIP 或 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Create(ctx, makeNode(), metav1.CreateOptions{})
 				},
+				// 按时间顺序模拟一次外部事件，逐步推进节点状态。
 				func(ctx context.Context, client clientset.Interface) {
-					// node updated with PodCIDRs
+					// 节点更新后分配了 PodCIDR。
 					_, _ = client.CoreV1().Nodes().Update(ctx, makeNode(
 						tweakPodCIDRs("10.0.0.0/24"),
 					), metav1.UpdateOptions{})
 				},
 			},
-			// times out and ignores the error
+			// 没有 NodeIP 会超时，因此这里忽略错误，只检查已观察到的 PodCIDR。
 			expectedNodeIPs:  nil,
 			expectedPodCIDRs: []string{"10.0.0.0/24"},
 		},
@@ -209,19 +230,19 @@ func TestNewNodeManager(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 			client := clientsetfake.NewClientset()
 
-			// call the node update functions in go routine, we add 15ms sleep in between
-			// each update function to wait for the 10ms poll interval to finish
+			// 在 goroutine 中按序触发节点更新，每次间隔 15ms，
+			// 保证 manager 的 10ms 轮询能观察到每一次变化。
 			go func() {
-				// wait for node manager setup
+				// 先等 manager 完成初始化并开始监听，否则早期更新可能被错过。
 				time.Sleep(100 * time.Millisecond)
 
 				for _, update := range tc.nodeUpdates {
 					update(ctx, client)
-					// wait for 15 ms for 10ms poll interval to finish
+					// 留足 15ms，确保 manager 的 10ms 轮询能观察到本次更新。
 					time.Sleep(15 * time.Millisecond)
 				}
 			}()
-			// initialize the node manager with 10ms poll interval and 1s poll timeout
+			// 初始化 manager 时用 10ms 轮询间隔和 1s 超时，使测试快速结束。
 			nodeManager, err := newNodeManager(ctx, client, time.Second, testNodeName, tc.watchPodCIDRs, func(i int) {}, 10*time.Millisecond, time.Second, time.Second)
 			if len(tc.expectedError) > 0 {
 				require.Nil(t, nodeManager)
@@ -235,6 +256,7 @@ func TestNewNodeManager(t *testing.T) {
 	}
 }
 
+// TestNodeManagerOnNodeChange 验证 Node 的 IP 或 PodCIDR 变化是否按预期触发退出。
 func TestNodeManagerOnNodeChange(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -300,6 +322,7 @@ func TestNodeManagerOnNodeChange(t *testing.T) {
 	}
 }
 
+// TestNodeManagerOnNodeDelete 验证节点被删除时会调用退出函数。
 func TestNodeManagerOnNodeDelete(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var exitCode *int
@@ -315,6 +338,7 @@ func TestNodeManagerOnNodeDelete(t *testing.T) {
 	require.Equal(t, ptr.To(1), exitCode)
 }
 
+// TestNodeManagerNode 验证 Node 访问器返回的是最新版本的节点对象。
 func TestNodeManagerNode(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
