@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 +k8s:neq=<value> 对 int、指针与 typedef：
+// 与禁止值相同则报 Invalid（origin=neq）；nil 指针跳过校验；
+// 新旧值相同则应被 ratcheting 放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

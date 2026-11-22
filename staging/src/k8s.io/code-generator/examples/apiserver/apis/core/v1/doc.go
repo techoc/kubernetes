@@ -21,4 +21,7 @@ limitations under the License.
 // +groupName=
 // +k8s:openapi-model-package=io.k8s.code-generator.examples.apiserver.apis.core.v1
 
+// Package v1 是 core 示例的 versioned 外部 API 包。
+// 它同时开启 openapi、deepcopy、defaulter 与 conversion 生成，并指向
+// 内部包 k8s.io/code-generator/examples/apiserver/apis/core 作为转换对端。
 package v1

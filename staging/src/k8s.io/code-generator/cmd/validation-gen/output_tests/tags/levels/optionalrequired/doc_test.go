@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAlpha 验证 alpha 级别 required：仅 RequiredField 缺失时报 Alpha 错误；
+// 提供旧值以触发 ratcheting 语义。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -43,6 +45,7 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 验证 beta 级别 required：仅 RequiredFieldBeta 缺失时报 Beta 错误。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

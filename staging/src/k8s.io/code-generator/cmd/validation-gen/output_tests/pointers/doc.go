@@ -18,7 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package pointers 是 validation-gen 的测试包，覆盖指针字段与指向结构体的
+// 指针：生成代码必须先判空再解引用，且同一指针类型在多个字段上重复出现时
+// 只能生成一次校验逻辑。
 // +k8s:validation-gen-nolint
 package pointers
 

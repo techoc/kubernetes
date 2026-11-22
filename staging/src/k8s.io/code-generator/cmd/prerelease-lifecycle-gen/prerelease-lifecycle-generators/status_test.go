@@ -29,6 +29,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// mockType 是一个可复用的假类型；部分测试会就地修改它的注释切片。
 var mockType = &types.Type{
 	CommentLines: []string{
 		"RandomType defines a random structure in Kubernetes",
@@ -37,6 +38,9 @@ var mockType = &types.Type{
 	SecondClosestCommentLines: []string{},
 }
 
+// TestArgsFromType 验证从类型注释推导模板参数。
+// 关键规则：GA（v1）默认没有 deprecated/removed 版本；alpha/beta 在未显式声明时
+// 会按既定偏移量推导出默认弃用/移除版本（beta 为 +3/+6，alpha 为 +3/+6 相对 introduced）。
 func TestArgsFromType(t *testing.T) {
 	type testcase struct {
 		name          string
@@ -254,6 +258,7 @@ func TestArgsFromType(t *testing.T) {
 		},
 	}
 
+	// expected 里统一补上 "type" 键，因为模板总会收到源类型本身。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.expected != nil {
@@ -279,6 +284,9 @@ func TestArgsFromType(t *testing.T) {
 	}
 }
 
+// Test_extractKubeVersionTag 覆盖版本标签的解析与校验：
+// 标签重复、多值、缺失主次版本号或含非数字都会被拒绝；
+// 其中 wantFatal 的用例对应实现里 klog.Fatalf 的路径，通过替换 klog.OsExit 捕获。
 func Test_extractKubeVersionTag(t *testing.T) {
 	oldKlogOsExit := klog.OsExit
 	defer func() {
@@ -409,10 +417,12 @@ func Test_extractKubeVersionTag(t *testing.T) {
 	}
 }
 
+// customExit 把 klog 的退出转成 panic，使 Fatal 路径可在测试中被捕获而不是终止进程。
 func customExit(exitCode int) {
 	panic(strconv.Itoa(exitCode))
 }
 
+// safeExtractKubeVersionTag 包装真实实现，用 recover 把 panic 转成返回值。
 func safeExtractKubeVersionTag(tagName string, t *types.Type) (value *tagValue, major int, minor int, err error, localErr error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -423,6 +433,7 @@ func safeExtractKubeVersionTag(tagName string, t *types.Type) (value *tagValue, 
 	return
 }
 
+// safeExtractTag 同上，用于捕获 extractTag 的 Fatal 路径。
 func safeExtractTag(t *testing.T, tagName string, comments []string) (value *tagValue, err error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -433,6 +444,8 @@ func safeExtractTag(t *testing.T, tagName string, comments []string) (value *tag
 	return
 }
 
+// Test_extractTag 覆盖通用标签提取：只有带 "+" 标记的行才算标签；
+// 重复标签和多值标签视为错误，未带值的标签返回空字符串。
 func Test_extractTag(t *testing.T) {
 	oldKlogOsExit := klog.OsExit
 	defer func() {
@@ -504,6 +517,7 @@ func Test_extractTag(t *testing.T) {
 		},
 	}
 
+	// 多个 "=" 的行只取第一段值（见 “strange behaviour” 用例），这里锁定既有行为以防回归。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotTag, err := safeExtractTag(t, tt.variableName, tt.tagComments)
@@ -521,6 +535,8 @@ func Test_extractTag(t *testing.T) {
 	}
 }
 
+// Test_extractEnabledTypeTag 验证包级启用标签在两级注释（类型注释与最近的包注释）中都能被找到，
+// 任一为空不影响另一级的解析。
 func Test_extractEnabledTypeTag(t *testing.T) {
 	someComments := []string{
 		"+variable=7",
@@ -576,6 +592,8 @@ func Test_extractEnabledTypeTag(t *testing.T) {
 	}
 }
 
+// Test_extractReplacementTag 覆盖 replacement 标签的三元组解析（group,version,kind）。
+// 缺项（空 group/version/kind）必须报错，否则生成的弃用提示会指向不存在的类型。
 func Test_extractReplacementTag(t *testing.T) {
 	replacementTag := "+k8s:prerelease-lifecycle-gen:replacement"
 	tests := []struct {
@@ -735,6 +753,7 @@ func Test_extractReplacementTag(t *testing.T) {
 	}
 }
 
+// Test_isAPIType 锁定 API 类型的判定条件：导出名、struct 且内嵌 TypeMeta，三者缺一不可。
 func Test_isAPIType(t *testing.T) {
 	tests := []struct {
 		name string

@@ -23,9 +23,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:enum 对字符串类型的取值约束：
+// Enum0 没有任何合法值，Enum1 只允许 E1V1，Enum2 允许 E2V1/E2V2；
+// 未标记 enum 的 NotEnum 不受约束。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值不合法：Enum0 无合法值，Enum1/Enum2 的零值不在枚举集合中。
 	st.Value(&Struct{
 		// All zero vals
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -34,6 +38,7 @@ func Test(t *testing.T) {
 		field.NotSupported(field.NewPath("enum2Field"), Enum2(""), []Enum2{E2V1, E2V2}),
 	})
 
+	// 合法值 + 指针字段：只有 Enum0（无合法值）会报错；NotEnum 不做枚举校验。
 	st.Value(&Struct{
 		Enum0Field:      "",                // no valid value exists
 		Enum0PtrField:   ptr.To(Enum0("")), // no valid value exists
@@ -48,6 +53,7 @@ func Test(t *testing.T) {
 		field.NotSupported(field.NewPath("enum0PtrField"), Enum0(""), []Enum0{}),
 	})
 
+	// 非法值：值字段与指针字段都应报错，且错误里带上允许的取值集合。
 	st.Value(&Struct{
 		Enum0Field:      "x",                // no valid value exists
 		Enum0PtrField:   ptr.To(Enum0("x")), // no valid value exists

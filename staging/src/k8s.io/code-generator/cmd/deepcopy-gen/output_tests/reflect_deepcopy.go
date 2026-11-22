@@ -22,11 +22,15 @@ import (
 )
 
 // ReflectDeepCopy deep copies the object using reflection.
+// 返回 interface{} 便于在测试中与生成代码的结果做通用比较。
 func ReflectDeepCopy(in interface{}) interface{} {
 	return reflectDeepCopy(reflect.ValueOf(in)).Interface()
 }
 
+// reflectDeepCopy 是 ReflectDeepCopy 的递归实现，按 reflect.Kind 分派。
 func reflectDeepCopy(src reflect.Value) reflect.Value {
+	// nil 的 interface/pointer/map/slice 直接返回原值：复制 nil 仍应为 nil，
+	// 不能变成零值对象，否则语义改变。
 	switch src.Kind() {
 	case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
 		if src.IsNil() {
@@ -36,6 +40,7 @@ func reflectDeepCopy(src reflect.Value) reflect.Value {
 
 	switch src.Kind() {
 	case reflect.Chan, reflect.Func, reflect.UnsafePointer, reflect.Uintptr:
+		// 这些类型不可安全复制，显式 panic 而不是产生浅拷贝。
 		panic(fmt.Sprintf("cannot deep copy kind: %s", src.Kind()))
 	case reflect.Array:
 		dst := reflect.New(src.Type())
@@ -44,6 +49,7 @@ func reflectDeepCopy(src reflect.Value) reflect.Value {
 		}
 		return dst.Elem()
 	case reflect.Interface:
+		// 展开接口后递归复制其动态值；未导出字段由类型自身负责语义。
 		return reflectDeepCopy(src.Elem())
 	case reflect.Map:
 		dst := reflect.MakeMap(src.Type())
@@ -56,6 +62,7 @@ func reflectDeepCopy(src reflect.Value) reflect.Value {
 		dst.Elem().Set(reflectDeepCopy(src.Elem()))
 		return dst
 	case reflect.Slice:
+		// 预留容量但按元素追加，保持与生成代码相同的 nil/空语义。
 		dst := reflect.MakeSlice(src.Type(), 0, src.Len())
 		for i := 0; i < src.Len(); i++ {
 			dst = reflect.Append(dst, reflectDeepCopy(src.Index(i)))

@@ -19,6 +19,7 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:neq 作用于 bool 值字段、指针字段与 typedef 字段。
 package neqbool
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

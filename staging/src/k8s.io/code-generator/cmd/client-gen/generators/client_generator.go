@@ -40,6 +40,10 @@ import (
 )
 
 // NameSystems returns the name system used by the generators in this package.
+//
+// 命名系统决定了同一 Go 类型在不同上下文中的拼写（导出名、私有名、复数名等）。
+// 生成的代码依赖这些名字互相引用，因此这里必须与 gengo 的默认行为保持一致，
+// 只有确实需要去重（例如资源名与 group 名冲突）时才通过 ExceptionNamer 覆盖。
 func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	lowercaseNamer := namer.NewAllLowercasePluralNamer(pluralExceptions)
 
@@ -95,14 +99,17 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 
 	return namer.NameSystems{
-		"singularKind":       namer.NewPublicNamer(0),
-		"public":             publicNamer,
-		"private":            privateNamer,
-		"raw":                namer.NewRawNamer("", nil),
-		"publicPlural":       publicPluralNamer,
-		"privatePlural":      privatePluralNamer,
+		// singularKind 用于单数 Kind 形式，主要供 scheme 注册使用。
+		"singularKind":  namer.NewPublicNamer(0),
+		"public":        publicNamer,
+		"private":       privateNamer,
+		"raw":           namer.NewRawNamer("", nil),
+		"publicPlural":  publicPluralNamer,
+		"privatePlural": privatePluralNamer,
+		// allLowercasePlural 生成全小写复数，即 REST 资源名（如 "deployments"）。
 		"allLowercasePlural": lowercaseNamer,
-		"resource":           codegennamer.NewTagOverrideNamer("resourceName", lowercaseNamer),
+		// resource 允许通过 +resourceName 标签覆盖资源名，默认退化为全小写复数。
+		"resource": codegennamer.NewTagOverrideNamer("resourceName", lowercaseNamer),
 	}
 }
 
@@ -130,7 +137,13 @@ func DefaultNameSystem() string {
 	return "public"
 }
 
+// targetForGroup 为单个 group/version 生成一个 typed clientset 目标：
+// 每个类型一个文件、一个 group client 文件，外加 generated_expansion.go。
+//
+// 文件按 private 名命名而非 Kind 名，是为了让生成结果与类型声明顺序无关，
+// 同时避免大小写在不同文件系统上的差异。
 func targetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clientsetDir, clientsetPkg string, groupPkgName string, groupGoName string, apiPath string, inputPkg string, applyBuilderPkg string, boilerplate []byte, prefersProtobuf bool) generator.Target {
+	// 目录布局固定为 typed/<group>/<version>，其中 group 与 version 都小写。
 	subdir := []string{"typed", strings.ToLower(groupPkgName), strings.ToLower(gv.Version.NonEmpty())}
 	gvDir := filepath.Join(clientsetDir, filepath.Join(subdir...))
 	gvPkg := path.Join(clientsetPkg, path.Join(subdir...))
@@ -183,6 +196,7 @@ func targetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 				imports:          generator.NewImportTrackerForPackage(gvPkg),
 			})
 
+			// expansion 文件用于手写扩展方法，文件名固定，生成器不会清空其内容。
 			expansionFileName := "generated_expansion.go"
 			generators = append(generators, &genExpansion{
 				groupPackagePath: gvDir,
@@ -194,12 +208,15 @@ func targetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 
 			return generators
 		},
+		// 只处理带 +genclient 的类型，其余类型属于该包的普通 API 对象。
 		FilterFunc: func(c *generator.Context, t *types.Type) bool {
 			return util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...)).GenerateClient
 		},
 	}
 }
 
+// targetForClientset 生成顶层 clientset.go，即 Clientset 接口与实现，
+// 以及按 group 划分的访问方法。
 func targetForClientset(args *args.Args, clientsetDir, clientsetPkg string, groupGoNames map[clientgentypes.GroupVersion]string, boilerplate []byte) generator.Target {
 	return &generator.SimpleTarget{
 		PkgName:       args.ClientsetName,
@@ -225,6 +242,10 @@ func targetForClientset(args *args.Args, clientsetDir, clientsetPkg string, grou
 	}
 }
 
+// targetForScheme 生成 scheme/register.go，把每个 group-version 注册进运行时 scheme。
+//
+// 内部版本（version 为空串）的 client 无法通过公开的 versioned scheme 完成
+// 编解码，因此需要额外创建 runtime.Registry，由 CreateRegistry 开关控制。
 func targetForScheme(args *args.Args, clientsetDir, clientsetPkg string, groupGoNames map[clientgentypes.GroupVersion]string, boilerplate []byte) generator.Target {
 	schemeDir := filepath.Join(clientsetDir, "scheme")
 	schemePkg := path.Join(clientsetPkg, "scheme")
@@ -275,6 +296,9 @@ NextGroup:
 // applyGroupOverrides applies group name overrides to each package, if applicable. If there is a
 // comment of the form "// +groupName=somegroup" or "// +groupName=somegroup.foo.bar.io", use the
 // first field (somegroup) as the name of the group in Go code, e.g. as the func name in a clientset.
+//
+// 先在 universe 中扫描出 old GV -> new GV 的映射，再据此改写 args.Groups，
+// 保证后续所有生成器看到的 group 名与源码注释一致。
 func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 	// Create a map from "old GV" to "new GV" so we know what changes we need to make.
 	changes := make(map[clientgentypes.GroupVersion]clientgentypes.GroupVersion)
@@ -323,6 +347,9 @@ func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 //
 // TODO: Change this tool to just take inputs as Go "patterns" like every other
 // gengo tool, then extract GVs from those.
+//
+// 只有 universe 中尚未加载（Name 为空）的包才会触发 FindPackages；
+// 已加载的包保持原样，避免重复解析。
 func sanitizePackagePaths(context *generator.Context, args *args.Args) error {
 	for i := range args.Groups {
 		pkg := &args.Groups[i]
@@ -347,6 +374,9 @@ func sanitizePackagePaths(context *generator.Context, args *args.Args) error {
 }
 
 // GetTargets makes the client target definition.
+//
+// 生成顺序固定为：clientset -> scheme -> (fake) -> 各 group/version。
+// 注意 ClientsetOnly 会提前返回，此时只重写聚合层，不动 typed client。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, "", gengo.StdGeneratedBy)
 	if err != nil {
@@ -367,6 +397,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		idOpts = append(idOpts, apidefinitions.WithLintRules(args.LintRules...))
 	}
 
+	// gvToTypes 收集每个 group-version 需要生成 client 的类型，
+	// groupGoNames 记录其在 Go 代码中的 group 标识符（可能被 +groupGoName 覆盖）。
 	gvToTypes := map[clientgentypes.GroupVersion][]*types.Type{}
 	groupGoNames := make(map[clientgentypes.GroupVersion]string)
 	for gv, inputDir := range args.GroupVersionPackages() {
@@ -438,6 +470,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		return []generator.Target(targetList)
 	}
 
+	// 按 private 名排序类型，保证同一 group-version 内的文件与接口方法顺序稳定。
 	orderer := namer.Orderer{Namer: namer.NewPrivateNamer(0)}
 	gvPackages := args.GroupVersionPackages()
 	for _, group := range args.Groups {

@@ -19,12 +19,16 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 minimum 标签在有无符号整数的各宽度、指针、typedef，
+// 以及 optional/required 组合下的生成结果；负数边界单独成组。
 package minimum
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// BasicStruct 覆盖带符号/无符号整数的值类型与指针类型。
 type BasicStruct struct {
 	TypeMeta int
 
@@ -58,6 +62,7 @@ type BasicStruct struct {
 	TypedefPtrField *IntType `json:"typedefPtrField"`
 }
 
+// OptionalStruct 验证 optional 字段的空值不触发 minimum 校验。
 type OptionalStruct struct {
 	TypeMeta int
 
@@ -76,6 +81,7 @@ type OptionalStruct struct {
 	OptionalTypedefPtrField *IntType `json:"optionalTypedefPtrField"`
 }
 
+// RequiredStruct 验证 required 字段必须存在且满足 minimum。
 type RequiredStruct struct {
 	TypeMeta int
 
@@ -94,6 +100,7 @@ type RequiredStruct struct {
 	RequiredTypedefPtrField *IntType `json:"requiredTypedefPtrField"`
 }
 
+// NegativeMinimumStruct 验证负的 minimum 值不会与零值判断混淆。
 type NegativeMinimumStruct struct {
 	TypeMeta int
 

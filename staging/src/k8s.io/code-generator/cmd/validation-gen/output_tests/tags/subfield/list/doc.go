@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // Package  contains test types for testing subfield field validation tags.
+// list 验证 +k8s:subfield 对嵌套 list/map 语义（listType、eachKey 等）
+// 的覆盖方式，并配合 opaqueType 跳过外部类型。
 // +k8s:validation-gen-nolint
 package list
 

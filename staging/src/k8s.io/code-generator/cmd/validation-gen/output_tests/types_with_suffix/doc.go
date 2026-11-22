@@ -20,6 +20,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:validation-gen=TypesWithSuffix=Request：只处理以后缀结尾的类型，
+// 且只有进入 StructRequest 类型图的类型才应生成校验。
 package primitives
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

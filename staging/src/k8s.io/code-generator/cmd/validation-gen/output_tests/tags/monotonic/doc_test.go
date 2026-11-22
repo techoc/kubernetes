@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖 +k8s:monotonic 在更新场景下的语义：只允许不减，
+// 并与 required、NoUnset、minimum 等其他约束叠加。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// structOrig 是基线旧值；后续用增加/减少两种新值与之比较。
 	structOrig := Struct{
 		IntField:          10,
 		Int64Field:        20,
@@ -39,6 +42,7 @@ func Test(t *testing.T) {
 		NegativeInt:       0,
 	}
 
+	// structIncrease 是所有字段均增大的新值，作为合法更新用例。
 	structIncrease := Struct{
 		IntField:          11,
 		Int64Field:        21,
@@ -53,6 +57,7 @@ func Test(t *testing.T) {
 		NegativeInt:       5,
 	}
 
+	// structDecrease 是所有字段均减小的新值，作为非法更新用例。
 	structDecrease := Struct{
 		IntField:          9,
 		Int64Field:        19,
@@ -114,6 +119,7 @@ func Test(t *testing.T) {
 	st.Value(&structDecrease).ExpectValid()
 
 	// OptionalIntPtr unset -> set should be valid (transition from nil to value)
+	// nil 到有值视为“增加”，应通过。
 	structSet := structOrig
 	structSet.OptionalIntPtr = new(10)
 	oldObjectSet := structSet

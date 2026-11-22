@@ -24,9 +24,11 @@ import (
 // PluralExceptionListToMapOrDie converts the list in "Type:PluralType" to map[string]string.
 // This is used for pluralizer.
 // If the format is wrong, this function will panic.
+// 参数来自命令行，格式错误属于调用方配置错误，panic 比静默忽略更安全。
 func PluralExceptionListToMapOrDie(pluralExceptions []string) map[string]string {
 	pluralExceptionMap := make(map[string]string, len(pluralExceptions))
 	for i := range pluralExceptions {
+		// 使用 SplitN 之外的 Split 以严格拒绝多余冒号。
 		parts := strings.Split(pluralExceptions[i], ":")
 		if len(parts) != 2 {
 			panic(fmt.Sprintf("invalid plural exception definition: %s", pluralExceptions[i]))

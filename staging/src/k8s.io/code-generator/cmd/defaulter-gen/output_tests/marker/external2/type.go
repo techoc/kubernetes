@@ -16,4 +16,7 @@ limitations under the License.
 
 package external2
 
+// String 是一个定义在外部包的类型别名。
+// 测试用它验证 defaulter-gen 在字段类型来自其他包时仍能正确生成
+// 字面量赋值，且不会错误地把它当成内建 string 处理。
 type String string

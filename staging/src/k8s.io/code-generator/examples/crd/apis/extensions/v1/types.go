@@ -32,6 +32,10 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TestType is a top-level type. A client is created for it.
+//
+// 上面一组 +genclient:method 让 client-gen 为它生成额外的方法：
+// Get/List/Create/Update/Patch/Apply 的扩展形式，以及带子资源的
+// Get/Create/Update/Apply 方法，用于覆盖 client-gen 的子资源代码生成。
 type TestType struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -42,6 +46,7 @@ type TestType struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// TestSubresource 是子资源方法的输入/输出类型。
 type TestSubresource struct {
 	metav1.TypeMeta `json:""`
 
@@ -60,6 +65,7 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 是 TestType 的 status 子结构。
 type TestTypeStatus struct {
 	Blah string `json:"blah"`
 }

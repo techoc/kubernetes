@@ -33,27 +33,40 @@ const (
 // decide whether to inherit short-circuit validations from the field. Lookups
 // must therefore happen in a deferred callback so that all opaque tags have
 // been registered first.
+//
+// 全局状态是刻意为之：标签处理顺序无法保证，opaque 信息必须在所有标签都
+// 处理完后才能查询，因此查询点放在 Deferred 回调里。
 var (
 	globalOpaqueTypes   = map[*types.Type]bool{}
 	globalOpaqueMembers = map[*types.Member]bool{}
 )
 
+// opaqueTypeTagValidator 处理 +k8s:opaqueType 标签，并在全局表中登记
+// 被标记的类型与字段。
 type opaqueTypeTagValidator struct{}
 
 func init() {
 	RegisterTagValidator(opaqueTypeTagValidator{})
 }
 
+// Init 无需额外配置。
 func (opaqueTypeTagValidator) Init(Config) {}
 
+// TagName 返回标签全名。
 func (opaqueTypeTagValidator) TagName() string {
 	return opaqueTypeTagName
 }
 
+// ValidScopes: opaque 可标在类型、字段以及 list/map 的元素位置，
+// 从而覆盖集合内的元素类型。
 func (opaqueTypeTagValidator) ValidScopes() sets.Set[Scope] {
 	return sets.New(ScopeType, ScopeField, ScopeListVal, ScopeMapKey, ScopeMapVal)
 }
 
+// GetValidations 登记 opaque 信息并返回 OpaqueType 标记。
+//
+// 只在不透明类型或字段的实际声明位置登记；调用方的字段查找使用
+// globalOpaqueMembers，因此 Member 为 nil 时跳过。
 func (opaqueTypeTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
 	// Store information about opaque types and fields, so that other validators
 	// don't have to extract it again.
@@ -72,6 +85,9 @@ func (opaqueTypeTagValidator) GetValidations(context Context, _ codetags.Tag) (V
 // +k8s:opaqueType. It reads from the package-level registries above, so
 // callers must invoke it from a deferred callback (or any other context
 // where opaque-tag processing has finished).
+//
+// 同时检查字段级与类型级：字段级覆盖更精确，类型级让同一类型的所有使用处
+// 都保持不透明；查询前先剥掉指针与 alias，确保比较的是底层类型。
 func isFieldOpaque(context Context) bool {
 	if context.Member != nil && globalOpaqueMembers[context.Member] {
 		return true
@@ -82,6 +98,7 @@ func isFieldOpaque(context Context) bool {
 	return false
 }
 
+// Docs 返回面向用户的标签文档。
 func (v opaqueTypeTagValidator) Docs() TagDoc {
 	doc := TagDoc{
 		Tag:            opaqueTypeTagName,

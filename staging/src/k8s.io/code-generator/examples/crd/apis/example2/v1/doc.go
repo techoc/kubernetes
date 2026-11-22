@@ -19,4 +19,6 @@ limitations under the License.
 // +groupName=example.test.crd.code-generator.k8s.io
 // +groupGoName=SecondExample
 
+// Package v1 是 CRD 示例的版本化 API 包，用于验证自定义资源场景下的
+// deepcopy/defaulter 生成以及 +groupName/+groupGoName 的组合。
 package v1

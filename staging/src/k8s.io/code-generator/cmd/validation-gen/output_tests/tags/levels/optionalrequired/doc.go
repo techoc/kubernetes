@@ -18,12 +18,15 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+// 这是一个测试包：验证 alpha/beta 前缀包裹 required 时的错误级别。
+// 注意：此包没有 "This is a test package." 文档行，直接以标签说明用途。
 package optionalrequired
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 用 Alpha/Beta 两种稳定性声明两个必填指针字段。
 type Struct struct {
 	TypeMeta int
 

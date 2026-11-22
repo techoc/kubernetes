@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 minItems 作用在结构体 slice 上，并对比普通元素与 typedef 元素；
+// minItems=0 不应产生任何校验。
 package sliceofstruct
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

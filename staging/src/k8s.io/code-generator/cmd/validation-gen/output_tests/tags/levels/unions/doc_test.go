@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestAlpha 验证 union / zeroOrOneOf 在 alpha 级别下的报错：
+// 判别器要求的成员缺失，以及多个互斥成员同时出现。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 判别器为 DM1 时 M1 必须存在。
 	st.Value(&Struct{
 		D:  DM1,
 		M1: &M1{},
@@ -37,6 +40,7 @@ func TestAlpha(t *testing.T) {
 		field.Invalid(field.NewPath("m1"), nil, "").WithOrigin("union").MarkAlpha(),
 	})
 
+	// 结构体字段上的 zeroOrOneOf。
 	st.Value(&MyStruct{
 		Z1: &Z1{},
 		Z2: &Z2{},
@@ -46,6 +50,7 @@ func TestAlpha(t *testing.T) {
 		}, "only one of z1, z2 may be specified").WithOrigin("zeroOrOneOf").MarkAlpha(),
 	})
 
+	// 列表元素上的 zeroOrOneOf。
 	st.Value(&MyListStruct{
 		Tasks: []Task{
 			{Name: "succeeded", State: "Succeeded"},
@@ -56,6 +61,8 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 与 TestAlpha 用例一一对应，只是全部标签换成 beta 级别，
+// 用于确认错误上的稳定性级别随标签正确变化。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

@@ -20,15 +20,20 @@ import (
 	"testing"
 )
 
+// Test 验证 ifEnabled/ifDisabled 条件作用在 subfield 上：
+// FeatureX 关闭时只校验 metadataDisabled.xDisabledField，
+// 开启时只校验 metadata.xEnabledField。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// FeatureX 关闭：仅 disabled 分支的校验生效。
 	st.Value(&Struct{
 		// All zero values
 	}).Opts(map[string]bool{"FeatureX": false}).ExpectValidateFalseByPath(map[string][]string{
 		"metadataDisabled.xDisabledField": {"field Struct.ObjectMetaDisabled.XDisabledField"},
 	})
 
+	// FeatureX 开启：仅 enabled 分支的校验生效。
 	st.Value(&Struct{
 		// All zero values
 	}).Opts(map[string]bool{"FeatureX": true}).ExpectValidateFalseByPath(map[string][]string{

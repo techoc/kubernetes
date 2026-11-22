@@ -45,11 +45,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// main 是 prerelease-lifecycle-gen 的入口：解析 flag → 校验 → 交给 gengo 执行。
+// 项目文档注释（上方包注释）说明标签语法；这里只做标准的生成器装配，
+// 具体目标与命名在 prerelease-lifecycle-generators 包中实现。
 func main() {
 	klog.InitFlags(nil)
 	args := args.New()
 
 	args.AddFlags(pflag.CommandLine)
+	// klog 的 flag 注册在标准库 flag 上，需要显式并入 pflag 才能被统一解析。
 	flag.Set("logtostderr", "true")
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()

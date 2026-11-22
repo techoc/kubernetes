@@ -32,12 +32,18 @@ import (
 	customreflect "k8s.io/code-generator/third_party/forked/golang/reflect"
 )
 
+// rewriteFile 解析 name 指向的 Go 文件，交给 rewriteFn 做 AST 级修改，
+// 然后用 header 覆盖文件头并整体格式化写回。
+//
+// 之所以走“解析-改写-重新打印”而不是文本替换：生成代码的排版会随 gogo
+// 版本变化，只有基于 AST 的改写才能在格式差异下保持幂等。
 func rewriteFile(name string, header []byte, rewriteFn func(*token.FileSet, *ast.File) error) error {
 	fset := token.NewFileSet()
 	src, err := os.ReadFile(name)
 	if err != nil {
 		return err
 	}
+	// 需要 ParseComments，否则注释映射表为空，后续 cmap.Filter 会丢掉全部注释。
 	file, err := parser.ParseFile(fset, name, src, parser.DeclarationErrors|parser.ParseComments)
 	if err != nil {
 		return err
@@ -48,6 +54,7 @@ func rewriteFile(name string, header []byte, rewriteFn func(*token.FileSet, *ast
 	}
 
 	b := &bytes.Buffer{}
+	// 先写入许可证头，再打印 AST：printer 不会保留原文件的头部注释。
 	b.Write(header)
 	if err := printer.Fprint(b, fset, file); err != nil {
 		return err
@@ -69,24 +76,27 @@ func rewriteFile(name string, header []byte, rewriteFn func(*token.FileSet, *ast
 	return f.Close()
 }
 
-// ExtractFunc extracts information from the provided TypeSpec and returns true if the type should be
-// removed from the destination file.
+// ExtractFunc 从 TypeSpec 中提取信息，返回 true 表示该类型应从目标文件中移除。
 type ExtractFunc func(*ast.TypeSpec) bool
 
-// OptionalFunc returns true if the provided local name is a type that has protobuf.nullable=true
-// and should have its marshal functions adjusted to remove the 'Items' accessor.
+// OptionalFunc 返回 true 表示该本地类型名带 protobuf.nullable=true，
+// 其序列化函数需要去掉 'Items' 访问器。
 type OptionalFunc func(name string) bool
 
+// RewriteGeneratedGogoProtobufFile 对 gogo 生成的 .pb.go 文件做后处理：
+// 适配 optional 类型、去掉 gogo 依赖、删除已存在的类型声明与空导入。
+// 目的是让生成结果只保留 Kubernetes 自身需要的部分，避免引入 gogo 运行时依赖。
 func RewriteGeneratedGogoProtobufFile(file string, extractFn ExtractFunc, optionalFn OptionalFunc, header []byte, dropGogo bool) error {
 	return rewriteFile(file, header, func(fset *token.FileSet, file *ast.File) error {
+		// 记录原始注释位置，改写后据此剔除已失效的注释。
 		cmap := ast.NewCommentMap(fset, file, file.Comments)
 
-		// transform methods that point to optional maps or slices
+		// 转换指向 optional map 或 slice 的方法。
 		for _, d := range file.Decls {
 			rewriteOptionalMethods(d, optionalFn)
 		}
 		if dropGogo {
-			// transform references to gogo sort util
+			// 转换对 gogo sort 工具的引用。
 			var oldSortImport string
 			var usedSort bool
 			for _, d := range file.Decls {
@@ -102,7 +112,7 @@ func RewriteGeneratedGogoProtobufFile(file string, extractFn ExtractFunc, option
 			}
 		}
 
-		// remove types that are already declared
+		// 移除已声明的类型。
 		decls := []ast.Decl{}
 		for _, d := range file.Decls {
 			if dropExistingTypeDeclarations(d, extractFn) {
@@ -111,7 +121,7 @@ func RewriteGeneratedGogoProtobufFile(file string, extractFn ExtractFunc, option
 			if dropEmptyImportDeclarations(d) {
 				continue
 			}
-			// remove all but required functions
+			// 只保留必需的函数。
 			if dropGogo && dropUnusedGo(d) {
 				continue
 			}
@@ -119,15 +129,15 @@ func RewriteGeneratedGogoProtobufFile(file string, extractFn ExtractFunc, option
 		}
 		file.Decls = decls
 
-		// remove unmapped comments
+		// 移除已无法映射到节点的注释。
 		file.Comments = cmap.Filter(file).Comments()
 		return nil
 	})
 }
 
-// rewriteGogoSortImport rewrites an import of "github.com/gogo/protobuf/sortkeys" to "sort",
-// and returns the original package alias and true if the rewrite occurred.
-// Returns "", false if the decl is not an import decl, or does not contain an import of "github.com/gogo/protobuf/sortkeys",
+// rewriteGogoSortImport 把 "github.com/gogo/protobuf/sortkeys" 的导入改写为 "sort"，
+// 返回原包别名以及是否发生了改写。
+// 若该 decl 不是 import decl，或不包含该导入，返回 "", false。
 func rewriteGogoSortImport(decl ast.Decl) (string, bool) {
 	t, ok := decl.(*ast.GenDecl)
 	if !ok {
@@ -139,12 +149,13 @@ func rewriteGogoSortImport(decl ast.Decl) (string, bool) {
 	for _, s := range t.Specs {
 		if spec, ok := s.(*ast.ImportSpec); ok {
 			if spec.Path != nil && spec.Path.Value == `"github.com/gogo/protobuf/sortkeys"` {
-				// switch gogo sort to stdlib sort
+				// 把 gogo sort 换成标准库 sort。
 				spec.Path.Value = `"sort"`
 				oldName := "sortkeys"
 				if spec.Name != nil {
 					oldName = spec.Name.Name
 				}
+				// 清除别名，使用标准库包名 sort。
 				spec.Name = nil
 				return oldName, true
 			}
@@ -153,7 +164,7 @@ func rewriteGogoSortImport(decl ast.Decl) (string, bool) {
 	return "", false
 }
 
-// rewriteGogoSort walks the AST, replacing use of the oldSortImport package with newSortImport
+// rewriteGogoSort 遍历 AST，把 oldSortImport 包的使用替换为 newSortImport。
 func rewriteGogoSort(decl ast.Decl, oldSortImport, newSortImport string) {
 	t, ok := decl.(*ast.FuncDecl)
 	if !ok {
@@ -162,44 +173,47 @@ func rewriteGogoSort(decl ast.Decl, oldSortImport, newSortImport string) {
 	ast.Walk(replacePackageVisitor{oldPackage: oldSortImport, newPackage: newSortImport}, t.Body)
 }
 
-// keepFuncs is an allowlist of top-level func decls we should keep
+// keepFuncs 是应保留的顶层函数白名单。
+// 白名单之外的函数（如 gogo 的 XXX_ 系列、Getter）在 dropGogo 模式下会被删除。
 var keepFuncs = map[string]bool{
-	// generated helpers
+	// 生成的辅助函数
 	"sovGenerated":           true,
 	"sozGenerated":           true,
 	"skipGenerated":          true,
 	"encodeVarintGenerated":  true,
 	"valueToStringGenerated": true,
 
-	// unmarshal
+	// 反序列化
 	"Reset":     true,
 	"Unmarshal": true,
 
-	// marshal
+	// 序列化
 	"Size":                 true,
 	"Marshal":              true,
 	"MarshalTo":            true,
 	"MarshalToSizedBuffer": true,
 
-	// other widely used methods
+	// 其他被广泛使用的方法
 	"String": true,
 }
 
-// keepVars is an allowlist of top-level var decls we should keep
+// keepVars 是应保留的顶层变量白名单（错误变量被生成代码引用）。
 var keepVars = map[string]bool{
 	"ErrInvalidLengthGenerated":        true,
 	"ErrIntOverflowGenerated":          true,
 	"ErrUnexpectedEndOfGroupGenerated": true,
 }
 
-// dropUnusedGo returns true if the top-level decl should be dropped.
-// Has the following behavior for different decl types:
-// * import: decl is rewritten to drop gogo package imports. Returns true if all imports in the decl were gogo imports, false if non-gogo imports remain.
-// * var: decl is rewritten to drop vars not in the keepVars allowlist. Returns true if all vars in the decl were removed, false if allowlisted vars remain.
-// * const: returns true
-// * type: returns true
-// * func: returns true if the func is not in the keepFuncs allowlist and should be dropped.
-// * other: returns false
+// dropUnusedGo 返回该顶层 decl 是否应被丢弃。
+// 各类 decl 的行为如下：
+//   - import：改写以去掉 gogo 包导入。若 decl 中全部是 gogo 导入则返回 true，
+//     若仍有非 gogo 导入则返回 false。
+//   - var：改写以去掉不在 keepVars 白名单中的变量。若全部被移除返回 true，
+//     若仍有白名单变量返回 false。
+//   - const：返回 true
+//   - type：返回 true
+//   - func：若函数不在 keepFuncs 白名单中则应丢弃，返回 true。
+//   - other：返回 false
 func dropUnusedGo(decl ast.Decl) bool {
 	switch t := decl.(type) {
 	case *ast.GenDecl:
@@ -219,7 +233,7 @@ func dropUnusedGo(decl ast.Decl) bool {
 			t.Specs = specs
 			return false
 		case token.CONST:
-			// drop all const declarations
+			// 丢弃全部 const 声明。
 			return true
 		case token.VAR:
 			specs := []ast.Spec{}
@@ -236,7 +250,7 @@ func dropUnusedGo(decl ast.Decl) bool {
 			t.Specs = specs
 			return false
 		case token.TYPE:
-			// drop all type declarations
+			// 丢弃全部类型声明。
 			return true
 		}
 	case *ast.FuncDecl:
@@ -251,9 +265,9 @@ func dropUnusedGo(decl ast.Decl) bool {
 	return false
 }
 
-// rewriteOptionalMethods makes specific mutations to marshaller methods that belong to types identified
-// as being "optional" (they may be nil on the wire). This allows protobuf to serialize a map or slice and
-// properly discriminate between empty and nil (which is not possible in protobuf).
+// rewriteOptionalMethods 对标记为 optional（在 wire 上可能为 nil）的类型的
+// 序列化方法做特定改写。这样 protobuf 才能序列化 map 或 slice 并区分空值与 nil
+// （protobuf 本身无法表达该区别）。
 // TODO: move into upstream gogo-protobuf once https://github.com/gogo/protobuf/issues/181
 // has agreement
 func rewriteOptionalMethods(decl ast.Decl, isOptional OptionalFunc) {
@@ -263,8 +277,8 @@ func rewriteOptionalMethods(decl ast.Decl, isOptional OptionalFunc) {
 			return
 		}
 
-		// correct initialization of the form `m.Field = &OptionalType{}` to
-		// `m.Field = OptionalType{}`
+		// 把 `m.Field = &OptionalType{}` 形式的初始化改为
+		// `m.Field = OptionalType{}`。
 		if t.Name.Name == "Unmarshal" {
 			ast.Walk(optionalAssignmentVisitor{fn: isOptional}, t.Body)
 		}
@@ -280,7 +294,7 @@ func rewriteOptionalMethods(decl ast.Decl, isOptional OptionalFunc) {
 			ast.Walk(&optionalItemsVisitor{}, t.Body)
 			fallthrough
 		case "Marshal":
-			// if the method has a pointer receiver, set it back to a normal receiver
+			// 若方法使用指针接收者，改回普通接收者，与 optional 字段展开后的类型一致。
 			if ptr {
 				t.Recv.List[0].Type = ident
 			}
@@ -288,12 +302,12 @@ func rewriteOptionalMethods(decl ast.Decl, isOptional OptionalFunc) {
 	}
 }
 
+// optionalAssignmentVisitor 把 optional 类型的指针初始化改写为值初始化。
 type optionalAssignmentVisitor struct {
 	fn OptionalFunc
 }
 
-// Visit walks the provided node, transforming field initializations of the form
-// m.Field = &OptionalType{} -> m.Field = OptionalType{}
+// Visit 遍历节点，把 m.Field = &OptionalType{} 改写为 m.Field = OptionalType{}。
 func (v optionalAssignmentVisitor) Visit(n ast.Node) ast.Visitor {
 	if t, ok := n.(*ast.AssignStmt); ok {
 		if len(t.Lhs) == 1 && len(t.Rhs) == 1 {
@@ -304,6 +318,7 @@ func (v optionalAssignmentVisitor) Visit(n ast.Node) ast.Visitor {
 			if !ok || unary.Op != token.AND {
 				return nil
 			}
+			// 只处理空的复合字面量：带元素的初始化语义不同，不能简单去地址。
 			composite, ok := unary.X.(*ast.CompositeLit)
 			if !ok || composite.Type == nil || len(composite.Elts) != 0 {
 				return nil
@@ -317,10 +332,11 @@ func (v optionalAssignmentVisitor) Visit(n ast.Node) ast.Visitor {
 	return v
 }
 
+// optionalItemsVisitor 把 optional 类型的 `m.Items` 访问改写为对 m 本身的访问。
 type optionalItemsVisitor struct{}
 
-// Visit walks the provided node, looking for specific patterns to transform that match
-// the effective outcome of turning struct{ map[x]y || []x } into map[x]y or []x.
+// Visit 遍历节点，寻找与“把 struct{ map[x]y || []x } 变成 map[x]y 或 []x”
+// 等价的模式并改写。
 func (v *optionalItemsVisitor) Visit(n ast.Node) ast.Visitor {
 	switch t := n.(type) {
 	case *ast.RangeStmt:
@@ -362,7 +378,7 @@ func (v *optionalItemsVisitor) Visit(n ast.Node) ast.Visitor {
 			}
 		}
 		if t.Init != nil {
-			// Find form:
+			// 匹配形式：
 			// if err := m[len(m.Items)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 			// 	return err
 			// }
@@ -409,6 +425,8 @@ func (v *optionalItemsVisitor) Visit(n ast.Node) ast.Visitor {
 	return v
 }
 
+// isFieldSelector 判断 n 是否为 `name.field` 形式的选择器表达式；
+// field 为空时只检查接收者。
 func isFieldSelector(n ast.Expr, name, field string) bool {
 	s, ok := n.(*ast.SelectorExpr)
 	if !ok || s.Sel == nil || (field != "" && s.Sel.Name != field) {
@@ -417,11 +435,13 @@ func isFieldSelector(n ast.Expr, name, field string) bool {
 	return isIdent(s.X, name)
 }
 
+// isIdent 判断 n 是否为名为 value 的标识符。
 func isIdent(n ast.Expr, value string) bool {
 	ident, ok := n.(*ast.Ident)
 	return ok && ident.Name == value
 }
 
+// receiver 解析方法声明的接收者，返回类型标识符、是否为指针接收者以及是否成功。
 func receiver(f *ast.FuncDecl) (ident *ast.Ident, pointer bool, ok bool) {
 	if f.Recv == nil || len(f.Recv.List) != 1 {
 		return nil, false, false
@@ -439,8 +459,8 @@ func receiver(f *ast.FuncDecl) (ident *ast.Ident, pointer bool, ok bool) {
 	return nil, false, false
 }
 
-// dropExistingTypeDeclarations removes any type declaration for which extractFn returns true. The function
-// returns true if the entire declaration should be dropped.
+// dropExistingTypeDeclarations 移除 extractFn 返回 true 的类型声明。
+// 若整个声明都被移除，返回 true。
 func dropExistingTypeDeclarations(decl ast.Decl, extractFn ExtractFunc) bool {
 	if t, ok := decl.(*ast.GenDecl); ok {
 		if t.Tok != token.TYPE {
@@ -463,9 +483,8 @@ func dropExistingTypeDeclarations(decl ast.Decl, extractFn ExtractFunc) bool {
 	return false
 }
 
-// dropEmptyImportDeclarations strips any generated but no-op imports from the generated code
-// to prevent generation from being able to define side-effects.  The function returns true
-// if the entire declaration should be dropped.
+// dropEmptyImportDeclarations 去掉生成代码中无实际作用的导入（如 `_ "pkg"`），
+// 防止生成结果引入意外的副作用。若整个声明都被移除，返回 true。
 func dropEmptyImportDeclarations(decl ast.Decl) bool {
 	if t, ok := decl.(*ast.GenDecl); ok {
 		if t.Tok != token.IMPORT {
@@ -488,17 +507,20 @@ func dropEmptyImportDeclarations(decl ast.Decl) bool {
 	return false
 }
 
+// RewriteTypesWithProtobufStructTags 把 structTags 中的 protobuf 标签写入
+// name 文件对应的结构体字段。已存在的标签不会被覆盖，保证手工调整优先。
 func RewriteTypesWithProtobufStructTags(name string, structTags map[string]map[string]string) error {
 	return rewriteFile(name, []byte{}, func(fset *token.FileSet, file *ast.File) error {
 		allErrs := []error{}
 
-		// set any new struct tags
+		// 设置所有新的 struct 标签。
 		for _, d := range file.Decls {
 			if errs := updateStructTags(d, structTags, []string{"protobuf"}); len(errs) > 0 {
 				allErrs = append(allErrs, errs...)
 			}
 		}
 
+		// 汇总全部错误后一次返回，便于用户一次修完所有标签问题。
 		if len(allErrs) > 0 {
 			var s string
 			for _, err := range allErrs {
@@ -510,6 +532,8 @@ func RewriteTypesWithProtobufStructTags(name string, structTags map[string]map[s
 	})
 }
 
+// getFieldName 从字段表达式中取出字段名，支持标识符、选择器和指针。
+// 内嵌字段没有显式名字，只能从类型表达式推导。
 func getFieldName(expr ast.Expr, structname string) (name string, err error) {
 	for {
 		switch t := expr.(type) {
@@ -525,6 +549,7 @@ func getFieldName(expr ast.Expr, structname string) (name string, err error) {
 	}
 }
 
+// updateStructTags 为声明中的结构体字段补充 toCopy 指定的标签。
 func updateStructTags(decl ast.Decl, structTags map[string]map[string]string, toCopy []string) []error {
 	var errs []error
 	t, ok := decl.(*ast.GenDecl)
@@ -555,6 +580,7 @@ func updateStructTags(decl ast.Decl, structTags map[string]map[string]string, to
 			var name string
 			var err error
 			if len(f.Names) == 0 {
+				// 内嵌字段：从类型表达式取名字。
 				name, err = getFieldName(f.Type, spec.Name.Name)
 				if err != nil {
 					errs = append(errs, err)
@@ -577,11 +603,11 @@ func updateStructTags(decl ast.Decl, structTags map[string]map[string]string, to
 				tags = oldTags
 			}
 			for _, name := range toCopy {
-				// don't overwrite existing tags
+				// 不覆盖已有标签。
 				if tags.Has(name) {
 					continue
 				}
-				// append new tags
+				// 追加新标签。
 				if v := reflect.StructTag(value).Get(name); len(v) > 0 {
 					tags = append(tags, customreflect.StructTag{Name: name, Value: v})
 				}
@@ -598,12 +624,13 @@ func updateStructTags(decl ast.Decl, structTags map[string]map[string]string, to
 	return errs
 }
 
+// replacePackageVisitor 把对某个包名的引用替换为另一个包名。
 type replacePackageVisitor struct {
 	oldPackage string
 	newPackage string
 }
 
-// Visit walks the provided node, transforming references to the old package to the new package.
+// Visit 遍历节点，把对 oldPackage 的引用替换为 newPackage。
 func (v replacePackageVisitor) Visit(n ast.Node) ast.Visitor {
 	if e, ok := n.(*ast.SelectorExpr); ok {
 		if i, ok := e.X.(*ast.Ident); ok && i.Name == v.oldPackage {

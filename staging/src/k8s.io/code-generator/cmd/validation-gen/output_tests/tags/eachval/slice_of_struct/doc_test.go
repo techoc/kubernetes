@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 验证 eachVal 作用于 slice 的值：按索引报错；不可比较元素类型在
+// ratcheting 时按语义比较，旧值中已存在的元素不重复报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

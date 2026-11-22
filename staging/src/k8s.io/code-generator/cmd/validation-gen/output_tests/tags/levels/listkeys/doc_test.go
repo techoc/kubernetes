@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestListKeys 验证 listMapKey 的稳定性级别如何决定重复元素错误的级别：
+// 错误级别由 listType 的稳定性决定；单独把 key 声明为 Alpha/Beta
+// 不会提升错误级别。复合 key 中每个 key 都参与重复判定。
 func TestListKeys(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

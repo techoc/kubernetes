@@ -22,6 +22,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证多键 listMapKey 的 +k8s:item：选择条件必须同时匹配全部键，
+// 并覆盖值元素、指针元素以及混合键（指针 + 值）三种形态。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

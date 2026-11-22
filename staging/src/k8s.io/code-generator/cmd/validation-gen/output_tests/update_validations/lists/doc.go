@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 validation-gen=* 的全量模式：列表元素上的校验会被递归生成，
+// 即使类型本身没有标记 TypesWithField。
 package lists
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -30,6 +33,7 @@ type T1 struct {
 	LM1 []M1 `json:"lm1"`
 }
 
+// M1 是列表元素类型，其字段校验应随 T1 的列表一起生成。
 type M1 struct {
 	// +k8s:validateFalse="M1.S"
 	S string `json:"s"`

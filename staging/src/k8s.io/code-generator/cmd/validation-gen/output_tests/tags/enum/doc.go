@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 enum 标签对没有枚举值、只有一个值、多个值
+// 以及“看起来像 enum 但实际不是”的类型分别如何生成。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package enum
@@ -25,6 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 覆盖各枚举类型的值与指针字段形态。
 type Struct struct {
 	TypeMeta int
 
@@ -42,9 +45,11 @@ type Struct struct {
 }
 
 // +k8s:enum
+// Enum0 没有枚举值，用于检验生成器对空枚举集合的处理。
 type Enum0 string // Note: this enum has no values
 
 // +k8s:enum
+// Enum1 只有一个合法取值。
 type Enum1 string // Note: this enum has 1 value
 
 const (
@@ -52,6 +57,7 @@ const (
 )
 
 // +k8s:enum
+// Enum2 有两个合法取值。
 type Enum2 string // Note: this enum has 2 values
 
 const (

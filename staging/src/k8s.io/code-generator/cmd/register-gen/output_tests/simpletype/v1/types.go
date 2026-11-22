@@ -20,6 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SimpleType 是 register-gen 输出测试的最小类型：只内嵌 TypeMeta。
+// 生成的 register 代码应只为它注册 DeepCopyObject 等所需接口。
 type SimpleType struct {
 	metav1.TypeMeta `json:""`
 }

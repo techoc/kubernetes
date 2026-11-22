@@ -14,5 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件只承载 go:generate 指令：重新生成 output_tests 下全部 zz_generated.deepcopy.go。
+// 生成器直接以本模块路径作为输入，因此不需要额外的 GOMOD 或 vendor 处理。
+// 包级说明见 interface_fuzzer.go。
+
 //go:generate go run k8s.io/code-generator/cmd/deepcopy-gen --output-file zz_generated.deepcopy.go --go-header-file=../../../examples/hack/boilerplate.go.txt k8s.io/code-generator/cmd/deepcopy-gen/output_tests/...
 package outputtests

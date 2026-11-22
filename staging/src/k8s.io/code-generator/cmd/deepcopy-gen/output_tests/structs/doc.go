@@ -16,9 +16,11 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// 这是一个测试包：覆盖结构体字段（含嵌套结构体）的 deepcopy 生成。
 // This is a test package.
 package structs
 
+// Inner 汇集全部内置标量类型，用于验证生成器对这些类型的直接赋值拷贝。
 type Inner struct {
 	Byte byte
 	// Int8    int8 //TODO: int8 becomes byte in SnippetWriter
@@ -34,6 +36,7 @@ type Inner struct {
 	String  string
 }
 
+// Ttest 通过两个同类型的内嵌字段，验证按字段逐个调用嵌套深拷贝的行为。
 type Ttest struct {
 	Inner1 Inner
 	Inner2 Inner

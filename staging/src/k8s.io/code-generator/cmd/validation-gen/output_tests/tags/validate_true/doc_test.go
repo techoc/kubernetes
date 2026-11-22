@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 验证 +k8s:validateTrue 的生成：零值与非零值都应通过，
+// 该标签主要用于确认生成器会为类型生成校验函数。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

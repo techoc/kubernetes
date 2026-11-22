@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// register-gen 是 gengo 驱动的代码生成器，为 API 包生成 scheme 注册代码。
+//
+// 典型用法：register-gen --output-file zz_generated.register.go \
+// --go-header-file hack/boilerplate/boilerplate.generatego.txt \
+// k8s.io/api/core/v1
 package main
 
 import (
@@ -28,6 +33,7 @@ import (
 )
 
 func main() {
+	// 先初始化 klog 并注册参数，再把它们并入 pflag，统一由 pflag 解析。
 	klog.InitFlags(nil)
 	args := args.New()
 	args.AddFlags(pflag.CommandLine)
@@ -39,10 +45,12 @@ func main() {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// 延迟到 gengo 加载完 universe 后再构造生成目标。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}
 
+	// pflag.Args() 是待处理的输入包路径列表；StdBuildTag 使用标准生成标记。
 	if err := gengo.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),

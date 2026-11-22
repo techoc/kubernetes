@@ -28,11 +28,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 默认值测试中使用的共享常量指针来源，避免每个用例重复分配。
 var (
 	defaultInt32 int32 = 32
 	defaultInt64 int64 = 64
 )
 
+// Test_Marker 验证 default 标签生成器的多种场景：
+//   - default：零值对象被补全所有默认值；
+//   - values-omitempty：已显式赋值的字段不被覆盖；
+//   - lists：slice 中的 nil 元素被替换为默认值；
+//   - stringmap：map 中的 nil 值元素被替换为默认值。
 func Test_Marker(t *testing.T) {
 	testcases := []struct {
 		name string
@@ -331,6 +337,7 @@ func Test_Marker(t *testing.T) {
 		},
 	}
 
+	// 逐用例调用生成的 SetObjectDefaults 并比对完整对象。
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			SetObjectDefaults_Defaulted(&tc.in)
@@ -341,6 +348,8 @@ func Test_Marker(t *testing.T) {
 	}
 }
 
+// Test_DefaultingFunction 验证手写 SetDefaults_* 函数与 marker 默认值协同工作：
+// S1 来自普通函数、S2 来自标签。
 func Test_DefaultingFunction(t *testing.T) {
 	in := DefaultedWithFunction{}
 	SetObjectDefaults_DefaultedWithFunction(&in)
@@ -354,11 +363,15 @@ func Test_DefaultingFunction(t *testing.T) {
 
 }
 
+// Test_DefaultingReference 验证默认值标签对“引用型”表达式的处理：
+// 别名指针、跨包符号引用、同名包（external 与 external/external）、
+// 多重指针转换以及别名强转，确保生成代码能正确写出这些复杂默认值。
 func Test_DefaultingReference(t *testing.T) {
 	dv := DefaultedValueItem(SomeValue)
 	SomeDefault := SomeDefault
 	SomeValue := SomeValue
 
+	// 构造一组逐层加深的指针转换链，期望值必须精确复现生成的表达式。
 	ptrVar9 := string(SomeValue)
 	ptrVar8 := &ptrVar9
 	ptrVar7 := (*B1)(&ptrVar8)

@@ -18,6 +18,10 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 +k8s:update 的 NoSet/NoUnset/NoAddItem/NoRemoveItem/NoModify：
+// 不同 listType（atomic/set/map）选择不同的元素匹配策略，
+// 复合键与 typedef 列表也在覆盖范围内。
 // +k8s:validation-gen-nolint
 package lists
 

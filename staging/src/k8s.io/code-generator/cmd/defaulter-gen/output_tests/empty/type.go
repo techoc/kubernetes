@@ -16,6 +16,8 @@ limitations under the License.
 
 package empty
 
+// Ttest 是本输出测试的最小类型，覆盖四种内建字段，用于验证 defaulter-gen
+// 在没有任何默认值标记时也能正确生成（空的）默认值函数。
 // Only test
 type Ttest struct {
 	BoolField   bool
@@ -24,6 +26,8 @@ type Ttest struct {
 	FloatField  float64
 }
 
+// TypeMeta 用于验证包级 "+k8s:defaulter-gen=covers" 场景下的类型处理；
+// 命名刻意与 metav1.TypeMeta 不同，避免引入额外依赖。
 type TypeMeta struct {
 	Fortest bool
 }

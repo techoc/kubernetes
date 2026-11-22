@@ -18,6 +18,9 @@ package generators
 
 import "k8s.io/gengo/v2/types"
 
+// 模板中通过 $.xxx|raw$ 引用的外部符号集中在此声明。
+// 这样做有两个好处：import 路径（尤其是 structured-merge-diff 的 v6 版本）
+// 只有一处维护点；模板里出现未知引用时会在生成期直接失败，而不是产出无法编译的代码。
 var (
 	fmtSprintf             = types.Ref("fmt", "Sprintf")
 	syncOnce               = types.Ref("sync", "Once")

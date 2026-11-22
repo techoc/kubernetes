@@ -18,7 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package keys 是 validation-gen 的测试包，覆盖 map 键上的校验：
+// 通过 +k8s:eachKey 把校验施加到键类型，包括内建键类型与各种 typedef 键类型，
+// 用于确认键与值的作用域不会互相串扰。
 // +k8s:validation-gen-nolint
 package keys
 

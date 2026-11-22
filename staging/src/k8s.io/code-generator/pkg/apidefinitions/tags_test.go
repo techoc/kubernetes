@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestGroupNameForPackage 验证从包注释中解析 +groupName 标记：
+// 支持不带域名的短名与带域名的完整 group 名，无标记时返回 ok=false。
 func TestGroupNameForPackage(t *testing.T) {
 	cases := []struct {
 		name     string

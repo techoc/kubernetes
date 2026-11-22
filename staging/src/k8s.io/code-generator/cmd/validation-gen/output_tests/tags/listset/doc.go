@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package listset 是 validation-gen 的测试包，覆盖 listType=set 的去重与
+// 不可变性：可比较、不可比较以及“看似可比较”（仅含指针）的结构体分别走
+// 不同的运行时比较路径。
 // +k8s:validation-gen-nolint
 package listset
 

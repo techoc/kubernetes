@@ -17,4 +17,8 @@ limitations under the License.
 */
 
 //go:generate go run k8s.io/code-generator/cmd/register-gen --output-file zz_generated.register.go --go-header-file=../../../examples/hack/boilerplate.go.txt k8s.io/code-generator/cmd/register-gen/output_tests/...
+
+// Package outputtests 是 register-gen 的生成基线夹具。
+// 这里只放 go:generate 指令，真正的测试类型位于 simpletype 子包；
+// 用 go:generate 而非 Makefile 保证重新生成命令与测试同处一目录、便于手工验证。
 package outputtests

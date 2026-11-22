@@ -50,6 +50,7 @@ func init() {
 	RegisterTagValidator(maxBytesTagValidator{})
 }
 
+// maxLengthTagValidator 实现 +k8s:maxLength：限制字符串的字符数。
 type maxLengthTagValidator struct{}
 
 func (maxLengthTagValidator) Init(_ Config) {}
@@ -66,9 +67,12 @@ func (maxLengthTagValidator) ValidScopes() sets.Set[Scope] {
 
 var maxLengthValidator = types.Name{Package: libValidationPkg, Name: "MaxLength"}
 
+// GetValidations 解析非负整数负载并生成 MaxLength 校验。
 func (maxLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 该标记可作用于值、指针字段以及 typedef（typedef 不应是指针），
+	// 需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
@@ -104,6 +108,7 @@ func (mltv maxLengthTagValidator) Docs() TagDoc {
 	}
 }
 
+// maxBytesTagValidator 实现 +k8s:maxBytes：限制字符串的字节数。
 type maxBytesTagValidator struct{}
 
 func (maxBytesTagValidator) Init(_ Config) {}
@@ -120,9 +125,11 @@ func (maxBytesTagValidator) ValidScopes() sets.Set[Scope] {
 
 var maxBytesValidator = types.Name{Package: libValidationPkg, Name: "MaxBytes"}
 
+// GetValidations 解析非负整数负载并生成 MaxBytes 校验。
 func (maxBytesTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
@@ -158,6 +165,7 @@ func (mbtv maxBytesTagValidator) Docs() TagDoc {
 	}
 }
 
+// minItemsTagValidator 实现 +k8s:minItems：限制列表的最小长度。
 type minItemsTagValidator struct{}
 
 func (minItemsTagValidator) Init(_ Config) {}
@@ -179,9 +187,11 @@ func (minItemsTagValidator) ValidScopes() sets.Set[Scope] {
 
 var minItemsValidator = types.Name{Package: libValidationPkg, Name: "MinItems"}
 
+// GetValidations 解析非负整数负载并生成 MinItems 校验。
 func (minItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 注意：列表的指针不被支持，因此这里不应出现指针。
 	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
 	if t := util.NativeType(context.Type); t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", rootTypeString(context.Type, t))
@@ -214,6 +224,7 @@ func (mitv minItemsTagValidator) Docs() TagDoc {
 	}
 }
 
+// minPropertiesTagValidator 实现 +k8s:minProperties：限制 map 的最小元素数。
 type minPropertiesTagValidator struct{}
 
 func (minPropertiesTagValidator) Init(_ Config) {}
@@ -233,14 +244,17 @@ func (minPropertiesTagValidator) ValidScopes() sets.Set[Scope] {
 
 var minPropertiesValidator = types.Name{Package: libValidationPkg, Name: "MinProperties"}
 
+// GetValidations 校验 map 与字符串键，并解析 [0,100000] 的负载。
 func (minPropertiesTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 注意：map 的指针不被支持，因此这里不应出现指针。
 	// NOTE: pointers to maps are not supported, so we should never see a pointer here.
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Map {
 		return Validations{}, fmt.Errorf("can only be used on map types (%s)", rootTypeString(context.Type, t))
 	}
+	// 仅支持字符串键，与 JSON object 语义一致。
 	keyType := util.NativeType(t.Key)
 	if keyType.Kind != types.Builtin || keyType.Name.Name != "string" {
 		return Validations{}, fmt.Errorf("can only be used on map types with string-based keys (%s)", rootTypeString(context.Type, t))
@@ -253,6 +267,7 @@ func (minPropertiesTagValidator) GetValidations(context Context, tag codetags.Ta
 	if intVal < 0 {
 		return result, fmt.Errorf("must be greater than or equal to zero")
 	}
+	// 上限防止生成过大的校验常量。
 	if intVal > 100000 {
 		return result, fmt.Errorf("must be less than or equal to 100000")
 	}
@@ -276,6 +291,7 @@ func (mptv minPropertiesTagValidator) Docs() TagDoc {
 	}
 }
 
+// maxItemsTagValidator 实现 +k8s:maxItems：限制列表的最大长度。
 type maxItemsTagValidator struct{}
 
 func (maxItemsTagValidator) Init(_ Config) {}
@@ -297,9 +313,11 @@ func (maxItemsTagValidator) ValidScopes() sets.Set[Scope] {
 
 var maxItemsValidator = types.Name{Package: libValidationPkg, Name: "MaxItems"}
 
+// GetValidations 解析非负整数负载并生成 MaxItems 校验。
 func (maxItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 注意：列表的指针不被支持，因此这里不应出现指针。
 	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
 	if t := util.NativeType(context.Type); t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", rootTypeString(context.Type, t))
@@ -312,6 +330,7 @@ func (maxItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (V
 	if intVal < 0 {
 		return result, fmt.Errorf("must be greater than or equal to zero")
 	}
+	// 注意：maxItems 会短路后续校验，避免在超长列表上做昂贵操作。
 	// Note: maxItems short-circuits other validations for safety.
 	result.AddFunction(Function(maxItemsTagName, ShortCircuit, maxItemsValidator, intVal).
 		WithEmits(Emission{field.ErrorTypeTooMany, "maxItems", ""}))
@@ -333,6 +352,7 @@ func (mitv maxItemsTagValidator) Docs() TagDoc {
 	}
 }
 
+// maxPropertiesTagValidator 实现 +k8s:maxProperties：限制 map 的最大元素数。
 type maxPropertiesTagValidator struct{}
 
 func (maxPropertiesTagValidator) Init(_ Config) {}
@@ -352,9 +372,11 @@ func (maxPropertiesTagValidator) ValidScopes() sets.Set[Scope] {
 
 var maxPropertiesValidator = types.Name{Package: libValidationPkg, Name: "MaxProperties"}
 
+// GetValidations 校验 map 与字符串键，并解析 [0,100000] 的负载。
 func (maxPropertiesTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 注意：map 的指针不被支持，因此这里不应出现指针。
 	// NOTE: pointers to maps are not supported, so we should never see a pointer here.
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Map {
@@ -375,6 +397,7 @@ func (maxPropertiesTagValidator) GetValidations(context Context, tag codetags.Ta
 	if intVal > 100000 {
 		return result, fmt.Errorf("must be less than or equal to 100000")
 	}
+	// 注意：maxProperties 会短路后续校验。
 	// Note: maxProperties short-circuits other validations.
 	result.AddFunction(Function(maxPropertiesTagName, ShortCircuit, maxPropertiesValidator, intVal).
 		WithEmits(Emission{field.ErrorTypeTooMany, "maxProperties", ""}))
@@ -396,6 +419,7 @@ func (mptv maxPropertiesTagValidator) Docs() TagDoc {
 	}
 }
 
+// minimumTagValidator 实现 +k8s:minimum：数值字段的下界。
 type minimumTagValidator struct{}
 
 func (minimumTagValidator) Init(_ Config) {}
@@ -412,9 +436,11 @@ func (minimumTagValidator) ValidScopes() sets.Set[Scope] {
 
 var minimumValidator = types.Name{Package: libValidationPkg, Name: "Minimum"}
 
+// GetValidations 按整数位宽与有符号性解析负载，并生成 Minimum 校验。
 func (minimumTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	t := util.NonPointer(util.NativeType(context.Type))
@@ -422,6 +448,7 @@ func (minimumTagValidator) GetValidations(context Context, tag codetags.Tag) (Va
 		return result, fmt.Errorf("can only be used on integer types (%s)", rootTypeString(context.Type, t))
 	}
 
+	// 位宽决定负载的解析范围，避免溢出。
 	bitSize, err := intBitSize(t)
 	if err != nil {
 		return result, err
@@ -459,6 +486,7 @@ func (mtv minimumTagValidator) Docs() TagDoc {
 	}
 }
 
+// maximumTagValidator 实现 +k8s:maximum：数值字段的上界。
 type maximumTagValidator struct{}
 
 func (maximumTagValidator) Init(_ Config) {}
@@ -475,9 +503,11 @@ func (maximumTagValidator) ValidScopes() sets.Set[Scope] {
 
 var maximumValidator = types.Name{Package: libValidationPkg, Name: "Maximum"}
 
+// GetValidations 按整数位宽与有符号性解析负载，并生成 Maximum 校验。
 func (maximumTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	t := util.NonPointer(util.NativeType(context.Type))
@@ -522,6 +552,7 @@ func (mtv maximumTagValidator) Docs() TagDoc {
 	}
 }
 
+// minLengthTagValidator 实现 +k8s:minLength：限制字符串的最小字符数。
 type minLengthTagValidator struct{}
 
 func (minLengthTagValidator) Init(_ Config) {}
@@ -538,9 +569,11 @@ func (minLengthTagValidator) ValidScopes() sets.Set[Scope] {
 
 var minLengthValidator = types.Name{Package: libValidationPkg, Name: "MinLength"}
 
+// GetValidations 解析整数负载；仅当值大于 0 时才生成校验。
 func (minLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
@@ -552,6 +585,8 @@ func (minLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (
 		return result, fmt.Errorf("failed to parse tag payload as int: %w", err)
 	}
 
+	// 指令 +k8s:minLength=0 用于显式表达“已考虑最小长度，且刻意不设约束”。
+	// 由于 0 与不校验语义等价，仅在 > 0 时才添加校验函数。
 	// Usage of `+k8s:minLength=0` is useful as a semantic representation of the fact that
 	// the minimum valid length of the field was considered and that it intentionally doesn't
 	// have a minimum length constraint.

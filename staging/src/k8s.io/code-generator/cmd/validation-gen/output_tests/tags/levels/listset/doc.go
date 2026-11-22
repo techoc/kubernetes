@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// Package listset 是 validation-gen 的测试包，覆盖集合类型（listType=set）的
+// 校验等级：alpha/beta 既可包装 listType 本身，也可包装元素校验或子字段校验。
 // +k8s:validation-gen-nolint
 package listset
 

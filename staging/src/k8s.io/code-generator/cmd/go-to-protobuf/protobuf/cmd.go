@@ -16,6 +16,9 @@ limitations under the License.
 
 // go-to-protobuf generates a Protobuf IDL from a Go struct, respecting any
 // existing IDL tags on the Go struct.
+//
+// 中文概述：go-to-protobuf 从 Go 结构体生成 Protobuf IDL，再调用 protoc 生成
+// 序列化代码，并把生成的 .pb.go 中的类型声明改写为仅保留序列化器。
 package protobuf
 
 import (
@@ -36,6 +39,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// Generator 汇总 go-to-protobuf 的配置项。
 type Generator struct {
 	GoHeaderFile         string
 	APIMachineryPackages string
@@ -51,6 +55,8 @@ type Generator struct {
 	DropEmbeddedFields   string
 }
 
+// New 返回带默认值的配置：默认输出到当前目录，并预置一组 apimachinery 输入包。
+// 以 '+' 开头的包只为其显式带 IDL 标签的类型生成 IDL。
 func New() *Generator {
 	defaultSourceTree := "."
 	return &Generator{
@@ -70,6 +76,7 @@ func New() *Generator {
 	}
 }
 
+// BindFlags 把配置项注册到 flag set。
 func (g *Generator) BindFlags(flag *flag.FlagSet) {
 	flag.StringVarP(&g.GoHeaderFile, "go-header-file", "h", "", "File containing boilerplate header text. The string YEAR will be replaced with the current 4-digit year.")
 	flag.StringVarP(&g.Packages, "packages", "p", g.Packages, "comma-separated list of directories to get input types from. Directories prefixed with '-' are not generated, directories prefixed with '+' only create types with explicit IDL instructions.")
@@ -85,10 +92,13 @@ func (g *Generator) BindFlags(flag *flag.FlagSet) {
 	flag.StringVar(&g.DropEmbeddedFields, "drop-embedded-fields", g.DropEmbeddedFields, "Comma-delimited list of embedded Go types to omit from generated protobufs")
 }
 
+// Run 是命令行工具的入口：解析输入包、生成 IDL、调用 protoc 并改写产物。
+// 注释中的 "roughly models" 表示这里复刻了 gengo/v2 的执行流程，而非直接复用。
 // This roughly models gengo/v2.Execute.
 func Run(g *Generator) {
 	// Roughly models gengo/v2.newBuilder.
 
+	// 用 "proto" build tag 解析，确保只看到参与 protobuf 生成的代码分支。
 	p := parser.NewWithOptions(parser.Options{BuildTags: []string{"proto"}})
 
 	var allInputs []string
@@ -102,12 +112,12 @@ func Run(g *Generator) {
 		log.Fatalf("Both apimachinery-packages and packages are empty. At least one package must be specified.")
 	}
 
+	// 改写生成文件与丢弃 gogo 引用二者互斥：若不改写，就无从删除 gogo 引用。
 	if g.DropGogoGo && g.SkipGeneratedRewrite {
 		log.Fatalf("--drop-gogo-go=true and --skip-generated-rewrite=true are mutually exclusive")
 	}
 
-	// Build up a list of packages to load from all the inputs.  Track the
-	// special modifiers for each.  NOTE: This does not support pkg/... syntax.
+	// 构建待加载包列表并记录每个输入的特殊修饰符。注意：不支持 pkg/... 语法。
 	type modifier struct {
 		allTypes bool
 		output   bool
@@ -119,6 +129,7 @@ func Run(g *Generator) {
 	for _, d := range allInputs {
 		modifier := modifier{allTypes: true, output: true}
 
+		// '+' 表示只生成显式声明 IDL 的类型；'-' 表示仅作为依赖、不输出。
 		switch {
 		case strings.HasPrefix(d, "+"):
 			d = d[1:]
@@ -127,6 +138,7 @@ func Run(g *Generator) {
 			d = d[1:]
 			modifier.output = false
 		}
+		// 允许用 "path=proto.name" 覆盖生成的 protobuf 包名。
 		name := protoSafePackage(d)
 		parts := strings.SplitN(d, "=", 2)
 		if len(parts) > 1 {
@@ -144,6 +156,7 @@ func Run(g *Generator) {
 		log.Fatalf("Unable to load packages: %v", err)
 	}
 
+	// 仅注册 public 命名系统，protobuf 命名由后面的 "proto" 覆盖。
 	c, err := generator.NewContext(
 		p,
 		namer.NameSystems{
@@ -165,6 +178,7 @@ func Run(g *Generator) {
 		log.Fatalf("Failed loading boilerplate (consider using the go-header-file flag): %v", err)
 	}
 
+	// 把 --drop-embedded-fields 解析为 types.Name 集合，供生成时跳过内嵌字段。
 	omitTypes := map[types.Name]struct{}{}
 	for _, t := range strings.Split(g.DropEmbeddedFields, ",") {
 		name := types.Name{}
@@ -190,6 +204,7 @@ func Run(g *Generator) {
 		}
 		pkg := c.Universe[input]
 		protopkg := newProtobufPackage(pkg.Path, pkg.Dir, mod.name, mod.allTypes, omitTypes)
+		// boilerplate 与 protobuf 头部注释合并，保证每个生成文件都带许可声明。
 		header := append([]byte{}, boilerplate...)
 		header = append(header, protopkg.HeaderComment...)
 		protopkg.HeaderComment = header
@@ -213,6 +228,7 @@ func Run(g *Generator) {
 	}
 
 	// order package by imports, importees first
+	// 按包依赖做拓扑排序：被依赖的包先处理，保证引用它的 IDL 已存在。
 	deps := deps(c, protobufNames.packages)
 	order, err := importOrder(deps)
 	if err != nil {
@@ -233,6 +249,7 @@ func Run(g *Generator) {
 		localOutputPackages = append(localOutputPackages, p)
 	}
 
+	// 必须先确定 Common 类型归属，再执行生成，否则跨包引用会落到错误包。
 	if err := protobufNames.AssignTypesToPackages(c); err != nil {
 		log.Fatalf("Failed to identify Common types: %v", err)
 	}
@@ -241,6 +258,7 @@ func Run(g *Generator) {
 		log.Fatalf("Failed executing local generator: %v", err)
 	}
 
+	// --only-idl 到此为止，不调用 protoc。
 	if g.OnlyIDL {
 		return
 	}
@@ -268,6 +286,7 @@ func Run(g *Generator) {
 	args := searchArgs
 	args = append(args, fmt.Sprintf("--gogo_out=%s", g.OutputDir))
 
+	// 预生成文件头（可选 build tag + boilerplate），供改写阶段插入。
 	buf := &bytes.Buffer{}
 	if len(g.Conditional) > 0 {
 		fmt.Fprintf(buf, "// +build %s\n\n", g.Conditional)
@@ -277,6 +296,7 @@ func Run(g *Generator) {
 	for _, outputPackage := range outputPackages {
 		p := outputPackage.(*protobufPackage)
 
+		// 输出路径与导入路径分开：IDL 使用源目录路径，.pb.go 使用包内输出路径。
 		path := filepath.Join(g.OutputDir, p.ImportPath())
 		outputPath := filepath.Join(g.OutputDir, p.OutputPath())
 
@@ -295,6 +315,8 @@ func Run(g *Generator) {
 
 		// alter the generated protobuf file to remove the generated types (but leave the serializers) and rewrite the
 		// package statement to match the desired package name
+		// 原因：pkg 目录下的 Go 类型已存在，protoc 生成的定义会冲突；
+		// 因此只保留序列化相关代码并改写包名。
 		if err := RewriteGeneratedGogoProtobufFile(outputPath, p.ExtractGeneratedType, p.OptionalTypeName, buf.Bytes(), g.DropGogoGo); err != nil {
 			log.Fatalf("Unable to rewrite generated %s: %v", outputPath, err)
 		}
@@ -302,6 +324,7 @@ func Run(g *Generator) {
 		outputPaths := []string{outputPath}
 
 		// sort imports
+		// 改写后导入必然有缺失或冗余，需要 goimports 修正。
 		cmd = exec.Command("goimports", append([]string{"-w"}, outputPaths...)...)
 		out, err = cmd.CombinedOutput()
 		if len(out) > 0 {
@@ -330,6 +353,7 @@ func Run(g *Generator) {
 
 	if !g.KeepGogoproto {
 		// generate, but do so without gogoprotobuf extensions
+		// 再跑一遍生成器并设置 OmitGogo，用不带 gogo 扩展的版本覆盖之前的结果。
 		for _, outputPackage := range outputPackages {
 			p := outputPackage.(*protobufPackage)
 			p.OmitGogo = true
@@ -339,6 +363,7 @@ func Run(g *Generator) {
 		}
 	}
 
+	// 最后把 protobuf struct tag 写回源文件，使 Go 结构体与 IDL 字段编号保持一致。
 	for _, outputPackage := range outputPackages {
 		p := outputPackage.(*protobufPackage)
 
@@ -353,6 +378,7 @@ func Run(g *Generator) {
 		}
 
 		for _, s := range files {
+			// 测试文件不需要 protobuf tag。
 			if strings.HasSuffix(s, "_test.go") {
 				continue
 			}
@@ -363,6 +389,7 @@ func Run(g *Generator) {
 	}
 }
 
+// deps 返回包路径到其依赖包路径列表的映射，供拓扑排序使用。
 func deps(c *generator.Context, pkgs []*protobufPackage) map[string][]string {
 	ret := map[string][]string{}
 	for _, p := range pkgs {
@@ -378,7 +405,8 @@ func deps(c *generator.Context, pkgs []*protobufPackage) map[string][]string {
 	return ret
 }
 
-// given a set of pkg->[]deps, return the order that ensures all deps are processed before the things that depend on them
+// importOrder 给定 pkg->[]deps 的映射，返回一个确保所有依赖都先于使用者的处理顺序。
+// 实现为 Kahn 拓扑排序；若剩余节点非空说明依赖图有环。
 func importOrder(deps map[string][]string) ([]string, error) {
 	// add all nodes and edges
 	var remainingNodes = map[string]struct{}{}
@@ -395,6 +423,7 @@ func importOrder(deps map[string][]string) ([]string, error) {
 	sorted := findAndRemoveNodesWithoutDependencies(remainingNodes, graph)
 	for i := 0; i < len(sorted); i++ {
 		node := sorted[i]
+		// 每取出一个节点就删除它以它为起点的边，使更多节点成为新的依赖根。
 		removeEdgesFrom(node, graph)
 		sorted = append(sorted, findAndRemoveNodesWithoutDependencies(remainingNodes, graph)...)
 	}
@@ -407,12 +436,15 @@ func importOrder(deps map[string][]string) ([]string, error) {
 	return sorted, nil
 }
 
+// edge 描述图中一条 from->to 的依赖边（from 依赖 to）。
 // edge describes a from->to relationship in a graph
 type edge struct {
 	from string
 	to   string
 }
 
+// findAndRemoveNodesWithoutDependencies 找出图中没有任何入边指向的节点，
+// 将它们从节点集合中移除并按字典序返回。
 // findAndRemoveNodesWithoutDependencies finds nodes in the given set which are not pointed to by any edges in the graph,
 // removes them from the set of nodes, and returns them in sorted order
 func findAndRemoveNodesWithoutDependencies(nodes map[string]struct{}, graph map[edge]struct{}) []string {
@@ -434,10 +466,12 @@ func findAndRemoveNodesWithoutDependencies(nodes map[string]struct{}, graph map[
 			roots = append(roots, node)
 		}
 	}
+	// 排序保证输出顺序稳定，使生成结果可复现。
 	sort.Strings(roots)
 	return roots
 }
 
+// removeEdgesFrom 删除图中所有以 node 为起点的边。
 // removeEdgesFrom removes any edges from the graph where edge.from == node
 func removeEdgesFrom(node string, graph map[edge]struct{}) {
 	for edge := range graph {
@@ -447,19 +481,23 @@ func removeEdgesFrom(node string, graph map[edge]struct{}) {
 	}
 }
 
+// positionOrder 按外部给定的拓扑位置对 protobufPackage 切片排序。
 type positionOrder struct {
 	pos      map[string]int
 	elements []*protobufPackage
 }
 
+// Len 实现 sort.Interface。
 func (o positionOrder) Len() int {
 	return len(o.elements)
 }
 
+// Less 比较两个包在拓扑序中的位置。
 func (o positionOrder) Less(i, j int) bool {
 	return o.pos[o.elements[i].Path()] < o.pos[o.elements[j].Path()]
 }
 
+// Swap 实现 sort.Interface。
 func (o positionOrder) Swap(i, j int) {
 	o.elements[i], o.elements[j] = o.elements[j], o.elements[i]
 }

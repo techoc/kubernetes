@@ -23,9 +23,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 k8s-short-name（单段 DNS label，最长 63）的合法与非法取值。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法：小写字母数字与连字符。
 	st.Value(&Struct{
 		ShortNameField:        "foo-bar",
 		ShortNamePtrField:     ptr.To("foo-bar"),
@@ -38,6 +40,7 @@ func Test(t *testing.T) {
 		ShortNameTypedefField: "1234",
 	}).ExpectValid()
 
+	// 非法：空串与包含空格/大写等非 DNS label 字符的值。
 	st.Value(&Struct{
 		ShortNameField:        "",
 		ShortNamePtrField:     ptr.To(""),

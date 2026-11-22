@@ -24,9 +24,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:format=k8s-label-key 对值、指针与 typedef 字段的格式校验，
+// 边界包含长度上限（63/253 字符）与字符集/点分域名规则。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法样例：含上限长度与“域名/名称”两种形式。
 	validCases := []string{
 		"simple",
 		"now-with-dashes",
@@ -54,6 +57,7 @@ func Test(t *testing.T) {
 		}).ExpectValid()
 	}
 
+	// 非法样例：特殊字符、首尾短横线、多余斜杠、大写域名、超长等。
 	invalidCases := []string{
 		"nospecialchars%^=@",
 		"cantendwithadash-",

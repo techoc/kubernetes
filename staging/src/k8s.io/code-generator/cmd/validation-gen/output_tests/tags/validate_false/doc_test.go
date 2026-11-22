@@ -20,9 +20,12 @@ import (
 	"testing"
 )
 
+// Test 验证 +k8s:validateFalse 始终产生指定消息的错误，
+// 并确认 ratcheting 在值未变化时抑制该错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值同样触发校验。
 	st.Value(&Struct{
 		// All zero-values.
 	}).ExpectValidateFalseByPath(map[string][]string{

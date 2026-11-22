@@ -17,4 +17,5 @@ limitations under the License.
 package external
 
 // Used for test with multiple packages of the same name
+// 与 external2、external3 包同名，用于验证 ref(...) 跨同名包时的解析。
 const AConstant string = "AConstantString"

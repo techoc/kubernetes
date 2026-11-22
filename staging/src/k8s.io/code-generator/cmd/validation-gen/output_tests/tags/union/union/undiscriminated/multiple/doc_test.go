@@ -22,6 +22,9 @@ import (
 	field "k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖同一结构体内多个无判别 union 的组合：
+// 每个 union 独立校验“恰好一个成员”，一个 union 的错误不影响另一个；
+// 相同旧值下 ratcheting 应完全放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

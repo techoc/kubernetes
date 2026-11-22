@@ -39,6 +39,11 @@ limitations under the License.
 //
 // to indicate that the defaulter does not or should not call any nested
 // defaulters.
+//
+// 中文概述：defaulter-gen 扫描顶层类型，汇总其对象树中所有 SetDefault_* 方法，
+// 为整个对象生成高效的 SetObjectDefaults_* 函数。生成由包级
+// 指令 +k8s:defaulter-gen=<field-name> 标签、类型级 =true|false 标签以及
+// SetDefaults_* 上的 =covers 标签共同控制。
 package main
 
 import (
@@ -52,7 +57,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// main 解析参数、校验后交给 gengo 执行 defaulter-gen 的 targets。
 func main() {
+	// klog 与 pflag 共用同一个 FlagSet，保持命令行行为与其他生成器一致。
 	klog.InitFlags(nil)
 	args := args.New()
 
@@ -61,10 +68,12 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	// 参数非法立即退出，避免产生半成品生成文件。
 	if err := args.Validate(); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// targets 需要 universe 信息，因此延迟到 gengo 构建 Context 之后。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}

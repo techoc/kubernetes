@@ -28,6 +28,9 @@ import (
 
 // copyableStruct returns a struct type with a single primitive int32 field.
 // copyableType in deepcopy.go accepts a non-private struct kind.
+//
+// 用最小可深拷贝结构体作探针，避免测试依赖真实 API 类型；
+// 名称、包路径和注释都由调用方指定，以便精确构造标签组合。
 func copyableStruct(pkgPath, name string, comments []string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: pkgPath, Name: name},
@@ -39,6 +42,9 @@ func copyableStruct(pkgPath, name string, comments []string) *types.Type {
 	}
 }
 
+// TestGetTargets 覆盖 deepcopy-gen 的包级/类型级开关组合：
+// 包标签可整体开启、关闭或显式指定 register；无包标签时类型可单独 opt-in；
+// 没有可拷贝类型的包应被跳过；其他生成器的 +k8s: 标签不得导致报错。
 func TestGetTargets(t *testing.T) {
 	type pkgSpec struct {
 		path     string
@@ -58,6 +64,7 @@ func TestGetTargets(t *testing.T) {
 		wantRegister map[string]bool
 	}{
 		{
+			// 包级 +k8s:deepcopy-gen=package：开启全量拷贝，但默认不注册 scheme。
 			name: "package tag with copyable struct activates",
 			pkgs: []pkgSpec{
 				{
@@ -71,6 +78,7 @@ func TestGetTargets(t *testing.T) {
 			wantRegister: map[string]bool{"example.com/pkg/a": false},
 		},
 		{
+			// 显式 register=false 与默认值一致，仍应生成全量拷贝。
 			name: "package tag with register=false activates with register=false",
 			pkgs: []pkgSpec{
 				{
@@ -84,6 +92,7 @@ func TestGetTargets(t *testing.T) {
 			wantRegister: map[string]bool{"example.com/pkg/b": false},
 		},
 		{
+			// register=true 会额外生成 scheme 注册代码。
 			name: "package tag with register=true activates with register=true",
 			pkgs: []pkgSpec{
 				{
@@ -97,6 +106,7 @@ func TestGetTargets(t *testing.T) {
 			wantRegister: map[string]bool{"example.com/pkg/c": true},
 		},
 		{
+			// 包级 false 是硬性 opt-out，即使包含可拷贝类型也不生成。
 			name: "package opted out is skipped",
 			pkgs: []pkgSpec{
 				{
@@ -108,6 +118,7 @@ func TestGetTargets(t *testing.T) {
 			wantPkgs: nil,
 		},
 		{
+			// 无包标签、类型级 true：只拷贝被标注的类型，allTypes 必须为 false。
 			name: "no package tag but type opts in activates",
 			pkgs: []pkgSpec{
 				{
@@ -122,6 +133,7 @@ func TestGetTargets(t *testing.T) {
 			wantRegister: map[string]bool{"example.com/pkg/e": false},
 		},
 		{
+			// 开启但没有任何可拷贝类型，无需产出 target。
 			name: "package tag but no copyable types is skipped",
 			pkgs: []pkgSpec{
 				{
@@ -133,6 +145,7 @@ func TestGetTargets(t *testing.T) {
 			wantPkgs: nil,
 		},
 		{
+			// 无标签且无 opt-in：不生成。
 			name: "no tag and no opt-in types is skipped",
 			pkgs: []pkgSpec{
 				{
@@ -165,6 +178,7 @@ func TestGetTargets(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 构造最小 universe：每个 pkgSpec 一个包，包内按需合成可拷贝结构体。
 			universe := types.Universe{}
 			var inputs []string
 			for _, ps := range tc.pkgs {
@@ -189,6 +203,7 @@ func TestGetTargets(t *testing.T) {
 
 			result := GetTargets(ctx, args.New())
 
+			// 目标包集合与顺序无关，比较前先排序。
 			var gotPkgs []string
 			for _, tgt := range result {
 				gotPkgs = append(gotPkgs, tgt.Path())
@@ -200,6 +215,7 @@ func TestGetTargets(t *testing.T) {
 				t.Errorf("PkgPaths = %v, want %v", gotPkgs, want)
 			}
 
+			// 每个 target 只应产出一个生成器，且开关值需与标签语义一致。
 			for _, tgt := range result {
 				gens := tgt.Generators(ctx)
 				if len(gens) != 1 {

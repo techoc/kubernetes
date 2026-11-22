@@ -194,6 +194,7 @@ func TestIdentify(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			pkg := &types.Package{Path: "test/pkg", Dir: "/tmp/test", Comments: tc.comments}
+			// 打开 KnownTagsOnly 以便同时校验“未知/拼错的 -gen 标签必须报错”这一类用例。
 			info, err := Identify(pkg, tc.spec, WithLintRules(LintRuleKnownTagsOnly))
 			if tc.wantErr != "" {
 				if err == nil {
@@ -213,6 +214,8 @@ func TestIdentify(t *testing.T) {
 			if got := info.IsExplicitOnly(); got != tc.wantExplicitOnly {
 				t.Errorf("IsExplicitOnly = %v, want %v", got, tc.wantExplicitOnly)
 			}
+			// 值的读取方式由 Spec.ValueMode 决定：conversion 是 peer 列表，
+			// defaulter/validation 是类型过滤器列表，其余 spec 没有值可检查。
 			switch tc.spec.ValueMode {
 			case ConversionPeerList:
 				if got := info.PeerPackages(); !reflect.DeepEqual(got, tc.wantValues) {
@@ -227,6 +230,9 @@ func TestIdentify(t *testing.T) {
 	}
 }
 
+// TestExternalTypes 覆盖“从哪个包读取类型定义”的解析规则：
+// 各生成器使用不同标签名（conversion-gen-external-types / *-gen-input），
+// 未指定时退回自身路径；相对路径与重复值必须被拒绝。
 func TestExternalTypes(t *testing.T) {
 	const ownPath = "k8s.io/kubernetes/pkg/apis/apps/v1"
 	cases := []struct {
@@ -241,6 +247,7 @@ func TestExternalTypes(t *testing.T) {
 			spec: Conversion,
 			want: ownPath,
 		},
+		// conversion 用 external-types 而不是 input，语义相同但历史标签名不同。
 		{
 			name:     "conversion: external-types tag",
 			spec:     Conversion,
@@ -261,6 +268,7 @@ func TestExternalTypes(t *testing.T) {
 		},
 		{
 			name: "conversion ignores other generators' input tags",
+			// 其他生成器的 input 标签不应影响当前 spec 的判断。
 			spec: Conversion,
 			comments: []string{
 				"+k8s:defaulter-gen-input=k8s.io/api/apps/v2",

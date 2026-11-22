@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+//
+// 本包穷举 listType 与 listMapKey 在 stable/alpha/beta 三种稳定性级别下的
+// 全部组合，用于验证级别前缀可以独立作用在 listType 与每个 key 上。
 package listkeys
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -35,6 +38,7 @@ type MultiKeyItem struct {
 	Value int    `json:"value"`
 }
 
+// ListKeyStruct 的每个字段对应一种级别组合，注释即该用例的期望语义。
 type ListKeyStruct struct {
 	TypeMeta int
 

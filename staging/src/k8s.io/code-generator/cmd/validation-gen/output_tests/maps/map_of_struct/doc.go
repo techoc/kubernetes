@@ -18,7 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package mapofstruct 是 validation-gen 的测试包，覆盖 map 值为结构体的情况：
+// 通过 +k8s:eachVal 对每个值调用其类型校验，并验证 typedef 结构体同样生效。
 // +k8s:validation-gen-nolint
 package mapofstruct
 

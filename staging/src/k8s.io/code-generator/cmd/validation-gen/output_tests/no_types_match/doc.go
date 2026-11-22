@@ -20,6 +20,9 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // This is a test package.
+//
+// 类型过滤器 TypesWithField=TypeMeta 在本包不匹配任何类型，用于验证
+// 生成器在“选择器无命中”时输出空实现而不报错。
 // +k8s:validation-gen-nolint
 package notypesmatch
 

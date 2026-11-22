@@ -18,6 +18,9 @@ package generators
 
 import "k8s.io/gengo/v2/types"
 
+// 以下变量集中声明生成代码需要引用的外部类型符号。以 gengo types.Name
+// 形式保存，使模板可以通过 raw 命名系统输出带 import 的完整引用；
+// 集中声明也便于发现跨包依赖。
 var (
 	apiScheme                                    = types.Name{Package: "k8s.io/kubernetes/pkg/api/legacyscheme", Name: "Scheme"}
 	cacheDeletedObject                           = types.Name{Package: "k8s.io/client-go/tools/cache", Name: "DeletedObject"}

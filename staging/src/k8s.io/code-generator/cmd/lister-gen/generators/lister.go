@@ -35,6 +35,10 @@ import (
 )
 
 // NameSystems returns the name system used by the generators in this package.
+//
+// 除 raw/public 等通用系统外，这里注册了 publicPlural、allLowercasePlural 和
+// lowercaseSingular：lister 的接口名、资源名和构造函数名分别依赖它们，
+// 复数特例（如 endpoints）由调用方通过 pluralExceptions 注入。
 func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	return namer.NameSystems{
 		"public":             namer.NewPublicNamer(0),
@@ -61,6 +65,9 @@ func DefaultNameSystem() string {
 }
 
 // GetTargets makes the client target definition.
+//
+// 只为同时具备 list 和 get 动词的类型生成 lister：lister 的接口正是围绕
+// List/Get 两个操作设计的。每个 GroupVersion 输出到 <group>/<version> 子目录。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, "", gengo.StdGeneratedBy)
 	if err != nil {
@@ -76,6 +83,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	for _, inputPkg := range context.Inputs {
 		p := context.Universe.Package(inputPkg)
 
+		// 是否生成完全由包级识别结果决定（+k8s:lister-gen 或类型级 opt-in）。
 		info, err := apidefinitions.Identify(p, apidefinitions.Lister, idOpts...)
 		if err != nil {
 			klog.Fatal(err)
@@ -96,6 +104,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		var gv clientgentypes.GroupVersion
 		var internalGVPkg string
 
+		// 内部版本没有版本号目录，group 名取自最后一段；外部版本最后两段是 group/version，
+		// internalGVPkg 指回上一层的内部包，供 lister 引用 internal 类型。
 		if internal {
 			lastSlash := strings.LastIndex(p.Path, "/")
 			if lastSlash == -1 {
@@ -115,6 +125,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		// If there's a comment of the form "// +groupName=somegroup" or
 		// "// +groupName=somegroup.foo.bar.io", use the first field (somegroup) as the name of the
 		// group when generating.
+		// 只取点号前的第一段，与 client-gen 的 group 目录命名保持一致。
 		override, ok, err := apidefinitions.GroupNameForPackage(p.Comments)
 		if err != nil {
 			klog.Fatalf("error resolving group name: %v", err)
@@ -123,6 +134,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			gv.Group = clientgentypes.Group(strings.SplitN(override, ".", 2)[0])
 		}
 
+		// lister 只对可 list、可 get 的资源有意义；排序保证生成顺序稳定。
 		var typesToGenerate []*types.Type
 		for _, t := range p.Types {
 			tags := util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...))
@@ -137,6 +149,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		orderer := namer.Orderer{Namer: namer.NewPrivateNamer(0)}
 		typesToGenerate = orderer.OrderTypes(typesToGenerate)
 
+		// 输出目录与 import 路径都按 group/version 分层，与真实客户端包布局一致。
 		subdir := []string{groupPackageName, strings.ToLower(gv.Version.NonEmpty())}
 		outputDir := filepath.Join(args.OutputDir, filepath.Join(subdir...))
 		outputPkg := path.Join(args.OutputPkg, path.Join(subdir...))
@@ -150,6 +163,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 				return tags.GenerateClient && tags.HasVerb("list") && tags.HasVerb("get")
 			},
 			GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
+				// 每个 GroupVersion 一个 expansion 文件；每个类型一个独立 lister 文件。
 				generators = append(generators, &expansionGenerator{
 					GoGenerator: generator.GoGenerator{
 						OutputFilename: "expansion_generated.go",
@@ -180,6 +194,9 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 }
 
 // objectMetaForPackage returns the type of ObjectMeta used by package p.
+//
+// 第二个返回值表示该 ObjectMeta 是否来自 internal 版本；调用方据此决定 lister
+// 引用内部类型还是版本化类型。包内有 genclient 类型却找不到 ObjectMeta 时视为错误。
 func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	generatingForPackage := false
 	for _, t := range p.Types {
@@ -201,6 +218,8 @@ func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 }
 
 // isInternal returns true if the tags for a member do not contain a json tag
+//
+// 内部版本类型的字段没有 json tag；这是区分 internal 与版本化 ObjectMeta 的简便判据。
 func isInternal(m types.Member) bool {
 	return !strings.Contains(m.Tags, "json")
 }
@@ -219,25 +238,31 @@ type listerGenerator struct {
 
 var _ generator.Generator = &listerGenerator{}
 
+// Filter 只放行构造时绑定的类型，保证一个文件只包含一个类型的 lister。
 func (g *listerGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	return t == g.typeToGenerate
 }
 
+// Namers 注册 raw namer，模板中的类型按 outputPackage 解析并登记 import。
 func (g *listerGenerator) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 返回模板引用到的 import。
 func (g *listerGenerator) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// GenerateType 生成 lister 接口、实现结构体和构造函数；命名空间资源额外生成
+// NamespaceLister。
 func (g *listerGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
 	klog.V(5).Infof("processing type %v", t)
+	// 模板参数：Resource 用于按资源名建立索引，objectMeta 决定可选字段的访问方式。
 	m := map[string]interface{}{
 		"Resource":               c.Universe.Function(types.Name{Package: t.Name.Package, Name: "Resource"}),
 		"labelsSelector":         c.Universe.Function(types.Name{Package: "k8s.io/apimachinery/pkg/labels", Name: "Selector"}),
@@ -254,6 +279,7 @@ func (g *listerGenerator) GenerateType(c *generator.Context, t *types.Type, w io
 		return err
 	}
 
+	// 非命名空间资源没有 NamespaceLister，提前返回以免生成不可用的方法。
 	if tags.NonNamespaced {
 		sw.Do(typeListerInterfaceNonNamespaced, m)
 	} else {
@@ -274,6 +300,7 @@ func (g *listerGenerator) GenerateType(c *generator.Context, t *types.Type, w io
 	return sw.Error()
 }
 
+// typeListerInterface 是命名空间资源的顶层 lister：List 全部 + 按 namespace 下钻。
 var typeListerInterface = `
 // $.type|public$Lister helps list $.type|publicPlural$.
 // All objects returned here must be treated as read-only.
@@ -287,6 +314,8 @@ type $.type|public$Lister interface {
 }
 `
 
+// typeListerInterfaceNonNamespaced 用于 cluster-scoped 资源：没有 namespace 参数，
+// 直接按 name Get。
 var typeListerInterfaceNonNamespaced = `
 // $.type|public$Lister helps list $.type|publicPlural$.
 // All objects returned here must be treated as read-only.
@@ -311,6 +340,8 @@ type $.type|private$Lister struct {
 }
 `
 
+// typeListerConstructor 以资源名建立带类型的索引，资源名取自 <Type>Resource()，
+// 保证与 informer 使用的索引键一致。
 var typeListerConstructor = `
 // New$.type|public$Lister returns a new $.type|public$Lister.
 func New$.type|public$Lister(indexer $.cacheIndexer|raw$) $.type|public$Lister {
@@ -318,6 +349,7 @@ func New$.type|public$Lister(indexer $.cacheIndexer|raw$) $.type|public$Lister {
 }
 `
 
+// typeListerNamespaceLister 是由顶层 lister 返回的 per-namespace 视图。
 var typeListerNamespaceLister = `
 // $.type|publicPlural$ returns an object that can list and get $.type|publicPlural$.
 func (s *$.type|private$Lister) $.type|publicPlural$(namespace string) $.type|public$NamespaceLister {
@@ -325,6 +357,7 @@ func (s *$.type|private$Lister) $.type|publicPlural$(namespace string) $.type|pu
 }
 `
 
+// namespaceListerInterface 仅暴露某个 namespace 内的 List/Get。
 var namespaceListerInterface = `
 // $.type|public$NamespaceLister helps list and get $.type|publicPlural$.
 // All objects returned here must be treated as read-only.

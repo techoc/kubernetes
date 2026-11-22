@@ -33,6 +33,9 @@ import (
 
 // informerGenerator produces a file of listers for a given GroupVersion and
 // type.
+//
+// 每个带 +genclient 的类型生成一个 informer 文件，包含新旧两套 API：
+// 返回 SharedIndexInformer 的兼容接口，以及类型安全的 Typed* 变体。
 type informerGenerator struct {
 	generator.GoGenerator
 	outputPackage             string
@@ -48,30 +51,36 @@ type informerGenerator struct {
 
 var _ generator.Generator = &informerGenerator{}
 
+// Filter 只接受构造时指定的类型，保证一个文件只描述一个资源。
 func (g *informerGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	return t == g.typeToGenerate
 }
 
+// Namers 只注册 raw 命名系统，模板中其余名字由导入 tracker 解析。
 func (g *informerGenerator) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 输出模板实际用到的 import 行。
 func (g *informerGenerator) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// GenerateType 渲染 informer 的接口、结构体、构造函数与辅助转换函数。
 func (g *informerGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
 	klog.V(5).Infof("processing type %v", t)
 
+	// lister 包路径与 client-gen 的目录布局保持一致：listers/<group>/<version>。
 	listerPackage := fmt.Sprintf("%s/%s/%s", g.listersPackage, g.groupPkgName, strings.ToLower(g.groupVersion.Version.NonEmpty()))
 	clientSetInterface := c.Universe.Type(types.Name{Package: g.clientSetPackage, Name: "Interface"})
 	informerFor := "InformerFor"
 
+	// tags 决定是否生成 namespace 参数：cluster-scoped 类型不接收 namespace。
 	tags, err := util.ParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...))
 	if err != nil {
 		return err
@@ -111,15 +120,16 @@ func (g *informerGenerator) GenerateType(c *generator.Context, t *types.Type, w 
 		"namespaceAll":                                c.Universe.Type(metav1NamespaceAll),
 		"namespaced":                                  !tags.NonNamespaced,
 		"newLister":                                   c.Universe.Function(types.Name{Package: listerPackage, Name: "New" + t.Name.Name + "Lister"}),
-		"resourceName":                                strings.ToLower(t.Name.Name) + "s",
-		"runtimeObject":                               c.Universe.Type(runtimeObject),
-		"schemaGroupVersionResource":                  c.Universe.Type(schemaGroupVersionResource),
-		"timeDuration":                                c.Universe.Type(timeDuration),
-		"type":                                        t,
-		"v1ListOptions":                               c.Universe.Type(v1ListOptions),
-		"version":                                     namer.IC(g.groupVersion.Version.String()),
-		"versionName":                                 g.groupVersion.Version.String(),
-		"watchInterface":                              c.Universe.Type(watchInterface),
+		// resourceName 仅作兜底：GVR 的 Resource 必须与 REST 资源名一致。
+		"resourceName":               strings.ToLower(t.Name.Name) + "s",
+		"runtimeObject":              c.Universe.Type(runtimeObject),
+		"schemaGroupVersionResource": c.Universe.Type(schemaGroupVersionResource),
+		"timeDuration":               c.Universe.Type(timeDuration),
+		"type":                       t,
+		"v1ListOptions":              c.Universe.Type(v1ListOptions),
+		"version":                    namer.IC(g.groupVersion.Version.String()),
+		"versionName":                g.groupVersion.Version.String(),
+		"watchInterface":             c.Universe.Type(watchInterface),
 	}
 
 	sw.Do(typeInformerInterface, m)

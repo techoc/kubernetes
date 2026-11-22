@@ -34,21 +34,29 @@ const (
 )
 
 var (
+	// Monotonic 是 apimachinery 中实现“更新时不得减小”的运行时校验函数。
 	monotonicValidator = types.Name{Package: libValidationPkg, Name: "Monotonic"}
 )
 
+// monotonicTagValidator 处理 +k8s:monotonic：生成的校验会比较新旧值，
+// 保证字段在 update 时单调不减。
 type monotonicTagValidator struct{}
 
+// Init 无需配置，保持接口一致。
 func (v *monotonicTagValidator) Init(_ Config) {}
 
+// TagName 返回标签名。
 func (v *monotonicTagValidator) TagName() string {
 	return monotonicTagName
 }
 
+// ValidScopes 可用于类型或字段；类型作用域常用于同类型字段的批量约束。
 func (v *monotonicTagValidator) ValidScopes() sets.Set[Scope] {
 	return sets.New(ScopeType, ScopeField)
 }
 
+// GetValidations 校验目标必须是整数类型（含别名与指针），并登记运行时函数调用。
+// 指针先解引用再判断，因为 +k8s:monotonic 的语义针对数值本身而非可空性。
 func (v *monotonicTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	t := util.NonPointer(util.NativeType(context.Type))
 	if !types.IsInteger(t) {
@@ -60,6 +68,7 @@ func (v *monotonicTagValidator) GetValidations(context Context, tag codetags.Tag
 	return result, nil
 }
 
+// Docs 返回标签文档；monotonic 目前为 Alpha 稳定性。
 func (v *monotonicTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            monotonicTagName,

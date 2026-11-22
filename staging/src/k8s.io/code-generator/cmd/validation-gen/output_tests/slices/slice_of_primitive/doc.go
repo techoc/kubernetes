@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 slice 字段的字段级校验与 eachVal 元素级校验组合，
+// 覆盖基本类型、typedef 以及指针元素（*T 与 *Typedef）的生成差异。
 package sliceofprimitive
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -40,6 +43,7 @@ type Struct struct {
 
 	UnvalidatedListField []string `json:"UnvalidatedListField"`
 
+	// 指针元素要求生成器先解引用再校验，nil 元素应被跳过。
 	// +k8s:validateFalse="field Struct.ListPtrField"
 	// +k8s:eachVal=+k8s:validateFalse="field Struct.ListPtrField[*]"
 	ListPtrField []*string `json:"listPtrField"`

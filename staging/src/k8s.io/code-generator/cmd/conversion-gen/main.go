@@ -92,6 +92,11 @@ limitations under the License.
 // out of Conversion generation by specifying a comment on the of the form:
 //
 //	// +k8s:conversion-gen=false
+//
+// 中文概述：conversion-gen 根据 +k8s:conversion-gen 标签，在 internal 与 external
+// 类型之间生成 autoConvert_/Convert_ 函数并注册到 runtime.Scheme。开发者可用同名的
+// 手写 Convert_ 函数覆盖生成行为，也可以用 +k8s:conversion-gen=false 让某个类型或
+// 字段退出转换生成。
 package main
 
 import (
@@ -106,7 +111,10 @@ import (
 	"k8s.io/gengo/v2/generator"
 )
 
+// main 解析参数、校验后把 gengo 引擎交给 conversion-gen 的 targets 回调。
+// 本工具不直接处理输入参数，packages 由 pflag 的剩余参数传入 gengo。
 func main() {
+	// klog 的标志先初始化，再与 pflag 共享同一个 FlagSet。
 	klog.InitFlags(nil)
 	args := generatorargs.New()
 
@@ -115,10 +123,12 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	// 尽早失败，避免生成到一半才发现参数非法。
 	if err := args.Validate(); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// 延迟到 gengo 构建好 Context 后再生成目标，因为 target 需要 universe 信息。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}

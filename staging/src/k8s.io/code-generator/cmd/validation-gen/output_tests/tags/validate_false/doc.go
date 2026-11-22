@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 最小 validateFalse 夹具：一个字段标签 + 测试夹具生成本身，
+// 用于验证测试生成器的错误收集与 JSON 基线比对。
 package validatefalse
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

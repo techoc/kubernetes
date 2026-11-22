@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 maxItems 的边界：长度恰好等于上限时合法，超过时 TooMany；
+// typedef 切片与普通切片行为一致，旧值相同则因 ratcheting 跳过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

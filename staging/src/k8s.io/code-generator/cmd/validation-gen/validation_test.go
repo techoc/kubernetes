@@ -25,6 +25,7 @@ import (
 )
 
 // gengo has `PointerTo()` but not the rest, so keep this here for consistency.
+// 这些构造器刻意保留空 Package，用于验证类型学习代码只依赖 Kind/Elem 结构。
 func ptrTo(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -36,6 +37,7 @@ func ptrTo(t *types.Type) *types.Type {
 	}
 }
 
+// sliceOf 构造 []T；名字沿用 Go 语法，便于失败信息可读。
 func sliceOf(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -47,6 +49,7 @@ func sliceOf(t *types.Type) *types.Type {
 	}
 }
 
+// mapOf 构造 map[string]T（键固定为 string，测试只关心值类型）。
 func mapOf(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -59,6 +62,7 @@ func mapOf(t *types.Type) *types.Type {
 	}
 }
 
+// aliasOf 用名字前缀区分不同别名，因为测试会比较类型名字符串。
 func aliasOf(name string, t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -70,6 +74,8 @@ func aliasOf(name string, t *types.Type) *types.Type {
 	}
 }
 
+// TestGetLeafTypeAndPrefixes 穷举指针层数与别名的组合，确认生成的表达式前缀
+// 与声明类型前缀能让“取叶子值”的代码在每一层都编译通过。
 func TestGetLeafTypeAndPrefixes(t *testing.T) {
 
 	cases := []struct {
@@ -369,6 +375,9 @@ func TestGetLeafTypeAndPrefixes(t *testing.T) {
 	}
 }
 
+// TestSortIntoCohorts 验证校验函数的分组规则：同一 cohort 保持加入顺序，
+// 组内 short-circuit 前置，默认 cohort 最先输出。顺序影响生成代码的执行语义，
+// 因此测试对结果做精确比较而不是集合比较。
 func TestSortIntoCohorts(t *testing.T) {
 	cases := []struct {
 		in       []validators.FunctionGen

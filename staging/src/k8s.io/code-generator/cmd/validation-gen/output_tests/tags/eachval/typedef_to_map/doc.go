@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 eachVal 标注在 map 类型本身（而非字段）时，
+// 所有使用该 typedef 的字段都会继承这份元素级校验。
 package typedeftomap
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -44,6 +47,7 @@ type MapTypedefType map[string]StringType
 type Struct struct {
 	TypeMeta int
 
+	// 字段级与类型级 eachVal 同时存在，两条错误都应上报。
 	// +k8s:eachVal=+k8s:validateFalse="field Struct.MapField[*]"
 	MapField MapType `json:"mapField"`
 

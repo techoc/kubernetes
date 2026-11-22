@@ -18,6 +18,8 @@ limitations under the License.
 
 // This package contains code generation utilities
 // This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 全部使用空白导入：这里只关心模块依赖图，不需要在运行时引用任何生成器符号。
+
 package codegenerator
 
 import (

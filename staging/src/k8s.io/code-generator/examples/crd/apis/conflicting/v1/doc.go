@@ -19,4 +19,6 @@ limitations under the License.
 // +groupName=conflicting.test.crd.code-generator.k8s.io
 // +groupGoName=ConflictingExample
 
+// Package v1 是 CRD 示例中的冲突测试版本：包名 v1 与 group 名不一致的
+// 场景用于验证生成的注册/默认值代码按 +groupName 而非目录名分组。
 package v1

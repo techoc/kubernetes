@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // Package nonincluded contains test types for testing subfield field validation tags.
+//
+// 覆盖“被 subfield 指向的字段类型未被生成器纳入”的场景：
+// 外部包类型配合 +k8s:opaqueType，子字段校验仍应正常生成。
 // +k8s:validation-gen-nolint
 package nonincluded
 

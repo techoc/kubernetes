@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// multiple 在同一结构体中声明两个 undiscriminated union，验证
+// unionMember(union: ...) 的分组不会互相干扰。
 // +k8s:validation-gen-nolint
 package multiple
 

@@ -19,6 +19,7 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:maxLength：与 maxBytes 结构对称，验证字符串长度边界与 typedef 标记传递。
 package maxlength
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

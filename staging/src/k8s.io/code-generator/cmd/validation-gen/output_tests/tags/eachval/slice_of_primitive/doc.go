@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 eachVal 作用在基本类型与 typedef 的 slice 元素上，
+// 是 eachval 系列中最简单的基线用例。
 package sliceofprimitive
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

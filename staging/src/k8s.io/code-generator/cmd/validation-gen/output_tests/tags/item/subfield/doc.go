@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 item 选择器与 subfield 的组合：先用 key 选中元素，再对元素的
+// 子字段施加校验或不可变约束。
 package subfield
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -28,22 +30,27 @@ var localSchemeBuilder = testscheme.New()
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 
+	// 选中 key=target 的元素，仅校验其 stringField 子字段。
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:item(key: "target")=+k8s:subfield(stringField)=+k8s:validateFalse="item Items[key=target].stringField"
 	Items []Item `json:"items"`
 
+	// 选中 key=ratchet 的元素，对其 status 子字段施加 neq 校验，
+	// 用于验证 item+subfield 组合下的 ratcheting 行为。
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:item(key: "ratchet")=+k8s:subfield(status)=+k8s:neq="forbidden"
 	RatchetItems []RatchetItem `json:"ratchetItems"`
 }
 
+// Item 是带 key 与 stringField 的简单元素。
 type Item struct {
 	Key         string `json:"key"`
 	StringField string `json:"stringField"`
 }
 
+// RatchetItem 含 status/version，用于测试子字段校验在更新时的 ratcheting。
 type RatchetItem struct {
 	Key     string `json:"key"`
 	Status  string `json:"status"`

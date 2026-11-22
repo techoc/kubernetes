@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // applyconfiguration-gen is a tool for auto-generating apply builder functions.
+//
+// applyconfiguration-gen 为带 +genclient 的 API 类型生成 ApplyConfiguration
+// 类型及其 With/WithXxx 构造方法，使客户端可以以声明式方式构造 apply 请求体。
 package main
 
 import (
@@ -30,18 +33,22 @@ import (
 
 func main() {
 	klog.InitFlags(nil)
+	// 默认输入路径指向 k8s 自己的内部 API 包；调用方（例如 make update）会显式覆盖。
 	args := args.New()
 	args.AddFlags(pflag.CommandLine, "k8s.io/kubernetes/pkg/apis") // TODO: move this input path out of applyconfiguration-gen
+	// gengo 与 klog 都注册到标准 flag，需要显式打开 stderr 日志，否则生成失败时没有任何输出。
 	if err := flag.Set("logtostderr", "true"); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	// 先校验参数再加载包，避免扫描完整个 API 树之后才发现参数错误。
 	if err := args.Validate(); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// gengo 以回调方式获取 target，保证 context（类型宇宙）加载完成后再构造生成器。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}

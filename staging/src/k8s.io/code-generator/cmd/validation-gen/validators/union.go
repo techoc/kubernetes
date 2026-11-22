@@ -39,28 +39,33 @@ var newUnionMember = types.Name{Package: libValidationPkg, Name: "NewUnionMember
 var newUnionMembership = types.Name{Package: libValidationPkg, Name: "NewUnionMembership"}
 var unionVariablePrefix = "unionMembershipFor"
 
+// init 注册 union 相关的两个标记校验器。
+// 一个 union 由多个标记共同描述，它们必须共享状态：
+//   - 字段型 union：标记在结构体字段上，校验生成在结构体上；
+//   - 列表项型 union：标记在列表元素上（经 +k8s:item），校验生成在列表上。
+//
+// 两个校验器通过同一个 shared 映射交换信息。
 func init() {
-	// Unions are comprised of multiple tags that need to share information.
-	// For field-based unions: tags are on struct fields, validation is on the struct
-	// For item-based unions: tags are on list items (via +k8s:item), validation is on the list
-
-	// "shared" maps from field path strings (key) to union definitions (value)
-	// key examples:
-	//   - struct union: "MyStruct" (validation on the struct type)
-	//   - list union: "Pipeline.Tasks" (validation on the list field)
+	// "shared" 把字段路径字符串（键）映射到 union 定义（值）。
+	// 键示例：
+	//   - 结构体 union："MyStruct"（校验生成在结构体类型上）
+	//   - 列表 union："Pipeline.Tasks"（校验生成在列表字段上）
 	shared := map[string]unions{}
 	RegisterTagValidator(unionDiscriminatorTagValidator{shared})
 	RegisterTagValidator(unionMemberTagValidator{shared})
 }
 
+// getUnionValidations 在成员标记全部处理完后，把收集到的 union 定义翻译为校验。
+// 它由 unionMemberTagValidator 的 Deferred（ParentContext）回调触发，
+// 此时同一结构体/列表上的所有成员标记都已注册完毕。
 func getUnionValidations(shared map[string]unions, context Context) (Validations, error) {
-	// unions are keyed by ParentPath for struct fields (ScopeField), or Path for others.
+	// union 以 ParentPath 为键（字段作用域），其他作用域则用 Path。
 	structPath := context.ParentPath
 	parentType := context.ParentType
 
 	// TODO: Add support for map items once map item validation is implemented
 
-	// Extract the most concrete type possible.
+	// 取尽可能具体的类型：union 只能作用于结构体或切片。
 	if k := util.NonPointer(util.NativeType(parentType)).Kind; k != types.Struct && k != types.Slice {
 		return Validations{}, nil
 	}
@@ -69,6 +74,7 @@ func getUnionValidations(shared map[string]unions, context Context) (Validations
 	if len(unions) == 0 {
 		return Validations{}, nil
 	}
+	// 消费后删除，避免同一路径的 union 被重复生成（例如包被扫描两次）。
 	delete(shared, structPath.String())
 
 	result, err := processUnionValidations(structPath, parentType, unions, unionVariablePrefix,
@@ -82,32 +88,40 @@ const (
 	unionMemberTagName        = "k8s:unionMember"
 )
 
+// unionDiscriminatorTagValidator 处理 +k8s:unionDiscriminator。
 type unionDiscriminatorTagValidator struct {
 	shared map[string]unions
 }
 
+// Init 无状态，无需初始化。
 func (unionDiscriminatorTagValidator) Init(_ Config) {}
 
+// TagName 返回标记名。
 func (unionDiscriminatorTagValidator) TagName() string {
 	return unionDiscriminatorTagName
 }
 
-// Shared between unionDiscriminatorTagValidator and unionMemberTagValidator.
+// unionTagValidScopes 由 discriminator 与 member 两个校验器共享：
+// 二者都可出现在字段或列表元素上。
 var unionTagValidScopes = sets.New(ScopeField, ScopeListVal)
 
+// ValidScopes 返回允许的作用域。
 func (unionDiscriminatorTagValidator) ValidScopes() sets.Set[Scope] {
 	return unionTagValidScopes
 }
 
+// GetValidations 记录 discriminator 信息，本身不产生校验。
+// 校验统一由成员校验器的延迟回调生成，以保证所有成员信息已收集完整。
 func (udtv unionDiscriminatorTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	err := processDiscriminatorValidations(udtv.shared, context, tag)
 	if err != nil {
 		return Validations{}, err
 	}
-	// Configure descriminator for the union. Validations are emitted by the union member validator.
+	// 为 union 配置 discriminator；校验由 union member 校验器发出。
 	return Validations{}, nil
 }
 
+// Docs 返回 discriminator 标记的文档。
 func (udtv unionDiscriminatorTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            udtv.TagName(),
@@ -123,20 +137,26 @@ func (udtv unionDiscriminatorTagValidator) Docs() TagDoc {
 	}
 }
 
+// unionMemberTagValidator 处理 +k8s:unionMember。
 type unionMemberTagValidator struct {
 	shared map[string]unions
 }
 
+// Init 无状态，无需初始化。
 func (unionMemberTagValidator) Init(_ Config) {}
 
+// TagName 返回标记名。
 func (unionMemberTagValidator) TagName() string {
 	return unionMemberTagName
 }
 
+// ValidScopes 返回允许的作用域。
 func (unionMemberTagValidator) ValidScopes() sets.Set[Scope] {
 	return unionTagValidScopes
 }
 
+// GetValidations 记录成员信息，并注册一个延迟校验：
+// 延迟到父上下文再生成，是因为必须等同一 union 的所有成员都被看到。
 func (umtv unionMemberTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	err := processMemberValidations(umtv.shared, context, tag)
 	if err != nil {
@@ -151,6 +171,7 @@ func (umtv unionMemberTagValidator) GetValidations(context Context, tag codetags
 	}, nil
 }
 
+// Docs 返回成员标记的文档。
 func (umtv unionMemberTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            umtv.TagName(),
@@ -172,50 +193,49 @@ func (umtv unionMemberTagValidator) Docs() TagDoc {
 	}
 }
 
-// union defines how a union validation will be generated. Unions can be
-// composed of either a set of struct fields (with an optional disctriminator),
-// or a set of list items (stored as selection criteria).
+// union 定义一次 union 校验的生成方式。union 可以由一组结构体字段
+// （可带 discriminator）组成，也可以由一组列表项（以选择条件表示）组成。
 type union struct {
-	// members provides field information about all the members of the union.
-	// Each item provides a fieldName and discriminatorValue pair, where the
-	// name identifies the field or selector (for use in errors) and the
-	// discriminatorValue indicates the value which should be used in a
-	// discriminated union to name this member.
+	// members 提供 union 全部成员的信息。
+	// 每项含 fieldName 与 discriminatorValue 对，其中 name 标识字段或
+	// 选择器（用于错误消息），discriminatorValue 是带 discriminator 的
+	// union 中用于命名该成员的值。
 	members []unionMember
 
-	// fieldMembers describes all the members of a struct-field union.  This is
-	// mutually exclusive with itemMembers.
+	// fieldMembers 描述结构体字段 union 的全部成员。
+	// 与 itemMembers 互斥。
 	fieldMembers []*types.Member
 
-	// discriminator is the name of the discriminator field.
+	// discriminator 是 discriminator 字段名。
 	discriminator *string
-	// discriminatorMember describes the discriminator field.
+	// discriminatorMember 描述 discriminator 字段。
 	discriminatorMember *types.Member
 
-	// itemMembers stores selection criteria for all the members of a list-item
-	// union. This is mutually exclusive with fieldMembers. The map key is the
-	// "field name" (eg: `field[{"name": "succeeded"}]`), and the value is a
-	// list of selection criteria.
+	// itemMembers 保存列表项 union 全部成员的选择条件。
+	// 与 fieldMembers 互斥。map 键是“字段名”
+	// （如 `field[{"name": "succeeded"}]`），值是选择条件列表。
 	itemMembers map[string][]ListSelectorTerm
 }
 
+// unionMember 是 union 的一个成员：错误消息中显示的字段名与可选的
+// discriminator 值。
 type unionMember struct {
 	fieldName          string
 	discriminatorValue string
 }
 
-// unions represents all the unions for a go struct.
+// unions 表示某个 Go 结构体上的全部 union，以 union 名为键。
 type unions map[string]*union
 
-// newUnion initializes a new union instance
+// newUnion 初始化一个 union 实例。
 func newUnion() *union {
 	return &union{
-		// slice fields can be nil
+		// 切片字段可以为 nil。
 		itemMembers: make(map[string][]ListSelectorTerm),
 	}
 }
 
-// getOrCreate gets a union by name, or initializes a new union by the given name.
+// getOrCreate 按名字取 union，不存在则新建。
 func (us unions) getOrCreate(name string) *union {
 	var u *union
 	var ok bool
@@ -226,12 +246,14 @@ func (us unions) getOrCreate(name string) *union {
 	return u
 }
 
+// processUnionValidations 把一组 union 定义转换为变量（成员集合）与函数（校验）。
+// 变量先声明、函数再引用，避免在每次校验时重建成员表。
 func processUnionValidations(structPath *field.Path, parentType *types.Type, unions unions, varPrefix string,
 	tagName string, undiscriminatedValidator types.Name, discriminatedValidator types.Name, emits Emission,
 ) (Validations, error) {
 	result := Validations{}
 
-	// Sort the keys for stable output.
+	// 对键排序以保证输出稳定。
 	keys := make([]string, 0, len(unions))
 	for k := range unions {
 		keys = append(keys, k)
@@ -240,6 +262,7 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 	for _, unionName := range keys {
 		u := unions[unionName]
 		if len(u.fieldMembers) > 0 || u.discriminator != nil || len(u.itemMembers) > 0 {
+			// 字段型与列表项型不能混用：二者的成员语义与错误路径完全不同。
 			if len(u.fieldMembers) > 0 && len(u.itemMembers) > 0 {
 				return Validations{}, fmt.Errorf("cannot have both field members and item members")
 			}
@@ -254,23 +277,23 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 			// TODO: Avoid the "local" here. This was added to avoid errors caused when the package is an empty string.
 			//       The correct package would be the output package but is not known here. This does not show up in generated code.
 			// TODO: Append a consistent hash suffix to avoid generated name conflicts?
-			varBaseName := sanitizeName(structPath.String() + "_" + unionName) // unionName can be ""
+			varBaseName := sanitizeName(structPath.String() + "_" + unionName) // unionName 可以为 ""
 			supportVarName := PrivateVar{Name: varPrefix + "_" + varBaseName, Package: "local"}
 
 			var extractorArgs []any
 			ptrType := types.PointerTo(parentType)
 
-			// Handle field unions
+			// 处理字段型 union。
 			for _, member := range u.fieldMembers {
 				extractor := createMemberExtractor(ptrType, member)
 				extractorArgs = append(extractorArgs, extractor)
 			}
 
-			// Handle list item unions for lists
+			// 处理列表型 union 的列表项。
 			if nativeType.Kind == types.Slice && len(u.itemMembers) > 0 {
 				elemType := util.NonPointer(nativeType.Elem)
 
-				// Sort keys for stable output
+				// 对键排序以保证输出稳定。
 				keys := make([]string, 0, len(u.itemMembers))
 				for key := range u.itemMembers {
 					keys = append(keys, key)
@@ -288,11 +311,13 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 			}
 
 			if u.discriminator != nil {
+				// 带 discriminator：成员按 discriminator 值匹配。
 				supportVar := Variable(supportVarName,
 					Function(tagName, DefaultFlags, newDiscriminatedUnionMembership,
 						append([]any{*u.discriminator}, getMemberArgs(u, parentType, true)...)...))
 				result.Variables = append(result.Variables, supportVar)
 
+				// discriminator 提取器把字段值转换为 string，供运行时比较。
 				discriminatorExtractor := FunctionLiteral{
 					Parameters: []ParamResult{{Name: "obj", Type: ptrType}},
 					Results:    []ParamResult{{Type: types.String}},
@@ -304,6 +329,7 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 					WithEmits(emits)
 				result.Functions = append(result.Functions, fn)
 			} else {
+				// 无 discriminator：按“至少/至多一个成员被设置”判断。
 				supportVar := Variable(supportVarName, Function(tagName, DefaultFlags, newUnionMembership, getMemberArgs(u, parentType, false)...))
 				result.Variables = append(result.Variables, supportVar)
 
@@ -318,6 +344,8 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 	return result, nil
 }
 
+// createMemberExtractor 为字段型 union 成员生成“是否被设置”的判定函数。
+// 不同 Kind 的判定方式不同：指针判 nil，map/slice 判长度，内建类型与零值比较。
 func createMemberExtractor(ptrType *types.Type, member *types.Member) FunctionLiteral {
 	extractor := FunctionLiteral{
 		Parameters: []ParamResult{{Name: "obj", Type: ptrType}},
@@ -332,15 +360,14 @@ func createMemberExtractor(ptrType *types.Type, member *types.Member) FunctionLi
 	case types.Builtin:
 		extractor.Body = fmt.Sprintf("if obj == nil {return false}; var z %s; return obj.%s != z", member.Type, member.Name)
 	default:
-		// This should be caught before we get here, but JIC.
+		// 这种情况本应在更早阶段被拦截，这里兜底。
 		extractor.Body = fmt.Sprintf("if obj == nil {return false}; return false /* unsupported union member kind: %s */", nt.Kind)
 	}
 	return extractor
 }
 
-// createItemExtractor creates an extractor function for list item union
-// members. It generates code that loops through the list to check if an item
-// matching the criteria exists.
+// createItemExtractor 为列表项 union 成员生成提取器：
+// 遍历列表，判断是否存在满足选择条件的元素。
 func createItemExtractor(listType *types.Type, elemType *types.Type, selector []ListSelectorTerm) (FunctionLiteral, error) {
 	var criteria []keyValuePair
 	for _, term := range selector {
@@ -350,7 +377,7 @@ func createItemExtractor(listType *types.Type, elemType *types.Type, selector []
 		})
 	}
 
-	// Sort for stable output.
+	// 排序以保证输出稳定。
 	slices.SortFunc(criteria, func(a, b keyValuePair) int {
 		return strings.Compare(a.key, b.key)
 	})
@@ -375,23 +402,23 @@ func createItemExtractor(listType *types.Type, elemType *types.Type, selector []
 	return extractor, nil
 }
 
-// processDiscriminatorValidations processes union discriminator tags. It is a
-// free function, rather than a method so that it can be called from other
-// union-like tags.
+// processDiscriminatorValidations 处理 union discriminator 标记。
+// 它写成自由函数而非方法，以便其他类似 union 的标记复用。
 func processDiscriminatorValidations(shared map[string]unions, context Context, tag codetags.Tag) error {
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标记可作用于值字段、指针字段以及 typedef（typedef 不应该是指针）。
+	// 因此需要检查具体类型。
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
 		return fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
 	if shared[context.ParentPath.String()] == nil {
 		shared[context.ParentPath.String()] = unions{}
 	}
-	unionArg, _ := tag.NamedArg("union") // optional
+	unionArg, _ := tag.NamedArg("union") // 可选
 	u := shared[context.ParentPath.String()].getOrCreate(unionArg.Value)
 
 	var discriminatorFieldName string
 	if jsonAnnotation, ok := tags.LookupJSON(*context.Member); ok {
+		// 使用 JSON 名而不是 Go 字段名，保证错误消息与 API 字段路径一致。
 		discriminatorFieldName = jsonAnnotation.Name
 		u.discriminator = &discriminatorFieldName
 		u.discriminatorMember = context.Member
@@ -400,9 +427,8 @@ func processDiscriminatorValidations(shared map[string]unions, context Context, 
 	return nil
 }
 
-// processMemberValidations processes union member tags for fields and list
-// items.  It is a free function, rather than a method so that it can be called
-// from other union-like tags.
+// processMemberValidations 处理字段与列表项的 union 成员标记。
+// 它写成自由函数而非方法，以便其他类似 union 的标记复用。
 func processMemberValidations(shared map[string]unions, context Context, tag codetags.Tag) error {
 	switch context.Scope {
 	case ScopeField:
@@ -413,16 +439,15 @@ func processMemberValidations(shared map[string]unions, context Context, tag cod
 	return fmt.Errorf("can only be used on fields and list items: %v", context.Scope)
 }
 
-// processFieldMemberValidations processes union member tags for struct fields.
-// It is a free function, rather than a method so that it can be called from
-// other union-like tags.
+// processFieldMemberValidations 处理结构体字段的 union 成员标记。
+// 它写成自由函数而非方法，以便其他类似 union 的标记复用。
 func processFieldMemberValidations(shared map[string]unions, context Context, tag codetags.Tag) error {
 	nt := util.NativeType(context.Member.Type)
 	switch nt.Kind {
 	case types.Pointer, types.Map, types.Slice, types.Builtin:
 		// OK
 	default:
-		// In particular non-pointer structs are not supported.
+		// 特别地，不支持非指针结构体（值类型无法表达“未设置”）。
 		return fmt.Errorf("can only be used on nilable and primitive types (%s)", nt.Kind)
 	}
 	if context.Member == nil {
@@ -442,13 +467,13 @@ func processFieldMemberValidations(shared map[string]unions, context Context, ta
 		shared[context.ParentPath.String()] = unions{}
 	}
 
-	// See if the tag specified a member name.
-	memberName := context.Member.Name                        // default
-	if memberNameArg, ok := tag.NamedArg("memberName"); ok { // optional
+	// 检查标记是否指定了成员名。
+	memberName := context.Member.Name                        // 默认值
+	if memberNameArg, ok := tag.NamedArg("memberName"); ok { // 可选
 		memberName = memberNameArg.Value
 	}
 
-	unionArg, _ := tag.NamedArg("union") // optional
+	unionArg, _ := tag.NamedArg("union") // 可选
 	u := shared[context.ParentPath.String()].getOrCreate(unionArg.Value)
 	u.members = append(u.members, unionMember{fieldName, memberName})
 
@@ -457,33 +482,32 @@ func processFieldMemberValidations(shared map[string]unions, context Context, ta
 	return nil
 }
 
-// processListMemberValidations processes union member tags for list items.  It
-// is a free function, rather than a method so that it can be called from other
-// union-like tags.
+// processListMemberValidations 处理列表项的 union 成员标记。
+// 它写成自由函数而非方法，以便其他类似 union 的标记复用。
 func processListMemberValidations(shared map[string]unions, context Context, tag codetags.Tag) error {
 	if context.ListSelector == nil {
 		return fmt.Errorf("list-item union member has no list selector in context")
 	}
 
-	// It's not really a "field", but close enough. We don't really NEED the
-	// field name, since it is present in the error message, but it is more
-	// human-friendly. eg: `field[{"name": "succeeded"}]`
+	// 严格说不是“字段”，但接近。错误消息里已包含字段名，这里取一个
+	// 便于人阅读的名字：`field[{"name": "succeeded"}]`。
 	fieldName := lastPathElement(context.Path)
 
 	if shared[context.ParentPath.String()] == nil {
 		shared[context.ParentPath.String()] = unions{}
 	}
 
-	// See if the tag specified a member name.
+	// 检查标记是否指定了成员名。
 	memberName := ""
-	if memberNameArg, ok := tag.NamedArg("memberName"); ok { // optional
+	if memberNameArg, ok := tag.NamedArg("memberName"); ok { // 可选
 		memberName = memberNameArg.Value
 	}
 
-	unionArg, _ := tag.NamedArg("union") // optional
+	unionArg, _ := tag.NamedArg("union") // 可选
 	u := shared[context.ParentPath.String()].getOrCreate(unionArg.Value)
 	u.members = append(u.members, unionMember{fieldName, memberName})
 
+	// 同一列表项路径只能属于一个 union 成员，重复会导致生成的匹配条件歧义。
 	if _, found := u.itemMembers[fieldName]; found {
 		return fmt.Errorf("list-item union member %q already exists", fieldName)
 	}
@@ -492,6 +516,7 @@ func processListMemberValidations(shared map[string]unions, context Context, tag
 	return nil
 }
 
+// lastPathElement 返回字段路径的最后一段。
 func lastPathElement(path *field.Path) string {
 	parts := strings.Split(path.String(), ".")
 	if len(parts) > 0 {
@@ -500,7 +525,7 @@ func lastPathElement(path *field.Path) string {
 	return ""
 }
 
-// getMemberArgs gets a list of arguments which construct union members.
+// getMemberArgs 构造用于初始化 union 成员的参数列表。
 func getMemberArgs(u *union, _ *types.Type, discrim bool) []any {
 	members := make([]any, 0, len(u.members))
 	for _, f := range u.members {
@@ -515,7 +540,7 @@ func getMemberArgs(u *union, _ *types.Type, discrim bool) []any {
 	return members
 }
 
-// sanitizeName converts a string into a valid Go identifier
+// sanitizeName 把任意字符串转换为合法的 Go 标识符。
 func sanitizeName(name string) string {
 	name = strings.ReplaceAll(name, ".", "_")
 	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)

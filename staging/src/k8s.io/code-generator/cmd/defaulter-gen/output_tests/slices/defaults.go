@@ -20,11 +20,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 是手写入口，模拟 kube-apiserver 中注册默认化函数的惯例；
+// 测试需要它存在，以便与生成的 RegisterDefaults 一起被调用。
+//
 //nolint:unused
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_Ttest 手写 base defaulter：仅处理布尔指针字段。
+// 生成器识别到它后不会再为 Ttest 生成 SetDefaults_Ttest，
+// 但会生成调用它的 SetObjectDefaults_Ttest。
 func SetDefaults_Ttest(obj *Ttest) {
 	if obj.BoolField == nil {
 		obj.BoolField = new(bool)

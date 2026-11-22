@@ -19,6 +19,7 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 +k8s:validateTrue 的生成：该标记总是通过校验，仅用于测试脚手架。
 package validatetrue
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -28,6 +29,7 @@ var localSchemeBuilder = testscheme.New()
 type Struct struct {
 	TypeMeta int
 
+	// 永远通过的校验，生成代码中带固定结果 true。
 	// +k8s:validateTrue="field Struct.StringField"
 	StringField string `json:"stringField"`
 }

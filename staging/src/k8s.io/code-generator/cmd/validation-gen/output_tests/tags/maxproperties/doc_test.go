@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 maxProperties 的边界：map 长度等于上限合法，超过则 TooMany；
+// typedef key 的 map 与普通 map 行为一致，旧值相同则 ratcheting 跳过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -78,6 +80,7 @@ func Test(t *testing.T) {
 	}).ExpectValid()
 }
 
+// generateMapStringStringWithLength 生成含 n 个元素的 map[string]string。
 func generateMapStringStringWithLength(n int) map[string]string {
 	out := make(map[string]string)
 	for i := range n {
@@ -87,6 +90,8 @@ func generateMapStringStringWithLength(n int) map[string]string {
 	return out
 }
 
+// generateMapStringKeyStringWithLength 生成以 typedef 为 key 的 map，用于验证
+// key 类型不影响 maxProperties 的生成。
 func generateMapStringKeyStringWithLength(n int) map[StringKey]string {
 	out := make(map[StringKey]string)
 	for i := range n {

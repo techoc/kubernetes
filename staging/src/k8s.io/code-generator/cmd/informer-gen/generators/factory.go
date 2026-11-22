@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package generators 实现 informer-gen：生成 shared informer factory、
+// 按 group/version 的访问器以及 generic informer 等。
+//
+// 各 Generator 大多只作用于“第一个类型”，因为它们输出的是包级（而非
+// 每类型）的代码；模板字符串中的内容属于生成产物。
 package generators
 
 import (
@@ -28,6 +33,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// factoryGenerator 生成 shared informer factory 的文件。
+// 它同时输出 factory 结构体、选项函数、SharedInformerFactory 接口以及
+// 每个 group 的访问器方法。
 // factoryGenerator produces a file of listers for a given GroupVersion and
 // type.
 type factoryGenerator struct {
@@ -43,6 +51,7 @@ type factoryGenerator struct {
 
 var _ generator.Generator = &factoryGenerator{}
 
+// Filter 让 GenerateType 只执行一次：factory 是包级产物，首个类型触发即可。
 func (g *factoryGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	if !g.filtered {
 		g.filtered = true
@@ -51,22 +60,28 @@ func (g *factoryGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	return false
 }
 
+// Namers 只注册 raw namer，并让它把用到的类型登记进 imports。
 func (g *factoryGenerator) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 返回 raw namer 收集到的导入行。
 func (g *factoryGenerator) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// GenerateType 渲染 factory 模板。
+// 先把模板中引用到的标准库/框架类型解析成 *types.Type，再连同 group 信息
+// 一起交给模板。
 func (g *factoryGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "{{", "}}")
 
 	klog.V(5).Infof("processing type %v", t)
 
+	// 为每个 group 解析其包内的 Interface 与 New 符号，供模板生成访问器。
 	gvInterfaces := make(map[string]*types.Type)
 	gvNewFuncs := make(map[string]*types.Type)
 	for groupPkgName := range g.groupVersions {
@@ -102,12 +117,15 @@ func (g *factoryGenerator) GenerateType(c *generator.Context, t *types.Type, w i
 		"waitContextForChannel":          c.Universe.Function(waitContextForChannelFunc),
 	}
 
+	// 结构体与接口分两段输出，共用同一份模板参数。
 	sw.Do(sharedInformerFactoryStruct, m)
 	sw.Do(sharedInformerFactoryInterface, m)
 
 	return sw.Error()
 }
 
+// sharedInformerFactoryStruct 是 factory 结构体、选项函数与生命周期方法
+// （Start/Shutdown/WaitForCacheSync 等）的模板。
 var sharedInformerFactoryStruct = `
 // SharedInformerOption defines the functional option type for SharedInformerFactory.
 type SharedInformerOption func(*sharedInformerFactory) *sharedInformerFactory
@@ -322,6 +340,8 @@ func (f *sharedInformerFactory) InformerFor(obj {{.runtimeObject|raw}}, newFunc 
 }
 `
 
+// sharedInformerFactoryInterface 是 SharedInformerFactory 接口及其
+// 各 group 访问器实现的模板。
 var sharedInformerFactoryInterface = `
 // SharedInformerFactory provides shared informers for resources in all known
 // API group versions.

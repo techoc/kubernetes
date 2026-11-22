@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 验证 eachVal 作用于 map 的值：每个条目各产生一条错误，
+// 路径带上键名（mapField[a]），typedef 值类型也不例外。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

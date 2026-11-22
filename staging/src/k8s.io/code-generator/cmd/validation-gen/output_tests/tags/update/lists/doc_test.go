@@ -22,6 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestUpdateListTags 覆盖 update 标签在列表上的全部组合：
+// NoSet/NoUnset（整个字段）、NoAddItem/NoRemoveItem（逐元素），
+// 以及它们与 listType=set/map、复合 key、atomic+unique、eachVal 的交互。
+// 关键不变式：更新校验按 key（而非下标）关联元素，重排不算修改。
 func TestUpdateListTags(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

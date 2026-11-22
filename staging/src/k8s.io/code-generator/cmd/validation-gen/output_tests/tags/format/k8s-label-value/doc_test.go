@@ -24,9 +24,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 k8s-label-value 的合法与非法取值，并确认值、指针、类型定义
+// 三种字段形态得到相同的错误路径与 origin，且旧值非法时允许 ratcheting。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法用例：字母数字、. _ -，首尾为字母数字，长度 <= 63。
 	validCases := []struct {
 		name  string
 		value string
@@ -51,6 +54,7 @@ func Test(t *testing.T) {
 		})
 	}
 
+	// 非法用例：首尾出现分隔符、含非法字符、超长。
 	invalidCases := []struct {
 		name  string
 		value string
@@ -79,6 +83,7 @@ func Test(t *testing.T) {
 				field.Invalid(field.NewPath("labelValueTypedefField"), nil, "").WithOrigin("format=k8s-label-value"),
 			})
 			// Test validation ratcheting
+			// 旧值同样非法时不应重新报错（未变化的数据不重复校验）。
 			st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 		})
 	}

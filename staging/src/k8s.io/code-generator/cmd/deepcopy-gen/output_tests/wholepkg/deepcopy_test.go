@@ -23,10 +23,13 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestDeepCopyPrimitives 验证内建类型字段的深拷贝：用 fuzzer 填充后拷贝，
+// 断言源与目标在拷贝前后完全相等。
 func TestDeepCopyPrimitives(t *testing.T) {
 	x := StructPrimitives{}
 	y := StructPrimitives{}
 
+	// 起始值相等是后续判断失败的前提。
 	if !reflect.DeepEqual(&x, &y) {
 		t.Errorf("objects should be equal to start, but are not")
 	}
@@ -45,6 +48,8 @@ func TestDeepCopyPrimitives(t *testing.T) {
 	}
 }
 
+// TestDeepCopyInterfaceFields 验证接口字段（runtime.Object / Selector）的深拷贝。
+// 生成代码应对接口中的具体对象递归调用 DeepCopyObject。
 func TestDeepCopyInterfaceFields(t *testing.T) {
 	x := StructInterfaces{}
 	y := StructInterfaces{}
@@ -55,6 +60,7 @@ func TestDeepCopyInterfaceFields(t *testing.T) {
 
 	fuzzer := randfill.New()
 
+	// ObjectField 与 SelectorField 分别指向不同的具体实现，确保两者都被拷贝。
 	obj := StructExplicitObject{}
 	fuzzer.Fill(&obj)
 	x.ObjectField = &obj
@@ -73,6 +79,7 @@ func TestDeepCopyInterfaceFields(t *testing.T) {
 	}
 }
 
+// TestNilCopy 验证 nil 接收者的 DeepCopy 仍返回 nil，而不是新建对象。
 func TestNilCopy(t *testing.T) {
 	var x *StructB
 	y := x.DeepCopy()
@@ -81,22 +88,27 @@ func TestNilCopy(t *testing.T) {
 	}
 }
 
+// assertMethod 断言类型上存在指定方法。
 func assertMethod(t *testing.T, typ reflect.Type, name string) {
 	if _, found := typ.MethodByName(name); !found {
 		t.Errorf("StructExplicitObject must have %v method", name)
 	}
 }
 
+// assertNotMethod 断言类型上不存在指定方法。
 func assertNotMethod(t *testing.T, typ reflect.Type, name string) {
 	if _, found := typ.MethodByName(name); found {
 		t.Errorf("%v must not have %v method", typ, name)
 	}
 }
 
+// TestInterfaceTypes 验证哪些类型会因接口标记而生成 DeepCopyObject 等方法：
+// 显式声明 runtime.Object / Selector 的类型才应生成对应方法。
 func TestInterfaceTypes(t *testing.T) {
 	explicitObject := reflect.TypeOf(&StructExplicitObject{})
 	assertMethod(t, explicitObject, "DeepCopyObject")
 
+	// 未标记 runtime.Object 的类型不应生成 DeepCopy。
 	typeMeta := reflect.TypeOf(&StructTypeMeta{})
 	assertNotMethod(t, typeMeta, "DeepCopy")
 
@@ -112,6 +124,7 @@ func TestInterfaceTypes(t *testing.T) {
 	assertMethod(t, explicitSelectorExplicitObject, "DeepCopyObject")
 }
 
+// TestInterfaceDeepCopy 验证 DeepCopyObject 返回同类型的新对象且内容相等。
 func TestInterfaceDeepCopy(t *testing.T) {
 	x := StructExplicitObject{}
 
@@ -128,6 +141,7 @@ func TestInterfaceDeepCopy(t *testing.T) {
 	}
 }
 
+// TestInterfaceNonPointerDeepCopy 验证非指针类型实现 runtime.Object 时的拷贝路径。
 func TestInterfaceNonPointerDeepCopy(t *testing.T) {
 	x := StructNonPointerExplicitObject{}
 

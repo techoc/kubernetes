@@ -34,6 +34,7 @@ func init() {
 	RegisterTagValidator(formatTagValidator{})
 }
 
+// formatTagValidator 实现 +k8s:format：把字符串字段映射到对应的格式校验函数。
 type formatTagValidator struct{}
 
 func (formatTagValidator) Init(_ Config) {}
@@ -49,6 +50,7 @@ func (formatTagValidator) ValidScopes() sets.Set[Scope] {
 }
 
 var (
+	// 保持此列表按字母序排列。
 	// Keep this list alphabetized.
 	// TODO: uncomment the following when we've done the homework
 	// to be sure it works the current state of IP manual-ratcheting
@@ -66,7 +68,10 @@ var (
 	uuidValidator                       = types.Name{Package: libValidationPkg, Name: "UUID"}
 )
 
+// GetValidations 校验字段/typedef 的底层类型是字符串，并解析出格式校验函数。
 func (formatTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
+	// 该标记可作用于值、指针字段以及 typedef（typedef 不应是指针），
+	// 因此需要先取到具体类型。
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
@@ -82,13 +87,18 @@ func (formatTagValidator) GetValidations(context Context, tag codetags.Tag) (Val
 	return result, nil
 }
 
+// getFormatValidationFunction 把格式名映射到对应的运行时校验函数，
+// 并声明该函数可能产生的错误 origin。
 func getFormatValidationFunction(format string) (FunctionGen, error) {
+	// 格式名遵循 JSON schema 风格：全小写、单词间用连字符。
+	// 参见 https://json-schema.org/draft/2020-12/json-schema-validation#name-defined-formats
 	// The naming convention for these formats follows the JSON schema style:
 	// all lower-case, dashes between words. See
 	// https://json-schema.org/draft/2020-12/json-schema-validation#name-defined-formats
 	// for more examples.
 
 	switch format {
+	// 保持按字母序排列。
 	// Keep this sequence alphabetized.
 	case "k8s-extended-resource-name":
 		return Function(formatTagName, DefaultFlags, extendedResourceNameValidator).
@@ -135,6 +145,7 @@ func getFormatValidationFunction(format string) (FunctionGen, error) {
 	return FunctionGen{}, fmt.Errorf("unsupported validation format %q", format)
 }
 
+// Docs 返回该标记的文档元数据；格式列表需与 getFormatValidationFunction 保持一致。
 func (ftv formatTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            ftv.TagName(),

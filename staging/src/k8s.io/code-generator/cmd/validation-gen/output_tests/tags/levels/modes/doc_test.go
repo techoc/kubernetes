@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAlpha 验证 alpha 级别的 modeDiscriminator/ifMode 组合：
+// 选中模式下必填字段缺失报 Required、未选中模式下字段被设置报 Forbidden，
+// 错误都标记为 Alpha。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -48,6 +51,7 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 与 TestAlpha 场景相同，但错误级别为 Beta。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -73,6 +77,8 @@ func TestBeta(t *testing.T) {
 	})
 }
 
+// TestMixedLevels 验证同一结构体内不同字段可拥有不同的稳定性级别：
+// 错误级别跟随对应成员标签的级别。
 func TestMixedLevels(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -101,6 +107,8 @@ func TestMixedLevels(t *testing.T) {
 	})
 }
 
+// TestCrossLevels 验证 discriminator 与成员字段级别不一致时，
+// 错误级别以成员字段自身的标签为准。
 func TestCrossLevels(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -124,6 +132,8 @@ func TestCrossLevels(t *testing.T) {
 	})
 }
 
+// TestSameFieldMixed 验证同一字段被不同模式的成员标签引用时，
+// 按命中的 mode 决定错误级别。
 func TestSameFieldMixed(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

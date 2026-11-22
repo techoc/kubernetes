@@ -22,13 +22,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 +k8s:maxItems 作用于切片 typedef 时，边界值（0/1/9/10/11）
+// 与未校验字段的差异，并确认 ratcheting 对未变化的超限旧值放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全零值：未校验字段与上限字段都不应报错。
 	st.Value(&Struct{
 		// All zero values
 	}).ExpectValid()
 
+	// 空切片（显式 make）同样合法。
 	st.Value(&Struct{
 		UnvalidatedField:  make(UnvalidatedType, 0),
 		Max0Field:         make(Max0Type, 0),
@@ -55,6 +59,7 @@ func Test(t *testing.T) {
 		Max10TypedefField: make(Max10TypedefType, 10),
 	}).ExpectValid()
 
+	// 超过上限：每个受限字段都报 TooMany，未校验字段不报错。
 	testVal := &Struct{
 		UnvalidatedField:  make(UnvalidatedType, 11),
 		Max0Field:         make(Max0Type, 1),
@@ -69,6 +74,7 @@ func Test(t *testing.T) {
 		field.TooMany(field.NewPath("max10TypedefField"), 11, 10),
 	})
 	// Test validation ratcheting
+	// 新旧值都超限且未变化，不应重新报错。
 	st.Value(&Struct{
 		UnvalidatedField:  make(UnvalidatedType, 1),
 		Max0Field:         make(Max0Type, 1),

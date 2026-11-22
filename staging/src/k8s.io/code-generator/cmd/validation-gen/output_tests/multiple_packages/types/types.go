@@ -16,8 +16,11 @@ limitations under the License.
 
 // Package types holds the shared input types generated into ../registered and
 // ../external and referenced by ../consumer.
+//
+// 该包只提供类型定义，不生成校验代码；生成目标由引用方的包级标签决定。
 package types
 
+// T1 的字段既覆盖嵌套结构体校验，也覆盖 slice 元素校验。
 type T1 struct {
 	TypeMeta int
 
@@ -28,6 +31,7 @@ type T1 struct {
 	List []T2 `json:"list"`
 }
 
+// T2 被 T1 以值类型和 slice 元素两种方式引用。
 type T2 struct {
 	// +k8s:validateFalse="field T2.S"
 	S string `json:"s"`

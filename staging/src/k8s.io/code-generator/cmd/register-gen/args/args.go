@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package args 定义 register-gen 的命令行参数。
+//
+// register-gen 为 API 包生成 scheme 注册代码（register.go），因此参数很少，
+// 主要只需输出文件名与 boilerplate 模板。
 package args
 
 import (
@@ -23,10 +27,13 @@ import (
 	"k8s.io/code-generator/pkg/apidefinitions"
 )
 
+// Args 汇集 register-gen 的输入。
 type Args struct {
+	// 生成的文件名；默认 generated.register.go。
 	OutputFile   string
 	GoHeaderFile string
 
+	// 内嵌 lint 参数，用于校验生成代码。
 	apidefinitions.LintArgs
 }
 

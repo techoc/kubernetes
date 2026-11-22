@@ -22,14 +22,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestAlpha 验证 alpha 级别的子字段校验与 union 校验：
+// 错误应带上 alpha 稳定性标记，路径应指向具体子字段。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法基线：所有值都满足各自阈值。
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 5},
 		SubfieldBeta: SubStruct{Inner: 5},
 	}).ExpectValid()
 
+	// 失败被标记为 alpha：路径定位到 subfield.inner。
 	// Test failures marked as alpha
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 1},
@@ -38,6 +42,7 @@ func TestAlpha(t *testing.T) {
 		field.Invalid(field.NewPath("subfield", "inner"), 1, "").WithOrigin("minimum").MarkAlpha(),
 	})
 
+	// union 成员同时被指定时，zeroOrOneOf 错误也应标记为 alpha。
 	one := 1
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 5},
@@ -53,6 +58,7 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 验证 beta 级别的子字段校验：错误应带上 beta 稳定性标记。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -61,6 +67,7 @@ func TestBeta(t *testing.T) {
 		SubfieldBeta: SubStruct{Inner: 5},
 	}).ExpectValid()
 
+	// 失败被标记为 beta：路径定位到 subfieldBeta.inner。
 	// Test failures marked as beta
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 5},

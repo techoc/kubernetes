@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestFullyQualifiedName 验证 k8s-resource-fully-qualified-name 格式：
+// 合法值必须含 domain/name；分别覆盖缺斜杠、空字符串、空 name 三种错误消息，
+// 并验证相同非法旧值时 ratcheting 放行。
 func TestFullyQualifiedName(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

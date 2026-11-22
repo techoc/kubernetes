@@ -18,6 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // Package primitivepointers is a test package.
+// 中文说明：验证 immutable 作用于指向基本类型的指针字段时的更新校验。
 //
 // +k8s:validation-gen-nolint
 //
@@ -28,6 +29,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 的四个指针字段均为 immutable，覆盖 string/int/bool/float64。
 type Struct struct {
 	// +k8s:immutable
 	SP *string `json:"sp"`

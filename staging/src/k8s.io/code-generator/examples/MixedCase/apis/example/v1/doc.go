@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1 是 MixedCase 示例的 v1 API 包，用于验证生成器对混合大小写
+// 群组名与目录名的处理。
 // +k8s:deepcopy-gen=package
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=example.crd.code-generator.k8s.io

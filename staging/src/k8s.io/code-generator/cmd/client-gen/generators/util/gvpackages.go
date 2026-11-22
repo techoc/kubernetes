@@ -18,6 +18,12 @@ package util
 
 import "strings"
 
+// ParsePathGroupVersion 把 "path/to/pkg/group/version" 拆成导入路径与
+// "group/version" 两段。约定最后两段分别是 group 和 version，因此段数不足三段时
+// 无法区分路径，整体按 groupVersion 返回、路径为空。
+//
+// 注意：这是按字符串后缀切分，不校验语义；"k8s.io/api/core/v1" 得到
+// ("k8s.io/api", "core/v1")，而 "v1" 得到 ("", "v1")。
 func ParsePathGroupVersion(pgvString string) (gvPath string, gvString string) {
 	subs := strings.Split(pgvString, "/")
 	length := len(subs)

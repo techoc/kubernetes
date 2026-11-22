@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 eachVal 作用在结构体元素上：包括普通结构体、typedef 结构体
+// 以及不可比较结构体（ratcheting 判等需要深比较）。
 package sliceofstruct
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -42,6 +45,7 @@ type OtherStruct struct{}
 
 type OtherTypedefStruct OtherStruct
 
+// NonComparableStruct 含 slice 字段，不可用 == 比较。
 type NonComparableStruct struct {
 	SliceField []string `json:"sliceField"`
 }

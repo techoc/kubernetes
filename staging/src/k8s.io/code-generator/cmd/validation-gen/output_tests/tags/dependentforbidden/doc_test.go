@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestStruct 覆盖依赖约束的核心语义与 ratcheting：
+// dependent 单独存在合法，trigger 单独存在合法，二者同时存在则 Forbidden；
+// 若旧值中两者已经同时存在，则更新时跳过（避免存量对象永久不可写）。
 func TestStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -60,6 +63,8 @@ func TestStruct(t *testing.T) {
 		)
 }
 
+// TestMultiDependent 验证重复标签生成的多条独立约束，
+// 每个 dependent 各自报错于自己的路径。
 func TestMultiDependent(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -73,6 +78,8 @@ func TestMultiDependent(t *testing.T) {
 	)
 }
 
+// TestMultiTrigger 验证多个 trigger 指向同一 dependent 时，
+// 匹配器按 origin 合并实际错误即可。
 func TestMultiTrigger(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -86,6 +93,8 @@ func TestMultiTrigger(t *testing.T) {
 	)
 }
 
+// TestAllKinds 验证四类“已设置”判定：
+// 指针非 nil、slice/map 非空、整型非零才视为设置；空集合与零值不算。
 func TestAllKinds(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

@@ -24,6 +24,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestExtractCommentTagsWithoutArguments 覆盖无参数标记的提取：
+// 重复标签应累积、裸标签得到空字符串值、带括号参数的行应报错，
+// tagNames 过滤时只解析关心的标签，未出现的标签不出现在结果中。
 func TestExtractCommentTagsWithoutArguments(t *testing.T) {
 	cases := []struct {
 		tagNames    []string

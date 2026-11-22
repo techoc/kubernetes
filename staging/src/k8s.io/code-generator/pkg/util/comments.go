@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package util 汇集各代码生成器共用的注释解析辅助函数。
 package util
 
 import (
@@ -75,6 +76,8 @@ func ExtractCommentTagsWithoutArguments(marker string, tagNames []string, lines 
 	for tagName, tags := range functionStyleTags {
 		values := make([]string, 0)
 
+		// 本函数只接受无参数标签；"key(arg)=value" 形式属于另一类语义，
+		// 混入会改变值解析规则，因此直接报错而不是丢弃参数。
 		for _, tag := range tags {
 			if tag.Args == nil {
 				values = append(values, tag.Value)
@@ -83,6 +86,7 @@ func ExtractCommentTagsWithoutArguments(marker string, tagNames []string, lines 
 			}
 		}
 
+		// 空值列表不写入 map，调用方可以据此判断“标签是否存在”。
 		if len(values) > 0 {
 			out[tagName] = values
 		}

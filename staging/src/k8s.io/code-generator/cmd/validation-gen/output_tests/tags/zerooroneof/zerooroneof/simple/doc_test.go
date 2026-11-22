@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 zeroOrOneOf union：零个或至多一个成员合法，多个成员非法；
+// 覆盖指针、字符串、指针字符串成员，以及更新时只看“是否设置”的语义和
+// nil 旧值的处理。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

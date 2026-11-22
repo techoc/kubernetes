@@ -27,6 +27,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestStruct 验证非指针子结构体字段的 ratcheting：创建时报错，
+// 更新且子字段值未变时不报错；错误路径包含父字段前缀。
 func TestStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 	st.Value(&Struct{
@@ -48,6 +50,8 @@ func TestStruct(t *testing.T) {
 	}).ExpectValid()
 }
 
+// TestStructWithSubfield 覆盖“把子结构体提升为字段”的形态：
+// 校验逻辑与 TestStruct 相同，但错误路径直接落在提升后的字段上。
 func TestStructWithSubfield(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 	st.Value(&StructWithSubfield{

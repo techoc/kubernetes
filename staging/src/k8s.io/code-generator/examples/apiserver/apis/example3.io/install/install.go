@@ -16,6 +16,9 @@ limitations under the License.
 
 // Package install installs the experimental API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+//
+// install 包负责把示例 API group（内部版本与 v1 外部版本）注册进 scheme，
+// 并把 v1 设为优先版本。
 package install
 
 import (
@@ -26,6 +29,7 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+// Install 注册内部版本与 v1，并把 v1 设为该 group 的首选版本。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(example3.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))

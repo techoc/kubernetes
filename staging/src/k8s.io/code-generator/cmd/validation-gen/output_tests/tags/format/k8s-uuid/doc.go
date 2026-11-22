@@ -18,6 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// k8suuid 验证 k8s-uuid 格式标记在值、指针与类型定义上的生成结果。
 // +k8s:validation-gen-nolint
 package k8suuid
 

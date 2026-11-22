@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestStrictUnion 验证判别器各取值下的 strict union 语义：
+// 选中分支字段必填，未选中分支字段隐式禁止。
 func TestStrictUnion(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -45,6 +47,8 @@ func TestStrictUnion(t *testing.T) {
 	})
 }
 
+// TestSharedField 验证同一字段可在多个 mode 中声明为合法：
+// 只有未声明它的 mode 才会禁止该字段。
 func TestSharedField(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -60,6 +64,8 @@ func TestSharedField(t *testing.T) {
 	})
 }
 
+// TestChainedValidation 验证 mode 内的必填/禁止与字段自身的链式校验共存：
+// 选中分支先检查 required，再执行 maxLength。
 func TestChainedValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -78,6 +84,8 @@ func TestChainedValidation(t *testing.T) {
 	})
 }
 
+// TestImplicitForbidden 验证“未在 mode 中列出”自动推导为禁止，
+// 不需要显式写 forbidden 标签。
 func TestImplicitForbidden(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -91,6 +99,8 @@ func TestImplicitForbidden(t *testing.T) {
 	})
 }
 
+// TestNonStringDiscriminator 验证判别器可以是 bool 等非字符串类型，
+// 生成代码必须按实际类型比较而不是硬编码字符串。
 func TestNonStringDiscriminator(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -104,6 +114,8 @@ func TestNonStringDiscriminator(t *testing.T) {
 	})
 }
 
+// TestMultipleDiscriminators 验证所有判别器同时满足各自 mode 约束，
+// 缺少任一必填字段都应独立报错。
 func TestMultipleDiscriminators(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -123,6 +135,8 @@ func TestMultipleDiscriminators(t *testing.T) {
 	})
 }
 
+// TestCollections 验证 mode 约束同样适用于 slice/map 字段，
+// 未选中分支的集合必须整体禁止。
 func TestCollections(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -153,6 +167,8 @@ func TestCollections(t *testing.T) {
 	})
 }
 
+// TestRatcheting 验证 mode 相关校验的 ratcheting 判定：
+// 字段未变则跳过，字段或判别器一旦变化就重新完整校验。
 func TestRatcheting(t *testing.T) {
 	mkTest := func() *ChainedValidation {
 		return &ChainedValidation{
@@ -183,6 +199,8 @@ func TestRatcheting(t *testing.T) {
 	})
 
 	// 4. Changed discriminator re-validates (and fails)
+	//
+	// 即使字段值没变，判别器从 B 切到 A 也必须重新校验，否则会绕过 mode 约束。
 	mkDifferentDisc := func() *ChainedValidation {
 		return &ChainedValidation{
 			D1:     "B", // Discriminator changed from B -> A

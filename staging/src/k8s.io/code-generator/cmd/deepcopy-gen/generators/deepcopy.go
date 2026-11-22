@@ -41,19 +41,27 @@ const (
 )
 
 // Known values for the comment tag.
+// 包级标签唯一的合法值：表示整包生成；"true"/"false" 只用于类型级。
 const tagValuePackage = "package"
 
 // enabledTagValue holds parameters from a tagName tag.
+//
+// value 是逗号前的部分；register 来自 ",register=true" 子参数，
+// 表示需要额外生成 RegisterDeepCopy 之类的注册函数。
 type enabledTagValue struct {
 	value    string
 	register bool
 }
 
+// extractEnabledTypeTag 同时检查类型注释的“最近”与“次近”两段，
+// 因为 +k8s:deepcopy-gen 可能写在类型 doc 上，也可能写在其上方的分组注释中。
 func extractEnabledTypeTag(t *types.Type) *enabledTagValue {
 	comments := append(append([]string{}, t.SecondClosestCommentLines...), t.CommentLines...)
 	return extractEnabledTag(comments)
 }
 
+// extractEnabledTag 解析 +k8s:deepcopy-gen 的值与子参数。
+// 同一注释块出现多个标签视为配置错误（生成结果将不确定）。
 func extractEnabledTag(comments []string) *enabledTagValue {
 	tags, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{tagEnabledName}, comments)
 	if err != nil {
@@ -78,6 +86,7 @@ func extractEnabledTag(comments []string) *enabledTagValue {
 	}
 
 	// Parse extra arguments.
+	// 未知子参数直接 fatal，避免拼写错误被静默忽略后生成结果与预期不符。
 	parts = parts[1:]
 	for i := range parts {
 		kv := strings.SplitN(parts[i], "=", 2)
@@ -123,6 +132,7 @@ func DefaultNameSystem() string {
 	return "public"
 }
 
+// GetTargets 为每个需要生成 deepcopy 的输入包构造一个 target，输出物写回原包。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, gengo.StdBuildTag, gengo.StdGeneratedBy)
 	if err != nil {
@@ -229,12 +239,13 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 type genDeepCopy struct {
 	generator.GoGenerator
 	targetPackage string
-	allTypes      bool
-	registerTypes bool
+	allTypes      bool // 包级标签为 package 时为 true：整包生成，除非类型显式 =false
+	registerTypes bool // 是否生成运行时注册调用（,register=true）
 	imports       namer.ImportTracker
-	typesForInit  []*types.Type
+	typesForInit  []*types.Type // Filter 阶段收集的待生成类型，供 Init 阶段使用
 }
 
+// NewGenDeepCopy 构造单文件深拷贝生成器；输出文件与目标包由调用方决定。
 func NewGenDeepCopy(outputFilename, targetPackage string, allTypes, registerTypes bool) generator.Generator {
 	return &genDeepCopy{
 		GoGenerator: generator.GoGenerator{
@@ -255,6 +266,8 @@ func (g *genDeepCopy) Namers(c *generator.Context) namer.NameSystems {
 	}
 }
 
+// Filter 决定是否为本类型生成代码，并顺带记录到 typesForInit。
+// 注意 Filter 对每个类型只应产生副作用一次，因此只有返回 true 时才追加。
 func (g *genDeepCopy) Filter(c *generator.Context, t *types.Type) bool {
 	// Filter out types not being processed or not copyable within the package.
 	enabled := g.allTypes
@@ -377,6 +390,9 @@ func deepCopyIntoMethodOrDie(t *types.Type) *types.Signature {
 	return ret
 }
 
+// copyableType 判断类型是否需要/能够生成深拷贝：
+// 显式 =false 退出；私有类型不处理；别名仅在其底层可拷贝或作者已提供
+// DeepCopy/DeepCopyInto 时处理；其余只有 struct 才生成。
 func copyableType(t *types.Type) bool {
 	// If the type opts out of copy-generation, stop.
 	ttag := extractEnabledTypeTag(t)
@@ -406,6 +422,8 @@ func copyableType(t *types.Type) bool {
 	return true
 }
 
+// underlyingType 逐层剥掉别名，返回真正参与 switch 分派的类型。
+// 生成规则是“按底层类型决定怎么写，按别名类型构造对象”。
 func underlyingType(t *types.Type) *types.Type {
 	for t.Kind == types.Alias {
 		t = t.Underlying
@@ -413,6 +431,8 @@ func underlyingType(t *types.Type) *types.Type {
 	return t
 }
 
+// isOtherPackage 判断某条 import 是否属于当前输出包。ImportLines 可能包含
+// 带引号的路径，所以同时比较原文与带引号形式。
 func (g *genDeepCopy) isOtherPackage(pkg string) bool {
 	if pkg == g.targetPackage {
 		return false
@@ -423,6 +443,7 @@ func (g *genDeepCopy) isOtherPackage(pkg string) bool {
 	return true
 }
 
+// Imports 过滤掉对自身包的 import——生成文件与类型同包，引用自身会导致循环。
 func (g *genDeepCopy) Imports(c *generator.Context) (imports []string) {
 	importLines := []string{}
 	for _, singleImport := range g.imports.ImportLines() {
@@ -433,6 +454,8 @@ func (g *genDeepCopy) Imports(c *generator.Context) (imports []string) {
 	return importLines
 }
 
+// argsFromType 构造模板参数：type 指第一个类型，type1..typeN 依次对应每个类型，
+// 这样同一模板可以同时引用被生成类型和它实现的接口类型。
 func argsFromType(ts ...*types.Type) generator.Args {
 	a := generator.Args{
 		"type": ts[0],
@@ -443,10 +466,13 @@ func argsFromType(ts ...*types.Type) generator.Args {
 	return a
 }
 
+// Init 无需额外输出；注册逻辑由 GenerateType 内的模板处理。
 func (g *genDeepCopy) Init(c *generator.Context, w io.Writer) error {
 	return nil
 }
 
+// needsGeneration 结合包级与类型级标签决定最终是否生成：
+// 整包生成时类型可以 =false 退出；否则类型必须 =true 才生成。
 func (g *genDeepCopy) needsGeneration(t *types.Type) bool {
 	tag := extractEnabledTypeTag(t)
 	tv := ""
@@ -469,6 +495,8 @@ func (g *genDeepCopy) needsGeneration(t *types.Type) bool {
 	return true
 }
 
+// extractInterfacesTag 解析 +k8s:deepcopy-gen:interfaces=...，支持逗号分隔的多个接口；
+// 同一标签可重复出现，空项会被跳过。
 func extractInterfacesTag(t *types.Type) []string {
 	var result []string
 	comments := append(append([]string{}, t.SecondClosestCommentLines...), t.CommentLines...)
@@ -491,6 +519,8 @@ func extractInterfacesTag(t *types.Type) []string {
 	return result
 }
 
+// extractNonPointerInterfaces 解析 :nonpointer-interfaces，控制 DeepCopy<Interface>
+// 方法的接收者是值还是指针。多个值互相矛盾时报错，避免生成结果随标签顺序变化。
 func extractNonPointerInterfaces(t *types.Type) (bool, error) {
 	comments := append(append([]string{}, t.SecondClosestCommentLines...), t.CommentLines...)
 	tags, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{interfacesNonPointerTagName}, comments)
@@ -511,6 +541,8 @@ func extractNonPointerInterfaces(t *types.Type) (bool, error) {
 	return result, nil
 }
 
+// deepCopyableInterfacesInner 解析接口标签并加载对应包；非 struct 类型直接返回空。
+// 接口必须真实存在且 Kind 为 Interface，否则报错——生成代码否则无法编译。
 func (g *genDeepCopy) deepCopyableInterfacesInner(c *generator.Context, t *types.Type) ([]*types.Type, error) {
 	if t.Kind != types.Struct {
 		return nil, nil
@@ -567,13 +599,18 @@ func (g *genDeepCopy) deepCopyableInterfaces(c *generator.Context, t *types.Type
 	return result, nonPointerReceiver, nil
 }
 
+// TypeSlice 让 []*types.Type 可以按类型全名排序。
 type TypeSlice []*types.Type
 
 func (s TypeSlice) Len() int           { return len(s) }
 func (s TypeSlice) Less(i, j int) bool { return s[i].String() < s[j].String() }
 func (s TypeSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s TypeSlice) Sort()              { sort.Sort(s) }
 
+// Sort 就地排序，保证生成文件中方法的顺序稳定，便于审阅 diff。
+func (s TypeSlice) Sort() { sort.Sort(s) }
+
+// GenerateType 依次输出 DeepCopyInto、DeepCopy 以及各接口方法。
+// 若类型作者已提供这些方法，则跳过对应部分，优先保留手写实现。
 func (g *genDeepCopy) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	if !g.needsGeneration(t) {
 		return nil
@@ -585,12 +622,15 @@ func (g *genDeepCopy) GenerateType(c *generator.Context, t *types.Type, w io.Wri
 
 	if deepCopyIntoMethodOrDie(t) == nil {
 		sw.Do("// DeepCopyInto is an autogenerated deepcopy function, copying the receiver, writing into out. in must be non-nil.\n", args)
+		// 引用类型（指针/map/slice 及其别名）的接收者用值类型，并在函数体首行
+		// 重新取地址，这样后续同一套 in/out 影子变量逻辑对所有类型都成立。
 		if isReference(t) {
 			sw.Do("func (in $.type|raw$) DeepCopyInto(out *$.type|raw$) {\n", args)
 			sw.Do("{in:=&in\n", nil)
 		} else {
 			sw.Do("func (in *$.type|raw$) DeepCopyInto(out *$.type|raw$) {\n", args)
 		}
+		// 作者已手写 DeepCopy 时直接复用它，避免生成重复的字段级拷贝逻辑。
 		if deepCopyMethodOrDie(t) != nil {
 			if t.Methods["DeepCopy"].Signature.Receiver.Kind == types.Pointer {
 				sw.Do("clone := in.DeepCopy()\n", nil)
@@ -631,6 +671,7 @@ func (g *genDeepCopy) GenerateType(c *generator.Context, t *types.Type, w io.Wri
 	if err != nil {
 		return err
 	}
+	// 接口方法按类型全名排序后输出，确保多次生成的 diff 稳定。
 	for _, intf := range intfs {
 		sw.Do(fmt.Sprintf("// DeepCopy%s is an autogenerated deepcopy function, copying the receiver, creating a new $.type2|raw$.\n", intf.Name.Name), argsFromType(t, intf))
 		if nonPointerReceiver {
@@ -666,6 +707,7 @@ func (g *genDeepCopy) generateFor(t *types.Type, sw *generator.SnippetWriter) {
 	// basic rule: generate according to inner type, but construct objects with the alias type.
 	ut := underlyingType(t)
 
+	// 生成器按“裸类型”分派；t 可能是别名，故先剥到 underlyingType。
 	var f func(*types.Type, *generator.SnippetWriter)
 	switch ut.Kind {
 	case types.Builtin:
@@ -719,6 +761,8 @@ func (g *genDeepCopy) doMap(t *types.Type, sw *generator.SnippetWriter) {
 	sw.Do("*out = make($.|raw$, len(*in))\n", t)
 	sw.Do("for key, val := range *in {\n", nil)
 	dc, dci := deepCopyMethodOrDie(ut.Elem), deepCopyIntoMethodOrDie(ut.Elem)
+	// 左值/右值指针性必须匹配：DeepCopy 返回指针而字段是值（或反之）时，
+	// 需要临时变量或 & 取址，否则生成的赋值无法编译。
 	switch {
 	case dc != nil || dci != nil:
 		// Note: a DeepCopy exists because it is added if DeepCopyInto is manually defined

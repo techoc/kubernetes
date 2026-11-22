@@ -41,6 +41,10 @@ var localSchemeBuilder = testscheme.New()
 // * T4 should call eachVal(T3).
 // * T5 and T6 hold a map of themselves, reached via T1 so the map type is
 //   still being discovered when its own field is processed.
+//
+// 中文说明：该用例针对递归 map 类型的验证传播。核心风险是类型发现与字段处理
+// 交错时可能提前判定“无验证”，因此期望值明确要求 T2/T4 等间接类型也被生成，
+// 并且自引用 map（T5/T6）在自身字段处理期间仍能被发现。
 
 type T1 struct {
 	T2 T2            `json:"t2"`

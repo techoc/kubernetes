@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package generators 实现 register-gen：为外部 API 版本包生成
+// scheme 注册代码。本测试覆盖包的选择与跳过规则。
 package generators
 
 import (
@@ -27,6 +29,9 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// TestGetTargets 表驱动验证 GetTargets 的包筛选逻辑：
+// 标签 groupName 激活、register-gen=false 显式关闭、internal 包跳过、
+// 已存在 register.go 跳过，以及第三方生成器标签不影响判断。
 func TestGetTargets(t *testing.T) {
 	type pkgSpec struct {
 		path     string
@@ -41,6 +46,7 @@ func TestGetTargets(t *testing.T) {
 	externalTypeMeta := []types.Member{
 		{Name: "TypeMeta", Embedded: true, Tags: `json:",inline"`},
 	}
+	// 内部版本没有 json tag，register-gen 应将其跳过。
 	internalTypeMeta := []types.Member{
 		{Name: "TypeMeta", Embedded: true},
 	}
@@ -139,6 +145,7 @@ func TestGetTargets(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 构造最小 gengo universe：只填充 GetTargets 关心的字段。
 			universe := types.Universe{}
 			ctx := &generator.Context{
 				Universe: universe,
@@ -174,6 +181,7 @@ func TestGetTargets(t *testing.T) {
 			a := &args.Args{OutputFile: "zz_generated.register.go"}
 			got := GetTargets(ctx, a)
 
+			// 排序后比较，避免依赖 map 迭代顺序。
 			gotPaths := make([]string, 0, len(got))
 			for _, g := range got {
 				gotPaths = append(gotPaths, g.Path())
@@ -216,6 +224,7 @@ func TestGetTargets(t *testing.T) {
 	}
 }
 
+// equalStrSlice 比较两个已排序字符串切片是否完全相同。
 func equalStrSlice(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

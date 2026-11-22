@@ -19,6 +19,8 @@ limitations under the License.
 // +k8s:validation-gen-test-targets
 
 // This is a test package.
+// opaque 验证 +k8s:opaqueType 关闭嵌套类型校验的各种放置方式：
+// 字段、内嵌、eachVal/eachKey 以及类型定义。
 // +k8s:validation-gen-nolint
 package opaque
 

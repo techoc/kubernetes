@@ -28,16 +28,22 @@ import (
 
 // factoryInterfaceGenerator produces a file of interfaces used to break a dependency cycle for
 // informer registration
+//
+// 生成的 factory 接口不依赖具体 group 的 typed informer，因此能被低层包引用，
+// 从而打破 informer 与 clientset 之间的循环导入。
 type factoryInterfaceGenerator struct {
 	generator.GoGenerator
 	outputPackage    string
 	imports          namer.ImportTracker
 	clientSetPackage string
-	filtered         bool
+	// filtered 保证整个 target 只生成一次：gengo 会按类型调用 Filter，
+	// 而本文件与具体类型无关。
+	filtered bool
 }
 
 var _ generator.Generator = &factoryInterfaceGenerator{}
 
+// Filter 仅在第一次调用时返回 true，之后一律跳过。
 func (g *factoryInterfaceGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	if !g.filtered {
 		g.filtered = true
@@ -46,22 +52,27 @@ func (g *factoryInterfaceGenerator) Filter(c *generator.Context, t *types.Type) 
 	return false
 }
 
+// Namers 只注册 raw 命名系统，模板中所有引用都走 import tracker 解析。
 func (g *factoryInterfaceGenerator) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 输出模板实际用到的 import 行。
 func (g *factoryInterfaceGenerator) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// GenerateType 把模板渲染到输出文件。
+// 传入的 t 仅用于触发一次生成，模板内容与它无关。
 func (g *factoryInterfaceGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "{{", "}}")
 
 	klog.V(5).Infof("processing type %v", t)
 
+	// 模板变量统一使用类型而非字符串，确保 import 由 tracker 正确管理。
 	m := map[string]interface{}{
 		"cacheIndexers":            c.Universe.Type(cacheIndexers),
 		"cacheInformerName":        c.Universe.Type(cacheInformerName),

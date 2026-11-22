@@ -23,9 +23,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 k8s-long-name（小写 DNS 子域）的合法/非法取值，
+// 并验证旧值非法时 ratcheting 不再报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法：小写字母数字与点，点分段非空。
 	st.Value(&Struct{
 		LongNameField:        "foo.bar",
 		LongNamePtrField:     ptr.To("foo.bar"),
@@ -38,6 +41,7 @@ func Test(t *testing.T) {
 		LongNameTypedefField: "1.2.3.4",
 	}).ExpectValid()
 
+	// 非法：空串与大写/空格等不满足小写 DNS 子域规则的值。
 	invalidStruct := &Struct{
 		LongNameField:        "",
 		LongNamePtrField:     ptr.To(""),

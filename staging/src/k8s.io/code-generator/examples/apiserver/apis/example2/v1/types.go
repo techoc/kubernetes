@@ -42,6 +42,7 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 是 TestType 的状态子结构。
 type TestTypeStatus struct {
 	Blah string `json:"blah"`
 }

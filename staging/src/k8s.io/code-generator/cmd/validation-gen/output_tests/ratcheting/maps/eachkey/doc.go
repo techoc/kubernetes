@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:eachKey 与 ratcheting 的交互：key 的类型级校验（含 typedef 与非 typedef）
+// 应作用在 map key 上，而字段级校验只作用于整个 map。
 package eachkey
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

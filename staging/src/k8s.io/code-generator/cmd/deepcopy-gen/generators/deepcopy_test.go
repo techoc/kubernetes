@@ -23,6 +23,10 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// Test_deepCopyMethod 校验对已有 DeepCopy 方法签名的识别：
+// 合法签名要求接收者与返回值在“值/指针”上保持一致，即 *T 接收者返回 *T，
+// T 接收者返回 T；参数个数必须为 0。签名错误时返回 error，未找到方法则静默返回 nil。
+// 这决定了生成器是否会重复生成 DeepCopy。
 func Test_deepCopyMethod(t *testing.T) {
 	testCases := []struct {
 		typ    types.Type
@@ -297,6 +301,7 @@ func Test_deepCopyMethod(t *testing.T) {
 		},
 	}
 
+	// 逐用例断言错误与返回值；error 用例只看是否报错，不看结果。
 	for i, tc := range testCases {
 		r, err := deepCopyMethod(&tc.typ)
 		if tc.error && err == nil {
@@ -309,6 +314,9 @@ func Test_deepCopyMethod(t *testing.T) {
 	}
 }
 
+// Test_deepCopyIntoMethod 校验对已有 DeepCopyInto 方法签名的识别：
+// 合法签名为 func (T 或 *T) DeepCopyInto(*T)，无返回值、恰有一个指针参数。
+// 错误签名让生成器报错，避免生成与手写方法冲突的代码。
 func Test_deepCopyIntoMethod(t *testing.T) {
 	testCases := []struct {
 		typ    types.Type
@@ -517,6 +525,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 		},
 	}
 
+	// 与 DeepCopy 用例相同的断言方式。
 	for i, tc := range testCases {
 		r, err := deepCopyIntoMethod(&tc.typ)
 		if tc.error && err == nil {
@@ -529,6 +538,9 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 	}
 }
 
+// Test_extractTagParams 覆盖 extractEnabledTag 对 +k8s:deepcopy-gen 各写法的解析：
+// 无标签返回 nil；裸标签视为 value=""；=package 记下 value；,register 以及
+// register=true/false 决定 register 布尔值。解析结果驱动按包/按类型的生成策略。
 func Test_extractTagParams(t *testing.T) {
 	testCases := []struct {
 		comments []string
@@ -592,6 +604,7 @@ func Test_extractTagParams(t *testing.T) {
 		},
 	}
 
+	// nil 与空结果分别断言，避免只比较值而漏判存在性。
 	for i, tc := range testCases {
 		r := extractEnabledTag(tc.comments)
 		if r == nil && tc.expect != nil {
@@ -606,6 +619,9 @@ func Test_extractTagParams(t *testing.T) {
 	}
 }
 
+// Test_extractInterfacesTag 覆盖 +k8s:deepcopy-gen:interfaces=... 标签的提取：
+// 同一类型可声明多个 interface，且 CommentLines 与 SecondClosestCommentLines
+// 两处来源都会参与解析（因此可能得到重复值或跨来源合并的结果）。
 func Test_extractInterfacesTag(t *testing.T) {
 	testCases := []struct {
 		comments, secondComments []string
@@ -678,6 +694,7 @@ func Test_extractInterfacesTag(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
+		// 构造仅含注释行的类型，专门聚焦标签提取逻辑。
 		typ := &types.Type{
 			CommentLines:              tc.comments,
 			SecondClosestCommentLines: tc.secondComments,

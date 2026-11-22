@@ -28,17 +28,20 @@ import (
 )
 
 // groupInterfaceGenerator generates the per-group interface file.
+// 输出 <group>/interface.go：一个 group 对应一个文件，内含该组所有版本访问器。
 type groupInterfaceGenerator struct {
 	generator.GoGenerator
 	outputPackage             string
 	imports                   namer.ImportTracker
 	groupVersions             clientgentypes.GroupVersions
-	filtered                  bool
+	filtered                  bool // 组级生成器只应触发一次，用它保证 Filter 幂等
 	internalInterfacesPackage string
 }
 
 var _ generator.Generator = &groupInterfaceGenerator{}
 
+// Filter 首次调用返回 true，之后恒为 false：文件级生成器需要恰好一次输出机会，
+// 而 gengo 的 Filter 是对每个类型调用的，因此用状态位模拟“只生成一次”。
 func (g *groupInterfaceGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	if !g.filtered {
 		g.filtered = true
@@ -47,23 +50,29 @@ func (g *groupInterfaceGenerator) Filter(c *generator.Context, t *types.Type) bo
 	return false
 }
 
+// Namers 注册 raw 命名系统。
 func (g *groupInterfaceGenerator) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 返回生成文件所需的导入行。
 func (g *groupInterfaceGenerator) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// versionData 描述模板中单个版本的访问器：名称、返回接口以及构造函数。
 type versionData struct {
 	Name      string
 	Interface *types.Type
 	New       *types.Type
 }
 
+// GenerateType 生成组级 Interface 及其实现。
+// 各版本的 Interface/New 通过 Universe 按“输出包/版本”路径引用，
+// 因此生成顺序无关，只要同目录下对应版本的 informer 文件存在即可编译。
 func (g *groupInterfaceGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
@@ -73,6 +82,7 @@ func (g *groupInterfaceGenerator) GenerateType(c *generator.Context, t *types.Ty
 		versionPackage := path.Join(g.outputPackage, strings.ToLower(gv.Version.NonEmpty()))
 		iface := c.Universe.Type(types.Name{Package: versionPackage, Name: "Interface"})
 		versions = append(versions, versionData{
+			// 版本号在 Go 标识符里需要合法化（如 v1beta1 → V1beta1）。
 			Name:      namer.IC(version.Version.NonEmpty()),
 			Interface: iface,
 			New:       c.Universe.Function(types.Name{Package: versionPackage, Name: "New"}),

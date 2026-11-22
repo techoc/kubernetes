@@ -19,6 +19,8 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // This is a test package.
+// pointers 验证校验代码发现阶段对递归指针类型的处理：既不能无限递归，
+// 也要为真正可达的校验生成调用。
 // +k8s:validation-gen-nolint
 package pointers
 

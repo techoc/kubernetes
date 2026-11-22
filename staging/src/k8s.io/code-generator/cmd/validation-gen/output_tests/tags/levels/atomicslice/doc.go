@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// Package atomicslice 是 validation-gen 的测试包，覆盖原子切片的校验等级：
+// alpha/beta 包装可分别作用于 eachVal 或作用于 eachVal 内部的校验本身。
 // +k8s:validation-gen-nolint
 package atomicslice
 

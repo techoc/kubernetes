@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:format=k8s-label-value：字段、指针字段与带格式标签的 typedef 都要校验，
+// 无标签的 typedef 字段则不应产生校验。
 package format
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

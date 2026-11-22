@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// sparse 是“稀疏”discriminated union：存在没有对应成员字段的
+// discriminator 取值，验证选中该值时不会错误地要求字段存在。
 // +k8s:validation-gen-nolint
 package sparse
 

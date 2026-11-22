@@ -16,5 +16,7 @@ limitations under the License.
 
 // +k8s:defaulter-gen=TypeMeta
 
-// This is a test package.
+// Package marker 是 defaulter-gen 的测试包，用包级标签
+// 指令 +k8s:defaulter-gen=TypeMeta 演示“只给含 TypeMeta 字段的对象生成 defaulter”。
+// 本目录其他文件提供各类标记组合，期望输出在 zz_generated.defaults.go 中。
 package marker

@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 eachVal 对指针切片元素的处理：
+// 元素非 nil 时对解引用值执行校验；元素为 nil 时由 PtrSliceVal
+// 直接报 Required，而不是解引用导致崩溃。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

@@ -22,6 +22,8 @@ import (
 	field "k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证内建类型字段的不可变更新校验：新旧值相同时合法，
+// 任一字段变化都应报 immutable 错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

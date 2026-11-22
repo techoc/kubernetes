@@ -18,7 +18,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package consumer 是 validation-gen 的跨包测试包：其类型引用 ../types 中的
+// 类型，生成器必须调用已注册（canonical）的那份校验函数，而不是重复生成。
 // +k8s:validation-gen-nolint
 package consumer
 

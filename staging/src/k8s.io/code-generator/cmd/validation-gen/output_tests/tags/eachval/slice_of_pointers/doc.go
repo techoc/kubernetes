@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package sliceofpointers 是 validation-gen 的测试包，覆盖 +k8s:eachVal 作用于
+// 指针元素切片：生成代码需同时处理“元素为 nil”与“元素指向结构体/标量”两种情况。
 // +k8s:validation-gen-nolint
 package sliceofpointers
 

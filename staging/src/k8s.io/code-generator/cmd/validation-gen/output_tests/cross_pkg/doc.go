@@ -21,6 +21,9 @@ limitations under the License.
 //nolint:unused
 
 // This is a test package.
+//
+// 本包验证跨包类型引用：内嵌的外部包类型（primitives/typedefs/other）
+// 应决定校验函数被生成在哪个包，并通过 opaqueType 控制是否深入其字段。
 // +k8s:validation-gen-nolint
 package crosspkg
 

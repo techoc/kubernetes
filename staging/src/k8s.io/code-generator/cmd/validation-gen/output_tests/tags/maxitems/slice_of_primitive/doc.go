@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 maxItems 作用于基础类型 slice 以及 typedef 元素 slice 的情形。
 // +k8s:validation-gen-nolint
 package sliceofprimitive
 

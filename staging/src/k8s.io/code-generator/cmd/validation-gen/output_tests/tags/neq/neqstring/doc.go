@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 neq 标签对字符串、指针、typedef 及其指针的处理，
+// 以及类型级 neq 对引用它的字段生效。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package neqstring
@@ -25,6 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 覆盖字段级 neq 与类型级 neq（ValidatedStringType）两种来源。
 type Struct struct {
 	TypeMeta int
 

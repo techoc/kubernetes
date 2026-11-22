@@ -18,4 +18,6 @@ package external3
 
 import "k8s.io/code-generator/cmd/defaulter-gen/output_tests/marker/external2"
 
+// StringPointer 是跨包类型的指针别名，用于验证 defaulter-gen 在遇到
+// “指向其他包 typedef 的指针”时能正确识别 nil 并调用默认值函数。
 type StringPointer *external2.String

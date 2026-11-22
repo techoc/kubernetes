@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 immutable 与 update=NoModify 在 ifEnabled/ifDisabled 条件下的行为：
+// 只有条件成立的分支才会在更新时阻止字段修改。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -39,8 +41,10 @@ func Test(t *testing.T) {
 		UpdateNoModifyDisabled: "hhh",
 	}
 
+	// 新旧值相同：没有任何字段被修改，合法。
 	st.Value(&structA).OldValue(&structA).Opts(map[string]bool{"FeatureX": false}).ExpectValid()
 
+	// FeatureX 关闭：仅 disabled 分支的 immutable/NoModify 生效。
 	st.Value(&structB).OldValue(&structA).Opts(map[string]bool{"FeatureX": false}).ExpectMatches(
 		field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByDetailSubstring(),
 		field.ErrorList{
@@ -49,6 +53,7 @@ func Test(t *testing.T) {
 		},
 	)
 
+	// FeatureX 开启：仅 enabled 分支的约束生效。
 	st.Value(&structB).OldValue(&structA).Opts(map[string]bool{"FeatureX": true}).ExpectMatches(
 		field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByDetailSubstring(),
 		field.ErrorList{

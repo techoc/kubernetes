@@ -24,10 +24,18 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// TestLintRules 表驱动验证 lint 规则：
+//   - linting 关闭时任何标签都放行；
+//   - known-tags 拒绝未知/拼错的 *-gen 标签，但允许非生成器标签；
+//   - explicit-disablement 要求 API 包显式声明其应启用的生成器；
+//   - 两条规则可组合，未知规则名直接报错。
 func TestLintRules(t *testing.T) {
+	// pkg 构造只带注释的最小包。
 	pkg := func(path string, comments ...string) *types.Package {
 		return &types.Package{Path: path, Dir: "/tmp/" + path, Comments: comments}
 	}
+	// pkgWithTypeMeta 构造带 TypeMeta 成员的最小包；jsonTag 决定
+	// 该包被识别为外部版本（,inline）还是内部版本（无 tag）。
 	pkgWithTypeMeta := func(path, jsonTag string, comments ...string) *types.Package {
 		return &types.Package{
 			Path: path, Dir: "/tmp/" + path, Comments: comments,
@@ -42,6 +50,8 @@ func TestLintRules(t *testing.T) {
 		}
 	}
 
+	// allRecognized 是当前所有生成器的已知标签，用于确认 known-tags
+	// 规则不会误报。
 	allRecognized := []string{
 		"+k8s:conversion-gen=k8s.io/api/foo",
 		"+k8s:conversion-gen-external-types=k8s.io/api/foo/v1",
@@ -231,6 +241,8 @@ func TestLintRules(t *testing.T) {
 	}
 }
 
+// withTypeMeta 构造仅含 TypeMeta 成员的类型；jsonTag 为 nil 表示
+// 无 json tag（内部类型）。
 func withTypeMeta(jsonTag *string) *types.Type {
 	tags := ""
 	if jsonTag != nil {
@@ -244,6 +256,8 @@ func withTypeMeta(jsonTag *string) *types.Type {
 	}
 }
 
+// TestClassifyPackage 验证包角色识别：外部版本、内部版本、内部群组、
+// 外部群组以及无法识别的包，识别结果决定 explicit-disablement 的期望。
 func TestClassifyPackage(t *testing.T) {
 	cases := []struct {
 		name string
@@ -384,6 +398,8 @@ func TestClassifyPackage(t *testing.T) {
 	}
 }
 
+// TestExpectedGenerators 验证不同包角色期望启用的生成器集合：
+// 外部版本必须 deepcopy；内部版本必须 conversion/defaulter/validation。
 func TestExpectedGenerators(t *testing.T) {
 	cases := []struct {
 		name  string

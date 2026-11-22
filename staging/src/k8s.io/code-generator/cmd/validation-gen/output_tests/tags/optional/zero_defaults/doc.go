@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:optional 与等于零值的 +default 组合：
+// 默认值本身是零值时，可选性判断不能把“未设置”误判为“已设置为零值”。
 package zerodefaults
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

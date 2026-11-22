@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestUniqueness 验证复合 key 列表的唯一性：只有所有 key 字段都相同的元素
+// 才被视为重复；三种列表声明形式（普通/typedef 元素/typedef 列表）行为一致。
 func TestUniqueness(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -49,6 +51,8 @@ func TestUniqueness(t *testing.T) {
 	})
 }
 
+// TestUpdateCorrelation 验证更新时按 key（而非下标）关联新旧元素：
+// 仅重排顺序视为未变化；key 不同或内容变化才会触发 immutable 错误。
 func TestUpdateCorrelation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -128,6 +132,8 @@ func TestUpdateCorrelation(t *testing.T) {
 	})
 }
 
+// TestRatcheting 验证列表重排不会重新触发校验：新旧列表语义等价时，
+// 逐元素校验（eachVal）的结果应被跳过。
 func TestRatcheting(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -164,6 +170,9 @@ func TestRatcheting(t *testing.T) {
 	st.Value(&struct2).OldValue(&struct1).ExpectValid()
 }
 
+// TestItemWithPtrKey 验证 item 匹配对指针 key 的处理：
+// 非 nil 且值相等才算匹配，nil key 与任何值都不匹配；混合指针/值 key 时
+// 需全部匹配才命中。
 func TestItemWithPtrKey(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

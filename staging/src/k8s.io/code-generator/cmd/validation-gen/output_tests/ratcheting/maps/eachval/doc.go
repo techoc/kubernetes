@@ -19,12 +19,16 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 map 值上的 eachVal 校验在 ratcheting（旧对象放宽）模式下
+// 对不同值类型的行为：基本类型、typedef、可比较与不可比较结构体。
 package eachval
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// StructWithMaps 覆盖 eachVal 作用在各类 map value 上的情形。
 type StructWithMaps struct {
 	TypeMeta int
 
@@ -43,10 +47,13 @@ type StructWithMaps struct {
 
 type StringType string
 
+// ComparableStruct 可比较，可直接用 == 判等。
 type ComparableStruct struct {
 	IntField int `json:"intField"`
 }
 
+// NonComparableStruct 含指针字段导致不可比较，ratcheting 比较必须走
+// 深比较而非 ==，否则运行时会 panic。
 type NonComparableStruct struct {
 	IntPtrField *int `json:"intPtrField"`
 }

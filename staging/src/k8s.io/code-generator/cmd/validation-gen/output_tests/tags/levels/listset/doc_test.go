@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestListSet 验证 set 语义下重复元素与子字段校验的级别（alpha/beta）
+// 会正确传播到最终错误上。
 func TestListSet(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

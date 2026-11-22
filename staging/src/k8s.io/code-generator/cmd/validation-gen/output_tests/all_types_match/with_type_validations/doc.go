@@ -19,6 +19,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
+// 这是一个测试包：所有类型都参与生成，验证类型级校验。
+// 只有带校验的类型（T1、E1）应出现在生成结果中，T2/E2 即使可被引用也不生成。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package withtypevalidations
@@ -28,6 +30,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // +k8s:validateFalse="type T1"
+// T1 同时有类型级与字段级校验。
 type T1 struct {
 	// +k8s:validateFalse="field T1.S"
 	S string `json:"s"`

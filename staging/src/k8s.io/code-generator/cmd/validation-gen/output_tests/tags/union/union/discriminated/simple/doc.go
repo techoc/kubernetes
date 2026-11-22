@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 discriminated union：unionDiscriminator 与 unionMember 配对，
+// 成员涵盖指针、切片、map，用来验证按判别值选择分支并强制互斥。
 package simple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

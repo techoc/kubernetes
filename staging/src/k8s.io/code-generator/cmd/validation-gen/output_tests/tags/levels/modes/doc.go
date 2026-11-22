@@ -17,6 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// modes 验证 mode discriminator 与 alpha/beta 稳定级别混合使用时的
+// 生成行为，包括跨级别与同字段多级别的情形。
+//
 // +k8s:validation-gen-nolint
 package modes
 

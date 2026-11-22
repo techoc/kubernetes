@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证带 discriminator 的稀疏 union：discriminator 为 M2 时允许不设置
+// 任何成员（稀疏），但设置了不匹配的成员或该设未设都应报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全零值：discriminator 为空，不要求任何成员。
 	st.Value(&Struct{ /* zero values */ }).ExpectValid()
 
 	st.Value(&Struct{D: DM1, M1: &M1{}}).ExpectValid()

@@ -23,6 +23,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// TestGetMemberByJSON 验证按 json 标签名查字段，而非按 Go 字段名。
 func TestGetMemberByJSON(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -65,6 +66,8 @@ func TestGetMemberByJSON(t *testing.T) {
 	}
 }
 
+// TestIsNilableType 验证可空类型判定：指针、map、slice、interface 及其 alias
+// 为 true，struct/builtin 及其 alias 为 false。
 func TestIsNilableType(t *testing.T) {
 	tStruct := &types.Type{
 		Name: types.Name{Name: "MyStruct"},
@@ -178,6 +181,8 @@ func TestIsNilableType(t *testing.T) {
 	}
 }
 
+// TestNativeType 验证 alias 解引用后保留指针层级：
+// alias 只影响类型名，不改变指针结构；但指针下的 alias 会被完全展开。
 func TestNativeType(t *testing.T) {
 	tStruct := &types.Type{
 		Name: types.Name{Name: "MyStruct"},
@@ -255,6 +260,8 @@ func TestNativeType(t *testing.T) {
 	}
 }
 
+// TestNonPointer 验证剥离指针层级的行为：
+// 只剥外层指针，遇到 alias 即停止，保留 alias 本身。
 func TestNonPointer(t *testing.T) {
 	tStruct := &types.Type{
 		Name: types.Name{Name: "MyStruct"},
@@ -324,6 +331,9 @@ func TestNonPointer(t *testing.T) {
 }
 
 // gengo has `PointerTo()` but not the rest, so keep this here for consistency.
+//
+// 以下构造函数用于在测试里快速拼出各种类型形状；
+// 显式设置 Name 便于失败信息中可读。
 func ptrTo(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -335,6 +345,7 @@ func ptrTo(t *types.Type) *types.Type {
 	}
 }
 
+// sliceOf 构造元素类型为 t 的 slice。
 func sliceOf(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -346,6 +357,7 @@ func sliceOf(t *types.Type) *types.Type {
 	}
 }
 
+// mapOf 构造 map[string]t；key 固定为 string 足以覆盖可比较性判定。
 func mapOf(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -358,6 +370,7 @@ func mapOf(t *types.Type) *types.Type {
 	}
 }
 
+// arrayOf 构造定长数组 [2]t，用于验证数组的可比较性由元素类型决定。
 func arrayOf(t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -370,6 +383,7 @@ func arrayOf(t *types.Type) *types.Type {
 	}
 }
 
+// aliasOf 构造命名 alias；名字前缀固定，避免与内建类型混淆。
 func aliasOf(name string, t *types.Type) *types.Type {
 	return &types.Type{
 		Name: types.Name{
@@ -381,6 +395,8 @@ func aliasOf(name string, t *types.Type) *types.Type {
 	}
 }
 
+// TestIsDirectComparable 验证 Go 的“可直接用 == 比较”规则：
+// 指针/slice/map 不可比，数组与结构体递归取决于元素/字段类型。
 func TestIsDirectComparable(t *testing.T) {
 	cases := []struct {
 		in     *types.Type
@@ -453,6 +469,8 @@ func TestIsDirectComparable(t *testing.T) {
 	}
 }
 
+// TestParseInt 验证整数解析只接受规范形式（无前导零、无一元 +）,
+// 保证标签字面量与生成代码中的常量写法一致。
 func TestParseInt(t *testing.T) {
 	type testcase struct {
 		name          string
@@ -516,6 +534,8 @@ func TestParseInt(t *testing.T) {
 	}
 }
 
+// TestParseSignedInt 覆盖 int8/16/32/64 的边界与溢出，并验证非规范形式、
+// 未知位宽被拒绝。边界值同时检查“恰好可表示”和“越界一位”。
 func TestParseSignedInt(t *testing.T) {
 	type testcase struct {
 		name          string
@@ -732,6 +752,8 @@ func TestParseSignedInt(t *testing.T) {
 	}
 }
 
+// TestParseUnsignedInt 覆盖 uint8/16/32/64 的上界、溢出、负值拒绝
+// 以及规范形式校验；无下界所以只测最大值。
 func TestParseUnsignedInt(t *testing.T) {
 	type testcase struct {
 		name          string
@@ -876,6 +898,8 @@ func TestParseUnsignedInt(t *testing.T) {
 	}
 }
 
+// TestParseBool 验证 bool 只接受小写 "true"/"false"，
+// 拒绝大写、数字和 YAML 风格写法，避免标签语义产生歧义。
 func TestParseBool(t *testing.T) {
 	type testcase struct {
 		name          string

@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestStructValidation 验证子字段上的 union 校验：discriminator 的值必须与
+// 被设置的成员一致；不匹配或同时设置多个成员都会报错。
 func TestStructValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

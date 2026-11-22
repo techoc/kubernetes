@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 +k8s:monotonic：字段值在更新时只能增大（或保持不变），
+// 常与 minimum、optional/required、NoUnset 组合使用。
 package monotonic
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -40,12 +42,14 @@ type Struct struct {
 	// +k8s:monotonic
 	Uint64Field uint64 `json:"uint64Field"`
 
+	// optional + NoUnset：一旦设置就不允许再清空，同时受 monotonic 约束。
 	// +k8s:optional
 	// +k8s:minimum=0
 	// +k8s:update=NoUnset
 	// +k8s:monotonic
 	IntPtrField *int `json:"intPtrField"`
 
+	// 校验声明在 typedef 上，字段继承。
 	MonotonicField MonotonicType `json:"monotonicField"`
 
 	MonotonicPtrField *MonotonicType `json:"monotonicPtrField"`
@@ -72,11 +76,13 @@ type Struct struct {
 	// +k8s:monotonic
 	RequiredIntPtr *int `json:"requiredIntPtr"`
 
+	// 负下界 + monotonic 的组合。
 	// +k8s:minimum=-10
 	// +k8s:monotonic
 	NegativeInt int `json:"negativeInt"`
 }
 
+// MonotonicType 在 typedef 上声明 monotonic 与 minimum，使用它的字段继承。
 // +k8s:minimum=0
 // +k8s:monotonic
 type MonotonicType int

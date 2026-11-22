@@ -42,14 +42,19 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 是 TestType 的状态子结构。
 type TestTypeStatus struct {
 	Blah string `json:"blah"`
 }
 
+// Conversion 验证 conversion-gen 对“内存表示一致/不一致”两类结构体的处理。
 type Conversion struct {
 	Identical MemoryIdentical `json:"identical"`
 	Different MemoryDifferent `json:"different"`
 }
+
+// MemoryIdentical 在 internal 与 external 中表示完全一致，
+// 转换函数可以直接赋值，无需逐字段处理。
 type MemoryIdentical struct {
 	Items *MemoryIdentical `json:"items,omitempty"`
 
@@ -60,6 +65,9 @@ type MemoryIdentical struct {
 
 	Bool bool `json:"bool"`
 }
+
+// MemoryDifferent 的 Bool 在 external 中是 *bool，内存布局不同，
+// 因此必须生成显式转换代码。
 type MemoryDifferent struct {
 	Items *MemoryDifferent `json:"items,omitempty"`
 
@@ -71,11 +79,14 @@ type MemoryDifferent struct {
 	Bool *bool `json:"bool"` // differs from internal representation
 }
 
+// ConversionPrivate 验证未导出字段不会参与转换。
 type ConversionPrivate struct {
 	PublicField  string `json:"publicField"`
 	privateField string `json:"privateField"`
 }
 
+// ConversionCustomContainer 覆盖 custom conversion 在 slice/map/struct
+// 及指针变体上的分派。
 type ConversionCustomContainer struct {
 	// +listType=atomic
 	Slice []ConversionCustom `json:"slice"`
@@ -86,6 +97,8 @@ type ConversionCustomContainer struct {
 	Struct  ConversionCustom             `json:"struct"`
 	StructP *ConversionCustom            `json:"structP"`
 }
+
+// ConversionCustom 有手写转换函数，用以验证 custom conversion 的优先级。
 type ConversionCustom struct {
 	PublicField  string `json:"publicField"`
 	privateField string `json:"privateField"`

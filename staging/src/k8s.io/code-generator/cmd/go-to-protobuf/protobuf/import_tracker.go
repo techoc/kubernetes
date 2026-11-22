@@ -21,14 +21,21 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// ImportTracker 是 protobuf 生成专用的 import 追踪器。
+// 默认实现按 Go 包名去重，而 .proto 的 import 是文件级（如 gogo.proto），
+// 因此这里把“类型名”替换为包名、并直接输出路径，避免生成重复或错误的 import。
 type ImportTracker struct {
 	namer.DefaultImportTracker
 }
 
+// NewImportTracker 构造一个仅收集 Protobuf 类型、并按包名去重的追踪器。
 func NewImportTracker(local types.Name, typesToAdd ...*types.Type) *ImportTracker {
 	tracker := namer.NewDefaultImportTracker(local)
+	// 只关心 Protobuf 类型：Go 内建类型会被映射成 proto 标量，无需 import。
 	tracker.IsInvalidType = func(t *types.Type) bool { return t.Kind != types.Protobuf }
+	// proto import 的键是 package，而不是类型名。
 	tracker.LocalName = func(name types.Name) string { return name.Package }
+	// 生成 .proto 时只写路径，不加 Go 别名。
 	tracker.PrintImport = func(path, name string) string { return path }
 
 	tracker.AddTypes(typesToAdd...)

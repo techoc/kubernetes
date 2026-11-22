@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
+// 这是一个测试包：验证结构体上多个校验标签的生成顺序。
+// T00~T03 用 4 位组合覆盖“有无 ShortCircuit 标志”，TMultiple 故意乱序声明，
+// 用来断言生成器会按稳定规则重排。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package structs
@@ -26,6 +29,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Tother 是被嵌入的辅助类型，只有一个字段级校验。
 type Tother struct {
 	// +k8s:validateFalse="Tother, no flags"
 	OS string `json:"os"`

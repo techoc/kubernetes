@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖基本类型字段（string/int/bool/float）与嵌套结构体的验证生成。
+// T2 被 T1 引用（进入类型图），T4/T5 未进入 T1 的类型图，用于验证
+// “只生成可达类型”的传播规则。
 package primitives
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

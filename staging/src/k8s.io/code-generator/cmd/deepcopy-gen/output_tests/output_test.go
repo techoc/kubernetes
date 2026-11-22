@@ -33,7 +33,10 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// TestWithValueFuzzer 用随机值验证生成的 DeepCopy 与反射实现的语义一致：
+// 深拷贝结果必须与原对象 DeepEqual，且对原对象做值扰动不能影响副本（无共享引用）。
 func TestWithValueFuzzer(t *testing.T) {
+	// 每个测试包覆盖一类 tricky 的 Go 构造：别名、内建、接口、map、指针、切片、结构体。
 	tests := []interface{}{
 		aliases.Ttest{},
 		builtins.Ttest{},
@@ -44,6 +47,7 @@ func TestWithValueFuzzer(t *testing.T) {
 		structs.Ttest{},
 	}
 
+	// NilChance 与 NumElements 的组合确保 nil、空集合与非空集合都能被测到。
 	fuzzer := randfill.New()
 	fuzzer.NilChance(0.5)
 	fuzzer.NumElements(0, 2)
@@ -53,6 +57,7 @@ func TestWithValueFuzzer(t *testing.T) {
 		t.Run(fmt.Sprintf("%T", test), func(t *testing.T) {
 			N := 1000
 			for i := 0; i < N; i++ {
+				// 每次新建值再填充，避免上一轮的引用关系泄漏到本轮。
 				original := reflect.New(reflect.TypeOf(test)).Interface()
 
 				fuzzer.Fill(original)
@@ -63,12 +68,14 @@ func TestWithValueFuzzer(t *testing.T) {
 					t.Errorf("original and reflectCopy are different:\n\n  original = %s\n\n  jsonCopy = %s", dump.Pretty(original), dump.Pretty(reflectCopy))
 				}
 
+				// 动态调用生成代码里的 DeepCopy()，验证它与反射拷贝完全等价。
 				deepCopy := reflect.ValueOf(original).MethodByName("DeepCopy").Call(nil)[0].Interface()
 
 				if !reflect.DeepEqual(original, deepCopy) {
 					t.Fatalf("original and deepCopy are different:\n\n  original = %s\n\n  deepCopy() = %s", dump.Pretty(original), dump.Pretty(deepCopy))
 				}
 
+				// 就地修改原对象的标量字段：真正的深拷贝副本不应随之变化。
 				ValueFuzz(original)
 
 				if !reflect.DeepEqual(reflectCopy, deepCopy) {
@@ -79,6 +86,8 @@ func TestWithValueFuzzer(t *testing.T) {
 	}
 }
 
+// BenchmarkReflectDeepCopy 对照生成代码 DeepCopy 的性能。
+// 数据预构造好以排除 fuzz 开销，只测拷贝本身。
 func BenchmarkReflectDeepCopy(b *testing.B) {
 	fourtytwo := "fourtytwo"
 	fourtytwoPtr := &fourtytwo
@@ -91,6 +100,7 @@ func BenchmarkReflectDeepCopy(b *testing.B) {
 		Ptr:     &fourtytwoPtr,
 	}
 
+	// 三种类型分别覆盖 map、slice、pointer 的嵌套引用。
 	tests := []interface{}{
 		maps.Ttest{
 			Byte:         map[string]byte{"0": 42, "1": 42, "3": 42},

@@ -17,6 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// listmapitem 验证 +k8s:item(...) 与 alpha/beta 级别组合在 list-map
+// 元素校验上的行为，包括标签级与校验级稳定性级别。
+//
 // +k8s:validation-gen-nolint
 package listmapitem
 

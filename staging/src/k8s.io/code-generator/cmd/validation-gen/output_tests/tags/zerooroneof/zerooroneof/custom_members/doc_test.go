@@ -22,10 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证使用自定义成员名的 zero-or-one-of union：空集合或单个成员合法，
+// 两个成员同时设置应报错；错误消息应使用自定义成员名。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	// Empty union is valid
+	// 空 union 合法。
 	st.Value(&Struct{}).ExpectValid()
 
 	st.Value(&Struct{M1: &M1{}}).ExpectValid()

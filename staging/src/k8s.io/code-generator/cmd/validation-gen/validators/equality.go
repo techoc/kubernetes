@@ -30,20 +30,27 @@ const (
 	neqTagName = "k8s:neq"
 )
 
+// init 注册 neq 校验器；注册必须在 InitGlobalValidator 之前完成。
 func init() {
 	RegisterTagValidator(neqTagValidator{})
 }
 
+// neqTagValidator 实现 +k8s:neq 标记：字段值不得等于给定的不允许值。
 type neqTagValidator struct{}
 
+// Init 无状态，无需初始化。
 func (neqTagValidator) Init(_ Config) {}
 
+// TagName 返回标记名。
 func (neqTagValidator) TagName() string {
 	return neqTagName
 }
 
+// neqTagValidScopes 列出 neq 可用的位置：
+// 类型、字段、列表元素、map 键与 map 值。
 var neqTagValidScopes = sets.New(ScopeType, ScopeField, ScopeListVal, ScopeMapKey, ScopeMapVal)
 
+// ValidScopes 返回 neq 允许的作用域。
 func (neqTagValidator) ValidScopes() sets.Set[Scope] {
 	return neqTagValidScopes
 }
@@ -52,7 +59,11 @@ var (
 	neqValidator = types.Name{Package: libValidationPkg, Name: "NEQ"}
 )
 
+// GetValidations 校验标记载荷与字段类型是否匹配，并生成一个校验函数调用。
+// 载荷类型必须与字段类型一致（string/bool/integer），否则拒绝生成：
+// 生成代码里直接比较不同类型的值无法编译。
 func (v neqTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
+	// 先剥掉指针与别名，得到实际参与比较的原生类型。
 	t := util.NonPointer(util.NativeType(context.Type))
 	if !util.IsDirectComparable(t) {
 		return Validations{}, fmt.Errorf("can only be used on comparable types (e.g. string, int, bool), but got %s", rootTypeString(context.Type, t))
@@ -91,11 +102,13 @@ func (v neqTagValidator) GetValidations(context Context, tag codetags.Tag) (Vali
 		return Validations{}, fmt.Errorf("unsupported type for 'neq' tag: %s", t.Name)
 	}
 
+	// 载荷作为常量内联进生成代码；Emission 声明该规则产生的错误类型。
 	fn := Function(v.TagName(), DefaultFlags, neqValidator, disallowedValue).
 		WithEmits(Emission{field.ErrorTypeInvalid, "neq", ""})
 	return Validations{Functions: []FunctionGen{fn}}, nil
 }
 
+// Docs 返回 neq 标记的文档，供 --docs 输出。
 func (v neqTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:              v.TagName(),

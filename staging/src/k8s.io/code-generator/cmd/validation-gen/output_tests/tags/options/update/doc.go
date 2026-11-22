@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:ifEnabled/+k8s:ifDisabled 门控 +k8s:immutable 与 +k8s:update：
+// 两种约束都只在特性开关打开时进入生成代码。
 package update
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

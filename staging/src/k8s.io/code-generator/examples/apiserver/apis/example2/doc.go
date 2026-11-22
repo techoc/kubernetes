@@ -18,4 +18,7 @@ limitations under the License.
 // +groupName=example.test.apiserver.code-generator.k8s.io
 // +groupGoName=SecondExample
 
+// Package example2 是 code-generator 的示例内部 API 包（第二个 group）。
+// 指令 +groupName 指定完整 group 名，+groupGoName 指定生成代码中使用的
+// Go 标识符前缀 SecondExample，避免与 example 包生成的符号冲突。
 package example2

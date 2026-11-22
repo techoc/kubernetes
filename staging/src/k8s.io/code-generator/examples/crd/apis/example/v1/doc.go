@@ -18,4 +18,6 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=example.crd.code-generator.k8s.io
 
+// Package v1 是 code-generator 的 CRD 示例 API 包。
+// 包级标签为整包生成 deepcopy，并为含 TypeMeta 的类型生成默认值函数。
 package v1

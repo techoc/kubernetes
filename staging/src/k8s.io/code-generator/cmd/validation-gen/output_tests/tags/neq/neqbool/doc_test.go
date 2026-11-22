@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 +k8s:neq 对 bool：值等于禁用值时报错，指针为 nil 视为未设置；
+// 旧值同样非法时 ratcheting 不再报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

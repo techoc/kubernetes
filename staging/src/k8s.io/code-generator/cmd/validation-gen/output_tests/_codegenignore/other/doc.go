@@ -21,6 +21,8 @@ limitations under the License.
 // validations, it is outside of the args used when generating output_tests,
 // and so the generated could should NOT descend into these.
 // +k8s:validation-gen-nolint
+// 上述三种类型都带有 +k8s:validateFalse，但本包不在生成参数中，
+// 因此生成代码不应下探到这里的类型。
 package other
 
 // +k8s:validateFalse="you should not see this outside of this pkg"

@@ -19,6 +19,9 @@ limitations under the License.
 // This is a test package.
 package slices
 
+// Ttest 用于验证 deepcopy-gen 对 slice 元素各种形态的处理：
+// 值类型、指针、指针的指针、map、嵌套 slice 以及结构体/结构体指针。
+// 生成代码必须对 map 与指针字段做深拷贝，对基本类型 slice 直接 make+copy。
 type Ttest struct {
 	Byte []byte
 	// Int8    []int8 //TODO: int8 becomes byte in SnippetWriter

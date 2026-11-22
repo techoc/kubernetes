@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证同一位置多条校验标签的排序：validateFalse 之间保持源码顺序，
+// 不同种类的标签按稳定规则分组，确保生成结果可复现。
 package multipletags
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

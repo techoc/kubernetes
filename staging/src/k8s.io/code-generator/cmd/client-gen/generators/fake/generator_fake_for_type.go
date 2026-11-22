@@ -32,6 +32,10 @@ import (
 )
 
 // genFakeForType produces a file for each top-level type.
+//
+// 每个类型单独一个文件，因此 Filter 只放行 typeToMatch。生成的结构体通过嵌入
+// client-go/gentype 的 FakeClient 变体复用通用的 CRUD 逻辑，只保留模板化的
+// 类型签名和 action 构造。
 type genFakeForType struct {
 	generator.GoGenerator
 	outputPackage             string // Must be a Go import-path
@@ -46,17 +50,20 @@ type genFakeForType struct {
 
 var _ generator.Generator = &genFakeForType{}
 
+// titler 用于把动词类型名（如 Get/List）转成扩展方法名（如 GetScale）。
 var titler = cases.Title(language.Und)
 
 // Filter ignores all but one type because we're making a single file per type.
 func (g *genFakeForType) Filter(c *generator.Context, t *types.Type) bool { return t == g.typeToMatch }
 
+// Namers 注册 raw namer，模板中的类型按包限定名渲染并自动登记 import。
 func (g *genFakeForType) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 直接返回追踪到的 import；模板中所有外部符号都经 $...|raw$ 登记。
 func (g *genFakeForType) Imports(c *generator.Context) (imports []string) {
 	return g.imports.ImportLines()
 }
@@ -70,6 +77,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 	}
 
 	const pkgClientGoTesting = "k8s.io/client-go/testing"
+	// 这张表同时充当 import 白名单：只有这里出现的包才会进入生成文件的 import 段。
 	m := map[string]interface{}{
 		"type":                t,
 		"inputType":           t,
@@ -127,10 +135,14 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 	generateApply := len(g.applyConfigurationPackage) > 0
 	if generateApply {
 		// Generated apply builder type references required for generated Apply function
+		// ApplyConfiguration 位于 applyconfiguration 包的 <group>/<version> 子包下，
+		// 名称由类型名加 ApplyConfiguration 后缀构成。
 		_, gvString := util.ParsePathGroupVersion(g.inputPackage)
 		m["inputApplyConfig"] = types.Ref(path.Join(g.applyConfigurationPackage, gvString), t.Name.Name+"ApplyConfiguration")
 	}
 
+	// 用位掩码选择结构体/构造函数模板：list 决定是否需要 List 类型，
+	// apply 决定是否需要 ApplyConfiguration 类型，从而省去四个近似模板的手工分支。
 	listableOrAppliable := noList | noApply
 
 	if !tags.NoVerbs && tags.HasVerb("list") {
@@ -151,6 +163,8 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 	_, typeGVString := util.ParsePathGroupVersion(g.inputPackage)
 
 	// generate extended client methods
+	// 扩展动词（如 get/update 的 Scale 子资源）可以覆盖输入/结果类型，
+	// 因此每个扩展都复制一份参数表，避免污染基础方法。
 	for _, e := range tags.Extensions {
 		if e.HasVerb("apply") && !generateApply {
 			continue
@@ -158,6 +172,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 		inputType := *t
 		resultType := *t
 		inputGVString := typeGVString
+		// 带包的 override 需要同时切换 group/version，供 ApplyConfiguration 路径使用。
 		if len(e.InputTypeOverride) > 0 {
 			if name, pkg := e.Input(); len(pkg) > 0 {
 				_, inputGVString = util.ParsePathGroupVersion(pkg)
@@ -240,6 +255,8 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 // adjustTemplate adjust the origin verb template using the expansion name.
 // TODO: Make the verbs in templates parametrized so the strings.Replace() is
 // not needed.
+//
+// 模板里的方法名写作 " Get"（前置空格）以便精确替换，避免误伤方法体中的同名子串。
 func adjustTemplate(name, verbType, template string) string {
 	return strings.ReplaceAll(template, " "+titler.String(verbType), " "+name)
 }
@@ -265,6 +282,7 @@ const (
 // Go enforces index unicity in these kinds of declarations.
 
 // struct declarations
+// 四个槽位必须与上面的位值保持一致：索引即 list|apply 的组合值。
 var structType = []string{
 	noList | noApply: `
 	// fake$.type|publicPlural$ implements $.type|public$Interface
@@ -297,6 +315,7 @@ var structType = []string{
 }
 
 // Constructors for the struct, in all variants
+// 构造函数的四个槽位与 structType 一一对应，泛型实参随变体递增。
 var newStruct = []string{
 	noList | noApply: `
 	func newFake$.type|publicPlural$(fake *Fake$.GroupGoName$$.Version$$if .namespaced$, namespace string$end$) $.realClientInterface|raw$ {
@@ -364,6 +383,7 @@ var newStruct = []string{
 	`,
 }
 
+// listTemplate 记录一个 ListAction 并返回空列表；opts 透传给 action 供测试断言。
 var listTemplate = `
 // List takes label and field selectors, and returns the list of $.type|publicPlural$ that match those selectors.
 func (c *fake$.type|publicPlural$) List(ctx $.contextContext|raw$, opts $.ListOptions|raw$) (result *$.type|raw$List, err error) {
@@ -378,6 +398,7 @@ func (c *fake$.type|publicPlural$) List(ctx $.contextContext|raw$, opts $.ListOp
 }
 `
 
+// getTemplate 对应普通资源的 Get；namespaced 与 root 走不同的 action 构造函数。
 var getTemplate = `
 // Get takes name of the $.type|private$, and returns the corresponding $.resultType|private$ object, and an error if there is any.
 func (c *fake$.type|publicPlural$) Get(ctx $.contextContext|raw$, name string, options $.GetOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -392,6 +413,7 @@ func (c *fake$.type|publicPlural$) Get(ctx $.contextContext|raw$, name string, o
 }
 `
 
+// getSubresourceTemplate 用于扩展动词（例如 Status）：多一个父资源名参数。
 var getSubresourceTemplate = `
 // Get takes name of the $.type|private$, and returns the corresponding $.resultType|private$ object, and an error if there is any.
 func (c *fake$.type|publicPlural$) Get(ctx $.contextContext|raw$, $.type|private$Name string, options $.GetOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -406,6 +428,7 @@ func (c *fake$.type|publicPlural$) Get(ctx $.contextContext|raw$, $.type|private
 }
 `
 
+// deleteTemplate 只关心 action 是否被触发，因此忽略返回值。
 var deleteTemplate = `
 // Delete takes name of the $.type|private$ and deletes it. Returns an error if one occurs.
 func (c *fake$.type|publicPlural$) Delete(ctx $.contextContext|raw$, name string, opts $.DeleteOptions|raw$) error {
@@ -416,6 +439,7 @@ func (c *fake$.type|publicPlural$) Delete(ctx $.contextContext|raw$, name string
 }
 `
 
+// createTemplate 返回服务器端对象；fake 场景下由 reactor 决定返回值。
 var createTemplate = `
 // Create takes the representation of a $.inputType|private$ and creates it.  Returns the server's representation of the $.resultType|private$, and an error, if there is any.
 func (c *fake$.type|publicPlural$) Create(ctx $.contextContext|raw$, $.inputType|private$ *$.inputType|raw$, opts $.CreateOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -430,6 +454,7 @@ func (c *fake$.type|publicPlural$) Create(ctx $.contextContext|raw$, $.inputType
 }
 `
 
+// createSubresourceTemplate 为子资源创建：参数顺序为父资源名、对象、选项。
 var createSubresourceTemplate = `
 // Create takes the representation of a $.inputType|private$ and creates it.  Returns the server's representation of the $.resultType|private$, and an error, if there is any.
 func (c *fake$.type|publicPlural$) Create(ctx $.contextContext|raw$, $.type|private$Name string, $.inputType|private$ *$.inputType|raw$, opts $.CreateOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -444,6 +469,7 @@ func (c *fake$.type|publicPlural$) Create(ctx $.contextContext|raw$, $.type|priv
 }
 `
 
+// updateTemplate 对应普通资源的 Update，返回更新后的对象。
 var updateTemplate = `
 // Update takes the representation of a $.inputType|private$ and updates it. Returns the server's representation of the $.resultType|private$, and an error, if there is any.
 func (c *fake$.type|publicPlural$) Update(ctx $.contextContext|raw$, $.inputType|private$ *$.inputType|raw$, opts $.UpdateOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -458,6 +484,7 @@ func (c *fake$.type|publicPlural$) Update(ctx $.contextContext|raw$, $.inputType
 }
 `
 
+// updateSubresourceTemplate 更新子资源；namespaced 分支把 &inputType{} 作为写入目标。
 var updateSubresourceTemplate = `
 // Update takes the representation of a $.inputType|private$ and updates it. Returns the server's representation of the $.resultType|private$, and an error, if there is any.
 func (c *fake$.type|publicPlural$) Update(ctx $.contextContext|raw$, $.type|private$Name string, $.inputType|private$ *$.inputType|raw$, opts $.UpdateOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -472,6 +499,7 @@ func (c *fake$.type|publicPlural$) Update(ctx $.contextContext|raw$, $.type|priv
 }
 `
 
+// watchTemplate 直接返回 reactor 提供的 watch.Interface，不包装空结果。
 var watchTemplate = `
 // Watch returns a $.watchInterface|raw$ that watches the requested $.type|privatePlural$.
 func (c *fake$.type|publicPlural$) Watch(ctx $.contextContext|raw$, opts $.ListOptions|raw$) ($.watchInterface|raw$, error) {
@@ -481,6 +509,7 @@ func (c *fake$.type|publicPlural$) Watch(ctx $.contextContext|raw$, opts $.ListO
 }
 `
 
+// patchTemplate 统一走 subresource patch action，subresources 可变参数允许调用方指定子资源路径。
 var patchTemplate = `
 // Patch applies the patch and returns the patched $.resultType|private$.
 func (c *fake$.type|publicPlural$) Patch(ctx $.contextContext|raw$, name string, pt $.PatchType|raw$, data []byte, opts $.PatchOptions|raw$, subresources ...string) (result *$.resultType|raw$, err error) {
@@ -495,6 +524,8 @@ func (c *fake$.type|publicPlural$) Patch(ctx $.contextContext|raw$, name string,
 }
 `
 
+// applyTemplate 把 ApplyConfiguration 序列化成 JSON，再以 ApplyPatchType 发起 patch；
+// 名字必须由调用方在配置中提供，否则无法定位资源。
 var applyTemplate = `
 // Apply takes the given apply declarative configuration, applies it and returns the applied $.resultType|private$.
 func (c *fake$.type|publicPlural$) Apply(ctx $.contextContext|raw$, $.inputType|private$ *$.inputApplyConfig|raw$, opts $.ApplyOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -520,6 +551,7 @@ func (c *fake$.type|publicPlural$) Apply(ctx $.contextContext|raw$, $.inputType|
 }
 `
 
+// applySubresourceTemplate 与 applyTemplate 相同，但以父资源名定位子资源。
 var applySubresourceTemplate = `
 // Apply takes top resource name and the apply declarative configuration for $.subresourcePath$,
 // applies it and returns the applied $.resultType|private$, and an error, if there is any.

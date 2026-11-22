@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// mode 验证 +k8s:modeDiscriminator 与 +k8s:ifMode 的核心语义：
+// 某 mode 未声明的字段被隐式禁止，声明的字段按条件校验。
 // +k8s:validation-gen-nolint
 package mode
 

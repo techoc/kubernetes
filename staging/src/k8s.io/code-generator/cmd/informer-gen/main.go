@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Command informer-gen 根据 API 类型生成 shared informer 与 informer factory。
 package main
 
 import (
@@ -28,7 +29,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// main 解析参数、校验后交给 gengo 执行 informer-gen 的 targets。
+// informer 的名称依赖复数规则，因此需要把 --plural-exceptions 转成 map 后
+// 传给命名系统。
 func main() {
+	// klog 与 pflag 共用同一个 FlagSet。
 	klog.InitFlags(nil)
 	args := args.New()
 
@@ -37,16 +42,19 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	// 参数非法立即退出。
 	if err := args.Validate(); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// targets 依赖 universe 信息，延迟到 Context 构建后执行。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}
 
 	// Run it.
 	if err := gengo.Execute(
+		// 复数例外表影响生成的 informer/client 名称，必须在此注入。
 		generators.NameSystems(util.PluralExceptionListToMapOrDie(args.PluralExceptions)),
 		generators.DefaultNameSystem(),
 		myTargets,

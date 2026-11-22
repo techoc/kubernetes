@@ -77,6 +77,9 @@ var (
 
 // extractAndParseTag extracts all the values for a given tag, according to the
 // tag grammar.
+//
+// codetags.Extract 返回 map，顺序不确定；本函数只筛选指定 tag，
+// 因此调用方拿到的顺序与源码出现顺序一致（ParseAll 保持行序）。
 func extractAndParseTag(tagName string, comments []string) ([]codetags.Tag, error) {
 	extracted := codetags.Extract("+", comments)
 	var tags []codetags.Tag
@@ -95,6 +98,9 @@ func extractAndParseTag(tagName string, comments []string) ([]codetags.Tag, erro
 
 // validationTypeMatch returns the +k8s:validation-gen tag values for pkg,
 // or false if validation-gen should not run.
+//
+// 是否生成由 apidefinitions 统一判定，以便和 client-gen 等工具共享
+// 同一套 API 识别规则。
 func validationTypeMatch(pkg *types.Package, idOpts []apidefinitions.Option) ([]string, bool) {
 	info, err := apidefinitions.Identify(pkg, apidefinitions.Validation, idOpts...)
 	if err != nil {
@@ -106,6 +112,10 @@ func validationTypeMatch(pkg *types.Package, idOpts []apidefinitions.Option) ([]
 	return info.TypeFilters(), true
 }
 
+// checkMainTag 判断注释中是否存在指定取值的 +k8s:validation-gen 标签。
+//
+// require 为空时匹配无值形式（// +k8s:validation-gen），
+// 有值时要求标签值序列与 require 完全一致。
 // TODO: this can just accept a single bool
 func checkMainTag(comments []string, require ...string) bool {
 	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
@@ -130,6 +140,10 @@ func checkMainTag(comments []string, require ...string) bool {
 	return reflect.DeepEqual(valueStrings, require)
 }
 
+// schemeRegistryTag 解析包级 scheme 注册配置，返回 scheme 类型及是否注册。
+//
+// "nil" 表示该包不注册（用于同一 input 被生成到多个包时避免重复注册），
+// 未标注则默认使用 apimachinery 的 runtime.Scheme。
 func schemeRegistryTag(pkg *types.Package) (types.Name, bool) {
 	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
 	tags, err := gengo.ExtractFunctionStyleCommentTags("+", []string{schemeRegistryTagName}, pkg.Comments)
@@ -157,6 +171,9 @@ func registerScheme(pkg *types.Package) bool {
 	return ok
 }
 
+// isSubresourceTag 返回类型声明的 subresource 名（+k8s:isSubresource）。
+//
+// 每个类型至多声明一个主 subresource，重复声明直接 panic。
 func isSubresourceTag(t *types.Type) (string, bool) {
 	var comments []string
 	comments = append(comments, t.SecondClosestCommentLines...)
@@ -174,6 +191,8 @@ func isSubresourceTag(t *types.Type) (string, bool) {
 	return tags[0].Value, true
 }
 
+// supportedSubresourceTags 收集类型可通过 +k8s:supportsSubresource 声明的
+// 全部 subresource 名，标签可重复出现。
 func supportedSubresourceTags(t *types.Type) sets.Set[string] {
 	var comments []string
 	comments = append(comments, t.SecondClosestCommentLines...)
@@ -192,8 +211,11 @@ func supportedSubresourceTags(t *types.Type) sets.Set[string] {
 	return subresources
 }
 
+// testFixtureTagValues 是 +k8s:validation-gen-test-fixture 当前支持的全部取值。
 var testFixtureTagValues = sets.New("validateFalse")
 
+// testFixtureTag 返回包声明的测试夹具种类；非法取值直接 panic，
+// 避免生成出无人认识的测试文件。
 func testFixtureTag(pkg *types.Package) sets.Set[string] {
 	result := sets.New[string]()
 	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
@@ -215,6 +237,7 @@ func testFixtureTag(pkg *types.Package) sets.Set[string] {
 	return result
 }
 
+// generateTestTargetsTag 判断包是否要求为声明式校验生成覆盖率测试 target。
 func generateTestTargetsTag(pkg *types.Package) bool {
 	tags, err := gengo.ExtractFunctionStyleCommentTags("+", []string{generateTestTargetsTagName}, pkg.Comments)
 	if err != nil {
@@ -225,6 +248,9 @@ func generateTestTargetsTag(pkg *types.Package) bool {
 }
 
 // NameSystems returns the name system used by the generators in this package.
+//
+// objectvalidationfn 是校验函数专用的命名系统，生成的函数名形如
+// Validate_<Type>，必须全局可预测，便于测试和注册代码引用。
 func NameSystems() namer.NameSystems {
 	return namer.NameSystems{
 		"public":             namer.NewPublicNamer(1),
@@ -235,6 +261,7 @@ func NameSystems() namer.NameSystems {
 	}
 }
 
+// validationFnNamer 定义校验函数命名策略：前缀 Validate_，各级名字用 "_" 连接。
 func validationFnNamer() *namer.NameStrategy {
 	return &namer.NameStrategy{
 		Prefix: "Validate_",
@@ -250,6 +277,12 @@ func DefaultNameSystem() string {
 	return "public"
 }
 
+// GetTargets 构造 validation-gen 的全部生成目标。
+//
+// 流程：先识别所有输入包及其类型来源（+k8s:validation-gen-input 可让类型与
+// 输出包分离），再为每个输入包发现类型、收集规则、生成校验代码，最后统一
+// 校验自定义校验函数是否都有标签。顺序敏感性体现在 canonical 包的选取：
+// 跨包引用必须指向唯一一个注册 scheme 的包。
 func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, gengo.StdBuildTag, gengo.StdGeneratedBy)
 	if err != nil {
@@ -265,6 +298,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 
 	// First load other "input" packages.  We do this as a single call because
 	// it is MUCH faster.
+	//
+	// 一次性批量加载，避免逐包解析带来的重复类型检查开销。
 	inputPkgs := make([]string, 0, len(context.Inputs))
 	pkgToInput := map[string]string{}
 	inputToCanonicalPkg := map[string]string{} // types package -> the output package cross-package references resolve to
@@ -292,6 +327,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 		// is canonical -- the package cross-package references resolve to. The
 		// registering package is canonical; if none registers, the first one seen
 		// wins. At most one package may register.
+		//
+		// 如果两个包都注册 scheme，跨包引用会产生歧义，直接失败。
 		if prev, ok := inputToCanonicalPkg[inputPath]; !ok {
 			inputToCanonicalPkg[inputPath] = input
 		} else if registerScheme(pkg) {
@@ -321,6 +358,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 		inputPkgs = append(inputPkgs, extra)
 		pkgToInput[extra] = extra
 		// Don't let a read-only package override a generation mapping.
+		//
+		// 只读包只用于解析类型，不能替换已有的生成映射。
 		if _, ok := inputToCanonicalPkg[extra]; !ok {
 			inputToCanonicalPkg[extra] = extra
 		}
@@ -336,6 +375,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	context.Order = orderer.OrderUniverse(context.Universe)
 
 	// Initialize all validator plugins exactly once.
+	//
+	// 插件注册有全局副作用，必须只初始化一次，否则标签会被重复注册。
 	validator := validators.InitGlobalValidator(context, inputToCanonicalPkg)
 
 	// Create a type discoverer for all types of all inputs.
@@ -352,6 +393,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	groupKindReports := map[schema.GroupKind][]*report{}
 
 	// Build a cache of type->callNode for every type we need.
+	//
+	// 逐包处理：识别 → 发现类型 → lint → 生成 target。
 	for _, input := range context.Inputs {
 		klog.V(2).InfoS("processing", "pkg", input)
 
@@ -364,9 +407,11 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			klog.V(2).InfoS("  did not find required tag", "tag", mainTagName)
 			continue
 		}
+		// 包级标签必须有值；这里提前拒绝空值，避免后面静默生成空文件。
 		if len(criteria) == 1 && criteria[0] == "" {
 			klog.Fatalf("%s: found package tag %q with no value", input, mainTagName)
 		}
+		// 校验标签取值只允许 *、TypesWithField=、TypesWithSuffix=。
 		for _, crit := range criteria {
 			if crit == "*" {
 				continue
@@ -385,6 +430,10 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			}
 			klog.Fatalf("%s: unknown value for package tag %q: %q", input, mainTagName, crit)
 		}
+		// shouldCreateObjectValidationFn 决定某个类型是否作为根类型生成校验。
+		//
+		// 优先看类型级 opt-in/opt-out，其次排除 List 类型，最后才用包级
+		// criteria 匹配。顺序保证类型级标签总能覆盖包级规则。
 		shouldCreateObjectValidationFn := func(t *types.Type) bool {
 			// Never generate validation for unexported types.
 			if namer.IsPrivateGoName(t.Name.Name) {
@@ -406,6 +455,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			}
 
 			// skip types that embed metav1.ListMeta
+			//
+			// List 类型的校验无实际意义，且会引入额外的跨包依赖。
 			if t.Kind == types.Struct {
 				for _, member := range t.Members {
 					if member.Embedded && member.Type.Name == listMetaType {
@@ -451,6 +502,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			}
 		}
 		// Deterministic ordering helps in logs and debugging.
+		//
+		// 排序也让生成的代码和注册顺序在不同机器上完全一致。
 		slices.SortFunc(rootTypes, func(a, b *types.Type) int {
 			return cmp.Compare(a.Name.String(), b.Name.String())
 		})
@@ -462,6 +515,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			}
 		}
 
+		// 包级 nolint 允许测试夹具跳过风格检查。
 		extracted := codetags.Extract("+", pkg.Comments)
 		if _, ok := extracted["k8s:validation-gen-nolint"]; !ok {
 			for _, t := range rootTypes {
@@ -479,6 +533,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 				PkgDir:        pkg.Dir, // output pkg is the same as the input
 				HeaderComment: boilerplate,
 
+				// 只把属于 typesPkg 的类型交给生成器，避免把输出包里的
+				// 其他类型误当成待校验类型。
 				FilterFunc: func(c *generator.Context, t *types.Type) bool {
 					return t.Name.Package == typesPkg.Path
 				},
@@ -487,6 +543,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 					generators = []generator.Generator{
 						NewGenValidations(args.OutputFile, pkg.Path, typesPkg.Path, rootTypes, td, inputToCanonicalPkg, schemeRegistry, registerThisPkg),
 					}
+					// 测试夹具：为 validateFalse 生成对应的表驱动测试文件。
 					testFixtureTags := testFixtureTag(pkg)
 					if testFixtureTags.Len() > 0 {
 						if !strings.HasSuffix(args.OutputFile, ".go") {
@@ -495,6 +552,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 						filename := args.OutputFile[0:len(args.OutputFile)-3] + "_test.go"
 						generators = append(generators, FixtureTests(filename, testFixtureTags))
 					}
+					// 覆盖率测试 target：把每个 Kind 的规则导出成测试数据。
 					if generateTestTargetsTag(pkg) {
 						var reports []*report
 						for _, t := range rootTypes {
@@ -539,6 +597,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	}
 	targetList = append(targetList, testTargets(args.TestOutputRoot, args.TestOutputFilePrefix, groupKindReports, allowlist, boilerplate)...)
 
+	// lint 错误在这里一次性汇总输出，避免中途 Fatal 丢掉其余诊断。
 	if len(linter.lintErrors) > 0 {
 		buf := strings.Builder{}
 
@@ -553,6 +612,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	return targetList
 }
 
+// isTypeWithField 判断结构体是否含有指定名字的字段（TypesWithField 规则）。
 func isTypeWithField(t *types.Type, fieldName string) bool {
 	if t.Kind == types.Struct {
 		for _, field := range t.Members {
@@ -564,6 +624,7 @@ func isTypeWithField(t *types.Type, fieldName string) bool {
 	return false
 }
 
+// isTypeWithSuffix 判断类型名是否以指定后缀结尾（TypesWithSuffix 规则）。
 func isTypeWithSuffix(t *types.Type, suffix string) bool {
 	return strings.HasSuffix(t.Name.Name, suffix)
 }

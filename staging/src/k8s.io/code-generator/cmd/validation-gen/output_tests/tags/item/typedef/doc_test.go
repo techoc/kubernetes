@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 item 选择器声明在切片 typedef 上时的行为，以及字段级与
+// typedef 级选择器的叠加、嵌套 typedef 与同 key 冲突等场景。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 未命中 item 选择器的元素合法。
 	st.Value(&Struct{
 		TypedefItems: ItemList{
 			{Key: "a", Data: "d1"},
@@ -32,6 +35,7 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
+	// 命中 typedef 上声明的 item 选择器，错误定位到元素索引。
 	st.Value(&Struct{
 		TypedefItems: ItemList{
 			{Key: "a", Data: "d1"},
@@ -41,6 +45,7 @@ func Test(t *testing.T) {
 		`typedefItems[1]`: {"item ItemList[key=validated]"},
 	})
 
+	// 验证 typedef 上的不可变约束：同一 key 的元素数据被修改应报错。
 	// Test immutability on typedef.
 	oldStruct := &Struct{
 		TypedefItems: ItemList{
@@ -56,6 +61,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("typedefItems").Index(0), nil, "immutable").WithOrigin("immutable"),
 	})
 
+	// 验证 typedef 的 typedef：选择器应沿别名链继续生效。
 	// Test nested typedef (typedef of typedef).
 	st.Value(&Struct{
 		NestedTypedefItems: ItemListAlias{
@@ -66,6 +72,7 @@ func Test(t *testing.T) {
 		`nestedTypedefItems[1]`: {"item ItemListAlias[key=aliased]"},
 	})
 
+	// 字段级与 typedef 级各有一个 item 选择器，两条校验都应触发。
 	// Test tag on field and typedef.
 	st.Value(&Struct{
 		DualItems: DualItemList{
@@ -78,6 +85,7 @@ func Test(t *testing.T) {
 		`dualItems[2]`: {"item DualItems[id=field-target] from field"},
 	})
 
+	// 字段级与 typedef 级选择器指向同一个 key 时，两条校验都保留。
 	// Test tag on field and typedef with same key.
 	st.Value(&Struct{
 		ConflictingItems: ConflictingItemList{

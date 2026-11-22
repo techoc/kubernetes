@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
+// 这是一个测试包：验证 typedef（具名字符串类型）上校验标签的生成顺序，
+// 组合方式与 ordering/structs 对应。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package typedefs

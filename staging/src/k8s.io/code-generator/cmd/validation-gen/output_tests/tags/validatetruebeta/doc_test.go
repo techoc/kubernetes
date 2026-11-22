@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// Test 确认 beta 稳定级别的 validateTrue 在校验通过时不产生错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 item 标签内嵌 subfield 的路径语义，以及 ratcheting：
+// 只有匹配 key 的元素才执行子字段校验；旧值中同一元素已被拒绝时，
+// 只要该子字段不变就不再报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

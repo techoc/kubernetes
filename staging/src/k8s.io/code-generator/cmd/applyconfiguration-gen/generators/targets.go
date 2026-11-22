@@ -37,11 +37,14 @@ import (
 )
 
 const (
-	// ApplyConfigurationTypeSuffix is the suffix of generated apply configuration types.
+	// ApplyConfigurationTypeSuffix 是生成的 apply configuration 类型名后缀，
+	// 如 FooApplyConfiguration。生成与查找（ForKind/Extract）都依赖该后缀，
+	// 因此不能随意改动。
 	ApplyConfigurationTypeSuffix = "ApplyConfiguration"
 )
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
+// public/private 用于 Go 标识符，raw 用于生成带 import 限定的类型引用。
 func NameSystems() namer.NameSystems {
 	return namer.NameSystems{
 		"public":  namer.NewPublicNamer(0),
@@ -50,24 +53,29 @@ func NameSystems() namer.NameSystems {
 	}
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 指定遍历类型时使用 public 命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
 
-// GetTargets makes the client target definition.
+// GetTargets 为 applyconfiguration-gen 构建所有输出目标：
+// 每个 API 包一个 apply configuration 包、一个 utils 包（ForKind 等）
+// 以及一个 internal 包（内嵌 OpenAPI schema）。输出目录布局与 client-gen
+// 保持一致，以便二者共存于同一目录树。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, "", gengo.StdGeneratedBy)
 	if err != nil {
 		klog.Fatalf("Failed loading boilerplate: %v", err)
 	}
 
+	// lint 规则只在显式指定时启用，避免默认行为突变。
 	var idOpts []apidefinitions.Option
 	if len(args.LintRules) > 0 {
 		idOpts = append(idOpts, apidefinitions.WithLintRules(args.LintRules...))
 	}
 
+	// 先确定哪些输入包需要生成，再计算可达类型图；外部 apply configuration
+	// 作为额外根节点参与可达性计算，保证跨包引用能解析到正确目标。
 	pkgTypes := packageTypesForInputs(context, args.OutputPkg, idOpts)
 	initialTypes := args.ExternalApplyConfigurations
 	refs := refGraphForReachableTypes(context.Universe, pkgTypes, initialTypes)
@@ -99,6 +107,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			gvk := gv.WithKind(clientgentypes.Kind(t.Name.Name))
 			openAPIName := typeModels.gvkToOpenAPIType[gvk]
 
+			// 只为可达类型生成：不可达类型既不会被 root 引用，也不会被
+			// 外部 apply configuration 引用。
 			if typePkg, ok := refs[t.Name]; ok {
 				toGenerate = append(toGenerate, applyConfig{
 					Type:               t,
@@ -110,6 +120,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		if len(toGenerate) == 0 {
 			continue // Don't generate empty packages
 		}
+		// 排序保证生成结果稳定，避免 map 迭代顺序导致 diff 抖动。
 		sort.Sort(applyConfigSort(toGenerate))
 
 		// Apparently we allow the groupName to be overridden in a way that it
@@ -158,11 +169,15 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	return targetList
 }
 
+// typeName 返回便于错误信息展示的 "package.Type" 形式名称。
 func typeName(t *types.Type) string {
 	typePackage := t.Name.Package
 	return fmt.Sprintf("%s.%s", typePackage, t.Name.Name)
 }
 
+// targetForApplyConfigurationsPackage 为一个 API 版本包创建目标。
+// 每个源类型对应一个输出文件（文件名取类型名小写），保持与上游
+// generated apply configuration 布局一致。
 func targetForApplyConfigurationsPackage(outputDirBase, outputPkgBase, pkgSubdir string, boilerplate []byte, gv clientgentypes.GroupVersion, typesToGenerate []applyConfig, refs refGraph, models *typeModels) generator.Target {
 	outputDir := filepath.Join(outputDirBase, pkgSubdir)
 	outputPkg := path.Join(outputPkgBase, pkgSubdir)
@@ -176,6 +191,8 @@ func targetForApplyConfigurationsPackage(outputDirBase, outputPkgBase, pkgSubdir
 			for _, toGenerate := range typesToGenerate {
 				var openAPIType *string
 				gvk := gv.WithKind(clientgentypes.Kind(toGenerate.Type.Name.Name))
+				// OpenAPI 名称是运行期 Extract 的依据，缺失时保持 nil，
+				// 由生成器决定回退行为。
 				if v, ok := models.gvkToOpenAPIType[gvk]; ok {
 					openAPIType = &v
 				}
@@ -198,6 +215,8 @@ func targetForApplyConfigurationsPackage(outputDirBase, outputPkgBase, pkgSubdir
 	}
 }
 
+// targetForUtils 创建输出 utils.go 的目标：为所有版本生成 ForKind 与
+// NewTypeConverter，使调用方可按 GVK 构造对应的 apply configuration。
 func targetForUtils(outputDirBase, outputPkgBase string, boilerplate []byte, groupVersions map[string]clientgentypes.GroupVersions,
 	applyConfigsForGroupVersion map[clientgentypes.GroupVersion][]applyConfig, groupGoNames map[string]string, models *typeModels) generator.Target {
 	return &generator.SimpleTarget{
@@ -222,6 +241,8 @@ func targetForUtils(outputDirBase, outputPkgBase string, boilerplate []byte, gro
 	}
 }
 
+// targetForInternal 创建 internal 子包目标，用于承载内嵌的 OpenAPI schema。
+// 单独成包是为了让 utils 包可以引用 schema 解析器而不产生循环依赖。
 func targetForInternal(outputDirBase, outputPkgBase string, boilerplate []byte, models *typeModels) generator.Target {
 	outputDir := filepath.Join(outputDirBase, "internal")
 	outputPkg := path.Join(outputPkgBase, "internal")
@@ -244,6 +265,8 @@ func targetForInternal(outputDirBase, outputPkgBase string, boilerplate []byte, 
 	}
 }
 
+// goName 计算群组的 Go 包前缀，默认取 group 首段并首字母大写；
+// 注释标签 groupGoName 可覆盖，用于 group 名称不合 Go 命名习惯的场景。
 func goName(gv clientgentypes.GroupVersion, p *types.Package) (string, error) {
 	goName := namer.IC(strings.Split(gv.Group.NonEmpty(), ".")[0])
 	override, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{"groupGoName"}, p.Comments)
@@ -258,6 +281,8 @@ func goName(gv clientgentypes.GroupVersion, p *types.Package) (string, error) {
 	return goName, nil
 }
 
+// packageTypesForInputs 过滤输入包并计算其在输出树中的位置。
+// 内部（internal）版本包没有 json tag，无法用于 apply configuration，直接跳过。
 func packageTypesForInputs(context *generator.Context, outPkgBase string, idOpts []apidefinitions.Option) map[string]*types.Package {
 	pkgTypes := map[string]*types.Package{}
 	for _, inputDir := range context.Inputs {
@@ -285,6 +310,8 @@ func packageTypesForInputs(context *generator.Context, outPkgBase string, idOpts
 	return pkgTypes
 }
 
+// groupVersion 从包路径末两段推导 group/version，并允许 +groupName 注释覆盖
+// group。版本段保持原样（如 v1、v1beta1），参与 GVK 与包目录命名。
 func groupVersion(p *types.Package) (gv clientgentypes.GroupVersion, err error) {
 	parts := strings.Split(p.Path, "/")
 	gv.Group = clientgentypes.Group(parts[len(parts)-2])
@@ -304,7 +331,8 @@ func groupVersion(p *types.Package) (gv clientgentypes.GroupVersion, err error) 
 	return gv, nil
 }
 
-// isInternalPackage returns true if the package is an internal package
+// isInternalPackage 通过 ObjectMeta 成员是否带 json tag 判断 internal 包。
+// 内部类型没有 json tag，不能直接映射为 apply configuration。
 func isInternalPackage(p *types.Package) bool {
 	for _, t := range p.Types {
 		for _, member := range t.Members {
@@ -316,12 +344,14 @@ func isInternalPackage(p *types.Package) bool {
 	return false
 }
 
-// isInternal returns true if the tags for a member do not contain a json tag
+// isInternal 判断成员是否缺少 json tag；无 json tag 即视为 internal 类型。
 func isInternal(m types.Member) bool {
 	_, ok := lookupJSONTags(m)
 	return !ok
 }
 
+// hasObjectMetaField 判断类型是否内嵌 ObjectMeta。apply configuration 依赖
+// ObjectMeta 提供 name/namespace 等信息来构造 Apply 请求。
 func hasObjectMetaField(t *types.Type) bool {
 	for _, member := range t.Members {
 		if objectMeta.Name == member.Type.Name && member.Embedded {

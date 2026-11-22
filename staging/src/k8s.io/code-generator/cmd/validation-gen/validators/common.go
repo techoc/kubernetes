@@ -26,11 +26,14 @@ import (
 const (
 	// libValidationPkg is the pkgpath to our "standard library" of validation
 	// functions.
+	// 生成的校验代码调用该包中的泛型校验函数，而不是内联逻辑，
+	// 以便校验语义集中维护并被单元测试覆盖。
 	libValidationPkg = "k8s.io/apimachinery/pkg/api/validate"
 )
 
 // rootTypeString returns a string representation of the relationship between
 // src and dst types, for use in error messages.
+// 当源/目标类型相同时只输出一个名字，避免 "T -> T" 这类噪声。
 func rootTypeString(src, dst *types.Type) string {
 	if src == dst {
 		return src.String()

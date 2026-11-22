@@ -22,6 +22,7 @@ import (
 	"k8s.io/gengo/v2/codetags"
 )
 
+// tagGroupName 是唯一被所有生成器共享、且不带 "-gen" 后缀的包级标签。
 const tagGroupName = "groupName"
 
 // extractGeneratorTag returns the values of "+<tagName>" in comments.
@@ -53,6 +54,8 @@ func extractGeneratorTag(comments []string, tagName string) (values []string, op
 	return values, false, nil
 }
 
+// tagValues 返回某个标签的全部值；标签缺失时返回 nil 而不是空切片，
+// 便于调用方区分“没有标签”和“标签值为空”。
 func tagValues(lines []string, name string) ([]string, error) {
 	tags, err := extractTags(lines, name)
 	if err != nil {
@@ -68,6 +71,8 @@ func tagValues(lines []string, name string) ([]string, error) {
 	return out, nil
 }
 
+// extractTags 先按名字粗筛原始行，再逐条解析；RawValues(true) 允许
+// 带引号等原始字面量，因为这里只做值透传，不做语义解释。
 func extractTags(lines []string, names ...string) (map[string][]codetags.Tag, error) {
 	raw := codetags.Extract("+", lines)
 	out := map[string][]codetags.Tag{}
@@ -85,6 +90,9 @@ func extractTags(lines []string, names ...string) (map[string][]codetags.Tag, er
 
 // GroupNameForPackage returns the value of the +groupName= tag from
 // comments. ok is false when the tag is absent.
+//
+// 只取第一个值：group 名在 client-gen/lister-gen 中用于目录命名，
+// 重复声明没有合理语义。
 func GroupNameForPackage(comments []string) (group string, ok bool, err error) {
 	values, err := tagValues(comments, tagGroupName)
 	if err != nil {

@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package optional 是 validation-gen 的测试包，覆盖 +k8s:optional 与字段校验
+// 的组合：可选字段上的校验必须能正确处理零值、nil 指针、typedef、切片与 map。
 // +k8s:validation-gen-nolint
 package optional
 

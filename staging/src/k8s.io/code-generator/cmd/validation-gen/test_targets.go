@@ -37,6 +37,7 @@ import (
 
 // Package symbols referenced in emitted test fixtures. fmtPkgSymbols (shared
 // with validation.go) covers Fprintln.
+// 提前解析成符号集合，是为了在模板里通过 raw namer 输出时能正确登记导入。
 var (
 	schemaPkg               = "k8s.io/apimachinery/pkg/runtime/schema"
 	schemaPkgSymbols        = mkPkgNames(schemaPkg, "GroupVersionKind")
@@ -53,6 +54,7 @@ var (
 var apiVersionRe = regexp.MustCompile(`^v\d+(alpha\d+|beta\d+)?$`)
 
 // rule is one declared field-validation error.
+// ErrorType 对应 field.ErrorType；Origin 为空表示未标注来源。
 type rule struct {
 	ErrorType string
 	Origin    string
@@ -168,15 +170,17 @@ func loadAllowlist(path string) ([]allowlistEntry, error) {
 
 // coverageTestGen emits test files for validation-gen coverage.
 // It can emit rule registrations (init func), apiVersions variable, and TestMain.
+// 同一包会生成两类文件：按版本注册规则的 *_test.go，以及汇总断言的 main_test.go。
 type coverageTestGen struct {
 	generator.GoGenerator
 	outputPackage string
 	imports       namer.ImportTracker
 	reports       []*report
-	emitMain      bool
+	emitMain      bool // true 时输出 TestMain 与 apiVersions
 	versions      []string
 }
 
+// newCoverageTestGen 构造一个生成器；filename 由调用方按版本或 main 命名。
 func newCoverageTestGen(outputPackage, filename string, reports []*report, emitMain bool, versions []string) generator.Generator {
 	return &coverageTestGen{
 		GoGenerator: generator.GoGenerator{
@@ -190,14 +194,19 @@ func newCoverageTestGen(outputPackage, filename string, reports []*report, emitM
 	}
 }
 
+// Namers 注册 raw 命名系统。
 func (g *coverageTestGen) Namers(*generator.Context) namer.NameSystems {
 	return namer.NameSystems{"raw": namer.NewRawNamer(g.outputPackage, g.imports)}
 }
 
+// Imports 返回生成文件所需的导入行。
 func (g *coverageTestGen) Imports(*generator.Context) []string { return g.imports.ImportLines() }
 
+// Filter 恒为 false：coverage 生成器不使用按类型的生成流程。
 func (g *coverageTestGen) Filter(*generator.Context, *types.Type) bool { return false }
 
+// emitRegisterDeclaredRules 生成 init()，把每个 GVK 的声明式规则注册到运行时测试注册表。
+// 路径与规则都排序，保证生成文件稳定、可复现。
 func emitRegisterDeclaredRules(sw *generator.SnippetWriter, c *generator.Context, reports []*report) {
 	for _, r := range reports {
 		args := generator.Args{
@@ -241,6 +250,8 @@ func emitRegisterDeclaredRules(sw *generator.SnippetWriter, c *generator.Context
 	}
 }
 
+// emitTestMain 生成 TestMain：跑完测试后再断言声明式覆盖是否完整，
+// 覆盖缺口会以退出码非零的形式让 CI 失败。
 func emitTestMain(sw *generator.SnippetWriter, c *generator.Context) {
 	args := generator.Args{
 		"testing": mkSymbolArgs(c, testingSymbols),
@@ -256,6 +267,7 @@ func emitTestMain(sw *generator.SnippetWriter, c *generator.Context) {
 	sw.Do("    $.os.Exit|raw$(code)\n}\n", args)
 }
 
+// Init 写出整个文件：先注册规则，再（可选）写 apiVersions 与 TestMain。
 func (g *coverageTestGen) Init(c *generator.Context, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 	if len(g.reports) > 0 {
@@ -300,6 +312,7 @@ func collectReports(pkg *types.Package, rootTypes []*types.Type, td *typeDiscove
 		version = pkg.Name
 	}
 
+	// 只有声明了规则的根类型才需要测试夹具；规则数由类型树遍历得出。
 	for _, t := range rootTypes {
 		rules := collectRules(td.typeNodes[t])
 		if len(rules) == 0 {
@@ -365,6 +378,8 @@ func testTargets(testOutputRoot, filePrefix string, groupKindReports map[schema.
 }
 
 // collectRules walks node's type tree and returns its declared FieldRules.
+// seen 用 defer delete 维护“当前路径”的访问集：同一类型出现在兄弟分支是允许的，
+// 只有递归回环才应剪枝。
 func collectRules(node *typeNode) fieldRules {
 	if node == nil {
 		return nil
@@ -466,6 +481,7 @@ func recordRules(rules fieldRules, basePath string, fg validators.FunctionGen, s
 
 // joinPath joins seg onto base; empty seg is a no-op so inline-embedded
 // struct fields (jsonName "") stay transparent.
+// 以 "[" 开头的段（如 "[*]"）直接拼接，不再加点号，以匹配 field.Path 的渲染形式。
 func joinPath(base, seg string) string {
 	if seg == "" {
 		return base

@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 +k8s:optional 与非零 +default 的组合：默认值不能被视为“已设置”，
+// 校验器必须区分 nil/零值与显式赋值。
 // +k8s:validation-gen-nolint
 package nonzerodefaults
 

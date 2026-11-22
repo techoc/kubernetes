@@ -17,18 +17,23 @@ limitations under the License.
 package discriminators
 
 import (
+	"testing"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
-	"testing"
 )
 
+// Test 验证 +k8s:ifEnabled/ifDisabled 包裹 discriminator 校验时，
+// FeatureZ 的开关会决定哪个字段的错误被触发。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值结构始终合法。
 	st.Value(&Struct{
 		// All zero values
 	}).Opts(map[string]bool{"FeatureZ": false}).ExpectValid()
 
+	// FeatureZ 关闭时，只有 DiscriminatorFieldDisabled 生效。
 	st.Value(&Struct{
 		DiscriminatorField: Discriminator{
 			Discriminator: "A",
@@ -43,6 +48,7 @@ func Test(t *testing.T) {
 		field.ErrorList{field.Forbidden(field.NewPath("discriminatorFieldDisabled", "fieldB"), "").WithOrigin("")},
 	)
 
+	// FeatureZ 开启时，只有 DiscriminatorField 生效。
 	st.Value(&Struct{
 		DiscriminatorField: Discriminator{
 			Discriminator: "A",

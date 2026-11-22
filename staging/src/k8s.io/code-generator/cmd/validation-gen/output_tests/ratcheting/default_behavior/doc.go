@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// defaultbehavior 验证默认 ratcheting 行为：更新时未变化的字段不会重新
+// 执行校验，已存在的非法值因此被保留。
 // +k8s:validation-gen-nolint
 package defaultbehavior
 

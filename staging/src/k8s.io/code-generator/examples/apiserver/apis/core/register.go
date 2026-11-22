@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package core 是 apiserver 示例中的 core 群组（无 group 名）注册代码。
 package core
 
 import (
@@ -21,8 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// SchemeGroupVersion 使用 runtime.APIVersionInternal，表明这是内部类型。
 var SchemeGroupVersion = schema.GroupVersion{Version: runtime.APIVersionInternal}
 
+// SchemeBuilder/AddToScheme 提供标准 scheme 注册入口。
 var (
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme

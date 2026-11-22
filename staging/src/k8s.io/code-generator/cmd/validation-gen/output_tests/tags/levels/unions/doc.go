@@ -18,15 +18,19 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+// 验证 alpha/beta 稳定性级别标记在 union 相关标记（unionDiscriminator、
+// unionMember、zeroOrOneOfMember）上的传播。
 package unions
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 是 alpha 级别的 discriminated union 测试。
 type Struct struct {
 	TypeMeta int
 
+	// 判别字段为 alpha 级别的 unionDiscriminator。
 	// +k8s:alpha=+k8s:unionDiscriminator
 	D D `json:"d"`
 
@@ -34,11 +38,13 @@ type Struct struct {
 	// +k8s:optional
 	M1 *M1 `json:"m1"`
 
+	// 带 since 版本的 alpha 成员。
 	// +k8s:alpha(since:"1.35")=+k8s:unionMember
 	// +k8s:optional
 	M2 *M2 `json:"m2"`
 }
 
+// UnionStructBeta 是 beta 级别的 discriminated union 测试。
 type UnionStructBeta struct {
 	TypeMeta int
 
@@ -54,6 +60,7 @@ type UnionStructBeta struct {
 	M2Beta *BetaM2 `json:"m2Beta"`
 }
 
+// MyStruct 是 alpha 级别的 zero-or-one-of union 测试。
 type MyStruct struct {
 	TypeMeta int
 
@@ -66,6 +73,7 @@ type MyStruct struct {
 	Z2 *Z2 `json:"z2"`
 }
 
+// MyStructBeta 是 beta 级别的 zero-or-one-of union 测试。
 type MyStructBeta struct {
 	TypeMeta int
 
@@ -78,6 +86,7 @@ type MyStructBeta struct {
 	Z2Beta *BetaZ2 `json:"z2Beta"`
 }
 
+// D 是 alpha union 的判别值类型。
 type D string
 
 const (
@@ -88,6 +97,7 @@ const (
 type M1 struct{}
 type M2 struct{}
 
+// BetaD 是 beta union 的判别值类型。
 type BetaD string
 
 const (
@@ -104,6 +114,7 @@ type Z2 struct{}
 type BetaZ1 struct{}
 type BetaZ2 struct{}
 
+// MyListStruct 用 item 选择器在列表元素上声明 alpha zeroOrOneOfMember。
 type MyListStruct struct {
 	TypeMeta int
 
@@ -114,6 +125,7 @@ type MyListStruct struct {
 	Tasks []Task `json:"tasks"`
 }
 
+// MyListStructBeta 与 MyListStruct 对应，但使用 beta 级别。
 type MyListStructBeta struct {
 	TypeMeta int
 

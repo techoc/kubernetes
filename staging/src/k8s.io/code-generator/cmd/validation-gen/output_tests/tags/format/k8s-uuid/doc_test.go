@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestK8sUUID 覆盖 k8s-uuid 格式：合法小写 UUID、大写变体、非 UUID 字符串，
+// 并验证三种字段形态一致以及旧值已报错时的 ratcheting。
 func TestK8sUUID(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

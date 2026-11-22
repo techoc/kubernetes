@@ -19,6 +19,9 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // This is a test package.
+//
+// 覆盖“typedef 到 slice”的映射：slice 类型本身可以携带 +k8s:eachVal，
+// 也可以作为没有校验的普通类型（Unvalidated*）。
 // +k8s:validation-gen-nolint
 package typedeftoslice
 

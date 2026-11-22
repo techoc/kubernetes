@@ -19,12 +19,16 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证多 listMapKey 下的 item 匹配与 eachVal 语义：
+// 包括 typedef 列表、指针 key（需解引用）、可比较与不可比较元素。
 package multiplekeys
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 的每个字段覆盖一种 listType=map 组合。
 type Struct struct {
 	TypeMeta int
 
@@ -40,6 +44,7 @@ type Struct struct {
 	// +k8s:eachVal=+k8s:immutable
 	ListTypedefField []OtherTypedefStruct `json:"listTypedefField"`
 
+	// 类型级 listMapKey 已定义在 ListType 上，字段只需补充 eachVal。
 	// +k8s:eachVal=+k8s:immutable
 	TypedefField ListType `json:"typedefField"`
 
@@ -49,12 +54,14 @@ type Struct struct {
 	// +k8s:eachVal=+k8s:validateFalse="field Struct.ListComparableField[*]"
 	ListComparableField []OtherStruct `json:"listComparableField"`
 
+	// 不可比较元素要求 ratcheting 比较走深比较。
 	// +k8s:listType=map
 	// +k8s:listMapKey=key1Field
 	// +k8s:listMapKey=key2Field
 	// +k8s:eachVal=+k8s:validateFalse="field Struct.ListNonComparableField[*]"
 	ListNonComparableField []NonComparableStruct `json:"listNonComparableField"`
 
+	// item 匹配条件里的指针 key 需按解引用后的值比较。
 	// +k8s:listType=map
 	// +k8s:listMapKey=key1Field
 	// +k8s:listMapKey=key2Field
@@ -76,6 +83,7 @@ type OtherStruct struct {
 
 type OtherTypedefStruct OtherStruct
 
+// NonComparableStruct 含有 slice 字段，不能直接用 == 比较。
 type NonComparableStruct struct {
 	Key1Field string   `json:"key1Field"`
 	Key2Field int      `json:"key2Field"`

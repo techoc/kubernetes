@@ -24,6 +24,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖 maxBytes：边界值（0/10）合法、超出即报 TooLong，
+// 普通/指针/typedef 字段一致；旧值已报错时 ratcheting 抑制重复报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

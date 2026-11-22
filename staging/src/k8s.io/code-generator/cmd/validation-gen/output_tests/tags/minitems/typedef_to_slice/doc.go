@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// typedeftoslice 验证 +k8s:minItems 声明在切片类型定义上的生成行为，
+// 以及未声明校验的切片别名不会被误加校验。
 // +k8s:validation-gen-nolint
 package typedeftoslice
 

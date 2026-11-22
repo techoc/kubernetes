@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖 +k8s:maxItems 的边界：nil 与空切片合法，长度为上限时合法，
+// 超限时报 TooMany，并验证相同内容的旧值可被 ratcheting 放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

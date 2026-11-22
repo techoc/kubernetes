@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestRegisterValidations 验证声明了 supportsSubresource 后：
+// 已知子资源与根资源都能通过，含未知子资源的组合则返回 InternalError。
 func TestRegisterValidations(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

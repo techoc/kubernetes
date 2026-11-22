@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 是 discriminated union 的主用例集：discriminator 值决定哪个成员
+// 必须出现、哪些成员被禁止；同时覆盖 nil/空切片的差异、指针/map 成员，
+// 以及更新时的 ratcheting 与 nil 旧值处理。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

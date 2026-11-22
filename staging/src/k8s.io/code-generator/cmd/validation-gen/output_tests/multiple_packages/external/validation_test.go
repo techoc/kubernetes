@@ -26,13 +26,14 @@ import (
 	"k8s.io/code-generator/cmd/validation-gen/output_tests/multiple_packages/types"
 )
 
-// TestSelfContained runs this non-registering package's validators via direct
-// calls (no scheme) and checks they agree with the registered copy.
+// TestSelfContained 通过直接调用校验函数（不经过 scheme）验证本包生成的
+// 校验器，并确认其与 registered 副本产生一致的错误。
 func TestSelfContained(t *testing.T) {
 	ctx := context.Background()
 	matcher := field.ErrorMatcher{}.ByField().ByDetailExact()
 
 	// Shared types must match the registered copy.
+	// T1/T2 在两个包中都会生成，结果必须逐字段一致。
 	obj := &types.T1{List: []types.T2{{}, {}}}
 	ext := Validate_T1(ctx, operation.Operation{}, nil, obj, nil)
 	if len(ext) == 0 {
@@ -42,6 +43,7 @@ func TestSelfContained(t *testing.T) {
 	matcher.Test(t, reg, ext)
 
 	// T3 is selected only by external; registered has no Validate_T3.
+	// 说明 selection（+k8s:validation-gen=*）只影响本包副本。
 	got := Validate_T3(ctx, operation.Operation{}, nil, &types.T3{}, nil)
 	want := field.ErrorList{
 		field.Invalid(field.NewPath("s"), nil, "forced failure: field T3.S"),

@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package validatetruealpha 是 validation-gen 的测试包，覆盖 alpha 阶段的
+// 指令 +k8s:validateTrueAlpha 标记（始终失败的校验），用于验证 alpha 标记的生成路径。
 // +k8s:validation-gen-nolint
 package validatetruealpha
 

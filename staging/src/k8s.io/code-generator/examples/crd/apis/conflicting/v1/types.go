@@ -25,6 +25,9 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TestType is a top-level type. A client is created for it.
+//
+// 内嵌 TestEmbeddedType 用于制造字段名冲突，验证生成器对 embedded 字段
+// 与 TypeMeta/ObjectMeta 的优先级处理。
 type TestType struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -47,11 +50,14 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 内嵌来自 gateway-api 的 PolicyStatus，
+// 验证跨包嵌入类型的字段合并。
 type TestTypeStatus struct {
 	Blah                    string `json:"blah"`
 	gwv1alpha2.PolicyStatus `json:""`
 }
 
+// TestTypeEmbeddedStatus 自引用 slice，用于验证递归类型的处理。
 type TestTypeEmbeddedStatus struct {
 	Statuses []TestTypeEmbeddedStatus `json:"statuses"`
 }

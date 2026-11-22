@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main 实现 lister-gen：为带 +genclient 的类型生成只读 lister。
+// 参数与 client-gen 保持同名同义，便于在 make 目标中成对调用。
 package main
 
 import (
@@ -28,10 +30,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// lister-gen 为带 +genclient 的类型生成只读 lister。
+// 参数与 client-gen 保持同名同义，便于在 make 目标中成对调用。
 func main() {
 	klog.InitFlags(nil)
 	args := args.New()
 
+	// klog 与 pflag 混用：先注册业务 flag，再把标准库 flag 合并进 pflag。
 	args.AddFlags(pflag.CommandLine)
 	flag.Set("logtostderr", "true")
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

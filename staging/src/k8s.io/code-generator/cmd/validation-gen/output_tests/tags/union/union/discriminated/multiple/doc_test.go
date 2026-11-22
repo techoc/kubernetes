@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证一个结构体内多个判别联合体互不干扰：
+// 每个联合体只校验自己判别值对应的成员，非法组合报 union 错误；
+// 旧值相同的非法组合因 ratcheting 跳过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

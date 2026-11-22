@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 k8s-extended-resource-name 格式校验在字段、指针字段和
+// typedef 三种写法下的生成结果。
 package k8sextendedresourcename
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -32,6 +35,7 @@ type MyType struct {
 	// +k8s:optional
 	// +k8s:format=k8s-extended-resource-name
 	NameField string `json:"nameField"`
+	// 指针字段需先判空再校验格式。
 	// +k8s:optional
 	// +k8s:format=k8s-extended-resource-name
 	NamePtrField *string `json:"namePtrField"`

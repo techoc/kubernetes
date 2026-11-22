@@ -24,6 +24,7 @@ import (
 	"k8s.io/gengo/v2/codetags"
 )
 
+// kubeVersionRegex 限定版本参数格式为 <major>.<minor>。
 var kubeVersionRegex = regexp.MustCompile(`^\d+\.\d+$`)
 
 const (
@@ -32,10 +33,12 @@ const (
 )
 
 func init() {
+	// 同一个校验器类型用不同 tagName/level 注册两次，分别实现 alpha 与 beta。
 	RegisterTagValidator(&levelTagValidator{tagName: alphaTagName, level: ValidationStabilityLevelAlpha})
 	RegisterTagValidator(&levelTagValidator{tagName: betaTagName, level: ValidationStabilityLevelBeta})
 }
 
+// levelTagValidator 实现 +k8s:alpha / +k8s:beta：把负载校验标记为指定稳定性级别。
 type levelTagValidator struct {
 	validator TagValidationExtractor
 	tagName   string
@@ -56,11 +59,14 @@ func (levelTagValidator) ValidScopes() sets.Set[Scope] {
 	return levelTagsValidScopes
 }
 
+// GetValidations 解析可选的 since 版本参数，递归提取负载校验并统一改写其级别。
 func (ltv *levelTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
+	// 负载必须是一个校验标记。
 	if tag.ValueType != codetags.ValueTypeTag || tag.ValueTag == nil {
 		return Validations{}, fmt.Errorf("requires a validation tag as its value payload")
 	}
 
+	// 至多允许一个可选参数（since）。
 	if len(tag.Args) > 1 {
 		return Validations{}, fmt.Errorf("at most one optional kubernetes version argument is supported")
 	}
@@ -74,12 +80,14 @@ func (ltv *levelTagValidator) GetValidations(context Context, tag codetags.Tag) 
 		}
 	}
 
+	// 先设置上下文的稳定性级别，再解析负载，使嵌套标记继承该级别。
 	context.StabilityLevel = ltv.level
 	validations, err := ltv.validator.ExtractTagValidations(context, *tag.ValueTag)
 	if err != nil {
 		return Validations{}, err
 	}
 
+	// 递归改写所有函数级别；自行管理级别的函数保持不变。
 	validations = WrapFunctions(validations, func(fn FunctionGen, scope DeferredScope) FunctionGen {
 		if fn.StabilityLevelSelfManaged {
 			return fn

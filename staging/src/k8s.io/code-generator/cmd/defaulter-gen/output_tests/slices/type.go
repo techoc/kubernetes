@@ -21,16 +21,20 @@ import (
 )
 
 // Only test
+// Ttest 覆盖默认值是内嵌 TypeMeta 与指针布尔字段的场景；
+// 列表类型分别用值切片和指针切片，用来验证 defaulter 对两种元素形态的处理。
 type Ttest struct {
 	empty.TypeMeta
 	BoolField *bool
 }
 
+// TtestList 值切片元素的默认值处理。
 type TtestList struct {
 	empty.TypeMeta
 	Items []Ttest
 }
 
+// TtestPointerList 指针切片元素需要先分配再处理默认值。
 type TtestPointerList struct {
 	empty.TypeMeta
 	Items []*Ttest

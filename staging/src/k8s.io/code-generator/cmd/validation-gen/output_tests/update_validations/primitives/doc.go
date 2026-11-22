@@ -19,6 +19,7 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:immutable 在基本类型上的生成：更新时任何值变化都应被拒绝。
 package primitives
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

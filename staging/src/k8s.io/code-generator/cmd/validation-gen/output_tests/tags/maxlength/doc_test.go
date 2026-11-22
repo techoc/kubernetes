@@ -24,6 +24,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 maxLength 的字符数（非字节数）边界：
+// 长度等于上限合法，超过则 TooLongCharacters；指针、无校验 typedef、
+// 类型级有校验的 typedef 行为一致，旧值相同则 ratcheting 跳过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

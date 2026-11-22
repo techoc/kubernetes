@@ -14,10 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 这是一个位于多个包场景中的消费方测试包：Consumer 引用 types 包中的
+// 共享类型 T2，用于验证跨包校验生成与类型归属。
+
 package consumer
 
 import "k8s.io/code-generator/cmd/validation-gen/output_tests/multiple_packages/types"
 
+// Consumer 内嵌一个整型 TypeMeta（保证被选为目标类型），
+// 并通过 JSON 字段引用外部包类型。
 type Consumer struct {
 	TypeMeta int
 

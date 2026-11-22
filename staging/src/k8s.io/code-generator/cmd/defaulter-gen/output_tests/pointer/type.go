@@ -20,12 +20,15 @@ import (
 	"k8s.io/code-generator/cmd/defaulter-gen/output_tests/empty"
 )
 
+// Tpointer 含一个可为 nil 的 BoolField，用于验证指针字段的默认值生成。
 type Tpointer struct {
 	empty.TypeMeta
 	BoolField *bool
 }
 
 // Only test
+// Ttest 同时包含值类型与指针类型的 Tpointer，用于验证两种嵌套路径下的
+// 默认值传播。
 type Ttest struct {
 	empty.TypeMeta
 	NTP Tpointer

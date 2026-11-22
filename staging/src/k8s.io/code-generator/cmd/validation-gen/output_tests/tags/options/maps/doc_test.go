@@ -20,9 +20,13 @@ import (
 	"testing"
 )
 
+// Test 验证 ifEnabled/ifDisabled 选项对字段、eachKey、eachVal 三种位置的
+// 生效范围：功能开关为 false 时只有 Disabled 变体报错，反之亦然。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// FeatureX 关闭：EachKey/EachVal 的 Disabled 变体生效。
+	// 注意 eachKey 的错误路径不带 key 下标，eachVal 的路径带 [key]。
 	st.Value(&Struct{
 		MapField: map[string]string{
 			"a": "1",
@@ -48,6 +52,7 @@ func Test(t *testing.T) {
 		"mapFieldEachValDisabled[b]": {"field Struct.MapFieldEachValDisabled/val"},
 	})
 
+	// FeatureX 开启：Enabled 变体生效，Disabled 变体沉默。
 	st.Value(&Struct{
 		MapField: map[string]string{
 			"a": "1",

@@ -22,13 +22,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestUpdateMapTags 覆盖 map 字段上的 update 约束：
+// NoSet/NoUnset（整体存在性）、NoAddItem/NoRemoveItem（键集合）、
+// FrozenShape（键集合整体冻结）以及 eachVal 与 NoModify 的组合。
 func TestUpdateMapTags(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 只比较类型、字段、详情子串与 origin，避免绑定完整的错误文本。
 	matcher := field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin()
 	base := UpdateMapStruct{}
 
 	// Map NoSet/NoUnset
+	//
+	// 空 map 视为“未设置”，非空视为“已设置”，nil 同样算清空。
 	{
 		old := base
 		cur := base
@@ -48,6 +54,8 @@ func TestUpdateMapTags(t *testing.T) {
 	}
 
 	// Map NoAddItem/NoRemoveItem
+	//
+	// 只约束键集合的增删；已有键的值变化不受影响。
 	{
 		old := base
 		old.MapNoAdd = map[string]string{"a": "1"}
@@ -83,6 +91,8 @@ func TestUpdateMapTags(t *testing.T) {
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
 		// Swap one key: one add + one remove.
+		//
+		// 交换键会同时触发“新增”和“删除”两条错误。
 		swap := base
 		swap.MapFrozenShape = map[string]string{"a": "1", "c": "3"}
 		st.Value(&swap).OldValue(&old).ExpectMatches(matcher, field.ErrorList{
@@ -99,6 +109,8 @@ func TestUpdateMapTags(t *testing.T) {
 
 		// Both constraints fire: NoSet on the empty->non-empty transition
 		// and NoAddItem on the new key.
+		//
+		// 两条约束检查的是不同层面，因此同时上报，而不是短路。
 		st.Value(&cur).OldValue(&old).ExpectMatches(matcher, field.ErrorList{
 			field.Invalid(field.NewPath("mapSetThenFreeze"), nil, "field cannot be set once created").WithOrigin("update"),
 			field.Forbidden(field.NewPath("mapSetThenFreeze").Key("k"), "item may not be added").WithOrigin("update"),

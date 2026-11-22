@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// Test 验证 Alpha 级别的 validateTrue 在零值与非零值下都视为通过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

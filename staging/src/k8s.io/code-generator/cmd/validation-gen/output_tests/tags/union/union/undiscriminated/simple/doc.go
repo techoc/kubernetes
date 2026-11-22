@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：无判别器联合体——所有成员都可选，但同一时间至多一个被设置，
+// 覆盖结构体、字符串、指针、slice、map 等成员形态。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package simple
@@ -26,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // Non-discriminated union
+// 无判别器联合体：M1~M6 为互斥成员，NonUnionField 不参与联合体。
 type Struct struct {
 	TypeMeta int
 

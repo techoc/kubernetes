@@ -20,16 +20,20 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 map 类型字段在更新场景下的校验生成：包级选择所有类型（=*），
+// 生成器应能递归处理 map value 结构体的校验。
 package maps
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// T1 含一个 map，value 为带校验的结构体 M1。
 type T1 struct {
 	MSM1 map[string]M1 `json:"msm1"`
 }
 
+// M1 的 S 字段带固定失败校验，用于观察 map value 的校验路径。
 type M1 struct {
 	// +k8s:validateFalse="M1.S"
 	S string `json:"s"`

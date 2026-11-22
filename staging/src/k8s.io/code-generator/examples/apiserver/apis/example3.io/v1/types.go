@@ -22,6 +22,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TestType is a top-level type. A client is created for it.
+// 带 +genclient，clientset/informer/lister 都会为之生成代码。
 type TestType struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -34,6 +35,7 @@ type TestType struct {
 
 // TestTypeList is a top-level list type. The client methods for lists are automatically created.
 // You are not supposed to create a separated client for this one.
+// List 类型只需实现 runtime.Object，不单独生成客户端。
 type TestTypeList struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -42,6 +44,7 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 是示例状态类型，字段全部可选以避免默认值测试受干扰。
 type TestTypeStatus struct {
 	Blah string `json:"blah"`
 }

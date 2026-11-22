@@ -20,5 +20,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=nil
 
 // This is a test package.
+// external 是 multiple_packages 测试中的非注册副本：通过
+// validation-gen-input 指向 types 包，并设置 scheme-registry=nil，
+// 用于验证同一份校验逻辑可以被生成到另一个包而不注册 scheme。
 // +k8s:validation-gen-nolint
 package external

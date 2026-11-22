@@ -27,6 +27,9 @@ import (
 )
 
 // TestTransforms verified that transform calls are applied as expected.
+// TestTransforms 验证 shared informer factory 的 transform 优先级：
+// factory 级 transform 覆盖 per-informer transform；未设置 factory transform 时
+// 保留 per-informer 的设置。
 func TestTransforms(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -100,11 +103,14 @@ func TestTransforms(t *testing.T) {
 	}
 }
 
+// transformTrackingInformer 包装 SharedIndexInformer 并记录最后一次设置的
+// transform，以便测试中主动调用并观察优先级。
 type transformTrackingInformer struct {
 	cache.SharedIndexInformer
 	lastTransform cache.TransformFunc
 }
 
+// SetTransform 记录并转发 transform 设置到底层 informer。
 func (s *transformTrackingInformer) SetTransform(handler cache.TransformFunc) error {
 	s.lastTransform = handler
 	return s.SharedIndexInformer.SetTransform(handler)

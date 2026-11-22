@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package args 定义 prerelease-lifecycle-gen 的命令行参数。
 package args
 
 import (
@@ -24,6 +25,8 @@ import (
 	"k8s.io/code-generator/pkg/apidefinitions"
 )
 
+// Args 汇总生成器参数。嵌入 LintArgs 以与其他 API 定义生成器共享
+// lint 规则开关。
 type Args struct {
 	OutputFile   string
 	GoHeaderFile string
@@ -32,6 +35,7 @@ type Args struct {
 }
 
 // New returns default arguments for the generator.
+// 默认输出文件名固定，保证重复运行覆盖同一文件而非堆积。
 func New() *Args {
 	return &Args{}
 }
@@ -46,6 +50,7 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 }
 
 // Validate checks the given arguments.
+// output-file 为空会导致无法确定写文件位置，因此必须显式或使用默认值。
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {
 		return fmt.Errorf("--output-file must be specified")

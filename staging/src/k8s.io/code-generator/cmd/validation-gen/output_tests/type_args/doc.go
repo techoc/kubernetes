@@ -19,6 +19,9 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // This is a test package.
+//
+// 覆盖校验标签的 typeArg 参数：显式指定类型参数后，生成代码应以该类型
+// 渲染（且必须是指针，见下方 T1 的说明）。
 // +k8s:validation-gen-nolint
 package typeargs
 

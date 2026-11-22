@@ -19,4 +19,6 @@ limitations under the License.
 // +groupName=extensions.test.crd.code-generator.k8s.io
 // +groupGoName=ExtensionsExample
 
+// Package v1 是 code-generator 的 CRD 示例 API 包。
+// 同时开启 deepcopy 与 defaulter 生成：defaulter 以 TypeMeta 字段为筛选条件。
 package v1

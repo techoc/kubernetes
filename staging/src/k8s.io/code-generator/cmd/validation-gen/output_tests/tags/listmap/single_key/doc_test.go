@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestUniqueness 验证单键 map 列表的唯一性：重复 key 的第二个元素报
+// Duplicate 错误，字段直接使用、typedef 与嵌套 typedef 三种形态行为一致。
 func TestUniqueness(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -49,6 +51,8 @@ func TestUniqueness(t *testing.T) {
 	})
 }
 
+// TestUpdateCorrelation 验证更新时按 key 关联新旧元素：仅顺序变化视为无变化，
+// 真正修改了某个 key 对应元素的值才会触发 immutable 错误。
 func TestUpdateCorrelation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -128,6 +132,8 @@ func TestUpdateCorrelation(t *testing.T) {
 	})
 }
 
+// TestRatcheting 验证 map 列表的 ratcheting：新旧列表数据相同（仅顺序不同）
+// 时，validateFalse 错误被抑制，可比较与不可比较元素都如此。
 func TestRatcheting(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -163,6 +169,8 @@ func TestRatcheting(t *testing.T) {
 	st.Value(&struct2).OldValue(&struct1).ExpectValid()
 }
 
+// TestUniquenessPtrKey 验证指针键的唯一性：值相同的不同指针视为重复 key，
+// 多个 nil 指针也视为重复，因为 map 语义按键值而非地址比较。
 func TestUniquenessPtrKey(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

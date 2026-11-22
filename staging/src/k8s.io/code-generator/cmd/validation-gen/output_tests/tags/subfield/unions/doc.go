@@ -18,6 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // Package unions contains test types for testing subfield union validation tags.
+// 中文说明：通过 subfield 把 unionDiscriminator/unionMember 作用到子结构体字段上。
 // +k8s:validation-gen-nolint
 package unions
 
@@ -27,6 +28,7 @@ import (
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 的 Subfield 字段携带整套 union 标签，等价于在 SubStruct 内部声明。
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 
@@ -36,6 +38,7 @@ type Struct struct {
 	Subfield SubStruct `json:"subfield"`
 }
 
+// SubStruct 是被 subfield 定位的子结构体，D 为判别器，M1/M2 为成员。
 type SubStruct struct {
 	D  string `json:"d"`
 	M1 *int   `json:"m1,omitempty"`

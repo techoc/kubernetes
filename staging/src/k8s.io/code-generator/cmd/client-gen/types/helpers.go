@@ -27,6 +27,9 @@ import (
 
 // ToGroupVersion turns "group/version" string into a GroupVersion struct. It reports error
 // if it cannot parse the string.
+//
+// 空串和 "/" 都表示内部版本（core 组的 internal 版本），此时 Group 与 Version 均为空。
+// 超过一个 "/" 视为非法，避免把 "a/b/c" 误解析成组名里带斜杠。
 func ToGroupVersion(gv string) (GroupVersion, error) {
 	// this can be the internal version for the legacy kube types
 	// TODO once we've cleared the last uses as strings, this special case should be removed.
@@ -45,6 +48,8 @@ func ToGroupVersion(gv string) (GroupVersion, error) {
 	}
 }
 
+// sortableSliceOfVersions 实现按 Kubernetes 版本优先级排序：v2 > v1beta2 > v1beta1 > v1alpha2。
+// 注意它排序的是去掉 "v" 前缀后的字符串，依赖版本号只含数字与 alpha/beta 后缀这一约定。
 type sortableSliceOfVersions []string
 
 func (a sortableSliceOfVersions) Len() int      { return len(a) }
@@ -75,6 +80,8 @@ func (a sortableSliceOfVersions) Less(i, j int) bool {
 // Determine the default version among versions. If a user calls a group client
 // without specifying the version (e.g., c.CoreV1(), instead of c.CoreV1()), the
 // default version will be returned.
+//
+// 取排序后的最后一个，即最高优先级版本；group client 的默认构造函数使用该版本。
 func defaultVersion(versions []PackageVersion) Version {
 	var versionStrings []string
 	for _, version := range versions {
@@ -85,6 +92,9 @@ func defaultVersion(versions []PackageVersion) Version {
 }
 
 // ToGroupVersionInfo is a helper function used by generators for groups.
+//
+// PackageAlias 由 groupGoName 与版本拼接后转小写，用于生成 import 别名，
+// 保证不同 group-version 的别名唯一且可预测。
 func ToGroupVersionInfo(groups []GroupVersions, groupGoNames map[GroupVersion]string) []GroupVersionInfo {
 	var groupVersionPackages []GroupVersionInfo
 	for _, group := range groups {
@@ -102,6 +112,8 @@ func ToGroupVersionInfo(groups []GroupVersions, groupGoNames map[GroupVersion]st
 	return groupVersionPackages
 }
 
+// ToGroupInstallPackages 为每个 group 生成一个安装包信息，版本取该 group 的默认版本。
+// scheme 注册时每个 group 只需一个安装入口，因此不按 version 展开。
 func ToGroupInstallPackages(groups []GroupVersions, groupGoNames map[GroupVersion]string) []GroupInstallPackage {
 	var groupInstallPackages []GroupInstallPackage
 	for _, group := range groups {

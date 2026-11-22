@@ -18,6 +18,8 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
+// 这是一个测试包：验证同一字段可累积多条校验（含 eachVal），
+// 生成的校验函数必须对每个切片元素逐条执行。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package multiplevalidations
@@ -26,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 的类型级与元素级各有多条校验。
 // +k8s:validateFalse="type Struct #1"
 // +k8s:validateFalse="type Struct #2"
 type Struct struct {

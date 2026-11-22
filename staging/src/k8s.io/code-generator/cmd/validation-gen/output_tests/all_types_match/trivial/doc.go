@@ -19,7 +19,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package trivial 是 validation-gen 的测试包（all_types_match/trivial）。
+// 包级标签选中所有类型（*），但类型与字段都没有任何校验标记，
+// 因此生成结果应只包含最小的注册代码。
 // +k8s:validation-gen-nolint
 package trivial
 

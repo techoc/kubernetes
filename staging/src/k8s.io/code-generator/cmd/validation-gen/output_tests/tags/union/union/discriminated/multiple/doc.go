@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证同一结构体内可并存多个带名字的 discriminated union：
+// 每个 union 由 union 名关联判别器与成员，互不干扰。
 package multiple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -52,6 +55,7 @@ type Struct struct {
 	U2M2 *M2 `json:"u2m2"`
 }
 
+// D 是两个 union 共用的判别器类型，因此成员常量需要按 union 前缀区分。
 type D string
 
 const (

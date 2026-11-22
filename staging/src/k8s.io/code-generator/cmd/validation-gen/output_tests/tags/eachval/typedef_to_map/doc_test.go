@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 覆盖“typedef 到 map”的场景：类型级校验先于字段级校验输出，
+// 每个键还会触发值类型的校验，因此同一路径下可能有多条错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

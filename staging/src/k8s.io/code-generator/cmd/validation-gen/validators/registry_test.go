@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestGetStability 验证标签名到稳定性级别的映射：
+// Alpha/Beta 由命名约定决定，未列入表中的标签视为 Stable；
+// 未注册的标签返回 error。
 func TestGetStability(t *testing.T) {
 	tests := []struct {
 		tagName     string
@@ -45,6 +48,7 @@ func TestGetStability(t *testing.T) {
 		},
 	}
 
+	// expectedError 未显式设置时为零值，因此只断言成功路径上的返回值。
 	for _, tt := range tests {
 		t.Run(tt.tagName, func(t *testing.T) {
 			got, err := GetStability(tt.tagName)
@@ -58,6 +62,8 @@ func TestGetStability(t *testing.T) {
 	}
 }
 
+// TestIsKnownTag 验证已知标签判断：注册过的 Alpha/Beta/Stable 标签返回 true，
+// 未注册标签返回 false。lint 的 known-tags-only 规则依赖这一判定。
 func TestIsKnownTag(t *testing.T) {
 	tests := []struct {
 		tagName  string

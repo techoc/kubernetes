@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// enums 验证 +k8s:enum 在 alpha/beta 稳定级别下的错误标记。
+//
 // +k8s:validation-gen-nolint
 package enums
 

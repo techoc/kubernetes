@@ -22,13 +22,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:optional 字段上的校验仍会执行：零值合法（可选字段未设置），
+// 非零值则触发字段级与类型级校验，覆盖指针、typedef、切片与 map。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全零值：可选字段未设置，合法。
 	st.Value(&Struct{
 		// All zero-values.
 	}).ExpectValid()
 
+	// 全部字段设置非零值，应触发每项的 validateFalse。
 	st.Value(&Struct{
 		StringField:           "abc",
 		StringPtrField:        ptr.To("xyz"),

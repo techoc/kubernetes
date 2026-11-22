@@ -28,6 +28,8 @@ import (
 
 var g = protobuf.New()
 
+// init 在 pflag 上注册参数，并把 klog 的标准库 flag 合并进来，
+// 使 --v 等日志参数与生成器参数在同一命令行解析。
 func init() {
 	klog.InitFlags(nil)
 	g.BindFlags(flag.CommandLine)
@@ -35,6 +37,7 @@ func init() {
 	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 }
 
+// main 解析参数后交由 protobuf.Run 执行生成流程。
 func main() {
 	flag.Parse()
 	protobuf.Run(g)

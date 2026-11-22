@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证同一结构体中的多个无 discriminator zero-or-one-of union：
+// 通过 union 参数把成员分组，各组独立校验。
 package multiple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -26,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // Two non-discriminated zero-or-one-of unions in the same struct
+// Struct 中 union1 与 union2 各自最多只能有一个成员被指定。
 type Struct struct {
 	TypeMeta int
 

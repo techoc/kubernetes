@@ -41,30 +41,36 @@ import (
      }
 */
 
+// TestProtoParser 验证 getFieldName 能从各种合法的结构体字段表达式中取出字段名，
+// 并对不支持的表达式返回错误。内嵌字段的 AST 形态见上方注释。
 func TestProtoParser(t *testing.T) {
 	ident := ast.NewIdent("FieldName")
 	tests := []struct {
 		expr ast.Expr
 		err  bool
 	}{
+		// 合法结构体字段表达式：普通字段
 		// valid struct field expressions
 		{
 			expr: ident,
 			err:  false,
 		},
 		{
+			// 带包限定的内嵌字段，如 v1.TypeMeta。
 			expr: &ast.SelectorExpr{
 				Sel: ident,
 			},
 			err: false,
 		},
 		{
+			// 指针字段，如 *X。
 			expr: &ast.StarExpr{
 				X: ident,
 			},
 			err: false,
 		},
 		{
+			// 双重指针 **X。
 			expr: &ast.StarExpr{
 				X: &ast.StarExpr{
 					X: ident,
@@ -73,6 +79,7 @@ func TestProtoParser(t *testing.T) {
 			err: false,
 		},
 		{
+			// 包限定指针内嵌字段，如 *v1.ListMeta。
 			expr: &ast.StarExpr{
 				X: &ast.SelectorExpr{
 					Sel: ident,
@@ -81,6 +88,7 @@ func TestProtoParser(t *testing.T) {
 			err: false,
 		},
 
+		// 其他表达式应报错
 		// something else should provide an error
 		{
 			expr: &ast.KeyValueExpr{

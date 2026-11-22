@@ -27,18 +27,22 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// ruleAlwaysPass 是一个恒定通过的测试规则，只用来统计被调用的次数。
 func ruleAlwaysPass(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 	return "", nil
 }
 
+// ruleAlwaysFail 恒定返回一条违规消息，用于验证 lint 错误会被收集但不会中断遍历。
 func ruleAlwaysFail(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 	return "lintfail", nil
 }
 
+// ruleAlwaysErr 恒定返回 error，用于验证规则内部错误会终止 lintComments 遍历。
 func ruleAlwaysErr(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 	return "", errors.New("linterr")
 }
 
+// mkCountRule 包装真实规则并记录调用次数，供测试断言调用行为。
 func mkCountRule(counter *int, realRule lintRule) lintRule {
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 		(*counter)++
@@ -46,8 +50,11 @@ func mkCountRule(counter *int, realRule lintRule) lintRule {
 	}
 }
 
+// validator 复用一个全局标签解析器，避免每个用例重复初始化。
 var validator = validators.InitGlobalValidator(&generator.Context{}, nil)
 
+// TestLintCommentsRuleInvocation 验证 lintComments 对规则与注释分组的遍历语义：
+// 每个注释分组会依次应用每条规则；某条规则返回 error 时立即停止当前分组的后续规则。
 func TestLintCommentsRuleInvocation(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -100,6 +107,7 @@ func TestLintCommentsRuleInvocation(t *testing.T) {
 		},
 	}
 
+	// 每条规则都被计数包装；wantCount 精确反映预期的调用次数。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			counter := 0
@@ -122,6 +130,8 @@ func TestLintCommentsRuleInvocation(t *testing.T) {
 	}
 }
 
+// TestRuleAlphaBetaPrefix 验证 alphaBetaPrefix 规则：+k8s:alpha/+k8s:beta 的值必须
+// 本身是一个校验标签，且只能出现在最外层（不能嵌在 item/listType 等链式标签中间）。
 func TestRuleAlphaBetaPrefix(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -175,6 +185,7 @@ func TestRuleAlphaBetaPrefix(t *testing.T) {
 		},
 	}
 
+	// 先解析标签再应用规则，模拟真实的 lint 流程。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tags, _ := validator.ExtractTags(validators.Context{}, tt.comments)
@@ -188,6 +199,9 @@ func TestRuleAlphaBetaPrefix(t *testing.T) {
 	}
 }
 
+// TestRuleStability 验证 validationStability 规则：
+// 稳定性较低的标签（Alpha/Beta）不能出现在更稳定的上下文中；
+// 包的版本名（v1alpha1/v1beta1）可提升允许的上下文级别。
 func TestRuleStability(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -261,6 +275,7 @@ func TestRuleStability(t *testing.T) {
 		},
 	}
 
+	// dummyType 的包名决定“包上下文”的稳定性级别。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dummyType := &types.Type{Name: types.Name{Package: tt.pkg, Name: "Dummy"}}
@@ -276,6 +291,8 @@ func TestRuleStability(t *testing.T) {
 	}
 }
 
+// TestLintType 验证 lintType 的递归遍历：指针、slice、map、alias、struct 成员
+// 以及嵌套类型中的注释标签都会被逐层检查，因此规则调用次数随嵌套深度增长。
 func TestLintType(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -410,6 +427,7 @@ func TestLintType(t *testing.T) {
 		},
 	}
 
+	// 用计数规则记录遍历到多少处标签；错误检查走 linter 自身的 lintErrors。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			counter := 0
@@ -429,6 +447,9 @@ func TestLintType(t *testing.T) {
 	}
 }
 
+// TestHasAnyValidationTag 验证 hasNonOpaqueValidationTag：
+// required/forbidden 等必填性标签以及带值负载的链式校验标签都算“有校验”；
+// optional 只声明可选性，不算；非校验类 +k8s: 标签（如 openapi-gen）也不算。
 func TestHasAnyValidationTag(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -482,6 +503,8 @@ func TestHasAnyValidationTag(t *testing.T) {
 		},
 	}
 
+	// 链式标签集合来自全局校验器的文档：只有 PayloadsType 为 Tag 的标签
+	// 才能作为另一个标签的负载。
 	chainTags := sets.New[string]()
 	for _, doc := range validator.Docs() {
 		if doc.PayloadsType == codetags.ValueTypeTag {
@@ -499,6 +522,8 @@ func TestHasAnyValidationTag(t *testing.T) {
 	}
 }
 
+// TestHasRequirednessTag 验证 hasRequirednessTag 能识别直接以及被
+// alpha/beta 前缀包裹的 optional/required 标签。
 func TestHasRequirednessTag(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -552,6 +577,10 @@ func TestHasRequirednessTag(t *testing.T) {
 	}
 }
 
+// TestLintRequiredness 验证 requiredAndOptional lint 规则：
+// 指针/切片/映射字段一旦带有（直接或传递的）校验，就必须显式声明
+// optional/required/forbidden，否则无法判断“零值是否合法”。
+// 覆盖递归类型、opaqueType/eachVal 等逃逸标记以及缓存复用等边界场景。
 func TestLintRequiredness(t *testing.T) {
 	sharedAlias := testAlias("MyAlias", testSlice(testStruct("Inner", []types.Member{
 		testField("Bar", testType("int"), "+k8s:minimum=0"),
@@ -929,6 +958,7 @@ func TestLintRequiredness(t *testing.T) {
 		},
 	}
 
+	// 每个用例应产生 0 或 1 条错误；多于 1 条即视为规则行为异常。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := newLinter(requiredAndOptional(validator))
@@ -950,6 +980,7 @@ func TestLintRequiredness(t *testing.T) {
 	}
 }
 
+// testType 构造一个内置类型，可附带注释标签。
 func testType(name string, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "", Name: name},
@@ -958,6 +989,7 @@ func testType(name string, comments ...string) *types.Type {
 	}
 }
 
+// testPtr 构造指针类型；名称带 Ptr 后缀以免与元素类型混淆。
 func testPtr(elem *types.Type, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: elem.Name.Name + "Ptr"},
@@ -967,6 +999,7 @@ func testPtr(elem *types.Type, comments ...string) *types.Type {
 	}
 }
 
+// testStruct 构造结构体类型，成员与注释由调用方给出。
 func testStruct(name string, members []types.Member, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: name},
@@ -976,6 +1009,7 @@ func testStruct(name string, members []types.Member, comments ...string) *types.
 	}
 }
 
+// testField 构造结构体成员。
 func testField(name string, fieldType *types.Type, comments ...string) types.Member {
 	return types.Member{
 		Name:         name,
@@ -984,6 +1018,7 @@ func testField(name string, fieldType *types.Type, comments ...string) types.Mem
 	}
 }
 
+// testSlice 构造切片类型。
 func testSlice(elem *types.Type, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: "[]" + elem.Name.Name},
@@ -993,6 +1028,7 @@ func testSlice(elem *types.Type, comments ...string) *types.Type {
 	}
 }
 
+// testArray 构造数组类型；与切片区分开以验证遍历逻辑处理 Array。
 func testArray(elem *types.Type, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: "array_" + elem.Name.Name},
@@ -1002,6 +1038,7 @@ func testArray(elem *types.Type, comments ...string) *types.Type {
 	}
 }
 
+// testMap 构造映射类型。
 func testMap(key, val *types.Type, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: "map_" + key.Name.Name + "_" + val.Name.Name},
@@ -1012,6 +1049,7 @@ func testMap(key, val *types.Type, comments ...string) *types.Type {
 	}
 }
 
+// testAlias 构造别名类型，模拟 Go typedef。
 func testAlias(name string, underlying *types.Type, comments ...string) *types.Type {
 	return &types.Type{
 		Name:         types.Name{Package: "pkg", Name: name},

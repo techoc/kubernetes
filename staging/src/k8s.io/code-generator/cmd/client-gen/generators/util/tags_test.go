@@ -21,6 +21,11 @@ import (
 	"testing"
 )
 
+// TestParseTags 覆盖 +genclient 及其变体标签的解析。
+// 重点验证：
+//   - 只有裸 +genclient 才启用生成，带 =true 的旧写法必须报错；
+//   - onlyVerbs/readonly 会转换成互补的 SkipVerbs 集合；
+//   - 冲突或未知指令必须返回错误。
 func TestParseTags(t *testing.T) {
 	testCases := map[string]struct {
 		lines       []string
@@ -31,6 +36,7 @@ func TestParseTags(t *testing.T) {
 			lines:      []string{`+genclient`},
 			expectTags: Tags{GenerateClient: true},
 		},
+		// 名称里有 = 的写法已废弃，应拒绝而不是静默忽略。
 		"genclient=true": {
 			lines:       []string{`+genclient=true`},
 			expectError: true,
@@ -83,6 +89,9 @@ func TestParseTags(t *testing.T) {
 	}
 }
 
+// TestParseTagsExtension 覆盖 +genclient:method 扩展语法。
+// 扩展用于在 typed client 上生成额外方法（如子资源、不同返回类型）；
+// 用例锁定必填字段（verb）、可选覆盖（subresource/result/input）以及非法组合的报错行为。
 func TestParseTagsExtension(t *testing.T) {
 	testCases := map[string]struct {
 		lines              []string
@@ -133,6 +142,7 @@ func TestParseTagsExtension(t *testing.T) {
 			expectError:        true,
 		},
 	}
+	// 每条用例独立解析；错误用例只验证是否报错，成功用例则整体比较 Extensions 切片。
 	for key, c := range testCases {
 		result, err := ParseClientGenTags(c.lines)
 		if err != nil && !c.expectError {

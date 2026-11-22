@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package mapofprimitive 是 validation-gen 的测试包，覆盖对 map 值（内建类型与
+// typedef）逐项施加校验的 +k8s:eachVal 语义。
 // +k8s:validation-gen-nolint
 package mapofprimitive
 

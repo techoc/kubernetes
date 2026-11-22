@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 覆盖空 discriminated union 的边界：判别字段为空或未知值时，
+// 生成代码不应因缺少成员而误报（成员本身均未设置）。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

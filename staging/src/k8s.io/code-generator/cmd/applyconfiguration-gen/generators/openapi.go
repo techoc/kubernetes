@@ -31,11 +31,15 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// typeModels 封装 OpenAPI schema 的解析结果：可供 Extract* 使用的模型，
+// 以及 GVK 到 OpenAPI 类型名的映射（Extract* 需要把 Kind 映射回 definitions 条目）。
 type typeModels struct {
 	models           utilproto.Models
 	gvkToOpenAPIType map[clientgentypes.GroupVersionKind]string
 }
 
+// newTypeModels 读取并裁剪 OpenAPI schema，只保留 apply 相关的类型及其引用闭包。
+// 空闲路径（未提供 schema 文件）返回 emptyModels，对应不生成 Extract* 函数的模式。
 func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Package) (*typeModels, error) {
 	if len(openAPISchemaFilePath) == 0 {
 		return emptyModels, nil // No Extract<type>() functions will be generated.
@@ -55,6 +59,8 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 
 	// Build a mapping from openAPI type name to GVK.
 	// Find the root types needed by by client-go for apply.
+	// 只有同时具备 +genclient 与 apply/applyStatus verb 的类型才是 apply 根对象，
+	// 其余类型通过引用闭包被间接纳入。
 	gvkToOpenAPIType := map[clientgentypes.GroupVersionKind]string{}
 	rootDefs := map[string]spec.Schema{}
 	for _, p := range pkgTypes {
@@ -66,6 +72,7 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 			tags := genclientTags(t)
 			hasApply := tags.HasVerb("apply") || tags.HasVerb("applyStatus")
 			if tags.GenerateClient && hasApply {
+				// ToRESTFriendlyName 把 Go 类型名转成 OpenAPI definitions 中使用的名字。
 				openAPIType := util.ToRESTFriendlyName(typeName(t))
 				gvk := gv.WithKind(clientgentypes.Kind(t.Name.Name))
 				rootDefs[openAPIType] = openAPISchema.Definitions[openAPIType]
@@ -75,6 +82,7 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 	}
 
 	// Trim the schema down to just the types needed by client-go for apply.
+	// 裁剪可缩小序列化/校验成本，也避免未引用的外部 schema 造成校验失败。
 	requiredDefs := make(map[string]spec.Schema)
 	for name, def := range rootDefs {
 		requiredDefs[name] = def
@@ -90,11 +98,14 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 	return &typeModels{models: models, gvkToOpenAPIType: gvkToOpenAPIType}, nil
 }
 
+// emptyModels 在无 schema 时使用，始终非 nil，简化调用方判空。
 var emptyModels = &typeModels{
 	models:           &utilproto.Definitions{},
 	gvkToOpenAPIType: map[clientgentypes.GroupVersionKind]string{},
 }
 
+// toValidatedModels 把 spec.Swagger 转成 kube-openapi 的模型格式。
+// 走 openapiv2.ParseDocument 是为了复用 Its 引用校验；代价是一次多余的 JSON 往返。
 func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
 	// openapi_v2.ParseDocument only accepts a []byte of the JSON or YAML file to be parsed.
 	// so we do an inefficient marshal back to json and then read it back in as yaml
@@ -119,11 +130,14 @@ func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
 
 // findReferenced recursively finds all schemas referenced from the given def.
 // toValidatedModels makes sure no references get missed.
+// 递归覆盖 OpenAPI schema 中所有可能嵌套 schema 的位置；漏掉任一分支都会导致
+// 裁剪后的文档出现悬空 $ref，从而在模型校验阶段报错。
 func findReferenced(def *spec.Schema, allSchemas, referencedOut map[string]spec.Schema) {
 	// follow $ref, if any
 	refPtr := def.Ref.GetPointer()
 	if refPtr != nil && !refPtr.IsEmpty() {
 		name := refPtr.String()
+		// 只处理本文件的 #/definitions/ 引用，外部引用保持原样。
 		if !strings.HasPrefix(name, "/definitions/") {
 			return
 		}
@@ -132,6 +146,7 @@ func findReferenced(def *spec.Schema, allSchemas, referencedOut map[string]spec.
 		if !ok {
 			panic(fmt.Sprintf("allSchemas schema is missing referenced type: %s", name))
 		}
+		// 已收录的引用不再下钻，既防环也避免重复工作。
 		if _, ok := referencedOut[name]; !ok {
 			referencedOut[name] = schema
 			findReferenced(&schema, allSchemas, referencedOut)

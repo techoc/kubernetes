@@ -15,6 +15,10 @@ limitations under the License.
 */
 
 // validation-gen is a tool for auto-generating Validation functions.
+//
+// 该工具把类型与字段上的声明式标记（+k8s:required、+k8s:minLength 等）翻译成
+// Go 校验函数，并生成注册代码。生成器只依赖标记，不解析手写校验逻辑，
+// 因此同一份 API 定义可以在不同版本、不同仓库中重复生成出等价代码。
 package main
 
 import (
@@ -52,6 +56,7 @@ func main() {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// --docs 只打印支持的标记文档后退出，不读取任何输入包。
 	if args.PrintDocs {
 		printDocs()
 		os.Exit(0)
@@ -61,7 +66,7 @@ func main() {
 		return GetTargets(context, args)
 	}
 
-	// Run it.
+	// 执行生成；输入包取自位置参数。
 	if err := gengo.Execute(
 		NameSystems(),
 		DefaultNameSystem(),
@@ -74,34 +79,33 @@ func main() {
 	klog.V(2).Info("Completed successfully.")
 }
 
+// Args 是 validation-gen 的命令行参数。
 type Args struct {
 	OutputFile   string
-	ReadOnlyPkgs []string // Always consider these as last-ditch possibilities for validations.
+	ReadOnlyPkgs []string // 始终作为校验函数的兜底来源考虑。
 	GoHeaderFile string
 	PrintDocs    bool
-	// TestOutputRoot, when non-empty, enables coverage test fixture
-	// generation. For each Kind with declared rules, emits a test directory
-	// at <TestOutputRoot>/<short-group>/<lowercase(kind)>/ containing one
-	// <TestOutputFilePrefix><version>_test.go per version plus a shared
-	// <TestOutputFilePrefix>main_test.go.
+	// TestOutputRoot 非空时启用覆盖率测试夹具生成：为每个声明了规则的 Kind
+	// 在 <TestOutputRoot>/<short-group>/<lowercase(kind)>/ 下生成每个版本一个
+	// <TestOutputFilePrefix><version>_test.go，外加共享的
+	// <TestOutputFilePrefix>main_test.go。
 	TestOutputRoot string
 
-	// TestOutputFilePrefix is prepended to every emitted test fixture
-	// filename. Empty by default; consumers that mark generated files via a
-	// linguist-generated gitattributes pattern (e.g. "zz_generated.") set
-	// this to that prefix.
+	// TestOutputFilePrefix 会加到每个测试夹具文件名前面。默认为空；
+	// 通过 linguist-generated gitattributes 模式（如 "zz_generated."）标记
+	// 生成文件的调用方应把它设为该前缀。
 	TestOutputFilePrefix string
 
-	// TestAllowlist, when non-empty, is the path to a YAML file of
-	// rule-level filters to exclude from fixture generation. Each entry has
-	// fields apiVersion, kind, path, errorType, origin (use "*" to wildcard
-	// kind/path/errorType/origin) plus a required reason.
+	// TestAllowlist 非空时是 YAML 文件的路径，内容为按规则级别的过滤项，
+	// 用于从夹具生成中排除某些规则。每项含 apiVersion、kind、path、
+	// errorType、origin 字段（用 "*" 通配 kind/path/errorType/origin），
+	// 以及必需的 reason。
 	TestAllowlist string
 
 	apidefinitions.LintArgs
 }
 
-// AddFlags add the generator flags to the flag set.
+// AddFlags 把生成器参数注册到 flag 集合上。
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputFile, "output-file", "generated.validations.go",
 		"the name of the file to be generated")
@@ -120,7 +124,9 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
+// Validate 校验参数。
+// 测试夹具相关参数只在 --test-output-root 生效时才有意义，
+// 单独指定多半是命令行拼写错误，因此直接报错而不是静默忽略。
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {
 		return fmt.Errorf("--output-file must be specified")
@@ -138,15 +144,16 @@ func (args *Args) Validate() error {
 	return nil
 }
 
+// printDocs 以 JSON 形式输出所有已注册声明式校验标记的文档。
 func printDocs() {
-	// We need a fake context to init the validator plugins.
+	// 需要一个假 context 来初始化校验器插件。
 	c := &generator.Context{
 		Namers:    namer.NameSystems{},
 		Universe:  types.Universe{},
 		FileTypes: map[string]generator.FileType{},
 	}
 
-	// Initialize all registered validators.
+	// 初始化所有已注册的校验器。
 	validator := validators.InitGlobalValidator(c, nil)
 
 	docs := validator.Docs()
@@ -154,7 +161,7 @@ func printDocs() {
 		d := &docs[i]
 		slices.Sort(d.Scopes)
 		if d.Usage == "" {
-			// Try to generate a usage string if none was provided.
+			// 未提供用法字符串时尝试自动生成。
 			usage := d.Tag
 			if len(d.Args) > 0 {
 				usage += "("
@@ -177,6 +184,7 @@ func printDocs() {
 			d.Usage = usage
 		}
 	}
+	// 按标记名排序，保证文档输出稳定、可 diff。
 	slices.SortFunc(docs, func(a, b validators.TagDoc) int {
 		return cmp.Compare(a.Tag, b.Tag)
 	})

@@ -22,10 +22,13 @@ import (
 
 // ValueFuzz recursively changes all basic type values in an object. Any kind of references will not
 // be touched, i.e. the addresses of slices, maps, pointers will stay unchanged.
+// 这是测试辅助：用就地修改来检测深拷贝是否存在别名（副本若与原对象共享底层数组则会被一并改掉）。
 func ValueFuzz(obj interface{}) {
 	valueFuzz(reflect.ValueOf(obj))
 }
 
+// valueFuzz 递归遍历值并修改可设置的标量。
+// 集合自身不重建（保持地址不变），只改其元素；nil 集合暂时跳过。
 func valueFuzz(obj reflect.Value) {
 	switch obj.Kind() {
 	case reflect.Array:
@@ -66,9 +69,11 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Func: // ignore, we don't have function types in our API
 	default:
+		// 不可设置的字段（如未导出字段、非寻址的 map 索引）无法修改，直接放弃。
 		if !obj.CanSet() {
 			return
 		}
+		// 用确定性的变换（+1、取反、*2+1）而非随机数，保证失败可复现。
 		switch obj.Kind() {
 		case reflect.String:
 			obj.SetString(obj.String() + "x")

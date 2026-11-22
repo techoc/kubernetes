@@ -23,6 +23,9 @@ import (
 	"k8s.io/code-generator/examples/apiserver/apis/example"
 )
 
+// TestConversion 验证 v1 ↔ internal 的转换在多种集合形态下可往返：
+// nil/空值、包含零值元素、以及所有字段都已设置。往返后与原对象 DeepEqual
+// 是生成转换函数必须保持的不变式，尤其用于确认 nil 与空集合不会互相漂移。
 func TestConversion(t *testing.T) {
 	testcases := []struct {
 		name string
@@ -67,6 +70,7 @@ func TestConversion(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 先深拷贝作为基准，避免被测转换意外修改输入导致断言失真。
 			original := tc.in.DeepCopy()
 
 			out := &example.ConversionCustomContainer{}

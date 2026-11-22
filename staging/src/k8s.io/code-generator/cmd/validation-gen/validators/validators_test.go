@@ -23,8 +23,12 @@ import (
 	"k8s.io/gengo/v2/codetags"
 )
 
+// TestTypeCheck 覆盖 TagDoc 与标签实参之间的类型检查。
+// 用例按三类输入组织：命名参数、位置参数、标签值；每组都验证必填/可选、
+// 类型不匹配和未知名参数等错误分支。
 func TestTypeCheck(t *testing.T) {
 
+	// mkt/mkta/mkd/mkda 是构造测试数据的简写，避免每个用例重复 struct 字面量。
 	mkt := func(args []codetags.Arg, valueType codetags.ValueType) codetags.Tag {
 		return codetags.Tag{
 			Args:      args,
@@ -203,6 +207,8 @@ func TestTypeCheck(t *testing.T) {
 		},
 	}
 
+	// wantErr 为空表示期望成功；非空则要求错误信息包含该子串，
+	// 这样既能断言失败，又不会把措辞变化变成脆弱的精确匹配。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := typeCheck(tt.tag, tt.doc)

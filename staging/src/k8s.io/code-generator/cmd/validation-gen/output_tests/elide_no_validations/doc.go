@@ -21,12 +21,17 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证“无校验时不产出空壳校验函数”的裁剪逻辑：
+// 未被链接（NotLinked）的类型不应进入生成结果，而字段/类型级校验混用时
+// 生成器需要沿 typedef 链正确下钻。
 package elidenovalidations
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// T1 是测试入口类型，内嵌 TypeMeta 以满足 TypesWithField=TypeMeta 的筛选条件。
 type T1 struct {
 	TypeMeta int
 

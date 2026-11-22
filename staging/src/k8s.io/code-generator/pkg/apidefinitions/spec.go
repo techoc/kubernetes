@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apidefinitions 统一描述各代码生成器的标签协议（激活标签、
+// 输入标签、取值模式与附加标签），并提供包识别与 lint 能力。
+// 将协议集中在此处，避免各生成器对同一标签做出不一致的解释。
 package apidefinitions
 
 import "k8s.io/apimachinery/pkg/util/sets"
@@ -73,6 +76,8 @@ const (
 	ConversionPeerList
 )
 
+// allKnownSpecs 是所有已知生成器协议的清单，供 lint 与标签集合构建使用。
+// 新增生成器时必须同步登记，否则其标签会被 known-tags lint 判为未知。
 var allKnownSpecs = []Spec{
 	Conversion, Defaulter, Validation, PrereleaseLifecycle,
 	Deepcopy, Register, OpenAPI, Protobuf,
@@ -158,6 +163,8 @@ var (
 	}
 )
 
+// allKnownTags 汇总所有生成器拥有的标签（激活、输入、附加），
+// 用于判断某个 +k8s:*-gen 标签是否属于已知协议。
 var allKnownTags = func() sets.Set[string] {
 	out := sets.New[string]()
 	for _, s := range allKnownSpecs {

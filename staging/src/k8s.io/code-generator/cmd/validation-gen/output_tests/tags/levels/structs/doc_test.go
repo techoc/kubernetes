@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestMixed 验证同一字段上普通校验与 alpha/beta 校验并存时，
+// 两类错误各自携带正确的稳定性等级；等级由错误匹配器分别校验。
 func TestMixed(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -68,9 +70,12 @@ func TestMixed(t *testing.T) {
 	})
 }
 
+// TestConditionalStruct 验证条件校验（ifEnabled/ifDisabled）与递归校验的等级标记：
+// 只有在 Opts 打开特性时才产生对应错误。
 func TestConditionalStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 特性开启且取值满足条件，应完全合法。
 	st.Value(&ConditionalStruct{
 		ConditionalField:     15,
 		ConditionalFieldBeta: 15,

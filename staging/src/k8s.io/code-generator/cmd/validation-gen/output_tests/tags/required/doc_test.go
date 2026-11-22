@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:required 对所有基础类型、指针、结构体指针、切片与 map
+// 的“必需”判定：零值、显式空值都视为缺失；非零值则通过 required，
+// 但仍触发 validateFalse 测试夹具的错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

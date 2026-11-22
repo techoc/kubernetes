@@ -22,4 +22,7 @@ limitations under the License.
 // +groupGoName=ThirdExample
 // +k8s:openapi-model-package=io.k8s.code-generator.examples.apiserver.apis.example3.io.v1
 
+// Package v1 是 example3.io 群组的版本化 API 包。
+// 该示例同时启用 deepcopy/defaulter/openapi/conversion，目录名与群组名不一致，
+// 由 +groupName 与 +groupGoName 分别声明外部群组名和 Go 标识符前缀。
 package v1

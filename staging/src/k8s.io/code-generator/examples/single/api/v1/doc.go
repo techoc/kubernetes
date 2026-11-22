@@ -18,4 +18,5 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=example.crd.code-generator.k8s.io
 
+// 这是只有一个 API 组的示例包：开启 deepcopy 与 defaulter 生成。
 package v1

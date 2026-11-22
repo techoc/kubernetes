@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestRequiredShortCircuit 验证 required 校验在子字段上的短路行为：
+// 子字段为 nil 时直接报 Required 并短路；opaqueType 会阻断 required 的继承，
+// 使子字段校验继续执行。
 func TestRequiredShortCircuit(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -106,6 +109,9 @@ func TestRequiredShortCircuit(t *testing.T) {
 	}
 }
 
+// TestImmutableShortCircuit 验证 immutable 在子字段上的短路行为：
+// 更新时值变化则报错并短路；创建时（无旧值）不校验 immutable，
+// opaqueType 同样阻断 immutable 的继承。
 func TestImmutableShortCircuit(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -204,6 +210,8 @@ func TestImmutableShortCircuit(t *testing.T) {
 	}
 }
 
+// TestMultipleShortCircuit 验证多个短路校验共存时的顺序与优先级：
+// 字段级 required 先于子字段校验；子字段 immutable 先于继承来的 required。
 func TestMultipleShortCircuit(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -280,6 +288,8 @@ func TestMultipleShortCircuit(t *testing.T) {
 	}
 }
 
+// TestOtherShortCircuits 逐一验证 optional/required/forbidden/update/maxItems/
+// maxProperties 在子字段上的短路语义：失败即短路，通过则继续执行子字段校验。
 func TestOtherShortCircuits(t *testing.T) {
 	tests := []struct {
 		name         string

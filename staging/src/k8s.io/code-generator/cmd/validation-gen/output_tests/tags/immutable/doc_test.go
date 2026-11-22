@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:immutable：值相同（包括指针指向的内容相同）时不报错，
+// 任一字段变化则每个被标记的字段各报一条 short-circuit 错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -39,6 +41,8 @@ func Test(t *testing.T) {
 		ImmutablePtrField:           ptr.To(ImmutableType("fff")),
 	}
 
+	// structA2 与 structA 内容相同但指针地址不同：不可变性必须按内容比较，
+	// 否则每次序列化/反序列化都会被误判为修改。
 	structA2 := structA // dup of A but with different pointer values
 	structA2.StringPtrField = ptr.To(*structA2.StringPtrField)
 	structA2.StructField.StringPtrField = ptr.To("BBB")
@@ -47,6 +51,7 @@ func Test(t *testing.T) {
 	structA2.NonComparableStructPtrField = ptr.To(*structA2.NonComparableStructPtrField)
 	structA2.ImmutablePtrField = ptr.To(*structA2.ImmutablePtrField)
 
+	// structB 所有字段都不同，用于验证每个 immutable 字段都会报错。
 	structB := Struct{
 		StringField:                 "uuu",
 		StringPtrField:              ptr.To("uuu"),

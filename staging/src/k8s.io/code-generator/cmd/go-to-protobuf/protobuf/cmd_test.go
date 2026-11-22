@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestImportOrder 验证 importOrder 的拓扑排序：被依赖的包先输出，
+// 存在环时必须报错而不是死循环或产生不确定顺序。
 func TestImportOrder(t *testing.T) {
 	testcases := []struct {
 		Name      string
@@ -34,11 +36,13 @@ func TestImportOrder(t *testing.T) {
 			Expect: []string{},
 		},
 		{
+			// 依赖链 apps -> extensions -> core -> meta，输出应反向。
 			Name:   "simple",
 			Input:  map[string][]string{"apps": {"core", "extensions", "meta"}, "extensions": {"core", "meta"}, "core": {"meta"}},
 			Expect: []string{"meta", "core", "extensions", "apps"},
 		},
 		{
+			// core 依赖 apps，而 apps 间接依赖 core，构成环。
 			Name:      "cycle",
 			Input:     map[string][]string{"apps": {"core", "extensions", "meta"}, "extensions": {"core", "meta"}, "core": {"meta", "apps"}},
 			ExpectErr: true,

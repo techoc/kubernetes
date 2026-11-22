@@ -23,6 +23,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestK8sExtendedResourceName 验证 k8s-extended-resource-name 格式校验：
+//   - 合法的 qualified name（域名前缀 + 路径段）通过；
+//   - 保留名/保留前缀（kubernetes.io、requests.example.com）以及缺少斜杠的值被拒绝；
+//   - 路径段或域名非法的值给出通用错误信息；
+//   - 旧值相同的非法值因 ratcheting 不再报错。
 func TestK8sExtendedResourceName(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

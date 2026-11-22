@@ -17,6 +17,9 @@ limitations under the License.
 */
 
 // Ignore this file to prevent zz_generated for this package
+//
+// outputtests 根包本身没有可生成类型，只是 go:generate 的挂载点：
+// ./... 会递归到所有子包，一次性重新生成全部测试夹具。
 
 //go:generate go run k8s.io/code-generator/cmd/validation-gen --output-file zz_generated.validations.go --go-header-file=../../../examples/hack/boilerplate.go.txt ./...
 package outputtests

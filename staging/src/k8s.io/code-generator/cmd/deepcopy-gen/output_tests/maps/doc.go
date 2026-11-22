@@ -16,9 +16,13 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// 这是一个测试包：覆盖 map 键值对中各种元素类型的 deepcopy 生成，
+// 生成的深拷贝结果再由 output_test 与反射深拷贝做对比。
 // This is a test package.
 package maps
 
+// Ttest 用 map[string]X 覆盖各值类型 X，确保生成器对内置类型、指针、
+// 嵌套 map/slice、结构体及其指针都能生成正确的深拷贝。
 type Ttest struct {
 	Byte map[string]byte
 	// Int8    map[string]int8 //TODO: int8 becomes byte in SnippetWriter

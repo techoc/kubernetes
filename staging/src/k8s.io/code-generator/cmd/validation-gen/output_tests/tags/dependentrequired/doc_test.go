@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestStruct 覆盖单向依赖的基本语义：只有触发字段已设置而依赖字段未设置时报错；
+// 以及基于“设置状态”而非值的 ratcheting。
 func TestStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -59,6 +61,7 @@ func TestStruct(t *testing.T) {
 		)
 }
 
+// TestMultiDependent 一个触发字段声明多个依赖：每个依赖独立报错。
 func TestMultiDependent(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -72,6 +75,7 @@ func TestMultiDependent(t *testing.T) {
 	)
 }
 
+// TestMultiTrigger 多个触发字段依赖同一字段：错误路径相同，由 origin 归并。
 func TestMultiTrigger(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -85,6 +89,7 @@ func TestMultiTrigger(t *testing.T) {
 	)
 }
 
+// TestAllKinds 覆盖“已设置”的判定：指针非 nil、slice/map 非空、内建类型非零值。
 func TestAllKinds(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

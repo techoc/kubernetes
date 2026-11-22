@@ -16,9 +16,11 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// This is a test package.
+// Package builtins 是 deepcopy-gen 的测试包，覆盖 Go 内建标量类型的深拷贝生成。
+// 生成结果与 expect.go 中的手写期望值逐字比对。
 package builtins
 
+// Ttest 汇集各类内建标量，用于验证生成器为值类型选择直接赋值而非递归拷贝。
 type Ttest struct {
 	Byte byte
 	// Int8    int8 // TODO: int8 becomes byte in SnippetWriter

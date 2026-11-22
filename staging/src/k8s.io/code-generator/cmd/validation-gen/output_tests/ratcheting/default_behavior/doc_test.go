@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_StructPrimitive 验证默认 ratcheting 行为：创建（无 OldValue）时报错，
+// 更新时值未变化则不报错。IntPtrField 每次都是新指针但值相同，用来确认比较按值而非按地址。
 func Test_StructPrimitive(t *testing.T) {
 	mkTest := func() *StructPrimitive {
 		return &StructPrimitive{
@@ -39,6 +41,9 @@ func Test_StructPrimitive(t *testing.T) {
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 }
 
+// Test_StructSlice 覆盖切片字段与 typedef 切片的错误路径归属：
+// 字段级错误落在 sliceField，元素级错误落在 sliceField[0]；
+// typedef 切片同时继承字段与类型两层的校验。
 func Test_StructSlice(t *testing.T) {
 	mkTest := func() *StructSlice {
 		return &StructSlice{
@@ -57,6 +62,7 @@ func Test_StructSlice(t *testing.T) {
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 }
 
+// Test_StructMap 覆盖 map key/value 的 typedef 校验以及 key 路径（[k]）的渲染。
 func Test_StructMap(t *testing.T) {
 	mkTest := func() *StructMap {
 		return &StructMap{
@@ -80,6 +86,8 @@ func Test_StructMap(t *testing.T) {
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 }
 
+// Test_StructStruct 对比可直接比较与非直接可比较结构体：
+// 后者含指针字段，ratcheting 走反射/语义比较，但错误路径必须一致。
 func Test_StructStruct(t *testing.T) {
 	mkTest := func() *StructStruct {
 		return &StructStruct{
@@ -117,6 +125,8 @@ func Test_StructStruct(t *testing.T) {
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 }
 
+// Test_StructEmbedded 验证内嵌结构体的字段提升：错误路径不含内嵌层名，
+// 直接以提升后的字段路径呈现，但嵌套结构体字段仍保留完整路径。
 func Test_StructEmbedded(t *testing.T) {
 	mkTest := func() *StructEmbedded {
 		return &StructEmbedded{
@@ -176,6 +186,7 @@ func Test_StructEmbedded(t *testing.T) {
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 }
 
+// Test_Mix 验证同类型内混合可比较/不可比较字段时，OldValue(nil) 仍按创建语义报告错误。
 func Test_Mix(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 	st.Value(&MixComparableStruct{

@@ -34,7 +34,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
+// publicPlural/allLowercasePlural 决定生成文件名与共享 informer 名（如 deployments）；
+// lowercaseSingular 用于 SharedInformerFactory 中按资源名生成访问器方法。
 func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	return namer.NameSystems{
 		"public":             namer.NewPublicNamer(0),
@@ -46,21 +48,22 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 }
 
-// lowercaseSingularNamer implements Namer
+// lowercaseSingularNamer 实现 Namer，输出全小写的类型名（单数）。
 type lowercaseSingularNamer struct{}
 
-// Name returns t's name in all lowercase.
+// Name 返回 t 的全小写名称。
 func (n *lowercaseSingularNamer) Name(t *types.Type) string {
 	return strings.ToLower(t.Name.Name)
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回按类型排序处理时使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
 
-// objectMetaForPackage returns the type of ObjectMeta used by package p.
+// objectMetaForPackage 返回包 p 中使用的 ObjectMeta 类型。
+// 若包内没有任何 genclient 类型，返回 nil；若存在 genclient 类型却找不到
+// ObjectMeta 字段，则报错——这说明输入不符合 informer 生成的预期结构。
 func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	generatingForPackage := false
 	for _, t := range p.Types {
@@ -80,14 +83,23 @@ func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	return nil, false, nil
 }
 
-// isInternal returns true if the tags for a member do not contain a json tag
+// isInternal 判断成员标签是否不含 json tag。
+// 内部版本类型没有 json 标签，据此区分 internal 与 external 版本，
+// 二者生成的 informer 输出目录与 client 包都不同。
 func isInternal(m types.Member) bool {
 	return !strings.Contains(m.Tags, "json")
 }
 
 const subdirForInternalInterfaces = "internalinterfaces"
 
-// GetTargets makes the client target definition.
+// GetTargets 构造 informer 生成目标。
+// 输出的目录布局（除 SingleDirectory 模式外）为：
+//
+//	<output>/internalversion/<group>/<version>/...  内部版本
+//	<output>/externalversions/<group>/<version>/... 外部版本
+//	<output>/{internal,external}versions/internalinterfaces/
+//
+// 外部与内部版本各自独立生成，互不混用 client 包。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, "", gengo.StdGeneratedBy)
 	if err != nil {
@@ -98,6 +110,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	internalVersionOutputPkg := args.OutputPkg
 	externalVersionOutputDir := args.OutputDir
 	externalVersionOutputPkg := args.OutputPkg
+	// SingleDirectory 模式把所有内容写在同一个包里，供测试或特殊场景使用。
 	if !args.SingleDirectory {
 		internalVersionOutputDir = filepath.Join(internalVersionOutputDir, "internalversion")
 		internalVersionOutputPkg = path.Join(internalVersionOutputPkg, "internalversion")
@@ -111,6 +124,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	}
 
 	var targetList []generator.Target
+	// typesForGroupVersion 供 generic.go 生成 SharedInformerFactory 的
+	// ForResource 映射，因此必须收集所有版本的类型，而不只是当前包。
 	typesForGroupVersion := make(map[clientgentypes.GroupVersion][]*types.Type)
 
 	externalGroupVersions := make(map[string]clientgentypes.GroupVersions)
@@ -132,13 +147,15 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			klog.Fatal(err)
 		}
 		if objectMeta == nil {
-			// no types in this package had genclient
+			// 该包中没有带 genclient 的类型。
 			continue
 		}
 
 		var gv clientgentypes.GroupVersion
 		var targetGroupVersions map[string]clientgentypes.GroupVersions
 
+		// 内部版本的路径形如 .../<group>，外部版本形如 .../<group>/<version>，
+		// 因此解析方式不同。
 		if internal {
 			lastSlash := strings.LastIndex(p.Path, "/")
 			if lastSlash == -1 {
@@ -155,9 +172,9 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		groupPackageName := gv.Group.NonEmpty()
 		gvPackage := path.Clean(p.Path)
 
-		// If there's a comment of the form "// +groupName=somegroup" or
-		// "// +groupName=somegroup.foo.bar.io", use the first field (somegroup) as the name of the
-		// group when generating.
+		// 若存在 "// +groupName=somegroup" 或
+		// "// +groupName=somegroup.foo.bar.io" 注释，则用其第一段
+		// （somegroup）作为生成时的 group 名。
 		override, ok, err := apidefinitions.GroupNameForPackage(p.Comments)
 		if err != nil {
 			klog.Fatalf("error resolving group name: %v", err)
@@ -166,8 +183,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			gv.Group = clientgentypes.Group(override)
 		}
 
-		// If there's a comment of the form "// +groupGoName=SomeUniqueShortName", use that as
-		// the Go group identifier in CamelCase. It defaults
+		// 若存在 "// +groupGoName=SomeUniqueShortName" 注释，用它作为
+		// CamelCase 的 Go group 标识符；否则从 group 名推导。
 		groupGoNames[groupPackageName] = namer.IC(strings.Split(gv.Group.NonEmpty(), ".")[0])
 		goName, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{"groupGoName"}, p.Comments)
 		if err != nil {
@@ -180,6 +197,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		var typesToGenerate []*types.Type
 		for _, t := range p.Types {
 			tags := util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...))
+			// informer 依赖 list/watch，缺少任一动词或显式 NoVerbs 的类型不能生成 informer。
 			if !tags.GenerateClient || tags.NoVerbs || !tags.HasVerb("list") || !tags.HasVerb("watch") {
 				continue
 			}
@@ -205,6 +223,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		groupVersionsEntry.Versions = append(groupVersionsEntry.Versions, clientgentypes.PackageVersion{Version: gv.Version, Package: gvPackage})
 		targetGroupVersions[groupPackageName] = groupVersionsEntry
 
+		// 按私有名排序，使同一 group 内各版本的类型处理顺序确定。
 		orderer := namer.Orderer{Namer: namer.NewPrivateNamer(0)}
 		typesToGenerate = orderer.OrderTypes(typesToGenerate)
 
@@ -225,6 +244,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		}
 	}
 
+	// 工厂与 group 接口只有在存在对应版本时才生成，避免产出无意义的空包。
 	if len(externalGroupVersions) != 0 {
 		targetList = append(targetList,
 			factoryInterfaceTarget(
@@ -258,6 +278,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	return targetList
 }
 
+// factoryTarget 生成 SharedInformerFactory 的两个文件：
+// factory.go（工厂结构体与版本访问器）和 generic.go（ForResource 等通用接口）。
 func factoryTarget(outputDirBase, outputPkgBase string, boilerplate []byte, groupGoNames, pluralExceptions map[string]string, groupVersions map[string]clientgentypes.GroupVersions, clientSetPackage string,
 	typesForGroupVersion map[clientgentypes.GroupVersion][]*types.Type) generator.Target {
 	return &generator.SimpleTarget{
@@ -295,6 +317,8 @@ func factoryTarget(outputDirBase, outputPkgBase string, boilerplate []byte, grou
 	}
 }
 
+// factoryInterfaceTarget 生成 internalinterfaces 包中的 SharedInformerFactory 接口，
+// 供 factory.go 与 generic.go 引用而无需依赖具体版本包。
 func factoryInterfaceTarget(outputDirBase, outputPkgBase string, boilerplate []byte, clientSetPackage string) generator.Target {
 	outputDir := filepath.Join(outputDirBase, subdirForInternalInterfaces)
 	outputPkg := path.Join(outputPkgBase, subdirForInternalInterfaces)
@@ -319,9 +343,11 @@ func factoryInterfaceTarget(outputDirBase, outputPkgBase string, boilerplate []b
 	}
 }
 
+// groupTarget 生成某个 group 的 interface.go，提供按版本获取 informer 的访问器。
 func groupTarget(outputDirBase, outputPackageBase string, groupVersions clientgentypes.GroupVersions, boilerplate []byte) generator.Target {
 	outputDir := filepath.Join(outputDirBase, groupVersions.PackageName)
 	outputPkg := path.Join(outputPackageBase, groupVersions.PackageName)
+	// group 名可能带域名后缀（如 apps.example.com），包名只取第一段。
 	groupPkgName := strings.Split(string(groupVersions.PackageName), ".")[0]
 
 	return &generator.SimpleTarget{
@@ -348,7 +374,10 @@ func groupTarget(outputDirBase, outputPackageBase string, groupVersions clientge
 	}
 }
 
+// versionTarget 生成某个 group/version 的 informer：interface.go 提供类型化
+// informer 访问器，并为每个类型生成一个独立文件（文件名取小写类型名）。
 func versionTarget(outputDirBase, outputPkgBase string, groupPkgName string, gv clientgentypes.GroupVersion, groupGoName string, boilerplate []byte, typesToGenerate []*types.Type, clientSetPackage, listersPackage string) generator.Target {
+	// 目录与包名统一使用小写版本号，与 client-go 的既有目录结构保持一致。
 	subdir := []string{groupPkgName, strings.ToLower(gv.Version.NonEmpty())}
 	outputDir := filepath.Join(outputDirBase, filepath.Join(subdir...))
 	outputPkg := path.Join(outputPkgBase, path.Join(subdir...))

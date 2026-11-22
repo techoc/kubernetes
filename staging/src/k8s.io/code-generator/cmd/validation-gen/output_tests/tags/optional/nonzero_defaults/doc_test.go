@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 optional 与非零 default 组合下的 requiredness：
+// 全零值输入对所有字段报 Required，即使字段声明为 optional；
+// 显式赋非零值即合法（指针指向零值也算已设置）。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

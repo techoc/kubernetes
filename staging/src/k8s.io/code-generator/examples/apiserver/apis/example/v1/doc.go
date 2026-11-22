@@ -21,4 +21,6 @@ limitations under the License.
 // +groupName=example.apiserver.code-generator.k8s.io
 // +k8s:openapi-model-package=io.k8s.code-generator.examples.apiserver.apis.example.v1
 
+// 这是 external（versioned）API 包示例：同时开启 openapi、deepcopy、defaulter、
+// conversion 生成，并指向 internal 包作为转换对端。
 package v1

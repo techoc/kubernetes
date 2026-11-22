@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:maximum 对所有整数宽度（含无符号与指针）的生成，
+// 以及 int typedef 上标记向字段的传递。
 package maximum
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

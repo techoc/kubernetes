@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestListMapItem 验证校验错误的 stability level 由标签来源决定：
+// 标准标签产生普通错误，alpha/beta 标签（或对应级别的校验声明）产生
+// 带级别标记的错误；两者叠加时取更高（更严格）的级别。
 func TestListMapItem(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

@@ -18,7 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package cohorts 是 validation-gen 的测试包，验证 cohort 与 ShortCircuit
+// 标志下校验函数的输出顺序：同一 cohort 的普通校验先于短路校验，
+// 且 cohort 之间按固定次序排列，保证生成结果可复现。
 // +k8s:validation-gen-nolint
 package cohorts
 

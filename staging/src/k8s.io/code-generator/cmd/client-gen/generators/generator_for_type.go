@@ -32,22 +32,25 @@ import (
 )
 
 // genClientForType produces a file for each top-level type.
+// 一个实例只服务一个类型（见 Filter），因此 typed client 的接口、实现和组级
+// 访问器能放在同一个文件里，且彼此引用无需跨文件解析。
 type genClientForType struct {
 	generator.GoGenerator
-	outputPackage             string // must be a Go import-path
-	inputPackage              string
-	clientsetPackage          string // must be a Go import-path
-	applyConfigurationPackage string // must be a Go import-path
-	group                     string
+	outputPackage             string // must be a Go import-path；生成代码所在包
+	inputPackage              string // API 类型所在包，用于推导 group/version
+	clientsetPackage          string // must be a Go import-path；scheme.ParameterCodec 的来源
+	applyConfigurationPackage string // must be a Go import-path；为空表示不生成 apply verb
+	group                     string // group 名，用于生成客户端类型前缀
 	version                   string
-	groupGoName               string
-	prefersProtobuf           bool
+	groupGoName               string // group 的 Go 标识符形式
+	prefersProtobuf           bool   // 该类型是否默认使用 protobuf 传输
 	typeToMatch               *types.Type
 	imports                   namer.ImportTracker
 }
 
 var _ generator.Generator = &genClientForType{}
 
+// titler 用于把 verb 名转成导出形式（首字母大写）。
 var titler = cases.Title(language.Und)
 
 // Filter ignores all but one type because we're making a single file per type.
@@ -55,12 +58,14 @@ func (g *genClientForType) Filter(c *generator.Context, t *types.Type) bool {
 	return t == g.typeToMatch
 }
 
+// Namers 注册 raw 命名系统，输出带导入限定的 Go 类型名。
 func (g *genClientForType) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 返回生成文件所需的导入行。
 func (g *genClientForType) Imports(c *generator.Context) (imports []string) {
 	return g.imports.ImportLines()
 }
@@ -68,6 +73,7 @@ func (g *genClientForType) Imports(c *generator.Context) (imports []string) {
 // Ideally, we'd like genStatus to return true if there is a subresource path
 // registered for "status" in the API server, but we do not have that
 // information, so genStatus returns true if the type has a status field.
+// 这是保守启发式：有 Status 字段且未声明 +genclient:noStatus 就生成 Status 相关 verb。
 func genStatus(t *types.Type) bool {
 	// Default to true if we have a Status member
 	hasStatus := false
@@ -81,6 +87,8 @@ func genStatus(t *types.Type) bool {
 }
 
 // GenerateType makes the body of a file implementing the individual typed client for type t.
+// 生成流程分三段：Getter 接口 → 接口方法集合 → 结构体/构造器；扩展 verb
+// 在接口与实现两处分别展开，必须使用相同的模板替换逻辑以保证签名一致。
 func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	generateApply := len(g.applyConfigurationPackage) > 0
 	defaultVerbTemplates := buildDefaultVerbTemplates(generateApply)
@@ -98,6 +106,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	_, typeGVString := util.ParsePathGroupVersion(g.inputPackage)
 	extendedMethods := []extendedInterfaceMethod{}
 	for _, e := range tags.Extensions {
+		// 没有 apply configuration 包时跳过 apply 扩展，否则会引用不存在的类型。
 		if e.HasVerb("apply") && !generateApply {
 			continue
 		}
@@ -106,6 +115,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 		inputGVString := typeGVString
 		// TODO: Extract this to some helper method as this code is copied into
 		// 2 other places.
+		// input/result 覆盖允许扩展方法引用其它 GV 的类型（如 Scale）。
 		if len(e.InputTypeOverride) > 0 {
 			if name, pkg := e.Input(); len(pkg) > 0 {
 				_, inputGVString = util.ParsePathGroupVersion(pkg)
@@ -123,6 +133,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 				resultType.Name.Name = e.ResultTypeOverride
 			}
 		}
+		// 复用默认 verb 模板的签名，只把方法名替换成扩展名；子资源用不同的
+		// 参数列表（多一个父资源名）。
 		var updatedVerbtemplate string
 		if _, exists := subresourceDefaultVerbTemplates[e.VerbType]; e.IsSubresource() && exists {
 			updatedVerbtemplate = e.VerbName + "(" + strings.TrimPrefix(subresourceDefaultVerbTemplates[e.VerbType], titler.String(e.VerbType)+"(")
@@ -145,11 +157,13 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 				"context":       c.Universe.Type(types.Name{Package: "context", Name: "Context"}),
 			},
 		}
+		// apply 扩展的入参是 apply configuration 指针，而不是 API 类型。
 		if e.HasVerb("apply") {
 			extendedMethod.args["inputApplyConfig"] = types.Ref(path.Join(g.applyConfigurationPackage, inputGVString), inputType.Name.Name+"ApplyConfiguration")
 		}
 		extendedMethods = append(extendedMethods, extendedMethod)
 	}
+	// m 是主模板参数表；后续扩展 verb 会就地覆写 inputType/resultType 等键。
 	m := map[string]interface{}{
 		"type":                      t,
 		"inputType":                 t,
@@ -192,6 +206,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 
 	if generateApply {
 		// Generated apply configuration type references required for generated Apply function
+		// apply configuration 与被生成代码位于同一 GV 子包下，因此需要重新解析链接串。
 		_, gvString := util.ParsePathGroupVersion(g.inputPackage)
 		m["inputApplyConfig"] = types.Ref(path.Join(g.applyConfigurationPackage, gvString), t.Name.Name+"ApplyConfiguration")
 	}
@@ -205,6 +220,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 
 	sw.Do(interfaceTemplate1, m)
 	if !tags.NoVerbs {
+		// 没有 Status 字段时，updateStatus/applyStatus 只能跳过，否则实现会引用不存在的子资源。
 		if !genStatus(t) {
 			tags.SkipVerbs = append(tags.SkipVerbs, "updateStatus")
 			tags.SkipVerbs = append(tags.SkipVerbs, "applyStatus")
@@ -222,6 +238,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	}
 	sw.Do(interfaceTemplate4, m)
 
+	// 结构体与构造器按“命名空间 × list × apply”三维组合选择模板；
+	// 位掩码索引配合下面的常量声明实现编译期枚举。
 	structNamespaced := namespaced
 	if tags.NonNamespaced {
 		structNamespaced = nonNamespaced
@@ -240,6 +258,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 		listableOrAppliable |= withList
 	}
 
+	// 只有存在 apply configuration 包且支持 apply verb 时才选择带 apply 的构造器，
+	// 否则会引用未生成的类型。
 	if tags.HasVerb("apply") && generateApply {
 		listableOrAppliable |= withApply
 	}
@@ -248,6 +268,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	sw.Do(newStruct[structNamespaced|listableOrAppliable], m)
 
 	// generate expansion methods
+	// 扩展方法逐个生成；m 是共享 map，每次循环覆写相关键，因此必须在同一轮内
+	// 生成所有 verb，避免不同扩展之间串值。
 	for _, e := range tags.Extensions {
 		if e.HasVerb("apply") && !generateApply {
 			continue
@@ -280,6 +302,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 			m["inputApplyConfig"] = types.Ref(path.Join(g.applyConfigurationPackage, inputGVString), inputType.Name.Name+"ApplyConfiguration")
 		}
 
+		// 每个 verb 有主资源/子资源两套模板；watch/delete 的子资源语义尚未定义，
+		// 因此 TODO 标注后仍统一使用主资源模板。
 		if e.HasVerb("get") {
 			if e.IsSubresource() {
 				sw.Do(getSubresourceTemplate, m)
@@ -339,6 +363,8 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	return sw.Error()
 }
 
+// generateInterface 按 util.SupportedVerbs 的固定顺序拼接接口方法。
+// 顺序固定是为了让生成结果可复现、diff 稳定，不能改成 map 迭代。
 func generateInterface(defaultVerbTemplates map[string]string, tags util.Tags) string {
 	// need an ordered list here to guarantee order of generated methods.
 	out := []string{}
@@ -350,6 +376,8 @@ func generateInterface(defaultVerbTemplates map[string]string, tags util.Tags) s
 	return strings.Join(out, "\n")
 }
 
+// buildSubresourceDefaultVerbTemplates 返回子资源 verb 的方法签名。
+// 子资源方法多一个父资源名字参数，用于定位 <name>/<subresource>。
 func buildSubresourceDefaultVerbTemplates(generateApply bool) map[string]string {
 	m := map[string]string{
 		"create": `Create(ctx $.context|raw$, $.type|private$Name string, $.inputType|private$ *$.inputType|raw$, opts $.CreateOptions|raw$) (*$.resultType|raw$, error)`,
@@ -363,6 +391,8 @@ func buildSubresourceDefaultVerbTemplates(generateApply bool) map[string]string 
 	return m
 }
 
+// buildDefaultVerbTemplates 返回主资源 verb 的方法签名。
+// apply/applyStatus 仅在 generateApply 为真时加入，且 apply* 使用 ApplyConfiguration 入参。
 func buildDefaultVerbTemplates(generateApply bool) map[string]string {
 	m := map[string]string{
 		"create": `Create(ctx $.context|raw$, $.inputType|private$ *$.inputType|raw$, opts $.CreateOptions|raw$) (*$.resultType|raw$, error)`,
@@ -385,6 +415,8 @@ ApplyStatus(ctx $.context|raw$, $.inputType|private$ *$.inputApplyConfig|raw$, o
 }
 
 // group client will implement this interface.
+// 组级 Getter 是 typed client 与具体类型 client 之间的桥梁：
+// 调用方通过 client.<Plural>(namespace) 拿到类型客户端。
 var getterComment = `
 // $.type|publicPlural$Getter has a method to return a $.type|public$Interface.
 // A group's client should implement this interface.`
@@ -438,6 +470,8 @@ const (
 
 // struct declarations
 // Namespacedness does not matter
+// structType 用位掩码索引选择实现：Client / ClientWithList / ClientWithApply /
+// ClientWithListAndApply 分别对应不同的能力组合，避免生成大量重复样板。
 var structType = []string{
 	noList | noApply: `
 	// $.type|privatePlural$ implements $.type|public$Interface
@@ -467,6 +501,7 @@ var structType = []string{
 
 // Constructors for the struct, in all variants
 // Namespacedness matters
+// 构造器按“是否命名空间 + 能力位”索引；非命名空间变体把 namespace 参数替换为 ""。
 var newStruct = []string{
 	namespaced | noList | noApply: `
 	// new$.type|publicPlural$ returns a $.type|publicPlural$
@@ -786,6 +821,8 @@ func (c *$.type|privatePlural$) $.verb$(ctx $.context|raw$, name string, pt $.Pa
 }
 `
 
+// applyTemplate 生成 server-side apply 请求。必须在客户端校验非空配置与 Name，
+// 因为 apply 请求以 Name 构造 URL，缺失时服务端错误不够直观。
 var applyTemplate = `
 // $.verb$ takes the given apply declarative configuration, applies it and returns the applied $.resultType|private$.
 func (c *$.type|privatePlural$) $.verb$(ctx $.context|raw$, $.inputType|private$ *$.inputApplyConfig|raw$, opts $.ApplyOptions|raw$) (result *$.resultType|raw$, err error) {
@@ -814,6 +851,7 @@ func (c *$.type|privatePlural$) $.verb$(ctx $.context|raw$, $.inputType|private$
 }
 `
 
+// applySubresourceTemplate 与 applyTemplate 类似，但父资源名来自方法参数。
 var applySubresourceTemplate = `
 // $.verb$ takes top resource name and the apply declarative configuration for $.subresourcePath$,
 // applies it and returns the applied $.resultType|private$, and an error, if there is any.

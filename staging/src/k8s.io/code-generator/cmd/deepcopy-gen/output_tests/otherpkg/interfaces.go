@@ -16,10 +16,12 @@ limitations under the License.
 
 package otherpkg
 
+// Object 模拟 runtime.Object 的最小接口，用于跨包接口 deepcopy 测试。
 type Object interface {
 	DeepCopyObject() Object
 }
 
+// List 模拟列表对象的复制接口，用于验证跨包生成的调用目标。
 type List interface {
 	DeepCopyList() List
 }

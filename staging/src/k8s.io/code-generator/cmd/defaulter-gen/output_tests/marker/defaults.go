@@ -20,11 +20,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 模拟手写 defaulter 的注册入口。生成代码只引用
+// SetObjectDefaults_* 包装函数，真正注册进 scheme 需要这里显式挂载，
+// 因此测试也用它验证生成代码与手写注册的衔接。
+//
 //nolint:unused
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_DefaultedWithFunction 是被 defaulter-gen 识别的手写默认值函数，
+// 命名必须严格为 SetDefaults_<Type> 才会被生成的 SetObjectDefaults_<Type> 调用。
 func SetDefaults_DefaultedWithFunction(obj *DefaultedWithFunction) {
 	if obj.S1 == "" {
 		obj.S1 = "default_function"

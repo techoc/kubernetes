@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 zeroOrOneOfMember(memberName:...)：自定义错误中引用的成员名，
+// 应使用标签指定的名字而非 Go 字段名；非 union 字段不参与约束。
 package custommembers
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

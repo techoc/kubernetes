@@ -22,6 +22,8 @@ import (
 	field "k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证同一结构体中多个 zeroOrOneOf 组互不影响：
+// 每组允许 0 或 1 个成员，超过 1 个报 “must specify at most one of”。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

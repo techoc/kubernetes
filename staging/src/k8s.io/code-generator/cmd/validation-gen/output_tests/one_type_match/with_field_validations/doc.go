@@ -18,7 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package withfieldvalidations 是 validation-gen 的测试包：只有带 TypeMeta
+// 字段的类型才会被选中（TypesWithField=TypeMeta），用于验证字段级校验
+// 如何被内联到类型图中，以及未被引用的类型（T4/T5/E3/E4）不产生代码。
 // +k8s:validation-gen-nolint
 package withfieldvalidations
 

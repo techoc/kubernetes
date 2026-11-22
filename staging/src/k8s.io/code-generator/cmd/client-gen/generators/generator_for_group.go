@@ -27,7 +27,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// genGroup produces a file for a group client, e.g. ExtensionsClient for the extension group.
+// genGroup 为一个 group client 生成文件，例如 extension group 的 ExtensionsClient。
 type genGroup struct {
 	generator.GoGenerator
 	outputPackage string
@@ -46,7 +46,8 @@ type genGroup struct {
 
 var _ generator.Generator = &genGroup{}
 
-// We only want to call GenerateType() once per group.
+// Filter 保证每个 group 只调用一次 GenerateType()：
+// 一个 group 生成一个文件，与 group 内的类型数量无关。
 func (g *genGroup) Filter(c *generator.Context, t *types.Type) bool {
 	if !g.called {
 		g.called = true
@@ -55,21 +56,24 @@ func (g *genGroup) Filter(c *generator.Context, t *types.Type) bool {
 	return false
 }
 
+// Namers 以输出包为基准注册 "raw" 命名系统，用于正确限定引用类型。
 func (g *genGroup) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
 }
 
+// Imports 返回该 group 文件所需的全部导入。
 func (g *genGroup) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	return
 }
 
+// GenerateType 渲染 group client 的全部模板片段。
 func (g *genGroup) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
-	// allow user to define a group name that's different from the one parsed from the directory.
+	// 允许用户通过 doc.go 标签覆盖从目录名解析出的 group 名。
 	p := c.Universe.Package(g.inputPackage)
 	groupName := g.group
 	override, ok, err := apidefinitions.GroupNameForPackage(p.Comments)
@@ -80,10 +84,12 @@ func (g *genGroup) GenerateType(c *generator.Context, t *types.Type, w io.Writer
 		groupName = override
 	}
 
+	// 无 group 名（如 core 组）时 API 路径退化为 "/api"。
 	apiPath := `"` + g.apiPath + `"`
 	if groupName == "" {
 		apiPath = `"/api"`
 	}
+	// scheme 包与 clientset 同源，用于默认版本的协商序列化。
 	schemePackage := path.Join(g.clientsetPackage, "scheme")
 	m := map[string]interface{}{
 		"version":                            g.version,
@@ -119,6 +125,7 @@ func (g *genGroup) GenerateType(c *generator.Context, t *types.Type, w io.Writer
 			"GroupGoName": g.groupGoName,
 			"Version":     namer.IC(g.version),
 		}
+		// namespaced 与 cluster-scoped 类型的 getter 签名不同，必须按标签分派。
 		if tags.NonNamespaced {
 			sw.Do(getterImplNonNamespaced, wrapper)
 		} else {
@@ -129,6 +136,7 @@ func (g *genGroup) GenerateType(c *generator.Context, t *types.Type, w io.Writer
 	sw.Do(newClientForConfigAndClientTemplate, m)
 	sw.Do(newClientForConfigOrDieTemplate, m)
 	sw.Do(newClientForRESTClientTemplate, m)
+	// 内部版本（version == ""）需要从 scheme 推导组版本，外部版本则直接使用 SchemeGroupVersion。
 	if g.version == "" {
 		sw.Do(setInternalVersionClientDefaultsTemplate, m)
 	} else {
@@ -139,6 +147,7 @@ func (g *genGroup) GenerateType(c *generator.Context, t *types.Type, w io.Writer
 	return sw.Error()
 }
 
+// groupInterfaceTemplate 定义 group 级接口：暴露 RESTClient 及每个类型的 getter。
 var groupInterfaceTemplate = `
 type $.GroupGoName$$.Version$Interface interface {
     RESTClient() $.restRESTClientInterface|raw$
@@ -147,6 +156,7 @@ type $.GroupGoName$$.Version$Interface interface {
 }
 `
 
+// groupClientTemplate 定义 group client 结构体，仅持有一个 RESTClient。
 var groupClientTemplate = `
 // $.GroupGoName$$.Version$Client is used to interact with features provided by the $.groupName$ group.
 type $.GroupGoName$$.Version$Client struct {
@@ -154,18 +164,21 @@ type $.GroupGoName$$.Version$Client struct {
 }
 `
 
+// getterImplNamespaced 生成带 namespace 参数的 getter（namespaced 资源）。
 var getterImplNamespaced = `
 func (c *$.GroupGoName$$.Version$Client) $.type|publicPlural$(namespace string) $.type|public$Interface {
 	return new$.type|publicPlural$(c, namespace)
 }
 `
 
+// getterImplNonNamespaced 生成无参 getter（cluster-scoped 资源）。
 var getterImplNonNamespaced = `
 func (c *$.GroupGoName$$.Version$Client) $.type|publicPlural$() $.type|public$Interface {
 	return new$.type|publicPlural$(c)
 }
 `
 
+// newClientForConfigTemplate 生成 NewForConfig：先补齐默认值再构造共享的 httpClient。
 var newClientForConfigTemplate = `
 // NewForConfig creates a new $.GroupGoName$$.Version$Client for the given config.
 // NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
@@ -181,6 +194,7 @@ func NewForConfig(c *$.restConfig|raw$) (*$.GroupGoName$$.Version$Client, error)
 }
 `
 
+// newClientForConfigAndClientTemplate 生成 NewForConfigAndClient：调用方提供的 http client 优先。
 var newClientForConfigAndClientTemplate = `
 // NewForConfigAndClient creates a new $.GroupGoName$$.Version$Client for the given config and http client.
 // Note the http client provided takes precedence over the configured transport values.
@@ -195,6 +209,7 @@ func NewForConfigAndClient(c *$.restConfig|raw$, h *$.httpClient|raw$) (*$.Group
 }
 `
 
+// newClientForConfigOrDieTemplate 生成 NewForConfigOrDie：配置错误时 panic。
 var newClientForConfigOrDieTemplate = `
 // NewForConfigOrDie creates a new $.GroupGoName$$.Version$Client for the given config and
 // panics if there is an error in the config.
@@ -207,6 +222,7 @@ func NewForConfigOrDie(c *$.restConfig|raw$) *$.GroupGoName$$.Version$Client {
 }
 `
 
+// getRESTClient 生成 RESTClient() 访问器；对 nil receiver 返回 nil，避免调用方崩溃。
 var getRESTClient = `
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
@@ -218,6 +234,7 @@ func (c *$.GroupGoName$$.Version$Client) RESTClient() $.restRESTClientInterface|
 }
 `
 
+// newClientForRESTClientTemplate 生成 New：用现成 RESTClient 直接包装。
 var newClientForRESTClientTemplate = `
 // New creates a new $.GroupGoName$$.Version$Client for the given RESTClient.
 func New(c $.restRESTClientInterface|raw$) *$.GroupGoName$$.Version$Client {
@@ -225,6 +242,8 @@ func New(c $.restRESTClientInterface|raw$) *$.GroupGoName$$.Version$Client {
 }
 `
 
+// setInternalVersionClientDefaultsTemplate 为内部版本生成 setConfigDefaults：
+// 组版本取自 scheme 中该 group 的优先版本，序列化器则保留转换能力。
 var setInternalVersionClientDefaultsTemplate = `
 func setConfigDefaults(config *$.restConfig|raw$) {
 	config.APIPath = $.apiPath$
@@ -246,6 +265,8 @@ func setConfigDefaults(config *$.restConfig|raw$) {
 }
 `
 
+// setClientDefaultsTemplate 为外部版本生成 setConfigDefaults：
+// 使用包内 SchemeGroupVersion，并通过 WithoutConversion() 关闭转换。
 var setClientDefaultsTemplate = `
 func setConfigDefaults(config *$.restConfig|raw$) {
 	gv := $.SchemeGroupVersion|raw$

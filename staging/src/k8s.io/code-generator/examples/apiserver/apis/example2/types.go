@@ -23,6 +23,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +genclient:nonNamespaced
 //
 // TestType is a top-level type. A client is created for it.
+// TestType 是 example2 组的顶层类型；nonNamespaced 使其成为集群级资源。
 type TestType struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -33,6 +34,7 @@ type TestType struct {
 
 // TestTypeList is a top-level list type. The client methods for lists are automatically created.
 // You are not supposed to create a separated client for this one.
+// TestTypeList 是 example2 组的列表类型。
 type TestTypeList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
@@ -40,6 +42,7 @@ type TestTypeList struct {
 	Items []TestType
 }
 
+// TestTypeStatus 是 TestType 的状态部分。
 type TestTypeStatus struct {
 	Blah string
 }

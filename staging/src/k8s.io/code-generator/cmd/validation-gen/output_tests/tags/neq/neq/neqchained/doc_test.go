@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 +k8s:neq 链式作用于结构体、切片、map key/value 与类型定义时
+// 的错误路径，以及旧值相同情况下的 ratcheting。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法取值（不在禁止集合中）以及空集合/未设置都应通过。
 	st.Value(&Struct{
 		StructField:          InnerStruct{StringField: "allowed"},
 		StructPtrField:       &InnerStruct{StringField: "valid"},
@@ -47,6 +50,7 @@ func Test(t *testing.T) {
 	}).ExpectValid()
 
 	// Test invalid values trigger all expected validation errors
+	// 每个被禁止的位置都应独立报错，索引/键路径用于精确定位。
 	invalidStruct := &Struct{
 		StructField:          InnerStruct{StringField: "disallowed-subfield"},
 		StructPtrField:       &InnerStruct{StringField: "disallowed-subfield-ptr"},

@@ -17,6 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 immutable 标签对可比较类型（字符串、指针、可比较
+// 结构体）与不可比较类型（slice、map、含 slice 的结构体）都能生成正确的
+// 不可变校验。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package immutable
@@ -25,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 同时覆盖字段级 immutable 与类型级 immutable（ImmutableType）。
 type Struct struct {
 	TypeMeta int
 
@@ -57,14 +61,17 @@ type Struct struct {
 	ImmutablePtrField *ImmutableType `json:"immutablePtrField"`
 }
 
+// ComparableStruct 只含可直接比较的字段，immutable 校验可直接用 ==。
 type ComparableStruct struct {
 	StringField    string  `json:"stringField"`
 	StringPtrField *string `json:"stringPtrField"`
 }
 
+// NonComparableStruct 含 slice，必须走语义深比较。
 type NonComparableStruct struct {
 	SliceField []string `json:"sliceField"`
 }
 
 // +k8s:immutable
+// ImmutableType 在类型级声明不可变，任何引用它的字段都继承该校验。
 type ImmutableType string

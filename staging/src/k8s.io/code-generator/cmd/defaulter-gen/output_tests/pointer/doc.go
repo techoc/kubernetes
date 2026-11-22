@@ -16,5 +16,7 @@ limitations under the License.
 
 // +k8s:defaulter-gen=TypeMeta
 
+// 这是一个测试包：验证当类型内嵌 TypeMeta 时，defaulter-gen 会为包含
+// TypeMeta 字段的类型生成默认值函数。
 // This is a test package.
 package pointer

@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// Test 验证 +k8s:eachVal 对 typedef 切片的传播：
+// 空值与空切片合法；非空时每个元素都同时收到类型级与字段级错误，
+// 错误路径按元素下标渲染，如 listField[0]。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

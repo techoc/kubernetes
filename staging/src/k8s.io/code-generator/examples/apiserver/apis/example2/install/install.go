@@ -16,6 +16,7 @@ limitations under the License.
 
 // Package install installs the experimental API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+// 依次注册内部版本与 v1 版本，并设置版本优先级，使 v1 成为首选版本。
 package install
 
 import (

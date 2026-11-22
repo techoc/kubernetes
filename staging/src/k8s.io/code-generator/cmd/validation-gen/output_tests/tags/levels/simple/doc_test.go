@@ -23,9 +23,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAlpha 验证 alpha 级别的校验错误携带 alpha 稳定性等级，
+// 覆盖 minimum/maxLength/maxItems/format/immutable 等规则。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全部合法值，不应有任何错误。
 	st.Value(&Struct{
 		IntField:           10,
 		StringField:        "abc",
@@ -40,6 +43,7 @@ func TestAlpha(t *testing.T) {
 	}).ExpectValid()
 
 	// Test failures marked as alpha
+	// 设置 OldValue 以让 immutable 规则感知“值发生了变化”。
 	st.Value(&Struct{
 		IntField:           5,
 		StringField:        "too-long",
@@ -63,9 +67,11 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 与 TestAlpha 对称，验证 beta 级别的校验错误携带 beta 稳定性等级。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全部合法值，不应有任何错误。
 	st.Value(&Struct{
 		IntField:           10,
 		StringField:        "abc",
@@ -103,9 +109,12 @@ func TestBeta(t *testing.T) {
 	})
 }
 
+// TestSpecialValidationStruct 验证特殊规则（neq、forbidden、update、validateFalse）
+// 的 alpha/beta 等级标记，update 规则需要 OldValue 才能触发。
 func TestSpecialValidationStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法值：neq 字段不等于 5，且 update 字段未变化。
 	st.Value(&SpecialValidationStruct{
 		NEQField:     10,
 		NEQFieldBeta: 10,

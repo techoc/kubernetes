@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package codegenerator 是 k8s.io/code-generator 模块的模块级包。
+// 除 tools.go 中的工具依赖导入外，它不包含可执行代码；各个生成器位于 cmd/ 子目录。
 package codegenerator

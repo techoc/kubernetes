@@ -22,9 +22,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 shallow subfield 校验只作用于字段的直接子字段，
+// 不会递归进入更深层结构；同一子字段上的多条 subfield 校验会全部保留。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// StructField 与 StructPtrField 应产生完全对称的错误集合，
+	// 指针只是访问路径不同，不应影响子字段校验结果。
 	st.Value(&Struct{
 		StructField: OtherStruct{
 			StringField:  "",

@@ -30,6 +30,9 @@ import (
 	clientgentypes "k8s.io/code-generator/cmd/client-gen/types"
 )
 
+// TargetForGroup 返回某个 group/version 的 fake typed client 生成目标。
+// 输出目录必须与真实 typed client 的目录结构镜像（typed/<group>/<version>/fake），
+// 否则 fake 包无法以相同导入路径替换真实实现。
 func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clientsetDir, clientsetPkg string, groupPkgName string, groupGoName string, inputPkg string, applyBuilderPackage string, boilerplate []byte) generator.Target {
 	// TODO: should make this a function, called by here and in client-generator.go
 	subdir := []string{"typed", strings.ToLower(groupPkgName), strings.ToLower(gv.Version.NonEmpty())}
@@ -52,6 +55,7 @@ func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 			}
 			// Since we want a file per type that we generate a client for, we
 			// have to provide a function for this.
+			// 每个类型一个文件，文件名取 private 命名（首字母小写），便于按类型定位。
 			for _, t := range typeList {
 				generators = append(generators, &genFakeForType{
 					GoGenerator: generator.GoGenerator{
@@ -68,6 +72,7 @@ func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 				})
 			}
 
+			// 组级 fake client 汇总该组下所有类型的 fake 实现。
 			generators = append(generators, &genFakeForGroup{
 				GoGenerator: generator.GoGenerator{
 					OutputFilename: "fake_" + groupPkgName + "_client.go",
@@ -87,6 +92,9 @@ func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 	}
 }
 
+// TargetForClientset 返回 fake clientset 聚合包的生成目标。
+// 与真实 clientset 不同，fake 包只需要 clientset 与 register 两个文件：
+// 类型级 fake 已由 TargetForGroup 生成在各自的子包中。
 func TargetForClientset(args *args.Args, clientsetDir, clientsetPkg string, applyConfigurationPkg string, groupGoNames map[clientgentypes.GroupVersion]string, boilerplate []byte) generator.Target {
 	return &generator.SimpleTarget{
 		// TODO: we'll generate fake clientset for different release in the future.

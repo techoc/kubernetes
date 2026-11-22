@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 optional 的零值语义：带 default=0 的值类型字段仍是 optional，
+// 而指针字段的 nil 被视为“未设置”，因此必需（required）报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -32,11 +34,15 @@ func Test(t *testing.T) {
 		// "stringField": optional value fields with zero defaults are just docs
 		// "intField": optional value fields with zero defaults are just docs
 		// "boolField": optional value fields with zero defaults are just docs
+		//
+		// 值类型的零值可被 default=0 覆盖，因此不算缺失；
+		// 指针为 nil 时无法区分“零值”和“未设置”，必须显式赋值。
 		field.Required(field.NewPath("stringPtrField"), ""),
 		field.Required(field.NewPath("intPtrField"), ""),
 		field.Required(field.NewPath("boolPtrField"), ""),
 	})
 
+	// 全部字段显式赋值（包括指针指向零值），整体合法。
 	st.Value(&Struct{
 		StringField:    "abc",
 		StringPtrField: ptr.To(""),

@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestAtomicSlice 验证原子切片上 eachVal 的稳定性等级：
+// alpha/beta 无论包装 eachVal 还是包装内部校验，产生的错误都应带上对应等级。
 func TestAtomicSlice(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

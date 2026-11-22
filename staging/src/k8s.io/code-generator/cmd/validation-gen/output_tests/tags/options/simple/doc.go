@@ -19,10 +19,14 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包是 ifEnabled/ifDisabled 的基础用例：单个选项、多个选项混合，
+// 以及作用在 slice 别名字段上的开关。
 package simple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
+// MySlice 用于验证选项开关作用在 slice 别名类型字段上的行为。
 type MySlice []string
 
 var localSchemeBuilder = testscheme.New()

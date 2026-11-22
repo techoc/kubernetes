@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package args 定义 lister-gen 的命令行参数。
+// 输出目录与输出 import 路径必须成对提供，否则生成结果无法确定
+// 文件落点与包引用。
 package args
 
 import (
@@ -32,6 +35,9 @@ type Args struct {
 
 	// PluralExceptions specify list of exceptions used when pluralizing certain types.
 	// For example 'Endpoints:Endpoints', otherwise the pluralizer will generate 'Endpointes'.
+	//
+	// 复数例外同时影响生成的 lister 方法名，必须与 client-gen 传入的一致，
+	// 否则 lister 与 client 的资源名会对不上。
 	PluralExceptions []string
 
 	apidefinitions.LintArgs
@@ -56,6 +62,8 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 }
 
 // Validate checks the given arguments.
+//
+// 校验失败直接返回错误而不是 panic，便于 main 统一打印可操作的提示。
 func (args *Args) Validate() error {
 	if len(args.OutputDir) == 0 {
 		return fmt.Errorf("--output-dir must be specified")

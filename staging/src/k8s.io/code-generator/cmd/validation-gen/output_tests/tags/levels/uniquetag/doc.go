@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// uniquetag 验证 +k8s:unique 与 alpha/beta 级别组合时的生成与错误标记。
+//
 // +k8s:validation-gen-nolint
 package uniquetag
 

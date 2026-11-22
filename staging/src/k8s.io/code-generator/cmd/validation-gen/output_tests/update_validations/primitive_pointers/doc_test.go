@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 immutable 校验比较的是指针指向的值而非指针地址：
+// 两个内容相同但地址不同的指针应视为未修改。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -34,6 +36,8 @@ func Test(t *testing.T) {
 	}
 
 	// Same data, different pointers
+	//
+	// 深比较避免误报：immutable 语义针对值，不针对内存地址。
 	structA2 := Struct{
 		SP: ptr.To("zero"),
 		IP: ptr.To(0),
@@ -52,6 +56,7 @@ func Test(t *testing.T) {
 
 	st.Value(&structA1).OldValue(&structA2).ExpectValid()
 
+	// 四个字段都变化时各自独立报 immutable 错误。
 	st.Value(&structA1).OldValue(&structB).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("sp"), nil, "").WithOrigin("immutable"),
 		field.Invalid(field.NewPath("ip"), nil, "").WithOrigin("immutable"),

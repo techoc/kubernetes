@@ -24,13 +24,20 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 minLength 对值、指针、typedef（默认无校验与类型自带校验）
+// 以及 string 别名的生成差异，并覆盖长度边界和 ratcheting。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值字符串长度为 0；所有字段都是 optional 或 minLength 允许 0，
+	// 因此空对象合法。
 	st.Value(&Struct{
 		// All zero values
 	}).ExpectValid()
 
+	// 所有带 minLength 的字段都只放 1 个字符，低于阈值。
+	// min2 与 min10 两组分别验证不同阈值，typedef 用来确认校验来自字段
+	// 标签还是类型标签。
 	st.Value(&Struct{
 		Min2Field:                          strings.Repeat("x", 1),
 		Min2PtrField:                       ptr.To(strings.Repeat("x", 1)),
@@ -63,6 +70,7 @@ func Test(t *testing.T) {
 		field.TooShort(field.NewPath("min2UnvalidatedStringAliasPtrField"), "x", 2),
 	})
 
+	// min2 组仍为 1 字符、min10 组提升到 9 字符，仍全部低于各自阈值。
 	st.Value(&Struct{
 		Min2Field:                          strings.Repeat("x", 1),
 		Min2PtrField:                       ptr.To(strings.Repeat("x", 1)),
@@ -95,6 +103,7 @@ func Test(t *testing.T) {
 		field.TooShort(field.NewPath("min2UnvalidatedStringAliasPtrField"), "x", 2),
 	})
 
+	// 全部取恰好达标的长度（min2 取 2，min10 取 10），应当全部通过。
 	st.Value(&Struct{
 		Min2Field:                          strings.Repeat("x", 2),
 		Min2PtrField:                       ptr.To(strings.Repeat("x", 2)),
@@ -111,6 +120,7 @@ func Test(t *testing.T) {
 		Min2UnvalidatedStringAliasPtrField: ptr.To(strings.Repeat("x", 2)),
 	}).ExpectValid()
 
+	// 超过阈值（3 > 2，11 > 10）同样合法，且 string 别名不受类型级校验影响。
 	testVal := &Struct{
 		Min2Field:                          strings.Repeat("x", 3),
 		Min2PtrField:                       ptr.To(strings.Repeat("x", 3)),
@@ -130,6 +140,9 @@ func Test(t *testing.T) {
 	st.Value(testVal).ExpectValid()
 
 	// Test validation ratcheting
+	//
+	// 新旧值相同（或旧值同样短）时跳过校验；这里旧值均不满足 minLength，
+	// 但字段未被改动，因此整体应放行。
 	st.Value(&Struct{
 		Min2Field:                       strings.Repeat("x", 2),
 		Min2PtrField:                    ptr.To(strings.Repeat("x", 2)),

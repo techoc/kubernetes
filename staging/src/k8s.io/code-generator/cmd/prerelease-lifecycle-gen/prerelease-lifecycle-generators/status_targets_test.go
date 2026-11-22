@@ -27,6 +27,8 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// TestGetTargets 验证 +k8s:prerelease-lifecycle-gen 的包激活/退出语义，
+// 以及与其他生成器标签共存时不会误判或报错。
 func TestGetTargets(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -48,6 +50,7 @@ func TestGetTargets(t *testing.T) {
 		},
 		{
 			name: "sole =false opts out",
+			// 显式 =false 且没有其他值时必须关闭生成。
 			pkgs: map[string]*types.Package{
 				"example.com/api/v1": {
 					Path:     "example.com/api/v1",
@@ -60,6 +63,7 @@ func TestGetTargets(t *testing.T) {
 		},
 		{
 			name: "no relevant tag is skipped",
+			// 只有无关标签时不应激活，也不应报错。
 			pkgs: map[string]*types.Package{
 				"example.com/api/v1": {
 					Path:     "example.com/api/v1",
@@ -104,6 +108,7 @@ func TestGetTargets(t *testing.T) {
 		},
 		{
 			name: "mix of all cases",
+			// 混合输入用于确认每个包独立判定，互不影响。
 			pkgs: map[string]*types.Package{
 				"example.com/enabled/v1": {
 					Path:     "example.com/enabled/v1",
@@ -152,6 +157,7 @@ func TestGetTargets(t *testing.T) {
 
 			got := GetTargets(ctx, a)
 
+			// 只比较包路径；排序后再 diff，避免 target 构造顺序影响断言。
 			var gotPkgs []string
 			for _, tgt := range got {
 				gotPkgs = append(gotPkgs, tgt.Path())

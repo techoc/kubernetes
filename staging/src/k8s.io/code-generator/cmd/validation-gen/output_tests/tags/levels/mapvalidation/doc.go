@@ -18,12 +18,16 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+//
+// 本包验证稳定性级别前缀（alpha/beta）可以加在 eachVal/eachKey 外层，
+// 也可以加在内层校验上，两种写法的生成结果应等价。
 package mapvalidation
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// MapValidationStruct 每个字段对应一种级别标注位置。
 type MapValidationStruct struct {
 	TypeMeta int
 

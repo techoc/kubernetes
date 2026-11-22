@@ -20,11 +20,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 把生成/手写的默认值函数注册进 scheme。
+// 之所以存在：旧版注册约定要求每个 API 包提供该入口。
+//
 //nolint:unused
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_StructPrimitives 为 BoolField 提供默认值 true，
+// 用于验证 defaulter-gen 能正确处理指针字段（nil 时新建并赋值）。
 func SetDefaults_StructPrimitives(obj *StructPrimitives) {
 	if obj.BoolField == nil {
 		obj.BoolField = new(bool)

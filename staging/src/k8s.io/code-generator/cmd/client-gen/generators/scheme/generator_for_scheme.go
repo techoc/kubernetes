@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package scheme 生成 clientset 的 scheme 包：注册各 GroupVersion 的类型，
+// 并导出 scheme、codecs（以及公开 scheme 的 parameter codec）。
 package scheme
 
 import (
@@ -31,6 +33,10 @@ import (
 )
 
 // GenScheme produces a package for a clientset with the scheme, codecs and parameter codecs.
+//
+// 该生成器只运行一次（见 Filter），为整个 clientset 输出单个 scheme 包。
+// PrivateScheme 用于 internal clientset：全局变量改为小写，不导出 ParameterCodec；
+// CreateRegistry 用于需要 Install(registry) 而非 AddToScheme 的旧式注册路径。
 type GenScheme struct {
 	generator.GoGenerator
 	OutputPkg       string // Must be a Go import-path
@@ -44,6 +50,7 @@ type GenScheme struct {
 	schemeGenerated bool
 }
 
+// Namers 只注册 raw namer，所有类型以完整限定名输出。
 func (g *GenScheme) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.OutputPkg, g.ImportTracker),
@@ -57,6 +64,8 @@ func (g *GenScheme) Filter(c *generator.Context, t *types.Type) bool {
 	return ret
 }
 
+// Imports 按注册方式选择 import 目标：registry 模式导入每个版本的 install 包，
+// 简单模式导入版本包自身；别名统一为小写的 group+version，避免与 Go 关键字冲突。
 func (g *GenScheme) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.ImportTracker.ImportLines()...)
 	for _, group := range g.Groups {
@@ -65,6 +74,7 @@ func (g *GenScheme) Imports(c *generator.Context) (imports []string) {
 			groupAlias := strings.ToLower(g.GroupGoNames[clientgentypes.GroupVersion{Group: group.Group, Version: version.Version}])
 			if g.CreateRegistry {
 				// import the install package for internal clientsets instead of the type package with register.go
+				// 版本目录的 install 包负责把该版本类型注册到 scheme，因此上溯一层再拼 install。
 				if version.Version != "" {
 					packagePath = path.Dir(packagePath)
 				}
@@ -80,9 +90,11 @@ func (g *GenScheme) Imports(c *generator.Context) (imports []string) {
 	return
 }
 
+// GenerateType 输出 scheme/codecs 全局变量与注册逻辑。
 func (g *GenScheme) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
+	// 分组信息预先计算成可直接 range 的结构，模板中不重复做类型转换。
 	allGroupVersions := clientgentypes.ToGroupVersionInfo(g.Groups, g.GroupGoNames)
 	allInstallGroups := clientgentypes.ToGroupInstallPackages(g.Groups, g.GroupGoNames)
 
@@ -100,6 +112,7 @@ func (g *GenScheme) GenerateType(c *generator.Context, t *types.Type, w io.Write
 		"schemaGroupVersion":        c.Universe.Type(types.Name{Package: "k8s.io/apimachinery/pkg/runtime/schema", Name: "GroupVersion"}),
 		"metav1AddToGroupVersion":   c.Universe.Function(types.Name{Package: "k8s.io/apimachinery/pkg/apis/meta/v1", Name: "AddToGroupVersion"}),
 	}
+	// 私有 scheme 的变量首字母小写，避免 internal clientset 把可变全局暴露给用户。
 	globals := map[string]string{
 		"Scheme":         "Scheme",
 		"Codecs":         "Codecs",
@@ -116,6 +129,8 @@ func (g *GenScheme) GenerateType(c *generator.Context, t *types.Type, w io.Write
 
 	sw.Do(globalsTemplate, m)
 
+	// 若调用方提供了 register_custom.go，则额外调用其 Install/ExtraAddToScheme，
+	// 以支持手工注册无法自动推导的类型。
 	if g.OutputPath != "" {
 		if _, err := os.Stat(filepath.Join(g.OutputPath, strings.ToLower("register_custom.go"))); err == nil {
 			m["customRegister"] = true
@@ -131,11 +146,14 @@ func (g *GenScheme) GenerateType(c *generator.Context, t *types.Type, w io.Write
 	return sw.Error()
 }
 
+// globalsTemplate 声明 scheme、codecs，以及（仅公开 scheme）parameter codec。
 var globalsTemplate = `
 var $.Scheme$ = $.runtimeNewScheme|raw$()
 var $.Codecs$ = $.serializerNewCodecFactory|raw$($.Scheme$)
 $if .publicScheme$var $.ParameterCodec$ = $.runtimeNewParameterCodec|raw$($.Scheme$)$end -$`
 
+// registryRegistration 生成 registry 风格：init 中直接 Install(scheme)，
+// 每个 install 包自行把类型加入 scheme。
 var registryRegistration = `
 
 func init() {
@@ -154,6 +172,8 @@ func Install(scheme *$.runtimeScheme|raw$) {
 }
 `
 
+// simpleRegistration 用 SchemeBuilder 汇总各版本的 AddToScheme，
+// 导出 AddToScheme 以便其他 clientset 组合复用（见模板中的示例注释）。
 var simpleRegistration = `
 var localSchemeBuilder = $.runtimeSchemeBuilder|raw${
 	$- range .allGroupVersions$

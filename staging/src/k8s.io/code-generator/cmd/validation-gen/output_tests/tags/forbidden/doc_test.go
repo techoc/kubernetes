@@ -23,13 +23,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:forbidden：零值、nil 与空切片/map 视为“未指定”而合法；
+// 任何非零值都应报 Forbidden 错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全零值（nil 切片/map）合法。
 	st.Value(&Struct{
 		// All zero-values (nil slices/maps).
 	}).ExpectValid()
 
+	// 显式零值与空切片/map 同样合法。
 	st.Value(&Struct{
 		// Explicit zero-values and empty slices/maps.
 		StringField:           "",
@@ -51,6 +55,7 @@ func Test(t *testing.T) {
 		MapTypedefField:       MapType{},
 	}).ExpectValid()
 
+	// 所有字段都设置为非零值，每个字段都应报告 Forbidden。
 	st.Value(&Struct{
 		StringField:           "abc",
 		StringPtrField:        ptr.To("xyz"),

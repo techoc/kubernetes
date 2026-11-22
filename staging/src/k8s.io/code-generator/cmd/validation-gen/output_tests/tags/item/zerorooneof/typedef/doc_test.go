@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证以 typedef 列表为载体的 item+zeroOrOneOf：
+// 空列表、只命中一个成员均合法；同时命中两个成员报 zeroOrOneOf；
+// 旧值同样非法时因 ratcheting 跳过。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

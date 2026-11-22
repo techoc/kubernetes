@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 map[string]string 与其 typedef 值类型的验证生成：
+// 字段级验证与 eachVal 元素级验证需要分别落在正确路径上，
+// 未加标签的 map 字段不应产生任何校验代码。
 package mapofprimitive
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

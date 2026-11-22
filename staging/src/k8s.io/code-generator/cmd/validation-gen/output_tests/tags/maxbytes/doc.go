@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:maxBytes：边界值 0 与 10、值/指针/typedef 的排列组合，
+// 并验证类型定义上的标记会传递到所有使用该类型的字段。
 package maxbytes
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

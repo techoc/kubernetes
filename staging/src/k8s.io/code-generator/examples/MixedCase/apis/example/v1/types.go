@@ -22,6 +22,9 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TestType is a top-level type. A client is created for it.
+//
+// 混合大小写示例：包目录、group 与类型名的大小写差异用于验证生成器
+// 不会在文件名或标识符上做错误的规范化。
 type TestType struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -42,6 +45,7 @@ type TestTypeList struct {
 	Items []TestType `json:"items"`
 }
 
+// TestTypeStatus 是 TestType 的状态子结构。
 type TestTypeStatus struct {
 	Blah string `json:"blah"`
 }
@@ -49,6 +53,7 @@ type TestTypeStatus struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ClusterTestTypeList 是 cluster-scoped 资源的列表类型。
 type ClusterTestTypeList struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -62,7 +67,8 @@ type ClusterTestTypeList struct {
 // +genclient:method=GetScale,verb=get,subresource=scale,result=k8s.io/api/autoscaling/v1.Scale
 // +genclient:method=UpdateScale,verb=update,subresource=scale,input=k8s.io/api/autoscaling/v1.Scale,result=k8s.io/api/autoscaling/v1.Scale
 // +genclient:method=CreateScale,verb=create,subresource=scale,input=k8s.io/api/autoscaling/v1.Scale,result=k8s.io/api/autoscaling/v1.Scale
-
+//
+// ClusterTestType 同时演示 nonNamespaced 与三个 scale 扩展方法。
 type ClusterTestType struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -71,6 +77,7 @@ type ClusterTestType struct {
 	Status ClusterTestTypeStatus `json:"status,omitempty"`
 }
 
+// ClusterTestTypeStatus 是 ClusterTestType 的状态子结构。
 type ClusterTestTypeStatus struct {
 	Blah string `json:"blah"`
 }

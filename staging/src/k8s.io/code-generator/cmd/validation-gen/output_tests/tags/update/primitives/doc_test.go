@@ -23,12 +23,18 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestUpdateTags 穷举值类型、指针、结构体（可比与不可比）、自定义类型上的
+// update 约束语义：NoSet 禁止“未设置→已设置”，NoUnset 禁止反向，
+// NoModify 只禁止已设置值之间变化；零值即“未设置”。
 func TestUpdateTags(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// baseStruct 全零值，作为每次比较的“未设置”基线。
 	baseStruct := UpdateTestStruct{}
 
 	// String NoSet
+	//
+	// 从空串到非空视为设置，被 NoSet 拦截。
 	old := baseStruct
 	old.StringNoSet = "" // unset
 
@@ -42,6 +48,8 @@ func TestUpdateTags(t *testing.T) {
 	st.Value(&old).OldValue(&old).ExpectValid()
 
 	// String NoUnset
+	//
+	// 首次设置允许，但从非空清空会被拒绝。
 	oldWithValue := baseStruct
 	oldWithValue.StringNoUnset = "value"
 
@@ -57,6 +65,8 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// String NoModify
+	//
+	// NoModify 允许设置与清空，只拦截两个非空值之间的变化。
 	oldEmpty := baseStruct
 	withValue := baseStruct
 	withValue.StringNoModify = "value"
@@ -75,6 +85,8 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// String Fully Restricted
+	//
+	// 三种约束叠加后，任何表意上的变化都会被拒绝。
 	oldEmpty = baseStruct
 	withValue = baseStruct
 	withValue.StringFullyRestricted = "value"
@@ -97,6 +109,8 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// String Set-Once Pattern
+	//
+	// NoUnset+NoModify 的组合等价于“只能设置一次”。
 	oldEmpty = baseStruct
 	withValue = baseStruct
 	withValue.StringSetOnce = "value"
@@ -117,6 +131,8 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// Int NoModify
+	//
+	// 数值类型用零值判断“未设置”，0→10 允许。
 	oldZero := baseStruct
 	withValue = baseStruct
 	withValue.IntNoModify = 10
@@ -131,6 +147,7 @@ func TestUpdateTags(t *testing.T) {
 		field.Invalid(field.NewPath("intNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
+	// 其余数值宽度（int32/uint/float32/float64/byte）走同一套零值逻辑。
 	// Int32 NoModify
 	old = baseStruct
 	withValue = baseStruct
@@ -218,6 +235,9 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// Struct NoModify
+	//
+	// 值类型结构体没有 nil，任何值（含零值）都视为“已设置”，
+	// 因此从零值到非零值也算修改。
 	withStruct := baseStruct
 	withStruct.StructNoModify = TestStruct{StringField: "value", IntField: 42}
 
@@ -232,6 +252,8 @@ func TestUpdateTags(t *testing.T) {
 	// NonComparable Struct NoModify - uses reflection
 	// For non-pointer structs, even zero value is considered "set"
 	// So any change is a modification
+	//
+	// 不可比较结构体必须用反射深比较，不能依赖 ==。
 	old = baseStruct
 	old.NonComparableStructNoModify = NonComparableStruct{} // zero value
 
@@ -260,6 +282,8 @@ func TestUpdateTags(t *testing.T) {
 	st.Value(&withValue).OldValue(&withValue).ExpectValid()
 
 	// Pointer NoSet
+	//
+	// nil 表示未设置，指针的“设置/清空”判断基于 nil，而非指向的内容。
 	withSet := baseStruct
 	withSet.PointerNoSet = ptr.To("value")
 
@@ -339,6 +363,8 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// Bool Pointer NoModify
+	//
+	// 指针指向 false 仍是“已设置”，因此 false→true 属于修改。
 	falseVal := false
 	trueVal := true
 

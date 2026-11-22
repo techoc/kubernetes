@@ -19,6 +19,7 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 最小用例：没有任何验证标签。用于确认生成器在“无事可做”时仍产出可编译的空壳文件。
 package trivial
 
 type T1 struct {

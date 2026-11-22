@@ -21,6 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// 本文件手写 DeepCopy/DeepCopyObject/GetObjectKind，充当 deepcopy-gen 与
+// register-gen 的输出，使 defaulter-gen 的 output test 不必依赖其他生成器即可编译。
+// 这些类型只有标量字段，因此 DeepCopyInto 可以直接整体赋值。
+
+// DeepCopy 返回一份独立副本；nil 接收者保持 nil，与生成代码的约定一致。
 func (in *Defaulted) DeepCopy() *Defaulted {
 	if in == nil {
 		return nil
@@ -34,6 +39,7 @@ func (in *Defaulted) DeepCopyInto(out *Defaulted) {
 	*out = *in
 }
 
+// DeepCopyObject 让类型满足 runtime.Object，供 scheme 注册与默认值分派使用。
 func (in *Defaulted) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
@@ -81,6 +87,7 @@ func (in *DefaultedWithFunction) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// GetObjectKind 返回空的 ObjectKind，满足 runtime.Object 接口。
 func (in *Defaulted) GetObjectKind() schema.ObjectKind              { return schema.EmptyObjectKind }
 func (in *DefaultedOmitempty) GetObjectKind() schema.ObjectKind     { return schema.EmptyObjectKind }
 func (in *DefaultedWithFunction) GetObjectKind() schema.ObjectKind  { return schema.EmptyObjectKind }

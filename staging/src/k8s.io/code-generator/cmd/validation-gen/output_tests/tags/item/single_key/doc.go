@@ -17,6 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 item 标签按单个 list-map key 匹配元素的各种形态，
+// 包括字符串/整型/布尔/typedef key、指针元素、指针 key，以及
+// atomic+unique=map+item 的组合。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package singlekey
@@ -25,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 的每个列表字段演示一种 key 类型与 item 匹配组合。
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 

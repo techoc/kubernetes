@@ -36,6 +36,8 @@ import (
 // No other guarantees are made about the order of execution of TagValidators.
 // Instead of relying on tag ordering, TagValidators can
 // accumulate information internally and use a DeferredGen to finish the work.
+//
+// 每个校验标签对应一个实现；生成器扫描标签时按注册表分派。
 type TagValidator interface {
 	// Init initializes the implementation.  This will be called exactly once.
 	Init(cfg Config)
@@ -48,6 +50,9 @@ type TagValidator interface {
 	ValidScopes() sets.Set[Scope]
 
 	// GetValidations returns any validations described by this tag.
+	//
+	// 返回值可以是函数调用、变量、注释或 Deferred 回调；生成器再决定
+	// 哪些真正落到代码里。
 	GetValidations(context Context, tag codetags.Tag) (Validations, error)
 
 	// Docs returns user-facing documentation for this tag.
@@ -80,6 +85,8 @@ type Config struct {
 }
 
 // Scope describes where a validation (or potential validation) is located.
+//
+// scope 决定标签允许出现的位置，也影响生成代码中路径与循环的构造方式。
 type Scope string
 
 // Note: All of these values should be strings which can be used in an error
@@ -117,6 +124,9 @@ const (
 
 // Context describes where a tag was used, so that the scope can be checked
 // and so validators can handle different cases if they need.
+//
+// 同一份类型在不同位置使用时 Context 不同（Path/ParentPath 不同），
+// 校验器据此区分“类型级”与“字段级”语义。
 type Context struct {
 	// Scope is where the validation is being considered.
 	Scope Scope
@@ -181,6 +191,8 @@ type Constant struct {
 }
 
 // ListSelectorTerm represents a field name and value pair.
+//
+// 用于 listMap 的 item 选择：Field 是 JSON 名，Value 是待匹配的原生值。
 type ListSelectorTerm struct {
 	// Field is the JSON name of the field to match.
 	Field string
@@ -203,6 +215,7 @@ const (
 	TagStabilityLevelStable TagStabilityLevel = "Stable"
 )
 
+// stabilityOrder 给稳定性级别定义全序，便于比较与排序。
 var stabilityOrder = map[TagStabilityLevel]int{
 	TagStabilityLevelAlpha:  0,
 	TagStabilityLevelBeta:   1,
@@ -263,6 +276,7 @@ type TagDoc struct {
 	AcceptsUnknownArgs bool `json:",omitempty"`
 }
 
+// Arg 按名字查找参数文档。
 func (td TagDoc) Arg(name string) (TagArgDoc, bool) {
 	for _, arg := range td.Args {
 		if arg.Name == name {
@@ -304,6 +318,9 @@ type TagPayloadDoc struct {
 
 // Validations define the function calls and variables to generate to perform
 // validation.
+//
+// Validations 是校验器输出的中间表示：生成器按作用域把这些片段拼装成
+// 最终的 Go 代码，并处理 Opaque* 的短路语义。
 type Validations struct {
 	// Functions hold the function calls that should be generated to perform
 	// validation.  These functions may not be called in order - they may be
@@ -353,6 +370,7 @@ type Validations struct {
 	Deferred []DeferredGen
 }
 
+// Empty 报告是否既无可生成内容，也没有任何 opaque 标记。
 func (v *Validations) Empty() bool {
 	return !v.HasEmitable() &&
 		!v.OpaqueType &&
@@ -360,26 +378,33 @@ func (v *Validations) Empty() bool {
 		!v.OpaqueValType
 }
 
+// HasEmitable 报告是否存在需要写入生成代码的内容（含 Deferred）。
 func (v *Validations) HasEmitable() bool {
 	return len(v.Functions) > 0 || len(v.Variables) > 0 || len(v.Comments) > 0 || len(v.Deferred) > 0
 }
 
+// AddFunction 追加一个函数调用。
 func (v *Validations) AddFunction(fn FunctionGen) {
 	v.Functions = append(v.Functions, fn)
 }
 
+// AddVariable 追加一个变量声明。
 func (v *Validations) AddVariable(vr VariableGen) {
 	v.Variables = append(v.Variables, vr)
 }
 
+// AddDeferred 追加一个延迟回调。
 func (v *Validations) AddDeferred(d DeferredGen) {
 	v.Deferred = append(v.Deferred, d)
 }
 
+// AddComment 追加一行注释（不含 //）。
 func (v *Validations) AddComment(comment string) {
 	v.Comments = append(v.Comments, comment)
 }
 
+// Add 合并另一组 Validations；opaque 标记按逻辑或聚合，
+// 任一方声明不透明即视为不透明。
 func (v *Validations) Add(o Validations) {
 	v.Functions = append(v.Functions, o.Functions...)
 	v.Variables = append(v.Variables, o.Variables...)
@@ -391,6 +416,9 @@ func (v *Validations) Add(o Validations) {
 }
 
 // Clone returns a copy of v with new slices for its slice fields.
+//
+// 深拷贝切片（元素本身是值或回调指针，无需再递归），
+// 以便包装函数安全地修改副本而不影响原始 Validations。
 func (v Validations) Clone() Validations {
 	res := v
 	if v.Functions != nil {
@@ -420,6 +448,10 @@ func WrapFunctions(v Validations, wrapFn func(FunctionGen, DeferredScope) Functi
 	return wrapFunctionsWithScope(v, wrapFn, ThisContext)
 }
 
+// wrapFunctionsWithScope 是 WrapFunctions 的递归实现。
+//
+// 关键点：Deferred 回调里产生的 Validations 也必须被包装，
+// 因此不能简单地在顶层遍历，而要在回调返回后递归调用自身。
 func wrapFunctionsWithScope(v Validations, wrapFn func(FunctionGen, DeferredScope) FunctionGen, scope DeferredScope) Validations {
 	result := v.Clone()
 	result.Functions = nil
@@ -469,6 +501,8 @@ const (
 
 // Conditions defines what conditions must be true for a resource to be validated.
 // If any of the conditions are not true, the resource is not validated.
+//
+// 对应 +k8s:ifEnabled / +k8s:ifDisabled：生成代码里包一层 if 判断。
 type Conditions struct {
 	// OptionEnabled specifies an option name that must be set to true for the condition to be true.
 	OptionEnabled string
@@ -477,6 +511,7 @@ type Conditions struct {
 	OptionDisabled string
 }
 
+// Empty 报告是否没有任何条件（即始终生效）。
 func (c Conditions) Empty() bool {
 	return len(c.OptionEnabled) == 0 && len(c.OptionDisabled) == 0
 }
@@ -637,6 +672,7 @@ func Variable(variable PrivateVar, initializer any) VariableGen {
 	}
 }
 
+// VariableGen 描述一个需要生成到校验函数中的局部变量。
 type VariableGen struct {
 	// Variable holds the variable identifier.
 	Variable PrivateVar
@@ -706,6 +742,7 @@ type SliceLiteral struct {
 	Elements        []any
 }
 
+// StructLiteralField 是 StructLiteral 中的一个字段初始化项。
 type StructLiteralField struct {
 	Name  string
 	Value any
@@ -719,6 +756,9 @@ type ParamResult struct {
 
 // typeCheck checks that the argument and value types of the tag match the types
 // declared in the doc.
+//
+// 双向检查：文档声明但标签缺失的必填参数要报错，标签中出现但文档未声明
+// 的参数也要报错（除非显式允许未知参数）。payload 类型同样校验。
 func typeCheck(tag codetags.Tag, doc TagDoc) error {
 	for _, docArg := range doc.Args {
 		hasArg := false

@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package external 是 defaulter-gen 的输出测试夹具：它与另一目录下的同名包
+// 一起用来验证“多个同名包”时的导入别名与类型引用是否正确。
 package external
 
+// AnotherConstant 用于制造与同名包的符号冲突，测试生成代码能否正确区分。
 // Used for test with multiple packages of the same name
 const AnotherConstant string = "AnotherConstantString"

@@ -23,9 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 +k8s:minProperties 对 map（含 typedef）的下限校验，
+// 遍历 0/1/9/10/11 个键的边界，并确认 ratcheting 对未变化的旧值放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 全零值：nil map 的键数为 0，低于下限的字段报错。
 	st.Value(&Struct{
 		// All zero values
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -33,6 +36,7 @@ func Test(t *testing.T) {
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
 	})
 
+	// 显式空 map 与 nil map 行为一致。
 	st.Value(&Struct{
 		Min0Field:         make(map[string]string, 0),
 		Min10Field:        make(map[string]string, 0),
@@ -80,6 +84,7 @@ func Test(t *testing.T) {
 		min10TypedefField10[fmt.Sprintf("k%d", i)] = "v"
 	}
 
+	// 键数达到下限 10，应完全合法。
 	st.Value(&Struct{
 		Min10Field:        min10Field10,
 		Min10TypedefField: min10TypedefField10,
@@ -99,6 +104,7 @@ func Test(t *testing.T) {
 		min10TypedefField11[fmt.Sprintf("k%d", i)] = "v"
 	}
 
+	// min0 字段有 1 个键即满足下限；min10 字段有 11 个键也满足。
 	testVal := &Struct{
 		Min0Field:         min0Field1,
 		Min10Field:        min10Field11,
@@ -108,6 +114,7 @@ func Test(t *testing.T) {
 	st.Value(testVal).ExpectValid()
 
 	// Test validation ratcheting
+	// 旧值已经低于下限，新值未变化时不应重新报错。
 	st.Value(&Struct{
 		Min0Field:         min0Field1,
 		Min10Field:        min10Field11,

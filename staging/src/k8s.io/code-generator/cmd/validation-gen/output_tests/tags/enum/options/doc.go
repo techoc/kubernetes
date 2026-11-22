@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 +k8s:enum / +k8s:enumExclude 的各种组合：无值、单值、多值枚举，
+// 以及 enumExclude 受 +k8s:ifEnabled/ifDisabled 门控时的取值集合。
 // +k8s:validation-gen-nolint
 package options
 

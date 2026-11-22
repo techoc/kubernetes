@@ -18,7 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// Package typedeftomap 是 validation-gen 的测试包，覆盖“命名 map 类型”：
+// 校验既可能来自 typedef 本身，也可能来自字段上的 +k8s:eachVal，
+// 需要验证两者在生成代码中的叠加方式。
 // +k8s:validation-gen-nolint
 package typedeftomap
 

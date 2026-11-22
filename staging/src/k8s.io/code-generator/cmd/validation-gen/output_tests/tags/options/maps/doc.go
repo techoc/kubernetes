@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 ifEnabled/ifDisabled 条件选项作用在 map 字段、map key 与 map value
+// 上的行为：只有条件成立时对应校验才会执行。
 package maps
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -28,18 +30,22 @@ var localSchemeBuilder = testscheme.New()
 type Struct struct {
 	TypeMeta int
 
+	// 条件成立时对整个 map 字段施加校验。
 	// +k8s:ifEnabled(FeatureX)=+k8s:validateFalse="field Struct.MapField"
 	MapField map[string]string `json:"mapField"`
 
+	// 条件不成立（FeatureX 关闭）时才施加校验。
 	// +k8s:ifDisabled(FeatureX)=+k8s:validateFalse="field Struct.MapFieldDisabled"
 	MapFieldDisabled map[string]string `json:"mapFieldDisabled"`
 
+	// 条件包裹 eachKey：条件成立时校验每个 key。
 	// +k8s:ifEnabled(FeatureX)=+k8s:eachKey=+k8s:validateFalse="field Struct.MapFieldEachKey/key"
 	MapFieldEachKey map[string]string `json:"mapFieldEachKey"`
 
 	// +k8s:ifDisabled(FeatureX)=+k8s:eachKey=+k8s:validateFalse="field Struct.MapFieldEachKeyDisabled/key"
 	MapFieldEachKeyDisabled map[string]string `json:"mapFieldEachKeyDisabled"`
 
+	// 条件包裹 eachVal：条件成立时校验每个 value。
 	// +k8s:ifEnabled(FeatureX)=+k8s:eachVal=+k8s:validateFalse="field Struct.MapFieldEachVal/val"
 	MapFieldEachVal map[string]string `json:"mapFieldEachVal"`
 

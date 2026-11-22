@@ -23,9 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖 k8s-prefixed-label-key 的合法与非法取值，并确认普通字段、
+// 指针字段、typedef 字段三者行为一致；ratcheting 由 format 标签统一处理。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法样例覆盖长度边界：前缀最多 253 字符、名称最多 63 字符。
 	validCases := []string{
 		"simple.com/simple",
 		"now-with-dashes.com/simple",
@@ -46,6 +49,7 @@ func Test(t *testing.T) {
 		}).ExpectValid()
 	}
 
+	// 非法样例包含缺少前缀、大写前缀、多余斜杠以及超长等典型失败模式。
 	invalidCases := []string{
 		"simple",
 		"now-with-dashes",

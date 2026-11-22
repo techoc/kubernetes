@@ -20,6 +20,8 @@ limitations under the License.
 // Package format is the internal version of the API.
 // +k8s:validation:internal
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:format=k8s-prefixed-label-key：与 k8s-label-value 相互独立，
+// 验证带前缀的 label key 格式以及 typedef 上的格式标记传播。
 package format
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

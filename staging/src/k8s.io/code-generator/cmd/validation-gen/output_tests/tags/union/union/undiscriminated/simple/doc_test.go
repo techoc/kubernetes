@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 覆盖无判别字段的 union：零个成员报 “must specify one of”，
+// 多个成员报 “must specify exactly one of”；空 slice/map 视为未设置；
+// 更新时只比较成员是否设置，不比较值。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

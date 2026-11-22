@@ -37,24 +37,29 @@ import (
 )
 
 // applyConfigurationGenerator produces apply configurations for a given GroupVersion and type.
+// 每个生成器实例只负责一个具体类型（见 Filter），因此可以安全地把该类型的
+// 命名、标签与引用图等上下文直接保存在结构体里。
 type applyConfigurationGenerator struct {
 	generator.GoGenerator
 	// outPkgBase is the base package, under which the "internal" and GV-specific subdirs live
-	outPkgBase   string // must be a Go import-path
-	localPkg     string
+	outPkgBase   string // must be a Go import-path；该路径决定 Parser 等内部类型的导入路径
+	localPkg     string // 输出包自身的导入路径，raw namer 用它区分同包引用与其他包引用
 	groupVersion clientgentypes.GroupVersion
-	applyConfig  applyConfig
-	imports      namer.ImportTracker
-	refGraph     refGraph
-	openAPIType  *string // if absent, extraction function cannot be generated
+	applyConfig  applyConfig         // 当前类型对应的 apply configuration 元数据
+	imports      namer.ImportTracker // 汇总所有被引用到的导入，最后由 Imports() 输出
+	refGraph     refGraph            // 类型到 apply configuration 名称的映射，保证跨类型引用命名一致
+	openAPIType  *string             // if absent, extraction function cannot be generated；没有 schema 类型名就无法生成 Extract* 函数
 }
 
 var _ generator.Generator = &applyConfigurationGenerator{}
 
+// Filter 只保留当前生成器负责的那个类型，避免同一输出包内重复生成。
 func (g *applyConfigurationGenerator) Filter(_ *generator.Context, t *types.Type) bool {
 	return t == g.applyConfig.Type
 }
 
+// Namers 注册生成模板使用的命名系统。"raw" 输出带导入限定的 Go 类型名；
+// "singularKind" 用于生成 Kind 字符串（public namer 会对首字母大写并单数化）。
 func (g *applyConfigurationGenerator) Namers(*generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw":          namer.NewRawNamer(g.localPkg, g.imports),
@@ -62,6 +67,7 @@ func (g *applyConfigurationGenerator) Namers(*generator.Context) namer.NameSyste
 	}
 }
 
+// Imports 返回生成文件需要的导入行，ImportTracker 会去重并处理别名。
 func (g *applyConfigurationGenerator) Imports(*generator.Context) (imports []string) {
 	return g.imports.ImportLines()
 }
@@ -69,25 +75,30 @@ func (g *applyConfigurationGenerator) Imports(*generator.Context) (imports []str
 // TypeParams provides a struct that an apply configuration
 // is generated for as well as the apply configuration details
 // and types referenced by the struct.
+// 它是模板参数聚合体：模板里通过它访问源类型、命名信息以及生成所需的辅助类型。
 type TypeParams struct {
-	Struct      *types.Type
-	ApplyConfig applyConfig
-	Tags        util.Tags
-	APIVersion  string
-	ExtractInto *types.Type
-	ParserFunc  *types.Type
-	OpenAPIType *string
+	Struct      *types.Type // 源 API 类型
+	ApplyConfig applyConfig // 生成的 apply configuration 的命名信息
+	Tags        util.Tags   // 源类型上的 +genclient 等标签
+	APIVersion  string      // 写入 APIVersion 字段的 group/version 字符串
+	ExtractInto *types.Type // internal.ExtractInto 辅助函数类型
+	ParserFunc  *types.Type // internal.Parser 类型（OpenAPI schema 解析入口）
+	OpenAPIType *string     // 源类型在 OpenAPI definitions 中的名字
 }
 
+// memberParams 描述单个成员在某个类型（可能是嵌入父类型）上下文中的生成参数。
 type memberParams struct {
 	TypeParams
 	Member     types.Member
 	MemberType *types.Type
 	JSONTags   JSONTags
-	ArgType    *types.Type   // only set for maps and slices
-	EmbeddedIn *memberParams // parent embedded member, if any
+	ArgType    *types.Type   // only set for maps and slices；With* 函数 varargs 的实参类型
+	EmbeddedIn *memberParams // parent embedded member, if any；跨过嵌入层时需要借此拼接访问路径
 }
 
+// GenerateType 为单个 API 类型生成完整的 apply configuration 源码。
+// 生成顺序（struct → 构造器 → IsApplyConfiguration → With* → Get*）是固定契约：
+// 构造函数里会调用 WithName/WithKind 等，因此这些方法必须在同一文件内存在。
 func (g *applyConfigurationGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
@@ -106,6 +117,8 @@ func (g *applyConfigurationGenerator) GenerateType(c *generator.Context, t *type
 		return fmt.Errorf("failed to generate apply configuration struct for %s: %w", t.Name, err)
 	}
 
+	// 有 +genclient 的类型是资源根对象，需要生成可直接用于 apply 的构造函数
+	// 以及（若提供 schema）Extract* 辅助函数。
 	if typeParams.Tags.GenerateClient {
 		if typeParams.Tags.NonNamespaced {
 			sw.Do(clientgenTypeConstructorNonNamespaced, typeParams)
@@ -116,6 +129,7 @@ func (g *applyConfigurationGenerator) GenerateType(c *generator.Context, t *type
 			g.generateClientgenExtract(sw, typeParams)
 		}
 	} else {
+		// 非根类型只有在自带 TypeMeta 时才填充 Kind/APIVersion，其余情况用最简构造器。
 		if hasTypeMetaField(t) {
 			sw.Do(constructorWithTypeMeta, typeParams)
 		} else {
@@ -123,6 +137,8 @@ func (g *applyConfigurationGenerator) GenerateType(c *generator.Context, t *type
 		}
 	}
 
+	// IsApplyConfiguration 是运行时识别 apply configuration 的标记方法，
+	// 仅对能被当作顶层 apply 对象的类型生成。
 	if typeParams.Tags.GenerateClient || hasTypeMetaField(t) {
 		g.generateIsApplyConfiguration(typeParams.ApplyConfig.ApplyConfiguration, sw)
 	}
@@ -131,6 +147,7 @@ func (g *applyConfigurationGenerator) GenerateType(c *generator.Context, t *type
 	return sw.Error()
 }
 
+// hasTypeMetaField 判断类型是否内嵌 TypeMeta；这类类型能自行携带 Kind/APIVersion。
 func hasTypeMetaField(t *types.Type) bool {
 	for _, member := range t.Members {
 		if typeMeta.Name == member.Type.Name && member.Embedded {
@@ -140,6 +157,9 @@ func hasTypeMetaField(t *types.Type) bool {
 	return false
 }
 
+// blocklisted 过滤不应出现在 apply configuration 中的字段。
+// ManagedFields/SelfLink 是服务端维护的元数据，客户端不应提交；ZZZ_ 前缀是
+// 删除过程中的过渡字段，generated 代码不应把它们暴露为可写字段。
 func blocklisted(t *types.Type, member types.Member) bool {
 	if objectMeta.Name == t.Name && member.Name == "ManagedFields" {
 		return true
@@ -154,12 +174,16 @@ func blocklisted(t *types.Type, member types.Member) bool {
 	return false
 }
 
+// needsGetter 只有 ObjectMeta 的 Name/Namespace 与 TypeMeta 的 Kind/APIVersion
+// 需要 getter：Extract* 流程之外，调用方需要读取这些身份字段。
 func needsGetter(t *types.Type, member types.Member) bool {
 	// Needed when applying an ApplyConfiguration
 	return (objectMeta.Name == t.Name && (member.Name == "Name" || member.Name == "Namespace")) ||
 		(typeMeta.Name == t.Name && (member.Name == "Kind" || member.Name == "APIVersion"))
 }
 
+// generateGetters 为少量身份字段生成 getter。嵌入字段需要递归下钻，
+// 因为 getter 实际定义在外层 apply configuration 上、却要读取嵌入结构里的字段。
 func (g *applyConfigurationGenerator) generateGetters(t *types.Type, typeParams TypeParams, sw *generator.SnippetWriter, embed *memberParams) {
 	for _, member := range t.Members {
 		if blocklisted(t, member) {
@@ -189,6 +213,8 @@ func (g *applyConfigurationGenerator) generateGetters(t *types.Type, typeParams 
 	}
 }
 
+// generateWithFuncs 为每个可写成员生成 With* 方法。generated 用于跨嵌入层去重：
+// 同名字段只应生成一次，否则会造成方法重复定义。
 func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParams TypeParams, sw *generator.SnippetWriter, embed *memberParams,
 	generated *[]string) {
 	for _, member := range t.Members {
@@ -224,6 +250,7 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 			// For slices where the items are generated apply configuration types, accept varargs of
 			// pointers of the type as "with" function arguments so the "with" function can be used like so:
 			// WithFoos(Foo().WithName("x"), Foo().WithName("y"))
+			// 先用 deref 处理指向切片的指针，再判断元素是否为 apply configuration。
 			if t := deref(member.Type); t.Kind == types.Slice && g.refGraph.isApplyConfig(t.Elem) {
 				memberParams.ArgType = &types.Type{Kind: types.Pointer, Elem: memberType.Elem}
 				g.generateMemberWithForSlice(sw, member, memberParams)
@@ -235,6 +262,7 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 			// that would be used like so:
 			// WithMap(map[string]FooApplyConfiguration{*Foo().WithName("x")})
 
+			// slice/map 需要专门的追加/合并语义；其余标量与结构体直接赋值。
 			switch memberParams.Member.Type.Kind {
 			case types.Slice:
 				memberParams.ArgType = memberType.Elem
@@ -248,9 +276,11 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 	}
 }
 
+// generateStruct 输出 apply configuration 的 struct 定义，并保留源类型的文档注释。
 func (g *applyConfigurationGenerator) generateStruct(sw *generator.SnippetWriter, typeParams TypeParams) error {
 	sw.Do("// $.ApplyConfig.ApplyConfiguration|public$ represents a declarative configuration of the $.ApplyConfig.Type|public$ type for use\n", typeParams)
 	sw.Do("// with apply.\n", typeParams)
+	// 合并两级注释并剔除 + 开头的生成标记，避免把 codegen 指令写进输出。
 	structComments := commentsWithoutMarkers(append(typeParams.Struct.SecondClosestCommentLines, typeParams.Struct.CommentLines...))
 	if len(structComments) > 0 {
 		sw.Do("//\n", typeParams)
@@ -264,6 +294,7 @@ func (g *applyConfigurationGenerator) generateStruct(sw *generator.SnippetWriter
 			continue
 		}
 		if structMemberTags, ok := lookupJSONTags(structMember); ok {
+			// 除内联嵌入外统一加 omitempty：apply configuration 用 nil 表达“不提交该字段”。
 			if !structMemberTags.inline {
 				structMemberTags.omitempty = true
 			}
@@ -277,6 +308,7 @@ func (g *applyConfigurationGenerator) generateStruct(sw *generator.SnippetWriter
 			if err := sw.Append(strings.NewReader(commentsWithoutMarkers(structMember.CommentLines))); err != nil {
 				return fmt.Errorf("failed to write comments for member %s: %w", structMember.Name, err)
 			}
+			// 内联嵌入才能用非指针形式；非内联嵌入必须是指针，以便整体省略。
 			if structMember.Embedded {
 				if structMemberTags.inline {
 					sw.Do("$.MemberType|raw$ `json:\"$.JSONTags$\"`\n", params)
@@ -295,12 +327,14 @@ func (g *applyConfigurationGenerator) generateStruct(sw *generator.SnippetWriter
 	return nil
 }
 
+// generateIsApplyConfiguration 生成空方法，作为 apply configuration 的运行时标记。
 func (g *applyConfigurationGenerator) generateIsApplyConfiguration(t *types.Type, sw *generator.SnippetWriter) {
 	sw.Do(`
 func (b $.|public$) IsApplyConfiguration() {}
 `, t)
 }
 
+// deref 剥掉所有指针层，返回最内层类型。
 func deref(t *types.Type) *types.Type {
 	for t.Kind == types.Pointer {
 		t = t.Elem
@@ -308,12 +342,14 @@ func deref(t *types.Type) *types.Type {
 	return t
 }
 
+// isNillable 判断类型本身是否可以表示 nil（slice/map）。
 func isNillable(t *types.Type) bool {
 	return t.Kind == types.Slice || t.Kind == types.Map
 }
 
 // commentsWithoutMarkers removes comment lines that start with '+' as they are codegen markers
 // and ensures all comments have the proper // prefix
+// 空行会被折叠并通过延迟写入放在下一段非空注释前，避免尾部多余空注释。
 func commentsWithoutMarkers(comments []string) string {
 	b := strings.Builder{}
 	emptyLines := strings.Builder{}
@@ -338,6 +374,7 @@ func commentsWithoutMarkers(comments []string) string {
 	return b.String()
 }
 
+// generateMemberWith 生成标量/结构体成员的 With*：直接覆盖赋值，多次调用以最后一次为准。
 func (g *applyConfigurationGenerator) generateMemberWith(sw *generator.SnippetWriter, memberParams memberParams) {
 	sw.Do("// With$.Member.Name$ sets the $.Member.Name$ field in the declarative configuration to the given value\n", memberParams)
 	sw.Do("// and returns the receiver, so that objects can be built by chaining \"With\" function invocations.\n", memberParams)
@@ -353,6 +390,8 @@ func (g *applyConfigurationGenerator) generateMemberWith(sw *generator.SnippetWr
 	sw.Do("}\n", memberParams)
 }
 
+// generateMemberGetter 生成身份字段的 getter；非 nil 类型直接返回值，
+// 指针/可空类型返回原始类型（保持与字段存储形式一致）。
 func (g *applyConfigurationGenerator) generateMemberGetter(sw *generator.SnippetWriter, memberParams memberParams) {
 	sw.Do("// Get$.Member.Name$ retrieves the value of the $.Member.Name$ field in the declarative configuration.\n", memberParams)
 	if g.refGraph.isApplyConfig(memberParams.Member.Type) || isNillable(memberParams.Member.Type) {
@@ -365,6 +404,9 @@ func (g *applyConfigurationGenerator) generateMemberGetter(sw *generator.Snippet
 	sw.Do("}\n", memberParams)
 }
 
+// generateMemberWithForSlice 生成追加语义的 With*。
+// 指向切片的字段需要先确保切片本身已分配；元素为指针且为 nil 时直接 panic，
+// 因为提交 nil 元素没有可表达的 JSON 语义，属于调用方错误。
 func (g *applyConfigurationGenerator) generateMemberWithForSlice(sw *generator.SnippetWriter, member types.Member, memberParams memberParams) {
 	memberIsPointerToSlice := member.Type.Kind == types.Pointer
 	if memberIsPointerToSlice {
@@ -404,6 +446,8 @@ func (g *applyConfigurationGenerator) generateMemberWithForSlice(sw *generator.S
 	sw.Do("}\n", memberParams)
 }
 
+// generateMemberWithForMap 生成合并语义的 With*：首次写入时按条目数预分配，
+// 之后逐键覆盖，多次调用等价于 map 合并。
 func (g *applyConfigurationGenerator) generateMemberWithForMap(sw *generator.SnippetWriter, memberParams memberParams) {
 	sw.Do("// With$.Member.Name$ puts the entries into the $.Member.Name$ field in the declarative configuration\n", memberParams)
 	sw.Do("// and returns the receiver, so that objects can be build by chaining \"With\" function invocations.\n", memberParams)
@@ -421,6 +465,8 @@ func (g *applyConfigurationGenerator) generateMemberWithForMap(sw *generator.Sni
 	sw.Do("}\n", memberParams)
 }
 
+// ensureEmbedExistsIfApplicable 在写入跨嵌入层字段前，先让非内联嵌入对象分配到位；
+// 否则会因 nil 指针解引用而 panic。
 func (g *applyConfigurationGenerator) ensureEmbedExistsIfApplicable(sw *generator.SnippetWriter, memberParams memberParams) {
 	// Embedded types that are not inlined must be nillable so they are not included in the apply configuration
 	// when all their fields are omitted.
@@ -429,6 +475,7 @@ func (g *applyConfigurationGenerator) ensureEmbedExistsIfApplicable(sw *generato
 	}
 }
 
+// ensureEmbedExists 生成“确保嵌入对象存在”的辅助方法模板。
 var ensureEmbedExists = `
 func (b *$.ApplyConfig.ApplyConfiguration|public$) ensure$.MemberType.Elem|public$Exists() {
   if b.$.MemberType.Elem|public$ == nil {
@@ -437,6 +484,7 @@ func (b *$.ApplyConfig.ApplyConfiguration|public$) ensure$.MemberType.Elem|publi
 }
 `
 
+// ensureNonEmbedSliceExists 生成指向切片的字段的初始化方法模板。
 var ensureNonEmbedSliceExists = `
 func (b *$.ApplyConfig.ApplyConfiguration|public$) ensure$.MemberType.Elem|public$Exists() {
   if b.$.Member.Name$ == nil {
@@ -445,6 +493,7 @@ func (b *$.ApplyConfig.ApplyConfiguration|public$) ensure$.MemberType.Elem|publi
 }
 `
 
+// clientgenTypeConstructorNamespaced 生成带 namespace 的根对象构造器模板。
 var clientgenTypeConstructorNamespaced = `
 // $.ApplyConfig.Type|public$ constructs a declarative configuration of the $.ApplyConfig.Type|public$ type for use with
 // apply.
@@ -458,6 +507,7 @@ func $.ApplyConfig.Type|public$(name, namespace string) *$.ApplyConfig.ApplyConf
 }
 `
 
+// clientgenTypeConstructorNonNamespaced 生成集群级资源构造器模板。
 var clientgenTypeConstructorNonNamespaced = `
 // $.ApplyConfig.Type|public$ constructs a declarative configuration of the $.ApplyConfig.Type|public$ type for use with
 // apply.
@@ -470,6 +520,7 @@ func $.ApplyConfig.Type|public$(name string) *$.ApplyConfig.ApplyConfiguration|p
 }
 `
 
+// constructorWithTypeMeta 生成自带 TypeMeta 的嵌套类型的构造器模板（填充 Kind/APIVersion）。
 var constructorWithTypeMeta = `
 // $.ApplyConfig.ApplyConfiguration|public$ constructs a declarative configuration of the $.ApplyConfig.Type|public$ type for use with
 // apply.
@@ -481,8 +532,10 @@ func $.ApplyConfig.Type|public$() *$.ApplyConfig.ApplyConfiguration|public$ {
 }
 `
 
+// titler 用于把子资源名转成首字母大写的导出方法名（extract 函数后缀）。
 var titler = cases.Title(language.Und)
 
+// constructor 生成最简构造器模板：不填充任何身份字段。
 var constructor = `
 // $.ApplyConfig.ApplyConfiguration|public$ constructs a declarative configuration of the $.ApplyConfig.Type|public$ type for use with
 // apply.
@@ -491,6 +544,9 @@ func $.ApplyConfig.Type|public$() *$.ApplyConfig.ApplyConfiguration|public$ {
 }
 `
 
+// generateClientgenExtract 生成从 API 对象提取已应用配置的 Extract* 函数。
+// 提取依赖 OpenAPI schema 中的字段归属信息，因此只有 openAPIType 存在时才会走到这里；
+// 每个子资源都生成一个便捷包装，最终都委托给 From 版函数。
 func (g *applyConfigurationGenerator) generateClientgenExtract(sw *generator.SnippetWriter, typeParams TypeParams) {
 	subresources := g.collectSubresources(typeParams)
 
@@ -536,6 +592,7 @@ func Extract$.ApplyConfig.Type|public$($.Struct|private$ *$.Struct|raw$, fieldMa
 }
 `, typeParams)
 
+	// 遍历子资源并生成 Extract<Type><Subresource> 便捷函数。
 	for _, subresource := range subresources {
 		sw.Do(`
 // Extract$.ApplyConfig.Type|public$$.SubresourceName$ extracts the applied configuration owned by fieldManager from
@@ -552,6 +609,9 @@ func Extract$.ApplyConfig.Type|public$$.SubresourceName$($.Struct|private$ *$.St
 	}
 }
 
+// collectSubresources 收集需要生成 Extract 变体的子资源。
+// status 由结构体是否含 Status 字段推导；其余自定义子资源来自 +genclient 扩展，
+// 排序后输出以保证生成结果可复现。
 func (g *applyConfigurationGenerator) collectSubresources(typeParams TypeParams) []string {
 	subresources := sets.New[string]()
 	if !typeParams.Tags.NoStatus {

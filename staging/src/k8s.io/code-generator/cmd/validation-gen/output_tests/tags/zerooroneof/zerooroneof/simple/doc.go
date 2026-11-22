@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package simple 是 validation-gen 的测试包，覆盖不带 discriminator 的
+// zero-or-one-of union：字段上的 +k8s:zeroOrOneOfMember 组合成结构体级校验。
 // +k8s:validation-gen-nolint
 package simple
 

@@ -16,5 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 // +groupName=
+// 空的 groupName 表示 core 组；包级 deepcopy-gen 会为整包类型生成 DeepCopy。
 
 package core

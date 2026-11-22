@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:ifEnabled/+k8s:ifDisabled 包裹列表相关标签：
+// 开关打开时 listType/listMapKey/eachVal 生效，关闭时对应的校验与元数据都不应生成。
 package lists
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

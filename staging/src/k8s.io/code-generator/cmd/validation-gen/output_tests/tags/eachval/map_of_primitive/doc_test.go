@@ -20,13 +20,17 @@ import (
 	"testing"
 )
 
+// Test 验证 eachVal 对 map 基本类型值与 typedef 值逐项生效，
+// 且空 map 不产生任何错误。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值 map 没有任何元素，eachVal 不应上报错误。
 	st.Value(&Struct{
 		// All zero values.
 	}).ExpectValid()
 
+	// 每个 key 对应一条错误，路径带 [key] 后缀，校验信息来自 eachVal 标签。
 	st.Value(&Struct{
 		MapField:        map[string]string{"a": "A", "b": "B"},
 		MapTypedefField: map[string]StringType{"a": "A", "b": "B"},

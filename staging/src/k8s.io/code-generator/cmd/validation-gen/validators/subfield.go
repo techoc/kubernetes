@@ -29,34 +29,44 @@ const (
 	subfieldTagName = "k8s:subfield"
 )
 
+// 注册在全局注册表中；子标签的实际校验通过注入的 TagValidator 递归解析。
 func init() {
 	RegisterTagValidator(&subfieldTagValidator{})
 }
 
+// subfieldTagValidator 把校验标签转发到“指定 JSON 名的直接子字段”上，
+// 并负责在父类型上补齐 nil 安全的值提取与 ratcheting 所需的比较函数。
 type subfieldTagValidator struct {
 	validator              TagValidationExtractor
-	processedShortCircuits map[string]bool
+	processedShortCircuits map[string]bool // 按子字段路径去重，见 extractMemberShortCircuits
 }
 
+// Init 注入全局 TagValidator；子标签的解析完全委托给它。
 func (stv *subfieldTagValidator) Init(cfg Config) {
 	stv.validator = cfg.TagValidator
 	stv.processedShortCircuits = make(map[string]bool)
 }
 
+// TagName 返回标签名，供注册表分派。
 func (*subfieldTagValidator) TagName() string {
 	return subfieldTagName
 }
 
+// 作用于类型、字段以及列表/映射的元素位置，因为这些位置都可能出现结构体。
 var subfieldTagValidScopes = sets.New(ScopeType, ScopeField, ScopeListVal, ScopeMapKey, ScopeMapVal)
 
+// ValidScopes 返回该标签允许的作用域集合。
 func (*subfieldTagValidator) ValidScopes() sets.Set[Scope] {
 	return subfieldTagValidScopes
 }
 
+// 运行时库中的 Subfield 包装函数：校验前先安全地取出子字段值。
 var (
 	validateSubfield = types.Name{Package: libValidationPkg, Name: "Subfield"}
 )
 
+// GetValidations 解析 +k8s:subfield(name)=<sub-tag>，把子标签的校验包一层
+// nil 安全的字段提取，并在需要 ratcheting 时选择 == 或 DeepEqual。
 func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	// TODO: Support nested subfields once the generated validation code can
 	// prevent nil pointer dereferences by checking optionality or requiredness
@@ -70,17 +80,20 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 	args := tag.Args
 	// This tag can apply to value and pointer fields, as well as typedefs
 	// (which should never be pointers). We need to check the concrete type.
+	// 剥掉指针和别名后必须是 struct，否则没有“子字段”可访问。
 	t := context.Type
 	nt := util.NonPointer(util.NativeType(t))
 	if nt.Kind != types.Struct {
 		return Validations{}, fmt.Errorf("can only be used on struct types: %v", nt.Kind)
 	}
+	// 参数是 JSON 名，避免生成代码依赖 Go 字段名的改写规则。
 	subname := args[0].Value
 	submemb := util.GetMemberByJSON(nt, subname)
 	if submemb == nil {
 		return Validations{}, fmt.Errorf("no field for json name %q", subname)
 	}
 
+	// 子上下文模拟“直接位于该字段上”的语义，路径与 parent 都同步调整。
 	subContext := Context{
 		Scope:          ScopeField,
 		Type:           submemb.Type,
@@ -91,6 +104,8 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 		StabilityLevel: context.StabilityLevel,
 	}
 
+	// 提取函数的两端都统一成可空类型：父结构体不可空时取地址传入，
+	// 子字段不可空时返回指针，保证生成的函数可以安全地检查 nil。
 	nilableStructType := context.Type
 	if !util.IsNilableType(nilableStructType) {
 		nilableStructType = types.PointerTo(nilableStructType)
@@ -197,6 +212,7 @@ func (stv *subfieldTagValidator) extractMemberShortCircuits(subContext Context) 
 	return copyShortCircuitsAsNonError(memberValidations), nil
 }
 
+// Docs 返回标签文档；payload 必须是另一个校验标签。
 func (stv *subfieldTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            stv.TagName(),
@@ -230,6 +246,7 @@ func copyShortCircuitsAsNonError(v Validations) Validations {
 		}
 	}
 	for _, d := range v.Deferred {
+		// deferred 项同样递归过滤：父上下文返回的校验可能包含 short-circuit。
 		res.AddDeferred(Deferred(d.Scope, func() (Validations, error) {
 			inner, err := d.Callback()
 			if err != nil {

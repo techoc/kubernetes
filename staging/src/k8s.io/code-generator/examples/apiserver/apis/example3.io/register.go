@@ -21,8 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// SchemeGroupVersion 描述该 group 的 internal 版本。
+// group 名带点号（example.dots...），用于验证命名转换在含点 group 上的行为。
 var SchemeGroupVersion = schema.GroupVersion{Group: "example.dots.apiserver.code-generator.k8s.io", Version: runtime.APIVersionInternal}
 
+// SchemeBuilder/AddToScheme 是 scheme 注册的标准入口。
 var (
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
@@ -40,6 +43,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&TestTypeList{},
 	)
 
+	// 无参调用保留与其它 register.go 一致的调用形态，便于对比生成结果。
 	scheme.AddKnownTypes(SchemeGroupVersion)
 	return nil
 }

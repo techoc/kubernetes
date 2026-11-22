@@ -27,11 +27,15 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// checkAlphaBetaUsage 递归校验 +k8s:alpha/+k8s:beta 只能出现在标签链的最外层：
+// 它们修饰的是其 ValueTag 指向的验证标签，嵌套使用会让稳定性语义含糊。
+// isRoot 为 false 表示已处在 ValueTag 内部。
 func checkAlphaBetaUsage(tag codetags.Tag, isRoot bool) (string, error) {
 	if tag.Name == "k8s:alpha" || tag.Name == "k8s:beta" {
 		if !isRoot {
 			return fmt.Sprintf("tag %q can't be used in between", tag.Name), nil
 		}
+		// 稳定性前缀必须携带被修饰的验证标签，否则没有任何作用对象。
 		if tag.ValueTag == nil {
 			return fmt.Sprintf("tag %q requires a validation tag as its value payload", tag.Name), nil
 		}
@@ -44,6 +48,7 @@ func checkAlphaBetaUsage(tag codetags.Tag, isRoot bool) (string, error) {
 }
 
 // alphaBetaPrefix enforces that +k8s:alpha and +k8s:beta tags are always used as prefix to
+// 另一条规则：稳定性标签必须位于标签链最外层，作为内部验证的前缀。
 func alphaBetaPrefix() lintRule {
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 		for _, tag := range tags {
@@ -58,6 +63,7 @@ func alphaBetaPrefix() lintRule {
 
 // checkTagStability recursively checks that a tag and its nested tags
 // satisfy the stability requirements of the context.
+// 未知标签（非声明式验证标签）没有稳定性元数据，直接放行交给其他规则处理。
 func checkTagStability(tag codetags.Tag, contextLevel validators.TagStabilityLevel) (string, error) {
 	tagStability, err := validators.GetStability(tag.Name)
 	// all DV tags have stability, if a tag doesn't have stability then it is not a valid DV tag.
@@ -68,6 +74,7 @@ func checkTagStability(tag codetags.Tag, contextLevel validators.TagStabilityLev
 	if err != nil {
 		return "", err
 	}
+	// 标签稳定性低于上下文允许的最低级别时拒绝，例如在 Stable 上下文中使用 Alpha 标签。
 	if cmpOrder < 0 {
 		return fmt.Sprintf("tag %q with stability level %q cannot be used in %s validation", tag.Name, tagStability, contextLevel), nil
 	}
@@ -89,6 +96,7 @@ func validationStability() lintRule {
 		// In Alpha packages, we allow Alpha-level and Beta-level validations
 		// without a prefix. In Beta packages, we allow Beta-level validations
 		// without a prefix.
+		// 包路径末段（如 v1alpha1）决定了默认的稳定性上下文。
 		defaultContextLevel := validators.TagStabilityLevelStable
 		// APIVersion is the last element of the package path.
 		apiVersion := path.Base(pkgPath)
@@ -120,6 +128,7 @@ func validationStability() lintRule {
 			// without forcing validation authors to write redundant handwritten code (bypassing the
 			// declarative validation equivalence check), we automatically relax the stability
 			// context to Beta if the current context is Stable.
+			// 这样特性门控内的 beta 验证不必额外手写等价实现。
 			if tagToCheck.Name == "k8s:ifEnabled" || tagToCheck.Name == "k8s:ifDisabled" {
 				if contextLevel == validators.TagStabilityLevelStable {
 					contextLevel = validators.TagStabilityLevelBeta
@@ -139,6 +148,7 @@ func validationStability() lintRule {
 }
 
 // hasTag recursively checks if a tag with given name exists in the tag tree.
+// 条件标签（如 ifEnabled）的载荷里可能还有验证标签，必须一并检查。
 func hasTag(tags []codetags.Tag, name string) bool {
 	for _, tag := range tags {
 		if tag.Name == name {
@@ -158,6 +168,7 @@ func hasRequirednessTag(tags []codetags.Tag) bool {
 }
 
 // hasNonOpaqueValidationTag returns true if tags contain any registered validation tag that is not opaqueType.
+// chainTags 中的标签会展开其 ValueTag 继续检查；其余已知验证标签即视为存在验证。
 func hasNonOpaqueValidationTag(extractor validators.ValidationExtractor, chainTags sets.Set[string], tags []codetags.Tag) bool {
 	for _, tag := range tags {
 		if tag.Name == "k8s:optional" || tag.Name == "k8s:opaqueType" {
@@ -179,7 +190,12 @@ func hasNonOpaqueValidationTag(extractor validators.ValidationExtractor, chainTa
 
 // requiredAndOptional checks that fields (pointers, slices, maps, arrays) with validation
 // (either direct or transitive) explicitly declare +k8s:optional or +k8s:required.
+//
+// 规则动机：声明式验证生成器对“有验证但未声明可选性”的字段无法判断零值语义，
+// 因此要求作者显式表态。判断“有验证”时必须穿透别名、容器元素和嵌套结构体，
+// 因为验证可能只存在于元素的类型上。
 func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
+	// 这些标签的载荷是验证标签（如 alpha/beta/ifEnabled），需要展开而非直接比对。
 	chainTags := sets.New[string]()
 	for _, doc := range extractor.Docs() {
 		if doc.PayloadsType == codetags.ValueTypeTag {
@@ -187,6 +203,8 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 		}
 	}
 
+	// opacity 记录沿途遇到的 opaqueType/opaqueKeyType/opaqueValType：
+	// 一旦某层被声明为不透明，就不再深入该层（其内部字段不属于本 API 的契约）。
 	type opacity struct {
 		typ, key, val bool
 	}
@@ -201,6 +219,7 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 		return filtered
 	}
 
+	// 缓存以“类型 + 不透明状态”为键；nil 值表示正在访问，用于检测递归类型形成的环。
 	type cacheKey struct {
 		t  *types.Type
 		op opacity
@@ -253,6 +272,8 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 			return true, false, nil
 		}
 
+		// 各容器形态分别把不透明状态传递到对应的位置：
+		// slice/array 传给元素；map 分别传给 key 与 value。
 		var hasVal, cycleBroken bool
 		switch t.Kind {
 		case types.Alias:
@@ -310,6 +331,7 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 			return false, false, err
 		}
 
+		// 含环的结论可能依赖于进入环的位置，不缓存以免得到错误答案。
 		if !cycleBroken {
 			hasValidation[ck] = &hasVal
 		} else {
@@ -370,6 +392,8 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 	}
 }
 
+// lintRules 返回按顺序执行的 lint 规则集合。
+// 顺序影响报错优先级：先检查标签用法（alpha/beta 前缀），再检查稳定性，最后检查可选性声明。
 func lintRules(extractor validators.ValidationExtractor) []lintRule {
 	return []lintRule{
 		alphaBetaPrefix(),

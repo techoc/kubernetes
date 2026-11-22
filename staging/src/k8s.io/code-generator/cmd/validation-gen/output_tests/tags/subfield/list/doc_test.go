@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestStructValidation 验证 subfield 能对嵌入的 ObjectMeta 内部字段
+// （ownerReferences/finalizers/labels）执行列表与 map 级校验。
 func TestStructValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

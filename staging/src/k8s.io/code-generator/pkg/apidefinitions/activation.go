@@ -23,29 +23,33 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// Activation 表示从 API 包 doc.go 中提取的、用于控制某个生成器是否启用的数据。
 // Activation represents the data extracted from an API package's
 // doc.go that control the activation of a generator.
 type Activation struct {
-	// spec is the generator specification this activation applies to.
+	// spec 是该 activation 对应的生成器规格。
 	spec Spec
-	// shouldGenerate reports if the spec generator should be run
-	// for the package.
+	// shouldGenerate 报告是否应为该包运行 spec 指定的生成器。
 	shouldGenerate bool
 
-	// typeFilers is only set if the spec's ValueMode is TypeFilterList
+	// typeFilters 仅在 spec 的 ValueMode 为 TypeFilterList 时设置。
 	typeFilters []string
 
-	// externalTypes provides a full import path to the external types.
+	// externalTypes 指向 external 类型的完整导入路径。
 	externalTypes string
 
 	// Conversion specific:
-	// explicitOnly indicates that conversion is configured to only
-	// generate conversion for explicitly tagged types.
+	// explicitOnly 表示 conversion 被配置为只为显式打标签的类型生成转换。
 	explicitOnly bool
-	// peerPackages provides the conversion peer package list.
+	// peerPackages 提供转换的 peer 包列表。
 	peerPackages []string
 }
 
+// ShouldGenerate 报告是否应在此包上运行生成器。它统一了所有启用路径：
+// 显式 ActivationTag 值、=false 退出、+<GroupActivationTag> 回退，以及
+// ScanTypes 的类型级回退。ValueMode 为 ConversionPeerList 的生成器在
+// ActivationTag 为 "false"（explicit-only 模式）时也会生成；
+// 可用 IsExplicitOnly 区分。
 // ShouldGenerate reports whether the generator should run on the
 // package. It unifies all activation paths: explicit ActivationTag
 // value, =false opt-out, +<GroupActivationTag> fallback, and ScanTypes
@@ -54,22 +58,30 @@ type Activation struct {
 // use IsExplicitOnly to disambiguate.
 func (a *Activation) ShouldGenerate() bool { return a.shouldGenerate }
 
+// TypeFilters 返回生成器应处理的类型名模式。
 // TypeFilters returns the type name patterns the generator should
 // process.
 func (a *Activation) TypeFilters() []string { return a.typeFilters }
 
+// ExternalTypes 返回 external 类型的完整导入路径。
 // ExternalTypes returns a full import path to the external types.
 func (a *Activation) ExternalTypes() string { return a.externalTypes }
 
+// PeerPackages 返回转换的 peer 包列表。
 // PeerPackages returns the conversion peer package list.
 func (a *Activation) PeerPackages() []string { return a.peerPackages }
 
+// IsExplicitOnly 报告 conversion-gen 是否应运行在 explicit-only 模式
+// （只为显式打标签的类型生成转换）。该值由 +k8s:conversion-gen=false 设置，
+// 且仅对使用 ConversionPeerList 的生成器有意义。
 // IsExplicitOnly reports whether conversion-gen should run in
 // explicit-only mode (emit conversions only for explicitly tagged
 // types). Set when +k8s:conversion-gen=false; ONLY meaningful for
 // generators using ConversionPeerList.
 func (a *Activation) IsExplicitOnly() bool { return a.explicitOnly }
 
+// Identify 从 pkg 的 doc.go 中为 spec 描述的生成器提取激活信息。
+// opts 可启用 lint 规则；pkg 为 nil 时返回零值 Activation（视为未启用）。
 // Identify extracts data from pkg's doc.go for the generator described
 // by spec.
 func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error) {
@@ -77,6 +89,7 @@ func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error
 	for _, opt := range opts {
 		opt(&st)
 	}
+	// lint 先于激活判定执行，以便尽早暴露 doc.go 中的配置错误。
 	if err := applyLintRules(&st, pkg); err != nil {
 		return nil, err
 	}
@@ -91,6 +104,7 @@ func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error
 	enabled := !optedOut && len(values) > 0
 	switch spec.ValueMode {
 	case ConversionPeerList:
+		// peer 包必须是完整导入路径，相对路径会让生成结果不可复现。
 		for _, v := range values {
 			if err := checkRelativeImportPath(spec.ActivationTag, v); err != nil {
 				return nil, err
@@ -106,6 +120,7 @@ func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error
 		return nil, err
 	}
 
+	// 按优先级依次尝试各种启用条件，先命中者生效。
 	switch {
 	case enabled:
 		a.shouldGenerate = true
@@ -123,6 +138,7 @@ func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error
 	return a, nil
 }
 
+// isGroupActivated 报告包是否带有组级激活标签（任一值即视为启用）。
 func isGroupActivated(pkg *types.Package, spec Spec) bool {
 	if len(spec.GroupActivationTag) > 0 {
 		if vals, _ := tagValues(pkg.Comments, spec.GroupActivationTag); len(vals) > 0 {
@@ -132,6 +148,8 @@ func isGroupActivated(pkg *types.Package, spec Spec) bool {
 	return false
 }
 
+// scanTypesForActivation 报告 pkg 中是否存在带类型级
+// 指令 +<tagName>=<非 false> 标签的类型。这实现了 ScanTypes 激活检查。
 // scanTypesForActivation reports whether any type in pkg has a
 // type-level +<tagName>=<non-false> tag. This implements ScanTypes
 // activation check.
@@ -140,9 +158,11 @@ func scanTypesForActivation(pkg *types.Package, tagName string) bool {
 		return false
 	}
 	for _, t := range pkg.Types {
+		// 两处注释来源都要看：标签可能紧贴类型，也可能在其上方的注释块中。
 		lines := append(append([]string{}, t.CommentLines...), t.SecondClosestCommentLines...)
 		vals, err := tagValues(lines, tagName)
 		if err != nil {
+			// 单个类型的标签格式错误不应让整个扫描失败。
 			continue
 		}
 		for _, v := range vals {
@@ -154,6 +174,8 @@ func scanTypesForActivation(pkg *types.Package, tagName string) bool {
 	return false
 }
 
+// resolveExternalTypes 返回 pkg 的 +<spec.InputTag> 值（若存在），
+// 否则返回 pkg.Path。输入标签出现多个值是错误。
 // resolveExternalTypes returns the value of pkg's +<spec.InputTag> if
 // present, or pkg.Path otherwise. Multiple values for the input tag is
 // an error.
@@ -167,6 +189,7 @@ func resolveExternalTypes(pkg *types.Package, spec Spec) (string, error) {
 	}
 	switch len(values) {
 	case 0:
+		// 未声明时 external 类型与包本身同址（同一包内版本）。
 		return pkg.Path, nil
 	case 1:
 		if err := checkRelativeImportPath(spec.InputTag, values[0]); err != nil {
@@ -178,7 +201,8 @@ func resolveExternalTypes(pkg *types.Package, spec Spec) (string, error) {
 	}
 }
 
-// checkRelativeImportPath checks if the path is a relative path and returns an error if so
+// checkRelativeImportPath 检查路径是否为相对路径，是则返回错误。
+// 相对路径在不同工作目录下解析结果不同，无法保证生成结果可复现。
 func checkRelativeImportPath(tagName, path string) error {
 	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
 		return fmt.Errorf("+%s: relative path %q is not supported; use the full package import path", tagName, path)

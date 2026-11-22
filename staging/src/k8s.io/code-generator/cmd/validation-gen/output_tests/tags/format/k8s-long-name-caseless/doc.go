@@ -18,6 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// format 验证 k8s-long-name-caseless 格式标记：允许大小写，长度上限 63。
 // +k8s:validation-gen-nolint
 package format
 

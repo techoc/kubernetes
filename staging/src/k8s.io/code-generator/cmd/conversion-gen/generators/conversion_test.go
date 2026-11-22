@@ -22,10 +22,12 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// builtin 构造一个内建类型，如 string、int。
 func builtin(name string) *types.Type {
 	return &types.Type{Name: types.Name{Name: name}, Kind: types.Builtin}
 }
 
+// structOf 构造指定包、名字与成员的结构体类型。
 func structOf(pkg, name string, members ...types.Member) *types.Type {
 	return &types.Type{
 		Name:    types.Name{Package: pkg, Name: name},
@@ -34,14 +36,19 @@ func structOf(pkg, name string, members ...types.Member) *types.Type {
 	}
 }
 
+// field 构造结构体成员，comments 用于携带 +k8s:conversion-gen 等标记。
 func field(name string, t *types.Type, comments ...string) types.Member {
 	return types.Member{Name: name, Type: t, CommentLines: comments}
 }
 
+// conversionFn 构造一个手写转换函数的类型，comments 模拟其标记。
 func conversionFn(comments ...string) *types.Type {
 	return &types.Type{Name: types.Name{Name: "ConversionFunc"}, CommentLines: comments}
 }
 
+// TestCanUseMemoryCopyConversion 校验“能否用内存拷贝代替逐字段转换”的判定。
+// 判定正确性很关键：内存拷贝走 unsafe，一旦误判就会在 in/out 内存布局
+// 不一致时产生静默的数据损坏。
 func TestCanUseMemoryCopyConversion(t *testing.T) {
 	str := builtin("string")
 	i := builtin("int")
@@ -50,6 +57,7 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 	metaInt := structOf("int", "TypeMeta", field("Kind", str))
 	metaAlias := &types.Type{Name: types.Name{Package: "ext", Name: "MetaAlias"}, Kind: types.Alias, Underlying: metaExt}
 
+	// 构造三层嵌套结构，用于验证嵌套处的手写转换会阻止所有祖先的内存拷贝。
 	level2Ext := structOf("ext", "Level2", field("Value", str))
 	level2Int := structOf("int", "Level2", field("Value", str))
 	level1Ext := structOf("ext", "Level1", field("Level2", level2Ext))
@@ -98,6 +106,7 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 			out:  structOf("int", "T", field("Name", str)),
 			want: false,
 		},
+		// 非导出字段：只有转换发生在同一包内时才允许内存拷贝。
 		{
 			name:          "unexported member, output package internal",
 			outputPackage: "int",
@@ -119,6 +128,7 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 			out:           structOf("p", "T", field("secret", str)),
 			want:          true,
 		},
+		// 手写转换：drop 与普通转换都会阻止内存拷贝，copy-only 不会。
 		{
 			name:              "member has a dropping manual conversion",
 			manualConversions: conversionFuncMap{{meta, meta}: conversionFn("+k8s:conversion-fn=drop")},
@@ -155,6 +165,7 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 			want:              true,
 		},
 		{
+			// 手写转换注册在别名上而非底层类型上，仍需生效。
 			name:              "conversion on alias, not underlying type",
 			manualConversions: conversionFuncMap{{metaAlias, metaAlias}: conversionFn("+k8s:conversion-fn=drop")},
 			in:                structOf("ext", "T", field("Meta", metaAlias)),
@@ -167,6 +178,7 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 			out:     structOf("int", "T", field("Name", str)),
 			wantErr: "multiple arguments must use 'name: value' syntax",
 		},
+		// equalMemoryTypes 比较的边界：类型一致才允许。
 		{
 			name: "equalMemoryTypes compare: identical",
 			in:   structOf("ext", "T", field("Name", str)),
@@ -191,6 +203,8 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 			out:  structOf("int", "T", field("Name", str)),
 			want: true,
 		},
+		// 嵌套的手写转换会让其所有祖先都无法内存拷贝：祖先的内存布局
+		// 不再与对端等价，必须逐层转换。
 		{
 			name:              "nested manual conversion blocks memory copy at every ancestor",
 			manualConversions: conversionFuncMap{{level2Ext, level2Int}: conversionFn()},
@@ -209,6 +223,8 @@ func TestCanUseMemoryCopyConversion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 把非 copy-only 的手写转换对标记为 unsafe 不适用，
+			// 模拟真实生成流程中 useUnsafe 的构建过程。
 			useUnsafe := equalMemoryTypes{}
 			for pair, fn := range tt.manualConversions {
 				copyOnly, _ := isCopyOnly(fn.CommentLines)

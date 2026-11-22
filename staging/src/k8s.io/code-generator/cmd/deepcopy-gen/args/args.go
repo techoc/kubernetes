@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package args defines the command-line arguments shared by the deepcopy-gen
+// entry point and its tests.
+//
+// 与其它生成器一致，参数校验放在 Validate 中、生成开始前完成，避免生成到一半才失败。
 package args
 
 import (
@@ -24,9 +28,11 @@ import (
 	"k8s.io/code-generator/pkg/apidefinitions"
 )
 
+// Args 汇总 deepcopy-gen 的全部参数。
+// LintArgs 内嵌了 lint 相关开关，使其与生成参数共用同一 flag 集合与校验流程。
 type Args struct {
-	OutputFile   string
-	GoHeaderFile string
+	OutputFile   string // 生成文件的路径；默认写在当前包下
+	GoHeaderFile string // boilerplate 头文件路径；空表示不加头
 
 	apidefinitions.LintArgs
 }
@@ -37,6 +43,8 @@ func New() *Args {
 }
 
 // AddFlags add the generator flags to the flag set.
+// 默认输出文件名与 kube 仓库的约定一致（generated.deepcopy.go），
+// 这样 make update 无需显式传参。
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputFile, "output-file", "generated.deepcopy.go",
 		"the name of the file to be generated")
@@ -46,6 +54,7 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 }
 
 // Validate checks the given arguments.
+// 输出文件是唯一的硬性要求；lint 参数交由共享包统一校验。
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {
 		return fmt.Errorf("--output-file must be specified")

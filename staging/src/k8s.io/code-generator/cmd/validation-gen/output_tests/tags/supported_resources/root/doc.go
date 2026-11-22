@@ -19,6 +19,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 无任何 +k8s:supportsSubresource / +k8s:isSubresource 标签时，
+// 根资源校验可用，而所有子资源校验都应报错（见 subresource 包）。
 // +k8s:validation-gen-nolint
 package root
 

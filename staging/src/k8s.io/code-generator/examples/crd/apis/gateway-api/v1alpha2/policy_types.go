@@ -21,20 +21,28 @@ import (
 )
 
 // Copied from Gateway API as a minimal reproducer for #131533
+//
+// 该文件从 Gateway API 复制而来，是 #131533 的最小复现用例。
+// 手写 DeepCopyInto 用于覆盖“内嵌跨包结构体需要逐层深拷贝”的生成路径。
 
+// PolicyAncestorStatus 描述某个策略祖先的状态。
 type PolicyAncestorStatus struct {
 	AncestorRef v1.ParentReference `json:"ancestorRef"`
 }
 
+// PolicyStatus 汇总策略所有祖先的状态。
 type PolicyStatus struct {
 	Ancestors []PolicyAncestorStatus `json:"ancestors"`
 }
 
+// DeepCopyInto 手写实现，必须深入复制跨包的 AncestorRef，
+// 不能仅靠 *out = *in 的结构赋值。
 func (in *PolicyAncestorStatus) DeepCopyInto(out *PolicyAncestorStatus) {
 	*out = *in
 	in.AncestorRef.DeepCopyInto(&out.AncestorRef)
 }
 
+// DeepCopyInto 手写实现，为切片分配新底层数组并逐元素深拷贝。
 func (in *PolicyStatus) DeepCopyInto(out *PolicyStatus) {
 	*out = *in
 	if in.Ancestors != nil {

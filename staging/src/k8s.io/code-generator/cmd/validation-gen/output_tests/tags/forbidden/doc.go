@@ -18,6 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// forbidden 为每种可校验类型声明 +k8s:forbidden，验证非零值一律被拒绝。
 // +k8s:validation-gen-nolint
 package forbidden
 

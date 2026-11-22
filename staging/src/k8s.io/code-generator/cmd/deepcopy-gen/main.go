@@ -96,7 +96,7 @@ func main() {
 		return generators.GetTargets(context, args)
 	}
 
-	// Run it.
+	// 执行生成；输入包取自位置参数，类型标注由 +k8s:deepcopy-gen 标签控制。
 	if err := gengo.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),

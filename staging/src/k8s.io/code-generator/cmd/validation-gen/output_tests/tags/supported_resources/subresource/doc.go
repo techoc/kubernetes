@@ -20,6 +20,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证 supportsSubresource 声明：根资源默认受支持，/status、/scale 与
+// 多级路径 /x/y 需显式声明。
 package subresource
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -28,6 +30,7 @@ var localSchemeBuilder = testscheme.New()
 
 // Root resource is supported by default
 
+// 显式声明支持的子资源；未列出的子资源在校验时会报错。
 // +k8s:supportsSubresource="/status"
 // +k8s:supportsSubresource="/scale"
 // +k8s:supportsSubresource="/x/y"

@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestMisc 验证 unique 标签在 alpha/beta 级别下都对重复元素报错，
+// 且错误上的稳定性级别与标签一致。
 func TestMisc(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -29,6 +31,7 @@ func TestMisc(t *testing.T) {
 		AlphaUniqueSet: []string{"a", "a"},
 		BetaUniqueSet:  []string{"a", "a"},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByValidationStabilityLevel(), field.ErrorList{
+		// 错误位置指向第二个重复项（索引 1）。
 		field.Duplicate(field.NewPath("alphaUniqueSet").Index(1), "a").MarkAlpha(),
 		field.Duplicate(field.NewPath("betaUniqueSet").Index(1), "a").MarkBeta(),
 	})

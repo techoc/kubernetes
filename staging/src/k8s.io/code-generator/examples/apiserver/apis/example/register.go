@@ -21,9 +21,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// SchemeGroupVersion 是 internal 版本的 GroupVersion；Version 使用
+// runtime.APIVersionInternal，表示这是 hub 版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: "example.api.code-generator.k8s.io", Version: runtime.APIVersionInternal}
 
 var (
+	// SchemeBuilder 收集注册函数；AddToScheme 供 install 包调用。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
@@ -35,6 +38,7 @@ func Resource(resource string) schema.GroupResource {
 
 // Adds the list of known types to the given scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
+	// 注册 TestType 及其 List 类型；List 类型用于 list 请求。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&TestType{},
 		&TestTypeList{},

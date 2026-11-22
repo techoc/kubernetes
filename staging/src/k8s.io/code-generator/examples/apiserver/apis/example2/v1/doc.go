@@ -22,4 +22,7 @@ limitations under the License.
 // +groupGoName=SecondExample
 // +k8s:openapi-model-package=io.k8s.code-generator.examples.apiserver.apis.example2.v1
 
+// Package v1 是 example2 组的外部版本；除常规生成标签外，
+// 指令 +k8s:conversion-gen 指向同组的内部包，+groupGoName 指定生成代码中的
+// 组名前缀（SecondExample），避免与 example 组冲突。
 package v1

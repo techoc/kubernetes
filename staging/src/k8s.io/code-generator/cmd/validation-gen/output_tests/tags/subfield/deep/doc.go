@@ -19,12 +19,16 @@ limitations under the License.
 
 // Package subfield contains test types for testing subfield field validation tags.
 // +k8s:validation-gen-nolint
+// 本文件当前没有可生成的内容：下方用例被整体注释，等待生成器支持为
+// 中间字段配置 optionality/requiredness 以处理 NPE。
 package deep
 
 // TODO: Uncomment the following code once the generated validation code can handle NPE by
 // configuring optionality or requiredness for the intermediate fields.
 
 /**
+// 被注释掉的用例覆盖：多层 subfield 链（结构体→结构体/切片/map）、
+// optional 与 setByServer/required 的组合，以及 opaqueType 与指针场景。
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()

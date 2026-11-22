@@ -42,6 +42,7 @@ func (in *Ttest) DeepCopy() *Ttest {
 	return out
 }
 
+// DeepCopyObject 让 Ttest 满足 runtime.Object，便于在 scheme 中注册。
 func (in *Ttest) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
@@ -72,6 +73,7 @@ func (in *TtestList) DeepCopy() *TtestList {
 	return out
 }
 
+// DeepCopyObject 让 TtestList 满足 runtime.Object。
 func (in *TtestList) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
@@ -106,6 +108,7 @@ func (in *TtestPointerList) DeepCopy() *TtestPointerList {
 	return out
 }
 
+// DeepCopyObject 让 TtestPointerList 满足 runtime.Object。
 func (in *TtestPointerList) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
@@ -113,6 +116,7 @@ func (in *TtestPointerList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// GetObjectKind 返回空 ObjectKind：测试类型未实现 TypeMeta 语义。
 func (in *Ttest) GetObjectKind() schema.ObjectKind            { return schema.EmptyObjectKind }
 func (in *TtestList) GetObjectKind() schema.ObjectKind        { return schema.EmptyObjectKind }
 func (in *TtestPointerList) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }

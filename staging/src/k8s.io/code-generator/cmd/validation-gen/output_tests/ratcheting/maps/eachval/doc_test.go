@@ -27,6 +27,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_StructWithMaps 验证 map 值的 ratcheting：同样键在旧值中已报错时，
+// 新值仅修改其他键不再重复报错（ExpectValid）。
 func Test_StructWithMaps(t *testing.T) {
 	mkTest := func() *StructWithMaps {
 		return &StructWithMaps{
@@ -41,6 +43,7 @@ func Test_StructWithMaps(t *testing.T) {
 		}
 	}
 
+	// 每种 map 元素类型各触发一次 Invalid：原语、typedef、可比较与不可比较结构体。
 	st := localSchemeBuilder.Test(t)
 	st.Value(mkTest()).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Invalid(field.NewPath("mapPrimitiveField[x]"), "y", ""),

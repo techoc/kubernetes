@@ -20,6 +20,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证同一字段上重复的 validateFalse 标签会全部保留且顺序稳定，
+// 以及 eachKey/eachVal 与字段级校验共存时的组合行为。
 package multiplevalidations
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -30,6 +33,8 @@ var localSchemeBuilder = testscheme.New()
 type Struct struct {
 	TypeMeta int
 
+	// 字段级、key 级、value 级校验各两条：生成器不能去重，
+	// 每条标签都对应一次独立的错误上报。
 	// +k8s:validateFalse="field Struct.MapField #1"
 	// +k8s:validateFalse="field Struct.MapField #2"
 	// +k8s:eachKey=+k8s:validateFalse="field Struct.MapField(keys) #1"

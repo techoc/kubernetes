@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证自定义成员名 discriminated union 的匹配与互斥规则：
+// discriminator 选中某值时必须且只能设置对应成员；旧值相同则 ratcheting 放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

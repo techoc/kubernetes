@@ -16,6 +16,9 @@ limitations under the License.
 
 package wholepkg
 
+// Selector 验证生成器遇到接口类型时的行为：
+// 接口不能直接深拷贝，但若被结构体字段引用，生成代码应调用其自身声明的
+// DeepCopySelector 方法，而不是尝试复制接口底层值。
 type Selector interface {
 	DeepCopySelector() Selector
 }

@@ -19,6 +19,8 @@ limitations under the License.
 // +k8s:validation-gen-nolint
 
 // This is a test package.
+// 覆盖 +k8s:maxProperties：map 键值由 typedef 定义时，数量上限仍应作用于整个 map，
+// 且 typedef key 不应带来额外校验。
 package maxproperties
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

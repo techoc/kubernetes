@@ -20,24 +20,30 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 验证校验标记在 typedef 链（typedef 的 typedef）上的传播，
+// 以及字段级校验与类型级校验的叠加。
 package typedefs
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// E1 是字符串 typedef，类型级校验应传播到使用它的字段。
 // +k8s:validateFalse="type E1"
 type E1 string
 
 // +k8s:validateFalse="type E2"
 type E2 int
 
+// E3 是 typedef 的 typedef（E1 的别名类型），用于验证多级传播。
 // +k8s:validateFalse="type E3"
 type E3 E1
 
+// E4 是基于结构体 typedef 的 typedef。
 // +k8s:validateFalse="type E4"
 type E4 T2
 
+// T1 用值/指针两种方式引用上述 typedef，验证两路径都生效。
 // +k8s:validateFalse="type T1"
 type T1 struct {
 	TypeMeta int
@@ -68,6 +74,7 @@ type T1 struct {
 	PT2 *T2 `json:"pt2"`
 }
 
+// T2 是带类型级校验的结构体 typedef 目标。
 // +k8s:validateFalse="type T2"
 type T2 struct {
 	// +k8s:validateFalse="field T2.S"

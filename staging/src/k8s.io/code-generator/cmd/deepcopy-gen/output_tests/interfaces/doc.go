@@ -17,13 +17,17 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 
 // This is a test package.
+// 用于验证 deepcopy-gen 为接口类型生成 DeepCopy 方法，以及包含接口切片的
+// 结构体的复制路径。
 package interfaces
 
+// Inner 是被字段引用的接口；生成器需为其生成 DeepCopyInner。
 type Inner interface {
 	Function() float64
 	DeepCopyInner() Inner
 }
 
+// Ttest 持有接口切片，验证生成器会逐元素调用接口的复制方法。
 type Ttest struct {
 	I []Inner
 }

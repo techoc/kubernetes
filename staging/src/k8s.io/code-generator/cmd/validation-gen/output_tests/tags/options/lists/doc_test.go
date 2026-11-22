@@ -17,10 +17,14 @@ limitations under the License.
 package lists
 
 import (
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 +k8s:ifEnabled/ifDisabled 包裹 listType=map 重复校验与
+// eachVal 校验时，FeatureX 开关决定生效的字段。
+// 注意错误 origin 为空，表示错误来自底层 list 校验而非 option 包装层。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

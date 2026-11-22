@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖 minItems：nil 与空 slice 长度均为 0，低于下限即报 TooFew；
+// 达到下限（10）合法，超出下限也合法；旧值已报错时 ratcheting 抑制重复报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

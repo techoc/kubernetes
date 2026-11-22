@@ -47,6 +47,7 @@ import (
 // supports registration of any type (not just runtime.Object) and implements Register directly, allowing it
 // to also be used as a scheme builder.
 // Must only be used with tests that perform all registration before calls to validate.
+// 由于测试是单线程的，这里用普通 map 保存注册函数，无需加锁。
 type Scheme struct {
 	validationFuncs    map[reflect.Type]func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList
 	registrationErrors field.ErrorList
@@ -59,11 +60,13 @@ func New() *Scheme {
 
 // AddValidationFunc registers a validation function.
 // Last writer wins.
+// 以 reflect.Type 为键，同一类型重复注册时后注册者覆盖前者。
 func (s *Scheme) AddValidationFunc(srcType any, fn func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList) {
 	s.validationFuncs[reflect.TypeOf(srcType)] = fn
 }
 
 // Validate validates an object using the registered validation function.
+// 注册阶段出现错误时短路返回，避免测试因后续 panic 而丢失根因。
 func (s *Scheme) Validate(ctx context.Context, options map[string]bool, object any, subresources ...string) field.ErrorList {
 	if len(s.registrationErrors) > 0 {
 		return s.registrationErrors // short circuit with registration errors if any are present
@@ -86,6 +89,8 @@ func (s *Scheme) ValidateUpdate(ctx context.Context, options map[string]bool, ob
 }
 
 // Register adds a scheme setup function to the list.
+// 与 runtime.Scheme 不同，注册错误被累积而不是立即 panic，
+// 便于在 Validate* 中统一呈现。
 func (s *Scheme) Register(funcs ...func(*Scheme) error) {
 	for _, f := range funcs {
 		err := f(s)
@@ -95,6 +100,7 @@ func (s *Scheme) Register(funcs ...func(*Scheme) error) {
 	}
 }
 
+// toRegistrationError 将注册错误包装成字段内部错误，保持错误类型统一。
 func toRegistrationError(err error) *field.Error {
 	return field.InternalError(nil, fmt.Errorf("registration error: %w", err))
 }
@@ -106,11 +112,14 @@ func (s *Scheme) Test(t *testing.T) *ValidationTestBuilder {
 
 // ValidationTestBuilder provides convenience functions to build
 // validation tests.
+// 它包装 *testing.T 与 Scheme，所有 Expect* 方法都会创建子测试，
+// 便于定位失败用例。
 type ValidationTestBuilder struct {
 	*testing.T
 	s *Scheme
 }
 
+// fixtureEnvVar 控制是否重写 fixture 文件；仅用于本地更新期望值。
 const fixtureEnvVar = "UPDATE_VALIDATION_GEN_FIXTURE_DATA"
 
 // ValidateFixtures ensures that the validation errors of all registered types match what is expected by the test fixture files.
@@ -122,6 +131,9 @@ const fixtureEnvVar = "UPDATE_VALIDATION_GEN_FIXTURE_DATA"
 // Fixtures:
 //   - validate-false.json: defines a map of registered type to a map of field path to  +validateFalse validations args
 //     that are expected to be returned as errors when the type is validated.
+//
+// 该测试会遍历所有注册类型，因此新增类型若未更新 fixture 会失败；
+// 这是刻意的，防止生成器悄悄漏掉校验。
 func (s *ValidationTestBuilder) ValidateFixtures() {
 	s.T.Helper()
 
@@ -131,6 +143,7 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 	for t := range s.s.validationFuncs {
 		var v any
 		// TODO: this should handle maps and slices
+		// 为类型构造指针值，使可空类型也能被 fuzz 填充。
 		if t.Kind() == reflect.Pointer {
 			v = reflect.New(t.Elem()).Interface()
 		} else {
@@ -222,6 +235,8 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 	}
 }
 
+// randfiller 返回固定种子的 randfill 填充器：保证测试可重复，
+// 并强制产生非空集合，以覆盖迭代分支。
 func randfiller() *randfill.Filler {
 	// Ensure that lists and maps are not empty and use a deterministic seed.
 	// But also, don't recurse infinitely.
@@ -243,6 +258,7 @@ func (s *ValidationTestBuilder) Value(value any) *ValidationTester {
 
 // ValidationTester provides convenience functions to define validation
 // tests for a validatable value.
+// oldValue 非 nil 时自动切换为 update 校验，因此链式调用顺序有意义。
 type ValidationTester struct {
 	*ValidationTestBuilder
 	value        any
@@ -283,6 +299,7 @@ func (v *ValidationTester) Subresources(subresources []string) *ValidationTester
 	return v
 }
 
+// multiline 将错误列表格式化为多行，便于测试失败时阅读。
 func multiline(errs field.ErrorList) string {
 	if len(errs) == 0 {
 		return "<no errors>"
@@ -339,6 +356,9 @@ func (v *ValidationTester) ExpectValidateFalseByPath(expectedByPath map[string][
 	return v
 }
 
+// validateFalseArgsByPath 提取由 +k8s:validateFalse 产生的错误，
+// 按字段路径聚合其参数。字段路径为 "<nil>" 时归一化为空串，
+// 与 fixture 中类型级校验的键保持一致。
 func (v *ValidationTester) validateFalseArgsByPath() map[string][]string {
 	byPath := map[string][]string{}
 	errs := v.validate()
@@ -374,6 +394,8 @@ func (v *ValidationTester) ExpectMatches(matcher field.ErrorMatcher, expected fi
 	return v
 }
 
+// validate 根据是否设置 oldValue 选择 create 或 update 校验，
+// 并把观测到的规则上报给覆盖率统计。
 func (v *ValidationTester) validate() field.ErrorList {
 	var errs field.ErrorList
 	if v.isUpdate {

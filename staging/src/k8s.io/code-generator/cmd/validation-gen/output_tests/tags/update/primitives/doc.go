@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package for the +k8s:update tag.
 // +k8s:validation-gen-nolint
+// 覆盖 NoSet/NoUnset/NoModify 及其组合在所有标量、指针、typedef 与不可比较结构体
+// 上的生成；多个 update 标签必须合并为单次调用，而不是重复校验。
 package primitives
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

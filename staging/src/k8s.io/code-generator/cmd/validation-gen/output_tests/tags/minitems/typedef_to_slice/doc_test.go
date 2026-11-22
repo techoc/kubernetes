@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 minItems 校验先于元素级校验执行，并覆盖 0、边界与超出边界
+// 以及 ratcheting 四类场景。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 零值（nil slice）按长度 0 处理，只有 minItems=10 的字段报错。
 	st.Value(&Struct{
 		// All zero values
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -32,6 +35,7 @@ func Test(t *testing.T) {
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
 	})
 
+	// 显式 make 的长度 0 与 nil 行为一致；minItems=0 始终合法。
 	st.Value(&Struct{
 		Min0Field:         make(Min0Type, 0),
 		Min10Field:        make(Min10Type, 0),
@@ -42,6 +46,7 @@ func Test(t *testing.T) {
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
 	})
 
+	// 长度不足但仍大于 0，错误里带上实际长度。
 	st.Value(&Struct{
 		Min10Field:        make(Min10Type, 1),
 		Min10TypedefField: make(Min10TypedefType, 1),
@@ -50,6 +55,7 @@ func Test(t *testing.T) {
 		field.TooFew(field.NewPath("min10TypedefField"), 1, 10),
 	})
 
+	// 差一（9 < 10）。
 	st.Value(&Struct{
 		Min10Field:        make(Min10Type, 9),
 		Min10TypedefField: make(Min10TypedefType, 9),
@@ -58,6 +64,7 @@ func Test(t *testing.T) {
 		field.TooFew(field.NewPath("min10TypedefField"), 9, 10),
 	})
 
+	// 恰好达到下界。
 	st.Value(&Struct{
 		Min10Field:        make(Min10Type, 10),
 		Min10TypedefField: make(Min10TypedefType, 10),
@@ -72,6 +79,8 @@ func Test(t *testing.T) {
 	st.Value(testVal).ExpectValid()
 
 	// Test validation ratcheting
+	//
+	// 新旧值相同且都已违规时放行，避免存量对象升级失败。
 	st.Value(&Struct{
 		Min0Field:         make(Min0Type, 1),
 		Min10Field:        make(Min10Type, 1),

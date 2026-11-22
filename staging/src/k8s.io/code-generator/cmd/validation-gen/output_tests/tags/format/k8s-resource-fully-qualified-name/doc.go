@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package fullyqualifiedname 是 validation-gen 的测试包，覆盖
+// 指令 +k8s:format=k8s-resource-fully-qualified-name：值字段、指针字段以及带该
+// 标记的 typedef 类型都应生成相应格式校验。
 // +k8s:validation-gen-nolint
 package fullyqualifiedname
 

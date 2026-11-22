@@ -17,7 +17,10 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package subfield contains test types for testing subfield field validation tags.
+// Package shallow contains test types for testing subfield field validation tags.
+//
+// 覆盖浅层子字段校验：通过 +k8s:subfield(name) 把校验绑定到结构体
+// （或其指针）的指定子字段上。
 // +k8s:validation-gen-nolint
 package shallow
 

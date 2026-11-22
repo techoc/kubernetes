@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestUnique 覆盖 unique 校验在 set、listMap、原子列表、自定义类型、
+// 指针 key 与多 key 组合等形态下的行为。
 func TestUnique(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -29,6 +31,9 @@ func TestUnique(t *testing.T) {
 	st.Value(&Struct{}).ExpectValid()
 
 	// Test valid cases with no duplicates
+	//
+	// 注意 CustomUniqueListWithTypeSet/Map 故意放了重复元素：它们使用自定义
+	// 的 unique 规则（而非默认全量比较），此处应通过。
 	st.Value(&Struct{
 		PrimitiveListUniqueSet: []string{"aaa", "bbb"},
 		SliceMapFieldWithMultipleKeys: []ItemWithMultipleKeys{
@@ -93,6 +98,9 @@ func TestUnique(t *testing.T) {
 	}).ExpectValid()
 
 	// Test duplicate values (should fail validation)
+	//
+	// 错误位置指向重复出现的那个元素（索引 2/3/4/5）；
+	// atomic 列表只按 Key 判断重复，所以 Data 不同也算重复。
 	st.Value(&Struct{
 		PrimitiveListUniqueSet: []string{"aaa", "bbb", "ccc", "ccc", "bbb", "aaa"},
 		SliceMapFieldWithMultipleKeys: []ItemWithMultipleKeys{
@@ -148,6 +156,8 @@ func TestUnique(t *testing.T) {
 	})
 
 	// Test with zero values and empty strings
+	//
+	// 空字符串同样参与去重，不会因“零值”被特殊跳过。
 	st.Value(&Struct{
 		PrimitiveListUniqueSet: []string{"", "a", ""},
 		AtomicListUniqueMap: []Item{
@@ -163,6 +173,8 @@ func TestUnique(t *testing.T) {
 	})
 
 	// Test nil elements in pointer lists (should trigger Required errors)
+	//
+	// nil 元素在去重前先被 required 拦截，避免解引用 panic。
 	st.Value(&Struct{
 		PrimitivePointerListUniqueSet: []*string{new("a"), nil, new("b")},
 		PointerListUniqueMap:          []*Item{{Key: "key1"}, nil},
@@ -172,6 +184,8 @@ func TestUnique(t *testing.T) {
 	})
 }
 
+// TestRatcheting 验证唯一性校验不受元素顺序变化影响：
+// 只要集合内容相同，重排不应触发错误。
 func TestRatcheting(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -211,6 +225,9 @@ func TestRatcheting(t *testing.T) {
 	}
 
 	// Same data, different order.
+	//
+	// 注意 CustomUniqueListWithTypeSet/Map 的重复元素位置也变了，
+	// 但作为多重集合内容一致。
 	struct2 := Struct{
 		PrimitiveListUniqueSet: []string{"bbb", "aaa"},
 		SliceMapFieldWithMultipleKeys: []ItemWithMultipleKeys{

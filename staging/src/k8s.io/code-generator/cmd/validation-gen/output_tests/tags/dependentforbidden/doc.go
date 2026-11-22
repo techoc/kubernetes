@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 dependentForbidden 标签——当 trigger 字段被设置时，
+// 指定的 dependent 字段必须为空。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package dependentforbidden
@@ -26,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // Basic one-to-one dependency.
+// 一对一：Trigger 被设置时 Dependent 必须为空。
 type Struct struct {
 	TypeMeta int
 
@@ -41,6 +44,7 @@ type Struct struct {
 }
 
 // One trigger, many dependents (repeated tags).
+// 一个 trigger 对应多个 dependent：重复标签各自生成一条独立约束。
 type MultiDependent struct {
 	TypeMeta int
 
@@ -57,6 +61,7 @@ type MultiDependent struct {
 }
 
 // Many triggers, one dependent.
+// 多个 trigger 指向同一个 dependent：任一 trigger 被设置都应触发错误。
 type MultiTrigger struct {
 	TypeMeta int
 
@@ -73,6 +78,7 @@ type MultiTrigger struct {
 }
 
 // All four "is set" extractor kinds.
+// 覆盖四类“是否已设置”抽取器：指针、切片、映射与整型（非零即视为设置）。
 type AllKinds struct {
 	TypeMeta int
 

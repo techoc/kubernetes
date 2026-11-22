@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package maps 是 validation-gen 的测试包，覆盖 map 的更新约束
+// （+k8s:update=NoSet/NoUnset/NoAddItem/NoRemoveItem/NoModify）及其组合，
+// 用于确认生成的 update 校验能正确区分“整体设置”与“逐项增删改”。
 // +k8s:validation-gen-nolint
 package maps
 

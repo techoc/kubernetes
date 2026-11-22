@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包用 listType=map + listMapKey 模拟 union：列表按 name 去重，
+// item 标签把特定成员标记为 unionMember，从而约束“恰好一个成员存在”。
 package unionsimple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
@@ -28,6 +31,7 @@ var localSchemeBuilder = testscheme.New()
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 
+	// listMapKey 必须与 Task.Name 的 json 名一致，union 匹配依赖该键。
 	// +k8s:listType=map
 	// +k8s:listMapKey=name
 	// +k8s:item(name: "succeeded")=+k8s:unionMember

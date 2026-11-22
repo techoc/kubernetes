@@ -18,4 +18,6 @@ limitations under the License.
 // +groupName=example.dots.apiserver.code-generator.k8s.io
 // +groupGoName=ThirdExample
 
+// Package example3 是带点号群组名示例的 API 包。目录名 example3.io 与
+// 群组名不同，通过 +groupGoName 指定 Go 包前缀 ThirdExample。
 package example3

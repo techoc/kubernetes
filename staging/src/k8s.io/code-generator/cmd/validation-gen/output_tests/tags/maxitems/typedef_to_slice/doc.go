@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:maxItems 在切片 typedef 上的传递：类型标记应作用于所有使用它的字段，
+// 未标记的 typedef 与指针元素 typedef 不应产生校验。
 package typedeftoslice
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

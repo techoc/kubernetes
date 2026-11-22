@@ -19,6 +19,8 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // This is a test package.
+// slices 验证递归切片类型（T5/T6 持有自身切片）的发现顺序：切片元素类型
+// 在字段处理过程中可能尚未完成发现，生成器必须能正确处理。
 // +k8s:validation-gen-nolint
 package slices
 

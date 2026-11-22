@@ -29,6 +29,8 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
+// newProtobufPackage 构造一个 protobuf 输出目标。PkgName 是点分 protobuf
+// 包名，PkgPath 是 Go import 路径，二者语义不同，不能混用。
 func newProtobufPackage(packagePath, packageDir, packageName string, generateAll bool, omitFieldTypes map[types.Name]struct{}) *protobufPackage {
 	pkg := &protobufPackage{
 		SimpleTarget: generator.SimpleTarget{
@@ -48,6 +50,8 @@ func newProtobufPackage(packagePath, packageDir, packageName string, generateAll
 }
 
 // protobufPackage contains the protobuf implementation of Package.
+// 它同时充当 gengo Target 与生成参数容器，负责清理旧产物、过滤类型并
+// 决定是否重写字段 tag。
 type protobufPackage struct {
 	generator.SimpleTarget
 
@@ -79,6 +83,8 @@ type protobufPackage struct {
 	Imports *ImportTracker
 }
 
+// Clean 删除旧的 generated.proto 与 generated.pb.go。
+// 忽略不存在错误，使首次生成也能正常工作。
 func (p *protobufPackage) Clean() error {
 	for _, s := range []string{p.ImportPath(), p.OutputPath()} {
 		if err := os.Remove(filepath.Join(p.Dir(), filepath.Base(s))); err != nil && !os.IsNotExist(err) {
@@ -88,6 +94,8 @@ func (p *protobufPackage) Clean() error {
 	return nil
 }
 
+// ProtoTypeName 构造 protobuf 类型名：Name 是 Go 路径，Package 是 protobuf
+// 包名，Path 是 proto import 路径。三者用途不同，生成时必须分别使用。
 func (p *protobufPackage) ProtoTypeName() types.Name {
 	return types.Name{
 		Name:    p.Path(),       // the go path "foo/bar/baz"
@@ -96,6 +104,9 @@ func (p *protobufPackage) ProtoTypeName() types.Name {
 	}
 }
 
+// filterFunc 决定某个类型是否进入 protobuf 生成。
+// 只接受显式可选别名与 FilterTypes 指定的类型；函数、通道、内建、容器和
+// 指针类型均不生成独立的 proto 定义。
 func (p *protobufPackage) filterFunc(c *generator.Context, t *types.Type) bool {
 	switch t.Kind {
 	case types.Func, types.Chan:
@@ -122,16 +133,20 @@ func (p *protobufPackage) filterFunc(c *generator.Context, t *types.Type) bool {
 	return ok
 }
 
+// HasGoType 报告本包是否导出该名字的 Go 类型。
 func (p *protobufPackage) HasGoType(name string) bool {
 	_, ok := p.LocalNames[name]
 	return ok
 }
 
+// OptionalTypeName 报告该类型是否需要重写 marshaller 以去掉合成字段。
 func (p *protobufPackage) OptionalTypeName(name string) bool {
 	_, ok := p.OptionalTypeNames[name]
 	return ok
 }
 
+// ExtractGeneratedType 从已生成的 AST 中读取结构体字段的 protobuf tag，
+// 记录到 StructTags，供后续重写时保留。multiple names 属于异常写法，仅警告。
 func (p *protobufPackage) ExtractGeneratedType(t *ast.TypeSpec) bool {
 	if !p.HasGoType(t.Name.Name) {
 		return false
@@ -169,6 +184,7 @@ func (p *protobufPackage) ExtractGeneratedType(t *ast.TypeSpec) bool {
 	return true
 }
 
+// generatorsFunc 返回本包的生成器；nullable 扩展由 import tracker 按需注入。
 func (p *protobufPackage) generatorsFunc(c *generator.Context) []generator.Generator {
 	generators := []generator.Generator{}
 
@@ -188,14 +204,17 @@ func (p *protobufPackage) generatorsFunc(c *generator.Context) []generator.Gener
 	return generators
 }
 
+// GoPackageName 返回 Go import 路径的最后一段。
 func (p *protobufPackage) GoPackageName() string {
 	return filepath.Base(p.Path())
 }
 
+// ImportPath 返回 proto import 使用的相对路径（generated.proto）。
 func (p *protobufPackage) ImportPath() string {
 	return filepath.Join(p.Path(), "generated.proto")
 }
 
+// OutputPath 返回生成的 Go 文件路径（generated.pb.go）。
 func (p *protobufPackage) OutputPath() string {
 	return filepath.Join(p.Path(), "generated.pb.go")
 }

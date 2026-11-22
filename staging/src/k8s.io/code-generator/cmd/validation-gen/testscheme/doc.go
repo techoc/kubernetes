@@ -104,4 +104,10 @@ limitations under the License.
 //
 // The fuzzed data is generated pseudo-randomly with a consistent seed, with all nilable fields se
 // to a value, and with a single entry for each map  and a single element for each slice.
+//
+// 中文要点：本包提供 validation-gen 的测试脚手架。被测包需启用
+// 指令 +k8s:validation-gen-scheme-registry 并定义 testscheme.New() 的 localSchemeBuilder，
+// 生成器才会产出 zz_generated.validations.go；测试既可用 ValidationTester 手写，
+// 也可通过 +k8s:validation-gen-test-fixture 由生成器产出夹具。
+// 同一包内先调用 OldValue()/OldValueFuzzed() 会使其后的校验自动按 update 语义执行。
 package testscheme

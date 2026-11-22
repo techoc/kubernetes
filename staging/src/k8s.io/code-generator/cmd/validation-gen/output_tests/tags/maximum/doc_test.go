@@ -23,9 +23,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 +k8s:maximum=1 对所有整数类型（含指针与 typedef）生效，
+// 并验证 ratcheting：未修改的非法值在更新时不再报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 所有字段取 2（超过最大值 1），每个字段都应报错。
 	st.Value(&Struct{
 		// invalid values (greater than maximum=1)
 		IntField:        2,
@@ -54,6 +57,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("typedefField"), nil, ""),
 		field.Invalid(field.NewPath("typedefPtrField"), nil, ""),
 	})
+	// 校验 ratcheting：新旧值相同（都非法）时不报错。
 	// Test validation ratcheting
 	st.Value(&Struct{
 		IntField:        2,
@@ -83,6 +87,7 @@ func Test(t *testing.T) {
 		TypedefPtrField: ptr.To(IntType(2)),
 	}).ExpectValid()
 
+	// 边界值 1 合法。
 	st.Value(&Struct{
 		IntField:        1,
 		IntPtrField:     ptr.To(1),

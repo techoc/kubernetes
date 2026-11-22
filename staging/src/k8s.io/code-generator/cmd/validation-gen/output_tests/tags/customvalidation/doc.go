@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 验证 +k8s:customValidation 与声明式标签可共存、可被功能开关
+// （+k8s:ifEnabled）门控，并沿 typedef 字段深度传播。
 // +k8s:validation-gen-nolint
 package customvalidation
 

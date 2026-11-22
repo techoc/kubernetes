@@ -22,10 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 验证 +k8s:enum 与特性开关（ifEnabled）的组合：
+// 同一字段在不同 feature gate 组合下允许的枚举值不同，错误消息中的
+// 允许值列表必须随开关变化。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// opts declares all options this type references, enabling the named ones.
+	// opts 声明该类型引用的全部选项，并打开指定项。
+	// 先全部置为 false 再逐项打开，确保未列出的特性不会被意外启用。
 	opts := func(enabled ...string) map[string]bool {
 		m := map[string]bool{"FeatureA": false, "FeatureB": false, "FeatureC": false, "FeatureD": false}
 		for _, e := range enabled {
@@ -34,6 +38,7 @@ func Test(t *testing.T) {
 		return m
 	}
 
+	// 空字符串在默认配置下不在允许集合内。
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "",
 	}).Opts(opts()).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{

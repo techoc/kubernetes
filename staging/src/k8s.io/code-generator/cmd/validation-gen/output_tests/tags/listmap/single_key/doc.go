@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package singlekey 是 validation-gen 的测试包，覆盖单键 map 列表
+// （listType=map、listMapKey=keyField）：元素可为指针键、不可比较类型，
+// 并验证 eachVal 与不可变校验的交互。
 // +k8s:validation-gen-nolint
 package singlekey
 

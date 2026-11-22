@@ -17,4 +17,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 
 // This is a test package.
+//
+// wholepkg 用包级 +k8s:deepcopy-gen=package 打开生成，覆盖内置类型、map、slice、
+// 接口、别名以及手动实现 DeepCopy 的类型；具体类型分布在同目录的 a.go/b.go 中。
 package wholepkg

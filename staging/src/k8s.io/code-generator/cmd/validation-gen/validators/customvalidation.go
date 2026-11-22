@@ -31,10 +31,12 @@ import (
 const (
 	customValidationTagName = "k8s:customValidation"
 
+	// 手写验证函数的命名约定：ValidateCustom_<Type>[_<Field>]。
 	customValidationFuncPrefix = "ValidateCustom_"
 )
 
 // Fixed types in the custom-validation signature; value/oldValue types vary.
+// 这些是签名中位置固定的参数类型，只有 value/oldValue 随被验证类型变化。
 var (
 	contextType   = types.Name{Package: "context", Name: "Context"}
 	operationType = types.Name{Package: "k8s.io/apimachinery/pkg/api/operation", Name: "Operation"}
@@ -60,25 +62,31 @@ type customValidationTagValidator struct {
 	claimed map[types.Name]bool
 }
 
+// Init 从生成器配置中取得 universe 与输入/输出包映射，供后续函数查找使用。
 func (v *customValidationTagValidator) Init(cfg Config) {
 	v.gengoContext = cfg.GengoContext
 	v.inputToCanonicalPkg = cfg.InputToCanonicalPkg
 	v.claimed = map[types.Name]bool{}
 }
 
+// TagName 返回该验证器负责的标签名。
 func (customValidationTagValidator) TagName() string {
 	return customValidationTagName
 }
 
+// customValidationTagValidScopes 自定义验证既可作用于整个类型，也可作用于单个字段。
 var customValidationTagValidScopes = sets.New(ScopeType, ScopeField)
 
+// ValidScopes 返回允许的作用域。
 func (customValidationTagValidator) ValidScopes() sets.Set[Scope] {
 	return customValidationTagValidScopes
 }
 
+// GetValidations 按命名约定定位手写函数并校验其签名，然后把它登记为一个函数调用。
 func (v *customValidationTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
 	// Resolve the output package for the type that owns the call site (the type
 	// itself, or the containing struct for a field), as done for Validate_<Type>.
+	// 字段作用域的函数定义在包含它的结构体所属的生成包中，而非字段类型的包。
 	definingType := context.Type
 	if context.Scope == ScopeField {
 		definingType = context.ParentType
@@ -89,6 +97,7 @@ func (v *customValidationTagValidator) GetValidations(context Context, _ codetag
 	}
 
 	// Resolve the function name from the naming convention.
+	// 字段级函数名附加字段名，避免同一类型多个字段冲突。
 	funcName := customValidationFuncPrefix + definingType.Name.Name
 	if context.Scope == ScopeField {
 		funcName += "_" + context.Member.Name
@@ -97,6 +106,7 @@ func (v *customValidationTagValidator) GetValidations(context Context, _ codetag
 
 	// value and oldValue are the nilable form of the validated value, matching
 	// what the generated traversal passes to the function.
+	// 指针化后调用方可以区分“未设置”与零值，这也是 ratcheting 比较所需的形式。
 	valueType := context.Type
 	if !util.IsNilableType(valueType) {
 		valueType = types.PointerTo(valueType)
@@ -124,6 +134,8 @@ func VerifyCustomValidationsHaveTags() error {
 	return customValidationValidator.verifyCustomFunctions()
 }
 
+// verifyCustomFunctions 扫描所有相关包，收集命名不规范或未被任何标签引用的
+// ValidateCustom_* 函数。问题汇总后排序输出，保证报错稳定、便于批量修复。
 func (v *customValidationTagValidator) verifyCustomFunctions() error {
 	if v.gengoContext == nil {
 		return nil
@@ -144,6 +156,7 @@ func (v *customValidationTagValidator) verifyCustomFunctions() error {
 			}
 		}
 		// A ValidateCustom_* function in the generated package with no tag.
+		// 多个输入包可能映射到同一输出包，用 scanned 去重避免重复报告。
 		if scanned[outPkg] {
 			continue
 		}
@@ -199,10 +212,12 @@ func signatureMatches(sig *types.Signature, valueType *types.Type) bool {
 		isType(sig.Results[0].Type, errorListType)
 }
 
+// isType 判断类型是否恰好是给定命名类型。
 func isType(t *types.Type, name types.Name) bool {
 	return t != nil && t.Name == name
 }
 
+// isPointerTo 判断类型是否为指向给定命名类型的指针。
 func isPointerTo(t *types.Type, name types.Name) bool {
 	return t != nil && t.Kind == types.Pointer && t.Elem != nil && t.Elem.Name == name
 }
@@ -242,6 +257,8 @@ func renderType(t *types.Type) string {
 	}
 }
 
+// Docs 描述标签用法。函数名的 <Type>/<Field> 使用 Go 标识符而非 JSON 名，
+// 因为函数定义在生成代码里，必须与 Go 命名一致。
 func (v customValidationTagValidator) Docs() TagDoc {
 	return TagDoc{
 		Tag:            customValidationTagName,

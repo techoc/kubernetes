@@ -31,6 +31,7 @@ func init() {
 	RegisterTagValidator(immutableTagValidator{})
 }
 
+// immutableTagValidator 实现 +k8s:immutable：字段创建后不可修改。
 type immutableTagValidator struct{}
 
 func (immutableTagValidator) Init(_ Config) {}
@@ -49,9 +50,12 @@ var (
 	immutableValidator = types.Name{Package: libValidationPkg, Name: "Immutable"}
 )
 
+// GetValidations 生成一个 Immutable 校验函数。
 func (immutableTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// 使用 ShortCircuit 标志，使 immutable 与 +k8s:optional 处于同一校验组：
+	// 字段缺省时无需再判断不可变性。
 	// Use ShortCircuit flag so immutable runs in the same group as +k8s:optional.
 	result.AddFunction(Function(immutableTagName, ShortCircuit, immutableValidator).
 		WithEmits(Emission{field.ErrorTypeInvalid, "immutable", ""}))

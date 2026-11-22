@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 +k8s:neq 对 int：普通字段、指针字段以及类型级声明的 typedef 都要
+// 拒绝等于指定值的输入。
 // +k8s:validation-gen-nolint
 package neqint
 

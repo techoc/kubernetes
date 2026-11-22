@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestMapValidation 验证 map 上 eachVal/eachKey 以及类型级校验的
+// stability level 传播：alpha/beta 标签与对应级别的校验都应正确标记错误。
 func TestMapValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

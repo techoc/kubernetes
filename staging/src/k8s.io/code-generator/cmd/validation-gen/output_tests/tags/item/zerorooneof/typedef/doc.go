@@ -17,7 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package zeroroneooftypedef 是 validation-gen 的测试包，覆盖在命名列表类型上
+// 通过 +k8s:item 声明 zero-or-one-of 成员：列表最多只能有一个成员的 key 命中。
 // +k8s:validation-gen-nolint
 package zeroroneooftypedef
 

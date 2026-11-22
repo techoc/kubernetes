@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 neq 拒绝指定值、允许其他值；nil 指针跳过校验；
+// 旧值相同的非法值因 ratcheting 不再报错。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

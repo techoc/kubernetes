@@ -24,6 +24,9 @@ import (
 	"k8s.io/gengo/v2"
 )
 
+// supportedTags 列出 client-gen 认识的全部 genclient 标签。
+// validateClientGenTags 用该列表反向剔除已识别标签，剩下的 genclient: 前缀标签
+// 即视为拼写错误，避免静默忽略用户的错误注解。
 var supportedTags = []string{
 	"genclient",
 	"genclient:nonNamespaced",
@@ -105,6 +108,9 @@ var resultTypeSupportedVerbs = []string{
 // The 'input' is the input type used for creation (function argument).
 // The 'result' (not needed in this case) is the result type returned from the
 // client function.
+//
+// extension 对应单条 +genclient:method 标签的解析结果。注意其字段语义由
+// verb 决定：只有 create/update/apply 能覆盖输入类型，只有部分 verb 能覆盖返回类型。
 type extension struct {
 	// VerbName is the name of the custom verb (Scale, Instantiate, etc..)
 	VerbName string
@@ -137,18 +143,26 @@ func (e *extension) HasVerb(verb string) bool {
 }
 
 // Input returns the input override package path and the type.
+//
+// 返回顺序是 (类型名, 包路径)，与直觉相反：调用方按此顺序拼装
+// "包.类型" 引用。分隔符用 "."，因此输入值形如 "v1.Scale"。
 func (e *extension) Input() (string, string) {
 	parts := strings.Split(e.InputTypeOverride, ".")
 	return parts[len(parts)-1], strings.Join(parts[0:len(parts)-1], ".")
 }
 
 // Result returns the result override package path and the type.
+//
+// 同 Input，返回 (类型名, 包路径)。
 func (e *extension) Result() (string, string) {
 	parts := strings.Split(e.ResultTypeOverride, ".")
 	return parts[len(parts)-1], strings.Join(parts[0:len(parts)-1], ".")
 }
 
 // Tags represents a genclient configuration for a single type.
+//
+// 每个被 +genclient 标注的类型都会解析出一个 Tags，生成器据此决定
+// 是否产出 client、是否 namespace 化、包含哪些 verb 以及扩展方法。
 type Tags struct {
 	// +genclient
 	GenerateClient bool
@@ -190,6 +204,9 @@ func MustParseClientGenTags(lines []string) Tags {
 
 // ParseClientGenTags parse the provided genclient tags and validates that no unknown
 // tags are provided.
+//
+// onlyVerbs 与 readonly 的实现方式是反转为 SkipVerbs，这样后续生成器只需
+// 判断 HasVerb，无需区分白名单/黑名单两种模式。
 func ParseClientGenTags(lines []string) (Tags, error) {
 	ret := Tags{}
 	values := gengo.ExtractCommentTags("+", lines)
@@ -221,6 +238,7 @@ func ParseClientGenTags(lines []string) (Tags, error) {
 		if len(v) > 0 {
 			onlyVerbs = append(onlyVerbs, strings.Split(v[0], ",")...)
 		}
+		// 把 onlyVerbs 白名单翻译成 SkipVerbs 黑名单。
 		skipVerbs := []string{}
 		for _, m := range SupportedVerbs {
 			skip := true
@@ -249,6 +267,9 @@ func ParseClientGenTags(lines []string) (Tags, error) {
 	return ret, validateClientGenTags(values)
 }
 
+// parseClientExtensions 解析所有 +genclient:method 标签。
+// 标签名以 "method" 为前缀（因为 gengo 会把 method 后面带不带值统一成键名），
+// 值形如 "UpdateScale,verb=update,subresource=scale"。
 func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 	var ret []extension
 	for name, values := range tags {
@@ -295,6 +316,8 @@ func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 			if len(ext.VerbType) == 0 {
 				return nil, fmt.Errorf("verb type must be specified (use '// +genclient:method=%s,verb=create')", ext.VerbName)
 			}
+			// 类型覆盖只在部分 verb 上有意义，提前拒绝可避免生成出
+			// 签名与实际 HTTP 动作不匹配的 client 方法。
 			if len(ext.ResultTypeOverride) > 0 {
 				supported := false
 				for _, v := range resultTypeSupportedVerbs {
@@ -331,6 +354,9 @@ func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 }
 
 // validateTags validates that only supported genclient tags were provided.
+//
+// 直接删除 map 中的已识别键，剩余的 genclient: 前缀键即为未知标签。
+// 注意这里只是校验，调用方不应复用该 map。
 func validateClientGenTags(values map[string][]string) error {
 	for _, k := range supportedTags {
 		delete(values, k)

@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test 覆盖 +k8s:minItems：nil/空与不足下限报 TooFew，达到或超过下限合法；
+// 与 maxItems 不同，超上限在此用例中不报错，ratcheting 对违反 minItems 的旧值放行。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

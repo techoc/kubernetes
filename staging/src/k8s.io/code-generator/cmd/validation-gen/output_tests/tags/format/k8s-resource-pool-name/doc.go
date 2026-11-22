@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 k8s-resource-pool-name 格式校验：字段与指针字段直接标注，
+// typedef 则把格式定义在类型上供所有使用者继承。
 package format
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

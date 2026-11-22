@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package typedef 是 validation-gen 的测试包，覆盖 +k8s:item 作用于命名列表
+// 类型（typedef 与嵌套 typedef）：列表级与字段级的 item 标记需要合并，
+// 且相同 id/key 的冲突必须可被检测。
 // +k8s:validation-gen-nolint
 package typedef
 

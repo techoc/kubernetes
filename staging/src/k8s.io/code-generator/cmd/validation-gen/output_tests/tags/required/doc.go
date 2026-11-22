@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:required 对各类可空/不可空字段的语义：
+// 标量按零值判断，指针按 nil 判断，slice/map 按 nil 判断（空但非 nil 视为已设置）；
+// typedef 上同时带验证标签，用于确认 required 与验证并行执行。
 package required
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

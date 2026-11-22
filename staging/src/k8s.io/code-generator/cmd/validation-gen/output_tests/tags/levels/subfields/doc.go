@@ -18,12 +18,16 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+// 这是一个测试包：验证 subfield 标签被 alpha/beta 包裹时，
+// 子字段校验的错误级别如何确定。
 package subfields
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 演示 alpha/beta 的 subfield 校验，以及多个 alpha 子字段
+// 共同构成 zeroOrOneOf 联合体。
 type Struct struct {
 	TypeMeta int
 

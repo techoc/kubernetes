@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestSubfieldObjectMetaValidationWithValidateFalse 验证 subfield 能指向
+// 未包含在生成范围内（nonincluded）的外部包类型字段，且错误路径使用
+// 完整的子字段路径。
 func TestSubfieldObjectMetaValidationWithValidateFalse(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

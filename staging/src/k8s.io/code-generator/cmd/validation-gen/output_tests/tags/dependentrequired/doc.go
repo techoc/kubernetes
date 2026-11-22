@@ -17,7 +17,9 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// Package dependentrequired 是 validation-gen 的测试包，覆盖 +k8s:dependentRequired：
+// 一个触发字段被设置时，其依赖字段也必须被设置；并覆盖一对多、多对一以及
+// 指针/切片/map/内建类型四种“是否已设置”判定方式。
 // +k8s:validation-gen-nolint
 package dependentrequired
 

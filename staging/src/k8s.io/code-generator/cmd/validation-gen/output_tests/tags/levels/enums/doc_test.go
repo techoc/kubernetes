@@ -22,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestAlpha 验证 alpha 级别 enum 校验：非法值错误应标记为 alpha，
+// 而 beta 字段不受影响。
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 合法值 "A" 对两个字段都通过。
 	st.Value(&Struct{
 		EnumField:     "A",
 		EnumFieldBeta: "A",
@@ -39,6 +42,7 @@ func TestAlpha(t *testing.T) {
 	})
 }
 
+// TestBeta 验证 beta 级别 enum 校验：错误标记为 beta。
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

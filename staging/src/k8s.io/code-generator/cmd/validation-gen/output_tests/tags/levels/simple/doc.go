@@ -18,12 +18,15 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // +k8s:validation-gen-nolint
+// 这是一个测试包：为各种常用校验标签提供 alpha/beta 两个版本，
+// 验证错误级别会随前缀变化，而校验逻辑保持一致。
 package simple
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 覆盖 minimum/maxLength/maxItems/format/immutable 的 alpha/beta 版本。
 type Struct struct {
 	TypeMeta int
 
@@ -58,6 +61,7 @@ type Struct struct {
 	ImmutableFieldBeta string `json:"immutableFieldBeta"`
 }
 
+// SpecialValidationStruct 覆盖 neq/forbidden/update 等特殊校验的 alpha/beta 版本。
 type SpecialValidationStruct struct {
 	TypeMeta int
 
@@ -80,6 +84,7 @@ type SpecialValidationStruct struct {
 	UpdateFieldBeta string `json:"updateFieldBeta"`
 }
 
+// StructWithValidateFalse 用恒失败的校验验证错误级别前缀的传递。
 type StructWithValidateFalse struct {
 	TypeMeta int
 

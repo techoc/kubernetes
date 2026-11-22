@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package args 定义 defaulter-gen 的命令行参数、默认值与校验逻辑。
 package args
 
 import (
@@ -25,6 +26,7 @@ import (
 	"k8s.io/gengo/v2"
 )
 
+// Args 保存 defaulter-gen 的命令行参数。
 type Args struct {
 	OutputFile    string
 	ExtraPeerDirs []string // Always consider these as last-ditch possibilities for conversions.
@@ -36,6 +38,7 @@ type Args struct {
 	// keep tags distinct as well.
 	GeneratedBuildTag string
 
+	// LintArgs 提供通用的 +k8s: 标签校验选项；嵌入而非复制，保证各生成器行为一致。
 	apidefinitions.LintArgs
 }
 
@@ -60,6 +63,7 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 
 // Validate checks the given arguments.
 func (args *Args) Validate() error {
+	// 没有输出文件名就无法落盘，尽早报错而不是在写文件时才 panic。
 	if len(args.OutputFile) == 0 {
 		return fmt.Errorf("--output-file must be specified")
 	}

@@ -47,6 +47,9 @@ func init() {
 	RegisterTagValidator(fixedResultTagValidator{result: true, stability: TagStabilityLevelBeta})
 }
 
+// fixedResultTagValidator 实现一组固定结果的测试标记：
+// validateTrue/validateFalse 返回固定布尔结果，validateError 直接让生成失败，
+// validateTrueAlpha/Beta 则是带稳定性级别的固定结果版本。
 type fixedResultTagValidator struct {
 	result    bool
 	error     bool
@@ -55,6 +58,7 @@ type fixedResultTagValidator struct {
 
 func (fixedResultTagValidator) Init(_ Config) {}
 
+// TagName 根据构造时的 result/error/stability 组合返回对应标记名。
 func (frtv fixedResultTagValidator) TagName() string {
 	if frtv.error {
 		return validateErrorTagName
@@ -77,9 +81,11 @@ func (fixedResultTagValidator) ValidScopes() sets.Set[Scope] {
 	return fixedResultTagValidScopes
 }
 
+// GetValidations 生成固定结果的校验函数；error 模式则直接返回错误。
 func (frtv fixedResultTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	var result Validations
 
+	// validateError 用于测试生成器对错误的处理，直接终止生成。
 	if frtv.error {
 		return result, fmt.Errorf("forced error: %q", tag.Value)
 	}
@@ -90,6 +96,7 @@ func (frtv fixedResultTagValidator) GetValidations(context Context, tag codetags
 	}
 	fn := Function(frtv.TagName(), args.flags, fixedResultValidator, frtv.result, args.msg).
 		WithTypeArgs(args.typeArgs...)
+	// 仅失败校验会产生错误，因此只有它需要声明错误来源。
 	if !frtv.result {
 		fn = fn.WithEmits(Emission{field.ErrorTypeInvalid, "validateFalse", ""})
 	}
@@ -103,6 +110,7 @@ var (
 	fixedResultValidator = types.Name{Package: libValidationPkg, Name: "FixedResult"}
 )
 
+// fixedResultArgs 是从标记参数解析出的固定结果校验配置。
 type fixedResultArgs struct {
 	flags    FunctionFlags
 	msg      string
@@ -110,6 +118,7 @@ type fixedResultArgs struct {
 	cohort   string
 }
 
+// toFixedResultArgs 解析 flags/typeArg/cohort 命名参数与字符串负载。
 func (fixedResultTagValidator) toFixedResultArgs(in codetags.Tag) (fixedResultArgs, error) {
 	result := fixedResultArgs{}
 	for _, a := range in.Args {
@@ -143,6 +152,7 @@ func (fixedResultTagValidator) toFixedResultArgs(in codetags.Tag) (fixedResultAr
 	return result, nil
 }
 
+// Docs 返回该标记的文档元数据；固定结果标记属于测试辅助，默认级别为 alpha。
 func (frtv fixedResultTagValidator) Docs() TagDoc {
 	tagStabilityLevel := TagStabilityLevelAlpha
 	if frtv.stability != "" {

@@ -19,6 +19,9 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+//
+// 本包验证 validateTrueBeta：该标签只在 beta 特性门控开启时生成，
+// 且生成出的错误应带 beta 稳定性级别。
 package validatetruebeta
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

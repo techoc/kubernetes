@@ -18,6 +18,8 @@ package protobuf
 
 import "testing"
 
+// TestProtoSafePackage 验证包路径到 protobuf 包名的转换规则：
+// 斜杠转点号，连字符转下划线，因为 protobuf 的 package 标识符不允许这两类字符。
 func TestProtoSafePackage(t *testing.T) {
 	tests := []struct {
 		pkg      string

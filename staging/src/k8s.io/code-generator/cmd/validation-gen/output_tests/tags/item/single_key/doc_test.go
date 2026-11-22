@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证单键 +k8s:item：覆盖 string/int/bool 键、typedef 列表、
+// 嵌套 typedef、atomic+unique=map 组合、指针键以及指针元素（nil 元素报 Required）。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

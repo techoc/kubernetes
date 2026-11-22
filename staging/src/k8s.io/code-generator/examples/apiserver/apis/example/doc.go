@@ -17,4 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=example.apiserver.code-generator.k8s.io
 
+// 这是一个 internal（hub）API 包示例：包级标签要求为整包生成 deepcopy，
+// groupName 覆盖从目录名推导出的 API 组名。
 package example

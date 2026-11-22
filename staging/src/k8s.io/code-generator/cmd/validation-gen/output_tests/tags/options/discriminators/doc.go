@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 ifEnabled/ifDisabled 与 modeDiscriminator 的组合——
+// 特性开关决定哪一组模式校验生效。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package discriminators
@@ -25,6 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 同时包含启用与禁用 FeatureZ 时生效的两套判别器。
 type Struct struct {
 	TypeMeta int
 
@@ -32,6 +35,7 @@ type Struct struct {
 	DiscriminatorFieldDisabled DiscriminatorDisabled `json:"discriminatorFieldDisabled"`
 }
 
+// Discriminator 在 FeatureZ 启用时生效：Discriminator 字段决定哪个成员可选。
 type Discriminator struct {
 	// +k8s:ifEnabled(FeatureZ)=+k8s:modeDiscriminator
 	Discriminator string `json:"discriminator"`
@@ -43,6 +47,7 @@ type Discriminator struct {
 	FieldB *string `json:"fieldB"`
 }
 
+// DiscriminatorDisabled 在 FeatureZ 禁用时生效，校验逻辑相同但由 ifDisabled 包裹。
 type DiscriminatorDisabled struct {
 	// +k8s:ifDisabled(FeatureZ)=+k8s:modeDiscriminator
 	Discriminator string `json:"discriminator"`

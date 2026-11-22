@@ -43,30 +43,39 @@ func init() {
 	RegisterTagValidator(&ifModeTagValidator{discriminatorDefinitions, nil})
 }
 
+// discriminatorDefinitions 保存所有标签校验器发现的 discriminator 定义。
+// key 是结构体的路径；用全局表是为了让 modeDiscriminator 与 ifMode 两个
+// 独立标签校验器共享状态。
 // discriminatorDefinitions stores all discriminator definitions found by tag validators.
 // Key is the struct path.
 var discriminatorDefinitions = map[string]discriminatorGroups{}
 
+// discriminatorGroups 是同一结构体下按组名索引的 discriminator 组。
 type discriminatorGroups map[string]*discriminatorGroup
 
+// discriminatorGroup 表示一个 discriminator 组：判别字段及其各成员的规则。
 type discriminatorGroup struct {
 	name                string
 	discriminatorMember *types.Member
+	// members 把字段名映射到该字段在本组中的规则。
 	// members maps field names to their rules in this discriminator group.
 	members map[string]*fieldMemberRules
 }
 
+// fieldMemberRules 保存一个字段在某个 discriminator 组中的成员规则。
 type fieldMemberRules struct {
 	member *types.Member
 	rules  []memberRule
 }
 
+// memberRule 是一条“当 discriminator 等于 value 时生效”的校验规则。
 type memberRule struct {
 	value          string
 	validations    Validations
 	stabilityLevel ValidationStabilityLevel
 }
 
+// getOrCreate 返回指定组名的组，不存在则创建；空名归一化为 "default"。
 func (mg discriminatorGroups) getOrCreate(name string) *discriminatorGroup {
 	if name == "" {
 		name = "default"
@@ -82,6 +91,7 @@ func (mg discriminatorGroups) getOrCreate(name string) *discriminatorGroup {
 	return g
 }
 
+// modeDiscriminatorTagValidator 实现 +k8s:modeDiscriminator：声明状态判别字段。
 type modeDiscriminatorTagValidator struct {
 	shared map[string]discriminatorGroups
 }
@@ -96,11 +106,14 @@ func (mdtv *modeDiscriminatorTagValidator) ValidScopes() sets.Set[Scope] {
 	return sets.New(ScopeField)
 }
 
+// GetValidations 校验判别字段的类型并登记其所属组；实际校验由
+// getDiscriminatorValidations 在延迟阶段统一生成。
 func (mdtv *modeDiscriminatorTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	if util.NativeType(context.Type).Kind == types.Pointer {
 		return Validations{}, fmt.Errorf("can only be used on non-pointer types")
 	}
 
+	// 判别值只能是 string 或 bool。
 	if t := util.NonPointer(util.NativeType(context.Type)); t.Kind != types.Builtin || (t.Name.Name != "string" && t.Name.Name != "bool") {
 		return Validations{}, fmt.Errorf("can only be used on string or bool types (%s)", rootTypeString(context.Type, t))
 	}
@@ -108,6 +121,7 @@ func (mdtv *modeDiscriminatorTagValidator) GetValidations(context Context, tag c
 	if mdtv.shared[context.ParentPath.String()] == nil {
 		mdtv.shared[context.ParentPath.String()] = make(discriminatorGroups)
 	}
+	// 通过 modality 参数指定组名；缺省为 default 组。
 	groupName := ""
 	if nameArg, ok := tag.NamedArg("modality"); ok {
 		groupName = nameArg.Value
@@ -119,11 +133,13 @@ func (mdtv *modeDiscriminatorTagValidator) GetValidations(context Context, tag c
 		return Validations{}, fmt.Errorf("discriminator group name %q is reserved", groupName)
 	}
 	group := mdtv.shared[context.ParentPath.String()].getOrCreate(groupName)
+	// 同一组只能有一个判别字段。
 	if group.discriminatorMember != nil && group.discriminatorMember != context.Member {
 		return Validations{}, fmt.Errorf("duplicate discriminator: %q", groupName)
 	}
 	group.discriminatorMember = context.Member
 
+	// 这里只记录 discriminator 元数据，校验由延迟阶段统一生成。
 	// configures descriminator metadata, Validations are emitted by  modeDiscriminatorTagValidator.
 	return Validations{}, nil
 }
@@ -143,6 +159,7 @@ func (mdtv *modeDiscriminatorTagValidator) Docs() TagDoc {
 	}
 }
 
+// ifModeTagValidator 实现 +k8s:ifMode：按 discriminator 取值条件性地施加校验。
 type ifModeTagValidator struct {
 	shared    map[string]discriminatorGroups
 	validator TagValidationExtractor
@@ -160,6 +177,8 @@ func (imtv *ifModeTagValidator) ValidScopes() sets.Set[Scope] {
 	return sets.New(ScopeField)
 }
 
+// GetValidations 记录“字段 + discriminator 值 + 校验”的规则，
+// 并通过延迟生成统一产出 Discriminated 校验。
 func (imtv *ifModeTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	if tag.ValueTag == nil {
 		return Validations{}, fmt.Errorf("missing required payload")
@@ -173,6 +192,7 @@ func (imtv *ifModeTagValidator) GetValidations(context Context, tag codetags.Tag
 		return Validations{}, fmt.Errorf("discriminator group name %q is reserved", groupName)
 	}
 
+	// mode 可用命名参数或位置参数给出。
 	value := ""
 	if valArg, ok := tag.NamedArg("mode"); ok {
 		value = valArg.Value
@@ -190,6 +210,7 @@ func (imtv *ifModeTagValidator) GetValidations(context Context, tag codetags.Tag
 
 	fieldName := context.Member.Name
 	if rules, ok := group.members[fieldName]; ok {
+		// 同一字段多次出现时，member 必须是同一个，否则说明内部状态不一致。
 		if rules.member != context.Member {
 			return Validations{}, fmt.Errorf("internal error: member mismatch for field %q", fieldName)
 		}
@@ -210,6 +231,7 @@ func (imtv *ifModeTagValidator) GetValidations(context Context, tag codetags.Tag
 		stabilityLevel: context.StabilityLevel,
 	})
 
+	// 延迟到父级上下文统一生成，确保所有成员规则都已收集完毕。
 	return Validations{
 		Deferred: []DeferredGen{
 			Deferred(ParentContext, func() (Validations, error) {
@@ -246,9 +268,11 @@ func (imtv *ifModeTagValidator) Docs() TagDoc {
 	}
 }
 
+// getDiscriminatorValidations 把已收集的 discriminator 组转换为 Discriminated 校验。
 func getDiscriminatorValidations(shared map[string]discriminatorGroups, context Context) (Validations, error) {
 	structPath := context.ParentPath.String()
 
+	// 取尽可能具体的类型；非结构体（如 typedef 到结构体）则不做处理。
 	// Extract the most concrete type possible.
 	if k := util.NonPointer(util.NativeType(context.ParentType)).Kind; k != types.Struct {
 		return Validations{}, nil
@@ -258,11 +282,13 @@ func getDiscriminatorValidations(shared map[string]discriminatorGroups, context 
 	if !ok || len(groups) == 0 {
 		return Validations{}, nil
 	}
+	// 删除以避免同一结构体被处理两次。
 	// deleting to ensure we don't process the same struct twice.
 	delete(shared, structPath)
 
 	var result Validations
 
+	// 对组名排序，保证生成输出确定。
 	// Sort group names for deterministic output
 	groupNames := make([]string, 0, len(groups))
 	for name := range groups {
@@ -273,6 +299,7 @@ func getDiscriminatorValidations(shared map[string]discriminatorGroups, context 
 	for _, gn := range groupNames {
 		group := groups[gn]
 		if group.discriminatorMember == nil {
+			// 有成员规则却没有判别字段，说明声明不完整。
 			if len(group.members) > 0 {
 				if gn == "default" {
 					return Validations{}, fmt.Errorf("missing discriminator")
@@ -281,6 +308,7 @@ func getDiscriminatorValidations(shared map[string]discriminatorGroups, context 
 			}
 			continue
 		}
+		// 对字段名排序，保证输出稳定。
 		fieldNames := make([]string, 0, len(group.members))
 		for name := range group.members {
 			fieldNames = append(fieldNames, name)
@@ -300,9 +328,12 @@ func getDiscriminatorValidations(shared map[string]discriminatorGroups, context 
 	return result, nil
 }
 
+// generateMemberFieldValidation 为一个成员字段生成 Discriminated 校验：
+// 按 discriminator 取值分桶，每个取值对应一组包装后的校验。
 func generateMemberFieldValidation(structType *types.Type, group *discriminatorGroup, rules *fieldMemberRules) (Validations, error) {
 	fieldType := rules.member.Type
 
+	// 使用可空形式以处理缺省值：非可空类型统一取指针。
 	// Use the nilable form to handle missing values.
 	nilableFieldType := fieldType
 	fieldExprPrefix := ""
@@ -311,12 +342,15 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		fieldExprPrefix = "&"
 	}
 
+	// 取字段的 JSON 名称，错误路径与序列化保持一致。
 	// Get the JSON name of the field
 	jsonName := rules.member.Name
 	if jt, ok := tags.LookupJSON(*rules.member); ok {
 		jsonName = jt.Name
 	}
 
+	// Default-Forbidden 在 Discriminated 运行时中于 structPath.Child(jsonName) 执行，
+	// 因此路径片段为 "." + jsonName。
 	// Default-Forbidden runs at structPath.Child(jsonName) inside the
 	// Discriminated runtime; attribute it to "." + jsonName.
 	defaultForbidden, err := getForbiddenValidation(fieldType, "."+jsonName)
@@ -324,6 +358,8 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		return Validations{}, err
 	}
 
+	// 准备 DiscriminatedRules：先按取值聚合规则，再按取值排序。
+	// 在聚合前标记每条规则的稳定性级别，使同一取值的不同规则可携带不同级别。
 	// Prepare DiscriminatedRules
 	// Mark each rule's validation functions with their stability level before
 	// aggregating by value, so that different rules for the same value can
@@ -331,11 +367,13 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 	rulesByValue := make(map[string]*Validations)
 	var values []string
 	for _, rule := range rules.rules {
+		// 按首次出现顺序记录唯一取值。
 		// Track unique discriminator values in order of first appearance.
 		if _, ok := rulesByValue[rule.value]; !ok {
 			rulesByValue[rule.value] = &Validations{}
 			values = append(values, rule.value)
 		}
+		// 合并前先标记每个校验函数的稳定性级别。
 		// Mark each validation function with its stability level before merging.
 		v := rule.validations
 		if rule.stabilityLevel != "" {
@@ -345,11 +383,14 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 			}
 			v.Functions = marked
 		}
+		// 累加到相同 discriminator 取值的桶中。
 		// Accumulate this rule's validations with others that share the same discriminator value.
 		rulesByValue[rule.value].Add(v)
 	}
 	slices.Sort(values)
 
+	// 当所有规则共享同一稳定性级别时，default-forbidden（针对未识别的
+	// discriminator 取值）也应标记为该级别，使错误带一致的注解。
 	// When all rules share the same stability level, the default-forbidden
 	// (which fires for unrecognized discriminator values) should also be marked
 	// with that level so its errors carry the same stability annotation.
@@ -372,10 +413,12 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		wrapper := MultiWrapperFunction{
 			Functions: rulesByValue[val].Functions,
 			ObjType:   nilableFieldType,
+			// 每个 mode 的规则同样在 structPath.Child(jsonName) 执行。
 			// Per-mode rules also run at structPath.Child(jsonName).
 			PathFragment: "." + jsonName,
 		}
 
+		// 把字符串形式的 tag 值转换为 discriminator 类型对应的 Go 字面量。
 		// Convert the string tag value to the appropriate typed Go literal
 		// for the discriminator type.
 		typedValue, err := convertDiscriminatorValue(val, discriminatorType)
@@ -401,6 +444,7 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		Elements:        discriminatedRules,
 	}
 
+	// getValue 提取被校验的成员字段。
 	// getValue extractor
 	getValue := FunctionLiteral{
 		Parameters: []ParamResult{{Name: "obj", Type: types.PointerTo(structType)}},
@@ -408,6 +452,7 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		Body:       fmt.Sprintf("return %sobj.%s", fieldExprPrefix, rules.member.Name),
 	}
 
+	// getDiscriminator 提取判别字段。
 	// getDiscriminator extractor
 	getDiscriminator := FunctionLiteral{
 		Parameters: []ParamResult{{Name: "obj", Type: types.PointerTo(structType)}},
@@ -415,6 +460,7 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		Body:       fmt.Sprintf("return obj.%s", group.discriminatorMember.Name),
 	}
 
+	// directComparable 决定 ratcheting 时使用 "==" 还是语义 DeepEqual。
 	// directComparable is used to determine whether we can use the direct
 	// comparison operator "==" or need to use the semantic DeepEqual when
 	// looking up and comparing correlated list elements for validation ratcheting.
@@ -433,6 +479,8 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 		defaultForbidden,
 		rulesSlice,
 	)
+	// 稳定性级别已设置在被包裹的函数上，跳过上游的级别包装；
+	// 否则上游会覆盖已设置的级别。
 	// Stability levels are already set on the wrapped validation functions, so
 	// skip the level wrapping in the upstream. Processing the stability level
 	// in the upstream will override the stability levels of the wrapped validators.
@@ -440,6 +488,7 @@ func generateMemberFieldValidation(structType *types.Type, group *discriminatorG
 	return Validations{Functions: []FunctionGen{fn}}, nil
 }
 
+// uniformStabilityLevel 返回所有规则共同的稳定性级别；若不一致则返回 ""。
 // uniformStabilityLevel returns the common stability level if all rules share
 // the same one, or "" if they differ.
 func uniformStabilityLevel(rules []memberRule) ValidationStabilityLevel {
@@ -452,6 +501,8 @@ func uniformStabilityLevel(rules []memberRule) ValidationStabilityLevel {
 	return level
 }
 
+// getForbiddenValidation 返回一个 MultiWrapperFunction，按 t 的 Kind 选择
+// 合适的 validate.Forbidden* 运行时调用。pathFragment 是包装器的路径片段。
 // getForbiddenValidation returns a MultiWrapperFunction wrapping the runtime
 // validate.Forbidden* call appropriate for t's kind. pathFragment is the
 // wrapper's PathFragment (see MultiWrapperFunction).
@@ -466,6 +517,7 @@ func getForbiddenValidation(t *types.Type, pathFragment string) (any, error) {
 	case types.Pointer:
 		forbidden = types.Name{Package: libValidationPkg, Name: "ForbiddenPointer"}
 	case types.Struct:
+		// 结构体成员必须用指针表示，否则无法区分“未设置”。
 		return nil, fmt.Errorf("discriminated member fields of struct type must be pointers")
 	default:
 		forbidden = types.Name{Package: libValidationPkg, Name: "ForbiddenValue"}
@@ -474,6 +526,7 @@ func getForbiddenValidation(t *types.Type, pathFragment string) (any, error) {
 	fg := Function(forbiddenTagName, DefaultFlags, forbidden).
 		WithEmits(Emission{field.ErrorTypeForbidden, "", ""})
 
+	// 使用可空形式以匹配标准校验函数签名。
 	// Use the nilable form to match standard validation function signatures.
 	wrapperObjType := t
 	if !util.IsNilableType(t) {
@@ -487,6 +540,8 @@ func getForbiddenValidation(t *types.Type, pathFragment string) (any, error) {
 	}, nil
 }
 
+// convertDiscriminatorValue 把字符串 tag 值转换为 discriminator 类型对应的
+// 有类型 Go 字面量；目前仅支持 string 与 bool。
 // convertDiscriminatorValue converts a string tag value to the appropriate
 // typed Go literal for the given discriminator type.
 func convertDiscriminatorValue(val string, discType *types.Type) (any, error) {

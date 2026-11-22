@@ -22,21 +22,31 @@ import (
 )
 
 // manually created final conversion function required because the object contains private fields that cannot be auto-converted
+//
+// 由于 ConversionPrivate 含私有字段，生成器无法自动完成转换，
+// 需手写 Convert_* 并复用生成的 autoConvert_*。
 func Convert_v1_ConversionPrivate_To_example_ConversionPrivate(in *ConversionPrivate, out *example.ConversionPrivate, scope conversion.Scope) error {
 	return autoConvert_v1_ConversionPrivate_To_example_ConversionPrivate(in, out, scope)
 }
 
 // manually created final conversion function required because the object contains private fields that cannot be auto-converted
+//
+// 反向转换同理，必须手写以处理私有字段。
 func Convert_example_ConversionPrivate_To_v1_ConversionPrivate(in *example.ConversionPrivate, out *ConversionPrivate, scope conversion.Scope) error {
 	return autoConvert_example_ConversionPrivate_To_v1_ConversionPrivate(in, out, scope)
 }
 
 // custom conversion function to exercise use of custom functions in slice/map/pointer fields
+//
+// 手写 Convert_* 用于验证生成器在 slice/map/pointer 字段中
+// 会优先调用这些自定义转换函数。
 func Convert_v1_ConversionCustom_To_example_ConversionCustom(in *ConversionCustom, out *example.ConversionCustom, scope conversion.Scope) error {
 	return autoConvert_v1_ConversionCustom_To_example_ConversionCustom(in, out, scope)
 }
 
 // custom conversion function to exercise use of custom functions in slice/map/pointer fields
+//
+// 反向自定义转换，保证双向路径都被覆盖。
 func Convert_example_ConversionCustom_To_v1_ConversionCustom(in *example.ConversionCustom, out *ConversionCustom, scope conversion.Scope) error {
 	return autoConvert_example_ConversionCustom_To_v1_ConversionCustom(in, out, scope)
 }

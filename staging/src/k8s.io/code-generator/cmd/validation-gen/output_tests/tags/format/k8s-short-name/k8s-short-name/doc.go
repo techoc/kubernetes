@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+//
+// 覆盖 +k8s:format=k8s-short-name；目录名与 package 名刻意不同（format），
+// 用于确认生成器按包名而非目录名组织输出。
 // +k8s:validation-gen-nolint
 package format
 

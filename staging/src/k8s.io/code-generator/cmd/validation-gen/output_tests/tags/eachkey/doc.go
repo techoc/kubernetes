@@ -19,6 +19,8 @@ limitations under the License.
 
 // This is a test package.
 // +k8s:validation-gen-nolint
+// 覆盖 +k8s:eachKey：key 本身的类型/字段校验应分别作用于无校验 typedef、
+// 有校验 typedef 以及整个 map typedef 三种形态。
 package eachkey
 
 import "k8s.io/code-generator/cmd/validation-gen/testscheme"

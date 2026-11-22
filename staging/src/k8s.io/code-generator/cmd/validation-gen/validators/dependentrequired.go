@@ -28,15 +28,18 @@ import (
 )
 
 const (
+	// 两个标签共用同一套实现，差异只在“要求存在”还是“要求不存在”。
 	dependentRequiredTagName  = "k8s:dependentRequired"
 	dependentForbiddenTagName = "k8s:dependentForbidden"
 )
 
+// 运行时校验库中的具体实现（生成的代码会引用这些符号）。
 var (
 	dependentRequiredValidator  = types.Name{Package: libValidationPkg, Name: "DependentRequired"}
 	dependentForbiddenValidator = types.Name{Package: libValidationPkg, Name: "DependentForbidden"}
 )
 
+// 两种模式分别注册，因此同一个依赖关系可以同时用 required 和 forbidden 表达。
 func init() {
 	RegisterTagValidator(dependencyTagValidator{dependencyRequired})
 	RegisterTagValidator(dependencyTagValidator{dependencyForbidden})
@@ -49,6 +52,7 @@ type dependencyTagValidator struct {
 	mode dependencyMode
 }
 
+// dependencyMode 区分 required/forbidden，同时复用调用路径。
 type dependencyMode string
 
 const (
@@ -56,18 +60,24 @@ const (
 	dependencyForbidden dependencyMode = dependentForbiddenTagName
 )
 
+// Init 无需额外状态，依赖信息全部来自标签参数。
 func (dependencyTagValidator) Init(_ Config) {}
 
+// TagName 返回当前模式对应的标签名，注册表据此分派。
 func (dtv dependencyTagValidator) TagName() string {
 	return string(dtv.mode)
 }
 
+// 只允许出现在 struct 字段上：校验需要同时读取触发字段和依赖字段。
 var dependencyTagValidScopes = sets.New(ScopeField)
 
+// ValidScopes 返回该标签允许的作用域集合。
 func (dependencyTagValidator) ValidScopes() sets.Set[Scope] {
 	return dependencyTagValidScopes
 }
 
+// GetValidations 定位依赖字段并生成校验函数。
+// 返回值以 Deferred 形式挂在父类型上，因为生成的函数需要同时访问两个兄弟字段。
 func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	if context.Member == nil {
 		return Validations{}, fmt.Errorf("must be used on a struct field")
@@ -81,6 +91,7 @@ func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.T
 	if len(tag.Args) != 1 {
 		return Validations{}, fmt.Errorf("expected exactly one argument naming the dependent field, got %d", len(tag.Args))
 	}
+	// 参数是 JSON 名而非 Go 字段名，生成的校验从不依赖 Go 命名细节。
 	dependentJSONName := tag.Args[0].Value
 
 	dependentMember := util.GetMemberByJSON(parentType, dependentJSONName)
@@ -117,6 +128,7 @@ func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.T
 	var validator types.Name
 	var emitType field.ErrorType
 	var origin string
+	// 错误类型与 origin 决定用户看到的报错语义，必须与模式严格对应。
 	switch dtv.mode {
 	case dependencyRequired:
 		validator, emitType, origin = dependentRequiredValidator, field.ErrorTypeRequired, "dependentRequired"
@@ -148,6 +160,7 @@ func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.T
 	}, nil
 }
 
+// Docs 返回标签的用法文档；两个模式共享参数格式，只是描述与错误语义不同。
 func (dtv dependencyTagValidator) Docs() TagDoc {
 	doc := TagDoc{
 		Tag:            dtv.TagName(),

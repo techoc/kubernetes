@@ -28,7 +28,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// genClientset generates a package for a clientset.
+// genClientset 为 clientset 生成一个包（即聚合所有 group client 的 Clientset）。
 type genClientset struct {
 	generator.GoGenerator
 	groups             []clientgentypes.GroupVersions
@@ -40,19 +40,23 @@ type genClientset struct {
 
 var _ generator.Generator = &genClientset{}
 
+// Namers 为 clientset 生成器注册 "raw" 命名系统，用于输出完整的限定类型名。
 func (g *genClientset) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.clientsetPackage, g.imports),
 	}
 }
 
-// We only want to call GenerateType() once.
+// Filter 让 GenerateType() 只被调用一次：clientset 是单文件产物，
+// 与输入类型数量无关，因此首类型后即置位并返回 false。
 func (g *genClientset) Filter(c *generator.Context, t *types.Type) bool {
 	ret := !g.clientsetGenerated
 	g.clientsetGenerated = true
 	return ret
 }
 
+// Imports 汇总各 group-version 的 typed client 包，并为它们生成唯一的别名，
+// 避免不同 group 的同名版本包（如 v1）发生导入冲突。
 func (g *genClientset) Imports(c *generator.Context) (imports []string) {
 	imports = append(imports, g.imports.ImportLines()...)
 	for _, group := range g.groups {
@@ -65,12 +69,16 @@ func (g *genClientset) Imports(c *generator.Context) (imports []string) {
 	return
 }
 
+// GenerateType 渲染 clientset 的全部模板片段。
+// 模板按“接口 -> 结构体 -> 各 group 实现 -> 构造函数”的顺序输出，
+// 该顺序决定生成文件的内容布局，必须保持稳定以便 diff 审查。
 func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	// TODO: We actually don't need any type information to generate the clientset,
 	// perhaps we can adapt the go2ild framework to this kind of usage.
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
 	allGroups := clientgentypes.ToGroupVersionInfo(g.groups, g.groupGoNames)
+	// 模板中引用的符号统一从 universe 中解析，保证生成代码的类型名与实际包一致。
 	m := map[string]interface{}{
 		"allGroups":                            allGroups,
 		"fmtErrorf":                            c.Universe.Type(types.Name{Package: "fmt", Name: "Errorf"}),
@@ -100,6 +108,8 @@ func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Wr
 	return sw.Error()
 }
 
+// clientsetInterface 定义生成的 Clientset 接口：包含 Discovery 以及各 group-version 的访问方法。
+// 这些方法的命名与 typed client 包中的接口名严格对应。
 var clientsetInterface = `
 type Interface interface {
 	Discovery() $.DiscoveryInterfaces|raw$
@@ -108,6 +118,8 @@ type Interface interface {
 }
 `
 
+// clientsetTemplate 定义 Clientset 结构体，内嵌 DiscoveryClient 并为每个 group-version
+// 持有一个具体 client 字段（字段名小写，与接口方法名区分）。
 var clientsetTemplate = `
 // Clientset contains the clients for groups.
 type Clientset struct {
@@ -117,6 +129,7 @@ type Clientset struct {
 }
 `
 
+// clientsetInterfaceImplTemplate 为每个 group-version 生成接口实现方法。
 var clientsetInterfaceImplTemplate = `
 // $.GroupGoName$$.Version$ retrieves the $.GroupGoName$$.Version$Client
 func (c *Clientset) $.GroupGoName$$.Version$() $.PackageAlias$.$.GroupGoName$$.Version$Interface {
@@ -124,6 +137,7 @@ func (c *Clientset) $.GroupGoName$$.Version$() $.PackageAlias$.$.GroupGoName$$.V
 }
 `
 
+// getDiscoveryTemplate 生成 Discovery() 方法；nil 检查让零值 Clientset 也能安全调用。
 var getDiscoveryTemplate = `
 // Discovery retrieves the DiscoveryClient
 func (c *Clientset) Discovery() $.DiscoveryInterfaces|raw$ {
@@ -134,6 +148,8 @@ func (c *Clientset) Discovery() $.DiscoveryInterfaces|raw$ {
 }
 `
 
+// newClientsetForConfigTemplate 生成 NewForConfig；在浅拷贝上补全 UserAgent，
+// 并把构造出的 httpClient 交给 NewForConfigAndClient，从而在所有 client 间共享 transport。
 var newClientsetForConfigTemplate = `
 // NewForConfig creates a new Clientset for the given config.
 // If config's RateLimiter is not set and QPS and Burst are acceptable, 
@@ -157,6 +173,8 @@ func NewForConfig(c *$.Config|raw$) (*Clientset, error) {
 }
 `
 
+// newClientsetForConfigAndClientTemplate 生成 NewForConfigAndClient；若未设置限流器，
+// 则按 QPS/Burst 构造 token bucket，随后逐个构造各 group-version client 与 discovery client。
 var newClientsetForConfigAndClientTemplate = `
 // NewForConfigAndClient creates a new Clientset for the given config and http client.
 // Note the http client provided takes precedence over the configured transport values.
@@ -186,6 +204,7 @@ $end$
 }
 `
 
+// newClientsetForConfigOrDieTemplate 生成 NewForConfigOrDie：出错即 panic，供启动期使用。
 var newClientsetForConfigOrDieTemplate = `
 // NewForConfigOrDie creates a new Clientset for the given config and
 // panics if there is an error in the config.
@@ -198,6 +217,8 @@ func NewForConfigOrDie(c *$.Config|raw$) *Clientset {
 }
 `
 
+// newClientsetForRESTClientTemplate 生成 New：用已有的 RESTClient 组装 Clientset，
+// 不做任何配置推导，便于调用方完全掌控底层连接。
 var newClientsetForRESTClientTemplate = `
 // New creates a new Clientset for the given RESTClient.
 func New(c $.RESTClientInterface|raw$) *Clientset {

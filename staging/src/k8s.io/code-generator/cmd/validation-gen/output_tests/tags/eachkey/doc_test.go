@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// Test 验证 eachKey 对普通 map、typedef map 以及带自身校验的 typedef 键
+// 都会对每个键执行校验；错误信息里同时保留字段路径与类型来源。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

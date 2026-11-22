@@ -17,6 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：验证 maxItems 作用于结构体切片及 typedef 切片。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package sliceofstruct
@@ -25,6 +26,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
+// Struct 同时覆盖 maxItems=0 与 maxItems=10、普通元素与 typedef 元素。
 type Struct struct {
 	TypeMeta int
 

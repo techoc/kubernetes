@@ -23,11 +23,15 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test 验证 listType=set 的唯一性约束：重复元素应在首次重复处报 Duplicate。
+// 覆盖可比较类型、不可比较类型，以及“看似可比较但实际按指针比较”的陷阱。
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 空结构体合法。
 	st.Value(&Struct{}).ExpectValid()
 
+	// 无重复时全部合法；不可比较类型应走语义深比较。
 	st.Value(&Struct{
 		SliceStringField:     []string{"aaa", "bbb"},
 		SliceIntField:        []int{1, 2},
@@ -38,6 +42,8 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
+	// 两个指针值相同但地址不同：直接 == 比较会误判为不同，
+	// 因此需要按值比较，才能识别为重复。
 	ptrS1 := ptr.To("same value")
 	ptrS2 := ptr.To("same value")
 	st.Value(&Struct{
@@ -57,6 +63,7 @@ func Test(t *testing.T) {
 			{StringPtrField: ptrS2},
 		},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
+		// 索引 3 起为重复元素。
 		field.Duplicate(field.NewPath("sliceStringField").Index(3), nil),
 		field.Duplicate(field.NewPath("sliceStringField").Index(4), nil),
 		field.Duplicate(field.NewPath("sliceStringField").Index(5), nil),
@@ -69,10 +76,13 @@ func Test(t *testing.T) {
 		field.Duplicate(field.NewPath("sliceNonComparableField").Index(3), nil),
 		field.Duplicate(field.NewPath("sliceNonComparableField").Index(4), nil),
 		field.Duplicate(field.NewPath("sliceNonComparableField").Index(5), nil),
+		// 指针字段按值比较，索引 1 与 0 值相同。
 		field.Duplicate(field.NewPath("sliceFalselyComparableField").Index(1), nil),
 	})
 }
 
+// TestSetCorrelation 验证 set 语义下新旧值的关联：元素顺序变化不算修改，
+// 因此不可变约束不会误报。
 func TestSetCorrelation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
@@ -88,6 +98,7 @@ func TestSetCorrelation(t *testing.T) {
 	structOld = ImmutableStruct{SliceSetPrimitiveField: []int{2, 1}}
 	st.Value(&structNew).OldValue(&structOld).ExpectValid()
 
+	// 指针值相同但地址不同，按语义比较仍视为未变化。
 	structNew = ImmutableStruct{SliceSetFalselyComparableField: []FalselyComparableStruct{{StringPtrField: ptr.To("same value")}}}
 	structOld = ImmutableStruct{SliceSetFalselyComparableField: []FalselyComparableStruct{{StringPtrField: ptr.To("same value")}}}
 	st.Value(&structNew).OldValue(&structOld).ExpectValid()

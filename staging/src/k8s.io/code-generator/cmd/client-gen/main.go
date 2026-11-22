@@ -40,24 +40,28 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
-	// add group version package as input dirs for gengo
+	// 把每个 group/version 包作为 gengo 的输入目录。
+	// 输入列表直接决定生成哪些类型的 typed client，因此必须覆盖 --groups 的全部版本。
 	inputPkgs := []string{}
 	for _, pkg := range args.Groups {
 		for _, v := range pkg.Versions {
 			inputPkgs = append(inputPkgs, v.Package)
 		}
 	}
-	// ensure stable code generation output
+	// 对输入包排序，保证 import 别名分配与生成文件内容在多次运行间稳定。
+	// 否则 map 迭代顺序会让输出在不同机器上产生无意义 diff。
 	slices.Sort(inputPkgs)
 
 	if err := args.Validate(); err != nil {
 		klog.Fatalf("Error: %v", err)
 	}
 
+	// 目标在 gengo 构建完类型上下文后才创建，因为生成器需要完整的类型信息。
 	myTargets := func(context *generator.Context) []generator.Target {
 		return generators.GetTargets(context, args)
 	}
 
+	// 执行生成。复数形式的例外表用于把 Kind 正确映射为资源名（如 Ingress -> ingresses）。
 	if err := gengo.Execute(
 		generators.NameSystems(util.PluralExceptionListToMapOrDie(args.PluralExceptions)),
 		generators.DefaultNameSystem(),

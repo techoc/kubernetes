@@ -22,9 +22,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_StructSlice 验证列表字段的 ratcheting（存量容忍）语义：
+// 新值中的非法元素仍报错，但未发生变化的旧值不报错；同时覆盖 atomic、
+// set、map 三类列表以及可比较/不可比较/指针键元素的错误路径。
 func Test_StructSlice(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
+	// 所有列表字段都含非法元素，确认每类列表都产生预期路径的错误。
 	invalidStructSlice := &StructSlice{
 		AtomicSliceStringField:        []StringType{""},
 		AtomicSliceTypeField:          IntSliceType{1},
@@ -53,6 +57,8 @@ func Test_StructSlice(t *testing.T) {
 	// No changes.
 	st.Value(&invalidStructSlice).OldValue(&invalidStructSlice).ExpectValid()
 
+	// 删除元素后，atomic 列表仍然整体校验，故残留非法元素继续报错；
+	// set/map 列表则按元素身份比较，删除不产生新错误。
 	//  Removed elements - errors on atomic.
 	st.Value(&StructSlice{
 		AtomicSliceStringField:        []StringType{""},
@@ -82,6 +88,7 @@ func Test_StructSlice(t *testing.T) {
 		"atomicSliceNonComparableField[0]": {"field AtomicSliceNonComparableField[*]", "type NonComparableStruct"},
 	})
 
+	// 数据相同、仅顺序不同：set/map 按身份比较，应视为无变化。
 	// Same data, different order.
 	st.Value(&StructSlice{
 		SetSliceComparableField:    []ComparableStruct{{IntField: 2}, {IntField: 1}},
@@ -100,6 +107,8 @@ func Test_StructSlice(t *testing.T) {
 	}).ExpectValid()
 }
 
+// Test_Items 验证列表项级校验的 ratcheting：替换某个 key 的元素会触发
+// 新元素的校验错误，而旧元素保持合法。
 func Test_Items(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 

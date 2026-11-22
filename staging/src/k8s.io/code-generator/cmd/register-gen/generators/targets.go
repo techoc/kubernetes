@@ -45,6 +45,8 @@ func DefaultNameSystem() string {
 }
 
 // GetTargets makes targets to generate.
+// 对每个输入包做三重筛选：是否 opt-in、是否为 internal 包、是否已有手写 register.go；
+// 任一条件不满足即跳过，避免覆盖人工维护的注册文件。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, gengo.StdBuildTag, gengo.StdGeneratedBy)
 	if err != nil {
@@ -67,12 +69,14 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			klog.V(5).Infof("skipping the generation of %s file, due to err %v", args.OutputFile, err)
 			continue
 		}
+		// internal 类型没有 json tag，不能用于线缆序列化，因此不生成对外注册代码。
 		if internal {
 			klog.V(5).Infof("skipping the generation of %s file because %s package contains internal types, note that internal types don't have \"json\" tags", args.OutputFile, pkg.Name)
 			continue
 		}
 		registerFileName := "register.go"
 		searchPath := path.Join(pkg.Dir, registerFileName)
+		// 已存在 register.go 说明该包使用手写注册，生成器必须让路。
 		if _, err := os.Stat(path.Join(searchPath)); err == nil {
 			klog.V(5).Infof("skipping the generation of %s file because %s already exists in the path %s", args.OutputFile, registerFileName, searchPath)
 			continue
@@ -82,6 +86,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 
 		gv := clientgentypes.GroupVersion{}
 		{
+			// 约定：包路径的倒数第二段是 group，最后一段是 version。
 			pathParts := strings.Split(pkg.Path, "/")
 			if len(pathParts) < 2 {
 				klog.Errorf("the path of the package must contain the group name and the version, path = %s", pkg.Path)
@@ -92,6 +97,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 
 			// if there is a comment of the form "// +groupName=somegroup" or "// +groupName=somegroup.foo.bar.io",
 			// extract the fully qualified API group name from it and overwrite the group inferred from the package path
+			// 目录名与真实 API group 并不总是一致（例如 example3.io），因此允许注释覆盖。
 			override, ok, err := apidefinitions.GroupNameForPackage(pkg.Comments)
 			if err != nil {
 				klog.Fatalf("error resolving group name: %v", err)
@@ -105,6 +111,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		typesToRegister := []*types.Type{}
 		for _, t := range pkg.Types {
 			klog.V(5).Infof("considering type = %s", t.Name.String())
+			// 只有内嵌 TypeMeta 的顶层类型才是可注册的 API 对象。
 			for _, typeMember := range t.Members {
 				if typeMember.Name == "TypeMeta" && typeMember.Embedded {
 					typesToRegister = append(typesToRegister, t)
@@ -150,6 +157,7 @@ func isRegisterGenTarget(pkg *types.Package, idOpts []apidefinitions.Option) boo
 
 // isInternal determines whether the given package
 // contains the internal types or not
+// 判定依据是 TypeMeta 成员是否带 json tag：internal 类型不加 tag。
 func isInternal(p *types.Package) (bool, error) {
 	for _, t := range p.Types {
 		for _, member := range t.Members {

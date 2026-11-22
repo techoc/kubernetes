@@ -17,6 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
+// 这是一个测试包：空的有判别器联合体——只有 discriminator 没有成员，
+// 用于确认生成器不会为空联合体产生无效代码。
 // This is a test package.
 // +k8s:validation-gen-nolint
 package empty
@@ -26,6 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // Empty discriminated union
+// 空判别联合体：仅声明判别器字段 D。
 type Struct struct {
 	TypeMeta int
 

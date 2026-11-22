@@ -18,6 +18,9 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // This is a test package.
+// custommembers 验证带自定义成员名的 discriminated union：成员字段名
+// 与 discriminator 值不一致时，union 校验仍需正确关联二者。
+//
 // +k8s:validation-gen-nolint
 package custommembers
 

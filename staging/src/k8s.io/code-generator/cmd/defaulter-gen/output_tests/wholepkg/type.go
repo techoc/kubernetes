@@ -20,6 +20,7 @@ import (
 	"k8s.io/code-generator/cmd/defaulter-gen/output_tests/empty"
 )
 
+// 仅包含基本类型
 // Only primitives
 type StructPrimitives struct {
 	empty.TypeMeta
@@ -28,13 +29,18 @@ type StructPrimitives struct {
 	StringField *string
 	FloatField  *float64
 }
+
+// StructPrimitivesAlias 是 StructPrimitives 的别名类型，用于验证
+// 默认值逻辑能否穿透 typedef。
 type StructPrimitivesAlias StructPrimitives
 
+// StructStructPrimitives 内嵌一个具名结构体，验证嵌套默认值的递归调用。
 type StructStructPrimitives struct {
 	empty.TypeMeta
 	StructField StructPrimitives
 }
 
+// Pointer 汇集各种指针/值组合，验证默认值生成对指针语义的处理。
 // Pointer
 type StructPointer struct {
 	empty.TypeMeta
@@ -46,6 +52,7 @@ type StructPointer struct {
 	PointerPointerStructStructPrimitives     *StructStructPrimitives
 }
 
+// Slices 覆盖元素为值与指针、结构体与别名的 slice 字段。
 // Slices
 type StructSlices struct {
 	empty.TypeMeta
@@ -57,6 +64,7 @@ type StructSlices struct {
 	SlicePointerStructStructPrimitives     []*StructStructPrimitives
 }
 
+// Everything 是上述各类字段的并集，作为主要测试入口。
 // Everything
 type StructEverything struct {
 	empty.TypeMeta

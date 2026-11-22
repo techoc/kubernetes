@@ -34,6 +34,9 @@ import (
 )
 
 // genProtoIDL produces a .proto IDL.
+//
+// 输出的是 proto2 语法的消息定义；每个 Go 输入包对应一个 .proto 文件。
+// omitGogo 用于生成不依赖 gogoproto 扩展的“干净” IDL。
 type genProtoIDL struct {
 	// This base type is close enough to what we need, if we redefine some
 	// methods.
@@ -47,6 +50,9 @@ type genProtoIDL struct {
 	omitFieldTypes map[types.Name]struct{}
 }
 
+// PackageVars 输出 .proto 的 option 段。未 omitGogo 时打开 gogoproto 的
+// marshaler/sizer/unmarshaler 生成，关闭其自带的 stringer/getter/unrecognized，
+// 与 k8s 现有的 proto 代码约定一致。
 func (g *genProtoIDL) PackageVars(c *generator.Context) []string {
 	if g.omitGogo {
 		return []string{
@@ -67,10 +73,13 @@ func (g *genProtoIDL) PackageVars(c *generator.Context) []string {
 	}
 }
 
+// Filename 在同一输出文件名后加 .proto 后缀，避免与 Go 输出冲突。
 func (g *genProtoIDL) Filename() string { return g.OutputFilename + ".proto" }
 
+// FileType 告诉 gengo 使用 proto IDL 的组装逻辑（见 NewProtoFile）。
 func (g *genProtoIDL) FileType() string { return "protoidl" }
 
+// Namers 使用 local namer：proto 类型名需按 package 规则渲染，而非 Go 的限定名。
 func (g *genProtoIDL) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
 		// The local namer returns the correct protobuf name for a proto type
@@ -80,6 +89,8 @@ func (g *genProtoIDL) Namers(c *generator.Context) namer.NameSystems {
 }
 
 // Filter ignores types that are identified as not exportable.
+// 类型级 +protobuf=true/false 优先于包级 generateAll；未显式标注时，
+// 只有可被 proto 表达的类型才会输出。
 func (g *genProtoIDL) Filter(c *generator.Context, t *types.Type) bool {
 	tags, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{"protobuf"}, t.CommentLines)
 	if err != nil {
@@ -105,6 +116,9 @@ func (g *genProtoIDL) Filter(c *generator.Context, t *types.Type) bool {
 	return ok
 }
 
+// isProtoable 递归判断类型能否用 proto 表示。
+// seen 用于在类型环上乐观地返回 true：真正不可表示的类型会在其他分支被拒；
+// struct 只要有一个成员可表示即可（其余成员可能被 protobuf:"-" 排除）。
 func isProtoable(seen map[*types.Type]bool, t *types.Type) bool {
 	if seen[t] {
 		// be optimistic in the case of type cycles.
@@ -152,6 +166,8 @@ func isOptionalAlias(t *types.Type) bool {
 	return extractBoolTagOrDie("protobuf.nullable", t.CommentLines)
 }
 
+// Imports 在 omitGogo 模式下剔除 gogoproto 的 import；否则残留的
+// (gogoproto.*) 选项在 option 段已被移除，import 也必须一起移除。
 func (g *genProtoIDL) Imports(c *generator.Context) (imports []string) {
 	lines := []string{}
 	// TODO: this could be expressed more cleanly
@@ -165,6 +181,7 @@ func (g *genProtoIDL) Imports(c *generator.Context) (imports []string) {
 }
 
 // GenerateType makes the body of a file implementing a set for type t.
+// 别名与 struct 分别走 doAlias/doStruct；其他 Kind 说明生成器不应处理该类型。
 func (g *genProtoIDL) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 	b := bodyGen{
@@ -198,12 +215,14 @@ type ProtobufFromGoNamer interface {
 	GoNameToProtoName(name types.Name) types.Name
 }
 
+// ProtobufLocator 提供 Go 类型 ↔ proto 类型之间的映射与命名策略。
 type ProtobufLocator interface {
 	ProtoTypeFor(t *types.Type) (*types.Type, error)
 	GoTypeForName(name types.Name) *types.Type
 	CastTypeName(name types.Name) string
 }
 
+// protobufLocator 是 ProtobufLocator 的实现，依赖 proto namer 与 import 追踪器。
 type protobufLocator struct {
 	namer    ProtobufFromGoNamer
 	tracker  namer.ImportTracker
@@ -214,6 +233,7 @@ type protobufLocator struct {
 
 // CastTypeName returns the cast type name of a Go type
 // TODO: delegate to a new localgo namer?
+// 本包内类型只写短名；跨包类型写全限定名，供 gogoproto.casttype 使用。
 func (p protobufLocator) CastTypeName(name types.Name) string {
 	if name.Package == p.localGoPackage {
 		return name.Name
@@ -221,6 +241,7 @@ func (p protobufLocator) CastTypeName(name types.Name) string {
 	return name.String()
 }
 
+// GoTypeForName 在未指定包时默认落到本包；用于 protobuf.as 的别名解析。
 func (p protobufLocator) GoTypeForName(name types.Name) *types.Type {
 	if len(name.Package) == 0 {
 		name.Package = p.localGoPackage
@@ -254,6 +275,7 @@ func (p protobufLocator) ProtoTypeFor(t *types.Type) (*types.Type, error) {
 	return nil, errUnrecognizedType
 }
 
+// bodyGen 负责单个类型/消息的文本输出；locator 决定字段类型如何映射。
 type bodyGen struct {
 	locator        ProtobufLocator
 	localPackage   types.Name
@@ -267,6 +289,8 @@ func (b bodyGen) unknown() error {
 	return fmt.Errorf("not sure how to generate: %#v", b.t)
 }
 
+// doAlias 只为标记了 protobuf.nullable=true 的 map/slice 别名生成消息：
+// 把它们包装成含单个 Items 字段的 message，从而在 proto 中表达“可为空”。
 func (b bodyGen) doAlias(sw *generator.SnippetWriter) error {
 	if !isOptionalAlias(b.t) {
 		return nil
@@ -298,7 +322,10 @@ func (b bodyGen) doAlias(sw *generator.SnippetWriter) error {
 	return nested.doStruct(sw)
 }
 
+// doStruct 输出一个 message：先收集类型级 option 与 protobuf.as/embed 指令，
+// 再按 Go struct 字段顺序逐行输出字段与字段级 option。
 func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
+	// 匿名类型与私有类型不产生可引用的消息名，直接跳过。
 	if len(b.t.Name.Name) == 0 {
 		return nil
 	}
@@ -316,6 +343,7 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 			key := strings.TrimPrefix(k, "protobuf.options.")
 			switch key {
 			case "marshal":
+				// marshal=false 需要同时关掉 unmarshaler/sizer，否则 gogo 生成代码不完整。
 				if v[0] == "false" {
 					if !b.omitGogo {
 						options = append(options,
@@ -375,6 +403,7 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 	sw.Do(`message $.Name.Name$ {
 `, b.t)
 
+	// option 排序输出，否则 map 遍历顺序会让生成结果在每次运行间抖动。
 	if len(options) > 0 {
 		sort.Strings(options)
 		for _, s := range options {
@@ -397,6 +426,7 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 		}
 		sw.Do(`$.Type|local$ $.Name$ = $.Tag$`, field)
 		if len(field.Extras) > 0 {
+			// 同样排序，保持同一份输入产生逐字节可比的输出。
 			extras := []string{}
 			for k, v := range field.Extras {
 				if b.omitGogo && strings.HasPrefix(k, "(gogoproto.") {
@@ -420,6 +450,7 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 	return nil
 }
 
+// protoField 描述最终写入 .proto 的一个字段；Tag 为 -1 表示尚未分配。
 type protoField struct {
 	LocalPackage types.Name
 
@@ -437,9 +468,13 @@ type protoField struct {
 }
 
 var (
+	// errUnrecognizedType 表示某成员类型无法用 proto 表达；调用方据此中止生成。
 	errUnrecognizedType = fmt.Errorf("did not recognize the provided type")
 )
 
+// isFundamentalProtoType 把 Go 内建类型映射为 proto2 标量。
+// 注意 int/uint 统一映射到 64 位，float64/float 映射 double、float32 映射 float，
+// 这是 k8s proto 序列化格式的既定兼容性要求。
 func isFundamentalProtoType(t *types.Type) (*types.Type, bool) {
 	// TODO: when we enable proto3, also include other fundamental types in the google.protobuf package
 	// switch {
@@ -474,6 +509,9 @@ func isFundamentalProtoType(t *types.Type) (*types.Type, bool) {
 	return t, false
 }
 
+// memberTypeToProtobufField 递归把 Go 成员类型映射为 protoField。
+// 关键不变式：map 的 casttype 需要拆成 castkey/castvalue 分别挂在键和值上，
+// 指针/可选别名设置 Nullable，否则 gogo 生成代码会把指针字段当作值类型。
 func memberTypeToProtobufField(locator ProtobufLocator, field *protoField, t *types.Type) error {
 	var err error
 	switch t.Kind {
@@ -551,6 +589,8 @@ func memberTypeToProtobufField(locator ProtobufLocator, field *protoField, t *ty
 }
 
 // protobufTagToField extracts information from an existing protobuf tag
+// 手写 protobuf:"..." 标签可覆盖自动推导的 wire type、字段号与名称；
+// 显式 wire type（varint/bytes 等）表示字段保持自动映射，只是编号/名称被固定。
 func protobufTagToField(tag string, field *protoField, m types.Member, t *types.Type, localPackage types.Name) error {
 	if len(tag) == 0 || tag == "-" {
 		return nil
@@ -623,6 +663,9 @@ func protobufTagToField(tag string, field *protoField, m types.Member, t *types.
 	return nil
 }
 
+// membersToFields 把结构体成员转换为 proto 字段并分配字段号。
+// 显式编号优先且必须唯一；未编号字段从当前最大值继续递增，
+// 从而保证已有编号不变、新增字段不冲突（proto 兼容性的关键）。
 func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.Name, omitFieldTypes map[types.Name]struct{}) ([]protoField, error) {
 	fields := []protoField{}
 
@@ -720,6 +763,8 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 	return fields, nil
 }
 
+// genComment 输出缩进后的 // 注释，并去掉末尾空行——.proto 中空注释行会产生
+// 无意义的输出，且部分格式化工具会报错。
 func genComment(out io.Writer, lines []string, indent string) {
 	for {
 		l := len(lines)
@@ -737,11 +782,14 @@ func genComment(out io.Writer, lines []string, indent string) {
 	}
 }
 
+// formatProtoFile 目前原样返回；protoc 的格式化器不可用时仍需保持接口一致。
 func formatProtoFile(source []byte) ([]byte, error) {
 	// TODO; Is there any protobuf formatter?
 	return source, nil
 }
 
+// assembleProtoFile 按 proto2 语法组装最终文件：header、syntax、package、
+// 排序后的 import、文件级 option，最后是消息体。
 func assembleProtoFile(w io.Writer, f *generator.File) {
 	w.Write(f.Header)
 
@@ -770,6 +818,7 @@ func assembleProtoFile(w io.Writer, f *generator.File) {
 	w.Write(f.Body.Bytes())
 }
 
+// NewProtoFile 返回 .proto 的文件类型，交给 gengo 按 FileType 分发。
 func NewProtoFile() *generator.DefaultFileType {
 	return &generator.DefaultFileType{
 		Format:   formatProtoFile,

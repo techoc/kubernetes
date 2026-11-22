@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1 是 example2 组的 lister 示例包。
+// 手写的 *_expansion.go 用于给生成的 lister 增加自定义方法，
+// 从而在不修改生成代码的前提下扩展行为。
 package v1
 
 // TestTypeListerExpansion allows custom methods to be added to
@@ -26,6 +29,8 @@ type TestTypeListerExpansion interface {
 // TestTypeNamespaceLister.
 type TestTypeNamespaceListerExpansion interface{}
 
+// CheckExpansionSupport 是一个空实现，用来证明 lister-gen 生成的类型
+// 会内嵌对应的 Expansion 接口，手写方法因此可用。
 func (*testTypeLister) CheckExpansionSupport() {
 	// This checks that lister-gen correctly supports expansions
 }
