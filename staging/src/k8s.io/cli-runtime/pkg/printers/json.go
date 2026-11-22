@@ -36,12 +36,14 @@ func (p *JSONPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
 	// we need an actual value in order to retrieve the package path for an object.
 	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 中文：拒绝打印 internal 版本对象，它们缺少 apiVersion/kind 且不该出现在 CLI 输出中。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(InternalObjectPrinterErr)
 	}
 
 	switch obj := obj.(type) {
 	case *metav1.WatchEvent:
+		// WatchEvent 包了一层 Object，必须校验内层对象，否则可绕过上面的 internal 检查。
 		if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj.Object.Object)).Type().PkgPath()) {
 			return errors.New(InternalObjectPrinterErr)
 		}
@@ -53,9 +55,11 @@ func (p *JSONPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 		if err != nil {
 			return err
 		}
+		// 每个对象后补换行，保证多文档流在终端里可读。
 		_, err = w.Write([]byte{'\n'})
 		return err
 	case *runtime.Unknown:
+		// 原始字节已经是 JSON，只做缩进，避免先反序列化再序列化的损耗与精度问题。
 		var buf bytes.Buffer
 		err := json.Indent(&buf, obj.Raw, "", "    ")
 		if err != nil {
@@ -67,9 +71,11 @@ func (p *JSONPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Empty() {
+		// 缺少类型元信息会输出不可再解析的 JSON，提前报错并给出修复建议。
 		return fmt.Errorf("missing apiVersion or kind; try GetObjectKind().SetGroupVersionKind() if you know the type")
 	}
 
+	// 固定 4 空格缩进，与 kubectl 历史输出保持一致。
 	data, err := json.MarshalIndent(obj, "", "    ")
 	if err != nil {
 		return err

@@ -30,18 +30,22 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
+// 共享的元数据访问器，统一读写 name/namespace/resourceVersion 等字段，无需区分具体类型。
 var metadataAccessor = meta.NewAccessor()
 
 // Helper provides methods for retrieving or mutating a RESTful
 // resource.
 type Helper struct {
 	// The name of this resource as the server would recognize it
+	// 中文：服务端识别的复数资源名，如 "pods"。
 	Resource string
 	// The name of the subresource as the server would recognize it
+	// 中文：子资源名，如 "status"；为空表示直接操作主资源。
 	Subresource string
 	// A RESTClient capable of mutating this resource.
 	RESTClient RESTClient
 	// True if the resource type is scoped to namespaces
+	// 中文：决定请求路径是否带 namespaces/<ns> 前缀。
 	NamespaceScoped bool
 	// If true, then use server-side dry-run to not persist changes to storage
 	// for verbs and resources that support server-side dry-run.
@@ -61,6 +65,7 @@ type Helper struct {
 }
 
 // NewHelper creates a Helper from a ResourceMapping
+// 中文：资源名与命名空间作用域都取自 RESTMapping，保证与实际注册的资源一致。
 func NewHelper(client RESTClient, mapping *meta.RESTMapping) *Helper {
 	return &Helper{
 		Resource:        mapping.Resource.Resource,
@@ -71,6 +76,7 @@ func NewHelper(client RESTClient, mapping *meta.RESTMapping) *Helper {
 
 // DryRun, if true, will use server-side dry-run to not persist changes to storage.
 // Otherwise, changes will be persisted to storage.
+// 中文：server-side dry-run 只在服务端支持时生效，否则变更仍会落盘，调用方需自行确认兼容性。
 func (m *Helper) DryRun(dryRun bool) *Helper {
 	m.ServerDryRun = dryRun
 	return m
@@ -97,6 +103,7 @@ func (m *Helper) WithSubresource(subresource string) *Helper {
 }
 
 func (m *Helper) Get(namespace, name string) (runtime.Object, error) {
+	// context.TODO 是历史遗留：Helper 接口尚未接受调用方 context。
 	req := m.RESTClient.Get().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(m.Resource).
@@ -116,6 +123,7 @@ func (m *Helper) List(namespace, apiVersion string, options *metav1.ListOptions)
 // FollowContinue handles the continue parameter returned by the API server when using list
 // chunking. To take advantage of this, the initial ListOptions provided by the consumer
 // should include a non-zero Limit parameter.
+// 中文：循环拉取直到服务端不再返回 continue token，调用方据此拿到完整结果集。
 func FollowContinue(initialOpts *metav1.ListOptions,
 	listFunc func(metav1.ListOptions) (runtime.Object, error)) error {
 	opts := initialOpts
@@ -135,12 +143,14 @@ func FollowContinue(initialOpts *metav1.ListOptions,
 // EnhanceListError augments errors typically returned by List operations with additional context,
 // making sure to retain the StatusError type when applicable.
 func EnhanceListError(err error, opts metav1.ListOptions, subj string) error {
+	// ResourceExpired 需要用户重试整个列表，改写消息没有意义，原样返回。
 	if apierrors.IsResourceExpired(err) {
 		return err
 	}
 	if apierrors.IsBadRequest(err) || apierrors.IsNotFound(err) {
 		if se, ok := err.(*apierrors.StatusError); ok {
 			// modify the message without hiding this is an API error
+			// 中文：仅改 Message，保留 StatusError 类型，调用方仍可做 IsNotFound 等判断。
 			if len(opts.LabelSelector) == 0 && len(opts.FieldSelector) == 0 {
 				se.ErrStatus.Message = fmt.Sprintf("Unable to list %q: %v", subj,
 					se.ErrStatus.Message)
@@ -162,6 +172,7 @@ func EnhanceListError(err error, opts metav1.ListOptions, subj string) error {
 }
 
 func (m *Helper) Watch(namespace, apiVersion string, options *metav1.ListOptions) (watch.Interface, error) {
+	// 复用 ListOptions，额外置 Watch 标志即可切换为 watch 请求。
 	options.Watch = true
 	return m.RESTClient.Get().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
@@ -171,6 +182,7 @@ func (m *Helper) Watch(namespace, apiVersion string, options *metav1.ListOptions
 }
 
 func (m *Helper) WatchSingle(namespace, name, resourceVersion string) (watch.Interface, error) {
+	// 用 fieldSelector 把 watch 收窄到单个对象，从指定 resourceVersion 开始。
 	return m.RESTClient.Get().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(m.Resource).
@@ -187,6 +199,7 @@ func (m *Helper) Delete(namespace, name string) (runtime.Object, error) {
 }
 
 func (m *Helper) DeleteWithOptions(namespace, name string, options *metav1.DeleteOptions) (runtime.Object, error) {
+	// nil 也要归一成空 options，后面才能安全地追加 dry-run。
 	if options == nil {
 		options = &metav1.DeleteOptions{}
 	}
@@ -222,6 +235,7 @@ func (m *Helper) CreateWithOptions(namespace string, modify bool, obj runtime.Ob
 	}
 	if modify {
 		// Attempt to version the object based on client logic.
+		// 中文：创建时若对象带了 resourceVersion，服务端会拒绝；先清空以适配“apply 式”创建。
 		version, err := metadataAccessor.ResourceVersion(obj)
 		if err != nil {
 			// We don't know how to clear the version on this object, so send it to the server as is
@@ -238,6 +252,7 @@ func (m *Helper) CreateWithOptions(namespace string, modify bool, obj runtime.Ob
 }
 
 func (m *Helper) createResource(c RESTClient, resource, namespace string, obj runtime.Object, options *metav1.CreateOptions) (runtime.Object, error) {
+	// POST <resource>?<options>；options 走查询参数编码。
 	return c.Post().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(resource).
@@ -253,6 +268,7 @@ func (m *Helper) Patch(namespace, name string, pt types.PatchType, data []byte, 
 	if m.ServerDryRun {
 		options.DryRun = []string{metav1.DryRunAll}
 	}
+	// fieldManager/fieldValidation 通过查询参数下发，未设置时保持服务端默认。
 	if m.FieldManager != "" {
 		options.FieldManager = m.FieldManager
 	}
@@ -284,6 +300,7 @@ func (m *Helper) Replace(namespace, name string, overwrite bool, obj runtime.Obj
 	}
 
 	// Attempt to version the object based on client logic.
+	// 中文：overwrite 且对象没有 resourceVersion 时先取服务端版本回填，避免无条件覆盖他人改动。
 	version, err := metadataAccessor.ResourceVersion(obj)
 	if err != nil {
 		// We don't know how to version this object, so send it to the server as is
@@ -309,6 +326,7 @@ func (m *Helper) Replace(namespace, name string, overwrite bool, obj runtime.Obj
 }
 
 func (m *Helper) replaceResource(c RESTClient, resource, namespace, name string, obj runtime.Object, options *metav1.UpdateOptions) (runtime.Object, error) {
+	// PUT <resource>/<name>；子资源路径由 m.Subresource 拼接。
 	return c.Put().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(resource).

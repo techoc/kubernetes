@@ -61,6 +61,9 @@ type ResourceMapping interface {
 
 // Info contains temporary info to execute a REST call, or show the results
 // of an already completed REST call.
+//
+// Info 是一次遍历中“单个资源”的上下文：既可用于延迟发的 Get/List 调用，
+// 也可承载已加载的对象。Visitor 链上的装饰器会就地修改它。
 type Info struct {
 	// Client will only be present if this builder was not local
 	Client RESTClient
@@ -97,9 +100,13 @@ func (i *Info) Visit(fn VisitorFunc) error {
 }
 
 // Get retrieves the object from the Namespace and Name fields
+//
+// 这是延迟加载的核心：只给 Info 配好 Client/Mapping 后，真正取对象发生在遍历时。
 func (i *Info) Get() (err error) {
 	obj, err := NewHelper(i.Client, i.Mapping).WithSubresource(i.Subresource).Get(i.Namespace, i.Name)
 	if err != nil {
+		// 对象 not found 时进一步检查 namespace 是否存在；若 namespace 也不存在，
+		// 返回更贴近根因的错误（否则用户会误以为对象名写错）。
 		if errors.IsNotFound(err) && len(i.Namespace) > 0 && i.Namespace != metav1.NamespaceDefault && i.Namespace != metav1.NamespaceAll {
 			err2 := i.Client.Get().AbsPath("api", "v1", "namespaces", i.Namespace).Do(context.TODO()).Error()
 			if err2 != nil && errors.IsNotFound(err2) {
@@ -117,6 +124,7 @@ func (i *Info) Get() (err error) {
 // the Object will be updated even if name, namespace, or resourceVersion
 // attributes cannot be loaded from the object.
 func (i *Info) Refresh(obj runtime.Object, ignoreError bool) error {
+	// 三个字段独立读取：默认严格，ignoreError 时尽量保留能取到的部分。
 	name, err := metadataAccessor.Name(obj)
 	if err != nil {
 		if !ignoreError {
@@ -147,6 +155,7 @@ func (i *Info) Refresh(obj runtime.Object, ignoreError bool) error {
 
 // ObjectName returns an approximate form of the resource's kind/name.
 func (i *Info) ObjectName() string {
+	// 有 mapping 时用规范资源名；否则退回从对象 GVK 推断。
 	if i.Mapping != nil {
 		return fmt.Sprintf("%s/%s", i.Mapping.Resource.Resource, i.Name)
 	}
@@ -179,6 +188,8 @@ func (i *Info) Namespaced() bool {
 }
 
 // Watch returns server changes to this object after it was retrieved.
+//
+// 单对象 watch：以 Info 的 namespace/name 作为目标。
 func (i *Info) Watch(resourceVersion string) (watch.Interface, error) {
 	return NewHelper(i.Client, i.Mapping).WatchSingle(i.Namespace, i.Name, resourceVersion)
 }
@@ -193,6 +204,8 @@ func (i *Info) ResourceMapping() *meta.RESTMapping {
 type VisitorList []Visitor
 
 // Visit implements Visitor
+//
+// 顺序遍历；遇到第一个错误立即返回，适合要求严格顺序或快速失败的场景。
 func (l VisitorList) Visit(fn VisitorFunc) error {
 	for i := range l {
 		if err := l[i].Visit(fn); err != nil {
@@ -202,11 +215,13 @@ func (l VisitorList) Visit(fn VisitorFunc) error {
 	return nil
 }
 
+// ConcurrentVisitorList 并发遍历多个 visitor；concurrency 为 0/1 时退化为串行。
 type ConcurrentVisitorList struct {
 	visitors    []Visitor
 	concurrency int
 }
 
+// Visit 用 errgroup 控制并发上限，并等待全部 visitor 结束（出错也会等）。
 func (l ConcurrentVisitorList) Visit(fn VisitorFunc) error {
 	g := errgroup.Group{}
 
@@ -230,6 +245,8 @@ func (l ConcurrentVisitorList) Visit(fn VisitorFunc) error {
 
 // EagerVisitorList implements Visit for the sub visitors it contains. All errors
 // will be captured and returned at the end of iteration.
+//
+// “急切”指不因单个错误提前退出，而是收集全部错误后一次性返回。
 type EagerVisitorList []Visitor
 
 // Visit implements Visitor, and gathers errors that occur during processing until
@@ -254,6 +271,8 @@ func (l EagerVisitorList) Visit(fn VisitorFunc) error {
 	return utilerrors.NewAggregate(errs)
 }
 
+// ValidateSchema 在解析对象前做 schema 校验；校验失败时附上如何关闭校验的提示，
+// 因为 CLI 用户常被这个开关卡住。
 func ValidateSchema(data []byte, schema ContentValidator) error {
 	if schema == nil {
 		return nil
@@ -266,12 +285,16 @@ func ValidateSchema(data []byte, schema ContentValidator) error {
 
 // URLVisitor downloads the contents of a URL, and if successful, returns
 // an info object representing the downloaded object.
+//
+// URLVisitor 把远程内容交给 StreamVisitor 解析，因此同样支持多文档 YAML。
 type URLVisitor struct {
 	URL *url.URL
 	*StreamVisitor
+	// HttpAttemptCount 控制重试次数，0 或负数直接报错。
 	HttpAttemptCount int
 }
 
+// Visit 下载并解析 URL；响应体由本方法负责关闭。
 func (v *URLVisitor) Visit(fn VisitorFunc) error {
 	body, err := readHttpWithRetries(httpgetImpl, time.Second, v.URL.String(), v.HttpAttemptCount)
 	if err != nil {
@@ -283,6 +306,8 @@ func (v *URLVisitor) Visit(fn VisitorFunc) error {
 }
 
 // readHttpWithRetries tries to http.Get the v.URL retries times before giving up.
+//
+// 重试策略：网络错误和 5xx 重试，4xx/3xx 立即失败；每次重试前 sleep duration。
 func readHttpWithRetries(get httpget, duration time.Duration, u string, attempts int) (io.ReadCloser, error) {
 	var err error
 	if attempts <= 0 {
@@ -328,6 +353,7 @@ func readHttpWithRetries(get httpget, duration time.Duration, u string, attempts
 type httpget func(url string) (int, string, io.ReadCloser, error)
 
 // httpgetImpl Implements a function to retrieve a url and return the results.
+// 把失败折叠成 error，调用方只需关心状态码与响应体。
 func httpgetImpl(url string) (int, string, io.ReadCloser, error) {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -338,6 +364,8 @@ func httpgetImpl(url string) (int, string, io.ReadCloser, error) {
 
 // DecoratedVisitor will invoke the decorators in order prior to invoking the visitor function
 // passed to Visit. An error will terminate the visit.
+//
+// 装饰器模式让 namespace 填充、校验、延迟加载等横切逻辑可独立组合。
 type DecoratedVisitor struct {
 	visitor    Visitor
 	decorators []VisitorFunc
@@ -347,6 +375,7 @@ type DecoratedVisitor struct {
 // the user supplied visitor function is invoked, giving them the opportunity to mutate the Info
 // object or terminate early with an error.
 func NewDecoratedVisitor(v Visitor, fn ...VisitorFunc) Visitor {
+	// 没有装饰器就不要再包一层，减少无谓的间接调用。
 	if len(fn) == 0 {
 		return v
 	}
@@ -354,6 +383,8 @@ func NewDecoratedVisitor(v Visitor, fn ...VisitorFunc) Visitor {
 }
 
 // Visit implements Visitor
+//
+// 先跑完所有装饰器（可能修改 Info 或短路），再把 Info 交给最终回调。
 func (v DecoratedVisitor) Visit(fn VisitorFunc) error {
 	return v.visitor.Visit(func(info *Info, err error) error {
 		if err != nil {
@@ -371,6 +402,8 @@ func (v DecoratedVisitor) Visit(fn VisitorFunc) error {
 // ContinueOnErrorVisitor visits each item and, if an error occurs on
 // any individual item, returns an aggregate error after all items
 // are visited.
+//
+// 与 EagerVisitorList 的区别：它在单项遍历层面容错，而后者在子 visitor 层面。
 type ContinueOnErrorVisitor struct {
 	Visitor
 }
@@ -383,6 +416,7 @@ type ContinueOnErrorVisitor struct {
 // not being visited.
 func (v ContinueOnErrorVisitor) Visit(fn VisitorFunc) error {
 	var errs []error
+	// 回调内部吞掉错误并收集，使底层 visitor 能继续往下走。
 	err := v.Visitor.Visit(func(info *Info, err error) error {
 		if err != nil {
 			errs = append(errs, err)
@@ -407,6 +441,8 @@ func (v ContinueOnErrorVisitor) Visit(fn VisitorFunc) error {
 // that interface - into multiple Infos. Returns nil in the case of no errors.
 // When an error is hit on sub items (for instance, if a List contains an object that does
 // not have a registered client or resource), returns an aggregate error.
+//
+// FlattenListVisitor 把 List 拆成单项 Info，让下游只面对同一种粒度。
 type FlattenListVisitor struct {
 	visitor Visitor
 	typer   runtime.ObjectTyper
@@ -419,6 +455,8 @@ func NewFlattenListVisitor(v Visitor, typer runtime.ObjectTyper, mapper *mapper)
 	return FlattenListVisitor{v, typer, mapper}
 }
 
+// FlattenListVisitor.Visit 用显式队列展开嵌套列表：List 里可以再套 List，
+// 直到所有元素都是非列表对象再逐个生成 Info。
 func (v FlattenListVisitor) Visit(fn VisitorFunc) error {
 	return v.visitor.Visit(func(info *Info, err error) error {
 		if err != nil {
@@ -478,6 +516,7 @@ func (v FlattenListVisitor) Visit(fn VisitorFunc) error {
 	})
 }
 
+// ignoreFile 在递归遍历时按扩展名过滤；extensions 为空则不过滤。
 func ignoreFile(path string, extensions []string) bool {
 	if len(extensions) == 0 {
 		return false
@@ -492,6 +531,8 @@ func ignoreFile(path string, extensions []string) bool {
 }
 
 // FileVisitorForSTDIN return a special FileVisitor just for STDIN
+//
+// 用常量路径 "STDIN" 区分标准输入，避免与真实文件名冲突。
 func FileVisitorForSTDIN(mapper *mapper, schema ContentValidator) Visitor {
 	return &FileVisitor{
 		Path:          constSTDINstr,
@@ -502,6 +543,8 @@ func FileVisitorForSTDIN(mapper *mapper, schema ContentValidator) Visitor {
 // ExpandPathsToFileVisitors will return a slice of FileVisitors that will handle files from the provided path.
 // After FileVisitors open the files, they will pass an io.Reader to a StreamVisitor to do the reading. (stdin
 // is also taken care of). Paths argument also accepts a single file, and will return a single visitor
+//
+// 递归时按 extensions 过滤；显式给出的单个文件即使扩展名不匹配也会被处理。
 func ExpandPathsToFileVisitors(mapper *mapper, paths string, recursive bool, extensions []string, schema ContentValidator) ([]Visitor, error) {
 	var visitors []Visitor
 	err := filepath.Walk(paths, func(path string, fi os.FileInfo, err error) error {
@@ -509,6 +552,7 @@ func ExpandPathsToFileVisitors(mapper *mapper, paths string, recursive bool, ext
 			return err
 		}
 
+		// 非递归模式：跳过根目录以下的子目录。
 		if fi.IsDir() {
 			if path != paths && !recursive {
 				return filepath.SkipDir
@@ -542,6 +586,8 @@ type FileVisitor struct {
 }
 
 // Visit in a FileVisitor is just taking care of opening/closing files
+//
+// 标准输入不关闭（由进程生命周期管理）；普通文件在本次 Visit 结束后关闭。
 func (v *FileVisitor) Visit(fn VisitorFunc) error {
 	var f *os.File
 	if v.Path == constSTDINstr {
@@ -557,6 +603,7 @@ func (v *FileVisitor) Visit(fn VisitorFunc) error {
 
 	// TODO: Consider adding a flag to force to UTF16, apparently some
 	// Windows tools don't write the BOM
+	// 自动识别并剥离 UTF-8/UTF-16 BOM，兼容 Windows 生成的清单文件。
 	utf16bom := unicode.BOMOverride(unicode.UTF8.NewDecoder())
 	v.StreamVisitor.Reader = transform.NewReader(f, utf16bom)
 
@@ -567,6 +614,8 @@ func (v *FileVisitor) Visit(fn VisitorFunc) error {
 // visited once.
 // TODO: depends on objects being in JSON format before being passed to decode - need to implement
 // a stream decoder method on runtime.Codec to properly handle this.
+//
+// StreamVisitor 是不可重放的：Reader 被消费后无法再次遍历，需要多次使用时先缓存 Infos。
 type StreamVisitor struct {
 	io.Reader
 	*mapper
@@ -576,6 +625,8 @@ type StreamVisitor struct {
 }
 
 // NewStreamVisitor is a helper function that is useful when we want to change the fields of the struct but keep calls the same.
+//
+// 替代直接构造 StreamVisitor，避免调用方依赖字段布局。
 func NewStreamVisitor(r io.Reader, mapper *mapper, source string, schema ContentValidator) *StreamVisitor {
 	return &StreamVisitor{
 		Reader: r,
@@ -586,6 +637,9 @@ func NewStreamVisitor(r io.Reader, mapper *mapper, source string, schema Content
 }
 
 // Visit implements Visitor over a stream. StreamVisitor is able to distinct multiple resources in one stream.
+//
+// 用 YAMLOrJSONDecoder 逐个文档解码，因此一个文件里用 "---" 分隔的多个对象会
+// 分别生成 Info；空文档和 null 文档跳过。
 func (v *StreamVisitor) Visit(fn VisitorFunc) error {
 	d := yaml.NewYAMLOrJSONDecoder(v.Reader, 4096)
 	for {
@@ -598,6 +652,7 @@ func (v *StreamVisitor) Visit(fn VisitorFunc) error {
 		}
 		// TODO: This needs to be able to handle object in other encodings and schemas.
 		ext.Raw = bytes.TrimSpace(ext.Raw)
+		// 只有分隔符没有内容时 Raw 可能为空或 "null"，跳过而不是报错。
 		if len(ext.Raw) == 0 || bytes.Equal(ext.Raw, []byte("null")) {
 			continue
 		}
@@ -606,6 +661,7 @@ func (v *StreamVisitor) Visit(fn VisitorFunc) error {
 		}
 		info, err := v.infoForData(ext.Raw, v.Source)
 		if err != nil {
+			// 解析失败也交给回调决定：ContinueOnError 模式下可继续处理后续文档。
 			if fnErr := fn(info, err); fnErr != nil {
 				return fnErr
 			}
@@ -617,6 +673,7 @@ func (v *StreamVisitor) Visit(fn VisitorFunc) error {
 	}
 }
 
+// UpdateObjectNamespace 把 Info.Namespace 同步到对象自身的 metadata 上。
 func UpdateObjectNamespace(info *Info, err error) error {
 	if err != nil {
 		return err
@@ -628,6 +685,8 @@ func UpdateObjectNamespace(info *Info, err error) error {
 }
 
 // FilterNamespace omits the namespace if the object is not namespace scoped
+//
+// 集群级资源不能带 namespace，否则服务端会拒绝请求。
 func FilterNamespace(info *Info, err error) error {
 	if err != nil {
 		return err
@@ -641,6 +700,8 @@ func FilterNamespace(info *Info, err error) error {
 
 // SetNamespace ensures that every Info object visited will have a namespace
 // set. If info.Object is set, it will be mutated as well.
+//
+// 只填充空 namespace，不覆盖对象里显式写的值。
 func SetNamespace(namespace string) VisitorFunc {
 	return func(info *Info, err error) error {
 		if err != nil {
@@ -669,6 +730,8 @@ func RequireNamespace(namespace string) VisitorFunc {
 		if !info.Namespaced() {
 			return nil
 		}
+		// 对象未指定 namespace 时补默认值；已指定则必须与命令行一致，
+		// 防止误操作到其他 namespace 的同名资源。
 		if len(info.Namespace) == 0 {
 			info.Namespace = namespace
 			UpdateObjectNamespace(info, nil)
@@ -683,6 +746,8 @@ func RequireNamespace(namespace string) VisitorFunc {
 
 // RetrieveLatest updates the Object on each Info by invoking a standard client
 // Get.
+//
+// 已加载的 List 不能直接“取最新”，因为 Info 的粒度是单对象，这里明确报错。
 func RetrieveLatest(info *Info, err error) error {
 	if err != nil {
 		return err
@@ -700,6 +765,8 @@ func RetrieveLatest(info *Info, err error) error {
 }
 
 // RetrieveLazy updates the object if it has not been loaded yet.
+//
+// Builder 默认只构造 Info 而不立即请求，真正取对象推迟到遍历时。
 func RetrieveLazy(info *Info, err error) error {
 	if err != nil {
 		return err
@@ -710,13 +777,16 @@ func RetrieveLazy(info *Info, err error) error {
 	return nil
 }
 
+// FilterFunc 返回 false 表示丢弃该 Info；返回 error 则终止遍历。
 type FilterFunc func(info *Info, err error) (bool, error)
 
+// FilteredVisitor 依次应用过滤器，任一过滤器拒绝则不再继续。
 type FilteredVisitor struct {
 	visitor Visitor
 	filters []FilterFunc
 }
 
+// NewFilteredVisitor 无过滤器时直接返回原 visitor，避免多余包装。
 func NewFilteredVisitor(v Visitor, fn ...FilterFunc) Visitor {
 	if len(fn) == 0 {
 		return v
@@ -742,6 +812,7 @@ func (v FilteredVisitor) Visit(fn VisitorFunc) error {
 	})
 }
 
+// FilterByLabelSelector 仅保留标签匹配 selector 的对象；本地文件也适用。
 func FilterByLabelSelector(s labels.Selector) FilterFunc {
 	return func(info *Info, err error) (bool, error) {
 		if err != nil {
@@ -758,8 +829,10 @@ func FilterByLabelSelector(s labels.Selector) FilterFunc {
 	}
 }
 
+// InfoListVisitor 把一组既有的 Info 适配成 Visitor，便于复用遍历逻辑。
 type InfoListVisitor []*Info
 
+// Visit 顺序回调每个 Info；注意错误会传入下一次回调，由调用方决定是否中止。
 func (infos InfoListVisitor) Visit(fn VisitorFunc) error {
 	var err error
 	for _, i := range infos {

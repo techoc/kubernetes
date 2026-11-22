@@ -23,14 +23,17 @@ import (
 )
 
 const (
+	// 最小列宽 6、制表步长 4、列间隔 3 个空格，与 kubectl get 的观感对齐。
 	tabwriterMinWidth = 6
 	tabwriterWidth    = 4
 	tabwriterPadding  = 3
 	tabwriterPadChar  = ' '
-	tabwriterFlags    = tabwriter.RememberWidths
+	// 记住已见列宽，使同一表格后续行对齐稳定，不会因长值出现而整体抖动。
+	tabwriterFlags = tabwriter.RememberWidths
 )
 
 // GetNewTabWriter returns a tabwriter that translates tabbed columns in input into properly aligned text.
 func GetNewTabWriter(output io.Writer) *tabwriter.Writer {
+	// 调用方负责 Flush，否则缓冲内容不会写出。
 	return tabwriter.NewWriter(output, tabwriterMinWidth, tabwriterWidth, tabwriterPadding, tabwriterPadChar, tabwriterFlags)
 }

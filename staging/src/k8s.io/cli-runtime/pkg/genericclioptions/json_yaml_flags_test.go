@@ -25,6 +25,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestPrinterSupportsExpectedJSONYamlFormats 验证 JSONYamlPrintFlags 只接受
+// json/yaml 两种格式：匹配时应输出对应序列化结果，其余格式（含 jsonpath
+// 这类由别的 printer 负责的格式）必须返回 NoCompatiblePrinterError。
 func TestPrinterSupportsExpectedJSONYamlFormats(t *testing.T) {
 	testObject := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
@@ -65,11 +68,13 @@ func TestPrinterSupportsExpectedJSONYamlFormats(t *testing.T) {
 
 			p, err := printFlags.ToPrinter(tc.outputFormat)
 			if tc.expectNoMatch {
+				// 不匹配必须是“无兼容 printer”这一特定错误，而不是普通错误。
 				if !IsNoCompatiblePrinterError(err) {
 					t.Fatalf("expected no printer matches for output format %q", tc.outputFormat)
 				}
 				return
 			}
+			// 匹配时既不能是无兼容错误，也不能有其他意外错误。
 			if IsNoCompatiblePrinterError(err) {
 				t.Fatalf("expected to match template printer for output format %q", tc.outputFormat)
 			}
@@ -77,6 +82,7 @@ func TestPrinterSupportsExpectedJSONYamlFormats(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
+			// 实际序列化一次，确认返回的 printer 与格式一致。
 			out := bytes.NewBuffer([]byte{})
 			err = p.PrintObj(testObject, out)
 			if err != nil {

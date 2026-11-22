@@ -37,10 +37,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// objBody 把对象编码成 JSON 并包装成 fake REST 客户端期望的 Body。
 func objBody(obj runtime.Object) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader([]byte(runtime.EncodeOrDie(corev1Codec, obj))))
 }
 
+// header 返回 JSON 内容类型的响应头；fake client 解码依赖它。
 func header() http.Header {
 	header := http.Header{}
 	header.Set("Content-Type", runtime.ContentTypeJSON)
@@ -48,6 +50,8 @@ func header() http.Header {
 }
 
 // splitPath returns the segments for a URL path.
+//
+// 去掉首尾斜杠后按 "/" 切分，便于测试断言 URL 中的 namespace/name/subresource。
 func splitPath(path string) []string {
 	path = strings.Trim(path, "/")
 	if path == "" {
@@ -57,6 +61,9 @@ func splitPath(path string) []string {
 }
 
 // V1DeepEqualSafePodSpec returns a PodSpec which is ready to be used with apiequality.Semantic.DeepEqual
+//
+// 显式填上默认值（重启策略、DNS 策略、优雅终止时间、SecurityContext），
+// 是因为服务端解码时会补齐默认值，若不预置会导致 DeepEqual 出现假差异。
 func V1DeepEqualSafePodSpec() corev1.PodSpec {
 	grace := int64(30)
 	return corev1.PodSpec{
@@ -67,6 +74,8 @@ func V1DeepEqualSafePodSpec() corev1.PodSpec {
 	}
 }
 
+// V1DeepEqualSafePodStatus 返回带 Ready 条件的 PodStatus；同样用于规避
+// 默认值造成的比较噪声。
 func V1DeepEqualSafePodStatus() corev1.PodStatus {
 	return corev1.PodStatus{
 		Conditions: []corev1.PodCondition{
@@ -78,6 +87,8 @@ func V1DeepEqualSafePodStatus() corev1.PodStatus {
 	}
 }
 
+// TestHelperDelete 覆盖 Delete 的三类结果：网络错误、404、成功。
+// 成功用例通过 Req 回调确认请求方法与 URL 中的 namespace/name 正确。
 func TestHelperDelete(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -154,6 +165,9 @@ func TestHelperDelete(t *testing.T) {
 	}
 }
 
+// TestHelperCreate 验证 Create 生成的 POST 请求及请求体：
+// Modify=true 时 ResourceVersion 必须被清空（创建语义不允许带 RV），
+// 其余情况请求体应与输入对象编码完全一致。
 func TestHelperCreate(t *testing.T) {
 	expectPost := func(req *http.Request) bool {
 		if req.Method != "POST" {
@@ -265,6 +279,7 @@ func TestHelperCreate(t *testing.T) {
 	}
 }
 
+// TestHelperGet 验证 GET 请求路径，并覆盖子资源（如 status）的 URL 追加。
 func TestHelperGet(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -373,6 +388,8 @@ func TestHelperGet(t *testing.T) {
 	}
 }
 
+// TestHelperList 验证 List 请求的路径与 label selector 查询参数
+// （参数名由 GroupVersion 决定），并确认返回的 PodList 被正确解码。
 func TestHelperList(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -481,6 +498,8 @@ func TestHelperList(t *testing.T) {
 	}
 }
 
+// TestHelperListSelectorCombination 验证 label 与 field selector 可任意组合，
+// 且不触发错误（两者由不同的查询参数携带）。
 func TestHelperListSelectorCombination(t *testing.T) {
 	tests := []struct {
 		Name          string
@@ -548,6 +567,9 @@ func TestHelperListSelectorCombination(t *testing.T) {
 	}
 }
 
+// TestHelperReplace 验证 PUT 请求的路径（命名空间作用域/集群作用域/子资源）
+// 以及 overwrite 语义：Overwrite=true 时先 GET 取最新 ResourceVersion 再写回，
+// 测试用 HTTPClient 模拟这一 GET+PUT 往返。
 func TestHelperReplace(t *testing.T) {
 	expectPut := func(path string, req *http.Request) bool {
 		if req.Method != "PUT" {
@@ -725,6 +747,9 @@ func TestHelperReplace(t *testing.T) {
 	}
 }
 
+// TestEnhanceListError 验证 list 失败的报错会被补充为“Unable to list/find ...”
+// 形式：有 selector 时用 find 并附上选择条件，无 selector 时用 list；
+// 非 StatusError（被 fmt.Errorf 包装）则保留原始错误文本。
 func TestEnhanceListError(t *testing.T) {
 	podGVR := corev1.SchemeGroupVersion.WithResource(corev1.ResourcePods.String())
 	podSubject := podGVR.String()
@@ -825,6 +850,9 @@ func TestEnhanceListError(t *testing.T) {
 	}
 }
 
+// TestFollowContinue 验证分页语义：只要响应里还有 continue token 就继续拉取，
+// 直到服务端把 kind 标记为 ListComplete；中途 listFunc 报错应立即中止。
+// 注意 initialOpts 会被原地修改，因此每个用例都需要重新初始化。
 func TestFollowContinue(t *testing.T) {
 	var continueTokens []string
 	tests := []struct {

@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestIllegalPackageSourceChecker 验证非法包前缀判定：只匹配“前缀”，
+// 且前缀本身必须是完整路径段，不能误伤包含该子串的其他路径。
 func TestIllegalPackageSourceChecker(t *testing.T) {
 	disallowedPrefixes := []string{
 		"foo/bar",
@@ -49,6 +51,7 @@ func TestIllegalPackageSourceChecker(t *testing.T) {
 		},
 	}
 
+	// 直接构造 checker，绕开包级默认实例，保证用例不受全局配置影响。
 	checker := &illegalPackageSourceChecker{disallowedPrefixes}
 
 	for _, tc := range testCases {

@@ -24,10 +24,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// TestKYAMLPrinter 直接复用 testPrinter 的用例集，只是把 Printer 换成 KYAMLPrinter。
 func TestKYAMLPrinter(t *testing.T) {
 	testPrinter(t, NewTypeSetter(scheme.Scheme).ToPrinter(&KYAMLPrinter{}), kyamlUnmarshal)
 }
 
+// kyamlUnmarshal 作为 testPrinter 的解析器：用 sigs.k8s.io/yaml 校验输出可被重新读取。
 func kyamlUnmarshal(data []byte, v interface{}) error {
 	return yaml.Unmarshal(data, v)
 }

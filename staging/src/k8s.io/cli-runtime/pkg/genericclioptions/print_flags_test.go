@@ -27,6 +27,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// TestNamePrinter 验证 name printer 对单个对象和 List 都能输出 "kind/name"。
+// 两个用例依赖 WithTypeSetter 为从文件读入的对象补齐 GVK。
 func TestNamePrinter(t *testing.T) {
 	tests := map[string]struct {
 		obj    runtime.Object
@@ -63,6 +65,7 @@ func TestNamePrinter(t *testing.T) {
 			"pod/bar\n"},
 	}
 
+	// 使用 name 输出同时挂上 TypeSetter，覆盖“对象自带 Kind”和“List 展开”两种形态。
 	printFlags := NewPrintFlags("").WithTypeSetter(scheme.Scheme).WithDefaultOutput("name")
 	printer, err := printFlags.ToPrinter()
 	if err != nil {

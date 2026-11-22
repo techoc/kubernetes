@@ -38,6 +38,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 这些 flag 名称属于 kubectl 对外的稳定 CLI 契约，外部脚本和文档都按名字引用，改动即破坏兼容性。
 const (
 	flagClusterName          = "cluster"
 	flagAuthInfoName         = "user"
@@ -65,14 +66,20 @@ const (
 // RESTClientGetter is an interface that the ConfigFlags describe to provide an easier way to mock for commands
 // and eliminate the direct coupling to a struct type.  Users may wish to duplicate this type in their own packages
 // as per the golang type overlapping.
+// 中文：把命令真正需要的能力（REST 配置、发现客户端、REST 映射、原始 kubeconfig 加载器）抽成接口，
+// 既能解耦具体结构体，也方便测试注入假实现。
 type RESTClientGetter interface {
 	// ToRESTConfig returns restconfig
+	// 返回最终用于连接集群的 rest.Config（已应用 flag 覆盖与 WrapConfigFn）。
 	ToRESTConfig() (*rest.Config, error)
 	// ToDiscoveryClient returns discovery client
+	// 返回带缓存的发现客户端；持久化模式下同一实例会被复用。
 	ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error)
 	// ToRESTMapper returns a restmapper
+	// 返回在发现客户端之上构建的 REST 映射器，用于 GVK 与资源路径互转。
 	ToRESTMapper() (meta.RESTMapper, error)
 	// ToRawKubeConfigLoader return kubeconfig loader as-is
+	// 原样返回 kubeconfig 加载器，供需要自行组合加载规则的调用方使用。
 	ToRawKubeConfigLoader() clientcmd.ClientConfig
 }
 
@@ -80,11 +87,16 @@ var _ RESTClientGetter = &ConfigFlags{}
 
 // ConfigFlags composes the set of values necessary
 // for obtaining a REST client config
+// 中文：各字段存放 flag 指针，AddFlags 绑定后由用户输入写入。字段为 nil 表示该 flag 不注册，
+// 命令可借此裁剪暴露给用户的选项。
 type ConfigFlags struct {
-	CacheDir   *string
+	// 发现缓存目录，优先级：显式 flag > KUBECACHEDIR > ~/.kube/cache。
+	CacheDir *string
+	// 显式 kubeconfig 路径；非空时覆盖默认加载规则。
 	KubeConfig *string
 
 	// config flags
+	// 以下为 kubeconfig 覆盖项，分身份认证、集群连接、上下文三类。
 	ClusterName          *string
 	AuthInfoName         *string
 	Context              *string
@@ -107,20 +119,25 @@ type ConfigFlags struct {
 	ProxyURL             *string
 	// If non-nil, wrap config function can transform the Config
 	// before it is returned in ToRESTConfig function.
+	// 中文：给调用方一个钩子，在配置返回前统一注入自定义行为（如客户端限流、用户代理）。
 	WrapConfigFn func(*rest.Config) *rest.Config
 
+	// 持久化模式下缓存的原始 kubeconfig 加载器，用互斥锁保护懒初始化。
 	clientConfig     clientcmd.ClientConfig
 	clientConfigLock sync.Mutex
 
+	// 持久化模式下缓存的 REST 映射器。
 	restMapper     meta.RESTMapper
 	restMapperLock sync.Mutex
 
+	// 持久化模式下缓存的发现客户端。
 	discoveryClient     discovery.CachedDiscoveryInterface
 	discoveryClientLock sync.Mutex
 
 	// If set to true, will use persistent client config, rest mapper, discovery client, and
 	// propagate them to the places that need them, rather than
 	// instantiating them multiple times.
+	// 中文：持久化可避免一次命令里重复构建这些对象、重复打发现请求。
 	usePersistentConfig bool
 	// Allows increasing burst used for discovery, this is useful
 	// in clusters with many registered resources
@@ -130,6 +147,7 @@ type ConfigFlags struct {
 	discoveryQPS float32
 	// Allows all possible warnings are printed in a standardized
 	// format.
+	// 中文：用于输出发现过程中（如废弃 API 用法的）警告，统一到 stderr。
 	warningPrinter *printers.WarningPrinter
 }
 
@@ -139,6 +157,7 @@ type ConfigFlags struct {
 // Expects the AddFlags method to have been called. If WrapConfigFn
 // is non-nil this function can transform config before return.
 func (f *ConfigFlags) ToRESTConfig() (*rest.Config, error) {
+	// 先由 kubeconfig 加载规则叠加 flag 覆盖得到基础配置，再交给可选的包装函数做最终加工。
 	c, err := f.ToRawKubeConfigLoader().ClientConfig()
 	if err != nil {
 		return nil, err
@@ -153,6 +172,7 @@ func (f *ConfigFlags) ToRESTConfig() (*rest.Config, error) {
 // Returns an interactive clientConfig if the password flag is enabled,
 // or a non-interactive clientConfig otherwise.
 func (f *ConfigFlags) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	// 持久化模式下复用同一加载器，避免一次命令中重复解析 kubeconfig 文件。
 	if f.usePersistentConfig {
 		return f.toRawKubePersistentConfigLoader()
 	}
@@ -160,18 +180,21 @@ func (f *ConfigFlags) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 }
 
 func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
+	// 使用标准默认加载顺序（KUBECONFIG、~/.kube/config 等），保证与其他 kubectl 工具一致。
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	// use the standard defaults for this client command
 	// DEPRECATED: remove and replace with something more accurate
 	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
 
 	if f.KubeConfig != nil {
+		// 显式路径优先级最高，会跳过默认的合并加载规则。
 		loadingRules.ExplicitPath = *f.KubeConfig
 	}
 
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 
 	// bind auth info flag values to overrides
+	// 中文：文件类 flag 与内嵌数据互斥，指定文件时清空内嵌数据，避免加载器选错来源。
 	if f.CertFile != nil {
 		overrides.AuthInfo.ClientCertificate = *f.CertFile
 		overrides.AuthInfo.ClientCertificateData = nil
@@ -188,10 +211,12 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 		overrides.AuthInfo.Impersonate = *f.Impersonate
 	}
 	if f.ImpersonateUserExtra != nil && len(*f.ImpersonateUserExtra) > 0 {
+		// 每个元素格式为 key=value，同一 key 可出现多次并累加成多值。
 		userExtras := make(map[string][]string)
 		for _, extra := range *f.ImpersonateUserExtra {
 			parts := strings.SplitN(extra, "=", 2)
 			if len(parts) != 2 {
+				// 格式不合法则静默跳过，不阻断整条命令。
 				continue
 			}
 			key := parts[0]
@@ -214,6 +239,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 	}
 
 	// bind cluster flags
+	// 中文：集群连接相关覆盖，直接映射到集群条目。
 	if f.APIServer != nil {
 		overrides.ClusterInfo.Server = *f.APIServer
 	}
@@ -234,6 +260,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 	}
 
 	// bind context flags
+	// 中文：上下文覆盖，决定当前选中哪个 cluster/authinfo/namespace。
 	if f.Context != nil {
 		overrides.CurrentContext = *f.Context
 	}
@@ -252,6 +279,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 	}
 
 	// we only have an interactive prompt when a password is allowed
+	// 中文：仅当注册了 --password 时才启用交互式加载，避免无终端场景阻塞等待输入。
 	if f.Password == nil {
 		return &clientConfig{clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)}
 	}
@@ -261,6 +289,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 // toRawKubePersistentConfigLoader binds config flag values to config overrides
 // Returns a persistent clientConfig for propagation.
 func (f *ConfigFlags) toRawKubePersistentConfigLoader() clientcmd.ClientConfig {
+	// 双检锁式懒初始化：只构建一次，之后所有调用方共享同一加载器。
 	f.clientConfigLock.Lock()
 	defer f.clientConfigLock.Unlock()
 
@@ -282,6 +311,7 @@ func (f *ConfigFlags) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 }
 
 func (f *ConfigFlags) toPersistentDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	// 缓存发现客户端可显著减少一次命令内的 discovery 请求。
 	f.discoveryClientLock.Lock()
 	defer f.discoveryClientLock.Unlock()
 
@@ -301,6 +331,7 @@ func (f *ConfigFlags) toDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 		return nil, err
 	}
 
+	// 发现请求量大，单独设置 burst/QPS，避免被默认限流失真（尤其在大集群里）。
 	config.Burst = f.discoveryBurst
 	config.QPS = f.discoveryQPS
 
@@ -315,8 +346,10 @@ func (f *ConfigFlags) toDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 	}
 
 	httpCacheDir := filepath.Join(cacheDir, "http")
+	// 按 host 分目录，避免不同集群的发现缓存互相污染。
 	discoveryCacheDir := computeDiscoverCacheDir(filepath.Join(cacheDir, "discovery"), config.Host)
 
+	// 缓存有效期 6 小时，在新鲜度与避免频繁重扫之间折中。
 	return diskcached.NewCachedDiscoveryClientForConfig(config, discoveryCacheDir, httpCacheDir, time.Duration(6*time.Hour))
 }
 
@@ -324,6 +357,7 @@ func (f *ConfigFlags) toDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 // it first looks at KUBECACHEDIR env var if it is set, otherwise
 // it returns standard kube cache dir.
 func getDefaultCacheDir() string {
+	// KUBECACHEDIR 作为环境级覆盖，便于测试或共享缓存目录。
 	if kcd := os.Getenv("KUBECACHEDIR"); kcd != "" {
 		return kcd
 	}
@@ -340,6 +374,7 @@ func (f *ConfigFlags) ToRESTMapper() (meta.RESTMapper, error) {
 }
 
 func (f *ConfigFlags) toPersistentRESTMapper() (meta.RESTMapper, error) {
+	// REST 映射器构建依赖发现，缓存它可以省掉重复的 mapping 查询。
 	f.restMapperLock.Lock()
 	defer f.restMapperLock.Unlock()
 
@@ -359,7 +394,9 @@ func (f *ConfigFlags) toRESTMapper() (meta.RESTMapper, error) {
 		return nil, err
 	}
 
+	// 延迟发现：首次解析时才拉取 API 列表，未用到映射的命令不必付出这笔开销。
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
+	// 包装一层快捷名展开（如 "all"），并在遇到歧义时通过 warningPrinter 提示用户。
 	expander := restmapper.NewShortcutExpander(mapper, discoveryClient, func(a string) {
 		if f.warningPrinter != nil {
 			f.warningPrinter.Print(a)
@@ -369,6 +406,7 @@ func (f *ConfigFlags) toRESTMapper() (meta.RESTMapper, error) {
 }
 
 // AddFlags binds client configuration flags to a given flagset
+// 中文：只为非 nil 字段注册 flag，nil 即表示该选项不暴露，供不同命令复用同一结构体。
 func (f *ConfigFlags) AddFlags(flags *pflag.FlagSet) {
 	if f.KubeConfig != nil {
 		flags.StringVar(f.KubeConfig, "kubeconfig", *f.KubeConfig, "Path to the kubeconfig file to use for CLI requests.")
@@ -442,6 +480,7 @@ func (f *ConfigFlags) AddFlags(flags *pflag.FlagSet) {
 }
 
 // WithDeprecatedPasswordFlag enables the username and password config flags
+// 中文：用户名/密码属于已废弃的认证方式，默认不注册，只有显式调用才暴露。
 func (f *ConfigFlags) WithDeprecatedPasswordFlag() *ConfigFlags {
 	f.Username = ptr.To("")
 	f.Password = ptr.To("")
@@ -473,6 +512,7 @@ func (f *ConfigFlags) WithWarningPrinter(ioStreams genericiooptions.IOStreams) *
 }
 
 // NewConfigFlags returns ConfigFlags with default values set
+// 中文：所有字段预置为空指针值，保证 AddFlags 能注册完整的 kubeconfig 选项集。
 func NewConfigFlags(usePersistentConfig bool) *ConfigFlags {
 	impersonateGroup := []string{}
 	impersonateUserExtra := []string{}
@@ -516,8 +556,10 @@ var overlyCautiousIllegalFileCharacters = regexp.MustCompile(`[^(\w/.)]`)
 // computeDiscoverCacheDir takes the parentDir and the host and comes up with a "usually non-colliding" name.
 func computeDiscoverCacheDir(parentDir, host string) string {
 	// strip the optional scheme from host if its there:
+	// 中文：去掉 scheme，只保留 host，作为缓存子目录名的基础。
 	schemelessHost := strings.Replace(strings.Replace(host, "https://", "", 1), "http://", "", 1)
 	// now do a simple collapse of non-AZ09 characters.  Collisions are possible but unlikely.  Even if we do collide the problem is short lived
+	// 中文：用保守的字符白名单替换非法字符（Windows 文件名限制更严）；理论上可能碰撞，但影响短暂且可接受。
 	safeHost := overlyCautiousIllegalFileCharacters.ReplaceAllString(schemelessHost, "_")
 	return filepath.Join(parentDir, safeHost)
 }

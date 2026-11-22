@@ -32,10 +32,12 @@ type NamePrintFlags struct {
 	// Operation describes the name of the action that
 	// took place on an object, to be included in the
 	// finalized "successful" message.
+	// 中文：如 "created"、"patched"；为空时只打印资源名，非空时拼成成功提示。
 	Operation string
 }
 
 // Complete sets NamePrintFlags operation flag from successTemplate
+// 中文：把操作动词套进模板（通常是 "%%s <verb>" 一类）后存入 Operation，供最终消息使用。
 func (f *NamePrintFlags) Complete(successTemplate string) error {
 	f.Operation = fmt.Sprintf(successTemplate, f.Operation)
 	return nil
@@ -43,6 +45,7 @@ func (f *NamePrintFlags) Complete(successTemplate string) error {
 
 // AllowedFormats returns slice of string of allowed Name printing format
 func (f *NamePrintFlags) AllowedFormats() []string {
+	// 允许 nil 接收者安全调用。
 	if f == nil {
 		return []string{}
 	}
@@ -61,9 +64,11 @@ func (f *NamePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinte
 	outputFormat = strings.ToLower(outputFormat)
 	switch outputFormat {
 	case "name":
+		// 显式 -o name 时强制只输出 "kind/name"，即使带了操作动词。
 		namePrinter.ShortOutput = true
 		fallthrough
 	case "":
+		// 未指定输出格式时沿用默认行为（可能输出操作成功消息）。
 		return namePrinter, nil
 	default:
 		return nil, NoCompatiblePrinterError{OutputFormat: &outputFormat, AllowedFormats: f.AllowedFormats()}
@@ -72,6 +77,7 @@ func (f *NamePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinte
 
 // AddFlags receives a *cobra.Command reference and binds
 // flags related to name printing to it
+// 中文：name 输出无需额外 flag，保留空实现以满足 PrintFlags 的统一接口。
 func (f *NamePrintFlags) AddFlags(c *cobra.Command) {}
 
 // NewNamePrintFlags returns flags associated with

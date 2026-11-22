@@ -14,4 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cliruntime 汇集构建 Kubernetes 命令行工具所需的通用构件：
+// 配置加载、资源解析（resource）、输出格式化（printers）以及可复用的 flag 集合（genericclioptions）。
+// 各子包彼此解耦，命令行项目（如 kubectl）按需组合，避免把 CLI 逻辑塞进 client-go。
 package cliruntime

@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestNamePrinterSupportsExpectedFormats 验证 NamePrintFlags 对 "name"、空格式以及其他格式的匹配行为，
+// 以及操作动词（Operation）在有/无 -o name 时对输出的影响。
 func TestNamePrinterSupportsExpectedFormats(t *testing.T) {
 	testObject := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
@@ -40,6 +42,7 @@ func TestNamePrinterSupportsExpectedFormats(t *testing.T) {
 		expectedOutput string
 		expectNoMatch  bool
 	}{
+		// -o name 时即使有操作动词也只输出短格式 kind/name。
 		{
 			name:           "valid \"name\" output format with no operation prints resource name",
 			outputFormat:   "name",
@@ -63,6 +66,7 @@ func TestNamePrinterSupportsExpectedFormats(t *testing.T) {
 			expectedOutput: "pod/foo patched",
 			operation:      "patched",
 		},
+		// 非法格式或由其他 printer 负责的格式必须报 NoCompatiblePrinterError。
 		{
 			name:          "no printer is matched on an invalid outputFormat",
 			outputFormat:  "invalid",

@@ -23,11 +23,16 @@ import (
 )
 
 // TODO require negotiatedSerializer.  leaving it optional lets us plumb current behavior and deal with the difference after major plumbing is complete
+//
+// clientForGroupVersion 按 GroupVersion 构造类型化 REST client。
+// 返回值中的 APIPath 必须与 group 是否为空对应：核心组走 /api，
+// 其余 API 组走 /apis，否则请求 URL 会拼错。
 func (clientConfigFn ClientConfigFunc) clientForGroupVersion(gv schema.GroupVersion, negotiatedSerializer runtime.NegotiatedSerializer) (RESTClient, error) {
 	cfg, err := clientConfigFn()
 	if err != nil {
 		return nil, err
 	}
+	// 调用方未指定 serializer 时沿用配置里的默认值，避免强行覆盖。
 	if negotiatedSerializer != nil {
 		cfg.ContentConfig.NegotiatedSerializer = negotiatedSerializer
 	}
@@ -41,6 +46,8 @@ func (clientConfigFn ClientConfigFunc) clientForGroupVersion(gv schema.GroupVers
 	return rest.RESTClientFor(cfg)
 }
 
+// unstructuredClientForGroupVersion 构造统一使用 unstructured 编解码的 REST client，
+// 适合事先不知道具体类型（CRD、聚合资源）的场景。
 func (clientConfigFn ClientConfigFunc) unstructuredClientForGroupVersion(gv schema.GroupVersion) (RESTClient, error) {
 	cfg, err := clientConfigFn()
 	if err != nil {
@@ -57,6 +64,9 @@ func (clientConfigFn ClientConfigFunc) unstructuredClientForGroupVersion(gv sche
 	return rest.RESTClientFor(cfg)
 }
 
+// withStdinUnavailable 包装 ClientConfigFunc，标记 exec 认证插件不可使用 stdin。
+// 原因：stdin 已被 -f - 的资源读取占用，若认证插件再读 stdin 会与之竞争；
+// 这里通过 StdinUnavailableMessage 给用户一个可诊断的原因说明。
 func (clientConfigFn ClientConfigFunc) withStdinUnavailable(stdinUnavailable bool) ClientConfigFunc {
 	return func() (*rest.Config, error) {
 		cfg, err := clientConfigFn()

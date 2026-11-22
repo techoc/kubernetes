@@ -25,6 +25,9 @@ import (
 )
 
 const (
+	// kustomizationContent1 是一个尽量覆盖常见能力的 kustomization：
+	// 前缀/后缀、命名空间、公共标签与注解、资源引用、configMap/secret
+	// 生成器以及 json6902 patch，用于验证 build 结果被完整交给 StreamVisitor。
 	kustomizationContent1 = `
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -132,6 +135,9 @@ spec:
 `
 )
 
+// TestKustomizeVisitor 在内存文件系统上跑一次 kustomize build，
+// 验证两件事：四个资源都被访问到，且 build 产生的 YAML 与预期一致
+// （包括生成器哈希后缀与 patch 结果）。
 func TestKustomizeVisitor(t *testing.T) {
 	fSys := filesys.MakeFsInMemory()
 	fSys.WriteFile(
@@ -140,6 +146,7 @@ func TestKustomizeVisitor(t *testing.T) {
 	fSys.WriteFile("deployment.yaml", []byte(deploymentContent))
 	fSys.WriteFile("namespace.yaml", []byte(namespaceContent))
 	fSys.WriteFile("jsonpatch.json", []byte(jsonpatchContent))
+	// 复用默认 builder 的 mapper/schema，保证与真实命令的解释行为一致。
 	b := newDefaultBuilder()
 	kv := KustomizeVisitor{
 		mapper:  b.mapper,

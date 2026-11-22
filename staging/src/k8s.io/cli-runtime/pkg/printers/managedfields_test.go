@@ -27,18 +27,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// testResourcePrinter 把普通函数适配成 ResourcePrinter，方便在测试中直接断言委托收到的对象。
 type testResourcePrinter func(object runtime.Object, writer io.Writer) error
 
 func (p testResourcePrinter) PrintObj(o runtime.Object, w io.Writer) error {
 	return p(o, w)
 }
 
+// TestOmitManagedFieldsPrinter 验证 OmitManagedFieldsPrinter 会在委托前剥离 managedFields：
+// 单个对象、含/不含 managedFields，以及列表中的每个元素都要处理。
 func TestOmitManagedFieldsPrinter(t *testing.T) {
 	testCases := []struct {
 		name     string
 		object   runtime.Object
 		expected runtime.Object
 	}{
+		// 没有 managedFields 时不应改动对象。
 		{
 			name: "pod without managedFields",
 			object: &v1.Pod{
@@ -64,6 +68,7 @@ func TestOmitManagedFieldsPrinter(t *testing.T) {
 		},
 		{
 			name: "pod list",
+			// 列表应逐项剥离，包括空 managedFields 切片与完全缺失的项。
 			object: &v1.PodList{
 				Items: []v1.Pod{
 					{
@@ -95,6 +100,7 @@ func TestOmitManagedFieldsPrinter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
+			// 委托函数即断言点：它收到的对象应是剥离后的结果。
 			delegate := func(o runtime.Object, w io.Writer) error {
 				r.Equal(tc.expected, o)
 				return nil

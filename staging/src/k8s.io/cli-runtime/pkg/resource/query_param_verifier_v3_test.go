@@ -27,6 +27,8 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 )
 
+// TestV3SupportsQueryParamBatchV1 用内嵌 OpenAPI V3 文档验证 fieldValidation
+// 等 query param 的支持判定，包含内置资源、CRD 与未知 GVK/param 的情况。
 func TestV3SupportsQueryParamBatchV1(t *testing.T) {
 	tests := map[string]struct {
 		crds             []schema.GroupKind      // CRDFinder returns these CRD's
@@ -138,6 +140,8 @@ func TestV3SupportsQueryParamBatchV1(t *testing.T) {
 	}
 }
 
+// TestInvalidOpenAPIV3Document 覆盖残缺/非法 OpenAPI V3 文档的错误分类：
+// 文档整体不可用时报 Invalid，文档可用但路径缺失时报 Path not found。
 func TestInvalidOpenAPIV3Document(t *testing.T) {
 	tests := map[string]struct {
 		spec *spec3.OpenAPI
@@ -209,6 +213,7 @@ type fakeRoot struct {
 	spec *spec3.OpenAPI
 }
 
+// GroupVersions 未被验证逻辑使用，返回空即可。
 func (f *fakeRoot) GroupVersions() ([]schema.GroupVersion, error) {
 	// Unused
 	return nil, nil

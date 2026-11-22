@@ -21,17 +21,22 @@ import (
 )
 
 // NewSimpleFakeResourceFinder builds a super simple ResourceFinder that just iterates over the objects you provided
+//
+// 返回的 FakeResourceFinder 不做任何 API 交互，仅按传入顺序遍历 Info，
+// 供命令层的单元测试替换真实 builder。
 func NewSimpleFakeResourceFinder(infos ...*resource.Info) *FakeResourceFinder {
 	return &FakeResourceFinder{
 		Infos: infos,
 	}
 }
 
+// WithError 汇总一个错误：Do() 返回的 visitor 在遍历前会直接返回该错误。
 func (f *FakeResourceFinder) WithError(err error) *FakeResourceFinder {
 	f.err = err
 	return f
 }
 
+// FakeResourceFinder 是 ResourceFinder 的测试实现，持有预置的 Info 列表和可选错误。
 type FakeResourceFinder struct {
 	Infos []*resource.Info
 	err   error
@@ -45,12 +50,16 @@ func (f *FakeResourceFinder) Do() resource.Visitor {
 	}
 }
 
+// fakeResourceResult 是 FakeResourceFinder 的 Visitor 实现。
 type fakeResourceResult struct {
 	Infos []*resource.Info
 	err   error
 }
 
 // Visit just iterates over info
+//
+// 与真实 visitor 的差异：fn 的第二个参数始终为 nil；遇到错误立即中止，
+// 因为测试中通常希望首个失败就能定位问题。
 func (r *fakeResourceResult) Visit(fn resource.VisitorFunc) error {
 	if r.err != nil {
 		return r.err

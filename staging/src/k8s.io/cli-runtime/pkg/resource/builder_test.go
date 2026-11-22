@@ -56,10 +56,12 @@ var (
 	corev1Codec = scheme.Codecs.CodecForVersions(scheme.Codecs.LegacyCodec(corev1GV), scheme.Codecs.UniversalDecoder(corev1GV), corev1GV, corev1GV)
 )
 
+// stringBody 把固定字符串包装成可关闭的 ReadCloser，供 fake client 返回响应体。
 func stringBody(body string) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader([]byte(body)))
 }
 
+// watchBody 将 watch 事件编码成流式响应体，模拟 apiserver 的 watch 输出。
 func watchBody(events ...watch.Event) string {
 	buf := &bytes.Buffer{}
 	codec := corev1Codec
@@ -70,12 +72,15 @@ func watchBody(events ...watch.Event) string {
 	return buf.String()
 }
 
+// fakeClient 返回一个不做任何 HTTP 交互的客户端，适合只校验参数解析的用例。
 func fakeClient() FakeClientFunc {
 	return func(version schema.GroupVersion) (RESTClient, error) {
 		return &fake.RESTClient{}, nil
 	}
 }
 
+// fakeClientWith 用 map 模拟 server：以“路径?查询串”为键返回预置响应体。
+// 未命中的请求直接 t.Fatalf，确保测试对请求路径/参数敏感，避免静默放过回归。
 func fakeClientWith(testName string, t *testing.T, data map[string]string) FakeClientFunc {
 	return func(version schema.GroupVersion) (RESTClient, error) {
 		return &fake.RESTClient{
@@ -103,6 +108,7 @@ func fakeClientWith(testName string, t *testing.T, data map[string]string) FakeC
 	}
 }
 
+// testData 提供一组固定的 Pod/Service 列表，多个测试共享以保持断言基线一致。
 func testData() (*v1.PodList, *v1.ServiceList) {
 	pods := &v1.PodList{
 		ListMeta: metav1.ListMeta{
@@ -136,6 +142,8 @@ func testData() (*v1.PodList, *v1.ServiceList) {
 	return pods, svc
 }
 
+// streamTestData 通过管道把两个 JSON 对象串成流，模拟 stdin 中多文档输入。
+// 使用 goroutine 写入是为了让读取端可以边读边解析，贴近真实管道行为。
 func streamTestData() (io.Reader, *v1.PodList, *v1.ServiceList) {
 	pods, svc := testData()
 	r, w := io.Pipe()
@@ -147,6 +155,7 @@ func streamTestData() (io.Reader, *v1.PodList, *v1.ServiceList) {
 	return r, pods, svc
 }
 
+// subresourceTestData 返回带 status 的 Pod，用于验证 status 子资源的请求路径与内容。
 func subresourceTestData(name string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", ResourceVersion: "10"},
@@ -155,6 +164,7 @@ func subresourceTestData(name string) *v1.Pod {
 	}
 }
 
+// JSONToYAMLOrDie 把 JSON 转成 YAML，失败即 panic：测试数据是常量，转换失败说明用例本身有问题。
 func JSONToYAMLOrDie(in []byte) []byte {
 	data, err := yaml.JSONToYAML(in)
 	if err != nil {
@@ -163,6 +173,7 @@ func JSONToYAMLOrDie(in []byte) []byte {
 	return data
 }
 
+// streamYAMLTestData 构造以 "---" 分隔的 YAML 流，验证 YAML 多文档解析路径。
 func streamYAMLTestData() (io.Reader, *v1.PodList, *v1.ServiceList) {
 	pods, svc := testData()
 	r, w := io.Pipe()
@@ -175,6 +186,7 @@ func streamYAMLTestData() (io.Reader, *v1.PodList, *v1.ServiceList) {
 	return r, pods, svc
 }
 
+// streamTestObject 把单个对象编码成流，供需要单对象输入的测试复用。
 func streamTestObject(obj runtime.Object) io.Reader {
 	r, w := io.Pipe()
 	go func() {
@@ -184,11 +196,13 @@ func streamTestObject(obj runtime.Object) io.Reader {
 	return r
 }
 
+// testVisitor 收集 Visit 回调得到的 Info，并可通过 InjectErr 模拟访问中途失败。
 type testVisitor struct {
 	InjectErr error
 	Infos     []*Info
 }
 
+// Handle 充当 Visitor；首参 err 非空时优先返回它，模拟上游解析失败。
 func (v *testVisitor) Handle(info *Info, err error) error {
 	if err != nil {
 		return err
@@ -197,6 +211,7 @@ func (v *testVisitor) Handle(info *Info, err error) error {
 	return v.InjectErr
 }
 
+// Objects 提取访问到的对象，便于与期望对象做 DeepEqual 比较。
 func (v *testVisitor) Objects() []runtime.Object {
 	objects := []runtime.Object{}
 	for i := range v.Infos {
@@ -205,6 +220,7 @@ func (v *testVisitor) Objects() []runtime.Object {
 	return objects
 }
 
+// aPod 是用于文件名参数测试的 Pod JSON 模板，{id} 占位符由用例替换以生成多个对象。
 var aPod string = `
 {
     "kind": "Pod",
@@ -231,6 +247,8 @@ var aPod string = `
     }
 }
 `
+
+// aPodBadAnnotations 的 annotations 值类型错误，用于验证 Unstructured 模式下的错误路径。
 var aPodBadAnnotations string = `
 {
     "kind": "Pod",
@@ -261,6 +279,7 @@ var aPodBadAnnotations string = `
 }
 `
 
+// aRC 是 ReplicationController 的 JSON 模板，与 aPod 配合覆盖多种资源类型的文件遍历。
 var aRC string = `
 {
     "kind": "ReplicationController",
@@ -299,10 +318,13 @@ var aRC string = `
 }
 `
 
+// newDefaultBuilder 返回指向假客户端的 builder，用静态 RESTMapper 与假类别展开器，
+// 让测试无需真实集群即可解析资源类型。
 func newDefaultBuilder() *Builder {
 	return newDefaultBuilderWith(fakeClient())
 }
 
+// newDefaultBuilderWith 允许替换 fake client 工厂，其余配置与 newDefaultBuilder 一致。
 func newDefaultBuilderWith(fakeClientFn FakeClientFunc) *Builder {
 	return NewFakeBuilder(
 		fakeClientFn,
@@ -315,6 +337,7 @@ func newDefaultBuilderWith(fakeClientFn FakeClientFunc) *Builder {
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...)
 }
 
+// newUnstructuredDefaultBuilder 使用 Unstructured 模式构建，验证未知类型无需强类型 scheme。
 func newUnstructuredDefaultBuilder() *Builder {
 	return newUnstructuredDefaultBuilderWith(fakeClient())
 }
@@ -331,6 +354,8 @@ func newUnstructuredDefaultBuilderWith(fakeClientFn FakeClientFunc) *Builder {
 		Unstructured()
 }
 
+// errorRestMapper 包装正常 mapper 并让 RESTMapping 固定返回指定错误，
+// 用于验证 builder 是否把非 NoKindMatch 错误原样透传。
 type errorRestMapper struct {
 	meta.RESTMapper
 	err error
@@ -340,10 +365,12 @@ func (l *errorRestMapper) RESTMapping(gk schema.GroupKind, versions ...string) (
 	return nil, l.err
 }
 
+// Reset 委托给底层 mapper，保持可重置语义。
 func (l *errorRestMapper) Reset() {
 	meta.MaybeResetRESTMapper(l.RESTMapper)
 }
 
+// newDefaultBuilderWithMapperError 在默认 builder 基础上注入 mapper 错误。
 func newDefaultBuilderWithMapperError(fakeClientFn FakeClientFunc, err error) *Builder {
 	return NewFakeBuilder(
 		fakeClientFn,
@@ -359,6 +386,8 @@ func newDefaultBuilderWithMapperError(fakeClientFn FakeClientFunc, err error) *B
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...)
 }
 
+// TestPathBuilderAndVersionedObjectNotDefaulted 验证从文件读取的版本化对象保持原样：
+// 不应用默认值（例如 replicas 仍为 nil），避免 CLI 悄悄改变用户输入语义。
 func TestPathBuilderAndVersionedObjectNotDefaulted(t *testing.T) {
 	b := newDefaultBuilder().
 		FilenameParam(false, &FilenameOptions{Recursive: false, Filenames: []string{"../../artifacts/kitten-rc.yaml"}})
@@ -384,6 +413,8 @@ func TestPathBuilderAndVersionedObjectNotDefaulted(t *testing.T) {
 	}
 }
 
+// TestNodeBuilder 验证集群级资源（Node）不会被强行塞入 namespace：
+// 即使带 --namespace，输出的 Info.Namespace 也应为空。
 func TestNodeBuilder(t *testing.T) {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: "should-not-have", ResourceVersion: "10"},
@@ -415,18 +446,22 @@ func TestNodeBuilder(t *testing.T) {
 	}
 }
 
+// createTestDir 创建测试目录，失败直接终止用例。
 func createTestDir(t *testing.T, path string) {
 	if err := os.MkdirAll(path, 0750); err != nil {
 		t.Fatalf("error creating test dir: %v", err)
 	}
 }
 
+// writeTestFile 写入测试文件内容。
 func writeTestFile(t *testing.T, path string, contents string) {
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
 		t.Fatalf("error creating test file %#v", err)
 	}
 }
 
+// TestFilenameOptionsValidate 覆盖 -f/-k/-R 的互斥规则：
+// -f 与 -k 不能同时用，-k 也不能与 -f/-R 组合。
 func TestFilenameOptionsValidate(t *testing.T) {
 	testcases := []struct {
 		filenames []string
@@ -483,6 +518,8 @@ func TestFilenameOptionsValidate(t *testing.T) {
 	}
 }
 
+// TestPathBuilderWithMultiple 验证递归遍历目录时能读取多个不同类型文件，
+// 并覆盖目录内嵌套目录与硬链接（同一文件不应被重复读取）。
 func TestPathBuilderWithMultiple(t *testing.T) {
 	// create test dirs
 	tmpDir, err := os.MkdirTemp("", "recursive_test_multiple")
@@ -552,6 +589,8 @@ func TestPathBuilderWithMultiple(t *testing.T) {
 	}
 }
 
+// TestPathBuilderWithMultipleInvalid 验证符号链接与自引用链接环会被拒绝，
+// 避免递归遍历逃逸目录或无限循环。
 func TestPathBuilderWithMultipleInvalid(t *testing.T) {
 	// create test dirs
 	tmpDir, err := os.MkdirTemp("", "recursive_test_multiple_invalid")
@@ -599,6 +638,7 @@ func TestPathBuilderWithMultipleInvalid(t *testing.T) {
 	}
 }
 
+// TestDirectoryBuilder 验证非递归读取整个目录。目录含多个对象，因此不应是 singleItemImplied。
 func TestDirectoryBuilder(t *testing.T) {
 	b := newDefaultBuilder().
 		FilenameParam(false, &FilenameOptions{Recursive: false, Filenames: []string{"../../artifacts/guestbook"}}).
@@ -624,6 +664,8 @@ func TestDirectoryBuilder(t *testing.T) {
 	}
 }
 
+// TestFilePatternBuilderWhenFileLiteralExists 验证当路径本身是存在的文件时，
+// 即使名字里含 glob 元字符（[x]）也按字面量处理，而不是先去展开通配符。
 func TestFilePatternBuilderWhenFileLiteralExists(t *testing.T) {
 	const pathPattern = "../../artifacts/oddly-named-file[x].yaml"
 	b := newDefaultBuilder().
@@ -642,6 +684,7 @@ func TestFilePatternBuilderWhenFileLiteralExists(t *testing.T) {
 	}
 }
 
+// TestFilePatternBuilder 验证通配符匹配多个文件时全部被读取。
 func TestFilePatternBuilder(t *testing.T) {
 	b := newDefaultBuilder().
 		FilenameParam(false, &FilenameOptions{Recursive: false, Filenames: []string{"../../artifacts/guestbook/redis-*.yaml"}}).
@@ -662,6 +705,8 @@ func TestFilePatternBuilder(t *testing.T) {
 	}
 }
 
+// TestErrorFilePatternBuilder 验证非法 glob、文件不存在、目录不存在三类错误：
+// 错误消息需包含原始输入，便于用户定位写错的路径。
 func TestErrorFilePatternBuilder(t *testing.T) {
 	testCases := map[string]struct {
 		input        string
@@ -702,6 +747,7 @@ func TestErrorFilePatternBuilder(t *testing.T) {
 	}
 }
 
+// setupKustomizeDirectory 在临时目录写入一组 kustomization 输入，返回目录路径。
 func setupKustomizeDirectory() (string, error) {
 	path, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -782,6 +828,8 @@ resources:
 	return path, nil
 }
 
+// TestKustomizeDirectoryBuilder 验证 -k 的目录语义：
+// 必须指向包含 kustomization 的目录（不能是文件），并应用 nameprefix 等变换。
 func TestKustomizeDirectoryBuilder(t *testing.T) {
 	dir, err := setupKustomizeDirectory()
 	if err != nil {
@@ -856,6 +904,8 @@ func TestKustomizeDirectoryBuilder(t *testing.T) {
 	}
 }
 
+// TestNamespaceOverride 验证对象自带 namespace 与命令行 namespace 的关系：
+// 普通模式下以对象内为准；RequireNamespace 强制校验时，不匹配即报错。
 func TestNamespaceOverride(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -886,6 +936,7 @@ func TestNamespaceOverride(t *testing.T) {
 	}
 }
 
+// TestURLBuilder 验证从 URL 读取流式响应，且单个响应中可含多个对象。
 func TestURLBuilder(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -916,6 +967,7 @@ func TestURLBuilder(t *testing.T) {
 
 }
 
+// TestURLBuilderRequireNamespace 验证 URL 来源的对象若与指定 namespace 不符会被拒绝。
 func TestURLBuilderRequireNamespace(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -936,6 +988,7 @@ func TestURLBuilderRequireNamespace(t *testing.T) {
 	}
 }
 
+// TestReplaceAliases 验证 "all" 等快捷名会展开为具体资源列表，且可与逗号分隔的其他参数混用。
 func TestReplaceAliases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -969,6 +1022,7 @@ func TestReplaceAliases(t *testing.T) {
 	}
 }
 
+// TestResourceByName 验证 "pods foo" 形式会精确请求单个对象，并解析出正确的 RESTMapping。
 func TestResourceByName(t *testing.T) {
 	pods, _ := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1000,6 +1054,9 @@ func TestResourceByName(t *testing.T) {
 		t.Errorf("unexpected resource mapping: %#v", mapping)
 	}
 }
+
+// TestSubresourceByName 验证 Subresource("status") 会把请求路径改写为 .../status，
+// 但 ResourceMapping 仍报告主资源 pods。
 func TestSubresourceByName(t *testing.T) {
 	pod := subresourceTestData("foo")
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1032,6 +1089,8 @@ func TestSubresourceByName(t *testing.T) {
 	}
 }
 
+// TestRestMappingErrors 区分两类映射错误：未知资源类型应给出友好提示，
+// 其他 mapper 错误必须原样透传，不能被误判为“资源不存在”。
 func TestRestMappingErrors(t *testing.T) {
 	pods, _ := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1075,6 +1134,8 @@ func TestRestMappingErrors(t *testing.T) {
 	}
 }
 
+// TestMultipleResourceByTheSameName 验证多资源类型 + 多名字会做笛卡尔积式访问，
+// 且此时无法确定单一 ResourceMapping。
 func TestMultipleResourceByTheSameName(t *testing.T) {
 	pods, svcs := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1107,6 +1168,8 @@ func TestMultipleResourceByTheSameName(t *testing.T) {
 	}
 }
 
+// TestRequestModifier 验证 TransformRequests 钩子确实能拿到最终发送的 *rest.Request，
+// 包括 Flatten 与非 Flatten 两条路径。
 func TestRequestModifier(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -1155,6 +1218,7 @@ func TestRequestModifier(t *testing.T) {
 	}
 }
 
+// TestResourceNames 验证 RESOURCE/NAME 混合写法（pods/foo services/baz）能分别解析并访问。
 func TestResourceNames(t *testing.T) {
 	pods, svc := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1182,6 +1246,8 @@ func TestResourceNames(t *testing.T) {
 	}
 }
 
+// TestResourceNamesWithoutResource 验证资源类型为空但参数是裸名字时应报错，
+// 因为无法确定要访问哪种资源。
 func TestResourceNamesWithoutResource(t *testing.T) {
 	pods, svc := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1203,6 +1269,8 @@ func TestResourceNamesWithoutResource(t *testing.T) {
 	}
 }
 
+// TestResourceByNameWithoutRequireObject 验证 RequireObject(false) 只做定位不发请求：
+// Info 含名字与映射，但 Object 为 nil。
 func TestResourceByNameWithoutRequireObject(t *testing.T) {
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{})).NamespaceParam("test")
 
@@ -1235,6 +1303,7 @@ func TestResourceByNameWithoutRequireObject(t *testing.T) {
 	}
 }
 
+// TestResourceByNameAndEmptySelector 验证空标签选择器不会改变“按名字取单对象”的行为。
 func TestResourceByNameAndEmptySelector(t *testing.T) {
 	pods, _ := testData()
 	b := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1262,6 +1331,7 @@ func TestResourceByNameAndEmptySelector(t *testing.T) {
 	}
 }
 
+// TestLabelSelector 验证 labelSelector 会作为查询参数下发，并在 Flatten 后展开多个列表的结果。
 func TestLabelSelector(t *testing.T) {
 	pods, svc := testData()
 	labelKey := metav1.LabelSelectorQueryParam(corev1GV.String())
@@ -1295,6 +1365,7 @@ func TestLabelSelector(t *testing.T) {
 	}
 }
 
+// TestLabelSelectorRequiresKnownTypes 验证未知资源类型应尽早报错，而不是带着选择器发请求。
 func TestLabelSelectorRequiresKnownTypes(t *testing.T) {
 	b := newDefaultBuilder().
 		LabelSelectorParam("a=b").
@@ -1306,6 +1377,7 @@ func TestLabelSelectorRequiresKnownTypes(t *testing.T) {
 	}
 }
 
+// TestFieldSelector 验证 fieldSelector 作为查询参数下发并参与结果扁平化。
 func TestFieldSelector(t *testing.T) {
 	pods, svc := testData()
 	fieldKey := metav1.FieldSelectorQueryParam(corev1GV.String())
@@ -1339,6 +1411,7 @@ func TestFieldSelector(t *testing.T) {
 	}
 }
 
+// TestFieldSelectorRequiresKnownTypes 验证未知资源类型 + fieldSelector 会报错。
 func TestFieldSelectorRequiresKnownTypes(t *testing.T) {
 	b := newDefaultBuilder().
 		FieldSelectorParam("a=b").
@@ -1349,6 +1422,8 @@ func TestFieldSelectorRequiresKnownTypes(t *testing.T) {
 		t.Errorf("unexpected non-error")
 	}
 }
+
+// TestNoSelectorUnknowResourceType 验证即使没有选择器，未知资源类型也会报出可识别的错误。
 func TestNoSelectorUnknowResourceType(t *testing.T) {
 	b := newDefaultBuilder().
 		NamespaceParam("test").
@@ -1361,6 +1436,8 @@ func TestNoSelectorUnknowResourceType(t *testing.T) {
 		}
 	}
 }
+
+// TestSingleResourceType 验证 SingleResourceType 会把多资源类型判定为 ErrMultipleResourceTypes。
 func TestSingleResourceType(t *testing.T) {
 	b := newDefaultBuilder().
 		LabelSelectorParam("a=b").
@@ -1372,6 +1449,8 @@ func TestSingleResourceType(t *testing.T) {
 	}
 }
 
+// TestResourceTuple 覆盖 RESOURCE/NAME 形式的合法与非法组合：
+// 允许跨命名空间/集群级类型混用，但拒绝裸名字与 RESOURCE/NAME 混用、多类型拼接、未知类型及首尾斜杠等。
 func TestResourceTuple(t *testing.T) {
 	expectNoErr := func(err error) bool { return err == nil }
 	expectErr := func(err error) bool { return err != nil }
@@ -1477,6 +1556,7 @@ func TestResourceTuple(t *testing.T) {
 	}
 }
 
+// TestStream 验证 JSON 流输入在 Flatten 后逐个产出对象（列表被展开为成员）。
 func TestStream(t *testing.T) {
 	r, pods, rc := streamTestData()
 	b := newDefaultBuilder().
@@ -1494,6 +1574,7 @@ func TestStream(t *testing.T) {
 	}
 }
 
+// TestYAMLStream 验证以 "---" 分隔的 YAML 流同样能被逐文档解析。
 func TestYAMLStream(t *testing.T) {
 	r, pods, rc := streamYAMLTestData()
 	b := newDefaultBuilder().
@@ -1511,6 +1592,7 @@ func TestYAMLStream(t *testing.T) {
 	}
 }
 
+// TestMultipleObject 验证多对象结果在 Infoless 模式下会被打包成 v1.List。
 func TestMultipleObject(t *testing.T) {
 	r, pods, svc := streamTestData()
 	obj, err := newDefaultBuilder().
@@ -1533,6 +1615,8 @@ func TestMultipleObject(t *testing.T) {
 	}
 }
 
+// TestContinueOnErrorVisitor 验证 ContinueOnError 模式下访问不会首错即停：
+// 所有 Info 都被访问，错误最后聚合成 Aggregate 返回。
 func TestContinueOnErrorVisitor(t *testing.T) {
 	r, _, _ := streamTestData()
 	req := newDefaultBuilder().
@@ -1563,6 +1647,7 @@ func TestContinueOnErrorVisitor(t *testing.T) {
 	}
 }
 
+// TestSingleItemImpliedObject 验证单个文件输入会标记 singleItemImplied，并返回该对象本身。
 func TestSingleItemImpliedObject(t *testing.T) {
 	obj, err := newDefaultBuilder().
 		NamespaceParam("test").DefaultNamespace().
@@ -1583,6 +1668,7 @@ func TestSingleItemImpliedObject(t *testing.T) {
 	}
 }
 
+// TestSingleItemImpliedObjectNoExtension 验证无扩展名的 YAML 文件同样能识别为单对象。
 func TestSingleItemImpliedObjectNoExtension(t *testing.T) {
 	obj, err := newDefaultBuilder().
 		NamespaceParam("test").DefaultNamespace().
@@ -1603,6 +1689,7 @@ func TestSingleItemImpliedObjectNoExtension(t *testing.T) {
 	}
 }
 
+// TestSingleItemImpliedRootScopedObject 验证集群级单对象不会被赋予默认 namespace。
 func TestSingleItemImpliedRootScopedObject(t *testing.T) {
 	node := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
 	r := streamTestObject(node)
@@ -1628,6 +1715,7 @@ func TestSingleItemImpliedRootScopedObject(t *testing.T) {
 	}
 }
 
+// TestListObject 验证 Flatten 后的列表保留列表级 resourceVersion 与全部成员。
 func TestListObject(t *testing.T) {
 	pods, _ := testData()
 	labelKey := metav1.LabelSelectorQueryParam(corev1GV.String())
@@ -1661,6 +1749,8 @@ func TestListObject(t *testing.T) {
 	}
 }
 
+// TestListObjectWithDifferentVersions 验证合并不同资源类型的列表时，resourceVersion 会被清空，
+// 因为跨类型不存在统一的版本。
 func TestListObjectWithDifferentVersions(t *testing.T) {
 	pods, svc := testData()
 	labelKey := metav1.LabelSelectorQueryParam(corev1GV.String())
@@ -1688,6 +1778,7 @@ func TestListObjectWithDifferentVersions(t *testing.T) {
 	}
 }
 
+// TestListObjectSubresource 验证对批量资源使用子资源会导致明确错误，而不是静默忽略。
 func TestListObjectSubresource(t *testing.T) {
 	pods, _ := testData()
 	labelKey := metav1.LabelSelectorQueryParam(corev1GV.String())
@@ -1705,6 +1796,7 @@ func TestListObjectSubresource(t *testing.T) {
 	}
 }
 
+// TestWatch 验证 watch 请求的路径、fieldSelector、resourceVersion 参数正确，事件能正常解码。
 func TestWatch(t *testing.T) {
 	_, svc := testData()
 	w, err := newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
@@ -1738,6 +1830,7 @@ func TestWatch(t *testing.T) {
 	}
 }
 
+// TestWatchMultipleError 验证对多个来源执行 watch 会报错：watch 只能针对单一目标。
 func TestWatchMultipleError(t *testing.T) {
 	_, err := newDefaultBuilder().
 		NamespaceParam("test").DefaultNamespace().
@@ -1750,6 +1843,7 @@ func TestWatchMultipleError(t *testing.T) {
 	}
 }
 
+// TestLatest 验证 Latest() 会用服务端最新对象替换流中各对象的旧版本。
 func TestLatest(t *testing.T) {
 	r, _, _ := streamTestData()
 	newPod := &v1.Pod{
@@ -1781,6 +1875,8 @@ func TestLatest(t *testing.T) {
 	}
 }
 
+// TestReceiveMultipleErrors 验证多个输入源各自的解析错误都被收集为 Aggregate，
+// 而不是只报告第一个。
 func TestReceiveMultipleErrors(t *testing.T) {
 	pods, svc := testData()
 
@@ -1819,6 +1915,7 @@ func TestReceiveMultipleErrors(t *testing.T) {
 	}
 }
 
+// TestHasNames 验证参数中是否含资源名的判定，以及 RESOURCE/NAME 与裸类型混用时的提示错误。
 func TestHasNames(t *testing.T) {
 	basename := filepath.Base(os.Args[0])
 	tests := []struct {
@@ -1889,6 +1986,8 @@ func TestHasNames(t *testing.T) {
 	}
 }
 
+// TestUnstructured 验证 Unstructured 模式能接受任意类型，但字段类型非法时（如 annotations 值为数字）
+// 仍会在访问时报出带字段路径的错误。
 func TestUnstructured(t *testing.T) {
 	// create test dirs
 	tmpDir, err := os.MkdirTemp(os.TempDir(), "unstructured_test")
@@ -1947,6 +2046,8 @@ func TestUnstructured(t *testing.T) {
 	}
 }
 
+// TestStdinMultiUseError 验证 stdin 只能被消费一次：先 Stdin() 再 StdinInUse()
+// 或反序调用都应返回 StdinMultiUseError。
 func TestStdinMultiUseError(t *testing.T) {
 	if got, want := newUnstructuredDefaultBuilder().Stdin().StdinInUse().Do().Err(), StdinMultiUseError; !errors.Is(got, want) {
 		t.Errorf("got: %q, want: %q", got, want)

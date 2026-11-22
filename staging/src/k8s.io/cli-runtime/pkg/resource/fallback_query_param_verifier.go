@@ -24,6 +24,7 @@ import (
 // fallbackQueryParamVerifier encapsulates the primary Verifier that
 // is invoked, and the secondary/fallback Verifier.
 type fallbackQueryParamVerifier struct {
+	// primary 通常基于 OpenAPI v3；secondary 是旧版 OpenAPI v2 实现。
 	primary   Verifier
 	secondary Verifier
 }
@@ -33,6 +34,7 @@ var _ Verifier = &fallbackQueryParamVerifier{}
 // NewFallbackQueryParamVerifier returns a new Verifier which will invoke the
 // initial/primary Verifier. If the primary Verifier is "NotFound", then the
 // secondary Verifier is invoked as a fallback.
+// 中文：用于兼容尚未提供 OpenAPI v3 的旧集群；构造时不影响既有行为，仅在主校验器失败时启用回退。
 func NewFallbackQueryParamVerifier(primary Verifier, secondary Verifier) Verifier {
 	return &fallbackQueryParamVerifier{
 		primary:   primary,
@@ -51,6 +53,7 @@ func (f *fallbackQueryParamVerifier) HasSupport(gvk schema.GroupVersionKind) err
 	// If an error was returned from the primary OpenAPI endpoint,
 	// we fallback to check the secondary OpenAPI endpoint for
 	// any error *except* "paramUnsupportedError".
+	// 中文：paramUnsupportedError 是确定性的“不支持”结论，回退也无法改变，故不再浪费一次请求。
 	if err != nil && !IsParamUnsupportedError(err) {
 		klog.V(7).Infof("openapi v3 error...falling back to legacy: %s", err)
 		err = f.secondary.HasSupport(gvk)

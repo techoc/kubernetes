@@ -35,21 +35,30 @@ import (
 
 // cellBreakChars are characters that cause cell value truncation.
 // Formfeed is included because tabwriter treats it as a newline.
+//
+// 单元格中出现这些字符就截断并追加 "..."，避免多行内容破坏表格对齐；
+// 换页符 \f 也在此列，因为 tabwriter 会把它当作换行处理。
 const cellBreakChars = "\f\n\r"
 
 // flushInterval is the number of rows between tabwriter flushes when
 // streaming a large table. Flushing bounds memory while preserving
 // alignment via tabwriter.RememberWidths after the first flush.
+//
+// 每 100 行 flush 一次，既限制流式输出时的缓冲大小，又借助
+// RememberWidths 保证后续 flush 的列宽一致。
 const flushInterval = 100
 
 var _ ResourcePrinter = &HumanReadablePrinter{}
 
+// printHandler 把一个对象类型绑定到“列定义 + 打印函数”。
+// printFunc 用反射调用，是因为历史 printer 注册表需要按类型动态分发。
 type printHandler struct {
 	columnDefinitions []metav1.TableColumnDefinition
 	printFunc         reflect.Value
 }
 
 var (
+	// 非 Table 类型对象的兜底路径：Status 有专用三列，其余走 ObjectMeta 两列。
 	statusHandlerEntry = &printHandler{
 		columnDefinitions: statusColumnDefinitions,
 		printFunc:         reflect.ValueOf(printStatus),
@@ -71,6 +80,7 @@ var (
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
 	}
 
+	// watch 事件与命名空间是前置列，单独存放便于在表头阶段 prepend。
 	withEventTypePrefixColumns = []string{"EVENT"}
 	withNamespacePrefixColumns = []string{"NAMESPACE"} // TODO(erictune): print cluster name too.
 )
@@ -79,6 +89,10 @@ var (
 // more elegant output. It is not threadsafe, but you may call PrintObj repeatedly; headers
 // will only be printed if the object type changes. This makes it useful for printing items
 // received from watches.
+//
+// 状态（lastType/lastColumns/printedHeaders）跨调用保留，用于实现
+// “同类型对象只打印一次表头”；因此该 printer 不是并发安全的，
+// 但非常适合 watch 流式输出。
 type HumanReadablePrinter struct {
 	options        PrintOptions
 	lastType       interface{}
@@ -94,6 +108,7 @@ func NewTablePrinter(options PrintOptions) ResourcePrinter {
 	return printer
 }
 
+// printHeader 用制表符拼接列名并在末尾补换行，交给 tabwriter 统一对齐。
 func printHeader(columnNames []string, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, "%s\n", strings.Join(columnNames, "\t")); err != nil {
 		return err
@@ -104,12 +119,15 @@ func printHeader(columnNames []string, w io.Writer) error {
 // PrintObj prints the obj in a human-friendly format according to the type of the obj.
 func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) error {
 
+	// 调用方可能已经传入 tabwriter（大表流式输出场景），此时不能重复包装，
+	// 否则对齐语义与 flush 节奏都会被打乱。
 	if _, found := output.(*tabwriter.Writer); !found {
 		w := GetNewTabWriter(output)
 		output = w
 		defer w.Flush()
 	}
 
+	// WatchEvent 只携带事件类型和真实对象；先拆包，事件类型稍后作为首列插入。
 	var eventType string
 	if event, isEvent := obj.(*metav1.WatchEvent); isEvent {
 		eventType = event.Type
@@ -131,6 +149,7 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 			table.ColumnDefinitions = h.lastColumns
 		} else if !reflect.DeepEqual(table.ColumnDefinitions, h.lastColumns) {
 			// If this table has column definitions, remember them for future use.
+			// 列定义变化说明服务端切换了资源类型或版本，需要重置表头状态。
 			h.lastColumns = table.ColumnDefinitions
 			h.printedHeaders = false
 		}
@@ -139,6 +158,7 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 			h.printedHeaders = true
 		}
 
+		// 服务端返回的 Table 只含原始行；命名空间、自定义标签等列由客户端补充。
 		if err := decorateTable(table, localOptions); err != nil {
 			return err
 		}
@@ -164,6 +184,7 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 
 	includeHeaders := h.lastType != handler && !h.options.NoHeaders
 
+	// 类型切换时插入空行，避免多个资源的表格连在一起难以区分。
 	if h.lastType != nil && h.lastType != handler && !h.options.NoHeaders {
 		fmt.Fprintln(output)
 	}
@@ -179,6 +200,9 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 // printTable prints a table to the provided output respecting the filtering rules for options
 // for wide columns and filtered rows. It filters out rows that are Completed. You should call
 // decorateTable if you receive a table from a remote server before calling printTable.
+//
+// 这里同时负责三件事：按 -o wide 过滤 Priority 列、按 NoHeaders 控制表头、
+// 以及为 tabwriter 预扫描列宽以保证流式 flush 后仍能对齐。
 func printTable(table *metav1.Table, output io.Writer, options PrintOptions) error {
 	numColDefs := len(table.ColumnDefinitions)
 
@@ -197,9 +221,11 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 		maxCellWidths = make([]int, numColDefs)
 		for _, row := range table.Rows {
 			for i, cell := range row.Cells {
+				// 服务端可能返回比列定义更多的单元格，超出部分忽略（见下方 issue）。
 				if i >= numColDefs {
 					break
 				}
+				// 非 wide 模式不显示 Priority != 0 的列，宽度也无需计算。
 				if !options.Wide && table.ColumnDefinitions[i].Priority != 0 {
 					continue
 				}
@@ -232,6 +258,7 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 
 	if !options.NoHeaders {
 		// avoid printing headers if we have no rows to display
+		// 空表连表头都不输出，避免脚本把只有表头的输出误判为有资源。
 		if len(table.Rows) == 0 {
 			return nil
 		}
@@ -246,8 +273,10 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 			} else {
 				output.Write([]byte{'\t'}) //nolint:errcheck
 			}
+			// 表头统一大写，是 kubectl 表格输出的惯例。
 			name := strings.ToUpper(column.Name)
 			io.WriteString(output, name) //nolint:errcheck
+			// 用预扫描的最大宽度补齐表头，使第一次 flush 就锁定列宽。
 			if i != lastVisibleCol && i < len(maxCellWidths) {
 				if pad := maxCellWidths[i] - len(name); pad > 0 {
 					output.Write(bytes.Repeat([]byte{' '}, pad)) //nolint:errcheck
@@ -318,6 +347,7 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 		rowBuf = append(rowBuf, '\n')
 		output.Write(rowBuf) //nolint:errcheck
 
+		// 周期性 flush：写错误交给 tabwriter 自身处理，这里刻意忽略返回值。
 		if isTabwriter && (ri+1)%flushInterval == 0 {
 			tw.Flush() //nolint:errcheck
 		}
@@ -339,6 +369,8 @@ func appendCellValue(w io.Writer, buf []byte, val string) []byte {
 	}
 
 	// Slow path: flush accumulated buffer, then handle the special value.
+	// 之所以先 flush 再直接写，是为了让转义/截断只作用于当前单元格，
+	// 同时保持之前的行内内容顺序不变。
 	if len(buf) > 0 {
 		w.Write(buf) //nolint:errcheck
 		buf = buf[:0]
@@ -357,8 +389,10 @@ func appendCellValue(w io.Writer, buf []byte, val string) []byte {
 	return buf
 }
 
+// cellValueFunc 根据表格行计算新增列的值；供 addColumns 注入 EVENT 等列。
 type cellValueFunc func(metav1.TableRow) (interface{}, error)
 
+// columnAddPosition 指定新列插入到表头/行的开头还是末尾。
 type columnAddPosition int
 
 const (
@@ -366,6 +400,8 @@ const (
 	end       columnAddPosition = 2
 )
 
+// addColumns 在表格开头或末尾插入若干列，并为每个数据行计算新单元格。
+// 先完整计算所有行再统一替换，保证任一取值函数出错时不会留下半成品表格。
 func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.TableColumnDefinition, valueFuncs []cellValueFunc) error {
 	if len(columns) != len(valueFuncs) {
 		return fmt.Errorf("cannot prepend columns, unmatched value functions")
@@ -382,6 +418,7 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 		if pos == end {
 			// If we're appending, start with the existing cells,
 			// then add nil cells to match the number of columns
+			// 先用 nil 补齐列定义数量，避免服务端返回的短行在追加后错位。
 			newCells = append(newCells, table.Rows[i].Cells...)
 			for len(newCells) < len(table.ColumnDefinitions) {
 				newCells = append(newCells, nil)
@@ -430,6 +467,9 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 // namespace column. It will fill empty columns with nil (if the object
 // does not expose metadata). It returns an error if the table cannot
 // be decorated.
+//
+// 注意 rows 是表头行拷贝，修改 row.Cells 后必须回写 rows[i]，
+// 否则对切片的追加只会体现在副本上。
 func decorateTable(table *metav1.Table, options PrintOptions) error {
 	width := len(table.ColumnDefinitions) + len(options.ColumnLabels)
 	if options.WithNamespace {
@@ -441,6 +481,7 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 
 	columns := table.ColumnDefinitions
 
+	// --show-kind 时把 kind 前缀拼到 format=name 的列（通常是 NAME）上。
 	nameColumn := -1
 	if options.WithKind && !options.Kind.Empty() {
 		for i := range columns {
@@ -452,6 +493,7 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 	}
 
 	if width != len(table.ColumnDefinitions) {
+		// 只有需要额外列时才重建列定义，否则直接复用服务端返回的切片。
 		columns = make([]metav1.TableColumnDefinition, 0, width)
 		if options.WithNamespace {
 			columns = append(columns, metav1.TableColumnDefinition{
@@ -492,6 +534,7 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 				}
 			}
 			// if we can't get an accessor, fill out the appropriate columns with empty spaces
+			// 取不到 metadata 时仍要补齐单元格，否则表格列数不齐会破坏 tabwriter 对齐。
 			if m == nil {
 				if options.WithNamespace {
 					r := make([]interface{}, 1, width)
@@ -527,6 +570,7 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 func printRowsForHandlerEntry(output io.Writer, handler *printHandler, eventType string, obj runtime.Object, options PrintOptions, includeHeaders bool) error {
 	var results []reflect.Value
 
+	// printFunc 的签名固定为 func(runtime.Object, PrintOptions) ([]metav1.TableRow, error)。
 	args := []reflect.Value{reflect.ValueOf(obj), reflect.ValueOf(options)}
 	results = handler.printFunc.Call(args)
 	if !results[1].IsNil() {
@@ -563,6 +607,8 @@ func printRowsForHandlerEntry(output io.Writer, handler *printHandler, eventType
 	return results[1].Interface().(error)
 }
 
+// formattedEventType 把 watch 事件类型映射为固定宽度的展示文本，
+// 补空格是为了在没有列对齐的情况下让后续列起始位置一致。
 var formattedEventType = map[string]string{
 	string(watch.Added):    "ADDED   ",
 	string(watch.Modified): "MODIFIED",
@@ -570,6 +616,7 @@ var formattedEventType = map[string]string{
 	string(watch.Error):    "ERROR   ",
 }
 
+// formatEventType 未知事件类型原样返回，避免丢失服务端可能新增的取值。
 func formatEventType(eventType string) string {
 	if formatted, ok := formattedEventType[eventType]; ok {
 		return formatted
@@ -585,6 +632,7 @@ func printRows(output io.Writer, eventType string, rows []metav1.TableRow, optio
 			fmt.Fprint(output, "\t")
 		}
 		if options.WithNamespace {
+			// 命名空间从 row.Object 中取；取不到时留空列而不是报错。
 			if obj := row.Object.Object; obj != nil {
 				if m, err := meta.Accessor(obj); err == nil {
 					fmt.Fprint(output, m.GetNamespace())
@@ -620,6 +668,8 @@ func printRows(output io.Writer, eventType string, rows []metav1.TableRow, optio
 	}
 }
 
+// formatLabelHeaders 把 "app.kubernetes.io/name" 这类标签键转换为
+// 表头只保留最后一段（NAME），与 kubectl -L 的展示习惯一致。
 func formatLabelHeaders(columnLabels []string) []string {
 	formHead := make([]string, len(columnLabels))
 	for i, l := range columnLabels {
@@ -661,6 +711,7 @@ func appendLabelCells(values []interface{}, itemLabels map[string]string, opts P
 	return values
 }
 
+// printStatus 为 *metav1.Status 生成一行三列（Status/Reason/Message）。
 func printStatus(obj runtime.Object, options PrintOptions) ([]metav1.TableRow, error) {
 	status, ok := obj.(*metav1.Status)
 	if !ok {
@@ -672,6 +723,7 @@ func printStatus(obj runtime.Object, options PrintOptions) ([]metav1.TableRow, e
 	}}, nil
 }
 
+// printObjectMeta 是通用兜底：对 List 递归展开，对单对象只输出 Name/Age。
 func printObjectMeta(obj runtime.Object, options PrintOptions) ([]metav1.TableRow, error) {
 	if meta.IsListType(obj) {
 		rows := make([]metav1.TableRow, 0, 16)
@@ -704,6 +756,8 @@ func printObjectMeta(obj runtime.Object, options PrintOptions) ([]metav1.TableRo
 
 // translateTimestampSince returns the elapsed time since timestamp in
 // human-readable approximation.
+//
+// 零值时间无法计算时长，显示 <unknown> 而不是一个极易误解的巨大年龄。
 func translateTimestampSince(timestamp metav1.Time) string {
 	if timestamp.IsZero() {
 		return "<unknown>"

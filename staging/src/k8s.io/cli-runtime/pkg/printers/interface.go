@@ -24,6 +24,8 @@ import (
 )
 
 // ResourcePrinterFunc is a function that can print objects
+//
+// 让普通函数可以直接满足 ResourcePrinter 接口，省去定义包装类型。
 type ResourcePrinterFunc func(runtime.Object, io.Writer) error
 
 // PrintObj implements ResourcePrinter
@@ -38,15 +40,25 @@ type ResourcePrinter interface {
 }
 
 // PrintOptions struct defines a struct for various print options
+//
+// PrintOptions 是表格式输出（如 kubectl get）的通用配置，各 flag 由调用方填充。
 type PrintOptions struct {
-	NoHeaders     bool
+	// NoHeaders 关闭表头，便于脚本消费。
+	NoHeaders bool
+	// WithNamespace 在表格中额外输出 NAMESPACE 列。
 	WithNamespace bool
-	WithKind      bool
-	Wide          bool
-	ShowLabels    bool
-	Kind          schema.GroupKind
-	ColumnLabels  []string
+	// WithKind 在每行输出中附带资源 Kind。
+	WithKind bool
+	// Wide 输出额外列（如 kubectl get -o wide）。
+	Wide bool
+	// ShowLabels 输出标签列。
+	ShowLabels bool
+	// Kind 指定当前打印对象的 GroupKind。
+	Kind schema.GroupKind
+	// ColumnLabels 是服务端返回的自定义列名。
+	ColumnLabels []string
 
+	// SortBy 指定表格排序字段，空表示保持服务端顺序。
 	SortBy string
 
 	// indicates if it is OK to ignore missing keys for rendering an output template.

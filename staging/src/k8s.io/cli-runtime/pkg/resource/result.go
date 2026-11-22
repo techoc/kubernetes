@@ -34,10 +34,15 @@ import (
 type ErrMatchFunc func(error) bool
 
 // Result contains helper methods for dealing with the outcome of a Builder.
+//
+// Result 是 Builder.Do() 的产物，持有可执行的 Visitor 与原始来源；
+// 同一个 Result 通常只能遍历一次（stream 类输入不可重放），需要多次使用时
+// 应通过 Infos() 缓存结果。
 type Result struct {
 	err     error
 	visitor Visitor
 
+	// sources 保留原始 Visitor，供 ResourceMapping/Watch 等能力探测使用。
 	sources            []Visitor
 	singleItemImplied  bool
 	targetsSingleItems bool
@@ -84,6 +89,8 @@ func (r *Result) Mapper() *mapper {
 // Err returns one or more errors (via a util.ErrorList) that occurred prior
 // to visiting the elements in the visitor. To see all errors including those
 // that occur during visitation, invoke Infos().
+//
+// 仅返回构造阶段（Builder 参数校验、映射解析）的错误，不包含遍历期间的错误。
 func (r *Result) Err() error {
 	return r.err
 }
@@ -110,6 +117,8 @@ func (r *Result) IntoSingleItemImplied(b *bool) *Result {
 // Infos returns an array of all of the resource infos retrieved via traversal.
 // Will attempt to traverse the entire set of visitors only once, and will return
 // a cached list on subsequent calls.
+//
+// 缓存 info 和 err：避免重复遍历不可重放的 stream 输入，也保证多次调用结果一致。
 func (r *Result) Infos() ([]*Info, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -144,6 +153,7 @@ func (r *Result) Object() (runtime.Object, error) {
 		return nil, err
 	}
 
+	// 只有所有 info 的 resourceVersion 一致时才把它提升到 List 上，否则留空。
 	versions := sets.New[string]()
 	objects := []runtime.Object{}
 	for _, info := range infos {
@@ -178,6 +188,7 @@ var _ metav1.ListMetaAccessor = &v1.List{}
 // toV1List takes a slice of Objects + their version, and returns
 // a v1.List Object containing the objects in the Items field
 func toV1List(objects []runtime.Object, version string) runtime.Object {
+	// 用 RawExtension 包装保留原始对象，避免额外的序列化往返。
 	raw := []runtime.RawExtension{}
 	for _, o := range objects {
 		raw = append(raw, runtime.RawExtension{Object: o})
@@ -193,6 +204,8 @@ func toV1List(objects []runtime.Object, version string) runtime.Object {
 // ResourceMapping returns a single meta.RESTMapping representing the
 // resources located by the builder, or an error if more than one
 // mapping was found.
+//
+// 用 GVR 去重：同一资源通过 plural/shortname 重复指定时仍视为单一映射。
 func (r *Result) ResourceMapping() (*meta.RESTMapping, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -224,9 +237,11 @@ func (r *Result) Watch(resourceVersion string) (watch.Interface, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
+	// watch 只对单一来源有意义；多来源无法合并成一个 watch 流。
 	if len(r.sources) != 1 {
 		return nil, fmt.Errorf("you may only watch a single resource or type of resource at a time")
 	}
+	// 来源本身支持 watch（selector/类型）时直接使用，否则退回 Info 级别 watch。
 	w, ok := r.sources[0].(Watchable)
 	if !ok {
 		info, err := r.Infos()

@@ -30,10 +30,13 @@ import (
 
 // GoTemplatePrinter is an implementation of ResourcePrinter which formats data with a Go Template.
 type GoTemplatePrinter struct {
+	// 原始模板文本，出错时回显给用户便于排查。
 	rawTemplate string
 	template    *template.Template
 }
 
+// NewGoTemplatePrinter 解析 Go 模板并注册 CLI 特有函数：
+// exists 用于安全探测字段，base64decode 便于直接查看 Secret 等 base64 内容。
 func NewGoTemplatePrinter(tmpl []byte) (*GoTemplatePrinter, error) {
 	t, err := template.New("output").
 		Funcs(template.FuncMap{
@@ -52,6 +55,7 @@ func NewGoTemplatePrinter(tmpl []byte) (*GoTemplatePrinter, error) {
 
 // AllowMissingKeys tells the template engine if missing keys are allowed.
 func (p *GoTemplatePrinter) AllowMissingKeys(allow bool) {
+	// default 模式把缺失键渲染为空值，error 模式直接失败，便于发现字段拼写错误。
 	if allow {
 		p.template.Option("missingkey=default")
 	} else {
@@ -61,12 +65,14 @@ func (p *GoTemplatePrinter) AllowMissingKeys(allow bool) {
 
 // PrintObj formats the obj with the Go Template.
 func (p *GoTemplatePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
+	// 拒绝 internal 版本对象，避免输出缺少类型信息的内容。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(InternalObjectPrinterErr)
 	}
 
 	var data []byte
 	var err error
+	// 统一转为通用 JSON map 再执行模板，模板里可用字段名而非结构化类型。
 	data, err = json.Marshal(obj)
 	if err != nil {
 		return err
@@ -91,6 +97,7 @@ func (p *GoTemplatePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 
 // safeExecute tries to execute the template, but catches panics and returns an error
 // should the template engine panic.
+// 中文：模板可能触发引擎内部 panic，包装一层 recover 转成错误，避免整个进程崩溃。
 func (p *GoTemplatePrinter) safeExecute(w io.Writer, obj interface{}) error {
 	var panicErr error
 	// Sorry for the double anonymous function. There's probably a clever way
@@ -110,6 +117,7 @@ func (p *GoTemplatePrinter) safeExecute(w io.Writer, obj interface{}) error {
 	return retErr
 }
 
+// base64decode 是暴露给模板的辅助函数，用于把 Secret 的 data 字段解成明文，省去管道外处理。
 func base64decode(v string) (string, error) {
 	data, err := base64.StdEncoding.DecodeString(v)
 	if err != nil {

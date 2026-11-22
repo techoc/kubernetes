@@ -30,6 +30,9 @@ import (
 // templates are logically optional for specifying a format.
 // this allows a user to specify a template format value
 // as --output=jsonpath=
+//
+// 这三个键是 --output 的合法取值。值本身可以省略模板，模板通过
+// --output=jsonpath='{...}' 或 --template 单独给出。
 var jsonFormats = map[string]bool{
 	"jsonpath":         true,
 	"jsonpath-file":    true,
@@ -39,14 +42,20 @@ var jsonFormats = map[string]bool{
 // JSONPathPrintFlags provides default flags necessary for template printing.
 // Given the following flag values, a printer can be requested that knows
 // how to handle printing based on these values.
+//
+// JSONPathPrintFlags 保存 jsonpath 输出所需的 flag 绑定，负责把用户输入
+// 转成对应的 ResourcePrinter。
 type JSONPathPrintFlags struct {
 	// indicates if it is OK to ignore missing keys for rendering
 	// an output template.
 	AllowMissingKeys *bool
+	// TemplateArgument 是 jsonpath 表达式；为指针以便调用方可选择不绑定该 flag。
 	TemplateArgument *string
 }
 
 // AllowedFormats returns slice of string of allowed JSONPath printing format
+//
+// 返回排序后的格式列表，便于错误信息和帮助文本保持稳定顺序。
 func (f *JSONPathPrintFlags) AllowedFormats() []string {
 	formats := make([]string, 0, len(jsonFormats))
 	for format := range jsonFormats {
@@ -59,7 +68,11 @@ func (f *JSONPathPrintFlags) AllowedFormats() []string {
 // ToPrinter receives an templateFormat and returns a printer capable of
 // handling --template format printing.
 // Returns false if the specified templateFormat does not match a template format.
+//
+// ToPrinter 支持两种模板来源：--output=jsonpath=<expr> 内嵌表达式，或 --template
+// 指定的表达式/文件。不匹配时返回 NoCompatiblePrinterError，让上层继续尝试其他 printer。
 func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.ResourcePrinter, error) {
+	// 既没有格式也没有模板时无法构造 printer；返回可兼容性错误而非普通错误。
 	if (f.TemplateArgument == nil || len(*f.TemplateArgument) == 0) && len(templateFormat) == 0 {
 		return nil, NoCompatiblePrinterError{Options: f, OutputFormat: &templateFormat}
 	}
@@ -67,6 +80,7 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 	templateValue := ""
 
 	if f.TemplateArgument == nil || len(*f.TemplateArgument) == 0 {
+		// 解析 --output=jsonpath=<expr> 形式：把前缀剥离，剩余部分作为模板。
 		for format := range jsonFormats {
 			format = format + "="
 			if strings.HasPrefix(templateFormat, format) {
@@ -76,9 +90,11 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 			}
 		}
 	} else {
+		// --template 显式给出的模板优先级更高。
 		templateValue = *f.TemplateArgument
 	}
 
+	// 格式不在白名单中，交由调用方尝试其他 printer。
 	if _, supportedFormat := jsonFormats[templateFormat]; !supportedFormat {
 		return nil, NoCompatiblePrinterError{OutputFormat: &templateFormat, AllowedFormats: f.AllowedFormats()}
 	}
@@ -87,6 +103,7 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 		return nil, fmt.Errorf("template format specified but no template given")
 	}
 
+	// jsonpath-file 表示模板来自文件，其余格式则直接使用内联表达式。
 	if templateFormat == "jsonpath-file" {
 		data, err := os.ReadFile(templateValue)
 		if err != nil {
@@ -101,6 +118,7 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 		return nil, fmt.Errorf("error parsing jsonpath %s, %v", templateValue, err)
 	}
 
+	// 默认允许缺失键，只有调用方显式设置 AllowMissingKeys 时才改变。
 	allowMissingKeys := true
 	if f.AllowMissingKeys != nil {
 		allowMissingKeys = *f.AllowMissingKeys
@@ -108,6 +126,7 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 
 	p.AllowMissingKeys(allowMissingKeys)
 
+	// jsonpath-as-json 在逐项求值后把结果序列化为 JSON，便于脚本消费。
 	if templateFormat == "jsonpath-as-json" {
 		p.EnableJSONOutput(true)
 	}
@@ -117,6 +136,8 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 
 // AddFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it
+//
+// 只在对应指针非 nil 时绑定，允许调用方裁剪不需要的 flag。
 func (f *JSONPathPrintFlags) AddFlags(c *cobra.Command) {
 	if f.TemplateArgument != nil {
 		c.Flags().StringVar(f.TemplateArgument, "template", *f.TemplateArgument, "Template string or path to template file to use when --output=jsonpath, --output=jsonpath-file.")
@@ -129,6 +150,8 @@ func (f *JSONPathPrintFlags) AddFlags(c *cobra.Command) {
 
 // NewJSONPathPrintFlags returns flags associated with
 // --template printing, with default values set.
+//
+// 返回时即把两个指针字段指向局部变量副本，便于后续 AddFlags 直接绑定。
 func NewJSONPathPrintFlags(templateValue string, allowMissingKeys bool) *JSONPathPrintFlags {
 	return &JSONPathPrintFlags{
 		TemplateArgument: &templateValue,

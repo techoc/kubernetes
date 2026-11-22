@@ -35,6 +35,9 @@ var _ Verifier = &queryParamVerifierV3{}
 // OpenAPI V3 specs are determined by the passed oapiClient. For memory caching, the
 // client should be wrapped beforehand as: cached.NewClient(oapiClient). The disk
 // caching is determined by the discovery client the oapiClient is created from.
+//
+// 注意：缓存策略完全由调用方提供的 oapiClient 决定，本函数不做缓存包装；
+// 每次 GVSpec 调用都可能触发远端请求，热路径上应先包一层 cached client。
 func NewQueryParamVerifierV3(dynamicClient dynamic.Interface, oapiClient openapi.Client, queryParam VerifiableQueryParam) Verifier {
 	return &queryParamVerifierV3{
 		finder:     NewCRDFinder(CRDFromDynamic(dynamicClient)),
@@ -52,6 +55,7 @@ type queryParamVerifierV3 struct {
 	queryParam VerifiableQueryParam
 }
 
+// namespaceGVK 作为 CRD 能力推断的参照类型，理由与 V2 实现一致。
 var namespaceGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 
 // HasSupport returns nil error if the passed GVK supports the parameter
@@ -67,6 +71,8 @@ func (v *queryParamVerifierV3) HasSupport(gvk schema.GroupVersionKind) error {
 	if err == nil {
 		return supportsQueryParamV3(gvSpec, gvk, v.queryParam)
 	}
+	// 只有“该 GroupVersion 不存在”才走 CRD 回退；其他错误（网络等）原样返回，
+	// 避免把真实故障误报为“不支持该参数”。
 	if _, isErr := err.(*openapi3.GroupVersionNotFoundError); !isErr {
 		return err
 	}
@@ -106,6 +112,7 @@ func hasGVKExtensionV3(extensions spec.Extensions, gvk schema.GroupVersionKind) 
 // when an invalid document error is returned when an invalid OpenAPI V3
 // is passed in).
 func supportsQueryParamV3(doc *spec3.OpenAPI, gvk schema.GroupVersionKind, queryParam VerifiableQueryParam) error {
+	// 不完整的文档直接报错，而不是当作“不支持”，以便调用方区分配置问题与能力问题。
 	if doc == nil || doc.Paths == nil {
 		return fmt.Errorf("Invalid OpenAPI V3 document")
 	}
@@ -139,6 +146,7 @@ func supportsQueryParamV3(doc *spec3.OpenAPI, gvk schema.GroupVersionKind, query
 				}
 			}
 		}
+		// 已定位到该 GVK 的 PATCH 端点但没有目标参数，明确不支持。
 		return NewParamUnsupportedError(gvk, queryParam)
 	}
 	return fmt.Errorf("Path not found for GVK (%s) in OpenAPI V3 doc", gvk)

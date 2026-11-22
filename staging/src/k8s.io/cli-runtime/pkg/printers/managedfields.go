@@ -25,12 +25,16 @@ import (
 
 // OmitManagedFieldsPrinter wraps an existing printer and omits the managed fields from the object
 // before printing it.
+//
+// 用于输出用户关心的内容：managedFields 通常冗长且属于服务端记账信息。
 type OmitManagedFieldsPrinter struct {
 	Delegate ResourcePrinter
 }
 
+// 编译期断言接口实现，避免 Delegate 相关重构悄悄破坏契约。
 var _ ResourcePrinter = (*OmitManagedFieldsPrinter)(nil)
 
+// omitManagedFields 就地清空 managedFields；对象不是 metav1.Object 时原样返回。
 func omitManagedFields(o runtime.Object) runtime.Object {
 	a, err := meta.Accessor(o)
 	if err != nil {
@@ -42,6 +46,8 @@ func omitManagedFields(o runtime.Object) runtime.Object {
 }
 
 // PrintObj copies the object and omits the managed fields from the copied object before printing it.
+//
+// 必须先深拷贝：直接清空会污染调用方持有的对象（以及缓存中的对象）。
 func (p *OmitManagedFieldsPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	if obj == nil {
 		return p.Delegate.PrintObj(obj, w)

@@ -24,13 +24,17 @@ import (
 )
 
 // Selector is a Visitor for resources that match a label selector.
+//
+// Selector 负责按 label/field selector 向服务端发起列表查询，并按 chunk
+// 分页遍历；每个分页的结果作为一个 Info 交给 VisitorFunc。
 type Selector struct {
 	Client        RESTClient
 	Mapping       *meta.RESTMapping
 	Namespace     string
 	LabelSelector string
 	FieldSelector string
-	LimitChunks   int64
+	// LimitChunks 为 0 表示不分页，一次性取回全部结果。
+	LimitChunks int64
 }
 
 // NewSelector creates a resource selector which hides details of getting items by their label selector.
@@ -46,6 +50,9 @@ func NewSelector(client RESTClient, mapping *meta.RESTMapping, namespace, labelS
 }
 
 // Visit implements Visitor and uses request chunking by default.
+//
+// 通过 FollowContinue 自动跟随 continue token，既避免超大列表一次性传输，
+// 又保证每个分页都能被处理。
 func (r *Selector) Visit(fn VisitorFunc) error {
 	helper := NewHelper(r.Client, r.Mapping)
 	initialOpts := metav1.ListOptions{
@@ -59,11 +66,13 @@ func (r *Selector) Visit(fn VisitorFunc) error {
 			r.ResourceMapping().GroupVersionKind.GroupVersion().String(),
 			&options,
 		)
+		// 列表错误补充分页上下文（selector、continue token），便于定位是哪个查询失败。
 		if err != nil {
 			return nil, EnhanceListError(err, options, r.Mapping.Resource.String())
 		}
 		resourceVersion, _ := metadataAccessor.ResourceVersion(list)
 
+		// 分页结果也包装成 Info，语义上仍是“一次逻辑查询”的一个片段。
 		info := &Info{
 			Client:  r.Client,
 			Mapping: r.Mapping,
@@ -81,6 +90,7 @@ func (r *Selector) Visit(fn VisitorFunc) error {
 	})
 }
 
+// Watch 对 selector 命中的集合发起 watch；复用与列表相同的 label/field selector。
 func (r *Selector) Watch(resourceVersion string) (watch.Interface, error) {
 	return NewHelper(r.Client, r.Mapping).Watch(r.Namespace, r.ResourceMapping().GroupVersionKind.GroupVersion().String(),
 		&metav1.ListOptions{ResourceVersion: resourceVersion, LabelSelector: r.LabelSelector, FieldSelector: r.FieldSelector})

@@ -29,6 +29,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// testData 是跨测试复用的样本对象，覆盖标量、map 和两种 slice 字段，
+// 用于验证 printer 的序列化/反序列化往返不丢失结构。
 var testData = TestStruct{
 	TypeMeta:   metav1.TypeMeta{APIVersion: "foo/bar", Kind: "TestStruct"},
 	Key:        "testValue",
@@ -37,6 +39,8 @@ var testData = TestStruct{
 	IntList:    []int{1, 2, 3},
 }
 
+// TestStruct 是测试专用的最小 runtime.Object，借助 TypeMeta 让
+// UniversalDecoder 能按 "foo/bar, TestStruct" 完成版本化解码。
 type TestStruct struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -46,6 +50,8 @@ type TestStruct struct {
 	IntList           []int          `json:"IntList"`
 }
 
+// DeepCopyObject 仅为满足 runtime.Object 接口；测试中从不深拷贝，
+// 一旦被调用说明接口使用方式发生了变化。
 func (in *TestStruct) DeepCopyObject() runtime.Object {
 	panic("never called")
 }
@@ -54,6 +60,10 @@ func TestJSONPrinter(t *testing.T) {
 	testPrinter(t, NewTypeSetter(scheme.Scheme).ToPrinter(&JSONPrinter{}), json.Unmarshal)
 }
 
+// testPrinter 是 JSON/YAML/KYAML printer 的公共断言逻辑：
+//  1. 输出必须能被对应的通用反序列化器解析；
+//  2. 再用真实的 UniversalDecoder 还原对象并与原值做 DeepEqual，
+//     以捕获 TypeSetter 注入 apiVersion/kind 后可能引入的偏差。
 func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data []byte, v interface{}) error) {
 	buf := bytes.NewBuffer([]byte{})
 
@@ -77,6 +87,8 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 		t.Errorf("Test data and unmarshaled data are not equal: %v", cmp.Diff(poutput, testData))
 	}
 
+	// 第二阶段用真实的内置类型（Pod）走一遍同样的往返流程，
+	// 以覆盖默认值填充（decoder 会 application defaults）带来的差异。
 	obj := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
@@ -101,6 +113,8 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 	}
 }
 
+// TestPrintersSuccess 只断言“不报错”，覆盖单对象、空 List、非空 List
+// 和含嵌套结构的 Endpoints，确保各序列化 printer 对空值与切片不 panic。
 func TestPrintersSuccess(t *testing.T) {
 	om := func(name string) metav1.ObjectMeta { return metav1.ObjectMeta{Name: name} }
 

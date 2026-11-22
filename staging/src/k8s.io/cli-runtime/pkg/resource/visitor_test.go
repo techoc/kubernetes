@@ -32,6 +32,8 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// TestVisitorHttpGet 验证 URLVisitor 的重试策略：网络错误与 5xx 重试、
+// 3xx 不重试、次数上限生效，以及 attempts 为 0 时直接报错。
 func TestVisitorHttpGet(t *testing.T) {
 	type httpArgs struct {
 		duration time.Duration
@@ -40,6 +42,7 @@ func TestVisitorHttpGet(t *testing.T) {
 	}
 
 	i := 0
+	// count 是期望的 http getter 实际调用次数；isNotNil 表示最终应成功拿到 body。
 	tests := []struct {
 		name        string
 		httpRetries httpget
@@ -169,6 +172,7 @@ func TestVisitorHttpGet(t *testing.T) {
 	}
 }
 
+// TestFlattenListVisitor 验证嵌套 List（List 套 List）会被展开成 6 个独立 Info。
 func TestFlattenListVisitor(t *testing.T) {
 	b := newDefaultBuilder().
 		FilenameParam(false, &FilenameOptions{Recursive: false, Filenames: []string{"../../artifacts/deeply-nested.yaml"}}).
@@ -185,6 +189,8 @@ func TestFlattenListVisitor(t *testing.T) {
 	}
 }
 
+// TestFlattenListVisitorWithVisitorError 验证回调报错不会让已经展开的项丢失，
+// 错误仍会作为结果返回。
 func TestFlattenListVisitorWithVisitorError(t *testing.T) {
 	b := newDefaultBuilder().
 		FilenameParam(false, &FilenameOptions{Recursive: false, Filenames: []string{"../../artifacts/deeply-nested.yaml"}}).
@@ -200,6 +206,8 @@ func TestFlattenListVisitorWithVisitorError(t *testing.T) {
 	}
 }
 
+// TestExpandPathsToFileVisitors 用临时目录覆盖递归/非递归、扩展名过滤、
+// 显式单文件等组合，并校验路径不存在时会返回 *fs.PathError。
 func TestExpandPathsToFileVisitors(t *testing.T) {
 	// Define a directory structure that will be used for testing and create empty files
 	testDir := t.TempDir()
@@ -230,6 +238,7 @@ func TestExpandPathsToFileVisitors(t *testing.T) {
 	}
 
 	// Define and execute test cases
+	// 期望路径按 filepath.Walk 的字典序排列；非递归时子目录应被跳过。
 	tests := []struct {
 		name            string
 		path            string

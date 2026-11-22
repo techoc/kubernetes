@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/openapi3"
 )
 
+// TestFallbackQueryParamVerifier_PrimaryNoFallback 验证主验证器成功时绝不调用
+// secondary：secondary 被设为一旦调用就让测试失败。
 func TestFallbackQueryParamVerifier_PrimaryNoFallback(t *testing.T) {
 	tests := map[string]struct {
 		crds             []schema.GroupKind      // CRDFinder returns these CRD's
@@ -136,6 +138,8 @@ func TestFallbackQueryParamVerifier_PrimaryNoFallback(t *testing.T) {
 	}
 }
 
+// TestFallbackQueryParamVerifier_SecondaryFallback 覆盖主验证器各种失败原因
+// （v3 端点缺失、文档非法、超时）下是否/如何回退到 legacy OpenAPI V2 验证器。
 func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 	tests := map[string]struct {
 		crds             []schema.GroupKind      // CRDFinder returns these CRD's
@@ -289,6 +293,8 @@ func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 
 // createFakeV3Verifier returns a fake OpenAPI V3 queryParamVerifierV3 struct
 // filled in with passed values; implements Verifier interface.
+//
+// CRD 列表通过闭包注入，模拟 CRDFinder 的返回结果。
 func createFakeV3Verifier(crds []schema.GroupKind, root openapi3.Root, queryParam VerifiableQueryParam) Verifier {
 	return &queryParamVerifierV3{
 		finder: NewCRDFinder(func() ([]schema.GroupKind, error) {
@@ -301,6 +307,8 @@ func createFakeV3Verifier(crds []schema.GroupKind, root openapi3.Root, queryPara
 
 // createFakeLegacyVerifier returns a fake QueryParamVerifier struct for legacy
 // OpenAPI V2; implements Verifier interface.
+//
+// 复用预置的 fakeSchema，使回退路径的判定与主验证器可对比。
 func createFakeLegacyVerifier(crds []schema.GroupKind, fakeSchema discovery.OpenAPISchemaInterface, queryParam VerifiableQueryParam) Verifier {
 	return &QueryParamVerifier{
 		finder: NewCRDFinder(func() ([]schema.GroupKind, error) {
@@ -312,6 +320,8 @@ func createFakeLegacyVerifier(crds []schema.GroupKind, fakeSchema discovery.Open
 }
 
 // failingVerifier always crashes when called; implements Verifier
+//
+// 作为“不应被调用”的哨兵：一旦被调用立即判定测试失败。
 type failingVerifier struct {
 	name string
 	t    *testing.T

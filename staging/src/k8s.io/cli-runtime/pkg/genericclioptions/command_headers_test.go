@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// 测试用的命令节点；TestParseCommandHeaders 会按顺序把它们串成父子链。
 var kubectlCmd = &cobra.Command{Use: "kubectl"}
 var applyCmd = &cobra.Command{Use: "apply"}
 var createCmd = &cobra.Command{Use: "create"}
@@ -31,6 +32,7 @@ var genericCmd = &cobra.Command{Use: "generic"}
 var authCmd = &cobra.Command{Use: "auth"}
 var reconcileCmd = &cobra.Command{Use: "reconcile"}
 
+// TestParseCommandHeaders 验证从任意层级的 cobra 命令都能还原出以空格分隔的完整命令路径。
 func TestParseCommandHeaders(t *testing.T) {
 	tests := map[string]struct {
 		// Ordering is important; each subsequent command is added as a subcommand
@@ -71,6 +73,7 @@ func TestParseCommandHeaders(t *testing.T) {
 			ch := &CommandHeaderRoundTripper{}
 			ch.ParseCommandHeaders(rootCmd, []string{})
 			// Unique session ID header should always be present.
+			// 无论命令层级如何，会话 ID 都必须生成，测试不作具体值断言。
 			if _, found := ch.Headers[kubectlSessionHeader]; !found {
 				t.Errorf("expected kubectl session header (%s) is missing", kubectlSessionHeader)
 			}
@@ -92,6 +95,8 @@ func TestParseCommandHeaders(t *testing.T) {
 // Builds a hierarchy of commands in order from the passed slice of commands,
 // by adding each subsequent command as a child of the previous command,
 // returning the last leaf command.
+//
+// buildCommandChain 按切片顺序构造父子链，并返回最末端的叶子命令。
 func buildCommandChain(commands []*cobra.Command) *cobra.Command {
 	var currCmd *cobra.Command
 	if len(commands) > 0 {
@@ -107,6 +112,8 @@ func buildCommandChain(commands []*cobra.Command) *cobra.Command {
 
 // Tests that the CancelRequest function is propogated to the wrapped Delegate
 // RoundTripper; but only if the Delegate implements the CancelRequest function.
+//
+// TestCancelRequest 覆盖“Delegate 实现了 CancelRequest”和“未实现”两种情况。
 func TestCancelRequest(t *testing.T) {
 	tests := map[string]struct {
 		delegate  http.RoundTripper
@@ -137,6 +144,7 @@ func TestCancelRequest(t *testing.T) {
 }
 
 // Test RoundTripper with CancelRequest function.
+// cancellableRoundTripper 通过把 req.Close 置为 true 来模拟取消已生效。
 type cancellableRoundTripper struct{}
 
 func (rtc *cancellableRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -148,6 +156,7 @@ func (rtc *cancellableRoundTripper) CancelRequest(req *http.Request) {
 }
 
 // Test RoundTripper without CancelRequest function.
+// nonCancellableRoundTripper 故意不实现 CancelRequest，用于验证不会误调用。
 type nonCancellableRoundTripper struct{}
 
 func (rtc *nonCancellableRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

@@ -22,10 +22,12 @@ import (
 )
 
 const (
+	// 黄色加粗 + 复位码，仅在 opts.Color 为 true 时使用（例如 TTY 输出）。
 	yellowColor = "\u001b[33;1m"
 	resetColor  = "\u001b[0m"
 )
 
+// WarningPrinter 把 API server 返回的 warning 写到指定 writer（通常是 stderr）。
 type WarningPrinter struct {
 	// out is the writer to output warnings to
 	out io.Writer
@@ -46,6 +48,9 @@ func NewWarningPrinter(out io.Writer, opts WarningPrinterOptions) *WarningPrinte
 }
 
 // Print prints warnings to the configured writer.
+//
+// "Warning:" 前缀是 kubectl 的稳定输出格式之一，脚本可能据此过滤；
+// 着色时仅给前缀上色，消息正文保持原样。
 func (w *WarningPrinter) Print(message string) {
 	if w.opts.Color {
 		fmt.Fprintf(w.out, "%sWarning:%s %s\n", yellowColor, resetColor, message)

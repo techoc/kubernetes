@@ -24,6 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// exampleManifest 覆盖三类输入形态：单对象、内嵌 List、以及 core v1 List，
+// 用来验证 Flatten 能把嵌套列表都展开成独立对象。
 var exampleManifest = `
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -74,6 +76,9 @@ items:
 `
 
 // ExampleNewLocalBuilderLoad demonstrates using a local resource builder to read typed resources from a manifest
+//
+// 示例演示典型的 CLI 读取流程：本地 builder -> 强类型 scheme -> Stream 输入 ->
+// Flatten 展开 -> ContinueOnError 尽量多读，最后用 Infos 取回全部对象。
 func ExampleNewLocalBuilder() {
 	// Create a local builder...
 	builder := resource.NewLocalBuilder().

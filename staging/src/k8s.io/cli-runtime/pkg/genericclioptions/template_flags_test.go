@@ -28,9 +28,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestPrinterSupportsExpectedTemplateFormats 覆盖 GoTemplatePrintFlags 的格式匹配与
+// --template 取值方式：内联在 -o 中、单独 flag、以及 -o=go-template-file 读文件。
+// 同时验证不支持的格式必须返回 NoCompatiblePrinterError，不能误匹配。
 func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 	testObject := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
+	// 用一个临时文件模拟 -o=go-template-file 的输入来源。
 	templateFile, err := os.CreateTemp("", "printers_jsonpath_flags")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -93,6 +97,7 @@ func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 空字符串视为“未提供 --template”，以便走“缺少模板参数”的报错路径。
 			templateArg := &tc.templateArg
 			if len(tc.templateArg) == 0 {
 				templateArg = nil
@@ -101,6 +106,7 @@ func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 			printFlags := GoTemplatePrintFlags{
 				TemplateArgument: templateArg,
 			}
+			// AllowedFormats 需保持有序，否则命令需要排序后展示时结果不稳定。
 			if !sort.StringsAreSorted(printFlags.AllowedFormats()) {
 				t.Fatalf("allowed formats are not sorted")
 			}
@@ -116,6 +122,7 @@ func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 				t.Fatalf("expected to match template printer for output format %q", tc.outputFormat)
 			}
 
+			// 预期错误必须在构造 printer 阶段出现（例如模板格式缺少模板内容）。
 			if len(tc.expectedError) > 0 {
 				if err == nil || !strings.Contains(err.Error(), tc.expectedError) {
 					t.Errorf("expecting error %q, got %v", tc.expectedError, err)
@@ -126,6 +133,8 @@ func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
+			// 这里用长度而不是内容比对，因为部分用例的输出刻意只校验长度
+			// （例如无效模板会被原样当作输出）。
 			out := bytes.NewBuffer([]byte{})
 			err = p.PrintObj(testObject, out)
 			if err != nil {
@@ -139,9 +148,13 @@ func TestPrinterSupportsExpectedTemplateFormats(t *testing.T) {
 	}
 }
 
+// TestTemplatePrinterDefaultsAllowMissingKeysToTrue 校验 --allow-missing-template-keys
+// 的默认值确实是 true：未显式传入时缺失字段输出 <no value>，显式设为 false 才报错。
+// 这一默认值是 kubectl 的既有行为，属于兼容性约定。
 func TestTemplatePrinterDefaultsAllowMissingKeysToTrue(t *testing.T) {
 	testObject := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
+	// 显式关闭 allowMissingKeys 的取值，仅部分用例使用（其余传 nil 以验证默认行为）。
 	allowMissingKeys := false
 
 	testCases := []struct {

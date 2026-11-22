@@ -21,4 +21,9 @@ limitations under the License.
 // standard command line arguments and parameters into a Visitor that can iterate
 // over all of the identified resources, whether on the server or on the local
 // filesystem.
+//
+// package resource 服务于命令行客户端的资源访问层：
+//   - Builder 把 kubectl 风格的参数（-f、-k、resource/name、selector 等）归一化成 Result；
+//   - Result 背后是 Visitor 链，既能遍历本地文件/URL/stdin，也能遍历服务端列表；
+//   - Info 描述单个待处理的资源及其实施 REST 调用所需的上下文。
 package resource

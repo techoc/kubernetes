@@ -26,9 +26,12 @@ import (
 	openapitesting "k8s.io/kube-openapi/pkg/util/proto/testing"
 )
 
+// 使用仓库内的 OpenAPI 文档做离线测试，分别覆盖参数内联与 shared parameters 两种写法。
 var fakeSchema = openapitesting.Fake{Path: filepath.Join("..", "..", "artifacts", "openapi", "swagger.json")}
 var fakeSchemaSharedParams = openapitesting.Fake{Path: filepath.Join("..", "..", "artifacts", "openapi", "swagger-with-shared-parameters.json")}
 
+// TestSupportsQueryParam 验证 supportsQueryParam 能从两种 OpenAPI 文档结构中正确判断
+// 某 GVK 是否支持 fieldValidation 参数，以及未知类型、不支持类型的行为。
 func TestSupportsQueryParam(t *testing.T) {
 	docInlineParams, err := fakeSchema.OpenAPISchema()
 	if err != nil {
@@ -45,6 +48,7 @@ func TestSupportsQueryParam(t *testing.T) {
 		supports   bool
 		queryParam VerifiableQueryParam
 	}{
+		// Pod 支持 fieldValidation。
 		{
 			gvk: schema.GroupVersionKind{
 				Group:   "",
@@ -55,6 +59,7 @@ func TestSupportsQueryParam(t *testing.T) {
 			supports:   true,
 			queryParam: QueryParamFieldValidation,
 		},
+		// 未知类型：既找不到定义，也判定为不支持。
 		{
 			gvk: schema.GroupVersionKind{
 				Group:   "",
@@ -65,6 +70,7 @@ func TestSupportsQueryParam(t *testing.T) {
 			supports:   false,
 			queryParam: QueryParamFieldValidation,
 		},
+		// NodeProxyOptions 存在但不支持 fieldValidation。
 		{
 			gvk: schema.GroupVersionKind{
 				Group:   "",
@@ -75,6 +81,7 @@ func TestSupportsQueryParam(t *testing.T) {
 			supports:   false,
 			queryParam: QueryParamFieldValidation,
 		},
+		// List 是聚合类型，本身不承载可验证字段。
 		{
 			gvk: schema.GroupVersionKind{
 				Group:   "",
@@ -110,8 +117,11 @@ func TestSupportsQueryParam(t *testing.T) {
 	}
 }
 
+// TestFieldValidationVerifier 验证 QueryParamVerifier 结合 CRD 发现后的判定：
+// 已知内置类型按 OpenAPI 判断，CRD 天生支持 fieldValidation，未知类型则报错。
 func TestFieldValidationVerifier(t *testing.T) {
 	fieldValidationVerifier := QueryParamVerifier{
+		// 模拟发现到两个 CRD，用于验证 CRD 分支。
 		finder: NewCRDFinder(func() ([]schema.GroupKind, error) {
 			return []schema.GroupKind{
 				{
@@ -154,12 +164,15 @@ func TestFieldValidationVerifier(t *testing.T) {
 	}
 }
 
+// EmptyOpenAPI 返回空文档，模拟服务端未暴露 OpenAPI 信息的老集群。
 type EmptyOpenAPI struct{}
 
 func (EmptyOpenAPI) OpenAPISchema() (*openapi_v2.Document, error) {
 	return &openapi_v2.Document{}, nil
 }
 
+// TestFieldValidationVerifierNoOpenAPI 验证拿不到 OpenAPI 文档时的保守行为：
+// 除 CRD 外一律判定为不支持，宁可少用参数也不要发出可能被拒绝的请求。
 func TestFieldValidationVerifierNoOpenAPI(t *testing.T) {
 	fieldValidationVerifier := QueryParamVerifier{
 		finder: NewCRDFinder(func() ([]schema.GroupKind, error) {

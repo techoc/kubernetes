@@ -29,8 +29,10 @@ import (
 // needed to create Info for arbitrary objects.
 type mapper struct {
 	// localFn indicates the call can't make server requests
+	// 中文：为 true 时只做本地解码，不查 RESTMapping、不取 client，供离线处理文件/流的场景使用。
 	localFn func() bool
 
+	// 延迟获取 REST 映射器与客户端，避免在真正需要之前触发发现请求。
 	restMapperFn RESTMapperFunc
 	clientFn     func(version schema.GroupVersion) (RESTClient, error)
 	decoder      runtime.Decoder
@@ -59,6 +61,7 @@ func (m *mapper) infoForData(data []byte, source string) (*Info, error) {
 	}
 
 	if m.localFn == nil || !m.localFn() {
+		// 仅在线模式下才需要映射与客户端；本地模式保持 Info 只有对象本身。
 		restMapper, err := m.restMapperFn()
 		if err != nil {
 			return nil, err
@@ -66,6 +69,7 @@ func (m *mapper) infoForData(data []byte, source string) (*Info, error) {
 		mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
 			if _, ok := err.(*meta.NoKindMatchError); ok {
+				// 未知 GVK 最常见的原因是 CRD 未安装，直接给出可操作提示。
 				return nil, fmt.Errorf("resource mapping not found for name: %q namespace: %q from %q: %w\nensure CRDs are installed first",
 					name, namespace, source, err)
 			}
@@ -93,6 +97,7 @@ func (m *mapper) infoForObject(obj runtime.Object, typer runtime.ObjectTyper, pr
 	}
 
 	gvk := groupVersionKinds[0]
+	// 一个类型可能注册了多个 GVK；调用方可传入偏好列表来挑选合适的版本。
 	if len(groupVersionKinds) > 1 && len(preferredGVKs) > 0 {
 		gvk = preferredObjectKind(groupVersionKinds, preferredGVKs)
 	}
@@ -134,6 +139,7 @@ func (m *mapper) infoForObject(obj runtime.Object, typer runtime.ObjectTyper, pr
 // GroupKind matches
 // Group matches
 func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []schema.GroupVersionKind) schema.GroupVersionKind {
+	// 从最精确的完全匹配开始放宽，确保偏好列表靠前的条目优先。
 	// Exact match
 	for _, priority := range preferences {
 		for _, possibility := range possibilities {
@@ -162,5 +168,6 @@ func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []
 	}
 
 	// Just pick the first
+	// 全都不匹配时退回注册顺序的第一个，保证行为确定而非随机。
 	return possibilities[0]
 }

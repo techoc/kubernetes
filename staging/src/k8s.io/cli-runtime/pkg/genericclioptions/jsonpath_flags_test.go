@@ -28,9 +28,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestPrinterSupportsExpectedJSONPathFormats 验证 JSONPathPrintFlags 能识别 jsonpath、
+// jsonpath-as-json 及 jsonpath-file 三类写法，并对缺失模板、非法模板等情形给出预期错误。
 func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 	testObject := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
+	// 用临时文件覆盖 jsonpath-file 从文件读取模板的分支。
 	jsonpathFile, err := os.CreateTemp("", "printers_jsonpath_flags")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -51,6 +54,7 @@ func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 		expectedOutput     string
 		expectNoMatch      bool
 	}{
+		// 模板内联在 -o jsonpath=... 中，无需 --template。
 		{
 			name:           "valid output format also containing the jsonpath argument succeeds",
 			outputFormat:   "jsonpath={ .metadata.name }",
@@ -95,6 +99,7 @@ func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 			templateArg:        "{invalid}",
 			expectedParseError: "unrecognized identifier invalid",
 		},
+		// 未知格式以及由其他 printer 负责的格式都应返回 NoCompatiblePrinterError。
 		{
 			name:          "no printer is matched on an invalid outputFormat",
 			outputFormat:  "invalid",
@@ -110,6 +115,7 @@ func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			templateArg := &tc.templateArg
+			// 空字符串视作未提供 --template，以便命中“缺模板”分支。
 			if len(tc.templateArg) == 0 {
 				templateArg = nil
 			}
@@ -117,6 +123,7 @@ func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 			printFlags := JSONPathPrintFlags{
 				TemplateArgument: templateArg,
 			}
+			// AllowedFormats 需保持有序，否则帮助信息的候选列表不稳定。
 			if !sort.StringsAreSorted(printFlags.AllowedFormats()) {
 				t.Fatalf("allowed formats are not sorted")
 			}
@@ -161,6 +168,8 @@ func TestPrinterSupportsExpectedJSONPathFormats(t *testing.T) {
 	}
 }
 
+// TestJSONPathPrinterDefaultsAllowMissingKeysToTrue 验证 AllowMissingKeys 的默认语义：
+// 未显式设置时允许缺失键并输出空串；显式设为 false 时执行应报错。
 func TestJSONPathPrinterDefaultsAllowMissingKeysToTrue(t *testing.T) {
 	testObject := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
@@ -173,6 +182,7 @@ func TestJSONPathPrinterDefaultsAllowMissingKeysToTrue(t *testing.T) {
 		expectedError    string
 		allowMissingKeys *bool
 	}{
+		// 存在的字段无论开关如何都应正常取值。
 		{
 			name:             "existing field does not error and returns expected value",
 			templateArg:      "{ .metadata.name }",

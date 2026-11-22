@@ -24,10 +24,14 @@ import (
 )
 
 // metadataValidatingDecoder wraps a decoder and additionally ensures metadata schema fields decode before returning an unstructured object
+//
+// 目的：unstructured 解码会推迟类型检查，metadata 里的字段错误可能直到
+// meta.Accessor 的 Get/Set 阶段才暴露；这里提前校验，避免错误被静默吞掉。
 type metadataValidatingDecoder struct {
 	decoder runtime.Decoder
 }
 
+// Decode 先走底层解码，仅对 unstructured 结果追加一次 metadata-only 反序列化校验。
 func (m *metadataValidatingDecoder) Decode(data []byte, defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	obj, gvk, err := m.decoder.Decode(data, defaults, into)
 
@@ -50,6 +54,7 @@ func (m *metadataValidatingDecoder) Decode(data []byte, defaults *schema.GroupVe
 	return obj, gvk, err
 }
 
+// metadataOnlyObject 只声明 TypeMeta + ObjectMeta，用作 metadata 结构的强类型校验目标。
 type metadataOnlyObject struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -30,6 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// 下面两个全局样本供多个测试复用：带标签的 Pod 用于验证命名空间/标签列，
+// Status 用于验证非表格对象的专用三列输出。
 var testPodName = "test-pod-name"
 var testPodNamespace = "test-namespace"
 
@@ -52,6 +54,8 @@ var testStatus = &metav1.Status{
 	Reason:   "test-status-reason",
 }
 
+// TestPrintTable_MissingColumnsRows 确认没有列或没有行时输出为空——
+// 空表连表头都不应出现，否则脚本会误以为存在资源。
 func TestPrintTable_MissingColumnsRows(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -99,6 +103,8 @@ func TestPrintTable_MissingColumnsRows(t *testing.T) {
 	}
 }
 
+// TestPrintTable_ColumnPriority 验证 Priority > 0 的列在默认输出中隐藏，
+// 仅在 -o wide（options.Wide）时展示；覆盖单行与多行两种对齐场景。
 func TestPrintTable_ColumnPriority(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -197,6 +203,8 @@ test3   4/4     podPhase   1         22h
 	}
 }
 
+// TestPrintTable_ColumnHeaders 验证默认输出表头，而 NoHeaders 时完全省略表头，
+// 同时检查无表头模式下首行仍按最大列宽对齐。
 func TestPrintTable_ColumnHeaders(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -294,6 +302,8 @@ test3   4/4   podPhase   1     22h
 	}
 }
 
+// TestPrintTable_WithNamespace 验证 WithNamespace 会在最左侧插入 NAMESPACE 列，
+// 其值从 row.Object 的 metadata 中读取（-A 场景）。
 func TestPrintTable_WithNamespace(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -340,6 +350,8 @@ test-namespace   test1   1/1     podPhase   5         20h
 	}
 }
 
+// TestPrintTable_WithKind 验证 --show-kind 只在 format=name 的列前拼接小写 kind，
+// 而不是新加一列。
 func TestPrintTable_WithKind(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -385,6 +397,8 @@ pod/test1   1/1     podPhase   5         20h
 	}
 }
 
+// TestPrintTable_WithLabels 覆盖 --show-labels 与 -L/--label-columns：
+// 前者把全部标签拼成一列，后者按指定键各生成一列，并沿用标签键的末段作为表头。
 func TestPrintTable_WithLabels(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -472,6 +486,9 @@ test1   1/1     podPhase   5         20h   12            label-value
 	}
 }
 
+// TestPrintTable_NonTable 验证非 Table 对象走兜底路径：
+// Pod 输出 NAME/AGE（Age 因 creationTimestamp 为零显示 <unknown>），
+// Status 输出 STATUS/REASON/MESSAGE。
 func TestPrintTable_NonTable(t *testing.T) {
 	tests := []struct {
 		object   runtime.Object
@@ -531,6 +548,8 @@ Failure   test-status-reason   test-status-message
 	}
 }
 
+// TestPrintTable_WatchEvents 验证 WatchEvent 中的 Table 会被拆包输出，
+// 并把事件类型作为 EVENT 首列；NoHeaders 时依然保留事件类型列。
 func TestPrintTable_WatchEvents(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition
@@ -599,6 +618,9 @@ Added   test1   1/1     podPhase   5         20h
 	}
 }
 
+// TestPrintUnstructuredObject 用正则而非精确字符串断言：
+// Unstructured 的 Age 依赖当前时间，只能匹配数字/单位；重点覆盖
+// 单对象、WithNamespace、ShowLabels 以及 items 列表的展开。
 func TestPrintUnstructuredObject(t *testing.T) {
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -712,6 +734,9 @@ func TestPrintUnstructuredObject(t *testing.T) {
 // earlier rows to be written with narrower column widths than later rows,
 // because tabwriter's RememberWidths can only grow widths on future flushes
 // and cannot retroactively re-pad already-flushed rows.
+//
+// 因此 printTable 必须先预扫描最大列宽；本测试把最宽的单元格放在最后，
+// 从而确保一旦回归为“边写边算宽度”，跨 flush 边界的列就会错位。
 func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
 	// Exercise > 2 flush intervals so we cross multiple flush boundaries,
 	// and place the widest Name cell in the final group so the first flush
@@ -788,6 +813,9 @@ func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
 // column on a tabwriter-formatted line. A column starts at the first non-space
 // byte following a run of >=2 spaces. This matches tabwriter's inter-column
 // padding and ignores the natural variability of the final column's contents.
+//
+// 用“连续两个空格后首个非空格字符”作为列起始判定，比直接按 tab 分割更稳健，
+// 因为 tabwriter 输出的是空格填充，不含制表符。
 func columnStartOffsets(line string) []int {
 	var offsets []int
 	for i := 2; i < len(line); i++ {
@@ -800,6 +828,9 @@ func columnStartOffsets(line string) []int {
 
 // TestPrintTable_LargeRowCount verifies that the optimized printTable
 // produces correct output for large tables (the primary optimization target).
+//
+// 500 行会跨越多个 flush 周期；这里只校验总行数和首尾行存在，
+// 具体对齐由上一个测试负责。
 func TestPrintTable_LargeRowCount(t *testing.T) {
 	columns := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string"},
@@ -836,6 +867,8 @@ func TestPrintTable_LargeRowCount(t *testing.T) {
 	}
 }
 
+// TestUnknownType 是没有 metadata 且没有已知 kind 的对象，
+// 用于验证 printer 遇到无法提取对象信息的输入时返回错误而非静默输出。
 type TestUnknownType struct{}
 
 func (obj *TestUnknownType) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
@@ -847,6 +880,8 @@ func (obj *TestUnknownType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// TestUnknownTypePrinting 确保未知类型走兜底 printer 时得到明确错误，
+// 因为 meta.Accessor 无法从它取到 name。
 func TestUnknownTypePrinting(t *testing.T) {
 	printer := NewTablePrinter(PrintOptions{})
 	buffer := &bytes.Buffer{}
@@ -856,6 +891,9 @@ func TestUnknownTypePrinting(t *testing.T) {
 	}
 }
 
+// TestStringPrinting 验证单元格内容的终端安全处理：
+// 多行文本在首个换行处截断并追加 "..."；长单行不截断；
+// 带换行的长文本同样截断；ESC 控制字符转义为 [[^[] 形式，防止篡改终端显示。
 func TestStringPrinting(t *testing.T) {
 	tests := []struct {
 		columns  []metav1.TableColumnDefinition

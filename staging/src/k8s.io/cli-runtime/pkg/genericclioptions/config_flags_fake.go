@@ -29,6 +29,9 @@ import (
 
 // TestConfigFlags contains clientConfig struct
 // and interfaces that implements RESTClientGetter
+//
+// TestConfigFlags 是 ConfigFlags 的测试替身：它不注册任何真实 flag，
+// 而是由测试通过 With* 方法注入 clientConfig/discoveryClient/RESTMapper。
 type TestConfigFlags struct {
 	clientConfig    clientcmd.ClientConfig
 	discoveryClient discovery.CachedDiscoveryInterface
@@ -37,6 +40,9 @@ type TestConfigFlags struct {
 
 // ToRawKubeConfigLoader implements RESTClientGetter
 // Returns a clientconfig if it's set
+//
+// 未注入 clientConfig 时直接 panic，而不是返回零值：测试里这属于使用错误，
+// 尽早暴露比让后续逻辑静默走到空命名空间更好。
 func (f *TestConfigFlags) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	if f.clientConfig == nil {
 		panic("attempt to obtain a test RawKubeConfigLoader with no clientConfig specified")
@@ -55,11 +61,15 @@ func (f *TestConfigFlags) ToRESTConfig() (*rest.Config, error) {
 // ToDiscoveryClient implements RESTClientGetter.
 // Returns a CachedDiscoveryInterface
 func (f *TestConfigFlags) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	// 未注入时返回 (nil, nil) 而非报错，调用方需自行判断是否为 nil；
+	// 这与真实实现不同，测试中要避免依赖发现能力的路径。
 	return f.discoveryClient, nil
 }
 
 // ToRESTMapper implements RESTClientGetter.
 // Returns a mapper.
+//
+// 优先使用显式注入的 RESTMapper；否则用 discoveryClient 构造延迟发现 + 短名展开的 mapper。
 func (f *TestConfigFlags) ToRESTMapper() (meta.RESTMapper, error) {
 	if f.restMapper != nil {
 		return f.restMapper, nil
@@ -91,6 +101,9 @@ func (f *TestConfigFlags) WithDiscoveryClient(c discovery.CachedDiscoveryInterfa
 }
 
 // WithNamespace sets the clientConfig flag by modifying delagate and namespace
+//
+// 用包装器覆盖命名空间而不改动原始 clientConfig，便于在同一配置上跑多组用例。
+// 若尚未设置 clientConfig 则 panic，因为无委托对象可包装。
 func (f *TestConfigFlags) WithNamespace(ns string) *TestConfigFlags {
 	if f.clientConfig == nil {
 		panic("attempt to obtain a test RawKubeConfigLoader with no clientConfig specified")
@@ -107,11 +120,14 @@ func NewTestConfigFlags() *TestConfigFlags {
 	return &TestConfigFlags{}
 }
 
+// namespacedClientConfig 只覆盖 Namespace()，其余方法全部委托给底层配置。
 type namespacedClientConfig struct {
 	delegate  clientcmd.ClientConfig
 	namespace string
 }
 
+// Namespace 返回被覆盖的命名空间；第二个返回值表示命名空间是否被显式指定
+// （长度大于 0），这会影响调用方是否回退到 kubeconfig 的默认命名空间。
 func (c *namespacedClientConfig) Namespace() (string, bool, error) {
 	return c.namespace, len(c.namespace) > 0, nil
 }

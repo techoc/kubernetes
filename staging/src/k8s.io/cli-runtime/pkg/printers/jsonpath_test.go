@@ -26,6 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestPrinters 验证 JSONPathPrinter 对两类输入的行为：
+// 单对象（Pod）可正常取值；List 与 Endpoints 因为顶层是列表/嵌套结构，
+// 使用 {.metadata.name} 取不到值，必须报错。
+// 后半段在启用 JSONOutput 后再跑一遍，确保输出模式切换不影响错误语义。
 func TestPrinters(t *testing.T) {
 	om := func(name string) metav1.ObjectMeta { return metav1.ObjectMeta{Name: name} }
 

@@ -16,4 +16,8 @@ limitations under the License.
 
 // Package printers is helper for formatting and printing runtime objects into
 // primitives io.writer.
+//
+// 该包把 runtime.Object（任意 Kubernetes 资源、List 或 Table）渲染成
+// JSON/YAML/template/jsonpath/table 等面向终端的输出。所有 printer 都实现
+// ResourcePrinter 接口，便于命令按 -o 参数动态选择。
 package printers

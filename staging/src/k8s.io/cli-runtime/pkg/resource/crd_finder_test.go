@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestCacheCRDFinder 验证 CRDFinder 懒加载：构造不调用 getter，
+// 首次 HasCRD 才查询，后续命中缓存不再重复查询。
 func TestCacheCRDFinder(t *testing.T) {
 	called := 0
 	getter := func() ([]schema.GroupKind, error) {
@@ -50,6 +52,7 @@ func TestCacheCRDFinder(t *testing.T) {
 	}
 }
 
+// TestCRDFinderErrors 验证 getter 失败时错误向上传递，且不误报“找到”。
 func TestCRDFinderErrors(t *testing.T) {
 	getter := func() ([]schema.GroupKind, error) {
 		return nil, errors.New("not working")
@@ -64,6 +67,7 @@ func TestCRDFinderErrors(t *testing.T) {
 	}
 }
 
+// TestCRDFinder 验证按 Group+Kind 精确匹配：命中已注册 CRD，未注册的返回 false。
 func TestCRDFinder(t *testing.T) {
 	getter := func() ([]schema.GroupKind, error) {
 		return []schema.GroupKind{

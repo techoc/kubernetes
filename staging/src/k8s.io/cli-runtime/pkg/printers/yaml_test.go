@@ -24,10 +24,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// TestYAMLPrinter 复用 testPrinter 的往返断言，仅把反序列化器换成 YAML。
 func TestYAMLPrinter(t *testing.T) {
 	testPrinter(t, NewTypeSetter(scheme.Scheme).ToPrinter(&YAMLPrinter{}), yamlUnmarshal)
 }
 
+// yamlUnmarshal 是适配 sigs.k8s.io/yaml 的 Unmarshal 签名的小包装。
 func yamlUnmarshal(data []byte, v interface{}) error {
 	return yaml.Unmarshal(data, v)
 }

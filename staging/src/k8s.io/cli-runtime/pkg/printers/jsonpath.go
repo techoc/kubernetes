@@ -36,6 +36,8 @@ import (
 // index returns the result of indexing its first argument by the following
 // arguments.  Thus "index x 1 2 3" is, in Go syntax, x[1][2][3]. Each
 // indexed item must be a map, slice, or array.
+// 中文：模板中的 exists 函数依赖它做安全探测；只要有一层索引越界或类型不符就返回 false，
+// 而不是让 jsonpath 执行中途 panic。
 func exists(item interface{}, indices ...interface{}) bool {
 	v := reflect.ValueOf(item)
 	for _, i := range indices {
@@ -85,6 +87,7 @@ func exists(item interface{}, indices ...interface{}) bool {
 // indirect returns the item at the end of indirection, and a bool to indicate if it's nil.
 // We indirect through pointers and empty interfaces (only) because
 // non-empty interfaces have methods we might need.
+// 中文：只穿透指针和空接口；带方法的非空接口保留原值，因为方法可能正是模板要调用的。
 func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	for ; v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface; v = v.Elem() {
 		if v.IsNil() {
@@ -99,10 +102,13 @@ func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 
 // JSONPathPrinter is an implementation of ResourcePrinter which formats data with jsonpath expression.
 type JSONPathPrinter struct {
+	// 保留原始模板文本，仅用于出错时展示给用户调试。
 	rawTemplate string
 	*jsonpath.JSONPath
 }
 
+// NewJSONPathPrinter 解析 jsonpath 模板并返回可复用的 printer；解析失败直接返回错误，
+// 让调用方（如 -o jsonpath=...）尽早失败，而不是等到打印对象时才发现语法问题。
 func NewJSONPathPrinter(tmpl string) (*JSONPathPrinter, error) {
 	j := jsonpath.New("out")
 	if err := j.Parse(tmpl); err != nil {
@@ -119,14 +125,17 @@ func (j *JSONPathPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
 	// we need an actual value in order to retrieve the package path for an object.
 	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 中文：同样先挡掉 internal 对象，避免内部类型泄漏到用户输出。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(InternalObjectPrinterErr)
 	}
 
 	var queryObj interface{} = obj
 	if unstructured, ok := obj.(runtime.Unstructured); ok {
+		// Unstructured 直接取底层 map，省去一次无谓的序列化往返。
 		queryObj = unstructured.UnstructuredContent()
 	} else {
+		// 其余类型转成通用 map，jsonpath 引擎只认 map/slice 等基础结构。
 		data, err := json.Marshal(obj)
 		if err != nil {
 			return err
@@ -138,6 +147,7 @@ func (j *JSONPathPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	}
 
 	if err := j.JSONPath.Execute(w, queryObj); err != nil {
+		// 模板出错时输出模板与输入对象，方便用户自行定位；错误本身仍返回给调用方。
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, "Error executing template: %v. Printing more information for debugging the template:\n", err)
 		fmt.Fprintf(buf, "\ttemplate was:\n\t\t%v\n", j.rawTemplate)

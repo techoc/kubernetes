@@ -36,8 +36,13 @@ type KustomizeVisitor struct {
 }
 
 // Visit passes the result of a kustomize build to a StreamVisitor.
+//
+// 复用 StreamVisitor 处理构建产物，使 -k 与 -f 在后续解析、校验、
+// 遍历行为上完全一致；目录本身作为 base path 传给 StreamVisitor，
+// 以便相对路径与错误信息中的位置可正确解析。
 func (v *KustomizeVisitor) Visit(fn VisitorFunc) error {
 	kOpts := krusty.MakeDefaultOptions()
+	// 使用 legacy 排序以兼容旧版 kubectl 的 -k 输出顺序，避免改变 apply 顺序。
 	kOpts.Reorder = krusty.ReorderOptionLegacy
 	k := krusty.MakeKustomizer(kOpts)
 	m, err := k.Run(v.fSys, v.dirPath)

@@ -25,6 +25,10 @@ import (
 // KubeTemplatePrintFlags composes print flags that provide both a JSONPath and a go-template printer.
 // This is necessary if dealing with cases that require support both both printers, since both sets of flags
 // require overlapping flags.
+//
+// 由于 go-template 与 jsonpath 两套 flag（--template、--allow-missing-template-keys）
+// 名称相同，不能各自注册；因此这里持有一份共享的 flag 变量，
+// 再分别注入两套 PrintFlags，保证两种输出格式共用同一组 flag 值。
 type KubeTemplatePrintFlags struct {
 	GoTemplatePrintFlags *GoTemplatePrintFlags
 	JSONPathPrintFlags   *JSONPathPrintFlags
@@ -45,6 +49,9 @@ func (f *KubeTemplatePrintFlags) AllowedFormats() []string {
 // handling --template printing.
 // Returns false if the specified outputFormat does not match a supported format.
 // Supported Format types can be found in pkg/printers/printers.go
+//
+// 先尝试 JSONPath；只有“无兼容 printer”这一种错误才回退到 Go template，
+// 其余真实错误原样返回，避免掩盖模板解析问题。
 func (f *KubeTemplatePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinter, error) {
 	if f == nil {
 		return nil, NoCompatiblePrinterError{}
@@ -65,6 +72,7 @@ func (f *KubeTemplatePrintFlags) AddFlags(c *cobra.Command) {
 
 	if f.TemplateArgument != nil {
 		c.Flags().StringVar(f.TemplateArgument, "template", *f.TemplateArgument, "Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].")
+		// 启用文件名补全：--template 也可指向模板文件。
 		c.MarkFlagFilename("template")
 	}
 	if f.AllowMissingKeys != nil {
@@ -74,6 +82,9 @@ func (f *KubeTemplatePrintFlags) AddFlags(c *cobra.Command) {
 
 // NewKubeTemplatePrintFlags returns flags associated with
 // --template printing, with default values set.
+//
+// allowMissingKeys 默认为 true，是 kubectl 长期以来对模板中缺失字段
+// 保持宽松的约定；改为 false 会破坏既有脚本的输出行为。
 func NewKubeTemplatePrintFlags() *KubeTemplatePrintFlags {
 	allowMissingKeysPtr := true
 	templateArgPtr := ""

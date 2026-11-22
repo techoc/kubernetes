@@ -26,11 +26,14 @@ import (
 // IOStreams provides the standard names for iostreams.  This is useful for embedding and for unit testing.
 // Inconsistent and different names make it hard to read and review code
 // DEPRECATED: use genericiooptions.IOStreams
+// 已弃用：仅为保持向后兼容而保留的类型别名，新代码请使用 genericiooptions.IOStreams。
 type IOStreams = genericiooptions.IOStreams
 
 // NewTestIOStreams returns a valid IOStreams and in, out, errout buffers for unit tests
 // DEPRECATED: use genericiooptions.NewTestIOStreams
+// 已弃用：新代码请使用 genericiooptions.NewTestIOStreams。
 func NewTestIOStreams() (genericiooptions.IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
+	// 每个流独立的内存缓冲，便于测试逐段断言命令输出。
 	in := &bytes.Buffer{}
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
@@ -44,7 +47,9 @@ func NewTestIOStreams() (genericiooptions.IOStreams, *bytes.Buffer, *bytes.Buffe
 
 // NewTestIOStreamsDiscard returns a valid IOStreams that just discards
 // DEPRECATED: use genericiooptions.NewTestIOStreamsDiscard
+// 已弃用：新代码请使用 genericiooptions.NewTestIOStreamsDiscard。
 func NewTestIOStreamsDiscard() genericiooptions.IOStreams {
+	// 标准输入仍需可读缓冲；输出全部丢弃，适合不关心输出的测试。
 	in := &bytes.Buffer{}
 	return IOStreams{
 		In:     in,
