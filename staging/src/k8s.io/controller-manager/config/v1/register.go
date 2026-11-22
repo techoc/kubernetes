@@ -26,6 +26,7 @@ import (
 const GroupName = "controllermanager.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 对外版本 v1 的 GroupVersion。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
@@ -39,10 +40,12 @@ var (
 )
 
 // Adds the list of known types to the given scheme.
+// 注册 v1 版本的已知类型，并加入 metav1 的通用类型（如 TypeMeta）。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&LeaderMigrationConfiguration{},
 	)
+	// 使 scheme 知道该版本下 TypeMeta 等元信息的处理方式。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

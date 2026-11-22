@@ -22,6 +22,8 @@ import (
 	"k8s.io/controller-manager/pkg/features"
 )
 
+// init 中把 controller-manager 专有的 feature gate 注册到 apiserver 的默认 gate 集合；
+// 注册失败说明存在重复定义等致命问题，用 Must 直接 panic。
 func init() {
 	runtime.Must(features.SetupCurrentKubernetesSpecificFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }

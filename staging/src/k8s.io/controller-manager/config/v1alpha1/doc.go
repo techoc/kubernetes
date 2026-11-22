@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// v1alpha1 是最早的领导者迁移配置版本。
+// 这里同时生成 deepcopy、conversion 与 openapi 定义，供向后兼容旧配置文件使用。
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/controller-manager/config
 // +k8s:conversion-gen=k8s.io/controller-manager/config/v1alpha1

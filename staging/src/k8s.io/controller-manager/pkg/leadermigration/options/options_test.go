@@ -29,6 +29,8 @@ import (
 	migrationconfig "k8s.io/controller-manager/pkg/leadermigration/config"
 )
 
+// 表驱动测试：覆盖默认配置、v1alpha1/v1beta1/v1 三种版本的配置文件、
+// 通配符与非通配符控制器归属等场景，验证解析结果和开关状态。
 func TestLeaderMigrationOptions(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -185,7 +187,9 @@ controllerLeaders:
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			flags := tc.flags
+			// 从 case 给定的 flag 列表开始，必要时追加配置文件路径 flag。
 			if tc.configContent != "" {
+				// 有配置内容时写临时文件，并把 --leader-migration-config 指向它。
 				configFile, err := os.CreateTemp("", tc.name)
 				if err != nil {
 					t.Fatal(err)
@@ -202,6 +206,7 @@ controllerLeaders:
 			fs := pflag.NewFlagSet("addflagstest", pflag.ContinueOnError)
 			options.AddFlags(fs)
 			err := fs.Parse(flags)
+			// 先解析 flag，再加 ApplyTo，模拟真实的启动流程。
 			if err != nil {
 				t.Errorf("cannot parse leader-migration-config: %v", err)
 				return
@@ -215,6 +220,7 @@ controllerLeaders:
 				// expect err and got err, finish the test case.
 				return
 			}
+			// ApplyTo 没报错但测试期望报错，说明错误场景没有被正确识别。
 			if err == nil && tc.expectErr {
 				t.Errorf("expected error but got nil")
 				return

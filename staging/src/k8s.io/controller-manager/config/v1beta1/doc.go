@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// v1beta1 是领导者迁移配置的 beta 外部版本，仍保留 ResourceLock 字段，
+// 用于兼容 v1 之前的配置文件。
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/controller-manager/config
 // +k8s:openapi-gen=true

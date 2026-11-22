@@ -22,7 +22,10 @@ import (
 
 // LeaderMigrationConfiguration provides versioned configuration for all migrating leader locks.
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// v1 版本的领导者迁移配置。
+// 相比内部版本，这里没有 ResourceLock 字段——v1 起锁类型固定为 leases。
 type LeaderMigrationConfiguration struct {
+	// 内嵌类型元信息，用于反序列化时识别 apiVersion / kind。
 	metav1.TypeMeta `json:""`
 
 	// LeaderName is the name of the leader election resource that protects the migration
@@ -30,6 +33,7 @@ type LeaderMigrationConfiguration struct {
 	LeaderName string `json:"leaderName"`
 
 	// ControllerLeaders contains a list of migrating leader lock configurations
+	// listType=atomic 告诉序列化/合并逻辑该列表应作为整体替换，而不是逐项合并。
 	// +listType=atomic
 	ControllerLeaders []ControllerLeaderConfiguration `json:"controllerLeaders"`
 }

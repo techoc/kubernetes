@@ -22,7 +22,10 @@ import (
 	internal "k8s.io/controller-manager/config"
 )
 
+// 表驱动测试 FilterFunc：分别用“迁移来源”“迁移目标”“通配符”三种配置，
+// 在 KCM 和 CCM 两个组件视角下验证每个控制器的启动策略。
 func TestLeaderMigratorFilterFunc(t *testing.T) {
+	// fromConfig：控制器原本在 KCM，正迁移到 CCM。
 	fromConfig := &internal.LeaderMigrationConfiguration{
 		ResourceLock: "leases",
 		LeaderName:   "cloud-provider-extraction-migration",
@@ -39,6 +42,7 @@ func TestLeaderMigratorFilterFunc(t *testing.T) {
 			},
 		},
 	}
+	// toConfig：控制器迁移的目标为 CCM。
 	toConfig := &internal.LeaderMigrationConfiguration{
 		ResourceLock: "leases",
 		LeaderName:   "cloud-provider-extraction-migration",
@@ -55,6 +59,7 @@ func TestLeaderMigratorFilterFunc(t *testing.T) {
 			},
 		},
 	}
+	// wildcardConfig：控制器归属设为 "*"，两边都允许接管。
 	wildcardConfig := &internal.LeaderMigrationConfiguration{
 		ResourceLock: "leases",
 		LeaderName:   "cloud-provider-extraction-migration",
@@ -147,6 +152,7 @@ func TestLeaderMigratorFilterFunc(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			migrator := NewLeaderMigrator(tc.config, tc.component)
+			// 用当前 case 的配置与组件构造迁移器，再逐条核对期望结果。
 			for name, expected := range tc.expectResult {
 				if result := migrator.FilterFunc(name); expected != result {
 					t.Errorf("controller %s, expect %v, got %v", name, expected, result)

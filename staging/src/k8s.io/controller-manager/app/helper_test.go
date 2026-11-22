@@ -24,7 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// 表驱动测试：覆盖显式启用/禁用、通配符、默认禁用集合以及无通配符等场景。
 func TestIsControllerEnabled(t *testing.T) {
+	// 每个 case 给出控制器名、命令行配置、默认禁用集合以及期望结果。
 	tcs := []struct {
 		name                         string
 		controllerName               string
@@ -83,6 +85,7 @@ func TestIsControllerEnabled(t *testing.T) {
 		},
 	}
 
+	// 逐条执行并用 assert 对比期望值，失败时打印 case 名称以便定位。
 	for _, tc := range tcs {
 		actual := IsControllerEnabled(tc.controllerName, sets.NewString(tc.disabledByDefaultControllers...), tc.controllers)
 		assert.Equal(t, tc.expected, actual, "%v: expected %v, got %v", tc.name, tc.expected, actual)

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包只放“内部版本”（internal）的通用配置类型。
+// 对外暴露的版本化配置放在 v1、v1beta1、v1alpha1 子包中，通过 conversion 转换为这里的内部类型。
 // +k8s:deepcopy-gen=package
 
 package config

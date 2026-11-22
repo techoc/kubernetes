@@ -27,7 +27,10 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 )
 
+// 表驱动测试：覆盖空检查、全健康、verbose 输出、同批/分批加入坏检查、
+// 运行期追加检查以及子路径 /healthz/{name} 等场景。
 func TestMutableHealthzHandler(t *testing.T) {
+	// 一个永远失败的检查器，用于验证失败时的响应体与状态码。
 	badChecker := healthz.NamedCheck("bad", func(r *http.Request) error {
 		return fmt.Errorf("bad")
 	})
@@ -134,10 +137,13 @@ func TestMutableHealthzHandler(t *testing.T) {
 	}
 }
 
+// 验证读锁设计：一个“卡住”的检查器不应阻止其它健康检查请求并发进入。
+// 通过计数并发进入的检查器数量来判断是否被串行化。
 // TestConcurrentChecks tests that the handler would not block on concurrent healthz requests.
 func TestConcurrentChecks(t *testing.T) {
 	const N = 5
 	stopChan := make(chan interface{})
+	// 所有并发检查在通道上等待，测试结束后再统一放行。
 	defer close(stopChan) // always close no matter passing or not
 	concurrentChan := make(chan interface{}, N)
 	var concurrentCount int32
@@ -157,6 +163,7 @@ func TestConcurrentChecks(t *testing.T) {
 		}()
 	}
 
+	// 设置超时保护：正常情况下应远小于 1 秒，超时说明请求被串行阻塞。
 	giveUp := time.After(1 * time.Second) // should take <1ms if passing
 	for i := 0; i < N; i++ {
 		select {

@@ -31,16 +31,21 @@ import (
 )
 
 // ResourceLockLeases is the resourceLock value for 'leases' API
+// 迁移配置中允许的两种资源锁类型常量。
 const ResourceLockLeases = "leases"
 
 // ResourceLockEndpoints is the resourceLock value for 'endpoints' API
 const ResourceLockEndpoints = "endpoints"
 
+// 专用于解析迁移配置文件的 scheme：注册内部版本以及所有支持的外部版本。
 var cfgScheme = runtime.NewScheme()
 
+// 依次注册 internal / v1alpha1 / v1beta1 / v1，并设置版本优先级。
+// 优先级决定多版本同时存在时哪个版本为“存储/首选”版本（这里最终以 v1 优先）。
 func init() {
 	// internal
 	util.Must(internal.AddToScheme(cfgScheme))
+	// 内部版本先注册，转换的目标类型必须存在。
 
 	// v1alpha1
 	util.Must(v1alpha1.AddToScheme(cfgScheme))
@@ -58,16 +63,24 @@ func init() {
 // ReadLeaderMigrationConfiguration reads LeaderMigrationConfiguration from a YAML file at the given path.
 // The parsed LeaderMigrationConfiguration may be invalid.
 // It returns an error if the file did not exist.
+// 从 YAML 文件读取迁移配置：
+// 1) 读文件；
+// 2) 用严格模式的通用解码器解析（未知字段/重复字段会报错）；
+// 3) 断言结果为内部版本类型。
+// 注意：这里只做解析，不做语义校验。
 func ReadLeaderMigrationConfiguration(configFilePath string) (*internal.LeaderMigrationConfiguration, error) {
 	data, err := os.ReadFile(configFilePath)
+	// 文件不存在或不可读时立即返回带路径的错误。
 	if err != nil {
 		return nil, fmt.Errorf("unable to read leader migration configuration from %q: %w", configFilePath, err)
 	}
+	// 严格解码：未知字段与重复字段都视为错误；External 版本会自动转换为内部版本。
 	config, gvk, err := serializer.NewCodecFactory(cfgScheme, serializer.EnableStrict).UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	internalConfig, ok := config.(*internal.LeaderMigrationConfiguration)
+	// 类型断言：确保解析出的确实是迁移配置，而不是同一 scheme 中的其它类型。
 	if !ok {
 		return nil, fmt.Errorf("unexpected config type: %v", gvk)
 	}
@@ -77,16 +90,21 @@ func ReadLeaderMigrationConfiguration(configFilePath string) (*internal.LeaderMi
 // ValidateLeaderMigrationConfiguration validates the LeaderMigrationConfiguration against common errors.
 // It checks required names and whether resourceLock is either 'leases' or 'endpoints'.
 // It will return nil if it does not find anything wrong.
+// 校验迁移配置：leaderName 必填、resourceLock 只能是 leases/endpoints、
+// 每个 controllerLeaders 条目的 name 与 component 必填。
 func ValidateLeaderMigrationConfiguration(config *internal.LeaderMigrationConfiguration) (allErrs field.ErrorList) {
 	if config.LeaderName == "" {
+		// 迁移锁必须有名字，否则 KCM/CCM 无法就同一把锁达成一致。
 		allErrs = append(allErrs, field.Required(field.NewPath("leaderName"),
 			"leaderName must be set for LeaderMigrationConfiguration"))
 	}
 	if config.ResourceLock != ResourceLockLeases && config.ResourceLock != ResourceLockEndpoints {
+		// 只接受两种已知锁类型。
 		allErrs = append(allErrs, field.Invalid(field.NewPath("resourceLock"), config.ResourceLock,
 			"resource Lock must be one of 'leases' or 'endpoints'"))
 	}
 	// validate controllerLeaders
+	// 逐项校验控制器列表，并带上数组下标作为字段路径，便于定位是哪一条出错。
 	fldPath := field.NewPath("controllerLeaders")
 	for i, controllerLeader := range config.ControllerLeaders {
 		path := fldPath.Index(i)
@@ -95,8 +113,10 @@ func ValidateLeaderMigrationConfiguration(config *internal.LeaderMigrationConfig
 	return
 }
 
+// 校验单个控制器条目；component 决定由哪个组件运行，name 必须与控制器注册名一致。
 func validateControllerLeaderConfiguration(path *field.Path, config *internal.ControllerLeaderConfiguration) (allErrs field.ErrorList) {
 	if config == nil {
+		// nil 条目直接跳过，避免解引用 panic。
 		return
 	}
 	if config.Component == "" {

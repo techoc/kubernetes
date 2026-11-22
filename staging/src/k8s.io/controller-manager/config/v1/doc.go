@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// v1 是领导者迁移配置的稳定外部版本。
+// 该包只暴露 LeaderMigrationConfiguration；ResourceLock 字段在 v1 中固定为 leases，
+// 转换到内部版本时由 conversion.go 自动补齐。
 // +k8s:deepcopy-gen=package
 // +groupName=controllermanager.config.k8s.io
 

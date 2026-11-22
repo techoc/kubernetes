@@ -26,6 +26,7 @@ import (
 const GroupName = "controllermanager.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// v1alpha1 版本的 GroupVersion。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
@@ -39,6 +40,7 @@ var (
 )
 
 // Adds the list of known types to the given scheme.
+// 注册 v1alpha1 的类型以及默认化/转换所需的元信息。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&LeaderMigrationConfiguration{},

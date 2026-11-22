@@ -41,27 +41,36 @@ import (
 )
 
 var (
+	// 动态客户端构建器的两个可调参数：
+	// 令牌默认有效期（秒），以及剩余有效期低于多少比例时触发轮换。
 	// defaultExpirationSeconds defines the duration of a TokenRequest in seconds.
 	defaultExpirationSeconds = int64(3600)
 	// defaultLeewayPercent defines the percentage of expiration left before the client trigger a token rotation.
+	// leewayPercent 取值范围为 [0, 100]；提前轮换可以避免令牌刚好过期时请求失败。
 	// range[0, 100]
 	defaultLeewayPercent = 20
 )
 
+// 动态客户端构建器：为每个控制器创建对应的 ServiceAccount，
+// 并通过 TokenRequest API 定期申请/刷新令牌，无需把长期凭据写入 kubeconfig。
 type DynamicControllerClientBuilder struct {
 	// ClientConfig is a skeleton config to clone and use as the basis for each controller client
 	ClientConfig *restclient.Config
 
 	// CoreClient is used to provision service accounts if needed and watch for their associated tokens
 	// to construct a controller client
+	// 用于创建/查询 ServiceAccount 及其 Token 的核心客户端。
 	CoreClient v1core.CoreV1Interface
 
 	// Namespace is the namespace used to host the service accounts that will back the
 	// controllers.  It must be highly privileged namespace which normal users cannot inspect.
+	// 承载这些 ServiceAccount 的命名空间；必须是普通用户无法访问的受限命名空间。
 	Namespace string
 
 	// roundTripperFuncMap is a cache stores the corresponding roundtripper func for each
 	// service account
+	// 按 ServiceAccount 缓存包装函数，保证同一账号的多个客户端共享同一个令牌源，
+	// 避免每个客户端各自刷新令牌造成 TokenRequest 请求风暴。
 	roundTripperFuncMap map[string]func(http.RoundTripper) http.RoundTripper
 
 	// expirationSeconds defines the token expiration seconds
@@ -70,12 +79,15 @@ type DynamicControllerClientBuilder struct {
 	// leewayPercent defines the percentage of expiration left before the client trigger a token rotation.
 	leewayPercent int
 
+	// 保护 roundTripperFuncMap 的并发访问。
 	mutex sync.Mutex
 
+	// 可注入的时钟，便于测试中控制时间（生产环境用 RealClock）。
 	clock clock.Clock
 }
 
 // NewDynamicClientBuilder returns client builder which uses TokenRequest feature and refresh service account token periodically
+// 生产用的构造函数，使用默认令牌有效期与轮换比例。
 func NewDynamicClientBuilder(clientConfig *restclient.Config, coreClient v1core.CoreV1Interface, ns string) ControllerClientBuilder {
 	builder := &DynamicControllerClientBuilder{
 		ClientConfig:        clientConfig,
@@ -84,11 +96,13 @@ func NewDynamicClientBuilder(clientConfig *restclient.Config, coreClient v1core.
 		roundTripperFuncMap: map[string]func(http.RoundTripper) http.RoundTripper{},
 		expirationSeconds:   defaultExpirationSeconds,
 		leewayPercent:       defaultLeewayPercent,
-		clock:               clock.RealClock{},
+		// 生产环境使用真实时钟。
+		clock: clock.RealClock{},
 	}
 	return builder
 }
 
+// 仅供测试使用：允许注入自定义的有效期/轮换比例，以便快速验证令牌轮换逻辑。
 // this function only for test purpose, don't call it
 func NewTestDynamicClientBuilder(clientConfig *restclient.Config, coreClient v1core.CoreV1Interface, ns string, expirationSeconds int64, leewayPercent int) ControllerClientBuilder {
 	builder := &DynamicControllerClientBuilder{
@@ -103,21 +117,32 @@ func NewTestDynamicClientBuilder(clientConfig *restclient.Config, coreClient v1c
 	return builder
 }
 
+// 为指定 ServiceAccount 构造 REST 配置：
+// 1) 确保 ServiceAccount 存在；
+// 2) 克隆基础配置并加上身份；
+// 3) 为该账号取得（或复用）一个带缓存的令牌源并挂到请求传输链上。
 func (t *DynamicControllerClientBuilder) Config(saName string) (*restclient.Config, error) {
 	_, err := getOrCreateServiceAccount(t.CoreClient, t.Namespace, saName)
+	// 先确保账号存在，否则后面申请 Token 会 404。
 	if err != nil {
 		return nil, err
 	}
 
 	configCopy := constructClient(t.Namespace, saName, t.ClientConfig)
+	// 复制基础配置并设置 User-Agent。
 
 	t.mutex.Lock()
+	// 缓存 map 可能被多个控制器并发访问，必须加锁。
 	defer t.mutex.Unlock()
 
 	rt, ok := t.roundTripperFuncMap[saName]
+	// 如果该账号已有包装函数，直接复用，保证共享同一令牌缓存。
 	if ok {
+		// 命中缓存：复用之前的 RoundTripper 包装。
 		configCopy.Wrap(rt)
 	} else {
+		// 未命中缓存：创建一个 TokenRequest 令牌源，并外包一层缓存，
+		// 避免每次 HTTP 请求都重新向 apiserver 申请令牌。
 		cachedTokenSource := transport.NewCachedTokenSource(&tokenSourceImpl{
 			namespace:          t.Namespace,
 			serviceAccountName: saName,
@@ -126,12 +151,15 @@ func (t *DynamicControllerClientBuilder) Config(saName string) (*restclient.Conf
 			leewayPercent:      t.leewayPercent,
 		})
 		configCopy.Wrap(transport.ResettableTokenSourceWrapTransport(cachedTokenSource))
+		// 把令牌源包装进传输链，使每个请求自动携带最新令牌。
+		// 把包装函数记下来，供同一账号的后续客户端复用。
 		t.roundTripperFuncMap[saName] = configCopy.WrapTransport
 	}
 
 	return &configCopy, nil
 }
 
+// Config 的“出错即退出”版本。
 func (t *DynamicControllerClientBuilder) ConfigOrDie(name string) *restclient.Config {
 	clientConfig, err := t.Config(name)
 	if err != nil {
@@ -140,6 +168,7 @@ func (t *DynamicControllerClientBuilder) ConfigOrDie(name string) *restclient.Co
 	return clientConfig
 }
 
+// 用动态配置构造 clientset。
 func (t *DynamicControllerClientBuilder) Client(name string) (clientset.Interface, error) {
 	clientConfig, err := t.Config(name)
 	if err != nil {
@@ -148,6 +177,7 @@ func (t *DynamicControllerClientBuilder) Client(name string) (clientset.Interfac
 	return clientset.NewForConfig(clientConfig)
 }
 
+// Client 的“出错即退出”版本。
 func (t *DynamicControllerClientBuilder) ClientOrDie(name string) clientset.Interface {
 	client, err := t.Client(name)
 	if err != nil {
@@ -156,6 +186,7 @@ func (t *DynamicControllerClientBuilder) ClientOrDie(name string) clientset.Inte
 	return client
 }
 
+// 发现客户端同样调高 Burst/QPS，理由与 SimpleBuilder 一致。
 func (t *DynamicControllerClientBuilder) DiscoveryClient(name string) (discovery.DiscoveryInterface, error) {
 	clientConfig, err := t.Config(name)
 	if err != nil {
@@ -168,6 +199,7 @@ func (t *DynamicControllerClientBuilder) DiscoveryClient(name string) (discovery
 	return clientset.NewForConfig(clientConfig)
 }
 
+// DiscoveryClient 的“出错即退出”版本。
 func (t *DynamicControllerClientBuilder) DiscoveryClientOrDie(name string) discovery.DiscoveryInterface {
 	client, err := t.DiscoveryClient(name)
 	if err != nil {
@@ -176,6 +208,7 @@ func (t *DynamicControllerClientBuilder) DiscoveryClientOrDie(name string) disco
 	return client
 }
 
+// 实现 oauth2.TokenSource：每次 Token() 调用都会通过 TokenRequest API 申请新令牌。
 type tokenSourceImpl struct {
 	namespace          string
 	serviceAccountName string
@@ -184,20 +217,29 @@ type tokenSourceImpl struct {
 	leewayPercent      int
 }
 
+// 申请令牌的完整流程：
+// 1) 带指数退避重试，确保 ServiceAccount 存在；
+// 2) 调用 CreateToken 申请具有指定有效期的令牌；
+// 3) 根据返回的有效期和 leeway 计算提前轮换时间；
+// 4) 封装为 oauth2.Token 返回。
 func (ts *tokenSourceImpl) Token() (*oauth2.Token, error) {
 	var retTokenRequest *v1authenticationapi.TokenRequest
 
 	backoff := wait.Backoff{
+		// 退避策略：初始 500ms，每次翻倍，共 4 次，用于容忍 apiserver 短暂不可用。
 		Duration: 500 * time.Millisecond,
 		Factor:   2, // double the timeout for every failure
 		Steps:    4,
 	}
 	if err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		// 重试条件返回 (false, nil) 表示继续重试；只在成功时返回 true。
 		if _, inErr := getOrCreateServiceAccount(ts.coreClient, ts.namespace, ts.serviceAccountName); inErr != nil {
+			// 账号可能因清理等原因消失，每次重试都先确认/重建。
 			klog.Warningf("get or create service account failed: %v", inErr)
 			return false, nil
 		}
 
+		// 申请短期令牌：有效期由 expirationSeconds 指定，并随请求一起传给 apiserver。
 		tr, inErr := ts.coreClient.ServiceAccounts(ts.namespace).CreateToken(context.TODO(), ts.serviceAccountName, &v1authenticationapi.TokenRequest{
 			Spec: v1authenticationapi.TokenRequestSpec{
 				ExpirationSeconds: ptr.To[int64](ts.expirationSeconds),
@@ -208,23 +250,29 @@ func (ts *tokenSourceImpl) Token() (*oauth2.Token, error) {
 			return false, nil
 		}
 		retTokenRequest = tr
+		// 保存成功结果，退出重试循环。
 		return true, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to get token for %s/%s: %v", ts.namespace, ts.serviceAccountName, err)
 	}
 
+	// 防御性检查：apiserver 未回填有效期时无法计算轮换时间，视为错误。
 	if retTokenRequest.Spec.ExpirationSeconds == nil {
 		return nil, fmt.Errorf("nil pointer of expiration in token request")
 	}
 
 	lifetime := retTokenRequest.Status.ExpirationTimestamp.Time.Sub(time.Now())
+	// 计算令牌从现在起还剩多少有效时间。
 	if lifetime < time.Minute*10 {
+		// 时钟偏差可能算出很短甚至负值，统一兜底为至少 10 分钟。
 		// possible clock skew issue, pin to minimum token lifetime
 		lifetime = time.Minute * 10
 	}
 
 	leeway := time.Duration(int64(lifetime) * int64(ts.leewayPercent) / 100)
+	// 提前 leeway 比例的时间轮换，留出刷新所需的余量。
 	expiry := time.Now().Add(lifetime).Add(-1 * leeway)
+	// oauth2 缓存会在 Expiry 到来前重新获取令牌，从而实现自动轮换。
 
 	return &oauth2.Token{
 		AccessToken: retTokenRequest.Status.Token,
@@ -233,9 +281,13 @@ func (ts *tokenSourceImpl) Token() (*oauth2.Token, error) {
 	}, nil
 }
 
+// 构造客户端配置：生成 ServiceAccount 形式的用户名，浅拷贝基础配置并设置 User-Agent。
+// 浅拷贝保留了基础配置上的 HTTP Wrap 函数，便于未来扩展。
 func constructClient(saNamespace, saName string, config *restclient.Config) restclient.Config {
 	username := apiserverserviceaccount.MakeUsername(saNamespace, saName)
+	// 生成形如 system:serviceaccount:<ns>:<name> 的用户名，作为 User-Agent 标识。
 	// make a shallow copy
+	// 调用方已在创建时清理过配置；这里只做浅拷贝并追加 User-Agent，不修改原对象。
 	// the caller already castrated the config during creation
 	// this allows for potential extensions in the future
 	// for example it preserve HTTP wrappers for custom behavior per request
@@ -244,16 +296,23 @@ func constructClient(saNamespace, saName string, config *restclient.Config) rest
 	return ret
 }
 
+// 获取或创建 ServiceAccount：
+// 1) 先 Get，存在则直接返回；
+// 2) 不存在时确保 Namespace 存在（容忍无权限）；
+// 3) 创建 SA；若遇到并发创建（AlreadyExists）则重新 Get。
 func getOrCreateServiceAccount(coreClient v1core.CoreV1Interface, namespace, name string) (*v1.ServiceAccount, error) {
 	sa, err := coreClient.ServiceAccounts(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	// 快路径：账号已存在。
 	if err == nil {
 		return sa, nil
 	}
 	if !apierrors.IsNotFound(err) {
+		// 除了 NotFound 之外的错误都直接返回，不擅自创建。
 		return nil, err
 	}
 
 	// Create the namespace if we can't verify it exists.
+	// 无法确认命名空间存在时尝试创建；本组件可能没有创建命名空间的权限，因此容忍失败。
 	// Tolerate errors, since we don't know whether this component has namespace creation permissions.
 	if _, err := coreClient.Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{}); apierrors.IsNotFound(err) {
 		if _, err = coreClient.Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -262,8 +321,10 @@ func getOrCreateServiceAccount(coreClient v1core.CoreV1Interface, namespace, nam
 	}
 
 	// Create the service account
+	// 真正创建 ServiceAccount。
 	sa, err = coreClient.ServiceAccounts(namespace).Create(context.TODO(), &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name}}, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
+		// 并发情况下别的 goroutine 可能已创建，重新读取即可。
 		// If we're racing to init and someone else already created it, re-fetch
 		return coreClient.ServiceAccounts(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	}

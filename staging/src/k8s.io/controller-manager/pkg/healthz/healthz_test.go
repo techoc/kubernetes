@@ -22,6 +22,7 @@ import (
 	"testing"
 )
 
+// 测试用检查器：Check 总是返回指定消息的错误，便于验证命名与错误传递。
 type checkWithMessage struct {
 	message string
 }
@@ -30,6 +31,7 @@ func (c *checkWithMessage) Check(_ *http.Request) error {
 	return fmt.Errorf("%s", c.message)
 }
 
+// 验证 NamedHealthChecker 会为检查器设置名字，并且原样传递 Check 返回的错误。
 func TestNamedHealthChecker(t *testing.T) {
 	named := NamedHealthChecker("foo", &checkWithMessage{message: "hello"})
 	if named.Name() != "foo" {

@@ -27,6 +27,8 @@ import (
 	internal "k8s.io/controller-manager/config"
 )
 
+// 表驱动测试读取与解析：覆盖空文件、类型不匹配、基本配置、两种锁类型、
+// 未知字段、重复字段以及带 leaders 的完整配置等场景。
 func TestReadLeaderMigrationConfiguration(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -139,6 +141,7 @@ controllerLeaders:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 把每个 case 的 YAML 写入临时文件，再调用真实的文件读取函数。
 			configFile, err := os.CreateTemp("", tc.name)
 			if err != nil {
 				t.Fatal(err)
@@ -160,6 +163,7 @@ controllerLeaders:
 	}
 }
 
+// 表驱动测试校验逻辑：空名字、非法锁类型应报错；空控制器列表与合法 endpoints 配置应通过。
 func TestValidateLeaderMigrationConfiguration(t *testing.T) {
 	testCases := []struct {
 		name      string

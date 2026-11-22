@@ -20,13 +20,18 @@ import internal "k8s.io/controller-manager/config"
 
 // DefaultLeaderMigrationConfiguration returns the default LeaderMigrationConfiguration
 // that is valid for this release of Kubernetes.
+// 返回当前版本推荐的默认迁移配置：
+// 锁名为 cloud-provider-extraction-migration，使用 leases 锁，
+// 并把路由、Service、云节点生命周期三个控制器标记为可由任意组件运行（"*"）。
 func DefaultLeaderMigrationConfiguration() *internal.LeaderMigrationConfiguration {
 	return &internal.LeaderMigrationConfiguration{
-		LeaderName:   "cloud-provider-extraction-migration",
+		LeaderName: "cloud-provider-extraction-migration",
+		// KCM 与 CCM 必须使用同一个锁名，才能在迁移期间互斥。
 		ResourceLock: ResourceLockLeases,
 		ControllerLeaders: []internal.ControllerLeaderConfiguration{
 			{
-				Name:      "route-controller",
+				Name: "route-controller",
+				// "*" 表示迁移过程中该控制器可由任一参与迁移的组件接管。
 				Component: "*",
 			}, {
 				Name:      "service-controller",

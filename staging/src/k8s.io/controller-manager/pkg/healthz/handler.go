@@ -29,18 +29,25 @@ import (
 //
 // This handler can register health checks after its creation, which
 // is originally not allowed with standard healthz handler.
+// 标准 healthz handler 不允许在创建后再添加检查项。
+// MutableHealthzHandler 通过“加检查时重建内部 handler + 读写锁”绕开这个限制，
+// 使 controller-manager 能在启动后继续把控制器的健康检查挂到 /healthz 上。
 type MutableHealthzHandler struct {
 	// handler is the underlying handler that will be replaced every time
 	// new checks are added.
+	// 当前实际处理请求的 handler；每次新增检查都会被替换成新的 mux。
 	handler http.Handler
 	// mutex is a RWMutex that allows concurrent health checks (read)
 	// but disallow replacing the handler at the same time (write).
+	// 读锁用于并发处理健康检查请求，写锁用于安全替换 handler。
 	mutex  sync.RWMutex
 	checks []healthz.HealthChecker
 }
 
+// 处理请求时加读锁：多个健康检查可并行执行，但不会与 handler 替换同时发生。
 func (h *MutableHealthzHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	h.mutex.RLock()
+	// 持有读锁直到响应结束，确保期间 handler 不会被换掉。
 	defer h.mutex.RUnlock()
 
 	h.handler.ServeHTTP(writer, request)
@@ -50,16 +57,24 @@ func (h *MutableHealthzHandler) ServeHTTP(writer http.ResponseWriter, request *h
 //
 // Every time this function is called, the handler have to be re-initiated.
 // It is advised to add as many checks at once as possible.
+// 追加检查项并重建内部 handler。
+// 每次调用都要重建 mux，因此建议尽量批量添加，减少重建次数。
 func (h *MutableHealthzHandler) AddHealthChecker(checks ...healthz.HealthChecker) {
 	h.mutex.Lock()
+	// 重建期间独占访问，避免与正在进行的请求/其它添加操作竞争。
 	defer h.mutex.Unlock()
 
 	h.checks = append(h.checks, checks...)
+	// 把新检查累积到列表中，保留之前添加的全部检查。
 	newMux := mux.NewPathRecorderMux("healthz")
+	// 创建一个新的 mux，重新安装全部检查（包括新加的）。
 	healthz.InstallHandler(newMux, h.checks...)
+	// 由 apiserver 的 healthz 包生成 /healthz 及各个子路径的路由。
 	h.handler = newMux
+	// 原子替换（在写锁保护下）为新的 handler；之后的请求都会走到新路由。
 }
 
+// 用初始检查集合构造 handler；统一走 AddHealthChecker 以复用重建逻辑。
 func NewMutableHealthzHandler(checks ...healthz.HealthChecker) *MutableHealthzHandler {
 	h := &MutableHealthzHandler{}
 	h.AddHealthChecker(checks...)

@@ -22,6 +22,7 @@ import (
 
 // LeaderMigrationConfiguration provides versioned configuration for all migrating leader locks.
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// v1beta1 版本的迁移配置；与 v1alpha1 类似，仍保留 ResourceLock 字段。
 type LeaderMigrationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -31,9 +32,11 @@ type LeaderMigrationConfiguration struct {
 
 	// ResourceLock indicates the resource object type that will be used to lock
 	// Should be "leases" or "endpoints"
+	// 锁类型，合法值为 leases 或 endpoints。
 	ResourceLock string `json:"resourceLock"`
 
 	// ControllerLeaders contains a list of migrating leader lock configurations
+	// 列表整体替换，不做逐项合并。
 	// +listType=atomic
 	ControllerLeaders []ControllerLeaderConfiguration `json:"controllerLeaders"`
 }

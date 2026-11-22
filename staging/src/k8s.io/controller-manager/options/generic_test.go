@@ -26,6 +26,7 @@ import (
 	cmconfig "k8s.io/controller-manager/config"
 )
 
+// 表驱动测试 Validate：覆盖空配置、通配符、别名、未知控制器以及非法锁类型等场景。
 func TestValidateGenericControllerManagerConfigurationOptions(t *testing.T) {
 	testCases := []struct {
 		name                   string
@@ -155,6 +156,7 @@ func TestValidateGenericControllerManagerConfigurationOptions(t *testing.T) {
 	}
 }
 
+// 表驱动测试 ApplyTo：重点验证别名是否被正确解析成规范名称，且禁用前缀是否保留。
 func TestApplyToGenericControllerManagerConfigurationOptions(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -243,6 +245,7 @@ func TestApplyToGenericControllerManagerConfigurationOptions(t *testing.T) {
 	}
 }
 
+// 测试用的“已知控制器”名单。
 func getAllControllers() []string {
 	return []string{
 		"red-controller",
@@ -251,6 +254,7 @@ func getAllControllers() []string {
 	}
 }
 
+// 测试用的别名映射：多个别名可以指向同一个规范名称。
 func getControllerAliases() map[string]string {
 	return map[string]string{
 		"crimson-controller":     "red-controller",
