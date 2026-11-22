@@ -35,29 +35,34 @@ import (
 )
 
 const (
-	// OpenIDConfigPath is the URL path at which the API server serves
-	// an OIDC Provider Configuration Information document, corresponding
-	// to the Kubernetes Service Account key issuer.
+	// OpenIDConfigPath 是 API Server 提供 OIDC 发现文档的路径。
+	// 遵循 OIDC Discovery 1.0 规范，外部依赖方通过此路径获取 ServiceAccount Token 的验证信息。
 	// https://openid.net/specs/openid-connect-discovery-1_0.html
 	OpenIDConfigPath = "/.well-known/openid-configuration"
 
-	// JWKSPath is the URL path at which the API server serves a JWKS
-	// containing the public keys that may be used to sign Kubernetes
-	// Service Account keys.
+	// JWKSPath 是 API Server 提供 JWKS（JSON Web Key Set）的路径。
+	// 包含用于验证 ServiceAccount Token 签名的所有公钥，支持密钥轮换。
 	JWKSPath = "/openid/v1/jwks"
 )
 
-// OpenIDMetadataProvider returns pre-rendered responses for OIDC discovery endpoints.
+// OpenIDMetadataProvider 提供 OIDC 发现端点的预渲染响应。
+// GetConfigJSON 返回 OIDC Discovery 文档，GetKeysetJSON 返回 JWKS。
+// maxAge 指示响应可以缓存的秒数，用于 HTTP Cache-Control 头。
 type OpenIDMetadataProvider interface {
 	GetConfigJSON() (json []byte, maxAge int)
 	GetKeysetJSON() (json []byte, maxAge int)
 }
 
+// openidConfigProvider 实现 OpenIDMetadataProvider 接口。
+// 当公钥变化时（通过 Listener 通知），原子更新预渲染的 JSON 内容。
 type openidConfigProvider struct {
 	issuerURL, jwksURI string
 	pubKeyGetter       PublicKeysGetter
 	config             atomic.Pointer[openidConfig]
 }
+
+// openidConfig 存储预渲染的 OIDC 配置和 JWKS JSON 内容。
+// 使用 atomic.Pointer 确保并发读取时不会看到部分更新的数据。
 type openidConfig struct {
 	configJSON []byte
 	keysetJSON []byte
@@ -69,12 +74,19 @@ func (p *openidConfigProvider) GetConfigJSON() ([]byte, int) {
 func (p *openidConfigProvider) GetKeysetJSON() ([]byte, int) {
 	return p.config.Load().keysetJSON, p.pubKeyGetter.GetCacheAgeMaxSeconds()
 }
+
+// Enqueue 实现 Listener 接口，在公钥变化时重新生成 OIDC 元数据。
+// 由 PublicKeysGetter 在密钥更新时调用。
 func (p *openidConfigProvider) Enqueue() {
 	err := p.Update()
 	if err != nil {
 		klog.ErrorS(err, "failed to update openid config metadata")
 	}
 }
+
+// Update 重新生成 OIDC 配置和 JWKS JSON 内容。
+// 过滤掉 ExcludeFromOIDCDiscovery 的密钥，只保留可用于新 Token 验证的公钥。
+// 使用 atomic.Store 确保并发读取时不会看到部分更新的数据。
 func (p *openidConfigProvider) Update() error {
 	pubKeys := []PublicKey{}
 

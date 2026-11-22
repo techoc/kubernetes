@@ -39,7 +39,8 @@ import (
 	apiserverserviceaccount "k8s.io/apiserver/pkg/authentication/serviceaccount"
 )
 
-// ServiceAccountTokenGetter defines functions to retrieve a named service account and secret
+// ServiceAccountTokenGetter 定义获取 ServiceAccount、Pod、Secret、Node 和 Webhook 配置的方法。
+// 用于 Token 验证时检查绑定对象的存在性和 UID 匹配。
 type ServiceAccountTokenGetter interface {
 	GetServiceAccount(ctx context.Context, namespace, name string) (*v1.ServiceAccount, error)
 	GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error)
@@ -49,6 +50,9 @@ type ServiceAccountTokenGetter interface {
 	GetMutatingWebhookConfiguration(ctx context.Context, name string) (*admissionregistrationv1.MutatingWebhookConfiguration, error)
 }
 
+// TokenGenerator 是生成 ServiceAccount Token 的接口。
+// GenerateToken 将公共和私有 claim 合并为 JWT payload，并用私钥签名。
+// 公共 claim 优先级高于私有 claim，如果两者有同名字段，使用公共 claim 的值。
 type TokenGenerator interface {
 	// GenerateToken generates a token which will identify the given
 	// ServiceAccount. privateClaims is an interface that will be
@@ -59,8 +63,9 @@ type TokenGenerator interface {
 	GenerateToken(ctx context.Context, claims *jwt.Claims, privateClaims interface{}) (string, error)
 }
 
-// JWTTokenGenerator returns a TokenGenerator that generates signed JWT tokens, using the given privateKey.
-// privateKey is a PEM-encoded byte array of a private RSA key.
+// JWTTokenGenerator 创建使用给定私钥生成签名 JWT Token 的生成器。
+// 支持 RSA、ECDSA 和 OpaqueSigner（外部签名器）三种私钥类型。
+// iss 是 Token 的 issuer，会嵌入每个生成的 Token 中。
 func JWTTokenGenerator(iss string, privateKey interface{}) (TokenGenerator, error) {
 	var signer jose.Signer
 	var err error
@@ -114,6 +119,9 @@ func keyIDFromPublicKey(publicKey interface{}) (string, error) {
 	return keyID, nil
 }
 
+// signerFromRSAPrivateKey 从 RSA 私钥创建 JOSE Signer。
+// 使用 RS256 算法，并从公钥派生 keyID（SHA256 hash）。
+// keyID 用于 JWT header 的 kid 字段，让验证方选择正确的公钥。
 func signerFromRSAPrivateKey(keyPair *rsa.PrivateKey) (jose.Signer, error) {
 	keyID, err := keyIDFromPublicKey(&keyPair.PublicKey)
 	if err != nil {
@@ -149,6 +157,8 @@ func signerFromRSAPrivateKey(keyPair *rsa.PrivateKey) (jose.Signer, error) {
 	return signer, nil
 }
 
+// signerFromECDSAPrivateKey 从 ECDSA 私钥创建 JOSE Signer。
+// 根据椭圆曲线类型选择算法：P-256→ES256, P-384→ES384, P-521→ES512。
 func signerFromECDSAPrivateKey(keyPair *ecdsa.PrivateKey) (jose.Signer, error) {
 	var alg jose.SignatureAlgorithm
 
@@ -196,6 +206,8 @@ func signerFromECDSAPrivateKey(keyPair *ecdsa.PrivateKey) (jose.Signer, error) {
 	return signer, nil
 }
 
+// signerFromOpaqueSigner 从 OpaqueSigner（如 HSM 或外部签名服务）创建 JOSE Signer。
+// 支持硬件安全模块等场景，私钥不直接暴露给 API Server。
 func signerFromOpaqueSigner(opaqueSigner jose.OpaqueSigner) (jose.Signer, error) {
 	alg := jose.SignatureAlgorithm(opaqueSigner.Public().Algorithm)
 
@@ -218,6 +230,7 @@ func signerFromOpaqueSigner(opaqueSigner jose.OpaqueSigner) (jose.Signer, error)
 	return signer, nil
 }
 
+// jwtTokenGenerator 使用 JOSE Signer 生成签名的 JWT Token。
 type jwtTokenGenerator struct {
 	iss    string
 	signer jose.Signer
@@ -227,9 +240,10 @@ func (j *jwtTokenGenerator) GenerateToken(ctx context.Context, claims *jwt.Claim
 	return GenerateToken(j.signer, j.iss, claims, privateClaims)
 }
 
-// JWTTokenAuthenticator authenticates tokens as JWT tokens produced by JWTTokenGenerator
-// Token signatures are verified using each of the given public keys until one works (allowing key rotation)
-// If lookup is true, the service account and secret referenced as claims inside the token are retrieved and verified with the provided ServiceAccountTokenGetter
+// JWTTokenAuthenticator 创建 JWT Token 认证器。
+// 使用提供的公钥验证 Token 签名，支持密钥轮换（多个公钥依次尝试）。
+// 通过泛型 PrivateClaims 支持不同领域的 claim 验证逻辑（如 ServiceAccount 或外部 JWT）。
+// issuers 是受信任的签发者列表，implicitAuds 用于没有 audience claim 的旧版 Token。
 func JWTTokenAuthenticator[PrivateClaims any](issuers []string, publicKeysGetter PublicKeysGetter, implicitAuds authenticator.Audiences, validator Validator[PrivateClaims]) authenticator.Token {
 	issuersMap := make(map[string]bool)
 	for _, issuer := range issuers {
@@ -243,13 +257,17 @@ func JWTTokenAuthenticator[PrivateClaims any](issuers []string, publicKeysGetter
 	}
 }
 
-// Listener is an interface to use to notify interested parties of a change.
+// Listener 用于通知感兴趣的组件输入可能已变化。
+// 当公钥更新时，PublicKeysGetter 调用所有注册的 Listener 的 Enqueue 方法，
+// 触发依赖方（如 OIDC 元数据提供者）重新生成缓存数据。
 type Listener interface {
 	// Enqueue should be called when an input may have changed
 	Enqueue()
 }
 
-// PublicKeysGetter returns public keys for a given key id.
+// PublicKeysGetter 根据 key ID 获取公钥列表。
+// 支持静态公钥（StaticPublicKeysGetter）和动态公钥（如 external-jwt-signer 的 keyCache）。
+// 通过 Listener 机制通知公钥变化，支持密钥轮换。
 type PublicKeysGetter interface {
 	// AddListener is adds a listener to be notified of potential input changes.
 	// This is a noop on static providers.
@@ -265,21 +283,24 @@ type PublicKeysGetter interface {
 	GetPublicKeys(ctx context.Context, keyIDHint string) []PublicKey
 }
 
+// PublicKey 表示用于验证 JWT 签名的公钥及其元数据。
+// ExcludeFromOIDCDiscovery 用于标记仅用于验证历史 Token 的密钥，不暴露在 OIDC 发现端点。
 type PublicKey struct {
 	KeyID                    string
 	PublicKey                interface{}
 	ExcludeFromOIDCDiscovery bool
 }
 
+// staticPublicKeysGetter 实现静态公钥的 PublicKeysGetter。
+// 启动时初始化，之后不会变化，适用于内置签名密钥场景。
 type staticPublicKeysGetter struct {
 	allPublicKeys  []PublicKey
 	publicKeysByID map[string][]PublicKey
 }
 
-// StaticPublicKeysGetter constructs an implementation of PublicKeysGetter
-// which returns all public keys when key id is unspecified, and returns
-// the public keys matching the keyIDFromPublicKey-derived key id when
-// a key id is specified.
+// StaticPublicKeysGetter 创建静态公钥获取器。
+// 支持传入私钥（自动提取公钥）或公钥。通过 keyIDFromPublicKey 派生 keyID。
+// 适用于 API Server 内置签名密钥场景，不支持运行时密钥轮换。
 func StaticPublicKeysGetter(keys []interface{}) (PublicKeysGetter, error) {
 	allPublicKeys := []PublicKey{}
 	publicKeysByID := map[string][]PublicKey{}
@@ -319,6 +340,8 @@ func (s staticPublicKeysGetter) GetPublicKeys(ctx context.Context, keyID string)
 	return s.publicKeysByID[keyID]
 }
 
+// jwtTokenAuthenticator 实现 authenticator.Token 接口，验证 JWT Token。
+// 使用泛型 PrivateClaims 支持不同领域的 claim 验证逻辑。
 type jwtTokenAuthenticator[PrivateClaims any] struct {
 	issuers      map[string]bool
 	keysGetter   PublicKeysGetter
@@ -326,10 +349,9 @@ type jwtTokenAuthenticator[PrivateClaims any] struct {
 	implicitAuds authenticator.Audiences
 }
 
-// Validator is called by the JWT token authenticator to apply domain specific
-// validation to a token and extract user information.
-// PrivateClaims is the struct that the authenticator should deserialize the JWT payload into, thus
-// it should contain fields for any private claims that the Validator requires to validate the JWT.
+// Validator 由 JWT Token 认证器调用，对 Token 进行领域特定的验证并提取用户信息。
+// PrivateClaims 是认证器反序列化 JWT payload 的目标结构体。
+// 实现者可以假设调用 Validate 时，Token 的 issuer 和签名已经验证通过。
 type Validator[PrivateClaims any] interface {
 	// Validate validates a token and returns user information or an error.
 	// Validator can assume that the issuer and signature of a token are already
@@ -337,6 +359,9 @@ type Validator[PrivateClaims any] interface {
 	Validate(ctx context.Context, tokenData string, public *jwt.Claims, private *PrivateClaims) (*apiserverserviceaccount.ServiceAccountInfo, error)
 }
 
+// AuthenticateToken 验证 JWT Token 并返回认证结果。
+// 流程：检查 issuer → 解析 JWT → 按 keyID 选择公钥 → 验证签名 → 验证 audience → 调用 Validator。
+// 返回 (response, true, nil) 表示认证成功；(nil, false, nil) 表示不是此认证器处理的 Token。
 func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Context, tokenData string) (*authenticator.Response, bool, error) {
 	if !j.hasCorrectIssuer(tokenData) {
 		return nil, false, nil

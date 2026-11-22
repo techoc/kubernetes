@@ -33,6 +33,8 @@ WwIDAQAB
 -----END PUBLIC KEY-----
 `
 
+// TestKeyIDStability 测试 keyIDFromPublicKey 的稳定性。
+// 同一个公钥多次调用 keyIDFromPublicKey 应该返回相同的 keyID。
 func TestKeyIDStability(t *testing.T) {
 	keys, err := keyutil.ParsePublicKeysPEM([]byte(rsaPublicKey))
 	if err != nil {

@@ -29,6 +29,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestServiceEvaluatorMatchesResources 验证 Service 评估器的 MatchingResources 方法，
+// 检查哪些资源名称由 Service 评估器处理（如 services、services.nodeport 等）。
 func TestServiceEvaluatorMatchesResources(t *testing.T) {
 	evaluator := NewServiceEvaluator(nil)
 	// we give a lot of resources
@@ -51,6 +53,8 @@ func TestServiceEvaluatorMatchesResources(t *testing.T) {
 	}
 }
 
+// TestServiceEvaluatorUsage 验证 Service 评估器的 Usage 方法，
+// 测试 NodePort 计数（每个使用的 NodePort 计为1）、LoadBalancer 计数、以及 Service 对象计数。
 func TestServiceEvaluatorUsage(t *testing.T) {
 	evaluator := NewServiceEvaluator(nil)
 	testCases := map[string]struct {
@@ -267,6 +271,8 @@ func TestServiceEvaluatorUsage(t *testing.T) {
 	}
 }
 
+// TestServiceConstraintsFunc 验证 Service 配额评估器的 Constraints 方法，
+// 检查 Service 是否满足必需资源的约束（如 NodePort 服务必须指定 nodePort 等）。
 func TestServiceConstraintsFunc(t *testing.T) {
 	testCases := map[string]struct {
 		service  *api.Service
@@ -332,6 +338,8 @@ func TestServiceConstraintsFunc(t *testing.T) {
 	}
 }
 
+// TestServiceEvaluatorHandles 验证 Handles 方法正确判断 admission 操作是否由 Service 评估器处理。
+// Create 和 Update（非子资源）应返回 true，Delete、Connect、子资源操作返回 false。
 func TestServiceEvaluatorHandles(t *testing.T) {
 	evaluator := NewServiceEvaluator(nil)
 	testCases := []struct {

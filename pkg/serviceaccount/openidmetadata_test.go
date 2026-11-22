@@ -88,6 +88,8 @@ func (p *proxyKeyGetter) AddListener(listener serviceaccount.Listener) {
 	p.PublicKeysGetter.AddListener(listener)
 }
 
+// TestServeConfiguration 测试 OIDC 发现文档的生成。
+// 验证 issuer、jwks_uri、response_types、subject_types 和 signing_algs 等字段。
 func TestServeConfiguration(t *testing.T) {
 	ecKeysGetter, err := serviceaccount.StaticPublicKeysGetter([]interface{}{getPublicKey(ecdsaPublicKey)})
 	if err != nil {
@@ -159,6 +161,8 @@ func expectConfiguration(t *testing.T, reqURL string, want Configuration) {
 	}
 }
 
+// TestServeKeys 测试 JWKS 端点的公钥集生成。
+// 验证 RSA/ECDSA 公钥正确编码为 JWK 格式，以及密钥轮换时 Listener 通知机制。
 func TestServeKeys(t *testing.T) {
 	wantPubRSA := getPublicKey(rsaPublicKey).(*rsa.PublicKey)
 	wantPubECDSA := getPublicKey(ecdsaPublicKey).(*ecdsa.PublicKey)
@@ -384,6 +388,8 @@ func expectKeys(t *testing.T, reqURL string, wantKeys []jose.JSONWebKey) {
 	}
 }
 
+// TestURLBoundaries 测试 issuer URL 的边界条件。
+// 验证非 HTTPS、带 query 参数、带 fragment 的 URL 被正确拒绝。
 func TestURLBoundaries(t *testing.T) {
 	keysGetter, err := serviceaccount.StaticPublicKeysGetter(defaultKeys)
 	if err != nil {
@@ -420,6 +426,8 @@ func TestURLBoundaries(t *testing.T) {
 	}
 }
 
+// TestNewOpenIDMetadata 测试 NewOpenIDMetadataProvider 的各种输入验证。
+// 覆盖：空 issuer、空 JWKS URI、非 HTTPS、空公钥等错误场景，以及正常创建和默认 JWKS URI 构建。
 func TestNewOpenIDMetadata(t *testing.T) {
 	cases := []struct {
 		name            string

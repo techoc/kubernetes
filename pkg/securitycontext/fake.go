@@ -21,8 +21,9 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// ValidSecurityContextWithContainerDefaults creates a valid security context provider based on
-// empty container defaults.  Used for testing.
+// ValidSecurityContextWithContainerDefaults 创建一个有效的 v1.SecurityContext，用于测试。
+// 使用空的容器默认值：非特权模式、空 Capabilities、默认 ProcMount。
+// 测试中需要非 nil 的 SecurityContext 时调用此函数，避免空指针。
 func ValidSecurityContextWithContainerDefaults() *v1.SecurityContext {
 	priv := false
 	defProcMount := v1.DefaultProcMount
@@ -33,8 +34,8 @@ func ValidSecurityContextWithContainerDefaults() *v1.SecurityContext {
 	}
 }
 
-// ValidInternalSecurityContextWithContainerDefaults creates a valid security context provider based on
-// empty container defaults.  Used for testing.
+// ValidInternalSecurityContextWithContainerDefaults 创建一个有效的内部 api.SecurityContext，用于测试。
+// 与 ValidSecurityContextWithContainerDefaults 类似，但返回内部版本而非外部 v1 版本。
 func ValidInternalSecurityContextWithContainerDefaults() *api.SecurityContext {
 	priv := false
 	dpm := api.DefaultProcMount

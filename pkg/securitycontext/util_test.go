@@ -24,6 +24,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAddNoNewPrivileges 测试 AddNoNewPrivileges 函数的逻辑。
+// 覆盖 4 种场景：SecurityContext 为 nil、AllowPrivilegeEscalation 为 nil、
+// 设置为 false（应返回 true）、设置为 true（应返回 false）。
 func TestAddNoNewPrivileges(t *testing.T) {
 	pfalse := false
 	ptrue := true
@@ -64,6 +67,8 @@ func TestAddNoNewPrivileges(t *testing.T) {
 	}
 }
 
+// TestConvertToRuntimeMaskedPaths 测试 ProcMountType 到 MaskedPaths 的转换。
+// 覆盖 3 种场景：nil（默认 mask）、DefaultProcMount（默认 mask）、UnmaskedProcMount（空切片）。
 func TestConvertToRuntimeMaskedPaths(t *testing.T) {
 	dPM := v1.DefaultProcMount
 	uPM := v1.UnmaskedProcMount
@@ -93,6 +98,8 @@ func TestConvertToRuntimeMaskedPaths(t *testing.T) {
 	}
 }
 
+// TestConvertToRuntimeReadonlyPaths 测试 ProcMountType 到 ReadonlyPaths 的转换。
+// 与 TestConvertToRuntimeMaskedPaths 类似，但验证只读路径而非 mask 路径。
 func TestConvertToRuntimeReadonlyPaths(t *testing.T) {
 	dPM := v1.DefaultProcMount
 	uPM := v1.UnmaskedProcMount
@@ -122,6 +129,9 @@ func TestConvertToRuntimeReadonlyPaths(t *testing.T) {
 	}
 }
 
+// TestDetermineEffectiveRunAsUser 测试 RunAsUser 的有效值计算。
+// 覆盖 5 种场景：双无 SecurityContext、双有 SecurityContext 但无 RunAsUser、
+// 仅 Pod 有 RunAsUser、仅 Container 有 RunAsUser、两者都有（Container 优先级更高）。
 func TestDetermineEffectiveRunAsUser(t *testing.T) {
 	tests := []struct {
 		desc          string

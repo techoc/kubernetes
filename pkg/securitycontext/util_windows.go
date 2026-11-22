@@ -16,6 +16,9 @@ limitations under the License.
 
 package securitycontext
 
+// possibleCPUs 是 Windows 平台上的 stub 实现。
+// Windows 没有 /sys/devices/system/cpu/possible 文件，
+// 返回 nil 让调用方回退到 runtime.NumCPU()。
 func possibleCPUs() []int {
 	return nil
 }

@@ -36,6 +36,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testVolumeClaim 创建测试用的 PVC 对象。
 func testVolumeClaim(name string, namespace string, spec core.PersistentVolumeClaimSpec) *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -43,6 +44,8 @@ func testVolumeClaim(name string, namespace string, spec core.PersistentVolumeCl
 	}
 }
 
+// TestPersistentVolumeClaimEvaluatorMatchingScopes 验证 PVC 评估器的 MatchingScopes 方法，
+// 检查 PVC 是否正确匹配 VolumeAttributesClass 等 scope。
 func TestPersistentVolumeClaimEvaluatorMatchingScopes(t *testing.T) {
 	evaluator := NewPersistentVolumeClaimEvaluator(nil)
 	testCases := map[string]struct {
@@ -158,6 +161,8 @@ func TestPersistentVolumeClaimEvaluatorMatchingScopes(t *testing.T) {
 	}
 }
 
+// TestPersistentVolumeClaimEvaluatorUsage 验证 PVC 评估器的 Usage 方法，
+// 测试按 StorageClass 细分的存储配额、VolumeAttributesClass scope、以及存储扩容失败恢复等场景。
 func TestPersistentVolumeClaimEvaluatorUsage(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	classGold := "gold"
@@ -302,6 +307,8 @@ func getPVCWithAllocatedResource(pvcSize, allocatedSize string) *core.Persistent
 	return validPVCWithAllocatedResources
 }
 
+// TestPersistentVolumeClaimEvaluatorMatchingResources 验证 PVC 评估器的 MatchingResources 方法，
+// 检查哪些资源名称由 PVC 评估器处理（如 storage、requests.storage 等）。
 func TestPersistentVolumeClaimEvaluatorMatchingResources(t *testing.T) {
 	evaluator := NewPersistentVolumeClaimEvaluator(nil)
 	testCases := map[string]struct {
@@ -344,6 +351,8 @@ func TestPersistentVolumeClaimEvaluatorMatchingResources(t *testing.T) {
 	}
 }
 
+// TestPersistentVolumeClaimEvaluatorHandles 验证 Handles 方法正确判断 admission 操作是否由 PVC 评估器处理。
+// Create 和 Update（非子资源）应返回 true，Delete、Connect、子资源操作返回 false。
 func TestPersistentVolumeClaimEvaluatorHandles(t *testing.T) {
 	evaluator := NewPersistentVolumeClaimEvaluator(nil)
 	testCases := []struct {

@@ -52,6 +52,8 @@ var (
 	}
 )
 
+// TestHasResourcesChanged 验证 hasResourcesChanged 函数正确检测 Pod、Service、PVC 的配额相关字段是否变化。
+// 只有影响配额计算的字段变化时才返回 true，避免不必要的配额重新评估。
 func TestHasResourcesChanged(t *testing.T) {
 
 	oldNotChangedPod := &v1.Pod{

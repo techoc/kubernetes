@@ -41,6 +41,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPodConstraintsFunc 验证 Pod 配额评估器的 Constraints 方法，
+// 检查容器是否指定了必需的资源（如 Memory），包括 InitContainer 和 Container。
 func TestPodConstraintsFunc(t *testing.T) {
 	testCases := map[string]struct {
 		pod                      *api.Pod
@@ -169,6 +171,9 @@ func TestPodConstraintsFunc(t *testing.T) {
 	}
 }
 
+// TestPodEvaluatorUsage 验证 Pod 配额评估器的 Usage 方法，
+// 测试各种资源类型（CPU、Memory、EphemeralStorage、HugePages、扩展资源）
+// 以及终止 Pod、Overhead、Pod-level 资源等场景的资源使用量计算。
 func TestPodEvaluatorUsage(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	evaluator := NewPodEvaluator(nil, fakeClock)
@@ -666,6 +671,8 @@ func TestPodEvaluatorUsage(t *testing.T) {
 	}
 }
 
+// TestPodEvaluatorUsageStats 验证 UsageStats 方法按 scope 和 scopeSelector 过滤 Pod，
+// 测试终止状态 Pod 不计入资源使用量但计入对象计数等规则。
 func TestPodEvaluatorUsageStats(t *testing.T) {
 	cpu1 := api.ResourceList{api.ResourceCPU: resource.MustParse("1")}
 	tests := []struct {
@@ -806,6 +813,8 @@ func TestPodEvaluatorUsageStats(t *testing.T) {
 	}
 }
 
+// TestPodEvaluatorMatchingScopes 验证 MatchingScopes 方法根据 Pod 属性匹配对应的配额 scope，
+// 如 PriorityClass、BestEffort、Terminating、CrossNamespacePodAffinity 等。
 func TestPodEvaluatorMatchingScopes(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	evaluator := NewPodEvaluator(nil, fakeClock)
@@ -1020,6 +1029,8 @@ func TestPodEvaluatorMatchingScopes(t *testing.T) {
 	}
 }
 
+// TestPodEvaluatorUsageResourceResize 验证 Pod 资源调整（Resize）后，
+// Usage 方法取 Spec.Requests 和 ContainerStatus.Resources 的最大值作为实际使用量。
 func TestPodEvaluatorUsageResourceResize(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	evaluator := NewPodEvaluator(nil, fakeClock)
@@ -1194,6 +1205,8 @@ func TestPodEvaluatorUsageResourceResize(t *testing.T) {
 	}
 }
 
+// BenchmarkPodMatchesScopeFunc 测试 podMatchesScopeFunc 的性能，
+// 验证不同 scope selector 的匹配效率。
 func BenchmarkPodMatchesScopeFunc(b *testing.B) {
 	pod, _ := toExternalPodOrError(makePod("p1", "high-priority",
 		api.ResourceList{api.ResourceCPU: resource.MustParse("1")}, api.PodRunning))
@@ -1239,6 +1252,8 @@ func BenchmarkPodMatchesScopeFunc(b *testing.B) {
 	}
 }
 
+// mockListerForResourceFunc 根据 GroupVersionResource 映射返回对应的 GenericLister，
+// 用于测试中模拟 API 对象的列表查询。
 func mockListerForResourceFunc(listerForResource map[schema.GroupVersionResource]cache.GenericLister) quota.ListerForResourceFunc {
 	return func(gvr schema.GroupVersionResource) (cache.GenericLister, error) {
 		lister, found := listerForResource[gvr]
@@ -1249,6 +1264,8 @@ func mockListerForResourceFunc(listerForResource map[schema.GroupVersionResource
 	}
 }
 
+// newGenericLister 从 runtime.Object 切片创建 GenericLister，
+// 将对象添加到 Indexer 存储中，供测试使用。
 func newGenericLister(groupResource schema.GroupResource, items []runtime.Object) cache.GenericLister {
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{"namespace": cache.MetaNamespaceIndexFunc})
 	for _, item := range items {
@@ -1257,6 +1274,7 @@ func newGenericLister(groupResource schema.GroupResource, items []runtime.Object
 	return cache.NewGenericLister(store, groupResource)
 }
 
+// makePod 创建测试用的 Pod 对象，设置名称、优先级类、资源列表和运行状态。
 func makePod(name, pcName string, resList api.ResourceList, phase api.PodPhase) *api.Pod {
 	return &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1279,6 +1297,8 @@ func makePod(name, pcName string, resList api.ResourceList, phase api.PodPhase) 
 	}
 }
 
+// TestPodEvaluatorHandles 验证 Handles 方法正确判断 admission 操作是否由 Pod 评估器处理。
+// Create 和 resize 子资源 Update 应返回 true，普通 Update、Delete、Connect 返回 false。
 func TestPodEvaluatorHandles(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	evaluator := NewPodEvaluator(nil, fakeClock)

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 提供 external-jwt-signer 相关的指标。
+// 监控与外部 JWT 签名器的 gRPC 通信：密钥同步、签名请求、请求延迟等。
+// 帮助诊断外部签名器的可用性和性能问题。
 package metrics
 
 import (
@@ -36,6 +39,8 @@ const (
 )
 
 var (
+	// lastKeyFetchTimeStamp 记录最后一次成功获取密钥的时间戳。
+	// 用于监控密钥同步是否正常，如果长时间不更新说明同步失败。
 	lastKeyFetchTimeStamp = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -47,6 +52,8 @@ var (
 		nil,
 	)
 
+	// dataTimeStamp 记录外部签名器返回的密钥数据时间戳。
+	// 用于判断本地缓存的密钥是否与外部签名器一致。
 	dataTimeStamp = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -58,6 +65,8 @@ var (
 		nil,
 	)
 
+	// totalKeyFetch 记录 FetchKeys 请求的总次数，按错误码分类。
+	// 用于监控密钥同步的频率和失败率。
 	totalKeyFetch = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -69,6 +78,8 @@ var (
 		[]string{"code"},
 	)
 
+	// tokenGenReqTotal 记录 Sign 请求的总次数，按错误码分类。
+	// 用于监控 Token 生成的频率和失败率。
 	tokenGenReqTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -80,6 +91,8 @@ var (
 		[]string{"code"},
 	)
 
+	// requestDurationSeconds 记录 gRPC 请求的延迟分布。
+	// 按方法名（FetchKeys/Sign）和错误码分类，用于性能监控。
 	requestDurationSeconds = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Namespace:      namespace,
@@ -95,6 +108,7 @@ var (
 
 var registerMetrics sync.Once
 
+// RegisterMetrics 注册所有 external-jwt-signer 相关的指标。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(lastKeyFetchTimeStamp)
@@ -105,6 +119,8 @@ func RegisterMetrics() {
 	})
 }
 
+// RecordFetchKeysAttempt 记录 FetchKeys 请求的结果。
+// 成功时更新 lastKeyFetchTimeStamp 时间戳。
 func RecordFetchKeysAttempt(err error) {
 	totalKeyFetch.WithLabelValues(getErrorCode(err)).Inc()
 	if err == nil {
@@ -112,18 +128,24 @@ func RecordFetchKeysAttempt(err error) {
 	}
 }
 
+// RecordTokenGenAttempt 记录 Sign 请求的结果。
 func RecordTokenGenAttempt(err error) {
 	tokenGenReqTotal.WithLabelValues(getErrorCode(err)).Inc()
 }
 
+// RecordKeyDataTimeStamp 记录外部签名器返回的密钥数据时间戳。
 func RecordKeyDataTimeStamp(timestamp float64) {
 	dataTimeStamp.WithLabelValues().Set(timestamp)
 }
 
+// gRPCError 是实现了 GRPCStatus() 方法的错误接口，用于提取 gRPC 错误码。
 type gRPCError interface {
 	GRPCStatus() *status.Status
 }
 
+// getErrorCode 从错误中提取错误码字符串。
+// 如果是 gRPC 错误，返回 gRPC status code；否则返回 "unknown-non-grpc"。
+// 用于指标的 label 分类。
 func getErrorCode(err error) string {
 	if err == nil {
 		return codes.OK.String()
@@ -135,11 +157,12 @@ func getErrorCode(err error) string {
 		return s.GRPCStatus().Code().String()
 	}
 
-	// This is not gRPC error. The operation must have failed before gRPC
-	// method was called, otherwise we would get gRPC error.
+	// 非 gRPC 错误说明在调用 gRPC 方法之前就失败了（如连接建立失败）。
 	return "unknown-non-grpc"
 }
 
+// OuboundRequestMetricsInterceptor 是 gRPC 客户端拦截器，记录所有出站请求的延迟。
+// 作为 WithChainUnaryInterceptor 使用，自动记录每个 gRPC 调用的耗时和结果。
 func OuboundRequestMetricsInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	start := time.Now()
 	err := invoker(ctx, method, req, reply, cc, opts...)

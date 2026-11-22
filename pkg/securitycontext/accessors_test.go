@@ -25,6 +25,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPodSecurityContextAccessor 测试 PodSecurityContextAccessor 的只读功能。
+// 覆盖 nil、空对象以及各字段（FSGroup、RunAsNonRoot、RunAsUser、RunAsGroup、
+// SeccompProfile、SELinuxOptions、SupplementalGroups、FSGroupChangePolicy）单独设置的情况。
 func TestPodSecurityContextAccessor(t *testing.T) {
 	fsGroup := int64(2)
 	runAsUser := int64(1)
@@ -79,6 +82,10 @@ func TestPodSecurityContextAccessor(t *testing.T) {
 	}
 }
 
+// TestPodSecurityContextMutator 测试 PodSecurityContextMutator 的读写功能。
+// 覆盖 nil、空对象、已填充对象三种初始状态，验证 no-op setter 不修改对象，
+// 以及每个字段（FSGroup、RunAsNonRoot、RunAsUser、RunAsGroup、SELinuxOptions、
+// SeccompProfile、SupplementalGroups、FSGroupChangePolicy）的 setter 正确更新值。
 func TestPodSecurityContextMutator(t *testing.T) {
 	testcases := map[string]struct {
 		newSC func() *api.PodSecurityContext
@@ -238,6 +245,9 @@ func TestPodSecurityContextMutator(t *testing.T) {
 	}
 }
 
+// TestContainerSecurityContextAccessor 测试 ContainerSecurityContextAccessor 的只读功能。
+// 覆盖 nil、空对象以及各字段（Capabilities、Privileged、SELinuxOptions、RunAsUser、
+// RunAsGroup、RunAsNonRoot、ReadOnlyRootFilesystem、SeccompProfile、AllowPrivilegeEscalation）单独设置的情况。
 func TestContainerSecurityContextAccessor(t *testing.T) {
 	privileged := true
 	runAsUser := int64(1)
@@ -297,6 +307,9 @@ func TestContainerSecurityContextAccessor(t *testing.T) {
 	}
 }
 
+// TestContainerSecurityContextMutator 测试 ContainerSecurityContextMutator 的读写功能。
+// 覆盖 nil、空对象、已填充对象三种初始状态，验证 no-op setter 不修改对象，
+// 以及每个字段的 setter 正确更新值。
 func TestContainerSecurityContextMutator(t *testing.T) {
 	testcases := map[string]struct {
 		newSC func() *api.SecurityContext
@@ -464,6 +477,10 @@ func TestContainerSecurityContextMutator(t *testing.T) {
 	}
 }
 
+// TestEffectiveContainerSecurityContextAccessor 测试有效容器安全上下文的只读功能。
+// 验证 Pod 和 Container 级别配置的合并逻辑：Container 字段优先级高于 Pod。
+// 覆盖双 nil、双空、仅 Pod 有值、Pod 有值+Container 空、两者都有值（Container 覆盖 Pod）
+// 以及 RunAsGroup 继承和覆盖等场景。
 func TestEffectiveContainerSecurityContextAccessor(t *testing.T) {
 	privileged := true
 	runAsUser := int64(1)
@@ -608,6 +625,9 @@ func TestEffectiveContainerSecurityContextAccessor(t *testing.T) {
 	}
 }
 
+// TestEffectiveContainerSecurityContextMutator 测试有效容器安全上下文的可变功能。
+// 验证修改有效安全上下文时，只修改 Container 级别的对象，不修改 Pod 级别的对象。
+// 覆盖 nil、空对象、Pod 有值、Container 有值四种初始状态。
 func TestEffectiveContainerSecurityContextMutator(t *testing.T) {
 	runAsNonRootPod := false
 	runAsUserPod := int64(12)

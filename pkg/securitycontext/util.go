@@ -24,8 +24,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// HasWindowsHostProcessRequest returns true if container should run as HostProcess container,
-// taking into account nils
+// HasWindowsHostProcessRequest 判断容器是否应作为 HostProcess 容器运行。
+// HostProcess 是 Windows 上的一种特殊容器模式，容器与主机共享命名空间。
+// 需要检查多层 nil，因为 WindowsOptions 和 HostProcess 字段都是可选的。
 func HasWindowsHostProcessRequest(pod *v1.Pod, container *v1.Container) bool {
 	effectiveSc := DetermineEffectiveSecurityContext(pod, container)
 
@@ -38,9 +39,11 @@ func HasWindowsHostProcessRequest(pod *v1.Pod, container *v1.Container) bool {
 	return *effectiveSc.WindowsOptions.HostProcess
 }
 
-// DetermineEffectiveSecurityContext returns a synthesized SecurityContext for reading effective configurations
-// from the provided pod's and container's security context. Container's fields take precedence in cases where both
-// are set
+// DetermineEffectiveSecurityContext 计算容器的有效安全上下文。
+// 合并 Pod 和 Container 级别的配置，Container 的字段优先级更高。
+// 返回新的 SecurityContext 对象，不修改原始对象。
+// 设计原因：Kubelet 和容器运行时需要一个完整的安全上下文视图，
+// 而不是分别处理 Pod 和 Container 级别的部分配置。
 func DetermineEffectiveSecurityContext(pod *v1.Pod, container *v1.Container) *v1.SecurityContext {
 	effectiveSc := securityContextFromPodSecurityContext(pod)
 	containerSc := container.SecurityContext
@@ -61,7 +64,9 @@ func DetermineEffectiveSecurityContext(pod *v1.Pod, container *v1.Container) *v1
 	}
 
 	if containerSc.WindowsOptions != nil {
-		// only override fields that are set at the container level, not the whole thing
+		// 仅覆盖 Container 级别设置的字段，而不是整个 WindowsOptions 结构体。
+		// 因为 Pod 级别可能设置了某些字段（如 GMSACredentialSpec），
+		// Container 级别只设置了其他字段（如 RunAsUserName），需要保留两者的值。
 		if effectiveSc.WindowsOptions == nil {
 			effectiveSc.WindowsOptions = &v1.WindowsSecurityContextOptions{}
 		}
@@ -121,9 +126,9 @@ func DetermineEffectiveSecurityContext(pod *v1.Pod, container *v1.Container) *v1
 	return effectiveSc
 }
 
-// DetermineEffectiveRunAsUser returns a pointer of UID from the provided pod's
-// and container's security context and a bool value to indicate if it is absent.
-// Container's runAsUser take precedence in cases where both are set.
+// DetermineEffectiveRunAsUser 返回有效的 RunAsUser UID 和是否存在标志。
+// Container 的 RunAsUser 优先级高于 Pod。如果两者都未设置，返回 (nil, false)。
+// 比 DetermineEffectiveSecurityContext 更轻量，仅关注 RunAsUser 字段。
 func DetermineEffectiveRunAsUser(pod *v1.Pod, container *v1.Container) (*int64, bool) {
 	var runAsUser *int64
 	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.RunAsUser != nil {
@@ -140,6 +145,9 @@ func DetermineEffectiveRunAsUser(pod *v1.Pod, container *v1.Container) (*int64, 
 	return runAsUser, true
 }
 
+// securityContextFromPodSecurityContext 将 PodSecurityContext 转换为 SecurityContext 格式。
+// 仅复制 Pod 级别会继承到 Container 的字段（SELinuxOptions, WindowsOptions, RunAsUser, RunAsGroup, RunAsNonRoot）。
+// 其他 Pod 特有字段（如 FSGroup, SupplementalGroups）不会复制到 Container 的安全上下文中。
 func securityContextFromPodSecurityContext(pod *v1.Pod) *v1.SecurityContext {
 	if pod.Spec.SecurityContext == nil {
 		return nil
@@ -175,24 +183,31 @@ func securityContextFromPodSecurityContext(pod *v1.Pod) *v1.SecurityContext {
 	return synthesized
 }
 
-// AddNoNewPrivileges returns if we should add the no_new_privs option.
+// AddNoNewPrivileges 判断是否应添加 no_new_privs 安全选项。
+// 当 AllowPrivilegeEscalation 明确设置为 false 时，返回 true。
+// no_new_privs 防止进程通过 execve 获取新的权限，是安全最佳实践。
 func AddNoNewPrivileges(sc *v1.SecurityContext) bool {
 	if sc == nil {
 		return false
 	}
 
-	// handle the case where the user did not set the default and did not explicitly set allowPrivilegeEscalation
+	// 用户未设置 AllowPrivilegeEscalation 时，不强制添加 no_new_privs。
+	// 保持默认行为，由容器运行时决定。
 	if sc.AllowPrivilegeEscalation == nil {
 		return false
 	}
 
-	// handle the case where defaultAllowPrivilegeEscalation is false or the user explicitly set allowPrivilegeEscalation to true/false
+	// AllowPrivilegeEscalation 为 false 时，需要 no_new_privs 来阻止权限提升。
+	// 为 true 时，不需要 no_new_privs。
 	return !*sc.AllowPrivilegeEscalation
 }
 
 var (
-	// These *must* be kept in sync with moby/moby.
-	// https://github.com/moby/moby/blob/ecb03c4cdae6f323150fc11b303dcc5dc4d82416/oci/defaults.go#L190-L218
+	// defaultMaskedPaths 和 defaultReadonlyPaths 定义 /proc 的默认掩码路径。
+	// 必须与 Docker (moby/moby) 保持同步，确保 Kubernetes 容器与 Docker 容器的安全行为一致。
+	// 参考：https://github.com/moby/moby/blob/ecb03c4cdae6f323150fc11b303dcc5dc4d82416/oci/defaults.go#L190-L218
+	// MaskedPaths 将指定路径替换为空只读文件，ReadonlyPaths 将指定路径设为只读挂载。
+	// 使用 sync.OnceValue 延迟初始化，仅在需要时解析 CPU thermal_throttle 路径。
 	defaultMaskedPaths = sync.OnceValue(func() []string {
 		maskedPaths := []string{
 			"/proc/asound",
@@ -209,6 +224,9 @@ var (
 			"/sys/devices/virtual/powercap",
 		}
 
+		// 动态添加每个 CPU 核心的 thermal_throttle 路径。
+		// 因为 CPU 数量因主机而异，无法硬编码，需要运行时检测。
+		// thermal_throttle 暴露 CPU 节流信息，属于敏感内核数据，需要 mask。
 		for _, cpu := range possibleCPUs() {
 			path := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/thermal_throttle", cpu)
 			if _, err := os.Stat(path); err == nil {
@@ -227,26 +245,28 @@ var (
 	}
 )
 
-// ConvertToRuntimeMaskedPaths converts the ProcMountType to the specified or default
-// masked paths.
+// ConvertToRuntimeMaskedPaths 将 ProcMountType 转换为运行时 MaskedPaths。
+// 如果 ProcMount 设置为 Unmasked，则返回空切片（不 mask 任何路径）。
+// 否则返回默认 mask 路径列表，限制容器对敏感 /proc 路径的访问。
 func ConvertToRuntimeMaskedPaths(opt *v1.ProcMountType) []string {
 	if opt != nil && *opt == v1.UnmaskedProcMount {
-		// Unmasked proc mount should have no paths set as masked.
+		// Unmasked 模式下不 mask 任何路径，容器可以完全访问 /proc。
+		// 仅用于特权场景，如系统调试容器。
 		return []string{}
 	}
 
-	// Otherwise, add the default masked paths to the runtime security context.
+	// 默认模式下，添加所有默认 mask 路径，限制容器对敏感 /proc 路径的访问。
 	return defaultMaskedPaths()
 }
 
-// ConvertToRuntimeReadonlyPaths converts the ProcMountType to the specified or default
-// readonly paths.
+// ConvertToRuntimeReadonlyPaths 将 ProcMountType 转换为运行时 ReadonlyPaths。
+// 与 ConvertToRuntimeMaskedPaths 类似，但控制只读路径而非 mask 路径。
 func ConvertToRuntimeReadonlyPaths(opt *v1.ProcMountType) []string {
 	if opt != nil && *opt == v1.UnmaskedProcMount {
-		// Unmasked proc mount should have no paths set as readonly.
+		// Unmasked 模式下不设置只读路径。
 		return []string{}
 	}
 
-	// Otherwise, add the default readonly paths to the runtime security context.
+	// 默认模式下，添加所有默认只读路径。
 	return defaultReadonlyPaths
 }

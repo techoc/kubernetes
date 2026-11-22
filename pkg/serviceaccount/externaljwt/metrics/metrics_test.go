@@ -29,6 +29,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestFetchMetrics 测试 RecordFetchKeysAttempt 的指标记录。
+// 覆盖成功、gRPC 错误和非 gRPC 错误三种场景。
 func TestFetchMetrics(t *testing.T) {
 	testCases := []struct {
 		desc    string
@@ -111,6 +113,8 @@ func TestFetchMetrics(t *testing.T) {
 	}
 }
 
+// TestTokenGenMetrics 测试 RecordTokenGenAttempt 的指标记录。
+// 覆盖成功和 gRPC 错误两种场景。
 func TestTokenGenMetrics(t *testing.T) {
 	testCases := []struct {
 		desc    string
@@ -193,6 +197,8 @@ func TestTokenGenMetrics(t *testing.T) {
 	}
 }
 
+// TestRecordKeyDataTimeStamp 测试 RecordKeyDataTimeStamp 的指标记录。
+// 验证时间戳正确设置到 dataTimeStamp 指标。
 func TestRecordKeyDataTimeStamp(t *testing.T) {
 
 	dataTimeStamp1 := float64(time.Now().Unix())

@@ -136,6 +136,9 @@ func getPublicKey(data string) interface{} {
 	return keys[0]
 }
 
+// TestTokenGenerateAndValidate 测试 JWT Token 的生成和验证完整流程。
+// 覆盖：RSA/ECDSA 密钥、多种曲线类型、密钥轮换、无效签名、
+// issuer 不匹配、audience 不匹配、旧版 token（无 audience）等。
 func TestTokenGenerateAndValidate(t *testing.T) {
 	expectedUserName := "system:serviceaccount:test:my-service-account"
 	expectedUserUID := "12345"
@@ -551,6 +554,8 @@ func generateECDSATokenWithMalformedIss(t *testing.T, serviceAccount *v1.Service
 	return string(out)
 }
 
+// TestStaticPublicKeysGetter 测试静态公钥获取器的功能。
+// 覆盖：传入私钥自动提取公钥、按 keyID 查找、空 keyID 返回所有密钥等。
 func TestStaticPublicKeysGetter(t *testing.T) {
 	ecPrivate := getPrivateKey(ecdsaPrivateKey)
 	ecPublic := getPublicKey(ecdsaPublicKey)

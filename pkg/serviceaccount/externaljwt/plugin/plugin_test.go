@@ -61,6 +61,9 @@ func init() {
 	}
 }
 
+// TestExternalTokenGenerator 测试外部 JWT 签名器插件的 Token 生成功能。
+// 覆盖：正常生成、无效 header、空签名、不支持的算法、
+// 被排除的 OIDC 密钥等场景。
 func TestExternalTokenGenerator(t *testing.T) {
 	testCases := []struct {
 		desc string

@@ -38,6 +38,9 @@ import (
 	utilnettesting "k8s.io/apimachinery/pkg/util/net/testing"
 )
 
+// TestExternalPublicKeyGetter 测试 keyCache 的 GetPublicKeys 功能。
+// 覆盖：按 keyID 查找、空 keyID 返回所有、未知 keyID 触发同步、
+// 无效 keyID 长度等场景。
 func TestExternalPublicKeyGetter(t *testing.T) {
 
 	invalidKid := string(make([]byte, 1025))
@@ -237,6 +240,8 @@ func TestExternalPublicKeyGetter(t *testing.T) {
 	}
 }
 
+// TestInitialFill 测试 keyCache 的初始填充功能。
+// 覆盖成功填充和外部签名器返回错误时的行为。
 func TestInitialFill(t *testing.T) {
 	ctx := context.Background()
 
@@ -302,6 +307,8 @@ func TestInitialFill(t *testing.T) {
 	}
 }
 
+// TestReflectChanges 测试 keyCache 在密钥变化时的行为。
+// 验证 Listener 通知机制和 OIDC 元数据更新。
 func TestReflectChanges(t *testing.T) {
 	ctx := context.Background()
 
@@ -443,6 +450,8 @@ func (d *dummyListener) Enqueue() {
 	d.count.Add(1)
 }
 
+// TestKeysChanged 测试 keysChanged 函数的各种场景。
+// 覆盖：时间戳变化、数量变化、keyID 变化、OIDC 排除标志变化等。
 func TestKeysChanged(t *testing.T) {
 	testcases := []struct {
 		name    string

@@ -221,18 +221,20 @@ type ContainerSecurityContextMutator interface {
 	SetAllowPrivilegeEscalation(*bool)
 }
 
-// NewContainerSecurityContextAccessor returns an accessor for the provided container security context
-// May be initialized with a nil SecurityContext
+// NewContainerSecurityContextAccessor 返回容器安全上下文的只读访问器。
+// 可用于 nil SecurityContext，此时所有 getter 返回零值。
 func NewContainerSecurityContextAccessor(containerSC *api.SecurityContext) ContainerSecurityContextAccessor {
 	return &containerSecurityContextWrapper{containerSC: containerSC}
 }
 
-// NewContainerSecurityContextMutator returns a mutator for the provided container security context
-// May be initialized with a nil SecurityContext
+// NewContainerSecurityContextMutator 返回容器安全上下文的可变访问器。
+// 可用于 nil SecurityContext，首次 setter 调用时会自动初始化。
 func NewContainerSecurityContextMutator(containerSC *api.SecurityContext) ContainerSecurityContextMutator {
 	return &containerSecurityContextWrapper{containerSC: containerSC}
 }
 
+// containerSecurityContextWrapper 包装 *api.SecurityContext，实现 ContainerSecurityContextAccessor 和 ContainerSecurityContextMutator 接口。
+// 与 podSecurityContextWrapper 类似，提供 nil 安全的 getter/setter。
 type containerSecurityContextWrapper struct {
 	containerSC *api.SecurityContext
 }

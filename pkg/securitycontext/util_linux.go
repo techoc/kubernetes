@@ -24,7 +24,10 @@ import (
 	"sync"
 )
 
-// possibleCPUs returns the number of possible CPUs on this host.
+// possibleCPUs 返回主机上所有可能的 CPU 编号列表。
+// 用于确定哪些 CPU 的 thermal_throttle 路径需要 mask。
+// 优先从 /sys/devices/system/cpu/possible 解析（支持 CPU 热插拔），
+// 回退到 runtime.NumCPU()（仅返回在线 CPU）。
 func possibleCPUs() (cpus []int) {
 	if ncpu := possibleCPUsParsed(); ncpu != nil {
 		return ncpu
@@ -37,8 +40,10 @@ func possibleCPUs() (cpus []int) {
 	return cpus
 }
 
-// possibleCPUsParsed is parsing the amount of possible CPUs on this host from
-// /sys/devices.
+// possibleCPUsParsed 从 /sys/devices/system/cpu/possible 解析 CPU 编号。
+// 该文件格式为 "0-7,16-23" 这样的范围表示，表示系统可能支持的 CPU（包括离线 CPU）。
+// 使用 sync.OnceValue 确保只解析一次，因为 CPU 拓扑在运行时不会频繁变化。
+// 如果解析失败（如文件不存在或格式错误），返回 nil，调用方会回退到 runtime.NumCPU()。
 var possibleCPUsParsed = sync.OnceValue(func() (cpus []int) {
 	data, err := os.ReadFile("/sys/devices/system/cpu/possible")
 	if err != nil {

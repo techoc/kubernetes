@@ -32,8 +32,13 @@ import (
 	externaljwtmetrics "k8s.io/kubernetes/pkg/serviceaccount/externaljwt/metrics"
 )
 
+// fallbackRefreshDuration 是密钥同步失败后的回退刷新间隔。
+// 当外部签名器返回错误时，使用固定 10 秒间隔重试，而不是使用签名器建议的间隔。
 const fallbackRefreshDuration = 10 * time.Second
 
+// keyCache 缓存外部 JWT 签名器的公钥，实现 serviceaccount.PublicKeysGetter 接口。
+// 定期从外部签名器同步密钥，使用 singleflight 避免并发重复请求。
+// 通过 Listener 机制通知依赖方（如 OIDC 元数据提供者）密钥变化。
 type keyCache struct {
 	client externaljwtv1.ExternalJWTSignerClient
 
@@ -44,7 +49,7 @@ type keyCache struct {
 	verificationKeys atomic.Pointer[VerificationKeys]
 }
 
-// newKeyCache constructs an implementation of KeyCache.
+// newKeyCache 创建外部 JWT 签名器的公钥缓存。
 func newKeyCache(client externaljwtv1.ExternalJWTSignerClient) *keyCache {
 	cache := &keyCache{
 		client: client,
@@ -53,8 +58,8 @@ func newKeyCache(client externaljwtv1.ExternalJWTSignerClient) *keyCache {
 	return cache
 }
 
-// InitialFill can be used to perform an initial fetch for keys get the
-// refresh interval as recommended by external signer.
+// initialFill 执行首次密钥获取，建立与外部签名器的连接并获取初始密钥集。
+// 启动时同步调用，确保后续 GetPublicKeys 不会返回空缓存。
 func (p *keyCache) initialFill(ctx context.Context) error {
 	if err := p.syncKeys(ctx); err != nil {
 		return fmt.Errorf("while performing initial cache fill: %w", err)
@@ -62,6 +67,9 @@ func (p *keyCache) initialFill(ctx context.Context) error {
 	return nil
 }
 
+// scheduleSync 在后台循环中定期同步密钥。
+// 使用外部签名器建议的刷新间隔，失败时回退到 fallbackRefreshDuration。
+// 在 goroutine 中运行，直到 ctx 被取消。
 func (p *keyCache) scheduleSync(ctx context.Context, keySyncTimeout time.Duration) {
 	timer := time.NewTimer(p.verificationKeys.Load().NextRefreshHint.Sub(time.Now()))
 	defer timer.Stop()
@@ -92,6 +100,8 @@ func (p *keyCache) AddListener(listener serviceaccount.Listener) {
 	p.listeners = append(p.listeners, listener)
 }
 
+// GetCacheAgeMaxSeconds 返回当前缓存可以保留的秒数。
+// 基于外部签名器建议的下次刷新时间计算，如果已过期则返回 0。
 func (p *keyCache) GetCacheAgeMaxSeconds() int {
 	val := int(p.verificationKeys.Load().NextRefreshHint.Sub(time.Now()).Seconds())
 	if val < 0 {
@@ -100,8 +110,8 @@ func (p *keyCache) GetCacheAgeMaxSeconds() int {
 	return val
 }
 
-// GetPublicKeys returns the public key corresponding to requested keyID.
-// Getter is expected to return All keys for keyID ""
+// GetPublicKeys 根据 keyID 获取公钥。如果缓存中没有找到指定 keyID，触发一次同步。
+// keyID 为空时返回所有公钥。实现 serviceaccount.PublicKeysGetter 接口。
 func (p *keyCache) GetPublicKeys(ctx context.Context, keyID string) []serviceaccount.PublicKey {
 	pubKeys, ok := p.findKeyForKeyID(keyID)
 	if ok {
@@ -144,8 +154,8 @@ func (p *keyCache) findKeyForKeyID(keyID string) ([]serviceaccount.PublicKey, bo
 	return keysToReturn, len(keysToReturn) > 0
 }
 
-// sync supported external keys.
-// completely re-writes the set of supported keys.
+// syncKeys 从外部签名器同步所有公钥，完全替换当前缓存。
+// 使用 singleflight 避免并发重复请求。如果密钥发生变化，通知所有 Listener。
 func (p *keyCache) syncKeys(ctx context.Context) error {
 	_, err, _ := p.syncGroup.Do("", func() (any, error) {
 		oldPublicKeys := p.verificationKeys.Load()
@@ -167,7 +177,8 @@ func (p *keyCache) syncKeys(ctx context.Context) error {
 	return err
 }
 
-// keysChanged returns true if the data timestamp, key count, order of key ids or excludeFromOIDCDiscovery indicators
+// keysChanged 判断新旧密钥集是否有变化。
+// 比较时间戳、数量、keyID 顺序和 OIDC 排除标志，但不比较密钥内容本身（避免深度比较开销）。
 func keysChanged(oldPublicKeys, newPublicKeys *VerificationKeys) bool {
 	// If the timestamp changed, we changed
 	if !oldPublicKeys.DataTimestamp.Equal(newPublicKeys.DataTimestamp) {
@@ -200,8 +211,9 @@ func (p *keyCache) broadcastUpdate() {
 	}
 }
 
-// GetTokenVerificationKeys returns a map of supported external keyIDs to keys
-// the keys are PKIX-serialized. It calls external-jwt-signer with a timeout of keySyncTimeoutSec.
+// getTokenVerificationKeys 从外部签名器获取所有公钥。
+// 验证返回的 refreshHint、dataTimestamp 和每个密钥的 keyID、key 内容。
+// 将 PKIX 序列化的公钥解析为 crypto.PublicKey。
 func (p *keyCache) getTokenVerificationKeys(ctx context.Context) (*VerificationKeys, error) {
 	req := &externaljwtv1.FetchKeysRequest{}
 	resp, err := p.client.FetchKeys(ctx, req)

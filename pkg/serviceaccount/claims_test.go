@@ -49,6 +49,9 @@ func init() {
 	}
 }
 
+// TestClaims 测试 Claims 函数构建的各种场景。
+// 覆盖：基本 claims、Pod 绑定、Secret 绑定、Node 绑定、Webhook 绑定、
+// attestation、warnafter 以及 JTI 功能门控等。
 func TestClaims(t *testing.T) {
 	sa := core.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -396,6 +399,9 @@ type claimTestCase struct {
 	expectErr string
 }
 
+// TestValidatePrivateClaims 测试 validator.Validate 的各种验证场景。
+// 覆盖：有效 token、过期 token、绑定对象删除、UID 不匹配、
+// warnafter 阈值、Webhook 绑定等。
 func TestValidatePrivateClaims(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.APIServerWebhookAuthenticationToken, true)
 
@@ -625,6 +631,8 @@ func TestValidatePrivateClaims(t *testing.T) {
 	}
 }
 
+// TestValidatePrivateClaimsWebhookFeatureGateDisabled 测试 Webhook 功能门关闭时的行为。
+// 当 APIServerWebhookAuthenticationToken 功能门关闭时，webhook 绑定的 token 应该被拒绝。
 func TestValidatePrivateClaimsWebhookFeatureGateDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.APIServerWebhookAuthenticationToken, false)
 

@@ -33,6 +33,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestLegacyTokensMetric 测试旧版 Token 的指标记录。
+// 验证 legacyTokensTotal 在旧版 Token（无 audience）认证时正确递增。
 func TestLegacyTokensMetric(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	RegisterMetrics()
@@ -86,6 +88,8 @@ func TestLegacyTokensMetric(t *testing.T) {
 	}
 }
 
+// TestWarnAfterTokensMetric 测试 warnafter 阈值的指标记录。
+// 验证 staleTokensTotal 和 validTokensTotal 在 Token 超过或未超过 warnafter 时正确递增。
 func TestWarnAfterTokensMetric(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	RegisterMetrics()

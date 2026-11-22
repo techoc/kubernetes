@@ -14,6 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package serviceaccount 提供 ServiceAccount Token 的生成、验证和 OIDC 发现功能。
+// 主要功能：
+//   - 构建和验证 JWT Token 的 Claims（支持绑定 Pod、Secret、Node、Webhook 等对象）
+//   - 使用 RSA/ECDSA/OpaqueSigner 生成签名的 JWT Token
+//   - 验证 JWT Token 的签名、issuer、audience 和绑定对象状态
+//   - 处理旧版 Secret-based Token 的验证和弃用迁移
+//   - 提供 OIDC Discovery 端点的元数据和 JWKS
+//   - 支持外部 JWT 签名器（external-jwt-signer）插件
+//   - 记录 Token 使用相关的指标（legacy、stale、valid 等）
 package serviceaccount
 
 import (
@@ -39,24 +48,31 @@ import (
 )
 
 const (
-	// Injected bound service account token expiration which triggers monitoring of its time-bound feature.
+	// WarnOnlyBoundTokenExpirationSeconds 是注入的绑定 ServiceAccount Token 的过期时间。
+	// 60*60+7 秒（略大于 1 小时）用于触发 projected token 的时效性监控。
+	// 比标准过期时间稍长，用于安全滚动更新期间的过渡期。
 	WarnOnlyBoundTokenExpirationSeconds = 60*60 + 7
 
-	// Extended expiration for those modified tokens involved in safe rollout if time-bound feature.
+	// ExpirationExtensionSeconds 是为安全滚动更新期间修改的 Token 扩展的过期时间。
+	// 24*365 秒（约 1 年）确保旧 Pod 在新 token 完全部署后仍有足够时间使用旧 token。
 	ExpirationExtensionSeconds = 24 * 365 * 60 * 60
 )
 
 var (
-	// time.Now stubbed out to allow testing
+	// now 是 time.Now 的 stub，用于测试时注入固定时间
 	now = time.Now
-	// uuid.New stubbed out to allow testing
+	// newUUID 是 uuid.NewString 的 stub，用于测试时注入固定 UUID
 	newUUID = uuid.NewString
 )
 
+// privateClaims 是 JWT Token 中 Kubernetes 专有的 claim 结构。
+// 通过 "kubernetes.io" 命名空间避免与标准 JWT claim 冲突。
 type privateClaims struct {
 	Kubernetes kubernetes `json:"kubernetes.io,omitempty"`
 }
 
+// kubernetes 包含 JWT Token 中所有 Kubernetes 相关的 claim。
+// 支持绑定多种对象类型（Pod、Secret、Node、Webhook），但 Token 只能绑定一种对象类型。
 type kubernetes struct {
 	Namespace                      string                                     `json:"namespace,omitempty"`
 	Svcacct                        ref                                        `json:"serviceaccount,omitempty"`
@@ -69,11 +85,17 @@ type kubernetes struct {
 	WarnAfter                      *jwt.NumericDate                           `json:"warnafter,omitempty"`
 }
 
+// ref 表示对 Kubernetes 对象的引用，包含名称和 UID。
+// 用于验证 Token 绑定的对象是否仍然存在且 UID 匹配。
 type ref struct {
 	Name string `json:"name,omitempty"`
 	UID  string `json:"uid,omitempty"`
 }
 
+// Claims 构建 ServiceAccount Token 的公共和私有 Claims。
+// 支持将 Token 绑定到 Pod、Secret、Node 或 Webhook 对象，但只能绑定一种类型。
+// 绑定对象的删除会使 Token 失效，实现细粒度的 Token 生命周期管理。
+// 返回 jwt.Claims（标准 claim）和 privateClaims（Kubernetes 专有 claim）。
 func Claims(sa core.ServiceAccount, pod *core.Pod, secret *core.Secret, node *core.Node, validating *admissionregistrationv1.ValidatingWebhookConfiguration, mutating *admissionregistrationv1.MutatingWebhookConfiguration, expirationSeconds, warnafter int64, audience []string, attestations map[string]authentication.AttestationValue) (*jwt.Claims, interface{}, error) {
 	now := now()
 	sc := &jwt.Claims{
@@ -147,18 +169,26 @@ func Claims(sa core.ServiceAccount, pod *core.Pod, secret *core.Secret, node *co
 	return sc, pc, nil
 }
 
+// NewValidator 创建 ServiceAccount Token 的验证器。
+// 验证器检查 Token 的时间有效性、绑定对象的存在性和 UID 匹配。
 func NewValidator(getter ServiceAccountTokenGetter) Validator[privateClaims] {
 	return &validator{
 		getter: getter,
 	}
 }
 
+// validator 实现 Validator[privateClaims] 接口，验证 ServiceAccount Token 的 claims。
+// 不仅验证 JWT 标准 claim（过期时间、签发时间），还验证 Kubernetes 专有 claim（绑定对象状态）。
 type validator struct {
 	getter ServiceAccountTokenGetter
 }
 
 var _ = Validator[privateClaims](&validator{})
 
+// Validate 验证 ServiceAccount Token 的完整有效性。
+// 包括：JWT 标准 claim 验证（过期、签发时间）、ServiceAccount 存在性和 UID 匹配、
+// 绑定对象（Pod/Secret/Node/Webhook）存在性和 UID 匹配、warnafter 阈值检查。
+// 如果绑定对象已删除（考虑 leeway 时间窗口），Token 失效。
 func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, private *privateClaims) (*apiserverserviceaccount.ServiceAccountInfo, error) {
 	nowTime := now()
 	err := public.Validate(jwt.Expected{
@@ -361,8 +391,12 @@ func (v *validator) getMutatingWebhookMeta(ctx context.Context, name string) (me
 	return obj.ObjectMeta, nil
 }
 
+// getter 是获取 Webhook 配置 ObjectMeta 的函数类型，用于 validateWebhookCfgRef 的泛型参数。
 type getter func(ctx context.Context, name string) (metav1.ObjectMeta, error)
 
+// validateWebhookCfgRef 验证 Webhook 配置对象的引用。
+// 检查对象是否存在、UID 是否匹配、以及是否已被删除。
+// 用于 ValidatingWebhookConfiguration 和 MutatingWebhookConfiguration 的通用验证逻辑。
 func validateWebhookCfgRef(ctx context.Context, get getter, kind string, private *kubernetes, ref *ref, invalidIfDeletedBefore time.Time) (string, string, error) {
 	obj, err := get(ctx, ref.Name)
 	if err != nil {

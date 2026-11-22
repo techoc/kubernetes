@@ -35,20 +35,22 @@ import (
 	externaljwtmetrics "k8s.io/kubernetes/pkg/serviceaccount/externaljwt/metrics"
 )
 
+// init 在包加载时注册 external-jwt-signer 相关的指标。
 func init() {
 	externaljwtmetrics.RegisterMetrics()
 }
 
+// VerificationKeys 存储从外部签名器获取的公钥集及其元数据。
 type VerificationKeys struct {
 	Keys            []serviceaccount.PublicKey
 	DataTimestamp   time.Time
 	NextRefreshHint time.Time
 }
 
-// New calls external signer to fill out supported keys.
-// It also starts a periodic sync of external keys.
-// In order for the key cache and external signing to work correctly, pass a context that will live as
-// long as the dependent process; is used to maintain the lifetime of the connection to external signer.
+// New 创建外部 JWT 签名器插件，建立与外部签名器的 gRPC 连接。
+// 通过 Unix domain socket 通信，使用 insecure 凭证（因为 Unix socket 本身提供 OS 级别的访问控制）。
+// 启动时同步获取初始密钥集，然后在后台 goroutine 中定期同步。
+// ctx 控制整个插件的生命周期，取消时关闭 gRPC 连接。
 func New(ctx context.Context, issuer, socketPath string, keySyncTimeout time.Duration, allowSigningWithNonOIDCKeys bool) (*Plugin, *keyCache, error) {
 	conn, err := grpc.Dial(
 		socketPath,
@@ -82,7 +84,8 @@ func New(ctx context.Context, issuer, socketPath string, keySyncTimeout time.Dur
 	return plugin, plugin.keyCache, nil
 }
 
-// enables plugging in an external jwt signer.
+// Plugin 是外部 JWT 签名器插件，实现 serviceaccount.TokenGenerator 接口。
+// 通过 gRPC 调用外部签名器生成签名的 JWT Token，支持 HSM 等硬件安全模块。
 type Plugin struct {
 	iss                         string
 	client                      externaljwtv1.ExternalJWTSignerClient
@@ -90,7 +93,7 @@ type Plugin struct {
 	allowSigningWithNonOIDCKeys bool
 }
 
-// newPlugin constructs an implementation of external JWT signer plugin.
+// newPlugin 创建外部 JWT 签名器插件的实例。
 func newPlugin(iss string, conn *grpc.ClientConn, allowSigningWithNonOIDCKeys bool) *Plugin {
 	client := externaljwtv1.NewExternalJWTSignerClient(conn)
 	plugin := &Plugin{
@@ -102,14 +105,16 @@ func newPlugin(iss string, conn *grpc.ClientConn, allowSigningWithNonOIDCKeys bo
 	return plugin
 }
 
-// GenerateToken creates a service account token with the provided claims by
-// calling out to the external signer binary.
+// GenerateToken 通过外部签名器生成签名的 ServiceAccount Token。
+// 将 claims 序列化为 JWT payload，发送给外部签名器签名，然后组装为完整的 JWT。
 func (p *Plugin) GenerateToken(ctx context.Context, claims *jwt.Claims, privateClaims interface{}) (string, error) {
 	jwt, err := p.signAndAssembleJWT(ctx, claims, privateClaims)
 	externaljwtmetrics.RecordTokenGenAttempt(err)
 	return jwt, err
 }
 
+// signAndAssembleJWT 将 claims 合并为 payload，发送给外部签名器签名，然后组装为 JWT 字符串。
+// 验证返回的 JWT header 的算法、keyID 和类型，确保外部签名器返回合法的签名。
 func (p *Plugin) signAndAssembleJWT(ctx context.Context, claims *jwt.Claims, privateClaims interface{}) (string, error) {
 	payload, err := mergeClaims(p.iss, claims, privateClaims)
 	if err != nil {
@@ -138,13 +143,15 @@ func (p *Plugin) signAndAssembleJWT(ctx context.Context, claims *jwt.Claims, pri
 	return response.Header + "." + payloadBase64 + "." + response.Signature, nil
 }
 
-// GetServiceMetadata returns metadata associated with externalJWTSigner
-// It Includes details like max token lifetime supported by externalJWTSigner, etc.
+// GetServiceMetadata 获取外部签名器的元数据，如支持的最大 Token 生命周期等。
 func (p *Plugin) GetServiceMetadata(ctx context.Context) (*externaljwtv1.MetadataResponse, error) {
 	req := &externaljwtv1.MetadataRequest{}
 	return p.client.Metadata(ctx, req)
 }
 
+// validateJWTHeader 验证外部签名器返回的 JWT header。
+// 检查 typ 必须是 "JWT"，kid 不能为空且不超过 1KB，算法必须是 RS256/ES256/ES384/ES512。
+// 如果 allowSigningWithNonOIDCKeys 为 false，还检查使用的密钥没有被排除在 OIDC 发现之外。
 func (p *Plugin) validateJWTHeader(ctx context.Context, response *externaljwtv1.SignJWTResponse) error {
 	jsonBytes, err := base64.RawURLEncoding.DecodeString(response.Header)
 	if err != nil {

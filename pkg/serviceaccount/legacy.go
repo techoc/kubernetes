@@ -37,8 +37,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// InvalidSinceLabelKey 是标记旧版 Token 失效的 Secret label 键。
+// 设置此 label 后，对应的 Secret-based Token 将被拒绝，但手动创建的 Secret 可以移除此 label 临时恢复。
+// 用于渐进式弃用自动生成的 Secret-based Token。
 const InvalidSinceLabelKey = "kubernetes.io/legacy-token-invalid-since"
 
+// LegacyClaims 构建旧版 Secret-based Token 的 claims。
+// 与 Claims 函数不同，旧版 Token 不绑定 Pod/Node，只关联 ServiceAccount 和 Secret。
+// 没有过期时间、audience 等标准 JWT claim，仅包含 Kubernetes 专有 claim。
 func LegacyClaims(serviceAccount v1.ServiceAccount, secret v1.Secret) (*jwt.Claims, interface{}) {
 	claims := &jwt.Claims{
 		Subject: apiserverserviceaccount.MakeUsername(
@@ -56,10 +62,16 @@ func LegacyClaims(serviceAccount v1.ServiceAccount, secret v1.Secret) (*jwt.Clai
 }
 
 const (
-	LegacyIssuer     = "kubernetes/serviceaccount"
+	// LegacyIssuer 是旧版 Secret-based Token 的 issuer 字符串。
+	// 与 projected token 的 issuer（API Server 的 --service-account-issuer 参数）不同。
+	LegacyIssuer = "kubernetes/serviceaccount"
+	// LastUsedLabelKey 记录旧版 Token 最后使用日期的 Secret label 键。
+	// 格式为 "2006-01-02"，用于追踪和审计旧版 Token 的使用情况。
 	LastUsedLabelKey = "kubernetes.io/legacy-token-last-used"
 )
 
+// legacyPrivateClaims 是旧版 Secret-based Token 的私有 claim 结构。
+// 只包含 ServiceAccount 和 Secret 的引用，没有 Pod/Node 绑定信息。
 type legacyPrivateClaims struct {
 	ServiceAccountName string `json:"kubernetes.io/serviceaccount/service-account.name"`
 	ServiceAccountUID  string `json:"kubernetes.io/serviceaccount/service-account.uid"`
@@ -67,6 +79,9 @@ type legacyPrivateClaims struct {
 	Namespace          string `json:"kubernetes.io/serviceaccount/namespace"`
 }
 
+// NewLegacyValidator 创建旧版 Secret-based Token 的验证器。
+// 如果 lookup 为 true，需要验证 Secret 和 ServiceAccount 的存在性，并记录使用指标。
+// secretsWriter 用于更新 Secret 的 last-used label，追踪旧版 Token 的使用。
 func NewLegacyValidator(lookup bool, getter ServiceAccountTokenGetter, secretsWriter typedv1core.SecretsGetter) (Validator[legacyPrivateClaims], error) {
 	if lookup && getter == nil {
 		return nil, errors.New("ServiceAccountTokenGetter must be provided")
@@ -81,6 +96,9 @@ func NewLegacyValidator(lookup bool, getter ServiceAccountTokenGetter, secretsWr
 	}, nil
 }
 
+// legacyValidator 验证旧版 Secret-based Token。
+// 区分自动生成的 Secret（ServiceAccount.Secrets 引用的）和手动创建的 Secret，
+// 分别记录不同的指标和审计注解，帮助管理员追踪旧版 Token 的使用情况。
 type legacyValidator struct {
 	lookup        bool
 	getter        ServiceAccountTokenGetter
@@ -89,6 +107,9 @@ type legacyValidator struct {
 
 var _ = Validator[legacyPrivateClaims](&legacyValidator{})
 
+// Validate 验证旧版 Secret-based Token 的 claims。
+// 检查必要 claim 的存在性、subject 格式、以及（如果 lookup 启用）Secret 和 ServiceAccount 的状态。
+// 区分已标记失效、自动生成和手动创建的 Token，记录不同的指标和审计注解。
 func (v *legacyValidator) Validate(ctx context.Context, tokenData string, public *jwt.Claims, private *legacyPrivateClaims) (*apiserverserviceaccount.ServiceAccountInfo, error) {
 	// Make sure the claims we need exist
 	if len(public.Subject) == 0 {
@@ -185,6 +206,9 @@ func (v *legacyValidator) Validate(ctx context.Context, tokenData string, public
 	}, nil
 }
 
+// patchSecretWithLastUsedDate 更新 Secret 的 last-used label，记录旧版 Token 的使用日期。
+// 每天只更新一次（检查 today 和 tomorrow，避免时区问题导致的重复更新）。
+// 使用 Server-Side Apply 的 Patch 操作，避免并发冲突。
 func (v *legacyValidator) patchSecretWithLastUsedDate(ctx context.Context, secret *v1.Secret) {
 	now := time.Now().UTC()
 	today := now.Format("2006-01-02")

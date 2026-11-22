@@ -25,6 +25,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestGetProfile 测试 GetProfile 函数的 profile 优先级逻辑。
+// 覆盖 10 种场景：无 profile、仅 Pod 级别、仅容器级别、仅 annotation、
+// 无效 annotation、无效 annotation 回退到 Pod、容器优先于 annotation、
+// 容器优先于 Pod、annotation 优先于 Pod、三者同时存在时容器最高优先级。
 func TestGetProfile(t *testing.T) {
 	runtimeDefault := &v1.AppArmorProfile{Type: v1.AppArmorProfileTypeRuntimeDefault}
 	unconfined := &v1.AppArmorProfile{Type: v1.AppArmorProfileTypeUnconfined}

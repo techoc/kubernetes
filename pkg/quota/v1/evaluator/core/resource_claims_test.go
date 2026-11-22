@@ -42,6 +42,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testResourceClaim 创建测试用的 ResourceClaim 对象，支持扩展资源和普通资源两种模式。
 func testResourceClaim(name string, namespace string, isExtended bool, podName string, spec api.ResourceClaimSpec) *api.ResourceClaim {
 	claim := &api.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -62,6 +63,9 @@ func testResourceClaim(name string, namespace string, isExtended bool, podName s
 	return claim
 }
 
+// TestResourceClaimEvaluatorUsage 验证 ResourceClaim 评估器的 Usage 方法，
+// 测试 DRA（Dynamic Resource Allocation）的 DeviceClass 配额、扩展资源映射、
+// 以及 FirstAvailable/Exactly 模式下的资源使用量计算。
 func TestResourceClaimEvaluatorUsage(t *testing.T) {
 	classGpu := "gpu"
 	classTpu := "tpu"
@@ -629,6 +633,8 @@ func TestResourceClaimEvaluatorUsage(t *testing.T) {
 	}
 }
 
+// TestResourceClaimEvaluatorMatchingResources 验证 ResourceClaim 评估器的 MatchingResources 方法，
+// 检查哪些资源名称由 ResourceClaim 评估器处理（如按 DeviceClass 细分的扩展资源）。
 func TestResourceClaimEvaluatorMatchingResources(t *testing.T) {
 	deviceClass1 := &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -703,6 +709,8 @@ func TestResourceClaimEvaluatorMatchingResources(t *testing.T) {
 	}
 }
 
+// TestResourceClaimEvaluatorHandles 验证 Handles 方法正确判断 admission 操作是否由 ResourceClaim 评估器处理。
+// Create 和 Update（非子资源）应返回 true，Delete、Connect、子资源操作返回 false。
 func TestResourceClaimEvaluatorHandles(t *testing.T) {
 	evaluator := NewResourceClaimEvaluator(nil, nil, nil, nil)
 	testCases := []struct {

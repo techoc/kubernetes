@@ -14,5 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package security contains security apis and implementations.
+// Package security 包含安全相关的 API 和实现。
+// 目前主要提供 AppArmor 配置文件验证功能（位于 apparmor 子包），
+// 用于确保节点支持 Pod 所请求的 AppArmor 安全配置。
 package security
