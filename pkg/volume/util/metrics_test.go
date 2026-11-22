@@ -29,6 +29,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestGetFullQualifiedPluginNameForVolume 验证各种 VolumeSource 下插件全限定名的拼接结果。
 func TestGetFullQualifiedPluginNameForVolume(t *testing.T) {
 	var (
 		fakePluginName          = "kubernetes.io/fakePlugin"
@@ -95,6 +96,7 @@ func TestGetFullQualifiedPluginNameForVolume(t *testing.T) {
 	}
 }
 
+// TestOperationCompleteHook_StorageOperationMetric_CollectAndCompare 验证存储操作耗时指标按状态和迁移标记正确记录。
 func TestOperationCompleteHook_StorageOperationMetric_CollectAndCompare(t *testing.T) {
 	StorageOperationMetric.Reset()
 
@@ -114,6 +116,7 @@ storage_operation_duration_seconds_count{migrated="true",operation_name="unmount
 	}
 }
 
+// TestRecordOperationLatencyMetric_VolumeOperationTotalSeconds_CollectAndCompare 验证端到端卷操作耗时指标的记录结果。
 func TestRecordOperationLatencyMetric_VolumeOperationTotalSeconds_CollectAndCompare(t *testing.T) {
 	storageOperationEndToEndLatencyMetric.Reset()
 	RecordOperationLatencyMetric("kubernetes.io/fake-plugin", "mount_volume", 0.5)
@@ -127,6 +130,7 @@ volume_operation_total_seconds_count{operation_name="mount_volume",plugin_name="
 	}
 }
 
+// gatherWithoutBuckets 采集指标但去掉直方图的桶和总和，让断言只关注计数，避免依赖具体耗时。
 func gatherWithoutBuckets() testutil.GathererFunc {
 	return func() ([]*testutil.MetricFamily, error) {
 		got, err := legacyregistry.DefaultGatherer.Gather()

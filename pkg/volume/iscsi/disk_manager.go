@@ -26,21 +26,21 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Abstract interface to disk operations.
+// diskManager 抽象磁盘操作方法，便于测试时替换。
 type diskManager interface {
 	MakeGlobalPDName(disk iscsiDisk) string
 	MakeGlobalVDPDName(disk iscsiDisk) string
-	// Attaches the disk to the kubelet's host machine.
+	// 将磁盘附加到 kubelet 所在宿主机。
 	AttachDisk(b iscsiDiskMounter) (string, error)
-	// Detaches the disk from the kubelet's host machine.
+	// 从 kubelet 所在宿主机分离磁盘。
 	DetachDisk(disk iscsiDiskUnmounter, mntPath string) error
-	// Detaches the block disk from the kubelet's host machine.
+	// 从 kubelet 所在宿主机分离块设备。
 	DetachBlockISCSIDisk(disk iscsiDiskUnmapper, mntPath string) error
 }
 
-// utility to mount a disk based filesystem
-// globalPDPath: global mount path like, /var/lib/kubelet/plugins/kubernetes.io/iscsi/{ifaceName}/{portal-some_iqn-lun-lun_id}
-// volPath: pod volume dir path like, /var/lib/kubelet/pods/{podUID}/volumes/kubernetes.io~iscsi/{volumeName}
+// diskSetUp 将全局挂载路径 bind mount 到 Pod 卷目录。
+// globalPDPath 形如 /var/lib/kubelet/plugins/kubernetes.io/iscsi/{ifaceName}/{portal-some_iqn-lun-lun_id}
+// volPath 形如 /var/lib/kubelet/pods/{podUID}/volumes/kubernetes.io~iscsi/{volumeName}
 func diskSetUp(manager diskManager, b iscsiDiskMounter, volPath string, mounter mount.Interface, mounterArgs volume.MounterArgs) error {
 	fsGroup := mounterArgs.FsGroup
 	fsGroupChangePolicy := mounterArgs.FSGroupChangePolicy
@@ -57,13 +57,13 @@ func diskSetUp(manager diskManager, b iscsiDiskMounter, volPath string, mounter 
 		klog.Errorf("failed to mkdir:%s", volPath)
 		return err
 	}
-	// Perform a bind mount to the full path to allow duplicate mounts of the same disk.
+	// 使用 bind mount，使同一磁盘可在多个位置重复挂载。
 	options := []string{"bind"}
 	if b.readOnly {
 		options = append(options, "ro")
 	}
 	if b.iscsiDisk.InitiatorName != "" {
-		// new iface name is <target portal>:<volume name>
+		// 新 iface 名格式为 <目标 portal>:<卷名>。
 		b.iscsiDisk.Iface = b.iscsiDisk.Portals[0] + ":" + b.iscsiDisk.VolName
 	}
 	globalPDPath := manager.MakeGlobalPDName(*b.iscsiDisk)
@@ -87,7 +87,7 @@ func diskSetUp(manager diskManager, b iscsiDiskMounter, volPath string, mounter 
 				return err
 			}
 			if !noMnt {
-				//  will most likely retry on next sync loop.
+				// 下一次同步循环大概率会重试。
 				klog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", volPath)
 				return err
 			}
@@ -97,7 +97,7 @@ func diskSetUp(manager diskManager, b iscsiDiskMounter, volPath string, mounter 
 	}
 
 	if !b.readOnly {
-		// This code requires larger refactor to monitor progress of ownership change
+		// 监控属主变更进度需要较大重构，此处暂时忽略错误。
 		ownershipChanger := volume.NewVolumeOwnership(&b, volPath, fsGroup, fsGroupChangePolicy, util.FSGroupCompleteHook(b.plugin, nil))
 		_ = ownershipChanger.ChangePermissions()
 	}

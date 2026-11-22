@@ -26,16 +26,16 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// ValidatePersistentVolume validates PV object for plugin specific validation
-// We can put here validations which are specific to volume types.
+// ValidatePersistentVolume 对 PV 对象做插件相关的校验。
+// 这里放置与具体卷类型相关的校验逻辑。
 func ValidatePersistentVolume(pv *api.PersistentVolume) field.ErrorList {
 	return checkMountOption(pv)
 }
 
+// checkMountOption 校验 PV 的挂载选项是否合法。
 func checkMountOption(pv *api.PersistentVolume) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// if PV is of these types we don't return errors
-	// since mount options is supported
+	// 这些卷类型支持挂载选项，无需报错。
 	if pv.Spec.GCEPersistentDisk != nil ||
 		pv.Spec.AWSElasticBlockStore != nil ||
 		pv.Spec.Glusterfs != nil ||
@@ -51,7 +51,7 @@ func checkMountOption(pv *api.PersistentVolume) field.ErrorList {
 		pv.Spec.PhotonPersistentDisk != nil {
 		return allErrs
 	}
-	// any other type if mount option is present lets return error
+	// 其他卷类型一旦指定挂载选项就报错。
 	if _, ok := pv.Annotations[api.MountOptionAnnotation]; ok {
 		metaField := field.NewPath("metadata")
 		allErrs = append(allErrs, field.Forbidden(metaField.Child("annotations", api.MountOptionAnnotation), "may not specify mount options for this volume type"))
@@ -59,7 +59,7 @@ func checkMountOption(pv *api.PersistentVolume) field.ErrorList {
 	return allErrs
 }
 
-// ValidatePathNoBacksteps will make sure the targetPath does not have any element which is ".."
+// ValidatePathNoBacksteps 确保 targetPath 中不含 ".." 路径段。
 func ValidatePathNoBacksteps(targetPath string) error {
 	parts := strings.Split(filepath.ToSlash(targetPath), "/")
 	if slices.Contains(parts, "..") {

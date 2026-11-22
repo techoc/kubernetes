@@ -33,19 +33,20 @@ import (
 	utilstrings "k8s.io/utils/strings"
 )
 
+// flexVolumeProber 通过监听插件目录变更来发现 flexvolume 驱动。
 type flexVolumeProber struct {
 	mutex          sync.Mutex
-	pluginDir      string         // Flexvolume driver directory
-	runner         exec.Interface // Interface to use for execing flex calls
+	pluginDir      string         // Flexvolume 驱动所在目录
+	runner         exec.Interface // 执行 flex 调用时使用的接口
 	watcher        utilfs.FSWatcher
 	factory        PluginFactory
 	fs             utilfs.Filesystem
 	ctx            context.Context
 	probeAllNeeded bool
-	eventsMap      map[string]volume.ProbeOperation // the key is the driver directory path, the value is the corresponding operation
+	eventsMap      map[string]volume.ProbeOperation // 键为驱动目录路径，值为对应的操作
 }
 
-// GetDynamicPluginProber creates dynamic plugin prober
+// GetDynamicPluginProber 创建一个动态插件探测器。
 func GetDynamicPluginProber(ctx context.Context, pluginDir string, runner exec.Interface) volume.DynamicPluginProber {
 	return &flexVolumeProber{
 		pluginDir: pluginDir,
@@ -57,6 +58,7 @@ func GetDynamicPluginProber(ctx context.Context, pluginDir string, runner exec.I
 	}
 }
 
+// Init 初始化探测器：全量探测一次，并创建插件目录、启动监听。
 func (prober *flexVolumeProber) Init() error {
 	prober.testAndSetProbeAllNeeded(true)
 	prober.eventsMap = map[string]volume.ProbeOperation{}
@@ -71,8 +73,7 @@ func (prober *flexVolumeProber) Init() error {
 	return nil
 }
 
-// If probeAllNeeded is true, probe all pluginDir
-// else probe events in eventsMap
+// Probe 返回待处理的探测事件：probeAllNeeded 为真时全量扫描 pluginDir，否则处理 eventsMap 中的增量事件。
 func (prober *flexVolumeProber) Probe() (events []volume.ProbeEvent, err error) {
 	if prober.probeAllNeeded {
 		prober.testAndSetProbeAllNeeded(false)
@@ -82,14 +83,15 @@ func (prober *flexVolumeProber) Probe() (events []volume.ProbeEvent, err error) 
 	return prober.probeMap()
 }
 
+// probeMap 处理 eventsMap 中累积的增量事件，处理后即删除对应条目。
 func (prober *flexVolumeProber) probeMap() (events []volume.ProbeEvent, err error) {
-	// TODO use a concurrent map to avoid Locking the entire map
+	// TODO 改用并发 map，避免锁住整张表
 	prober.mutex.Lock()
 	defer prober.mutex.Unlock()
 	probeEvents := []volume.ProbeEvent{}
 	allErrs := []error{}
 	for driverDirPathAbs, op := range prober.eventsMap {
-		driverDirName := filepath.Base(driverDirPathAbs) // e.g. driverDirName = vendor~cifs
+		driverDirName := filepath.Base(driverDirPathAbs) // 例如 driverDirName = vendor~cifs
 		probeEvent, pluginErr := prober.newProbeEvent(driverDirName, op)
 		if pluginErr != nil {
 			allErrs = append(allErrs, pluginErr)
@@ -102,6 +104,7 @@ func (prober *flexVolumeProber) probeMap() (events []volume.ProbeEvent, err erro
 	return probeEvents, errors.NewAggregate(allErrs)
 }
 
+// probeAll 扫描插件目录，为每个驱动子目录生成添加/更新事件。
 func (prober *flexVolumeProber) probeAll() (events []volume.ProbeEvent, err error) {
 	probeEvents := []volume.ProbeEvent{}
 	allErrs := []error{}
@@ -110,11 +113,10 @@ func (prober *flexVolumeProber) probeAll() (events []volume.ProbeEvent, err erro
 		return nil, fmt.Errorf("error reading the Flexvolume directory: %s", err)
 	}
 	for _, f := range files {
-		// only directories with names that do not begin with '.' are counted as plugins
-		// and pluginDir/dirname/dirname should be an executable
-		// unless dirname contains '~' for escaping namespace
-		// e.g. dirname = vendor~cifs
-		// then, executable will be pluginDir/dirname/cifs
+		// 只有名字不以 '.' 开头的目录才算插件；
+		// 通常 pluginDir/dirname/dirname 应为可执行文件，
+		// 但若目录名含 '~' 用于转义命名空间（如 vendor~cifs），
+		// 则可执行文件是 pluginDir/dirname/cifs。
 		if f.IsDir() && filepath.Base(f.Name())[0] != '.' {
 			probeEvent, pluginErr := prober.newProbeEvent(f.Name(), volume.ProbeAddOrUpdate)
 			if pluginErr != nil {
@@ -127,6 +129,7 @@ func (prober *flexVolumeProber) probeAll() (events []volume.ProbeEvent, err erro
 	return probeEvents, errors.NewAggregate(allErrs)
 }
 
+// newProbeEvent 根据驱动目录名和操作构造探测事件；删除事件只需插件名，无需重新加载驱动。
 func (prober *flexVolumeProber) newProbeEvent(driverDirName string, op volume.ProbeOperation) (volume.ProbeEvent, error) {
 	probeEvent := volume.ProbeEvent{
 		Op: op,
@@ -151,10 +154,11 @@ func (prober *flexVolumeProber) newProbeEvent(driverDirName string, op volume.Pr
 	return probeEvent, nil
 }
 
+// handleWatchEvent 把文件系统事件转换为插件的添加/更新/删除事件。
 func (prober *flexVolumeProber) handleWatchEvent(event fsnotify.Event) error {
-	// event.Name is the watched path.
+	// event.Name 是被监听的路径。
 	if filepath.Base(event.Name)[0] == '.' {
-		// Ignore files beginning with '.'
+		// 忽略以 '.' 开头的文件
 		return nil
 	}
 
@@ -168,10 +172,9 @@ func (prober *flexVolumeProber) handleWatchEvent(event fsnotify.Event) error {
 		return err
 	}
 
-	// event of pluginDirAbs
+	// 插件目录自身的事件
 	if eventPathAbs == pluginDirAbs {
-		// If the Flexvolume plugin directory is removed, need to recreate it
-		// in order to keep it under watch.
+		// 插件目录被删除后需重建，否则监听随之失效。
 		if event.Has(fsnotify.Remove) {
 			if err := prober.createPluginDir(); err != nil {
 				return err
@@ -183,7 +186,7 @@ func (prober *flexVolumeProber) handleWatchEvent(event fsnotify.Event) error {
 		return nil
 	}
 
-	// watch newly added subdirectories inside a driver directory
+	// 监听驱动目录下新增的子目录
 	if event.Has(fsnotify.Create) {
 		if err := prober.addWatchRecursive(eventPathAbs); err != nil {
 			return err
@@ -195,11 +198,11 @@ func (prober *flexVolumeProber) handleWatchEvent(event fsnotify.Event) error {
 		return err
 	}
 
-	// event inside specific driver dir
+	// 具体驱动目录内的事件
 	if len(eventRelPathToPluginDir) > 0 {
 		driverDirName := strings.Split(eventRelPathToPluginDir, string(os.PathSeparator))[0]
 		driverDirAbs := filepath.Join(pluginDirAbs, driverDirName)
-		// executable is removed, will trigger ProbeRemove event
+		// 可执行文件被删除时触发 ProbeRemove 事件
 		if event.Has(fsnotify.Remove) && (eventRelPathToPluginDir == getExecutablePathRel(driverDirName) || parentPathAbs == pluginDirAbs) {
 			prober.updateEventsMap(driverDirAbs, volume.ProbeRemove)
 		} else {
@@ -210,12 +213,13 @@ func (prober *flexVolumeProber) handleWatchEvent(event fsnotify.Event) error {
 	return nil
 }
 
-// getExecutableName returns the executableName of a flex plugin
+// getExecutablePathRel 返回 flex 插件可执行文件相对于插件目录的路径。
 func getExecutablePathRel(driverDirName string) string {
 	parts := strings.Split(driverDirName, "~")
 	return filepath.Join(driverDirName, parts[len(parts)-1])
 }
 
+// updateEventsMap 记录某驱动目录待处理的操作；若即将全量探测则无需记录。
 func (prober *flexVolumeProber) updateEventsMap(eventDirAbs string, op volume.ProbeOperation) {
 	prober.mutex.Lock()
 	defer prober.mutex.Unlock()
@@ -225,15 +229,13 @@ func (prober *flexVolumeProber) updateEventsMap(eventDirAbs string, op volume.Pr
 	prober.eventsMap[eventDirAbs] = op
 }
 
-// Recursively adds to watch all directories inside and including the file specified by the given filename.
-// If the file is a symlink to a directory, it will watch the symlink but not any of the subdirectories.
+// addWatchRecursive 递归监听指定路径及其下所有目录。
+// 若路径是目录的符号链接，只监听该链接本身，不监听其子目录。
 //
-// Each file or directory change triggers two events: one from the watch on itself, another from the watch
-// on its parent directory.
+// 每个文件或目录变更会触发两个事件：来自自身监听的一个，以及来自父目录监听的一个。
 func (prober *flexVolumeProber) addWatchRecursive(filename string) error {
-	// this may be called with an actual absolute path on Windows (with a C:\ prefix).
-	// But the prober.fs.Walk below will execute filepath.Join(fs.root, filenameAbove), which
-	// will result in an incorrect path, you can't join C:\path and C:\another\path.
+	// Windows 上可能传入带 C:\ 前缀的绝对路径；但下方 fs.Walk 会将其与 fs.root 拼接，
+	// 而 C:\path 与 C:\another\path 无法正确拼接，因此先去掉前缀。
 	filename = strings.TrimPrefix(filename, `C:\`)
 	addWatch := func(path string, info os.FileInfo, err error) error {
 		if err == nil && info.IsDir() {
@@ -246,8 +248,7 @@ func (prober *flexVolumeProber) addWatchRecursive(filename string) error {
 	return prober.fs.Walk(filename, addWatch)
 }
 
-// Creates a new filesystem watcher and adds watches for the plugin directory
-// and all of its subdirectories.
+// initWatcher 创建文件系统监听器，并监听插件目录及其所有子目录。
 func (prober *flexVolumeProber) initWatcher() error {
 	err := prober.watcher.Init(func(event fsnotify.Event) {
 		if err := prober.handleWatchEvent(event); err != nil {
@@ -269,7 +270,7 @@ func (prober *flexVolumeProber) initWatcher() error {
 	return nil
 }
 
-// Creates the plugin directory, if it doesn't already exist.
+// createPluginDir 在插件目录不存在时创建它。
 func (prober *flexVolumeProber) createPluginDir() error {
 	if _, err := prober.fs.Stat(prober.pluginDir); os.IsNotExist(err) {
 		klog.Warningf("Flexvolume plugin directory at %s does not exist. Recreating.", prober.pluginDir)
@@ -282,6 +283,7 @@ func (prober *flexVolumeProber) createPluginDir() error {
 	return nil
 }
 
+// testAndSetProbeAllNeeded 原子地更新 probeAllNeeded，并返回旧值。
 func (prober *flexVolumeProber) testAndSetProbeAllNeeded(newval bool) (oldval bool) {
 	prober.mutex.Lock()
 	defer prober.mutex.Unlock()

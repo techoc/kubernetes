@@ -28,36 +28,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Dummy quota implementation for systems that do not implement support
-// for volume quotas
+// 为不支持卷配额的系统提供的空实现。
 
 var errNotImplemented = errors.New("not implemented")
 
+// GetQuotaOnDir 返回无效配额 ID，表示该系统不支持配额查询。
 func GetQuotaOnDir(_ mount.Interface, _ string) (common.QuotaID, error) {
 	return common.BadQuotaID, errNotImplemented
 }
 
-// SupportsQuotas -- dummy implementation
+// SupportsQuotas 为不支持配额的系统提供的空实现。
 func SupportsQuotas(_ mount.Interface, _ string, _ bool) (bool, error) {
 	return false, errNotImplemented
 }
 
-// AssignQuota -- dummy implementation
+// AssignQuota 为不支持配额的系统提供的空实现。
 func AssignQuota(_ mount.Interface, _ string, _ types.UID, _ *resource.Quantity, _ bool) error {
 	return errNotImplemented
 }
 
-// GetConsumption -- dummy implementation
+// GetConsumption 为不支持配额的系统提供的空实现。
 func GetConsumption(_ string) (*resource.Quantity, error) {
 	return nil, errNotImplemented
 }
 
-// GetInodes -- dummy implementation
+// GetInodes 为不支持配额的系统提供的空实现。
 func GetInodes(_ string) (*resource.Quantity, error) {
 	return nil, errNotImplemented
 }
 
-// ClearQuota -- dummy implementation
+// ClearQuota 为不支持配额的系统提供的空实现。
 func ClearQuota(_ mount.Interface, _ string, _ bool) error {
 	return errNotImplemented
 }

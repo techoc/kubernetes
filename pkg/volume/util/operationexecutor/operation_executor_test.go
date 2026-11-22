@@ -35,6 +35,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// 并发测试中各类操作使用的卷/设备数量，统一为 2 以观察是否同时启动。
 const (
 	numVolumesToMount                    = 2
 	numAttachableVolumesToUnmount        = 2
@@ -52,95 +53,103 @@ const (
 
 var _ OperationGenerator = &fakeOperationGenerator{}
 
+// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevicemountablePlugins
+// 验证不可挂载、非设备挂载插件的挂载操作可以并发执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevicemountablePlugins(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToMount)
 	secretName := "secret-volume"
 	volumeName := v1.UniqueVolumeName(secretName)
 
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		podName := "pod-" + strconv.Itoa(i+1)
 		pod := getTestPodWithSecret(podName, secretName)
 		volumesToMount[i] = VolumeToMount{
 			Pod:                     pod,
 			VolumeName:              volumeName,
-			PluginIsAttachable:      false, // this field determines whether the plugin is attachable
-			PluginIsDeviceMountable: false, // this field determines whether the plugin is devicemountable
+			PluginIsAttachable:      false, // 该字段决定插件是否可挂载
+			PluginIsDeviceMountable: false, // 该字段决定插件是否可挂载设备
 			ReportedInUse:           true,
 		}
 		oe.MountVolume(0 /* waitForAttachTimeOut */, volumesToMount[i], nil /* actualStateOfWorldMounterUpdater */, false /* isRemount */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToMount) {
 		t.Fatalf("Unable to start mount operations in Concurrent for non-attachable volumes")
 	}
 }
 
+// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins
+// 验证可挂载插件的挂载操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToAttach)
 	pdName := "pd-volume"
 	volumeName := v1.UniqueVolumeName(pdName)
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		podName := "pod-" + strconv.Itoa(i+1)
 		pod := getTestPodWithGCEPD(podName, pdName)
 		volumesToMount[i] = VolumeToMount{
 			Pod:                pod,
 			VolumeName:         volumeName,
-			PluginIsAttachable: true, // this field determines whether the plugin is attachable
+			PluginIsAttachable: true, // 该字段决定插件是否可挂载
 			ReportedInUse:      true,
 		}
 		oe.MountVolume(0 /* waitForAttachTimeout */, volumesToMount[i], nil /* actualStateOfWorldMounterUpdater */, false /* isRemount */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Mount operations should not start concurrently for attachable volumes")
 	}
 }
 
+// TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins
+// 验证设备挂载插件的挂载操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToAttach)
 	pdName := "pd-volume"
 	volumeName := v1.UniqueVolumeName(pdName)
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		podName := "pod-" + strconv.Itoa(i+1)
 		pod := getTestPodWithGCEPD(podName, pdName)
 		volumesToMount[i] = VolumeToMount{
 			Pod:                     pod,
 			VolumeName:              volumeName,
-			PluginIsDeviceMountable: true, // this field determines whether the plugin is devicemountable
+			PluginIsDeviceMountable: true, // 该字段决定插件是否可挂载设备
 			ReportedInUse:           true,
 		}
 		oe.MountVolume(0 /* waitForAttachTimeout */, volumesToMount[i], nil /* actualStateOfWorldMounterUpdater */, false /* isRemount */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Mount operations should not start concurrently for devicemountable volumes")
 	}
 }
 
+// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins
+// 验证所有类型插件的卸载操作都可以并发执行。
 func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToUnmount := make([]MountedVolume, numAttachableVolumesToUnmount+numNonAttachableVolumesToUnmount)
 	pdName := "pd-volume"
 	secretName := "secret-volume"
 
-	// Act
+	// 执行
 	for i := 0; i < numNonAttachableVolumesToUnmount+numAttachableVolumesToUnmount; i++ {
 		podName := "pod-" + strconv.Itoa(i+1)
 		if i < numNonAttachableVolumesToUnmount {
@@ -161,21 +170,22 @@ func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins(t *testi
 		oe.UnmountVolume(volumesToUnmount[i], nil /* actualStateOfWorldMounterUpdater */, "" /*podsDir*/)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numNonAttachableVolumesToUnmount+numAttachableVolumesToUnmount) {
 		t.Fatalf("Unable to start unmount operations concurrently for volume plugins")
 	}
 }
 
+// TestOperationExecutor_UnmountDeviceConcurrently 验证设备卸载操作必须串行执行。
 func TestOperationExecutor_UnmountDeviceConcurrently(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	attachedVolumes := make([]AttachedVolume, numDevicesToUnmount)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range attachedVolumes {
 		attachedVolumes[i] = AttachedVolume{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -184,21 +194,23 @@ func TestOperationExecutor_UnmountDeviceConcurrently(t *testing.T) {
 		oe.UnmountDevice(attachedVolumes[i], nil /* actualStateOfWorldMounterUpdater */, nil /* mount.Interface */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Unmount device operations should not start concurrently")
 	}
 }
 
+// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode
+// 验证单节点卷挂到同一节点时必须串行执行。
 func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToAttach := make([]VolumeToAttach, numVolumesToAttach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range volumesToAttach {
 		volumesToAttach[i] = VolumeToAttach{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -215,21 +227,23 @@ func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode(t *testi
 		oe.AttachVolume(logger, volumesToAttach[i], nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Attach volume operations should not start concurrently")
 	}
 }
 
+// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode
+// 验证多节点卷挂到同一节点时必须串行执行。
 func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToAttach := make([]VolumeToAttach, numVolumesToAttach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range volumesToAttach {
 		volumesToAttach[i] = VolumeToAttach{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -246,21 +260,23 @@ func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode(t *testin
 		oe.AttachVolume(logger, volumesToAttach[i], nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Attach volume operations should not start concurrently")
 	}
 }
 
+// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes
+// 验证单节点卷挂到不同节点时必须串行执行。
 func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToAttach := make([]VolumeToAttach, numVolumesToAttach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range volumesToAttach {
 		volumesToAttach[i] = VolumeToAttach{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -277,19 +293,21 @@ func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes(t 
 		oe.AttachVolume(logger, volumesToAttach[i], nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Attach volume operations should not start concurrently")
 	}
 }
 
+// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes
+// 验证多节点卷挂到不同节点时可以并发执行。
 func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToAttach := make([]VolumeToAttach, numVolumesToAttach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range volumesToAttach {
 		volumesToAttach[i] = VolumeToAttach{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -306,21 +324,23 @@ func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes(t *
 		oe.AttachVolume(logger, volumesToAttach[i], nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToAttach) {
 		t.Fatalf("Attach volume operations should not execute serially")
 	}
 }
 
+// TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode
+// 验证从同一节点卸载单节点卷时必须串行执行。
 func TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	attachedVolumes := make([]AttachedVolume, numVolumesToDetach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range attachedVolumes {
 		attachedVolumes[i] = AttachedVolume{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -337,21 +357,23 @@ func TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode(t *tes
 		oe.DetachVolume(logger, attachedVolumes[i], true /* verifySafeToDetach */, nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("DetachVolume operations should not run concurrently")
 	}
 }
 
+// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode
+// 验证从同一节点卸载多节点卷时必须串行执行。
 func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	attachedVolumes := make([]AttachedVolume, numVolumesToDetach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range attachedVolumes {
 		attachedVolumes[i] = AttachedVolume{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -368,19 +390,21 @@ func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode(t *test
 		oe.DetachVolume(logger, attachedVolumes[i], true /* verifySafeToDetach */, nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("DetachVolume operations should not run concurrently")
 	}
 }
 
+// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes
+// 验证从不同节点卸载多节点卷时可以并发执行。
 func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	attachedVolumes := make([]AttachedVolume, numVolumesToDetach)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range attachedVolumes {
 		attachedVolumes[i] = AttachedVolume{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -397,32 +421,36 @@ func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes(t
 		oe.DetachVolume(logger, attachedVolumes[i], true /* verifySafeToDetach */, nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToDetach) {
 		t.Fatalf("Attach volume operations should not execute serially")
 	}
 }
 
+// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode
+// 验证同一节点上卷挂载状态校验操作可以并发执行。
 func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 
-	// Act
+	// 执行
 	for i := 0; i < numVolumesToVerifyAttached; i++ {
 		oe.VerifyVolumesAreAttachedPerNode(nil /* attachedVolumes */, "node-name", nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToVerifyAttached) {
 		t.Fatalf("VerifyVolumesAreAttached operation is not being run concurrently")
 	}
 }
 
+// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes
+// 验证不同节点上卷挂载状态校验操作可以并发执行。
 func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 
-	// Act
+	// 执行
 	for i := 0; i < numVolumesToVerifyAttached; i++ {
 		oe.VerifyVolumesAreAttachedPerNode(
 			nil, /* attachedVolumes */
@@ -430,21 +458,23 @@ func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes(
 			nil /* actualStateOfWorldAttacherUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToVerifyAttached) {
 		t.Fatalf("VerifyVolumesAreAttached operation is not being run concurrently")
 	}
 }
 
+// TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently
+// 验证控制器挂载状态校验操作必须串行执行。
 func TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToVerifyControllerAttached)
 	pdName := "pd-volume"
 
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		volumesToMount[i] = VolumeToMount{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -453,14 +483,16 @@ func TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently(t *testing
 		oe.VerifyControllerAttachedVolume(logger, volumesToMount[i], types.NodeName("node-name"), nil /* actualStateOfWorldMounterUpdater */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("VerifyControllerAttachedVolume should not run concurrently")
 	}
 }
 
+// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_VolumeMode_Block
+// 验证块模式下不可挂载插件的映射操作可以并发执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_VolumeMode_Block(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToMap)
 	secretName := "secret-volume"
@@ -468,30 +500,32 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_Vo
 	volumeMode := v1.PersistentVolumeBlock
 	tmpSpec := &volume.Spec{PersistentVolume: &v1.PersistentVolume{Spec: v1.PersistentVolumeSpec{VolumeMode: &volumeMode}}}
 
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		podName := "pod-" + strconv.Itoa(i+1)
 		pod := getTestPodWithSecret(podName, secretName)
 		volumesToMount[i] = VolumeToMount{
 			Pod:                pod,
 			VolumeName:         volumeName,
-			PluginIsAttachable: false, // this field determines whether the plugin is attachable
+			PluginIsAttachable: false, // 该字段决定插件是否可挂载
 			ReportedInUse:      true,
 			VolumeSpec:         tmpSpec,
 		}
 		oe.MountVolume(0 /* waitForAttachTimeOut */, volumesToMount[i], nil /* actualStateOfWorldMounterUpdater */, false)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numVolumesToMap) {
 		t.Fatalf("Unable to start map operations in Concurrent for non-attachable volumes")
 	}
 }
 
+// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_VolumeMode_Block
+// 验证块模式下可挂载插件的映射操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_VolumeMode_Block(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToMount := make([]VolumeToMount, numVolumesToAttach)
 	pdName := "pd-volume"
@@ -499,28 +533,30 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_Volum
 	volumeMode := v1.PersistentVolumeBlock
 	tmpSpec := &volume.Spec{PersistentVolume: &v1.PersistentVolume{Spec: v1.PersistentVolumeSpec{VolumeMode: &volumeMode}}}
 
-	// Act
+	// 执行
 	for i := range volumesToMount {
 		podName := "pod-" + strconv.Itoa(i+1)
 		pod := getTestPodWithGCEPD(podName, pdName)
 		volumesToMount[i] = VolumeToMount{
 			Pod:                pod,
 			VolumeName:         volumeName,
-			PluginIsAttachable: true, // this field determines whether the plugin is attachable
+			PluginIsAttachable: true, // 该字段决定插件是否可挂载
 			ReportedInUse:      true,
 			VolumeSpec:         tmpSpec,
 		}
 		oe.MountVolume(0 /* waitForAttachTimeout */, volumesToMount[i], nil /* actualStateOfWorldMounterUpdater */, false)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Map operations should not start concurrently for attachable volumes")
 	}
 }
 
+// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMode_Block
+// 验证块模式下所有插件的取消映射操作可以并发执行。
 func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMode_Block(t *testing.T) {
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	volumesToUnmount := make([]MountedVolume, numAttachableVolumesToUnmap+numNonAttachableVolumesToUnmap)
 	pdName := "pd-volume"
@@ -528,7 +564,7 @@ func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMo
 	volumeMode := v1.PersistentVolumeBlock
 	tmpSpec := &volume.Spec{PersistentVolume: &v1.PersistentVolume{Spec: v1.PersistentVolumeSpec{VolumeMode: &volumeMode}}}
 
-	// Act
+	// 执行
 	for i := 0; i < numNonAttachableVolumesToUnmap+numAttachableVolumesToUnmap; i++ {
 		podName := "pod-" + strconv.Itoa(i+1)
 		if i < numNonAttachableVolumesToUnmap {
@@ -551,23 +587,25 @@ func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMo
 		oe.UnmountVolume(volumesToUnmount[i], nil /* actualStateOfWorldMounterUpdater */, "" /* podsDir */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunConcurrently(ch, quit, numNonAttachableVolumesToUnmap+numAttachableVolumesToUnmap) {
 		t.Fatalf("Unable to start unmap operations concurrently for volume plugins")
 	}
 }
 
+// TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block
+// 验证块模式下设备取消映射操作必须串行执行。
 func TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block(t *testing.T) {
 	t.Parallel()
 
-	// Arrange
+	// 准备
 	ch, quit, oe := setup()
 	attachedVolumes := make([]AttachedVolume, numDevicesToUnmap)
 	pdName := "pd-volume"
 	volumeMode := v1.PersistentVolumeBlock
 	tmpSpec := &volume.Spec{PersistentVolume: &v1.PersistentVolume{Spec: v1.PersistentVolumeSpec{VolumeMode: &volumeMode}}}
 
-	// Act
+	// 执行
 	for i := range attachedVolumes {
 		attachedVolumes[i] = AttachedVolume{
 			VolumeName: v1.UniqueVolumeName(pdName),
@@ -577,17 +615,20 @@ func TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block(t *testing
 		oe.UnmountDevice(attachedVolumes[i], nil /* actualStateOfWorldMounterUpdater */, nil /* mount.Interface */)
 	}
 
-	// Assert
+	// 断言
 	if !isOperationRunSerially(ch, quit) {
 		t.Fatalf("Unmap device operations should not start concurrently")
 	}
 }
 
+// fakeOperationGenerator 是 OperationGenerator 的假实现，
+// 生成的操作只向 ch 发信号，再阻塞直到测试关闭 quit。
 type fakeOperationGenerator struct {
 	ch   chan interface{}
 	quit chan interface{}
 }
 
+// newFakeOperationGenerator 创建一个用 ch/quit 观察操作并发行为的假生成器。
 func newFakeOperationGenerator(ch chan interface{}, quit chan interface{}) OperationGenerator {
 	return &fakeOperationGenerator{
 		ch:   ch,
@@ -595,6 +636,7 @@ func newFakeOperationGenerator(ch chan interface{}, quit chan interface{}) Opera
 	}
 }
 
+// GenerateMountVolumeFunc 生成一个阻塞型挂载操作，用于观察挂载是否并发。
 func (fopg *fakeOperationGenerator) GenerateMountVolumeFunc(waitForAttachTimeout time.Duration, volumeToMount VolumeToMount, actualStateOfWorldMounterUpdater ActualStateOfWorldMounterUpdater, isRemount bool) volumetypes.GeneratedOperations {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -604,6 +646,8 @@ func (fopg *fakeOperationGenerator) GenerateMountVolumeFunc(waitForAttachTimeout
 		OperationFunc: opFunc,
 	}
 }
+
+// GenerateUnmountVolumeFunc 生成一个阻塞型卸载操作，用于观察卸载是否并发。
 func (fopg *fakeOperationGenerator) GenerateUnmountVolumeFunc(volumeToUnmount MountedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, podsDir string) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -613,6 +657,8 @@ func (fopg *fakeOperationGenerator) GenerateUnmountVolumeFunc(volumeToUnmount Mo
 		OperationFunc: opFunc,
 	}, nil
 }
+
+// GenerateAttachVolumeFunc 生成一个阻塞型挂载（attach）操作。
 func (fopg *fakeOperationGenerator) GenerateAttachVolumeFunc(logger klog.Logger, volumeToAttach VolumeToAttach, actualStateOfWorld ActualStateOfWorldAttacherUpdater) volumetypes.GeneratedOperations {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -622,6 +668,8 @@ func (fopg *fakeOperationGenerator) GenerateAttachVolumeFunc(logger klog.Logger,
 		OperationFunc: opFunc,
 	}
 }
+
+// GenerateDetachVolumeFunc 生成一个阻塞型卸载（detach）操作。
 func (fopg *fakeOperationGenerator) GenerateDetachVolumeFunc(logger klog.Logger, volumeToDetach AttachedVolume, verifySafeToDetach bool, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -631,6 +679,8 @@ func (fopg *fakeOperationGenerator) GenerateDetachVolumeFunc(logger klog.Logger,
 		OperationFunc: opFunc,
 	}, nil
 }
+
+// GenerateVolumesAreAttachedFunc 生成一个阻塞型的卷挂载状态校验操作。
 func (fopg *fakeOperationGenerator) GenerateVolumesAreAttachedFunc(attachedVolumes []AttachedVolume, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -640,6 +690,8 @@ func (fopg *fakeOperationGenerator) GenerateVolumesAreAttachedFunc(attachedVolum
 		OperationFunc: opFunc,
 	}, nil
 }
+
+// GenerateUnmountDeviceFunc 生成一个阻塞型设备卸载操作。
 func (fopg *fakeOperationGenerator) GenerateUnmountDeviceFunc(deviceToDetach AttachedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, hostutil hostutil.HostUtils) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -649,6 +701,8 @@ func (fopg *fakeOperationGenerator) GenerateUnmountDeviceFunc(deviceToDetach Att
 		OperationFunc: opFunc,
 	}, nil
 }
+
+// GenerateVerifyControllerAttachedVolumeFunc 生成一个阻塞型的控制器挂载校验操作。
 func (fopg *fakeOperationGenerator) GenerateVerifyControllerAttachedVolumeFunc(logger klog.Logger, volumeToMount VolumeToMount, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -659,6 +713,7 @@ func (fopg *fakeOperationGenerator) GenerateVerifyControllerAttachedVolumeFunc(l
 	}, nil
 }
 
+// GenerateExpandVolumeFunc 生成一个阻塞型扩容操作。
 func (fopg *fakeOperationGenerator) GenerateExpandVolumeFunc(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -669,6 +724,7 @@ func (fopg *fakeOperationGenerator) GenerateExpandVolumeFunc(pvc *v1.PersistentV
 	}, nil
 }
 
+// GenerateExpandAndRecoverVolumeFunc 生成一个阻塞型扩容及恢复操作。
 func (fopg *fakeOperationGenerator) GenerateExpandAndRecoverVolumeFunc(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume, resizerName string) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -679,6 +735,7 @@ func (fopg *fakeOperationGenerator) GenerateExpandAndRecoverVolumeFunc(pvc *v1.P
 	}, nil
 }
 
+// GenerateExpandInUseVolumeFunc 生成一个阻塞型在线扩容操作。
 func (fopg *fakeOperationGenerator) GenerateExpandInUseVolumeFunc(volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, currentSize resource.Quantity) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -689,6 +746,7 @@ func (fopg *fakeOperationGenerator) GenerateExpandInUseVolumeFunc(volumeToMount 
 	}, nil
 }
 
+// GenerateMapVolumeFunc 生成一个阻塞型块设备映射操作。
 func (fopg *fakeOperationGenerator) GenerateMapVolumeFunc(waitForAttachTimeout time.Duration, volumeToMount VolumeToMount, actualStateOfWorldMounterUpdater ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -699,6 +757,7 @@ func (fopg *fakeOperationGenerator) GenerateMapVolumeFunc(waitForAttachTimeout t
 	}, nil
 }
 
+// GenerateUnmapVolumeFunc 生成一个阻塞型块设备取消映射操作。
 func (fopg *fakeOperationGenerator) GenerateUnmapVolumeFunc(volumeToUnmount MountedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -709,6 +768,7 @@ func (fopg *fakeOperationGenerator) GenerateUnmapVolumeFunc(volumeToUnmount Moun
 	}, nil
 }
 
+// GenerateUnmapDeviceFunc 生成一个阻塞型块设备取消映射操作。
 func (fopg *fakeOperationGenerator) GenerateUnmapDeviceFunc(deviceToDetach AttachedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, hostutil hostutil.HostUtils) (volumetypes.GeneratedOperations, error) {
 	opFunc := func() volumetypes.OperationContext {
 		startOperationAndBlock(fopg.ch, fopg.quit)
@@ -719,10 +779,12 @@ func (fopg *fakeOperationGenerator) GenerateUnmapDeviceFunc(deviceToDetach Attac
 	}, nil
 }
 
+// GetVolumePluginMgr 返回 nil；这些测试不依赖插件管理器。
 func (fopg *fakeOperationGenerator) GetVolumePluginMgr() *volume.VolumePluginMgr {
 	return nil
 }
 
+// getTestPodWithSecret 构造一个挂载 secret 卷的测试 Pod。
 func getTestPodWithSecret(podName, secretName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -760,6 +822,7 @@ func getTestPodWithSecret(podName, secretName string) *v1.Pod {
 	}
 }
 
+// getTestPodWithGCEPD 构造一个挂载 GCE PD 卷的测试 Pod。
 func getTestPodWithGCEPD(podName, pdName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -799,6 +862,7 @@ func getTestPodWithGCEPD(podName, pdName string) *v1.Pod {
 	}
 }
 
+// isOperationRunSerially 在 5 秒窗口内若观察到多个操作同时启动则返回 false。
 func isOperationRunSerially(ch <-chan interface{}, quit chan<- interface{}) bool {
 	defer close(quit)
 	numOperationsStarted := 0
@@ -817,6 +881,7 @@ loop:
 	return true
 }
 
+// isOperationRunConcurrently 在 5 秒窗口内等待指定数量的操作全部启动。
 func isOperationRunConcurrently(ch <-chan interface{}, quit chan<- interface{}, numOperationsToRun int) bool {
 	defer close(quit)
 	numOperationsStarted := 0
@@ -835,13 +900,14 @@ loop:
 	return false
 }
 
+// setup 返回供假生成器发信号的通道，以及使用该生成器的 OperationExecutor。
 func setup() (chan interface{}, chan interface{}, OperationExecutor) {
 	ch, quit := make(chan interface{}), make(chan interface{})
 	return ch, quit, NewOperationExecutor(newFakeOperationGenerator(ch, quit))
 }
 
-// This function starts by writing to ch and blocks on the quit channel
-// until it is closed by the currently running test
+// startOperationAndBlock 先向 ch 写入以通知测试操作已启动，
+// 再阻塞在 quit 上，直到当前测试关闭该通道。
 func startOperationAndBlock(ch chan<- interface{}, quit <-chan interface{}) {
 	ch <- nil
 	<-quit

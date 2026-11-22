@@ -31,10 +31,12 @@ import (
 
 var _ volume.NodeExpandableVolumePlugin = &csiPlugin{}
 
+// RequiresFSResize 表示 CSI 插件需要由 kubelet 执行文件系统扩容。
 func (c *csiPlugin) RequiresFSResize() bool {
 	return true
 }
 
+// NodeExpand 调用 CSI 驱动的 NodeExpandVolume 完成节点侧卷扩容。
 func (c *csiPlugin) NodeExpand(resizeOptions volume.NodeResizeOptions) (bool, error) {
 	klog.V(4).Info(log("Expander.NodeExpand(%s)", resizeOptions.DeviceMountPath))
 	csiSource, err := getCSISourceFromSpec(resizeOptions.VolumeSpec)
@@ -44,8 +46,8 @@ func (c *csiPlugin) NodeExpand(resizeOptions volume.NodeResizeOptions) (bool, er
 
 	csClient, err := newCsiDriverClient(csiDriverName(csiSource.Driver))
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// 驱动不存在按瞬时错误处理，详见
+		// https://github.com/kubernetes/kubernetes/issues/120268。
 		return false, volumetypes.NewTransientOperationFailure(err.Error())
 	}
 	fsVolume, err := util.CheckVolumeModeFilesystem(resizeOptions.VolumeSpec)
@@ -56,6 +58,7 @@ func (c *csiPlugin) NodeExpand(resizeOptions volume.NodeResizeOptions) (bool, er
 	return c.nodeExpandWithClient(resizeOptions, csiSource, csClient, fsVolume)
 }
 
+// nodeExpandWithClient 使用传入的客户端执行扩容，并把 CSI 错误分类为 kubelet 可重试类型。
 func (c *csiPlugin) nodeExpandWithClient(
 	resizeOptions volume.NodeResizeOptions,
 	csiSource *api.CSIPersistentVolumeSource,
@@ -102,9 +105,8 @@ func (c *csiPlugin) nodeExpandWithClient(
 	}
 
 	if !fsVolume {
-		// for block volumes the volumePath in CSI NodeExpandvolumeRequest is
-		// basically same as DevicePath because block devices are not mounted and hence
-		// DeviceMountPath does not get populated in resizeOptions.DeviceMountPath
+		// 块设备没有挂载点，resizeOptions.DeviceMountPath 为空，因此扩容请求
+		// 中的 volumePath 使用 DevicePath。
 		opts.volumePath = resizeOptions.DevicePath
 		opts.fsType = fsTypeBlockName
 	}
@@ -132,24 +134,21 @@ func (c *csiPlugin) nodeExpandWithClient(
 func inUseError(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
-		// not a grpc error
+		// 非 gRPC 错误，不做分类。
 		return false
 	}
-	// if this is a failed precondition error then that means driver does not support expansion
-	// of in-use volumes
-	// More info - https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerexpandvolume-errors
+	// FailedPrecondition 表示驱动不支持对使用中的卷扩容，
+	// 详见 https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerexpandvolume-errors。
 	return st.Code() == codes.FailedPrecondition
 }
 
-// IsInfeasibleError returns true for grpc errors that are considered terminal in a way
-// that they indicate CSI operation as infeasible.
-// This function returns a subset of final errors. All infeasible errors are also final errors.
+// IsInfeasibleError 判断 gRPC 错误是否表示 CSI 操作不可行（终止性错误）。
+// 它返回最终错误的子集：所有不可行错误都是最终错误。
 func isInfeasibleError(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
-		// This is not gRPC error. The operation must have failed before gRPC
-		// method was called, otherwise we would get gRPC error.
-		// We don't know if any previous volume operation is in progress, be on the safe side.
+		// 非 gRPC 错误说明失败发生在调用 gRPC 之前；由于无法判断是否有
+		// 其他卷操作在进行中，保守起见不视为不可行错误。
 		return false
 	}
 	switch st.Code() {
@@ -158,7 +157,6 @@ func isInfeasibleError(err error) bool {
 		codes.NotFound:
 		return true
 	}
-	// All other errors mean that operation either did not
-	// even start or failed. It is for sure are not infeasible errors
+	// 其余错误表示操作未开始或已失败，确定不是不可行错误。
 	return false
 }

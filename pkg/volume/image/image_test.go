@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package image 测试 image 卷插件。
 package image
 
 import (
@@ -23,6 +24,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// TestCanSupport 验证 image 卷插件已注册，且仅支持带 Image 字段的卷规格。
+// 空 Reference 也应被接受（具体引用合法性由运行时校验）。
 func TestCanSupport(t *testing.T) {
 	pluginMgr := volume.VolumePluginMgr{}
 	err := pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, nil /* host */)

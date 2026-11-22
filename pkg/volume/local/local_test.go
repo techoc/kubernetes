@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package local 测试 local 卷插件的挂载、块设备映射和路径校验逻辑。
 package local
 
 import (
@@ -37,6 +38,7 @@ import (
 	testingexec "k8s.io/utils/exec/testing"
 )
 
+// 测试中使用的 PV 名称及各类挂载路径片段。
 const (
 	testPVName                        = "pvA"
 	testMountPath                     = "pods/poduid/volumes/kubernetes.io~local-volume/pvA"
@@ -45,6 +47,7 @@ const (
 	testBlockFormattingToFSGlobalPath = "plugins/kubernetes.io/local-volume/mounts/pvA"
 )
 
+// getPlugin 创建临时根目录并初始化插件管理器，返回目录和 local 卷插件。
 func getPlugin(t *testing.T) (string, volume.VolumePlugin) {
 	tmpDir, err := utiltesting.MkTmpdir("localVolumeTest")
 	if err != nil {
@@ -65,6 +68,7 @@ func getPlugin(t *testing.T) (string, volume.VolumePlugin) {
 	return tmpDir, plug
 }
 
+// getBlockPlugin 返回 local 卷的块设备映射插件，用于测试块设备路径。
 func getBlockPlugin(t *testing.T) (string, volume.BlockVolumePlugin) {
 	tmpDir, err := utiltesting.MkTmpdir("localVolumeTest")
 	if err != nil {
@@ -84,6 +88,7 @@ func getBlockPlugin(t *testing.T) (string, volume.BlockVolumePlugin) {
 	return tmpDir, plug
 }
 
+// getNodeExpandablePlugin 返回支持节点扩容的插件，按场景把临时目录标记为块设备或目录。
 func getNodeExpandablePlugin(t *testing.T, isBlockDevice bool) (string, volume.NodeExpandableVolumePlugin) {
 	tmpDir, err := utiltesting.MkTmpdir("localVolumeTest")
 	if err != nil {
@@ -115,6 +120,7 @@ func getNodeExpandablePlugin(t *testing.T, isBlockDevice bool) (string, volume.N
 	return tmpDir, plug
 }
 
+// getPersistentPlugin 返回 local 卷的持久卷插件，用于测试 PV 相关接口。
 func getPersistentPlugin(t *testing.T) (string, volume.PersistentVolumePlugin) {
 	tmpDir, err := utiltesting.MkTmpdir("localVolumeTest")
 	if err != nil {
@@ -135,6 +141,8 @@ func getPersistentPlugin(t *testing.T) (string, volume.PersistentVolumePlugin) {
 	return tmpDir, plug
 }
 
+// getDeviceMountablePluginWithBlockPath 返回支持设备挂载的插件。
+// Windows 上块设备用磁盘号表示，由 mounter 校验，故使用固定值 "0"。
 func getDeviceMountablePluginWithBlockPath(t *testing.T, isBlockDevice bool) (string, *localVolumePlugin) {
 	var (
 		source string
@@ -142,7 +150,7 @@ func getDeviceMountablePluginWithBlockPath(t *testing.T, isBlockDevice bool) (st
 	)
 
 	if isBlockDevice && runtime.GOOS == "windows" {
-		// On Windows, block devices are referenced by the disk number, which is validated by the mounter,
+		// Windows 上块设备以磁盘号引用，由 mounter 校验该编号。
 		source = "0"
 	} else {
 		source, err = utiltesting.MkTmpdir("localVolumeTest")
@@ -172,6 +180,7 @@ func getDeviceMountablePluginWithBlockPath(t *testing.T, isBlockDevice bool) (st
 	return source, plug.(*localVolumePlugin)
 }
 
+// getTestVolume 构造测试用 local PV 规格，可指定只读、路径、卷模式和挂载选项。
 func getTestVolume(readOnly bool, path string, isBlock bool, mountOptions []string) *volume.Spec {
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,6 +206,7 @@ func getTestVolume(readOnly bool, path string, isBlock bool, mountOptions []stri
 	return volume.NewSpecFromPersistentVolume(pv, readOnly)
 }
 
+// TestCanSupport 验证插件仅支持带 Local 卷源的 PV。
 func TestCanSupport(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -206,6 +216,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证 local 卷仅声明 RWO，不支持 RWX 和 ROX。
 func TestGetAccessModes(t *testing.T) {
 	tmpDir, plug := getPersistentPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -223,6 +234,7 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// TestGetVolumeName 验证返回的卷名等于 PV 名称。
 func TestGetVolumeName(t *testing.T) {
 	tmpDir, plug := getPersistentPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -236,6 +248,7 @@ func TestGetVolumeName(t *testing.T) {
 	}
 }
 
+// TestInvalidLocalPath 验证含 ".." 的 local 路径在 SetUp 时被拒绝，防止越界访问。
 func TestInvalidLocalPath(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -253,8 +266,9 @@ func TestInvalidLocalPath(t *testing.T) {
 	}
 }
 
+// TestBlockDeviceGlobalPathAndMountDevice 验证块设备全局挂载路径计算，
+// 以及 MountDevice/UnmountDevice 能创建并清理格式化目录。
 func TestBlockDeviceGlobalPathAndMountDevice(t *testing.T) {
-	// Block device global mount path testing
 	tmpBlockDir, plug := getDeviceMountablePluginWithBlockPath(t, true)
 	defer os.RemoveAll(tmpBlockDir)
 
@@ -299,8 +313,9 @@ func TestBlockDeviceGlobalPathAndMountDevice(t *testing.T) {
 	}
 }
 
+// TestFSGlobalPathAndMountDevice 验证文件系统卷的全局挂载路径即本地路径本身，
+// MountDevice 对目录型卷不做实际操作。
 func TestFSGlobalPathAndMountDevice(t *testing.T) {
-	// FS global path testing
 	tmpFSDir, plug := getDeviceMountablePluginWithBlockPath(t, false)
 	defer os.RemoveAll(tmpFSDir)
 
@@ -320,7 +335,7 @@ func TestFSGlobalPathAndMountDevice(t *testing.T) {
 		t.Fatalf("Expected device mount global path:%s, got: %s", expectedGlobalPath, actualPath)
 	}
 
-	// Actually, we will do nothing if the local path is FS type
+	// 本地路径为文件系统类型时，MountDevice 不做实际操作。
 	err = dm.MountDevice(pvSpec, tmpFSDir, expectedGlobalPath, volume.DeviceMounterArgs{})
 	if err != nil {
 		t.Fatal(err)
@@ -334,8 +349,8 @@ func TestFSGlobalPathAndMountDevice(t *testing.T) {
 	}
 }
 
+// TestNodeExpand 验证目录型卷的 NodeExpand 直接报告扩容完成（无需实际操作）。
 func TestNodeExpand(t *testing.T) {
-	// FS global path testing
 	tmpFSDir, plug := getNodeExpandablePlugin(t, false)
 	defer os.RemoveAll(tmpFSDir)
 
@@ -346,7 +361,7 @@ func TestNodeExpand(t *testing.T) {
 		DevicePath: tmpFSDir,
 	}
 
-	// Actually, we will do no volume expansion if volume is of type dir
+	// 目录型卷无需真正扩容。
 	resizeDone, err := plug.NodeExpand(resizeOptions)
 	if err != nil {
 		t.Fatal(err)
@@ -356,6 +371,7 @@ func TestNodeExpand(t *testing.T) {
 	}
 }
 
+// TestMountUnmount 验证 SetUp 创建挂载路径、TearDown 清理路径的完整流程。
 func TestMountUnmount(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -380,7 +396,7 @@ func TestMountUnmount(t *testing.T) {
 	}
 
 	if runtime.GOOS != "windows" {
-		// skip this check in windows since the "bind mount" logic is implemented differently in mount_windows.go
+		// Windows 的 bind mount 实现不同（见 mount_windows.go），跳过该检查。
 		if _, err := os.Stat(path); err != nil {
 			if os.IsNotExist(err) {
 				t.Errorf("SetUp() failed, volume path not created: %s", path)
@@ -408,7 +424,7 @@ func TestMountUnmount(t *testing.T) {
 	}
 }
 
-// TestMapUnmap tests block map and unmap interfaces.
+// TestMapUnmap 测试块设备映射和解除映射接口，验证全局/Pod 设备路径计算。
 func TestMapUnmap(t *testing.T) {
 	tmpDir, plug := getBlockPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -479,6 +495,7 @@ func TestMapUnmap(t *testing.T) {
 	}
 }
 
+// testFSGroupMount 以指定 fsGroup 设置卷，验证权限组传播逻辑。
 func testFSGroupMount(plug volume.VolumePlugin, pod *v1.Pod, tmpDir string, fsGroup int64) error {
 	mounter, err := plug.NewMounter(getTestVolume(false, tmpDir, false, nil), pod)
 	if err != nil {
@@ -502,6 +519,8 @@ func testFSGroupMount(plug volume.VolumePlugin, pod *v1.Pod, tmpDir string, fsGr
 	return nil
 }
 
+// TestConstructVolumeSpec 验证从挂载点重建卷规格：
+// 块设备源需记录设备路径，目录源则不需要。
 func TestConstructVolumeSpec(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -595,6 +614,7 @@ func TestConstructVolumeSpec(t *testing.T) {
 
 }
 
+// TestConstructBlockVolumeSpec 验证重建块设备 PV 规格时卷模式为 Block。
 func TestConstructBlockVolumeSpec(t *testing.T) {
 	tmpDir, plug := getBlockPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -636,6 +656,7 @@ func TestConstructBlockVolumeSpec(t *testing.T) {
 	}
 }
 
+// TestMountOptions 验证用户挂载选项与 bind 选项一起传给底层 mounter。
 func TestMountOptions(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -649,7 +670,7 @@ func TestMountOptions(t *testing.T) {
 		t.Fatalf("Got a nil Mounter")
 	}
 
-	// Wrap with FakeMounter.
+	// 替换为 FakeMounter，便于检查实际下发的挂载选项。
 	fakeMounter := mount.NewFakeMounter(nil)
 	mounter.(*localVolumeMounter).mounter = fakeMounter
 
@@ -663,11 +684,12 @@ func TestMountOptions(t *testing.T) {
 	}
 }
 
+// TestPersistentClaimReadOnlyFlag 验证只读 PV 生成的 mounter 属性正确反映只读标志。
 func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
 
-	// Read only == true
+	// 只读标志为 true。
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")}}
 	mounter, err := plug.NewMounter(getTestVolume(true, tmpDir, false, nil), pod)
 	if err != nil {
@@ -680,7 +702,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 		t.Errorf("Expected true for mounter.IsReadOnly")
 	}
 
-	// Read only == false
+	// 只读标志为 false。
 	mounter, err = plug.NewMounter(getTestVolume(false, tmpDir, false, nil), pod)
 	if err != nil {
 		t.Errorf("Failed to make a new Mounter: %v", err)
@@ -693,6 +715,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	}
 }
 
+// TestUnsupportedPlugins 验证 local 插件不实现回收、删除、附加和动态制备接口。
 func TestUnsupportedPlugins(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("localVolumeTest")
 	if err != nil {
@@ -725,6 +748,8 @@ func TestUnsupportedPlugins(t *testing.T) {
 	}
 }
 
+// TestFilterPodMounts 验证只保留位于 Pod 目录下的挂载路径，
+// 避免清理时误删其他目录（注意目录边界，不能仅按字符串前缀匹配）。
 func TestFilterPodMounts(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)

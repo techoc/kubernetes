@@ -34,6 +34,7 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// removeAll 删除测试临时目录，失败时记录错误。
 func removeAll(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.RemoveAll(dir); err != nil {
@@ -41,13 +42,14 @@ func removeAll(t *testing.T, dir string) {
 	}
 }
 
+// TestSafeMakeDir 验证安全创建子目录：能跟随普通符号链接，
+// 但拒绝越界（.. 或链接到根目录）、符号链接环路和悬空链接。
 func TestSafeMakeDir(t *testing.T) {
 	defaultPerm := os.FileMode(0750) + os.ModeDir
 	maxPerm := os.FileMode(0777) + os.ModeDir
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 在给定 base 下准备测试目录结构。
 		prepare     func(base string) error
 		path        string
 		checkPath   string
@@ -170,7 +172,7 @@ func TestSafeMakeDir(t *testing.T) {
 		{
 			"follow-symlink-multiple follow",
 			func(base string) error {
-				/* test1/dir points to test2 and test2/dir points to test1 */
+				/* test1/dir 指向 test2，test2/dir 指回 test1 */
 				if err := os.MkdirAll(filepath.Join(base, "test1"), defaultPerm); err != nil {
 					return err
 				}
@@ -290,7 +292,7 @@ func TestSafeMakeDir(t *testing.T) {
 				actualMode := st.Mode()
 				if actualMode != test.perm {
 					if actualMode^test.perm == os.ModeSetgid && test.perm&os.ModeSetgid == 0 {
-						// when TMPDIR is a kubernetes emptydir, the sticky gid bit is set due to fsgroup
+						// TMPDIR 为 Kubernetes emptyDir 时，fsGroup 会设置 setgid 位。
 						t.Logf("masking bit from %o", actualMode)
 					} else {
 						t.Errorf("expected permissions %o, got %o (%b)", test.perm, actualMode, test.perm^actualMode)
@@ -301,14 +303,15 @@ func TestSafeMakeDir(t *testing.T) {
 	}
 }
 
+// TestRemoveEmptyDirs 验证只清理终点目录之下的空目录，
+// 保留非空目录和 base 本身，越界路径返回错误。
 func TestRemoveEmptyDirs(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 在给定 base 下准备测试目录结构。
 		prepare func(base string) error
-		// Function that validates directory structure after the test
+		// 测试后校验目录结构。
 		validate    func(base string) error
 		baseDir     string
 		endDir      string
@@ -415,16 +418,17 @@ func TestRemoveEmptyDirs(t *testing.T) {
 	}
 }
 
+// TestCleanSubPaths 验证清理 subpath 目录：
+// 已挂载目录先卸载再删除，不触碰其他卷的目录，文件型挂载也能清理。
 func TestCleanSubPaths(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 	testVol := "vol1"
 
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 在给定 base 下准备测试目录结构，返回当前挂载点列表。
 		prepare func(base string) ([]mount.MountPoint, error)
-		// Function that validates directory structure after the test
+		// 测试后校验目录结构。
 		validate    func(base string) error
 		expectError bool
 		unmount     func(path string) error
@@ -597,7 +601,7 @@ func TestCleanSubPaths(t *testing.T) {
 			unmount: func(mountpath string) error {
 				err := filepath.Walk(mountpath, func(path string, info os.FileInfo, _ error) error {
 					if path == mountpath {
-						// Skip top level directory
+						// 跳过顶层目录本身。
 						return nil
 					}
 
@@ -648,6 +652,7 @@ func TestCleanSubPaths(t *testing.T) {
 	}
 }
 
+// bind subpath 测试共用的卷、Pod、容器名和子路径索引。
 var (
 	testVol       = "vol1"
 	testPod       = "pod0"
@@ -655,6 +660,7 @@ var (
 	testSubpath   = 1
 )
 
+// setupFakeMounter 根据路径列表构造 FakeMounter，模拟已存在的挂载点。
 func setupFakeMounter(testMounts []string) *mount.FakeMounter {
 	mounts := []mount.MountPoint{}
 	for _, mountPoint := range testMounts {
@@ -663,18 +669,20 @@ func setupFakeMounter(testMounts []string) *mount.FakeMounter {
 	return mount.NewFakeMounter(mounts)
 }
 
+// getTestPaths 返回卷路径和 bind mount 目标路径。
 func getTestPaths(base string) (string, string) {
 	return filepath.Join(base, testVol),
 		filepath.Join(base, testPod, containerSubPathDirectoryName, testVol, testContainer, strconv.Itoa(testSubpath))
 }
 
+// TestBindSubPath 验证子路径 bind mount：目录、文件、socket、FIFO 均可，
+// 但指向卷外的符号链接被拒绝。
 func TestBindSubPath(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 准备测试环境，返回已挂载路径、卷路径、子路径和错误。
 		prepare     func(base string) ([]string, string, string, error)
 		expectError bool
 	}{
@@ -756,12 +764,12 @@ func TestBindSubPath(t *testing.T) {
 				if err := os.MkdirAll(volpath, defaultPerm); err != nil {
 					return nil, "", "", err
 				}
-				// touch file outside
+				// 在卷外创建文件。
 				if err := os.WriteFile(child, []byte{}, defaultPerm); err != nil {
 					return nil, "", "", err
 				}
 
-				// create symlink for subpath dir
+				// 为子路径目录创建符号链接。
 				return nil, volpath, subpath, os.Symlink(base, subpathDir)
 			},
 			expectError: true,
@@ -775,7 +783,7 @@ func TestBindSubPath(t *testing.T) {
 				if err := os.MkdirAll(volpath, defaultPerm); err != nil {
 					return nil, "", "", err
 				}
-				// create symlink for subpath dir
+				// 为子路径目录创建符号链接。
 				return nil, volpath, subpath, os.Symlink(base, subpathDir)
 			},
 			expectError: true,
@@ -791,12 +799,12 @@ func TestBindSubPath(t *testing.T) {
 				if err := os.MkdirAll(subpathDir, defaultPerm); err != nil {
 					return nil, "", "", err
 				}
-				// touch file outside
+				// 在卷外创建文件。
 				if err := os.WriteFile(child, []byte{}, defaultPerm); err != nil {
 					return nil, "", "", err
 				}
 
-				// create symlink for middle dir
+				// 为中间目录创建符号链接。
 				return nil, volpath, subpath, os.Symlink(base, symlinkDir)
 			},
 			expectError: true,
@@ -811,7 +819,7 @@ func TestBindSubPath(t *testing.T) {
 					return nil, "", "", err
 				}
 
-				// create symlink for subpath
+				// 为子路径创建符号链接。
 				return nil, volpath, subpath, os.Symlink(symlinkBase, subpath)
 			},
 			expectError: true,
@@ -833,10 +841,9 @@ func TestBindSubPath(t *testing.T) {
 			name: "subpath-mount-already-exists",
 			prepare: func(base string) ([]string, string, string, error) {
 				volpath, subpathMount := getTestPaths(base)
-				// Do NOT list subpathMount as a mount point: the intent of this
-				// test is that the bind target directory already exists on disk,
-				// not that a mismatching mount is present.  Listing it as mounted
-				// would trigger the lazyUnmountFn path which fails on a plain dir.
+				// 此处不将 subpathMount 列为挂载点：本用例要验证的是目标目录
+				// 已存在于磁盘，而非存在不匹配的挂载。若列为挂载点会触发
+				// lazyUnmountFn 路径，对普通目录会失败。
 				mounts := []string{}
 				if err := os.MkdirAll(subpathMount, defaultPerm); err != nil {
 					return nil, "", "", err
@@ -932,14 +939,14 @@ func TestBindSubPath(t *testing.T) {
 	}
 }
 
+// TestSubpath_PrepareSafeSubpath 验证 bind 目标已存在时的处理：
+// 不匹配的挂载经 lazyUnmount 后重建，同一 inode 视为已挂载，陈旧挂载可恢复。
 func TestSubpath_PrepareSafeSubpath(t *testing.T) {
-	//complete code
 	defaultPerm := os.FileMode(0750)
 
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 准备测试环境，返回已挂载路径、卷路径、子路径和错误。
 		prepare        func(base string) ([]string, string, string, error)
 		modifyMounter  func(fm *mount.FakeMounter, bindPathTarget string)
 		expectError    bool
@@ -959,8 +966,8 @@ func TestSubpath_PrepareSafeSubpath(t *testing.T) {
 				subpath := filepath.Join(volpath, "dir0")
 				return mounts, volpath, subpath, os.MkdirAll(subpath, defaultPerm)
 			},
-			// lazyUnmountFn is injected via modifyMounter below; mounter.Unmount
-			// is no longer called for the mismatching-mount path.
+			// 通过 modifyMounter 注入 lazyUnmountFn；
+			// 挂载不匹配时不再调用 mounter.Unmount。
 			modifyMounter: func(fm *mount.FakeMounter, bindPathTarget string) {
 				origLazyUnmountFn := lazyUnmountFn
 				lazyUnmountFn = func(path string) error {
@@ -992,7 +999,7 @@ func TestSubpath_PrepareSafeSubpath(t *testing.T) {
 					return nil, "", "", err
 				}
 				subpath := filepath.Join(volpath, "file0")
-				// using hard link to simulate bind mounts
+				// 用硬链接模拟 bind mount（两者 inode 相同）。
 				err = os.Link(subpathMount, subpath)
 				if err != nil {
 					return nil, "", "", err
@@ -1129,6 +1136,8 @@ func TestSubpath_PrepareSafeSubpath(t *testing.T) {
 	}
 }
 
+// TestPrepareSubpathTargetDifferentDevice 验证源与目标 inode 不同时，
+// 走 lazyUnmountFn 重新 bind mount，且不调用 mounter.Unmount。
 func TestPrepareSubpathTargetDifferentDevice(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 
@@ -1146,18 +1155,18 @@ func TestPrepareSubpathTargetDifferentDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Bind-mount target exists as a regular file (simulates an existing bind mount).
+	// bind 目标以普通文件存在，模拟已有挂载。
 	if err := os.WriteFile(subpathMount, []byte{}, 0640); err != nil {
 		t.Fatal(err)
 	}
 
-	// Source is a distinct file, different inode, not a hard-link to the target.
+	// 源文件是独立文件，inode 不同，不是目标的硬链接。
 	sourceFile := filepath.Join(volPath, "file-different")
 	if err := os.WriteFile(sourceFile, []byte{}, 0640); err != nil {
 		t.Fatal(err)
 	}
 
-	// FakeMounter lists subpathMount as a mount point so IsMountPoint returns true.
+	// 让 FakeMounter 将目标列为挂载点，使 IsMountPoint 返回 true。
 	fm := setupFakeMounter([]string{subpathMount})
 
 	subpath := Subpath{
@@ -1169,7 +1178,7 @@ func TestPrepareSubpathTargetDifferentDevice(t *testing.T) {
 		ContainerName:    testContainer,
 	}
 
-	// Inject a spy for lazyUnmountFn; mounter.Unmount must NOT be called.
+	// 给 lazyUnmountFn 注入探针；mounter.Unmount 不应被调用。
 	lazyUnmountCalled := false
 	origLazyUnmountFn := lazyUnmountFn
 	defer func() { lazyUnmountFn = origLazyUnmountFn }()
@@ -1191,12 +1200,14 @@ func TestPrepareSubpathTargetDifferentDevice(t *testing.T) {
 	if !lazyUnmountCalled {
 		t.Errorf("expected lazyUnmountFn to be called when source and bind-target have different inodes/devices")
 	}
-	// mounter.Unmount must NOT have been called, only lazyUnmountFn.
+	// 只能调用 lazyUnmountFn，不应调用 mounter.Unmount。
 	if actions := fm.GetLog(); len(actions) != 0 {
 		t.Errorf("expected no mounter.Unmount actions (must use lazyUnmountFn), got %v", actions)
 	}
 }
 
+// TestSubpathStaleBindMountRemount 验证陈旧 bind mount 的重新挂载：
+// lazyUnmount 失败时透传错误，成功时重建挂载且不调用 mounter.Unmount。
 func TestSubpathStaleBindMountRemount(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 
@@ -1281,20 +1292,21 @@ func TestSubpathStaleBindMountRemount(t *testing.T) {
 		if gotTarget != subpathMount {
 			t.Errorf("expected target %q, got %q", subpathMount, gotTarget)
 		}
-		// mounter.Unmount must NOT have been called.
+		// 不应调用 mounter.Unmount。
 		if actions := fm.GetLog(); len(actions) != 0 {
 			t.Errorf("expected no mounter.Unmount actions, got %v", actions)
 		}
 	})
 }
 
+// TestSafeOpen 验证安全打开文件：允许已存在的普通文件和放在末级的 socket，
+// 拒绝目录穿越、符号链接和路径中间出现 socket。
 func TestSafeOpen(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 在给定 base 下准备测试目录结构。
 		prepare     func(base string) error
 		path        string
 		expectError bool
@@ -1471,12 +1483,12 @@ func TestSafeOpen(t *testing.T) {
 	}
 }
 
+// createSocketFile 在指定目录创建 Unix socket，返回其完整路径。
 func createSocketFile(socketDir string) (string, error) {
 	testSocketFile := filepath.Join(socketDir, "mt.sock")
 
-	// Switch to volume path and create the socket file
-	// socket file can not have length of more than 108 character
-	// and hence we must use relative path
+	// 切到目标目录再创建 socket：socket 路径长度上限 108 字符，
+	// 因此必须使用相对路径。
 	oldDir, _ := os.Getwd()
 
 	err := os.Chdir(socketDir)
@@ -1490,12 +1502,13 @@ func createSocketFile(socketDir string) (string, error) {
 	return testSocketFile, socketCreateError
 }
 
+// TestFindExistingPrefix 验证查找路径中已存在的最长前缀，
+// 返回剩余待创建目录；悬空链接按不存在处理。
 func TestFindExistingPrefix(t *testing.T) {
 	defaultPerm := os.FileMode(0750)
 	tests := []struct {
 		name string
-		// Function that prepares directory structure for the test under given
-		// base.
+		// 在给定 base 下准备测试目录结构。
 		prepare      func(base string) error
 		path         string
 		expectedPath string
@@ -1548,7 +1561,7 @@ func TestFindExistingPrefix(t *testing.T) {
 		{
 			"follow-symlink-multiple follow",
 			func(base string) error {
-				/* test1/dir points to test2 and test2/dir points to test1 */
+				/* test1/dir 指向 test2，test2/dir 指回 test1 */
 				if err := os.MkdirAll(filepath.Join(base, "test1"), defaultPerm); err != nil {
 					return err
 				}
@@ -1573,8 +1586,7 @@ func TestFindExistingPrefix(t *testing.T) {
 			func(base string) error {
 				return os.Symlink("non-existing", filepath.Join(base, "test"))
 			},
-			// OS returns IsNotExist error both for dangling symlink and for
-			// non-existing directory.
+			// 系统对悬空符号链接和不存在的目录都返回 IsNotExist。
 			"test/directory",
 			"",
 			[]string{"test", "directory"},
@@ -1623,6 +1635,7 @@ func TestFindExistingPrefix(t *testing.T) {
 	}
 }
 
+// validateDirEmpty 校验目录存在且为空。
 func validateDirEmpty(dir string) error {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -1635,6 +1648,7 @@ func validateDirEmpty(dir string) error {
 	return nil
 }
 
+// validateDirExists 校验目录存在且可读取。
 func validateDirExists(dir string) error {
 	_, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -1643,6 +1657,7 @@ func validateDirExists(dir string) error {
 	return nil
 }
 
+// validateDirNotExists 校验目录已被删除（其他读取错误仍视为失败）。
 func validateDirNotExists(dir string) error {
 	_, err := ioutil.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -1654,6 +1669,7 @@ func validateDirNotExists(dir string) error {
 	return fmt.Errorf("dir %q still exists", dir)
 }
 
+// validateFileExists 校验文件存在。
 func validateFileExists(file string) error {
 	if _, err := os.Stat(file); err != nil {
 		return err

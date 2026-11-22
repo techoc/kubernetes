@@ -21,21 +21,21 @@ import (
 	"os"
 )
 
-// FileType enumerates the known set of possible file types.
+// FileType 枚举已知的文件类型集合。
 type FileType string
 
 const (
-	// FileTypeBlockDev defines a constant for the block device FileType.
+	// FileTypeBlockDev 表示块设备类型。
 	FileTypeBlockDev FileType = "BlockDevice"
-	// FileTypeCharDev defines a constant for the character device FileType.
+	// FileTypeCharDev 表示字符设备类型。
 	FileTypeCharDev FileType = "CharDevice"
-	// FileTypeDirectory defines a constant for the directory FileType.
+	// FileTypeDirectory 表示目录类型。
 	FileTypeDirectory FileType = "Directory"
-	// FileTypeFile defines a constant for the file FileType.
+	// FileTypeFile 表示普通文件类型。
 	FileTypeFile FileType = "File"
-	// FileTypeSocket defines a constant for the socket FileType.
+	// FileTypeSocket 表示套接字类型。
 	FileTypeSocket FileType = "Socket"
-	// FileTypeUnknown defines a constant for an unknown FileType.
+	// FileTypeUnknown 表示未知的文件类型。
 	FileTypeUnknown FileType = ""
 )
 
@@ -43,52 +43,47 @@ var (
 	errUnknownFileType = fmt.Errorf("only recognise file, directory, socket, block device and character device")
 )
 
-// HostUtils defines the set of methods for interacting with paths on a host.
+// HostUtils 定义与宿主机路径交互的一组方法。
 type HostUtils interface {
-	// DeviceOpened determines if the device (e.g. /dev/sdc) is in use elsewhere
-	// on the system, i.e. still mounted.
+	// DeviceOpened 判断设备（如 /dev/sdc）是否在系统别处仍被使用，即是否仍处于挂载状态。
 	DeviceOpened(pathname string) (bool, error)
-	// PathIsDevice determines if a path is a device.
+	// PathIsDevice 判断给定路径是否为设备。
 	PathIsDevice(pathname string) (bool, error)
-	// MakeRShared checks that given path is on a mount with 'rshared' mount
-	// propagation. If not, it bind-mounts the path as rshared.
+	// MakeRShared 检查给定路径所在挂载点是否具有 rshared 传播属性，若没有则以 rshared 方式 bind mount 该路径。
 	MakeRShared(path string) error
-	// GetFileType checks for file/directory/socket/block/character devices.
+	// GetFileType 判断路径是文件、目录、套接字还是块/字符设备。
 	GetFileType(pathname string) (FileType, error)
-	// PathExists tests if the given path already exists
-	// Error is returned on any other error than "file not found".
+	// PathExists 判断给定路径是否已存在。
+	// 除“文件不存在”以外的错误都会作为 error 返回。
 	PathExists(pathname string) (bool, error)
-	// EvalHostSymlinks returns the path name after evaluating symlinks.
+	// EvalHostSymlinks 返回解析符号链接之后的路径。
 	EvalHostSymlinks(pathname string) (string, error)
-	// GetOwner returns the integer ID for the user and group of the given path
+	// GetOwner 返回给定路径的用户和组的整数 ID。
 	GetOwner(pathname string) (int64, int64, error)
-	// GetSELinuxSupport returns true if given path is on a mount that supports
-	// SELinux.
+	// GetSELinuxSupport 判断给定路径所在挂载点是否支持 SELinux。
 	GetSELinuxSupport(pathname string) (bool, error)
-	// GetMode returns permissions of the path.
+	// GetMode 返回路径的权限位。
 	GetMode(pathname string) (os.FileMode, error)
-	// GetSELinuxMountContext returns value of -o context=XYZ mount option on
-	// given mount point.
+	// GetSELinuxMountContext 返回给定挂载点上 -o context=XYZ 挂载选项的值。
 	GetSELinuxMountContext(pathname string) (string, error)
 }
 
-// Compile-time check to ensure all HostUtil implementations satisfy
-// the Interface.
+// 编译期检查，确保 HostUtil 实现满足 HostUtils 接口。
 var _ HostUtils = &HostUtil{}
 
-// getFileType checks for file/directory/socket and block/character devices.
+// getFileType 检查路径是文件、目录、套接字还是块/字符设备。
 func getFileType(pathname string) (FileType, error) {
 	var pathType FileType
 	info, err := os.Stat(pathname)
 	if os.IsNotExist(err) {
 		return pathType, fmt.Errorf("path %q does not exist", pathname)
 	}
-	// err in call to os.Stat
+	// 路径存在但 os.Stat 仍报错，直接向上传递该错误。
 	if err != nil {
 		return pathType, err
 	}
 
-	// checks whether the mode is the target mode.
+	// 位运算判断是否设置了目标 mode 位，设备类型可能叠加多个标志位。
 	isSpecificMode := func(mode, targetMode os.FileMode) bool {
 		return mode&targetMode == targetMode
 	}

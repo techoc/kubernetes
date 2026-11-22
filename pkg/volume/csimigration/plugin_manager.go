@@ -26,32 +26,31 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// PluginNameMapper contains utility methods to retrieve names of plugins
-// that support a spec, map intree <=> migrated CSI plugin names, etc
+// PluginNameMapper 提供工具方法：从 spec 获取支持它的插件名，
+// 在 in-tree 插件名与迁移后的 CSI 插件名之间映射等。
 type PluginNameMapper interface {
 	GetInTreePluginNameFromSpec(pv *v1.PersistentVolume, vol *v1.Volume) (string, error)
 	GetCSINameFromInTreeName(pluginName string) (string, error)
 }
 
-// PluginManager keeps track of migrated state of in-tree plugins
+// PluginManager 跟踪 in-tree 插件的迁移状态。
 type PluginManager struct {
 	PluginNameMapper
 }
 
-// NewPluginManager returns a new PluginManager instance
+// NewPluginManager 返回一个新的 PluginManager 实例。
 func NewPluginManager(m PluginNameMapper) PluginManager {
 	return PluginManager{
 		PluginNameMapper: m,
 	}
 }
 
-// IsMigrationCompleteForPlugin indicates whether CSI migration has been completed
-// for a particular storage plugin. A complete migration will need to:
-// 1. Enable CSIMigrationXX for the plugin
-// 2. Unregister the in-tree plugin by setting the InTreePluginXXUnregister feature gate
+// IsMigrationCompleteForPlugin 表示某个存储插件的 CSI 迁移是否已完成。
+// 完成迁移需要：
+// 1. 为该插件启用 CSIMigrationXX；
+// 2. 通过设置 InTreePluginXXUnregister feature gate 注销 in-tree 插件。
 func (pm PluginManager) IsMigrationCompleteForPlugin(pluginName string) bool {
-	// CSIMigration feature and plugin specific InTreePluginUnregister feature flags should
-	// be enabled for plugin specific migration completion to be take effect
+	// 插件级迁移完成要生效，CSIMigration 与插件专属的 InTreePluginUnregister 开关都必须开启。
 	if !pm.IsMigrationEnabledForPlugin(pluginName) {
 		return false
 	}
@@ -76,11 +75,10 @@ func (pm PluginManager) IsMigrationCompleteForPlugin(pluginName string) bool {
 	}
 }
 
-// IsMigrationEnabledForPlugin indicates whether CSI migration has been enabled
-// for a particular storage plugin
+// IsMigrationEnabledForPlugin 表示某个存储插件是否已启用 CSI 迁移。
 func (pm PluginManager) IsMigrationEnabledForPlugin(pluginName string) bool {
-	// CSIMigration feature should be enabled along with the plugin-specific one
-	// CSIMigration has been GA. It will be enabled by default.
+	// CSIMigration 需要与插件专属开关一起启用。
+	// CSIMigration 已 GA，默认开启。
 
 	switch pluginName {
 	case csilibplugins.AWSEBSInTreePluginName:
@@ -102,8 +100,7 @@ func (pm PluginManager) IsMigrationEnabledForPlugin(pluginName string) bool {
 	}
 }
 
-// IsMigratable indicates whether CSI migration has been enabled for a volume
-// plugin that the spec refers to
+// IsMigratable 表示 spec 所指的卷插件是否已启用 CSI 迁移。
 func (pm PluginManager) IsMigratable(spec *volume.Spec) (bool, error) {
 	if spec == nil {
 		return false, fmt.Errorf("could not find if plugin is migratable because volume spec is nil")
@@ -113,19 +110,18 @@ func (pm PluginManager) IsMigratable(spec *volume.Spec) (bool, error) {
 	if pluginName == "" {
 		return false, nil
 	}
-	// found an in-tree plugin that supports the spec
+	// 找到了支持该 spec 的 in-tree 插件
 	return pm.IsMigrationEnabledForPlugin(pluginName), nil
 }
 
-// InTreeToCSITranslator performs translation of Volume sources for PV and Volume objects
-// from references to in-tree plugins to migrated CSI plugins
+// InTreeToCSITranslator 把 PV 和 Volume 对象中的卷来源从 in-tree 插件引用
+// 翻译为迁移后的 CSI 插件引用。
 type InTreeToCSITranslator interface {
 	TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error)
 	TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error)
 }
 
-// TranslateInTreeSpecToCSI translates a volume spec (either PV or inline volume)
-// supported by an in-tree plugin to CSI
+// TranslateInTreeSpecToCSI 把 in-tree 插件支持的卷 spec（PV 或 inline volume）翻译为 CSI。
 func TranslateInTreeSpecToCSI(logger klog.Logger, spec *volume.Spec, podNamespace string, translator InTreeToCSITranslator) (*volume.Spec, error) {
 	var csiPV *v1.PersistentVolume
 	var err error

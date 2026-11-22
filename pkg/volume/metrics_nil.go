@@ -18,18 +18,17 @@ package volume
 
 var _ MetricsProvider = &MetricsNil{}
 
-// MetricsNil represents a MetricsProvider that does not support returning
-// Metrics.  It serves as a placeholder for Volumes that do not yet support
-// metrics.
+// MetricsNil 是一个不支持返回 Metrics 的 MetricsProvider，
+// 用作尚未支持 metrics 的卷的占位实现。
 type MetricsNil struct{}
 
-// SupportsMetrics returns false for the MetricsNil type.
+// SupportsMetrics 对 MetricsNil 类型始终返回 false。
 func (*MetricsNil) SupportsMetrics() bool {
 	return false
 }
 
-// GetMetrics returns an empty Metrics and an error.
-// See MetricsProvider.GetMetrics
+// GetMetrics 返回空的 Metrics 和一个错误。
+// 参见 MetricsProvider.GetMetrics。
 func (*MetricsNil) GetMetrics() (*Metrics, error) {
 	return &Metrics{}, NewNotSupportedError()
 }

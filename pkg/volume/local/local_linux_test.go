@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestFSGroupMount 验证不同 Pod 以不同 fsGroup 挂载同一卷时，不会覆盖卷目录原有的 GID。
 func TestFSGroupMount(t *testing.T) {
 	tmpDir, plug := getPlugin(t)
 	defer os.RemoveAll(tmpDir)
@@ -57,7 +58,7 @@ func TestFSGroupMount(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to make a new Mounter: %v", err)
 	}
-	//Checking if GID of tmpDir has not been changed by mounting it by second pod
+	// 检查第二个 Pod 挂载后 tmpDir 的 GID 未被改动。
 	s = info.Sys().(*syscall.Stat_t)
 	if s == nil {
 		t.Fatalf("Error getting stats for %s (%v)", tmpDir, err)

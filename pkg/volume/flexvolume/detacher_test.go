@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package flexvolume 测试 flexVolume 插件的卸载设备与分离逻辑。
 package flexvolume
 
 import (
@@ -22,6 +23,8 @@ import (
 	"k8s.io/kubernetes/test/utils/harness"
 )
 
+// TestDetach 验证 Detach 向驱动下发 detach 命令及设备路径和节点名。
+// flexVolume 的分离操作由外部驱动实现，此处仅断言命令参数正确。
 func TestDetach(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -36,6 +39,7 @@ func TestDetach(tt *testing.T) {
 	d.Detach("sdx", "localhost")
 }
 
+// TestUnmountDevice 验证 UnmountDevice 向驱动下发 unmountDevice 命令及挂载目录路径。
 func TestUnmountDevice(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()

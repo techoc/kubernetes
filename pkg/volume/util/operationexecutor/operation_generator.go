@@ -57,33 +57,32 @@ const (
 
 var _ OperationGenerator = &operationGenerator{}
 
+// operationGenerator 生成 kubelet 的卷操作函数。
 type operationGenerator struct {
-	// Used to fetch objects from the API server like Node in the
-	// VerifyControllerAttachedVolume operation.
+	// kubeClient 用于从 API 服务器获取对象，例如 VerifyControllerAttachedVolume 中的 Node。
 	kubeClient clientset.Interface
 
-	// volumePluginMgr is the volume plugin manager used to create volume
-	// plugin objects.
+	// volumePluginMgr 用于创建卷插件对象。
 	volumePluginMgr *volume.VolumePluginMgr
 
-	// recorder is used to record events in the API server
+	// recorder 向 API 服务器记录事件。
 	recorder record.EventRecorder
 
-	// blkUtil provides volume path related operations for block volume
+	// blkUtil 提供块设备卷的路径相关操作。
 	blkUtil volumepathhandler.BlockVolumePathHandler
 }
 
+// inTreeResizeResponse 记录树内插件扩容的结果。
 type inTreeResizeResponse struct {
 	pvc *v1.PersistentVolumeClaim
 	pv  *v1.PersistentVolume
 
 	err error
-	// indicates that resize operation was called on underlying volume driver
-	// mainly useful for testing.
+	// 是否调用了底层卷驱动的扩容操作，主要用于测试。
 	resizeCalled bool
 }
 
-// NewOperationGenerator is returns instance of operationGenerator
+// NewOperationGenerator 返回 operationGenerator 实例。
 func NewOperationGenerator(kubeClient clientset.Interface,
 	volumePluginMgr *volume.VolumePluginMgr,
 	recorder record.EventRecorder,
@@ -98,51 +97,54 @@ func NewOperationGenerator(kubeClient clientset.Interface,
 	}
 }
 
-// OperationGenerator interface that extracts out the functions from operation_executor to make it dependency injectable
+// OperationGenerator 把 operation_executor 中的函数抽象为接口，便于依赖注入。
 type OperationGenerator interface {
-	// Generates the MountVolume function needed to perform the mount of a volume plugin
+	// GenerateMountVolumeFunc 生成执行卷插件挂载所需的 MountVolume 函数。
 	GenerateMountVolumeFunc(waitForAttachTimeout time.Duration, volumeToMount VolumeToMount, actualStateOfWorldMounterUpdater ActualStateOfWorldMounterUpdater, isRemount bool) volumetypes.GeneratedOperations
 
-	// Generates the UnmountVolume function needed to perform the unmount of a volume plugin
+	// GenerateUnmountVolumeFunc 生成卸载卷插件所需的 UnmountVolume 函数。
 	GenerateUnmountVolumeFunc(volumeToUnmount MountedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, podsDir string) (volumetypes.GeneratedOperations, error)
 
-	// Generates the AttachVolume function needed to perform attach of a volume plugin
+	// GenerateAttachVolumeFunc 生成挂载卷插件到节点所需的 AttachVolume 函数。
 	GenerateAttachVolumeFunc(logger klog.Logger, volumeToAttach VolumeToAttach, actualStateOfWorld ActualStateOfWorldAttacherUpdater) volumetypes.GeneratedOperations
 
-	// Generates the DetachVolume function needed to perform the detach of a volume plugin
+	// GenerateDetachVolumeFunc 生成从节点分离卷插件所需的 DetachVolume 函数。
 	GenerateDetachVolumeFunc(logger klog.Logger, volumeToDetach AttachedVolume, verifySafeToDetach bool, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error)
 
-	// Generates the VolumesAreAttached function needed to verify if volume plugins are attached
+	// GenerateVolumesAreAttachedFunc 生成校验卷插件是否仍挂载在节点上所需的函数。
 	GenerateVolumesAreAttachedFunc(attachedVolumes []AttachedVolume, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error)
 
-	// Generates the UnMountDevice function needed to perform the unmount of a device
+	// GenerateUnmountDeviceFunc 生成卸载设备所需的 UnMountDevice 函数。
 	GenerateUnmountDeviceFunc(deviceToDetach AttachedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, mounter hostutil.HostUtils) (volumetypes.GeneratedOperations, error)
 
-	// Generates the function needed to check if the attach_detach controller has attached the volume plugin
+	// GenerateVerifyControllerAttachedVolumeFunc 生成检查 attach_detach 控制器是否已挂载卷所需的函数。
 	GenerateVerifyControllerAttachedVolumeFunc(logger klog.Logger, volumeToMount VolumeToMount, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error)
 
-	// Generates the MapVolume function needed to perform the map of a volume plugin
+	// GenerateMapVolumeFunc 生成映射块设备卷所需的 MapVolume 函数。
 	GenerateMapVolumeFunc(waitForAttachTimeout time.Duration, volumeToMount VolumeToMount, actualStateOfWorldMounterUpdater ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error)
 
-	// Generates the UnmapVolume function needed to perform the unmap of a volume plugin
+	// GenerateUnmapVolumeFunc 生成解除块设备卷映射所需的 UnmapVolume 函数。
 	GenerateUnmapVolumeFunc(volumeToUnmount MountedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error)
 
-	// Generates the UnmapDevice function needed to perform the unmap of a device
+	// GenerateUnmapDeviceFunc 生成解除设备映射所需的 UnmapDevice 函数。
 	GenerateUnmapDeviceFunc(deviceToDetach AttachedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, mounter hostutil.HostUtils) (volumetypes.GeneratedOperations, error)
 
-	// GetVolumePluginMgr returns volume plugin manager
+	// GetVolumePluginMgr 返回卷插件管理器。
 	GetVolumePluginMgr() *volume.VolumePluginMgr
 
+	// GenerateExpandVolumeFunc 生成卷扩容函数。
 	GenerateExpandVolumeFunc(*v1.PersistentVolumeClaim, *v1.PersistentVolume) (volumetypes.GeneratedOperations, error)
 
+	// GenerateExpandAndRecoverVolumeFunc 生成带恢复流程的卷扩容函数。
 	GenerateExpandAndRecoverVolumeFunc(*v1.PersistentVolumeClaim, *v1.PersistentVolume, string) (volumetypes.GeneratedOperations, error)
 
-	// Generates the volume file system resize function, which can resize volume's file system to expected size without unmounting the volume.
-	// Along with volumeToMount and actualStateOfWorld, the function expects current size of volume on the node as an argument. The current
-	// size here always refers to capacity last recorded in actualStateOfWorld from pvc.Status.Capacity
+	// GenerateExpandInUseVolumeFunc 生成在线文件系统扩容函数，无需卸载卷即可扩容到目标大小。
+	// 除 volumeToMount 与 actualStateOfWorld 外，还需传入节点上卷的当前大小；
+	// 该大小取自 actualStateOfWorld 中记录的 pvc.Status.Capacity。
 	GenerateExpandInUseVolumeFunc(volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, currentSize resource.Quantity) (volumetypes.GeneratedOperations, error)
 }
 
+// inTreeResizeOpts 封装树内卷扩容所需的参数。
 type inTreeResizeOpts struct {
 	resizerName  string
 	pvc          *v1.PersistentVolumeClaim
@@ -151,6 +153,7 @@ type inTreeResizeOpts struct {
 	volumePlugin volume.ExpandableVolumePlugin
 }
 
+// nodeResizeOperationOpts 封装节点侧卷扩容所需的参数。
 type nodeResizeOperationOpts struct {
 	vmt                VolumeToMount
 	pvc                *v1.PersistentVolumeClaim
@@ -164,14 +167,12 @@ func (og *operationGenerator) GenerateVolumesAreAttachedFunc(
 	attachedVolumes []AttachedVolume,
 	nodeName types.NodeName,
 	actualStateOfWorld ActualStateOfWorldAttacherUpdater) (volumetypes.GeneratedOperations, error) {
-	// volumesPerPlugin maps from a volume plugin to a list of volume specs which belong
-	// to this type of plugin
+	// volumesPerPlugin 按插件名聚合卷规格，便于按插件批量检查。
 	volumesPerPlugin := make(map[string][]*volume.Spec)
-	// volumeSpecMap maps from a volume spec to its unique volumeName which will be used
-	// when calling MarkVolumeAsDetached
+	// volumeSpecMap 保存卷规格到唯一卷名的映射，供 MarkVolumeAsDetached 使用。
 	volumeSpecMap := make(map[*volume.Spec]v1.UniqueVolumeName)
 
-	// Iterate each volume spec and put them into a map index by the pluginName
+	// 遍历卷规格，按插件名归类。
 	for _, volumeAttached := range attachedVolumes {
 		if volumeAttached.VolumeSpec == nil {
 			klog.Errorf("VerifyVolumesAreAttached.GenerateVolumesAreAttachedFunc: nil spec for volume %s", volumeAttached.VolumeName)
@@ -189,14 +190,13 @@ func (og *operationGenerator) GenerateVolumesAreAttachedFunc(
 		}
 		volumeSpecList = append(volumeSpecList, volumeAttached.VolumeSpec)
 		volumesPerPlugin[volumePlugin.GetPluginName()] = volumeSpecList
-		// Migration: VolumeSpecMap contains original VolumeName for use in ActualStateOfWorld
+		// 迁移场景：保留原始卷名，供 ActualStateOfWorld 使用。
 		volumeSpecMap[volumeAttached.VolumeSpec] = volumeAttached.VolumeName
 	}
 
 	volumesAreAttachedFunc := func() volumetypes.OperationContext {
 
-		// For each volume plugin, pass the list of volume specs to VolumesAreAttached to check
-		// whether the volumes are still attached.
+		// 对每个插件批量调用 VolumesAreAttached，检查卷是否仍挂载在节点上。
 		for pluginName, volumesSpecs := range volumesPerPlugin {
 			attachableVolumePlugin, err :=
 				og.volumePluginMgr.FindAttachablePluginByName(pluginName)
@@ -235,7 +235,7 @@ func (og *operationGenerator) GenerateVolumesAreAttachedFunc(
 			}
 		}
 
-		// It is hard to differentiate migrated status for all volumes for verify_volumes_are_attached_per_node
+		// verify_volumes_are_attached_per_node 难以逐个区分卷的迁移状态，统一按非迁移处理。
 		return volumetypes.NewOperationContext(nil, nil, false)
 	}
 
@@ -243,10 +243,11 @@ func (og *operationGenerator) GenerateVolumesAreAttachedFunc(
 		OperationName:     "verify_volumes_are_attached_per_node",
 		OperationFunc:     volumesAreAttachedFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume("<n/a>", nil), "verify_volumes_are_attached_per_node"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
+// GenerateAttachVolumeFunc 生成将卷挂载到节点的 AttachVolume 操作。
 func (og *operationGenerator) GenerateAttachVolumeFunc(
 	logger klog.Logger,
 	volumeToAttach VolumeToAttach,
@@ -269,7 +270,7 @@ func (og *operationGenerator) GenerateAttachVolumeFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Execute attach
+		// 执行挂载。
 		devicePath, attachErr := volumeAttacher.Attach(
 			volumeToAttach.VolumeSpec, volumeToAttach.NodeName)
 
@@ -287,21 +288,21 @@ func (og *operationGenerator) GenerateAttachVolumeFunc(
 				klog.Errorf("AttachVolume.MarkVolumeAsUncertain fail to add the volume %q to actual state with %s", volumeToAttach.VolumeName, addErr)
 			}
 
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToAttach.GenerateError("AttachVolume.Attach failed", attachErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Update actual state of world
+		// 更新实际状态。
 		addVolumeNodeErr := actualStateOfWorld.MarkVolumeAsAttached(
 			logger, volumeToAttach.VolumeName, volumeToAttach.VolumeSpec, volumeToAttach.NodeName, devicePath)
 		if addVolumeNodeErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToAttach.GenerateError("AttachVolume.MarkVolumeAsAttached failed", addVolumeNodeErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Successful attach event is useful for user debugging
+		// 挂载成功事件便于用户排查问题。
 		simpleMsg, _ := volumeToAttach.GenerateMsg("AttachVolume.Attach succeeded", "")
 		for _, pod := range volumeToAttach.ScheduledPods {
 			og.recorder.Eventf(pod, v1.EventTypeNormal, kevents.SuccessfulAttachVolume, "%s", simpleMsg)
@@ -321,13 +322,11 @@ func (og *operationGenerator) GenerateAttachVolumeFunc(
 
 	attachableVolumePluginName := unknownAttachableVolumePlugin
 
-	// Get attacher plugin
+	// 获取可挂载插件。
 	attachableVolumePlugin, err :=
 		og.volumePluginMgr.FindAttachablePluginBySpec(volumeToAttach.VolumeSpec)
-	// It's ok to ignore the error, returning error is not expected from this function.
-	// If an error case occurred during the function generation, this error case(skipped one) will also trigger an error
-	// while the generated function is executed. And those errors will be handled during the execution of the generated
-	// function with a back off policy.
+	// 此处可忽略错误：生成阶段不会返回错误。生成时跳过的错误在执行生成函数时同样会触发，
+	// 并在执行阶段通过退避策略处理。
 	if err == nil && attachableVolumePlugin != nil {
 		attachableVolumePluginName = attachableVolumePlugin.GetPluginName()
 	}
@@ -340,10 +339,12 @@ func (og *operationGenerator) GenerateAttachVolumeFunc(
 	}
 }
 
+// GetVolumePluginMgr 返回卷插件管理器。
 func (og *operationGenerator) GetVolumePluginMgr() *volume.VolumePluginMgr {
 	return og.volumePluginMgr
 }
 
+// GenerateDetachVolumeFunc 生成从节点分离卷的 DetachVolume 操作。
 func (og *operationGenerator) GenerateDetachVolumeFunc(
 	logger klog.Logger,
 	volumeToDetach AttachedVolume,
@@ -366,9 +367,8 @@ func (og *operationGenerator) GenerateDetachVolumeFunc(
 			return volumetypes.GeneratedOperations{}, volumeToDetach.GenerateErrorDetailed("DetachVolume.GetVolumeName failed", err)
 		}
 	} else {
-		// Get attacher plugin and the volumeName by splitting the volume unique name in case
-		// there's no VolumeSpec: this happens only on attach/detach controller crash recovery
-		// when a pod has been deleted during the controller downtime
+		// 没有 VolumeSpec 时只能拆分唯一卷名来找到插件：这种情况仅见于 attach/detach
+		// 控制器崩溃恢复——控制器停机期间 Pod 已被删除。
 		pluginName, volumeName, err = util.SplitUniqueName(volumeToDetach.VolumeName)
 		if err != nil {
 			return volumetypes.GeneratedOperations{}, volumeToDetach.GenerateErrorDetailed("DetachVolume.SplitUniqueName failed", err)
@@ -402,8 +402,7 @@ func (og *operationGenerator) GenerateDetachVolumeFunc(
 		migrated := getMigratedStatusBySpec(volumeToDetach.VolumeSpec)
 
 		if err != nil {
-			// On failure, mark the volume as uncertain. Attach() must succeed before adding the volume back
-			// to node status as attached.
+			// 失败时将卷标记为状态不确定；必须等 Attach() 成功才能重新记为已挂载。
 			uncertainError := actualStateOfWorld.MarkVolumeAsUncertain(
 				logger, volumeToDetach.VolumeName, volumeToDetach.VolumeSpec, volumeToDetach.NodeName)
 			if uncertainError != nil {
@@ -415,7 +414,7 @@ func (og *operationGenerator) GenerateDetachVolumeFunc(
 
 		klog.Info(volumeToDetach.GenerateMsgDetailed("DetachVolume.Detach succeeded", ""))
 
-		// Update actual state of world
+		// 更新实际状态。
 		actualStateOfWorld.MarkVolumeAsDetached(
 			volumeToDetach.VolumeName, volumeToDetach.NodeName)
 
@@ -426,10 +425,11 @@ func (og *operationGenerator) GenerateDetachVolumeFunc(
 		OperationName:     DetachOperationName,
 		OperationFunc:     detachVolumeFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(pluginName, volumeToDetach.VolumeSpec), DetachOperationName),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
+// GenerateMountVolumeFunc 生成挂载卷到 Pod 的 MountVolume 操作。
 func (og *operationGenerator) GenerateMountVolumeFunc(
 	waitForAttachTimeout time.Duration,
 	volumeToMount VolumeToMount,
@@ -444,7 +444,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 	}
 
 	mountVolumeFunc := func() volumetypes.OperationContext {
-		// Get mounter plugin
+		// 获取挂载插件。
 		volumePlugin, err := og.volumePluginMgr.FindPluginBySpec(volumeToMount.VolumeSpec)
 
 		migrated := getMigratedStatusBySpec(volumeToMount.VolumeSpec)
@@ -474,9 +474,9 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Enforce ReadWriteOncePod access mode if it is the only one present. This is also enforced during scheduling.
+		// 若访问模式仅有 ReadWriteOncePod，则在此强制校验；调度阶段也会校验。
 		if actualStateOfWorld.IsVolumeMountedElsewhere(volumeToMount.VolumeName, volumeToMount.PodName) &&
-			// Because we do not know what access mode the pod intends to use if there are multiple.
+			// 多个访问模式时无法判断 Pod 的意图，故只处理单一模式的情形。
 			len(volumeToMount.VolumeSpec.PersistentVolume.Spec.AccessModes) == 1 &&
 			v1helper.ContainsAccessMode(volumeToMount.VolumeSpec.PersistentVolume.Spec.AccessModes, v1.ReadWriteOncePod) {
 
@@ -485,7 +485,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Get attacher, if possible
+		// 尽量获取挂载器；并非所有卷都需要 Attach。
 		attachableVolumePlugin, _ :=
 			og.volumePluginMgr.FindAttachablePluginBySpec(volumeToMount.VolumeSpec)
 		var volumeAttacher volume.Attacher
@@ -493,7 +493,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			volumeAttacher, _ = attachableVolumePlugin.NewAttacher()
 		}
 
-		// get deviceMounter, if possible
+		// 尽量获取设备挂载器；并非所有卷都需要在全局路径挂载设备。
 		deviceMountableVolumePlugin, _ := og.volumePluginMgr.FindDeviceMountablePluginBySpec(volumeToMount.VolumeSpec)
 		var volumeDeviceMounter volume.DeviceMounter
 		if deviceMountableVolumePlugin != nil {
@@ -513,13 +513,13 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 
 		devicePath := volumeToMount.DevicePath
 		if volumeAttacher != nil {
-			// Wait for attachable volumes to finish attaching
+			// 等待可挂载卷完成 Attach。
 			klog.InfoS(volumeToMount.GenerateMsgDetailed("MountVolume.WaitForAttach entering", fmt.Sprintf("DevicePath %q", volumeToMount.DevicePath)), "pod", klog.KObj(volumeToMount.Pod))
 
 			devicePath, err = volumeAttacher.WaitForAttach(
 				volumeToMount.VolumeSpec, devicePath, volumeToMount.Pod, waitForAttachTimeout)
 			if err != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.WaitForAttach failed", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
@@ -536,12 +536,12 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			deviceMountPath, err :=
 				volumeDeviceMounter.GetDeviceMountPath(volumeToMount.VolumeSpec)
 			if err != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.GetDeviceMountPath failed", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 
-			// Mount device to global mount path
+			// 将设备挂载到全局挂载路径。
 			og.markVolumeMountAsAttempted(actualStateOfWorld, volumeToMount.PodName, volumeToMount.VolumeName)
 			err = volumeDeviceMounter.MountDevice(
 				volumeToMount.VolumeSpec,
@@ -552,36 +552,36 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			if err != nil {
 				og.checkForFailedMount(volumeToMount, err)
 				og.markDeviceErrorState(volumeToMount, devicePath, deviceMountPath, err, actualStateOfWorld)
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.MountDevice failed", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 
 			klog.InfoS(volumeToMount.GenerateMsgDetailed("MountVolume.MountDevice succeeded", fmt.Sprintf("device mount path %q", deviceMountPath)), "pod", klog.KObj(volumeToMount.Pod))
 
-			// Update actual state of world to reflect volume is globally mounted
+			// 更新实际状态，记录卷已全局挂载。
 			markDeviceMountedErr := actualStateOfWorld.MarkDeviceAsMounted(
 				volumeToMount.VolumeName, devicePath, deviceMountPath, volumeToMount.SELinuxLabel)
 			if markDeviceMountedErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.MarkDeviceAsMounted failed", markDeviceMountedErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
-			// set staging path for volume expansion
+			// 记录 staging 路径，供后续卷扩容使用。
 			resizeOptions.DeviceStagePath = deviceMountPath
 		}
 
 		if volumeDeviceMounter != nil && resizeOptions.DeviceStagePath == "" {
 			deviceStagePath, err := volumeDeviceMounter.GetDeviceMountPath(volumeToMount.VolumeSpec)
 			if err != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.GetDeviceMountPath failed for expansion", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 			resizeOptions.DeviceStagePath = deviceStagePath
 		}
 
-		// Execute mount
+		// 执行挂载。
 		og.markVolumeMountAsAttempted(actualStateOfWorld, volumeToMount.PodName, volumeToMount.VolumeName)
 		mountErr := volumeMounter.SetUp(volume.MounterArgs{
 			FsUser:              util.FsUserFrom(volumeToMount.Pod),
@@ -593,7 +593,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			ReconstructedVolume: actualStateOfWorld.IsVolumeReconstructed(volumeToMount.VolumeName, volumeToMount.PodName),
 			IsRemount:           isRemount,
 		})
-		// Update actual state of world
+		// 更新实际状态。
 		markOpts := MarkVolumeOpts{
 			PodName:             volumeToMount.PodName,
 			PodUID:              volumeToMount.Pod.UID,
@@ -607,7 +607,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 		if mountErr != nil {
 			og.checkForFailedMount(volumeToMount, mountErr)
 			og.markVolumeErrorState(volumeToMount, markOpts, mountErr, actualStateOfWorld)
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.SetUp failed", mountErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -624,26 +624,22 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 		if resizeError != nil {
 			klog.Errorf("MountVolume.NodeExpandVolume failed with %v", resizeError)
 			eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.Setup failed while expanding volume", resizeError)
-			// At this point, MountVolume.Setup already succeeded, we should add volume into actual state
-			// so that reconciler can clean up volume when needed. However, volume resize failed,
-			// we should not mark the volume as mounted to avoid pod starts using it.
-			// Considering the above situations, we mark volume as uncertain here so that reconciler will trigger
-			// volume tear down when pod is deleted, and also makes sure pod will not start using it.
+			// SetUp 已成功，需让协调器能在必要时清理卷；但扩容失败又不能标记为已挂载，
+			// 否则 Pod 会开始使用它。故标记为不确定：Pod 删除时触发清理，同时阻止其启动使用。
 			if err := actualStateOfWorld.MarkVolumeMountAsUncertain(markOpts); err != nil {
 				klog.Error(volumeToMount.GenerateErrorDetailed("MountVolume.MarkVolumeMountAsUncertain failed", err).Error())
 			}
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// record total time it takes to mount a volume. This is end to end time that includes waiting for volume to attach, node to be update
-		// plugin call to succeed
+		// 记录挂载耗时，含等待 Attach、节点状态更新及插件调用成功的端到端时间。
 		mountRequestTime := volumeToMount.MountRequestTime
 		totalTimeTaken := time.Since(mountRequestTime).Seconds()
 		util.RecordOperationLatencyMetric(util.GetFullQualifiedPluginNameForVolume(volumePluginName, volumeToMount.VolumeSpec), "overall_volume_mount", totalTimeTaken)
 
 		markVolMountedErr := actualStateOfWorld.MarkVolumeAsMounted(markOpts)
 		if markVolMountedErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MountVolume.MarkVolumeAsMounted failed", markVolMountedErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -664,6 +660,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 	}
 }
 
+// checkForFailedMount 针对文件系统类型不匹配的挂载失败记录告警事件。
 func (og *operationGenerator) checkForFailedMount(volumeToMount VolumeToMount, mountError error) {
 	pv := volumeToMount.VolumeSpec.PersistentVolume
 	if pv == nil {
@@ -676,12 +673,14 @@ func (og *operationGenerator) checkForFailedMount(volumeToMount VolumeToMount, m
 	}
 }
 
+// markVolumeMountAsAttempted 在 CSIVolumeHealth 开启时记录卷挂载尝试，供健康监控使用。
 func (og *operationGenerator) markVolumeMountAsAttempted(actualStateOfWorld ActualStateOfWorldMounterUpdater, podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIVolumeHealth) {
 		actualStateOfWorld.MarkVolumeAsMountAttempted(podName, volumeName)
 	}
 }
 
+// markDeviceErrorState 根据错误类型把设备状态调整为已卸载或不确定。
 func (og *operationGenerator) markDeviceErrorState(volumeToMount VolumeToMount, devicePath, deviceMountPath string, mountError error, actualStateOfWorld ActualStateOfWorldMounterUpdater) {
 	if volumetypes.IsOperationFinishedError(mountError) &&
 		actualStateOfWorld.GetDeviceMountState(volumeToMount.VolumeName) == DeviceMountUncertain {
@@ -691,7 +690,7 @@ func (og *operationGenerator) markDeviceErrorState(volumeToMount VolumeToMount, 
 			return
 		}
 
-		// Only devices which were uncertain can be marked as unmounted
+		// 只有状态不确定的设备才能标记为已卸载。
 		markDeviceUnmountError := actualStateOfWorld.MarkDeviceAsUnmounted(volumeToMount.VolumeName)
 		if markDeviceUnmountError != nil {
 			klog.Error(volumeToMount.GenerateErrorDetailed("MountDevice.MarkDeviceAsUnmounted failed", markDeviceUnmountError).Error())
@@ -701,8 +700,7 @@ func (og *operationGenerator) markDeviceErrorState(volumeToMount VolumeToMount, 
 
 	if volumetypes.IsUncertainProgressError(mountError) &&
 		actualStateOfWorld.GetDeviceMountState(volumeToMount.VolumeName) == DeviceNotMounted {
-		// only devices which are not mounted can be marked as uncertain. We do not want to mark a device
-		// which was previously marked as mounted here as uncertain.
+		// 只有未挂载的设备才能标记为不确定；已标记为已挂载的设备不能在此降级。
 		markDeviceUncertainError := actualStateOfWorld.MarkDeviceAsUncertain(volumeToMount.VolumeName, devicePath, deviceMountPath, volumeToMount.SELinuxLabel)
 		if markDeviceUncertainError != nil {
 			klog.Error(volumeToMount.GenerateErrorDetailed("MountDevice.MarkDeviceAsUncertain failed", markDeviceUncertainError).Error())
@@ -711,11 +709,11 @@ func (og *operationGenerator) markDeviceErrorState(volumeToMount VolumeToMount, 
 
 }
 
+// markVolumeErrorState 根据错误类型把卷挂载状态调整为已卸载或不确定。
 func (og *operationGenerator) markVolumeErrorState(volumeToMount VolumeToMount, markOpts MarkVolumeOpts, mountError error, actualStateOfWorld ActualStateOfWorldMounterUpdater) {
 	if volumetypes.IsOperationFinishedError(mountError) &&
 		actualStateOfWorld.GetVolumeMountState(volumeToMount.VolumeName, markOpts.PodName) == VolumeMountUncertain {
-		// if volume was previously reconstructed we are not going to change its state as unmounted even
-		// if mount operation fails.
+		// 重建恢复的卷即使挂载失败也不改为已卸载，保持其不确定状态。
 		if actualStateOfWorld.IsVolumeReconstructed(volumeToMount.VolumeName, volumeToMount.PodName) {
 			klog.V(3).InfoS("MountVolume.markVolumeErrorState leaving volume uncertain", "volumeName", volumeToMount.VolumeName)
 			return
@@ -738,11 +736,12 @@ func (og *operationGenerator) markVolumeErrorState(volumeToMount VolumeToMount, 
 	}
 }
 
+// GenerateUnmountVolumeFunc 生成从 Pod 卸载卷的 UnmountVolume 操作。
 func (og *operationGenerator) GenerateUnmountVolumeFunc(
 	volumeToUnmount MountedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
 	podsDir string) (volumetypes.GeneratedOperations, error) {
-	// Get mountable plugin
+	// 获取可卸载插件。
 	volumePlugin, err := og.volumePluginMgr.FindPluginByName(volumeToUnmount.PluginName)
 	if err != nil || volumePlugin == nil {
 		return volumetypes.GeneratedOperations{}, volumeToUnmount.GenerateErrorDetailed("UnmountVolume.FindPluginByName failed", err)
@@ -758,17 +757,17 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 
 		migrated := getMigratedStatusBySpec(volumeToUnmount.VolumeSpec)
 
-		// Remove all bind-mounts for subPaths
+		// 清理 subPath 产生的所有 bind mount。
 		podDir := filepath.Join(podsDir, string(volumeToUnmount.PodUID))
 		if err := subpather.CleanSubPaths(podDir, volumeToUnmount.InnerVolumeSpecName); err != nil {
 			eventErr, detailedErr := volumeToUnmount.GenerateError("error cleaning subPath mounts", err)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Execute unmount
+		// 执行卸载。
 		unmountErr := volumeUnmounter.TearDown()
 		if unmountErr != nil {
-			// Mark the volume as uncertain, so SetUp is called for new pods. Teardown may be already in progress.
+			// 标记为不确定，使新 Pod 仍会调用 SetUp；卸载可能正在进行中。
 			opts := MarkVolumeOpts{
 				PodName:          volumeToUnmount.PodName,
 				PodUID:           volumeToUnmount.PodUID,
@@ -779,11 +778,11 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 			}
 			markMountUncertainErr := actualStateOfWorld.MarkVolumeMountAsUncertain(opts)
 			if markMountUncertainErr != nil {
-				// There is nothing else we can do. Hope that UnmountVolume will be re-tried shortly.
+				// 别无他法，只能等待 UnmountVolume 很快重试。
 				klog.Error(volumeToUnmount.GenerateErrorDetailed("UnmountVolume.MarkVolumeMountAsUncertain failed", markMountUncertainErr).Error())
 			}
 
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToUnmount.GenerateError("UnmountVolume.TearDown failed", unmountErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -797,11 +796,11 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 			volumeToUnmount.PluginName,
 			volumeToUnmount.VolumeGIDValue)
 
-		// Update actual state of world
+		// 更新实际状态。
 		markVolMountedErr := actualStateOfWorld.MarkVolumeAsUnmounted(
 			volumeToUnmount.PodName, volumeToUnmount.VolumeName)
 		if markVolMountedErr != nil {
-			// On failure, just log and exit
+			// 此处失败只记录日志，不再重试。
 			klog.Error(volumeToUnmount.GenerateErrorDetailed("UnmountVolume.MarkVolumeAsUnmounted failed", markVolMountedErr).Error())
 		}
 
@@ -812,15 +811,16 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 		OperationName:     "volume_unmount",
 		OperationFunc:     unmountVolumeFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(volumePlugin.GetPluginName(), volumeToUnmount.VolumeSpec), "volume_unmount"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
+// GenerateUnmountDeviceFunc 生成卸载设备全局挂载路径的 UnmountDevice 操作。
 func (og *operationGenerator) GenerateUnmountDeviceFunc(
 	deviceToDetach AttachedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
 	hostutil hostutil.HostUtils) (volumetypes.GeneratedOperations, error) {
-	// Get DeviceMounter plugin
+	// 获取设备挂载插件。
 	deviceMountableVolumePlugin, err :=
 		og.volumePluginMgr.FindDeviceMountablePluginByName(deviceToDetach.PluginName)
 	if err != nil || deviceMountableVolumePlugin == nil {
@@ -845,13 +845,13 @@ func (og *operationGenerator) GenerateUnmountDeviceFunc(
 		deviceMountPath, err :=
 			volumeDeviceMounter.GetDeviceMountPath(deviceToDetach.VolumeSpec)
 		if err != nil {
-			// On failure other than "does not exist", return error. Caller will log and retry.
+			// 除“路径不存在”外的错误均直接返回，由调用方记录并重试。
 			if !strings.Contains(err.Error(), "does not exist") {
 				eventErr, detailedErr := deviceToDetach.GenerateError("GetDeviceMountPath failed", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
-			// If the mount path could not be found, don't fail the unmount, but instead log a warning and proceed,
-			// using the value from deviceToDetach.DeviceMountPath, so that the device can be marked as unmounted
+			// 找不到挂载路径时不让卸载失败：回退到 deviceToDetach.DeviceMountPath 并告警，
+			// 这样才能把设备记为已卸载。
 			deviceMountPath = deviceToDetach.DeviceMountPath
 			klog.Warning(deviceToDetach.GenerateMsgDetailed(fmt.Sprintf(
 				"GetDeviceMountPath failed, but unmount operation will proceed using deviceMountPath=%s: %v", deviceMountPath, err), ""))
@@ -865,34 +865,32 @@ func (og *operationGenerator) GenerateUnmountDeviceFunc(
 			eventErr, detailedErr := deviceToDetach.GenerateError("GetDeviceMountRefs check failed", err)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
-		// Execute unmount
+		// 执行设备卸载。
 		unmountDeviceErr := volumeDeviceUnmounter.UnmountDevice(deviceMountPath)
 		if unmountDeviceErr != nil {
-			// Mark the device as uncertain, so MountDevice is called for new pods. UnmountDevice may be already in progress.
+			// 标记为不确定，使新 Pod 仍会调用 MountDevice；卸载可能正在进行中。
 			markDeviceUncertainErr := actualStateOfWorld.MarkDeviceAsUncertain(deviceToDetach.VolumeName, deviceToDetach.DevicePath, deviceMountPath, deviceToDetach.SELinuxMountContext)
 			if markDeviceUncertainErr != nil {
-				// There is nothing else we can do. Hope that UnmountDevice will be re-tried shortly.
+				// 别无他法，只能等待 UnmountDevice 很快重试。
 				klog.Error(deviceToDetach.GenerateErrorDetailed("UnmountDevice.MarkDeviceAsUncertain failed", markDeviceUncertainErr).Error())
 			}
 
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := deviceToDetach.GenerateError("UnmountDevice failed", unmountDeviceErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
-		// Before logging that UnmountDevice succeeded and moving on,
-		// use hostutil.PathIsDevice to check if the path is a device,
-		// if so use hostutil.DeviceOpened to check if the device is in use anywhere
-		// else on the system. Retry if it returns true.
+		// 宣告卸载成功前，先用 hostutil.PathIsDevice 确认路径是否为设备，
+		// 再用 hostutil.DeviceOpened 检查系统其他位置是否仍在使用；若仍被占用则需重试。
 		deviceOpened, deviceOpenedErr := isDeviceOpened(deviceToDetach, hostutil)
 		if deviceOpenedErr != nil {
 			return volumetypes.NewOperationContext(nil, deviceOpenedErr, migrated)
 		}
-		// The device is still in use elsewhere. Caller will log and retry.
+		// 设备仍被别处使用，由调用方记录并重试。
 		if deviceOpened {
-			// Mark the device as uncertain, so MountDevice is called for new pods.
+			// 标记为不确定，使新 Pod 仍会调用 MountDevice。
 			markDeviceUncertainErr := actualStateOfWorld.MarkDeviceAsUncertain(deviceToDetach.VolumeName, deviceToDetach.DevicePath, deviceMountPath, deviceToDetach.SELinuxMountContext)
 			if markDeviceUncertainErr != nil {
-				// There is nothing else we can do. Hope that UnmountDevice will be re-tried shortly.
+				// 别无他法，只能等待 UnmountDevice 很快重试。
 				klog.Error(deviceToDetach.GenerateErrorDetailed("UnmountDevice.MarkDeviceAsUncertain failed", markDeviceUncertainErr).Error())
 			}
 			eventErr, detailedErr := deviceToDetach.GenerateError(
@@ -903,11 +901,11 @@ func (og *operationGenerator) GenerateUnmountDeviceFunc(
 
 		klog.Info(deviceToDetach.GenerateMsgDetailed("UnmountDevice succeeded", ""))
 
-		// Update actual state of world
+		// 更新实际状态。
 		markDeviceUnmountedErr := actualStateOfWorld.MarkDeviceAsUnmounted(
 			deviceToDetach.VolumeName)
 		if markDeviceUnmountedErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := deviceToDetach.GenerateError("MarkDeviceAsUnmounted failed", markDeviceUnmountedErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -919,25 +917,22 @@ func (og *operationGenerator) GenerateUnmountDeviceFunc(
 		OperationName:     "unmount_device",
 		OperationFunc:     unmountDeviceFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(deviceMountableVolumePlugin.GetPluginName(), deviceToDetach.VolumeSpec), "unmount_device"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
-// GenerateMapVolumeFunc marks volume as mounted based on following steps.
-// If plugin is attachable, call WaitForAttach() and then mark the device
-// as mounted. On next step, SetUpDevice is called without dependent of
-// plugin type, but this method mainly is targeted for none attachable plugin.
-// After setup is done, create symbolic links on both global map path and pod
-// device map path. Once symbolic links are created, take fd lock by
-// loopback for the device to avoid silent volume replacement. This lock
-// will be released once no one uses the device.
-// If all steps are completed, the volume is marked as mounted.
+// GenerateMapVolumeFunc 按如下步骤把块卷标记为已挂载：
+// 可挂载插件先调用 WaitForAttach() 并把设备标记为已挂载；
+// 随后不区分插件类型调用 SetUpDevice（主要针对不可挂载插件）。
+// 设置完成后在全局映射路径和 Pod 设备映射路径创建符号链接，
+// 再通过 loopback 持有设备 fd 锁，避免卷被静默替换；
+// 无人使用该设备时锁自动释放。所有步骤完成后卷才被标记为已挂载。
 func (og *operationGenerator) GenerateMapVolumeFunc(
 	waitForAttachTimeout time.Duration,
 	volumeToMount VolumeToMount,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error) {
 
-	// Get block volume mapper plugin
+	// 获取块卷映射插件。
 	blockVolumePlugin, err :=
 		og.volumePluginMgr.FindMapperPluginBySpec(volumeToMount.VolumeSpec)
 	if err != nil {
@@ -963,7 +958,7 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 		return volumetypes.GeneratedOperations{}, detailedErr
 	}
 
-	// Get attacher, if possible
+	// 尽量获取挂载器；并非所有卷都需要 Attach。
 	attachableVolumePlugin, _ :=
 		og.volumePluginMgr.FindAttachablePluginBySpec(volumeToMount.VolumeSpec)
 	var volumeAttacher volume.Attacher
@@ -977,9 +972,9 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 
 		migrated := getMigratedStatusBySpec(volumeToMount.VolumeSpec)
 
-		// Enforce ReadWriteOncePod access mode. This is also enforced during scheduling.
+		// 强制校验 ReadWriteOncePod 访问模式；调度阶段同样会校验。
 		if actualStateOfWorld.IsVolumeMountedElsewhere(volumeToMount.VolumeName, volumeToMount.PodName) &&
-			// Because we do not know what access mode the pod intends to use if there are multiple.
+			// 多个访问模式时无法判断 Pod 的意图，故只处理单一模式的情形。
 			len(volumeToMount.VolumeSpec.PersistentVolume.Spec.AccessModes) == 1 &&
 			v1helper.ContainsAccessMode(volumeToMount.VolumeSpec.PersistentVolume.Spec.AccessModes, v1.ReadWriteOncePod) {
 
@@ -988,22 +983,22 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Set up global map path under the given plugin directory using symbolic link
+		// 通过符号链接在插件目录下建立全局映射路径。
 		globalMapPath, err :=
 			blockVolumeMapper.GetGlobalMapPath(volumeToMount.VolumeSpec)
 		if err != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.GetGlobalMapPath failed", err)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 		if volumeAttacher != nil {
-			// Wait for attachable volumes to finish attaching
+			// 等待可挂载卷完成 Attach。
 			klog.InfoS(volumeToMount.GenerateMsgDetailed("MapVolume.WaitForAttach entering", fmt.Sprintf("DevicePath %q", volumeToMount.DevicePath)), "pod", klog.KObj(volumeToMount.Pod))
 
 			devicePath, err = volumeAttacher.WaitForAttach(
 				volumeToMount.VolumeSpec, volumeToMount.DevicePath, volumeToMount.Pod, waitForAttachTimeout)
 			if err != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.WaitForAttach failed", err)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
@@ -1011,25 +1006,25 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 			klog.InfoS(volumeToMount.GenerateMsgDetailed("MapVolume.WaitForAttach succeeded", fmt.Sprintf("DevicePath %q", devicePath)), "pod", klog.KObj(volumeToMount.Pod))
 
 		}
-		// Call SetUpDevice if blockVolumeMapper implements CustomBlockVolumeMapper
+		// 仅自定义块映射插件才需要 SetUpDevice。
 		if customBlockVolumeMapper, ok := blockVolumeMapper.(volume.CustomBlockVolumeMapper); ok && actualStateOfWorld.GetDeviceMountState(volumeToMount.VolumeName) != DeviceGloballyMounted {
 			var mapErr error
 			og.markVolumeMountAsAttempted(actualStateOfWorld, volumeToMount.PodName, volumeToMount.VolumeName)
 			stagingPath, mapErr = customBlockVolumeMapper.SetUpDevice()
 			if mapErr != nil {
 				og.markDeviceErrorState(volumeToMount, devicePath, globalMapPath, mapErr, actualStateOfWorld)
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.SetUpDevice failed", mapErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 		}
 
-		// Update actual state of world to reflect volume is globally mounted
+		// 更新实际状态，记录卷已全局挂载。
 		markedDevicePath := devicePath
 		markDeviceMappedErr := actualStateOfWorld.MarkDeviceAsMounted(
 			volumeToMount.VolumeName, markedDevicePath, globalMapPath, "")
 		if markDeviceMappedErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MarkDeviceAsMounted failed", markDeviceMappedErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -1044,19 +1039,19 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 			VolumeMountState:  VolumeMounted,
 		}
 
-		// Call MapPodDevice if blockVolumeMapper implements CustomBlockVolumeMapper
+		// 自定义块映射插件可自行完成 Pod 设备映射。
 		if customBlockVolumeMapper, ok := blockVolumeMapper.(volume.CustomBlockVolumeMapper); ok {
-			// Execute driver specific map
+			// 执行驱动特定的映射。
 			pluginDevicePath, mapErr := customBlockVolumeMapper.MapPodDevice()
 			if mapErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				og.markVolumeErrorState(volumeToMount, markVolumeOpts, mapErr, actualStateOfWorld)
 				eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MapPodDevice failed", mapErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 
-			// From now on, the volume is mapped. Mark it as uncertain on error,
-			// so it is unmapped when corresponding pod is deleted.
+			// 卷至此已映射完成；后续出错时标记为不确定，
+			// 以便对应 Pod 删除时执行解除映射。
 			defer func() {
 				if operationContext.EventErr != nil {
 					errText := operationContext.EventErr.Error()
@@ -1064,8 +1059,7 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 				}
 			}()
 
-			// if pluginDevicePath is provided, assume attacher may not provide device
-			// or attachment flow uses SetupDevice to get device path
+			// 插件给出了设备路径时，说明挂载器可能未提供设备，或附加流程通过 SetupDevice 获取路径。
 			if len(pluginDevicePath) != 0 {
 				devicePath = pluginDevicePath
 			}
@@ -1075,10 +1069,9 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 			}
 		}
 
-		// When kubelet is containerized, devicePath may be a symlink at a place unavailable to
-		// kubelet, so evaluate it on the host and expect that it links to a device in /dev,
-		// which will be available to containerized kubelet. If still it does not exist,
-		// AttachFileDevice will fail. If kubelet is not containerized, eval it anyway.
+		// 容器化部署的 kubelet 可能无法访问 devicePath 中的符号链接，
+		// 故在宿主机上解析，期望其指向 /dev 下容器可见的设备；若仍不存在，AttachFileDevice 会失败。
+		// 非容器化 kubelet 也统一做解析。
 		kvh, ok := og.GetVolumePluginMgr().Host.(volume.KubeletVolumeHost)
 		if !ok {
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume type assertion error", fmt.Errorf("volume host does not implement KubeletVolumeHost interface"))
@@ -1091,34 +1084,34 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Update actual state of world with the devicePath again, if devicePath has changed from markedDevicePath
+		// 解析后设备路径可能变化，需重新更新实际状态。
 		// TODO: This can be improved after #82492 is merged and ASW has state.
 		if markedDevicePath != devicePath {
 			markDeviceMappedErr := actualStateOfWorld.MarkDeviceAsMounted(
 				volumeToMount.VolumeName, devicePath, globalMapPath, "")
 			if markDeviceMappedErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MarkDeviceAsMounted failed", markDeviceMappedErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 		}
 
-		// Execute common map
+		// 执行通用映射。
 		volumeMapPath, volName := blockVolumeMapper.GetPodDeviceMapPath()
 		mapErr := util.MapBlockVolume(og.blkUtil, devicePath, globalMapPath, volumeMapPath, volName, volumeToMount.Pod.UID)
 		if mapErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MapBlockVolume failed", mapErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Device mapping for global map path succeeded
+		// 全局映射路径的设备映射成功。
 		simpleMsg, detailedMsg := volumeToMount.GenerateMsg("MapVolume.MapPodDevice succeeded", fmt.Sprintf("globalMapPath %q", globalMapPath))
 		verbosity := klog.Level(4)
 		og.recorder.Eventf(volumeToMount.Pod, v1.EventTypeNormal, kevents.SuccessfulMountVolume, "%s", simpleMsg)
 		klog.V(verbosity).InfoS(detailedMsg, "pod", klog.KObj(volumeToMount.Pod))
 
-		// Device mapping for pod device map path succeeded
+		// Pod 设备映射路径的设备映射成功。
 		simpleMsg, detailedMsg = volumeToMount.GenerateMsg("MapVolume.MapPodDevice succeeded", fmt.Sprintf("volumeMapPath %q", volumeMapPath))
 		verbosity = klog.Level(1)
 		og.recorder.Eventf(volumeToMount.Pod, v1.EventTypeNormal, kevents.SuccessfulMountVolume, "%s", simpleMsg)
@@ -1132,11 +1125,8 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 		if resizeError != nil {
 			klog.Errorf("MapVolume.NodeExpandVolume failed with %v", resizeError)
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MarkVolumeAsMounted failed while expanding volume", resizeError)
-			// At this point, MountVolume.Setup already succeeded, we should add volume into actual state
-			// so that reconciler can clean up volume when needed. However, if nodeExpandVolume failed,
-			// we should not mark the volume as mounted to avoid pod starts using it.
-			// Considering the above situations, we mark volume as uncertain here so that reconciler will trigger
-			// volume tear down when pod is deleted, and also makes sure pod will not start using it.
+			// 此时 SetUp 已成功，需让协调器能在必要时清理卷；但扩容失败又不能标记为已挂载，
+			// 否则 Pod 会开始使用它。故标记为不确定：Pod 删除时触发清理，同时阻止其启动使用。
 			if err := actualStateOfWorld.MarkVolumeMountAsUncertain(markVolumeOpts); err != nil {
 				klog.Error(volumeToMount.GenerateErrorDetailed("MountVolume.MarkVolumeMountAsUncertain failed", err).Error())
 			}
@@ -1145,7 +1135,7 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 
 		markVolMountedErr := actualStateOfWorld.MarkVolumeAsMounted(markVolumeOpts)
 		if markVolMountedErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("MapVolume.MarkVolumeAsMounted failed", markVolMountedErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -1167,15 +1157,14 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 	}, nil
 }
 
-// GenerateUnmapVolumeFunc marks volume as unmonuted based on following steps.
-// Remove symbolic links from pod device map path dir and  global map path dir.
-// Once those cleanups are done, remove pod device map path dir.
-// If all steps are completed, the volume is marked as unmounted.
+// GenerateUnmapVolumeFunc 按如下步骤把卷标记为未挂载：
+// 删除 Pod 设备映射路径与全局映射路径下的符号链接，再删除 Pod 设备映射目录。
+// 所有步骤完成后卷才被标记为未挂载。
 func (og *operationGenerator) GenerateUnmapVolumeFunc(
 	volumeToUnmount MountedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater) (volumetypes.GeneratedOperations, error) {
 
-	// Get block volume unmapper plugin
+	// 获取块卷解除映射插件。
 	blockVolumePlugin, err :=
 		og.volumePluginMgr.FindMapperPluginByName(volumeToUnmount.PluginName)
 	if err != nil {
@@ -1199,14 +1188,13 @@ func (og *operationGenerator) GenerateUnmapVolumeFunc(
 		// plugins/kubernetes.io/{PluginName}/volumeDevices/{volumePluginDependentPath}/{podUID}
 		globalUnmapPath, err := blockVolumeUnmapper.GetGlobalMapPath(volumeToUnmount.VolumeSpec)
 		if err != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToUnmount.GenerateError("UnmapVolume.GetGlobalMapPath failed", err)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Mark the device as uncertain to make sure kubelet calls UnmapDevice again in all the "return err"
-		// cases below. The volume is marked as fully un-mapped at the end of this function, when everything
-		// succeeds.
+		// 先把设备标记为不确定，保证下面任何 "return err" 分支都会让 kubelet 再次调用 UnmapDevice。
+		// 全部成功后才在末尾标记为完全解除映射。
 		markVolumeOpts := MarkVolumeOpts{
 			PodName:          volumeToUnmount.PodName,
 			PodUID:           volumeToUnmount.PodUID,
@@ -1217,25 +1205,25 @@ func (og *operationGenerator) GenerateUnmapVolumeFunc(
 		}
 		markVolumeUncertainErr := actualStateOfWorld.MarkVolumeMountAsUncertain(markVolumeOpts)
 		if markVolumeUncertainErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToUnmount.GenerateError("UnmapVolume.MarkDeviceAsUncertain failed", markVolumeUncertainErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Execute common unmap
+		// 执行通用解除映射。
 		unmapErr := util.UnmapBlockVolume(og.blkUtil, globalUnmapPath, podDeviceUnmapPath, volName, volumeToUnmount.PodUID)
 		if unmapErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToUnmount.GenerateError("UnmapVolume.UnmapBlockVolume failed", unmapErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Call UnmapPodDevice if blockVolumeUnmapper implements CustomBlockVolumeUnmapper
+		// 自定义块映射插件自行解除 Pod 设备映射。
 		if customBlockVolumeUnmapper, ok := blockVolumeUnmapper.(volume.CustomBlockVolumeUnmapper); ok {
-			// Execute plugin specific unmap
+			// 执行插件特定的解除映射。
 			unmapErr = customBlockVolumeUnmapper.UnmapPodDevice()
 			if unmapErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToUnmount.GenerateError("UnmapVolume.UnmapPodDevice failed", unmapErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
@@ -1250,11 +1238,11 @@ func (og *operationGenerator) GenerateUnmapVolumeFunc(
 			volumeToUnmount.PluginName,
 			volumeToUnmount.VolumeGIDValue)
 
-		// Update actual state of world
+		// 更新实际状态。
 		markVolUnmountedErr := actualStateOfWorld.MarkVolumeAsUnmounted(
 			volumeToUnmount.PodName, volumeToUnmount.VolumeName)
 		if markVolUnmountedErr != nil {
-			// On failure, just log and exit
+			// 此处失败只记录日志，不再重试。
 			klog.Error(volumeToUnmount.GenerateErrorDetailed("UnmapVolume.MarkVolumeAsUnmounted failed", markVolUnmountedErr).Error())
 		}
 
@@ -1265,20 +1253,15 @@ func (og *operationGenerator) GenerateUnmapVolumeFunc(
 		OperationName:     "unmap_volume",
 		OperationFunc:     unmapVolumeFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(blockVolumePlugin.GetPluginName(), volumeToUnmount.VolumeSpec), "unmap_volume"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
-// GenerateUnmapDeviceFunc marks device as unmounted based on following steps.
-// Check under globalMapPath dir if there isn't pod's symbolic links in it.
-// If symbolic link isn't there, the device isn't referenced from Pods.
-// Call plugin TearDownDevice to clean-up device connection, stored data under
-// globalMapPath, these operations depend on plugin implementation.
-// Once TearDownDevice is completed, remove globalMapPath dir.
-// After globalMapPath is removed, fd lock by loopback for the device can
-// be released safely because no one can consume the device at this point.
-// At last, device open status will be checked just in case.
-// If all steps are completed, the device is marked as unmounted.
+// GenerateUnmapDeviceFunc 按如下步骤把设备标记为未挂载：
+// 检查 globalMapPath 下是否还有 Pod 的符号链接；没有则说明设备已不被任何 Pod 引用。
+// 调用插件的 TearDownDevice 清理设备连接及 globalMapPath 下的数据（具体行为由插件决定），
+// 完成后删除 globalMapPath 目录，此时方可安全释放 loopback 持有的设备 fd 锁。
+// 最后再检查一次设备占用状态。所有步骤完成后设备才被标记为未挂载。
 func (og *operationGenerator) GenerateUnmapDeviceFunc(
 	deviceToDetach AttachedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
@@ -1303,13 +1286,13 @@ func (og *operationGenerator) GenerateUnmapDeviceFunc(
 
 	unmapDeviceFunc := func() volumetypes.OperationContext {
 		migrated := getMigratedStatusBySpec(deviceToDetach.VolumeSpec)
-		// Search under globalMapPath dir if all symbolic links from pods have been removed already.
-		// If symbolic links are there, pods may still refer the volume.
+		// 检查 globalMapPath 下所有来自 Pod 的符号链接是否已删除；
+		// 仍有链接说明 Pod 可能还在引用该卷。
 		globalMapPath := deviceToDetach.DeviceMountPath
 		refs, err := og.blkUtil.GetDeviceBindMountRefs(deviceToDetach.DevicePath, globalMapPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				// Looks like SetupDevice did not complete. Fall through to TearDownDevice and mark the device as unmounted.
+				// 看起来 SetupDevice 未完成；继续走 TearDownDevice 并把设备标记为未挂载。
 				refs = nil
 			} else {
 				eventErr, detailedErr := deviceToDetach.GenerateError("UnmapDevice.GetDeviceBindMountRefs check failed", err)
@@ -1322,46 +1305,42 @@ func (og *operationGenerator) GenerateUnmapDeviceFunc(
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Mark the device as uncertain to make sure kubelet calls UnmapDevice again in all the "return err"
-		// cases below. The volume is marked as fully un-mapped at the end of this function, when everything
-		// succeeds.
+		// 先把设备标记为不确定，保证下面任何 "return err" 分支都会让 kubelet 再次调用 UnmapDevice。
+		// 全部成功后才在末尾标记为完全解除映射。
 		markDeviceUncertainErr := actualStateOfWorld.MarkDeviceAsUncertain(
 			deviceToDetach.VolumeName, deviceToDetach.DevicePath, globalMapPath, "" /* seLinuxMountContext */)
 		if markDeviceUncertainErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := deviceToDetach.GenerateError("UnmapDevice.MarkDeviceAsUncertain failed", markDeviceUncertainErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Call TearDownDevice if blockVolumeUnmapper implements CustomBlockVolumeUnmapper
+		// 自定义块映射插件自行清理设备。
 		if customBlockVolumeUnmapper, ok := blockVolumeUnmapper.(volume.CustomBlockVolumeUnmapper); ok {
-			// Execute tear down device
+			// 执行插件特定的设备清理。
 			unmapErr := customBlockVolumeUnmapper.TearDownDevice(globalMapPath, deviceToDetach.DevicePath)
 			if unmapErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := deviceToDetach.GenerateError("UnmapDevice.TearDownDevice failed", unmapErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 		}
 
-		// Plugin finished TearDownDevice(). Now globalMapPath dir and plugin's stored data
-		// on the dir are unnecessary, clean up it.
+		// 插件已清理完设备，globalMapPath 目录及其中的数据不再需要，直接删除。
 		removeMapPathErr := og.blkUtil.RemoveMapPath(globalMapPath)
 		if removeMapPathErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := deviceToDetach.GenerateError("UnmapDevice.RemoveMapPath failed", removeMapPathErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Before logging that UnmapDevice succeeded and moving on,
-		// use hostutil.PathIsDevice to check if the path is a device,
-		// if so use hostutil.DeviceOpened to check if the device is in use anywhere
-		// else on the system. Retry if it returns true.
+		// 宣告解除映射成功前，先用 hostutil.PathIsDevice 确认路径是否为设备，
+		// 再用 hostutil.DeviceOpened 检查系统其他位置是否仍在使用；若仍被占用则需重试。
 		deviceOpened, deviceOpenedErr := isDeviceOpened(deviceToDetach, hostutil)
 		if deviceOpenedErr != nil {
 			return volumetypes.NewOperationContext(nil, deviceOpenedErr, migrated)
 		}
-		// The device is still in use elsewhere. Caller will log and retry.
+		// 设备仍被别处使用，由调用方记录并重试。
 		if deviceOpened {
 			eventErr, detailedErr := deviceToDetach.GenerateError(
 				"UnmapDevice failed",
@@ -1371,11 +1350,11 @@ func (og *operationGenerator) GenerateUnmapDeviceFunc(
 
 		klog.Info(deviceToDetach.GenerateMsgDetailed("UnmapDevice succeeded", ""))
 
-		// Update actual state of world
+		// 更新实际状态。
 		markDeviceUnmountedErr := actualStateOfWorld.MarkDeviceAsUnmounted(
 			deviceToDetach.VolumeName)
 		if markDeviceUnmountedErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := deviceToDetach.GenerateError("MarkDeviceAsUnmounted failed", markDeviceUnmountedErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -1387,10 +1366,11 @@ func (og *operationGenerator) GenerateUnmapDeviceFunc(
 		OperationName:     "unmap_device",
 		OperationFunc:     unmapDeviceFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(blockVolumePlugin.GetPluginName(), deviceToDetach.VolumeSpec), "unmap_device"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 }
 
+// GenerateVerifyControllerAttachedVolumeFunc 生成校验控制器是否已完成卷挂载的操作。
 func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 	logger klog.Logger,
 	volumeToMount VolumeToMount,
@@ -1402,10 +1382,8 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		return volumetypes.GeneratedOperations{}, volumeToMount.GenerateErrorDetailed("VerifyControllerAttachedVolume.FindPluginBySpec failed", err)
 	}
 
-	// For attachable volume types, lets check if volume is attached by reading from node lister.
-	// This would avoid exponential back-off and creation of goroutine unnecessarily. We still
-	// verify status of attached volume by directly reading from API server later on.This is necessarily
-	// to ensure any race conditions because of cached state in the informer.
+	// 对可挂载卷先从 node lister 缓存检查挂载状态，避免不必要的指数退避与 goroutine。
+	// 之后仍会直接读 API 服务器复核，以防 informer 缓存状态带来竞态。
 	if volumeToMount.PluginIsAttachable {
 		cachedAttachedVolumes, _ := og.volumePluginMgr.Host.GetAttachedVolumesFromNodeStatus()
 		if cachedAttachedVolumes != nil {
@@ -1420,7 +1398,7 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		migrated := getMigratedStatusBySpec(volumeToMount.VolumeSpec)
 		claimSize := actualStateOfWorld.GetClaimSize(volumeToMount.VolumeName)
 
-		// only fetch claimSize if it was not set previously
+		// 仅当之前未记录 claimSize 时才去获取。
 		if volumeToMount.VolumeSpec.PersistentVolume != nil && claimSize.IsZero() && !volumeToMount.VolumeSpec.InlineVolumeSpecForCSIMigration {
 			pv := volumeToMount.VolumeSpec.PersistentVolume
 			pvc, err := og.kubeClient.CoreV1().PersistentVolumeClaims(pv.Spec.ClaimRef.Namespace).Get(context.TODO(), pv.Spec.ClaimRef.Name, metav1.GetOptions{})
@@ -1435,14 +1413,12 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		}
 
 		if !volumeToMount.PluginIsAttachable {
-			// If the volume does not implement the attacher interface, it is
-			// assumed to be attached and the actual state of the world is
-			// updated accordingly.
+			// 卷未实现 attacher 接口时视为已挂载，并相应更新实际状态。
 
 			addVolumeNodeErr := actualStateOfWorld.MarkVolumeAsAttached(
 				logger, volumeToMount.VolumeName, volumeToMount.VolumeSpec, nodeName, "" /* devicePath */)
 			if addVolumeNodeErr != nil {
-				// On failure, return error. Caller will log and retry.
+				// 失败时返回错误，由调用方记录并重试。
 				eventErr, detailedErr := volumeToMount.GenerateError("VerifyControllerAttachedVolume.MarkVolumeAsAttachedByUniqueVolumeName failed", addVolumeNodeErr)
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
@@ -1451,20 +1427,17 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		}
 
 		if !volumeToMount.ReportedInUse {
-			// If the given volume has not yet been added to the list of
-			// VolumesInUse in the node's volume status, do not proceed, return
-			// error. Caller will log and retry. The node status is updated
-			// periodically by kubelet, so it may take as much as 10 seconds
-			// before this clears.
+			// 卷尚未出现在节点状态的 VolumesInUse 列表中时直接报错，由调用方记录并重试。
+			// 节点状态由 kubelet 周期性更新，最多可能需 10 秒才会生效。
 			// Issue #28141 to enable on demand status updates.
 			eventErr, detailedErr := volumeToMount.GenerateError("Volume has not been added to the list of VolumesInUse in the node's volume status", nil)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
 
-		// Fetch current node object
+		// 获取最新的 Node 对象。
 		node, fetchErr := og.kubeClient.CoreV1().Nodes().Get(context.TODO(), string(nodeName), metav1.GetOptions{})
 		if fetchErr != nil {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			eventErr, detailedErr := volumeToMount.GenerateError("VerifyControllerAttachedVolume failed fetching node from API server", fetchErr)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -1475,7 +1448,7 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 					logger, v1.UniqueVolumeName(""), volumeToMount.VolumeSpec, nodeName, attachedVolume.DevicePath)
 				klog.InfoS(volumeToMount.GenerateMsgDetailed("Controller attach succeeded", fmt.Sprintf("device path: %q", attachedVolume.DevicePath)), "pod", klog.KObj(volumeToMount.Pod))
 				if addVolumeNodeErr != nil {
-					// On failure, return error. Caller will log and retry.
+					// 失败时返回错误，由调用方记录并重试。
 					eventErr, detailedErr := volumeToMount.GenerateError("VerifyControllerAttachedVolume.MarkVolumeAsAttached failed", addVolumeNodeErr)
 					return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 				}
@@ -1484,7 +1457,7 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 			}
 		}
 
-		// Volume not attached, return error. Caller will log and retry.
+		// 节点状态显示卷未挂载，返回错误由调用方记录并重试。
 		eventErr, detailedErr := volumeToMount.GenerateError("Volume not attached according to node status", nil)
 		return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 	}
@@ -1493,14 +1466,15 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		OperationName:     VerifyControllerAttachedVolumeOpName,
 		OperationFunc:     verifyControllerAttachedVolumeFunc,
 		CompleteFunc:      util.OperationCompleteHook(util.GetFullQualifiedPluginNameForVolume(volumePlugin.GetPluginName(), volumeToMount.VolumeSpec), "verify_controller_attached_volume"),
-		EventRecorderFunc: nil, // nil because we do not want to generate event on error
+		EventRecorderFunc: nil, // 不希望在该操作出错时产生事件。
 	}, nil
 
 }
 
+// verifyVolumeIsSafeToDetach 检查节点状态以确认卷可安全分离。
 func (og *operationGenerator) verifyVolumeIsSafeToDetach(
 	volumeToDetach AttachedVolume) error {
-	// Fetch current node object
+	// 获取最新的 Node 对象。
 	node, fetchErr := og.kubeClient.CoreV1().Nodes().Get(context.TODO(), string(volumeToDetach.NodeName), metav1.GetOptions{})
 	if fetchErr != nil {
 		if errors.IsNotFound(fetchErr) {
@@ -1508,7 +1482,7 @@ func (og *operationGenerator) verifyVolumeIsSafeToDetach(
 			return nil
 		}
 
-		// On failure, return error. Caller will log and retry.
+		// 失败时返回错误，由调用方记录并重试。
 		return volumeToDetach.GenerateErrorDetailed("DetachVolume failed fetching node from API server", fetchErr)
 	}
 
@@ -1518,11 +1492,12 @@ func (og *operationGenerator) verifyVolumeIsSafeToDetach(
 			fmt.Errorf("volume is still in use by node, according to Node status"))
 	}
 
-	// Volume is not marked as in use by node
+	// 节点未将卷标记为使用中，可安全分离。
 	klog.Info(volumeToDetach.GenerateMsgDetailed("Verified volume is safe to detach", ""))
 	return nil
 }
 
+// GenerateExpandVolumeFunc 生成控制器侧卷扩容操作。
 func (og *operationGenerator) GenerateExpandVolumeFunc(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume) (volumetypes.GeneratedOperations, error) {
@@ -1557,9 +1532,9 @@ func (og *operationGenerator) GenerateExpandVolumeFunc(
 			klog.Infof("ExpandVolume succeeded for volume %s", util.GetPersistentVolumeClaimQualifiedName(pvc))
 
 			newSize = updatedSize
-			// k8s doesn't have transactions, we can't guarantee that after updating PV - updating PVC will be
-			// successful, that is why all PVCs for which pvc.Spec.Size > pvc.Status.Size must be reprocessed
-			// until they reflect user requested size in pvc.Status.Size
+			// k8s 没有事务，无法保证更新 PV 后 PVC 一定更新成功；
+			// 因此所有 pvc.Spec.Size > pvc.Status.Size 的 PVC 都需反复处理，
+			// 直到 pvc.Status.Size 反映用户请求的大小。
 			_, updateErr := util.UpdatePVSize(pv, newSize, og.kubeClient)
 			if updateErr != nil {
 				detailedErr := fmt.Errorf("error updating PV spec capacity for volume %q with : %v", util.GetPersistentVolumeClaimQualifiedName(pvc), updateErr)
@@ -1570,9 +1545,8 @@ func (og *operationGenerator) GenerateExpandVolumeFunc(
 		}
 
 		fsVolume, _ := util.CheckVolumeModeFilesystem(volumeSpec)
-		// No Cloudprovider resize needed, lets mark resizing as done
-		// Rest of the volume expand controller code will assume PVC as *not* resized until pvc.Status.Size
-		// reflects user requested size.
+		// 无需云厂商扩容时直接标记完成；其余扩容控制器逻辑在 pvc.Status.Size
+		// 反映用户请求大小之前，会始终视 PVC 为未扩容。
 		if !volumePlugin.RequiresFSResize() || !fsVolume {
 			klog.V(4).Infof("Controller resizing done for PVC %s", util.GetPersistentVolumeClaimQualifiedName(pvc))
 			_, err := util.MarkResizeFinished(pvc, newSize, og.kubeClient)
@@ -1615,6 +1589,7 @@ func (og *operationGenerator) GenerateExpandVolumeFunc(
 	}, nil
 }
 
+// GenerateExpandAndRecoverVolumeFunc 生成支持从扩容失败中恢复的卷扩容操作。
 func (og *operationGenerator) GenerateExpandAndRecoverVolumeFunc(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume, resizerName string) (volumetypes.GeneratedOperations, error) {
@@ -1662,6 +1637,7 @@ func (og *operationGenerator) GenerateExpandAndRecoverVolumeFunc(
 
 // Deprecated: This function should not be called by any controller code in future and should be removed
 // from kubernetes code
+// expandAndRecoverFunction 执行扩容并从失败中恢复；已废弃，未来不应再被控制器调用。
 func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOpts) inTreeResizeResponse {
 	pvc := resizeOpts.pvc
 	pv := resizeOpts.pv
@@ -1679,7 +1655,7 @@ func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOp
 		resizeCalled: false,
 	}
 
-	// by default we are expanding to fulfill size requested in pvc.Spec.Resources
+	// 默认扩容到 pvc.Spec.Resources 中请求的大小。
 	newSize := pvcSpecSize
 
 	var resizeStatus v1.ClaimResourceStatus
@@ -1695,7 +1671,7 @@ func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOp
 	var err error
 
 	if pvSize.Cmp(pvcSpecSize) < 0 {
-		// pv is not of requested size yet and hence will require expanding
+		// PV 尚未达到请求大小，需要扩容。
 
 		switch resizeStatus {
 		case v1.PersistentVolumeClaimControllerResizeInProgress,
@@ -1709,39 +1685,31 @@ func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOp
 			newSize = pvcSpecSize
 		}
 	} else {
-		// PV has already been expanded and hence we can be here for following reasons:
-		//   1. If expansion is pending on the node and this was just a spurious update event
-		//      we don't need to do anything and let kubelet handle it.
-		//   2. It could be that - although we successfully expanded the volume, we failed to
-		//      record our work in API objects, in which case - we should resume resizing operation
-		//      and let API objects be updated.
-		//   3. Controller successfully expanded the volume, but expansion is failing on the node
-		//      and before kubelet can retry failed node expansion - controller must verify if it is
-		//      safe to do so.
-		//   4. While expansion was still pending on the node, user reduced the pvc size.
+		// PV 已扩容仍走到这里，可能原因有四：
+		//   1. 节点扩容待处理，且这只是一次多余的更新事件——无需操作，交给 kubelet。
+		//   2. 卷已成功扩容但未写回 API 对象——应恢复扩容并更新 API 对象。
+		//   3. 控制器已扩容，但节点扩容失败——kubelet 重试前控制器需确认是否安全。
+		//   4. 节点扩容待处理期间用户缩小了 PVC。
 		switch resizeStatus {
 		case v1.PersistentVolumeClaimNodeResizeInProgress,
 			v1.PersistentVolumeClaimNodeResizePending:
-			// we don't need to do any work. We could be here because of a spurious update event.
-			// This is case #1
+			// 无需操作，多由多余的更新事件触发（情形 1）。
 			return resizeResponse
 		case v1.PersistentVolumeClaimNodeResizeInfeasible:
-			// This is case#3
+			// 情形 3。
 			pvc, err = og.markForPendingNodeExpansion(pvc, pv)
 			resizeResponse.pvc = pvc
 			resizeResponse.err = err
 			return resizeResponse
 		case v1.PersistentVolumeClaimControllerResizeInProgress,
 			v1.PersistentVolumeClaimControllerResizeInfeasible:
-			// This is case#2 or it could also be case#4 when user manually shrunk the PVC
-			// after expanding it.
+			// 情形 2；也可能是情形 4：用户扩容后又手动缩小了 PVC。
 			if allocatedSize != nil {
 				newSize = *allocatedSize
 			}
 		default:
-			// It is impossible for ResizeStatus to be "" and allocatedSize to be not nil but somehow
-			// if we do end up in this state, it is safest to resume expansion to last recorded size in
-			// allocatedSize variable.
+			// resizeStatus 为空而 allocatedSize 非空本不应出现；若真遇到，
+			// 按 allocatedSize 中记录的上次大小恢复扩容最稳妥。
 			if resizeStatus == "" && allocatedSize != nil {
 				newSize = *allocatedSize
 			} else {
@@ -1768,10 +1736,10 @@ func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOp
 		return resizeResponse
 	}
 
-	// update PV size
+	// 更新 PV 大小。
 	var updateErr error
 	pv, updateErr = util.UpdatePVSize(pv, updatedSize, og.kubeClient)
-	// if updating PV failed, we are going to leave the PVC in ControllerExpansionInProgress state, so as expansion can be retried to previously set allocatedSize value.
+	// PV 更新失败时保持 PVC 处于 ControllerExpansionInProgress，便于按之前记录的 allocatedSize 重试。
 	if updateErr != nil {
 		msg := fmt.Errorf("error updating pv for pvc %s: %v", util.GetPersistentVolumeClaimQualifiedName(pvc), updateErr)
 		resizeResponse.err = msg
@@ -1803,6 +1771,7 @@ func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOp
 	return resizeResponse
 }
 
+// markForPendingNodeExpansion 将 PVC 标记为等待节点扩容，并保存扩容前容量。
 func (og *operationGenerator) markForPendingNodeExpansion(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, error) {
 	var err error
 	pvc, err = util.MarkForFSResize(pvc, og.kubeClient)
@@ -1810,8 +1779,7 @@ func (og *operationGenerator) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 		msg := fmt.Errorf("error marking pvc %s for node expansion: %v", util.GetPersistentVolumeClaimQualifiedName(pvc), err)
 		return pvc, msg
 	}
-	// store old PVC capacity in pv, so as if PVC gets deleted while node expansion was pending
-	// we can restore size of pvc from PV annotation and still perform expansion on the node
+	// 把扩容前容量存入 PV：若节点扩容待处理期间 PVC 被删除，可从 PV 注解恢复大小继续扩容。
 	oldCapacity := pvc.Status.Capacity[v1.ResourceStorage]
 	err = util.AddAnnPreResizeCapacity(pv, oldCapacity, og.kubeClient)
 	if err != nil {
@@ -1822,6 +1790,7 @@ func (og *operationGenerator) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 	return pvc, nil
 }
 
+// GenerateExpandInUseVolumeFunc 生成在线文件系统扩容操作，无需卸载卷。
 func (og *operationGenerator) GenerateExpandInUseVolumeFunc(
 	volumeToMount VolumeToMount,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater, currentSize resource.Quantity) (volumetypes.GeneratedOperations, error) {
@@ -1881,7 +1850,7 @@ func (og *operationGenerator) GenerateExpandInUseVolumeFunc(
 				resizeOptions.DeviceStagePath = deviceStagePath
 			}
 		} else {
-			// Get block volume mapper plugin
+			// 获取块卷映射插件。
 			blockVolumePlugin, err :=
 				og.volumePluginMgr.FindMapperPluginBySpec(volumeToMount.VolumeSpec)
 			if err != nil {
@@ -1902,13 +1871,13 @@ func (og *operationGenerator) GenerateExpandInUseVolumeFunc(
 				return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 			}
 
-			// if plugin supports custom mappers lets add DeviceStagePath
+			// 自定义映射插件可自行提供 staging 路径。
 			if customBlockVolumeMapper, ok := blockVolumeMapper.(volume.CustomBlockVolumeMapper); ok {
 				resizeOptions.DeviceStagePath = customBlockVolumeMapper.GetStagingPath()
 			}
 		}
 
-		// if we are doing online expansion then volume is already published
+		// 在线扩容时卷已发布，直接执行扩容。
 		resizeDone, eventErr, detailedErr = og.doOnlineExpansion(volumeToMount, actualStateOfWorld, resizeOptions)
 		if eventErr != nil || detailedErr != nil {
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
@@ -1934,6 +1903,7 @@ func (og *operationGenerator) GenerateExpandInUseVolumeFunc(
 	}, nil
 }
 
+// doOnlineExpansion 执行在线扩容并在成功后更新实际状态。
 func (og *operationGenerator) doOnlineExpansion(volumeToMount VolumeToMount,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
 	resizeOptions volume.NodeResizeOptions) (bool, error, error) {
@@ -1947,7 +1917,7 @@ func (og *operationGenerator) doOnlineExpansion(volumeToMount VolumeToMount,
 	if resizeDone {
 		markingDone := actualStateOfWorld.MarkVolumeAsResized(volumeToMount.VolumeName, newSize)
 		if !markingDone {
-			// On failure, return error. Caller will log and retry.
+			// 失败时返回错误，由调用方记录并重试。
 			genericFailureError := fmt.Errorf("unable to mark volume as resized")
 			e1, e2 := volumeToMount.GenerateError("NodeExpandVolume.MarkVolumeAsResized failed", genericFailureError)
 			return false, e1, e2
@@ -1957,13 +1927,14 @@ func (og *operationGenerator) doOnlineExpansion(volumeToMount VolumeToMount,
 	return false, nil, nil
 }
 
+// expandVolumeDuringMount 在挂载流程中按需执行节点扩容。
 func (og *operationGenerator) expandVolumeDuringMount(volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, rsOpts volume.NodeResizeOptions) (bool, error) {
 	supportsExpansion, expandablePlugin := og.checkIfSupportsNodeExpansion(volumeToMount)
 	if supportsExpansion {
 		pv := volumeToMount.VolumeSpec.PersistentVolume
 		pvc, err := og.kubeClient.CoreV1().PersistentVolumeClaims(pv.Spec.ClaimRef.Namespace).Get(context.TODO(), pv.Spec.ClaimRef.Name, metav1.GetOptions{})
 		if err != nil {
-			// Return error rather than leave the file system un-resized, caller will log and retry
+			// 直接报错而非放任文件系统未扩容；调用方会记录并重试。
 			return false, fmt.Errorf("mountVolume.NodeExpandVolume get PVC failed : %v", err)
 		}
 
@@ -1990,7 +1961,7 @@ func (og *operationGenerator) expandVolumeDuringMount(volumeToMount VolumeToMoun
 				actualStateOfWorld: actualStateOfWorld,
 			}
 			if og.checkForRecoveryFromExpansion(pvc, volumeToMount) {
-				// if recovery feature is enabled, we can use allocated size from PVC status as new size
+				// 恢复特性开启时，以 PVC 状态中的 allocated 大小作为新大小。
 				rsOpts.NewSize = pvc.Status.AllocatedResources[v1.ResourceStorage]
 				resizeOp.pluginResizeOpts = rsOpts
 				nodeExpander := newNodeExpander(resizeOp, og.kubeClient, og.recorder)
@@ -2004,6 +1975,7 @@ func (og *operationGenerator) expandVolumeDuringMount(volumeToMount VolumeToMoun
 	return true, nil
 }
 
+// checkIfSupportsNodeExpansion 判断卷是否支持节点扩容并返回相应插件。
 func (og *operationGenerator) checkIfSupportsNodeExpansion(volumeToMount VolumeToMount) (bool, volume.NodeExpandableVolumePlugin) {
 	if volumeToMount.VolumeSpec != nil &&
 		volumeToMount.VolumeSpec.InlineVolumeSpecForCSIMigration {
@@ -2011,7 +1983,7 @@ func (og *operationGenerator) checkIfSupportsNodeExpansion(volumeToMount VolumeT
 		return false, nil
 	}
 
-	// Get expander, if possible
+	// 尽量获取节点扩容器；并非所有卷都支持节点扩容。
 	expandableVolumePlugin, _ :=
 		og.volumePluginMgr.FindNodeExpandablePluginBySpec(volumeToMount.VolumeSpec)
 	if expandableVolumePlugin != nil &&
@@ -2022,6 +1994,7 @@ func (og *operationGenerator) checkIfSupportsNodeExpansion(volumeToMount VolumeT
 	return false, nil
 }
 
+// nodeExpandVolume 在节点侧执行扩容，返回是否完成、当前大小及错误。
 func (og *operationGenerator) nodeExpandVolume(
 	volumeToMount VolumeToMount,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
@@ -2030,13 +2003,13 @@ func (og *operationGenerator) nodeExpandVolume(
 	supportsExpansion, expandableVolumePlugin := og.checkIfSupportsNodeExpansion(volumeToMount)
 
 	if supportsExpansion {
-		// lets use sizes handed over to us by caller for comparison
+		// 使用调用方传入的大小做比较。
 		if rsOpts.NewSize.Cmp(rsOpts.OldSize) > 0 {
 			pv := volumeToMount.VolumeSpec.PersistentVolume
 			pvc, err := og.kubeClient.CoreV1().PersistentVolumeClaims(pv.Spec.ClaimRef.Namespace).Get(context.TODO(), pv.Spec.ClaimRef.Name, metav1.GetOptions{})
 			currentSize := pvc.Status.Capacity.Storage()
 			if err != nil {
-				// Return error rather than leave the file system un-resized, caller will log and retry
+				// 直接报错而非放任文件系统未扩容；调用方会记录并重试。
 				return false, *currentSize, fmt.Errorf("mountVolume.NodeExpandVolume get PVC failed : %w", err)
 			}
 
@@ -2057,7 +2030,7 @@ func (og *operationGenerator) nodeExpandVolume(
 			}
 
 			if og.checkForRecoveryFromExpansion(pvc, volumeToMount) {
-				// if recovery feature is enabled, we can use allocated size from PVC status as new size
+				// 恢复特性开启时，以 PVC 状态中的 allocated 大小作为新大小。
 				newSize := pvc.Status.AllocatedResources[v1.ResourceStorage]
 				rsOpts.NewSize = newSize
 				resizeOp.pluginResizeOpts.NewSize = newSize
@@ -2073,23 +2046,23 @@ func (og *operationGenerator) nodeExpandVolume(
 	return true, rsOpts.OldSize, nil
 }
 
+// checkForRecoveryFromExpansion 判断本次扩容是否应按失败恢复路径处理。
 func (og *operationGenerator) checkForRecoveryFromExpansion(pvc *v1.PersistentVolumeClaim, volumeToMount VolumeToMount) bool {
 	resizeStatus := pvc.Status.AllocatedResourceStatuses[v1.ResourceStorage]
 	allocatedResource := pvc.Status.AllocatedResources
 	featureGateStatus := utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure)
 
 	if !featureGateStatus {
-		// even though RecoverVolumeExpansionFailure feature-gate is disabled, we should consider it enabled
-		// if resizeStatus is not empty or allocatedresources is set
+		// 即使 RecoverVolumeExpansionFailure 特性门控关闭，只要 resizeStatus 或
+		// allocatedResources 已设置，也应视作恢复路径生效。
 		if resizeStatus != "" || allocatedResource != nil {
 			return true
 		}
 		return false
 	}
 
-	// Even though RecoverVolumeExpansionFailure feature gate is enabled, it appears that we are running with older version
-	// of resize controller, which will not populate allocatedResource and resizeStatus. This can happen because of version skew
-	// and hence we are going to keep expanding using older logic.
+	// 特性门控虽已开启，但 resizeStatus 与 allocatedResources 均为空，说明运行的是旧版扩容控制器，
+	// 不会填充这些字段。这是版本偏差导致的，故继续使用旧逻辑扩容。
 	if resizeStatus == "" && allocatedResource == nil {
 		_, detailedMsg := volumeToMount.GenerateMsg("MountVolume.NodeExpandVolume running with", "older external resize controller")
 		klog.Warning(detailedMsg)
@@ -2098,8 +2071,7 @@ func (og *operationGenerator) checkForRecoveryFromExpansion(pvc *v1.PersistentVo
 	return true
 }
 
-// legacyCallNodeExpandOnPlugin is old version of calling node expansion on plugin, which does not support
-// recovery from volume expansion failure
+// legacyCallNodeExpandOnPlugin 是旧版节点扩容调用方式，不支持从扩容失败中恢复。
 // TODO: Removing this code when RecoverVolumeExpansionFailure feature goes GA.
 func (og *operationGenerator) legacyCallNodeExpandOnPlugin(resizeOp nodeResizeOperationOpts) (bool, error) {
 	pvc := resizeOp.pvc
@@ -2114,24 +2086,21 @@ func (og *operationGenerator) legacyCallNodeExpandOnPlugin(resizeOp nodeResizeOp
 
 	var err error
 
-	// File system resize was requested, proceed
+	// 已请求文件系统扩容，继续执行。
 	klog.V(4).InfoS(volumeToMount.GenerateMsgDetailed("MountVolume.NodeExpandVolume entering", fmt.Sprintf("DevicePath %q", volumeToMount.DevicePath)), "pod", klog.KObj(volumeToMount.Pod))
 
 	rsOpts.VolumeSpec = volumeToMount.VolumeSpec
 
 	_, resizeErr := expandableVolumePlugin.NodeExpand(rsOpts)
 	if resizeErr != nil {
-		// This is a workaround for now, until RecoverFromVolumeExpansionFailure feature goes GA.
-		// If RecoverFromVolumeExpansionFailure feature is enabled, we will not ever hit this state, because
-		// we will wait for VolumeExpansionPendingOnNode before trying to expand volume in kubelet.
+		// 这是临时方案，待 RecoverFromVolumeExpansionFailure 特性 GA 后移除。
+		// 该特性开启时不会走到这里，因为 kubelet 会先等待 VolumeExpansionPendingOnNode 再扩容。
 		if volumetypes.IsOperationNotSupportedError(resizeErr) {
 			klog.V(4).InfoS(volumeToMount.GenerateMsgDetailed("MountVolume.NodeExpandVolume failed", "NodeExpandVolume not supported"), "pod", klog.KObj(volumeToMount.Pod))
 			return true, nil
 		}
 
-		// if driver returned FailedPrecondition error that means
-		// volume expansion should not be retried on this node but
-		// expansion operation should not block mounting
+		// 驱动返回 FailedPrecondition 表示本节点不应重试扩容，但扩容操作不应阻塞挂载。
 		if volumetypes.IsFailedPreconditionError(resizeErr) {
 			actualStateOfWorld.MarkForInUseExpansionError(volumeToMount.VolumeName)
 			klog.Error(volumeToMount.GenerateErrorDetailed("MountVolume.NodeExpandVolume failed", resizeErr).Error())
@@ -2145,20 +2114,21 @@ func (og *operationGenerator) legacyCallNodeExpandOnPlugin(resizeOp nodeResizeOp
 	og.recorder.Eventf(pvc, v1.EventTypeNormal, kevents.FileSystemResizeSuccess, "%s", simpleMsg)
 	klog.InfoS(detailedMsg, "pod", klog.KObj(volumeToMount.Pod))
 
-	// if PVC already has new size, there is no need to update it.
+	// PVC 已有新大小则无需更新。
 	if pvcStatusCap.Cmp(rsOpts.NewSize) >= 0 {
 		return true, nil
 	}
 
-	// File system resize succeeded, now update the PVC's Capacity to match the PV's
+	// 文件系统扩容成功，更新 PVC 容量使其与 PV 一致。
 	_, err = util.MarkFSResizeFinished(pvc, rsOpts.NewSize, og.kubeClient)
 	if err != nil {
-		// On retry, NodeExpandVolume will be called again but do nothing
+		// 重试时 NodeExpandVolume 会被再次调用，但不会重复操作。
 		return false, fmt.Errorf("mountVolume.NodeExpandVolume update PVC status failed : %v", err)
 	}
 	return true, nil
 }
 
+// checkMountOptionSupport 在卷规格指定了挂载选项时检查插件是否支持。
 func checkMountOptionSupport(og *operationGenerator, volumeToMount VolumeToMount, plugin volume.VolumePlugin) error {
 	mountOptions := util.MountOptionFromSpec(volumeToMount.VolumeSpec)
 
@@ -2168,8 +2138,8 @@ func checkMountOptionSupport(og *operationGenerator, volumeToMount VolumeToMount
 	return nil
 }
 
-// checkNodeAffinity looks at the PV node affinity, and checks if the node has the same corresponding labels
-// This ensures that we don't mount a volume that doesn't belong to this node
+// checkNodeAffinity 根据 PV 的节点亲和性检查当前节点标签是否匹配，
+// 确保不会挂载不属于本节点的卷。
 func checkNodeAffinity(og *operationGenerator, volumeToMount VolumeToMount) error {
 	pv := volumeToMount.VolumeSpec.PersistentVolume
 	if pv != nil {
@@ -2185,14 +2155,14 @@ func checkNodeAffinity(og *operationGenerator, volumeToMount VolumeToMount) erro
 	return nil
 }
 
-// isDeviceOpened checks the device status if the device is in use anywhere else on the system
+// isDeviceOpened 检查设备路径是否仍被系统其他位置占用。
 func isDeviceOpened(deviceToDetach AttachedVolume, hostUtil hostutil.HostUtils) (bool, error) {
 	isDevicePath, devicePathErr := hostUtil.PathIsDevice(deviceToDetach.DevicePath)
 	var deviceOpened bool
 	var deviceOpenedErr error
 	if !isDevicePath && devicePathErr == nil ||
 		(devicePathErr != nil && strings.Contains(devicePathErr.Error(), "does not exist")) {
-		// not a device path or path doesn't exist
+		// 不是设备路径或路径不存在。
 		// TODO: refer to #36092
 		klog.V(3).Infof("The path isn't device path or doesn't exist. Skip checking device path: %s", deviceToDetach.DevicePath)
 		deviceOpened = false
@@ -2207,10 +2177,9 @@ func isDeviceOpened(deviceToDetach AttachedVolume, hostUtil hostutil.HostUtils) 
 	return deviceOpened, nil
 }
 
-// findDetachablePluginBySpec is a variant of VolumePluginMgr.FindAttachablePluginByName() function.
-// The difference is that it bypass the CanAttach() check for CSI plugin, i.e. it assumes all CSI plugin supports detach.
-// The intention here is that a CSI plugin volume can end up in an Uncertain state,  so that a detach
-// operation will help it to detach no matter it actually has the ability to attach/detach.
+// findDetachablePluginBySpec 是 VolumePluginMgr.FindAttachablePluginByName() 的变体：
+// 对 CSI 插件绕过 CanAttach() 检查，假定所有 CSI 插件都支持分离。
+// 这样 CSI 卷即使处于不确定状态，也能通过分离操作完成清理，无论其是否真的支持 attach/detach。
 func findDetachablePluginBySpec(spec *volume.Spec, pm *volume.VolumePluginMgr) (volume.AttachableVolumePlugin, error) {
 	volumePlugin, err := pm.FindPluginBySpec(spec)
 	if err != nil {
@@ -2229,6 +2198,7 @@ func findDetachablePluginBySpec(spec *volume.Spec, pm *volume.VolumePluginMgr) (
 	return nil, nil
 }
 
+// getMigratedStatusBySpec 返回卷规格的迁移标记；nil 规格按非迁移处理。
 func getMigratedStatusBySpec(spec *volume.Spec) bool {
 	migrated := false
 	if spec != nil {

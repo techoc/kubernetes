@@ -38,39 +38,31 @@ const (
 	maxPathLength     = 4096
 )
 
-// AtomicWriter handles atomically projecting content for a set of files into
-// a target directory.
+// AtomicWriter 负责将一组文件的内容原子地投影到目标目录。
 //
-// Note:
+// 注意：
 //
-//  1. AtomicWriter reserves the set of pathnames starting with `..`.
-//  2. AtomicWriter offers no concurrency guarantees and must be synchronized
-//     by the caller.
+//  1. AtomicWriter 保留所有以 `..` 开头的路径名。
+//  2. AtomicWriter 不提供并发保证，需由调用方自行同步。
 //
-// The visible files in this volume are symlinks to files in the writer's data
-// directory.  Actual files are stored in a hidden timestamped directory which
-// is symlinked to by the data directory. The timestamped directory and
-// data directory symlink are created in the writer's target dir.  This scheme
-// allows the files to be atomically updated by changing the target of the
-// data directory symlink.
+// 卷中可见的文件是指向 writer 数据目录内文件的符号链接。真实文件存放在隐藏的时间戳目录中，
+// 数据目录再以符号链接指向它。时间戳目录和数据目录的符号链接都创建在 writer 的目标目录下。
+// 这样只需改变数据目录符号链接的指向，即可原子地更新所有文件。
 //
-// Consumers of the target directory can monitor the ..data symlink using
-// inotify or fanotify to receive events when the content in the volume is
-// updated.
+// 目标目录的使用方可以通过 inotify 或 fanotify 监听 ..data 符号链接，从而在卷内容更新时收到事件。
 type AtomicWriter struct {
 	targetDir  string
 	logContext string
 }
 
-// FileProjection contains file Data and access Mode
+// FileProjection 包含文件的数据、权限模式及文件系统用户。
 type FileProjection struct {
 	Data   []byte
 	Mode   int32
 	FsUser *int64
 }
 
-// NewAtomicWriter creates a new AtomicWriter configured to write to the given
-// target directory, or returns an error if the target directory does not exist.
+// NewAtomicWriter 创建一个写入指定目标目录的 AtomicWriter；目标目录不存在时返回错误。
 func NewAtomicWriter(targetDir string, logContext string) (*AtomicWriter, error) {
 	_, err := os.Stat(targetDir)
 	if os.IsNotExist(err) {
@@ -85,59 +77,49 @@ const (
 	newDataDirName = "..data_tmp"
 )
 
-// Write does an atomic projection of the given payload into the writer's target
-// directory.  Input paths must not begin with '..'.
-// setPerms is an optional pointer to a function that caller can provide to set the
-// permissions of the newly created files before they are published. The function is
-// passed subPath which is the name of the timestamped directory that was created
-// under target directory.
+// Write 将给定的 payload 原子地投影到 writer 的目标目录。输入路径不得以 '..' 开头。
+// setPerms 是可选的回调，供调用方在文件发布前设置新创建文件的权限；参数为目标目录下新建的时间戳目录名。
 //
-// The Write algorithm is:
+// Write 算法如下：
 //
-//  1. The payload is validated; if the payload is invalid, the function returns
+//  1. 校验 payload；若无效则返回错误。
 //
-//  2. The current timestamped directory is detected by reading the data directory
-//     symlink
+//  2. 读取数据目录符号链接，找到当前的时间戳目录。
 //
-//  3. The old version of the volume is walked to determine whether any
-//     portion of the payload was deleted and is still present on disk.
+//  3. 遍历旧版本卷，判断 payload 中是否有部分内容被删除但仍残留在磁盘上。
 //
-//  4. The data in the current timestamped directory is compared to the projected
-//     data to determine if an update to data directory is required.
+//  4. 比较当前时间戳目录与目标数据，判断是否需要更新数据目录。
 //
-//  5. A new timestamped dir is created if an update is required.
+//  5. 如需更新，则新建一个时间戳目录。
 //
-//  6. The payload is written to the new timestamped directory.
+//  6. 将 payload 写入新的时间戳目录。
 //
-//  7. Permissions are set (if setPerms is not nil) on the new timestamped directory and files.
+//  7. 若 setPerms 非空，对新时间戳目录及其中的文件设置权限。
 //
-//  8. A symlink to the new timestamped directory ..data_tmp is created that will
-//     become the new data directory.
+//  8. 创建指向新时间戳目录的符号链接 ..data_tmp，它将成为新的数据目录。
 //
-//  9. The new data directory symlink is renamed to the data directory; rename is atomic.
+//  9. 将新数据目录符号链接重命名替换旧的数据目录；重命名是原子操作。
 //
-//  10. Symlinks and directory for new user-visible files are created (if needed).
+//  10. 按需为新可见文件创建符号链接与目录。
 //
-//     For example, consider the files:
+//     例如有如下文件：
 //     <target-dir>/podName
 //     <target-dir>/user/labels
 //     <target-dir>/k8s/annotations
 //
-//     The user visible files are symbolic links into the internal data directory:
+//     用户可见文件是指向内部数据目录的符号链接：
 //     <target-dir>/podName         -> ..data/podName
 //     <target-dir>/usr -> ..data/usr
 //     <target-dir>/k8s -> ..data/k8s
 //
-//     The data directory itself is a link to a timestamped directory with
-//     the real data:
+//     数据目录本身则链接到存放真实数据的时间戳目录：
 //     <target-dir>/..data          -> ..2016_02_01_15_04_05.12345678/
-//     NOTE(claudiub): We need to create these symlinks AFTER we've finished creating and
-//     linking everything else. On Windows, if a target does not exist, the created symlink
-//     will not work properly if the target ends up being a directory.
+//     NOTE(claudiub): 这些符号链接必须在其余创建与链接工作完成后才创建。在 Windows 上，
+//     若目标当时不存在，后续变成目录时已创建的符号链接将无法正常工作。
 //
-//  11. Old paths are removed from the user-visible portion of the target directory.
+//  11. 从目标目录的可见部分删除旧路径。
 //
-//  12. The previous timestamped directory is removed, if it exists.
+//  12. 若存在旧的时间戳目录，则将其删除。
 func (w *AtomicWriter) Write(payload map[string]FileProjection, setPerms func(subPath string) error) error {
 	// (1)
 	cleanPayload, err := validatePayload(payload)
@@ -154,15 +136,14 @@ func (w *AtomicWriter) Write(payload map[string]FileProjection, setPerms func(su
 			klog.Errorf("%s: error reading link for data directory: %v", w.logContext, err)
 			return err
 		}
-		// although Readlink() returns "" on err, don't be fragile by relying on it (since it's not specified in docs)
-		// empty oldTsDir indicates that it didn't exist
+		// 出错时 Readlink() 返回 ""，但文档未保证该行为，不应依赖；空 oldTsDir 即表示原目录不存在。
 		oldTsDir = ""
 	}
 	oldTsPath := filepath.Join(w.targetDir, oldTsDir)
 
 	var pathsToRemove sets.Set[string]
 	shouldWrite := true
-	// if there was no old version, there's nothing to remove
+	// 没有旧版本时无需删除任何内容。
 	if len(oldTsDir) != 0 {
 		// (3)
 		pathsToRemove, err = w.pathsToRemove(cleanPayload, oldTsPath)
@@ -177,10 +158,9 @@ func (w *AtomicWriter) Write(payload map[string]FileProjection, setPerms func(su
 			return err
 		} else if !should && len(pathsToRemove) == 0 {
 			klog.V(4).Infof("%s: write not required for data directory %v", w.logContext, oldTsDir)
-			// data directory is already up to date, but we need to make sure that
-			// the user-visible symlinks are created.
+			// 数据目录已是最新，但仍需确保用户可见的符号链接已创建。
 			// See https://github.com/kubernetes/kubernetes/issues/121472 for more details.
-			// Reset oldTsDir to empty string to avoid removing the data directory.
+			// 将 oldTsDir 置空，避免误删数据目录。
 			shouldWrite = false
 			oldTsDir = ""
 		} else {
@@ -269,7 +249,7 @@ func (w *AtomicWriter) Write(payload map[string]FileProjection, setPerms func(su
 	return nil
 }
 
-// validatePayload returns an error if any path in the payload returns a copy of the payload with the paths cleaned.
+// validatePayload 校验 payload 中的路径，并返回一份路径已清理的副本；路径非法时返回错误。
 func validatePayload(payload map[string]FileProjection) (map[string]FileProjection, error) {
 	cleanPayload := make(map[string]FileProjection)
 	for k, content := range payload {
@@ -283,19 +263,16 @@ func validatePayload(payload map[string]FileProjection) (map[string]FileProjecti
 	return cleanPayload, nil
 }
 
-// validatePath validates a single path, returning an error if the path is
-// invalid.  paths may not:
+// validatePath 校验单个路径，非法时返回错误。路径不得：
 //
-// 1. be absolute
-// 2. contain '..' as an element
-// 3. start with '..'
-// 4. contain filenames larger than 255 characters
-// 5. be longer than 4096 characters
+// 1. 为绝对路径
+// 2. 包含 '..' 路径段
+// 3. 以 '..' 开头
+// 4. 文件名超过 255 字符
+// 5. 总长度超过 4096 字符
 func validatePath(targetPath string) error {
-	// TODO: somehow unify this with the similar api validation,
-	// validateVolumeSourcePath; the error semantics are just different enough
-	// from this that it was time-prohibitive trying to find the right
-	// refactoring to re-use.
+	// TODO: 设法与类似的 api 校验 validateVolumeSourcePath 统一；两者错误语义差异较大，
+	// 短时间内难以找到合适的重构方式复用。
 	if targetPath == "" {
 		return fmt.Errorf("invalid path: must not be empty: %q", targetPath)
 	}
@@ -323,7 +300,7 @@ func validatePath(targetPath string) error {
 	return nil
 }
 
-// shouldWritePayload returns whether the payload should be written to disk.
+// shouldWritePayload 判断 payload 是否需要写入磁盘。
 func shouldWritePayload(payload map[string]FileProjection, oldTsDir string) (bool, error) {
 	for userVisiblePath, fileProjection := range payload {
 		shouldWrite, err := shouldWriteFile(filepath.Join(oldTsDir, userVisiblePath), fileProjection.Data)
@@ -339,7 +316,7 @@ func shouldWritePayload(payload map[string]FileProjection, oldTsDir string) (boo
 	return false, nil
 }
 
-// shouldWriteFile returns whether a new version of a file should be written to disk.
+// shouldWriteFile 判断某个文件的新版本是否需要写入磁盘。
 func shouldWriteFile(path string, content []byte) (bool, error) {
 	_, err := os.Lstat(path)
 	if os.IsNotExist(err) {
@@ -354,9 +331,7 @@ func shouldWriteFile(path string, content []byte) (bool, error) {
 	return !bytes.Equal(content, contentOnFs), nil
 }
 
-// pathsToRemove walks the current version of the data directory and
-// determines which paths should be removed (if any) after the payload is
-// written to the target directory.
+// pathsToRemove 遍历当前版本的数据目录，确定 payload 写入目标目录后应删除哪些路径。
 func (w *AtomicWriter) pathsToRemove(payload map[string]FileProjection, oldTSDir string) (sets.Set[string], error) {
 	paths := sets.New[string]()
 	visitor := func(path string, info os.FileInfo, err error) error {
@@ -380,8 +355,7 @@ func (w *AtomicWriter) pathsToRemove(payload map[string]FileProjection, oldTSDir
 
 	newPaths := sets.New[string]()
 	for file := range payload {
-		// add all subpaths for the payload to the set of new paths
-		// to avoid attempting to remove non-empty dirs
+		// 将 payload 中所有子路径加入新路径集合，避免误删非空目录。
 		for subPath := file; subPath != ""; {
 			newPaths.Insert(subPath)
 			subPath, _ = filepath.Split(subPath)
@@ -396,7 +370,7 @@ func (w *AtomicWriter) pathsToRemove(payload map[string]FileProjection, oldTSDir
 	return result, nil
 }
 
-// newTimestampDir creates a new timestamp directory
+// newTimestampDir 创建一个新的时间戳目录。
 func (w *AtomicWriter) newTimestampDir() (string, error) {
 	tsDir, err := os.MkdirTemp(w.targetDir, time.Now().UTC().Format("..2006_01_02_15_04_05."))
 	if err != nil {
@@ -404,9 +378,7 @@ func (w *AtomicWriter) newTimestampDir() (string, error) {
 		return "", err
 	}
 
-	// 0755 permissions are needed to allow 'group' and 'other' to recurse the
-	// directory tree.  do a chmod here to ensure that permissions are set correctly
-	// regardless of the process' umask.
+	// 需要 0755 权限，以便 group 和其他用户能遍历目录树；显式 chmod 可消除进程 umask 的影响。
 	err = os.Chmod(tsDir, 0755)
 	if err != nil {
 		klog.Errorf("%s: unable to set mode on new temp directory: %v", w.logContext, err)
@@ -416,8 +388,7 @@ func (w *AtomicWriter) newTimestampDir() (string, error) {
 	return tsDir, nil
 }
 
-// writePayloadToDir writes the given payload to the given directory.  The
-// directory must exist.
+// writePayloadToDir 将 payload 写入指定目录，该目录必须已存在。
 func (w *AtomicWriter) writePayloadToDir(payload map[string]FileProjection, dir string) error {
 	for userVisiblePath, fileProjection := range payload {
 		content := fileProjection.Data
@@ -434,10 +405,8 @@ func (w *AtomicWriter) writePayloadToDir(payload map[string]FileProjection, dir 
 			klog.Errorf("%s: unable to write file %s with mode %v: %v", w.logContext, fullPath, mode, err)
 			return err
 		}
-		// Chmod is needed because os.WriteFile() ends up calling
-		// open(2) to create the file, so the final mode used is "mode &
-		// ~umask". But we want to make sure the specified mode is used
-		// in the file no matter what the umask is.
+		// os.WriteFile 底层使用 open(2) 创建文件，实际权限会是 "mode & ~umask"；
+		// 这里显式 chmod，确保无论 umask 如何都使用指定权限。
 		if err := os.Chmod(fullPath, mode); err != nil {
 			klog.Errorf("%s: unable to change file %s with mode %v: %v", w.logContext, fullPath, mode, err)
 			return err
@@ -456,13 +425,9 @@ func (w *AtomicWriter) writePayloadToDir(payload map[string]FileProjection, dir 
 	return nil
 }
 
-// createUserVisibleFiles creates the relative symlinks for all the
-// files configured in the payload. If the directory in a file path does not
-// exist, it is created.
+// createUserVisibleFiles 为 payload 中所有文件创建相对符号链接；文件路径中的目录不存在时会创建。
 //
-// Viz:
-// For files: "bar", "foo/bar", "baz/bar", "foo/baz/blah"
-// the following symlinks are created:
+// 示例：对文件 "bar"、"foo/bar"、"baz/bar"、"foo/baz/blah"，创建如下符号链接：
 // bar -> ..data/bar
 // foo -> ..data/foo
 // baz -> ..data/baz
@@ -475,7 +440,7 @@ func (w *AtomicWriter) createUserVisibleFiles(payload map[string]FileProjection)
 		linkname := userVisiblePath[:slashpos]
 		_, err := os.Readlink(filepath.Join(w.targetDir, linkname))
 		if err != nil && os.IsNotExist(err) {
-			// The link into the data directory for this path doesn't exist; create it
+			// 该路径指向数据目录的链接尚不存在，创建它。
 			visibleFile := filepath.Join(w.targetDir, linkname)
 			dataDirFile := filepath.Join(dataDirName, linkname)
 
@@ -497,13 +462,12 @@ func (w *AtomicWriter) createUserVisibleFiles(payload map[string]FileProjection)
 	return nil
 }
 
-// removeUserVisiblePaths removes the set of paths from the user-visible
-// portion of the writer's target directory.
+// removeUserVisiblePaths 从 writer 目标目录的可见部分删除给定的路径集合。
 func (w *AtomicWriter) removeUserVisiblePaths(paths sets.Set[string]) error {
 	ps := string(os.PathSeparator)
 	var lasterr error
 	for p := range paths {
-		// only remove symlinks from the volume root directory (i.e. items that don't contain '/')
+		// 只删除卷根目录下的符号链接（即路径中不含 '/' 的项）。
 		if strings.Contains(p, ps) {
 			continue
 		}
@@ -516,8 +480,7 @@ func (w *AtomicWriter) removeUserVisiblePaths(paths sets.Set[string]) error {
 	return lasterr
 }
 
-// ResolvesFsUser resolves file owner UID using a fallback mechanism described in KEP-5936.
-// Returns nil when the feature gate is disabled.
+// ResolvesFsUser 按 KEP-5936 描述的回退机制确定文件所有者 UID；特性门控关闭时返回 nil。
 func ResolvesFsUser(defaultUser, itemUser *int64) (fsUser *int64) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.AtomicWriteVolumeUserFields) {
 		if itemUser != nil {

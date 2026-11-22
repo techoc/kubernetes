@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package volume includes internal representations of external volume types
-// as well as utility methods required to mount/unmount volumes to kubelets.
+// Package volume 提供外部存储卷类型的内部抽象，
+// 以及 kubelet 挂载/卸载卷所需的工具方法。
+// 每个卷插件通过 VolumePlugin 接口接入，插件管理器负责按名称查找和探测。
 package volume

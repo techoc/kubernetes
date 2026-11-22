@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package hostpath contains the internal representation of hostPath
-// volumes.
+// Package hostpath 包含 hostPath 卷的内部表示。
 package hostpath

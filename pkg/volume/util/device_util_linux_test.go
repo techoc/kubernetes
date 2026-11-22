@@ -27,8 +27,10 @@ import (
 	"time"
 )
 
+// mockOsIOHandler 提供基于内存的 /sys 与 /dev 路径读取，供设备发现测试使用。
 type mockOsIOHandler struct{}
 
+// ReadFile 返回预设的 iSCSI 端口、地址与 target 名称。
 func (handler *mockOsIOHandler) ReadFile(filename string) ([]byte, error) {
 	portPattern := regexp.MustCompile("^/sys/class/iscsi_host/(host\\d)/device/session\\d/connection\\d:0/iscsi_connection/connection\\d:0/(?:persistent_)?port$")
 	if portPattern.MatchString(filename) {
@@ -57,6 +59,7 @@ func (handler *mockOsIOHandler) ReadFile(filename string) ([]byte, error) {
 	return nil, errors.New("not Implemented for Mock")
 }
 
+// ReadDir 返回模拟的 /sys/block 与 /sys/class/iscsi_host 目录内容。
 func (handler *mockOsIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	switch dirname {
 	case "/sys/block/dm-1/slaves":
@@ -142,6 +145,7 @@ func (handler *mockOsIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return nil, errors.New("not Implemented for Mock")
 }
 
+// Lstat 返回模拟的块设备与 iSCSI LUN 符号链接信息。
 func (handler *mockOsIOHandler) Lstat(name string) (os.FileInfo, error) {
 	links := map[string]string{
 		"/sys/block/dm-1/slaves/sda": "sda",
@@ -157,6 +161,7 @@ func (handler *mockOsIOHandler) Lstat(name string) (os.FileInfo, error) {
 	return nil, errors.New("not Implemented for Mock")
 }
 
+// EvalSymlinks 返回预设的符号链接解析结果，覆盖 by-path、dm 及普通设备路径。
 func (handler *mockOsIOHandler) EvalSymlinks(path string) (string, error) {
 	links := map[string]string{
 		"/returns/a/dev":   "/dev/sde",
@@ -171,37 +176,47 @@ func (handler *mockOsIOHandler) EvalSymlinks(path string) (string, error) {
 	return links[path], nil
 }
 
+// WriteFile 在 mock 中不支持写入，始终返回错误。
 func (handler *mockOsIOHandler) WriteFile(filename string, data []byte, perm os.FileMode) error {
 	return errors.New("not Implemented for Mock")
 }
 
+// fakeFileInfo 仅实现 os.FileInfo 的 Name，其余字段对测试无意义。
 type fakeFileInfo struct {
 	name string
 }
 
+// Name 返回构造时给定的文件名。
 func (fi *fakeFileInfo) Name() string {
 	return fi.name
 }
 
+// Size 返回 0。
 func (fi *fakeFileInfo) Size() int64 {
 	return 0
 }
 
+// Mode 返回固定的权限位。
 func (fi *fakeFileInfo) Mode() os.FileMode {
 	return 777
 }
 
+// ModTime 返回当前时间。
 func (fi *fakeFileInfo) ModTime() time.Time {
 	return time.Now()
 }
+
+// IsDir 始终返回 false，mock 的文件项均为设备或链接。
 func (fi *fakeFileInfo) IsDir() bool {
 	return false
 }
 
+// Sys 返回 nil。
 func (fi *fakeFileInfo) Sys() interface{} {
 	return nil
 }
 
+// TestFindMultipathDeviceForDevice 验证设备到 dm 多路径设备的映射查找。
 func TestFindMultipathDeviceForDevice(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -242,6 +257,7 @@ func TestFindMultipathDeviceForDevice(t *testing.T) {
 	}
 }
 
+// TestFindDeviceForPath 验证符号链接解析为设备名的逻辑，含非法链接与不存在路径。
 func TestFindDeviceForPath(t *testing.T) {
 	io := &mockOsIOHandler{}
 
@@ -271,6 +287,7 @@ func TestFindDeviceForPath(t *testing.T) {
 
 }
 
+// TestFindSlaveDevicesOnMultipath 验证多路径设备下属从属设备的发现。
 func TestFindSlaveDevicesOnMultipath(t *testing.T) {
 	mockDeviceUtil := NewDeviceHandler(&mockOsIOHandler{})
 	devices := mockDeviceUtil.FindSlaveDevicesOnMultipath("/dev/dm-1")
@@ -283,6 +300,7 @@ func TestFindSlaveDevicesOnMultipath(t *testing.T) {
 	}
 }
 
+// TestGetISCSIPortalHostMapForTarget 验证 iSCSI target 到 portal:host 映射的解析。
 func TestGetISCSIPortalHostMapForTarget(t *testing.T) {
 	mockDeviceUtil := NewDeviceHandler(&mockOsIOHandler{})
 	portalHostMap, err := mockDeviceUtil.GetISCSIPortalHostMapForTarget("target1")
@@ -300,6 +318,7 @@ func TestGetISCSIPortalHostMapForTarget(t *testing.T) {
 	}
 }
 
+// TestFindDevicesForISCSILun 验证根据 target 与 LUN 查找对应设备。
 func TestFindDevicesForISCSILun(t *testing.T) {
 	mockDeviceUtil := NewDeviceHandler(&mockOsIOHandler{})
 	devices, err := mockDeviceUtil.FindDevicesForISCSILun("target1", 1)

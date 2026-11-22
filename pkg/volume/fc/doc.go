@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fc contains the internal representation of
-// Fibre Channel (fc) volumes.
+// Package fc 包含 Fibre Channel（fc）卷的内部表示。
 package fc

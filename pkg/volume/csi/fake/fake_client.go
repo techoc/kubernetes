@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fake 提供用于测试的假 CSI 客户端实现。
+// 通过预设卷 ID 可模拟超时、终态错误等场景，无需真实存储后端。
 package fake
 
 import (
@@ -30,39 +32,41 @@ import (
 )
 
 const (
-	// NodePublishTimeOut_VolumeID is volume id that will result in NodePublish operation to timeout
-	NodePublishTimeOut_VolumeID    = "node-publish-timeout"
+	// NodePublishTimeOut_VolumeID 是会使 NodePublish 操作超时的卷 ID。
+	NodePublishTimeOut_VolumeID = "node-publish-timeout"
+	// NodePublishFinalError_VolumeID 是会使 NodePublish 返回终态错误的卷 ID。
 	NodePublishFinalError_VolumeID = "node-publish-final-error"
 
-	// NodeStageTimeOut_VolumeID is a volume id that will result in NodeStage operation to timeout
+	// NodeStageTimeOut_VolumeID 是会使 NodeStage 操作超时的卷 ID。
 	NodeStageTimeOut_VolumeID = "node-stage-timeout"
 )
 
-// IdentityClient is a CSI identity client used for testing
+// IdentityClient 是测试用的 CSI identity 客户端。
 type IdentityClient struct {
 	nextErr error
 }
 
-// SetNextError injects expected error
+// SetNextError 注入下次调用期望返回的错误。
 func (f *IdentityClient) SetNextError(err error) {
 	f.nextErr = err
 }
 
-// GetPluginInfo returns plugin info
+// GetPluginInfo 返回插件信息（假实现，始终返回 nil）。
 func (f *IdentityClient) GetPluginInfo(ctx context.Context, in *csipb.GetPluginInfoRequest, opts ...grpc.CallOption) (*csipb.GetPluginInfoResponse, error) {
 	return nil, nil
 }
 
-// GetPluginCapabilities implements csi method
+// GetPluginCapabilities 实现 CSI GetPluginCapabilities 方法（假实现）。
 func (f *IdentityClient) GetPluginCapabilities(ctx context.Context, in *csipb.GetPluginCapabilitiesRequest, opts ...grpc.CallOption) (*csipb.GetPluginCapabilitiesResponse, error) {
 	return nil, nil
 }
 
-// Probe implements csi method
+// Probe 实现 CSI Probe 方法（假实现）。
 func (f *IdentityClient) Probe(ctx context.Context, in *csipb.ProbeRequest, opts ...grpc.CallOption) (*csipb.ProbeResponse, error) {
 	return nil, nil
 }
 
+// CSIVolume 记录假客户端中某个卷的句柄、上下文和挂载路径等状态。
 type CSIVolume struct {
 	VolumeHandle     string
 	VolumeContext    map[string]string
@@ -73,7 +77,8 @@ type CSIVolume struct {
 	VolumeMountGroup string
 }
 
-// NodeClient returns CSI node client
+// NodeClient 是测试用的 CSI node 客户端，记录已发布/已暂存的卷状态。
+// 各布尔字段控制对外声明的能力，nextErr 用于注入错误。
 type NodeClient struct {
 	nodePublishedVolumes     map[string]CSIVolume
 	nodeStagedVolumes        map[string]CSIVolume
@@ -94,7 +99,7 @@ type NodeClient struct {
 	getCapabilitiesErr       error
 }
 
-// NewNodeClient returns fake node client
+// NewNodeClient 创建假 node 客户端，用于 Staging/Unstaging 场景。
 func NewNodeClient(stageUnstageSet bool) *NodeClient {
 	return &NodeClient{
 		nodePublishedVolumes: make(map[string]CSIVolume),
@@ -104,6 +109,7 @@ func NewNodeClient(stageUnstageSet bool) *NodeClient {
 	}
 }
 
+// NewNodeClientWithExpansion 创建支持卷扩容的假 node 客户端。
 func NewNodeClientWithExpansion(stageUnstageSet bool, expansionSet bool) *NodeClient {
 	return &NodeClient{
 		nodePublishedVolumes: make(map[string]CSIVolume),
@@ -113,6 +119,7 @@ func NewNodeClientWithExpansion(stageUnstageSet bool, expansionSet bool) *NodeCl
 	}
 }
 
+// NewNodeClientWithVolumeStats 创建带卷统计能力的假 node 客户端。
 func NewNodeClientWithVolumeStats(volumeStatsSet bool) *NodeClient {
 	return &NodeClient{
 		volumeStatsSet: volumeStatsSet,
@@ -120,6 +127,7 @@ func NewNodeClientWithVolumeStats(volumeStatsSet bool) *NodeClient {
 	}
 }
 
+// NewNodeClientWithVolumeStatsAndHealth 创建同时支持卷统计和健康检查的假 node 客户端。
 func NewNodeClientWithVolumeStatsAndHealth(volumeStatsSet, volumeHealth, setVolumeStats, setVolumeHealth bool) *NodeClient {
 	return &NodeClient{
 		volumeStatsSet:  volumeStatsSet,
@@ -129,6 +137,7 @@ func NewNodeClientWithVolumeStatsAndHealth(volumeStatsSet, volumeHealth, setVolu
 	}
 }
 
+// NewNodeClientWithSingleNodeMultiWriter 创建支持单节点多写能力的假 node 客户端。
 func NewNodeClientWithSingleNodeMultiWriter(singleNodeMultiWriterSet bool) *NodeClient {
 	return &NodeClient{
 		nodePublishedVolumes:     make(map[string]CSIVolume),
@@ -139,6 +148,7 @@ func NewNodeClientWithSingleNodeMultiWriter(singleNodeMultiWriterSet bool) *Node
 	}
 }
 
+// NewNodeClientWithVolumeMountGroup 创建支持卷挂载组（fsGroup）能力的假 node 客户端。
 func NewNodeClientWithVolumeMountGroup(stageUnstageSet, volumeMountGroupSet bool) *NodeClient {
 	return &NodeClient{
 		nodePublishedVolumes: make(map[string]CSIVolume),
@@ -148,29 +158,32 @@ func NewNodeClientWithVolumeMountGroup(stageUnstageSet, volumeMountGroupSet bool
 	}
 }
 
-// SetNextError injects next expected error
+// SetNextError 注入下次 RPC 调用期望返回的错误。
 func (f *NodeClient) SetNextError(err error) {
 	f.nextErr = err
 }
 
+// SetGetCapabilitiesErr 注入 GetCapabilities 调用返回的错误。
 func (f *NodeClient) SetGetCapabilitiesErr(err error) {
 	f.getCapabilitiesErr = err
 }
 
+// SetNodeGetInfoResp 设置 NodeGetInfo 的预设响应。
 func (f *NodeClient) SetNodeGetInfoResp(resp *csipb.NodeGetInfoResponse) {
 	f.nodeGetInfoResp = resp
 }
 
+// SetNodeVolumeStatsResp 设置 NodeGetVolumeStats 的预设响应。
 func (f *NodeClient) SetNodeVolumeStatsResp(resp *csipb.NodeGetVolumeStatsResponse) {
 	f.nodeVolumeStatsResp = resp
 }
 
-// GetNodePublishedVolumes returns node published volumes
+// GetNodePublishedVolumes 返回已发布的卷集合。
 func (f *NodeClient) GetNodePublishedVolumes() map[string]CSIVolume {
 	return f.nodePublishedVolumes
 }
 
-// AddNodePublishedVolume adds specified volume to nodePublishedVolumes
+// AddNodePublishedVolume 将指定卷加入已发布集合，供测试预设状态。
 func (f *NodeClient) AddNodePublishedVolume(volID, deviceMountPath string, volumeContext map[string]string) {
 	f.nodePublishedVolumes[volID] = CSIVolume{
 		Path:          deviceMountPath,
@@ -178,12 +191,12 @@ func (f *NodeClient) AddNodePublishedVolume(volID, deviceMountPath string, volum
 	}
 }
 
-// GetNodeStagedVolumes returns node staged volumes
+// GetNodeStagedVolumes 返回已暂存的卷集合。
 func (f *NodeClient) GetNodeStagedVolumes() map[string]CSIVolume {
 	return f.nodeStagedVolumes
 }
 
-// AddNodeStagedVolume adds specified volume to nodeStagedVolumes
+// AddNodeStagedVolume 将指定卷加入已暂存集合，供测试预设状态。
 func (f *NodeClient) AddNodeStagedVolume(volID, deviceMountPath string, volumeContext map[string]string) {
 	f.nodeStagedVolumes[volID] = CSIVolume{
 		Path:          deviceMountPath,
@@ -191,7 +204,8 @@ func (f *NodeClient) AddNodeStagedVolume(volID, deviceMountPath string, volumeCo
 	}
 }
 
-// NodePublishVolume implements CSI NodePublishVolume
+// NodePublishVolume 实现 CSI NodePublishVolume：校验参数后记录已发布卷。
+// 特定卷 ID 会模拟超时或终态错误；同时创建目标路径（块设备建空文件，文件系统建目录）。
 func (f *NodeClient) NodePublishVolume(ctx context.Context, req *csipb.NodePublishVolumeRequest, opts ...grpc.CallOption) (*csipb.NodePublishVolumeResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -218,8 +232,7 @@ func (f *NodeClient) NodePublishVolume(ctx context.Context, req *csipb.NodePubli
 		return nil, status.Errorf(codes.Internal, "final error")
 	}
 
-	// "Creation of target_path is the responsibility of the SP."
-	// Our plugin depends on it.
+	// CSI 规范要求存储插件自行创建 target_path，本假实现遵循该约定。
 	if req.VolumeCapability.GetBlock() != nil {
 		if err := os.WriteFile(req.TargetPath, []byte{}, 0644); err != nil {
 			return nil, fmt.Errorf("cannot create target path %s for block file: %s", req.TargetPath, err)
@@ -245,7 +258,7 @@ func (f *NodeClient) NodePublishVolume(ctx context.Context, req *csipb.NodePubli
 	return &csipb.NodePublishVolumeResponse{}, nil
 }
 
-// NodeUnpublishVolume implements csi method
+// NodeUnpublishVolume 实现 CSI NodeUnpublishVolume：删除已发布记录并清理目标路径。
 func (f *NodeClient) NodeUnpublishVolume(ctx context.Context, req *csipb.NodeUnpublishVolumeRequest, opts ...grpc.CallOption) (*csipb.NodeUnpublishVolumeResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -259,7 +272,7 @@ func (f *NodeClient) NodeUnpublishVolume(ctx context.Context, req *csipb.NodeUnp
 	}
 	delete(f.nodePublishedVolumes, req.GetVolumeId())
 
-	// "The SP MUST delete the file or directory it created at this path."
+	// CSI 规范要求存储插件删除其在目标路径创建的文件或目录。
 	if err := os.Remove(req.TargetPath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to remove publish path %s: %s", req.TargetPath, err)
 	}
@@ -267,7 +280,8 @@ func (f *NodeClient) NodeUnpublishVolume(ctx context.Context, req *csipb.NodeUnp
 	return &csipb.NodeUnpublishVolumeResponse{}, nil
 }
 
-// NodeStagevolume implements csi method
+// NodeStageVolume 实现 CSI NodeStageVolume：校验参数并记录已暂存卷。
+// 特定卷 ID 会模拟超时错误。
 func (f *NodeClient) NodeStageVolume(ctx context.Context, req *csipb.NodeStageVolumeRequest, opts ...grpc.CallOption) (*csipb.NodeStageVolumeResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -306,7 +320,7 @@ func (f *NodeClient) NodeStageVolume(ctx context.Context, req *csipb.NodeStageVo
 	return &csipb.NodeStageVolumeResponse{}, nil
 }
 
-// NodeUnstageVolume implements csi method
+// NodeUnstageVolume 实现 CSI NodeUnstageVolume：删除已暂存记录。
 func (f *NodeClient) NodeUnstageVolume(ctx context.Context, req *csipb.NodeUnstageVolumeRequest, opts ...grpc.CallOption) (*csipb.NodeUnstageVolumeResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -323,7 +337,7 @@ func (f *NodeClient) NodeUnstageVolume(ctx context.Context, req *csipb.NodeUnsta
 	return &csipb.NodeUnstageVolumeResponse{}, nil
 }
 
-// NodeExpandVolume implements csi method
+// NodeExpandVolume 实现 CSI NodeExpandVolume：保存请求并返回请求的容量作为扩容结果。
 func (f *NodeClient) NodeExpandVolume(ctx context.Context, req *csipb.NodeExpandVolumeRequest, opts ...grpc.CallOption) (*csipb.NodeExpandVolumeResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -348,7 +362,7 @@ func (f *NodeClient) NodeExpandVolume(ctx context.Context, req *csipb.NodeExpand
 	return resp, nil
 }
 
-// NodeGetId implements csi method
+// NodeGetInfo 返回预设的节点信息响应，未设置时返回 nil。
 func (f *NodeClient) NodeGetInfo(ctx context.Context, in *csipb.NodeGetInfoRequest, opts ...grpc.CallOption) (*csipb.NodeGetInfoResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -356,7 +370,8 @@ func (f *NodeClient) NodeGetInfo(ctx context.Context, in *csipb.NodeGetInfoReque
 	return f.nodeGetInfoResp, nil
 }
 
-// NodeGetCapabilities implements csi method
+// NodeGetCapabilities 根据各布尔标记拼装返回的能力列表。
+// getCapabilitiesErr 非空时返回错误，用于测试失败路径。
 func (f *NodeClient) NodeGetCapabilities(ctx context.Context, in *csipb.NodeGetCapabilitiesRequest, opts ...grpc.CallOption) (*csipb.NodeGetCapabilitiesResponse, error) {
 	resp := &csipb.NodeGetCapabilitiesResponse{
 		Capabilities: []*csipb.NodeServiceCapability{},
@@ -437,13 +452,13 @@ func (f *NodeClient) NodeGetCapabilities(ctx context.Context, in *csipb.NodeGetC
 }
 
 /*
-// NodeGetVolumeStats implements csi method
+// NodeGetVolumeStats 实现 CSI NodeGetVolumeStats（旧版空实现，已被下方版本取代）。
 func (f *NodeClient) NodeGetVolumeStats(ctx context.Context, in *csipb.NodeGetVolumeStatsRequest, opts ...grpc.CallOption) (*csipb.NodeGetVolumeStatsResponse, error) {
 	return nil, nil
 }
 */
 
-// NodeGetVolumeStats implements csi method
+// NodeGetVolumeStats 实现 CSI NodeGetVolumeStats：返回预设响应或空响应。
 func (f *NodeClient) NodeGetVolumeStats(ctx context.Context, req *csipb.NodeGetVolumeStatsRequest, opts ...grpc.CallOption) (*csipb.NodeGetVolumeStatsResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -460,7 +475,8 @@ func (f *NodeClient) NodeGetVolumeStats(ctx context.Context, req *csipb.NodeGetV
 	return &csipb.NodeGetVolumeStatsResponse{}, nil
 }
 
-// NodeGetVolumeHealth implements csi method
+// NodeGetVolumeHealth 实现 CSI NodeGetVolumeHealth：
+// SetVolumeHealth 开启时返回降级的卷健康状态。
 func (f *NodeClient) NodeGetVolumeHealth(ctx context.Context, req *csipb.NodeGetVolumeHealthRequest, opts ...grpc.CallOption) (*csipb.NodeGetVolumeHealthResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -481,7 +497,8 @@ func (f *NodeClient) NodeGetVolumeHealth(ctx context.Context, req *csipb.NodeGet
 	return resp, nil
 }
 
-// NodeGetStorageHealth implements csi method
+// NodeGetStorageHealth 实现 CSI NodeGetStorageHealth：
+// SetStorageHealth 开启时返回降级的存储后端健康状态。
 func (f *NodeClient) NodeGetStorageHealth(ctx context.Context, req *csipb.NodeGetStorageHealthRequest, opts ...grpc.CallOption) (*csipb.NodeGetStorageHealthResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -499,7 +516,7 @@ func (f *NodeClient) NodeGetStorageHealth(ctx context.Context, req *csipb.NodeGe
 	return resp, nil
 }
 
-// NewNodeClientWithStorageHealth returns a fake node client with storage health capability.
+// NewNodeClientWithStorageHealth 创建带存储健康检查能力的假 node 客户端。
 func NewNodeClientWithStorageHealth(storageHealth, setStorageHealth bool) *NodeClient {
 	return &NodeClient{
 		storageHealthSet: storageHealth,
@@ -507,23 +524,23 @@ func NewNodeClientWithStorageHealth(storageHealth, setStorageHealth bool) *NodeC
 	}
 }
 
-// ControllerClient represents a CSI Controller client
+// ControllerClient 是测试用的 CSI controller 客户端，可注入错误和能力列表。
 type ControllerClient struct {
 	nextCapabilities []*csipb.ControllerServiceCapability
 	nextErr          error
 }
 
-// SetNextError injects next expected error
+// SetNextError 注入下次 RPC 调用期望返回的错误。
 func (f *ControllerClient) SetNextError(err error) {
 	f.nextErr = err
 }
 
-// SetNextCapabilities injects next expected capabilities
+// SetNextCapabilities 注入期望返回的能力列表。
 func (f *ControllerClient) SetNextCapabilities(caps []*csipb.ControllerServiceCapability) {
 	f.nextCapabilities = caps
 }
 
-// ControllerGetCapabilities implements csi method
+// ControllerGetCapabilities 返回预设能力列表，未设置时默认包含 PUBLISH_UNPUBLISH_VOLUME。
 func (f *ControllerClient) ControllerGetCapabilities(ctx context.Context, in *csipb.ControllerGetCapabilitiesRequest, opts ...grpc.CallOption) (*csipb.ControllerGetCapabilitiesResponse, error) {
 	if f.nextErr != nil {
 		return nil, f.nextErr
@@ -545,37 +562,37 @@ func (f *ControllerClient) ControllerGetCapabilities(ctx context.Context, in *cs
 	}, nil
 }
 
-// CreateVolume implements csi method
+// CreateVolume 实现 CSI CreateVolume（假实现）。
 func (f *ControllerClient) CreateVolume(ctx context.Context, in *csipb.CreateVolumeRequest, opts ...grpc.CallOption) (*csipb.CreateVolumeResponse, error) {
 	return nil, nil
 }
 
-// DeleteVolume implements csi method
+// DeleteVolume 实现 CSI DeleteVolume（假实现）。
 func (f *ControllerClient) DeleteVolume(ctx context.Context, in *csipb.DeleteVolumeRequest, opts ...grpc.CallOption) (*csipb.DeleteVolumeResponse, error) {
 	return nil, nil
 }
 
-// ControllerPublishVolume implements csi method
+// ControllerPublishVolume 实现 CSI ControllerPublishVolume（假实现）。
 func (f *ControllerClient) ControllerPublishVolume(ctx context.Context, in *csipb.ControllerPublishVolumeRequest, opts ...grpc.CallOption) (*csipb.ControllerPublishVolumeResponse, error) {
 	return nil, nil
 }
 
-// ControllerUnpublishVolume implements csi method
+// ControllerUnpublishVolume 实现 CSI ControllerUnpublishVolume（假实现）。
 func (f *ControllerClient) ControllerUnpublishVolume(ctx context.Context, in *csipb.ControllerUnpublishVolumeRequest, opts ...grpc.CallOption) (*csipb.ControllerUnpublishVolumeResponse, error) {
 	return nil, nil
 }
 
-// ValidateVolumeCapabilities implements csi method
+// ValidateVolumeCapabilities 实现 CSI ValidateVolumeCapabilities（假实现）。
 func (f *ControllerClient) ValidateVolumeCapabilities(ctx context.Context, in *csipb.ValidateVolumeCapabilitiesRequest, opts ...grpc.CallOption) (*csipb.ValidateVolumeCapabilitiesResponse, error) {
 	return nil, nil
 }
 
-// ListVolumes implements csi method
+// ListVolumes 实现 CSI ListVolumes（假实现）。
 func (f *ControllerClient) ListVolumes(ctx context.Context, in *csipb.ListVolumesRequest, opts ...grpc.CallOption) (*csipb.ListVolumesResponse, error) {
 	return nil, nil
 }
 
-// GetCapacity implements csi method
+// GetCapacity 实现 CSI GetCapacity（假实现）。
 func (f *ControllerClient) GetCapacity(ctx context.Context, in *csipb.GetCapacityRequest, opts ...grpc.CallOption) (*csipb.GetCapacityResponse, error) {
 	return nil, nil
 }

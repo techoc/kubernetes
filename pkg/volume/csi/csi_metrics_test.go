@@ -28,6 +28,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// TestGetMetrics 验证 CSI 卷指标能被正确解析。
 func TestGetMetrics(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -96,7 +97,7 @@ func TestGetMetrics(t *testing.T) {
 	}
 }
 
-// test GetMetrics with a volume that does not support stats
+// TestGetMetricsDriverNotSupportStats 验证不支持统计的驱动会返回 NotSupported 错误。
 func TestGetMetricsDriverNotSupportStats(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -139,7 +140,7 @@ func TestGetMetricsDriverNotSupportStats(t *testing.T) {
 
 }
 
-// test GetMetrics with a volume that does not support stats
+// TestGetMetricsDriverNotFound 验证找不到驱动时返回预期的瞬时错误。
 func TestGetMetricsDriverNotFound(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	tests := []struct {
@@ -169,6 +170,7 @@ func TestGetMetricsDriverNotFound(t *testing.T) {
 
 }
 
+// getRawVolumeInfo 构造用于测试的 CSI 卷统计响应。
 func getRawVolumeInfo() *csipbv1.NodeGetVolumeStatsResponse {
 	return &csipbv1.NodeGetVolumeStatsResponse{
 		Usage: []*csipbv1.VolumeUsage{

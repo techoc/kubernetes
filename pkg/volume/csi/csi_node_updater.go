@@ -26,21 +26,20 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// csiNodeUpdater watches for changes to CSIDriver objects and manages the lifecycle
-// of per-driver goroutines that periodically update CSINodeDriver.Allocatable information
-// based on the NodeAllocatableUpdatePeriodSeconds setting.
+// csiNodeUpdater 监听 CSIDriver 对象的变化，并按 NodeAllocatableUpdatePeriodSeconds
+// 配置管理每个驱动的定时任务协程，周期更新 CSINodeDriver.Allocatable 信息。
 type csiNodeUpdater struct {
-	// Informer for CSIDriver objects
+	// 用于监听 CSIDriver 对象的 informer。
 	driverInformer cache.SharedIndexInformer
 
-	// Map of driver names to stop channels for update goroutines
+	// 驱动名到更新协程停止信道的映射。
 	driverUpdaters sync.Map
 
-	// Ensures the updater is only started once
+	// 保证更新器只启动一次。
 	once sync.Once
 }
 
-// NewCSINodeUpdater creates a new csiNodeUpdater
+// NewCSINodeUpdater 创建一个新的 csiNodeUpdater，driverInformer 不能为空。
 func NewCSINodeUpdater(driverInformer cache.SharedIndexInformer) (*csiNodeUpdater, error) {
 	if driverInformer == nil {
 		return nil, fmt.Errorf("driverInformer must not be nil")
@@ -51,7 +50,7 @@ func NewCSINodeUpdater(driverInformer cache.SharedIndexInformer) (*csiNodeUpdate
 	}, nil
 }
 
-// Run starts the csiNodeUpdater by registering event handlers.
+// Run 通过注册事件处理器启动 csiNodeUpdater，用 sync.Once 保证只注册一次。
 func (u *csiNodeUpdater) Run() {
 	u.once.Do(func() {
 		_, err := u.driverInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -67,7 +66,7 @@ func (u *csiNodeUpdater) Run() {
 	})
 }
 
-// onDriverAdd handles the addition of a new CSIDriver object.
+// onDriverAdd 处理新增 CSIDriver 对象的事件。
 func (u *csiNodeUpdater) onDriverAdd(obj interface{}) {
 	driver, ok := obj.(*v1.CSIDriver)
 	if !ok {
@@ -77,7 +76,7 @@ func (u *csiNodeUpdater) onDriverAdd(obj interface{}) {
 	u.syncDriverUpdater(driver.Name)
 }
 
-// onDriverUpdate handles updates to CSIDriver objects.
+// onDriverUpdate 处理 CSIDriver 对象的更新事件。
 func (u *csiNodeUpdater) onDriverUpdate(oldObj, newObj interface{}) {
 	oldDriver, ok := oldObj.(*v1.CSIDriver)
 	if !ok {
@@ -88,7 +87,7 @@ func (u *csiNodeUpdater) onDriverUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	// Only reconfigure if the NodeAllocatableUpdatePeriodSeconds field is updated.
+	// 仅当更新周期变化时才需要重建定时协程，其他字段变化不影响更新逻辑。
 	oldPeriod := getNodeAllocatableUpdatePeriod(oldDriver)
 	newPeriod := getNodeAllocatableUpdatePeriod(newDriver)
 	if oldPeriod != newPeriod {
@@ -97,7 +96,7 @@ func (u *csiNodeUpdater) onDriverUpdate(oldObj, newObj interface{}) {
 	}
 }
 
-// onDriverDelete handles deletion of CSIDriver objects.
+// onDriverDelete 处理 CSIDriver 对象的删除事件。
 func (u *csiNodeUpdater) onDriverDelete(obj interface{}) {
 	driver, ok := obj.(*v1.CSIDriver)
 	if !ok {
@@ -107,17 +106,17 @@ func (u *csiNodeUpdater) onDriverDelete(obj interface{}) {
 	u.syncDriverUpdater(driver.Name)
 }
 
-// syncDriverUpdater re-evaluates whether the periodic updater for a given driver should run.
-// It is invoked from informer events (Add/Update/Delete) and from plugin registration/deregistration.
+// syncDriverUpdater 重新判断给定驱动的定时更新协程是否应该运行。
+// 它由 informer 事件（Add/Update/Delete）以及插件注册/注销共同触发。
 func (u *csiNodeUpdater) syncDriverUpdater(driverName string) {
-	// Check if the CSI plugin is installed on this node.
+	// 只有装在本节点的驱动才需要更新 CSINode。
 	if !isDriverInstalled(driverName) {
 		klog.V(4).InfoS("Driver not installed; stopping csiNodeUpdater", "driver", driverName)
 		u.unregisterDriver(driverName)
 		return
 	}
 
-	// Get the CSIDriver object from the informer cache.
+	// 从 informer 缓存中读取 CSIDriver，避免直接访问 API Server。
 	obj, exists, err := u.driverInformer.GetStore().GetByKey(driverName)
 	if err != nil {
 		u.unregisterDriver(driverName)
@@ -135,7 +134,7 @@ func (u *csiNodeUpdater) syncDriverUpdater(driverName string) {
 		return
 	}
 
-	// Get the update period.
+	// 未配置更新周期（0）时不需要启动定时任务。
 	period := getNodeAllocatableUpdatePeriod(driver)
 	if period == 0 {
 		klog.V(7).InfoS("NodeAllocatableUpdatePeriodSeconds is not configured; disabling updates", "driver", driverName)
@@ -145,18 +144,18 @@ func (u *csiNodeUpdater) syncDriverUpdater(driverName string) {
 
 	newStopCh := make(chan struct{})
 	prevStopCh, loaded := u.driverUpdaters.Swap(driverName, newStopCh)
-	// If an updater is already running, stop it so we can reconfigure.
+	// 先停掉旧协程，再用新周期启动，避免多个协程同时更新同一驱动。
 	if loaded && prevStopCh != nil {
 		if stopCh, ok := prevStopCh.(chan struct{}); ok {
 			close(stopCh)
 		}
 	}
 
-	// Start the periodic update goroutine.
+	// 用新的停止信道启动定时更新协程。
 	go u.runPeriodicUpdate(driverName, period, newStopCh)
 }
 
-// unregisterDriver stops any running periodic update goroutine for the given driver.
+// unregisterDriver 停止给定驱动正在运行的定时更新协程。
 func (u *csiNodeUpdater) unregisterDriver(driverName string) {
 	prev, loaded := u.driverUpdaters.LoadAndDelete(driverName)
 	if loaded && prev != nil {
@@ -166,7 +165,7 @@ func (u *csiNodeUpdater) unregisterDriver(driverName string) {
 	}
 }
 
-// runPeriodicUpdate runs the periodic update loop for a driver.
+// runPeriodicUpdate 运行某个驱动的定时更新循环，收到停止信号后退出。
 func (u *csiNodeUpdater) runPeriodicUpdate(driverName string, period time.Duration, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
@@ -184,13 +183,14 @@ func (u *csiNodeUpdater) runPeriodicUpdate(driverName string, period time.Durati
 	}
 }
 
-// isDriverInstalled checks if the CSI driver is installed on the node by checking the global csiDrivers map
+// isDriverInstalled 通过全局 csiDrivers 映射判断驱动是否已安装在当前节点。
 func isDriverInstalled(driverName string) bool {
 	_, ok := csiDrivers.Get(driverName)
 	return ok
 }
 
-// getNodeAllocatableUpdatePeriod returns the NodeAllocatableUpdatePeriodSeconds value from the CSIDriver
+// getNodeAllocatableUpdatePeriod 从 CSIDriver 读取更新周期，未配置时返回 0。
+// 将秒数转换为 time.Duration，便于直接用于 ticker。
 func getNodeAllocatableUpdatePeriod(driver *v1.CSIDriver) time.Duration {
 	if driver == nil || driver.Spec.NodeAllocatableUpdatePeriodSeconds == nil {
 		return 0

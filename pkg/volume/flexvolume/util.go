@@ -28,6 +28,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// addSecretsToOptions 获取 spec 引用的 Secret，并以 base64 编码写入驱动选项。
+// 未指定 Secret 时直接返回；Secret 必须能被当前 kube 客户端读取。
 func addSecretsToOptions(options map[string]string, spec *volume.Spec, namespace string, driverName string, host volume.VolumeHost) error {
 	secretName, secretNamespace, err := getSecretNameAndNamespace(spec, namespace)
 	if err != nil {
@@ -49,6 +51,7 @@ func addSecretsToOptions(options map[string]string, spec *volume.Spec, namespace
 		return err
 	}
 	for name, data := range secrets {
+		// 以固定前缀写入选项，避免与用户自定义选项键冲突。
 		options[optionKeySecret+"/"+name] = base64.StdEncoding.EncodeToString([]byte(data))
 		klog.V(1).Infof("found flex volume secret info: %s", name)
 	}
@@ -56,8 +59,10 @@ func addSecretsToOptions(options map[string]string, spec *volume.Spec, namespace
 	return nil
 }
 
+// 共享错误：spec 不是 flexVolume 卷。
 var errNotFlexVolume = fmt.Errorf("not a flex volume")
 
+// getDriver 从内联卷或 PV 规格中提取 flexVolume 驱动名。
 func getDriver(spec *volume.Spec) (string, error) {
 	if spec.Volume != nil && spec.Volume.FlexVolume != nil {
 		return spec.Volume.FlexVolume.Driver, nil
@@ -68,6 +73,7 @@ func getDriver(spec *volume.Spec) (string, error) {
 	return "", errNotFlexVolume
 }
 
+// getFSType 从内联卷或 PV 规格中提取 flexVolume 指定的文件系统类型。
 func getFSType(spec *volume.Spec) (string, error) {
 	if spec.Volume != nil && spec.Volume.FlexVolume != nil {
 		return spec.Volume.FlexVolume.FSType, nil
@@ -78,6 +84,8 @@ func getFSType(spec *volume.Spec) (string, error) {
 	return "", errNotFlexVolume
 }
 
+// getSecretNameAndNamespace 解析 Secret 引用：内联卷使用 Pod 命名空间，
+// PV 使用引用中指定的命名空间，缺省时回退到 Pod 命名空间。
 func getSecretNameAndNamespace(spec *volume.Spec, podNamespace string) (string, string, error) {
 	if spec.Volume != nil && spec.Volume.FlexVolume != nil {
 		if spec.Volume.FlexVolume.SecretRef == nil {
@@ -99,17 +107,20 @@ func getSecretNameAndNamespace(spec *volume.Spec, podNamespace string) (string, 
 	return "", "", errNotFlexVolume
 }
 
+// getReadOnly 返回卷是否只读：内联卷取字段值，
+// PV 场景只读属性由卷规格整体决定，而非 flexVolume 驱动字段。
 func getReadOnly(spec *volume.Spec) (bool, error) {
 	if spec.Volume != nil && spec.Volume.FlexVolume != nil {
 		return spec.Volume.FlexVolume.ReadOnly, nil
 	}
 	if spec.PersistentVolume != nil && spec.PersistentVolume.Spec.FlexVolume != nil {
-		// ReadOnly is specified at the PV level
+		// PV 场景下只读属性在卷规格层面指定。
 		return spec.ReadOnly, nil
 	}
 	return false, errNotFlexVolume
 }
 
+// getOptions 提取 flexVolume 的自定义驱动选项。
 func getOptions(spec *volume.Spec) (map[string]string, error) {
 	if spec.Volume != nil && spec.Volume.FlexVolume != nil {
 		return spec.Volume.FlexVolume.Options, nil
@@ -120,6 +131,8 @@ func getOptions(spec *volume.Spec) (map[string]string, error) {
 	return nil, errNotFlexVolume
 }
 
+// prepareForMount 确保挂载目录存在，并返回该路径当前是否已被挂载。
+// 目录不存在时以 0750 创建：仅属主可写、同组可读，避免敏感数据泄露。
 func prepareForMount(mounter mount.Interface, deviceMountPath string) (bool, error) {
 
 	notMnt, err := mounter.IsLikelyNotMountPoint(deviceMountPath)
@@ -137,8 +150,7 @@ func prepareForMount(mounter mount.Interface, deviceMountPath string) (bool, err
 	return !notMnt, nil
 }
 
-// Mounts the device at the given path.
-// It is expected that prepareForMount has been called before.
+// doMount 将设备挂载到指定路径，调用前须先通过 prepareForMount 准备好目录。
 func doMount(mounter mount.Interface, devicePath, deviceMountPath, fsType string, options []string) error {
 	err := mounter.MountSensitiveWithoutSystemd(devicePath, deviceMountPath, fsType, options, nil)
 	if err != nil {
@@ -148,6 +160,7 @@ func doMount(mounter mount.Interface, devicePath, deviceMountPath, fsType string
 	return nil
 }
 
+// isNotMounted 判断路径是否尚未挂载，检查失败时返回错误。
 func isNotMounted(mounter mount.Interface, deviceMountPath string) (bool, error) {
 	notmnt, err := mounter.IsLikelyNotMountPoint(deviceMountPath)
 	if err != nil {

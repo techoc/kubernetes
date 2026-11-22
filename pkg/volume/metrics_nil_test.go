@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TestMetricsNilSupportsMetrics 验证 MetricsNil 不支持指标采集。
 func TestMetricsNilSupportsMetrics(t *testing.T) {
 	metrics := &MetricsNil{}
 	supported := metrics.SupportsMetrics()
@@ -28,6 +29,7 @@ func TestMetricsNilSupportsMetrics(t *testing.T) {
 	}
 }
 
+// TestMetricsNilGetCapacity 验证 MetricsNil 返回空指标且报错。
 func TestMetricsNilGetCapacity(t *testing.T) {
 	metrics := &MetricsNil{}
 	actual, err := metrics.GetMetrics()

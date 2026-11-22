@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package configmap 实现 ConfigMap 卷插件，将 API Server 中的 ConfigMap 数据以文件形式挂载到 Pod 中。
+// 卷内容通过 AtomicWriter 原子写入，kubelet 定期同步时按需更新，无需重启容器。
 package configmap
 
 import (
@@ -33,7 +35,7 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// ProbeVolumePlugins is the entry point for plugin detection in a package.
+// ProbeVolumePlugins 是包内卷插件探测的入口，返回可供 kubelet 注册的插件列表。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{&configMapPlugin{}}
 }
@@ -42,7 +44,7 @@ const (
 	configMapPluginName = "kubernetes.io/configmap"
 )
 
-// configMapPlugin implements the VolumePlugin interface.
+// configMapPlugin 实现 VolumePlugin 接口，负责创建 ConfigMap 卷的 mounter 和 unmounter。
 type configMapPlugin struct {
 	host         volume.VolumeHost
 	getConfigMap func(namespace, name string) (*v1.ConfigMap, error)
@@ -54,16 +56,19 @@ func getPath(uid types.UID, volName string, host volume.VolumeHost) string {
 	return host.GetPodVolumeDir(uid, utilstrings.EscapeQualifiedName(configMapPluginName), volName)
 }
 
+// Init 初始化插件，保存 VolumeHost 并获取 ConfigMap 查询函数。
 func (plugin *configMapPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 	plugin.getConfigMap = host.GetConfigMapFunc()
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (plugin *configMapPlugin) GetPluginName() string {
 	return configMapPluginName
 }
 
+// GetVolumeName 返回卷的唯一标识，格式为 "<卷名>/<ConfigMap 名>"。
 func (plugin *configMapPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	volumeSource, _ := getVolumeSource(spec)
 	if volumeSource == nil {
@@ -76,22 +81,27 @@ func (plugin *configMapPlugin) GetVolumeName(spec *volume.Spec) (string, error) 
 		volumeSource.Name), nil
 }
 
+// CanSupport 判断卷规格是否引用 ConfigMap 卷源。
 func (plugin *configMapPlugin) CanSupport(spec *volume.Spec) bool {
 	return spec.Volume != nil && spec.Volume.ConfigMap != nil
 }
 
+// RequiresRemount 返回 true，ConfigMap 内容变化时需要重新挂载以同步数据。
 func (plugin *configMapPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return true
 }
 
+// SupportsMountOption 返回 false，该插件不支持挂载选项。
 func (plugin *configMapPlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsSELinuxContextMount 返回 false，该插件不支持 SELinux 上下文挂载。
 func (plugin *configMapPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// NewMounter 为 Pod 的 ConfigMap 卷创建 mounter。
 func (plugin *configMapPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	return &configMapVolumeMounter{
 		configMapVolume: &configMapVolume{
@@ -107,6 +117,7 @@ func (plugin *configMapPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volum
 	}, nil
 }
 
+// NewUnmounter 为指定 Pod 的 ConfigMap 卷创建 unmounter。
 func (plugin *configMapPlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
 	return &configMapVolumeUnmounter{
 		&configMapVolume{
@@ -119,6 +130,7 @@ func (plugin *configMapPlugin) NewUnmounter(volName string, podUID types.UID) (v
 	}, nil
 }
 
+// ConstructVolumeSpec 根据已挂载的卷名重建 ConfigMap 卷规格，用于节点重启后的卷恢复场景。
 func (plugin *configMapPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	configMapVolume := &v1.Volume{
 		Name: volumeName,
@@ -131,6 +143,7 @@ func (plugin *configMapPlugin) ConstructVolumeSpec(volumeName, mountPath string)
 	}, nil
 }
 
+// configMapVolume 保存 ConfigMap 卷的公共状态：卷名、所属 Pod、插件、mounter 和指标。
 type configMapVolume struct {
 	volName string
 	podUID  types.UID
@@ -141,12 +154,12 @@ type configMapVolume struct {
 
 var _ volume.Volume = &configMapVolume{}
 
+// GetPath 返回该卷在主机上的挂载路径。
 func (sv *configMapVolume) GetPath() string {
 	return sv.plugin.host.GetPodVolumeDir(sv.podUID, utilstrings.EscapeQualifiedName(configMapPluginName), sv.volName)
 }
 
-// configMapVolumeMounter handles retrieving secrets from the API server
-// and placing them into the volume on the host.
+// configMapVolumeMounter 从 API Server 获取 ConfigMap 数据，并以文件形式写入主机上的卷目录。
 type configMapVolumeMounter struct {
 	*configMapVolume
 
@@ -157,6 +170,7 @@ type configMapVolumeMounter struct {
 
 var _ volume.Mounter = &configMapVolumeMounter{}
 
+// GetAttributes 返回卷属性：只读、由 kubelet 管理、需要 SELinux 重新打标。
 func (sv *configMapVolume) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       true,
@@ -166,23 +180,24 @@ func (sv *configMapVolume) GetAttributes() volume.Attributes {
 }
 
 func wrappedVolumeSpec() volume.Spec {
-	// This is the spec for the volume that this plugin wraps.
+	// 这是插件内部包装所用的卷规格：借用 EmptyDir 完成实际的目录创建和生命周期管理。
 	return volume.Spec{
-		// This should be on a tmpfs instead of the local disk; the problem is
-		// charging the memory for the tmpfs to the right cgroup.  We should make
-		// this a tmpfs when we can do the accounting correctly.
+		// 理想情况下应使用 tmpfs 而非本地磁盘，但目前无法将 tmpfs 的内存正确计入对应的 cgroup；
+		// 待内存计费问题解决后再切换为 tmpfs。
 		Volume: &v1.Volume{VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 	}
 }
 
+// SetUp 在默认路径上挂载 ConfigMap 卷。
 func (b *configMapVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
 
+// SetUpAt 在指定目录挂载 ConfigMap 卷：先由 EmptyDir 准备好目录，再将 ConfigMap 数据原子写入。
 func (b *configMapVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	klog.V(3).Infof("Setting up volume %v for pod %v at %v", b.volName, b.pod.UID, dir)
 
-	// Wrap EmptyDir, let it do the setup.
+	// 包装 EmptyDir，由它完成底层目录的创建和挂载。
 	wrapped, err := b.plugin.host.NewWrapperMounter(b.volName, wrappedVolumeSpec(), &b.pod)
 	if err != nil {
 		return err
@@ -191,6 +206,7 @@ func (b *configMapVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterA
 	optional := b.source.Optional != nil && *b.source.Optional
 	configMap, err := b.getConfigMap(b.pod.Namespace, b.source.Name)
 	if err != nil {
+		// 只有 ConfigMap 不存在且声明为 optional 时才继续，否则必须报错。
 		if !(errors.IsNotFound(err) && optional) {
 			klog.Errorf("Couldn't get configMap %v/%v: %v", b.pod.Namespace, b.source.Name, err)
 			return err
@@ -224,7 +240,7 @@ func (b *configMapVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterA
 	}
 
 	defer func() {
-		// Clean up directories if setup fails
+		// 安装失败时清理已创建的目录，避免留下残留挂载点。
 		if !setupSuccess {
 			unmounter, unmountCreateErr := b.plugin.NewUnmounter(b.volName, b.podUID)
 			if unmountCreateErr != nil {
@@ -246,8 +262,7 @@ func (b *configMapVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterA
 	}
 
 	setPerms := func(_ string) error {
-		// This may be the first time writing and new files get created outside the timestamp subdirectory:
-		// change the permissions on the whole volume and not only in the timestamp directory.
+		// 首次写入时新文件可能创建在时间戳子目录之外，因此要对整个卷改权限，而不只是时间戳目录。
 		ownerShipChanger := volume.NewVolumeOwnership(b, dir, mounterArgs.FsGroup, nil /*fsGroupChangePolicy*/, volumeutil.FSGroupCompleteHook(b.plugin, nil))
 		return ownerShipChanger.ChangePermissions()
 	}
@@ -261,7 +276,8 @@ func (b *configMapVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterA
 	return nil
 }
 
-// MakePayload function is exported so that it can be called from the projection volume driver
+// MakePayload 将 ConfigMap 数据按 items 映射转换为待写入的文件投影。
+// 导出该函数以便 projection 卷驱动复用。
 func MakePayload(mappings []v1.KeyToPath, configMap *v1.ConfigMap, defaultMode *int32, defaultUser *int64, optional bool) (map[string]volumeutil.FileProjection, error) {
 	if defaultMode == nil {
 		return nil, fmt.Errorf("no defaultMode used, not even the default value for it")
@@ -271,6 +287,7 @@ func MakePayload(mappings []v1.KeyToPath, configMap *v1.ConfigMap, defaultMode *
 	var fileProjection volumeutil.FileProjection
 
 	if len(mappings) == 0 {
+		// 未指定 items 时，将 Data 和 BinaryData 中的所有键直接投射为同名文件。
 		for name, data := range configMap.Data {
 			fileProjection.Data = []byte(data)
 			fileProjection.Mode = *defaultMode
@@ -288,6 +305,7 @@ func MakePayload(mappings []v1.KeyToPath, configMap *v1.ConfigMap, defaultMode *
 			payload[name] = fileProjection
 		}
 	} else {
+		// 指定 items 时按 key -> path 映射投射；optional 下缺失的键直接跳过。
 		for _, ktp := range mappings {
 			if stringData, ok := configMap.Data[ktp.Key]; ok {
 				fileProjection.Data = []byte(stringData)
@@ -314,6 +332,7 @@ func MakePayload(mappings []v1.KeyToPath, configMap *v1.ConfigMap, defaultMode *
 	return payload, nil
 }
 
+// totalBytes 统计 ConfigMap 中字符串数据和二进制数据的总字节数，仅用于日志输出。
 func totalBytes(configMap *v1.ConfigMap) int {
 	totalSize := 0
 	for _, value := range configMap.Data {
@@ -326,21 +345,24 @@ func totalBytes(configMap *v1.ConfigMap) int {
 	return totalSize
 }
 
-// configMapVolumeUnmounter handles cleaning up configMap volumes.
+// configMapVolumeUnmounter 负责清理 ConfigMap 卷挂载。
 type configMapVolumeUnmounter struct {
 	*configMapVolume
 }
 
 var _ volume.Unmounter = &configMapVolumeUnmounter{}
 
+// TearDown 在默认路径上卸载 ConfigMap 卷。
 func (c *configMapVolumeUnmounter) TearDown() error {
 	return c.TearDownAt(c.GetPath())
 }
 
+// TearDownAt 卸载指定目录的 ConfigMap 卷，交由包装的 EmptyDir 完成清理。
 func (c *configMapVolumeUnmounter) TearDownAt(dir string) error {
 	return volumeutil.UnmountViaEmptyDir(dir, c.plugin.host, c.volName, wrappedVolumeSpec(), c.podUID)
 }
 
+// getVolumeSource 从卷规格中提取 ConfigMap 卷源及只读标记。
 func getVolumeSource(spec *volume.Spec) (*v1.ConfigMapVolumeSource, bool) {
 	var readOnly bool
 	var volumeSource *v1.ConfigMapVolumeSource

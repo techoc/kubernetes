@@ -46,6 +46,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testcase 描述 Install/Uninstall CSIDriver 的一个测试用例及其期望结果。
 type testcase struct {
 	name             string
 	driverName       string
@@ -61,12 +62,17 @@ type testcase struct {
 	migratedPlugins  map[string](func() bool)
 }
 
+// nodeIDMap 表示驱动名称到节点 ID 的映射。
 type nodeIDMap map[string]string
+
+// topologyKeyMap 表示驱动名称到拓扑键列表的映射。
 type topologyKeyMap map[string][]string
+
+// labelMap 表示节点标签的键值对集合。
 type labelMap map[string]string
 
-// TestInstallCSIDriver tests InstallCSIDriver with various existing Node and/or CSINode objects.
-// The node IDs in all test cases below are the same between the Node annotation and CSINode.
+// TestInstallCSIDriver 用各种已存在的 Node 和/或 CSINode 对象测试 InstallCSIDriver。
+// 以下各用例中，Node 注解与 CSINode 里的节点 ID 保持一致。
 func TestInstallCSIDriver(t *testing.T) {
 	testcases := []testcase{
 		{
@@ -379,7 +385,7 @@ func TestInstallCSIDriver(t *testing.T) {
 				Spec: storage.CSINodeSpec{
 					Drivers: []storage.CSINodeDriver{
 						{
-							// Only the new driver should be present because the old CSINode represented a previous node.
+							// 旧 CSINode 属于之前的节点，因此这里只应保留新驱动。
 							Name:   "com.example.csi.driver1",
 							NodeID: "com.example.csi/csi-node1",
 						},
@@ -684,13 +690,14 @@ func TestInstallCSIDriver(t *testing.T) {
 	test(t, true /* addNodeInfo */, testcases)
 }
 
+// generateVolumeLimits 生成卷数量上限资源对象，用于构造测试用例。
 func generateVolumeLimits(i int32) *storage.VolumeNodeResources {
 	return &storage.VolumeNodeResources{
 		Count: ptr.To[int32](i),
 	}
 }
 
-// TestUninstallCSIDriver tests UninstallCSIDriver with various existing Node and/or CSINode objects.
+// TestUninstallCSIDriver 用各种已存在的 Node 和/或 CSINode 对象测试 UninstallCSIDriver。
 func TestUninstallCSIDriver(t *testing.T) {
 	testcases := []testcase{
 		{
@@ -819,6 +826,7 @@ func TestUninstallCSIDriver(t *testing.T) {
 	test(t, false /* addNodeInfo */, testcases)
 }
 
+// TestSetMigrationAnnotation 验证迁移插件注解的设置逻辑。
 func TestSetMigrationAnnotation(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -969,6 +977,7 @@ func TestSetMigrationAnnotation(t *testing.T) {
 	}
 }
 
+// TestInstallCSIDriverExistingAnnotation 验证 Node 上已有注解时驱动安装的兼容性。
 func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 	driverName := "com.example.csi/driver1"
 	nodeID := "com.example.csi/some-node"
@@ -998,7 +1007,7 @@ func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 	for _, tc := range testcases {
 		t.Logf("test case: %q", tc.name)
 
-		// Arrange
+		// 准备：构造测试客户端与宿主环境。
 		nodeName := tc.existingNode.Name
 		client := fake.NewSimpleClientset(tc.existingNode)
 
@@ -1018,7 +1027,7 @@ func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 
 		nim := NewNodeInfoManager(types.NodeName(nodeName), host, nil)
 
-		// Act
+		// 执行：创建 CSINode 并安装驱动。
 		_, err = nim.CreateCSINode()
 		if err != nil {
 			t.Errorf("expected no error from creating CSINodeinfo but got: %v", err)
@@ -1030,7 +1039,7 @@ func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 			continue
 		}
 
-		// Assert
+		// 断言：校验 CSINode 中的驱动信息。
 		nodeInfo, err := client.StorageV1().CSINodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 		if err != nil {
 			t.Errorf("error getting CSINode: %v", err)
@@ -1044,6 +1053,7 @@ func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 	}
 }
 
+// getClientSet 根据给定的 Node 和 CSINode 构造 fake 客户端。
 func getClientSet(existingNode *v1.Node, existingCSINode *storage.CSINode) *fake.Clientset {
 	objects := []runtime.Object{}
 	if existingNode != nil {
@@ -1055,11 +1065,12 @@ func getClientSet(existingNode *v1.Node, existingCSINode *storage.CSINode) *fake
 	return fake.NewSimpleClientset(objects...)
 }
 
+// test 依次执行给定的测试用例，校验 Node/CSINode 的最终状态。
 func test(t *testing.T, addNodeInfo bool, testcases []testcase) {
 	for _, tc := range testcases {
 		t.Logf("test case: %q", tc.name)
 
-		//// Arrange
+		//// 准备：构造测试客户端与宿主环境。
 		nodeName := tc.existingNode.Name
 		client := getClientSet(tc.existingNode, tc.existingCSINode)
 
@@ -1078,7 +1089,7 @@ func test(t *testing.T, addNodeInfo bool, testcases []testcase) {
 		)
 		nim := NewNodeInfoManager(types.NodeName(nodeName), host, tc.migratedPlugins)
 
-		//// Act
+		//// 执行：根据用例安装或卸载驱动。
 		nim.CreateCSINode()
 		if addNodeInfo {
 			err = nim.InstallCSIDriver(tc.driverName, tc.inputNodeID, tc.inputVolumeLimit, tc.inputTopology)
@@ -1086,7 +1097,7 @@ func test(t *testing.T, addNodeInfo bool, testcases []testcase) {
 			err = nim.UninstallCSIDriver(tc.driverName)
 		}
 
-		//// Assert
+		//// 断言：校验操作结果及对象状态。
 		if tc.expectFail {
 			if err == nil {
 				t.Errorf("expected an error from InstallCSIDriver call but got none")
@@ -1117,7 +1128,7 @@ func test(t *testing.T, addNodeInfo bool, testcases []testcase) {
 			t.Errorf("expected Node %v; got: %v", tc.expectedNode, node)
 		}
 
-		// CSINode validation
+		// 校验 CSINode 对象。
 		nodeInfo, err := client.StorageV1().CSINodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 		if err != nil {
 			if !errors.IsNotFound(err) {
@@ -1140,6 +1151,7 @@ func test(t *testing.T, addNodeInfo bool, testcases []testcase) {
 	}
 }
 
+// generateNode 根据节点 ID、标签和容量构造测试用 Node 对象。
 func generateNode(nodeIDs, labels map[string]string, capacity map[v1.ResourceName]resource.Quantity) *v1.Node {
 	var annotations map[string]string
 	if len(nodeIDs) > 0 {
@@ -1161,11 +1173,13 @@ func generateNode(nodeIDs, labels map[string]string, capacity map[v1.ResourceNam
 	return node
 }
 
+// marshall 将节点 ID 映射序列化为 JSON 字符串。
 func marshall(nodeIDs nodeIDMap) string {
 	b, _ := json.Marshal(nodeIDs)
 	return string(b)
 }
 
+// generateCSINode 根据驱动节点 ID、卷上限和拓扑键构造测试用 CSINode 对象。
 func generateCSINode(nodeIDs nodeIDMap, volumeLimits *storage.VolumeNodeResources, topologyKeys topologyKeyMap) *storage.CSINode {
 	nodeDrivers := []storage.CSINodeDriver{}
 	for k, nodeID := range nodeIDs {
@@ -1188,6 +1202,7 @@ func generateCSINode(nodeIDs nodeIDMap, volumeLimits *storage.VolumeNodeResource
 	}
 }
 
+// getCSINodeObjectMeta 返回测试用 CSINode 的对象元数据。
 func getCSINodeObjectMeta() metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name: "node1",
@@ -1201,6 +1216,7 @@ func getCSINodeObjectMeta() metav1.ObjectMeta {
 	}
 }
 
+// applyNodeStatusPatch 将 strategic merge patch 应用到 Node 上，返回更新后的对象。
 func applyNodeStatusPatch(originalNode *v1.Node, patch []byte) (*v1.Node, error) {
 	original, err := json.Marshal(originalNode)
 	if err != nil {
@@ -1218,6 +1234,7 @@ func applyNodeStatusPatch(originalNode *v1.Node, patch []byte) (*v1.Node, error)
 	return updatedNode, nil
 }
 
+// hasPatchAction 返回动作列表中第一个 patch 动作，没有则返回 nil。
 func hasPatchAction(actions []clienttesting.Action) clienttesting.Action {
 	for _, action := range actions {
 		if action.GetVerb() == "patch" {
@@ -1227,6 +1244,7 @@ func hasPatchAction(actions []clienttesting.Action) clienttesting.Action {
 	return nil
 }
 
+// TestUpdateCSINodeStorageHealth 验证 CSINode 存储健康状态的更新逻辑。
 func TestUpdateCSINodeStorageHealth(t *testing.T) {
 	driver1 := "com.example.csi.driver1"
 	driver2 := "com.example.csi.driver2"

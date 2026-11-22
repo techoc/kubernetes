@@ -32,31 +32,38 @@ import (
 	utiltesting "k8s.io/client-go/util/testing"
 )
 
+// localFakeMounter 是只关心路径和属性的假挂载器，用于测试权限变更逻辑。
 type localFakeMounter struct {
 	path       string
 	attributes Attributes
 }
 
+// GetPath 返回假挂载器的路径。
 func (l *localFakeMounter) GetPath() string {
 	return l.path
 }
 
+// GetAttributes 返回假挂载器的属性。
 func (l *localFakeMounter) GetAttributes() Attributes {
 	return l.attributes
 }
 
+// SetUp 是空实现，测试不执行实际挂载。
 func (l *localFakeMounter) SetUp(mounterArgs MounterArgs) error {
 	return nil
 }
 
+// SetUpAt 是空实现，测试不执行实际挂载。
 func (l *localFakeMounter) SetUpAt(dir string, mounterArgs MounterArgs) error {
 	return nil
 }
 
+// GetMetrics 返回空指标，测试不关心挂载器指标。
 func (l *localFakeMounter) GetMetrics() (*Metrics, error) {
 	return nil, nil
 }
 
+// TestSkipPermissionChange 验证各 fsGroup 变更策略下是否跳过权限变更的判断。
 func TestSkipPermissionChange(t *testing.T) {
 	always := v1.FSGroupChangeAlways
 	onrootMismatch := v1.FSGroupChangeOnRootMismatch
@@ -181,6 +188,7 @@ func TestSkipPermissionChange(t *testing.T) {
 	}
 }
 
+// TestSetVolumeOwnershipMode 验证不同 fsGroup 变更策略下目录权限的设置结果。
 func TestSetVolumeOwnershipMode(t *testing.T) {
 	always := v1.FSGroupChangeAlways
 	onrootMismatch := v1.FSGroupChangeOnRootMismatch
@@ -200,13 +208,13 @@ func TestSetVolumeOwnershipMode(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				// change mode of root folder to be right
+				// 将根目录权限改为预期值
 				err = os.Chmod(path, info.Mode()|expectedMask)
 				if err != nil {
 					return err
 				}
 
-				// create a subdirectory with invalid permissions
+				// 创建一个权限不合规的子目录
 				rogueDir := filepath.Join(path, "roguedir")
 				nosgidPerm := info.Mode() &^ os.ModeSetgid
 				err = os.Mkdir(rogueDir, nosgidPerm)
@@ -232,13 +240,13 @@ func TestSetVolumeOwnershipMode(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				// change mode of root folder to be right
+				// 将根目录权限改为预期值
 				err = os.Chmod(path, info.Mode()|expectedMask)
 				if err != nil {
 					return err
 				}
 
-				// create a subdirectory with invalid permissions
+				// 创建一个权限不合规的子目录
 				rogueDir := filepath.Join(path, "roguedir")
 				err = os.Mkdir(rogueDir, rwMask)
 				if err != nil {
@@ -259,13 +267,13 @@ func TestSetVolumeOwnershipMode(t *testing.T) {
 			description:         "featuregate=on, fsgroupchangepolicy=onrootmismatch,rootdir=invalidperm",
 			fsGroupChangePolicy: &onrootMismatch,
 			setupFunc: func(path string) error {
-				// change mode of root folder to be right
+				// 将根目录权限改为预期值
 				err := os.Chmod(path, 0770)
 				if err != nil {
 					return err
 				}
 
-				// create a subdirectory with invalid permissions
+				// 创建一个权限不合规的子目录
 				rogueDir := filepath.Join(path, "roguedir")
 				err = os.Mkdir(rogueDir, rwMask)
 				if err != nil {
@@ -314,7 +322,7 @@ func TestSetVolumeOwnershipMode(t *testing.T) {
 				t.Errorf("for %s error running setup with: %v", test.description, err)
 			}
 
-			mounter := &localFakeMounter{path: "FAKE_DIR_DOESNT_EXIST"} // SetVolumeOwnership() must rely on tmpDir
+			mounter := &localFakeMounter{path: "FAKE_DIR_DOESNT_EXIST"} // 故意给假路径，强制 SetVolumeOwnership() 使用传入的 tmpDir
 			ownershipChanger := NewVolumeOwnership(mounter, tmpDir, &expectedGID, test.fsGroupChangePolicy, nil)
 			err = ownershipChanger.ChangePermissions()
 			if err != nil {
@@ -328,24 +336,24 @@ func TestSetVolumeOwnershipMode(t *testing.T) {
 	}
 }
 
+// TestProgressTracking 验证权限变更耗时较长时进度事件的上报行为。
 func TestProgressTracking(t *testing.T) {
 	alwaysApplyPolicy := v1.FSGroupChangeAlways
 	var expectedGID int64 = 9999
 
-	//  capture original variable
+	// 保存原值，测试结束后恢复，避免影响其他用例
 	originalfilePermissionChangeFunc := filePermissionChangeFunc
 	originalProgressReportDuration := progressReportDuration
 	originalfirstEventReportDuration := firstEventReportDuration
 
 	var permissionSleepDuration = 5 * time.Millisecond
 
-	// Override how often progress is reported
+	// 缩短进度上报间隔，让测试在有限时间内观察到事件
 	progressReportDuration = 300 * time.Millisecond
-	// Override when first event about progress is reported
+	// 提前首次上报时间，便于覆盖首次事件的分支
 	firstEventReportDuration = 150 * time.Millisecond
 
-	// Override how permission change is applied, so as to artificially slow
-	// permission change
+	// 包装权限变更函数，人为拖慢每次变更以触发进度上报
 	filePermissionChangeFunc = func(filename string, fsGroup *int64, readonly bool, info os.FileInfo) error {
 		time.Sleep(permissionSleepDuration)
 		originalfilePermissionChangeFunc(filename, fsGroup, readonly, info)
@@ -432,12 +440,12 @@ func TestProgressTracking(t *testing.T) {
 				}
 			}()
 
-			mounter := &localFakeMounter{path: "FAKE_DIR_DOESNT_EXIST"} // SetVolumeOwnership() must rely on tmpDir
+			mounter := &localFakeMounter{path: "FAKE_DIR_DOESNT_EXIST"} // 故意给假路径，强制 SetVolumeOwnership() 使用传入的 tmpDir
 
 			fakeRecorder := record.NewFakeRecorder(100)
 			recordedEvents := []string{}
 
-			// Set how long file permission change takes
+			// 控制单个文件权限变更的耗时，决定进度事件是否触发
 			permissionSleepDuration = tc.filePermissionChangeTimeDuration
 
 			ownershipChanger := NewVolumeOwnership(mounter, volumePath, &expectedGID, &alwaysApplyPolicy, nil)
@@ -468,8 +476,7 @@ func TestProgressTracking(t *testing.T) {
 	}
 }
 
-// verifyDirectoryPermission checks if given path has directory permissions
-// that is expected by k8s. If returns true if it does otherwise false
+// verifyDirectoryPermission 检查给定路径的目录权限是否符合 k8s 预期，符合则返回 true。
 func verifyDirectoryPermission(path string, readonly bool) bool {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -493,6 +500,7 @@ func verifyDirectoryPermission(path string, readonly bool) bool {
 	return false
 }
 
+// TestSetVolumeOwnershipOwner 验证卷所有权（uid/gid）的变更结果，含符号链接场景。
 func TestSetVolumeOwnershipOwner(t *testing.T) {
 	fsGroup := int64(3000)
 	currentUid := os.Geteuid()
@@ -610,8 +618,7 @@ func TestSetVolumeOwnershipOwner(t *testing.T) {
 	}
 }
 
-// verifyFileOwner checks if given path is owned by uid and gid.
-// It returns true if it is otherwise false.
+// verifyFileOwner 检查给定路径的属主是否为指定的 uid 和 gid。
 func verifyFileOwner(path string, uid, gid int) bool {
 	info, err := os.Lstat(path)
 	if err != nil {

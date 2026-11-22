@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/test/utils/harness"
 )
 
+// TestAttach 验证附加器调用驱动的 attach 命令。
 func TestAttach(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -41,6 +42,7 @@ func TestAttach(tt *testing.T) {
 	a.Attach(spec, "localhost")
 }
 
+// TestWaitForAttach 验证附加器调用驱动的 wait-for-attach 命令。
 func TestWaitForAttach(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -57,6 +59,7 @@ func TestWaitForAttach(tt *testing.T) {
 	a.WaitForAttach(spec, "/dev/sdx", pod, 1*time.Second)
 }
 
+// TestMountDevice 验证附加器调用驱动的 mount-device 命令。
 func TestMountDevice(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -73,6 +76,7 @@ func TestMountDevice(tt *testing.T) {
 	a.MountDevice(spec, "/dev/sdx", rootDir+"/mount-dir", volume.DeviceMounterArgs{})
 }
 
+// TestIsVolumeAttached 验证附加器通过驱动的 is-attached 命令批量查询卷挂载状态。
 func TestIsVolumeAttached(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()

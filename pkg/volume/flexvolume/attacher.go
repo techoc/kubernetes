@@ -33,7 +33,7 @@ var _ volume.Attacher = &flexVolumeAttacher{}
 
 var _ volume.DeviceMounter = &flexVolumeAttacher{}
 
-// Attach is part of the volume.Attacher interface
+// Attach 调用驱动的 attach 命令；驱动不支持时回退到默认实现。
 func (a *flexVolumeAttacher) Attach(spec *volume.Spec, hostName types.NodeName) (string, error) {
 
 	call := a.plugin.NewDriverCall(attachCmd)
@@ -49,7 +49,7 @@ func (a *flexVolumeAttacher) Attach(spec *volume.Spec, hostName types.NodeName) 
 	return status.DevicePath, err
 }
 
-// WaitForAttach is part of the volume.Attacher interface
+// WaitForAttach 调用驱动的 waitForAttach 命令并等待完成。
 func (a *flexVolumeAttacher) WaitForAttach(spec *volume.Spec, devicePath string, _ *v1.Pod, timeout time.Duration) (string, error) {
 	call := a.plugin.NewDriverCallWithTimeout(waitForAttachCmd, timeout)
 	call.Append(devicePath)
@@ -64,14 +64,14 @@ func (a *flexVolumeAttacher) WaitForAttach(spec *volume.Spec, devicePath string,
 	return status.DevicePath, nil
 }
 
-// GetDeviceMountPath is part of the volume.Attacher interface
+// GetDeviceMountPath 返回设备在该节点上的全局挂载路径。
 func (a *flexVolumeAttacher) GetDeviceMountPath(spec *volume.Spec) (string, error) {
 	return a.plugin.getDeviceMountPath(spec)
 }
 
-// MountDevice is part of the volume.Attacher interface
+// MountDevice 将设备挂载到全局路径，重复调用直接跳过。
 func (a *flexVolumeAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, _ volume.DeviceMounterArgs) error {
-	// Mount only once.
+	// 已经挂载过就不再重复调用驱动。
 	alreadyMounted, err := prepareForMount(a.plugin.host.GetMounter(), deviceMountPath)
 	if err != nil {
 		return err
@@ -87,8 +87,7 @@ func (a *flexVolumeAttacher) MountDevice(spec *volume.Spec, devicePath string, d
 
 	_, err = call.Run()
 	if isCmdNotSupportedErr(err) {
-		// Devicepath is empty if the plugin does not support attach calls. Ignore mountDevice calls if the
-		// plugin does not implement attach interface.
+		// 不支持 attach 的驱动其 devicePath 为空，此时无需调用 mountDevice。
 		if devicePath != "" {
 			return (*attacherDefaults)(a).MountDevice(spec, devicePath, deviceMountPath, a.plugin.host.GetMounter())
 		}
@@ -97,6 +96,7 @@ func (a *flexVolumeAttacher) MountDevice(spec *volume.Spec, devicePath string, d
 	return err
 }
 
+// VolumesAreAttached 逐个调用驱动 isAttached，检查卷是否仍挂载在指定节点。
 func (a *flexVolumeAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.NodeName) (map[*volume.Spec]bool, error) {
 	volumesAttachedCheck := make(map[*volume.Spec]bool)
 	for _, spec := range specs {

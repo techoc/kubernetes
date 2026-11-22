@@ -35,12 +35,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// newHostPathType 将字符串包装为 *v1.HostPathType。
 func newHostPathType(pathType string) *v1.HostPathType {
 	hostPathType := new(v1.HostPathType)
 	*hostPathType = v1.HostPathType(pathType)
 	return hostPathType
 }
 
+// newHostPathTypeList 将多个字符串转换为 *v1.HostPathType 切片。
 func newHostPathTypeList(pathType ...string) []*v1.HostPathType {
 	typeList := []*v1.HostPathType{}
 	for _, ele := range pathType {
@@ -50,6 +52,7 @@ func newHostPathTypeList(pathType ...string) []*v1.HostPathType {
 	return typeList
 }
 
+// TestCanSupport 验证 hostPath 插件对 HostPath 卷与 PV 的支持判断，以及对无来源卷的拒绝。
 func TestCanSupport(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeKubeletVolumeHost(t, "fake", nil, nil))
@@ -72,6 +75,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证 hostPath 持久卷只支持 ReadWriteOnce。
 func TestGetAccessModes(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeKubeletVolumeHost(t, "/tmp/fake", nil, nil))
@@ -85,6 +89,7 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// TestRecycler 验证可按 spec 找到 hostPath 的可回收插件。
 func TestRecycler(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	pluginHost := volumetest.NewFakeKubeletVolumeHost(t, "/tmp/fake", nil, nil)
@@ -97,8 +102,9 @@ func TestRecycler(t *testing.T) {
 	}
 }
 
+// TestDeleter 验证 deleter 能删除 /tmp 下的 hostPath 目录。
 func TestDeleter(t *testing.T) {
-	// Deleter has a hard-coded regex for "/tmp".
+	// deleter 对 "/tmp" 路径有硬编码的正则校验，因此临时目录必须建在 /tmp 下。
 	tempPath := fmt.Sprintf("/tmp/hostpath.%s", uuid.NewUUID())
 	err := os.MkdirAll(tempPath, 0750)
 	if err != nil {
@@ -129,6 +135,7 @@ func TestDeleter(t *testing.T) {
 	}
 }
 
+// TestDeleterTempDir 验证 deleter 对 /tmp 路径的校验，拒绝裸 /tmp 与非 /tmp 路径。
 func TestDeleterTempDir(t *testing.T) {
 	tests := map[string]struct {
 		expectedFailure bool
@@ -155,6 +162,7 @@ func TestDeleterTempDir(t *testing.T) {
 	}
 }
 
+// TestProvisioner 验证 hostPath provisioner 能创建 PV，并设置容量与回收策略。
 func TestProvisioner(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{ProvisioningEnabled: true}),
@@ -203,6 +211,7 @@ func TestProvisioner(t *testing.T) {
 
 }
 
+// TestInvalidHostPath 验证包含 '..' 的 hostPath 在 SetUp 时被拒绝。
 func TestInvalidHostPath(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeKubeletVolumeHost(t, "fake", nil, nil))
@@ -228,6 +237,7 @@ func TestInvalidHostPath(t *testing.T) {
 	}
 }
 
+// TestPlugin 验证 hostPath mounter/unmounter 的完整挂载与卸载流程。
 func TestPlugin(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeKubeletVolumeHost(t, "fake", nil, nil))
@@ -274,6 +284,7 @@ func TestPlugin(t *testing.T) {
 	}
 }
 
+// TestPersistentClaimReadOnlyFlag 验证从 PVC 派生的 spec 创建的 mounter 带有只读属性。
 func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -309,7 +320,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeKubeletVolumeHost(t, "/tmp/fake", client, nil))
 	plug, _ := plugMgr.FindPluginByName(hostPathPluginName)
 
-	// readOnly bool is supplied by persistent-claim volume source when its mounter creates other volumes
+	// PVC 卷源在创建 mounter 时会提供 readOnly 标志。
 	spec := volume.NewSpecFromPersistentVolume(pv, true)
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")}}
 	mounter, _ := plug.NewMounter(spec, pod)
@@ -322,6 +333,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	}
 }
 
+// setUp 创建测试用的目录与普通文件。
 func setUp() error {
 	err := os.MkdirAll("/tmp/ExistingFolder", os.FileMode(0755))
 	if err != nil {
@@ -337,10 +349,12 @@ func setUp() error {
 	return nil
 }
 
+// tearDown 清理 setUp 创建的目录。
 func tearDown() {
 	os.RemoveAll("/tmp/ExistingFolder")
 }
 
+// TestOSFileTypeChecker 验证文件类型检查器对目录、普通文件、socket 与设备文件的判定。
 func TestOSFileTypeChecker(t *testing.T) {
 	err := setUp()
 	if err != nil {
@@ -499,6 +513,7 @@ func TestOSFileTypeChecker(t *testing.T) {
 
 }
 
+// fakeHostPathTypeChecker 提供可配置的 hostPathTypeChecker 假实现，用于内部类型校验测试。
 type fakeHostPathTypeChecker struct {
 	name            string
 	path            string
@@ -513,17 +528,37 @@ type fakeHostPathTypeChecker struct {
 	invalidpathType []*v1.HostPathType
 }
 
-func (ftc *fakeHostPathTypeChecker) MakeFile() error          { return nil }
-func (ftc *fakeHostPathTypeChecker) MakeDir() error           { return nil }
-func (ftc *fakeHostPathTypeChecker) Exists() bool             { return ftc.exists }
-func (ftc *fakeHostPathTypeChecker) IsFile() bool             { return ftc.isFile }
-func (ftc *fakeHostPathTypeChecker) IsDir() bool              { return ftc.isDir }
-func (ftc *fakeHostPathTypeChecker) IsBlock() bool            { return ftc.isBlock }
-func (ftc *fakeHostPathTypeChecker) IsChar() bool             { return ftc.isChar }
-func (ftc *fakeHostPathTypeChecker) IsSocket() bool           { return ftc.isSocket }
-func (ftc *fakeHostPathTypeChecker) GetPath() string          { return ftc.path }
+// MakeFile 为空实现。
+func (ftc *fakeHostPathTypeChecker) MakeFile() error { return nil }
+
+// MakeDir 为空实现。
+func (ftc *fakeHostPathTypeChecker) MakeDir() error { return nil }
+
+// Exists 返回预设的存在性。
+func (ftc *fakeHostPathTypeChecker) Exists() bool { return ftc.exists }
+
+// IsFile 返回预设的文件标记。
+func (ftc *fakeHostPathTypeChecker) IsFile() bool { return ftc.isFile }
+
+// IsDir 返回预设的目录标记。
+func (ftc *fakeHostPathTypeChecker) IsDir() bool { return ftc.isDir }
+
+// IsBlock 返回预设的块设备标记。
+func (ftc *fakeHostPathTypeChecker) IsBlock() bool { return ftc.isBlock }
+
+// IsChar 返回预设的字符设备标记。
+func (ftc *fakeHostPathTypeChecker) IsChar() bool { return ftc.isChar }
+
+// IsSocket 返回预设的 socket 标记。
+func (ftc *fakeHostPathTypeChecker) IsSocket() bool { return ftc.isSocket }
+
+// GetPath 返回预设路径。
+func (ftc *fakeHostPathTypeChecker) GetPath() string { return ftc.path }
+
+// GetType 返回预设的 hostPath 类型。
 func (ftc *fakeHostPathTypeChecker) GetType() (string, error) { return string(*ftc.pathType), nil }
 
+// TestHostPathTypeCheckerInternal 校验每种 hostPath 类型与文件实际状态的匹配规则。
 func TestHostPathTypeCheckerInternal(t *testing.T) {
 	testCases := []fakeHostPathTypeChecker{
 		{

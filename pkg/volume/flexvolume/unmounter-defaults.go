@@ -21,8 +21,10 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// unmounterDefaults 是未实现卸载逻辑的 flexVolume 插件使用的默认卸载器。
 type unmounterDefaults flexVolumeUnmounter
 
+// TearDownAt 清理指定目录下的挂载点。
 func (f *unmounterDefaults) TearDownAt(dir string) error {
 	klog.Warning(logPrefix(f.plugin), "using default TearDownAt for ", dir)
 	return mount.CleanupMountPoint(dir, f.mounter, false)

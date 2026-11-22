@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package secret contains the internal representation of secret volumes.
+// Package secret 包含 secret 卷的内部表示。
 package secret

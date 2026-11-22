@@ -76,14 +76,12 @@ exit 1
 echo -n $@ &> {{.OutputFile}}
 `
 
-// NOTE: Typically, Windows requires file extensions for executable files. If a file does not
-// have a file extension, Windows will check if there is a file with the given name + one of the
-// extensions from $env:PATHEXT (in order) and run that file with that extension.
-// For example, if we have the file C:\\foo.bat, we can run C:\\foo.
-// For these tests, .bat was chosen since it's one of the default values in $env.PATHEXT. .ps1 is
-// not in that list, but it might be useful for flexvolumes to be able to handle powershell scripts.
-// There's no argument count variable in batch. Instead, we can check that the n-th argument
-// is an empty string.
+// 注意：Windows 下可执行文件通常需要扩展名。若文件名无扩展名，
+// Windows 会按顺序尝试 $env:PATHEXT 中各扩展名匹配文件并执行。
+// 例如存在 C:\\foo.bat 时，可直接运行 C:\\foo。
+// 此处选择 .bat 是因为它默认就在 $env:PATHEXT 中；.ps1 不在列表内，
+// 但 flexVolume 插件仍可能需要支持 PowerShell 脚本。
+// 批处理没有参数个数变量，改为检查第 n 个参数是否为空字符串。
 const execScriptTemplBat = `
 @echo off
 
@@ -115,6 +113,8 @@ echo {"status": "Not supported"}
 exit 1
 `
 
+// installPluginUnderTest 在临时目录下创建可执行的假驱动脚本。
+// 带 vendor 名时目录格式为 vendor~plugName，以模拟插件的供应商前缀命名。
 func installPluginUnderTest(t *testing.T, vendorName, plugName, tmpDir string, execScriptTempl string, execTemplateData *map[string]interface{}) {
 	vendoredName := plugName
 	if vendorName != "" {
@@ -157,6 +157,8 @@ func installPluginUnderTest(t *testing.T, vendorName, plugName, tmpDir string, e
 	f.Close()
 }
 
+// TestCanSupport 验证插件发现与 CanSupport 判断：
+// 仅识别驱动名匹配的 flexVolume 卷和 PV，空卷源返回 false。
 func TestCanSupport(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("flexvolume_test")
 	if err != nil {
@@ -192,6 +194,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证 flexVolume 持久插件声明 RWO 和 ROX 两种访问模式。
 func TestGetAccessModes(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("flexvolume_test")
 	if err != nil {
@@ -218,6 +221,8 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// GetDynamicPluginProberWithoutWatcher 构造一个使用假 watcher 的插件探测器，
+// 使测试不依赖真实文件系统事件。
 func GetDynamicPluginProberWithoutWatcher(pluginDir string, runner exec.Interface) volume.DynamicPluginProber {
 	return &flexVolumeProber{
 		pluginDir: pluginDir,

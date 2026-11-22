@@ -21,17 +21,17 @@ import (
 )
 
 const (
-	// ErrCodeNotSupported code for NotSupported Errors.
+	// ErrCodeNotSupported 表示“不支持”类错误。
 	ErrCodeNotSupported int = iota + 1
 
-	// ErrCodeNoPathDefined code for NoPathDefined Errors.
+	// ErrCodeNoPathDefined 表示“未定义路径”类错误。
 	ErrCodeNoPathDefined
 
-	// ErrCodeFsInfoFailed code for FsInfoFailed Errors.
+	// ErrCodeFsInfoFailed 表示获取文件系统信息失败类错误。
 	ErrCodeFsInfoFailed
 )
 
-// NewNotSupportedError creates a new MetricsError with code NotSupported.
+// NewNotSupportedError 创建一个错误码为 NotSupported 的 MetricsError。
 func NewNotSupportedError() *MetricsError {
 	return &MetricsError{
 		Code: ErrCodeNotSupported,
@@ -39,7 +39,7 @@ func NewNotSupportedError() *MetricsError {
 	}
 }
 
-// NewNotImplementedError creates a new MetricsError with code NotSupported.
+// NewNotImplementedError 创建一个错误码为 NotSupported 的 MetricsError，并附带未实现的原因。
 func NewNotImplementedError(reason string) *MetricsError {
 	return &MetricsError{
 		Code: ErrCodeNotSupported,
@@ -47,8 +47,8 @@ func NewNotImplementedError(reason string) *MetricsError {
 	}
 }
 
-// NewNotSupportedErrorWithDriverName creates a new MetricsError with code NotSupported.
-// driver name is added to the error message.
+// NewNotSupportedErrorWithDriverName 创建一个错误码为 NotSupported 的 MetricsError，
+// 并在错误消息中附上驱动名。
 func NewNotSupportedErrorWithDriverName(name string) *MetricsError {
 	return &MetricsError{
 		Code: ErrCodeNotSupported,
@@ -56,7 +56,7 @@ func NewNotSupportedErrorWithDriverName(name string) *MetricsError {
 	}
 }
 
-// NewNoPathDefinedError creates a new MetricsError with code NoPathDefined.
+// NewNoPathDefinedError 创建一个错误码为 NoPathDefined 的 MetricsError。
 func NewNoPathDefinedError() *MetricsError {
 	return &MetricsError{
 		Code: ErrCodeNoPathDefined,
@@ -64,7 +64,8 @@ func NewNoPathDefinedError() *MetricsError {
 	}
 }
 
-// NewFsInfoFailedError creates a new MetricsError with code FsInfoFailed.
+// NewFsInfoFailedError 创建一个错误码为 FsInfoFailed 的 MetricsError，
+// 消息中包含底层错误。
 func NewFsInfoFailedError(err error) *MetricsError {
 	return &MetricsError{
 		Code: ErrCodeFsInfoFailed,
@@ -72,21 +73,23 @@ func NewFsInfoFailedError(err error) *MetricsError {
 	}
 }
 
-// MetricsError to distinguish different Metrics Errors.
+// MetricsError 用于区分不同类别的 Metrics 错误。
 type MetricsError struct {
 	Code int
 	Msg  string
 }
 
+// Error 返回错误的文本消息。
 func (e *MetricsError) Error() string {
 	return e.Msg
 }
 
-// IsNotSupported returns true if and only if err is "key" not found error.
+// IsNotSupported 判断 err 是否为“不支持”类错误。
 func IsNotSupported(err error) bool {
 	return isErrCode(err, ErrCodeNotSupported)
 }
 
+// isErrCode 判断 err 是否为指定错误码的 MetricsError。
 func isErrCode(err error, code int) bool {
 	if err == nil {
 		return false

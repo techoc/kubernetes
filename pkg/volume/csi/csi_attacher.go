@@ -43,8 +43,10 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// globalMountInGlobalPath 是全局挂载目录下用于设备级挂载的子目录名。
 const globalMountInGlobalPath = "globalmount"
 
+// csiAttacher 实现 CSI 卷的附加、设备挂载与卸载。
 type csiAttacher struct {
 	plugin       *csiPlugin
 	k8s          kubernetes.Interface
@@ -53,13 +55,14 @@ type csiAttacher struct {
 	csiClient csiClient
 }
 
-// volume.Attacher methods
+// 编译期检查：csiAttacher 实现下列卷接口。
 var _ volume.Attacher = &csiAttacher{}
 
 var _ volume.Detacher = &csiAttacher{}
 
 var _ volume.DeviceMounter = &csiAttacher{}
 
+// Attach 创建 VolumeAttachment 并等待其附加完成；CSI 卷没有设备路径可返回。
 func (c *csiAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string, error) {
 	_, ok := c.plugin.host.(volume.KubeletVolumeHost)
 	if ok {
@@ -87,17 +90,14 @@ func (c *csiAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string
 	if attachment == nil {
 		var vaSrc storage.VolumeAttachmentSource
 		if spec.InlineVolumeSpecForCSIMigration {
-			// inline PV scenario - use PV spec to populate VA source.
-			// The volume spec will be populated by CSI translation API
-			// for inline volumes. This allows fields required by the CSI
-			// attacher such as AccessMode and MountOptions (in addition to
-			// fields in the CSI persistent volume source) to be populated
-			// as part of CSI translation for inline volumes.
+			// 内联 PV 场景：用 PV spec 填充 VA source。内联卷的 volume spec 由
+			// CSI 转换 API 生成，这样 AccessMode、MountOptions 等 CSI attacher
+			// 必需的字段（除 CSI PV source 中已有字段外）也能一并填充。
 			vaSrc = storage.VolumeAttachmentSource{
 				InlineVolumeSpec: &spec.PersistentVolume.Spec,
 			}
 		} else {
-			// regular PV scenario - use PV name to populate VA source
+			// 常规 PV 场景：用 PV 名称填充 VA source。
 			pvName := spec.PersistentVolume.GetName()
 			vaSrc = storage.VolumeAttachmentSource{
 				PersistentVolumeName: &pvName,
@@ -126,23 +126,22 @@ func (c *csiAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string
 		}
 	}
 
-	// Attach and detach functionality is exclusive to the CSI plugin that runs in the AttachDetachController,
-	// and has access to a VolumeAttachment lister that can be polled for the current status.
+	// 附加/分离功能仅由运行在 AttachDetachController 中的 CSI 插件提供，
+	// 它可以访问 VolumeAttachment lister 以轮询当前状态。
 	if err := c.waitForVolumeAttachmentWithLister(spec, pvSrc.VolumeHandle, attachID, c.watchTimeout); err != nil {
 		return "", err
 	}
 
 	klog.V(4).Info(log("attacher.Attach finished OK with VolumeAttachment object [%s]", attachID))
 
-	// Don't return attachID as a devicePath. We can reconstruct the attachID using getAttachmentName()
+	// 不把 attachID 当作设备路径返回，需要时可用 getAttachmentName() 重建。
 	return "", nil
 }
 
-// WaitForAttach waits for the attach operation to complete and returns the device path when it is done.
-// But in this case, there should be no waiting. The device is found by the CSI driver later, in NodeStage / NodePublish calls.
-// so it should just return device metadata, in this case it is VolumeAttachment name. If the target VolumeAttachment does not
-// exist or is not attached, the function will return an error. And then the caller (kubelet) should retry it.
-// We can get rid of watching it that serves no purpose. More details in https://issues.k8s.io/124398
+// WaitForAttach 等待附加完成并返回设备路径。但 CSI 卷无需等待：设备由 CSI 驱动
+// 在后续 NodeStage / NodePublish 调用中发现，此处只返回设备元数据（即 VolumeAttachment 名称）。
+// 若目标 VolumeAttachment 不存在或未附加，则返回错误，由调用方（kubelet）重试。
+// 因此可以去掉无用的监听。详见 https://issues.k8s.io/124398。
 func (c *csiAttacher) WaitForAttach(spec *volume.Spec, _ string, pod *v1.Pod, _ time.Duration) (string, error) {
 	source, err := getPVSourceFromSpec(spec)
 	if err != nil {
@@ -169,19 +168,20 @@ func (c *csiAttacher) WaitForAttach(spec *volume.Spec, _ string, pod *v1.Pod, _ 
 	return attach.Name, nil
 }
 
+// waitForVolumeAttachmentWithLister 通过 lister 轮询 VolumeAttachment 状态直至附加完成。
 func (c *csiAttacher) waitForVolumeAttachmentWithLister(spec *volume.Spec, volumeHandle, attachID string, timeout time.Duration) error {
 	klog.V(4).Info(log("probing VolumeAttachment [id=%v]", attachID))
 
 	verifyStatus := func() (bool, error) {
 		volumeAttachment, err := c.plugin.volumeAttachmentLister.Get(attachID)
 		if err != nil {
-			// Ignore "not found" errors in case the VolumeAttachment was just created and hasn't yet made it into the lister.
+			// 忽略 "not found"：VolumeAttachment 可能刚创建，尚未进入 lister 缓存。
 			if !apierrors.IsNotFound(err) {
 				klog.Error(log("unexpected error waiting for volume attachment, %v", err))
 				return false, err
 			}
 
-			// The VolumeAttachment is not available yet and we will have to try again.
+			// VolumeAttachment 尚不可用，需稍后重试。
 			return false, nil
 		}
 
@@ -195,6 +195,7 @@ func (c *csiAttacher) waitForVolumeAttachmentWithLister(spec *volume.Spec, volum
 	return c.waitForVolumeAttachDetachStatusWithLister(spec, volumeHandle, attachID, timeout, verifyStatus, "Attach")
 }
 
+// VolumesAreAttached 批量检查卷是否仍附加在指定节点上。
 func (c *csiAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.NodeName) (map[*volume.Spec]bool, error) {
 	klog.V(4).Info(log("probing attachment status for %d volume(s) ", len(specs)))
 
@@ -219,7 +220,7 @@ func (c *csiAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.No
 			klog.Error(log("Failed to check CSIDriver for %s: %s", driverName, err))
 		} else {
 			if skip {
-				// This volume is not attachable, pretend it's attached
+				// 该卷不可附加，视为已附加。
 				attached[spec] = true
 				continue
 			}
@@ -235,8 +236,7 @@ func (c *csiAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.No
 			}
 			klog.V(4).Info(log("attacher.VolumesAreAttached failed in AttachmentLister for attach.ID=%v: %v. Probing the API server.", attachID, err))
 		}
-		// The cache lookup is not setup or the object is not found in the cache.
-		// Get the object from the API server.
+		// 缓存未建立或对象不在缓存中，改从 API server 获取。
 		klog.V(4).Info(log("probing attachment status for VolumeAttachment %v", attachID))
 		attach, err = c.k8s.StorageV1().VolumeAttachments().Get(context.TODO(), attachID, metav1.GetOptions{})
 		if err != nil {
@@ -251,6 +251,7 @@ func (c *csiAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.No
 	return attached, nil
 }
 
+// GetDeviceMountPath 返回该卷设备级挂载的全局路径。
 func (c *csiAttacher) GetDeviceMountPath(spec *volume.Spec) (string, error) {
 	klog.V(4).Info(log("attacher.GetDeviceMountPath for volume(%s)", spec.Name()))
 	deviceMountPath, err := makeDeviceMountPath(c.plugin, spec)
@@ -261,6 +262,7 @@ func (c *csiAttacher) GetDeviceMountPath(spec *volume.Spec) (string, error) {
 	return deviceMountPath, nil
 }
 
+// MountDevice 调用 NodeStageVolume 在全局路径准备设备，并保存供卸载使用的元数据。
 func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, deviceMounterArgs volume.DeviceMounterArgs) error {
 	klog.V(4).Info(log("attacher.MountDevice(%s, %s)", devicePath, deviceMountPath))
 
@@ -268,7 +270,7 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 		return errors.New(log("attacher.MountDevice failed, deviceMountPath is empty"))
 	}
 
-	// Setup
+	// 参数检查。
 	if spec == nil {
 		return errors.New(log("attacher.MountDevice failed, spec is nil"))
 	}
@@ -277,12 +279,12 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 		return errors.New(log("attacher.MountDevice failed to get CSIPersistentVolumeSource: %v", err))
 	}
 
-	// lets check if node/unstage is supported
+	// 创建客户端后才能查询节点能力。
 	if c.csiClient == nil {
 		c.csiClient, err = newCsiDriverClient(csiDriverName(csiSource.Driver))
 		if err != nil {
-			// Treat the absence of the CSI driver as a transient error
-			// See https://github.com/kubernetes/kubernetes/issues/120268
+			// 驱动不存在按瞬时错误处理，详见
+			// https://github.com/kubernetes/kubernetes/issues/120268。
 			return volumetypes.NewTransientOperationFailure(log("attacher.MountDevice failed to create newCsiDriverClient: %v", err))
 		}
 	}
@@ -290,7 +292,7 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 
 	ctx, cancel := createCSIOperationContext(spec, c.watchTimeout)
 	defer cancel()
-	// Check whether "STAGE_UNSTAGE_VOLUME" is set
+	// 查询驱动是否支持 STAGE_UNSTAGE_VOLUME。
 	stageUnstageSet, err := csi.NodeSupportsStageUnstage(ctx)
 	if err != nil {
 		return err
@@ -305,13 +307,13 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 	}
 
 	nodeStageSecrets := map[string]string{}
-	// we only require secrets if csiSource has them and volume has NodeStage capability
+	// 只有卷声明了 nodeStageSecretRef 且驱动支持 NodeStage 时才需要该 secret。
 	if csiSource.NodeStageSecretRef != nil && stageUnstageSet {
 		nodeStageSecrets, err = getCredentialsFromSecret(c.k8s, csiSource.NodeStageSecretRef)
 		if err != nil {
 			err = fmt.Errorf("fetching NodeStageSecretRef %s/%s failed: %v",
 				csiSource.NodeStageSecretRef.Namespace, csiSource.NodeStageSecretRef.Name, err)
-			// if we failed to fetch secret then that could be a transient error
+			// 获取 secret 失败可能是瞬时错误。
 			return volumetypes.NewTransientOperationFailure(err.Error())
 		}
 	}
@@ -333,8 +335,7 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 		}
 	}
 
-	// Store volume metadata for UnmountDevice. Keep it around even if the
-	// driver does not support NodeStage, UnmountDevice still needs it.
+	// 元数据供 UnmountDevice 使用；即使驱动不支持 NodeStage 也必须保留。
 	if err = filesystem.MkdirAllWithPathCheck(deviceMountPath, 0750); err != nil {
 		return errors.New(log("attacher.MountDevice failed to create dir %#v:  %v", deviceMountPath, err))
 	}
@@ -352,11 +353,11 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 
 	if !stageUnstageSet {
 		klog.Info(log("attacher.MountDevice STAGE_UNSTAGE_VOLUME capability not set. Skipping MountDevice..."))
-		// defer does *not* remove the metadata file and it's correct - UnmountDevice needs it there.
+		// 此处不删除元数据文件是正确的：UnmountDevice 仍需要它。
 		return nil
 	}
 
-	// TODO (vladimirvivien) implement better AccessModes mapping between k8s and CSI
+	// TODO (vladimirvivien) 实现 k8s 与 CSI 之间更完善的 AccessModes 映射。
 	accessMode := v1.ReadWriteOnce
 	if spec.PersistentVolume.Spec.AccessModes != nil {
 		accessMode = spec.PersistentVolume.Spec.AccessModes[0]
@@ -397,7 +398,7 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 
 	if csiRPCError != nil {
 		if volumetypes.IsOperationFinishedError(csiRPCError) {
-			// clean up metadata
+			// 最终错误时清理元数据，避免下次操作被陈旧状态阻塞。
 			klog.Error(log("attacher.MountDevice failed: %v", csiRPCError))
 			if err := removeMountDir(c.plugin, deviceMountPath); err != nil {
 				klog.Error(log("attacher.MountDevice failed to remove mount dir after error [%s]: %v", deviceMountPath, err))
@@ -414,6 +415,7 @@ var _ volume.Detacher = &csiAttacher{}
 
 var _ volume.DeviceUnmounter = &csiAttacher{}
 
+// Detach 删除 VolumeAttachment 并等待分离完成。
 func (c *csiAttacher) Detach(volumeName string, nodeName types.NodeName) error {
 	_, ok := c.plugin.host.(volume.KubeletVolumeHost)
 	if ok {
@@ -428,7 +430,7 @@ func (c *csiAttacher) Detach(volumeName string, nodeName types.NodeName) error {
 		return errors.New("missing expected parameter volumeName")
 	}
 
-	// volumeName in format driverName<SEP>volumeHandle generated by plugin.GetVolumeName()
+	// volumeName 格式为 plugin.GetVolumeName() 生成的 driverName<SEP>volumeHandle。
 	parts := strings.Split(volumeName, volNameSep)
 	if len(parts) != 2 {
 		klog.Error(log("detacher.Detach insufficient info encoded in volumeName"))
@@ -441,7 +443,7 @@ func (c *csiAttacher) Detach(volumeName string, nodeName types.NodeName) error {
 
 	if err := c.k8s.StorageV1().VolumeAttachments().Delete(context.TODO(), attachID, metav1.DeleteOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
-			// object deleted or never existed, done
+			// 对象已删除或从未存在，视为分离成功。
 			klog.V(4).Info(log("VolumeAttachment object [%v] for volume [%v] not found, object deleted", attachID, volID))
 			return nil
 		}
@@ -450,11 +452,12 @@ func (c *csiAttacher) Detach(volumeName string, nodeName types.NodeName) error {
 
 	klog.V(4).Info(log("detacher deleted ok VolumeAttachment.ID=%s", attachID))
 
-	// Attach and detach functionality is exclusive to the CSI plugin that runs in the AttachDetachController,
-	// and has access to a VolumeAttachment lister that can be polled for the current status.
+	// 附加/分离功能仅由运行在 AttachDetachController 中的 CSI 插件提供，
+	// 它可以访问 VolumeAttachment lister 以轮询当前状态。
 	return c.waitForVolumeDetachmentWithLister(volID, attachID, c.watchTimeout)
 }
 
+// waitForVolumeDetachmentWithLister 通过 lister 轮询直至 VolumeAttachment 被删除。
 func (c *csiAttacher) waitForVolumeDetachmentWithLister(volumeHandle, attachID string, timeout time.Duration) error {
 	klog.V(4).Info(log("probing VolumeAttachment [id=%v]", attachID))
 
@@ -465,13 +468,13 @@ func (c *csiAttacher) waitForVolumeDetachmentWithLister(volumeHandle, attachID s
 				return false, errors.New(log("detacher.WaitForDetach failed for volume [%s] (will continue to try): %v", volumeHandle, err))
 			}
 
-			// Detachment successful.
+			// 对象已删除，分离成功。
 			klog.V(4).Info(log("VolumeAttachment object [%v] for volume [%v] not found, object deleted", attachID, volumeHandle))
 			return true, nil
 		}
 
-		// Detachment is only "successful" once the VolumeAttachment is deleted, however we perform
-		// this check to make sure the object does not contain any detach errors.
+		// 只有 VolumeAttachment 被删除才算分离成功；此处仍检查状态是为了
+		// 及时发现驱动报告的分裂错误。
 		successful, err := verifyDetachmentStatus(volumeAttachment, volumeHandle)
 		if err != nil {
 			return false, err
@@ -482,10 +485,11 @@ func (c *csiAttacher) waitForVolumeDetachmentWithLister(volumeHandle, attachID s
 	return c.waitForVolumeAttachDetachStatusWithLister(nil, volumeHandle, attachID, timeout, verifyStatus, "Detach")
 }
 
+// waitForVolumeAttachDetachStatusWithLister 带退避和超时地反复调用 verifyStatus。
 func (c *csiAttacher) waitForVolumeAttachDetachStatusWithLister(spec *volume.Spec, volumeHandle, attachID string, timeout time.Duration, verifyStatus func() (bool, error), operation string) error {
 	var (
 		initBackoff = 500 * time.Millisecond
-		// This is approximately the duration between consecutive ticks after two minutes (CSI timeout).
+		// 两分钟（CSI 超时）后相邻轮询间隔大致收敛到该值。
 		maxBackoff    = 7 * time.Second
 		resetDuration = time.Minute
 		backoffFactor = 1.05
@@ -497,7 +501,7 @@ func (c *csiAttacher) waitForVolumeAttachDetachStatusWithLister(spec *volume.Spe
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Get driver name from spec for better log messages. During detach spec can be nil, and it's ok for driver to be unknown.
+	// 从 spec 取驱动名以改善日志；分离时 spec 可为 nil，驱动名未知也无妨。
 	csiDriverName, err := GetCSIDriverName(spec)
 	if err != nil {
 		csiDriverName = "unknown"
@@ -523,6 +527,7 @@ func (c *csiAttacher) waitForVolumeAttachDetachStatusWithLister(spec *volume.Spe
 	}
 }
 
+// UnmountDevice 调用 NodeUnstageVolume 并清理全局挂载目录和元数据。
 func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 	klog.V(4).Info(log("attacher.UnmountDevice(%s)", deviceMountPath))
 
@@ -546,24 +551,24 @@ func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 	if c.csiClient == nil {
 		c.csiClient, err = newCsiDriverClient(csiDriverName(driverName))
 		if err != nil {
-			// Treat the absence of the CSI driver as a transient error
-			// See https://github.com/kubernetes/kubernetes/issues/120268
+			// 驱动不存在按瞬时错误处理，详见
+			// https://github.com/kubernetes/kubernetes/issues/120268。
 			return volumetypes.NewTransientOperationFailure(log("attacher.UnmountDevice failed to create newCsiDriverClient: %v", err))
 		}
 	}
 	csi := c.csiClient
 
-	// could not get whether this is migrated because there is no spec
+	// 没有 spec，无法判断是否迁移卷，使用固定超时。
 	ctx, cancel := createCSIOperationContext(nil, csiTimeout)
 	defer cancel()
-	// Check whether "STAGE_UNSTAGE_VOLUME" is set
+	// 查询驱动是否支持 STAGE_UNSTAGE_VOLUME。
 	stageUnstageSet, err := csi.NodeSupportsStageUnstage(ctx)
 	if err != nil {
 		return errors.New(log("attacher.UnmountDevice failed to check whether STAGE_UNSTAGE_VOLUME set: %v", err))
 	}
 	if !stageUnstageSet {
 		klog.Info(log("attacher.UnmountDevice STAGE_UNSTAGE_VOLUME capability not set. Skipping UnmountDevice..."))
-		// Just	delete the global directory + json file
+		// 驱动不支持 NodeStage 时只需删除全局目录和元数据文件。
 		if err := removeMountDir(c.plugin, deviceMountPath); err != nil {
 			return errors.New(log("failed to clean up global mount %s: %s", dataDir, err))
 		}
@@ -589,12 +594,13 @@ func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 	return nil
 }
 
-// getAttachmentName returns csi-<sha256(volName,csiDriverName,NodeName)>
+// getAttachmentName 返回 csi-<sha256(卷名、驱动名、节点名)>，保证同一卷在同一节点上名称稳定。
 func getAttachmentName(volName, csiDriverName, nodeName string) string {
 	result := sha256.Sum256([]byte(fmt.Sprintf("%s%s%s", volName, csiDriverName, nodeName)))
 	return fmt.Sprintf("csi-%x", result)
 }
 
+// makeDeviceMountPath 根据驱动名和卷句柄的哈希生成全局设备挂载路径。
 func makeDeviceMountPath(plugin *csiPlugin, spec *volume.Spec) (string, error) {
 	if spec == nil {
 		return "", errors.New("makeDeviceMountPath failed, spec is nil")
@@ -622,22 +628,23 @@ func makeDeviceMountPath(plugin *csiPlugin, spec *volume.Spec) (string, error) {
 	return filepath.Join(plugin.host.GetPluginDir(plugin.GetPluginName()), driver, volSha, globalMountInGlobalPath), nil
 }
 
+// verifyAttachmentStatus 判断 VolumeAttachment 是否已附加，错误状态则快速失败。
 func verifyAttachmentStatus(attachment *storage.VolumeAttachment, volumeHandle string) (bool, error) {
-	// when we received a deleted event during attachment, fail fast
+	// 附加过程中对象被删除，立即失败。
 	if attachment == nil {
 		klog.Error(log("VolumeAttachment [%s] has been deleted, will not continue to wait for attachment", volumeHandle))
 		return false, errors.New("volume attachment has been deleted")
 	}
-	// if being deleted, fail fast
+	// 正在删除时立即失败。
 	if attachment.GetDeletionTimestamp() != nil {
 		klog.Error(log("VolumeAttachment [%s] has deletion timestamp, will not continue to wait for attachment", attachment.Name))
 		return false, errors.New("volume attachment is being deleted")
 	}
-	// attachment OK
+	// 附加成功。
 	if attachment.Status.Attached {
 		return true, nil
 	}
-	// driver reports attach error
+	// 驱动报告附加错误。
 	attachErr := attachment.Status.AttachError
 	if attachErr != nil {
 		klog.Error(log("attachment for %v failed: %v", volumeHandle, attachErr.Message))
@@ -646,13 +653,13 @@ func verifyAttachmentStatus(attachment *storage.VolumeAttachment, volumeHandle s
 	return false, nil
 }
 
+// verifyDetachmentStatus 检查分离状态；对象已删除即视为成功。
 func verifyDetachmentStatus(attachment *storage.VolumeAttachment, volumeHandle string) (bool, error) {
-	// when we received a deleted event during detachment
-	// it means we have successfully detached it.
+	// 分离过程中收到删除事件，说明已成功分离。
 	if attachment == nil {
 		return true, nil
 	}
-	// driver reports detach error
+	// 驱动报告分离错误。
 	detachErr := attachment.Status.DetachError
 	if detachErr != nil {
 		klog.Error(log("detachment for VolumeAttachment for volume [%s] failed: %v", volumeHandle, detachErr.Message))

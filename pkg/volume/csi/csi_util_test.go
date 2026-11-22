@@ -34,20 +34,21 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// TestMain starting point for all tests.
-// Surfaces klog flags by default to enable
-// go test -v ./ --args <klog flags>
+// TestMain 是所有测试的入口，显式注册 klog 参数，
+// 从而支持 go test -v ./ --args <klog flags> 调整日志行为。
 func TestMain(m *testing.M) {
 	klog.InitFlags(flag.CommandLine)
 	os.Exit(m.Run())
 }
 
+// makeTestPVWithMountOptions 在测试 PV 上附加指定的挂载选项。
 func makeTestPVWithMountOptions(name string, sizeGig int, driverName, volID string, mountOptions []string) *api.PersistentVolume {
 	pv := makeTestPV(name, sizeGig, driverName, volID)
 	pv.Spec.MountOptions = mountOptions
 	return pv
 }
 
+// makeTestPV 构造一个使用 CSI 源、可读写且容量固定的测试 PV。
 func makeTestPV(name string, sizeGig int, driverName, volID string) *api.PersistentVolume {
 	return &api.PersistentVolume{
 		ObjectMeta: meta.ObjectMeta{
@@ -71,6 +72,7 @@ func makeTestPV(name string, sizeGig int, driverName, volID string) *api.Persist
 	}
 }
 
+// makeTestVol 构造一个引用指定 CSI 驱动的测试卷。
 func makeTestVol(name string, driverName string) *api.Volume {
 	ro := false
 	return &api.Volume{
@@ -84,6 +86,7 @@ func makeTestVol(name string, driverName string) *api.Volume {
 	}
 }
 
+// getTestCSIDriver 构造测试用 CSIDriver；驱动名为 "supports_selinux"/"no_selinux" 时设置对应的 SELinux 挂载能力。
 func getTestCSIDriver(name string, podInfoMount *bool, attachable *bool, volumeLifecycleModes []storagev1.VolumeLifecycleMode) *storagev1.CSIDriver {
 	defaultFSGroupPolicy := storagev1.ReadWriteOnceWithFSTypeFSGroupPolicy
 	seLinuxMountSupport := true
@@ -108,6 +111,7 @@ func getTestCSIDriver(name string, podInfoMount *bool, attachable *bool, volumeL
 	return driver
 }
 
+// TestSaveVolumeData 验证 saveVolumeData 将卷数据以 JSON 形式写入目标路径的数据文件。
 func TestSaveVolumeData(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -134,14 +138,14 @@ func TestSaveVolumeData(t *testing.T) {
 		if !tc.shouldFail && err != nil {
 			t.Errorf("unexpected failure: %v", err)
 		}
-		// did file get created
+		// 确认数据文件已落在目标路径下。
 		dataDir := getTargetPath(testPodUID, specVolID, plug.host)
 		file := filepath.Join(dataDir, volDataFileName)
 		if _, err := os.Stat(file); err != nil {
 			t.Errorf("failed to create data dir: %v", err)
 		}
 
-		// validate content
+		// 与 JSON 编码结果逐字节比对，确保写入格式符合预期。
 		data, err := os.ReadFile(file)
 		if !tc.shouldFail && err != nil {
 			t.Errorf("failed to read data file: %v", err)
@@ -157,6 +161,7 @@ func TestSaveVolumeData(t *testing.T) {
 	}
 }
 
+// TestCreateCSIOperationContext 验证 createCSIOperationContext 将卷的迁移状态写入 context。
 func TestCreateCSIOperationContext(t *testing.T) {
 	testCases := []struct {
 		name     string

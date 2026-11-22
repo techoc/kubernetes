@@ -31,67 +31,79 @@ import (
 	utilstrings "k8s.io/utils/strings"
 )
 
-// ProbeVolumePlugins is the entry point for plugin detection in a package.
+// ProbeVolumePlugins 是包内插件探测的入口，返回 downwardAPI 卷插件实例。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{&downwardAPIPlugin{}}
 }
 
+// downwardAPI 插件名称。
 const (
 	downwardAPIPluginName = "kubernetes.io/downward-api"
 )
 
-// downwardAPIPlugin implements the VolumePlugin interface.
+// downwardAPIPlugin 实现 VolumePlugin 接口，暴露 Pod 元数据给容器。
 type downwardAPIPlugin struct {
 	host volume.VolumeHost
 }
 
+// 编译时断言 downwardAPIPlugin 实现 volume.VolumePlugin 接口。
 var _ volume.VolumePlugin = &downwardAPIPlugin{}
 
+// getPath 返回 downwardAPI 卷在宿主机上的挂载目录。
 func getPath(uid types.UID, volName string, host volume.VolumeHost) string {
 	return host.GetPodVolumeDir(uid, utilstrings.EscapeQualifiedName(downwardAPIPluginName), volName)
 }
 
+// wrappedVolumeSpec 返回内存 EmptyDir 规格，作为 downwardAPI 卷的底层承载卷。
 func wrappedVolumeSpec() volume.Spec {
 	return volume.Spec{
 		Volume: &v1.Volume{VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{Medium: v1.StorageMediumMemory}}},
 	}
 }
 
+// Init 初始化插件，保存 VolumeHost 供后续使用。
 func (plugin *downwardAPIPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (plugin *downwardAPIPlugin) GetPluginName() string {
 	return downwardAPIPluginName
 }
 
+// GetVolumeName 校验规格引用的是 downwardAPI 卷，并返回用户定义的卷名。
 func (plugin *downwardAPIPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	volumeSource, _ := getVolumeSource(spec)
 	if volumeSource == nil {
 		return "", fmt.Errorf("Spec does not reference a DownwardAPI volume type")
 	}
 
-	// Return user defined volume name, since this is an ephemeral volume type
+	// 临时卷没有持久标识，返回用户定义的卷名即可。
 	return spec.Name(), nil
 }
 
+// CanSupport 判断规格是否为 downwardAPI 卷。
 func (plugin *downwardAPIPlugin) CanSupport(spec *volume.Spec) bool {
 	return spec.Volume != nil && spec.Volume.DownwardAPI != nil
 }
 
+// RequiresRemount 始终返回 true：downwardAPI 内容需随 kubelet 同步周期刷新。
 func (plugin *downwardAPIPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return true
 }
 
+// SupportsMountOption 返回 false，downwardAPI 卷不支持挂载选项。
 func (plugin *downwardAPIPlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsSELinuxContextMount 返回 false，不支持通过挂载选项设置 SELinux 上下文。
 func (plugin *downwardAPIPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// NewMounter 为 Pod 创建 downwardAPI 卷的 Mounter，并挂载缓存的用量指标提供者。
 func (plugin *downwardAPIPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	v := &downwardAPIVolume{
 		volName:         spec.Name(),
@@ -107,6 +119,7 @@ func (plugin *downwardAPIPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (vol
 	}, nil
 }
 
+// NewUnmounter 根据卷名和 Pod UID 创建 downwardAPI 卷的 Unmounter。
 func (plugin *downwardAPIPlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
 	return &downwardAPIVolumeUnmounter{
 		&downwardAPIVolume{
@@ -118,6 +131,7 @@ func (plugin *downwardAPIPlugin) NewUnmounter(volName string, podUID types.UID) 
 	}, nil
 }
 
+// ConstructVolumeSpec 根据卷名重建 downwardAPI 卷规格（仅用于卸载等场景）。
 func (plugin *downwardAPIPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	downwardAPIVolume := &v1.Volume{
 		Name: volumeName,
@@ -130,27 +144,28 @@ func (plugin *downwardAPIPlugin) ConstructVolumeSpec(volumeName, mountPath strin
 	}, nil
 }
 
-// downwardAPIVolume retrieves downward API data and placing them into the volume on the host.
+// downwardAPIVolume 保存 downwardAPI 卷的基本信息，用于生成文件并计算挂载路径。
 type downwardAPIVolume struct {
 	volName string
 	items   []v1.DownwardAPIVolumeFile
 	pod     *v1.Pod
-	podUID  types.UID // TODO: remove this redundancy as soon NewUnmounter func will have *v1.POD and not only types.UID
-	plugin  *downwardAPIPlugin
+	// TODO: remove this redundancy as soon NewUnmounter func will have *v1.POD and not only types.UID
+	// podUID 与 pod.UID 重复，待 NewUnmounter 接收 *v1.Pod 后可移除。
+	podUID types.UID
+	plugin *downwardAPIPlugin
 	volume.MetricsProvider
 }
 
-// downwardAPIVolumeMounter fetches info from downward API from the pod
-// and dumps it in files
+// downwardAPIVolumeMounter 从 Pod 获取 downwardAPI 信息并写入文件。
 type downwardAPIVolumeMounter struct {
 	*downwardAPIVolume
 	source v1.DownwardAPIVolumeSource
 }
 
-// downwardAPIVolumeMounter implements volume.Mounter interface
+// 编译时断言 downwardAPIVolumeMounter 实现 volume.Mounter 接口。
 var _ volume.Mounter = &downwardAPIVolumeMounter{}
 
-// downward API volumes are always ReadOnlyManaged
+// GetAttributes 返回卷属性：downwardAPI 卷始终为只读且受 kubelet 管理。
 func (d *downwardAPIVolume) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       true,
@@ -159,17 +174,18 @@ func (d *downwardAPIVolume) GetAttributes() volume.Attributes {
 	}
 }
 
-// SetUp puts in place the volume plugin.
-// This function is not idempotent by design. We want the data to be refreshed periodically.
-// The internal sync interval of kubelet will drive the refresh of data.
+// SetUp 设置卷。
+// 该函数故意不做幂等处理：数据需要周期性刷新，由 kubelet 内部同步周期驱动。
 // TODO: Add volume specific ticker and refresh loop
 func (b *downwardAPIVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
 
+// SetUpAt 在指定目录设置 downwardAPI 卷：底层用内存 EmptyDir 承载，
+// 收集字段数据后通过 AtomicWriter 原子写入；失败时清理目录。
 func (b *downwardAPIVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	klog.V(3).Infof("Setting up a downwardAPI volume %v for pod %v/%v at %v", b.volName, b.pod.Namespace, b.pod.Name, dir)
-	// Wrap EmptyDir. Here we rely on the idempotency of the wrapped plugin to avoid repeatedly mounting
+	// 包装 EmptyDir，依赖其幂等性避免重复挂载。
 	wrapped, err := b.plugin.host.NewWrapperMounter(b.volName, wrappedVolumeSpec(), b.pod)
 	if err != nil {
 		klog.Errorf("Couldn't setup downwardAPI volume %v for pod %v/%v: %s", b.volName, b.pod.Namespace, b.pod.Name, err.Error())
@@ -193,7 +209,7 @@ func (b *downwardAPIVolumeMounter) SetUpAt(dir string, mounterArgs volume.Mounte
 	}
 
 	defer func() {
-		// Clean up directories if setup fails
+		// 设置失败时清理目录，避免残留部分写入的卷。
 		if !setupSuccess {
 			unmounter, unmountCreateErr := b.plugin.NewUnmounter(b.volName, b.podUID)
 			if unmountCreateErr != nil {
@@ -215,8 +231,8 @@ func (b *downwardAPIVolumeMounter) SetUpAt(dir string, mounterArgs volume.Mounte
 	}
 
 	setPerms := func(_ string) error {
-		// This may be the first time writing and new files get created outside the timestamp subdirectory:
-		// change the permissions on the whole volume and not only in the timestamp directory.
+		// 首次写入时新文件可能出现在时间戳子目录之外，
+		// 因此对整个卷而非仅时间戳目录调整权限。
 		ownershipChanger := volume.NewVolumeOwnership(b, dir, mounterArgs.FsGroup, nil /*fsGroupChangePolicy*/, volumeutil.FSGroupCompleteHook(b.plugin, nil))
 		return ownershipChanger.ChangePermissions()
 	}
@@ -230,11 +246,10 @@ func (b *downwardAPIVolumeMounter) SetUpAt(dir string, mounterArgs volume.Mounte
 	return nil
 }
 
-// CollectData collects requested downwardAPI in data map.
-// Map's key is the requested name of file to dump
-// Map's value is the (sorted) content of the field to be dumped in the file.
+// CollectData 收集请求的 downwardAPI 数据到 map 中。
+// map 的键为要写入的文件名，值为字段内容（已排序）。
 //
-// Note: this function is exported so that it can be called from the projection volume driver
+// 注意：导出该函数是为了供 projection 卷驱动调用。
 func CollectData(items []v1.DownwardAPIVolumeFile, pod *v1.Pod, host volume.VolumeHost, defaultMode *int32, defaultUser *int64) (map[string]volumeutil.FileProjection, error) {
 	if defaultMode == nil {
 		return nil, fmt.Errorf("no defaultMode used, not even the default value for it")
@@ -254,6 +269,7 @@ func CollectData(items []v1.DownwardAPIVolumeFile, pod *v1.Pod, host volume.Volu
 		}
 		if fileInfo.FieldRef != nil {
 			// TODO: unify with Kubelet.podFieldSelectorRuntimeValue
+			// 字段路径提取逻辑应与 kubelet 的字段选择器统一，避免行为漂移。
 			if values, err := fieldpath.ExtractFieldPathAsString(pod, fileInfo.FieldRef.FieldPath); err != nil {
 				klog.Errorf("Unable to extract field %s: %s", fileInfo.FieldRef.FieldPath, err.Error())
 				errlist = append(errlist, err)
@@ -278,26 +294,30 @@ func CollectData(items []v1.DownwardAPIVolumeFile, pod *v1.Pod, host volume.Volu
 	return data, utilerrors.NewAggregate(errlist)
 }
 
+// GetPath 返回卷在宿主机上的挂载目录。
 func (d *downwardAPIVolume) GetPath() string {
 	return d.plugin.host.GetPodVolumeDir(d.podUID, utilstrings.EscapeQualifiedName(downwardAPIPluginName), d.volName)
 }
 
-// downwardAPIVolumeCleaner handles cleaning up downwardAPI volumes
+// downwardAPIVolumeUnmounter 负责清理 downwardAPI 卷。
 type downwardAPIVolumeUnmounter struct {
 	*downwardAPIVolume
 }
 
-// downwardAPIVolumeUnmounter implements volume.Unmounter interface
+// 编译时断言 downwardAPIVolumeUnmounter 实现 volume.Unmounter 接口。
 var _ volume.Unmounter = &downwardAPIVolumeUnmounter{}
 
+// TearDown 卸载默认路径下的 downwardAPI 卷。
 func (c *downwardAPIVolumeUnmounter) TearDown() error {
 	return c.TearDownAt(c.GetPath())
 }
 
+// TearDownAt 通过底层 EmptyDir 卸载指定目录。
 func (c *downwardAPIVolumeUnmounter) TearDownAt(dir string) error {
 	return volumeutil.UnmountViaEmptyDir(dir, c.plugin.host, c.volName, wrappedVolumeSpec(), c.podUID)
 }
 
+// getVolumeSource 从规格中提取 downwardAPI 卷源和只读标志。
 func getVolumeSource(spec *volume.Spec) (*v1.DownwardAPIVolumeSource, bool) {
 	var readOnly bool
 	var volumeSource *v1.DownwardAPIVolumeSource

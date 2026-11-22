@@ -28,12 +28,11 @@ import (
 	"k8s.io/utils/exec"
 )
 
+// createSocketFile 在 socketDir 中创建测试用的 Unix socket。
 func createSocketFile(socketDir string) (string, error) {
 	testSocketFile := filepath.Join(socketDir, "mt.sock")
 
-	// Switch to volume path and create the socket file
-	// socket file can not have length of more than 108 character
-	// and hence we must use relative path
+	// 切到目标目录再创建 socket：socket 路径不能超过 108 个字符，只能用相对路径。
 	oldDir, _ := os.Getwd()
 
 	err := os.Chdir(socketDir)
@@ -47,6 +46,7 @@ func createSocketFile(socketDir string) (string, error) {
 	return testSocketFile, socketCreateError
 }
 
+// TestGetFileType 验证 GetFileType 能正确识别目录、普通文件、socket 和设备文件。
 func TestGetFileType(t *testing.T) {
 	hu := NewHostUtil()
 
@@ -134,10 +134,10 @@ func TestGetFileType(t *testing.T) {
 			continue
 		}
 		path, cleanUpPath, err := tc.setUp()
-		defer os.RemoveAll(cleanUpPath) // RemoveAll can deal with a empty path ""
+		defer os.RemoveAll(cleanUpPath) // RemoveAll 能处理空路径 ""
 		if err != nil {
-			// Locally passed, but upstream CI is not friendly to create such device files
-			// Leave "Operation not permitted" out, which can be covered in an e2e test
+			// 本地能通过，但上游 CI 不允许创建这类设备文件。
+			// 跳过 "Operation not permitted"，留给 e2e 测试覆盖。
 			if isOperationNotPermittedError(err) {
 				continue
 			}
@@ -154,6 +154,7 @@ func TestGetFileType(t *testing.T) {
 	}
 }
 
+// isOperationNotPermittedError 判断错误是否因权限不足被拒绝。
 func isOperationNotPermittedError(err error) bool {
 	return strings.Contains(err.Error(), "Operation not permitted")
 }

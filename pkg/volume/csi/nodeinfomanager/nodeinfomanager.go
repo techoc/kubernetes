@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nodeinfomanager includes internal functions used to add/delete labels to
-// kubernetes nodes for corresponding CSI drivers
+// Package nodeinfomanager 提供内部函数，为相应的 CSI 驱动在 Kubernetes 节点上
+// 添加或删除标签，并维护 Node 与 CSINode 对象上的驱动信息。
 package nodeinfomanager
 
 import (
@@ -46,12 +46,14 @@ import (
 )
 
 const (
-	// Name of node annotation that contains JSON map of driver names to node
+	// annotationKeyNodeID 是节点注解的名称，其值为驱动名到节点 ID 的 JSON 映射。
 	annotationKeyNodeID = "csi.volume.kubernetes.io/nodeid"
 )
 
 var (
-	nodeKind      = v1.SchemeGroupVersion.WithKind("Node")
+	// nodeKind 描述 Node 对象的 Kind，用于校验 CSINode 的属主引用。
+	nodeKind = v1.SchemeGroupVersion.WithKind("Node")
+	// updateBackoff 定义更新 Node/CSINode 时的指数退避策略，缓解并发更新冲突。
 	updateBackoff = wait.Backoff{
 		Steps:    4,
 		Duration: 10 * time.Millisecond,
@@ -60,47 +62,45 @@ var (
 	}
 )
 
-// nodeInfoManager contains necessary common dependencies to update node info on both
-// the Node and CSINode objects.
+// nodeInfoManager 持有更新 Node 与 CSINode 对象所需的一组公共依赖。
 type nodeInfoManager struct {
 	nodeName        types.NodeName
 	nodeID          types.UID
 	volumeHost      volume.VolumeHost
 	migratedPlugins map[string](func() bool)
-	// lock protects changes to node.
+	// lock 保护对 Node 对象的并发修改，避免更新冲突。
 	lock sync.Mutex
 }
 
-// If no updates is needed, the function must return the same Node object as the input.
+// nodeUpdateFunc 对 Node 执行一次变换。
+// 若无需更新，必须原样返回输入的 Node 对象，以便调用方跳过写入。
 type nodeUpdateFunc func(*v1.Node) (newNode *v1.Node, updated bool, err error)
 
-// Interface implements an interface for managing labels of a node
+// Interface 定义管理节点标签与 CSI 驱动信息的操作集合。
 type Interface interface {
+	// CreateCSINode 为当前节点创建 CSINode 对象，并写入迁移注解。
 	CreateCSINode() (*storagev1.CSINode, error)
 
-	// Updates or Creates the CSINode object with annotations for CSI Migration
+	// InitializeCSINodeWithAnnotation 创建或更新 CSINode 对象，写入 CSI 迁移所需的注解。
 	InitializeCSINodeWithAnnotation() error
 
-	// Record in the cluster the given node information from the CSI driver with the given name.
-	// Concurrent calls to InstallCSIDriver() is allowed, but they should not be intertwined with calls
-	// to other methods in this interface.
+	// InstallCSIDriver 在集群中记录指定名称 CSI 驱动上报的节点信息。
+	// 允许并发调用 InstallCSIDriver()，但不得与本接口的其他方法调用交错。
 	InstallCSIDriver(driverName string, driverNodeID string, maxVolumeLimit int64, topology map[string]string) error
 
-	// UpdateCSIDriver updates CSIDrivers field in the CSINode object.
+	// UpdateCSIDriver 更新 CSINode 对象中的 CSIDrivers 字段。
 	UpdateCSIDriver(driverName string, driverNodeID string, maxAttachLimit int64, topology map[string]string) error
 
-	// Remove in the cluster node information from the CSI driver with the given name.
-	// Concurrent calls to UninstallCSIDriver() is allowed, but they should not be intertwined with calls
-	// to other methods in this interface.
+	// UninstallCSIDriver 从集群中移除指定名称 CSI 驱动的节点信息。
+	// 允许并发调用 UninstallCSIDriver()，但不得与本接口的其他方法调用交错。
 	UninstallCSIDriver(driverName string) error
 
-	// UpdateCSINodeStorageHealth updates CSINode.Status.StorageHealth for the given
-	// driver with the provided conditions. Other drivers' entries are preserved.
-	// No-ops if the condition identity set for this driver is unchanged.
+	// UpdateCSINodeStorageHealth 用给定条件更新 CSINode.Status.StorageHealth 中该驱动的条目。
+	// 其他驱动的条目保持不变。若该驱动的条件标识集合未变，则不做任何操作。
 	UpdateCSINodeStorageHealth(driverName string, conditions []storagev1.StorageHealthCondition) error
 }
 
-// NewNodeInfoManager initializes nodeInfoManager
+// NewNodeInfoManager 初始化并返回一个 nodeInfoManager。
 func NewNodeInfoManager(
 	nodeName types.NodeName,
 	volumeHost volume.VolumeHost,
@@ -112,15 +112,16 @@ func NewNodeInfoManager(
 	}
 }
 
-// InstallCSIDriver updates the node ID annotation in the Node object and CSIDrivers field in the
-// CSINode object. If the CSINode object doesn't yet exist, it will be created.
-// If multiple calls to InstallCSIDriver() are made in parallel, some calls might receive Node or
-// CSINode update conflicts, which causes the function to retry the corresponding update.
+// InstallCSIDriver 更新 Node 对象中的节点 ID 注解以及 CSINode 对象中的 CSIDrivers 字段。
+// 若 CSINode 对象尚不存在，则先创建它。
+// 并行调用 InstallCSIDriver() 时，部分调用可能遇到 Node 或 CSINode 更新冲突，
+// 此时会通过退避重试相应的更新。
 func (nim *nodeInfoManager) InstallCSIDriver(driverName string, driverNodeID string, maxAttachLimit int64, topology map[string]string) error {
 	if driverNodeID == "" {
 		return fmt.Errorf("error adding CSI driver node info: driverNodeID must not be empty")
 	}
 
+	// 先依次更新 Node 上的节点 ID 注解与拓扑标签，再更新 CSINode。
 	nodeUpdateFuncs := []nodeUpdateFunc{
 		updateNodeIDInNode(driverName, driverNodeID),
 		updateTopologyLabels(topology),
@@ -139,7 +140,7 @@ func (nim *nodeInfoManager) InstallCSIDriver(driverName string, driverNodeID str
 	return nil
 }
 
-// UpdateCSIDriver updates CSIDrivers field in the CSINode object.
+// UpdateCSIDriver 更新 CSINode 对象中的 CSIDrivers 字段。
 func (nim *nodeInfoManager) UpdateCSIDriver(driverName string, driverNodeID string, maxAttachLimit int64, topology map[string]string) error {
 	err := nim.updateCSINode(driverName, driverNodeID, maxAttachLimit, topology)
 	if err != nil {
@@ -148,10 +149,10 @@ func (nim *nodeInfoManager) UpdateCSIDriver(driverName string, driverNodeID stri
 	return nil
 }
 
-// UninstallCSIDriver removes the node ID annotation from the Node object and CSIDrivers field from the
-// CSINode object. If the CSINodeInfo object contains no CSIDrivers, it will be deleted.
-// If multiple calls to UninstallCSIDriver() are made in parallel, some calls might receive Node or
-// CSINode update conflicts, which causes the function to retry the corresponding update.
+// UninstallCSIDriver 从 Node 对象移除节点 ID 注解，并从 CSINode 对象移除对应的 CSIDrivers 条目。
+// 若 CSINode 对象已不含任何 CSIDriver，则将其删除。
+// 并行调用 UninstallCSIDriver() 时，部分调用可能遇到 Node 或 CSINode 更新冲突，
+// 此时会通过退避重试相应的更新。
 func (nim *nodeInfoManager) UninstallCSIDriver(driverName string) error {
 	err := nim.uninstallDriverFromCSINode(driverName)
 	if err != nil {
@@ -167,8 +168,10 @@ func (nim *nodeInfoManager) UninstallCSIDriver(driverName string) error {
 	return nil
 }
 
+// updateNode 通过指数退避重试，依次应用给定的更新函数来更新 Node 对象。
 func (nim *nodeInfoManager) updateNode(updateFuncs ...nodeUpdateFunc) error {
 	var updateErrs []error
+	// 更新冲突属于可重试错误，收集每次失败原因以便最终一并报告。
 	err := wait.ExponentialBackoff(updateBackoff, func() (bool, error) {
 		if err := nim.tryUpdateNode(updateFuncs...); err != nil {
 			updateErrs = append(updateErrs, err)
@@ -182,17 +185,14 @@ func (nim *nodeInfoManager) updateNode(updateFuncs ...nodeUpdateFunc) error {
 	return nil
 }
 
-// updateNode repeatedly attempts to update the corresponding node object
-// which is modified by applying the given update functions sequentially.
-// Because updateFuncs are applied sequentially, later updateFuncs should take into account
-// the effects of previous updateFuncs to avoid potential conflicts. For example, if multiple
-// functions update the same field, updates in the last function are persisted.
+// tryUpdateNode 依次应用给定的更新函数来修改 Node 对象，并尝试写回。
+// 由于 updateFuncs 按顺序执行，后续函数需考虑前面函数的改动以避免冲突。
+// 例如多个函数更新同一字段时，最终以最后一个函数的更新为准。
 func (nim *nodeInfoManager) tryUpdateNode(updateFuncs ...nodeUpdateFunc) error {
 	nim.lock.Lock()
 	defer nim.lock.Unlock()
 
-	// Retrieve the latest version of Node before attempting update, so that
-	// existing changes are not overwritten.
+	// 写回前先读取最新的 Node，避免覆盖其他写入方已有的改动。
 
 	kubeClient := nim.volumeHost.GetKubeClient()
 	if kubeClient == nil {
@@ -217,8 +217,7 @@ func (nim *nodeInfoManager) tryUpdateNode(updateFuncs ...nodeUpdateFunc) error {
 	}
 
 	if needUpdate {
-		// PatchNodeStatus can update both node's status and labels or annotations
-		// Updating status by directly updating node does not work
+		// 直接更新整个 Node 无法写入 status，只能用 PatchNodeStatus 同时更新状态与标签/注解。
 		_, _, updateErr := nodeutil.PatchNodeStatus(kubeClient.CoreV1(), types.NodeName(node.Name), originalNode, node)
 		return updateErr
 	}
@@ -226,7 +225,8 @@ func (nim *nodeInfoManager) tryUpdateNode(updateFuncs ...nodeUpdateFunc) error {
 	return nil
 }
 
-// Guarantees the map is non-nil if no error is returned.
+// buildNodeIDMapFromAnnotation 解析 Node 注解中的驱动名到节点 ID 映射。
+// 保证只要不返回错误，所得 map 就非 nil，便于调用方直接写入。
 func buildNodeIDMapFromAnnotation(node *v1.Node) (map[string]string, error) {
 	var previousAnnotationValue string
 	if node.ObjectMeta.Annotations != nil {
@@ -236,7 +236,7 @@ func buildNodeIDMapFromAnnotation(node *v1.Node) (map[string]string, error) {
 
 	var existingDriverMap map[string]string
 	if previousAnnotationValue != "" {
-		// Parse previousAnnotationValue as JSON
+		// 注解值以 JSON 存储，解析失败时直接报错，避免覆盖已有数据。
 		if err := json.Unmarshal([]byte(previousAnnotationValue), &existingDriverMap); err != nil {
 			return nil, fmt.Errorf(
 				"failed to parse node's %q annotation value (%q) err=%v",
@@ -252,8 +252,7 @@ func buildNodeIDMapFromAnnotation(node *v1.Node) (map[string]string, error) {
 	return existingDriverMap, nil
 }
 
-// updateNodeIDInNode returns a function that updates a Node object with the given
-// Node ID information.
+// updateNodeIDInNode 返回一个函数，用给定的节点 ID 信息更新 Node 对象上的注解。
 func updateNodeIDInNode(
 	csiDriverName string,
 	csiDriverNodeID string) nodeUpdateFunc {
@@ -265,12 +264,12 @@ func updateNodeIDInNode(
 
 		if val, ok := existingDriverMap[csiDriverName]; ok {
 			if val == csiDriverNodeID {
-				// Value already exists in node annotation, nothing more to do
+				// 注解中已有相同的值，无需更新，避免无谓的写操作。
 				return node, false, nil
 			}
 		}
 
-		// Add/update annotation value
+		// 新增或覆盖该驱动对应的节点 ID。
 		existingDriverMap[csiDriverName] = csiDriverNodeID
 		jsonObj, err := json.Marshal(existingDriverMap)
 		if err != nil {
@@ -290,8 +289,7 @@ func updateNodeIDInNode(
 	}
 }
 
-// removeNodeIDFromNode returns a function that removes node ID information matching the given
-// driver name from a Node object.
+// removeNodeIDFromNode 返回一个函数，从 Node 对象的注解中移除指定驱动的节点 ID 信息。
 func removeNodeIDFromNode(csiDriverName string) nodeUpdateFunc {
 	return func(node *v1.Node) (*v1.Node, bool, error) {
 		var previousAnnotationValue string
@@ -304,7 +302,7 @@ func removeNodeIDFromNode(csiDriverName string) nodeUpdateFunc {
 			return node, false, nil
 		}
 
-		// Parse previousAnnotationValue as JSON
+		// 注解值以 JSON 存储；解析失败时报错，避免误删其他驱动的数据。
 		existingDriverMap := map[string]string{}
 		if err := json.Unmarshal([]byte(previousAnnotationValue), &existingDriverMap); err != nil {
 			return nil, false, fmt.Errorf(
@@ -315,11 +313,11 @@ func removeNodeIDFromNode(csiDriverName string) nodeUpdateFunc {
 		}
 
 		if _, ok := existingDriverMap[csiDriverName]; !ok {
-			// Value is already missing in node annotation, nothing more to do
+			// 注解中本就没有该驱动，无需更新，避免无谓的写操作。
 			return node, false, nil
 		}
 
-		// Delete annotation value
+		// 删除该驱动的条目；若已无驱动则顺带移除整个注解。
 		delete(existingDriverMap, csiDriverName)
 		if len(existingDriverMap) == 0 {
 			delete(node.ObjectMeta.Annotations, annotationKeyNodeID)
@@ -340,14 +338,14 @@ func removeNodeIDFromNode(csiDriverName string) nodeUpdateFunc {
 	}
 }
 
-// updateTopologyLabels returns a function that updates labels of a Node object with the given
-// topology information.
+// updateTopologyLabels 返回一个函数，用给定的拓扑信息更新 Node 对象的标签。
 func updateTopologyLabels(topology map[string]string) nodeUpdateFunc {
 	return func(node *v1.Node) (*v1.Node, bool, error) {
 		if len(topology) == 0 {
 			return node, false, nil
 		}
 
+		// 已有标签与驱动上报值冲突时报错，避免悄悄改写其他来源的拓扑信息。
 		for k, v := range topology {
 			if curVal, exists := node.Labels[k]; exists && curVal != v {
 				return nil, false, fmt.Errorf("detected topology value collision: driver reported %q:%q but existing label is %q:%q", k, v, k, curVal)
@@ -364,6 +362,7 @@ func updateTopologyLabels(topology map[string]string) nodeUpdateFunc {
 	}
 }
 
+// updateCSINode 通过指数退避重试，将驱动信息写入 CSINode 对象。
 func (nim *nodeInfoManager) updateCSINode(
 	driverName string,
 	driverNodeID string,
@@ -376,6 +375,7 @@ func (nim *nodeInfoManager) updateCSINode(
 	}
 
 	var updateErrs []error
+	// 冲突可重试；记录每次失败原因以便最终定位问题。
 	err := wait.ExponentialBackoff(updateBackoff, func() (bool, error) {
 		if err := nim.tryUpdateCSINode(csiKubeClient, driverName, driverNodeID, maxAttachLimit, topology); err != nil {
 			updateErrs = append(updateErrs, err)
@@ -389,6 +389,7 @@ func (nim *nodeInfoManager) updateCSINode(
 	return nil
 }
 
+// tryUpdateCSINode 尝试一次 CSINode 更新：对象不存在时先创建，并校验属主后安装驱动信息。
 func (nim *nodeInfoManager) tryUpdateCSINode(
 	csiKubeClient clientset.Interface,
 	driverName string,
@@ -400,6 +401,7 @@ func (nim *nodeInfoManager) tryUpdateCSINode(
 	defer nim.lock.Unlock()
 
 	nodeInfo, err := csiKubeClient.StorageV1().CSINodes().Get(context.TODO(), string(nim.nodeName), metav1.GetOptions{})
+	// 节点首次接入 CSI 驱动时 CSINode 还不存在，需要先创建再更新。
 	if nodeInfo == nil || errors.IsNotFound(err) {
 		nodeInfo, err = nim.CreateCSINode()
 	}
@@ -414,6 +416,7 @@ func (nim *nodeInfoManager) tryUpdateCSINode(
 	return nim.installDriverToCSINode(nodeInfo, driverName, driverNodeID, maxAttachLimit, topology)
 }
 
+// InitializeCSINodeWithAnnotation 通过指数退避重试，确保 CSINode 对象存在且带有 CSI 迁移注解。
 func (nim *nodeInfoManager) InitializeCSINodeWithAnnotation() error {
 	csiKubeClient := nim.volumeHost.GetKubeClient()
 	if csiKubeClient == nil {
@@ -421,6 +424,7 @@ func (nim *nodeInfoManager) InitializeCSINodeWithAnnotation() error {
 	}
 
 	var lastErr error
+	// 失败时记录最后一次错误，便于退避耗尽后给出具体原因。
 	err := wait.ExponentialBackoff(updateBackoff, func() (bool, error) {
 		if lastErr = nim.tryInitializeCSINodeWithAnnotation(csiKubeClient); lastErr != nil {
 			klog.V(2).Infof("Failed to publish CSINode: %v", lastErr)
@@ -435,6 +439,7 @@ func (nim *nodeInfoManager) InitializeCSINodeWithAnnotation() error {
 	return nil
 }
 
+// tryInitializeCSINodeWithAnnotation 尝试一次 CSINode 初始化，并同步 CSI 迁移注解。
 func (nim *nodeInfoManager) tryInitializeCSINodeWithAnnotation(csiKubeClient clientset.Interface) error {
 	nim.lock.Lock()
 	defer nim.lock.Unlock()
@@ -447,7 +452,7 @@ func (nim *nodeInfoManager) tryInitializeCSINodeWithAnnotation(csiKubeClient cli
 
 	nodeInfo, err := csiKubeClient.StorageV1().CSINodes().Get(context.TODO(), string(nim.nodeName), metav1.GetOptions{})
 	if nodeInfo == nil || errors.IsNotFound(err) {
-		// CreateCSINode will set the annotation
+		// 新建 CSINode 时 CreateCSINode 会一并写入迁移注解，无需后续更新。
 		_, err = nim.CreateCSINode()
 		return err
 	} else if err != nil {
@@ -468,8 +473,8 @@ func (nim *nodeInfoManager) tryInitializeCSINodeWithAnnotation(csiKubeClient cli
 
 }
 
-// ensureNodeOwnsCSINode will ensure that the current CSINode object is owned by the node represented by this nodeInfoManager.
-// If not, it will delete the existing CSINode object and return an error.
+// ensureNodeOwnsCSINode 确保当前 CSINode 对象属于本 nodeInfoManager 所代表的节点。
+// 若不属于，则删除该 CSINode 对象并返回错误。
 func (nim *nodeInfoManager) ensureNodeOwnsCSINode(nodeInfo *storagev1.CSINode) error {
 	if ok, csiNodeOwnerID := nim.nodeOwnsCSINode(nodeInfo); !ok {
 		klog.V(2).Infof("existing CSINode %q is owned by different node (oldNodeID=%q, newNodeID=%q), cleaning up...", nodeInfo.Name, csiNodeOwnerID, nim.nodeID)
@@ -477,14 +482,14 @@ func (nim *nodeInfoManager) ensureNodeOwnsCSINode(nodeInfo *storagev1.CSINode) e
 		if err != nil {
 			return fmt.Errorf("error deleting existing CSINode %q: %w", nodeInfo.Name, err)
 		}
-		// Returning now so that the next attempt can create a new CSINode object
+		// 返回错误以触发重试，让下一次尝试重新创建 CSINode 对象。
 		return fmt.Errorf("CSINode %q was owned by different node (oldNodeID=%q, newNodeID=%q), deleted it", nodeInfo.Name, csiNodeOwnerID, nim.nodeID)
 	}
 	return nil
 }
 
-// nodeOwnsCSINode checks if the CSINode object is owned by the node represented by this nodeInfoManager.
-// It also returns the current owner UID.
+// nodeOwnsCSINode 检查 CSINode 对象是否属于本 nodeInfoManager 所代表的节点。
+// 同时返回当前属主的 UID。
 func (nim *nodeInfoManager) nodeOwnsCSINode(nodeInfo *storagev1.CSINode) (bool, types.UID) {
 	var csiNodeOwnerID types.UID
 	var found bool
@@ -506,6 +511,7 @@ func (nim *nodeInfoManager) nodeOwnsCSINode(nodeInfo *storagev1.CSINode) (bool, 
 	return found, csiNodeOwnerID
 }
 
+// CreateCSINode 为当前节点创建 CSINode 对象，设置节点属主引用并写入迁移注解。
 func (nim *nodeInfoManager) CreateCSINode() (*storagev1.CSINode, error) {
 
 	csiKubeClient := nim.volumeHost.GetKubeClient()
@@ -535,6 +541,7 @@ func (nim *nodeInfoManager) CreateCSINode() (*storagev1.CSINode, error) {
 	return csiKubeClient.StorageV1().CSINodes().Create(context.TODO(), nodeInfo, metav1.CreateOptions{})
 }
 
+// DeleteCSINode 删除当前节点对应的 CSINode 对象。
 func (nim *nodeInfoManager) DeleteCSINode() error {
 
 	csiKubeClient := nim.volumeHost.GetKubeClient()
@@ -545,12 +552,15 @@ func (nim *nodeInfoManager) DeleteCSINode() error {
 	return csiKubeClient.StorageV1().CSINodes().Delete(context.TODO(), string(nim.nodeName), metav1.DeleteOptions{})
 }
 
+// setMigrationAnnotation 根据 migratedPlugins 的当前状态刷新 CSINode 上的迁移插件注解。
+// 若注解内容发生变化则返回 true，调用方需据此写回对象。
 func setMigrationAnnotation(migratedPlugins map[string](func() bool), nodeInfo *storagev1.CSINode) (modified bool) {
 	if migratedPlugins == nil {
 		return false
 	}
 
 	nodeInfoAnnotations := nodeInfo.GetAnnotations()
+	// 注解 map 可能为 nil，先建一个可写的副本，避免直接改到 nil map。
 	if nodeInfoAnnotations == nil {
 		nodeInfoAnnotations = map[string]string{}
 	}
@@ -571,6 +581,7 @@ func setMigrationAnnotation(migratedPlugins map[string](func() bool), nodeInfo *
 		}
 	}
 
+	// 集合相等时无需写回，避免无谓的更新与冲突。
 	if oldAnnotationSet.Equal(newAnnotationSet) {
 		return false
 	}
@@ -586,7 +597,8 @@ func setMigrationAnnotation(migratedPlugins map[string](func() bool), nodeInfo *
 	return true
 }
 
-// Returns true if and only if new maxAttachLimit doesn't require CSINode update
+// keepAllocatableCount 判断新的 maxAttachLimit 是否无需更新 CSINode：
+// 当且仅当当前的 attach 上限与之相同时返回 true。
 func keepAllocatableCount(driverInfoSpec storagev1.CSINodeDriver, maxAttachLimit int64) bool {
 	if maxAttachLimit == 0 {
 		return driverInfoSpec.Allocatable == nil || driverInfoSpec.Allocatable.Count == nil
@@ -595,6 +607,7 @@ func keepAllocatableCount(driverInfoSpec storagev1.CSINodeDriver, maxAttachLimit
 	return driverInfoSpec.Allocatable != nil && driverInfoSpec.Allocatable.Count != nil && int64(*driverInfoSpec.Allocatable.Count) == maxAttachLimit
 }
 
+// installDriverToCSINode 将驱动信息写入 CSINode.Spec.Drivers，并在必要时同步迁移注解。
 func (nim *nodeInfoManager) installDriverToCSINode(
 	nodeInfo *storagev1.CSINode,
 	driverName string,
@@ -610,7 +623,7 @@ func (nim *nodeInfoManager) installDriverToCSINode(
 	topologyKeys := sets.KeySet[string, string](topology)
 
 	specModified := true
-	// Clone driver list, omitting the driver that matches the given driverName
+	// 复制驱动列表并剔除同名驱动，再用新信息重新追加，保证规格是最新且无重复的。
 	newDriverSpecs := []storagev1.CSINodeDriver{}
 	for _, driverInfoSpec := range nodeInfo.Spec.Drivers {
 		if driverInfoSpec.Name == driverName {
@@ -620,18 +633,19 @@ func (nim *nodeInfoManager) installDriverToCSINode(
 				specModified = false
 			}
 		} else {
-			// Omit driverInfoSpec matching given driverName
+			// 同名驱动不复制，稍后以新规格追加。
 			newDriverSpecs = append(newDriverSpecs, driverInfoSpec)
 		}
 	}
 
 	annotationModified := setMigrationAnnotation(nim.migratedPlugins, nodeInfo)
 
+	// 规格与注解都没变化时不写回，避免无谓的更新与冲突。
 	if !specModified && !annotationModified {
 		return nil
 	}
 
-	// Append new driver
+	// 追加新的驱动规格。
 	driverSpec := storagev1.CSINodeDriver{
 		Name:         driverName,
 		NodeID:       driverNodeID,
@@ -639,6 +653,7 @@ func (nim *nodeInfoManager) installDriverToCSINode(
 	}
 
 	if maxAttachLimit > 0 {
+		// Allocatable.Count 是 int32，超出范围只能截断，否则无法写入对象。
 		if maxAttachLimit > math.MaxInt32 {
 			klog.Warningf("Exceeded max supported attach limit value, truncating it to %d", math.MaxInt32)
 			maxAttachLimit = math.MaxInt32
@@ -656,6 +671,7 @@ func (nim *nodeInfoManager) installDriverToCSINode(
 	return err
 }
 
+// uninstallDriverFromCSINode 通过指数退避重试，从 CSINode 中移除指定驱动。
 func (nim *nodeInfoManager) uninstallDriverFromCSINode(
 	csiDriverName string) error {
 
@@ -665,6 +681,7 @@ func (nim *nodeInfoManager) uninstallDriverFromCSINode(
 	}
 
 	var updateErrs []error
+	// 冲突可重试；记录每次失败原因以便最终定位问题。
 	err := wait.ExponentialBackoff(updateBackoff, func() (bool, error) {
 		if err := nim.tryUninstallDriverFromCSINode(csiKubeClient, csiDriverName); err != nil {
 			updateErrs = append(updateErrs, err)
@@ -678,6 +695,7 @@ func (nim *nodeInfoManager) uninstallDriverFromCSINode(
 	return nil
 }
 
+// tryUninstallDriverFromCSINode 尝试一次从 CSINode 中移除指定驱动；对象不存在时视为成功。
 func (nim *nodeInfoManager) tryUninstallDriverFromCSINode(
 	csiKubeClient clientset.Interface,
 	csiDriverName string) error {
@@ -694,34 +712,32 @@ func (nim *nodeInfoManager) tryUninstallDriverFromCSINode(
 	}
 
 	hasModified := false
-	// Uninstall CSINodeDriver with name csiDriverName
+	// 原地过滤驱动列表：复用底层数组，去掉名为 csiDriverName 的条目。
 	drivers := nodeInfo.Spec.Drivers[:0]
 	for _, driver := range nodeInfo.Spec.Drivers {
 		if driver.Name != csiDriverName {
 			drivers = append(drivers, driver)
 		} else {
-			// Found a driver with name csiDriverName
-			// Set hasModified to true because it will be removed
+			// 找到了目标驱动，标记列表已改动，稍后需写回。
 			hasModified = true
 		}
 	}
 
+	// 没有改动时不写回，避免无谓的更新与冲突。
 	if !hasModified {
-		// No changes, don't update
 		return nil
 	}
 	nodeInfo.Spec.Drivers = drivers
 
 	_, err = nodeInfoClient.Update(context.TODO(), nodeInfo, metav1.UpdateOptions{})
 
-	return err // do not wrap error
+	return err // 不包装错误，保持原始错误类型以便调用方判断。
 
 }
 
-// UpdateCSINodeStorageHealth updates CSINode.Status.StorageHealth for the given
-// driver with the provided conditions. Other drivers' entries are preserved.
-// No-ops if the status, reason, and volume-capability identities for this driver
-// are unchanged.
+// UpdateCSINodeStorageHealth 用给定条件更新 CSINode.Status.StorageHealth 中该驱动的条目。
+// 其他驱动的条目保持不变。
+// 若该驱动的 status、reason 与卷能力标识均未变，则不做任何操作。
 func (nim *nodeInfoManager) UpdateCSINodeStorageHealth(driverName string, conditions []storagev1.StorageHealthCondition) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.CSIVolumeHealth) {
 		return nil
@@ -746,6 +762,7 @@ func (nim *nodeInfoManager) UpdateCSINodeStorageHealth(driverName string, condit
 	return nil
 }
 
+// tryUpdateCSINodeStorageHealth 尝试一次更新 CSINode 中该驱动的存储健康状态。
 func (nim *nodeInfoManager) tryUpdateCSINodeStorageHealth(
 	csiKubeClient clientset.Interface,
 	driverName string,
@@ -764,6 +781,7 @@ func (nim *nodeInfoManager) tryUpdateCSINodeStorageHealth(
 	}
 
 	var existingDriverConds []storagev1.StorageHealthCondition
+	// 保留其他驱动的状态，只替换目标驱动，避免更新时丢失其健康信息。
 	otherDriversHealth := make([]storagev1.StorageHealth, 0, len(nodeInfo.Status.StorageHealth))
 	for _, health := range nodeInfo.Status.StorageHealth {
 		if health.Name == driverName {
@@ -773,6 +791,7 @@ func (nim *nodeInfoManager) tryUpdateCSINodeStorageHealth(
 		}
 	}
 
+	// 条件标识未变时不写回，避免重复上报造成无谓的状态写入。
 	if storageHealthIdentityEqual(existingDriverConds, conditions) {
 		return nil
 	}
@@ -787,14 +806,13 @@ func (nim *nodeInfoManager) tryUpdateCSINodeStorageHealth(
 	return err
 }
 
-// storageHealthIdentityEqual reports whether two condition slices have the same
-// set of status, reason, and volume-capability identities. Message, transition
-// time, and duplicate entries are ignored so repeated or duplicate reports do
-// not cause status write churn.
+// storageHealthIdentityEqual 判断两个条件切片的 status、reason 与卷能力标识集合是否相同。
+// 忽略 message、transition time 与重复条目，避免重复或重复上报导致状态被反复写入。
 func storageHealthIdentityEqual(a, b []storagev1.StorageHealthCondition) bool {
 	return storageHealthIdentities(a).Equal(storageHealthIdentities(b))
 }
 
+// storageHealthIdentities 将条件切片转换为条件标识集合，用于忽略时间、消息等字段的比较。
 func storageHealthIdentities(conditions []storagev1.StorageHealthCondition) sets.Set[storageHealthIdentity] {
 	identities := sets.New[storageHealthIdentity]()
 	for _, c := range conditions {
@@ -803,10 +821,12 @@ func storageHealthIdentities(conditions []storagev1.StorageHealthCondition) sets
 	return identities
 }
 
+// storageHealthIdentity 是存储健康条件的身份标识，仅包含决定状态是否需要更新的字段。
 type storageHealthIdentity struct {
 	status, reason, accessMode, volumeMode string
 }
 
+// storageHealthConditionIdentity 从健康条件中提取身份标识；可选的访问模式与卷模式为空时留空。
 func storageHealthConditionIdentity(condition storagev1.StorageHealthCondition) storageHealthIdentity {
 	identity := storageHealthIdentity{
 		status: string(condition.Status),

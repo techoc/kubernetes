@@ -31,6 +31,7 @@ import (
 	utiltesting "k8s.io/client-go/util/testing"
 )
 
+// TestNewAtomicWriter 验证已存在和不存在目标目录时创建写入器的结果。
 func TestNewAtomicWriter(t *testing.T) {
 	targetDir, err := utiltesting.MkTmpdir("atomic-write")
 	if err != nil {
@@ -58,6 +59,7 @@ func TestNewAtomicWriter(t *testing.T) {
 	}
 }
 
+// TestValidatePath 验证路径合法性校验对绝对路径、越界路径和长度限制的处理。
 func TestValidatePath(t *testing.T) {
 	maxPath := strings.Repeat("a", maxPathLength+1)
 	maxFile := strings.Repeat("a", maxFileNameLength+1)
@@ -127,6 +129,7 @@ func TestValidatePath(t *testing.T) {
 	}
 }
 
+// TestPathsToRemove 验证新旧载荷对比得出的待删除路径集合。
 func TestPathsToRemove(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -256,8 +259,9 @@ func TestPathsToRemove(t *testing.T) {
 	}
 }
 
+// TestWriteOnce 验证单次写入的载荷内容、权限和路径校验。
 func TestWriteOnce(t *testing.T) {
-	// $1 if you can tell me what this binary is
+	// 猜猜这段 base64 是什么二进制（提示：它是一段可执行的 ELF 文件头）。
 	encodedMysteryBinary := `f0VMRgIBAQAAAAAAAAAAAAIAPgABAAAAeABAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAEAAOAAB
 AAAAAAAAAAEAAAAFAAAAAAAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAfQAAAAAAAAB9AAAAAAAAAAAA
 IAAAAAAAsDyZDwU=`
@@ -411,6 +415,7 @@ IAAAAAAAsDyZDwU=`
 	}
 }
 
+// TestUpdate 验证二次写入后的内容更新、增删效果。
 func TestUpdate(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -599,6 +604,7 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// TestMultipleUpdates 验证连续多次写入后目录内容始终与最新载荷一致。
 func TestMultipleUpdates(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -749,9 +755,10 @@ func TestMultipleUpdates(t *testing.T) {
 	}
 }
 
+// checkVolumeContents 通过遍历数据目录验证实际内容与预期载荷一致。
 func checkVolumeContents(targetDir, tcName string, payload map[string]FileProjection, t *testing.T) {
 	dataDirPath := filepath.Join(targetDir, dataDirName)
-	// use filepath.Walk to reconstruct the payload, then deep equal
+	// 遍历符号链接指向的数据目录重建载荷，再做深度比较。
 	observedPayload := make(map[string]FileProjection)
 	visitor := func(path string, info os.FileInfo, _ error) error {
 		if info.IsDir() {
@@ -811,6 +818,7 @@ func checkVolumeContents(targetDir, tcName string, payload map[string]FileProjec
 	}
 }
 
+// TestValidatePayload 验证载荷路径校验及非规范路径的清理。
 func TestValidatePayload(t *testing.T) {
 	maxPath := strings.Repeat("a", maxPathLength+1)
 
@@ -902,6 +910,7 @@ func TestValidatePayload(t *testing.T) {
 	}
 }
 
+// TestCreateUserVisibleFiles 验证用户可见符号链接指向数据目录。
 func TestCreateUserVisibleFiles(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -984,6 +993,7 @@ func TestCreateUserVisibleFiles(t *testing.T) {
 	}
 }
 
+// TestSetPerms 验证 setPerms 回调调用次数及错误传播。
 func TestSetPerms(t *testing.T) {
 	targetDir, err := utiltesting.MkTmpdir("atomic-write")
 	if err != nil {
@@ -991,7 +1001,7 @@ func TestSetPerms(t *testing.T) {
 	}
 	defer os.RemoveAll(targetDir)
 
-	// Test that setPerms() is called once and with valid timestamp directory.
+	// 验证 setPerms 只调用一次，且传入的是真实存在的时间戳目录。
 	payload1 := map[string]FileProjection{
 		"foo/bar.txt": {Mode: 0644, Data: []byte("foo")},
 		"bar/zab.txt": {Mode: 0644, Data: []byte("bar")},
@@ -1004,7 +1014,7 @@ func TestSetPerms(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error getting file info: %v", err)
 		}
-		// Ensure that given timestamp directory really exists.
+		// 确认回调收到的确实是目录。
 		if !fileInfo.IsDir() {
 			t.Fatalf("subPath is not a directory: %v", subPath)
 		}
@@ -1018,7 +1028,7 @@ func TestSetPerms(t *testing.T) {
 		t.Fatalf("unexpected number of calls to setPerms: %v", setPermsCalled)
 	}
 
-	// Test that errors from setPerms() are propagated.
+	// 验证 setPerms 返回的错误会被向上传播。
 	payload2 := map[string]FileProjection{
 		"foo/bar.txt": {Mode: 0644, Data: []byte("foo2")},
 		"bar/zab.txt": {Mode: 0644, Data: []byte("bar2")},
@@ -1035,6 +1045,7 @@ func TestSetPerms(t *testing.T) {
 	}
 }
 
+// TestWriteAgainAfterUnexpectedExit 验证异常退出后再次写入可恢复内容。
 func TestWriteAgainAfterUnexpectedExit(t *testing.T) {
 	testCases := []struct {
 		name       string

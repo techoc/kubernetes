@@ -38,6 +38,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// csiClient 定义 kubelet 与 CSI 驱动节点服务交互的接口。
 type csiClient interface {
 	NodeGetInfo(ctx context.Context) (
 		nodeID string,
@@ -45,9 +46,8 @@ type csiClient interface {
 		accessibleTopology map[string]string,
 		err error)
 
-	// The caller is responsible for checking whether the driver supports
-	// applying FSGroup by calling NodeSupportsVolumeMountGroup().
-	// If the driver does not, fsGroup must be set to nil.
+	// 调用方需先通过 NodeSupportsVolumeMountGroup() 检查驱动是否支持应用 FSGroup；
+	// 若不支持，fsGroup 必须传 nil。
 	NodePublishVolume(
 		ctx context.Context,
 		volumeid string,
@@ -70,9 +70,8 @@ type csiClient interface {
 		targetPath string,
 	) error
 
-	// The caller is responsible for checking whether the driver supports
-	// applying FSGroup by calling NodeSupportsVolumeMountGroup().
-	// If the driver does not, fsGroup must be set to nil.
+	// 调用方需先通过 NodeSupportsVolumeMountGroup() 检查驱动是否支持应用 FSGroup；
+	// 若不支持，fsGroup 必须传 nil。
 	NodeStageVolume(ctx context.Context,
 		volID string,
 		publishVolumeInfo map[string]string,
@@ -90,18 +89,15 @@ type csiClient interface {
 		volID string,
 		targetPath string,
 	) (*volume.Metrics, error)
-	// NodeGetVolumeHealth returns adverse health conditions for a volume.
-	// An empty slice means the volume is healthy. stagingTargetPath and
-	// volumePublishPath are optional and may be empty when the volume was
-	// never successfully staged/published.
+	// NodeGetVolumeHealth 返回卷的不健康状况；空切片表示卷健康。
+	// stagingTargetPath 与 volumePublishPath 是可选的，卷从未成功 stage/publish 时可为空。
 	NodeGetVolumeHealth(
 		ctx context.Context,
 		volID string,
 		stagingTargetPath string,
 		volumePublishPath string,
 	) ([]api.VolumeHealthCondition, error)
-	// NodeGetStorageHealth returns adverse health conditions for the driver's
-	// storage backend on this node. An empty slice means the backend is healthy.
+	// NodeGetStorageHealth 返回驱动在本节点上的存储后端的不健康状况；空切片表示后端健康。
 	NodeGetStorageHealth(
 		ctx context.Context,
 		secrets map[string]string,
@@ -116,13 +112,13 @@ type csiClient interface {
 	NodeSupportsVolumeMountGroup(ctx context.Context) (bool, error)
 }
 
-// Strongly typed address
+// csiAddr 是强类型的 CSI 驱动地址。
 type csiAddr string
 
-// Strongly typed driver name
+// csiDriverName 是强类型的 CSI 驱动名称。
 type csiDriverName string
 
-// csiClient encapsulates all csi-plugin methods
+// csiDriverClient 封装了对 CSI 插件节点服务的调用。
 type csiDriverClient struct {
 	driverName          csiDriverName
 	addr                csiAddr
@@ -130,6 +126,7 @@ type csiDriverClient struct {
 	nodeV1ClientCreator nodeV1ClientCreator
 }
 
+// csiResizeOptions 承载节点扩容所需的参数。
 type csiResizeOptions struct {
 	volumeID          string
 	volumePath        string
@@ -143,19 +140,18 @@ type csiResizeOptions struct {
 
 var _ csiClient = &csiDriverClient{}
 
+// nodeV1ClientCreator 创建 NodeClient 及其关闭函数，便于测试时替换。
 type nodeV1ClientCreator func(addr csiAddr, metricsManager *MetricsManager) (
 	nodeClient csipbv1.NodeClient,
 	closer io.Closer,
 	err error,
 )
 
+// nodeV1AccessModeMapper 将 Kubernetes 访问模式映射为 CSI v1 访问模式。
 type nodeV1AccessModeMapper func(am api.PersistentVolumeAccessMode) csipbv1.VolumeCapability_AccessMode_Mode
 
-// newV1NodeClient creates a new NodeClient with the internally used gRPC
-// connection set up. It also returns a closer which must be called to close
-// the gRPC connection when the NodeClient is not used anymore.
-// This is the default implementation for the nodeV1ClientCreator, used in
-// newCsiDriverClient.
+// newV1NodeClient 创建 NodeClient 并建立 gRPC 连接，同时返回不再使用时必须调用的关闭函数。
+// 这是 newCsiDriverClient 中 nodeV1ClientCreator 的默认实现。
 func newV1NodeClient(addr csiAddr, metricsManager *MetricsManager) (nodeClient csipbv1.NodeClient, closer io.Closer, err error) {
 	var conn *grpc.ClientConn
 	conn, err = newGrpcConn(addr, metricsManager)
@@ -167,6 +163,7 @@ func newV1NodeClient(addr csiAddr, metricsManager *MetricsManager) (nodeClient c
 	return nodeClient, conn, nil
 }
 
+// newCsiDriverClient 根据已注册的驱动名称创建 csiDriverClient。
 func newCsiDriverClient(driverName csiDriverName) (*csiDriverClient, error) {
 	if driverName == "" {
 		return nil, fmt.Errorf("driver name is empty")
@@ -186,6 +183,7 @@ func newCsiDriverClient(driverName csiDriverName) (*csiDriverClient, error) {
 	}, nil
 }
 
+// NodeGetInfo 返回驱动报告的节点信息。
 func (c *csiDriverClient) NodeGetInfo(ctx context.Context) (
 	nodeID string,
 	maxVolumePerNode int64,
@@ -201,6 +199,7 @@ func (c *csiDriverClient) NodeGetInfo(ctx context.Context) (
 	return nodeID, maxVolumePerNode, accessibleTopology, getNodeInfoError
 }
 
+// nodeGetInfoV1 通过 NodeGetInfo RPC 获取节点信息。
 func (c *csiDriverClient) nodeGetInfoV1(ctx context.Context) (
 	nodeID string,
 	maxVolumePerNode int64,
@@ -225,6 +224,7 @@ func (c *csiDriverClient) nodeGetInfoV1(ctx context.Context) (
 	return res.GetNodeId(), res.GetMaxVolumesPerNode(), accessibleTopology, nil
 }
 
+// NodePublishVolume 调用驱动的 NodePublishVolume RPC 将卷发布到目标路径。
 func (c *csiDriverClient) NodePublishVolume(
 	ctx context.Context,
 	volID string,
@@ -303,6 +303,7 @@ func (c *csiDriverClient) NodePublishVolume(
 	return err
 }
 
+// NodeExpandVolume 调用驱动的 NodeExpandVolume RPC 执行节点扩容。
 func (c *csiDriverClient) NodeExpandVolume(ctx context.Context, opts csiResizeOptions) (resource.Quantity, error) {
 	if c.nodeV1ClientCreator == nil {
 		return opts.newSize, fmt.Errorf("version of CSI driver does not support volume expansion")
@@ -342,8 +343,7 @@ func (c *csiDriverClient) NodeExpandVolume(ctx context.Context, opts csiResizeOp
 		Secrets: opts.secrets,
 	}
 
-	// not all CSI drivers support NodeStageUnstage and hence the StagingTargetPath
-	// should only be set when available
+	// 并非所有 CSI 驱动都支持 NodeStageUnstage，因此仅在有值时设置 StagingTargetPath。
 	if opts.stagingTargetPath != "" {
 		req.StagingTargetPath = opts.stagingTargetPath
 	}
@@ -373,6 +373,7 @@ func (c *csiDriverClient) NodeExpandVolume(ctx context.Context, opts csiResizeOp
 	return *updatedQuantity, nil
 }
 
+// NodeUnpublishVolume 调用驱动的 NodeUnpublishVolume RPC 取消卷发布。
 func (c *csiDriverClient) NodeUnpublishVolume(ctx context.Context, volID string, targetPath string) error {
 	klog.V(4).InfoS(log("calling NodeUnpublishVolume rpc"), "volID", volID, "targetPath", targetPath)
 	if volID == "" {
@@ -400,6 +401,7 @@ func (c *csiDriverClient) NodeUnpublishVolume(ctx context.Context, volID string,
 	return err
 }
 
+// NodeStageVolume 调用驱动的 NodeStageVolume RPC 将卷 stage 到临时路径。
 func (c *csiDriverClient) NodeStageVolume(ctx context.Context,
 	volID string,
 	publishContext map[string]string,
@@ -470,6 +472,7 @@ func (c *csiDriverClient) NodeStageVolume(ctx context.Context,
 	return err
 }
 
+// NodeUnstageVolume 调用驱动的 NodeUnstageVolume RPC 取消卷的 stage。
 func (c *csiDriverClient) NodeUnstageVolume(ctx context.Context, volID, stagingTargetPath string) error {
 	klog.V(4).InfoS(log("calling NodeUnstageVolume rpc"), "volID", volID, "stagingTargetPath", stagingTargetPath)
 	if volID == "" {
@@ -496,14 +499,17 @@ func (c *csiDriverClient) NodeUnstageVolume(ctx context.Context, volID, stagingT
 	return err
 }
 
+// NodeSupportsNodeExpand 返回驱动是否支持卷扩容能力。
 func (c *csiDriverClient) NodeSupportsNodeExpand(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_EXPAND_VOLUME)
 }
 
+// NodeSupportsStageUnstage 返回驱动是否支持 stage/unstage 能力。
 func (c *csiDriverClient) NodeSupportsStageUnstage(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME)
 }
 
+// getNodeV1AccessModeMapper 按驱动能力选择访问模式映射函数。
 func (c *csiDriverClient) getNodeV1AccessModeMapper(ctx context.Context) (nodeV1AccessModeMapper, error) {
 	supported, err := c.NodeSupportsSingleNodeMultiWriterAccessMode(ctx)
 	if err != nil {
@@ -515,6 +521,7 @@ func (c *csiDriverClient) getNodeV1AccessModeMapper(ctx context.Context) (nodeV1
 	return asCSIAccessModeV1, nil
 }
 
+// asCSIAccessModeV1 将 Kubernetes 访问模式映射为 CSI v1 访问模式。
 func asCSIAccessModeV1(am api.PersistentVolumeAccessMode) csipbv1.VolumeCapability_AccessMode_Mode {
 	switch am {
 	case api.ReadWriteOnce:
@@ -523,15 +530,14 @@ func asCSIAccessModeV1(am api.PersistentVolumeAccessMode) csipbv1.VolumeCapabili
 		return csipbv1.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY
 	case api.ReadWriteMany:
 		return csipbv1.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER
-	// This mapping exists to enable CSI drivers that lack the
-	// SINGLE_NODE_MULTI_WRITER capability to work with the
-	// ReadWriteOncePod access mode.
+	// 该映射使不支持 SINGLE_NODE_MULTI_WRITER 能力的 CSI 驱动也能配合 ReadWriteOncePod 访问模式工作。
 	case api.ReadWriteOncePod:
 		return csipbv1.VolumeCapability_AccessMode_SINGLE_NODE_WRITER
 	}
 	return csipbv1.VolumeCapability_AccessMode_UNKNOWN
 }
 
+// asSingleNodeMultiWriterCapableCSIAccessModeV1 针对支持 SINGLE_NODE_MULTI_WRITER 的驱动映射访问模式。
 func asSingleNodeMultiWriterCapableCSIAccessModeV1(am api.PersistentVolumeAccessMode) csipbv1.VolumeCapability_AccessMode_Mode {
 	switch am {
 	case api.ReadWriteOnce:
@@ -546,6 +552,7 @@ func asSingleNodeMultiWriterCapableCSIAccessModeV1(am api.PersistentVolumeAccess
 	return csipbv1.VolumeCapability_AccessMode_UNKNOWN
 }
 
+// newGrpcConn 建立到 CSI 驱动 unix socket 的 gRPC 连接，并挂载指标拦截器。
 func newGrpcConn(addr csiAddr, metricsManager *MetricsManager) (*grpc.ClientConn, error) {
 	network := "unix"
 	klog.V(4).InfoS(log("creating new gRPC connection"), "protocol", network, "endpoint", addr)
@@ -561,18 +568,16 @@ func newGrpcConn(addr csiAddr, metricsManager *MetricsManager) (*grpc.ClientConn
 	)
 }
 
-// CSI client getter with cache.
-// This provides a method to initialize CSI client with driver name and caches
-// it for later use. When CSI clients have not been discovered yet (e.g.
-// on kubelet restart), client initialization will fail. Users of CSI client (e.g.
-// mounter manager and block mapper) can use this to delay CSI client
-// initialization until needed.
+// csiClientGetter 带缓存地获取 CSI 客户端。它按驱动名初始化客户端并缓存备用。
+// 当 CSI 客户端尚未被发现时（如 kubelet 重启期间），初始化会失败；使用方（如 mounter manager 与
+// block mapper）可借此将 CSI 客户端初始化推迟到真正需要时。
 type csiClientGetter struct {
 	sync.RWMutex
 	csiClient  csiClient
 	driverName csiDriverName
 }
 
+// Get 返回缓存的 CSI 客户端，必要时延迟初始化。
 func (c *csiClientGetter) Get() (csiClient, error) {
 	c.RLock()
 	if c.csiClient != nil {
@@ -582,7 +587,7 @@ func (c *csiClientGetter) Get() (csiClient, error) {
 	c.RUnlock()
 	c.Lock()
 	defer c.Unlock()
-	// Double-checking locking criterion.
+	// 双重检查，避免并发初始化出多个客户端。
 	if c.csiClient != nil {
 		return c.csiClient, nil
 	}
@@ -594,14 +599,17 @@ func (c *csiClientGetter) Get() (csiClient, error) {
 	return c.csiClient, nil
 }
 
+// NodeSupportsVolumeStats 返回驱动是否支持卷统计能力。
 func (c *csiDriverClient) NodeSupportsVolumeStats(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_VOLUME_STATS)
 }
 
+// NodeSupportsSingleNodeMultiWriterAccessMode 返回驱动是否支持单节点多写访问模式。
 func (c *csiDriverClient) NodeSupportsSingleNodeMultiWriterAccessMode(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER)
 }
 
+// NodeGetVolumeStats 调用驱动的 NodeGetVolumeStats RPC 获取卷使用情况。
 func (c *csiDriverClient) NodeGetVolumeStats(ctx context.Context, volID string, targetPath string) (*volume.Metrics, error) {
 	klog.V(4).InfoS(log("calling NodeGetVolumeStats rpc"), "volID", volID, "targetPath", targetPath)
 	if volID == "" {
@@ -666,14 +674,17 @@ func (c *csiDriverClient) NodeGetVolumeStats(ctx context.Context, volID string, 
 	return metrics, nil
 }
 
+// NodeSupportsVolumeHealth 返回驱动是否支持卷健康状态能力。
 func (c *csiDriverClient) NodeSupportsVolumeHealth(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_VOLUME_HEALTH)
 }
 
+// NodeSupportsStorageHealth 返回驱动是否支持存储后端健康状态能力。
 func (c *csiDriverClient) NodeSupportsStorageHealth(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_STORAGE_HEALTH)
 }
 
+// NodeGetVolumeHealth 调用驱动的 NodeGetVolumeHealth RPC 获取卷健康状况。
 func (c *csiDriverClient) NodeGetVolumeHealth(ctx context.Context, volID, stagingTargetPath, volumePublishPath string) ([]api.VolumeHealthCondition, error) {
 	klog.V(4).InfoS(log("calling NodeGetVolumeHealth rpc"), "volID", volID, "stagingTargetPath", stagingTargetPath, "volumePublishPath", volumePublishPath)
 	if volID == "" {
@@ -706,6 +717,7 @@ func (c *csiDriverClient) NodeGetVolumeHealth(ctx context.Context, volID, stagin
 	return mapVolumeHealthConditions(resp.GetVolumeHealth()), nil
 }
 
+// NodeGetStorageHealth 调用驱动的 NodeGetStorageHealth RPC 获取存储后端健康状况。
 func (c *csiDriverClient) NodeGetStorageHealth(ctx context.Context, secrets map[string]string) ([]storagev1.StorageHealthCondition, error) {
 	klog.V(4).InfoS(log("calling NodeGetStorageHealth rpc"))
 	if c.nodeV1ClientCreator == nil {
@@ -733,6 +745,7 @@ func (c *csiDriverClient) NodeGetStorageHealth(ctx context.Context, secrets map[
 	return mapStorageBackendHealth(resp.GetBackendHealth())
 }
 
+// mapVolumeHealthConditions 将 CSI 卷健康状况转换为 Kubernetes 卷健康状况。
 func mapVolumeHealthConditions(vh *csipbv1.VolumeHealth) []api.VolumeHealthCondition {
 	if vh == nil {
 		return nil
@@ -759,6 +772,7 @@ func mapVolumeHealthConditions(vh *csipbv1.VolumeHealth) []api.VolumeHealthCondi
 	return out
 }
 
+// mapVolumeHealthStatus 将 CSI 卷健康错误类型映射为 Kubernetes 状态类型。
 func mapVolumeHealthStatus(status csipbv1.VolumeHealthErrorType) (api.VolumeHealthStatusType, bool) {
 	switch status {
 	case csipbv1.VolumeHealthErrorType_INACCESSIBLE:
@@ -774,6 +788,7 @@ func mapVolumeHealthStatus(status csipbv1.VolumeHealthErrorType) (api.VolumeHeal
 
 const maxStorageHealthConditions = 16
 
+// mapStorageBackendHealth 将 CSI 存储后端健康状况转换为 Kubernetes 健康条件。
 func mapStorageBackendHealth(entries []*csipbv1.NodeGetStorageHealthResponse_StorageBackendHealth) ([]storagev1.StorageHealthCondition, error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -808,6 +823,7 @@ func mapStorageBackendHealth(entries []*csipbv1.NodeGetStorageHealthResponse_Sto
 	return out, nil
 }
 
+// mapStorageHealthVolumeCapability 将 CSI 卷能力转换为 Kubernetes 的访问模式与卷模式。
 func mapStorageHealthVolumeCapability(capability *csipbv1.VolumeCapability) (api.PersistentVolumeAccessMode, api.PersistentVolumeMode, error) {
 	var volumeMode api.PersistentVolumeMode
 	switch capability.GetAccessType().(type) {
@@ -841,6 +857,7 @@ func mapStorageHealthVolumeCapability(capability *csipbv1.VolumeCapability) (api
 	return accessMode, volumeMode, nil
 }
 
+// mapStorageHealthStatus 将 CSI 存储健康错误类型映射为 Kubernetes 状态类型。
 func mapStorageHealthStatus(status csipbv1.StorageHealthErrorType) (storagev1.StorageHealthStatusType, bool) {
 	switch status {
 	case csipbv1.StorageHealthErrorType_STORAGE_UNREACHABLE:
@@ -852,10 +869,12 @@ func mapStorageHealthStatus(status csipbv1.StorageHealthErrorType) (storagev1.St
 	}
 }
 
+// NodeSupportsVolumeMountGroup 返回驱动是否支持挂载时应用 volume group。
 func (c *csiDriverClient) NodeSupportsVolumeMountGroup(ctx context.Context) (bool, error) {
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_VOLUME_MOUNT_GROUP)
 }
 
+// nodeSupportsCapability 查询驱动是否声明了指定的节点服务能力。
 func (c *csiDriverClient) nodeSupportsCapability(ctx context.Context, capabilityType csipbv1.NodeServiceCapability_RPC_Type) (bool, error) {
 	klog.V(4).Info(log("calling NodeGetCapabilities rpc to determine if the node service has %s capability", capabilityType))
 	capabilities, err := c.nodeGetCapabilities(ctx)
@@ -874,6 +893,7 @@ func (c *csiDriverClient) nodeSupportsCapability(ctx context.Context, capability
 	return false, nil
 }
 
+// nodeGetCapabilities 调用 NodeGetCapabilities RPC 获取驱动的节点能力列表。
 func (c *csiDriverClient) nodeGetCapabilities(ctx context.Context) ([]*csipbv1.NodeServiceCapability, error) {
 	if c.nodeV1ClientCreator == nil {
 		return []*csipbv1.NodeServiceCapability{}, errors.New("nodeV1ClientCreate is nil")
@@ -896,26 +916,25 @@ func (c *csiDriverClient) nodeGetCapabilities(ctx context.Context) ([]*csipbv1.N
 	return resp.GetCapabilities(), nil
 }
 
+// isFinalError 判断错误是否属于最终错误，即操作确定未在进行中。
 func isFinalError(err error) bool {
-	// Sources:
+	// 参考：
 	// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// https://github.com/container-storage-interface/spec/blob/master/spec.md
 	st, ok := status.FromError(err)
 	if !ok {
-		// This is not gRPC error. The operation must have failed before gRPC
-		// method was called, otherwise we would get gRPC error.
-		// We don't know if any previous volume operation is in progress, be on the safe side.
+		// 非 gRPC 错误，说明在调用 gRPC 方法前就已失败。但无法确定此前是否有卷操作仍在进行，
+		// 保守起见按非最终错误处理。
 		return false
 	}
 	switch st.Code() {
-	case codes.Canceled, // gRPC: Client Application cancelled the request
-		codes.DeadlineExceeded,  // gRPC: Timeout
-		codes.Unavailable,       // gRPC: Server shutting down, TCP connection broken - previous volume operation may be still in progress.
-		codes.ResourceExhausted, // gRPC: Server temporarily out of resources - previous volume operation may be still in progress.
-		codes.Aborted:           // CSI: Operation pending for volume
+	case codes.Canceled, // gRPC：客户端取消了请求
+		codes.DeadlineExceeded,  // gRPC：超时
+		codes.Unavailable,       // gRPC：服务端关闭或连接中断，之前的卷操作可能仍在进行
+		codes.ResourceExhausted, // gRPC：服务端临时资源不足，之前的卷操作可能仍在进行
+		codes.Aborted:           // CSI：卷上存在待处理操作
 		return false
 	}
-	// All other errors mean that operation either did not
-	// even start or failed. It is for sure not in progress.
+	// 其余错误意味着操作要么尚未开始、要么已失败，可以确定没有在进行中。
 	return true
 }

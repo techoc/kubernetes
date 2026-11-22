@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// TestGetDefaultClass 验证默认 StorageClass 的选择规则：无默认返回 nil，多个默认取创建时间最新者，时间相同按名称排序。
 func TestGetDefaultClass(t *testing.T) {
 
 	var (

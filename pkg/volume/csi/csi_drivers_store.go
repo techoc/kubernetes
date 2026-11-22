@@ -22,23 +22,23 @@ import (
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 )
 
-// Driver is a description of a CSI Driver, defined by an endpoint and the
-// highest CSI version supported
+// Driver 描述一个 CSI 驱动：由其端点与所支持的最高 CSI 版本确定。
 type Driver struct {
 	endpoint                string
 	highestSupportedVersion *utilversion.Version
 }
 
-// DriversStore holds a list of CSI Drivers
+// DriversStore 保存 CSI 驱动列表，并自带读写锁保证并发安全。
 type DriversStore struct {
 	store
 	sync.RWMutex
 }
 
+// store 以驱动名为键保存 CSI 驱动。
 type store map[string]Driver
 
-// Get lets you retrieve a CSI Driver by name.
-// This method is protected by a mutex.
+// Get 按名称查询 CSI 驱动。
+// 该方法由互斥锁保护。
 func (s *DriversStore) Get(driverName string) (Driver, bool) {
 	s.RLock()
 	defer s.RUnlock()
@@ -47,8 +47,8 @@ func (s *DriversStore) Get(driverName string) (Driver, bool) {
 	return driver, ok
 }
 
-// Set lets you save a CSI Driver to the list and give it a specific name.
-// This method is protected by a mutex.
+// Set 以指定名称把 CSI 驱动存入列表；首次写入时才初始化底层 map。
+// 该方法由互斥锁保护。
 func (s *DriversStore) Set(driverName string, driver Driver) {
 	s.Lock()
 	defer s.Unlock()
@@ -60,8 +60,8 @@ func (s *DriversStore) Set(driverName string, driver Driver) {
 	s.store[driverName] = driver
 }
 
-// Delete lets you delete a CSI Driver by name.
-// This method is protected by a mutex.
+// Delete 按名称删除 CSI 驱动。
+// 该方法由互斥锁保护。
 func (s *DriversStore) Delete(driverName string) {
 	s.Lock()
 	defer s.Unlock()
@@ -69,8 +69,8 @@ func (s *DriversStore) Delete(driverName string) {
 	delete(s.store, driverName)
 }
 
-// Clear deletes all entries in the store.
-// This methiod is protected by a mutex.
+// Clear 清空存储中的所有条目。
+// 该方法由互斥锁保护。
 func (s *DriversStore) Clear() {
 	s.Lock()
 	defer s.Unlock()
@@ -78,7 +78,7 @@ func (s *DriversStore) Clear() {
 	s.store = store{}
 }
 
-// List returns the names of all registered CSI drivers.
+// List 返回所有已注册 CSI 驱动的名称。
 func (s *DriversStore) List() []string {
 	s.RLock()
 	defer s.RUnlock()

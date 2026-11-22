@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package nestedpendingoperations 测试卷操作的嵌套挂起逻辑。
 package nestedpendingoperations
 
 import (
@@ -29,47 +30,45 @@ import (
 )
 
 const (
-	// testTimeout is a timeout of goroutines to finish. This _should_ be just a
-	// "context switch" and it should take several ms, however, Clayton says "We
-	// have had flakes due to tests that assumed that 15s is long enough to sleep")
+	// testTimeout 是等待 goroutine 结束的超时时间。理论上只是“上下文切换”，几毫秒足矣；
+	// 但 Clayton 说过：“曾经有测试以为睡 15 秒就够，结果因此出现偶发失败。”故留足一分钟。
 	testTimeout time.Duration = 1 * time.Minute
 
-	// initialOperationWaitTimeShort is the initial amount of time the test will
-	// wait for an operation to complete (each successive failure results in
-	// exponential backoff).
+	// initialOperationWaitTimeShort 是等待操作完成的最初时长；每次失败后按指数退避递增。
 	initialOperationWaitTimeShort time.Duration = 20 * time.Millisecond
 
-	// initialOperationWaitTimeLong is the initial amount of time the test will
-	// wait for an operation to complete (each successive failure results in
-	// exponential backoff).
+	// initialOperationWaitTimeLong 是等待操作完成的最初时长；每次失败后按指数退避递增。
+	// 用于退避本身耗时较长的场景。
 	initialOperationWaitTimeLong time.Duration = 500 * time.Millisecond
 )
 
+// Test_NestedPendingOperations_Positive_SingleOp 验证单个操作可正常启动并执行。
 func Test_NestedPendingOperations_Positive_SingleOp(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 
-	// Act
+	// 执行
 	err := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_TwoOps 验证不同卷上的两个操作可并行执行。
 func Test_NestedPendingOperations_Positive_TwoOps(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volume1Name := v1.UniqueVolumeName("volume1-name")
 	volume2Name := v1.UniqueVolumeName("volume2-name")
 
-	// Act
+	// 执行
 	err1 := grm.Run(volume1Name, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 	err2 := grm.Run(volume2Name, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 
-	// Assert
+	// 断言
 	if err1 != nil {
 		t.Fatalf("NestedPendingOperations %q failed. Expected: <no error> Actual: <%v>", volume1Name, err1)
 	}
@@ -79,18 +78,19 @@ func Test_NestedPendingOperations_Positive_TwoOps(t *testing.T) {
 	}
 }
 
+// Test_NestedPendingOperations_Positive_TwoSubOps 验证同一卷下不同 Pod 的两个子操作可并行执行。
 func Test_NestedPendingOperations_Positive_TwoSubOps(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1PodName := volumetypes.UniquePodName("operation1-podname")
 	operation2PodName := volumetypes.UniquePodName("operation2-podname")
 
-	// Act
+	// 执行
 	err1 := grm.Run(volumeName, operation1PodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 	err2 := grm.Run(volumeName, operation2PodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 
-	// Assert
+	// 断言
 	if err1 != nil {
 		t.Fatalf("NestedPendingOperations %q failed. Expected: <no error> Actual: <%v>", operation1PodName, err1)
 	}
@@ -100,23 +100,25 @@ func Test_NestedPendingOperations_Positive_TwoSubOps(t *testing.T) {
 	}
 }
 
+// Test_NestedPendingOperations_Positive_SingleOpWithExpBackoff 验证开启出错退避时单个操作仍可正常执行。
 func Test_NestedPendingOperations_Positive_SingleOpWithExpBackoff(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 
-	// Act
+	// 执行
 	err := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: noopFunc})
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletes 验证第一个操作结束后，同键的第二个操作可以启动。
 func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletes(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateCallbackFunc(operation1DoneCh)
@@ -125,9 +127,9 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletes(t *testin
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 	operation2 := noopFunc
-	<-operation1DoneCh // Force operation1 to complete
+	<-operation1DoneCh // 放行 operation1，使其结束
 
-	// Act
+	// 执行
 	err2 := retryWithExponentialBackOff(
 		time.Duration(initialOperationWaitTimeShort),
 		func() (bool, error) {
@@ -140,15 +142,16 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletes(t *testin
 		},
 	)
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletesWithExpBackoff 验证开启出错退避时，第一个操作结束后同键的第二个操作可以启动。
 func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletesWithExpBackoff(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateCallbackFunc(operation1DoneCh)
@@ -157,9 +160,9 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletesWithExpBac
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 	operation2 := noopFunc
-	<-operation1DoneCh // Force operation1 to complete
+	<-operation1DoneCh // 放行 operation1，使其结束
 
-	// Act
+	// 执行
 	err2 := retryWithExponentialBackOff(
 		time.Duration(initialOperationWaitTimeShort),
 		func() (bool, error) {
@@ -172,15 +175,16 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstCompletesWithExpBac
 		},
 	)
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanics 验证第一个操作 panic 后，同键的第二个操作仍可启动。
 func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanics(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1 := panicFunc
 	err1 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation1})
@@ -189,7 +193,7 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanics(t *testing.T
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := retryWithExponentialBackOff(
 		time.Duration(initialOperationWaitTimeShort),
 		func() (bool, error) {
@@ -202,15 +206,16 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanics(t *testing.T
 		},
 	)
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanicsWithExpBackoff 验证开启出错退避时，第一个操作 panic 后同键的第二个操作仍可启动。
 func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanicsWithExpBackoff(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1 := panicFunc
 	err1 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation1})
@@ -219,9 +224,9 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanicsWithExpBackof
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := retryWithExponentialBackOff(
-		time.Duration(initialOperationWaitTimeLong), // Longer duration to accommodate for backoff
+		time.Duration(initialOperationWaitTimeLong), // 退避需要时间，故放宽初始等待时长
 		func() (bool, error) {
 			err := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 			if err != nil {
@@ -232,15 +237,16 @@ func Test_NestedPendingOperations_Positive_SecondOpAfterFirstPanicsWithExpBackof
 		},
 	)
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 }
 
+// Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes 验证第一个操作未结束时，同键的第二个操作会被拒绝。
 func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -250,10 +256,10 @@ func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes(t *testi
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -262,9 +268,10 @@ func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes(t *testi
 	}
 }
 
+// Test_NestedPendingOperations_Negative_SecondThirdOpWithDifferentNames 验证不同操作名的操作不受退避影响；相同操作名在退避期内仍被拒绝。
 func Test_NestedPendingOperations_Negative_SecondThirdOpWithDifferentNames(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	op1Name := "mount_volume"
 	operation1 := errorFunc
@@ -272,8 +279,7 @@ func Test_NestedPendingOperations_Negative_SecondThirdOpWithDifferentNames(t *te
 	if err1 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
-	// Shorter than exponential backoff period, so as to trigger exponential backoff error on second
-	// operation.
+	// 等待时间短于退避周期，以便第二次操作触发退避错误。
 	operation2 := errorFunc
 	err2 := retryWithExponentialBackOff(
 		initialOperationWaitTimeShort,
@@ -290,23 +296,24 @@ func Test_NestedPendingOperations_Negative_SecondThirdOpWithDifferentNames(t *te
 		},
 	)
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Fatalf("Expected NestedPendingOperations to fail with exponential backoff for operationKey : %s and operationName : %s", volumeName, op1Name)
 	}
 
 	operation3 := noopFunc
 	op3Name := "unmount_volume"
-	// Act
+	// 执行
 	err3 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation3, OperationName: op3Name})
 	if err3 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected <no error> Actual: <%v>", err3)
 	}
 }
 
+// Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes2 验证同一卷同一 Pod 的第一个子操作未结束时，第二个子操作被拒绝。
 func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes2(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operationPodName := volumetypes.UniquePodName("operation-podname")
 	operation1DoneCh := make(chan interface{})
@@ -317,10 +324,10 @@ func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes2(t *t
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, operationPodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -329,9 +336,10 @@ func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes2(t *t
 	}
 }
 
+// Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes 验证同一卷同一 Pod 的第一个子操作未结束时，第二个子操作被拒绝。
 func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operationPodName := volumetypes.UniquePodName("operation-podname")
 	operation1DoneCh := make(chan interface{})
@@ -342,10 +350,10 @@ func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes(t *te
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, operationPodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -354,9 +362,10 @@ func Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes(t *te
 	}
 }
 
+// Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletesWithExpBackoff 验证开启出错退避时，第一个操作未结束时同键的第二个操作仍被拒绝。
 func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletesWithExpBackoff(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -366,10 +375,10 @@ func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletesWithExpBa
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -378,9 +387,10 @@ func Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletesWithExpBa
 	}
 }
 
+// Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletes 验证第二个操作被拒绝后，第一个操作结束则第三个操作可启动。
 func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletes(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -391,10 +401,10 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletes(t *testing
 	operation2 := noopFunc
 	operation3 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -402,8 +412,8 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletes(t *testing
 		t.Fatalf("NestedPendingOperations did not return alreadyExistsError, got: %v", err2)
 	}
 
-	// Act
-	operation1DoneCh <- true // Force operation1 to complete
+	// 执行
+	operation1DoneCh <- true // 放行 operation1，使其结束
 	err3 := retryWithExponentialBackOff(
 		time.Duration(initialOperationWaitTimeShort),
 		func() (bool, error) {
@@ -416,15 +426,16 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletes(t *testing
 		},
 	)
 
-	// Assert
+	// 断言
 	if err3 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err3)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletesWithExpBackoff 验证开启出错退避时，第二个操作被拒绝后第一个操作结束则第三个操作可启动。
 func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletesWithExpBackoff(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -435,10 +446,10 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletesWithExpBack
 	operation2 := noopFunc
 	operation3 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName, EmptyUniquePodName, EmptyNodeName, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Fatalf("NestedPendingOperations did not fail. Expected: <Failed to create operation with name \"%s\". An operation with that name already exists.> Actual: <no error>", volumeName)
 	}
@@ -446,8 +457,8 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletesWithExpBack
 		t.Fatalf("NestedPendingOperations did not return alreadyExistsError, got: %v", err2)
 	}
 
-	// Act
-	operation1DoneCh <- true // Force operation1 to complete
+	// 执行
+	operation1DoneCh <- true // 放行 operation1，使其结束
 	err3 := retryWithExponentialBackOff(
 		time.Duration(initialOperationWaitTimeShort),
 		func() (bool, error) {
@@ -460,54 +471,57 @@ func Test_NestedPendingOperations_Positive_ThirdOpAfterFirstCompletesWithExpBack
 		},
 	)
 
-	// Assert
+	// 断言
 	if err3 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err3)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_WaitEmpty 验证空操作集合上的 Wait() 不阻塞。
 func Test_NestedPendingOperations_Positive_WaitEmpty(t *testing.T) {
-	// Test than Wait() on empty GoRoutineMap always succeeds without blocking
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 验证空 GoRoutineMap 上的 Wait() 总能立即返回、不阻塞
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 
-	// Act
+	// 执行
 	waitDoneCh := make(chan interface{}, 1)
 	go func() {
 		grm.Wait()
 		waitDoneCh <- true
 	}()
 
-	// Assert
+	// 断言
 	err := waitChannelWithTimeout(waitDoneCh, testTimeout)
 	if err != nil {
 		t.Errorf("Error waiting for GoRoutineMap.Wait: %v", err)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_WaitEmptyWithExpBackoff 验证开启出错退避时，空操作集合上的 Wait() 不阻塞。
 func Test_NestedPendingOperations_Positive_WaitEmptyWithExpBackoff(t *testing.T) {
-	// Test than Wait() on empty GoRoutineMap always succeeds without blocking
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 验证空 GoRoutineMap 上的 Wait() 总能立即返回、不阻塞
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 
-	// Act
+	// 执行
 	waitDoneCh := make(chan interface{}, 1)
 	go func() {
 		grm.Wait()
 		waitDoneCh <- true
 	}()
 
-	// Assert
+	// 断言
 	err := waitChannelWithTimeout(waitDoneCh, testTimeout)
 	if err != nil {
 		t.Errorf("Error waiting for GoRoutineMap.Wait: %v", err)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_Wait 验证 Wait() 会阻塞到最后一个操作完成。
 func Test_NestedPendingOperations_Positive_Wait(t *testing.T) {
-	// Test that Wait() really blocks until the last operation succeeds
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 验证 Wait() 会一直阻塞到最后一个操作成功
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -516,27 +530,28 @@ func Test_NestedPendingOperations_Positive_Wait(t *testing.T) {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	waitDoneCh := make(chan interface{}, 1)
 	go func() {
 		grm.Wait()
 		waitDoneCh <- true
 	}()
 
-	// Finish the operation
+	// 结束该操作
 	operation1DoneCh <- true
 
-	// Assert
+	// 断言
 	err = waitChannelWithTimeout(waitDoneCh, testTimeout)
 	if err != nil {
 		t.Fatalf("Error waiting for GoRoutineMap.Wait: %v", err)
 	}
 }
 
+// Test_NestedPendingOperations_Positive_WaitWithExpBackoff 验证开启出错退避时，Wait() 会阻塞到最后一个操作完成。
 func Test_NestedPendingOperations_Positive_WaitWithExpBackoff(t *testing.T) {
-	// Test that Wait() really blocks until the last operation succeeds
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 验证 Wait() 会一直阻塞到最后一个操作成功
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
@@ -545,54 +560,55 @@ func Test_NestedPendingOperations_Positive_WaitWithExpBackoff(t *testing.T) {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	waitDoneCh := make(chan interface{}, 1)
 	go func() {
 		grm.Wait()
 		waitDoneCh <- true
 	}()
 
-	// Finish the operation
+	// 结束该操作
 	operation1DoneCh <- true
 
-	// Assert
+	// 断言
 	err = waitChannelWithTimeout(waitDoneCh, testTimeout)
 	if err != nil {
 		t.Fatalf("Error waiting for GoRoutineMap.Wait: %v", err)
 	}
 }
 
-/* Concurrent operations tests */
+/* 并发操作测试 */
 
-// "None" means volume, pod, and node names are all empty
-// "Volume" means volume name is set, but pod name and node name are empty
-// "Volume Pod" means volume and pod names are set, but the node name is empty
-// "Volume Node" means volume and node names are set, but the pod name is empty
+// “None”表示卷名、Pod 名和节点名都为空。
+// “Volume”表示只设置卷名，Pod 名和节点名为空。
+// “Volume Pod”表示设置卷名和 Pod 名，节点名为空。
+// “Volume Node”表示设置卷名和节点名，Pod 名为空。
 
-// The same volume, pod, and node names are used (where they are not empty).
+// 非空时，各用例使用相同的卷名、Pod 名和节点名。
 
-// Covered cases:
-// FIRST OP    | SECOND OP   | RESULT
-// None        | None        | Positive
-// None        | Volume      | Positive
-// None        | Volume Pod  | Positive
-// None        | Volume Node | Positive
-// Volume      | None        | Positive
-// Volume      | Volume      | Negative (covered in Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes above)
-// Volume      | Volume Pod  | Negative
-// Volume      | Volume Node | Negative
-// Volume Pod  | None        | Positive
-// Volume Pod  | Volume      | Negative
-// Volume Pod  | Volume Pod  | Negative (covered in Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes above)
-// Volume Node | None        | Positive
-// Volume Node | Volume      | Negative
-// Volume Node | Volume Node | Negative
+// 覆盖的用例：
+// 第一个操作 | 第二个操作 | 结果
+// None        | None        | 通过
+// None        | Volume      | 通过
+// None        | Volume Pod  | 通过
+// None        | Volume Node | 通过
+// Volume      | None        | 通过
+// Volume      | Volume      | 失败（上面的 Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes 已覆盖）
+// Volume      | Volume Pod  | 失败
+// Volume      | Volume Node | 失败
+// Volume Pod  | None        | 通过
+// Volume Pod  | Volume      | 失败
+// Volume Pod  | Volume Pod  | 失败（上面的 Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes 已覆盖）
+// Volume Node | None        | 通过
+// Volume Node | Volume      | 失败
+// Volume Node | Volume Node | 失败
 
-// These cases are not covered because they will never occur within the same
-// binary, so either result works.
+// 以下组合不会出现在同一个二进制中，故无需覆盖，哪种结果都可以。
 // Volume Pod  | Volume Node
 // Volume Node | Volume Pod
 
+// Test_NestedPendingOperations_SecondOpBeforeFirstCompletes 枚举各种键形态组合，
+// 验证第一个操作未结束时第二个操作能否创建。
 func Test_NestedPendingOperations_SecondOpBeforeFirstCompletes(t *testing.T) {
 	const (
 		keyNone = iota
@@ -603,7 +619,7 @@ func Test_NestedPendingOperations_SecondOpBeforeFirstCompletes(t *testing.T) {
 
 	type testCase struct {
 		testID     int
-		keyTypes   []int // only 2 elements are supported
+		keyTypes   []int // 只支持 2 个元素
 		expectPass bool
 	}
 
@@ -675,25 +691,23 @@ func Test_NestedPendingOperations_SecondOpBeforeFirstCompletes(t *testing.T) {
 
 }
 
+// Test_NestedPendingOperations_Positive_Issue_88355 复现 kubernetes/kubernetes issue #88355
+// 中疑似触发问题的操作时序，验证退避后的操作能正常重试并成功。
+// 详情见 https://github.com/kubernetes/kubernetes/issues/88355。
 func Test_NestedPendingOperations_Positive_Issue_88355(t *testing.T) {
-	// This test reproduces the scenario that is likely to have caused
-	// kubernetes/kubernetes issue #88355.
-	// Please refer to the issue for more context:
-	// https://github.com/kubernetes/kubernetes/issues/88355
+	// vx 表示卷名，nx 表示节点名。
 
-	// Below, vx is a volume name, and nx is a node name.
-
-	// Operation sequence:
-	// opZ(v0) starts (operates on a different volume from all other operations)
-	// op1(v1, n1) starts
-	// op2(v1, n2) starts
-	// opZ(v0) ends with success
-	// op2(v1, n2) ends with an error (exponential backoff should be triggered)
-	// op1(v1, n1) ends with success
-	// op3(v1, n2) starts (continuously retried on exponential backoff error)
-	// op3(v1, n2) ends with success
-	// op4(v1, n2) starts
-	// op4(v1, n2) ends with success
+	// 操作时序：
+	// opZ(v0) 启动（操作的是另一个卷，与其他操作无关）
+	// op1(v1, n1) 启动
+	// op2(v1, n2) 启动
+	// opZ(v0) 成功结束
+	// op2(v1, n2) 失败结束（应触发指数退避）
+	// op1(v1, n1) 成功结束
+	// op3(v1, n2) 启动（遇退避错误则不断重试）
+	// op3(v1, n2) 成功结束
+	// op4(v1, n2) 启动
+	// op4(v1, n2) 成功结束
 
 	const (
 		mainVolumeName = "main-volume"
@@ -701,15 +715,14 @@ func Test_NestedPendingOperations_Positive_Issue_88355(t *testing.T) {
 		node1          = "node1"
 		node2          = "node2"
 
-		// delay after an operation is signaled to finish to ensure it actually
-		// finishes before running the next operation.
+		// 发出结束信号后留一点延迟，确保操作真的结束后再执行下一个。
 		delay = 50 * time.Millisecond
 
-		// Replicates the default AttachDetachController reconcile period
+		// 模拟 AttachDetachController 默认的对账周期。
 		reconcilerPeriod = 100 * time.Millisecond
 	)
 
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	opZContinueCh := make(chan interface{})
 	op1ContinueCh := make(chan interface{})
 	op2ContinueCh := make(chan interface{})
@@ -719,17 +732,17 @@ func Test_NestedPendingOperations_Positive_Issue_88355(t *testing.T) {
 	operation3 := noopFunc
 	operation4 := noopFunc
 
-	errZ := grm.Run(opZVolumeName, "" /* podName */, "" /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operationZ})
+	errZ := grm.Run(opZVolumeName, "" /* podName：空 */, "" /* nodeName：空 */, volumetypes.GeneratedOperations{OperationFunc: operationZ})
 	if errZ != nil {
 		t.Fatalf("NestedPendingOperations failed for operationZ. Expected: <no error> Actual: <%v>", errZ)
 	}
 
-	err1 := grm.Run(mainVolumeName, "" /* podName */, node1, volumetypes.GeneratedOperations{OperationFunc: operation1})
+	err1 := grm.Run(mainVolumeName, "" /* podName：空 */, node1, volumetypes.GeneratedOperations{OperationFunc: operation1})
 	if err1 != nil {
 		t.Fatalf("NestedPendingOperations failed for operation1. Expected: <no error> Actual: <%v>", err1)
 	}
 
-	err2 := grm.Run(mainVolumeName, "" /* podName */, node2, volumetypes.GeneratedOperations{OperationFunc: operation2})
+	err2 := grm.Run(mainVolumeName, "" /* podName：空 */, node2, volumetypes.GeneratedOperations{OperationFunc: operation2})
 	if err2 != nil {
 		t.Fatalf("NestedPendingOperations failed for operation2. Expected: <no error> Actual: <%v>", err2)
 	}
@@ -742,7 +755,7 @@ func Test_NestedPendingOperations_Positive_Issue_88355(t *testing.T) {
 	time.Sleep(delay)
 
 	for {
-		err3 := grm.Run(mainVolumeName, "" /* podName */, node2, volumetypes.GeneratedOperations{OperationFunc: operation3})
+		err3 := grm.Run(mainVolumeName, "" /* podName：空 */, node2, volumetypes.GeneratedOperations{OperationFunc: operation3})
 		if err3 == nil {
 			break
 		} else if !exponentialbackoff.IsExponentialBackoff(err3) {
@@ -753,14 +766,13 @@ func Test_NestedPendingOperations_Positive_Issue_88355(t *testing.T) {
 
 	time.Sleep(delay)
 
-	err4 := grm.Run(mainVolumeName, "" /* podName */, node2, volumetypes.GeneratedOperations{OperationFunc: operation4})
+	err4 := grm.Run(mainVolumeName, "" /* podName：空 */, node2, volumetypes.GeneratedOperations{OperationFunc: operation4})
 	if err4 != nil {
 		t.Fatalf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err4)
 	}
 }
 
-// testConcurrentOperationsPositive passes if the two operations keyed by the
-// provided parameters are executed in parallel, and fails otherwise.
+// testConcurrentOperationsPositive 验证两个给定键的操作能并行执行，否则失败。
 func testConcurrentOperationsPositive(
 	t *testing.T,
 	volumeName1 v1.UniqueVolumeName,
@@ -770,27 +782,26 @@ func testConcurrentOperationsPositive(
 	podName2 volumetypes.UniquePodName,
 	nodeName2 types.NodeName) {
 
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
-	err1 := grm.Run(volumeName1, podName1, nodeName1 /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation1})
+	err1 := grm.Run(volumeName1, podName1, nodeName1 /* nodeName：同变量 */, volumetypes.GeneratedOperations{OperationFunc: operation1})
 	if err1 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName2, podName2, nodeName2, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 }
 
-// testConcurrentOperationsNegative passes if the creation of the second
-// operation returns an alreadyExists error, and fails otherwise.
+// testConcurrentOperationsNegative 验证第二个操作的创建返回 alreadyExists 错误，否则失败。
 func testConcurrentOperationsNegative(
 	t *testing.T,
 	volumeName1 v1.UniqueVolumeName,
@@ -800,20 +811,20 @@ func testConcurrentOperationsNegative(
 	podName2 volumetypes.UniquePodName,
 	nodeName2 types.NodeName) {
 
-	// Arrange
-	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(false /* exponentialBackOffOnError：是否出错退避 */)
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitFunc(operation1DoneCh)
-	err1 := grm.Run(volumeName1, podName1, nodeName1 /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation1})
+	err1 := grm.Run(volumeName1, podName1, nodeName1 /* nodeName：同变量 */, volumetypes.GeneratedOperations{OperationFunc: operation1})
 	if err1 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 	operation2 := noopFunc
 
-	// Act
+	// 执行
 	err2 := grm.Run(volumeName2, podName2, nodeName2, volumetypes.GeneratedOperations{OperationFunc: operation2})
 
-	// Assert
+	// 断言
 	if err2 == nil {
 		t.Errorf("NestedPendingOperations did not fail. Expected an operation to already exist")
 	}
@@ -822,8 +833,9 @@ func testConcurrentOperationsNegative(
 	}
 }
 
-/* END concurrent operations tests */
+/* 并发操作测试结束 */
 
+// generateCallbackFunc 生成操作函数：收到结束信号后返回成功上下文。
 func generateCallbackFunc(done chan<- interface{}) func() volumetypes.OperationContext {
 	return func() volumetypes.OperationContext {
 		done <- true
@@ -831,6 +843,7 @@ func generateCallbackFunc(done chan<- interface{}) func() volumetypes.OperationC
 	}
 }
 
+// generateWaitFunc 生成操作函数：阻塞等待结束信号后返回成功上下文。
 func generateWaitFunc(done <-chan interface{}) func() volumetypes.OperationContext {
 	return func() volumetypes.OperationContext {
 		<-done
@@ -838,14 +851,17 @@ func generateWaitFunc(done <-chan interface{}) func() volumetypes.OperationConte
 	}
 }
 
+// panicFunc 操作函数：直接 panic，用于测试异常恢复。
 func panicFunc() volumetypes.OperationContext {
 	panic("testing panic")
 }
 
+// errorFunc 操作函数：返回带占位错误的上下文，用于模拟操作失败。
 func errorFunc() volumetypes.OperationContext {
 	return volumetypes.NewOperationContext(fmt.Errorf("placeholder1"), fmt.Errorf("placeholder2"), false)
 }
 
+// generateWaitWithErrorFunc 生成操作函数：阻塞等待结束信号后返回带错误的上下文。
 func generateWaitWithErrorFunc(done <-chan interface{}) func() volumetypes.OperationContext {
 	return func() volumetypes.OperationContext {
 		<-done
@@ -853,10 +869,12 @@ func generateWaitWithErrorFunc(done <-chan interface{}) func() volumetypes.Opera
 	}
 }
 
+// noopFunc 空操作函数：直接返回成功上下文。
 func noopFunc() volumetypes.OperationContext {
 	return volumetypes.NewOperationContext(nil, nil, false)
 }
 
+// retryWithExponentialBackOff 按固定因子 3、最多 4 步的指数退避重复调用 fn，直到成功或耗尽步数。
 func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: initialDuration,
@@ -867,22 +885,24 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
+// waitChannelWithTimeout 在超时时间内等待通道收到值，超时则返回错误。
 func waitChannelWithTimeout(ch <-chan interface{}, timeout time.Duration) error {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
 	select {
 	case <-ch:
-		// Success!
+		// 成功
 		return nil
 	case <-timer.C:
 		return fmt.Errorf("timeout after %v", timeout)
 	}
 }
 
+// Test_NestedPendingOperations_OperationExists_PendingFirst 验证退避中的操作优先于同键其他操作：仍有挂起操作时，空 Pod 名的操作被拒绝。
 func Test_NestedPendingOperations_OperationExists_PendingFirst(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("test-volume")
 	podName1 := volumetypes.UniquePodName("pod1")
 	podName2 := volumetypes.UniquePodName("pod2")
@@ -890,33 +910,32 @@ func Test_NestedPendingOperations_OperationExists_PendingFirst(t *testing.T) {
 	podName4 := EmptyUniquePodName
 	nodeName := EmptyNodeName
 
-	// delay after an operation is signaled to finish to ensure it actually
-	// finishes before running the next operation.
+	// 发出结束信号后留一点延迟，确保操作真的结束后再执行下一个。
 	delay := 50 * time.Millisecond
 
-	// fake operation1 for pod1 failed
+	// pod1 的操作1：模拟失败
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitWithErrorFunc(operation1DoneCh)
-	err1 := grm.Run(volumeName, podName1, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation1, OperationName: "umount"})
+	err1 := grm.Run(volumeName, podName1, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation1, OperationName: "umount"})
 	if err1 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 
-	// fake operation2 for pod2 fails
+	// pod2 的操作2：模拟失败
 	operation2DoneCh := make(chan interface{})
 	operation2 := generateWaitWithErrorFunc(operation2DoneCh)
-	err2 := grm.Run(volumeName, podName2, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation2, OperationName: "umount"})
+	err2 := grm.Run(volumeName, podName2, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation2, OperationName: "umount"})
 	if err2 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 
-	// fake operation3 for pod3 pending
+	// pod3 的操作3：保持挂起不结束
 	operation3DoneCh := make(chan interface{})
 	operation3 := generateWaitFunc(operation3DoneCh)
 	defer func() {
 		close(operation3DoneCh)
 	}()
-	err3 := grm.Run(volumeName, podName3, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation3, OperationName: "umount"})
+	err3 := grm.Run(volumeName, podName3, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation3, OperationName: "umount"})
 	if err3 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err3)
 	}
@@ -925,15 +944,15 @@ func Test_NestedPendingOperations_OperationExists_PendingFirst(t *testing.T) {
 	operation2DoneCh <- true
 	time.Sleep(delay)
 
-	// fake operation4 for EmptyUniquePodName should be rejected as operation3 is still pending
+	// 操作3 仍挂起，空 Pod 名的操作4 应被拒绝
 	operation4DoneCh := make(chan interface{})
 	operation4 := generateWaitFunc(operation4DoneCh)
 	defer func() {
 		close(operation4DoneCh)
 	}()
-	err4 := grm.Run(volumeName, podName4, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation4, OperationName: "mount"})
+	err4 := grm.Run(volumeName, podName4, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation4, OperationName: "mount"})
 
-	// Assert
+	// 断言
 	if err4 == nil {
 		t.Errorf("NestedPendingOperations did not fail. Expected an operation to already exist")
 	}
@@ -942,9 +961,10 @@ func Test_NestedPendingOperations_OperationExists_PendingFirst(t *testing.T) {
 	}
 }
 
+// Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending 验证精确匹配的操作全部失败后，新的同键操作可启动并替换旧记录。
 func Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending(t *testing.T) {
-	// Arrange
-	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError */)
+	// 准备
+	grm := NewNestedPendingOperations(true /* exponentialBackOffOnError：是否出错退避 */)
 	volumeName := v1.UniqueVolumeName("test-volume")
 	podName1 := volumetypes.UniquePodName("pod1")
 	podName2 := volumetypes.UniquePodName("pod2")
@@ -952,31 +972,30 @@ func Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending(t *te
 	podName4 := EmptyUniquePodName
 	nodeName := EmptyNodeName
 
-	// delay after an operation is signaled to finish to ensure it actually
-	// finishes before running the next operation.
+	// 发出结束信号后留一点延迟，确保操作真的结束后再执行下一个。
 	delay := 50 * time.Millisecond
 	backoffDelay := 500 * time.Millisecond
 
 	// fake operation1 for pod1 fails
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitWithErrorFunc(operation1DoneCh)
-	err1 := grm.Run(volumeName, podName1, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation1, OperationName: "umount"})
+	err1 := grm.Run(volumeName, podName1, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation1, OperationName: "umount"})
 	if err1 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err1)
 	}
 
-	// fake operation2 for pod2 fails
+	// pod2 的操作2：模拟失败
 	operation2DoneCh := make(chan interface{})
 	operation2 := generateWaitWithErrorFunc(operation2DoneCh)
-	err2 := grm.Run(volumeName, podName2, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation2, OperationName: "umount"})
+	err2 := grm.Run(volumeName, podName2, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation2, OperationName: "umount"})
 	if err2 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err2)
 	}
 
-	// fake operation3 for pod3 fails
+	// pod3 的操作3：模拟失败
 	operation3DoneCh := make(chan interface{})
 	operation3 := generateWaitWithErrorFunc(operation3DoneCh)
-	err3 := grm.Run(volumeName, podName3, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation3, OperationName: "umount"})
+	err3 := grm.Run(volumeName, podName3, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation3, OperationName: "umount"})
 	if err3 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err3)
 	}
@@ -986,17 +1005,17 @@ func Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending(t *te
 	operation3DoneCh <- true
 	time.Sleep(delay)
 
-	// fake operation4 with EmptyUniquePodName fails
+	// 空 Pod 名的操作4：模拟失败
 	operation4DoneCh := make(chan interface{})
 	operation4 := generateWaitWithErrorFunc(operation4DoneCh)
-	err4 := grm.Run(volumeName, podName4, nodeName /* nodeName */, volumetypes.GeneratedOperations{OperationFunc: operation4, OperationName: "mount"})
+	err4 := grm.Run(volumeName, podName4, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation4, OperationName: "mount"})
 	if err4 != nil {
 		t.Errorf("NestedPendingOperations failed. Expected: <no error> Actual: <%v>", err4)
 	}
 
 	operation4DoneCh <- true
 
-	// operation for pod2 retry
+	// 退避结束后重试 pod2 的操作
 	time.Sleep(backoffDelay)
 	operation5 := noopFunc
 	err5 := grm.Run(volumeName, podName2, nodeName, volumetypes.GeneratedOperations{OperationFunc: operation5, OperationName: "umount"})
@@ -1005,8 +1024,8 @@ func Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending(t *te
 	}
 	time.Sleep(delay)
 
-	// Assert
-	// Operation5 will override operation2, since we successfully finished unmount operation on pod2, it should be removed from operations array
+	// 断言
+	// 操作5 覆盖了操作2；pod2 的卸载已成功，该记录应从 operations 中移除
 	grm.(*nestedPendingOperations).lock.Lock()
 	defer grm.(*nestedPendingOperations).lock.Unlock()
 	for _, op := range grm.(*nestedPendingOperations).operations {

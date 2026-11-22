@@ -47,32 +47,28 @@ import (
 )
 
 const (
+	// readyFileName 是标记卷已就绪的文件名。
 	readyFileName = "ready"
 
-	// ControllerManagedAttachAnnotation is the key of the annotation on Node
-	// objects that indicates attach/detach operations for the node should be
-	// managed by the attach/detach controller
+	// ControllerManagedAttachAnnotation 是 Node 对象上的注解键，
+	// 表示该节点的挂载/卸载操作应由 attach/detach 控制器管理。
 	ControllerManagedAttachAnnotation string = "volumes.kubernetes.io/controller-managed-attach-detach"
 
-	// MountsInGlobalPDPath is name of the directory appended to a volume plugin
-	// name to create the place for volume mounts in the global PD path.
+	// MountsInGlobalPDPath 是附加在卷插件名后的目录名，
+	// 用于在全局 PD 路径下存放卷挂载点。
 	MountsInGlobalPDPath = "mounts"
 
-	// VolumeGidAnnotationKey is the of the annotation on the PersistentVolume
-	// object that specifies a supplemental GID.
+	// VolumeGidAnnotationKey 是 PersistentVolume 对象上指定附加 GID 的注解键。
 	VolumeGidAnnotationKey = "pv.beta.kubernetes.io/gid"
 
-	// VolumeDynamicallyCreatedByKey is the key of the annotation on PersistentVolume
-	// object created dynamically
+	// VolumeDynamicallyCreatedByKey 是动态创建的 PersistentVolume 对象上的注解键。
 	VolumeDynamicallyCreatedByKey = "kubernetes.io/createdby"
 
-	// kubernetesPluginPathPrefix is the prefix of kubernetes plugin mount paths.
+	// kubernetesPluginPathPrefix 是 Kubernetes 插件挂载路径的前缀。
 	kubernetesPluginPathPrefix = "/plugins/kubernetes.io/"
 )
 
-// IsReady checks for the existence of a regular file
-// called 'ready' in the given directory and returns
-// true if that file exists.
+// IsReady 检查给定目录下是否存在名为 'ready' 的普通文件，存在则返回 true。
 func IsReady(dir string) bool {
 	readyFile := filepath.Join(dir, readyFileName)
 	s, err := os.Stat(readyFile)
@@ -80,6 +76,7 @@ func IsReady(dir string) bool {
 		return false
 	}
 
+	// 只把普通文件当作就绪标记，避免同名目录被误判。
 	if !s.Mode().IsRegular() {
 		klog.Errorf("ready-file is not a file: %s", readyFile)
 		return false
@@ -88,10 +85,9 @@ func IsReady(dir string) bool {
 	return true
 }
 
-// SetReady creates a file called 'ready' in the given
-// directory.  It logs an error if the file cannot be
-// created.
+// SetReady 在给定目录下创建名为 'ready' 的文件，失败时记录错误日志。
 func SetReady(dir string) {
+	// 先建目录：调用方未必已创建它，否则文件创建会失败。
 	if err := os.MkdirAll(dir, 0750); err != nil && !os.IsExist(err) {
 		klog.Errorf("Can't mkdir %s: %v", dir, err)
 		return
@@ -106,7 +102,7 @@ func SetReady(dir string) {
 	file.Close()
 }
 
-// GetSecretForPV locates secret by name and namespace, verifies the secret type, and returns secret map
+// GetSecretForPV 按名称和命名空间查找 Secret，校验其类型后返回数据映射。
 func GetSecretForPV(secretNamespace, secretName, volumePluginName string, kubeClient clientset.Interface) (map[string]string, error) {
 	secret := make(map[string]string)
 	if kubeClient == nil {
@@ -125,7 +121,7 @@ func GetSecretForPV(secretNamespace, secretName, volumePluginName string, kubeCl
 	return secret, nil
 }
 
-// LoadPodFromFile will read, decode, and return a Pod from a file.
+// LoadPodFromFile 从文件读取并解码，返回一个 Pod。
 func LoadPodFromFile(filePath string) (*v1.Pod, error) {
 	if filePath == "" {
 		return nil, fmt.Errorf("file path not specified")
@@ -146,10 +142,8 @@ func LoadPodFromFile(filePath string) (*v1.Pod, error) {
 	return pod, nil
 }
 
-// CalculateTimeoutForVolume calculates time for a Recycler pod to complete a
-// recycle operation. The calculation and return value is either the
-// minimumTimeout or the timeoutIncrement per Gi of storage size, whichever is
-// greater.
+// CalculateTimeoutForVolume 计算 Recycler Pod 完成回收操作的超时时间。
+// 取 minimumTimeout 与按存储容量（每 Gi）计算的 timeoutIncrement 中的较大者。
 func CalculateTimeoutForVolume(minimumTimeout, timeoutIncrement int, pv *v1.PersistentVolume) int64 {
 	giQty := resource.MustParse("1Gi")
 	pvQty := pv.Spec.Capacity[v1.ResourceStorage]
@@ -162,7 +156,7 @@ func CalculateTimeoutForVolume(minimumTimeout, timeoutIncrement int, pv *v1.Pers
 	return timeout
 }
 
-// GetPath checks if the path from the mounter is empty.
+// GetPath 检查 mounter 返回的路径是否为空，为空则返回错误。
 func GetPath(mounter volume.Mounter) (string, error) {
 	path := mounter.GetPath()
 	if path == "" {
@@ -171,12 +165,11 @@ func GetPath(mounter volume.Mounter) (string, error) {
 	return path, nil
 }
 
-// UnmountViaEmptyDir delegates the tear down operation for secret, configmap, git_repo and downwardapi
-// to empty_dir
+// UnmountViaEmptyDir 将 secret、configmap、git_repo 和 downwardapi 的卸载操作委托给 empty_dir。
 func UnmountViaEmptyDir(dir string, host volume.VolumeHost, volName string, volSpec volume.Spec, podUID utypes.UID) error {
 	klog.V(3).Infof("Tearing down volume %v for pod %v at %v", volName, podUID, dir)
 
-	// Wrap EmptyDir, let it do the teardown.
+	// 包装成 EmptyDir，由它完成实际卸载。
 	wrapped, err := host.NewWrapperUnmounter(volName, volSpec, podUID)
 	if err != nil {
 		return err
@@ -184,12 +177,12 @@ func UnmountViaEmptyDir(dir string, host volume.VolumeHost, volName string, volS
 	return wrapped.TearDownAt(dir)
 }
 
-// MountOptionFromSpec extracts and joins mount options from volume spec with supplied options
+// MountOptionFromSpec 从卷规格中提取挂载选项，并与传入的选项合并。
 func MountOptionFromSpec(spec *volume.Spec, options ...string) []string {
 	pv := spec.PersistentVolume
 
 	if pv != nil {
-		// Use beta annotation first
+		// 优先使用 beta 注解，兼容旧版行为。
 		if mo, ok := pv.Annotations[v1.MountOptionAnnotation]; ok {
 			moList := strings.Split(mo, ",")
 			return JoinMountOptions(moList, options)
@@ -203,10 +196,11 @@ func MountOptionFromSpec(spec *volume.Spec, options ...string) []string {
 	return options
 }
 
-// JoinMountOptions joins mount options eliminating duplicates
+// JoinMountOptions 合并挂载选项并去重。
 func JoinMountOptions(userOptions []string, systemOptions []string) []string {
 	allMountOptions := sets.New[string]()
 
+	// 用集合去重，避免同一选项被重复传给挂载命令。
 	for _, mountOption := range userOptions {
 		if len(mountOption) > 0 {
 			allMountOptions.Insert(mountOption)
@@ -219,12 +213,12 @@ func JoinMountOptions(userOptions []string, systemOptions []string) []string {
 	return sets.List(allMountOptions)
 }
 
-// ContainsAccessMode returns whether the requested mode is contained by modes
+// ContainsAccessMode 判断 modes 中是否包含指定的访问模式。
 func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.PersistentVolumeAccessMode) bool {
 	return slices.Contains(modes, mode)
 }
 
-// ContainsAllAccessModes returns whether all of the requested modes are contained by modes
+// ContainsAllAccessModes 判断 modes 是否包含所有指定的访问模式。
 func ContainsAllAccessModes(indexedModes []v1.PersistentVolumeAccessMode, requestedModes []v1.PersistentVolumeAccessMode) bool {
 	for _, mode := range requestedModes {
 		if !ContainsAccessMode(indexedModes, mode) {
@@ -234,7 +228,7 @@ func ContainsAllAccessModes(indexedModes []v1.PersistentVolumeAccessMode, reques
 	return true
 }
 
-// GetWindowsPath get a windows path
+// GetWindowsPath 将路径转换为 Windows 风格路径。
 func GetWindowsPath(path string) string {
 	windowsPath := strings.Replace(path, "/", "\\", -1)
 	if strings.HasPrefix(windowsPath, "\\") {
@@ -243,35 +237,30 @@ func GetWindowsPath(path string) string {
 	return windowsPath
 }
 
-// GetUniquePodName returns a unique identifier to reference a pod by
+// GetUniquePodName 返回用于唯一标识 Pod 的标识符。
 func GetUniquePodName(pod *v1.Pod) types.UniquePodName {
 	return types.UniquePodName(pod.UID)
 }
 
-// GetUniqueVolumeName returns a unique name representing the volume/plugin.
-// Caller should ensure that volumeName is a name/ID uniquely identifying the
-// actual backing device, directory, path, etc. for a particular volume.
-// The returned name can be used to uniquely reference the volume, for example,
-// to prevent operations (attach/detach or mount/unmount) from being triggered
-// on the same volume.
+// GetUniqueVolumeName 返回代表卷/插件的唯一名称。
+// 调用方需保证 volumeName 能唯一标识该卷背后的设备、目录或路径等。
+// 返回的名称可用于唯一引用该卷，例如避免对同一卷重复触发
+// 挂载/卸载或 attach/detach 操作。
 func GetUniqueVolumeName(pluginName, volumeName string) v1.UniqueVolumeName {
 	return v1.UniqueVolumeName(fmt.Sprintf("%s/%s", pluginName, volumeName))
 }
 
-// GetUniqueVolumeNameFromSpecWithPod returns a unique volume name with pod
-// name included. This is useful to generate different names for different pods
-// on same volume.
+// GetUniqueVolumeNameFromSpecWithPod 返回包含 Pod 名的唯一卷名，
+// 便于为共享同一卷的不同 Pod 生成不同的名称。
 func GetUniqueVolumeNameFromSpecWithPod(
 	podName types.UniquePodName, volumePlugin volume.VolumePlugin, volumeSpec *volume.Spec) v1.UniqueVolumeName {
 	return v1.UniqueVolumeName(
 		fmt.Sprintf("%s/%v-%s", volumePlugin.GetPluginName(), podName, volumeSpec.Name()))
 }
 
-// GetUniqueVolumeNameFromSpec uses the given VolumePlugin to generate a unique
-// name representing the volume defined in the specified volume spec.
-// This returned name can be used to uniquely reference the actual backing
-// device, directory, path, etc. referenced by the given volumeSpec.
-// If the given plugin does not support the volume spec, this returns an error.
+// GetUniqueVolumeNameFromSpec 使用给定 VolumePlugin 为卷规格生成唯一名称。
+// 该名称可唯一引用卷规格所指向的实际设备、目录或路径等。
+// 若插件不支持该卷规格，则返回错误。
 func GetUniqueVolumeNameFromSpec(
 	volumePlugin volume.VolumePlugin,
 	volumeSpec *volume.Spec) (v1.UniqueVolumeName, error) {
@@ -295,16 +284,15 @@ func GetUniqueVolumeNameFromSpec(
 		nil
 }
 
-// IsPodTerminated checks if pod is terminated
+// IsPodTerminated 判断 Pod 是否已终止。
 func IsPodTerminated(pod *v1.Pod, podStatus v1.PodStatus) bool {
-	// TODO: the guarantees provided by kubelet status are not sufficient to guarantee it's safe to ignore a deleted pod,
-	// even if everything is notRunning (kubelet does not guarantee that when pod status is waiting that it isn't trying
-	// to start a container).
+	// TODO: kubelet 状态的保证不足以确信可以忽略已删除的 Pod，
+	// 即使所有容器都处于 notRunning（kubelet 不保证 waiting 状态时没有在尝试
+	// 启动容器）。
 	return podStatus.Phase == v1.PodFailed || podStatus.Phase == v1.PodSucceeded || (pod.DeletionTimestamp != nil && notRunning(podStatus.InitContainerStatuses) && notRunning(podStatus.ContainerStatuses) && notRunning(podStatus.EphemeralContainerStatuses))
 }
 
-// notRunning returns true if every status is terminated or waiting, or the status list
-// is empty.
+// notRunning 在所有状态均为 terminated 或 waiting，或状态列表为空时返回 true。
 func notRunning(statuses []v1.ContainerStatus) bool {
 	for _, status := range statuses {
 		if status.State.Terminated == nil && status.State.Waiting == nil {
@@ -314,12 +302,11 @@ func notRunning(statuses []v1.ContainerStatus) bool {
 	return true
 }
 
-// SplitUniqueName splits the unique name to plugin name and volume name strings. It expects the uniqueName to follow
-// the format plugin_name/volume_name and the plugin name must be namespaced as described by the plugin interface,
-// i.e. namespace/plugin containing exactly one '/'. This means the unique name will always be in the form of
-// plugin_namespace/plugin/volume_name, see k8s.io/kubernetes/pkg/volume/plugins.go VolumePlugin interface
-// description and pkg/volume/util/volumehelper/volumehelper.go GetUniqueVolumeNameFromSpec that constructs
-// the unique volume names.
+// SplitUniqueName 将唯一名称拆分为插件名和卷名。
+// uniqueName 需符合 plugin_name/volume_name 格式，且插件名带命名空间，即 namespace/plugin，
+// 其中恰好包含一个 '/'。因此唯一名称形如 plugin_namespace/plugin/volume_name；
+// 参见 k8s.io/kubernetes/pkg/volume/plugins.go 中 VolumePlugin 接口说明，
+// 以及 pkg/volume/util/volumehelper/volumehelper.go 中构造唯一卷名的 GetUniqueVolumeNameFromSpec。
 func SplitUniqueName(uniqueName v1.UniqueVolumeName) (string, string, error) {
 	components := strings.SplitN(string(uniqueName), "/", 3)
 	if len(components) != 3 {
@@ -329,9 +316,8 @@ func SplitUniqueName(uniqueName v1.UniqueVolumeName) (string, string, error) {
 	return pluginName, components[2], nil
 }
 
-// GetVolumeMode retrieves VolumeMode from pv.
-// If the volume doesn't have PersistentVolume, it's an inline volume,
-// should return volumeMode as filesystem to keep existing behavior.
+// GetVolumeMode 从 PV 中获取 VolumeMode。
+// 内联卷没有 PersistentVolume，为保持既有行为返回 filesystem。
 func GetVolumeMode(volumeSpec *volume.Spec) (v1.PersistentVolumeMode, error) {
 	if volumeSpec == nil || volumeSpec.PersistentVolume == nil {
 		return v1.PersistentVolumeFilesystem, nil
@@ -342,13 +328,12 @@ func GetVolumeMode(volumeSpec *volume.Spec) (v1.PersistentVolumeMode, error) {
 	return "", fmt.Errorf("cannot get volumeMode for volume: %v", volumeSpec.Name())
 }
 
-// GetPersistentVolumeClaimQualifiedName returns a qualified name for pvc.
+// GetPersistentVolumeClaimQualifiedName 返回 PVC 的限定名（命名空间/名称）。
 func GetPersistentVolumeClaimQualifiedName(claim *v1.PersistentVolumeClaim) string {
 	return utilstrings.JoinQualifiedName(claim.GetNamespace(), claim.GetName())
 }
 
-// CheckVolumeModeFilesystem checks VolumeMode.
-// If the mode is Filesystem, return true otherwise return false.
+// CheckVolumeModeFilesystem 检查 VolumeMode 是否为 Filesystem。
 func CheckVolumeModeFilesystem(volumeSpec *volume.Spec) (bool, error) {
 	volumeMode, err := GetVolumeMode(volumeSpec)
 	if err != nil {
@@ -360,28 +345,26 @@ func CheckVolumeModeFilesystem(volumeSpec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
-// CheckPersistentVolumeClaimModeBlock checks VolumeMode.
-// If the mode is Block, return true otherwise return false.
+// CheckPersistentVolumeClaimModeBlock 检查 PVC 的 VolumeMode 是否为 Block。
 func CheckPersistentVolumeClaimModeBlock(pvc *v1.PersistentVolumeClaim) bool {
 	return pvc.Spec.VolumeMode != nil && *pvc.Spec.VolumeMode == v1.PersistentVolumeBlock
 }
 
-// IsWindowsUNCPath checks if path is prefixed with \\
-// This can be used to skip any processing of paths
-// that point to SMB shares, local named pipes and local UNC path
+// IsWindowsUNCPath 判断路径是否以 \\ 开头。
+// 可用于跳过指向 SMB 共享、本地命名管道和本地 UNC 路径的处理。
 func IsWindowsUNCPath(goos, path string) bool {
 	if goos != "windows" {
 		return false
 	}
-	// Check for UNC prefix \\
+	// 检查 UNC 前缀 \\
 	if strings.HasPrefix(path, `\\`) {
 		return true
 	}
 	return false
 }
 
-// IsWindowsLocalPath checks if path is a local path
-// prefixed with "/" or "\" like "/foo/bar" or "\foo\bar"
+// IsWindowsLocalPath 判断路径是否为以 "/" 或 "\" 开头的本地路径，
+// 例如 "/foo/bar" 或 "\foo\bar"。
 func IsWindowsLocalPath(goos, path string) bool {
 	if goos != "windows" {
 		return false
@@ -398,27 +381,26 @@ func IsWindowsLocalPath(goos, path string) bool {
 	return true
 }
 
-// MakeAbsolutePath convert path to absolute path according to GOOS
+// MakeAbsolutePath 根据 GOOS 将路径转换为绝对路径。
 func MakeAbsolutePath(goos, path string) string {
 	if goos != "windows" {
 		return filepath.Clean("/" + path)
 	}
-	// These are all for windows
-	// If there is a colon, give up.
+	// 以下均针对 Windows。
+	// 含冒号说明已带盘符，直接返回。
 	if strings.Contains(path, ":") {
 		return path
 	}
-	// If there is a slash, but no drive, add 'c:'
+	// 以斜杠开头但没有盘符时补上 'c:'。
 	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\") {
 		return "c:" + path
 	}
-	// Otherwise, add 'c:\'
+	// 其他情况补上 'c:\'。
 	return "c:\\" + path
 }
 
-// MapBlockVolume is a utility function to provide a common way of mapping
-// block device path for a specified volume and pod.  This function should be
-// called by volume plugins that implements volume.BlockVolumeMapper.Map() method.
+// MapBlockVolume 为指定卷和 Pod 提供映射块设备路径的通用实现。
+// 实现了 volume.BlockVolumeMapper.Map() 方法的插件应调用此函数。
 func MapBlockVolume(
 	blkUtil volumepathhandler.BlockVolumePathHandler,
 	devicePath,
@@ -427,24 +409,23 @@ func MapBlockVolume(
 	volumeMapName string,
 	podUID utypes.UID,
 ) error {
-	// map devicePath to global node path as bind mount
-	mapErr := blkUtil.MapDevice(devicePath, globalMapPath, string(podUID), true /* bindMount */)
+	// 以绑定挂载方式将设备映射到节点全局路径。
+	mapErr := blkUtil.MapDevice(devicePath, globalMapPath, string(podUID), true /* 绑定挂载 */)
 	if mapErr != nil {
 		return fmt.Errorf("blkUtil.MapDevice failed. devicePath: %s, globalMapPath:%s, podUID: %s, bindMount: %v: %v",
 			devicePath, globalMapPath, string(podUID), true, mapErr)
 	}
 
-	// map devicePath to pod volume path
-	mapErr = blkUtil.MapDevice(devicePath, podVolumeMapPath, volumeMapName, false /* bindMount */)
+	// 将设备映射到 Pod 的卷路径。
+	mapErr = blkUtil.MapDevice(devicePath, podVolumeMapPath, volumeMapName, false /* 非绑定挂载 */)
 	if mapErr != nil {
 		return fmt.Errorf("blkUtil.MapDevice failed. devicePath: %s, podVolumeMapPath:%s, volumeMapName: %s, bindMount: %v: %v",
 			devicePath, podVolumeMapPath, volumeMapName, false, mapErr)
 	}
 
-	// Take file descriptor lock to keep a block device opened. Otherwise, there is a case
-	// that the block device is silently removed and attached another device with the same name.
-	// Container runtime can't handle this problem. To avoid unexpected condition fd lock
-	// for the block device is required.
+	// 持有文件描述符锁以保持块设备打开，否则设备可能被静默移除，
+	// 再挂上同名的另一设备，容器运行时无法察觉这种情况。
+	// 为避免意外，必须对块设备加锁。
 	_, mapErr = blkUtil.AttachFileDevice(filepath.Join(globalMapPath, string(podUID)))
 	if mapErr != nil {
 		return fmt.Errorf("blkUtil.AttachFileDevice failed. globalMapPath:%s, podUID: %s: %v",
@@ -454,9 +435,8 @@ func MapBlockVolume(
 	return nil
 }
 
-// UnmapBlockVolume is a utility function to provide a common way of unmapping
-// block device path for a specified volume and pod.  This function should be
-// called by volume plugins that implements volume.BlockVolumeMapper.Map() method.
+// UnmapBlockVolume 为指定卷和 Pod 提供解除块设备映射的通用实现。
+// 实现了 volume.BlockVolumeMapper.Map() 方法的插件应调用此函数。
 func UnmapBlockVolume(
 	blkUtil volumepathhandler.BlockVolumePathHandler,
 	globalUnmapPath,
@@ -464,22 +444,22 @@ func UnmapBlockVolume(
 	volumeMapName string,
 	podUID utypes.UID,
 ) error {
-	// Release file descriptor lock.
+	// 释放文件描述符锁。
 	err := blkUtil.DetachFileDevice(filepath.Join(globalUnmapPath, string(podUID)))
 	if err != nil {
 		return fmt.Errorf("blkUtil.DetachFileDevice failed. globalUnmapPath:%s, podUID: %s: %v",
 			globalUnmapPath, string(podUID), err)
 	}
 
-	// unmap devicePath from pod volume path
-	unmapDeviceErr := blkUtil.UnmapDevice(podDeviceUnmapPath, volumeMapName, false /* bindMount */)
+	// 解除 Pod 卷路径上的设备映射。
+	unmapDeviceErr := blkUtil.UnmapDevice(podDeviceUnmapPath, volumeMapName, false /* 非绑定挂载 */)
 	if unmapDeviceErr != nil {
 		return fmt.Errorf("blkUtil.DetachFileDevice failed. podDeviceUnmapPath:%s, volumeMapName: %s, bindMount: %v: %v",
 			podDeviceUnmapPath, volumeMapName, false, unmapDeviceErr)
 	}
 
-	// unmap devicePath from global node path
-	unmapDeviceErr = blkUtil.UnmapDevice(globalUnmapPath, string(podUID), true /* bindMount */)
+	// 解除节点全局路径上的设备映射。
+	unmapDeviceErr = blkUtil.UnmapDevice(globalUnmapPath, string(podUID), true /* 绑定挂载 */)
 	if unmapDeviceErr != nil {
 		return fmt.Errorf("blkUtil.DetachFileDevice failed. globalUnmapPath:%s, podUID: %s, bindMount: %v: %v",
 			globalUnmapPath, string(podUID), true, unmapDeviceErr)
@@ -487,19 +467,16 @@ func UnmapBlockVolume(
 	return nil
 }
 
-// IsLocalEphemeralVolume determines whether the argument is a local ephemeral
-// volume vs. some other type
-// Local means the volume is using storage from the local disk that is managed by kubelet.
-// Ephemeral means the lifecycle of the volume is the same as the Pod.
+// IsLocalEphemeralVolume 判断参数是否为本地临时卷。
+// 本地指卷使用 kubelet 管理的本地磁盘存储；临时指卷的生命周期与 Pod 相同。
 func IsLocalEphemeralVolume(volume v1.Volume) bool {
 	return volume.GitRepo != nil ||
 		(volume.EmptyDir != nil && volume.EmptyDir.Medium == v1.StorageMediumDefault) ||
 		volume.ConfigMap != nil
 }
 
-// GetPodVolumeNames returns names of volumes that are used in a pod,
-// either as filesystem mount or raw block device.
-// To save another sweep through containers, SELinux options are optionally collected too.
+// GetPodVolumeNames 返回 Pod 使用的卷名，包括文件系统挂载和裸块设备。
+// 为避免再次遍历容器，可选地一并收集 SELinux 选项。
 func GetPodVolumeNames(pod *v1.Pod, collectSELinuxOptions bool) (mounts sets.Set[string], devices sets.Set[string], seLinuxContainerContexts map[string][]*v1.SELinuxOptions) {
 	mounts = sets.New[string]()
 	devices = sets.New[string]()
@@ -532,14 +509,12 @@ func GetPodVolumeNames(pod *v1.Pod, collectSELinuxOptions bool) (mounts sets.Set
 	return
 }
 
-// FsUserFrom returns FsUser of pod, which is determined by the runAsUser
-// attributes.
+// FsUserFrom 返回 Pod 的 FsUser，由各容器的 runAsUser 属性决定。
 func FsUserFrom(pod *v1.Pod) *int64 {
 	var fsUser *int64
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(), func(container *v1.Container, containerType podutil.ContainerType) bool {
 		runAsUser, ok := securitycontext.DetermineEffectiveRunAsUser(pod, container)
-		// One container doesn't specify user or there are more than one
-		// non-root UIDs.
+		// 有容器未指定用户，或存在多个不同的非 root UID 时无法确定。
 		if !ok || (fsUser != nil && *fsUser != *runAsUser) {
 			fsUser = nil
 			return false
@@ -552,29 +527,25 @@ func FsUserFrom(pod *v1.Pod) *int64 {
 	return fsUser
 }
 
-// HasMountRefs checks if the given mountPath has mountRefs.
-// TODO: this is a workaround for the unmount device issue caused by gci mounter.
-// In GCI cluster, if gci mounter is used for mounting, the container started by mounter
-// script will cause additional mounts created in the container. Since these mounts are
-// irrelevant to the original mounts, they should be not considered when checking the
-// mount references. The current solution is to filter out those mount paths that contain
-// the k8s plugin suffix of original mount path.
+// HasMountRefs 判断给定的 mountPath 是否存在挂载引用。
+// TODO: 这是针对 gci mounter 导致的设备卸载问题的临时绕过方案。
+// 在 GCI 集群中，若使用 gci mounter 挂载，mounter 脚本启动的容器会产生额外挂载；
+// 这些挂载与原始挂载无关，检查挂载引用时应予忽略。
+// 当前做法是过滤掉包含原始挂载路径中 k8s 插件后缀的那些路径。
 func HasMountRefs(mountPath string, mountRefs []string) bool {
-	// A mountPath typically is like
+	// mountPath 通常形如
 	//   /var/lib/kubelet/plugins/kubernetes.io/some-plugin/mounts/volume-XXXX
-	// Mount refs can look like
+	// 挂载引用可能形如
 	//   /home/somewhere/var/lib/kubelet/plugins/kubernetes.io/some-plugin/...
-	// but if /var/lib/kubelet is mounted to a different device a ref might be like
+	// 若 /var/lib/kubelet 挂在其他设备上，引用也可能形如
 	//   /mnt/some-other-place/kubelet/plugins/kubernetes.io/some-plugin/...
-	// Neither of the above should be counted as a mount ref as those are handled
-	// by the kubelet. What we're concerned about is a path like
+	// 这两种都由 kubelet 处理，不应算作挂载引用。我们关心的是类似
 	//   /data/local/some/manual/mount
-	// As unmounting could interrupt usage from that mountpoint.
+	// 的路径，因为卸载它可能中断该挂载点上的使用。
 	//
-	// So instead of looking for the entire /var/lib/... path, the plugins/kubernetes.io/
-	// suffix is trimmed off and searched for.
+	// 因此不查找完整的 /var/lib/... 路径，而是截取 plugins/kubernetes.io/ 之后的部分来匹配。
 	//
-	// If there isn't a /plugins/... path, the whole mountPath is used instead.
+	// 若路径中没有 /plugins/...，则使用完整的 mountPath。
 	pathToFind := mountPath
 	if i := strings.Index(mountPath, kubernetesPluginPathPrefix); i > -1 {
 		pathToFind = mountPath[i:]
@@ -587,35 +558,34 @@ func HasMountRefs(mountPath string, mountRefs []string) bool {
 	return false
 }
 
-// IsMultiAttachAllowed checks if attaching this volume to multiple nodes is definitely not allowed/possible.
-// In its current form, this function can only reliably say for which volumes it's definitely forbidden. If it returns
-// false, it is not guaranteed that multi-attach is actually supported by the volume type and we must rely on the
-// attacher to fail fast in such cases.
-// Please see https://github.com/kubernetes/kubernetes/issues/40669 and https://github.com/kubernetes/kubernetes/pull/40148#discussion_r98055047
+// IsMultiAttachAllowed 判断该卷是否明确不允许/不可能挂载到多个节点。
+// 当前实现只能可靠判断哪些卷确定被禁止多挂载；返回 false 并不代表该卷类型支持多挂载，
+// 仍需依赖 attacher 在这种情况下快速失败。
+// 参见 https://github.com/kubernetes/kubernetes/issues/40669 和 https://github.com/kubernetes/kubernetes/pull/40148#discussion_r98055047
 func IsMultiAttachAllowed(volumeSpec *volume.Spec) bool {
 	if volumeSpec == nil {
-		// we don't know if it's supported or not and let the attacher fail later in cases it's not supported
+		// 无法确定是否支持，若不支持就让 attacher 后续自行失败。
 		return true
 	}
 
 	if volumeSpec.Volume != nil {
-		// Check for volume types which are known to fail slow or cause trouble when trying to multi-attach
+		// 排查已知在多挂载时失败缓慢或易出问题的卷类型。
 		if volumeSpec.Volume.AzureDisk != nil ||
 			volumeSpec.Volume.Cinder != nil {
 			return false
 		}
 	}
 
-	// Only if this volume is a persistent volume, we have reliable information on whether it's allowed or not to
-	// multi-attach. We trust in the individual volume implementations to not allow unsupported access modes
+	// 只有持久卷才有可靠信息判断是否允许多挂载；
+	// 其余情况信任各卷实现会拒绝不支持的访问模式。
 	if volumeSpec.PersistentVolume != nil {
-		// Check for persistent volume types which do not fail when trying to multi-attach
+		// 排查多挂载时不会失败的持久卷类型。
 		if len(volumeSpec.PersistentVolume.Spec.AccessModes) == 0 {
-			// No access mode specified so we don't know for sure. Let the attacher fail if needed
+			// 未指定访问模式则无法确定，必要时让 attacher 失败。
 			return true
 		}
 
-		// check if this volume is allowed to be attached to multiple PODs/nodes, if yes, return false
+		// 检查该卷是否允许挂载到多个 Pod/节点，若允许则返回 false。
 		for _, accessMode := range volumeSpec.PersistentVolume.Spec.AccessModes {
 			if accessMode == v1.ReadWriteMany || accessMode == v1.ReadOnlyMany {
 				return true
@@ -624,11 +594,11 @@ func IsMultiAttachAllowed(volumeSpec *volume.Spec) bool {
 		return false
 	}
 
-	// we don't know if it's supported or not and let the attacher fail later in cases it's not supported
+	// 无法确定是否支持，若不支持就让 attacher 后续自行失败。
 	return true
 }
 
-// IsAttachableVolume checks if the given volumeSpec is an attachable volume or not
+// IsAttachableVolume 判断给定的卷规格是否为可挂载卷。
 func IsAttachableVolume(volumeSpec *volume.Spec, volumePluginMgr *volume.VolumePluginMgr) bool {
 	attachableVolumePlugin, _ := volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
 	if attachableVolumePlugin != nil {
@@ -641,7 +611,7 @@ func IsAttachableVolume(volumeSpec *volume.Spec, volumePluginMgr *volume.VolumeP
 	return false
 }
 
-// IsDeviceMountableVolume checks if the given volumeSpec is an device mountable volume or not
+// IsDeviceMountableVolume 判断给定的卷规格是否支持设备级挂载。
 func IsDeviceMountableVolume(volumeSpec *volume.Spec, volumePluginMgr *volume.VolumePluginMgr) bool {
 	deviceMountableVolumePlugin, _ := volumePluginMgr.FindDeviceMountablePluginBySpec(volumeSpec)
 	if deviceMountableVolumePlugin != nil {
@@ -654,12 +624,12 @@ func IsDeviceMountableVolume(volumeSpec *volume.Spec, volumePluginMgr *volume.Vo
 	return false
 }
 
-// GetReliableMountRefs calls mounter.GetMountRefs and retries on IsInconsistentReadError.
-// To be used in volume reconstruction of volume plugins that don't have any protection
-// against mounting a single volume on multiple nodes (such as attach/detach).
+// GetReliableMountRefs 调用 mounter.GetMountRefs，并在遇到 IsInconsistentReadError 时重试。
+// 适用于没有防止同一卷被挂到多节点机制（如 attach/detach）的插件的卷重建场景。
 func GetReliableMountRefs(mounter mount.Interface, mountPath string) ([]string, error) {
 	var paths []string
 	var lastErr error
+	// 读取挂载引用可能命中不一致快照，短间隔重试直到结果稳定。
 	err := wait.PollImmediate(10*time.Millisecond, time.Minute, func() (bool, error) {
 		var err error
 		paths, err = mounter.GetMountRefs(mountPath)
@@ -678,6 +648,7 @@ func GetReliableMountRefs(mounter mount.Interface, mountPath string) ([]string, 
 	return paths, err
 }
 
+// VolumeHealthConditionSetsEqual 判断两组卷健康条件是否等价（忽略顺序，只比较状态和原因）。
 func VolumeHealthConditionSetsEqual(a, b []v1.VolumeHealthCondition) bool {
 	type key struct {
 		status v1.VolumeHealthStatusType
@@ -690,6 +661,7 @@ func VolumeHealthConditionSetsEqual(a, b []v1.VolumeHealthCondition) bool {
 		}
 		return s
 	}
+	// 顺序无关，按（状态，原因）归一化后比较集合。
 	sa, sb := toSet(a), toSet(b)
 	if len(sa) != len(sb) {
 		return false

@@ -28,16 +28,17 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// realMountDetector pretends to implement mediumer.
+// realMountDetector 伪装成 mediumer 的实现（非 Linux 平台上不做真实探测）。
 type realMountDetector struct {
 	mounter mount.Interface
 }
 
+// GetMountMedium 返回挂载点的存储介质类型；非 Linux 平台上始终返回默认介质。
 func (m *realMountDetector) GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error) {
 	return v1.StorageMediumDefault, false, nil, nil
 }
 
-// ResizeEphemeralVolume resizes the volume on the node.
+// ResizeEphemeralVolume 在节点上调整卷大小；内存卷仅在 Linux 上支持原地扩容。
 func (plugin *emptyDirPlugin) ResizeEphemeralVolume(spec *volume.Spec, pod *v1.Pod, newSize *resource.Quantity) error {
 	return fmt.Errorf("in-place resize of memory-backed volumes is only supported on Linux")
 }

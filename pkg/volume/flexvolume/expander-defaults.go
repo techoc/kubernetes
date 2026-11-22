@@ -25,28 +25,30 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// expanderDefaults 是未实现扩容能力的 flexVolume 插件使用的默认扩展器。
 type expanderDefaults struct {
 	plugin *flexVolumePlugin
 }
 
+// newExpanderDefaults 为指定插件创建默认扩展器。
 func newExpanderDefaults(plugin *flexVolumePlugin) *expanderDefaults {
 	return &expanderDefaults{plugin}
 }
 
+// ExpandVolumeDevice 直接返回目标大小：默认实现不会在设备层做任何实际扩容。
 func (e *expanderDefaults) ExpandVolumeDevice(spec *volume.Spec, newSize resource.Quantity, oldSize resource.Quantity) (resource.Quantity, error) {
 	klog.Warning(logPrefix(e.plugin), "using default expand for volume ", spec.Name(), ", to size ", newSize, " from ", oldSize)
 	return newSize, nil
 }
 
-// the defaults for NodeExpand return a generic resize indicator that will trigger the operation executor to go ahead with
-// generic filesystem resize
+// NodeExpand 的默认实现返回一个通用的扩容指示，触发 operation executor 执行通用文件系统扩容。
 func (e *expanderDefaults) NodeExpand(rsOpt volume.NodeResizeOptions) (bool, error) {
 	klog.Warning(logPrefix(e.plugin), "using default filesystem resize for volume ", rsOpt.VolumeSpec.Name(), ", at ", rsOpt.DevicePath)
 	fsVolume, err := util.CheckVolumeModeFilesystem(rsOpt.VolumeSpec)
 	if err != nil {
 		return false, fmt.Errorf("error checking VolumeMode: %v", err)
 	}
-	// if volume is not a fs file system, there is nothing for us to do here.
+	// 非文件系统卷无需调整文件系统大小。
 	if !fsVolume {
 		return true, nil
 	}

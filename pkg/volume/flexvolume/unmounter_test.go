@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/test/utils/harness"
 )
 
+// TestTearDownAt 验证卸载器调用驱动的 unmount 命令。
 func TestTearDownAt(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()

@@ -31,52 +31,51 @@ import (
 
 var _ volume.MetricsProvider = &metricsCsi{}
 
-// metricsCsi represents a MetricsProvider that calculates the used,free and
-// capacity information for volume using volume path.
-
+// metricsCsi 实现 MetricsProvider，通过卷路径计算卷的已用空间、空闲空间和容量信息。
 type metricsCsi struct {
-	// the directory path the volume is mounted to.
+	// 卷挂载到的目录路径。
 	targetPath string
 
-	// Volume handle or id
+	// 卷句柄或 ID。
 	volumeID string
 
-	//csiClient with cache
+	// 带缓存的 csiClient。
 	csiClientGetter
 }
 
-// NewMetricsCsi creates a new metricsCsi with the Volume ID and path.
+// NewMetricsCsi 根据卷 ID、路径和驱动名称创建一个新的 metricsCsi。
 func NewMetricsCsi(volumeID string, targetPath string, driverName csiDriverName) volume.MetricsProvider {
 	mc := &metricsCsi{volumeID: volumeID, targetPath: targetPath}
 	mc.csiClientGetter.driverName = driverName
 	return mc
 }
 
+// GetMetrics 通过 CSI 的 NodeGetVolumeStats 获取卷的使用量、容量等指标。
 func (mc *metricsCsi) GetMetrics() (*volume.Metrics, error) {
 	startTime := time.Now()
 	defer servermetrics.CollectVolumeStatCalDuration(string(mc.csiClientGetter.driverName), startTime)
 	currentTime := metav1.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), csiTimeout)
 	defer cancel()
-	// Get CSI client
+	// 获取 CSI 客户端。
 	csiClient, err := mc.csiClientGetter.Get()
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// CSI 驱动暂不可用按瞬时错误处理。
+		// 参见 https://github.com/kubernetes/kubernetes/issues/120268
 		return nil, volumetypes.NewTransientOperationFailure(err.Error())
 	}
-	// Check whether "GET_VOLUME_STATS" is set
+	// 检查是否设置了 "GET_VOLUME_STATS" 能力。
 	volumeStatsSet, err := csiClient.NodeSupportsVolumeStats(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// if plugin doesnot support volume status, return.
+	// 插件不支持卷统计时直接返回。
 	if !volumeStatsSet {
 		return nil, volume.NewNotSupportedErrorWithDriverName(
 			string(mc.csiClientGetter.driverName))
 	}
-	// Get Volumestatus
+	// 获取卷状态。
 	metrics, err := csiClient.NodeGetVolumeStats(ctx, mc.volumeID, mc.targetPath)
 	if err != nil {
 		return nil, err
@@ -84,17 +83,17 @@ func (mc *metricsCsi) GetMetrics() (*volume.Metrics, error) {
 	if metrics == nil {
 		return nil, fmt.Errorf("csi.NodeGetVolumeStats returned nil metrics for volume %s", mc.volumeID)
 	}
-	//set recorded time
+	// 记录采集时间。
 	metrics.Time = currentTime
 	return metrics, nil
 }
 
-// MetricsManager defines the metrics manager for CSI operation
+// MetricsManager 管理 CSI 操作的指标记录。
 type MetricsManager struct {
 	driverName string
 }
 
-// NewCSIMetricsManager creates a CSIMetricsManager object
+// NewCSIMetricsManager 创建一个 CSIMetricsManager 对象。
 func NewCSIMetricsManager(driverName string) *MetricsManager {
 	volumeutil.RegisterMetrics()
 	cmm := MetricsManager{
@@ -110,8 +109,7 @@ type additionalInfoKeyType struct{}
 
 var additionalInfoKey additionalInfoKeyType
 
-// RecordMetricsInterceptor is a grpc interceptor that is used to
-// record CSI operation
+// RecordMetricsInterceptor 是用于记录 CSI 操作的 gRPC 拦截器。
 func (cmm *MetricsManager) RecordMetricsInterceptor(
 	ctx context.Context,
 	method string,
@@ -122,7 +120,7 @@ func (cmm *MetricsManager) RecordMetricsInterceptor(
 	start := time.Now()
 	err := invoker(ctx, method, req, reply, cc, opts...)
 	duration := time.Since(start)
-	// Check if this is migrated operation
+	// 判断是否为 CSI 迁移操作。
 	additionalInfoVal := ctx.Value(additionalInfoKey)
 	migrated := "false"
 	if additionalInfoVal != nil {
@@ -132,7 +130,7 @@ func (cmm *MetricsManager) RecordMetricsInterceptor(
 		}
 		migrated = additionalInfoVal.Migrated
 	}
-	// Record the metric latency
+	// 记录该操作的耗时指标。
 	volumeutil.RecordCSIOperationLatencyMetrics(cmm.driverName, method, err, duration, migrated)
 
 	return err

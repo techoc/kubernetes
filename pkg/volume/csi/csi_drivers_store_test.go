@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/csi"
 )
 
+// TestDriversStore 验证 DriversStore 的增删查与清空行为。
 func TestDriversStore(t *testing.T) {
 	store := &csi.DriversStore{}
 	someDriver := csi.Driver{}
@@ -41,6 +42,7 @@ func TestDriversStore(t *testing.T) {
 	expectAbsent(t, store, "some-driver")
 }
 
+// expectPresent 断言指定驱动存在于 store 中且内容与期望一致。
 func expectPresent(t *testing.T, store *csi.DriversStore, name string, expected csi.Driver) {
 	t.Helper()
 
@@ -55,6 +57,7 @@ func expectPresent(t *testing.T, store *csi.DriversStore, name string, expected 
 	}
 }
 
+// expectAbsent 断言指定驱动不存在于 store 中。
 func expectAbsent(t *testing.T, store *csi.DriversStore, name string) {
 	t.Helper()
 

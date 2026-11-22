@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package git_repo contains the internal representation of git repo volumes.
+// Package git_repo 包含 git 仓库卷的内部表示。
 package git_repo

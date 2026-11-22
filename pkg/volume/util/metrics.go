@@ -36,14 +36,14 @@ const (
 )
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 默认情况下，下列所有指标均属于 ALPHA 稳定性级别，参见
+ * https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标稳定性级别是组件负责人的职责，因为按指标稳定性策略，
+ * 这意味着要明确承诺在多个版本中持续支持该指标。
  */
 
+// StorageOperationMetric 记录各存储操作的耗时分布，按插件、操作名、状态和是否迁移分组。
 var StorageOperationMetric = metrics.NewHistogramVec(
 	&metrics.HistogramOpts{
 		Name:           "storage_operation_duration_seconds",
@@ -54,6 +54,7 @@ var StorageOperationMetric = metrics.NewHistogramVec(
 	[]string{"volume_plugin", "operation_name", "status", "migrated"},
 )
 
+// storageOperationEndToEndLatencyMetric 记录存储操作从发起到结束的端到端耗时。
 var storageOperationEndToEndLatencyMetric = metrics.NewHistogramVec(
 	&metrics.HistogramOpts{
 		Name:           "volume_operation_total_seconds",
@@ -64,6 +65,7 @@ var storageOperationEndToEndLatencyMetric = metrics.NewHistogramVec(
 	[]string{"plugin_name", "operation_name"},
 )
 
+// csiOperationsLatencyMetric 记录 CSI 操作耗时及对应的 gRPC 状态码。
 var csiOperationsLatencyMetric = metrics.NewHistogramVec(
 	&metrics.HistogramOpts{
 		Subsystem:      "csi",
@@ -75,34 +77,34 @@ var csiOperationsLatencyMetric = metrics.NewHistogramVec(
 	[]string{"driver_name", "method_name", "grpc_status_code", "migrated"},
 )
 
+// 保证指标只注册一次。
 var registerMetricsOnce sync.Once
 
-// RegisterMetrics registers the volume operation metrics with the legacy
-// registry. Do not invoke from init() function so that metric feature gates
-// (e.g. NativeHistograms) are applied before these histogram
-// metrics are created. It is safe to call multiple times; registration
-// happens at most once.
+// RegisterMetrics 向 legacy registry 注册卷操作相关指标。
+// 不要在 init() 中调用：需等特性门控（如 NativeHistograms）生效后再创建直方图指标。
+// 该函数可安全重复调用，实际注册至多执行一次。
 func RegisterMetrics() {
 	registerMetricsOnce.Do(func() {
-		// legacyregistry is the internal k8s wrapper around the prometheus
-		// global registry, used specifically for metric stability enforcement
+		// legacyregistry 是 k8s 对 prometheus 全局注册表的封装，
+		// 专门用于强制实施指标稳定性级别约束。
 		legacyregistry.MustRegister(StorageOperationMetric)
 		legacyregistry.MustRegister(storageOperationEndToEndLatencyMetric)
 		legacyregistry.MustRegister(csiOperationsLatencyMetric)
 	})
 }
 
-// OperationCompleteHook returns a hook to call when an operation is completed
+// OperationCompleteHook 返回一个钩子，在操作完成时调用以记录耗时和成功/失败状态。
 func OperationCompleteHook(plugin, operationName string) func(types.CompleteFuncParam) {
 	RegisterMetrics()
 	requestTime := time.Now()
 	opComplete := func(c types.CompleteFuncParam) {
 		timeTaken := time.Since(requestTime).Seconds()
-		// Create metric with operation name and plugin name
+		// 用操作名和插件名构造指标标签。
 		status := statusSuccess
 		if *c.Err != nil {
 			// TODO: Establish well-known error codes to be able to distinguish
 			// user configuration errors from system errors.
+			// 目前无法区分错误类型，统一记为 fail-unknown。
 			status = statusFailUnknown
 		}
 		migrated := false
@@ -114,16 +116,14 @@ func OperationCompleteHook(plugin, operationName string) func(types.CompleteFunc
 	return opComplete
 }
 
-// FSGroupCompleteHook returns a hook to call when volume recursive permission is changed
+// FSGroupCompleteHook 返回一个钩子，在卷递归权限变更（fsGroup 应用）完成时调用。
 func FSGroupCompleteHook(plugin volume.VolumePlugin, spec *volume.Spec) func(types.CompleteFuncParam) {
 	return OperationCompleteHook(GetFullQualifiedPluginNameForVolume(plugin.GetPluginName(), spec), "volume_apply_access_control")
 }
 
-// GetFullQualifiedPluginNameForVolume returns full qualified plugin name for
-// given volume. For CSI plugin, it appends plugin driver name at the end of
-// plugin name, e.g. kubernetes.io/csi:csi-hostpath. It helps to distinguish
-// between metrics emitted for CSI volumes which may be handled by different
-// CSI plugin drivers.
+// GetFullQualifiedPluginNameForVolume 返回卷的完全限定插件名。
+// 对 CSI 插件会在名称后附加驱动名，例如 kubernetes.io/csi:csi-hostpath，
+// 以便区分由不同 CSI 驱动处理的卷所产生的指标。
 func GetFullQualifiedPluginNameForVolume(pluginName string, spec *volume.Spec) string {
 	if spec != nil {
 		if spec.Volume != nil && spec.Volume.CSI != nil {
@@ -136,15 +136,15 @@ func GetFullQualifiedPluginNameForVolume(pluginName string, spec *volume.Spec) s
 	return pluginName
 }
 
-// RecordOperationLatencyMetric records the end to end latency for certain operation
-// into metric volume_operation_total_seconds
+// RecordOperationLatencyMetric 将某操作的端到端耗时记录到
+// volume_operation_total_seconds 指标中。
 func RecordOperationLatencyMetric(plugin, operationName string, secondsTaken float64) {
 	RegisterMetrics()
 	storageOperationEndToEndLatencyMetric.WithLabelValues(plugin, operationName).Observe(secondsTaken)
 }
 
-// RecordCSIOperationLatencyMetrics records the CSI operation latency and grpc status
-// into metric csi_kubelet_operations_seconds
+// RecordCSIOperationLatencyMetrics 将 CSI 操作耗时和 gRPC 状态记录到
+// csi_kubelet_operations_seconds 指标中。
 func RecordCSIOperationLatencyMetrics(driverName string,
 	operationName string,
 	operationErr error,
@@ -154,6 +154,7 @@ func RecordCSIOperationLatencyMetrics(driverName string,
 	csiOperationsLatencyMetric.WithLabelValues(driverName, operationName, getErrorCode(operationErr), migrated).Observe(operationDuration.Seconds())
 }
 
+// getErrorCode 提取错误对应的 gRPC 状态码字符串。
 func getErrorCode(err error) string {
 	if err == nil {
 		return codes.OK.String()
@@ -161,8 +162,8 @@ func getErrorCode(err error) string {
 
 	st, ok := status.FromError(err)
 	if !ok {
-		// This is not gRPC error. The operation must have failed before gRPC
-		// method was called, otherwise we would get gRPC error.
+		// 非 gRPC 错误说明操作在调用 gRPC 方法之前就已失败，
+		// 否则拿到的会是 gRPC 错误。
 		return "unknown-non-grpc"
 	}
 

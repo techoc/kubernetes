@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package operationexecutor implements interfaces that enable execution of
-// attach, detach, mount, and unmount operations with a
-// nestedpendingoperations so that more than one operation is never triggered
-// on the same volume for the same pod.
+// Package operationexecutor 提供通过 nestedpendingoperations 执行附加、分离、挂载和卸载操作的接口，
+// 确保同一卷不会为同一 pod 触发多个操作。
 package operationexecutor
 
 import (
@@ -39,119 +37,92 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// OperationExecutor defines a set of operations for attaching, detaching,
-// mounting, or unmounting a volume that are executed with a NewNestedPendingOperations which
-// prevents more than one operation from being triggered on the same volume.
+// OperationExecutor 定义卷的附加、分离、挂载和卸载操作，由 NewNestedPendingOperations 执行，
+// 确保同一卷上不会同时触发多个操作。
 //
-// These operations should be idempotent (for example, AttachVolume should
-// still succeed if the volume is already attached to the node, etc.). However,
-// they depend on the volume plugins to implement this behavior.
+// 这些操作应当是幂等的（例如卷已附加到节点时 AttachVolume 仍应成功），
+// 但这依赖卷插件实现该行为。
 //
-// Once an operation completes successfully, the actualStateOfWorld is updated
-// to indicate the volume is attached/detached/mounted/unmounted.
+// 操作成功后会更新 actualStateOfWorld，反映卷的附加/分离/挂载/卸载状态。
 //
-// If the OperationExecutor fails to start the operation because, for example,
-// an operation with the same UniqueVolumeName is already pending, a non-nil
-// error is returned.
+// 若因同 UniqueVolumeName 的操作正在等待而无法启动操作，返回非 nil 错误。
 //
-// Once the operation is started, since it is executed asynchronously,
-// errors are simply logged and the goroutine is terminated without updating
-// actualStateOfWorld (callers are responsible for retrying as needed).
+// 操作启动后异步执行：错误只记录日志并终止 goroutine，不更新 actualStateOfWorld
+// （调用方负责按需重试）。
 //
-// Some of these operations may result in calls to the API server; callers are
-// responsible for rate limiting on errors.
+// 部分操作会调用 API server，调用方需自行对错误限流。
 type OperationExecutor interface {
-	// AttachVolume attaches the volume to the node specified in volumeToAttach.
-	// It then updates the actual state of the world to reflect that.
+	// AttachVolume 将卷附加到 volumeToAttach 指定的节点，并更新实际状态以反映结果。
 	AttachVolume(logger klog.Logger, volumeToAttach VolumeToAttach, actualStateOfWorld ActualStateOfWorldAttacherUpdater) error
 
-	// VerifyVolumesAreAttachedPerNode verifies the given list of volumes to see whether they are still attached to the node.
-	// If any volume is not attached right now, it will update the actual state of the world to reflect that.
-	// Note that this operation could be operated concurrently with other attach/detach operations.
-	// In theory (but very unlikely in practise), race condition among these operations might mark volume as detached
-	// even if it is attached. But reconciler can correct this in a short period of time.
+	// VerifyVolumesAreAttachedPerNode 校验给定卷列表是否仍附加在节点上。
+	// 若某个卷当前未附加，则更新实际状态。
+	// 该操作可能与其他附加/分离操作并发执行。
+	// 理论上（实践中极少发生）并发竞争可能把仍附加的卷标为已分离，
+	// 但 reconciler 会在短时间内纠正。
 	VerifyVolumesAreAttachedPerNode(AttachedVolumes []AttachedVolume, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) error
 
-	// VerifyVolumesAreAttached verifies volumes being used in entire cluster and if they are still attached to the node
-	// If any volume is not attached right now, it will update actual state of world to reflect that.
+	// VerifyVolumesAreAttached 校验整个集群中正在使用的卷是否仍附加在节点上。
+	// 若某个卷当前未附加，则更新实际状态。
 	VerifyVolumesAreAttached(volumesToVerify map[types.NodeName][]AttachedVolume, actualStateOfWorld ActualStateOfWorldAttacherUpdater)
 
-	// DetachVolume detaches the volume from the node specified in
-	// volumeToDetach, and updates the actual state of the world to reflect
-	// that. If verifySafeToDetach is set, a call is made to the fetch the node
-	// object and it is used to verify that the volume does not exist in Node's
-	// Status.VolumesInUse list (operation fails with error if it is).
+	// DetachVolume 从 volumeToDetach 指定的节点分离卷，并更新实际状态。
+	// verifySafeToDetach 为 true 时会获取节点对象，校验卷不在 Node 的
+	// Status.VolumesInUse 列表中（否则操作失败并返回错误）。
 	DetachVolume(logger klog.Logger, volumeToDetach AttachedVolume, verifySafeToDetach bool, actualStateOfWorld ActualStateOfWorldAttacherUpdater) error
 
-	// If a volume has 'Filesystem' volumeMode, MountVolume mounts the
-	// volume to the pod specified in volumeToMount.
-	// Specifically it will:
-	// * Wait for the device to finish attaching (for attachable volumes only).
-	// * Mount device to global mount path (for attachable volumes only).
-	// * Update actual state of world to reflect volume is globally mounted (for
-	//   attachable volumes only).
-	// * Mount the volume to the pod specific path.
-	// * Update actual state of world to reflect volume is mounted to the pod
-	//   path.
-	// The parameter "isRemount" is informational and used to adjust logging
-	// verbosity. An initial mount is more log-worthy than a remount, for
-	// example.
+	// 卷的 volumeMode 为 'Filesystem' 时，MountVolume 将卷挂载到 volumeToMount 指定的 pod。
+	// 具体流程：
+	// * 等待设备附加完成（仅可附加卷）。
+	// * 将设备挂载到全局挂载路径（仅可附加卷）。
+	// * 更新实际状态，反映卷已全局挂载（仅可附加卷）。
+	// * 将卷挂载到 pod 专属路径。
+	// * 更新实际状态，反映卷已挂载到 pod 路径。
+	// 参数 "isRemount" 仅用于提示，以调整日志详细程度：
+	// 首次挂载比重挂载更值得记录。
 	//
-	// For 'Block' volumeMode, this method creates a symbolic link to
-	// the volume from both the pod specified in volumeToMount and global map path.
-	// Specifically it will:
-	// * Wait for the device to finish attaching (for attachable volumes only).
-	// * Update actual state of world to reflect volume is globally mounted/mapped.
-	// * Map volume to global map path using symbolic link.
-	// * Map the volume to the pod device map path using symbolic link.
-	// * Update actual state of world to reflect volume is mounted/mapped to the pod path.
+	// volumeMode 为 'Block' 时，该方法为卷在 volumeToMount 指定的 pod 与全局映射路径
+	// 两处创建符号链接。具体流程：
+	// * 等待设备附加完成（仅可附加卷）。
+	// * 更新实际状态，反映卷已全局挂载/映射。
+	// * 用符号链接将卷映射到全局映射路径。
+	// * 用符号链接将卷映射到 pod 设备映射路径。
+	// * 更新实际状态，反映卷已挂载/映射到 pod 路径。
 	MountVolume(waitForAttachTimeout time.Duration, volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, isRemount bool) error
 
-	// If a volume has 'Filesystem' volumeMode, UnmountVolume unmounts the
-	// volume from the pod specified in volumeToUnmount and updates the actual
-	// state of the world to reflect that.
+	// 卷的 volumeMode 为 'Filesystem' 时，UnmountVolume 从 volumeToUnmount 指定的 pod
+	// 卸载卷，并更新实际状态。
 	//
-	// For 'Block' volumeMode, this method unmaps symbolic link to the volume
-	// from both the pod device map path in volumeToUnmount and global map path.
-	// And then, updates the actual state of the world to reflect that.
+	// volumeMode 为 'Block' 时，该方法解除 volumeToUnmount 中 pod 设备映射路径
+	// 与全局映射路径上的卷符号链接，然后更新实际状态。
 	UnmountVolume(volumeToUnmount MountedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, podsDir string) error
 
-	// If a volume has 'Filesystem' volumeMode, UnmountDevice unmounts the
-	// volumes global mount path from the device (for attachable volumes only,
-	// freeing it for detach. It then updates the actual state of the world to
-	// reflect that.
+	// 卷的 volumeMode 为 'Filesystem' 时，UnmountDevice 从设备卸载卷的全局挂载路径
+	// （仅可附加卷），使其可被分离，然后更新实际状态。
 	//
-	// For 'Block' volumeMode, this method checks number of symbolic links under
-	// global map path. If number of reference is zero, remove global map path
-	// directory and free a volume for detach.
-	// It then updates the actual state of the world to reflect that.
+	// volumeMode 为 'Block' 时，该方法检查全局映射路径下的符号链接数量；
+	// 引用数为零时删除全局映射目录，使卷可被分离，然后更新实际状态。
 	UnmountDevice(deviceToDetach AttachedVolume, actualStateOfWorld ActualStateOfWorldMounterUpdater, hostutil hostutil.HostUtils) error
 
-	// VerifyControllerAttachedVolume checks if the specified volume is present
-	// in the specified nodes AttachedVolumes Status field. It uses kubeClient
-	// to fetch the node object.
-	// If the volume is found, the actual state of the world is updated to mark
-	// the volume as attached.
-	// If the volume does not implement the attacher interface, it is assumed to
-	// be attached and the actual state of the world is updated accordingly.
-	// If the volume is not found or there is an error (fetching the node
-	// object, for example) then an error is returned which triggers exponential
-	// back off on retries.
+	// VerifyControllerAttachedVolume 检查指定卷是否出现在指定节点的
+	// AttachedVolumes 状态字段中，通过 kubeClient 获取节点对象。
+	// 找到卷时更新实际状态，标记卷为已附加。
+	// 卷未实现 attacher 接口时，假定其已附加并相应更新实际状态。
+	// 未找到卷或发生错误（例如获取节点对象失败）时返回错误，触发指数退避重试。
 	VerifyControllerAttachedVolume(logger klog.Logger, volumeToMount VolumeToMount, nodeName types.NodeName, actualStateOfWorld ActualStateOfWorldAttacherUpdater) error
 
-	// IsOperationPending returns true if an operation for the given volumeName
-	// and one of podName or nodeName is pending, otherwise it returns false
+	// IsOperationPending 判断给定 volumeName 与 podName 或 nodeName 对应的操作是否正在等待。
 	IsOperationPending(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName, nodeName types.NodeName) bool
-	// IsOperationSafeToRetry returns false if an operation for the given volumeName
-	// and one of podName or nodeName is pending or in exponential backoff, otherwise it returns true
+	// IsOperationSafeToRetry 判断给定 volumeName 与 podName 或 nodeName 对应的操作
+	// 是否既不等待也不处于指数退避中。
 	IsOperationSafeToRetry(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName, nodeName types.NodeName, operationName string) bool
-	// ExpandInUseVolume will resize volume's file system to expected size without unmounting the volume.
+	// ExpandInUseVolume 在不卸载卷的情况下将文件系统扩容到期望大小。
 	ExpandInUseVolume(volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, currentSize resource.Quantity) error
-	// ReconstructVolumeOperation construct a new volumeSpec and returns it created by plugin
+	// ReconstructVolumeOperation 由插件构造新的 volumeSpec 并返回。
 	ReconstructVolumeOperation(volumeMode v1.PersistentVolumeMode, plugin volume.VolumePlugin, mapperPlugin volume.BlockVolumePlugin, uid types.UID, podName volumetypes.UniquePodName, volumeSpecName string, volumePath string, pluginName string) (volume.ReconstructedVolume, error)
 }
 
-// NewOperationExecutor returns a new instance of OperationExecutor.
+// NewOperationExecutor 创建 OperationExecutor 实例。
 func NewOperationExecutor(
 	operationGenerator OperationGenerator) OperationExecutor {
 
@@ -162,154 +133,148 @@ func NewOperationExecutor(
 	}
 }
 
-// MarkVolumeOpts is a struct to pass arguments to MountVolume functions
+// MarkVolumeOpts 封装传给卷挂载状态更新方法的参数。
 type MarkVolumeOpts struct {
-	PodName             volumetypes.UniquePodName
-	PodUID              types.UID
-	VolumeName          v1.UniqueVolumeName
-	Mounter             volume.Mounter
-	BlockVolumeMapper   volume.BlockVolumeMapper
-	VolumeGIDVolume     string
-	VolumeSpec          *volume.Spec
-	VolumeMountState    VolumeMountState
+	// PodName 是挂载目标 pod 的唯一标识。
+	PodName volumetypes.UniquePodName
+	// PodUID 是挂载目标 pod 的 UID。
+	PodUID types.UID
+	// VolumeName 是卷的唯一标识。
+	VolumeName v1.UniqueVolumeName
+	// Mounter 用于挂载文件系统卷。
+	Mounter volume.Mounter
+	// BlockVolumeMapper 用于映射块卷。
+	BlockVolumeMapper volume.BlockVolumeMapper
+	// VolumeGIDVolume 是卷的 GID 值。
+	VolumeGIDVolume string
+	// VolumeSpec 是卷的规格。
+	VolumeSpec *volume.Spec
+	// VolumeMountState 是卷当前的挂载状态。
+	VolumeMountState VolumeMountState
+	// SELinuxMountContext 是挂载时使用的 SELinux 上下文。
 	SELinuxMountContext string
 }
 
-// ActualStateOfWorldMounterUpdater defines a set of operations updating the actual
-// state of the world cache after successful mount/unmount.
+// ActualStateOfWorldMounterUpdater 定义在挂载/卸载成功后更新实际状态缓存的操作。
 type ActualStateOfWorldMounterUpdater interface {
-	// Marks the specified volume as mounted to the specified pod
+	// MarkVolumeAsMounted 标记指定卷已挂载到指定 pod。
 	MarkVolumeAsMounted(markVolumeOpts MarkVolumeOpts) error
 
-	// Marks the specified volume as unmounted from the specified pod
+	// MarkVolumeAsUnmounted 标记指定卷已从指定 pod 卸载。
 	MarkVolumeAsUnmounted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) error
 
-	// MarkVolumeMountAsUncertain marks state of volume mount for the pod uncertain
+	// MarkVolumeMountAsUncertain 将 pod 的卷挂载状态标记为不确定。
 	MarkVolumeMountAsUncertain(markVolumeOpts MarkVolumeOpts) error
 
-	// Marks the specified volume as having been globally mounted.
+	// MarkDeviceAsMounted 标记指定卷的设备已全局挂载。
 	MarkDeviceAsMounted(volumeName v1.UniqueVolumeName, devicePath, deviceMountPath, seLinuxMountContext string) error
 
-	// MarkDeviceAsUncertain marks device state in global mount path as uncertain
+	// MarkDeviceAsUncertain 将全局挂载路径中的设备状态标记为不确定。
 	MarkDeviceAsUncertain(volumeName v1.UniqueVolumeName, devicePath, deviceMountPath, seLinuxMountContext string) error
 
-	// Marks the specified volume as having its global mount unmounted.
+	// MarkDeviceAsUnmounted 标记指定卷的全局挂载已卸载。
 	MarkDeviceAsUnmounted(volumeName v1.UniqueVolumeName) error
 
-	// Marks the specified volume's file system resize request is finished.
+	// MarkVolumeAsResized 标记指定卷的文件系统扩容请求已完成。
 	MarkVolumeAsResized(volumeName v1.UniqueVolumeName, claimSize resource.Quantity) bool
 
-	// GetDeviceMountState returns mount state of the device in global path
+	// GetDeviceMountState 返回设备在全局路径的挂载状态。
 	GetDeviceMountState(volumeName v1.UniqueVolumeName) DeviceMountState
 
-	// GetVolumeMountState returns mount state of the volume for the Pod
+	// GetVolumeMountState 返回卷在指定 Pod 中的挂载状态。
 	GetVolumeMountState(volumName v1.UniqueVolumeName, podName volumetypes.UniquePodName) VolumeMountState
 
-	// IsVolumeMountedElsewhere returns whether the supplied volume is mounted in a Pod other than the supplied one
+	// IsVolumeMountedElsewhere 判断给定卷是否挂载在指定 pod 之外的其他 pod 上。
 	IsVolumeMountedElsewhere(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) bool
 
-	// MarkForInUseExpansionError marks the volume to have in-use error during expansion.
-	// volume expansion must not be retried for this volume
+	// MarkForInUseExpansionError 标记卷在扩容时出现 in-use 错误。
+	// 此后不得再对该卷重试扩容。
 	MarkForInUseExpansionError(volumeName v1.UniqueVolumeName)
 
-	// CheckAndMarkVolumeAsUncertainViaReconstruction only adds volume to actual state of the world
-	// if volume was not already there. This avoid overwriting in any previously stored
-	// state. It returns error if there was an error adding the volume to ASOW.
-	// It returns true, if this operation resulted in volume being added to ASOW
-	// otherwise it returns false.
+	// CheckAndMarkVolumeAsUncertainViaReconstruction 仅在卷尚未进入实际状态时将其加入，
+	// 以免覆盖已有状态。加入 ASOW 失败时返回错误；若本次确实加入了卷则返回 true，否则返回 false。
 	CheckAndMarkVolumeAsUncertainViaReconstruction(opts MarkVolumeOpts) (bool, error)
 
-	// CheckAndMarkDeviceUncertainViaReconstruction only adds device to actual state of the world
-	// if device was not already there. This avoids overwriting in any previously stored
-	// state. We only supply deviceMountPath because devicePath is already determined from
-	// VerifyControllerAttachedVolume function.
+	// CheckAndMarkDeviceUncertainViaReconstruction 仅在设备尚未进入实际状态时将其加入，
+	// 以免覆盖已有状态。只需传入 deviceMountPath，因为 devicePath 已由
+	// VerifyControllerAttachedVolume 确定。
 	CheckAndMarkDeviceUncertainViaReconstruction(volumeName v1.UniqueVolumeName, deviceMountPath string) bool
 
-	// IsVolumeReconstructed returns true if volume currently added to actual state of the world
-	// was found during reconstruction.
+	// IsVolumeReconstructed 判断当前实际状态中的卷是否由重建流程发现。
 	IsVolumeReconstructed(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) bool
 
-	// IsVolumeDeviceReconstructed returns true if volume device identified by volumeName has been
-	// found during reconstruction.
+	// IsVolumeDeviceReconstructed 判断 volumeName 对应的卷设备是否由重建流程发现。
 	IsVolumeDeviceReconstructed(volumeName v1.UniqueVolumeName) bool
 
-	// MarkVolumeExpansionFailedWithFinalError marks volume as failed with a final error, so as
-	// this state doesn't have to be recorded in the API server
+	// MarkVolumeExpansionFailedWithFinalError 标记卷扩容因最终错误失败，
+	// 该状态无需记录到 API server。
 	MarkVolumeExpansionFailedWithFinalError(volumeName v1.UniqueVolumeName)
 
-	// RemoveVolumeFromFailedWithFinalErrors removes volume from list that indicates that volume
-	// has failed expansion with a final error
+	// RemoveVolumeFromFailedWithFinalErrors 从最终错误失败列表中移除卷。
 	RemoveVolumeFromFailedWithFinalErrors(volumeName v1.UniqueVolumeName)
 
-	// CheckVolumeInFailedExpansionWithFinalErrors verifies if volume expansion has failed with a final
-	// error
+	// CheckVolumeInFailedExpansionWithFinalErrors 判断卷扩容是否因最终错误而失败。
 	CheckVolumeInFailedExpansionWithFinalErrors(volumeName v1.UniqueVolumeName) bool
 
-	// MarkVolumeAsMountAttempted records that kubelet attempted to stage/publish this
-	// volume for the pod. Used by volume health probing for volumes that never
-	// reached mounted/uncertain ASW state.
+	// MarkVolumeAsMountAttempted 记录 kubelet 已尝试为该 pod stage/publish 卷。
+	// 供卷健康探测使用，覆盖那些从未进入 mounted/uncertain ASW 状态的卷。
 	MarkVolumeAsMountAttempted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName)
-	// IsVolumeMountAttempted returns true if MarkVolumeAsMountAttempted was called for this pair.
+	// IsVolumeMountAttempted 判断该 pod 与卷的组合是否调用过 MarkVolumeAsMountAttempted。
 	IsVolumeMountAttempted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) bool
 }
 
-// ActualStateOfWorldAttacherUpdater defines a set of operations updating the
-// actual state of the world cache after successful attach/detach/mount/unmount.
+// ActualStateOfWorldAttacherUpdater 定义在附加/分离/挂载/卸载成功后更新实际状态缓存的操作。
 type ActualStateOfWorldAttacherUpdater interface {
-	// Marks the specified volume as attached to the specified node.  If the
-	// volume name is supplied, that volume name will be used.  If not, the
-	// volume name is computed using the result from querying the plugin.
+	// MarkVolumeAsAttached 标记指定卷已附加到指定节点。提供了卷名时使用传入的卷名，
+	// 否则根据插件查询结果计算卷名。
 	//
-	// TODO: in the future, we should be able to remove the volumeName
-	// argument to this method -- since it is used only for attachable
-	// volumes.  See issue 29695.
+	// TODO: 将来应能移除此方法的 volumeName 参数，因为它仅用于可附加卷。
+	// 参见 issue 29695。
 	MarkVolumeAsAttached(logger klog.Logger, volumeName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string) error
 
-	// Marks the specified volume as *possibly* attached to the specified node.
-	// If an attach operation fails, the attach/detach controller does not know for certain if the volume is attached or not.
-	// If the volume name is supplied, that volume name will be used.  If not, the
-	// volume name is computed using the result from querying the plugin.
+	// MarkVolumeAsUncertain 标记指定卷*可能*已附加到指定节点。
+	// 附加操作失败时，附加/分离控制器无法确定卷是否已附加。
+	// 提供了卷名时使用传入的卷名，否则根据插件查询结果计算卷名。
 	MarkVolumeAsUncertain(logger klog.Logger, volumeName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName) error
 
-	// Marks the specified volume as detached from the specified node
+	// MarkVolumeAsDetached 标记指定卷已从指定节点分离。
 	MarkVolumeAsDetached(volumeName v1.UniqueVolumeName, nodeName types.NodeName)
 
-	// Marks desire to detach the specified volume (remove the volume from the node's
-	// volumesToReportAsAttached list)
+	// RemoveVolumeFromReportAsAttached 表达分离指定卷的意图（从节点的
+	// volumesToReportAsAttached 列表中移除该卷）。
 	RemoveVolumeFromReportAsAttached(volumeName v1.UniqueVolumeName, nodeName types.NodeName) error
 
-	// Unmarks the desire to detach for the specified volume (add the volume back to
-	// the node's volumesToReportAsAttached list)
+	// AddVolumeToReportAsAttached 撤销分离指定卷的意图（将卷加回节点的
+	// volumesToReportAsAttached 列表）。
 	AddVolumeToReportAsAttached(logger klog.Logger, volumeName v1.UniqueVolumeName, nodeName types.NodeName)
 
-	// InitializeClaimSize sets pvc claim size by reading pvc.Status.Capacity
+	// InitializeClaimSize 读取 pvc.Status.Capacity 设置 PVC 声明大小。
 	InitializeClaimSize(logger klog.Logger, volumeName v1.UniqueVolumeName, claimSize resource.Quantity)
 
+	// GetClaimSize 返回卷对应的 PVC 声明大小。
 	GetClaimSize(volumeName v1.UniqueVolumeName) resource.Quantity
 }
 
-// VolumeLogger defines a set of operations for generating volume-related logging and error msgs
+// VolumeLogger 定义生成卷相关日志与错误消息的操作。
 type VolumeLogger interface {
-	// Creates a detailed msg that can be used in logs
-	// The msg format follows the pattern "<prefixMsg> <volume details> <suffixMsg>",
-	// where each implementation provides the volume details
+	// GenerateMsgDetailed 生成可用于日志的详细消息。
+	// 格式为 "<prefixMsg> <卷详情> <suffixMsg>"，卷详情由各实现提供。
 	GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string)
 
-	// Creates a detailed error that can be used in logs.
-	// The msg format follows the pattern "<prefixMsg> <volume details>: <err> ",
+	// GenerateErrorDetailed 生成可用于日志的详细错误。
+	// 消息格式为 "<prefixMsg> <卷详情>: <err> "。
 	GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error)
 
-	// Creates a simple msg that is user friendly and a detailed msg that can be used in logs
-	// The msg format follows the pattern "<prefixMsg> <volume details> <suffixMsg>",
-	// where each implementation provides the volume details
+	// GenerateMsg 生成面向用户的简单消息和可用于日志的详细消息。
+	// 格式为 "<prefixMsg> <卷详情> <suffixMsg>"，卷详情由各实现提供。
 	GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string)
 
-	// Creates a simple error that is user friendly and a detailed error that can be used in logs.
-	// The msg format follows the pattern "<prefixMsg> <volume details>: <err> ",
+	// GenerateError 生成面向用户的简单错误和可用于日志的详细错误。
+	// 消息格式为 "<prefixMsg> <卷详情>: <err> "。
 	GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error)
 }
 
-// errSuffix generates an error string with the format ": <err>" if err exists
+// errSuffix 在 err 非空时生成格式为 ": <err>" 的错误字符串。
 func errSuffix(err error) string {
 	errStr := ""
 	if err != nil {
@@ -318,43 +283,37 @@ func errSuffix(err error) string {
 	return errStr
 }
 
-// generateVolumeMsgDetailed generates a detailed error msg for logs
+// generateVolumeMsgDetailed 生成供日志使用的详细消息。
 func generateVolumeMsgDetailed(prefixMsg, suffixMsg, volumeName, details string) (detailedMsg string) {
 	return fmt.Sprintf("%v for volume %q %v %v", prefixMsg, volumeName, details, suffixMsg)
 }
 
-// generateVolumeMsg generates a simplified error msg for events and a detailed error msg for logs
+// generateVolumeMsg 生成供事件使用的简化消息和供日志使用的详细消息。
 func generateVolumeMsg(prefixMsg, suffixMsg, volumeName, details string) (simpleMsg, detailedMsg string) {
 	simpleMsg = fmt.Sprintf("%v for volume %q %v", prefixMsg, volumeName, suffixMsg)
 	return simpleMsg, generateVolumeMsgDetailed(prefixMsg, suffixMsg, volumeName, details)
 }
 
-// VolumeToAttach represents a volume that should be attached to a node.
+// VolumeToAttach 表示应附加到节点的卷。
 type VolumeToAttach struct {
-	// MultiAttachErrorReported indicates whether the multi-attach error has been reported for the given volume.
-	// It is used to prevent reporting the error from being reported more than once for a given volume.
+	// MultiAttachErrorReported 表示该卷的多重附加错误是否已上报。
+	// 用于避免同一卷重复上报该错误。
 	MultiAttachErrorReported bool
 
-	// VolumeName is the unique identifier for the volume that should be
-	// attached.
+	// VolumeName 是待附加卷的唯一标识。
 	VolumeName v1.UniqueVolumeName
 
-	// VolumeSpec is a volume spec containing the specification for the volume
-	// that should be attached.
+	// VolumeSpec 是待附加卷的规格。
 	VolumeSpec *volume.Spec
 
-	// NodeName is the identifier for the node that the volume should be
-	// attached to.
+	// NodeName 是卷应附加到的节点标识。
 	NodeName types.NodeName
 
-	// scheduledPods is a map containing the set of pods that reference this
-	// volume and are scheduled to the underlying node. The key in the map is
-	// the name of the pod and the value is a pod object containing more
-	// information about the pod.
+	// ScheduledPods 是引用该卷且已调度到该节点的一组 pod。
 	ScheduledPods []*v1.Pod
 }
 
-// GenerateMsgDetailed returns detailed msgs for volumes to attach
+// GenerateMsgDetailed 返回待附加卷的详细消息。
 func (volume *VolumeToAttach) GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) from node %q", volume.VolumeName, volume.NodeName)
 	volumeSpecName := "nil"
@@ -364,7 +323,7 @@ func (volume *VolumeToAttach) GenerateMsgDetailed(prefixMsg, suffixMsg string) (
 	return generateVolumeMsgDetailed(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateMsg returns simple and detailed msgs for volumes to attach
+// GenerateMsg 返回待附加卷的简单消息和详细消息。
 func (volume *VolumeToAttach) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) from node %q", volume.VolumeName, volume.NodeName)
 	volumeSpecName := "nil"
@@ -374,18 +333,18 @@ func (volume *VolumeToAttach) GenerateMsg(prefixMsg, suffixMsg string) (simpleMs
 	return generateVolumeMsg(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateErrorDetailed returns detailed errors for volumes to attach
+// GenerateErrorDetailed 返回待附加卷的详细错误。
 func (volume *VolumeToAttach) GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error) {
 	return errors.New(volume.GenerateMsgDetailed(prefixMsg, errSuffix(err)))
 }
 
-// GenerateError returns simple and detailed errors for volumes to attach
+// GenerateError 返回待附加卷的简单错误和详细错误。
 func (volume *VolumeToAttach) GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error) {
 	simpleMsg, detailedMsg := volume.GenerateMsg(prefixMsg, errSuffix(err))
 	return errors.New(simpleMsg), errors.New(detailedMsg)
 }
 
-// String combines key fields of the volume for logging in text format.
+// String 以文本格式组合卷的关键字段用于日志。
 func (volume *VolumeToAttach) String() string {
 	volumeSpecName := "nil"
 	if volume.VolumeSpec != nil {
@@ -394,7 +353,7 @@ func (volume *VolumeToAttach) String() string {
 	return fmt.Sprintf("%s (UniqueName: %s) from node %s", volumeSpecName, volume.VolumeName, volume.NodeName)
 }
 
-// MarshalLog combines key fields of the volume for logging in a structured format.
+// MarshalLog 以结构化格式组合卷的关键字段用于日志。
 func (volume *VolumeToAttach) MarshalLog() interface{} {
 	volumeSpecName := "nil"
 	if volume.VolumeSpec != nil {
@@ -409,115 +368,108 @@ func (volume *VolumeToAttach) MarshalLog() interface{} {
 	}
 }
 
+// 编译期断言：VolumeToAttach 实现 fmt.Stringer 与 logr.Marshaler。
 var _ fmt.Stringer = &VolumeToAttach{}
 var _ logr.Marshaler = &VolumeToAttach{}
 
-// VolumeToMount represents a volume that should be attached to this node and
-// mounted to the PodName.
+// VolumeToMount 表示应附加到本节点并挂载到指定 Pod 的卷。
 type VolumeToMount struct {
-	// VolumeName is the unique identifier for the volume that should be
-	// mounted.
+	// VolumeName 是待挂载卷的唯一标识。
 	VolumeName v1.UniqueVolumeName
 
-	// PodName is the unique identifier for the pod that the volume should be
-	// mounted to after it is attached.
+	// PodName 是卷附加后要挂载到的 pod 的唯一标识。
 	PodName volumetypes.UniquePodName
 
-	// VolumeSpec is a volume spec containing the specification for the volume
-	// that should be mounted. Used to create NewMounter. Used to generate
-	// InnerVolumeSpecName.
+	// VolumeSpec 是待挂载卷的规格，用于创建 Mounter 并生成 InnerVolumeSpecName。
 	VolumeSpec *volume.Spec
 
-	// outerVolumeSpecNames are the podSpec.Volume[x].Name of the volume.
+	// OuterVolumeSpecNames 是卷在 podSpec.Volumes[x].Name 中的名称。
 	OuterVolumeSpecNames []string
 
-	// Pod to mount the volume to. Used to create NewMounter.
+	// Pod 是卷的挂载目标，用于创建 Mounter。
 	Pod *v1.Pod
 
-	// PluginIsAttachable indicates that the plugin for this volume implements
-	// the volume.Attacher interface
+	// PluginIsAttachable 表示该卷的插件实现了 volume.Attacher 接口。
 	PluginIsAttachable bool
 
-	// PluginIsDeviceMountable indicates that the plugin for this volume implements
-	// the volume.DeviceMounter interface
+	// PluginIsDeviceMountable 表示该卷的插件实现了 volume.DeviceMounter 接口。
 	PluginIsDeviceMountable bool
 
-	// VolumeGIDValue contains the value of the GID annotation, if present.
+	// VolumeGIDValue 是 GID 注解的值（若存在）。
 	VolumeGIDValue string
 
-	// DevicePath contains the path on the node where the volume is attached.
-	// For non-attachable volumes this is empty.
+	// DevicePath 是卷在节点上的附加路径；不可附加卷为空。
 	DevicePath string
 
-	// ReportedInUse indicates that the volume was successfully added to the
-	// VolumesInUse field in the node's status.
+	// ReportedInUse 表示卷已成功加入节点状态的 VolumesInUse 字段。
 	ReportedInUse bool
 
-	// DesiredSizeLimit indicates the desired upper bound on the size of the volume
-	// (if so implemented)
+	// DesiredSizeLimit 是卷大小的期望上限（若插件实现）。
 	DesiredSizeLimit *resource.Quantity
 
-	// time at which volume was requested to be mounted
+	// MountRequestTime 是请求挂载卷的时间。
 	MountRequestTime time.Time
 
-	// DesiredPersistentVolumeSize stores desired size of the volume.
-	// usually this is the size if pv.Spec.Capacity
+	// DesiredPersistentVolumeSize 存储卷的期望大小，通常取自 pv.Spec.Capacity。
 	DesiredPersistentVolumeSize resource.Quantity
 
-	// SELinux label that should be used to mount.
-	// The label is set when:
-	// * SELinuxMountReadWriteOncePod feature gate is enabled and the volume is RWOP and kubelet knows the SELinux label.
-	// * Or, SELinuxMount feature gate is enabled and kubelet knows the SELinux label.
+	// SELinuxLabel 是挂载时要使用的 SELinux 标签。
+	// 满足以下任一条件时设置：
+	// * 启用 SELinuxMountReadWriteOncePod 特性门控、卷为 RWOP 且 kubelet 知道 SELinux 标签。
+	// * 或启用 SELinuxMount 特性门控且 kubelet 知道 SELinux 标签。
 	SELinuxLabel string
 }
 
-// DeviceMountState represents device mount state in a global path.
+// DeviceMountState 表示设备在全局路径中的挂载状态。
 type DeviceMountState string
 
 const (
-	// DeviceGloballyMounted means device has been globally mounted successfully
+	// DeviceGloballyMounted 表示设备已成功全局挂载。
 	DeviceGloballyMounted DeviceMountState = "DeviceGloballyMounted"
 
-	// DeviceMountUncertain means device may not be mounted but a mount operation may be
-	// in-progress which can cause device mount to succeed.
+	// DeviceMountUncertain 表示设备可能尚未挂载，但可能有挂载操作正在进行并使其最终成功。
 	DeviceMountUncertain DeviceMountState = "DeviceMountUncertain"
 
-	// DeviceNotMounted means device has not been mounted globally.
+	// DeviceNotMounted 表示设备尚未全局挂载。
 	DeviceNotMounted DeviceMountState = "DeviceNotMounted"
 )
 
-// VolumeMountState represents volume mount state in a path local to the pod.
+// VolumeMountState 表示卷在 pod 本地路径中的挂载状态。
 type VolumeMountState string
 
 const (
-	// VolumeMounted means volume has been mounted in pod's local path
+	// VolumeMounted 表示卷已挂载到 pod 的本地路径。
 	VolumeMounted VolumeMountState = "VolumeMounted"
 
-	// VolumeMountUncertain means volume may or may not be mounted in pods' local path
+	// VolumeMountUncertain 表示卷可能已挂载、也可能未挂载到 pod 的本地路径。
 	VolumeMountUncertain VolumeMountState = "VolumeMountUncertain"
 
-	// VolumeNotMounted means volume has not be mounted in pod's local path
+	// VolumeNotMounted 表示卷尚未挂载到 pod 的本地路径。
 	VolumeNotMounted VolumeMountState = "VolumeNotMounted"
 )
 
+// MountPreConditionFailed 表示挂载前置条件不满足的错误。
 type MountPreConditionFailed struct {
 	msg string
 }
 
+// Error 返回错误消息。
 func (err *MountPreConditionFailed) Error() string {
 	return err.msg
 }
 
+// NewMountPreConditionFailedError 创建挂载前置条件失败错误。
 func NewMountPreConditionFailedError(msg string) *MountPreConditionFailed {
 	return &MountPreConditionFailed{msg: msg}
 }
 
+// IsMountFailedPreconditionError 判断 err 是否为挂载前置条件失败错误。
 func IsMountFailedPreconditionError(err error) bool {
 	var failedPreconditionError *MountPreConditionFailed
 	return errors.As(err, &failedPreconditionError)
 }
 
-// GenerateMsgDetailed returns detailed msgs for volumes to mount
+// GenerateMsgDetailed 返回待挂载卷的详细消息。
 func (volume *VolumeToMount) GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) pod %q (UID: %q)", volume.VolumeName, volume.Pod.Name, volume.Pod.UID)
 	volumeSpecName := "nil"
@@ -527,7 +479,7 @@ func (volume *VolumeToMount) GenerateMsgDetailed(prefixMsg, suffixMsg string) (d
 	return generateVolumeMsgDetailed(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateMsg returns simple and detailed msgs for volumes to mount
+// GenerateMsg 返回待挂载卷的简单消息和详细消息。
 func (volume *VolumeToMount) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) pod %q (UID: %q)", volume.VolumeName, volume.Pod.Name, volume.Pod.UID)
 	volumeSpecName := "nil"
@@ -537,49 +489,45 @@ func (volume *VolumeToMount) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg
 	return generateVolumeMsg(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateErrorDetailed returns detailed errors for volumes to mount
+// GenerateErrorDetailed 返回待挂载卷的详细错误。
 func (volume *VolumeToMount) GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error) {
 	return errors.New(volume.GenerateMsgDetailed(prefixMsg, errSuffix(err)))
 }
 
-// GenerateError returns simple and detailed errors for volumes to mount
+// GenerateError 返回待挂载卷的简单错误和详细错误。
 func (volume *VolumeToMount) GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error) {
 	simpleMsg, detailedMsg := volume.GenerateMsg(prefixMsg, errSuffix(err))
 	return errors.New(simpleMsg), errors.New(detailedMsg)
 }
 
-// AttachedVolume represents a volume that is attached to a node.
+// AttachedVolume 表示已附加到节点的卷。
 type AttachedVolume struct {
-	// VolumeName is the unique identifier for the volume that is attached.
+	// VolumeName 是已附加卷的唯一标识。
 	VolumeName v1.UniqueVolumeName
 
-	// VolumeSpec is the volume spec containing the specification for the
-	// volume that is attached.
+	// VolumeSpec 是已附加卷的规格。
 	VolumeSpec *volume.Spec
 
-	// NodeName is the identifier for the node that the volume is attached to.
+	// NodeName 是卷所附加到的节点标识。
 	NodeName types.NodeName
 
-	// PluginIsAttachable indicates that the plugin for this volume implements
-	// the volume.Attacher interface
+	// PluginIsAttachable 表示该卷的插件实现了 volume.Attacher 接口。
 	PluginIsAttachable bool
 
-	// DevicePath contains the path on the node where the volume is attached.
-	// For non-attachable volumes this is empty.
+	// DevicePath 是卷在节点上的附加路径；不可附加卷为空。
 	DevicePath string
 
-	// DeviceMountPath contains the path on the node where the device should
-	// be mounted after it is attached.
+	// DeviceMountPath 是设备附加后应挂载到节点上的路径。
 	DeviceMountPath string
 
-	// PluginName is the Unescaped Qualified name of the volume plugin used to
-	// attach and mount this volume.
+	// PluginName 是用于附加和挂载该卷的插件的未转义限定名称。
 	PluginName string
 
+	// SELinuxMountContext 是挂载时使用的 SELinux 上下文。
 	SELinuxMountContext string
 }
 
-// GenerateMsgDetailed returns detailed msgs for attached volumes
+// GenerateMsgDetailed 返回已附加卷的详细消息。
 func (volume *AttachedVolume) GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) on node %q", volume.VolumeName, volume.NodeName)
 	volumeSpecName := "nil"
@@ -589,7 +537,7 @@ func (volume *AttachedVolume) GenerateMsgDetailed(prefixMsg, suffixMsg string) (
 	return generateVolumeMsgDetailed(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateMsg returns simple and detailed msgs for attached volumes
+// GenerateMsg 返回已附加卷的简单消息和详细消息。
 func (volume *AttachedVolume) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) on node %q", volume.VolumeName, volume.NodeName)
 	volumeSpecName := "nil"
@@ -599,18 +547,18 @@ func (volume *AttachedVolume) GenerateMsg(prefixMsg, suffixMsg string) (simpleMs
 	return generateVolumeMsg(prefixMsg, suffixMsg, volumeSpecName, detailedStr)
 }
 
-// GenerateErrorDetailed returns detailed errors for attached volumes
+// GenerateErrorDetailed 返回已附加卷的详细错误。
 func (volume *AttachedVolume) GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error) {
 	return errors.New(volume.GenerateMsgDetailed(prefixMsg, errSuffix(err)))
 }
 
-// GenerateError returns simple and detailed errors for attached volumes
+// GenerateError 返回已附加卷的简单错误和详细错误。
 func (volume *AttachedVolume) GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error) {
 	simpleMsg, detailedMsg := volume.GenerateMsg(prefixMsg, errSuffix(err))
 	return errors.New(simpleMsg), errors.New(detailedMsg)
 }
 
-// String combines key fields of the volume for logging in text format.
+// String 以文本格式组合卷的关键字段用于日志。
 func (volume *AttachedVolume) String() string {
 	volumeSpecName := "nil"
 	if volume.VolumeSpec != nil {
@@ -619,7 +567,7 @@ func (volume *AttachedVolume) String() string {
 	return fmt.Sprintf("%s (UniqueName: %s) from node %s", volumeSpecName, volume.VolumeName, volume.NodeName)
 }
 
-// MarshalLog combines key fields of the volume for logging in a structured format.
+// MarshalLog 以结构化格式组合卷的关键字段用于日志。
 func (volume *AttachedVolume) MarshalLog() interface{} {
 	volumeSpecName := "nil"
 	if volume.VolumeSpec != nil {
@@ -634,23 +582,23 @@ func (volume *AttachedVolume) MarshalLog() interface{} {
 	}
 }
 
+// 编译期断言：AttachedVolume 实现 fmt.Stringer 与 logr.Marshaler。
 var _ fmt.Stringer = &AttachedVolume{}
 var _ logr.Marshaler = &AttachedVolume{}
 
-// MountedVolume represents a volume that has successfully been mounted to a pod.
+// MountedVolume 表示已成功挂载到 pod 的卷。
 type MountedVolume struct {
-	// PodName is the unique identifier of the pod mounted to.
+	// PodName 是挂载目标 pod 的唯一标识。
 	PodName volumetypes.UniquePodName
 
-	// VolumeName is the unique identifier of the volume mounted to the pod.
+	// VolumeName 是挂载到 pod 的卷的唯一标识。
 	VolumeName v1.UniqueVolumeName
 
-	// InnerVolumeSpecName is the volume.Spec.Name() of the volume. If the
-	// volume was referenced through a persistent volume claims, this contains
-	// the name of the bound persistent volume object.
-	// It is the name that plugins use in their pod mount path, i.e.
+	// InnerVolumeSpecName 是卷的 volume.Spec.Name()。若卷通过 PVC 引用，
+	// 这里存放绑定的 PV 对象名称。
+	// 插件在 pod 挂载路径中使用该名称，例如：
 	// /var/lib/kubelet/pods/{podUID}/volumes/{escapeQualifiedPluginName}/{innerVolumeSpecName}/
-	// PVC example,
+	// PVC 示例：
 	//   apiVersion: v1
 	//   kind: PersistentVolume
 	//   metadata:
@@ -664,7 +612,7 @@ type MountedVolume struct {
 	//     nfs:
 	//       path: /tmp
 	//       server: 172.17.0.2
-	// Non-PVC example:
+	// 非 PVC 示例：
 	//   apiVersion: v1
 	//   kind: Pod
 	//   metadata:
@@ -683,77 +631,69 @@ type MountedVolume struct {
 	//     	   fsType: ext4
 	InnerVolumeSpecName string
 
-	// PluginName is the "Unescaped Qualified" name of the volume plugin used to
-	// mount and unmount this volume. It can be used to fetch the volume plugin
-	// to unmount with, on demand. It is also the name that plugins use, though
-	// escaped, in their pod mount path, i.e.
+	// PluginName 是用于挂载和卸载该卷的插件的未转义限定名称。
+	// 可按需据此获取插件进行卸载。插件在 pod 挂载路径中使用其转义形式，例如：
 	// /var/lib/kubelet/pods/{podUID}/volumes/{escapeQualifiedPluginName}/{outerVolumeSpecName}/
 	PluginName string
 
-	// PodUID is the UID of the pod mounted to. It is also the string used by
-	// plugins in their pod mount path, i.e.
+	// PodUID 是挂载目标 pod 的 UID，也是插件在 pod 挂载路径中使用的字符串，例如：
 	// /var/lib/kubelet/pods/{podUID}/volumes/{escapeQualifiedPluginName}/{outerVolumeSpecName}/
 	PodUID types.UID
 
-	// Mounter is the volume mounter used to mount this volume. It is required
-	// by kubelet to create container.VolumeMap.
-	// Mounter is only required for file system volumes and not required for block volumes.
+	// Mounter 是挂载该卷的卷 mounter，kubelet 需要它来构建 container.VolumeMap。
+	// 仅文件系统卷需要 Mounter，块卷不需要。
 	Mounter volume.Mounter
 
-	// BlockVolumeMapper is the volume mapper used to map this volume. It is required
-	// by kubelet to create container.VolumeMap.
-	// BlockVolumeMapper is only required for block volumes and not required for file system volumes.
+	// BlockVolumeMapper 是映射该卷的卷 mapper，kubelet 需要它来构建 container.VolumeMap。
+	// 仅块卷需要 BlockVolumeMapper，文件系统卷不需要。
 	BlockVolumeMapper volume.BlockVolumeMapper
 
-	// VolumeGIDValue contains the value of the GID annotation, if present.
+	// VolumeGIDValue 是 GID 注解的值（若存在）。
 	VolumeGIDValue string
 
-	// VolumeSpec is a volume spec containing the specification for the volume
-	// that should be mounted.
+	// VolumeSpec 是待挂载卷的规格。
 	VolumeSpec *volume.Spec
 
-	// DeviceMountPath contains the path on the node where the device should
-	// be mounted after it is attached.
+	// DeviceMountPath 是设备附加后应挂载到节点上的路径。
 	DeviceMountPath string
 
-	// SELinuxMountContext is value of mount option 'mount -o context=XYZ'.
-	// If empty, no such mount option was used.
+	// SELinuxMountContext 是挂载选项 'mount -o context=XYZ' 的值；为空表示未使用该挂载选项。
 	SELinuxMountContext string
 }
 
-// GenerateMsgDetailed returns detailed msgs for mounted volumes
+// GenerateMsgDetailed 返回已挂载卷的详细消息。
 func (volume *MountedVolume) GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) pod %q (UID: %q)", volume.VolumeName, volume.PodName, volume.PodUID)
 	return generateVolumeMsgDetailed(prefixMsg, suffixMsg, string(volume.VolumeName), detailedStr)
 }
 
-// GenerateMsg returns simple and detailed msgs for mounted volumes
+// GenerateMsg 返回已挂载卷的简单消息和详细消息。
 func (volume *MountedVolume) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string) {
 	detailedStr := fmt.Sprintf("(UniqueName: %q) pod %q (UID: %q)", volume.VolumeName, volume.PodName, volume.PodUID)
 	return generateVolumeMsg(prefixMsg, suffixMsg, string(volume.VolumeName), detailedStr)
 }
 
-// GenerateErrorDetailed returns simple and detailed errors for mounted volumes
+// GenerateErrorDetailed 返回已挂载卷的详细错误。
 func (volume *MountedVolume) GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error) {
 	return errors.New(volume.GenerateMsgDetailed(prefixMsg, errSuffix(err)))
 }
 
-// GenerateError returns simple and detailed errors for mounted volumes
+// GenerateError 返回已挂载卷的简单错误和详细错误。
 func (volume *MountedVolume) GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error) {
 	simpleMsg, detailedMsg := volume.GenerateMsg(prefixMsg, errSuffix(err))
 	return errors.New(simpleMsg), errors.New(detailedMsg)
 }
 
+// operationExecutor 是 OperationExecutor 的实现。
 type operationExecutor struct {
-	// pendingOperations keeps track of pending attach and detach operations so
-	// multiple operations are not started on the same volume
+	// pendingOperations 跟踪正在等待的附加/分离操作，避免同卷启动多个操作。
 	pendingOperations nestedpendingoperations.NestedPendingOperations
 
-	// operationGenerator is an interface that provides implementations for
-	// generating volume function
+	// operationGenerator 提供生成卷操作函数的实现。
 	operationGenerator OperationGenerator
 }
 
+// IsOperationPending 判断卷与 pod/节点对应的操作是否正在等待。
 func (oe *operationExecutor) IsOperationPending(
 	volumeName v1.UniqueVolumeName,
 	podName volumetypes.UniquePodName,
@@ -761,6 +701,7 @@ func (oe *operationExecutor) IsOperationPending(
 	return oe.pendingOperations.IsOperationPending(volumeName, podName, nodeName)
 }
 
+// IsOperationSafeToRetry 判断卷与 pod/节点对应的操作是否可安全重试。
 func (oe *operationExecutor) IsOperationSafeToRetry(
 	volumeName v1.UniqueVolumeName,
 	podName volumetypes.UniquePodName,
@@ -769,6 +710,7 @@ func (oe *operationExecutor) IsOperationSafeToRetry(
 	return oe.pendingOperations.IsOperationSafeToRetry(volumeName, podName, nodeName, operationName)
 }
 
+// AttachVolume 将卷附加到指定节点，并更新实际状态。
 func (oe *operationExecutor) AttachVolume(
 	logger klog.Logger,
 	volumeToAttach VolumeToAttach,
@@ -776,15 +718,18 @@ func (oe *operationExecutor) AttachVolume(
 	generatedOperations :=
 		oe.operationGenerator.GenerateAttachVolumeFunc(logger, volumeToAttach, actualStateOfWorld)
 
+	// 可多重附加的卷按节点区分并发键：不同节点可并行附加，同节点仍需串行。
 	if util.IsMultiAttachAllowed(volumeToAttach.VolumeSpec) {
 		return oe.pendingOperations.Run(
 			volumeToAttach.VolumeName, "" /* podName */, volumeToAttach.NodeName, generatedOperations)
 	}
 
+	// 不可多重附加的卷按卷名全局串行，防止多个节点同时附加。
 	return oe.pendingOperations.Run(
 		volumeToAttach.VolumeName, "" /* podName */, "" /* nodeName */, generatedOperations)
 }
 
+// DetachVolume 从指定节点分离卷，并更新实际状态。
 func (oe *operationExecutor) DetachVolume(
 	logger klog.Logger,
 	volumeToDetach AttachedVolume,
@@ -796,6 +741,7 @@ func (oe *operationExecutor) DetachVolume(
 		return err
 	}
 
+	// 与附加对称：可多重附加的卷按节点区分，其他卷全局串行。
 	if util.IsMultiAttachAllowed(volumeToDetach.VolumeSpec) {
 		return oe.pendingOperations.Run(
 			volumeToDetach.VolumeName, "" /* podName */, volumeToDetach.NodeName, generatedOperations)
@@ -805,6 +751,7 @@ func (oe *operationExecutor) DetachVolume(
 
 }
 
+// VerifyVolumesAreAttached 逐节点校验卷的附加状态；单节点失败只记日志，不影响其他节点。
 func (oe *operationExecutor) VerifyVolumesAreAttached(
 	attachedVolumes map[types.NodeName][]AttachedVolume,
 	actualStateOfWorld ActualStateOfWorldAttacherUpdater) {
@@ -817,6 +764,7 @@ func (oe *operationExecutor) VerifyVolumesAreAttached(
 	}
 }
 
+// VerifyVolumesAreAttachedPerNode 校验指定节点上卷的附加状态。
 func (oe *operationExecutor) VerifyVolumesAreAttachedPerNode(
 	attachedVolumes []AttachedVolume,
 	nodeName types.NodeName,
@@ -827,10 +775,11 @@ func (oe *operationExecutor) VerifyVolumesAreAttachedPerNode(
 		return err
 	}
 
-	// Give an empty UniqueVolumeName so that this operation could be executed concurrently.
+	// 使用空 UniqueVolumeName，使不同节点的校验操作可以并发执行。
 	return oe.pendingOperations.Run("" /* volumeName */, "" /* podName */, "" /* nodeName */, generatedOperations)
 }
 
+// MountVolume 按卷模式生成挂载或映射操作并执行。
 func (oe *operationExecutor) MountVolume(
 	waitForAttachTimeout time.Duration,
 	volumeToMount VolumeToMount,
@@ -842,28 +791,24 @@ func (oe *operationExecutor) MountVolume(
 	}
 	var generatedOperations volumetypes.GeneratedOperations
 	if fsVolume {
-		// Filesystem volume case
-		// Mount/remount a volume when a volume is attached
+		// 文件系统卷：附加完成后挂载或重挂载。
 		generatedOperations = oe.operationGenerator.GenerateMountVolumeFunc(
 			waitForAttachTimeout, volumeToMount, actualStateOfWorld, isRemount)
 
 	} else {
-		// Block volume case
-		// Creates a map to device if a volume is attached
+		// 块卷：附加完成后创建到设备的映射。
 		generatedOperations, err = oe.operationGenerator.GenerateMapVolumeFunc(
 			waitForAttachTimeout, volumeToMount, actualStateOfWorld)
 	}
 	if err != nil {
 		return err
 	}
-	// Avoid executing mount/map from multiple pods referencing the
-	// same volume in parallel
+	// 默认按卷名串行，避免引用同卷的多个 pod 并行挂载/映射。
 	podName := nestedpendingoperations.EmptyUniquePodName
 
 	// TODO: remove this -- not necessary
 	if !volumeToMount.PluginIsAttachable && !volumeToMount.PluginIsDeviceMountable {
-		// volume plugins which are Non-attachable and Non-deviceMountable can execute mount for multiple pods
-		// referencing the same volume in parallel
+		// 不可附加且不可设备挂载的插件可安全地为多个 pod 并行挂载同一卷。
 		podName = util.GetUniquePodName(volumeToMount.Pod)
 	}
 
@@ -872,6 +817,7 @@ func (oe *operationExecutor) MountVolume(
 		volumeToMount.VolumeName, podName, "" /* nodeName */, generatedOperations)
 }
 
+// UnmountVolume 按卷模式生成卸载或解除映射操作并执行。
 func (oe *operationExecutor) UnmountVolume(
 	volumeToUnmount MountedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
@@ -882,27 +828,25 @@ func (oe *operationExecutor) UnmountVolume(
 	}
 	var generatedOperations volumetypes.GeneratedOperations
 	if fsVolume {
-		// Filesystem volume case
-		// Unmount a volume if a volume is mounted
+		// 文件系统卷：已挂载时执行卸载。
 		generatedOperations, err = oe.operationGenerator.GenerateUnmountVolumeFunc(
 			volumeToUnmount, actualStateOfWorld, podsDir)
 	} else {
-		// Block volume case
-		// Unmap a volume if a volume is mapped
+		// 块卷：已映射时解除映射。
 		generatedOperations, err = oe.operationGenerator.GenerateUnmapVolumeFunc(
 			volumeToUnmount, actualStateOfWorld)
 	}
 	if err != nil {
 		return err
 	}
-	// All volume plugins can execute unmount/unmap for multiple pods referencing the
-	// same volume in parallel
+	// 所有插件都允许引用同卷的多个 pod 并行卸载/解除映射，因此用 pod UID 作为键。
 	podName := volumetypes.UniquePodName(volumeToUnmount.PodUID)
 
 	return oe.pendingOperations.Run(
 		volumeToUnmount.VolumeName, podName, "" /* nodeName */, generatedOperations)
 }
 
+// UnmountDevice 按卷模式生成设备卸载或解除映射操作并执行。
 func (oe *operationExecutor) UnmountDevice(
 	deviceToDetach AttachedVolume,
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
@@ -913,27 +857,25 @@ func (oe *operationExecutor) UnmountDevice(
 	}
 	var generatedOperations volumetypes.GeneratedOperations
 	if fsVolume {
-		// Filesystem volume case
-		// Unmount and detach a device if a volume isn't referenced
+		// 文件系统卷：卷不再被引用时卸载设备。
 		generatedOperations, err = oe.operationGenerator.GenerateUnmountDeviceFunc(
 			deviceToDetach, actualStateOfWorld, hostutil)
 	} else {
-		// Block volume case
-		// Detach a device and remove loopback if a volume isn't referenced
+		// 块卷：卷不再被引用时分离设备并移除回环设备。
 		generatedOperations, err = oe.operationGenerator.GenerateUnmapDeviceFunc(
 			deviceToDetach, actualStateOfWorld, hostutil)
 	}
 	if err != nil {
 		return err
 	}
-	// Avoid executing unmount/unmap device from multiple pods referencing
-	// the same volume in parallel
+	// 多个 pod 共享同一设备，按卷名串行避免并发卸载同一设备。
 	podName := nestedpendingoperations.EmptyUniquePodName
 
 	return oe.pendingOperations.Run(
 		deviceToDetach.VolumeName, podName, "" /* nodeName */, generatedOperations)
 }
 
+// ExpandInUseVolume 生成并执行在线扩容操作。
 func (oe *operationExecutor) ExpandInUseVolume(volumeToMount VolumeToMount, actualStateOfWorld ActualStateOfWorldMounterUpdater, currentSize resource.Quantity) error {
 	generatedOperations, err := oe.operationGenerator.GenerateExpandInUseVolumeFunc(volumeToMount, actualStateOfWorld, currentSize)
 	if err != nil {
@@ -942,6 +884,7 @@ func (oe *operationExecutor) ExpandInUseVolume(volumeToMount VolumeToMount, actu
 	return oe.pendingOperations.Run(volumeToMount.VolumeName, "", "" /* nodeName */, generatedOperations)
 }
 
+// VerifyControllerAttachedVolume 生成并运行控制器附加状态校验操作。
 func (oe *operationExecutor) VerifyControllerAttachedVolume(
 	logger klog.Logger,
 	volumeToMount VolumeToMount,
@@ -957,7 +900,7 @@ func (oe *operationExecutor) VerifyControllerAttachedVolume(
 		volumeToMount.VolumeName, "" /* podName */, "" /* nodeName */, generatedOperations)
 }
 
-// ReconstructVolumeOperation return a func to create volumeSpec from mount path
+// ReconstructVolumeOperation 由插件根据挂载路径重建 volumeSpec。
 func (oe *operationExecutor) ReconstructVolumeOperation(
 	volumeMode v1.PersistentVolumeMode,
 	plugin volume.VolumePlugin,
@@ -968,9 +911,8 @@ func (oe *operationExecutor) ReconstructVolumeOperation(
 	volumePath string,
 	pluginName string) (volume.ReconstructedVolume, error) {
 
-	// Filesystem Volume case
+	// 文件系统卷：从挂载路径重建 volumeSpec。
 	if volumeMode == v1.PersistentVolumeFilesystem {
-		// Create volumeSpec from mount path
 		klog.V(5).Infof("Starting operationExecutor.ReconstructVolume for file volume on pod %q", podName)
 		reconstructed, err := plugin.ConstructVolumeSpec(volumeSpecName, volumePath)
 		if err != nil {
@@ -979,13 +921,11 @@ func (oe *operationExecutor) ReconstructVolumeOperation(
 		return reconstructed, nil
 	}
 
-	// Block Volume case
-	// Create volumeSpec from mount path
+	// 块卷：从挂载路径重建 volumeSpec。
 	klog.V(5).Infof("Starting operationExecutor.ReconstructVolume for block volume on pod %q", podName)
 
-	// volumePath contains volumeName on the path. In the case of block volume, {volumeName} is symbolic link
-	// corresponding to raw block device.
-	// ex. volumePath: pods/{podUid}}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/{volumeName}
+	// volumePath 的路径中包含卷名；对块卷而言 {volumeName} 是指向原始块设备的符号链接。
+	// 例如 volumePath: pods/{podUid}}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/{volumeName}
 	volumeSpec, err := mapperPlugin.ConstructBlockVolumeSpec(uid, volumeSpecName, volumePath)
 	if err != nil {
 		return volume.ReconstructedVolume{}, err

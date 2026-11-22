@@ -25,23 +25,25 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fs"
 )
 
+// 编译时断言 metricsStatFS 实现 MetricsProvider 接口。
 var _ MetricsProvider = &metricsStatFS{}
 
-// metricsStatFS represents a MetricsProvider that calculates the used and available
-// Volume space by stat'ing and gathering filesystem info for the Volume path.
+// metricsStatFS 通过 statfs 系统调用收集卷路径的文件系统信息，
+// 计算卷的已用空间和可用空间。
 type metricsStatFS struct {
-	// the directory path the volume is mounted to.
+	// 卷挂载到的目录路径。
 	path string
 }
 
-// NewMetricsStatFS creates a new metricsStatFS with the Volume path.
+// NewMetricsStatFS 以卷路径创建一个 metricsStatFS 指标提供者。
 func NewMetricsStatFS(path string) MetricsProvider {
 	return &metricsStatFS{path}
 }
 
-// See MetricsProvider.GetMetrics
-// GetMetrics calculates the volume usage and device free space by executing "du"
-// and gathering filesystem info for the Volume path.
+// GetMetrics 计算卷使用量和设备剩余空间。
+// 通过 fs.Info 获取卷路径的文件系统统计信息（容量、已用、可用及 inode 数据）。
+// 指标采集耗时由 servermetrics 记录，便于观测 statfs 调用开销。
+// 参见 MetricsProvider.GetMetrics。
 func (md *metricsStatFS) GetMetrics() (*Metrics, error) {
 	startTime := time.Now()
 	defer servermetrics.CollectVolumeStatCalDuration("statfs", startTime)
@@ -59,7 +61,8 @@ func (md *metricsStatFS) GetMetrics() (*Metrics, error) {
 	return metrics, nil
 }
 
-// getFsInfo writes metrics.Capacity, metrics.Used and metrics.Available from the filesystem info
+// getFsInfo 从文件系统信息填充 metrics 的容量、已用、可用及 inode 字段。
+// 容量统一按 BinarySI（KiB/MiB 等）计量，与 kubectl 展示单位保持一致。
 func (md *metricsStatFS) getFsInfo(metrics *Metrics) error {
 	available, capacity, usage, inodes, inodesFree, inodesUsed, err := fs.Info(md.path)
 	if err != nil {

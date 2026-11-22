@@ -31,10 +31,12 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// 测试中使用的 iSCSI iface 名称。
 const (
 	TestIface = "192.168.1.10:pv0001"
 )
 
+// TestExtractDeviceAndPrefix 验证从挂载路径中正确分离设备路径（含 lun 后缀）和前缀。
 func TestExtractDeviceAndPrefix(t *testing.T) {
 	devicePath := "127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00"
 	mountPrefix := "/var/lib/kubelet/plugins/kubernetes.io/iscsi/iface-default/" + devicePath
@@ -45,6 +47,7 @@ func TestExtractDeviceAndPrefix(t *testing.T) {
 	}
 }
 
+// TestExtractIface 验证从路径中提取 iface 名：带 iface- 前缀时成功，否则返回未找到。
 func TestExtractIface(t *testing.T) {
 	ifaceName := "default"
 	devicePath := "127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00-lun-0"
@@ -58,6 +61,7 @@ func TestExtractIface(t *testing.T) {
 	}
 }
 
+// TestExtractPortalAndIqn 验证从设备路径拆分 portal 和 IQN，覆盖 IPv4、EUI 和 IPv6 地址格式。
 func TestExtractPortalAndIqn(t *testing.T) {
 	devicePath := "127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00-lun-0"
 	portal, iqn, err := extractPortalAndIqn(devicePath)
@@ -76,6 +80,7 @@ func TestExtractPortalAndIqn(t *testing.T) {
 	}
 }
 
+// TestRemoveDuplicate 验证去重时保持 portal 原有顺序。
 func TestRemoveDuplicate(t *testing.T) {
 	dupPortals := []string{"127.0.0.1:3260", "127.0.0.1:3260", "127.0.0.100:3260"}
 	portals := removeDuplicate(dupPortals)
@@ -85,21 +90,25 @@ func TestRemoveDuplicate(t *testing.T) {
 	}
 }
 
+// fakeOsStat 假装文件存在，用于验证路径查找的 glob 分支。
 func fakeOsStat(devicePath string) (fi os.FileInfo, err error) {
 	var cmd os.FileInfo
 	return cmd, nil
 }
 
+// fakeFilepathGlob 返回传入的路径本身，模拟精确匹配。
 func fakeFilepathGlob(devicePath string) (globs []string, err error) {
 	return []string{devicePath}, nil
 }
 
+// fakeFilepathGlob2 返回带 PCI 地址的规范路径，模拟通配符展开结果。
 func fakeFilepathGlob2(devicePath string) (globs []string, err error) {
 	return []string{
 		"/dev/disk/by-path/pci-0000:00:00.0-ip-127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00-lun-0",
 	}, nil
 }
 
+// TestExtractTransportname 验证从 iscsiadm 输出解析传输协议名，含缺失字段时回退到 tcp。
 func TestExtractTransportname(t *testing.T) {
 	fakeIscsiadmOutput := []string{
 		"# BEGIN RECORD 2.0-873\n" +
@@ -139,6 +148,8 @@ func TestExtractTransportname(t *testing.T) {
 	}
 }
 
+// TestWaitForPathToExist 验证设备路径等待逻辑：
+// tcp 使用 stat、非 tcp 使用 glob，通配符匹配后会回写实际路径。
 func TestWaitForPathToExist(t *testing.T) {
 	devicePath := []string{"/dev/disk/by-path/ip-127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00-lun-0",
 		"/dev/disk/by-path/pci-*-ip-127.0.0.1:3260-iqn.2014-12.com.example:test.tgt00-lun-0"}
@@ -168,6 +179,8 @@ func TestWaitForPathToExist(t *testing.T) {
 	}
 }
 
+// TestParseIscsiadmShow 验证解析 iscsiadm show 输出：
+// 忽略空值和 BEGIN/END 标记，非法格式返回错误。
 func TestParseIscsiadmShow(t *testing.T) {
 	fakeIscsiadmOutput1 := "# BEGIN RECORD 2.0-873\n" +
 		"iface.iscsi_ifacename = default\n" +
@@ -226,6 +239,7 @@ func TestParseIscsiadmShow(t *testing.T) {
 	}
 }
 
+// TestClonedIface 验证 cloneIface 按序执行 show/new/update 命令创建自定义 iface。
 func TestClonedIface(t *testing.T) {
 	fakeExec := &testingexec.FakeExec{}
 	scripts := []volumetest.CommandScript{
@@ -270,6 +284,7 @@ func TestClonedIface(t *testing.T) {
 	}
 }
 
+// TestClonedIfaceShowError 验证 show 失败时 cloneIface 立即返回错误，不再执行后续命令。
 func TestClonedIfaceShowError(t *testing.T) {
 	fakeExec := &testingexec.FakeExec{}
 	scripts := []volumetest.CommandScript{
@@ -305,6 +320,7 @@ func TestClonedIfaceShowError(t *testing.T) {
 
 }
 
+// TestClonedIfaceUpdateError 验证 update 失败后清理新建的 iface（执行 delete）。
 func TestClonedIfaceUpdateError(t *testing.T) {
 	fakeExec := &testingexec.FakeExec{}
 	scripts := []volumetest.CommandScript{
@@ -356,8 +372,9 @@ func TestClonedIfaceUpdateError(t *testing.T) {
 
 }
 
+// TestGetVolCount 验证按 portal 和 IQN 统计卷引用数，覆盖错误 portal/IQN、普通卷和块设备卷。
 func TestGetVolCount(t *testing.T) {
-	// This will create a dir structure like this:
+	// 会创建如下目录结构：
 	// /tmp/refcounter555814673
 	// +-- iface-127.0.0.1:3260:pv1
 	// |   +-- 127.0.0.1:3260-iqn.2003-01.io.k8s:e2e.volume-1-lun-3
@@ -439,6 +456,7 @@ func TestGetVolCount(t *testing.T) {
 	}
 }
 
+// createFakePluginDirs 创建模拟的插件引用计数目录结构，返回临时根目录。
 func createFakePluginDirs() (string, error) {
 	dir, err := os.MkdirTemp("", "refcounter")
 	if err != nil {

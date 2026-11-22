@@ -32,6 +32,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// TestCanSupport 验证 NFS 插件只识别 NFS 类型的内联卷和持久卷。
 func TestCanSupport(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("nfs_test")
 	if err != nil {
@@ -60,6 +61,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证 NFS 插件声明了三种访问模式。
 func TestGetAccessModes(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("nfs_test")
 	if err != nil {
@@ -79,6 +81,7 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// TestRecycler 验证 NFS 持久卷可被识别为可回收卷。
 func TestRecycler(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("nfs_test")
 	if err != nil {
@@ -96,6 +99,7 @@ func TestRecycler(t *testing.T) {
 	}
 }
 
+// doTestPlugin 验证 NFS 卷的挂载路径、挂载参数及卸载行为。
 func doTestPlugin(t *testing.T, spec *volume.Spec, expectedDevice string) {
 	tmpDir, err := utiltesting.MkTmpdir("nfs_test")
 	if err != nil {
@@ -187,6 +191,7 @@ func doTestPlugin(t *testing.T, spec *volume.Spec, expectedDevice string) {
 	fake.ResetLog()
 }
 
+// TestPluginVolume 验证内联 NFS 卷源的挂载行为。
 func TestPluginVolume(t *testing.T) {
 	vol := &v1.Volume{
 		Name:         "vol1",
@@ -195,6 +200,7 @@ func TestPluginVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol), "localhost:/somepath")
 }
 
+// TestIPV6VolumeSource 验证 IPv6 服务器地址会被方括号包裹。
 func TestIPV6VolumeSource(t *testing.T) {
 	vol := &v1.Volume{
 		Name:         "vol1",
@@ -203,6 +209,7 @@ func TestIPV6VolumeSource(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol), "[0:0:0:0:0:0:0:1]:/somepath")
 }
 
+// TestIPV4VolumeSource 验证 IPv4 服务器地址的挂载行为。
 func TestIPV4VolumeSource(t *testing.T) {
 	vol := &v1.Volume{
 		Name:         "vol1",
@@ -211,6 +218,7 @@ func TestIPV4VolumeSource(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol), "127.0.0.1:/somepath")
 }
 
+// TestPluginPersistentVolume 验证 NFS 持久卷的挂载行为。
 func TestPluginPersistentVolume(t *testing.T) {
 	vol := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -226,6 +234,7 @@ func TestPluginPersistentVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromPersistentVolume(vol, false), "localhost:/somepath")
 }
 
+// TestPersistentClaimReadOnlyFlag 验证持久卷声明的只读标志会传递给挂载器。
 func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("nfs_test")
 	if err != nil {
@@ -266,7 +275,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	plugMgr.InitPlugins(ProbeVolumePlugins(volume.VolumeConfig{}), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, client, nil))
 	plug, _ := plugMgr.FindPluginByName(nfsPluginName)
 
-	// readOnly bool is supplied by persistent-claim volume source when its mounter creates other volumes
+	// 只读标志由持久卷声明卷源在创建挂载器时提供
 	spec := volume.NewSpecFromPersistentVolume(pv, true)
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")}}
 	mounter, _ := plug.NewMounter(spec, pod)

@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package util contains utility code for use by volume plugins.
+// Package util 提供供卷插件使用的工具代码。
 package util

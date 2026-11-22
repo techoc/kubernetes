@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package iscsi contains the internal representation of Internet Small
-// Computer System Interface (iSCSI) volumes.
+// Package iscsi 提供互联网小型计算机系统接口（Internet Small Computer
+// System Interface，iSCSI）卷的内部表示。
 package iscsi

@@ -27,26 +27,29 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Windows 下查询磁盘空间所需的 kernel32 动态链接库入口。
 var (
 	modkernel32            = windows.NewLazySystemDLL("kernel32.dll")
 	procGetDiskFreeSpaceEx = modkernel32.NewProc("GetDiskFreeSpaceExW")
 )
 
+// UsageInfo 记录路径的磁盘用量，Inodes 在 Windows 上不可用（恒为 0）。
 type UsageInfo struct {
 	Bytes  int64
 	Inodes int64
 }
 
-// Info returns (available bytes, byte capacity, byte usage, total inodes, inodes free, inode usage, error)
-// for the filesystem that path resides upon.
+// Info 返回 path 所在文件系统的信息：
+// 可用字节数、总容量、已用字节数、总 inode 数、空闲 inode 数、已用 inode 数及错误。
+// Windows 不提供 inode 统计，后三项恒为 0。
 func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 	var freeBytesAvailable, totalNumberOfBytes, totalNumberOfFreeBytes int64
 	var err error
 
-	// The equivalent linux call supports calls against files but the syscall for windows
-	// fails for files with error code: The directory name is invalid. (#99173)
+	// Linux 的等价调用可作用于文件，但 Windows 的该 syscall 对文件会失败，
+	// 返回错误码 "The directory name is invalid"（#99173）。
 	// https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
-	// By always ensuring the directory path we meet all uses cases of this function
+	// 因此统一取父目录路径，覆盖所有使用场景。
 	path = filepath.Dir(path)
 	ret, _, err := syscall.Syscall6(
 		procGetDiskFreeSpaceEx.Addr(),
@@ -65,7 +68,7 @@ func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 	return freeBytesAvailable, totalNumberOfBytes, totalNumberOfBytes - freeBytesAvailable, 0, 0, 0, nil
 }
 
-// DiskUsage gets disk usage of specified path.
+// DiskUsage 计算指定路径（含子目录）占用的磁盘字节数。
 func DiskUsage(path string) (UsageInfo, error) {
 	var usage UsageInfo
 	info, err := os.Lstat(path)
@@ -77,6 +80,7 @@ func DiskUsage(path string) (UsageInfo, error) {
 	return usage, err
 }
 
+// diskUsage 递归累加路径占用字节数；符号链接不追踪，避免重复计数或环。
 func diskUsage(currPath string, info os.FileInfo) (int64, error) {
 	var size int64
 
@@ -84,7 +88,8 @@ func diskUsage(currPath string, info os.FileInfo) (int64, error) {
 		return size, nil
 	}
 
-	// go1.23 behavior change: https://github.com/golang/go/issues/63703#issuecomment-2535941458
+	// go1.23 行为变更：Windows 上不规则文件的 Size() 不再可靠，跳过此类文件。
+	// https://github.com/golang/go/issues/63703#issuecomment-2535941458
 	if info.Mode()&os.ModeIrregular != 0 {
 		return size, nil
 	}

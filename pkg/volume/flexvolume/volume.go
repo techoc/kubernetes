@@ -24,32 +24,33 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// flexVolume 表示已附加到某个 Pod 的 flexvolume 卷实例。
 type flexVolume struct {
-	// driverName is the name of the plugin driverName.
+	// driverName 是插件驱动的名称。
 	driverName string
-	// Driver executable used to setup the volume.
+	// execPath 是用于配置卷的驱动可执行文件路径。
 	execPath string
-	// mounter provides the interface that is used to mount the actual
-	// block device.
+	// mounter 提供挂载实际块设备所需的接口。
 	mounter mount.Interface
-	// podName is the name of the pod, if available.
+	// podName 是 Pod 名称（如果可用）。
 	podName string
-	// podUID is the UID of the pod.
+	// podUID 是 Pod 的 UID。
 	podUID types.UID
-	// podNamespace is the namespace of the pod, if available.
+	// podNamespace 是 Pod 的命名空间（如果可用）。
 	podNamespace string
-	// podServiceAccountName is the service account name of the pod, if available.
+	// podServiceAccountName 是 Pod 的 ServiceAccount 名称（如果可用）。
 	podServiceAccountName string
-	// volName is the name of the pod's volume.
+	// volName 是 Pod 中该卷的名称。
 	volName string
-	// the underlying plugin
+	// plugin 是底层插件。
 	plugin *flexVolumePlugin
-	// the metric plugin
+	// MetricsProvider 提供卷指标能力。
 	volume.MetricsProvider
 }
 
-// volume.Volume interface
+// 实现 volume.Volume 接口。
 
+// GetPath 返回该卷在 Pod 目录中的挂载路径。
 func (f *flexVolume) GetPath() string {
 	name := f.driverName
 	return f.plugin.host.GetPodVolumeDir(f.podUID, utilstrings.EscapeQualifiedName(name), f.volName)

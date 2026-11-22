@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nfs contains the internal representation of network file system
-// (NFS) volumes.
+// Package nfs 包含网络文件系统（NFS）卷的内部表示。
 package nfs

@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package emptydir 包含 emptyDir 卷插件的测试。
 package emptydir
 
 import (
@@ -46,10 +47,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Construct an instance of a plugin, by name.
+// makePluginUnderTest 按名称构造一个待测试的插件实例。
 func makePluginUnderTest(t *testing.T, plugName, basePath string) volume.VolumePlugin {
 	plugMgr := volume.VolumePluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, basePath, nil, nil))
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, volumetest.NewFakeVolumeHost(t, basePath, nil, nil))
 
 	plug, err := plugMgr.FindPluginByName(plugName)
 	if err != nil {
@@ -58,6 +59,7 @@ func makePluginUnderTest(t *testing.T, plugName, basePath string) volume.VolumeP
 	return plug
 }
 
+// TestCanSupport 验证插件只支持带 EmptyDir 来源的卷规格。
 func TestCanSupport(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("emptydirTest")
 	if err != nil {
@@ -77,15 +79,19 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// fakeMountDetector 是 MountDetector 的假实现，直接返回预设的介质与挂载状态。
 type fakeMountDetector struct {
 	medium  v1.StorageMedium
 	isMount bool
 }
 
+// GetMountMedium 返回预设的介质与挂载状态。
 func (fake *fakeMountDetector) GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error) {
 	return fake.medium, fake.isMount, nil, nil
 }
 
+// TestPluginEmptyRootContext 覆盖默认介质下卷目录和元数据目录存在与否的各种组合，
+// 确认这些情况下都不触发物理挂载。
 func TestPluginEmptyRootContext(t *testing.T) {
 	doTestPlugin(t, pluginTestConfig{
 		volumeDirExists:        true,
@@ -113,6 +119,7 @@ func TestPluginEmptyRootContext(t *testing.T) {
 		expectedTeardownMounts: 0})
 }
 
+// TestPluginHugetlbfs 验证 HugePages 介质会执行一次物理挂载，且卸载时无需额外挂载操作。
 func TestPluginHugetlbfs(t *testing.T) {
 	testCases := map[string]struct {
 		medium v1.StorageMedium
@@ -136,18 +143,19 @@ func TestPluginHugetlbfs(t *testing.T) {
 	}
 }
 
+// pluginTestConfig 描述 doTestPlugin 的测试场景与预期挂载次数。
 type pluginTestConfig struct {
 	medium v1.StorageMedium
-	//volumeDirExists indicates whether volumeDir already/still exists before volume setup/teardown
+	// volumeDirExists 表示在 setup/teardown 之前卷目录是否已存在/仍然存在。
 	volumeDirExists bool
-	//readyDirExists indicates whether readyDir already/still exists before volume setup/teardown
+	// readyDirExists 表示在 setup/teardown 之前 readyDir 是否已存在/仍然存在。
 	readyDirExists                bool
 	expectedSetupMounts           int
 	shouldBeMountedBeforeTeardown bool
 	expectedTeardownMounts        int
 }
 
-// doTestPlugin sets up a volume and tears it back down.
+// doTestPlugin 挂载一个卷再将其卸载，检查目录状态和物理挂载调用次数。
 func doTestPlugin(t *testing.T, config pluginTestConfig) {
 	basePath, err := utiltesting.MkTmpdir("emptydir_volume_test")
 	if err != nil {
@@ -216,11 +224,11 @@ func doTestPlugin(t *testing.T, config pluginTestConfig) {
 		}
 	}
 
-	// Stat the directory and check the permission bits
+	// 检查目录及其权限位。
 	testSetUp(mounter, metadataDir, volPath)
 
 	log := physicalMounter.GetLog()
-	// Check the number of mounts performed during setup
+	// 检查 setup 阶段执行的挂载次数。
 	if e, a := config.expectedSetupMounts, len(log); e != a {
 		t.Errorf("Expected %v physicalMounter calls during setup, got %v", e, a)
 	} else if config.expectedSetupMounts == 1 &&
@@ -229,7 +237,7 @@ func doTestPlugin(t *testing.T, config pluginTestConfig) {
 	}
 	physicalMounter.ResetLog()
 
-	// Make an unmounter for the volume
+	// 为该卷创建 Unmounter。
 	teardownMedium := v1.StorageMediumDefault
 	if config.medium == v1.StorageMediumMemory {
 		teardownMedium = v1.StorageMediumMemory
@@ -253,13 +261,13 @@ func doTestPlugin(t *testing.T, config pluginTestConfig) {
 			t.Errorf("failed to remove ready dir [%s]: %v", metadataDir, err)
 		}
 	}
-	// Tear down the volume
+	// 卸载该卷。
 	if err := testTearDown(unmounter, metadataDir, volPath); err != nil {
 		t.Errorf("Test failed with error %v", err)
 	}
 
 	log = physicalMounter.GetLog()
-	// Check the number of physicalMounter calls during tardown
+	// 检查 teardown 阶段对 physicalMounter 的调用次数。
 	if e, a := config.expectedTeardownMounts, len(log); e != a {
 		t.Errorf("Expected %v physicalMounter calls during teardown, got %v", e, a)
 	} else if config.expectedTeardownMounts == 1 && log[0].Action != mount.FakeActionUnmount {
@@ -268,11 +276,12 @@ func doTestPlugin(t *testing.T, config pluginTestConfig) {
 	physicalMounter.ResetLog()
 }
 
+// testSetUp 执行挂载，并检查 ready 文件及卷目录的权限位。
 func testSetUp(mounter volume.Mounter, metadataDir, volPath string) error {
 	if err := mounter.SetUp(volume.MounterArgs{}); err != nil {
 		return fmt.Errorf("expected success, got: %w", err)
 	}
-	// Stat the directory and check the permission bits
+	// 检查目录及其权限位。
 	if !volumeutil.IsReady(metadataDir) {
 		return fmt.Errorf("SetUp() failed, ready file is not created")
 	}
@@ -289,6 +298,7 @@ func testSetUp(mounter volume.Mounter, metadataDir, volPath string) error {
 	return nil
 }
 
+// testTearDown 执行卸载，并检查 ready 文件和卷目录均已清除。
 func testTearDown(unmounter volume.Unmounter, metadataDir, volPath string) error {
 	if err := unmounter.TearDown(); err != nil {
 		return err
@@ -304,6 +314,7 @@ func testTearDown(unmounter volume.Unmounter, metadataDir, volPath string) error
 	return nil
 }
 
+// TestPluginBackCompat 验证未显式指定 VolumeSource 时仍按传统路径规则生成卷目录。
 func TestPluginBackCompat(t *testing.T) {
 	basePath, err := utiltesting.MkTmpdir("emptydirTest")
 	if err != nil {
@@ -331,9 +342,9 @@ func TestPluginBackCompat(t *testing.T) {
 	}
 }
 
-// TestMetrics tests that MetricProvider methods return sane values.
+// TestMetrics 验证 MetricProvider 的方法返回合理的值。
 func TestMetrics(t *testing.T) {
-	// Create an empty temp directory for the volume
+	// 为卷创建一个空的临时目录。
 	tmpDir, err := utiltesting.MkTmpdir("empty_dir_test")
 	if err != nil {
 		t.Fatalf("Can't make a tmp dir: %v", err)
@@ -354,7 +365,7 @@ func TestMetrics(t *testing.T) {
 		t.Fatalf("Got a nil Mounter")
 	}
 
-	// Need to create the subdirectory
+	// GetMetrics 依赖卷目录存在，先创建它。
 	os.MkdirAll(mounter.GetPath(), 0755)
 
 	expectedEmptyDirUsage, err := volumetest.FindEmptyDirectoryUsageOnTmpfs()
@@ -362,7 +373,7 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("Unexpected error finding expected empty directory usage on tmpfs: %v", err)
 	}
 
-	// TODO(pwittroc): Move this into a reusable testing utility
+	// TODO(pwittroc): 将这段逻辑提取为可复用的测试工具。
 	metrics, err := mounter.GetMetrics()
 	if err != nil {
 		t.Errorf("Unexpected error when calling GetMetrics %v", err)
@@ -378,6 +389,8 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
+// TestGetHugePagesMountOptions 验证根据 Pod 的 hugepages 请求推导挂载页大小的逻辑，
+// 包括容器级和 Pod 级资源、多种页大小及非法规格。
 func TestGetHugePagesMountOptions(t *testing.T) {
 	testCases := map[string]struct {
 		pod                      *v1.Pod
@@ -743,16 +756,20 @@ func TestGetHugePagesMountOptions(t *testing.T) {
 	}
 }
 
+// testMountDetector 是 MountDetector 的假实现，可预设页大小、挂载状态和错误。
 type testMountDetector struct {
 	pageSize *resource.Quantity
 	isMnt    bool
 	err      error
 }
 
+// GetMountMedium 返回 HugePages 介质及预设的挂载状态、页大小和错误。
 func (md *testMountDetector) GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error) {
 	return v1.StorageMediumHugePages, md.isMnt, md.pageSize, md.err
 }
 
+// TestSetupHugepages 覆盖 HugePages 卷的挂载路径，包括未挂载、已挂载且页大小一致，
+// 以及介质不匹配、探测器报错等失败场景。
 func TestSetupHugepages(t *testing.T) {
 	tmpdir, err := os.MkdirTemp("", "TestSetupHugepages")
 	if err != nil {
@@ -979,6 +996,7 @@ func TestSetupHugepages(t *testing.T) {
 	}
 }
 
+// TestGetPageSize 验证从挂载点选项中解析 hugetlbfs 页大小，覆盖合法与非法选项。
 func TestGetPageSize(t *testing.T) {
 	mounter := &mount.FakeMounter{
 		MountPoints: []mount.MountPoint{
@@ -1077,6 +1095,8 @@ func TestGetPageSize(t *testing.T) {
 	}
 }
 
+// TestCalculateEmptyDirMemorySize 验证内存卷大小按 EmptyDir 显式限制、
+// 容器本地内存限制、节点可分配内存的优先级计算。
 func TestCalculateEmptyDirMemorySize(t *testing.T) {
 	testCases := map[string]struct {
 		pod                   *v1.Pod
@@ -1159,6 +1179,7 @@ func TestCalculateEmptyDirMemorySize(t *testing.T) {
 	}
 }
 
+// TestTmpfsMountOptions 验证 tmpfs 挂载选项是否按能力包含 noswap，并按大小限制包含 size。
 func TestTmpfsMountOptions(t *testing.T) {
 	subQuantity := resource.MustParse("123Ki")
 
@@ -1213,6 +1234,8 @@ func TestTmpfsMountOptions(t *testing.T) {
 	}
 }
 
+// TestResizeEphemeralVolume 验证内存型 EmptyDir 的原地扩容：通过 remount 更新 size 选项，
+// 并覆盖挂载点不存在、非内存介质以及非法目标大小等失败场景。
 func TestResizeEphemeralVolume(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("only supported on linux")
@@ -1249,7 +1272,7 @@ func TestResizeEphemeralVolume(t *testing.T) {
 			name:                 "resize memory volume when mount already exists (remount/resize)",
 			medium:               v1.StorageMediumMemory,
 			isMountPoint:         true,
-			currentMountSizeOpts: []string{"size=104857600"}, // 100Mi
+			currentMountSizeOpts: []string{"size=104857600"}, // 100Mi，挂载选项以字节表示
 			newSize:              &quantity200Mi,
 			expectError:          false,
 			expectedMountAction:  "mount",
@@ -1349,6 +1372,8 @@ func TestResizeEphemeralVolume(t *testing.T) {
 	}
 }
 
+// TestEmptyDirVolumeMode 验证开启特性门控时，EmptyDir 的 mode 会反映到卷目录权限，
+// 包括 sticky 位的处理。
 func TestEmptyDirVolumeMode(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EmptyDirVolumeMode, true)
 
@@ -1432,6 +1457,8 @@ func TestEmptyDirVolumeMode(t *testing.T) {
 	}
 }
 
+// TestEmptyDirVolumeModeFeatureGateDisabled 验证特性门控关闭时 mode 被忽略，
+// 卷目录使用默认权限。
 func TestEmptyDirVolumeModeFeatureGateDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EmptyDirVolumeMode, false)
 

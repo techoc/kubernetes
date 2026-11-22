@@ -36,20 +36,25 @@ import (
 )
 
 const (
-	rwMask   = os.FileMode(0660)
-	roMask   = os.FileMode(0440)
+	// rwMask 是可写卷需要的属主/属组读写权限位。
+	rwMask = os.FileMode(0660)
+	// roMask 是只读卷需要的属主/属组读权限位。
+	roMask = os.FileMode(0440)
+	// execMask 是目录需要的属主/属组执行（进入）权限位。
 	execMask = os.FileMode(0110)
 )
 
 var (
-	// function that will be used for changing file permissions on linux
-	// mainly stored here as a variable so as it can replaced in tests
+	// filePermissionChangeFunc 是 Linux 上真正改权限的函数；
+	// 做成变量是为了在测试中替换。
 	filePermissionChangeFunc = changeFilePermission
-	progressReportDuration   = 60 * time.Second
+	// progressReportDuration 是递归改权限期间重复上报进度的间隔。
+	progressReportDuration = 60 * time.Second
+	// firstEventReportDuration 是开始处理后首次上报进度前的等待时间。
 	firstEventReportDuration = 30 * time.Second
 )
 
-// NewVolumeOwnership returns an interface that can be used to recursively change volume permissions and ownership
+// NewVolumeOwnership 返回可递归修改卷权限与属组的接口实现。
 func NewVolumeOwnership(mounter Mounter, dir string, fsGroup *int64, fsGroupChangePolicy *v1.PodFSGroupChangePolicy, completeFunc func(types.CompleteFuncParam)) VolumeOwnershipChanger {
 	vo := &VolumeOwnership{
 		mounter:             mounter,
@@ -62,12 +67,14 @@ func NewVolumeOwnership(mounter Mounter, dir string, fsGroup *int64, fsGroupChan
 	return vo
 }
 
+// AddProgressNotifier 设置进度事件所需的 Pod 与事件记录器。
 func (vo *VolumeOwnership) AddProgressNotifier(pod *v1.Pod, recorder record.EventRecorder) VolumeOwnershipChanger {
 	vo.pod = pod
 	vo.recorder = recorder
 	return vo
 }
 
+// ChangePermissions 按需递归修改卷内文件的属组与权限。
 func (vo *VolumeOwnership) ChangePermissions() error {
 	if vo.fsGroup == nil {
 		return nil
@@ -81,6 +88,7 @@ func (vo *VolumeOwnership) ChangePermissions() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// 延迟告警：小卷很快就改完，没必要为它制造噪音。
 	timer := time.AfterFunc(firstEventReportDuration, func() {
 		vo.initiateProgressMonitor(ctx)
 	})
@@ -89,6 +97,7 @@ func (vo *VolumeOwnership) ChangePermissions() error {
 	return vo.changePermissionsRecursively()
 }
 
+// initiateProgressMonitor 发首次告警，并在有事件记录器时启动进度监控。
 func (vo *VolumeOwnership) initiateProgressMonitor(ctx context.Context) {
 	klog.Warningf("Setting volume ownership for %s and fsGroup set. If the volume has a lot of files then setting volume ownership could be slow, see https://github.com/kubernetes/kubernetes/issues/69699", vo.dir)
 	if vo.pod != nil {
@@ -96,6 +105,7 @@ func (vo *VolumeOwnership) initiateProgressMonitor(ctx context.Context) {
 	}
 }
 
+// changePermissionsRecursively 遍历卷内所有文件并逐个改权限，结束时回调完成通知。
 func (vo *VolumeOwnership) changePermissionsRecursively() error {
 	err := walkDeep(vo.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -113,6 +123,7 @@ func (vo *VolumeOwnership) changePermissionsRecursively() error {
 	return err
 }
 
+// monitorProgress 周期性上报处理进度，直到外部调用 cancel 结束。
 func (vo *VolumeOwnership) monitorProgress(ctx context.Context) {
 	dirName := getDirnameToReport(vo.dir, string(vo.pod.UID))
 	msg := fmt.Sprintf("Setting volume ownership for %s is taking longer than expected, consider using OnRootMismatch - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods", dirName)
@@ -129,7 +140,7 @@ func (vo *VolumeOwnership) monitorProgress(ctx context.Context) {
 	}
 }
 
-// report everything after podUID in dir string, including podUID
+// getDirnameToReport 只保留路径中从 podUID 起的部分；找不到 podUID 时返回原路径。
 func getDirnameToReport(dir, podUID string) string {
 	podUIDIndex := strings.Index(dir, podUID)
 	if podUIDIndex == -1 {
@@ -138,6 +149,7 @@ func getDirnameToReport(dir, podUID string) string {
 	return dir[podUIDIndex:]
 }
 
+// logWarning 记录当前已处理文件数，并发出进度警告事件。
 func (vo *VolumeOwnership) logWarning() {
 	dirName := getDirnameToReport(vo.dir, string(vo.pod.UID))
 	msg := fmt.Sprintf("Setting volume ownership for %s, processed %d files.", dirName, vo.fileCounter.Load())
@@ -145,19 +157,17 @@ func (vo *VolumeOwnership) logWarning() {
 	vo.recorder.Event(vo.pod, v1.EventTypeWarning, events.VolumePermissionChangeInProgress, msg)
 }
 
+// changeFilePermission 修改单个文件的属组与权限位；符号链接只改链接本身，不改目标。
 func changeFilePermission(filename string, fsGroup *int64, readonly bool, info os.FileInfo) error {
+	// Lchown 不跟随符号链接，避免改到卷外目标文件的属组。
 	err := os.Lchown(filename, -1, int(*fsGroup))
 	if err != nil {
 		klog.ErrorS(err, "Lchown failed", "path", filename)
 	}
 
-	// chmod passes through to the underlying file for symlinks.
-	// Symlinks have a mode of 777 but this really doesn't mean anything.
-	// The permissions of the underlying file are what matter.
-	// However, if one reads the mode of a symlink then chmods the symlink
-	// with that mode, it changes the mode of the underlying file, overridden
-	// the defaultMode and permissions initialized by the volume plugin, which
-	// is not what we want; thus, we skip chmod for symlinks.
+	// chmod 会顺着符号链接改到目标文件；符号链接自身的 777 mode 并无实际意义，
+	// 真正权限由目标文件决定。若拿这个 mode 去 chmod，会覆盖卷插件初始化好的
+	// defaultMode，所以这里对符号链接跳过 chmod。
 	if info.Mode()&os.ModeSymlink != 0 {
 		return nil
 	}
@@ -180,6 +190,7 @@ func changeFilePermission(filename string, fsGroup *int64, readonly bool, info o
 	return nil
 }
 
+// skipPermissionChange 判断是否无需递归改权限：未指定 OnRootMismatch 时必须改。
 func skipPermissionChange(mounter Mounter, dir string, fsGroup *int64, fsGroupChangePolicy *v1.PodFSGroupChangePolicy) bool {
 	if fsGroupChangePolicy == nil || *fsGroupChangePolicy != v1.FSGroupChangeOnRootMismatch {
 		klog.V(4).InfoS("Perform recursive ownership change for directory", "path", dir)
@@ -188,6 +199,7 @@ func skipPermissionChange(mounter Mounter, dir string, fsGroup *int64, fsGroupCh
 	return !requiresPermissionChange(dir, fsGroup, mounter.GetAttributes().ReadOnly)
 }
 
+// requiresPermissionChange 检查根目录的属组与权限是否已满足要求，不满足才需递归修改。
 func requiresPermissionChange(rootDir string, fsGroup *int64, readonly bool) bool {
 	fsInfo, err := os.Stat(rootDir)
 	if err != nil {
@@ -210,20 +222,16 @@ func requiresPermissionChange(rootDir string, fsGroup *int64, readonly bool) boo
 		unixPerms = roMask
 	}
 
-	// if rootDir is not a directory then we should apply permission change anyways
+	// 根目录不是目录时无法按目录规则判断，直接走递归修改。
 	if !fsInfo.IsDir() {
 		return true
 	}
 	unixPerms |= execMask
 	filePerm := fsInfo.Mode().Perm()
 
-	// We need to check if actual permissions of root directory is a superset of permissions required by unixPerms.
-	// This is done by checking if permission bits expected in unixPerms is set in actual permissions of the directory.
-	// We use bitwise AND operation to check set bits. For example:
-	//     unixPerms: 770, filePerms: 775 : 770&775 = 770 (perms on directory is a superset)
-	//     unixPerms: 770, filePerms: 770 : 770&770 = 770 (perms on directory is a superset)
-	//     unixPerms: 770, filePerms: 750 : 770&750 = 750 (perms on directory is NOT a superset)
-	// We also need to check if setgid bits are set in permissions of the directory.
+	// 只需判断目录实际权限是否覆盖 unixPerms：按位与结果等于 unixPerms 即为覆盖。
+	// 例如 770&775 = 770（覆盖），770&750 = 750（未覆盖）。
+	// 目录还必须设置 setgid，保证新建文件继承同一属组。
 	if (unixPerms&filePerm != unixPerms) || (fsInfo.Mode()&os.ModeSetgid == 0) {
 		klog.V(4).InfoS("Performing recursive ownership change on rootDir because of mismatching mode", "path", rootDir)
 		return true
@@ -231,10 +239,8 @@ func requiresPermissionChange(rootDir string, fsGroup *int64, readonly bool) boo
 	return false
 }
 
-// readDirNames reads the directory named by dirname and returns
-// a list of directory entries.
-// We are not using filepath.readDirNames because we do not want to sort files found in a directory before changing
-// permissions for performance reasons.
+// readDirNames 读取目录中的条目名，不排序；
+// 改权限不依赖顺序，跳过排序可以省下大卷上的开销。
 func readDirNames(dirname string) ([]string, error) {
 	f, err := os.Open(dirname)
 	if err != nil {
@@ -248,10 +254,9 @@ func readDirNames(dirname string) ([]string, error) {
 	return names, nil
 }
 
-// walkDeep can be used to traverse directories and has two minor differences
-// from filepath.Walk:
-//   - List of files/dirs is not sorted for performance reasons
-//   - callback walkFunc is invoked on root directory after visiting child dirs and files
+// walkDeep 遍历目录树，与 filepath.Walk 有两点差异：
+//   - 不排序，避免大卷上不必要的开销
+//   - 先处理子目录和文件，最后才对根目录调用 walkFunc
 func walkDeep(root string, walkFunc filepath.WalkFunc) error {
 	info, err := os.Lstat(root)
 	if err != nil {

@@ -16,6 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package subpath 在 Linux 上实现 subpath 的安全处理：解析卷内子目录，
+// 通过 /proc/<pid>/fd/<fd> 做 bind mount，防止 symlink 逃逸出卷路径。
 package subpath
 
 import (
@@ -32,12 +34,12 @@ import (
 )
 
 const (
-	// place for subpath mounts
-	// TODO: pass in directory using kubelet_getters instead
+	// 存放 subpath 挂载点的目录
+	// TODO: 改为通过 kubelet_getters 传入目录
 	containerSubPathDirectoryName = "volume-subpaths"
-	// syscall.Openat flags used to traverse directories not following symlinks
+	// 遍历目录时不跟随符号链接所用的 syscall.Openat 标志
 	nofollowFlags = unix.O_RDONLY | unix.O_NOFOLLOW
-	// flags for getting file descriptor without following the symlink
+	// 获取文件描述符时不跟随符号链接所用的标志
 	openFDFlags = unix.O_NOFOLLOW | unix.O_PATH
 )
 
@@ -45,17 +47,19 @@ type subpath struct {
 	mounter mount.Interface
 }
 
-// New returns a subpath.Interface for the current system
+// New 返回适用于当前系统的 subpath.Interface。
 func New(mounter mount.Interface) Interface {
 	return &subpath{
 		mounter: mounter,
 	}
 }
 
+// CleanSubPaths 清理指定 pod 的某个卷下所有 subpath bind mount。
 func (sp *subpath) CleanSubPaths(podDir string, volumeName string) error {
 	return doCleanSubPaths(sp.mounter, podDir, volumeName)
 }
 
+// SafeMakeDir 在 base 范围内安全地创建子目录，防止借助符号链接逃出 base。
 func (sp *subpath) SafeMakeDir(subdir string, base string, perm os.FileMode) error {
 	realBase, err := filepath.EvalSymlinks(base)
 	if err != nil {
@@ -67,16 +71,16 @@ func (sp *subpath) SafeMakeDir(subdir string, base string, perm os.FileMode) err
 	return doSafeMakeDir(realFullPath, realBase, perm)
 }
 
+// PrepareSafeSubpath 为 subpath 建立 bind mount，返回可供容器使用的宿主路径。
 func (sp *subpath) PrepareSafeSubpath(subPath Subpath) (newHostPath string, cleanupAction func(), err error) {
 	newHostPath, err = doBindSubPath(sp.mounter, subPath)
 
-	// There is no action when the container starts. Bind-mount will be cleaned
-	// when container stops by CleanSubPaths.
+	// 容器启动时无需清理动作；容器停止时由 CleanSubPaths 负责卸载 bind mount。
 	cleanupAction = nil
 	return newHostPath, cleanupAction, err
 }
 
-// safeOpenSubPath opens subpath and returns its fd.
+// safeOpenSubPath 打开 subpath 并返回其文件描述符。
 func safeOpenSubPath(mounter mount.Interface, subpath Subpath) (int, error) {
 	if !mount.PathWithinBase(subpath.Path, subpath.VolumePath) {
 		return -1, fmt.Errorf("subpath %q not within volume path %q", subpath.Path, subpath.VolumePath)
@@ -88,18 +92,18 @@ func safeOpenSubPath(mounter mount.Interface, subpath Subpath) (int, error) {
 	return fd, nil
 }
 
-// prepareSubpathTarget creates target for bind-mount of subpath. It returns
-// "true" when the target already exists and something is mounted there.
+// prepareSubpathTarget 为 subpath 的 bind mount 创建挂载目标。
+// 当目标已存在且其上已挂载内容时返回 true。
 func prepareSubpathTarget(mounter mount.Interface, subpath Subpath) (bool, string, error) {
-	// Early check for already bind-mounted subpath.
+	// 提前检查 subpath 是否已经被 bind mount。
 	bindPathTarget := getSubpathBindTarget(subpath)
 	isMount, err := mounter.IsMountPoint(bindPathTarget)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Ignore ErrorNotExist: the file/directory will be created below if it does not exist yet.
+			// 忽略不存在的错误：下面会按需创建文件或目录。
 			isMount = false
 		} else if mount.IsCorruptedMnt(err) {
-			// The mount point is corrupted, attempt to recover by re-creating it.
+			// 挂载点已损坏，尝试卸载后重建。
 			klog.Warningf("Detected corrupted mount at %s (error: %v), unmounting", bindPathTarget, err)
 			if unmountErr := mounter.Unmount(bindPathTarget); unmountErr != nil {
 				return false, "", fmt.Errorf("error unmounting corrupted mount %s: %w", bindPathTarget, unmountErr)
@@ -110,26 +114,25 @@ func prepareSubpathTarget(mounter mount.Interface, subpath Subpath) (bool, strin
 		}
 	}
 	if isMount {
-		// It's already mounted, so check if it's bind-mounted to the same path
+		// 已挂载，需确认它是否 bind mount 到了同一个路径。
 		samePath, err := checkSubPathFileEqual(subpath, bindPathTarget)
 		if err != nil {
 			return false, "", fmt.Errorf("error checking subpath mount info for %s: %s", bindPathTarget, err)
 		}
 		if !samePath {
-			// Use lazy unmount so a hung FUSE/GlusterFS flush cannot block pod recovery.
+			// 使用惰性卸载，避免挂起的 FUSE/GlusterFS flush 阻塞 pod 恢复。
 			klog.V(4).Infof("Subpath bind mount at %s points to a different inode/device than source, will lazy-unmount and recreate", bindPathTarget)
 			if err = lazyUnmountFn(bindPathTarget); err != nil {
 				return false, "", fmt.Errorf("error lazy-unmounting stale subpath mount %s: %w", bindPathTarget, err)
 			}
 		} else {
-			// It's already mounted
+			// 已正确挂载，无需重复操作。
 			klog.V(5).Infof("Skipping bind-mounting subpath %s: already mounted", bindPathTarget)
 			return true, bindPathTarget, nil
 		}
 	}
 
-	// bindPathTarget is in /var/lib/kubelet and thus reachable without any
-	// translation even to containerized kubelet.
+	// bindPathTarget 位于 /var/lib/kubelet 下，即使是容器化的 kubelet 也无需路径转换即可访问。
 	bindParent := filepath.Dir(bindPathTarget)
 	err = os.MkdirAll(bindParent, 0750)
 	if err != nil && !os.IsExist(err) {
@@ -146,10 +149,9 @@ func prepareSubpathTarget(mounter mount.Interface, subpath Subpath) (bool, strin
 			return false, "", fmt.Errorf("error creating directory %s: %s", bindPathTarget, err)
 		}
 	} else {
-		// "/bin/touch <bindPathTarget>".
-		// A file is enough for all possible targets (symlink, device, pipe,
-		// socket, ...), bind-mounting them into a file correctly changes type
-		// of the target file.
+		// 相当于 "/bin/touch <bindPathTarget>"。
+		// 普通文件即可作为所有类型目标（符号链接、设备、管道、socket 等）的挂载点，
+		// bind mount 会将其正确替换为源文件的类型。
 		if err = os.WriteFile(bindPathTarget, []byte{}, 0640); err != nil {
 			return false, "", fmt.Errorf("error creating file %s: %s", bindPathTarget, err)
 		}
@@ -157,12 +159,12 @@ func prepareSubpathTarget(mounter mount.Interface, subpath Subpath) (bool, strin
 	return false, bindPathTarget, nil
 }
 
-// lazyUnmountFn is a package-level variable so tests can replace it without
-// forking the binary.
+// lazyUnmountFn 是包级变量，便于测试替换而无需 fork 出新二进制。
 var lazyUnmountFn = func(path string) error {
 	return syscall.Unmount(path, syscall.MNT_DETACH)
 }
 
+// checkSubPathFileEqual 判断 subpath 源与 bind mount 目标是否指向相同的 inode/device。
 func checkSubPathFileEqual(subpath Subpath, bindMountTarget string) (bool, error) {
 	s, err := os.Lstat(subpath.Path)
 	if err != nil {
@@ -180,18 +182,20 @@ func checkSubPathFileEqual(subpath Subpath, bindMountTarget string) (bool, error
 	return true, nil
 }
 
+// getSubpathBindTarget 返回 subpath 的 bind mount 目标路径。
 func getSubpathBindTarget(subpath Subpath) string {
-	// containerName is DNS label, i.e. safe as a directory name.
+	// 容器名是 DNS label，可安全用作目录名。
 	return filepath.Join(subpath.PodDir, containerSubPathDirectoryName, subpath.VolumeName, subpath.ContainerName, strconv.Itoa(subpath.VolumeMountIndex))
 }
 
+// doBindSubPath 为 subpath 建立 bind mount 并返回宿主路径。
 func doBindSubPath(mounter mount.Interface, subpath Subpath) (hostPath string, err error) {
-	// Linux, kubelet runs on the host:
-	// - safely open the subpath
-	// - bind-mount /proc/<pid of kubelet>/fd/<fd> to subpath target
-	// User can't change /proc/<pid of kubelet>/fd/<fd> to point to a bad place.
+	// Linux 上 kubelet 运行在宿主机：
+	// - 安全地打开 subpath
+	// - 将 /proc/<kubelet 的 pid>/fd/<fd> bind mount 到 subpath 目标
+	// 用户无法把 /proc/<kubelet 的 pid>/fd/<fd> 改指向恶意位置。
 
-	// Evaluate all symlinks here once for all subsequent functions.
+	// 在此一次性解析所有符号链接，供后续函数使用。
 	newVolumePath, err := filepath.EvalSymlinks(subpath.VolumePath)
 	if err != nil {
 		return "", fmt.Errorf("error resolving symlinks in %q: %v", subpath.VolumePath, err)
@@ -220,7 +224,7 @@ func doBindSubPath(mounter mount.Interface, subpath Subpath) (hostPath string, e
 
 	success := false
 	defer func() {
-		// Cleanup subpath on error
+		// 出错时清理 subpath。
 		if !success {
 			klog.V(4).Infof("doBindSubPath() failed for %q, cleaning up subpath", bindPathTarget)
 			if cleanErr := cleanSubPath(mounter, subpath); cleanErr != nil {
@@ -232,7 +236,7 @@ func doBindSubPath(mounter mount.Interface, subpath Subpath) (hostPath string, e
 	kubeletPid := os.Getpid()
 	mountSource := fmt.Sprintf("/proc/%d/fd/%v", kubeletPid, fd)
 
-	// Do the bind mount
+	// 执行 bind mount。
 	options := []string{"bind"}
 	mountFlags := []string{"--no-canonicalize"}
 	klog.V(5).Infof("bind mounting %q at %q", mountSource, bindPathTarget)
@@ -245,9 +249,9 @@ func doBindSubPath(mounter mount.Interface, subpath Subpath) (hostPath string, e
 	return bindPathTarget, nil
 }
 
-// doCleanSubPaths tears down the subpath bind mounts for a pod
+// doCleanSubPaths 拆除某个 pod 的所有 subpath bind mount。
 func doCleanSubPaths(mounter mount.Interface, podDir string, volumeName string) error {
-	// scan /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/*
+	// 扫描 /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/*
 	subPathDir := filepath.Join(podDir, containerSubPathDirectoryName, volumeName)
 	klog.V(4).Infof("Cleaning up subpath mounts for %s", subPathDir)
 
@@ -266,27 +270,27 @@ func doCleanSubPaths(mounter mount.Interface, podDir string, volumeName string) 
 		}
 		klog.V(4).Infof("Cleaning up subpath mounts for container %s", containerDir.Name())
 
-		// scan /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/<container name>/*
+		// 扫描 /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/<container name>/*
 		fullContainerDirPath := filepath.Join(subPathDir, containerDir.Name())
-		// The original traversal method here was ReadDir, which was not so robust to handle some error such as "stale NFS file handle",
-		// so it was replaced with filepath.Walk in a later patch, which can pass through error and handled by the callback WalkFunc.
-		// After go 1.16, WalkDir was introduced, it's more effective than Walk because the callback WalkDirFunc is called before
-		// reading a directory, making it save some time when a container's subPath contains lots of dirs.
-		// See https://github.com/kubernetes/kubernetes/pull/71804 and https://github.com/kubernetes/kubernetes/issues/107667 for more details.
+		// 原先的遍历方式是 ReadDir，对诸如 "stale NFS file handle" 之类的错误不够健壮，
+		// 后续补丁改用 filepath.Walk：错误可以向上传递并由回调 WalkFunc 处理。
+		// Go 1.16 之后引入的 WalkDir 更高效：回调 WalkDirFunc 在读取目录前就被调用，
+		// 当容器的 subPath 包含大量目录时可以省下一些时间。
+		// 详情见 https://github.com/kubernetes/kubernetes/pull/71804 和 https://github.com/kubernetes/kubernetes/issues/107667。
 		err = filepath.WalkDir(fullContainerDirPath, func(path string, info os.DirEntry, _ error) error {
 			if path == fullContainerDirPath {
-				// Skip top level directory
+				// 跳过顶层目录。
 				return nil
 			}
 
-			// pass through errors and let doCleanSubPath handle them
+			// 将错误向上传递，交由 doCleanSubPath 处理。
 			if err = doCleanSubPath(mounter, fullContainerDirPath, filepath.Base(path)); err != nil {
 				return err
 			}
 
-			// We need to check that info is not nil. This may happen when the incoming err is not nil due to stale mounts or permission errors.
+			// 需要检查 info 不为 nil：挂载失效或权限错误时传入的 err 可能非空。
 			if info != nil && info.IsDir() {
-				// skip subdirs of the volume: it only matters the first level to unmount, otherwise it would try to unmount subdir of the volume
+				// 跳过卷的子目录：只需卸载第一层，否则会尝试卸载卷内的子目录。
 				return filepath.SkipDir
 			}
 
@@ -296,19 +300,19 @@ func doCleanSubPaths(mounter mount.Interface, podDir string, volumeName string) 
 			return fmt.Errorf("error processing %s: %s", fullContainerDirPath, err)
 		}
 
-		// Whole container has been processed, remove its directory.
+		// 整个容器已处理完毕，移除其目录。
 		if err := os.Remove(fullContainerDirPath); err != nil {
 			return fmt.Errorf("error deleting %s: %s", fullContainerDirPath, err)
 		}
 		klog.V(5).Infof("Removed %s", fullContainerDirPath)
 	}
-	// Whole pod volume subpaths have been cleaned up, remove its subpath directory.
+	// 整个 pod 卷的 subpath 已清理完毕，移除其 subpath 目录。
 	if err := os.Remove(subPathDir); err != nil {
 		return fmt.Errorf("error deleting %s: %s", subPathDir, err)
 	}
 	klog.V(5).Infof("Removed %s", subPathDir)
 
-	// Remove entire subpath directory if it's the last one
+	// 如果已是最后一个，移除整个 subpath 目录。
 	podSubPathDir := filepath.Join(podDir, containerSubPathDirectoryName)
 	if err := os.Remove(podSubPathDir); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("error deleting %s: %s", podSubPathDir, err)
@@ -317,9 +321,9 @@ func doCleanSubPaths(mounter mount.Interface, podDir string, volumeName string) 
 	return nil
 }
 
-// doCleanSubPath tears down the single subpath bind mount
+// doCleanSubPath 拆除单个 subpath bind mount。
 func doCleanSubPath(mounter mount.Interface, fullContainerDirPath, subPathIndex string) error {
-	// process /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/<container name>/<subPathName>
+	// 处理 /var/lib/kubelet/pods/<uid>/volume-subpaths/<volume>/<container name>/<subPathName>
 	klog.V(4).Infof("Cleaning up subpath mounts for subpath %v", subPathIndex)
 	fullSubPath := filepath.Join(fullContainerDirPath, subPathIndex)
 
@@ -331,16 +335,16 @@ func doCleanSubPath(mounter mount.Interface, fullContainerDirPath, subPathIndex 
 	return nil
 }
 
-// cleanSubPath will teardown the subpath bind mount and any remove any directories if empty
+// cleanSubPath 拆除 subpath bind mount，并递归删除变空的目录。
 func cleanSubPath(mounter mount.Interface, subpath Subpath) error {
 	containerDir := filepath.Join(subpath.PodDir, containerSubPathDirectoryName, subpath.VolumeName, subpath.ContainerName)
 
-	// Clean subdir bindmount
+	// 清理子目录的 bind mount。
 	if err := doCleanSubPath(mounter, containerDir, strconv.Itoa(subpath.VolumeMountIndex)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	// Recusively remove directories if empty
+	// 递归删除空目录。
 	if err := removeEmptyDirs(subpath.PodDir, containerDir); err != nil {
 		return err
 	}
@@ -348,8 +352,8 @@ func cleanSubPath(mounter mount.Interface, subpath Subpath) error {
 	return nil
 }
 
-// removeEmptyDirs works backwards from endDir to baseDir and removes each directory
-// if it is empty.  It stops once it encounters a directory that has content
+// removeEmptyDirs 从 endDir 向 baseDir 反向遍历，遇到非空目录即停止，
+// 途中删除所有空目录。
 func removeEmptyDirs(baseDir, endDir string) error {
 	if !mount.PathWithinBase(endDir, baseDir) {
 		return fmt.Errorf("endDir %q is not within baseDir %q", endDir, baseDir)
@@ -380,7 +384,7 @@ func removeEmptyDirs(baseDir, endDir string) error {
 	return nil
 }
 
-// doSafeMakeDir creates a directory at pathname, but only if it is within base.
+// doSafeMakeDir 在 pathname 处创建目录，但仅当它位于 base 范围内时。
 func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	klog.V(4).Infof("Creating directory %q within base %q", pathname, base)
 
@@ -388,25 +392,24 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		return fmt.Errorf("path %s is outside of allowed base %s", pathname, base)
 	}
 
-	// Quick check if the directory already exists
+	// 快速检查目录是否已存在。
 	s, err := os.Stat(pathname)
 	if err == nil {
-		// Path exists
+		// 路径已存在。
 		if s.IsDir() {
-			// The directory already exists. It can be outside of the parent,
-			// but there is no race-proof check.
+			// 目录已存在。它可能位于父目录之外，但无法做无竞态的检查。
 			klog.V(4).Infof("Directory %s already exists", pathname)
 			return nil
 		}
 		return &os.PathError{Op: "mkdir", Path: pathname, Err: syscall.ENOTDIR}
 	}
 
-	// Find all existing directories
+	// 找出其中已存在的最长目录前缀。
 	existingPath, toCreate, err := findExistingPrefix(base, pathname)
 	if err != nil {
 		return fmt.Errorf("error opening directory %s: %s", pathname, err)
 	}
-	// Ensure the existing directory is inside allowed base
+	// 确认已存在的目录确实位于允许的 base 之内。
 	fullExistingPath, err := filepath.EvalSymlinks(existingPath)
 	if err != nil {
 		return fmt.Errorf("error opening directory %s: %s", existingPath, err)
@@ -435,8 +438,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	}()
 
 	currentPath := fullExistingPath
-	// create the directories one by one, making sure nobody can change
-	// created directory into symlink.
+	// 逐级创建目录，确保没人能把已创建的目录替换成符号链接。
 	for _, dir := range toCreate {
 		currentPath = filepath.Join(currentPath, dir)
 		klog.V(4).Infof("Creating %s", dir)
@@ -444,18 +446,16 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		if err != nil {
 			return fmt.Errorf("cannot create directory %s: %w", currentPath, err)
 		}
-		// Dive into the created directory
+		// 钻进刚创建的目录。
 		childFD, err = syscall.Openat(parentFD, dir, nofollowFlags|unix.O_CLOEXEC, 0)
 		if err != nil {
 			return fmt.Errorf("cannot open %s: %s", currentPath, err)
 		}
-		// We can be sure that childFD is safe to use. It could be changed
-		// by user after Mkdirat() and before Openat(), however:
-		// - it could not be changed to symlink - we use nofollowFlags
-		// - it could be changed to a file (or device, pipe, socket, ...)
-		//   but either subsequent Mkdirat() fails or we mount this file
-		//   to user's container. Security is no violated in both cases
-		//   and user either gets error or the file that it can already access.
+		// 可以确信 childFD 是安全的。用户可能在 Mkdirat() 与 Openat() 之间改动它，但：
+		// - 无法改成符号链接——我们使用了 nofollowFlags；
+		// - 即便改成文件（或设备、管道、socket 等），要么后续 Mkdirat() 失败，
+		//   要么我们把该文件挂载进用户容器。两种情况下安全性都不受影响，
+		//   用户要么拿到错误，要么拿到本来就可访问的文件。
 
 		if err = syscall.Close(parentFD); err != nil {
 			klog.V(4).Infof("Closing FD %v failed for safemkdir(%v): %v", parentFD, pathname, err)
@@ -463,13 +463,12 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		parentFD = childFD
 		childFD = -1
 
-		// Everything was created. mkdirat(..., perm) above was affected by current
-		// umask and we must apply the right permissions to the all created directory.
-		// (that's the one that will be available to the container as subpath)
-		// so user can read/write it.
-		// parentFD is the last created directory.
+		// 目录都已创建。上面的 mkdirat(..., perm) 受当前 umask 影响，
+		// 必须给所有新建目录补上正确的权限（容器将把它作为 subpath 访问），
+		// 这样用户才能读写。
+		// parentFD 此时指向最后创建的目录。
 
-		// Translate perm (os.FileMode) to uint32 that fchmod() expects
+		// 把 perm（os.FileMode）转换为 fchmod() 需要的 uint32。
 		kernelPerm := uint32(perm & os.ModePerm)
 		if perm&os.ModeSetgid > 0 {
 			kernelPerm |= syscall.S_ISGID
@@ -488,8 +487,8 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	return nil
 }
 
-// findExistingPrefix finds prefix of pathname that exists. In addition, it
-// returns list of remaining directories that don't exist yet.
+// findExistingPrefix 找出 pathname 中已存在的前缀，
+// 并返回尚不存在的剩余目录列表。
 func findExistingPrefix(base, pathname string) (string, []string, error) {
 	rel, err := filepath.Rel(base, pathname)
 	if err != nil {
@@ -497,9 +496,8 @@ func findExistingPrefix(base, pathname string) (string, []string, error) {
 	}
 	dirs := strings.Split(rel, string(filepath.Separator))
 
-	// Do OpenAt in a loop to find the first non-existing dir. Resolve symlinks.
-	// This should be faster than looping through all dirs and calling os.Stat()
-	// on each of them, as the symlinks are resolved only once with OpenAt().
+	// 循环执行 OpenAt 找到第一个不存在的目录，同时解析符号链接。
+	// 这样比遍历所有目录逐个调用 os.Stat() 更快，因为符号链接只会在 OpenAt() 时解析一次。
 	currentPath := base
 	fd, err := syscall.Open(currentPath, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
 	if err != nil {
@@ -511,8 +509,7 @@ func findExistingPrefix(base, pathname string) (string, []string, error) {
 		}
 	}()
 	for i, dir := range dirs {
-		// Using O_PATH here will prevent hangs in case user replaces directory with
-		// fifo
+		// 这里使用 O_PATH，防止用户把目录换成 fifo 时发生挂起。
 		childFD, err := syscall.Openat(fd, dir, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -529,22 +526,21 @@ func findExistingPrefix(base, pathname string) (string, []string, error) {
 	return pathname, []string{}, nil
 }
 
-// Open path and return its fd.
-// Symlinks are disallowed (pathname must already resolve symlinks),
-// and the path must be within the base directory.
+// doSafeOpen 打开 path 并返回其文件描述符。
+// 不允许符号链接（pathname 必须已解析完符号链接），
+// 且路径必须位于 base 目录之内。
 func doSafeOpen(pathname string, base string) (int, error) {
 	pathname = filepath.Clean(pathname)
 	base = filepath.Clean(base)
 
-	// Calculate segments to follow
+	// 计算需要逐级跟随的路径段。
 	subpath, err := filepath.Rel(base, pathname)
 	if err != nil {
 		return -1, err
 	}
 	segments := strings.Split(subpath, string(filepath.Separator))
 
-	// Assumption: base is the only directory that we have under control.
-	// Base dir is not allowed to be a symlink.
+	// 前提：base 是唯一受我们控制的目录，且不允许 base 本身是符号链接。
 	parentFD, err := syscall.Open(base, nofollowFlags|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return -1, fmt.Errorf("cannot open directory %s: %s", base, err)
@@ -568,8 +564,7 @@ func doSafeOpen(pathname string, base string) (int, error) {
 
 	currentPath := base
 
-	// Follow the segments one by one using openat() to make
-	// sure the user cannot change already existing directories into symlinks.
+	// 用 openat() 逐级跟随，确保用户无法把已有目录改成符号链接。
 	for _, seg := range segments {
 		var deviceStat unix.Stat_t
 
@@ -578,8 +573,8 @@ func doSafeOpen(pathname string, base string) (int, error) {
 			return -1, fmt.Errorf("path %s is outside of allowed base %s", currentPath, base)
 		}
 
-		// Trigger auto mount if it's an auto-mounted directory, ignore error if not a directory.
-		// Notice the trailing slash is mandatory, see "automount" in openat(2) and open_by_handle_at(2).
+		// 若是自动挂载目录则触发自动挂载；若不是目录则忽略错误。
+		// 注意结尾斜杠是必须的，参见 openat(2) 和 open_by_handle_at(2) 中的 "automount"。
 		unix.Fstatat(parentFD, seg+"/", &deviceStat, unix.AT_SYMLINK_NOFOLLOW)
 
 		klog.V(5).Infof("Opening path %s", currentPath)
@@ -597,16 +592,16 @@ func doSafeOpen(pathname string, base string) (int, error) {
 			return -1, fmt.Errorf("unexpected symlink found %s", currentPath)
 		}
 
-		// Close parentFD
+		// 关闭 parentFD。
 		if err = syscall.Close(parentFD); err != nil {
 			return -1, fmt.Errorf("closing fd for %q failed: %v", filepath.Dir(currentPath), err)
 		}
-		// Set child to new parent
+		// 将 child 设为新的 parent。
 		parentFD = childFD
 		childFD = -1
 	}
 
-	// We made it to the end, return this fd, don't close it
+	// 一路走到末尾，返回该 fd，不要关闭。
 	finalFD := parentFD
 	parentFD = -1
 

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// makeLink 通过 cmd 的 mklink 创建目录符号链接。
 func makeLink(link, target string) error {
 	if output, err := exec.Command("cmd", "/c", "mklink", "/D", link, target).CombinedOutput(); err != nil {
 		return fmt.Errorf("mklink failed: %v, link(%q) target(%q) output: %q", err, link, target, string(output))
@@ -35,6 +36,7 @@ func makeLink(link, target string) error {
 	return nil
 }
 
+// TestDoSafeMakeDir 验证创建子目录时会拒绝逃逸卷根的符号链接路径。
 func TestDoSafeMakeDir(t *testing.T) {
 	base, err := os.MkdirTemp("", "TestDoSafeMakeDir")
 	if err != nil {
@@ -105,12 +107,12 @@ func TestDoSafeMakeDir(t *testing.T) {
 
 	for _, test := range tests {
 		if len(test.volumePath) > 0 && len(test.subPath) > 0 && len(test.symlinkTarget) > 0 {
-			// make all parent sub directories
+			// 先创建所有父目录。
 			if parent := filepath.Dir(test.subPath); parent != "." {
 				os.MkdirAll(parent, 0755)
 			}
 
-			// make last element as symlink
+			// 将路径最后一段创建为符号链接。
 			linkPath := test.subPath
 			if _, err := os.Stat(linkPath); err != nil && os.IsNotExist(err) {
 				if err := makeLink(linkPath, test.symlinkTarget); err != nil {
@@ -131,6 +133,7 @@ func TestDoSafeMakeDir(t *testing.T) {
 	}
 }
 
+// TestLockAndCheckSubPath 验证路径锁定和符号链接逃逸检查返回的句柄数。
 func TestLockAndCheckSubPath(t *testing.T) {
 	base, err := os.MkdirTemp("", "TestLockAndCheckSubPath")
 	if err != nil {
@@ -203,15 +206,15 @@ func TestLockAndCheckSubPath(t *testing.T) {
 		if len(test.volumePath) > 0 && len(test.subPath) > 0 {
 			os.MkdirAll(test.volumePath, 0755)
 			if len(test.symlinkTarget) == 0 {
-				// make all intermediate sub directories
+				// 创建所有中间目录。
 				os.MkdirAll(test.subPath, 0755)
 			} else {
-				// make all parent sub directories
+				// 先创建所有父目录。
 				if parent := filepath.Dir(test.subPath); parent != "." {
 					os.MkdirAll(parent, 0755)
 				}
 
-				// make last element as symlink
+				// 将路径最后一段创建为符号链接。
 				linkPath := test.subPath
 				if _, err := os.Stat(linkPath); err != nil && os.IsNotExist(err) {
 					if err := makeLink(linkPath, test.symlinkTarget); err != nil {
@@ -231,10 +234,11 @@ func TestLockAndCheckSubPath(t *testing.T) {
 		assert.Nil(t, err, "Expect no error during LockAndCheckSubPath(%s, %s)", test.volumePath, test.subPath)
 	}
 
-	// remove dir will happen after closing all file handles
+	// 先关闭所有文件句柄，才能删除目录。
 	assert.Nil(t, os.RemoveAll(testingVolumePath), "Expect no error during remove dir %s", testingVolumePath)
 }
 
+// TestLockAndCheckSubPathWithoutSymlink 验证不解析符号链接时仍返回各路径分量的句柄。
 func TestLockAndCheckSubPathWithoutSymlink(t *testing.T) {
 	base, err := os.MkdirTemp("", "TestLockAndCheckSubPathWithoutSymlink")
 	if err != nil {
@@ -307,15 +311,15 @@ func TestLockAndCheckSubPathWithoutSymlink(t *testing.T) {
 		if len(test.volumePath) > 0 && len(test.subPath) > 0 {
 			os.MkdirAll(test.volumePath, 0755)
 			if len(test.symlinkTarget) == 0 {
-				// make all intermediate sub directories
+				// 创建所有中间目录。
 				os.MkdirAll(test.subPath, 0755)
 			} else {
-				// make all parent sub directories
+				// 先创建所有父目录。
 				if parent := filepath.Dir(test.subPath); parent != "." {
 					os.MkdirAll(parent, 0755)
 				}
 
-				// make last element as symlink
+				// 将路径最后一段创建为符号链接。
 				linkPath := test.subPath
 				if _, err := os.Stat(linkPath); err != nil && os.IsNotExist(err) {
 					if err := makeLink(linkPath, test.symlinkTarget); err != nil {
@@ -335,10 +339,11 @@ func TestLockAndCheckSubPathWithoutSymlink(t *testing.T) {
 		assert.Nil(t, err, "Expect no error during LockAndCheckSubPath(%s, %s)", test.volumePath, test.subPath)
 	}
 
-	// remove dir will happen after closing all file handles
+	// 先关闭所有文件句柄，才能删除目录。
 	assert.Nil(t, os.RemoveAll(testingVolumePath), "Expect no error during remove dir %s", testingVolumePath)
 }
 
+// TestFindExistingPrefix 验证查找已有路径前缀和待创建目录列表。
 func TestFindExistingPrefix(t *testing.T) {
 	base, err := os.MkdirTemp("", "TestFindExistingPrefix")
 	if err != nil {
@@ -434,10 +439,11 @@ func TestFindExistingPrefix(t *testing.T) {
 			test.base, test.pathname, toCreate, test.expectedToCreateDirs)
 
 	}
-	// remove dir will happen after closing all file handles
+	// 先关闭所有文件句柄，才能删除目录。
 	assert.Nil(t, os.RemoveAll(testingVolumePath), "Expect no error during remove dir %s", testingVolumePath)
 }
 
+// TestIsDriveLetterorEmptyPath 验证盘符路径和空路径的识别。
 func TestIsDriveLetterorEmptyPath(t *testing.T) {
 	tests := []struct {
 		path           string
@@ -476,61 +482,60 @@ func TestIsDriveLetterorEmptyPath(t *testing.T) {
 	}
 }
 
+// TestIsDeviceOrUncPath 验证设备路径和 UNC 路径的识别，防止被解析触发 NTLM 认证。
 func TestIsDeviceOrUncPath(t *testing.T) {
 	tests := []struct {
 		path           string
 		expectedResult bool
 	}{
 		{
-			// ordinary local path must be resolvable
+			// 普通本地路径应可正常解析。
 			path:           `c:\tmp\foo`,
 			expectedResult: false,
 		},
 		{
-			// empty path is not a device/UNC path
+			// 空路径不是设备/UNC 路径。
 			path:           ``,
 			expectedResult: false,
 		},
 		{
-			// UNC network path: must be refused so it is never followed,
-			// otherwise resolving it triggers forced NTLM authentication.
+			// UNC 网络路径必须拒绝解析，否则解析时会触发强制 NTLM 认证。
 			path:           `\\attacker\share`,
 			expectedResult: true,
 		},
 		{
-			// UNC network path referenced by IP
+			// 使用 IP 的 UNC 网络路径。
 			path:           `\\127.0.0.1\share\dir`,
 			expectedResult: true,
 		},
 		{
-			// forward-slash UNC form: evalSymlink normalizes "/" to "\" via
-			// mount.NormalizeWindowsPath before this check, but asserting it
-			// here guards against callers that pass an unnormalized target.
+			// 正斜杠 UNC 形式：evalSymlink 在正常化时会将 "/" 转为 "\\"，
+			// 此处显式断言可防止调用方传入未规范化的目标。
 			path:           `//attacker/share`,
 			expectedResult: true,
 		},
 		{
-			// device-form UNC path (extended-length prefix)
+			// 设备形式的 UNC 路径（扩展长度前缀）。
 			path:           `\\?\UNC\server\share`,
 			expectedResult: true,
 		},
 		{
-			// device namespace path
+			// 设备命名空间路径。
 			path:           `\\.\PhysicalDrive0`,
 			expectedResult: true,
 		},
 		{
-			// extended-length local path
+			// 扩展长度的本地路径。
 			path:           `\\?\c:\tmp`,
 			expectedResult: true,
 		},
 		{
-			// stripped device-form UNC path
+			// 去掉前缀的设备形式 UNC 路径。
 			path:           `UNC\server\share`,
 			expectedResult: true,
 		},
 		{
-			// volume GUID path
+			// 卷 GUID 路径。
 			path:           `Volume{00000000-0000-0000-0000-000000000000}\`,
 			expectedResult: true,
 		},

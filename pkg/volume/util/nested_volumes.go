@@ -27,14 +27,13 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
-// getNestedMountpoints returns a list of mountpoint directories that should be created
-// for the volume indicated by name.
-// note: the returned list is relative to baseDir
+// getNestedMountpoints 返回为指定卷需要创建的挂载点目录列表。
+// 注意：返回的列表相对于 baseDir。
 func getNestedMountpoints(name, baseDir string, pod v1.Pod) ([]string, error) {
 	var retval []string
 	checkContainer := func(container *v1.Container) error {
-		var allMountPoints []string // all mount points in this container
-		var myMountPoints []string  // mount points that match name
+		var allMountPoints []string // 该容器内所有挂载点
+		var myMountPoints []string  // 与 name 匹配的挂载点
 		for _, vol := range container.VolumeMounts {
 			cleaned := filepath.Clean(vol.MountPath)
 			allMountPoints = append(allMountPoints, cleaned)
@@ -44,28 +43,26 @@ func getNestedMountpoints(name, baseDir string, pod v1.Pod) ([]string, error) {
 		}
 		sort.Strings(allMountPoints)
 		parentPrefix := ".." + string(os.PathSeparator)
-		// Examine each place where this volume is mounted
+		// 检查该卷的每一处挂载位置
 		for _, myMountPoint := range myMountPoints {
 			if strings.HasPrefix(myMountPoint, parentPrefix) {
-				// Don't let a container trick us into creating directories outside of its rootfs
+				// 防止容器借相对路径诱使我们在 rootfs 之外创建目录
 				return fmt.Errorf("invalid container mount point %v", myMountPoint)
 			}
 			myMountPointWithSlash := myMountPoint + string(os.PathSeparator)
-			// The previously found nested mountpoints.
-			// NOTE: We can't simply rely on sort.Strings to have all the mountpoints sorted and
-			// grouped. For example, the following strings are sorted in this exact order:
+			// 记录此前已发现的嵌套挂载点。
+			// 注意：不能只依赖 sort.Strings 让挂载点自然分组。例如以下字符串恰好按此顺序排列：
 			// /dir/nested, /dir/nested-vol, /dir/nested.vol, /dir/nested/double, /dir/nested2
-			// The issue is a bit worse for Windows paths, since the \'s value is higher than /'s:
+			// Windows 路径更麻烦，因为反斜杠的排序值大于正斜杠：
 			// \dir\nested, \dir\nested-vol, \dir\nested.vol, \dir\nested2, \dir\nested\double
-			// Because of this, we should use a list of previously mounted mountpoints, rather than only one.
+			// 因此需要用列表记录所有已发现的挂载点，而不是只记一个。
 			prevNestedMPs := []string{}
-			// examine each mount point to see if it's nested beneath this volume
-			// (but skip any that are double-nested beneath this volume)
-			// For example, if this volume is mounted as /dir and other volumes are mounted
-			//              as /dir/nested and /dir/nested/other, only create /dir/nested.
+			// 找出嵌套在该卷挂载点下的其他挂载点，但跳过双重嵌套者。
+			// 例如本卷挂载在 /dir，其他卷挂载在 /dir/nested 和 /dir/nested/other，
+			// 则只需创建 /dir/nested。
 			for _, mp := range allMountPoints {
 				if !strings.HasPrefix(mp, myMountPointWithSlash) {
-					continue // skip -- not nested beneath myMountPoint
+					continue // 跳过：不在 myMountPoint 之下
 				}
 
 				isNested := false
@@ -76,9 +73,9 @@ func getNestedMountpoints(name, baseDir string, pod v1.Pod) ([]string, error) {
 					}
 				}
 				if isNested {
-					continue // skip -- double nested beneath myMountPoint
+					continue // 跳过：在 myMountPoint 下双重嵌套
 				}
-				// since this mount point is nested, remember it so that we can check that following ones aren't nested beneath this one
+				// 记住这个嵌套挂载点，以便检查后续挂载点是否嵌套在它之下
 				prevNestedMPs = append(prevNestedMPs, mp+string(os.PathSeparator))
 				retval = append(retval, mp[len(myMountPointWithSlash):])
 			}
@@ -98,7 +95,7 @@ func getNestedMountpoints(name, baseDir string, pod v1.Pod) ([]string, error) {
 	return retval, nil
 }
 
-// MakeNestedMountpoints creates mount points in baseDir for volumes mounted beneath name
+// MakeNestedMountpoints 在 baseDir 下为挂载在 name 卷之内的其他卷创建挂载点。
 func MakeNestedMountpoints(name, baseDir string, pod v1.Pod) error {
 	dirs, err := getNestedMountpoints(name, baseDir, pod)
 	if err != nil {

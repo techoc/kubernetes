@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TestHandleResponseDefaults 验证驱动返回空能力字段时使用默认能力集。
 func TestHandleResponseDefaults(t *testing.T) {
 	ds, err := handleCmdResponse("test", []byte(`{"status": "Success"}`))
 	if err != nil {

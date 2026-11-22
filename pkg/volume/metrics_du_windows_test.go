@@ -22,6 +22,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fs"
 )
 
+// getExpectedBlockSize 返回 path 所在文件系统的预期块大小；Windows 下走 fs.DiskUsage。
 func getExpectedBlockSize(path string) int64 {
 	usage, err := fs.DiskUsage(path)
 	if err != nil {

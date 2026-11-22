@@ -23,33 +23,37 @@ import (
 	utilfs "k8s.io/kubernetes/pkg/util/filesystem"
 )
 
-// Mock filesystem watcher
+// fakeWatcher 是测试用的模拟文件系统监视器。
 type fakeWatcher struct {
-	watches      []string // List of watches added by the prober, ordered from least recent to most recent.
+	watches      []string // 探测器添加的监视路径，按加入顺序由旧到新排列。
 	eventHandler utilfs.FSEventHandler
 }
 
 var _ utilfs.FSWatcher = &fakeWatcher{}
 
+// newFakeWatcher 创建一个空的模拟监视器。
 func newFakeWatcher() *fakeWatcher {
 	return &fakeWatcher{
 		watches: nil,
 	}
 }
 
+// Init 记录事件回调；测试无需错误回调。
 func (w *fakeWatcher) Init(eventHandler utilfs.FSEventHandler, _ utilfs.FSErrorHandler) error {
 	w.eventHandler = eventHandler
 	return nil
 }
 
+// Run 空实现：测试直接调用 TriggerEvent，无需后台循环。
 func (w *fakeWatcher) Run(_ context.Context) { /* no-op */ }
 
+// AddWatch 把路径记入监视列表，不实际监听文件系统。
 func (w *fakeWatcher) AddWatch(path string) error {
 	w.watches = append(w.watches, path)
 	return nil
 }
 
-// Triggers a mock filesystem event.
+// TriggerEvent 触发一次模拟文件系统事件。
 func (w *fakeWatcher) TriggerEvent(op fsnotify.Op, filename string) {
 	w.eventHandler(fsnotify.Event{Op: op, Name: filename})
 }

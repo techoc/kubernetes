@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package local contains the internal representation of local volumes
+// Package local 定义本地卷的内部表示。
 package local

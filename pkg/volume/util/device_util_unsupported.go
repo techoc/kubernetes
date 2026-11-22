@@ -18,24 +18,24 @@ limitations under the License.
 
 package util
 
-// FindMultipathDeviceForDevice unsupported returns ""
+// FindMultipathDeviceForDevice 在非 Linux 平台不支持，返回空字符串。
 func (handler *deviceHandler) FindMultipathDeviceForDevice(device string) string {
 	return ""
 }
 
-// FindSlaveDevicesOnMultipath unsupported returns ""
+// FindSlaveDevicesOnMultipath 在非 Linux 平台不支持，返回空切片。
 func (handler *deviceHandler) FindSlaveDevicesOnMultipath(disk string) []string {
 	out := []string{}
 	return out
 }
 
-// GetISCSIPortalHostMapForTarget unsupported returns nil
+// GetISCSIPortalHostMapForTarget 在非 Linux 平台不支持，返回空 map。
 func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (map[string]int, error) {
 	portalHostMap := make(map[string]int)
 	return portalHostMap, nil
 }
 
-// FindDevicesForISCSILun unsupported returns nil
+// FindDevicesForISCSILun 在非 Linux 平台不支持，返回空切片。
 func (handler *deviceHandler) FindDevicesForISCSILun(targetIqn string, lun int) ([]string, error) {
 	devices := []string{}
 	return devices, nil

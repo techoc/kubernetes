@@ -24,6 +24,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestValidatePersistentVolumes 校验挂载选项在不同 PV 类型下的合法性。
 func TestValidatePersistentVolumes(t *testing.T) {
 	scenarios := map[string]struct {
 		isExpectedFailure bool
@@ -66,6 +67,7 @@ func TestValidatePersistentVolumes(t *testing.T) {
 	}
 }
 
+// testVolumeWithMountOption 构造带挂载选项注解的 PV，供校验测试使用。
 func testVolumeWithMountOption(name string, namespace string, mountOptions string, spec api.PersistentVolumeSpec) *api.PersistentVolume {
 	annotations := map[string]string{
 		api.MountOptionAnnotation: mountOptions,
@@ -85,6 +87,7 @@ func testVolumeWithMountOption(name string, namespace string, mountOptions strin
 	}
 }
 
+// TestValidatePathNoBacksteps 验证 ValidatePathNoBacksteps 能拒绝含 ".." 回退的路径。
 func TestValidatePathNoBacksteps(t *testing.T) {
 	testCases := map[string]struct {
 		path        string

@@ -37,8 +37,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
-// TestCSI_VolumeAll runs a close approximation of volume workflow
-// based on operations from the volume manager/reconciler/operation executor
+// TestCSI_VolumeAll 近似模拟卷管理器/协调器/操作执行器中的完整卷工作流程。
 func TestCSI_VolumeAll(t *testing.T) {
 	defaultFSGroupPolicy := storage.ReadWriteOnceWithFSTypeFSGroupPolicy
 
@@ -80,7 +79,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 				return &api.Pod{ObjectMeta: meta.ObjectMeta{UID: podUID, Namespace: testns}}
 			},
 			driverSpec: &storage.CSIDriverSpec{
-				// Required for the driver to be accepted for the persistent volume.
+				// 持久卷要被该驱动接受，必须声明 persistent 模式。
 				VolumeLifecycleModes: []storage.VolumeLifecycleMode{storage.VolumeLifecyclePersistent},
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -98,7 +97,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 				return &api.Pod{ObjectMeta: meta.ObjectMeta{UID: podUID, Namespace: testns}}
 			},
 			driverSpec: &storage.CSIDriverSpec{
-				// This will cause the volume to be rejected.
+				// 只有 ephemeral 模式会导致持久卷被拒绝。
 				VolumeLifecycleModes: []storage.VolumeLifecycleMode{storage.VolumeLifecycleEphemeral},
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -116,7 +115,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			},
 			isInline: true,
 			driverSpec: &storage.CSIDriverSpec{
-				// Required for the driver to be accepted for the inline volume.
+				// 内联卷要被该驱动接受，必须声明 ephemeral 模式。
 				VolumeLifecycleModes: []storage.VolumeLifecycleMode{storage.VolumeLifecycleEphemeral},
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -134,7 +133,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			},
 			isInline: true,
 			driverSpec: &storage.CSIDriverSpec{
-				// Required for the driver to be accepted for the inline volume.
+				// 内联卷要被该驱动接受，必须声明 ephemeral 模式。
 				VolumeLifecycleModes: []storage.VolumeLifecycleMode{storage.VolumeLifecyclePersistent, storage.VolumeLifecycleEphemeral},
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -165,8 +164,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			},
 			isInline: true,
 			driverSpec: &storage.CSIDriverSpec{
-				// This means the driver *cannot* handle the inline volume because
-				// the default is "persistent".
+				// 未声明模式时默认为 persistent，因此该驱动无法处理内联卷。
 				VolumeLifecycleModes: nil,
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -184,7 +182,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			},
 			isInline: true,
 			driverSpec: &storage.CSIDriverSpec{
-				// This means the driver *cannot* handle the inline volume.
+				// 只有 persistent 模式意味着该驱动无法处理内联卷。
 				VolumeLifecycleModes: []storage.VolumeLifecycleMode{storage.VolumeLifecyclePersistent},
 				FSGroupPolicy:        &defaultFSGroupPolicy,
 			},
@@ -273,8 +271,8 @@ func TestCSI_VolumeAll(t *testing.T) {
 			attachName := getAttachmentName(test.volName, test.driver, string(attachDetachVolumeHost.GetNodeName()))
 			t.Log("csiTest.VolumeAll starting...")
 
-			// *************** Attach/Mount volume resources ****************//
-			// attach volume
+			// *************** 附加/挂载卷资源 ****************//
+			// 附加卷
 			t.Log("csiTest.VolumeAll Attaching volume...")
 			attachPlug, err := attachDetachPlugMgr.FindAttachablePluginBySpec(volSpec)
 			if err != nil {
@@ -304,7 +302,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 					t.Fatal("csiTest.VolumeAll failed to create new attacher: ", err)
 				}
 
-				// creates VolumeAttachment and blocks until it is marked attached (done by external attacher)
+				// 创建 VolumeAttachment 并阻塞，直到它被标记为已附加（由外部 attacher 完成）
 				go func() {
 					attachID, err := volAttacher.Attach(volSpec, attachDetachVolumeHost.GetNodeName())
 					if err != nil {
@@ -314,10 +312,10 @@ func TestCSI_VolumeAll(t *testing.T) {
 					t.Logf("csiTest.VolumeAll got attachID %s", attachID)
 				}()
 
-				// Simulates external-attacher and marks VolumeAttachment.Status.Attached = true
+				// 模拟 external-attacher，将 VolumeAttachment.Status.Attached 置为 true
 				markVolumeAttached(t, attachDetachVolumeHost.GetKubeClient(), nil, attachName, storage.VolumeAttachmentStatus{Attached: true})
 
-				// Observe attach on this node.
+				// 确认本节点上已完成附加。
 				devicePath, err = volAttacher.WaitForAttach(volSpec, "", pod, 500*time.Millisecond)
 				if err != nil {
 					t.Fatal("csiTest.VolumeAll attacher.WaitForAttach failed:", err)
@@ -333,9 +331,8 @@ func TestCSI_VolumeAll(t *testing.T) {
 				t.Log("csiTest.VolumeAll volume attacher not found, skipping attachment")
 			}
 
-			// The reason for separate volume hosts here is because the attach/detach behavior is exclusive to the
-			// CSI plugin running in the AttachDetachController. Similarly, the mount/unmount behavior is exclusive
-			// to the CSI plugin running in the Kubelet.
+			// 此处使用两个独立的卷宿主：附加/分离只发生在 AttachDetachController 中运行的 CSI 插件，
+			// 挂载/卸载则只发生在 kubelet 中运行的 CSI 插件。
 			kubeletVolumeHost := volumetest.NewFakeKubeletVolumeHostWithCSINodeName(t,
 				tmpDir,
 				client,
@@ -346,7 +343,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			)
 			kubeletPlugMgr := kubeletVolumeHost.GetPluginMgr()
 
-			// Mount Device
+			// 挂载设备
 			t.Log("csiTest.VolumeAll Mouting device...")
 			devicePlug, err := kubeletPlugMgr.FindDeviceMountablePluginBySpec(volSpec)
 			if err != nil {
@@ -383,7 +380,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 				t.Log("csiTest.VolumeAll DeviceMountablePlugin not found, skipping deviceMounter.MountDevice")
 			}
 
-			// mount volume
+			// 挂载卷
 			t.Log("csiTest.VolumeAll Mouting volume...")
 			volPlug, err := kubeletPlugMgr.FindPluginBySpec(volSpec)
 			if err != nil || volPlug == nil {
@@ -414,16 +411,14 @@ func TestCSI_VolumeAll(t *testing.T) {
 			mounterArgs.FsGroup = fsGroup
 			err = csiMounter.SetUp(mounterArgs)
 			if test.isInline && (test.driverSpec == nil || !containsVolumeMode(test.driverSpec.VolumeLifecycleModes, storage.VolumeLifecycleEphemeral)) {
-				// This *must* fail because a CSIDriver.Spec.VolumeLifecycleModes entry "ephemeral"
-				// is required.
+				// 此处必须失败：CSIDriver.Spec.VolumeLifecycleModes 中必须有 "ephemeral"。
 				if err == nil {
 					t.Fatalf("csiTest.VolumeAll volPlugin.NewMounter should have failed for inline volume due to lack of support for inline volumes, got: %+v, %s", mounter, err)
 				}
 				return
 			}
 			if !test.isInline && test.driverSpec != nil && !containsVolumeMode(test.driverSpec.VolumeLifecycleModes, storage.VolumeLifecyclePersistent) {
-				// This *must* fail because a CSIDriver.Spec.VolumeLifecycleModes entry "persistent"
-				// is required when a driver object is available.
+				// 存在驱动对象时必须在 VolumeLifecycleModes 中声明 "persistent"，因此此处必须失败。
 				if err == nil {
 					t.Fatalf("csiTest.VolumeAll volPlugin.NewMounter should have failed for persistent volume due to lack of support for persistent volumes, got: %+v, %s", mounter, err)
 				}
@@ -440,7 +435,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			}
 			t.Log("csiTest.VolumeAll JSON datafile generated OK:", dataFile)
 
-			// ******** Volume Reconstruction ************* //
+			// ******** 卷规格重建 ************* //
 			volPath := filepath.Dir(csiMounter.GetPath())
 			t.Log("csiTest.VolumeAll entering plugin.ConstructVolumeSpec for path", volPath)
 			rec, err := volPlug.ConstructVolumeSpec(test.volName, volPath)
@@ -474,9 +469,9 @@ func TestCSI_VolumeAll(t *testing.T) {
 				}
 			}
 
-			// ************* Teardown everything **************** //
+			// ************* 拆掉所有资源 **************** //
 			t.Log("csiTest.VolumeAll Tearing down...")
-			// unmount volume
+			// 卸载卷
 			t.Log("csiTest.VolumeAll Unmouting volume...")
 			volPlug, err = kubeletPlugMgr.FindPluginBySpec(volSpec)
 			if err != nil || volPlug == nil {
@@ -502,7 +497,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 			}
 			t.Log("csiTest.VolumeAll unmounter.TearDownAt done OK for dir:", mounter.GetPath())
 
-			// unmount device
+			// 卸载设备
 			t.Log("csiTest.VolumeAll Unmouting device...")
 			devicePlug, err = kubeletPlugMgr.FindDeviceMountablePluginBySpec(volSpec)
 			if err != nil {
@@ -546,7 +541,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 				t.Log("csiTest.VolumeAll DeviceMountablePluginBySpec did not find a plugin, skipping unmounting.")
 			}
 
-			// detach volume
+			// 分离卷
 			t.Log("csiTest.VolumeAll Detaching volume...")
 			attachPlug, err = attachDetachPlugMgr.FindAttachablePluginBySpec(volSpec)
 			if err != nil {

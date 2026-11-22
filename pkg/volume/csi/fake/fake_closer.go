@@ -20,22 +20,26 @@ import (
 	"testing"
 )
 
+// NewCloser 创建一个绑定到 t 的 Closer，用于验证 Close 是否被调用。
 func NewCloser(t *testing.T) *Closer {
 	return &Closer{
 		t: t,
 	}
 }
 
+// Closer 是记录 Close 调用情况的 io.Closer 测试替身。
 type Closer struct {
 	wasCalled bool
 	t         *testing.T
 }
 
+// Close 标记 Closer 已被关闭。
 func (c *Closer) Close() error {
 	c.wasCalled = true
 	return nil
 }
 
+// Check 断言 Close 已被调用，返回自身便于链式调用。
 func (c *Closer) Check() *Closer {
 	c.t.Helper()
 

@@ -44,15 +44,14 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fsquota"
 )
 
-// TODO: in the near future, this will be changed to be more restrictive
-// and the group will be set to allow containers to use emptyDir volumes
-// from the group attribute.
+// TODO: 将来会收紧此权限：改为通过 group 属性授权容器使用 emptyDir 卷，
+// 而不是对所有人开放。
 //
 // https://issue.k8s.io/2630
 const perm os.FileMode = 0777
 
-// unixModeToFileMode converts a Unix-style permission value (0-01777) to
-// Go's os.FileMode. The sticky bit (01000) maps to os.ModeSticky.
+// unixModeToFileMode 把 Unix 风格的权限值（0-01777）转换为 Go 的 os.FileMode。
+// 粘滞位（01000）映射为 os.ModeSticky。
 func unixModeToFileMode(mode int32) os.FileMode {
 	fm := os.FileMode(mode & 0777)
 	if mode&01000 != 0 {
@@ -61,13 +60,14 @@ func unixModeToFileMode(mode int32) os.FileMode {
 	return fm
 }
 
-// ProbeVolumePlugins is the primary entrypoint for volume plugins.
+// ProbeVolumePlugins 是卷插件的主要入口，返回本包实现的插件列表。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{
 		&emptyDirPlugin{nil},
 	}
 }
 
+// emptyDirPlugin 实现 emptyDir 卷插件，持有访问节点目录所需的 VolumeHost。
 type emptyDirPlugin struct {
 	host volume.VolumeHost
 }
@@ -75,77 +75,87 @@ type emptyDirPlugin struct {
 var _ volume.ResizableEphemeralVolumePlugin = &emptyDirPlugin{}
 
 const (
-	EmptyDirPluginName           = "kubernetes.io/empty-dir"
+	// EmptyDirPluginName 是 emptyDir 卷插件在 VolumePluginMgr 中的注册名。
+	EmptyDirPluginName = "kubernetes.io/empty-dir"
+	// hugePagesPageSizeMountOption 是 hugetlbfs 挂载参数中指定页大小的键名。
 	hugePagesPageSizeMountOption = "pagesize"
 )
 
+// getPath 返回 Pod 专属的卷目录；插件限定名含 '/'，转义后才能安全拼入目录名。
 func getPath(uid types.UID, volName string, host volume.VolumeHost) string {
 	return host.GetPodVolumeDir(uid, utilstrings.EscapeQualifiedName(EmptyDirPluginName), volName)
 }
 
+// Init 保存 VolumeHost，供后续创建卷路径和挂载器使用。
 func (plugin *emptyDirPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 
 	return nil
 }
 
+// GetPluginName 返回插件的注册名称。
 func (plugin *emptyDirPlugin) GetPluginName() string {
 	return EmptyDirPluginName
 }
 
+// GetVolumeName 返回用户在 Pod 中声明的卷名；emptyDir 是临时卷，没有独立卷对象。
 func (plugin *emptyDirPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	volumeSource, _ := getVolumeSource(spec)
 	if volumeSource == nil {
 		return "", fmt.Errorf("spec does not reference an emptyDir volume type")
 	}
 
-	// Return user defined volume name, since this is an ephemeral volume type
+	// 临时卷没有持久化的卷对象，直接沿用用户定义的名字。
 	return spec.Name(), nil
 }
 
+// CanSupport 判断 spec 是否声明了 emptyDir 卷源。
 func (plugin *emptyDirPlugin) CanSupport(spec *volume.Spec) bool {
 	return spec.Volume != nil && spec.Volume.EmptyDir != nil
 }
 
+// RequiresRemount 表示不需要由卷插件触发重挂。
 func (plugin *emptyDirPlugin) RequiresRemount(spec *volume.Spec) bool {
-	// The kuberuntime_manager is responsible for resizing memory-backed emptyDir volumes,
-	// so we never remount them from within the volume plugin.
+	// 内存型 emptyDir 的扩缩容由 kuberuntime_manager 负责，插件侧重挂反而会干扰它。
 	return false
 }
 
+// SupportsMountOption 表示不支持用户自定义挂载参数。
 func (plugin *emptyDirPlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsSELinuxContextMount 表示不支持通过挂载参数传递 SELinux 上下文。
 func (plugin *emptyDirPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// NewMounter 创建生产用挂载器，注入真实的挂载器与挂载探测器。
 func (plugin *emptyDirPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	return plugin.newMounterInternal(spec, pod, plugin.host.GetMounter(), &realMountDetector{plugin.host.GetMounter()})
 }
 
+// calculateEmptyDirMemorySize 取节点可分配内存、Pod 内存 limit 与卷自身 limit 的最小值作为 tmpfs 上限。
 func calculateEmptyDirMemorySize(nodeAllocatableMemory *resource.Quantity, spec *volume.Spec, pod *v1.Pod) *resource.Quantity {
-	// size limit defaults to node allocatable (pods can't consume more memory than all pods)
+	// 默认上限为节点可分配内存：单个 Pod 不可能比所有 Pod 加起来用得更多。
 	sizeLimit := nodeAllocatableMemory
 	zero := resource.MustParse("0")
 
-	// determine pod resource allocation
-	// we use the same function for pod cgroup assignment to maintain consistent behavior
-	// NOTE: this could be nil on systems that do not support pod memory containment (i.e. windows)
+	// 计算 Pod 的内存分配；复用 pod cgroup 的同一函数，保证两处口径一致。
+	// 注意：不限制 Pod 内存的平台（如 Windows）上结果可能为 nil。
 	podResourceConfig := cm.ResourceConfigForPod(pod, false, uint64(100000), false, config.NoneMemoryReservationPolicy)
 	if podResourceConfig != nil && podResourceConfig.Memory != nil {
 		podMemoryLimit := resource.NewQuantity(*(podResourceConfig.Memory), resource.BinarySI)
-		// ensure 0 < value < size
+		// 只接受 0 < 值 <= 当前上限，避免非法或放大的 limit 生效。
 		if podMemoryLimit.Cmp(zero) > 0 && podMemoryLimit.Cmp(*sizeLimit) < 1 {
 			sizeLimit = podMemoryLimit
 		}
 	}
 
-	// volume local size is  used if and only if less than what pod could consume
+	// 卷自身的 limit 只有在比 Pod 可用内存更小时才收紧上限。
 	if spec.Volume.EmptyDir.SizeLimit != nil {
 		volumeSizeLimit := spec.Volume.EmptyDir.SizeLimit
-		// ensure 0 < value < size
+		// 同样只接受 0 < 值 <= 当前上限。
 		if volumeSizeLimit.Cmp(zero) > 0 && volumeSizeLimit.Cmp(*sizeLimit) < 1 {
 			sizeLimit = volumeSizeLimit
 		}
@@ -153,11 +163,12 @@ func calculateEmptyDirMemorySize(nodeAllocatableMemory *resource.Quantity, spec 
 	return sizeLimit
 }
 
+// newMounterInternal 组装 emptyDir 挂载器，便于测试时注入假挂载器与探测器。
 func (plugin *emptyDirPlugin) newMounterInternal(spec *volume.Spec, pod *v1.Pod, mounter mount.Interface, mountDetector mountDetector) (volume.Mounter, error) {
 	medium := v1.StorageMediumDefault
 	sizeLimit := &resource.Quantity{}
 	var mode *int32
-	if spec.Volume.EmptyDir != nil { // Support a non-specified source as EmptyDir.
+	if spec.Volume.EmptyDir != nil { // 未显式指定卷源时按默认空目录处理。
 		medium = spec.Volume.EmptyDir.Medium
 		if medium == v1.StorageMediumMemory {
 			nodeAllocatable, err := plugin.host.GetNodeAllocatable()
@@ -183,16 +194,18 @@ func (plugin *emptyDirPlugin) newMounterInternal(spec *volume.Spec, pod *v1.Pod,
 	}, nil
 }
 
+// NewUnmounter 创建卸载器；真实依赖在此注入，测试通过内部函数进行。
 func (plugin *emptyDirPlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
-	// Inject real implementations here, test through the internal function.
+	// 真实实现只在这一层注入，内部函数保持可测试。
 	return plugin.newUnmounterInternal(volName, podUID, plugin.host.GetMounter(), &realMountDetector{plugin.host.GetMounter()})
 }
 
+// newUnmounterInternal 构造卸载器；介质此时未知，等卸载时按实际挂载状态判断。
 func (plugin *emptyDirPlugin) newUnmounterInternal(volName string, podUID types.UID, mounter mount.Interface, mountDetector mountDetector) (volume.Unmounter, error) {
 	ed := &emptyDir{
 		pod:             &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: podUID}},
 		volName:         volName,
-		medium:          v1.StorageMediumDefault, // might be changed later
+		medium:          v1.StorageMediumDefault, // 卸载时再根据实际挂载情况修正。
 		mounter:         mounter,
 		mountDetector:   mountDetector,
 		plugin:          plugin,
@@ -201,6 +214,7 @@ func (plugin *emptyDirPlugin) newUnmounterInternal(volName string, podUID types.
 	return ed, nil
 }
 
+// ConstructVolumeSpec 从已挂载路径重建最小化的 emptyDir 卷 spec。
 func (plugin *emptyDirPlugin) ConstructVolumeSpec(volName, mountPath string) (volume.ReconstructedVolume, error) {
 	emptyDirVolume := &v1.Volume{
 		Name: volName,
@@ -213,18 +227,15 @@ func (plugin *emptyDirPlugin) ConstructVolumeSpec(volName, mountPath string) (vo
 	}, nil
 }
 
-// mountDetector abstracts how to find what kind of mount a path is backed by.
+// mountDetector 抽象「如何判断路径背后是哪种挂载」，便于在测试中替换真实挂载器。
 type mountDetector interface {
-	// GetMountMedium determines what type of medium a given path is backed
-	// by and whether that path is a mount point.  For example, if this
-	// returns (v1.StorageMediumMemory, false, nil), the caller knows that the path is
-	// on a memory FS (tmpfs on Linux) but is not the root mountpoint of
-	// that tmpfs.
+	// GetMountMedium 返回路径背后的介质类型、该路径本身是否为挂载点，以及挂载页大小。
+	// 例如返回 (v1.StorageMediumMemory, false, nil) 表示路径位于内存文件系统
+	// （Linux 上是 tmpfs）上，但并非该 tmpfs 的根挂载点。
 	GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error)
 }
 
-// EmptyDir volumes are temporary directories exposed to the pod.
-// These do not persist beyond the lifetime of a pod.
+// emptyDir 表示暴露给 Pod 的临时目录，生命周期不超过 Pod 本身。
 type emptyDir struct {
 	pod           *v1.Pod
 	volName       string
@@ -237,6 +248,7 @@ type emptyDir struct {
 	volume.MetricsProvider
 }
 
+// GetAttributes 描述卷属性：可写、由 kubelet 管理、需要 SELinux 重打标。
 func (ed *emptyDir) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       false,
@@ -245,37 +257,32 @@ func (ed *emptyDir) GetAttributes() volume.Attributes {
 	}
 }
 
-// SetUp creates new directory.
+// SetUp 在默认路径上创建并准备卷目录。
 func (ed *emptyDir) SetUp(mounterArgs volume.MounterArgs) error {
 	return ed.SetUpAt(ed.GetPath(), mounterArgs)
 }
 
-// SetUpAt creates new directory.
+// SetUpAt 在指定目录上创建并准备卷。
 func (ed *emptyDir) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	notMnt, err := ed.mounter.IsLikelyNotMountPoint(dir)
-	// Getting an os.IsNotExist err from is a contingency; the directory
-	// may not exist yet, in which case, setup should run.
+	// 目录可能还不存在，此时探测会报 IsNotExist，应继续初始化而不是直接失败。
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	// If the plugin readiness file is present for this volume, and the
-	// storage medium is the default, then the volume is ready.  If the
-	// medium is memory, and a mountpoint is present, then the volume is
-	// ready.
+	// 默认介质只要就绪文件存在即视为可用；内存介质还必须已经挂载。
 	readyDir := ed.getMetaDir()
 	if volumeutil.IsReady(readyDir) {
 		if ed.medium == v1.StorageMediumMemory && !notMnt {
 			return nil
 		} else if ed.medium == v1.StorageMediumDefault {
-			// Further check dir exists
+			// 就绪文件在，还要确认目录本身仍在。
 			if _, err := os.Stat(dir); err == nil {
 				klog.V(6).InfoS("Dir exists, so check and assign quota if the underlying medium supports quotas", "dir", dir)
 				err = ed.assignQuota(dir, mounterArgs.DesiredSize)
 				return err
 			}
-			// This situation should not happen unless user manually delete volume dir.
-			// In this case, delete ready file and print a warning for it.
+			// 正常流程不会出现，说明用户手工删了卷目录；清掉就绪标记，下次 SetUp 会重建。
 			klog.Warningf("volume ready file dir %s exist, but volume dir %s does not. Remove ready dir", readyDir, dir)
 			if err := os.RemoveAll(readyDir); err != nil && !os.IsNotExist(err) {
 				klog.Warningf("failed to remove ready dir [%s]: %v", readyDir, err)
@@ -297,9 +304,7 @@ func (ed *emptyDir) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	ownershipChanger := volume.NewVolumeOwnership(ed, dir, mounterArgs.FsGroup, nil /*fsGroupChangePolicy*/, volumeutil.FSGroupCompleteHook(ed.plugin, nil))
 	_ = ownershipChanger.ChangePermissions()
 
-	// If setting up the quota fails, just log a message but don't actually error out.
-	// We'll use the old du mechanism in this case, at least until we support
-	// enforcement.
+	// 配额设置失败只记录、不让挂载失败：在支持强制配额之前仍可退回 du 统计。
 	if err == nil {
 		volumeutil.SetReady(ed.getMetaDir())
 		err = ed.assignQuota(dir, mounterArgs.DesiredSize)
@@ -307,13 +312,11 @@ func (ed *emptyDir) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	return err
 }
 
-// assignQuota checks if the underlying medium supports quotas and if so, sets
+// assignQuota 检查底层介质是否支持配额，支持时为卷设置配额。
 func (ed *emptyDir) assignQuota(dir string, mounterSize *resource.Quantity) error {
 	if mounterSize != nil {
-		// Deliberately shadow the outer use of err as noted
-		// above.
-		// hostUsers field is interpreted as true by default, so a pod is by default
-		// not confined by a user namespace.
+		// 这里的 err 刻意遮蔽外层 err，不影响后续挂载结果判断。
+		// hostUsers 默认为 true，Pod 默认不受 user namespace 限制；显式设为 false 才启用。
 		userNamespacesEnabled := false
 		if usernamespacefeature.EnabledUserNamespacesSupport() {
 			userNamespacesEnabled = ed.pod.Spec.HostUsers != nil && !*ed.pod.Spec.HostUsers
@@ -334,7 +337,7 @@ func (ed *emptyDir) assignQuota(dir string, mounterSize *resource.Quantity) erro
 	return nil
 }
 
-// setupTmpfs creates a tmpfs mount at the specified directory.
+// setupTmpfs 在指定目录上挂载 tmpfs。
 func (ed *emptyDir) setupTmpfs(dir string) error {
 	if ed.mounter == nil {
 		return fmt.Errorf("memory storage requested, but mounter is nil")
@@ -342,13 +345,12 @@ func (ed *emptyDir) setupTmpfs(dir string) error {
 	if err := ed.setupDir(dir); err != nil {
 		return err
 	}
-	// Make SetUp idempotent.
+	// 先探测现状，保证重复 SetUp 不会二次挂载。
 	medium, isMnt, _, err := ed.mountDetector.GetMountMedium(dir, ed.medium)
 	if err != nil {
 		return err
 	}
-	// If the directory is a mountpoint with medium memory, there is no
-	// work to do since we are already in the desired state.
+	// 已挂载为内存介质时直接返回，无需重复挂载。
 	if isMnt && medium == v1.StorageMediumMemory {
 		return nil
 	}
@@ -359,7 +361,7 @@ func (ed *emptyDir) setupTmpfs(dir string) error {
 	return ed.mounter.MountSensitiveWithoutSystemd("tmpfs", dir, "tmpfs", options, nil)
 }
 
-// setupHugepages creates a hugepage mount at the specified directory.
+// setupHugepages 在指定目录上挂载 hugetlbfs。
 func (ed *emptyDir) setupHugepages(dir string) error {
 	if ed.mounter == nil {
 		return fmt.Errorf("memory storage requested, but mounter is nil")
@@ -367,24 +369,23 @@ func (ed *emptyDir) setupHugepages(dir string) error {
 	if err := ed.setupDir(dir); err != nil {
 		return err
 	}
-	// Make SetUp idempotent.
+	// 先探测现状，保证重复 SetUp 不会二次挂载。
 	medium, isMnt, mountPageSize, err := ed.mountDetector.GetMountMedium(dir, ed.medium)
 	klog.V(3).Infof("pod %v: setupHugepages: medium: %s, isMnt: %v, dir: %s, err: %v", ed.pod.UID, medium, isMnt, dir, err)
 	if err != nil {
 		return err
 	}
-	// If the directory is a mountpoint with medium hugepages of the same page size,
-	// there is no work to do since we are already in the desired state.
+	// 已按相同页大小挂载 hugepages 时无需重复操作。
 	if isMnt && v1helper.IsHugePageMedium(medium) {
-		// Medium is: Hugepages
+		// 介质为 Hugepages：未指定页大小。
 		if ed.medium == v1.StorageMediumHugePages {
 			return nil
 		}
 		if mountPageSize == nil {
 			return fmt.Errorf("pod %v: mounted dir %s pagesize is not determined", ed.pod.UID, dir)
 		}
-		// Medium is: Hugepages-<size>
-		// Mounted page size and medium size must be equal
+		// 介质为 Hugepages-<size>：已指定页大小。
+		// 已挂载的页大小必须与介质声明的大小一致。
 		mediumSize, err := v1helper.HugePageSizeFromMedium(ed.medium)
 		if err != nil {
 			return err
@@ -404,15 +405,14 @@ func (ed *emptyDir) setupHugepages(dir string) error {
 	return ed.mounter.MountSensitiveWithoutSystemd("nodev", dir, "hugetlbfs", []string{pageSizeMountOption}, nil)
 }
 
-// getPageSizeMountOption retrieves pageSize mount option from Pod's resources
-// and medium and validates pageSize options in all containers of given Pod.
+// getPageSizeMountOption 根据介质和 Pod 资源请求推导页大小挂载参数，并校验各容器请求是否一致。
 func getPageSizeMountOption(medium v1.StorageMedium, pod *v1.Pod) (string, error) {
 	pageSizeFound := false
 	pageSize := resource.Quantity{}
 
 	var mediumPageSize resource.Quantity
 	if medium != v1.StorageMediumHugePages {
-		// medium is: Hugepages-<size>
+		// 介质为 Hugepages-<size>，页大小由介质名给出。
 		var err error
 		mediumPageSize, err = v1helper.HugePageSizeFromMedium(medium)
 		if err != nil {
@@ -425,12 +425,12 @@ func getPageSizeMountOption(medium v1.StorageMedium, pod *v1.Pod) (string, error
 		podLevelAndContainerLevelRequests = append(podLevelAndContainerLevelRequests, pod.Spec.Resources.Requests)
 	}
 
-	// In some rare cases init containers can also consume Huge pages
+	// init 容器在少数场景下也会申请大页。
 	for _, container := range append(pod.Spec.Containers, pod.Spec.InitContainers...) {
 		podLevelAndContainerLevelRequests = append(podLevelAndContainerLevelRequests, container.Resources.Requests)
 	}
 
-	// We can take request because limit and requests must match.
+	// 大页的 request 与 limit 必须相等，因此只取 request 即可。
 	for _, resourceList := range podLevelAndContainerLevelRequests {
 		for requestName := range resourceList {
 			if !v1helper.IsHugePageResourceName(requestName) {
@@ -440,15 +440,15 @@ func getPageSizeMountOption(medium v1.StorageMedium, pod *v1.Pod) (string, error
 			if err != nil {
 				return "", err
 			}
-			if medium == v1.StorageMediumHugePages { // medium is: Hugepages, size is not specified
-				// PageSize for all volumes in a POD must be equal if medium is "Hugepages"
+			if medium == v1.StorageMediumHugePages { // 介质为 Hugepages，未指定页大小。
+				// 介质为 Hugepages 时，一个 Pod 中所有卷的页大小必须一致。
 				if pageSizeFound && pageSize.Cmp(currentPageSize) != 0 {
 					return "", fmt.Errorf("medium: %s can't be used if container requests multiple huge page sizes", medium)
 				}
 
 				pageSizeFound = true
 				pageSize = currentPageSize
-			} else { // medium is: Hugepages-<size>
+			} else { // 介质为 Hugepages-<size>。
 				if currentPageSize.Cmp(mediumPageSize) == 0 {
 					pageSizeFound = true
 					pageSize = currentPageSize
@@ -464,9 +464,9 @@ func getPageSizeMountOption(medium v1.StorageMedium, pod *v1.Pod) (string, error
 	return fmt.Sprintf("%s=%s", hugePagesPageSizeMountOption, pageSize.String()), nil
 }
 
-// setupDir creates the directory with the requested mode, or defaults to 0777.
+// setupDir 创建目录并按指定 mode 设置权限；未指定 mode 时使用 0777。
 func (ed *emptyDir) setupDir(dir string) error {
-	// Create the directory if it doesn't already exist.
+	// 目录不存在时创建，已存在则保留原有内容。
 	if err := os.MkdirAll(dir, perm); err != nil {
 		return err
 	}
@@ -479,19 +479,15 @@ func (ed *emptyDir) setupDir(dir string) error {
 		return nil
 	}
 
-	// stat the directory to read permission bits
+	// 读取实际权限位，判断是否需要修正。
 	fileinfo, err := os.Lstat(dir)
 	if err != nil {
 		return err
 	}
 
 	if fileinfo.Mode().Perm() != perm.Perm() {
-		// If the permissions on the created directory are wrong, the
-		// kubelet is probably running with a umask set.  In order to
-		// avoid clearing the umask for the entire process or locking
-		// the thread, clearing the umask, creating the dir, restoring
-		// the umask, and unlocking the thread, we do a chmod to set
-		// the specific bits we need.
+		// 权限不符通常说明 kubelet 进程带了 umask。与其清空整个进程的 umask，
+		// 或锁住线程反复改 umask，直接用 chmod 补齐需要的权限位更简单。
 		err := os.Chmod(dir, perm)
 		if err != nil {
 			return err
@@ -510,18 +506,19 @@ func (ed *emptyDir) setupDir(dir string) error {
 	return nil
 }
 
+// GetPath 返回该卷在宿主机上的目录路径。
 func (ed *emptyDir) GetPath() string {
 	return getPath(ed.pod.UID, ed.volName, ed.plugin.host)
 }
 
-// TearDown simply discards everything in the directory.
+// TearDown 清理默认路径上的卷目录。
 func (ed *emptyDir) TearDown() error {
 	return ed.TearDownAt(ed.GetPath())
 }
 
-// TearDownAt simply discards everything in the directory.
+// TearDownAt 卸载并删除指定目录中的内容。
 func (ed *emptyDir) TearDownAt(dir string) error {
-	// First remove ready dir which created in SetUp func
+	// 先删除就绪标记，避免后续重建目录时被误判为已就绪。
 	readyDir := ed.getMetaDir()
 	if removeErr := os.RemoveAll(readyDir); removeErr != nil && !os.IsNotExist(removeErr) {
 		return fmt.Errorf("failed to remove ready dir [%s]: %v", readyDir, removeErr)
@@ -534,7 +531,7 @@ func (ed *emptyDir) TearDownAt(dir string) error {
 		return nil
 	}
 
-	// Figure out the medium.
+	// 按实际挂载状态判断介质，而不是信任 spec 里的记录。
 	medium, isMnt, _, err := ed.mountDetector.GetMountMedium(dir, ed.medium)
 	if err != nil {
 		return err
@@ -548,13 +545,14 @@ func (ed *emptyDir) TearDownAt(dir string) error {
 			return ed.teardownTmpfsOrHugetlbfs(dir)
 		}
 	}
-	// assume StorageMediumDefault
+	// 没有挂载点则按默认磁盘介质处理。
 	return ed.teardownDefault(dir)
 }
 
+// teardownDefault 清理默认介质（普通磁盘目录）上的卷。
 func (ed *emptyDir) teardownDefault(dir string) error {
 	if utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolationFSQuotaMonitoring) {
-		// Remove any quota
+		// 删除目录前先清除配额记录。
 		userNamespacesEnabled := false
 		if usernamespacefeature.EnabledUserNamespacesSupport() {
 			userNamespacesEnabled = ed.pod.Spec.HostUsers != nil && !*ed.pod.Spec.HostUsers
@@ -564,11 +562,11 @@ func (ed *emptyDir) teardownDefault(dir string) error {
 			klog.Warningf("Failed to clear quota on %s: %v", dir, err)
 		}
 	}
-	// Renaming the directory is not required anymore because the operation executor
-	// now handles duplicate operations on the same volume
+	// 操作执行器已能处理同一卷上的重复操作，无需再靠重命名目录规避竞态。
 	return os.RemoveAll(dir)
 }
 
+// teardownTmpfsOrHugetlbfs 先卸载 tmpfs/hugetlbfs，再删除挂载目录。
 func (ed *emptyDir) teardownTmpfsOrHugetlbfs(dir string) error {
 	if ed.mounter == nil {
 		return fmt.Errorf("memory storage requested, but mounter is nil")
@@ -582,10 +580,12 @@ func (ed *emptyDir) teardownTmpfsOrHugetlbfs(dir string) error {
 	return nil
 }
 
+// getMetaDir 返回存放卷元数据（就绪标记）的插件目录。
 func (ed *emptyDir) getMetaDir() string {
 	return filepath.Join(ed.plugin.host.GetPodPluginDir(ed.pod.UID, utilstrings.EscapeQualifiedName(EmptyDirPluginName)), ed.volName)
 }
 
+// getVolumeSource 取出 spec 中的 emptyDir 卷源及只读标记，不支持时返回 nil。
 func getVolumeSource(spec *volume.Spec) (*v1.EmptyDirVolumeSource, bool) {
 	var readOnly bool
 	var volumeSource *v1.EmptyDirVolumeSource
@@ -598,8 +598,9 @@ func getVolumeSource(spec *volume.Spec) (*v1.EmptyDirVolumeSource, bool) {
 	return volumeSource, readOnly
 }
 
+// generateTmpfsMountOptions 生成 tmpfs 挂载参数：显式大小上限和可选的 noswap。
 func (ed *emptyDir) generateTmpfsMountOptions(noswapSupported bool) (options []string) {
-	// Linux system default is 50% of capacity.
+	// Linux 默认只给 tmpfs 50% 内存容量，有显式上限时必须写明 size。
 	if ed.sizeLimit != nil && ed.sizeLimit.Value() > 0 {
 		options = append(options, fmt.Sprintf("size=%d", ed.sizeLimit.Value()))
 	}

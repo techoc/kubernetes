@@ -25,23 +25,27 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// subpath 是当前平台上 subpath 的空实现。
 type subpath struct{}
 
 var errUnsupported = errors.New("util/subpath on this platform is not supported")
 
-// New returns a subpath.Interface for the current system.
+// New 返回当前系统的 subpath.Interface 实现。
 func New(mount.Interface) Interface {
 	return &subpath{}
 }
 
+// PrepareSafeSubpath 为子路径做准备；本平台不支持，直接返回原路径和错误。
 func (sp *subpath) PrepareSafeSubpath(subPath Subpath) (newHostPath string, cleanupAction func(), err error) {
 	return subPath.Path, nil, errUnsupported
 }
 
+// CleanSubPaths 清理 pod 目录下某卷的子路径；本平台不支持。
 func (sp *subpath) CleanSubPaths(podDir string, volumeName string) error {
 	return errUnsupported
 }
 
+// SafeMakeDir 在 base 下安全地创建目录；本平台不支持。
 func (sp *subpath) SafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	return errUnsupported
 }

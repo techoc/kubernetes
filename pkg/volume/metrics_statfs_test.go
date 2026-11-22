@@ -25,6 +25,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// TestGetMetricsStatFS 验证 MetricsStatFS 在无效路径上报错、在有效目录上返回容量信息。
 func TestGetMetricsStatFS(t *testing.T) {
 	metrics := NewMetricsStatFS("")
 	actual, err := metrics.GetMetrics()

@@ -32,20 +32,19 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// realMountDetector implements mountDetector in terms of syscalls.
+// realMountDetector 通过系统调用实现 mountDetector。
 type realMountDetector struct {
 	mounter mount.Interface
 }
 
-// getPageSize obtains page size from the 'pagesize' mount option of the
-// mounted volume
+// getPageSize 从卷挂载选项的 pagesize 中读取页大小。
 func getPageSize(path string, mounter mount.Interface) (*resource.Quantity, error) {
-	// Get mount point data for the path
+	// 先获取该路径的挂载点信息
 	mountPoints, err := mounter.List()
 	if err != nil {
 		return nil, fmt.Errorf("error listing mount points: %v", err)
 	}
-	// Find mount point for the path
+	// 从中找出对应该路径的挂载点
 	mountPoint, err := func(mps []mount.MountPoint, mpPath string) (*mount.MountPoint, error) {
 		for _, mp := range mps {
 			if mp.Path == mpPath {
@@ -57,13 +56,13 @@ func getPageSize(path string, mounter mount.Interface) (*resource.Quantity, erro
 	if err != nil {
 		return nil, err
 	}
-	// Get page size from the 'pagesize' option value
+	// 从 pagesize 选项中提取页大小
 	for _, opt := range mountPoint.Opts {
 		opt = strings.TrimSpace(opt)
 		prefix := "pagesize="
 		if strings.HasPrefix(opt, prefix) {
 			// NOTE: Adding suffix 'i' as result should be comparable with a medium size.
-			// pagesize mount option is specified without a suffix,
+			// pagesize 挂载选项不带后缀，
 			// e.g. pagesize=2M or pagesize=1024M for x86 CPUs
 			trimmedOpt := strings.TrimPrefix(opt, prefix)
 			if !strings.HasSuffix(trimmedOpt, "i") {
@@ -79,6 +78,7 @@ func getPageSize(path string, mounter mount.Interface) (*resource.Quantity, erro
 	return nil, fmt.Errorf("no pagesize option specified for %s mount", mountPoint.Path)
 }
 
+// GetMountMedium 检测给定路径的挂载介质类型、是否已挂载及巨页大小。
 func (m *realMountDetector) GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error) {
 	klog.V(5).Infof("Determining mount medium of %v", path)
 	notMnt, err := m.mounter.IsLikelyNotMountPoint(path)
@@ -96,11 +96,11 @@ func (m *realMountDetector) GetMountMedium(path string, requestedMedium v1.Stora
 	if buf.Type == unix.TMPFS_MAGIC {
 		return v1.StorageMediumMemory, !notMnt, nil, nil
 	} else if int64(buf.Type) == unix.HUGETLBFS_MAGIC {
-		// Skip page size detection if requested medium doesn't have size specified
+		// 请求的介质未指定大小时，无需探测页大小
 		if requestedMedium == v1.StorageMediumHugePages {
 			return v1.StorageMediumHugePages, !notMnt, nil, nil
 		}
-		// Get page size for the volume mount
+		// 探测卷挂载使用的页大小
 		pageSize, err := getPageSize(path, m.mounter)
 		if err != nil {
 			return v1.StorageMediumHugePages, !notMnt, nil, err
@@ -110,7 +110,7 @@ func (m *realMountDetector) GetMountMedium(path string, requestedMedium v1.Stora
 	return v1.StorageMediumDefault, !notMnt, nil, nil
 }
 
-// ResizeEphemeralVolume resizes the volume on the node.
+// ResizeEphemeralVolume 在节点上调整临时卷大小。
 func (plugin *emptyDirPlugin) ResizeEphemeralVolume(spec *volume.Spec, pod *v1.Pod, newSize *resource.Quantity) error {
 	if spec.Volume == nil || spec.Volume.EmptyDir == nil {
 		return fmt.Errorf("spec does not reference an emptyDir volume type")

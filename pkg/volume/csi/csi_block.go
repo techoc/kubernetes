@@ -83,6 +83,7 @@ import (
 	utilstrings "k8s.io/utils/strings"
 )
 
+// csiBlockMapper 实现 CSI 块卷的映射器与取消映射器。
 type csiBlockMapper struct {
 	csiClientGetter
 	k8s        kubernetes.Interface
@@ -100,47 +101,46 @@ type csiBlockMapper struct {
 var _ volume.BlockVolumeMapper = &csiBlockMapper{}
 var _ volume.CustomBlockVolumeMapper = &csiBlockMapper{}
 
-// GetGlobalMapPath returns a global map path (on the node) to a device file which will be symlinked to
-// Example: plugins/kubernetes.io/csi/volumeDevices/{specName}/dev
+// GetGlobalMapPath 返回节点上设备文件的全局映射路径，该设备文件会被符号链接到此路径。
+// 示例：plugins/kubernetes.io/csi/volumeDevices/{specName}/dev
 func (m *csiBlockMapper) GetGlobalMapPath(spec *volume.Spec) (string, error) {
 	dir := getVolumeDevicePluginDir(m.specName, m.plugin.host)
 	klog.V(4).Info(log("blockMapper.GetGlobalMapPath = %s", dir))
 	return dir, nil
 }
 
-// GetStagingPath returns a staging path for a directory (on the node) that should be used on NodeStageVolume/NodeUnstageVolume
-// Example: plugins/kubernetes.io/csi/volumeDevices/staging/{specName}
+// GetStagingPath 返回节点上供 NodeStageVolume/NodeUnstageVolume 使用的目录 staging 路径。
+// 示例：plugins/kubernetes.io/csi/volumeDevices/staging/{specName}
 func (m *csiBlockMapper) GetStagingPath() string {
 	return filepath.Join(m.plugin.host.GetVolumeDevicePluginDir(CSIPluginName), "staging", m.specName)
 }
 
-// SupportsMetrics returns true for csiBlockMapper as it initializes the
-// MetricsProvider.
+// SupportsMetrics 对 csiBlockMapper 始终返回 true，因为它会初始化 MetricsProvider。
 func (m *csiBlockMapper) SupportsMetrics() bool {
 	return true
 }
 
-// getPublishDir returns path to a directory, where the volume is published to each pod.
-// Example: plugins/kubernetes.io/csi/volumeDevices/publish/{specName}
+// getPublishDir 返回卷 publish 到各 Pod 的父目录路径。
+// 示例：plugins/kubernetes.io/csi/volumeDevices/publish/{specName}
 func (m *csiBlockMapper) getPublishDir() string {
 	return filepath.Join(m.plugin.host.GetVolumeDevicePluginDir(CSIPluginName), "publish", m.specName)
 }
 
-// getPublishPath returns a publish path for a file (on the node) that should be used on NodePublishVolume/NodeUnpublishVolume
-// Example: plugins/kubernetes.io/csi/volumeDevices/publish/{specName}/{podUID}
+// getPublishPath 返回节点上供 NodePublishVolume/NodeUnpublishVolume 使用的文件 publish 路径。
+// 示例：plugins/kubernetes.io/csi/volumeDevices/publish/{specName}/{podUID}
 func (m *csiBlockMapper) getPublishPath() string {
 	return filepath.Join(m.getPublishDir(), string(m.podUID))
 }
 
-// GetPodDeviceMapPath returns pod's device file which will be mapped to a volume
-// returns: pods/{podUID}/volumeDevices/kubernetes.io~csi, {specName}
+// GetPodDeviceMapPath 返回 Pod 中要映射到卷的设备文件路径。
+// 返回：pods/{podUID}/volumeDevices/kubernetes.io~csi 与 {specName}
 func (m *csiBlockMapper) GetPodDeviceMapPath() (string, string) {
 	path := m.plugin.host.GetPodVolumeDeviceDir(m.podUID, utilstrings.EscapeQualifiedName(CSIPluginName))
 	klog.V(4).Info(log("blockMapper.GetPodDeviceMapPath [path=%s; name=%s]", path, m.specName))
 	return path, m.specName
 }
 
-// stageVolumeForBlock stages a block volume to stagingPath
+// stageVolumeForBlock 将块卷 stage 到 stagingPath
 func (m *csiBlockMapper) stageVolumeForBlock(
 	ctx context.Context,
 	csi csiClient,
@@ -153,7 +153,7 @@ func (m *csiBlockMapper) stageVolumeForBlock(
 	stagingPath := m.GetStagingPath()
 	klog.V(4).Info(log("blockMapper.stageVolumeForBlock stagingPath set [%s]", stagingPath))
 
-	// Check whether "STAGE_UNSTAGE_VOLUME" is set
+	// 检查驱动是否设置了 "STAGE_UNSTAGE_VOLUME" 能力
 	stageUnstageSet, err := csi.NodeSupportsStageUnstage(ctx)
 	if err != nil {
 		return "", errors.New(log("blockMapper.stageVolumeForBlock failed to check STAGE_UNSTAGE_VOLUME capability: %v", err))
@@ -175,15 +175,15 @@ func (m *csiBlockMapper) stageVolumeForBlock(
 		}
 	}
 
-	// Creating a stagingPath directory before call to NodeStageVolume
+	// 调用 NodeStageVolume 前先创建 stagingPath 目录
 	if err := os.MkdirAll(stagingPath, 0750); err != nil {
 		return "", errors.New(log("blockMapper.stageVolumeForBlock failed to create dir %s: %v", stagingPath, err))
 	}
 	klog.V(4).Info(log("blockMapper.stageVolumeForBlock created stagingPath directory successfully [%s]", stagingPath))
 
-	// Request to stage a block volume to stagingPath.
-	// Expected implementation for driver is creating driver specific resource on stagingPath and
-	// attaching the block volume to the node.
+	// 请求将块卷 stage 到 stagingPath。
+	// 驱动应实现为在 stagingPath 上创建自身特定的资源，
+	// 并把块卷附加到节点。
 	err = csi.NodeStageVolume(ctx,
 		csiSource.VolumeHandle,
 		publishVolumeInfo,
@@ -203,7 +203,7 @@ func (m *csiBlockMapper) stageVolumeForBlock(
 	return stagingPath, nil
 }
 
-// publishVolumeForBlock publishes a block volume to publishPath
+// publishVolumeForBlock 将块卷 publish 到 publishPath
 func (m *csiBlockMapper) publishVolumeForBlock(
 	ctx context.Context,
 	csi csiClient,
@@ -218,7 +218,7 @@ func (m *csiBlockMapper) publishVolumeForBlock(
 		publishVolumeInfo = attachment.Status.AttachmentMetadata
 	}
 
-	// Inject pod information into volume_attributes
+	// 将 Pod 信息注入 volume_attributes
 	volAttribs := csiSource.VolumeAttributes
 	podInfoEnabled, err := m.plugin.podInfoEnabled(string(m.driverName))
 	if err != nil {
@@ -242,18 +242,18 @@ func (m *csiBlockMapper) publishVolumeForBlock(
 	}
 
 	publishPath := m.getPublishPath()
-	// Setup a parent directory for publishPath before call to NodePublishVolume
+	// 调用 NodePublishVolume 前先创建 publishPath 的父目录
 	publishDir := filepath.Dir(publishPath)
 	if err := os.MkdirAll(publishDir, 0750); err != nil {
 		return "", errors.New(log("blockMapper.publishVolumeForBlock failed to create dir %s:  %v", publishDir, err))
 	}
 	klog.V(4).Info(log("blockMapper.publishVolumeForBlock created directory for publishPath successfully [%s]", publishDir))
 
-	// Request to publish a block volume to publishPath.
-	// Expectation for driver is to place a block volume on the publishPath, by bind-mounting the device file on the publishPath or
-	// creating device file on the publishPath.
-	// Parent directory for publishPath is created by k8s, but driver is responsible for creating publishPath itself.
-	// If driver doesn't implement NodeStageVolume, attaching the block volume to the node may be done, here.
+	// 请求将块卷 publish 到 publishPath。
+	// 驱动应通过把设备文件 bind mount 到 publishPath，或在 publishPath 上创建设备文件，
+	// 将块卷放置到 publishPath。
+	// publishPath 的父目录由 k8s 创建，但 publishPath 本身由驱动负责创建。
+	// 若驱动未实现 NodeStageVolume，可在此处完成块卷到节点的附加。
 	err = csi.NodePublishVolume(
 		ctx,
 		m.volumeID,
@@ -276,11 +276,11 @@ func (m *csiBlockMapper) publishVolumeForBlock(
 	return publishPath, nil
 }
 
-// SetUpDevice ensures the device is attached returns path where the device is located.
+// SetUpDevice 确保设备已附加，并返回设备所在路径。
 func (m *csiBlockMapper) SetUpDevice() (string, error) {
 	klog.V(4).Info(log("blockMapper.SetUpDevice called"))
 
-	// Get csiSource from spec
+	// 从卷规格中获取 CSI 卷来源。
 	if m.spec == nil {
 		return "", errors.New(log("blockMapper.SetUpDevice spec is nil"))
 	}
@@ -298,7 +298,7 @@ func (m *csiBlockMapper) SetUpDevice() (string, error) {
 
 	var attachment *storage.VolumeAttachment
 	if !skip {
-		// Search for attachment by VolumeAttachment.Spec.Source.PersistentVolumeName
+		// 按 VolumeAttachment.Spec.Source.PersistentVolumeName 查找 VolumeAttachment。
 		nodeName := string(m.plugin.host.GetNodeName())
 		attachID := getAttachmentName(csiSource.VolumeHandle, csiSource.Driver, nodeName)
 		attachment, err = m.k8s.StorageV1().VolumeAttachments().Get(context.TODO(), attachID, meta.GetOptions{})
@@ -307,7 +307,7 @@ func (m *csiBlockMapper) SetUpDevice() (string, error) {
 		}
 	}
 
-	// TODO (vladimirvivien) implement better AccessModes mapping between k8s and CSI
+	// TODO (vladimirvivien) 实现 k8s 与 CSI 之间更完善的 AccessModes 映射
 	accessMode := v1.ReadWriteOnce
 	if m.spec.PersistentVolume.Spec.AccessModes != nil {
 		accessMode = m.spec.PersistentVolume.Spec.AccessModes[0]
@@ -318,18 +318,18 @@ func (m *csiBlockMapper) SetUpDevice() (string, error) {
 
 	csiClient, err := m.csiClientGetter.Get()
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// CSI 驱动暂不可用按瞬时错误处理。
+		// 参见 https://github.com/kubernetes/kubernetes/issues/120268
 		return "", volumetypes.NewTransientOperationFailure(log("blockMapper.SetUpDevice failed to get CSI client: %v", err))
 	}
 
-	// Call NodeStageVolume
+	// 调用 NodeStageVolume。
 	stagingPath, err := m.stageVolumeForBlock(ctx, csiClient, accessMode, csiSource, attachment)
 	if err != nil {
 		if volumetypes.IsOperationFinishedError(err) {
 			cleanupErr := m.cleanupOrphanDeviceFiles()
 			if cleanupErr != nil {
-				// V(4) for not so serious error
+				// 清理失败不算严重错误，用 V(4) 记录。
 				klog.V(4).Infof("Failed to clean up block volume directory %s", cleanupErr)
 			}
 		}
@@ -339,10 +339,11 @@ func (m *csiBlockMapper) SetUpDevice() (string, error) {
 	return stagingPath, nil
 }
 
+// MapPodDevice 调用 CSI 的 NodePublishVolume，将块卷 publish 到 Pod 的 publish 路径。
 func (m *csiBlockMapper) MapPodDevice() (string, error) {
 	klog.V(4).Info(log("blockMapper.MapPodDevice called"))
 
-	// Get csiSource from spec
+	// 从卷规格中获取 CSI 卷来源。
 	if m.spec == nil {
 		return "", errors.New(log("blockMapper.MapPodDevice spec is nil"))
 	}
@@ -360,7 +361,7 @@ func (m *csiBlockMapper) MapPodDevice() (string, error) {
 
 	var attachment *storage.VolumeAttachment
 	if !skip {
-		// Search for attachment by VolumeAttachment.Spec.Source.PersistentVolumeName
+		// 按 VolumeAttachment.Spec.Source.PersistentVolumeName 查找 VolumeAttachment。
 		nodeName := string(m.plugin.host.GetNodeName())
 		attachID := getAttachmentName(csiSource.VolumeHandle, csiSource.Driver, nodeName)
 		attachment, err = m.k8s.StorageV1().VolumeAttachments().Get(context.TODO(), attachID, meta.GetOptions{})
@@ -369,7 +370,7 @@ func (m *csiBlockMapper) MapPodDevice() (string, error) {
 		}
 	}
 
-	// TODO (vladimirvivien) implement better AccessModes mapping between k8s and CSI
+	// TODO (vladimirvivien) 实现 k8s 与 CSI 之间更完善的 AccessModes 映射
 	accessMode := v1.ReadWriteOnce
 	if m.spec.PersistentVolume.Spec.AccessModes != nil {
 		accessMode = m.spec.PersistentVolume.Spec.AccessModes[0]
@@ -380,12 +381,12 @@ func (m *csiBlockMapper) MapPodDevice() (string, error) {
 
 	csiClient, err := m.csiClientGetter.Get()
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// CSI 驱动暂不可用按瞬时错误处理。
+		// 参见 https://github.com/kubernetes/kubernetes/issues/120268
 		return "", volumetypes.NewTransientOperationFailure(log("blockMapper.MapPodDevice failed to get CSI client: %v", err))
 	}
 
-	// Call NodePublishVolume
+	// 调用 NodePublishVolume。
 	publishPath, err := m.publishVolumeForBlock(ctx, csiClient, accessMode, csiSource, attachment)
 	if err != nil {
 		return "", err
@@ -397,13 +398,13 @@ func (m *csiBlockMapper) MapPodDevice() (string, error) {
 var _ volume.BlockVolumeUnmapper = &csiBlockMapper{}
 var _ volume.CustomBlockVolumeUnmapper = &csiBlockMapper{}
 
-// unpublishVolumeForBlock unpublishes a block volume from publishPath
+// unpublishVolumeForBlock 将块卷从 publishPath 取消 publish
 func (m *csiBlockMapper) unpublishVolumeForBlock(ctx context.Context, csi csiClient, publishPath string) error {
-	// Request to unpublish a block volume from publishPath.
-	// Expectation for driver is to remove block volume from the publishPath, by unmounting bind-mounted device file
-	// or deleting device file.
-	// Driver is responsible for deleting publishPath itself.
-	// If driver doesn't implement NodeUnstageVolume, detaching the block volume from the node may be done, here.
+	// 请求将块卷从 publishPath 取消 publish。
+	// 驱动应通过解挂 bind mount 的设备文件，或删除设备文件，
+	// 将块卷从 publishPath 移除。
+	// publishPath 本身由驱动负责删除。
+	// 若驱动未实现 NodeUnstageVolume，可在此处完成块卷从节点的分离。
 	if err := csi.NodeUnpublishVolume(ctx, m.volumeID, publishPath); err != nil {
 		return errors.New(log("blockMapper.unpublishVolumeForBlock failed: %v", err))
 	}
@@ -412,9 +413,9 @@ func (m *csiBlockMapper) unpublishVolumeForBlock(ctx context.Context, csi csiCli
 	return nil
 }
 
-// unstageVolumeForBlock unstages a block volume from stagingPath
+// unstageVolumeForBlock 将块卷从 stagingPath 取消 stage
 func (m *csiBlockMapper) unstageVolumeForBlock(ctx context.Context, csi csiClient, stagingPath string) error {
-	// Check whether "STAGE_UNSTAGE_VOLUME" is set
+	// 检查驱动是否设置了 "STAGE_UNSTAGE_VOLUME" 能力
 	stageUnstageSet, err := csi.NodeSupportsStageUnstage(ctx)
 	if err != nil {
 		return errors.New(log("blockMapper.unstageVolumeForBlock failed to check STAGE_UNSTAGE_VOLUME capability: %v", err))
@@ -424,15 +425,15 @@ func (m *csiBlockMapper) unstageVolumeForBlock(ctx context.Context, csi csiClien
 		return nil
 	}
 
-	// Request to unstage a block volume from stagingPath.
-	// Expected implementation for driver is removing driver specific resource in stagingPath and
-	// detaching the block volume from the node.
+	// 请求将块卷从 stagingPath 取消 stage。
+	// 驱动应移除 stagingPath 中自身特定的资源，
+	// 并把块卷从节点分离。
 	if err := csi.NodeUnstageVolume(ctx, m.volumeID, stagingPath); err != nil {
 		return errors.New(log("blockMapper.unstageVolumeForBlock failed: %v", err))
 	}
 	klog.V(4).Info(log("blockMapper.unstageVolumeForBlock NodeUnstageVolume successfully [%s]", stagingPath))
 
-	// Remove stagingPath directory and its contents
+	// 删除 stagingPath 目录及其内容。
 	if err := os.RemoveAll(stagingPath); err != nil {
 		return errors.New(log("blockMapper.unstageVolumeForBlock failed to remove staging path after NodeUnstageVolume() error [%s]: %v", stagingPath, err))
 	}
@@ -440,19 +441,19 @@ func (m *csiBlockMapper) unstageVolumeForBlock(ctx context.Context, csi csiClien
 	return nil
 }
 
-// TearDownDevice removes traces of the SetUpDevice.
+// TearDownDevice 清理 SetUpDevice 留下的痕迹。
 func (m *csiBlockMapper) TearDownDevice(globalMapPath, devicePath string) error {
 	ctx, cancel := createCSIOperationContext(m.spec, csiTimeout)
 	defer cancel()
 
 	csiClient, err := m.csiClientGetter.Get()
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// CSI 驱动暂不可用按瞬时错误处理。
+		// 参见 https://github.com/kubernetes/kubernetes/issues/120268
 		return volumetypes.NewTransientOperationFailure(log("blockMapper.TearDownDevice failed to get CSI client: %v", err))
 	}
 
-	// Call NodeUnstageVolume
+	// 调用 NodeUnstageVolume。
 	stagingPath := m.GetStagingPath()
 	if _, err := os.Stat(stagingPath); err != nil {
 		if os.IsNotExist(err) {
@@ -467,35 +468,35 @@ func (m *csiBlockMapper) TearDownDevice(globalMapPath, devicePath string) error 
 		}
 	}
 	if err = m.cleanupOrphanDeviceFiles(); err != nil {
-		// V(4) for not so serious error
+		// 清理失败不算严重错误，用 V(4) 记录。
 		klog.V(4).Infof("Failed to clean up block volume directory %s", err)
 	}
 
 	return nil
 }
 
-// Clean up any orphan files / directories when a block volume is being unstaged.
-// At this point we can be sure that there is no pod using the volume and all
-// files are indeed orphaned.
+// 取消 stage 块卷时清理所有孤立的文件/目录。
+// 此时可以确定已无 Pod 使用该卷，
+// 所有文件确为孤立文件。
 func (m *csiBlockMapper) cleanupOrphanDeviceFiles() error {
-	// Remove artifacts of NodePublish.
-	// publishDir: xxx/plugins/kubernetes.io/csi/volumeDevices/publish/<volume name>
-	// Each PublishVolume() created a subdirectory there. Since everything should be
-	// already unpublished at this point, the directory should be empty by now.
+	// 清理 NodePublish 留下的产物。
+	// publishDir 为 xxx/plugins/kubernetes.io/csi/volumeDevices/publish/<volume name>。
+	// 每次 PublishVolume() 都会在其中创建子目录；此时应都已取消 publish，
+	// 目录应为空。
 	publishDir := m.getPublishDir()
 	if err := os.Remove(publishDir); err != nil && !os.IsNotExist(err) {
 		return errors.New(log("failed to remove publish directory [%s]: %v", publishDir, err))
 	}
 
-	// Remove artifacts of NodeStage.
-	// stagingPath: xxx/plugins/kubernetes.io/csi/volumeDevices/staging/<volume name>
+	// 清理 NodeStage 留下的产物。
+	// stagingPath 为 xxx/plugins/kubernetes.io/csi/volumeDevices/staging/<volume name>。
 	stagingPath := m.GetStagingPath()
 	if err := os.Remove(stagingPath); err != nil && !os.IsNotExist(err) {
 		return errors.New(log("failed to delete volume staging path [%s]: %v", stagingPath, err))
 	}
 
-	// Remove everything under xxx/plugins/kubernetes.io/csi/volumeDevices/<volume name>.
-	// At this point it contains only "data/vol_data.json" and empty "dev/".
+	// 删除 xxx/plugins/kubernetes.io/csi/volumeDevices/<volume name> 下的所有内容。
+	// 此时其中只剩 "data/vol_data.json" 和空的 "dev/"。
 	volumeDir := getVolumePluginDir(m.specName, m.plugin.host)
 	mounter := m.plugin.host.GetMounter()
 	if err := removeall.RemoveAllOneFilesystem(mounter, volumeDir); err != nil {
@@ -505,22 +506,22 @@ func (m *csiBlockMapper) cleanupOrphanDeviceFiles() error {
 	return nil
 }
 
-// UnmapPodDevice unmaps the block device path.
+// UnmapPodDevice 解除块设备路径的映射。
 func (m *csiBlockMapper) UnmapPodDevice() error {
 	publishPath := m.getPublishPath()
 
 	csiClient, err := m.csiClientGetter.Get()
 	if err != nil {
-		// Treat the absence of the CSI driver as a transient error
-		// See https://github.com/kubernetes/kubernetes/issues/120268
+		// CSI 驱动暂不可用按瞬时错误处理。
+		// 参见 https://github.com/kubernetes/kubernetes/issues/120268
 		return volumetypes.NewTransientOperationFailure(log("blockMapper.UnmapPodDevice failed to get CSI client: %v", err))
 	}
 
 	ctx, cancel := createCSIOperationContext(m.spec, csiTimeout)
 	defer cancel()
 
-	// Call NodeUnpublishVolume.
-	// Even if publishPath does not exist - previous NodePublish may have timed out
-	// and Kubernetes makes sure that the operation is finished.
+	// 调用 NodeUnpublishVolume。
+	// 即使 publishPath 不存在也要调用：之前的 NodePublish 可能已超时，
+	// 需要由 Kubernetes 确保该操作最终完成。
 	return m.unpublishVolumeForBlock(ctx, csiClient, publishPath)
 }

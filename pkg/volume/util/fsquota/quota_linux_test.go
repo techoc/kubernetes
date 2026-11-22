@@ -34,6 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fsquota/common"
 )
 
+// dummyMountData 是模拟的 /proc/self/mounts 内容，供挂载解析测试使用。
 const dummyMountData = `sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
 proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
 devtmpfs /dev devtmpfs rw,nosuid,size=6133536k,nr_inodes=1533384,mode=755 0 0
@@ -44,6 +45,7 @@ tmpfs /tmp tmpfs rw,nosuid,nodev 0 0
 /dev/sdb1 /virt xfs rw,noatime,attr2,inode64,usrquota,prjquota 0 0
 `
 
+// dummyFakeMount1 返回带若干典型挂载点的假挂载器，用于挂载点探测测试。
 func dummyFakeMount1() mount.Interface {
 	return mount.NewFakeMounter(
 		[]mount.MountPoint{
@@ -80,6 +82,7 @@ func dummyFakeMount1() mount.Interface {
 		})
 }
 
+// backingDevTest 描述一次块设备探测的用例：给定路径和 mounts 内容，期望的结果或失败。
 type backingDevTest struct {
 	path           string
 	mountdata      string
@@ -87,6 +90,7 @@ type backingDevTest struct {
 	expectFailure  bool
 }
 
+// mountpointTest 描述一次挂载点探测的用例：给定路径和挂载器，期望的结果或失败。
 type mountpointTest struct {
 	path           string
 	mounter        mount.Interface
@@ -94,6 +98,7 @@ type mountpointTest struct {
 	expectFailure  bool
 }
 
+// testBackingDev1 执行一次块设备探测用例，将 mounts 内容写入临时文件再解析。
 func testBackingDev1(testcase backingDevTest) error {
 	tmpfile, err := os.CreateTemp("", "backingdev")
 	if err != nil {
@@ -120,6 +125,7 @@ func testBackingDev1(testcase backingDevTest) error {
 	return fmt.Errorf("mismatch: path %s expects mountpoint %s got %s", testcase.path, testcase.expectedResult, backingDev)
 }
 
+// TestBackingDev 验证从 mounts 数据中为各种路径找到正确块设备，错误路径应失败。
 func TestBackingDev(t *testing.T) {
 	testcasesBackingDev := map[string]backingDevTest{
 		"Root": {
@@ -161,6 +167,7 @@ func TestBackingDev(t *testing.T) {
 	}
 }
 
+// TestDetectMountPoint 验证沿路径向上查找挂载点的行为，包括根目录与空路径。
 func TestDetectMountPoint(t *testing.T) {
 	testcasesMount := map[string]mountpointTest{
 		"Root": {
@@ -206,6 +213,7 @@ func TestDetectMountPoint(t *testing.T) {
 	}
 }
 
+// dummyMountPoints 模拟带 prjquota 与不带配额选项的挂载，供配额测试使用。
 var dummyMountPoints = []mount.MountPoint{
 	{
 		Device: "/dev/sda2",
@@ -233,13 +241,16 @@ var dummyMountPoints = []mount.MountPoint{
 	},
 }
 
+// dummyQuotaTest 返回基于 dummyMountPoints 的假挂载器。
 func dummyQuotaTest() mount.Interface {
 	return mount.NewFakeMounter(dummyMountPoints)
 }
 
+// dummySetFSInfo 预填路径的挂载点与块设备缓存，绕过真实文件系统探测。
 func dummySetFSInfo(path string) {
 	if enabledQuotasForMonitoring() {
 		for _, mount := range dummyMountPoints {
+			// 取最长前缀对应挂载；dummyMountPoints 中更具体的路径在前。
 			if strings.HasPrefix(path, mount.Path) {
 				mountpointMap[path] = mount.Path
 				backingDevMap[path] = mount.Device
@@ -249,15 +260,19 @@ func dummySetFSInfo(path string) {
 	}
 }
 
+// VolumeProvider1 是为测试提供 /quota1 挂载点施加器的虚拟配额提供者。
 type VolumeProvider1 struct {
 }
 
+// VolumeProvider2 是为测试提供 /quota2 挂载点施加器的虚拟配额提供者。
 type VolumeProvider2 struct {
 }
 
+// testVolumeQuota 是用内存映射模拟配额施加行为的虚拟施加器。
 type testVolumeQuota struct {
 }
 
+// logAllMaps 在用例失败时打印所有内部映射，便于定位状态偏差。
 func logAllMaps(where string) {
 	fmt.Printf("Maps at %s\n", where)
 	fmt.Printf("    Map podQuotaMap contents:\n")
@@ -307,9 +322,13 @@ func logAllMaps(where string) {
 	fmt.Printf("End maps %s\n", where)
 }
 
+// testIDQuotaMap 记录测试用配额 ID 到目录的映射。
 var testIDQuotaMap = make(map[common.QuotaID]string)
+
+// testQuotaIDMap 记录测试用目录到配额 ID 的映射。
 var testQuotaIDMap = make(map[string]common.QuotaID)
 
+// GetQuotaApplier 为 /quota1 挂载点返回虚拟施加器，其他挂载点返回 nil。
 func (*VolumeProvider1) GetQuotaApplier(mountpoint string, backingDev string) common.LinuxVolumeQuotaApplier {
 	if strings.HasPrefix(mountpoint, "/quota1") {
 		return testVolumeQuota{}
@@ -317,6 +336,7 @@ func (*VolumeProvider1) GetQuotaApplier(mountpoint string, backingDev string) co
 	return nil
 }
 
+// GetQuotaApplier 为 /quota2 挂载点返回虚拟施加器，其他挂载点返回 nil。
 func (*VolumeProvider2) GetQuotaApplier(mountpoint string, backingDev string) common.LinuxVolumeQuotaApplier {
 	if strings.HasPrefix(mountpoint, "/quota2") {
 		return testVolumeQuota{}
@@ -324,6 +344,7 @@ func (*VolumeProvider2) GetQuotaApplier(mountpoint string, backingDev string) co
 	return nil
 }
 
+// SetQuotaOnDir 在内存映射中设置目录配额，拒绝同一 ID 或目录被重复占用。
 func (v testVolumeQuota) SetQuotaOnDir(dir string, id common.QuotaID, _ int64) error {
 	odir, ok := testIDQuotaMap[id]
 	if ok && dir != odir {
@@ -338,6 +359,7 @@ func (v testVolumeQuota) SetQuotaOnDir(dir string, id common.QuotaID, _ int64) e
 	return nil
 }
 
+// GetQuotaOnDir 返回目录上设置的配额 ID，未设置时返回 BadQuotaID 和错误。
 func (v testVolumeQuota) GetQuotaOnDir(path string) (common.QuotaID, error) {
 	id, ok := testQuotaIDMap[path]
 	if ok {
@@ -346,40 +368,47 @@ func (v testVolumeQuota) GetQuotaOnDir(path string) (common.QuotaID, error) {
 	return common.BadQuotaID, fmt.Errorf("no quota available for %s", path)
 }
 
+// QuotaIDIsInUse 判断配额 ID 是否已被测试映射占用。
 func (v testVolumeQuota) QuotaIDIsInUse(id common.QuotaID) (bool, error) {
 	if _, ok := testIDQuotaMap[id]; ok {
 		return true, nil
 	}
-	// So that we reject some
+	// 人为拒绝部分 ID，以覆盖未占用但不可用的情况。
 	if id%3 == 0 {
 		return false, nil
 	}
 	return false, nil
 }
 
+// GetConsumption 返回固定的模拟已用字节数。
 func (v testVolumeQuota) GetConsumption(_ string, _ common.QuotaID) (int64, error) {
 	return 4096, nil
 }
 
+// GetInodes 返回固定的模拟已用 inode 数。
 func (v testVolumeQuota) GetInodes(_ string, _ common.QuotaID) (int64, error) {
 	return 1, nil
 }
 
+// fakeSupportsQuotas 用假挂载器预填文件系统信息后检查路径是否支持配额。
 func fakeSupportsQuotas(path string, userNamespacesEnabled bool) (bool, error) {
 	dummySetFSInfo(path)
 	return SupportsQuotas(dummyQuotaTest(), path, userNamespacesEnabled)
 }
 
+// fakeAssignQuota 用假挂载器为路径分配指定大小的配额。
 func fakeAssignQuota(path string, poduid types.UID, bytes int64, userNamespacesEnabled bool) error {
 	dummySetFSInfo(path)
 	return AssignQuota(dummyQuotaTest(), path, poduid, resource.NewQuantity(bytes, resource.DecimalSI), userNamespacesEnabled)
 }
 
+// fakeClearQuota 用假挂载器清除路径上的配额。
 func fakeClearQuota(path string, userNamespacesEnabled bool) error {
 	dummySetFSInfo(path)
 	return ClearQuota(dummyQuotaTest(), path, userNamespacesEnabled)
 }
 
+// quotaTestCase 是配额分配/清理用例：包含操作参数、期望的系统文件内容及各内部映射的数量变化。
 type quotaTestCase struct {
 	name                             string
 	path                             string
@@ -404,6 +433,7 @@ type quotaTestCase struct {
 	deltaExpectedMountpointCount     int
 }
 
+// 以下是系统配额文件 /etc/projects 与 /etc/projid 的期望内容片段。
 const (
 	projectsHeader = `# This is a /etc/projects header
 1048578:/quota/d
@@ -442,6 +472,7 @@ volume1048581:1048581
 `
 )
 
+// quotaTestCases 按执行顺序排列：依次分配、重复分配、清理，并校验每步后的映射状态。
 var quotaTestCases = []quotaTestCase{
 	{
 		"SupportsQuotaOnQuotaVolumeWithUserNamespace",
@@ -505,6 +536,7 @@ var quotaTestCases = []quotaTestCase{
 	},
 }
 
+// compareProjectsFiles 校验配额系统文件内容：特性关闭时期望只剩文件头。
 func compareProjectsFiles(t *testing.T, testcase quotaTestCase, projectsFile string, projidFile string, enabled bool) {
 	bytes, err := os.ReadFile(projectsFile)
 	if err != nil {
@@ -534,6 +566,7 @@ func compareProjectsFiles(t *testing.T, testcase quotaTestCase, projectsFile str
 	}
 }
 
+// runCaseEnabled 在配额特性开启时执行单个用例并返回是否失败。
 func runCaseEnabled(t *testing.T, testcase quotaTestCase, seq int) bool {
 	fail := false
 	var err error
@@ -572,6 +605,7 @@ func runCaseEnabled(t *testing.T, testcase quotaTestCase, seq int) bool {
 	return fail
 }
 
+// runCaseDisabled 在配额特性关闭时执行用例：所有操作都应报错，且不支持配额。
 func runCaseDisabled(t *testing.T, testcase quotaTestCase, seq int) bool {
 	var err error
 	var supports bool
@@ -601,8 +635,10 @@ func runCaseDisabled(t *testing.T, testcase quotaTestCase, seq int) bool {
 	return false
 }
 
+// testAddRemoveQuotas 在给定特性开关下顺序执行全部配额用例，逐步校验文件内容与映射计数。
 func testAddRemoveQuotas(t *testing.T, enabled bool) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.LocalStorageCapacityIsolationFSQuotaMonitoring, enabled)
+	// 用临时文件模拟系统配额文件，避免触碰真实 /etc/projects 与 /etc/projid。
 	tmpProjectsFile, err := os.CreateTemp("", "projects")
 	if err == nil {
 		_, err = tmpProjectsFile.WriteString(projectsHeader)
@@ -749,10 +785,12 @@ func testAddRemoveQuotas(t *testing.T, enabled bool) {
 	os.Remove(projidFile)
 }
 
+// TestAddRemoveQuotasEnabled 验证特性开启时配额的分配与清理行为。
 func TestAddRemoveQuotasEnabled(t *testing.T) {
 	testAddRemoveQuotas(t, true)
 }
 
+// TestAddRemoveQuotasDisabled 验证特性关闭时配额操作全部被拒绝。
 func TestAddRemoveQuotasDisabled(t *testing.T) {
 	testAddRemoveQuotas(t, false)
 }

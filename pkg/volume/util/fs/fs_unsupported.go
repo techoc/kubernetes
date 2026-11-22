@@ -22,17 +22,18 @@ import (
 	"fmt"
 )
 
+// UsageInfo 描述路径占用的字节数与 inode 数。
 type UsageInfo struct {
 	Bytes  int64
 	Inodes int64
 }
 
-// Info unsupported returns 0 values for available and capacity and an error.
+// Info 在该构建平台上不受支持：所有统计值返回 0，并附带错误。
 func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 	return 0, 0, 0, 0, 0, 0, fmt.Errorf("fsinfo not supported for this build")
 }
 
-// DiskUsage gets disk usage of specified path.
+// DiskUsage 获取指定路径的磁盘用量；该构建平台不支持，返回错误。
 func DiskUsage(path string) (UsageInfo, error) {
 	var usage UsageInfo
 	return usage, fmt.Errorf("directory disk usage not supported for this build.")

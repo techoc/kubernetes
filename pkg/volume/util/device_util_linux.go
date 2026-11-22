@@ -30,8 +30,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// FindMultipathDeviceForDevice given a device name like /dev/sdx, find the devicemapper parent. If called with a device
-// already resolved to devicemapper, do nothing.
+// FindMultipathDeviceForDevice 根据 /dev/sdx 这样的设备名查找其 devicemapper 父设备；
+// 传入已是 dm 设备的名称时原样返回。
 func (handler *deviceHandler) FindMultipathDeviceForDevice(device string) string {
 	if strings.HasPrefix(device, "/dev/dm-") {
 		return device
@@ -56,15 +56,14 @@ func (handler *deviceHandler) FindMultipathDeviceForDevice(device string) string
 	return ""
 }
 
-// findDeviceForPath Find the underlying disk for a linked path such as /dev/disk/by-path/XXXX or /dev/mapper/XXXX
-// will return sdX or hdX etc, if /dev/sdX is passed in then sdX will be returned
+// findDeviceForPath 解析符号链接，返回 /dev/disk/by-path/XXXX 等路径底层的
+// 磁盘名（如 sdX、hdX）；传入 /dev/sdX 时返回 sdX。
 func findDeviceForPath(path string, io IoUtil) (string, error) {
 	devicePath, err := io.EvalSymlinks(path)
 	if err != nil {
 		return "", err
 	}
-	// if path /dev/hdX split into "", "dev", "hdX" then we will
-	// return just the last part
+	// /dev/hdX 按 "/" 切分后取最后一段。
 	parts := strings.Split(devicePath, "/")
 	if len(parts) == 3 && strings.HasPrefix(parts[1], "dev") {
 		return parts[2], nil
@@ -72,12 +71,12 @@ func findDeviceForPath(path string, io IoUtil) (string, error) {
 	return "", errors.New("Illegal path for device " + devicePath)
 }
 
-// FindSlaveDevicesOnMultipath given a dm name like /dev/dm-1, find all devices
-// which are managed by the devicemapper dm-1.
+// FindSlaveDevicesOnMultipath 根据 /dev/dm-1 这样的名称查找该多路径设备
+// 管理的所有从属设备。
 func (handler *deviceHandler) FindSlaveDevicesOnMultipath(dm string) []string {
 	var devices []string
 	io := handler.getIo
-	// Split path /dev/dm-1 into "", "dev", "dm-1"
+	// 将 /dev/dm-1 切分为 "", "dev", "dm-1"。
 	parts := strings.Split(dm, "/")
 	if len(parts) != 3 || !strings.HasPrefix(parts[1], "dev") {
 		return devices
@@ -92,10 +91,10 @@ func (handler *deviceHandler) FindSlaveDevicesOnMultipath(dm string) []string {
 	return devices
 }
 
-// GetISCSIPortalHostMapForTarget given a target iqn, find all the scsi hosts logged into
-// that target. Returns a map of iSCSI portals (string) to SCSI host numbers (integers).
+// GetISCSIPortalHostMapForTarget 根据 target IQN 查找已登录该 target 的所有
+// SCSI 主机，返回 iSCSI portal 到 SCSI 主机号的映射。
 //
-//	For example: {
+//	例如：{
 //	   "192.168.30.7:3260": 2,
 //	   "192.168.30.8:3260": 3,
 //	}
@@ -103,7 +102,7 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 	portalHostMap := make(map[string]int)
 	io := handler.getIo
 
-	// Iterate over all the iSCSI hosts in sysfs
+	// 遍历 sysfs 中所有 iSCSI 主机。
 	sysPath := "/sys/class/iscsi_host"
 	hostDirs, err := io.ReadDir(sysPath)
 	if err != nil {
@@ -113,8 +112,7 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 		return nil, err
 	}
 	for _, hostDir := range hostDirs {
-		// iSCSI hosts are always of the format "host%d"
-		// See drivers/scsi/hosts.c in Linux
+		// iSCSI 主机名格式固定为 "host%d"，参见 Linux drivers/scsi/hosts.c。
 		hostName := hostDir.Name()
 		if !strings.HasPrefix(hostName, "host") {
 			continue
@@ -125,17 +123,15 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 			continue
 		}
 
-		// Iterate over the children of the iscsi_host device
-		// We are looking for the associated session
+		// 遍历 iscsi_host 设备的子项，寻找关联的会话。
 		devicePath := sysPath + "/" + hostName + "/device"
 		deviceDirs, err := io.ReadDir(devicePath)
 		if err != nil {
 			return nil, err
 		}
 		for _, deviceDir := range deviceDirs {
-			// Skip over files that aren't the session
-			// Sessions are of the format "session%u"
-			// See drivers/scsi/scsi_transport_iscsi.c in Linux
+			// 跳过非会话项；会话名格式为 "session%u"，参见
+			// Linux drivers/scsi/scsi_transport_iscsi.c。
 			sessionName := deviceDir.Name()
 			if !strings.HasPrefix(sessionName, "session") {
 				continue
@@ -143,7 +139,7 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 
 			sessionPath := devicePath + "/" + sessionName
 
-			// Read the target name for the iSCSI session
+			// 读取 iSCSI 会话对应的 target 名称。
 			targetNamePath := sessionPath + "/iscsi_session/" + sessionName + "/targetname"
 			targetName, err := io.ReadFile(targetNamePath)
 			if err != nil {
@@ -151,22 +147,20 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 				continue
 			}
 
-			// Ignore hosts that don't matchthe target we were looking for.
+			// 跳过 target 名称不匹配的主机。
 			if strings.TrimSpace(string(targetName)) != targetIqn {
 				continue
 			}
 
-			// Iterate over the children of the iSCSI session looking
-			// for the iSCSI connection.
+			// 遍历会话子项寻找 iSCSI 连接。
 			dirs2, err := io.ReadDir(sessionPath)
 			if err != nil {
 				klog.Infof("Failed to process session %s, assuming this session is unavailable: %s", sessionName, err)
 				continue
 			}
 			for _, dir2 := range dirs2 {
-				// Skip over files that aren't the connection
-				// Connections are of the format "connection%d:%u"
-				// See drivers/scsi/scsi_transport_iscsi.c in Linux
+				// 跳过非连接项；连接名格式为 "connection%d:%u"，
+				// 参见 Linux drivers/scsi/scsi_transport_iscsi.c。
 				dirName := dir2.Name()
 				if !strings.HasPrefix(dirName, "connection") {
 					continue
@@ -174,7 +168,7 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 
 				connectionPath := sessionPath + "/" + dirName + "/iscsi_connection/" + dirName
 
-				// Read the current and persistent portal information for the connection.
+				// 读取连接的当前和持久 portal 信息。
 				addrPath := connectionPath + "/address"
 				addr, err := io.ReadFile(addrPath)
 				if err != nil {
@@ -203,9 +197,8 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 					continue
 				}
 
-				// Add entries to the map for both the current and persistent portals
-				// pointing to the SCSI host for those connections
-				// JoinHostPort will add `[]` around IPv6 addresses.
+				// 当前和持久 portal 都映射到对应 SCSI 主机；
+				// JoinHostPort 会为 IPv6 地址加上方括号。
 				portal := net.JoinHostPort(strings.TrimSpace(string(addr)), strings.TrimSpace(string(port)))
 				portalHostMap[portal] = hostNumber
 
@@ -218,21 +211,19 @@ func (handler *deviceHandler) GetISCSIPortalHostMapForTarget(targetIqn string) (
 	return portalHostMap, nil
 }
 
-// FindDevicesForISCSILun given an iqn, and lun number, find all the devices
-// corresponding to that LUN.
+// FindDevicesForISCSILun 根据 target IQN 和 LUN 号查找对应的所有块设备。
 func (handler *deviceHandler) FindDevicesForISCSILun(targetIqn string, lun int) ([]string, error) {
 	devices := make([]string, 0)
 	io := handler.getIo
 
-	// Iterate over all the iSCSI hosts in sysfs
+	// 遍历 sysfs 中所有 iSCSI 主机。
 	sysPath := "/sys/class/iscsi_host"
 	hostDirs, err := io.ReadDir(sysPath)
 	if err != nil {
 		return nil, err
 	}
 	for _, hostDir := range hostDirs {
-		// iSCSI hosts are always of the format "host%d"
-		// See drivers/scsi/hosts.c in Linux
+		// iSCSI 主机名格式固定为 "host%d"，参见 Linux drivers/scsi/hosts.c。
 		hostName := hostDir.Name()
 		if !strings.HasPrefix(hostName, "host") {
 			continue
@@ -243,53 +234,46 @@ func (handler *deviceHandler) FindDevicesForISCSILun(targetIqn string, lun int) 
 			continue
 		}
 
-		// Iterate over the children of the iscsi_host device
-		// We are looking for the associated session
+		// 遍历 iscsi_host 设备的子项，寻找关联的会话。
 		devicePath := sysPath + "/" + hostName + "/device"
 		deviceDirs, err := io.ReadDir(devicePath)
 		if err != nil {
 			return nil, err
 		}
 		for _, deviceDir := range deviceDirs {
-			// Skip over files that aren't the session
-			// Sessions are of the format "session%u"
-			// See drivers/scsi/scsi_transport_iscsi.c in Linux
+			// 跳过非会话项；会话名格式为 "session%u"，参见
+			// Linux drivers/scsi/scsi_transport_iscsi.c。
 			sessionName := deviceDir.Name()
 			if !strings.HasPrefix(sessionName, "session") {
 				continue
 			}
 
-			// Read the target name for the iSCSI session
+			// 读取 iSCSI 会话对应的 target 名称。
 			targetNamePath := devicePath + "/" + sessionName + "/iscsi_session/" + sessionName + "/targetname"
 			targetName, err := io.ReadFile(targetNamePath)
 			if err != nil {
 				return nil, err
 			}
 
-			// Only if the session matches the target we were looking for,
-			// add it to the map
+			// 仅处理 target 名称匹配的会话。
 			if strings.TrimSpace(string(targetName)) != targetIqn {
 				continue
 			}
 
-			// The list of block devices on the scsi bus will be in a
-			// directory called "target%d:%d:%d".
-			// See drivers/scsi/scsi_scan.c in Linux
-			// We assume the channel/bus and device/controller are always zero for iSCSI
+			// SCSI 总线上的块设备位于 "target%d:%d:%d" 目录，参见
+			// Linux drivers/scsi/scsi_scan.c；iSCSI 中 channel 和 device 恒为 0。
 			targetPath := devicePath + "/" + sessionName + fmt.Sprintf("/target%d:0:0", hostNumber)
 
-			// The block device for a given lun will be "%d:%d:%d:%d" --
-			// host:channel:bus:LUN
+			// LUN 对应目录格式为 host:channel:bus:LUN。
 			blockDevicePath := targetPath + fmt.Sprintf("/%d:0:0:%d", hostNumber, lun)
 
-			// If the LUN doesn't exist on this bus, continue on
+			// LUN 在该总线上不存在则跳过。
 			_, err = io.Lstat(blockDevicePath)
 			if err != nil {
 				continue
 			}
 
-			// Read the block directory, there should only be one child --
-			// the block device "sd*"
+			// block 目录下应只有一个子项，即 "sd*" 块设备。
 			path := blockDevicePath + "/block"
 			dirs, err := io.ReadDir(path)
 			if err != nil {

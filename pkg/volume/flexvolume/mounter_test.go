@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/harness"
 )
 
+// TestSetUpAt 验证 SetUpAt 在有无 FsGroup 参数时传给驱动的选项是否正确。
 func TestSetUpAt(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -48,7 +49,7 @@ func TestSetUpAt(tt *testing.T) {
 	plugin, rootDir := testPlugin(t)
 	plugin.unsupportedCommands = []string{"unsupportedCmd"}
 	plugin.runner = fakeRunner(
-		// first call without mounterArgs.FsGroup
+		// 第一次调用不带 mounterArgs.FsGroup。
 		assertDriverCall(t, successOutput(), mountCmd, rootDir+"/mount-dir",
 			specJSON(plugin, spec, map[string]string{
 				optionKeyPodName:            "my-pod",
@@ -57,7 +58,7 @@ func TestSetUpAt(tt *testing.T) {
 				optionKeyServiceAccountName: "my-sa",
 			})),
 
-		// second test has mounterArgs.FsGroup
+		// 第二次调用带 mounterArgs.FsGroup。
 		assertDriverCall(t, notSupportedOutput(), mountCmd, rootDir+"/mount-dir",
 			specJSON(plugin, spec, map[string]string{
 				optionFSGroup:               "42",

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package downwardapi 包含 downwardAPI 卷插件的单元测试。
 package downwardapi
 
 import (
@@ -42,12 +43,17 @@ import (
 )
 
 const (
+	// downwardAPIDir 是 downwardAPI 卷存放数据的符号链接目录名。
 	downwardAPIDir = "..data"
-	testPodUID     = types.UID("test_pod_uid")
-	testNamespace  = "test_metadata_namespace"
-	testName       = "test_metadata_name"
+	// testPodUID 是测试中使用的固定 Pod UID。
+	testPodUID = types.UID("test_pod_uid")
+	// testNamespace 是测试中使用的固定命名空间。
+	testNamespace = "test_metadata_namespace"
+	// testName 是测试中使用的固定 Pod 名称。
+	testName = "test_metadata_name"
 )
 
+// newTestHost 创建临时根目录及基于该目录、携带指定客户端的假卷主机。
 func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.VolumeHost) {
 	tempDir, err := utiltesting.MkTmpdir("downwardApi_volume_test.")
 	if err != nil {
@@ -56,11 +62,13 @@ func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.Vo
 	return tempDir, volumetest.NewFakeVolumeHost(t, tempDir, clientset, emptydir.ProbeVolumePlugins())
 }
 
+// TestCanSupport 验证 downwardAPI 插件按名可找到，且只支持 downwardAPI 卷源。
 func TestCanSupport(t *testing.T) {
 	pluginMgr := volume.VolumePluginMgr{}
 	tmpDir, host := newTestHost(t, nil)
 	defer os.RemoveAll(tmpDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	// 这里不探测插件健康状态，传 nil 探针即可。
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探针 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(downwardAPIPluginName)
 	if err != nil {
@@ -77,8 +85,9 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestDownwardAPI 覆盖标签、注解、名称、命名空间、路径及权限等投影场景。
 func TestDownwardAPI(t *testing.T) {
-	// Skip tests that fail on Windows, as discussed during the SIG Testing meeting from January 10, 2023
+	// 按 2023-01-10 SIG Testing 会议结论，在 Windows 上跳过这些测试。
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test that fails on Windows")
 	}
@@ -110,8 +119,7 @@ func TestDownwardAPI(t *testing.T) {
 			files:     map[string]string{"labels": "metadata.labels"},
 			podLabels: labels1,
 			steps: []testStep{
-				// for steps that involve files, stepName is also
-				// used as the name of the file to verify
+				// 涉及文件的步骤中，stepName 同时也是待校验的文件名。
 				verifyMapInFile{stepName{"labels"}, labels1},
 			},
 		},
@@ -202,6 +210,7 @@ func TestDownwardAPI(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithUser 验证默认用户、显式用户及特性开关对文件属主的影响。
 func TestCollectDataWithUser(t *testing.T) {
 	caseMappingUser1 := int64(1001)
 	caseMappingUser2 := int64(1002)
@@ -285,6 +294,7 @@ func TestCollectDataWithUser(t *testing.T) {
 	}
 
 	for _, tc := range cases {
+		// 关闭特性时锁定仿真版本，确保用户字段被忽略。
 		if tc.disableUserFieldsGate {
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 		}
@@ -316,6 +326,7 @@ func TestCollectDataWithUser(t *testing.T) {
 	}
 }
 
+// downwardAPITest 保存一个挂载好的 downwardAPI 卷及其测试上下文。
 type downwardAPITest struct {
 	t          *testing.T
 	name       string
@@ -326,6 +337,7 @@ type downwardAPITest struct {
 	rootDir    string
 }
 
+// newDownwardAPITest 根据文件映射和 Pod 元数据创建并挂载一个 downwardAPI 卷。
 func newDownwardAPITest(t *testing.T, name string, volumeFiles, podLabels, podAnnotations map[string]string, modes map[string]int32) *downwardAPITest {
 	defaultMode := int32(0644)
 	var files []v1.DownwardAPIVolumeFile
@@ -351,7 +363,8 @@ func newDownwardAPITest(t *testing.T, name string, volumeFiles, podLabels, podAn
 
 	pluginMgr := volume.VolumePluginMgr{}
 	rootDir, host := newTestHost(t, clientset)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	// 无需健康探测，传 nil 探针即可。
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探针 */, host)
 	plugin, err := pluginMgr.FindPluginByName(downwardAPIPluginName)
 	if err != nil {
 		t.Fatal("Can't find the plugin by name")
@@ -383,7 +396,7 @@ func newDownwardAPITest(t *testing.T, name string, volumeFiles, podLabels, podAn
 		t.Errorf("Failed to setup volume: %v", err)
 	}
 
-	// downwardAPI volume should create its own empty wrapper path
+	// downwardAPI 卷应创建自己的空包装目录，用于存放卷元数据。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/%v/plugins/kubernetes.io~empty-dir/wrapped_%v", rootDir, testPodUID, name)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -404,6 +417,7 @@ func newDownwardAPITest(t *testing.T, name string, volumeFiles, podLabels, podAn
 	}
 }
 
+// tearDown 卸载卷并清理测试临时目录。
 func (test *downwardAPITest) tearDown() {
 	unmounter, err := test.plugin.NewUnmounter(test.name, testPodUID)
 	if err != nil {
@@ -424,20 +438,24 @@ func (test *downwardAPITest) tearDown() {
 	os.RemoveAll(test.rootDir)
 }
 
-// testStep represents a named step of downwardAPITest.
-// For steps that deal with files, step name also serves
-// as the name of the file that's used by the step.
+// testStep 表示 downwardAPITest 中的一个命名步骤。
+// 涉及文件的步骤中，步骤名同时作为该步骤要操作的文件名。
 type testStep interface {
+	// getName 返回步骤名称。
 	getName() string
+	// run 执行该步骤。
 	run(*downwardAPITest)
 }
 
+// stepName 为步骤提供名称。
 type stepName struct {
 	name string
 }
 
+// getName 返回步骤名称。
 func (step stepName) getName() string { return step.name }
 
+// doVerifyLinesInFile 校验指定文件内容与期望值一致。
 func doVerifyLinesInFile(t *testing.T, volumePath, filename string, expected string) {
 	data, err := os.ReadFile(filepath.Join(volumePath, filename))
 	if err != nil {
@@ -451,29 +469,35 @@ func doVerifyLinesInFile(t *testing.T, volumePath, filename string, expected str
 	}
 }
 
+// verifyLinesInFile 校验文件中的文本与期望值一致。
 type verifyLinesInFile struct {
 	stepName
 	expected string
 }
 
+// run 执行文件内容校验。
 func (step verifyLinesInFile) run(test *downwardAPITest) {
 	doVerifyLinesInFile(test.t, test.volumePath, step.name, step.expected)
 }
 
+// verifyMapInFile 校验文件中格式化的映射与期望值一致。
 type verifyMapInFile struct {
 	stepName
 	expected map[string]string
 }
 
+// run 执行映射内容校验。
 func (step verifyMapInFile) run(test *downwardAPITest) {
 	doVerifyLinesInFile(test.t, test.volumePath, step.name, fieldpath.FormatMap(step.expected))
 }
 
+// verifyMode 校验文件权限与期望模式一致。
 type verifyMode struct {
 	stepName
 	expectedMode int32
 }
 
+// run 执行文件权限校验。
 func (step verifyMode) run(test *downwardAPITest) {
 	fileInfo, err := os.Stat(filepath.Join(test.volumePath, step.name))
 	if err != nil {
@@ -488,12 +512,14 @@ func (step verifyMode) run(test *downwardAPITest) {
 	}
 }
 
+// reSetUp 表示一次重复 SetUp：可更新标签，并校验数据链接是否变化。
 type reSetUp struct {
 	stepName
 	linkShouldChange bool
 	newLabels        map[string]string
 }
 
+// run 重新执行 SetUp 并校验符号链接是否按预期变化。
 func (step reSetUp) run(test *downwardAPITest) {
 	if step.newLabels != nil {
 		test.pod.ObjectMeta.Labels = step.newLabels
@@ -504,12 +530,12 @@ func (step reSetUp) run(test *downwardAPITest) {
 		test.t.Errorf("labels file should be a link... %s\n", err.Error())
 	}
 
-	// now re-run Setup
+	// 再次 SetUp，验证原子写入下数据链接的更新行为。
 	if err = test.mounter.SetUp(volume.MounterArgs{}); err != nil {
 		test.t.Errorf("Failed to re-setup volume: %v", err)
 	}
 
-	// get the link of the link
+	// 再次读取链接目标，与 SetUp 前比较以判断是否发生更新。
 	currentTarget2, err := os.Readlink(filepath.Join(test.volumePath, downwardAPIDir))
 	if err != nil {
 		test.t.Errorf(".current should be a link... %s\n", err.Error())

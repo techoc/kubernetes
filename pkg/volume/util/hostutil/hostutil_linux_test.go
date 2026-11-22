@@ -24,6 +24,7 @@ import (
 	"testing"
 )
 
+// TestIsSharedSuccess 验证共享与非共享挂载点的判断结果。
 func TestIsSharedSuccess(t *testing.T) {
 	successMountInfo :=
 		`62 0 253:0 / / rw,relatime shared:1 - ext4 /dev/mapper/ssd-root rw,seclabel,data=ordered
@@ -47,35 +48,31 @@ func TestIsSharedSuccess(t *testing.T) {
 		expectedResult bool
 	}{
 		{
-			// /var/lib/kubelet is a directory on mount '/' that is shared
-			// This is the most common case.
+			// /var/lib/kubelet 是共享挂载 '/' 上的目录，这是最常见的情况。
 			"shared",
 			"/var/lib/kubelet",
 			true,
 		},
 		{
-			// 8a2a... is a directory on mount /var/lib/docker/devicemapper
-			// that is private.
+			// 8a2a... 是私有挂载 /var/lib/docker/devicemapper 上的目录。
 			"private",
 			"/var/lib/docker/devicemapper/mnt/8a2a5c19eefb06d6f851dfcb240f8c113427f5b49b19658b5c60168e88267693/",
 			false,
 		},
 		{
-			// 'directory' is a directory on mount
-			// /var/lib/docker/devicemapper/test/shared that is shared, but one
-			// of its parent is private.
+			// 'directory' 位于共享挂载上，但其某个父级挂载是私有的。
 			"nested-shared",
 			"/var/lib/docker/devicemapper/test/shared/my/test/directory",
 			true,
 		},
 		{
-			// /var/lib/foo is a mount point and it's shared
+			// /var/lib/foo 是共享挂载点。
 			"shared-mount",
 			"/var/lib/foo",
 			true,
 		},
 		{
-			// /var/lib/bar is a mount point and it's private
+			// /var/lib/bar 是私有挂载点。
 			"private-mount",
 			"/var/lib/bar",
 			false,
@@ -92,13 +89,14 @@ func TestIsSharedSuccess(t *testing.T) {
 	}
 }
 
+// TestIsSharedFailure 验证格式错误的 mountinfo 会导致 isShared 返回错误。
 func TestIsSharedFailure(t *testing.T) {
 	errorTests := []struct {
 		name    string
 		content string
 	}{
 		{
-			// the first line is too short
+			// 首行字段不足。
 			name: "too-short-line",
 			content: `62 0 253:0 / / rw,relatime
 76 62 8:1 / /boot rw,relatime shared:29 - ext4 /dev/sda1 rw,seclabel,data=ordered
@@ -109,7 +107,7 @@ func TestIsSharedFailure(t *testing.T) {
 `,
 		},
 		{
-			// there is no root mount
+			// 缺少根挂载。
 			name: "no-root-mount",
 			content: `76 62 8:1 / /boot rw,relatime shared:29 - ext4 /dev/sda1 rw,seclabel,data=ordered
 78 62 0:41 / /tmp rw,nosuid,nodev shared:30 - tmpfs tmpfs rw,seclabel
@@ -133,6 +131,7 @@ func TestIsSharedFailure(t *testing.T) {
 	}
 }
 
+// TestGetSELinuxSupport 验证不同文件系统上 SELinux 支持的判断。
 func TestGetSELinuxSupport(t *testing.T) {
 	info :=
 		`62 0 253:0 / / rw,relatime shared:1 - ext4 /dev/mapper/ssd-root rw,seclabel,data=ordered
@@ -190,6 +189,7 @@ func TestGetSELinuxSupport(t *testing.T) {
 	}
 }
 
+// writeFile 将内容写入临时 mountinfo 文件，返回临时目录和文件路径。
 func writeFile(content string) (string, string, error) {
 	tempDir, err := os.MkdirTemp("", "mounter_shared_test")
 	if err != nil {
@@ -204,6 +204,7 @@ func writeFile(content string) (string, string, error) {
 	return tempDir, filename, nil
 }
 
+// TestGetSELinuxMountContext 验证从挂载选项解析 SELinux 上下文。
 func TestGetSELinuxMountContext(t *testing.T) {
 	info :=
 		`840 60 8:0 / /var/lib/kubelet/pods/d4f3b306-ad4c-4f7a-8983-b5b228039a8c/volumes/kubernetes.io~iscsi/mypv rw,relatime shared:421 - ext4 /dev/sda rw,context="system_u:object_r:container_file_t:s0:c314,c894"

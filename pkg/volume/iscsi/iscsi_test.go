@@ -35,6 +35,8 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// TestCanSupport 验证 iSCSI 插件仅识别 iSCSI 类型的内联卷和持久卷，
+// 空规格或非 iSCSI 规格均应返回 false。
 func TestCanSupport(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("iscsi_test")
 	if err != nil {
@@ -43,7 +45,7 @@ func TestCanSupport(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	plugMgr := volume.VolumePluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/iscsi")
 	if err != nil {
@@ -72,6 +74,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证持久卷插件报告 ReadWriteOnce 和 ReadOnlyMany 两种访问模式。
 func TestGetAccessModes(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("iscsi_test")
 	if err != nil {
@@ -80,7 +83,7 @@ func TestGetAccessModes(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	plugMgr := volume.VolumePluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
 
 	plug, err := plugMgr.FindPersistentPluginByName("kubernetes.io/iscsi")
 	if err != nil {
@@ -91,41 +94,47 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// fakeDiskManager 用临时目录代替真实 iSCSI 磁盘的挂载管理器。
 type fakeDiskManager struct {
 	tmpDir string
 }
 
+// NewFakeDiskManager 创建一个以临时目录为挂载点的假磁盘管理器。
 func NewFakeDiskManager() *fakeDiskManager {
 	return &fakeDiskManager{
 		tmpDir: utiltesting.MkTmpdirOrDie("iscsi_test"),
 	}
 }
 
+// Cleanup 删除假管理器使用的临时目录。
 func (fake *fakeDiskManager) Cleanup() {
 	os.RemoveAll(fake.tmpDir)
 }
 
+// MakeGlobalPDName 返回全局挂载路径，这里直接用临时目录冒充。
 func (fake *fakeDiskManager) MakeGlobalPDName(disk iscsiDisk) string {
 	return fake.tmpDir
 }
 
+// MakeGlobalVDPDName 返回块设备的全局映射路径，同样复用临时目录。
 func (fake *fakeDiskManager) MakeGlobalVDPDName(disk iscsiDisk) string {
 	return fake.tmpDir
 }
 
+// AttachDisk 模拟挂载：建好全局路径并挂载一次，返回假的设备路径。
 func (fake *fakeDiskManager) AttachDisk(b iscsiDiskMounter) (string, error) {
 	globalPath := b.manager.MakeGlobalPDName(*b.iscsiDisk)
 	err := os.MkdirAll(globalPath, 0750)
 	if err != nil {
 		return "", err
 	}
-	// Simulate the global mount so that the fakeMounter returns the
-	// expected number of mounts for the attached disk.
+	// 模拟全局挂载，使 fakeMounter 记录到与已挂载磁盘相符的挂载次数。
 	b.mounter.MountSensitiveWithoutSystemd(globalPath, globalPath, b.fsType, nil, nil)
 
 	return "/dev/sdb", nil
 }
 
+// DetachDisk 通过删除全局路径模拟卸载磁盘。
 func (fake *fakeDiskManager) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 	globalPath := c.manager.MakeGlobalPDName(*c.iscsiDisk)
 	err := os.RemoveAll(globalPath)
@@ -135,6 +144,7 @@ func (fake *fakeDiskManager) DetachDisk(c iscsiDiskUnmounter, mntPath string) er
 	return nil
 }
 
+// DetachBlockISCSIDisk 通过删除全局映射路径模拟取消块设备映射。
 func (fake *fakeDiskManager) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mntPath string) error {
 	globalPath := c.manager.MakeGlobalVDPDName(*c.iscsiDisk)
 	err := os.RemoveAll(globalPath)
@@ -144,6 +154,7 @@ func (fake *fakeDiskManager) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mntPath s
 	return nil
 }
 
+// doTestPlugin 走一遍插件的挂载/卸载流程，并核对卷路径的创建与清理。
 func doTestPlugin(t *testing.T, spec *volume.Spec) {
 	tmpDir, err := utiltesting.MkTmpdir("iscsi_test")
 	if err != nil {
@@ -152,7 +163,7 @@ func doTestPlugin(t *testing.T, spec *volume.Spec) {
 	defer os.RemoveAll(tmpDir)
 
 	plugMgr := volume.VolumePluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, volumetest.NewFakeVolumeHost(t, tmpDir, nil, nil))
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/iscsi")
 	if err != nil {
@@ -187,6 +198,7 @@ func doTestPlugin(t *testing.T, spec *volume.Spec) {
 		}
 	}
 
+	// 卸载器独立于挂载器测试，使用新的假管理器避免路径状态相互干扰。
 	fakeManager2 := NewFakeDiskManager()
 	defer fakeManager2.Cleanup()
 	unmounter, err := plug.(*iscsiPlugin).newUnmounterInternal("vol1", types.UID("poduid"), fakeManager2, fakeMounter, fakeExec)
@@ -207,6 +219,7 @@ func doTestPlugin(t *testing.T, spec *volume.Spec) {
 	}
 }
 
+// TestPluginVolume 以内联 iSCSI 卷规格验证挂载与卸载路径。
 func TestPluginVolume(t *testing.T) {
 	vol := &v1.Volume{
 		Name: "vol1",
@@ -222,6 +235,7 @@ func TestPluginVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol))
 }
 
+// TestPluginPersistentVolume 以持久卷规格验证挂载与卸载路径。
 func TestPluginPersistentVolume(t *testing.T) {
 	vol := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -241,6 +255,7 @@ func TestPluginPersistentVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromPersistentVolume(vol, false))
 }
 
+// TestPersistentClaimReadOnlyFlag 验证持久卷声明以只读方式使用时，挂载器属性中的 ReadOnly 为真。
 func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("iscsi_test")
 	if err != nil {
@@ -283,10 +298,10 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	client := fake.NewSimpleClientset(pv, claim)
 
 	plugMgr := volume.VolumePluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, client, nil))
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, volumetest.NewFakeVolumeHost(t, tmpDir, client, nil))
 	plug, _ := plugMgr.FindPluginByName(iscsiPluginName)
 
-	// readOnly bool is supplied by persistent-claim volume source when its mounter creates other volumes
+	// 声明卷的挂载器在下挂其他卷时会传入 readOnly，这里用 true 构造规格。
 	spec := volume.NewSpecFromPersistentVolume(pv, true)
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")}}
 	mounter, _ := plug.NewMounter(spec, pod)
@@ -299,6 +314,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	}
 }
 
+// TestPortalMounter 验证带端口的 portal 原样保留，不带端口的补上默认端口。
 func TestPortalMounter(t *testing.T) {
 	if portal := portalMounter("127.0.0.1"); portal != "127.0.0.1:3260" {
 		t.Errorf("wrong portal: %s", portal)
@@ -308,11 +324,12 @@ func TestPortalMounter(t *testing.T) {
 	}
 }
 
+// testcase 描述一个规格解析用例及其期望的返回值。
 type testcase struct {
 	name      string
 	defaultNs string
 	spec      *volume.Spec
-	// Expected return of the test
+	// 期望 getISCSISecretNameAndNamespace / getISCSIInitiatorInfo 等函数返回的值
 	expectedName          string
 	expectedNs            string
 	expectedIface         string
@@ -321,6 +338,8 @@ type testcase struct {
 	expectedSessionCHAP   bool
 }
 
+// TestGetSecretNameAndNamespaceForPV 验证 Secret 名称和命名空间的读取：
+// 持久卷用 SecretRef 中指定的值，缺省命名空间取默认值，内联卷不返回 Secret。
 func TestGetSecretNameAndNamespaceForPV(t *testing.T) {
 	tests := []testcase{
 		{
@@ -402,6 +421,7 @@ func TestGetSecretNameAndNamespaceForPV(t *testing.T) {
 
 }
 
+// TestGetISCSIInitiatorInfo 验证内联卷和持久卷均能读出 iSCSI 接口类型。
 func TestGetISCSIInitiatorInfo(t *testing.T) {
 	tests := []testcase{
 		{
@@ -452,6 +472,8 @@ func TestGetISCSIInitiatorInfo(t *testing.T) {
 	}
 }
 
+// TestGetISCSICHAP 验证发现阶段和会话阶段的 CHAP 认证开关读取，
+// 并确认非 iSCSI 规格返回错误。
 func TestGetISCSICHAP(t *testing.T) {
 	tests := []testcase{
 		{
@@ -515,6 +537,7 @@ func TestGetISCSICHAP(t *testing.T) {
 	}
 }
 
+// TestGetVolumeSpec 验证从全局挂载路径能还原出 portal、IQN、LUN 和接口信息。
 func TestGetVolumeSpec(t *testing.T) {
 	path := "plugins/kubernetes.io/iscsi/volumeDevices/iface-default/127.0.0.1:3260-iqn.2014-12.server:storage.target01-lun-0"
 	spec, _ := getVolumeSpecFromGlobalMapPath("test", path)
@@ -537,6 +560,7 @@ func TestGetVolumeSpec(t *testing.T) {
 	}
 }
 
+// TestGetVolumeSpec_no_lun 验证缺少 LUN 的路径被判定为格式错误。
 func TestGetVolumeSpec_no_lun(t *testing.T) {
 	path := "plugins/kubernetes.io/iscsi/volumeDevices/iface-default/127.0.0.1:3260-iqn.2014-12.server:storage.target01"
 	_, err := getVolumeSpecFromGlobalMapPath("test", path)
@@ -545,6 +569,7 @@ func TestGetVolumeSpec_no_lun(t *testing.T) {
 	}
 }
 
+// TestGetVolumeSpec_no_iface 验证路径中缺少接口段时返回提取失败的错误。
 func TestGetVolumeSpec_no_iface(t *testing.T) {
 	path := "plugins/kubernetes.io/iscsi/volumeDevices/default/127.0.0.1:3260-iqn.2014-12.server:storage.target01-lun-0"
 	_, err := getVolumeSpecFromGlobalMapPath("test", path)

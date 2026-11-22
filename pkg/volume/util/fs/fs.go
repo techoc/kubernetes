@@ -31,13 +31,14 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fsquota"
 )
 
+// UsageInfo 记录目录消耗的字节数和 inode 数。
 type UsageInfo struct {
 	Bytes  int64
 	Inodes int64
 }
 
-// Info linux returns (available bytes, byte capacity, byte usage, total inodes, inodes free, inode usage, error)
-// for the filesystem that path resides upon.
+// Info 返回 path 所在文件系统的可用字节数、总容量、已用字节数、
+// inode 总数、空闲 inode 数、已用 inode 数及错误。
 func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 	statfs := &unix.Statfs_t{}
 	err := unix.Statfs(path, statfs)
@@ -45,13 +46,13 @@ func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 		return 0, 0, 0, 0, 0, 0, err
 	}
 
-	// Available is blocks available * fragment size
+	// 可用空间按可用块数乘以块大小计算。
 	available := int64(statfs.Bavail) * int64(statfs.Bsize)
 
-	// Capacity is total block count * fragment size
+	// 总容量按总块数乘以块大小计算。
 	capacity := int64(statfs.Blocks) * int64(statfs.Bsize)
 
-	// Usage is block being used * fragment size (aka block size).
+	// 已用空间按已用块数乘以块大小计算。
 	usage := (int64(statfs.Blocks) - int64(statfs.Bfree)) * int64(statfs.Bsize)
 
 	inodes := int64(statfs.Files)
@@ -61,7 +62,7 @@ func Info(path string) (int64, int64, int64, int64, int64, int64, error) {
 	return available, capacity, usage, inodes, inodesFree, inodesUsed, nil
 }
 
-// DiskUsage calculates the number of inodes and disk usage for a given directory
+// DiskUsage 统计指定目录的 inode 数和磁盘用量。
 func DiskUsage(path string) (UsageInfo, error) {
 	var usage UsageInfo
 
@@ -69,9 +70,8 @@ func DiskUsage(path string) (UsageInfo, error) {
 		return usage, fmt.Errorf("invalid directory")
 	}
 
-	// First check whether the quota system knows about this directory
-	// A nil quantity or error means that the path does not support quotas
-	// or xfs_quota tool is missing and we should use other mechanisms.
+	// 先查询配额系统是否管理该目录。返回 nil 或错误表示不支持配额或
+	// 缺少 xfs_quota 工具，此时改用遍历目录的方式统计。
 	startTime := time.Now()
 	consumption, _ := fsquota.GetConsumption(path)
 	if consumption != nil {
@@ -96,11 +96,11 @@ func DiskUsage(path string) (UsageInfo, error) {
 		return usage, err
 	}
 
-	// dedupedInode stores inodes that could be duplicates (nlink > 1)
+	// 记录已统计过的硬链接 inode，避免重复计数。
 	dedupedInodes := make(map[uint64]struct{})
 
 	err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		// ignore files that have been deleted after directory was read
+		// 忽略读取目录后已被删除的文件。
 		if os.IsNotExist(err) {
 			return nil
 		}
@@ -108,7 +108,7 @@ func DiskUsage(path string) (UsageInfo, error) {
 			return fmt.Errorf("unable to count inodes for %s: %s", path, err)
 		}
 
-		// according to the docs, Sys can be nil
+		// 按文档 Sys 可能为 nil。
 		if info.Sys() == nil {
 			return fmt.Errorf("fileinfo Sys is nil")
 		}
@@ -119,11 +119,11 @@ func DiskUsage(path string) (UsageInfo, error) {
 		}
 
 		if s.Dev != topLevelStat.Dev {
-			// don't descend into directories on other devices
+			// 不跨越设备边界统计。
 			return filepath.SkipDir
 		}
 
-		// Dedupe hardlinks
+		// 硬链接去重。
 		if s.Nlink > 1 {
 			if _, ok := dedupedInodes[s.Ino]; !ok {
 				dedupedInodes[s.Ino] = struct{}{}
@@ -133,7 +133,7 @@ func DiskUsage(path string) (UsageInfo, error) {
 		}
 
 		if consumption == nil {
-			usage.Bytes += int64(s.Blocks) * int64(512) // blocksize in bytes
+			usage.Bytes += int64(s.Blocks) * int64(512) // stat 中块大小固定为 512 字节
 		}
 
 		if inodes == nil {

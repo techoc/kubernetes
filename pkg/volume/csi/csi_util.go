@@ -36,12 +36,13 @@ import (
 )
 
 const (
-	// TestInformerSyncPeriod is informer sync period duration for testing
+	// TestInformerSyncPeriod 是测试时使用的 informer 同步周期。
 	TestInformerSyncPeriod = 100 * time.Millisecond
-	// TestInformerSyncTimeout is informer timeout duration for testing
+	// TestInformerSyncTimeout 是测试时使用的 informer 超时时长。
 	TestInformerSyncTimeout = 30 * time.Second
 )
 
+// getCredentialsFromSecret 从 Secret 中读取 CSI 驱动所需的凭据。
 func getCredentialsFromSecret(k8s kubernetes.Interface, secretRef *api.SecretReference) (map[string]string, error) {
 	credentials := map[string]string{}
 	secret, err := k8s.CoreV1().Secrets(secretRef.Namespace).Get(context.TODO(), secretRef.Name, meta.GetOptions{})
@@ -55,7 +56,7 @@ func getCredentialsFromSecret(k8s kubernetes.Interface, secretRef *api.SecretRef
 	return credentials, nil
 }
 
-// saveVolumeData persists parameter data as json file at the provided location
+// saveVolumeData 将参数数据以 JSON 文件形式保存到指定位置。
 func saveVolumeData(dir string, fileName string, data map[string]string) error {
 	dataFilePath := filepath.Join(dir, fileName)
 	klog.V(4).Info(log("saving volume data file [%s]", dataFilePath))
@@ -71,9 +72,9 @@ func saveVolumeData(dir string, fileName string, data map[string]string) error {
 	return nil
 }
 
-// loadVolumeData loads volume info from specified json file/location
+// loadVolumeData 从指定的 JSON 文件加载卷信息。
 func loadVolumeData(dir string, fileName string) (map[string]string, error) {
-	// remove /mount at the end
+	// 去掉末尾的 /mount。
 	dataFileName := filepath.Join(dir, fileName)
 	klog.V(4).Info(log("loading volume data file [%s]", dataFileName))
 
@@ -90,10 +91,12 @@ func loadVolumeData(dir string, fileName string) (map[string]string, error) {
 	return data, nil
 }
 
+// getCSISourceFromSpec 从卷规格中提取 CSI 持久卷来源。
 func getCSISourceFromSpec(spec *volume.Spec) (*api.CSIPersistentVolumeSource, error) {
 	return getPVSourceFromSpec(spec)
 }
 
+// getReadOnlyFromSpec 从卷规格中提取只读标志。
 func getReadOnlyFromSpec(spec *volume.Spec) (bool, error) {
 	if spec.PersistentVolume != nil &&
 		spec.PersistentVolume.Spec.CSI != nil {
@@ -103,32 +106,32 @@ func getReadOnlyFromSpec(spec *volume.Spec) (bool, error) {
 	return false, fmt.Errorf("CSIPersistentVolumeSource not defined in spec")
 }
 
-// log prepends log string with `kubernetes.io/csi`
+// log 在日志字符串前加上 `kubernetes.io/csi` 前缀。
 func log(msg string, parts ...interface{}) string {
 	return fmt.Sprintf(fmt.Sprintf("%s: %s", CSIPluginName, msg), parts...)
 }
 
-// getVolumePluginDir returns the path where CSI plugin keeps metadata for given volume
+// getVolumePluginDir 返回 CSI 插件保存指定卷元数据的路径。
 func getVolumePluginDir(specVolID string, host volume.VolumeHost) string {
 	sanitizedSpecVolID := utilstrings.EscapeQualifiedName(specVolID)
 	return filepath.Join(host.GetVolumeDevicePluginDir(CSIPluginName), sanitizedSpecVolID)
 }
 
-// getVolumeDevicePluginDir returns the path where the CSI plugin keeps the
-// symlink for a block device associated with a given specVolumeID.
-// path: plugins/kubernetes.io/csi/volumeDevices/{specVolumeID}/dev
+// getVolumeDevicePluginDir 返回 CSI 插件保存与指定 specVolumeID 关联的
+// 块设备符号链接的路径。
+// 路径格式：plugins/kubernetes.io/csi/volumeDevices/{specVolumeID}/dev
 func getVolumeDevicePluginDir(specVolID string, host volume.VolumeHost) string {
 	return filepath.Join(getVolumePluginDir(specVolID, host), "dev")
 }
 
-// getVolumeDeviceDataDir returns the path where the CSI plugin keeps the
-// volume data for a block device associated with a given specVolumeID.
-// path: plugins/kubernetes.io/csi/volumeDevices/{specVolumeID}/data
+// getVolumeDeviceDataDir 返回 CSI 插件保存与指定 specVolumeID 关联的
+// 块设备卷数据的路径。
+// 路径格式：plugins/kubernetes.io/csi/volumeDevices/{specVolumeID}/data
 func getVolumeDeviceDataDir(specVolID string, host volume.VolumeHost) string {
 	return filepath.Join(getVolumePluginDir(specVolID, host), "data")
 }
 
-// hasReadWriteOnce returns true if modes contains v1.ReadWriteOnce
+// hasReadWriteOnce 判断 modes 中是否包含 v1.ReadWriteOnce（或 ReadWriteOncePod）。
 func hasReadWriteOnce(modes []api.PersistentVolumeAccessMode) bool {
 	if modes == nil {
 		return false
@@ -142,7 +145,7 @@ func hasReadWriteOnce(modes []api.PersistentVolumeAccessMode) bool {
 	return false
 }
 
-// getSourceFromSpec returns either CSIVolumeSource or CSIPersistentVolumeSource, but not both
+// getSourceFromSpec 从卷规格中返回 CSIVolumeSource 或 CSIPersistentVolumeSource 之一，二者不可同时存在。
 func getSourceFromSpec(spec *volume.Spec) (*api.CSIVolumeSource, *api.CSIPersistentVolumeSource, error) {
 	if spec == nil {
 		return nil, nil, fmt.Errorf("volume.Spec nil")
@@ -161,7 +164,7 @@ func getSourceFromSpec(spec *volume.Spec) (*api.CSIVolumeSource, *api.CSIPersist
 	return nil, nil, fmt.Errorf("volume source not found in volume.Spec")
 }
 
-// getPVSourceFromSpec ensures only CSIPersistentVolumeSource is present in volume.Spec
+// getPVSourceFromSpec 确保 volume.Spec 中只存在 CSIPersistentVolumeSource。
 func getPVSourceFromSpec(spec *volume.Spec) (*api.CSIPersistentVolumeSource, error) {
 	volSrc, pvSrc, err := getSourceFromSpec(spec)
 	if err != nil {
@@ -173,12 +176,12 @@ func getPVSourceFromSpec(spec *volume.Spec) (*api.CSIPersistentVolumeSource, err
 	return pvSrc, nil
 }
 
-// GetCSIMounterPath returns the mounter path given the base path.
+// GetCSIMounterPath 根据基础路径返回挂载器路径。
 func GetCSIMounterPath(path string) string {
 	return filepath.Join(path, "/mount")
 }
 
-// GetCSIDriverName returns the csi driver name
+// GetCSIDriverName 返回 CSI 驱动名称。
 func GetCSIDriverName(spec *volume.Spec) (string, error) {
 	volSrc, pvSrc, err := getSourceFromSpec(spec)
 	if err != nil {
@@ -195,6 +198,7 @@ func GetCSIDriverName(spec *volume.Spec) (string, error) {
 	}
 }
 
+// createCSIOperationContext 创建带超时和迁移标记的 CSI 操作上下文。
 func createCSIOperationContext(volumeSpec *volume.Spec, timeout time.Duration) (context.Context, context.CancelFunc) {
 	migrated := false
 	if volumeSpec != nil {
@@ -204,7 +208,7 @@ func createCSIOperationContext(volumeSpec *volume.Spec, timeout time.Duration) (
 	return context.WithTimeout(ctx, timeout)
 }
 
-// getPodInfoAttrs returns pod info for NodePublish
+// getPodInfoAttrs 返回 NodePublish 所需的 Pod 信息属性。
 func getPodInfoAttrs(pod *api.Pod, volumeMode storage.VolumeLifecycleMode) map[string]string {
 	attrs := map[string]string{
 		"csi.storage.k8s.io/pod.name":            pod.Name,

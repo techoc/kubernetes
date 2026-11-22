@@ -35,15 +35,18 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// fakeMountDetector 是可注入的挂载探测器，用于在测试中假定介质类型与挂载状态。
 type fakeMountDetector struct {
 	medium  v1.StorageMedium
 	isMount bool
 }
 
+// GetMountMedium 直接返回预设的介质与挂载状态，忽略传入路径和请求的介质。
 func (fake *fakeMountDetector) GetMountMedium(path string, requestedMedium v1.StorageMedium) (v1.StorageMedium, bool, *resource.Quantity, error) {
 	return fake.medium, fake.isMount, nil, nil
 }
 
+// TestEmptyDirVolumeModeWindows 验证 Windows 上设置卷 mode 时 SetUp 不会失败。
 func TestEmptyDirVolumeModeWindows(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EmptyDirVolumeMode, true)
 

@@ -31,35 +31,31 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// SELinuxLabelTranslator translates v1.SELinuxOptions of a process to SELinux file label.
+// SELinuxLabelTranslator 把进程的 v1.SELinuxOptions 转换为 SELinux 文件标签。
 type SELinuxLabelTranslator interface {
-	// SELinuxOptionsToFileLabel returns SELinux file label for given SELinuxOptions
-	// of a container process.
-	// When Role, User or Type are empty, they're read from the system defaults.
-	// It returns "" and no error on platforms that do not have SELinux enabled
-	// or don't support SELinux at all.
+	// SELinuxOptionsToFileLabel 根据容器进程的 SELinuxOptions 返回文件标签。
+	// Role、User 或 Type 为空时使用系统默认值。
+	// 在未启用或不支持 SELinux 的平台上返回空字符串且无错误。
 	SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (string, error)
 
-	// SELinuxEnabled returns true when the OS has enabled SELinux support.
+	// SELinuxEnabled 判断操作系统是否启用了 SELinux 支持。
 	SELinuxEnabled() bool
 }
 
-// Real implementation of the interface.
-// On Linux with SELinux enabled it translates. Otherwise it always returns an empty string and no error.
+// translator 是 SELinuxLabelTranslator 的真实实现。
+// 仅在启用 SELinux 的 Linux 上做转换，其他平台始终返回空字符串且无错误。
 type translator struct{}
 
 var _ SELinuxLabelTranslator = &translator{}
 
-// NewSELinuxLabelTranslator returns new SELinuxLabelTranslator for the platform.
+// NewSELinuxLabelTranslator 返回适用于当前平台的 SELinuxLabelTranslator。
 func NewSELinuxLabelTranslator() SELinuxLabelTranslator {
 	return &translator{}
 }
 
-// SELinuxOptionsToFileLabel returns SELinux file label for given SELinuxOptions
-// of a container process.
-// When Role, User or Type are empty, they're read from the system defaults.
-// It returns "" and no error on platforms that do not have SELinux enabled
-// or don't support SELinux at all.
+// SELinuxOptionsToFileLabel 根据容器进程的 SELinuxOptions 返回文件标签。
+// Role、User 或 Type 为空时使用系统默认值。
+// 在未启用或不支持 SELinux 的平台上返回空字符串且无错误。
 func (l *translator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (string, error) {
 	if opts == nil {
 		return "", nil
@@ -72,19 +68,18 @@ func (l *translator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (string,
 
 	processLabel, fileLabel, err := label.InitLabels(args)
 	if err != nil {
-		// In theory, this should be unreachable. InitLabels can fail only when args contain an unknown option,
-		// and all options returned by contextOptions are known.
+		// 理论上不会走到这里：InitLabels 仅在参数含未知选项时失败，
+		// 而 contextOptions 产生的选项都是已知的。
 		return "", &SELinuxLabelTranslationError{msg: err.Error()}
 	}
-	// InitLabels() may allocate a new unique SELinux label in kubelet memory. The label is *not* allocated
-	// in the container runtime. Clear it to avoid memory problems.
-	// ReleaseLabel on non-allocated label is NOOP.
+	// InitLabels 可能在 kubelet 侧分配唯一的进程标签，但容器运行时并不会使用它。
+	// 及时释放避免标签泄漏；对未分配的标签调用 ReleaseLabel 是空操作。
 	selinux.ReleaseLabel(processLabel)
 
 	return fileLabel, nil
 }
 
-// Convert SELinuxOptions to []string accepted by label.InitLabels
+// contextOptions 把 SELinuxOptions 转换为 label.InitLabels 接受的 []string 参数。
 func contextOptions(opts *v1.SELinuxOptions) []string {
 	if opts == nil {
 		return nil
@@ -105,28 +100,28 @@ func contextOptions(opts *v1.SELinuxOptions) []string {
 	return args
 }
 
+// SELinuxEnabled 报告当前系统是否启用了 SELinux。
 func (l *translator) SELinuxEnabled() bool {
 	return selinux.GetEnabled()
 }
 
-// Fake implementation of the interface for unit tests.
+// fakeTranslator 是用于单元测试的假实现，按固定规则生成标签。
 type fakeTranslator struct{}
 
 var _ SELinuxLabelTranslator = &fakeTranslator{}
 
-// NewFakeSELinuxLabelTranslator returns a fake translator for unit tests.
-// It imitates a real translator on platforms that do not have SELinux enabled
-// or don't support SELinux at all.
+// NewFakeSELinuxLabelTranslator 返回单元测试用的假转换器。
+// 在没有启用或不支持 SELinux 的平台上模拟真实转换器的行为。
 func NewFakeSELinuxLabelTranslator() SELinuxLabelTranslator {
 	return &fakeTranslator{}
 }
 
-// SELinuxOptionsToFileLabel returns SELinux file label for given options.
+// SELinuxOptionsToFileLabel 按固定规则为给定选项生成文件标签。
 func (l *fakeTranslator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (string, error) {
 	if opts == nil {
 		return "", nil
 	}
-	// Fill empty values from "system defaults" (taken from Fedora Linux).
+	// 空字段使用 Fedora 的系统默认值填充，模拟真实转换器的行为。
 	user := opts.User
 	if user == "" {
 		user = "system_u"
@@ -137,9 +132,8 @@ func (l *fakeTranslator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (str
 		role = "object_r"
 	}
 
-	// opts is context of the *process* to run in a container. Translate
-	// process type "container_t" to file label type "container_file_t".
-	// (The rest of the context is the same for processes and files).
+	// opts 描述容器内进程的上下文，需把进程类型 container_t 换成文件类型 container_file_t。
+	// 上下文的其他部分在进程和文件之间保持一致。
 	fileType := opts.Type
 	if fileType == "" || fileType == "container_t" {
 		fileType = "container_file_t"
@@ -147,7 +141,7 @@ func (l *fakeTranslator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (str
 
 	level := opts.Level
 	if level == "" {
-		// If empty, level is allocated randomly.
+		// level 为空时真实转换器会随机分配，这里用固定值便于断言。
 		level = "s0:c998,c999"
 	}
 
@@ -155,24 +149,28 @@ func (l *fakeTranslator) SELinuxOptionsToFileLabel(opts *v1.SELinuxOptions) (str
 	return ctx, nil
 }
 
+// SELinuxEnabled 在测试中始终返回 true，保证走转换逻辑。
 func (l *fakeTranslator) SELinuxEnabled() bool {
 	return true
 }
 
+// SELinuxLabelTranslationError 表示 SELinux 标签转换失败。
 type SELinuxLabelTranslationError struct {
 	msg string
 }
 
+// Error 返回标签转换失败的具体原因。
 func (e *SELinuxLabelTranslationError) Error() string {
 	return e.msg
 }
 
+// IsSELinuxLabelTranslationError 判断错误链中是否包含 SELinuxLabelTranslationError。
 func IsSELinuxLabelTranslationError(err error) bool {
 	var seLinuxError *SELinuxLabelTranslationError
 	return errors.As(err, &seLinuxError)
 }
 
-// SupportsSELinuxContextMount checks if the given volumeSpec supports with mount -o context
+// SupportsSELinuxContextMount 检查给定卷是否支持 -o context 方式的 SELinux 挂载。
 func SupportsSELinuxContextMount(volumeSpec *volume.Spec, volumePluginMgr *volume.VolumePluginMgr) (bool, error) {
 	plugin, _ := volumePluginMgr.FindPluginBySpec(volumeSpec)
 	if plugin != nil {
@@ -182,7 +180,8 @@ func SupportsSELinuxContextMount(volumeSpec *volume.Spec, volumePluginMgr *volum
 	return false, nil
 }
 
-// VolumeSupportsSELinuxMount returns true if given volume access mode can support mount with SELinux mount options.
+// VolumeSupportsSELinuxMount 判断给定卷的访问模式是否允许带 SELinux 挂载选项挂载。
+// 需要 feature gate 开启，且默认 gate 开启时要求卷只有一个 RWOP 访问模式。
 func VolumeSupportsSELinuxMount(volumeSpec *volume.Spec) bool {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		return false
@@ -194,66 +193,66 @@ func VolumeSupportsSELinuxMount(volumeSpec *volume.Spec) bool {
 		return true
 	}
 
-	// Only SELinuxMountReadWriteOncePod feature is enabled
+	// 仅开启了 SELinuxMountReadWriteOncePod 特性时，需要按访问模式判断。
 	if len(volumeSpec.PersistentVolume.Spec.AccessModes) != 1 {
-		// RWOP volumes must be the only access mode of the volume
+		// RWOP 卷必须只有一个访问模式，避免与其他节点共享写权限。
 		return false
 	}
 	if !v1helper.ContainsAccessMode(volumeSpec.PersistentVolume.Spec.AccessModes, v1.ReadWriteOncePod) {
-		// Not a RWOP volume
+		// 不是 RWOP 卷，不能安全地按 SELinux 标签独占挂载。
 		return false
 	}
-	// RWOP volume
+	// 是 RWOP 卷
 	return true
 }
 
-// MultipleSELinuxLabelsError tells that one volume in a pod is mounted in multiple containers and each has a different SELinux label.
+// MultipleSELinuxLabelsError 表示同一个卷被 Pod 内多个容器挂载且各自使用不同的 SELinux 标签。
 type MultipleSELinuxLabelsError struct {
 	labels []string
 }
 
+// Error 列出发现的所有 SELinux 标签。
 func (e *MultipleSELinuxLabelsError) Error() string {
 	return fmt.Sprintf("multiple SELinux labels found: %s", strings.Join(e.labels, ","))
 }
 
+// Labels 返回导致冲突的所有 SELinux 标签。
 func (e *MultipleSELinuxLabelsError) Labels() []string {
 	return e.labels
 }
 
+// IsMultipleSELinuxLabelsError 判断错误链中是否包含 MultipleSELinuxLabelsError。
 func IsMultipleSELinuxLabelsError(err error) bool {
 	var multiError *MultipleSELinuxLabelsError
 	return errors.As(err, &multiError)
 }
 
-// AddSELinuxMountOption adds -o context="XYZ" mount option to a given list
+// AddSELinuxMountOption 向挂载选项列表追加 -o context="XYZ"。
 func AddSELinuxMountOption(options []string, seLinuxContext string) []string {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		return options
 	}
-	// Use double quotes to support a comma "," in the SELinux context string.
-	// For example: dirsync,context="system_u:object_r:container_file_t:s0:c15,c25",noatime
+	// SELinux 上下文里 MCS 范围自带逗号，必须用双引号包住整个 context 值。
+	// 例如：dirsync,context="system_u:object_r:container_file_t:s0:c15,c25",noatime
 	return append(options, fmt.Sprintf("context=%q", seLinuxContext))
 }
 
-// SELinuxLabelInfo contains information about SELinux labels that should be used to mount a volume for a Pod.
+// SELinuxLabelInfo 描述为 Pod 挂载卷时应使用的 SELinux 标签信息。
 type SELinuxLabelInfo struct {
-	// SELinuxMountLabel is the SELinux label that should be used to mount the volume.
-	// The volume plugin supports SELinuxMount and the Pod did not opt out via SELinuxChangePolicy.
-	// Empty string otherwise.
+	// SELinuxMountLabel 是挂载卷时应使用的 SELinux 标签。
+	// 仅当卷插件支持 SELinuxMount 且 Pod 没有通过 SELinuxChangePolicy 退出时为非空。
 	SELinuxMountLabel string
-	// SELinuxProcessLabel is the SELinux label that will the container runtime use for the Pod.
-	// Regardless if the volume plugin supports SELinuxMount or the Pod opted out via SELinuxChangePolicy.
+	// SELinuxProcessLabel 是容器运行时为 Pod 使用的 SELinux 标签。
+	// 无论卷插件是否支持 SELinuxMount、Pod 是否退出，该字段都会被设置。
 	SELinuxProcessLabel string
-	// PluginSupportsSELinuxContextMount is true if the volume plugin supports SELinux mount.
+	// PluginSupportsSELinuxContextMount 表示卷插件是否支持 SELinux 挂载。
 	PluginSupportsSELinuxContextMount bool
 }
 
-// GetMountSELinuxLabel returns SELinux labels that should be used to mount the given volume volumeSpec and podSecurityContext.
-// It expects effectiveSELinuxContainerLabels as returned by volumeutil.GetPodVolumeNames, i.e. with all SELinuxOptions
-// from all containers that use the volume in the pod, potentially expanded with PodSecurityContext.SELinuxOptions,
-// if container's SELinuxOptions are nil.
-// It does not evaluate the volume access mode! It's up to the caller to check SELinuxMount feature gate,
-// it may need to bump different metrics based on feature gates / access modes / label anyway.
+// GetMountSELinuxLabel 返回挂载给定卷时应使用的 SELinux 标签。
+// effectiveSELinuxContainerLabels 来自 volumeutil.GetPodVolumeNames，包含 Pod 内所有使用该卷的容器的 SELinuxOptions；
+// 容器未设置时用 PodSecurityContext.SELinuxOptions 补齐。
+// 本函数不判断卷访问模式：feature gate 由调用方检查，调用方还需按 gate / 访问模式 / 标签上报不同指标。
 func GetMountSELinuxLabel(volumeSpec *volume.Spec, effectiveSELinuxContainerLabels []*v1.SELinuxOptions, podSecurityContext *v1.PodSecurityContext, volumePluginMgr *volume.VolumePluginMgr, seLinuxTranslator SELinuxLabelTranslator) (SELinuxLabelInfo, error) {
 	info := SELinuxLabelInfo{}
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
@@ -271,8 +270,7 @@ func GetMountSELinuxLabel(volumeSpec *volume.Spec, effectiveSELinuxContainerLabe
 
 	info.PluginSupportsSELinuxContextMount = pluginSupportsSELinuxContextMount
 
-	// Collect all SELinux options from all containers that use this volume.
-	// A set will squash any duplicities.
+	// 汇总所有使用该卷的容器的 SELinux 标签，用集合去重后判断是否一致。
 	labels := sets.New[string]()
 	for _, containerLabel := range effectiveSELinuxContainerLabels {
 		lbl, err := seLinuxTranslator.SELinuxOptionsToFileLabel(containerLabel)
@@ -283,9 +281,9 @@ func GetMountSELinuxLabel(volumeSpec *volume.Spec, effectiveSELinuxContainerLabe
 		labels.Insert(lbl)
 	}
 
-	// Ensure that all containers use the same SELinux label.
+	// 一个卷只能有一个挂载标签，多标签意味着容器间标签冲突。
 	if labels.Len() > 1 {
-		// This volume is used with more than one SELinux label in the pod.
+		// Pod 中多个容器用不同标签访问同一卷，无法用单一 context 挂载。
 		return info, &MultipleSELinuxLabelsError{labels: labels.UnsortedList()}
 	}
 	if labels.Len() == 0 {
@@ -300,12 +298,12 @@ func GetMountSELinuxLabel(volumeSpec *volume.Spec, effectiveSELinuxContainerLabe
 		podSecurityContext != nil &&
 		podSecurityContext.SELinuxChangePolicy != nil &&
 		*podSecurityContext.SELinuxChangePolicy == v1.SELinuxChangePolicyRecursive {
-		// The pod has opted into recursive SELinux label changes. Do not mount with -o context.
+		// Pod 选择递归改标签，挂载时不应再用 -o context 限制标签。
 		info.SELinuxMountLabel = ""
 	}
 
 	if !pluginSupportsSELinuxContextMount {
-		// The volume plugin does not support SELinux mount. Do not mount with -o context.
+		// 插件不支持 SELinux 挂载，不能用 -o context，否则挂载会失败。
 		info.SELinuxMountLabel = ""
 	}
 

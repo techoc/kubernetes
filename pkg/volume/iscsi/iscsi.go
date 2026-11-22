@@ -41,11 +41,12 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/volumepathhandler"
 )
 
-// ProbeVolumePlugins is the primary entrypoint for volume plugins.
+// ProbeVolumePlugins 是卷插件的主要入口点。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{&iscsiPlugin{}}
 }
 
+// iscsiPlugin 实现 iSCSI 卷插件。
 type iscsiPlugin struct {
 	host        volume.VolumeHost
 	targetLocks keymutex.KeyMutex
@@ -59,16 +60,19 @@ const (
 	iscsiPluginName = "kubernetes.io/iscsi"
 )
 
+// Init 初始化插件：保存卷宿主并创建按目标加锁的锁表。
 func (plugin *iscsiPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 	plugin.targetLocks = keymutex.NewHashed(0)
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (plugin *iscsiPlugin) GetPluginName() string {
 	return iscsiPluginName
 }
 
+// GetVolumeName 返回 "portal:iqn:lun" 形式的卷唯一名称。
 func (plugin *iscsiPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	tp, _, iqn, lun, err := getISCSITargetInfo(spec)
 	if err != nil {
@@ -78,22 +82,27 @@ func (plugin *iscsiPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	return fmt.Sprintf("%v:%v:%v", tp, iqn, lun), nil
 }
 
+// CanSupport 判断卷规格是否为 iSCSI 类型（内联卷或持久卷均可）。
 func (plugin *iscsiPlugin) CanSupport(spec *volume.Spec) bool {
 	return (spec.Volume != nil && spec.Volume.ISCSI != nil) || (spec.PersistentVolume != nil && spec.PersistentVolume.Spec.ISCSI != nil)
 }
 
+// RequiresRemount 返回 false：iSCSI 卷无需重挂载。
 func (plugin *iscsiPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return false
 }
 
+// SupportsMountOption 返回 true：支持自定义挂载选项。
 func (plugin *iscsiPlugin) SupportsMountOption() bool {
 	return true
 }
 
+// SupportsSELinuxContextMount 返回 true：支持 SELinux 上下文挂载。
 func (plugin *iscsiPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// GetAccessModes 返回 iSCSI 卷支持的访问模式。
 func (plugin *iscsiPlugin) GetAccessModes() []v1.PersistentVolumeAccessMode {
 	return []v1.PersistentVolumeAccessMode{
 		v1.ReadWriteOnce,
@@ -101,6 +110,7 @@ func (plugin *iscsiPlugin) GetAccessModes() []v1.PersistentVolumeAccessMode {
 	}
 }
 
+// NewMounter 根据卷规格和 Pod 创建 iSCSI 挂载器。
 func (plugin *iscsiPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	if pod == nil {
 		return nil, fmt.Errorf("nil pod")
@@ -112,6 +122,7 @@ func (plugin *iscsiPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mo
 	return plugin.newMounterInternal(spec, pod.UID, &ISCSIUtil{}, plugin.host.GetMounter(), utilexec.New(), secret)
 }
 
+// newMounterInternal 使用指定的磁盘管理器、挂载器和执行器创建挂载器。
 func (plugin *iscsiPlugin) newMounterInternal(spec *volume.Spec, podUID types.UID, manager diskManager, mounter mount.Interface, exec utilexec.Interface, secret map[string]string) (volume.Mounter, error) {
 	readOnly, fsType, err := getISCSIVolumeInfo(spec)
 	if err != nil {
@@ -124,7 +135,7 @@ func (plugin *iscsiPlugin) newMounterInternal(spec *volume.Spec, podUID types.UI
 
 	if iscsiDisk != nil {
 
-		//Add volume metrics
+		// 添加卷指标统计
 		iscsiDisk.MetricsProvider = volume.NewMetricsStatFS(iscsiDisk.GetPath())
 	}
 	return &iscsiDiskMounter{
@@ -138,10 +149,9 @@ func (plugin *iscsiPlugin) newMounterInternal(spec *volume.Spec, podUID types.UI
 	}, nil
 }
 
-// NewBlockVolumeMapper creates a new volume.BlockVolumeMapper from an API specification.
+// NewBlockVolumeMapper 根据 API 规格创建块设备卷映射器。
 func (plugin *iscsiPlugin) NewBlockVolumeMapper(spec *volume.Spec, pod *v1.Pod) (volume.BlockVolumeMapper, error) {
-	// If this is called via GenerateUnmapDeviceFunc(), pod is nil.
-	// Pass empty string as dummy uid since uid isn't used in the case.
+	// 经 GenerateUnmapDeviceFunc() 调用时 pod 为 nil，此时用不到 uid，传空值占位。
 	var uid types.UID
 	var secret map[string]string
 	var err error
@@ -155,6 +165,7 @@ func (plugin *iscsiPlugin) NewBlockVolumeMapper(spec *volume.Spec, pod *v1.Pod) 
 	return plugin.newBlockVolumeMapperInternal(spec, uid, &ISCSIUtil{}, plugin.host.GetMounter(), utilexec.New(), secret)
 }
 
+// newBlockVolumeMapperInternal 使用指定的磁盘管理器、挂载器和执行器创建块设备映射器。
 func (plugin *iscsiPlugin) newBlockVolumeMapperInternal(spec *volume.Spec, podUID types.UID, manager diskManager, mounter mount.Interface, exec utilexec.Interface, secret map[string]string) (volume.BlockVolumeMapper, error) {
 	readOnly, _, err := getISCSIVolumeInfo(spec)
 	if err != nil {
@@ -180,10 +191,12 @@ func (plugin *iscsiPlugin) newBlockVolumeMapperInternal(spec *volume.Spec, podUI
 	return mapper, nil
 }
 
+// NewUnmounter 根据卷名和 Pod UID 创建卸载器。
 func (plugin *iscsiPlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
 	return plugin.newUnmounterInternal(volName, podUID, &ISCSIUtil{}, plugin.host.GetMounter(), utilexec.New())
 }
 
+// newUnmounterInternal 使用指定的磁盘管理器、挂载器和执行器创建卸载器。
 func (plugin *iscsiPlugin) newUnmounterInternal(volName string, podUID types.UID, manager diskManager, mounter mount.Interface, exec utilexec.Interface) (volume.Unmounter, error) {
 	return &iscsiDiskUnmounter{
 		iscsiDisk: &iscsiDisk{
@@ -199,11 +212,12 @@ func (plugin *iscsiPlugin) newUnmounterInternal(volName string, podUID types.UID
 	}, nil
 }
 
-// NewBlockVolumeUnmapper creates a new volume.BlockVolumeUnmapper from recoverable state.
+// NewBlockVolumeUnmapper 根据可恢复状态创建块设备卷解映射器。
 func (plugin *iscsiPlugin) NewBlockVolumeUnmapper(volName string, podUID types.UID) (volume.BlockVolumeUnmapper, error) {
 	return plugin.newUnmapperInternal(volName, podUID, &ISCSIUtil{}, utilexec.New())
 }
 
+// newUnmapperInternal 使用指定的磁盘管理器和执行器创建解映射器。
 func (plugin *iscsiPlugin) newUnmapperInternal(volName string, podUID types.UID, manager diskManager, exec utilexec.Interface) (volume.BlockVolumeUnmapper, error) {
 	return &iscsiDiskUnmapper{
 		iscsiDisk: &iscsiDisk{
@@ -217,14 +231,13 @@ func (plugin *iscsiPlugin) newUnmapperInternal(volName string, podUID types.UID,
 	}, nil
 }
 
+// ConstructVolumeSpec 从 Pod 卷挂载点重建 iSCSI 卷规格。
 func (plugin *iscsiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
-	// Find globalPDPath from pod volume directory(mountPath)
+	// 从 Pod 卷目录（mountPath）反向查找全局挂载路径
 	var globalPDPath string
 	mounter := plugin.host.GetMounter()
-	// Try really hard to get the global mount of the volume, an error returned from here would
-	// leave the global mount still mounted, while marking the volume as unused.
-	// The volume can then be mounted on several nodes, resulting in volume
-	// corruption.
+	// 必须尽力找到全局挂载点：否则全局挂载仍保留，卷却被标记为未使用，
+	// 随后可能被挂载到多个节点，导致数据损坏。
 	paths, err := ioutil.GetReliableMountRefs(mounter, mountPath)
 	if io.IsInconsistentReadError(err) {
 		klog.Errorf("Failed to read mount refs from /proc/mounts for %s: %s", mountPath, err)
@@ -241,12 +254,12 @@ func (plugin *iscsiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (vo
 			break
 		}
 	}
-	// Couldn't fetch globalPDPath
+	// 未找到全局挂载路径
 	if len(globalPDPath) == 0 {
 		return volume.ReconstructedVolume{}, fmt.Errorf("couldn't fetch globalPDPath. failed to obtain volume spec")
 	}
 
-	// Obtain iscsi disk configurations from globalPDPath
+	// 从全局挂载路径中解析 iSCSI 磁盘配置
 	device, _, err := extractDeviceAndPrefix(globalPDPath)
 	if err != nil {
 		return volume.ReconstructedVolume{}, err
@@ -295,6 +308,7 @@ func (plugin *iscsiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (vo
 	}, nil
 }
 
+// ConstructBlockVolumeSpec 从块设备卷的映射路径重建卷规格。
 func (plugin *iscsiPlugin) ConstructBlockVolumeSpec(podUID types.UID, volumeName, mapPath string) (*volume.Spec, error) {
 	pluginDir := plugin.host.GetVolumeDevicePluginDir(iscsiPluginName)
 	blkutil := volumepathhandler.NewBlockVolumePathHandler()
@@ -303,14 +317,14 @@ func (plugin *iscsiPlugin) ConstructBlockVolumeSpec(podUID types.UID, volumeName
 		return nil, err
 	}
 	klog.V(5).Infof("globalMapPathUUID: %v, err: %v", globalMapPathUUID, err)
-	// Retrieve volume information from globalMapPathUUID
-	// globalMapPathUUID example:
+	// 从 globalMapPathUUID 中提取卷信息，示例：
 	// plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid}
 	// plugins/kubernetes.io/iscsi/volumeDevices/iface-default/192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0/{pod uuid}
 	globalMapPath := filepath.Dir(globalMapPathUUID)
 	return getVolumeSpecFromGlobalMapPath(volumeName, globalMapPath)
 }
 
+// iscsiDisk 保存 iSCSI 卷的目标配置与运行时状态。
 type iscsiDisk struct {
 	VolName       string
 	podUID        types.UID
@@ -324,17 +338,19 @@ type iscsiDisk struct {
 	secret        map[string]string `datapolicy:"token"`
 	InitiatorName string
 	plugin        *iscsiPlugin
-	// Utility interface that provides API calls to the provider to attach/detach disks.
+	// 提供磁盘附加/分离操作的工具接口。
 	manager diskManager
 	volume.MetricsProvider
 }
 
+// GetPath 返回该卷在 Pod 目录下的挂载路径。
 func (iscsi *iscsiDisk) GetPath() string {
 	name := iscsiPluginName
-	// safe to use PodVolumeDir now: volume teardown occurs before pod is cleaned up
+	// 卷拆解发生在 Pod 清理之前，此时使用 PodVolumeDir 是安全的
 	return iscsi.plugin.host.GetPodVolumeDir(iscsi.podUID, utilstrings.EscapeQualifiedName(name), iscsi.VolName)
 }
 
+// iscsiGlobalMapPath 返回块设备卷的全局映射路径。
 func (iscsi *iscsiDisk) iscsiGlobalMapPath(spec *volume.Spec) (string, error) {
 	mounter, err := volumeSpecToMounter(spec, iscsi.plugin.host, iscsi.plugin.targetLocks, nil /* pod */)
 	if err != nil {
@@ -344,11 +360,13 @@ func (iscsi *iscsiDisk) iscsiGlobalMapPath(spec *volume.Spec) (string, error) {
 	return iscsi.manager.MakeGlobalVDPDName(*mounter.iscsiDisk), nil
 }
 
+// iscsiPodDeviceMapPath 返回 Pod 内块设备映射目录及卷名。
 func (iscsi *iscsiDisk) iscsiPodDeviceMapPath() (string, string) {
 	name := iscsiPluginName
 	return iscsi.plugin.host.GetPodVolumeDeviceDir(iscsi.podUID, utilstrings.EscapeQualifiedName(name)), iscsi.VolName
 }
 
+// iscsiDiskMounter 实现文件系统模式 iSCSI 卷的挂载。
 type iscsiDiskMounter struct {
 	*iscsiDisk
 	readOnly                  bool
@@ -363,6 +381,7 @@ type iscsiDiskMounter struct {
 
 var _ volume.Mounter = &iscsiDiskMounter{}
 
+// GetAttributes 返回卷属性，是否重打 SELinux 标签取决于挂载时是否使用了 context 选项。
 func (b *iscsiDiskMounter) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       b.readOnly,
@@ -371,25 +390,28 @@ func (b *iscsiDiskMounter) GetAttributes() volume.Attributes {
 	}
 }
 
+// SetUp 将卷挂载到默认路径。
 func (b *iscsiDiskMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
 
+// SetUpAt 将卷挂载到指定目录。
 func (b *iscsiDiskMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
-	// diskSetUp checks mountpoints and prevent repeated calls
+	// diskSetUp 会检查挂载点，避免重复挂载
 	err := diskSetUp(b.manager, *b, dir, b.mounter, mounterArgs)
 	if err != nil {
 		klog.Errorf("iscsi: failed to setup")
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
-		// The volume must have been mounted in MountDevice with -o context.
-		// TODO: extract from mount table in GetAttributes() to be sure?
+		// 卷在 MountDevice 阶段应该已带 -o context 挂载。
+		// TODO: 是否在 GetAttributes() 中从挂载表解析以确认？
 		b.mountedWithSELinuxContext = mounterArgs.SELinuxLabel != ""
 	}
 	return err
 }
 
+// iscsiDiskUnmounter 实现文件系统模式 iSCSI 卷的卸载。
 type iscsiDiskUnmounter struct {
 	*iscsiDisk
 	mounter    mount.Interface
@@ -399,17 +421,17 @@ type iscsiDiskUnmounter struct {
 
 var _ volume.Unmounter = &iscsiDiskUnmounter{}
 
-// Unmounts the bind mount, and detaches the disk only if the disk
-// resource was the last reference to that disk on the kubelet.
+// TearDown 解除绑定挂载；仅当该磁盘在 kubelet 上已无其他引用时才分离设备。
 func (c *iscsiDiskUnmounter) TearDown() error {
 	return c.TearDownAt(c.GetPath())
 }
 
+// TearDownAt 清理指定目录的挂载点。
 func (c *iscsiDiskUnmounter) TearDownAt(dir string) error {
 	return mount.CleanupMountPoint(dir, c.mounter, false)
 }
 
-// Block Volumes Support
+// iscsiDiskMapper 实现块设备模式 iSCSI 卷的映射。
 type iscsiDiskMapper struct {
 	*iscsiDisk
 	readOnly   bool
@@ -419,6 +441,7 @@ type iscsiDiskMapper struct {
 
 var _ volume.BlockVolumeMapper = &iscsiDiskMapper{}
 
+// iscsiDiskUnmapper 实现块设备模式 iSCSI 卷的解映射。
 type iscsiDiskUnmapper struct {
 	*iscsiDisk
 	exec       utilexec.Interface
@@ -426,8 +449,7 @@ type iscsiDiskUnmapper struct {
 	volume.MetricsNil
 }
 
-// SupportsMetrics returns true for SupportsMetrics as it initializes the
-// MetricsProvider.
+// SupportsMetrics 返回 true：映射器已初始化 MetricsProvider。
 func (idm *iscsiDiskMapper) SupportsMetrics() bool {
 	return true
 }
@@ -435,9 +457,8 @@ func (idm *iscsiDiskMapper) SupportsMetrics() bool {
 var _ volume.BlockVolumeUnmapper = &iscsiDiskUnmapper{}
 var _ volume.CustomBlockVolumeUnmapper = &iscsiDiskUnmapper{}
 
-// Even though iSCSI plugin has attacher/detacher implementation, iSCSI plugin
-// needs volume detach operation during TearDownDevice(). This method is only
-// chance that operations are done on kubelet node during volume teardown sequences.
+// 尽管 iSCSI 插件有 attacher/detacher 实现，但仍需在 TearDownDevice() 中分离卷：
+// 这是卷拆解流程中唯一在 kubelet 节点上执行操作的机会。
 func (c *iscsiDiskUnmapper) TearDownDevice(mapPath, _ string) error {
 	err := c.manager.DetachBlockISCSIDisk(*c, mapPath)
 	if err != nil {
@@ -452,23 +473,24 @@ func (c *iscsiDiskUnmapper) TearDownDevice(mapPath, _ string) error {
 	return nil
 }
 
+// UnmapPodDevice 为空操作：iSCSI 在 TearDownDevice 中已完成分离。
 func (c *iscsiDiskUnmapper) UnmapPodDevice() error {
 	return nil
 }
 
-// GetGlobalMapPath returns global map path and error
-// path: plugins/kubernetes.io/{PluginName}/volumeDevices/{ifaceName}/{portal-some_iqn-lun-lun_id}
+// GetGlobalMapPath 返回块设备卷的全局映射路径：
+// plugins/kubernetes.io/{PluginName}/volumeDevices/{ifaceName}/{portal-some_iqn-lun-lun_id}
 func (iscsi *iscsiDisk) GetGlobalMapPath(spec *volume.Spec) (string, error) {
 	return iscsi.iscsiGlobalMapPath(spec)
 }
 
-// GetPodDeviceMapPath returns pod device map path and volume name
-// path: pods/{podUid}/volumeDevices/kubernetes.io~iscsi
-// volumeName: pv0001
+// GetPodDeviceMapPath 返回 Pod 内的设备映射目录和卷名：
+// 路径 pods/{podUid}/volumeDevices/kubernetes.io~iscsi，卷名如 pv0001。
 func (iscsi *iscsiDisk) GetPodDeviceMapPath() (string, string) {
 	return iscsi.iscsiPodDeviceMapPath()
 }
 
+// portalMounter 给不含端口的 portal 补上默认端口 3260。
 func portalMounter(portal string) string {
 	if !strings.Contains(portal, ":") {
 		portal = portal + ":3260"
@@ -476,10 +498,9 @@ func portalMounter(portal string) string {
 	return portal
 }
 
-// get iSCSI volume info: readOnly and fstype
+// getISCSIVolumeInfo 提取 iSCSI 卷的只读标志和文件系统类型。
 func getISCSIVolumeInfo(spec *volume.Spec) (bool, string, error) {
-	// for volume source, readonly is in volume spec
-	// for PV, readonly is in PV spec. PV gets the ReadOnly flag indirectly through the PVC source
+	// 内联卷的只读标志在卷规格中；持久卷的标志通过 PVC 卷源间接传入 spec.ReadOnly
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		return spec.Volume.ISCSI.ReadOnly, spec.Volume.ISCSI.FSType, nil
 	} else if spec.PersistentVolume != nil &&
@@ -490,7 +511,7 @@ func getISCSIVolumeInfo(spec *volume.Spec) (bool, string, error) {
 	return false, "", fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
-// get iSCSI target info: target portal, portals, iqn, and lun
+// getISCSITargetInfo 提取 iSCSI 目标信息：主 portal、备选 portal、IQN 和 lun。
 func getISCSITargetInfo(spec *volume.Spec) (string, []string, string, int32, error) {
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		return spec.Volume.ISCSI.TargetPortal, spec.Volume.ISCSI.Portals, spec.Volume.ISCSI.IQN, spec.Volume.ISCSI.Lun, nil
@@ -502,7 +523,7 @@ func getISCSITargetInfo(spec *volume.Spec) (string, []string, string, int32, err
 	return "", nil, "", 0, fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
-// get iSCSI initiator info: iface and initiator name
+// getISCSIInitiatorInfo 提取 iSCSI 发起端信息：接口名和发起端名称。
 func getISCSIInitiatorInfo(spec *volume.Spec) (string, *string, error) {
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		return spec.Volume.ISCSI.ISCSIInterface, spec.Volume.ISCSI.InitiatorName, nil
@@ -514,7 +535,7 @@ func getISCSIInitiatorInfo(spec *volume.Spec) (string, *string, error) {
 	return "", nil, fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
-// get iSCSI Discovery CHAP boolean
+// getISCSIDiscoveryCHAPInfo 提取是否启用发现阶段 CHAP 认证。
 func getISCSIDiscoveryCHAPInfo(spec *volume.Spec) (bool, error) {
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		return spec.Volume.ISCSI.DiscoveryCHAPAuth, nil
@@ -526,7 +547,7 @@ func getISCSIDiscoveryCHAPInfo(spec *volume.Spec) (bool, error) {
 	return false, fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
-// get iSCSI Session CHAP boolean
+// getISCSISessionCHAPInfo 提取是否启用会话阶段 CHAP 认证。
 func getISCSISessionCHAPInfo(spec *volume.Spec) (bool, error) {
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		return spec.Volume.ISCSI.SessionCHAPAuth, nil
@@ -538,7 +559,7 @@ func getISCSISessionCHAPInfo(spec *volume.Spec) (bool, error) {
 	return false, fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
-// get iSCSI CHAP Secret info: secret name and namespace
+// getISCSISecretNameAndNamespace 提取 CHAP 认证 Secret 的名称和命名空间。
 func getISCSISecretNameAndNamespace(spec *volume.Spec, defaultSecretNamespace string) (string, string, error) {
 	if spec.Volume != nil && spec.Volume.ISCSI != nil {
 		if spec.Volume.ISCSI.SecretRef != nil {
@@ -561,6 +582,7 @@ func getISCSISecretNameAndNamespace(spec *volume.Spec, defaultSecretNamespace st
 	return "", "", fmt.Errorf("Spec does not reference an ISCSI volume type")
 }
 
+// createISCSIDisk 根据卷规格和 CHAP Secret 构造 iSCSI 磁盘对象。
 func createISCSIDisk(spec *volume.Spec, podUID types.UID, plugin *iscsiPlugin, manager diskManager, secret map[string]string) (*iscsiDisk, error) {
 	tp, portals, iqn, lunStr, err := getISCSITargetInfo(spec)
 	if err != nil {
@@ -614,6 +636,7 @@ func createISCSIDisk(spec *volume.Spec, podUID types.UID, plugin *iscsiPlugin, m
 		plugin:        plugin}, nil
 }
 
+// createSecretMap 从 API 读取 CHAP Secret，若未启用认证则返回 nil。
 func createSecretMap(spec *volume.Spec, plugin *iscsiPlugin, namespace string) (map[string]string, error) {
 	var secret map[string]string
 	chapDiscover, err := getISCSIDiscoveryCHAPInfo(spec)
@@ -631,7 +654,7 @@ func createSecretMap(spec *volume.Spec, plugin *iscsiPlugin, namespace string) (
 		}
 
 		if len(secretName) > 0 && len(secretNamespace) > 0 {
-			// if secret is provided, retrieve it
+			// 指定了 Secret 时从 API 读取
 			kubeClient := plugin.host.GetKubeClient()
 			if kubeClient == nil {
 				return nil, fmt.Errorf("cannot get kube client")
@@ -651,6 +674,7 @@ func createSecretMap(spec *volume.Spec, plugin *iscsiPlugin, namespace string) (
 	return secret, err
 }
 
+// createPersistentVolumeFromISCSIPVSource 用给定的 iSCSI 卷源构造块设备模式的持久卷。
 func createPersistentVolumeFromISCSIPVSource(volumeName string, iscsi v1.ISCSIPersistentVolumeSource) *v1.PersistentVolume {
 	block := v1.PersistentVolumeBlock
 	return &v1.PersistentVolume{
@@ -666,13 +690,13 @@ func createPersistentVolumeFromISCSIPVSource(volumeName string, iscsi v1.ISCSIPe
 	}
 }
 
+// getVolumeSpecFromGlobalMapPath 从块设备卷的全局映射路径重建卷规格。
 func getVolumeSpecFromGlobalMapPath(volumeName, globalMapPath string) (*volume.Spec, error) {
-	// Retrieve volume spec information from globalMapPath
-	// globalMapPath example:
+	// 从 globalMapPath 中提取卷规格信息，示例：
 	// plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}
 	// plugins/kubernetes.io/iscsi/volumeDevices/iface-default/192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0
 
-	// device: 192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0
+	// 其中 device 部分为 192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0
 	device, _, err := extractDeviceAndPrefix(globalMapPath)
 	if err != nil {
 		return nil, err

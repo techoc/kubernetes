@@ -24,15 +24,18 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// NewVolumeOwnership returns an interface that can be used to recursively change volume permissions and ownership
+// NewVolumeOwnership 返回卷属组修改器；非 Linux 平台不支持递归改权限，这里返回空实现。
+// 调用方无需感知平台差异，因此统一提供同样的接口。
 func NewVolumeOwnership(mounter Mounter, dir string, fsGroup *int64, fsGroupChangePolicy *v1.PodFSGroupChangePolicy, completeFunc func(types.CompleteFuncParam)) VolumeOwnershipChanger {
 	return &VolumeOwnership{}
 }
 
+// AddProgressNotifier 在非 Linux 平台上是空操作，保持与 Linux 实现相同的调用方式。
 func (vo *VolumeOwnership) AddProgressNotifier(pod *v1.Pod, recorder record.EventRecorder) VolumeOwnershipChanger {
 	return vo
 }
 
+// ChangePermissions 在非 Linux 平台上直接返回成功，不修改任何文件。
 func (vo *VolumeOwnership) ChangePermissions() error {
 	return nil
 }

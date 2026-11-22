@@ -35,6 +35,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestLoadPodFromFile 从文件加载 Pod 定义的测试。
 func TestLoadPodFromFile(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -108,7 +109,7 @@ spec:
 				t.Errorf("test %q expected error, got nil", test.name)
 			}
 		} else {
-			// no error expected
+			// 该用例不应返回错误。
 			if err != nil {
 				t.Errorf("error loading pod %q: %v", test.name, err)
 			}
@@ -119,6 +120,7 @@ spec:
 	}
 }
 
+// TestCalculateTimeoutForVolume 卷操作超时时间计算的测试。
 func TestCalculateTimeoutForVolume(t *testing.T) {
 	pv := &v1.PersistentVolume{
 		Spec: v1.PersistentVolumeSpec{
@@ -146,6 +148,7 @@ func TestCalculateTimeoutForVolume(t *testing.T) {
 	}
 }
 
+// TestFsUserFrom 从卷规格解析 fsGroup 用户信息的测试。
 func TestFsUserFrom(t *testing.T) {
 	tests := []struct {
 		desc       string
@@ -305,6 +308,7 @@ func TestFsUserFrom(t *testing.T) {
 	}
 }
 
+// TestHasMountRefs 判断挂载引用是否存在的测试。
 func TestHasMountRefs(t *testing.T) {
 	testCases := map[string]struct {
 		mountPath string
@@ -340,6 +344,7 @@ func TestHasMountRefs(t *testing.T) {
 	}
 }
 
+// TestMountOptionFromSpec 从卷规格提取挂载选项的测试。
 func TestMountOptionFromSpec(t *testing.T) {
 	scenarios := map[string]struct {
 		volume            *volume.Spec
@@ -394,6 +399,7 @@ func TestMountOptionFromSpec(t *testing.T) {
 	}
 }
 
+// createVolumeSpecWithMountOption 构造带指定挂载选项的卷规格，供测试用例使用。
 func createVolumeSpecWithMountOption(name string, mountOptions string, spec v1.PersistentVolumeSpec) *volume.Spec {
 	annotations := map[string]string{
 		v1.MountOptionAnnotation: mountOptions,
@@ -410,6 +416,7 @@ func createVolumeSpecWithMountOption(name string, mountOptions string, spec v1.P
 	return &volume.Spec{PersistentVolume: pv}
 }
 
+// TestGetWindowsPath Windows 路径转换的测试。
 func TestGetWindowsPath(t *testing.T) {
 	tests := []struct {
 		path         string
@@ -441,6 +448,7 @@ func TestGetWindowsPath(t *testing.T) {
 	}
 }
 
+// TestIsWindowsUNCPath Windows UNC 路径识别的测试。
 func TestIsWindowsUNCPath(t *testing.T) {
 	tests := []struct {
 		goos      string
@@ -492,6 +500,7 @@ func TestIsWindowsUNCPath(t *testing.T) {
 	}
 }
 
+// TestIsWindowsLocalPath Windows 本地路径识别的测试。
 func TestIsWindowsLocalPath(t *testing.T) {
 	tests := []struct {
 		goos               string
@@ -583,6 +592,7 @@ func TestIsWindowsLocalPath(t *testing.T) {
 	}
 }
 
+// TestMakeAbsolutePath 将路径转换为绝对路径的测试。
 func TestMakeAbsolutePath(t *testing.T) {
 	tests := []struct {
 		goos         string
@@ -637,6 +647,7 @@ func TestMakeAbsolutePath(t *testing.T) {
 	}
 }
 
+// TestGetPodVolumeNames 提取 Pod 所使用卷名称的测试。
 func TestGetPodVolumeNames(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMountReadWriteOncePod, true)
 	tests := []struct {
@@ -889,7 +900,7 @@ func TestGetPodVolumeNames(t *testing.T) {
 						},
 						{
 							Name: "container2",
-							// No SELinux context, will be inherited from PodSecurityContext
+							// 未设置 SELinux context，将继承 PodSecurityContext 的配置。
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name: "vol2",
@@ -964,6 +975,7 @@ func TestGetPodVolumeNames(t *testing.T) {
 	}
 }
 
+// TestVolumeHealthConditionSetsEqual 卷健康条件集合相等性判断的测试。
 func TestVolumeHealthConditionSetsEqual(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1068,6 +1080,7 @@ func TestVolumeHealthConditionSetsEqual(t *testing.T) {
 	}
 }
 
+// TestVolumeHealthConditionSetsEqual_IgnoresMessageChanges 卷健康条件集合比较忽略消息变化的测试。
 func TestVolumeHealthConditionSetsEqual_IgnoresMessageChanges(t *testing.T) {
 	a := []v1.VolumeHealthCondition{{
 		Status:  v1.VolumeHealthInaccessible,

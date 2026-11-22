@@ -28,32 +28,26 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// Volume represents a directory used by pods or hosts on a node. All method
-// implementations of methods in the volume interface must be idempotent.
+// Volume 表示节点上供 Pod 或宿主机使用的目录。
+// 该接口的所有方法实现都必须是幂等的。
 type Volume interface {
-	// GetPath returns the path to which the volume should be mounted for the
-	// pod.
+	// GetPath 返回该卷在 Pod 中应挂载到的路径。
 	GetPath() string
 
-	// MetricsProvider embeds methods for exposing metrics (e.g.
-	// used, available space).
+	// MetricsProvider 内嵌用于暴露指标（如已用、可用空间）的方法。
 	MetricsProvider
 }
 
-// BlockVolume interface provides methods to generate global map path
-// and pod device map path.
+// BlockVolume 接口提供生成全局映射路径和 Pod 设备映射路径的方法。
 type BlockVolume interface {
-	// GetGlobalMapPath returns a global map path which contains
-	// bind mount associated to a block device.
-	// ex. plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid}
+	// GetGlobalMapPath 返回包含块设备 bind mount 的全局映射路径。
+	// 例如 plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid}
 	GetGlobalMapPath(spec *Spec) (string, error)
-	// GetPodDeviceMapPath returns a pod device map path
-	// and name of a symbolic link associated to a block device.
-	// ex. pods/{podUid}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/, {volumeName}
+	// GetPodDeviceMapPath 返回 Pod 设备映射路径及与块设备关联的符号链接名。
+	// 例如 pods/{podUid}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/, {volumeName}
 	GetPodDeviceMapPath() (string, string)
 
-	// SupportsMetrics should return true if the MetricsProvider is
-	// initialized
+	// 若 MetricsProvider 已初始化，SupportsMetrics 应返回 true。
 	SupportsMetrics() bool
 
 	// MetricsProvider embeds methods for exposing metrics (e.g.
@@ -61,62 +55,56 @@ type BlockVolume interface {
 	MetricsProvider
 }
 
-// MetricsProvider exposes metrics (e.g. used,available space) related to a
-// Volume.
+// MetricsProvider 暴露与卷相关的指标（如已用、可用空间）。
 type MetricsProvider interface {
-	// GetMetrics returns the Metrics for the Volume. Maybe expensive for
-	// some implementations.
+	// GetMetrics 返回卷的指标；某些实现中该调用开销较大。
 	GetMetrics() (*Metrics, error)
 }
 
-// Metrics represents the used and available bytes of the Volume.
+// Metrics 表示卷的已用和可用字节数。
 type Metrics struct {
-	// The time at which these stats were updated.
+	// 这些统计数据的更新时间。
 	Time metav1.Time
 
-	// Used represents the total bytes used by the Volume.
-	// Note: For block devices this maybe more than the total size of the files.
+	// Used 是卷已使用的总字节数。
+	// 注意：块设备的该值可能大于其中文件的总大小。
 	Used *resource.Quantity
 
-	// Capacity represents the total capacity (bytes) of the volume's
-	// underlying storage. For Volumes that share a filesystem with the host
-	// (e.g. emptydir, hostpath) this is the size of the underlying storage,
-	// and will not equal Used + Available as the fs is shared.
+	// Capacity 是卷底层存储的总容量（字节）。对于与宿主机共享文件系统的卷
+	// （如 emptydir、hostpath），这是底层存储的大小；由于文件系统共享，
+	// 该值不等于 Used + Available。
 	Capacity *resource.Quantity
 
-	// Available represents the storage space available (bytes) for the
-	// Volume. For Volumes that share a filesystem with the host (e.g.
-	// emptydir, hostpath), this is the available space on the underlying
-	// storage, and is shared with host processes and other Volumes.
+	// Available 是卷可用的存储空间（字节）。对于与宿主机共享文件系统的卷
+	// （如 emptydir、hostpath），这是底层存储的可用空间，并与宿主机进程及
+	// 其他卷共享。
 	Available *resource.Quantity
 
-	// InodesUsed represents the total inodes used by the Volume.
+	// InodesUsed 是卷已使用的 inode 总数。
 	InodesUsed *resource.Quantity
 
-	// Inodes represents the total number of inodes available in the volume.
-	// For volumes that share a filesystem with the host (e.g. emptydir, hostpath),
-	// this is the inodes available in the underlying storage,
-	// and will not equal InodesUsed + InodesFree as the fs is shared.
+	// Inodes 是卷中可用 inode 的总数。对于与宿主机共享文件系统的卷
+	// （如 emptydir、hostpath），这是底层存储中的可用 inode 数，
+	// 由于文件系统共享，该值不等于 InodesUsed + InodesFree。
 	Inodes *resource.Quantity
 
-	// InodesFree represents the inodes available for the volume. For Volumes that share
-	// a filesystem with the host (e.g. emptydir, hostpath), this is the free inodes
-	// on the underlying storage, and is shared with host processes and other volumes
+	// InodesFree 是卷可用的 inode 数。对于与宿主机共享文件系统的卷
+	// （如 emptydir、hostpath），这是底层存储中的空闲 inode 数，并与宿主机
+	// 进程及其他卷共享。
 	InodesFree *resource.Quantity
 }
 
-// Attributes represents the attributes of this mounter.
+// Attributes 表示该 mounter 的属性。
 type Attributes struct {
 	ReadOnly       bool
 	Managed        bool
 	SELinuxRelabel bool
 }
 
-// MounterArgs provides more easily extensible arguments to Mounter
+// MounterArgs 为 Mounter 提供易于扩展的参数。
 type MounterArgs struct {
-	// When FsUser is set, the ownership of the volume will be modified to be
-	// owned and writable by FsUser. Otherwise, there is no side effects.
-	// Currently only supported with projected service account tokens.
+	// 设置 FsUser 时，卷的属主会被改为 FsUser 并赋予写权限；否则不产生副作用。
+	// 目前仅 projection service account token 支持。
 	FsUser              *int64
 	FsGroup             *int64
 	FSGroupChangePolicy *v1.PodFSGroupChangePolicy
@@ -124,27 +112,27 @@ type MounterArgs struct {
 	SELinuxLabel        string
 	Recorder            record.EventRecorder
 
-	// Optional interface that will be used to change the ownership of the volume, if specified.
-	// mainly used by unit tests
+	// 可选的卷属主变更接口，主要用于单元测试。
 	VolumeOwnershipApplicator VolumeOwnershipChanger
 	ReconstructedVolume       bool
 
-	// IsRemount is true when SetUp is being invoked on a volume that the
-	// reconciler considers already mounted to the pod, e.g. a periodic
-	// republish triggered by CSIDriver.spec.requiresRepublish=true. Volume
-	// plugins should use this to avoid destroying state (e.g. mount
-	// directories, volume metadata files) that the pod is currently
-	// observing through an existing bind mount, since teardown on a
-	// failed remount cannot be repaired by a subsequent successful
-	// remount and would leave the pod with stale contents.
+	// 当 reconciler 认为卷已挂载到 Pod 时（例如由
+	// CSIDriver.spec.requiresRepublish=true 触发的周期性重发布），IsRemount
+	// 为 true。卷插件应据此避免破坏 Pod 正通过现有 bind mount 观察的状态
+	// （如挂载目录、卷元数据文件）：失败重挂载的清理无法由后续成功的重挂载
+	// 修复，只会导致 Pod 看到过期内容。
 	IsRemount bool
 }
 
+// VolumeOwnershipChanger 用于修改卷属主和权限。
 type VolumeOwnershipChanger interface {
+	// AddProgressNotifier 设置变更进度事件的记录器。
 	AddProgressNotifier(pod *v1.Pod, recorder record.EventRecorder) VolumeOwnershipChanger
+	// ChangePermissions 执行权限变更。
 	ChangePermissions() error
 }
 
+// VolumeOwnership 实现卷的属主和权限变更，并记录进度。
 type VolumeOwnership struct {
 	mounter             Mounter
 	dir                 string
@@ -152,177 +140,151 @@ type VolumeOwnership struct {
 	fsGroupChangePolicy *v1.PodFSGroupChangePolicy
 	completionCallback  func(volumetypes.CompleteFuncParam)
 
-	// for monitoring progress of permission change operation
+	// 用于监控权限变更操作的进度。
 	pod         *v1.Pod
 	fileCounter atomic.Int64
 	recorder    record.EventRecorder
 }
 
-// Mounter interface provides methods to set up/mount the volume.
+// Mounter 接口提供设置/挂载卷的方法。
 type Mounter interface {
-	// Uses Interface to provide the path for Docker binds.
+	// 内嵌 Volume 以提供供 Docker bind 使用的路径。
 	Volume
 
-	// SetUp prepares and mounts/unpacks the volume to a
-	// self-determined directory path. The mount point and its
-	// content should be owned by `fsUser` or 'fsGroup' so that it can be
-	// accessed by the pod. This may be called more than once, so
-	// implementations must be idempotent.
-	// It could return following types of errors:
+	// SetUp 准备卷并将其挂载/解包到插件自行决定的目录。挂载点及其内容应
+	// 归属于 fsUser 或 fsGroup，以便 Pod 访问。该方法可能被多次调用，实现
+	// 必须幂等。
+	// 可返回以下错误类型：
 	//   - TransientOperationFailure
 	//   - UncertainProgressError
-	//   - Error of any other type should be considered a final error
+	//   - 其他类型的错误均视为最终错误
 	SetUp(mounterArgs MounterArgs) error
 
-	// SetUpAt prepares and mounts/unpacks the volume to the
-	// specified directory path, which may or may not exist yet.
-	// The mount point and its content should be owned by `fsUser`
-	// 'fsGroup' so that it can be accessed by the pod. This may
-	// be called more than once, so implementations must be
-	// idempotent.
+	// SetUpAt 准备卷并将其挂载/解包到指定目录（该目录可以尚不存在）。挂载点
+	// 及其内容应归属于 fsUser 或 fsGroup，以便 Pod 访问。该方法可能被多次
+	// 调用，实现必须幂等。
 	SetUpAt(dir string, mounterArgs MounterArgs) error
-	// GetAttributes returns the attributes of the mounter.
-	// This function is called after SetUp()/SetUpAt().
+	// GetAttributes 返回 mounter 的属性，在 SetUp()/SetUpAt() 之后调用。
 	GetAttributes() Attributes
 }
 
-// Unmounter interface provides methods to cleanup/unmount the volumes.
+// Unmounter 接口提供清理/卸载卷的方法。
 type Unmounter interface {
 	Volume
-	// TearDown unmounts the volume from a self-determined directory and
-	// removes traces of the SetUp procedure.
+	// TearDown 从插件自行决定的目录卸载卷并清除 SetUp 留下的痕迹。
 	TearDown() error
-	// TearDown unmounts the volume from the specified directory and
-	// removes traces of the SetUp procedure.
+	// TearDownAt 从指定目录卸载卷并清除 SetUp 留下的痕迹。
 	TearDownAt(dir string) error
 }
 
-// BlockVolumeMapper interface is a mapper interface for block volume.
+// BlockVolumeMapper 是块卷的映射接口。
 type BlockVolumeMapper interface {
 	BlockVolume
 }
 
-// CustomBlockVolumeMapper interface provides custom methods to set up/map the volume.
+// CustomBlockVolumeMapper 提供自定义的设置/映射卷方法。
 type CustomBlockVolumeMapper interface {
 	BlockVolumeMapper
-	// SetUpDevice prepares the volume to the node by the plugin specific way.
-	// For most in-tree plugins, attacher.Attach() and attacher.WaitForAttach()
-	// will do necessary works.
-	// This may be called more than once, so implementations must be idempotent.
-	// SetUpDevice returns stagingPath if device setup was successful
+	// SetUpDevice 以插件特定的方式在节点上准备卷。对大多数树内插件，
+	// attacher.Attach() 和 attacher.WaitForAttach() 会完成必要工作。
+	// 该方法可能被多次调用，实现必须幂等。
+	// 准备成功时 SetUpDevice 返回 stagingPath。
 	SetUpDevice() (stagingPath string, err error)
 
-	// MapPodDevice maps the block device to a path and return the path.
-	// Unique device path across kubelet node reboot is required to avoid
-	// unexpected block volume destruction.
-	// If empty string is returned, the path returned by attacher.Attach() and
-	// attacher.WaitForAttach() will be used.
+	// MapPodDevice 将块设备映射到某个路径并返回该路径。
+	// 路径在 kubelet 节点重启前后必须保持唯一，否则可能导致块卷被意外销毁。
+	// 返回空字符串时，使用 attacher.Attach() 和 attacher.WaitForAttach()
+	// 返回的路径。
 	MapPodDevice() (publishPath string, err error)
 
-	// GetStagingPath returns path that was used for staging the volume
-	// it is mainly used by CSI plugins
+	// GetStagingPath 返回卷 staging 时使用的路径，主要供 CSI 插件使用。
 	GetStagingPath() string
 }
 
-// BlockVolumeUnmapper interface is an unmapper interface for block volume.
+// BlockVolumeUnmapper 是块卷的取消映射接口。
 type BlockVolumeUnmapper interface {
 	BlockVolume
 }
 
-// CustomBlockVolumeUnmapper interface provides custom methods to cleanup/unmap the volumes.
+// CustomBlockVolumeUnmapper 提供自定义的清理/取消映射卷方法。
 type CustomBlockVolumeUnmapper interface {
 	BlockVolumeUnmapper
-	// TearDownDevice removes traces of the SetUpDevice procedure.
-	// If the plugin is non-attachable, this method detaches the volume
-	// from a node.
+	// TearDownDevice 清除 SetUpDevice 留下的痕迹。若插件不可附加，
+	// 该方法同时从节点上卸载卷。
 	TearDownDevice(mapPath string, devicePath string) error
 
-	// UnmapPodDevice removes traces of the MapPodDevice procedure.
+	// UnmapPodDevice 清除 MapPodDevice 留下的痕迹。
 	UnmapPodDevice() error
 }
 
-// Provisioner is an interface that creates templates for PersistentVolumes
-// and can create the volume as a new resource in the infrastructure provider.
+// Provisioner 接口创建 PersistentVolume 模板，并可在基础设施提供方
+// 中将卷创建为新资源。
 type Provisioner interface {
-	// Provision creates the resource by allocating the underlying volume in a
-	// storage system. This method should block until completion and returns
-	// PersistentVolume representing the created storage resource.
+	// Provision 在存储系统中分配底层卷来创建资源。该方法应阻塞至完成，
+	// 并返回代表所创建存储资源的 PersistentVolume。
 	Provision(selectedNode *v1.Node, allowedTopologies []v1.TopologySelectorTerm) (*v1.PersistentVolume, error)
 }
 
-// Deleter removes the resource from the underlying storage provider. Calls
-// to this method should block until the deletion is complete. Any error
-// returned indicates the volume has failed to be reclaimed. A nil return
-// indicates success.
+// Deleter 从底层存储提供方删除资源。调用应阻塞至删除完成。
+// 返回错误表示卷回收失败，返回 nil 表示成功。
 type Deleter interface {
 	Volume
-	// This method should block until completion.
-	// deletedVolumeInUseError returned from this function will not be reported
-	// as error and it will be sent as "Info" event to the PV being deleted. The
-	// volume controller will retry deleting the volume in the next periodic
-	// sync. This can be used to postpone deletion of a volume that is being
-	// detached from a node. Deletion of such volume would fail anyway and such
-	// error would confuse users.
+	// 该方法应阻塞至完成。返回的 deletedVolumeInUseError 不会作为错误上报，
+	// 而是以 "Info" 事件发送给被删除的 PV；卷控制器会在下次周期性同步时
+	// 重试删除。这可用于推迟删除正在从节点上分离的卷：此类卷的删除本来就
+	// 会失败，上报此类错误只会让用户困惑。
 	Delete() error
 }
 
-// Attacher can attach a volume to a node.
+// Attacher 可将卷附加到节点。
 type Attacher interface {
 	DeviceMounter
 
-	// Attaches the volume specified by the given spec to the node with the given Name.
-	// On success, returns the device path where the device was attached on the
-	// node.
+	// Attach 将给定 spec 指定的卷附加到指定名称的节点，成功时返回设备上
+	// 附加到节点后的设备路径。
 	Attach(spec *Spec, nodeName types.NodeName) (string, error)
 
-	// VolumesAreAttached checks whether the list of volumes still attached to the specified
-	// node. It returns a map which maps from the volume spec to the checking result.
-	// If an error is occurred during checking, the error will be returned
+	// VolumesAreAttached 检查卷列表是否仍附加在指定节点上，返回从卷 spec
+	// 到检查结果的映射。检查过程中出错时返回该错误。
 	VolumesAreAttached(specs []*Spec, nodeName types.NodeName) (map[*Spec]bool, error)
 
-	// WaitForAttach blocks until the device is attached to this
-	// node. If it successfully attaches, the path to the device
-	// is returned. Otherwise, if the device does not attach after
-	// the given timeout period, an error will be returned.
+	// WaitForAttach 阻塞直到设备附加到本节点，成功时返回设备路径；
+	// 若在给定超时时间内未能附加，则返回错误。
 	WaitForAttach(spec *Spec, devicePath string, pod *v1.Pod, timeout time.Duration) (string, error)
 }
 
-// DeviceMounterArgs provides auxiliary, optional arguments to DeviceMounter.
+// DeviceMounterArgs 为 DeviceMounter 提供可选辅助参数。
 type DeviceMounterArgs struct {
 	FsGroup      *int64
 	SELinuxLabel string
 }
 
-// DeviceMounter can mount a block volume to a global path.
+// DeviceMounter 可将块卷挂载到全局路径。
 type DeviceMounter interface {
-	// GetDeviceMountPath returns a path where the device should
-	// be mounted after it is attached. This is a global mount
-	// point which should be bind mounted for individual volumes.
+	// GetDeviceMountPath 返回设备附加后应挂载到的路径，这是供各个卷
+	// bind mount 使用的全局挂载点。
 	GetDeviceMountPath(spec *Spec) (string, error)
 
-	// MountDevice mounts the disk to a global path which
-	// individual pods can then bind mount
-	// Note that devicePath can be empty if the volume plugin does not implement any of Attach and WaitForAttach methods.
-	// It could return following types of errors:
+	// MountDevice 将磁盘挂载到全局路径，供各 Pod 随后 bind mount。
+	// 若卷插件未实现 Attach 或 WaitForAttach，devicePath 可能为空。
+	// 可返回以下错误类型：
 	//   - TransientOperationFailure
 	//   - UncertainProgressError
-	//   - Error of any other type should be considered a final error
+	//   - 其他类型的错误均视为最终错误
 	MountDevice(spec *Spec, devicePath string, deviceMountPath string, deviceMounterArgs DeviceMounterArgs) error
 }
 
-// Detacher can detach a volume from a node.
+// Detacher 可从节点上分离卷。
 type Detacher interface {
 	DeviceUnmounter
-	// Detach the given volume from the node with the given Name.
-	// volumeName is name of the volume as returned from plugin's
-	// GetVolumeName().
+	// Detach 从指定名称的节点分离给定卷。
+	// volumeName 是插件 GetVolumeName() 返回的卷名。
 	Detach(volumeName string, nodeName types.NodeName) error
 }
 
-// DeviceUnmounter can unmount a block volume from the global path.
+// DeviceUnmounter 可从全局路径卸载块卷。
 type DeviceUnmounter interface {
-	// UnmountDevice unmounts the global mount of the disk. This
-	// should only be called once all bind mounts have been
-	// unmounted.
+	// UnmountDevice 卸载磁盘的全局挂载。仅应在所有 bind mount
+	// 都已卸载后调用。
 	UnmountDevice(deviceMountPath string) error
 }

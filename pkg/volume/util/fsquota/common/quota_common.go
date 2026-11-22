@@ -14,15 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package common 定义文件系统配额的通用标识，以及各配额机制的公共接口。
 package common
 
-// QuotaID is generic quota identifier.
-// Data type based on quotactl(2).
+// QuotaID 是配额的通用标识符。
+// 数据类型取自 quotactl(2)，以便与内核的配额语义保持一致。
 type QuotaID int32
 
 const (
-	// UnknownQuotaID -- cannot determine whether a quota is in force
+	// UnknownQuotaID 表示无法确定配额是否生效。
 	UnknownQuotaID QuotaID = -1
-	// BadQuotaID -- Invalid quota
+	// BadQuotaID 表示无效配额。
 	BadQuotaID QuotaID = 0
 )

@@ -64,6 +64,7 @@ var (
 	testAccount = "test-service-account"
 )
 
+// prepareVolumeInfoFile 在挂载目录下写入卷元数据文件。
 func prepareVolumeInfoFile(mountPath string, plug *csiPlugin, specVolumeName, volumeID, driverName, lifecycleMode, seLinuxMountContext string) error {
 	nodeName := string(plug.host.GetNodeName())
 	volData := map[string]string{
@@ -84,11 +85,12 @@ func prepareVolumeInfoFile(mountPath string, plug *csiPlugin, specVolumeName, vo
 	return nil
 }
 
+// TestMounterGetPath 验证 CSI 挂载器生成的卷挂载路径。
 func TestMounterGetPath(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
 
-	// TODO (vladimirvivien) specName with slashes will not work
+	// TODO (vladimirvivien) 含斜杠的 specName 无法正常工作
 	testCases := []struct {
 		name           string
 		specVolumeName string
@@ -127,6 +129,7 @@ func TestMounterGetPath(t *testing.T) {
 	}
 }
 
+// TestMounterSetUp 验证 SetUp 传递的 Pod 信息、挂载选项、SELinux 上下文及元数据文件。
 func TestMounterSetUp(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -208,7 +211,7 @@ func TestMounterSetUp(t *testing.T) {
 			name:                     "should not include selinux mount options, if feature gate is enabled, driver supports it, but Pod does not have it",
 			driver:                   "supports_selinux",
 			seLinuxLabel:             "",
-			expectedSELinuxContext:   "", // especially make sure the volume plugin does not use -o context="", that is an invalid value
+			expectedSELinuxContext:   "", // 确保卷插件不会使用 -o context=""，那是非法值
 			volumeContext:            nil,
 			enableSELinuxFeatureGate: true,
 			expectedVolumeContext:    nil,
@@ -287,7 +290,7 @@ func TestMounterSetUp(t *testing.T) {
 				t.Fatalf("failed to setup VolumeAttachment: %v", err)
 			}
 
-			// Mounter.SetUp()
+			// 调用 Mounter.SetUp()
 			var mounterArgs volume.MounterArgs
 			fsGroup := int64(2000)
 			mounterArgs.FsGroup = &fsGroup
@@ -305,7 +308,7 @@ func TestMounterSetUp(t *testing.T) {
 			if err := csiMounter.SetUp(mounterArgs); err != nil {
 				t.Fatalf("mounter.Setup failed: %v", err)
 			}
-			//Test the default value of file system type is not overridden
+			// 确认默认文件系统类型未被覆盖
 			if len(csiMounter.spec.PersistentVolume.Spec.CSI.FSType) != 0 {
 				t.Errorf("default value of file system type was overridden by type %s", csiMounter.spec.PersistentVolume.Spec.CSI.FSType)
 			}
@@ -319,7 +322,7 @@ func TestMounterSetUp(t *testing.T) {
 				}
 			}
 
-			// ensure call went all the way
+			// 确认调用确实到达了 CSI 驱动
 			pubs := csiMounter.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 			vol, ok := pubs[csiMounter.volumeID]
 			if !ok {
@@ -335,7 +338,7 @@ func TestMounterSetUp(t *testing.T) {
 				t.Errorf("csi server expected volumeContext %+v, got %+v", test.expectedVolumeContext, vol.VolumeContext)
 			}
 
-			// ensure data file is created
+			// 确认元数据文件已创建
 			dataDir := filepath.Dir(mounter.GetPath())
 			dataFile := filepath.Join(dataDir, volDataFileName)
 			if _, err := os.Stat(dataFile); err != nil {
@@ -369,10 +372,12 @@ func TestMounterSetUp(t *testing.T) {
 	}
 }
 
+// mockVolumeOwnershipChanger 是可触发错误的卷属主修改器测试替身。
 type mockVolumeOwnershipChanger struct {
 	triggerError bool
 }
 
+// ChangePermissions 按配置返回成功或模拟错误。
 func (m *mockVolumeOwnershipChanger) ChangePermissions() error {
 	if m.triggerError {
 		return fmt.Errorf("mock error")
@@ -380,10 +385,12 @@ func (m *mockVolumeOwnershipChanger) ChangePermissions() error {
 	return nil
 }
 
+// AddProgressNotifier 返回自身，忽略进度通知器参数。
 func (m *mockVolumeOwnershipChanger) AddProgressNotifier(pod *corev1.Pod, recorder record.EventRecorder) volume.VolumeOwnershipChanger {
 	return m
 }
 
+// TestMounterSetupJsonFileHandling 验证 SetUp 失败时元数据文件是否被删除。
 func TestMounterSetupJsonFileHandling(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -477,7 +484,7 @@ func TestMounterSetupJsonFileHandling(t *testing.T) {
 				t.Fatal("unexpected error:", err)
 			}
 
-			// Check if the json file exists or not
+			// 检查 JSON 文件是否存在
 			dataFile := filepath.Join(dataDir, volDataFileName)
 			_, err = os.Stat(dataFile)
 			if tc.shouldRemoveFile {
@@ -495,6 +502,7 @@ func TestMounterSetupJsonFileHandling(t *testing.T) {
 	}
 }
 
+// TestMounterSetUpSimple 验证不同卷源和驱动配置下 SetUp 的行为。
 func TestMounterSetUpSimple(t *testing.T) {
 	fakeClient := fakeclient.NewSimpleClientset()
 	plug, tmpDir := newTestPlugin(t, fakeClient)
@@ -600,7 +608,7 @@ func TestMounterSetUpSimple(t *testing.T) {
 			}
 
 			if tc.unsetClient {
-				// Clear out the clients
+				// 清空客户端，强制重新查找驱动
 				csiMounter.csiClient = nil
 				csiMounter.csiClientGetter.csiClient = nil
 				t.Log("driver name is ", csiMounter.csiClientGetter.driverName)
@@ -622,7 +630,7 @@ func TestMounterSetUpSimple(t *testing.T) {
 				t.Fatal("unexpected error:", err)
 			}
 
-			// ensure call went all the way
+			// 确认调用确实到达了 CSI 驱动
 			pubs := csiMounter.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 			vol, ok := pubs[csiMounter.volumeID]
 			if !ok {
@@ -652,7 +660,7 @@ func TestMounterSetUpSimple(t *testing.T) {
 				t.Error("csi server may not have received NodePublishVolume call")
 			}
 
-			// ensure data file is created
+			// 确认元数据文件已创建
 			dataDir := filepath.Dir(mounter.GetPath())
 			dataFile := filepath.Join(dataDir, volDataFileName)
 			if _, err := os.Stat(dataFile); err != nil {
@@ -685,6 +693,7 @@ func TestMounterSetUpSimple(t *testing.T) {
 	}
 }
 
+// TestMounterSetupWithStatusTracking 验证 SetUp 在不同故障场景下返回的操作状态类型。
 func TestMounterSetupWithStatusTracking(t *testing.T) {
 	fakeClient := fakeclient.NewSimpleClientset()
 	plug, tmpDir := newTestPlugin(t, fakeClient)
@@ -791,6 +800,7 @@ func TestMounterSetupWithStatusTracking(t *testing.T) {
 	}
 }
 
+// TestMounterSetUpWithInline 验证临时内联卷和持久卷的 SetUp 行为差异。
 func TestMounterSetUpWithInline(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -840,7 +850,7 @@ func TestMounterSetUpWithInline(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// The fake driver currently supports all modes.
+		// 假驱动目前支持所有生命周期模式
 		volumeLifecycleModes := []storage.VolumeLifecycleMode{
 			storage.VolumeLifecycleEphemeral,
 			storage.VolumeLifecyclePersistent,
@@ -891,7 +901,7 @@ func TestMounterSetUpWithInline(t *testing.T) {
 				t.Fatalf("mounter.Setup failed: %v", err)
 			}
 
-			// ensure call went all the way
+			// 确认调用确实到达了 CSI 驱动
 			pubs := csiMounter.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 			vol, ok := pubs[csiMounter.volumeID]
 			if !ok {
@@ -901,7 +911,7 @@ func TestMounterSetUpWithInline(t *testing.T) {
 				t.Error("volumeHandle not sent to CSI driver properly")
 			}
 
-			// validate stagingTargetPath
+			// 校验 stagingTargetPath：临时内联卷不应有 staging 路径
 			if tc.mode == storage.VolumeLifecycleEphemeral && vol.DeviceMountPath != "" {
 				t.Errorf("unexpected devicePathTarget sent to driver: %s", vol.DeviceMountPath)
 			}
@@ -930,6 +940,7 @@ func TestMounterSetUpWithInline(t *testing.T) {
 	}
 }
 
+// TestMounterSetUpWithFSGroup 验证 FSGroup 策略及驱动能力对 FSGroup 传递的影响。
 func TestMounterSetUpWithFSGroup(t *testing.T) {
 	fakeClient := fakeclient.NewSimpleClientset()
 	plug, tmpDir := newTestPlugin(t, fakeClient)
@@ -1159,12 +1170,12 @@ func TestMounterSetUpWithFSGroup(t *testing.T) {
 			t.Fatalf("mounter.Setup failed: %v", err)
 		}
 
-		//Test the default value of file system type is not overridden
+		// 确认文件系统类型未被覆盖
 		if len(csiMounter.spec.PersistentVolume.Spec.CSI.FSType) != len(tc.fsType) {
 			t.Errorf("file system type was overridden by type %s", csiMounter.spec.PersistentVolume.Spec.CSI.FSType)
 		}
 
-		// ensure call went all the way
+		// 确认调用确实到达了 CSI 驱动
 		pubs := csiMounter.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 		if pubs[csiMounter.volumeID].Path != csiMounter.GetPath() {
 			t.Error("csi server may not have received NodePublishVolume call")
@@ -1175,6 +1186,7 @@ func TestMounterSetUpWithFSGroup(t *testing.T) {
 	}
 }
 
+// TestMounterSetUpFWithNodePublishFinalError 验证 NodePublishVolume 最终失败时元数据文件的保留规则。
 func TestMounterSetUpFWithNodePublishFinalError(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -1210,12 +1222,10 @@ func TestMounterSetUpFWithNodePublishFinalError(t *testing.T) {
 			expectDataFileExists: false,
 		},
 		{
-			// Regression test for https://github.com/kubernetes/kubernetes/issues/121271:
-			// when NodePublishVolume fails on a remount (e.g. a republish
-			// triggered by CSIDriver.spec.requiresRepublish=true), the
-			// mount directory and vol_data.json must be preserved so the
-			// pod continues to see the previously-published contents and
-			// a subsequent successful republish can refresh them in place.
+			// 回归测试 https://github.com/kubernetes/kubernetes/issues/121271：
+			// 重挂载时（如 CSIDriver.spec.requiresRepublish=true 触发的重新发布）
+			// NodePublishVolume 失败，必须保留挂载目录和 vol_data.json，
+			// 使 Pod 仍能看到此前发布的内容，后续成功的重新发布可就地刷新。
 			name:   "setup with remount preserves mount dir on final error",
 			podUID: types.UID(fmt.Sprintf("%08X", rand.Uint64())),
 			spec: func(fsType string, options []string) *volume.Spec {
@@ -1282,24 +1292,25 @@ func TestMounterSetUpFWithNodePublishFinalError(t *testing.T) {
 	}
 }
 
+// TestUnmounterTeardown 验证卸载卷时会调用 CSI 的 NodeUnpublishVolume。
 func TestUnmounterTeardown(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
 	registerFakePlugin(testDriver, "endpoint", []string{"1.0.0"}, t)
 	pv := makeTestPV("test-pv", 10, testDriver, testVol)
 
-	// save the data file prior to unmount
+	// 卸载前先写入元数据文件
 	targetDir := getTargetPath(testPodUID, pv.ObjectMeta.Name, plug.host)
 	dir := filepath.Join(targetDir, "mount")
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
 	}
 
-	// do a fake local mount
+	// 构造一个假的本地挂载
 	diskMounter := mount.NewSafeFormatAndMount(plug.host.GetMounter(), &testingexec.FakeExec{DisableScripts: true})
 	device := "/fake/device"
 	if goruntime.GOOS == "windows" {
-		// We need disk numbers on Windows.
+		// Windows 上需要磁盘编号而非设备路径
 		device = "1"
 	}
 	if err := diskMounter.FormatAndMount(device, dir, "testfs", nil); err != nil {
@@ -1330,7 +1341,7 @@ func TestUnmounterTeardown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// ensure csi client call
+	// 确认 CSI 客户端收到了调用
 	pubs := csiUnmounter.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 	if _, ok := pubs[csiUnmounter.volumeID]; ok {
 		t.Error("csi server may not have received NodeUnpublishVolume call")
@@ -1338,6 +1349,7 @@ func TestUnmounterTeardown(t *testing.T) {
 
 }
 
+// TestUnmounterTeardownNoClientError 验证客户端不可用卸载失败时返回瞬时错误。
 func TestUnmounterTeardownNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -1345,18 +1357,18 @@ func TestUnmounterTeardownNoClientError(t *testing.T) {
 	registerFakePlugin(testDriver, "endpoint", []string{"1.0.0"}, t)
 	pv := makeTestPV("test-pv", 10, testDriver, testVol)
 
-	// save the data file prior to unmount
+	// 卸载前先写入元数据文件
 	targetDir := getTargetPath(testPodUID, pv.ObjectMeta.Name, plug.host)
 	dir := filepath.Join(targetDir, "mount")
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
 	}
 
-	// do a fake local mount
+	// 构造一个假的本地挂载
 	diskMounter := mount.NewSafeFormatAndMount(plug.host.GetMounter(), &testingexec.FakeExec{DisableScripts: true})
 	device := "/fake/device"
 	if goruntime.GOOS == "windows" {
-		// We need disk numbers on Windows.
+		// Windows 上需要磁盘编号而非设备路径
 		device = "1"
 	}
 	if err := diskMounter.FormatAndMount(device, dir, "testfs", nil); err != nil {
@@ -1382,10 +1394,9 @@ func TestUnmounterTeardownNoClientError(t *testing.T) {
 
 	csiUnmounter := unmounter.(*csiMountMgr)
 
-	// Clear out the cached client
-	// The lookup to generate a new client will fail when it tries to query a driver with an unknown name
+	// 清空缓存的客户端；查询未知名称的驱动时重建客户端会失败
 	csiUnmounter.csiClientGetter.csiClient = nil
-	// Note that registerFakePlugin above will create a driver with a name of "test-driver"
+	// 注意上面 registerFakePlugin 创建的驱动名为 "test-driver"
 	csiUnmounter.csiClientGetter.driverName = "unknown-driver"
 
 	err = csiUnmounter.TearDownAt(dir)
@@ -1396,6 +1407,7 @@ func TestUnmounterTeardownNoClientError(t *testing.T) {
 	}
 }
 
+// TestPodServiceAccountTokenAttrs 验证 ServiceAccount token 请求如何传入卷上下文或 Secret。
 func TestPodServiceAccountTokenAttrs(t *testing.T) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(pkgauthenticationv1.RegisterDefaults(scheme))
@@ -1530,6 +1542,7 @@ func TestPodServiceAccountTokenAttrs(t *testing.T) {
 	}
 }
 
+// Test_csiMountMgr_supportsFSGroup 验证不同文件系统类型、访问模式和驱动策略下是否应用 FSGroup。
 func Test_csiMountMgr_supportsFSGroup(t *testing.T) {
 	type fields struct {
 		plugin              *csiPlugin
@@ -1678,6 +1691,7 @@ func Test_csiMountMgr_supportsFSGroup(t *testing.T) {
 	}
 }
 
+// TestMounterGetFSGroupPolicy 验证从 CSIDriver 读取的 FSGroupPolicy 符合预期。
 func TestMounterGetFSGroupPolicy(t *testing.T) {
 	defaultPolicy := storage.ReadWriteOnceWithFSTypeFSGroupPolicy
 	testCases := []struct {
@@ -1703,7 +1717,7 @@ func TestMounterGetFSGroupPolicy(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Logf("testing: %s", tc.name)
-		// Define the driver and set the FSGroupPolicy
+		// 定义驱动并设置 FSGroupPolicy
 		driver := getTestCSIDriver(testDriver, nil, nil, nil)
 		if tc.defined {
 			driver.Spec.FSGroupPolicy = &tc.expectedFSGroupPolicy
@@ -1711,7 +1725,7 @@ func TestMounterGetFSGroupPolicy(t *testing.T) {
 			driver.Spec.FSGroupPolicy = &defaultPolicy
 		}
 
-		// Create the client and register the resources
+		// 创建客户端并注册资源
 		fakeClient := fakeclient.NewSimpleClientset(driver)
 		plug, tmpDir := newTestPlugin(t, fakeClient)
 		defer os.RemoveAll(tmpDir)
@@ -1727,7 +1741,7 @@ func TestMounterGetFSGroupPolicy(t *testing.T) {
 
 		csiMounter := mounter.(*csiMountMgr)
 
-		// Check to see if we can obtain the CSIDriver, along with examining its FSGroupPolicy
+		// 确认能读取到 CSIDriver 及其 FSGroupPolicy
 		fsGroup, err := csiMounter.getFSGroupPolicy()
 		if err != nil {
 			t.Fatalf("Error attempting to obtain FSGroupPolicy: %v", err)

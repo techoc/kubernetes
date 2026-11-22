@@ -30,7 +30,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
-// NewTestPlugin creates a plugin mgr to load plugins and setup a fake client
+// NewTestPlugin 创建插件管理器以加载插件，并配置一个 fake 客户端。
 func NewTestPlugin(t *testing.T, client *fakeclient.Clientset) (*volume.VolumePluginMgr, *volume.VolumePlugin, string) {
 	tmpDir, err := utiltesting.MkTmpdir("csi-test")
 	if err != nil {
@@ -48,7 +48,7 @@ func NewTestPlugin(t *testing.T, client *fakeclient.Clientset) (*volume.VolumePl
 		Spec: v1.NodeSpec{},
 	})
 
-	// Start informer for CSIDrivers.
+	// 启动 CSIDrivers informer，等待其缓存同步后再使用 lister。
 	factory := informers.NewSharedInformerFactory(client, csi.CsiResyncPeriod)
 	csiDriverInformer := factory.Storage().V1().CSIDrivers()
 	csiDriverLister := csiDriverInformer.Lister()

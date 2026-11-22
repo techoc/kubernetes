@@ -22,6 +22,7 @@ import (
 	"testing"
 )
 
+// TestMapDevice 验证设备到 map 路径的映射及空参数校验。
 func TestMapDevice(t *testing.T) {
 	tempDir := t.TempDir()
 	testCases := []struct {
@@ -85,6 +86,7 @@ func TestMapDevice(t *testing.T) {
 	}
 }
 
+// TestUnmapDevice 验证解除设备映射，覆盖符号链接、bind mount 文件及空路径场景。
 func TestUnmapDevice(t *testing.T) {
 	tempDir := t.TempDir()
 	testCases := []struct {
@@ -151,7 +153,7 @@ func TestUnmapDevice(t *testing.T) {
 				if err := os.MkdirAll(mapPath, 0750); err != nil {
 					t.Fatalf("failed to create mapPath in setup: %v", err)
 				}
-				// Do not create file
+				// 故意不创建文件，以覆盖文件缺失时的清理分支。
 			},
 			expectError: "",
 		},
@@ -198,6 +200,7 @@ func TestUnmapDevice(t *testing.T) {
 	}
 }
 
+// TestRemoveMapPath 验证删除 map 路径，含路径不存在时的幂等行为。
 func TestRemoveMapPath(t *testing.T) {
 	tempDir := t.TempDir()
 	mapPath := filepath.Join(tempDir, "test-remove-map-path")
@@ -243,6 +246,7 @@ func TestRemoveMapPath(t *testing.T) {
 	}
 }
 
+// TestIsSymlinkExist 验证符号链接存在性检查。
 func TestIsSymlinkExist(t *testing.T) {
 	tempDir := t.TempDir()
 	mapPath := filepath.Join(tempDir, "test-symlink")

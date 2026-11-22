@@ -27,16 +27,15 @@ import (
 )
 
 const (
-	// isDefaultStorageClassAnnotation represents a StorageClass annotation that
-	// marks a class as the default StorageClass
+	// IsDefaultStorageClassAnnotation 是标记某 StorageClass 为默认类的注解键。
 	IsDefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
 
-	// betaIsDefaultStorageClassAnnotation is the beta version of IsDefaultStorageClassAnnotation.
+	// BetaIsDefaultStorageClassAnnotation 是 IsDefaultStorageClassAnnotation 的 beta 版本。
 	// TODO: remove Beta when no longer used
 	BetaIsDefaultStorageClassAnnotation = "storageclass.beta.kubernetes.io/is-default-class"
 )
 
-// GetDefaultClass returns the default StorageClass from the store, or nil.
+// GetDefaultClass 从存储中返回默认 StorageClass，没有则返回 nil。
 func GetDefaultClass(lister storagev1listers.StorageClassLister) (*storagev1.StorageClass, error) {
 	list, err := lister.List(labels.Everything())
 	if err != nil {
@@ -55,8 +54,7 @@ func GetDefaultClass(lister storagev1listers.StorageClassLister) (*storagev1.Sto
 		return nil, nil
 	}
 
-	// Primary sort by creation timestamp, newest first
-	// Secondary sort by class name, ascending order
+	// 先按创建时间倒序取最新的；时间相同时按类名升序，保证结果稳定。
 	sort.Slice(defaultClasses, func(i, j int) bool {
 		if defaultClasses[i].CreationTimestamp.UnixNano() == defaultClasses[j].CreationTimestamp.UnixNano() {
 			return defaultClasses[i].Name < defaultClasses[j].Name
@@ -70,8 +68,7 @@ func GetDefaultClass(lister storagev1listers.StorageClassLister) (*storagev1.Sto
 	return defaultClasses[0], nil
 }
 
-// IsDefaultAnnotation returns a boolean if the default storage class
-// annotation is set
+// IsDefaultAnnotation 判断对象是否带有默认 StorageClass 注解。
 // TODO: remove Beta when no longer needed
 func IsDefaultAnnotation(obj metav1.ObjectMeta) bool {
 	if obj.Annotations[IsDefaultStorageClassAnnotation] == "true" {

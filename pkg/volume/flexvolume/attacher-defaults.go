@@ -27,26 +27,27 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// attacherDefaults 在驱动不支持对应命令时提供默认行为。
 type attacherDefaults flexVolumeAttacher
 
-// Attach is part of the volume.Attacher interface
+// Attach 是 volume.Attacher 的默认实现，不进行实际挂载。
 func (a *attacherDefaults) Attach(spec *volume.Spec, hostName types.NodeName) (string, error) {
 	klog.Warning(logPrefix(a.plugin.flexVolumePlugin), "using default Attach for volume ", spec.Name(), ", host ", hostName)
 	return "", nil
 }
 
-// WaitForAttach is part of the volume.Attacher interface
+// WaitForAttach 是 volume.Attacher 的默认实现，直接返回设备路径。
 func (a *attacherDefaults) WaitForAttach(spec *volume.Spec, devicePath string, timeout time.Duration) (string, error) {
 	klog.Warning(logPrefix(a.plugin.flexVolumePlugin), "using default WaitForAttach for volume ", spec.Name(), ", device ", devicePath)
 	return devicePath, nil
 }
 
-// GetDeviceMountPath is part of the volume.Attacher interface
+// GetDeviceMountPath 返回设备在该节点上的全局挂载路径。
 func (a *attacherDefaults) GetDeviceMountPath(spec *volume.Spec, mountsDir string) (string, error) {
 	return a.plugin.getDeviceMountPath(spec)
 }
 
-// MountDevice is part of the volume.Attacher interface
+// MountDevice 是 volume.DeviceMounter 的默认实现，执行格式化和挂载。
 func (a *attacherDefaults) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, mounter mount.Interface) error {
 	klog.Warning(logPrefix(a.plugin.flexVolumePlugin), "using default MountDevice for volume ", spec.Name(), ", device ", devicePath, ", deviceMountPath ", deviceMountPath)
 

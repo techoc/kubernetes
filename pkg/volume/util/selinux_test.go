@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestGetMountSELinuxLabel 验证不同特性开关、变更策略与插件支持情况下 SELinux 标签的计算结果。
 func TestGetMountSELinuxLabel(t *testing.T) {
 	pvRWOP := &v1.PersistentVolume{
 		Spec: v1.PersistentVolumeSpec{
@@ -62,7 +63,7 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 
 	tests := []struct {
 		name                  string
-		featureGates          []featuregate.Feature // SELinuxMountReadWriteOncePod is always enabled
+		featureGates          []featuregate.Feature // SELinuxMountReadWriteOncePod 始终启用
 		pluginSupportsSELinux bool
 		volume                *volume.Spec
 		podSecurityContext    *v1.PodSecurityContext
@@ -70,7 +71,7 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 		expectError           bool
 		expectedInfo          SELinuxLabelInfo
 	}{
-		// Tests with no labels
+		// 无标签场景
 		{
 			name:                  "no label, no changePolicy",
 			featureGates:          nil,
@@ -80,8 +81,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        nil,
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "", // no SELinuxOptions + the default policy is recursive
-				SELinuxProcessLabel:               "", // no SELinuxOptions
+				SELinuxMountLabel:                 "", // 无 SELinuxOptions，且默认策略为 recursive
+				SELinuxProcessLabel:               "", // 无 SELinuxOptions
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -94,12 +95,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        nil,
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "", // no SELinuxOptions + recursive policy
-				SELinuxProcessLabel:               "", // SELinuxOptions
+				SELinuxMountLabel:                 "", // 无 SELinuxOptions，且策略为 recursive
+				SELinuxProcessLabel:               "", // 无 SELinuxOptions
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
-		// Tests with one label and RWOP volume
+		// 单个标签 + RWOP 卷场景
 		{
 			name:                  "one label, Recursive change policy, no feature gate",
 			featureGates:          nil,
@@ -109,8 +110,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // Recursive policy is not observed when SELinuxChangePolicy is off
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // SELinuxChangePolicy 关闭时 recursive 策略不生效
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -123,8 +124,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "",     // Recursive policy is effective with SELinuxChangePolicy, affects RWOP too.
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 "",     // SELinuxChangePolicy 开启时 recursive 策略生效，同样影响 RWOP。
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -137,8 +138,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // The default policy is MountOption
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // 默认策略为 MountOption
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -151,12 +152,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // SELinuxChangePolicy feature is disabled, but the default policy is MountOption anyway
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // SELinuxChangePolicy 特性虽关闭，但默认策略本就是 MountOption
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
-		// Tests with RWX volume
+		// RWX 卷场景
 		{
 			name:                  "one label, no policy, RWX",
 			featureGates:          nil,
@@ -166,8 +167,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // GetMountSELinuxLabel() does not check the access mode, it's up to the caller
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // GetMountSELinuxLabel() 不检查访问模式，交由调用方判断
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -180,8 +181,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, //  GetMountSELinuxLabel() does not check the access mode, it's up to the caller
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, //  GetMountSELinuxLabel() 不检查访问模式，交由调用方判断
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -194,8 +195,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // GetMountSELinuxLabel() does not check the access mode, it's up to the caller
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // GetMountSELinuxLabel() 不检查访问模式，交由调用方判断
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
@@ -208,12 +209,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // SELinuxMount FG + MountOption policy
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // SELinuxMount 特性开启 + MountOption 策略
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
-		// No plugin support
+		// 插件不支持 SELinux 场景
 		{
 			name:                  "one label, Recursive change policy, SELinuxChangePolicy, no plugin support",
 			featureGates:          []featuregate.Feature{features.SELinuxChangePolicy},
@@ -223,8 +224,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "",     // No plugin support
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 "",     // 插件不支持
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: false,
 			},
 		},
@@ -237,8 +238,8 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "",     // No plugin support
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 "",     // 插件不支持
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: false,
 			},
 		},
@@ -251,12 +252,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 "",     // No plugin support
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 "",     // 插件不支持
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: false,
 			},
 		},
-		// Corner cases
+		// 边界场景
 		{
 			name:                  "multiple same labels, no policy",
 			featureGates:          nil,
@@ -266,12 +267,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			seLinuxOptions:        []*v1.SELinuxOptions{&seLinuxOpts1, &seLinuxOpts1, &seLinuxOpts1, &seLinuxOpts1},
 			expectError:           false,
 			expectedInfo: SELinuxLabelInfo{
-				SELinuxMountLabel:                 label1, // The default policy is MountOption
-				SELinuxProcessLabel:               label1, // Pod has a label assigned
+				SELinuxMountLabel:                 label1, // 默认策略为 MountOption
+				SELinuxProcessLabel:               label1, // Pod 已分配标签
 				PluginSupportsSELinuxContextMount: true,
 			},
 		},
-		// Error cases
+		// 错误场景
 		{
 			name:                  "multiple different labels, no policy",
 			featureGates:          nil,
@@ -302,13 +303,12 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 		},
 	}
 
-	// Unlock GA feature gates (SELinuxChangePolicy, SELinuxMount) so they can be disabled in tests
+	// 将已 GA 的特性门控模拟版本降到 1.35，使测试中能够关闭它们。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
-			// Set feature gates for the test.
+			// 准备：按用例设置特性门控。
 			allGates := []featuregate.Feature{features.SELinuxChangePolicy, features.SELinuxMount}
 			enabledGates := sets.New(tt.featureGates...)
 			for _, fg := range allGates {
@@ -319,10 +319,10 @@ func TestGetMountSELinuxLabel(t *testing.T) {
 			pluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 			plugin.SupportsSELinux = tt.pluginSupportsSELinux
 
-			// Act
+			// 执行：计算标签。
 			info, err := GetMountSELinuxLabel(tt.volume, tt.seLinuxOptions, tt.podSecurityContext, pluginMgr, seLinuxTranslator)
 
-			// Assert
+			// 断言：校验错误与结果。
 			if err != nil {
 				if !tt.expectError {
 					t.Errorf("GetMountSELinuxLabel() unexpected error: %v", err)

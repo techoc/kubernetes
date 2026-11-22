@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package git_repo 包含 gitRepo 卷插件的单元测试。
 package git_repo
 
 import (
@@ -40,6 +41,7 @@ import (
 	fakeexec "k8s.io/utils/exec/testing"
 )
 
+// newTestHost 创建临时根目录及基于该目录的假卷主机。
 func newTestHost(t *testing.T) (string, volume.VolumeHost) {
 	tempDir, err := os.MkdirTemp("", "git_repo_test.")
 	if err != nil {
@@ -48,11 +50,13 @@ func newTestHost(t *testing.T) (string, volume.VolumeHost) {
 	return tempDir, volumetest.NewFakeVolumeHost(t, tempDir, nil, emptydir.ProbeVolumePlugins())
 }
 
+// TestCanSupport 验证 gitRepo 插件能被按名找到，且只支持 gitRepo 卷源。
 func TestCanSupport(t *testing.T) {
 	plugMgr := volume.VolumePluginMgr{}
 	tempDir, host := newTestHost(t)
 	defer os.RemoveAll(tempDir)
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	// 这里不探测插件健康状态，传 nil 探针即可。
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探针 */, host)
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/git-repo")
 	if err != nil {
@@ -66,14 +70,15 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
-// Expected command
+// expectedCommand 描述一次期望执行的 git 命令。
 type expectedCommand struct {
-	// The git command
+	// cmd 是期望执行的 git 命令及参数。
 	cmd []string
-	// The dir of git command is executed
+	// dir 是执行命令时所在的工作目录。
 	dir string
 }
 
+// scenario 描述一个测试用例：卷规格、期望命令序列及预期结果。
 type scenario struct {
 	name                  string
 	vol                   *v1.Volume
@@ -82,6 +87,7 @@ type scenario struct {
 	gitRepoPluginDisabled bool
 }
 
+// TestPlugin 覆盖有/无版本目录、启用/禁用特性开关及非法参数等挂载场景。
 func TestPlugin(t *testing.T) {
 	gitURL := "https://github.com/kubernetes/kubernetes.git"
 	revision := "2a30ce65c5ab586b98916d83385c5983edd353a1"
@@ -430,6 +436,7 @@ func TestPlugin(t *testing.T) {
 	for _, sc := range scenarios {
 		t.Run(fmt.Sprintf("%s/gitRepoPluginDisabled:%v", sc.name, sc.gitRepoPluginDisabled), func(t *testing.T) {
 
+			// 禁用插件时无需锁定仿真版本，让其使用当前版本。
 			if !sc.gitRepoPluginDisabled {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 			}
@@ -448,13 +455,15 @@ func TestPlugin(t *testing.T) {
 
 }
 
+// doTestPlugin 按场景执行插件的挂载与卸载流程，收集所有错误。
 func doTestPlugin(t *testing.T, sc scenario) []error {
 	allErrs := []error{}
 
 	plugMgr := volume.VolumePluginMgr{}
 	rootDir, host := newTestHost(t)
 	defer os.RemoveAll(rootDir)
-	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	// 测试不涉及健康探测，传 nil 探针即可。
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探针 */, host)
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/git-repo")
 	if err != nil {
@@ -484,7 +493,7 @@ func doTestPlugin(t *testing.T, sc scenario) []error {
 		return allErrs
 	}
 
-	// Test setUp()
+	// 验证 SetUp 阶段的命令序列与目录结构。
 	setUpErrs := doTestSetUp(sc, mounter)
 	allErrs = append(allErrs, setUpErrs...)
 
@@ -500,7 +509,7 @@ func doTestPlugin(t *testing.T, sc scenario) []error {
 
 	}
 
-	// gitRepo volume should create its own empty wrapper path
+	// gitRepo 卷应创建自己的空包装目录，用于存放卷元数据。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/poduid/plugins/kubernetes.io~empty-dir/wrapped_%v", rootDir, sc.vol.Name)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -540,16 +549,17 @@ func doTestPlugin(t *testing.T, sc scenario) []error {
 	return allErrs
 }
 
+// doTestSetUp 用假执行器验证 SetUp 发起的 git 命令、目录及调用次数。
 func doTestSetUp(sc scenario, mounter volume.Mounter) []error {
 	expecteds := sc.expecteds
 	allErrs := []error{}
 
-	// Construct combined outputs from expected commands
+	// 根据期望命令构造假执行器的输出脚本。
 	var fakeOutputs []fakeexec.FakeAction
 	var fcmd fakeexec.FakeCmd
 	for _, expected := range expecteds {
 		if expected.cmd[1] == "clone" {
-			// Calculate the subdirectory clone would create (if any)
+			// 推算 clone 可能创建的子目录：URL 去掉 .git 后缀后作为目录名。
 			// git clone -- https://github.com/kubernetes/kubernetes.git target_dir --> target_dir
 			// git clone -- https://github.com/kubernetes/kubernetes.git            --> kubernetes
 			// git clone -- https://github.com/kubernetes/kubernetes.git .          --> .
@@ -559,12 +569,12 @@ func doTestSetUp(sc scenario, mounter volume.Mounter) []error {
 				cloneSubdir = "kubernetes"
 			}
 			fakeOutputs = append(fakeOutputs, func() ([]byte, []byte, error) {
-				// git clone, it creates new dir/files
+				// 模拟 clone 创建新目录，供后续命令和路径校验使用。
 				os.MkdirAll(filepath.Join(fcmd.Dirs[0], expected.dir, cloneSubdir), 0750)
 				return []byte{}, nil, nil
 			})
 		} else {
-			// git checkout || git reset, they create nothing
+			// checkout 和 reset 不创建目录，无需额外动作。
 			fakeOutputs = append(fakeOutputs, func() ([]byte, []byte, error) {
 				return []byte{}, nil, nil
 			})
@@ -574,7 +584,7 @@ func doTestSetUp(sc scenario, mounter volume.Mounter) []error {
 		CombinedOutputScript: fakeOutputs,
 	}
 
-	// Construct fake exec outputs from fcmd
+	// 将 fcmd 包装成假执行器的命令脚本。
 	var fakeAction []fakeexec.FakeCommandAction
 	for i := 0; i < len(expecteds); i++ {
 		fakeAction = append(fakeAction, func(cmd string, args ...string) exec.Cmd {

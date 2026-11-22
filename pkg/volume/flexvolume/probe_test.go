@@ -36,21 +36,21 @@ const (
 	errorDriverName = "error-driver"
 )
 
+// assertPathSuffix 断言 dir2 以 dir1 结尾。
 func assertPathSuffix(t *testing.T, dir1 string, dir2 string) {
 	assert.True(t, strings.HasSuffix(dir2, dir1))
 }
 
-// Probes a driver installed before prober initialization.
+// 验证 prober 初始化前已安装的驱动能被探测到。
 func TestProberExistingDriverBeforeInit(t *testing.T) {
-	// Arrange
+	// 准备
 	driverPath, _, watcher, prober := initTestEnvironment(t)
 
-	// Act
+	// 执行
 	events, err := prober.Probe()
 
-	// Assert
-	// Probe occurs, 1 plugin should be returned, and 2 watches (pluginDir and all its
-	// current subdirectories) registered.
+	// 断言
+	// 首次 Probe 应返回 1 个插件，并注册 2 个 watch（pluginDir 及其当前所有子目录）。
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	plugDir := pluginDir
@@ -61,27 +61,27 @@ func TestProberExistingDriverBeforeInit(t *testing.T) {
 	assertPathSuffix(t, driverPath, watcher.watches[1])
 	assert.NoError(t, err)
 
-	// Should no longer probe.
+	// 不应再探测到插件。
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 }
 
-// Probes newly added drivers after prober is running.
+// 验证 prober 运行后新增的驱动能被探测到。
 func TestProberAddRemoveDriver(t *testing.T) {
-	// Arrange
+	// 准备
 	_, fs, watcher, prober := initTestEnvironment(t)
 	prober.Probe()
 	events, err := prober.Probe()
 	assert.NoError(t, err)
 	assert.Empty(t, events)
 
-	// Call probe after a file is added. Should return 1 event.
+	// 文件新增后调用 Probe，应返回 1 个事件。
 
-	// add driver
+	// 添加驱动
 	const driverName2 = "fake-driver2"
 	driverPath := filepath.Join(pluginDir, driverName2)
 	executablePath := filepath.Join(driverPath, driverName2)
@@ -89,102 +89,102 @@ func TestProberAddRemoveDriver(t *testing.T) {
 	watcher.TriggerEvent(fsnotify.Create, driverPath)
 	watcher.TriggerEvent(fsnotify.Create, executablePath)
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)                   // 1 newly added
-	assertPathSuffix(t, driverPath, watcher.watches[len(watcher.watches)-1]) // Checks most recent watch
+	assertPathSuffix(t, driverPath, watcher.watches[len(watcher.watches)-1]) // 检查最新的 watch
 	assert.NoError(t, err)
 
-	// Call probe again, should return 0 event.
+	// 再次调用 Probe，应返回 0 个事件。
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 
-	// Call probe after a non-driver file is added in a subdirectory. should return 1 event.
+	// 子目录新增非驱动文件后调用 Probe，应返回 1 个事件。
 	fp := filepath.Join(driverPath, "dummyfile")
 	fs.Create(fp)
 	watcher.TriggerEvent(fsnotify.Create, fp)
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	assert.NoError(t, err)
 
-	// Call probe again, should return 0 event.
-	// Act
+	// 再次调用 Probe，应返回 0 个事件。
+	// 执行
 	events, err = prober.Probe()
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 
-	// Call probe after a subdirectory is added in a driver directory. should return 1 event.
+	// 驱动目录新增子目录后调用 Probe，应返回 1 个事件。
 	subdirPath := filepath.Join(driverPath, "subdir")
 	fs.Create(subdirPath)
 	watcher.TriggerEvent(fsnotify.Create, subdirPath)
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	assert.NoError(t, err)
 
-	// Call probe again, should return 0 event.
-	// Act
+	// 再次调用 Probe，应返回 0 个事件。
+	// 执行
 	events, err = prober.Probe()
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 
-	// Call probe after a subdirectory is removed in a driver directory. should return 1 event.
+	// 驱动目录移除子目录后调用 Probe，应返回 1 个事件。
 	fs.Remove(subdirPath)
 	watcher.TriggerEvent(fsnotify.Remove, subdirPath)
 
-	// Act
+	// 执行
 	events, err = prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	assert.NoError(t, err)
 
-	// Call probe again, should return 0 event.
-	// Act
+	// 再次调用 Probe，应返回 0 个事件。
+	// 执行
 	events, err = prober.Probe()
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 
-	// Call probe after a driver executable and driver directory is remove. should return 1 event.
+	// 移除驱动可执行文件和目录后调用 Probe，应返回 1 个事件。
 	fs.Remove(executablePath)
 	fs.Remove(driverPath)
 	watcher.TriggerEvent(fsnotify.Remove, executablePath)
 	watcher.TriggerEvent(fsnotify.Remove, driverPath)
-	// Act and Assert: 1 ProbeRemove event
+	// 执行与断言：1 个 ProbeRemove 事件
 	events, err = prober.Probe()
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeRemove, events[0].Op)
 	assert.NoError(t, err)
 
-	// Act and Assert: 0 event
+	// 执行与断言：0 个事件
 	events, err = prober.Probe()
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 }
 
-// Tests the behavior when no drivers exist in the plugin directory.
+// 验证插件目录为空时的行为。
 func TestEmptyPluginDir(t *testing.T) {
-	// Arrange
+	// 准备
 	fs := utilfs.NewTempFs()
 	watcher := newFakeWatcher()
 	prober := &flexVolumeProber{
@@ -195,17 +195,17 @@ func TestEmptyPluginDir(t *testing.T) {
 	}
 	prober.Init()
 
-	// Act
+	// 执行
 	events, err := prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Empty(t, events)
 	assert.NoError(t, err)
 }
 
-// Issue an event to remove plugindir. New directory should still be watched.
+// 触发移除插件目录的事件，新目录仍应被 watch。
 func TestRemovePluginDir(t *testing.T) {
-	// Arrange
+	// 准备
 	driverPath, fs, watcher, _ := initTestEnvironment(t)
 	err := fs.RemoveAll(pluginDir)
 	assert.NoError(t, err)
@@ -213,9 +213,9 @@ func TestRemovePluginDir(t *testing.T) {
 	watcher.TriggerEvent(fsnotify.Remove, driverPath)
 	watcher.TriggerEvent(fsnotify.Remove, pluginDir)
 
-	// Act: The handler triggered by the above events should have already handled the event appropriately.
+	// 执行：上述事件触发的 handler 应已做相应处理。
 
-	// Assert
+	// 断言
 	assert.Len(t, watcher.watches, 3) // 2 from initial setup, 1 from new watch.
 	plugDir := pluginDir
 	if goruntime.GOOS == "windows" {
@@ -224,41 +224,41 @@ func TestRemovePluginDir(t *testing.T) {
 	assertPathSuffix(t, plugDir, watcher.watches[len(watcher.watches)-1])
 }
 
-// Issue an event to remove plugindir. New directory should still be watched.
+// 触发移除插件目录的事件，新目录仍应被 watch。
 func TestNestedDriverDir(t *testing.T) {
-	// Arrange
+	// 准备
 	_, fs, watcher, _ := initTestEnvironment(t)
-	// Assert
+	// 断言
 	assert.Len(t, watcher.watches, 2) // 2 from initial setup
 
-	// test add testDriverName
+	// 测试添加 testDriverName
 	testDriverName := "testDriverName"
 	testDriverPath := filepath.Join(pluginDir, testDriverName)
 	fs.MkdirAll(testDriverPath, 0777)
 	watcher.TriggerEvent(fsnotify.Create, testDriverPath)
-	// Assert
+	// 断言
 	assert.Len(t, watcher.watches, 3) // 2 from initial setup, 1 from new watch.
 	assertPathSuffix(t, testDriverPath, watcher.watches[len(watcher.watches)-1])
 
-	// test add nested subdir inside testDriverName
+	// 测试在 testDriverName 内添加嵌套子目录
 	basePath := testDriverPath
 	for i := 0; i < 10; i++ {
 		subdirName := "subdirName"
 		subdirPath := filepath.Join(basePath, subdirName)
 		fs.MkdirAll(subdirPath, 0777)
 		watcher.TriggerEvent(fsnotify.Create, subdirPath)
-		// Assert
+		// 断言
 		assert.Len(t, watcher.watches, 4+i) // 3 + newly added
 		assertPathSuffix(t, subdirPath, watcher.watches[len(watcher.watches)-1])
 		basePath = subdirPath
 	}
 }
 
-// Issue multiple events and probe multiple times.
+// 触发多个事件并多次调用 Probe。
 func TestProberMultipleEvents(t *testing.T) {
 	const iterations = 5
 
-	// Arrange
+	// 准备
 	_, fs, watcher, prober := initTestEnvironment(t)
 	for i := 0; i < iterations; i++ {
 		newDriver := fmt.Sprintf("multi-event-driver%d", 1)
@@ -268,10 +268,10 @@ func TestProberMultipleEvents(t *testing.T) {
 		watcher.TriggerEvent(fsnotify.Create, filepath.Join(driverPath, newDriver))
 	}
 
-	// Act
+	// 执行
 	events, err := prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 2)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[1].Op)
@@ -283,6 +283,7 @@ func TestProberMultipleEvents(t *testing.T) {
 	}
 }
 
+// TestProberError 验证驱动加载失败时 Probe 返回错误。
 func TestProberError(t *testing.T) {
 	fs := utilfs.NewTempFs()
 	watcher := newFakeWatcher()
@@ -299,9 +300,10 @@ func TestProberError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestProberSuccessAndError 验证部分驱动失败时仍返回成功驱动的事件。
 func TestProberSuccessAndError(t *testing.T) {
 
-	// Arrange
+	// 准备
 	fs := utilfs.NewTempFs()
 	watcher := newFakeWatcher()
 	prober := &flexVolumeProber{
@@ -317,27 +319,27 @@ func TestProberSuccessAndError(t *testing.T) {
 	driverPath := filepath.Join(pluginDir, errorDriverName)
 	watcher.TriggerEvent(fsnotify.Create, filepath.Join(driverPath, errorDriverName))
 
-	// Act
+	// 执行
 	events, err := prober.Probe()
 
-	// Assert
+	// 断言
 	assert.Len(t, events, 1)
 	assert.Equal(t, volume.ProbeAddOrUpdate, events[0].Op)
 	assert.Equal(t, driverName, events[0].PluginName)
 	assert.Error(t, err)
 }
 
-// Installs a mock driver (an empty file) in the mock fs.
+// 在 mock 文件系统中安装一个模拟驱动（空文件）。
 func installDriver(driverName string, fs utilfs.Filesystem) {
 	driverPath := filepath.Join(pluginDir, driverName)
 	fs.MkdirAll(driverPath, 0777)
 
-	// We need to close the file, otherwise we won't be able to remove it.
+	// 必须关闭文件，否则后续无法删除。
 	f, _ := fs.Create(filepath.Join(driverPath, driverName))
 	f.Close()
 }
 
-// Initializes mocks, installs a single driver in the mock fs, then initializes prober.
+// 初始化 mock，安装一个驱动，然后初始化 prober。
 func initTestEnvironment(t *testing.T) (
 	driverPath string,
 	fs utilfs.Filesystem,
@@ -360,17 +362,19 @@ func initTestEnvironment(t *testing.T) (
 	return
 }
 
-// Fake Flexvolume plugin
+// 模拟的 Flexvolume 插件
+// fakePluginFactory 是测试用的插件工厂，可指定某个驱动返回错误。
 type fakePluginFactory struct {
-	errorDriver string // the name of the driver in error
+	errorDriver string // 需要返回错误的驱动名
 }
 
 var _ PluginFactory = fakePluginFactory{}
 
+// NewFlexVolumePlugin 返回测试用插件；errorDriver 指定的驱动会返回错误。
 func (m fakePluginFactory) NewFlexVolumePlugin(_, driverName string, _ exec.Interface) (volume.VolumePlugin, error) {
 	if driverName == m.errorDriver {
 		return nil, fmt.Errorf("Flexvolume plugin error")
 	}
-	// Dummy Flexvolume plugin. Prober never interacts with the plugin.
+	// 空壳 Flexvolume 插件；Prober 不会与之交互。
 	return &flexVolumePlugin{driverName: driverName}, nil
 }

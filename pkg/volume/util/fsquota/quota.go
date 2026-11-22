@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fsquota 提供文件系统配额的探测与查询能力。
 package fsquota
 
 import (
@@ -26,30 +27,28 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/fsquota/common"
 )
 
-// Interface -- quota interface
+// Interface 定义配额机制的抽象接口。
 type Interface interface {
-	// GetQuotaOnDir gets the quota ID (if any) that applies to
-	// this directory
+	// GetQuotaOnDir 获取作用于该目录的配额 ID（若有）。
 	GetQuotaOnDir(m mount.Interface, path string) (common.QuotaID, error)
 
-	// Does the path provided support quotas, and if so, what types
+	// SupportsQuotas 判断给定路径是否支持配额。
 	SupportsQuotas(m mount.Interface, path string) (bool, error)
-	// Assign a quota (picked by the quota mechanism) to a path,
-	// and return it.
+	// AssignQuota 为路径分配一个由配额机制选定的配额并返回。
 	AssignQuota(m mount.Interface, path string, poduid types.UID, bytes *resource.Quantity) error
 
-	// Get the quota-based storage consumption for the path
+	// GetConsumption 获取该路径基于配额的存储使用量。
 	GetConsumption(path string) (*resource.Quantity, error)
 
-	// Get the quota-based inode consumption for the path
+	// GetInodes 获取该路径基于配额的 inode 使用量。
 	GetInodes(path string) (*resource.Quantity, error)
 
-	// Remove the quota from a path
-	// Implementations may assume that any data covered by the
-	// quota has already been removed.
+	// ClearQuota 移除路径上的配额。
+	// 实现可假定配额覆盖的数据已被删除。
 	ClearQuota(m mount.Interface, path string) error
 }
 
+// enabledQuotasForMonitoring 判断用于监控的配额特性是否启用。
 func enabledQuotasForMonitoring() bool {
 	return utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolationFSQuotaMonitoring)
 }

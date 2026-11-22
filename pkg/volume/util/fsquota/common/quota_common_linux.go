@@ -22,68 +22,53 @@ import (
 	"regexp"
 )
 
-// QuotaType -- type of quota to be applied
+// QuotaType 表示要应用的配额类型。
 type QuotaType int
 
 const (
-	// FSQuotaAccounting for quotas for accounting only
+	// FSQuotaAccounting 表示仅用于统计的配额。
 	FSQuotaAccounting QuotaType = 1 << iota
-	// FSQuotaEnforcing for quotas for enforcement
+	// FSQuotaEnforcing 表示强制执行的配额。
 	FSQuotaEnforcing QuotaType = 1 << iota
 )
 
-// FirstQuota is the quota ID we start with.
-// XXXXXXX Need a better way of doing this...
+// FirstQuota 是我们起始的配额 ID。
+// XXXXXXX 需要更好的做法...
 var FirstQuota QuotaID = 1048577
 
-// MountsFile is the location of the system mount data
+// MountsFile 是系统挂载数据的位置。
 var MountsFile = "/proc/self/mounts"
 
-// MountParseRegexp parses out /proc/sys/self/mounts
-var MountParseRegexp = regexp.MustCompilePOSIX("^([^ ]*)[ \t]*([^ ]*)[ \t]*([^ ]*)") // Ignore options etc.
+// MountParseRegexp 用于解析 /proc/sys/self/mounts。
+var MountParseRegexp = regexp.MustCompilePOSIX("^([^ ]*)[ \t]*([^ ]*)[ \t]*([^ ]*)") // 忽略选项等字段
 
-// LinuxVolumeQuotaProvider returns an appropriate quota applier
-// object if we can support quotas on this device
+// LinuxVolumeQuotaProvider 在设备支持配额时返回合适的配额执行器。
 type LinuxVolumeQuotaProvider interface {
-	// GetQuotaApplier retrieves an object that can apply
-	// quotas (or nil if this provider cannot support quotas
-	// on the device)
+	// GetQuotaApplier 返回可应用配额的对象；
+	// 若该 provider 无法在此设备上支持配额则返回 nil。
 	GetQuotaApplier(mountpoint string, backingDev string) LinuxVolumeQuotaApplier
 }
 
-// LinuxVolumeQuotaApplier is a generic interface to any quota
-// mechanism supported by Linux
+// LinuxVolumeQuotaApplier 是 Linux 支持的任意配额机制的通用接口。
 type LinuxVolumeQuotaApplier interface {
-	// GetQuotaOnDir gets the quota ID (if any) that applies to
-	// this directory
+	// GetQuotaOnDir 获取作用于该目录的配额 ID（如果有）。
 	GetQuotaOnDir(path string) (QuotaID, error)
 
-	// SetQuotaOnDir applies the specified quota ID to a directory.
-	// Negative value for bytes means that a non-enforcing quota
-	// should be applied (perhaps by setting a quota too large to
-	// be hit)
+	// SetQuotaOnDir 将指定的配额 ID 应用到目录。
+	// bytes 为负数时表示应用非强制配额（例如设一个大到用不上的上限）。
 	SetQuotaOnDir(path string, id QuotaID, bytes int64) error
 
-	// QuotaIDIsInUse determines whether the quota ID is in use.
-	// Implementations should not check /etc/project or /etc/projid,
-	// only whether their underlying mechanism already has the ID in
-	// use.
-	// Return value of false with no error means that the ID is not
-	// in use; true means that it is already in use.  An error
-	// return means that any quota ID will fail.
+	// QuotaIDIsInUse 判断配额 ID 是否已被使用。
+	// 实现不应检查 /etc/project 或 /etc/projid，只检查底层机制是否已占用该 ID。
+	// 返回 false 且无错误表示 ID 未被使用；true 表示已在使用。
+	// 返回错误则表示任何配额 ID 都会失败。
 	QuotaIDIsInUse(id QuotaID) (bool, error)
 
-	// GetConsumption returns the consumption (in bytes) of the
-	// directory, determined by the implementation's quota-based
-	// mechanism.  If it is unable to do so using that mechanism,
-	// it should return an error and allow higher layers to
-	// enumerate the directory.
+	// GetConsumption 返回目录的用量（字节），由实现的配额机制确定。
+	// 若无法通过该机制获取，应返回错误，让上层自行遍历目录。
 	GetConsumption(path string, id QuotaID) (int64, error)
 
-	// GetInodes returns the number of inodes used by the
-	// directory, determined by the implementation's quota-based
-	// mechanism.  If it is unable to do so using that mechanism,
-	// it should return an error and allow higher layers to
-	// enumerate the directory.
+	// GetInodes 返回目录占用的 inode 数，由实现的配额机制确定。
+	// 若无法通过该机制获取，应返回错误，让上层自行遍历目录。
 	GetInodes(path string, id QuotaID) (int64, error)
 }

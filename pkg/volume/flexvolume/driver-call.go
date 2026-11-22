@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	// Driver calls
+	// 驱动命令名
 	initCmd          = "init"
 	getVolumeNameCmd = "getvolumename"
 
@@ -47,7 +47,7 @@ const (
 	expandVolumeCmd = "expandvolume"
 	expandFSCmd     = "expandfs"
 
-	// Option keys
+	// 传给驱动的选项键
 	optionFSType         = "kubernetes.io/fsType"
 	optionReadWrite      = "kubernetes.io/readwrite"
 	optionKeySecret      = "kubernetes.io/secret"
@@ -62,18 +62,19 @@ const (
 )
 
 const (
-	// StatusSuccess represents the successful completion of command.
+	// StatusSuccess 表示命令执行成功。
 	StatusSuccess = "Success"
-	// StatusNotSupported represents that the command is not supported.
+	// StatusNotSupported 表示驱动不支持该命令。
 	StatusNotSupported = "Not supported"
 )
 
+// 驱动调用超时错误。
 var (
 	errTimeout = fmt.Errorf("timeout")
 )
 
-// DriverCall implements the basic contract between FlexVolume and its driver.
-// The caller is responsible for providing the required args.
+// DriverCall 封装 FlexVolume 与驱动之间的调用契约。
+// 调用方需负责按命令要求提供完整参数。
 type DriverCall struct {
 	Command string
 	Timeout time.Duration
@@ -81,10 +82,12 @@ type DriverCall struct {
 	args    []string
 }
 
+// NewDriverCall 创建一个无超时限制的驱动调用。
 func (plugin *flexVolumePlugin) NewDriverCall(command string) *DriverCall {
 	return plugin.NewDriverCallWithTimeout(command, 0)
 }
 
+// NewDriverCallWithTimeout 创建带指定超时的驱动调用。
 func (plugin *flexVolumePlugin) NewDriverCallWithTimeout(command string, timeout time.Duration) *DriverCall {
 	return &DriverCall{
 		Command: command,
@@ -94,12 +97,12 @@ func (plugin *flexVolumePlugin) NewDriverCallWithTimeout(command string, timeout
 	}
 }
 
-// Append appends arg into driver call argument list
+// Append 向驱动调用的参数列表追加一个参数。
 func (dc *DriverCall) Append(arg string) {
 	dc.args = append(dc.args, arg)
 }
 
-// AppendSpec appends volume spec to driver call argument list
+// AppendSpec 将卷规格序列化为 JSON 后追加到驱动调用参数列表。
 func (dc *DriverCall) AppendSpec(spec *volume.Spec, host volume.VolumeHost, extraOptions map[string]string) error {
 	optionsForDriver, err := NewOptionsForDriver(spec, host, extraOptions)
 	if err != nil {
@@ -115,7 +118,8 @@ func (dc *DriverCall) AppendSpec(spec *volume.Spec, host volume.VolumeHost, extr
 	return nil
 }
 
-// Run executes the driver call
+// Run 执行驱动调用并返回驱动状态。
+// 已知不支持的命令直接返回 Not supported，避免重复启动外部进程。
 func (dc *DriverCall) Run() (*DriverStatus, error) {
 	if dc.plugin.isUnsupported(dc.Command) {
 		return nil, errors.New(StatusNotSupported)
@@ -126,6 +130,7 @@ func (dc *DriverCall) Run() (*DriverStatus, error) {
 
 	timeout := false
 	if dc.Timeout > 0 {
+		// 超时时终止进程；用标志区分 timeout 与驱动自身报错。
 		timer := time.AfterFunc(dc.Timeout, func() {
 			timeout = true
 			cmd.Stop()
@@ -138,8 +143,11 @@ func (dc *DriverCall) Run() (*DriverStatus, error) {
 		if timeout {
 			return nil, errTimeout
 		}
+		// 即便进程退出码非零，也要解析输出：驱动可能在标准输出里
+		// 返回结构化的 "Not supported"，需据此缓存不支持状态。
 		_, err := handleCmdResponse(dc.Command, output)
 		if err == nil {
+			// 进程报错但响应声称成功，属于驱动 bug，仍按执行错误上报。
 			klog.Errorf("FlexVolume: driver bug: %s: exec error (%s) but no error in response.", execPath, execErr)
 			return nil, execErr
 		}
@@ -162,10 +170,10 @@ func (dc *DriverCall) Run() (*DriverStatus, error) {
 	return status, nil
 }
 
-// OptionsForDriver represents the spec given to the driver.
+// OptionsForDriver 表示传给驱动的卷规格选项（JSON 序列化后作为命令行参数）。
 type OptionsForDriver map[string]string
 
-// NewOptionsForDriver create driver options given volume spec
+// NewOptionsForDriver 根据卷规格构造驱动选项。
 func NewOptionsForDriver(spec *volume.Spec, host volume.VolumeHost, extraOptions map[string]string) (OptionsForDriver, error) {
 
 	volSourceFSType, err := getFSType(spec)
@@ -195,6 +203,7 @@ func NewOptionsForDriver(spec *volume.Spec, host volume.VolumeHost, extraOptions
 
 	options[optionPVorVolumeName] = spec.Name()
 
+	// 先写额外选项，再写卷自带选项：后者优先级更高，可覆盖前者。
 	for key, value := range extraOptions {
 		options[key] = value
 	}
@@ -206,28 +215,26 @@ func NewOptionsForDriver(spec *volume.Spec, host volume.VolumeHost, extraOptions
 	return OptionsForDriver(options), nil
 }
 
-// DriverStatus represents the return value of the driver callout.
+// DriverStatus 表示驱动调用的返回结构。
 type DriverStatus struct {
-	// Status of the callout. One of "Success", "Failure" or "Not supported".
+	// 调用状态，取值为 "Success"、"Failure" 或 "Not supported"。
 	Status string `json:"status"`
-	// Reason for success/failure.
+	// 成功或失败的原因说明。
 	Message string `json:"message,omitempty"`
-	// Path to the device attached. This field is valid only for attach calls.
-	// ie: /dev/sdx
+	// 已挂载设备的路径，仅对 attach 调用有效，例如 /dev/sdx。
 	DevicePath string `json:"device,omitempty"`
-	// Cluster wide unique name of the volume.
+	// 集群内唯一的卷名称。
 	VolumeName string `json:"volumeName,omitempty"`
-	// Represents volume is attached on the node
+	// 表示卷是否已挂载到当前节点。
 	Attached bool `json:"attached,omitempty"`
-	// Returns capabilities of the driver.
-	// By default we assume all the capabilities are supported.
-	// If the plugin does not support a capability, it can return false for that capability.
+	// 驱动支持的能力。默认假定全部支持；
+	// 若驱动不支持某项能力，可对该字段返回 false。
 	Capabilities *DriverCapabilities `json:",omitempty"`
-	// Returns the actual size of the volume after resizing is done, the size is in bytes.
+	// 扩容完成后卷的实际大小，单位为字节。
 	ActualVolumeSize int64 `json:"volumeNewSize,omitempty"`
 }
 
-// DriverCapabilities represents what driver can do
+// DriverCapabilities 描述驱动支持的能力。
 type DriverCapabilities struct {
 	Attach           bool `json:"attach"`
 	SELinuxRelabel   bool `json:"selinuxRelabel"`
@@ -236,6 +243,8 @@ type DriverCapabilities struct {
 	RequiresFSResize bool `json:"requiresFSResize"`
 }
 
+// defaultCapabilities 返回驱动能力的默认值：除指标采集外默认全部支持。
+// 驱动可通过响应覆盖这些默认值。
 func defaultCapabilities() *DriverCapabilities {
 	return &DriverCapabilities{
 		Attach:           true,
@@ -246,14 +255,13 @@ func defaultCapabilities() *DriverCapabilities {
 	}
 }
 
-// isCmdNotSupportedErr checks if the error corresponds to command not supported by
-// driver.
+// isCmdNotSupportedErr 判断错误是否表示驱动不支持该命令。
 func isCmdNotSupportedErr(err error) bool {
 	return err != nil && err.Error() == StatusNotSupported
 }
 
-// handleCmdResponse processes the command output and returns the appropriate
-// error code or message.
+// handleCmdResponse 解析驱动的标准输出，根据 status 字段返回状态或对应错误。
+// 未显式给出的能力字段由 defaultCapabilities 填充。
 func handleCmdResponse(cmd string, output []byte) (*DriverStatus, error) {
 	status := DriverStatus{
 		Capabilities: defaultCapabilities(),

@@ -23,6 +23,7 @@ import (
 	"k8s.io/utils/exec/testing"
 )
 
+// TestInit 验证插件初始化时会调用驱动的 init 命令。
 func TestInit(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()
@@ -34,6 +35,7 @@ func TestInit(tt *testing.T) {
 	plugin.Init(plugin.host)
 }
 
+// fakeVolumeNameOutput 构造包含指定卷名的驱动输出，供 getVolumeName 命令断言使用。
 func fakeVolumeNameOutput(name string) testingexec.FakeAction {
 	return fakeResultOutput(&DriverStatus{
 		Status:     StatusSuccess,
@@ -41,6 +43,7 @@ func fakeVolumeNameOutput(name string) testingexec.FakeAction {
 	})
 }
 
+// TestGetVolumeName 验证插件能从驱动返回的 Status 中解析出卷名。
 func TestGetVolumeName(tt *testing.T) {
 	t := harness.For(tt)
 	defer t.Close()

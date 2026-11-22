@@ -36,37 +36,39 @@ var quotaCmd string
 var quotaCmdInitialized bool
 var quotaCmdLock sync.RWMutex
 
-// If we later get a filesystem that uses project quota semantics other than
-// XFS, we'll need to change this.
-// Higher levels don't need to know what's inside
+// 若将来出现采用非 XFS 项目配额语义的文件系统，需要修改此处。
+// 上层无需感知内部细节。
 type linuxFilesystemType struct {
-	name             string
-	typeMagic        int64 // Filesystem magic number, per statfs(2)
-	maxQuota         int64
-	allowEmptyOutput bool // Accept empty output from "quota" command
+	name      string
+	typeMagic int64 // 文件系统魔数，见 statfs(2)
+	maxQuota  int64
+	// 是否接受 "quota" 命令输出为空。
+	allowEmptyOutput bool
 }
 
 const (
-	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
+	bitsPerWord = 32 << (^uint(0) >> 63) // 32 或 64
 )
 
 var (
 	linuxSupportedFilesystems = []linuxFilesystemType{
 		{
-			name:             "XFS",
-			typeMagic:        0x58465342,
-			maxQuota:         1<<(bitsPerWord-1) - 1,
-			allowEmptyOutput: true, // XFS filesystems report nothing if a quota is not present
+			name:      "XFS",
+			typeMagic: 0x58465342,
+			maxQuota:  1<<(bitsPerWord-1) - 1,
+			// 未设置配额时 XFS 不输出任何内容。
+			allowEmptyOutput: true,
 		}, {
-			name:             "ext4fs",
-			typeMagic:        0xef53,
-			maxQuota:         (1<<(bitsPerWord-1) - 1) & (1<<58 - 1),
-			allowEmptyOutput: false, // ext4 filesystems always report something even if a quota is not present
+			name:      "ext4fs",
+			typeMagic: 0xef53,
+			maxQuota:  (1<<(bitsPerWord-1) - 1) & (1<<58 - 1),
+			// 即使未设置配额，ext4 也总会输出内容。
+			allowEmptyOutput: false,
 		},
 	}
 )
 
-// VolumeProvider supplies a quota applier to the generic code.
+// VolumeProvider 向通用代码提供配额施加器。
 type VolumeProvider struct {
 }
 
@@ -81,8 +83,8 @@ var quotaParseRegexp = regexp.MustCompilePOSIX("^[^ \t]*[ \t]*([0-9]+)")
 var lsattrCmd = "/usr/bin/lsattr"
 var lsattrParseRegexp = regexp.MustCompilePOSIX("^ *([0-9]+) [^ ]+ (.*)$")
 
-// GetQuotaApplier -- does this backing device support quotas that
-// can be applied to directories?
+// GetQuotaApplier 判断该块设备是否支持可施加到目录上的配额；
+// 支持时返回对应的配额施加器。
 func (*VolumeProvider) GetQuotaApplier(mountpoint string, backingDev string) LinuxVolumeQuotaApplier {
 	for _, fsType := range linuxSupportedFilesystems {
 		if isFilesystemOfType(mountpoint, backingDev, fsType.typeMagic) {
@@ -95,12 +97,14 @@ func (*VolumeProvider) GetQuotaApplier(mountpoint string, backingDev string) Lin
 	return nil
 }
 
+// linuxVolumeQuotaApplier 在 Linux 文件系统上通过 xfs_quota 施加和查询项目配额。
 type linuxVolumeQuotaApplier struct {
 	mountpoint       string
 	maxQuota         int64
 	allowEmptyOutput bool
 }
 
+// getXFSQuotaCmd 查找并返回可用的 xfs_quota 可执行文件，结果带缓存。
 func getXFSQuotaCmd() (string, error) {
 	quotaCmdLock.Lock()
 	defer quotaCmdLock.Unlock()
@@ -120,13 +124,13 @@ func getXFSQuotaCmd() (string, error) {
 	return "", fmt.Errorf("no xfs_quota program found")
 }
 
+// doRunXFSQuotaCommand 使用指定的 mounts 文件执行 xfs_quota 命令。
 func doRunXFSQuotaCommand(mountpoint string, mountsFile, command string) (string, error) {
 	quotaCmd, err := getXFSQuotaCmd()
 	if err != nil {
 		return "", err
 	}
-	// We're using numeric project IDs directly; no need to scan
-	// /etc/projects or /etc/projid
+	// 直接使用数字形式的项目 ID，无需扫描 /etc/projects 或 /etc/projid。
 	klog.V(4).Infof("runXFSQuotaCommand %s -t %s -P/dev/null -D/dev/null -x -f %s -c %s", quotaCmd, mountsFile, mountpoint, command)
 	cmd := exec.Command(quotaCmd, "-t", mountsFile, "-P/dev/null", "-D/dev/null", "-x", "-f", mountpoint, "-c", command)
 
@@ -138,11 +142,9 @@ func doRunXFSQuotaCommand(mountpoint string, mountsFile, command string) (string
 	return string(data), nil
 }
 
-// Extract the mountpoint we care about into a temporary mounts file so that xfs_quota does
-// not attempt to scan every mount on the filesystem, which could hang if e. g.
-// a stuck NFS mount is present.
-// See https://bugzilla.redhat.com/show_bug.cgi?id=237120 for an example
-// of the problem that could be caused if this were to happen.
+// 把关心的挂载点提取到临时 mounts 文件，避免 xfs_quota 扫描文件系统上的所有挂载；
+// 例如存在卡住的 NFS 挂载时，全量扫描可能挂起。
+// 相关问题的实例参见 https://bugzilla.redhat.com/show_bug.cgi?id=237120 。
 func runXFSQuotaCommand(mountpoint string, command string) (string, error) {
 	tmpMounts, err := os.CreateTemp("", "mounts")
 	if err != nil {
@@ -177,7 +179,7 @@ func runXFSQuotaCommand(mountpoint string, command string) (string, error) {
 	return "", fmt.Errorf("cannot run xfs_quota: cannot find mount point %s in %s", mountpoint, MountsFile)
 }
 
-// SupportsQuotas determines whether the filesystem supports quotas.
+// SupportsQuotas 判断文件系统是否支持指定类型的配额。
 func SupportsQuotas(mountpoint string, qType QuotaType) (bool, error) {
 	data, err := runXFSQuotaCommand(mountpoint, "state -p")
 	if err != nil {
@@ -189,6 +191,7 @@ func SupportsQuotas(mountpoint string, qType QuotaType) (bool, error) {
 	return strings.Contains(data, "Accounting: ON"), nil
 }
 
+// isFilesystemOfType 判断挂载点是否为指定魔数对应的文件系统，且支持配额记账。
 func isFilesystemOfType(mountpoint string, backingDev string, typeMagic int64) bool {
 	var buf syscall.Statfs_t
 	err := syscall.Statfs(mountpoint, &buf)
@@ -205,9 +208,8 @@ func isFilesystemOfType(mountpoint string, backingDev string, typeMagic int64) b
 	return false
 }
 
-// GetQuotaOnDir retrieves the quota ID (if any) associated with the specified directory
-// If we can't make system calls, all we can say is that we don't know whether
-// it has a quota, and higher levels have to make the call.
+// GetQuotaOnDir 获取与指定目录关联的配额 ID（若有）。
+// 若无法执行系统调用，只能回答“未知”，由上层决定如何处理。
 func (v linuxVolumeQuotaApplier) GetQuotaOnDir(path string) (QuotaID, error) {
 	cmd := exec.Command(lsattrCmd, "-pd", path)
 	data, err := cmd.Output()
@@ -228,7 +230,7 @@ func (v linuxVolumeQuotaApplier) GetQuotaOnDir(path string) (QuotaID, error) {
 	return QuotaID(projid), nil
 }
 
-// SetQuotaOnDir applies a quota to the specified directory under the specified mountpoint.
+// SetQuotaOnDir 对指定挂载点下的目录施加配额。
 func (v linuxVolumeQuotaApplier) SetQuotaOnDir(path string, id QuotaID, bytes int64) error {
 	if bytes < 0 || bytes > v.maxQuota {
 		bytes = v.maxQuota
@@ -242,6 +244,7 @@ func (v linuxVolumeQuotaApplier) SetQuotaOnDir(path string, id QuotaID, bytes in
 	return err
 }
 
+// getQuantity 查询指定配额 ID 的用量，并按 multiplier 换算单位。
 func getQuantity(mountpoint string, id QuotaID, xfsQuotaArg string, multiplier int64, allowEmptyOutput bool) (int64, error) {
 	data, err := runXFSQuotaCommand(mountpoint, fmt.Sprintf("quota -p -N -n -v %s %v", xfsQuotaArg, id))
 	if err != nil {
@@ -262,18 +265,17 @@ func getQuantity(mountpoint string, id QuotaID, xfsQuotaArg string, multiplier i
 	return size * multiplier, nil
 }
 
-// GetConsumption returns the consumption in bytes if available via quotas
+// GetConsumption 通过配额返回已用字节数（若可用）。
 func (v linuxVolumeQuotaApplier) GetConsumption(_ string, id QuotaID) (int64, error) {
 	return getQuantity(v.mountpoint, id, "-b", 1024, v.allowEmptyOutput)
 }
 
-// GetInodes returns the inodes in use if available via quotas
+// GetInodes 通过配额返回已用 inode 数（若可用）。
 func (v linuxVolumeQuotaApplier) GetInodes(_ string, id QuotaID) (int64, error) {
 	return getQuantity(v.mountpoint, id, "-i", 1, v.allowEmptyOutput)
 }
 
-// QuotaIDIsInUse checks whether the specified quota ID is in use on the specified
-// filesystem
+// QuotaIDIsInUse 判断指定配额 ID 在文件系统上是否仍被使用。
 func (v linuxVolumeQuotaApplier) QuotaIDIsInUse(id QuotaID) (bool, error) {
 	bytes, err := v.GetConsumption(v.mountpoint, id)
 	if err != nil {

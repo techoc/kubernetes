@@ -22,12 +22,15 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// pluginDefaults 为未自行实现该方法的 flexVolume 插件提供默认行为。
 type pluginDefaults flexVolumePlugin
 
+// logPrefix 返回带驱动名的日志前缀，便于定位具体驱动。
 func logPrefix(plugin *flexVolumePlugin) string {
 	return "flexVolume driver " + plugin.driverName + ": "
 }
 
+// GetVolumeName 默认返回卷名本身；多数驱动无需自定义名称。
 func (plugin *pluginDefaults) GetVolumeName(spec *volume.Spec) (string, error) {
 	klog.V(4).Info(logPrefix((*flexVolumePlugin)(plugin)), "using default GetVolumeName for volume ", spec.Name())
 	return spec.Name(), nil

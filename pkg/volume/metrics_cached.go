@@ -23,8 +23,7 @@ import (
 
 var _ MetricsProvider = &cachedMetrics{}
 
-// cachedMetrics represents a MetricsProvider that wraps another provider and
-// caches the result.
+// cachedMetrics 包装另一个 MetricsProvider 并缓存其指标结果。
 type cachedMetrics struct {
 	wrapped       MetricsProvider
 	resultError   error
@@ -32,15 +31,13 @@ type cachedMetrics struct {
 	once          cacheOnce
 }
 
-// NewCachedMetrics creates a new cachedMetrics wrapping another
-// MetricsProvider and caching the results.
+// NewCachedMetrics 返回一个包装 provider 并缓存其结果的 MetricsProvider。
 func NewCachedMetrics(provider MetricsProvider) MetricsProvider {
 	return &cachedMetrics{wrapped: provider}
 }
 
-// GetMetrics runs the wrapped metrics provider's GetMetrics method once and
-// caches the result. Will not cache result if there is an error.
-// See MetricsProvider.GetMetrics
+// GetMetrics 调用被包装提供者的 GetMetrics 并缓存结果；出错时不缓存，
+// 以便下次调用重试。参见 MetricsProvider.GetMetrics。
 func (md *cachedMetrics) GetMetrics() (*Metrics, error) {
 	md.once.cache(func() error {
 		md.resultMetrics, md.resultError = md.wrapped.GetMetrics()
@@ -49,20 +46,18 @@ func (md *cachedMetrics) GetMetrics() (*Metrics, error) {
 	return md.resultMetrics, md.resultError
 }
 
-// Copied from sync.Once but we don't want to cache the results if there is an
-// error
+// cacheOnce 类似 sync.Once，但出错时不标记为完成，允许后续重试。
 type cacheOnce struct {
 	m    sync.Mutex
 	done uint32
 }
 
-// Copied from sync.Once but we don't want to cache the results if there is an
-// error
+// cache 最多执行一次成功调用 f；失败时保持未完成后续可重试。
 func (o *cacheOnce) cache(f func() error) {
 	if atomic.LoadUint32(&o.done) == 1 {
 		return
 	}
-	// Slow-path.
+	// 慢路径：加锁后再次确认。
 	o.m.Lock()
 	defer o.m.Unlock()
 	if o.done == 0 {

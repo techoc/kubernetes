@@ -25,21 +25,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// detacherDefaults 为未实现 Detacher 接口的插件提供默认空操作，嵌入后可按需覆盖。
 type detacherDefaults flexVolumeDetacher
 
-// Detach is part of the volume.Detacher interface.
+// Detach 是 volume.Detacher 接口的一部分，默认不执行任何分离操作。
 func (d *detacherDefaults) Detach(volumeName string, hostName types.NodeName) error {
 	klog.Warning(logPrefix(d.plugin.flexVolumePlugin), "using default Detach for volume ", volumeName, ", host ", hostName)
 	return nil
 }
 
-// WaitForDetach is part of the volume.Detacher interface.
+// WaitForDetach 是 volume.Detacher 接口的一部分，默认不等待，直接返回。
 func (d *detacherDefaults) WaitForDetach(devicePath string, timeout time.Duration) error {
 	klog.Warning(logPrefix(d.plugin.flexVolumePlugin), "using default WaitForDetach for device ", devicePath)
 	return nil
 }
 
-// UnmountDevice is part of the volume.Detacher interface.
+// UnmountDevice 是 volume.Detacher 接口的一部分，默认清理设备挂载点。
 func (d *detacherDefaults) UnmountDevice(deviceMountPath string) error {
 	klog.Warning(logPrefix(d.plugin.flexVolumePlugin), "using default UnmountDevice for device mount path ", deviceMountPath)
 	return mount.CleanupMountPoint(deviceMountPath, d.plugin.host.GetMounter(), false)

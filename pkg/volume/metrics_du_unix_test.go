@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// getExpectedBlockSize 返回指定文件系统上块的字节大小。
 func getExpectedBlockSize(path string) int64 {
 	statfs := &unix.Statfs_t{}
 	err := unix.Statfs(path, statfs)

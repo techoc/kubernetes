@@ -15,12 +15,9 @@ limitations under the License.
 */
 
 /*
-Package nestedpendingoperations is a modified implementation of
-pkg/util/goroutinemap. It implements a data structure for managing go routines
-by volume/pod name. It prevents the creation of new go routines if an existing
-go routine for the volume already exists. It also allows multiple operations to
-execute in parallel for the same volume as long as they are operating on
-different pods.
+Package nestedpendingoperations 是 pkg/util/goroutinemap 的改造版本。
+它提供按卷名/Pod 名管理 goroutine 的数据结构：若该卷已有 goroutine 在运行，则不再创建新的；
+同时允许同一卷上的多个操作在不同 Pod 上并行执行。
 */
 package nestedpendingoperations
 
@@ -37,85 +34,73 @@ import (
 )
 
 const (
-	// EmptyUniquePodName is a UniquePodName for empty string.
+	// EmptyUniquePodName 表示空字符串的 UniquePodName。
 	EmptyUniquePodName volumetypes.UniquePodName = volumetypes.UniquePodName("")
 
-	// EmptyUniqueVolumeName is a UniqueVolumeName for empty string
+	// EmptyUniqueVolumeName 表示空字符串的 UniqueVolumeName。
 	EmptyUniqueVolumeName v1.UniqueVolumeName = v1.UniqueVolumeName("")
 
-	// EmptyNodeName is a NodeName for empty string
+	// EmptyNodeName 表示空字符串的 NodeName。
 	EmptyNodeName types.NodeName = types.NodeName("")
 )
 
-// NestedPendingOperations defines the supported set of operations.
+// NestedPendingOperations 定义所支持的操作集合。
 type NestedPendingOperations interface {
 
-	// Run adds the concatenation of volumeName, podName, and nodeName to the list
-	// of running operations and spawns a new go routine to run
-	// generatedOperations.
+	// Run 把 volumeName、podName 和 nodeName 的组合加入运行中的操作列表，
+	// 并启动一个新的 goroutine 执行 generatedOperations。
 
-	// volumeName, podName, and nodeName collectively form the operation key.
-	// The following forms of operation keys are supported (two keys are designed
-	// to be "matched" if we want to serialize their operations):
-	// - volumeName empty, podName and nodeName could be anything
-	//   This key does not match with any keys.
-	// - volumeName exists, podName empty, nodeName empty
-	//   This key matches all other keys with the same volumeName.
-	// - volumeName exists, podName exists, nodeName empty
-	//   This key matches with:
-	//   - the same volumeName and podName
-	//   - the same volumeName, but empty podName
-	// - volumeName exists, podName empty, nodeName exists
-	//   This key matches with:
-	//   - the same volumeName and nodeName
-	//   - the same volumeName but empty nodeName
+	// volumeName、podName 和 nodeName 共同构成操作键。支持以下键形式
+	// （需要串行化两个键的操作时，称这两个键“匹配”）：
+	// - volumeName 为空，podName 和 nodeName 任意：
+	//   该键不与任何键匹配。
+	// - volumeName 非空，podName 为空，nodeName 为空：
+	//   该键与所有 volumeName 相同的键匹配。
+	// - volumeName 非空，podName 非空，nodeName 为空：
+	//   该键与以下键匹配：
+	//   - volumeName 和 podName 均相同
+	//   - volumeName 相同但 podName 为空
+	// - volumeName 非空，podName 为空，nodeName 非空：
+	//   该键与以下键匹配：
+	//   - volumeName 和 nodeName 均相同
+	//   - volumeName 相同但 nodeName 为空
 
-	// If there is no operation with a matching key, the operation is allowed to
-	// proceed.
-	// If an operation with a matching key exists and the previous operation is
-	// running, an AlreadyExists error is returned.
-	// If an operation with a matching key exists and the previous operation
-	// failed:
-	// - If the previous operation has the same
-	//   generatedOperations.operationName:
-	//   - If the full exponential backoff period is satisfied, the operation is
-	//     allowed to proceed.
-	//   - Otherwise, an ExponentialBackoff error is returned.
-	// - Otherwise, exponential backoff is reset and operation is allowed to
-	//   proceed.
+	// 若不存在匹配的键，则允许操作继续。
+	// 若存在匹配的键且前一个操作仍在运行，则返回 AlreadyExists 错误。
+	// 若存在匹配的键且前一个操作失败：
+	// - 若前一个操作与 generatedOperations.operationName 同名：
+	//   - 已满足完整的指数退避周期时，允许操作继续；
+	//   - 否则返回 ExponentialBackoff 错误。
+	// - 否则重置指数退避，允许操作继续。
 
-	// Once the operation is complete, the go routine is terminated. If the
-	// operation succeeded, its corresponding key is removed from the list of
-	// executing operations, allowing a new operation to be started with the key
-	// without error. If it failed, the key remains and the exponential
-	// backoff status is updated.
+	// 操作完成后 goroutine 即终止。若操作成功，其键会从执行中的操作列表移除，
+	// 之后可用该键无错地启动新操作；若失败，键会保留并更新指数退避状态。
 	Run(
 		volumeName v1.UniqueVolumeName,
 		podName volumetypes.UniquePodName,
 		nodeName types.NodeName,
 		generatedOperations volumetypes.GeneratedOperations) error
 
-	// Wait blocks until all operations are completed. This is typically
-	// necessary during tests - the test should wait until all operations finish
-	// and evaluate results after that.
+	// Wait 阻塞直到所有操作完成。测试通常需要调用它：
+	// 等待全部操作结束后再断言结果。
 	Wait()
 
-	// IsOperationPending returns true if an operation for the given volumeName
-	// and one of podName or nodeName is pending, otherwise it returns false
+	// IsOperationPending 若给定 volumeName 与 podName 或 nodeName 的操作仍在进行则返回 true，
+	// 否则返回 false。
 	IsOperationPending(
 		volumeName v1.UniqueVolumeName,
 		podName volumetypes.UniquePodName,
 		nodeName types.NodeName) bool
 
-	// IsOperationSafeToRetry returns false if an operation for the given volumeName
-	// and one of podName or nodeName is pending or in exponential backoff, otherwise it returns true
+	// IsOperationSafeToRetry 若给定 volumeName 与 podName 或 nodeName 的操作正在进行
+	// 或处于指数退避中则返回 false，否则返回 true。
 	IsOperationSafeToRetry(
 		volumeName v1.UniqueVolumeName,
 		podName volumetypes.UniquePodName,
 		nodeName types.NodeName, operationName string) bool
 }
 
-// NewNestedPendingOperations returns a new instance of NestedPendingOperations.
+// NewNestedPendingOperations 返回一个新的 NestedPendingOperations 实例。
 func NewNestedPendingOperations(exponentialBackOffOnError bool) NestedPendingOperations {
 	g := &nestedPendingOperations{
 		operations:                []operation{},
@@ -125,6 +110,7 @@ func NewNestedPendingOperations(exponentialBackOffOnError bool) NestedPendingOpe
 	return g
 }
 
+// nestedPendingOperations 维护操作列表及条件变量，实现操作的串行化与指数退避。
 type nestedPendingOperations struct {
 	operations                []operation
 	exponentialBackOffOnError bool
@@ -132,6 +118,7 @@ type nestedPendingOperations struct {
 	lock                      sync.RWMutex
 }
 
+// operation 记录一个操作键的挂起状态、名称与退避信息。
 type operation struct {
 	key              operationKey
 	operationName    string
@@ -139,6 +126,7 @@ type operation struct {
 	expBackoff       exponentialbackoff.ExponentialBackoff
 }
 
+// Run 登记操作并启动 goroutine；同名操作未结束时按退避规则拒绝或放行。
 func (grm *nestedPendingOperations) Run(
 	volumeName v1.UniqueVolumeName,
 	podName volumetypes.UniquePodName,
@@ -152,9 +140,9 @@ func (grm *nestedPendingOperations) Run(
 	opExists, previousOpIndex := grm.isOperationExists(opKey)
 	if opExists {
 		previousOp := grm.operations[previousOpIndex]
-		// Operation already exists
+		// 已有相同键的操作记录。
 		if previousOp.operationPending {
-			// Operation is pending
+			// 上一个操作尚未完成，不能并发启动。
 			return NewAlreadyExistsError(opKey)
 		}
 
@@ -163,16 +151,16 @@ func (grm *nestedPendingOperations) Run(
 			if previousOp.operationName == generatedOperations.OperationName {
 				return backOffErr
 			}
-			// previous operation and new operation are different. reset op. name and exp. backoff
+			// 前后是两个不同操作，退避状态不应沿用。
 			grm.operations[previousOpIndex].operationName = generatedOperations.OperationName
 			grm.operations[previousOpIndex].expBackoff = exponentialbackoff.ExponentialBackoff{}
 		}
 
-		// Update existing operation to mark as pending.
+		// 复用已有记录，标记为挂起。
 		grm.operations[previousOpIndex].operationPending = true
 		grm.operations[previousOpIndex].key = opKey
 	} else {
-		// Create a new operation
+		// 首次出现该键，新建记录。
 		grm.operations = append(grm.operations,
 			operation{
 				key:              opKey,
@@ -183,15 +171,17 @@ func (grm *nestedPendingOperations) Run(
 	}
 
 	go func() (eventErr, detailedErr error) {
-		// Handle unhandled panics (very unlikely)
+		// 兜底处理逃逸的 panic（概率很低）。
 		defer k8sRuntime.HandleCrash()
-		// Handle completion of and error, if any, from operationFunc()
+		// 无论成功失败都要清理挂起状态，否则该键会被永久占用。
 		defer grm.operationComplete(opKey, &detailedErr)
 		return generatedOperations.Run()
 	}()
 
 	return nil
 }
+
+// IsOperationSafeToRetry 判断同名操作是否可以安全重试。
 func (grm *nestedPendingOperations) IsOperationSafeToRetry(
 	volumeName v1.UniqueVolumeName,
 	podName volumetypes.UniquePodName,
@@ -220,6 +210,7 @@ func (grm *nestedPendingOperations) IsOperationSafeToRetry(
 	return true
 }
 
+// IsOperationPending 判断匹配的操作是否仍在执行。
 func (grm *nestedPendingOperations) IsOperationPending(
 	volumeName v1.UniqueVolumeName,
 	podName volumetypes.UniquePodName,
@@ -236,10 +227,10 @@ func (grm *nestedPendingOperations) IsOperationPending(
 	return false
 }
 
-// This is an internal function and caller should acquire and release the lock
+// isOperationExists 是内部函数，调用方需自行加锁/解锁。
 func (grm *nestedPendingOperations) isOperationExists(key operationKey) (bool, int) {
 
-	// If volumeName is empty, operation can be executed concurrently
+	// volumeName 为空表示操作互不关联，可以并发执行。
 	if key.volumeName == EmptyUniqueVolumeName {
 		return false, -1
 	}
@@ -261,12 +252,11 @@ func (grm *nestedPendingOperations) isOperationExists(key operationKey) (bool, i
 		nodeNameExactMatch := previousOp.key.nodeName == key.nodeName
 
 		if volumeNameMatch && podNameMatch && nodeNameMatch {
-			// nonExactMatch pending first
+			// 挂起的非精确匹配优先：已有操作在跑就必须串行化。
 			if previousOp.operationPending {
 				return true, previousOpIndex
 			}
-			// nonExactMatch with no pending, set opIndex to the first nonExactMatch
-			// exactMatch can override opIndex to expected
+			// 无挂起时先记下第一个非精确匹配；精确匹配可覆盖它。
 			if opIndex == -1 || (podNameExactMatch && nodeNameExactMatch) {
 				opIndex = previousOpIndex
 			}
@@ -276,8 +266,9 @@ func (grm *nestedPendingOperations) isOperationExists(key operationKey) (bool, i
 
 }
 
+// getOperation 查找键完全相同的操作，返回其下标。
 func (grm *nestedPendingOperations) getOperation(key operationKey) (uint, error) {
-	// Assumes lock has been acquired by caller.
+	// 假定调用方已加锁。
 
 	for i, op := range grm.operations {
 		if op.key.volumeName == key.volumeName &&
@@ -290,8 +281,9 @@ func (grm *nestedPendingOperations) getOperation(key operationKey) (uint, error)
 	return 0, fmt.Errorf("operation %+v not found", key)
 }
 
+// deleteOperation 删除键完全相同的操作记录。
 func (grm *nestedPendingOperations) deleteOperation(key operationKey) {
-	// Assumes lock has been acquired by caller.
+	// 假定调用方已加锁。
 
 	opIndex := -1
 	for i, op := range grm.operations {
@@ -307,34 +299,32 @@ func (grm *nestedPendingOperations) deleteOperation(key operationKey) {
 		return
 	}
 
-	// Delete index without preserving order
+	// 用末尾元素覆盖待删元素即可，列表本身无序。
 	grm.operations[opIndex] = grm.operations[len(grm.operations)-1]
 	grm.operations = grm.operations[:len(grm.operations)-1]
 }
 
+// operationComplete 在操作结束时清理挂起标记；失败时按配置保留键并更新退避状态。
 func (grm *nestedPendingOperations) operationComplete(key operationKey, err *error) {
-	// Defer operations are executed in Last-In is First-Out order. In this case
-	// the lock is acquired first when operationCompletes begins, and is
-	// released when the method finishes, after the lock is released cond is
-	// signaled to wake waiting goroutine.
+	// defer 后进先出：Signal 在锁释放之后执行，才能唤醒 Wait 中的 goroutine。
 	defer grm.cond.Signal()
 	grm.lock.Lock()
 	defer grm.lock.Unlock()
 
 	if *err == nil || !grm.exponentialBackOffOnError {
-		// Operation completed without error, or exponentialBackOffOnError disabled
+		// 操作成功，或未启用失败退避：直接删除记录。
 		grm.deleteOperation(key)
 		if *err != nil {
-			// Log error
+			// 记录被忽略的错误，便于排查。
 			klog.Errorf("operation %+v failed with: %v", key, *err)
 		}
 		return
 	}
 
-	// Operation completed with error and exponentialBackOffOnError Enabled
+	// 操作失败且启用了退避：保留记录以限制重试频率。
 	existingOpIndex, getOpErr := grm.getOperation(key)
 	if getOpErr != nil {
-		// Failed to find existing operation
+		// 记录异常：需要更新退避却找不到原操作。
 		klog.Errorf("Operation %+v completed. error: %v. exponentialBackOffOnError is enabled, but failed to get operation to update.",
 			key,
 			*err)
@@ -344,11 +334,12 @@ func (grm *nestedPendingOperations) operationComplete(key operationKey, err *err
 	grm.operations[existingOpIndex].expBackoff.Update(err)
 	grm.operations[existingOpIndex].operationPending = false
 
-	// Log error
+	// 输出禁止重试的剩余时间，方便判断何时可重试。
 	klog.Errorf("%v", grm.operations[existingOpIndex].expBackoff.
 		GenerateNoRetriesPermittedMsg(fmt.Sprintf("%+v", key)))
 }
 
+// Wait 阻塞直到操作列表清空。
 func (grm *nestedPendingOperations) Wait() {
 	grm.lock.Lock()
 	defer grm.lock.Unlock()
@@ -358,20 +349,19 @@ func (grm *nestedPendingOperations) Wait() {
 	}
 }
 
+// operationKey 由卷名、Pod 名和节点名组成，决定操作的匹配与串行化范围。
 type operationKey struct {
 	volumeName v1.UniqueVolumeName
 	podName    volumetypes.UniquePodName
 	nodeName   types.NodeName
 }
 
-// NewAlreadyExistsError returns a new instance of AlreadyExists error.
+// NewAlreadyExistsError 返回一个 AlreadyExists 错误实例。
 func NewAlreadyExistsError(key operationKey) error {
 	return alreadyExistsError{key}
 }
 
-// IsAlreadyExists returns true if an error returned from
-// NestedPendingOperations indicates a new operation can not be started because
-// an operation with the same operation name is already executing.
+// IsAlreadyExists 判断错误是否表示同名操作已在执行，因而无法启动新操作。
 func IsAlreadyExists(err error) bool {
 	switch err.(type) {
 	case alreadyExistsError:
@@ -381,15 +371,14 @@ func IsAlreadyExists(err error) bool {
 	}
 }
 
-// alreadyExistsError is the error returned by NestedPendingOperations when a
-// new operation can not be started because an operation with the same operation
-// name is already executing.
+// alreadyExistsError 表示因同名操作已在执行而无法启动新操作。
 type alreadyExistsError struct {
 	operationKey operationKey
 }
 
 var _ error = alreadyExistsError{}
 
+// Error 返回错误描述。
 func (err alreadyExistsError) Error() string {
 	return fmt.Sprintf(
 		"Failed to create operation with name %+v. An operation with that name is already executing.",

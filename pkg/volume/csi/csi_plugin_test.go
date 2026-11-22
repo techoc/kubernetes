@@ -42,20 +42,26 @@ import (
 )
 
 const (
+	// volumeHostType 表示使用通用 FakeVolumeHost。
 	volumeHostType int = iota
+	// kubeletVolumeHostType 表示使用 kubelet 侧 FakeVolumeHost。
 	kubeletVolumeHostType
+	// attachDetachVolumeHostType 表示使用 attach-detach 侧 FakeVolumeHost。
 	attachDetachVolumeHostType
 )
 
+// newTestPlugin 用 kubelet 侧 VolumeHost 构造测试用 csiPlugin，并返回插件与临时目录。
 func newTestPlugin(t *testing.T, client *fakeclient.Clientset) (*csiPlugin, string) {
 	return newTestPluginWithVolumeHost(t, client, kubeletVolumeHostType)
 }
 
+// newTestPluginWithAttachDetachVolumeHost 用 attach-detach 侧 VolumeHost 构造测试插件。
 func newTestPluginWithAttachDetachVolumeHost(t *testing.T, client *fakeclient.Clientset) (*csiPlugin, string) {
 	return newTestPluginWithVolumeHost(t, client, attachDetachVolumeHostType)
 }
 
-// create a plugin mgr to load plugins and setup a fake client
+// newTestPluginWithVolumeHost 创建插件管理器并加载插件，同时配置 fake 客户端。
+// hostType 决定采用哪种 VolumeHost 实现，以覆盖不同调用方的行为。
 func newTestPluginWithVolumeHost(t *testing.T, client *fakeclient.Clientset, hostType int) (*csiPlugin, string) {
 	tmpDir, err := utiltesting.MkTmpdir("csi-test")
 	if err != nil {
@@ -66,6 +72,7 @@ func newTestPluginWithVolumeHost(t *testing.T, client *fakeclient.Clientset, hos
 		client = fakeclient.NewSimpleClientset()
 	}
 
+	// 预置 fakeNode，部分 VolumeHost 实现会按节点名查找 Node 对象。
 	client.Tracker().Add(&api.Node{
 		ObjectMeta: meta.ObjectMeta{
 			Name: "fakeNode",
@@ -73,7 +80,7 @@ func newTestPluginWithVolumeHost(t *testing.T, client *fakeclient.Clientset, hos
 		Spec: api.NodeSpec{},
 	})
 
-	// Start informer for CSIDrivers.
+	// 启动 informer 并等待缓存同步，插件查询依赖 informer 的本地缓存。
 	factory := informers.NewSharedInformerFactory(client, CsiResyncPeriod)
 	csiDriverInformer := factory.Storage().V1().CSIDrivers()
 	csiDriverLister := csiDriverInformer.Lister()
@@ -143,6 +150,7 @@ func newTestPluginWithVolumeHost(t *testing.T, client *fakeclient.Clientset, hos
 	return csiPlug, tmpDir
 }
 
+// registerFakePlugin 在全局 csiDrivers 中注册一个 fake CSI 驱动，供插件查询使用。
 func registerFakePlugin(pluginName, endpoint string, versions []string, t *testing.T) {
 	highestSupportedVersions, err := utilversion.HighestSupportedVersion(versions)
 	if err != nil {
@@ -156,6 +164,7 @@ func registerFakePlugin(pluginName, endpoint string, versions []string, t *testi
 	})
 }
 
+// TestPluginGetPluginName 验证插件名固定为 kubernetes.io/csi。
 func TestPluginGetPluginName(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -164,6 +173,7 @@ func TestPluginGetPluginName(t *testing.T) {
 	}
 }
 
+// TestPluginGetVolumeName 验证按驱动名与卷名拼接出卷标识，并覆盖非法 spec 场景。
 func TestPluginGetVolumeName(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -203,7 +213,8 @@ func TestPluginGetVolumeName(t *testing.T) {
 			driverName: "test-driver",
 			volName:    "test.vol.name",
 			spec:       volume.NewSpecFromVolume(makeTestVol("test-pv", "test-driver")),
-			shouldFail: true, // csi inline feature off
+			// 未启用 CSI inline 特性，Volume 类型 spec 必然失败。
+			shouldFail: true,
 		},
 		{
 			name:       "missing spec",
@@ -228,6 +239,7 @@ func TestPluginGetVolumeName(t *testing.T) {
 	}
 }
 
+// TestPluginGetVolumeNameWithInline 验证 CSIDriver 仅支持持久卷时内联卷 spec 被拒绝。
 func TestPluginGetVolumeNameWithInline(t *testing.T) {
 	modes := []storage.VolumeLifecycleMode{
 		storage.VolumeLifecyclePersistent,
@@ -279,6 +291,7 @@ func TestPluginGetVolumeNameWithInline(t *testing.T) {
 	}
 }
 
+// TestPluginCanSupport 验证插件对不同 spec 是否声明支持。
 func TestPluginCanSupport(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -316,6 +329,7 @@ func TestPluginCanSupport(t *testing.T) {
 	}
 }
 
+// TestPluginConstructVolumeSpec 验证从卷信息文件重建 spec，包括 SELinux 上下文与特性开关的影响。
 func TestPluginConstructVolumeSpec(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -362,8 +376,9 @@ func TestPluginConstructVolumeSpec(t *testing.T) {
 			volHandle:                 "handle4",
 			originSELinuxMountContext: "system_u:object_r:container_file_t:s0:c314,c894",
 			originSpec:                volume.NewSpecFromPersistentVolume(makeTestPV("spec4", 20, testDriver, "handle4"), true),
-			expectedSELinuxContext:    "", // The context is cleared when the feature gate is off
-			podUID:                    types.UID(fmt.Sprintf("%08X", rand.Uint64())),
+			// 特性门控关闭时 SELinux 上下文会被清空。
+			expectedSELinuxContext: "",
+			podUID:                 types.UID(fmt.Sprintf("%08X", rand.Uint64())),
 		},
 	}
 
@@ -394,7 +409,7 @@ func TestPluginConstructVolumeSpec(t *testing.T) {
 				t.Fatalf("failed to save fake volume info file: %s", err)
 			}
 
-			// rebuild spec
+			// 从落盘的卷信息文件重建 spec，模拟 kubelet 重启后的恢复流程。
 			rec, err := plug.ConstructVolumeSpec("test-pv", filepath.Dir(csiMounter.GetPath()))
 			if err != nil {
 				t.Fatal(err)
@@ -403,7 +418,7 @@ func TestPluginConstructVolumeSpec(t *testing.T) {
 				t.Fatal("nil volume.Spec constructed")
 			}
 
-			// inspect spec
+			// 检查重建出的 spec 各字段是否还原正确。
 			if rec.Spec.PersistentVolume == nil || rec.Spec.PersistentVolume.Spec.CSI == nil {
 				t.Fatal("CSIPersistentVolume not found in constructed spec ")
 			}
@@ -436,6 +451,7 @@ func TestPluginConstructVolumeSpec(t *testing.T) {
 	}
 }
 
+// TestPluginConstructVolumeSpecWithInline 验证持久卷与内联卷 spec 的重建，以及生命周期模式缺失时的失败路径。
 func TestPluginConstructVolumeSpecWithInline(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -531,7 +547,7 @@ func TestPluginConstructVolumeSpecWithInline(t *testing.T) {
 				t.Fatalf("failed to save fake volume info file: %s", err)
 			}
 
-			// rebuild spec
+			// 从数据文件重建 spec。
 			rec, err := plug.ConstructVolumeSpec("test-pv", filepath.Dir(csiMounter.GetPath()))
 			if err != nil {
 				t.Fatal(err)
@@ -579,6 +595,7 @@ func TestPluginConstructVolumeSpecWithInline(t *testing.T) {
 	}
 }
 
+// TestPluginNewMounter 验证持久卷与内联卷均能创建 mounter，并检查其字段。
 func TestPluginNewMounter(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -601,7 +618,8 @@ func TestPluginNewMounter(t *testing.T) {
 			podUID:              types.UID(fmt.Sprintf("%08X", rand.Uint64())),
 			namespace:           "test-ns2",
 			volumeLifecycleMode: storage.VolumeLifecycleEphemeral,
-			shouldFail:          false, // NewMounter works with disabled inline volumes
+			// NewMounter 在内联卷特性关闭时仍可工作。
+			shouldFail: false,
 		},
 		{
 			name:       "mounter from no spec provided",
@@ -632,7 +650,7 @@ func TestPluginNewMounter(t *testing.T) {
 			}
 			csiMounter := mounter.(*csiMountMgr)
 
-			// validate mounter fields
+			// 校验 mapper 各字段是否设置正确。
 			if string(csiMounter.driverName) != testDriver {
 				t.Error("mounter driver name not set")
 			}
@@ -659,6 +677,7 @@ func TestPluginNewMounter(t *testing.T) {
 	}
 }
 
+// TestPluginNewMounterWithInline 验证在驱动支持不同生命周期模式组合时 mounter 的创建行为。
 func TestPluginNewMounterWithInline(t *testing.T) {
 	bothModes := []storage.VolumeLifecycleMode{
 		storage.VolumeLifecycleEphemeral,
@@ -722,7 +741,7 @@ func TestPluginNewMounterWithInline(t *testing.T) {
 					&api.Pod{ObjectMeta: meta.ObjectMeta{UID: test.podUID, Namespace: test.namespace}},
 				)
 
-				// Some test cases are meant to fail because their input data is broken.
+				// 部分用例的输入 spec 本身不合法，预期创建 mounter 失败。
 				shouldFail := test.shouldFail
 				if shouldFail != (err != nil) {
 					t.Fatal("Unexpected error:", err)
@@ -737,7 +756,7 @@ func TestPluginNewMounterWithInline(t *testing.T) {
 				}
 				csiMounter := mounter.(*csiMountMgr)
 
-				// validate mounter fields
+				// 校验 mounter 各字段是否设置正确。
 				if string(csiMounter.driverName) != testDriver {
 					t.Error("mounter driver name not set")
 				}
@@ -772,6 +791,7 @@ func TestPluginNewMounterWithInline(t *testing.T) {
 	})
 }
 
+// TestPluginNewUnmounter 验证从保存的卷数据重建 unmounter 并恢复必要字段。
 func TestPluginNewUnmounter(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -779,7 +799,7 @@ func TestPluginNewUnmounter(t *testing.T) {
 	registerFakePlugin(testDriver, "endpoint", []string{"1.0.0"}, t)
 	pv := makeTestPV("test-pv", 10, testDriver, testVol)
 
-	// save the data file to re-create client
+	// 先落盘卷数据，unmounter 需从文件恢复驱动信息以重建客户端。
 	dir := filepath.Join(getTargetPath(testPodUID, pv.ObjectMeta.Name, plug.host), "/mount")
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
@@ -797,7 +817,7 @@ func TestPluginNewUnmounter(t *testing.T) {
 		t.Fatalf("failed to save volume data: %v", err)
 	}
 
-	// test unmounter
+	// 验证 unmounter 能从数据文件恢复上下文。
 	unmounter, err := plug.NewUnmounter(pv.ObjectMeta.Name, testPodUID)
 	csiUnmounter := unmounter.(*csiMountMgr)
 
@@ -819,6 +839,7 @@ func TestPluginNewUnmounter(t *testing.T) {
 	}
 }
 
+// TestPluginNewAttacher 验证创建 attacher 时插件、客户端与超时均已设置。
 func TestPluginNewAttacher(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -840,6 +861,7 @@ func TestPluginNewAttacher(t *testing.T) {
 	}
 }
 
+// TestPluginNewDetacher 验证创建 detacher 时插件、客户端与超时均已设置。
 func TestPluginNewDetacher(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -861,6 +883,7 @@ func TestPluginNewDetacher(t *testing.T) {
 	}
 }
 
+// TestPluginCanAttach 验证根据 CSIDriver 的 attachRequired 判断卷是否可挂载。
 func TestPluginCanAttach(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -914,6 +937,7 @@ func TestPluginCanAttach(t *testing.T) {
 	}
 }
 
+// TestPluginFindAttachablePlugin 验证按 spec 查找可挂载插件的结果与驱动的 attachRequired 一致。
 func TestPluginFindAttachablePlugin(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -989,6 +1013,7 @@ func TestPluginFindAttachablePlugin(t *testing.T) {
 	}
 }
 
+// TestPluginCanDeviceMount 验证设备挂载能力由 CSIDriver 配置决定。
 func TestPluginCanDeviceMount(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1040,6 +1065,7 @@ func TestPluginCanDeviceMount(t *testing.T) {
 	}
 }
 
+// TestPluginFindDeviceMountablePluginBySpec 验证按 spec 查找支持设备挂载的插件。
 func TestPluginFindDeviceMountablePluginBySpec(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1104,6 +1130,7 @@ func TestPluginFindDeviceMountablePluginBySpec(t *testing.T) {
 	}
 }
 
+// TestPluginNewBlockMapper 验证块设备 mapper 创建成功且数据文件已落盘。
 func TestPluginNewBlockMapper(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -1123,7 +1150,7 @@ func TestPluginNewBlockMapper(t *testing.T) {
 	}
 	csiMapper := mounter.(*csiBlockMapper)
 
-	// validate mounter fields
+	// 校验 mapper 各字段是否设置正确。
 	if string(csiMapper.driverName) != testDriver {
 		t.Error("CSI block mapper missing driver name")
 	}
@@ -1139,7 +1166,7 @@ func TestPluginNewBlockMapper(t *testing.T) {
 		t.Errorf("mapper csiClient is nil: %v", err)
 	}
 
-	// ensure data file is created
+	// 数据文件落盘是 mapper 正常工作的前置条件。
 	dataFile := getVolumeDeviceDataDir(csiMapper.spec.Name(), plug.host)
 	if _, err := os.Stat(dataFile); err != nil {
 		if os.IsNotExist(err) {
@@ -1150,6 +1177,7 @@ func TestPluginNewBlockMapper(t *testing.T) {
 	}
 }
 
+// TestPluginNewUnmapper 验证从保存的数据重建块设备 unmapper 并恢复卷信息。
 func TestPluginNewUnmapper(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -1157,7 +1185,7 @@ func TestPluginNewUnmapper(t *testing.T) {
 	registerFakePlugin(testDriver, "endpoint", []string{"1.0.0"}, t)
 	pv := makeTestPV("test-pv", 10, testDriver, testVol)
 
-	// save the data file to re-create client
+	// 先落盘卷数据，unmapper 需从文件恢复驱动信息以重建客户端。
 	dir := getVolumeDeviceDataDir(pv.ObjectMeta.Name, plug.host)
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
@@ -1175,7 +1203,7 @@ func TestPluginNewUnmapper(t *testing.T) {
 		t.Fatalf("failed to save volume data: %v", err)
 	}
 
-	// test unmounter
+	// 验证 unmapper 能从数据文件恢复上下文。
 	unmapper, err := plug.NewBlockVolumeUnmapper(pv.ObjectMeta.Name, testPodUID)
 	csiUnmapper := unmapper.(*csiBlockMapper)
 
@@ -1200,7 +1228,7 @@ func TestPluginNewUnmapper(t *testing.T) {
 		t.Errorf("unmapper csiClient is nil: %v", err)
 	}
 
-	// test loaded vol data
+	// 校验从数据文件加载出的卷信息。
 	if string(csiUnmapper.driverName) != testDriver {
 		t.Error("unmapper driverName not set")
 	}
@@ -1209,6 +1237,7 @@ func TestPluginNewUnmapper(t *testing.T) {
 	}
 }
 
+// TestPluginConstructBlockVolumeSpec 验证从卷数据文件重建块卷 spec。
 func TestPluginConstructBlockVolumeSpec(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -1230,7 +1259,7 @@ func TestPluginConstructBlockVolumeSpec(t *testing.T) {
 		t.Logf("test case: %s", tc.name)
 		deviceDataDir := getVolumeDeviceDataDir(tc.specVolID, plug.host)
 
-		// create data file in csi plugin dir
+		// 在插件目录下放置数据文件，供 ConstructBlockVolumeSpec 读取。
 		if tc.data != nil {
 			if err := os.MkdirAll(deviceDataDir, 0755); err != nil && !os.IsNotExist(err) {
 				t.Errorf("failed to create dir [%s]: %v", deviceDataDir, err)
@@ -1240,7 +1269,7 @@ func TestPluginConstructBlockVolumeSpec(t *testing.T) {
 			}
 		}
 
-		// rebuild spec
+		// 从数据文件重建块卷 spec。
 		spec, err := plug.ConstructBlockVolumeSpec("test-podUID", tc.specVolID, getVolumeDevicePluginDir(tc.specVolID, plug.host))
 		if tc.shouldFail {
 			if err == nil {
@@ -1268,6 +1297,7 @@ func TestPluginConstructBlockVolumeSpec(t *testing.T) {
 	}
 }
 
+// TestValidatePlugin 验证驱动注册时版本号的校验规则。
 func TestValidatePlugin(t *testing.T) {
 	testCases := []struct {
 		pluginName string
@@ -1356,10 +1386,10 @@ func TestValidatePlugin(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Arrange & Act
+		// 执行待校验的驱动注册。
 		err := PluginHandler.ValidatePlugin(t.Context(), tc.pluginName, tc.endpoint, tc.versions)
 
-		// Assert
+		// 校验预期结果与实际错误是否一致。
 		if tc.shouldFail && err == nil {
 			t.Fatalf("expecting ValidatePlugin to fail, but got nil error for testcase: %#v", tc)
 		}
@@ -1369,6 +1399,7 @@ func TestValidatePlugin(t *testing.T) {
 	}
 }
 
+// TestValidatePluginExistingDriver 验证同名或同 endpoint 驱动的冲突检测。
 func TestValidatePluginExistingDriver(t *testing.T) {
 	testCases := []struct {
 		pluginName1 string
@@ -1409,7 +1440,7 @@ func TestValidatePluginExistingDriver(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Arrange & Act
+		// 先注册第一个驱动，再校验第二个是否冲突。
 		highestSupportedVersions1, err := utilversion.HighestSupportedVersion(tc.versions1)
 		if err != nil {
 			t.Fatalf("unexpected error parsing version for testcase: %#v: %v", tc, err)
@@ -1421,10 +1452,10 @@ func TestValidatePluginExistingDriver(t *testing.T) {
 			highestSupportedVersion: highestSupportedVersions1,
 		})
 
-		// Arrange & Act
+		// 校验第二个驱动能否与已注册驱动共存。
 		err = PluginHandler.ValidatePlugin(t.Context(), tc.pluginName2, tc.endpoint2, tc.versions2)
 
-		// Assert
+		// 校验预期结果与实际错误是否一致。
 		if tc.shouldFail && err == nil {
 			t.Fatalf("expecting ValidatePlugin to fail, but got nil error for testcase: %#v", tc)
 		}
@@ -1434,6 +1465,7 @@ func TestValidatePluginExistingDriver(t *testing.T) {
 	}
 }
 
+// TestGetNodeAllocatableUpdatePeriod 验证从 CSIDriver 读取可分配资源更新周期，缺省为零。
 func TestGetNodeAllocatableUpdatePeriod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1475,6 +1507,7 @@ func TestGetNodeAllocatableUpdatePeriod(t *testing.T) {
 	}
 }
 
+// TestIsResourceExhaustError 验证仅 ResourceExhausted 错误码被识别为资源耗尽。
 func TestIsResourceExhaustError(t *testing.T) {
 	tests := []struct {
 		name       string

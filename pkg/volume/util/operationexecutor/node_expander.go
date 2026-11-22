@@ -31,28 +31,28 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// NodeExpander 负责在节点侧执行卷扩容，并处理扩容状态与错误标记。
 type NodeExpander struct {
 	nodeResizeOperationOpts
 	kubeClient clientset.Interface
 	recorder   record.EventRecorder
 
-	// computed via precheck
+	// 由预检查计算得出。
 	pvcStatusCap resource.Quantity
 	resizeStatus v1.ClaimResourceStatus
 
-	// indicates that if volume expansion failed on the node, then current expansion should be marked
-	// as infeasible so as controller can reconcile the resizing operation by using new user requested size.
+	// 若节点扩容失败，应将本次扩容标记为不可行，使控制器按用户新请求的大小重新协调。
 	markExpansionInfeasibleOnFailure bool
 
-	// pvcAlreadyUpdated if true indicates that although we are calling NodeExpandVolume on the kubelet
-	// PVC has already been updated - possibly because expansion already succeeded on different node.
-	// This can happen when a RWX PVC is expanded.
+	// pvcAlreadyUpdated 为真表示虽然 kubelet 仍在调用 NodeExpandVolume，
+	// PVC 实际已更新——可能扩容已在其他节点完成。RWX PVC 扩容时会遇到这种情况。
 	pvcAlreadyUpdated bool
 
-	// testStatus is used for testing purposes only.
+	// testStatus 仅供单元测试使用。
 	testStatus testResponseData
 }
 
+// newNodeExpander 创建节点扩容器。
 func newNodeExpander(resizeOp nodeResizeOperationOpts, client clientset.Interface, recorder record.EventRecorder) *NodeExpander {
 	return &NodeExpander{
 		kubeClient:              client,
@@ -61,23 +61,17 @@ func newNodeExpander(resizeOp nodeResizeOperationOpts, client clientset.Interfac
 	}
 }
 
-// testResponseData is merely used for doing sanity checks in unit tests
+// testResponseData 仅用于单元测试中的断言。
 type testResponseData struct {
-	// indicates that resize operation was called on underlying volume driver
-	// mainly useful for testing.
+	// 是否调用了底层卷驱动的扩容操作，主要用于测试。
 	resizeCalledOnPlugin bool
 
-	// Indicates whether kubelet should assume resize operation as finished.
-	// For kubelet - resize operation could be assumed as finished even if
-	// actual resizing is *not* finished. This can happen, because certain prechecks
-	// are failing and kubelet should not retry expansion, or it could happen
-	// because resize operation is genuinely finished.
+	// kubelet 是否可认为扩容已结束。即使实际扩容并未完成，某些预检失败时
+	// kubelet 也不应重试，此时同样视为结束；当然也可能是真的完成了。
 	assumeResizeFinished bool
 }
 
-// runPreCheck performs some sanity checks before expansion can be performed on the PVC.
-// This function returns true only if node expansion is allowed to proceed otherwise
-// it returns false.
+// runPreCheck 在扩容前做健全性检查；仅当允许继续节点扩容时返回 true。
 func (ne *NodeExpander) runPreCheck() bool {
 	ne.pvcStatusCap = ne.pvc.Status.Capacity[v1.ResourceStorage]
 
@@ -88,10 +82,8 @@ func (ne *NodeExpander) runPreCheck() bool {
 
 	pvcSpecCap := ne.pvc.Spec.Resources.Requests[v1.ResourceStorage]
 
-	// usually when are performing node expansion, we expect pv size and pvc spec size
-	// to be the same, but if user has edited pvc since then and volume expansion failed
-	// with final error, then we should let controller reconcile this state, by marking entire
-	// node expansion as infeasible.
+	// 通常节点扩容时 PV 与 PVC 规格大小应一致；若用户中途改过 PVC 且扩容以最终错误告终，
+	// 应把整个节点扩容标记为不可行，交由控制器重新协调。
 	if pvcSpecCap.Cmp(ne.pluginResizeOpts.NewSize) != 0 &&
 		ne.actualStateOfWorld.CheckVolumeInFailedExpansionWithFinalErrors(ne.vmt.VolumeName) {
 		ne.markExpansionInfeasibleOnFailure = true
@@ -101,27 +93,23 @@ func (ne *NodeExpander) runPreCheck() bool {
 		ne.pvcAlreadyUpdated = true
 	}
 
-	// if the volume is already expanded, but volume is of type RWX and
-	// pvc doesn't have annotation indicating that node expansion is not required
-	// then we should allow node expansion to proceed, even if the volume is already expanded.
+	// 卷已扩容但为 RWX 类型、且 PVC 未标注无需节点扩容时，仍应允许节点扩容继续。
 	//
-	// This special cases is needed because, in case of RWX volumes, the volume expansion
-	// should be performed on all nodes, even if the volume is already expanded.
+	// RWX 卷的扩容必须在所有节点上执行，即便卷本身已经扩容过，故需此特例。
 	if ne.pvcAlreadyUpdated &&
 		storage.ContainsAccessMode(ne.pvc.Spec.AccessModes, v1.ReadWriteMany) &&
 		!metav1.HasAnnotation(ne.pvc.ObjectMeta, volumetypes.NodeExpansionNotRequired) {
 		return true
 	}
 
-	// recovery features will only work for newer version of resize controller
+	// 恢复特性仅在新版扩容控制器上可用。
 	if ne.resizeStatus == "" {
 		return false
 	}
 
 	resizeStatusVal := ne.resizeStatus
 
-	// if resizestatus is nil or NodeExpansionInProgress or NodeExpansionPending then we
-	// should allow volume expansion on the node to proceed.
+	// resizeStatus 为空、NodeExpansionInProgress 或 NodeExpansionPending 时，允许节点扩容继续。
 	if resizeStatusVal == v1.PersistentVolumeClaimNodeResizePending ||
 		resizeStatusVal == v1.PersistentVolumeClaimNodeResizeInProgress {
 		return true
@@ -129,13 +117,14 @@ func (ne *NodeExpander) runPreCheck() bool {
 	return false
 }
 
+// expandOnPlugin 在预检通过后调用卷插件执行节点扩容，并更新 PVC 状态；
+// 返回是否成功、当前卷大小及错误。
 func (ne *NodeExpander) expandOnPlugin() (bool, resource.Quantity, error) {
 	allowExpansion := ne.runPreCheck()
 	if !allowExpansion {
 		if ne.pvcAlreadyUpdated {
-			// if pvc is already updated, then we could be here because size stored in ASOW is smaller and controller did full
-			// expansion and hence no node expansion is needed.
-			// This will stop reconciler from retrying expansion on the node.
+			// PVC 已更新却走到这里，说明 ASOW 中的大小偏小，控制器已完成完整扩容，
+			// 无需节点扩容；标记结束以阻止协调器重试。
 			ne.testStatus = testResponseData{assumeResizeFinished: true, resizeCalledOnPlugin: false}
 			return true, ne.pluginResizeOpts.NewSize, nil
 		}
@@ -160,20 +149,16 @@ func (ne *NodeExpander) expandOnPlugin() (bool, resource.Quantity, error) {
 	}
 	_, resizeErr := ne.volumePlugin.NodeExpand(ne.pluginResizeOpts)
 	if resizeErr != nil {
-		// In order to support node volume expansion for RWX volumes on different nodes,
-		// we bypass the check for VolumeExpansionPendingOnNode state during the pre-check
-		// and then directly call the NodeExpandVolume method on the plugin.
+		// 为支持 RWX 卷在不同节点上的扩容，预检绕过了 VolumeExpansionPendingOnNode
+		// 状态检查，直接调用插件的 NodeExpandVolume。
 		//
-		// However, it does not make sense where the csi driver does not support node expansion.
-		// We should not treat this as a failure. It is a workaround for this issue:
+		// 但若 CSI 驱动本身不支持节点扩容，则不应视为失败。这是针对此问题的临时方案：
 		// https://github.com/kubernetes/kubernetes/issues/131381.
 		//
-		// For other access modes, we should not hit this state, because we will wait for
-		// VolumeExpansionPendingOnNode before trying to expand volume in kubelet.
-		// See runPreCheck() above.
+		// 其他访问模式不会走到此状态，因为 kubelet 会先等待 VolumeExpansionPendingOnNode
+		// 再尝试扩容。参见上面的 runPreCheck()。
 		//
-		// If volume is already expanded, then we should not retry expansion on the node if
-		// driver returns OperationNotSupportedError.
+		// 卷已扩容时，若驱动返回 OperationNotSupportedError，不应在节点上重试。
 		if volumetypes.IsOperationNotSupportedError(resizeErr) && ne.pvcAlreadyUpdated {
 			klog.V(4).InfoS(ne.vmt.GenerateMsgDetailed("MountVolume.NodeExpandVolume failed", "NodeExpandVolume not supported"), "pod", klog.KObj(ne.vmt.Pod))
 			ne.testStatus = testResponseData{assumeResizeFinished: true, resizeCalledOnPlugin: false}
@@ -196,9 +181,7 @@ func (ne *NodeExpander) expandOnPlugin() (bool, resource.Quantity, error) {
 			}
 		}
 
-		// if driver returned FailedPrecondition error that means
-		// volume expansion should not be retried on this node but
-		// expansion operation should not block mounting
+		// 驱动返回 FailedPrecondition 表示本节点不应重试扩容，但扩容操作不应阻塞挂载。
 		if volumetypes.IsFailedPreconditionError(resizeErr) {
 			ne.actualStateOfWorld.MarkForInUseExpansionError(ne.vmt.VolumeName)
 			klog.Error(ne.vmt.GenerateErrorDetailed("MountVolume.NodeExpandVolume failed with %v", resizeErr).Error())
@@ -214,12 +197,12 @@ func (ne *NodeExpander) expandOnPlugin() (bool, resource.Quantity, error) {
 	klog.InfoS(detailedMsg, "pod", klog.KObj(ne.vmt.Pod))
 
 	ne.testStatus = testResponseData{true /*resizeCalledOnPlugin */, true /* assumeResizeFinished */}
-	// no need to update PVC object if we already updated it
+	// PVC 已更新则无需重复更新。
 	if ne.pvcAlreadyUpdated {
 		return true, ne.pluginResizeOpts.NewSize, nil
 	}
 
-	// File system resize succeeded, now update the PVC's Capacity to match the PV's
+	// 文件系统扩容成功，更新 PVC 容量使其与 PV 一致。
 	ne.pvc, err = util.MarkNodeExpansionFinishedWithRecovery(ne.pvc, ne.pluginResizeOpts.NewSize, ne.kubeClient)
 	if err != nil {
 		return true, ne.pluginResizeOpts.NewSize, fmt.Errorf("mountVolume.NodeExpandVolume update pvc status failed: %w", err)

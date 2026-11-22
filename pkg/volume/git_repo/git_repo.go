@@ -32,17 +32,19 @@ import (
 	utilstrings "k8s.io/utils/strings"
 )
 
-// This is the primary entrypoint for volume plugins.
+// ProbeVolumePlugins 是卷插件的主入口，返回本包支持的卷插件列表。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{&gitRepoPlugin{nil}}
 }
 
+// gitRepoPlugin 实现 gitRepo 卷插件。
 type gitRepoPlugin struct {
 	host volume.VolumeHost
 }
 
 var _ volume.VolumePlugin = &gitRepoPlugin{}
 
+// wrappedVolumeSpec 返回底层 EmptyDir 卷规格；gitRepo 卷在其上克隆代码。
 func wrappedVolumeSpec() volume.Spec {
 	return volume.Spec{
 		Volume: &v1.Volume{VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
@@ -53,15 +55,18 @@ const (
 	gitRepoPluginName = "kubernetes.io/git-repo"
 )
 
+// Init 保存卷宿主，供后续路径计算使用。
 func (plugin *gitRepoPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (plugin *gitRepoPlugin) GetPluginName() string {
 	return gitRepoPluginName
 }
 
+// GetVolumeName 由仓库、版本和子目录组合出卷的唯一名称。
 func (plugin *gitRepoPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	volumeSource, _ := getVolumeSource(spec)
 	if volumeSource == nil {
@@ -75,22 +80,27 @@ func (plugin *gitRepoPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 		volumeSource.Directory), nil
 }
 
+// CanSupport 判断规格是否为 gitRepo 卷。
 func (plugin *gitRepoPlugin) CanSupport(spec *volume.Spec) bool {
 	return spec.Volume != nil && spec.Volume.GitRepo != nil
 }
 
+// RequiresRemount 返回 false：gitRepo 卷不需要周期性重新挂载。
 func (plugin *gitRepoPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return false
 }
 
+// SupportsMountOption 返回 false：gitRepo 卷不接受挂载选项。
 func (plugin *gitRepoPlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsSELinuxContextMount 返回 false：不支持以 SELinux 上下文挂载。
 func (plugin *gitRepoPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// NewMounter 校验规格并创建 gitRepo 卷的挂载器。
 func (plugin *gitRepoPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	if err := validateVolume(spec.Volume.GitRepo); err != nil {
 		return nil, err
@@ -110,6 +120,7 @@ func (plugin *gitRepoPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.
 	}, nil
 }
 
+// NewUnmounter 创建 gitRepo 卷的卸载器。
 func (plugin *gitRepoPlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
 	return &gitRepoVolumeUnmounter{
 		&gitRepoVolume{
@@ -120,6 +131,7 @@ func (plugin *gitRepoPlugin) NewUnmounter(volName string, podUID types.UID) (vol
 	}, nil
 }
 
+// ConstructVolumeSpec 根据名称重建 gitRepo 卷规格；已从磁盘恢复，无需原始参数。
 func (plugin *gitRepoPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	gitVolume := &v1.Volume{
 		Name: volumeName,
@@ -132,8 +144,7 @@ func (plugin *gitRepoPlugin) ConstructVolumeSpec(volumeName, mountPath string) (
 	}, nil
 }
 
-// gitRepo volumes are directories which are pre-filled from a git repository.
-// These do not persist beyond the lifetime of a pod.
+// gitRepoVolume 是从 git 仓库预填充的目录，随 Pod 生命周期结束而消失。
 type gitRepoVolume struct {
 	volName string
 	podUID  types.UID
@@ -143,12 +154,13 @@ type gitRepoVolume struct {
 
 var _ volume.Volume = &gitRepoVolume{}
 
+// GetPath 返回卷在 Pod 目录下的挂载路径。
 func (gr *gitRepoVolume) GetPath() string {
 	name := gitRepoPluginName
 	return gr.plugin.host.GetPodVolumeDir(gr.podUID, utilstrings.EscapeQualifiedName(name), gr.volName)
 }
 
-// gitRepoVolumeMounter builds git repo volumes.
+// gitRepoVolumeMounter 负责克隆 git 仓库并构建卷目录。
 type gitRepoVolumeMounter struct {
 	*gitRepoVolume
 
@@ -161,15 +173,16 @@ type gitRepoVolumeMounter struct {
 
 var _ volume.Mounter = &gitRepoVolumeMounter{}
 
+// GetAttributes 返回卷属性；该卷可写且由 kubelet 管理。
 func (b *gitRepoVolumeMounter) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       false,
 		Managed:        true,
-		SELinuxRelabel: true, // xattr change should be okay, TODO: double check
+		SELinuxRelabel: true, // TODO: double check xattr 变更是否确实安全
 	}
 }
 
-// SetUp creates new directory and clones a git repo.
+// SetUp 创建目录并克隆 git 仓库。
 func (b *gitRepoVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GitRepoVolumeDriver) {
 		return fmt.Errorf("git-repo volume plugin has been disabled; if necessary, it may be re-enabled by enabling the feature-gate `GitRepoVolumeDriver`")
@@ -178,13 +191,13 @@ func (b *gitRepoVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
 
-// SetUpAt creates new directory and clones a git repo.
+// SetUpAt 在指定目录创建卷并克隆仓库；已就绪则直接返回。
 func (b *gitRepoVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	if volumeutil.IsReady(b.getMetaDir()) {
 		return nil
 	}
 
-	// Wrap EmptyDir, let it do the setup.
+	// 借助 EmptyDir 完成目录创建与权限设置。
 	wrapped, err := b.plugin.host.NewWrapperMounter(b.volName, wrappedVolumeSpec(), &b.pod)
 	if err != nil {
 		return err
@@ -209,7 +222,7 @@ func (b *gitRepoVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArg
 	}
 
 	if len(b.revision) == 0 {
-		// Done!
+		// 无需检出指定版本，克隆完成即就绪。
 		volumeutil.SetReady(b.getMetaDir())
 		return nil
 	}
@@ -218,13 +231,13 @@ func (b *gitRepoVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArg
 
 	switch {
 	case len(b.target) != 0 && filepath.Clean(b.target) == ".":
-		// if target dir is '.', use the current dir
+		// 目标目录为 '.' 时直接在当前目录操作。
 		subdir = filepath.Join(dir)
 	case len(files) == 1:
-		// if target is not '.', use the generated folder
+		// 未指定目标目录时，克隆产生的唯一子目录即为仓库根目录。
 		subdir = filepath.Join(dir, files[0].Name())
 	default:
-		// if target is not '.', but generated many files, it's wrong
+		// 既非 '.' 又生成了多个条目，无法确定仓库根目录。
 		return fmt.Errorf("unexpected directory contents: %v", files)
 	}
 
@@ -236,22 +249,25 @@ func (b *gitRepoVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArg
 	}
 
 	ownershipChanger := volume.NewVolumeOwnership(b, dir, mounterArgs.FsGroup, nil /*fsGroupChangePolicy*/, volumeutil.FSGroupCompleteHook(b.plugin, nil))
-	// We do not care about return value, this plugin is deprecated
+	// 插件已废弃，权限变更失败也无需处理。
 	_ = ownershipChanger.ChangePermissions()
 	volumeutil.SetReady(b.getMetaDir())
 	return nil
 }
 
+// getMetaDir 返回用于记录卷就绪状态的元数据目录。
 func (b *gitRepoVolumeMounter) getMetaDir() string {
 	return filepath.Join(b.plugin.host.GetPodPluginDir(b.podUID, utilstrings.EscapeQualifiedName(gitRepoPluginName)), b.volName)
 }
 
+// execCommand 在指定目录中执行命令并返回合并输出。
 func (b *gitRepoVolumeMounter) execCommand(command string, args []string, dir string) ([]byte, error) {
 	cmd := b.exec.Command(command, args...)
 	cmd.SetDir(dir)
 	return cmd.CombinedOutput()
 }
 
+// validateVolume 校验仓库、版本和目录参数，防止以 '-' 开头被当成 git 选项。
 func validateVolume(src *v1.GitRepoVolumeSource) error {
 	if err := validateNonFlagArgument(src.Repository, "repository"); err != nil {
 		return err
@@ -271,23 +287,24 @@ func validateVolume(src *v1.GitRepoVolumeSource) error {
 	return nil
 }
 
-// gitRepoVolumeUnmounter cleans git repo volumes.
+// gitRepoVolumeUnmounter 负责清理 gitRepo 卷目录。
 type gitRepoVolumeUnmounter struct {
 	*gitRepoVolume
 }
 
 var _ volume.Unmounter = &gitRepoVolumeUnmounter{}
 
-// TearDown simply deletes everything in the directory.
+// TearDown 删除卷目录下的一切内容。
 func (c *gitRepoVolumeUnmounter) TearDown() error {
 	return c.TearDownAt(c.GetPath())
 }
 
-// TearDownAt simply deletes everything in the directory.
+// TearDownAt 委托 EmptyDir 卸载逻辑删除指定目录内容。
 func (c *gitRepoVolumeUnmounter) TearDownAt(dir string) error {
 	return volumeutil.UnmountViaEmptyDir(dir, c.plugin.host, c.volName, wrappedVolumeSpec(), c.podUID)
 }
 
+// getVolumeSource 从规格中提取 gitRepo 卷源及只读标记。
 func getVolumeSource(spec *volume.Spec) (*v1.GitRepoVolumeSource, bool) {
 	var readOnly bool
 	var volumeSource *v1.GitRepoVolumeSource
@@ -300,6 +317,7 @@ func getVolumeSource(spec *volume.Spec) (*v1.GitRepoVolumeSource, bool) {
 	return volumeSource, readOnly
 }
 
+// validateNonFlagArgument 拒绝以 '-' 开头的值，避免被 git 当作命令行选项。
 func validateNonFlagArgument(arg, argName string) error {
 	if len(arg) > 0 && arg[0] == '-' {
 		return fmt.Errorf("%q is an invalid value for %s", arg, argName)

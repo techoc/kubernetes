@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// TestSearchDiskMultipathDevice 验证 searchDisk 能找到对应的多路径设备。
 func TestSearchDiskMultipathDevice(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -59,7 +60,7 @@ func TestSearchDiskMultipathDevice(t *testing.T) {
 			if !test.expectError && err != nil {
 				t.Errorf("got unexpected error: %s", err)
 			}
-			// if no disk matches input wwn and lun, exit
+			// 没有匹配 wwn 和 lun 的磁盘时提前判错
 			if devicePath == "" && !test.expectError {
 				t.Errorf("no fc disk found")
 			}

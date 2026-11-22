@@ -30,26 +30,21 @@ import (
 
 var _ MetricsProvider = &metricsBlock{}
 
-// metricsBlock represents a MetricsProvider that detects the size of the
-// BlockMode Volume.
+// metricsBlock 通过块设备节点探测 BlockMode 卷大小的 MetricsProvider。
 type metricsBlock struct {
-	// the device node where the volume is attached to.
+	// 卷所挂载到的设备节点。
 	device string
 }
 
-// NewMetricsBlock creates a new metricsBlock with the device node of the
-// Volume.
+// NewMetricsBlock 使用卷的设备节点创建一个 metricsBlock。
 func NewMetricsBlock(device string) MetricsProvider {
 	return &metricsBlock{device}
 }
 
-// See MetricsProvider.GetMetrics
-// GetMetrics detects the size of the BlockMode volume for the device node
-// where the Volume is attached.
+// GetMetrics 探测卷所挂载设备节点上 BlockMode 卷的大小。
+// 参见 MetricsProvider.GetMetrics。
 //
-// Note that only the capacity of the device can be detected with standard
-// tools. Storage systems may have more information that they can provide by
-// going through specialized APIs.
+// 标准工具只能探测设备容量；存储系统可能通过专有 API 提供更丰富的信息。
 func (mb *metricsBlock) GetMetrics() (*Metrics, error) {
 	startTime := time.Now()
 	defer servermetrics.CollectVolumeStatCalDuration("block", startTime)
@@ -72,8 +67,7 @@ func (mb *metricsBlock) GetMetrics() (*Metrics, error) {
 	return metrics, nil
 }
 
-// getBlockInfo fetches metrics.Capacity by opening the device and seeking to
-// the end.
+// getBlockInfo 打开设备并定位到末尾，由此得到 metrics.Capacity。
 func (mb *metricsBlock) getBlockInfo(metrics *Metrics) error {
 	dev, err := os.Open(mb.device)
 	if err != nil {

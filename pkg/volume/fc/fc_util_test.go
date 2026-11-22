@@ -26,35 +26,45 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// fakeFileInfo 是测试用的 os.FileInfo 实现。
 type fakeFileInfo struct {
 	name string
 }
 
+// Name 返回假文件名。
 func (fi *fakeFileInfo) Name() string {
 	return fi.name
 }
 
+// Size 返回假文件大小。
 func (fi *fakeFileInfo) Size() int64 {
 	return 0
 }
 
+// Mode 返回假文件权限。
 func (fi *fakeFileInfo) Mode() os.FileMode {
 	return 777
 }
 
+// ModTime 返回假文件的修改时间。
 func (fi *fakeFileInfo) ModTime() time.Time {
 	return time.Now()
 }
+
+// IsDir 对假文件始终返回 false。
 func (fi *fakeFileInfo) IsDir() bool {
 	return false
 }
 
+// Sys 返回 nil。
 func (fi *fakeFileInfo) Sys() interface{} {
 	return nil
 }
 
+// fakeIOHandler 是测试用的 IOHandler，按预设映射返回目录和设备信息。
 type fakeIOHandler struct{}
 
+// ReadDir 返回预设目录下假的文件列表。
 func (handler *fakeIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	switch dirname {
 	case "/dev/disk/by-path/":
@@ -97,6 +107,7 @@ func (handler *fakeIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return nil, nil
 }
 
+// Lstat 返回预设的设备链接信息。
 func (handler *fakeIOHandler) Lstat(name string) (os.FileInfo, error) {
 	links := map[string]string{
 		"/sys/block/dm-1/slaves/sde": "sde",
@@ -109,6 +120,7 @@ func (handler *fakeIOHandler) Lstat(name string) (os.FileInfo, error) {
 	return nil, errors.New("device not found for mock")
 }
 
+// EvalSymlinks 返回预设的符号链接解析结果。
 func (handler *fakeIOHandler) EvalSymlinks(path string) (string, error) {
 	switch path {
 	case "/dev/disk/by-path/pci-0000:41:00.0-fc-0x500a0981891b8dc5-lun-0":
@@ -135,14 +147,17 @@ func (handler *fakeIOHandler) EvalSymlinks(path string) (string, error) {
 	return "", nil
 }
 
+// WriteFile 是空实现，不写实际文件。
 func (handler *fakeIOHandler) WriteFile(filename string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
+// ReadFile 是空实现，返回空内容。
 func (handler *fakeIOHandler) ReadFile(filename string) ([]byte, error) {
 	return nil, nil
 }
 
+// TestSearchDisk 验证按 WWN 和 LUN 能找到正确的 FC 磁盘。
 func TestSearchDisk(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -200,7 +215,7 @@ func TestSearchDisk(t *testing.T) {
 			if !test.expectError && err != nil {
 				t.Errorf("got unexpected error: %s", err)
 			}
-			// if no disk matches input wwn and lun, exit
+			// 若没有匹配输入 wwn 和 lun 的磁盘，直接退出
 			if devicePath == "" && !test.expectError {
 				t.Errorf("no fc disk found")
 			}
@@ -211,6 +226,7 @@ func TestSearchDisk(t *testing.T) {
 	}
 }
 
+// TestSearchDiskWWID 验证按 WWID 能找到 FC 磁盘。
 func TestSearchDiskWWID(t *testing.T) {
 	fakeMounter := fcDiskMounter{
 		fcDisk: &fcDisk{
@@ -220,12 +236,13 @@ func TestSearchDiskWWID(t *testing.T) {
 		deviceUtil: util.NewDeviceHandler(util.NewIOHandler()),
 	}
 	devicePath, error := searchDisk(fakeMounter)
-	// if no disk matches input wwid, exit
+	// 若没有匹配输入 wwid 的磁盘，直接退出
 	if devicePath == "" || error != nil {
 		t.Errorf("no fc disk found")
 	}
 }
 
+// TestParsePDName 验证从插件路径解析 WWN/LUN/WWID 的逻辑。
 func TestParsePDName(t *testing.T) {
 	tests := []struct {
 		name        string

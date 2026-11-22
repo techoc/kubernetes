@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	// CSIPluginName is the name of the in-tree CSI Plugin
+	// CSIPluginName 是树内 CSI 插件的名称。
 	CSIPluginName = "kubernetes.io/csi"
 
 	csiTimeout      = 2 * time.Minute
@@ -58,11 +58,12 @@ const (
 	volDataFileName = "vol_data.json"
 	fsTypeBlockName = "block"
 
-	// CsiResyncPeriod is default resync period duration
+	// CsiResyncPeriod 是默认的重新同步周期。
 	// TODO: increase to something useful
 	CsiResyncPeriod = time.Minute
 )
 
+// csiPlugin 实现 CSI 卷插件，桥接 kubelet 与外部 CSI 驱动。
 type csiPlugin struct {
 	host                      volume.VolumeHost
 	csiDriverLister           storagelisters.CSIDriverLister
@@ -71,7 +72,7 @@ type csiPlugin struct {
 	volumeAttachmentLister    storagelisters.VolumeAttachmentLister
 }
 
-// ProbeVolumePlugins returns implemented plugins
+// ProbeVolumePlugins 返回已实现的 CSI 插件实例列表。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	p := &csiPlugin{
 		host: nil,
@@ -79,29 +80,29 @@ func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{p}
 }
 
-// volume.VolumePlugin methods
+// 编译时断言 csiPlugin 实现 VolumePlugin 接口。
 var _ volume.VolumePlugin = &csiPlugin{}
 
-// RegistrationHandler is the handler which is fed to the pluginwatcher API.
+// RegistrationHandler 实现 pluginwatcher API 所需的驱动注册回调。
 type RegistrationHandler struct {
 	csiPlugin *csiPlugin
 }
 
 // TODO (verult) consider using a struct instead of global variables
-// csiDrivers map keep track of all registered CSI drivers on the node and their
-// corresponding sockets
+// csiDrivers 记录节点上所有已注册的 CSI 驱动及其对应的 socket 端点。
 var csiDrivers = &DriversStore{}
 
+// 节点信息管理器，负责维护 CSINode 对象。
 var nim nodeinfomanager.Interface
 
+// 用于动态更新 CSINode 可分配卷数量的 updater。
 var csiNodeUpdaterVar *csiNodeUpdater
 
-// PluginHandler is the plugin registration handler interface passed to the
-// pluginwatcher module in kubelet
+// PluginHandler 是传给 kubelet pluginwatcher 模块的插件注册处理器。
 var PluginHandler = &RegistrationHandler{}
 
-// ValidatePlugin is called by kubelet's plugin watcher upon detection
-// of a new registration socket opened by CSI Driver registrar side car.
+// ValidatePlugin 在 kubelet 的 pluginwatcher 发现 CSI 驱动注册器新建 socket 时调用，
+// 用于校验驱动声明的版本是否受支持。
 func (h *RegistrationHandler) ValidatePlugin(ctx context.Context, pluginName string, endpoint string, versions []string) error {
 	klog.Info(log("Trying to validate a new CSI Driver with name: %s endpoint: %s versions: %s",
 		pluginName, endpoint, strings.Join(versions, ",")))
@@ -114,7 +115,8 @@ func (h *RegistrationHandler) ValidatePlugin(ctx context.Context, pluginName str
 	return err
 }
 
-// RegisterPlugin is called when a plugin can be registered
+// RegisterPlugin 在驱动可注册时调用：保存端点、获取节点信息并初始化 CSINode。
+// 任一步失败都会注销驱动，避免留下不完整注册状态。
 func (h *RegistrationHandler) RegisterPlugin(ctx context.Context, pluginName string, endpoint string, versions []string, pluginClientTimeout *time.Duration) error {
 	klog.Info(log("Register new plugin with name: %s at endpoint: %s", pluginName, endpoint))
 
@@ -123,14 +125,14 @@ func (h *RegistrationHandler) RegisterPlugin(ctx context.Context, pluginName str
 		return err
 	}
 
-	// Storing endpoint of newly registered CSI driver into the map, where CSI driver name will be the key
-	// all other CSI components will be able to get the actual socket of CSI drivers by its name.
+	// 以驱动名为键保存新注册驱动的端点，
+	// 其他 CSI 组件即可按名称找到对应的 socket。
 	csiDrivers.Set(pluginName, Driver{
 		endpoint:                endpoint,
 		highestSupportedVersion: highestSupportedVersion,
 	})
 
-	// Get node info from the driver.
+	// 从驱动获取节点信息（节点 ID、每节点卷数上限、可访问拓扑）。
 	csi, err := newCsiDriverClient(csiDriverName(pluginName))
 	if err != nil {
 		return err
@@ -169,6 +171,7 @@ func (h *RegistrationHandler) RegisterPlugin(ctx context.Context, pluginName str
 	return nil
 }
 
+// updateCSIDriver 重新向驱动查询节点信息并更新 CSINode 中的记录。
 func updateCSIDriver(pluginName string) error {
 	csi, err := newCsiDriverClient(csiDriverName(pluginName))
 	if err != nil {
@@ -189,6 +192,8 @@ func updateCSIDriver(pluginName string) error {
 	return nil
 }
 
+// VerifyExhaustedResource 检查卷的 VolumeAttachment 是否报告资源耗尽错误。
+// 检测到时刷新驱动信息并返回 true，供上层触发重新调度。
 func (p *csiPlugin) VerifyExhaustedResource(spec *volume.Spec) bool {
 	if spec == nil || spec.PersistentVolume == nil || spec.PersistentVolume.Spec.CSI == nil {
 		klog.ErrorS(nil, "Invalid volume spec for CSI")
@@ -231,6 +236,7 @@ func (p *csiPlugin) VerifyExhaustedResource(spec *volume.Spec) bool {
 	return false
 }
 
+// isResourceExhaustError 判断卷附加错误码是否为 gRPC ResourceExhausted。
 func isResourceExhaustError(attachment *storage.VolumeAttachment) bool {
 	if attachment == nil || attachment.Status.AttachError == nil {
 		return false
@@ -239,17 +245,18 @@ func isResourceExhaustError(attachment *storage.VolumeAttachment) bool {
 		*attachment.Status.AttachError.ErrorCode == int32(codes.ResourceExhausted)
 }
 
+// validateVersions 校验驱动声明的版本并返回其中受支持的最高版本。
+// 若同名驱动已以更高版本注册，则拒绝本次注册。
 func (h *RegistrationHandler) validateVersions(callerName, pluginName string, endpoint string, versions []string) (*utilversion.Version, error) {
 	if len(versions) == 0 {
 		return nil, errors.New(log("%s for CSI driver %q failed. Plugin returned an empty list for supported versions", callerName, pluginName))
 	}
 
-	// Validate version
-	// CSI currently only has version 0.x and 1.x (see https://github.com/container-storage-interface/spec/releases).
-	// Therefore any driver claiming version 2.x+ is ignored as an unsupported versions.
-	// Future 1.x versions of CSI are supposed to be backwards compatible so this version of Kubernetes will work with any 1.x driver
-	// (or 0.x), but it may not work with 2.x drivers (because 2.x does not have to be backwards compatible with 1.x).
-	// CSI v0.x is no longer supported as of Kubernetes v1.17 in accordance with deprecation policy set out in Kubernetes v1.13.
+	// 校验版本：CSI 目前只有 0.x 和 1.x（参见 https://github.com/container-storage-interface/spec/releases）。
+	// 因此声明 2.x 及以上的驱动会被当作不支持而忽略。
+	// 1.x 后续版本应向后兼容，本版本 Kubernetes 可配合任意 1.x（或 0.x）驱动；
+	// 但可能不兼容 2.x，因为 2.x 无需向后兼容 1.x。
+	// 按 Kubernetes v1.13 的弃用策略，自 v1.17 起不再支持 CSI v0.x。
 	newDriverHighestVersion, err := utilversion.HighestSupportedVersion(versions)
 	if err != nil {
 		return nil, errors.New(log("%s for CSI driver %q failed. None of the versions specified %q are supported. err=%v", callerName, pluginName, versions, err))
@@ -265,8 +272,7 @@ func (h *RegistrationHandler) validateVersions(callerName, pluginName string, en
 	return newDriverHighestVersion, nil
 }
 
-// DeRegisterPlugin is called when a plugin removed its socket, signaling
-// it is no longer available
+// DeRegisterPlugin 在插件移除 socket 时调用，表示驱动已不可用。
 func (h *RegistrationHandler) DeRegisterPlugin(ctx context.Context, pluginName, endpoint string) {
 	klog.Info(log("registrationHandler.DeRegisterPlugin request for plugin %s, endpoint %s", pluginName, endpoint))
 	if err := unregisterDriver(pluginName); err != nil {
@@ -278,6 +284,7 @@ func (h *RegistrationHandler) DeRegisterPlugin(ctx context.Context, pluginName, 
 	}
 }
 
+// Init 初始化插件：注入 VolumeHost、配置 lister 与 token 获取函数，并初始化 CSINode。
 func (p *csiPlugin) Init(host volume.VolumeHost) error {
 	p.host = host
 
@@ -285,7 +292,7 @@ func (p *csiPlugin) Init(host volume.VolumeHost) error {
 	if csiClient == nil {
 		klog.Warning(log("kubeclient not set, assuming standalone kubelet"))
 	} else {
-		// set CSIDriverLister and volumeAttachmentLister
+		// 从 host 取 CSIDriverLister 和 volumeAttachmentLister。
 		seLinuxHost, ok := host.(volume.CSIDriverVolumeHost)
 		if ok {
 			p.csiDriverLister = seLinuxHost.CSIDriverLister()
@@ -310,7 +317,7 @@ func (p *csiPlugin) Init(host volume.VolumeHost) error {
 			if p.serviceAccountTokenGetter == nil {
 				klog.Error(log("ServiceAccountTokenGetter not found on KubeletVolumeHost"))
 			}
-			// We don't run the volumeAttachmentLister in the kubelet context
+			// kubelet 上下文不使用 volumeAttachmentLister（附加由 controller 负责）。
 			p.volumeAttachmentLister = nil
 
 			informerFactory := kletHost.GetInformerFactory()
@@ -346,18 +353,19 @@ func (p *csiPlugin) Init(host volume.VolumeHost) error {
 		},
 	}
 
-	// Initializing the label management channels
+	// 初始化节点信息管理器和插件处理器。
 	nim = nodeinfomanager.NewNodeInfoManager(host.GetNodeName(), host, migratedPlugins)
 	PluginHandler.csiPlugin = p
 
-	// This function prevents Kubelet from posting Ready status until CSINode
-	// is both installed and initialized
+	// 在 CSINode 安装并初始化完成前阻止 kubelet 上报 Ready 状态。
 	if err := initializeCSINode(host, p.csiDriverInformer); err != nil {
 		return errors.New(log("failed to initialize CSINode: %v", err))
 	}
 	return nil
 }
 
+// initializeCSINode 在后台初始化 CSINode：等待 APIServer 可用后初始化已迁移驱动，
+// 完成后才允许 kubelet 上报 Ready；非 kubelet 或单机模式直接跳过。
 func initializeCSINode(host volume.VolumeHost, csiDriverInformer cache.SharedIndexInformer) error {
 	kvh, ok := host.(volume.KubeletVolumeHost)
 	if !ok {
@@ -366,7 +374,7 @@ func initializeCSINode(host volume.VolumeHost, csiDriverInformer cache.SharedInd
 	}
 	kubeClient := host.GetKubeClient()
 	if kubeClient == nil {
-		// Kubelet running in standalone mode. Skip CSINode initialization
+		// 单机模式无 APIServer，跳过 CSINode 初始化。
 		klog.Warning("Skipping CSINode initialization, kubelet running in standalone mode")
 		return nil
 	}
@@ -376,15 +384,14 @@ func initializeCSINode(host volume.VolumeHost, csiDriverInformer cache.SharedInd
 	go func() {
 		defer utilruntime.HandleCrash()
 
-		// First wait indefinitely to talk to Kube APIServer
+		// 先无限等待，直到能与 APIServer 通信。
 		nodeName := host.GetNodeName()
 		err := waitForAPIServerForever(kubeClient, nodeName)
 		if err != nil {
 			klog.Fatalf("Failed to initialize CSINode while waiting for API server to report ok: %v", err)
 		}
 
-		// Backoff parameters tuned to retry over 140 seconds. Will fail and restart the Kubelet
-		// after max retry steps.
+		// 退避参数按总计约 140 秒重试调优；超过最大次数即失败并重启 kubelet。
 		initBackoff := wait.Backoff{
 			Steps:    6,
 			Duration: 30 * time.Millisecond,
@@ -400,16 +407,15 @@ func initializeCSINode(host volume.VolumeHost, csiDriverInformer cache.SharedInd
 				return false, nil
 			}
 
-			// Successfully initialized drivers, allow Kubelet to post Ready
+			// 驱动初始化成功，允许 kubelet 上报 Ready。
 			kvh.SetKubeletError(nil)
 			return true, nil
 		})
 		if err != nil {
-			// 2 releases after CSIMigration and all CSIMigrationX (where X is a volume plugin)
-			// are permanently enabled the apiserver/controllers can assume that the kubelet is
-			// using CSI for all Migrated volume plugins. Then all the CSINode initialization
-			// code can be dropped from Kubelet.
-			// Kill the Kubelet process and allow it to restart to retry initialization
+			// 当 CSIMigration 及各 CSIMigrationX 永久启用两个版本后，
+			// apiserver/controller 可假定 kubelet 对所有迁移插件都使用 CSI，
+			// 届时可移除 kubelet 中的 CSINode 初始化代码。
+			// 目前选择终止 kubelet 进程，重启后重试初始化。
 			klog.Fatalf("Failed to initialize CSINode after retrying: %v", err)
 		}
 	}()
@@ -428,25 +434,28 @@ func initializeCSINode(host volume.VolumeHost, csiDriverInformer cache.SharedInd
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (p *csiPlugin) GetPluginName() string {
 	return CSIPluginName
 }
 
-// GetvolumeName returns a concatenated string of CSIVolumeSource.Driver<volNameSe>CSIVolumeSource.VolumeHandle
-// That string value is used in Detach() to extract driver name and volumeName.
+// GetVolumeName 返回 "驱动名<分隔符>卷句柄" 的拼接字符串。
+// Detach() 会从中解析出驱动名和卷名。
 func (p *csiPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	csi, err := getPVSourceFromSpec(spec)
 	if err != nil {
 		return "", errors.New(log("plugin.GetVolumeName failed to extract volume source from spec: %v", err))
 	}
 
-	// return driverName<separator>volumeHandle
+	// 返回 driverName<分隔符>volumeHandle。
 	return fmt.Sprintf("%s%s%s", csi.Driver, volNameSep, csi.VolumeHandle), nil
 }
 
+// CanSupport 判断规格是否引用 CSI 卷（内联卷或 PV）。
 func (p *csiPlugin) CanSupport(spec *volume.Spec) bool {
 	// TODO (vladimirvivien) CanSupport should also take into account
 	// the availability/registration of specified Driver in the volume source
+	// 还应考虑卷源中指定的驱动是否已注册可用。
 	if spec == nil {
 		return false
 	}
@@ -454,6 +463,7 @@ func (p *csiPlugin) CanSupport(spec *volume.Spec) bool {
 		(spec.Volume != nil && spec.Volume.CSI != nil)
 }
 
+// RequiresRemount 根据 CSIDriver.Spec.RequiresRepublish 判断是否需要重新发布卷。
 func (p *csiPlugin) RequiresRemount(spec *volume.Spec) bool {
 	if p.csiDriverLister == nil {
 		return false
@@ -471,6 +481,8 @@ func (p *csiPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return *csiDriver.Spec.RequiresRepublish
 }
 
+// NewMounter 为 Pod 创建 CSI 卷的 Mounter。
+// 从卷规格提取驱动名和卷句柄，内联卷的句柄由 Pod UID 和卷名合成。
 func (p *csiPlugin) NewMounter(
 	spec *volume.Spec,
 	pod *api.Pod) (volume.Mounter, error) {
@@ -537,6 +549,7 @@ func (p *csiPlugin) NewMounter(
 	return mounter, nil
 }
 
+// NewUnmounter 从磁盘上的卷数据文件恢复驱动名和卷句柄，创建 Unmounter。
 func (p *csiPlugin) NewUnmounter(specName string, podUID types.UID) (volume.Unmounter, error) {
 	klog.V(4).Info(log("setting up unmounter for [name=%v, podUID=%v]", specName, podUID))
 
@@ -552,7 +565,7 @@ func (p *csiPlugin) NewUnmounter(specName string, podUID types.UID) (volume.Unmo
 		kubeVolHost:  kvh,
 	}
 
-	// load volume info from file
+	// 从文件加载卸载所需的卷信息。
 	dir := unmounter.GetPath()
 	dataDir := filepath.Dir(dir) // dropoff /mount at end
 	data, err := loadVolumeData(dataDir, volDataFileName)
@@ -566,6 +579,7 @@ func (p *csiPlugin) NewUnmounter(specName string, podUID types.UID) (volume.Unmo
 	return unmounter, nil
 }
 
+// ConstructVolumeSpec 根据挂载目录中的卷数据重建卷规格，区分临时卷和持久卷。
 func (p *csiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	klog.V(4).Info(log("plugin.ConstructVolumeSpec [pv.Name=%v, path=%v]", volumeName, mountPath))
 
@@ -580,9 +594,8 @@ func (p *csiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.Re
 		ret.SELinuxMountContext = volData[volDataKey.seLinuxMountContext]
 	}
 
-	// If mode is VolumeLifecycleEphemeral, use constructVolSourceSpec
-	// to construct volume source spec. If mode is VolumeLifecyclePersistent,
-	// use constructPVSourceSpec to construct volume construct pv source spec.
+	// 临时卷用 constructVolSourceSpec 重建内联卷源；
+	// 持久卷用 constructPVSourceSpec 重建 PV 卷源。
 	if storage.VolumeLifecycleMode(volData[volDataKey.volumeLifecycleMode]) == storage.VolumeLifecycleEphemeral {
 		ret.Spec = p.constructVolSourceSpec(volData[volDataKey.specVolID], volData[volDataKey.driverName])
 		return ret, nil
@@ -592,7 +605,7 @@ func (p *csiPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.Re
 	return ret, nil
 }
 
-// constructVolSourceSpec constructs volume.Spec with CSIVolumeSource
+// constructVolSourceSpec 构造带 CSIVolumeSource 的卷规格（临时卷）。
 func (p *csiPlugin) constructVolSourceSpec(volSpecName, driverName string) *volume.Spec {
 	vol := &api.Volume{
 		Name: volSpecName,
@@ -605,7 +618,7 @@ func (p *csiPlugin) constructVolSourceSpec(volSpecName, driverName string) *volu
 	return volume.NewSpecFromVolume(vol)
 }
 
-// constructPVSourceSpec constructs volume.Spec with CSIPersistentVolumeSource
+// constructPVSourceSpec 构造带 CSIPersistentVolumeSource 的卷规格（持久卷）。
 func (p *csiPlugin) constructPVSourceSpec(volSpecName, driverName, volumeHandle string) *volume.Spec {
 	fsMode := api.PersistentVolumeFilesystem
 	pv := &api.PersistentVolume{
@@ -625,15 +638,17 @@ func (p *csiPlugin) constructPVSourceSpec(volSpecName, driverName, volumeHandle 
 	return volume.NewSpecFromPersistentVolume(pv, false)
 }
 
+// SupportsMountOption 返回 true，CSI 插件支持挂载选项。
 func (p *csiPlugin) SupportsMountOption() bool {
 	// TODO (vladimirvivien) use CSI VolumeCapability.MountVolume.mount_flags
 	// to probe for the result for this method
-	// (bswartz) Until the CSI spec supports probing, our only option is to
-	// make plugins register their support for mount options or lack thereof
-	// directly with kubernetes.
+	// (bswartz) 在 CSI 规范支持探测之前，只能让插件直接向 Kubernetes
+	// 注册其是否支持挂载选项。
+	// 当前保守返回 true。
 	return true
 }
 
+// SupportsSELinuxContextMount 根据 CSIDriver.Spec.SELinuxMount 判断驱动是否支持 SELinux 挂载上下文。
 func (p *csiPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		driver, err := GetCSIDriverName(spec)
@@ -655,23 +670,28 @@ func (p *csiPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error)
 	return false, nil
 }
 
-// volume.AttachableVolumePlugin methods
+// 编译时断言 csiPlugin 实现卷附加和设备挂载相关接口。
 var _ volume.AttachableVolumePlugin = &csiPlugin{}
 
 var _ volume.DeviceMountableVolumePlugin = &csiPlugin{}
 
+// NewAttacher 创建 CSI 卷附加器。
 func (p *csiPlugin) NewAttacher() (volume.Attacher, error) {
 	return p.newAttacherDetacher()
 }
 
+// NewDeviceMounter 创建设备挂载器，与 Attacher 共用实现。
 func (p *csiPlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
 	return p.NewAttacher()
 }
 
+// NewDetacher 创建 CSI 卷分离器。
 func (p *csiPlugin) NewDetacher() (volume.Detacher, error) {
 	return p.newAttacherDetacher()
 }
 
+// CanAttach 判断卷是否需要附加：临时卷不需要，
+// 持久卷依据 CSIDriver.Spec.AttachRequired 决定。
 func (p *csiPlugin) CanAttach(spec *volume.Spec) (bool, error) {
 	volumeLifecycleMode, err := p.getVolumeLifecycleMode(spec)
 	if err != nil {
@@ -698,7 +718,7 @@ func (p *csiPlugin) CanAttach(spec *volume.Spec) (bool, error) {
 	return !skipAttach, nil
 }
 
-// CanDeviceMount returns true if the spec supports device mount
+// CanDeviceMount 判断规格是否支持设备挂载：临时卷不支持，持久卷支持。
 func (p *csiPlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
 	volumeLifecycleMode, err := p.getVolumeLifecycleMode(spec)
 	if err != nil {
@@ -710,22 +730,25 @@ func (p *csiPlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
 		return false, nil
 	}
 
-	// Persistent volumes support device mount.
+	// 持久卷支持设备挂载。
 	return true, nil
 }
 
+// NewDeviceUnmounter 创建设备卸载器，与 Detacher 共用实现。
 func (p *csiPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
 	return p.NewDetacher()
 }
 
+// GetDeviceMountRefs 返回设备挂载点的引用列表。
 func (p *csiPlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	m := p.host.GetMounter()
 	return m.GetMountRefs(deviceMountPath)
 }
 
-// BlockVolumePlugin methods
+// 编译时断言 csiPlugin 实现 BlockVolumePlugin 接口。
 var _ volume.BlockVolumePlugin = &csiPlugin{}
 
+// NewBlockVolumeMapper 为 Pod 创建块设备卷映射器，并持久化卷信息供卸载时恢复。
 func (p *csiPlugin) NewBlockVolumeMapper(spec *volume.Spec, podRef *api.Pod) (volume.BlockVolumeMapper, error) {
 	pvSource, err := getCSISourceFromSpec(spec)
 	if err != nil {
@@ -756,7 +779,7 @@ func (p *csiPlugin) NewBlockVolumeMapper(spec *volume.Spec, podRef *api.Pod) (vo
 	}
 	mapper.csiClientGetter.driverName = csiDriverName(pvSource.Driver)
 
-	// Save volume info in pod dir
+	// 在 Pod 目录下保存卷信息。
 	dataDir := getVolumeDeviceDataDir(spec.Name(), p.host)
 
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
@@ -771,7 +794,7 @@ func (p *csiPlugin) NewBlockVolumeMapper(spec *volume.Spec, podRef *api.Pod) (vo
 
 	mapper.MetricsProvider = NewMetricsCsi(pvSource.VolumeHandle, blockPath+"/"+string(podRef.UID), csiDriverName(pvSource.Driver))
 
-	// persist volume info data for teardown
+	// 持久化卷信息，供 teardown 阶段使用。
 	node := string(p.host.GetNodeName())
 	attachID := getAttachmentName(pvSource.VolumeHandle, pvSource.Driver, node)
 	volData := map[string]string{
@@ -784,10 +807,10 @@ func (p *csiPlugin) NewBlockVolumeMapper(spec *volume.Spec, podRef *api.Pod) (vo
 
 	err = saveVolumeData(dataDir, volDataFileName, volData)
 	defer func() {
-		// Only if there was an error and volume operation was considered
-		// finished, we should remove the directory.
+		// 仅在出错且操作被视为终结性失败时删除目录，
+		// 避免清理可被后续重试复用的状态。
 		if err != nil && volumetypes.IsOperationFinishedError(err) {
-			// attempt to cleanup volume mount dir.
+			// 尝试清理挂载目录。
 			if err = removeMountDir(p, dataDir); err != nil {
 				klog.Error(log("attacher.MountDevice failed to remove mount dir after error [%s]: %v", dataDir, err))
 			}
@@ -802,6 +825,7 @@ func (p *csiPlugin) NewBlockVolumeMapper(spec *volume.Spec, podRef *api.Pod) (vo
 	return mapper, nil
 }
 
+// NewBlockVolumeUnmapper 从磁盘卷数据恢复驱动信息，创建块设备卷解除映射器。
 func (p *csiPlugin) NewBlockVolumeUnmapper(volName string, podUID types.UID) (volume.BlockVolumeUnmapper, error) {
 	klog.V(4).Info(log("setting up block unmapper for [Spec=%v, podUID=%v]", volName, podUID))
 	unmapper := &csiBlockMapper{
@@ -810,7 +834,7 @@ func (p *csiPlugin) NewBlockVolumeUnmapper(volName string, podUID types.UID) (vo
 		specName: volName,
 	}
 
-	// load volume info from file
+	// 从文件加载卷信息。
 	dataDir := getVolumeDeviceDataDir(unmapper.specName, p.host)
 	data, err := loadVolumeData(dataDir, volDataFileName)
 	if err != nil {
@@ -823,6 +847,7 @@ func (p *csiPlugin) NewBlockVolumeUnmapper(volName string, podUID types.UID) (vo
 	return unmapper, nil
 }
 
+// ConstructBlockVolumeSpec 根据持久化的卷数据重建块设备卷的 PV 规格。
 func (p *csiPlugin) ConstructBlockVolumeSpec(podUID types.UID, specVolName, mapPath string) (*volume.Spec, error) {
 	klog.V(4).Infof("plugin.ConstructBlockVolumeSpec [podUID=%s, specVolName=%s, path=%s]", string(podUID), specVolName, mapPath)
 
@@ -853,13 +878,13 @@ func (p *csiPlugin) ConstructBlockVolumeSpec(podUID types.UID, specVolName, mapP
 	return volume.NewSpecFromPersistentVolume(pv, false), nil
 }
 
-// skipAttach looks up CSIDriver object associated with driver name
-// to determine if driver requires attachment volume operation
+// skipAttach 查询 CSIDriver 对象，判断驱动是否需要附加卷操作。
+// CSIDriver 不存在时保守返回 false（执行附加）。
 func (p *csiPlugin) skipAttach(driver string) (bool, error) {
 	csiDriver, err := p.getCSIDriver(driver)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Don't skip attach if CSIDriver does not exist
+			// CSIDriver 不存在时不能跳过附加。
 			return false, nil
 		}
 		return false, err
@@ -870,6 +895,7 @@ func (p *csiPlugin) skipAttach(driver string) (bool, error) {
 	return false, nil
 }
 
+// getCSIDriver 从 lister 获取指定驱动对象，读取前先等待缓存同步完成。
 func (p *csiPlugin) getCSIDriver(driver string) (*storage.CSIDriver, error) {
 	kletHost, ok := p.host.(volume.KubeletVolumeHost)
 	if ok {
@@ -885,13 +911,12 @@ func (p *csiPlugin) getCSIDriver(driver string) (*storage.CSIDriver, error) {
 	return csiDriver, err
 }
 
-// getVolumeLifecycleMode returns the mode for the specified spec: {persistent|ephemeral}.
-// 1) If mode cannot be determined, it will default to "persistent".
-// 2) If Mode cannot be resolved to either {persistent | ephemeral}, an error is returned
-// See https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/596-csi-inline-volumes/README.md
+// getVolumeLifecycleMode 返回规格的卷生命周期模式：persistent 或 ephemeral。
+// 无法确定时默认 persistent；模式无法解析为两者之一时返回错误。
+// 参见 https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/596-csi-inline-volumes/README.md
 func (p *csiPlugin) getVolumeLifecycleMode(spec *volume.Spec) (storage.VolumeLifecycleMode, error) {
-	// 1) if volume.Spec.Volume.CSI != nil -> mode is ephemeral
-	// 2) if volume.Spec.PersistentVolume.Spec.CSI != nil -> persistent
+	// 1) volume.Spec.Volume.CSI 非空 -> ephemeral
+	// 2) volume.Spec.PersistentVolume.Spec.CSI 非空 -> persistent
 	volSrc, _, err := getSourceFromSpec(spec)
 	if err != nil {
 		return "", err
@@ -903,6 +928,8 @@ func (p *csiPlugin) getVolumeLifecycleMode(spec *volume.Spec) (storage.VolumeLif
 	return storage.VolumeLifecyclePersistent, nil
 }
 
+// getPublishContext 从 VolumeAttachment 中获取驱动的发布上下文。
+// skipAttach 的驱动没有附加对象，返回 nil。
 func (p *csiPlugin) getPublishContext(client clientset.Interface, handle, driver, nodeName string) (map[string]string, error) {
 	skip, err := p.skipAttach(driver)
 	if err != nil {
@@ -914,10 +941,11 @@ func (p *csiPlugin) getPublishContext(client clientset.Interface, handle, driver
 
 	attachID := getAttachmentName(handle, driver, nodeName)
 
-	// search for attachment by VolumeAttachment.Spec.Source.PersistentVolumeName
+	// 按附加 ID 查找 VolumeAttachment。
 	attachment, err := client.StorageV1().VolumeAttachments().Get(context.TODO(), attachID, meta.GetOptions{})
 	if err != nil {
-		return nil, err // This err already has enough context ("VolumeAttachment xyz not found")
+		// 该错误已包含足够上下文，直接返回不再包装。
+		return nil, err
 	}
 
 	if attachment == nil {
@@ -927,6 +955,7 @@ func (p *csiPlugin) getPublishContext(client clientset.Interface, handle, driver
 	return attachment.Status.AttachmentMetadata, nil
 }
 
+// newAttacherDetacher 创建附加器/分离器共用的 csiAttacher 实例。
 func (p *csiPlugin) newAttacherDetacher() (*csiAttacher, error) {
 	k8s := p.host.GetKubeClient()
 	if k8s == nil {
@@ -940,7 +969,7 @@ func (p *csiPlugin) newAttacherDetacher() (*csiAttacher, error) {
 	}, nil
 }
 
-// podInfoEnabled  check CSIDriver enabled pod info flag
+// podInfoEnabled 检查 CSIDriver 是否启用了 Pod 信息上报（PodInfoOnMount）。
 func (p *csiPlugin) podInfoEnabled(driverName string) (bool, error) {
 	csiDriver, err := p.getCSIDriver(driverName)
 	if err != nil {
@@ -951,7 +980,7 @@ func (p *csiPlugin) podInfoEnabled(driverName string) (bool, error) {
 		return false, err
 	}
 
-	// if PodInfoOnMount is not set or false we do not set pod attributes
+	// PodInfoOnMount 未设置或为 false 时不传递 Pod 属性。
 	if csiDriver.Spec.PodInfoOnMount == nil || *csiDriver.Spec.PodInfoOnMount == false {
 		klog.V(4).Info(log("CSIDriver %q does not require pod information", driverName))
 		return false, nil
@@ -959,6 +988,7 @@ func (p *csiPlugin) podInfoEnabled(driverName string) (bool, error) {
 	return true, nil
 }
 
+// unregisterDriver 从驱动表中删除驱动并卸载其节点信息。
 func unregisterDriver(driverName string) error {
 	csiDrivers.Delete(driverName)
 
@@ -969,29 +999,26 @@ func unregisterDriver(driverName string) error {
 	return nil
 }
 
-// waitForAPIServerForever waits forever to get a CSINode instance as a proxy
-// for a healthy APIServer
+// waitForAPIServerForever 无限重试读取 CSINode，作为 APIServer 健康可用的信号。
 func waitForAPIServerForever(client clientset.Interface, nodeName types.NodeName) error {
 	var lastErr error
-	// Served object is discarded so no risk to have stale object with benefit to
-	// reduce the load on APIServer and etcd.
+	// 读取后立即丢弃对象，避免陈旧数据风险，同时减轻 APIServer 和 etcd 负载。
 	opts := meta.GetOptions{}
 	util.FromApiserverCache(&opts)
 	err := wait.PollImmediateInfinite(time.Second, func() (bool, error) {
-		// Get a CSINode from API server to make sure 1) kubelet can reach API server
-		// and 2) it has enough permissions. Kubelet may have restricted permissions
-		// when it's bootstrapping TLS.
+		// 读取 CSINode 同时验证：1）kubelet 能访问 APIServer；2）具备足够权限。
+		// TLS 引导阶段 kubelet 权限可能受限。
 		// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/
 		_, lastErr = client.StorageV1().CSINodes().Get(context.TODO(), string(nodeName), opts)
 		if lastErr == nil || apierrors.IsNotFound(lastErr) {
-			// API server contacted
+			// 已能访问 APIServer（NotFound 也算成功连通）。
 			return true, nil
 		}
 		klog.V(2).Infof("Failed to contact API server when waiting for CSINode publishing: %s", lastErr)
 		return false, nil
 	})
 	if err != nil {
-		// In theory this is unreachable, but just in case:
+		// 理论上不可达，仅作兜底。
 		return fmt.Errorf("%v: %v", err, lastErr)
 	}
 

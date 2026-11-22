@@ -26,8 +26,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
-// TestMetricsDuGetCapacity tests that MetricsDu can read disk usage
-// for path
+// TestMetricsDuGetCapacity 验证 MetricsDu 能读取路径的磁盘用量。
 func TestMetricsDuGetCapacity(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("metrics_du_test")
 	if err != nil {
@@ -49,8 +48,7 @@ func TestMetricsDuGetCapacity(t *testing.T) {
 		t.Errorf("Unexpected value for empty directory; expected %v, got %v", e, a)
 	}
 
-	// TODO(pwittroc): Figure out a way to test these values for correctness, maybe by formatting and mounting a file
-	// as a filesystem
+	// TODO(pwittroc): 想办法校验这些值的正确性，或许可通过格式化并挂载文件为文件系统来实现。
 	if a := actual.Capacity.Value(); a <= 0 {
 		t.Errorf("Expected Capacity %d to be greater than 0.", a)
 	}
@@ -58,7 +56,7 @@ func TestMetricsDuGetCapacity(t *testing.T) {
 		t.Errorf("Expected Available %d to be greater than 0.", a)
 	}
 
-	// Write a file and expect Used to increase
+	// 写入文件后 Used 应随之增加。
 	os.WriteFile(filepath.Join(tmpDir, "f1"), []byte("Hello World"), os.ModeTemporary)
 	actual, err = metrics.GetMetrics()
 	if err != nil {
@@ -68,7 +66,7 @@ func TestMetricsDuGetCapacity(t *testing.T) {
 		t.Errorf("Unexpected Used for directory with file.  Expected %v, got %d.", e, a)
 	}
 
-	// create a hardlink and expect inodes count to stay the same
+	// 创建硬链接不应增加 inode 使用量。
 	previousInodes := actual.InodesUsed.Value()
 	err = os.Link(filepath.Join(tmpDir, "f1"), filepath.Join(tmpDir, "f2"))
 	if err != nil {
@@ -84,8 +82,7 @@ func TestMetricsDuGetCapacity(t *testing.T) {
 
 }
 
-// TestMetricsDuRequireInit tests that if MetricsDu is not initialized with a path, GetMetrics
-// returns an error
+// TestMetricsDuRequirePath 验证未指定路径的 MetricsDu 调用 GetMetrics 会报错。
 func TestMetricsDuRequirePath(t *testing.T) {
 	metrics := NewMetricsDu("")
 	actual, err := metrics.GetMetrics()
@@ -98,8 +95,7 @@ func TestMetricsDuRequirePath(t *testing.T) {
 	}
 }
 
-// TestMetricsDuRealDirectory tests that if MetricsDu is initialized to a non-existent path, GetMetrics
-// returns an error
+// TestMetricsDuRequireRealDirectory 验证路径不存在时 GetMetrics 返回错误。
 func TestMetricsDuRequireRealDirectory(t *testing.T) {
 	metrics := NewMetricsDu("/not/a/real/directory")
 	actual, err := metrics.GetMetrics()

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// TestDiskUsage 验证 Windows 下 DiskUsage 能正确累加目录及文件的大小。
 func TestDiskUsage(t *testing.T) {
 
 	dir1, err := os.MkdirTemp("", "dir_1")
@@ -46,9 +47,8 @@ func TestDiskUsage(t *testing.T) {
 		t.Fatalf("TestDiskUsage failed: %s", err.Error())
 	}
 
-	// File creation is not atomic. If we're calculating the DiskUsage before the data is flushed,
-	// we'd get zeroes for sizes, and fail with this error:
-	// TestDiskUsage failed: expected 0, got -1
+	// 文件创建不是原子操作；若在数据落盘前计算 DiskUsage，会读到 0 大小，
+	// 从而报出 "TestDiskUsage failed: expected 0, got -1"。
 	tmpfile1.Sync()
 	tmpfile2.Sync()
 
@@ -90,6 +90,7 @@ func TestDiskUsage(t *testing.T) {
 	}
 }
 
+// TestInfo 验证 Windows 下 Info 对目录和文件均返回容量信息。
 func TestInfo(t *testing.T) {
 	dir1, err := os.MkdirTemp("", "dir_1")
 	if err != nil {
@@ -97,7 +98,7 @@ func TestInfo(t *testing.T) {
 	}
 	defer os.RemoveAll(dir1)
 
-	// should pass for folder path
+	// 目录路径应能正常查询。
 	availablebytes, capacity, usage, inodesTotal, inodesFree, inodeUsage, err := Info(dir1)
 	if err != nil {
 		t.Errorf("Info() should not error = %v", err)
@@ -105,7 +106,7 @@ func TestInfo(t *testing.T) {
 	}
 	validateInfo(t, availablebytes, capacity, usage, inodesTotal, inodeUsage, inodesFree)
 
-	// should pass for file
+	// 文件路径也应能正常查询。
 	tmpfile1, err := os.CreateTemp(dir1, "test")
 	if _, err = tmpfile1.WriteString("just for testing"); err != nil {
 		t.Fatalf("TestInfo failed: %s", err.Error())
@@ -114,8 +115,9 @@ func TestInfo(t *testing.T) {
 	validateInfo(t, availablebytes, capacity, usage, inodesTotal, inodeUsage, inodesFree)
 }
 
+// validateInfo 校验 Info 返回值：真实系统上容量相关值应大于零，Windows 下 inode 数恒为零。
 func validateInfo(t *testing.T, availablebytes int64, capacity int64, usage int64, inodesTotal int64, inodeUsage int64, inodesFree int64) {
-	// All of these should be greater than zero on a real system
+	// 在真实系统上这些值都应大于零。
 	if availablebytes <= 0 {
 		t.Errorf("Info() availablebytes should be greater than 0, got %v", availablebytes)
 	}
@@ -126,7 +128,7 @@ func validateInfo(t *testing.T, availablebytes int64, capacity int64, usage int6
 		t.Errorf("Info() got usage should be greater than 0, got %v", usage)
 	}
 
-	// inodes will always be zero for Windows
+	// Windows 不支持 inode 统计，相关值恒为零。
 	if inodesTotal != 0 {
 		t.Errorf("Info() inodesTotal = %v, want %v", inodeUsage, 0)
 	}

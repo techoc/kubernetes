@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// flexVolumeDetacher 实现 flexVolume 插件的卸载设备与解挂载逻辑。
 type flexVolumeDetacher struct {
 	plugin *flexVolumeAttachablePlugin
 }
@@ -35,7 +36,7 @@ var _ volume.Detacher = &flexVolumeDetacher{}
 
 var _ volume.DeviceUnmounter = &flexVolumeDetacher{}
 
-// Detach is part of the volume.Detacher interface.
+// Detach 是 volume.Detacher 接口的一部分。
 func (d *flexVolumeDetacher) Detach(volumeName string, hostName types.NodeName) error {
 
 	call := d.plugin.NewDriverCall(detachCmd)
@@ -43,13 +44,14 @@ func (d *flexVolumeDetacher) Detach(volumeName string, hostName types.NodeName) 
 	call.Append(string(hostName))
 
 	_, err := call.Run()
+	// 驱动不支持 detach 时退回默认实现，保证向后兼容。
 	if isCmdNotSupportedErr(err) {
 		return (*detacherDefaults)(d).Detach(volumeName, hostName)
 	}
 	return err
 }
 
-// UnmountDevice is part of the volume.Detacher interface.
+// UnmountDevice 是 volume.Detacher 接口的一部分。
 func (d *flexVolumeDetacher) UnmountDevice(deviceMountPath string) error {
 
 	pathExists, pathErr := mount.PathExists(deviceMountPath)
@@ -64,7 +66,8 @@ func (d *flexVolumeDetacher) UnmountDevice(deviceMountPath string) error {
 	notmnt, err := isNotMounted(d.plugin.host.GetMounter(), deviceMountPath)
 	if err != nil {
 		if mount.IsCorruptedMnt(err) {
-			notmnt = false // Corrupted error is assumed to be mounted.
+			// 挂载点损坏时按“已挂载”处理，避免跳过必要的清理。
+			notmnt = false // 损坏错误视为仍处于挂载状态。
 		} else {
 			return err
 		}
@@ -85,7 +88,7 @@ func (d *flexVolumeDetacher) UnmountDevice(deviceMountPath string) error {
 		}
 	}
 
-	// Flexvolume driver may remove the directory. Ignore if it does.
+	// Flexvolume 驱动可能已自行删除目录，此时无需再删。
 	if pathExists, pathErr := mount.PathExists(deviceMountPath); pathErr != nil {
 		return fmt.Errorf("error checking if path exists: %w", pathErr)
 	} else if !pathExists {

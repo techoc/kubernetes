@@ -25,8 +25,9 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// TestGetMetricsBlockInvalid 验证未正确初始化的 MetricsBlock 返回空指标和错误。
 func TestGetMetricsBlockInvalid(t *testing.T) {
-	// TODO: Enable this on Windows once support VolumeMode=Block is added.
+	// TODO: 待 Windows 支持 VolumeMode=Block 后启用此测试。
 	metrics := NewMetricsBlock("")
 	actual, err := metrics.GetMetrics()
 	expected := &Metrics{}

@@ -20,8 +20,9 @@ package util
 
 import "os"
 
-// lchown changes the numeric uid and gid of the named file.
-// If the file is a symbolic link, it changes the uid and gid of the link itself.
+// lchown 修改指定文件的数字 uid 和 gid。
+// 如果文件是符号链接，修改的是链接本身而不是它指向的目标。
+// 卷内容可能包含符号链接，跟随链接会误改不该动的文件，因此这里必须用 Lchown。
 func (w *AtomicWriter) lchown(name string, uid, gid int) error {
 	return os.Lchown(name, uid, gid)
 }

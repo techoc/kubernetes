@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package configmap contains the internal representation of configMap volumes.
+// Package configmap 提供 configMap 卷的内部表示。
 package configmap

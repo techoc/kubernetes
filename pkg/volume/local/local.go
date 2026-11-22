@@ -44,11 +44,12 @@ const (
 	defaultFSType = "ext4"
 )
 
-// ProbeVolumePlugins is the primary entrypoint for volume plugins.
+// ProbeVolumePlugins 是卷插件的主要入口。
 func ProbeVolumePlugins() []volume.VolumePlugin {
 	return []volume.VolumePlugin{&localVolumePlugin{}}
 }
 
+// localVolumePlugin 实现 local 卷的卷插件接口。
 type localVolumePlugin struct {
 	host        volume.VolumeHost
 	volumeLocks keymutex.KeyMutex
@@ -64,6 +65,7 @@ const (
 	localVolumePluginName = "kubernetes.io/local-volume"
 )
 
+// Init 初始化插件，保存 VolumeHost、卷锁与事件记录器。
 func (plugin *localVolumePlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
 	plugin.volumeLocks = keymutex.NewHashed(0)
@@ -71,39 +73,47 @@ func (plugin *localVolumePlugin) Init(host volume.VolumeHost) error {
 	return nil
 }
 
+// GetPluginName 返回插件名称。
 func (plugin *localVolumePlugin) GetPluginName() string {
 	return localVolumePluginName
 }
 
+// GetVolumeName 返回卷名；local 卷仅支持作为 PersistentVolumeSource，故 PV 名即唯一标识。
 func (plugin *localVolumePlugin) GetVolumeName(spec *volume.Spec) (string, error) {
-	// This volume is only supported as a PersistentVolumeSource, so the PV name is unique
+	// local 卷仅支持作为 PersistentVolumeSource，因此 PV 名称是唯一的。
 	return spec.Name(), nil
 }
 
+// CanSupport 判断给定规格是否为 local PersistentVolume。
 func (plugin *localVolumePlugin) CanSupport(spec *volume.Spec) bool {
-	// This volume is only supported as a PersistentVolumeSource
+	// local 卷仅支持作为 PersistentVolumeSource。
 	return (spec.PersistentVolume != nil && spec.PersistentVolume.Spec.Local != nil)
 }
 
+// RequiresRemount 返回是否需要重挂载；local 卷不需要。
 func (plugin *localVolumePlugin) RequiresRemount(spec *volume.Spec) bool {
 	return false
 }
 
+// SupportsMountOption 返回是否支持挂载选项。
 func (plugin *localVolumePlugin) SupportsMountOption() bool {
 	return true
 }
 
+// SupportsSELinuxContextMount 返回是否支持 SELinux 上下文挂载；local 卷不支持。
 func (plugin *localVolumePlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// GetAccessModes 返回支持的访问模式。
 func (plugin *localVolumePlugin) GetAccessModes() []v1.PersistentVolumeAccessMode {
-	// The current meaning of AccessMode is how many nodes can attach to it, not how many pods can mount it
+	// 当前 AccessMode 的语义是能 attach 的节点数，而非能挂载的 Pod 数。
 	return []v1.PersistentVolumeAccessMode{
 		v1.ReadWriteOnce,
 	}
 }
 
+// getVolumeSource 从规格中提取 local 卷源及只读标记。
 func getVolumeSource(spec *volume.Spec) (*v1.LocalVolumeSource, bool, error) {
 	if spec.PersistentVolume != nil && spec.PersistentVolume.Spec.Local != nil {
 		return spec.PersistentVolume.Spec.Local, spec.ReadOnly, nil
@@ -112,6 +122,7 @@ func getVolumeSource(spec *volume.Spec) (*v1.LocalVolumeSource, bool, error) {
 	return nil, false, fmt.Errorf("Spec does not reference a Local volume type")
 }
 
+// NewMounter 为 local 卷创建文件系统 mounter。
 func (plugin *localVolumePlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	_, readOnly, err := getVolumeSource(spec)
 	if err != nil {
@@ -145,6 +156,7 @@ func (plugin *localVolumePlugin) NewMounter(spec *volume.Spec, pod *v1.Pod) (vol
 
 }
 
+// NewUnmounter 为 local 卷创建 unmounter。
 func (plugin *localVolumePlugin) NewUnmounter(volName string, podUID types.UID) (volume.Unmounter, error) {
 	return &localVolumeUnmounter{
 		localVolume: &localVolume{
@@ -156,6 +168,7 @@ func (plugin *localVolumePlugin) NewUnmounter(volName string, podUID types.UID) 
 	}, nil
 }
 
+// NewBlockVolumeMapper 为 local 块卷创建 mapper。
 func (plugin *localVolumePlugin) NewBlockVolumeMapper(spec *volume.Spec, pod *v1.Pod) (volume.BlockVolumeMapper, error) {
 	volumeSource, readOnly, err := getVolumeSource(spec)
 	if err != nil {
@@ -181,6 +194,7 @@ func (plugin *localVolumePlugin) NewBlockVolumeMapper(spec *volume.Spec, pod *v1
 	return mapper, nil
 }
 
+// NewBlockVolumeUnmapper 为 local 块卷创建 unmapper。
 func (plugin *localVolumePlugin) NewBlockVolumeUnmapper(volName string,
 	podUID types.UID) (volume.BlockVolumeUnmapper, error) {
 	return &localVolumeUnmapper{
@@ -192,15 +206,12 @@ func (plugin *localVolumePlugin) NewBlockVolumeUnmapper(volName string,
 	}, nil
 }
 
-// TODO: check if no path and no topology constraints are ok
+// TODO: 检查无路径、无拓扑约束的情况是否可接受。
 func (plugin *localVolumePlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	fs := v1.PersistentVolumeFilesystem
-	// The main purpose of reconstructed volume is to clean unused mount points
-	// and directories.
-	// For filesystem volume with directory source, no global mount path is
-	// needed to clean. Empty path is ok.
-	// For filesystem volume with block source, we should resolve to its device
-	// path if global mount path exists.
+	// 重建卷的主要目的是清理未使用的挂载点和目录。
+	// 对于以目录为来源的文件系统卷，无需清理全局挂载路径，空路径即可。
+	// 对于以块设备为来源的文件系统卷，若全局挂载路径存在，应解析出其设备路径。
 	var path string
 	mounter := plugin.host.GetMounter()
 	refs, err := mounter.GetMountRefs(mountPath)
@@ -210,11 +221,9 @@ func (plugin *localVolumePlugin) ConstructVolumeSpec(volumeName, mountPath strin
 	baseMountPath := plugin.generateBlockDeviceBaseGlobalPath()
 	for _, ref := range refs {
 		if mount.PathWithinBase(ref, baseMountPath) {
-			// If the global mount for block device exists, the source is block
-			// device.
-			// The resolved device path may not be the exact same as path in
-			// local PV object if symbolic link is used. However, it's the true
-			// source and can be used in reconstructed volume.
+			// 若存在块设备的全局挂载，说明卷来源是块设备。
+			// 使用符号链接时，解析出的设备路径可能与 local PV 对象中的路径不完全一致，
+			// 但它是真实的来源，可用于重建卷。
 			path, _, err = mount.GetDeviceNameFromMount(mounter, ref)
 			if err != nil {
 				return volume.ReconstructedVolume{}, err
@@ -241,6 +250,7 @@ func (plugin *localVolumePlugin) ConstructVolumeSpec(volumeName, mountPath strin
 	}, nil
 }
 
+// ConstructBlockVolumeSpec 重建 local 块卷的规格。
 func (plugin *localVolumePlugin) ConstructBlockVolumeSpec(podUID types.UID, volumeName,
 	mapPath string) (*volume.Spec, error) {
 	block := v1.PersistentVolumeBlock
@@ -252,7 +262,7 @@ func (plugin *localVolumePlugin) ConstructBlockVolumeSpec(podUID types.UID, volu
 		Spec: v1.PersistentVolumeSpec{
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				Local: &v1.LocalVolumeSource{
-					// Not needed because we don't need to detach local device from the host.
+					// 无需从主机断开本地设备，因此路径留空。
 					Path: "",
 				},
 			},
@@ -263,10 +273,12 @@ func (plugin *localVolumePlugin) ConstructBlockVolumeSpec(podUID types.UID, volu
 	return volume.NewSpecFromPersistentVolume(localVolume, false), nil
 }
 
+// generateBlockDeviceBaseGlobalPath 返回块设备全局挂载路径的根目录。
 func (plugin *localVolumePlugin) generateBlockDeviceBaseGlobalPath() string {
 	return filepath.Join(plugin.host.GetPluginDir(localVolumePluginName), util.MountsInGlobalPDPath)
 }
 
+// getGlobalLocalPath 返回 local 卷在主机上的全局路径。
 func (plugin *localVolumePlugin) getGlobalLocalPath(spec *volume.Spec) (string, error) {
 	if spec.PersistentVolume.Spec.Local == nil || len(spec.PersistentVolume.Spec.Local.Path) == 0 {
 		return "", fmt.Errorf("local volume source is nil or local path is not set")
@@ -293,6 +305,7 @@ func (plugin *localVolumePlugin) getGlobalLocalPath(spec *volume.Spec) (string, 
 
 var _ volume.DeviceMountableVolumePlugin = &localVolumePlugin{}
 
+// deviceMounter 实现 local 卷的设备挂载与卸载。
 type deviceMounter struct {
 	plugin   *localVolumePlugin
 	mounter  *mount.SafeFormatAndMount
@@ -301,10 +314,12 @@ type deviceMounter struct {
 
 var _ volume.DeviceMounter = &deviceMounter{}
 
+// CanDeviceMount 表示始终可进行设备挂载。
 func (plugin *localVolumePlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// NewDeviceMounter 创建一个 deviceMounter。
 func (plugin *localVolumePlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
 	kvh, ok := plugin.host.(volume.KubeletVolumeHost)
 	if !ok {
@@ -313,6 +328,7 @@ func (plugin *localVolumePlugin) NewDeviceMounter() (volume.DeviceMounter, error
 	return plugin.newDeviceMounterInternal(kvh, plugin.host.GetMounter(), utilexec.New())
 }
 
+// newDeviceMounterInternal 构造 deviceMounter，便于测试时注入 mounter 与 exec。
 func (plugin *localVolumePlugin) newDeviceMounterInternal(kvh volume.KubeletVolumeHost, mounter mount.Interface, exec utilexec.Interface) (volume.DeviceMounter, error) {
 	return &deviceMounter{
 		plugin:   plugin,
@@ -321,6 +337,7 @@ func (plugin *localVolumePlugin) newDeviceMounterInternal(kvh volume.KubeletVolu
 	}, nil
 }
 
+// mountLocalBlockDevice 在必要时格式化并将本地块设备挂载到 deviceMountPath。
 func (dm *deviceMounter) mountLocalBlockDevice(spec *volume.Spec, devicePath string, deviceMountPath string) error {
 	klog.V(4).Infof("local: mounting device %s to %s", devicePath, deviceMountPath)
 	notMnt, err := dm.mounter.IsLikelyNotMountPoint(deviceMountPath)
@@ -362,6 +379,7 @@ func (dm *deviceMounter) mountLocalBlockDevice(spec *volume.Spec, devicePath str
 	return nil
 }
 
+// MountDevice 按卷来源类型挂载设备；目录来源直接返回，块设备来源执行实际挂载。
 func (dm *deviceMounter) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, _ volume.DeviceMounterArgs) error {
 	if spec.PersistentVolume.Spec.Local == nil || len(spec.PersistentVolume.Spec.Local.Path) == 0 {
 		return fmt.Errorf("local volume source is nil or local path is not set")
@@ -373,20 +391,22 @@ func (dm *deviceMounter) MountDevice(spec *volume.Spec, devicePath string, devic
 
 	switch fileType {
 	case hostutil.FileTypeBlockDev:
-		// local volume plugin does not implement AttachableVolumePlugin interface, so set devicePath to Path in PV spec directly
+		// local 插件未实现 AttachableVolumePlugin，因此直接使用 PV 规格中的路径作为设备路径。
 		return dm.mountLocalBlockDevice(spec, spec.PersistentVolume.Spec.Local.Path, deviceMountPath)
 	case hostutil.FileTypeDirectory:
-		// if the given local volume path is of already filesystem directory, return directly
+		// 路径本身已是文件系统目录，无需挂载，直接返回。
 		return nil
 	default:
 		return fmt.Errorf("only directory and block device are supported")
 	}
 }
 
+// RequiresFSResize 返回是否需要文件系统扩容。
 func (plugin *localVolumePlugin) RequiresFSResize() bool {
 	return true
 }
 
+// NodeExpand 对 local 卷执行节点扩容；目录来源为空操作。
 func (plugin *localVolumePlugin) NodeExpand(resizeOptions volume.NodeResizeOptions) (bool, error) {
 	fsVolume, err := util.CheckVolumeModeFilesystem(resizeOptions.VolumeSpec)
 	if err != nil {
@@ -416,8 +436,7 @@ func (plugin *localVolumePlugin) NodeExpand(resizeOptions volume.NodeResizeOptio
 		}
 		return true, nil
 	case hostutil.FileTypeDirectory:
-		// if the given local volume path is of already filesystem directory, return directly because
-		// we do not want to prevent mount operation from succeeding.
+		// 路径本身已是文件系统目录，直接返回，避免阻碍挂载成功。
 		klog.InfoS("Expansion of directory based local volumes is NO-OP", "localVolumePath", localDevicePath)
 		return true, nil
 	default:
@@ -425,38 +444,42 @@ func (plugin *localVolumePlugin) NodeExpand(resizeOptions volume.NodeResizeOptio
 	}
 }
 
+// getVolumeSourceFSType 返回 local 卷的文件系统类型，未指定时默认为 ext4。
 func getVolumeSourceFSType(spec *volume.Spec) (string, error) {
 	if spec.PersistentVolume != nil &&
 		spec.PersistentVolume.Spec.Local != nil {
 		if spec.PersistentVolume.Spec.Local.FSType != nil {
 			return *spec.PersistentVolume.Spec.Local.FSType, nil
 		}
-		// if the FSType is not set in local PV spec, setting it to default ("ext4")
+		// local PV 规格未指定 FSType 时使用默认值 "ext4"。
 		return defaultFSType, nil
 	}
 
 	return "", fmt.Errorf("spec does not reference a Local volume type")
 }
 
+// getVolumeSourceReadOnly 返回 local 卷的只读标记。
 func getVolumeSourceReadOnly(spec *volume.Spec) (bool, error) {
 	if spec.PersistentVolume != nil &&
 		spec.PersistentVolume.Spec.Local != nil {
-		// local volumes used as a PersistentVolume gets the ReadOnly flag indirectly through
-		// the persistent-claim volume used to mount the PV
+		// 作为 PV 使用的 local 卷，其只读标记通过挂载该 PV 的 persistent-claim 卷间接获得。
 		return spec.ReadOnly, nil
 	}
 
 	return false, fmt.Errorf("spec does not reference a Local volume type")
 }
 
+// GetDeviceMountPath 返回设备的全局挂载路径。
 func (dm *deviceMounter) GetDeviceMountPath(spec *volume.Spec) (string, error) {
 	return dm.plugin.getGlobalLocalPath(spec)
 }
 
+// NewDeviceUnmounter 创建设备卸载器。
 func (plugin *localVolumePlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
 	return plugin.newDeviceUnmounterInternal(plugin.host.GetMounter(), utilexec.New())
 }
 
+// newDeviceUnmounterInternal 构造设备卸载器，便于测试时注入依赖。
 func (plugin *localVolumePlugin) newDeviceUnmounterInternal(mounter mount.Interface, exec utilexec.Interface) (volume.DeviceUnmounter, error) {
 	return &deviceMounter{
 		plugin:  plugin,
@@ -464,6 +487,7 @@ func (plugin *localVolumePlugin) newDeviceUnmounterInternal(mounter mount.Interf
 	}, nil
 }
 
+// GetDeviceMountRefs 返回设备挂载点的引用列表。
 func (plugin *localVolumePlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	mounter := plugin.host.GetMounter()
 	return mounter.GetMountRefs(deviceMountPath)
@@ -471,12 +495,10 @@ func (plugin *localVolumePlugin) GetDeviceMountRefs(deviceMountPath string) ([]s
 
 var _ volume.DeviceUnmounter = &deviceMounter{}
 
+// UnmountDevice 仅在 deviceMountPath 位于块设备全局挂载根目录下时执行卸载。
 func (dm *deviceMounter) UnmountDevice(deviceMountPath string) error {
-	// If the local PV is a block device,
-	// The deviceMountPath is generated to the format like :/var/lib/kubelet/plugins/kubernetes.io/local-volume/mounts/localpv.spec.Name;
-	// If it is a filesystem directory, then the deviceMountPath is set directly to pvSpec.Local.Path
-	// We only need to unmount block device here, so we need to check if the deviceMountPath passed here
-	// has base mount path: /var/lib/kubelet/plugins/kubernetes.io/local-volume/mounts
+	// 块设备卷的 deviceMountPath 形如 /var/lib/kubelet/plugins/kubernetes.io/local-volume/mounts/<PV 名>；
+	// 目录来源卷则直接使用 pvSpec.Local.Path。这里只需卸载块设备，故检查路径是否位于上述挂载根目录内。
 	basemountPath := dm.plugin.generateBlockDeviceBaseGlobalPath()
 	if mount.PathWithinBase(deviceMountPath, basemountPath) {
 		return mount.CleanupMountPoint(deviceMountPath, dm.mounter, false)
@@ -485,25 +507,26 @@ func (dm *deviceMounter) UnmountDevice(deviceMountPath string) error {
 	return nil
 }
 
-// Local volumes represent a local directory on a node.
-// The directory at the globalPath will be bind-mounted to the pod's directory
+// localVolume 表示节点上的本地目录，globalPath 处的目录会被 bind mount 到 Pod 目录。
 type localVolume struct {
 	volName string
 	pod     *v1.Pod
 	podUID  types.UID
-	// Global path to the volume
+	// 卷在主机上的全局路径。
 	globalPath string
-	// Mounter interface that provides system calls to mount the global path to the pod local path.
+	// 提供将全局路径挂载到 Pod 本地路径的系统调用。
 	mounter  mount.Interface
 	hostUtil hostutil.HostUtils
 	plugin   *localVolumePlugin
 	volume.MetricsProvider
 }
 
+// GetPath 返回卷在 Pod 目录中的路径。
 func (l *localVolume) GetPath() string {
 	return l.plugin.host.GetPodVolumeDir(l.podUID, utilstrings.EscapeQualifiedName(localVolumePluginName), l.volName)
 }
 
+// localVolumeMounter 实现 local 卷的文件系统挂载。
 type localVolumeMounter struct {
 	*localVolume
 	readOnly     bool
@@ -512,6 +535,7 @@ type localVolumeMounter struct {
 
 var _ volume.Mounter = &localVolumeMounter{}
 
+// GetAttributes 返回卷属性，包括只读标记与 SELinux 重标记能力。
 func (m *localVolumeMounter) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       m.readOnly,
@@ -520,12 +544,12 @@ func (m *localVolumeMounter) GetAttributes() volume.Attributes {
 	}
 }
 
-// SetUp bind mounts the directory to the volume path
+// SetUp 将本地目录 bind mount 到卷路径。
 func (m *localVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return m.SetUpAt(m.GetPath(), mounterArgs)
 }
 
-// SetUpAt bind mounts the directory to the volume path and sets up volume ownership
+// SetUpAt 将本地目录 bind mount 到指定路径，并设置卷的所有权。
 func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	m.plugin.volumeLocks.LockKey(m.globalPath)
 	defer m.plugin.volumeLocks.UnlockKey(m.globalPath)
@@ -556,7 +580,7 @@ func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs)
 			return err
 		}
 
-		// Only count mounts from other pods
+		// 只统计来自其他 Pod 的挂载。
 		refs = m.filterPodMounts(refs)
 		if len(refs) > 0 {
 			fsGroupNew := int64(*mounterArgs.FsGroup)
@@ -572,13 +596,13 @@ func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs)
 	}
 
 	if runtime.GOOS != "windows" {
-		// skip below MkdirAll for windows since the "bind mount" logic is implemented differently in mount_wiondows.go
+		// Windows 不执行下面的 MkdirAll，因为 "bind mount" 逻辑在 mount_windows.go 中另有实现。
 		if err := os.MkdirAll(dir, 0750); err != nil {
 			klog.Errorf("mkdir failed on disk %s (%v)", dir, err)
 			return err
 		}
 	}
-	// Perform a bind mount to the full path to allow duplicate mounts of the same volume.
+	// 对完整路径执行 bind mount，使同一卷可在多处重复挂载。
 	options := []string{"bind"}
 	if m.readOnly {
 		options = append(options, "ro")
@@ -606,7 +630,7 @@ func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs)
 				return err
 			}
 			if !notMnt {
-				// This is very odd, we don't expect it.  We'll try again next sync loop.
+				// 属于异常情况，留待下一个 sync 循环重试。
 				klog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", dir)
 				return err
 			}
@@ -617,7 +641,7 @@ func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs)
 		return err
 	}
 	if !m.readOnly {
-		// Volume owner will be written only once on the first volume mount
+		// 卷所有者仅在首次挂载时写入。
 		if len(refs) == 0 {
 			ownershipChanger := volume.NewVolumeOwnership(m, dir, mounterArgs.FsGroup, mounterArgs.FSGroupChangePolicy, util.FSGroupCompleteHook(m.plugin, nil))
 			ownershipChanger.AddProgressNotifier(m.pod, mounterArgs.Recorder)
@@ -627,7 +651,7 @@ func (m *localVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs)
 	return nil
 }
 
-// filterPodMounts only returns mount paths inside the kubelet pod directory
+// filterPodMounts 只保留位于 kubelet Pod 目录内的挂载路径。
 func (m *localVolumeMounter) filterPodMounts(refs []string) []string {
 	filtered := []string{}
 	for _, r := range refs {
@@ -638,24 +662,25 @@ func (m *localVolumeMounter) filterPodMounts(refs []string) []string {
 	return filtered
 }
 
+// localVolumeUnmounter 实现 local 卷的卸载。
 type localVolumeUnmounter struct {
 	*localVolume
 }
 
 var _ volume.Unmounter = &localVolumeUnmounter{}
 
-// TearDown unmounts the bind mount
+// TearDown 解除 bind mount。
 func (u *localVolumeUnmounter) TearDown() error {
 	return u.TearDownAt(u.GetPath())
 }
 
-// TearDownAt unmounts the bind mount
+// TearDownAt 解除指定路径上的 bind mount。
 func (u *localVolumeUnmounter) TearDownAt(dir string) error {
 	klog.V(4).Infof("Unmounting volume %q at path %q\n", u.volName, dir)
 	return mount.CleanupMountPoint(dir, u.mounter, true) /* extensiveMountPointCheck = true */
 }
 
-// localVolumeMapper implements the BlockVolumeMapper interface for local volumes.
+// localVolumeMapper 为 local 卷实现 BlockVolumeMapper 接口。
 type localVolumeMapper struct {
 	*localVolume
 	readOnly bool
@@ -664,30 +689,29 @@ type localVolumeMapper struct {
 var _ volume.BlockVolumeMapper = &localVolumeMapper{}
 var _ volume.CustomBlockVolumeMapper = &localVolumeMapper{}
 
-// SetUpDevice prepares the volume to the node by the plugin specific way.
+// SetUpDevice 按插件特定的方式在节点上准备卷；local 卷无需额外操作。
 func (m *localVolumeMapper) SetUpDevice() (string, error) {
 	return "", nil
 }
 
-// MapPodDevice provides physical device path for the local PV.
+// MapPodDevice 返回 local PV 对应的物理设备路径。
 func (m *localVolumeMapper) MapPodDevice() (string, error) {
 	globalPath := util.MakeAbsolutePath(runtime.GOOS, m.globalPath)
 	klog.V(4).Infof("MapPodDevice returning path %s", globalPath)
 	return globalPath, nil
 }
 
-// GetStagingPath returns
+// GetStagingPath 返回空字符串；local 块卷无需 staging 路径。
 func (m *localVolumeMapper) GetStagingPath() string {
 	return ""
 }
 
-// SupportsMetrics returns true for SupportsMetrics as it initializes the
-// MetricsProvider.
+// SupportsMetrics 返回 true，因为该 mapper 会初始化 MetricsProvider。
 func (m *localVolumeMapper) SupportsMetrics() bool {
 	return true
 }
 
-// localVolumeUnmapper implements the BlockVolumeUnmapper interface for local volumes.
+// localVolumeUnmapper 为 local 卷实现 BlockVolumeUnmapper 接口。
 type localVolumeUnmapper struct {
 	*localVolume
 	volume.MetricsNil
@@ -695,16 +719,16 @@ type localVolumeUnmapper struct {
 
 var _ volume.BlockVolumeUnmapper = &localVolumeUnmapper{}
 
-// GetGlobalMapPath returns global map path and error.
-// path: plugins/kubernetes.io/kubernetes.io/local-volume/volumeDevices/{volumeName}
+// GetGlobalMapPath 返回全局映射路径。
+// 路径格式：plugins/kubernetes.io/kubernetes.io/local-volume/volumeDevices/{volumeName}
 func (l *localVolume) GetGlobalMapPath(spec *volume.Spec) (string, error) {
 	return filepath.Join(l.plugin.host.GetVolumeDevicePluginDir(utilstrings.EscapeQualifiedName(localVolumePluginName)),
 		l.volName), nil
 }
 
-// GetPodDeviceMapPath returns pod device map path and volume name.
-// path: pods/{podUid}/volumeDevices/kubernetes.io~local-volume
-// volName: local-pv-ff0d6d4
+// GetPodDeviceMapPath 返回 Pod 设备映射路径与卷名。
+// 路径格式：pods/{podUid}/volumeDevices/kubernetes.io~local-volume
+// 卷名示例：local-pv-ff0d6d4
 func (l *localVolume) GetPodDeviceMapPath() (string, string) {
 	return l.plugin.host.GetPodVolumeDeviceDir(l.podUID,
 		utilstrings.EscapeQualifiedName(localVolumePluginName)), l.volName

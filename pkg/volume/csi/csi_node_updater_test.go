@@ -29,8 +29,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// testDriverName 是各测试用例复用的测试驱动名。
 const testDriverName = "test-driver"
 
+// testFixture 聚合 fake client、informer、updater 及停止通道，便于测试统一收尾。
 type testFixture struct {
 	client         *fakeclient.Clientset
 	factory        informers.SharedInformerFactory
@@ -39,6 +41,7 @@ type testFixture struct {
 	stopCh         chan struct{}
 }
 
+// setupTest 启动 CSIDriver informer 并等待缓存同步后构造 updater，随后由调用方清理。
 func setupTest(t *testing.T, driver *v1.CSIDriver) *testFixture {
 	var clientObjects []runtime.Object
 	if driver != nil {
@@ -72,6 +75,7 @@ func setupTest(t *testing.T, driver *v1.CSIDriver) *testFixture {
 	}
 }
 
+// TestNewCSINodeUpdater 验证合法 informer 能创建 updater，nil informer 返回错误。
 func TestNewCSINodeUpdater(t *testing.T) {
 	t.Run("valid informer", func(t *testing.T) {
 		f := setupTest(t, nil)
@@ -99,6 +103,8 @@ func TestNewCSINodeUpdater(t *testing.T) {
 	})
 }
 
+// TestSyncDriverUpdater 驱动卸载、未注册、未设置更新周期时会停止 updater，
+// 已存在 updater 时则先停止旧实例再替换为新实例。
 func TestSyncDriverUpdater(t *testing.T) {
 	t.Run("driver not installed, should stop updater", func(t *testing.T) {
 		f := setupTest(t, nil)
@@ -107,13 +113,13 @@ func TestSyncDriverUpdater(t *testing.T) {
 		updaterStopCh := make(chan struct{})
 		f.updater.driverUpdaters.Store(testDriverName, updaterStopCh)
 
-		// Verify the initial state - updater should exist for the driver
+		// 初始状态：先确认已有 updater，后续才能验证它被清理。
 		verifyUpdaterState(t, f.updater, testDriverName, true)
 
-		// Detect the driver is not installed
+		// informer 中没有该驱动，应视为驱动未安装。
 		f.updater.syncDriverUpdater(testDriverName)
 
-		// Verify the driver was unregistered from the updater map
+		// 驱动应从 updater 表中注销。
 		verifyUpdaterState(t, f.updater, testDriverName, false)
 
 		if !isChannelClosed(updaterStopCh) {
@@ -125,7 +131,7 @@ func TestSyncDriverUpdater(t *testing.T) {
 		f := setupTest(t, nil)
 		defer f.cleanup()
 
-		// Register driver in global map but not in informer
+		// 只注册到全局表，informer 中保持缺失，以覆盖两者不一致的场景。
 		registerTestDriver(testDriverName)
 		defer unregisterTestDriver(testDriverName)
 
@@ -134,7 +140,7 @@ func TestSyncDriverUpdater(t *testing.T) {
 
 		verifyUpdaterState(t, f.updater, testDriverName, true)
 
-		// Detect the driver exists in global map but not in informer
+		// 以 informer 为准，全局表里有但 informer 里没有也应停止 updater。
 		f.updater.syncDriverUpdater(testDriverName)
 		verifyUpdaterState(t, f.updater, testDriverName, false)
 
@@ -156,7 +162,7 @@ func TestSyncDriverUpdater(t *testing.T) {
 
 		verifyUpdaterState(t, f.updater, testDriverName, true)
 
-		// Detect the driver has unset updatePeriodSeconds
+		// 未设置更新周期时无需周期性更新，updater 应被停止。
 		f.updater.syncDriverUpdater(testDriverName)
 		verifyUpdaterState(t, f.updater, testDriverName, false)
 
@@ -178,14 +184,14 @@ func TestSyncDriverUpdater(t *testing.T) {
 		f.updater.driverUpdaters.Store(testDriverName, oldStopCh)
 		verifyUpdaterState(t, f.updater, testDriverName, true)
 
-		// Replace the old updater with a new one
+		// 配置变更后需停掉旧实例再启动新实例，避免两个更新循环并存。
 		f.updater.syncDriverUpdater(testDriverName)
 
 		if !isChannelClosed(oldStopCh) {
 			t.Errorf("Previous stop channel was not closed during updater replacement")
 		}
 
-		// Verify a new entry was added and is different from old one
+		// 新停止通道必须是不同的实例，否则旧循环并未真正被替换。
 		value, exists := f.updater.driverUpdaters.Load(testDriverName)
 		if !exists {
 			t.Errorf("No updater entry exists after replacement")
@@ -202,10 +208,12 @@ func TestSyncDriverUpdater(t *testing.T) {
 	})
 }
 
+// cleanup 关闭 informer 停止通道，释放测试启动的后台协程。
 func (f *testFixture) cleanup() {
 	close(f.stopCh)
 }
 
+// createTestDriver 构造带有指定更新周期的 CSIDriver 对象。
 func createTestDriver(name string, updatePeriodSeconds *int64) *v1.CSIDriver {
 	return &v1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
@@ -217,6 +225,7 @@ func createTestDriver(name string, updatePeriodSeconds *int64) *v1.CSIDriver {
 	}
 }
 
+// registerTestDriver 将驱动写入全局表，模拟驱动已在节点上注册。
 func registerTestDriver(name string) {
 	csiDrivers.Set(name, Driver{
 		endpoint:                "test-endpoint",
@@ -224,10 +233,12 @@ func registerTestDriver(name string) {
 	})
 }
 
+// unregisterTestDriver 从全局表移除驱动，供测试收尾清理。
 func unregisterTestDriver(name string) {
 	csiDrivers.Delete(name)
 }
 
+// isChannelClosed 非阻塞地检查通道是否已关闭。
 func isChannelClosed(ch chan struct{}) bool {
 	select {
 	case <-ch:
@@ -237,6 +248,7 @@ func isChannelClosed(ch chan struct{}) bool {
 	}
 }
 
+// verifyUpdaterState 断言 updater 表中指定驱动的条目存在与否符合预期。
 func verifyUpdaterState(t *testing.T, updater *csiNodeUpdater, driverName string, shouldExist bool) {
 	_, exists := updater.driverUpdaters.Load(driverName)
 	if shouldExist && !exists {

@@ -36,6 +36,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
 
+// TestCanSupport 验证 FC 插件只识别 FC 类型的卷。
 func TestCanSupport(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("fc_test")
 	if err != nil {
@@ -73,6 +74,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestGetAccessModes 验证 FC 插件声明了预期的访问模式。
 func TestGetAccessModes(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("fc_test")
 	if err != nil {
@@ -92,30 +94,36 @@ func TestGetAccessModes(t *testing.T) {
 	}
 }
 
+// fakeDiskManager 是测试中替代真实磁盘管理器的假实现。
 type fakeDiskManager struct {
 	tmpDir       string
 	attachCalled bool
 	detachCalled bool
 }
 
+// newFakeDiskManager 创建带有临时目录的假磁盘管理器。
 func newFakeDiskManager() *fakeDiskManager {
 	return &fakeDiskManager{
 		tmpDir: utiltesting.MkTmpdirOrDie("fc_test"),
 	}
 }
 
+// Cleanup 删除假管理器使用的临时目录。
 func (fake *fakeDiskManager) Cleanup() {
 	os.RemoveAll(fake.tmpDir)
 }
 
+// MakeGlobalPDName 返回临时目录作为全局文件卷路径。
 func (fake *fakeDiskManager) MakeGlobalPDName(disk fcDisk) string {
 	return fake.tmpDir
 }
 
+// MakeGlobalVDPDName 返回临时目录作为全局块设备卷路径。
 func (fake *fakeDiskManager) MakeGlobalVDPDName(disk fcDisk) string {
 	return fake.tmpDir
 }
 
+// AttachDisk 创建全局路径并记录附加调用。
 func (fake *fakeDiskManager) AttachDisk(b fcDiskMounter) (string, error) {
 	globalPath := b.manager.MakeGlobalPDName(*b.fcDisk)
 	err := os.MkdirAll(globalPath, 0750)
@@ -126,6 +134,7 @@ func (fake *fakeDiskManager) AttachDisk(b fcDiskMounter) (string, error) {
 	return "", nil
 }
 
+// DetachDisk 删除全局路径并记录分离调用。
 func (fake *fakeDiskManager) DetachDisk(c fcDiskUnmounter, mntPath string) error {
 	globalPath := c.manager.MakeGlobalPDName(*c.fcDisk)
 	err := os.RemoveAll(globalPath)
@@ -136,6 +145,7 @@ func (fake *fakeDiskManager) DetachDisk(c fcDiskUnmounter, mntPath string) error
 	return nil
 }
 
+// DetachBlockFCDisk 删除块设备卷映射路径并记录分离调用。
 func (fake *fakeDiskManager) DetachBlockFCDisk(c fcDiskUnmapper, mapPath, devicePath string) error {
 	err := os.RemoveAll(mapPath)
 	if err != nil {
@@ -145,6 +155,7 @@ func (fake *fakeDiskManager) DetachBlockFCDisk(c fcDiskUnmapper, mapPath, device
 	return nil
 }
 
+// doTestPlugin 验证 FC 卷的挂载与卸载流程。
 func doTestPlugin(t *testing.T, spec *volume.Spec) {
 	tmpDir, err := utiltesting.MkTmpdir("fc_test")
 	if err != nil {
@@ -208,6 +219,7 @@ func doTestPlugin(t *testing.T, spec *volume.Spec) {
 	}
 }
 
+// doTestPluginNilMounter 验证磁盘信息缺失时创建挂载器会失败。
 func doTestPluginNilMounter(t *testing.T, spec *volume.Spec) {
 	tmpDir, err := utiltesting.MkTmpdir("fc_test")
 	if err != nil {
@@ -235,6 +247,7 @@ func doTestPluginNilMounter(t *testing.T, spec *volume.Spec) {
 	}
 }
 
+// TestPluginVolume 验证内联 FC 卷的挂载流程。
 func TestPluginVolume(t *testing.T) {
 	lun := int32(0)
 	vol := &v1.Volume{
@@ -250,6 +263,7 @@ func TestPluginVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol))
 }
 
+// TestPluginPersistentVolume 验证 FC 持久卷的挂载流程。
 func TestPluginPersistentVolume(t *testing.T) {
 	lun := int32(0)
 	fs := v1.PersistentVolumeFilesystem
@@ -271,6 +285,7 @@ func TestPluginPersistentVolume(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromPersistentVolume(vol, false))
 }
 
+// TestPluginVolumeWWIDs 验证基于 WWID 的内联 FC 卷挂载流程。
 func TestPluginVolumeWWIDs(t *testing.T) {
 	vol := &v1.Volume{
 		Name: "vol1",
@@ -284,6 +299,7 @@ func TestPluginVolumeWWIDs(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromVolume(vol))
 }
 
+// TestPluginPersistentVolumeWWIDs 验证基于 WWID 的 FC 持久卷挂载流程。
 func TestPluginPersistentVolumeWWIDs(t *testing.T) {
 	fs := v1.PersistentVolumeFilesystem
 	vol := &v1.PersistentVolume{
@@ -303,6 +319,7 @@ func TestPluginPersistentVolumeWWIDs(t *testing.T) {
 	doTestPlugin(t, volume.NewSpecFromPersistentVolume(vol, false))
 }
 
+// TestPluginVolumeNoDiskInfo 验证缺少磁盘信息的内联 FC 卷无法创建挂载器。
 func TestPluginVolumeNoDiskInfo(t *testing.T) {
 	vol := &v1.Volume{
 		Name: "vol1",
@@ -315,6 +332,7 @@ func TestPluginVolumeNoDiskInfo(t *testing.T) {
 	doTestPluginNilMounter(t, volume.NewSpecFromVolume(vol))
 }
 
+// TestPluginPersistentVolumeNoDiskInfo 验证缺少磁盘信息的 FC 持久卷无法创建挂载器。
 func TestPluginPersistentVolumeNoDiskInfo(t *testing.T) {
 	fs := v1.PersistentVolumeFilesystem
 	vol := &v1.PersistentVolume{
@@ -333,6 +351,7 @@ func TestPluginPersistentVolumeNoDiskInfo(t *testing.T) {
 	doTestPluginNilMounter(t, volume.NewSpecFromPersistentVolume(vol, false))
 }
 
+// TestPersistentClaimReadOnlyFlag 验证持久卷声明的只读标志会传递给挂载器。
 func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("fc_test")
 	if err != nil {
@@ -381,7 +400,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(t, tmpDir, client, nil))
 	plug, _ := plugMgr.FindPluginByName(fcPluginName)
 
-	// readOnly bool is supplied by persistent-claim volume source when its mounter creates other volumes
+	// 只读标志由持久卷声明卷源在创建挂载器时提供
 	spec := volume.NewSpecFromPersistentVolume(pv, true)
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")}}
 	mounter, _ := plug.NewMounter(spec, pod)
@@ -394,6 +413,7 @@ func TestPersistentClaimReadOnlyFlag(t *testing.T) {
 	}
 }
 
+// Test_getWwnsLun 验证从 FC 卷源中解析 WWN 与 lun。
 func Test_getWwnsLun(t *testing.T) {
 	num := int32(0)
 	fc := &v1.FCVolumeSource{
@@ -402,35 +422,38 @@ func Test_getWwnsLun(t *testing.T) {
 		Lun:        &num,
 	}
 	wwn, lun, _, err := getWwnsLunWwids(fc)
-	// if no wwn and lun, exit
+	// 未解析出 WWN 和 lun 时报错
 	if (len(wwn) == 0 && lun != "0") || err != nil {
 		t.Errorf("no fc disk found")
 	}
 }
 
+// Test_getWwids 验证从 FC 卷源中解析 WWID。
 func Test_getWwids(t *testing.T) {
 	fc := &v1.FCVolumeSource{
 		FSType: "ext4",
 		WWIDs:  []string{"3600508b400105e210000900000490000"},
 	}
 	_, _, wwid, err := getWwnsLunWwids(fc)
-	// if no wwn and lun, exit
+	// 未解析出 WWN 和 lun 时报错
 	if len(wwid) == 0 || err != nil {
 		t.Errorf("no fc disk found")
 	}
 }
 
+// Test_getWwnsLunWwidsError 验证没有任何磁盘信息时会报错。
 func Test_getWwnsLunWwidsError(t *testing.T) {
 	fc := &v1.FCVolumeSource{
 		FSType: "ext4",
 	}
 	wwn, lun, wwid, err := getWwnsLunWwids(fc)
-	// expected no wwn and lun and wwid
+	// 预期解析不出 WWN、lun 和 WWID
 	if (len(wwn) != 0 && lun != "" && len(wwid) != 0) || err == nil {
 		t.Errorf("unexpected fc disk found")
 	}
 }
 
+// Test_ConstructVolumeSpec 验证能从挂载引用中还原 WWN+lun 或 WWID 信息。
 func Test_ConstructVolumeSpec(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skipf("Test_ConstructVolumeSpec is not supported on GOOS=%s", runtime.GOOS)
@@ -484,6 +507,7 @@ func Test_ConstructVolumeSpec(t *testing.T) {
 	}
 }
 
+// Test_ConstructVolumeSpecNoRefs 验证没有挂载引用时找不到全局卷路径。
 func Test_ConstructVolumeSpecNoRefs(t *testing.T) {
 	fm := mount.NewFakeMounter(
 		[]mount.MountPoint{

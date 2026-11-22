@@ -27,19 +27,19 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Abstract interface to disk operations.
+// diskManager 抽象 FC 磁盘操作，便于测试时替换。
 type diskManager interface {
 	MakeGlobalPDName(disk fcDisk) string
 	MakeGlobalVDPDName(disk fcDisk) string
-	// Attaches the disk to the kubelet's host machine.
+	// 将磁盘连接到 kubelet 所在主机。
 	AttachDisk(b fcDiskMounter) (string, error)
-	// Detaches the disk from the kubelet's host machine.
+	// 从 kubelet 所在主机断开磁盘。
 	DetachDisk(disk fcDiskUnmounter, devicePath string) error
-	// Detaches the block disk from the kubelet's host machine.
+	// 从 kubelet 所在主机断开块设备磁盘。
 	DetachBlockFCDisk(disk fcDiskUnmapper, mntPath, devicePath string) error
 }
 
-// utility to mount a disk based filesystem
+// diskSetUp 将 FC 磁盘上的文件系统挂载到 volPath。
 func diskSetUp(manager diskManager, b fcDiskMounter, volPath string, mounter mount.Interface, fsGroup *int64, fsGroupChangePolicy *v1.PodFSGroupChangePolicy) error {
 	globalPDPath := manager.MakeGlobalPDName(*b.fcDisk)
 	noMnt, err := mounter.IsLikelyNotMountPoint(volPath)
@@ -55,7 +55,7 @@ func diskSetUp(manager diskManager, b fcDiskMounter, volPath string, mounter mou
 		klog.Errorf("failed to mkdir:%s", volPath)
 		return err
 	}
-	// Perform a bind mount to the full path to allow duplicate mounts of the same disk.
+	// 通过 bind mount 完整路径，使同一磁盘可在多处重复挂载。
 	options := []string{"bind"}
 	if b.readOnly {
 		options = append(options, "ro")
@@ -80,7 +80,7 @@ func diskSetUp(manager diskManager, b fcDiskMounter, volPath string, mounter mou
 				return err
 			}
 			if !noMnt {
-				//  will most likely retry on next sync loop.
+				// 卸载未生效，留待下一个 sync 循环重试。
 				klog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", volPath)
 				return err
 			}
@@ -92,7 +92,7 @@ func diskSetUp(manager diskManager, b fcDiskMounter, volPath string, mounter mou
 
 	if !b.readOnly {
 		ownershipChanger := volume.NewVolumeOwnership(&b, volPath, fsGroup, fsGroupChangePolicy, util.FSGroupCompleteHook(b.plugin, nil))
-		// TODO: Handle error returned here properly.
+		// TODO: 正确处理此处返回的错误。
 		_ = ownershipChanger.ChangePermissions()
 	}
 

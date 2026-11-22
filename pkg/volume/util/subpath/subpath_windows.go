@@ -30,18 +30,18 @@ import (
 	"k8s.io/mount-utils"
 )
 
-// MaxPathLength is the maximum length of Windows path. Normally, it is 260, but if long path is enable,
-// the max number is 32,767
+// MaxPathLength 是 Windows 路径的最大长度。通常为 260，启用长路径后上限为 32767。
 const MaxPathLength = 32767
 
+// subpath 是 Windows 平台上 Subpath 接口的实现。
 type subpath struct{}
 
-// New returns a subpath.Interface for the current system
+// New 返回当前系统使用的 subpath.Interface。
 func New(mount.Interface) Interface {
 	return &subpath{}
 }
 
-// isDriveLetterPath returns true if the given path is empty or it ends with ":" or ":\" or ":\\"
+// isDriveLetterorEmptyPath 判断给定路径是否为空或以 ":"、":\"、":\\" 结尾（即盘符根）。
 func isDriveLetterorEmptyPath(path string) bool {
 	if path == "" || strings.HasSuffix(path, ":\\\\") || strings.HasSuffix(path, ":") || strings.HasSuffix(path, ":\\") {
 		return true
@@ -49,18 +49,13 @@ func isDriveLetterorEmptyPath(path string) bool {
 	return false
 }
 
-// isDeviceOrUncPath returns true if the given path name starts with "Volume"
-// (a volume GUID path), "UNC" (a device-form UNC path with the "\\?\" prefix
-// stripped), or "\\" / "//" (any device-namespace path such as "\\?\", "\\.\"
-// or a UNC network path "\\server\share"). Otherwise, it returns false.
+// isDeviceOrUncPath 判断路径是否以 "Volume"（卷 GUID 路径）、"UNC"（去掉 "\\?\" 前缀的设备形式 UNC 路径），
+// 或 "\\" / "\\"（设备命名空间路径，如 "\\?\"、"\\.\" 以及 UNC 网络路径 "\\server\share"）开头。
 //
-// Any path beginning with "\\" must not be resolved/followed: touching a remote
-// UNC target causes Windows to open an SMB session and automatically send the
-// node's credentials, enabling forced NTLM authentication (MITRE ATT&CK T1187).
-// The previous implementation only matched the "\\?\" and "\\.\" device forms
-// and let ordinary UNC paths like "\\attacker\share" through. The forward-slash
-// form is matched too so the check holds for callers that pass an unnormalized
-// path (e.g. a symlink target read before mount.NormalizeWindowsPath runs).
+// 任何以 "\\" 开头的路径都不得解析/跟随：访问远程 UNC 目标会令 Windows 开启 SMB 会话并自动发送节点凭据，
+// 从而可能被用于强制 NTLM 认证（MITRE ATT&CK T1187）。旧实现只匹配 "\\?\" 与 "\\.\" 两种设备形式，
+// 会放过诸如 "\\attacker\share" 的普通 UNC 路径。这里也匹配正斜杠形式，以覆盖传入未规范化路径的调用方
+// （例如在 mount.NormalizeWindowsPath 运行前读取到的符号链接目标）。
 func isDeviceOrUncPath(path string) bool {
 	if strings.HasPrefix(path, "Volume") || strings.HasPrefix(path, "UNC") || strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, "//") {
 		return true
@@ -68,15 +63,14 @@ func isDeviceOrUncPath(path string) bool {
 	return false
 }
 
-// getUpperPath removes the last level of directory.
+// getUpperPath 去掉路径的最后一级目录。
 func getUpperPath(path string) string {
 	sep := fmt.Sprintf("%c", filepath.Separator)
 	upperpath := strings.TrimSuffix(path, sep)
 	return filepath.Dir(upperpath)
 }
 
-// Check whether a directory/file is a link type or not
-// LinkType could be SymbolicLink, Junction, or HardLink
+// isLinkPath 判断目录/文件是否为链接（SymbolicLink、Junction 或 HardLink）。
 func isLinkPath(path string) (bool, error) {
 	cmd := exec.Command("powershell", "/c", "$ErrorActionPreference = 'Stop'; (Get-Item -Force -LiteralPath $env:linkpath).LinkType")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("linkpath=%s", path))
@@ -91,8 +85,7 @@ func isLinkPath(path string) (bool, error) {
 	return false, nil
 }
 
-// evalSymlink returns the path name after the evaluation of any symbolic links.
-// If the path after evaluation is a device path or network connection, the original path is returned
+// evalSymlink 返回解析所有符号链接后的路径。若解析结果是设备路径或网络连接，则返回原路径。
 func evalSymlink(path string) (string, error) {
 	path = mount.NormalizeWindowsPath(path)
 	if isDeviceOrUncPath(path) || isDriveLetterorEmptyPath(path) {
@@ -109,7 +102,7 @@ func evalSymlink(path string) (string, error) {
 		if isLink {
 			break
 		}
-		// continue to check next layer
+		// 当前层不是链接，继续向上检查父目录。
 		base = filepath.Join(filepath.Base(upperpath), base)
 		upperpath = getUpperPath(upperpath)
 		if isDriveLetterorEmptyPath(upperpath) {
@@ -117,8 +110,7 @@ func evalSymlink(path string) (string, error) {
 			return path, nil
 		}
 	}
-	// This command will give the target path of a given symlink
-	// The -Force parameter will allow Get-Item to also evaluate hidden folders, like AppData.
+	// 此命令用于取得符号链接的目标路径；-Force 让 Get-Item 也能处理 AppData 等隐藏目录。
 	cmd := exec.Command("powershell", "/c", "$ErrorActionPreference = 'Stop'; (Get-Item -Force -LiteralPath $env:linkpath).Target")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("linkpath=%s", upperpath))
 	klog.V(8).Infof("Executing command: %q", cmd.String())
@@ -132,7 +124,7 @@ func evalSymlink(path string) (string, error) {
 		klog.V(4).Infof("Path '%s' has a target %s. Return its original form.", path, linkedPath)
 		return path, nil
 	}
-	// If the target is not an absolute path, join iit with the current upperpath
+	// 目标为相对路径时，相对当前链接所在目录解析。
 	if !filepath.IsAbs(linkedPath) {
 		linkedPath = filepath.Join(getUpperPath(upperpath), linkedPath)
 	}
@@ -143,8 +135,8 @@ func evalSymlink(path string) (string, error) {
 	return filepath.Join(nextLink, base), nil
 }
 
-// check whether hostPath is within volume path
-// this func will lock all intermediate subpath directories, need to close handle outside of this func after container started
+// lockAndCheckSubPath 先解析符号链接，再检查 hostPath 是否位于 volumePath 内。
+// 该函数会锁定所有中间子目录的句柄，调用方需在容器启动后关闭这些句柄。
 func lockAndCheckSubPath(volumePath, hostPath string) ([]uintptr, error) {
 	if len(volumePath) == 0 || len(hostPath) == 0 {
 		return []uintptr{}, nil
@@ -163,14 +155,14 @@ func lockAndCheckSubPath(volumePath, hostPath string) ([]uintptr, error) {
 	return lockAndCheckSubPathWithoutSymlink(finalVolumePath, finalSubPath)
 }
 
-// lock all intermediate subPath directories and check they are all within volumePath
-// volumePath & subPath should not contain any symlink, otherwise it will return error
+// lockAndCheckSubPathWithoutSymlink 锁定所有中间子目录并检查其均位于 volumePath 内。
+// volumePath 与 subPath 不得含符号链接，否则返回错误。
 func lockAndCheckSubPathWithoutSymlink(volumePath, subPath string) ([]uintptr, error) {
 	if len(volumePath) == 0 || len(subPath) == 0 {
 		return []uintptr{}, nil
 	}
 
-	// get relative path to volumePath
+	// 取 subPath 相对 volumePath 的路径，便于逐级校验边界。
 	relSubPath, err := filepath.Rel(volumePath, subPath)
 	if err != nil {
 		return []uintptr{}, fmt.Errorf("Rel(%s, %s) error: %v", volumePath, subPath, err)
@@ -180,7 +172,7 @@ func lockAndCheckSubPathWithoutSymlink(volumePath, subPath string) ([]uintptr, e
 	}
 
 	if relSubPath == "." {
-		// volumePath and subPath are equal
+		// 两者相同，无需检查中间目录。
 		return []uintptr{}, nil
 	}
 
@@ -190,7 +182,7 @@ func lockAndCheckSubPathWithoutSymlink(volumePath, subPath string) ([]uintptr, e
 	currentFullPath := volumePath
 	dirs := strings.Split(relSubPath, string(os.PathSeparator))
 	for _, dir := range dirs {
-		// lock intermediate subPath directory first
+		// 先锁定该级子目录，防止校验期间被替换为链接。
 		currentFullPath = filepath.Join(currentFullPath, dir)
 		handle, err := lockPath(currentFullPath)
 		if err != nil {
@@ -199,7 +191,7 @@ func lockAndCheckSubPathWithoutSymlink(volumePath, subPath string) ([]uintptr, e
 		}
 		fileHandles = append(fileHandles, handle)
 
-		// make sure intermediate subPath directory does not contain symlink any more
+		// 锁定后再次确认中间目录不是符号链接。
 		stat, err := os.Lstat(currentFullPath)
 		if err != nil {
 			errorResult = fmt.Errorf("Lstat(%q) error: %v", currentFullPath, err)
@@ -225,7 +217,7 @@ func lockAndCheckSubPathWithoutSymlink(volumePath, subPath string) ([]uintptr, e
 	return fileHandles, errorResult
 }
 
-// unlockPath unlock directories
+// unlockPath 释放之前的锁定目录句柄。
 func unlockPath(fileHandles []uintptr) {
 	if fileHandles != nil {
 		for _, handle := range fileHandles {
@@ -234,7 +226,7 @@ func unlockPath(fileHandles []uintptr) {
 	}
 }
 
-// lockPath locks a directory or symlink, return handle, exec "syscall.CloseHandle(handle)" to unlock the path
+// lockPath 锁定目录或符号链接并返回句柄；调用方需执行 "syscall.CloseHandle(handle)" 解锁。
 func lockPath(path string) (uintptr, error) {
 	if len(path) == 0 {
 		return uintptr(syscall.InvalidHandle), syscall.ERROR_FILE_NOT_FOUND
@@ -251,23 +243,23 @@ func lockPath(path string) (uintptr, error) {
 	return uintptr(fd), err
 }
 
-// Lock all directories in subPath and check they're not symlinks.
+// PrepareSafeSubpath 锁定 subPath 中的所有目录并确认它们不是符号链接。
 func (sp *subpath) PrepareSafeSubpath(subPath Subpath) (newHostPath string, cleanupAction func(), err error) {
 	handles, err := lockAndCheckSubPath(subPath.VolumePath, subPath.Path)
 
-	// Unlock the directories when the container starts
+	// 容器启动时才释放目录锁，以覆盖整个挂载过程。
 	cleanupAction = func() {
 		unlockPath(handles)
 	}
 	return subPath.Path, cleanupAction, err
 }
 
-// No bind-mounts for subpaths are necessary on Windows
+// CleanSubPaths 为空实现：Windows 下子路径无需 bind mount，因此无需清理。
 func (sp *subpath) CleanSubPaths(podDir string, volumeName string) error {
 	return nil
 }
 
-// SafeMakeDir makes sure that the created directory does not escape given base directory mis-using symlinks.
+// SafeMakeDir 确保创建的目录不会借助符号链接逃出 base 目录。
 func (sp *subpath) SafeMakeDir(subdir string, base string, perm os.FileMode) error {
 	realBase, err := evalSymlink(base)
 	if err != nil {
@@ -278,6 +270,7 @@ func (sp *subpath) SafeMakeDir(subdir string, base string, perm os.FileMode) err
 	return doSafeMakeDir(realFullPath, realBase, perm)
 }
 
+// doSafeMakeDir 逐级创建目录，并在每一步锁定并检查边界，防止通过符号链接逃逸。
 func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	klog.V(4).Infof("Creating directory %q within base %q", pathname, base)
 
@@ -285,20 +278,19 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		return fmt.Errorf("path %s is outside of allowed base %s", pathname, base)
 	}
 
-	// Quick check if the directory already exists
+	// 先快速判断目录是否已存在。
 	s, err := os.Stat(pathname)
 	if err == nil {
-		// Path exists
+		// 路径已存在。
 		if s.IsDir() {
-			// The directory already exists. It can be outside of the parent,
-			// but there is no race-proof check.
+			// 目录可能位于 base 之外，但此处无法做无竞态的检查。
 			klog.V(4).Infof("Directory %s already exists", pathname)
 			return nil
 		}
 		return &os.PathError{Op: "mkdir", Path: pathname, Err: syscall.ENOTDIR}
 	}
 
-	// Find all existing directories
+	// 找出已有的前缀目录，剩余部分待创建。
 	existingPath, toCreate, err := findExistingPrefix(base, pathname)
 	if err != nil {
 		return fmt.Errorf("error opening directory %s: %s", pathname, err)
@@ -307,7 +299,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		return nil
 	}
 
-	// Ensure the existing directory is inside allowed base
+	// 解析符号链接后，确认已有目录仍在允许的 base 内。
 	fullExistingPath, err := evalSymlink(existingPath)
 	if err != nil {
 		return fmt.Errorf("error opening existing directory %s: %s", existingPath, err)
@@ -320,7 +312,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 		return fmt.Errorf("path %s is outside of allowed base %s", fullExistingPath, err)
 	}
 
-	// lock all intermediate directories from fullBasePath to fullExistingPath (top to bottom)
+	// 锁定 fullBasePath 到 fullExistingPath 之间的所有目录（自上而下）。
 	fileHandles, err := lockAndCheckSubPathWithoutSymlink(fullBasePath, fullExistingPath)
 	defer unlockPath(fileHandles)
 	if err != nil {
@@ -329,8 +321,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 
 	klog.V(4).Infof("%q already exists, %q to create", fullExistingPath, filepath.Join(toCreate...))
 	currentPath := fullExistingPath
-	// create the directories one by one, making sure nobody can change
-	// created directory into symlink by lock that directory immediately
+	// 逐级创建目录，并立即锁定新建目录，防止其被替换为符号链接。
 	for _, dir := range toCreate {
 		currentPath = filepath.Join(currentPath, dir)
 		klog.V(4).Infof("Creating %s", dir)
@@ -342,7 +333,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 			return fmt.Errorf("cannot lock path %s: %s", currentPath, err)
 		}
 		defer syscall.CloseHandle(syscall.Handle(handle))
-		// make sure newly created directory does not contain symlink after lock
+		// 锁定后再次确认新建目录不是符号链接。
 		stat, err := os.Lstat(currentPath)
 		if err != nil {
 			return fmt.Errorf("Lstat(%q) error: %v", currentPath, err)
@@ -359,8 +350,7 @@ func doSafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	return nil
 }
 
-// findExistingPrefix finds prefix of pathname that exists. In addition, it
-// returns list of remaining directories that don't exist yet.
+// findExistingPrefix 返回 pathname 中最长的一段已存在前缀，以及尚需创建的剩余目录列表。
 func findExistingPrefix(base, pathname string) (string, []string, error) {
 	rel, err := filepath.Rel(base, pathname)
 	if err != nil {
@@ -372,7 +362,7 @@ func findExistingPrefix(base, pathname string) (string, []string, error) {
 	}
 
 	if rel == "." {
-		// base and pathname are equal
+		// 两者相同，无需创建任何目录。
 		return pathname, []string{}, nil
 	}
 

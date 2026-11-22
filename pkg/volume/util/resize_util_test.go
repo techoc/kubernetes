@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// conditionMergeTestCase 是 PVC 扩容条件合并的测试用例。
 type conditionMergeTestCase struct {
 	description             string
 	pvc                     *v1.PersistentVolumeClaim
@@ -41,6 +42,7 @@ type conditionMergeTestCase struct {
 	finalConditions         []v1.PersistentVolumeClaimCondition
 }
 
+// TestMergeResizeCondition 验证扩容条件合并时保留/移除旧条件的逻辑。
 func TestMergeResizeCondition(t *testing.T) {
 	currentTime := metav1.Now()
 
@@ -173,6 +175,7 @@ func TestMergeResizeCondition(t *testing.T) {
 
 }
 
+// TestResizeFunctions 验证各类扩容标记函数对 PVC 状态的修改。
 func TestResizeFunctions(t *testing.T) {
 	basePVC := makePVC([]v1.PersistentVolumeClaimCondition{})
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
@@ -241,6 +244,7 @@ func TestResizeFunctions(t *testing.T) {
 
 }
 
+// TestCreatePVCPatch 验证生成的 PVC patch 中包含 resourceVersion 检查。
 func TestCreatePVCPatch(t *testing.T) {
 	pvc1 := makePVC([]v1.PersistentVolumeClaimCondition{
 		{
@@ -273,14 +277,17 @@ func TestCreatePVCPatch(t *testing.T) {
 	}
 }
 
+// pvcModifier 以链式调用的方式构造测试用 PVC。
 type pvcModifier struct {
 	pvc *v1.PersistentVolumeClaim
 }
 
+// get 返回 PVC 的深拷贝，避免测试间共享状态。
 func (m pvcModifier) get() *v1.PersistentVolumeClaim {
 	return m.pvc.DeepCopy()
 }
 
+// makePVC 构造带有初始条件的测试用 PVC。
 func makePVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "resize"},
@@ -306,10 +313,12 @@ func makePVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
 	return pvcModifier{pvc}
 }
 
+// withStorageResourceStatus 设置 storage 资源的状态。
 func (m pvcModifier) withStorageResourceStatus(status v1.ClaimResourceStatus) pvcModifier {
 	return m.withResourceStatus(v1.ResourceStorage, status)
 }
 
+// withResourceStatus 设置指定资源的状态；status 为空时删除对应条目。
 func (m pvcModifier) withResourceStatus(resource v1.ResourceName, status v1.ClaimResourceStatus) pvcModifier {
 	if m.pvc.Status.AllocatedResourceStatuses != nil && status == "" {
 		delete(m.pvc.Status.AllocatedResourceStatuses, resource)

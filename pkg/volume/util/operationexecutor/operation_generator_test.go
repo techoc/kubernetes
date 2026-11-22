@@ -45,8 +45,8 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// this method just tests the volume plugin name that's used in CompleteFunc, the same plugin is also used inside the
-// generated func so there is no need to test the plugin name that's used inside generated function
+// 该测试只校验 CompleteFunc 使用的插件名；生成的函数中也使用同一插件，无需重复验证。
+// TestOperationGenerator_GenerateUnmapVolumeFunc_PluginName 验证 CompleteFunc 使用正确的插件名上报指标。
 func TestOperationGenerator_GenerateUnmapVolumeFunc_PluginName(t *testing.T) {
 	type testcase struct {
 		name              string
@@ -94,6 +94,7 @@ func TestOperationGenerator_GenerateUnmapVolumeFunc_PluginName(t *testing.T) {
 	}
 }
 
+// TestOperationGenerator_GenerateExpandAndRecoverVolumeFunc 验证扩容恢复逻辑对 PVC/PV 状态的更新。
 func TestOperationGenerator_GenerateExpandAndRecoverVolumeFunc(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	nodeResizePending := v1.PersistentVolumeClaimNodeResizePending
@@ -104,7 +105,7 @@ func TestOperationGenerator_GenerateExpandAndRecoverVolumeFunc(t *testing.T) {
 		pv                   *v1.PersistentVolume
 		recoverFeatureGate   bool
 		disableNodeExpansion bool
-		// expectations of test
+		// 预期结果
 		expectedResizeStatus  v1.ClaimResourceStatus
 		expectedAllocatedSize resource.Quantity
 		expectResizeCall      bool
@@ -191,6 +192,7 @@ func TestOperationGenerator_GenerateExpandAndRecoverVolumeFunc(t *testing.T) {
 	}
 }
 
+// TestOperationGenerator_nodeExpandVolume 验证节点扩容在不同状态与容量组合下的调用行为。
 func TestOperationGenerator_nodeExpandVolume(t *testing.T) {
 	getSizeFunc := func(size string) *resource.Quantity {
 		x := resource.MustParse(size)
@@ -205,12 +207,12 @@ func TestOperationGenerator_nodeExpandVolume(t *testing.T) {
 		pvc  *v1.PersistentVolumeClaim
 		pv   *v1.PersistentVolume
 
-		// desired size, defaults to pv.Spec.Capacity
+		// 期望容量，为 nil 时取 pv.Spec.Capacity
 		desiredSize *resource.Quantity
-		// actualSize, defaults to pvc.Status.Capacity
+		// 实际容量，为 nil 时取 pvc.Status.Capacity
 		actualSize *resource.Quantity
 
-		// expectations of test
+		// 预期结果
 		expectedResizeStatus v1.ClaimResourceStatus
 		expectedStatusSize   resource.Quantity
 		resizeCallCount      int
@@ -324,6 +326,7 @@ func TestOperationGenerator_nodeExpandVolume(t *testing.T) {
 	}
 }
 
+// TestExpandDuringMount 验证挂载过程中触发的节点扩容。
 func TestExpandDuringMount(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	nodeResizePending := v1.PersistentVolumeClaimNodeResizePending
@@ -332,12 +335,12 @@ func TestExpandDuringMount(t *testing.T) {
 		pvc  *v1.PersistentVolumeClaim
 		pv   *v1.PersistentVolume
 
-		// desired size, defaults to pv.Spec.Capacity
+		// 期望容量，为 nil 时取 pv.Spec.Capacity
 		desiredSize *resource.Quantity
-		// actualSize, defaults to pvc.Status.Capacity
+		// 实际容量，为 nil 时取 pvc.Status.Capacity
 		actualSize *resource.Quantity
 
-		// expectations of test
+		// 预期结果
 		expectedResizeStatus v1.ClaimResourceStatus
 		expectedStatusSize   resource.Quantity
 		resizeCallCount      int
@@ -407,6 +410,8 @@ func TestExpandDuringMount(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckForRecoveryFromExpansion 验证何时需要进行扩容恢复检查。
 func TestCheckForRecoveryFromExpansion(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	tests := []struct {
@@ -512,6 +517,7 @@ func TestCheckForRecoveryFromExpansion(t *testing.T) {
 	}
 }
 
+// TestGenerateMountVolumeFunc_AttemptTrackingRespectsFeatureGate 验证特性门控对挂载尝试标记的影响。
 func TestGenerateMountVolumeFunc_AttemptTrackingRespectsFeatureGate(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 
@@ -563,6 +569,7 @@ func TestGenerateMountVolumeFunc_AttemptTrackingRespectsFeatureGate(t *testing.T
 	}
 }
 
+// TestGenerateMapVolumeFunc_AttemptTrackingRespectsFeatureGate 验证特性门控对块设备映射尝试标记的影响。
 func TestGenerateMapVolumeFunc_AttemptTrackingRespectsFeatureGate(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 
@@ -579,8 +586,8 @@ func TestGenerateMapVolumeFunc_AttemptTrackingRespectsFeatureGate(t *testing.T) 
 		{
 			name:               "feature gate enabled",
 			featureGateEnabled: true,
-			// MapVolume marks once before SetUpDevice (unlike MountVolume which marks
-			// before both MountDevice and SetUp).
+			// MapVolume 只在 SetUpDevice 前标记一次；MountVolume 则在 MountDevice
+			// 和 SetUp 之前各标记一次。
 			expectedAttemptedCall: 1,
 		},
 	}
@@ -623,6 +630,7 @@ func TestGenerateMapVolumeFunc_AttemptTrackingRespectsFeatureGate(t *testing.T) 
 	}
 }
 
+// attemptTrackingTestASW 记录挂载尝试调用次数，用于验证特性门控。
 type attemptTrackingTestASW struct {
 	deviceMountState    DeviceMountState
 	mountAttemptedCalls int
@@ -642,6 +650,7 @@ func (a *attemptTrackingTestASW) MarkVolumeMountAsUncertain(markVolumeOpts MarkV
 	return nil
 }
 
+// MarkDeviceAsMounted 记录设备为全局已挂载。
 func (a *attemptTrackingTestASW) MarkDeviceAsMounted(volumeName v1.UniqueVolumeName, devicePath, deviceMountPath, seLinuxMountContext string) error {
 	a.deviceMountState = DeviceGloballyMounted
 	return nil
@@ -651,6 +660,7 @@ func (a *attemptTrackingTestASW) MarkDeviceAsUncertain(volumeName v1.UniqueVolum
 	return nil
 }
 
+// MarkDeviceAsUnmounted 记录设备为未挂载。
 func (a *attemptTrackingTestASW) MarkDeviceAsUnmounted(volumeName v1.UniqueVolumeName) error {
 	a.deviceMountState = DeviceNotMounted
 	return nil
@@ -700,6 +710,7 @@ func (a *attemptTrackingTestASW) CheckVolumeInFailedExpansionWithFinalErrors(vol
 	return false
 }
 
+// MarkVolumeAsMountAttempted 累计尝试次数并记录最近一次尝试的 Pod 和卷。
 func (a *attemptTrackingTestASW) MarkVolumeAsMountAttempted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) {
 	a.mountAttemptedCalls++
 	a.lastAttemptedPod = podName
@@ -710,6 +721,7 @@ func (a *attemptTrackingTestASW) IsVolumeMountAttempted(podName volumetypes.Uniq
 	return a.mountAttemptedCalls > 0 && a.lastAttemptedPod == podName && a.lastAttemptedVolume == volumeName
 }
 
+// getTestPod 创建引用指定 PVC 的测试 Pod。
 func getTestPod(podName, pvcName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -732,6 +744,7 @@ func getTestPod(podName, pvcName string) *v1.Pod {
 	}
 }
 
+// getTestPVC 创建指定容量、已分配容量和调整状态的测试 PVC。
 func getTestPVC(volumeName string, specSize, statusSize, allocatedSize string, resizeStatus *v1.ClaimResourceStatus) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -762,11 +775,13 @@ func getTestPVC(volumeName string, specSize, statusSize, allocatedSize string, r
 	return pvc
 }
 
+// addAccessMode 向 PVC 追加访问模式并返回自身。
 func addAccessMode(pvc *v1.PersistentVolumeClaim, mode v1.PersistentVolumeAccessMode) *v1.PersistentVolumeClaim {
 	pvc.Spec.AccessModes = append(pvc.Spec.AccessModes, mode)
 	return pvc
 }
 
+// addAnnotation 向 PVC 添加注解并返回自身。
 func addAnnotation(pvc *v1.PersistentVolumeClaim, key, value string) *v1.PersistentVolumeClaim {
 	if pvc.Annotations == nil {
 		pvc.Annotations = make(map[string]string)
@@ -775,6 +790,7 @@ func addAnnotation(pvc *v1.PersistentVolumeClaim, key, value string) *v1.Persist
 	return pvc
 }
 
+// getTestPV 创建指定容量并处于 Bound 状态的测试 PV。
 func getTestPV(volumeName string, specSize string) *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -793,6 +809,7 @@ func getTestPV(volumeName string, specSize string) *v1.PersistentVolume {
 	}
 }
 
+// getTestOperationGenerator 使用假客户端创建 OperationGenerator。
 func getTestOperationGenerator(volumePluginMgr *volume.VolumePluginMgr, objects ...runtime.Object) OperationGenerator {
 	fakeKubeClient := fakeclient.NewSimpleClientset(objects...)
 	fakeRecorder := &record.FakeRecorder{}
@@ -805,6 +822,7 @@ func getTestOperationGenerator(volumePluginMgr *volume.VolumePluginMgr, objects 
 	return operationGenerator
 }
 
+// getTestOperatorGeneratorWithPVPVC 创建使用给定 PVC/PV 响应 get 和 status patch 的 OperationGenerator。
 func getTestOperatorGeneratorWithPVPVC(volumePluginMgr *volume.VolumePluginMgr, pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) OperationGenerator {
 	fakeKubeClient := fakeclient.NewSimpleClientset(pvc, pv)
 	fakeKubeClient.AddReactor("get", "persistentvolumeclaims", func(action core.Action) (bool, runtime.Object, error) {
@@ -830,6 +848,7 @@ func getTestOperatorGeneratorWithPVPVC(volumePluginMgr *volume.VolumePluginMgr, 
 	return operationGenerator
 }
 
+// getTestVolumeToUnmount 构造待卸载的已挂载卷。
 func getTestVolumeToUnmount(pod *v1.Pod, pvSpec v1.PersistentVolumeSpec, pluginName string) MountedVolume {
 	volumeSpec := &volume.Spec{
 		PersistentVolume: &v1.PersistentVolume{
@@ -845,6 +864,7 @@ func getTestVolumeToUnmount(pod *v1.Pod, pvSpec v1.PersistentVolumeSpec, pluginN
 	return volumeToUnmount
 }
 
+// initTestPlugins 初始化插件管理器并确认目标插件已注册。
 func initTestPlugins(t *testing.T, plugs []volume.VolumePlugin, pluginName string) (*volume.VolumePluginMgr, string) {
 	client := fakeclient.NewSimpleClientset()
 	pluginMgr, _, tmpDir := csitesting.NewTestPlugin(t, client)

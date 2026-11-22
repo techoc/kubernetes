@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestMakePayload 验证 MakePayload 按 items 映射生成文件投影，并正确处理默认权限、用户及特性门控。
 func TestMakePayload(t *testing.T) {
 	caseMappingMode := int32(0400)
 	caseMappingUser1 := int64(1001)
@@ -371,6 +372,7 @@ func TestMakePayload(t *testing.T) {
 	}
 
 	for _, tc := range cases {
+		// 关闭用户字段时需回退模拟版本，否则门控默认值会随版本变化。
 		if tc.disableUserFieldsGate {
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 		}
@@ -397,6 +399,7 @@ func TestMakePayload(t *testing.T) {
 	}
 }
 
+// newTestHost 创建临时根目录及其对应的 FakeVolumeHost，调用方负责清理返回目录。
 func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.VolumeHost) {
 	tempDir, err := os.MkdirTemp("", "secret_volume_test.")
 	if err != nil {
@@ -406,11 +409,12 @@ func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.Vo
 	return tempDir, volumetest.NewFakeVolumeHost(t, tempDir, clientset, emptydir.ProbeVolumePlugins())
 }
 
+// TestCanSupport 验证 secret 插件只识别带 Secret 源的卷。
 func TestCanSupport(t *testing.T) {
 	pluginMgr := volume.VolumePluginMgr{}
 	tempDir, host := newTestHost(t, nil)
 	defer os.RemoveAll(tempDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -427,6 +431,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestPlugin 验证 secret 卷的挂载路径、数据写入、包装目录与指标，并验证卸载清理。
 func TestPlugin(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -441,7 +446,7 @@ func TestPlugin(t *testing.T) {
 		rootDir, host = newTestHost(t, client)
 	)
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -474,7 +479,7 @@ func TestPlugin(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷通过 empty-dir 插件创建包装目录，用于挂载点重建时的元数据恢复。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -487,7 +492,7 @@ func TestPlugin(t *testing.T) {
 	doTestSecretDataInVolume(volumePath, secret, t)
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 
-	// Metrics only supported on linux
+	// 卷指标目前只在 Linux 上提供。
 	metrics, err := mounter.GetMetrics()
 	if runtime.GOOS == "linux" {
 		assert.NotEmpty(t, metrics)
@@ -497,6 +502,7 @@ func TestPlugin(t *testing.T) {
 	}
 }
 
+// TestInvalidPathSecret 验证映射中不存在的 key 会导致挂载失败且不留下卷目录。
 func TestInvalidPathSecret(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -515,7 +521,7 @@ func TestInvalidPathSecret(t *testing.T) {
 	}
 
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -548,9 +554,8 @@ func TestInvalidPathSecret(t *testing.T) {
 	}
 }
 
-// Test the case where the plugin's ready file exists, but the volume dir is not a
-// mountpoint, which is the state the system will be in after reboot.  The dir
-// should be mounter and the secret data written to it.
+// TestPluginReboot 模拟重启后的状态：ready 文件仍在但卷目录不是挂载点，
+// 此时应重新挂载卷目录并把 secret 数据写入其中。
 func TestPluginReboot(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid3")
@@ -565,7 +570,7 @@ func TestPluginReboot(t *testing.T) {
 		rootDir, host = newTestHost(t, client)
 	)
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -604,6 +609,7 @@ func TestPluginReboot(t *testing.T) {
 	doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// TestPluginOptional 验证 secret 不存在但标记为 optional 时，挂载成功且卷目录为空。
 func TestPluginOptional(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -619,7 +625,7 @@ func TestPluginOptional(t *testing.T) {
 	)
 	volumeSpec.Secret.Optional = &trueVal
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -652,7 +658,7 @@ func TestPluginOptional(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷通过 empty-dir 插件创建包装目录，用于挂载点重建时的元数据恢复。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -695,6 +701,7 @@ func TestPluginOptional(t *testing.T) {
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// TestPluginOptionalKeys 验证 optional 卷中缺失的 key 被跳过，其余 key 正常写入且不报错。
 func TestPluginOptionalKeys(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -717,7 +724,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 	}
 	volumeSpec.Secret.Optional = &trueVal
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* 探测器 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(secretPluginName)
 	if err != nil {
@@ -750,7 +757,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷通过 empty-dir 插件创建包装目录，用于挂载点重建时的元数据恢复。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -763,7 +770,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 	doTestSecretDataInVolume(volumePath, secret, t)
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 
-	// Metrics only supported on linux
+	// 卷指标目前只在 Linux 上提供。
 	metrics, err := mounter.GetMetrics()
 	if runtime.GOOS == "linux" {
 		assert.NotEmpty(t, metrics)
@@ -773,6 +780,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 	}
 }
 
+// volumeSpec 构造引用指定 secret 的卷规格，并设置默认文件权限。
 func volumeSpec(volumeName, secretName string, defaultMode int32) *v1.Volume {
 	return &v1.Volume{
 		Name: volumeName,
@@ -785,6 +793,7 @@ func volumeSpec(volumeName, secretName string, defaultMode int32) *v1.Volume {
 	}
 }
 
+// secret 构造包含三个测试键值对的 Secret 对象。
 func secret(namespace, name string) v1.Secret {
 	return v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -799,6 +808,7 @@ func secret(namespace, name string) v1.Secret {
 	}
 }
 
+// doTestSecretDataInVolume 逐项核对 secret 数据已按 key 写入卷目录且内容一致。
 func doTestSecretDataInVolume(volumePath string, secret v1.Secret, t *testing.T) {
 	for key, value := range secret.Data {
 		secretDataHostPath := filepath.Join(volumePath, key)
@@ -818,6 +828,7 @@ func doTestSecretDataInVolume(volumePath string, secret v1.Secret, t *testing.T)
 	}
 }
 
+// doTestCleanAndTeardown 卸载卷并确认卷目录已被移除。
 func doTestCleanAndTeardown(plugin volume.VolumePlugin, podUID types.UID, testVolumeName, volumePath string, t *testing.T) {
 	unmounter, err := plugin.NewUnmounter(testVolumeName, podUID)
 	if err != nil {
@@ -837,6 +848,7 @@ func doTestCleanAndTeardown(plugin volume.VolumePlugin, podUID types.UID, testVo
 	}
 }
 
+// hasPathSuffix 按当前平台的路径分隔符判断后缀，兼容 Windows 等非 Unix 平台。
 func hasPathSuffix(s, suffix string) bool {
 	return strings.HasSuffix(s, filepath.FromSlash(suffix))
 }

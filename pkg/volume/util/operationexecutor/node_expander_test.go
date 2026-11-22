@@ -32,6 +32,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// fakeActualStateOfWorld 是 ActualStateOfWorld 的测试替身，记录扩容失败与挂载尝试状态。
 type fakeActualStateOfWorld struct {
 	volumesWithFinalExpansionErrors sets.Set[v1.UniqueVolumeName]
 	attemptedMounts                 map[volumetypes.UniquePodName]sets.Set[v1.UniqueVolumeName]
@@ -40,6 +41,7 @@ type fakeActualStateOfWorld struct {
 
 var _ ActualStateOfWorldMounterUpdater = &fakeActualStateOfWorld{}
 
+// newFakeActualStateOfWorld 构造测试用的 fake ActualStateOfWorld 对象。
 func newFakeActualStateOfWorld() *fakeActualStateOfWorld {
 	return &fakeActualStateOfWorld{
 		volumesWithFinalExpansionErrors: sets.New[v1.UniqueVolumeName](),
@@ -47,6 +49,7 @@ func newFakeActualStateOfWorld() *fakeActualStateOfWorld {
 	}
 }
 
+// TestNodeExpander 节点扩容逻辑的测试。
 func TestNodeExpander(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 
@@ -59,20 +62,20 @@ func TestNodeExpander(t *testing.T) {
 		pv                            *v1.PersistentVolume
 		recoverVolumeExpansionFailure bool
 
-		// desired size, defaults to pv.Spec.Capacity
+		// 期望大小，未指定时默认取 pv.Spec.Capacity
 		desiredSize *resource.Quantity
-		// actualSize, defaults to pvc.Status.Capacity
+		// 实际大小，未指定时默认取 pvc.Status.Capacity
 		actualSize *resource.Quantity
 
-		// expectations of test
+		// 该用例的预期结果
 		expectedResizeStatus v1.ClaimResourceStatus
 		expectedStatusSize   resource.Quantity
-		// whether resize call was made to the plugin
+		// 是否向插件发起了扩容调用
 		expectResizeCall    bool
 		expectFinalErrors   bool
 		expectedReturnValue bool
 
-		// whether resize operation was assumed as finished
+		// 是否假定扩容操作已完成
 		assumeResizeOpAsFinished bool
 		expectError              bool
 	}{
@@ -275,84 +278,84 @@ func TestNodeExpander(t *testing.T) {
 	}
 }
 
-// CheckAndMarkDeviceUncertainViaReconstruction implements ActualStateOfWorldMounterUpdater.
+// CheckAndMarkDeviceUncertainViaReconstruction 通过重建将设备标记为状态不确定，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) CheckAndMarkDeviceUncertainViaReconstruction(volumeName v1.UniqueVolumeName, deviceMountPath string) bool {
 	panic("unimplemented")
 }
 
-// CheckAndMarkVolumeAsUncertainViaReconstruction implements ActualStateOfWorldMounterUpdater.
+// CheckAndMarkVolumeAsUncertainViaReconstruction 通过重建将卷标记为状态不确定，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) CheckAndMarkVolumeAsUncertainViaReconstruction(opts MarkVolumeOpts) (bool, error) {
 	panic("unimplemented")
 }
 
-// CheckVolumeInFailedExpansionWithFinalErrors implements ActualStateOfWorldMounterUpdater.
+// CheckVolumeInFailedExpansionWithFinalErrors 检查卷是否处于不可恢复的扩容失败状态，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) CheckVolumeInFailedExpansionWithFinalErrors(volumeName v1.UniqueVolumeName) bool {
 	f.RLock()
 	defer f.RUnlock()
 	return f.volumesWithFinalExpansionErrors.Has(volumeName)
 }
 
-// GetDeviceMountState implements ActualStateOfWorldMounterUpdater.
+// GetDeviceMountState 获取设备挂载状态，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) GetDeviceMountState(volumeName v1.UniqueVolumeName) DeviceMountState {
 	panic("unimplemented")
 }
 
-// GetVolumeMountState implements ActualStateOfWorldMounterUpdater.
+// GetVolumeMountState 获取卷挂载状态，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) GetVolumeMountState(volumName v1.UniqueVolumeName, podName volumetypes.UniquePodName) VolumeMountState {
 	panic("unimplemented")
 }
 
-// IsVolumeDeviceReconstructed implements ActualStateOfWorldMounterUpdater.
+// IsVolumeDeviceReconstructed 判断卷设备是否已重建，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) IsVolumeDeviceReconstructed(volumeName v1.UniqueVolumeName) bool {
 	panic("unimplemented")
 }
 
-// IsVolumeMountedElsewhere implements ActualStateOfWorldMounterUpdater.
+// IsVolumeMountedElsewhere 判断卷是否挂载在其他 Pod 上，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) IsVolumeMountedElsewhere(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) bool {
 	panic("unimplemented")
 }
 
-// IsVolumeReconstructed implements ActualStateOfWorldMounterUpdater.
+// IsVolumeReconstructed 判断卷是否已重建，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) IsVolumeReconstructed(volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) bool {
 	panic("unimplemented")
 }
 
-// MarkDeviceAsMounted implements ActualStateOfWorldMounterUpdater.
+// MarkDeviceAsMounted 将设备标记为已挂载，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkDeviceAsMounted(volumeName v1.UniqueVolumeName, devicePath string, deviceMountPath string, seLinuxMountContext string) error {
 	panic("unimplemented")
 }
 
-// MarkDeviceAsUncertain implements ActualStateOfWorldMounterUpdater.
+// MarkDeviceAsUncertain 将设备标记为状态不确定，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkDeviceAsUncertain(volumeName v1.UniqueVolumeName, devicePath string, deviceMountPath string, seLinuxMountContext string) error {
 	panic("unimplemented")
 }
 
-// MarkDeviceAsUnmounted implements ActualStateOfWorldMounterUpdater.
+// MarkDeviceAsUnmounted 将设备标记为已卸载，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkDeviceAsUnmounted(volumeName v1.UniqueVolumeName) error {
 	panic("unimplemented")
 }
 
-// MarkForInUseExpansionError implements ActualStateOfWorldMounterUpdater.
+// MarkForInUseExpansionError 标记使用中的扩容错误，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkForInUseExpansionError(volumeName v1.UniqueVolumeName) {
 	panic("unimplemented")
 }
 
-// MarkVolumeAsMounted implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeAsMounted 将卷标记为已挂载，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeAsMounted(markVolumeOpts MarkVolumeOpts) error {
 	panic("unimplemented")
 }
 
-// MarkVolumeAsResized implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeAsResized 将卷标记为已扩容，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeAsResized(volumeName v1.UniqueVolumeName, claimSize resource.Quantity) bool {
 	panic("unimplemented")
 }
 
-// MarkVolumeAsUnmounted implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeAsUnmounted 将卷标记为已卸载，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeAsUnmounted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) error {
 	panic("unimplemented")
 }
 
-// MarkVolumeExpansionFailedWithFinalError implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeExpansionFailedWithFinalError 将卷扩容标记为不可恢复的失败，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeExpansionFailedWithFinalError(volumeName v1.UniqueVolumeName) {
 	f.Lock()
 	defer f.Unlock()
@@ -360,19 +363,19 @@ func (f *fakeActualStateOfWorld) MarkVolumeExpansionFailedWithFinalError(volumeN
 	f.volumesWithFinalExpansionErrors.Insert(volumeName)
 }
 
-// MarkVolumeMountAsUncertain implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeMountAsUncertain 将卷挂载标记为状态不确定，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeMountAsUncertain(markVolumeOpts MarkVolumeOpts) error {
 	panic("unimplemented")
 }
 
-// RemoveVolumeFromFailedWithFinalErrors implements ActualStateOfWorldMounterUpdater.
+// RemoveVolumeFromFailedWithFinalErrors 从不可恢复失败集合中移除卷，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) RemoveVolumeFromFailedWithFinalErrors(volumeName v1.UniqueVolumeName) {
 	f.Lock()
 	defer f.Unlock()
 	f.volumesWithFinalExpansionErrors.Delete(volumeName)
 }
 
-// MarkVolumeAsMountAttempted implements ActualStateOfWorldMounterUpdater.
+// MarkVolumeAsMountAttempted 将卷挂载标记为已尝试，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) MarkVolumeAsMountAttempted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) {
 	f.Lock()
 	defer f.Unlock()
@@ -384,7 +387,7 @@ func (f *fakeActualStateOfWorld) MarkVolumeAsMountAttempted(podName volumetypes.
 	volumes.Insert(volumeName)
 }
 
-// IsVolumeMountAttempted implements ActualStateOfWorldMounterUpdater.
+// IsVolumeMountAttempted 判断卷挂载是否已尝试，实现 ActualStateOfWorldMounterUpdater 接口。
 func (f *fakeActualStateOfWorld) IsVolumeMountAttempted(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) bool {
 	f.RLock()
 	defer f.RUnlock()

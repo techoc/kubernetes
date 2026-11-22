@@ -21,10 +21,12 @@ import (
 	"testing"
 )
 
+// pathWithSuffix 在固定的设备路径后拼接后缀，构造测试用例输入。
 func pathWithSuffix(suffix string) string {
 	return fmt.Sprintf("%s%s", "/var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/pvc-1d205234-06cd-4fe4-a7ea-0e8f3e2faf5f/dev/e196ebd3-2ab1-4185-bed4-b997ba38d1dc", suffix)
 }
 
+// TestCleanBackingFilePath 验证 cleanBackingFilePath 能去掉路径尾部的空白和 "(deleted)" 标记。
 func TestCleanBackingFilePath(t *testing.T) {
 	const defaultPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/pvc-1d205234-06cd-4fe4-a7ea-0e8f3e2faf5f/dev/e196ebd3-2ab1-4185-bed4-b997ba38d1dc"
 	testCases := []struct {

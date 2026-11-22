@@ -32,22 +32,21 @@ import (
 	utilpath "k8s.io/utils/path"
 )
 
-// HostUtil implements HostUtils for Windows platforms.
+// HostUtil 在 Windows 平台上实现 HostUtils。
 type HostUtil struct{}
 
-// NewHostUtil returns a struct that implements HostUtils on Windows platforms
+// NewHostUtil 返回一个在 Windows 平台上实现 HostUtils 的结构体。
 func NewHostUtil() *HostUtil {
 	return &HostUtil{}
 }
 
-// GetDeviceNameFromMount given a mnt point, find the device
+// GetDeviceNameFromMount 根据挂载点查找对应的设备。
 func (hu *HostUtil) GetDeviceNameFromMount(mounter mount.Interface, mountPath, pluginMountDir string) (string, error) {
 	return getDeviceNameFromMount(mounter, mountPath, pluginMountDir)
 }
 
-// getDeviceNameFromMount find the device(drive) name in which
-// the mount path reference should match the given plugin mount directory. In case no mount path reference
-// matches, returns the volume name taken from its given mountPath
+// getDeviceNameFromMount 查找挂载路径引用所匹配的插件挂载目录下的设备（盘符）名。
+// 若没有任何挂载路径引用匹配，则返回给定 mountPath 的末级目录名作为卷名。
 func getDeviceNameFromMount(mounter mount.Interface, mountPath, pluginMountDir string) (string, error) {
 	refs, err := mounter.GetMountRefs(mountPath)
 	if err != nil {
@@ -72,22 +71,23 @@ func getDeviceNameFromMount(mounter mount.Interface, mountPath, pluginMountDir s
 	return filepath.Base(mountPath), nil
 }
 
-// DeviceOpened determines if the device is in use elsewhere
+// DeviceOpened 判断设备是否被其他地方占用。Windows 上始终返回未占用。
 func (hu *HostUtil) DeviceOpened(pathname string) (bool, error) {
 	return false, nil
 }
 
-// PathIsDevice determines if a path is a device.
+// PathIsDevice 判断给定路径是否是设备。Windows 上始终返回否。
 func (hu *HostUtil) PathIsDevice(pathname string) (bool, error) {
 	return false, nil
 }
 
-// MakeRShared checks that given path is on a mount with 'rshared' mount
-// propagation. Empty implementation here.
+// MakeRShared 检查给定路径是否位于以 'rshared' 方式传播的挂载上。
+// Windows 不支持该传播模式，这里为空实现。
 func (hu *HostUtil) MakeRShared(path string) error {
 	return nil
 }
 
+// isSystemCannotAccessErr 判断错误是否为 Windows 的“无法访问文件”系统错误。
 func isSystemCannotAccessErr(err error) bool {
 	if fserr, ok := err.(*fs.PathError); ok {
 		errno, ok := fserr.Err.(syscall.Errno)
@@ -97,37 +97,35 @@ func isSystemCannotAccessErr(err error) bool {
 	return false
 }
 
-// GetFileType checks for sockets/block/character devices
+// GetFileType 检查路径是否为 socket/块设备/字符设备。
 func (hu *(HostUtil)) GetFileType(pathname string) (FileType, error) {
 	filetype, err := getFileType(pathname)
 
 	return filetype, err
 }
 
-// PathExists checks whether the path exists
+// PathExists 检查路径是否存在。
 func (hu *HostUtil) PathExists(pathname string) (bool, error) {
 	return utilpath.Exists(utilpath.CheckFollowSymlink, pathname)
 }
 
-// EvalHostSymlinks returns the path name after evaluating symlinks
+// EvalHostSymlinks 返回解析符号链接后的路径。
 func (hu *HostUtil) EvalHostSymlinks(pathname string) (string, error) {
 	return filepath.EvalSymlinks(pathname)
 }
 
-// GetOwner returns the integer ID for the user and group of the given path
-// Note that on windows, it always returns 0. We actually don't set Group on
-// windows platform, see SetVolumeOwnership implementation.
+// GetOwner 返回给定路径的用户和组的整数 ID。
+// 注意在 Windows 上始终返回 0：该平台并不设置组，参见 SetVolumeOwnership 的实现。
 func (hu *HostUtil) GetOwner(pathname string) (int64, int64, error) {
 	return -1, -1, nil
 }
 
-// GetSELinuxSupport returns a boolean indicating support for SELinux.
-// Windows does not support SELinux.
+// GetSELinuxSupport 返回是否支持 SELinux。Windows 不支持 SELinux。
 func (hu *HostUtil) GetSELinuxSupport(pathname string) (bool, error) {
 	return false, nil
 }
 
-// GetMode returns permissions of the path.
+// GetMode 返回路径的权限位。
 func (hu *HostUtil) GetMode(pathname string) (os.FileMode, error) {
 	info, err := os.Stat(pathname)
 	if err != nil {
@@ -136,8 +134,7 @@ func (hu *HostUtil) GetMode(pathname string) (os.FileMode, error) {
 	return info.Mode(), nil
 }
 
-// GetSELinuxMountContext returns value of -o context=XYZ mount option on
-// given mount point.
+// GetSELinuxMountContext 返回给定挂载点上 -o context=XYZ 挂载选项的值。
 func (hu *HostUtil) GetSELinuxMountContext(pathname string) (string, error) {
 	return "", nil
 }

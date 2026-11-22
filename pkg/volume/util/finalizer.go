@@ -17,12 +17,12 @@ limitations under the License.
 package util
 
 const (
-	// PVCProtectionFinalizer is the name of finalizer on PVCs that have a running pod.
+	// PVCProtectionFinalizer 是运行在用的 Pod 所关联 PVC 上的 finalizer 名称。
 	PVCProtectionFinalizer = "kubernetes.io/pvc-protection"
 
-	// PVProtectionFinalizer is the name of finalizer on PVs that are bound by PVCs
+	// PVProtectionFinalizer 是被 PVC 绑定的 PV 上的 finalizer 名称。
 	PVProtectionFinalizer = "kubernetes.io/pv-protection"
 
-	// VACProtectionFinalizer is the name of finalizer on VACs that are used by PVs or PVCs
+	// VACProtectionFinalizer 是被 PV 或 PVC 使用的 VAC 上的 finalizer 名称。
 	VACProtectionFinalizer = "kubernetes.io/vac-protection"
 )

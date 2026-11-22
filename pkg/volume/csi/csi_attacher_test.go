@@ -45,15 +45,20 @@ import (
 )
 
 const (
-	testWatchTimeout     = 10 * time.Second
+	// testWatchTimeout 是等待卷附件状态变化的默认超时时间。
+	testWatchTimeout = 10 * time.Second
+	// testWatchFailTimeout 缩短预期失败用例的等待时间，避免拖慢测试。
 	testWatchFailTimeout = 2 * time.Second
 )
 
 var (
+	// bFalse 提供可复用的 bool 指针，供 CSIDriver 测试用例取址。
 	bFalse = false
-	bTrue  = true
+	// bTrue 提供可复用的 bool 指针，供 CSIDriver 测试用例取址。
+	bTrue = true
 )
 
+// makeTestAttachment 构造指定 ID、节点和 PV 的卷附件，初始状态为未挂载。
 func makeTestAttachment(attachID, nodeName, pvName string) *storage.VolumeAttachment {
 	return &storage.VolumeAttachment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,12 +79,14 @@ func makeTestAttachment(attachID, nodeName, pvName string) *storage.VolumeAttach
 	}
 }
 
+// markVolumeAttached 轮询客户端直到卷附件出现，再写入状态并通知 watcher。
+// 附件由 Attach 的异步 goroutine 创建，必须等其落库后才能更新，否则会漏改。
 func markVolumeAttached(t *testing.T, client clientset.Interface, watch *watch.RaceFreeFakeWatcher, attachID string, status storage.VolumeAttachmentStatus) {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	var attach *storage.VolumeAttachment
 	var err error
 	defer ticker.Stop()
-	// wait for attachment to be saved
+	// 等待附件被保存，避免异步 goroutine 尚未创建就更新。
 	for i := 0; i < 100; i++ {
 		attach, err = client.StorageV1().VolumeAttachments().Get(context.TODO(), attachID, metav1.GetOptions{})
 		if err != nil {
@@ -112,6 +119,7 @@ func markVolumeAttached(t *testing.T, client clientset.Interface, watch *watch.R
 	}
 }
 
+// TestAttacherAttach 验证 Attach 在卷与驱动匹配时成功，不匹配或驱动报错时返回错误。
 func TestAttacherAttach(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -187,7 +195,7 @@ func TestAttacherAttach(t *testing.T) {
 			volumeName: "vol02",
 			attachID:   getAttachmentName("vol02", "driver02", "node02"),
 			spec:       volume.NewSpecFromVolume(makeTestVol("pv01", "driver02")),
-			shouldFail: true, // csi not enabled
+			shouldFail: true, // 内联卷源未启用 CSI
 		},
 		{
 			name:       "missing spec",
@@ -195,11 +203,11 @@ func TestAttacherAttach(t *testing.T) {
 			driverName: "driver000",
 			volumeName: "vol02",
 			attachID:   getAttachmentName("vol02", "driver02", "node02"),
-			shouldFail: true, // csi not enabled
+			shouldFail: true, // 缺少 spec 时无法挂载
 		},
 	}
 
-	// attacher loop
+	// 逐个执行 attacher 用例
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("test case: %s", tc.name)
@@ -245,6 +253,7 @@ func TestAttacherAttach(t *testing.T) {
 	}
 }
 
+// TestAttacherAttachWithInline 验证内联卷源场景下 Attach 的行为：PV 可挂载，卷源与缺失 spec 均失败。
 func TestAttacherAttachWithInline(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -286,7 +295,7 @@ func TestAttacherAttachWithInline(t *testing.T) {
 		},
 	}
 
-	// attacher loop
+	// 逐个执行 attacher 用例
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("test case: %s", tc.name)
@@ -328,6 +337,7 @@ func TestAttacherAttachWithInline(t *testing.T) {
 	}
 }
 
+// TestAttacherWithCSIDriver 验证 CanAttach 与 Attach 遵循 CSIDriver 的 AttachRequired 配置。
 func TestAttacherWithCSIDriver(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -412,10 +422,9 @@ func TestAttacherWithCSIDriver(t *testing.T) {
 	}
 }
 
+// TestAttacherWaitForVolumeAttachmentWithCSIDriver 验证不可挂载驱动会跳过 WaitForAttach。
 func TestAttacherWaitForVolumeAttachmentWithCSIDriver(t *testing.T) {
-	// In order to detect if the volume plugin would skip WaitForAttach for non-attachable drivers,
-	// we do not instantiate any VolumeAttachment. So if the plugin does not skip attach,  WaitForVolumeAttachment
-	// will return an error that volume attachment was not found.
+	// 故意不创建任何卷附件：若插件未对不可挂载驱动跳过等待，WaitForVolumeAttachment 会因找不到附件而报错。
 	tests := []struct {
 		name         string
 		driver       string
@@ -487,6 +496,7 @@ func TestAttacherWaitForVolumeAttachmentWithCSIDriver(t *testing.T) {
 	}
 }
 
+// TestAttacherWaitForAttach 验证 WaitForAttach 返回已挂载附件的 ID，附件缺失或卷源无效时报错。
 func TestAttacherWaitForAttach(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -569,6 +579,7 @@ func TestAttacherWaitForAttach(t *testing.T) {
 	}
 }
 
+// TestAttacherWaitForAttachWithInline 验证内联卷源场景下 WaitForAttach 的行为：PV 附件返回 ID，其余情况报错。
 func TestAttacherWaitForAttachWithInline(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -649,6 +660,7 @@ func TestAttacherWaitForAttachWithInline(t *testing.T) {
 	}
 }
 
+// TestAttacherVolumesAreAttached 验证 VolumesAreAttached 按附件的 Attached 状态返回每个 spec 的挂载状态。
 func TestAttacherVolumesAreAttached(t *testing.T) {
 	type attachedSpec struct {
 		volName  string
@@ -707,7 +719,7 @@ func TestAttacherVolumesAreAttached(t *testing.T) {
 			nodeName := "fakeNode"
 
 			var specs []*volume.Spec
-			// create and save volume attchments
+			// 创建并保存卷附件
 			for _, attachedSpec := range tc.attachedSpecs {
 				specs = append(specs, attachedSpec.spec)
 				attachID := getAttachmentName(attachedSpec.volName, testDriver, nodeName)
@@ -719,7 +731,7 @@ func TestAttacherVolumesAreAttached(t *testing.T) {
 				}
 			}
 
-			// retrieve attached status
+			// 查询挂载状态
 			stats, err := csiAttacher.VolumesAreAttached(specs, types.NodeName(nodeName))
 			if err != nil {
 				t.Fatal(err)
@@ -728,7 +740,7 @@ func TestAttacherVolumesAreAttached(t *testing.T) {
 				t.Errorf("expecting %d attachment status, got %d", len(tc.attachedSpecs), len(stats))
 			}
 
-			// compare attachment status for each spec
+			// 逐个 spec 比较挂载状态
 			for _, attached := range tc.attachedSpecs {
 				stat, ok := stats[attached.spec]
 				if attached.attached && !ok {
@@ -742,6 +754,7 @@ func TestAttacherVolumesAreAttached(t *testing.T) {
 	}
 }
 
+// TestAttacherVolumesAreAttachedWithInline 验证内联卷源场景下 VolumesAreAttached 只返回 PV 的挂载状态。
 func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
 	type attachedSpec struct {
 		volName  string
@@ -778,7 +791,7 @@ func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
 			nodeName := "fakeNode"
 
 			var specs []*volume.Spec
-			// create and save volume attchments
+			// 创建并保存卷附件
 			for _, attachedSpec := range tc.attachedSpecs {
 				specs = append(specs, attachedSpec.spec)
 				attachID := getAttachmentName(attachedSpec.volName, testDriver, nodeName)
@@ -790,7 +803,7 @@ func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
 				}
 			}
 
-			// retrieve attached status
+			// 查询挂载状态
 			stats, err := csiAttacher.VolumesAreAttached(specs, types.NodeName(nodeName))
 			if err != nil {
 				t.Fatal(err)
@@ -799,7 +812,7 @@ func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
 				t.Errorf("expecting %d attachment status, got %d", len(tc.attachedSpecs), len(stats))
 			}
 
-			// compare attachment status for each spec
+			// 逐个 spec 比较挂载状态
 			for _, attached := range tc.attachedSpecs {
 				stat, ok := stats[attached.spec]
 				if attached.attached && !ok {
@@ -813,6 +826,7 @@ func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
 	}
 }
 
+// TestAttacherDetach 验证 Detach 删除卷附件，NotFound 视为成功，其余 API 错误向上传播。
 func TestAttacherDetach(t *testing.T) {
 	nodeName := "fakeNode"
 	testCases := []struct {
@@ -830,9 +844,9 @@ func TestAttacherDetach(t *testing.T) {
 			name:       "API error",
 			volID:      "vol-004",
 			attachID:   getAttachmentName("vol-004", testDriver, nodeName),
-			shouldFail: true, // All other API errors should be propagated to caller
+			shouldFail: true, // 除 NotFound 外的 API 错误都应传播给调用方
 			reactor: func(action core.Action) (handled bool, ret runtime.Object, err error) {
-				// return Forbidden to all DELETE requests
+				// 对所有 DELETE 请求返回 Forbidden，模拟权限错误
 				if action.Matches("delete", "volumeattachments") {
 					return true, nil, apierrors.NewForbidden(action.GetResource().GroupResource(), action.GetNamespace(), fmt.Errorf("mock error"))
 				}
@@ -891,9 +905,10 @@ func TestAttacherDetach(t *testing.T) {
 	}
 }
 
+// TestAttacherGetDeviceMountPath 验证 GetDeviceMountPath 生成的路径，及缺失 CSI 源、卷句柄时的失败行为。
 func TestAttacherGetDeviceMountPath(t *testing.T) {
-	// Setup
-	// Create a new attacher
+	// 准备环境
+	// 创建新的 attacher
 	fakeClient := fakeclient.NewSimpleClientset()
 	plug, tmpDir := newTestPlugin(t, fakeClient)
 	defer os.RemoveAll(tmpDir)
@@ -908,10 +923,10 @@ func TestAttacherGetDeviceMountPath(t *testing.T) {
 		testName           string
 		pvName             string
 		volumeId           string
-		skipPVCSISource    bool // The test clears PV.Spec.CSI
+		skipPVCSISource    bool // 该用例清空 PV.Spec.CSI
 		shouldFail         bool
-		addVolSource       bool // The test adds a Volume.VolumeSource.CSI.
-		removeVolumeHandle bool // The test force removes CSI volume handle.
+		addVolSource       bool // 该用例添加 Volume.VolumeSource.CSI
+		removeVolumeHandle bool // 该用例强制清空 CSI 卷句柄
 	}{
 		{
 			testName: "success test",
@@ -945,7 +960,7 @@ func TestAttacherGetDeviceMountPath(t *testing.T) {
 		t.Logf("Running test case: %s", tc.testName)
 		var spec *volume.Spec
 
-		// Create spec
+		// 构造 spec，按用例需要移除 CSI 源或卷句柄
 		pv := makeTestPV(tc.pvName, 10, testDriver, tc.volumeId)
 		if tc.removeVolumeHandle {
 			pv.Spec.PersistentVolumeSource.CSI.VolumeHandle = ""
@@ -958,10 +973,10 @@ func TestAttacherGetDeviceMountPath(t *testing.T) {
 				spec.PersistentVolume.Spec.CSI = nil
 			}
 		}
-		// Run
+		// 执行被测方法
 		mountPath, err := csiAttacher.GetDeviceMountPath(spec)
 
-		// Verify
+		// 校验结果
 		if err != nil && !tc.shouldFail {
 			t.Errorf("test should not fail, but error occurred: %v", err)
 		} else if err == nil {
@@ -975,6 +990,7 @@ func TestAttacherGetDeviceMountPath(t *testing.T) {
 	}
 }
 
+// TestAttacherMountDevice 验证 MountDevice 的 stage 行为、fsGroup 传递、错误处理及卷数据文件落盘。
 func TestAttacherMountDevice(t *testing.T) {
 	pvName := "test-pv"
 	var testFSGroup int64 = 3000
@@ -1096,9 +1112,8 @@ func TestAttacherMountDevice(t *testing.T) {
 			createAttachment:        true,
 			populateDeviceMountPath: true,
 			shouldFail:              true,
-			// NOTE: We're skipping this test on Windows because os.Chmod is not working as intended, which means that
-			// this test won't fail on Windows due to permission denied errors.
-			// TODO: Remove the skip once Windows file permissions support is added.
+			// NOTE: Windows 上 os.Chmod 行为不符合预期，此用例在 Windows 上不会因权限不足而失败，故跳过。
+			// TODO: 待 Windows 文件权限支持完善后移除跳过。
 			// https://github.com/kubernetes/kubernetes/pull/110921
 			skipOnWindows: true,
 			spec:          volume.NewSpecFromPersistentVolume(makeTestPV(pvName, 10, testDriver, "test-vol1"), true),
@@ -1169,8 +1184,8 @@ func TestAttacherMountDevice(t *testing.T) {
 			}
 			t.Logf("Running test case: %s", tc.testName)
 
-			// Setup
-			// Create a new attacher
+			// 准备环境
+			// 创建新的 attacher
 			fakeClient := fakeclient.NewSimpleClientset()
 			plug, tmpDir := newTestPlugin(t, fakeClient)
 			defer os.RemoveAll(tmpDir)
@@ -1192,7 +1207,7 @@ func TestAttacherMountDevice(t *testing.T) {
 			attachID := getAttachmentName(tc.volName, testDriver, nodeName)
 
 			if tc.createAttachment {
-				// Set up volume attachment
+				// 准备卷附件
 				attachment := makeTestAttachment(attachID, nodeName, pvName)
 				_, err := csiAttacher.k8s.StorageV1().VolumeAttachments().Create(context.TODO(), attachment, metav1.CreateOptions{})
 				if err != nil {
@@ -1203,8 +1218,7 @@ func TestAttacherMountDevice(t *testing.T) {
 			parent := filepath.Dir(tc.deviceMountPath)
 			filePath := filepath.Join(parent, "newfile")
 			if tc.populateDeviceMountPath {
-				// We need to create the deviceMountPath before we Mount,
-				// so that we can correctly create the file without errors.
+				// 必须先创建 deviceMountPath，Mount 时才能在其中成功创建测试文件。
 				err := os.MkdirAll(tc.deviceMountPath, 0750)
 				if err != nil {
 					t.Errorf("error attempting to create the directory")
@@ -1219,21 +1233,20 @@ func TestAttacherMountDevice(t *testing.T) {
 				}
 			}
 
-			// Run
+			// 执行被测方法
 			err := csiAttacher.MountDevice(
 				tc.spec,
 				tc.devicePath,
 				tc.deviceMountPath,
 				volume.DeviceMounterArgs{FsGroup: tc.fsGroup})
 
-			// Verify
+			// 校验结果
 			if err != nil {
 				if !tc.shouldFail {
 					t.Errorf("test should not fail, but error occurred: %v", err)
 				}
 				if tc.populateDeviceMountPath {
-					// We're expecting saveVolumeData to fail, which is responsible
-					// for creating this file. It shouldn't exist.
+					// 预期 saveVolumeData 因权限不足失败，它负责创建 vol_data.json，故该文件不应存在。
 					_, err := os.Stat(filepath.Join(parent, volDataFileName))
 					if !os.IsNotExist(err) {
 						t.Errorf("vol_data.json should not exist: %v", err)
@@ -1256,7 +1269,7 @@ func TestAttacherMountDevice(t *testing.T) {
 				t.Errorf("test should fail, but no error occurred")
 			}
 
-			// Verify call goes through all the way
+			// 验证调用确实走到 CSI 驱动
 			numStaged := 1
 			if !tc.stageUnstageSet {
 				numStaged = 0
@@ -1283,7 +1296,7 @@ func TestAttacherMountDevice(t *testing.T) {
 				}
 			}
 
-			// Verify the deviceMountPath was created by the plugin
+			// 验证插件创建了 deviceMountPath 目录
 			if tc.stageUnstageSet {
 				s, err := os.Stat(tc.deviceMountPath)
 				if err != nil {
@@ -1298,6 +1311,7 @@ func TestAttacherMountDevice(t *testing.T) {
 	}
 }
 
+// TestAttacherMountDeviceWithInline 验证内联卷源场景下 MountDevice 失败，PV 场景正常 stage 并传递 fsGroup。
 func TestAttacherMountDeviceWithInline(t *testing.T) {
 	pvName := "test-pv"
 	var testFSGroup int64 = 3000
@@ -1387,8 +1401,8 @@ func TestAttacherMountDeviceWithInline(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			t.Logf("Running test case: %s", tc.testName)
 
-			// Setup
-			// Create a new attacher
+			// 准备环境
+			// 创建新的 attacher
 			fakeClient := fakeclient.NewSimpleClientset()
 			plug, tmpDir := newTestPlugin(t, fakeClient)
 			defer os.RemoveAll(tmpDir)
@@ -1410,7 +1424,7 @@ func TestAttacherMountDeviceWithInline(t *testing.T) {
 			nodeName := string(csiAttacher.plugin.host.GetNodeName())
 			attachID := getAttachmentName(tc.volName, testDriver, nodeName)
 
-			// Set up volume attachment
+			// 准备卷附件
 			attachment := makeTestAttachment(attachID, nodeName, pvName)
 			_, err := csiAttacher.k8s.StorageV1().VolumeAttachments().Create(context.TODO(), attachment, metav1.CreateOptions{})
 			if err != nil {
@@ -1425,14 +1439,14 @@ func TestAttacherMountDeviceWithInline(t *testing.T) {
 				fakeWatcher.Delete(attachment)
 			}()
 
-			// Run
+			// 执行被测方法
 			err = csiAttacher.MountDevice(
 				tc.spec,
 				tc.devicePath,
 				tc.deviceMountPath,
 				volume.DeviceMounterArgs{FsGroup: tc.fsGroup})
 
-			// Verify
+			// 校验结果
 			if err != nil {
 				if !tc.shouldFail {
 					t.Errorf("test should not fail, but error occurred: %v", err)
@@ -1443,7 +1457,7 @@ func TestAttacherMountDeviceWithInline(t *testing.T) {
 				t.Errorf("test should fail, but no error occurred")
 			}
 
-			// Verify call goes through all the way
+			// 验证调用确实走到 CSI 驱动
 			numStaged := 1
 			if !tc.stageUnstageSet {
 				numStaged = 0
@@ -1472,6 +1486,7 @@ func TestAttacherMountDeviceWithInline(t *testing.T) {
 	}
 }
 
+// TestAttacherUnmountDevice 验证 UnmountDevice 依据卷数据文件清理 stage 目录，以及客户端缺失时返回瞬时错误。
 func TestAttacherUnmountDevice(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	testCases := []struct {
@@ -1486,7 +1501,7 @@ func TestAttacherUnmountDevice(t *testing.T) {
 		exitError       error
 		unsetClient     bool
 	}{
-		// PV agnostic path positive test cases
+		// 与 PV 无关路径的正向用例
 		{
 			testName:        "success, json file exists",
 			volID:           "project/zone/test-vol1",
@@ -1500,7 +1515,7 @@ func TestAttacherUnmountDevice(t *testing.T) {
 			jsonFile:        `{"driverName":"test-driver","volumeHandle":"test-vol1"}`,
 			stageUnstageSet: false,
 		},
-		// PV agnostic path negative test cases
+		// 与 PV 无关路径的负向用例
 		{
 			testName:        "success: json file doesn't exist, unmount device is skipped",
 			deviceMountPath: "plugins/csi/" + generateSha("project/zone/test-vol1") + "/globalmount",
@@ -1516,7 +1531,7 @@ func TestAttacherUnmountDevice(t *testing.T) {
 			stageUnstageSet: true,
 			shouldFail:      true,
 		},
-		// Ensure that a transient error is returned if the client is not established
+		// 确保客户端未建立时返回瞬时错误
 		{
 			testName:        "fail with transient error, json file exists but client not found",
 			volID:           "project/zone/test-vol1",
@@ -1532,8 +1547,8 @@ func TestAttacherUnmountDevice(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
 			t.Logf("Running test case: %s", tc.testName)
-			// Setup
-			// Create a new attacher
+			// 准备环境
+			// 创建新的 attacher
 			fakeClient := fakeclient.NewSimpleClientset()
 			plug, tmpDir := newTestPlugin(t, fakeClient)
 			defer os.RemoveAll(tmpDir)
@@ -1547,18 +1562,18 @@ func TestAttacherUnmountDevice(t *testing.T) {
 			if tc.deviceMountPath != "" {
 				tc.deviceMountPath = filepath.Join(tmpDir, tc.deviceMountPath)
 			}
-			// Add the volume to NodeStagedVolumes
+			// 将卷加入 NodeStagedVolumes，使 UnmountDevice 能找到它
 			cdc := csiAttacher.csiClient.(*fakeCsiDriverClient)
 			cdc.nodeClient.AddNodeStagedVolume(tc.volID, tc.deviceMountPath, nil)
 
-			// Make the device staged path
+			// 创建 stage 目录
 			if tc.deviceMountPath != "" {
 				if err := os.MkdirAll(tc.deviceMountPath, 0755); err != nil {
 					t.Fatalf("error creating directory %s: %s", tc.deviceMountPath, err)
 				}
 			}
 			dir := filepath.Dir(tc.deviceMountPath)
-			// Make JSON for this object
+			// 写入卷数据 JSON 文件
 			if tc.jsonFile != "" {
 				dataPath := filepath.Join(dir, volDataFileName)
 				if err := os.WriteFile(dataPath, []byte(tc.jsonFile), 0644); err != nil {
@@ -1566,7 +1581,7 @@ func TestAttacherUnmountDevice(t *testing.T) {
 				}
 			}
 			if tc.createPV {
-				// Make the PV for this object
+				// 为该对象创建 PV
 				pvName := filepath.Base(dir)
 				pv := makeTestPV(pvName, 5, "csi", tc.volID)
 				_, err := csiAttacher.k8s.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{})
@@ -1574,15 +1589,14 @@ func TestAttacherUnmountDevice(t *testing.T) {
 					t.Fatalf("Failed to create PV: %v", err)
 				}
 			}
-			// Clear out the client if specified
-			// The lookup to generate a new client will fail
+			// 按需清空客户端，使后续查找新客户端失败
 			if tc.unsetClient {
 				csiAttacher.csiClient = nil
 			}
 
-			// Run
+			// 执行被测方法
 			err := csiAttacher.UnmountDevice(tc.deviceMountPath)
-			// Verify
+			// 校验结果
 			if err != nil {
 				if !tc.shouldFail {
 					t.Errorf("test should not fail, but error occurred: %v", err)
@@ -1596,7 +1610,7 @@ func TestAttacherUnmountDevice(t *testing.T) {
 				t.Errorf("test should fail, but no error occurred")
 			}
 
-			// Verify call goes through all the way
+			// 验证调用确实走到 CSI 驱动
 			expectedSet := 0
 			if !tc.stageUnstageSet || tc.volID == "" {
 				expectedSet = 1
@@ -1629,6 +1643,8 @@ func TestAttacherUnmountDevice(t *testing.T) {
 	}
 }
 
+// getCsiAttacherFromVolumeAttacher 将 Attach 接口断言为 csiAttacher 并设置测试用等待超时。
+// watchTimeout 为 0 时使用默认值。
 func getCsiAttacherFromVolumeAttacher(attacher volume.Attacher, watchTimeout time.Duration) *csiAttacher {
 	if watchTimeout == 0 {
 		watchTimeout = testWatchTimeout
@@ -1638,6 +1654,8 @@ func getCsiAttacherFromVolumeAttacher(attacher volume.Attacher, watchTimeout tim
 	return csiAttacher
 }
 
+// getCsiAttacherFromVolumeDetacher 将 Detach 接口断言为 csiAttacher 并设置测试用等待超时。
+// watchTimeout 为 0 时使用默认值。
 func getCsiAttacherFromVolumeDetacher(detacher volume.Detacher, watchTimeout time.Duration) *csiAttacher {
 	if watchTimeout == 0 {
 		watchTimeout = testWatchTimeout
@@ -1647,6 +1665,8 @@ func getCsiAttacherFromVolumeDetacher(detacher volume.Detacher, watchTimeout tim
 	return csiAttacher
 }
 
+// getCsiAttacherFromDeviceMounter 将设备挂载接口断言为 csiAttacher 并设置测试用等待超时。
+// watchTimeout 为 0 时使用默认值。
 func getCsiAttacherFromDeviceMounter(deviceMounter volume.DeviceMounter, watchTimeout time.Duration) *csiAttacher {
 	if watchTimeout == 0 {
 		watchTimeout = testWatchTimeout
@@ -1656,6 +1676,8 @@ func getCsiAttacherFromDeviceMounter(deviceMounter volume.DeviceMounter, watchTi
 	return csiAttacher
 }
 
+// getCsiAttacherFromDeviceUnmounter 将设备卸载接口断言为 csiAttacher 并设置测试用等待超时。
+// watchTimeout 为 0 时使用默认值。
 func getCsiAttacherFromDeviceUnmounter(deviceUnmounter volume.DeviceUnmounter, watchTimeout time.Duration) *csiAttacher {
 	if watchTimeout == 0 {
 		watchTimeout = testWatchTimeout
@@ -1665,6 +1687,7 @@ func getCsiAttacherFromDeviceUnmounter(deviceUnmounter volume.DeviceUnmounter, w
 	return csiAttacher
 }
 
+// generateSha 计算卷句柄的 SHA256，与生产代码生成挂载路径的方式保持一致。
 func generateSha(handle string) string {
 	result := sha256.Sum256([]byte(fmt.Sprintf("%s", handle)))
 	return fmt.Sprintf("%x", result)

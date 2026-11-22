@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package emptydir contains the internal representation of emptyDir
-// volumes.
+// Package emptydir 包含 emptyDir 卷的内部实现。
 package emptydir

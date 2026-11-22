@@ -23,6 +23,7 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// TestErrorTypes 验证错误判断函数对直接错误和包装错误都能正确识别。
 func TestErrorTypes(t *testing.T) {
 	tests := []struct {
 		name           string

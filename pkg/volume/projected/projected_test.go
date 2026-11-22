@@ -54,6 +54,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCollectDataWithSecret 验证 Secret 投影的键映射、权限、可选性与用户字段处理。
 func TestCollectDataWithSecret(t *testing.T) {
 	caseMappingMode := int32(0400)
 	caseMappingUser1 := int64(1001)
@@ -384,6 +385,7 @@ func TestCollectDataWithSecret(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -417,6 +419,7 @@ func TestCollectDataWithSecret(t *testing.T) {
 			}
 
 			actualPayload, err := myVolumeMounter.collectData(volume.MounterArgs{})
+			// 先按预期的成功/失败分支收窄，避免后续断言误报。
 			if err != nil && tc.success {
 				t.Errorf("%v: unexpected failure making payload: %v", tc.name, err)
 				return
@@ -435,6 +438,7 @@ func TestCollectDataWithSecret(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithConfigMap 验证 ConfigMap 投影的键映射、可选性与用户字段处理。
 func TestCollectDataWithConfigMap(t *testing.T) {
 	caseMappingMode := int32(0400)
 	caseMappingUser1 := int64(1001)
@@ -772,6 +776,7 @@ func TestCollectDataWithConfigMap(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -805,6 +810,7 @@ func TestCollectDataWithConfigMap(t *testing.T) {
 			}
 
 			actualPayload, err := myVolumeMounter.collectData(volume.MounterArgs{})
+			// 先按预期的成功/失败分支收窄，避免后续断言误报。
 			if err != nil && tc.success {
 				t.Errorf("%v: unexpected failure making payload: %v", tc.name, err)
 				return
@@ -823,6 +829,7 @@ func TestCollectDataWithConfigMap(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithDownwardAPI 验证 DownwardAPI 投影的字段引用与用户字段映射。
 func TestCollectDataWithDownwardAPI(t *testing.T) {
 	testNamespace := "test_projected_namespace"
 	testPodUID := types.UID("test_pod_uid")
@@ -1034,6 +1041,7 @@ func TestCollectDataWithDownwardAPI(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -1061,6 +1069,7 @@ func TestCollectDataWithDownwardAPI(t *testing.T) {
 			}
 
 			actualPayload, err := myVolumeMounter.collectData(volume.MounterArgs{})
+			// 先按预期的成功/失败分支收窄，避免后续断言误报。
 			if err != nil && tc.success {
 				t.Errorf("%v: unexpected failure making payload: %v", tc.name, err)
 				return
@@ -1080,6 +1089,7 @@ func TestCollectDataWithDownwardAPI(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithServiceAccountToken 验证 serviceAccountToken 投影的受众、过期时间与用户字段处理。
 func TestCollectDataWithServiceAccountToken(t *testing.T) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(pkgauthenticationv1.RegisterDefaults(scheme))
@@ -1263,6 +1273,7 @@ func TestCollectDataWithServiceAccountToken(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -1285,9 +1296,11 @@ func TestCollectDataWithServiceAccountToken(t *testing.T) {
 			client.AddReactor("create", "serviceaccounts", clitesting.ReactionFunc(func(action clitesting.Action) (bool, runtime.Object, error) {
 				tr := action.(clitesting.CreateAction).GetObject().(*authenticationv1.TokenRequest)
 				scheme.Default(tr)
+				// fake client 不会应用 scheme 默认值，受众需手动补齐。
 				if len(tr.Spec.Audiences) == 0 {
 					tr.Spec.Audiences = []string{"https://api"}
 				}
+				// 用可解析的伪 token 把各项入参编码进去，便于断言。
 				tr.Status.Token = fmt.Sprintf("%v:%v:%d:%v", action.GetNamespace(), "foo", *tr.Spec.ExpirationSeconds, tr.Spec.Audiences)
 				return true, tr, nil
 			}))
@@ -1319,10 +1332,10 @@ func TestCollectDataWithServiceAccountToken(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithClusterTrustBundle 验证 ClusterTrustBundle 投影按名称或签发者选择并生成文件。
 func TestCollectDataWithClusterTrustBundle(t *testing.T) {
-	// This test is limited by the use of a fake clientset and volume host.  We
-	// can't meaningfully test that label selectors end up doing the correct
-	// thing for example.
+	// 本测试受 fake clientset 与 volume host 的限制，
+	// 无法有效验证标签选择器等逻辑是否真正生效。
 
 	goodCert1 := mustMakeRoot(t, "root1")
 
@@ -1376,10 +1389,10 @@ func TestCollectDataWithClusterTrustBundle(t *testing.T) {
 				Sources: []v1.VolumeProjection{
 					{
 						ClusterTrustBundle: &v1.ClusterTrustBundleProjection{
-							SignerName: ptr.To("foo.example/bar"), // Note: fake client doesn't understand selection by signer name.
+							SignerName: ptr.To("foo.example/bar"), // 注：fake client 不支持按 signer name 选择。
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"key": "non-value", // Note: fake client doesn't actually act on label selectors.
+									"key": "non-value", // 注：fake client 实际不会处理标签选择器。
 								},
 							},
 							Path: "bundle.pem",
@@ -1673,6 +1686,7 @@ func TestCollectDataWithClusterTrustBundle(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -1717,6 +1731,7 @@ func TestCollectDataWithClusterTrustBundle(t *testing.T) {
 	}
 }
 
+// TestCollectDataWithPodCertificate 验证 PodCertificate 投影的数据、权限与用户字段映射。
 func TestCollectDataWithPodCertificate(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -1749,7 +1764,7 @@ func TestCollectDataWithPodCertificate(t *testing.T) {
 			bundles: []runtime.Object{},
 			wantPayload: map[string]util.FileProjection{
 				"credbundle.pem": {
-					Data: []byte("key\ncert\n"), // fake kubelet volume host is hardcoded to return this string.
+					Data: []byte("key\ncert\n"), // fake kubelet volume host 固定返回该字符串。
 					Mode: 0644,
 				},
 			},
@@ -1772,11 +1787,11 @@ func TestCollectDataWithPodCertificate(t *testing.T) {
 			bundles: []runtime.Object{},
 			wantPayload: map[string]util.FileProjection{
 				"key.pem": {
-					Data: []byte("key\n"), // fake kubelet volume host is hardcoded to return this string.
+					Data: []byte("key\n"), // fake kubelet volume host 固定返回该字符串。
 					Mode: 0644,
 				},
 				"certificates.pem": {
-					Data: []byte("cert\n"), // fake kubelet volume host is hardcoded to return this string.
+					Data: []byte("cert\n"), // fake kubelet volume host 固定返回该字符串。
 					Mode: 0644,
 				},
 			},
@@ -2041,6 +2056,7 @@ func TestCollectDataWithPodCertificate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.disableUserFieldsGate {
+				// 固定仿真版本，使旧版本下忽略用户字段的行为可复现。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.37"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AtomicWriteVolumeUserFields, !tc.disableUserFieldsGate)
@@ -2082,6 +2098,7 @@ func TestCollectDataWithPodCertificate(t *testing.T) {
 	}
 }
 
+// newTestHost 创建临时根目录并返回带探针插件的 fake volume host。
 func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.VolumeHost) {
 	tempDir, err := os.MkdirTemp("", "projected_volume_test.")
 	if err != nil {
@@ -2091,11 +2108,12 @@ func newTestHost(t *testing.T, clientset clientset.Interface) (string, volume.Vo
 	return tempDir, volumetest.NewFakeKubeletVolumeHost(t, tempDir, clientset, emptydir.ProbeVolumePlugins())
 }
 
+// TestCanSupport 验证插件按名称注册，且仅识别 projected 卷来源。
 func TestCanSupport(t *testing.T) {
 	pluginMgr := volume.VolumePluginMgr{}
 	tempDir, host := newTestHost(t, nil)
 	defer os.RemoveAll(tempDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2112,6 +2130,7 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
+// TestPlugin 验证 projected 卷插件的挂载、数据写入与卸载全流程。
 func TestPlugin(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -2126,7 +2145,7 @@ func TestPlugin(t *testing.T) {
 		rootDir, host = newTestHost(t, client)
 	)
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2159,7 +2178,7 @@ func TestPlugin(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷会自行创建一个空的 wrapper 目录。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -2173,6 +2192,7 @@ func TestPlugin(t *testing.T) {
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// TestInvalidPathProjected 验证 secret 中不存在的键会导致挂载失败且不留下卷路径。
 func TestInvalidPathProjected(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -2191,7 +2211,7 @@ func TestInvalidPathProjected(t *testing.T) {
 	}
 
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2224,9 +2244,9 @@ func TestInvalidPathProjected(t *testing.T) {
 	}
 }
 
-// Test the case where the plugin's ready file exists, but the volume dir is not a
-// mountpoint, which is the state the system will be in after reboot.  The dir
-// should be mounter and the secret data written to it.
+// 覆盖 ready 文件存在、卷目录却不是挂载点的场景，即宿主机重启后的状态：
+// 此时应重新挂载卷并写入 secret 数据。
+// TestPluginReboot 验证宿主机重启后 ready 文件残留、卷目录非挂载点时的恢复挂载。
 func TestPluginReboot(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid3")
@@ -2241,7 +2261,7 @@ func TestPluginReboot(t *testing.T) {
 		rootDir, host = newTestHost(t, client)
 	)
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2258,6 +2278,7 @@ func TestPluginReboot(t *testing.T) {
 	}
 
 	podMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid3/plugins/kubernetes.io~projected/test_volume_name", rootDir)
+	// 模拟重启后残留的 ready 文件。
 	util.SetReady(podMetadataDir)
 	volumePath := mounter.GetPath()
 	if !strings.HasSuffix(volumePath, filepath.FromSlash("pods/test_pod_uid3/volumes/kubernetes.io~projected/test_volume_name")) {
@@ -2280,6 +2301,7 @@ func TestPluginReboot(t *testing.T) {
 	doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// TestPluginOptional 验证 optional secret 不存在时卷仍可挂载且内容为空。
 func TestPluginOptional(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -2295,7 +2317,7 @@ func TestPluginOptional(t *testing.T) {
 	)
 	volumeSpec.VolumeSource.Projected.Sources[0].Secret.Optional = &trueVal
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2328,7 +2350,7 @@ func TestPluginOptional(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷会自行创建一个空的 wrapper 目录。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -2371,6 +2393,7 @@ func TestPluginOptional(t *testing.T) {
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// TestPluginOptionalKeys 验证 optional secret 中缺失的键被跳过，其余键正常写入。
 func TestPluginOptionalKeys(t *testing.T) {
 	var (
 		testPodUID     = types.UID("test_pod_uid")
@@ -2393,7 +2416,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 	}
 	volumeSpec.VolumeSource.Projected.Sources[0].Secret.Optional = &trueVal
 	defer os.RemoveAll(rootDir)
-	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
+	pluginMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober 为空 */, host)
 
 	plugin, err := pluginMgr.FindPluginByName(projectedPluginName)
 	if err != nil {
@@ -2426,7 +2449,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 		}
 	}
 
-	// secret volume should create its own empty wrapper path
+	// secret 卷会自行创建一个空的 wrapper 目录。
 	podWrapperMetadataDir := fmt.Sprintf("%v/pods/test_pod_uid/plugins/kubernetes.io~empty-dir/wrapped_test_volume_name", rootDir)
 
 	if _, err := os.Stat(podWrapperMetadataDir); err != nil {
@@ -2440,6 +2463,7 @@ func TestPluginOptionalKeys(t *testing.T) {
 	defer doTestCleanAndTeardown(plugin, testPodUID, testVolumeName, volumePath, t)
 }
 
+// makeVolumeSpec 构造引用指定 secret 的 projected 卷规格。
 func makeVolumeSpec(volumeName, name string, defaultMode int32) *v1.Volume {
 	return &v1.Volume{
 		Name: volumeName,
@@ -2449,6 +2473,7 @@ func makeVolumeSpec(volumeName, name string, defaultMode int32) *v1.Volume {
 	}
 }
 
+// makeSecret 构造带三个数据键的测试用 secret。
 func makeSecret(namespace, name string) v1.Secret {
 	return v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2463,6 +2488,7 @@ func makeSecret(namespace, name string) v1.Secret {
 	}
 }
 
+// makeProjection 按 kind 构造只含单一来源的 projected 卷定义。
 func makeProjection(name string, defaultMode *int32, defaultUser *int64, kind string) *v1.ProjectedVolumeSource {
 	var item v1.VolumeProjection
 
@@ -2496,6 +2522,7 @@ func makeProjection(name string, defaultMode *int32, defaultUser *int64, kind st
 	}
 }
 
+// doTestSecretDataInVolume 校验 secret 中每个键都落盘且内容一致。
 func doTestSecretDataInVolume(volumePath string, secret v1.Secret, t *testing.T) {
 	for key, value := range secret.Data {
 		secretDataHostPath := filepath.Join(volumePath, key)
@@ -2515,6 +2542,7 @@ func doTestSecretDataInVolume(volumePath string, secret v1.Secret, t *testing.T)
 	}
 }
 
+// doTestCleanAndTeardown 卸载卷，并确认卷路径已被移除。
 func doTestCleanAndTeardown(plugin volume.VolumePlugin, podUID types.UID, testVolumeName, volumePath string, t *testing.T) {
 	unmounter, err := plugin.NewUnmounter(testVolumeName, podUID)
 	if err != nil {
@@ -2534,6 +2562,7 @@ func doTestCleanAndTeardown(plugin volume.VolumePlugin, podUID types.UID, testVo
 	}
 }
 
+// mustMakeRoot 生成一张自签名根证书，并以 PEM 字符串返回。
 func mustMakeRoot(t *testing.T, cn string) string {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

@@ -40,31 +40,30 @@ import (
 )
 
 const (
-	// Minimum number of paths that the volume plugin considers enough when a multipath volume is requested.
+	// 请求多路径卷时，卷插件认为足够的最少路径数。
 	minMultipathCount = 2
 
-	// Minimal number of attempts to attach all paths of a multipath volumes. If at least minMultipathCount paths
-	// are available after this nr. of attempts, the volume plugin continues with mounting the volume.
+	// 附加多路径卷所有路径的最少尝试次数。达到该次数后，
+	// 若已有至少 minMultipathCount 条路径可用，就继续挂载卷。
 	minAttachAttempts = 2
 
-	// Total number of attempts to attach at least minMultipathCount paths. If there are less than minMultipathCount,
-	// the volume plugin tries to attach the remaining paths at least this number of times in total. After
-	// maxAttachAttempts attempts, it mounts even a single path.
+	// 尝试附加至少 minMultipathCount 条路径的总次数上限。若始终不足，
+	// 插件至少会尝试这么多次；超过后即使只有一条路径也会挂载。
 	maxAttachAttempts = 5
 
-	// How many seconds to wait for a multipath device if at least two paths are available.
+	// 至少有两条路径可用时，等待多路径设备出现的秒数。
 	multipathDeviceTimeout = 10
 
-	// How many seconds to wait for a device/path to appear before giving up.
+	// 放弃前等待设备/路径出现的秒数。
 	deviceDiscoveryTimeout = 30
 
-	// 'iscsiadm' error code stating that a session is logged in
-	// See https://github.com/open-iscsi/open-iscsi/blob/7d121d12ad6ba7783308c25ffd338a9fa0cc402b/include/iscsi_err.h#L37-L38
+	// 'iscsiadm' 中表示会话已登录的错误码。
+	// 参见 https://github.com/open-iscsi/open-iscsi/blob/7d121d12ad6ba7783308c25ffd338a9fa0cc402b/include/iscsi_err.h#L37-L38
 	iscsiadmErrorSessExists = 15
 
-	// iscsiadm exit code for "session could not be found"
+	// iscsiadm 退出码："找不到会话"。
 	exit_ISCSI_ERR_SESS_NOT_FOUND = 2
-	// iscsiadm exit code for "no records/targets/sessions/portals found to execute operation on."
+	// iscsiadm 退出码："没有可操作的记录/目标/会话/portal"。
 	exit_ISCSI_ERR_NO_OBJS_FOUND = 21
 )
 
@@ -83,6 +82,7 @@ var (
 	ifaceRe              = regexp.MustCompile(`.+/iface-([^/]+)/.+`)
 )
 
+// updateISCSIDiscoverydb 在启用发现阶段 CHAP 时更新 discoverydb 的认证配置。
 func updateISCSIDiscoverydb(b iscsiDiskMounter, tp string) error {
 	if !b.chapDiscovery {
 		return nil
@@ -95,7 +95,7 @@ func updateISCSIDiscoverydb(b iscsiDiskMounter, tp string) error {
 	for _, k := range chapSt {
 		v := b.secret[k]
 		if len(v) > 0 {
-			// explicitly not using execWithLog so secrets are not logged
+			// 刻意不用 execWithLog，避免把密钥写进日志
 			out, err := b.exec.Command("iscsiadm", "-m", "discoverydb", "-t", "sendtargets", "-p", tp, "-I", b.Iface, "-o", "update", "-n", k, "-v", v).CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("iscsi: failed to update discoverydb key %q error: %v", k, string(out))
@@ -105,11 +105,12 @@ func updateISCSIDiscoverydb(b iscsiDiskMounter, tp string) error {
 	return nil
 }
 
+// updateISCSINode 更新节点记录：关闭自动扫描并按需配置会话 CHAP。
 func updateISCSINode(b iscsiDiskMounter, tp string) error {
-	// setting node.session.scan to manual to handle https://github.com/kubernetes/kubernetes/issues/90982
+	// 将 node.session.scan 设为 manual，以规避 https://github.com/kubernetes/kubernetes/issues/90982
 	out, err := execWithLog(b, "iscsiadm", "-m", "node", "-p", tp, "-T", b.Iqn, "-I", b.Iface, "-o", "update", "-n", "node.session.scan", "-v", "manual")
 	if err != nil {
-		// don't fail if iscsiadm fails or the version does not support node.session.scan - log a warning to highlight the potential exposure
+		// iscsiadm 失败或版本不支持 node.session.scan 时不报错，仅告警提示可能的暴露风险
 		klog.Warningf("iscsi: failed to update node with node.session.scan=manual, possible exposure to issue 90982: %v", out)
 	}
 
@@ -125,7 +126,7 @@ func updateISCSINode(b iscsiDiskMounter, tp string) error {
 	for _, k := range chapSess {
 		v := b.secret[k]
 		if len(v) > 0 {
-			// explicitly not using execWithLog so secrets are not logged
+			// 刻意不用 execWithLog，避免把密钥写进日志
 			out, err := b.exec.Command("iscsiadm", "-m", "node", "-p", tp, "-T", b.Iqn, "-I", b.Iface, "-o", "update", "-n", k, "-v", v).CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("iscsi: failed to update node session key %q error: %v", k, string(out))
@@ -135,16 +136,18 @@ func updateISCSINode(b iscsiDiskMounter, tp string) error {
 	return nil
 }
 
-// stat a path, if not exists, retry maxRetries times
-// when iscsi transports other than default are used,  use glob instead as pci id of device is unknown
+// StatFunc 和 GlobFunc 抽象文件系统查询，便于单元测试注入。
+// 路径不存在时最多重试 maxRetries 次；非默认传输方式下设备 PCI id 未知，改用 glob 匹配。
 type StatFunc func(string) (os.FileInfo, error)
 type GlobFunc func(string) ([]string, error)
 
+// waitForPathToExist 使用真实的 os.Stat 和 filepath.Glob 等待设备路径出现。
 func waitForPathToExist(devicePath *string, maxRetries int, deviceTransport string) bool {
-	// This makes unit testing a lot easier
+	// 抽象成函数参数便于单元测试
 	return waitForPathToExistInternal(devicePath, maxRetries, deviceTransport, os.Stat, filepath.Glob)
 }
 
+// waitForPathToExistInternal 是等待设备路径出现的可注入实现。
 func waitForPathToExistInternal(devicePath *string, maxRetries int, deviceTransport string, osStat StatFunc, filepathGlob GlobFunc) bool {
 	if devicePath == nil {
 		return false
@@ -159,9 +162,8 @@ func waitForPathToExistInternal(devicePath *string, maxRetries int, deviceTransp
 			if fpath == nil {
 				err = os.ErrNotExist
 			} else {
-				// There might be a case that fpath contains multiple device paths if
-				// multiple PCI devices connect to same iscsi target. We handle this
-				// case at subsequent logic. Pick up only first path here.
+				// 多个 PCI 设备连接同一 iSCSI 目标时可能匹配到多条路径，
+				// 后续逻辑会处理这种情况，这里只取第一条。
 				*devicePath = fpath[0]
 			}
 		}
@@ -179,30 +181,30 @@ func waitForPathToExistInternal(devicePath *string, maxRetries int, deviceTransp
 	return false
 }
 
-// make a directory like /var/lib/kubelet/plugins/kubernetes.io/iscsi/iface_name/portal-some_iqn-lun-lun_id
+// makePDNameInternal 生成类似 /var/lib/kubelet/plugins/kubernetes.io/iscsi/iface_name/portal-some_iqn-lun-lun_id 的目录名。
 func makePDNameInternal(host volume.VolumeHost, portal string, iqn string, lun string, iface string) string {
 	return filepath.Join(host.GetPluginDir(iscsiPluginName), "iface-"+iface, portal+"-"+iqn+"-lun-"+lun)
 }
 
-// make a directory like /var/lib/kubelet/plugins/kubernetes.io/iscsi/volumeDevices/iface_name/portal-some_iqn-lun-lun_id
+// makeVDPDNameInternal 生成类似 /var/lib/kubelet/plugins/kubernetes.io/iscsi/volumeDevices/iface_name/portal-some_iqn-lun-lun_id 的目录名。
 func makeVDPDNameInternal(host volume.VolumeHost, portal string, iqn string, lun string, iface string) string {
 	return filepath.Join(host.GetVolumeDevicePluginDir(iscsiPluginName), "iface-"+iface, portal+"-"+iqn+"-lun-"+lun)
 }
 
+// ISCSIUtil 实现 iSCSI 卷的附加、分离和配置持久化操作。
 type ISCSIUtil struct{}
 
-// MakeGlobalPDName returns path of global plugin dir
+// MakeGlobalPDName 返回文件系统卷的全局插件目录路径。
 func (util *ISCSIUtil) MakeGlobalPDName(iscsi iscsiDisk) string {
 	return makePDNameInternal(iscsi.plugin.host, iscsi.Portals[0], iscsi.Iqn, iscsi.Lun, iscsi.Iface)
 }
 
-// MakeGlobalVDPDName returns path of global volume device plugin dir
+// MakeGlobalVDPDName 返回块设备卷的全局插件目录路径。
 func (util *ISCSIUtil) MakeGlobalVDPDName(iscsi iscsiDisk) string {
 	return makeVDPDNameInternal(iscsi.plugin.host, iscsi.Portals[0], iscsi.Iqn, iscsi.Lun, iscsi.Iface)
 }
 
-// persistISCSIFile saves iSCSI volume configuration for DetachDisk
-// into given directory.
+// persistISCSIFile 将 iSCSI 卷配置写入指定目录，供 DetachDisk 使用。
 func (util *ISCSIUtil) persistISCSIFile(conf iscsiDisk, mnt string) error {
 	file := filepath.Join(mnt, "iscsi.json")
 	fp, err := os.Create(file)
@@ -217,6 +219,7 @@ func (util *ISCSIUtil) persistISCSIFile(conf iscsiDisk, mnt string) error {
 	return nil
 }
 
+// loadISCSI 从指定目录读取持久化的 iSCSI 卷配置。
 func (util *ISCSIUtil) loadISCSI(conf *iscsiDisk, mnt string) error {
 	file := filepath.Join(mnt, "iscsi.json")
 	fp, err := os.Open(file)
@@ -231,14 +234,9 @@ func (util *ISCSIUtil) loadISCSI(conf *iscsiDisk, mnt string) error {
 	return nil
 }
 
-// scanOneLun scans a single LUN on one SCSI bus
-// Use this to avoid scanning the whole SCSI bus for all of the LUNs, which
-// would result in the kernel on this node discovering LUNs that it shouldn't
-// know about. Extraneous LUNs cause problems because they may get deleted
-// without us getting notified, since we were never supposed to know about
-// them. When LUNs are deleted without proper cleanup in the kernel, I/O errors
-// and timeouts result, which can noticeably degrade performance of future
-// operations.
+// scanOneLun 只扫描指定 SCSI 总线上的单个 LUN。
+// 扫描整条总线会让内核发现本不该看到的 LUN，这些多余 LUN 被删除时我们收不到通知，
+// 内核清理不干净会导致 I/O 错误和超时，明显拖慢后续操作。
 func scanOneLun(hostNumber int, lunNumber int) error {
 	filename := fmt.Sprintf("/sys/class/scsi_host/host%d/scan", hostNumber)
 	fd, err := os.OpenFile(filename, os.O_WRONLY, 0)
@@ -247,7 +245,7 @@ func scanOneLun(hostNumber int, lunNumber int) error {
 	}
 	defer fd.Close()
 
-	// Channel/Target are always 0 for iSCSI
+	// iSCSI 的 Channel/Target 固定为 0
 	scanCmd := fmt.Sprintf("0 0 %d", lunNumber)
 	if written, err := fd.WriteString(scanCmd); err != nil {
 		return err
@@ -259,6 +257,7 @@ func scanOneLun(hostNumber int, lunNumber int) error {
 	return nil
 }
 
+// waitForMultiPathToExist 尝试为给定路径找到对应的多路径设备，找不到返回空串。
 func waitForMultiPathToExist(devicePaths []string, maxRetries int, deviceUtil volumeutil.DeviceUtil) string {
 	if 0 == len(devicePaths) {
 		return ""
@@ -266,12 +265,11 @@ func waitForMultiPathToExist(devicePaths []string, maxRetries int, deviceUtil vo
 
 	for i := 0; i < maxRetries; i++ {
 		for _, path := range devicePaths {
-			// There shouldn't be any empty device paths. However adding this check
-			// for safer side to avoid the possibility of an empty entry.
+			// 理论上不应出现空路径，保险起见跳过
 			if path == "" {
 				continue
 			}
-			// check if the dev is using mpio and if so mount it via the dm-XX device
+			// 检查设备是否属于多路径，是则使用 dm-XX 设备
 			if mappedDevicePath := deviceUtil.FindMultipathDeviceForDevice(path); mappedDevicePath != "" {
 				return mappedDevicePath
 			}
@@ -284,7 +282,7 @@ func waitForMultiPathToExist(devicePaths []string, maxRetries int, deviceUtil vo
 	return ""
 }
 
-// AttachDisk returns devicePath of volume if attach succeeded otherwise returns error
+// AttachDisk 附加 iSCSI 卷，成功时返回设备路径，失败时返回错误。
 func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 	var devicePath string
 	devicePaths := map[string]string{}
@@ -301,8 +299,7 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 
 	bkpPortal := b.Portals
 
-	// If the initiator name was set, the iface isn't created yet,
-	// so create it and copy parameters from the pre-configured one
+	// 指定了发起端名称时 iface 尚未创建，需复制预配置 iface 的参数后新建
 	if b.InitiatorName != "" {
 		if err = cloneIface(b); err != nil {
 			klog.Errorf("iscsi: failed to clone iface: %s error: %v", b.InitIface, err)
@@ -310,13 +307,11 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 		}
 	}
 
-	// Lock the target while we login to avoid races between 2 volumes that share the same
-	// target both logging in or one logging out while another logs in.
+	// 登录期间锁定目标，避免共享同一目标的两个卷同时登录，或一边登录一边登出。
 	b.plugin.targetLocks.LockKey(b.Iqn)
 	defer b.plugin.targetLocks.UnlockKey(b.Iqn)
 
-	// Build a map of SCSI hosts for each target portal. We will need this to
-	// issue the bus rescans.
+	// 建立 portal 到 SCSI host 的映射，后续按此执行总线重扫。
 	portalHostMap, err := b.deviceUtil.GetISCSIPortalHostMapForTarget(b.Iqn)
 	if err != nil {
 		return "", err
@@ -334,10 +329,10 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 			if !loggedIn {
 				klog.V(4).Infof("Could not get SCSI host number for portal %s, will attempt login", tp)
 
-				// build discoverydb and discover iscsi target
+				// 建立 discoverydb 记录并发现 iSCSI 目标
 				execWithLog(b, "iscsiadm", "-m", "discoverydb", "-t", "sendtargets", "-p", tp, "-I", b.Iface, "-o", "new")
 
-				// update discoverydb with CHAP secret
+				// 用 CHAP 密钥更新 discoverydb
 				err = updateISCSIDiscoverydb(b, tp)
 				if err != nil {
 					lastErr = fmt.Errorf("iscsi: failed to update discoverydb to portal %s error: %v", tp, err)
@@ -346,7 +341,7 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 
 				out, err = execWithLog(b, "iscsiadm", "-m", "discoverydb", "-t", "sendtargets", "-p", tp, "-I", b.Iface, "--discover")
 				if err != nil {
-					// delete discoverydb record
+					// 发现失败时删除 discoverydb 记录
 					execWithLog(b, "iscsiadm", "-m", "discoverydb", "-t", "sendtargets", "-p", tp, "-I", b.Iface, "-o", "delete")
 					lastErr = fmt.Errorf("iscsi: failed to sendtargets to portal %s output: %s, err %v", tp, out, err)
 					continue
@@ -354,28 +349,28 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 
 				err = updateISCSINode(b, tp)
 				if err != nil {
-					// failure to update node db is rare. But deleting record will likely impact those who already start using it.
+					// 更新 node 库失败很少见，但删除记录会影响已在使用的客户端，故保留
 					lastErr = fmt.Errorf("iscsi: failed to update iscsi node to portal %s error: %v", tp, err)
 					continue
 				}
 
-				// login to iscsi target
+				// 登录 iSCSI 目标
 				out, err = execWithLog(b, "iscsiadm", "-m", "node", "-p", tp, "-T", b.Iqn, "-I", b.Iface, "--login")
 				if err != nil {
-					// delete the node record from database
+					// 登录失败时删除 node 记录
 					execWithLog(b, "iscsiadm", "-m", "node", "-p", tp, "-I", b.Iface, "-T", b.Iqn, "-o", "delete")
 					lastErr = fmt.Errorf("iscsi: failed to attach disk: Error: %s (%v)", out, err)
 					continue
 				}
 
-				// in case of node failure/restart, explicitly set to manual login so it doesn't hang on boot
+				// 显式设为手动登录，避免节点故障/重启后在启动时卡住
 				_, err = execWithLog(b, "iscsiadm", "-m", "node", "-p", tp, "-T", b.Iqn, "-o", "update", "-n", "node.startup", "-v", "manual")
 				if err != nil {
-					// don't fail if we can't set startup mode, but log warning so there is a clue
+					// 设置启动模式失败不视为错误，但记录告警以便排查
 					klog.Warningf("Failed to set iSCSI login mode to manual: %v", err)
 				}
 
-				// Rebuild the host map after logging in
+				// 登录后重建 host 映射
 				portalHostMap, err := b.deviceUtil.GetISCSIPortalHostMapForTarget(b.Iqn)
 				if err != nil {
 					return "", err
@@ -395,7 +390,7 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 				return "", fmt.Errorf("AttachDisk: lun is not a number: %s\nError: %v", b.Lun, err)
 			}
 
-			// Scan the iSCSI bus for the LUN
+			// 扫描 iSCSI 总线以发现 LUN
 			err = scanOneLun(hostNumber, lunNumber)
 			if err != nil {
 				return "", err
@@ -408,7 +403,7 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 
 			addr := tp
 			if strings.HasPrefix(tp, "[") {
-				// Delete [] from IP address, links in /dev/disk/by-path do not have it.
+				// /dev/disk/by-path 下的链接名不含 IPv6 地址的方括号
 				addr = strings.NewReplacer("[", "", "]", "").Replace(tp)
 			}
 			if iscsiTransport == "tcp" {
@@ -420,7 +415,7 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 			if exist := waitForPathToExist(&devicePath, deviceDiscoveryTimeout, iscsiTransport); !exist {
 				msg := fmt.Sprintf("Timed out waiting for device at path %s after %ds", devicePath, deviceDiscoveryTimeout)
 				klog.Error(msg)
-				// update last error
+				// 记录最后一次错误
 				lastErr = errors.New(msg)
 				continue
 			} else {
@@ -429,19 +424,18 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 		}
 		klog.V(4).Infof("iscsi: tried all devices for %q %d times, %d paths found", b.Iqn, i, len(devicePaths))
 		if len(devicePaths) == 0 {
-			// No path attached, report error and stop trying. kubelet will try again in a short while
-			// delete cloned iface
+			// 一条路径都没附加成功：报错停止，kubelet 稍后会重试；同时删除克隆的 iface
 			execWithLog(b, "iscsiadm", "-m", "iface", "-I", b.Iface, "-o", "delete")
 			klog.Errorf("iscsi: failed to get any path for iscsi disk, last err seen:\n%v", lastErr)
 			return "", fmt.Errorf("failed to get any path for iscsi disk, last err seen:\n%v", lastErr)
 		}
 		if len(devicePaths) == len(bkpPortal) {
-			// We have all paths
+			// 所有路径均已找到
 			klog.V(4).Infof("iscsi: all devices for %q found", b.Iqn)
 			break
 		}
 		if len(devicePaths) >= minMultipathCount && i >= minAttachAttempts {
-			// We have at least two paths for multipath and we tried the other paths long enough
+			// 已有多路径所需的最少路径数，且其余路径已尝试足够久
 			klog.V(4).Infof("%d devices found for %q", len(devicePaths), b.Iqn)
 			break
 		}
@@ -455,18 +449,17 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 	for _, path := range devicePaths {
 		devicePathList = append(devicePathList, path)
 	}
-	// Try to find a multipath device for the volume
+	// 尝试为卷找到多路径设备
 	if len(bkpPortal) > 1 {
-		// Multipath volume was requested. Wait up to multipathDeviceTimeout seconds for the multipath device to appear.
+		// 请求了多路径卷：最多等待 multipathDeviceTimeout 秒让多路径设备出现。
 		devicePath = waitForMultiPathToExist(devicePathList, multipathDeviceTimeout, b.deviceUtil)
 	} else {
-		// For PVs with 1 portal, just try one time to find the multipath device. This
-		// avoids a long pause when the multipath device will never get created, and
-		// matches legacy behavior.
+		// 单 portal 的 PV 只尝试一次，避免多路径设备根本不会出现时长时间卡顿，
+		// 同时保持旧行为。
 		devicePath = waitForMultiPathToExist(devicePathList, 1, b.deviceUtil)
 	}
 
-	// When no multipath device is found, just use the first (and presumably only) device
+	// 找不到多路径设备时，直接使用第一条设备路径（通常也是唯一一条）
 	if devicePath == "" {
 		devicePath = devicePathList[0]
 	}
@@ -474,15 +467,13 @@ func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {
 	klog.V(5).Infof("iscsi: AttachDisk devicePath: %s", devicePath)
 
 	if err = util.persistISCSI(b); err != nil {
-		// Return uncertain error so kubelet calls Unmount / Unmap when the pod
-		// is deleted.
+		// 返回"进度不确定"错误，使 kubelet 在 Pod 删除时仍调用 Unmount/Unmap
 		return "", types.NewUncertainProgressError(err.Error())
 	}
 	return devicePath, nil
 }
 
-// persistISCSI saves iSCSI volume configuration for DetachDisk into global
-// mount / map directory.
+// persistISCSI 将 iSCSI 卷配置写入全局挂载/映射目录，供 DetachDisk 使用。
 func (util *ISCSIUtil) persistISCSI(b iscsiDiskMounter) error {
 	klog.V(5).Infof("iscsi: AttachDisk volumeMode: %s", b.volumeMode)
 	var globalPDPath string
@@ -503,25 +494,23 @@ func (util *ISCSIUtil) persistISCSI(b iscsiDiskMounter) error {
 			return err
 		}
 		if !notMnt {
-			// The volume is already mounted, therefore the previous WaitForAttach must have
-			// persisted the volume metadata. In addition, the metadata is actually *inside*
-			// globalPDPath and we can't write it here, because it was shadowed by the volume
-			// mount.
+			// 卷已挂载，说明此前的 WaitForAttach 已持久化元数据。而且元数据文件位于
+			// globalPDPath 内部，此刻被卷挂载遮蔽，无法写入。
 			klog.V(4).Infof("Skipping persistISCSI, the volume is already mounted at %s", globalPDPath)
 			return nil
 		}
 	}
 
-	// Persist iscsi disk config to json file for DetachDisk path
+	// 将磁盘配置写成 JSON 文件，供 DetachDisk 读取
 	return util.persistISCSIFile(*(b.iscsiDisk), globalPDPath)
 }
 
-// Delete 1 block device of the form "sd*"
+// deleteDevice 从 SCSI 子系统中删除一个形如 sd* 的块设备。
 func deleteDevice(deviceName string) error {
 	filename := fmt.Sprintf("/sys/block/%s/device/delete", deviceName)
 	fd, err := os.OpenFile(filename, os.O_WRONLY, 0)
 	if err != nil {
-		// The file was not present, so just return without error
+		// 文件不存在说明设备已删除，直接返回成功
 		return nil
 	}
 	defer fd.Close()
@@ -535,36 +524,35 @@ func deleteDevice(deviceName string) error {
 	return nil
 }
 
-// deleteDevices tries to remove all the block devices and multipath map devices
-// associated with a given iscsi device
+// deleteDevices 删除与给定 iSCSI 设备关联的所有块设备和多路径设备。
 func deleteDevices(c iscsiDiskUnmounter) error {
 	lunNumber, err := strconv.Atoi(c.iscsiDisk.Lun)
 	if err != nil {
 		klog.Errorf("iscsi delete devices: lun is not a number: %s\nError: %v", c.iscsiDisk.Lun, err)
 		return err
 	}
-	// Enumerate the devices so we can delete them
+	// 先枚举出要删除的设备
 	deviceNames, err := c.deviceUtil.FindDevicesForISCSILun(c.iscsiDisk.Iqn, lunNumber)
 	if err != nil {
 		klog.Errorf("iscsi delete devices: could not get devices associated with LUN %d on target %s\nError: %v",
 			lunNumber, c.iscsiDisk.Iqn, err)
 		return err
 	}
-	// Find the multipath device path(s)
+	// 找出关联的多路径设备
 	mpathDevices := make(map[string]bool)
 	for _, deviceName := range deviceNames {
 		path := "/dev/" + deviceName
-		// check if the dev is using mpio and if so mount it via the dm-XX device
+		// 检查设备是否属于多路径，是则记录其 dm-XX 设备
 		if mappedDevicePath := c.deviceUtil.FindMultipathDeviceForDevice(path); mappedDevicePath != "" {
 			mpathDevices[mappedDevicePath] = true
 		}
 	}
-	// Flush any multipath device maps
+	// 清理多路径设备映射
 	for mpathDevice := range mpathDevices {
 		_, err = c.exec.Command("multipath", "-f", mpathDevice).CombinedOutput()
 		if err != nil {
 			klog.Warningf("Failed to flush multipath device map: %s: %v", mpathDevice, err)
-			// Fall through -- keep deleting the block devices
+			// 继续删除块设备，不因清理失败中断
 		}
 		klog.V(4).Infof("Flushed multipath device: %s", mpathDevice)
 	}
@@ -572,13 +560,13 @@ func deleteDevices(c iscsiDiskUnmounter) error {
 		err = deleteDevice(deviceName)
 		if err != nil {
 			klog.Warningf("Failed to delete block device: %s: %v", deviceName, err)
-			// Fall through -- keep deleting other block devices
+			// 继续删除其他块设备
 		}
 	}
 	return nil
 }
 
-// DetachDisk unmounts and detaches a volume from node
+// DetachDisk 从节点卸载并分离文件系统模式的 iSCSI 卷。
 func (util *ISCSIUtil) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 	if pathExists, pathErr := mount.PathExists(mntPath); pathErr != nil {
 		return fmt.Errorf("error checking if path exists: %w", pathErr)
@@ -598,7 +586,7 @@ func (util *ISCSIUtil) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 		}
 	}
 
-	// if device is no longer used, see if need to logout the target
+	// 卸载后检查是否还有人在用该设备，以决定是否需要登出目标
 	device, _, err := extractDeviceAndPrefix(mntPath)
 	if err != nil {
 		return err
@@ -608,32 +596,29 @@ func (util *ISCSIUtil) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 	var volName, iqn, iface, initiatorName string
 	found := true
 
-	// load iscsi disk config from json file
+	// 从 JSON 文件读取 iSCSI 磁盘配置
 	if err := util.loadISCSI(c.iscsiDisk, mntPath); err == nil {
 		bkpPortal, iqn, iface, volName = c.iscsiDisk.Portals, c.iscsiDisk.Iqn, c.iscsiDisk.Iface, c.iscsiDisk.VolName
 		initiatorName = c.iscsiDisk.InitiatorName
 	} else {
-		// If the iscsi disk config is not found, fall back to the original behavior.
-		// This portal/iqn/iface is no longer referenced, log out.
-		// Extract the portal and iqn from device path.
+		// 找不到配置文件时回退到旧行为：从设备路径解析 portal 和 iqn 后登出。
 		bkpPortal = make([]string, 1)
 		bkpPortal[0], iqn, err = extractPortalAndIqn(device)
 		if err != nil {
 			return err
 		}
-		// Extract the iface from the mountPath and use it to log out. If the iface
-		// is not found, maintain the previous behavior to facilitate kubelet upgrade.
-		// Logout may fail as no session may exist for the portal/IQN on the specified interface.
+		// 从挂载路径解析 iface 用于登出；找不到则保持旧行为以便 kubelet 升级。
+		// 指定接口上可能没有对应会话，登出失败属正常情况。
 		iface, found = extractIface(mntPath)
 	}
 
-	// Delete all the scsi devices and any multipath devices after unmounting
+	// 卸载后删除所有 SCSI 设备和多路径设备
 	if err = deleteDevices(c); err != nil {
 		klog.Warningf("iscsi detach disk: failed to delete devices\nError: %v", err)
-		// Fall through -- even if deleting fails, a logout may fix problems
+		// 即使删除失败也继续：登出或许能解决问题
 	}
 
-	// Lock the target while we determine if we can safely log out or not
+	// 判断能否安全登出期间锁定目标
 	c.plugin.targetLocks.LockKey(iqn)
 	defer c.plugin.targetLocks.UnlockKey(iqn)
 
@@ -642,7 +627,7 @@ func (util *ISCSIUtil) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 		return fmt.Errorf("iscsi detach disk: failed to detach iscsi disk. Couldn't get connected portals from configurations")
 	}
 
-	// If device is no longer used, see if need to logout the target
+	// 卸载后检查是否还有人在用该设备，以决定是否需要登出目标
 	if isSessionBusy(c.iscsiDisk.plugin.host, portals[0], iqn) {
 		return nil
 	}
@@ -654,7 +639,7 @@ func (util *ISCSIUtil) DetachDisk(c iscsiDiskUnmounter, mntPath string) error {
 	return nil
 }
 
-// DetachBlockISCSIDisk removes loopback device for a volume and detaches a volume from node
+// DetachBlockISCSIDisk 移除块设备卷的 loopback 设备并从节点分离卷。
 func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string) error {
 	if pathExists, pathErr := mount.PathExists(mapPath); pathErr != nil {
 		return fmt.Errorf("error checking if path exists: %w", pathErr)
@@ -662,8 +647,8 @@ func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string)
 		klog.Warningf("Unmap skipped because path does not exist: %v", mapPath)
 		return nil
 	}
-	// If we arrive here, device is no longer used, see if need to logout the target
-	// device: 192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0
+	// 能走到这里说明设备已无人使用，检查是否需要登出目标。
+	// device 形如 192.168.0.10:3260-iqn.2017-05.com.example:test-lun-0
 	device, _, err := extractDeviceAndPrefix(mapPath)
 	if err != nil {
 		return err
@@ -671,14 +656,12 @@ func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string)
 	var bkpPortal []string
 	var volName, iqn, lun, iface, initiatorName string
 	found := true
-	// load iscsi disk config from json file
+	// 从 JSON 文件读取 iSCSI 磁盘配置
 	if err := util.loadISCSI(c.iscsiDisk, mapPath); err == nil {
 		bkpPortal, iqn, lun, iface, volName = c.iscsiDisk.Portals, c.iscsiDisk.Iqn, c.iscsiDisk.Lun, c.iscsiDisk.Iface, c.iscsiDisk.VolName
 		initiatorName = c.iscsiDisk.InitiatorName
 	} else {
-		// If the iscsi disk config is not found, fall back to the original behavior.
-		// This portal/iqn/iface is no longer referenced, log out.
-		// Extract the portal and iqn from device path.
+		// 找不到配置文件时回退到旧行为：从设备路径解析 portal 和 iqn 后登出。
 		bkpPortal = make([]string, 1)
 		bkpPortal[0], iqn, err = extractPortalAndIqn(device)
 		if err != nil {
@@ -689,9 +672,8 @@ func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string)
 			return fmt.Errorf("failed to retrieve lun from mapPath: %v", mapPath)
 		}
 		lun = arr[1]
-		// Extract the iface from the mountPath and use it to log out. If the iface
-		// is not found, maintain the previous behavior to facilitate kubelet upgrade.
-		// Logout may fail as no session may exist for the portal/IQN on the specified interface.
+		// 从挂载路径解析 iface 用于登出；找不到则保持旧行为以便 kubelet 升级。
+		// 指定接口上可能没有对应会话，登出失败属正常情况。
 		iface, found = extractIface(mapPath)
 	}
 	portals := removeDuplicate(bkpPortal)
@@ -705,16 +687,16 @@ func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string)
 		return fmt.Errorf("failed to validate devicePath: %s", devicePath)
 	}
 
-	// Lock the target while we determine if we can safely log out or not
+	// 判断能否安全登出期间锁定目标
 	c.plugin.targetLocks.LockKey(iqn)
 	defer c.plugin.targetLocks.UnlockKey(iqn)
 
-	// If device is no longer used, see if need to logout the target
+	// 卸载后检查是否还有人在用该设备，以决定是否需要登出目标
 	if isSessionBusy(c.iscsiDisk.plugin.host, portals[0], iqn) {
 		return nil
 	}
 
-	// Detach a volume from kubelet node
+	// 从 kubelet 节点分离卷
 	err = util.detachISCSIDisk(c.exec, portals, iqn, iface, volName, initiatorName, found)
 	if err != nil {
 		return fmt.Errorf("failed to finish detachISCSIDisk, err: %v", err)
@@ -722,6 +704,7 @@ func (util *ISCSIUtil) DetachBlockISCSIDisk(c iscsiDiskUnmapper, mapPath string)
 	return nil
 }
 
+// detachISCSIDisk 对所有 portal 执行登出并删除 node 记录，最后清理插件自建的 iface。
 func (util *ISCSIUtil) detachISCSIDisk(exec utilexec.Interface, portals []string, iqn, iface, volName, initiatorName string, found bool) error {
 	for _, portal := range portals {
 		logoutArgs := []string{"-m", "node", "-p", portal, "-T", iqn, "--logout"}
@@ -737,7 +720,7 @@ func (util *ISCSIUtil) detachISCSIDisk(exec utilexec.Interface, portals []string
 			klog.Errorf("iscsi: failed to detach disk Error: %s", string(out))
 			return err
 		}
-		// Delete the node record
+		// 删除 node 记录
 		klog.Infof("iscsi: delete node record target %s iqn %s", portal, iqn)
 		out, err = exec.Command("iscsiadm", deleteArgs...).CombinedOutput()
 		err = ignoreExitCodes(err, exit_ISCSI_ERR_NO_OBJS_FOUND, exit_ISCSI_ERR_SESS_NOT_FOUND)
@@ -746,8 +729,7 @@ func (util *ISCSIUtil) detachISCSIDisk(exec utilexec.Interface, portals []string
 			return err
 		}
 	}
-	// Delete the iface after all sessions have logged out
-	// If the iface is not created via iscsi plugin, skip to delete
+	// 所有会话登出后才能删除 iface；非插件创建的 iface 不删
 	if initiatorName != "" && found && iface == (portals[0]+":"+volName) {
 		deleteArgs := []string{"-m", "iface", "-I", iface, "-o", "delete"}
 		out, err := exec.Command("iscsiadm", deleteArgs...).CombinedOutput()
@@ -761,10 +743,12 @@ func (util *ISCSIUtil) detachISCSIDisk(exec utilexec.Interface, portals []string
 	return nil
 }
 
+// getDevByPath 拼接 /dev/disk/by-path 下对应的设备路径。
 func getDevByPath(portal, iqn, lun string) string {
 	return "/dev/disk/by-path/ip-" + portal + "-iscsi-" + iqn + "-lun-" + lun
 }
 
+// extractTransportname 从 iscsiadm iface 输出中解析传输方式。
 func extractTransportname(ifaceOutput string) (iscsiTransport string) {
 	rexOutput := ifaceTransportNameRe.FindStringSubmatch(ifaceOutput)
 	if rexOutput == nil {
@@ -772,20 +756,21 @@ func extractTransportname(ifaceOutput string) (iscsiTransport string) {
 	}
 	iscsiTransport = rexOutput[1]
 
-	// While iface.transport_name is a required parameter, handle it being unspecified anyways
+	// iface.transport_name 理论上是必填项，但仍兼容未指定的情况
 	if iscsiTransport == "<empty>" {
 		iscsiTransport = "tcp"
 	}
 	return iscsiTransport
 }
 
+// extractDeviceAndPrefix 从挂载/映射路径中拆出设备名和 "-lun-" 之前的前缀。
 func extractDeviceAndPrefix(mntPath string) (string, string, error) {
 	ind := strings.LastIndex(mntPath, "/")
 	if ind < 0 {
 		return "", "", fmt.Errorf("iscsi detach disk: malformatted mnt path: %s", mntPath)
 	}
 	device := mntPath[(ind + 1):]
-	// strip -lun- from mount path
+	// 从挂载路径中剥离 -lun- 部分
 	ind = strings.LastIndex(mntPath, "-lun-")
 	if ind < 0 {
 		return "", "", fmt.Errorf("iscsi detach disk: malformatted mnt path: %s", mntPath)
@@ -794,6 +779,7 @@ func extractDeviceAndPrefix(mntPath string) (string, string, error) {
 	return device, prefix, nil
 }
 
+// extractIface 从路径中提取 iface 名称，找不到时返回 false。
 func extractIface(mntPath string) (string, bool) {
 	reOutput := ifaceRe.FindStringSubmatch(mntPath)
 	if len(reOutput) > 1 {
@@ -803,6 +789,7 @@ func extractIface(mntPath string) (string, bool) {
 	return "", false
 }
 
+// extractPortalAndIqn 从设备名中解析 portal 和 IQN（兼容 iqn. 与 eui.）。
 func extractPortalAndIqn(device string) (string, string, error) {
 	ind1 := strings.Index(device, "-")
 	if ind1 < 0 {
@@ -821,7 +808,7 @@ func extractPortalAndIqn(device string) (string, string, error) {
 	return portal, iqn, nil
 }
 
-// Remove duplicates or string
+// removeDuplicate 原地去除字符串切片中的空串和重复项。
 func removeDuplicate(s []string) []string {
 	m := map[string]bool{}
 	for _, v := range s {
@@ -834,6 +821,7 @@ func removeDuplicate(s []string) []string {
 	return s
 }
 
+// parseIscsiadmShow 解析 iscsiadm iface show 的输出为参数映射。
 func parseIscsiadmShow(output string) (map[string]string, error) {
 	params := make(map[string]string)
 	slice := strings.Split(output, "\n")
@@ -845,7 +833,7 @@ func parseIscsiadmShow(output string) (map[string]string, error) {
 		if len(iface) != 3 || iface[1] != "=" {
 			return nil, fmt.Errorf("error: invalid iface setting: %v", iface)
 		}
-		// iscsi_ifacename is immutable once the iface is created
+		// iface 创建后 iscsi_ifacename 不可修改
 		if iface[0] == "iface.iscsi_ifacename" {
 			continue
 		}
@@ -854,26 +842,27 @@ func parseIscsiadmShow(output string) (map[string]string, error) {
 	return params, nil
 }
 
+// cloneIface 复制预配置 iface 的参数，创建使用自定义发起端名称的新 iface。
 func cloneIface(b iscsiDiskMounter) error {
 	var lastErr error
 	if b.InitIface == b.Iface {
 		return fmt.Errorf("iscsi: cannot clone iface with same name: %s", b.InitIface)
 	}
-	// get pre-configured iface records
+	// 读取预配置 iface 的记录
 	out, err := execWithLog(b, "iscsiadm", "-m", "iface", "-I", b.InitIface, "-o", "show")
 	if err != nil {
 		lastErr = fmt.Errorf("iscsi: failed to show iface records: %s (%v)", out, err)
 		return lastErr
 	}
-	// parse obtained records
+	// 解析读取到的记录
 	params, err := parseIscsiadmShow(out)
 	if err != nil {
 		lastErr = fmt.Errorf("iscsi: failed to parse iface records: %s (%v)", out, err)
 		return lastErr
 	}
-	// update initiatorname
+	// 替换为自定义的发起端名称
 	params["iface.initiatorname"] = b.InitiatorName
-	// create new iface
+	// 创建新 iface
 	out, err = execWithLog(b, "iscsiadm", "-m", "iface", "-I", b.Iface, "-o", "new")
 	if err != nil {
 		exit, ok := err.(utilexec.ExitError)
@@ -884,13 +873,13 @@ func cloneIface(b iscsiDiskMounter) error {
 			return lastErr
 		}
 	}
-	// Get and sort keys to maintain a stable iteration order
+	// 排序 key 以保证写入顺序稳定
 	var keys []string
 	for k := range params {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	// update new iface records
+	// 逐项写入新 iface 的参数
 	for _, key := range keys {
 		_, err = execWithLog(b, "iscsiadm", "-m", "iface", "-I", b.Iface, "-o", "update", "-n", key, "-v", params[key])
 		if err != nil {
@@ -902,7 +891,7 @@ func cloneIface(b iscsiDiskMounter) error {
 	return lastErr
 }
 
-// isSessionBusy determines if the iSCSI session is busy by counting both FS and block volumes in use.
+// isSessionBusy 通过统计在用的文件系统卷和块设备卷数判断 iSCSI 会话是否繁忙。
 func isSessionBusy(host volume.VolumeHost, portal, iqn string) bool {
 	fsDir := host.GetPluginDir(iscsiPluginName)
 	countFS, err := getVolCount(fsDir, portal, iqn)
@@ -921,11 +910,10 @@ func isSessionBusy(host volume.VolumeHost, portal, iqn string) bool {
 	return countFS+countBlock > 1
 }
 
-// getVolCount returns the number of volumes in use by the kubelet.
-// It does so by counting the number of directories prefixed by the given portal and IQN.
+// getVolCount 统计 kubelet 在用的卷数：按给定 portal 和 IQN 前缀匹配目录名。
 func getVolCount(dir, portal, iqn string) (int, error) {
-	// For FileSystem volumes, the topmost dirs are named after the ifaces, e.g., iface-default or iface-127.0.0.1:3260:pv0.
-	// For Block volumes, the default topmost dir is volumeDevices.
+	// 文件系统卷的顶层目录按 iface 命名，如 iface-default 或 iface-127.0.0.1:3260:pv0；
+	// 块设备卷的顶层目录是 volumeDevices。
 	contents, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -934,8 +922,8 @@ func getVolCount(dir, portal, iqn string) (int, error) {
 		return 0, err
 	}
 
-	// Inside each iface dir, we look for volume dirs prefixed by the given
-	// portal + iqn, e.g., 127.0.0.1:3260-iqn.2003-01.io.k8s:e2e.volume-1-lun-2
+	// 在每个 iface 目录下查找以 portal + iqn 为前缀的卷目录，
+	// 例如 127.0.0.1:3260-iqn.2003-01.io.k8s:e2e.volume-1-lun-2
 	var counter int
 	for _, c := range contents {
 		if !c.IsDir() || c.Name() == kubeletconfig.DefaultKubeletVolumeDevicesDirName {
@@ -959,6 +947,7 @@ func getVolCount(dir, portal, iqn string) (int, error) {
 	return counter, nil
 }
 
+// ignoreExitCodes 将指定的 iscsiadm 退出码视为成功，其余错误原样返回。
 func ignoreExitCodes(err error, ignoredExitCodes ...int) error {
 	exitError, ok := err.(utilexec.ExitError)
 	if !ok {
@@ -973,6 +962,7 @@ func ignoreExitCodes(err error, ignoredExitCodes ...int) error {
 	return err
 }
 
+// execWithLog 执行命令并在 V(5) 日志中记录耗时与输出（不含密钥）。
 func execWithLog(b iscsiDiskMounter, cmd string, args ...string) (string, error) {
 	start := time.Now()
 	out, err := b.exec.Command(cmd, args...).CombinedOutput()

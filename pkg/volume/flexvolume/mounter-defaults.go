@@ -22,10 +22,10 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// mounterDefaults 为未实现 Mounter 接口的插件提供默认挂载实现，嵌入后可按需覆盖。
 type mounterDefaults flexVolumeMounter
 
-// SetUpAt is part of the volume.Mounter interface.
-// This implementation relies on the attacher's device mount path and does a bind mount to dir.
+// SetUpAt 是 volume.Mounter 接口的一部分。默认实现依赖 attacher 的设备挂载路径，以 bind mount 方式挂载到 dir。
 func (f *mounterDefaults) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	klog.Warning(logPrefix(f.plugin), "using default SetUpAt to ", dir)
 
@@ -41,7 +41,7 @@ func (f *mounterDefaults) SetUpAt(dir string, mounterArgs volume.MounterArgs) er
 	return nil
 }
 
-// Returns the default volume attributes.
+// GetAttributes 返回默认的卷属性。
 func (f *mounterDefaults) GetAttributes() volume.Attributes {
 	klog.V(5).Info(logPrefix(f.plugin), "using default GetAttributes")
 	return volume.Attributes{

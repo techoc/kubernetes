@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// ExpandVolumeDevice 调用驱动扩容底层块设备，驱动不支持该命令时回退到默认实现。
 func (plugin *flexVolumePlugin) ExpandVolumeDevice(spec *volume.Spec, newSize resource.Quantity, oldSize resource.Quantity) (resource.Quantity, error) {
 	call := plugin.NewDriverCall(expandVolumeCmd)
 	call.AppendSpec(spec, plugin.host, nil)
@@ -37,17 +38,17 @@ func (plugin *flexVolumePlugin) ExpandVolumeDevice(spec *volume.Spec, newSize re
 	call.Append(strconv.FormatInt(oldSize.Value(), 10))
 
 	_, err = call.Run()
+	// 老驱动可能没有实现 expand-volume，回退到默认（无操作）实现以兼容它们。
 	if isCmdNotSupportedErr(err) {
 		return newExpanderDefaults(plugin).ExpandVolumeDevice(spec, newSize, oldSize)
 	}
 	return newSize, err
 }
 
+// NodeExpand 调用驱动扩容节点上的文件系统，驱动不支持该命令时回退到默认实现。
 func (plugin *flexVolumePlugin) NodeExpand(rsOpt volume.NodeResizeOptions) (bool, error) {
-	// This method is called after we spec.PersistentVolume.Spec.Capacity
-	// has been updated to the new size. The underlying driver thus sees
-	// the _new_ (requested) size and can find out the _current_ size from
-	// its underlying storage implementation
+	// 调用时 PV 的 Capacity 已经更新为目标大小，因此驱动拿到的是新容量，
+	// 当前实际大小需要驱动自己从底层存储查询。
 
 	if rsOpt.VolumeSpec.PersistentVolume == nil {
 		return false, fmt.Errorf("PersistentVolume not found for spec: %s", rsOpt.VolumeSpec.Name())
@@ -61,6 +62,7 @@ func (plugin *flexVolumePlugin) NodeExpand(rsOpt volume.NodeResizeOptions) (bool
 	call.Append(strconv.FormatInt(rsOpt.OldSize.Value(), 10))
 
 	_, err := call.Run()
+	// 同 ExpandVolumeDevice：未实现 expand-fs 的驱动走默认实现。
 	if isCmdNotSupportedErr(err) {
 		return newExpanderDefaults(plugin).NodeExpand(rsOpt)
 	}

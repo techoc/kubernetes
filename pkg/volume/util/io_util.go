@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 )
 
-// IoUtil is a mockable util for common IO operations
+// IoUtil 把常用 IO 操作抽象成接口，便于在测试中替换（mock）。
 type IoUtil interface {
 	ReadFile(filename string) ([]byte, error)
 	ReadDir(dirname string) ([]os.FileInfo, error)
@@ -29,16 +29,20 @@ type IoUtil interface {
 	EvalSymlinks(path string) (string, error)
 }
 
+// osIOHandler 是 IoUtil 的真实操作系统实现。
 type osIOHandler struct{}
 
-// NewIOHandler Create a new IoHandler implementation
+// NewIOHandler 创建一个 IoUtil 的操作系统实现。
 func NewIOHandler() IoUtil {
 	return &osIOHandler{}
 }
 
+// ReadFile 读取指定文件的全部内容。
 func (handler *osIOHandler) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filename)
 }
+
+// ReadDir 读取目录下的条目信息；os.ReadDir 返回的是 DirEntry，需逐个转成 FileInfo。
 func (handler *osIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	entries, err := os.ReadDir(dirname)
 	if err != nil {
@@ -54,9 +58,13 @@ func (handler *osIOHandler) ReadDir(dirname string) ([]os.FileInfo, error) {
 	}
 	return infos, nil
 }
+
+// Lstat 获取文件或符号链接自身的信息（不跟随链接）。
 func (handler *osIOHandler) Lstat(name string) (os.FileInfo, error) {
 	return os.Lstat(name)
 }
+
+// EvalSymlinks 解析路径中的所有符号链接，返回最终路径。
 func (handler *osIOHandler) EvalSymlinks(path string) (string, error) {
 	return filepath.EvalSymlinks(path)
 }

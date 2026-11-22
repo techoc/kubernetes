@@ -31,34 +31,28 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// RecycleEventRecorder is a func that defines how to record RecycleEvent.
+// RecycleEventRecorder 定义如何记录回收事件的回调。
 type RecycleEventRecorder func(eventtype, message string)
 
-// RecycleVolumeByWatchingPodUntilCompletion is intended for use with volume
-// Recyclers. This function will save the given Pod to the API and watch it
-// until it completes, fails, or the pod's ActiveDeadlineSeconds is exceeded,
-// whichever comes first. An attempt to delete a recycler pod is always
-// attempted before returning.
+// RecycleVolumeByWatchingPodUntilCompletion 供卷回收器使用。
+// 该函数把给定的 Pod 保存到 API，并持续 watch 直到它完成、失败，
+// 或超过 ActiveDeadlineSeconds，以最先发生者为准。返回前总会尝试删除回收 Pod。
 //
-// In case there is a pod with the same namespace+name already running, this
-// function deletes it as it is not able to judge if it is an old recycler
-// or user has forged a fake recycler to block Kubernetes from recycling.//
+// 若同名同命名空间下已有 Pod 在运行，本函数会直接删除它——因为无法判断
+// 那是旧的回收器，还是用户伪造的回收器来阻止 Kubernetes 回收卷。//
 //
-//	 pod - the pod designed by a volume plugin to recycle the volume. pod.Name
-//	       will be overwritten with unique name based on PV.Name.
-//		client - kube client for API operations.
+//	 pod - 卷插件为回收卷设计的 pod。pod.Name 会被基于 PV.Name 的唯一名称覆盖。
+//		client - 用于 API 操作的 kube client。
 func RecycleVolumeByWatchingPodUntilCompletion(pvName string, pod *v1.Pod, kubeClient clientset.Interface, recorder RecycleEventRecorder) error {
 	return internalRecycleVolumeByWatchingPodUntilCompletion(pvName, pod, newRecyclerClient(kubeClient, recorder))
 }
 
-// same as above func comments, except 'recyclerClient' is a narrower pod API
-// interface to ease testing
+// 与上面的函数注释相同，区别是 recyclerClient 是更窄的 Pod API 接口，便于测试。
 func internalRecycleVolumeByWatchingPodUntilCompletion(pvName string, pod *v1.Pod, recyclerClient recyclerClient) error {
 	klog.V(5).Infof("creating recycler pod for volume %s\n", pod.Name)
 
-	// Generate unique name for the recycler pod - we need to get "already
-	// exists" error when a previous controller has already started recycling
-	// the volume. Here we assume that pv.Name is already unique.
+	// 为回收 Pod 生成唯一名称：这样若前一个控制器已开始回收该卷，
+	// 会收到“already exists”错误。这里假设 pv.Name 本身已唯一。
 	pod.Name = "recycler-for-" + pvName
 	pod.GenerateName = ""
 
@@ -70,7 +64,7 @@ func internalRecycleVolumeByWatchingPodUntilCompletion(pvName string, pod *v1.Po
 		return err
 	}
 
-	// Start the pod
+	// 启动 Pod
 	_, err = recyclerClient.CreatePod(pod)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
@@ -78,29 +72,26 @@ func internalRecycleVolumeByWatchingPodUntilCompletion(pvName string, pod *v1.Po
 			if deleteErr != nil {
 				return fmt.Errorf("failed to delete old recycler pod %s/%s: %s", pod.Namespace, pod.Name, deleteErr)
 			}
-			// Recycler will try again and the old pod will be hopefully deleted
-			// at that time.
+			// 回收器会在下次重试，届时旧 Pod 应该已被删除。
 			return fmt.Errorf("old recycler pod found, will retry later")
 		}
 		return fmt.Errorf("unexpected error creating recycler pod:  %+v", err)
 	}
 	err = waitForPod(pod, recyclerClient, podCh)
 
-	// In all cases delete the recycler pod and log its result.
+	// 无论结果如何都删除回收 Pod，并记录删除结果。
 	klog.V(2).Infof("deleting recycler pod %s/%s", pod.Namespace, pod.Name)
 	deleteErr := recyclerClient.DeletePod(pod.Name, pod.Namespace)
 	if deleteErr != nil {
 		klog.Errorf("failed to delete recycler pod %s/%s: %v", pod.Namespace, pod.Name, deleteErr)
 	}
 
-	// Returning recycler error is preferred, the pod will be deleted again on
-	// the next retry.
+	// 优先返回回收错误；Pod 会在下一次重试时再次删除。
 	if err != nil {
 		return fmt.Errorf("failed to recycle volume: %s", err)
 	}
 
-	// Recycle succeeded but we failed to delete the recycler pod. Report it,
-	// the controller will re-try recycling the PV again shortly.
+	// 回收成功但删除回收 Pod 失败：上报该错误，控制器很快会再次重试回收该 PV。
 	if deleteErr != nil {
 		return fmt.Errorf("failed to delete recycler pod: %s", deleteErr)
 	}
@@ -108,8 +99,7 @@ func internalRecycleVolumeByWatchingPodUntilCompletion(pvName string, pod *v1.Po
 	return nil
 }
 
-// waitForPod watches the pod it until it finishes and send all events on the
-// pod to the PV.
+// waitForPod 持续 watch Pod 直到结束，并把 Pod 上的所有事件转发给 PV。
 func waitForPod(pod *v1.Pod, recyclerClient recyclerClient, podCh <-chan watch.Event) error {
 	for {
 		event, ok := <-podCh
@@ -118,13 +108,13 @@ func waitForPod(pod *v1.Pod, recyclerClient recyclerClient, podCh <-chan watch.E
 		}
 		switch event.Object.(type) {
 		case *v1.Pod:
-			// POD changed
+			// Pod 状态变化
 			pod := event.Object.(*v1.Pod)
 			klog.V(4).Infof("recycler pod update received: %s %s/%s %s", event.Type, pod.Namespace, pod.Name, pod.Status.Phase)
 			switch event.Type {
 			case watch.Added, watch.Modified:
 				if pod.Status.Phase == v1.PodSucceeded {
-					// Recycle succeeded.
+					// 回收成功。
 					return nil
 				}
 				if pod.Status.Phase == v1.PodFailed {
@@ -142,7 +132,7 @@ func waitForPod(pod *v1.Pod, recyclerClient recyclerClient, podCh <-chan watch.E
 			}
 
 		case *v1.Event:
-			// Event received
+			// 收到事件
 			podEvent := event.Object.(*v1.Event)
 			klog.V(4).Infof("recycler event received: %s %s/%s %s/%s %s", event.Type, podEvent.Namespace, podEvent.Name, podEvent.InvolvedObject.Namespace, podEvent.InvolvedObject.Name, podEvent.Message)
 			if event.Type == watch.Added {
@@ -152,20 +142,19 @@ func waitForPod(pod *v1.Pod, recyclerClient recyclerClient, podCh <-chan watch.E
 	}
 }
 
-// recyclerClient abstracts access to a Pod by providing a narrower interface.
-// This makes it easier to mock a client for testing.
+// recyclerClient 通过更窄的接口抽象 Pod 访问，便于在测试中 mock 客户端。
 type recyclerClient interface {
 	CreatePod(pod *v1.Pod) (*v1.Pod, error)
 	GetPod(name, namespace string) (*v1.Pod, error)
 	DeletePod(name, namespace string) error
-	// WatchPod returns a ListWatch for watching a pod.  The stopChannel is used
-	// to close the reflector backing the watch.  The caller is responsible for
-	// derring a close on the channel to stop the reflector.
+	// WatchPod 返回用于 watch Pod 的 ListWatch。stopChannel 用于关闭 watch 背后的 reflector。
+	// 调用方负责 defer 关闭该 channel 以停止 reflector。
 	WatchPod(name, namespace string, stopChannel chan struct{}) (<-chan watch.Event, error)
-	// Event sends an event to the volume that is being recycled.
+	// Event 把事件发送给正在被回收的卷。
 	Event(eventtype, message string)
 }
 
+// newRecyclerClient 创建基于真实客户端的 recyclerClient。
 func newRecyclerClient(client clientset.Interface, recorder RecycleEventRecorder) recyclerClient {
 	return &realRecyclerClient{
 		client,
@@ -173,29 +162,34 @@ func newRecyclerClient(client clientset.Interface, recorder RecycleEventRecorder
 	}
 }
 
+// realRecyclerClient 是基于 clientset 的 recyclerClient 实现。
 type realRecyclerClient struct {
 	client   clientset.Interface
 	recorder RecycleEventRecorder
 }
 
+// CreatePod 创建回收 Pod。
 func (c *realRecyclerClient) CreatePod(pod *v1.Pod) (*v1.Pod, error) {
 	return c.client.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 }
 
+// GetPod 获取指定名称和命名空间的 Pod。
 func (c *realRecyclerClient) GetPod(name, namespace string) (*v1.Pod, error) {
 	return c.client.CoreV1().Pods(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
+// DeletePod 删除指定名称和命名空间的 Pod。
 func (c *realRecyclerClient) DeletePod(name, namespace string) error {
 	return c.client.CoreV1().Pods(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
+// Event 通过 recorder 记录事件。
 func (c *realRecyclerClient) Event(eventtype, message string) {
 	c.recorder(eventtype, message)
 }
 
-// WatchPod watches a pod and events related to it. It sends pod updates and events over the returned channel
-// It will continue until stopChannel is closed
+// WatchPod watch 一个 Pod 及其相关事件，把 Pod 更新和事件发送到返回的 channel。
+// 持续运行直到 stopChannel 被关闭。
 func (c *realRecyclerClient) WatchPod(name, namespace string, stopChannel chan struct{}) (<-chan watch.Event, error) {
 	podSelector, err := fields.ParseSelector("metadata.name=" + name)
 	if err != nil {

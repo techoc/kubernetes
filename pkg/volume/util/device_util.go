@@ -16,19 +16,24 @@ limitations under the License.
 
 package util
 
-// DeviceUtil is a util for common device methods
+// DeviceUtil 提供常用设备查询操作的工具接口。
 type DeviceUtil interface {
+	// FindMultipathDeviceForDevice 查找设备所属的多路径父设备。
 	FindMultipathDeviceForDevice(disk string) string
+	// FindSlaveDevicesOnMultipath 返回多路径设备管理的从属设备列表。
 	FindSlaveDevicesOnMultipath(disk string) []string
+	// GetISCSIPortalHostMapForTarget 返回 target 对应的 iSCSI portal 与 SCSI 主机号映射。
 	GetISCSIPortalHostMapForTarget(targetIqn string) (map[string]int, error)
+	// FindDevicesForISCSILun 返回 target 上指定 LUN 对应的所有块设备。
 	FindDevicesForISCSILun(targetIqn string, lun int) ([]string, error)
 }
 
+// deviceHandler 通过注入的 IoUtil 访问 sysfs，便于测试。
 type deviceHandler struct {
 	getIo IoUtil
 }
 
-// NewDeviceHandler Create a new IoHandler implementation
+// NewDeviceHandler 创建一个使用给定 IoUtil 的 DeviceUtil 实现。
 func NewDeviceHandler(io IoUtil) DeviceUtil {
 	return &deviceHandler{getIo: io}
 }

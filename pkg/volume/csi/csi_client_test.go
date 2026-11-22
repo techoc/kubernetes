@@ -43,11 +43,13 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// fakeCsiDriverClient 用假的节点客户端实现 csiClient 接口。
 type fakeCsiDriverClient struct {
 	t          *testing.T
 	nodeClient *fake.NodeClient
 }
 
+// newFakeCsiDriverClient 创建支持/不支持 stage 的假客户端。
 func newFakeCsiDriverClient(t *testing.T, stagingCapable bool) *fakeCsiDriverClient {
 	return &fakeCsiDriverClient{
 		t:          t,
@@ -55,6 +57,7 @@ func newFakeCsiDriverClient(t *testing.T, stagingCapable bool) *fakeCsiDriverCli
 	}
 }
 
+// newFakeCsiDriverClientWithExpansion 创建可模拟节点扩容能力的假客户端。
 func newFakeCsiDriverClientWithExpansion(t *testing.T, stagingCapable bool, expansionSet bool) *fakeCsiDriverClient {
 	return &fakeCsiDriverClient{
 		t:          t,
@@ -62,6 +65,7 @@ func newFakeCsiDriverClientWithExpansion(t *testing.T, stagingCapable bool, expa
 	}
 }
 
+// newFakeCsiDriverClientWithVolumeStats 创建可模拟卷指标能力的假客户端。
 func newFakeCsiDriverClientWithVolumeStats(t *testing.T, volumeStatsSet bool) *fakeCsiDriverClient {
 	return &fakeCsiDriverClient{
 		t:          t,
@@ -69,6 +73,7 @@ func newFakeCsiDriverClientWithVolumeStats(t *testing.T, volumeStatsSet bool) *f
 	}
 }
 
+// newFakeCsiDriverClientWithVolumeStatsAndHealth 创建可分别模拟卷指标与健康报告能力/响应的假客户端。
 func newFakeCsiDriverClientWithVolumeStatsAndHealth(t *testing.T, volumeStatsSet, volumeHealth, setVolumeStat, setVolumeHealth bool) *fakeCsiDriverClient {
 	return &fakeCsiDriverClient{
 		t:          t,
@@ -76,6 +81,7 @@ func newFakeCsiDriverClientWithVolumeStatsAndHealth(t *testing.T, volumeStatsSet
 	}
 }
 
+// newFakeCsiDriverClientWithVolumeMountGroup 创建可模拟 VOLUME_MOUNT_GROUP 能力的假客户端。
 func newFakeCsiDriverClientWithVolumeMountGroup(t *testing.T, stagingCapable, volumeMountGroupSet bool) *fakeCsiDriverClient {
 	return &fakeCsiDriverClient{
 		t:          t,
@@ -83,6 +89,7 @@ func newFakeCsiDriverClientWithVolumeMountGroup(t *testing.T, stagingCapable, vo
 	}
 }
 
+// NodeGetInfo 返回假节点的 ID、单节点卷数上限和拓扑信息。
 func (c *fakeCsiDriverClient) NodeGetInfo(ctx context.Context) (
 	nodeID string,
 	maxVolumePerNode int64,
@@ -96,6 +103,7 @@ func (c *fakeCsiDriverClient) NodeGetInfo(ctx context.Context) (
 	return resp.GetNodeId(), resp.GetMaxVolumesPerNode(), accessibleTopology, err
 }
 
+// NodeGetVolumeStats 将假响应中的字节和 inode 使用量转换为 volume.Metrics。
 func (c *fakeCsiDriverClient) NodeGetVolumeStats(ctx context.Context, volID string, targetPath string) (
 	usageCountMap *volume.Metrics, err error) {
 	c.t.Log("calling fake.NodeGetVolumeStats...")
@@ -123,7 +131,7 @@ func (c *fakeCsiDriverClient) NodeGetVolumeStats(ctx context.Context, volID stri
 	}
 	for _, usage := range usages {
 		if usage == nil {
-			continue
+			continue // 跳过空条目，避免解引用空指针
 		}
 		unit := usage.GetUnit()
 		switch unit {
@@ -140,11 +148,13 @@ func (c *fakeCsiDriverClient) NodeGetVolumeStats(ctx context.Context, volID stri
 	return metrics, nil
 }
 
+// NodeSupportsVolumeStats 报告假驱动是否支持 GET_VOLUME_STATS。
 func (c *fakeCsiDriverClient) NodeSupportsVolumeStats(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeSupportsVolumeStats...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_VOLUME_STATS)
 }
 
+// NodePublishVolume 构造 NodePublishVolumeRequest，按卷类型设置块或挂载访问类型。
 func (c *fakeCsiDriverClient) NodePublishVolume(
 	ctx context.Context,
 	volID string,
@@ -199,6 +209,7 @@ func (c *fakeCsiDriverClient) NodePublishVolume(
 	return err
 }
 
+// NodeUnpublishVolume 调用假驱动的 NodeUnpublishVolume。
 func (c *fakeCsiDriverClient) NodeUnpublishVolume(ctx context.Context, volID string, targetPath string) error {
 	c.t.Log("calling fake.NodeUnpublishVolume...")
 	req := &csipbv1.NodeUnpublishVolumeRequest{
@@ -210,6 +221,7 @@ func (c *fakeCsiDriverClient) NodeUnpublishVolume(ctx context.Context, volID str
 	return err
 }
 
+// NodeStageVolume 构造 NodeStageVolumeRequest，按卷类型设置块或挂载访问类型。
 func (c *fakeCsiDriverClient) NodeStageVolume(ctx context.Context,
 	volID string,
 	publishContext map[string]string,
@@ -258,6 +270,7 @@ func (c *fakeCsiDriverClient) NodeStageVolume(ctx context.Context,
 	return err
 }
 
+// NodeUnstageVolume 调用假驱动的 NodeUnstageVolume。
 func (c *fakeCsiDriverClient) NodeUnstageVolume(ctx context.Context, volID, stagingTargetPath string) error {
 	c.t.Log("calling fake.NodeUnstageVolume...")
 	req := &csipbv1.NodeUnstageVolumeRequest{
@@ -268,16 +281,19 @@ func (c *fakeCsiDriverClient) NodeUnstageVolume(ctx context.Context, volID, stag
 	return err
 }
 
+// NodeSupportsNodeExpand 报告假驱动是否支持 EXPAND_VOLUME。
 func (c *fakeCsiDriverClient) NodeSupportsNodeExpand(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeSupportsNodeExpand...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_EXPAND_VOLUME)
 }
 
+// NodeSupportsStageUnstage 报告假驱动是否支持 STAGE_UNSTAGE_VOLUME。
 func (c *fakeCsiDriverClient) NodeSupportsStageUnstage(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeGetCapabilities for NodeSupportsStageUnstage...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME)
 }
 
+// NodeSupportsVolumeMountGroup 直接检查节点能力列表中的 VOLUME_MOUNT_GROUP。
 func (c *fakeCsiDriverClient) NodeSupportsVolumeMountGroup(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeGetCapabilities for NodeSupportsVolumeMountGroup...")
 	req := &csipbv1.NodeGetCapabilitiesRequest{}
@@ -300,6 +316,7 @@ func (c *fakeCsiDriverClient) NodeSupportsVolumeMountGroup(ctx context.Context) 
 	return volumeMountGroupSet, nil
 }
 
+// NodeExpandVolume 调用假驱动的 NodeExpandVolume 并返回更新后的容量。
 func (c *fakeCsiDriverClient) NodeExpandVolume(ctx context.Context, opts csiResizeOptions) (resource.Quantity, error) {
 	c.t.Log("calling fake.NodeExpandVolume")
 	req := &csipbv1.NodeExpandVolumeRequest{
@@ -333,16 +350,19 @@ func (c *fakeCsiDriverClient) NodeExpandVolume(ctx context.Context, opts csiResi
 	return *updatedQuantity, nil
 }
 
+// NodeSupportsVolumeHealth 报告假驱动是否支持 GET_VOLUME_HEALTH。
 func (c *fakeCsiDriverClient) NodeSupportsVolumeHealth(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeSupportsVolumeHealth...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_VOLUME_HEALTH)
 }
 
+// NodeSupportsStorageHealth 报告假驱动是否支持 GET_STORAGE_HEALTH。
 func (c *fakeCsiDriverClient) NodeSupportsStorageHealth(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeSupportsStorageHealth...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_GET_STORAGE_HEALTH)
 }
 
+// NodeGetVolumeHealth 返回假驱动报告的卷健康状态。
 func (c *fakeCsiDriverClient) NodeGetVolumeHealth(ctx context.Context, volID, stagingTargetPath, volumePublishPath string) ([]api.VolumeHealthCondition, error) {
 	c.t.Log("calling fake.NodeGetVolumeHealth...")
 	req := &csipbv1.NodeGetVolumeHealthRequest{
@@ -357,6 +377,7 @@ func (c *fakeCsiDriverClient) NodeGetVolumeHealth(ctx context.Context, volID, st
 	return mapVolumeHealthConditions(resp.GetVolumeHealth()), nil
 }
 
+// NodeGetStorageHealth 返回假驱动报告的后端存储健康状态。
 func (c *fakeCsiDriverClient) NodeGetStorageHealth(ctx context.Context, secrets map[string]string) ([]storagev1.StorageHealthCondition, error) {
 	c.t.Log("calling fake.NodeGetStorageHealth...")
 	req := &csipbv1.NodeGetStorageHealthRequest{
@@ -369,11 +390,13 @@ func (c *fakeCsiDriverClient) NodeGetStorageHealth(ctx context.Context, secrets 
 	return mapStorageBackendHealth(resp.GetBackendHealth())
 }
 
+// NodeSupportsSingleNodeMultiWriterAccessMode 报告假驱动是否支持 SINGLE_NODE_MULTI_WRITER。
 func (c *fakeCsiDriverClient) NodeSupportsSingleNodeMultiWriterAccessMode(ctx context.Context) (bool, error) {
 	c.t.Log("calling fake.NodeSupportsSingleNodeMultiWriterAccessMode...")
 	return c.nodeSupportsCapability(ctx, csipbv1.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER)
 }
 
+// nodeSupportsCapability 在节点能力列表中查找指定 RPC 能力。
 func (c *fakeCsiDriverClient) nodeSupportsCapability(ctx context.Context, capabilityType csipbv1.NodeServiceCapability_RPC_Type) (bool, error) {
 	capabilities, err := c.nodeGetCapabilities(ctx)
 	if err != nil {
@@ -388,6 +411,7 @@ func (c *fakeCsiDriverClient) nodeSupportsCapability(ctx context.Context, capabi
 	return false, nil
 }
 
+// nodeGetCapabilities 返回假驱动的节点能力列表。
 func (c *fakeCsiDriverClient) nodeGetCapabilities(ctx context.Context) ([]*csipbv1.NodeServiceCapability, error) {
 	req := &csipbv1.NodeGetCapabilitiesRequest{}
 	resp, err := c.nodeClient.NodeGetCapabilities(ctx, req)
@@ -397,26 +421,32 @@ func (c *fakeCsiDriverClient) nodeGetCapabilities(ctx context.Context) ([]*csipb
 	return resp.GetCapabilities(), nil
 }
 
+// setupClient 创建仅配置 stage 能力的 csiClient。
 func setupClient(t *testing.T, stageUnstageSet bool) csiClient {
 	return newFakeCsiDriverClient(t, stageUnstageSet)
 }
 
+// setupClientWithExpansion 创建带扩容能力配置的 csiClient。
 func setupClientWithExpansion(t *testing.T, stageUnstageSet bool, expansionSet bool) csiClient {
 	return newFakeCsiDriverClientWithExpansion(t, stageUnstageSet, expansionSet)
 }
 
+// setupClientWithVolumeStatsAndHealth 创建带卷指标和健康配置的 csiClient。
 func setupClientWithVolumeStatsAndHealth(t *testing.T, volumeStatsSet, volumeHealth, setVolumeStat, setVolumeHealth bool) csiClient {
 	return newFakeCsiDriverClientWithVolumeStatsAndHealth(t, volumeStatsSet, volumeHealth, setVolumeStat, setVolumeHealth)
 }
 
+// setupClientWithVolumeStats 创建带卷指标能力配置的 csiClient。
 func setupClientWithVolumeStats(t *testing.T, volumeStatsSet bool) csiClient {
 	return newFakeCsiDriverClientWithVolumeStats(t, volumeStatsSet)
 }
 
+// setupClientWithVolumeMountGroup 创建带 VOLUME_MOUNT_GROUP 能力配置的 csiClient。
 func setupClientWithVolumeMountGroup(t *testing.T, stageUnstageSet bool, volumeMountGroupSet bool) csiClient {
 	return newFakeCsiDriverClientWithVolumeMountGroup(t, stageUnstageSet, volumeMountGroupSet)
 }
 
+// checkErr 断言错误出现与否符合用例预期。
 func checkErr(t *testing.T, expectedAnError bool, actualError error) {
 	t.Helper()
 
@@ -431,6 +461,7 @@ func checkErr(t *testing.T, expectedAnError bool, actualError error) {
 	}
 }
 
+// TestClientNodeGetInfo 验证 NodeGetInfo 返回节点信息及错误处理。
 func TestClientNodeGetInfo(t *testing.T) {
 	testCases := []struct {
 		name                       string
@@ -494,6 +525,7 @@ func TestClientNodeGetInfo(t *testing.T) {
 	}
 }
 
+// TestClientNodePublishVolume 验证发布卷时请求字段及错误路径。
 func TestClientNodePublishVolume(t *testing.T) {
 	var testFSGroup int64 = 3000
 
@@ -562,6 +594,7 @@ func TestClientNodePublishVolume(t *testing.T) {
 	}
 }
 
+// TestClientNodeUnpublishVolume 验证取消发布卷的错误处理。
 func TestClientNodeUnpublishVolume(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("csi-test")
 	if err != nil {
@@ -604,6 +637,7 @@ func TestClientNodeUnpublishVolume(t *testing.T) {
 	}
 }
 
+// TestClientNodeStageVolume 验证 stage 卷请求内容和错误路径。
 func TestClientNodeStageVolume(t *testing.T) {
 	var testFSGroup int64 = 3000
 
@@ -672,6 +706,7 @@ func TestClientNodeStageVolume(t *testing.T) {
 	}
 }
 
+// TestClientNodeUnstageVolume 验证取消 stage 卷的错误处理。
 func TestClientNodeUnstageVolume(t *testing.T) {
 	tmpDir, err := utiltesting.MkTmpdir("csi-test")
 	if err != nil {
@@ -717,6 +752,7 @@ func TestClientNodeUnstageVolume(t *testing.T) {
 	}
 }
 
+// TestNodeSupportsStageUnstageReturnNewUncertainProgressError 验证能力查询失败返回进度不确定错误。
 func TestNodeSupportsStageUnstageReturnNewUncertainProgressError(t *testing.T) {
 	fakeCloser := fake.NewCloser(t)
 	client := &csiDriverClient{
@@ -738,17 +774,19 @@ func TestNodeSupportsStageUnstageReturnNewUncertainProgressError(t *testing.T) {
 	fakeCloser.Check()
 }
 
+// TestClientNodeSupportsStageUnstage 验证 stage 能力检测结果。
 func TestClientNodeSupportsStageUnstage(t *testing.T) {
 	testClientNodeSupportsCapabilities(t,
 		func(client *csiDriverClient) (bool, error) {
 			return client.NodeSupportsStageUnstage(context.Background())
 		},
 		func(stagingCapable bool) *fake.NodeClient {
-			// Creates a staging-capable client
+			// 创建支持 stage 的客户端。
 			return fake.NewNodeClient(stagingCapable)
 		})
 }
 
+// TestClientNodeSupportsNodeExpand 验证节点扩容能力检测结果。
 func TestClientNodeSupportsNodeExpand(t *testing.T) {
 	testClientNodeSupportsCapabilities(t,
 		func(client *csiDriverClient) (bool, error) {
@@ -759,6 +797,7 @@ func TestClientNodeSupportsNodeExpand(t *testing.T) {
 		})
 }
 
+// TestClientNodeSupportsVolumeStats 验证卷指标能力检测结果。
 func TestClientNodeSupportsVolumeStats(t *testing.T) {
 	testClientNodeSupportsCapabilities(t,
 		func(client *csiDriverClient) (bool, error) {
@@ -769,6 +808,7 @@ func TestClientNodeSupportsVolumeStats(t *testing.T) {
 		})
 }
 
+// TestClientNodeSupportsVolumeMountGroup 验证 VOLUME_MOUNT_GROUP 能力检测结果。
 func TestClientNodeSupportsVolumeMountGroup(t *testing.T) {
 	testClientNodeSupportsCapabilities(t,
 		func(client *csiDriverClient) (bool, error) {
@@ -779,6 +819,7 @@ func TestClientNodeSupportsVolumeMountGroup(t *testing.T) {
 		})
 }
 
+// testClientNodeSupportsCapabilities 对给定能力查询函数执行正反两种检测。
 func testClientNodeSupportsCapabilities(
 	t *testing.T,
 	capabilityMethodToTest func(*csiDriverClient) (bool, error),
@@ -813,6 +854,7 @@ func testClientNodeSupportsCapabilities(
 	}
 }
 
+// TestNodeExpandVolume 验证节点扩容参数校验和错误路径。
 func TestNodeExpandVolume(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -870,18 +912,19 @@ func TestNodeExpandVolume(t *testing.T) {
 	}
 }
 
+// VolumeStatsOptions 保存卷指标测试所需的卷规格、卷 ID 和挂载路径。
 type VolumeStatsOptions struct {
 	VolumeSpec *volume.Spec
 
-	// this just could be volumeID
+	// 测试场景中可仅用作卷 ID。
 	VolumeID string
 
-	// DeviceMountPath location where device is mounted on the node. If volume type
-	// is attachable - this would be global mount path otherwise
-	// it would be location where volume was mounted for the pod
+	// 设备在该节点上的挂载位置：可附加卷为全局挂载路径，
+	// 否则为卷在 Pod 中的挂载位置。
 	DeviceMountPath string
 }
 
+// TestVolumeHealthEnable 验证开启卷健康特性时各能力组合的结果。
 func TestVolumeHealthEnable(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
 	spec := volume.NewSpecFromPersistentVolume(makeTestPV("test-pv", 10, "metrics", "test-vol"), false)
@@ -963,6 +1006,7 @@ func TestVolumeHealthEnable(t *testing.T) {
 	}
 }
 
+// TestVolumeHealthDisable 验证关闭卷健康特性时仍可获取卷指标。
 func TestVolumeHealthDisable(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, false)
 	spec := volume.NewSpecFromPersistentVolume(makeTestPV("test-pv", 10, "metrics", "test-vol"), false)
@@ -997,6 +1041,7 @@ func TestVolumeHealthDisable(t *testing.T) {
 	}
 }
 
+// TestVolumeStats 验证卷指标获取对参数完整性和驱动能力的要求。
 func TestVolumeStats(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
 	spec := volume.NewSpecFromPersistentVolume(makeTestPV("test-pv", 10, "metrics", "test-vol"), false)
@@ -1075,6 +1120,7 @@ func TestVolumeStats(t *testing.T) {
 
 }
 
+// TestAccessModeMapping 验证 CSI 驱动能力对访问模式映射的影响。
 func TestAccessModeMapping(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -1155,6 +1201,7 @@ func TestAccessModeMapping(t *testing.T) {
 	}
 }
 
+// TestNodeGetVolumeHealth 验证卷健康状态映射及能力检测。
 func TestNodeGetVolumeHealth(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1219,6 +1266,7 @@ func TestNodeGetVolumeHealth(t *testing.T) {
 	}
 }
 
+// TestNodeGetStorageHealth 验证后端存储健康状态映射及能力检测。
 func TestNodeGetStorageHealth(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -1279,6 +1327,7 @@ func TestNodeGetStorageHealth(t *testing.T) {
 	}
 }
 
+// TestMapStorageHealthVolumeCapability 验证 CSI 卷能力到 k8s 访问模式/卷模式的映射。
 func TestMapStorageHealthVolumeCapability(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1363,6 +1412,7 @@ func TestMapStorageHealthVolumeCapability(t *testing.T) {
 	}
 }
 
+// TestMapStorageBackendHealthLimit 验证健康状态条目数超限时返回错误。
 func TestMapStorageBackendHealthLimit(t *testing.T) {
 	entries := make([]*csipbv1.NodeGetStorageHealthResponse_StorageBackendHealth, maxStorageHealthConditions+1)
 	for i := range entries {

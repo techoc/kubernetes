@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/exec"
 )
 
+// fcAttacher 实现 FC 卷的挂载与设备挂载接口。
 type fcAttacher struct {
 	host    volume.VolumeHost
 	manager diskManager
@@ -46,6 +47,7 @@ var _ volume.AttachableVolumePlugin = &fcPlugin{}
 
 var _ volume.DeviceMountableVolumePlugin = &fcPlugin{}
 
+// NewAttacher 创建 FC 卷的挂载器。
 func (plugin *fcPlugin) NewAttacher() (volume.Attacher, error) {
 	return &fcAttacher{
 		host:    plugin.host,
@@ -53,19 +55,23 @@ func (plugin *fcPlugin) NewAttacher() (volume.Attacher, error) {
 	}, nil
 }
 
+// NewDeviceMounter 创建设备挂载器；FC 与卷挂载共用同一实现。
 func (plugin *fcPlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
 	return plugin.NewAttacher()
 }
 
+// GetDeviceMountRefs 返回设备挂载点的引用列表。
 func (plugin *fcPlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	mounter := plugin.host.GetMounter()
 	return mounter.GetMountRefs(deviceMountPath)
 }
 
+// Attach 空实现：FC 卷在 WaitForAttach 阶段才完成实际挂载。
 func (attacher *fcAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string, error) {
 	return "", nil
 }
 
+// VolumesAreAttached 假设所有卷均已挂载；FC 的挂载状态在节点侧检查。
 func (attacher *fcAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.NodeName) (map[*volume.Spec]bool, error) {
 	volumesAttachedCheck := make(map[*volume.Spec]bool)
 	for _, spec := range specs {
@@ -75,10 +81,12 @@ func (attacher *fcAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName ty
 	return volumesAttachedCheck, nil
 }
 
+// VerifyExhaustedResource 返回 false：FC 无需检查 exhausted 资源状态。
 func (plugin *fcPlugin) VerifyExhaustedResource(spec *volume.Spec) bool {
 	return false
 }
 
+// WaitForAttach 根据卷规格找到并挂载 FC 磁盘，返回设备路径。
 func (attacher *fcAttacher) WaitForAttach(spec *volume.Spec, devicePath string, _ *v1.Pod, timeout time.Duration) (string, error) {
 	mounter, err := volumeSpecToMounter(spec, attacher.host)
 	if err != nil {
@@ -88,6 +96,7 @@ func (attacher *fcAttacher) WaitForAttach(spec *volume.Spec, devicePath string, 
 	return attacher.manager.AttachDisk(*mounter)
 }
 
+// GetDeviceMountPath 返回 FC 磁盘的全局挂载路径。
 func (attacher *fcAttacher) GetDeviceMountPath(
 	spec *volume.Spec) (string, error) {
 	mounter, err := volumeSpecToMounter(spec, attacher.host)
@@ -99,6 +108,7 @@ func (attacher *fcAttacher) GetDeviceMountPath(
 	return attacher.manager.MakeGlobalPDName(*mounter.fcDisk), nil
 }
 
+// MountDevice 在全局挂载路径上格式化并挂载 FC 设备；已挂载则跳过。
 func (attacher *fcAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, mountArgs volume.DeviceMounterArgs) error {
 	mounter := attacher.host.GetMounter()
 	notMnt, err := mounter.IsLikelyNotMountPoint(deviceMountPath)
@@ -137,6 +147,7 @@ func (attacher *fcAttacher) MountDevice(spec *volume.Spec, devicePath string, de
 	return nil
 }
 
+// fcDetacher 实现 FC 卷的卸载与设备卸载接口。
 type fcDetacher struct {
 	mounter mount.Interface
 	manager diskManager
@@ -147,6 +158,7 @@ var _ volume.Detacher = &fcDetacher{}
 
 var _ volume.DeviceUnmounter = &fcDetacher{}
 
+// NewDetacher 创建 FC 卷的卸载器。
 func (plugin *fcPlugin) NewDetacher() (volume.Detacher, error) {
 	return &fcDetacher{
 		mounter: plugin.host.GetMounter(),
@@ -155,39 +167,40 @@ func (plugin *fcPlugin) NewDetacher() (volume.Detacher, error) {
 	}, nil
 }
 
+// NewDeviceUnmounter 创建设备卸载器；FC 与卷卸载共用同一实现。
 func (plugin *fcPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
 	return plugin.NewDetacher()
 }
 
+// Detach 空实现：FC 卷在 UnmountDevice 阶段完成分离。
 func (detacher *fcDetacher) Detach(volumeName string, nodeName types.NodeName) error {
 	return nil
 }
 
+// UnmountDevice 卸载全局挂载路径并分离 FC 磁盘。
 func (detacher *fcDetacher) UnmountDevice(deviceMountPath string) error {
-	// Specify device name for DetachDisk later
+	// 先取设备名，供后续 DetachDisk 使用。
 	devName, _, err := mount.GetDeviceNameFromMount(detacher.mounter, deviceMountPath)
 	if err != nil {
 		klog.Errorf("fc: failed to get device from mnt: %s\nError: %v", deviceMountPath, err)
 		return err
 	}
-	// Unmount for deviceMountPath(=globalPDPath)
+	// 卸载 deviceMountPath（即 globalPDPath）。
 	err = mount.CleanupMountPoint(deviceMountPath, detacher.mounter, false)
 	if err != nil {
 		return fmt.Errorf("fc: failed to unmount: %s\nError: %v", deviceMountPath, err)
 	}
-	// GetDeviceNameFromMount from above returns an empty string if deviceMountPath is not a mount point
-	// There is no need to DetachDisk if this is the case (and DetachDisk will throw an error if we attempt)
+	// 若 deviceMountPath 本就不是挂载点，GetDeviceNameFromMount 返回空字符串；
+	// 此时无需（也不应）调用 DetachDisk，否则会报错。
 	if devName == "" {
 		return nil
 	}
 
 	unMounter := volumeSpecToUnmounter(detacher.mounter)
-	// The device is unmounted now. If UnmountDevice was retried, GetDeviceNameFromMount
-	// won't find any mount and won't return DetachDisk below.
-	// Therefore implement our own retry mechanism here.
-	// E.g. DetachDisk sometimes fails to flush a multipath device with "device is busy" when it was
-	// just unmounted.
-	// 2 minutes should be enough within 6 minute force detach timeout.
+	// 设备已卸载；若此时重试 UnmountDevice，GetDeviceNameFromMount 找不到挂载点，
+	// 也就不会再进入下面的 DetachDisk，因此这里自行实现重试。
+	// 例如刚卸载时 DetachDisk 可能因 "device is busy" 无法刷新多路径设备。
+	// 在 6 分钟强制分离超时内，2 分钟重试窗口足够。
 	var detachError error
 	err = wait.PollImmediate(10*time.Second, 2*time.Minute, func() (bool, error) {
 		detachError = detacher.manager.DetachDisk(*unMounter, devName)
@@ -205,14 +218,17 @@ func (detacher *fcDetacher) UnmountDevice(deviceMountPath string) error {
 	return nil
 }
 
+// CanAttach 返回 true：FC 插件始终允许挂载。
 func (plugin *fcPlugin) CanAttach(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// CanDeviceMount 返回 true：FC 插件始终允许设备挂载。
 func (plugin *fcPlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// volumeSpecToMounter 从卷规格构造 FC 磁盘挂载器，兼容 lun 与 WWID 两种标识方式。
 func volumeSpecToMounter(spec *volume.Spec, host volume.VolumeHost) (*fcDiskMounter, error) {
 	fc, readOnly, err := getVolumeSource(spec)
 	if err != nil {
@@ -256,6 +272,7 @@ func volumeSpecToMounter(spec *volume.Spec, host volume.VolumeHost) (*fcDiskMoun
 	}, nil
 }
 
+// volumeSpecToUnmounter 构造 FC 磁盘卸载器。
 func volumeSpecToUnmounter(mounter mount.Interface) *fcDiskUnmounter {
 	return &fcDiskUnmounter{
 		fcDisk: &fcDisk{

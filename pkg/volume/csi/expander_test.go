@@ -31,6 +31,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// TestNodeExpand 覆盖节点扩容的成功、失败及卷访问类型等场景。
 func TestNodeExpand(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -160,7 +161,7 @@ func TestNodeExpand(t *testing.T) {
 				}
 			}
 
-			// verify device staging target path
+			// 校验传给 CSI 驱动的 device staging 目标路径
 			stagingTargetPath := fakeNodeClient.FakeNodeExpansionRequest.GetStagingTargetPath()
 			if tc.deviceStagePath != "" && tc.deviceStagePath != stagingTargetPath {
 				t.Errorf("For %s: expected staging path %s got %s", tc.name, tc.deviceStagePath, stagingTargetPath)
@@ -173,7 +174,7 @@ func TestNodeExpand(t *testing.T) {
 					t.Errorf("For %s : expected %v got %v", tc.name, tc.success, ok)
 				}
 			}
-			// verify volume capability received by node expansion request
+			// 校验扩容请求中携带的卷访问类型（mount 或 block）
 			if tc.success {
 				capability := fakeNodeClient.FakeNodeExpansionRequest.GetVolumeCapability()
 				if tc.fsVolume {
@@ -190,6 +191,7 @@ func TestNodeExpand(t *testing.T) {
 	}
 }
 
+// TestNodeExpandNoClientError 验证没有客户端时 NodeExpand 返回瞬时错误。
 func TestNodeExpandNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)

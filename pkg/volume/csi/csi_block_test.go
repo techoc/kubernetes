@@ -36,6 +36,7 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// prepareBlockMapperTest 构造块设备映射器及对应卷规格，供块设备相关测试使用。
 func prepareBlockMapperTest(plug *csiPlugin, specVolumeName string, t *testing.T) (*csiBlockMapper, *volume.Spec, *api.PersistentVolume, error) {
 	registerFakePlugin(testDriver, "endpoint", []string{"1.0.0"}, t)
 	pv := makeTestPV(specVolumeName, 10, testDriver, testVol)
@@ -51,11 +52,12 @@ func prepareBlockMapperTest(plug *csiPlugin, specVolumeName string, t *testing.T
 	return csiMapper, spec, pv, nil
 }
 
+// TestBlockMapperGetGlobalMapPath 获取块设备全局映射路径的测试。
 func TestBlockMapperGetGlobalMapPath(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
 
-	// TODO (vladimirvivien) specName with slashes will not work
+	// TODO (vladimirvivien) 含斜杠的 specName 将无法工作
 	testCases := []struct {
 		name           string
 		specVolumeName string
@@ -90,6 +92,7 @@ func TestBlockMapperGetGlobalMapPath(t *testing.T) {
 	}
 }
 
+// TestBlockMapperGetStagingPath 获取块设备 staging 路径的测试。
 func TestBlockMapperGetStagingPath(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -125,6 +128,7 @@ func TestBlockMapperGetStagingPath(t *testing.T) {
 	}
 }
 
+// TestBlockMapperGetPublishPath 获取块设备 publish 路径的测试。
 func TestBlockMapperGetPublishPath(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -160,6 +164,7 @@ func TestBlockMapperGetPublishPath(t *testing.T) {
 	}
 }
 
+// TestBlockMapperGetDeviceMapPath 获取块设备映射路径的测试。
 func TestBlockMapperGetDeviceMapPath(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -199,6 +204,7 @@ func TestBlockMapperGetDeviceMapPath(t *testing.T) {
 	}
 }
 
+// TestBlockMapperSetupDevice 块设备映射器 SetUpDevice 的测试。
 func TestBlockMapperSetupDevice(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -227,7 +233,7 @@ func TestBlockMapperSetupDevice(t *testing.T) {
 		t.Fatalf("mapper failed to SetupDevice: %v", err)
 	}
 
-	// Check if NodeStageVolume staged to the right path
+	// 校验 NodeStageVolume 是否 stage 到正确路径
 	svols := csiMapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodeStagedVolumes()
 	svol, ok := svols[csiMapper.volumeID]
 	if !ok {
@@ -238,6 +244,7 @@ func TestBlockMapperSetupDevice(t *testing.T) {
 	}
 }
 
+// TestBlockMapperSetupDeviceError 块设备映射器 SetUpDevice 错误处理与目录清理的测试。
 func TestBlockMapperSetupDeviceError(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -268,8 +275,8 @@ func TestBlockMapperSetupDeviceError(t *testing.T) {
 		t.Fatal("mapper unexpectedly succeeded")
 	}
 
-	// Check that all directories have been cleaned
-	// Check that all metadata / staging / publish directories were deleted
+	// 校验所有目录均已清理
+	// 校验元数据 / staging / publish 目录均已删除
 	dataDir := getVolumeDeviceDataDir(pv.ObjectMeta.Name, plug.host)
 	if _, err := os.Stat(dataDir); err == nil {
 		t.Errorf("volume publish data directory %s was not deleted", dataDir)
@@ -284,6 +291,7 @@ func TestBlockMapperSetupDeviceError(t *testing.T) {
 	}
 }
 
+// TestBlockMapperSetupDeviceNoClientError CSI 客户端不可用时 SetUpDevice 返回瞬时错误的测试。
 func TestBlockMapperSetupDeviceNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -308,11 +316,11 @@ func TestBlockMapperSetupDeviceNoClientError(t *testing.T) {
 	}
 	t.Log("created attachment ", attachID)
 
-	// Clear out the clients
-	// The lookup to generate a new client will fail when it tries to query a driver with an unknown name
+	// 清空客户端缓存
+	// 查询未知名称的驱动会失败，从而无法生成新客户端
 	csiMapper.csiClient = nil
 	csiMapper.csiClientGetter.csiClient = nil
-	// Note that prepareBlockMapperTest above will create a driver with a name of "test-driver"
+	// 注意上面的 prepareBlockMapperTest 会创建名为 "test-driver" 的驱动
 	csiMapper.csiClientGetter.driverName = "unknown-driver"
 
 	_, err = csiMapper.SetUpDevice()
@@ -323,6 +331,7 @@ func TestBlockMapperSetupDeviceNoClientError(t *testing.T) {
 	}
 }
 
+// TestBlockMapperMapPodDevice 块设备映射器 MapPodDevice 的测试。
 func TestBlockMapperMapPodDevice(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -346,13 +355,13 @@ func TestBlockMapperMapPodDevice(t *testing.T) {
 	}
 	t.Log("created attachment ", attachID)
 
-	// Map device to global and pod device map path
+	// 将设备映射到全局及 Pod 设备映射路径
 	path, err := csiMapper.MapPodDevice()
 	if err != nil {
 		t.Fatalf("mapper failed to GetGlobalMapPath: %v", err)
 	}
 
-	// Check if NodePublishVolume published to the right path
+	// 校验 NodePublishVolume 是否 publish 到正确路径
 	pvols := csiMapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 	pvol, ok := pvols[csiMapper.volumeID]
 	if !ok {
@@ -368,6 +377,7 @@ func TestBlockMapperMapPodDevice(t *testing.T) {
 	}
 }
 
+// TestBlockMapperMapPodDeviceNotSupportAttach 驱动不支持 attach 时 MapPodDevice 的测试。
 func TestBlockMapperMapPodDeviceNotSupportAttach(t *testing.T) {
 	fakeClient := fakeclient.NewSimpleClientset()
 	attachRequired := false
@@ -384,8 +394,8 @@ func TestBlockMapperMapPodDeviceNotSupportAttach(t *testing.T) {
 		t.Fatalf("Failed to create a fakeDriver: %v", err)
 	}
 
-	// after the driver is created, create the plugin. newTestPlugin waits for the informer to sync,
-	// such that csiMapper.SetUpDevice below sees the VolumeAttachment object in the lister.
+	// 创建驱动后再创建插件；newTestPlugin 会等待 informer 同步，
+	// 确保下面的 csiMapper.SetUpDevice 能在 lister 中看到 VolumeAttachment 对象。
 
 	plug, tmpDir := newTestPlugin(t, fakeClient)
 	defer os.RemoveAll(tmpDir)
@@ -396,7 +406,7 @@ func TestBlockMapperMapPodDeviceNotSupportAttach(t *testing.T) {
 	}
 	csiMapper.csiClient = setupClient(t, true)
 
-	// Map device to global and pod device map path
+	// 将设备映射到全局及 Pod 设备映射路径
 	path, err := csiMapper.MapPodDevice()
 	if err != nil {
 		t.Fatalf("mapper failed to GetGlobalMapPath: %v", err)
@@ -407,6 +417,7 @@ func TestBlockMapperMapPodDeviceNotSupportAttach(t *testing.T) {
 	}
 }
 
+// TestBlockMapperMapPodDeviceWithPodInfo 驱动要求 Pod 信息时 MapPodDevice 的测试。
 func TestBlockMapperMapPodDeviceWithPodInfo(t *testing.T) {
 	fakeClient := fakeclient.NewSimpleClientset()
 	attachRequired := false
@@ -425,8 +436,8 @@ func TestBlockMapperMapPodDeviceWithPodInfo(t *testing.T) {
 		t.Fatalf("Failed to create a fakeDriver: %v", err)
 	}
 
-	// after the driver is created, create the plugin. newTestPlugin waits for the informer to sync,
-	// such that csiMapper.SetUpDevice below sees the VolumeAttachment object in the lister.
+	// 创建驱动后再创建插件；newTestPlugin 会等待 informer 同步，
+	// 确保下面的 csiMapper.SetUpDevice 能在 lister 中看到 VolumeAttachment 对象。
 
 	plug, tmpDir := newTestPlugin(t, fakeClient)
 	defer os.RemoveAll(tmpDir)
@@ -437,7 +448,7 @@ func TestBlockMapperMapPodDeviceWithPodInfo(t *testing.T) {
 	}
 	csiMapper.csiClient = setupClient(t, true)
 
-	// Map device to global and pod device map path
+	// 将设备映射到全局及 Pod 设备映射路径
 	_, err = csiMapper.MapPodDevice()
 	if err != nil {
 		t.Fatalf("mapper failed to GetGlobalMapPath: %v", err)
@@ -453,6 +464,7 @@ func TestBlockMapperMapPodDeviceWithPodInfo(t *testing.T) {
 	}
 }
 
+// TestBlockMapperMapPodDeviceNoClientError CSI 客户端不可用时 MapPodDevice 返回瞬时错误的测试。
 func TestBlockMapperMapPodDeviceNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -477,11 +489,11 @@ func TestBlockMapperMapPodDeviceNoClientError(t *testing.T) {
 	}
 	t.Log("created attachment ", attachID)
 
-	// Clear out the clients
-	// The lookup to generate a new client will fail when it tries to query a driver with an unknown name
+	// 清空客户端缓存
+	// 查询未知名称的驱动会失败，从而无法生成新客户端
 	csiMapper.csiClient = nil
 	csiMapper.csiClientGetter.csiClient = nil
-	// Note that prepareBlockMapperTest above will create a driver with a name of "test-driver"
+	// 注意上面的 prepareBlockMapperTest 会创建名为 "test-driver" 的驱动
 	csiMapper.csiClientGetter.driverName = "unknown-driver"
 
 	_, err = csiMapper.MapPodDevice()
@@ -492,6 +504,7 @@ func TestBlockMapperMapPodDeviceNoClientError(t *testing.T) {
 	}
 }
 
+// TestBlockMapperMapPodDeviceGetStageSecretsError 获取 stage secret 失败时 MapPodDevice 的错误处理测试。
 func TestBlockMapperMapPodDeviceGetStageSecretsError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -506,7 +519,7 @@ func TestBlockMapperMapPodDeviceGetStageSecretsError(t *testing.T) {
 		t.Fatalf("Failed to make a new Mapper: %v", err)
 	}
 
-	// set a stage secret for the pv
+	// 为 PV 设置 stage secret
 	pv.Spec.PersistentVolumeSource.CSI.NodePublishSecretRef = &api.SecretReference{
 		Name:      "foo",
 		Namespace: "default",
@@ -532,6 +545,7 @@ func TestBlockMapperMapPodDeviceGetStageSecretsError(t *testing.T) {
 	}
 }
 
+// TestBlockMapperTearDownDevice 块设备映射器 TearDownDevice 的测试。
 func TestBlockMapperTearDownDevice(t *testing.T) {
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -541,7 +555,7 @@ func TestBlockMapperTearDownDevice(t *testing.T) {
 		t.Fatalf("Failed to make a new Mapper: %v", err)
 	}
 
-	// save volume data
+	// 保存卷数据
 	dir := getVolumeDeviceDataDir(pv.ObjectMeta.Name, plug.host)
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
@@ -577,19 +591,20 @@ func TestBlockMapperTearDownDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// ensure csi client call and node unpblished
+	// 校验 CSI 客户端确实调用了 node unpublish
 	pubs := csiUnmapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodePublishedVolumes()
 	if _, ok := pubs[csiUnmapper.volumeID]; ok {
 		t.Error("csi server may not have received NodeUnpublishVolume call")
 	}
 
-	// ensure csi client call and node unstaged
+	// 校验 CSI 客户端确实调用了 node unstage
 	vols := csiUnmapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodeStagedVolumes()
 	if _, ok := vols[csiUnmapper.volumeID]; ok {
 		t.Error("csi server may not have received NodeUnstageVolume call")
 	}
 }
 
+// TestBlockMapperTearDownDeviceNoClientError CSI 客户端不可用时 TearDownDevice 返回瞬时错误的测试。
 func TestBlockMapperTearDownDeviceNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -600,7 +615,7 @@ func TestBlockMapperTearDownDeviceNoClientError(t *testing.T) {
 		t.Fatalf("Failed to make a new Mapper: %v", err)
 	}
 
-	// save volume data
+	// 保存卷数据
 	dir := getVolumeDeviceDataDir(pv.ObjectMeta.Name, plug.host)
 	if err := os.MkdirAll(dir, 0755); err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to create dir [%s]: %v", dir, err)
@@ -631,11 +646,11 @@ func TestBlockMapperTearDownDeviceNoClientError(t *testing.T) {
 		t.Fatalf("unmapper failed to GetGlobalMapPath: %v", err)
 	}
 
-	// Clear out the clients
-	// The lookup to generate a new client will fail when it tries to query a driver with an unknown name
+	// 清空客户端缓存
+	// 查询未知名称的驱动会失败，从而无法生成新客户端
 	csiUnmapper.csiClient = nil
 	csiUnmapper.csiClientGetter.csiClient = nil
-	// Note that prepareBlockMapperTest above will create a driver with a name of "test-driver"
+	// 注意上面的 prepareBlockMapperTest 会创建名为 "test-driver" 的驱动
 	csiUnmapper.csiClientGetter.driverName = "unknown-driver"
 
 	err = csiUnmapper.TearDownDevice(globalMapPath, "/dev/test")
@@ -646,9 +661,10 @@ func TestBlockMapperTearDownDeviceNoClientError(t *testing.T) {
 	}
 }
 
+// TestVolumeSetupTeardown CSI 块设备完整创建与清理流程的测试。
 func TestVolumeSetupTeardown(t *testing.T) {
-	// Follow volume setup + teardown sequences at top of cs_block.go and set up / clean up one CSI block device.
-	// Focus on testing that there were no leftover files present after the cleanup.
+	// 按 cs_block.go 开头的 setup + teardown 流程，创建并清理一个 CSI 块设备。
+	// 重点验证清理完成后没有残留文件。
 
 	plug, tmpDir := newTestPlugin(t, nil)
 	defer os.RemoveAll(tmpDir)
@@ -676,7 +692,7 @@ func TestVolumeSetupTeardown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mapper failed to SetupDevice: %v", err)
 	}
-	// Check if NodeStageVolume staged to the right path
+	// 校验 NodeStageVolume 是否 stage 到正确路径
 	svols := csiMapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodeStagedVolumes()
 	svol, ok := svols[csiMapper.volumeID]
 	if !ok {
@@ -721,7 +737,7 @@ func TestVolumeSetupTeardown(t *testing.T) {
 		t.Errorf("unmapper failed to call UnmapPodDevice: %v", err)
 	}
 
-	// GenerateUnmapDeviceFunc uses "" as pod UUID, it is global operation over all pods that used the volume
+	// GenerateUnmapDeviceFunc 使用 "" 作为 Pod UUID，是对所有使用该卷的 Pod 的全局操作
 	unmapper, err = plug.NewBlockVolumeUnmapper(pv.ObjectMeta.Name, "")
 	if err != nil {
 		t.Fatalf("failed to make a new Unmapper: %v", err)
@@ -742,7 +758,7 @@ func TestVolumeSetupTeardown(t *testing.T) {
 		t.Error("csi server may not have received NodeUnstageVolume call")
 	}
 
-	// Check that all metadata / staging / publish directories were deleted
+	// 校验元数据 / staging / publish 目录均已删除
 	dataDir := getVolumeDeviceDataDir(pv.ObjectMeta.Name, plug.host)
 	if _, err := os.Stat(dataDir); err == nil {
 		t.Errorf("volume publish data directory %s was not deleted", dataDir)
@@ -763,6 +779,7 @@ func TestVolumeSetupTeardown(t *testing.T) {
 	}
 }
 
+// TestUnmapPodDeviceNoClientError CSI 客户端不可用时 UnmapPodDevice 返回瞬时错误的测试。
 func TestUnmapPodDeviceNoClientError(t *testing.T) {
 	transientError := volumetypes.NewTransientOperationFailure("")
 	plug, tmpDir := newTestPlugin(t, nil)
@@ -791,7 +808,7 @@ func TestUnmapPodDeviceNoClientError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mapper failed to SetupDevice: %v", err)
 	}
-	// Check if NodeStageVolume staged to the right path
+	// 校验 NodeStageVolume 是否 stage 到正确路径
 	svols := csiMapper.csiClient.(*fakeCsiDriverClient).nodeClient.GetNodeStagedVolumes()
 	svol, ok := svols[csiMapper.volumeID]
 	if !ok {
@@ -831,11 +848,11 @@ func TestUnmapPodDeviceNoClientError(t *testing.T) {
 		t.Fatalf("unmapper failed to GetGlobalMapPath: %v", err)
 	}
 
-	// Clear out the clients
-	// The lookup to generate a new client will fail when it tries to query a driver with an unknown name
+	// 清空客户端缓存
+	// 查询未知名称的驱动会失败，从而无法生成新客户端
 	csiUnmapper.csiClient = nil
 	csiUnmapper.csiClientGetter.csiClient = nil
-	// Note that prepareBlockMapperTest above will create a driver with a name of "test-driver"
+	// 注意上面的 prepareBlockMapperTest 会创建名为 "test-driver" 的驱动
 	csiUnmapper.csiClientGetter.driverName = "unknown-driver"
 
 	err = csiUnmapper.UnmapPodDevice()

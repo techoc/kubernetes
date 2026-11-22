@@ -25,84 +25,82 @@ import (
 	"k8s.io/mount-utils"
 )
 
-// HostUtil is an HostUtils implementation that allows compilation on
-// unsupported platforms
+// HostUtil 是 HostUtils 的占位实现，使代码能在不受支持的平台上编译通过。
 type HostUtil struct{}
 
-// NewHostUtil returns a struct that implements the HostUtils interface on
-// unsupported platforms
+// NewHostUtil 返回一个在不受支持平台上实现 HostUtils 接口的结构体。
 func NewHostUtil() *HostUtil {
 	return &HostUtil{}
 }
 
 var errUnsupported = errors.New("volume/util/hostutil on this platform is not supported")
 
-// DeviceOpened always returns an error on unsupported platforms
+// DeviceOpened 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) DeviceOpened(pathname string) (bool, error) {
 	return false, errUnsupported
 }
 
-// PathIsDevice always returns an error on unsupported platforms
+// PathIsDevice 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) PathIsDevice(pathname string) (bool, error) {
 	return true, errUnsupported
 }
 
-// GetDeviceNameFromMount always returns an error on unsupported platforms
+// GetDeviceNameFromMount 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) GetDeviceNameFromMount(mounter mount.Interface, mountPath, pluginMountDir string) (string, error) {
 	return getDeviceNameFromMount(mounter, mountPath, pluginMountDir)
 }
 
-// MakeRShared always returns an error on unsupported platforms
+// MakeRShared 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) MakeRShared(path string) error {
 	return errUnsupported
 }
 
-// GetFileType always returns an error on unsupported platforms
+// GetFileType 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) GetFileType(pathname string) (FileType, error) {
 	return FileType("fake"), errUnsupported
 }
 
-// MakeFile always returns an error on unsupported platforms
+// MakeFile 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) MakeFile(pathname string) error {
 	return errUnsupported
 }
 
-// MakeDir always returns an error on unsupported platforms
+// MakeDir 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) MakeDir(pathname string) error {
 	return errUnsupported
 }
 
-// PathExists always returns an error on unsupported platforms
+// PathExists 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) PathExists(pathname string) (bool, error) {
 	return true, errUnsupported
 }
 
-// EvalHostSymlinks always returns an error on unsupported platforms
+// EvalHostSymlinks 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) EvalHostSymlinks(pathname string) (string, error) {
 	return "", errUnsupported
 }
 
-// GetOwner always returns an error on unsupported platforms
+// GetOwner 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) GetOwner(pathname string) (int64, int64, error) {
 	return -1, -1, errUnsupported
 }
 
-// GetSELinuxSupport always returns an error on unsupported platforms
+// GetSELinuxSupport 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) GetSELinuxSupport(pathname string) (bool, error) {
 	return false, errUnsupported
 }
 
-// GetMode always returns an error on unsupported platforms
+// GetMode 在不受支持的平台上始终返回错误。
 func (hu *HostUtil) GetMode(pathname string) (os.FileMode, error) {
 	return 0, errUnsupported
 }
 
+// getDeviceNameFromMount 在不受支持的平台上始终返回错误。
 func getDeviceNameFromMount(mounter mount.Interface, mountPath, pluginMountDir string) (string, error) {
 	return "", errUnsupported
 }
 
-// GetSELinuxMountContext returns value of -o context=XYZ mount option on
-// given mount point.
+// GetSELinuxMountContext 返回给定挂载点上 -o context=XYZ 挂载选项的值。
 func (hu *HostUtil) GetSELinuxMountContext(pathname string) (string, error) {
 	return "", errUnsupported
 }

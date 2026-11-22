@@ -24,22 +24,19 @@ import (
 
 var _ MetricsProvider = &metricsDu{}
 
-// metricsDu represents a MetricsProvider that calculates the used and
-// available Volume space by calling fs.DiskUsage() and gathering
-// filesystem info for the Volume path.
+// metricsDu 通过 fs.DiskUsage() 及卷路径的文件系统信息计算卷已用与可用空间的 MetricsProvider。
 type metricsDu struct {
-	// the directory path the volume is mounted to.
+	// 卷挂载到的目录路径。
 	path string
 }
 
-// NewMetricsDu creates a new metricsDu with the Volume path.
+// NewMetricsDu 使用卷路径创建一个 metricsDu。
 func NewMetricsDu(path string) MetricsProvider {
 	return &metricsDu{path}
 }
 
-// GetMetrics calculates the volume usage and device free space by executing "du"
-// and gathering filesystem info for the Volume path.
-// See MetricsProvider.GetMetrics
+// GetMetrics 通过执行 "du" 并收集卷路径的文件系统信息，计算卷用量与设备空闲空间。
+// 参见 MetricsProvider.GetMetrics。
 func (md *metricsDu) GetMetrics() (*Metrics, error) {
 	metrics := &Metrics{Time: metav1.Now()}
 	if md.path == "" {
@@ -59,7 +56,7 @@ func (md *metricsDu) GetMetrics() (*Metrics, error) {
 	return metrics, nil
 }
 
-// getDiskUsage writes metrics.Used and metric.InodesUsed from fs.DiskUsage
+// getDiskUsage 将 fs.DiskUsage 的结果写入 metrics.Used 与 metrics.InodesUsed。
 func (md *metricsDu) getDiskUsage(metrics *Metrics) error {
 	usage, err := fs.DiskUsage(md.path)
 	if err != nil {
@@ -70,8 +67,7 @@ func (md *metricsDu) getDiskUsage(metrics *Metrics) error {
 	return nil
 }
 
-// getFsInfo writes metrics.Capacity and metrics.Available from the filesystem
-// info
+// getFsInfo 将文件系统信息写入 metrics.Capacity 与 metrics.Available。
 func (md *metricsDu) getFsInfo(metrics *Metrics) error {
 	available, capacity, _, inodes, inodesFree, _, err := fs.Info(md.path)
 	if err != nil {

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// testCases 描述嵌套挂载点场景的期望结果。
 type testCases struct {
 	name     string
 	err      bool
@@ -35,6 +36,7 @@ type testCases struct {
 	pod      v1.Pod
 }
 
+// TestGetNestedMountpoints 验证 getNestedMountpoints 能识别卷挂载点下的嵌套目录，并拒绝越界路径。
 func TestGetNestedMountpoints(t *testing.T) {
 	var (
 		testNamespace = "test_namespace"
