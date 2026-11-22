@@ -15,7 +15,12 @@ limitations under the License.
 */
 
 /*
-Package bootstrap provides a token authenticator for TLS bootstrap secrets.
+Package bootstrap 提供 TLS bootstrap token 认证器。
+
+新节点加入集群时，使用 bootstrap token 进行初始认证。
+Token 存储在 kube-system 命名空间的 Secret 中，格式为 bootstrap.kubernetes.io/token。
+认证成功后，节点用户被放入 system:bootstrappers 组，用户名为 system:bootstrap:(token-id)。
+然后节点可以通过 CSR（Certificate Signing Request）获取长期客户端证书。
 */
 package bootstrap
 
@@ -41,20 +46,20 @@ import (
 // because the existing functionality isn't exported or because it is in a
 // package that shouldn't be directly imported by this packages.
 
-// NewTokenAuthenticator initializes a bootstrap token authenticator.
-//
-// Lister is expected to be for the "kube-system" namespace.
+// NewTokenAuthenticator 创建一个新的 bootstrap token 认证器。
+// lister 应该指向 kube-system 命名空间，因为 bootstrap token secret 只存储在那里。
 func NewTokenAuthenticator(lister corev1listers.SecretNamespaceLister) *TokenAuthenticator {
 	return &TokenAuthenticator{lister}
 }
 
-// TokenAuthenticator authenticates bootstrap tokens from secrets in the API server.
+// TokenAuthenticator 从 API Server 的 Secret 中验证 bootstrap token。
+// 通过 kube-system 命名空间的 Secret lister 查找和验证 token。
 type TokenAuthenticator struct {
-	lister corev1listers.SecretNamespaceLister
+	lister corev1listers.SecretNamespaceLister // kube-system 命名空间的 Secret lister
 }
 
-// tokenErrorf prints a error message for a secret that has matched a bearer
-// token but fails to meet some other criteria.
+// tokenErrorf 记录一条错误消息，说明匹配到 bearer token 的 Secret 未通过某项检查。
+// 用于调试：打印 Secret 名称和失败原因，帮助排查 bootstrap token 配置问题。
 //
 //	tokenErrorf(secret, "has invalid value for key %s", key)
 func tokenErrorf(s *corev1.Secret, format string, i ...interface{}) {
@@ -62,31 +67,18 @@ func tokenErrorf(s *corev1.Secret, format string, i ...interface{}) {
 	klog.V(3).Infof(format, i...)
 }
 
-// AuthenticateToken tries to match the provided token to a bootstrap token secret
-// in a given namespace. If found, it authenticates the token in the
-// "system:bootstrappers" group and with the "system:bootstrap:(token-id)" username.
+// AuthenticateToken 尝试将提供的 token 与 kube-system 命名空间中的 bootstrap token Secret 匹配。
+// 如果找到匹配的 Secret，返回一个认证响应，用户属于 "system:bootstrappers" 组，
+// 用户名为 "system:bootstrap:(token-id)"。
 //
-// All secrets must be of type "bootstrap.kubernetes.io/token". An example secret:
+// 验证流程：
+// 1. 解析 token 格式（token-id.token-secret）
+// 2. 根据 token-id 查找名为 bootstrap-token-(token-id) 的 Secret
+// 3. 检查 Secret 未被删除、类型正确、token-secret 和 token-id 匹配
+// 4. 检查 token 未过期且标记为可用于认证
+// 5. 返回包含用户组和用户名的认证响应
 //
-//	apiVersion: v1
-//	kind: Secret
-//	metadata:
-//	  # Name MUST be of form "bootstrap-token-( token id )".
-//	  name: bootstrap-token-( token id )
-//	  namespace: kube-system
-//	# Only secrets of this type will be evaluated.
-//	type: bootstrap.kubernetes.io/token
-//	data:
-//	  token-secret: ( private part of token )
-//	  token-id: ( token id )
-//	  # Required key usage.
-//	  usage-bootstrap-authentication: true
-//	  auth-extra-groups: "system:bootstrappers:custom-group1,system:bootstrappers:custom-group2"
-//	  # May also contain an expiry.
-//
-// Tokens are expected to be of the form:
-//
-//	( token-id ).( token-secret )
+// Token 格式：(token-id).(token-secret)，例如 abcdef.0123456789abcdef
 func (t *TokenAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	tokenID, tokenSecret, err := bootstraptokenutil.ParseToken(token)
 	if err != nil {

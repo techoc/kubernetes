@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rbac implements the authorizer.Authorizer interface using roles base access control.
+// Package rbac 使用基于角色的访问控制实现 authorizer.Authorizer 接口。
+// 此文件提供 SubjectLocator 功能，用于查找可以执行特定操作的所有主体。
 package rbac
 
 import (
@@ -28,25 +29,31 @@ import (
 )
 
 type RoleToRuleMapper interface {
-	// GetRoleReferenceRules attempts to resolve the role reference of a RoleBinding or ClusterRoleBinding.  The passed namespace should be the namespace
-	// of the role binding, the empty string if a cluster role binding.
+	// GetRoleReferenceRules 尝试解析 RoleBinding 或 ClusterRoleBinding 的角色引用。
+	// 传入的 namespace 是 role binding 的命名空间，如果是 cluster role binding 则为空字符串。
 	GetRoleReferenceRules(ctx context.Context, roleRef rbacv1.RoleRef, namespace string) ([]rbacv1.PolicyRule, error)
 }
 
+// SubjectLocator 查找可以执行特定操作的所有主体。
+// 用于 Webhook 等场景，需要知道哪些用户或组有权限执行某项操作。
 type SubjectLocator interface {
 	AllowedSubjects(ctx context.Context, attributes authorizer.Attributes) ([]rbacv1.Subject, error)
 }
 
 var _ = SubjectLocator(&SubjectAccessEvaluator{})
 
+// SubjectAccessEvaluator 实现 SubjectLocator 接口，
+// 通过遍历所有 RoleBinding 和 ClusterRoleBinding 来查找有权限的主体。
 type SubjectAccessEvaluator struct {
-	superUser string
+	superUser string // 超级用户，始终被允许
 
 	roleBindingLister        rbacregistryvalidation.RoleBindingLister
 	clusterRoleBindingLister rbacregistryvalidation.ClusterRoleBindingLister
 	roleToRuleMapper         RoleToRuleMapper
 }
 
+// NewSubjectAccessEvaluator 创建一个新的主题访问评估器。
+// superUser 是始终被允许的超级用户（通常是 kube-apiserver 的认证配置中指定的用户）。
 func NewSubjectAccessEvaluator(roles rbacregistryvalidation.RoleGetter, roleBindings rbacregistryvalidation.RoleBindingLister, clusterRoles rbacregistryvalidation.ClusterRoleGetter, clusterRoleBindings rbacregistryvalidation.ClusterRoleBindingLister, superUser string) *SubjectAccessEvaluator {
 	subjectLocator := &SubjectAccessEvaluator{
 		superUser:                superUser,
@@ -59,9 +66,11 @@ func NewSubjectAccessEvaluator(roles rbacregistryvalidation.RoleGetter, roleBind
 	return subjectLocator
 }
 
-// AllowedSubjects returns the subjects that can perform an action and any errors encountered while computing the list.
-// It is possible to have both subjects and errors returned if some rolebindings couldn't be resolved, but others could be.
+// AllowedSubjects 返回可以执行指定操作的所有主体，以及计算过程中遇到的错误。
+// 如果某些 rolebinding 无法解析但其他可以，则可能同时返回主体和错误。
+// 始终包含 system:privileged 组和 superUser（如果配置了）。
 func (r *SubjectAccessEvaluator) AllowedSubjects(ctx context.Context, requestAttributes authorizer.Attributes) ([]rbacv1.Subject, error) {
+	// 始终允许 system:privileged 组（集群管理员）
 	subjects := []rbacv1.Subject{{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: user.SystemPrivilegedGroup}}
 	if len(r.superUser) > 0 {
 		subjects = append(subjects, rbacv1.Subject{Kind: rbacv1.UserKind, APIGroup: rbacv1.GroupName, Name: r.superUser})
@@ -75,9 +84,8 @@ func (r *SubjectAccessEvaluator) AllowedSubjects(ctx context.Context, requestAtt
 		for _, clusterRoleBinding := range clusterRoleBindings {
 			rules, err := r.roleToRuleMapper.GetRoleReferenceRules(ctx, clusterRoleBinding.RoleRef, "")
 			if err != nil {
-				// if we have an error, just keep track of it and keep processing.  Since rules are additive,
-				// missing a reference is bad, but we can continue with other rolebindings and still have a list
-				// that does not contain any invalid values
+				// 如果解析失败，记录错误并继续处理。因为规则是累加的，
+				// 缺少一个引用虽然不好，但其他 rolebinding 仍然可以产生有效列表。
 				errorlist = append(errorlist, err)
 			}
 			if RulesAllow(requestAttributes, rules...) {
@@ -94,9 +102,7 @@ func (r *SubjectAccessEvaluator) AllowedSubjects(ctx context.Context, requestAtt
 			for _, roleBinding := range roleBindings {
 				rules, err := r.roleToRuleMapper.GetRoleReferenceRules(ctx, roleBinding.RoleRef, namespace)
 				if err != nil {
-					// if we have an error, just keep track of it and keep processing.  Since rules are additive,
-					// missing a reference is bad, but we can continue with other rolebindings and still have a list
-					// that does not contain any invalid values
+					// 同上：记录错误并继续
 					errorlist = append(errorlist, err)
 				}
 				if RulesAllow(requestAttributes, rules...) {
@@ -106,6 +112,7 @@ func (r *SubjectAccessEvaluator) AllowedSubjects(ctx context.Context, requestAtt
 		}
 	}
 
+	// 去重：同一个主体可能通过多个 binding 获得相同的权限
 	dedupedSubjects := []rbacv1.Subject{}
 	for _, subject := range subjects {
 		found := false

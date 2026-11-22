@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rbac implements the authorizer.Authorizer interface using roles base access control.
+// Package rbac 使用基于角色的访问控制实现 authorizer.Authorizer 接口。
+// RBAC 是 Kubernetes 推荐的授权模式，通过 Role/ClusterRole 定义权限，
+// 通过 RoleBinding/ClusterRoleBinding 将权限授予用户、组或服务账户。
 package rbac
 
 import (
@@ -35,15 +37,13 @@ import (
 )
 
 type RequestToRuleMapper interface {
-	// RulesFor returns all known PolicyRules and any errors that happened while locating those rules.
-	// Any rule returned is still valid, since rules are deny by default.  If you can pass with the rules
-	// supplied, you do not have to fail the request.  If you cannot, you should indicate the error along
-	// with your denial.
+	// RulesFor 返回所有已知的 PolicyRule 和查找过程中遇到的错误。
+	// 返回的规则仍然有效，因为默认拒绝。如果提供的规则足以通过验证，
+	// 则不需要失败；如果不能，应该连同拒绝一起返回错误。
 	RulesFor(ctx context.Context, subject user.Info, namespace string) ([]rbacv1.PolicyRule, error)
 
-	// VisitRulesFor invokes visitor() with each rule that applies to a given user in a given namespace,
-	// and each error encountered resolving those rules. Rule may be nil if err is non-nil.
-	// If visitor() returns false, visiting is short-circuited.
+	// VisitRulesFor 对给定用户在给定命名空间中的每个适用规则调用 visitor()，
+	// 以及解析这些规则时遇到的每个错误。如果 visitor() 返回 false，则短路停止遍历。
 	VisitRulesFor(ctx context.Context, user user.Info, namespace string, visitor func(source fmt.Stringer, rule *rbacv1.PolicyRule, err error) bool)
 }
 
@@ -51,10 +51,11 @@ var _ = authorizer.Authorizer(&RBACAuthorizer{})
 var _ = authorizer.RuleResolver(&RBACAuthorizer{})
 
 type RBACAuthorizer struct {
-	authorizationRuleResolver RequestToRuleMapper
+	authorizationRuleResolver RequestToRuleMapper // 将请求映射到适用规则的解析器
 }
 
-// authorizingVisitor short-circuits once allowed, and collects any resolution errors encountered
+// authorizingVisitor 在找到允许规则后短路，并收集解析过程中遇到的错误。
+// 用于 Authorize 方法中遍历规则，一旦找到匹配规则就停止。
 type authorizingVisitor struct {
 	requestAttributes authorizer.Attributes
 
@@ -67,7 +68,7 @@ func (v *authorizingVisitor) visit(source fmt.Stringer, rule *rbacv1.PolicyRule,
 	if rule != nil && RuleAllows(v.requestAttributes, rule) {
 		v.allowed = true
 		v.reason = fmt.Sprintf("RBAC: allowed by %s", source.String())
-		return false
+		return false // 找到允许规则，短路停止遍历
 	}
 	if err != nil {
 		v.errors = append(v.errors, err)
@@ -78,13 +79,13 @@ func (v *authorizingVisitor) visit(source fmt.Stringer, rule *rbacv1.PolicyRule,
 func (r *RBACAuthorizer) Authorize(ctx context.Context, requestAttributes authorizer.Attributes) (authorizer.Decision, string, error) {
 	ruleCheckingVisitor := &authorizingVisitor{requestAttributes: requestAttributes}
 
+	// 遍历所有适用于该用户的规则，查找是否有允许此请求的规则
 	r.authorizationRuleResolver.VisitRulesFor(ctx, requestAttributes.GetUser(), requestAttributes.GetNamespace(), ruleCheckingVisitor.visit)
 	if ruleCheckingVisitor.allowed {
 		return authorizer.DecisionAllow, ruleCheckingVisitor.reason, nil
 	}
 
-	// Build a detailed log of the denial.
-	// Make the whole block conditional so we don't do a lot of string-building we won't use.
+	// 构建详细的拒绝日志，仅在需要时构建字符串以避免不必要的开销
 	if klogV := klog.V(5); klogV.Enabled() {
 		var operation string
 		if requestAttributes.IsResourceRequest() {
@@ -129,12 +130,12 @@ func (r *RBACAuthorizer) Authorize(ctx context.Context, requestAttributes author
 	return authorizer.DecisionNoOpinion, reason, nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不支持 conditions-aware 授权，直接转换 Authorize 结果。
 func (r *RBACAuthorizer) ConditionsAwareAuthorize(ctx context.Context, requestAttributes authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(r.Authorize(ctx, requestAttributes))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 不支持条件评估。
 func (*RBACAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -145,6 +146,7 @@ func (r *RBACAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace
 		nonResourceRules []authorizer.NonResourceRuleInfo
 	)
 
+	// 获取用户的所有 RBAC 规则，转换为 authorizer 接口需要的格式
 	policyRules, err := r.authorizationRuleResolver.RulesFor(ctx, user, namespace)
 	for _, policyRule := range policyRules {
 		if len(policyRule.Resources) > 0 {
@@ -169,6 +171,9 @@ func (r *RBACAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace
 	return resourceRules, nonResourceRules, false, err
 }
 
+// New 创建一个新的 RBAC 授权器。
+// 需要 Role、RoleBinding、ClusterRole、ClusterRoleBinding 的获取和列表接口，
+// 用于在授权时查找适用的规则。
 func New(roles rbacregistryvalidation.RoleGetter, roleBindings rbacregistryvalidation.RoleBindingLister, clusterRoles rbacregistryvalidation.ClusterRoleGetter, clusterRoleBindings rbacregistryvalidation.ClusterRoleBindingLister) *RBACAuthorizer {
 	authorizer := &RBACAuthorizer{
 		authorizationRuleResolver: rbacregistryvalidation.NewDefaultRuleResolver(
@@ -178,6 +183,8 @@ func New(roles rbacregistryvalidation.RoleGetter, roleBindings rbacregistryvalid
 	return authorizer
 }
 
+// RulesAllow 检查请求是否被任一规则允许。
+// 用于 Node 授权器等场景，需要检查静态规则列表。
 func RulesAllow(requestAttributes authorizer.Attributes, rules ...rbacv1.PolicyRule) bool {
 	for i := range rules {
 		if RuleAllows(requestAttributes, &rules[i]) {
@@ -188,6 +195,9 @@ func RulesAllow(requestAttributes authorizer.Attributes, rules ...rbacv1.PolicyR
 	return false
 }
 
+// RuleAllows 检查单个规则是否允许给定的请求。
+// 对于资源请求，检查 verb、API group、resource 和 resource name 是否匹配。
+// 对于非资源请求，检查 verb 和 URL 路径是否匹配。
 func RuleAllows(requestAttributes authorizer.Attributes, rule *rbacv1.PolicyRule) bool {
 	if requestAttributes.IsResourceRequest() {
 		combinedResource := requestAttributes.GetResource()
@@ -205,6 +215,8 @@ func RuleAllows(requestAttributes authorizer.Attributes, rule *rbacv1.PolicyRule
 		rbacv1helpers.NonResourceURLMatches(rule, requestAttributes.GetPath())
 }
 
+// RoleGetter 包装 RoleLister，提供 Role 获取接口。
+// 适配 rbacregistryvalidation 包需要的接口。
 type RoleGetter struct {
 	Lister rbaclisters.RoleLister
 }
@@ -213,6 +225,7 @@ func (g *RoleGetter) GetRole(ctx context.Context, namespace, name string) (*rbac
 	return g.Lister.Roles(namespace).Get(name)
 }
 
+// RoleBindingLister 包装 RoleBindingLister，提供 RoleBinding 列表接口。
 type RoleBindingLister struct {
 	Lister rbaclisters.RoleBindingLister
 }
@@ -221,6 +234,7 @@ func (l *RoleBindingLister) ListRoleBindings(ctx context.Context, namespace stri
 	return l.Lister.RoleBindings(namespace).List(labels.Everything())
 }
 
+// ClusterRoleGetter 包装 ClusterRoleLister，提供 ClusterRole 获取接口。
 type ClusterRoleGetter struct {
 	Lister rbaclisters.ClusterRoleLister
 }
@@ -229,6 +243,7 @@ func (g *ClusterRoleGetter) GetClusterRole(ctx context.Context, name string) (*r
 	return g.Lister.Get(name)
 }
 
+// ClusterRoleBindingLister 包装 ClusterRoleBindingLister，提供 ClusterRoleBinding 列表接口。
 type ClusterRoleBindingLister struct {
 	Lister rbaclisters.ClusterRoleBindingLister
 }

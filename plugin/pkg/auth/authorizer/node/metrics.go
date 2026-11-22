@@ -23,16 +23,19 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// nodeAuthorizerSubsystem 是 Node 授权器相关指标的子系统名称。
 const nodeAuthorizerSubsystem = "node_authorizer"
 
 var (
+	// graphActionsDuration 记录 Graph 操作（AddPod、DeletePod 等）的耗时分布。
+	// 用于监控 Node 授权器图操作的延迟，诊断大规模集群中的性能问题。
 	graphActionsDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      nodeAuthorizerSubsystem,
 			Name:           "graph_actions_duration_seconds",
 			Help:           "Histogram of duration of graph actions in node authorizer.",
 			StabilityLevel: metrics.ALPHA,
-			// Start with 0.1ms with the last bucket being [~200ms, Inf)
+			// 从 0.1ms 开始，最后一个桶为 [~200ms, Inf)
 			Buckets: metrics.ExponentialBuckets(0.0001, 2, 12),
 		},
 		[]string{"operation"},
@@ -41,7 +44,8 @@ var (
 
 var registerMetrics sync.Once
 
-// RegisterMetrics registers metrics for node package.
+// RegisterMetrics 注册 Node 授权器的指标。
+// 使用 sync.Once 确保只注册一次。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(graphActionsDuration)

@@ -31,7 +31,34 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph/simple"
 )
 
-// namedVertex implements graph.Node and remembers the type, namespace, and name of its related API object
+// Graph 维护一个有向无环图，表示 Kubernetes 资源到 Node 的依赖关系。
+// 所有边都指向 Node 顶点，方向为：资源 -> ... -> Node。
+// 用于 Node 授权器快速判断某个资源是否与指定节点关联。
+//
+// 图的边方向示例：
+//
+//	node <- pod
+//	pod  <- secret,configmap,pvc
+//	pvc  <- pv
+//	pv   <- secret
+//
+// 当 kubelet 请求访问某个资源时，授权器在图中查找从该资源到 kubelet 所在节点的路径。
+// 如果存在路径，则允许访问；否则拒绝。
+type Graph struct {
+	lock sync.RWMutex // 保护图的并发访问
+	// Calling graph.SetEdge is restricted to the addEdgeLocked method of Graph.
+	graph *simple.DirectedAcyclicGraph // 底层有向无环图实现
+	// vertices is a map of type -> namespace -> name -> vertex
+	vertices map[vertexType]namespaceVertexMapping // 快速查找顶点：类型 -> 命名空间 -> 名称 -> 顶点
+
+	// destinationEdgeIndex is a map of vertex -> set of destination IDs
+	destinationEdgeIndex map[int]*intSet // 优化：缓存每个顶点可达的 Node ID 集合，避免重复 DFS
+	// destinationEdgeThreshold is the minimum number of distinct destination IDs at which to maintain an index
+	destinationEdgeThreshold int // 只有当顶点的出边数超过此阈值时，才维护 destinationEdgeIndex（节省内存）
+}
+
+// namedVertex 实现 graph.Node 接口，表示图中一个 API 对象的顶点。
+// 记录对象的类型、命名空间和名称，用于在图中定位和标识资源。
 type namedVertex struct {
 	name       string
 	namespace  string
@@ -57,8 +84,9 @@ func (n *namedVertex) String() string {
 	return vertexTypes[n.vertexType] + ":" + n.namespace + "/" + n.name
 }
 
-// destinationEdge is a graph edge that includes a denormalized reference to the final destination vertex.
-// This should only be used when there is a single leaf vertex reachable from T.
+// destinationEdge 是一条包含到最终目标顶点（Node）引用的边。
+// 用于快速判断一个资源是否可达某个特定的 Node，避免完整的图遍历。
+// 仅当从顶点 T 出发只能到达单个叶节点（Node）时使用。
 type destinationEdge struct {
 	F           graph.Node
 	T           graph.Node
@@ -73,30 +101,10 @@ func (e *destinationEdge) To() graph.Node     { return e.T }
 func (e *destinationEdge) Weight() float64    { return 0 }
 func (e *destinationEdge) DestinationID() int { return e.Destination.ID() }
 
-// Graph holds graph vertices and a way to look up a vertex for a particular API type/namespace/name.
-// All edges point toward the vertices representing Kubernetes nodes:
-//
-// node <- pod
-// pod  <- secret,configmap,pvc
-// pvc  <- pv
-// pv   <- secret
-type Graph struct {
-	lock sync.RWMutex
-	// Calling graph.SetEdge is restricted to the addEdgeLocked method of Graph.
-	graph *simple.DirectedAcyclicGraph
-	// vertices is a map of type -> namespace -> name -> vertex
-	vertices map[vertexType]namespaceVertexMapping
-
-	// destinationEdgeIndex is a map of vertex -> set of destination IDs
-	destinationEdgeIndex map[int]*intSet
-	// destinationEdgeThreshold is the minimum number of distinct destination IDs at which to maintain an index
-	destinationEdgeThreshold int
-}
-
-// namespaceVertexMapping is a map of namespace -> name -> vertex
+// namespaceVertexMapping 表示 命名空间 -> 名称 -> 顶点 的映射
 type namespaceVertexMapping map[string]nameVertexMapping
 
-// nameVertexMapping is a map of name -> vertex
+// nameVertexMapping 表示 名称 -> 顶点 的映射
 type nameVertexMapping map[string]*namedVertex
 
 func NewGraph() *Graph {
@@ -105,14 +113,14 @@ func NewGraph() *Graph {
 		graph:    simple.NewDirectedAcyclicGraph(0, 0),
 
 		destinationEdgeIndex: map[int]*intSet{},
-		// experimentally determined to be the point at which iteration adds an order of magnitude to the authz check.
-		// since maintaining indexes costs time/memory while processing graph changes, we don't want to make this too low.
+		// 200 是通过实验确定的阈值：低于此值时，维护索引的开销大于直接遍历。
+		// 索引需要额外的时间和内存来维护，所以不能设得太低。
 		destinationEdgeThreshold: 200,
 	}
 }
 
-// vertexType indicates the type of the API object the vertex represents.
-// represented as a byte to minimize space used in the vertices.
+// vertexType 表示顶点所代表的 API 对象类型。
+// 使用 byte 类型以最小化顶点占用的空间。
 type vertexType byte
 
 const (
@@ -143,10 +151,9 @@ var vertexTypes = map[vertexType]string{
 	pcrVertexType:            "podcertificaterequest",
 }
 
-// vertexTypeWithAuthoritativeIndex indicates which types of vertices can hold
-// a destination edge index that is authoritative i.e. if the index exists,
-// then it always stores all of the Nodes that are reachable from that vertex
-// in the graph.
+// vertexTypeWithAuthoritativeIndex 表示哪些类型的顶点可以维护权威的 destination edge 索引。
+// 即：如果索引存在，则它总是包含从该顶点在图中可达的所有 Node。
+// 对于 PV 和 Node 类型，索引不是权威的（因为 PV->PVC->Pod->Node 链路可能在 PV 添加时尚未建立）。
 var vertexTypeWithAuthoritativeIndex = map[vertexType]bool{
 	configMapVertexType:      true,
 	sliceVertexType:          true,
@@ -158,7 +165,7 @@ var vertexTypeWithAuthoritativeIndex = map[vertexType]bool{
 	pcrVertexType:            true,
 }
 
-// must be called under a write lock
+// 必须在持有写锁时调用
 func (g *Graph) getOrCreateVertexLocked(vertexType vertexType, namespace, name string) *namedVertex {
 	if vertex, exists := g.getVertexRLocked(vertexType, namespace, name); exists {
 		return vertex
@@ -166,13 +173,13 @@ func (g *Graph) getOrCreateVertexLocked(vertexType vertexType, namespace, name s
 	return g.createVertexLocked(vertexType, namespace, name)
 }
 
-// must be called under a read lock
+// 必须在持有读锁时调用
 func (g *Graph) getVertexRLocked(vertexType vertexType, namespace, name string) (*namedVertex, bool) {
 	vertex, exists := g.vertices[vertexType][namespace][name]
 	return vertex, exists
 }
 
-// must be called under a write lock
+// 必须在持有写锁时调用
 func (g *Graph) createVertexLocked(vertexType vertexType, namespace, name string) *namedVertex {
 	typedVertices, exists := g.vertices[vertexType]
 	if !exists {
@@ -193,7 +200,9 @@ func (g *Graph) createVertexLocked(vertexType vertexType, namespace, name string
 	return vertex
 }
 
-// must be called under write lock
+// 必须在持有写锁时调用
+// deleteVertexLocked 删除指定顶点及其所有关联边。
+// 同时清理孤立顶点（度数为 1 的邻居，即只有与被删除顶点之间的边）。
 func (g *Graph) deleteVertexLocked(vertexType vertexType, namespace, name string) {
 	vertex, exists := g.getVertexRLocked(vertexType, namespace, name)
 	if !exists {
@@ -235,9 +244,9 @@ func (g *Graph) deleteVertexLocked(vertexType vertexType, namespace, name string
 	}
 }
 
-// must be called under write lock
-// deletes edges from a given vertex type to a specific vertex
-// will delete each orphaned "from" vertex, but will never delete the "to" vertex
+// 必须在持有写锁时调用
+// deleteEdgesLocked 删除从指定类型的顶点到目标顶点的所有边。
+// 会删除孤立的源顶点，但不会删除目标顶点本身。
 func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toName string) {
 	// get the "to" side
 	toVert, exists := g.getVertexRLocked(toType, toNamespace, toName)
@@ -274,7 +283,8 @@ func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toNa
 	}
 }
 
-// A fastpath for recomputeDestinationIndexLocked for "removing edge" case.
+// removeEdgeFromDestinationIndexLocked 是 recomputeDestinationIndexLocked 的删除边快速路径。
+// 仅更新索引中受影响的目标 ID 引用计数，避免全量重算。
 func (g *Graph) removeEdgeFromDestinationIndexLocked(e graph.Edge) {
 	n := e.From()
 	// don't maintain indices for nodes with few edges
@@ -294,7 +304,8 @@ func (g *Graph) removeEdgeFromDestinationIndexLocked(e graph.Edge) {
 	}
 }
 
-// A fastpath for recomputeDestinationIndexLocked for "adding edge case".
+// addEdgeToDestinationIndexLocked 是 recomputeDestinationIndexLocked 的添加边快速路径。
+// 如果索引已存在，直接递增目标 ID 的引用计数；否则全量重算索引。
 func (g *Graph) addEdgeToDestinationIndexLocked(e graph.Edge) {
 	n := e.From()
 	index := g.destinationEdgeIndex[n.ID()]
@@ -309,9 +320,8 @@ func (g *Graph) addEdgeToDestinationIndexLocked(e graph.Edge) {
 	}
 }
 
-// must be called under write lock
-// removeVertexLocked removes the specified vertex from the graph and from the maintained indices.
-// It does nothing to indexes of neighbor vertices.
+// 必须在持有写锁时调用
+// removeVertexLocked 从图和索引中移除指定顶点，但不处理邻居顶点的索引。
 func (g *Graph) removeVertexLocked(v *namedVertex) {
 	g.graph.RemoveNode(v)
 	delete(g.destinationEdgeIndex, v.ID())
@@ -321,8 +331,9 @@ func (g *Graph) removeVertexLocked(v *namedVertex) {
 	}
 }
 
-// must be called under write lock
-// recomputeDestinationIndexLocked recomputes the index of destination ids for the specified vertex
+// 必须在持有写锁时调用
+// recomputeDestinationIndexLocked 重新计算指定顶点的 destination ID 索引。
+// 仅当顶点的出边数超过 destinationEdgeThreshold 时才维护索引。
 func (g *Graph) recomputeDestinationIndexLocked(n graph.Node) {
 	// don't maintain indices for nodes with few edges
 	edgeCount := g.graph.Degree(n)
@@ -349,14 +360,16 @@ func (g *Graph) recomputeDestinationIndexLocked(n graph.Node) {
 	g.destinationEdgeIndex[n.ID()] = index
 }
 
-// AddPod should only be called once spec.NodeName is populated.
-// It sets up edges for the following relationships (which are immutable for a pod once bound to a node):
+// AddPod 将 Pod 及其引用的资源添加到图中。
+// 仅在 spec.NodeName 已填充时调用（Pod 已调度到节点）。
+// 建立以下边关系（Pod 绑定到节点后不可变）：
 //
 //	pod       -> node
 //	secret    -> pod
 //	configmap -> pod
 //	pvc       -> pod
 //	svcacct   -> pod
+//	resourceclaim -> pod
 func (g *Graph) AddPod(pod *corev1.Pod) {
 	start := time.Now()
 	defer func() {
@@ -371,16 +384,15 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 	// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
 	g.addEdgeLocked(podVertex, nodeVertex, nodeVertex)
 
-	// Short-circuit adding edges to other resources for mirror pods.
-	// A node must never be able to create a pod that grants them permissions on other API objects.
-	// The NodeRestriction admission plugin prevents creation of such pods, but short-circuiting here gives us defense in depth.
+	// 对于 mirror pod，不添加到其他资源的边。
+	// 节点绝不能通过创建 mirror pod 来获得对其他 API 对象的权限。
+	// NodeRestriction admission plugin 已经阻止创建此类 Pod，这里短路是纵深防御（defense in depth）。
 	if _, isMirrorPod := pod.Annotations[corev1.MirrorPodAnnotationKey]; isMirrorPod {
 		return
 	}
 
-	// The pod unconditionally gets access to the pod's service account.  In the
-	// future, this access could be restricted based on whether or not the pod
-	// actually mounts a service account token, or has a podcertificate volume.
+	// Pod 无条件获得其 ServiceAccount 的访问权限。
+	// 未来可以根据 Pod 是否实际挂载了 ServiceAccount token 或 PodCertificate 来限制此访问。
 	if len(pod.Spec.ServiceAccountName) > 0 {
 		serviceAccountVertex := g.getOrCreateVertexLocked(serviceAccountVertexType, pod.Namespace, pod.Spec.ServiceAccountName)
 		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
@@ -415,10 +427,8 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 		}
 	}
 
-	// Grant kubelet access to all ResourceClaims referenced by or created for
-	// the pod (including extended resource claims). Claims that still need to
-	// be created or intentionally were not created because they are not needed
-	// are skipped by PodClaims.
+	// 授予 kubelet 访问 Pod 引用或为其创建的所有 ResourceClaim（包括扩展资源 claim）。
+	// PodClaims 会跳过尚未创建或故意不创建的 claim（因为不需要）。
 	for claimName := range resourceclaim.PodClaims(pod) {
 		claimVertex := g.getOrCreateVertexLocked(resourceClaimVertexType, pod.Namespace, claimName)
 		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
@@ -426,11 +436,10 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 	}
 }
 
-// Must be called under a write lock.
-// All edge adds must be handled by that method rather than by calling
-// g.graph.SetEdge directly.
-// Note: if "from" belongs to vertexTypeWithAuthoritativeIndex, then
-// "destination" must be non-nil.
+// 必须在持有写锁时调用。
+// addEdgeLocked 是添加边的唯一入口，不能直接调用 g.graph.SetEdge。
+// 如果 destination 非空，创建带目标信息的 destinationEdge（用于快速查找）。
+// 注意：如果 from 属于 vertexTypeWithAuthoritativeIndex，则 destination 必须非 nil。
 func (g *Graph) addEdgeLocked(from, to, destination *namedVertex) {
 	if destination != nil {
 		e := newDestinationEdge(from, to, destination)
@@ -439,9 +448,8 @@ func (g *Graph) addEdgeLocked(from, to, destination *namedVertex) {
 		return
 	}
 
-	// We must not create edges without a Node label from a vertex that is
-	// supposed to hold authoritative destination edge index only.
-	// Entering this branch would mean there's a bug in the Node authorizer.
+	// 不应该为需要维护权威索引的顶点创建不带 Node 标签的边。
+	// 如果进入此分支，说明 Node 授权器有 bug。
 	if vertexTypeWithAuthoritativeIndex[from.vertexType] {
 		panic(fmt.Sprintf("vertex of type %q must have destination edges only", vertexTypes[from.vertexType]))
 	}
@@ -455,21 +463,20 @@ func (g *Graph) DeletePod(name, namespace string) {
 	}()
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	// 删除 Pod 顶点时，会自动清理指向它的 secret/configmap/pvc 等边。
+	// 如果这些上游顶点因此变成孤立顶点（度数为 1），也会被级联删除。
 	g.deleteVertexLocked(podVertexType, namespace, name)
 }
 
-// AddPodCertificateRequest adds a PodCertificateRequest to the graph.
+// AddPodCertificateRequest 将 PodCertificateRequest 添加到图中。
 //
-// PCRs technically have two valid edges:
+// PCR 在图中有两条可能的边：
 //
-// * PCR -> Pod (-> Node)
+//   - PCR -> Pod (-> Node)
+//   - PCR -> Node
 //
-// * PCR -> Node
-//
-// We only add the direct PCR -> Node edge, since that is enough to perform the
-// authorization, and it's a shorter graph traversal.  The noderestriction
-// admission plugin ensures that all PCRs created have a valid node,
-// serviceaccount, and pod combination that actually exists in the cluster.
+// 只添加直接的 PCR -> Node 边，因为授权检查已经足够，且图遍历路径更短。
+// noderestriction admission plugin 确保所有 PCR 都有有效的 node、serviceaccount 和 pod 组合。
 func (g *Graph) AddPodCertificateRequest(pcr *certsv1.PodCertificateRequest) {
 	start := time.Now()
 	defer func() {
@@ -484,7 +491,7 @@ func (g *Graph) AddPodCertificateRequest(pcr *certsv1.PodCertificateRequest) {
 	g.addEdgeLocked(pcrVertex, nodeVertex, nodeVertex)
 }
 
-// DeletePodCertificateRequest removes it from the graph.
+// DeletePodCertificateRequest 从图中移除 PodCertificateRequest。
 func (g *Graph) DeletePodCertificateRequest(pcr *certsv1.PodCertificateRequest) {
 	start := time.Now()
 	defer func() {
@@ -495,11 +502,14 @@ func (g *Graph) DeletePodCertificateRequest(pcr *certsv1.PodCertificateRequest) 
 	g.deleteVertexLocked(pcrVertexType, pcr.ObjectMeta.Namespace, pcr.ObjectMeta.Name)
 }
 
-// AddPV sets up edges for the following relationships:
+// AddPV 将 PV 及其引用的资源添加到图中。
+// 建立以下边关系：
 //
 //	secret -> pv
-//
 //	pv -> pvc
+//
+// 由于 PV 可能在其绑定的 PVC->Pod->Node 链路建立之前就被添加，
+// 这些边不携带 Node 信息（destination 为 nil）。
 func (g *Graph) AddPV(pv *corev1.PersistentVolume) {
 	start := time.Now()
 	defer func() {
@@ -508,18 +518,18 @@ func (g *Graph) AddPV(pv *corev1.PersistentVolume) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	// clear existing edges
+	// 清除现有边，因为 PV 的 ClaimRef 或 Secret 引用可能已变更
 	g.deleteVertexLocked(pvVertexType, "", pv.Name)
 
-	// if we have a pvc, establish new edges
+	// 如果 PV 绑定了 PVC，建立新边
 	if pv.Spec.ClaimRef != nil {
 		pvVertex := g.getOrCreateVertexLocked(pvVertexType, "", pv.Name)
 
-		// since we don't know the other end of the pvc -> pod -> node chain (or it may not even exist yet), we can't decorate these edges with kubernetes node info
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 因为我们不知道 pvc -> pod -> node 链路的另一端（或者它可能还不存在），
+		// 所以无法在这些边上装饰 Kubernetes Node 信息（destination 为 nil）。
 		g.addEdgeLocked(pvVertex, g.getOrCreateVertexLocked(pvcVertexType, pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name), nil)
 		pvutil.VisitPVSecretNames(pv, func(namespace, secret string, kubeletVisible bool) bool {
-			// This grants access to the named secret in the same namespace as the bound PVC
+			// 只授予 kubelet 可见的 secret 的访问权限（在 PVC 所在命名空间中）
 			if kubeletVisible {
 				// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
 				g.addEdgeLocked(g.getOrCreateVertexLocked(secretVertexType, namespace, secret), pvVertex, nil)
@@ -538,7 +548,8 @@ func (g *Graph) DeletePV(name string) {
 	g.deleteVertexLocked(pvVertexType, "", name)
 }
 
-// AddVolumeAttachment sets up edges for the following relationships:
+// AddVolumeAttachment 将 VolumeAttachment 添加到图中。
+// 建立以下边关系：
 //
 //	volume attachment -> node
 func (g *Graph) AddVolumeAttachment(attachmentName, nodeName string) {
@@ -549,10 +560,10 @@ func (g *Graph) AddVolumeAttachment(attachmentName, nodeName string) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	// clear existing edges
+	// 清除现有边，因为 VolumeAttachment 可能已变更节点
 	g.deleteVertexLocked(vaVertexType, "", attachmentName)
 
-	// if we have a node, establish new edges
+	// 如果有节点，建立新边
 	if len(nodeName) > 0 {
 		vaVertex := g.getOrCreateVertexLocked(vaVertexType, "", attachmentName)
 		nodeVertex := g.getOrCreateVertexLocked(nodeVertexType, "", nodeName)
@@ -570,7 +581,8 @@ func (g *Graph) DeleteVolumeAttachment(name string) {
 	g.deleteVertexLocked(vaVertexType, "", name)
 }
 
-// AddResourceSlice sets up edges for the following relationships:
+// AddResourceSlice 将 ResourceSlice 添加到图中。
+// 建立以下边关系：
 //
 //	node resource slice -> node
 func (g *Graph) AddResourceSlice(sliceName, nodeName string) {
@@ -581,10 +593,10 @@ func (g *Graph) AddResourceSlice(sliceName, nodeName string) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	// clear existing edges
+	// 清除现有边
 	g.deleteVertexLocked(sliceVertexType, "", sliceName)
 
-	// if we have a node, establish new edges
+	// 如果有节点，建立新边
 	if len(nodeName) > 0 {
 		sliceVertex := g.getOrCreateVertexLocked(sliceVertexType, "", sliceName)
 		nodeVertex := g.getOrCreateVertexLocked(nodeVertexType, "", nodeName)

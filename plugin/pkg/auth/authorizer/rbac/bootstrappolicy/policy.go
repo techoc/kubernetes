@@ -31,8 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// Write and other vars are slices of the allowed verbs.
-// Label and Annotation are default maps of bootstrappolicy.
+// Write 和 ReadWrite 等是常用 verb 列表，Label 和 Annotation 是启动策略的默认元数据。
 var (
 	Write      = []string{"create", "update", "patch", "delete", "deletecollection"}
 	ReadWrite  = []string{"get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"}
@@ -44,6 +43,7 @@ var (
 )
 
 const (
+	// API 组常量，用于构建 RBAC 规则时引用各个 API 组
 	legacyGroup                  = ""
 	appsGroup                    = "apps"
 	authenticationGroup          = "authentication.k8s.io"
@@ -70,6 +70,9 @@ const (
 	schedulingGroup              = "scheduling.k8s.io"
 )
 
+// addDefaultMetadata 为启动策略中的对象添加默认标签和注释。
+// 标签 kubernetes.io/bootstrapping=rbac-defaults 标识这是系统自动创建的资源。
+// 注释 rbac.authorization.k8s.io/auto-update 允许系统自动更新内置角色。
 func addDefaultMetadata(obj runtime.Object) {
 	metadata, err := meta.Accessor(obj)
 	if err != nil {
@@ -96,6 +99,7 @@ func addDefaultMetadata(obj runtime.Object) {
 	metadata.SetAnnotations(annotations)
 }
 
+// addClusterRoleLabel 为所有 ClusterRole 添加默认元数据。
 func addClusterRoleLabel(roles []rbacv1.ClusterRole) {
 	for i := range roles {
 		addDefaultMetadata(&roles[i])
@@ -103,6 +107,7 @@ func addClusterRoleLabel(roles []rbacv1.ClusterRole) {
 	return
 }
 
+// addClusterRoleBindingLabel 为所有 ClusterRoleBinding 添加默认元数据。
 func addClusterRoleBindingLabel(rolebindings []rbacv1.ClusterRoleBinding) {
 	for i := range rolebindings {
 		addDefaultMetadata(&rolebindings[i])
@@ -110,6 +115,9 @@ func addClusterRoleBindingLabel(rolebindings []rbacv1.ClusterRoleBinding) {
 	return
 }
 
+// viewRules 返回 view 角色的规则，提供对常见资源的只读访问。
+// 包括 Pod、Service、ConfigMap、Deployment、StatefulSet 等用户级资源。
+// 根据功能门控动态添加 DRA、GenericWorkload 等新功能的权限。
 func viewRules() []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("pods", "replicationcontrollers", "replicationcontrollers/scale", "serviceaccounts",
@@ -159,6 +167,9 @@ func viewRules() []rbacv1.PolicyRule {
 	return rules
 }
 
+// editRules 返回 edit 角色的规则，提供对常见资源的读写访问。
+// 包括创建/更新/删除 Pod、Service、Secret、ConfigMap 等。
+// 不包括系统级资源（如 status 子资源、quota、limits）。
 func editRules() []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		// Allow read on escalating resources
@@ -210,7 +221,9 @@ func editRules() []rbacv1.PolicyRule {
 	return rules
 }
 
-// NodeRules returns node policy rules, it is slice of rbacv1.PolicyRule.
+// NodeRules 返回 system:node 角色的规则，定义 kubelet 的权限。
+// kubelet 需要访问 Node、Pod、Secret、ConfigMap、PVC、PV 等资源，
+// 但通过 Node authorizer 和 NodeRestriction admission plugin 进行细粒度限制。
 func NodeRules() []rbacv1.PolicyRule {
 	nodePolicyRules := []rbacv1.PolicyRule{
 		// Needed to check API access.  These creates are non-mutating
@@ -311,7 +324,10 @@ func NodeRules() []rbacv1.PolicyRule {
 	return nodePolicyRules
 }
 
-// ClusterRoles returns the cluster roles to bootstrap an API server with
+// ClusterRoles 返回集群启动时自动创建的 ClusterRole 列表。
+// 包括 cluster-admin、system:discovery、system:monitoring、system:basic-user、
+// system:public-info-viewer、admin、edit、view 等内置角色，
+// 以及 kube-controller-manager、kube-scheduler、kube-proxy、kubelet 等组件角色。
 func ClusterRoles() []rbacv1.ClusterRole {
 	monitoringURLs := []string{
 		"/metrics", "/metrics/slis",
@@ -713,7 +729,8 @@ func ClusterRoles() []rbacv1.ClusterRole {
 
 const systemNodeRoleName = "system:node"
 
-// ClusterRoleBindings return default rolebindings to the default roles
+// ClusterRoleBindings 返回集群启动时自动创建的 ClusterRoleBinding 列表。
+// 将内置角色绑定到系统用户、组和服务账户。
 func ClusterRoleBindings() []rbacv1.ClusterRoleBinding {
 	rolebindings := []rbacv1.ClusterRoleBinding{
 		rbacv1helpers.NewClusterBinding("cluster-admin").Groups(user.SystemPrivilegedGroup).BindingOrDie(),
@@ -735,19 +752,15 @@ func ClusterRoleBindings() []rbacv1.ClusterRoleBinding {
 		},
 	}
 
-	// Allow all in-cluster workloads (via their service accounts) to read the OIDC discovery endpoints.
-	// Users with certain forms of write access (create pods, create secrets, create service accounts, etc)
-	// can gain access to a service account identity which would allow them to access this information.
-	// This includes the issuer URL, which is already present in the SA token JWT.  Similarly, SAs can
-	// already gain this same info via introspection of their own token.  Since this discovery endpoint
-	// points to what issued all service account tokens, it seems fitting for SAs to have this access.
-	// Defer to the cluster admin with regard to binding directly to all authenticated and/or
-	// unauthenticated users.
+	// 允许所有集群内工作负载（通过其 ServiceAccount）读取 OIDC 发现端点。
+	// 具有某些写权限（创建 Pod、Secret、ServiceAccount 等）的用户可以获得
+	// ServiceAccount 身份，从而访问这些信息。issuer URL 已经包含在 SA token JWT 中，
+	// SA 也可以通过检查自己的 token 获得相同信息。因此 SA 应该有此访问权限。
 	rolebindings = append(rolebindings,
 		rbacv1helpers.NewClusterBinding("system:service-account-issuer-discovery").Groups(serviceaccount.AllServiceAccountsGroup).BindingOrDie(),
 	)
 
-	// Service accounts can read ClusterTrustBundle objects.
+	// ServiceAccount 可以读取 ClusterTrustBundle 对象
 	if utilfeature.DefaultFeatureGate.Enabled(features.ClusterTrustBundle) {
 		rolebindings = append(rolebindings, rbacv1helpers.NewClusterBinding("system:cluster-trust-bundle-discovery").Groups(serviceaccount.AllServiceAccountsGroup).BindingOrDie())
 	}
@@ -757,7 +770,8 @@ func ClusterRoleBindings() []rbacv1.ClusterRoleBinding {
 	return rolebindings
 }
 
-// ClusterRolesToAggregate maps from previous clusterrole name to the new clusterrole name
+// ClusterRolesToAggregate 返回需要聚合的 ClusterRole 映射。
+// 用于将旧版角色（admin/edit/view）的规则聚合到对应的 system:aggregate-to-* 角色中。
 func ClusterRolesToAggregate() map[string]string {
 	return map[string]string{
 		"admin": "system:aggregate-to-admin",
@@ -766,8 +780,9 @@ func ClusterRolesToAggregate() map[string]string {
 	}
 }
 
-// ClusterRoleBindingsToSplit returns a map of Names of source ClusterRoleBindings
-// to copy Subjects, Annotations, and Labels to destination ClusterRoleBinding templates.
+// ClusterRoleBindingsToSplit 返回需要拆分的 ClusterRoleBinding 映射。
+// 将 source ClusterRoleBinding 的 Subjects、Annotations 和 Labels
+// 复制到 destination ClusterRoleBinding 模板中。
 func ClusterRoleBindingsToSplit() map[string]rbacv1.ClusterRoleBinding {
 	bindingsToSplit := map[string]rbacv1.ClusterRoleBinding{}
 	for _, defaultClusterRoleBinding := range ClusterRoleBindings() {

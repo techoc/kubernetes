@@ -14,5 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package authorizer contains implementations for pkg/auth/authorizer interfaces
+// Package authorizer 包含授权器插件的实现。
+//
+//   - rbac：RBAC 授权器，基于 Role/ClusterRole 和 RoleBinding/ClusterRoleBinding 进行访问控制。
+//
+//   - node：Node 授权器，使用有向图限制 kubelet 只能访问与其关联的资源（Pod、Secret、PVC 等）。
+//     与 NodeRestriction admission plugin 配合，形成双层防护。
+//
+//   - rbac/bootstrappolicy：集群启动时自动创建的默认 RBAC 策略，包括内置角色和绑定。
 package authorizer

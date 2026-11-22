@@ -31,8 +31,13 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// saRolePrefix 是控制器 ServiceAccount 角色的名称前缀。
+// 每个控制器的角色名为 system:controller:<controller-name>，
+// 对应的 ServiceAccount 名为 <controller-name>。
 const saRolePrefix = "system:controller:"
 
+// addControllerRole 添加控制器的 ClusterRole 和 ClusterRoleBinding。
+// 角色名必须以 system:controller: 开头，避免重复注册。
 func addControllerRole(controllerRoles *[]rbacv1.ClusterRole, controllerRoleBindings *[]rbacv1.ClusterRoleBinding, role rbacv1.ClusterRole) {
 	if !strings.HasPrefix(role.Name, saRolePrefix) {
 		klog.Fatalf(`role %q must start with %q`, role.Name, saRolePrefix)
@@ -53,9 +58,15 @@ func addControllerRole(controllerRoles *[]rbacv1.ClusterRole, controllerRoleBind
 }
 
 func eventsRule() rbacv1.PolicyRule {
+	// 所有控制器都可以创建/更新/patch Event 对象
 	return rbacv1helpers.NewRule("create", "update", "patch").Groups(legacyGroup, eventsGroup).Resources("events").RuleOrDie()
 }
 
+// buildControllerRoles 构建所有控制器的 ClusterRole 和 ClusterRoleBinding。
+// 包括 attachdetach、cronjob、daemon-set、deployment、replicaset、
+// statefulset、job、garbagecollector、namespace、serviceaccount、
+// bootstrap-signer、token-cleaner、node-ipam、endpoint、
+// resourceclaim、podgc 等控制器的权限。
 func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) {
 	// controllerRoles is a slice of roles used for controllers
 	controllerRoles := []rbacv1.ClusterRole{}

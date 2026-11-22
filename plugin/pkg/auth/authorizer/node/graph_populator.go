@@ -35,10 +35,15 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// graphPopulator 将 informer 事件转换为 Graph 操作。
+// 通过监听 Pod、PV、VolumeAttachment、ResourceSlice、PCR 等资源的变更，
+// 实时更新资源到 Node 的依赖关系图。
 type graphPopulator struct {
 	graph *Graph
 }
 
+// AddGraphEventHandlers 为各个资源 informer 注册事件处理器，
+// 在资源变更时自动更新 Graph。等待所有缓存同步完成后，图才可用于授权检查。
 func AddGraphEventHandlers(
 	graph *Graph,
 	nodes corev1informers.NodeInformer,
@@ -92,28 +97,30 @@ func AddGraphEventHandlers(
 		synced = append(synced, pcrHandler.HasSynced)
 	}
 
+	// 等待所有 informer 缓存同步，确保图的初始状态完整
 	go cache.WaitForNamedCacheSync("node_authorizer", wait.NeverStop, synced...)
 }
 
 func (g *graphPopulator) addPod(obj interface{}) {
+	// 新增 Pod 等价于从 nil 更新为新 Pod
 	g.updatePod(nil, obj)
 }
 
 func (g *graphPopulator) updatePod(oldObj, obj interface{}) {
 	pod := obj.(*corev1.Pod)
 	if len(pod.Spec.NodeName) == 0 {
-		// No node assigned
+		// Pod 尚未调度到节点，不添加到图
 		klog.V(5).Infof("updatePod %s/%s, no node", pod.Namespace, pod.Name)
 		return
 	}
 	if oldPod, ok := oldObj.(*corev1.Pod); ok && oldPod != nil {
-		// Ephemeral containers can add new secret or config map references to the pod.
+		// Ephemeral containers 可以添加新的 secret 或 configmap 引用
 		hasNewEphemeralContainers := len(pod.Spec.EphemeralContainers) > len(oldPod.Spec.EphemeralContainers)
 		if (pod.Spec.NodeName == oldPod.Spec.NodeName) && (pod.UID == oldPod.UID) &&
 			!hasNewEphemeralContainers &&
 			resourceclaim.PodStatusEqual(oldPod.Status.ResourceClaimStatuses, pod.Status.ResourceClaimStatuses) &&
 			resourceclaim.PodExtendedStatusEqual(oldPod.Status.ExtendedResourceClaimStatus, pod.Status.ExtendedResourceClaimStatus) {
-			// Node and uid are unchanged, all object references in the pod spec are immutable respectively unmodified (claim statuses).
+			// Node 和 UID 未变，Pod spec 中所有对象引用不可变，claim 状态也未变，无需更新图
 			klog.V(5).Infof("updatePod %s/%s, node unchanged", pod.Namespace, pod.Name)
 			return
 		}
@@ -127,6 +134,7 @@ func (g *graphPopulator) updatePod(oldObj, obj interface{}) {
 
 func (g *graphPopulator) deletePod(obj interface{}) {
 	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		// informer 删除事件可能返回 tombstone，提取原始对象
 		obj = tombstone.Obj
 	}
 	pod, ok := obj.(*corev1.Pod)
@@ -135,6 +143,7 @@ func (g *graphPopulator) deletePod(obj interface{}) {
 		return
 	}
 	if len(pod.Spec.NodeName) == 0 {
+		// Pod 从未调度到节点，图中无记录
 		klog.V(5).Infof("deletePod %s/%s, no node", pod.Namespace, pod.Name)
 		return
 	}
@@ -146,12 +155,14 @@ func (g *graphPopulator) deletePod(obj interface{}) {
 }
 
 func (g *graphPopulator) addPV(obj interface{}) {
+	// 新增 PV 等价于从 nil 更新为新 PV
 	g.updatePV(nil, obj)
 }
 
 func (g *graphPopulator) updatePV(oldObj, obj interface{}) {
 	pv := obj.(*corev1.PersistentVolume)
-	// TODO: skip add if uid, pvc, and secrets are all identical between old and new
+	// 当前每次更新都重新添加 PV，因为 PV 的 ClaimRef 或 Secret 引用可能变更
+	// TODO: 可以优化为仅在 uid、pvc、secrets 都相同时跳过
 	g.graph.AddPV(pv)
 }
 
@@ -168,13 +179,14 @@ func (g *graphPopulator) deletePV(obj interface{}) {
 }
 
 func (g *graphPopulator) addVolumeAttachment(obj interface{}) {
+	// 新增 VolumeAttachment 等价于从 nil 更新
 	g.updateVolumeAttachment(nil, obj)
 }
 
 func (g *graphPopulator) updateVolumeAttachment(oldObj, obj interface{}) {
 	attachment := obj.(*storagev1.VolumeAttachment)
 	if oldObj != nil {
-		// skip add if node name is identical
+		// 如果节点名未变，跳过更新
 		oldAttachment := oldObj.(*storagev1.VolumeAttachment)
 		if oldAttachment.Spec.NodeName == attachment.Spec.NodeName {
 			return
@@ -201,6 +213,7 @@ func (g *graphPopulator) addResourceSlice(obj interface{}) {
 		klog.Infof("unexpected type %T", obj)
 		return
 	}
+	// ResourceSlice 的 NodeName 不可变，所以不需要 UpdateFunc
 	g.graph.AddResourceSlice(slice.Name, ptr.Deref(slice.Spec.NodeName, ""))
 }
 
@@ -222,6 +235,7 @@ func (g *graphPopulator) addPCR(obj any) {
 		klog.Infof("unexpected type %T", obj)
 		return
 	}
+	// PCR 的 spec 字段不可变，所以不需要 UpdateFunc
 	g.graph.AddPodCertificateRequest(pcr)
 }
 
