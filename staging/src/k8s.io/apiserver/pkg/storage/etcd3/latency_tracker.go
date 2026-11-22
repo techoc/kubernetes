@@ -27,6 +27,8 @@ import (
 // NewETCDLatencyTracker returns an implementation of
 // clientv3.KV that times the calls from the specified
 // 'delegate' KV instance in order to track latency incurred.
+//
+// 通过装饰器而非修改调用点来采集延迟，保证所有经此 KV 的调用都被覆盖。
 func NewETCDLatencyTracker(delegate clientv3.KV) clientv3.KV {
 	return &clientV3KVLatencyTracker{KV: delegate}
 }
@@ -48,10 +50,13 @@ func NewETCDLatencyTracker(delegate clientv3.KV) clientv3.KV {
 //
 // NOTE: Compact is an asynchronous process and is not associated with
 // any request, so we will not be tracking its latency.
+//
+// 只嵌入 clientv3.KV 而非另存字段，未覆盖的方法也能透明透传。
 type clientV3KVLatencyTracker struct {
 	clientv3.KV
 }
 
+// Put 计时并透传到底层 KV；用 defer 确保出错路径也记入延迟。
 func (c *clientV3KVLatencyTracker) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (*clientv3.PutResponse, error) {
 	startedAt := time.Now()
 	defer func() {
@@ -61,6 +66,7 @@ func (c *clientV3KVLatencyTracker) Put(ctx context.Context, key, val string, opt
 	return c.KV.Put(ctx, key, val, opts...)
 }
 
+// Get 计时并透传到底层 KV。
 func (c *clientV3KVLatencyTracker) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	startedAt := time.Now()
 	defer func() {
@@ -70,6 +76,7 @@ func (c *clientV3KVLatencyTracker) Get(ctx context.Context, key string, opts ...
 	return c.KV.Get(ctx, key, opts...)
 }
 
+// Delete 计时并透传到底层 KV。
 func (c *clientV3KVLatencyTracker) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.DeleteResponse, error) {
 	startedAt := time.Now()
 	defer func() {
@@ -79,6 +86,7 @@ func (c *clientV3KVLatencyTracker) Delete(ctx context.Context, key string, opts 
 	return c.KV.Delete(ctx, key, opts...)
 }
 
+// Do 计时并透传到底层 KV。
 func (c *clientV3KVLatencyTracker) Do(ctx context.Context, op clientv3.Op) (clientv3.OpResponse, error) {
 	startedAt := time.Now()
 	defer func() {
@@ -88,15 +96,18 @@ func (c *clientV3KVLatencyTracker) Do(ctx context.Context, op clientv3.Op) (clie
 	return c.KV.Do(ctx, op)
 }
 
+// Txn 返回包装后的 Txn；只对 Commit 计时，因为构建事务项本身不发网络请求。
 func (c *clientV3KVLatencyTracker) Txn(ctx context.Context) clientv3.Txn {
 	return &clientV3TxnTracker{ctx: ctx, Txn: c.KV.Txn(ctx)}
 }
 
+// clientV3TxnTracker 包装事务，保存 ctx 以便在 Commit 时上报延迟。
 type clientV3TxnTracker struct {
 	ctx context.Context
 	clientv3.Txn
 }
 
+// Commit 计时事务提交并透传到底层 Txn。
 func (t *clientV3TxnTracker) Commit() (*clientv3.TxnResponse, error) {
 	startedAt := time.Now()
 	defer func() {

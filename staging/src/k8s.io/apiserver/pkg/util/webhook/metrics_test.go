@@ -29,18 +29,22 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// roundTripperFunc 让函数类型满足 http.RoundTripper，便于注入固定的 TLS 错误。
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+// TestDeprecatedCertificateWrapperMetrics 验证已弃用证书检测的包装器在遇到
+// "缺少 SAN" 与 "SHA1 签名" 两类 TLS 错误时，分别递增对应计数器且不交叉计数。
 func TestDeprecatedCertificateWrapperMetrics(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string
 		// err simulates a TLS error from the net/http client and must match the standard
 		// library output exactly, because which counter gets incremented depends on the error
+		// 错误文本必须与标准库完全一致，分类依赖字符串匹配，改动会导致计数错位。
 		err        error
 		metricName string
 		expected   string
@@ -71,6 +75,7 @@ apiserver_webhooks_x509_insecure_sha1_total 1
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 计数器是全局注册的，测试前后都需重置，避免用例之间相互污染。
 			t.Cleanup(func() {
 				x509MissingSANCounter.Reset()
 				x509InsecureSHA1Counter.Reset()
@@ -89,6 +94,7 @@ apiserver_webhooks_x509_insecure_sha1_total 1
 				return nil, tc.err
 			}))
 
+			// 故意忽略返回的 error：本测试只关心指标副作用。
 			_, _ = wrapper.RoundTrip(req)
 
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tc.expected), tc.metricName); err != nil {

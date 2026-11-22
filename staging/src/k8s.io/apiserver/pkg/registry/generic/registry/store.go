@@ -58,6 +58,7 @@ import (
 )
 
 // FinishFunc is a function returned by Begin hooks to complete an operation.
+// success 表示操作最终是否提交；实现方应据此提交或回滚副作用。
 type FinishFunc func(ctx context.Context, success bool)
 
 // AfterDeleteFunc is the type used for the Store.AfterDelete hook.
@@ -98,11 +99,17 @@ type GenericStore interface {
 // specific to the API.
 //
 // TODO: make the default exposed methods exactly match a generic RESTStorage
+//
+// 设计要点：Store 自身无状态（除可选的只读/同步字段外），所有并发安全
+// 依赖底层 storage.Interface；它把 API 语义（校验、默认值、finalizer、
+// resourceVersion 冲突检测）与后端存储解耦。
 type Store struct {
 	// NewFunc returns a new instance of the type this registry returns for a
 	// GET of a single object, e.g.:
 	//
 	// curl GET /apis/group/version/namespaces/my-ns/myresource/name-of-object
+	//
+	// 每次调用必须返回新对象，避免调用方共享同一实例。
 	NewFunc func() runtime.Object
 
 	// NewListFunc returns a new list of the type this registry; it is the
@@ -219,6 +226,9 @@ type Store struct {
 	// Storage is the interface for the underlying storage for the
 	// resource. It is wrapped into a "DryRunnableStorage" that will
 	// either pass-through or simply dry-run.
+	//
+	// 通过 DryRunnableStorage 包装，dry-run 请求可以走完全相同的代码路径，
+	// 只是不落盘，从而保证 dry-run 与真实执行的校验行为一致。
 	Storage DryRunnableStorage
 	// StorageVersioner outputs the <group/version/kind> an object will be
 	// converted to before persisted in etcd, given a list of possible
@@ -260,12 +270,15 @@ var _ rest.SingularNameProvider = &Store{}
 var _ rest.CorruptObjectDeleterProvider = &Store{}
 
 const (
+	// OptimisticLockErrorMsg 是 resourceVersion 冲突时返回给客户端的固定提示，
+	// 客户端工具会依赖这段文案提示用户重新读取。
 	OptimisticLockErrorMsg        = "the object has been modified; please apply your changes to the latest version and try again"
 	resourceCountPollPeriodJitter = 1.2
 )
 
 // NamespaceKeyRootFunc is the default function for constructing storage paths
 // to resource directories enforcing namespace rules.
+// 命名空间来自请求上下文，而不是对象本身，确保存储路径与 URL 一致。
 func NamespaceKeyRootFunc(ctx context.Context, prefix string) string {
 	key := prefix
 	ns, ok := genericapirequest.NamespaceFrom(ctx)
@@ -287,6 +300,7 @@ func NamespaceKeyFunc(ctx context.Context, prefix string, name string) (string, 
 	if len(name) == 0 {
 		return "", apierrors.NewBadRequest("Name parameter required.")
 	}
+	// 拒绝含路径分隔符等非法片段的名称，防止键空间逃逸（例如 "../"）。
 	if msgs := content.IsPathSegmentName(name); len(msgs) != 0 {
 		return "", apierrors.NewBadRequest(fmt.Sprintf("Name parameter invalid: %q: %s", name, strings.Join(msgs, ";")))
 	}
@@ -307,6 +321,8 @@ func NoNamespaceKeyFunc(ctx context.Context, prefix string, name string) (string
 	return key, nil
 }
 
+// storeKeyFuncs 把“由上下文推导键”和“由对象推导缓存键”两类需求分开：
+// 前者用于请求路径，后者用于缓存层（缓存层拿不到请求上下文）。
 type storeKeyFuncs struct {
 	// storageRootKeyFunc returns the resource-relative storage path prefix for
 	// list and watch requests, for example "/pods" or "/pods/<namespace>".
@@ -320,6 +336,7 @@ type storeKeyFuncs struct {
 	cacheKeyFunc func(obj runtime.Object) (string, error)
 }
 
+// defaultStoreKeyFuncs 根据是否命名空间作用域选择默认键构造器。
 func defaultStoreKeyFuncs(prefix string, isNamespaced bool) storeKeyFuncs {
 	if isNamespaced {
 		return newStoreKeyFuncs(
@@ -344,6 +361,7 @@ func defaultStoreKeyFuncs(prefix string, isNamespaced bool) storeKeyFuncs {
 	)
 }
 
+// newStoreKeyFuncs 组装键函数集合，并派生基于对象元数据的 cacheKeyFunc。
 func newStoreKeyFuncs(
 	isNamespaced bool,
 	storageRootKeyFunc func(ctx context.Context) string,
@@ -427,6 +445,7 @@ func (e *Store) GetCorruptObjDeleter() rest.GracefulDeleter {
 // List returns a list of items matching labels and field according to the
 // store's PredicateFunc.
 func (e *Store) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
+	// 未指定选择器时使用 Everything，而不是空选择器，语义更直观。
 	label := labels.Everything()
 	if options != nil && options.LabelSelector != nil {
 		label = options.LabelSelector
@@ -450,6 +469,7 @@ func (e *Store) List(ctx context.Context, options *metainternalversion.ListOptio
 func (e *Store) ListPredicate(ctx context.Context, p storage.SelectionPredicate, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	if options == nil {
 		// By default we should serve the request from etcd.
+		// 空 ResourceVersion 表示读取最新（或缓存最新）数据，而不是任意历史版本。
 		options = &metainternalversion.ListOptions{ResourceVersion: ""}
 	}
 	p.Limit = options.Limit
@@ -471,6 +491,8 @@ func (e *Store) ListPredicate(ctx context.Context, p storage.SelectionPredicate,
 	}
 
 	// if we're not already namespace-scoped, see if the field selector narrows the scope of the watch
+	// 形如 metadata.namespace=foo 的字段选择器可以收窄为单命名空间查询，
+	// 从而减少扫描范围；仅当命名空间名合法时才应用该优化。
 	if requestNamespace, _ := genericapirequest.NamespaceFrom(ctx); len(requestNamespace) == 0 {
 		if selectorNamespace, ok := p.MatchesSingleNamespace(); ok {
 			if len(validation.ValidateNamespaceName(selectorNamespace, false)) == 0 {
@@ -479,6 +501,7 @@ func (e *Store) ListPredicate(ctx context.Context, p storage.SelectionPredicate,
 		}
 	}
 
+	// 选择器唯一确定一个对象时，退化为单键读取而非范围扫描。
 	if name, ok := p.MatchesSingle(); ok {
 		if key, err := e.KeyFunc(ctx, name); err == nil {
 			storageOpts.Recursive = false
@@ -512,6 +535,7 @@ const maxNameGenerationCreateAttempts = 8
 // hooks).  Tests which call this might want to call DeepCopy if they expect to
 // be able to examine the input and output objects for differences.
 func (e *Store) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
+	// generateName 可能产生冲突，走带重试的路径；普通 create 无需重试。
 	if needsNameGeneration(obj) {
 		return e.createWithGenerateNameRetry(ctx, obj, createValidation, options)
 	}
@@ -542,6 +566,8 @@ func (e *Store) createWithGenerateNameRetry(ctx context.Context, obj runtime.Obj
 	return resultObj, err
 }
 
+// create 执行真正的创建流程（不含 generateName 重试）。
+// 每次重试都必须使用对象副本，避免策略钩子对上一次尝试的修改泄漏到下一次。
 func (e *Store) create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	var finishCreate FinishFunc = finishNothing
 
@@ -561,6 +587,7 @@ func (e *Store) create(ctx context.Context, obj runtime.Object, createValidation
 			return nil, err
 		}
 		finishCreate = fn
+		// 默认按失败收尾；成功路径会先替换 finishCreate，避免 defer 重复调用。
 		defer func() {
 			finishCreate(ctx, false)
 		}()
@@ -597,6 +624,8 @@ func (e *Store) create(ctx context.Context, obj runtime.Object, createValidation
 		if !apierrors.IsAlreadyExists(err) {
 			return nil, err
 		}
+		// AlreadyExists 时回读现有对象：若它正在删除，给错误加上说明，
+		// 帮助客户端理解“同名对象尚未消失”而非单纯重名。
 		if errGet := e.Storage.Get(ctx, key, storage.GetOptions{}, out); errGet != nil {
 			return nil, err
 		}
@@ -682,6 +711,9 @@ func (e *Store) deleteWithoutFinalizers(ctx context.Context, name, key string, o
 // Update performs an atomic update and set of the object. Returns the result of the update
 // or an error. If the registry allows create-on-update, the create flow will be executed.
 // A bool is returned along with the object and any errors, to indicate object creation.
+//
+// 整个“读取-修改-写回”在 GuaranteedUpdate 内原子完成，回调可能被重试，
+// 因此回调必须无副作用（或把副作用放在 FinishFunc 中）。
 func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	key, err := e.KeyFunc(ctx, name)
 	if err != nil {
@@ -706,6 +738,7 @@ func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 	ignoreNotFound := e.UpdateStrategy.AllowCreateOnUpdate(ctx) || forceAllowCreate
 	// deleteObj is only used in case a deletion is carried out
 	var deleteObj runtime.Object
+	// GuaranteedUpdate 会在冲突时重试回调；existing 是存储中的最新对象。
 	err = e.Storage.GuaranteedUpdate(ctx, key, out, ignoreNotFound, storagePreconditions, func(existing runtime.Object, res storage.ResponseMeta) (runtime.Object, *uint64, error) {
 		existingResourceVersion, err := e.Storage.Versioner().ObjectResourceVersion(existing)
 		if err != nil {
@@ -741,6 +774,7 @@ func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 				// Wipe metadata on create-via-update and create-via-apply
 				// requests to match create behavior. Note that this happens
 				// AFTER preconditions are checked.
+				// 清空系统字段后重新填充，防止客户端伪造 UID/时间戳等。
 				rest.WipeObjectMetaSystemFields(objectMeta)
 				rest.FillObjectMetaSystemFields(objectMeta)
 			}
@@ -842,6 +876,8 @@ func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 			}
 		}
 		// Check the default delete-during-update conditions, and store-specific conditions if provided
+		// 移除最后一个 finalizer 的更新等价于删除：在这里转为删除流程，
+		// 避免对象以“已无 finalizer 但仍存在”的状态残留。
 		if ShouldDeleteDuringUpdate(ctx, key, obj, existing) &&
 			(e.ShouldDeleteDuringUpdate == nil || e.ShouldDeleteDuringUpdate(ctx, key, obj, existing)) {
 			deleteObj = obj
@@ -965,6 +1001,7 @@ func shouldOrphanDependents(ctx context.Context, e *Store, accessor metav1.Objec
 		return false
 	}
 
+	// 显式 OrphanDependents 优先于 PropagationPolicy，保持旧字段兼容。
 	// An explicit policy was set at deletion time, that overrides everything
 	//nolint:staticcheck // SA1019 backwards compatibility
 	if options != nil && options.OrphanDependents != nil {
@@ -1047,6 +1084,7 @@ func shouldDeleteDependentsInForeground(ctx context.Context, e *Store, accessor 
 // to ensure finalizers aren't set which will never be cleared.
 func deletionFinalizersForGarbageCollection(ctx context.Context, e *Store, accessor metav1.Object, options *metav1.DeleteOptions) (bool, []string) {
 	if !e.EnableGarbageCollection {
+		// 未启用 GC 时绝不设置 GC finalizer，否则永远无人清理，对象会永久卡住。
 		return false, []string{}
 	}
 	shouldOrphan := shouldOrphanDependents(ctx, e, accessor, options)
@@ -1088,6 +1126,7 @@ func markAsDeleting(obj runtime.Object, now time.Time) (err error) {
 	// This handles Generation bump for resources that don't support graceful
 	// deletion. For resources that support graceful deletion is handle in
 	// pkg/api/rest/delete.go
+	// generation 递增让客户端能观察到“删除已开始”这一代际变化。
 	if objectMeta.GetDeletionTimestamp() == nil && objectMeta.GetGeneration() > 0 {
 		objectMeta.SetGeneration(objectMeta.GetGeneration() + 1)
 	}
@@ -1132,6 +1171,8 @@ func (e *Store) updateForGracefulDeletionAndFinalizers(ctx context.Context, name
 				return nil, err
 			}
 			if pendingGraceful {
+				// 删除已在进行中：不再接受通过 DeleteOptions 修改 finalizer，
+				// 防止并发删除改变既定语义。
 				return nil, errAlreadyDeleting
 			}
 
@@ -1212,6 +1253,7 @@ func (e *Store) Delete(ctx context.Context, name string, deleteValidation rest.V
 	}
 
 	// support older consumers of delete by treating "nil" as delete immediately
+	// nil 选项按“立即删除”处理，兼容未传 DeleteOptions 的旧客户端。
 	if options == nil {
 		options = metav1.NewDeleteOptions(0)
 	}
@@ -1279,6 +1321,7 @@ func (e *Store) Delete(ctx context.Context, name string, deleteValidation rest.V
 	if err := e.Storage.Delete(ctx, key, out, &preconditions, storage.ValidateObjectFunc(deleteValidation), dryrun.IsDryRun(options.DryRun), nil, storage.DeleteOptions{}); err != nil {
 		// Please refer to the place where we set ignoreNotFound for the reason
 		// why we ignore the NotFound error .
+		// 并发删除时 NotFound 属预期：用最后一次看到的对象收尾，返回成功语义。
 		if storage.IsNotFound(err) && ignoreNotFound && lastExisting != nil {
 			// The lastExisting object may not be the last state of the object
 			// before its deletion, but it's the best approximation.
@@ -1306,10 +1349,14 @@ var deleteCollectionPageSize = int64(10000)
 // DeleteCollection is currently NOT atomic. It can happen that only subset of objects
 // will be deleted from storage, and then an error will be returned.
 // In case of success, the list of deleted objects will be returned.
+//
+// 实现采用“分页列举 + 工作池并发删除”：分页避免一次性加载大集合，
+// 并发删除提高吞吐；但由于非原子，部分失败时已删除的对象不会回滚。
 func (e *Store) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error) {
 	if listOptions == nil {
 		listOptions = &metainternalversion.ListOptions{}
 	} else {
+		// 复制一份，后续分页会修改 Continue/ResourceVersion，不能污染调用方。
 		listOptions = listOptions.DeepCopy()
 	}
 
@@ -1350,6 +1397,7 @@ func (e *Store) DeleteCollection(ctx context.Context, deleteValidation rest.Vali
 				// function in the delete strategy called in the delete method.  While that is always ugly, it works
 				// when making a single call.  When making multiple calls via delete collection, the mutation applied to
 				// pod/A can change the option ultimately used for pod/B.
+				// 因此每个对象使用独立的 options 副本，避免跨对象污染。
 				if _, _, err := e.Delete(ctx, accessor.GetName(), deleteValidation, options.DeepCopy()); err != nil && !apierrors.IsNotFound(err) {
 					klog.V(4).InfoS("Delete object in DeleteCollection failed", "object", klog.KObj(accessor), "err", err)
 					errs <- err
@@ -1456,6 +1504,7 @@ func (e *Store) DeleteCollection(ctx context.Context, deleteValidation rest.Vali
 // finalizeDelete runs the Store's AfterDelete hook if runHooks is set and
 // returns the decorated deleted object if appropriate.
 func (e *Store) finalizeDelete(ctx context.Context, obj runtime.Object, runHooks bool, options *metav1.DeleteOptions) (runtime.Object, error) {
+	// runHooks=false 用于“已经处于删除中”的重复 DELETE，避免重复触发 AfterDelete。
 	if runHooks && e.AfterDelete != nil {
 		e.AfterDelete(obj, options)
 	}
@@ -1522,6 +1571,7 @@ func (e *Store) WatchPredicate(ctx context.Context, p storage.SelectionPredicate
 	}
 
 	// if we're not already namespace-scoped, see if the field selector narrows the scope of the watch
+	// 与 List 相同的优化：字段选择器锁定单命名空间时缩小 watch 范围。
 	if requestNamespace, _ := genericapirequest.NamespaceFrom(ctx); len(requestNamespace) == 0 {
 		if selectorNamespace, ok := p.MatchesSingleNamespace(); ok {
 			if len(validation.ValidateNamespaceName(selectorNamespace, false)) == 0 {
@@ -1571,6 +1621,9 @@ func (e *Store) calculateTTL(obj runtime.Object, defaultTTL int64, update bool) 
 
 // CompleteWithOptions updates the store with the provided options and
 // defaults common fields.
+//
+// 这里集中做“配置完整性校验 + 默认值填充 + 底层存储构造”，
+// 任何必填项缺失都返回明确错误，避免运行期出现 nil panic。
 func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 	if e.DefaultQualifiedResource.Empty() {
 		return fmt.Errorf("store %#v must have a non-empty qualified resource", e)
@@ -1652,6 +1705,7 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 
 	var keyFuncs storeKeyFuncs
 	if e.KeyRootFunc == nil && e.KeyFunc == nil {
+		// 未自定义键函数时，按命名空间作用域推导默认前缀。
 		keyFuncs = defaultStoreKeyFuncs(prefix, isNamespaced)
 	} else {
 		keyFuncs = newStoreKeyFuncs(isNamespaced, e.KeyRootFunc, e.KeyFunc)
@@ -1697,6 +1751,7 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 			stopFunc := e.startObservingCount(opts.CountMetricPollPeriod, opts.StorageObjectCountTracker)
 			previousDestroy := e.DestroyFunc
 			var once sync.Once
+			// 用 once 包装：DestroyFunc 约定可能被多次调用，停止计数只能执行一次。
 			e.DestroyFunc = func() {
 				once.Do(func() {
 					stopFunc()
@@ -1743,6 +1798,8 @@ func (e *Store) startObservingCount(period time.Duration, objectCountTracker flo
 	}
 }
 
+// ConvertToTable implements rest.TableConvertor；未配置转换器时回退到
+// 只输出名称/创建时间的默认实现。
 func (e *Store) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	if e.TableConvertor != nil {
 		return e.TableConvertor.ConvertToTable(ctx, object, tableOptions)
@@ -1750,6 +1807,8 @@ func (e *Store) ConvertToTable(ctx context.Context, object runtime.Object, table
 	return rest.NewDefaultTableConvertor(e.DefaultQualifiedResource).ConvertToTable(ctx, object, tableOptions)
 }
 
+// StorageVersion 返回对象持久化前会转换到的版本；nil 表示 discovery
+// 中不提供 storageVersionHash。
 func (e *Store) StorageVersion() runtime.GroupVersioner {
 	return e.StorageVersioner
 }
@@ -1762,11 +1821,14 @@ func (e *Store) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return e.ResetFieldsStrategy.GetResetFields()
 }
 
+// GetSingularName 返回资源单数名，用于 API 路径中的单数形式。
 func (e *Store) GetSingularName() string {
 	return e.SingularQualifiedResource.Resource
 }
 
 // validateIndexers will check the prefix of indexers.
+// 索引名必须以 "l:"（标签）或 "f:"（字段）开头，缓存层依赖该前缀
+// 区分索引维度。
 func validateIndexers(indexers *cache.Indexers) error {
 	if indexers == nil {
 		return nil

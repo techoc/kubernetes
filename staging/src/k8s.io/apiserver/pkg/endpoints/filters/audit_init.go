@@ -30,17 +30,22 @@ import (
 //
 // a. If the caller does not specify a value for Audit-ID in the request header, we generate a new audit ID
 // b. We echo the Audit-ID value to the caller via the response Header 'Audit-ID'.
+//
+// 该过滤器必须位于审计过滤器之前：后续的审计逻辑依赖 context 中的审计上下文与 ID。
 func WithAuditInit(handler http.Handler) http.Handler {
 	return withAuditInit(handler, func() string {
 		return uuid.New().String()
 	})
 }
 
+// withAuditInit 抽出 ID 生成函数以便测试注入确定性 ID。
 func withAuditInit(handler http.Handler, newAuditIDFunc func() string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := audit.WithAuditContext(r.Context())
 		r = r.WithContext(ctx)
 
+		// 优先沿用调用方传入的 ID：kubectl 等客户端会带着同一个 ID 重试或串联多跳，
+		// 保持原值才能把一次逻辑操作的多条审计记录关联起来。
 		auditID := r.Header.Get(auditinternal.HeaderAuditID)
 		if len(auditID) == 0 {
 			auditID = newAuditIDFunc()
@@ -56,6 +61,9 @@ func withAuditInit(handler http.Handler, newAuditIDFunc func() string) http.Hand
 		//
 		// This filter will also be used by other aggregated api server(s). For an aggregated API
 		// we don't want to see the same audit ID appearing more than once.
+		//
+		// 先判断是否已有值再写：聚合服务器链路中前面的 apiserver 可能已经回写了 ID，
+		// 重复 Set 会让客户端看到多个值。
 		if value := w.Header().Get(auditinternal.HeaderAuditID); len(value) == 0 {
 			w.Header().Set(auditinternal.HeaderAuditID, auditID)
 		}

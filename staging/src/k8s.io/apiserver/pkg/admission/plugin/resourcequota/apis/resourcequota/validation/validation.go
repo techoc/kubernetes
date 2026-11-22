@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validation 校验 ResourceQuota 准入插件的配置。
 package validation
 
 import (
@@ -23,6 +24,8 @@ import (
 )
 
 // ValidateConfiguration validates the configuration.
+// 逐项检查 limitedResources，resource 字段为空时返回必填错误；
+// 其余字段（如 quota 名称）允许为空，由运行时回退到默认行为。
 func ValidateConfiguration(config *resourcequotaapi.Configuration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	fldPath := field.NewPath("limitedResources")

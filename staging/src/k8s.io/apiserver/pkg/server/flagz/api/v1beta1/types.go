@@ -22,6 +22,8 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // Flagz is the structured response for the /flagz endpoint.
+// Flagz 暴露本进程生效的命令行 flag，便于运维核对实际配置；敏感值由
+// 生成端脱敏，而不是依赖客户端过滤。
 type Flagz struct {
 	// TypeMeta is the type metadata for the object.
 	metav1.TypeMeta `json:""`

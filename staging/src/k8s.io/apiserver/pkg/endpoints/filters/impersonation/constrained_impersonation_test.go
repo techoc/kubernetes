@@ -48,6 +48,9 @@ import (
 	"k8s.io/client-go/transport"
 )
 
+// constrainedImpersonationTest 同时承担测试夹具与假审计后端/假授权器的职责：
+// 它记录授权检查、审计事件、指标与缓存状态，供断言使用。
+// 由于部分用例并行执行，可变的集中状态由 lock 保护。
 type constrainedImpersonationTest struct {
 	t testing.TB
 
@@ -64,11 +67,13 @@ type constrainedImpersonationTest struct {
 	lock sync.Mutex
 }
 
+// authzCheck 记录一次授权调用及其期望/实际决策。
 type authzCheck struct {
 	attributes authorizer.AttributesRecord
 	decision   authorizer.Decision
 }
 
+// ProcessEvents 作为审计后端接收事件；必须深拷贝，因为事件对象会被原地复用。
 func (c *constrainedImpersonationTest) ProcessEvents(evs ...*auditinternal.Event) bool {
 	for _, e := range evs {
 		c.auditEvents = append(c.auditEvents, e.DeepCopy()) // event is mutated in place so capture its current state
@@ -76,6 +81,9 @@ func (c *constrainedImpersonationTest) ProcessEvents(evs ...*auditinternal.Event
 	return true
 }
 
+// Authorize 是一个白名单式假授权器：按 (用户, verb, resource, subresource, name)
+// 精确匹配允许，其余一律 NoOpinion（等价于拒绝）。
+// 延迟记录到 authzChecks，确保记录的是最终决策（包括 panic 前的路径）。
 func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authorizer.Attributes) (decision authorizer.Decision, reason string, err error) {
 	u := a.GetUser()
 
@@ -124,6 +132,7 @@ func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authoriz
 		return authorizer.DecisionAllow, "", nil
 	}
 
+	// 受约束的 “代理执行”（impersonate-on）只放行读操作，防止借道变更资源。
 	if u.GetName() != "legacy-impersonator" &&
 		strings.HasPrefix(a.GetVerb(), "impersonate-on:") &&
 		(strings.HasSuffix(a.GetVerb(), "list") || strings.HasSuffix(a.GetVerb(), "get")) {
@@ -163,6 +172,8 @@ func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authoriz
 	return authorizer.DecisionNoOpinion, "deny by default", nil
 }
 
+// echoUserInfoHandler 返回请求上下文中的用户（JSON 编码），并在代理成功后
+// 断言所有 impersonate-* 请求头都已被剥离——泄漏这些头可能被后端误用。
 func (c *constrainedImpersonationTest) echoUserInfoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		c.lock.Lock()
@@ -193,6 +204,7 @@ func (c *constrainedImpersonationTest) echoUserInfoHandler() http.HandlerFunc {
 	}
 }
 
+// authenticationHandler 通过测试专用请求头注入认证用户，替代真实认证器。
 func (c *constrainedImpersonationTest) authenticationHandler(handler http.Handler) http.Handler {
 	return filters.WithAuthentication(handler, authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
 		userData := req.Header.Get(testUserHeader)
@@ -207,6 +219,8 @@ func (c *constrainedImpersonationTest) authenticationHandler(handler http.Handle
 	}), nil, nil, nil)
 }
 
+// requestInfoHandler 通过测试专用请求头注入 RequestInfo，让测试能精确控制
+// 资源、动词与命名空间，而无需构造真实 URL。
 func (c *constrainedImpersonationTest) requestInfoHandler(handler http.Handler) http.Handler {
 	return filters.WithRequestInfo(handler, requestInfoFunc(func(req *http.Request) (*request.RequestInfo, error) {
 		requestInfoData := req.Header.Get(testRequestInfoHeader)
@@ -221,8 +235,10 @@ func (c *constrainedImpersonationTest) requestInfoHandler(handler http.Handler) 
 	}))
 }
 
+// requestInfoFunc 把函数适配为 request.RequestInfoFactory。
 type requestInfoFunc func(*http.Request) (*request.RequestInfo, error)
 
+// NewRequestInfo 调用被包装的函数。
 func (f requestInfoFunc) NewRequestInfo(req *http.Request) (*request.RequestInfo, error) {
 	return f(req)
 }
@@ -232,6 +248,9 @@ const (
 	testRequestInfoHeader = "insecure-test-request-info-json"
 )
 
+// handler 组装与 DefaultBuildHandlerChain 相同顺序的处理链
+// （Audit → Authentication → LatencyTrackers → RequestInfo），
+// 并把指标回调替换为测试可观测的计数器。
 func (c *constrainedImpersonationTest) handler() http.Handler {
 	s := runtime.NewScheme()
 	metav1.AddToGroupVersion(s, metav1.SchemeGroupVersion)
@@ -259,6 +278,7 @@ func (c *constrainedImpersonationTest) handler() http.Handler {
 	addLatencyTrackers := filters.WithLatencyTrackers(addAuthentication)
 	addRequestInfo := c.requestInfoHandler(addLatencyTrackers)
 	// set received timestamp >500ms in the past so audit annotations are emitted
+	// 延迟注解只在耗时超过阈值时才写入；回拨接收时间以稳定触发该路径。
 	addReceivedTimestamp := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req = req.WithContext(request.WithReceivedTimestamp(req.Context(), time.Now().Add(-time.Hour)))
 		addRequestInfo.ServeHTTP(w, req)
@@ -267,6 +287,8 @@ func (c *constrainedImpersonationTest) handler() http.Handler {
 	return addAuditInit
 }
 
+// parallelHandler 是 handler 的精简版：去掉审计与延迟跟踪，
+// 只保留认证/请求信息/代理，便于并发测试减少噪声。
 func (c *constrainedImpersonationTest) parallelHandler() http.Handler {
 	s := runtime.NewScheme()
 	metav1.AddToGroupVersion(s, metav1.SchemeGroupVersion)
@@ -281,12 +303,15 @@ func (c *constrainedImpersonationTest) parallelHandler() http.Handler {
 	return addRequestInfo
 }
 
+// testRoundTripper 把测试请求的用户与 RequestInfo 编码进请求头，
+// 再交给底层 transport 发送，模拟上游已将身份解析完成。
 type testRoundTripper struct {
 	user        *user.DefaultInfo
 	requestInfo *request.RequestInfo
 	delegate    http.RoundTripper
 }
 
+// RoundTrip 注入测试头后委托发送。
 func (t *testRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	userData, err := json.Marshal(t.user)
 	if err != nil {
@@ -301,6 +326,7 @@ func (t *testRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.delegate.RoundTrip(r)
 }
 
+// assertAttributes 对比期望与实际授权检查序列（含顺序与决策）。
 func (c *constrainedImpersonationTest) assertAttributes(r testRequest) {
 	authzChecks := c.authzChecks
 	c.authzChecks = nil
@@ -321,6 +347,7 @@ func (c *constrainedImpersonationTest) assertAttributes(r testRequest) {
 	}
 }
 
+// comparableAttributes 把任意 Attributes 规整为可直接 DeepEqual 的 AttributesRecord。
 func comparableAttributes(attributes authorizer.Attributes) authorizer.AttributesRecord {
 	fs, errFS := attributes.GetFieldSelector()
 	ls, errLS := attributes.GetLabelSelector()
@@ -342,6 +369,7 @@ func comparableAttributes(attributes authorizer.Attributes) authorizer.Attribute
 	}
 }
 
+// comparableAuditUser 把审计 UserInfo 转换为 DefaultInfo，便于统一比较。
 func comparableAuditUser(u *authenticationv1.UserInfo) *user.DefaultInfo {
 	if u == nil {
 		return nil
@@ -361,6 +389,7 @@ func comparableAuditUser(u *authenticationv1.UserInfo) *user.DefaultInfo {
 	}
 }
 
+// comparableUser 提取 user.Info 的关键字段。
 func comparableUser(u user.Info) *user.DefaultInfo {
 	return &user.DefaultInfo{
 		Name:   u.GetName(),
@@ -370,12 +399,14 @@ func comparableUser(u user.Info) *user.DefaultInfo {
 	}
 }
 
+// assertEchoCalled 断言业务 handler 是否被执行，并重置标记。
 func (c *constrainedImpersonationTest) assertEchoCalled(expectedCalled bool) {
 	called := c.echoCalled
 	c.echoCalled = false
 	require.Equal(c.t, expectedCalled, called)
 }
 
+// assertMetrics 断言本次请求产生的 attempt 与授权指标，并重置计数。
 func (c *constrainedImpersonationTest) assertMetrics(r testRequest) {
 	c.t.Helper()
 
@@ -391,6 +422,9 @@ func (c *constrainedImpersonationTest) assertMetrics(r testRequest) {
 	require.Equal(c.t, r.expectedAuthorizationMetrics, authorizationMetrics, "unexpected authorization metrics")
 }
 
+// assertAuditEvents 断言审计事件包含请求接收与响应完成两条，
+// 延迟注解只在响应完成事件的耗时超阈值时出现，
+// 且成功代理时 AuthenticationMetadata 记录所用约束模式。
 func (c *constrainedImpersonationTest) assertAuditEvents(r testRequest) {
 	c.t.Helper()
 
@@ -413,6 +447,7 @@ func (c *constrainedImpersonationTest) assertAuditEvents(r testRequest) {
 
 	require.Nil(c.t, requestReceived.AuthenticationMetadata)
 	var expectedAuthenticationMetadata *auditinternal.AuthenticationMetadata
+	// 只有受约束代理成功时才报告约束模式；legacy 走原有审计语义。
 	if r.expectedCode == http.StatusOK && r.expectedAttemptMode != "legacy" {
 		expectedAuthenticationMetadata = &auditinternal.AuthenticationMetadata{
 			ImpersonationConstraint: "impersonate:" + r.expectedAttemptMode,
@@ -421,6 +456,8 @@ func (c *constrainedImpersonationTest) assertAuditEvents(r testRequest) {
 	require.Equal(c.t, expectedAuthenticationMetadata, responseComplete.AuthenticationMetadata)
 }
 
+// assertCache 断言两级缓存（请求者→模式索引、模式→outer/inner）的内容与预期一致；
+// expectedCache 为 nil 表示所有缓存必须为空。
 func (c *constrainedImpersonationTest) assertCache(r testRequest) {
 	rr := require.New(c.t)
 
@@ -466,11 +503,13 @@ func (c *constrainedImpersonationTest) assertCache(r testRequest) {
 	}
 }
 
+// usernameHash 返回 FNV-128a 十六进制摘要，与生产代码的模式索引键保持一致。
 func usernameHash(username string) string {
 	hash := fnvSum128a([]byte(username))
 	return fmt.Sprintf("%x", hash)
 }
 
+// fnvSum128a 计算 FNV-128a 摘要。
 func fnvSum128a(data []byte) []byte {
 	h := fnv.New128a()
 	h.Write(data)
@@ -478,6 +517,8 @@ func fnvSum128a(data []byte) []byte {
 	return h.Sum(sum[:0])
 }
 
+// checkCacheEntry 用 buildKey 重新构造 key 并验证缓存中的用户与约束模式，
+// 同时校验 key 的“rawKey 哈希/请求者名”后缀格式。
 func (c *constrainedImpersonationTest) checkCacheEntry(cache *impersonationCache, wantedUser *user.DefaultInfo, attributes authorizer.Attributes, rawKey string, expectedUser *user.DefaultInfo, expectedVerb string) {
 	rr := require.New(c.t)
 	keyString, err := buildKey(wantedUser, attributes)
@@ -490,11 +531,13 @@ func (c *constrainedImpersonationTest) checkCacheEntry(cache *impersonationCache
 	rr.Equal(keyHash(rawKey)+"/"+attributes.GetUser().GetName(), keyString, "hash of %q does not match", rawKey)
 }
 
+// keyHash 返回 SHA-256 十六进制摘要；缓存键只保存原始键的哈希以限制内存占用。
 func keyHash(rawKey string) string {
 	hash := sha256.Sum256([]byte(rawKey))
 	return fmt.Sprintf("%x", hash[:])
 }
 
+// withConstrainedImpersonationAttributes 构造受约束代理的授权属性。
 func withConstrainedImpersonationAttributes(a authorizer.AttributesRecord, mode string) authorizer.AttributesRecord {
 	a.Verb = "impersonate:" + mode
 	a.APIGroup = "authentication.k8s.io"
@@ -503,12 +546,14 @@ func withConstrainedImpersonationAttributes(a authorizer.AttributesRecord, mode 
 	return a
 }
 
+// withImpersonateOnAttributes 构造 “impersonate-on:<mode>:<verb>” 形式的代理执行属性。
 func withImpersonateOnAttributes(requestInfo *request.RequestInfo, mode string) authorizer.AttributesRecord {
 	a := requestInfoToAttributes(requestInfo)
 	a.Verb = "impersonate-on:" + mode + ":" + a.Verb
 	return a
 }
 
+// requestInfoToAttributes 借用 filters 的实际转换逻辑得到属性，保证与生产一致。
 func requestInfoToAttributes(requestInfo *request.RequestInfo) authorizer.AttributesRecord {
 	requestCtx := request.WithRequestInfo(context.Background(), requestInfo)
 	attrs, err := filters.GetAuthorizerAttributes(requestCtx)
@@ -518,6 +563,7 @@ func requestInfoToAttributes(requestInfo *request.RequestInfo) authorizer.Attrib
 	return *(attrs.(*authorizer.AttributesRecord))
 }
 
+// withLegacyImpersonateAttributes 构造旧版 “impersonate” 授权属性。
 func withLegacyImpersonateAttributes(a authorizer.AttributesRecord) authorizer.AttributesRecord {
 	a.Verb = "impersonate"
 	a.APIVersion = "v1"
@@ -525,11 +571,13 @@ func withLegacyImpersonateAttributes(a authorizer.AttributesRecord) authorizer.A
 	return a
 }
 
+// withUser 覆盖属性中的用户。
 func withUser(a authorizer.AttributesRecord, u *user.DefaultInfo) authorizer.AttributesRecord {
 	a.User = u
 	return a
 }
 
+// expectAuthzCheck 构造期望的授权检查。
 func expectAuthzCheck(attributes authorizer.AttributesRecord, decision authorizer.Decision) authzCheck {
 	return authzCheck{
 		attributes: attributes,
@@ -537,14 +585,17 @@ func expectAuthzCheck(attributes authorizer.AttributesRecord, decision authorize
 	}
 }
 
+// expectAllow 构造期望放行的检查。
 func expectAllow(attributes authorizer.AttributesRecord) authzCheck {
 	return expectAuthzCheck(attributes, authorizer.DecisionAllow)
 }
 
+// expectDeny 构造期望拒绝的检查；假授权器拒绝时返回 NoOpinion。
 func expectDeny(attributes authorizer.AttributesRecord) authzCheck {
 	return expectAuthzCheck(attributes, authorizer.DecisionNoOpinion)
 }
 
+// outerCacheKey 构造外层缓存的期望键。
 func outerCacheKey(wantedUser, requestor *user.DefaultInfo, req *request.RequestInfo, rawKey string) outerKey {
 	attributes := withUser(requestInfoToAttributes(req), requestor)
 	return outerKey{
@@ -554,27 +605,32 @@ func outerCacheKey(wantedUser, requestor *user.DefaultInfo, req *request.Request
 	}
 }
 
+// expectedCache 描述两级缓存的期望内容。
 type expectedCache struct {
 	modeIdx map[string]string            // username -> mode verb
 	modes   map[string]expectedModeCache // mode verb -> cache
 }
 
+// expectedModeCache 描述某个代理模式下的 outer/inner 缓存内容。
 type expectedModeCache struct {
 	outer map[outerKey]*user.DefaultInfo
 	inner map[innerKey]*user.DefaultInfo
 }
 
+// outerKey 是外层缓存的期望键：被代理用户 + 完整属性 + 原始键。
 type outerKey struct {
 	wantedUser *user.DefaultInfo
 	attributes *authorizer.AttributesRecord
 	rawKey     string
 }
 
+// innerKey 是内层缓存的期望键：被代理用户 + 请求者 + 原始键。
 type innerKey struct {
 	wantedUser, requestor *user.DefaultInfo
 	rawKey                string
 }
 
+// testRequest 描述一次请求及其全部期望结果（状态码、用户、授权检查、缓存、指标、审计）。
 type testRequest struct {
 	request          *request.RequestInfo
 	requestor        *user.DefaultInfo
@@ -593,6 +649,10 @@ type testRequest struct {
 	expectedAuthorizationMetrics map[string]int
 }
 
+// associatedNodeTestCase 针对 “associated-node” 模式：
+// 代理目标必须是请求者所在节点对应的 system:node:<node> 用户。
+// 这些用例共享同一个 handler，因此后续请求会命中缓存，
+// 期望的授权次数与缓存内容也随之变化。
 func associatedNodeTestCase() []testRequest {
 	getSecretRequest := &request.RequestInfo{
 		IsResourceRequest: true,
@@ -763,11 +823,16 @@ func associatedNodeTestCase() []testRequest {
 	}
 }
 
+// impersonationTestCase 是一组共享同一个 handler 的请求序列。
+// 共享 handler 很重要：缓存状态会跨请求累积，后面的请求期望命中前面建立的缓存。
 type impersonationTestCase struct {
 	name     string
 	requests []testRequest
 }
 
+// constrainedImpersonationTestCases 汇总所有受约束代理场景，
+// 每个用例聚焦一种模式（serviceaccount、node、user-info、legacy 等）
+// 及其授权、缓存、指标与审计的组合行为。
 func constrainedImpersonationTestCases() []impersonationTestCase {
 	getPodRequest := &request.RequestInfo{
 		IsResourceRequest: true,
@@ -1964,9 +2029,13 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 	return testCases
 }
 
+// TestConstrainedImpersonationFilter 端到端验证受约束代理过滤器：
+// 为每个用例分配独立 URL 与 handler，并行执行，逐请求比对
+// 响应码/响应体、授权检查序列、缓存状态、指标与审计事件。
 func TestConstrainedImpersonationFilter(t *testing.T) {
 	testCases := constrainedImpersonationTestCases()
 
+	// 每个用例通过独立路径复用同一个 httptest server，避免为每个子测试启动服务器。
 	var mux http.ServeMux
 	tests := make([]*constrainedImpersonationTest, len(testCases))
 	handlers := make([]http.Handler, len(testCases))
@@ -1994,6 +2063,7 @@ func TestConstrainedImpersonationFilter(t *testing.T) {
 				require.NoError(t, err)
 				_ = resp.Body.Close()
 
+				// 成功路径响应体是被代理用户的 JSON；失败路径响应体是 Status。
 				if r.expectedCode == http.StatusOK {
 					var actualUser user.DefaultInfo
 					if err := json.Unmarshal(body, &actualUser); err != nil {
@@ -2024,6 +2094,9 @@ func TestConstrainedImpersonationFilter(t *testing.T) {
 	}
 }
 
+// TestConstrainedImpersonationParallel 在 -race 下验证并发安全性：
+// 多个用户/目标/操作组合同时打向同一 handler，检查结果互不串扰、
+// 缓存与模式索引在并发访问下保持一致。
 func TestConstrainedImpersonationParallel(t *testing.T) {
 	// This test verifies goroutine safety by sending concurrent requests.
 	// Each test case defines multiple requests that are sent in parallel,
@@ -2225,6 +2298,8 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 			results := make(chan resultType, len(tc.requests))
 
 			// Send all requests concurrently
+			// 并发发送全部请求，制造缓存读写竞争；
+			// 每个请求自带 requestor 与目标用户，互不共享可变状态。
 			for idx, req := range tc.requests {
 				wg.Go(func() {
 					rt := &testRoundTripper{
@@ -2275,6 +2350,7 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 			close(results)
 
 			// Collect results
+			// 用索引映射收结果，避免并发完成顺序影响断言语义。
 			resultMap := make(map[int]resultType)
 			for res := range results {
 				require.NoError(t, res.err, "request %d: unexpected error", res.requestIdx)
@@ -2307,6 +2383,8 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 	}
 }
 
+// benchmarkHandler 构造只含认证/请求信息/代理的最小处理链，
+// 并把指标回调置为空操作，使基准测试只测代理本身的成本。
 func (c *constrainedImpersonationTest) benchmarkHandler(withImpersonation func(http.Handler, authorizer.UnconditionalAuthorizer, runtime.NegotiatedSerializer) http.Handler) http.Handler {
 	s := runtime.NewScheme()
 	metav1.AddToGroupVersion(s, metav1.SchemeGroupVersion)
@@ -2319,6 +2397,8 @@ func (c *constrainedImpersonationTest) benchmarkHandler(withImpersonation func(h
 	return addRequestInfo
 }
 
+// BenchmarkImpersonation 对比受约束代理与旧版代理在全部用例上的性能，
+// 用于评估新增的授权/缓存逻辑带来的额外开销。
 func BenchmarkImpersonation(b *testing.B) {
 	testCases := constrainedImpersonationTestCases()
 
@@ -2368,6 +2448,8 @@ func BenchmarkImpersonation(b *testing.B) {
 	}
 }
 
+// benchmarkExpectedCode 修正旧版代理的期望状态码：
+// WithImpersonation 不认识受约束的 impersonate:* 动词，因此这些请求会被拒绝。
 func benchmarkExpectedCode(r testRequest, isLegacy bool) int {
 	if isLegacy && r.expectedCode == http.StatusOK && r.requestor.Name != "legacy-impersonater" {
 		// legacy WithImpersonation denies any requestor that only has constrained impersonation verbs
@@ -2376,6 +2458,8 @@ func benchmarkExpectedCode(r testRequest, isLegacy bool) int {
 	return r.expectedCode
 }
 
+// doImpersonationRequest 使用 client-go 的 impersonating transport 发送请求，
+// 并断言响应状态码；返回的响应体由调用方读取并关闭。
 func doImpersonationRequest(tb testing.TB, baseTransport http.RoundTripper, url string, r testRequest, expectedCode int) *http.Response {
 	tb.Helper()
 

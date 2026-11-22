@@ -32,6 +32,7 @@ var _ = authorizer.RuleResolver(alwaysAllowAuthorizer{})
 // It is useful in tests and when using kubernetes in an open manner.
 type alwaysAllowAuthorizer struct{}
 
+// Authorize 无条件允许；调用方应只把它用于测试或显式开放的场景。
 func (alwaysAllowAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionAllow, "", nil
 }
@@ -46,6 +47,7 @@ func (alwaysAllowAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// RulesFor 报告"可执行一切"，与 Authorize 的始终允许语义保持一致。
 func (alwaysAllowAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	rrInfo := []authorizer.ResourceRuleInfo{
 		&authorizer.DefaultResourceRuleInfo{
@@ -63,6 +65,7 @@ func (alwaysAllowAuthorizer) RulesFor(ctx context.Context, user user.Info, names
 	return rrInfo, nrrInfo, false, nil
 }
 
+// NewAlwaysAllowAuthorizer 返回始终允许的授权器。
 func NewAlwaysAllowAuthorizer() *alwaysAllowAuthorizer {
 	return new(alwaysAllowAuthorizer)
 }
@@ -75,6 +78,8 @@ var _ = authorizer.RuleResolver(alwaysDenyAuthorizer{})
 // It is useful in unit tests to force an operation to be forbidden.
 type alwaysDenyAuthorizer struct{}
 
+// Authorize 返回 NoOpinion 而非 Deny：在授权器链中这意味着"我不表态"，
+// 若链上再无其他授权器，最终结果会被当作拒绝。
 func (alwaysDenyAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (decision authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionNoOpinion, "Everything is forbidden.", nil
 }
@@ -89,16 +94,19 @@ func (alwaysDenyAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.C
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// RulesFor 返回空规则集，表示该用户没有任何权限。
 func (alwaysDenyAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	return []authorizer.ResourceRuleInfo{}, []authorizer.NonResourceRuleInfo{}, false, nil
 }
 
+// NewAlwaysDenyAuthorizer 返回始终拒绝的授权器。
 func NewAlwaysDenyAuthorizer() *alwaysDenyAuthorizer {
 	return new(alwaysDenyAuthorizer)
 }
 
 var _ = authorizer.Authorizer(&privilegedGroupAuthorizer{})
 
+// privilegedGroupAuthorizer 对属于指定用户组之一的请求放行，用于 loopback 等特权场景。
 type privilegedGroupAuthorizer struct {
 	groups []string
 }
@@ -113,6 +121,8 @@ func (r *privilegedGroupAuthorizer) EvaluateConditions(_ context.Context, _ auth
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// Authorize 按用户组成员关系判定；没有用户信息时返回错误而非静默拒绝，
+// 以便上层区分"未认证"和"已认证但无权限"。
 func (r *privilegedGroupAuthorizer) Authorize(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
 	if attr.GetUser() == nil {
 		return authorizer.DecisionNoOpinion, "Error", errors.New("no user on request.")

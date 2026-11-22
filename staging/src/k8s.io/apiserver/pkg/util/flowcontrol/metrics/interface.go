@@ -17,6 +17,7 @@ limitations under the License.
 package metrics
 
 // Gauge is the methods of a gauge that are used by instrumented code.
+// 只暴露 APF 实际需要的子集，便于用简单实现替换 Prometheus gauge 进行测试。
 type Gauge interface {
 	Set(float64)
 	Inc()
@@ -29,6 +30,8 @@ type Gauge interface {
 // The numerator is set/changed through the Gauge methods,
 // and the denominator can be updated through the SetDenominator method.
 // A ratio is tracked whenever the numerator or denominator is set/changed.
+//
+// 用于表达“当前值 / 容量”的利用率；分母变化时无需重设分子。
 type RatioedGauge interface {
 	Gauge
 
@@ -58,6 +61,8 @@ type RatioedGaugeVec interface {
 // RatioedGaugePair is a corresponding pair of gauges, one for the
 // number of requests waiting in queue(s) and one for the number of
 // requests being executed.
+//
+// 两者共享同一分母（并发上限），从而可以分别观察排队与执行的利用率。
 type RatioedGaugePair struct {
 	// RequestsWaiting is given observations of the number of currently queued requests
 	RequestsWaiting RatioedGauge

@@ -44,6 +44,8 @@ import (
 	v1beta1 "k8s.io/apiserver/pkg/server/statusz/api/v1beta1"
 )
 
+// wantTmpl 是 text/plain 响应的期望模板；statusz 明确声明不可机器解析，
+// 因此这里按字符串包含关系断言，而不是结构化比较。
 const wantTmpl = `
 %s statusz
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
@@ -68,6 +70,9 @@ Binary version: %v
 Paths: /livez /readyz
 `
 
+// TestHandleStatusz 覆盖内容协商的关键分支：text/plain 默认、v1beta1
+// 结构化输出（JSON/YAML/CBOR）、v1alpha1 的弃用警告，以及各种不可接受的
+// Accept 头。
 func TestHandleStatusz(t *testing.T) {
 	// Enable CBOR feature gate for CBOR test case
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
@@ -114,6 +119,7 @@ func TestHandleStatusz(t *testing.T) {
 			),
 		},
 		{
+			// 显式请求 v1beta1 Statusz，必须返回带 TypeMeta/ObjectMeta 的结构化对象。
 			name:          "valid request for application/json",
 			acceptHeader:  "application/json;v=v1beta1;g=config.k8s.io;as=Statusz",
 			componentName: "test-server",
@@ -165,12 +171,14 @@ func TestHandleStatusz(t *testing.T) {
 			),
 		},
 		{
+			// 不支持的媒体类型应返回 406，而不是静默降级为 text。
 			name:           "invalid accept header",
 			acceptHeader:   "application/xml",
 			componentName:  "test-server",
 			wantStatusCode: http.StatusNotAcceptable,
 		},
 		{
+			// 模拟版本为空时文本输出应省略该行，而不是打印 "<nil>"。
 			name:          "missing emulation version",
 			acceptHeader:  "text/plain",
 			componentName: "test-server",
@@ -192,6 +200,7 @@ func TestHandleStatusz(t *testing.T) {
 			),
 		},
 		{
+			// application/json 缺少 v/g/as 参数时无法确定版本，必须 406。
 			name:           "application/json without params",
 			acceptHeader:   "application/json",
 			componentName:  "test-server",
@@ -204,6 +213,7 @@ func TestHandleStatusz(t *testing.T) {
 			wantStatusCode: http.StatusNotAcceptable,
 		},
 		{
+			// 通配 */* 走默认的 text/plain 路径。
 			name:          "wildcard accept header",
 			acceptHeader:  "*/*",
 			componentName: "test-server",
@@ -226,6 +236,7 @@ func TestHandleStatusz(t *testing.T) {
 			),
 		},
 		{
+			// 非法的结构化媒体类型不应导致失败；回退到 */* 提供的 text 路径。
 			name:          "bad json header fall back wildcard",
 			acceptHeader:  "application/json;v=foo;g=config.k8s.io;as=Statusz,*/*",
 			componentName: "test-server",
@@ -248,6 +259,7 @@ func TestHandleStatusz(t *testing.T) {
 			),
 		},
 		{
+			// v1alpha1 已被标记弃用，响应需带 Warning 头提示调用方迁移。
 			name:          "deprecated v1alpha1 request",
 			acceptHeader:  "application/json;v=v1alpha1;g=config.k8s.io;as=Statusz",
 			componentName: "test-server",
@@ -307,6 +319,7 @@ func TestHandleStatusz(t *testing.T) {
 			},
 		},
 		{
+			// CBOR 需要在测试中显式打开 CBORServingAndStorage 特性门控。
 			name:          "valid request for application/cbor",
 			acceptHeader:  "application/cbor;v=v1beta1;g=config.k8s.io;as=Statusz",
 			componentName: "test-server",
@@ -388,6 +401,8 @@ func TestHandleStatusz(t *testing.T) {
 	}
 }
 
+// unmarshalResponse 依据响应 Content-Type 选择对应的解码器，
+// 使同一组结构化断言可以覆盖 JSON/YAML/CBOR 三种编码。
 func unmarshalResponse(t *testing.T, contentType string, body []byte, got interface{}) {
 	t.Helper()
 	switch {
@@ -408,6 +423,7 @@ func unmarshalResponse(t *testing.T, contentType string, body []byte, got interf
 	}
 }
 
+// parseVersion 解析 "major.minor" 形式的版本，失败即终止测试。
 func parseVersion(t *testing.T, v string) *version.Version {
 	parsed, err := version.ParseMajorMinor(v)
 	if err != nil {
@@ -417,6 +433,8 @@ func parseVersion(t *testing.T, v string) *version.Version {
 	return parsed
 }
 
+// fakeRegistry 实现 statusz 所需的只读注册表接口，返回固定的测试数据。
+// deprecated 字段模拟“哪些 API 版本已被标记弃用”。
 type fakeRegistry struct {
 	startTime    time.Time
 	goVer        string
@@ -450,6 +468,8 @@ func (f fakeRegistry) paths() []string {
 	return f.listedPaths
 }
 
+// timeEqual 把时间比较截断到秒：statusz 只输出秒级精度，
+// 但构造期望值时使用的是纳秒级的 time.Now()。
 func timeEqual() cmp.Option {
 	return cmp.Comparer(func(expectedTime, actualTime metav1.Time) bool {
 		return expectedTime.Truncate(time.Second).Equal(actualTime.Truncate(time.Second))
@@ -472,6 +492,8 @@ func TestNewStatuszCodecFactory(t *testing.T) {
 	}
 }
 
+// TestMetrics 验证 statusz 请求会计入 apiserver_request_total：
+// text/plain 时的 group/version 为空，结构化请求则反映协商出的版本。
 func TestMetrics(t *testing.T) {
 	fakeStartTime := time.Now()
 	fakeBinaryVersion := parseVersion(t, "1.31")

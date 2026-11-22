@@ -25,6 +25,8 @@ import (
 	utilversion "k8s.io/component-base/version"
 )
 
+// TestBinaryVersion 验证 binaryVersion 的来源：优先使用注入的 effectiveVersion，
+// 否则回退到编译期版本。
 func TestBinaryVersion(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -58,6 +60,8 @@ func TestBinaryVersion(t *testing.T) {
 	}
 }
 
+// TestEmulationVersion 验证 emulationVersion 只在显式设置时返回，未设置时为 nil，
+// 避免 statusz 把“未启用模拟版本”误报为 0.0.0。
 func TestEmulationVersion(t *testing.T) {
 	tests := []struct {
 		name                    string

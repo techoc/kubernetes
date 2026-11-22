@@ -25,6 +25,10 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// TestAuthenticationDetection 验证 webhook 客户端如何从 kubeconfig 中按
+// 服务端主机名挑选认证信息。
+// 覆盖优先级：精确匹配 > 更具体的通配符 > 更宽泛的通配符 > "*" 兜底，
+// 并区分端口是否显式书写（443 与非默认端口的行为不同）。
 func TestAuthenticationDetection(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -226,6 +230,7 @@ func TestAuthenticationDetection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// UserAgent 与 Timeout 由调用方后续填充，不参与认证信息匹配。
 			actual.UserAgent = ""
 			actual.Timeout = 0
 

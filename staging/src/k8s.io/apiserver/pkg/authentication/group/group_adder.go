@@ -24,6 +24,7 @@ import (
 )
 
 // GroupAdder adds groups to an authenticated user.Info
+// 典型用途是把 system:masters 等特权组附加到回环客户端身份上。
 type GroupAdder struct {
 	// Authenticator is delegated to make the authentication decision
 	Authenticator authenticator.Request
@@ -32,16 +33,21 @@ type GroupAdder struct {
 }
 
 // NewGroupAdder wraps a request authenticator, and adds the specified groups to the returned user when authentication succeeds
+// 只包裹认证请求阶段；认证失败时原样返回，不改变错误与 ok 语义。
 func NewGroupAdder(auth authenticator.Request, groups []string) authenticator.Request {
 	return &GroupAdder{auth, groups}
 }
 
+// AuthenticateRequest 先委托给底层认证器，成功后再构造新的 user.Info。
+// 这里复制响应结构而非原地修改，避免污染底层认证器可能复用的缓存对象
+// （例如 tokenfile authenticator 会返回共享的 *user.DefaultInfo）。
 func (g *GroupAdder) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	r, ok, err := g.Authenticator.AuthenticateRequest(req)
 	if err != nil || !ok {
 		return nil, ok, err
 	}
 
+	// 预分配容量并先放原有组，保证附加组追加在末尾，便于断言与日志阅读。
 	newGroups := make([]string, 0, len(r.User.GetGroups())+len(g.Groups))
 	newGroups = append(newGroups, r.User.GetGroups()...)
 	newGroups = append(newGroups, g.Groups...)

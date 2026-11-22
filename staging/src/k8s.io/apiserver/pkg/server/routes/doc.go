@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package routes holds a collection of optional genericapiserver http handlers.
+//
+// 中文说明：这些 handler 不属于 API 资源，而是调试/可观测性入口
+// （如 /metrics、/debug/pprof），由各 apiserver 按需挂载。
 package routes

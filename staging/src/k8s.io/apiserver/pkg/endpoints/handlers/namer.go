@@ -38,14 +38,22 @@ type ScopeNamer interface {
 	ObjectName(obj runtime.Object) (namespace, name string, err error)
 }
 
+// ContextBasedNaming 从请求上下文（RequestInfo）或对象元数据中提取命名空间与名称，
+// 是 ScopeNamer 的默认实现。依赖上下文而不是再次解析 URL，可避免路由与命名
+// 逻辑出现分歧。
 type ContextBasedNaming struct {
-	Namer         runtime.Namer
+	// Namer 用于从对象本身提取 name/namespace；对于没有元数据的对象会返回错误。
+	Namer runtime.Namer
+	// ClusterScoped 表示对象不属于任何命名空间，此时 Namespace 始终为空。
 	ClusterScoped bool
 }
 
 // ContextBasedNaming implements ScopeNamer
 var _ ScopeNamer = ContextBasedNaming{}
 
+// Namespace 从请求上下文中的 RequestInfo 取命名空间。
+// 不直接解析路径，是因为 RequestInfo 已由前置过滤器完成一次解析，
+// 复用它可以保证命名空间判定与路由一致。
 func (n ContextBasedNaming) Namespace(req *http.Request) (namespace string, err error) {
 	requestInfo, ok := request.RequestInfoFrom(req.Context())
 	if !ok {
@@ -54,6 +62,7 @@ func (n ContextBasedNaming) Namespace(req *http.Request) (namespace string, err 
 	return requestInfo.Namespace, nil
 }
 
+// Name 从 RequestInfo 取命名空间与名称；名称为空视为请求非法。
 func (n ContextBasedNaming) Name(req *http.Request) (namespace, name string, err error) {
 	requestInfo, ok := request.RequestInfoFrom(req.Context())
 	if !ok {
@@ -66,6 +75,8 @@ func (n ContextBasedNaming) Name(req *http.Request) (namespace, name string, err
 	return requestInfo.Namespace, requestInfo.Name, nil
 }
 
+// ObjectName 从对象元数据中提取 namespace/name。
+// 先校验 name 再取 namespace，是为了让无名字对象的错误信息更明确。
 func (n ContextBasedNaming) ObjectName(obj runtime.Object) (namespace, name string, err error) {
 	name, err = n.Namer.Name(obj)
 	if err != nil {

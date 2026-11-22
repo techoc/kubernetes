@@ -32,6 +32,12 @@ import (
 	apiserverapiv1alpha1 "k8s.io/apiserver/pkg/apis/apiserver/v1alpha1"
 )
 
+// TestReadAdmissionConfiguration 验证准入配置文件的反序列化与路径修正。
+//
+// 中文说明：重点覆盖三类行为：
+//  1. 严格解码——重复字段与未知字段必须报错，防止拼写错误被静默忽略；
+//  2. 相对路径以配置文件所在目录为基准修正，绝对路径保持不变；
+//  3. 旧版扁平配置（imagePolicy 等）在启用对应插件时被映射为插件条目。
 func TestReadAdmissionConfiguration(t *testing.T) {
 	// create a place holder file to hold per test config
 	configFile, err := os.CreateTemp("", "admission-plugin-config")
@@ -210,6 +216,7 @@ func TestReadAdmissionConfiguration(t *testing.T) {
 	require.NoError(t, apiserverapiv1.AddToScheme(scheme))
 
 	for testName, testCase := range testCases {
+		// 每个用例把配置写入同一个临时文件，避免跨用例残留。
 		if err = os.WriteFile(configFileName, []byte(testCase.ConfigBody), 0644); err != nil {
 			t.Fatalf("unexpected err writing temp file: %v", err)
 		}
@@ -223,12 +230,18 @@ func TestReadAdmissionConfiguration(t *testing.T) {
 		} else if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		} else if !reflect.DeepEqual(config.(configProvider).config, testCase.ExpectedAdmissionConfig) {
+			// 通过 configProvider 取回内部配置做深比较，确保转换后的结果符合预期。
 			t.Fatalf("%s: Expected:\n\t%#v\nGot:\n\t%#v", testName, testCase.ExpectedAdmissionConfig, config.(configProvider).config)
 		}
 
 	}
 }
 
+// TestEmbeddedConfiguration 验证插件内嵌 configuration 字段原样透传。
+//
+// 中文说明：内嵌配置不经过本包的 scheme 解码，而是以原始 JSON 交给插件自行解析；
+// 因此带 apiVersion/kind 与不带两种形态都必须保持字节级语义（用 JSON 语义比较，
+// 忽略空白差异）。这是插件自定义配置的兼容性基础。
 func TestEmbeddedConfiguration(t *testing.T) {
 	// create a place holder file to hold per test config
 	configFile, err := os.CreateTemp("", "admission-plugin-config")
@@ -351,6 +364,7 @@ func TestEmbeddedConfiguration(t *testing.T) {
 	}
 }
 
+// equalJSON 按 JSON 语义比较两段文本：键顺序与空白差异不影响结果。
 func equalJSON(a, b string) bool {
 	var x, y interface{}
 	if err := json.Unmarshal([]byte(a), &x); err != nil {

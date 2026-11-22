@@ -45,6 +45,8 @@ const (
 )
 
 // ServerRunOptions contains the options while running a generic api server.
+// ServerRunOptions 是 generic apiserver 的通用运行参数，最终映射到
+// server.Config；它们决定限流、超时、优雅终止与版本模拟行为。
 type ServerRunOptions struct {
 	AdvertiseAddress net.IP
 
@@ -61,6 +63,8 @@ type ServerRunOptions struct {
 	ShutdownDelayDuration        time.Duration
 	// We intentionally did not add a flag for this option. Users of the
 	// apiserver library can wire it to a flag.
+	// JSON Patch 应用前允许复制的最大字节数，防止超大 patch 放大内存占用；
+	// 库使用方自行决定是否暴露 flag。
 	JSONPatchMaxCopyBytes int64
 	// The limit on the request body size that would be accepted and
 	// decoded in a write request. 0 means no limit.
@@ -95,6 +99,8 @@ type ServerRunOptions struct {
 	ShutdownWatchTerminationGracePeriod time.Duration
 
 	// ComponentGlobalsRegistry is the registry where the effective versions and feature gates for all components are stored.
+	// 组件级有效版本与 feature gate 的全局注册表；共享它才能保证同一进程内
+	// 各组件看到一致的版本配置。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
 	// ComponentName is name under which the server's global variabled are registered in the ComponentGlobalsRegistry.
 	ComponentName string
@@ -103,6 +109,7 @@ type ServerRunOptions struct {
 	// If true, all APIs that have higher priority than the APIs(beta+) of the same group resource enabled at the emulation version will be installed.
 	// This is needed when a controller implementation migrates to newer API versions, for the binary version, and also uses the newer API versions even when emulation version is set.
 	// Not applicable to alpha APIs.
+	// 仅在模拟版本低于二进制版本时才有意义（见 Validate）。
 	EmulationForwardCompatible bool
 	// RuntimeConfigEmulationForwardCompatible is an option to explicitly enable specific APIs introduced after the emulation version through the runtime-config.
 	// If true, APIs identified by group/version that are enabled in the --runtime-config flag will be installed even if it is introduced after the emulation version. --runtime-config flag values that identify multiple APIs, such as api/all,api/ga,api/beta, are not influenced by this flag and will only enable APIs available at the current emulation version.
@@ -110,6 +117,8 @@ type ServerRunOptions struct {
 	RuntimeConfigEmulationForwardCompatible bool
 }
 
+// NewServerRunOptions 创建默认 kube 组件的运行选项；若全局注册表尚未登记
+// 该组件，则先注册有效版本与 feature gate，保证后续 SetFallback 有对象可操作。
 func NewServerRunOptions() *ServerRunOptions {
 	if compatibility.DefaultComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent) == nil {
 		featureGate := utilfeature.DefaultMutableFeatureGate
@@ -120,6 +129,8 @@ func NewServerRunOptions() *ServerRunOptions {
 	return NewServerRunOptionsForComponent(basecompatibility.DefaultKubeComponent, compatibility.DefaultComponentGlobalsRegistry)
 }
 
+// NewServerRunOptionsForComponent 为指定组件构造选项；默认值取自
+// server.NewConfig，确保库内默认与 server.Config 一致。
 func NewServerRunOptionsForComponent(componentName string, componentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry) *ServerRunOptions {
 	defaults := server.NewConfig(serializer.CodecFactory{})
 	return &ServerRunOptions{
@@ -140,6 +151,8 @@ func NewServerRunOptionsForComponent(componentName string, componentGlobalsRegis
 }
 
 // ApplyTo applies the run options to the method receiver and returns self
+// 先把注册表状态固定为 fallback，再一次性拷贝到 Config；版本与 feature gate
+// 按 ComponentName 取出，避免组件间相互覆盖。
 func (s *ServerRunOptions) ApplyTo(c *server.Config) error {
 	if err := s.ComponentGlobalsRegistry.SetFallback(); err != nil {
 		return err
@@ -169,6 +182,8 @@ func (s *ServerRunOptions) ApplyTo(c *server.Config) error {
 }
 
 // DefaultAdvertiseAddress sets the field AdvertiseAddress if unset. The field will be set based on the SecureServingOptions.
+// 未指定或为未指定地址（0.0.0.0/::）时，从 secure serving 的绑定地址推导
+// 一个集群内可达的地址，否则对外的 advertised URL 不可用。
 func (s *ServerRunOptions) DefaultAdvertiseAddress(secure *SecureServingOptions) error {
 	if secure == nil {
 		return nil
@@ -187,6 +202,8 @@ func (s *ServerRunOptions) DefaultAdvertiseAddress(secure *SecureServingOptions)
 }
 
 // Validate checks validation of ServerRunOptions
+// 所有数值型参数统一拒绝负值；goaway 概率额外限制在 [0, 0.02]，避免误配导致
+// 大面积断连。版本相关选项只在真正处于模拟模式时才允许开启。
 func (s *ServerRunOptions) Validate() []error {
 	errors := []error{}
 
@@ -247,6 +264,8 @@ func (s *ServerRunOptions) Validate() []error {
 	if effectiveVersion == nil {
 		return errors
 	}
+	// 模拟版本与二进制版本相同即未启用模拟，此时 forward-compatible
+	// 选项没有语义，开启只会让配置看起来生效却毫无作用，故拒绝。
 	notEmulationMode := effectiveVersion.BinaryVersion().WithPatch(0).EqualTo(effectiveVersion.EmulationVersion())
 	if notEmulationMode && s.EmulationForwardCompatible {
 		errors = append(errors, fmt.Errorf("ServerRunOptions.EmulationForwardCompatible cannot be set to true if the emulation version is the same as the binary version"))
@@ -257,6 +276,8 @@ func (s *ServerRunOptions) Validate() []error {
 	return errors
 }
 
+// validateHSTSDirectives 校验 HSTS 指令：允许 includeSubDomains/preload，或
+// 形如 max-age=N 的单个指令；其他写法一律报错，避免下发无效安全头。
 func validateHSTSDirectives(hstsDirectives []string) error {
 	// HSTS Headers format: Strict-Transport-Security:max-age=expireTime [;includeSubDomains] [;preload]
 	// See https://tools.ietf.org/html/rfc6797#section-6.1 for more information
@@ -276,6 +297,9 @@ func validateHSTSDirectives(hstsDirectives []string) error {
 	return errors.NewAggregate(allErrors)
 }
 
+// validateCorsAllowedOriginList 校验 CORS 白名单正则。强制把表达式锚定到
+// 主机名首尾，是对 CVE-2022-1996 的缓解：过宽的正则（如 .*example.com）
+// 会匹配攻击者控制的子域，从而允许其跨域读取 API 响应。
 func validateCorsAllowedOriginList(corsAllowedOriginList []string) error {
 	allErrors := []error{}
 	validateRegexFn := func(regexpStr string) error {
@@ -294,6 +318,8 @@ func validateCorsAllowedOriginList(corsAllowedOriginList []string) error {
 		//   - with a capture group that matches the host and port separator '(:|$)'
 		// We will relax the validation to check if these regex markers
 		// are present in the user specified expression.
+		// 这是启发式检查：只确认标记存在，不保证正则语义上真的锚定；
+		// 更严格的判定成本高且容易误伤，故保持现状。
 		var pinStart, pinEnd bool
 		for _, prefix := range []string{"^", "//"} {
 			if strings.Contains(regexpStr, prefix) {
@@ -328,6 +354,8 @@ func validateCorsAllowedOriginList(corsAllowedOriginList []string) error {
 }
 
 // AddUniversalFlags adds flags for a specific APIServer to the specified FlagSet
+// 这些 flag 是所有 apiserver 共享的通用参数；组件特有的 flag 由各自
+// options 结构补充。
 func (s *ServerRunOptions) AddUniversalFlags(fs *pflag.FlagSet) {
 	// Note: the weird ""+ in below lines seems to be the only way to get gofmt to
 	// arrange these text blocks sensibly. Grrr.
@@ -409,6 +437,8 @@ func (s *ServerRunOptions) AddUniversalFlags(fs *pflag.FlagSet) {
 }
 
 // Complete fills missing fields with defaults.
+// SetFallback 会为尚未显式设置的版本/feature gate 选择默认值；必须在 ApplyTo
+// 之前完成，否则 Config 会拿到空版本。
 func (s *ServerRunOptions) Complete() error {
 	return s.ComponentGlobalsRegistry.SetFallback()
 }

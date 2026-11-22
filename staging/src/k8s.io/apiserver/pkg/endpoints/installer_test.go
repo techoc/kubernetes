@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestIsVowel 验证用于生成 “a/an” 冠词的元音判断（大小写不敏感）。
 func TestIsVowel(t *testing.T) {
 	tests := []struct {
 		name string
@@ -48,6 +49,8 @@ func TestIsVowel(t *testing.T) {
 	}
 }
 
+// TestGetArticleForNoun 验证为资源名词生成正确冠词：复数与不可数形式不添加冠词，
+// 单数按首字母元音/辅音选择 a/an。
 func TestGetArticleForNoun(t *testing.T) {
 	tests := []struct {
 		noun    string
@@ -102,6 +105,9 @@ func TestGetArticleForNoun(t *testing.T) {
 	}
 }
 
+// TestConvertAPIResourceToDiscovery 验证把传统 metav1.APIResource 列表转换为
+// 聚合发现 v2 的结构：子资源（name 含 "/"）需挂到父资源下，作用域必须与父资源一致，
+// 缺少父资源时仍要生成占位项以避免下游 nil 解引用。
 func TestConvertAPIResourceToDiscovery(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -161,6 +167,7 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 			},
 		},
 		{
+			// 子资源 name 形如 "<resource>/<subresource>"，需拆分并归入父资源。
 			name: "Test with subresource",
 			resources: []metav1.APIResource{
 				{
@@ -287,6 +294,7 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 				},
 			},
 		}, {
+			// 缺少父资源时仍生成父项（ResponseKind 为空），保证发现输出结构完整。
 			name: "Test with subresource with no parent",
 			resources: []metav1.APIResource{
 				{
@@ -343,6 +351,7 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 			},
 		},
 		{
+			// 父资源与子资源的 Namespaced 不一致属于非法注册，应报错而非静默修正。
 			name: "Test with mismatch parent and subresource scope",
 			resources: []metav1.APIResource{
 				{
@@ -441,6 +450,7 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 
 	for _, tt := range tests {
 		discoveryAPIResources, err := ConvertGroupVersionIntoToDiscovery(tt.resources)
+		// 期望出错时不比较结果：部分用例返回空列表，部分可能返回已构造的中间结果。
 		if err != nil {
 			if tt.wantErr == false {
 				t.Error(err)

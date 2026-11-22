@@ -25,7 +25,13 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordStorageListMetrics 验证 LIST 路径的四类指标被正确打点。
+// 中文说明：分别用 etcd 与 watchcache 两种后端，覆盖 index 标签存在与缺失的场景
+// （etcd 直读时索引为空，watchcache 路径携带字段选择器索引）。
+// 断言采用完整文本比对而非逐项取值，目的是同时锁定指标名、标签集与 HELP 文本，
+// 防止不经意的重命名破坏监控契约。
 func TestRecordStorageListMetrics(t *testing.T) {
+	// 使用独立 registry，避免与其他测试共享全局状态；defer Reset 保证用例间隔离。
 	registry := k8smetrics.NewKubeRegistry()
 	defer registry.Reset()
 
@@ -36,6 +42,7 @@ func TestRecordStorageListMetrics(t *testing.T) {
 
 	groupResource := schema.GroupResource{Group: "apps", Resource: "deployments"}
 
+	// 两条记录分别对应 etcd 直读与 watchcache 读取，因此 index 标签不同。
 	RecordStorageListMetrics(groupResource, StorageBackendEtcd, "", 4, 3, 1)
 	RecordStorageListMetrics(groupResource, StorageBackendWatchCache, "f:spec.nodeName", 2, 0, 2)
 

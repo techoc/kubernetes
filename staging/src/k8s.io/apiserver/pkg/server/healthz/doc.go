@@ -19,4 +19,7 @@ limitations under the License.
 //
 //	import "k8s.io/apiserver/pkg/server/healthz"
 //	healthz.InstallHandler(mux)
+//
+// 检查项分为 liveness（/livez）与 readiness（/readyz）：前者失败通常意味着
+// 需要重启进程，后者失败只表示暂时不应接收流量，两者不可混用。
 package healthz

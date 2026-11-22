@@ -27,6 +27,8 @@ import (
 )
 
 const (
+	// subsystem 作为所有审计指标名的统一前缀 apiserver_audit_，指标名一旦发布即成为
+	// 外部契约（告警、仪表盘依赖），不能随意更名。
 	subsystem = "apiserver_audit"
 )
 
@@ -78,6 +80,8 @@ var (
 )
 
 func init() {
+	// 直接在 init 中注册：审计指标不依赖 feature gate，注册失败属于编程错误，
+	// 用 MustRegister 让进程尽早失败而不是静默缺失指标。
 	legacyregistry.MustRegister(eventCounter)
 	legacyregistry.MustRegister(errorCounter)
 	legacyregistry.MustRegister(levelCounter)
@@ -85,11 +89,13 @@ func init() {
 }
 
 // ObserveEvent updates the relevant prometheus metrics for the generated audit event.
+// 每个真正产生并交给后端的审计事件计一次。
 func ObserveEvent(ctx context.Context) {
 	eventCounter.WithContext(ctx).Inc()
 }
 
 // ObservePolicyLevel updates the relevant prometheus metrics with the audit level for a request.
+// 每个请求只调用一次，因此该计数可用来估算不同审计级别下的请求量。
 func ObservePolicyLevel(ctx context.Context, level auditinternal.Level) {
 	levelCounter.WithContext(ctx).WithLabelValues(string(level)).Inc()
 }
@@ -97,6 +103,9 @@ func ObservePolicyLevel(ctx context.Context, level auditinternal.Level) {
 // HandlePluginError handles an error that occurred in an audit plugin. This method should only be
 // used if the error may have prevented the audit event from being properly recorded. The events are
 // logged to the debug log.
+//
+// 计数按受影响事件数累加（而非按错误次数），这样能直观看出丢失了多少条审计记录；
+// 事件内容打到日志里是为了事后取证，可能包含敏感信息，日志级别应保持可控。
 func HandlePluginError(plugin string, err error, impacted ...*auditinternal.Event) {
 	// Count the error.
 	errorCounter.WithLabelValues(plugin).Add(float64(len(impacted)))

@@ -54,6 +54,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestWatch 汇总 etcd3 存储对 storage.Interface watch 契约的一致性测试；
+// 大部分用例委托给 storagetesting，保证不同存储后端行为一致。
 func TestWatch(t *testing.T) {
 	t.Run("Watch", func(t *testing.T) {
 		ctx, store, _ := testSetup(t)
@@ -204,6 +206,8 @@ func TestWatchErrorIncorrectConfiguration(t *testing.T) {
 	}
 }
 
+// TestTooLargeResourceVersionErrorForWatchList 验证从超出 etcd 当前版本的 RV 开始
+// watch 时，以 Error 事件返回可重试的 4xx，并携带 RetryAfterSeconds。
 func TestTooLargeResourceVersionErrorForWatchList(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 	origCtx, store, _ := testSetup(t)
@@ -249,6 +253,8 @@ func TestTooLargeResourceVersionErrorForWatchList(t *testing.T) {
 	}
 }
 
+// TestWatchChanSync 覆盖初始同步的两种实现（分页与 RangeStream）在各分页边界下的
+// 事件数与 Get 调用次数，确保流式读取不会改变可观察语义。
 func TestWatchChanSync(t *testing.T) {
 	modes := []struct {
 		name        string
@@ -386,6 +392,8 @@ func TestWatchChanSyncStreamMatchesPaginated(t *testing.T) {
 	}
 }
 
+// resetFeatureSupportCheckerDuringTest 重置全局特性探测缓存并在测试结束时恢复，
+// 避免“服务端不支持 RangeStream”的探测结果泄漏到其他测试。
 func resetFeatureSupportCheckerDuringTest(t *testing.T) {
 	t.Helper()
 	orig := etcdfeature.DefaultFeatureSupportChecker
@@ -393,6 +401,8 @@ func resetFeatureSupportCheckerDuringTest(t *testing.T) {
 	t.Cleanup(func() { etcdfeature.DefaultFeatureSupportChecker = orig })
 }
 
+// TestWatchChanSyncStreamFallsBackToPaginated 模拟旧版 etcd（RangeStream 返回
+// Unimplemented），验证自动回退到分页同步、标记特性不可用且事件完整。
 func TestWatchChanSyncStreamFallsBackToPaginated(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EtcdRangeStream, true)
 	resetFeatureSupportCheckerDuringTest(t)
@@ -434,6 +444,7 @@ func TestWatchChanSyncStreamFallsBackToPaginated(t *testing.T) {
 	}
 }
 
+// drainSync 执行一次同步并收集 incomingEventChan 中的事件，按 key 索引便于比较。
 func drainSync(t *testing.T, store *store, ctx context.Context, sync func(*watchChan) error) map[string]*event {
 	t.Helper()
 	wc := store.watcher.createWatchChan(ctx, "/pods/", 0, true, false, false, storage.Everything)
@@ -448,6 +459,8 @@ func drainSync(t *testing.T, store *store, ctx context.Context, sync func(*watch
 	return out
 }
 
+// TestWatchChanSyncStreamCompactionError 验证流式同步遇到已压缩的 revision 时
+// 返回 ResourceExpired，并记录 listStream 错误指标。
 func TestWatchChanSyncStreamCompactionError(t *testing.T) {
 	metrics.Register()
 	ctx, store, _ := testSetup(t)
@@ -486,6 +499,7 @@ etcd_request_errors_total{group="",operation="listStream",resource="pods"} 1
 	}
 }
 
+// TestWatchChanSyncStreamMetrics 验证流式同步上报的指标（请求数/字节数等）。
 func TestWatchChanSyncStreamMetrics(t *testing.T) {
 	metrics.Register()
 
@@ -535,6 +549,8 @@ etcd_requests_total{group="",operation="listStream",resource="pods"} 1
 }
 
 // NOTE: it's not thread-safe
+// etcdClientKVWrapper 用于在测试中注入故障（未实现的 RangeStream、固定 revision）
+// 并统计 Get/GetStream 调用次数。
 type etcdClientKVWrapper struct {
 	clientv3.KV
 	// keeps track of the number of times Get method is called
@@ -549,6 +565,7 @@ type etcdClientKVWrapper struct {
 	getReactors []func()
 }
 
+// newEtcdClientKVWrapper 包装真实 KV 客户端。
 func newEtcdClientKVWrapper(kv clientv3.KV) *etcdClientKVWrapper {
 	return &etcdClientKVWrapper{
 		KV:             kv,
@@ -556,6 +573,7 @@ func newEtcdClientKVWrapper(kv clientv3.KV) *etcdClientKVWrapper {
 	}
 }
 
+// GetStream 按测试配置替换 KV 或固定 revision 后透传。
 func (ecw *etcdClientKVWrapper) GetStream(ctx context.Context, key string, opts ...clientv3.OpOption) (clientv3.GetStreamChan, error) {
 	ecw.getStreamCallCounter++
 	if ecw.streamKV != nil {
@@ -585,6 +603,7 @@ func (unimplementedRangeStream) Recv() (*pb.RangeStreamResponse, error) {
 	return nil, grpcstatus.Error(grpccodes.Unimplemented, "RangeStream is unimplemented")
 }
 
+// Get 统计调用次数，并按顺序执行一次性 reactor（用于在读取后制造并发修改）。
 func (ecw *etcdClientKVWrapper) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	resp, err := ecw.KV.Get(ctx, key, opts...)
 	ecw.getCallCounter++
@@ -601,6 +620,7 @@ func (ecw *etcdClientKVWrapper) Get(ctx context.Context, key string, opts ...cli
 	return resp, nil
 }
 
+// initStoreData 预置两个同名不同命名空间的 Pod，并返回它们的 key 列表。
 func initStoreData(ctx context.Context, store storage.Interface) ([]interface{}, error) {
 	barFirst := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "first", Name: "bar"}}
 	barSecond := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "second", Name: "bar"}}
@@ -635,6 +655,8 @@ func initStoreData(ctx context.Context, store storage.Interface) ([]interface{},
 	return created, nil
 }
 
+// TestWatchWithShardSelector 验证分片选择器只返回 UID 哈希落在
+// [boundary, 2^64) 区间内的事件，确保跨 API server 的 watch 分片不重不漏。
 func TestWatchWithShardSelector(t *testing.T) {
 	// The shard [boundary, 2^64) contains exactly the higher of the two UID hashes.
 	uidA, uidB := "uid-a", "uid-b"

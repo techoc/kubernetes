@@ -75,10 +75,14 @@ type testPatchType struct {
 
 // We explicitly make it public as private types doesn't
 // work correctly with json inlined types.
+//
+// 中文说明：encoding/json 无法为未导出类型的内联字段正确生成字段，故导出；
+// 这不是 API 面，仅测试使用。
 type TestPatchSubType struct {
 	StringField string `json:"theField"`
 }
 
+// DeepCopyObject 实现 runtime.Object；对 nil 接收者返回 nil 是协议要求。
 func (obj *testPatchType) DeepCopyObject() runtime.Object {
 	if obj == nil {
 		return nil
@@ -87,6 +91,9 @@ func (obj *testPatchType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// TestPatchAnonymousField 验证 strategic merge patch 能写入内联（匿名）字段。
+//
+// 中文说明：匿名内联字段的 JSON 路径与普通字段不同，这是容易出错的边界。
 func TestPatchAnonymousField(t *testing.T) {
 	testGV := schema.GroupVersion{Group: "", Version: "v"}
 	scheme.AddKnownTypes(testGV, &testPatchType{})
@@ -112,7 +119,12 @@ func TestPatchAnonymousField(t *testing.T) {
 	}
 }
 
+// TestLimitedReadBody 验证请求体大小限制与体积指标。
+//
+// 中文说明：超限时必须返回错误且不记录指标（没有完整读取，统计会失真）；
+// 未超限时指标应精确反映字节数。
 func TestLimitedReadBody(t *testing.T) {
+	// 注册/重置指标，避免与其他用例共享全局 registry 时互相污染。
 	defer legacyregistry.Reset()
 	legacyregistry.Register(metrics.RequestBodySizes)
 
@@ -201,6 +213,10 @@ func TestLimitedReadBody(t *testing.T) {
 	}
 }
 
+// TestStrategicMergePatchInvalid 验证非法 patch 被映射为 400。
+//
+// 中文说明：客户端提交的坏 JSON 属于请求错误，不能表现为 500，否则会误导
+// 运维并影响 SLO 统计。
 func TestStrategicMergePatchInvalid(t *testing.T) {
 	testGV := schema.GroupVersion{Group: "", Version: "v"}
 	scheme.AddKnownTypes(testGV, &testPatchType{})
@@ -223,6 +239,10 @@ func TestStrategicMergePatchInvalid(t *testing.T) {
 	}
 }
 
+// TestJSONPatch 验证 JSON Patch 的语法错误与语义错误分类。
+//
+// 中文说明：语法错误为 BadRequest，路径不存在等语义错误为 Invalid；
+// 两个负向用例还锁定了 json-patch v4 的越界行为，客户端可能依赖它们。
 func TestJSONPatch(t *testing.T) {
 	for _, test := range []struct {
 		name              string
@@ -252,6 +272,7 @@ func TestJSONPatch(t *testing.T) {
 		},
 		// This demonstrates out-of-spec behavior json-patch v4 allows,
 		// which Kubernetes clients may depend on, and which updating to json-patch v5 currently breaks
+		// 中文说明：保留该用例是为了防止升级补丁库时无意改变对客户端的兼容承诺。
 		{
 			name: "replace-missing-path-allowed",
 			patch: `[
@@ -292,6 +313,10 @@ func TestJSONPatch(t *testing.T) {
 	}
 }
 
+// TestPatchCustomResource 验证 CR 不支持 strategic merge patch。
+//
+// 中文说明：CR 没有 Go 结构体与 patch 元数据，无法推导合并策略，必须明确
+// 拒绝而不是退化为普通 merge，否则语义会静默改变。
 func TestPatchCustomResource(t *testing.T) {
 	testGV := schema.GroupVersion{Group: "mygroup.example.com", Version: "v1beta1"}
 	scheme.AddKnownTypes(testGV, &unstructured.Unstructured{})
@@ -323,6 +348,7 @@ func TestPatchCustomResource(t *testing.T) {
 	}
 }
 
+// testTimeoutPatcher 阻塞到上下文取消，用于模拟存储层超时。
 type testTimeoutPatcher struct {
 	t *testing.T
 }
@@ -331,6 +357,7 @@ func (p *testTimeoutPatcher) New() runtime.Object {
 	return &example.Pod{}
 }
 
+// Update 等待 ctx 结束再返回超时错误，确保测试走的是超时而非快速失败路径。
 func (p *testTimeoutPatcher) Update(ctx context.Context, _ string, _ rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc, _ rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// Block until the context is canceled to simulate a timeout scenario.
 	<-ctx.Done()
@@ -342,6 +369,10 @@ func (p *testTimeoutPatcher) Get(ctx context.Context, name string, options *meta
 	return nil, errors.New("unexpected call to testPatcher.Get")
 }
 
+// testPatcher 模拟存储层的 GuaranteedUpdate 重试语义。
+//
+// 中文说明：patch 的关键行为之一是并发冲突下的重试，这里用 numUpdates 与
+// startingPod/updatePod 精确控制"当前值"如何演进。
 type testPatcher struct {
 	t *testing.T
 
@@ -360,6 +391,8 @@ func (p *testPatcher) New() runtime.Object {
 
 func (p *testPatcher) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// Simulate GuaranteedUpdate behavior (retries internally on etcd changes if the incoming resource doesn't pin resourceVersion)
+	// 中文说明：循环复现真实存储的重试；若 patch 未固定 resourceVersion，
+	// 应在新值上重新计算而不是直接冲突。
 	for {
 		currentPod := p.startingPod
 		if p.numUpdates > 0 {
@@ -406,6 +439,7 @@ func (p *testPatcher) Get(ctx context.Context, name string, options *metav1.GetO
 	return nil, errors.New("Unexpected call to testPatcher.Get")
 }
 
+// testNamer 从固定字段返回命名空间与名字，供 RequestScope 使用。
 type testNamer struct {
 	namespace string
 	name      string
@@ -427,6 +461,10 @@ func (p *testNamer) ObjectName(obj runtime.Object) (namespace, name string, err 
 	return p.namespace, p.name, nil
 }
 
+// patchTestCase 描述一次 patch 请求的完整输入与期望。
+//
+// 中文说明：三种 patch 类型共用一个用例结构，便于同一场景在 JSON/Merge/
+// Strategic 三种语义下得到一致验证。
 type patchTestCase struct {
 	name string
 
@@ -456,6 +494,10 @@ type patchTestCase struct {
 	isTimeout bool
 }
 
+// Run 依次在三种 patch 类型下执行同一用例。
+//
+// 中文说明：若用例未提供显式 patch，则从 startingPod 与 changedPod 计算差量；
+// 期望对象先经编解码往返以获得默认值，避免与默认化行为比较时出现假失败。
 func (tc *patchTestCase) Run(t *testing.T) {
 	t.Logf("Starting test %s", tc.name)
 
@@ -499,6 +541,7 @@ func (tc *patchTestCase) Run(t *testing.T) {
 	}
 	for _, patchType := range []types.PatchType{types.JSONPatchType, types.MergePatchType, types.StrategicMergePatchType} {
 		// This needs to be reset on each iteration.
+		// 中文说明：每次迭代重新创建 patcher，否则 numUpdates 会跨类型累积。
 		testPatcher := &testPatcher{
 			t:           t,
 			startingPod: tc.startingPod,
@@ -590,6 +633,7 @@ func (tc *patchTestCase) Run(t *testing.T) {
 		if tc.isTimeout {
 			// Simulate timeout by using a zero-duration timeout and the timeout patcher
 			// replace testPatcher with the timeout simulator
+			// 中文说明：零超时保证请求一进入存储层就触发 ctx 取消，无需等待真实时长。
 			timeout = 0
 			p.restPatcher = &testTimeoutPatcher{t: t}
 		} else {
@@ -634,6 +678,7 @@ func (tc *patchTestCase) Run(t *testing.T) {
 		resultPod := resultObj.(*example.Pod)
 
 		// roundtrip to get defaulting
+		// 中文说明：期望对象是内部类型，先序列化再反序列化才能应用与生产一致的默认值。
 		expectedJS, err := runtime.Encode(codec, tc.expectedPod)
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", tc.name, err)
@@ -654,6 +699,10 @@ func (tc *patchTestCase) Run(t *testing.T) {
 
 }
 
+// TestNumberConversion 验证 patch 中的 JSON 数字能正确转回 Go 整数。
+//
+// 中文说明：JSON 解码默认把数字读成 float64，若不转换，int64 字段会因
+// 30 != 30.0 被误判为变更。
 func TestNumberConversion(t *testing.T) {
 	defaulter := runtime.ObjectDefaulter(scheme)
 
@@ -682,6 +731,9 @@ func TestNumberConversion(t *testing.T) {
 	}
 }
 
+// TestPatchResourceNumberConversion 验证"补丁值与他人写入值相同"时不视为冲突。
+//
+// 中文说明：历史实现因 float64 与 int64 比较误报冲突（见注释），本用例是回归保护。
 func TestPatchResourceNumberConversion(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -714,6 +766,7 @@ func TestPatchResourceNumberConversion(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchResourceTimeout 验证存储层超时被转换为 Timeout 错误。
 func TestPatchResourceTimeout(t *testing.T) {
 	tc := &patchTestCase{
 		name:        "TestPatchResourceTimeout",
@@ -727,6 +780,7 @@ func TestPatchResourceTimeout(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchResourceWithVersionConflict 验证未固定版本时在新值上重试并成功。
 func TestPatchResourceWithVersionConflict(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -755,6 +809,9 @@ func TestPatchResourceWithVersionConflict(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchResourceWithStaleVersionConflict 验证补丁显式固定了过期版本时立即冲突。
+//
+// 中文说明：固定 resourceVersion 表示"必须基于该版本"，重试无意义，应一次失败。
 func TestPatchResourceWithStaleVersionConflict(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -786,6 +843,9 @@ func TestPatchResourceWithStaleVersionConflict(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchResourceWithRacingVersionConflict 验证重试一次后仍冲突则返回错误。
+//
+// 中文说明：expectedTries=2 说明首次尝试用的是旧版本，重试时才发现版本再次变化。
 func TestPatchResourceWithRacingVersionConflict(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -822,6 +882,7 @@ func TestPatchResourceWithRacingVersionConflict(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchResourceWithConflict 验证无意义冲突时以最新值重新应用补丁。
 func TestPatchResourceWithConflict(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -854,6 +915,9 @@ func TestPatchResourceWithConflict(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestPatchWithAdmissionRejection 验证变更/校验准入的拒绝都能中止 patch。
+//
+// 中文说明：两者同时拒绝时，变更阶段的错误优先返回，因为它在流程上更早发生。
 func TestPatchWithAdmissionRejection(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -918,6 +982,10 @@ func TestPatchWithAdmissionRejection(t *testing.T) {
 	}
 }
 
+// TestPatchWithVersionConflictThenAdmissionFailure 验证重试后准入错误会取代冲突。
+//
+// 中文说明：seen 标志让首次准入通过、重试时失败，从而确认重试路径确实重新
+// 执行了准入，而不是直接复用首次结果。
 func TestPatchWithVersionConflictThenAdmissionFailure(t *testing.T) {
 	namespace := "bar"
 	name := "foo"
@@ -954,6 +1022,9 @@ func TestPatchWithVersionConflictThenAdmissionFailure(t *testing.T) {
 	tc.Run(t)
 }
 
+// TestHasUID 验证 hasUID 对 nil 接口、nil 指针与带 UID 对象的判断。
+//
+// 中文说明：typed-nil（runtime.Object(nil)）与真正 nil 的区分是 Go 接口常见陷阱。
 func TestHasUID(t *testing.T) {
 	testcases := []struct {
 		obj    runtime.Object
@@ -977,6 +1048,7 @@ func TestHasUID(t *testing.T) {
 	}
 }
 
+// setTcPod 按需填充测试 Pod 的字段；空字符串表示保持零值。
 func setTcPod(tcPod *example.Pod, name string, namespace string, uid types.UID, resourceVersion string, apiVersion string, activeDeadlineSeconds *int64, nodeName string) {
 	tcPod.Name = name
 	tcPod.Namespace = namespace
@@ -993,14 +1065,22 @@ func setTcPod(tcPod *example.Pod, name string, namespace string, uid types.UID, 
 	}
 }
 
+// Handles 让函数类型适配变更准入接口；测试中所有操作都应处理。
+//
+// 中文说明：mutateObjectUpdateFunc 定义在 update.go，这里只补接口方法。
 func (f mutateObjectUpdateFunc) Handles(operation admission.Operation) bool {
 	return true
 }
 
+// Admit 把准入属性解包为（新对象, 旧对象）后调用底层函数。
 func (f mutateObjectUpdateFunc) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	return f(ctx, a.GetObject(), a.GetOldObject())
 }
 
+// TestTransformDecodeErrorEnsuresBadRequestError 验证解码错误始终映射为 400。
+//
+// 中文说明：即使底层 typer 自身报错或对象类型未知，也不能把客户端错误
+// 暴露成 500，否则会触发错误的告警与重试。
 func TestTransformDecodeErrorEnsuresBadRequestError(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -1039,6 +1119,7 @@ func TestTransformDecodeErrorEnsuresBadRequestError(t *testing.T) {
 
 var _ runtime.ObjectTyper = alwaysErrorTyper{}
 
+// alwaysErrorTyper 让所有类型查询失败，用于覆盖错误分支。
 type alwaysErrorTyper struct{}
 
 func (alwaysErrorTyper) ObjectKinds(runtime.Object) ([]schema.GroupVersionKind, bool, error) {
@@ -1049,6 +1130,10 @@ func (alwaysErrorTyper) Recognizes(gvk schema.GroupVersionKind) bool {
 	return false
 }
 
+// TestUpdateToCreateOptions 用随机数据验证 UpdateOptions 到 CreateOptions 无损。
+//
+// 中文说明：转换必须逐字段对齐，新增字段若漏转会在创建路径静默丢失；
+// randfill 生成随机值可覆盖手写用例忽略的组合。
 func TestUpdateToCreateOptions(t *testing.T) {
 	f := randfill.New()
 	for i := 0; i < 100; i++ {
@@ -1078,6 +1163,10 @@ want: %#+v`, got, update)
 	}
 }
 
+// TestPatchToUpdateOptions 验证 PatchOptions 转换到 Update/CreateOptions 的无损性。
+//
+// 中文说明：Force 只存在于 PatchOptions，比较前需清零；TypeMeta 因目标类型
+// 不同也必须忽略。
 func TestPatchToUpdateOptions(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1135,6 +1224,10 @@ want: %#+v`, got, converted)
 	}
 }
 
+// TestDedupOwnerReferences 验证 ownerReference 去重语义。
+//
+// 中文说明：去重键包含 UID、名称与 APIVersion，但不能忽略 Controller/
+// BlockOwnerDeletion 的语义差异——nil 与 false 不等价，误判会改变级联删除行为。
 func TestDedupOwnerReferences(t *testing.T) {
 	falseA := false
 	falseB := false
@@ -1362,6 +1455,10 @@ func TestDedupOwnerReferences(t *testing.T) {
 	}
 }
 
+// TestParseYAMLWarnings 验证严格 YAML 解析的重复键告警能被正确提取。
+//
+// 中文说明：严格解析把重复键作为告警而非错误；提取时需保留行号，帮助用户
+// 定位配置中的重复字段。
 func TestParseYAMLWarnings(t *testing.T) {
 	yamlNoErrs := `---
 apiVersion: foo

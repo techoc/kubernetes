@@ -30,6 +30,8 @@ import (
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 )
 
+// TestLogResponseObjectWithPod 验证 RequestResponse 级别下响应对象会被完整序列化写入审计事件，
+// 且普通资源不会误填 ResponseStatus（那是 Status 类型专属字段）。
 func TestLogResponseObjectWithPod(t *testing.T) {
 	testPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -61,12 +63,14 @@ func TestLogResponseObjectWithPod(t *testing.T) {
 	ctx := WithAuditContext(context.Background())
 	ac := AuditContextFrom(ctx)
 
+	// capturingAuditSink 收集事件，便于在 ProcessEventStage 之后断言内容。
 	captureSink := &capturingAuditSink{}
 	if err := ac.Init(RequestAuditConfig{Level: auditinternal.LevelRequestResponse}, captureSink); err != nil {
 		t.Fatalf("Failed to initialize audit context: %v", err)
 	}
 
 	LogResponseObject(ctx, testPod, schema.GroupVersion{Group: "", Version: "v1"}, negotiatedSerializer)
+	// 审计事件在阶段推进时才真正下发到 sink，因此必须先调用 ProcessEventStage。
 	ac.ProcessEventStage(ctx, auditinternal.StageResponseComplete)
 
 	if len(captureSink.events) != 1 {
@@ -83,6 +87,7 @@ func TestLogResponseObjectWithPod(t *testing.T) {
 		t.Error("Expected ResponseObject.Raw to contain data, but it was empty")
 	}
 
+	// 响应必须是 JSON 且包含 Pod 的关键字段，证明序列化确实发生。
 	responseJSON := string(event.ResponseObject.Raw)
 	expectedFields := []string{"test-pod", "test-namespace", "test-container", "test-image"}
 	for _, field := range expectedFields {
@@ -96,6 +101,9 @@ func TestLogResponseObjectWithPod(t *testing.T) {
 	}
 }
 
+// TestLogResponseObjectWithStatus 验证 metav1.Status 的特殊处理：
+// 无论审计级别如何，Status 的关键字段都会写入 ResponseStatus；
+// 但只有 RequestResponse 级别才会额外序列化完整对象。
 func TestLogResponseObjectWithStatus(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -106,6 +114,7 @@ func TestLogResponseObjectWithStatus(t *testing.T) {
 		expectStatusFields bool
 	}{
 		{
+			// RequestResponse 是唯一会保存完整响应体的级别。
 			name:               "RequestResponse level should encode and log status fields",
 			level:              auditinternal.LevelRequestResponse,
 			status:             &metav1.Status{Status: "Success", Message: "Test message", Code: 200},
@@ -114,6 +123,8 @@ func TestLogResponseObjectWithStatus(t *testing.T) {
 			expectStatusFields: true,
 		},
 		{
+			// Metadata 级别仍记录错误状态，因为状态码与消息属于审计必需信息，
+			// 而不属于“响应体”这一敏感内容。
 			name:               "Metadata level should log status fields without encoding",
 			level:              auditinternal.LevelMetadata,
 			status:             &metav1.Status{Status: "Success", Message: "Test message", Code: 200},
@@ -179,6 +190,8 @@ func TestLogResponseObjectWithStatus(t *testing.T) {
 	}
 }
 
+// TestLogResponseObjectLevelCheck 用 mock serializer 精确断言“是否发生编码”：
+// 除 RequestResponse 外任何级别都不应触碰序列化器，避免无谓的 CPU 与敏感数据泄露。
 func TestLogResponseObjectLevelCheck(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -314,10 +327,13 @@ func TestLogResponseObjectLevelCheck(t *testing.T) {
 	}
 }
 
+// mockNegotiatedSerializer 只关心 EncoderForVersion 是否被调用，
+// 以此判断 LogResponseObject 是否真的尝试序列化响应体。
 type mockNegotiatedSerializer struct {
 	encodeCalled bool
 }
 
+// SupportedMediaTypes 返回一个 JSON 条目，满足序列化器的协商前置检查。
 func (m *mockNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInfo {
 	return []runtime.SerializerInfo{
 		{
@@ -330,6 +346,7 @@ func (m *mockNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInf
 	}
 }
 
+// EncoderForVersion 是编码入口，记录调用即代表“发生了一次序列化尝试”。
 func (m *mockNegotiatedSerializer) EncoderForVersion(serializer runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	m.encodeCalled = true
 	return &mockEncoder{}
@@ -339,20 +356,26 @@ func (m *mockNegotiatedSerializer) DecoderToVersion(serializer runtime.Decoder, 
 	return nil
 }
 
+// mockEncoder 丢弃所有输出；测试只关心是否调用，不关心内容。
 type mockEncoder struct{}
 
+// Encode 直接返回 nil。
 func (e *mockEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	return nil
 }
 
+// Identifier 返回固定的标识符，满足 runtime.Encoder 接口。
 func (e *mockEncoder) Identifier() runtime.Identifier {
 	return runtime.Identifier("mock")
 }
 
+// capturingAuditSink 把事件深拷贝后保存，模拟 backend 对事件的异步消费，
+// 避免后续阶段修改同一对象导致断言结果漂移。
 type capturingAuditSink struct {
 	events []*auditinternal.Event
 }
 
+// ProcessEvents 收集事件并返回 true，表示 sink 未阻塞。
 func (s *capturingAuditSink) ProcessEvents(events ...*auditinternal.Event) bool {
 	for _, event := range events {
 		eventCopy := event.DeepCopy()

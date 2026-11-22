@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTypes_ListType 验证 ListType 的标识、零值、元素类型以及到 CEL 类型的转换。
 func TestTypes_ListType(t *testing.T) {
 	list := NewListType(StringType, -1)
 	if !list.IsList() {
@@ -46,6 +47,7 @@ func TestTypes_ListType(t *testing.T) {
 	}
 }
 
+// TestTypes_MapType 验证 MapType 的标识、零值、键/值类型以及到 CEL 类型的转换。
 func TestTypes_MapType(t *testing.T) {
 	mp := NewMapType(StringType, IntType, -1)
 	if !mp.IsMap() {
@@ -72,6 +74,7 @@ func TestTypes_MapType(t *testing.T) {
 	}
 }
 
+// testValue 构造一个带指定 struct id 的 DynValue，构造失败即终止测试。
 func testValue(t *testing.T, id int64, val interface{}) *DynValue {
 	t.Helper()
 	dv, err := NewDynValue(id, val)
@@ -81,6 +84,8 @@ func testValue(t *testing.T, id int64, val interface{}) *DynValue {
 	return dv
 }
 
+// TestDeclTypeProvider_FindStructType 验证 DeclTypeProvider 能基于声明类型
+// 找到对象类型，并与底层 TypeProvider 组合后仍保持类型信息。
 func TestDeclTypeProvider_FindStructType(t *testing.T) {
 	obj := NewObjectType("foo", map[string]*DeclField{
 		"bar": NewDeclField("bar", StringType, true, nil, nil),

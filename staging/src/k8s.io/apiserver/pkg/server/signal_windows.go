@@ -20,4 +20,6 @@ import (
 	"os"
 )
 
+// Windows 不支持 SIGTERM，优雅停机的触发信号只有 os.Interrupt；
+// 另见 signal_posix.go 中的 Unix 实现（含 SIGTERM）。
 var shutdownSignals = []os.Signal{os.Interrupt}

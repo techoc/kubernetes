@@ -23,6 +23,10 @@ import (
 	"testing"
 )
 
+// TestWithMuxAndDiscoveryCompleteProtection 验证启动完成信号如何映射到请求上下文。
+//
+// 中文说明：信号未关闭时必须在上下文打标记，供后续 handler 以 503 拒绝请求；
+// 信号已关闭或为 nil 时不得打标记，否则正常请求会被误拒。
 func TestWithMuxAndDiscoveryCompleteProtection(t *testing.T) {
 	scenarios := []struct {
 		name                             string
@@ -47,6 +51,7 @@ func TestWithMuxAndDiscoveryCompleteProtection(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			// setup
+			// 通过捕获 delegate 看到的上下文来观察过滤器行为，无需模拟完整请求链。
 			var actualContext context.Context
 			delegate := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				actualContext = req.Context()
@@ -54,6 +59,7 @@ func TestWithMuxAndDiscoveryCompleteProtection(t *testing.T) {
 			target := WithMuxAndDiscoveryComplete(delegate, scenario.muxAndDiscoveryCompleteSignal)
 
 			// act
+			// 使用零值 Request 即可：过滤器只关心 Context，不读取 URL 或 Body。
 			req := &http.Request{}
 			target.ServeHTTP(httptest.NewRecorder(), req)
 

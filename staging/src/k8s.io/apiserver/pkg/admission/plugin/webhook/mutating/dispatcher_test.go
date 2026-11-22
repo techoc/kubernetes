@@ -25,6 +25,8 @@ import (
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 )
 
+// TestMutationAnnotationValue 验证记录“webhook 是否真的改动了对象”的注解值序列化格式；
+// 该注解用于审计和 reinvocation 判定，格式必须稳定。
 func TestMutationAnnotationValue(t *testing.T) {
 	tcs := []struct {
 		config   string
@@ -55,6 +57,8 @@ func TestMutationAnnotationValue(t *testing.T) {
 	}
 }
 
+// TestJSONPatchAnnotationValue 验证 JSONPatch 注解的序列化与回读一致性，
+// 覆盖空配置名、空 webhook 名、空操作以及空补丁切片等边界。
 func TestJSONPatchAnnotationValue(t *testing.T) {
 	tcs := []struct {
 		name     string

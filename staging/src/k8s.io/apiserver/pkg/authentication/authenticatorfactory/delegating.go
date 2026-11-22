@@ -39,6 +39,8 @@ import (
 
 // DelegatingAuthenticatorConfig is the minimal configuration needed to create an authenticator
 // built to delegate authentication to a kube API server
+// DelegatingAuthenticatorConfig 汇总可选的认证方式；New 按固定优先级把它们
+// 组合成单一 authenticator.Request。
 type DelegatingAuthenticatorConfig struct {
 	Anonymous *apiserver.AnonymousAuthConfig
 
@@ -66,12 +68,17 @@ type DelegatingAuthenticatorConfig struct {
 	RequestHeaderConfig *RequestHeaderConfig
 }
 
+// New 按“front-proxy -> 客户端证书 -> bearer token”的顺序组装认证链，
+// 并返回供 OpenAPI 描述的 securityDefinitions。任一步骤配置错误都会整体失败，
+// 避免部分认证方式静默缺席。
 func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.SecurityDefinitions, error) {
 	authenticators := []authenticator.Request{}
 	securityDefinitions := spec.SecurityDefinitions{}
 
 	// front-proxy first, then remote
 	// Add the front proxy authenticator if requested
+	// 请求头认证必须放在最前：front-proxy 已在 TLS 层验证过客户端，后续认证器
+	// 不应再覆盖其身份判断。
 	if c.RequestHeaderConfig != nil {
 		requestHeaderAuthenticator := headerrequest.NewDynamicVerifyOptionsSecure(
 			c.RequestHeaderConfig.CAContentProvider.VerifyOptions,
@@ -91,6 +98,8 @@ func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.Secur
 
 	if c.TokenAccessReviewClient != nil {
 		RegisterMetrics()
+		// 未配置重试退避时直接报错，而不是使用隐式默认，防止生产环境
+		// 在 webhook 故障时产生不可控重试风暴。
 		if c.WebhookRetryBackoff == nil {
 			return nil, nil, errors.New("retry backoff parameters for delegating authentication webhook has not been specified")
 		}
@@ -101,7 +110,10 @@ func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.Secur
 		if err != nil {
 			return nil, nil, err
 		}
+		// 正向与负向结果同 TTL 缓存，限制对 TokenReview webhook 的调用频率。
 		cachingTokenAuth := cache.New(tokenAuth, false, c.CacheTTL, c.CacheTTL)
+		// Bearer 头与 WebSocket 子协议中的 token 共用同一认证器；后者服务于
+		// kubectl exec 等基于 WebSocket 的场景。
 		authenticators = append(authenticators, bearertoken.New(cachingTokenAuth), websocket.NewProtocolAuthenticator(cachingTokenAuth))
 
 		securityDefinitions["BearerToken"] = &spec.SecurityScheme{
@@ -114,6 +126,7 @@ func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.Secur
 		}
 	}
 
+	// 没有任何显式认证器时才允许纯匿名；否则匿名只能作为兜底追加。
 	if len(authenticators) == 0 {
 		if c.Anonymous != nil && c.Anonymous.Enabled {
 			return anonymous.NewAuthenticator(c.Anonymous.Conditions), &securityDefinitions, nil
@@ -121,8 +134,11 @@ func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.Secur
 		return nil, nil, errors.New("no authentication method configured")
 	}
 
+	// 为认证成功的用户补上 system:authenticated 组，这是 RBAC 等授权策略的
+	// 基础假设。
 	authenticator := group.NewAuthenticatedGroupAdder(unionauth.New(authenticators...))
 	if c.Anonymous != nil && c.Anonymous.Enabled {
+		// FailOnError 保证前面认证器的后端错误不会被匿名认证“兜底”成匿名用户。
 		authenticator = unionauth.NewFailOnError(authenticator, anonymous.NewAuthenticator(c.Anonymous.Conditions))
 	}
 	return authenticator, &securityDefinitions, nil

@@ -37,15 +37,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// 编译期断言：MatchCondition 必须实现 CEL 表达式访问器接口。
 var _ celplugin.ExpressionAccessor = &MatchCondition{}
 
 // MatchCondition contains the inputs needed to compile, evaluate and match a cel expression
+//
+// MatchCondition 是 v1.MatchCondition 的类型别名式包装（定义新类型而非 alias），
+// 目的是为其附加 ExpressionAccessor 方法，同时不污染 API 类型。
 type MatchCondition v1.MatchCondition
 
+// GetExpression 返回用于求值的 CEL 源表达式。
 func (v *MatchCondition) GetExpression() string {
 	return v.Expression
 }
 
+// ReturnTypes 声明匹配条件必须返回 bool；编译期据此拒绝返回非布尔值的表达式。
 func (v *MatchCondition) ReturnTypes() []*cel.Type {
 	return []*cel.Type{cel.BoolType}
 }
@@ -53,6 +59,9 @@ func (v *MatchCondition) ReturnTypes() []*cel.Type {
 var _ Matcher = &matcher{}
 
 // matcher evaluates compiled cel expressions and determines if they match the given request or not
+//
+// failPolicy 决定表达式求值出错（而非返回 false）时的行为：Fail 拒绝请求，
+// Ignore 视为不匹配并跳过 webhook 调用。
 type matcher struct {
 	filter      celplugin.ConditionEvaluator
 	failPolicy  v1.FailurePolicyType
@@ -61,6 +70,8 @@ type matcher struct {
 	objectName  string
 }
 
+// NewMatcher 构造匹配器。failPolicy 为 nil 时默认 Fail，
+// 这是 API 中 failurePolicy 的默认值，保证未显式配置时行为保守。
 func NewMatcher(filter celplugin.ConditionEvaluator, failPolicy *v1.FailurePolicyType, matcherKind, matcherType, objectName string) Matcher {
 	var f v1.FailurePolicyType
 	if failPolicy == nil {
@@ -77,8 +88,11 @@ func NewMatcher(filter celplugin.ConditionEvaluator, failPolicy *v1.FailurePolic
 	}
 }
 
+// Match 依次求值所有 matchConditions，只有全部为 true 才返回 Matches=true。
+// 任一条件为 false 时立即短路返回，不再继续求值，也不调用 webhook。
 func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, authz authorizer.UnconditionalAuthorizer) MatchResult {
 	t := time.Now()
+	// 一次性求值整组条件；预算使用 matchConditions 专用额度，防止单请求开销失控。
 	evalResults, _, err := m.filter.ForInput(ctx, versionedAttr, celplugin.CreateAdmissionRequest(versionedAttr.Attributes, metav1.GroupVersionResource(versionedAttr.GetResource()), metav1.GroupVersionKind(versionedAttr.VersionedKind)), celplugin.OptionalVariableBindings{
 		VersionedParams: versionedParams,
 		Authorizer:      authz,
@@ -87,6 +101,7 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 	if err != nil {
 		admissionmetrics.Metrics.ObserveMatchConditionEvaluationTime(ctx, time.Since(t), m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
 		// filter returning error is unexpected and not an evaluation error so not incrementing metric here
+		// 框架级错误（非表达式求值错误）同样遵循 failurePolicy，保持与求值错误一致的外部行为。
 		if m.failPolicy == v1.Fail {
 			return MatchResult{
 				Error: err,
@@ -109,12 +124,14 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 			continue
 		}
 		if evalResult.Error != nil {
+			// 记录错误但继续检查其余条件：false 结果优先于错误，可避免不必要的 webhook 调用。
 			errorList = append(errorList, evalResult.Error)
 			admissionmetrics.Metrics.ObserveMatchConditionEvalError(ctx, m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
 		}
 		if evalResult.EvalResult == celtypes.False {
 			admissionmetrics.Metrics.ObserveMatchConditionEvaluationTime(ctx, time.Since(t), m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
 			// If any condition false, skip calling webhook always
+			// 报告首个不满足的条件名，便于用户定位问题。
 			return MatchResult{
 				Matches:             false,
 				FailedConditionName: matchCondition.Name,
@@ -138,6 +155,7 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 		}
 	}
 	// if no results eval to false, return matches true with list of any errors encountered
+	// 空条件列表也视为匹配，语义与“无 matchConditions”一致。
 	return MatchResult{
 		Matches: true,
 	}

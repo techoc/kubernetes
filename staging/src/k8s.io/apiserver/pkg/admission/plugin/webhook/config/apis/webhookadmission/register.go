@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// SchemeBuilder 收集本包的类型注册函数，供 install 包聚合到全局 scheme；
+// AddToScheme 把本包已知类型注册到给定 scheme。
 var (
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
@@ -30,6 +32,7 @@ var (
 const GroupName = "apiserver.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 使用内部版本，实际对外版本由 v1 子包提供。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -46,6 +49,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&WebhookAdmission{},
 	)
+	// 配置文件中的 kind 是 WebhookAdmissionConfiguration，而内部类型名为 WebhookAdmission，
+	// 因此额外注册别名，避免解码时找不到类型。
 	scheme.AddKnownTypeWithName(SchemeGroupVersion.WithKind("WebhookAdmissionConfiguration"),
 		&WebhookAdmission{},
 	)

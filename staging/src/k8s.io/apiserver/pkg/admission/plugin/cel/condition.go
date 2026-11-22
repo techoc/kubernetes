@@ -29,18 +29,24 @@ import (
 )
 
 // conditionCompiler implement the interface ConditionCompiler.
+// 它把编译职责与求值职责分离：编译在策略加载/重载时进行，求值在每次准入请求时进行。
 type conditionCompiler struct {
 	compiler Compiler
 }
 
+// NewConditionCompiler 基于给定的 CEL 环境集合创建条件编译器。
+// 复用同一个 Compiler 实例可以共享环境缓存，避免每条策略重复构建类型检查器。
 func NewConditionCompiler(env *environment.EnvSet) ConditionCompiler {
 	return &conditionCompiler{compiler: NewCompiler(env)}
 }
 
 // CompileCondition compiles the cel expressions defined in the ExpressionAccessors into a ConditionEvaluator
+// 编译结果按输入顺序保存在切片中，求值时依靠同样的下标对应回原始表达式。
+// 单个表达式编译失败不会中断其余表达式的编译，错误统一在 CompilationErrors 中汇总上报。
 func (c *conditionCompiler) CompileCondition(expressionAccessors []ExpressionAccessor, options OptionalVariableDeclarations, mode environment.Type) ConditionEvaluator {
 	compilationResults := make([]CompilationResult, len(expressionAccessors))
 	for i, expressionAccessor := range expressionAccessors {
+		// nil 访问器代表该位置没有条件，保留零值结果，避免下标错位。
 		if expressionAccessor == nil {
 			continue
 		}
@@ -50,10 +56,12 @@ func (c *conditionCompiler) CompileCondition(expressionAccessors []ExpressionAcc
 }
 
 // condition implements the ConditionEvaluator interface
+// 它是编译结果的无状态容器，因此可被多个请求并发复用。
 type condition struct {
 	compilationResults []CompilationResult
 }
 
+// NewCondition 用已编译的表达式结果构造条件求值器。
 func NewCondition(compilationResults []CompilationResult) ConditionEvaluator {
 	return &condition{
 		compilationResults,
@@ -63,6 +71,8 @@ func NewCondition(compilationResults []CompilationResult) ConditionEvaluator {
 // ForInput evaluates the compiled CEL expressions converting them into CELEvaluations
 // errors per evaluation are returned on the Evaluation object
 // runtimeCELCostBudget was added for testing purpose only. Callers should always use const RuntimeCELCostBudget from k8s.io/apiserver/pkg/apis/cel/config.go as input.
+// 预算在多个表达式之间顺序递减，任一表达式耗尽预算都会返回错误，
+// 从而限制单次准入请求中 CEL 计算的总开销，防止策略被用来拖垮 apiserver。
 func (c *condition) ForInput(ctx context.Context, versionedAttr *admission.VersionedAttributes, request *admissionv1.AdmissionRequest, inputs OptionalVariableBindings, namespace *v1.Namespace, runtimeCELCostBudget int64) ([]EvaluationResult, int64, error) {
 	// TODO: replace unstructured with ref.Val for CEL variables when native type support is available
 	evaluations := make([]EvaluationResult, len(c.compilationResults))
@@ -73,8 +83,10 @@ func (c *condition) ForInput(ctx context.Context, versionedAttr *admission.Versi
 	var err error
 
 	// if this activation supports composition, we will need the compositionCtx. It may be nil.
+	// 类型断言失败时 compositionCtx 为 nil，此时退化为普通的单策略求值路径。
 	compositionCtx, _ := ctx.(CompositionContext)
 
+	// 每次求值都新建 activation：它持有本次请求的变量绑定，不能跨请求共享。
 	activation, err := newActivation(compositionCtx, versionedAttr, request, inputs, namespace, useSchemalessTypeRef())
 	if err != nil {
 		return nil, -1, err
@@ -82,6 +94,7 @@ func (c *condition) ForInput(ctx context.Context, versionedAttr *admission.Versi
 
 	remainingBudget := runtimeCELCostBudget
 	for i, compilationResult := range c.compilationResults {
+		// 注意这里把剩余预算透传给下一个表达式，实现全局预算而非每表达式独立预算。
 		evaluations[i], remainingBudget, err = activation.Evaluate(ctx, compositionCtx, compilationResult, remainingBudget)
 		if err != nil {
 			return nil, -1, err
@@ -92,6 +105,10 @@ func (c *condition) ForInput(ctx context.Context, versionedAttr *admission.Versi
 }
 
 // TODO: to reuse https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apiserver/pkg/admission/plugin/webhook/request/admissionreview.go#L154
+// CreateAdmissionRequest 依据准入属性构造 CEL 表达式可见的 AdmissionRequest。
+// 关键点：Kind/Resource 使用匹配器判定等价的 GVK/GVR，而 RequestKind/RequestResource
+// 保留原始请求值。这样策略对同一资源的别名（如不同版本）只写一份即可，
+// 同时仍能通过 request* 字段观察到调用方真正请求的版本。
 func CreateAdmissionRequest(attr admission.Attributes, equivalentGVR metav1.GroupVersionResource, equivalentKind metav1.GroupVersionKind) *admissionv1.AdmissionRequest {
 	// Attempting to use same logic as webhook for constructing resource
 	// GVK, GVR, subresource
@@ -105,6 +122,8 @@ func CreateAdmissionRequest(attr admission.Attributes, equivalentGVR metav1.Grou
 	requestGVR := attr.GetResource()
 	requestSubResource := attr.GetSubresource()
 
+	// 将认证层的 UserInfo 转成 API 类型；Extra 需要逐键深拷贝，
+	// 避免表达式或后续代码修改到认证缓存中共享的 map。
 	aUserInfo := attr.GetUserInfo()
 	var userInfo authenticationv1.UserInfo
 	if aUserInfo != nil {
@@ -150,6 +169,8 @@ func CreateAdmissionRequest(attr admission.Attributes, equivalentGVR metav1.Grou
 		Operation:          admissionv1.Operation(attr.GetOperation()),
 		UserInfo:           userInfo,
 		// Leave Object and OldObject unset since we don't provide access to them via request
+		// 策略表达式通过 object/oldObject 变量直接访问对象，request 变量刻意不暴露它们，
+		// 以避免同一数据出现两条访问路径、造成语义分叉。
 		DryRun: &dryRun,
 		Options: runtime.RawExtension{
 			Object: attr.GetOperationOptions(),
@@ -159,6 +180,8 @@ func CreateAdmissionRequest(attr admission.Attributes, equivalentGVR metav1.Grou
 
 // CreateNamespaceObject creates a Namespace object that is suitable for the CEL evaluation.
 // If the namespace is nil, CreateNamespaceObject returns nil
+// 只复制 CEL 表达式可能用到的字段，属于显式的浅拷贝白名单：
+// 新增需要暴露的字段时必须同步修改这里，否则表达式将看不到它。
 func CreateNamespaceObject(namespace *v1.Namespace) *v1.Namespace {
 	if namespace == nil {
 		return nil
@@ -185,6 +208,7 @@ func CreateNamespaceObject(namespace *v1.Namespace) *v1.Namespace {
 }
 
 // CompilationErrors returns a list of all the errors from the compilation of the mutatingEvaluator
+// 与 ForInput 不同，这里不涉及运行时错误；仅用于策略加载阶段判断表达式是否可用。
 func (c *condition) CompilationErrors() []error {
 	compilationErrors := []error{}
 	for _, result := range c.compilationResults {

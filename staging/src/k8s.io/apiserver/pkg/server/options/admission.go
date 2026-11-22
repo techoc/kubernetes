@@ -48,6 +48,8 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+// configScheme 是可解码准入配置文件（AdmissionConfiguration）的 scheme。
+// 在 init 中注册内置与 v1/v1alpha1 版本，保证配置文件可以带版本前缀。
 var configScheme = runtime.NewScheme()
 
 func init() {
@@ -57,8 +59,14 @@ func init() {
 }
 
 // AdmissionOptions holds the admission options
+//
+// AdmissionOptions 汇总准入链的注册表、推荐顺序、默认关闭集合以及
+// 命令行/配置文件输入，供 ApplyTo 构建最终的准入链。
 type AdmissionOptions struct {
 	// RecommendedPluginOrder holds an ordered list of plugin names we recommend to use by default
+	//
+	// 推荐顺序是所有插件都必须出现且仅出现一次的权威顺序；实际执行
+	// 顺序始终以此为准，与 --enable/--disable 标志中的书写顺序无关。
 	RecommendedPluginOrder []string
 	// DefaultOffPlugins is a set of plugin names that is disabled by default
 	DefaultOffPlugins sets.Set[string]
@@ -84,6 +92,10 @@ type AdmissionOptions struct {
 //	Provides the list of RecommendedPluginOrder that holds sane values
 //	that can be used by servers that don't care about admission chain.
 //	Servers that do care can overwrite/append that field after creation.
+//
+// NewAdmissionOptions 构造默认选项：注册全部通用插件，并带上一层
+// admissionmetrics 装饰器。默认顺序把所有变更型插件放在校验型之前，
+// 因为 apiserver 总是先完成全部变更再执行校验。
 func NewAdmissionOptions() *AdmissionOptions {
 	options := &AdmissionOptions{
 		Plugins:    admission.NewPlugins(),
@@ -100,6 +112,9 @@ func NewAdmissionOptions() *AdmissionOptions {
 }
 
 // AddFlags adds flags related to admission for a specific APIServer to the specified FlagSet
+//
+// AddFlags 把启用/禁用插件与配置文件路径暴露为命令行参数。帮助文本中
+// 动态列出默认启用插件与全部已注册插件，避免文档与代码漂移。
 func (a *AdmissionOptions) AddFlags(fs *pflag.FlagSet) {
 	if a == nil {
 		return
@@ -125,6 +140,11 @@ func (a *AdmissionOptions) AddFlags(fs *pflag.FlagSet) {
 // note this method uses:
 //
 //	genericconfig.Authorizer
+//
+// ApplyTo 解析配置文件、构建初始化器链并创建准入链，最后写入
+// c.AdmissionControl。准入插件依赖 core API 的 informer、kubeClient 与
+// dynamicClient，因此这里显式校验非 nil，否则延迟到运行时才失败会
+// 非常难排查。
 func (a *AdmissionOptions) ApplyTo(
 	c *server.Config,
 	informers informers.SharedInformerFactory,
@@ -153,6 +173,8 @@ func (a *AdmissionOptions) ApplyTo(
 		return fmt.Errorf("failed to read plugin config: %v", err)
 	}
 
+	// RESTMapper 使用内存缓存发现结果，并由 post-start hook 周期刷新：
+	// CRD 可能在 apiserver 启动后才注册，静态映射会缺少这些资源。
 	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
 	discoveryRESTMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
 	genericInitializer := initializer.New(kubeClient, dynamicClient, informers, c.Authorization.Authorizer, features,
@@ -160,6 +182,8 @@ func (a *AdmissionOptions) ApplyTo(
 	initializersChain := admission.PluginInitializers{initializer.NewAPIServerIDInitializer(c.APIServerID), genericInitializer}
 	initializersChain = append(initializersChain, pluginInitializers...)
 
+	// 启动后定期刷新发现缓存，使策略中的参数与匹配规则跟随集群
+	// API 的增删而变化。
 	admissionPostStartHook := func(hookContext server.PostStartHookContext) error {
 		discoveryRESTMapper.Reset()
 		go utilwait.Until(discoveryRESTMapper.Reset, 30*time.Second, hookContext.Done())
@@ -176,11 +200,16 @@ func (a *AdmissionOptions) ApplyTo(
 		return err
 	}
 
+	// 在链外层再加步骤级指标，覆盖每个插件的耗时，而不仅是单个 webhook。
 	c.AdmissionControl = admissionmetrics.WithStepMetrics(admissionChain)
 	return nil
 }
 
 // Validate verifies flags passed to AdmissionOptions.
+//
+// Validate 检查启用/禁用列表中的插件名均已注册、两者无交集，并校验
+// 推荐顺序与实际注册集合完全一致（后者属于开发者错误，正常部署不会
+// 触发）。
 func (a *AdmissionOptions) Validate() []error {
 	if a == nil {
 		return nil
@@ -228,6 +257,9 @@ func (a *AdmissionOptions) Validate() []error {
 // enabledPluginNames makes use of RecommendedPluginOrder, DefaultOffPlugins,
 // EnablePlugins, DisablePlugins fields
 // to prepare a list of ordered plugin names that are enabled.
+//
+// enabledPluginNames 的计算规则：默认关闭集合与 --disable 取并集，再
+// 减去 --enable，即显式启用优先于默认关闭；最终顺序严格取自推荐顺序。
 func (a *AdmissionOptions) enabledPluginNames() []string {
 	allOffPlugins := append(sets.List[string](a.DefaultOffPlugins), a.DisablePlugins...)
 	disabledPlugins := sets.NewString(allOffPlugins...)
@@ -245,6 +277,9 @@ func (a *AdmissionOptions) enabledPluginNames() []string {
 }
 
 // Return names of plugins which are enabled by default
+//
+// defaultEnabledPluginNames 返回推荐顺序中未被默认关闭的插件，仅用于
+// 生成帮助文本。
 func (a *AdmissionOptions) defaultEnabledPluginNames() []string {
 	defaultOnPluginNames := []string{}
 	for _, pluginName := range a.RecommendedPluginOrder {

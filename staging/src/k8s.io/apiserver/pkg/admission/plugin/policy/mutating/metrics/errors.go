@@ -24,15 +24,18 @@ import (
 
 // ErrorType decodes the error to determine the error type
 // that the metrics understand.
+// 只暴露有限的枚举值，避免错误字符串进入指标标签造成基数爆炸。
 func ErrorType(err error) MutationErrorType {
 	if err == nil {
 		return MutationNoError
 	}
+	// 用 errors.Is 而非类型断言，以便包装后的错误仍能被正确归类。
 	if errors.Is(err, apiservercel.ErrCompilation) {
 		return MutationCompileError
 	}
 	if errors.Is(err, apiservercel.ErrOutOfBudget) {
 		return MutatingOutOfBudget
 	}
+	// 其余一律归为 invalid：拒绝请求但不泄露内部细节。
 	return MutatingInvalidError
 }

@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Package envelope transforms values for storage at rest using a Envelope provider
+// envelope 实现 KEK/DEK 信封加密：KMS 保管 KEK，每次写入生成随机 DEK，
+// 用 KEK 加密 DEK 后与密文拼接存储；读取时先解出 DEK 再解密数据。DEK
+// 以密文形式作为缓存键，避免把明文密钥长期留在进程内存。
 package envelope
 
 import (
@@ -34,11 +37,15 @@ import (
 )
 
 func init() {
+	// 数据变换层与信封加密层各自注册指标；init 保证即使未显式初始化，
+	// 指标也已存在，避免运行期重复注册 panic。
 	value.RegisterMetrics()
 	metrics.RegisterMetrics()
 }
 
 // Service allows encrypting and decrypting data using an external Key Management Service.
+// Service 是 KMS 的最小接口：只做 KEK 加解密，DEK 的生成与数据加解密由
+// transformer 负责。错误信息需保留原始状态码供指标分类，调用方不应包装。
 type Service interface {
 	// Decrypt a given bytearray to obtain the original data as bytes.
 	Decrypt(data []byte) ([]byte, error)
@@ -46,10 +53,13 @@ type Service interface {
 	Encrypt(data []byte) ([]byte, error)
 }
 
+// envelopeTransformer 实现 value.Transformer：密文布局为
+// [uint16 长度][加密后的 DEK][AES-GCM 密文]。
 type envelopeTransformer struct {
 	envelopeService Service
 
 	// transformers is a thread-safe LRU cache which caches decrypted DEKs indexed by their encrypted form.
+	// 键是加密后的 DEK，因此无需担心缓存键泄露明文密钥。
 	transformers *lru.Cache
 
 	// baseTransformerFunc creates a new transformer for encrypting the data with the DEK.
@@ -63,6 +73,7 @@ type envelopeTransformer struct {
 // It uses envelopeService to encrypt and decrypt DEKs. Respective DEKs (in encrypted form) are prepended to
 // the data items they encrypt. A cache (of size cacheSize) is maintained to store the most recently
 // used decrypted DEKs in memory.
+// cacheSize<=0 时禁用缓存，每次读取都要调用 KMS 解密 DEK（可用但延迟高）。
 func NewEnvelopeTransformer(envelopeService Service, cacheSize int, baseTransformerFunc func(cipher.Block) (value.Transformer, error)) value.Transformer {
 	var (
 		cache *lru.Cache
@@ -81,6 +92,8 @@ func NewEnvelopeTransformer(envelopeService Service, cacheSize int, baseTransfor
 }
 
 // TransformFromStorage decrypts data encrypted by this transformer using envelope encryption.
+// 先解析长度前缀得到加密 DEK，再查缓存或请求 KMS，最后用 DEK 解数据；
+// 任何一步失败都返回 false 表示“未成功解密”，由上层决定是否回退。
 func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
 	metrics.RecordArrival(metrics.FromStorageLabel, time.Now())
 
@@ -93,6 +106,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 		return nil, false, fmt.Errorf("invalid data encountered by envelope transformer: failed to read uint16 length prefixed data")
 	}
 
+	// 长度前缀之后的全部字节即 DEK 加密的数据密文。
 	encData := []byte(s)
 
 	// Look up the decrypted DEK from cache or Envelope.
@@ -119,6 +133,8 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 }
 
 // TransformToStorage encrypts data to be written to disk using envelope encryption.
+// 每次写入使用全新的随机 DEK，因此相同明文得到不同密文（避免等值泄露），
+// 也无需维护 nonce 计数器跨重启的状态。
 func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, error) {
 	metrics.RecordArrival(metrics.ToStorageLabel, time.Now())
 	newKey, err := generateKey(32)
@@ -144,6 +160,7 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 		return nil, err
 	}
 	// Append the length of the encrypted DEK as the first 2 bytes.
+	// 布局与 TransformFromStorage 的解析逻辑严格对应，改动需两边同步。
 	b := cryptobyte.NewBuilder(nil)
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddBytes([]byte(encKey))
@@ -153,6 +170,7 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 	return b.Bytes()
 }
 
+// 编译期断言：信封转换器必须满足 value.Transformer。
 var _ value.Transformer = &envelopeTransformer{}
 
 // addTransformer inserts a new transformer to the Envelope cache of DEKs for future reads.
@@ -168,6 +186,7 @@ func (t *envelopeTransformer) addTransformer(encKey []byte, key []byte) (value.T
 
 	// Use base64 of encKey as the key into the cache because hashicorp/golang-lru
 	// cannot hash []uint8.
+	// 缓存填充率用于观察缓存是否过小导致频繁回源 KMS。
 	if t.cacheEnabled {
 		t.transformers.Add(base64.StdEncoding.EncodeToString(encKey), transformer)
 		metrics.RecordDekCacheFillPercent(float64(t.transformers.Len()) / float64(t.cacheSize))
@@ -176,6 +195,7 @@ func (t *envelopeTransformer) addTransformer(encKey []byte, key []byte) (value.T
 }
 
 // getTransformer fetches the transformer corresponding to encKey from cache, if it exists.
+// 未启用缓存直接返回 nil，让调用方走 KMS 解密路径。
 func (t *envelopeTransformer) getTransformer(encKey []byte) value.Transformer {
 	if !t.cacheEnabled {
 		return nil
@@ -189,6 +209,7 @@ func (t *envelopeTransformer) getTransformer(encKey []byte) value.Transformer {
 }
 
 // generateKey generates a random key using system randomness.
+// 使用 crypto/rand 而非伪随机数：DEK 的不可预测性是信封加密安全性的基础。
 func generateKey(length int) (key []byte, err error) {
 	defer func(start time.Time) {
 		value.RecordDataKeyGeneration(start, err)

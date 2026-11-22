@@ -22,6 +22,9 @@ import (
 	resourcequotaapi "k8s.io/apiserver/pkg/admission/plugin/resourcequota/apis/resourcequota"
 )
 
+// TestValidateConfiguration 验证配额准入配置的校验：
+// 合法配置（资源 + MatchContains）通过；缺少 Resource 的配置必须报错，
+// 否则该受限规则将无法关联到任何 API 资源而静默失效。
 func TestValidateConfiguration(t *testing.T) {
 	successCases := []resourcequotaapi.Configuration{{
 		LimitedResources: []resourcequotaapi.LimitedResource{{

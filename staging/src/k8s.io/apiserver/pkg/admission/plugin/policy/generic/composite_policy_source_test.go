@@ -22,6 +22,7 @@ import (
 )
 
 // testHook is a minimal Hook implementation for testing.
+// 仅保留 name 字段，测试只需断言顺序与缓存复用，不关心钩子内容。
 type testHook struct {
 	name string
 }
@@ -32,20 +33,25 @@ type mockPolicySource struct {
 	hasSynced bool
 }
 
+// Hooks 返回当前钩子列表。
 func (m *mockPolicySource) Hooks() []testHook {
 	return m.hooks
 }
 
+// Run 无需启动任何后台逻辑。
 func (m *mockPolicySource) Run(_ context.Context) error {
 	return nil
 }
 
+// HasSynced 返回预设的同步状态。
 func (m *mockPolicySource) HasSynced() bool {
 	return m.hasSynced
 }
 
 var _ Source[testHook] = &mockPolicySource{}
 
+// TestCompositePolicySource_Hooks 验证组合源的合并顺序：静态源在前、API 源在后，
+// 并覆盖任一侧为空或为 nil 的情形。
 func TestCompositePolicySource_Hooks(t *testing.T) {
 	staticHook := testHook{name: "static-1"}
 	apiHook := testHook{name: "api-1"}
@@ -107,6 +113,8 @@ func TestCompositePolicySource_Hooks(t *testing.T) {
 	}
 }
 
+// TestCompositePolicySource_Caching 验证组合源在底层切片未变时复用缓存的
+// 合并结果，避免每个请求都重新分配切片；底层变化后必须产生新切片。
 func TestCompositePolicySource_Caching(t *testing.T) {
 	staticSource := &mockPolicySource{hooks: []testHook{{name: "static-1"}}, hasSynced: true}
 	apiSource := &mockPolicySource{hooks: []testHook{{name: "api-1"}}, hasSynced: true}
@@ -120,6 +128,7 @@ func TestCompositePolicySource_Caching(t *testing.T) {
 	}
 
 	// Second call with same underlying slices should return the cached combined slice.
+	// 通过比较首元素地址判断是否命中缓存（同一底层数组）。
 	hooks2 := source.Hooks()
 	if &hooks1[0] != &hooks2[0] {
 		t.Error("Expected cached slice to be returned when underlying slices haven't changed")
@@ -136,6 +145,8 @@ func TestCompositePolicySource_Caching(t *testing.T) {
 	}
 }
 
+// TestCompositePolicySource_HasSynced 验证组合源的同步状态是两侧的逻辑与：
+// 任何一侧未同步都必须报告 false，否则会基于不完整数据做准入决策。
 func TestCompositePolicySource_HasSynced(t *testing.T) {
 	tests := []struct {
 		name         string

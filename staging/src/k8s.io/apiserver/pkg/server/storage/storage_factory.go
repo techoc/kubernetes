@@ -55,6 +55,8 @@ type StorageFactory interface {
 	// Backends gets all backends for all registered storage destinations.
 	// Used for getting all instances for health validations.
 	// Deprecated: Use Configs instead
+	//
+	// 已弃用：请改用 Configs，再按需自行构造健康检查所需的连接信息。
 	Backends() []Backend
 }
 
@@ -67,8 +69,10 @@ type DefaultStorageFactory struct {
 	// Its authentication information will be used for every storage.Interface returned.
 	StorageConfig storagebackend.Config
 
+	// Overrides 按 GroupResource 保存差异化存储配置；键可以是具体资源，也可以是 "*" 组别名。
 	Overrides map[schema.GroupResource]groupResourceOverrides
 
+	// DefaultResourcePrefixes 为历史资源保留固定的 etcd 目录名，避免升级后数据"搬家"。
 	DefaultResourcePrefixes map[schema.GroupResource]string
 
 	// DefaultMediaType is the media type used to store resources. If it is not set, "application/json" is used.
@@ -89,6 +93,7 @@ type DefaultStorageFactory struct {
 	newStorageCodecFn func(opts StorageCodecConfig) (codec runtime.Codec, encodeVersioner runtime.GroupVersioner, err error)
 }
 
+// groupResourceOverrides 是单个 GroupResource 的存储覆盖项。
 type groupResourceOverrides struct {
 	// etcdLocation contains the list of "special" locations that are used for particular GroupResources
 	// These are merged on top of the StorageConfig when requesting the storage.Interface for a given GroupResource
@@ -115,6 +120,8 @@ type groupResourceOverrides struct {
 }
 
 // Apply overrides the provided config and options if the override has a value in that position
+//
+// 零值字段表示"不覆盖"，因此无法用空字符串显式清空某项配置。
 func (o groupResourceOverrides) Apply(config *storagebackend.Config, options *StorageCodecConfig) {
 	if len(o.etcdLocation) > 0 {
 		config.Transport.ServerList = o.etcdLocation
@@ -139,8 +146,10 @@ func (o groupResourceOverrides) Apply(config *storagebackend.Config, options *St
 
 var _ StorageFactory = &DefaultStorageFactory{}
 
+// AllResources 是"整个组"覆盖项的伪资源名。
 const AllResources = "*"
 
+// NewDefaultStorageFactory 构造默认存储工厂；未指定媒体类型时回退到 JSON。
 func NewDefaultStorageFactory(
 	config storagebackend.Config,
 	defaultMediaType string,
@@ -165,12 +174,14 @@ func NewDefaultStorageFactory(
 	}
 }
 
+// SetEtcdLocation 为指定资源设置独立的 etcd 端点列表。
 func (s *DefaultStorageFactory) SetEtcdLocation(groupResource schema.GroupResource, location []string) {
 	overrides := s.Overrides[groupResource]
 	overrides.etcdLocation = location
 	s.Overrides[groupResource] = overrides
 }
 
+// SetEtcdPrefix 为指定资源覆盖基础 key 前缀。
 func (s *DefaultStorageFactory) SetEtcdPrefix(groupResource schema.GroupResource, prefix string) {
 	overrides := s.Overrides[groupResource]
 	overrides.etcdPrefix = prefix
@@ -184,6 +195,7 @@ func (s *DefaultStorageFactory) SetResourceEtcdPrefix(groupResource schema.Group
 	s.Overrides[groupResource] = overrides
 }
 
+// SetSerializer 为指定资源配置专用媒体类型与序列化器。
 func (s *DefaultStorageFactory) SetSerializer(groupResource schema.GroupResource, mediaType string, serializer runtime.StorageSerializer) {
 	overrides := s.Overrides[groupResource]
 	overrides.mediaType = mediaType
@@ -200,6 +212,7 @@ func (s *DefaultStorageFactory) AddCohabitatingResources(groupResources ...schem
 	}
 }
 
+// AddSerializationChains 为指定资源安装编解码装饰器（例如用于 protobuf/加密包装）。
 func (s *DefaultStorageFactory) AddSerializationChains(encoderDecoratorFn func(runtime.Encoder) runtime.Encoder, decoderDecoratorFn func([]runtime.Decoder) []runtime.Decoder, groupResources ...schema.GroupResource) {
 	for _, groupResource := range groupResources {
 		overrides := s.Overrides[groupResource]
@@ -209,10 +222,13 @@ func (s *DefaultStorageFactory) AddSerializationChains(encoderDecoratorFn func(r
 	}
 }
 
+// getAllResourcesAlias 返回组级别的通配键。
 func getAllResourcesAlias(resource schema.GroupResource) schema.GroupResource {
 	return schema.GroupResource{Group: resource.Group, Resource: AllResources}
 }
 
+// getStorageGroupResource 在共存资源中选择实际承载存储的那个：优先挑启用中的组，
+// 保证被弃用的 API 组仍能读写同一份数据。
 func (s *DefaultStorageFactory) getStorageGroupResource(groupResource schema.GroupResource) schema.GroupResource {
 	for _, potentialStorageResource := range s.Overrides[groupResource].cohabitatingResources {
 		// TODO deads2k or liggitt determine if have ever stored any of our cohabitating resources in a different location on new clusters
@@ -230,12 +246,14 @@ func (s *DefaultStorageFactory) NewConfig(groupResource schema.GroupResource, ex
 	chosenStorageResource := s.getStorageGroupResource(groupResource)
 
 	// operate on copy
+	// 必须复制：后续 Apply 会修改配置，不能污染工厂中共享的 StorageConfig。
 	storageConfig := s.StorageConfig
 	codecConfig := StorageCodecConfig{
 		StorageMediaType:  s.DefaultMediaType,
 		StorageSerializer: s.DefaultSerializer,
 	}
 
+	// 组级覆盖先应用，资源级覆盖后应用，后者优先级更高。
 	if override, ok := s.Overrides[getAllResourcesAlias(chosenStorageResource)]; ok {
 		override.Apply(&storageConfig, &codecConfig)
 	}
@@ -245,6 +263,7 @@ func (s *DefaultStorageFactory) NewConfig(groupResource schema.GroupResource, ex
 
 	var err error
 	if backwardCompatibleInterface, ok := s.ResourceEncodingConfig.(CompatibilityResourceEncodingConfig); ok {
+		// 兼容模式按对象示例选择存储版本，用于平滑迁移单个资源。
 		codecConfig.StorageVersion, err = backwardCompatibleInterface.BackwardCompatibileStorageEncodingFor(chosenStorageResource, example)
 		if err != nil {
 			return nil, err
@@ -256,6 +275,7 @@ func (s *DefaultStorageFactory) NewConfig(groupResource schema.GroupResource, ex
 		}
 	}
 
+	// 内存版本按请求的资源（而非存储资源）决定，确保返回给客户端的版本符合该 API 端点。
 	codecConfig.MemoryVersion, err = s.ResourceEncodingConfig.InMemoryEncodingFor(groupResource)
 	if err != nil {
 		return nil, err
@@ -307,6 +327,8 @@ func (s *DefaultStorageFactory) Backends() []Backend {
 // Backends returns all backends for all registered storage destinations.
 // Used for getting all instances for health validations.
 // Deprecated: Validate health by passing storagebackend.Config directly to storagefactory.CreateProber.
+//
+// 已弃用：此处返回的 TLS 配置仅宽松地用于连通性探测，不代表实际存储客户端的安全设置。
 func Backends(storageConfig storagebackend.Config) []Backend {
 	return backends(storageConfig, nil)
 }
@@ -336,6 +358,7 @@ func backends(storageConfig storagebackend.Config, grOverrides map[schema.GroupR
 			caPool := x509.NewCertPool()
 			caPool.AppendCertsFromPEM(caCert)
 			tlsConfig.RootCAs = caPool
+			// 配置了可信 CA 才做证书校验，否则保持跳过（仅用于探测）。
 			tlsConfig.InsecureSkipVerify = false
 		}
 	}
@@ -352,6 +375,7 @@ func backends(storageConfig storagebackend.Config, grOverrides map[schema.GroupR
 	return backends
 }
 
+// ResourcePrefix 计算资源在 etcd 中的目录名，优先级：精确资源覆盖 > 组覆盖 > 特殊默认 > 小写资源名。
 func (s *DefaultStorageFactory) ResourcePrefix(groupResource schema.GroupResource) string {
 	chosenStorageResource := s.getStorageGroupResource(groupResource)
 	groupOverride := s.Overrides[getAllResourcesAlias(chosenStorageResource)]

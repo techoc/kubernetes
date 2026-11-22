@@ -42,6 +42,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateAuthenticationConfiguration 覆盖结构化认证配置（JWT authenticator）的
+// 整体校验：重复 issuer/discoveryURL、URL 格式、claim 规则与映射、egress selector
+// 特性门控，以及未验证 email 的使用约束。
 func TestValidateAuthenticationConfiguration(t *testing.T) {
 	testCases := []struct {
 		name                                         string
@@ -57,6 +60,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 两个 authenticator 指向同一 issuer 会让 token 归属不确定，必须拒绝。
 			name: "duplicate issuer across jwt authenticators",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -101,6 +105,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[1].issuer.url: Duplicate value: "https://issuer-url"`,
 		},
 		{
+			// discoveryURL 决定 OIDC 元数据拉取地址，重复会导致配置覆盖，需显式报错。
 			name: "duplicate discoveryURL across jwt authenticators",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -147,6 +152,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[1].issuer.discoveryURL: Duplicate value: "https://discovery-url/.well-known/openid-configuration"`,
 		},
 		{
+			// issuer URL 必须是 https，否则 token 可被中间人替换。
 			name: "failed issuer validation",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -167,6 +173,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].issuer.url: Invalid value: "invalid-url": URL scheme must be https`,
 		},
 		{
+			// 同一条 claim 上出现互相矛盾的要求，配置本身即无意义。
 			name: "failed claimValidationRule validation",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -197,6 +204,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimValidationRules[1].claim: Duplicate value: "foo"`,
 		},
 		{
+			// claim 与 expression 都没有时无法生成 username。
 			name: "failed claimMapping validation",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -222,6 +230,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "jwt[0].claimMappings.username: Required value: claim or expression is required",
 		},
 		{
+			// userValidationRules 重复执行无意义，去重以避免浪费 CEL 求值。
 			name: "failed userValidationRule validation",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -252,6 +261,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].userValidationRules[1].expression: Duplicate value: "user.username == 'foo'"`,
 		},
 		{
+			// disallowedIssuers 通常来自受保护的内置 issuer，避免用户配置覆盖系统身份。
 			name: "valid authentication configuration with disallowed issuer",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -279,6 +289,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want:              `jwt[0].issuer.url: Invalid value: "https://issuer-url": URL must not overlap with disallowed issuers: [a b c https://issuer-url]`,
 		},
 		{
+			// egressSelectorType 只允许 controlplane/cluster 两种取值。
 			name: "valid authentication configuration with invalid egress type",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -307,6 +318,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want:              `jwt[0].issuer.egressSelectorType: Invalid value: "panda": egress selector must be either controlplane or cluster`,
 		},
 		{
+			// 特性门控关闭时，即便取值合法也必须拒绝，避免生成无法生效的配置。
 			name: "valid authentication configuration with valid egress type with StructuredAuthenticationConfigurationEgressSelector feature disabled",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -336,6 +348,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].issuer.egressSelectorType: Invalid value: "controlplane": egress selector is not supported when StructuredAuthenticationConfigurationEgressSelector feature gate is disabled`,
 		},
 		{
+			// gaOnly 关闭所有 alpha/beta 门控，验证仅 GA 特性时的行为与显式关闭一致。
 			name: "valid authentication configuration with valid egress type with GA features only",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -365,6 +378,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want:              `jwt[0].issuer.egressSelectorType: Invalid value: "controlplane": egress selector is not supported when StructuredAuthenticationConfigurationEgressSelector feature gate is disabled`,
 		},
 		{
+			// 特性门控开启且取值合法时应通过。
 			name: "valid authentication configuration with valid egress type",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -393,6 +407,8 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want:              "",
 		},
 		{
+			// 直接用未验证的 email 做 username 会造成账号劫持（攻击者可在 IdP 侧抢注邮箱），
+			// 因此要求同时引用 email_verified。
 			name: "valid authentication configuration that uses unverified email",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -418,6 +434,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "claims.email": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// claims.email_ 是不同字段，不应被误判为使用 email；验证必须按标识符边界匹配。
 			name: "valid authentication configuration that almost uses unverified email",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -443,6 +460,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 通过 CEL 函数间接读取 email，仍算使用，需 email_verified 佐证。
 			name: "valid authentication configuration that uses unverified email join",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -468,6 +486,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "['yay', string(claims.email), 'panda'].join(' ')": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// 可选字段访问 claims.?email 同样视为使用 email。
 			name: "valid authentication configuration that uses unverified optional email",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -493,6 +512,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "claims.?email": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// 在 map 字面量里作为 key 使用也需检测到。
 			name: "valid authentication configuration that uses unverified optional map email key",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -518,6 +538,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "{claims.?email: \"panda\"}": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// 在 map 字面量里作为 value 使用。
 			name: "valid authentication configuration that uses unverified optional map email value",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -543,6 +564,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "{\"fancy\": claims.?email}": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// 列表迭代中引用 email 也要被识别。
 			name: "valid authentication configuration that uses unverified email value in list iteration",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -568,6 +590,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `jwt[0].claimMappings.username.expression: Invalid value: "[\"a\"].map(i, i + claims.email)": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression`,
 		},
 		{
+			// claimValidationRules 中显式引用 email_verified 即可放行 username 中的 email。
 			name: "valid authentication configuration that uses verified email join via rule",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -592,6 +615,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// extra 映射中引用 email_verified 同样满足“已验证”条件。
 			name: "valid authentication configuration that uses verified email join via extra",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -620,6 +644,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 可选访问 claims.?email_verified 也算显式检查。
 			name: "valid authentication configuration that uses verified email join via extra optional",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -648,6 +673,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 条件表达式中使用 email_verified（默认 true）时也视为已检查。
 			name: "valid authentication configuration that uses email and email_verified || true via username",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -674,6 +700,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 更保守的写法：email_verified 缺失时回退到 sub。
 			name: "valid authentication configuration that uses email and email_verified || false via username",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -700,6 +727,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 与上例等价，但校验规则里显式与 true 比较，使类型检查能确认布尔语义。
 			name: "valid authentication configuration that uses verified email via claim validation rule",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -727,6 +755,8 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: "",
 		},
 		{
+			// 旧文档中的错误写法 `claims.?email_verified.orValue(true)` 求值结果为 bool 值表达式，
+			// 但缺少 `== true` 的显式比较；此处确认它既不能通过返回类型检查，也不被视为有效验证。
 			name: "valid authentication configuration that uses verified email via claim validation rule incorrectly",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -755,6 +785,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 			want: `[jwt[0].claimValidationRules[0].expression: Invalid value: "claims.?email_verified.orValue(true)": must evaluate to bool, jwt[0].claimMappings.username.expression: Invalid value: "{claims.?email: \"panda\"}": claims.email_verified must be used in claimMappings.username.expression or claimMappings.extra[*].valueExpression or claimValidationRules[*].expression when claims.email is used in claimMappings.username.expression]`,
 		},
 		{
+			// 基线用例：完整且合法的配置应无错误。
 			name: "valid authentication configuration",
 			in: &api.AuthenticationConfiguration{
 				JWT: []api.JWTAuthenticator{
@@ -784,9 +815,11 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			// 特性门控在子测试内单独设置，避免用例之间相互污染。
 			if tt.structuredAuthnEgressSelectorFeatureOverride != nil {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StructuredAuthenticationConfigurationEgressSelector, *tt.structuredAuthnEgressSelectorFeatureOverride)
 			}
+			// gaOnly 模拟只启用 GA 特性的集群（例如升级前的兼容性验证）。
 			if tt.gaOnly {
 				featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 					"AllAlpha": false,
@@ -801,6 +834,8 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateIssuerURL 验证 issuer URL 的安全约束：必须 https、不得带用户信息/查询/片段，
+// 且不得与保留 issuer 重叠。
 func TestValidateIssuerURL(t *testing.T) {
 	fldPath := field.NewPath("issuer", "url")
 
@@ -863,6 +898,8 @@ func TestValidateIssuerURL(t *testing.T) {
 	}
 }
 
+// TestValidateIssuerDiscoveryURL 验证 discoveryURL 的附加约束：可与 issuer URL 不同，
+// 但必须真正不同（去除尾部斜杠后比较）。
 func TestValidateIssuerDiscoveryURL(t *testing.T) {
 	fldPath := field.NewPath("issuer", "discoveryURL")
 
@@ -948,6 +985,8 @@ func TestValidateIssuerDiscoveryURL(t *testing.T) {
 	}
 }
 
+// TestValidateAudiences 验证 audiences 与 audienceMatchPolicy 的联动规则：
+// 单个 audience 时策略须为空或 MatchAny，多个 audience 时必须为 MatchAny，且不允许重复。
 func TestValidateAudiences(t *testing.T) {
 	fldPath := field.NewPath("issuer", "audiences")
 	audienceMatchPolicyFldPath := field.NewPath("issuer", "audienceMatchPolicy")
@@ -1014,6 +1053,8 @@ func TestValidateAudiences(t *testing.T) {
 	}
 }
 
+// TestValidateCertificateAuthority 验证 CA bundle 必须是合法 PEM 编码的 RSA/ECDSA 证书；
+// 空值表示使用系统根证书，因此合法。
 func TestValidateCertificateAuthority(t *testing.T) {
 	fldPath := field.NewPath("issuer", "certificateAuthority")
 
@@ -1059,6 +1100,9 @@ func TestValidateCertificateAuthority(t *testing.T) {
 	}
 }
 
+// TestValidateClaimValidationRules 验证 claim 校验规则的两选一约束（claim 或 expression）、
+// 相关字段的互斥性、重复检测，以及 expression 必须编译且返回 bool。
+// 同时断言 validationState 是否正确记录了 CEL mapper 与 email_verified 的使用。
 func TestValidateClaimValidationRules(t *testing.T) {
 	fldPath := field.NewPath("issuer", "claimValidationRules")
 
@@ -1183,6 +1227,10 @@ func TestValidateClaimValidationRules(t *testing.T) {
 	}
 }
 
+// TestValidateClaimMappings 验证 username/groups/uid/extra 的映射规则：
+// claim 与 expression 互斥、claim 模式下 prefix 必须显式设置（允许空串以关闭前缀）、
+// extra key 需为小写域名前缀且不得占用 k8s.io/kubernetes.io 保留域，
+// 并确认使用未验证 email 时会被拒绝。
 func TestValidateClaimMappings(t *testing.T) {
 	fldPath := field.NewPath("issuer", "claimMappings")
 
@@ -1615,6 +1663,8 @@ func TestValidateClaimMappings(t *testing.T) {
 	}
 }
 
+// TestValidateUserValidationRules 验证 userValidationRules：expression 必填、不得重复、
+// 必须编译且返回 bool。
 func TestValidateUserValidationRules(t *testing.T) {
 	fldPath := field.NewPath("issuer", "userValidationRules")
 
@@ -1678,6 +1728,7 @@ func TestValidateUserValidationRules(t *testing.T) {
 	}
 }
 
+// errString 把聚合错误转为字符串，便于与用例中的期望文本逐字比较。
 func errString(errs errors.Aggregate) string {
 	if errs != nil {
 		return errs.Error()
@@ -1685,6 +1736,8 @@ func errString(errs errors.Aggregate) string {
 	return ""
 }
 
+// test 是授权配置校验用例的公共结构；knownTypes/repeatableTypes 模拟插件注册表，
+// 使校验逻辑与具体的 authorizer 类型解耦。
 type (
 	test struct {
 		name            string
@@ -1695,9 +1748,13 @@ type (
 	}
 )
 
+// TestValidateAuthorizationConfiguration 覆盖 AuthorizationConfiguration 的结构校验：
+// 类型/名称必填与唯一、DNS1123 合法性、Webhook 专属字段的互斥与必填、
+// 超时与 TTL 范围、SAR 版本、failurePolicy、connectionInfo 及其 kubeconfig 文件约束。
 func TestValidateAuthorizationConfiguration(t *testing.T) {
 	badKubeConfigFile := "../some/relative/path/kubeconfig"
 
+	// 创建一个真实存在的临时文件，用于验证 kubeconfig 路径的存在性检查。
 	tempKubeConfigFile, err := os.CreateTemp("/tmp", "kubeconfig")
 	if err != nil {
 		t.Fatalf("failed to set up temp file: %v", err)
@@ -2463,6 +2520,8 @@ func TestValidateAuthorizationConfiguration(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			errList := ValidateAuthorizationConfiguration(authorizationcel.NewDefaultCompiler(), nil, &test.configuration, test.knownTypes, test.repeatableTypes)
+			// 只比较错误数量、类型与 BadValue：字段路径细节容易随实现调整而波动，
+			// 这里关注的是错误类别是否被正确识别。
 			if len(errList) != len(test.expectedErrList) {
 				t.Errorf("expected %d errs, got %d, errors %v", len(test.expectedErrList), len(errList), errList)
 			}
@@ -2485,6 +2544,8 @@ func TestValidateAuthorizationConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateAndCompileMatchConditions 验证 webhook matchConditions 的编译与校验：
+// 空表达式、重复、未声明引用与语法错误都应被拒绝；全部合法时必须返回非 nil 的 matcher。
 func TestValidateAndCompileMatchConditions(t *testing.T) {
 	testCases := []struct {
 		name            string

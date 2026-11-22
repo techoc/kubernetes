@@ -42,12 +42,15 @@ import (
 var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
+// init 注册 example 类型，使存储层能编解码测试对象。
 func init() {
 	metav1.AddToGroupVersion(scheme, metav1.SchemeGroupVersion)
 	utilruntime.Must(example.AddToScheme(scheme))
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 }
 
+// TestTLSConnection 端到端验证 etcd3 存储后端在 mTLS 下的连接与写入：
+// 启动启用 TLS 的 etcd，用同一套证书构造 storage，再执行一次 Create。
 func TestTLSConnection(t *testing.T) {
 	codec := apitesting.TestCodec(codecs, examplev1.SchemeGroupVersion)
 
@@ -91,6 +94,8 @@ func TestTLSConnection(t *testing.T) {
 	}
 }
 
+// configureTLSCerts 把内嵌的测试证书写入临时目录，返回三个文件路径。
+// 调用方负责清理临时目录。
 func configureTLSCerts(t *testing.T) (certFile, keyFile, caFile string) {
 	baseDir := os.TempDir()
 	tempDir, err := os.MkdirTemp(baseDir, "etcd_certificates")

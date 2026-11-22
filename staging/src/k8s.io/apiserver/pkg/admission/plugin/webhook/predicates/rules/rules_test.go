@@ -28,13 +28,17 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
+// ruleTest 描述一条 webhook 规则以及它应当匹配/不匹配的请求属性集合。
 type ruleTest struct {
 	rule    adreg.RuleWithOperations
 	match   []admission.Attributes
 	noMatch []admission.Attributes
 }
+
+// tests 以用例名索引规则测试，便于表驱动执行。
 type tests map[string]ruleTest
 
+// a 构造一个带命名空间的 admission.Attributes；Kind 由资源名推导，仅用于测试。
 func a(group, version, resource, subresource, name string, operation admission.Operation, operationOptions runtime.Object) admission.Attributes {
 	return admission.NewAttributesRecord(
 		nil, nil,
@@ -48,6 +52,7 @@ func a(group, version, resource, subresource, name string, operation admission.O
 	)
 }
 
+// namespacedAttributes 与 a 相同，仅用于在 scope 测试中显式表达“命名空间作用域”。
 func namespacedAttributes(group, version, resource, subresource, name string, operation admission.Operation, operationOptions runtime.Object) admission.Attributes {
 	return admission.NewAttributesRecord(
 		nil, nil,
@@ -61,6 +66,7 @@ func namespacedAttributes(group, version, resource, subresource, name string, op
 	)
 }
 
+// clusterScopedAttributes 构造命名空间为空的对象，模拟集群级资源。
 func clusterScopedAttributes(group, version, resource, subresource, name string, operation admission.Operation, operationOptions runtime.Object) admission.Attributes {
 	return admission.NewAttributesRecord(
 		nil, nil,
@@ -74,10 +80,12 @@ func clusterScopedAttributes(group, version, resource, subresource, name string,
 	)
 }
 
+// attrList 提供可变参数到切片的语法糖。
 func attrList(a ...admission.Attributes) []admission.Attributes {
 	return a
 }
 
+// TestGroup 验证规则的 APIGroups 匹配：支持 "*" 通配与精确列表。
 func TestGroup(t *testing.T) {
 	table := tests{
 		"wildcard": {
@@ -91,6 +99,7 @@ func TestGroup(t *testing.T) {
 			),
 		},
 		"exact": {
+			// 组名必须完全一致；版本、资源差异不应影响组匹配。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					APIGroups: []string{"g1", "g2"},
@@ -123,6 +132,7 @@ func TestGroup(t *testing.T) {
 	}
 }
 
+// TestVersion 验证 APIVersions 的匹配，包括通配与精确版本。
 func TestVersion(t *testing.T) {
 	table := tests{
 		"wildcard": {
@@ -136,6 +146,7 @@ func TestVersion(t *testing.T) {
 			),
 		},
 		"exact": {
+			// 版本与组、资源相互独立匹配。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					APIVersions: []string{"v1", "v2"},
@@ -167,6 +178,8 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+// TestOperation 验证 Operations 匹配：OperationAll 覆盖所有操作，
+// 其余情况要求操作精确匹配列表中的某一项。
 func TestOperation(t *testing.T) {
 	table := tests{
 		"wildcard": {
@@ -250,9 +263,12 @@ func TestOperation(t *testing.T) {
 	}
 }
 
+// TestResource 验证 Resources 匹配，重点是 "resource/subresource" 形式的通配语义：
+// "r" 只匹配主资源，"r/*" 同时匹配主资源与其全部子资源。
 func TestResource(t *testing.T) {
 	table := tests{
 		"no subresources": {
+			// "*" 不含子资源，因此带 subresource 的请求不匹配。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"*"},
@@ -268,6 +284,7 @@ func TestResource(t *testing.T) {
 			),
 		},
 		"r & subresources": {
+			// "r/*" 覆盖 r 自身及任意子资源，但不匹配其他资源。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"r/*"},
@@ -283,6 +300,7 @@ func TestResource(t *testing.T) {
 			),
 		},
 		"r & subresources or r2": {
+			// 多条规则取并集；r2 未带 "/*"，其子资源仍不匹配。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"r/*", "r2"},
@@ -298,6 +316,7 @@ func TestResource(t *testing.T) {
 			),
 		},
 		"proxy or exec": {
+			// 通配符可出现在资源段，按 subresource 名称筛选。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"*/proxy", "*/exec"},
@@ -331,12 +350,15 @@ func TestResource(t *testing.T) {
 	}
 }
 
+// TestScope 验证 Cluster/Namespaced/AllScopes 三种作用域的匹配行为。
+// 注意 namespaces 资源本身属于集群作用域，即使请求携带命名空间也不例外。
 func TestScope(t *testing.T) {
 	cluster := adreg.ClusterScope
 	namespace := adreg.NamespacedScope
 	allscopes := adreg.AllScopes
 	table := tests{
 		"cluster scope": {
+			// 集群作用域应同时匹配空命名空间的属性，以及 namespaces 资源的属性。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"*"},
@@ -357,6 +379,7 @@ func TestScope(t *testing.T) {
 			),
 		},
 		"namespace scope": {
+			// 命名空间作用域只匹配普通命名空间资源，不匹配集群级或 namespaces 资源。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"*"},
@@ -377,6 +400,7 @@ func TestScope(t *testing.T) {
 			),
 		},
 		"all scopes": {
+			// AllScopes 是默认值，任何请求都应匹配。
 			rule: adreg.RuleWithOperations{
 				Rule: adreg.Rule{
 					Resources: []string{"*"},

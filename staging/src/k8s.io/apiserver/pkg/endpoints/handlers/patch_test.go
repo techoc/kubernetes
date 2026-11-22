@@ -25,6 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestValidateAndTranscodePatch 验证各类 patch 的校验与转码：
+// JSON/Merge/StrategicMerge 原样返回，ApplyCBOR/ApplyYAML 统一转成 JSON，
+// 非法输入必须报错。
 func TestValidateAndTranscodePatch(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -126,7 +129,8 @@ func TestValidateAndTranscodePatch(t *testing.T) {
 				return
 			}
 
-			// Normalize JSON to compare
+			// ApplyCBOR/ApplyYAML 需要先解码再编码为 JSON，因此不能直接比字节，
+			// 先各自反序列化再规范化比较，避免键顺序影响结果。
 			if tc.patchType == types.ApplyCBORPatchType || tc.patchType == types.ApplyYAMLPatchType {
 				var gotMap, expectedMap any
 				if err := json.Unmarshal(got, &gotMap); err != nil {

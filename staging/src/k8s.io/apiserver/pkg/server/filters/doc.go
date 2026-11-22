@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package filters contains all the http handler chain filters which
 // are not api related.
+// 这些过滤器负责超时、限流、请求体大小、CORS、压缩等横切关注点，
+// 不感知具体资源语义，因此可被所有 API 组复用。
 package filters

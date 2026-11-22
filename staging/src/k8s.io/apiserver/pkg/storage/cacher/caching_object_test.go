@@ -30,14 +30,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// mockEncoder 记录被调用的次数并可返回预设错误，用于验证缓存是否真的生效。
 type mockEncoder struct {
 	identifier     runtime.Identifier
 	expectedResult string
 	expectedError  error
 
+	// callsNumber 用原子操作累加，因为并发测试会多 goroutine 同时调用。
 	callsNumber int32
 }
 
+// newMockEncoder 构造一个 mock 编码器。
 func newMockEncoder(id, result string, err error) *mockEncoder {
 	return &mockEncoder{
 		identifier:     runtime.Identifier(id),
@@ -46,6 +49,7 @@ func newMockEncoder(id, result string, err error) *mockEncoder {
 	}
 }
 
+// encode 按预设结果写入；一旦被调用多次，callsNumber 会暴露缓存失效。
 func (e *mockEncoder) encode(_ runtime.Object, w io.Writer) error {
 	atomic.AddInt32(&e.callsNumber, 1)
 	if e.expectedError != nil {
@@ -55,6 +59,8 @@ func (e *mockEncoder) encode(_ runtime.Object, w io.Writer) error {
 	return err
 }
 
+// TestCachingObject 验证 CacheEncode 对每个 identifier 只编码一次（含返回错误的情况），
+// 并原样透传编码结果与错误。
 func TestCachingObject(t *testing.T) {
 	object, err := newCachingObject(&v1.Pod{})
 	if err != nil {
@@ -84,6 +90,8 @@ func TestCachingObject(t *testing.T) {
 	}
 }
 
+// TestCachingObjectFieldAccessors 验证 setter 修改的字段对后续编码（包括 GetObject
+// 返回的对象）都可见；所有 accessor 共用同一份逻辑，这里仅以 namespace 为代表。
 func TestCachingObjectFieldAccessors(t *testing.T) {
 	object, err := newCachingObject(&v1.Pod{})
 	if err != nil {
@@ -121,6 +129,8 @@ func TestCachingObjectFieldAccessors(t *testing.T) {
 	}
 }
 
+// TestCachingObjectRaces 用大量 goroutine 并发读写，配合 -race 检测缓存与 accessor
+// 的同步问题；同时断言每个 encoder 仍只被调用一次。
 func TestCachingObjectRaces(t *testing.T) {
 	object, err := newCachingObject(&v1.Pod{})
 	if err != nil {
@@ -164,6 +174,8 @@ func TestCachingObjectRaces(t *testing.T) {
 	wg.Wait()
 }
 
+// TestCachingObjectLazyDeepCopy 验证深拷贝是惰性的：从未修改时不拷贝，
+// 设置相同值也不拷贝，只有真正改变时才拷贝。
 func TestCachingObjectLazyDeepCopy(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

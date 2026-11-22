@@ -28,27 +28,29 @@ import (
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// mockAuthzHandler 返回固定的决策与错误，用于验证 union 的短路与合并逻辑。
 type mockAuthzHandler struct {
 	decision authorizer.Decision
 	err      error
 }
 
+// Authorize 返回预设的决策与错误。
 func (mock *mockAuthzHandler) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return mock.decision, "", mock.err
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不是条件感知实现，把 Authorize 的决策转换过去。
 func (mock *mockAuthzHandler) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(mock.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 不被该授权器支持。
 func (*mockAuthzHandler) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
-// mustNewIndexed wraps each authorizer with an auto-generated name and constructs
-// a union authorizer. Intended for tests that don't care about specific names.
+// mustNewIndexed 为每个授权器自动生成名称并构造 union 授权器。
+// 适用于不关心具体名称的测试。
 func mustNewIndexed(t *testing.T, handlers ...authorizer.Authorizer) authorizer.Authorizer {
 	t.Helper()
 	named := make([]NamedAuthorizer, len(handlers))
@@ -62,6 +64,7 @@ func mustNewIndexed(t *testing.T, handlers ...authorizer.Authorizer) authorizer.
 	return u
 }
 
+// TestAuthorizationSecondPasses 验证第一个授权器 NoOpinion 时继续询问第二个。
 func TestAuthorizationSecondPasses(t *testing.T) {
 	handler1 := &mockAuthzHandler{decision: authorizer.DecisionNoOpinion}
 	handler2 := &mockAuthzHandler{decision: authorizer.DecisionAllow}
@@ -73,6 +76,7 @@ func TestAuthorizationSecondPasses(t *testing.T) {
 	}
 }
 
+// TestAuthorizationFirstPasses 验证第一个授权器 Allow 即返回，不再询问后续授权器。
 func TestAuthorizationFirstPasses(t *testing.T) {
 	handler1 := &mockAuthzHandler{decision: authorizer.DecisionAllow}
 	handler2 := &mockAuthzHandler{decision: authorizer.DecisionNoOpinion}
@@ -84,6 +88,7 @@ func TestAuthorizationFirstPasses(t *testing.T) {
 	}
 }
 
+// TestAuthorizationNonePasses 验证所有授权器都 NoOpinion 时不会误判为 Allow。
 func TestAuthorizationNonePasses(t *testing.T) {
 	handler1 := &mockAuthzHandler{decision: authorizer.DecisionNoOpinion}
 	handler2 := &mockAuthzHandler{decision: authorizer.DecisionNoOpinion}
@@ -95,6 +100,7 @@ func TestAuthorizationNonePasses(t *testing.T) {
 	}
 }
 
+// TestAuthorizationError 验证授权器返回错误时 union 会把错误向上传递。
 func TestAuthorizationError(t *testing.T) {
 	handler1 := &mockAuthzHandler{err: fmt.Errorf("foo")}
 	handler2 := &mockAuthzHandler{err: fmt.Errorf("foo")}
@@ -106,12 +112,14 @@ func TestAuthorizationError(t *testing.T) {
 	}
 }
 
+// mockAuthzRuleHandler 提供预设的规则列表，用于测试 RuleResolvers 的合并。
 type mockAuthzRuleHandler struct {
 	resourceRules    []authorizer.ResourceRuleInfo
 	nonResourceRules []authorizer.NonResourceRuleInfo
 	err              error
 }
 
+// RulesFor 返回预设规则；设置 err 时返回错误。
 func (mock *mockAuthzRuleHandler) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	if mock.err != nil {
 		return []authorizer.ResourceRuleInfo{}, []authorizer.NonResourceRuleInfo{}, false, mock.err
@@ -119,6 +127,7 @@ func (mock *mockAuthzRuleHandler) RulesFor(ctx context.Context, user user.Info, 
 	return mock.resourceRules, mock.nonResourceRules, false, nil
 }
 
+// TestAuthorizationResourceRules 验证 RuleResolvers 按顺序拼接各授权器的资源规则。
 func TestAuthorizationResourceRules(t *testing.T) {
 	handler1 := &mockAuthzRuleHandler{
 		resourceRules: []authorizer.ResourceRuleInfo{
@@ -183,6 +192,7 @@ func TestAuthorizationResourceRules(t *testing.T) {
 	}
 }
 
+// TestAuthorizationNonResourceRules 验证非资源规则同样按顺序合并。
 func TestAuthorizationNonResourceRules(t *testing.T) {
 	handler1 := &mockAuthzRuleHandler{
 		nonResourceRules: []authorizer.NonResourceRuleInfo{
@@ -222,6 +232,7 @@ func TestAuthorizationNonResourceRules(t *testing.T) {
 	}
 }
 
+// getResourceRules 把接口切片转换为可直接比较的具体类型，便于 DeepEqual 断言。
 func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizer.DefaultResourceRuleInfo {
 	rules := make([]authorizer.DefaultResourceRuleInfo, len(infos))
 	for i, info := range infos {
@@ -235,6 +246,7 @@ func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizer.DefaultR
 	return rules
 }
 
+// getNonResourceRules 同 getResourceRules，用于非资源规则。
 func getNonResourceRules(infos []authorizer.NonResourceRuleInfo) []authorizer.DefaultNonResourceRuleInfo {
 	rules := make([]authorizer.DefaultNonResourceRuleInfo, len(infos))
 	for i, info := range infos {
@@ -246,16 +258,21 @@ func getNonResourceRules(infos []authorizer.NonResourceRuleInfo) []authorizer.De
 	return rules
 }
 
+// TestAuthorizationUnequivocalDeny 验证 union 的决策合并顺序：
+// 空链为 NoOpinion；按顺序遇到 Allow/Deny 立即返回；
+// 即使 Deny 的授权器同时返回错误，Deny 仍是最终结果。
 func TestAuthorizationUnequivocalDeny(t *testing.T) {
 	cs := []struct {
 		authorizers []authorizer.Authorizer
 		decision    authorizer.Decision
 	}{
 		{
+			// 没有授权器时没有任何一方给出意见
 			authorizers: []authorizer.Authorizer{},
 			decision:    authorizer.DecisionNoOpinion,
 		},
 		{
+			// Allow 先于 Deny 出现，应短路返回 Allow
 			authorizers: []authorizer.Authorizer{
 				&mockAuthzHandler{decision: authorizer.DecisionNoOpinion},
 				&mockAuthzHandler{decision: authorizer.DecisionAllow},
@@ -264,6 +281,7 @@ func TestAuthorizationUnequivocalDeny(t *testing.T) {
 			decision: authorizer.DecisionAllow,
 		},
 		{
+			// Deny 先于 Allow 出现，应短路返回 Deny
 			authorizers: []authorizer.Authorizer{
 				&mockAuthzHandler{decision: authorizer.DecisionNoOpinion},
 				&mockAuthzHandler{decision: authorizer.DecisionDeny},
@@ -272,6 +290,7 @@ func TestAuthorizationUnequivocalDeny(t *testing.T) {
 			decision: authorizer.DecisionDeny,
 		},
 		{
+			// 带错误的 Deny 仍视为终止决策
 			authorizers: []authorizer.Authorizer{
 				&mockAuthzHandler{decision: authorizer.DecisionNoOpinion},
 				&mockAuthzHandler{decision: authorizer.DecisionDeny, err: errors.New("webhook failed closed")},
@@ -292,31 +311,37 @@ func TestAuthorizationUnequivocalDeny(t *testing.T) {
 	}
 }
 
+// evalTestEffect 表示条件决策中单个条件的效果。
 type evalTestEffect string
 
 const (
-	effectNone      evalTestEffect = ""
-	effectAllow     evalTestEffect = "Allow"
-	effectDeny      evalTestEffect = "Deny"
+	// effectNone 表示不使用条件决策，直接返回普通决策。
+	effectNone evalTestEffect = ""
+	// effectAllow 表示条件决策中带一个 allow 条件。
+	effectAllow evalTestEffect = "Allow"
+	// effectDeny 表示条件决策中带一个 deny 条件。
+	effectDeny evalTestEffect = "Deny"
+	// effectNoOpinion 表示条件决策中带一个 no-opinion 条件。
 	effectNoOpinion evalTestEffect = "NoOpinion"
 )
 
-// evalTestAuthz is a configurable authorizer for testing the union evaluation flow.
+// evalTestAuthz 是用于测试 union 求值流程的可配置授权器。
 type evalTestAuthz struct {
-	// conditionEffect, if non-empty, makes AuthorizeConditionsAware return a ConditionsMap decision
-	// with a single condition of this effect. If empty, decision is returned instead.
+	// conditionEffect 非空时，ConditionsAwareAuthorize 返回只含该效果条件的 ConditionsMap；
+	// 为空时返回 decision。
 	conditionEffect evalTestEffect
-	// decision is returned from AuthorizeConditionsAware when conditionEffect is empty.
+	// decision 是 conditionEffect 为空时 ConditionsAwareAuthorize 的返回值。
 	decision authorizer.Decision
-	// authorizeErr is returned as the error from AuthorizeConditionsAware.
+	// authorizeErr 是 ConditionsAwareAuthorize 返回的错误。
 	authorizeErr error
 
-	// evalDecision is returned from EvaluateConditions.
+	// evalDecision 是 EvaluateConditions 的返回值。
 	evalDecision authorizer.Decision
-	// evalErr is returned as the error from EvaluateConditions.
+	// evalErr 是 EvaluateConditions 返回的错误。
 	evalErr error
 }
 
+// Authorize 是非条件感知入口：条件决策无法在此表达，因此 fail closed 并报错。
 func (a *evalTestAuthz) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	if a.conditionEffect != effectNone {
 		return a.ConditionsAwareAuthorize(ctx, attrs).FailureDecision(), "failed closed", fmt.Errorf("wanted to return a condition, but the client doesn't support it")
@@ -324,6 +349,7 @@ func (a *evalTestAuthz) Authorize(ctx context.Context, attrs authorizer.Attribut
 	return a.decision, "", a.authorizeErr
 }
 
+// ConditionsAwareAuthorize 返回条件决策或普通决策。
 func (a *evalTestAuthz) ConditionsAwareAuthorize(ctx context.Context, attrs authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	if a.conditionEffect != effectNone {
 		cond := []authorizer.Condition{authorizer.GenericCondition{ID: "test-cond", Condition: "test"}}
@@ -341,6 +367,7 @@ func (a *evalTestAuthz) ConditionsAwareAuthorize(ctx context.Context, attrs auth
 	return authorizer.ConditionsAwareDecisionFromParts(a.decision, "", a.authorizeErr)
 }
 
+// EvaluateConditions 只对 ConditionsMap 生效；对普通决策调用属于调用方错误。
 func (a *evalTestAuthz) EvaluateConditions(ctx context.Context, decision authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	if !decision.IsConditionsMap() {
 		return decision.FailureDecision(), "failed closed", errors.New("evalTestAuthz.EvaluateConditions must be called on a ConditionsMap, which was returned previously")
@@ -348,13 +375,16 @@ func (a *evalTestAuthz) EvaluateConditions(ctx context.Context, decision authori
 	return a.evalDecision, "", a.evalErr
 }
 
-// TestUnionEvaluateConditions tests the full Authorize + EvaluateConditions flow
-// through a DAG of nested union authorizers:
+// TestUnionEvaluateConditions 测试嵌套 union 授权器 DAG 上完整的
+// Authorize + EvaluateConditions 流程：
 //
 //		union0 = [union1, union3, authz5]
 //		union1 = [union2, authz3]
 //		union2 = [authz1, authz2]
 //	    union3 = [authz4]
+//
+// 表驱动用例覆盖：无条件决策短路、条件决策合并、以及条件求值得到
+// “该子决策不可能产生的结果”时如何 fail closed。
 func TestUnionEvaluateConditions(t *testing.T) {
 
 	noOpinion := func() *evalTestAuthz {
@@ -369,9 +399,10 @@ func TestUnionEvaluateConditions(t *testing.T) {
 		wantAuthorizeErr                       bool
 		wantFinalErr                           bool
 	}{
-		// === Concrete decisions (no conditions) ===
+		// === 具体决策（不含条件） ===
 
 		{
+			// 全部 NoOpinion：外层 union 也只能给出 NoOpinion
 			name:                  "all noopinion",
 			authz1:                noOpinion(),
 			authz2:                noOpinion(),
@@ -442,7 +473,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `Deny`,
 		},
 
-		// === Conditional decisions ===
+		// === 条件决策 ===
 
 		{
 			name: "authz2 conditional allow evals to allow",
@@ -510,7 +541,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `NoOpinion(reason="authz5: {only NoOpinion conditions always evaluate to NoOpinion}")`,
 		},
 
-		// === Conditional + concrete mixes ===
+		// === 条件决策与具体决策混合 ===
 
 		// conditional => noopinion, noopinion 	=== NoOpinion ok
 		// conditional => noopinion, allow		=== Allow ok
@@ -535,12 +566,11 @@ func TestUnionEvaluateConditions(t *testing.T) {
 		// conditional => deny, conditional => deny				=== Deny
 		// ==> summarized as conditional => deny, <anything> 	=== Deny
 
-		// Theorem: NoOpinion decisions can be inserted at any point
-		//		    === Final decision the same regardless of permutation
-		// Theorem: The final Decision is always the same, no matter if the
-		//			authorizer list is flat or chopped into a DAG
+		// 定理：NoOpinion 决策可插入任意位置
+		//		    === 最终决策不随排列改变
+		// 定理：最终 Decision 始终相同，无论授权器列表是扁平的还是切成 DAG
 		//
-		// Theorem: The suffix after a concrete Allow or Deny does not matter:
+		// 定理：具体 Allow 或 Deny 之后的后续项无关紧要：
 		//
 		// allow, <anything>		=== Allow
 		// deny, <anything>			=== Deny
@@ -638,7 +668,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `Deny`,
 		},
 
-		// === Multiple conditionals ===
+		// === 多个条件决策 ===
 
 		{
 			name: "authz1 conditional => noopinion, authz3 conditional => allow",
@@ -733,7 +763,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `NoOpinion(reason="union1: authz3: only NoOpinion conditions always evaluate to NoOpinion")`,
 		},
 
-		// === Conditional deny in the chain ===
+		// === 链中出现条件 deny ===
 
 		{
 			name: "authz1 conditional => deny, authz5 conditional => allow",
@@ -774,7 +804,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `Deny`,
 		},
 
-		// === Error handling ===
+		// === 错误处理 ===
 
 		{
 			// authz1's error rides through three layers of union ToDecision (union2, union1, union0).
@@ -809,7 +839,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalDecision:     `Allow(err="eval error")`,
 			wantFinalErr:          true,
 		},
-		// === Impossible evaluations ===
+		// === 不可能的求值结果 ===
 		{
 			name: "evaluate error propagated",
 			authz1: &evalTestAuthz{
@@ -825,12 +855,11 @@ func TestUnionEvaluateConditions(t *testing.T) {
 			wantFinalErr:          true,
 		},
 		{
-			// Regression guard: an impossible sub-decision must fail closed to the
-			// SUB-decision's FailureDecision, not the OUTER union's. Here authz5's
-			// Allow-only ConditionsMap has FailureDecision=NoOpinion, while the outer
-			// union0 has FailureDecision=Deny (authz1 contributes Deny to its possible
-			// set). If the guard regressed to using the outer FailureDecision, the
-			// result below would be Deny instead of NoOpinion.
+			// 回归防护：不可能的 sub-decision 必须 fail closed 到该 SUB 决策自身的
+			// FailureDecision，而不是外层 union 的 FailureDecision。这里 authz5 的
+			// Allow-only ConditionsMap 的 FailureDecision=NoOpinion，而外层 union0
+			// 的 FailureDecision=Deny（authz1 向其可能集合贡献了 Deny）。
+			// 若守卫逻辑退化为使用外层 FailureDecision，下面的结果会变成 Deny 而非 NoOpinion。
 			name: "impossible sub-decision fails closed to sub's FailureDecision, not outer union's",
 			authz1: &evalTestAuthz{
 				conditionEffect: effectDeny,
@@ -851,6 +880,7 @@ func TestUnionEvaluateConditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 每次子测试都重建整棵 union 树，避免状态在用例之间泄漏。
 			union3, err := New(NamedAuthorizer{AuthorizerName: "authz4", Authorizer: tt.authz4})
 			if err != nil {
 				t.Fatalf("union3 New: %v", err)
@@ -894,9 +924,10 @@ func TestUnionEvaluateConditions(t *testing.T) {
 				t.Errorf("ConditionsAwareAuthorize() = %s, want %s", authzDecision.String(), tt.wantAuthorizeDecision)
 			}
 
-			// Wrap in a ConditionsAwareDecision just to get a unified string formatting for assertions.
+			// 用 ConditionsAwareDecision 包装只为统一字符串格式，便于断言。
 			finalDecision := authzDecision
 			if !authzDecision.IsUnconditional() {
+				// 只有包含未求值条件的决策才需要继续调用 EvaluateConditions。
 				finalDecision = authorizer.ConditionsAwareDecisionFromParts(union0.EvaluateConditions(ctx, authzDecision, nil))
 			}
 			finalErr := finalDecision.Error()
@@ -910,52 +941,59 @@ func TestUnionEvaluateConditions(t *testing.T) {
 	}
 }
 
-// countingAuthz wraps another Authorizer and records how many times each method was invoked.
+// countingAuthz 包装另一个 Authorizer 并记录各方法被调用的次数，
+// 用于验证短路是否真的避免了调用后续授权器。
 type countingAuthz struct {
 	inner             authorizer.Authorizer
 	conditionsAware   int
 	evaluateCondCalls int
 }
 
+// Authorize 直接透传。
 func (c *countingAuthz) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	return c.inner.Authorize(ctx, attrs)
 }
 
+// ConditionsAwareAuthorize 计数后透传。
 func (c *countingAuthz) ConditionsAwareAuthorize(ctx context.Context, attrs authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	c.conditionsAware++
 	return c.inner.ConditionsAwareAuthorize(ctx, attrs)
 }
 
+// EvaluateConditions 计数后透传。
 func (c *countingAuthz) EvaluateConditions(ctx context.Context, d authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	c.evaluateCondCalls++
 	return c.inner.EvaluateConditions(ctx, d, data)
 }
 
-// TestUnionConditionsAwareAuthorizeShortCircuit verifies that once an authorizer returns
-// an unconditional Allow or Deny, the union authorizer does not call any later authorizers
-// in the chain.
+// TestUnionConditionsAwareAuthorizeShortCircuit 验证一旦某个授权器返回无条件的
+// Allow 或 Deny，union 就不会再调用链中其后的授权器。
 func TestUnionConditionsAwareAuthorizeShortCircuit(t *testing.T) {
 	cases := []struct {
 		name       string
-		decisions  []authorizer.Decision // decisions returned by the first N authorizers
-		wantCalled []int                 // how many times each authorizer was called
+		decisions  []authorizer.Decision // 前 N 个授权器返回的决策
+		wantCalled []int                 // 每个授权器应被调用的次数
 	}{
 		{
+			// 第二个授权器 Allow，后两个不应被调用
 			name:       "Allow short-circuits later authorizers",
 			decisions:  []authorizer.Decision{authorizer.DecisionNoOpinion, authorizer.DecisionAllow, authorizer.DecisionDeny, authorizer.DecisionAllow},
 			wantCalled: []int{1, 1, 0, 0},
 		},
 		{
+			// 第二个授权器 Deny，后两个不应被调用
 			name:       "Deny short-circuits later authorizers",
 			decisions:  []authorizer.Decision{authorizer.DecisionNoOpinion, authorizer.DecisionDeny, authorizer.DecisionAllow, authorizer.DecisionAllow},
 			wantCalled: []int{1, 1, 0, 0},
 		},
 		{
+			// 全部 NoOpinion，必须走完整条链
 			name:       "all NoOpinions exhausts the chain",
 			decisions:  []authorizer.Decision{authorizer.DecisionNoOpinion, authorizer.DecisionNoOpinion, authorizer.DecisionNoOpinion},
 			wantCalled: []int{1, 1, 1},
 		},
 		{
+			// 第一个就 Allow，后续一个都不调用
 			name:       "first authorizer Allow short-circuits everything",
 			decisions:  []authorizer.Decision{authorizer.DecisionAllow, authorizer.DecisionAllow, authorizer.DecisionAllow},
 			wantCalled: []int{1, 0, 0},
@@ -983,8 +1021,7 @@ func TestUnionConditionsAwareAuthorizeShortCircuit(t *testing.T) {
 	}
 }
 
-// TestUnionConditionsAwareAuthorizeEmptyChain verifies the union authorizer returns NoOpinion
-// when given zero sub-authorizers.
+// TestUnionConditionsAwareAuthorizeEmptyChain 验证没有子授权器时 union 返回 NoOpinion。
 func TestUnionConditionsAwareAuthorizeEmptyChain(t *testing.T) {
 	authz, err := New()
 	if err != nil {
@@ -996,13 +1033,11 @@ func TestUnionConditionsAwareAuthorizeEmptyChain(t *testing.T) {
 	}
 }
 
-// TestUnionEvaluateConditionsRoutesByAuthorizerName verifies that EvaluateConditions uses the
-// authorizer index parsed from the authorizerName when dispatching ConditionsMap evaluation.
+// TestUnionEvaluateConditionsRoutesByAuthorizerName 验证 EvaluateConditions 在派发
+// ConditionsMap 求值时，依据 authorizerName 中解析出的索引把子决策路由回其来源授权器。
 func TestUnionEvaluateConditionsRoutesByAuthorizerName(t *testing.T) {
-	// First authorizer returns a ConditionsMap that, when evaluated, yields NoOpinion.
-	// Second authorizer returns a ConditionsMap that, when evaluated, yields Allow.
-	// We verify that EvaluateConditions correctly routes each unevaluated sub-decision back to
-	// its originating authorizer (matching by authorizerName).
+	// 第一个授权器的 ConditionsMap 求值为 NoOpinion，第二个求值为 Allow。
+	// 这里要验证的是：每个未求值的子决策都会按 authorizerName 回到正确的授权器。
 	first := &evalTestAuthz{conditionEffect: effectAllow, evalDecision: authorizer.DecisionNoOpinion}
 	second := &evalTestAuthz{conditionEffect: effectAllow, evalDecision: authorizer.DecisionAllow}
 	authz, err := New(
@@ -1027,15 +1062,15 @@ func TestUnionEvaluateConditionsRoutesByAuthorizerName(t *testing.T) {
 	}
 }
 
-// TestUnionEvaluateConditionsUnconditionalShortCircuit verifies that EvaluateConditions
-// returns a wrapped unconditional decision immediately without descending into the chain.
+// TestUnionEvaluateConditionsUnconditionalShortCircuit 验证 EvaluateConditions
+// 对无条件决策直接返回包装后的结果，不会下探到链中。
 func TestUnionEvaluateConditionsUnconditionalShortCircuit(t *testing.T) {
 	a1 := &countingAuthz{inner: &evalTestAuthz{decision: authorizer.DecisionAllow}}
 	a2 := &countingAuthz{inner: &evalTestAuthz{decision: authorizer.DecisionNoOpinion}}
 	authz := mustNewIndexed(t, a1, a2)
 
 	d := authz.ConditionsAwareAuthorize(context.Background(), nil)
-	// Should be unconditional Allow after short-circuit.
+	// 短路后应为无条件 Allow。
 	if !d.IsAllow() {
 		t.Fatalf("expected Allow, got %s", d.String())
 	}

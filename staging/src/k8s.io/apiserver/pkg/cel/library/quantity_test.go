@@ -34,6 +34,9 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// testQuantity 用完整 CEL 环境编译并求值表达式：既校验编译期错误（正则匹配
+// 期望消息），也校验运行期错误或结果值。先 AstToCheckedExpr 强制类型检查，
+// 确保测试覆盖类型推断而不只是解析。
 func testQuantity(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErrPattern string, expectCompileErrs []string) {
 	env, err := cel.NewEnv(
 		cel.OptionalTypes(),
@@ -121,6 +124,8 @@ func testQuantity(t *testing.T, expr string, expectResult ref.Val, expectRuntime
 
 }
 
+// TestQuantity 覆盖 quantity()/isQuantity() 的解析、相等性、比较、四则运算
+// 与数值转换，重点验证不同单位/写法之间的语义等价以及错误路径。
 func TestQuantity(t *testing.T) {
 	twelveMi := resource.MustParse("12Mi")
 	trueVal := types.Bool(true)
@@ -134,11 +139,14 @@ func TestQuantity(t *testing.T) {
 		expectedRuntimeErr string
 	}{
 		{
+			// 基础解析：12Mi 应得到与 resource.MustParse 等价的 Quantity。
 			name:        "parse",
 			expr:        `quantity("12Mi")`,
 			expectValue: apiservercel.Quantity{Quantity: &twelveMi},
 		},
 		{
+			// 非法后缀在正则层就被拒绝；下一用例则覆盖“通过正则但后缀非法”
+			// 的路径，二者错误消息不同，需分别验证。
 			name:               "parseInvalidSuffix",
 			expr:               `quantity("10Mo")`,
 			expectedRuntimeErr: "quantities must match the regular expression.*",
@@ -166,6 +174,7 @@ func TestQuantity(t *testing.T) {
 			expectValue: trueVal,
 		},
 		{
+			// isQuantity 对非法输入只返回 false，不应抛出运行期错误。
 			name:        "isQuantity_invalidSuffix",
 			expr:        `isQuantity("20Mo")`,
 			expectValue: falseVal,
@@ -176,6 +185,7 @@ func TestQuantity(t *testing.T) {
 			expectValue: falseVal,
 		},
 		{
+			// 类型不匹配属于编译期错误，验证重载解析会给出明确提示。
 			name:               "isQuantity_noOverload",
 			expr:               `isQuantity([1, 2, 3])`,
 			expectedCompileErr: []string{"found no matching overload for 'isQuantity' applied to.*"},
@@ -246,6 +256,7 @@ func TestQuantity(t *testing.T) {
 			expectValue: types.Int(1),
 		},
 		{
+			// 加减运算保持单位语义：50k + 20 与 50.02k 等价。
 			name:        "add_quantity",
 			expr:        `quantity("50k").add(quantity("20")) == quantity("50.02k")`,
 			expectValue: trueVal,
@@ -271,6 +282,7 @@ func TestQuantity(t *testing.T) {
 			expectValue: types.Int(-49980),
 		},
 		{
+			// 链式运算验证中间结果的精度不会被每一步截断。
 			name:        "arith_chain",
 			expr:        `quantity("50k").add(20).sub(quantity("100k")).sub(-50000).asInteger()`,
 			expectValue: types.Int(20),
@@ -281,6 +293,7 @@ func TestQuantity(t *testing.T) {
 			expectValue: types.Int(50000),
 		},
 		{
+			// 超出 int64 的数值不能静默截断，必须报错。
 			name:               "as_integer_error",
 			expr:               `quantity("9999999999999999999999999999999999999G").asInteger()`,
 			expectedRuntimeErr: `cannot convert value to integer`,
@@ -301,6 +314,8 @@ func TestQuantity(t *testing.T) {
 			expectValue: types.Double(50703),
 		},
 		{
+			// 关键不变量：add 不得原地修改接收者。用 all() 对同一个 Quantity
+			// 引用连续调用，若实现原地修改，第二次比较结果会出错。
 			name:        "add_does_not_mutate_receiver",
 			expr:        `[quantity("9999999999999999999999999999999999999")].all(x, x.add(quantity("1")).compareTo(x.add(quantity("2"))) == -1)`,
 			expectValue: trueVal,

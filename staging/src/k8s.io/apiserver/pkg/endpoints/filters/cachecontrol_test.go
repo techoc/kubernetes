@@ -22,6 +22,9 @@ import (
 	"testing"
 )
 
+// TestCacheControl 验证 WithCacheControl 对 API 响应强制加上
+// "no-cache, private"，同时不覆盖下游已经设置的 Cache-Control。
+// 这防止中间代理缓存带有用户上下文的 API 响应。
 func TestCacheControl(t *testing.T) {
 	tests := []struct {
 		name string
@@ -31,16 +34,19 @@ func TestCacheControl(t *testing.T) {
 		expectedHeader string
 	}{
 		{
+			// 普通 API 资源路径默认被设为 no-cache, private。
 			name:           "simple",
 			path:           "/api/v1/namespaces",
 			expectedHeader: "no-cache, private",
 		},
 		{
+			// OpenAPI 端点同样不能被缓存，避免代理下发过期的 API 描述。
 			name:           "openapi",
 			path:           "/openapi/v2",
 			expectedHeader: "no-cache, private",
 		},
 		{
+			// 下游已显式设置时保留原值，过滤器不覆盖业务决策。
 			name:           "already-set",
 			path:           "/api/v1/namespaces",
 			startingHeader: "nonsense",
@@ -61,6 +67,7 @@ func TestCacheControl(t *testing.T) {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
+			// 预置起始头以模拟下游 handler 已经写入 Cache-Control 的情况。
 			if len(test.startingHeader) > 0 {
 				w.Header().Set("Cache-Control", test.startingHeader)
 			}

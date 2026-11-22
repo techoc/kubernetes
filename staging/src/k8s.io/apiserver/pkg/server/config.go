@@ -110,6 +110,8 @@ const (
 
 // Config is a structure used to configure a GenericAPIServer.
 // Its members are sorted roughly in order of importance for composers.
+//
+// Config 由各聚合 apiserver 在启动时填充；Complete 会补齐可推导字段，之后应视为只读。
 type Config struct {
 	// SecureServing is required to serve https
 	SecureServing *SecureServingInfo
@@ -123,6 +125,7 @@ type Config struct {
 	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
 	// This is required for proper functioning of the PostStartHooks on a GenericAPIServer
 	// TODO: move into SecureServing(WithLoopback) as soon as insecure serving is gone
+	// 回环客户端使用特权令牌，仅用于服务器内部组件（如 post-start hook）调用自身。
 	LoopbackClientConfig *restclient.Config
 
 	// EgressSelector provides a lookup mechanism for dialing outbound connections.
@@ -138,6 +141,7 @@ type Config struct {
 	CorsAllowedOriginList []string
 	HSTSDirectives        []string
 	// FlowControl, if not nil, gives priority and fairness to request handling
+	// 配置后启用 APF；否则退化为固定上限的 max-in-flight 限流（见 DefaultBuildHandlerChain）。
 	FlowControl utilflowcontrol.Interface
 
 	EnableIndex     bool
@@ -161,10 +165,12 @@ type Config struct {
 	// If true, all APIs that have higher priority than the APIs(beta+) of the same group resource enabled at the emulation version will be installed.
 	// This is needed when a controller implementation migrates to newer API versions, for the binary version, and also uses the newer API versions even when emulation version is set.
 	// Not applicable to alpha APIs.
+	// 仅对 GA/Beta API 生效；alpha API 不受模拟版本兼容逻辑影响。
 	EmulationForwardCompatible bool
 	// RuntimeConfigEmulationForwardCompatible is an option to explicitly enable specific APIs introduced after the emulation version through the runtime-config.
 	// If true, APIs identified by group/version that are enabled in the --runtime-config flag will be installed even if it is introduced after the emulation version. --runtime-config flag values that identify multiple APIs, such as api/all,api/ga,api/beta, are not influenced by this flag and will only enable APIs available at the current emulation version.
 	// If false, error would be thrown if any GroupVersion or GroupVersionResource explicitly enabled in the --runtime-config flag is introduced after the emulation version.
+	// 聚合型取值（api/all 等）不受该开关影响，只启用当前模拟版本已有的 API。
 	RuntimeConfigEmulationForwardCompatible bool
 	// FeatureGate is a way to plumb feature gate through if you have them.
 	FeatureGate featuregate.FeatureGate
@@ -226,9 +232,11 @@ type Config struct {
 
 	// If specified, all requests except those which match the LongRunningFunc predicate will timeout
 	// after this duration.
+	// 超时通过上下文截止实现，handler 可继续在后台运行，但客户端已收到超时响应。
 	RequestTimeout time.Duration
 	// If specified, long running requests such as watch will be allocated a random timeout between this value, and
 	// twice this value.  Note that it is up to the request handlers to ignore or honor this timeout. In seconds.
+	// 随机化可避免大量 watch 同时超时重连，形成惊群。
 	MinRequestTimeout int
 
 	// StorageInitializationTimeout defines the maximum amount of time to wait for storage initialization
@@ -243,6 +251,7 @@ type Config struct {
 	// ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
 	// have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
 	// but /readyz will return failure.
+	// 该延迟让负载均衡器有时间把流量切走，减少滚动更新时的连接错误。
 	ShutdownDelayDuration time.Duration
 
 	// The limit on the total size increase all "copy" operations in a json
@@ -251,6 +260,7 @@ type Config struct {
 	JSONPatchMaxCopyBytes int64
 	// The limit on the request size that would be accepted and decoded in a write request
 	// 0 means no limit.
+	// 默认 3MB，用于防止超大请求耗尽内存；etcd 侧推荐的请求上限为 1.5MB。
 	MaxRequestBodyBytes int64
 	// MaxRequestsInFlight is the maximum number of parallel non-long-running requests. Every further
 	// request has to wait. Applies only to non-mutating requests.
@@ -265,6 +275,7 @@ type Config struct {
 	// GOAWAY, the in-flight requests will not be affected and new requests will use
 	// a new TCP connection to triggering re-balancing to another server behind the load balance.
 	// Default to 0, means never send GOAWAY. Max is 0.02 to prevent break the apiserver.
+	// 概率性 GOAWAY 用于推动客户端重新建连，从而在负载均衡后端之间再平衡。
 	GoawayChance float64
 
 	// MergedResourceConfig indicates which groupVersion enabled and its resources enabled/disabled.
@@ -275,6 +286,7 @@ type Config struct {
 	// lifecycleSignals provides access to the various signals
 	// that happen during lifecycle of the apiserver.
 	// it's intentionally marked private as it should never be overridden.
+	// 生命周期信号驱动优雅关闭的各个阶段，禁止外部覆盖。
 	lifecycleSignals lifecycleSignals
 
 	// StorageObjectCountTracker is used to keep track of the total number of objects
@@ -288,6 +300,7 @@ type Config struct {
 	// Server as soon as ShutdownDelayDuration has elapsed.
 	// If enabled, after ShutdownDelayDuration elapses, any incoming request is
 	// rejected with a 429 status code and a 'Retry-After' response.
+	// 开启后客户端能明确感知"正在关闭"，并按照 Retry-After 重试到其他实例。
 	ShutdownSendRetryAfter bool
 
 	//===========================================================================
@@ -327,9 +340,11 @@ type Config struct {
 	// for them to drain, this maintains backward compatibility.
 	// This grace period is orthogonal to other grace periods, and
 	// it is not overridden by any other grace period.
+	// 为 0 时保持旧行为：不跟踪、不等待活跃 watch；正值会启用限速排空。
 	ShutdownWatchTerminationGracePeriod time.Duration
 }
 
+// RecommendedConfig 在 Config 之上附带推荐选项创建的共享 informer 工厂与客户端配置。
 type RecommendedConfig struct {
 	Config
 
@@ -344,6 +359,7 @@ type RecommendedConfig struct {
 	ClientConfig *restclient.Config
 }
 
+// SecureServingInfo 描述安全（HTTPS）监听的网络与 TLS 参数。
 type SecureServingInfo struct {
 	// Listener is the secure server network listener.
 	Listener net.Listener
@@ -381,6 +397,7 @@ type SecureServingInfo struct {
 	DisableHTTP2 bool
 }
 
+// AuthenticationInfo 汇总认证所需的认证器、受众标识与请求头配置。
 type AuthenticationInfo struct {
 	// APIAudiences is a list of identifier that the API identifies as. This is
 	// used by some authenticators to validate audience bound credentials.
@@ -391,6 +408,7 @@ type AuthenticationInfo struct {
 	RequestHeaderConfig *authenticatorfactory.RequestHeaderConfig
 }
 
+// AuthorizationInfo 汇总授权所需的授权器。
 type AuthorizationInfo struct {
 	// Authorizer determines whether the subject is allowed to make the request based only
 	// on the RequestURI
@@ -405,6 +423,7 @@ func init() {
 func NewConfig(codecs serializer.CodecFactory) *Config {
 	defaultHealthChecks := []healthz.HealthChecker{healthz.PingHealthz, healthz.LogHealthz}
 	var id string
+	// 启用 APIServerIdentity 时生成稳定的实例 ID，用于 lease 等机制区分不同 apiserver 实例。
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerIdentity) {
 		hostname, err := hostnameFunc()
 		if err != nil {
@@ -415,6 +434,7 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 		// the hash used for the identity should include both the hostname and the identity value.
 		// TODO: receive the identity value as a parameter once the apiserver identity lease controller
 		// post start hook is moved to generic apiserver.
+		// 长度前缀编码避免 hostname 与固定字符串拼接产生歧义。
 		b := cryptobyte.NewBuilder(nil)
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 			b.AddBytes([]byte(hostname))
@@ -532,6 +552,7 @@ func DefaultOpenAPIV3Config(getDefinitions openapicommon.GetOpenAPIDefinitions, 
 		GetDefinitionName:     defNamer.GetDefinitionName,
 		GetDefinitions:        getDefinitions,
 	}
+	// V3 的定义引用需要生成 #/components/schemas/ 形式，定义名中的特殊字符必须转义。
 	defaultConfig.Definitions = getDefinitions(func(name string) spec.Ref {
 		defName, _ := defaultConfig.GetDefinitionName(name)
 		return spec.MustCreateRef("#/components/schemas/" + openapicommon.EscapeJsonPointer(defName))
@@ -540,6 +561,8 @@ func DefaultOpenAPIV3Config(getDefinitions openapicommon.GetOpenAPIDefinitions, 
 	return defaultConfig
 }
 
+// ApplyClientCert 把客户端 CA 追加到安全监听配置中；
+// 已有 CA 时使用联合 provider，保留双方签发的证书都可信。
 func (c *AuthenticationInfo) ApplyClientCert(clientCA dynamiccertificates.CAContentProvider, servingInfo *SecureServingInfo) error {
 	if servingInfo == nil {
 		return nil
@@ -556,6 +579,7 @@ func (c *AuthenticationInfo) ApplyClientCert(clientCA dynamiccertificates.CACont
 	return nil
 }
 
+// completedConfig 由 Complete 生成，补充了完成阶段才能确定的字段。
 type completedConfig struct {
 	*Config
 
@@ -567,6 +591,8 @@ type completedConfig struct {
 	SharedInformerFactory informers.SharedInformerFactory
 }
 
+// CompletedConfig 把 completedConfig 藏在私有指针后，保证只能由本包生成，
+// 调用方无法手工构造一个未完成初始化的配置。
 type CompletedConfig struct {
 	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedConfig
@@ -575,6 +601,7 @@ type CompletedConfig struct {
 // AddHealthChecks adds a health check to our config to be exposed by the health endpoints
 // of our configured apiserver. We should prefer this to adding healthChecks directly to
 // the config unless we explicitly want to add a healthcheck only to a specific health endpoint.
+// 该方法会同时注册到 healthz/livez/readyz 三个端点。
 func (c *Config) AddHealthChecks(healthChecks ...healthz.HealthChecker) {
 	c.HealthzChecks = append(c.HealthzChecks, healthChecks...)
 	c.LivezChecks = append(c.LivezChecks, healthChecks...)
@@ -608,6 +635,7 @@ func (c *Config) AddPostStartHook(name string, hook PostStartHookFunc) error {
 	if hook == nil {
 		return fmt.Errorf("hook func may not be nil: %q", name)
 	}
+	// 显式禁用的 hook 静默跳过，便于下游通过配置裁剪默认行为。
 	if c.DisabledPostStartHooks.Has(name) {
 		klog.V(1).Infof("skipping %q because it was explicitly disabled", name)
 		return nil
@@ -615,6 +643,7 @@ func (c *Config) AddPostStartHook(name string, hook PostStartHookFunc) error {
 
 	if postStartHook, exists := c.PostStartHooks[name]; exists {
 		// this is programmer error, but it can be hard to debug
+		// 记录首次注册的调用栈，重名时直接指出来源，省去二分排查。
 		return fmt.Errorf("unable to add %q because it was already registered by: %s", name, postStartHook.originatingStack)
 	}
 	c.PostStartHooks[name] = PostStartHookConfigEntry{hook: hook, originatingStack: string(debug.Stack())}
@@ -629,12 +658,14 @@ func (c *Config) AddPostStartHookOrDie(name string, hook PostStartHookFunc) {
 	}
 }
 
+// completeOpenAPI 填充 OpenAPI V2 的默认安全定义、公共响应与版本信息。
 func completeOpenAPI(config *openapicommon.Config, version *version.Version) {
 	if config == nil {
 		return
 	}
 	if config.SecurityDefinitions != nil {
 		// Setup OpenAPI security: all APIs will have the same authentication for now.
+		// 排序后生成 DefaultSecurity，保证输出稳定、便于 diff。
 		config.DefaultSecurity = []map[string][]string{}
 		keys := []string{}
 		for k := range *config.SecurityDefinitions {
@@ -661,6 +692,7 @@ func completeOpenAPI(config *openapicommon.Config, version *version.Version) {
 	}
 	if config.Info.Version == "" {
 		if version != nil {
+			// 去掉版本号中的 "-alpha.1" 等后缀，只保留 major.minor。
 			config.Info.Version = strings.Split(version.String(), "-")[0]
 		} else {
 			config.Info.Version = "unversioned"
@@ -668,6 +700,7 @@ func completeOpenAPI(config *openapicommon.Config, version *version.Version) {
 	}
 }
 
+// completeOpenAPIV3 与 completeOpenAPI 对应，但使用 OpenAPI V3 的 schema 类型。
 func completeOpenAPIV3(config *openapicommon.OpenAPIV3Config, version *version.Version) {
 	if config == nil {
 		return
@@ -708,6 +741,7 @@ func completeOpenAPIV3(config *openapicommon.OpenAPIV3Config, version *version.V
 }
 
 // DrainedNotify returns a lifecycle signal of genericapiserver already drained while shutting down.
+// 用于等待所有在途请求处理完成后再关闭外部依赖（如 etcd 客户端）。
 func (c *Config) DrainedNotify() <-chan struct{} {
 	return c.lifecycleSignals.InFlightRequestsDrained.Signaled()
 }
@@ -728,6 +762,7 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 	}
 
 	// if there is no port, and we listen on one securely, use that one
+	// 外部地址缺少端口时从安全监听推断，否则生成的发现地址不可用。
 	if _, _, err := net.SplitHostPort(c.ExternalAddress); err != nil {
 		if c.SecureServing == nil {
 			klog.Fatalf("cannot derive external address port without listening on a secure port.")
@@ -755,6 +790,7 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 		if c.RESTOptionsGetter == nil {
 			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistry()
 		} else {
+			// 有存储时用存储前缀作为等价资源标识，避免不同组下同名的资源互相混淆。
 			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistryWithIdentity(func(groupResource schema.GroupResource) string {
 				// use the storage prefix as the key if possible
 				if opts, err := c.RESTOptionsGetter.GetRESTOptions(groupResource, nil); err == nil {
@@ -771,6 +807,8 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 
 // Complete fills in any fields not set that are required to have valid data and can be derived
 // from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
+//
+// RecommendedConfig 复用内嵌 Config 的完成逻辑，并带上推荐选项创建的 informer 工厂。
 func (c *RecommendedConfig) Complete() CompletedConfig {
 	return c.Config.Complete(c.SharedInformerFactory)
 }
@@ -788,6 +826,8 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 	if c.Serializer == nil {
 		return nil, fmt.Errorf("Genericapiserver.New() called with config.Serializer == nil")
 	}
+	// 只允许显式批准的媒体类型，防止序列化器意外暴露未审查的格式
+	// （例如在特性门控关闭时仍接受 CBOR）。
 	allowedMediaTypes := defaultAllowedMediaTypes
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.CBORServingAndStorage) {
 		allowedMediaTypes = append(allowedMediaTypes, runtime.ContentTypeCBOR)
@@ -899,6 +939,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 	}
 
 	// first add poststarthooks from delegated targets
+	// 先注册被委托服务器的 hook，再注册本地配置的 hook，保证重名检测覆盖两者。
 	for k, v := range delegationTarget.PostStartHooks() {
 		s.postStartHooks[k] = v
 	}
@@ -915,6 +956,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 	}
 
 	// register mux signals from the delegated server
+	// mux/discovery 完成信号参与 503 兜底逻辑，必须汇总到同一个服务器实例上。
 	for k, v := range delegationTarget.MuxAndDiscoveryCompleteSignals() {
 		if err := s.RegisterMuxAndDiscoveryCompleteSignal(k, v); err != nil {
 			return nil, err
@@ -923,6 +965,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 
 	genericApiServerHookName := "generic-apiserver-start-informers"
 	if c.SharedInformerFactory != nil {
+		// 只在未注册时启动 informer，避免与委托目标重复启动同一工厂。
 		if !s.isPostStartHookRegistered(genericApiServerHookName) {
 			err := s.AddPostStartHook(genericApiServerHookName, func(hookContext PostStartHookContext) error {
 				c.SharedInformerFactory.Start(hookContext.Done())
@@ -955,6 +998,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 	}
 
 	// Add PostStartHooks for maintaining the watermarks for the Priority-and-Fairness and the Max-in-Flight filters.
+	// 二者互斥：启用 APF 时由 APF 的排队/并发指标驱动，否则由 max-in-flight 采样驱动。
 	if c.FlowControl != nil {
 		const priorityAndFairnessFilterHookName = "priority-and-fairness-filter"
 		if !s.isPostStartHookRegistered(priorityAndFairnessFilterHookName) {
@@ -992,6 +1036,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		}
 	}
 
+	// 合并委托目标的健康检查；同名检查以委托目标为准，避免重复执行。
 	for _, delegateCheck := range delegationTarget.HealthzChecks() {
 		skip := false
 		for _, existingCheck := range c.HealthzChecks {
@@ -1027,19 +1072,28 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 	return s, nil
 }
 
+// BuildHandlerChainWithStorageVersionPrecondition 在默认链之外增加存储版本前置校验，
+// 防止客户端在存储版本迁移期间读到不支持的版本。
 func BuildHandlerChainWithStorageVersionPrecondition(apiHandler http.Handler, c *Config) http.Handler {
 	// WithStorageVersionPrecondition needs the WithRequestInfo to run first
 	handler := genericapifilters.WithStorageVersionPrecondition(apiHandler, c.StorageVersionManager, c.Serializer)
 	return DefaultBuildHandlerChain(handler, c)
 }
 
+// DefaultBuildHandlerChain 组装默认的过滤器链。
+//
+// 链的顺序即执行顺序（后包装的先执行）：审计初始化 -> panic 恢复 -> 请求信息解析 ->
+// 超时/限流 -> 认证 -> 授权 -> ...。顺序敏感，调整前务必确认各过滤器对上下文与响应的依赖。
 func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	handler := apiHandler
 
+	// 各阶段用 TrackStarted/TrackCompleted 成对打点；据此可从总延迟中扣除固定开销，
+	// 并单独统计 webhook 与 APF 排队耗时。
 	handler = filterlatency.TrackCompleted(handler)
 	handler = genericapifilters.WithAuthorization(handler, c.Authorization.Authorizer, c.Serializer)
 	handler = filterlatency.TrackStarted(handler, c.TracerProvider, "authorization")
 
+	// APF 与固定上限限流二选一：APF 支持按优先级/公平性分配并发。
 	if c.FlowControl != nil {
 		workEstimatorCfg := flowcontrolrequest.DefaultWorkEstimatorConfig()
 		requestWorkEstimator := flowcontrolrequest.NewWorkEstimator(
@@ -1052,6 +1106,7 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	}
 
 	handler = filterlatency.TrackCompleted(handler)
+	// 受限模拟会额外校验被模拟者的权限边界，特性门控关闭时退回传统模拟。
 	if c.FeatureGate.Enabled(genericfeatures.ConstrainedImpersonation) {
 		handler = impersonation.WithConstrainedImpersonation(handler, c.Authorization.Authorizer, c.Serializer)
 		handler = filterlatency.TrackStarted(handler, c.TracerProvider, "constrainedimpersonation")
@@ -1115,6 +1170,7 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	return handler
 }
 
+// installAPI 安装可选的通用端点（索引、pprof、metrics、version、发现等）。
 func installAPI(name string, s *GenericAPIServer, c *Config) {
 	if c.EnableIndex {
 		routes.Index{}.Install(s.listedPathProvider, s.Handler.NonGoRestfulMux)
@@ -1122,12 +1178,14 @@ func installAPI(name string, s *GenericAPIServer, c *Config) {
 	if c.EnableProfiling {
 		routes.Profiling{}.Install(s.Handler.NonGoRestfulMux)
 		if c.EnableContentionProfiling {
+			// 1 表示以采样方式记录所有阻塞事件，开销显著，仅用于排障。
 			goruntime.SetBlockProfileRate(1)
 		}
 		// so far, only logging related endpoints are considered valid to add for these debug flags.
 		routes.DebugFlags{}.Install(s.Handler.NonGoRestfulMux, "v", routes.StringFlagPutHandler(logs.GlogSetter))
 	}
 	if s.UnprotectedDebugSocket != nil {
+		// debug socket 不经认证，只应在受控环境（如本地回环）中启用。
 		s.UnprotectedDebugSocket.InstallProfiling()
 		s.UnprotectedDebugSocket.InstallDebugFlag("v", routes.StringFlagPutHandler(logs.GlogSetter))
 		if c.EnableContentionProfiling {
@@ -1137,6 +1195,7 @@ func installAPI(name string, s *GenericAPIServer, c *Config) {
 
 	if c.EnableMetrics {
 		if c.EnableProfiling {
+			// 同时暴露重置接口，便于本地调试；生产环境应通过鉴权限制访问。
 			routes.MetricsWithReset{}.Install(s.Handler.NonGoRestfulMux)
 			slis.SLIMetricsWithReset{}.Install(s.Handler.NonGoRestfulMux)
 		} else {
@@ -1156,6 +1215,8 @@ func installAPI(name string, s *GenericAPIServer, c *Config) {
 	}
 }
 
+// NewRequestInfoResolver 根据配置中的 API 前缀构造请求信息解析器。
+// GrouplessAPIPrefixes 中的前缀（默认 /api）走无组路径，其余（/apis）必须带组。
 func NewRequestInfoResolver(c *Config) *apirequest.RequestInfoFactory {
 	apiPrefixes := sets.NewString(strings.Trim(APIGroupPrefix, "/")) // all possible API prefixes
 	legacyAPIPrefixes := sets.String{}                               // APIPrefixes that won't have groups (legacy)
@@ -1170,6 +1231,7 @@ func NewRequestInfoResolver(c *Config) *apirequest.RequestInfoFactory {
 	}
 }
 
+// HostPort 返回安全监听的实际地址与端口；listener 未创建时返回错误。
 func (s *SecureServingInfo) HostPort() (string, int, error) {
 	if s == nil || s.Listener == nil {
 		return "", 0, fmt.Errorf("no listener found")
@@ -1189,6 +1251,9 @@ func (s *SecureServingInfo) HostPort() (string, int, error) {
 // AuthorizeClientBearerToken wraps the authenticator and authorizer in loopback authentication logic
 // if the loopback client config is specified AND it has a bearer token. Note that if either authn or
 // authz is nil, this function won't add a token authenticator or authorizer.
+//
+// 回环令牌被映射为 system:masters，仅用于服务器内部调用；它只加入认证链前端，
+// 仍需经过授权链（特权组会放行）。
 func AuthorizeClientBearerToken(loopback *restclient.Config, authn *AuthenticationInfo, authz *AuthorizationInfo) {
 	if loopback == nil || len(loopback.BearerToken) == 0 {
 		return
@@ -1204,6 +1269,7 @@ func AuthorizeClientBearerToken(loopback *restclient.Config, authn *Authenticati
 	}
 
 	privilegedLoopbackToken := loopback.BearerToken
+	// 随机 UID 使每次启动的内部身份可区分，便于审计追踪。
 	var uid = uuid.New().String()
 	tokens := make(map[string]*user.DefaultInfo)
 	tokens[privilegedLoopbackToken] = &user.DefaultInfo{

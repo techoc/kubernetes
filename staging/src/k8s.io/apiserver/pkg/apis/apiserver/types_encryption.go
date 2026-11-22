@@ -34,6 +34,10 @@ Use of wildcards that overlap within the same resource list or across multiple
 entries are not allowed since part of the configuration would be ineffective.
 Resource lists are processed in order, with earlier lists taking precedence.
 
+为什么顺序重要：解密时必须能用写入时的同一个 provider 读回数据，因此
+配置是“读优先”的有序列表——排在前面的 provider 先尝试解密，而写入始终
+使用列表中第一个 provider。
+
 Example:
 
 	kind: EncryptionConfiguration
@@ -70,10 +74,15 @@ Example:
 type EncryptionConfiguration struct {
 	metav1.TypeMeta
 	// resources is a list containing resources, and their corresponding encryption providers.
+	//
+	// 每个条目独立匹配一组资源；列表顺序即解密尝试顺序。
 	Resources []ResourceConfiguration
 }
 
 // ResourceConfiguration stores per resource configuration.
+//
+// 资源名使用 "resource" 或 "resource.group" 形式（注意不是 GVK），
+// 与 RBAC 中的资源表示保持一致。
 type ResourceConfiguration struct {
 	// resources is a list of kubernetes resources which have to be encrypted. The resource names are derived from `resource` or `resource.group` of the group/version/resource.
 	// eg: pandas.awesome.bears.example is a custom resource with 'group': awesome.bears.example, 'resource': pandas.
@@ -87,6 +96,9 @@ type ResourceConfiguration struct {
 }
 
 // ProviderConfiguration stores the provided configuration for an encryption provider.
+//
+// 各字段互斥：同一 provider 条目中只能设置一个 transformer，校验在
+// validation 包中完成。
 type ProviderConfiguration struct {
 	// aesgcm is the configuration for the AES-GCM transformer.
 	AESGCM *AESConfiguration
@@ -123,14 +135,21 @@ type Key struct {
 }
 
 // String implements Stringer interface in a log safe way.
+//
+// 密钥材料绝不能进日志：这里只输出名称，Secret 固定替换为 [REDACTED]。
+// 所有打印 Key 的地方都应依赖该方法，而不是 fmt 结构体。
 func (k Key) String() string {
 	return fmt.Sprintf("Name: %s, Secret: [REDACTED]", k.Name)
 }
 
 // IdentityConfiguration is an empty struct to allow identity transformer in provider configuration.
+// identity 表示明文存储，常用于关闭特定资源的加密（例如 events）。
 type IdentityConfiguration struct{}
 
 // KMSConfiguration contains the name, cache size and path to configuration file for a KMS based envelope transformer.
+//
+// KMS 负责保护 DEK，真正的数据加密由本地 AES 完成；因此 KMS 不可用时
+// 已有数据仍可读取（只要 DEK 已缓存），但新写入会失败。
 type KMSConfiguration struct {
 	// apiVersion of KeyManagementService
 	// +optional

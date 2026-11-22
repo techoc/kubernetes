@@ -25,6 +25,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// assertEqual 是测试内的小工具：nil 与非 nil 一律视为不等，
+// 避免 reflect.DeepEqual(nil, typed-nil) 的陷阱导致误判。
 func assertEqual(t *testing.T, expected, actual interface{}) {
 	var equal bool
 	if expected == nil || actual == nil {
@@ -37,11 +39,18 @@ func assertEqual(t *testing.T, expected, actual interface{}) {
 	}
 }
 
+// TestGetDefinitionName 验证 OpenAPI 定义名的生成与扩展字段。
+// 中文说明：注册类型后，namer 应返回稳定的 friendly name，并附带
+// x-kubernetes-group-version-kind 扩展，客户端据此把 schema 关联到 GVK。
+// 未注册的类型则原样返回名称且不带扩展，保证未知类型不会破坏文档生成。
 func TestGetDefinitionName(t *testing.T) {
 	testType := openapitesting.TestType{}
 	// in production, the name is stripped of ".*vendor/" prefix before passed
 	// to GetDefinitionName, so here typePkgName does not have the
 	// "k8s.io/kubernetes/vendor" prefix.
+	//
+	// 中文说明：这条注释解释了测试为何不构造 vendor 前缀——生产路径已先剥离，
+	// 在此重复构造只会测试到已被移除的旧行为。
 	typeFriendlyName := "io.k8s.apiserver.pkg.endpoints.openapi.testing.TestType"
 	s := runtime.NewScheme()
 	s.AddKnownTypeWithName(testType.GroupVersionKind(), &testType)
@@ -55,11 +64,15 @@ func TestGetDefinitionName(t *testing.T) {
 			"kind":    "TestType",
 		},
 	}, e["x-kubernetes-group-version-kind"])
+	// 未注册类型：名称保持不变，且没有 GVK 扩展。
 	n, e2 := namer.GetDefinitionName("com.test.another.Type")
 	assertEqual(t, "com.test.another.Type", n)
 	assertEqual(t, e2, spec.Extensions(nil))
 }
 
+// TestToValidOperationID 验证把任意字符串规范化为合法 OpenAPI operationId 的规则。
+// 中文说明：operationId 必须能安全嵌入生成的客户端方法名，因此非法字符被删除、
+// 可选地首字母大写；数字开头的处理由调用方通过 capitalizeFirstLetter 控制。
 func TestToValidOperationID(t *testing.T) {
 	scenarios := []struct {
 		s                     string

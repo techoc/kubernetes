@@ -44,6 +44,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// testInformer 包装 SharedIndexInformer 并跟踪已注册的事件处理器，
+// 以便在测试中断言控制器退出时确实移除了 handler，避免泄漏。
 type testInformer struct {
 	cache.SharedIndexInformer
 
@@ -51,6 +53,7 @@ type testInformer struct {
 	registrations map[interface{}]struct{}
 }
 
+// AddEventHandler 注册 handler 并记录其 registration。
 func (t *testInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
 	res, err := t.SharedIndexInformer.AddEventHandler(handler)
 	if err != nil {
@@ -69,6 +72,7 @@ func (t *testInformer) AddEventHandler(handler cache.ResourceEventHandler) (cach
 	return res, err
 }
 
+// RemoveEventHandler 移除 handler；移除未注册的 handler 视为测试失败。
 func (t *testInformer) RemoveEventHandler(registration cache.ResourceEventHandlerRegistration) error {
 	func() {
 		t.lock.Lock()
@@ -84,6 +88,7 @@ func (t *testInformer) RemoveEventHandler(registration cache.ResourceEventHandle
 }
 
 var (
+	// 用 unstructured 充当任意策略对象，避免为测试注册真实策略类型。
 	scheme  *runtime.Scheme             = runtime.NewScheme()
 	codecs  serializer.CodecFactory     = serializer.NewCodecFactory(scheme)
 	fakeGVR schema.GroupVersionResource = schema.GroupVersionResource{
@@ -100,6 +105,10 @@ func init() {
 	scheme.AddKnownTypeWithName(fakeGVKList, &unstructured.UnstructuredList{})
 }
 
+// setupTest 组装一个基于 fake tracker 的 informer 与通用控制器。
+// reconciler 把每次调用的对象副本投递到无缓冲 channel，从而让测试
+// 能逐步驱动并观察 reconcile 顺序；channel 无缓冲也使控制器在测试
+// 未接收时阻塞，便于断言同步状态。
 func setupTest(ctx context.Context, customReconciler func(string, string, runtime.Object) error) (
 	tracker clienttesting.ObjectTracker,
 	controller generic.Controller[*unstructured.Unstructured],
@@ -166,6 +175,8 @@ func setupTest(ctx context.Context, customReconciler func(string, string, runtim
 	return tracker, myController, informer, waitForReconcile, verifyNoMoreEvents
 }
 
+// TestReconcile 验证新增、更新、删除事件都会触发 reconcile，
+// 且删除事件以 nil 对象回调（表示对象已不存在）。
 func TestReconcile(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer testCancel()
@@ -236,6 +247,8 @@ func TestReconcile(t *testing.T) {
 	verifyNoMoreEvents()
 }
 
+// TestShutdown 验证上下文取消后控制器与 informer 都能退出，
+// 并且事件处理器被移除、不残留注册。
 func TestShutdown(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer testCancel()
@@ -277,6 +290,8 @@ func TestShutdown(t *testing.T) {
 }
 
 // Show an error is thrown informer isn't started when the controller runs
+// 验证 informer 未启动时控制器不会永远挂起，而是在 ctx 到期后以
+// DeadlineExceeded 停止并清理 handler。
 func TestInformerNeverStarts(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer testCancel()
@@ -308,6 +323,8 @@ func TestInformerNeverStarts(t *testing.T) {
 }
 
 // Shows that if RV does not change, the reconciler does not get called
+// resourceVersion 未变化时不应重复 reconcile，否则周期性 resync
+// 会带来无谓的全量重算。
 func TestIgnoredUpdate(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer testCancel()
@@ -369,6 +386,7 @@ func TestIgnoredUpdate(t *testing.T) {
 }
 
 // Shows that an object which fails reconciliation will retry
+// 失败的对象应以退避方式快速重试，直到 reconcile 返回成功。
 func TestReconcileRetry(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
 	defer testCancel()
@@ -426,6 +444,8 @@ func TestReconcileRetry(t *testing.T) {
 	verifyNoMoreEvents()
 }
 
+// TestInformerList 验证 informer 包装的 List/Namespaced/Get 语义：
+// 增删改后的缓存内容正确，命名空间隔离生效，不存在的对象返回 NotFound。
 func TestInformerList(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 

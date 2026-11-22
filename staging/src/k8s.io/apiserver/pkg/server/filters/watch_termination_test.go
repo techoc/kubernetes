@@ -26,6 +26,9 @@ import (
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestWithWatchTerminationDuringShutdown 验证关停期间对 watch 请求的处理策略：
+// 未进入 waiting 模式时正常放行并把关停信号挂到 context；
+// 已进入 waiting 模式时直接返回 503 + Retry-After，让客户端重建 watch。
 func TestWithWatchTerminationDuringShutdown(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -39,17 +42,20 @@ func TestWithWatchTerminationDuringShutdown(t *testing.T) {
 		signalAttachedToContext bool
 	}{
 		{
+			// 没有 RequestInfo 属于内部错误：过滤器无法判断请求类型。
 			name:               "no RequestInfo attached to request context",
 			handlerInvoked:     0,
 			statusCodeExpected: http.StatusInternalServerError,
 		},
 		{
+			// 非 watch 请求不受关停逻辑影响，也不加入等待组。
 			name:               "request is not a WATCH, not added into wait group",
 			requestInfo:        &apirequest.RequestInfo{Verb: "get"},
 			handlerInvoked:     1,
 			statusCodeExpected: http.StatusOK,
 		},
 		{
+			// waiting 模式下不再接受新 watch，避免关停被长连接无限拖延。
 			name:                    "request is a WATCH, wait group is in waiting mode",
 			requestInfo:             &apirequest.RequestInfo{Verb: "watch"},
 			wg:                      &fakeRequestWaitGroup{waiting: true},
@@ -60,6 +66,7 @@ func TestWithWatchTerminationDuringShutdown(t *testing.T) {
 			statusCodeExpected:      http.StatusServiceUnavailable,
 		},
 		{
+			// 正常阶段：watch 被加入等待组，并能在 context 中拿到关停信号自行退出。
 			name:                    "request is a WATCH, wait group is accepting",
 			requestInfo:             &apirequest.RequestInfo{Verb: "watch"},
 			wg:                      &fakeRequestWaitGroup{},
@@ -134,10 +141,13 @@ func TestWithWatchTerminationDuringShutdown(t *testing.T) {
 	}
 }
 
+// fakeServerShutdownSignal 是 ServerShutdownSignal 的测试替身。
 type fakeServerShutdownSignal struct{}
 
 func (fakeServerShutdownSignal) ShuttingDown() <-chan struct{} { return nil }
 
+// fakeRequestWaitGroup 记录 Add 的调用次数与当前 inflight 计数；
+// waiting=true 模拟 server 已进入“等待现有请求结束”的阶段。
 type fakeRequestWaitGroup struct {
 	waiting           bool
 	invoked, inflight int
@@ -153,6 +163,8 @@ func (f *fakeRequestWaitGroup) Add(delta int) error {
 }
 func (f *fakeRequestWaitGroup) Done() { f.inflight-- }
 
+// retryAfterSent 判断响应是否具备 503 重试所需的一组头：
+// Retry-After、JSON content type 与 nosniff。
 func retryAfterSent(resp *http.Response) bool {
 	switch {
 	case resp.StatusCode == http.StatusServiceUnavailable &&

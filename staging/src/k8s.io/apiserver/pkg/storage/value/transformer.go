@@ -15,6 +15,10 @@ limitations under the License.
 */
 
 // Package value contains methods for assisting with transformation of values in storage.
+//
+// 值转换用于静态加密（encryption at rest）等场景：写入时把明文转换为带前缀的
+// 密文，读取时根据前缀选择对应的转换器解密。前缀是区分不同 provider/key 的
+// 唯一标识，因此轮换密钥时新旧数据可以共存，读取路径按前缀逐条尝试。
 package value
 
 import (
@@ -42,6 +46,7 @@ type Context interface {
 	AuthenticatedData() []byte
 }
 
+// Read 把存储中的字节转换回明文。
 type Read interface {
 	// TransformFromStorage may transform the provided data from its underlying storage representation or return an error.
 	// Stale is true if the object on disk is stale and a write to etcd should be issued, even if the contents of the object
@@ -49,6 +54,7 @@ type Read interface {
 	TransformFromStorage(ctx context.Context, data []byte, dataCtx Context) (out []byte, stale bool, err error)
 }
 
+// Write 把明文转换为存储表示。
 type Write interface {
 	// TransformToStorage may transform the provided data into the appropriate form in storage or return an error.
 	TransformToStorage(ctx context.Context, data []byte, dataCtx Context) (out []byte, err error)
@@ -113,6 +119,9 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 			// (in the config file) than the encryption transformer. In that scenario, the identity transformer needs to
 			// identify (during reads from disk) whether the data being read is encrypted or not. If the data is encrypted,
 			// it shall throw an error, but that error should not prevent the next subsequent transformer from being tried.
+			//
+			// 空前缀代表 identity 转换器：它匹配一切数据，因此出错时必须继续尝试
+			// 后面的转换器，否则加密数据将永远无法被解密读取。
 			if len(transformer.Prefix) == 0 && err != nil {
 				continue
 			}
@@ -157,6 +166,8 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 				continue
 			}
 
+			// 非首个转换器成功说明数据是用旧配置写入的，标记 stale 促使上层回写
+			// 为当前配置，从而完成密钥/配置轮换。
 			return result, stale || i != 0, err
 		}
 	}
@@ -169,6 +180,9 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 }
 
 // TransformToStorage uses the first transformer and adds its prefix to the data.
+//
+// 写入永远使用第一个转换器，这是轮换的写入端：新数据用新密钥加密，旧数据在
+// 读取时被识别并逐步重写。
 func (t *prefixTransformers) TransformToStorage(ctx context.Context, data []byte, dataCtx Context) ([]byte, error) {
 	start := time.Now()
 	transformer := t.transformers[0]
@@ -185,6 +199,8 @@ func (t *prefixTransformers) TransformToStorage(ctx context.Context, data []byte
 	return prefixedData, nil
 }
 
+// logTransformErr 在 V(6) 下附带完整的请求信息，否则只记录错误本身，避免在
+// 常规日志级别泄露资源与用户细节。
 func logTransformErr(ctx context.Context, err error, message string) {
 	requestInfo := getRequestInfoFromContext(ctx)
 	if klogLevel6 := klog.V(6); klogLevel6.Enabled() {
@@ -207,6 +223,8 @@ func logTransformErr(ctx context.Context, err error, message string) {
 	klog.ErrorSDepth(1, err, message)
 }
 
+// getRequestInfoFromContext 在上下文缺失 RequestInfo 时返回空结构而不是报错：
+// 转换发生在存储层，可能来自后台任务（如 compaction），不应因此中断。
 func getRequestInfoFromContext(ctx context.Context) *genericapirequest.RequestInfo {
 	if reqInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
 		return reqInfo

@@ -48,12 +48,18 @@ import (
 // indicates fast forward CEL features that can be used when rollback is no longer needed.
 func DefaultCompatibilityVersion() *version.Version {
 	effectiveVer := compatibility.DefaultComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent)
+	// 未初始化时退回构建时版本，避免在测试或独立组件中 panic。
 	if effectiveVer == nil {
 		effectiveVer = compatibility.DefaultBuildEffectiveVersion()
 	}
 	return effectiveVer.MinCompatibilityVersion()
 }
 
+// baseOpts 是所有兼容版本共享的 CEL 环境选项列表。
+//
+// 每一项都带有 IntroducedVersion/RemovedVersion，EnvSet 在构造时根据目标兼容
+// 版本筛选出生效的选项。顺序有意义：选项按声明顺序叠加，同一库的新版本会
+// 覆盖旧版本。
 var baseOpts = []VersionedOptions{
 	{
 		// CEL epoch was actually 1.23, but we artificially set it to 1.0 because these
@@ -84,6 +90,8 @@ var baseOpts = []VersionedOptions{
 		},
 	},
 	{
+		// 旧版 lists 库在 1.37 移除，由下面新版本接替；保留 RemovedVersion 是为了
+		// 让旧兼容版本仍能编译历史表达式。
 		IntroducedVersion: version.MajorMinor(1, 0),
 		RemovedVersion:    version.MajorMinor(1, 37),
 		EnvOptions: []cel.EnvOption{
@@ -188,6 +196,8 @@ var baseOpts = []VersionedOptions{
 	StrictCostOpt,
 }
 
+// StrictCostOpt 为 Kubernetes 扩展库注册严格的成本估算器，防止 CEL 表达式通过
+// 扩展函数绕过内置的成本上限。
 var StrictCostOpt = VersionedOptions{
 	// This is to configure the cost calculation for extended libraries
 	IntroducedVersion: version.MajorMinor(1, 0),
@@ -224,11 +234,13 @@ func MustBaseEnvSet(ver *version.Version) *EnvSet {
 	if len(ver.Components()) < 2 {
 		panic(fmt.Sprintf("version must contain an major and minor component, but got: %s", ver.String()))
 	}
+	// 缓存键只取 major.minor：同一兼容版本下 patch 号不影响环境内容。
 	key := strconv.FormatUint(uint64(ver.Major()), 10) + "." + strconv.FormatUint(uint64(ver.Minor()), 10)
 	var entry interface{}
 	if entry, ok := baseEnvs.Load(key); ok {
 		return entry.(*EnvSet)
 	}
+	// singleflight 保证并发首次构造时只构建一次，避免重复的昂贵初始化。
 	entry, _, _ = baseEnvsSingleflight.Do(key, func() (interface{}, error) {
 		entry := mustNewEnvSet(ver, baseOpts)
 		if cacheBaseEnvs {

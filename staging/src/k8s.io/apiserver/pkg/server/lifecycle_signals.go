@@ -21,141 +21,119 @@ import (
 )
 
 /*
-We make an attempt here to identify the events that take place during
-lifecycle of the apiserver.
+这里尝试识别 apiserver 生命周期中发生的事件，并为每个事件命名以便引用。
 
-We also identify each event with a name so we can refer to it.
+事件：
+- ShutdownInitiated：收到 KILL 信号
+- AfterShutdownDelayDuration：shutdown 延迟时长已过
+- InFlightRequestsDrained：所有在途请求已排空
+- HasBeenReady：readyz 端点首次成功时发出
 
-Events:
-- ShutdownInitiated: KILL signal received
-- AfterShutdownDelayDuration: shutdown delay duration has passed
-- InFlightRequestsDrained: all in flight request(s) have been drained
-- HasBeenReady is signaled when the readyz endpoint succeeds for the first time
+以下是 ShutdownSendRetryAfter = false 时预期的关闭事件序列：
 
-The following is a sequence of shutdown events that we expect to see with
-  'ShutdownSendRetryAfter' = false:
+T0: ShutdownInitiated：收到 KILL 信号
+	- /readyz 开始返回红色
+    - 运行 pre shutdown hooks
 
-T0: ShutdownInitiated: KILL signal received
-	- /readyz starts returning red
-    - run pre shutdown hooks
+T0+70s: AfterShutdownDelayDuration：shutdown 延迟时长已过
+	- ShutdownDelayDuration 默认值为 70s
+	- 此时开始关闭 HTTP Server，调用 server.Shutdown
+	- 因此所有 listener 的 Close 被调用
+	- HTTP Server 立即停止监听
+	- 任何通过新 TCP socket 到达的新请求都会收到类似 'connection refused' 的网络错误
+    - HTTP Server 在 ShutdownTimeout 内（默认 60s）优雅等待现有请求完成
+	- 活跃的长运行请求会收到 GOAWAY。
 
-T0+70s: AfterShutdownDelayDuration: shutdown delay duration has passed
-	- the default value of 'ShutdownDelayDuration' is '70s'
-	- it's time to initiate shutdown of the HTTP Server, server.Shutdown is invoked
-	- as a consequene, the Close function has is called for all listeners
- 	- the HTTP Server stops listening immediately
-	- any new request arriving on a new TCP socket is denied with
-      a network error similar to 'connection refused'
-    - the HTTP Server waits gracefully for existing requests to complete
-      up to '60s' (dictated by ShutdownTimeout)
-	- active long running requests will receive a GOAWAY.
+T0+70s: HTTPServerStoppedListening：
+	- HTTP Server 停止监听时发出，即紧接在 server.Shutdown 调用之后
 
-T0+70s: HTTPServerStoppedListening:
-	- this event is signaled when the HTTP Server has stopped listening
-      which is immediately after server.Shutdown has been invoked
-
-T0 + 70s + up-to 60s: InFlightRequestsDrained: existing in flight requests have been drained
-	- long running requests are outside of this scope
-	- up-to 60s: the default value of 'ShutdownTimeout' is 60s, this means that
-      any request in flight has a hard timeout of 60s.
-	- it's time to call 'Shutdown' on the audit events since all
-	  in flight request(s) have drained.
+T0 + 70s + 最多 60s: InFlightRequestsDrained：在途请求已排空
+	- 长运行请求不在此范围内
+	- 最多 60s：ShutdownTimeout 默认 60s，即在途请求有 60s 硬超时。
+	- 此时应对审计事件调用 'Shutdown'，因为在途请求都已排空。
 
 
-The following is a sequence of shutdown events that we expect to see with
-  'ShutdownSendRetryAfter' = true:
+以下是 ShutdownSendRetryAfter = true 时预期的关闭事件序列：
 
-T0: ShutdownInitiated: KILL signal received
-	- /readyz starts returning red
-    - run pre shutdown hooks
+T0: ShutdownInitiated：收到 KILL 信号
+	- /readyz 开始返回红色
+    - 运行 pre shutdown hooks
 
-T0+70s: AfterShutdownDelayDuration: shutdown delay duration has passed
-	- the default value of 'ShutdownDelayDuration' is '70s'
-	- the HTTP Server will continue to listen
-	- the apiserver is not accepting new request(s)
-		- it includes new request(s) on a new or an existing TCP connection
-		- new request(s) arriving after this point are replied with a 429
-      	  and the  response headers: 'Retry-After: 1` and 'Connection: close'
-	- note: these new request(s) will not show up in audit logs
+T0+70s: AfterShutdownDelayDuration：shutdown 延迟时长已过
+	- ShutdownDelayDuration 默认值为 70s
+	- HTTP Server 继续监听
+	- apiserver 不再接受新请求
+		- 包括新 TCP 连接上的请求，也包括已有 TCP 连接上的新请求
+		- 此后到达的新请求返回 429，并带响应头 'Retry-After: 1' 与 'Connection: close'
+	- 注意：这些新请求不会出现在审计日志中
 
-T0 + 70s + up to 60s: InFlightRequestsDrained: existing in flight requests have been drained
-	- long running requests are outside of this scope
-	- up to 60s: the default value of 'ShutdownTimeout' is 60s, this means that
-      any request in flight has a hard timeout of 60s.
-	- server.Shutdown is called, the HTTP Server stops listening immediately
-    - the HTTP Server waits gracefully for existing requests to complete
-      up to '2s' (it's hard coded right now)
+T0 + 70s + 最多 60s: InFlightRequestsDrained：在途请求已排空
+	- 长运行请求不在此范围内
+	- 最多 60s：ShutdownTimeout 默认 60s，即在途请求有 60s 硬超时。
+	- 调用 server.Shutdown，HTTP Server 立即停止监听
+    - HTTP Server 在 '2s' 内优雅等待现有请求完成（当前为硬编码）
 */
 
-// lifecycleSignal encapsulates a named apiserver event
+// lifecycleSignal 封装一个具名的 apiserver 事件。
 type lifecycleSignal interface {
-	// Signal signals the event, indicating that the event has occurred.
-	// Signal is idempotent, once signaled the event stays signaled and
-	// it immediately unblocks any goroutine waiting for this event.
+	// Signal 触发事件，表示事件已发生。
+	// Signal 是幂等的：一旦触发，事件保持已触发状态，并立即解除所有等待者的阻塞。
 	Signal()
 
-	// Signaled returns a channel that is closed when the underlying event
-	// has been signaled. Successive calls to Signaled return the same value.
+	// Signaled 返回一个通道，底层事件触发后该通道关闭。
+	// 多次调用 Signaled 返回同一个值。
 	Signaled() <-chan struct{}
 
-	// Name returns the name of the signal, useful for logging.
+	// Name 返回信号名称，便于日志记录。
 	Name() string
 }
 
-// lifecycleSignals provides an abstraction of the events that
-// transpire during the lifecycle of the apiserver. This abstraction makes it easy
-// for us to write unit tests that can verify expected graceful termination behavior.
+// lifecycleSignals 抽象了 apiserver 生命周期中发生的各类事件，
+// 使我们可以编写单元测试来验证预期的优雅终止行为。
 //
-// GenericAPIServer can use these to either:
-//   - signal that a particular termination event has transpired
-//   - wait for a designated termination event to transpire and do some action.
+// GenericAPIServer 可以用它来：
+//   - 发出某个终止事件已发生的信号
+//   - 等待某个终止事件发生后再执行动作。
 type lifecycleSignals struct {
-	// ShutdownInitiated event is signaled when an apiserver shutdown has been initiated.
-	// It is signaled when the `stopCh` provided by the main goroutine
-	// receives a KILL signal and is closed as a consequence.
+	// ShutdownInitiated 在 apiserver 关闭开始时发出。
+	// 当主 goroutine 提供的 `stopCh` 收到 KILL 信号并因此关闭时发出。
 	ShutdownInitiated lifecycleSignal
 
-	// AfterShutdownDelayDuration event is signaled as soon as ShutdownDelayDuration
-	// has elapsed since the ShutdownInitiated event.
-	// ShutdownDelayDuration allows the apiserver to delay shutdown for some time.
+	// AfterShutdownDelayDuration 在 ShutdownInitiated 之后经过
+	// ShutdownDelayDuration 时立即发出。
+	// ShutdownDelayDuration 允许 apiserver 延迟一段时间再关闭。
 	AfterShutdownDelayDuration lifecycleSignal
 
-	// PreShutdownHooksStopped event is signaled when all registered
-	// preshutdown hook(s) have finished running.
+	// PreShutdownHooksStopped 在所有已注册的 preshutdown hook 执行完毕后发出。
 	PreShutdownHooksStopped lifecycleSignal
 
-	// NotAcceptingNewRequest event is signaled when the server is no
-	// longer accepting any new request, from this point on any new
-	// request will receive an error.
+	// NotAcceptingNewRequest 在服务器不再接受任何新请求时发出，
+	// 此后到达的新请求都会收到错误。
 	NotAcceptingNewRequest lifecycleSignal
 
-	// InFlightRequestsDrained event is signaled when the existing requests
-	// in flight have completed. This is used as signal to shut down the audit backends
+	// InFlightRequestsDrained 在现有在途请求全部完成时发出，
+	// 用作关闭审计后端的信号。
 	InFlightRequestsDrained lifecycleSignal
 
-	// HTTPServerStoppedListening termination event is signaled when the
-	// HTTP Server has stopped listening to the underlying socket.
+	// HTTPServerStoppedListening 终止事件在 HTTP Server 停止监听底层 socket 时发出。
 	HTTPServerStoppedListening lifecycleSignal
 
-	// HasBeenReady is signaled when the readyz endpoint succeeds for the first time.
+	// HasBeenReady 在 readyz 端点首次成功时发出。
 	HasBeenReady lifecycleSignal
 
-	// MuxAndDiscoveryComplete is signaled when all known HTTP paths have been installed.
-	// It exists primarily to avoid returning a 404 response when a resource actually exists but we haven't installed the path to a handler.
-	// The actual logic is implemented by an APIServer using the generic server library.
+	// MuxAndDiscoveryComplete 在所有已知 HTTP 路径安装完成时发出。
+	// 它主要用于避免在资源实际存在、但 handler 路径尚未安装时错误地返回 404。
+	// 具体逻辑由使用通用 server 库的 APIServer 实现。
 	MuxAndDiscoveryComplete lifecycleSignal
 }
 
-// ShuttingDown returns the lifecycle signal that is signaled when
-// the server is not accepting any new requests.
-// this is the lifecycle event that is exported to the request handler
-// logic to indicate that the server is shutting down.
+// ShuttingDown 返回服务器不再接受新请求时触发的生命周期信号。
+// 这是暴露给请求处理逻辑、用于指示服务器正在关闭的生命周期事件。
 func (s lifecycleSignals) ShuttingDown() <-chan struct{} {
 	return s.NotAcceptingNewRequest.Signaled()
 }
 
-// newLifecycleSignals returns an instance of lifecycleSignals interface to be used
-// to coordinate lifecycle of the apiserver
+// newLifecycleSignals 返回用于协调 apiserver 生命周期的 lifecycleSignals 实例。
 func newLifecycleSignals() lifecycleSignals {
 	return lifecycleSignals{
 		ShutdownInitiated:          newNamedChannelWrapper("ShutdownInitiated"),
@@ -169,6 +147,7 @@ func newLifecycleSignals() lifecycleSignals {
 	}
 }
 
+// newNamedChannelWrapper 创建一个以关闭通道实现的信号。
 func newNamedChannelWrapper(name string) lifecycleSignal {
 	return &namedChannelWrapper{
 		name: name,
@@ -177,22 +156,27 @@ func newNamedChannelWrapper(name string) lifecycleSignal {
 	}
 }
 
+// namedChannelWrapper 用一次性关闭的 channel 实现 lifecycleSignal。
+// 关闭 channel 天然是幂等且并发安全的广播机制。
 type namedChannelWrapper struct {
 	name string
 	once sync.Once
 	ch   chan struct{}
 }
 
+// Signal 关闭通道；sync.Once 保证只关闭一次，避免重复 close 导致 panic。
 func (e *namedChannelWrapper) Signal() {
 	e.once.Do(func() {
 		close(e.ch)
 	})
 }
 
+// Signaled 返回只读的已关闭通道。
 func (e *namedChannelWrapper) Signaled() <-chan struct{} {
 	return e.ch
 }
 
+// Name 返回信号名称。
 func (e *namedChannelWrapper) Name() string {
 	return e.name
 }

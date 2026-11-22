@@ -47,6 +47,9 @@ import (
 // StreamObject performs input stream negotiation from a ResourceStreamer and writes that to the response.
 // If the client requests a websocket upgrade, negotiate for a websocket reader protocol (because many
 // browser clients cannot easily handle binary streaming protocols).
+//
+// 流式响应不经过 SerializeObject，因此也不参与 gzip 压缩与响应体审计；
+// 适用场景（logs/exec/attach/portforward）本身已有各自的协议约定。
 func StreamObject(statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSerializer, stream rest.ResourceStreamer, w http.ResponseWriter, req *http.Request) {
 	out, flush, contentType, err := stream.InputStream(req.Context(), gv.String(), req.Header.Get("Accept"))
 	if err != nil {
@@ -60,6 +63,7 @@ func StreamObject(statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSe
 	}
 	defer out.Close()
 
+	// websocket 分支必须早于普通写路径：升级后不能再写 Content-Type/状态行。
 	if wsstream.IsWebSocketRequest(req) {
 		r := wsstream.NewReader(out, true, wsstream.NewDefaultReaderProtocols())
 		if err := r.Copy(w, req); err != nil {
@@ -74,10 +78,13 @@ func StreamObject(statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSe
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(statusCode)
 	// Flush headers, if possible
+	//
+	// 先刷出头部，让客户端尽早知道连接已建立，而不是等首块数据。
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
 	writer := w.(io.Writer)
+	// 需要逐块刷新时用 flushwriter 包装，保证每块数据立即到达客户端（如日志流）。
 	if flush {
 		writer = flushwriter.Wrap(w)
 	}
@@ -87,6 +94,8 @@ func StreamObject(statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSe
 // SerializeObject renders an object in the content type negotiated by the client using the provided encoder.
 // The context is optional and can be nil. This method will perform optional content compression if requested by
 // a client and the feature gate for APIResponseCompression is enabled.
+//
+// 延迟写入：编码成功后才真正写出响应，因此编码中途失败时可以丢弃已缓冲内容并改写为错误状态。
 func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object) {
 	ctx := req.Context()
 	ctx, span := tracing.Start(ctx, "SerializeObject",
@@ -107,6 +116,7 @@ func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.Response
 		ctx:             ctx,
 	}
 
+	// 编码器若支持分配器，复用池中的缓冲以减少大对象序列化时的分配压力。
 	var memoryAllocator runtime.MemoryAllocator
 	if encoderWithAllocator, supportsAllocator := encoder.(runtime.EncoderWithAllocator); supportsAllocator {
 		memoryAllocator = runtime.AllocatorPool.Get().(*runtime.Allocator)
@@ -127,6 +137,8 @@ func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.Response
 	}
 
 	// make a best effort to write the object if a failure is detected
+	//
+	// 尽力而为：丢弃已缓冲内容，把编码错误转换为 Status 响应，避免客户端收到半截 JSON。
 	utilruntime.HandleError(fmt.Errorf("apiserver was unable to write a %s response: %w", w.mediaType, err))
 	w.discardBufferedResponse()
 	status := ErrorToAPIStatus(err)
@@ -137,6 +149,7 @@ func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.Response
 	}
 	output, err := runtime.Encode(encoder, status)
 	if err != nil {
+		// 连错误对象都无法编码时退化为纯文本，保证至少返回可读信息。
 		w.mediaType = "text/plain"
 		output = []byte(fmt.Sprintf("%s: %s", status.Reason, status.Message))
 	}
@@ -146,18 +159,25 @@ func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.Response
 	w.Close()
 }
 
+// gzipPool 复用 gzip.Writer，避免每个响应都分配压缩状态；启动期构造失败直接 panic。
 var gzipPool = NewGzipWriterPoolOrDie()
 
 const (
 	// defaultGzipThresholdBytes is compared to the size of the first write from the stream
 	// (usually the entire object), and if the size is smaller no gzipping will be performed
 	// if the client requests it.
+	//
+	// 阈值的存在是为了避免压缩小响应反而增加 CPU 与延迟。
 	defaultGzipThresholdBytes = 128 * 1024
 	// Use the length of the first write to recognize streaming implementations.
 	// When streaming JSON first write is "{", while Kubernetes protobuf starts unique 4 byte header.
+	//
+	// 首个写入不超过 4 字节通常意味着流式/分块输出，此时不应缓冲等待压缩。
 	firstWriteStreamingThresholdBytes = 4
 )
 
+// deferredResponseWriter 延迟决定是否 gzip、以及何时写状态行：
+// 只有确认首个数据块超过阈值时才启用压缩，否则直接透传。
 type deferredResponseWriter struct {
 	mediaType       string
 	statusCode      int
@@ -176,6 +196,7 @@ type deferredResponseWriter struct {
 	ctx context.Context
 }
 
+// Write 实现 io.Writer，按情况选择缓冲、透传或 gzip。
 func (w *deferredResponseWriter) Write(p []byte) (n int, err error) {
 	switch {
 	case w.hasWritten:
@@ -213,6 +234,7 @@ func (w *deferredResponseWriter) Write(p []byte) (n int, err error) {
 	}
 }
 
+// discardBufferedResponse 丢弃尚未写出的缓冲；已写出时无操作（无法撤回）。
 func (w *deferredResponseWriter) discardBufferedResponse() {
 	if w.hasWritten {
 		return
@@ -221,6 +243,8 @@ func (w *deferredResponseWriter) discardBufferedResponse() {
 	w.buffer = nil
 }
 
+// unbufferedWrite 在首次写入时确定编码方式、写头部并锁定 Content-Type；
+// 后续写入直接复用已选定的 writer。
 func (w *deferredResponseWriter) unbufferedWrite(p []byte) (n int, err error) {
 	defer func() {
 		w.totalBytes += n
@@ -237,6 +261,7 @@ func (w *deferredResponseWriter) unbufferedWrite(p []byte) (n int, err error) {
 	switch {
 	case w.contentEncoding == "gzip" && len(p) > defaultGzipThresholdBytes:
 		header.Set("Content-Encoding", "gzip")
+		// Vary 告诉缓存层：同一 URL 因 Accept-Encoding 不同而内容不同，避免缓存串味。
 		header.Add("Vary", "Accept-Encoding")
 
 		gw := gzipPool.Get().(*gzip.Writer)
@@ -258,6 +283,7 @@ func (w *deferredResponseWriter) unbufferedWrite(p []byte) (n int, err error) {
 	return w.w.Write(p)
 }
 
+// Close 在未写出任何数据时把缓冲内容刷出；使用 gzip 时关闭并归还 writer。
 func (w *deferredResponseWriter) Close() (err error) {
 	defer func() {
 		if !w.hasWritten {
@@ -289,6 +315,7 @@ func (w *deferredResponseWriter) Close() (err error) {
 	switch t := w.w.(type) {
 	case *gzip.Writer:
 		err = t.Close()
+		// Reset(nil) 断开对底层连接的引用，防止连接被池中的 writer 长期持有。
 		t.Reset(nil)
 		gzipPool.Put(t)
 	}
@@ -296,6 +323,9 @@ func (w *deferredResponseWriter) Close() (err error) {
 }
 
 // WriteObjectNegotiated renders an object in the content type negotiated by the client.
+//
+// 若对象实现了 ResourceStreamer，则走流式路径并计入长耗时请求指标；
+// 否则按内容协商结果选择序列化器。协商失败时若原状态码本身是错误，优先保留原错误。
 func WriteObjectNegotiated(s runtime.NegotiatedSerializer, restrictions negotiation.EndpointRestrictions, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object, listGVKInContentType bool) {
 	stream, ok := object.(rest.ResourceStreamer)
 	if ok {
@@ -319,9 +349,11 @@ func WriteObjectNegotiated(s runtime.NegotiatedSerializer, restrictions negotiat
 		return
 	}
 
+	// 审计响应体：必须在编码前记录，否则对象可能已被编码器修改。
 	audit.LogResponseObject(req.Context(), object, gv, s)
 
 	var encoder runtime.Encoder
+	// CBOR 特性开启时使用非确定性编码：CBOR map 顺序无关，避免为稳定顺序付出排序成本。
 	if utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
 		encoder = s.EncoderForVersion(runtime.UseNondeterministicEncoding(serializer.Serializer), gv)
 	} else {
@@ -336,6 +368,8 @@ func WriteObjectNegotiated(s runtime.NegotiatedSerializer, restrictions negotiat
 	})
 }
 
+// generateMediaTypeWithGVK 把转换目标 GVK 附加到 media type 参数中，
+// 供客户端（尤其是表格/部分对象场景）知道响应体实际是哪种类型。
 func generateMediaTypeWithGVK(mediaType string, gvk *schema.GroupVersionKind) string {
 	if gvk == nil {
 		return mediaType
@@ -354,6 +388,8 @@ func generateMediaTypeWithGVK(mediaType string, gvk *schema.GroupVersionKind) st
 
 // ErrorNegotiated renders an error to the response. Returns the HTTP status code of the error.
 // The context is optional and may be nil.
+//
+// 返回状态码供调用方记录指标或做后续判断；204 无响应体，直接写状态行。
 func ErrorNegotiated(err error, s runtime.NegotiatedSerializer, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request) int {
 	status := ErrorToAPIStatus(err)
 	code := int(status.Code)
@@ -373,6 +409,8 @@ func ErrorNegotiated(err error, s runtime.NegotiatedSerializer, gv schema.GroupV
 }
 
 // WriteRawJSON writes a non-API object in JSON.
+//
+// 用于内容协商失败等无法走正常序列化器的兜底路径；缩进格式便于人阅读。
 func WriteRawJSON(statusCode int, object interface{}, w http.ResponseWriter) {
 	output, err := json.MarshalIndent(object, "", "  ")
 	if err != nil {

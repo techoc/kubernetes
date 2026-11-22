@@ -16,6 +16,10 @@ limitations under the License.
 
 // Package apiserver provides the machinery for building Kubernetes-style API servers.
 //
+// 该库既是 kube-apiserver 的实现基础，也是第三方构建聚合 API Server（extension API server）
+// 的主要框架：聚合服务器通过 APIService 对象注册到主 apiserver，由主 apiserver 反向代理
+// 对应 API 组的请求。绝大多数扩展场景应优先选择 CRD，而不是自建聚合服务器。
+//
 // This library is the foundation for the Kubernetes API server (`kube-apiserver`),
 // and is also the primary framework for developers building custom API servers to extend
 // the Kubernetes API.

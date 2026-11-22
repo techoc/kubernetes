@@ -22,21 +22,22 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// celReservedSymbols is a list of RESERVED symbols defined in the CEL lexer.
-// No identifiers are allowed to collide with these symbols.
+// celReservedSymbols 是 CEL 词法分析器中定义的一批 RESERVED 符号。
+// 任何标识符都不能与这些符号冲突。
 // https://github.com/google/cel-spec/blob/master/doc/langdef.md#syntax
 var celReservedSymbols = sets.NewString(
 	"true", "false", "null", "in",
 	"as", "break", "const", "continue", "else",
 	"for", "function", "if", "import", "let",
-	"loop", "package", "namespace", "return", // !! 'namespace' is used heavily in Kubernetes
+	"loop", "package", "namespace", "return", // !! Kubernetes 中大量使用 'namespace'
 	"var", "void", "while",
 )
 
-// expandMatcher matches the escape sequence, characters that are escaped, and characters that are unsupported
+// expandMatcher 匹配转义序列、需要转义的字符，以及不受支持的字符
 var expandMatcher = regexp.MustCompile(`(__|[-./]|[^a-zA-Z0-9-./_])`)
 
-// newCharacterFilter returns a boolean array to indicate the allowed characters
+// newCharacterFilter 返回一个布尔数组，标记哪些字符被允许。
+// 用字符码作为下标做 O(1) 查表，避免在热路径上逐字符比较字符串。
 func newCharacterFilter(characters string) []bool {
 	maxChar := 0
 	for _, c := range characters {
@@ -53,18 +54,22 @@ func newCharacterFilter(characters string) []bool {
 	return filter
 }
 
+// escapeCheck 记录快速预检的结论。
 type escapeCheck struct {
-	canSkipRegex     bool
+	// canSkipRegex 为 true 表示标识符无需正则展开，可直接使用。
+	canSkipRegex bool
+	// invalidCharFound 为 true 表示存在不受支持的字符。
 	invalidCharFound bool
 }
 
-// skipRegexCheck checks if escape would be skipped.
-// if invalidCharFound is true, it must have invalid character; if invalidCharFound is false, not sure if it has invalid character or not
+// skipRegexCheck 判断 Escape 是否可跳过正则处理。
+// invalidCharFound 为 true 时一定含非法字符；为 false 时不能确定是否含非法字符。
 func skipRegexCheck(ident string) escapeCheck {
 	escapeCheck := escapeCheck{canSkipRegex: true, invalidCharFound: false}
-	// skip escape if possible
+	// 尽可能跳过转义
 	previous_underscore := false
 	for _, c := range ident {
+		// 出现需要转义的字符，必须走正则路径
 		if c == '/' || c == '-' || c == '.' {
 			escapeCheck.canSkipRegex = false
 			return escapeCheck
@@ -74,6 +79,7 @@ func skipRegexCheck(ident string) escapeCheck {
 			escapeCheck.invalidCharFound = true
 			return escapeCheck
 		}
+		// 连续两个下划线需要转义为 __underscores__
 		if c == '_' && previous_underscore {
 			escapeCheck.canSkipRegex = false
 			return escapeCheck
@@ -84,23 +90,25 @@ func skipRegexCheck(ident string) escapeCheck {
 	return escapeCheck
 }
 
-// validCharacterFilter indicates the allowed characters.
+// validCharacterFilter 标记允许的字符。
 var validCharacterFilter = newCharacterFilter("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 
-// Escape escapes ident and returns a CEL identifier (of the form '[a-zA-Z_][a-zA-Z0-9_]*'), or returns
-// false if the ident does not match the supported input format of `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*`.
-// Escaping Rules:
-//   - '__' escapes to '__underscores__'
-//   - '.' escapes to '__dot__'
-//   - '-' escapes to '__dash__'
-//   - '/' escapes to '__slash__'
-//   - Identifiers that exactly match a CEL RESERVED keyword escape to '__{keyword}__'. The keywords are: "true", "false",
-//     "null", "in", "as", "break", "const", "continue", "else", "for", "function", "if", "import", "let", loop", "package",
-//     "namespace", "return".
+// Escape 转义 ident 并返回 CEL 标识符（形如 '[a-zA-Z_][a-zA-Z0-9_]*'）；
+// 若 ident 不匹配支持的输入格式 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 则返回 false。
+// 转义规则：
+//   - '__' 转义为 '__underscores__'
+//   - '.' 转义为 '__dot__'
+//   - '-' 转义为 '__dash__'
+//   - '/' 转义为 '__slash__'
+//   - 与 CEL RESERVED 关键字完全相同的标识符转义为 '__{keyword}__'。关键字包括："true"、"false"、
+//     "null"、"in"、"as"、"break"、"const"、"continue"、"else"、"for"、"function"、"if"、"import"、"let"、"loop"、"package"、
+//     "namespace"、"return"。
 func Escape(ident string) (string, bool) {
+	// 空标识符或数字开头的标识符不是合法 CEL 标识符
 	if len(ident) == 0 || ('0' <= ident[0] && ident[0] <= '9') {
 		return "", false
 	}
+	// 关键字必须加前后双下划线包裹，避免与字面量混淆
 	if celReservedSymbols.Has(ident) {
 		return "__" + ident + "__", true
 	}
@@ -109,6 +117,7 @@ func Escape(ident string) (string, bool) {
 	if escapeCheck.invalidCharFound {
 		return "", false
 	}
+	// 无需转义时直接返回，省去正则替换开销
 	if escapeCheck.canSkipRegex {
 		return ident, true
 	}
@@ -124,7 +133,7 @@ func Escape(ident string) (string, bool) {
 			return "__dash__"
 		case "/":
 			return "__slash__"
-		default: // matched a unsupported supported
+		default: // 匹配到不受支持的字符
 			ok = false
 			return ""
 		}
@@ -135,11 +144,12 @@ func Escape(ident string) (string, bool) {
 	return ident, true
 }
 
+// unexpandMatcher 匹配 Escape 产生的 __name__ 形式转义序列。
 var unexpandMatcher = regexp.MustCompile(`(_{2}[^_]+_{2})`)
 
-// Unescape unescapes an CEL identifier containing the escape sequences described in Escape, or return false if the
-// string contains invalid escape sequences. The escaped input is expected to be a valid CEL identifier, but is
-// not checked.
+// Unescape 还原包含 Escape 所述转义序列的 CEL 标识符；
+// 若字符串包含非法转义序列则返回 false。
+// 输入被假定为合法 CEL 标识符，但本函数不校验这一点。
 func Unescape(escaped string) (string, bool) {
 	ok := true
 	escaped = unexpandMatcher.ReplaceAllStringFunc(escaped, func(s string) string {
@@ -154,6 +164,7 @@ func Unescape(escaped string) (string, bool) {
 		case "slash":
 			return "/"
 		}
+		// 关键字转义必须覆盖整个标识符；若前后还有内容则说明该序列并非关键字转义。
 		if celReservedSymbols.Has(contents) {
 			if len(s) != len(escaped) {
 				ok = false

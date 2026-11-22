@@ -28,6 +28,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/cel"
 )
 
+// TestAuthorizerMetrics 验证 webhook 授权器在各种结果下写入的指标标签：
+// 成功、超时、取消、服务端错误与 TLS 失败分别对应不同的 result。
+// 这些标签是对外暴露的指标契约，因此用测试固定下来。
 func TestAuthorizerMetrics(t *testing.T) {
 	scenarios := []struct {
 		name                            string
@@ -168,6 +171,7 @@ func TestAuthorizerMetrics(t *testing.T) {
 }
 
 type fakeAuthorizerMetrics struct {
+	// totalCode 记录 RecordRequestTotal 收到的状态码标签。
 	totalCode string
 
 	latency     float64
@@ -185,23 +189,30 @@ type fakeAuthorizerMetrics struct {
 	cel.NoopMatcherMetrics
 }
 
+// RecordRequestTotal 记录请求总数所用的状态码。
 func (f *fakeAuthorizerMetrics) RecordRequestTotal(_ context.Context, code string) {
 	f.totalCode = code
 }
 
+// RecordRequestLatency 记录请求延迟及对应状态码。
 func (f *fakeAuthorizerMetrics) RecordRequestLatency(_ context.Context, code string, latency float64) {
 	f.latency = latency
 	f.latencyCode = code
 }
 
+// RecordWebhookEvaluation 记录 webhook 求值结果。
 func (f *fakeAuthorizerMetrics) RecordWebhookEvaluation(ctx context.Context, name, result string) {
 	f.evaluations += 1
 	f.evaluationsResult = result
 }
+
+// RecordWebhookDuration 记录 webhook 调用耗时及结果。
 func (f *fakeAuthorizerMetrics) RecordWebhookDuration(ctx context.Context, name, result string, duration float64) {
 	f.duration = duration
 	f.durationResult = result
 }
+
+// RecordWebhookFailOpen 记录 fail-open 次数及原因。
 func (f *fakeAuthorizerMetrics) RecordWebhookFailOpen(ctx context.Context, name, result string) {
 	f.failOpen += 1
 	f.failOpenResult = result

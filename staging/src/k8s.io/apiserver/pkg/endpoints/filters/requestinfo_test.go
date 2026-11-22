@@ -21,6 +21,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// newTestRequestInfoResolver 构造与真实 apiserver 一致的 RequestInfo 解析器：
+// /api 前缀视为无组（core），/apis 视为带组，供 filters 包的测试共享。
 func newTestRequestInfoResolver() *request.RequestInfoFactory {
 	return &request.RequestInfoFactory{
 		APIPrefixes:          sets.NewString("api", "apis"),

@@ -23,6 +23,9 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ReplicaSet ensures that a specified number of pod replicas are running at any given time.
+//
+// 该类型只用于测试：apiserver 的 endpoint/storage 测试需要一个独立于
+// core/v1 的 API 组，避免测试数据与真实内置类型互相污染。
 type ReplicaSet struct {
 	metav1.TypeMeta `json:""`
 

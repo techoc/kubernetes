@@ -15,6 +15,10 @@ limitations under the License.
 */
 
 // Package validation validates EncryptionConfiguration.
+//
+// 校验分为两类：结构性校验（每个资源项至少一个资源/提供者、单个提供者只能
+// 配置一种算法）和安全性校验（资源不重叠、密钥长度、KMS endpoint 必须为
+// unix socket）。错误路径使用 field.Path，便于直接反馈到配置字段。
 package validation
 
 import (
@@ -55,13 +59,18 @@ const (
 
 var (
 	// See https://golang.org/pkg/crypto/aes/#NewCipher for details on supported key sizes for AES.
+	// 16/24/32 字节分别对应 AES-128/192/256，禁止其他长度是为了避免
+	// 弱密钥被误用。
 	aesKeySizes = []int{16, 24, 32}
 
 	// See https://godoc.org/golang.org/x/crypto/nacl/secretbox#Open for details on the supported key sizes for Secretbox.
+	// Secretbox 只支持 256 位密钥。
 	secretBoxKeySizes = []int{32}
 )
 
 // ValidateEncryptionConfiguration validates a v1.EncryptionConfiguration.
+// reload 表示配置是否来自热重载路径：非 v1 的 KMS 名称始终要求全局唯一，
+// 而 v1 名称只在热重载时要求唯一，以兼容既有静态配置。
 func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reload bool) field.ErrorList {
 	root := field.NewPath("resources")
 	allErrs := field.ErrorList{}
@@ -77,6 +86,7 @@ func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reloa
 	}
 
 	// kmsProviderNames is used to track config names to ensure they are unique.
+	// 跨资源项共享同一集合，因为 KMS provider 名是整个配置内的逻辑标识。
 	kmsProviderNames := sets.New[string]()
 	for i, conf := range c.Resources {
 		r := root.Index(i).Child("resources")
@@ -97,6 +107,8 @@ func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reloa
 			path := p.Index(j)
 			allErrs = append(allErrs, validateSingleProvider(provider, path)...)
 
+			// 按提供者类型分发到各自的密钥/配置校验；
+			// Identity 提供者无需额外校验，因此不在分支中出现。
 			switch {
 			case provider.KMS != nil:
 				allErrs = append(allErrs, validateKMSConfiguration(provider.KMS, path.Child("kms"), kmsProviderNames, reload)...)
@@ -114,11 +126,15 @@ func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reloa
 	return allErrs
 }
 
+// anyGroupAnyResource 表示 “*.*”，即加密所有资源。
 var anyGroupAnyResource = schema.GroupResource{
 	Group:    "*",
 	Resource: "*",
 }
 
+// validateResourceOverlap 检查 resource 列表内是否存在重叠或重复。
+// 重叠（如 secrets 与 *.）会让后者被前者遮蔽，属于易错配置，
+// 因此直接拒绝而不是按顺序取第一个。
 func validateResourceOverlap(resources []string, fieldPath *field.Path) field.ErrorList {
 	if len(resources) < 2 { // cannot have overlap with a single resource
 		return nil
@@ -133,6 +149,7 @@ func validateResourceOverlap(resources []string, fieldPath *field.Path) field.Er
 
 	var hasOverlap, hasDuplicate bool
 
+	// O(n²) 比较在这里可接受：资源列表通常只有个位数项。
 	for i, r1 := range r {
 		for j, r2 := range r {
 			if i == j {
@@ -148,15 +165,18 @@ func validateResourceOverlap(resources []string, fieldPath *field.Path) field.Er
 				continue
 			}
 
+			// "*.*" 覆盖所有资源，必然与任何其他项重叠。
 			if r1 == anyGroupAnyResource {
 				hasOverlap = true
 				continue
 			}
 
+			// 不同组之间的同名资源互不影响。
 			if r1.Group != r2.Group {
 				continue
 			}
 
+			// 同组内 "*" 会覆盖该组全部资源。
 			if r1.Resource == "*" || r2.Resource == "*" {
 				hasOverlap = true
 				continue
@@ -189,6 +209,8 @@ func validateResourceOverlap(resources []string, fieldPath *field.Path) field.Er
 	return allErrs
 }
 
+// validateResourceNames 逐个校验资源名，拒绝大写、裸 "*"、无 REST 端点的
+// 内部资源、错误的组名以及跨组通配等历史遗留/不可生效写法。
 func validateResourceNames(resources []string, fieldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -283,6 +305,8 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 	return allErrs
 }
 
+// validateSingleProvider 要求每个 provider 元素恰好配置一种算法。
+// 允许多种会导致优先级歧义，因此超过一个即报错。
 func validateSingleProvider(provider apiserver.ProviderConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	found := 0
@@ -314,6 +338,7 @@ func validateSingleProvider(provider apiserver.ProviderConfiguration, fieldPath 
 	return allErrs
 }
 
+// validateKeys 要求至少一个密钥，并逐个校验。
 func validateKeys(keys []apiserver.Key, fieldPath *field.Path, expectedLen []int) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -329,6 +354,8 @@ func validateKeys(keys []apiserver.Key, fieldPath *field.Path, expectedLen []int
 	return allErrs
 }
 
+// validateKey 校验密钥名、base64 编码与解码后的长度。
+// 错误中回显 "REDACTED" 而非真实 secret，防止校验错误把密钥写进日志。
 func validateKey(key apiserver.Key, fieldPath *field.Path, expectedLen []int) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -362,6 +389,7 @@ func validateKey(key apiserver.Key, fieldPath *field.Path, expectedLen []int) fi
 	return allErrs
 }
 
+// validateKMSConfiguration 汇总 KMS 提供者的各字段校验。
 func validateKMSConfiguration(c *apiserver.KMSConfiguration, fieldPath *field.Path, kmsProviderNames sets.Set[string], reload bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -373,6 +401,7 @@ func validateKMSConfiguration(c *apiserver.KMSConfiguration, fieldPath *field.Pa
 	return allErrs
 }
 
+// validateKMSCacheSize 校验 KMS 缓存大小配置。
 func validateKMSCacheSize(c *apiserver.KMSConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -388,6 +417,7 @@ func validateKMSCacheSize(c *apiserver.KMSConfiguration, fieldPath *field.Path) 
 	return allErrs
 }
 
+// validateKMSTimeout 要求超时为正数；零或负值会让 KMS 调用立即失败。
 func validateKMSTimeout(c *apiserver.KMSConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if c.Timeout.Duration <= 0 {
@@ -397,6 +427,9 @@ func validateKMSTimeout(c *apiserver.KMSConfiguration, fieldPath *field.Path) fi
 	return allErrs
 }
 
+// validateKMSEndpoint 要求 endpoint 为 unix scheme 的合法 URL。
+// 只允许 unix socket，是因为 KMS 插件与 apiserver 之间需要本机
+// 可信通道，禁止网络传输可避免凭据与明文密钥跨主机流动。
 func validateKMSEndpoint(c *apiserver.KMSConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(c.Endpoint) == 0 {
@@ -415,6 +448,7 @@ func validateKMSEndpoint(c *apiserver.KMSConfiguration, fieldPath *field.Path) f
 	return allErrs
 }
 
+// validateKMSAPIVersion 限制 KMS 插件协议版本为 v1 或 v2。
 func validateKMSAPIVersion(c *apiserver.KMSConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if c.APIVersion != "v1" && c.APIVersion != "v2" {
@@ -424,6 +458,9 @@ func validateKMSAPIVersion(c *apiserver.KMSConfiguration, fieldPath *field.Path)
 	return allErrs
 }
 
+// validateKMSConfigName 校验 KMS provider 名非空、v2 名不含 ':'、
+// 并按 reload 语义检查名称唯一性。名字是 KMS 状态文件中的键；
+// 含 ':' 会与其分隔格式冲突，故 v2 禁止。
 func validateKMSConfigName(c *apiserver.KMSConfiguration, fieldPath *field.Path, kmsProviderNames sets.Set[string], reload bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if c.Name == "" {
@@ -446,6 +483,7 @@ func validateKMSConfigName(c *apiserver.KMSConfiguration, fieldPath *field.Path,
 	return allErrs
 }
 
+// hasCapital 判断字符串是否包含大写字母（用于资源名规范校验）。
 func hasCapital(input string) bool {
 	return strings.ToLower(input) != input
 }

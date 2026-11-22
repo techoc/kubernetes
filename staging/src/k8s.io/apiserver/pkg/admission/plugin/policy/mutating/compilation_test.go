@@ -45,6 +45,9 @@ import (
 // TestCompilation is an open-box test of mutatingEvaluator.compile
 // However, the result is a set of CEL programs, manually invoke them to assert
 // on the results.
+//
+// 白盒测试：绕过准入流程，直接对编译产物（Mutators）调用 Patch，
+// 从而精确断言 CEL 求值、patch 应用顺序、变量与参数绑定等行为。
 func TestCompilation(t *testing.T) {
 	deploymentGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 	deploymentGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
@@ -60,6 +63,7 @@ func TestCompilation(t *testing.T) {
 		expectedResult runtime.Object
 	}{
 		{
+			// 多个 mutation 按声明顺序依次应用：先 +100 再 replace 为当前值 +10，结果 111。
 			name: "applyConfiguration then jsonPatch",
 			policy: mutations(policy("d1"), v1.Mutation{
 				PatchType: v1.PatchTypeApplyConfiguration,
@@ -84,6 +88,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](111)}},
 		},
 		{
+			// 顺序颠倒后结果仍为 111：JSONPatch 先把 1 改为 11，applyConfiguration 再 +100。
 			name: "jsonPatch then applyConfiguration",
 			policy: mutations(policy("d1"),
 				v1.Mutation{
@@ -109,6 +114,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](111)}},
 		},
 		{
+			// 变量在 mutation 之前求值，可在表达式中通过 variables 引用。
 			name: "jsonPatch with variable",
 			policy: jsonPatches(variables(policy("d1"), v1.Variable{Name: "desired", Expression: "10"}), v1.JSONPatch{
 				Expression: `[
@@ -120,6 +126,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](11)}},
 		},
 		{
+			// applyConfiguration 表达式同样可以引用变量。
 			name: "apply configuration with variable",
 			policy: applyConfigurations(variables(policy("d1"), v1.Variable{Name: "desired", Expression: "10"}),
 				`Object{
@@ -132,6 +139,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](11)}},
 		},
 		{
+			// params 按 ParamKind 解析为对象，通过 params 变量访问；ConfigMap 数据是字符串，需显式转换。
 			name: "apply configuration with params",
 			policy: paramKind(applyConfigurations(policy("d1"),
 				`Object{
@@ -145,6 +153,8 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](100)}},
 		},
 		{
+			// 嵌套 all() 使求值代价超过预算，必须在求值期被中断，
+			// 防止恶意或低效表达式耗尽 apiserver CPU。
 			name: "jsonPatch with excessive cost",
 			policy: jsonPatches(variables(policy("d1"), v1.Variable{Name: "list", Expression: "[0,1,2,3,4,5,6,7,8,9]"}), v1.JSONPatch{
 				Expression: `[
@@ -158,6 +168,7 @@ func TestCompilation(t *testing.T) {
 			expectedErr: "operation cancelled: actual cost limit exceeded",
 		},
 		{
+			// applyConfiguration 路径同样受 CEL 代价预算约束。
 			name: "applyConfiguration with excessive cost",
 			policy: variables(applyConfigurations(policy("d1"),
 				`Object{
@@ -170,6 +181,7 @@ func TestCompilation(t *testing.T) {
 			expectedErr: "operation cancelled: actual cost limit exceeded",
 		},
 		{
+			// request 变量暴露 GVK 等请求属性，表达式可据此按资源类型分支。
 			name: "request variable",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -182,6 +194,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](10)}},
 		},
 		{
+			// namespaceObject 只在提供了 namespace 时可用。
 			name: "namespace request variable",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -195,6 +208,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](10)}},
 		},
 		{
+			// authorizer 变量允许策略在 CEL 中做二次授权检查；fakeAuthorizer 恒允许。
 			name: "authorizer check",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -208,6 +222,7 @@ func TestCompilation(t *testing.T) {
 			expectedResult: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](10)}},
 		},
 		{
+			// Object 类型构造后可直接读取字段。
 			name: "object type has field access",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -226,6 +241,7 @@ func TestCompilation(t *testing.T) {
 			}}},
 		},
 		{
+			// has() 对未设置字段返回 false，对已设置字段返回 true。
 			name: "object type has field testing",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -246,6 +262,7 @@ func TestCompilation(t *testing.T) {
 			}}},
 		},
 		{
+			// Object 相等性按字段值比较，空对象相等。
 			name: "object type equality",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -274,6 +291,9 @@ func TestCompilation(t *testing.T) {
 			// a full compilation pass with the types fully bound.  Before beta, we should
 			// recompile all expressions with fully bound types before evaluation and report
 			// errors if invalid Object types like this are initialized.
+			//
+			// 该用例固化了一个已知缺陷：无效的 Object 类型仍能构造成功，
+			// 因为当前编译未完全绑定类型；beta 前应在求值前重新编译并报错。
 			name: "object types are not fully type checked",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[
@@ -302,9 +322,11 @@ func TestCompilation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	// TypeConverterManager 依赖 OpenAPI 文档，需要异步加载；用嵌入式客户端避免网络依赖。
 	tcManager := patch.NewTypeConverterManager(nil, openapitest.NewEmbeddedFileClient())
 	go tcManager.Run(ctx)
 
+	// 等待 Deployment 的转换器就绪，否则 applyConfiguration 无法完成结构化合并。
 	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, time.Second, true, func(context.Context) (done bool, err error) {
 		converter := tcManager.GetTypeConverter(deploymentGVK)
 		return converter != nil, nil
@@ -320,6 +342,7 @@ func TestCompilation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// 测试对象只注册到一个 GVK，多值说明 scheme 配置有问题。
 			if len(gvks) == 1 {
 				gvk = gvks[0]
 			} else {
@@ -328,10 +351,12 @@ func TestCompilation(t *testing.T) {
 
 			policyEvaluator := compilePolicy(tc.policy)
 			if policyEvaluator.CompositedCompiler != nil {
+				// 复合编译器需要上下文承载类型信息与错误收集。
 				ctx = policyEvaluator.CompositedCompiler.CreateContext(ctx)
 			}
 			obj := tc.object
 
+			// 手工补全 TypeMeta：对象从 Go 结构体构造时缺少 kind/apiVersion。
 			typeAccessor, err := meta.TypeAccessor(obj)
 			if err != nil {
 				t.Fatal(err)
@@ -345,6 +370,7 @@ func TestCompilation(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 依次应用编译出的每个 mutation，后一个看到的是前一个的结果。
 			for _, patcher := range policyEvaluator.Mutators {
 				attrs := admission.NewAttributesRecord(obj, tc.oldObject, gvk,
 					metaAccessor.GetNamespace(), metaAccessor.GetName(), tc.gvr,
@@ -383,6 +409,7 @@ func TestCompilation(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 期望值也补齐 TypeMeta，否则比较会因缺少 apiVersion/kind 而失败。
 			wantTypeAccessor, err := meta.TypeAccessor(tc.expectedResult)
 			if err != nil {
 				t.Fatal(err)
@@ -401,6 +428,7 @@ func TestCompilation(t *testing.T) {
 	}
 }
 
+// policy 构造一个指定名称的空策略，后续 helper 在此基础上追加字段。
 func policy(name string) *v1.MutatingAdmissionPolicy {
 	return &v1.MutatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -410,11 +438,13 @@ func policy(name string) *v1.MutatingAdmissionPolicy {
 	}
 }
 
+// variables 追加 CEL 变量定义。
 func variables(policy *v1.MutatingAdmissionPolicy, variables ...v1.Variable) *v1.MutatingAdmissionPolicy {
 	policy.Spec.Variables = append(policy.Spec.Variables, variables...)
 	return policy
 }
 
+// jsonPatches 追加 JSONPatch 类型的 mutation。
 func jsonPatches(policy *v1.MutatingAdmissionPolicy, jsonPatches ...v1.JSONPatch) *v1.MutatingAdmissionPolicy {
 	for _, jsonPatch := range jsonPatches {
 		policy.Spec.Mutations = append(policy.Spec.Mutations, v1.Mutation{
@@ -426,6 +456,7 @@ func jsonPatches(policy *v1.MutatingAdmissionPolicy, jsonPatches ...v1.JSONPatch
 	return policy
 }
 
+// applyConfigurations 追加 ApplyConfiguration 类型的 mutation。
 func applyConfigurations(policy *v1.MutatingAdmissionPolicy, expressions ...string) *v1.MutatingAdmissionPolicy {
 	for _, expression := range expressions {
 		policy.Spec.Mutations = append(policy.Spec.Mutations, v1.Mutation{
@@ -436,21 +467,25 @@ func applyConfigurations(policy *v1.MutatingAdmissionPolicy, expressions ...stri
 	return policy
 }
 
+// paramKind 设置策略的参数类型。
 func paramKind(policy *v1.MutatingAdmissionPolicy, paramKind *v1.ParamKind) *v1.MutatingAdmissionPolicy {
 	policy.Spec.ParamKind = paramKind
 	return policy
 }
 
+// mutations 直接追加完整的 mutation 定义，用于需要显式控制顺序的用例。
 func mutations(policy *v1.MutatingAdmissionPolicy, mutations ...v1.Mutation) *v1.MutatingAdmissionPolicy {
 	policy.Spec.Mutations = append(policy.Spec.Mutations, mutations...)
 	return policy
 }
 
+// matchConstraints 设置策略的匹配约束。
 func matchConstraints(policy *v1.MutatingAdmissionPolicy, matchConstraints *v1.MatchResources) *v1.MutatingAdmissionPolicy {
 	policy.Spec.MatchConstraints = matchConstraints
 	return policy
 }
 
+// fakeAuthorizer 恒返回 Allow，隔离 authorizer 变量对测试结果的影响。
 type fakeAuthorizer struct{}
 
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {

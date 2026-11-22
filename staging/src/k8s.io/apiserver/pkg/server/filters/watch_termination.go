@@ -25,7 +25,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// WithWatchTerminationDuringShutdown 在优雅关闭期间终止 watch 请求。
+//
+// 为什么需要：watch 是长连接，若不主动打断，关闭流程会一直等待它们结束。
+// 该过滤器把 shutdown 信号注入请求 context，并跟踪在途 watch，
+// 使 apiserver 能及时响应 SIGTERM 而不丢请求。
 func WithWatchTerminationDuringShutdown(handler http.Handler, termination apirequest.ServerShutdownSignal, wg RequestWaitGroup) http.Handler {
+	// 任一依赖缺失时退化为不包装，并记录告警，避免静默地失去关闭能力。
 	if termination == nil || wg == nil {
 		klog.Warningf("watch termination during shutdown not attached to the handler chain")
 		return handler
@@ -38,6 +44,7 @@ func WithWatchTerminationDuringShutdown(handler http.Handler, termination apireq
 			responsewriters.InternalError(w, req, errors.New("no RequestInfo found in the context"))
 			return
 		}
+		// 只对 watch 动词做特殊处理，普通请求直接放行。
 		if !watchVerbs.Has(requestInfo.Verb) {
 			handler.ServeHTTP(w, req)
 			return
@@ -46,6 +53,8 @@ func WithWatchTerminationDuringShutdown(handler http.Handler, termination apireq
 		if err := wg.Add(1); err != nil {
 			// When apiserver is shutting down, signal clients to retry
 			// There is a good chance the client hit a different server, so a tight retry is good for client responsiveness.
+			//
+			// 返回 Retry-After 让客户端快速重连到其他实例，而不是等到 TCP 超时。
 			waitGroupWriteRetryAfterToResponse(w)
 			return
 		}
@@ -56,6 +65,7 @@ func WithWatchTerminationDuringShutdown(handler http.Handler, termination apireq
 		ctx = apirequest.WithServerShutdownSignal(req.Context(), termination)
 		req = req.WithContext(ctx)
 
+		// 确保无论 handler 如何返回都释放等待计数。
 		defer wg.Done()
 		handler.ServeHTTP(w, req)
 	})

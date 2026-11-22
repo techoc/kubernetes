@@ -18,6 +18,9 @@ package fieldmanager
 
 import "testing"
 
+// TestEqualIgnoringFieldValueAtPath 验证 field manager 的相等性判断会忽略
+// 指定路径上的差异（这里是 metadata.managedFields），同时对其余字段保持
+// 严格比较；并验证该判断满足交换律。
 func TestEqualIgnoringFieldValueAtPath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -137,6 +140,8 @@ func TestEqualIgnoringFieldValueAtPath(t *testing.T) {
 			want: false,
 		},
 		{
+			// managedFields 由 apiserver 自己维护，不同 manager 的条目差异
+			// 不应导致对象被判为“已变更”。
 			name: "different managed fields should be ignored",
 			a: map[string]any{
 				"metadata": map[string]any{
@@ -159,6 +164,9 @@ func TestEqualIgnoringFieldValueAtPath(t *testing.T) {
 			want: true,
 		},
 		{
+			// 路径类型不符合预期（metadata 不是 map）时，无法定位要忽略的
+			// 字段，实现选择“忽略该差异”而不是报错，避免因异常结构阻断
+			// 正常的 update 流程。
 			name: "wrong type for metadata result in differences being ignored",
 			a: map[string]any{
 				"metadata": []any{
@@ -189,6 +197,8 @@ func TestEqualIgnoringFieldValueAtPath(t *testing.T) {
 				t.Error("Expected equality check to return ", c.want, ", but got ", actual)
 			}
 			// Check that equality is commutative
+			// 交换参数顺序必须得到相同结论，否则调用方的行为会依赖参数
+			// 顺序，属于隐蔽的正确性 bug。
 			actual = equalIgnoringValueAtPath(c.b, c.a, path)
 			if actual != c.want {
 				t.Error("Expected equality check to return ", c.want, ", but got ", actual)

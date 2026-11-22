@@ -25,6 +25,11 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestGroupAdder 验证追加组的两个性质：新组追加在末尾，且委托方的 Response
+// 不被就地修改（追加必须产生新的 Groups 切片）。
+//
+// 第二点尤其重要：认证器返回的 Response 可能被多个请求共享，就地修改会导致
+// 组信息跨请求泄漏。
 func TestGroupAdder(t *testing.T) {
 	capacity := make([]string, 0, 1024)
 	response := &authenticator.Response{User: &user.DefaultInfo{Name: "user", Groups: append(capacity, "original")}}
@@ -49,6 +54,8 @@ func TestGroupAdder(t *testing.T) {
 	}
 }
 
+// TestAuthenticatedGroupAdder 验证 system:authenticated 组的注入规则：
+// 普通用户追加；已存在时不重复追加；匿名用户与 system:unauthenticated 用户不追加。
 func TestAuthenticatedGroupAdder(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -67,6 +74,7 @@ func TestAuthenticatedGroupAdder(t *testing.T) {
 			},
 		},
 		{
+			// 幂等：重复包装认证链时不能出现两个 system:authenticated。
 			name: "don't double add",
 			inputUser: &user.DefaultInfo{
 				Name:   "user",
@@ -78,6 +86,7 @@ func TestAuthenticatedGroupAdder(t *testing.T) {
 			},
 		},
 		{
+			// 匿名用户不应获得已认证身份，否则授权规则会被绕过。
 			name: "don't add for anon",
 			inputUser: &user.DefaultInfo{
 				Name:   user.Anonymous,

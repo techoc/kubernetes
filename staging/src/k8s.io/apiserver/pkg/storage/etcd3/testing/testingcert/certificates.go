@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testingcert 提供 etcd 集成测试用的固定 TLS 证书与私钥。
+// 证书长期有效（约 100 年），避免 CI 因证书过期而失效；
+// 它们仅用于本地测试，绝不能用于任何真实环境。
 package testingcert
 
 // You can use cfssl tool to generate certificates, please refer
@@ -32,6 +35,9 @@ package testingcert
 //
 //	key was changed from ecdsa,384 to rsa,2048
 //	hosts were changed to "localhost","127.0.0.1"
+//
+// CAFileContent 是测试用 CA 证书（PEM）。etcd 与客户端都信任它，
+// 这样测试无需访问系统根证书库。
 const CAFileContent = `
 -----BEGIN CERTIFICATE-----
 MIIEUDCCAzigAwIBAgIUKfV5+qwlw3JneAPdJS7JCO8xIlYwDQYJKoZIhvcNAQEL
@@ -60,6 +66,9 @@ xqC+4mAGBPN/dMPXpjayHD5dOXIKLfrNpqse6jImYlY9zduvwIHRDK/zvqTyPlNZ
 uR84Nw==
 -----END CERTIFICATE-----
 `
+
+// CertFileContent 是 localhost/127.0.0.1 的服务端与客户端共用证书，
+// SAN 同时包含 DNS 名与回环 IP，便于测试监听地址自由切换。
 const CertFileContent = `
 -----BEGIN CERTIFICATE-----
 MIIELzCCAxegAwIBAgIUcjkJA3cmHeoBQggaKZmfKebFL9cwDQYJKoZIhvcNAQEL
@@ -87,6 +96,8 @@ HgAyQSO7+csN13r84zbmDuRpUgo6eTXzJ+77G19KDkEL7XEtlw2jB2L6/o+3RGtw
 JLOpEsgi7hsvOYCuTA3Krw52Mw==
 -----END CERTIFICATE-----
 `
+
+// KeyFileContent 是与 CertFileContent 配对的 RSA 私钥（PKCS#1 PEM）。
 const KeyFileContent = `
 -----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA6JbkDrmFYZufBx6hkczT457FThw8X8Wk/7sE4rmLvKZJYCp8

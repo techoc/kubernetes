@@ -28,8 +28,12 @@ import (
 	"k8s.io/apiserver/pkg/apis/example"
 )
 
+// TestDecoratedWatcher 验证 decoratedWatcher 的三条关键契约：
+// 1) decorator 作用于事件对象；2) error 事件被原样透传且不关闭 watcher；
+// 3) 请求上下文取消后结果通道关闭，同时底层 watcher 被停止（防止泄漏）。
 func TestDecoratedWatcher(t *testing.T) {
 	w := watch.NewFake()
+	// 用注解标记对象，便于断言 decorator 确实被调用。
 	decorator := func(obj runtime.Object) {
 		if pod, ok := obj.(*example.Pod); ok {
 			pod.Annotations = map[string]string{"decorated": "true"}
@@ -39,6 +43,7 @@ func TestDecoratedWatcher(t *testing.T) {
 	dw := newDecoratedWatcher(ctx, w, decorator)
 	defer dw.Stop()
 
+	// 交错发送 error 与正常事件，模拟 etcd watch 中途出现可恢复错误。
 	go func() {
 		w.Error(&metav1.Status{Status: "Failure"})
 		w.Add(&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}})
@@ -74,6 +79,7 @@ func TestDecoratedWatcher(t *testing.T) {
 	}
 }
 
+// expectPodEvent 断言下一个事件是指定类型的 Pod，且已被 decorator 处理。
 func expectPodEvent(t *testing.T, dw *decoratedWatcher, watchType watch.EventType) {
 	select {
 	case e := <-dw.ResultChan():
@@ -92,6 +98,7 @@ func expectPodEvent(t *testing.T, dw *decoratedWatcher, watchType watch.EventTyp
 	}
 }
 
+// expectErrorEvent 断言下一个事件是 watch.Error 且对象为 Status。
 func expectErrorEvent(t *testing.T, dw *decoratedWatcher) {
 	select {
 	case e := <-dw.ResultChan():

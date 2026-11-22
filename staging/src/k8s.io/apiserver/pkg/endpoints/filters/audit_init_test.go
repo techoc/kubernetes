@@ -26,6 +26,10 @@ import (
 	"k8s.io/apiserver/pkg/audit"
 )
 
+// TestWithAuditID 验证审计 ID 的选取与回显规则：
+//   - 客户端自带 Audit-ID 时原样沿用；
+//   - 未提供时由生成函数产生；
+//   - 过长（超过 UUID 两倍）也不截断，因为审计 ID 是关联日志的关键，截断会破坏关联。
 func TestWithAuditID(t *testing.T) {
 	largeAuditID := fmt.Sprintf("%s-%s", uuid.New().String(), uuid.New().String())
 	tests := []struct {
@@ -73,6 +77,7 @@ func TestWithAuditID(t *testing.T) {
 				innerHandlerCallCount++
 
 				// does the inner handler see the audit ID?
+				// 内层 handler 必须能从 context 读到同一个 ID。
 				v, ok := audit.AuditIDFrom(req.Context())
 
 				found = ok
@@ -80,6 +85,7 @@ func TestWithAuditID(t *testing.T) {
 			})
 
 			wrapped := WithAuditInit(handler)
+			// 生产入口 WithAuditInit 固定使用 UUID 生成器；测试替换为可控生成器。
 			if test.newAuditIDFunc != nil {
 				wrapped = withAuditInit(handler, test.newAuditIDFunc)
 			}
@@ -105,6 +111,7 @@ func TestWithAuditID(t *testing.T) {
 				t.Errorf("WithAuditID: expected the request context to have: %q, but got=%q", test.auditIDExpected, auditIDGot)
 			}
 
+			// 响应头必须回显审计 ID，客户端据此与服务端日志对账。
 			auditIDEchoed := w.Header().Get(auditKey)
 			if test.auditIDExpected != auditIDEchoed {
 				t.Errorf("WithAuditID: expected Audit-ID response header: %q, but got: %q", test.auditIDExpected, auditIDEchoed)

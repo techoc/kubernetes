@@ -19,4 +19,9 @@ limitations under the License.
 // +k8s:openapi-model-package=io.k8s.apiserver.pkg.server.statusz.api.v1beta1
 
 // Package v1beta1 contains API Schema definitions for the statusz v1beta1 API group
+//
+// 中文说明：statusz 是 API Server 的运行时状态自省端点，其响应体在此处定义为
+// 版本化 API 类型。单独建包（而不是复用 metrics）是为了让 statusz 输出拥有稳定的
+// schema 与 OpenAPI 描述，从而能像普通 API 一样被客户端消费和演进；
+// v1beta1 表示字段仍可能在不通知的情况下调整。
 package v1beta1

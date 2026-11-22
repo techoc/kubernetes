@@ -48,6 +48,8 @@ import (
 )
 
 // Fake API versions, similar to api/latest.go
+//
+// 使用独立的 test.group 组注册类型，避免与真实 API 组冲突。
 const namedGroupPrefix = "apis"
 const testAPIGroup = "test.group"
 
@@ -55,6 +57,7 @@ var testGroupV1 = schema.GroupVersion{Group: testAPIGroup, Version: "1"}
 var testGroupV2 = schema.GroupVersion{Group: testAPIGroup, Version: "2"}
 var testCodecV2 = codecs.LegacyCodec(testGroupV2)
 
+// addTestTypesV2 向全局 scheme 注册 v2 测试类型；init 中调用以保证编解码可用。
 func addTestTypesV2() {
 	scheme.AddKnownTypes(testGroupV2,
 		&endpointstesting.Simple{},
@@ -67,6 +70,8 @@ func init() {
 	addTestTypesV2()
 }
 
+// TestWatchHTTPErrors 验证存储层在 watch 过程中报错时，错误被包装成 watch.Error
+// 事件并以 Status 对象发给客户端（而非直接断开连接）。
 func TestWatchHTTPErrors(t *testing.T) {
 	ctx := t.Context()
 	watcher := watch.NewFake()
@@ -134,6 +139,8 @@ func TestWatchHTTPErrors(t *testing.T) {
 	require.Equal(t, expectedStatus, status)
 }
 
+// TestWatchHTTPErrorsBeforeServe 验证 watch 开始前就失败（如 scope 解析出错）时，
+// 直接返回标准 Status 错误体，并且不泄漏 watcher goroutine。
 func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 	ctx := t.Context()
 	watcher := watch.NewFake()
@@ -202,6 +209,8 @@ func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 		"Leaked watcher goruntine after request done")
 }
 
+// TestWatchHTTPDynamicClientErrors 验证客户端与服务端的流式内容协商失败时返回 NegotiateError，
+// 确保不支持的媒体类型不会被静默降级。
 func TestWatchHTTPDynamicClientErrors(t *testing.T) {
 	watcher := watch.NewFake()
 	timeoutCh := make(chan time.Time)
@@ -239,6 +248,8 @@ func TestWatchHTTPDynamicClientErrors(t *testing.T) {
 	require.Equal(t, runtime.NegotiateError{Stream: true, ContentType: "testcase/json"}, err)
 }
 
+// TestWatchHTTPTimeout 验证 watch 超时路径：超时后 watcher 被停止、客户端读到 EOF，
+// 且不残留后台 goroutine。
 func TestWatchHTTPTimeout(t *testing.T) {
 	ctx := t.Context()
 	watcher := watch.NewFake()
@@ -321,11 +332,14 @@ type watchJSON struct {
 	Object json.RawMessage `json:"object,omitempty"`
 }
 
+// fakeTimeoutFactory 用可控 channel 模拟超时，使测试不依赖真实时间。
 type fakeTimeoutFactory struct {
 	timeoutCh chan time.Time
 	done      chan struct{}
 }
 
+// TimeoutCh 返回外部控制的超时 channel 与一个“已超时”的判定函数；
+// 判定函数关闭 done 以便测试观察服务端已完成超时处理。
 func (t *fakeTimeoutFactory) TimeoutCh() (<-chan time.Time, func() bool) {
 	return t.timeoutCh, func() bool {
 		defer close(t.done)
@@ -348,6 +362,8 @@ func serveWatch(watcher watch.Interface, watchServer *WatchServer, preServeErr e
 	}
 }
 
+// fakeCachingObject 模拟 cachingObject：首次编码后复用字节，用于验证 watch 事件大小
+// 指标对缓存对象也只统计一次编码开销。
 type fakeCachingObject struct {
 	obj runtime.Object
 
@@ -356,6 +372,7 @@ type fakeCachingObject struct {
 	err  error
 }
 
+// CacheEncode 首次调用执行编码并缓存，后续直接写缓存字节。
 func (f *fakeCachingObject) CacheEncode(_ runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	f.once.Do(func() {
 		buffer := bytes.NewBuffer(nil)
@@ -386,6 +403,10 @@ func (f *fakeCachingObject) DeepCopyObject() runtime.Object {
 var _ runtime.CacheableObject = &fakeCachingObject{}
 var _ runtime.Object = &fakeCachingObject{}
 
+// TestWatchEventSizes 验证 watch 事件大小指标按 group/resource/version 打标签并正确累加，
+// 分别覆盖普通对象与带序列化缓存的对象。
+//
+// 同一事件发送两次以确认指标计的是发送次数而非去重后的对象数。
 func TestWatchEventSizes(t *testing.T) {
 	metrics.Register()
 	gvr := schema.GroupVersionResource{Group: "group", Version: "version", Resource: "resource"}

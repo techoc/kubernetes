@@ -51,6 +51,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// setUp 构造一个最小可用的 server.Config，仅用于 TLS 相关测试。
 func setUp(t *testing.T) server.Config {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -60,16 +61,23 @@ func setUp(t *testing.T) server.Config {
 	return *config
 }
 
+// TestCertSpec 描述一张自签测试证书：主机名、额外 DNS 名与 IP。
 type TestCertSpec struct {
 	host       string
 	names, ips []string // in certificate
 }
 
+// NamedTestCertSpec 在 TestCertSpec 之上增加显式的 SNI 名称列表（对应 --tls-sni-cert-key）。
 type NamedTestCertSpec struct {
 	TestCertSpec
 	explicitNames []string // as --tls-sni-cert-key explicit names
 }
 
+// TestServerRunWithSNI 验证 TLS 证书选择逻辑：客户端 SNI 命中则用对应证书，
+// 未命中或客户端未发送 SNI 时回落到默认证书；同时验证 loopback 客户端可正常连接。
+//
+// 每个用例用真实 TLS 握手并比较返回证书的签名来确定服务端实际选了哪张证书，
+// 因此能覆盖 crypto/tls 的真实匹配规则（含通配符与 IP 不参与 SNI 的行为）。
 func TestServerRunWithSNI(t *testing.T) {
 	tests := map[string]struct {
 		Cert              TestCertSpec
@@ -383,6 +391,7 @@ func TestServerRunWithSNI(t *testing.T) {
 	}
 }
 
+// parseIPList 把字符串 IP 列表解析为 net.IP；使用宽松解析以兼容历史配置。
 func parseIPList(ips []string) []net.IP {
 	var netIPs []net.IP
 	for _, ip := range ips {
@@ -391,6 +400,9 @@ func parseIPList(ips []string) []net.IP {
 	return netIPs
 }
 
+// getOrCreateTestCertFiles 复用已存在的证书文件，否则生成并落盘。
+//
+// 复用而非每次重写，是为了让证书在多次测试运行间保持稳定，减少无谓的 RSA 生成开销。
 func getOrCreateTestCertFiles(certFileName, keyFileName string, spec TestCertSpec) (err error) {
 	if _, err := os.Stat(certFileName); err == nil {
 		if _, err := os.Stat(keyFileName); err == nil {
@@ -418,6 +430,10 @@ func getOrCreateTestCertFiles(certFileName, keyFileName string, spec TestCertSpe
 	return nil
 }
 
+// caCertFromBundle 从 PEM bundle 中取最后一张证书作为 CA。
+//
+// 约定 bundle 以叶子证书开头、CA 结尾（与 kubeadm 生成的 bundle 一致），
+// 因此取最后一个 PEM 块。
 func caCertFromBundle(bundlePath string) (*x509.Certificate, error) {
 	pemData, err := os.ReadFile(bundlePath)
 	if err != nil {
@@ -440,10 +456,12 @@ func caCertFromBundle(bundlePath string) (*x509.Certificate, error) {
 	}
 }
 
+// x509CertSignature 用证书签名的 base64 作为指纹，用于在测试中识别服务端返回的证书。
 func x509CertSignature(cert *x509.Certificate) string {
 	return base64.StdEncoding.EncodeToString(cert.Signature)
 }
 
+// certFileSignature 加载证书文件并计算指纹。
 func certFileSignature(certFile, keyFile string) (string, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -452,6 +470,7 @@ func certFileSignature(certFile, keyFile string) (string, error) {
 	return certSignature(cert)
 }
 
+// certSignature 解析 tls.Certificate 的叶子证书并计算指纹。
 func certSignature(cert tls.Certificate) (string, error) {
 	x509Certs, err := x509.ParseCertificates(cert.Certificate[0])
 	if err != nil {
@@ -460,6 +479,7 @@ func certSignature(cert tls.Certificate) (string, error) {
 	return x509CertSignature(x509Certs[0]), nil
 }
 
+// fakeVersionInfo 返回固定的版本信息，便于断言 discovery 响应内容。
 func fakeVersionInfo() version.Info {
 	baseVer := baseversion.Get()
 	baseVer.Major = "42"
@@ -474,6 +494,8 @@ func fakeVersionInfo() version.Info {
 // generateSelfSignedCertKey creates a self-signed certificate and key for the given host.
 // Host may be an IP or a DNS name
 // You may also specify additional subject alt names (either ip or dns names) for the certificate
+//
+// 证书同时带 IsCA=true，便于测试直接把叶子证书当作信任根。
 func generateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {
 	priv, err := rsa.GenerateKey(cryptorand.Reader, 2048)
 	if err != nil {

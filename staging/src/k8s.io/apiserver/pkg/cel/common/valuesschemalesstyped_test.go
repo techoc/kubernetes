@@ -34,6 +34,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// customJSONMarshaler 与 customPointerJSONMarshaler 用于验证自定义
+// MarshalJSON 的“值接收者”与“指针接收者”两种实现都能被正确处理。
 type customJSONMarshaler struct {
 	Val string
 }
@@ -50,6 +52,8 @@ func (c *customPointerJSONMarshaler) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]string{"marshaled": c.Val})
 }
 
+// 下面这些命名类型用来确认转换逻辑依据 kind 而非具体类型名，
+// 自定义的 int/float/string/bool/bytes 别名应与底层类型表现一致。
 type myInt int
 type myInt32 int32
 type myInt64 int64
@@ -64,12 +68,15 @@ type myBytes []byte
 type myCustomByte uint8
 type myCustomBytes []myCustomByte
 
+// TestStruct 覆盖普通字段、非指针字段与 omitempty 指针字段的组合。
 type TestStruct struct {
 	FieldA string `json:"fieldA,omitempty"`
 	FieldB int    `json:"fieldB"`
 	FieldC *int   `json:"fieldC,omitempty"`
 }
 
+// OmitTestStruct 用于验证：没有 omitempty 的 nil 指针字段会保留为 null，
+// 有 omitempty 的 nil 指针字段则会被省略——这一差异必须与 JSON 编码保持一致。
 type OmitTestStruct struct {
 	FieldNoOmit *int `json:"fieldNoOmit"`
 	FieldOmit   *int `json:"fieldOmit,omitempty"`
@@ -77,6 +84,9 @@ type OmitTestStruct struct {
 
 // The following Equiv structures mirror those in runtime/converter_test.go
 // to verify equivalence between SchemalessTypedToVal and ToUnstructured.
+//
+// 这些结构的字段覆盖嵌套结构体、嵌入字段、map、slice、指针、interface{}、
+// 自定义 JSON 序列化与 RawExtension，用于交叉验证两条转换路径的结果一致。
 type EquivA struct {
 	A int    `json:"aa,omitempty"`
 	B string `json:"ab,omitempty"`
@@ -198,6 +208,9 @@ type EquivNoNameTagOmitempty struct {
 	Data4 int `json:"data4"`
 }
 
+// assertEquivalence 断言 SchemalessTypedToVal 与“先 ToUnstructured 再
+// NativeToValue”两条路径得到相等的 CEL 值，并双向检查 Equal，
+// 以确保实现没有在等值比较上做出不对称的行为。
 func assertEquivalence(t *testing.T, val interface{}) {
 	unstrMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(val)
 	if err != nil {
@@ -218,6 +231,8 @@ func assertEquivalence(t *testing.T, val interface{}) {
 	}
 }
 
+// TestSchemalessTypedToVal_Equivalence 覆盖真实 k8s 类型与各类 Go 结构形态，
+// 逐一与 canonical 的 unstructured 转换结果比对。
 func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 	timeVal := time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC)
 	microTimeVal := time.Date(2026, 5, 18, 12, 0, 0, 1000, time.UTC)
@@ -228,6 +243,8 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 		val  interface{}
 	}{
 		{
+			// 真实类型：验证 resource.Quantity、metav1.Time 等特殊类型经转换后
+			// 与 unstructured 表示一致。
 			name: "corev1.Pod",
 			val: &corev1.Pod{
 				TypeMeta: metav1.TypeMeta{
@@ -331,6 +348,8 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 			},
 		},
 		{
+			// 自定义 MarshalJSON 与 RawExtension 必须按 JSON 序列化结果处理，
+			// 而不是反射结构体字段。
 			name: "StructG CustomMarshaling",
 			val: &EquivG{
 				CustomValue1:   EquivCustomValue{Data: []byte(`{"a":1}`)},
@@ -358,6 +377,7 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 			val:  &EquivInlineTestAnonymous{},
 		},
 		{
+			// 匿名字段在 json:"" 时被内联，必须与 encoding/json 的展开规则一致。
 			name: "InlineAnonymous full",
 			val: &EquivInlineTestAnonymous{
 				EquivNoTag:              EquivNoTag{Data0: 100},
@@ -389,6 +409,8 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 			},
 		},
 		{
+			// k8s 基础类型：metav1.Time/MicroTime/Duration、IntOrString、Quantity
+			// 以及自定义 JSON 序列化。
 			name: "K8sTypes",
 			val: &struct {
 				Time             metav1.Time
@@ -414,6 +436,8 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 			},
 		},
 		{
+			// map 中的 nil、nil 指针与各整数/浮点宽度：所有数值都映射为 CEL int/double，
+			// nil 映射为 null 而不是被忽略。
 			name: "Primitives in map",
 			val: &map[string]interface{}{
 				"nil":        nil,
@@ -447,6 +471,8 @@ func TestSchemalessTypedToVal_Equivalence(t *testing.T) {
 	}
 }
 
+// TestSchemalessTypedToVal_UnsupportedTypes 验证无法表示的 Go 类型（如 chan）
+// 返回 CEL 错误值，而不是 panic 或静默丢弃。
 func TestSchemalessTypedToVal_UnsupportedTypes(t *testing.T) {
 	val := make(chan int)
 	expectedErr := "unsupported Go type for CEL: chan int"
@@ -463,6 +489,8 @@ func TestSchemalessTypedToVal_UnsupportedTypes(t *testing.T) {
 // Note: The equivalence test (assertEquivalence) is not used here because
 // runtime.DefaultUnstructuredConverter.ToUnstructured requires structured types (objects/maps)
 // and will panic if passed primitive values.
+//
+// 这里直接断言标量转换结果，并特别覆盖 uint64 超出 int64 的溢出路径。
 func TestSchemalessTypedToVal_Primitives(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -516,6 +544,7 @@ func TestSchemalessTypedToVal_Primitives(t *testing.T) {
 	}
 }
 
+// makePod 构造一个字段较丰富的 Pod，用于基准测试中比较深层字段访问的开销。
 func makePod() *corev1.Pod {
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
@@ -560,6 +589,8 @@ func makePod() *corev1.Pod {
 	return pod
 }
 
+// getNestedField 沿 spec.securityContext.seLinuxOptions.level 逐层读取，
+// 用于基准测试中度量深层字段访问的成本；假定结构已按预期生成。
 func getNestedField(val ref.Val) ref.Val {
 	key1 := types.String("spec")
 	key2 := types.String("securityContext")
@@ -575,6 +606,8 @@ func getNestedField(val ref.Val) ref.Val {
 	return m4.Get(key4)
 }
 
+// BenchmarkAccessNestedField_Unstructured 是基线：每次迭代都做一遍完整的
+// ToUnstructured + NativeToValue 转换，再访问深字段。
 func BenchmarkAccessNestedField_Unstructured(b *testing.B) {
 	obj := makePod()
 	b.ResetTimer()
@@ -584,6 +617,8 @@ func BenchmarkAccessNestedField_Unstructured(b *testing.B) {
 	}
 }
 
+// BenchmarkAccessNestedField_SchemalessTyped 使用 SchemalessTypedToVal，
+// 其设计目标是避免中间 map 分配，从而降低深层字段访问的延迟与分配。
 func BenchmarkAccessNestedField_SchemalessTyped(b *testing.B) {
 	obj := makePod()
 	b.ResetTimer()
@@ -593,6 +628,9 @@ func BenchmarkAccessNestedField_SchemalessTyped(b *testing.B) {
 	}
 }
 
+// TestCelTraits 验证返回的 CEL 值正确实现了 traits（Lister/Mapper/Adder/Container
+// 等），包括越界、非法键、迭代耗尽等错误路径，确保 CEL 表达式不会因
+// 缺少 trait 而在运行期 panic。
 func TestCelTraits(t *testing.T) {
 	type dummy struct{ A string }
 
@@ -758,6 +796,8 @@ func TestCelTraits(t *testing.T) {
 	}
 }
 
+// TestSchemalessTypedStruct_Equal 验证结构体值的等值语义：同类型按字段比较，
+// 与等价的 map 也比较为 true；大小/键/值不同则为 false，类型不可比时返回错误。
 func TestSchemalessTypedStruct_Equal(t *testing.T) {
 	type SimpleStruct struct {
 		Name  string `json:"name"`
@@ -883,6 +923,8 @@ func TestSchemalessTypedStruct_Equal(t *testing.T) {
 	}
 }
 
+// TestSchemalessTypedMap_Equal 验证 map 值的等值语义：先比大小再逐键比较，
+// 与结构体不同，嵌套的 map/list 也参与递归比较。
 func TestSchemalessTypedMap_Equal(t *testing.T) {
 	baseMapCEL := SchemalessTypedToVal(map[string]interface{}{"a": 1, "b": "hello"})
 	complexBase := SchemalessTypedToVal(map[string]interface{}{

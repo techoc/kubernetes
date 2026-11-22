@@ -29,6 +29,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// TestGetMutatingWebhookConfig 验证管理器能把 informer 中的
+// MutatingWebhookConfiguration 转换为一组 webhook accessor。
 func TestGetMutatingWebhookConfig(t *testing.T) { synctest.Test(t, testGetMutatingWebhookConfig) }
 func testGetMutatingWebhookConfig(t *testing.T) {
 	// Build a test client that the admission plugin can use to look up the MutatingWebhookConfiguration
@@ -72,6 +74,7 @@ func testGetMutatingWebhookConfig(t *testing.T) {
 			t.Errorf("Expected mutating webhook")
 			continue
 		}
+		// accessor 必须保留配置中的原始 webhook 定义，否则运行时行为会与配置不符。
 		if !reflect.DeepEqual(h, &webhookConfiguration.Webhooks[i]) {
 			t.Errorf("Expected\n%#v\ngot\n%#v", &webhookConfiguration.Webhooks[i], h)
 		}
@@ -87,15 +90,22 @@ type mockCreateMutatingWebhookAccessor struct {
 	numberOfCalls int
 }
 
+// calledNTimes 返回当前计数。
 func (mock *mockCreateMutatingWebhookAccessor) calledNTimes() int { return mock.numberOfCalls }
-func (mock *mockCreateMutatingWebhookAccessor) resetCounter()     { mock.numberOfCalls = 0 }
+
+// resetCounter 清零计数，供断言“本次更新重建了几个 accessor”。
+func (mock *mockCreateMutatingWebhookAccessor) resetCounter() { mock.numberOfCalls = 0 }
+
+// incrementCounter 累加计数。
 func (mock *mockCreateMutatingWebhookAccessor) incrementCounter() { mock.numberOfCalls++ }
 
+// fn 替换管理器中的真实构造函数，仅统计调用次数。
 func (mock *mockCreateMutatingWebhookAccessor) fn(uid string, configurationName string, h *v1.MutatingWebhook) webhook.WebhookAccessor {
 	mock.incrementCounter()
 	return webhook.NewMutatingWebhookAccessor(uid, configurationName, h)
 }
 
+// mutatingConfigurationTotalWebhooks 汇总所有配置中的 webhook 数量。
 func mutatingConfigurationTotalWebhooks(configurations []*v1.MutatingWebhookConfiguration) int {
 	total := 0
 	for _, configuration := range configurations {
@@ -104,6 +114,9 @@ func mutatingConfigurationTotalWebhooks(configurations []*v1.MutatingWebhookConf
 	return total
 }
 
+// TestGetMutatingWebhookConfigSmartReload 验证配置变更时只重建受影响配置的
+// accessor（“smart reload”），未变更的配置继续复用缓存，避免每次变更都全量重建。
+// numberOfCreations/numberOfRefreshes 分别断言初始构建与更新重建的次数。
 func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 	type args struct {
 		createWebhookConfigurations []*v1.MutatingWebhookConfiguration
@@ -236,6 +249,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 					)
 				}
 				// assert creations
+				// 初次构建应为每个 webhook 各创建一次 accessor，没有多余的刷新。
 				if tt.numberOfCreations != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
 						"Expected number of creations %d received %d",
@@ -264,6 +278,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 				}
 
 				// assert updates
+				// 仅被更新配置的 webhook 应重建 accessor；未变更配置必须命中缓存。
 				if tt.numberOfRefreshes != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
 						"Expected number of refreshes %d received %d",

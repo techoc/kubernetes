@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package testing 提供 API 端点测试使用的共享类型与辅助函数。
+// 这些类型仅为测试而存在，不属于对外 API 契约，可随测试需求演进。
 package testing

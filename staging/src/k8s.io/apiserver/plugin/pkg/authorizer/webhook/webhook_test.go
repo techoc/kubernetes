@@ -29,6 +29,8 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// mustLabelRequirement 解析 selector 并返回其 requirements；解析失败直接 panic，
+// 因为测试用例里的 selector 都是静态合法的。
 func mustLabelRequirement(selector string) labels.Requirements {
 	ret, err := labels.Parse(selector)
 	if err != nil {
@@ -38,6 +40,9 @@ func mustLabelRequirement(selector string) labels.Requirements {
 	return requirements
 }
 
+// Test_resourceAttributesFrom 验证把授权属性中的 field/label selector
+// 转换为 SubjectAccessReview 的 ResourceAttributes：
+// 只保留授权模型能够表达的操作符，未知操作符被跳过，空结果不产生 selector 字段。
 func Test_resourceAttributesFrom(t *testing.T) {
 	type args struct {
 		attr authorizer.Attributes
@@ -48,6 +53,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 		want *authorizationv1.ResourceAttributes
 	}{
 		{
+			// 解析错误存在时仍能送出已解析的要求；错误交由调用方决定是否拒绝。
 			name: "field selector: ignore error",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -64,6 +70,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 标签 selector 的解析错误同样被忽略。
 			name: "label selector: ignore error",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -78,6 +85,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// =、==、in 在授权模型中统一表示为 In。
 			name: "field selector: equals, double equals, in",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -112,6 +120,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// != 与 notin 统一表示为 NotIn。
 			name: "field selector: not equals, not in",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -140,6 +149,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 无法映射的操作符被跳过，而不是让整个转换失败。
 			name: "field selector: unknown operator skipped",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -163,6 +173,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 没有任何可用要求时不设置 FieldSelector，保持请求体最小化。
 			name: "field selector: no requirements has no fieldselector",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -175,6 +186,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			want: &authorizationv1.ResourceAttributes{},
 		},
 		{
+			// 标签要求输出按 key 排序，保证同一输入的请求体稳定。
 			name: "label selector: in, equals, double equals",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -205,6 +217,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// notin 与 != 统一为 NotIn。
 			name: "label selector: not in, not equals",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -230,6 +243,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 存在性要求映射为 Exists/DoesNotExist，不带 Values。
 			name: "label selector: exists, not exists",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -253,6 +267,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 大于等无法表达的操作符被跳过。
 			name: "label selector: unknown operator skipped",
 			args: args{
 				attr: authorizer.AttributesRecord{
@@ -273,6 +288,7 @@ func Test_resourceAttributesFrom(t *testing.T) {
 			},
 		},
 		{
+			// 没有任何可用要求时不设置 LabelSelector。
 			name: "label selector: no requirements has no labelselector",
 			args: args{
 				attr: authorizer.AttributesRecord{

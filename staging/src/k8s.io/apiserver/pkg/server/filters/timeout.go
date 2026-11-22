@@ -35,6 +35,9 @@ import (
 )
 
 // WithTimeoutForNonLongRunningRequests times out non-long-running requests after the time given by timeout.
+//
+// 只对非长时请求生效：watch、exec、proxy 等长连接若被 60s 超时切断，功能会直接不可用。
+// 超时由请求 context 的 deadline 驱动（上游的 WithRequestDeadline 设置），此处不再自设时长。
 func WithTimeoutForNonLongRunningRequests(handler http.Handler, longRunning apirequest.LongRunningRequestCheck) http.Handler {
 	if longRunning == nil {
 		return handler
@@ -53,6 +56,7 @@ func WithTimeoutForNonLongRunningRequests(handler http.Handler, longRunning apir
 			return req, true, nil, nil
 		}
 
+		// 超时返回 504，但请求终止指标仍要记录，否则耗时统计会缺一条。
 		postTimeoutFn := func() {
 			metrics.RecordRequestTermination(req, requestInfo, metrics.APIServerComponent, http.StatusGatewayTimeout)
 		}
@@ -61,6 +65,7 @@ func WithTimeoutForNonLongRunningRequests(handler http.Handler, longRunning apir
 	return WithTimeout(handler, timeoutFunc)
 }
 
+// timeoutFunc 根据请求决定是否跳过超时控制（长时请求），并给出超时时的错误与收尾回调。
 type timeoutFunc = func(*http.Request) (req *http.Request, longRunning bool, postTimeoutFunc func(), err *apierrors.StatusError)
 
 // WithTimeout returns an http.Handler that runs h with a timeout
@@ -81,6 +86,10 @@ type timeoutHandler struct {
 	timeout timeoutFunc
 }
 
+// ServeHTTP 把实际处理放到独立 goroutine，主 goroutine 只等待“处理完成”或“context 到期”。
+//
+// 用 goroutine 而不是在同一个栈上等待，是因为 http.Handler 无法被中断；超时后
+// 只能放弃等待并让 response writer 拒绝后续写入。
 func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r, longRunning, postTimeoutFn, err := t.timeout(r)
 	if longRunning {
@@ -110,6 +119,7 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				buf = buf[:runtime.Stack(buf, false)]
 				err = fmt.Sprintf("%v\n%s", err, buf)
 			}
+			// 无论正常返回还是 panic 都必须向 resultCh 发送，否则超时分支的接收方会永久阻塞。
 			resultCh <- err
 		}()
 		t.handler.ServeHTTP(w, rCopy)
@@ -117,6 +127,9 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err := <-resultCh:
 		// panic if error occurs; stop otherwise
+		//
+		// 把 panic 重新抛到处理请求的 goroutine 上，交给 http.Server 统一记录与断连，
+		// 保持与未包装时一致的可观测行为。
 		if err != nil {
 			panic(err)
 		}
@@ -126,6 +139,8 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// resultCh needs to have a reader, since the function doing
 			// the work needs to send to it. This is defer'd to ensure it runs
 			// ever if the post timeout work itself panics.
+			//
+			// 后台 goroutine 稍后收尾：记录超时后处理器又运行了多久，用于发现“卡死”的 handler。
 			go func() {
 				timedOutAt := time.Now()
 				res := <-resultCh
@@ -140,6 +155,7 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				utilruntime.HandleErrorWithContext(r.Context(), nil, "Post-timeout activity", "timeElapsed", time.Since(timedOutAt), "method", r.Method, "path", r.URL.Path, "result", res)
 			}()
 		}()
+		// 超时后的 handler 栈已经不再有参考价值，关闭堆栈打印以免日志刷屏。
 		httplog.SetStacktracePredicate(r.Context(), func(status int) bool {
 			return false
 		})
@@ -148,11 +164,13 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// timeoutWriter 在保留 http.ResponseWriter 语义的同时增加超时控制能力。
 type timeoutWriter interface {
 	http.ResponseWriter
 	timeout(*apierrors.StatusError)
 }
 
+// newTimeoutWriter 返回内部 writer（用于触发超时）与外层包装（交给 handler 写入）。
 func newTimeoutWriter(w http.ResponseWriter) (timeoutWriter, http.ResponseWriter) {
 	base := &baseTimeoutWriter{w: w, handlerHeaders: w.Header().Clone()}
 	wrapped := responsewriter.WrapForHTTP1Or2(base)
@@ -163,6 +181,10 @@ func newTimeoutWriter(w http.ResponseWriter) (timeoutWriter, http.ResponseWriter
 var _ http.ResponseWriter = &baseTimeoutWriter{}
 var _ responsewriter.UserProvidedDecorator = &baseTimeoutWriter{}
 
+// baseTimeoutWriter 缓冲 handler 写的 header，直到第一次真正写入才提交给底层 writer。
+//
+// 这层缓冲是超时能返回规范 504 JSON 的前提：如果 handler 一开始就把 header 刷出去，
+// 超时后就无法再改状态码，只能断开连接。
 type baseTimeoutWriter struct {
 	w http.ResponseWriter
 
@@ -182,6 +204,7 @@ func (tw *baseTimeoutWriter) Unwrap() http.ResponseWriter {
 	return tw.w
 }
 
+// Header 在超时后返回一个丢弃用的空 header，避免 handler 继续改写已提交的响应。
 func (tw *baseTimeoutWriter) Header() http.Header {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -193,6 +216,7 @@ func (tw *baseTimeoutWriter) Header() http.Header {
 	return tw.handlerHeaders
 }
 
+// Write 在超时后返回 http.ErrHandlerTimeout，让 handler 能感知到自己已被放弃。
 func (tw *baseTimeoutWriter) Write(p []byte) (int, error) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -211,6 +235,7 @@ func (tw *baseTimeoutWriter) Write(p []byte) (int, error) {
 	return tw.w.Write(p)
 }
 
+// Flush 在超时后变为空操作，防止把已中止的响应推给客户端。
 func (tw *baseTimeoutWriter) Flush() {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -224,6 +249,7 @@ func (tw *baseTimeoutWriter) Flush() {
 	tw.w.(http.Flusher).Flush()
 }
 
+// WriteHeader 只在第一次调用时生效，与 net/http 的语义一致。
 func (tw *baseTimeoutWriter) WriteHeader(code int) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -243,6 +269,7 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
+// timeout 由超时分支调用，决定是返回 504 还是强制断开连接。
 func (tw *baseTimeoutWriter) timeout(err *apierrors.StatusError) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -271,10 +298,13 @@ func (tw *baseTimeoutWriter) timeout(err *apierrors.StatusError) {
 		// an error, panic with the value ErrAbortHandler.
 		//
 		// We are throwing http.ErrAbortHandler deliberately so that a client is notified and to suppress a not helpful stacktrace in the logs
+		//
+		// 已经写出 header 时无法再改状态码，唯一能让客户端知道“响应不完整”的办法就是断开连接。
 		panic(http.ErrAbortHandler)
 	}
 }
 
+// CloseNotify 超时后立即返回已关闭的 channel，通知 handler 连接已不可用。
 func (tw *baseTimeoutWriter) CloseNotify() <-chan bool {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -290,6 +320,8 @@ func (tw *baseTimeoutWriter) CloseNotify() <-chan bool {
 	return tw.w.(http.CloseNotifier).CloseNotify()
 }
 
+// Hijack 用于协议升级（如 exec 的 SPDY）。被 hijack 后超时控制失效，
+// 因为底层连接已脱离 http.Server 管理。
 func (tw *baseTimeoutWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()

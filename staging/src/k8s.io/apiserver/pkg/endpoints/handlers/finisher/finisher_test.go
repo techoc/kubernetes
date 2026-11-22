@@ -35,6 +35,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestFinishRequest 验证 FinishRequest 的返回值语义：
+// 成功状态对象原样返回，失败状态对象转为 StatusError，panic 向上传播；
+// http.ErrAbortHandler 特殊处理——不附加堆栈，保持原值以便 net/http 识别。
 func TestFinishRequest(t *testing.T) {
 	exampleObj := &example.Pod{}
 	exampleErr := fmt.Errorf("error")
@@ -160,6 +163,10 @@ func TestFinishRequest(t *testing.T) {
 	}
 }
 
+// TestFinishRequestWithPostTimeoutTracker 验证请求超时后 ResultFunc 的收尾行为：
+// 父 goroutine 立即返回超时错误，但后台仍等待 ResultFunc 结束并把结果交给
+// post-timeout logger；若 ResultFunc 永不返回，父 goroutine 在 postTimeoutWait
+// 之后放弃，避免 goroutine 永久泄漏。
 func TestFinishRequestWithPostTimeoutTracker(t *testing.T) {
 	tests := []struct {
 		name                       string
@@ -196,6 +203,7 @@ func TestFinishRequestWithPostTimeoutTracker(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 立即超时的 context：确保 FinishRequest 走超时分支。
 			ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 			defer cancel()
 

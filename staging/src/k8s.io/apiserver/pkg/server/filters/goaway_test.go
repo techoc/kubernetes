@@ -34,6 +34,8 @@ import (
 	"golang.org/x/net/http2"
 )
 
+// TestProbabilisticGoawayDecider 验证按概率决定是否发送 GOAWAY 的判定器：
+// chance=0 永不发送，chance=1 总是发送，中间值由随机源与阈值决定。
 func TestProbabilisticGoawayDecider(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -110,6 +112,7 @@ var (
 )
 
 // newTestGOAWAYServer return a test GOAWAY server instance.
+// newTestGOAWAYServer 启动一个启用 HTTP/2 的测试服务端，handler 包装了 GOAWAY filter。
 func newTestGOAWAYServer() (*httptest.Server, error) {
 	watchHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		timer := time.NewTicker(time.Second)
@@ -187,6 +190,8 @@ type watchResponse struct {
 
 // requestGOAWAYServer request test GOAWAY server using specified method and data according to the given url.
 // A non-nil channel will be returned if the request is watch, and a watchResponse can be got from the channel when watch done.
+// requestGOAWAYServer 发起 watch 请求并把响应流通过 channel 交给调用方，
+// 便于测试异步观察 GOAWAY 行为。
 func requestGOAWAYServer(client *http.Client, serverBaseURL, url string) (<-chan watchResponse, error) {
 	method := http.MethodGet
 	var reqBody io.Reader
@@ -261,6 +266,7 @@ func requestGOAWAYServer(client *http.Client, serverBaseURL, url string) (<-chan
 
 // TestClientReceivedGOAWAY tests the in-flight watch requests will not be affected and new requests use a new
 // connection after client received GOAWAY.
+// TestClientReceivedGOAWAY 验证客户端能收到并处理 GOAWAY 帧，且可重新建立连接继续 watch。
 func TestClientReceivedGOAWAY(t *testing.T) {
 	s, err := newTestGOAWAYServer()
 	if err != nil {
@@ -377,6 +383,7 @@ func TestClientReceivedGOAWAY(t *testing.T) {
 }
 
 // TestGOAWAYHTTP1Requests tests GOAWAY filter will not affect HTTP1.1 requests.
+// TestGOAWAYHTTP1Requests 验证 HTTP/1.1 请求不受 GOAWAY 逻辑影响（GOAWAY 是 HTTP/2 概念）。
 func TestGOAWAYHTTP1Requests(t *testing.T) {
 	s := httptest.NewUnstartedServer(WithProbabilisticGoaway(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -415,6 +422,7 @@ func TestGOAWAYHTTP1Requests(t *testing.T) {
 }
 
 // TestGOAWAYConcurrency tests GOAWAY frame will not affect concurrency requests in a single http client instance.
+// TestGOAWAYConcurrency 在并发请求下触发 GOAWAY，验证不会丢请求、不会破坏连接复用。
 func TestGOAWAYConcurrency(t *testing.T) {
 	s, err := newTestGOAWAYServer()
 	if err != nil {

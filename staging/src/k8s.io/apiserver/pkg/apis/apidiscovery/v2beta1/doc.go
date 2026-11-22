@@ -16,4 +16,6 @@ limitations under the License.
 
 // +groupName=apidiscovery.k8s.io
 
+// Package v2beta1 是 apidiscovery.k8s.io 组的 v2beta1 版本，包含聚合发现（Aggregated Discovery）
+// 相关类型。v2beta1 为 v2 的前身，保留它只为兼容旧客户端；新代码应使用 v2。
 package v2beta1

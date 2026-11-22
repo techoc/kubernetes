@@ -42,16 +42,20 @@ import (
 	"k8s.io/utils/path"
 )
 
+// apiserverService 是 OTel resource 中的 service.name，用于在追踪后端区分组件。
 const apiserverService = "apiserver"
 
 var (
+	// cfgScheme 只注册 apiserver 内部配置类型，用于解码 tracing 配置文件。
 	cfgScheme = runtime.NewScheme()
-	codecs    = serializer.NewCodecFactory(cfgScheme, serializer.EnableStrict)
+	// EnableStrict 让未知字段直接报错，避免配置拼写错误被静默忽略。
+	codecs = serializer.NewCodecFactory(cfgScheme, serializer.EnableStrict)
 )
 
 func init() {
 	// Prevent memory leak from OTel metrics, which we don't use:
 	// https://github.com/open-telemetry/opentelemetry-go-contrib/issues/5190
+	// 显式安装 noop MeterProvider，否则 OTel 默认全局 provider 会保留指标状态。
 	otel.SetMeterProvider(noop.NewMeterProvider())
 }
 
@@ -72,6 +76,7 @@ func NewTracingOptions() *TracingOptions {
 }
 
 // AddFlags adds flags related to tracing to the specified FlagSet
+// nil receiver 时直接返回，便于嵌入到可选的子选项中。
 func (o *TracingOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -82,6 +87,7 @@ func (o *TracingOptions) AddFlags(fs *pflag.FlagSet) {
 }
 
 // ApplyTo fills up Tracing config with options.
+// 未配置时保持 TracerProvider 为空（不启用追踪）。
 func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Config) error {
 	if o == nil || o.ConfigFile == "" {
 		return nil
@@ -101,6 +107,7 @@ func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Co
 	if es != nil {
 		// Only use the egressselector dialer if egressselector is enabled.
 		// Endpoint is on the "ControlPlane" network
+		// 追踪导出流量必须走 controlplane 网络，避免绕过集群的出站策略。
 		egressDialer, err := es.Lookup(egressselector.ControlPlane.AsNetworkContext())
 		if err != nil {
 			return err
@@ -113,6 +120,7 @@ func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Co
 		}
 	}
 
+	// APIServerID 作为实例 ID，便于在多副本中定位具体实例的 span。
 	resourceOpts := []resource.Option{
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(apiserverService),
@@ -124,6 +132,7 @@ func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Co
 		return err
 	}
 	c.TracerProvider = tp
+	// 回环客户端同样需要注入 tracing 包装，否则内部调用链会断开。
 	if c.LoopbackClientConfig != nil {
 		c.LoopbackClientConfig.Wrap(tracing.WrapperFor(c.TracerProvider))
 	}
@@ -136,6 +145,7 @@ func (o *TracingOptions) Validate() (errs []error) {
 		return
 	}
 
+	// 跟随符号链接检查文件存在性，与运行时读取行为保持一致。
 	if exists, err := path.Exists(path.CheckFollowSymlink, o.ConfigFile); !exists {
 		errs = append(errs, fmt.Errorf("tracing-config-file %s does not exist", o.ConfigFile))
 	} else if err != nil {
@@ -155,6 +165,7 @@ func ReadTracingConfiguration(configFilePath string) (*tracingapi.TracingConfigu
 	}
 	internalConfig := &apiserver.TracingConfiguration{}
 	// this handles json/yaml/whatever, and decodes all registered version to the internal version
+	// 先解码到内部版本再对外暴露，使调用方只依赖稳定的内部类型。
 	if err := runtime.DecodeInto(codecs.UniversalDecoder(), data, internalConfig); err != nil {
 		return nil, fmt.Errorf("unable to decode tracing configuration data: %v", err)
 	}

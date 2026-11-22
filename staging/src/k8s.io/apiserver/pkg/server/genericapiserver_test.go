@@ -72,6 +72,8 @@ var (
 	parameterCodec = runtime.NewParameterCodec(scheme)
 )
 
+// init 向测试 scheme 注册 meta 无版本类型与 example 资源，使 discovery
+// 与编解码测试有可用的类型集合。
 func init() {
 	metav1.AddToGroupVersion(scheme, metav1.SchemeGroupVersion)
 	scheme.AddUnversionedTypes(v1GroupVersion,
@@ -85,6 +87,8 @@ func init() {
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 }
 
+// buildTestOpenAPIDefinition 构造一个带多个 GVK 扩展的 OpenAPI 定义，
+// 用于验证同一 kind 在不同 group 下的注册行为。
 func buildTestOpenAPIDefinition() kubeopenapi.OpenAPIDefinition {
 	return kubeopenapi.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -117,6 +121,8 @@ func buildTestOpenAPIDefinition() kubeopenapi.OpenAPIDefinition {
 	}
 }
 
+// testGetOpenAPIDefinitions 是测试用的 OpenAPI 定义提供者，只包含
+// discovery 所需的最少类型。
 func testGetOpenAPIDefinitions(_ kubeopenapi.ReferenceCallback) map[string]kubeopenapi.OpenAPIDefinition {
 	return map[string]kubeopenapi.OpenAPIDefinition{
 		"io.k8s.apimachinery.pkg.apis.meta.v1.Status":          {},
@@ -128,6 +134,9 @@ func testGetOpenAPIDefinitions(_ kubeopenapi.ReferenceCallback) map[string]kubeo
 }
 
 // setUp is a convience function for setting up for (most) tests.
+//
+// setUp 构造一份带外部地址、legacy 前缀、fake clientset 与 OpenAPI 配置
+// 的 Config，并完成 Complete 阶段，供各测试直接 New 出 server。
 func setUp(t *testing.T) (Config, *assert.Assertions) {
 	config := NewConfig(codecs)
 	config.ExternalAddress = "192.168.10.4:443"
@@ -150,6 +159,7 @@ func setUp(t *testing.T) (Config, *assert.Assertions) {
 	return *config, assert.New(t)
 }
 
+// newMaster 基于 setUp 的配置创建一个空的 GenericAPIServer。
 func newMaster(t *testing.T) (*GenericAPIServer, Config, *assert.Assertions) {
 	config, assert := setUp(t)
 
@@ -171,6 +181,11 @@ func TestNew(t *testing.T) {
 }
 
 // Verifies that AddGroupVersions works as expected.
+//
+// TestInstallAPIGroups 验证 legacy group（/apiPrefix）与普通 group
+// （/apis/<group>）的发现文档：legacy 返回 APIVersions，普通 group 返回
+// APIGroup；资源动词列表必须与 storage 实现的能力一致（无动词时返回
+// 空切片而非 nil，避免 JSON 序列化成 null）。
 func TestInstallAPIGroups(t *testing.T) {
 	config, assert := setUp(t)
 
@@ -319,6 +334,8 @@ func TestInstallAPIGroups(t *testing.T) {
 	}
 }
 
+// TestPrepareRun 验证 PrepareRun 安装的 /openapi/v2 与 /healthz 路由，
+// 其中 healthz 因 max-in-flight 过滤器异步初始化而需要轮询等待。
 func TestPrepareRun(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	s, config, assert := newMaster(t)
@@ -354,6 +371,8 @@ func TestPrepareRun(t *testing.T) {
 	assert.Equal(http.StatusOK, resp.StatusCode)
 }
 
+// TestUpdateOpenAPISpec 验证 /openapi/v2 先返回静态 spec，再通过
+// OpenAPIVersionedService.UpdateSpec 热替换为新的 spec。
 func TestUpdateOpenAPISpec(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	s, _, assert := newMaster(t)
@@ -449,6 +468,9 @@ func TestCustomHandlerChain(t *testing.T) {
 }
 
 // TestNotRestRoutesHaveAuth checks that special non-routes are behind authz/authn.
+//
+// TestNotRestRoutesHaveAuth 验证索引页、pprof、flags、version 等非 REST
+// 路由同样经过鉴权，不能成为绕过授权检查的旁路。
 func TestNotRestRoutesHaveAuth(t *testing.T) {
 	config, _ := setUp(t)
 
@@ -492,6 +514,8 @@ func TestNotRestRoutesHaveAuth(t *testing.T) {
 	}
 }
 
+// TestMuxAndDiscoveryCompleteSignals 验证根 server 会聚合自身与 delegate
+// 链上的所有路由安装完成信号；根与 delegate 各注册一个时总数为 2。
 func TestMuxAndDiscoveryCompleteSignals(t *testing.T) {
 	// setup
 	cfg, assert := setUp(t)
@@ -525,6 +549,8 @@ func TestMuxAndDiscoveryCompleteSignals(t *testing.T) {
 	}
 }
 
+// mockAuthorizer 记录最近一次鉴权的 URI 并始终放行，用于断言请求确实
+// 经过了鉴权链。
 type mockAuthorizer struct {
 	lastURI string
 }
@@ -544,6 +570,8 @@ func (*mockAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.Condit
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// testGetterStorage 是一个只实现 Get 的测试 storage，用于验证发现文档
+// 中的动词推导。
 type testGetterStorage struct {
 	Version string
 }
@@ -572,6 +600,8 @@ func (p *testGetterStorage) GetSingularName() string {
 	return "getter"
 }
 
+// testNoVerbsStorage 不实现任何动词接口，用于验证发现结果返回空动词
+// 切片而不是 nil。
 type testNoVerbsStorage struct {
 	Version string
 }
@@ -596,6 +626,7 @@ func (p *testNoVerbsStorage) GetSingularName() string {
 	return "noverb"
 }
 
+// fakeVersion 返回一个固定的高版本号，避免测试受构建版本影响。
 func fakeVersion() version.Info {
 	return version.Info{
 		Major:        "42",
@@ -611,6 +642,10 @@ func fakeVersion() version.Info {
 }
 
 // TestGracefulShutdown verifies server shutdown after request handler finish.
+//
+// TestGracefulShutdown 验证优雅关闭：关闭 stopCh 后新请求被拒绝，但已在
+// 处理的请求必须完成并拿到响应。WithWaitGroup 只跟踪非长请求，正是
+// 优雅关闭依赖的机制。
 func TestGracefulShutdown(t *testing.T) {
 	config, _ := setUp(t)
 
@@ -699,6 +734,9 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 }
 
+// TestWarningWithRequestTimeout 验证请求超时后继续添加 Warning 不会触发
+// 读写竞争或 "Header called after Handler finished" panic。超时响应写出
+// 后 handler 仍可能运行，warning 机制必须能安全处理这种情况。
 func TestWarningWithRequestTimeout(t *testing.T) {
 	type result struct {
 		err        interface{}
@@ -778,6 +816,9 @@ func TestWarningWithRequestTimeout(t *testing.T) {
 }
 
 // builds a handler chain with the given user handler as used by GenericAPIServer.
+//
+// newGenericAPIServerHandlerChain 把用户 handler 挂到 NonGoRestfulMux 上，
+// 返回完整的 GenericAPIServer 处理器链，使测试覆盖真实过滤器顺序。
 func newGenericAPIServerHandlerChain(t *testing.T, path string, handler http.Handler) http.Handler {
 	config, _ := setUp(t)
 	s, err := config.Complete(nil).New("test", NewEmptyDelegate())

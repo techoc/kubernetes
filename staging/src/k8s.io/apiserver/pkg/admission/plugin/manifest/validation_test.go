@@ -27,6 +27,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestValidateStaticManifestsDir 验证静态清单目录的合法性检查：
+// 特性门控关闭时必须拒绝，路径必须是绝对路径且真实存在、确实是目录。
 func TestValidateStaticManifestsDir(t *testing.T) {
 	validDir := t.TempDir()
 	notADirFile := path.Join(t.TempDir(), "file.txt")
@@ -41,6 +43,7 @@ func TestValidateStaticManifestsDir(t *testing.T) {
 		wantErr           string
 	}{
 		{
+			// 空字符串表示“未配置”，是合法的可选值。
 			name:              "empty dir is valid",
 			dir:               "",
 			enableFeatureGate: true,
@@ -51,6 +54,7 @@ func TestValidateStaticManifestsDir(t *testing.T) {
 			enableFeatureGate: true,
 		},
 		{
+			// 未开启 ManifestBasedAdmissionControlConfig 时该配置整体不可用。
 			name:              "feature gate disabled",
 			dir:               "/some/path",
 			enableFeatureGate: false,
@@ -69,6 +73,7 @@ func TestValidateStaticManifestsDir(t *testing.T) {
 			wantErr:           "unable to read",
 		},
 		{
+			// 必须是目录而不是普通文件，否则扫描清单时会失败。
 			name:              "not a directory",
 			dir:               notADirFile,
 			enableFeatureGate: true,
@@ -96,6 +101,8 @@ func TestValidateStaticManifestsDir(t *testing.T) {
 	}
 }
 
+// TestValidateManifestName 验证清单对象名的约束：不能为空、必须以 .static.k8s.io
+// 结尾（用于区分静态清单来源），且在同一目录内不得重名。
 func TestValidateManifestName(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -128,6 +135,7 @@ func TestValidateManifestName(t *testing.T) {
 			errContains: "must have a name ending with",
 		},
 		{
+			// seenNames 记录名称到首次出现文件路径的映射，用于给出冲突文件位置。
 			name:        "duplicate name",
 			objName:     "dup.static.k8s.io",
 			filePath:    "second.yaml",

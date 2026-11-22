@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package authorizer 定义授权决策的通用契约：输入是请求属性（Attributes），
+// 输出是 Allow/Deny/NoOpinion 以及可选的“条件化”决策。
+// 该包不依赖 admission 或 registry，避免循环引用。
 package authorizer
 
 import (
@@ -32,6 +35,9 @@ import (
 // Attributes is an interface used by an Authorizer to get information about a
 // request's metadata, that is used to compute an unconditional or conditional
 // authorization decision.
+//
+// Attributes 必须被视为只读快照：授权器可以并发调用这些方法，且不得
+// 修改返回的选择器或其中的对象。
 type Attributes interface {
 	// GetUser returns the user.Info object to authorize
 	GetUser() user.Info
@@ -83,6 +89,9 @@ type Attributes interface {
 
 // UnconditionalAuthorizer is a downscoped variant of Authorizer, which only gives the
 // caller the ability to call the conditions-unaware Authorize method.
+//
+// 当调用方不需要条件授权时，应传入该接口而非完整 Authorizer，以限制
+// 其能力面。
 type UnconditionalAuthorizer interface {
 	Authorize(ctx context.Context, a Attributes) (authorized Decision, reason string, err error)
 }
@@ -125,21 +134,31 @@ type Authorizer interface {
 
 // ErrorConditionEvaluationNotSupported is returned by authorizer implementations
 // that do not support condition evaluation.
+//
+// 不支持条件的授权器必须 fail closed：返回 Deny 而不是 NoOpinion，
+// 否则条件化请求可能被后续授权器意外放行。
 var ErrorConditionEvaluationNotSupported = errors.New("condition evaluation not supported")
 
 // AuthorizerFunc implements Authorizer
+//
+// 函数式适配器：默认不提供条件能力，EvaluateConditions 固定 fail closed。
 var _ Authorizer = AuthorizerFunc(nil)
 
+// AuthorizerFunc 把普通函数提升为 Authorizer。
 type AuthorizerFunc func(ctx context.Context, a Attributes) (Decision, string, error)
 
+// Authorize 调用底层函数。
 func (f AuthorizerFunc) Authorize(ctx context.Context, a Attributes) (Decision, string, error) {
 	return f(ctx, a)
 }
 
+// ConditionsAwareAuthorize 把无条件决策包装成条件化决策，满足 Authorizer
+// 对“非条件感知实现”的约定。
 func (f AuthorizerFunc) ConditionsAwareAuthorize(ctx context.Context, a Attributes) ConditionsAwareDecision {
 	return ConditionsAwareDecisionFromParts(f.Authorize(ctx, a))
 }
 
+// EvaluateConditions 不支持条件求值，因此 fail closed。
 func (f AuthorizerFunc) EvaluateConditions(_ context.Context, _ ConditionsAwareDecision, _ ConditionsData) (Decision, string, error) {
 	return DecisionDeny, "", ErrorConditionEvaluationNotSupported
 }
@@ -156,6 +175,9 @@ type RequestAttributesGetter interface {
 }
 
 // AttributesRecord implements Attributes interface.
+//
+// 字段全部导出是为了让各 filter 能低成本构造；调用方应把实例当作
+// 不可变值传递，不要在使用期间修改字段。
 type AttributesRecord struct {
 	User            user.Info
 	Verb            string
@@ -178,10 +200,13 @@ func (a AttributesRecord) GetUser() user.Info {
 	return a.User
 }
 
+// GetVerb 返回 kube 动词（get/list/watch/...），非资源请求则是小写 HTTP 动词。
 func (a AttributesRecord) GetVerb() string {
 	return a.Verb
 }
 
+// IsReadOnly 仅把 get/list/watch 视为只读；create/update/patch/delete 都可能
+// 产生副作用，即便 dry-run 请求也仍按原动词判定。
 func (a AttributesRecord) IsReadOnly() bool {
 	return a.Verb == "get" || a.Verb == "list" || a.Verb == "watch"
 }
@@ -228,6 +253,8 @@ func (a AttributesRecord) GetLabelSelector() (labels.Requirements, error) {
 
 // Decision represents an final, unconditional authorization decision.
 // The zero value (0) of Decision is DecisionDeny.
+//
+// 零值即 Deny 是刻意的 fail-closed 设计：忘记赋值的决策不会误放行。
 type Decision int
 
 const (
@@ -241,6 +268,7 @@ const (
 	DecisionNoOpinion
 )
 
+// String 返回稳定的人类可读名称，用于日志与指标；未知值保留数字便于排障。
 func (d Decision) String() string {
 	switch d {
 	case DecisionDeny:
@@ -259,6 +287,10 @@ func (d Decision) String() string {
 // conditions list in the ConditionsMap.
 //
 // A Condition must be immutable and thread-safe.
+//
+// 条件化授权的核心：授权器先给出“若满足某条件则放行/拒绝”的决策，
+// 由调用方在拿到真实数据（如资源内容）后再求值，从而避免授权器直接
+// 读取对象存储。
 type Condition interface {
 	// GetID uniquely identifies this condition within the scope of the authorizer
 	// that authored it. Validated as a Kubernetes label key.
@@ -296,6 +328,7 @@ type Condition interface {
 }
 
 // EvaluateConditionFunc is a function that is able to concretely evaluate a condition to a boolean or error.
+// 返回错误表示条件无法判定，调用方应据此 fail closed。
 type EvaluateConditionFunc func(ctx context.Context, condition Condition, data ConditionsData) (bool, error)
 
 // MaybeEvaluateConditionFunc allows potentially evaluating a condition, returning Unevaluatable if a truth value or error cannot be assigned.
@@ -310,6 +343,9 @@ type AdmissionOperation string
 
 // ConditionsData represents the data available for conditions
 // to evaluate against. This is by design a subset of admission.Attributes.
+//
+// 之所以是子集：授权层不应依赖 admission 包（会形成循环），同时限制
+// 条件能看到的输入，降低信息泄露面。
 type ConditionsData interface {
 	// GetName returns the name of the object as presented in the request. On a CREATE operation, the client
 	// may omit name and rely on the server to generate the name. If that is the case, this method will return

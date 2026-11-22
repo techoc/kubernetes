@@ -37,6 +37,7 @@ import (
 )
 
 // PeerDiscoveryProvider defines an interface to get peer resources for peer-aggregated discovery.
+// 实现对端数据来源可以是对等 apiserver 的聚合发现端点。
 type PeerDiscoveryProvider interface {
 	GetPeerResources() map[string][]apidiscoveryv2.APIGroupDiscovery
 }
@@ -52,6 +53,8 @@ type PeerAggregatedResourceManager interface {
 	http.Handler
 }
 
+// peerAggregatedDiscoveryHandler 把本地与对端的发现文档合并后按需缓存。
+// 缓存指针用 atomic 发布，使并发读无需加锁；写路径只做整体替换，不原地修改。
 type peerAggregatedDiscoveryHandler struct {
 	serverID              string
 	localResourceManager  ResourceManager
@@ -66,6 +69,7 @@ func NewPeerAggregatedDiscoveryHandler(serverID string, localDiscoveryProvider R
 	scheme := runtime.NewScheme()
 	utilruntime.Must(apidiscoveryv2.AddToScheme(scheme))
 	var opts []serializer.CodecFactoryOptionsMutator
+	// CBOR 仅在特性门控开启时注册，保证与客户端协商能力一致。
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.CBORServingAndStorage) {
 		opts = append(opts, serializer.WithSerializer(cbor.NewSerializerInfo))
 	}
@@ -80,11 +84,13 @@ func NewPeerAggregatedDiscoveryHandler(serverID string, localDiscoveryProvider R
 		serializer:            codecs,
 	}
 
+	// 本地资源变化时必须让合并结果失效，否则会对外提供陈旧视图。
 	h.localResourceManager.AddInvalidationCallback(func() {
 		h.InvalidateCache()
 	})
 
 	// Instrumentation wrapper for serveHTTP
+	// 指标包在合并逻辑外层，统计的是端点整体耗时。
 	h.serveHTTPFunc = metrics.InstrumentHandlerFunc(request.MethodGet,
 		"", "", "", path, "", metrics.APIServerComponent, false, "",
 		h.serveHTTP)
@@ -99,10 +105,12 @@ func (h *peerAggregatedDiscoveryHandler) InvalidateCache() {
 	klog.V(4).Info("Invalidated peer-aggregated discovery caches")
 }
 
+// ServeHTTP 走带指标的包装函数。
 func (h *peerAggregatedDiscoveryHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	h.serveHTTPFunc(resp, req)
 }
 
+// serveHTTP 取缓存的合并结果并写出；ETag 复用缓存中的值以支持条件请求。
 func (h *peerAggregatedDiscoveryHandler) serveHTTP(resp http.ResponseWriter, req *http.Request) {
 	cache := h.fetchFromCache()
 	response := cache.cachedResponse
@@ -111,6 +119,8 @@ func (h *peerAggregatedDiscoveryHandler) serveHTTP(resp http.ResponseWriter, req
 	writeDiscoveryResponse(&response, etag, h.serializer, resp, req)
 }
 
+// fetchFromCache 返回缓存的合并结果；未命中时重建并写回。
+// 并发未命中时允许多次重复计算，最后一次 Store 胜出，结果本身是幂等的。
 func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 	cacheLoad := h.cache.Load()
 	if cacheLoad != nil {
@@ -121,6 +131,7 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 	PeerAggregatedCacheMissesCounter.Inc()
 
 	// Get local groups
+	// 仅在本地管理器支持内部接口时才能直接读其缓存；否则退化为空集合。
 	var localGroups []apidiscoveryv2.APIGroupDiscovery
 	if rdm, ok := h.localResourceManager.(resourceManager); ok {
 		localCache := rdm.fetchFromCache()
@@ -130,6 +141,7 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 	}
 
 	// Get peer resources if provider is set
+	// 未配置对端来源时只暴露本地资源，便于单机部署。
 	var mergedGroups []apidiscoveryv2.APIGroupDiscovery
 	if h.peerDiscoveryProvider != nil {
 		peerResources := h.peerDiscoveryProvider.GetPeerResources()
@@ -143,6 +155,7 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 	}
 	etag, err := calculateETag(response)
 	if err != nil {
+		// ETag 计算失败不应阻断发现请求，只是失去条件请求能力。
 		klog.Errorf("failed to calculate etag for discovery document: %v", err)
 		etag = ""
 	}
@@ -158,6 +171,9 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 // mergeResources merges local and peer APIGroupDiscovery lists, preserving relative order as much as possible.
 // localGroups is a list of APIGroupDiscovery objects from the local server.
 // peerGroupDiscovery is a map of peer server IDs to their APIGroupDiscovery lists.
+//
+// 顺序稳定性是对外契约的一部分：客户端可能按顺序渲染 kubectl api-resources，
+// 因此这里用拓扑式合并（MergePreservingRelativeOrder）而非简单排序。
 func (h *peerAggregatedDiscoveryHandler) mergeResources(
 	localGroups []apidiscoveryv2.APIGroupDiscovery,
 	peerGroupDiscovery map[string][]apidiscoveryv2.APIGroupDiscovery,
@@ -170,6 +186,7 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 
 	mergedGroupMap := make(map[string]apidiscoveryv2.APIGroupDiscovery)
 	allGroupNames := make([][]string, 0, len(discoveryByServerID))
+	// 按 serverID 排序遍历，保证相同输入得到相同的合并结果（确定性 ETag）。
 	sortedServerIDs := sortServerIDs(discoveryByServerID)
 
 	// contentChanged tracks if any new groups/versions/resources were added in a peer.
@@ -196,6 +213,7 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 
 	// Case 1: Total short-circuit.
 	// Nothing changed (no new content AND no order change).
+	// 完全无变化时直接返回本地切片，避免分配与排序。
 	if !contentChanged && groupNameListsAreIdentical {
 		return localGroups
 	}
@@ -214,6 +232,8 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 	return assembleGroups(mergedGroupMap, finalGroupOrder)
 }
 
+// processServerGroups 把单个服务器的组并入 mergedGroupMap，并返回该服务器的组名顺序。
+// contentMerged 表示本次合并是否真正改变了已有组的内容。
 func (h *peerAggregatedDiscoveryHandler) processServerGroups(
 	discoveryGroups []apidiscoveryv2.APIGroupDiscovery,
 	mergedGroupMap map[string]apidiscoveryv2.APIGroupDiscovery,
@@ -230,6 +250,7 @@ func (h *peerAggregatedDiscoveryHandler) processServerGroups(
 				contentMerged = true
 			}
 		} else {
+			// 首次出现的组直接放入，后续服务器若提供同名组再合并。
 			mergedGroupMap[group.Name] = group
 		}
 		groupNames = append(groupNames, group.Name)
@@ -291,6 +312,7 @@ func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscove
 
 	mergedVersions := orderedAPIVersionList(mergedVersionMap, finalVersionOrder)
 	return apidiscoveryv2.APIGroupDiscovery{
+		// 深拷贝 ObjectMeta，避免与调用方共享底层 map/slice。
 		ObjectMeta: *a.ObjectMeta.DeepCopy(),
 		TypeMeta:   a.TypeMeta,
 		Versions:   mergedVersions,
@@ -320,6 +342,7 @@ func mergeResourcesAcrossVersion(a, b apidiscoveryv2.APIVersionDiscovery) (apidi
 		if existing, ok := mergedResourceMap[r.Resource]; !ok {
 			mergedResourceMap[r.Resource] = r
 		} else {
+			// 完全相同则跳过，避免把“无差异”误判为内容变化。
 			if reflect.DeepEqual(existing, r) {
 				continue
 			}
@@ -380,6 +403,7 @@ func mergeResourceCapabilities(a, b apidiscoveryv2.APIResourceDiscovery) apidisc
 	}
 
 	// 2. Merge Subresources
+	// 子资源按名字去重；同名时后者覆盖前者（对端数据更新视为更权威）。
 	subresourceSet := make(map[string]apidiscoveryv2.APISubresourceDiscovery)
 	for _, s := range a.Subresources {
 		subresourceSet[s.Subresource] = s
@@ -419,6 +443,7 @@ func assembleGroups(
 ) []apidiscoveryv2.APIGroupDiscovery {
 	result := make([]apidiscoveryv2.APIGroupDiscovery, 0, len(orderedGroups))
 	for _, groupName := range orderedGroups {
+		// 顺序列表中可能出现重复项，但 map 查找天然去重。
 		if group, ok := groupMap[groupName]; ok {
 			result = append(result, group)
 		}
@@ -458,6 +483,7 @@ func orderedAPIResourceList(
 	return mergedResources
 }
 
+// combineServerDiscoveryLists 把本地结果与对端结果合到一张表，本地以自身 serverID 为键。
 func (h *peerAggregatedDiscoveryHandler) combineServerDiscoveryLists(localGroups []apidiscoveryv2.APIGroupDiscovery, peerGroupDiscovery map[string][]apidiscoveryv2.APIGroupDiscovery,
 ) map[string][]apidiscoveryv2.APIGroupDiscovery {
 	allServerLists := make(map[string][]apidiscoveryv2.APIGroupDiscovery, len(peerGroupDiscovery)+1)
@@ -468,6 +494,7 @@ func (h *peerAggregatedDiscoveryHandler) combineServerDiscoveryLists(localGroups
 	return allServerLists
 }
 
+// sortServerIDs 返回有序的 serverID 列表，用于确定性遍历 map。
 func sortServerIDs(allServerLists map[string][]apidiscoveryv2.APIGroupDiscovery) []string {
 	allServerIDs := make([]string, 0, len(allServerLists))
 	for serverID := range allServerLists {
@@ -477,6 +504,7 @@ func sortServerIDs(allServerLists map[string][]apidiscoveryv2.APIGroupDiscovery)
 	return allServerIDs
 }
 
+// localGroupNames 提取本地发现文档中的组名序列。
 func localGroupNames(localGroups []apidiscoveryv2.APIGroupDiscovery) []string {
 	localGroupNames := make([]string, 0, len(localGroups))
 	for _, g := range localGroups {

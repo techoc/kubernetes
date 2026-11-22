@@ -27,6 +27,9 @@ import (
 var metav1Now = metav1.Now
 
 // WipeObjectMetaSystemFields erases fields that are managed by the system on ObjectMeta.
+//
+// 用于把外部输入的对象“洗净”：这些字段只能由服务端产生，若允许客户端自带会造成
+// 时间戳伪造、UID 冲突或误触发级联删除。
 func WipeObjectMetaSystemFields(meta metav1.Object) {
 	meta.SetCreationTimestamp(metav1.Time{})
 	meta.SetUID("")
@@ -36,6 +39,8 @@ func WipeObjectMetaSystemFields(meta metav1.Object) {
 }
 
 // FillObjectMetaSystemFields populates fields that are managed by the system on ObjectMeta.
+//
+// 在对象首次写入存储前调用，赋予服务端生成的身份（UID）与创建时间。
 func FillObjectMetaSystemFields(meta metav1.Object) {
 	meta.SetCreationTimestamp(metav1Now())
 	meta.SetUID(uuid.NewUUID())
@@ -44,6 +49,8 @@ func FillObjectMetaSystemFields(meta metav1.Object) {
 // EnsureObjectNamespaceMatchesRequestNamespace returns an error if obj.Namespace and requestNamespace
 // are both populated and do not match. If either is unpopulated, it modifies obj as needed to ensure
 // obj.GetNamespace() == requestNamespace.
+//
+// 这是防止跨命名空间写入的安全边界：两者都非空且不一致时必须拒绝，而不是静默以请求路径为准。
 func EnsureObjectNamespaceMatchesRequestNamespace(requestNamespace string, obj metav1.Object) error {
 	objNamespace := obj.GetNamespace()
 	switch {
@@ -68,6 +75,7 @@ func EnsureObjectNamespaceMatchesRequestNamespace(requestNamespace string, obj m
 }
 
 // ExpectedNamespaceForScope returns the expected namespace for a resource, given the request namespace and resource scope.
+// 集群级资源的期望命名空间恒为空串。
 func ExpectedNamespaceForScope(requestNamespace string, namespaceScoped bool) string {
 	if namespaceScoped {
 		return requestNamespace
@@ -76,6 +84,8 @@ func ExpectedNamespaceForScope(requestNamespace string, namespaceScoped bool) st
 }
 
 // ExpectedNamespaceForResource returns the expected namespace for a resource, given the request namespace.
+//
+// namespaces 资源本身是集群级的特例（core 组），因此期望命名空间为空。
 func ExpectedNamespaceForResource(requestNamespace string, resource schema.GroupVersionResource) string {
 	if resource.Resource == "namespaces" && resource.Group == "" {
 		return ""

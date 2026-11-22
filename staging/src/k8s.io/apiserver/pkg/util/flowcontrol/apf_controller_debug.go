@@ -36,6 +36,9 @@ const (
 	queryIncludeRequestDetails = "includeRequestDetails"
 )
 
+// Install 注册 APF 调试端点。
+// 中文说明：使用 Unlisted 注册，避免出现在 discovery/健康检查列表里；
+// 三个粒度（优先级、队列、请求）共用同一套 CSV 输出约定。
 func (cfgCtlr *configController) Install(c *mux.PathRecorderMux) {
 	// TODO(yue9944882): handle "Accept" header properly
 	// debugging dumps a CSV content for three levels of granularity
@@ -47,6 +50,8 @@ func (cfgCtlr *configController) Install(c *mux.PathRecorderMux) {
 	c.UnlistedHandleFunc("/debug/api_priority_and_fairness/dump_requests", cfgCtlr.dumpRequests)
 }
 
+// dumpPriorityLevels 输出每个优先级级别的聚合状态。
+// 中文说明：全程持有 cfgCtlr.lock，保证 Dump 看到一致的快照；排序只为输出稳定。
 func (cfgCtlr *configController) dumpPriorityLevels(w http.ResponseWriter, r *http.Request) {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
@@ -101,6 +106,7 @@ func (cfgCtlr *configController) dumpPriorityLevels(w http.ResponseWriter, r *ht
 	runtime.HandleError(tabWriter.Flush())
 }
 
+// dumpQueues 输出每个优先级级别下各个队列的占用与虚拟时间。
 func (cfgCtlr *configController) dumpQueues(w http.ResponseWriter, r *http.Request) {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
@@ -138,6 +144,9 @@ func (cfgCtlr *configController) dumpQueues(w http.ResponseWriter, r *http.Reque
 	runtime.HandleError(tabWriter.Flush())
 }
 
+// dumpRequests 输出每个请求的明细；是否包含用户/路径等敏感字段由查询参数控制。
+// 中文说明：请求详情可能含用户名与对象名，默认不展示，避免调试端点无意中扩大
+// 信息暴露面。
 func (cfgCtlr *configController) dumpRequests(w http.ResponseWriter, r *http.Request) {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
@@ -219,6 +228,9 @@ func (cfgCtlr *configController) dumpRequests(w http.ResponseWriter, r *http.Req
 	runtime.HandleError(tabWriter.Flush())
 }
 
+// tabPrint / continueLine / endLine 是 CSV 输出的最小工具函数。
+// 中文说明：所有写错误都通过 runtime.HandleError 上报而不中断输出，调试端点
+// 不应因为客户端断开而影响其它请求。
 func tabPrint(w io.Writer, row string) {
 	_, err := fmt.Fprint(w, row)
 	runtime.HandleError(err)
@@ -266,6 +278,7 @@ func rowForRequestDetails(username, verb, path, namespace, name, apiVersion, res
 	)
 }
 
+// row 用 ",\t" 连接列，使 tabwriter 能按列对齐且保持 CSV 兼容。
 func row(columns ...string) string {
 	return strings.Join(columns, ",\t")
 }

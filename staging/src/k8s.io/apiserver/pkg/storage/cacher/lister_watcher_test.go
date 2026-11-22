@@ -36,6 +36,8 @@ import (
 	cachertesting "k8s.io/apiserver/pkg/storage/cacher/testing"
 )
 
+// TestDoesClientSupportWatchListSemanticsForKubeClient 验证能力探测：
+// 模拟存储应被识别为不支持 WatchList，etcd 存储应被识别为支持。
 func TestDoesClientSupportWatchListSemanticsForKubeClient(t *testing.T) {
 	target1 := &cachertesting.MockStorage{}
 	if !watchlist.DoesClientNotSupportWatchListSemantics(target1) {
@@ -50,6 +52,7 @@ func TestDoesClientSupportWatchListSemanticsForKubeClient(t *testing.T) {
 	}
 }
 
+// TestCacherListerWatcher 验证 List 返回存储中的全部对象。
 func TestCacherListerWatcher(t *testing.T) {
 	prefix := "/pods/"
 	fn := func() runtime.Object { return &example.PodList{} }
@@ -84,6 +87,8 @@ func TestCacherListerWatcher(t *testing.T) {
 	}
 }
 
+// TestCacherListerWatcherPagination 验证分页：第一页返回 Continue，第二页为空且
+// 两页合并后按名称顺序覆盖全部对象。
 func TestCacherListerWatcherPagination(t *testing.T) {
 	prefix := "/pods/"
 	fn := func() runtime.Object { return &example.PodList{} }
@@ -145,6 +150,8 @@ func TestCacherListerWatcherPagination(t *testing.T) {
 
 }
 
+// TestCacherListerWatcherListWatch 在启用 WatchList 特性时验证
+// SendInitialEvents 语义：先收到已存在对象，再收到带 initial-events-end 注解的 bookmark。
 func TestCacherListerWatcherListWatch(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 
@@ -196,6 +203,8 @@ func TestCacherListerWatcherListWatch(t *testing.T) {
 	storagetesting.TestCheckNoMoreResultsWithIgnoreFunc(t, w, nil)
 }
 
+// TestCacherListerWatcherWhenListWatchDisabled 验证特性关闭时拒绝
+// SendInitialEvents 并返回明确错误，而不是静默忽略。
 func TestCacherListerWatcherWhenListWatchDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, false)
 
@@ -222,6 +231,9 @@ func TestCacherListerWatcherWhenListWatchDisabled(t *testing.T) {
 	}
 }
 
+// TestListerWatcherListResourceVersionPropagation 验证只有同时满足
+// WatchList 开启、一致性检查开启且 RVM=Exact 时，客户端 resourceVersion 才透传到存储层；
+// 其余组合必须忽略该版本，避免读到不一致的快照。
 func TestListerWatcherListResourceVersionPropagation(t *testing.T) {
 	scenarios := []struct {
 		name                             string

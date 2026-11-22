@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package factory 根据 storagebackend.Config 构造具体的存储实现（目前为 etcd3），
+// 并负责客户端连接、健康检查、压缩器复用以及资源释放。
 package factory
 
 import (
@@ -97,6 +99,8 @@ func init() {
 // etcdClientDebugLevel translates ETCD_CLIENT_DEBUG into zap log level.
 // NOTE(negz): This is a copy of a private etcd client function:
 // https://github.com/etcd-io/etcd/blob/v3.5.4/client/v3/logger.go#L47
+//
+// 环境变量为空或 "true" 时使用 Info 级别；非法取值回退到 Info 并打印弃用提示。
 func etcdClientDebugLevel() zapcore.Level {
 	envLevel := os.Getenv("ETCD_CLIENT_DEBUG")
 	if envLevel == "" || envLevel == "true" {
@@ -110,6 +114,7 @@ func etcdClientDebugLevel() zapcore.Level {
 	return l
 }
 
+// newETCD3HealthCheck 构造 healthz 探针，超时使用配置值或默认值。
 func newETCD3HealthCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() error, error) {
 	timeout := storagebackend.DefaultHealthcheckTimeout
 	if c.HealthcheckTimeout != time.Duration(0) {
@@ -118,6 +123,7 @@ func newETCD3HealthCheck(c storagebackend.Config, stopCh <-chan struct{}) (func(
 	return newETCD3Check(c, timeout, stopCh)
 }
 
+// newETCD3ReadyCheck 构造 readyz 探针；读就绪的超时通常比 healthz 更严格。
 func newETCD3ReadyCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() error, error) {
 	timeout := storagebackend.DefaultReadinessTimeout
 	if c.ReadycheckTimeout != time.Duration(0) {
@@ -135,6 +141,7 @@ type atomicLastError struct {
 	timestamp time.Time
 }
 
+// Store 仅在时间戳更新时覆盖错误，防止旧请求的结果覆盖新请求。
 func (a *atomicLastError) Store(err error, t time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -144,12 +151,15 @@ func (a *atomicLastError) Store(err error, t time.Time) {
 	}
 }
 
+// Load 返回最近缓存的错误。
 func (a *atomicLastError) Load() error {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.err
 }
 
+// newETCD3Check 返回健康检查函数。
+// 客户端构造可能阻塞，故在后台循环重试，健康检查只需读取当前状态即可。
 func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan struct{}) (func() error, error) {
 	// constructing the etcd v3 client blocks and times out if etcd is not available.
 	// retry in a loop in the background until we successfully create the client, storing the client or error encountered
@@ -163,6 +173,7 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 		defer lock.Unlock()
 		newProber, err := newETCD3ProberMonitor(c)
 		// Ensure that server is already not shutting down.
+		// 关闭竞态：若 stopCh 已关闭而本次连接成功，需要立即释放，避免泄漏。
 		select {
 		case <-stopCh:
 			if err == nil {
@@ -195,6 +206,7 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 
 	// limit to a request every half of the configured timeout with a maximum burst of one
 	// rate limited requests will receive the last request sent error (note: not the last received response)
+	// 限速避免健康检查本身给 etcd 造成压力；被限流的调用返回最近一次结果。
 	limiter := rate.NewLimiter(rate.Every(timeout/2), 1)
 	// initial state is the clientErr
 	lastError := &atomicLastError{err: fmt.Errorf("etcd client connection not yet established")}
@@ -223,6 +235,7 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 	}, nil
 }
 
+// newETCD3ProberMonitor 为健康检查与存储指标创建独立客户端。
 func newETCD3ProberMonitor(c storagebackend.Config) (*etcd3ProberMonitor, error) {
 	client, err := newETCD3Client(c.Transport)
 	if err != nil {
@@ -235,6 +248,7 @@ func newETCD3ProberMonitor(c storagebackend.Config) (*etcd3ProberMonitor, error)
 	}, nil
 }
 
+// etcd3ProberMonitor 持有健康检查专用客户端，并提供 Probe/Monitor 两种操作。
 type etcd3ProberMonitor struct {
 	prefix    string
 	endpoints []string
@@ -244,6 +258,7 @@ type etcd3ProberMonitor struct {
 	closed bool
 }
 
+// Close 关闭底层客户端；重复关闭返回错误而非 panic。
 func (t *etcd3ProberMonitor) Close() error {
 	t.mux.Lock()
 	defer t.mux.Unlock()
@@ -254,6 +269,7 @@ func (t *etcd3ProberMonitor) Close() error {
 	return fmt.Errorf("closed")
 }
 
+// Probe 对 etcd 执行一次读操作来判定其可用性；只有读成功才算健康。
 func (t *etcd3ProberMonitor) Probe(ctx context.Context) error {
 	t.mux.RLock()
 	defer t.mux.RUnlock()
@@ -268,6 +284,8 @@ func (t *etcd3ProberMonitor) Probe(ctx context.Context) error {
 	return nil
 }
 
+// Monitor 随机选择一个 endpoint 查询状态，返回数据库物理大小。
+// 随机选取可避免总打同一个成员，导致指标无法反映整个集群的分布。
 func (t *etcd3ProberMonitor) Monitor(ctx context.Context) (metrics.StorageMetrics, error) {
 	t.mux.RLock()
 	defer t.mux.RUnlock()
@@ -283,6 +301,8 @@ func (t *etcd3ProberMonitor) Monitor(ctx context.Context) (metrics.StorageMetric
 	}, nil
 }
 
+// newETCD3Client 构造 etcd 客户端并等待连接就绪。
+// 可通过变量替换以便测试注入假客户端。
 var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client, error) {
 	tlsInfo := transport.TLSInfo{
 		CertFile:      c.CertFile,
@@ -295,12 +315,14 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 	}
 	// NOTE: Client relies on nil tlsConfig
 	// for non-secure connections, update the implicit variable
+	// 未配置任何证书文件时显式置 nil，表示使用明文连接。
 	if len(c.CertFile) == 0 && len(c.KeyFile) == 0 && len(c.TrustedCAFile) == 0 {
 		tlsConfig = nil
 	}
 	networkContext := egressselector.Etcd.AsNetworkContext()
 	var egressDialer utilnet.DialFunc
 	if c.EgressLookup != nil {
+		// EgressSelector 允许把 etcd 流量交给 konnectivity 等代理转发。
 		egressDialer, err = c.EgressLookup(networkContext)
 		if err != nil {
 			return nil, err
@@ -326,6 +348,7 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(tracingOpts...)))
 	if egressDialer != nil {
 		dialer := func(ctx context.Context, addr string) (net.Conn, error) {
+			// 兼容旧版 etcd 客户端传入 URL 而非 host:port 的行为。
 			if strings.Contains(addr, "//") {
 				// etcd client prior to 3.5 passed URLs to dialer, normalize to address
 				u, err := url.Parse(addr)
@@ -361,6 +384,8 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 	return kClient, nil
 }
 
+// blockUntilReady 等待 gRPC 连接进入 Ready 状态，或超时返回错误。
+// 显式 Connect 处理 Idle 状态，否则 WaitForStateChange 可能一直等不到变化。
 func blockUntilReady(timeout time.Duration, client *kubernetes.Client) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -387,6 +412,7 @@ func blockUntilReady(timeout time.Duration, client *kubernetes.Client) error {
 	}
 }
 
+// runningCompactor 表示一个按传输配置共享的压缩器；refs 记录引用它的存储数量。
 type runningCompactor struct {
 	interval  time.Duration
 	client    *clientv3.Client
@@ -404,6 +430,9 @@ var (
 // startCompactorOnce start one compactor per transport. If the interval get smaller on repeated calls, the
 // compactor is replaced. A destroy func is returned. If all destroy funcs with the same transport are called,
 // the compactor is stopped.
+//
+// 同一 etcd 传输配置只跑一个压缩器，避免多个资源各自压缩造成 etcd 压力；
+// interval 变为更小值时替换为更高频的压缩器。
 func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration) (etcd3.Compactor, func(), error) {
 	compactorsMu.Lock()
 	defer compactorsMu.Unlock()
@@ -413,6 +442,7 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 		return nil, func() {}, nil
 	}
 	key := fmt.Sprintf("%v", c) // gives: {[server1 server2] keyFile certFile caFile}
+	// 复用条件：不存在，或新间隔更小需要更频繁压缩。
 	if compactor, foundBefore := compactors[key]; !foundBefore || compactor.interval > interval {
 		client, err := newETCD3Client(c)
 		if err != nil {
@@ -438,6 +468,7 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 
 	compactors[key].refs++
 
+	// 每个调用方拿到独立 destroy 闭包，引用计数归零时才真正停止并关闭客户端。
 	return compactors[key].compactor, func() {
 		compactorsMu.Lock()
 		defer compactorsMu.Unlock()
@@ -452,6 +483,7 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 	}, nil
 }
 
+// newETCD3Storage 构造 etcd3 存储，并把压缩器、客户端与存储的生命周期绑定到返回的 destroy 函数。
 func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, DestroyFunc, error) {
 	compactor, stopCompactor, err := startCompactorOnce(c.Transport, c.CompactionInterval)
 	if err != nil {
@@ -465,16 +497,19 @@ func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc fu
 	}
 
 	// decorate the KV instance so we can track etcd latency per request.
+	// 指标按 GVR 记录延迟，装饰器把请求级信息注入到 etcd 调用中。
 	client.KV = etcd3.NewETCDLatencyTracker(client.KV)
 
 	transformer := c.Transformer
 	if transformer == nil {
+		// 未配置加密时使用 identity，同时完成密文转换的合法性检查。
 		transformer = identity.NewEncryptCheckTransformer()
 	}
 
 	versioner := storage.APIObjectVersioner{}
 	decoder := etcd3.NewDefaultDecoder(c.Codec, versioner)
 
+	// 允许在特性开启时删除损坏对象：需要 transformer/decoder 对损坏数据给出可识别的错误。
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.AllowUnsafeMalformedObjectDeletion) {
 		transformer = etcd3.WithCorruptObjErrorHandlingTransformer(transformer)
 		decoder = etcd3.WithCorruptObjErrorHandlingDecoder(decoder)
@@ -498,6 +533,7 @@ func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc fu
 	}
 	var storage storage.Interface = store
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.AllowUnsafeMalformedObjectDeletion) {
+		// 包装层额外允许对无法解码的对象执行删除，便于修复污染数据。
 		storage = etcd3.NewStoreWithUnsafeCorruptObjectDeletion(storage, c.GroupResource)
 	}
 	return storage, destroyFunc, nil

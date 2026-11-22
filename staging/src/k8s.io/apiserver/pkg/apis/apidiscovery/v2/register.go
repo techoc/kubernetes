@@ -33,6 +33,8 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
+	// SchemeBuilder 直接复用 k8s.io/api 中同名组的 builder，
+	// 保证内部类型与公开 API 类型注册到同一个 scheme 时不会出现两份冲突的注册表。
 	SchemeBuilder = &apidiscoveryv2.SchemeBuilder
 	// AddToScheme adds api to a scheme
 	AddToScheme = SchemeBuilder.AddToScheme

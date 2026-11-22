@@ -36,12 +36,16 @@ import (
 )
 
 // listerWatcher opaques storage.Interface to expose cache.ListerWatcher.
+//
+// 它让 informer/reflector 直接使用 cacher 的存储实现，绕过 REST 层；
+// 因此请求校验与特性门控需要在这里自行补齐。
 type listerWatcher struct {
 	storage         storage.Interface
 	resourcePrefix  string
 	newListFunc     func() runtime.Object
 	contextMetadata metadata.MD
 
+	// 在构造时缓存能力判断，避免每次 List/Watch 重复探测。
 	unsupportedWatchListSemantics    bool
 	watchListConsistencyCheckEnabled bool
 }
@@ -61,6 +65,7 @@ func NewListerWatcher(storage storage.Interface, resourcePrefix string, newListF
 // Implements cache.ListerWatcher interface.
 func (lw *listerWatcher) List(options metav1.ListOptions) (runtime.Object, error) {
 	list := lw.newListFunc()
+	// 内部 list 不使用 label/field selector：调用方（reflector）会自行过滤。
 	pred := storage.SelectionPredicate{
 		Label:    labels.Everything(),
 		Field:    fields.Everything(),
@@ -90,6 +95,7 @@ func (lw *listerWatcher) List(options metav1.ListOptions) (runtime.Object, error
 	// down to storage to ensure the correct semantics of the request.
 	watchListEnabled := utilfeature.DefaultFeatureGate.Enabled(features.WatchList)
 	supportedRVM := options.ResourceVersionMatch == metav1.ResourceVersionMatchExact
+	// 只有一致性检查器会带 RVM=Exact；其他请求忽略 RV，继续走缓存的最新快照。
 	if watchListEnabled && lw.watchListConsistencyCheckEnabled && supportedRVM {
 		storageOpts.ResourceVersion = options.ResourceVersion
 	}
@@ -128,6 +134,7 @@ func (lw *listerWatcher) Watch(options metav1.ListOptions) (watch.Interface, err
 	//
 	// in such a case, client-go is going to fall back to a standard LIST on any error
 	// returned for watch-list requests
+	// 因此这里主动返回错误，让 client-go 明确回退到普通 LIST，而不是拿到不完整的事件流。
 	if isListWatchRequest(opts) && !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 		return nil, fmt.Errorf("sendInitialEvents is forbidden for watch unless the WatchList feature gate is enabled")
 	}
@@ -135,6 +142,8 @@ func (lw *listerWatcher) Watch(options metav1.ListOptions) (watch.Interface, err
 	return lw.storage.Watch(ctx, lw.resourcePrefix, opts)
 }
 
+// IsWatchListSemanticsUnSupported 告知 reflector 该存储是否不支持 watch-list 语义，
+// 从而决定是否退回传统 LIST+WATCH。
 func (lw *listerWatcher) IsWatchListSemanticsUnSupported() bool {
 	return lw.unsupportedWatchListSemantics
 }

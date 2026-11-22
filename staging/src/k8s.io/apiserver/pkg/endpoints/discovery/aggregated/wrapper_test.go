@@ -44,6 +44,10 @@ const aggregatedProtoAccept = protobufAccept + aggregatedAcceptSuffix
 const aggregatedNoPeerJSONAccept = jsonAccept + aggregatedAcceptSuffix + ";profile=nopeer"
 const aggregatedNoPeerProtoAccept = protobufAccept + aggregatedAcceptSuffix + ";profile=nopeer"
 
+// fetchPath 用给定 Accept 头调用 handler 并返回响应体。
+//
+// 中文说明：用假 handler 的固定字符串作为响应体，测试只关心路由选择，
+// 不关心真实聚合发现的序列化内容。
 func fetchPath(handler http.Handler, path, accept string) string {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(request.MethodGet, discoveryPath, nil)
@@ -55,15 +59,22 @@ func fetchPath(handler http.Handler, path, accept string) string {
 	return w.Body.String()
 }
 
+// fakeHTTPHandler 返回固定字符串，用于标识实际被选中的下游 handler。
 type fakeHTTPHandler struct {
 	data string
 }
 
+// ServeHTTP 直接把 data 写入响应体，忽略请求内容。
 func (f fakeHTTPHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	io.WriteString(resp, f.data)
 }
 
+// TestAggregationEnabled 验证基于 Accept 头的聚合发现路由与 profile 语义。
+//
+// 中文说明：三个下游 handler 的响应体不同，因此仅凭返回内容就能判断请求被
+// 路由到哪一层；用例同时覆盖畸形/空 Accept、多类型优先级与 peer/nopeer。
 func TestAggregationEnabled(t *testing.T) {
+	// 固定仿真版本，避免测试结果随默认版本变化。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 	unaggregated := fakeHTTPHandler{data: "unaggregated"}
 	aggregated := fakeHTTPHandler{data: "nopeer-aggregated"}
@@ -140,9 +151,11 @@ func TestAggregationEnabled(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// v2beta1 相关用例需要临时关闭"移除 beta 类型"门控，否则请求会走新版本分支。
 		if tc.accept == aggregatedV2Beta1JSONAccept || tc.accept == aggregatedV2Beta1ProtoAccept {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.AggregatedDiscoveryRemoveBetaType, false)
 		}
+		// peer 聚合需要额外的门控；未开启时 profile 参数被忽略。
 		if tc.enablePeerAggregated {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.UnknownVersionInteroperabilityProxy, true)
 		}

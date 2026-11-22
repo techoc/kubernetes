@@ -16,9 +16,14 @@ limitations under the License.
 
 // This file was generated using openssl by the gencerts.sh script
 // and holds raw certificates for the webhook tests.
+//
+// 中文说明：这些是测试专用证书，包含受信 CA、一个不受信 CA、服务端与客户端证书/私钥。
+// badCACert 用于验证「证书链不被信任时请求必须失败」这条安全边界；
+// 所有材料均为测试固定值，生产环境绝不可复用。
 
 package webhook
 
+// caCert 是签发 serverCert/clientCert 的受信 CA，用于构造客户端的 CA bundle。
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDCzCCAfOgAwIBAgIJAKK9m2Cfg5uhMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -39,6 +44,7 @@ TJIpMokDUKlRi9cWSqkWXFE6xbCmhrrwKYsi0X6Vvi7a0pmOnSzKCQl8jN8u4A9R
 xar2YeJ6mCCzSAPM69DP
 -----END CERTIFICATE-----`)
 
+// badCACert 是另一套自签 CA，与 caCert 无信任关系，用于验证证书校验确实生效。
 var badCACert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDCzCCAfOgAwIBAgIJAPqJyUfmRxGLMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -59,6 +65,7 @@ IqCQy6t7uJDydRiNRfPFr9Eg7uOu83JGw11f3bGVhJVCbzHyKddvkQsQbdaMHRgZ
 zgmWLORg+ls1H1oaJiNW
 -----END CERTIFICATE-----`)
 
+// serverKey 是与 serverCert 配对的私钥，供测试 TLS 服务端使用。
 var serverKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAtegsP499au5ZxlwM26rk3TnRgakchQi/9bhfMr0LaEKng1lR
 XopzzGuGeZQswzbx7iiH89JzFkurZoEmZwtS4Aybit92VOSv0EUnyx7WR3V21ObZ
@@ -87,6 +94,7 @@ SYs/mPzYzKSd7F+7Zk6oVrgFVskTiReW3phF+cIl+CdcnIenF0jW1PVgGw8znu+P
 SbHSdqV+tB7AW2J7sH8TZtfMUPAK2MJ4S+1uaHK86K79ym4Rz0E2
 -----END RSA PRIVATE KEY-----`)
 
+// serverCert 由 caCert 签发，CN 为 webhook_authz_server，用于模拟授权 webhook 服务端。
 var serverCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIC/zCCAeegAwIBAgIJAN7rkfhaX8FZMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -107,6 +115,7 @@ gJu09S+KIz3x1CJLRuJX9tB+cFnnykDLQ2IKg7x44O83ikNk8+Di3iT/awCguWPE
 rHh5
 -----END CERTIFICATE-----`)
 
+// clientKey 是与 clientCert 配对的私钥，用于双向 TLS 场景。
 var clientKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEA5ij4WXWGvbmfAYhEafKRvLEHSkUCYIDjwQAlnHoLf/lz+Fh2
 DEv4lcBaycwk3+LVUGKgYOg91txYJvGD3HcmVThXZvcgJd4V9Ll3aY/6xVRCenWi
@@ -135,6 +144,7 @@ FxEmOChQgUnBdwb93qHCSq0Fidf7OfewrfJJkstWIh3zPS4umLZo7R3YblncpdfT
 M197uckIWccZml2jF/c7nvK+MjwDRhkOl2a6HzMxcdBwYUJmSwmIZ4k=
 -----END RSA PRIVATE KEY-----`)
 
+// clientCert 由 caCert 签发，CN 为 webhook_authz_client，用于验证客户端证书认证。
 var clientCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIC7jCCAdagAwIBAgIJAN7rkfhaX8FaMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy

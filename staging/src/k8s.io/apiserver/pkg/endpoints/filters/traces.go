@@ -30,11 +30,19 @@ import (
 )
 
 // WithTracing adds tracing to requests if the incoming request is sampled
+//
+// 追踪开关由传入的 TracerProvider 决定：传入 Noop provider 时仍保留
+// W3C/B3 上下文传播（用于把上游 trace 带给下游），但不产生 span，
+// 这样无需在过滤器里额外分支。
 func WithTracing(handler http.Handler, tp trace.TracerProvider) http.Handler {
 	opts := []otelhttp.Option{
+		// 使用与组件共享的传播器集合，保证 API server 与 kubelet/controller 互认。
 		otelhttp.WithPropagators(tracing.Propagators()),
+		// 特权组（system:masters、monitoring）视为内部端点，不注入外部请求的父 span，
+		// 避免把内部调用与外部用户请求混在同一条 trace 上。
 		otelhttp.WithPublicEndpointFn(notSystemPrivilegedGroup),
 		otelhttp.WithTracerProvider(tp),
+		// span 名使用稳定的路由模板而非原始 URL，避免高基数标签。
 		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 			ctx := r.Context()
 			info, exist := request.RequestInfoFrom(ctx)
@@ -47,6 +55,7 @@ func WithTracing(handler http.Handler, tp trace.TracerProvider) http.Handler {
 	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Adjust otelhttp tracing start time to match the start time used
 		// for Prometheus metrics.
+		// 统一起点后，trace 时长与 request latency 指标可以相互对照。
 		if startTime, ok := request.ReceivedTimestampFrom(r.Context()); ok {
 			r = r.WithContext(otelhttp.ContextWithStartTime(r.Context(), startTime))
 		}
@@ -57,6 +66,7 @@ func WithTracing(handler http.Handler, tp trace.TracerProvider) http.Handler {
 			span.SetAttributes(attribute.Key("http.target").String(r.URL.RequestURI()))
 		}
 		// Add auditID attribute if available. This helps us connect traces to audit log entries
+		// audit-id 已截断，避免在 span 中泄露完整标识或撑爆属性长度。
 		span.SetAttributes(attribute.String("audit-id", audit.GetAuditIDTruncated(r.Context())))
 		handler.ServeHTTP(w, r)
 	})
@@ -65,6 +75,8 @@ func WithTracing(handler http.Handler, tp trace.TracerProvider) http.Handler {
 	return otelhttp.NewHandler(wrappedHandler, "KubernetesAPI", opts...)
 }
 
+// getSpanNameFromRequestInfo 用 RequestInfo 构造低基数 span 名：
+// namespace 与 name 被替换为占位符，防止每个对象产生一个 span 名。
 func getSpanNameFromRequestInfo(info *request.RequestInfo, r *http.Request) string {
 	spanName := "/" + info.APIPrefix
 	if info.APIGroup != "" {
@@ -84,6 +96,8 @@ func getSpanNameFromRequestInfo(info *request.RequestInfo, r *http.Request) stri
 	return r.Method + " " + spanName
 }
 
+// notSystemPrivilegedGroup 判断请求是否来自普通用户。
+// 特权组走内部路径，采样与父 span 行为不同。
 func notSystemPrivilegedGroup(req *http.Request) bool {
 	if u, ok := request.UserFrom(req.Context()); ok {
 		for _, group := range u.GetGroups() {

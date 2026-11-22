@@ -21,6 +21,10 @@ import (
 	"testing"
 )
 
+// TestInMemoryResponseWriter 验证内存响应写入器的基本契约：
+// Header 可写、WriteHeader 记录状态码、Write 追加响应体，且 String() 的输出格式稳定。
+// 中文说明：String() 的格式被测试固定，是因为它常用于调试输出与测试断言；
+// 格式一旦变化会让大量依赖它的测试失败，因此显式锁定。
 func TestInMemoryResponseWriter(t *testing.T) {
 	w := NewInMemoryResponseWriter()
 
@@ -48,6 +52,9 @@ func TestInMemoryResponseWriter(t *testing.T) {
 	}
 }
 
+// TestInMemoryResponseWriter_DefaultHeader 验证未显式调用 WriteHeader 时，
+// 首次 Write 会隐式返回 200，与 net/http 的隐式状态码语义保持一致。
+// 中文说明：若不模拟该行为，被测代码中「忘记写状态码」的缺陷会被掩盖。
 func TestInMemoryResponseWriter_DefaultHeader(t *testing.T) {
 	w := NewInMemoryResponseWriter()
 
@@ -57,6 +64,7 @@ func TestInMemoryResponseWriter_DefaultHeader(t *testing.T) {
 	}
 
 	// should be StatusOK (200) by default
+	// 中文说明：对应 net/http 在首次 Write 时隐式提交 200 的行为。
 	if w.RespCode() != http.StatusOK {
 		t.Errorf("RespCode() returned unexpected code: %d, want %d", w.RespCode(), http.StatusOK)
 	}

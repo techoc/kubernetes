@@ -43,6 +43,7 @@ const (
 )
 
 // The gRPC implementation for envelope.Service.
+// 通过 Unix domain socket 与 KMS 插件通信；connection 的生命周期与 ctx 绑定。
 type gRPCService struct {
 	kmsClient      kmsapi.KeyManagementServiceClient
 	connection     *grpc.ClientConn
@@ -61,6 +62,7 @@ func NewGRPCService(ctx context.Context, endpoint string, callTimeout time.Durat
 	}
 
 	s := &gRPCService{callTimeout: callTimeout}
+	// 只支持 Unix socket：KMS 插件与 apiserver 必须同机部署，避免通过网络暴露密钥服务。
 	s.connection, err = grpc.Dial(
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -85,6 +87,7 @@ func NewGRPCService(ctx context.Context, endpoint string, callTimeout time.Durat
 
 	s.kmsClient = kmsapi.NewKeyManagementServiceClient(s.connection)
 
+	// 上下文结束后关闭连接，防止进程退出时泄漏 socket。
 	go func() {
 		defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -95,6 +98,7 @@ func NewGRPCService(ctx context.Context, endpoint string, callTimeout time.Durat
 	return s, nil
 }
 
+// checkAPIVersion 懒校验 KMS 插件协议版本：只在首次非 Version 调用时检查一次。
 func (g *gRPCService) checkAPIVersion(ctx context.Context) error {
 	g.mux.Lock()
 	defer g.mux.Unlock()
@@ -119,6 +123,7 @@ func (g *gRPCService) checkAPIVersion(ctx context.Context) error {
 
 // Decrypt a given data string to obtain the original byte data.
 func (g *gRPCService) Decrypt(cipher []byte) ([]byte, error) {
+	// 每次调用单独计时超时，避免插件卡死拖住存储请求。
 	ctx, cancel := context.WithTimeout(context.Background(), g.callTimeout)
 	defer cancel()
 
@@ -143,6 +148,8 @@ func (g *gRPCService) Encrypt(plain []byte) ([]byte, error) {
 	return response.Cipher, nil
 }
 
+// interceptor 在所有非 Version 调用前确保协议版本已校验，
+// 避免逐个业务方法重复检查开销。
 func (g *gRPCService) interceptor(
 	ctx context.Context,
 	method string,

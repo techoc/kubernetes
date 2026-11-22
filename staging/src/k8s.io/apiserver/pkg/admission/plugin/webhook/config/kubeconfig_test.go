@@ -28,6 +28,13 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestLoadConfig 验证 WebhookAdmissionConfiguration 的加载与静态清单目录的校验。
+//
+// 中文说明：用例覆盖三类关注点：
+//  1. 通用解码错误（空输入、未知 kind）；
+//  2. staticManifestsDir 的合法性——必须为绝对路径、必须存在、必须是目录，
+//     且在特性门控关闭时该字段直接 Forbidden，防止配置在未启用功能的版本上被静默接受；
+//  3. 字段组合——允许只配置 staticManifestsDir 而不配 kubeConfigFile。
 func TestLoadConfig(t *testing.T) {
 	// Create a temp directory for tests that need a valid directory path
 	validDir := t.TempDir()
@@ -134,6 +141,7 @@ staticManifestsDir: ` + validDir + `
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 仅在需要时切换门控，避免影响未声明门控的用例。
 			if tc.enableFeatureGate != nil {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ManifestBasedAdmissionControlConfig, *tc.enableFeatureGate)
 			}
@@ -150,6 +158,7 @@ staticManifestsDir: ` + validDir + `
 			if err != nil {
 				t.Fatal(err)
 			}
+			// 成功路径需同时校验两个字段，防止默认值或交叉污染。
 			if cfg.KubeConfigFile != tc.expectKubeconfig {
 				t.Fatalf("expected KubeConfigFile %q, got %q", tc.expectKubeconfig, cfg.KubeConfigFile)
 			}

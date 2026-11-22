@@ -33,6 +33,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// scheme 注册测试所需的 API 类型，供 RESTMapper 推断 GVK。
 var (
 	scheme *runtime.Scheme = func() *runtime.Scheme {
 		res := runtime.NewScheme()
@@ -48,6 +49,7 @@ var (
 	}()
 )
 
+// must3 用于测试中“确定成功”的三返回值调用，失败直接 panic 以缩短样板代码。
 func must3[T any, I any](val T, _ I, err error) T {
 	if err != nil {
 		panic(err)
@@ -55,6 +57,10 @@ func must3[T any, I any](val T, _ I, err error) T {
 	return val
 }
 
+// TestExtractTypeNames 验证从策略的 matchConstraints 推导出需要类型检查的 GVK 列表。
+//
+// 关键规则：通配资源（*、pods/*）无法静态确定类型，返回 nil 表示跳过检查；
+// 结果必须按 GVK 排序并去重，保证检查结果稳定。
 func TestExtractTypeNames(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -195,7 +201,13 @@ func TestExtractTypeNames(t *testing.T) {
 	}
 }
 
+// TestTypeCheck 验证 CEL 表达式对匹配资源 schema 的类型检查，产出带 fieldRef 的告警。
+//
+// 覆盖：未解析到 schema 时静默跳过、未定义字段、类型不匹配、params 引用、
+// messageExpression、authorizer 调用、additionalProperties、以及 variables 的
+// 类型推导与“变量自身错误不在类型检查阶段报告”的约定。
 func TestTypeCheck(t *testing.T) {
+	// deploymentPolicy 是基准策略：校验表达式访问 object.foo，匹配 apps/v1 deployments。
 	deploymentPolicy := &v1.ValidatingAdmissionPolicy{Spec: v1.ValidatingAdmissionPolicySpec{
 		Validations: []v1.Validation{
 			{
@@ -234,6 +246,7 @@ func TestTypeCheck(t *testing.T) {
 	}}
 
 	deploymentPolicyWithBadMessageExpression := deploymentPolicy.DeepCopy()
+	// messageExpression 期望返回字符串，这里刻意返回 int，用于验证它也被类型检查。
 	deploymentPolicyWithBadMessageExpression.Spec.Validations[0].MessageExpression = "object.foo + 114514" // confusion
 
 	multiExpressionPolicy := &v1.ValidatingAdmissionPolicy{Spec: v1.ValidatingAdmissionPolicySpec{
@@ -350,7 +363,8 @@ func TestTypeCheck(t *testing.T) {
 			name:           "unresolved schema",
 			policy:         deploymentPolicy,
 			schemaToReturn: nil,
-			assertions:     []assertionFunc{toBeEmpty},
+			// 无法解析 schema 时无法做类型检查，必须静默放过而不是报错阻塞策略创建。
+			assertions: []assertionFunc{toBeEmpty},
 		},
 		{
 			name:   "passed check",
@@ -442,6 +456,7 @@ func TestTypeCheck(t *testing.T) {
 				},
 			},
 			assertions: []assertionFunc{
+				// 只有第二条表达式出错，fieldRef 必须精确指向它，便于用户定位。
 				toHaveFieldRef("spec.validations[1].expression"), // expressions[0] is okay, [1] is wrong
 				toHaveLengthOf(1),
 			},
@@ -495,6 +510,7 @@ func TestTypeCheck(t *testing.T) {
 		{
 			name:   "additionalProperties: true",
 			policy: reproducerPolicy,
+			// additionalProperties 为 true 时任意字段名都合法，不应产生 undefined field 告警。
 			schemaToReturn: &spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Type: []string{"object"},
@@ -622,6 +638,8 @@ func TestTypeCheck(t *testing.T) {
 		},
 		{
 			name: "error in variables, not reported during type checking.",
+			// 变量表达式自身的类型错误在策略编译阶段单独报告，这里只检查
+			// 校验表达式对变量推导类型的兼容性，避免同一问题重复告警。
 			policy: &v1.ValidatingAdmissionPolicy{Spec: v1.ValidatingAdmissionPolicySpec{
 				Variables: []v1.Variable{
 					{
@@ -660,6 +678,8 @@ func TestTypeCheck(t *testing.T) {
 	}
 }
 
+// buildTypeChecker 构造一个使用假 schema 解析器的类型检查器；
+// RESTMapper 只注册测试涉及的 Pod 与 Deployment。
 func buildTypeChecker(schemaToReturn *spec.Schema) *TypeChecker {
 	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{
 		{
@@ -676,10 +696,12 @@ func buildTypeChecker(schemaToReturn *spec.Schema) *TypeChecker {
 	}
 }
 
+// fakeSchemaResolver 返回固定 schema；未设置时模拟“schema 不存在”。
 type fakeSchemaResolver struct {
 	schemaToReturn *spec.Schema
 }
 
+// ResolveSchema 实现 resolver.SchemaResolver。
 func (r *fakeSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (*spec.Schema, error) {
 	if r.schemaToReturn == nil {
 		return nil, fmt.Errorf("cannot resolve for %v: %w", gvk, resolver.ErrSchemaNotFound)
@@ -687,12 +709,14 @@ func (r *fakeSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (*spec.S
 	return r.schemaToReturn, nil
 }
 
+// toBeEmpty 断言没有产生任何告警。
 func toBeEmpty(warnings []v1.ExpressionWarning, t *testing.T) {
 	if len(warnings) != 0 {
 		t.Fatalf("expected empty but got %v", warnings)
 	}
 }
 
+// toContain 断言每条告警文本都包含指定子串。
 func toContain(substring string) func(warnings []v1.ExpressionWarning, t *testing.T) {
 	return func(warnings []v1.ExpressionWarning, t *testing.T) {
 		if len(warnings) == 0 {
@@ -706,6 +730,7 @@ func toContain(substring string) func(warnings []v1.ExpressionWarning, t *testin
 	}
 }
 
+// toHaveLengthOf 断言告警数量。
 func toHaveLengthOf(expected int) func(warnings []v1.ExpressionWarning, t *testing.T) {
 	return func(warnings []v1.ExpressionWarning, t *testing.T) {
 		got := len(warnings)
@@ -715,6 +740,7 @@ func toHaveLengthOf(expected int) func(warnings []v1.ExpressionWarning, t *testi
 	}
 }
 
+// toHaveFieldRef 断言告警按顺序指向指定的字段路径。
 func toHaveFieldRef(paths ...string) func(warnings []v1.ExpressionWarning, t *testing.T) {
 	return func(warnings []v1.ExpressionWarning, t *testing.T) {
 		if len(paths) != len(warnings) {
@@ -728,4 +754,5 @@ func toHaveFieldRef(paths ...string) func(warnings []v1.ExpressionWarning, t *te
 	}
 }
 
+// assertionFunc 是对类型检查告警的断言。
 type assertionFunc func(warnings []v1.ExpressionWarning, t *testing.T)

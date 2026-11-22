@@ -15,6 +15,10 @@ limitations under the License.
 */
 
 // Package kmsv2 transforms values for storage at rest using a Envelope v2 provider
+//
+// 信封加密：数据用本地生成的 DEK 加密，DEK 再由外部 KMS 加密后随数据一起存放。
+// 好处是批量数据加解密不经过 KMS，只有 DEK 轮换时才调用远端；代价是必须严格校验
+// KMS 返回的密钥标识与注解，防止被替换成攻击者控制的密钥。
 package kmsv2
 
 import (
@@ -58,6 +62,8 @@ var nowFuncPerKMS sync.Map // map[string]func() time.Time, KMS name -> NowFunc
 
 // SetNowFuncForTests should only be called in tests to swap the NowFunc for KMS providers
 // Caller must guarantee that all KMS providers have distinct names across all tests.
+//
+// 返回的清理函数必须 defer 调用，否则会污染后续测试的时钟。
 func SetNowFuncForTests(kmsName string, fn func() time.Time) func() {
 	if len(kmsName) == 0 { // guarantee that GetNowFunc("") returns the default value
 		panic("empty KMS name used in test")
@@ -67,6 +73,7 @@ func SetNowFuncForTests(kmsName string, fn func() time.Time) func() {
 }
 
 // GetNowFunc returns the time function for the given KMS provider name
+// 未注册时回退到 time.Now，保证生产路径永远可用。
 func GetNowFunc(kmsName string) func() time.Time {
 	nowFunc, ok := nowFuncPerKMS.Load(kmsName)
 	if !ok {
@@ -105,9 +112,13 @@ const (
 	errKeyIDTooLongCode ErrCodeKeyID = "too_long"
 )
 
+// StateFunc 返回某个时刻 KMS 插件的状态（当前用于加密的 DEK 与密钥 ID）。
 type StateFunc func() (State, error)
+
+// ErrCodeKeyID 是密钥 ID 校验结果的低基数枚举值，直接作为指标标签使用。
 type ErrCodeKeyID string
 
+// State 描述一次 KMS 状态快照，供加密与陈旧判断使用。
 type State struct {
 	Transformer value.Transformer
 
@@ -118,6 +129,7 @@ type State struct {
 
 	UID string
 
+	// ExpirationTimestamp 是 DEK 的过期时间；过期后拒绝加密，强制重新向 KMS 取密钥。
 	ExpirationTimestamp time.Time
 
 	// CacheKey is the key used to cache the DEK/seed in envelopeTransformer.cache.
@@ -127,6 +139,8 @@ type State struct {
 	KMSProviderName string
 }
 
+// ValidateEncryptCapability 在加密前检查 DEK 是否已过期。
+// 只用本进程的时钟判断，避免依赖 KMS 的时钟一致性。
 func (s *State) ValidateEncryptCapability() error {
 	nowFunc := GetNowFunc(s.KMSProviderName)
 	if now := nowFunc(); now.After(s.ExpirationTimestamp) {
@@ -136,6 +150,10 @@ func (s *State) ValidateEncryptCapability() error {
 	return nil
 }
 
+// envelopeTransformer 实现 KEK-DEK 信封加密的读写转换。
+//
+// cache 以"密文 DEK + keyID + 注解"为键缓存已解密的 transformer；
+// 这样同一批数据无需反复调用远端 KMS，同时 keyID 变化会自然产生新的缓存项。
 type envelopeTransformer struct {
 	envelopeService kmsservice.Service
 	providerName    string
@@ -153,6 +171,7 @@ func NewEnvelopeTransformer(envelopeService kmsservice.Service, providerName str
 	return newEnvelopeTransformerWithClock(envelopeService, providerName, stateFunc, apiServerID, cacheTTL, clock.RealClock{})
 }
 
+// newEnvelopeTransformerWithClock 允许测试注入假时钟，以验证缓存 TTL 行为。
 func newEnvelopeTransformerWithClock(envelopeService kmsservice.Service, providerName string, stateFunc StateFunc, apiServerID string, cacheTTL time.Duration, clock clock.Clock) value.Transformer {
 	return &envelopeTransformer{
 		envelopeService: envelopeService,
@@ -180,6 +199,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 
 	span.AddEvent("About to decode encrypted object")
 	// Deserialize the EncryptedObject from the data.
+	// 解码同时做结构校验：字段缺失、类型未知或尺寸超限都视为数据损坏，绝不猜测。
 	encryptedObject, err := t.doDecode(data)
 	if err != nil {
 		span.AddEvent("Decoding encrypted object failed")
@@ -192,6 +212,8 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 
 	// TODO: consider marking state.EncryptedDEK != encryptedObject.EncryptedDEK as a stale read to support DEK defragmentation
 	//  at a minimum we should have a metric that helps the user understand if DEK fragmentation is high
+	//
+	// 读取路径不校验加密能力（DEK 过期只影响写），否则历史数据在轮换后可能再也读不出来。
 	state, err := t.stateFunc() // no need to call state.ValidateEncryptCapability on reads
 	if err != nil {
 		return nil, false, err
@@ -206,6 +228,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 	transformer := t.cache.get(encryptedObjectCacheKey)
 
 	// fallback to the envelope service if we do not have the transformer locally
+	// 缓存未命中才访问远端 KMS；miss 计数用于观察重启/轮换后的冷启动成本。
 	if transformer == nil {
 		span.AddEvent("About to decrypt DEK using remote service")
 		value.RecordCacheMiss()
@@ -245,6 +268,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 
 	span.AddEvent("Data decryption succeeded")
 	// data is considered stale if the key ID does not match our current write transformer
+	// keyID 或 DEK 类型与当前写状态不一致即视为陈旧，从而触发后台重写（存储迁移）。
 	return out,
 		stale ||
 			encryptedObject.KeyID != state.EncryptedObjectKeyID ||
@@ -278,6 +302,8 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 	// this prevents a cache miss every time the DEK rotates
 	// this has the side benefit of causing the cache to perform a GC
 	// TODO see if we can do this inside the stateFunc control loop
+	//
+	// 写路径顺便把当前 transformer 放入缓存，使"刚写的数据马上被读"不必往返 KMS。
 	t.cache.set(state.CacheKey, state.Transformer)
 
 	requestInfo := getRequestInfoFromContext(ctx)
@@ -323,6 +349,7 @@ func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key [
 	var err error
 	if useSeed {
 		// the input key is considered safe to use here because it is coming from the KMS plugin / etcd
+		// seed 模式用 HKDF 派生扩展 nonce 密钥，避免 GCM 的 nonce 复用风险。
 		transformer, err = aestransformer.NewHKDFExtendedNonceGCMTransformer(key)
 	} else {
 		var block cipher.Block
@@ -342,6 +369,7 @@ func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key [
 }
 
 // doEncode encodes the EncryptedObject to a byte array.
+// 编码前再校验一次，防止内存中被错误修改的对象落盘。
 func (t *envelopeTransformer) doEncode(request *kmstypes.EncryptedObject) ([]byte, error) {
 	if err := ValidateEncryptedObject(request); err != nil {
 		return nil, err
@@ -350,6 +378,7 @@ func (t *envelopeTransformer) doEncode(request *kmstypes.EncryptedObject) ([]byt
 }
 
 // doDecode decodes the byte array to an EncryptedObject.
+// 解码后立即校验，使后续逻辑可以信任字段的尺寸与类型。
 func (t *envelopeTransformer) doDecode(originalData []byte) (*kmstypes.EncryptedObject, error) {
 	o := &kmstypes.EncryptedObject{}
 	if err := proto.Unmarshal(originalData, o); err != nil {
@@ -364,6 +393,9 @@ func (t *envelopeTransformer) doDecode(originalData []byte) (*kmstypes.Encrypted
 
 // GenerateTransformer generates a new transformer and encrypts the DEK/seed using the envelope service.
 // It returns the transformer, the encrypted DEK/seed, cache key and error.
+//
+// useSeed 决定 DEK 形态：种子可从同一 KMS 响应派生多个 nonce，减少 KMS 调用；
+// 非种子模式直接使用一段随机 AES 密钥。
 func GenerateTransformer(ctx context.Context, uid string, envelopeService kmsservice.Service, useSeed bool) (value.Transformer, *kmstypes.EncryptedObject, []byte, error) {
 	newTransformerFunc := func() (value.Transformer, []byte, error) {
 		seed, err := aestransformer.GenerateKey(aestransformer.MinSeedSizeExtendedNonceGCM)
@@ -413,11 +445,16 @@ func GenerateTransformer(ctx context.Context, uid string, envelopeService kmsser
 		return nil, nil, nil, err
 	}
 
+	// 清空占位数据：调用方必须在真正加密后填入 EncryptedData，
+	// 避免占位值被误当真实密文使用。
 	o.EncryptedData = nil // make sure that later code that uses this encrypted object sets this field
 
 	return transformer, o, cacheKey, nil
 }
 
+// ValidateEncryptedObject 校验从存储读回或即将写入的信封结构。
+//
+// 这是防篡改的关键：只要任一字段尺寸或类型异常就拒绝，不能尝试用可疑密钥解密。
 func ValidateEncryptedObject(o *kmstypes.EncryptedObject) error {
 	if o == nil {
 		return fmt.Errorf("encrypted object is nil")
@@ -446,6 +483,7 @@ func ValidateEncryptedObject(o *kmstypes.EncryptedObject) error {
 // validateEncryptedDEKSource tests the following:
 // 1. The encrypted DEK source is not empty.
 // 2. The size of encrypted DEK source is less than 1 kB.
+// 尺寸上限防止畸形数据导致后续分配与 KMS 调用放大（解压缩/分片攻击面）。
 func validateEncryptedDEKSource(encryptedDEKSource []byte) error {
 	if len(encryptedDEKSource) == 0 {
 		return fmt.Errorf("encrypted DEK source is empty")
@@ -459,6 +497,9 @@ func validateEncryptedDEKSource(encryptedDEKSource []byte) error {
 // validateAnnotations tests the following:
 //  1. checks if the annotation key is fully qualified
 //  2. The size of annotations keys + values is less than 32 kB.
+//
+// 要求全限定域名是为了让注解命名空间归属明确，避免不同 KMS 插件相互覆盖。
+// 逐项收集错误后聚合返回，便于一次性报告所有问题。
 func validateAnnotations(annotations map[string][]byte) error {
 	var errs []error
 	var totalSize uint64
@@ -477,6 +518,7 @@ func validateAnnotations(annotations map[string][]byte) error {
 // ValidateKeyID tests the following:
 // 1. The keyID is not empty.
 // 2. The size of keyID is less than 1 kB.
+// 返回的 ErrCodeKeyID 可直接作为指标标签，避免把 keyID 本身暴露为高基数标签。
 func ValidateKeyID(keyID string) (ErrCodeKeyID, error) {
 	if len(keyID) == 0 {
 		return errKeyIDEmptyCode, fmt.Errorf("keyID is empty")
@@ -487,6 +529,8 @@ func ValidateKeyID(keyID string) (ErrCodeKeyID, error) {
 	return errKeyIDOKCode, nil
 }
 
+// getRequestInfoFromContext 返回上下文中记录的请求信息；缺失时返回空结构，
+// 使日志字段（group/resource 等）始终存在而不必做 nil 判断。
 func getRequestInfoFromContext(ctx context.Context) *genericapirequest.RequestInfo {
 	if reqInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
 		return reqInfo
@@ -503,6 +547,9 @@ func getRequestInfoFromContext(ctx context.Context) *genericapirequest.RequestIn
 //  4. annotations (sorted by key) - each annotation is a concatenation of:
 //     a. annotation key
 //     b. annotation value
+//
+// 注解按 key 排序，保证相同逻辑输入产生相同缓存键，否则 map 迭代顺序会导致缓存失效。
+// 使用长度前缀而非分隔符，避免键值拼接产生歧义（与 compare 的注入攻击同理）。
 func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, encryptedDEKSource []byte, keyID string, annotations map[string][]byte) ([]byte, error) {
 	// TODO(aramase): use sync pool buffer to avoid allocations
 	b := cryptobyte.NewBuilder(nil)
@@ -541,6 +588,8 @@ func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, en
 }
 
 // toBytes performs unholy acts to avoid allocations
+// 仅在生命周期确定短于源字符串时使用；空字符串返回 nil，因为 unsafe.StringData
+// 对空串的行为未定义。
 func toBytes(s string) []byte {
 	// unsafe.StringData is unspecified for the empty string, so we provide a strict interpretation
 	if len(s) == 0 {
@@ -552,6 +601,7 @@ func toBytes(s string) []byte {
 }
 
 // GetHashIfNotEmpty returns the sha256 hash of the data if it is not empty.
+// 错误信息中使用哈希而非原始 keyID，既可用于比对又不泄露密钥标识。
 func GetHashIfNotEmpty(data string) string {
 	if len(data) > 0 {
 		return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(data)))

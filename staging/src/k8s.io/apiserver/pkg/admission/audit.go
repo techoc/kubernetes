@@ -24,6 +24,8 @@ import (
 )
 
 // auditHandler logs annotations set by other admission handlers
+//
+// 通过装饰器而非在每个插件里散落审计调用，保证注解收集与插件实现解耦。
 type auditHandler struct {
 	Interface
 }
@@ -43,7 +45,10 @@ func WithAudit(i Interface) Interface {
 	return &auditHandler{Interface: i}
 }
 
+// Admit 先做注解能力检查，再委托给内层变异插件，最后把注解写入审计事件。
+// 即使内层插件返回错误也仍然记录注解：失败请求的上下文同样有审计价值。
 func (handler *auditHandler) Admit(ctx context.Context, a Attributes, o ObjectInterfaces) error {
+	// 插件不处理该操作时直接跳过，避免无谓的注解检查。
 	if !handler.Interface.Handles(a.GetOperation()) {
 		return nil
 	}
@@ -58,6 +63,7 @@ func (handler *auditHandler) Admit(ctx context.Context, a Attributes, o ObjectIn
 	return err
 }
 
+// Validate 与 Admit 对称：只对 ValidationInterface 实现生效。
 func (handler *auditHandler) Validate(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	if !handler.Interface.Handles(a.GetOperation()) {
 		return nil
@@ -73,6 +79,9 @@ func (handler *auditHandler) Validate(ctx context.Context, a Attributes, o Objec
 	return err
 }
 
+// ensureAnnotationGetter 校验 attributes 具备提供审计注解的能力。
+// 两种接口都接受：privateAnnotationsGetter 供内置插件使用，
+// AnnotationsGetter 供外部插件使用。
 func ensureAnnotationGetter(a Attributes) error {
 	_, okPrivate := a.(privateAnnotationsGetter)
 	_, okPublic := a.(AnnotationsGetter)
@@ -82,6 +91,8 @@ func ensureAnnotationGetter(a Attributes) error {
 	return fmt.Errorf("attributes must be an instance of privateAnnotationsGetter or AnnotationsGetter")
 }
 
+// logAnnotations 按事件级别收集注解并合并进当前审计事件。
+// 级别决定了注解的详略（例如 Metadata 级别不收集请求体相关注解）。
 func (handler *auditHandler) logAnnotations(ctx context.Context, a Attributes) {
 	ae := audit.AuditContextFrom(ctx)
 	if ae == nil {

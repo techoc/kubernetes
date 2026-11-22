@@ -24,6 +24,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// MatchResult 汇总 matchConditions 的求值结论。
+// Error 非空时由调用方按 failurePolicy 决定放行还是拒绝；
+// FailedConditionName 仅用于诊断信息与审计，便于定位是哪条条件失败。
 type MatchResult struct {
 	Matches             bool
 	Error               error
@@ -33,5 +36,7 @@ type MatchResult struct {
 // Matcher contains logic for converting Evaluations to bool of matches or does not match
 type Matcher interface {
 	// Match is used to take cel evaluations and convert into decisions
+	// 多个条件之间是逻辑与：任一条件为 false 即整体不匹配；
+	// 任一条件求值出错则立即返回错误，不再继续求值后续条件。
 	Match(ctx context.Context, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, authz authorizer.UnconditionalAuthorizer) MatchResult
 }

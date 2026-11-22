@@ -48,6 +48,7 @@ type Config struct {
 	MaxBatchSize int64
 }
 
+// backend 是一个装饰器：在把事件交给真正的后端之前，先按大小进行截断和分批。
 type backend struct {
 	// The delegate backend that actually exports events.
 	delegateBackend audit.Backend
@@ -63,6 +64,9 @@ var _ audit.Backend = &backend{}
 
 // NewBackend returns a new truncating backend, using configuration passed in the parameters.
 // Truncate backend automatically runs and shut downs the delegate backend.
+//
+// groupVersion 决定事件大小以哪个 API 版本序列化计算——必须与后端实际
+// 使用的编码一致，否则大小估算会失真。
 func NewBackend(delegateBackend audit.Backend, config Config, groupVersion schema.GroupVersion) audit.Backend {
 	return &backend{
 		delegateBackend: delegateBackend,
@@ -71,6 +75,10 @@ func NewBackend(delegateBackend audit.Backend, config Config, groupVersion schem
 	}
 }
 
+// ProcessEvents truncates oversized events, splits them into batches, and
+// forwards each batch to the delegate backend.
+//
+// 返回值采用“与”语义：只要任一批次失败，整体就报告失败，让上层重试/告警。
 func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 	var errors []error
 	var impacted []*auditinternal.Event
@@ -82,6 +90,7 @@ func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 		// If event was correctly serialized, but the size is more than allowed
 		// and it makes sense to do trimming, i.e. there's a request and/or
 		// response present, try to strip away request and response.
+		// 低于 Request 级别的事件本就不含请求/响应体，截断无意义，直接报错。
 		if err == nil && size > b.c.MaxEventSize && event.Level.GreaterOrEqual(auditinternal.LevelRequest) {
 			event = truncate(event)
 			size, err = b.calcSize(event)
@@ -97,6 +106,7 @@ func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 			continue
 		}
 
+		// 达到批次上限就先冲刷当前批次，再开始新批次。
 		if len(batch) > 0 && batchSize+size > b.c.MaxBatchSize {
 			success = b.delegateBackend.ProcessEvents(batch...) && success
 			batch = []*auditinternal.Event{}
@@ -119,6 +129,9 @@ func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 
 // truncate removed request and response objects from the audit events,
 // to try and keep at least metadata.
+//
+// 浅拷贝而非深拷贝：被丢弃的正是 RequestObject/ResponseObject 这两个大字段，
+// 深拷贝它们纯属浪费。但注意因此不能修改其余共享字段。
 func truncate(e *auditinternal.Event) *auditinternal.Event {
 	// Make a shallow copy to avoid copying response/request objects.
 	newEvent := &auditinternal.Event{}
@@ -127,6 +140,7 @@ func truncate(e *auditinternal.Event) *auditinternal.Event {
 	newEvent.RequestObject = nil
 	newEvent.ResponseObject = nil
 
+	// 打上截断标记，让审计消费者知道这份事件不完整。
 	if newEvent.Annotations == nil {
 		newEvent.Annotations = make(map[string]string)
 	}
@@ -135,14 +149,17 @@ func truncate(e *auditinternal.Event) *auditinternal.Event {
 	return newEvent
 }
 
+// Run delegates to the wrapped backend; the truncating layer itself has no loop.
 func (b *backend) Run(stopCh <-chan struct{}) error {
 	return b.delegateBackend.Run(stopCh)
 }
 
+// Shutdown stops the wrapped backend.
 func (b *backend) Shutdown() {
 	b.delegateBackend.Shutdown()
 }
 
+// calcSize encodes the event into a counting writer to measure its wire size.
 func (b *backend) calcSize(e *auditinternal.Event) (int64, error) {
 	s := &sizer{}
 	if err := b.e.Encode(e, s); err != nil {
@@ -151,10 +168,12 @@ func (b *backend) calcSize(e *auditinternal.Event) (int64, error) {
 	return s.Size, nil
 }
 
+// String identifies this backend as truncate<delegate> in logs and metrics.
 func (b *backend) String() string {
 	return fmt.Sprintf("%s<%s>", PluginName, b.delegateBackend)
 }
 
+// sizer 是只统计字节数的 io.Writer，避免为测量大小而分配完整缓冲区。
 type sizer struct {
 	Size int64
 }

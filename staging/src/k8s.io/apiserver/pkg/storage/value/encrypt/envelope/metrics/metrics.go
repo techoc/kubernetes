@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 envelope 加密（KMS）相关的指标：DEK 缓存命中、
+// KMS 调用延迟、keyID 使用情况等。
+//
+// 安全注意：keyID 与 apiserver 身份都只以 SHA-256 哈希形式作为标签，
+// 避免把密钥标识或节点标识原样暴露到指标端点。
 package metrics
 
 import (
@@ -40,6 +45,8 @@ const (
 	ToStorageLabel   = "to_storage"
 )
 
+// metricLabels 用作 LRU 的 key：它唯一标识一组指标标签，value 无意义，
+// 缓存实际充当“已注册标签集合”，用于在基数超限时回收旧标签。
 type metricLabels struct {
 	transformationType string
 	providerName       string
@@ -174,6 +181,7 @@ var registerMetricsFunc sync.Once
 var hashPool *sync.Pool
 
 func registerLRUMetrics() {
+	// 重新注册时先清空旧缓存，避免上次注册的回调仍引用旧指标对象。
 	if keyIDHashTotalMetricLabels != nil {
 		keyIDHashTotalMetricLabels.Clear()
 	}
@@ -199,6 +207,9 @@ func registerLRUMetrics() {
 		}
 	})
 }
+
+// RegisterMetrics 幂等注册所有指标，并初始化哈希对象池。
+// 哈希池复用 sha256 实例，降低高频加密路径上的分配压力。
 func RegisterMetrics() {
 	registerMetricsFunc.Do(func() {
 		registerLRUMetrics()
@@ -229,6 +240,8 @@ func RecordKeyID(transformationType, providerName, keyID, apiServerID string) {
 }
 
 // RecordKeyIDFromStatus records last time in seconds when a KeyID was returned by the Status RPC call.
+// 与 RecordKeyID 使用独立的锁和 LRU，因为该指标的标签维度少一个
+// transformation_type。
 func RecordKeyIDFromStatus(providerName, keyID, apiServerID string) {
 	lockRecordKeyIDStatus.Lock()
 	defer lockRecordKeyIDStatus.Unlock()
@@ -241,6 +254,8 @@ func RecordInvalidKeyIDFromStatus(providerName, errCode string) {
 	InvalidKeyIDFromStatusTotal.WithLabelValues(providerName, errCode).Inc()
 }
 
+// RecordArrival 记录相邻两次转换请求的间隔，用于估算 DEK 缓存命中带来的
+// KMS 调用节省。首次请求没有前驱，间隔记为 0。
 func RecordArrival(transformationType string, start time.Time) {
 	switch transformationType {
 	case FromStorageLabel:
@@ -264,10 +279,13 @@ func RecordArrival(transformationType string, start time.Time) {
 	}
 }
 
+// RecordDekCacheFillPercent 记录 KMS v1 DEK 缓存占用比例。
 func RecordDekCacheFillPercent(percent float64) {
 	dekCacheFillPercent.Set(percent)
 }
 
+// RecordDekSourceCacheSize 记录 KMS v2 的 DEK 来源缓存条目数；
+// 重启后该值近似于需要向 KMS 发起的解密调用次数。
 func RecordDekSourceCacheSize(providerName string, size int) {
 	DekSourceCacheSize.WithLabelValues(providerName).Set(float64(size))
 }
@@ -277,10 +295,14 @@ func RecordKMSOperationLatency(providerName, methodName string, duration time.Du
 	KMSOperationsLatencyMetric.WithLabelValues(providerName, methodName, getErrorCode(err)).Observe(duration.Seconds())
 }
 
+// gRPCError 抽象出能返回 gRPC status 的错误，兼容 status.Error 以及
+// 被 fmt.Errorf("%w") 包装后的形式。
 type gRPCError interface {
 	GRPCStatus() *status.Status
 }
 
+// getErrorCode 把错误归一化为 gRPC 状态码字符串；非 gRPC 错误单独标记，
+// 以便区分“KMS 返回错误”与“调用前就失败”。
 func getErrorCode(err error) string {
 	if err == nil {
 		return codes.OK.String()
@@ -297,6 +319,8 @@ func getErrorCode(err error) string {
 	return "unknown-non-grpc"
 }
 
+// getHash 返回带 "sha256:" 前缀的十六进制哈希；空输入返回空串，
+// 避免为“未配置”的身份生成无意义标签。
 func getHash(data string) string {
 	if len(data) == 0 {
 		return ""
@@ -309,6 +333,8 @@ func getHash(data string) string {
 	return dataHash
 }
 
+// addLabelToCache 把标签组合放入 LRU，返回哈希后的 keyID 与 apiserverID。
+// 当缓存淘汰某个组合时，对应的指标标签值会被删除，从而为基数设上限。
 func addLabelToCache(c *lru.Cache, transformationType, providerName, keyID, apiServerID string) (string, string) {
 	keyIDHash := getHash(keyID)
 	apiServerIDHash := getHash(apiServerID)

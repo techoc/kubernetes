@@ -16,4 +16,7 @@ limitations under the License.
 
 // +groupName=apidiscovery.k8s.io
 
+// Package v2 定义聚合发现（Aggregated Discovery）的 v2 API 类型。
+// 相比 v1，v2 以精简的组/版本/资源层级描述发现信息，
+// 便于大规模集群下减少发现请求的响应体积。
 package v2

@@ -30,6 +30,9 @@ import (
 
 // request is a temporary container for "requests" with additional
 // tracking fields required for QueueSet functionality.
+//
+// 字段分两段：前半段在创建后只读，后半段受 queueSet 锁保护。这个划分是
+// 该包并发正确性的核心约定——凡是在锁外读取后半段字段都是 bug。
 type request struct {
 	ctx context.Context
 
@@ -52,6 +55,9 @@ type request struct {
 	//
 	// decision.Set is called with the queueSet locked.
 	// decision.Get is called without the queueSet locked.
+	//
+	// 用 write-once promise 而不是 channel：等待方可能在任意时刻多次读取结果，
+	// promise 既保证单次写入，又允许无锁读。
 	decision promise.WriteOnce
 
 	// arrivalTime is the real time when the request entered this system
@@ -82,6 +88,8 @@ type request struct {
 	waitStarted bool
 }
 
+// completedWorkEstimate 同时保留初始工作量与最终工作量：
+// 初始部分按估算的服务时长计，最终部分按实际额外延迟计，二者用于不同的公平性计算。
 type completedWorkEstimate struct {
 	fcrequest.WorkEstimate
 	totalWork fcrequest.SeatSeconds // initial plus final work
@@ -124,10 +132,12 @@ type queueSum struct {
 	TotalWorkSum fcrequest.SeatSeconds
 }
 
+// totalWork 返回预估总工作量，供调度决策计算虚拟时间增量。
 func (req *request) totalWork() fcrequest.SeatSeconds {
 	return req.workEstimate.totalWork
 }
 
+// completeWorkEstimate 把静态估算补齐为含初始与最终两部分的完整估算。
 func (qs *queueSet) completeWorkEstimate(we *fcrequest.WorkEstimate) completedWorkEstimate {
 	finalWork := qs.computeFinalWork(we)
 	return completedWorkEstimate{
@@ -137,14 +147,17 @@ func (qs *queueSet) completeWorkEstimate(we *fcrequest.WorkEstimate) completedWo
 	}
 }
 
+// computeInitialWork 用席位乘以估算服务时长；席位代表并发占用，时长代表占用时间。
 func (qs *queueSet) computeInitialWork(we *fcrequest.WorkEstimate) fcrequest.SeatSeconds {
 	return fcrequest.SeatsTimesDuration(float64(we.InitialSeats), qs.estimatedServiceDuration)
 }
 
+// computeFinalWork 用最终席位乘以额外延迟，反映请求在服务尾部追加的占用。
 func (qs *queueSet) computeFinalWork(we *fcrequest.WorkEstimate) fcrequest.SeatSeconds {
 	return fcrequest.SeatsTimesDuration(float64(we.FinalSeats), we.AdditionalLatency)
 }
 
+// dumpLocked 生成队列的诊断快照；调用方必须持有 queueSet 锁（名字中的 Locked 即此意）。
 func (q *queue) dumpLocked(includeDetails bool) debug.QueueDump {
 	waitingDigest := make([]debug.RequestDump, 0, q.requestsWaiting.Length())
 	q.requestsWaiting.Walk(func(r *request) bool {
@@ -170,6 +183,8 @@ func (q *queue) dumpLocked(includeDetails bool) debug.QueueDump {
 	}
 }
 
+// dumpRequest 把请求转成调试结构；includeDetails 为 true 时才附带用户与请求信息，
+// 因为完整转储可能包含敏感字段，且体积可观。
 func dumpRequest(includeDetails bool) func(*request) debug.RequestDump {
 	return func(r *request) debug.RequestDump {
 		ans := debug.RequestDump{
@@ -213,6 +228,8 @@ func SliceMapReduce[Elt, Result, Accumulator any](mapFn func(Elt) Result, reduce
 	}
 }
 
+// or 作为 reduce 函数用于"任一为真"的归约。
 func or(x, y bool) bool { return x || y }
 
+// append1 作为 reduce 函数用于收集元素；具名是为了满足泛型函数值传参的需要。
 func append1[Elt any](slice []Elt, next Elt) []Elt { return append(slice, next) }

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 为授权器提供指标埋点包装：统计每个授权器类型/名称的
+// 终态决策（allowed/denied/conditional），NoOpinion 不计数，因为它不
+// 代表最终结果。
 package metrics
 
 import (
@@ -45,20 +48,25 @@ var (
 
 var registerMetrics sync.Once
 
+// RegisterMetrics 幂等注册指标；多个授权器共享同一个计数器。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(authorizationDecisionsTotal)
 	})
 }
 
+// ResetMetricsForTest 清空计数器，仅供测试使用。
 func ResetMetricsForTest() {
 	authorizationDecisionsTotal.Reset()
 }
 
+// RecordAuthorizationDecision 记录一次终态决策。
 func RecordAuthorizationDecision(authorizerType, authorizerName, decision string) {
 	authorizationDecisionsTotal.WithLabelValues(authorizerType, authorizerName, decision).Inc()
 }
 
+// InstrumentedAuthorizer 包装授权器并自动注册指标，返回的包装器与原
+// 授权器行为完全一致，只是多了一次计数。
 func InstrumentedAuthorizer(authorizerType string, authorizerName string, delegate authorizer.Authorizer) authorizer.Authorizer {
 	RegisterMetrics()
 	return &instrumentedAuthorizer{
@@ -70,12 +78,15 @@ func InstrumentedAuthorizer(authorizerType string, authorizerName string, delega
 
 var _ = authorizer.Authorizer(&instrumentedAuthorizer{})
 
+// instrumentedAuthorizer 委托给真实授权器，并在返回后记录决策。
 type instrumentedAuthorizer struct {
 	authorizerType string
 	authorizerName string
 	delegate       authorizer.Authorizer
 }
 
+// Authorize 委托并记录终态决策；NoOpinion 表示“未表态”，不计入指标，
+// 以免把多授权器串联时的中间结果误当作最终结果。
 func (a *instrumentedAuthorizer) Authorize(ctx context.Context, attributes authorizer.Attributes) (authorizer.Decision, string, error) {
 	decision, reason, err := a.delegate.Authorize(ctx, attributes)
 	switch decision {

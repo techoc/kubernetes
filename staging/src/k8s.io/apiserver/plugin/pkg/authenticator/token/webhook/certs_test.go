@@ -17,8 +17,13 @@ limitations under the License.
 // This file is an exact copy of
 // plugin/pkg/auth/authorizer/webhook/certs_test.go
 
+// 本文件为测试提供固定的证书材料：一个 CA、其签发的服务端/客户端证书与私钥，
+// 以及一张由同一 CA 名称但不同密钥签发的"坏"证书（badCACert）。
+// 固定材料避免测试依赖运行时生成证书，也让 TLS 失败场景可复现。
+
 package webhook
 
+// caCert 是测试用 CA 证书，服务端与客户端证书都由它签发。
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDCzCCAfOgAwIBAgIJAKK9m2Cfg5uhMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -39,6 +44,7 @@ TJIpMokDUKlRi9cWSqkWXFE6xbCmhrrwKYsi0X6Vvi7a0pmOnSzKCQl8jN8u4A9R
 xar2YeJ6mCCzSAPM69DP
 -----END CERTIFICATE-----`)
 
+// badCACert 与 caCert 同名但密钥不同，用于验证客户端确实按内容而非名称校验 CA。
 var badCACert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDCzCCAfOgAwIBAgIJAPqJyUfmRxGLMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -59,6 +65,7 @@ IqCQy6t7uJDydRiNRfPFr9Eg7uOu83JGw11f3bGVhJVCbzHyKddvkQsQbdaMHRgZ
 zgmWLORg+ls1H1oaJiNW
 -----END CERTIFICATE-----`)
 
+// serverKey 是 webhook 测试服务端的私钥。
 var serverKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAtegsP499au5ZxlwM26rk3TnRgakchQi/9bhfMr0LaEKng1lR
 XopzzGuGeZQswzbx7iiH89JzFkurZoEmZwtS4Aybit92VOSv0EUnyx7WR3V21ObZ
@@ -87,6 +94,7 @@ SYs/mPzYzKSd7F+7Zk6oVrgFVskTiReW3phF+cIl+CdcnIenF0jW1PVgGw8znu+P
 SbHSdqV+tB7AW2J7sH8TZtfMUPAK2MJ4S+1uaHK86K79ym4Rz0E2
 -----END RSA PRIVATE KEY-----`)
 
+// serverCert 是 CA 签发的服务端证书，用于 httptest TLS 服务端。
 var serverCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIC/zCCAeegAwIBAgIJAN7rkfhaX8FZMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy
@@ -107,6 +115,7 @@ gJu09S+KIz3x1CJLRuJX9tB+cFnnykDLQ2IKg7x44O83ikNk8+Di3iT/awCguWPE
 rHh5
 -----END CERTIFICATE-----`)
 
+// clientKey 是客户端（apiserver 一侧）的私钥，用于双向 TLS 测试。
 var clientKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEA5ij4WXWGvbmfAYhEafKRvLEHSkUCYIDjwQAlnHoLf/lz+Fh2
 DEv4lcBaycwk3+LVUGKgYOg91txYJvGD3HcmVThXZvcgJd4V9Ll3aY/6xVRCenWi
@@ -135,6 +144,7 @@ FxEmOChQgUnBdwb93qHCSq0Fidf7OfewrfJJkstWIh3zPS4umLZo7R3YblncpdfT
 M197uckIWccZml2jF/c7nvK+MjwDRhkOl2a6HzMxcdBwYUJmSwmIZ4k=
 -----END RSA PRIVATE KEY-----`)
 
+// clientCert 是 CA 签发的客户端证书，服务端据此校验调用方身份。
 var clientCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIC7jCCAdagAwIBAgIJAN7rkfhaX8FaMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
 BAMMEHdlYmhvb2tfYXV0aHpfY2EwIBcNMTYwMjE2MjM0NDI4WhgPMjI4OTEyMDEy

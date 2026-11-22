@@ -18,9 +18,10 @@ package patch
 
 import (
 	"context"
-	"github.com/google/go-cmp/cmp"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,9 @@ import (
 	"k8s.io/client-go/openapi/openapitest"
 )
 
+// TestTypeConverter 验证 TypeConverter 的往返一致性：
+// ObjectToTyped 再 TypedToObject 后，经 unstructured 比较应与原对象完全相等。
+// 若转换器丢失字段（例如未处理某些嵌套结构），这里会以 diff 形式暴露。
 func TestTypeConverter(t *testing.T) {
 	deploymentGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	tests := []struct {
@@ -40,6 +44,7 @@ func TestTypeConverter(t *testing.T) {
 		object runtime.Object
 	}{
 		{
+			// 简单往返：包含一个带端口的多容器 PodSpec，覆盖嵌套 slice/struct。
 			name: "simple round trip",
 			gvk:  deploymentGVK,
 			object: &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
@@ -50,9 +55,11 @@ func TestTypeConverter(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	// 使用内嵌的 OpenAPI 文件客户端，测试不依赖真实 apiserver。
 	tcManager := NewTypeConverterManager(nil, openapitest.NewEmbeddedFileClient())
 	go tcManager.Run(ctx)
 
+	// 等待类型转换器异步构建完成，最多 1 秒。
 	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, time.Second, true, func(context.Context) (done bool, err error) {
 		converter := tcManager.GetTypeConverter(deploymentGVK)
 		return converter != nil, nil
@@ -63,6 +70,7 @@ func TestTypeConverter(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 显式补齐 TypeMeta，转换器需要 GVK 才能选对 schema。
 			typeAccessor, err := meta.TypeAccessor(tc.object)
 			if err != nil {
 				t.Fatal(err)
@@ -79,6 +87,7 @@ func TestTypeConverter(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 再转回通用对象，应能还原原始结构。
 			roundTripped, err := converter.TypedToObject(typedObject)
 			if err != nil {
 				t.Fatal(err)

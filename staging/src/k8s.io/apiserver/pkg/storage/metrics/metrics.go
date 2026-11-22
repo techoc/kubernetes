@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义存储层 LIST 成本相关的指标，用于观察 etcd 与 watch cache
+// 各自承担的读取量与选择器求值开销。
 package metrics
 
 import (
@@ -25,11 +27,15 @@ import (
 )
 
 const (
-	StorageBackendEtcd       = "etcd"
+	// StorageBackendEtcd 表示 LIST 直接读 etcd。
+	StorageBackendEtcd = "etcd"
+	// StorageBackendWatchCache 表示 LIST 由 watch cache 提供。
 	StorageBackendWatchCache = "watchcache"
 )
 
 var (
+	// 四个计数器共同刻画一次 LIST 的成本：请求数、读取对象数、选择器求值数、返回对象数。
+	// "index" 标签区分是否走了索引优化。
 	listStorageCount = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Name:           "apiserver_storage_list_total",
@@ -62,6 +68,7 @@ var (
 		},
 		[]string{"group", "resource", "storage"},
 	)
+	// 注册是幂等的：多个 apiserver 组件可能各自调用 Register。
 	registerMetrics sync.Once
 )
 

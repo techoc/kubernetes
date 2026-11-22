@@ -27,7 +27,11 @@ import (
 
 // logExcludedResourcesForValidatingWebhook logs an advisory for a ValidatingWebhookConfiguration whose rules name resources excluded from admission webhooks.
 // It is a no-op when excludedWebhookResources is empty.
+//
+// 中文说明：被排除的资源（例如租约类资源）即使出现在 webhook 规则里也不会触发调用，
+// 这里只记录日志而不拒绝配置，避免破坏既有清单的可用性。
 func logExcludedResourcesForValidatingWebhook(name string, webhooks []v1.ValidatingWebhook, excludedWebhookResources sets.Set[schema.GroupResource]) {
+	// 排除集合为空说明当前没有任何资源被排除，无需扫描规则。
 	if excludedWebhookResources.Len() == 0 {
 		return
 	}
@@ -40,6 +44,8 @@ func logExcludedResourcesForValidatingWebhook(name string, webhooks []v1.Validat
 
 // logExcludedResourcesForMutatingWebhook logs an advisory for a MutatingWebhookConfiguration whose rules name resources excluded from admission webhooks.
 // It is a no-op when excludedWebhookResources is empty.
+//
+// 中文说明：与 validating 版本对称，仅提示配置中的规则不会生效。
 func logExcludedResourcesForMutatingWebhook(name string, webhooks []v1.MutatingWebhook, excludedWebhookResources sets.Set[schema.GroupResource]) {
 	if excludedWebhookResources.Len() == 0 {
 		return
@@ -51,6 +57,8 @@ func logExcludedResourcesForMutatingWebhook(name string, webhooks []v1.MutatingW
 	logExcludedWebhookResources("MutatingWebhookConfiguration", name, rules, excludedWebhookResources)
 }
 
+// logExcludedWebhookResources 汇总所有规则命中的被排除资源，并按字典序输出一条结构化日志。
+// 去重是必要的：同一资源可能被多条规则或同一配置中的多个 webhook 重复命名。
 func logExcludedWebhookResources(kind, name string, rules []v1.RuleWithOperations, excludedWebhookResources sets.Set[schema.GroupResource]) {
 	excluded := sets.New[schema.GroupResource]()
 	for _, r := range rules {
@@ -63,6 +71,7 @@ func logExcludedWebhookResources(kind, name string, rules []v1.RuleWithOperation
 	for gr := range excluded {
 		resources = append(resources, gr.String())
 	}
+	// 排序保证日志稳定，便于 grep 与测试比对。
 	slices.Sort(resources)
 	klog.InfoS("Admission webhook configuration names resources that are excluded from admission webhooks; the matching rules will have no effect",
 		"kind", kind, "name", name, "excludedResources", resources)
@@ -72,7 +81,11 @@ func logExcludedWebhookResources(kind, name string, rules []v1.RuleWithOperation
 // A rule that uses a wildcard ("*") in apiGroups or resources is not flagged because its intent
 // toward the excluded resource is ambiguous. apiVersions are not considered because all versions
 // of an excluded resource are excluded.
+//
+// 中文说明：只有显式命名的资源才会被提示，通配符规则可能是有意覆盖全部资源，
+// 提示它只会制造噪音；版本无关是因为排除按 GroupResource 粒度生效。
 func excludedResourcesNamedByRule(apiGroups, resources []string, excludedWebhookResources sets.Set[schema.GroupResource]) []schema.GroupResource {
+	// 通配符规则语义含糊，跳过。
 	if slices.Contains(apiGroups, "*") || slices.Contains(resources, "*") {
 		return nil
 	}

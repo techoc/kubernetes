@@ -24,20 +24,23 @@ import (
 )
 
 const (
+	// GroupName 是 statusz API 的 group。
 	GroupName = "config.k8s.io"
-	Version   = "v1alpha1"
+	// Version 是 statusz API 的版本。
+	Version = "v1alpha1"
 )
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的 group version
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: Version}
 
 var (
-	// SchemeBuilder initializes a scheme builder
+	// SchemeBuilder 初始化 scheme builder
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a global function that adds this group's types to a scheme
+	// AddToScheme 把本 group 的类型加入 scheme 的全局函数
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 注册本版本的类型，并加入 metav1 的 TypeMeta/ListMeta 支持。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Statusz{},

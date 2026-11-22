@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package notfoundhandler 提供委托链末端的兜底 handler，用于区分
+// “路径尚未安装”与“路径确实不存在”两种情况。
 package notfoundhandler
 
 import (
@@ -34,10 +36,14 @@ import (
 //
 // Note that we don't want to add additional checks to the readyz path as it might prevent fixing bricked clusters.
 // This specific handler is meant to "protect" requests that arrive before the paths and handlers are fully initialized.
+//
+// 中文说明：启动早期返回 503+Retry-After 而非 404，避免客户端把“服务尚未就绪”
+// 误判为资源不存在并触发删除等破坏性操作；故意不检查 readyz 路径，以免阻塞自救。
 func New(serializer runtime.NegotiatedSerializer, isMuxAndDiscoveryCompleteFn func(ctx context.Context) bool) *Handler {
 	return &Handler{serializer: serializer, isMuxAndDiscoveryCompleteFn: isMuxAndDiscoveryCompleteFn}
 }
 
+// Handler 是委托链末端的兜底 handler。
 type Handler struct {
 	serializer                  runtime.NegotiatedSerializer
 	isMuxAndDiscoveryCompleteFn func(ctx context.Context) bool
@@ -50,8 +56,10 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		if err.ErrStatus.Details == nil {
 			err.ErrStatus.Details = &metav1.StatusDetails{}
 		}
+		// 建议客户端 5 秒后重试，给路径安装留出时间。
 		err.ErrStatus.Details.RetryAfterSeconds = int32(5)
 
+		// 尽量使用请求本身的组版本编码错误，保持与其他错误响应一致的格式。
 		gv := schema.GroupVersion{Group: "unknown", Version: "unknown"}
 		requestInfo, ok := apirequest.RequestInfoFrom(req.Context())
 		if ok {

@@ -30,6 +30,7 @@ import (
 )
 
 // legacyRootAPIHandler creates a webservice serving api group discovery.
+// 这里服务的是旧版 /api 端点，只暴露核心组的版本列表，与新式 /apis 分开维护。
 type legacyRootAPIHandler struct {
 	// addresses is used to build cluster IPs for discovery.
 	addresses  Addresses
@@ -37,10 +38,12 @@ type legacyRootAPIHandler struct {
 	serializer runtime.NegotiatedSerializer
 }
 
+// NewLegacyRootAPIHandler 构造旧版 /api 发现处理器。
 func NewLegacyRootAPIHandler(addresses Addresses, serializer runtime.NegotiatedSerializer, apiPrefix string) *legacyRootAPIHandler {
 	// Because in release 1.1, /apis returns response with empty APIVersion, we
 	// use stripVersionNegotiatedSerializer to keep the response backwards
 	// compatible.
+	// 该兼容行为已固化进 API 契约，修改会破坏老客户端，因此保留。
 	serializer = stripVersionNegotiatedSerializer{serializer}
 
 	return &legacyRootAPIHandler{
@@ -51,6 +54,7 @@ func NewLegacyRootAPIHandler(addresses Addresses, serializer runtime.NegotiatedS
 }
 
 // AddApiWebService adds a service to return the supported api versions at the legacy /api.
+// 注意方法名沿用历史拼写 WebService，实际返回 restful.WebService。
 func (s *legacyRootAPIHandler) WebService() *restful.WebService {
 	mediaTypes, _ := negotiation.MediaTypesForSerializer(s.serializer)
 	ws := new(restful.WebService)
@@ -65,10 +69,12 @@ func (s *legacyRootAPIHandler) WebService() *restful.WebService {
 	return ws
 }
 
+// restfulHandle 把 go-restful 请求桥接回标准 net/http 处理逻辑。
 func (s *legacyRootAPIHandler) restfulHandle(req *restful.Request, resp *restful.Response) {
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }
 
+// ServeHTTP 返回核心组支持的版本（目前固定为 v1）以及按客户端 CIDR 计算的 server address。
 func (s *legacyRootAPIHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	clientIP := utilnet.GetClientIP(req)
 	apiVersions := &metav1.APIVersions{

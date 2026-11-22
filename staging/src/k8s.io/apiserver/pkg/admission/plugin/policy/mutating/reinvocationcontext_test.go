@@ -17,13 +17,16 @@ limitations under the License.
 package mutating
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestFullReinvocation 覆盖"输出变化会触发全部已执行策略重调用"的完整流程：
+// 每次重调用都可能再次改变对象，因此需要反复重调用直到收敛。
 func TestFullReinvocation(t *testing.T) {
 	key1 := key{PolicyUID: types.NamespacedName{Name: "p1"}, BindingUID: types.NamespacedName{Name: "b1"}}
 	key2 := key{PolicyUID: types.NamespacedName{Name: "p2"}, BindingUID: types.NamespacedName{Name: "b2"}}
@@ -73,6 +76,8 @@ func TestFullReinvocation(t *testing.T) {
 	assert.True(t, rc.ShouldReinvoke(key3))
 }
 
+// TestPartialReinvocation 验证仅当对象在上次调用后确实变化时，才需要重调用其余策略：
+// key1 被重调用后输出未变，因此 key2/key3 无需再执行。
 func TestPartialReinvocation(t *testing.T) {
 	key1 := key{PolicyUID: types.NamespacedName{Name: "p1"}, BindingUID: types.NamespacedName{Name: "b1"}}
 	key2 := key{PolicyUID: types.NamespacedName{Name: "p2"}, BindingUID: types.NamespacedName{Name: "b2"}}
@@ -112,6 +117,7 @@ func TestPartialReinvocation(t *testing.T) {
 	assert.False(t, rc.ShouldReinvoke(key3))
 }
 
+// TestNoReinvocation 验证所有策略输出都未改变时不触发任何重调用。
 func TestNoReinvocation(t *testing.T) {
 	key1 := key{PolicyUID: types.NamespacedName{Name: "p1"}, BindingUID: types.NamespacedName{Name: "b1"}}
 	key2 := key{PolicyUID: types.NamespacedName{Name: "p2"}, BindingUID: types.NamespacedName{Name: "b2"}}

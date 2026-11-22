@@ -23,4 +23,6 @@ limitations under the License.
 
 // +groupName=example2.apiserver.k8s.io
 
+// Package v1 是 example2 API 组的 v1 版本，仅用于测试与示例，
+// 用来演练跨版本（v1 与 example/v1）的转换与多组同名类型的处理。
 package v1

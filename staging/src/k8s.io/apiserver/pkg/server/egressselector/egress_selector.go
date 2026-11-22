@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package egressselector 根据 EgressSelectorConfiguration 为不同网络上下文
+// （controlplane/etcd/cluster）选择出站拨号方式：直连、HTTP CONNECT 代理或
+// konnectivity gRPC 隧道。
 package egressselector
 
 import (
@@ -45,11 +48,15 @@ import (
 
 var directDialer utilnet.DialFunc = http.DefaultTransport.(*http.Transport).DialContext
 
+// init 把 konnectivity 客户端指标注册到 apiserver 的 registry，
+// 使隧道连接质量可以在同一 /metrics 端点观察。
 func init() {
 	client.Metrics.RegisterMetrics(legacyregistry.Registerer())
 }
 
 // EgressSelector is the map of network context type to context dialer, for network egress.
+//
+// 中文说明：构造后只读，因此可被多个组件并发 Lookup；缺失的上下文回退到直连。
 type EgressSelector struct {
 	egressToDialer map[EgressType]utilnet.DialFunc
 }
@@ -60,6 +67,7 @@ type EgressType int
 
 const (
 	// ControlPlane is the EgressType for traffic intended to go to the control plane.
+	// 中文说明：apiserver 访问 kubelet/其他控制面组件时使用。
 	ControlPlane EgressType = iota
 	// Etcd is the EgressType for traffic intended to go to Kubernetes persistence store.
 	Etcd
@@ -97,6 +105,9 @@ func (s EgressType) AsNetworkContext() NetworkContext {
 	return NetworkContext{EgressSelectionName: s}
 }
 
+// lookupServiceName 把配置文件中的名字解析为 EgressType。
+//
+// 中文说明：大小写不敏感，但未知名字必须报错——静默回退会隐藏配置拼写错误。
 func lookupServiceName(name string) (EgressType, error) {
 	switch strings.ToLower(name) {
 	case "controlplane":
@@ -109,6 +120,10 @@ func lookupServiceName(name string) (EgressType, error) {
 	return -1, fmt.Errorf("unrecognized service name %s", name)
 }
 
+// tunnelHTTPConnect 通过已有代理连接执行 HTTP CONNECT 隧道握手。
+//
+// 中文说明：限制响应头大小以防恶意代理撑爆内存；握手成功后不能有残留缓冲
+// 数据，否则后续 TLS 字节流会错位。
 func tunnelHTTPConnect(proxyConn net.Conn, proxyAddress, addr string) (net.Conn, error) {
 	fmt.Fprintf(proxyConn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", addr, "127.0.0.1")
 
@@ -150,6 +165,9 @@ type proxier interface {
 
 var _ proxier = &httpConnectProxier{}
 
+// httpConnectProxier 复用一条代理连接，每次 proxy 都发起新的 CONNECT。
+//
+// 中文说明：调用方需自行保证 conn 的生命周期，proxier 不负责关闭底层连接。
 type httpConnectProxier struct {
 	conn         net.Conn
 	proxyAddress string
@@ -161,6 +179,7 @@ func (t *httpConnectProxier) proxy(ctx context.Context, addr string) (net.Conn, 
 
 var _ proxier = &grpcProxier{}
 
+// grpcProxier 通过 konnectivity 隧道拨号；隧道由客户端库管理重连。
 type grpcProxier struct {
 	tunnel client.Tunnel
 }
@@ -179,6 +198,7 @@ type proxyServerConnector interface {
 	connect(context.Context) (proxier, error)
 }
 
+// tcpHTTPConnectConnector 通过 TCP+TLS 连接 HTTP CONNECT 代理。
 type tcpHTTPConnectConnector struct {
 	proxyAddress string
 	tlsConfig    *tls.Config
@@ -195,6 +215,8 @@ func (t *tcpHTTPConnectConnector) connect(ctx context.Context) (proxier, error) 
 	return &httpConnectProxier{conn: conn, proxyAddress: t.proxyAddress}, nil
 }
 
+// udsHTTPConnectConnector 通过 Unix domain socket 连接本机 CONNECT 代理，
+// 常见于代理与应用同 Pod 部署的场景。
 type udsHTTPConnectConnector struct {
 	udsName string
 }
@@ -208,6 +230,7 @@ func (u *udsHTTPConnectConnector) connect(ctx context.Context) (proxier, error) 
 	return &httpConnectProxier{conn: conn, proxyAddress: u.udsName}, nil
 }
 
+// udsGRPCConnector 通过 Unix domain socket 与 konnectivity server 建立 gRPC 隧道。
 type udsGRPCConnector struct {
 	udsName string
 }
@@ -240,17 +263,23 @@ func (u *udsGRPCConnector) connect(_ context.Context) (proxier, error) {
 	return &grpcProxier{tunnel: tunnel}, nil
 }
 
+// dialerCreator 组合连接器与指标标签，生成最终的拨号函数。
 type dialerCreator struct {
 	connector proxyServerConnector
 	direct    bool
 	options   metricsOptions
 }
 
+// metricsOptions 是拨号指标的两个低基数标签：传输方式与协议。
 type metricsOptions struct {
 	transport string
 	protocol  string
 }
 
+// createDialer 返回直连拨号器或带指标的代理拨号器。
+//
+// 中文说明：失败指标区分 connect 与 proxy 两个阶段，便于判断是代理不可达
+// 还是目标地址不可达。
 func (d *dialerCreator) createDialer() utilnet.DialFunc {
 	if d.direct {
 		return directDialer
@@ -275,6 +304,10 @@ func (d *dialerCreator) createDialer() utilnet.DialFunc {
 	}
 }
 
+// getTLSConfig 从配置构造客户端 TLS 配置。
+//
+// 中文说明：未提供 CA 时使用系统根证书（certPool=nil），便于在托管环境中
+// 复用主机信任链；提供 CA 则只信任该 CA，收紧信任范围。
 func getTLSConfig(t *apiserver.TLSConfig) (*tls.Config, error) {
 	clientCert := t.ClientCert
 	clientKey := t.ClientKey
@@ -304,6 +337,7 @@ func getTLSConfig(t *apiserver.TLSConfig) (*tls.Config, error) {
 	}, nil
 }
 
+// getProxyAddress 从 URL 中提取 host:port，忽略 scheme 与路径。
 func getProxyAddress(urlString string) (string, error) {
 	proxyURL, err := url.Parse(urlString)
 	if err != nil {
@@ -312,6 +346,9 @@ func getProxyAddress(urlString string) (string, error) {
 	return proxyURL.Host, nil
 }
 
+// connectionToDialerCreator 把配置中的连接方式映射为具体连接器。
+//
+// 中文说明：gRPC 仅支持 UDS 是当前实现限制，返回明确错误而非静默回退。
 func connectionToDialerCreator(c apiserver.Connection) (*dialerCreator, error) {
 	switch c.ProxyProtocol {
 
@@ -371,6 +408,9 @@ func connectionToDialerCreator(c apiserver.Connection) (*dialerCreator, error) {
 
 // NewEgressSelector configures lookup mechanism for Lookup.
 // It does so based on a EgressSelectorConfiguration which was read at startup.
+//
+// 中文说明：返回 (nil, nil) 表示未配置，调用方应把 nil Lookup 视为"全部直连"；
+// 任一选择项配置错误都会让整个构造失败，避免部分流量走错路径。
 func NewEgressSelector(config *apiserver.EgressSelectorConfiguration) (*EgressSelector, error) {
 	if config == nil || config.EgressSelections == nil {
 		// No Connection Services configured, leaving the serviceMap empty, will return default dialer.
@@ -394,6 +434,8 @@ func NewEgressSelector(config *apiserver.EgressSelectorConfiguration) (*EgressSe
 }
 
 // NewEgressSelectorWithMap returns a EgressSelector with the supplied EgressType to DialFunc map.
+//
+// 中文说明：主要用于测试或已有自定义拨号器的高级场景；nil map 会被规范化为空 map。
 func NewEgressSelectorWithMap(m map[EgressType]utilnet.DialFunc) *EgressSelector {
 	if m == nil {
 		m = make(map[EgressType]utilnet.DialFunc)
@@ -405,6 +447,9 @@ func NewEgressSelectorWithMap(m map[EgressType]utilnet.DialFunc) *EgressSelector
 
 // Lookup gets the dialer function for the network context.
 // This is configured for the Kubernetes API Server at startup.
+//
+// 中文说明：返回 nil 拨号器是合法结果，表示使用默认网络栈；未在配置中出现的
+// 上下文也按直连处理，而不是报错。
 func (cs *EgressSelector) Lookup(networkContext NetworkContext) (utilnet.DialFunc, error) {
 	if cs.egressToDialer == nil {
 		// The round trip wrapper will over-ride the dialContext method appropriately

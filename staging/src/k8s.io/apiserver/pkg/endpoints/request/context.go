@@ -24,6 +24,9 @@ import (
 )
 
 // The key type is unexported to prevent collisions
+//
+// 中文说明：用未导出的 key 类型避免与其他包的 context key 冲突；这是 Go context
+// 的推荐做法，不要改成字符串常量。
 type key int
 
 const (
@@ -35,6 +38,8 @@ const (
 )
 
 // NewContext instantiates a base context object for request flows.
+// 中文说明：这里用 context.TODO() 而不是 Background()，表示该 context 尚未绑定
+// 具体请求；过滤器链路随后会用真实请求的 context 替换它。
 func NewContext() context.Context {
 	return context.TODO()
 }
@@ -55,6 +60,8 @@ func WithNamespace(parent context.Context, namespace string) context.Context {
 }
 
 // NamespaceFrom returns the value of the namespace key on the ctx
+// 中文说明：第二个返回值区分“显式设置为空”与“从未设置”，调用方据此决定
+// 是否回退到默认值。
 func NamespaceFrom(ctx context.Context) (string, bool) {
 	namespace, ok := ctx.Value(namespaceKey).(string)
 	return namespace, ok

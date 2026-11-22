@@ -24,164 +24,155 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AdmissionConfiguration provides versioned configuration for admission controllers.
+// AdmissionConfiguration 是准入控制器的版本化配置。
+// 通过 --admission-control-config-file 加载后会被转换到内部版本。
 type AdmissionConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Plugins allows specifying a configuration per admission control plugin.
+	// Plugins 允许为每个准入插件单独指定配置。
 	// +optional
 	Plugins []AdmissionPluginConfiguration `json:"plugins"`
 }
 
-// AdmissionPluginConfiguration provides the configuration for a single plug-in.
+// AdmissionPluginConfiguration 是单个插件的配置。
 type AdmissionPluginConfiguration struct {
-	// Name is the name of the admission controller.
-	// It must match the registered admission plugin name.
+	// Name 是准入控制器的名称，必须与已注册的插件名一致。
 	Name string `json:"name"`
 
-	// Path is the path to a configuration file that contains the plugin's
-	// configuration
+	// Path 指向包含插件配置的文件。
 	// +optional
 	Path string `json:"path"`
 
-	// Configuration is an embedded configuration object to be used as the plugin's
-	// configuration. If present, it will be used instead of the path to the configuration file.
+	// Configuration 是内嵌的插件配置对象；若存在则优先于 Path 使用。
+	// 使用 runtime.Unknown 延迟解码，使不同插件可以各自定义配置类型。
 	// +optional
 	Configuration *runtime.Unknown `json:"configuration"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EgressSelectorConfiguration provides versioned configuration for egress selector clients.
+// EgressSelectorConfiguration 是 egress selector 客户端的版本化配置。
 type EgressSelectorConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// connectionServices contains a list of egress selection client configurations
+	// EgressSelections 是各 egress 客户端配置的列表
 	EgressSelections []EgressSelection `json:"egressSelections"`
 }
 
-// EgressSelection provides the configuration for a single egress selection client.
+// EgressSelection 是单个 egress 客户端配置。
 type EgressSelection struct {
-	// name is the name of the egress selection.
-	// Currently supported values are "controlplane", "master", "etcd" and "cluster"
-	// The "master" egress selector is deprecated in favor of "controlplane"
+	// Name 是 egress 选择的名称。
+	// 目前支持 "controlplane"、"master"、"etcd" 和 "cluster"。
+	// "master" 已弃用，应改用 "controlplane"。
 	Name string `json:"name"`
 
-	// connection is the exact information used to configure the egress selection
+	// Connection 是配置该 egress 选择所需的具体信息
 	Connection Connection `json:"connection"`
 }
 
-// Connection provides the configuration for a single egress selection client.
+// Connection 是单个 egress 客户端的连接配置。
 type Connection struct {
-	// Protocol is the protocol used to connect from client to the konnectivity server.
+	// ProxyProtocol 是从客户端连接到 konnectivity server 所用的协议。
 	ProxyProtocol ProtocolType `json:"proxyProtocol,omitempty"`
 
-	// Transport defines the transport configurations we use to dial to the konnectivity server.
-	// This is required if ProxyProtocol is HTTPConnect or GRPC.
+	// Transport 定义拨号到 konnectivity server 的传输配置。
+	// ProxyProtocol 为 HTTPConnect 或 GRPC 时必填。
 	// +optional
 	Transport *Transport `json:"transport,omitempty"`
 }
 
-// ProtocolType is a set of valid values for Connection.ProtocolType
+// ProtocolType 是 Connection.ProxyProtocol 的合法取值集合。
 type ProtocolType string
 
-// Valid types for ProtocolType for konnectivity server
+// konnectivity server 的 ProtocolType 合法取值
 const (
-	// Use HTTPConnect to connect to konnectivity server
+	// 使用 HTTPConnect 连接 konnectivity server
 	ProtocolHTTPConnect ProtocolType = "HTTPConnect"
-	// Use grpc to connect to konnectivity server
+	// 使用 grpc 连接 konnectivity server
 	ProtocolGRPC ProtocolType = "GRPC"
-	// Connect directly (skip konnectivity server)
+	// 直连（跳过 konnectivity server）
 	ProtocolDirect ProtocolType = "Direct"
 )
 
-// Transport defines the transport configurations we use to dial to the konnectivity server
+// Transport 定义拨号到 konnectivity server 的传输配置。
 type Transport struct {
-	// TCP is the TCP configuration for communicating with the konnectivity server via TCP
-	// ProxyProtocol of GRPC is not supported with TCP transport at the moment
-	// Requires at least one of TCP or UDS to be set
+	// TCP 是通过 TCP 与 konnectivity server 通信的配置。
+	// 目前 TCP transport 不支持 GRPC 的 ProxyProtocol。
+	// TCP 与 UDS 至少需设置一个。
 	// +optional
 	TCP *TCPTransport `json:"tcp,omitempty"`
 
-	// UDS is the UDS configuration for communicating with the konnectivity server via UDS
-	// Requires at least one of TCP or UDS to be set
+	// UDS 是通过 UDS 与 konnectivity server 通信的配置。
+	// TCP 与 UDS 至少需设置一个。
 	// +optional
 	UDS *UDSTransport `json:"uds,omitempty"`
 }
 
-// TCPTransport provides the information to connect to konnectivity server via TCP
+// TCPTransport 提供通过 TCP 连接 konnectivity server 的信息。
 type TCPTransport struct {
-	// URL is the location of the konnectivity server to connect to.
-	// As an example it might be "https://127.0.0.1:8131"
+	// URL 是 konnectivity server 的地址，例如 "https://127.0.0.1:8131"
 	URL string `json:"url,omitempty"`
 
-	// TLSConfig is the config needed to use TLS when connecting to konnectivity server
+	// TLSConfig 是连接 konnectivity server 时使用 TLS 所需的配置
 	// +optional
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
 }
 
-// UDSTransport provides the information to connect to konnectivity server via UDS
+// UDSTransport 提供通过 UDS 连接 konnectivity server 的信息。
 type UDSTransport struct {
-	// UDSName is the name of the unix domain socket to connect to konnectivity server
-	// This does not use a unix:// prefix. (Eg: /etc/srv/kubernetes/konnectivity-server/konnectivity-server.socket)
+	// UDSName 是连接 konnectivity server 的 unix domain socket 名称。
+	// 不带 unix:// 前缀（例如 /etc/srv/kubernetes/konnectivity-server/konnectivity-server.socket）
 	UDSName string `json:"udsName,omitempty"`
 }
 
-// TLSConfig provides the authentication information to connect to konnectivity server
-// Only used with TCPTransport
+// TLSConfig 是连接 konnectivity server 的认证信息，仅用于 TCPTransport。
 type TLSConfig struct {
-	// caBundle is the file location of the CA to be used to determine trust with the konnectivity server.
-	// Must be absent/empty if TCPTransport.URL is prefixed with http://
-	// If absent while TCPTransport.URL is prefixed with https://, default to system trust roots.
+	// CABundle 是用于确定对 konnectivity server 信任的 CA 文件路径。
+	// TCPTransport.URL 以 http:// 开头时必须为空。
+	// URL 以 https:// 开头且未设置时，使用系统信任根。
 	// +optional
 	CABundle string `json:"caBundle,omitempty"`
 
-	// clientKey is the file location of the client key to be used in mtls handshakes with the konnectivity server.
-	// Must be absent/empty if TCPTransport.URL is prefixed with http://
-	// Must be configured if TCPTransport.URL is prefixed with https://
+	// ClientKey 是与 konnectivity server 进行 mTLS 握手时客户端私钥的文件路径。
+	// URL 以 http:// 开头时必须为空；以 https:// 开头时必须配置。
 	// +optional
 	ClientKey string `json:"clientKey,omitempty"`
 
-	// clientCert is the file location of the client certificate to be used in mtls handshakes with the konnectivity server.
-	// Must be absent/empty if TCPTransport.URL is prefixed with http://
-	// Must be configured if TCPTransport.URL is prefixed with https://
+	// ClientCert 是与 konnectivity server 进行 mTLS 握手时客户端证书的文件路径。
+	// URL 以 http:// 开头时必须为空；以 https:// 开头时必须配置。
 	// +optional
 	ClientCert string `json:"clientCert,omitempty"`
 
-	// tlsServerName is used to check server certificate. If tlsServerName is empty, the hostname used to contact the server is used.
+	// TLSServerName 用于校验服务端证书；为空时使用连接时使用的 hostname。
 	// +optional
 	TLSServerName string `json:"tlsServerName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TracingConfiguration provides versioned configuration for tracing clients.
+// TracingConfiguration 是 tracing 客户端的版本化配置。
 type TracingConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Embed the component config tracing configuration struct
+	// 嵌入 component-base 的 tracing 配置结构体
 	tracingapi.TracingConfiguration `json:""`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AuthenticationConfiguration provides versioned configuration for authentication.
+// AuthenticationConfiguration 是认证的版本化配置。
 type AuthenticationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// jwt is a list of authenticator to authenticate Kubernetes users using
-	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,
-	// verify it's been signed by the configured issuer. The public key to verify the
-	// signature is discovered from the issuer's public endpoint using OIDC discovery.
-	// For an incoming token, each JWT authenticator will be attempted in
-	// the order in which it is specified in this list.  Note however that
-	// other authenticators may run before or after the JWT authenticators.
-	// The specific position of JWT authenticators in relation to other
-	// authenticators is neither defined nor stable across releases.  Since
-	// each JWT authenticator must have a unique issuer URL, at most one
-	// JWT authenticator will attempt to cryptographically validate the token.
+	// JWT 是使用 JWT 兼容令牌认证 Kubernetes 用户的认证器列表。
+	// 认证器会解析原始 ID token，并验证其由配置的 issuer 签名；
+	// 验签公钥通过 OIDC discovery 从 issuer 的公开端点获取。
+	// 对于传入的 token，各 JWT 认证器按本列表顺序尝试。但其他认证器
+	// 可能在 JWT 认证器之前或之后运行，其相对位置既不保证也不稳定。
+	// 由于每个 JWT 认证器必须有唯一的 issuer URL，最多只有一个
+	// JWT 认证器会真正对 token 做密码学验证。
 	//
-	// The minimum valid JWT payload must contain the following claims:
+	// 合法的 JWT payload 至少需要包含以下 claims：
 	// {
 	//		"iss": "https://issuer.example.com",
 	//		"aud": ["audience"],
@@ -190,479 +181,462 @@ type AuthenticationConfiguration struct {
 	// }
 	JWT []JWTAuthenticator `json:"jwt"`
 
-	// If present --anonymous-auth must not be set
+	// 若设置，则 --anonymous-auth 不得同时开启
 	Anonymous *AnonymousAuthConfig `json:"anonymous,omitempty"`
 }
 
-// AnonymousAuthConfig provides the configuration for the anonymous authenticator.
+// AnonymousAuthConfig 是匿名认证器的配置。
 type AnonymousAuthConfig struct {
+	// Enabled 表示是否启用匿名认证。
 	Enabled bool `json:"enabled"`
 
-	// If set, anonymous auth is only allowed if the request meets one of the
-	// conditions.
+	// 若设置，匿名认证仅在请求满足其中一个条件时允许。
 	Conditions []AnonymousAuthCondition `json:"conditions,omitempty"`
 }
 
-// AnonymousAuthCondition describes the condition under which anonymous auth
-// should be enabled.
+// AnonymousAuthCondition 描述匿名认证应启用的条件。
 type AnonymousAuthCondition struct {
-	// Path for which anonymous auth is enabled.
+	// Path 是启用匿名认证的请求路径。
 	Path string `json:"path"`
 }
 
-// JWTAuthenticator provides the configuration for a single JWT authenticator.
+// JWTAuthenticator 是单个 JWT 认证器的配置。
 type JWTAuthenticator struct {
-	// issuer contains the basic OIDC provider connection options.
+	// Issuer 包含 OIDC provider 的基础连接选项。
 	// +required
 	Issuer Issuer `json:"issuer"`
 
-	// claimValidationRules are rules that are applied to validate token claims to authenticate users.
+	// ClaimValidationRules 是用于校验 token claims 以认证用户的规则。
 	// +optional
 	ClaimValidationRules []ClaimValidationRule `json:"claimValidationRules,omitempty"`
 
-	// claimMappings points claims of a token to be treated as user attributes.
+	// ClaimMappings 把 token 的 claims 映射为用户属性。
 	// +required
 	ClaimMappings ClaimMappings `json:"claimMappings"`
 
-	// userValidationRules are rules that are applied to final user before completing authentication.
-	// These allow invariants to be applied to incoming identities such as preventing the
-	// use of the system: prefix that is commonly used by Kubernetes components.
-	// The validation rules are logically ANDed together and must all return true for the validation to pass.
+	// UserValidationRules 是在完成认证前对最终用户执行的规则。
+	// 可用于对传入身份施加不变量，例如禁止使用 Kubernetes 组件常用的
+	// system: 前缀。规则之间逻辑与，必须全部返回 true 才能通过校验。
 	// +optional
 	UserValidationRules []UserValidationRule `json:"userValidationRules,omitempty"`
 }
 
-// Issuer provides the configuration for an external provider's specific settings.
+// Issuer 是外部 provider 的特定设置。
 type Issuer struct {
-	// url points to the issuer URL in a format https://url or https://url/path.
-	// This must match the "iss" claim in the presented JWT, and the issuer returned from discovery.
-	// Same value as the --oidc-issuer-url flag.
-	// Discovery information is fetched from "{url}/.well-known/openid-configuration" unless overridden by discoveryURL.
-	// Required to be unique across all JWT authenticators.
-	// Note that egress selection configuration is not used for this network connection.
+	// URL 指向 issuer URL，格式为 https://url 或 https://url/path。
+	// 必须与所呈现 JWT 的 "iss" claim 以及 discovery 返回的 issuer 一致。
+	// 等价于 --oidc-issuer-url 参数。
+	// 除非被 discoveryURL 覆盖，否则从 "{url}/.well-known/openid-configuration" 获取 discovery 信息。
+	// 在所有 JWT 认证器中必须唯一。
+	// 注意：此网络连接不使用 egress selector 配置。
 	// +required
 	URL string `json:"url"`
 
-	// discoveryURL, if specified, overrides the URL used to fetch discovery
-	// information instead of using "{url}/.well-known/openid-configuration".
-	// The exact value specified is used, so "/.well-known/openid-configuration"
-	// must be included in discoveryURL if needed.
+	// DiscoveryURL 若指定，则覆盖用于获取 discovery 信息的 URL，
+	// 不再使用 "{url}/.well-known/openid-configuration"。
+	// 该值按原样使用，因此如有需要必须自行包含 "/.well-known/openid-configuration"。
 	//
-	// The "issuer" field in the fetched discovery information must match the "issuer.url" field
-	// in the AuthenticationConfiguration and will be used to validate the "iss" claim in the presented JWT.
-	// This is for scenarios where the well-known and jwks endpoints are hosted at a different
-	// location than the issuer (such as locally in the cluster).
+	// 获取到的 discovery 信息中的 "issuer" 字段必须与 AuthenticationConfiguration 中的
+	// "issuer.url" 一致，并用于校验所呈现 JWT 的 "iss" claim。
+	// 这适用于 well-known 与 jwks 端点托管在 issuer 之外（例如集群本地）的场景。
 	//
-	// Example:
-	// A discovery url that is exposed using kubernetes service 'oidc' in namespace 'oidc-namespace'
-	// and discovery information is available at '/.well-known/openid-configuration'.
+	// 示例：
+	// 通过命名空间 oidc-namespace 中的 kubernetes service 'oidc' 暴露 discovery，
+	// 且 discovery 信息位于 '/.well-known/openid-configuration'。
 	// discoveryURL: "https://oidc.oidc-namespace/.well-known/openid-configuration"
-	// certificateAuthority is used to verify the TLS connection and the hostname on the leaf certificate
-	// must be set to 'oidc.oidc-namespace'.
+	// certificateAuthority 用于校验 TLS 连接，叶子证书的 hostname 必须为 'oidc.oidc-namespace'。
 	//
 	// curl https://oidc.oidc-namespace/.well-known/openid-configuration (.discoveryURL field)
 	// {
 	//     issuer: "https://oidc.example.com" (.url field)
 	// }
 	//
-	// discoveryURL must be different from url.
-	// Required to be unique across all JWT authenticators.
-	// Note that egress selection configuration is not used for this network connection.
+	// discoveryURL 必须与 url 不同。
+	// 在所有 JWT 认证器中必须唯一。
+	// 注意：此网络连接不使用 egress selector 配置。
 	// +optional
 	DiscoveryURL *string `json:"discoveryURL,omitempty"`
 
-	// certificateAuthority contains PEM-encoded certificate authority certificates
-	// used to validate the connection when fetching discovery information.
-	// If unset, the system verifier is used.
-	// Same value as the content of the file referenced by the --oidc-ca-file flag.
+	// CertificateAuthority 包含 PEM 编码的 CA 证书，用于校验获取 discovery 信息时的连接。
+	// 未设置时使用系统验证器。
+	// 等价于 --oidc-ca-file 参数所引用文件的内容。
 	// +optional
 	CertificateAuthority string `json:"certificateAuthority,omitempty"`
 
-	// audiences is the set of acceptable audiences the JWT must be issued to.
-	// At least one of the entries must match the "aud" claim in presented JWTs.
-	// Same value as the --oidc-client-id flag (though this field supports an array).
-	// Required to be non-empty.
+	// Audiences 是 JWT 必须签发给的可接受受众集合。
+	// 至少有一个条目需与所呈现 JWT 的 "aud" claim 匹配。
+	// 等价于 --oidc-client-id 参数（但此字段支持数组）。
+	// 必须非空。
 	// +required
 	Audiences []string `json:"audiences"`
 
-	// audienceMatchPolicy defines how the "audiences" field is used to match the "aud" claim in the presented JWT.
-	// Allowed values are:
-	// 1. "MatchAny" when multiple audiences are specified and
-	// 2. empty (or unset) or "MatchAny" when a single audience is specified.
+	// AudienceMatchPolicy 定义如何用 "audiences" 字段匹配所呈现 JWT 的 "aud" claim。
+	// 允许的取值：
+	// 1. 指定多个 audiences 时为 "MatchAny"；
+	// 2. 指定单个 audience 时为空（或未设置）或 "MatchAny"。
 	//
-	// - MatchAny: the "aud" claim in the presented JWT must match at least one of the entries in the "audiences" field.
-	// For example, if "audiences" is ["foo", "bar"], the "aud" claim in the presented JWT must contain either "foo" or "bar" (and may contain both).
+	// - MatchAny：所呈现 JWT 的 "aud" claim 必须至少匹配 "audiences" 中的一个条目。
+	// 例如 "audiences" 为 ["foo", "bar"] 时，"aud" claim 必须包含 "foo" 或 "bar"（可同时包含）。
 	//
-	// - "": The match policy can be empty (or unset) when a single audience is specified in the "audiences" field. The "aud" claim in the presented JWT must contain the single audience (and may contain others).
+	// - ""：当 "audiences" 只指定一个受众时可为空（或未设置）。"aud" claim 必须包含该受众（可包含其他）。
 	//
-	// For more nuanced audience validation, use claimValidationRules.
-	//   example: claimValidationRule[].expression: 'sets.equivalent(claims.aud, ["bar", "foo", "baz"])' to require an exact match.
+	// 更精细的受众校验请使用 claimValidationRules。
+	//   例如：claimValidationRule[].expression: 'sets.equivalent(claims.aud, ["bar", "foo", "baz"])' 要求完全匹配。
 	// +optional
 	AudienceMatchPolicy AudienceMatchPolicyType `json:"audienceMatchPolicy,omitempty"`
 
-	// egressSelectorType is an indicator of which egress selection should be used for sending all traffic related
-	// to this issuer (discovery, JWKS, distributed claims, etc).  If unspecified, no custom dialer is used.
-	// When specified, the valid choices are "controlplane" and "cluster".  These correspond to the associated
-	// values in the --egress-selector-config-file.
+	// EgressSelectorType 指示与该 issuer 相关的所有流量（discovery、JWKS、distributed claims 等）
+	// 应使用哪个 egress selector。未指定时不使用自定义 dialer。
+	// 指定时合法取值为 "controlplane" 与 "cluster"，分别对应
+	// --egress-selector-config-file 中的同名配置。
 	//
-	// - controlplane: for traffic intended to go to the control plane.
+	// - controlplane：用于发往控制平面的流量。
 	//
-	// - cluster: for traffic intended to go to the system being managed by Kubernetes.
+	// - cluster：用于发往 Kubernetes 所管理系统的流量。
 	//
 	// +optional
 	EgressSelectorType EgressSelectorType `json:"egressSelectorType,omitempty"`
 }
 
-// AudienceMatchPolicyType is a set of valid values for issuer.audienceMatchPolicy
+// AudienceMatchPolicyType 是 issuer.audienceMatchPolicy 的合法取值集合。
 type AudienceMatchPolicyType string
 
-// Valid types for AudienceMatchPolicyType
+// AudienceMatchPolicyType 的合法取值
 const (
-	// MatchAny means the "aud" claim in the presented JWT must match at least one of the entries in the "audiences" field.
+	// MatchAny 表示所呈现 JWT 的 "aud" claim 必须至少匹配 "audiences" 中的一个条目。
 	AudienceMatchPolicyMatchAny AudienceMatchPolicyType = "MatchAny"
 )
 
-// EgressSelectorType is an indicator of which egress selection should be used for sending traffic.
+// EgressSelectorType 指示发送流量时应使用哪个 egress selector。
 type EgressSelectorType string
 
 const (
-	// EgressSelectorControlPlane is the EgressSelectorType for traffic intended to go to the control plane.
+	// EgressSelectorControlPlane 表示发往控制平面的流量。
 	EgressSelectorControlPlane EgressSelectorType = "controlplane"
 
-	// EgressSelectorCluster is the EgressSelectorType for traffic intended to go to the system being managed by Kubernetes.
+	// EgressSelectorCluster 表示发往 Kubernetes 所管理系统的流量。
 	EgressSelectorCluster EgressSelectorType = "cluster"
 )
 
-// ClaimValidationRule provides the configuration for a single claim validation rule.
+// ClaimValidationRule 是单条 claim 校验规则的配置。
 type ClaimValidationRule struct {
-	// claim is the name of a required claim.
-	// Same as --oidc-required-claim flag.
-	// Only string claim keys are supported.
-	// Mutually exclusive with expression and message.
+	// Claim 是必需 claim 的名称。
+	// 等价于 --oidc-required-claim 参数。
+	// 仅支持字符串类型的 claim key。
+	// 与 expression、message 互斥。
 	// +optional
 	Claim string `json:"claim,omitempty"`
-	// requiredValue is the value of a required claim.
-	// Same as --oidc-required-claim flag.
-	// Only string claim values are supported.
-	// If claim is set and requiredValue is not set, the claim must be present with a value set to the empty string.
-	// Mutually exclusive with expression and message.
+	// RequiredValue 是必需 claim 的取值。
+	// 等价于 --oidc-required-claim 参数。
+	// 仅支持字符串类型的 claim 值。
+	// 若设置了 claim 而未设置 requiredValue，则该 claim 必须存在且值为空字符串。
+	// 与 expression、message 互斥。
 	// +optional
 	RequiredValue string `json:"requiredValue,omitempty"`
 
-	// expression represents the expression which will be evaluated by CEL.
-	// Must produce a boolean.
+	// Expression 是交由 CEL 求值的表达式，必须返回布尔值。
 	//
-	// CEL expressions have access to the contents of the token claims, organized into CEL variable:
-	// - 'claims' is a map of claim names to claim values.
-	//   For example, a variable named 'sub' can be accessed as 'claims.sub'.
-	//   Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
-	// Must return true for the validation to pass.
+	// CEL 表达式可访问 token claims 的内容，组织为 CEL 变量：
+	// - 'claims' 是 claim 名称到 claim 值的映射。
+	//   例如名为 'sub' 的变量可通过 'claims.sub' 访问。
+	//   嵌套 claim 可用点号访问，例如 'claims.foo.bar'。
+	// 必须返回 true 才能通过校验。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
-	// Mutually exclusive with claim and requiredValue.
+	// 与 claim、requiredValue 互斥。
 	// +optional
 	Expression string `json:"expression,omitempty"`
-	// message customizes the returned error message when expression returns false.
-	// message is a literal string.
-	// Mutually exclusive with claim and requiredValue.
+	// Message 用于自定义 expression 返回 false 时的错误信息，必须是字面量字符串。
+	// 与 claim、requiredValue 互斥。
 	// +optional
 	Message string `json:"message,omitempty"`
 }
 
-// ClaimMappings provides the configuration for claim mapping
+// ClaimMappings 是 claim 映射的配置。
 type ClaimMappings struct {
-	// username represents an option for the username attribute.
-	// The claim's value must be a singular string.
-	// Same as the --oidc-username-claim and --oidc-username-prefix flags.
-	// If username.expression is set, the expression must produce a string value.
-	// If username.expression uses 'claims.email', then 'claims.email_verified' must be used in
-	// username.expression or extra[*].valueExpression or claimValidationRules[*].expression.
-	// An example claim validation rule expression that matches the validation automatically
-	// applied when username.claim is set to 'email' is 'claims.?email_verified.orValue(true) == true'. By explicitly comparing
-	// the value to true, we let type-checking see the result will be a boolean, and to make sure a non-boolean email_verified
-	// claim will be caught at runtime.
+	// Username 是 username 属性的配置选项。
+	// 该 claim 的值必须是单个字符串。
+	// 等价于 --oidc-username-claim 与 --oidc-username-prefix 参数。
+	// 若设置了 username.expression，表达式必须产生字符串值。
+	// 若 username.expression 使用 'claims.email'，则必须在
+	// username.expression 或 extra[*].valueExpression 或 claimValidationRules[*].expression 中使用 'claims.email_verified'。
+	// 一个与“username.claim 设为 'email' 时自动施加的校验”等价的 claim 校验规则表达式为
+	// 'claims.?email_verified.orValue(true) == true'。显式与 true 比较可让类型检查看到结果是布尔值，
+	// 并确保非布尔的 email_verified claim 会在运行时被捕获。
 	//
-	// In the flag based approach, the --oidc-username-claim and --oidc-username-prefix are optional. If --oidc-username-claim is not set,
-	// the default value is "sub". For the authentication config, there is no defaulting for claim or prefix. The claim and prefix must be set explicitly.
-	// For claim, if --oidc-username-claim was not set with legacy flag approach, configure username.claim="sub" in the authentication config.
-	// For prefix:
-	//     (1) --oidc-username-prefix="-", no prefix was added to the username. For the same behavior using authentication config,
-	//         set username.prefix=""
-	//     (2) --oidc-username-prefix="" and  --oidc-username-claim != "email", prefix was "<value of --oidc-issuer-url>#". For the same
-	//         behavior using authentication config, set username.prefix="<value of issuer.url>#"
-	//     (3) --oidc-username-prefix="<value>". For the same behavior using authentication config, set username.prefix="<value>"
+	// 在基于参数的方式中，--oidc-username-claim 与 --oidc-username-prefix 是可选的；
+	// 未设置 --oidc-username-claim 时默认值为 "sub"。在认证配置中没有默认值，
+	// claim 与前缀都必须显式设置。
+	// 若旧参数方式未设置 --oidc-username-claim，请在认证配置中设置 username.claim="sub"。
+	// 前缀：
+	//     (1) --oidc-username-prefix="-"，用户名不加前缀。认证配置中对应 username.prefix=""
+	//     (2) --oidc-username-prefix="" 且 --oidc-username-claim != "email"，前缀为 "<value of --oidc-issuer-url>#"。
+	//         认证配置中对应 username.prefix="<value of issuer.url>#"
+	//     (3) --oidc-username-prefix="<value>"。认证配置中对应 username.prefix="<value>"
 	// +required
 	Username PrefixedClaimOrExpression `json:"username"`
-	// groups represents an option for the groups attribute.
-	// The claim's value must be a string or string array claim.
-	// If groups.claim is set, the prefix must be specified (and can be the empty string).
-	// If groups.expression is set, the expression must produce a string or string array value.
-	//  "", [], and null values are treated as the group mapping not being present.
+	// Groups 是 groups 属性的配置选项。
+	// 该 claim 的值必须是字符串或字符串数组。
+	// 若设置了 groups.claim，则必须指定前缀（可为空字符串）。
+	// 若设置了 groups.expression，表达式必须产生字符串或字符串数组。
+	// "", [] 和 null 视为未提供 group 映射。
 	// +optional
 	Groups PrefixedClaimOrExpression `json:"groups,omitempty"`
 
-	// uid represents an option for the uid attribute.
-	// Claim must be a singular string claim.
-	// If uid.expression is set, the expression must produce a string value.
+	// UID 是 uid 属性的配置选项。
+	// claim 必须是单个字符串 claim。
+	// 若设置了 uid.expression，表达式必须产生字符串值。
 	// +optional
 	UID ClaimOrExpression `json:"uid"`
 
-	// extra represents an option for the extra attribute.
-	// expression must produce a string or string array value.
-	// If the value is empty, the extra mapping will not be present.
+	// Extra 是 extra 属性的配置选项。
+	// expression 必须产生字符串或字符串数组。
+	// 若值为空，则不添加该 extra 映射。
 	//
-	// hard-coded extra key/value
+	// 硬编码 key/value
 	// - key: "foo"
 	//   valueExpression: "'bar'"
-	// This will result in an extra attribute - foo: ["bar"]
+	// 结果为 extra 属性 - foo: ["bar"]
 	//
-	// hard-coded key, value copying claim value
+	// 硬编码 key，value 复制 claim 值
 	// - key: "foo"
 	//   valueExpression: "claims.some_claim"
-	// This will result in an extra attribute - foo: [value of some_claim]
+	// 结果为 extra 属性 - foo: [value of some_claim]
 	//
-	// hard-coded key, value derived from claim value
+	// 硬编码 key，value 由 claim 值推导
 	// - key: "admin"
 	//   valueExpression: '(has(claims.is_admin) && claims.is_admin) ? "true":""'
-	// This will result in:
-	//  - if is_admin claim is present and true, extra attribute - admin: ["true"]
-	//  - if is_admin claim is present and false or is_admin claim is not present, no extra attribute will be added
+	// 结果为：
+	//  - 若 is_admin claim 存在且为 true，extra 属性 - admin: ["true"]
+	//  - 若 is_admin claim 存在但为 false，或不存在，则不添加 extra 属性
 	//
 	// +optional
 	Extra []ExtraMapping `json:"extra,omitempty"`
 }
 
-// PrefixedClaimOrExpression provides the configuration for a single prefixed claim or expression.
+// PrefixedClaimOrExpression 是单个带前缀的 claim 或表达式的配置。
 type PrefixedClaimOrExpression struct {
-	// claim is the JWT claim to use.
-	// Mutually exclusive with expression.
+	// Claim 是要使用的 JWT claim。
+	// 与 expression 互斥。
 	// +optional
 	Claim string `json:"claim,omitempty"`
-	// prefix is prepended to claim's value to prevent clashes with existing names.
-	// prefix needs to be set if claim is set and can be the empty string.
-	// Mutually exclusive with expression.
+	// Prefix 会加在 claim 值之前，避免与已有名称冲突。
+	// 若设置了 claim 则必须设置 prefix，且可为空字符串。
+	// 与 expression 互斥。
 	// +optional
 	Prefix *string `json:"prefix,omitempty"`
 
-	// expression represents the expression which will be evaluated by CEL.
+	// Expression 是交由 CEL 求值的表达式。
 	//
-	// CEL expressions have access to the contents of the token claims, organized into CEL variable:
-	// - 'claims' is a map of claim names to claim values.
-	//   For example, a variable named 'sub' can be accessed as 'claims.sub'.
-	//   Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+	// CEL 表达式可访问 token claims 的内容，组织为 CEL 变量：
+	// - 'claims' 是 claim 名称到 claim 值的映射。
+	//   例如名为 'sub' 的变量可通过 'claims.sub' 访问。
+	//   嵌套 claim 可用点号访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
-	// Mutually exclusive with claim and prefix.
+	// 与 claim、prefix 互斥。
 	// +optional
 	Expression string `json:"expression,omitempty"`
 }
 
-// ClaimOrExpression provides the configuration for a single claim or expression.
+// ClaimOrExpression 是单个 claim 或表达式的配置。
 type ClaimOrExpression struct {
-	// claim is the JWT claim to use.
-	// Either claim or expression must be set.
-	// Mutually exclusive with expression.
+	// Claim 是要使用的 JWT claim。
+	// claim 与 expression 必须设置其中一个。
+	// 与 expression 互斥。
 	// +optional
 	Claim string `json:"claim,omitempty"`
 
-	// expression represents the expression which will be evaluated by CEL.
+	// Expression 是交由 CEL 求值的表达式。
 	//
-	// CEL expressions have access to the contents of the token claims, organized into CEL variable:
-	// - 'claims' is a map of claim names to claim values.
-	//   For example, a variable named 'sub' can be accessed as 'claims.sub'.
-	//   Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+	// CEL 表达式可访问 token claims 的内容，组织为 CEL 变量：
+	// - 'claims' 是 claim 名称到 claim 值的映射。
+	//   例如名为 'sub' 的变量可通过 'claims.sub' 访问。
+	//   嵌套 claim 可用点号访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
-	// Mutually exclusive with claim.
+	// 与 claim 互斥。
 	// +optional
 	Expression string `json:"expression,omitempty"`
 }
 
-// ExtraMapping provides the configuration for a single extra mapping.
+// ExtraMapping 是单条 extra 映射的配置。
 type ExtraMapping struct {
-	// key is a string to use as the extra attribute key.
-	// key must be a domain-prefix path (e.g. example.org/foo). All characters before the first "/" must be a valid
-	// subdomain as defined by RFC 1123. All characters trailing the first "/" must
-	// be valid HTTP Path characters as defined by RFC 3986.
-	// key must be lowercase.
-	// Required to be unique.
+	// Key 是用作 extra 属性 key 的字符串。
+	// 必须是 domain-prefix 路径（如 example.org/foo）。第一个 "/" 之前的字符必须是符合
+	// RFC 1123 的合法子域名，之后必须是符合 RFC 3986 的合法 HTTP Path 字符。
+	// 必须小写。
+	// 必须唯一。
 	// +required
 	Key string `json:"key"`
 
-	// valueExpression is a CEL expression to extract extra attribute value.
-	// valueExpression must produce a string or string array value.
-	// "", [], and null values are treated as the extra mapping not being present.
-	// Empty string values contained within a string array are filtered out.
+	// ValueExpression 是提取 extra 属性值的 CEL 表达式。
+	// 必须产生字符串或字符串数组。
+	// "", [] 和 null 视为不添加该 extra 映射。
+	// 字符串数组中的空字符串元素会被过滤。
 	//
-	// CEL expressions have access to the contents of the token claims, organized into CEL variable:
-	// - 'claims' is a map of claim names to claim values.
-	//   For example, a variable named 'sub' can be accessed as 'claims.sub'.
-	//   Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+	// CEL 表达式可访问 token claims 的内容，组织为 CEL 变量：
+	// - 'claims' 是 claim 名称到 claim 值的映射。
+	//   例如名为 'sub' 的变量可通过 'claims.sub' 访问。
+	//   嵌套 claim 可用点号访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// +required
 	ValueExpression string `json:"valueExpression"`
 }
 
-// UserValidationRule provides the configuration for a single user info validation rule.
+// UserValidationRule 是单条用户信息校验规则的配置。
 type UserValidationRule struct {
-	// expression represents the expression which will be evaluated by CEL.
-	// Must return true for the validation to pass.
+	// Expression 是交由 CEL 求值的表达式，必须返回 true 才能通过校验。
 	//
-	// CEL expressions have access to the contents of UserInfo, organized into CEL variable:
-	// - 'user' - authentication.k8s.io/v1, Kind=UserInfo object
-	//    Refer to https://github.com/kubernetes/api/blob/release-1.28/authentication/v1/types.go#L105-L122 for the definition.
-	//    API documentation: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#userinfo-v1-authentication-k8s-io
+	// CEL 表达式可访问 UserInfo 的内容，组织为 CEL 变量：
+	// - 'user' - authentication.k8s.io/v1, Kind=UserInfo 对象
+	//    定义参见 https://github.com/kubernetes/api/blob/release-1.28/authentication/v1/types.go#L105-L122
+	//    API 文档：https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#userinfo-v1-authentication-k8s-io
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// +required
 	Expression string `json:"expression"`
 
-	// message customizes the returned error message when rule returns false.
-	// message is a literal string.
+	// Message 用于自定义规则返回 false 时的错误信息，必须是字面量字符串。
 	// +optional
 	Message string `json:"message,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// AuthorizationConfiguration 是授权的版本化配置。
 type AuthorizationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Authorizers is an ordered list of authorizers to
-	// authorize requests against.
-	// This is similar to the --authorization-modes kube-apiserver flag
-	// Must be at least one.
+	// Authorizers 是按顺序尝试的授权器列表，请求依次与每个授权器比对。
+	// 类似 --authorization-modes kube-apiserver 参数。
+	// 至少需要一个。
 	Authorizers []AuthorizerConfiguration `json:"authorizers"`
 }
 
 const (
-	TypeWebhook                                          AuthorizerType = "Webhook"
-	FailurePolicyNoOpinion                               string         = "NoOpinion"
-	FailurePolicyDeny                                    string         = "Deny"
-	AuthorizationWebhookConnectionInfoTypeKubeConfigFile string         = "KubeConfigFile"
-	AuthorizationWebhookConnectionInfoTypeInCluster      string         = "InClusterConfig"
+	// TypeWebhook 是通用 apiserver 支持的授权器类型。
+	TypeWebhook AuthorizerType = "Webhook"
+	// FailurePolicyNoOpinion 表示 webhook 失败时继续咨询后续授权器。
+	FailurePolicyNoOpinion string = "NoOpinion"
+	// FailurePolicyDeny 表示 webhook 失败时直接拒绝请求。
+	FailurePolicyDeny string = "Deny"
+	// AuthorizationWebhookConnectionInfoTypeKubeConfigFile 表示使用 kubeconfig 文件连接 webhook。
+	AuthorizationWebhookConnectionInfoTypeKubeConfigFile string = "KubeConfigFile"
+	// AuthorizationWebhookConnectionInfoTypeInCluster 表示使用集群内配置连接 webhook。
+	AuthorizationWebhookConnectionInfoTypeInCluster string = "InClusterConfig"
 )
 
+// AuthorizerType 是授权器的类型。
 type AuthorizerType string
 
+// AuthorizerConfiguration 是单个授权器的配置。
 type AuthorizerConfiguration struct {
-	// Type refers to the type of the authorizer
-	// "Webhook" is supported in the generic API server
-	// Other API servers may support additional authorizer
-	// types like Node, RBAC, ABAC, etc.
+	// Type 是授权器类型。
+	// 通用 apiserver 支持 "Webhook"。
+	// 其他 apiserver 可能支持 Node、RBAC、ABAC 等额外类型。
 	Type string `json:"type"`
 
-	// Name used to describe the webhook
-	// This is explicitly used in monitoring machinery for metrics
-	// Note: Names must be DNS1123 labels like `myauthorizername` or
-	//		 subdomains like `myauthorizer.example.domain`
-	// Required, with no default
+	// Name 用于描述该 webhook，会显式出现在监控指标中。
+	// 注意：必须是 DNS1123 label（如 `myauthorizername`）或
+	//		 子域名（如 `myauthorizer.example.domain`）。
+	// 必填，无默认值。
 	Name string `json:"name"`
 
-	// Webhook defines the configuration for a Webhook authorizer
-	// Must be defined when Type=Webhook
-	// Must not be defined when Type!=Webhook
+	// Webhook 定义 Webhook 授权器的配置。
+	// Type=Webhook 时必须设置；Type!=Webhook 时不得设置。
 	Webhook *WebhookConfiguration `json:"webhook,omitempty"`
 }
 
+// WebhookConfiguration 是 Webhook 授权器的配置。
 type WebhookConfiguration struct {
-	// The duration to cache 'authorized' responses from the webhook
-	// authorizer.
-	// Same as setting `--authorization-webhook-cache-authorized-ttl` flag
-	// Default: 5m0s
+	// 缓存 webhook 授权器返回的 'authorized' 响应的时长。
+	// 等价于设置 `--authorization-webhook-cache-authorized-ttl` 参数。
+	// 默认：5m0s
 	AuthorizedTTL metav1.Duration `json:"authorizedTTL"`
-	// CacheAuthorizedRequests specifies whether authorized requests should be cached.
-	// If set to true, the TTL for cached decisions can be configured via the
-	// AuthorizedTTL field.
-	// Default: true
+	// CacheAuthorizedRequests 指定是否缓存已授权的请求。
+	// 设为 true 时可通过 AuthorizedTTL 配置缓存时长。
+	// 默认：true
 	// +optional
 	CacheAuthorizedRequests *bool `json:"cacheAuthorizedRequests,omitempty"`
-	// The duration to cache 'unauthorized' responses from the webhook
-	// authorizer.
-	// Same as setting `--authorization-webhook-cache-unauthorized-ttl` flag
-	// Default: 30s
+	// 缓存 webhook 授权器返回的 'unauthorized' 响应的时长。
+	// 等价于设置 `--authorization-webhook-cache-unauthorized-ttl` 参数。
+	// 默认：30s
 	UnauthorizedTTL metav1.Duration `json:"unauthorizedTTL"`
-	// CacheUnauthorizedRequests specifies whether unauthorized requests should be cached.
-	// If set to true, the TTL for cached decisions can be configured via the
-	// UnauthorizedTTL field.
-	// Default: true
+	// CacheUnauthorizedRequests 指定是否缓存未授权的请求。
+	// 设为 true 时可通过 UnauthorizedTTL 配置缓存时长。
+	// 默认：true
 	// +optional
 	CacheUnauthorizedRequests *bool `json:"cacheUnauthorizedRequests,omitempty"`
-	// Timeout for the webhook request
-	// Maximum allowed value is 30s.
-	// Required, no default value.
+	// webhook 请求超时。
+	// 最大允许 30s。
+	// 必填，无默认值。
 	Timeout metav1.Duration `json:"timeout"`
-	// The API version of the authorization.k8s.io SubjectAccessReview to
-	// send to and expect from the webhook.
-	// Same as setting `--authorization-webhook-version` flag
-	// Valid values: v1beta1, v1
-	// Required, no default value
+	// 发送给 webhook 并期望其返回的 authorization.k8s.io SubjectAccessReview 版本。
+	// 等价于设置 `--authorization-webhook-version` 参数。
+	// 合法值：v1beta1、v1
+	// 必填，无默认值
 	SubjectAccessReviewVersion string `json:"subjectAccessReviewVersion"`
-	// MatchConditionSubjectAccessReviewVersion specifies the SubjectAccessReview
-	// version the CEL expressions are evaluated against
-	// Valid values: v1
-	// Required, no default value
+	// MatchConditionSubjectAccessReviewVersion 指定 CEL 表达式求值时所用的 SubjectAccessReview 版本。
+	// 合法值：v1
+	// 必填，无默认值
 	MatchConditionSubjectAccessReviewVersion string `json:"matchConditionSubjectAccessReviewVersion"`
-	// Controls the authorization decision when a webhook request fails to
-	// complete or returns a malformed response or errors evaluating
-	// matchConditions.
-	// Valid values:
-	//   - NoOpinion: continue to subsequent authorizers to see if one of
-	//     them allows the request
-	//   - Deny: reject the request without consulting subsequent authorizers
-	// Required, with no default.
+	// 控制 webhook 请求失败、返回格式错误或 matchConditions 求值出错时的授权决定。
+	// 合法值：
+	//   - NoOpinion：继续咨询后续授权器，看是否有授权器允许该请求
+	//   - Deny：直接拒绝请求，不再咨询后续授权器
+	// 必填，无默认值。
 	FailurePolicy string `json:"failurePolicy"`
 
-	// ConnectionInfo defines how we talk to the webhook
+	// ConnectionInfo 定义如何与 webhook 通信
 	ConnectionInfo WebhookConnectionInfo `json:"connectionInfo"`
 
-	// matchConditions is a list of conditions that must be met for a request to be sent to this
-	// webhook. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// MatchConditions 是请求发往该 webhook 前必须满足的条件列表。
+	// 空列表匹配所有请求。最多允许 64 个条件。
 	//
-	// The exact matching logic is (in order):
-	//   1. If at least one matchCondition evaluates to FALSE, then the webhook is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, then the webhook is called.
-	//   3. If at least one matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Deny, then the webhook rejects the request
-	//      - If failurePolicy=NoOpinion, then the error is ignored and the webhook is skipped
+	// 具体匹配逻辑（按顺序）：
+	//   1. 若至少一个 matchCondition 求值为 FALSE，则跳过该 webhook。
+	//   2. 若所有 matchCondition 求值为 TRUE，则调用该 webhook。
+	//   3. 若至少一个 matchCondition 求值出错（但没有 FALSE）：
+	//      - failurePolicy=Deny 时，webhook 拒绝请求
+	//      - failurePolicy=NoOpinion 时，忽略错误并跳过该 webhook
 	MatchConditions []WebhookMatchCondition `json:"matchConditions"`
 }
 
+// WebhookConnectionInfo 定义与 webhook 通信的方式。
 type WebhookConnectionInfo struct {
-	// Controls how the webhook should communicate with the server.
-	// Valid values:
-	// - KubeConfigFile: use the file specified in kubeConfigFile to locate the
-	//   server.
-	// - InClusterConfig: use the in-cluster configuration to call the
-	//   SubjectAccessReview API hosted by kube-apiserver. This mode is not
-	//   allowed for kube-apiserver.
+	// 控制 webhook 与 server 的通信方式。
+	// 合法值：
+	// - KubeConfigFile：使用 kubeConfigFile 指定的文件定位 server。
+	// - InClusterConfig：使用集群内配置调用 kube-apiserver 托管的
+	//   SubjectAccessReview API。kube-apiserver 不允许使用此模式。
 	Type string `json:"type"`
 
-	// Path to KubeConfigFile for connection info
-	// Required, if connectionInfo.Type is KubeConfig
+	// KubeConfigFile 的路径
+	// connectionInfo.Type 为 KubeConfig 时必填
 	KubeConfigFile *string `json:"kubeConfigFile"`
 }
 
+// WebhookMatchCondition 是单条 webhook 匹配条件。
 type WebhookMatchCondition struct {
-	// expression represents the expression which will be evaluated by CEL. Must evaluate to bool.
-	// CEL expressions have access to the contents of the SubjectAccessReview in v1 version.
-	// If version specified by subjectAccessReviewVersion in the request variable is v1beta1,
-	// the contents would be converted to the v1 version before evaluating the CEL expression.
+	// Expression 是交由 CEL 求值的表达式，必须求值为 bool。
+	// CEL 表达式可访问 v1 版本的 SubjectAccessReview 内容。
+	// 若请求中 subjectAccessReviewVersion 指定的版本为 v1beta1，
+	// 内容会先转换为 v1 再求值。
 	//
-	// - 'resourceAttributes' describes information for a resource access request and is unset for non-resource requests. e.g. has(request.resourceAttributes) && request.resourceAttributes.namespace == 'default'
-	// - 'nonResourceAttributes' describes information for a non-resource access request and is unset for resource requests. e.g. has(request.nonResourceAttributes) && request.nonResourceAttributes.path == '/healthz'.
-	// - 'user' is the user to test for. e.g. request.user == 'alice'
-	// - 'groups' is the groups to test for. e.g. ('group1' in request.groups)
-	// - 'extra' corresponds to the user.Info.GetExtra() method from the authenticator.
-	// - 'uid' is the information about the requesting user. e.g. request.uid == '1'
+	// - 'resourceAttributes' 描述资源访问请求的信息，非资源请求时未设置。例如 has(request.resourceAttributes) && request.resourceAttributes.namespace == 'default'
+	// - 'nonResourceAttributes' 描述非资源访问请求的信息，资源请求时未设置。例如 has(request.nonResourceAttributes) && request.nonResourceAttributes.path == '/healthz'。
+	// - 'user' 是要测试的用户。例如 request.user == 'alice'
+	// - 'groups' 是要测试的组。例如 ('group1' in request.groups)
+	// - 'extra' 对应认证器的 user.Info.GetExtra() 方法。
+	// - 'uid' 是请求用户的信息。例如 request.uid == '1'
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	Expression string `json:"expression"`
 }

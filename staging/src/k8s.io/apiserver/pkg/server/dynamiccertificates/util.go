@@ -25,13 +25,18 @@ import (
 
 // GetHumanCertDetail is a convenient method for printing compact details of certificate that helps when debugging
 // kube-apiserver usage of certs.
+//
+// 输出刻意保持单行紧凑，便于在日志与错误信息中直接阅读；时间统一用 UTC，
+// 避免不同节点的本地时区造成排查时的困惑。
 func GetHumanCertDetail(certificate *x509.Certificate) string {
 	humanName := certificate.Subject.CommonName
 	signerHumanName := certificate.Issuer.CommonName
+	// 自签名证书的 subject 与 issuer 相同，单独标记为 <self> 更直观。
 	if certificate.Subject.CommonName == certificate.Issuer.CommonName {
 		signerHumanName = "<self>"
 	}
 
+	// 只把最常见的两种用途翻译成可读文本，其余按数字输出，保证信息不丢失。
 	usages := []string{}
 	for _, curr := range certificate.ExtKeyUsage {
 		if curr == x509.ExtKeyUsageClientAuth {
@@ -46,6 +51,7 @@ func GetHumanCertDetail(certificate *x509.Certificate) string {
 		usages = append(usages, fmt.Sprintf("%d", curr))
 	}
 
+	// SAN 中 IP 与 DNS 混排，能帮助快速确认证书是否覆盖当前服务的访问地址。
 	validServingNames := []string{}
 	for _, ip := range certificate.IPAddresses {
 		validServingNames = append(validServingNames, ip.String())
@@ -56,6 +62,7 @@ func GetHumanCertDetail(certificate *x509.Certificate) string {
 		servingString = fmt.Sprintf(" validServingFor=[%s]", strings.Join(validServingNames, ","))
 	}
 
+	// Organization 在客户端证书里通常承载 RBAC group，调试认证问题时有价值。
 	groupString := ""
 	if len(certificate.Subject.Organization) > 0 {
 		groupString = fmt.Sprintf(" groups=[%s]", strings.Join(certificate.Subject.Organization, ","))

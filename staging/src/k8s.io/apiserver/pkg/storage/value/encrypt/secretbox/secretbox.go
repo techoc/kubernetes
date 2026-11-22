@@ -30,6 +30,9 @@ import (
 // secretbox implements at rest encryption of the provided values given a 32 byte secret key.
 // Uses a standard 24 byte nonce (placed at the beginning of the cipher text) generated
 // from crypto/rand. Does not perform authentication of the data at rest.
+//
+// 中文说明：密文格式为 nonce || ciphertext，secretbox 自身保证完整性，
+// 但这里不做与存储上下文（资源/键）的绑定，因此不同资源的密文可互换。
 type secretboxTransformer struct {
 	key [32]byte
 }
@@ -42,6 +45,8 @@ func NewSecretboxTransformer(key [32]byte) value.Transformer {
 	return &secretboxTransformer{key: key}
 }
 
+// TransformFromStorage 从密文头部取出 nonce 后解密；长度不足或认证失败
+// 都返回错误，且第二个返回值恒为 false（不涉及密钥轮换/重写提示）。
 func (t *secretboxTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
 	if len(data) < (secretbox.Overhead + nonceSize) {
 		return nil, false, fmt.Errorf("the stored data was shorter than the required size")
@@ -57,12 +62,15 @@ func (t *secretboxTransformer) TransformFromStorage(ctx context.Context, data []
 	return result, false, nil
 }
 
+// TransformToStorage 为每条数据生成新的随机 nonce，并输出 nonce || 密文。
+// nonce 绝不可复用，否则会破坏 secretbox 的机密性保证。
 func (t *secretboxTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, error) {
 	var nonce [nonceSize]byte
 	n, err := rand.Read(nonce[:])
 	if err != nil {
 		return nil, err
 	}
+	// crypto/rand.Read 理论上可能返回短读，必须显式校验。
 	if n != nonceSize {
 		return nil, fmt.Errorf("unable to read sufficient random bytes")
 	}

@@ -29,11 +29,13 @@ type etcdHealth struct {
 
 // EtcdHealthCheck decodes data returned from etcd /healthz handler.
 // Deprecated: Validate health by passing storagebackend.Config directly to storagefactory.CreateProber.
+// 已弃用：请把 storagebackend.Config 直接传给 storagefactory.CreateProber 来探测健康状态。
 func EtcdHealthCheck(data []byte) error {
 	obj := etcdHealth{}
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return err
 	}
+	// etcd 的 /healthz 用字符串 "true"/"false" 而不是 JSON 布尔值。
 	if obj.Health != "true" {
 		return fmt.Errorf("Unhealthy status: %s", obj.Health)
 	}

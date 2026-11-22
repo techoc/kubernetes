@@ -47,6 +47,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// EtcdOptions 汇总 etcd 后端、加密配置与 watch cache 的启动选项。
 type EtcdOptions struct {
 	StorageConfig                           storagebackend.Config
 	EncryptionProviderConfigFilepath        string
@@ -70,10 +71,13 @@ type EtcdOptions struct {
 	SkipHealthEndpoints bool
 }
 
+// storageTypes 是当前支持的存储后端集合；只剩 etcd3。
 var storageTypes = sets.NewString(
 	storagebackend.StorageTypeETCD3,
 )
 
+// NewEtcdOptions 以给定后端配置为基础填充默认值。
+// 默认 JSON 存储、1 个 DeleteCollection worker、启用 GC 与 watch cache。
 func NewEtcdOptions(backendConfig *storagebackend.Config) *EtcdOptions {
 	options := &EtcdOptions{
 		StorageConfig:           *backendConfig,
@@ -82,16 +86,20 @@ func NewEtcdOptions(backendConfig *storagebackend.Config) *EtcdOptions {
 		EnableGarbageCollection: true,
 		EnableWatchCache:        true,
 	}
+	// 对象计数指标默认每分钟轮询一次，避免对 etcd 造成额外压力。
 	options.StorageConfig.CountMetricPollPeriod = time.Minute
 	return options
 }
 
+// storageMediaTypes 是允许作为存储格式的媒体类型。
 var storageMediaTypes = sets.New(
 	runtime.ContentTypeJSON,
 	runtime.ContentTypeYAML,
 	runtime.ContentTypeProtobuf,
 )
 
+// Validate 校验必填项与选项间依赖关系，返回全部错误而不是遇到第一个就返回，
+// 便于运维一次修正多个配置问题。
 func (s *EtcdOptions) Validate() []error {
 	if s == nil {
 		return nil
@@ -122,6 +130,9 @@ func (s *EtcdOptions) Validate() []error {
 }
 
 // AddFlags adds flags related to etcd storage for a specific APIServer to the specified FlagSet
+//
+// 每个标志直接绑定到 EtcdOptions 的对应字段；多数标志由各 apiserver 二进制
+// 自行暴露，因此默认值必须与 NewEtcdOptions 保持一致。
 func (s *EtcdOptions) AddFlags(fs *pflag.FlagSet) {
 	if s == nil {
 		return
@@ -209,6 +220,8 @@ func (s *EtcdOptions) AddFlags(fs *pflag.FlagSet) {
 }
 
 // ApplyTo mutates the provided server.Config.  It must never mutate the receiver (EtcdOptions).
+//
+// 复制一份 StorageConfig 再补 tracker，避免把 server 级状态写回共享的 options。
 func (s *EtcdOptions) ApplyTo(c *server.Config) error {
 	if s == nil {
 		return nil
@@ -223,6 +236,9 @@ func (s *EtcdOptions) ApplyTo(c *server.Config) error {
 }
 
 // ApplyWithStorageFactoryTo mutates the provided server.Config.  It must never mutate the receiver (EtcdOptions).
+//
+// 顺序有讲究：先注册健康检查与加密 transformer，最后才设置 RESTOptionsGetter，
+// 确保 REST 层初始化时 transformer 与 monitor 已就绪。
 func (s *EtcdOptions) ApplyWithStorageFactoryTo(factory serverstorage.StorageFactory, c *server.Config) error {
 	if s == nil {
 		return nil
@@ -249,6 +265,8 @@ func (s *EtcdOptions) ApplyWithStorageFactoryTo(factory serverstorage.StorageFac
 	return nil
 }
 
+// monitorCache 惰性创建并缓存各后端的存储监控器。
+// 惰性是为了把创建推迟到首次指标采集，避免启动阶段就建立额外连接。
 type monitorCache struct {
 	mu          sync.RWMutex
 	initialized bool
@@ -258,8 +276,10 @@ type monitorCache struct {
 	stopCh      <-chan struct{}
 }
 
+// createMonitor 可在测试中替换，以注入假的监控实现。
 var createMonitor = storagefactory.CreateMonitor
 
+// newMonitorCache 要求 stopCh 非空，否则无法在退出时释放监控器。
 func newMonitorCache(factory serverstorage.StorageFactory, stopCh <-chan struct{}) (*monitorCache, error) {
 	if stopCh == nil {
 		return nil, fmt.Errorf("stopCh is required for monitor cache cleanup")
@@ -271,6 +291,8 @@ func newMonitorCache(factory serverstorage.StorageFactory, stopCh <-chan struct{
 	return cache, nil
 }
 
+// get 返回缓存的监控器；首次调用走写锁初始化。
+// 读路径使用 RLock，指标采集是高频操作，不能每次都拿写锁。
 func (c *monitorCache) get() ([]metrics.Monitor, error) {
 	// Fast path: check if already initialized with read lock
 	c.mu.RLock()
@@ -289,6 +311,7 @@ func (c *monitorCache) get() ([]metrics.Monitor, error) {
 	return c.initialize()
 }
 
+// initialize 在写锁下创建全部监控器；任一失败则回滚已创建的部分，避免资源泄漏。
 func (c *monitorCache) initialize() ([]metrics.Monitor, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -322,6 +345,7 @@ func (c *monitorCache) initialize() ([]metrics.Monitor, error) {
 	return c.monitors, nil
 }
 
+// close 幂等地关闭所有监控器，由 server drained 信号触发。
 func (c *monitorCache) close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -335,6 +359,8 @@ func (c *monitorCache) close() {
 	c.monitors = nil
 }
 
+// CreateRESTOptionsGetter 构造 REST 选项工厂；若配置了加密 transformer，
+// 则用装饰器把按资源选择的 transformer 注入到每个存储配置中。
 func (s *EtcdOptions) CreateRESTOptionsGetter(factory serverstorage.StorageFactory, resourceTransformers storagevalue.ResourceTransformers) generic.RESTOptionsGetter {
 	if resourceTransformers != nil {
 		factory = &transformerStorageFactory{
@@ -345,6 +371,9 @@ func (s *EtcdOptions) CreateRESTOptionsGetter(factory serverstorage.StorageFacto
 	return &StorageFactoryRestOptionsFactory{Options: *s, StorageFactory: factory}
 }
 
+// maybeApplyResourceTransformers 按配置装配静态或动态加密 transformer。
+// 自动重载模式需要且仅需要一个健康检查，用于暴露 KMS 插件状态；
+// 该检查只加入 healthz/readyz，不加入 livez，避免 KMS 抖动导致 Pod 被重启。
 func (s *EtcdOptions) maybeApplyResourceTransformers(c *server.Config) (err error) {
 	if c.ResourceTransformers != nil {
 		return nil
@@ -413,11 +442,15 @@ func (s *EtcdOptions) maybeApplyResourceTransformers(c *server.Config) (err erro
 	return nil
 }
 
+// addHealthChecksWithoutLivez 只注册到 healthz 与 readyz：
+// 存储/加密依赖不可用时应停止接流量，但不该触发容器重启。
 func addHealthChecksWithoutLivez(c *server.Config, healthChecks ...healthz.HealthChecker) {
 	c.HealthzChecks = append(c.HealthzChecks, healthChecks...)
 	c.ReadyzChecks = append(c.ReadyzChecks, healthChecks...)
 }
 
+// addEtcdHealthEndpoint 注册 etcd 健康与就绪检查，并为每个服务器覆盖配置
+// 生成独立的检查项。
 func (s *EtcdOptions) addEtcdHealthEndpoint(c *server.Config) error {
 	healthCheck, err := storagefactory.CreateHealthCheck(s.StorageConfig, c.DrainedNotify())
 	if err != nil {
@@ -479,11 +512,13 @@ func (s *EtcdOptions) addEtcdHealthEndpoint(c *server.Config) error {
 	return nil
 }
 
+// StorageFactoryRestOptionsFactory 把 StorageFactory 适配成 generic.RESTOptionsGetter。
 type StorageFactoryRestOptionsFactory struct {
 	Options        EtcdOptions
 	StorageFactory serverstorage.StorageFactory
 }
 
+// GetRESTOptions 为单个资源生成存储选项，并根据 watch cache 配置选择装饰器。
 func (f *StorageFactoryRestOptionsFactory) GetRESTOptions(resource schema.GroupResource, example runtime.Object) (generic.RESTOptions, error) {
 	storageConfig, err := f.StorageFactory.NewConfig(resource, example)
 	if err != nil {
@@ -527,6 +562,8 @@ func (f *StorageFactoryRestOptionsFactory) GetRESTOptions(resource schema.GroupR
 
 // ParseWatchCacheSizes turns a list of cache size values into a map of group resources
 // to requested sizes.
+//
+// 格式为 "resource[.group]#size"；负数没有意义，直接报错。
 func ParseWatchCacheSizes(cacheSizes []string) (map[schema.GroupResource]int, error) {
 	watchCacheSizes := make(map[schema.GroupResource]int)
 	for _, c := range cacheSizes {
@@ -570,18 +607,22 @@ type SimpleStorageFactory struct {
 	StorageConfig storagebackend.Config
 }
 
+// NewConfig 返回资源对应的存储配置；路径由 GroupResource 唯一决定。
 func (s *SimpleStorageFactory) NewConfig(resource schema.GroupResource, example runtime.Object) (*storagebackend.ConfigForResource, error) {
 	return s.StorageConfig.ForResource(resource), nil
 }
 
+// ResourcePrefix 返回资源在 etcd 中的键前缀（group/resource）。
 func (s *SimpleStorageFactory) ResourcePrefix(resource schema.GroupResource) string {
 	return resource.Group + "/" + resource.Resource
 }
 
+// Configs 返回底层存储配置列表。
 func (s *SimpleStorageFactory) Configs() []storagebackend.Config {
 	return serverstorage.Configs(s.StorageConfig)
 }
 
+// Backends 返回后端描述；当前实现不会调用它，但需满足接口。
 func (s *SimpleStorageFactory) Backends() []serverstorage.Backend {
 	// nothing should ever call this method but we still provide a functional implementation
 	return serverstorage.Backends(s.StorageConfig)
@@ -589,11 +630,14 @@ func (s *SimpleStorageFactory) Backends() []serverstorage.Backend {
 
 var _ serverstorage.StorageFactory = &transformerStorageFactory{}
 
+// transformerStorageFactory 为每个资源注入对应的加密 transformer，
+// 其余行为全部委托给底层 factory。
 type transformerStorageFactory struct {
 	delegate             serverstorage.StorageFactory
 	resourceTransformers storagevalue.ResourceTransformers
 }
 
+// NewConfig 复制配置后再替换 transformer，避免修改底层 factory 共享的对象。
 func (t *transformerStorageFactory) NewConfig(resource schema.GroupResource, example runtime.Object) (*storagebackend.ConfigForResource, error) {
 	config, err := t.delegate.NewConfig(resource, example)
 	if err != nil {
@@ -608,25 +652,32 @@ func (t *transformerStorageFactory) NewConfig(resource schema.GroupResource, exa
 	return &configCopy, nil
 }
 
+// ResourcePrefix 委托给底层 factory。
 func (t *transformerStorageFactory) ResourcePrefix(resource schema.GroupResource) string {
 	return t.delegate.ResourcePrefix(resource)
 }
 
+// Configs 委托给底层 factory。
 func (t *transformerStorageFactory) Configs() []storagebackend.Config {
 	return t.delegate.Configs()
 }
 
+// Backends 委托给底层 factory。
 func (t *transformerStorageFactory) Backends() []serverstorage.Backend {
 	return t.delegate.Backends()
 }
 
+// EtcdServerOverride 表示某个资源使用独立 etcd 集群的配置。
 type EtcdServerOverride struct {
 	GroupResource schema.GroupResource
 	Servers       []string
 }
 
+// errOverridesInvalid 是 etcd 服务器覆盖格式错误的统一错误。
 var errOverridesInvalid = fmt.Errorf("--etcd-servers-overrides invalid, must be of format: group/resource#servers, where servers are URLs, semicolon separated")
 
+// ParseEtcdServersOverrides 解析 "group/resource#url;url" 形式的覆盖列表。
+// 任何格式偏差都返回统一错误，避免部分解析导致难以察觉的配置遗漏。
 func ParseEtcdServersOverrides(etcdServersOverrides []string) ([]EtcdServerOverride, error) {
 	var overrides []EtcdServerOverride
 	for _, override := range etcdServersOverrides {

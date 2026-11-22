@@ -16,4 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package resourcequota 定义 ResourceQuota 准入控制器的配置 API（内部版本）。
+// 该配置用于声明“默认受限资源”：资源一旦出现在 LimitedResources 中，
+// 若没有配额覆盖它，创建请求就会被拒绝，从而防止绕过配额。
 package resourcequota

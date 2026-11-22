@@ -15,4 +15,8 @@ limitations under the License.
 */
 
 // Package server contains the plumbing to create kubernetes-like API server command.
+//
+// 本包提供组装 Kubernetes 风格 API Server 所需的骨架：配置与默认值、鉴权/准入链、
+// 处理器安装、优雅关闭，以及后台动态证书加载等。它只负责“通用”服务端装配，
+// 具体资源与存储由调用方（如 kube-apiserver）注入，因此不依赖 k8s.io/kubernetes。
 package server

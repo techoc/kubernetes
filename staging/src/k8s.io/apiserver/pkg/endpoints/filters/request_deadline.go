@@ -46,11 +46,16 @@ const (
 // auditWrapper provides an http.Handler that audits a failed request.
 // longRunning returns true if he given request is a long running request.
 // requestTimeoutMaximum specifies the default request timeout value.
+//
+// 长时请求（watch、exec 等）不受 timeout 约束：它们本就设计为长时间挂起，
+// 强加截止时间会破坏客户端语义。时间基准优先使用 ReceivedTimestamp，
+// 这样排队时间也被计入超时预算，而不是从进入本过滤器才开始计时。
 func WithRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEvaluator, longRunning request.LongRunningRequestCheck,
 	negotiatedSerializer runtime.NegotiatedSerializer, requestTimeoutMaximum time.Duration) http.Handler {
 	return withRequestDeadline(handler, sink, policy, longRunning, negotiatedSerializer, requestTimeoutMaximum, clock.RealClock{})
 }
 
+// withRequestDeadline 是 WithRequestDeadline 的可注入时钟版本，便于测试。
 func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEvaluator, longRunning request.LongRunningRequestCheck,
 	negotiatedSerializer runtime.NegotiatedSerializer, requestTimeoutMaximum time.Duration, clock clock.PassiveClock) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -66,6 +71,8 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 			return
 		}
 
+		// 先解析 timeout 参数；非法值必须在进入业务 handler 前以 400 拒绝，
+		// 并走审计路径，保证被拒绝的请求同样留下审计记录。
 		userSpecifiedTimeout, ok, err := parseTimeout(req)
 		if err != nil {
 			statusErr := apierrors.NewBadRequest(err.Error())
@@ -88,6 +95,8 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 			}
 		}
 
+		// 以请求到达 apiserver 的时间为起点，而不是本过滤器执行的时间，
+		// 使前面过滤器消耗的排队时间计入同一预算。
 		started := clock.Now()
 		if requestStartedTimestamp, ok := request.ReceivedTimestampFrom(ctx); ok {
 			started = requestStartedTimestamp
@@ -103,6 +112,8 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 
 // withFailedRequestAudit decorates a failed http.Handler and is used to audit a failed request.
 // statusErr is used to populate the Message property of ResponseStatus.
+//
+// 没有审计 sink 或策略时直接透传，避免在未启用审计的集群上引入额外开销。
 func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.StatusError, sink audit.Sink, policy audit.PolicyRuleEvaluator) http.Handler {
 	if sink == nil || policy == nil {
 		return failedHandler
@@ -127,6 +138,7 @@ func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.Sta
 		ac.SetEventResponseStatus(respStatus)
 		ac.SetEventStage(auditinternal.StageResponseStarted)
 
+		// 包一层 response writer，让审计事件能记录真实的响应状态码与体积。
 		rw := decorateResponseWriter(req.Context(), w, true)
 		failedHandler.ServeHTTP(rw, req)
 	})
@@ -134,6 +146,8 @@ func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.Sta
 
 // failedErrorHandler returns an http.Handler that uses the specified StatusError object
 // to render an error response to the request.
+//
+// 按请求的 GroupVersion 协商编码，保证错误响应与客户端期望的 API 版本一致。
 func failedErrorHandler(s runtime.NegotiatedSerializer, statusError *apierrors.StatusError) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -152,6 +166,9 @@ func failedErrorHandler(s runtime.NegotiatedSerializer, statusError *apierrors.S
 // value if specified by the user.
 // If a timeout is not specified the function returns false and err is set to nil
 // If the value specified is malformed then the function returns false and err is set
+//
+// 返回值 ok 表示用户显式指定了 timeout；duration 为 0 或负数时由调用方
+// 视为“不限时”，仍以 apiserver 的最大值为准。
 func parseTimeout(req *http.Request) (time.Duration, bool, error) {
 	value := req.URL.Query().Get("timeout")
 	if value == "" {
@@ -171,6 +188,9 @@ func parseTimeout(req *http.Request) (time.Duration, bool, error) {
 // object, it does not print the given innerErr into the ResponseWriter object.
 // b) additionally, it prints the given msg, and innerErr to the log with other
 // request scoped data that helps identify the given request.
+//
+// 内外有别的错误信息是有意为之：客户端只看到 msg，内部细节（innerErr）
+// 只进日志，避免泄露服务端实现细节。
 func handleError(w http.ResponseWriter, r *http.Request, code int, innerErr error, msg string) {
 	http.Error(w, msg, code)
 	klog.ErrorSDepth(1, innerErr, msg, "method", r.Method, "URI", r.RequestURI, "auditID", audit.GetAuditIDTruncated(r.Context()))

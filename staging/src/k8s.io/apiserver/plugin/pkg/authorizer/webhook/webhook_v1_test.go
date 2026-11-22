@@ -54,6 +54,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// testRetryBackoff 是测试用的短退避序列：步数固定为 5，
+// 因此「可重试错误最终被调用 5 次」成为断言的一部分。
 var testRetryBackoff = wait.Backoff{
 	Duration: 5 * time.Millisecond,
 	Factor:   1.5,
@@ -61,6 +63,8 @@ var testRetryBackoff = wait.Backoff{
 	Steps:    5,
 }
 
+// TestV1NewFromConfig 验证从 kubeconfig 构造授权器时的配置校验：
+// 缺少 context、引用不存在的 cluster/user、同时提供文件与内联数据等都应报错。
 func TestV1NewFromConfig(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -232,6 +236,10 @@ type V1Service interface {
 }
 
 // NewV1TestServer wraps a V1Service as an httptest.Server.
+// NewV1TestServer 启动一个使用给定证书的 TLS 测试服务端，并在自定义路径上
+// 模拟 SubjectAccessReview 接口。
+// 中文说明：服务端强制校验 POST、路径与 apiVersion，确保被测客户端发出的
+// 请求形态正确；这些校验失败会以 4xx 返回，从而在测试中显式暴露协议错误。
 func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	const webhookPath = "/testserver"
 	var tlsConfig *tls.Config
@@ -310,6 +318,9 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 }
 
 // A service that can be set to allow all or deny all authorization requests.
+//
+// 中文说明：called 记录后端被调用的次数，用于断言缓存与重试行为；
+// reviewHook 允许用例在返回前修改评审对象（如注入求值错误）。
 type mockV1Service struct {
 	allow      bool
 	statusCode int
@@ -319,6 +330,7 @@ type mockV1Service struct {
 	reviewHook func(*authorizationv1.SubjectAccessReview)
 }
 
+// Review 记录一次调用并按 allow 设置结果。
 func (m *mockV1Service) Review(r *authorizationv1.SubjectAccessReview) {
 	m.called++
 	r.Status.Allowed = m.allow
@@ -333,6 +345,9 @@ func (m *mockV1Service) HTTPStatusCode() int { return m.statusCode }
 
 // newV1Authorizer creates a temporary kubeconfig file from the provided arguments and attempts to load
 // a new WebhookAuthorizer from it.
+//
+// 中文说明：把证书与 URL 写入临时 kubeconfig 再走真实加载路径，
+// 这样测试覆盖的是生产同款配置解析逻辑，而不是直接构造内部结构。
 func newV1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration, metrics metrics.AuthorizerMetrics, compiler authorizationcel.Compiler, expressions []apiserver.WebhookMatchCondition, authzName string) (*WebhookAuthorizer, error) {
 	tempfile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -366,6 +381,9 @@ func newV1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cache
 	return newWithBackoff(sarClient, cacheTime, cacheTime, testRetryBackoff, authorizer.DecisionNoOpinion, expressions, metrics, compiler, authzName)
 }
 
+// TestV1TLSConfig 验证 TLS 配置组合下的认证结果。
+// 中文说明：关键安全断言——客户端不信任服务端、服务端不信任客户端（坏 CA）、
+// 以及「不允许 insecure 连接」都必须失败。插件拒绝明文连接是硬性安全边界。
 func TestV1TLSConfig(t *testing.T) {
 	tests := []struct {
 		test                            string
@@ -462,6 +480,8 @@ func TestV1TLSConfig(t *testing.T) {
 }
 
 // recorderV1Service records all access review requests.
+//
+// 中文说明：始终返回允许，但保留最后收到的评审对象，供用例断言请求内容。
 type recorderV1Service struct {
 	last authorizationv1.SubjectAccessReview
 	err  error
@@ -479,6 +499,9 @@ func (rec *recorderV1Service) Last() (authorizationv1.SubjectAccessReview, error
 
 func (rec *recorderV1Service) HTTPStatusCode() int { return 200 }
 
+// TestV1Webhook 验证 authorizer.Attributes 到 SubjectAccessReview 的字段映射。
+// 中文说明：这是插件与外部服务之间的协议契约——用户、UID、组、资源属性、
+// 子资源与路径都必须逐字段正确传递，否则外部策略会基于错误信息做决策。
 func TestV1Webhook(t *testing.T) {
 	serv := new(recorderV1Service)
 	s, err := NewV1TestServer(serv, serverCert, serverKey, caCert)
@@ -580,6 +603,11 @@ func TestV1Webhook(t *testing.T) {
 
 // TestWebhookCache verifies that error responses from the server are not
 // cached, but successful responses are.
+// TestV1WebhookCache 验证授权结果的缓存与重试策略。
+// 中文说明：
+//   - 5xx/429 可重试，按退避步数调用 5 次；4xx（401/403/404）不重试；
+//   - 成功响应（无论 allow 还是 deny）在 TTL 内命中缓存，不再访问后端；
+//   - 超大属性（每字段 2000 字节）不缓存，防止缓存键与内存被滥用。
 func TestV1WebhookCache(t *testing.T) {
 	serv := new(mockV1Service)
 	s, err := NewV1TestServer(serv, serverCert, serverKey, caCert)
@@ -687,6 +715,9 @@ func TestV1WebhookCache(t *testing.T) {
 }
 
 // TestStructuredAuthzConfigFeatureEnablement verifies cel expressions can only be used when feature is enabled
+//
+// 中文说明：特性门控关闭时，携带 match condition 的配置必须被拒绝，
+// 防止集群在降级版本上静默忽略安全相关条件。
 func TestStructuredAuthzConfigFeatureEnablement(t *testing.T) {
 	service := new(mockV1Service)
 	service.statusCode = 200
@@ -803,6 +834,9 @@ func TestStructuredAuthzConfigFeatureEnablement(t *testing.T) {
 	}
 }
 
+// TestWebhookMetrics 验证 match condition 相关指标按授权器名称与类型打点。
+// 中文说明：两个授权器使用不同表达式，断言「评估错误」与「排除」分别计数；
+// 全局指标在每个子用例前后重置，避免相互污染。
 func TestWebhookMetrics(t *testing.T) {
 	service := new(mockV1Service)
 	service.statusCode = 200
@@ -908,6 +942,8 @@ func TestWebhookMetrics(t *testing.T) {
 	}
 }
 
+// BenchmarkNoCELExpressionFeatureOn 测量未配置任何 match condition 时的编译与授权开销，
+// 作为 CEL 相关基准的基线。
 func BenchmarkNoCELExpressionFeatureOn(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{}
 	b.Run("compile", func(b *testing.B) {
@@ -917,6 +953,8 @@ func BenchmarkNoCELExpressionFeatureOn(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithOneCELExpressions 测量单条 match condition 的编译与授权开销。
 func BenchmarkWithOneCELExpressions(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -930,6 +968,9 @@ func BenchmarkWithOneCELExpressions(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithOneCELExpressionsFalse 测量单条恒假表达式：仍需完整求值，
+// 用于观察「排除」路径相对允许路径的额外开销。
 func BenchmarkWithOneCELExpressionsFalse(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -943,6 +984,8 @@ func BenchmarkWithOneCELExpressionsFalse(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithTwoCELExpressions 测量两条 match condition 的开销。
 func BenchmarkWithTwoCELExpressions(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -959,6 +1002,9 @@ func BenchmarkWithTwoCELExpressions(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithTwoCELExpressionsFalse 测量两条表达式、其中一条恒假时的开销
+// （验证短路/排除的成本）。
 func BenchmarkWithTwoCELExpressionsFalse(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -975,6 +1021,9 @@ func BenchmarkWithTwoCELExpressionsFalse(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithManyCELExpressions 测量大量 match condition 下的编译与求值开销，
+// 用于评估表达式数量对授权延迟的影响。
 func BenchmarkWithManyCELExpressions(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -1009,6 +1058,8 @@ func BenchmarkWithManyCELExpressions(b *testing.B) {
 		benchmarkWebhookAuthorize(b, expressions)
 	})
 }
+
+// BenchmarkWithManyCELExpressionsFalse 测量大量表达式且最终不匹配时的开销。
 func BenchmarkWithManyCELExpressionsFalse(b *testing.B) {
 	expressions := []apiserver.WebhookMatchCondition{
 		{
@@ -1044,6 +1095,7 @@ func BenchmarkWithManyCELExpressionsFalse(b *testing.B) {
 	})
 }
 
+// benchmarkNewWebhookAuthorizer 测量构造授权器（含编译 CEL 表达式）的成本。
 func benchmarkNewWebhookAuthorizer(b *testing.B, expressions []apiserver.WebhookMatchCondition) {
 	service := new(mockV1Service)
 	service.statusCode = 200
@@ -1065,6 +1117,7 @@ func benchmarkNewWebhookAuthorizer(b *testing.B, expressions []apiserver.Webhook
 	b.StopTimer()
 }
 
+// benchmarkWebhookAuthorize 测量单次授权（含 match condition 求值）的成本。
 func benchmarkWebhookAuthorize(b *testing.B, expressions []apiserver.WebhookMatchCondition) {
 	attr := authorizer.AttributesRecord{
 		User: &user.DefaultInfo{
@@ -1103,6 +1156,9 @@ func benchmarkWebhookAuthorize(b *testing.B, expressions []apiserver.WebhookMatc
 }
 
 // TestV1WebhookMatchConditions verifies cel expressions are compiled and evaluated correctly
+//
+// 中文说明：覆盖匹配全通过、任一条件为假即排除、编译错误与求值错误等分支。
+// 语义是「所有表达式同时为真才算匹配」，空表达式列表视为全部匹配。
 func TestV1WebhookMatchConditions(t *testing.T) {
 	service := new(mockV1Service)
 	service.statusCode = 200
@@ -1405,16 +1461,21 @@ func TestV1WebhookMatchConditions(t *testing.T) {
 	}
 }
 
+// noopAuthorizerMetrics 返回丢弃全部指标的实现，用于不关心指标断言的用例。
 func noopAuthorizerMetrics() metrics.AuthorizerMetrics {
 	return metrics.NoopAuthorizerMetrics{}
 }
 
+// celAuthorizerMetrics 返回仅启用 match condition 指标的组合，
+// 请求级与 webhook 级指标仍为 no-op，避免无关计数干扰断言。
 func celAuthorizerMetrics() metrics.AuthorizerMetrics {
 	return celAuthorizerMetricsType{
 		MatcherMetrics: authorizationcel.NewMatcherMetrics(),
 	}
 }
 
+// celAuthorizerMetricsType 组合 no-op 的请求/webhook 指标与真实的 match condition 指标，
+// 让用例只观测 CEL 相关计数。
 type celAuthorizerMetricsType struct {
 	metrics.NoopRequestMetrics
 	metrics.NoopWebhookMetrics

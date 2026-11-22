@@ -36,6 +36,8 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend/factory"
 )
 
+// NewDryRunnableTestStorage 启动嵌入式 etcd 并构造 DryRunnableStorage，
+// 返回清理函数。测试需要真实存储后端来验证“dry-run 确实没有写盘”。
 func NewDryRunnableTestStorage(t *testing.T) (DryRunnableStorage, func()) {
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
 	sc.Codec = apitesting.TestStorageCodec(codecs, examplev1.SchemeGroupVersion)
@@ -49,6 +51,8 @@ func NewDryRunnableTestStorage(t *testing.T) (DryRunnableStorage, func()) {
 	}
 }
 
+// UnstructuredOrDie 从 JSON 构造 unstructured，解析失败直接 panic；
+// 仅用于测试中写死的合法 JSON。
 func UnstructuredOrDie(j string) *unstructured.Unstructured {
 	m := map[string]interface{}{}
 	err := json.Unmarshal([]byte(j), &m)
@@ -58,6 +62,7 @@ func UnstructuredOrDie(j string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: m}
 }
 
+// TestDryRunCreateDoesntCreate 验证 dry-run create 不会在存储中留下对象。
 func TestDryRunCreateDoesntCreate(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -76,6 +81,8 @@ func TestDryRunCreateDoesntCreate(t *testing.T) {
 	}
 }
 
+// TestDryRunCreateReturnsObject 验证 dry-run create 会把输入对象写入 out，
+// 使调用方拿到与真实创建一致的结果。
 func TestDryRunCreateReturnsObject(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -93,6 +100,8 @@ func TestDryRunCreateReturnsObject(t *testing.T) {
 	}
 }
 
+// TestDryRunCreateExistingObjectFails 验证 dry-run create 对已存在的 key
+// 仍返回 KeyExists，保持与真实创建一致的冲突语义。
 func TestDryRunCreateExistingObjectFails(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -112,6 +121,8 @@ func TestDryRunCreateExistingObjectFails(t *testing.T) {
 
 }
 
+// TestDryRunUpdateMissingObjectFails 验证对象不存在时 dry-run update 返回 NotFound，
+// 且不会调用 updateFunc——错误必须在执行业务更新之前暴露。
 func TestDryRunUpdateMissingObjectFails(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -128,6 +139,8 @@ func TestDryRunUpdateMissingObjectFails(t *testing.T) {
 	}
 }
 
+// TestDryRunUpdatePreconditions 验证 dry-run update 会执行前置条件检查：
+// UID 不匹配返回 InvalidObj，匹配则正常完成。
 func TestDryRunUpdatePreconditions(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -160,6 +173,7 @@ func TestDryRunUpdatePreconditions(t *testing.T) {
 	}
 }
 
+// TestDryRunUpdateDoesntUpdate 验证 dry-run update 不会修改存储中的对象。
 func TestDryRunUpdateDoesntUpdate(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -195,6 +209,8 @@ func TestDryRunUpdateDoesntUpdate(t *testing.T) {
 	}
 }
 
+// TestDryRunUpdateReturnsObject 验证 dry-run update 会把更新结果（含新 ResourceVersion）
+// 写回传入的对象，使客户端看到与真实更新相同的响应。
 func TestDryRunUpdateReturnsObject(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -226,6 +242,7 @@ func TestDryRunUpdateReturnsObject(t *testing.T) {
 	}
 }
 
+// TestDryRunDeleteDoesntDelete 验证 dry-run delete 不会真正删除对象。
 func TestDryRunDeleteDoesntDelete(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -249,6 +266,7 @@ func TestDryRunDeleteDoesntDelete(t *testing.T) {
 	}
 }
 
+// TestDryRunDeleteMissingObjectFails 验证删除不存在的对象时 dry-run 同样返回 NotFound。
 func TestDryRunDeleteMissingObjectFails(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -260,6 +278,7 @@ func TestDryRunDeleteMissingObjectFails(t *testing.T) {
 	}
 }
 
+// TestDryRunDeleteReturnsObject 验证 dry-run delete 把将被删除的对象写入 out。
 func TestDryRunDeleteReturnsObject(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()
@@ -283,6 +302,7 @@ func TestDryRunDeleteReturnsObject(t *testing.T) {
 	}
 }
 
+// TestDryRunDeletePreconditions 验证 dry-run delete 会执行 UID 前置条件检查。
 func TestDryRunDeletePreconditions(t *testing.T) {
 	s, destroy := NewDryRunnableTestStorage(t)
 	defer destroy()

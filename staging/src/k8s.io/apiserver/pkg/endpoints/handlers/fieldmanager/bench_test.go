@@ -37,6 +37,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// fakeTypeConverter 从仓库内的 swagger.json 构建类型转换器。
+// 使用真实 OpenAPI 定义而非手写 schema，才能让基准测试反映生产中的类型转换开销。
 var fakeTypeConverter = func() managedfields.TypeConverter {
 	data, err := os.ReadFile(filepath.Join(strings.Repeat(".."+string(filepath.Separator), 8),
 		"api", "openapi-spec", "swagger.json"))
@@ -59,6 +61,7 @@ var fakeTypeConverter = func() managedfields.TypeConverter {
 	return typeConverter
 }()
 
+// getObjectBytes 读取测试 fixture；文件缺失直接 panic，说明测试数据不完整。
 func getObjectBytes(file string) []byte {
 	s, err := os.ReadFile(file)
 	if err != nil {
@@ -67,6 +70,9 @@ func getObjectBytes(file string) []byte {
 	return s
 }
 
+// BenchmarkNewObject 衡量 managed fields 的核心操作（Update/Apply 及其组合）的开销。
+// 每种对象类型分别建基准，因为字段数量与嵌套深度对算法复杂度影响显著；
+// 子基准中的 Reset 用于隔离多次迭代，避免状态累积干扰计时。
 func BenchmarkNewObject(b *testing.B) {
 	tests := []struct {
 		gvk schema.GroupVersionKind
@@ -163,6 +169,7 @@ func BenchmarkNewObject(b *testing.B) {
 	}
 }
 
+// toUnstructured 把 typed 对象转换为 unstructured，用于对比两条转换路径的性能。
 func toUnstructured(b *testing.B, o runtime.Object) *unstructured.Unstructured {
 	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(o)
 	if err != nil {
@@ -171,6 +178,8 @@ func toUnstructured(b *testing.B, o runtime.Object) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: u}
 }
 
+// BenchmarkConvertObjectToTyped 对比 typed 与 unstructured 输入经 ObjectToTyped 转换的成本。
+// 用 RunParallel 是因为该转换在请求处理中会被并发调用，并行基准更接近真实负载。
 func BenchmarkConvertObjectToTyped(b *testing.B) {
 	tests := []struct {
 		gvk schema.GroupVersionKind
@@ -229,6 +238,7 @@ func BenchmarkConvertObjectToTyped(b *testing.B) {
 	}
 }
 
+// BenchmarkCompare 衡量两份已转换对象之间的 Compare 开销；Compare 是更新冲突检测的热点。
 func BenchmarkCompare(b *testing.B) {
 	tests := []struct {
 		gvk schema.GroupVersionKind
@@ -303,6 +313,8 @@ func BenchmarkCompare(b *testing.B) {
 	}
 }
 
+// BenchmarkRepeatedUpdate 模拟多个 manager 交替更新同一对象，测量 managed fields
+// 在持续变更下的摊还成本；交替顺序用 n%len(objs) 轮换，避免偏向某一版本。
 func BenchmarkRepeatedUpdate(b *testing.B) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 	podBytes := getObjectBytes("pod.yaml")

@@ -36,11 +36,14 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
+// fakeAuditSink 是线程安全的审计事件收集器：审计后端可能从
+// 多个 goroutine 投递事件（例如异步批处理）。
 type fakeAuditSink struct {
 	lock   sync.Mutex
 	events []*auditinternal.Event
 }
 
+// ProcessEvents 深拷贝事件后保存，避免被测代码后续修改事件影响断言。
 func (s *fakeAuditSink) ProcessEvents(evs ...*auditinternal.Event) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -51,12 +54,18 @@ func (s *fakeAuditSink) ProcessEvents(evs ...*auditinternal.Event) bool {
 	return true
 }
 
+// Events 返回当前事件的副本，供测试在不持锁的情况下断言。
 func (s *fakeAuditSink) Events() []*auditinternal.Event {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return append([]*auditinternal.Event{}, s.events...)
 }
 
+// TestAudit 驱动完整的 REST 端点（get/list/create/delete/update/patch/watch），
+// 断言每种请求产生的审计事件数量、阶段顺序、请求/响应体可见性以及
+// User-Agent/状态码等字段。
+// 重点在于验证审计策略对敏感时机的取舍：例如列表响应会被记录，
+// watch 的响应体不会被记录，被路由层提前拒绝的请求不会带请求体。
 func TestAudit(t *testing.T) {
 	type eventCheck func(events []*auditinternal.Event) error
 
@@ -124,6 +133,7 @@ func TestAudit(t *testing.T) {
 			return nil
 		}
 	}
+	// requestUserAgentMatches 要求所有事件都带上原始 UA，便于关联客户端。
 	requestUserAgentMatches := func(userAgent string) eventCheck {
 		return func(events []*auditinternal.Event) error {
 			for i := range events {
@@ -134,6 +144,7 @@ func TestAudit(t *testing.T) {
 			return nil
 		}
 	}
+	// expectedStages 校验事件按阶段产生且顺序符合审计流程。
 	expectedStages := func(stages ...auditinternal.Stage) eventCheck {
 		return func(events []*auditinternal.Event) error {
 			if len(stages) != len(events) {
@@ -156,6 +167,7 @@ func TestAudit(t *testing.T) {
 		checks []eventCheck
 	}{
 		{
+			// GET 单对象：请求体不记录，响应体记录。
 			"get",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodGet, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/other/simple/c", bytes.NewBuffer(simpleFooJSON))
@@ -169,6 +181,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// LIST 带 labelSelector，响应体包含全部匹配对象。
 			"list",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodGet, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/other/simple?labelSelector=a%3Dfoobar", nil)
@@ -182,6 +195,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// CREATE：请求体完整记录（受审计策略级别控制）。
 			"create",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodPost, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/default/simple", bytes.NewBuffer(simpleFooJSON))
@@ -195,6 +209,8 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// 带名字的 POST 在路由层就被 405 拒绝，尚未读取请求体，
+			// 因此审计事件中既无请求体也无响应体。
 			"not-allowed-named-create",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodPost, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/default/simple/named", bytes.NewBuffer(simpleFooJSON))
@@ -208,6 +224,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// DELETE 无请求体，响应为 Status 对象。
 			"delete",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodDelete, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/default/simple/a", nil)
@@ -221,6 +238,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// DELETE 可携带 DeleteOptions 请求体，需被记录。
 			"delete-with-options-in-body",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodDelete, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/default/simple/a", bytes.NewBuffer([]byte(`{"kind":"DeleteOptions"}`)))
@@ -234,6 +252,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// UPDATE：请求体与响应体均记录。
 			"update",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodPut, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/other/simple/c", bytes.NewBuffer(simpleCPrimeJSON))
@@ -247,6 +266,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// 对象命名空间与 URL 命名空间不一致，返回 400，响应体是 Failure Status。
 			"update-wrong-namespace",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodPut, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/default/simple/c", bytes.NewBuffer(simpleCPrimeJSON))
@@ -260,6 +280,7 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// PATCH：记录原始 patch 字节，而非合并后的对象。
 			"patch",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				req, _ := http.NewRequestWithContext(ctx, request.MethodPatch, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/other/simple/c", bytes.NewReader([]byte(`{"labels":{"foo":"bar"}}`)))
@@ -275,6 +296,8 @@ func TestAudit(t *testing.T) {
 			},
 		},
 		{
+			// WATCH 有第三个事件（ResponseStarted 与 ResponseComplete 分离）；
+			// 事件流可能包含大量对象，因此不记录请求/响应体。
 			"watch",
 			func(ctx context.Context, server string) (*http.Request, error) {
 				return http.NewRequestWithContext(ctx, request.MethodGet, server+"/"+prefix+"/"+testGroupVersion.Group+"/"+testGroupVersion.Version+"/namespaces/other/simple?watch=true", nil)
@@ -372,6 +395,8 @@ func TestAudit(t *testing.T) {
 
 // testTimeout returns the minimimum of the "ForeverTestTimeout" and the testing deadline (with
 // cleanup time).
+// 取二者较小值可确保在 `go test -timeout` 到期前主动失败并打印上下文，
+// 同时为清理留出 5 秒。
 func testTimeout(t *testing.T) time.Duration {
 	defaultTimeout := wait.ForeverTestTimeout
 	const cleanupTime = 5 * time.Second

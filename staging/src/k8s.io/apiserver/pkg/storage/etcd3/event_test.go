@@ -26,6 +26,9 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// TestParseEvent 验证 etcd watch 事件到内部 event 的转换：
+// create 由 CreateRevision == ModRevision 识别；delete 必须带 PrevKv（否则无法还原旧对象）
+// 并应记录被删除的值。recordTime 被清零后再比较，避免时间戳导致断言不稳定。
 func TestParseEvent(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -57,6 +60,7 @@ func TestParseEvent(t *testing.T) {
 			expectedErr: "",
 		},
 		{
+			// DELETE 事件缺少 PrevKv 时无法得到旧对象，必须显式报错而非静默丢弃。
 			name: "unsuccessful delete",
 			etcdEvent: &clientv3.Event{
 				Type:   mvccpb.DELETE,

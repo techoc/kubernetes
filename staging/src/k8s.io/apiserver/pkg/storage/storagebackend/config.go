@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package storagebackend 定义存储后端的配置类型（连接、编码、加密、压缩等），
+// 供 apiserver 在启动时构造 etcd3 存储客户端。
 package storagebackend
 
 import (
@@ -31,18 +33,30 @@ import (
 )
 
 const (
+	// StorageTypeUnset 表示未指定，等价于 etcd3。
 	StorageTypeUnset = ""
+	// StorageTypeETCD2 已废弃，仅为兼容旧配置保留字符串常量。
 	StorageTypeETCD2 = "etcd2"
+	// StorageTypeETCD3 是唯一受支持的存储后端。
 	StorageTypeETCD3 = "etcd3"
 
-	DefaultCompactInterval      = 5 * time.Minute
+	// DefaultCompactInterval 是默认的 etcd 压缩间隔；0 表示不压缩。
+	DefaultCompactInterval = 5 * time.Minute
+	// DefaultDBMetricPollInterval 是存储后端指标采集间隔。
 	DefaultDBMetricPollInterval = 30 * time.Second
-	DefaultEventsHistoryWindow  = 75 * time.Second
-	DefaultHealthcheckTimeout   = 2 * time.Second
-	DefaultReadinessTimeout     = 2 * time.Second
+	// DefaultEventsHistoryWindow 是事件保留的最短历史窗口，须大于 etcd 压缩间隔，
+	// 否则压缩可能删掉尚未被 watch 消费的事件。
+	DefaultEventsHistoryWindow = 75 * time.Second
+	// DefaultHealthcheckTimeout 是健康检查（livez）的存储探测超时。
+	DefaultHealthcheckTimeout = 2 * time.Second
+	// DefaultReadinessTimeout 是就绪检查（readyz）的存储探测超时。
+	DefaultReadinessTimeout = 2 * time.Second
 )
 
 // TransportConfig holds all connection related info,  i.e. equal TransportConfig means equal servers we talk to.
+//
+// 可比较性是刻意设计的：上层以 TransportConfig 作为键来复用 etcd 客户端，
+// 因此新增字段必须保持可比较（不要加入 slice/map/func 之外的不可比较类型）。
 type TransportConfig struct {
 	// ServerList is the list of storage servers to connect with.
 	ServerList []string
@@ -57,6 +71,8 @@ type TransportConfig struct {
 }
 
 // Config is configuration for creating a storage backend.
+// 一个 Config 描述“同一组 etcd 服务器上的同一套编码/加密设置”，可被多个
+// GroupResource 共享；按资源特化的部分见 ConfigForResource。
 type Config struct {
 	// Type defines the type of storage backend. Default ("") is "etcd3".
 	Type string
@@ -76,6 +92,7 @@ type Config struct {
 
 	// CompactionInterval is an interval of requesting compaction from apiserver.
 	// If the value is 0, no compaction will be issued.
+	// 压缩是回收 etcd 历史版本空间的手段，缺失会导致 etcd 磁盘无限增长。
 	CompactionInterval time.Duration
 	// CountMetricPollPeriod specifies how often should count metric be updated
 	CountMetricPollPeriod time.Duration
@@ -88,6 +105,7 @@ type Config struct {
 	// ReadycheckTimeout specifies the timeout used when checking readiness
 	ReadycheckTimeout time.Duration
 
+	// LeaseManagerConfig 控制 etcd3 租约的复用与回收参数。
 	LeaseManagerConfig etcd3.LeaseManagerConfig
 
 	// StorageObjectCountTracker is used to keep track of the total
@@ -105,6 +123,7 @@ type ConfigForResource struct {
 }
 
 // ForResource specializes to the given resource
+// 返回的是值拷贝：对返回值的修改不会影响原始 Config。
 func (config *Config) ForResource(resource schema.GroupResource) *ConfigForResource {
 	return &ConfigForResource{
 		Config:        *config,
@@ -112,6 +131,9 @@ func (config *Config) ForResource(resource schema.GroupResource) *ConfigForResou
 	}
 }
 
+// NewDefaultConfig returns a Config populated with production defaults.
+// 调用方仍需填写 Transport.ServerList；TracerProvider 默认是 no-op，
+// 避免未配置 tracing 时产生额外开销。
 func NewDefaultConfig(prefix string, codec runtime.Codec) *Config {
 	return &Config{
 		Prefix:               prefix,

@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供 storage/cacher 相关测试使用的伪造存储实现。
+//
+// 中文说明：仅用于测试，依赖 k8s.io/apiserver/pkg/apis/example 类型，
+// 生产代码不应导入本包。
 package testing
 
 import (
@@ -29,6 +33,10 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 )
 
+// MockStorage 是 storage.Interface 的测试替身：可注入错误、钩子函数，
+// 并记录 RequestWatchProgress 调用次数。
+// 中文说明：嵌入 sync.RWMutex，使计数读取与写入在并发测试下安全；未实现的方法
+// 统一返回 unimplemented，避免测试误用。
 type MockStorage struct {
 	sync.RWMutex
 	GetListErr error
@@ -63,6 +71,8 @@ func (d *MockStorage) IsWatchListSemanticsUnSupported() bool {
 	return true
 }
 
+// MockWatch 是极简 watch.Interface：Stop 直接关闭 channel，
+// 测试中不要重复 Stop，否则会 panic。
 type MockWatch struct {
 	ch chan watch.Event
 }
@@ -138,6 +148,8 @@ func (d *MockStorage) GetCurrentResourceVersion(ctx context.Context) (uint64, er
 	return 100, nil
 }
 
+// MockCacher 在 MockStorage 之上补齐 cacher 的就绪/一致性状态，
+// 用于测试依赖 Ready()/MarkConsistent() 的缓存逻辑。
 type MockCacher struct {
 	MockStorage
 	IsReady    bool

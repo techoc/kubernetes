@@ -21,6 +21,9 @@ import (
 	"time"
 )
 
+// TestCalculateRetryAfterForUnreadyCache 验证缓存未就绪时 Retry-After 的退避曲线：
+// 前期恒为 1 秒，随后随停机时间递增，并封顶在 30 秒。
+// 这样客户端在短暂抖动时快速重试，在长时间故障时不至于打爆 apiserver。
 func TestCalculateRetryAfterForUnreadyCache(t *testing.T) {
 	tests := []struct {
 		downtime time.Duration

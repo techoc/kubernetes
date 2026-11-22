@@ -26,6 +26,9 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestWithRequestReceivedTimestamp 验证该过滤器把注入时钟的时间写入请求 context，
+// 后续 handler 能通过 request.ReceivedTimestampFrom 取到同一时刻。
+// 使用 FakeClock 而非真实时钟，避免断言依赖调度延迟。
 func TestWithRequestReceivedTimestamp(t *testing.T) {
 	ctx := t.Context()
 	receivedTimestampExpected := time.Now()
@@ -52,6 +55,7 @@ func TestWithRequestReceivedTimestamp(t *testing.T) {
 	w := httptest.NewRecorder()
 	wrapped.ServeHTTP(w, testRequest)
 
+	// 过滤器只能透传一次，重复调用会导致审计时间戳重复记录。
 	if callCount != 1 {
 		t.Errorf("WithRequestReceivedTimestamp: expected the original handler to be invoked once, but was actually invoked %d times", callCount)
 	}

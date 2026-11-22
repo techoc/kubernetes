@@ -30,6 +30,9 @@ import (
 )
 
 // Avoid emitting errors that look like valid HTML. Quotes are okay.
+//
+// 错误信息里可能包含用户可控的请求路径/资源名，若不转义，浏览器在
+// 直接访问 API 时会把它当作 HTML 渲染，形成反射型 XSS。
 var sanitizer = strings.NewReplacer(`&`, "&amp;", `<`, "&lt;", `>`, "&gt;")
 
 // Forbidden renders a simple forbidden error
@@ -37,11 +40,15 @@ func Forbidden(attributes authorizer.Attributes, w http.ResponseWriter, req *htt
 	RespondWithError(w, req, ForbiddenStatusError(attributes, reason), s)
 }
 
+// RespondWithError 以内容协商方式写出错误响应。
+// nosniff 阻止浏览器根据内容猜测类型，进一步降低 XSS 风险。
 func RespondWithError(w http.ResponseWriter, req *http.Request, err error, s runtime.NegotiatedSerializer) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	ErrorNegotiated(err, s, metav1.Unversioned, w, req)
 }
 
+// ForbiddenStatusError 构造 403 StatusError；reason 为空时只使用基础描述，
+// 避免出现结尾多余的冒号。
 func ForbiddenStatusError(attributes authorizer.Attributes, reason string) *apierrors.StatusError {
 	msg := sanitizer.Replace(forbiddenMessage(attributes))
 
@@ -57,6 +64,8 @@ func ForbiddenStatusError(attributes authorizer.Attributes, reason string) *apie
 	return apierrors.NewForbidden(gr, attributes.GetName(), errMsg)
 }
 
+// forbiddenMessage 生成面向用户的拒绝说明：区分资源请求与非资源请求，
+// 并分别给出命名空间级和集群级两种措辞。
 func forbiddenMessage(attributes authorizer.Attributes) string {
 	username := ""
 	if user := attributes.GetUser(); user != nil {
@@ -80,6 +89,9 @@ func forbiddenMessage(attributes authorizer.Attributes) string {
 }
 
 // InternalError renders a simple internal error
+//
+// 同样经过 sanitizer 转义；同时把原始错误交给 utilruntime 记录，避免
+// 内部细节只出现在响应体里。
 func InternalError(w http.ResponseWriter, req *http.Request, err error) {
 	http.Error(w, sanitizer.Replace(fmt.Sprintf("Internal Server Error: %q: %v", req.RequestURI, err)),
 		http.StatusInternalServerError)

@@ -46,8 +46,14 @@ import (
 // flags := cmd.Flags()
 // // add flags
 // compatibility.DefaultComponentGlobalsRegistry.AddFlags(flags)
+//
+// 该注册表把"组件有效版本（emulation version）"与"特性门控"绑在一起：
+// 版本仿真要求特性门控按仿真版本而非二进制版本生效，因此必须由同一份注册表
+// 统一驱动，否则各组件会看到互相矛盾的版本视图。
 var DefaultComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry = basecompatibility.NewComponentGlobalsRegistry()
 
+// init 注册 kube 默认组件，使任何导入本包的程序都能获得可用的全局注册表。
+// 这里用 Must 是因为注册失败属于编程错误，应在启动阶段立即暴露而非静默降级。
 func init() {
 	utilruntime.Must(DefaultComponentGlobalsRegistry.Register(basecompatibility.DefaultKubeComponent, DefaultBuildEffectiveVersion(), utilfeature.DefaultMutableFeatureGate))
 }

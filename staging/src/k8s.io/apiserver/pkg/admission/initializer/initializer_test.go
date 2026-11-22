@@ -33,6 +33,9 @@ import (
 
 // TestWantsUnconditionalAuthorizer ensures that the authorizer is injected
 // when the WantsUnconditionalAuthorizer interface is implemented by a plugin.
+//
+// 中文说明：与 WantsAuthorizer 的区别在于是否受准入请求链路的条件求值约束；
+// 这里只验证注入路径，不验证鉴权语义。
 func TestWantsUnconditionalAuthorizer(t *testing.T) {
 	target := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, nil, nil)
 	wantUnconditionalAuthorizerAdmission := &WantUnconditionalAuthorizerAdmission{}
@@ -80,6 +83,9 @@ func TestWantsExternalKubeInformerFactory(t *testing.T) {
 
 // TestWantsShutdownSignal ensures that the shutdown signal is injected
 // when the WantsShutdownSignal interface is implemented by a plugin.
+//
+// 中文说明：函数名仍是旧称 ShutdownNotification，接口已改名为 WantsDrainedNotification；
+// 该通道在 apiserver 完成 drain 后关闭，插件据此停止后台工作。
 func TestWantsShutdownNotification(t *testing.T) {
 	stopCh := make(chan struct{})
 	target := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, stopCh, nil)
@@ -159,6 +165,7 @@ var _ admission.Interface = &WantAuthorizerAdmission{}
 var _ initializer.WantsAuthorizer = &WantAuthorizerAdmission{}
 
 // WantDrainedNotification is a test stub that filfills the WantsDrainedNotification interface.
+// 中文说明：只保存注入的通道，用于断言注入确实发生。
 type WantDrainedNotification struct {
 	stopCh <-chan struct{}
 }
@@ -193,6 +200,8 @@ func (*TestAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.Condit
 }
 
 func TestRESTMapperAdmissionPlugin(t *testing.T) {
+	// 中文说明：验证实现了 SetRESTMapper 的插件能拿到注入的 mapper；
+	// 插件侧常用它把资源名解析成 GVK 再与规则匹配。
 	initializer := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, nil, &doNothingRESTMapper{})
 	wantsRESTMapperAdmission := &WantsRESTMapperAdmissionPlugin{}
 	initializer.Initialize(wantsRESTMapperAdmission)
@@ -212,6 +221,7 @@ func (p *WantsRESTMapperAdmissionPlugin) SetRESTMapper(mapper meta.RESTMapper) {
 	p.mapper = mapper
 }
 
+// doNothingRESTMapper 是空实现的 RESTMapper：所有方法返回零值，仅用于满足接口。
 type doNothingRESTMapper struct{}
 
 func (doNothingRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
@@ -238,6 +248,7 @@ func (doNothingRESTMapper) ResourceSingularizer(resource string) (singular strin
 
 type doNothingAdmission struct{}
 
+// 中文说明：以下嵌入类型把 admission.Interface 的方法拆开，便于各测试桩只实现自己关心的部分。
 func (doNothingAdmission) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	return nil
 }

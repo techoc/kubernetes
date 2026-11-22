@@ -23,13 +23,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// PolicyDecisionAction 是策略最终对请求采取的动作。
 type PolicyDecisionAction string
 
 const (
+	// ActionAdmit 表示放行。
 	ActionAdmit PolicyDecisionAction = "admit"
-	ActionDeny  PolicyDecisionAction = "deny"
+	// ActionDeny 表示拒绝。
+	ActionDeny PolicyDecisionAction = "deny"
 )
 
+// PolicyDecisionEvaluation 记录决策的来源：正常通过、出错还是显式拒绝。
+// 与 Action 分开是为了在 deny 时区分“表达式返回 false”和“表达式求值失败”。
 type PolicyDecisionEvaluation string
 
 const (
@@ -39,14 +44,22 @@ const (
 )
 
 // PolicyDecision contains the action determined from a cel evaluation along with metadata such as message, reason and duration
+//
+// 该结构会出现在审计与拒绝响应中，字段语义需保持稳定。
 type PolicyDecision struct {
-	Action     PolicyDecisionAction
+	// Action 最终动作。
+	Action PolicyDecisionAction
+	// Evaluation 决策来源（通过/出错/拒绝）。
 	Evaluation PolicyDecisionEvaluation
-	Message    string
-	Reason     metav1.StatusReason
-	Elapsed    time.Duration
+	// Message 面向用户的说明。
+	Message string
+	// Reason 映射为 status 的 reason，进而决定 HTTP 状态码。
+	Reason metav1.StatusReason
+	// Elapsed CEL 求值耗时，用于预算与性能观测。
+	Elapsed time.Duration
 }
 
+// PolicyAuditAnnotationAction 描述一条审计注解的处理结果。
 type PolicyAuditAnnotationAction string
 
 const (
@@ -62,6 +75,7 @@ const (
 	AuditAnnotationActionExclude PolicyAuditAnnotationAction = "exclude"
 )
 
+// PolicyAuditAnnotation 是一条待写入审计事件的注解及其求值结果。
 type PolicyAuditAnnotation struct {
 	Key     string
 	Value   string
@@ -70,6 +84,8 @@ type PolicyAuditAnnotation struct {
 	Error   string
 }
 
+// reasonToCode 把策略 reason 映射为 HTTP 状态码。
+// 只允许 API 层可设置的 reason 进入这里，未知值兜底为 422，避免产生误导性的 5xx。
 func reasonToCode(r metav1.StatusReason) int32 {
 	switch r {
 	case metav1.StatusReasonForbidden:

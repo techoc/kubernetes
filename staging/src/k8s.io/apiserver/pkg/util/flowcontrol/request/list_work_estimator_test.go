@@ -23,6 +23,9 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 )
 
+// TestListWorkEstimator 校验 LIST 工作量估算：对象数量与对象大小两种策略（由 feature gate
+// 二选一启用）分别计算所需并发份额，覆盖存储/缓存、是否设置 limit、是否带选择器等组合。
+// 估算结果直接决定 APF 排队开销，因此每种请求形态都需要精确预期。
 func TestListWorkEstimator(t *testing.T) {
 
 	defaultCfg := DefaultWorkEstimatorConfig()
@@ -284,6 +287,7 @@ func TestListWorkEstimator(t *testing.T) {
 
 			stats := storage.Stats{ObjectCount: test.objectCount, EstimatedAverageObjectSizeBytes: test.totalSize / test.objectCount}
 
+			// 两种估算维度独立测试，避免一个维度的偏差掩盖另一个。
 			objectCountEstimate := estimator.seatsBasedOnObjectCount(stats, test.request, test.isListFromCache, test.matchesSingle)
 			objectSizeEstimage := estimator.seatsBasedOnObjectSize(stats, test.request, test.isListFromCache, test.matchesSingle)
 

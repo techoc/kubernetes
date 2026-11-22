@@ -27,6 +27,10 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// TestFormat 验证 format 库的校验语义：校验通过返回 Optional.none，
+// 失败返回包含错误说明的 Optional 列表；同时穷举所有常量格式的查找与互不相等性。
+//
+// 错误消息文本与 Kubernetes 校验函数保持一致，属于对用户可见的契约。
 func TestFormat(t *testing.T) {
 	type testcase struct {
 		name               string
@@ -201,6 +205,9 @@ func TestFormat(t *testing.T) {
 	}
 
 	// Also test format names and comparisons of all constants
+	//
+	// 对常量集合做两两组合，确保 format.named(name) 与 format.<name>() 等价，
+	// 且任意两个不同格式互不相等（防止枚举值或字符串拼接写错导致别名冲突）。
 	for keyLHS := range library.ConstantFormats {
 		cases = append(cases, testcase{
 			name:        "lookup and comparison",
@@ -231,6 +238,8 @@ func TestFormat(t *testing.T) {
 	}
 }
 
+// TestSizeLimit 保证所有格式名不超过 cel.MaxFormatSize，限制编译期常量大小，
+// 避免格式字符串成为内存/编译开销的放大器。
 func TestSizeLimit(t *testing.T) {
 	for name := range library.ConstantFormats {
 		if len(name) > cel.MaxFormatSize {

@@ -29,7 +29,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSchemaDeclType 校验从 OpenAPI schema 推导 CEL 声明类型的正确性。
+//
+// 中文说明：重点覆盖字段集合、默认值、枚举与 required 标记——这些信息一旦
+// 丢失，CEL 编译期的类型检查会放行本应拒绝的表达式。
 func TestSchemaDeclType(t *testing.T) {
+	// additionalProperties: true 必须产生 object 而非报错，否则使用开放 map 的
+	// CRD 无法编写任何规则。
 	t.Run("a schema with additionalProperties: true should be an valid object type", func(t *testing.T) {
 		schema := &spec.Schema{
 			SchemaProps: spec.SchemaProps{
@@ -70,6 +76,7 @@ func TestSchemaDeclType(t *testing.T) {
 		if !found {
 			t.Errorf("type field not found in schema, field: %s", f.Name)
 		}
+		// 默认值必须与 schema 一致，否则 CEL 在字段缺省时的求值结果与 API 默认化不符。
 		fdv := f.DefaultValue()
 		if prop.Default != nil {
 			pdv := types.DefaultTypeAdapter.NativeToValue(prop.Default)
@@ -100,6 +107,7 @@ func TestSchemaDeclType(t *testing.T) {
 
 	}
 	for _, name := range ts.Required {
+		// required 标记影响 CEL 中字段访问是否可空，必须原样传递。
 		df, found := cust.FindField(name)
 		if !found {
 			t.Errorf("custom type missing required field. field=%s", name)
@@ -111,6 +119,10 @@ func TestSchemaDeclType(t *testing.T) {
 
 }
 
+// TestSchemaDeclTypes 验证 FieldTypeMap 能递归收集全部嵌套对象类型。
+//
+// 中文说明：类型表用于向 CEL 环境注册类型，漏掉嵌套类型会导致引用它的
+// 表达式编译失败；比较使用 proto.Equal 而非指针相等，避免误判。
 func TestSchemaDeclTypes(t *testing.T) {
 	ts := testSchema()
 	cust := SchemaDeclType(ts, true).MaybeAssignTypeName("CustomObject")
@@ -151,6 +163,10 @@ func TestSchemaDeclTypes(t *testing.T) {
 	}
 }
 
+// testSchema 手工构造一份覆盖常见 OpenAPI 形态的 schema。
+//
+// 中文说明：刻意包含 map、数组、日期格式、默认值与枚举，作为后续多个用例的
+// 公共输入；手写而非从 YAML 加载，便于精确定位字段。
 func testSchema() *spec.Schema {
 	// Manual construction of a schema with the following definition:
 	//
@@ -243,6 +259,7 @@ func testSchema() *spec.Schema {
 	return ts
 }
 
+// arraySchema 构造元素类型固定的数组 schema，maxItems 为 nil 表示不限制。
 func arraySchema(arrayType, format string, maxItems *int64) *spec.Schema {
 	return &spec.Schema{
 		SchemaProps: spec.SchemaProps{
@@ -257,6 +274,10 @@ func arraySchema(arrayType, format string, maxItems *int64) *spec.Schema {
 	}
 }
 
+// TestEstimateMaxLengthJSON 验证 MaxElements 估算与 JSON 序列化长度的对应关系。
+//
+// 中文说明：MaxElements 用于 CEL 成本估算的规模上限；估算过大可被恶意对象
+// 放大成本，过小则误拒合法对象，因此每个用例都按最小 JSON 表示精确推算。
 func TestEstimateMaxLengthJSON(t *testing.T) {
 	type maxLengthTest struct {
 		Name                string
@@ -337,6 +358,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 			Name:        "arrayWithLength",
 			InputSchema: arraySchema("integer", "int64", ptr.To[int64](10)),
 			// manually set by MaxItems
+			// 中文说明：显式 maxItems 优先于按请求体大小推算的上限。
 			ExpectedMaxElements: 10,
 		},
 		{
@@ -445,6 +467,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 				}},
 			// note that unlike regular strings we don't have to take unicode into account,
 			// so we expect the max length to be exactly equal to the user-supplied one
+			// 中文说明：byte 格式在 JSON 中是 base64 字符串，长度按字节计，无需 4 倍余量。
 			ExpectedMaxElements: 20,
 		},
 	}
@@ -458,6 +481,10 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 	}
 }
 
+// genNestedSchema 生成 depth 层嵌套的 map-of-map schema。
+//
+// 中文说明：用于基准测试类型推导在深层嵌套下的表现，防止递归实现退化为
+// 指数复杂度。
 func genNestedSchema(depth int) *spec.Schema {
 	var generator func(d int) spec.Schema
 	generator = func(d int) spec.Schema {
@@ -478,6 +505,9 @@ func genNestedSchema(depth int) *spec.Schema {
 	return &schema
 }
 
+// BenchmarkDeeplyNestedSchemaDeclType 衡量 10 层嵌套 schema 的类型推导开销。
+//
+// 中文说明：该路径在 CRD 注册与策略编译时执行，性能退化会影响 apiserver 启动。
 func BenchmarkDeeplyNestedSchemaDeclType(b *testing.B) {
 	benchmarkSchema := genNestedSchema(10)
 	b.ResetTimer()

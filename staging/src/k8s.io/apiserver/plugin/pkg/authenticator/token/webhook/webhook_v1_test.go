@@ -41,6 +41,7 @@ import (
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+// testRetryBackoff 是测试用的短重试策略：步数固定为 5，便于断言调用次数。
 var testRetryBackoff = wait.Backoff{
 	Duration: 5 * time.Millisecond,
 	Factor:   1.5,
@@ -49,6 +50,9 @@ var testRetryBackoff = wait.Backoff{
 }
 
 // V1Service mocks a remote authentication service.
+//
+// 中文说明：测试服务可控制 allow 与 HTTP 状态码，用于覆盖成功、拒绝、
+// 可重试错误（429/5xx）与不可重试错误（404）等路径。
 type V1Service interface {
 	// Review looks at the TokenReviewSpec and provides an authentication
 	// response in the TokenReviewStatus.
@@ -57,6 +61,9 @@ type V1Service interface {
 }
 
 // NewV1TestServer wraps a V1Service as an httptest.Server.
+//
+// 中文说明：caCert 非空时要求并校验客户端证书，cert/key 非空时启用服务端
+// TLS；两者组合可模拟 mTLS、单向 TLS 与不安全连接三种场景。
 func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	const webhookPath = "/testserver"
 	var tlsConfig *tls.Config
@@ -95,6 +102,8 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 			return
 		}
 		// ensure we received the serialized tokenreview as expected
+		// 中文说明：校验 apiVersion 可发现编码错误（如误用 internal 版本），
+		// 这类错误在真实环境中会表现为 webhook 端解析失败。
 		if review.APIVersion != "authentication.k8s.io/v1" {
 			http.Error(w, fmt.Sprintf("wrong api version: %s", string(bodyData)), http.StatusBadRequest)
 			return
@@ -160,12 +169,15 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 }
 
 // A service that can be set to say yes or no to authentication requests.
+//
+// 中文说明：called 计数器用于验证缓存命中与重试次数。
 type mockV1Service struct {
 	allow      bool
 	statusCode int
 	called     int
 }
 
+// Review 记录调用次数并按 allow 填充响应。
 func (m *mockV1Service) Review(r *authenticationv1.TokenReview) {
 	m.called++
 	r.Status.Authenticated = m.allow
@@ -179,6 +191,9 @@ func (m *mockV1Service) HTTPStatusCode() int { return m.statusCode }
 
 // newV1TokenAuthenticator creates a temporary kubeconfig file from the provided
 // arguments and attempts to load a new WebhookTokenAuthenticator from it.
+//
+// 中文说明：走真实 kubeconfig 解析路径，确保客户端证书/CA 的接线方式与
+// 生产一致；cacheTime 为 0 表示不缓存，便于验证每次调用都打到服务端。
 func newV1TokenAuthenticator(serverURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration, implicitAuds authenticator.Audiences, metrics AuthenticatorMetrics) (authenticator.Token, error) {
 	tempfile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -220,6 +235,10 @@ func newV1TokenAuthenticator(serverURL string, clientCert, clientKey, ca []byte,
 	return cache.New(authn, false, cacheTime, cacheTime), nil
 }
 
+// TestV1TLSConfig 验证客户端与服务端在各种证书组合下的 TLS 行为。
+//
+// 中文说明：webhook 认证器不支持不安全连接；信任关系不对称时必须报错，
+// 而不是降级为明文，否则会静默失去传输安全。
 func TestV1TLSConfig(t *testing.T) {
 	tests := []struct {
 		test                            string
@@ -262,6 +281,7 @@ func TestV1TLSConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		// Use a closure so defer statements trigger between loop iterations.
+		// 中文说明：在闭包内 defer，保证每个用例结束即关闭 server，避免句柄泄漏。
 		func() {
 			service := new(mockV1Service)
 			service.statusCode = 200
@@ -307,11 +327,14 @@ func TestV1TLSConfig(t *testing.T) {
 
 // recorderV1Service records all token review requests, and responds with the
 // provided TokenReviewStatus.
+//
+// 中文说明：记录完整请求，便于断言 token、TypeMeta 与 audience 是否正确传递。
 type recorderV1Service struct {
 	lastRequest authenticationv1.TokenReview
 	response    authenticationv1.TokenReviewStatus
 }
 
+// Review 保存请求并回填预设响应。
 func (rec *recorderV1Service) Review(r *authenticationv1.TokenReview) {
 	rec.lastRequest = *r
 	r.Status = rec.response
@@ -319,6 +342,10 @@ func (rec *recorderV1Service) Review(r *authenticationv1.TokenReview) {
 
 func (rec *recorderV1Service) HTTPStatusCode() int { return 200 }
 
+// TestV1WebhookTokenAuthenticator 验证响应映射、未认证处理与 audience 语义。
+//
+// 中文说明：未认证时即使服务端返回用户信息也必须丢弃；audience 需取请求
+// 与隐式配置的交集，服务端返回的 Audiences 必须与请求期望一致。
 func TestV1WebhookTokenAuthenticator(t *testing.T) {
 	serv := &recorderV1Service{}
 
@@ -535,12 +562,15 @@ func TestV1WebhookTokenAuthenticator(t *testing.T) {
 	}
 }
 
+// authenticationV1UserInfo 让 TokenReview 的 UserInfo 满足 user.Info 接口，
+// 用于校验字段映射是否完整。
 type authenticationV1UserInfo authenticationv1.UserInfo
 
 func (a *authenticationV1UserInfo) GetName() string     { return a.Username }
 func (a *authenticationV1UserInfo) GetUID() string      { return a.UID }
 func (a *authenticationV1UserInfo) GetGroups() []string { return a.Groups }
 
+// GetExtra 把 ExtraValue 转换为普通字符串切片，nil 时保持 nil。
 func (a *authenticationV1UserInfo) GetExtra() map[string][]string {
 	if a.Extra == nil {
 		return nil
@@ -560,6 +590,9 @@ var _ user.Info = (*authenticationV1UserInfo)(nil)
 // TestWebhookCache verifies that error responses from the server are not
 // cached, but successful responses are. It also ensures that the webhook
 // call is retried on 429 and 500+ errors
+//
+// 中文说明：缓存 "forever" 让"未再次调用"成为缓存命中的证据；用例顺序
+// 依赖前一个 200 响应写入缓存，因此不能单独打乱执行。
 func TestV1WebhookCacheAndRetry(t *testing.T) {
 	serv := new(mockV1Service)
 	s, err := NewV1TestServer(serv, serverCert, serverKey, caCert)
@@ -569,6 +602,7 @@ func TestV1WebhookCacheAndRetry(t *testing.T) {
 	defer s.Close()
 
 	// Create an authenticator that caches successful responses "forever" (100 days).
+	// 中文说明：成功响应长期缓存，使后续"期望 0 次调用"的用例可判定缓存生效。
 	wh, err := newV1TokenAuthenticator(s.URL, clientCert, clientKey, caCert, 2400*time.Hour, nil, noopAuthenticatorMetrics())
 	if err != nil {
 		t.Fatal(err)
@@ -697,6 +731,7 @@ func TestV1WebhookCacheAndRetry(t *testing.T) {
 	}
 }
 
+// noopAuthenticatorMetrics 返回空实现的指标回调，避免测试触碰全局 registry。
 func noopAuthenticatorMetrics() AuthenticatorMetrics {
 	return AuthenticatorMetrics{
 		RecordRequestTotal:   noopMetrics{}.RequestTotal,

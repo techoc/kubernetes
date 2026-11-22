@@ -44,6 +44,10 @@ var (
 	errCode = "empty"
 )
 
+// TestRecordKMSOperationLatency 验证 KMS 操作延迟直方图的标签取值：
+// gRPC 错误码从状态中提取，包装后的错误也要能还原；非 gRPC 错误统一
+// 归入 unknown-non-grpc。预期输出包含完整的 bucket 布局，任何指标定义
+// 变化都会让该测试显式失败。
 func TestRecordKMSOperationLatency(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -199,6 +203,9 @@ func TestRecordKMSOperationLatency(t *testing.T) {
 	}
 }
 
+// TestRecordKeyID_Serial 顺序执行多个用例且不重置指标，以验证标签基数
+// 超限时的 LRU 淘汰行为：keyID/API server ID 均以哈希作为标签值，避免
+// 高基数明文进入指标。
 func TestRecordKeyID_Serial(t *testing.T) {
 	testCases := []struct {
 		desc               string
@@ -323,6 +330,8 @@ func TestRecordKeyID_Serial(t *testing.T) {
 	}
 }
 
+// TestRecordKeyIDLRUKey 并发记录大量不同标签，验证最终只保留 cacheSize
+// 个序列（LRU），阻止指标标签无界增长。
 func TestRecordKeyIDLRUKey(t *testing.T) {
 	RegisterMetrics()
 
@@ -371,6 +380,8 @@ func TestRecordKeyIDLRUKey(t *testing.T) {
 	}
 }
 
+// TestRecordKeyIDFromStatus 验证 Status RPC 返回的 keyID 时间戳指标同样
+// 受 LRU 基数上限约束，且并发写入不会产生零时间戳。
 func TestRecordKeyIDFromStatus(t *testing.T) {
 	RegisterMetrics()
 
@@ -418,6 +429,8 @@ func TestRecordKeyIDFromStatus(t *testing.T) {
 	}
 }
 
+// TestRecordInvalidKeyIDFromStatus 验证无效 keyID 计数器：并发计数应精确
+// 累计到预期值，错误类型作为标签区分。
 func TestRecordInvalidKeyIDFromStatus(t *testing.T) {
 	testCases := []struct {
 		desc         string

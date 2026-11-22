@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package authorizerfactory 提供内置授权器的构造方法。
+// 本文件实现“委托授权”（delegating authorization）：通过 SubjectAccessReview
+// 把授权决策交给另一个 kube-apiserver，典型用于聚合 apiserver。
 package authorizerfactory
 
 import (
@@ -29,6 +32,9 @@ import (
 
 // DelegatingAuthorizerConfig is the minimal configuration needed to create an authorizer
 // built to delegate authorization to a kube API server
+//
+// 缓存 TTL 通常允许值长于拒绝值：允许结果变化慢、拒绝后用户重试往往很快，
+// 过长的拒绝缓存会让重试无效。
 type DelegatingAuthorizerConfig struct {
 	SubjectAccessReviewClient authorizationclient.AuthorizationV1Interface
 
@@ -48,6 +54,10 @@ type DelegatingAuthorizerConfig struct {
 	WebhookRetryBackoff *wait.Backoff
 }
 
+// New 构造一个基于 webhook 的委托授权器。
+// WebhookRetryBackoff 必填：没有退避策略就无法在后端故障时限制重试风暴。
+// 未提供 Compiler 时使用默认的 CEL 编译器；授权器对未知请求默认返回 NoOpinion，
+// 以便与其它授权器组成链。
 func (c DelegatingAuthorizerConfig) New() (authorizer.Authorizer, error) {
 	if c.WebhookRetryBackoff == nil {
 		return nil, errors.New("retry backoff parameters for delegating authorization webhook has not been specified")

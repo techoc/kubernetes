@@ -22,6 +22,7 @@ import (
 )
 
 // promise implements the WriteOnce interface.
+// 并发语义：Set 只生效一次；Get 在未设置前阻塞，直到被 Set 或 doneCtx 结束。
 type promise struct {
 	doneCtx context.Context
 	doneVal interface{}
@@ -39,6 +40,8 @@ var _ WriteOnce = &promise{}
 // If a `Get` is waiting soon after the channel associated with the
 // `doneCtx` becomes selectable (which never happens for the nil
 // channel) then `Set(doneVal)` effectively happens at that time.
+//
+// doneCtx 用于给等待设一个上界：超时后以 doneVal 作为结果，避免 Get 永久阻塞。
 func NewWriteOnce(initial interface{}, doneCtx context.Context, doneVal interface{}) WriteOnce {
 	p := &promise{
 		doneCtx: doneCtx,
@@ -51,15 +54,18 @@ func NewWriteOnce(initial interface{}, doneCtx context.Context, doneVal interfac
 	return p
 }
 
+// Get 等待值被设置；若 doneCtx 先结束，则以 doneVal 完成设置。
 func (p *promise) Get() interface{} {
 	select {
 	case <-p.setCh:
 	case <-p.doneCtx.Done():
+		// 超时路径也走 Set，保证后续并发 Get 不会重复等待。
 		p.Set(p.doneVal)
 	}
 	return p.value
 }
 
+// Set 写入值并唤醒等待者；仅第一次调用生效，返回是否由本次调用写入。
 func (p *promise) Set(value interface{}) bool {
 	var ans bool
 	p.onceler.Do(func() {

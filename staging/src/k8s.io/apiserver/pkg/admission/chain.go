@@ -20,6 +20,9 @@ import "context"
 
 // chainAdmissionHandler is an instance of admission.NamedHandler that performs admission control using
 // a chain of admission handlers
+//
+// 链式处理器按顺序执行各插件，任一插件返回错误即短路。顺序因此具有语义：
+// 变更类插件先于校验类插件运行，使后续插件看到已变更的对象。
 type chainAdmissionHandler []Interface
 
 // NewChainHandler creates a new chain handler from an array of handlers. Used for testing.
@@ -28,6 +31,9 @@ func NewChainHandler(handlers ...Interface) chainAdmissionHandler {
 }
 
 // Admit performs an admission control check using a chain of handlers, and returns immediately on first error
+//
+// 只有实现了 MutationInterface 的插件参与变更；校验类插件在此阶段被跳过。
+// 跳过 Handles 不匹配的操作，避免插件为不关心的操作付出代价。
 func (admissionHandler chainAdmissionHandler) Admit(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	for _, handler := range admissionHandler {
 		if !handler.Handles(a.GetOperation()) {
@@ -44,6 +50,9 @@ func (admissionHandler chainAdmissionHandler) Admit(ctx context.Context, a Attri
 }
 
 // Validate performs an admission control check using a chain of handlers, and returns immediately on first error
+//
+// 与 Admit 对称：这里只调用 ValidationInterface，变更已经在前一阶段完成。
+// 立即返回首个错误，保证拒绝原因确定、不依赖后续插件的副作用。
 func (admissionHandler chainAdmissionHandler) Validate(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	for _, handler := range admissionHandler {
 		if !handler.Handles(a.GetOperation()) {
@@ -60,6 +69,8 @@ func (admissionHandler chainAdmissionHandler) Validate(ctx context.Context, a At
 }
 
 // Handles will return true if any of the handlers handles the given operation
+//
+// 只要有一个插件关心该操作就返回 true，使上层不会因链中混有不关心的插件而跳过整条链。
 func (admissionHandler chainAdmissionHandler) Handles(operation Operation) bool {
 	for _, handler := range admissionHandler {
 		if handler.Handles(operation) {

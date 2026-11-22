@@ -24,10 +24,12 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Configuration provides configuration for the ResourceQuota admission controller.
+// 它对应 resourcequota 准入插件的配置文件，决定哪些资源在缺少配额时必须被拒绝。
 type Configuration struct {
 	metav1.TypeMeta `json:""`
 
 	// LimitedResources whose consumption is limited by default.
+	// 每个条目描述一类资源；为空时所有资源都按默认配额策略处理。
 	// +optional
 	LimitedResources []LimitedResource `json:"limitedResources"`
 }
@@ -35,9 +37,11 @@ type Configuration struct {
 // LimitedResource matches a resource whose consumption is limited by default.
 // To consume the resource, there must exist an associated quota that limits
 // its consumption.
+// 该结构与 LimitedResources 配合，实现“没有覆盖配额就拒绝”的默认限制语义。
 type LimitedResource struct {
 
 	// APIGroup is the name of the APIGroup that contains the limited resource.
+	// 留空表示 core 组；必须与 Resource 组合后才能唯一确定资源。
 	// +optional
 	APIGroup string `json:"apiGroup,omitempty"`
 
@@ -56,6 +60,9 @@ type LimitedResource struct {
 	// that a quota must exist to consume persistent volume claims associated
 	// with any storage class, the list would include
 	// ".storageclass.storage.k8s.io/requests.storage"
+	//
+	// 匹配为子串匹配（而非前缀），因此条目应包含足够具体的资源名后缀，
+	// 避免误伤其他资源键。
 	MatchContains []string `json:"matchContains,omitempty"`
 	// For each intercepted request, the quota system will figure out if the input object
 	// satisfies a scope which is present in this listing, then

@@ -18,8 +18,13 @@ package v1alpha1
 
 import kruntime "k8s.io/apimachinery/pkg/runtime"
 
+// addDefaultingFuncs 向 scheme 注册默认值函数；
+// 由 generated 代码通过 SchemeBuilder 调用，保持与 k8s 默认值机制一致。
 func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_Configuration 目前没有可设置的默认值。
+// 保留该函数是为了让版本化 API 具备完整的 defaulting 注册点，
+// 后续新增字段时可以直接在此补充默认值而不必改动生成代码结构。
 func SetDefaults_Configuration(obj *Configuration) {}

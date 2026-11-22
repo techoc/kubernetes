@@ -53,11 +53,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// mockCodecs 包装真实 codec 工厂，并把最近一次 Encode 的错误记录下来，
+// 让测试无需解析输出即可断言审计日志对象是否编码成功。
 type mockCodecs struct {
 	serializer.CodecFactory
 	err error
 }
 
+// mockCodec 只拦截 Encode，把错误回写到共享的 mockCodecs。
 type mockCodec struct {
 	runtime.Codec
 	codecs *mockCodecs
@@ -69,6 +72,7 @@ func (p mockCodec) Encode(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
+// EncoderForVersion 返回带错误记录的编码器；下游审计日志写入走这条路径。
 func (s *mockCodecs) EncoderForVersion(encoder runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	out := s.CodecFactory.CodecForVersions(encoder, nil, gv, nil)
 	return &mockCodec{
@@ -77,6 +81,9 @@ func (s *mockCodecs) EncoderForVersion(encoder runtime.Encoder, gv runtime.Group
 	}
 }
 
+// TestDeleteResourceAuditLogRequestObject 验证审计日志序列化 DeleteOptions
+// 时使用的 codec：只有注册了对应 group 的 codec 才能成功，否则
+// LogRequestObject 应静默降级（不 panic、不阻塞删除）。
 func TestDeleteResourceAuditLogRequestObject(t *testing.T) {
 
 	ctx := audit.WithAuditContext(context.TODO())
@@ -156,6 +163,8 @@ func TestDeleteResourceAuditLogRequestObject(t *testing.T) {
 }
 
 // For issue https://github.com/kubernetes/kubernetes/issues/132359
+// 回归测试：DELETE 请求体中的类型错误（字段类型不符、apiVersion/kind 不匹配）
+// 必须返回 400，而不能被忽略或以 500 收场。
 func TestDeleteResourceDeleteOptions(t *testing.T) {
 	ctx := t.Context()
 	fakeDeleterFn := func(ctx context.Context, _ rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
@@ -216,12 +225,16 @@ func TestDeleteResourceDeleteOptions(t *testing.T) {
 	}
 }
 
+// fakeDeleterFunc 让普通函数满足 rest.GracefulDeleter，便于注入测试行为。
 type fakeDeleterFunc func(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error)
 
 func (f fakeDeleterFunc) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	return f(ctx, deleteValidation, options)
 }
 
+// TestDeleteCollection 验证 DeleteOptions 解码对 codec 注册的依赖：
+// 未注册 DeleteOptions 的 codec 必须返回明确错误，而标准内部 scheme 应能
+// 接受任意 apiVersion 的 DeleteOptions（版本转换后再解码）。
 func TestDeleteCollection(t *testing.T) {
 	req := &http.Request{
 		Header: http.Header{},
@@ -292,6 +305,8 @@ func TestDeleteCollection(t *testing.T) {
 }
 
 // For issue https://github.com/kubernetes/kubernetes/issues/132359
+// deletecollection 与单对象删除共用同一解析路径，同样需把请求体类型错误
+// 映射为 400。
 func TestDeleteCollectionDeleteOptions(t *testing.T) {
 	ctx := t.Context()
 	fakeDeleterFn := func(ctx context.Context, _ rest.ValidateObjectFunc, _ *metav1.DeleteOptions, _ *metainternalversion.ListOptions) (runtime.Object, error) {
@@ -352,6 +367,8 @@ func TestDeleteCollectionDeleteOptions(t *testing.T) {
 	}
 }
 
+// TestDeleteCollectionWithNoContextDeadlineEnforced 验证 deletecollection 不会
+// 给下层注入额外 deadline：请求本身无截止时间时，deleter 看到的 ctx 也不应有。
 func TestDeleteCollectionWithNoContextDeadlineEnforced(t *testing.T) {
 	ctx := t.Context()
 	var invokedGot, hasDeadlineGot int32
@@ -394,12 +411,14 @@ func TestDeleteCollectionWithNoContextDeadlineEnforced(t *testing.T) {
 	}
 }
 
+// fakeCollectionDeleterFunc 让普通函数满足 rest.CollectionDeleter。
 type fakeCollectionDeleterFunc func(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error)
 
 func (f fakeCollectionDeleterFunc) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error) {
 	return f(ctx, deleteValidation, options, listOptions)
 }
 
+// fakeSerializer 把编解码固定为单一 JSON serializer，简化 handler 测试。
 type fakeSerializer struct {
 	serializer runtime.Serializer
 }
@@ -420,6 +439,9 @@ func (n *fakeSerializer) DecoderToVersion(serializer runtime.Decoder, gv runtime
 	return n.serializer
 }
 
+// TestAuthorizeUnsafeDelete 覆盖 unsafe-delete 的授权闸门：只有删除操作、
+// 选项为 DeleteOptions 且 ignoreStoreReadError 为 true 时才调用授权器；
+// 子资源/非资源请求一律拒绝，授权器报错、弃权或拒绝都映射为 Forbidden。
 func TestAuthorizeUnsafeDelete(t *testing.T) {
 	const verbWant = "unsafe-delete-ignore-read-errors"
 	tests := []struct {
@@ -616,6 +638,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 }
 
 // attributes of interest for this test
+// 只构造本插件关心的字段；对象、kind 等保持零值以证明它们不会被读取。
 type attributes struct {
 	operation        admission.Operation
 	operationOptions runtime.Object
@@ -638,6 +661,8 @@ func newAttributes(attr attributes) admission.Attributes {
 		attr.userInfo)
 }
 
+// fakeAttributes 记录通过 AddAnnotation 写入的审计注解，便于断言
+// unsafe-delete 是否被标记。
 type fakeAttributes struct {
 	admission.Attributes
 	annotations map[string]string
@@ -655,6 +680,8 @@ func (f *fakeAttributes) AddAnnotation(key, value string) error {
 	return nil
 }
 
+// fakeAuthorizer 返回预设的授权决定，用于驱动 authorizeUnsafeDelete 的
+// 各失败分支。
 type fakeAuthorizer struct {
 	decision authorizer.Decision
 	reason   string
@@ -665,6 +692,10 @@ func (authorizer fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Att
 	return authorizer.decision, authorizer.reason, authorizer.err
 }
 
+// TestDeleteResourceWithUnsafeDeletionFlow 是 unsafe delete 的矩阵测试：
+// 组合 feature gate、registry 是否提供 corrupt-object deleter、用户是否
+// 传入 ignore 选项以及授权结果，断言实际走了普通还是 unsafe 删除流程、
+// 是否写入审计注解以及返回的 HTTP 状态。
 func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 	success := metav1.Status{Status: "Success", Code: 200, Details: &metav1.StatusDetails{}}
 	newInternalError := func(err error) metav1.Status {
@@ -877,6 +908,8 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 
 			// create a fake deleter that will be used for the normal deletion
 			// flow, and it will record the normal deletion activities
+			// registryHasUnsafeDeleter 为 nil 表示不实现 provider 接口；
+			// 为 false 表示实现但返回 nil，二者语义不同，需分别覆盖。
 			normalFlowObserved, unsafeFlowObserved := &deletionFlowTracker{}, &deletionFlowTracker{}
 			var deleter rest.GracefulDeleter = &fakeRegistry{tracker: normalFlowObserved}
 			if provider := test.registryHasUnsafeDeleter; provider != nil {
@@ -937,6 +970,9 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 	}
 }
 
+// TestDeleteCollectionWithUnsafeDeletionFlow 验证 deletecollection 明确禁止
+// ignoreStoreReadErrorWithClusterBreakingPotential：开启该选项返回 422，
+// deleter 不会被调用，也不会产生 unsafe 审计注解。
 func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 	success := metav1.Status{Status: "Success", Code: 200, Details: &metav1.StatusDetails{}}
 
@@ -1061,6 +1097,8 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 	}
 }
 
+// newRequest 构造带 RequestInfo 与审计上下文的 DELETE 请求；ignoreReadErr
+// 非 nil 时以查询参数传入，模拟真实 API 的请求形态。
 func newRequest(t *testing.T, ignoreReadErr *bool) *http.Request {
 	t.Helper()
 
@@ -1089,6 +1127,8 @@ func newRequest(t *testing.T, ignoreReadErr *bool) *http.Request {
 	return req
 }
 
+// newMetav1Serializer 构造只含 metav1 与内部 meta 类型的 serializer，确保
+// 测试不依赖完整 API scheme。
 func newMetav1Serializer(t *testing.T) runtime.NegotiatedSerializer {
 	t.Helper()
 
@@ -1105,6 +1145,7 @@ func newMetav1Serializer(t *testing.T) runtime.NegotiatedSerializer {
 	return runtime.NewSimpleNegotiatedSerializer(info)
 }
 
+// toStatus 把响应体解析为 metav1.Status，测试直接比较完整状态对象。
 func toStatus(t *testing.T, resp *http.Response) metav1.Status {
 	t.Helper()
 
@@ -1120,6 +1161,7 @@ func toStatus(t *testing.T, resp *http.Response) metav1.Status {
 }
 
 // to keep track of what a deletion flow (GracefulDeleter) observes
+// Ignore 保存最后一次看到的 ignore 选项，用于区分普通/unsafe 流程。
 type deletionFlowTracker struct {
 	Invoked int   // how many times Delete has been invoked
 	Ignore  *bool // the ignore option passed to Delete
@@ -1129,6 +1171,7 @@ type deletionFlowTracker struct {
 // TODO: this is not thread safe if concurrent Delete calls are made by a
 // test, tests are expected to invoke Delete serially, if that is to chage
 // we need to implement locking to keept it concurrency safe.
+// 记录调用次数与最后一次看到的 ignore 选项；测试串行调用，故无需加锁。
 type fakeRegistry struct {
 	tracker *deletionFlowTracker
 }
@@ -1147,6 +1190,8 @@ func (f *fakeRegistry) Delete(ctx context.Context, name string, deleteValidation
 var _ rest.CorruptObjectDeleterProvider = &fakeRegistryWithCorruptObjDeleter{}
 
 // fake registry implementation with support of the unsafe deletion flow
+// fakeRegistryWithCorruptObjDeleter 同时提供普通删器与 unsafe 删器；
+// handler 通过 CorruptObjectDeleterProvider 接口决定是否切换流程。
 type fakeRegistryWithCorruptObjDeleter struct {
 	// the default GracefulDeleter in use for the normal deletion flow
 	rest.GracefulDeleter
@@ -1159,6 +1204,7 @@ func (p *fakeRegistryWithCorruptObjDeleter) GetCorruptObjDeleter() rest.Graceful
 	return p.unsafeDeleter
 }
 
+// fakeAdmitter 对所有操作都声明不处理，确保测试不受准入插件干扰。
 type fakeAdmitter struct{}
 
 func (f *fakeAdmitter) Handles(_ admission.Operation) bool { return false }

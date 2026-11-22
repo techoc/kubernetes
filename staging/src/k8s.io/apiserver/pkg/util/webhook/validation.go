@@ -26,6 +26,8 @@ import (
 	"k8s.io/client-go/transport"
 )
 
+// ValidateCABundle 通过实际构建 TLS 配置来校验 CA 证书内容：
+// 与逐字节检查相比，这条路径确保 bundle 能被 TLS 栈真正解析。
 func ValidateCABundle(fldPath *field.Path, caBundle []byte) field.ErrorList {
 	var allErrors field.ErrorList
 	_, err := transport.TLSConfigFor(&transport.Config{TLS: transport.TLSConfig{CAData: caBundle}})
@@ -36,6 +38,9 @@ func ValidateCABundle(fldPath *field.Path, caBundle []byte) field.ErrorList {
 }
 
 // ValidateWebhookURL validates webhook's URL.
+// 安全边界：禁止 URL 中携带用户信息、fragment 与查询参数，
+// 避免 webhook 目标被注入额外语义或被客户端凭据混淆。
+// forceHttps 为 true 时仅允许 https scheme。
 func ValidateWebhookURL(fldPath *field.Path, URL string, forceHttps bool) field.ErrorList {
 	var allErrors field.ErrorList
 	const form = "; desired format: https://host[/path]"
@@ -61,6 +66,9 @@ func ValidateWebhookURL(fldPath *field.Path, URL string, forceHttps bool) field.
 	return allErrors
 }
 
+// ValidateWebhookService 校验 service 引用与 path。
+// 每一段 path 必须是 DNS1123 子域：服务端会把它拼接进转发 URL，
+// 宽松字符集可能引入路径穿越或编码歧义。
 func ValidateWebhookService(fldPath *field.Path, namespace, name string, path *string, port int32) field.ErrorList {
 	var allErrors field.ErrorList
 
@@ -83,9 +91,11 @@ func ValidateWebhookService(fldPath *field.Path, namespace, name string, path *s
 	// TODO: replace below with url.Parse + verifying that host is empty?
 
 	urlPath := *path
+	// "/" 与空路径都表示根路径，无需进一步检查。
 	if urlPath == "/" || len(urlPath) == 0 {
 		return allErrors
 	}
+	// "//" 会产生空的第一段，必须显式拒绝（否则后续 split 会得到空元素）。
 	if urlPath == "//" {
 		allErrors = append(allErrors, field.Invalid(fldPath.Child("path"), urlPath, "segment[0] may not be empty"))
 		return allErrors
@@ -95,6 +105,7 @@ func ValidateWebhookService(fldPath *field.Path, namespace, name string, path *s
 		allErrors = append(allErrors, field.Invalid(fldPath.Child("path"), urlPath, "must start with a '/'"))
 	}
 
+	// 去掉前导斜杠与可选的尾随斜杠后再逐段校验，避免把空段误判为非法。
 	urlPathToCheck := urlPath[1:]
 	if strings.HasSuffix(urlPathToCheck, "/") {
 		urlPathToCheck = urlPathToCheck[:len(urlPathToCheck)-1]

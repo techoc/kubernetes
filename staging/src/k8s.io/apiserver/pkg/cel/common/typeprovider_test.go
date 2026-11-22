@@ -30,6 +30,11 @@ import (
 	"k8s.io/apiserver/pkg/cel/mutation/dynamic"
 )
 
+// TestTypeProvider 验证 ResolverEnvOption 注入的类型解析器只影响对象构造，
+// 不干扰普通表达式的求值。
+//
+// 中文说明：关键不变量是"非对象表达式必须原样通过"——类型解析器若过度介入，
+// 会把算术等基础表达式也改写，造成难以排查的行为变化。
 func TestTypeProvider(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
@@ -41,6 +46,7 @@ func TestTypeProvider(t *testing.T) {
 			name:          "not an object",
 			expression:    `2 * 31 * 1847`,
 			expectedValue: int64(114514), // type resolver should not interfere.
+			// 中文说明：此处正是回归保护点：解析器不得改写非对象字面量。
 		},
 		{
 			name:          "empty",
@@ -56,6 +62,7 @@ func TestTypeProvider(t *testing.T) {
 			name:               "invalid type",
 			expression:         "Objectfoo{}",
 			expectCompileError: "undeclared reference to 'Objectfoo'",
+			// 中文说明：未注册的类型名必须编译期报错，而不是运行期变成 dyn。
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,6 +98,9 @@ func TestTypeProvider(t *testing.T) {
 
 // mockTypeResolver is a mock implementation of DynamicTypeResolver that
 // allows the object to contain any field.
+//
+// 中文说明：只识别 "Test" 一个类型名，其余一律拒绝，用来验证未知类型
+// 在编译期被拦截。
 type mockTypeResolver struct {
 }
 
@@ -103,6 +113,9 @@ func (m *mockTypeResolver) Resolve(name string) (ResolvedType, bool) {
 
 // mockResolvedType is a mock implementation of ResolvedType that
 // contains any field.
+//
+// 中文说明：Field 对任意字段名都返回 dyn 类型，模拟"无 schema 的开放对象"，
+// 使测试无需构造真实 OpenAPI 文档。
 type mockResolvedType struct {
 	objectType *types.Type
 	resolver   TypeResolver
@@ -133,6 +146,7 @@ func (m *mockResolvedType) TypeType() *types.Type {
 }
 
 func (m *mockResolvedType) Field(name string) (*types.FieldType, bool) {
+	// 返回 dyn 而非具体类型，保证任意字段访问都能通过编译。
 	return &types.FieldType{
 		Type: types.DynType,
 		IsSet: func(target any) bool {
@@ -145,15 +159,20 @@ func (m *mockResolvedType) Field(name string) (*types.FieldType, bool) {
 }
 
 func (m *mockResolvedType) FieldNames() ([]string, bool) {
+	// 返回 true 表示"字段集合开放"，CEL 不会对未知字段报错。
 	return nil, true
 }
 
+// Val 把字面量字段包装为动态对象，使求值结果表现为 map。
 func (m *mockResolvedType) Val(fields map[string]ref.Val) ref.Val {
 	return dynamic.NewObjectVal(m.objectType, fields)
 }
 
 // mustCreateEnv creates the default env for testing, with given option.
 // it fatally fails the test if the env fails to set up.
+//
+// 中文说明：以 1.30 作为引入版本，与生产代码中类型解析选项的启用版本一致，
+// 确保测试覆盖真实的特性开关边界。
 func mustCreateEnv(t testing.TB, envOptions ...cel.EnvOption) *cel.Env {
 	envSet, err := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).
 		Extend(environment.VersionedOptions{

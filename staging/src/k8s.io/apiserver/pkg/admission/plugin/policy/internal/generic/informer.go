@@ -21,17 +21,19 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// 编译期断言：informer 必须满足 Informer 接口。
 var _ Informer[runtime.Object] = informer[runtime.Object]{}
 
+// informer 把一个类型擦除的 SharedIndexInformer 包装成泛型 Informer。
+// 内嵌 lister 复用同一个 indexer，保证读取与事件通知看到同一份缓存。
 type informer[T runtime.Object] struct {
 	cache.SharedIndexInformer
 	lister[T]
 }
 
-// Creates a generic informer around a type-erased cache.SharedIndexInformer
-// It is incumbent on the caller to ensure that the generic type argument is
-// consistent with the type of the objects stored inside the SharedIndexInformer
-// as they will be casted.
+// NewInformer 围绕类型擦除的 cache.SharedIndexInformer 创建泛型 informer。
+// 调用方必须保证泛型参数 T 与 SharedIndexInformer 中实际存储的对象类型一致，
+// 因为后续取值会做强制类型转换；不一致会在运行时 panic，且没有任何编译期保护。
 func NewInformer[T runtime.Object](informe cache.SharedIndexInformer) Informer[T] {
 	return informer[T]{
 		SharedIndexInformer: informe,

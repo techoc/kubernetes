@@ -26,6 +26,8 @@ import (
 )
 
 var (
+	// 以下是 continue token 的各种无效输入错误；它们会作为 4xx 返回给客户端，
+	// 提示客户端应重新发起一次 list 而不是继续翻页。
 	ErrInvalidStartRV             = errors.New("continue key is not valid: incorrect encoded start resourceVersion (version meta.k8s.io/v1)")
 	ErrEmptyStartKey              = errors.New("continue key is not valid: encoded start key empty (version meta.k8s.io/v1)")
 	ErrGenericInvalidKey          = errors.New("continue key is not valid")
@@ -36,6 +38,9 @@ var (
 // TODO: if we change the version of the encoded from, we can't start encoding the new version
 // until all other servers are upgraded (i.e. we need to support rolling schema)
 // This is a public API struct and cannot change.
+//
+// 该结构会经 base64+JSON 暴露给客户端，字段名与语义属于 API 契约，
+// 只能通过新增版本（APIVersion 字段）来演进。
 type continueToken struct {
 	APIVersion      string `json:"v"`
 	ResourceVersion int64  `json:"rv"`
@@ -44,6 +49,9 @@ type continueToken struct {
 
 // DecodeContinue transforms an encoded predicate from into a versioned struct.
 // TODO: return a typed error that instructs clients that they must relist
+//
+// keyPrefix 是本次 list 的存储前缀；返回的 fromKey 已重新拼上该前缀，
+// 因此调用方可以直接从该 key 之后继续读取。
 func DecodeContinue(continueValue, keyPrefix string) (fromKey string, rv int64, err error) {
 	data, err := base64.RawURLEncoding.DecodeString(continueValue)
 	if err != nil {
@@ -65,6 +73,9 @@ func DecodeContinue(continueValue, keyPrefix string) (fromKey string, rv int64, 
 		// be at a higher level of the hierarchy, and so when we append the key prefix we will end up with
 		// continue start key that is fully qualified and cannot range over anything less specific than
 		// keyPrefix.
+		//
+		// 具体做法：先补上前导 "/" 再 Clean，若 Clean 改变了字符串（例如含 ".."）
+		// 就拒绝；最后去掉前导 "/" 再拼接 keyPrefix，确保结果始终位于 keyPrefix 之下。
 		key := c.StartKey
 		if !strings.HasPrefix(key, "/") {
 			key = "/" + key
@@ -80,6 +91,9 @@ func DecodeContinue(continueValue, keyPrefix string) (fromKey string, rv int64, 
 }
 
 // EncodeContinue returns a string representing the encoded continuation of the current query.
+//
+// 写入的 StartKey 会去掉 keyPrefix，减小 token 体积；解码时再拼回，
+// 因此 token 与具体的存储前缀（例如 /registry/pods）绑定。
 func EncodeContinue(key, keyPrefix string, resourceVersion int64) (string, error) {
 	nextKey := strings.TrimPrefix(key, keyPrefix)
 	if nextKey == key {
@@ -97,6 +111,9 @@ func EncodeContinue(key, keyPrefix string, resourceVersion int64) (string, error
 //
 // This function sets up parameters that a client can use to fetch the remaining results
 // from the server if they are available.
+//
+// remainingItemCount 只在没有字段/标签选择器时给出：etcd 返回的计数包含不满足
+// 谓词（predicate）的对象，直接暴露会误导客户端，因此宁可返回 nil。
 func PrepareContinueToken(keyLastItem, keyPrefix string, resourceVersion int64, itemsCount int64, hasMoreItems bool, opts ListOptions) (string, *int64, error) {
 	var remainingItemCount *int64
 	var continueValue string
@@ -104,6 +121,8 @@ func PrepareContinueToken(keyLastItem, keyPrefix string, resourceVersion int64, 
 
 	if hasMoreItems {
 		// Instruct the client to begin querying from immediately after the last key.
+		// 追加 NUL 字节是因为 etcd 的 range 从 key 开始 inclusive，NUL 保证排在
+		// 所有以 key 为前缀的键之后，从而实现“从下一项开始”。
 		continueValue, err = EncodeContinue(keyLastItem+"\x00", keyPrefix, resourceVersion)
 		if err != nil {
 			return "", remainingItemCount, err

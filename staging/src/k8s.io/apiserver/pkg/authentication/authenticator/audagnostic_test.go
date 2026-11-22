@@ -27,7 +27,13 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestAuthenticate 验证 audiences 在显式请求 audience 与认证器隐式
+// audience 不匹配时的处理。核心规则：认证器成功返回用户后，只有当
+// 请求的 audience 集合与隐式 audience 有交集时才算认证通过；错误则
+// 原样透传，未认证则返回 nil。测试通过三层循环穷举多组配置与请求
+// 组合，确保交集计算没有边界遗漏。
 func TestAuthenticate(t *testing.T) {
+	// treq 描述一次认证器调用及其期望结果。
 	type treq struct {
 		resp          *Response
 		authenticated bool
@@ -37,6 +43,7 @@ func TestAuthenticate(t *testing.T) {
 		wantAuthenticated bool
 		wantErr           bool
 	}
+	// taudcfg 描述一组"请求要求 audience"与"认证器隐式 audience"。
 	type taudcfg struct {
 		auds         Audiences
 		implicitAuds Audiences
@@ -50,6 +57,7 @@ func TestAuthenticate(t *testing.T) {
 		{
 			name: "good audience",
 
+			// 每个用例都保证请求 audience 与隐式 audience 至少有一个交集。
 			taudcfgs: []taudcfg{
 				{
 					implicitAuds: Audiences{"api"},
@@ -69,6 +77,8 @@ func TestAuthenticate(t *testing.T) {
 				},
 			},
 
+			// 认证成功：期望响应附带请求的 audience；错误与未认证路径
+			// 也应保持原语义。
 			treqs: []treq{
 				{
 					resp: &Response{
@@ -99,6 +109,7 @@ func TestAuthenticate(t *testing.T) {
 		{
 			name: "multiple good audiences",
 
+			// 两边各有多个 audience，验证交集为多个元素时全部保留。
 			taudcfgs: []taudcfg{
 				{
 					implicitAuds: Audiences{"api", "other_api"},
@@ -150,6 +161,8 @@ func TestAuthenticate(t *testing.T) {
 		{
 			name: "bad audience(s)",
 
+			// 请求 audience 与隐式 audience 无交集（含任一方为空），
+			// 此时即使认证器返回了用户，也必须判定为未认证。
 			taudcfgs: []taudcfg{
 				{
 					implicitAuds: Audiences{"api"},
@@ -205,6 +218,8 @@ func TestAuthenticate(t *testing.T) {
 					t.Run(fmt.Sprintf("auds=%q,implicit=%q", taudcfg.auds, taudcfg.implicitAuds), func(t *testing.T) {
 						ctx := context.Background()
 						ctx = WithAudiences(ctx, taudcfg.auds)
+						// 把待测请求包装成认证器函数，模拟底层认证器
+						// 返回的响应/状态/错误。
 						resp, ok, err := authenticate(ctx, taudcfg.implicitAuds, func() (*Response, bool, error) {
 							if treq.resp != nil {
 								resp := *treq.resp

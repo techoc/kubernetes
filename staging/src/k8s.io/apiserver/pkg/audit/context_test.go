@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestEnabled 验证 Enabled 的边界语义：nil context 视为未启用，
+// 但已初始化且尚未设置级别的 AuditContext 应视为启用（级别未知时宁可记录）。
 func TestEnabled(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -80,6 +82,9 @@ func TestEnabled(t *testing.T) {
 	}
 }
 
+// TestAddAuditAnnotation 验证注解收集的可见性规则与并发安全：
+// 无审计上下文时静默丢弃；策略求值前先缓存；LevelNone 下不记录；
+// 已存在的同名注解不被覆盖。并发写入用于确认实现有锁保护。
 func TestAddAuditAnnotation(t *testing.T) {
 	const (
 		annotationKeyTemplate = "test-annotation-%d"
@@ -154,6 +159,8 @@ func TestAddAuditAnnotation(t *testing.T) {
 	}
 }
 
+// TestAuditAnnotationsWithAuditLoggingSetup 按真实生命周期顺序验证：
+// 初始化前写入的注解会被丢弃，初始化后写入的保留。
 func TestAuditAnnotationsWithAuditLoggingSetup(t *testing.T) {
 	// No audit context data in the request context
 	ctx := context.Background()
@@ -177,6 +184,8 @@ func TestAuditAnnotationsWithAuditLoggingSetup(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
+// TestGetEventUser 验证 GetEventUser 返回深拷贝：修改结果中的 Groups/Extra
+// 不得影响审计事件本身，否则下游的读取会污染已生成的审计记录。
 func TestGetEventUser(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -251,6 +260,8 @@ func TestGetEventUser(t *testing.T) {
 	})
 }
 
+// TestGetEventImpersonatedUser 与 TestGetEventUser 对应，
+// 额外覆盖 ImpersonatedUser 为 nil 时应返回 nil 的情形。
 func TestGetEventImpersonatedUser(t *testing.T) {
 	tests := []struct {
 		name                       string
@@ -330,6 +341,7 @@ func TestGetEventImpersonatedUser(t *testing.T) {
 	})
 }
 
+// withAuditContextAndLevel 构造已初始化并设定级别的审计上下文。
 func withAuditContextAndLevel(ctx context.Context, t *testing.T, l auditinternal.Level) context.Context {
 	ctx = WithAuditContext(ctx)
 	if err := AuditContextFrom(ctx).Init(RequestAuditConfig{Level: l}, nil); err != nil {

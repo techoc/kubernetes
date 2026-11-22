@@ -26,17 +26,24 @@ import (
 )
 
 // ToProtoModels builds the proto formatted models from OpenAPI spec
+//
+// proto.Models 是 kube-openapi 中用于结构化遍历 schema 的中间表示，
+// CEL 的类型检查依赖它。这里先经过 JSON 往返再解析，是为了复用 gnostic
+// 的 v2 解析器，而不是直接操作 spec 结构体。
 func ToProtoModels(openAPISpec *spec.Swagger) (proto.Models, error) {
+	// gnostic 解析器只接受字节流，因此先把 Swagger 结构体序列化。
 	specBytes, err := json.MarshalIndent(openAPISpec, " ", " ")
 	if err != nil {
 		return nil, err
 	}
 
+	// 解析为 OpenAPI v2 文档模型。
 	doc, err := openapi_v2.ParseDocument(specBytes)
 	if err != nil {
 		return nil, err
 	}
 
+	// 转换为 kube-openapi 的 proto.Models 抽象。
 	models, err := proto.NewOpenAPIData(doc)
 	if err != nil {
 		return nil, err

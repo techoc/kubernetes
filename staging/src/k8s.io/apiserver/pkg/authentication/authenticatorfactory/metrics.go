@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package authenticatorfactory 构造 apiserver 的各类认证器：
+// 委派认证（webhook）、请求头认证与 loopback 认证。
 package authenticatorfactory
 
 import (
@@ -24,13 +26,17 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// registerables 是待注册指标的集合，便于一次性遍历注册。
 type registerables []compbasemetrics.Registerable
 
+// 保证重复调用 RegisterMetrics 不会因重复注册而 panic。
 var registerMetricsOnce sync.Once
 
 // RegisterMetrics registers the delegated authentication metrics with the legacy
 // registry. Do not use an init() function because feature gates (e.g., NativeHistograms)
 // must be parsed before the histogram metric is created and registered.
+//
+// 因此注册必须由启动流程在 flag 解析之后显式调用。
 func RegisterMetrics() {
 	registerMetricsOnce.Do(func() {
 		for _, metric := range metrics {
@@ -40,6 +46,7 @@ func RegisterMetrics() {
 }
 
 var (
+	// requestTotal 按响应状态码统计委派认证的 HTTP 请求数。
 	requestTotal = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Name:           "apiserver_delegated_authn_request_total",
@@ -49,6 +56,7 @@ var (
 		[]string{"code"},
 	)
 
+	// requestLatency 的桶从 250ms 起，覆盖委派认证常见的超时区间（默认 5s）。
 	requestLatency = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Name:           "apiserver_delegated_authn_request_duration_seconds",

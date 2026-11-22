@@ -44,11 +44,23 @@ import (
 // Interval for refreshing policies.
 // TODO: Consider reducing this to a shorter duration or replacing this entirely
 // with checks that detect when a policy change took effect.
+//
+// 轮询间隔是“最终一致”的代价：事件只负责把缓存标脏，真正重编译由该循环
+// 触发，因此从策略变更到生效存在一个固定上界。
 const policyRefreshIntervalDefault = 1 * time.Second
 
+// policyRefreshInterval 可在测试中通过 SetPolicyRefreshIntervalForTests 覆盖，
+// 因此读写都必须持锁（atomic 不适用于 time.Duration 的跨字段语义）。
 var policyRefreshInterval = policyRefreshIntervalDefault
 var policyRefreshIntervalLock sync.Mutex
 
+// policySource 是 Source[PolicyHook] 的实现：把策略与绑定 informer 组合成
+// 一组可直接评估的 hook。
+//
+// 关键并发约定：
+//   - policies 用 atomic.Pointer 发布，读者（Hooks/HasSynced）无锁；
+//   - compiledPolicies 与 paramsCRDControllers 只由持有 lock 的
+//     calculatePolicyData 写，因此其中所有 helper 都带 Locked 后缀。
 type policySource[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	ctx                context.Context
 	policyInformer     generic.Informer[P]
@@ -74,28 +86,37 @@ type policySource[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	paramsCRDControllers map[schema.GroupVersionKind]*paramInfo
 }
 
+// paramInfo 记录为某个 param CRD 临时启动的 informer 及其生命周期控制。
 type paramInfo struct {
 	mapping meta.RESTMapping
 
 	// When the param is changed, or the informer is done being used, the cancel
 	// func should be called to stop/cleanup the original informer
+	//
+	// 取消函数同时用于回收 informer goroutine 和释放 shared factory 的引用。
 	cancelFunc func()
 
 	// The lister for this param
 	informer informers.GenericInformer
 }
 
+// compiledPolicyEntry 缓存单个策略的编译产物；policyVersion 取
+// resourceVersion，用来判断是否需要重新编译。
 type compiledPolicyEntry[E Evaluator] struct {
 	policyVersion string
 	evaluator     E
 }
 
+// PolicyHook 是策略类 hook 的具体形态：策略本体 + 其全部绑定 + 参数
+// informer + 已编译的 evaluator。
 type PolicyHook[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	Policy   P
 	Bindings []B
 
 	// ParamInformer is the informer for the param CRD for this policy, or nil if
 	// there is no param or if there was a configuration error
+	//
+	// ParamScope 决定 param 是命名空间级还是集群级，调度时据此解析引用。
 	ParamInformer informers.GenericInformer
 	ParamScope    meta.RESTScope
 
@@ -104,12 +125,17 @@ type PolicyHook[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	// RESTMapper is used to resolve GVK to GVR for direct API calls
 	RESTMapper meta.RESTMapper
 
+	// ConfigurationError 非空表示该 hook 配置有误（例如 param CRD 找不到），
+	// 但 hook 仍会被返回，以便按 failurePolicy 决定拒绝还是忽略。
 	Evaluator          E
 	ConfigurationError error
 }
 
 var _ Source[PolicyHook[runtime.Object, runtime.Object, Evaluator]] = &policySource[runtime.Object, runtime.Object, Evaluator]{}
 
+// NewPolicySource 构造一个策略来源。参数 informer 工厂用于按需为 param CRD
+// 获取（或启动）informer；dynamicClient 与 restMapper 在缓存未命中时用于
+// 直接访问 API。
 func NewPolicySource[P runtime.Object, B runtime.Object, E Evaluator](
 	policyInformer cache.SharedIndexInformer,
 	bindingInformer cache.SharedIndexInformer,
@@ -137,6 +163,8 @@ func NewPolicySource[P runtime.Object, B runtime.Object, E Evaluator](
 
 // SetPolicyRefreshIntervalForTests allows the refresh interval to be overridden during tests.
 // This should only be called from tests.
+//
+// 返回值用于恢复默认值，调用方应以 defer 形式使用，避免测试间互相影响。
 func SetPolicyRefreshIntervalForTests(interval time.Duration) func() {
 	policyRefreshIntervalLock.Lock()
 	defer policyRefreshIntervalLock.Unlock()
@@ -148,6 +176,8 @@ func SetPolicyRefreshIntervalForTests(interval time.Duration) func() {
 	}
 }
 
+// Run 实现 Source。它会先阻塞等待初始缓存同步，然后完成首次编译，再注册
+// 事件处理器并启动周期性刷新，直到 ctx 被取消。
 func (s *policySource[P, B, E]) Run(ctx context.Context) error {
 	if s.ctx != nil {
 		return fmt.Errorf("policy source already running")
@@ -204,16 +234,20 @@ func (s *policySource[P, B, E]) Run(ctx context.Context) error {
 	// and needs to be recompiled
 	go func() {
 		// Loop every 1 second until context is cancelled, refreshing policies
+		// 每次循环重新读取间隔，使测试中调用 SetPolicyRefreshIntervalForTests
+		// 能够生效。
 		policyRefreshIntervalLock.Lock()
 		interval := policyRefreshInterval
 		policyRefreshIntervalLock.Unlock()
 		wait.Until(s.refreshPolicies, interval, ctx.Done())
 	}()
 
+	// 阻塞到关闭；事件处理器通过上面的 defer 摘除，informer 由调用方管理。
 	<-ctx.Done()
 	return nil
 }
 
+// UpstreamHasSynced 表示策略与绑定两个 informer 都已完成初始 list。
 func (s *policySource[P, B, E]) UpstreamHasSynced() bool {
 	return s.policyInformer.HasSynced() && s.bindingInformer.HasSynced()
 }
@@ -240,6 +274,10 @@ func (s *policySource[P, B, E]) Hooks() []PolicyHook[P, B, E] {
 	return *res
 }
 
+// refreshPolicies 在缓存被标脏时重算一次 hook 列表。
+//
+// 用 Swap(false) 原子地“认领”脏标记：即使计算过程中又有事件把标记置回 true，
+// 下一次循环也会再算一遍，不会丢失更新。计算失败时主动重新标脏以重试。
 func (s *policySource[P, B, E]) refreshPolicies() {
 	if !s.UpstreamHasSynced() {
 		return
@@ -268,6 +306,8 @@ func (s *policySource[P, B, E]) refreshPolicies() {
 	}
 }
 
+// notify 只标记脏位，不做任何计算；所有 informer 事件都走这里，避免在
+// 事件回调里做重活阻塞 informer。
 func (s *policySource[P, B, E]) notify() {
 	s.policiesDirty.Store(true)
 }
@@ -279,6 +319,8 @@ func (s *policySource[P, B, E]) notify() {
 // included in the result.
 //
 // This function caches the result of the intermediate compilations
+// 注意返回的 error 是“部分失败”：调用方应照常发布 result，让有问题的策略
+// 仍按 failurePolicy 参与评估，而不是整体失效。
 func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], error) {
 	if !s.UpstreamHasSynced() {
 		return nil, fmt.Errorf("cannot calculate policy data until upstream has synced")
@@ -289,6 +331,8 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 	defer s.lock.Unlock()
 
 	// Create a local copy of all policies and bindings
+	// 先按“绑定指向的策略名”分组，再从策略 informer 反查；这样即使策略
+	// 与绑定的到达顺序颠倒也能正确处理。
 	policiesToBindings := map[types.NamespacedName][]B{}
 	bindingList, err := s.bindingInformer.List(labels.Everything())
 	if err != nil {
@@ -307,6 +351,8 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 	}
 
 	result := make([]PolicyHook[P, B, E], 0, len(bindingList))
+	// usedParams 记录本轮实际引用的 param GVK，函数末尾据此回收不再需要的
+	// informer（见下方 orphaned param informers 清理）。
 	usedParams := map[schema.GroupVersionKind]struct{}{}
 	var errs []error
 	for policyKey, bindingSpecs := range policiesToBindings {
@@ -372,6 +418,8 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 
 	// Clean up orphaned policies by replacing the old cache of compiled policies
 	// (the map of used policies is updated by `compilePolicy`)
+	// 注意判断依据是 policiesToBindings：没有绑定的策略不会被评估，其编译
+	// 产物也就没有保留价值。
 	for policyKey := range s.compiledPolicies {
 		if _, wasSeen := policiesToBindings[policyKey]; !wasSeen {
 			delete(s.compiledPolicies, policyKey)
@@ -379,6 +427,7 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 	}
 
 	// Clean up orphaned param informers
+	// 回收必须调用 cancelFunc，否则会泄漏 informer goroutine 和 API 连接。
 	for paramKind, info := range s.paramsCRDControllers {
 		if _, wasSeen := usedParams[paramKind]; !wasSeen {
 			info.cancelFunc()
@@ -397,6 +446,8 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 // started and returns the informer and the scope of the paramKind.
 //
 // Must be called under write lock
+// 返回的错误会写入 PolicyHook.ConfigurationError，而不是让整个计算失败，
+// 因此找不到 param CRD 时仍能对已存在部分完成评估。
 func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.GroupVersionKind) (informers.GenericInformer, meta.RESTScope, error) {
 	if paramSource == nil {
 		return nil, nil, nil
@@ -416,6 +467,8 @@ func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.
 	}
 
 	// We are not watching this param. Start an informer for it.
+	// 每个 param GVK 使用独立的子 context，便于在不再被引用时精确回收；
+	// 它同时继承 s.ctx，因此 apiserver 关闭时也能级联停止。
 	instanceContext, instanceCancel := context.WithCancel(s.ctx)
 
 	var informer informers.GenericInformer
@@ -434,6 +487,8 @@ func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.
 		// Cannot use shared dynamic informer since it would be impossible
 		// to clean CRD informers properly with multiple dependents
 		// (cannot start ahead of time, and cannot track dependencies via stopCh)
+		//
+		// 因此这里每次按需新建一个独立 informer，并由 instanceCancel 单独停止。
 		informer = dynamicinformer.NewFilteredDynamicInformer(
 			s.dynamicClient,
 			mapping.Resource,
@@ -458,6 +513,7 @@ func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.
 }
 
 // For testing
+// getParamInformer 读取当前为该 param GVK 启动的 informer，不存在时返回 nil。
 func (s *policySource[P, B, E]) getParamInformer(param schema.GroupVersionKind) (informers.GenericInformer, meta.RESTScope) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -474,6 +530,8 @@ func (s *policySource[P, B, E]) getParamInformer(param schema.GroupVersionKind) 
 // the cached evaluator.
 //
 // Must be called under write lock
+// 缓存键是 resourceVersion 而非 spec 内容：只要对象被写入过（哪怕内容等价），
+// 也会触发重编译，换来实现简单和绝不返回陈旧 evaluator 的保证。
 func (s *policySource[P, B, E]) compilePolicyLocked(policySpec P) E {
 	policyMeta, err := meta.Accessor(policySpec)
 	if err != nil {

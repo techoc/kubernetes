@@ -32,6 +32,9 @@ import (
 const PluginName = "buffered"
 
 // BatchConfig represents batching delegate audit backend configuration.
+//
+// 中文说明：BufferSize 是内存上限——队列满时 ProcessEvents 会丢弃并报错，
+// 因此需要在“降低下游调用频率”和“丢审计事件”之间取舍。
 type BatchConfig struct {
 	// BufferSize defines a size of the buffering queue.
 	BufferSize int
@@ -52,6 +55,9 @@ type BatchConfig struct {
 	AsyncDelegate bool
 }
 
+// bufferedBackend 把逐个事件写改为批量写。
+// 中文说明：buffer 与 shutdownCh 的生命周期严格由 Run/Shutdown 控制：
+// buffer 只在 processIncomingEvents 结束时关闭，shutdownCh 只在后台 routine 退出时关闭。
 type bufferedBackend struct {
 	// The delegate backend that actually exports events.
 	delegateBackend audit.Backend
@@ -86,6 +92,9 @@ var _ audit.Backend = &bufferedBackend{}
 
 // NewBackend returns a buffered audit backend that wraps delegate backend.
 // Buffered backend automatically runs and shuts down the delegate backend.
+//
+// 中文说明：delegate 的生命周期由本包装器托管，调用方不要自行 Run/Shutdown，
+// 否则会出现重复启动或提前关闭。
 func NewBackend(delegate audit.Backend, config BatchConfig) audit.Backend {
 	var throttle flowcontrol.RateLimiter
 	if config.ThrottleEnable {
@@ -103,6 +112,9 @@ func NewBackend(delegate audit.Backend, config BatchConfig) audit.Backend {
 	}
 }
 
+// Run 启动后台批处理 goroutine，并同步运行 delegate。
+// 中文说明：stopCh 关闭后仍需尽量排空 buffer；排空循环用 panic 恢复保证
+// 单个事件处理失败不会丢掉剩余事件。
 func (b *bufferedBackend) Run(stopCh <-chan struct{}) error {
 	go func() {
 		// Signal that the working routine has exited.
@@ -194,6 +206,8 @@ func (b *bufferedBackend) processIncomingEvents(stopCh <-chan struct{}) {
 //   - Timer has passed.
 //   - Buffer channel is closed and empty.
 //   - stopCh is closed.
+//
+// 中文说明：返回空切片是正常结果（例如超时但无事件），调用方据此结束循环。
 func (b *bufferedBackend) collectEvents(timer <-chan time.Time, stopCh <-chan struct{}) []*auditinternal.Event {
 	var events []*auditinternal.Event
 
@@ -226,6 +240,7 @@ func (b *bufferedBackend) processEvents(events []*auditinternal.Event) {
 
 	// TODO(audit): Should control the number of active goroutines
 	// if one goroutine takes 5 seconds to finish, the number of goroutines can be 5 * defaultBatchThrottleQPS
+	// 中文说明：throttle 在同步路径上阻塞，因此限流会反压到采集循环——这是有意的背压。
 	if b.throttle != nil {
 		b.throttle.Accept()
 	}
@@ -251,6 +266,9 @@ func (b *bufferedBackend) processEvents(events []*auditinternal.Event) {
 	}
 }
 
+// ProcessEvents 把事件深拷贝后放入缓冲队列。
+// 中文说明：审计后端接口约定调用方会复用事件对象，因此必须 DeepCopy；
+// 队列满时丢弃并记录错误，但返回 true 以免拖慢请求处理路径。
 func (b *bufferedBackend) ProcessEvents(ev ...*auditinternal.Event) bool {
 	// The following mechanism is in place to support the situation when audit
 	// events are still coming after the backend was stopped.

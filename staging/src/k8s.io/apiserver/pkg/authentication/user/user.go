@@ -43,6 +43,7 @@ type Info interface {
 
 // DefaultInfo provides a simple user information exchange object
 // for components that implement the UserInfo interface.
+// 该类型不校验字段，使用方需自行保证 Name 非空且 Extra 的键为小写。
 type DefaultInfo struct {
 	Name   string
 	UID    string
@@ -50,24 +51,29 @@ type DefaultInfo struct {
 	Extra  map[string][]string
 }
 
+// GetName 返回用户名。
 func (i *DefaultInfo) GetName() string {
 	return i.Name
 }
 
+// GetUID 返回用户唯一标识；为空表示认证器无法提供稳定 ID。
 func (i *DefaultInfo) GetUID() string {
 	return i.UID
 }
 
+// GetGroups 返回用户所属组列表。
 func (i *DefaultInfo) GetGroups() []string {
 	return i.Groups
 }
 
+// GetExtra 返回认证器附加的扩展信息（如 token 的 scopes）。
 func (i *DefaultInfo) GetExtra() map[string][]string {
 	return i.Extra
 }
 
 const (
 	// well-known user and group names
+	// 这些名字是授权策略的稳定契约，不得修改；修改会破坏所有基于内置 ClusterRole 的授权。
 	SystemPrivilegedGroup = "system:masters"
 	NodesGroup            = "system:nodes"
 	MonitoringGroup       = "system:monitoring"
@@ -84,5 +90,6 @@ const (
 
 	// CredentialIDKey is the key used in a user's "extra" to specify the unique
 	// identifier for this identity document).
+	// 值由各认证器写入，用于审计与准入策略区分同一用户的不同凭据。
 	CredentialIDKey = "authentication.kubernetes.io/credential-id"
 )

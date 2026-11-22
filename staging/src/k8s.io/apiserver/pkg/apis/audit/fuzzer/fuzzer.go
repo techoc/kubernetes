@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fuzzer 为 audit API 类型提供 fuzz 自定义函数，使 roundtrip 测试能生成
+// 贴近真实事件形态的数据（含 runtime.Unknown 的请求/响应体）。
 package fuzzer
 
 import (
@@ -27,10 +29,14 @@ import (
 )
 
 // Funcs returns the fuzzer functions for the audit api group.
+//
+// 这些自定义函数让 fuzz 测试覆盖 roundtrip 的边界情况：RequestObject/ResponseObject
+// 为 *runtime.Unknown，且 Raw 中的 JSON 故意带有空的 apiVersion/kind。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(e *audit.Event, c randfill.Continue) {
 			c.FillNoCustom(e)
+			// 随机决定是否填充请求体，确保 nil 与非 nil 两条路径都被覆盖。
 			switch c.Bool() {
 			case true:
 				e.RequestObject = nil
@@ -65,6 +71,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 				o.APIVersion = "v1beta1"
 			default:
 				// use random value, but without / as it is used as separator
+				// "/" 在 ObjectReference 的字符串表示中作分隔符，随机值含它会破坏往返解析。
 				o.APIGroup = strings.Replace(o.APIGroup, "/", "-", -1)
 				o.APIVersion = strings.Replace(o.APIVersion, "/", "-", -1)
 			}

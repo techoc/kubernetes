@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package request 估算请求成本（座位数、时长、对象数量），为 API 优先级与
+// 公平性（APF）的排队与限流提供度量。
 package request
 
 import (
@@ -23,6 +25,9 @@ import (
 )
 
 // TestSeatSecondsString exercises the SeatSeconds constructor and de-constructors (String, ToFloat).
+//
+// 中文说明：SeatSeconds 用 1e-8 秒的定点数表示工作量，测试同时覆盖
+// String 的固定 8 位小数格式与 ToFloat 的精度往返。
 func TestSeatSecondsString(t *testing.T) {
 	testCases := []struct {
 		ss          SeatSeconds
@@ -41,6 +46,7 @@ func TestSeatSecondsString(t *testing.T) {
 		if actualStr != testCase.expectStr {
 			t.Errorf("SeatSeconds(%d).String() is %q but expected %q", uint64(testCase.ss), actualStr, testCase.expectStr)
 		}
+		// 按同一比例缩放后再比较，避免浮点尾差导致的误报。
 		actualFloat := testCase.ss.ToFloat()
 		if math.Round(actualFloat*ssScale) != math.Round(testCase.expectFloat*ssScale) {
 			t.Errorf("SeatSeconds(%d).ToFloat() is %v but expected %v", uint64(testCase.ss), actualFloat, testCase.expectFloat)
@@ -48,6 +54,8 @@ func TestSeatSecondsString(t *testing.T) {
 	}
 }
 
+// TestSeatSecondsPerSeat 验证按座位数折算的时长；座位数为 0 时
+// 工作量已无意义，期望得到 0 时长而不是除零 panic。
 func TestSeatSecondsPerSeat(t *testing.T) {
 	testCases := []struct {
 		ss     SeatSeconds

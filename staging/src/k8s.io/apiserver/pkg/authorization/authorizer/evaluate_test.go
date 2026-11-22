@@ -25,6 +25,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// TestPartiallyEvaluateConditionsAwareDecision 验证部分求值器对 ConditionsAwareDecision
+// 树的各种简化行为：内置条件可完全求值时折叠为 Allow/Deny/NoOpinion，遇到
+// 不可求值的条件时保留为精化后的 ConditionsMap，Union 则按顺序逐项简化。
 func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 	// mkCM builds a ConditionsMap decision from individually-tagged (effect, condition) pairs.
 	mkCM := func(items ...effectCondition) authorizer.ConditionsAwareDecision {
@@ -378,6 +381,8 @@ type effectCondition struct {
 }
 
 // snapDecision is a deep-comparable snapshot of an authorizer.ConditionsAwareDecision tree.
+//
+// 接口类型无法直接用 cmp.Diff 比较，因此把决策树转换成纯数据结构后再比对。
 type snapDecision struct {
 	Kind   string // "Allow" | "Deny" | "NoOpinion" | "ConditionsMap" | "Union"
 	Reason string
@@ -385,12 +390,14 @@ type snapDecision struct {
 	Union  []snapDecision
 }
 
+// snapCM 是 ConditionsMap 中三类条件的有序快照。
 type snapCM struct {
 	Deny      []snapCondition
 	NoOpinion []snapCondition
 	Allow     []snapCondition
 }
 
+// snapCondition 是单个条件用于比较的字段子集。
 type snapCondition struct {
 	ID          string
 	Condition   string
@@ -398,6 +405,7 @@ type snapCondition struct {
 	Description string
 }
 
+// snapshotDecision 递归地把决策树转换为可比较的快照。
 func snapshotDecision(d authorizer.ConditionsAwareDecision) snapDecision {
 	switch {
 	case d.IsAllow():
@@ -418,6 +426,7 @@ func snapshotDecision(d authorizer.ConditionsAwareDecision) snapDecision {
 	return snapDecision{Kind: "Unknown"}
 }
 
+// snapshotConditionsMap 按 Deny/NoOpinion/Allow 三类分别快照条件集合。
 func snapshotConditionsMap(cm authorizer.ConditionsMap) *snapCM {
 	out := &snapCM{}
 	for c := range cm.DenyConditions() {
@@ -432,6 +441,7 @@ func snapshotConditionsMap(cm authorizer.ConditionsMap) *snapCM {
 	return out
 }
 
+// snapshotCondition 提取条件的可比较字段。
 func snapshotCondition(c authorizer.Condition) snapCondition {
 	return snapCondition{
 		ID:          c.GetID(),

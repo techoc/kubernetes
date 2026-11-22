@@ -16,6 +16,10 @@ limitations under the License.
 
 // This file was generated using openssl by the gencerts.sh script
 // and holds raw certificates for the webhook tests.
+//
+// 这些固定证书用于覆盖 webhook 客户端在 TLS 校验上的各类分支：
+// 有效链、错误 CA、SHA-1 签名、缺失 SAN 以及中间 CA 等。证书即使已过期也不影响测试，
+// 因为测试只验证构造与校验逻辑，不做真实握手。
 
 package webhook
 
@@ -47,6 +51,7 @@ g6Kcffaz9f49gFUGq6tIG4N6yutR0xecE21w9z7ubA6k50x9umj5XkDyM5W9Tt5Z
 yRU/vk7jrZmt0WFDhb6Ao1RlFjLlKhBkQZ6dd6C6fxatUg3BGYI=
 -----END RSA PRIVATE KEY-----`)
 
+// caCert 是测试 CA 的自签名证书，用于签出下面各服务端/客户端证书。
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDGTCCAgGgAwIBAgIUealQGELTHLUVcpsNNwz8XexiWvswDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -67,6 +72,7 @@ koodzngbUuyaGFI8QISUAhU+pbt6npb69LlhJHC0icDXCc4uTsd+SDsBOorZDuUL
 HsNKnE0CSPZ65ENVNfJjB1fVEYbbpjr8kizOCDE=
 -----END CERTIFICATE-----`)
 
+// badCACert 与 caCert 同名但密钥不同，用于构造证书链校验失败的场景。
 var badCACert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDGTCCAgGgAwIBAgIUDr7CjUg6evYtl4uqdgyu94ACVOAwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -87,6 +93,7 @@ r97Qb+RQu9ijmNHWkwuTy5Zxj/GMIqC/vYu7x5DH/m0oCnSGqASLh1gAsjC0Aa+D
 YqXbFLxSCtUNhKuW5ejbvHAYp/QgtjAtu81HOkQ=
 -----END CERTIFICATE-----`)
 
+// caCertInter 是中间 CA 证书，用于验证多级证书链的构建。
 var caCertInter = []byte(`-----BEGIN CERTIFICATE-----
 MIIDMzCCAhugAwIBAgIUTJoqwFusJcupNCs/u39LBFrkZEIwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -108,6 +115,7 @@ LLCkme0M+1UsF7xua0KVi4DSuJc+RBl4aOH0ZvKmrIWzLzZhRS0vaO/fPArVCvvI
 VrUba0E3WQ==
 -----END CERTIFICATE-----`)
 
+// caCertInterSHA1 使用 SHA-1 签名，用于验证弱签名算法会被拒绝。
 var caCertInterSHA1 = []byte(`-----BEGIN CERTIFICATE-----
 MIIDMzCCAhugAwIBAgIUTJoqwFusJcupNCs/u39LBFrkZEMwDQYJKoZIhvcNAQEF
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -157,6 +165,7 @@ zaLifWtOdtckFxIk+6D/zLLn1icC7cc8n4TMwQ1ikY+9IPnkTXVx4b/r/NSbAVxZ
 J821mkhGdqKJGAzk6uh/Sn4rNGubH+I1x2Xa9hWbARCLsj8tp6TX
 -----END RSA PRIVATE KEY-----`)
 
+// serverCert 是带 SAN（127.0.0.1、localhost）的服务端证书，用于正常握手。
 var serverCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDHzCCAgegAwIBAgIUTJoqwFusJcupNCs/u39LBFrkZEQwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -177,6 +186,7 @@ gF+gpIOmPruJI9UoFqEncNpLfh5vKu2Vxv+maztFRhb+9gOg+nVBq1pxmMZV0PuM
 L+tz0avIZEO2+KhgVGF3AF8HSZQHYcaskGFSGc8FxDKcDjM=
 -----END CERTIFICATE-----`)
 
+// serverCertNoSAN 缺少 SAN 扩展，用于验证仅含 CN 的证书无法通过现代 TLS 校验。
 var serverCertNoSAN = []byte(`-----BEGIN CERTIFICATE-----
 MIIC+DCCAeCgAwIBAgIUTJoqwFusJcupNCs/u39LBFrkZEUwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -224,6 +234,7 @@ oZ6aymuKC93HB05wB3mxOwNwBGDC6LsaMkzyKuD3YNBXgROAnsTl7FG4j/O15L58
 6BGb7UYXGw0RqrasgoLtzL5/3eac/SFgfaLcNtbdk3orGuKPGU3A
 -----END RSA PRIVATE KEY-----`)
 
+// clientCert 是客户端证书，用于验证 mTLS 客户端认证。
 var clientCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDFDCCAfygAwIBAgIUTJoqwFusJcupNCs/u39LBFrkZEYwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -244,6 +255,7 @@ J20OuNSKUAOZEbk9n8UrTV/C/oQ4yDpw0iHSNWhti+KvARQSTj115NkEg+7HrM4d
 vhrAcrxy49UrY03GqZwmaf79vF+c2oKk
 -----END CERTIFICATE-----`)
 
+// sha1ServerCertInter 是由 SHA-1 中间 CA 签发的服务端证书，用于组合出弱链场景。
 var sha1ServerCertInter = []byte(`-----BEGIN CERTIFICATE-----
 MIIDITCCAgmgAwIBAgIUaVjtC++/JGFoZRtkpo/j5q1nQ/4wDQYJKoZIhvcNAQEF
 BQAwKDEmMCQGA1UEAwwdd2ViaG9va190ZXN0c19pbnRlcm1lZGlhdGVfY2EwIBcN
@@ -264,6 +276,7 @@ GCu2QGM4cVLaezmoa1J54ETZggT2xFw2IyWJ2g/kXFpo+HnoyaDrPthud3Pe5xEt
 JMzX0s3jPSjfeAv34Pr37s0Or18r1bS1hrgxE0SV2vk31fsImg==
 -----END CERTIFICATE-----`)
 
+// serverCertInterSHA1 是由中间 CA（SHA-1）签发的服务端证书，用于多级链的负向测试。
 var serverCertInterSHA1 = []byte(`-----BEGIN CERTIFICATE-----
 MIIDITCCAgmgAwIBAgIUfSzzygvth1xlpa9DtyGpHuY2V+swDQYJKoZIhvcNAQEL
 BQAwKDEmMCQGA1UEAwwdd2ViaG9va190ZXN0c19pbnRlcm1lZGlhdGVfY2EwIBcN

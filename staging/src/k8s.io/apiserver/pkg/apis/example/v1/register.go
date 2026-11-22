@@ -41,6 +41,9 @@ func Resource(resource string) schema.GroupResource {
 var (
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
 	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	//
+	// SchemeBuilder 收集安装方法；init 中注册的手写函数与生成函数分离，
+	// 使得生成文件缺失时包仍可编译。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
@@ -54,6 +57,7 @@ func init() {
 }
 
 // Adds the list of known types to the given scheme.
+// 只注册 Pod 这一种示例类型，并补上 metav1 的通用类型（WatchEvent、List 等）。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Pod{},

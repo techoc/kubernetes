@@ -19,4 +19,6 @@ limitations under the License.
 // +k8s:openapi-model-package=io.k8s.apiserver.pkg.server.flagz.api.v1beta1
 
 // Package v1beta1 contains API Schema definitions for the flagz v1beta1 API group
+//
+// flagz 暴露 apiserver 当前生效的命令行参数，便于运维排查配置漂移。
 package v1beta1

@@ -24,10 +24,13 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// 测试用的校验标识，用于区分同一指标下的不同标签值。
 const testIdentifier = "test_validation_identifier"
 const anotherTestIdentifier = "another_test_validation_identifier"
 
 // TestDeclarativeValidationMismatchMetric tests that the mismatch metric correctly increments once
+//
+// 每次递增应同时影响“按标识细分”的 alpha 指标与“总量”beta 指标。
 func TestDeclarativeValidationMismatchMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
@@ -51,6 +54,8 @@ func TestDeclarativeValidationMismatchMetric(t *testing.T) {
 }
 
 // TestDeclarativeValidationPanicMetric tests that the panic metric correctly increments once
+//
+// 与 mismatch 同理：panic 也需同时体现在细分与总量两个指标上。
 func TestDeclarativeValidationPanicMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
@@ -74,6 +79,8 @@ func TestDeclarativeValidationPanicMetric(t *testing.T) {
 }
 
 // TestDuplicateValidationErrorMetric tests that the duplicate error metric correctly increments once
+//
+// 重复错误本身没有标签维度，只验证内部指标（INTERNAL）的计数。
 func TestDuplicateValidationErrorMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
@@ -93,6 +100,8 @@ func TestDuplicateValidationErrorMetric(t *testing.T) {
 }
 
 // TestDeclarativeValidationMismatchMetricMultiple tests that the mismatch metric correctly increments multiple times
+//
+// 同时使用两个不同标识，验证按标签累计（2/1）与总量累计（3）互不干扰。
 func TestDeclarativeValidationMismatchMetricMultiple(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
@@ -118,6 +127,8 @@ func TestDeclarativeValidationMismatchMetricMultiple(t *testing.T) {
 }
 
 // TestDeclarativeValidationPanicMetricMultiple tests that the panic metric correctly increments multiple times
+//
+// 与 mismatch 的多标识累计场景对称。
 func TestDeclarativeValidationPanicMetricMultiple(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
@@ -164,6 +175,8 @@ func TestDuplicateValidationErrorMetricMultiple(t *testing.T) {
 }
 
 // TestDeclarativeValidationMetricsReset tests that the Reset function correctly resets the metrics to zero
+//
+// 先归零再重新累加，验证 Reset 之后计数器仍可正常使用（不会被置为不可用状态）。
 func TestDeclarativeValidationMetricsReset(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()

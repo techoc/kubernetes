@@ -29,12 +29,14 @@ import (
 	examplev1 "k8s.io/apiserver/pkg/apis/example/v1"
 )
 
-// overrideMetaFuncs override some generic fuzzer funcs from k8s.io/apiserver in order to have more realistic
-// values in a Kubernetes context.
+// overrideMetaFuncs 覆盖 apiserver 的通用 fuzzer 函数，以在 Kubernetes 语境下
+// 产生更真实的值。
 func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(j *runtime.Object, c randfill.Continue) {
 			// TODO: uncomment when round trip starts from a versioned object
+			// 当前 round-trip 测试从内部版本出发，无法携带 TypeMeta，
+			// 因此统一使用 runtime.Unknown 承载原始 JSON。
 			if true { // c.Bool() {
 				*j = &runtime.Unknown{
 					// We do not set TypeMeta here because it is not carried through a round trip
@@ -49,12 +51,12 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(r *runtime.RawExtension, c randfill.Continue) {
-			// Pick an arbitrary type and fuzz it
+			// 随机挑选一个类型并填充
 			types := []runtime.Object{&example.Pod{}}
 			obj := types[c.Rand.Intn(len(types))]
 			c.Fill(obj)
 
-			// Convert the object to raw bytes
+			// 编码为原始字节，模拟从存储/网络读到的未解析对象
 			bytes, err := runtime.Encode(apitesting.TestCodec(codecs, examplev1.SchemeGroupVersion), obj)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
@@ -66,11 +68,12 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	}
 }
 
+// exampleFuncs 为 example 组提供自定义 fuzzer，保证字段值落在 API 合法范围内。
 func exampleFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(s *example.PodSpec, c randfill.Continue) {
 			c.FillNoCustom(s)
-			// has a default value
+			// 该字段有默认值，必须非 nil 且非零才能通过校验
 			ttl := int64(30)
 			if c.Bool() {
 				ttl = int64(c.Uint32())
@@ -82,6 +85,7 @@ func exampleFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(j *example.PodPhase, c randfill.Continue) {
+			// 枚举值必须从已知集合中挑选，随机字符串会被校验拒绝。
 			statuses := []example.PodPhase{"Pending", "Running", "Succeeded", "Failed", "Unknown"}
 			*j = statuses[c.Rand.Intn(len(statuses))]
 		},
@@ -92,7 +96,7 @@ func exampleFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	}
 }
 
-// Funcs returns the fuzzer functions for the example api group.
+// Funcs 返回 example API 组使用的 fuzzer 函数集合。
 var Funcs = fuzzer.MergeFuzzerFuncs(
 	overrideMetaFuncs,
 	exampleFuncs,

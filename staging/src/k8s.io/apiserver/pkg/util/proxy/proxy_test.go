@@ -31,7 +31,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestResolve 验证 ClusterIP 与 Endpoint 两种解析模式在各 Service 类型下的行为。
+//
+// 中文说明：cluster 模式只依赖 Service 的 ClusterIP；endpoint 模式依赖
+// EndpointSlice 中的实际地址。用例覆盖无 443 端口、无切片、ExternalName、
+// 不支持的 Service 类型与缺失 Service 等失败路径。
 func TestResolve(t *testing.T) {
+	// matchingEndpointSlices 生成与 Service 端口一一对应的 EndpointSlice。
+	// 中文说明：只保留 TargetPort 为整数的端口，与解析逻辑的假设一致。
 	matchingEndpointSlices := func(svc *v1.Service) []*discoveryv1.EndpointSlice {
 		ports := []discoveryv1.EndpointPort{}
 		for _, p := range svc.Spec.Ports {
@@ -278,6 +285,7 @@ func TestResolve(t *testing.T) {
 		}
 
 		check := func(mode string, expected expectation, url *url.URL, err error) {
+			// 统一的断言入口，避免两种模式各写一套容易漂移的校验逻辑。
 			switch {
 			case err == nil && expected.error:
 				t.Errorf("%s in %s mode expected error, got none", test.name, mode)
@@ -304,6 +312,9 @@ func TestResolve(t *testing.T) {
 }
 
 // Tests that ResolveEndpoint picks randomly among endpoints in the expected way
+//
+// 中文说明：随机选择意味着单次调用无法断言结果，因此重复采样 100 次，
+// 用集合覆盖来验证"所有合法端点都可能被选中、非法端点从不被选中"。
 func TestResolveEndpointDistribution(t *testing.T) {
 	singleStackService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "single-stack"},
@@ -329,6 +340,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 	wrongPort := v1.ServicePort{Name: "http", Port: 80, TargetPort: intstr.FromInt32(443)}
 
 	makeEndpointSlice := func(svc *v1.Service, suffix string, addressType discoveryv1.AddressType, port v1.ServicePort, endpoints ...discoveryv1.Endpoint) *discoveryv1.EndpointSlice {
+		// 用 addressType 与端口区分切片，便于构造"地址族不匹配"或"端口名不匹配"的负向场景。
 		return &discoveryv1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: svc.Namespace,
@@ -378,6 +390,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 		{
 			name:    "multiple endpoints, some non-ready",
 			service: singleStackService,
+			// Ready 为 nil 时按就绪处理；显式 false 的端点必须被排除。
 			endpointSlices: []*discoveryv1.EndpointSlice{
 				makeEndpointSlice(singleStackService, "1",
 					discoveryv1.AddressTypeIPv4, svcPort,
@@ -434,6 +447,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 		{
 			name:    "dual-stack, primary-family endpoints ready",
 			service: dualStackService,
+			// 双栈服务优先选择主地址族（此处 IPv4），IPv6 端点应被忽略。
 			endpointSlices: []*discoveryv1.EndpointSlice{
 				makeEndpointSlice(dualStackService, "v6",
 					discoveryv1.AddressTypeIPv6, svcPort,
@@ -474,6 +488,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 		{
 			name:    "dual-stack, primary-family endpoints non-ready",
 			service: dualStackService,
+			// 主地址族全部未就绪时回退到另一地址族，保证可用性优先。
 			endpointSlices: []*discoveryv1.EndpointSlice{
 				makeEndpointSlice(dualStackService, "v4",
 					discoveryv1.AddressTypeIPv4, svcPort,
@@ -597,6 +612,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 
 			expectedURLs := sets.New(tc.expectedURLs...)
 			gotURLs := sets.New[string]()
+			// 多次采样覆盖随机选择：只允许出现期望集合内的地址，且期望集合必须被全部覆盖。
 			for i := 0; i < 100; i++ {
 				endpointURL, err := ResolveEndpoint(serviceLister, endpointSliceGetter, tc.service.Namespace, tc.service.Name, tc.service.Spec.Ports[0].Port)
 				if err != nil {

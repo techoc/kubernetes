@@ -53,13 +53,16 @@ type TimeoutFactory interface {
 	TimeoutCh() (<-chan time.Time, func() bool)
 }
 
-// realTimeoutFactory implements timeoutFactory
+// realTimeoutFactory implements timeoutFactory using a real time.Timer.
 type realTimeoutFactory struct {
 	timeout time.Duration
 }
 
 // TimeoutCh returns a channel which will receive something when the watch times out,
 // and a cleanup function to call when this happens.
+//
+// timeout == 0 时返回 nil channel：在 select 中永久阻塞，正好表达“不超时”，
+// 且无需额外分配 timer。
 func (w *realTimeoutFactory) TimeoutCh() (<-chan time.Time, func() bool) {
 	if w.timeout == 0 {
 		// nothing will ever be sent down this channel
@@ -71,6 +74,9 @@ func (w *realTimeoutFactory) TimeoutCh() (<-chan time.Time, func() bool) {
 
 // serveWatchHandler returns a handle to serve a watch response.
 // TODO: the functionality in this method and in WatchServer.Serve is not cleanly decoupled.
+//
+// 该函数负责“协商与装配”（编码器、framing、内存分配器、超时），
+// WatchServer 负责实际的流式循环；两者尚未完全解耦。
 func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOptions negotiation.MediaTypeOptions, req *http.Request, w http.ResponseWriter, timeout time.Duration, metricsScope string, isWatchListRequest bool, completeHook WatchListCompleteHook) (http.Handler, error) {
 	options, err := optionsForTransform(mediaTypeOptions, req)
 	if err != nil {
@@ -83,6 +89,8 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 		return nil, err
 	}
 	framer := serializer.StreamSerializer.Framer
+	// CBOR 的非确定性编码允许在 map 顺序等细节上自由选择，换取更快的序列化；
+	// 对 watch 流而言每个事件独立解码，顺序无关紧要。
 	var encoder runtime.Encoder
 	if utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
 		encoder = scope.Serializer.EncoderForVersion(runtime.UseNondeterministicEncoding(serializer.StreamSerializer.Serializer), scope.Kind.GroupVersion())
@@ -137,6 +145,7 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 	if encoderWithAllocator, supportsAllocator := negotiatedEncoder.(runtime.EncoderWithAllocator); supportsAllocator {
 		// don't put the allocator inside the embeddedEncodeFn as that would allocate memory on every call.
 		// instead, we allocate the buffer for the entire watch session and release it when we close the connection.
+		// 每个 watch 连接复用一个分配器，显著降低长连接的 GC 压力。
 		memoryAllocator = runtime.AllocatorPool.Get().(*runtime.Allocator)
 		negotiatedEncoder = runtime.NewEncoderWithAllocator(encoderWithAllocator, memoryAllocator)
 	}
@@ -183,6 +192,7 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 		watchListCompleteHook: completeHook,
 	}
 
+	// WebSocket 与普通 HTTP 分块流共用同一 WatchServer，只是传输层不同。
 	if wsstream.IsWebSocketRequest(req) {
 		w.Header().Set("Content-Type", server.MediaType)
 		return websocket.Handler(server.HandleWS), nil
@@ -220,6 +230,9 @@ type WatchListCompleteHook func()
 // watchEventMetricsRecorder allows the caller to count bytes written and report the size of the event.
 // It is thread-safe, as long as underlying io.Writer is thread-safe.
 // Once all Write calls for a given watch event have finished, RecordEvent must be called.
+//
+// 一个事件可能被 Write 多次（例如编码器分块写），因此用计数器累积，
+// 由 RecordEvent 一次性上报并清零。
 type watchEventMetricsRecorder struct {
 	writer      io.Writer
 	countMetric compbasemetrics.CounterMetric
@@ -243,6 +256,7 @@ func (c *watchEventMetricsRecorder) RecordEvent() {
 // watchGzipPool is a no-op until the first Get call (https://pkg.go.dev/sync#Pool.Get).
 var watchGzipPool = responsewriters.NewGzipWriterPoolOrDie()
 
+// watchStreamWriter 统一了明文与 gzip 两种流写入方式，供 watchResponseWriter 使用。
 type watchStreamWriter interface {
 	io.WriteCloser
 	Flush() error
@@ -250,6 +264,7 @@ type watchStreamWriter interface {
 
 var _ watchStreamWriter = &plainResponseWriter{}
 
+// plainResponseWriter 直接写底层 ResponseWriter，仅补充 Flush。
 type plainResponseWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
@@ -271,6 +286,9 @@ func (p *plainResponseWriter) Close() error {
 
 var _ watchStreamWriter = &perFlushGzipWriter{}
 
+// perFlushGzipWriter 在每次 Flush 后关闭 gzip writer 并归还对象池：
+// 对 watch 流而言，尽早结束一个 gzip member 能让客户端立即解压，
+// 而不是等待整个连接结束。
 type perFlushGzipWriter struct {
 	delegateRW http.ResponseWriter
 	flusher    http.Flusher
@@ -307,12 +325,15 @@ func (p *perFlushGzipWriter) Close() error {
 	p.gw.Reset(nil)
 	watchGzipPool.Put(p.gw)
 	// prevent double-close returning the writer to the pool twice
+	// 置 nil 是必要的：同一 writer 可能因错误路径被重复 Close，
+	// 重复归还对象池会导致池中出现同一对象的多个副本。
 	p.gw = nil
 	return err
 }
 
 var _ io.Writer = &watchResponseWriter{}
 
+// watchResponseWriter 根据内容协商结果选择明文或 gzip 输出。
 type watchResponseWriter struct {
 	delegateRW         http.ResponseWriter
 	flusher            http.Flusher
@@ -331,6 +352,7 @@ func newWatchResponseWriter(delegateRW http.ResponseWriter, flusher http.Flusher
 	}
 }
 
+// BeginStream 写出响应头并立即 flush，让客户端尽快进入流式读取状态。
 func (w *watchResponseWriter) BeginStream(mediaType string) {
 	w.delegateRW.Header().Set("Content-Type", mediaType)
 	w.delegateRW.Header().Set("Transfer-Encoding", "chunked")
@@ -391,6 +413,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
+	// framer 负责把编码后的事件切分成流式帧；构造失败属于编程错误。
 	framer := s.Framer.NewFrameWriter(rw)
 	if framer == nil {
 		// programmer error
@@ -401,6 +424,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// ensure the connection times out
+	// 超时后直接返回，让客户端按自身策略重连（通常是带 resourceVersion 续传）。
 	timeoutCh, cleanup := s.TimeoutFactory.TimeoutCh()
 	defer cleanup()
 
@@ -440,6 +464,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 				// End of results.
 				return
 			}
+			// watch-list 的首批事件以带注解的 Bookmark 结束，借此记录初始化延迟。
 			isWatchListLatencyRecordingRequired := shouldRecordWatchListLatency(req.Context(), event)
 
 			if err := watchEncoder.Encode(event); err != nil {
@@ -449,6 +474,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 			recorder.RecordEvent()
 
+			// 只在队列排空时 flush：积压时连续写可以减少 syscall 与分块开销。
 			if len(ch) == 0 {
 				if err := rw.Flush(); err != nil {
 					utilruntime.HandleErrorWithContext(req.Context(), err, "Failed to flush watch response")
@@ -471,6 +497,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 					s.watchListCompleteHook()
 				}
 				// release the gzip writer back to the pool so idle watches don't hold gzip state.
+				// 空闲的 watch 可能持续数小时，长期占用 gzip 状态是内存浪费。
 				if err := rw.Flush(); err != nil {
 					utilruntime.HandleErrorWithContext(req.Context(), err, "Failed to flush watch response after initial events")
 					return
@@ -497,6 +524,8 @@ func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 	timeoutCh, cleanup := s.TimeoutFactory.TimeoutCh()
 	defer cleanup()
 
+	// 单独一个 goroutine 读取客户端数据只是为了感知断连；watch 协议中
+	// 客户端不应发送任何内容，收到的一律丢弃。
 	go func() {
 		defer utilruntime.HandleCrashWithLogger(logger)
 		// This blocks until the connection is closed.
@@ -533,6 +562,7 @@ func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 	}
 }
 
+// websocketFramer 把编码后的事件作为单条 WebSocket 消息发送。
 type websocketFramer struct {
 	ws             *websocket.Conn
 	useTextFraming bool
@@ -546,6 +576,8 @@ func newWebsocketFramer(ws *websocket.Conn, useTextFraming bool) io.Writer {
 }
 
 func (w *websocketFramer) Write(p []byte) (int, error) {
+	// JSON 等文本媒体类型使用 text frame，二进制格式使用 binary frame；
+	// 浏览器端依赖这一区分来正确解码。
 	if w.useTextFraming {
 		// bytes.Buffer::String() has a special handling of nil value, but given
 		// we're writing serialized watch events, this will never happen here.
@@ -562,6 +594,8 @@ func (w *websocketFramer) Write(p []byte) (int, error) {
 
 var _ io.Writer = &websocketFramer{}
 
+// shouldRecordWatchListLatency 判断该事件是否标记了 watch-list 初始事件阶段结束。
+// 只有 cacher 在满足条件时才会给唯一的 Bookmark 事件加该注解。
 func shouldRecordWatchListLatency(ctx context.Context, event watch.Event) bool {
 	if event.Type != watch.Bookmark || !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 		return false

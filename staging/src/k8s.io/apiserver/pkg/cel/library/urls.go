@@ -104,26 +104,37 @@ import (
 //	url('https://example.com/path?key with spaces=value with spaces').getQuery() // returns { 'key with spaces': ['value with spaces']}
 //	url('https://example.com/path?').getQuery() // returns {}
 //	url('https://example.com/path').getQuery() // returns {}
+//
+// 中文说明：URL 库把字符串转换为 kubernetes.URL 类型并暴露解析后的组件。
+// 只接受绝对 URI 或绝对路径，相对路径与畸形 URI 会被拒绝，以免策略中
+// 出现歧义的 URL 判断。IP 地址在 getHost 中保留方括号，便于直接用作
+// HTTP 主机；getHostname 则去掉方括号。
 func URLs() cel.EnvOption {
 	return cel.Lib(urlsLib)
 }
 
+// urlsLib 是单例；库无状态，可安全共享。
 var urlsLib = &urls{}
 
+// urls 实现 cel.Library 接口。
 type urls struct{}
 
+// LibraryName 返回稳定的库名，供兼容性与去重使用。
 func (*urls) LibraryName() string {
 	return "kubernetes.urls"
 }
 
+// Types 返回库引入的自定义 CEL 类型 kubernetes.URL。
 func (*urls) Types() []*cel.Type {
 	return []*cel.Type{apiservercel.URLType}
 }
 
+// declarations 暴露函数声明供外部检查使用。
 func (*urls) declarations() map[string][]cel.FunctionOpt {
 	return urlLibraryDecls
 }
 
+// urlLibraryDecls 定义 url() 转换函数及各组件访问器。
 var urlLibraryDecls = map[string][]cel.FunctionOpt{
 	"url": {
 		cel.Overload("string_to_url", []*cel.Type{cel.StringType}, apiservercel.URLType,
@@ -152,6 +163,7 @@ var urlLibraryDecls = map[string][]cel.FunctionOpt{
 			cel.UnaryBinding(isURL))},
 }
 
+// CompileOptions 把函数注册进 CEL 编译环境。
 func (*urls) CompileOptions() []cel.EnvOption {
 	options := []cel.EnvOption{}
 	for name, overloads := range urlLibraryDecls {
@@ -160,10 +172,13 @@ func (*urls) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 无需运行期优化，URL 解析本身不是热点。
 func (*urls) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// stringToUrl 把字符串转换为 kubernetes.URL。先 ParseRequestURI 做严格
+// 校验，再用 Parse 得到正确保留 fragment 的 URL 对象。
 func stringToUrl(arg ref.Val) ref.Val {
 	s, ok := arg.Value().(string)
 	if !ok {
@@ -171,12 +186,16 @@ func stringToUrl(arg ref.Val) ref.Val {
 	}
 	// Use ParseRequestURI to check the URL before conversion.
 	// ParseRequestURI requires absolute URLs and is used by the OpenAPIv3 'uri' format.
+	// 用与 OpenAPIv3 'uri' 格式一致的严格校验，保持策略语义与 CRD
+	// schema 校验一致。
 	_, err := url.ParseRequestURI(s)
 	if err != nil {
 		return types.NewErr("URL parse error during conversion from string: %v", err)
 	}
 	// We must parse again with Parse since ParseRequestURI incorrectly parses URLs that contain a fragment
 	// part and will incorrectly append the fragment to either the path or the query, depending on which it was adjacent to.
+	// ParseRequestURI 对 fragment 的处理有缺陷，因此校验通过后必须用
+	// url.Parse 重新解析才能得到正确的组件划分。
 	u, err := url.Parse(s)
 	if err != nil {
 		// Errors are not expected here since Parse is a more lenient parser than ParseRequestURI.
@@ -185,6 +204,7 @@ func stringToUrl(arg ref.Val) ref.Val {
 	return apiservercel.URL{URL: u}
 }
 
+// getScheme 返回 scheme，缺省为空串。
 func getScheme(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -193,6 +213,7 @@ func getScheme(arg ref.Val) ref.Val {
 	return types.String(u.Scheme)
 }
 
+// getHost 返回 host（含端口；IPv6 地址带方括号），缺省为空串。
 func getHost(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -201,6 +222,7 @@ func getHost(arg ref.Val) ref.Val {
 	return types.String(u.Host)
 }
 
+// getHostname 返回不含端口的主机名；IPv6 地址去掉方括号。
 func getHostname(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -209,6 +231,7 @@ func getHostname(arg ref.Val) ref.Val {
 	return types.String(u.Hostname())
 }
 
+// getPort 返回端口字符串；缺省为空串而非 "0"。
 func getPort(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -217,6 +240,7 @@ func getPort(arg ref.Val) ref.Val {
 	return types.String(u.Port())
 }
 
+// getEscapedPath 返回 URL 转义后的路径，保证结果可直接拼接进 URL。
 func getEscapedPath(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -225,6 +249,8 @@ func getEscapedPath(arg ref.Val) ref.Val {
 	return types.String(u.EscapedPath())
 }
 
+// getQuery 返回未转义的查询参数映射，重复键聚合为字符串列表；
+// 无查询参数时返回空 map 而非 nil，避免 CEL 侧的空值判断差异。
 func getQuery(arg ref.Val) ref.Val {
 	u, ok := arg.Value().(*url.URL)
 	if !ok {
@@ -238,6 +264,7 @@ func getQuery(arg ref.Val) ref.Val {
 	return types.NewRefValMap(types.DefaultTypeAdapter, result)
 }
 
+// isURL 用与 stringToUrl 相同的严格规则判断字符串是否是合法 URL。
 func isURL(arg ref.Val) ref.Val {
 	s, ok := arg.Value().(string)
 	if !ok {

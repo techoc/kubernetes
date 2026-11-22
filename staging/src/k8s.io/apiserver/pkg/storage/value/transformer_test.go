@@ -32,6 +32,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// testTransformer 是可编程的桩：记录收到的输入，返回预设的输出/stale/
+// 错误，用于在不做真实加解密的情况下验证前缀转换器的分发逻辑。
 type testTransformer struct {
 	from, to                 []byte
 	err                      error
@@ -49,6 +51,9 @@ func (t *testTransformer) TransformToStorage(ctx context.Context, data []byte, d
 	return t.to, t.err
 }
 
+// TestPrefixFrom 验证读取时按前缀选择转换器：匹配的前缀只把去掉前缀
+// 后的数据交给对应转换器；未知前缀返回统一错误；转换器自身错误原样
+// 返回。这里刻意使用非首转换器，确认 stale 标志来源正确。
 func TestPrefixFrom(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	transformErr := fmt.Errorf("transform error")
@@ -69,6 +74,7 @@ func TestPrefixFrom(t *testing.T) {
 	}{
 		{[]byte("first:value"), []byte("value1"), false, nil, 0},
 		{[]byte("second:value"), []byte("value2"), true, nil, 1},
+		// 未知前缀不会尝试任何转换器，返回统一错误。
 		{[]byte("third:value"), nil, false, testErr, -1},
 		{[]byte("fails:value"), nil, false, transformErr, 2},
 		{[]byte("stale:value"), []byte("value3"), true, nil, 3},
@@ -80,12 +86,15 @@ func TestPrefixFrom(t *testing.T) {
 			t.Errorf("%d: unexpected out: %q %t %#v", i, string(got), stale, err)
 			continue
 		}
+		// 断言转换器收到的是剥离前缀后的数据，而不是原始输入。
 		if test.match != -1 && !bytes.Equal([]byte("value"), transformers[test.match].Transformer.(*testTransformer).receivedFrom) {
 			t.Errorf("%d: unexpected value received by transformer: %s", i, transformers[test.match].Transformer.(*testTransformer).receivedFrom)
 		}
 	}
 }
 
+// TestPrefixTo 验证写入时总是使用首个转换器，并把其前缀拼到输出前；
+// 转换器失败时输出为 nil 且错误原样返回。
 func TestPrefixTo(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	transformErr := fmt.Errorf("test error")
@@ -112,6 +121,9 @@ func TestPrefixTo(t *testing.T) {
 	}
 }
 
+// TestPrefixFromMetrics 验证读取路径的指标标签：成功为 OK，转换器
+// 失败与未知前缀都记为 unknown-non-grpc；前缀为空的转换器统一显示为
+// identity。指标按 resource 区分，便于定位具体资源的解密失败。
 func TestPrefixFromMetrics(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	transformerErr := fmt.Errorf("test error")
@@ -203,6 +215,9 @@ func TestPrefixFromMetrics(t *testing.T) {
 	}
 }
 
+// TestPrefixToMetrics 验证写入路径指标的 resource 标签：无 RequestInfo
+// 时 resource 为空串，有 API group 时拼接为 "test.testGroup"，保证指标
+// 能对应到具体 API 资源。transformation_type 为 to_storage。
 func TestPrefixToMetrics(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	transformerErr := fmt.Errorf("test error")
@@ -296,6 +311,9 @@ func TestPrefixToMetrics(t *testing.T) {
 	}
 }
 
+// TestLogTransformErr 验证加解密失败日志包含完整请求定位信息（group/
+// version/resource/verb/namespace/name），便于按对象排查；缺少 RequestInfo
+// 时先记录一条可识别的提示，避免日志中只剩空字段无从定位。
 func TestLogTransformErr(t *testing.T) {
 	klog.InitFlags(nil)
 	tests := []struct {
@@ -350,6 +368,7 @@ func TestLogTransformErr(t *testing.T) {
 	}
 }
 
+// testContext 返回带取消能力的上下文，并在测试结束时取消以释放资源。
 func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

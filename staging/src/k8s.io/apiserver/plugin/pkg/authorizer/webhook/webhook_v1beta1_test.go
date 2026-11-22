@@ -46,6 +46,9 @@ import (
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+// TestV1beta1NewFromConfig 验证从 kubeconfig 构造 v1beta1 SAR 客户端的行为：
+// 未指定 current-context 且存在多个 cluster 时无法确定目标，应报错；
+// 指定了指向合法 cluster 的 context 时成功。
 func TestV1beta1NewFromConfig(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -217,6 +220,9 @@ type V1beta1Service interface {
 }
 
 // NewV1beta1TestServer wraps a V1beta1Service as an httptest.Server.
+//
+// cert/caCert 非空时启用 TLS 并校验客户端证书；handler 只接受
+// POST /testserver 且 apiVersion 必须是 authorization.k8s.io/v1beta1。
 func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	const webhookPath = "/testserver"
 	var tlsConfig *tls.Config
@@ -311,6 +317,8 @@ func (m *mockV1beta1Service) HTTPStatusCode() int { return m.statusCode }
 
 // newV1beta1Authorizer creates a temporary kubeconfig file from the provided arguments and attempts to load
 // a new WebhookAuthorizer from it.
+//
+// cacheTime 同时用作 authorized 与 unauthorized 缓存 TTL，测试中通常传 0 关闭缓存。
 func newV1beta1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration) (*WebhookAuthorizer, error) {
 	tempfile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -344,6 +352,8 @@ func newV1beta1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, 
 	return newWithBackoff(sarClient, cacheTime, cacheTime, testRetryBackoff, authorizer.DecisionNoOpinion, []authzconfig.WebhookMatchCondition{}, noopAuthorizerMetrics(), authorizationcel.NewDefaultCompiler(), "")
 }
 
+// TestV1beta1TLSConfig 覆盖客户端与 webhook 服务端之间的 TLS 组合：双向认证、
+// 单向认证、证书不受信任等。插件不支持 insecure 配置，因此该用例应报错。
 func TestV1beta1TLSConfig(t *testing.T) {
 	tests := []struct {
 		test                            string
@@ -457,6 +467,8 @@ func (rec *recorderV1beta1Service) Last() (authorizationv1beta1.SubjectAccessRev
 
 func (rec *recorderV1beta1Service) HTTPStatusCode() int { return 200 }
 
+// TestV1beta1Webhook 验证 Attributes 到 v1beta1 SubjectAccessReview 的字段映射，
+// 包括非资源请求与资源请求两种形态。
 func TestV1beta1Webhook(t *testing.T) {
 	serv := new(recorderV1beta1Service)
 	s, err := NewV1beta1TestServer(serv, serverCert, serverKey, caCert)
@@ -558,6 +570,9 @@ func TestV1beta1Webhook(t *testing.T) {
 
 // TestWebhookCache verifies that error responses from the server are not
 // cached, but successful responses are.
+//
+// 同时验证重试策略（5xx/429 重试，4xx 不重试）以及超大属性请求不进入缓存，
+// 防止缓存被异常大的键撑爆。
 func TestV1beta1WebhookCache(t *testing.T) {
 	serv := new(mockV1beta1Service)
 	s, err := NewV1beta1TestServer(serv, serverCert, serverKey, caCert)

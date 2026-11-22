@@ -23,6 +23,8 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
+// TestOutOfBudgetError 验证 CEL 预算耗尽错误同时匹配具体哨兵 ErrOutOfBudget
+// 与分类哨兵 ErrInvalid，调用方可用任一粒度做判断。
 func TestOutOfBudgetError(t *testing.T) {
 	err := &Error{
 		Type:   ErrorTypeInvalid,
@@ -37,6 +39,10 @@ func TestOutOfBudgetError(t *testing.T) {
 	}
 }
 
+// TestCompilationError 验证编译错误：
+//   - ErrCompilation 归类为 ErrInvalid；
+//   - 包装后的 *Error 仍可被 errors.As 还原出 CompilationError 并保留原始 Issues 指针，
+//     这对把 CEL 诊断信息透传给用户至关重要。
 func TestCompilationError(t *testing.T) {
 	if !errors.Is(ErrCompilation, ErrInvalid) {
 		t.Errorf("unexpected %v is not %v", ErrCompilation, ErrInvalid)

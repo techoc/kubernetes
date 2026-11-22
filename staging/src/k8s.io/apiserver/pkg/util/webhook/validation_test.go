@@ -45,6 +45,8 @@ UU4dq6G4kCwMSxWE4cM3HlZ4u1dyIt47VbkP0rtvkBCXx36y+NXYA5lzntchNFZP
 uvEQdw==
 -----END CERTIFICATE-----`)
 
+// TestValidateCABundle 验证 CA bundle 的三种边界：nil/空视为合法（表示
+// 使用系统信任根），非空但无法解析出证书则必须报错。
 func TestValidateCABundle(t *testing.T) {
 	tests := []struct {
 		name      string

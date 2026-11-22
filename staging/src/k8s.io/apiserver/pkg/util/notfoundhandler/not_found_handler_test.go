@@ -27,6 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
+// TestNotFoundHandler 验证 not found handler 的双重行为：路由安装完成后
+// 返回普通 404；安装完成前则返回 503 与 retryAfterSeconds，避免客户端
+// 把"尚未就绪"误判为"资源不存在"。两个场景通过可切换的布尔函数模拟。
 func TestNotFoundHandler(t *testing.T) {
 	isMuxAndDiscoveryCompleteGlobalValue := true
 	isMuxAndDiscoveryCompleteTestFn := func(ctx context.Context) bool { return isMuxAndDiscoveryCompleteGlobalValue }
@@ -54,6 +57,7 @@ func TestNotFoundHandler(t *testing.T) {
 	}
 
 	// scenario 2: pretend the request has been made before the signal has been ready
+	// 切换为未就绪后，同一个路径必须返回 503 的 Status 对象。
 	isMuxAndDiscoveryCompleteGlobalValue = false
 	rw = httptest.NewRecorder()
 

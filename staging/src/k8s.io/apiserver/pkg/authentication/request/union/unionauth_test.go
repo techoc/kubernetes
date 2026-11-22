@@ -27,6 +27,8 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// mockAuthRequestHandler 返回预设的用户、认证状态与错误，用于在不依赖
+// 真实凭据的情况下驱动认证链。
 type mockAuthRequestHandler struct {
 	returnUser      user.Info
 	isAuthenticated bool
@@ -38,10 +40,13 @@ var (
 	user2 = &user.DefaultInfo{Name: "elegant_sheep", UID: "bravo"}
 )
 
+// AuthenticateRequest 原样返回 mock 中配置的结果。
 func (mock *mockAuthRequestHandler) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	return &authenticator.Response{User: mock.returnUser}, mock.isAuthenticated, mock.err
 }
 
+// TestAuthenticateRequestSecondPasses 第一个认证器未认证成功时，链应继续
+// 尝试并采用第二个认证器的用户。
 func TestAuthenticateRequestSecondPasses(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{returnUser: user1}
 	handler2 := &mockAuthRequestHandler{returnUser: user2, isAuthenticated: true}
@@ -60,6 +65,8 @@ func TestAuthenticateRequestSecondPasses(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestFirstPasses 第一个认证器成功时应立即返回，
+// 后续认证器不得覆盖其结果。
 func TestAuthenticateRequestFirstPasses(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{returnUser: user1, isAuthenticated: true}
 	handler2 := &mockAuthRequestHandler{returnUser: user2}
@@ -78,6 +85,8 @@ func TestAuthenticateRequestFirstPasses(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestSuppressUnnecessaryErrors 非 FailOnError 模式下，
+// 前一个认证器的错误不应遮蔽后一个认证器的成功结果。
 func TestAuthenticateRequestSuppressUnnecessaryErrors(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{err: errors.New("first")}
 	handler2 := &mockAuthRequestHandler{isAuthenticated: true}
@@ -93,6 +102,8 @@ func TestAuthenticateRequestSuppressUnnecessaryErrors(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestNoAuthenticators 空链应返回"未认证且无错误"，
+// 调用方据此返回 401 而不是 500。
 func TestAuthenticateRequestNoAuthenticators(t *testing.T) {
 	authRequestHandler := New()
 	req, _ := http.NewRequest("GET", "http://example.org", nil)
@@ -109,6 +120,7 @@ func TestAuthenticateRequestNoAuthenticators(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestNonePass 链中所有认证器都未认证时应报告未认证。
 func TestAuthenticateRequestNonePass(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{}
 	handler2 := &mockAuthRequestHandler{}
@@ -124,6 +136,8 @@ func TestAuthenticateRequestNonePass(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestAdditiveErrors 默认模式下应收集所有认证器的错误，
+// 而不是只返回第一个，方便运维定位全部失败原因。
 func TestAuthenticateRequestAdditiveErrors(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{err: errors.New("first")}
 	handler2 := &mockAuthRequestHandler{err: errors.New("second")}
@@ -145,6 +159,8 @@ func TestAuthenticateRequestAdditiveErrors(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestFailEarly FailOnError 模式下第一个错误即短路，
+// 后续认证器不应被调用（因此错误信息中不会出现 "second"）。
 func TestAuthenticateRequestFailEarly(t *testing.T) {
 	handler1 := &mockAuthRequestHandler{err: errors.New("first")}
 	handler2 := &mockAuthRequestHandler{err: errors.New("second")}

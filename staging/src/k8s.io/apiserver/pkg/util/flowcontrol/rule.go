@@ -27,6 +27,9 @@ import (
 
 // Tests whether a given request and FlowSchema match.  Nobody mutates
 // either input.
+//
+// FlowSchema 的规则之间是“或”关系：命中任一规则即匹配；调用方按优先级
+// 顺序遍历 flowSchemas，因此这里只关心单张 schema 内部。
 func matchesFlowSchema(digest RequestDigest, flowSchema *flowcontrol.FlowSchema) bool {
 	for _, policyRule := range flowSchema.Spec.Rules {
 		if matchesPolicyRule(digest, &policyRule) {
@@ -36,6 +39,8 @@ func matchesFlowSchema(digest RequestDigest, flowSchema *flowcontrol.FlowSchema)
 	return false
 }
 
+// matchesPolicyRule 要求 subject 与 resource/non-resource 两类维度同时匹配；
+// 资源型规则与非资源型规则互不相通。
 func matchesPolicyRule(digest RequestDigest, policyRule *flowcontrol.PolicyRulesWithSubjects) bool {
 	if !matchesASubject(digest.User, policyRule.Subjects) {
 		return false
@@ -55,6 +60,7 @@ func matchesASubject(user user.Info, subjects []flowcontrol.Subject) bool {
 	return false
 }
 
+// matchesSubject 按 Kind 分派；未知 Kind 一律不匹配（校验层已保证不会出现）。
 func matchesSubject(user user.Info, subject flowcontrol.Subject) bool {
 	switch subject.Kind {
 	case flowcontrol.SubjectKindUser:
@@ -116,6 +122,8 @@ func matchesAResourceRule(ri *request.RequestInfo, rules []flowcontrol.ResourceP
 	return false
 }
 
+// matchesResourcePolicyRule 依次校验 verb、resource/subresource、group 与
+// 命名空间/集群作用域；命名空间为空表示这是集群作用域请求，只看 ClusterScope。
 func matchesResourcePolicyRule(ri *request.RequestInfo, policyRule flowcontrol.ResourcePolicyRule) bool {
 	if !matchPolicyRuleVerb(policyRule.Verbs, ri.Verb) {
 		return false
@@ -152,6 +160,8 @@ func matchPolicyRuleVerb(policyRuleVerbs []string, requestVerb string) bool {
 	return containsString(requestVerb, policyRuleVerbs, flowcontrol.VerbAll)
 }
 
+// matchPolicyRuleNonResourceURL 支持两类写法：完全匹配（含 "*" 表示全部）与
+// 以 "*" 结尾的前缀匹配；前缀匹配时要求以 "/" 为边界，避免 /healthz 误配 /healthzfoo。
 func matchPolicyRuleNonResourceURL(policyRuleRequestURLs []string, requestPath string) bool {
 	for _, rulePath := range policyRuleRequestURLs {
 		if rulePath == flowcontrol.NonResourceAll || rulePath == requestPath {
@@ -172,6 +182,7 @@ func matchPolicyRuleAPIGroup(policyRuleAPIGroups []string, requestAPIGroup strin
 	return containsString(requestAPIGroup, policyRuleAPIGroups, flowcontrol.APIGroupAll)
 }
 
+// rsJoin 把 resource 与 subresource 拼成规则中使用的 "resource/subresource" 形式。
 func rsJoin(requestResource, requestSubresource string) string {
 	seekString := requestResource
 	if requestSubresource != "" {
@@ -180,6 +191,8 @@ func rsJoin(requestResource, requestSubresource string) string {
 	return seekString
 }
 
+// matchPolicyRuleResource 按 "resource/subresource" 整体匹配规则列表，
+// 因此 "pods/log" 这样的规则只命中 log 子资源。
 func matchPolicyRuleResource(policyRuleRequestResources []string, requestResource, requestSubresource string) bool {
 	return containsString(rsJoin(requestResource, requestSubresource), policyRuleRequestResources, flowcontrol.ResourceAll)
 }

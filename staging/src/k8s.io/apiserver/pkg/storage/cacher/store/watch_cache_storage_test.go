@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件测试 watch cache 的“存储”适配层（WatchCacheStorage）：
+// 一致性标记如何控制快照收集、按精确 resourceVersion 取快照的回退语义，
+// 以及压缩/替换对历史快照的清理。
+
 package store
 
 import (
@@ -30,6 +34,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestWatchCacheStorageMarkConsistent 验证一致性标记与快照收集的联动：
+// 不一致时清空历史并停止收集新快照；恢复一致后重新开始收集。
 func TestWatchCacheStorageMarkConsistent(t *testing.T) {
 	keyFunc := func(obj runtime.Object) (string, error) {
 		return obj.(*mockObject).key, nil
@@ -69,6 +75,8 @@ func TestWatchCacheStorageMarkConsistent(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestLatestSnapshotLocked 验证 LatestSnapshotLocked 在无写入时返回“无快照”，
+// 有写入后返回包含最新内容的最新快照。
 func TestLatestSnapshotLocked(t *testing.T) {
 	keyFunc := func(obj runtime.Object) (string, error) {
 		return obj.(*mockObject).key, nil
@@ -92,6 +100,8 @@ func TestLatestSnapshotLocked(t *testing.T) {
 	assert.Equal(t, &mockObject{key: "foo", val: "100"}, items[0].(*Element).Object)
 }
 
+// TestWatchCacheStorageMatchExactResourceVersionFallback 验证按精确版本取快照：
+// 版本不存在或被压缩后返回 ResourceExpired，提示客户端重新 list 而非 watch。
 func TestWatchCacheStorageMatchExactResourceVersionFallback(t *testing.T) {
 	keyFunc := func(obj runtime.Object) (string, error) {
 		return obj.(*mockObject).key, nil
@@ -156,16 +166,20 @@ func TestWatchCacheStorageMatchExactResourceVersionFallback(t *testing.T) {
 	}
 }
 
+// mockObject 是只含 key/val 的最小 runtime.Object，便于断言快照内容。
 type mockObject struct {
 	runtime.Object
 	key string
 	val string
 }
 
+// DeepCopyObject 返回新副本，满足 runtime.Object 要求并避免测试间共享状态。
 func (m *mockObject) DeepCopyObject() runtime.Object {
 	return &mockObject{key: m.key, val: m.val}
 }
 
+// TestWatchCacheStorageSnapshots 覆盖快照的完整生命周期：
+// 每次更新生成对应版本快照、压缩删除旧版本、Replace 清除历史。
 func TestWatchCacheStorageSnapshots(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, true)
 

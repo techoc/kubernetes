@@ -25,6 +25,8 @@ import (
 )
 
 // UsageStatsOptions is an options structs that describes how stats should be calculated
+// UsageStatsOptions 描述统计口径：命名空间、作用域与资源集合共同决定哪些对象
+// 会被计入用量。
 type UsageStatsOptions struct {
 	// Namespace where stats should be calculate
 	Namespace string
@@ -42,6 +44,7 @@ type UsageStats struct {
 }
 
 // Evaluator knows how to evaluate quota usage for a particular group resource
+// Evaluator 是每种资源类型（如 pods、services）的用量计算插件。
 type Evaluator interface {
 	// Constraints ensures that each required resource is present on item
 	Constraints(required []corev1.ResourceName, item runtime.Object) error
@@ -65,6 +68,7 @@ type Evaluator interface {
 }
 
 // Configuration defines how the quota system is configured.
+// Configuration 提供准入控制器所需的静态配置：忽略资源与评估器集合。
 type Configuration interface {
 	// IgnoredResources are ignored by quota.
 	IgnoredResources() map[schema.GroupResource]struct{}
@@ -73,6 +77,7 @@ type Configuration interface {
 }
 
 // Registry maintains a list of evaluators
+// Registry 把 GroupResource 映射到 Evaluator；实现需保证并发安全。
 type Registry interface {
 	// Add to registry
 	Add(e Evaluator)
@@ -85,4 +90,5 @@ type Registry interface {
 }
 
 // ListerForResourceFunc knows how to get a lister for a specific resource
+// 评估器借助它从 informer 缓存读取对象，用于批量计算已用量。
 type ListerForResourceFunc func(schema.GroupVersionResource) (cache.GenericLister, error)

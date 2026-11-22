@@ -55,11 +55,16 @@ import (
 )
 
 const (
+	// 这三个 route metadata 键会被 requestinfo 等中间件读取，属于内部契约，
+	// 改动会影响鉴权属性的推导。
 	RouteMetaGVK              = "x-kubernetes-group-version-kind"
 	RouteMetaSelectableFields = "x-kubernetes-selectable-fields"
 	RouteMetaAction           = "x-kubernetes-action"
 )
 
+// APIInstaller 负责把一个 APIGroupVersion 的 storage 映射注册成 HTTP 路由。
+// 中文说明：它是“存储能力 → REST 端点”的转换器：storage 实现了哪些 rest 接口，
+// 就注册哪些动词；缺少某接口则对应路由不暴露，而不是运行时报错。
 type APIInstaller struct {
 	group             *APIGroupVersion
 	prefix            string // Path prefix where API resources are to be registered.
@@ -67,6 +72,7 @@ type APIInstaller struct {
 }
 
 // Struct capturing information about an action (MethodGet, MethodPost, MethodWatch, MethodProxy, etc).
+// 中文说明：action 是注册前的中间表示，先收集再统一生成路由，便于按 scope 复用同一套逻辑。
 type action struct {
 	Verb          string               // Verb identifying the action (MethodGet, MethodPost, MethodWatch, MethodProxy, etc).
 	Path          string               // The path of the action
@@ -75,6 +81,10 @@ type action struct {
 	AllNamespaces bool // true iff the action is namespaced but works on aggregate result for all namespaces
 }
 
+// ConvertGroupVersionIntoToDiscovery 把扁平 APIResource 列表转换为聚合发现结构。
+// 中文说明：先建父资源索引再挂子资源，因为子资源可能在列表中出现于父资源之前；
+// 缺失父资源时补一个空壳父项，是为了兼容旧 client-go 对 nil ResponseKind 的 panic
+// （见 kubernetes#118361），属于必须保留的兼容行为。
 func ConvertGroupVersionIntoToDiscovery(list []metav1.APIResource) ([]apidiscoveryv2.APIResourceDiscovery, error) {
 	var apiResourceList []apidiscoveryv2.APIResourceDiscovery
 	parentResources := make(map[string]int)
@@ -167,6 +177,7 @@ func ConvertGroupVersionIntoToDiscovery(list []metav1.APIResource) ([]apidiscove
 }
 
 // An interface to see if one storage supports override its default verb for monitoring
+// 中文说明：少数资源（如 connect 类）对指标的 verb 语义有自己的定义，通过该接口覆盖。
 type StorageMetricsOverride interface {
 	// OverrideMetricsVerb gives a storage object an opportunity to override the verb reported to the metrics endpoint
 	OverrideMetricsVerb(oldVerb string) (newVerb string)
@@ -178,6 +189,8 @@ type documentable interface {
 }
 
 // toDiscoveryKubeVerb maps an action.Verb to the logical kube verb, used for discovery
+// 中文说明：空字符串表示不在 discovery 中列出（connect 由具体方法名映射）；
+// 一个 HTTP 动词可能对应多个 kube 动词（如 GET 既是 get 也是 list），因此映射是多对一。
 var toDiscoveryKubeVerb = map[string]string{
 	request.MethodConnect:          "", // do not list in discovery.
 	request.MethodDelete:           "delete",
@@ -193,6 +206,9 @@ var toDiscoveryKubeVerb = map[string]string{
 }
 
 // Install handlers for API resources.
+//
+// 中文说明：返回的 APIResource 列表用于 discovery，ResourceInfo 用于 storageversion
+// API；单个资源注册失败不会中断整体安装，而是聚合错误交由调用方决定是否致命。
 func (a *APIInstaller) Install() ([]metav1.APIResource, []*storageversion.ResourceInfo, *restful.WebService, []error) {
 	var apiResources []metav1.APIResource
 	var resourceInfos []*storageversion.ResourceInfo
@@ -200,6 +216,7 @@ func (a *APIInstaller) Install() ([]metav1.APIResource, []*storageversion.Resour
 	ws := a.newWebService()
 
 	// Register the paths in a deterministic (sorted) order to get a deterministic swagger spec.
+	// 中文说明：map 遍历无序，排序是为了让 swagger/OpenAPI 输出稳定，避免生成物抖动。
 	paths := make([]string, len(a.group.Storage))
 	var i int = 0
 	for path := range a.group.Storage {
@@ -240,6 +257,8 @@ func (a *APIInstaller) newWebService() *restful.WebService {
 }
 
 // calculate the storage gvk, the gvk objects are converted to before persisted to the etcd.
+// 中文说明：返回的是“落盘版本”，与对外暴露版本无关；storageversion API 依赖它来
+// 判断实际编码格式。
 func getStorageVersionKind(storageVersioner runtime.GroupVersioner, storage rest.Storage, typer runtime.ObjectTyper) (schema.GroupVersionKind, error) {
 	object := storage.New()
 	fqKinds, _, err := typer.ObjectKinds(object)
@@ -256,6 +275,10 @@ func getStorageVersionKind(storageVersioner runtime.GroupVersioner, storage rest
 // GetResourceKind returns the external group version kind registered for the given storage
 // object. If the storage object is a subresource and has an override supplied for it, it returns
 // the group version kind supplied in the override.
+//
+// 中文说明：优先询问 storage 自身（GroupVersionKindProvider），因为子资源的 Kind
+// 可能与父对象不同（如 Deployment/scale 返回 Scale）；否则按 Group 从注册的
+// 全部 Kind 中筛选。
 func GetResourceKind(groupVersion schema.GroupVersion, storage rest.Storage, typer runtime.ObjectTyper) (schema.GroupVersionKind, error) {
 	// Let the storage tell us exactly what GVK it has
 	if gvkProvider, ok := storage.(rest.GroupVersionKindProvider); ok {
@@ -286,6 +309,8 @@ func GetResourceKind(groupVersion schema.GroupVersion, storage rest.Storage, typ
 }
 
 func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storage, ws *restful.WebService) (*metav1.APIResource, *storageversion.ResourceInfo, error) {
+	// 中文说明：本函数很长但顺序重要：先解析 Kind/scope，再按 storage 实现的接口
+	// 收集 actions，最后为每个 action 生成路由。下面各段按这个顺序组织。
 	admit := a.group.Admit
 
 	optionsExternalVersion := a.group.GroupVersion
@@ -314,6 +339,7 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	isSubresource := len(subresource) > 0
 
 	// If there is a subresource, namespace scoping is defined by the parent resource
+	// 中文说明：子资源自身往往不实现 Scoper，scope 必须继承父资源，否则 URL 形态会错。
 	var namespaceScoped bool
 	if isSubresource {
 		parentStorage, ok := a.group.Storage[resource]
@@ -335,6 +361,7 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	}
 
 	// what verbs are supported by the storage, used to know what verbs we support per path
+	// 中文说明：这里用类型断言一次性探测能力，后续所有动作注册都基于这些布尔量。
 	creater, isCreater := storage.(rest.Creater)
 	namedCreater, isNamedCreater := storage.(rest.NamedCreater)
 	lister, isLister := storage.(rest.Lister)
@@ -392,6 +419,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	var versionedDeleterObject interface{}
 	deleteReturnsDeletedObject := false
 	if isGracefulDeleter {
+		// 中文说明：deleteOptions 与 body 类型分别构造：前者用于 query 参数，
+		// 后者用于请求体解码；两者版本可能不同（optionsExternalVersion）。
 		versionedDeleteOptions, err = a.group.Creater.New(optionsExternalVersion.WithKind("DeleteOptions"))
 		if err != nil {
 			return nil, nil, err
@@ -466,6 +495,7 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	}
 
 	allowWatchList := isWatcher && isLister // watching on lists is allowed only for kinds that support both watch and list.
+	// 中文说明：路径参数在所有动词间复用，避免重复分配。
 	nameParam := ws.PathParameter("name", "name of the "+kind).DataType("string")
 	pathParam := ws.PathParameter("path", "path to the resource").DataType("string")
 
@@ -499,6 +529,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	}
 
 	// Get the list of actions for the given scope.
+	// 中文说明：集群级与命名空间级两条分支逻辑几乎对称，只是路径前缀和 namer 不同；
+	// 保持分开书写比参数化更易读，也便于各自演进。
 	switch {
 	case !namespaceScoped:
 		// Handle non-namespace scoped resources like nodes.
@@ -590,6 +622,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 		// list or post across namespace.
 		// For ex: LIST all pods in all namespaces by sending a LIST request at /api/apiVersion/pods.
 		// TODO: more strongly type whether a resource allows these actions on "all namespaces" (bulk delete)
+		// 中文说明：跨 namespace 的 list/watch 路径不带 namespace 段，因此单独注册；
+		// 子资源不支持这种聚合形式。
 		if !isSubresource {
 			actions = appendIf(actions, action{request.MethodList, resource, params, namer, true}, isLister)
 			// DEPRECATED in 1.11
@@ -727,6 +761,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	}
 
 	for _, action := range actions {
+		// 中文说明：producedObject 决定 OpenAPI/路由的返回类型；storage 可按 verb 定制，
+		// 未定制时回退到资源的默认外部对象。
 		producedObject := storageMeta.ProducesObject(action.Verb)
 		if producedObject == nil {
 			producedObject = defaultVersionedObject
@@ -736,6 +772,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 		requestScope := "cluster"
 		var namespaced string
 		var operationSuffix string
+		// 中文说明：requestScope/operationSuffix 只影响指标标签与 operationId 命名，
+		// 不改变实际路由；两者共同保证不同形态的端点不会在监控里混淆。
 		if apiResource.Namespaced {
 			requestScope = "namespace"
 			namespaced = "Namespaced"
@@ -780,6 +818,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 		verbOverrider, needOverride := storage.(StorageMetricsOverride)
 
 		// accumulate endpoint-level warnings
+		// 中文说明：弃用警告按端点累积，随后包在 handler 外层，确保所有动词都能返回
+		// Warning 头。
 		var (
 			warnings       []string
 			deprecated     bool
@@ -787,6 +827,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 		)
 
 		{
+			// 中文说明：必须给副本设置 GVK 再判断弃用，否则 deprecation 包无法解析注解；
+			// 直接修改 versionedPtr 会污染后续路由的默认对象。
 			versionedPtrWithGVK := versionedPtr.DeepCopyObject()
 			versionedPtrWithGVK.GetObjectKind().SetGroupVersionKind(fqKindToRegister)
 			currentMajor, currentMinor, _ := deprecation.MajorMinor(versioninfo.Get())
@@ -1086,6 +1128,8 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 			return nil, nil, fmt.Errorf("unrecognized action verb: %s", action.Verb)
 		}
 		for _, route := range routes {
+			// 中文说明：GVK 取自 reqScope.Kind 而非 fqKindToRegister，因为子资源的
+			// Kind 已在上面被替换为父资源 Kind，requestinfo 依赖该值推导鉴权属性。
 			route.Metadata(RouteMetaGVK, metav1.GroupVersionKind{
 				Group:   reqScope.Kind.Group,
 				Version: reqScope.Kind.Version,
@@ -1101,6 +1145,7 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 	for kubeVerb := range kubeVerbs {
 		apiResource.Verbs = append(apiResource.Verbs, kubeVerb)
 	}
+	// 排序保证 discovery 输出稳定，客户端缓存不会因顺序变化而失效。
 	sort.Strings(apiResource.Verbs)
 
 	if shortNamesProvider, ok := storage.(rest.ShortNamesProvider); ok {
@@ -1131,10 +1176,12 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 }
 
 // indirectArbitraryPointer returns *ptrToObject for an arbitrary pointer
+// 中文说明：storage 构造的对象通常是 *T，而路由描述需要 T 值，这里做一次反射解引用。
 func indirectArbitraryPointer(ptrToObject interface{}) interface{} {
 	return reflect.Indirect(reflect.ValueOf(ptrToObject)).Interface()
 }
 
+// appendIf 仅在条件成立时追加 action，使动词注册表保持声明式风格。
 func appendIf(actions []action, a action, shouldAppend bool) []action {
 	if shouldAppend {
 		actions = append(actions, a)
@@ -1154,6 +1201,10 @@ func addParams(route *restful.RouteBuilder, params []*restful.Parameter) {
 // Go JSON behavior for omitting a field) become query parameters. The name of the query parameter is
 // the JSON field name. If a description struct tag is set on the field, that description is used on the
 // query parameter. In essence, it converts a standard JSON top level object into a query param schema.
+//
+// 中文说明：只处理顶层标量字段是刻意限制——嵌套结构无法用 query 参数表达。
+// excludedNames 用于屏蔽由路径/框架处理的字段（如 watch、allowWatchBookmarks），
+// 避免同一参数出现两次。
 func AddObjectParams(ws *restful.WebService, route *restful.RouteBuilder, obj interface{}, excludedNames ...string) error {
 	sv, err := conversion.EnforcePtr(obj)
 	if err != nil {
@@ -1202,6 +1253,8 @@ func AddObjectParams(ws *restful.WebService, route *restful.RouteBuilder, obj in
 
 // TODO: this is incomplete, expand as needed.
 // Convert the name of a golang type to the name of a JSON type
+// 中文说明：仅为 OpenAPI 参数类型标注服务；未列出的类型原样返回，属于已知的
+// 不完整实现（见上方待办注释）。
 func typeToJSON(typeName string) string {
 	switch typeName {
 	case "bool", "*bool":
@@ -1236,6 +1289,8 @@ func typeToJSON(typeName string) string {
 }
 
 // defaultStorageMetadata provides default answers to rest.StorageMetadata.
+// 中文说明：未实现 StorageMetadata 的 storage 使用此默认值，表示“不定制任何
+// MIME 类型或返回对象”。
 type defaultStorageMetadata struct{}
 
 // defaultStorageMetadata implements rest.StorageMetadata
@@ -1251,6 +1306,7 @@ func (defaultStorageMetadata) ProducesObject(verb string) interface{} {
 
 // splitSubresource checks if the given storage path is the path of a subresource and returns
 // the resource and subresource components.
+// 中文说明：只允许一到两段路径；更深的层级会让 requestinfo 无法可靠解析，故显式拒绝。
 func splitSubresource(path string) (string, string, error) {
 	var resource, subresource string
 	switch parts := strings.Split(path, "/"); len(parts) {
@@ -1266,6 +1322,7 @@ func splitSubresource(path string) (string, string, error) {
 }
 
 // GetArticleForNoun returns the article needed for the given noun.
+// 中文说明：仅用于生成人类可读的文档描述；复数名词不加冠词，避免 "a pods"。
 func GetArticleForNoun(noun string, padding string) string {
 	if !strings.HasSuffix(noun, "ss") && strings.HasSuffix(noun, "s") {
 		// Plurals don't have an article.
@@ -1293,6 +1350,8 @@ func isVowel(c rune) bool {
 }
 
 func restfulListResource(r rest.Lister, rw rest.Watcher, scope handlers.RequestScope, forceWatch bool, minRequestTimeout time.Duration) restful.RouteFunction {
+	// 中文说明：以下 restful* 函数只是把 net/http handler 适配成 go-restful 的
+	// RouteFunction；scope 按值捕获，注册后不再修改，因此可安全共享。
 	return func(req *restful.Request, res *restful.Response) {
 		handlers.ListResource(r, rw, &scope, forceWatch, minRequestTimeout)(res.ResponseWriter, req.Request)
 	}

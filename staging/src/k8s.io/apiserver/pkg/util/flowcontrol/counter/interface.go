@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package counter 定义 APF 内部用于统计活跃 goroutine 数量的抽象。
+// 生产实现基于原子计数，测试实现则让测试代码得以等待“所有就绪工作”完成。
 package counter
 
 // GoRoutineCounter keeps track of the number of active goroutines
@@ -22,6 +24,9 @@ package counter
 // goroutines to the test code, so that the test code can advance a fake
 // clock when and only when the code being tested has finished all
 // the work that is ready to do at the present time.
+//
+// 中文说明：计数的语义是“可能还会做事的 goroutine 数”，而非物理线程数；
+// 等待/阻塞前减一、唤醒对方前加一，测试据此判断何时推进虚拟时钟。
 type GoRoutineCounter interface {
 	// Add adds the given delta to the count of active goroutines.
 	// Call Add(1) before forking a goroutine, Add(-1) at the end of that goroutine.

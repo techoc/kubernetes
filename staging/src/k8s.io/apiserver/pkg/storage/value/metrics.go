@@ -41,7 +41,11 @@ const (
  * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
  * the metric stability policy.
  */
+// 以上指标默认均为 ALPHA 级别：升级稳定性等级需要组件 owner 明确承诺
+// 跨多个版本的支持，因此这里不做隐式升级。
 var (
+	// transformerLatencies 记录转换耗时；桶从 5µs（进程内 AES）指数增长，
+	// 覆盖到 KMS 外部调用可能出现的数百毫秒。
 	transformerLatencies = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Namespace: namespace,
@@ -56,6 +60,8 @@ var (
 		[]string{"transformation_type", "transformer_prefix"},
 	)
 
+	// transformerOperationsTotal 按资源、方向、转换器与状态统计转换次数；
+	// from_storage 对应解密、to_storage 对应加密，可用于告警。
 	transformerOperationsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -67,6 +73,7 @@ var (
 		[]string{"resource", "transformation_type", "transformer_prefix", "status"},
 	)
 
+	// envelopeTransformationCacheMissTotal 统计 KEK 解密缓存未命中（即需要访问 KMS）。
 	envelopeTransformationCacheMissTotal = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -77,6 +84,7 @@ var (
 		},
 	)
 
+	// dataKeyGenerationLatencies 记录 DEK 生成耗时。
 	dataKeyGenerationLatencies = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Namespace:      namespace,
@@ -88,6 +96,7 @@ var (
 		},
 	)
 
+	// dataKeyGenerationFailuresTotal 统计 DEK 生成失败次数。
 	dataKeyGenerationFailuresTotal = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -99,8 +108,10 @@ var (
 	)
 )
 
+// registerMetrics 保证注册只发生一次。
 var registerMetrics sync.Once
 
+// RegisterMetrics 注册本包全部指标；可重复调用。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(transformerLatencies)
@@ -111,7 +122,8 @@ func RegisterMetrics() {
 	})
 }
 
-// RecordTransformation records latencies and count of TransformFromStorage and TransformToStorage operations.
+// RecordTransformation 记录一次 TransformFromStorage/TransformToStorage 的
+// 次数与耗时；仅成功时才记录耗时直方图，失败耗时对容量规划无意义。
 // Note that transformation_failures_total metric is deprecated, use transformation_operations_total instead.
 func RecordTransformation(resource, transformationType, transformerPrefix string, elapsed time.Duration, err error) {
 	transformerOperationsTotal.WithLabelValues(resource, transformationType, transformerPrefix, getErrorCode(err)).Inc()
@@ -121,12 +133,12 @@ func RecordTransformation(resource, transformationType, transformerPrefix string
 	}
 }
 
-// RecordCacheMiss records a miss on Key Encryption Key(KEK) - call to KMS was required to decrypt KEK.
+// RecordCacheMiss 记录一次 KEK 缓存未命中；调用方在不得不访问 KMS 解密 KEK 时调用。
 func RecordCacheMiss() {
 	envelopeTransformationCacheMissTotal.Inc()
 }
 
-// RecordDataKeyGeneration records latencies and count of Data Encryption Key generation operations.
+// RecordDataKeyGeneration 记录 DEK 生成结果：失败只计数，成功才记录耗时。
 func RecordDataKeyGeneration(start time.Time, err error) {
 	if err != nil {
 		dataKeyGenerationFailuresTotal.Inc()
@@ -141,10 +153,13 @@ func sinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
+// gRPCError 抽象出可提取 gRPC 状态码的错误。
 type gRPCError interface {
 	GRPCStatus() *status.Status
 }
 
+// getErrorCode 把错误映射为稳定的标签值，避免高基数。
+// 非 gRPC 错误统一归为 "unknown-non-grpc"：说明失败发生在调用 gRPC 之前。
 func getErrorCode(err error) string {
 	if err == nil {
 		return codes.OK.String()

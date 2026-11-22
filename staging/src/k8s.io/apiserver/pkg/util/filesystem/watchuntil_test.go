@@ -25,6 +25,8 @@ import (
 	"time"
 )
 
+// TestWatchUntilPanicsOnInvalidArgs 验证契约违规（pollInterval <= 0 或
+// eventHandler 为 nil）会立即 panic，而不是在后台悄悄空转。
 func TestWatchUntilPanicsOnInvalidArgs(t *testing.T) {
 	t.Run("zero pollInterval panics", func(t *testing.T) {
 		defer func() {
@@ -60,6 +62,8 @@ func TestWatchUntilPanicsOnInvalidArgs(t *testing.T) {
 	})
 }
 
+// TestWatchUntilContextCancellation 验证 ctx 取消后 WatchUntil 能及时返回，
+// 不留下泄漏的 goroutine 或文件监听。
 func TestWatchUntilContextCancellation(t *testing.T) {
 	dir := t.TempDir()
 
@@ -89,6 +93,7 @@ func TestWatchUntilContextCancellation(t *testing.T) {
 	}
 }
 
+// TestWatchUntilCallsHandlerOnPoll 验证即使没有文件事件，轮询也会周期触发 handler。
 func TestWatchUntilCallsHandlerOnPoll(t *testing.T) {
 	dir := t.TempDir()
 
@@ -109,6 +114,8 @@ func TestWatchUntilCallsHandlerOnPoll(t *testing.T) {
 	})
 }
 
+// TestWatchUntilCallsHandlerOnFileChange 验证文件内容变化会通过 fsnotify
+// 立即触发 handler（这里故意设置很长的轮询间隔以排除轮询干扰）。
 func TestWatchUntilCallsHandlerOnFileChange(t *testing.T) {
 	dir := t.TempDir()
 	testFile := filepath.Join(dir, "test.yaml")
@@ -145,6 +152,8 @@ func TestWatchUntilCallsHandlerOnFileChange(t *testing.T) {
 	})
 }
 
+// TestWatchUntilNonExistentPathCallsErrorHandler 验证路径不存在时的降级：
+// 错误上报给 errorHandler，同时 handler 仍通过轮询被调用。
 func TestWatchUntilNonExistentPathCallsErrorHandler(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist")
 
@@ -173,6 +182,8 @@ func TestWatchUntilNonExistentPathCallsErrorHandler(t *testing.T) {
 	})
 }
 
+// TestWatchUntilNilErrorHandler 验证 errorHandler 为 nil 时不会 panic，
+// 错误被静默丢弃，轮询仍正常工作。
 func TestWatchUntilNilErrorHandler(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist")
 
@@ -203,6 +214,8 @@ func TestWatchUntilNilErrorHandler(t *testing.T) {
 	}
 }
 
+// TestWatchUntilDetectsAtomicRename 验证“写临时文件 + rename”这种原子替换
+// 也能被检测到。这是 KEP 推荐的配置更新方式，若不重新 Add 监听会丢失后续事件。
 func TestWatchUntilDetectsAtomicRename(t *testing.T) {
 	dir := t.TempDir()
 	testFile := filepath.Join(dir, "config.yaml")
@@ -244,6 +257,7 @@ func TestWatchUntilDetectsAtomicRename(t *testing.T) {
 	})
 }
 
+// waitForCondition 轮询等待条件成立，超时则使测试失败；避免依赖固定 sleep。
 func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

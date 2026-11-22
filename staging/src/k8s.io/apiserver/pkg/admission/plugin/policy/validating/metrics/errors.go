@@ -24,6 +24,10 @@ import (
 
 // ErrorType decodes the error to determine the error type
 // that the metrics understand.
+//
+// 将任意错误归一到有限的指标标签集合，避免高基数标签。使用 errors.Is
+// 而非类型断言，是为了兼容被包装过的 CEL 错误。未知错误统一记为
+// ValidatingInvalidError，保证标签枚举封闭。
 func ErrorType(err error) ValidationErrorType {
 	if err == nil {
 		return ValidationNoError

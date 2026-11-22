@@ -28,6 +28,7 @@ import (
 )
 
 // EncodeStyle is a hint for string encoding of parsed values.
+// 用于记录原始 YAML/JSON 中的排版风格，序列化回文本时尽量保持用户书写习惯。
 type EncodeStyle int
 
 const (
@@ -64,6 +65,9 @@ func NewDynValue(id int64, val interface{}) (*DynValue, error) {
 // DynValue is a dynamically typed value used to describe unstructured content.
 // Whether the value has the desired type is determined by where it is used within the Instance or
 // Template, and whether there are schemas which might enforce a more rigid type definition.
+//
+// value 保存 Go 原生值，exprValue 是其 CEL 表示，declType 是声明类型。
+// 三者由 SetValue 同步更新，避免出现类型与值不一致的中间状态。
 type DynValue struct {
 	ID          int64
 	EncodeStyle EncodeStyle
@@ -84,6 +88,7 @@ func (dv *DynValue) DeclType() *DeclType {
 // set of conversion behaviors and proxy to the CEL ConvertToNative method for the type.
 func (dv *DynValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	ev := dv.ExprValue()
+	// 求值阶段的错误优先返回，避免在错误值上继续做类型转换。
 	if types.IsError(ev) {
 		return nil, ev.(*types.Err)
 	}
@@ -95,6 +100,7 @@ func (dv *DynValue) Equal(other ref.Val) ref.Val {
 	dvType := dv.Type()
 	otherType := other.Type()
 	// Preserve CEL's homogeneous equality constraint.
+	// CEL 规定不同类型之间不可比较；这里不返回 false 而是“无此重载”错误。
 	if dvType.TypeName() != otherType.TypeName() {
 		return types.MaybeNoSuchOverloadErr(other)
 	}
@@ -104,6 +110,7 @@ func (dv *DynValue) Equal(other ref.Val) ref.Val {
 	case PlainTextValue:
 		return celBool(string(v) == other.Value().(string))
 	case *MultilineStringValue:
+		// 比较解析后的 Value 而非 Raw，使排版差异不影响语义相等。
 		return celBool(v.Value == other.Value().(string))
 	case time.Duration:
 		otherDuration := other.Value().(time.Duration)
@@ -127,6 +134,7 @@ func (dv *DynValue) Value() interface{} {
 }
 
 // SetValue updates the underlying value held by this reference.
+// 同时重建 CEL 值与声明类型；失败时保留原始 value 但返回错误，调用方不应继续使用。
 func (dv *DynValue) SetValue(value interface{}) error {
 	dv.value = value
 	var err error
@@ -139,6 +147,8 @@ func (dv *DynValue) Type() ref.Type {
 	return dv.ExprValue().Type()
 }
 
+// exprValue 把 Go 原生值映射为 CEL 值与声明类型。
+// 仅支持策略模型允许的类型集合，其他类型直接报错，防止未定义语义的值进入求值。
 func exprValue(value interface{}) (ref.Val, *DeclType, error) {
 	switch v := value.(type) {
 	case bool:
@@ -171,6 +181,7 @@ func exprValue(value interface{}) (ref.Val, *DeclType, error) {
 }
 
 // PlainTextValue is a text string literal which must not be treated as an expression.
+// 与普通 string 区分，避免被误当作 CEL 表达式再次求值。
 type PlainTextValue string
 
 // MultilineStringValue is a multiline string value which has been parsed in a way which omits
@@ -180,6 +191,7 @@ type MultilineStringValue struct {
 	Raw   string
 }
 
+// newStructValue 构造内部共享的字段容器；ObjectValue 与 MapValue 复用同一实现。
 func newStructValue() *structValue {
 	return &structValue{
 		Fields:   []*Field{},
@@ -187,12 +199,14 @@ func newStructValue() *structValue {
 	}
 }
 
+// structValue 同时维护有序字段列表与按名索引，前者保证遍历稳定，后者保证 O(1) 查找。
 type structValue struct {
 	Fields   []*Field
 	fieldMap map[string]*Field
 }
 
 // AddField appends a MapField to the MapValue and indexes the field by name.
+// 重复添加同名字段会覆盖索引但保留列表中的旧项；调用方应避免重复。
 func (sv *structValue) AddField(field *Field) {
 	sv.Fields = append(sv.Fields, field)
 	sv.fieldMap[field.Name] = field
@@ -208,6 +222,7 @@ func (sv *structValue) ConvertToNative(typeDesc reflect.Type) (interface{}, erro
 	}
 
 	// Unwrap pointers, but track their use.
+	// 只允许一层指针：更深层指针在 CEL 中没有对应语义。
 	isPtr := false
 	if typeDesc.Kind() == reflect.Pointer {
 		tk := typeDesc
@@ -240,6 +255,7 @@ func (sv *structValue) ConvertToNative(typeDesc reflect.Type) (interface{}, erro
 		ntvObjPtr := reflect.New(typeDesc)
 		ntvObj := ntvObjPtr.Elem()
 		for name, val := range sv.fieldMap {
+			// 按 Go 字段名而非 JSON 名匹配，与调用方传入的 typeDesc 约定一致。
 			f := ntvObj.FieldByName(name)
 			if !f.IsValid() {
 				return nil, fmt.Errorf("type conversion error, no such field %s in type %v",
@@ -314,6 +330,7 @@ func (o *ObjectValue) Equal(other ref.Val) ref.Val {
 		v := o.Get(k)
 		ov := o2.Get(k)
 		vEq := v.Equal(ov)
+		// 字段比较出错（而非不相等）时向上传播错误，便于用户定位问题。
 		if vEq != types.True {
 			return vEq
 		}
@@ -340,6 +357,7 @@ func (o *ObjectValue) Get(name ref.Val) ref.Val {
 	if !found {
 		return types.NewErr("no such field: %s", nameStr)
 	}
+	// 未设置的字段回退到 schema 默认值，实现 proto 风格的安全链式访问。
 	defValue := fieldDef.DefaultValue()
 	if defValue != nil {
 		return defValue
@@ -431,6 +449,7 @@ func (m *MapValue) Find(name ref.Val) (ref.Val, bool) {
 	// and also much simpler to support.
 	n, ok := name.(types.String)
 	if !ok {
+		// 非字符串 key 返回错误且 found=true，使调用方区分“类型错误”与“不存在”。
 		return types.MaybeNoSuchOverloadErr(n), true
 	}
 	nameStr := string(n)
@@ -454,6 +473,7 @@ func (m *MapValue) Get(key ref.Val) ref.Val {
 //
 // The Iterator is frequently used within comprehensions.
 func (m *MapValue) Iterator() traits.Iterator {
+	// 先快照 key 列表，避免迭代期间 map 变更导致结果不确定。
 	keys := make([]ref.Val, len(m.fieldMap))
 	i := 0
 	for k := range m.fieldMap {
@@ -481,6 +501,7 @@ func (m *MapValue) Value() interface{} {
 	return m
 }
 
+// baseMapIterator 以预先生成的 key 列表为基准进行遍历。
 type baseMapIterator struct {
 	*baseVal
 	keys []ref.Val
@@ -532,6 +553,7 @@ func NewListValue() *ListValue {
 }
 
 // ListValue contains a list of dynamically typed entries.
+// valueSet 是惰性构建的哈希集合，用于加速 Contains；Append 会使其失效。
 type ListValue struct {
 	Entries      []*DynValue
 	initValueSet sync.Once
@@ -561,6 +583,7 @@ func (lv *ListValue) Add(other ref.Val) ref.Val {
 func (lv *ListValue) Append(entry *DynValue) {
 	lv.Entries = append(lv.Entries, entry)
 	// The append resets all previously built indices.
+	// sync.Once 无法复位，只能整体替换为零值以允许下次重建。
 	lv.initValueSet = sync.Once{}
 }
 
@@ -572,6 +595,7 @@ func (lv *ListValue) Contains(val ref.Val) ref.Val {
 	if types.IsUnknownOrError(val) {
 		return val
 	}
+	// 元素全为标量时走哈希快路径；否则退回逐项比较。
 	lv.initValueSet.Do(lv.finalizeValueSet)
 	if lv.valueSet != nil {
 		_, found := lv.valueSet[val]
@@ -587,6 +611,7 @@ func (lv *ListValue) Contains(val ref.Val) ref.Val {
 		elem := lv.Entries[i]
 		cmp := elem.Equal(val)
 		b, ok := cmp.(types.Bool)
+		// 类型不匹配的比较会产生非 bool 结果，记录第一个错误但继续寻找相等项。
 		if !ok && err == nil {
 			err = types.MaybeNoSuchOverloadErr(cmp)
 		}
@@ -703,6 +728,7 @@ func (lv *ListValue) Value() interface{} {
 
 // finalizeValueSet inspects the ListValue entries in order to make internal optimizations once all list
 // entries are known.
+// 只有全部为可哈希的标量时才建立集合；出现复合类型则放弃优化（valueSet 保持 nil）。
 func (lv *ListValue) finalizeValueSet() {
 	valueSet := make(map[ref.Val]struct{})
 	for _, e := range lv.Entries {
@@ -717,24 +743,30 @@ func (lv *ListValue) finalizeValueSet() {
 	lv.valueSet = valueSet
 }
 
+// baseVal 为迭代器提供默认的“不支持”实现，避免每个迭代器重复定义。
 type baseVal struct{}
 
+// ConvertToNative 不支持。
 func (*baseVal) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	return nil, fmt.Errorf("unsupported native conversion to: %v", typeDesc)
 }
 
+// ConvertToType 不支持。
 func (*baseVal) ConvertToType(t ref.Type) ref.Val {
 	return types.NewErr("unsupported type conversion to: %v", t)
 }
 
+// Equal 不支持比较。
 func (*baseVal) Equal(other ref.Val) ref.Val {
 	return types.NewErr("unsupported equality test between instances")
 }
 
+// Value 无原生值。
 func (v *baseVal) Value() interface{} {
 	return nil
 }
 
+// baseListIterator 通过 getter 回调按下标取值，避免依赖具体列表实现。
 type baseListIterator struct {
 	*baseVal
 	getter func(idx ref.Val) ref.Val
@@ -742,6 +774,7 @@ type baseListIterator struct {
 	idx    int
 }
 
+// HasNext 判断是否还有元素。
 func (it *baseListIterator) HasNext() ref.Val {
 	if it.idx < it.sz {
 		return types.True
@@ -749,16 +782,19 @@ func (it *baseListIterator) HasNext() ref.Val {
 	return types.False
 }
 
+// Next 返回当前元素并前进。
 func (it *baseListIterator) Next() ref.Val {
 	v := it.getter(types.Int(it.idx))
 	it.idx++
 	return v
 }
 
+// Type 返回 iterator 类型。
 func (it *baseListIterator) Type() ref.Type {
 	return types.IteratorType
 }
 
+// celBool 把 Go bool 转为 CEL bool。
 func celBool(pred bool) ref.Val {
 	if pred {
 		return types.True
@@ -766,4 +802,5 @@ func celBool(pred bool) ref.Val {
 	return types.False
 }
 
+// unknownType 用于无法映射到已知声明类型的值；其名字仅用于错误信息。
 var unknownType = &DeclType{name: "unknown", MinSerializedSize: 1}

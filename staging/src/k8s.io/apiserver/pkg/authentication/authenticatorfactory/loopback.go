@@ -24,6 +24,11 @@ import (
 )
 
 // NewFromTokens returns an authenticator.Request or an error
+//
+// NewFromTokens 用静态 token 表构造 Bearer token 认证器，主要服务于
+// --token-auth-file 这类回环/测试场景。
+// WrapAudienceAgnosticToken 表示 token 文件中的身份不区分 audience：
+// 它们被视作对任意请求的 audience 都有效，因此集群管理员不应在生产环境依赖它做多租户隔离。
 func NewFromTokens(tokens map[string]*user.DefaultInfo, audiences authenticator.Audiences) authenticator.Request {
 	return bearertoken.New(authenticator.WrapAudienceAgnosticToken(audiences, tokenfile.New(tokens)))
 }

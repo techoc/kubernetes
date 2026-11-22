@@ -55,6 +55,9 @@ import (
 // that objects may implement any of the below interfaces.
 //
 // Consider using StorageWithReadiness whenever possible.
+//
+// 能力通过组合小接口表达：调用方对具体资源只依赖它实际需要的能力，
+// 例如只读端点只需 Lister，避免为未实现的动词提供假实现。
 type Storage interface {
 	// New returns an empty object that can be used with Create and Update after request data has been put into it.
 	// This object must be a pointer type for use with Codec.DecodeInto([]byte, runtime.Object)
@@ -67,6 +70,7 @@ type Storage interface {
 }
 
 // StorageWithReadiness extends Storage interface with the readiness check.
+// 用于需要等待底层存储（如 etcd 连接、缓存同步）就绪的资源。
 type StorageWithReadiness interface {
 	Storage
 
@@ -161,6 +165,8 @@ type GetterWithOptions interface {
 	NewGetOptions() (runtime.Object, bool, string)
 }
 
+// TableConvertor 把对象转换为 metav1.Table；列表端点必须实现，
+// 以支持 kubectl get 的服务端表格渲染。
 type TableConvertor interface {
 	ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error)
 }
@@ -315,6 +321,7 @@ type StandardStorage interface {
 }
 
 // Redirector know how to return a remote resource's location.
+// 用于代理/重定向类资源（如 nodes/proxy），由存储层决定实际远端地址。
 type Redirector interface {
 	// ResourceLocation should return the remote location of the given resource, and an optional transport to use to request it, or an error.
 	ResourceLocation(ctx context.Context, id string) (remoteLocation *url.URL, transport http.RoundTripper, err error)
@@ -384,6 +391,7 @@ type StorageVersionProvider interface {
 
 // ResetFieldsStrategy is an optional interface that a storage object can
 // implement if it wishes to provide the fields reset by its strategies.
+// 字段重置用于在更新时清除由系统管理的字段，避免客户端持久化这些值。
 type ResetFieldsStrategy interface {
 	GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set
 }

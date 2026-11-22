@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package resolver 定义从 GroupVersionKind 解析 OpenAPI schema 的最小接口。
+// 上层 CEL 类型系统只依赖该接口，从而可以分别对接内置类型与 CRD。
 package resolver
 
 import (
@@ -36,4 +38,7 @@ type SchemaResolver interface {
 
 // ErrSchemaNotFound is wrapped and returned if the schema cannot be located
 // by the resolver.
+//
+// 调用方应使用 errors.Is(err, ErrSchemaNotFound) 区分“类型确实不存在”
+// 与其它解析失败（例如 OpenAPI 服务不可用），前者通常可安全降级。
 var ErrSchemaNotFound = fmt.Errorf("schema not found")

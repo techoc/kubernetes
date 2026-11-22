@@ -31,6 +31,10 @@ import (
 	library "k8s.io/apiserver/pkg/cel/library"
 )
 
+// testSemver 是 semver 库测试的通用驱动：编译、检查编译期错误、
+// 求值并比对运行期错误或结果。
+//
+// version 用于选择库版本，以便同时覆盖 v0（严格）与 v1（可 normalize）两套语义。
 func testSemver(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErrPattern string, expectCompileErrs []string, version uint32) {
 	env, err := cel.NewEnv(
 		library.SemverLib(library.SemverVersion(version)),
@@ -41,6 +45,8 @@ func testSemver(t *testing.T, expr string, expectResult ref.Val, expectRuntimeEr
 	compiled, issues := env.Compile(expr)
 
 	if len(expectCompileErrs) > 0 {
+		// 期望存在编译错误时，逐条用正则匹配，并确保没有“多余的”错误混进来，
+		// 防止某条表达式因为别的原因失败却误判为通过。
 		missingCompileErrs := []string{}
 		matchedCompileErrs := sets.New[int]()
 		for _, expectedCompileErr := range expectCompileErrs {
@@ -104,6 +110,8 @@ func testSemver(t *testing.T, expr string, expectResult ref.Val, expectRuntimeEr
 
 }
 
+// TestSemver 覆盖 semver 库的解析、isSemver、比较与字段访问，
+// 并对照 v0（严格）与 v1（normalize 可选）两种行为。
 func TestSemver(t *testing.T) {
 	trueVal := types.Bool(true)
 	falseVal := types.Bool(false)

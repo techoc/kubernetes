@@ -23,10 +23,14 @@ import (
 )
 
 // ServiceResolver knows how to convert a service reference into an actual location.
+//
+// 实现可以注入自定义解析（例如测试中指向本地 httptest 服务）；
+// 默认实现只做集群内 DNS 拼接。
 type ServiceResolver interface {
 	ResolveEndpoint(namespace, name string, port int32) (*url.URL, error)
 }
 
+// defaultServiceResolver 按集群内 Service DNS 规则解析地址。
 type defaultServiceResolver struct{}
 
 // NewDefaultServiceResolver creates a new default server resolver.

@@ -29,10 +29,16 @@ import (
 
 // Attributes is an interface used by AdmissionController to get information about a request
 // that is used to make an admission decision.
+//
+// Attributes 是一次准入请求的只读视图：插件只能通过它观察请求，任何对对象的修改都必须经由
+// 返回 patch/新对象完成，从而让准入链能比较修改前后差异并写入审计。实现返回的对象可能被
+// 多个插件共享，插件不得原地修改它们。
 type Attributes interface {
 	// GetName returns the name of the object as presented in the request.  On a CREATE operation, the client
 	// may omit name and rely on the server to generate the name.  If that is the case, this method will return
 	// the empty string
+	//
+	// 注意：这里返回的是请求中出现的名字，而不是默认值或服务端生成的名字。
 	GetName() string
 	// GetNamespace is the namespace associated with the request (if any)
 	GetNamespace() string
@@ -52,6 +58,8 @@ type Attributes interface {
 	// could still be rejected by a subsequent validation step.
 	IsDryRun() bool
 	// GetObject is the object from the incoming request prior to default values being applied
+	//
+	// 返回的是反序列化后、默认值填充前的对象，因此插件看到的是客户端原始意图。
 	GetObject() runtime.Object
 	// GetOldObject is the existing object. Only populated for UPDATE and DELETE requests.
 	GetOldObject() runtime.Object
@@ -66,6 +74,8 @@ type Attributes interface {
 	// Both ValidationInterface and MutationInterface are allowed to add Annotations.
 	// By default, an annotation gets logged into audit event if the request's audit level is greater or
 	// equal to Metadata.
+	//
+	// 禁止覆盖已有键是为了避免插件之间静默互相覆盖；键必须带域名前缀，防止不同插件冲突。
 	AddAnnotation(key, value string) error
 
 	// AddAnnotationWithLevel sets annotation according to key-value pair with additional intended audit level.
@@ -74,12 +84,17 @@ type Attributes interface {
 	AddAnnotationWithLevel(key, value string, level auditinternal.Level) error
 
 	// GetReinvocationContext tracks the admission request information relevant to the re-invocation policy.
+	//
+	// 重调用上下文在整条准入链中共享，用于判断某插件在对象被其他插件修改后是否需要再次执行。
 	GetReinvocationContext() ReinvocationContext
 }
 
 // ObjectInterfaces is an interface used by AdmissionController to get object interfaces
 // such as Converter or Defaulter. These interfaces are normally coming from Request Scope
 // to handle special cases like CRDs.
+//
+// 这些接口来自请求作用域（Request Scope）而非全局注册表，因此对 CRD 等动态类型同样适用：
+// 插件不能假设自己拿到的是编译期已知的类型。
 type ObjectInterfaces interface {
 	// GetObjectCreater is the ObjectCreator appropriate for the requested object.
 	GetObjectCreater() runtime.ObjectCreater
@@ -94,6 +109,8 @@ type ObjectInterfaces interface {
 }
 
 // privateAnnotationsGetter is a private interface which allows users to get annotations from Attributes.
+//
+// 私有接口用于在不扩大公开 API 的前提下，让同包代码读取注解；外部实现应改用 AnnotationsGetter。
 type privateAnnotationsGetter interface {
 	getAnnotations(maxLevel auditinternal.Level) map[string]string
 }
@@ -127,6 +144,7 @@ type Interface interface {
 	Handles(operation Operation) bool
 }
 
+// MutationInterface 是允许修改请求对象的准入插件接口。
 type MutationInterface interface {
 	Interface
 
@@ -136,6 +154,8 @@ type MutationInterface interface {
 }
 
 // ValidationInterface is an abstract, pluggable interface for Admission Control decisions.
+//
+// 校验插件必须保持无副作用：它们可能在同一请求中被重调用，且不得修改对象。
 type ValidationInterface interface {
 	Interface
 
@@ -158,6 +178,9 @@ const (
 
 // PluginInitializer is used for initialization of shareable resources between admission plugins.
 // After initialization the resources have to be set separately
+//
+// 所有插件共享同一个初始化器实例，因此 Initialize 必须并发安全，且不应持有 plugin 引用
+// 之外的长期状态。
 type PluginInitializer interface {
 	Initialize(plugin Interface)
 }

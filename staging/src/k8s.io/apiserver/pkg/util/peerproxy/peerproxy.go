@@ -54,10 +54,16 @@ const (
 	// This is to allow time for all peer API servers to also observe
 	// the deleted CRD or aggregated API before this server stops excluding it
 	// in peer-aggregated discovery and while proxying requests to peers.
+	//
+	// 宽限期的意义：各 apiserver 观察 CRD/APIService 删除的时间点不一致，
+	// 若立即取消排除，可能把请求代理到一个仍认为该 GV 存在的对端。
 	defaultExclusionGracePeriod = 5 * time.Minute
 )
 
 // Interface defines how the Mixed Version Proxy filter interacts with the underlying system.
+//
+// 混版本代理的目标：客户端请求的版本本机不支持、但某个对端支持时，把请求转发给对端，
+// 从而在滚动升级期间保持 API 可用。
 type Interface interface {
 	WrapHandler(handler http.Handler) http.Handler
 	WaitForCacheSync(stopCh <-chan struct{}) error
@@ -112,6 +118,9 @@ type Interface interface {
 // New creates a new instance to implement unknown version proxy
 // This method is used for an alpha feature UnknownVersionInteroperabilityProxy
 // and is subject to future modifications.
+//
+// identityLeaseLabelSelector 用于从 Lease 中筛选出 apiserver 身份租约；
+// loopbackClientConfig 用于访问本机 discovery（NoPeerDiscovery=true，避免代理回环）。
 func NewPeerProxyHandler(
 	serverId string,
 	identityLeaseLabelSelector string,
@@ -153,6 +162,7 @@ func NewPeerProxyHandler(
 	}
 	h.identityLeaseLabelSelector = selector
 
+	// 单独的 scheme 只用于编解码 apidiscovery 类型，避免污染主 scheme。
 	discoveryScheme := runtime.NewScheme()
 	utilruntime.Must(apidiscoveryv2.AddToScheme(discoveryScheme))
 	h.discoverySerializer = serializer.NewCodecFactory(discoveryScheme)
@@ -163,6 +173,9 @@ func NewPeerProxyHandler(
 	}
 
 	// Always use local discovery to get local view of resources.
+	//
+	// 关键：必须关闭 peer discovery，否则本地视图会包含对端资源，
+	// 导致 shouldServeLocally 判断错误、形成代理回环。
 	discoveryClient.NoPeerDiscovery = true
 	h.discoveryClient = discoveryClient
 	h.localDiscoveryInfoCache.Store(map[schema.GroupVersionResource]bool{})
@@ -174,6 +187,8 @@ func NewPeerProxyHandler(
 	}
 	h.proxyTransport = proxyTransport
 
+	// 监听 apiserver 身份 Lease：新增/删除/持有者变化都意味着对端集合变了，
+	// 需要重新拉取其 discovery 信息。
 	peerDiscoveryRegistration, err := h.apiserverIdentityInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if lease, ok := h.isValidPeerIdentityLease(obj); ok {
@@ -204,6 +219,7 @@ func NewPeerProxyHandler(
 
 // RegisterCRDInformerHandlers registers event handlers for CRD informer.
 func (h *peerProxyHandler) RegisterCRDInformerHandlers(crdInformer cache.SharedIndexInformer, extractor GVExtractor) error {
+	// gvExclusionManager 为 nil 表示未启用排除逻辑，此时静默跳过而不是报错。
 	if h.gvExclusionManager != nil {
 		return h.gvExclusionManager.RegisterCRDInformerHandlers(crdInformer, extractor)
 	}

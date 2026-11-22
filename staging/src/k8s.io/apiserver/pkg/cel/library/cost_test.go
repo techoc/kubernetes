@@ -57,6 +57,7 @@ type comparableCost struct {
 	param string
 }
 
+// TestListsCost 校验列表相关函数（如 sum）的估算成本与运行时成本一致。
 func TestListsCost(t *testing.T) {
 	cases := []struct {
 		opts  []string
@@ -135,6 +136,7 @@ func TestListsCost(t *testing.T) {
 	}
 }
 
+// TestIndexOfCost 校验 indexOf/lastIndexOf 的线性扫描成本估算。
 func TestIndexOfCost(t *testing.T) {
 	cases := []struct {
 		opts  []string
@@ -198,6 +200,7 @@ func TestIndexOfCost(t *testing.T) {
 	}
 }
 
+// TestIncludesCost 校验 includes 的成本估算，包含跨数值类型比较时的隐式转换开销。
 func TestIncludesCost(t *testing.T) {
 	cases := []struct {
 		opts  []string
@@ -258,6 +261,7 @@ func TestIncludesCost(t *testing.T) {
 	}
 }
 
+// TestURLsCost 校验 URL 解析与各 getter 的成本估算。
 func TestURLsCost(t *testing.T) {
 	cases := []struct {
 		ops                []string
@@ -290,6 +294,7 @@ func TestURLsCost(t *testing.T) {
 	}
 }
 
+// TestIPCost 校验 ip() 解析与 IP 方法的成本；IPv6 比 IPv4 更贵，因为解析与规范化更复杂。
 func TestIPCost(t *testing.T) {
 	ipv4 := "ip('192.168.0.1')"
 	ipv4BaseEstimatedCost := checker.CostEstimate{Min: 2, Max: 2}
@@ -341,6 +346,7 @@ func TestIPCost(t *testing.T) {
 	}
 }
 
+// TestIPIsCanonicalCost 校验 isCanonical 的成本：需要完整解析地址，因此高于简单 getter。
 func TestIPIsCanonicalCost(t *testing.T) {
 	testCases := []struct {
 		op                 string
@@ -371,6 +377,7 @@ func TestIPIsCanonicalCost(t *testing.T) {
 	}
 }
 
+// TestCIDRCost 校验 cidr() 解析与 containsIP/containsCIDR 等方法的成本估算。
 func TestCIDRCost(t *testing.T) {
 	ipv4 := "cidr('192.168.0.0/16')"
 	ipv4BaseEstimatedCost := checker.CostEstimate{Min: 2, Max: 2}
@@ -563,6 +570,7 @@ func TestCIDRCost(t *testing.T) {
 	}
 }
 
+// TestStringLibrary 校验字符串扩展函数（大小写转换、格式化、引号等）的成本估算。
 func TestStringLibrary(t *testing.T) {
 	cases := []struct {
 		name               string
@@ -705,6 +713,7 @@ func TestStringLibrary(t *testing.T) {
 	}
 }
 
+// TestAuthzLibrary 校验 authorizer 扩展的 path/resource 等构造与 check 调用的成本估算。
 func TestAuthzLibrary(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -775,6 +784,7 @@ func TestAuthzLibrary(t *testing.T) {
 	}
 }
 
+// TestQuantityCost 校验 quantity 解析与比较的成本；数量字符串越长，解析成本越高。
 func TestQuantityCost(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -893,6 +903,7 @@ func TestQuantityCost(t *testing.T) {
 	}
 }
 
+// TestNameFormatCost 校验 format.<name> 系列格式函数的成本估算。
 func TestNameFormatCost(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -941,6 +952,7 @@ func TestNameFormatCost(t *testing.T) {
 	}
 }
 
+// TestSetsCost 校验 sets 扩展（contains/intersects 等）按输入规模计算的成本。
 func TestSetsCost(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -1171,6 +1183,7 @@ func TestSetsCost(t *testing.T) {
 	}
 }
 
+// TestSemverCost 校验 semver 解析与比较的成本随输入长度增长。
 func TestSemverCost(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -1251,6 +1264,8 @@ func TestSemverCost(t *testing.T) {
 	}
 }
 
+// TestTwoVariableComprehensionCost 校验带 key/value 两个变量的 map 宏（all/exists 等）
+// 的成本，确保每个元素都计入了两个变量的处理开销。
 func TestTwoVariableComprehensionCost(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -1340,6 +1355,9 @@ func TestTwoVariableComprehensionCost(t *testing.T) {
 	}
 }
 
+// testCost 编译并执行表达式，同时比较静态估算成本与运行时实际成本。
+// 打开 panicOnUnknown 是为了在缺少成本表项时立即失败，而不是默默返回默认值——
+// 成本模型的遗漏会直接变成 DoS 面。
 func testCost(t *testing.T, expr string, expectEsimatedCost checker.CostEstimate, expectRuntimeCost uint64) {
 	originalPanicOnUnknown := panicOnUnknown
 	panicOnUnknown = true
@@ -1402,6 +1420,7 @@ func testCost(t *testing.T, expr string, expectEsimatedCost checker.CostEstimate
 	}
 }
 
+// TestSize 校验自定义函数的重载成本表：每个重载的 size 估算与调用成本都必须显式登记。
 func TestSize(t *testing.T) {
 	exactSize := func(size int) checker.SizeEstimate {
 		return checker.SizeEstimate{Min: uint64(size), Max: uint64(size)}
@@ -1489,6 +1508,8 @@ func TestSize(t *testing.T) {
 }
 
 // TestTypeEquality ensures that cost is tested for all custom types used by Kubernetes libraries.
+// TestTypeEquality 确保每种自定义 CEL 类型的 Type() 唯一：若两个类型共用一个类型名，
+// 相等性判断会给出错误结果。新增类型时必须在此登记。
 func TestTypeEquality(t *testing.T) {
 	examples := map[string]ref.Val{
 		// Add example ref.Val's for custom types in Kubernetes here:
@@ -1525,6 +1546,7 @@ func TestTypeEquality(t *testing.T) {
 	}
 }
 
+// testNode 是 checker.AstNode 的最小实现，用于驱动成本估算器。
 type testNode struct {
 	size checker.SizeEstimate
 	typ  *types.Type
@@ -1532,25 +1554,31 @@ type testNode struct {
 
 var _ checker.AstNode = (*testNode)(nil)
 
+// Path 实现 checker.AstNode；测试中不使用。
 func (t testNode) Path() []string {
 	return nil // not needed
 }
 
+// Type 实现 checker.AstNode；测试中不使用。
 func (t testNode) Type() *types.Type {
 	return t.typ // not needed
 }
 
+// Expr 实现 checker.AstNode；测试中不使用。
 func (t testNode) Expr() ast.Expr {
 	return nil // not needed
 }
 
+// ComputedSize 返回预置的尺寸估算，供成本估算器使用。
 func (t testNode) ComputedSize() *checker.SizeEstimate {
 	return &t.size
 }
 
+// testCostEstimator 为字符串/字节类型给出固定尺寸上界，其余类型无估算。
 type testCostEstimator struct {
 }
 
+// EstimateSize 按 CEL 原始类型返回固定区间，模拟真实 schema 提供的尺寸信息。
 func (t *testCostEstimator) EstimateSize(element checker.AstNode) *checker.SizeEstimate {
 	expr, err := cel.TypeToExprType(element.Type())
 	if err != nil {
@@ -1565,12 +1593,15 @@ func (t *testCostEstimator) EstimateSize(element checker.AstNode) *checker.SizeE
 	return nil
 }
 
+// EstimateCallCost 不额外估算调用成本，测试关注的是各库自带的重载成本表。
 func (t *testCostEstimator) EstimateCallCost(function, overloadId string, target *checker.AstNode, args []checker.AstNode) *checker.CallEstimate {
 	return nil
 }
 
+// alwaysAllowAuthorizer 供 authorizer CEL 扩展测试使用，始终放行。
 type alwaysAllowAuthorizer struct{}
 
+// Authorize 始终返回 Allow。
 func (f alwaysAllowAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return authorizer.DecisionAllow, "", nil
 }

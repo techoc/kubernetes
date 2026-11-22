@@ -69,6 +69,8 @@ import (
 	cachertesting "k8s.io/apiserver/pkg/storage/cacher/testing"
 )
 
+// newTestCacherWithoutSyncing 用给定的存储与时钟构造 cacher，但不等待其完成
+// 初始同步，便于测试未就绪状态下的行为。
 func newTestCacherWithoutSyncing(s storage.Interface, c clock.WithTicker) (*Cacher, storage.Versioner, error) {
 	prefix := "/pods/"
 	config := Config{
@@ -100,6 +102,8 @@ func newTestCacherWithoutSyncing(s storage.Interface, c clock.WithTicker) (*Cach
 	return cacher, storage.APIObjectVersioner{}, err
 }
 
+// newTestCacher 构造并等待 cacher 就绪。多数测试假设 Get/GetList/Watch 不会
+// 因 watch cache 初始化返回 429，因此这里统一等待。
 func newTestCacher(s storage.Interface) (*Cacher, storage.Versioner, error) {
 	cacher, versioner, err := newTestCacherWithoutSyncing(s, clock.RealClock{})
 	if err != nil {
@@ -115,6 +119,11 @@ func newTestCacher(s storage.Interface) (*Cacher, storage.Versioner, error) {
 	return cacher, versioner, nil
 }
 
+// TestShouldDelegateList 穷举 ListOptions 组合，验证哪些请求应委托给底层存储
+// （bypass cache），哪些可以由 watch cache 直接服务。
+//
+// 覆盖 ResourceVersion（空/0/旧/新）、ResourceVersionMatch、continue token、
+// limit 与递归与否，并针对 ListFromCacheSnapshot 开关与快照是否可用做覆盖修正。
 func TestShouldDelegateList(t *testing.T) {
 	type opts struct {
 		Recursive            bool
@@ -361,6 +370,7 @@ func TestShouldDelegateList(t *testing.T) {
 	})
 }
 
+// mustAtoi 是测试辅助函数，解析失败直接 panic。
 func mustAtoi(s string) int {
 	value, err := strconv.Atoi(s)
 	if err != nil {
@@ -369,6 +379,9 @@ func mustAtoi(s string) int {
 	return value
 }
 
+// TestConsistentReadFallback 验证一致性读（RV="" 的递归 List）的三种路径：
+// 缓存已追平则直接返回；落后则等待 watch 进度通知并回退到存储；回退失败则报错。
+// 同时校验 ConsistentReadTotal 指标的 fallback/success 标签。
 func TestConsistentReadFallback(t *testing.T) {
 	tcs := []struct {
 		name                string
@@ -542,6 +555,8 @@ apiserver_watch_cache_consistent_read_total{fallback="skipped", group="", resour
 	}
 }
 
+// TestMatchExactResourceVersionFallback 验证 Exact 语义：缓存中不存在该 RV 的
+// 快照时必须回退到存储，快照可用时则直接由缓存服务。
 func TestMatchExactResourceVersionFallback(t *testing.T) {
 	for _, snapshotAvailable := range []bool{false, true} {
 		t.Run(fmt.Sprintf("SnapshotAvailable=%t", snapshotAvailable), func(t *testing.T) {
@@ -603,6 +618,9 @@ func TestMatchExactResourceVersionFallback(t *testing.T) {
 	}
 }
 
+// TestGetListNonRecursiveCacheWithConsistentListFromCache 验证在
+// ListFromCacheSnapshot=false 时，RV 为空的递归 List 仍由缓存服务，并通过
+// GetCurrentResourceVersion 获取当前 RV。
 func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
 	// Set feature gates once at the beginning since we only care about ListFromCacheSnapshot=false
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -724,6 +742,8 @@ func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
 	}
 }
 
+// TestGetCacheBypass 验证 Get 的委托规则：RV=0 由缓存服务，未指定 RV 时
+// 必须回退到存储（一致性读）。
 func TestGetCacheBypass(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -755,6 +775,8 @@ func TestGetCacheBypass(t *testing.T) {
 	}
 }
 
+// TestListMetrics 验证由 watch cache 服务的 List 会记录 fetched/evaluated/returned
+// 三类对象计数，并带上索引标签。
 func TestListMetrics(t *testing.T) {
 	ctx, delegator, terminate := testSetup(t, withNodeNameAndNamespaceIndex)
 	t.Cleanup(terminate)
@@ -807,6 +829,8 @@ apiserver_storage_list_total{group="",index="f:spec.nodeName",resource="pods",st
 	}
 }
 
+// TestWatchCacheBypass 验证 Watch 无论是否指定 RV=0 都由缓存服务（与 List
+// 不同，watch 可以安全地从任意历史点重放）。
 func TestWatchCacheBypass(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -834,6 +858,8 @@ func TestWatchCacheBypass(t *testing.T) {
 	}
 }
 
+// TestEmptyWatchEventCache 验证缓存从 etcd 当前版本初始化、事件历史为空时：
+// 从当前 RV 或更高版本建立 watch 可以成功，更早的 RV 则返回 ResourceExpired。
 func TestEmptyWatchEventCache(t *testing.T) {
 	server, etcdStorage := newEtcdTestStorage(t, etcd3testing.PathPrefix())
 	defer server.Terminate(t)
@@ -925,6 +951,8 @@ func TestEmptyWatchEventCache(t *testing.T) {
 	}
 }
 
+// TestWatchNotHangingOnStartupFailure 验证缓存无法初始化时，Watch 会阻塞等待
+// 就绪，但在请求上下文取消后能及时返回错误而不是永久挂起。
 func TestWatchNotHangingOnStartupFailure(t *testing.T) {
 	// Configure cacher so that it can't initialize, because of
 	// constantly failing lists to the underlying storage.
@@ -953,6 +981,8 @@ func TestWatchNotHangingOnStartupFailure(t *testing.T) {
 	}
 }
 
+// TestWatcherNotGoingBackInTime 验证慢速 watcher 不会拖慢分发线程，且快速
+// watcher 收到的事件 resourceVersion 单调递增、不重复。
 func TestWatcherNotGoingBackInTime(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, v, err := newTestCacher(backingStorage)
@@ -1035,6 +1065,8 @@ func TestWatcherNotGoingBackInTime(t *testing.T) {
 	}
 }
 
+// TestCacherDontAcceptRequestsStopped 验证 Stop 后不再接受新 watch，但已有的
+// watch 会被关闭，Get/GetList 仍可回退到底层存储。
 func TestCacherDontAcceptRequestsStopped(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1097,6 +1129,8 @@ func TestCacherDontAcceptRequestsStopped(t *testing.T) {
 	}
 }
 
+// TestCacherDontMissEventsOnReinitialization 验证重新初始化（relist）期间建立
+// 的并发 watch 不会漏事件，且每个 watcher 看到的 RV 连续递增。
 func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 	makePod := func(i int) *example.Pod {
 		return &example.Pod{
@@ -1206,6 +1240,8 @@ func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 	wg.Wait()
 }
 
+// TestCacherNoLeakWithMultipleWatchers 验证 watch 的创建/停止与过期 bookmark
+// watcher 清理并发进行时不会泄漏，运行数秒以覆盖多个时间桶。
 func TestCacherNoLeakWithMultipleWatchers(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1281,6 +1317,8 @@ func TestCacherNoLeakWithMultipleWatchers(t *testing.T) {
 	}
 }
 
+// testCacherSendBookmarkEvents 是 bookmark 事件的公共测试体：
+// allowWatchBookmarks 为 true 时应在事件流之后收到 bookmark，否则不应收到。
 func testCacherSendBookmarkEvents(t *testing.T, allowWatchBookmarks, expectedBookmarks bool) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1353,6 +1391,7 @@ func testCacherSendBookmarkEvents(t *testing.T, allowWatchBookmarks, expectedBoo
 	}
 }
 
+// TestCacherSendBookmarkEvents 分别验证允许与不允许 bookmark 的两种配置。
 func TestCacherSendBookmarkEvents(t *testing.T) {
 	testCases := []struct {
 		allowWatchBookmarks bool
@@ -1373,6 +1412,9 @@ func TestCacherSendBookmarkEvents(t *testing.T) {
 	}
 }
 
+// TestInitialEventsEndBookmark 验证 WatchList 语义：SendInitialEvents 时先发送
+// 初始对象事件，随后发送带 InitialEventsAnnotationKey 的 bookmark 表示同步完成。
+// 该 bookmark 只在 allowWatchBookmarks 与 sendInitialEvents 同时为真时出现。
 func TestInitialEventsEndBookmark(t *testing.T) {
 	for _, listFromCacheSnapshot := range []bool{true, false} {
 		t.Run(fmt.Sprintf("ListFromCacheSnapshot=%v", listFromCacheSnapshot), func(t *testing.T) {
@@ -1472,6 +1514,8 @@ func TestInitialEventsEndBookmark(t *testing.T) {
 	}
 }
 
+// TestCacherSendsMultipleWatchBookmarks 验证周期性 bookmark：只要缓存 RV 推进，
+// watcher 应能连续收到多个 bookmark 且 RV 不回退。
 func TestCacherSendsMultipleWatchBookmarks(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1542,6 +1586,8 @@ func TestCacherSendsMultipleWatchBookmarks(t *testing.T) {
 	}
 }
 
+// TestDispatchingBookmarkEventsWithConcurrentStop 反复在分发 bookmark 的同时
+// 停止 watcher，验证不会 panic、不会死锁（典型的数据竞争/关闭顺序回归测试）。
 func TestDispatchingBookmarkEventsWithConcurrentStop(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1612,6 +1658,8 @@ func TestDispatchingBookmarkEventsWithConcurrentStop(t *testing.T) {
 	}
 }
 
+// TestBookmarksOnResourceVersionUpdates 验证缓存 RV 因 progress notify 推进时，
+// 会向允许 bookmark 的 watcher 推送新 RV 的 bookmark。
 func TestBookmarksOnResourceVersionUpdates(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1680,6 +1728,7 @@ func TestBookmarksOnResourceVersionUpdates(t *testing.T) {
 	}
 }
 
+// fakeTimeBudget 是恒定的分发时间预算，避免测试因 CPU 饥饿而误判超时。
 type fakeTimeBudget struct{}
 
 func (f *fakeTimeBudget) takeAvailable() time.Duration {
@@ -1688,6 +1737,8 @@ func (f *fakeTimeBudget) takeAvailable() time.Duration {
 
 func (f *fakeTimeBudget) returnUnused(_ time.Duration) {}
 
+// TestStartingResourceVersion 验证 watch 从指定 RV 开始时，收到的事件 RV 一定
+// 严格大于起始 RV。
 func TestStartingResourceVersion(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1763,6 +1814,8 @@ func TestStartingResourceVersion(t *testing.T) {
 	}
 }
 
+// TestDispatchEventWillNotBeBlockedByTimedOutWatcher 验证一个阻塞/超时的慢
+// watcher 不会阻塞其他 watcher 的事件分发。
 func TestDispatchEventWillNotBeBlockedByTimedOutWatcher(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1845,6 +1898,8 @@ func TestDispatchEventWillNotBeBlockedByTimedOutWatcher(t *testing.T) {
 	}
 }
 
+// verifyEvents 等待并校验 watch 事件。strictOrder 为 true 时要求顺序完全一致，
+// 否则只要求集合匹配。比较前会剥掉 CacheableObject 包装。
 func verifyEvents(t *testing.T, w watch.Interface, events []watch.Event, strictOrder bool) {
 	_, _, line, _ := goruntime.Caller(1)
 	actualEvents := make([]watch.Event, len(events))
@@ -1900,6 +1955,8 @@ func verifyEvents(t *testing.T, w watch.Interface, events []watch.Event, strictO
 	}
 }
 
+// TestCachingDeleteEvents 验证 Delete 事件的过滤语义：标签选择器使用对象删除
+// 前的标签，因此从匹配集合中移除的对象应收到 Deleted 事件。
 func TestCachingDeleteEvents(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -1977,6 +2034,8 @@ func TestCachingDeleteEvents(t *testing.T) {
 	verifyEvents(t, barEventsWatcher, barEvents, true)
 }
 
+// testCachingObjects 验证分发出去的对象是 CacheableObject 包装，且多个 watcher
+// 看到的内容与 watch cache 历史记录一致。
 func testCachingObjects(t *testing.T, watchersCount int) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -2063,11 +2122,14 @@ func testCachingObjects(t *testing.T, watchersCount int) {
 	}
 }
 
+// TestCachingObjects 分别覆盖单 watcher 与多 watcher 的对象缓存行为。
 func TestCachingObjects(t *testing.T) {
 	t.Run("single watcher", func(t *testing.T) { testCachingObjects(t, 1) })
 	t.Run("many watcher", func(t *testing.T) { testCachingObjects(t, 3) })
 }
 
+// TestCacheIntervalInvalidationStopsWatch 验证历史区间失效（例如因压缩导致
+// 索引回退）时，正在重放该区间的 watch 会被关闭，而不是读到不一致的数据。
 func TestCacheIntervalInvalidationStopsWatch(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -2148,6 +2210,9 @@ func TestCacheIntervalInvalidationStopsWatch(t *testing.T) {
 	}
 }
 
+// TestWaitUntilWatchCacheFreshAndForceAllEvents 验证 SendInitialEvents 请求在
+// 缓存尚未追平所需 RV 时会主动请求 watch progress；追平后再重试即可拿到初始
+// 事件。覆盖指定 RV 与未指定 RV 两种形态。
 func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.WatchList: true,
@@ -2322,27 +2387,34 @@ func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 	}
 }
 
+// fakeStorage 是只实现 GetList/Watch 的最小存储，用于 benchmark。
 type fakeStorage struct {
 	pods []example.Pod
 	storage.Interface
 }
 
+// newObjectStorage 用预置 Pod 构造 fakeStorage。
 func newObjectStorage(fakePods []example.Pod) *fakeStorage {
 	return &fakeStorage{
 		pods: fakePods,
 	}
 }
 
+// GetList 直接返回预置 Pod 并把 RV 固定为 12345。
 func (m fakeStorage) GetList(ctx context.Context, key string, opts storage.ListOptions, listObj runtime.Object) error {
 	podList := listObj.(*example.PodList)
 	podList.ListMeta = metav1.ListMeta{ResourceVersion: "12345"}
 	podList.Items = m.pods
 	return nil
 }
+
+// Watch 返回一个永不产生事件的假 watch。
 func (m fakeStorage) Watch(_ context.Context, _ string, _ storage.ListOptions) (watch.Interface, error) {
 	return cachertesting.NewMockWatch(), nil
 }
 
+// BenchmarkCacher_GetList 测量不同选择率下由缓存服务 List 的耗时，对象带有
+// 约 2KB 的随机负载以接近真实大小。
 func BenchmarkCacher_GetList(b *testing.B) {
 	testCases := []struct {
 		totalObjectNum  int
@@ -2429,6 +2501,7 @@ func BenchmarkCacher_GetList(b *testing.B) {
 	}
 }
 
+// benchmarkPods 生成 n 个带约 2KB 随机负载的 Pod，供 benchmark 使用。
 func benchmarkPods(n int) []example.Pod {
 	pods := make([]example.Pod, n)
 	for i := range pods {
@@ -2446,6 +2519,7 @@ func benchmarkPods(n int) []example.Pod {
 	return pods
 }
 
+// newDelegatorWithPods 构造一个已就绪、底层存储返回给定 Pod 的 CacheDelegator。
 func newDelegatorWithPods(tb testing.TB, pods []example.Pod) *CacheDelegator {
 	store := &cachertesting.MockStorage{
 		GetListFn: func(_ context.Context, _ string, _ storage.ListOptions, listObj runtime.Object) error {
@@ -2466,6 +2540,7 @@ func newDelegatorWithPods(tb testing.TB, pods []example.Pod) *CacheDelegator {
 	return delegator
 }
 
+// BenchmarkCacher_GetList_AllPods 测量返回全部 1 万个对象的 List 耗时。
 func BenchmarkCacher_GetList_AllPods(b *testing.B) {
 	totalObjectNum := 10_000
 	delegator := newDelegatorWithPods(b, benchmarkPods(totalObjectNum))
@@ -2516,6 +2591,8 @@ func TestWatchListIsSynchronisedWhenNoEventsFromStoreReceived(t *testing.T) {
 	}, true)
 }
 
+// TestForgetWatcher 验证 watcher 注销的幂等性：重复调用 forgetWatcher 不会
+// 破坏内部状态，且不会导致计数器重复减少以外的副作用。
 func TestForgetWatcher(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -2929,6 +3006,8 @@ func TestGetBookmarkAfterResourceVersionLockedFunc(t *testing.T) {
 	}
 }
 
+// TestComputeListLimit 验证计算实际分页上限的规则：RV=0 属于旧式语义，
+// 不应用 limit（返回 0），其余情况沿用请求的 limit。
 func TestComputeListLimit(t *testing.T) {
 	scenarios := []struct {
 		name          string
@@ -2991,6 +3070,9 @@ func TestComputeListLimit(t *testing.T) {
 //
 // In the future we could have a function that would allow for setting the feature
 // only for duration of a test.
+//
+// 该辅助函数会启动一个真实的 etcd 并等待特性探测完成，因此只应在确实需要
+// watch progress 的测试中调用。
 func forceRequestWatchProgressSupport(t *testing.T) {
 	if etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RequestWatchProgress) {
 		return
@@ -3005,6 +3087,8 @@ func forceRequestWatchProgressSupport(t *testing.T) {
 	}
 }
 
+// TestListIndexer 验证 List 的索引选择：当字段选择器命中已建立的索引字段时
+// 应使用该索引（f:<field>），否则不使用索引。
 func TestListIndexer(t *testing.T) {
 	ctx, cacher, terminate := testSetup(t, withNodeNameAndNamespaceIndex)
 	t.Cleanup(terminate)
@@ -3151,6 +3235,8 @@ func TestListIndexer(t *testing.T) {
 	}
 }
 
+// TestRetryAfterForUnreadyCache 验证缓存未就绪时返回 429，并携带按未就绪
+// 时长计算的 RetryAfterSeconds，指导客户端退避重试。
 func TestRetryAfterForUnreadyCache(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	clock := testingclock.NewFakeClock(time.Now())
@@ -3190,6 +3276,8 @@ func TestRetryAfterForUnreadyCache(t *testing.T) {
 	}
 }
 
+// TestWatchListSemanticsSimple 是 WatchList 语义的冒烟测试：开启特性门控后
+// cacher 能正常就绪；dummy store 不支持 WatchList，因此不构造响应。
 func TestWatchListSemanticsSimple(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
@@ -3230,6 +3318,8 @@ func selectorExcludingUID(uid string) sharding.Selector {
 	})
 }
 
+// incrementHex 把十六进制字符串加一（保留 "0x" 前缀），用于构造紧邻的 shard
+// 范围上界。
 func incrementHex(hex string) string {
 	b := []byte(hex)
 	for i := len(b) - 1; i >= 2; i-- {
@@ -3248,6 +3338,7 @@ func incrementHex(hex string) string {
 	return "0x10000000000000000"
 }
 
+// makeExamplePod 构造带 UID 与标签的测试 Pod。
 func makeExamplePod(name, namespace, uid string, podLabels map[string]string) *example.Pod {
 	return &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3259,6 +3350,8 @@ func makeExamplePod(name, namespace, uid string, podLabels map[string]string) *e
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_ShardMatchAndLabels 验证分片与标签同时
+// 匹配时事件通过过滤。
 func TestFilterWithAttrsAndPrefixFunction_ShardMatchAndLabels(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	uid := "test-uid-1"
@@ -3278,6 +3371,8 @@ func TestFilterWithAttrsAndPrefixFunction_ShardMatchAndLabels(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_ShardMatchButLabelMismatch 验证分片匹配
+// 但标签不匹配时事件被拒绝。
 func TestFilterWithAttrsAndPrefixFunction_ShardMatchButLabelMismatch(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	uid := "test-uid-2"
@@ -3297,6 +3392,8 @@ func TestFilterWithAttrsAndPrefixFunction_ShardMatchButLabelMismatch(t *testing.
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_ShardMismatch 验证对象不在分片范围内时
+// 即使标签匹配也会被拒绝。
 func TestFilterWithAttrsAndPrefixFunction_ShardMismatch(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	uid := "test-uid-3"
@@ -3316,6 +3413,8 @@ func TestFilterWithAttrsAndPrefixFunction_ShardMismatch(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_NilShardSelector 验证未配置分片选择器时
+// 不做分片过滤，全部放行。
 func TestFilterWithAttrsAndPrefixFunction_NilShardSelector(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	pod := makeExamplePod("pod4", "default", "uid-4", map[string]string{"app": "web"})
@@ -3333,6 +3432,8 @@ func TestFilterWithAttrsAndPrefixFunction_NilShardSelector(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_EverythingSelector 验证 Everything
+// 选择器覆盖整个哈希空间，所有对象都通过。
 func TestFilterWithAttrsAndPrefixFunction_EverythingSelector(t *testing.T) {
 	pod := makeExamplePod("pod5", "default", "uid-5", nil)
 	gr := schema.GroupResource{Resource: "pods"}
@@ -3350,6 +3451,8 @@ func TestFilterWithAttrsAndPrefixFunction_EverythingSelector(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_WrongPrefix 验证键前缀不匹配的对象直接
+// 被拒绝，避免把其他资源的事件误投递给该 watcher。
 func TestFilterWithAttrsAndPrefixFunction_WrongPrefix(t *testing.T) {
 	uid := "test-uid-6"
 	pod := makeExamplePod("pod6", "default", uid, nil)
@@ -3368,6 +3471,8 @@ func TestFilterWithAttrsAndPrefixFunction_WrongPrefix(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_ShardErrorDropsEvent 验证无法解析分片
+// 字段（如 runtime.Unknown）时事件被丢弃（fail closed），而不是放行。
 func TestFilterWithAttrsAndPrefixFunction_ShardErrorDropsEvent(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	obj := &runtime.Unknown{}
@@ -3390,6 +3495,8 @@ func TestFilterWithAttrsAndPrefixFunction_ShardErrorDropsEvent(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_NamespaceSharding 验证按 namespace 字段
+// 哈希的分片选择器能正确匹配对象。
 func TestFilterWithAttrsAndPrefixFunction_NamespaceSharding(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	ns := "my-namespace"
@@ -3416,6 +3523,8 @@ func TestFilterWithAttrsAndPrefixFunction_NamespaceSharding(t *testing.T) {
 	}
 }
 
+// TestFilterWithAttrsAndPrefixFunction_NamespaceShardingMismatch 验证 namespace
+// 哈希不落在分片范围内时对象被拒绝。
 func TestFilterWithAttrsAndPrefixFunction_NamespaceShardingMismatch(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	ns := "other-namespace"
@@ -3462,6 +3571,7 @@ func selectorExcludingOnlyUID(uid string) sharding.Selector {
 	)
 }
 
+// shardTestPods 生成 n 个 UID 连续、RV 递增的 Pod，供分片 List 测试使用。
 func shardTestPods(n int) []example.Pod {
 	pods := make([]example.Pod, n)
 	for i := range pods {
@@ -3473,6 +3583,9 @@ func shardTestPods(n int) []example.Pod {
 	return pods
 }
 
+// TestGetListWithShardedListAndWatch 验证 Cacher.GetList 的分片语义：nil 或
+// Everything 选择器返回全部；命中分片时只返回范围内的对象，并在列表上设置
+// ShardInfo 以便调用方感知结果不完整。
 func TestGetListWithShardedListAndWatch(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 	delegator := newDelegatorWithPods(t, shardTestPods(3))

@@ -29,6 +29,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
+// TestPatch 验证 merge-patch 请求被正确解析并交给存储层，且 patch 内容生效。
 func TestPatch(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -65,6 +66,8 @@ func TestPatch(t *testing.T) {
 	}
 }
 
+// TestForbiddenForceOnNonApply 验证 force 参数只对 server-side apply 有意义：
+// 在 merge-patch 上显式带 force=true/false 都应返回 422。
 func TestForbiddenForceOnNonApply(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -121,6 +124,8 @@ func TestForbiddenForceOnNonApply(t *testing.T) {
 	}
 }
 
+// TestPatchRequiresMatchingName 验证 patch 体中的 metadata.name 必须与 URL 中的
+// 对象名一致，否则返回 400，防止一次请求意外改名。
 func TestPatchRequiresMatchingName(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}

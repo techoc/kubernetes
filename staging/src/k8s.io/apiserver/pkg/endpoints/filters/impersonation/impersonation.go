@@ -39,6 +39,9 @@ import (
 )
 
 // WithImpersonation is a filter that will inspect and check requests that attempt to change the user.Info for their requests
+//
+// 安全边界：每一个 Impersonate-* 头都映射为一次独立的授权检查，全部通过后才替换
+// 请求中的用户。任何一项被拒绝都立即返回 Forbidden，避免部分生效的模拟身份。
 func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorizer, s runtime.NegotiatedSerializer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		impersonationRequests, err := buildImpersonationRequests(req.Header)
@@ -47,6 +50,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 			responsewriters.RespondWithError(w, req, err, s)
 			return
 		}
+		// 无模拟请求时零开销直通。
 		if len(impersonationRequests) == 0 {
 			handler.ServeHTTP(w, req)
 			return
@@ -71,6 +75,8 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 		uid := ""
 		for _, impersonationRequest := range impersonationRequests {
 			gvk := impersonationRequest.GetObjectKind().GroupVersionKind()
+			// 以 "impersonate" 动词 + 目标资源构造授权属性，让 RBAC 可以精确到
+			// serviceaccounts/users/groups/userextras/uids 及其子资源。
 			actingAsAttributes := &authorizer.AttributesRecord{
 				User:            requestor,
 				Verb:            "impersonate",
@@ -87,6 +93,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 				username = serviceaccount.MakeUsername(impersonationRequest.Namespace, impersonationRequest.Name)
 				if !groupsSpecified {
 					// if groups aren't specified for a service account, we know the groups because its a fixed mapping.  Add them
+					// ServiceAccount 的组是固定映射（system:serviceaccounts 等），无需请求方显式声明。
 					groups = serviceaccount.MakeGroupNames(impersonationRequest.Namespace)
 				}
 
@@ -99,6 +106,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 				groups = append(groups, impersonationRequest.Name)
 
 			case authenticationv1.SchemeGroupVersion.WithKind("UserExtra").GroupKind():
+				// userextras 的键作为子资源参与授权，因此可以只允许模拟特定 extra 键。
 				extraKey := impersonationRequest.FieldPath
 				extraValue := impersonationRequest.Name
 				actingAsAttributes.Resource = "userextras"
@@ -110,6 +118,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 				actingAsAttributes.Resource = "uids"
 
 			default:
+				// 未知类型一律拒绝，避免将来新增头被静默忽略而绕过授权。
 				klog.V(4).InfoS("unknown impersonation request type", "request", impersonationRequest)
 				responsewriters.Forbidden(actingAsAttributes, w, req, fmt.Sprintf("unknown impersonation request type: %v", impersonationRequest), s)
 				return
@@ -123,6 +132,8 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 			}
 		}
 
+		// 组语义：模拟非匿名用户时默认补上 system:authenticated，除非调用方已显式
+		// 指定了 system:authenticated 或 system:unauthenticated（显式即权威）。
 		if username != user.Anonymous {
 			// When impersonating a non-anonymous user, include the 'system:authenticated' group
 			// in the impersonated user info:
@@ -143,6 +154,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 				groups = append(groups, user.AllAuthenticated)
 			}
 		} else {
+			// 模拟匿名用户则归属 system:unauthenticated，保持与真实匿名请求一致。
 			addUnauthenticated := true
 			for _, group := range groups {
 				if group == user.AllUnauthenticated {
@@ -167,9 +179,11 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 		oldUser, _ := request.UserFrom(ctx)
 		httplog.LogOf(req, w).Addf("%v is impersonating %v", userString(oldUser), userString(newUser))
 
+		// 审计记录同时保留原用户与模拟用户，便于事后追责。
 		audit.LogImpersonatedUser(audit.WithAuditContext(ctx), newUser, "")
 
 		// clear all the impersonation headers from the request
+		// 必须清除，否则下游的聚合层/代理会再次解释这些头，造成二次模拟或越权。
 		req.Header.Del(authenticationv1.ImpersonateUserHeader)
 		req.Header.Del(authenticationv1.ImpersonateGroupHeader)
 		req.Header.Del(authenticationv1.ImpersonateUIDHeader)
@@ -183,6 +197,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 	})
 }
 
+// userString 生成 "name[group1,group2]" 形式的可读表示，仅用于日志。
 func userString(u user.Info) string {
 	if u == nil {
 		return "<none>"
@@ -201,6 +216,8 @@ func userString(u user.Info) string {
 	return b.String()
 }
 
+// unescapeExtraKey 对 extra 头中的键做百分号解码。解码失败时保留原值，
+// 因为审计/日志必须如实记录客户端发送的内容，不能因格式问题丢弃。
 func unescapeExtraKey(encodedKey string) string {
 	key, err := url.PathUnescape(encodedKey) // Decode %-encoded bytes.
 	if err != nil {
@@ -212,12 +229,16 @@ func unescapeExtraKey(encodedKey string) string {
 // buildImpersonationRequests returns a list of objectreferences that represent the different things we're requesting to impersonate.
 // Also includes a map[string][]string representing user.Info.Extra
 // Each request must be authorized against the current user before switching contexts.
+//
+// 顺序无关紧要：所有请求都必须通过授权，任一失败即整体拒绝。
 func buildImpersonationRequests(headers http.Header) ([]v1.ObjectReference, error) {
 	impersonationRequests := []v1.ObjectReference{}
 
 	requestedUser := headers.Get(authenticationv1.ImpersonateUserHeader)
 	hasUser := len(requestedUser) > 0
 	if hasUser {
+		// serviceaccounts 形式的用户名会被拆成 namespace/name 分别参与授权，
+		// 这样 RBAC 可以按命名空间授予模拟权限。
 		if namespace, name, err := serviceaccount.SplitUsername(requestedUser); err == nil {
 			impersonationRequests = append(impersonationRequests, v1.ObjectReference{Kind: "ServiceAccount", Namespace: namespace, Name: name})
 		} else {
@@ -238,9 +259,11 @@ func buildImpersonationRequests(headers http.Header) ([]v1.ObjectReference, erro
 		}
 
 		hasUserExtra = true
+		// 头名在 HTTP/2 中已小写，这里显式转小写以兼容不同传输层。
 		extraKey := unescapeExtraKey(strings.ToLower(headerName[len(authenticationv1.ImpersonateUserExtraHeaderPrefix):]))
 
 		// make a separate request for each extra value they're trying to set
+		// 每个 extra 值单独授权，避免一个键通过后批量注入多个值。
 		for _, value := range values {
 			impersonationRequests = append(impersonationRequests,
 				v1.ObjectReference{
@@ -266,6 +289,8 @@ func buildImpersonationRequests(headers http.Header) ([]v1.ObjectReference, erro
 		})
 	}
 
+	// 只指定组/extra/UID 而不指定用户是无意义的请求，直接 400；
+	// 否则模拟出的身份将没有名字，后续授权与审计都无从解释。
 	if (hasGroups || hasUserExtra || hasUID) && !hasUser {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("requested %v without impersonating a user", impersonationRequests))
 	}

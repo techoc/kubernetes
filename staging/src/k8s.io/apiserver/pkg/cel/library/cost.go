@@ -32,9 +32,14 @@ import (
 
 // panicOnUnknown makes cost estimate functions panic on unrecognized functions.
 // This is only set to true for unit tests.
+//
+// 生产环境遇到未建模的函数时静默回退，保证升级/扩展库不会直接打挂 apiserver；
+// 测试里开启 panic 是为了强制新增函数必须补上成本模型。
 var panicOnUnknown = false
 
 // builtInFunctions is a list of functions used in cost tests that are not handled by CostEstimator.
+// 这些是 CEL 内建/基础运算符，成本由 CEL 自身计费，因此这里显式列为“无需处理”，
+// 以免测试模式下的 panic 误报。
 var knownUnhandledFunctions = map[string]bool{
 	"@not_strictly_false": true,
 	"uint":                true,
@@ -58,6 +63,9 @@ var knownUnhandledFunctions = map[string]bool{
 }
 
 // CostEstimator implements CEL's interpretable.ActualCostEstimator and checker.CostEstimator.
+//
+// 两个接口合在一起意味着：同一套规则既用于编译期估算（决定表达式是否可写进
+// CRD/VAP），也用于运行期实际计费（决定表达式是否超预算）。
 type CostEstimator struct {
 	// SizeEstimator provides a CostEstimator.EstimateSize that this CostEstimator will delegate size estimation
 	// calculations to if the size is not well known (i.e. a constant).
@@ -83,6 +91,10 @@ func selectorCostEstimate(selectorLength checker.SizeEstimate) checker.CostEstim
 	return baseSelectorCost.Add(parseCost).Add(requirementCost)
 }
 
+// CallCost 返回给定函数在运行期（已求得实参）的一次调用成本。
+// 返回 nil 表示交给 CEL 的默认计费逻辑处理。
+// 成本根据实参的实际长度/元素数量计算，因此这里针对字符串、列表、正则等
+// 分别建模；选择器解析等操作还与规则文本长度相关。
 func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, result ref.Val) *uint64 {
 	switch function {
 	case "check":
@@ -271,9 +283,15 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 	return nil
 }
 
+// EstimateCallCost 返回编译期对一次函数调用的成本上界。
+// 与 CallCost 不同，这里只有 AST（没有实参），因此只能依赖类型与大小估算。
+//
+// WARNING: Any changes to this code impact API compatibility! The estimated cost is used to determine which CEL rules may be written to a
+// CRD and any change (cost increases and cost decreases) are breaking.
 func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *checker.AstNode, args []checker.AstNode) *checker.CallEstimate {
 	// WARNING: Any changes to this code impact API compatibility! The estimated cost is used to determine which CEL rules may be written to a
 	// CRD and any change (cost increases and cost decreases) are breaking.
+	// 因此任何调整都必须视为 API 变更，需要走 KEP/版本化流程。
 	switch function {
 	case "check":
 		// An authorization check has a fixed cost
@@ -546,6 +564,8 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 	return nil
 }
 
+// actualSize 返回 CEL 值的实际大小（字符串/字节长度、列表/映射元素数）。
+// 非 Sizer 类型按 1 计；测试模式下 panic，以便尽早发现未建模的类型。
 func actualSize(value ref.Val) uint64 {
 	if sz, ok := value.(traits.Sizer); ok {
 		return uint64(sz.Size().(types.Int))
@@ -557,6 +577,8 @@ func actualSize(value ref.Val) uint64 {
 	return 1
 }
 
+// sizeEstimate 依次尝试 AST 上已计算的大小、注册的 SizeEstimator，
+// 最后退化为 [0, MaxUint64] 表示“未知大小”的最坏情况。
 func (l *CostEstimator) sizeEstimate(t checker.AstNode) checker.SizeEstimate {
 	if sz := t.ComputedSize(); sz != nil {
 		return *sz
@@ -567,6 +589,9 @@ func (l *CostEstimator) sizeEstimate(t checker.AstNode) checker.SizeEstimate {
 	return checker.SizeEstimate{Min: 0, Max: math.MaxUint64}
 }
 
+// listElementNode 为列表的元素构造一个虚拟 AST 节点。
+// 若列表节点带有路径，则追加 "@items" 段，使 OpenAPI 的 maxLength 等约束
+// 可以被元素类型估算器查到；没有路径时只能按类型给最坏估计。
 func (l *CostEstimator) listElementNode(list checker.AstNode) checker.AstNode {
 	if params := list.Type().Parameters(); len(params) > 0 {
 		lt := params[0]
@@ -586,6 +611,8 @@ func (l *CostEstimator) listElementNode(list checker.AstNode) checker.AstNode {
 	return nil
 }
 
+// EstimateSize 委托给可选的 SizeEstimator；未配置时返回 nil，
+// 由 sizeEstimate 退化为未知大小的最坏估计。
 func (l *CostEstimator) EstimateSize(element checker.AstNode) *checker.SizeEstimate {
 	if l.SizeEstimator != nil {
 		return l.SizeEstimator.EstimateSize(element)
@@ -593,6 +620,7 @@ func (l *CostEstimator) EstimateSize(element checker.AstNode) *checker.SizeEstim
 	return nil
 }
 
+// itemsNode 是元素的伪 AST 节点，只用于把“元素类型 + 元素路径”传给大小估算器。
 type itemsNode struct {
 	path []string
 	t    *types.Type
@@ -618,6 +646,9 @@ func (i *itemsNode) ComputedSize() *checker.SizeEstimate {
 var _ checker.AstNode = (*itemsNode)(nil)
 
 // traversalCost computes the cost of traversing a ref.Val as a data tree.
+//
+// 字符串/字节按长度计费；列表与映射递归累加，因此成本与嵌套数据量成正比，
+// 这正是限制表达式遍历整个对象的目的。
 func traversalCost(v ref.Val) uint64 {
 	// TODO: This could potentially be optimized by sampling maps and lists instead of traversing.
 	switch vt := v.(type) {

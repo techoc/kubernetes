@@ -24,6 +24,9 @@ import (
 
 // EventFunc does some work that needs to be done at or after the
 // given time.
+//
+// 回调参数是"调度触发时"的时间，而不是函数实际执行的时刻，这样业务逻辑判断
+// 时间边界时不受 goroutine 调度延迟影响，测试结果可复现。
 type EventFunc func(time.Time)
 
 // EventClock is an active clock abstraction for use in code that is
@@ -31,6 +34,10 @@ type EventFunc func(time.Time)
 // advanced.  The timing paradigm is invoking EventFuncs rather than
 // synchronizing through channels, so that the fake clock has a handle
 // on when associated activity is done.
+//
+// 之所以用回调而非 channel：假时钟需要在"推进时间"时同步等待所有到期事件执行完毕，
+// 才能保证测试断言看到的状态一致；回调让假时钟能直接串行驱动，避免竞态。
+// 这也意味着回调不能阻塞，否则会卡住时钟推进。
 type Interface interface {
 	baseclock.PassiveClock
 

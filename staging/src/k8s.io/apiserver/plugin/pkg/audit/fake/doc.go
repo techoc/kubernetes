@@ -15,4 +15,5 @@ limitations under the License.
 */
 
 // Package fake provides a fake audit.Backend interface implementation for testing.
+// 该后端不做持久化，仅通过回调暴露收到的请求与事件，便于测试审计链路而不依赖外部存储。
 package fake

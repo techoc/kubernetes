@@ -30,15 +30,23 @@ import (
 )
 
 var (
+	// 注册表是进程级共享的：不同组件（apiserver、controller-manager）
+	// 可能向各自路由注册同名 flag，需要统一展示。
 	lock            = &sync.RWMutex{}
 	registeredFlags = map[string]debugFlag{}
 )
 
 // DebugFlags adds handlers for flags under /debug/flags.
+//
+// DebugFlags 安装 /debug/flags 索引页，并允许各组件按名称注册可在线
+// 调整的 flag。索引页与具体 flag 路由都不列入根路径清单。
 type DebugFlags struct {
 }
 
 // Install registers the APIServer's flags handler.
+//
+// Install 把 /debug/flags 与 /debug/flags/<flag> 注册为未列出路由。
+// 同时注册精确路径和前缀，使带尾斜杠的请求也能落到索引页。
 func (f DebugFlags) Install(c *mux.PathRecorderMux, flag string, handler func(http.ResponseWriter, *http.Request)) {
 	c.UnlistedHandle("/debug/flags", http.HandlerFunc(f.Index))
 	c.UnlistedHandlePrefix("/debug/flags/", http.HandlerFunc(f.Index))
@@ -53,6 +61,8 @@ func (f DebugFlags) Install(c *mux.PathRecorderMux, flag string, handler func(ht
 // For example, "/debug/flags/v" serves the "--v" flag.
 // Index responds to a request for "/debug/flags/" with an HTML page
 // listing the available flags.
+//
+// Index 输出已注册 flag 的 HTML 列表；读锁保证枚举时不会与注册并发冲突。
 func (f DebugFlags) Index(w http.ResponseWriter, r *http.Request) {
 	lock.RLock()
 	defer lock.RUnlock()
@@ -61,6 +71,9 @@ func (f DebugFlags) Index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// indexTmpl 直接拼接 HTML 而非使用 html/template，以保留编译器的死代码
+// 消除能力（见 golang/go#72895）。所有动态内容都经过 HTMLEscapeString，
+// 防止 flag 名中的特殊字符造成注入。
 func indexTmpl(w io.Writer, flags map[string]debugFlag) error {
 	// avoid using a template to avoid disabling dead code elimination
 	// https://github.com/golang/go/issues/72895
@@ -95,10 +108,13 @@ full flags configurable<br>
 	return err
 }
 
+// debugFlag 是可在线修改的 flag 的最小描述；保留结构体而非裸字符串，
+// 便于未来增加类型、当前值等字段而不破坏接口。
 type debugFlag struct {
 	Flag string
 }
 
+// addFlag 在写锁下登记 flag；重复登记覆盖旧值（展示内容相同）。
 func (f DebugFlags) addFlag(flag string) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -109,6 +125,10 @@ func (f DebugFlags) addFlag(flag string) {
 type StringFlagSetterFunc func(string) (string, error)
 
 // StringFlagPutHandler wraps an http Handler to set string type flag.
+//
+// StringFlagPutHandler 只接受 PUT：修改 flag 属于非幂等操作，要求显式
+// 方法可以避免被链接预览、爬虫等 GET 请求意外触发。响应统一为纯文本，
+// 并设置 nosniff，防止浏览器把错误内容当作 HTML 解析。
 func StringFlagPutHandler(setter StringFlagSetterFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
@@ -119,6 +139,7 @@ func StringFlagPutHandler(setter StringFlagSetterFunc) http.HandlerFunc {
 				return
 			}
 			defer req.Body.Close()
+			// setter 负责校验新值是否合法；错误直接回传为 400。
 			response, err := setter(string(body))
 			if err != nil {
 				writePlainText(http.StatusBadRequest, err.Error(), w)
@@ -134,6 +155,8 @@ func StringFlagPutHandler(setter StringFlagSetterFunc) http.HandlerFunc {
 }
 
 // writePlainText renders a simple string response.
+//
+// writePlainText 统一设置 Content-Type 与 nosniff，避免内容嗅探攻击。
 func writePlainText(statusCode int, text string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

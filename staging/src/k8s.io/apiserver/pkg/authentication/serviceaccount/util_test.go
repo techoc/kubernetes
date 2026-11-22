@@ -25,6 +25,9 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestUserInfo 验证 ServiceAccountInfo 到 user.DefaultInfo 的映射：
+// username 采用 system:serviceaccount:<ns>:<name> 形式，组固定为全局与命名空间两级，
+// pod/node/webhook 等来源信息写入 Extra，供授权器按来源做细粒度判断。
 func TestUserInfo(t *testing.T) {
 	tests := map[string]struct {
 		info             ServiceAccountInfo
@@ -62,6 +65,8 @@ func TestUserInfo(t *testing.T) {
 				},
 			},
 		},
+		// 只有 NodeName 时才写 node-name，node-uid 单独出现应被忽略：
+		// 没有来源名称的 UID 无法用于审计追溯。
 		"does not extract node UID if name is not set": {
 			info: ServiceAccountInfo{Name: "name", Namespace: "ns", NodeUID: "test"},
 			expectedUserInfo: &user.DefaultInfo{
@@ -117,6 +122,9 @@ func TestUserInfo(t *testing.T) {
 	}
 }
 
+// TestMakeUsername 验证 MakeUsername 与 SplitUsername 的往返一致性：
+// 任意输入都应能被 MakeUsername 产出可被 MatchesUsername 识别的 username，
+// 而含空段或非法字符的输入在 SplitUsername 时返回错误。
 func TestMakeUsername(t *testing.T) {
 
 	testCases := map[string]struct {
@@ -182,6 +190,8 @@ func TestMakeUsername(t *testing.T) {
 	}
 }
 
+// TestMatchUsername 覆盖前缀与段数边界：缺失前缀、缺少某一段、多出段，
+// 以及 namespace/name 中带冒号等会让简单前缀匹配误判的情形，都要求精确匹配。
 func TestMatchUsername(t *testing.T) {
 
 	testCases := []struct {
@@ -218,6 +228,9 @@ func TestMatchUsername(t *testing.T) {
 	}
 }
 
+// TestIsServiceAccountToken 验证判断某个 Secret 是否为指定 ServiceAccount 的 token：
+// 需同时匹配 secret 类型、注解中的 SA 名称与 UID。UID 校验可防止 SA 被删除重建后
+// 旧 token 仍被当作新 SA 的凭据。
 func TestIsServiceAccountToken(t *testing.T) {
 
 	secretIns := &v1.Secret{

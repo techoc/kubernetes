@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package dynamic 实现无 schema 情况下 CEL 表达式中的 Object{} 字面量。
+//
+// 当 MutatingAdmissionPolicy 等特性尚未绑定具体类型时，用本包提供的动态 Object
+// 类型让表达式仍能构造结构化值，并在求值后再做字段路径与类型名一致性校验。
 package dynamic
 
 import (
@@ -31,6 +35,9 @@ import (
 // ObjectType is the implementation of the Object type for use when compiling
 // CEL expressions without schema information about the object.
 // This is to provide CEL expressions with access to Object{} types constructors.
+//
+// 该类型不校验字段名与类型，任何字段都按 DynType 处理；
+// 严格的类型名检查推迟到求值后的 CheckTypeNamesMatchFieldPathNames。
 type ObjectType struct {
 	objectType *types.Type
 }
@@ -61,6 +68,7 @@ func (o *ObjectType) Field(name string) (*types.FieldType, bool) {
 		// for unstructured, we do not check for its type,
 		// use DynType for all fields.
 		Type: types.DynType,
+		// IsSet 支撑 CEL 的 has() 语义：只有显式赋值的字段才视为已设置。
 		IsSet: func(target any) bool {
 			if m, ok := target.(map[string]any); ok {
 				_, isSet := m[name]
@@ -111,6 +119,8 @@ var _ traits.Zeroer = (*ObjectVal)(nil)
 //
 // It returns an error if the target type is not map[string]any,
 // or any recursive conversion fails.
+//
+// 支持 structpb 目标类型是为了让 Object 字面量能直接作为 JSON patch 的值被序列化。
 func (v *ObjectVal) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	result := make(map[string]any, len(v.fields))
 	for k, v := range v.fields {
@@ -141,6 +151,7 @@ func (v *ObjectVal) ConvertToType(typeValue ref.Type) ref.Val {
 	if v.objectType.TypeName() == typeValue.TypeName() {
 		return v
 	}
+	// 允许转换为 CEL 的 type 值，用于类型比较与断言。
 	if typeValue == types.TypeType {
 		return types.NewTypeTypeWithParam(v.objectType)
 	}
@@ -148,6 +159,7 @@ func (v *ObjectVal) ConvertToType(typeValue ref.Type) ref.Val {
 }
 
 // Equal returns true if the `other` value has the same type and content as the implementing struct.
+// 类型名不同即不相等；字段比较使用 DeepEqual，嵌套 Object 会递归比较。
 func (v *ObjectVal) Equal(other ref.Val) ref.Val {
 	if rhs, ok := other.(*ObjectVal); ok {
 		if v.objectType.Equal(rhs.objectType) != types.True {
@@ -180,11 +192,14 @@ func (v *ObjectVal) Value() any {
 // must have type names of the form "<ObjectVal.TypeName>.<field>", children of that type must have type names of the
 // form "<ObjectVal.TypeName>.<field>.<field>" and so on.
 // Intermediate maps and lists are unnamed and ignored.
+//
+// 该约束保证 Object{} 构造出的类型名与字段路径一致，防止表达式伪造任意类型。
 func (v *ObjectVal) CheckTypeNamesMatchFieldPathNames() error {
 	return errors.Join(typeCheck(v, []string{v.Type().TypeName()})...)
 
 }
 
+// typeCheck 递归校验子对象的类型名是否等于其从根开始的字段路径。
 func typeCheck(v ref.Val, typeNamePath []string) []error {
 	var errs []error
 	if ov, ok := v.(*ObjectVal); ok {

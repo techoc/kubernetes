@@ -23,6 +23,7 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// GroupName 是 statusz 资源所在的 API 组，Version 是该组当前暴露的版本。
 const (
 	GroupName = "config.k8s.io"
 	Version   = "v1beta1"
@@ -38,6 +39,9 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 向 scheme 注册本组类型。
+// 同时调用 metav1.AddToGroupVersion 注册 ListOptions 等公共元数据操作，
+// 否则 discovery 和客户端生成器会缺少这些类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Statusz{},

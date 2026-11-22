@@ -40,6 +40,7 @@ import (
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+// apiAuds 是测试中 apiserver 的隐式 audience 集合。
 var apiAuds = authenticator.Audiences{"api"}
 
 // V1beta1Service mocks a remote authentication service.
@@ -51,6 +52,9 @@ type V1beta1Service interface {
 }
 
 // NewV1beta1TestServer wraps a V1beta1Service as an httptest.Server.
+//
+// 服务端强制以 v1beta1 收发，并可选地要求客户端证书，
+// 用来验证认证器在旧版本协议与双向 TLS 下的行为。
 func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	const webhookPath = "/testserver"
 	var tlsConfig *tls.Config
@@ -69,6 +73,7 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 			tlsConfig = &tls.Config{}
 		}
 		tlsConfig.ClientCAs = rootCAs
+		// 配置了 CA 即要求并校验客户端证书，覆盖双向 TLS 场景。
 		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
@@ -160,6 +165,7 @@ type mockV1beta1Service struct {
 	called     int
 }
 
+// Review 按 allow 设置认证结果，并记录调用次数。
 func (m *mockV1beta1Service) Review(r *authenticationv1beta1.TokenReview) {
 	m.called++
 	r.Status.Authenticated = m.allow
@@ -167,12 +173,17 @@ func (m *mockV1beta1Service) Review(r *authenticationv1beta1.TokenReview) {
 		r.Status.User.Username = "realHooman@email.com"
 	}
 }
+
+// Allow / Deny / HTTPStatusCode 分别控制认证结果与响应状态码。
 func (m *mockV1beta1Service) Allow()              { m.allow = true }
 func (m *mockV1beta1Service) Deny()               { m.allow = false }
 func (m *mockV1beta1Service) HTTPStatusCode() int { return m.statusCode }
 
 // newV1beta1TokenAuthenticator creates a temporary kubeconfig file from the provided
 // arguments and attempts to load a new WebhookTokenAuthenticator from it.
+//
+// 刻意走真实 kubeconfig 加载路径，以覆盖证书/CA 的解析与校验逻辑，
+// 而不是直接构造 rest.Config 绕过它们。
 func newV1beta1TokenAuthenticator(serverURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration, implicitAuds authenticator.Audiences) (authenticator.Token, error) {
 	tempfile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -217,6 +228,8 @@ func newV1beta1TokenAuthenticator(serverURL string, clientCert, clientKey, ca []
 	return cache.New(authn, false, cacheTime, cacheTime), nil
 }
 
+// TestV1beta1TLSConfig 覆盖客户端与服务端之间各种 TLS 组合：
+// 正常双向认证、单/双向可选、CA 不匹配（双向）以及不安全连接必须被拒绝。
 func TestV1beta1TLSConfig(t *testing.T) {
 	tests := []struct {
 		test                            string
@@ -309,13 +322,17 @@ type recorderV1beta1Service struct {
 	response    authenticationv1beta1.TokenReviewStatus
 }
 
+// Review 记录收到的请求并回填预设状态。
 func (rec *recorderV1beta1Service) Review(r *authenticationv1beta1.TokenReview) {
 	rec.lastRequest = *r
 	r.Status = rec.response
 }
 
+// HTTPStatusCode 固定返回 200。
 func (rec *recorderV1beta1Service) HTTPStatusCode() int { return 200 }
 
+// TestV1beta1WebhookTokenAuthenticator 验证用户信息透传与 audience 交集语义：
+// 请求未限制 audience 时不校验；限制时只接受与 webhook/implicit 集合有交集的 token。
 func TestV1beta1WebhookTokenAuthenticator(t *testing.T) {
 	serv := &recorderV1beta1Service{}
 
@@ -534,10 +551,12 @@ func TestV1beta1WebhookTokenAuthenticator(t *testing.T) {
 
 type authenticationV1beta1UserInfo authenticationv1beta1.UserInfo
 
+// GetName / GetUID / GetGroups 代理到底层字段，使该类型满足 user.Info。
 func (a *authenticationV1beta1UserInfo) GetName() string     { return a.Username }
 func (a *authenticationV1beta1UserInfo) GetUID() string      { return a.UID }
 func (a *authenticationV1beta1UserInfo) GetGroups() []string { return a.Groups }
 
+// GetExtra 返回额外属性，并复制为 map[string][]string 以避免共享底层数据。
 func (a *authenticationV1beta1UserInfo) GetExtra() map[string][]string {
 	if a.Extra == nil {
 		return nil
@@ -557,6 +576,9 @@ var _ user.Info = (*authenticationV1beta1UserInfo)(nil)
 // TestWebhookCache verifies that error responses from the server are not
 // cached, but successful responses are. It also ensures that the webhook
 // call is retried on 429 and 500+ errors
+//
+// 成功结果缓存后，后续相同 token 的请求不再打到 webhook（expectCalls=0）；
+// 失败不缓存，因此 5xx/429 会重试并在下一次请求时再次尝试。
 func TestV1beta1WebhookCacheAndRetry(t *testing.T) {
 	serv := new(mockV1beta1Service)
 	s, err := NewV1beta1TestServer(serv, serverCert, serverKey, caCert)

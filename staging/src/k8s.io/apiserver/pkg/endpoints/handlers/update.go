@@ -48,6 +48,9 @@ import (
 )
 
 // UpdateResource returns a function that will handle a resource update
+//
+// PUT 可能变成 create（AllowCreateOnUpdate 的资源），因此这里同时准备
+// create 与 update 两套准入属性与授权属性，由存储层在事务内决定实际走哪条路径。
 func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -64,6 +67,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 
 		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
 		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		// 34s 来自 etcd 默认请求超时的安全余量，保证客户端断开前服务端能先收尾。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
 		defer cancel()
 
@@ -83,6 +87,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		}
 		span.AddEvent("limitedReadBody succeeded", attribute.Int("len", len(body)))
 
+		// 先解析并校验查询参数，再读请求体：非法参数不应消耗带宽去读取大对象。
 		options := &metav1.UpdateOptions{}
 		if err := metainternalversionscheme.ParameterCodec.DecodeParameters(req.URL.Query(), scope.MetaGroupVersion, options); err != nil {
 			err = errors.NewBadRequest(err.Error())
@@ -104,6 +109,8 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		defaultGVK := scope.Kind
 		original := r.New()
 
+		// 严格解码只在 Warn/Strict 模式下启用；Ignore 必须使用宽松解码，
+		// 否则未知字段会直接导致请求失败，违背该模式的兼容性承诺。
 		validationDirective := fieldValidation(options.FieldValidation)
 		decodeSerializer := s.Serializer
 		if validationDirective == metav1.FieldValidationWarn || validationDirective == metav1.FieldValidationStrict {
@@ -128,6 +135,8 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			}
 		}
 
+		// 请求体中的 apiVersion 必须与路由期望一致，否则拒绝：
+		// 否则客户端可能用 A 版本的 schema 提交 B 版本的语义。
 		objGV := gvk.GroupVersion()
 		if !scope.AcceptsGroupVersion(objGV) {
 			err = errors.NewBadRequest(fmt.Sprintf("the API version in the data (%s) does not match the expected API version (%s)", objGV, defaultGVK.GroupVersion()))
@@ -136,10 +145,12 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		}
 		span.AddEvent("Conversion done")
 
+		// 在准入之前记录审计请求体，保证即使准入拒绝也能留下原始输入。
 		audit.LogRequestObject(req.Context(), obj, objGV, scope.Resource, scope.Subresource, scope.Serializer)
 		admit = admission.WithAudit(admit)
 
 		// if this object supports namespace info
+		// 命名空间必须与 URL 一致，防止越权写到其他命名空间。
 		if objectMeta, err := meta.Accessor(obj); err == nil {
 			// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
 			if err := rest.EnsureObjectNamespaceMatchesRequestNamespace(rest.ExpectedNamespaceForResource(namespace, scope.Resource), objectMeta); err != nil {
@@ -157,6 +168,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		transformers := []rest.TransformFunc{}
 
 		// allows skipping managedFields update if the resulting object is too big
+		// managedFields 可能非常大；若因此超出 etcd 限制，会退化为不维护它并重试。
 		shouldUpdateManagedFields := true
 		admit = fieldmanager.NewManagedFieldsValidatingAdmissionController(admit)
 		transformers = append(transformers, func(_ context.Context, newObj, liveObj runtime.Object) (runtime.Object, error) {
@@ -166,6 +178,8 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			return newObj, nil
 		})
 
+		// 变更类准入作为 transformer 注入，在存储层“读-改-写”事务内执行，
+		// 从而保证准入看到的是最新的 liveObj。
 		if mutatingAdmission, ok := admit.(admission.MutationInterface); ok {
 			transformers = append(transformers, func(ctx context.Context, newObj, oldObj runtime.Object) (runtime.Object, error) {
 				isNotZeroObject, err := hasUID(oldObj)
@@ -184,11 +198,14 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			})
 			transformers = append(transformers, func(ctx context.Context, newObj, oldObj runtime.Object) (runtime.Object, error) {
 				// Dedup owner references again after mutating admission happens
+				// 准入可能新增 ownerReferences，必须在写库前再次去重。
 				dedupOwnerReferencesAndAddWarning(newObj, req.Context(), true)
 				return newObj, nil
 			})
 		}
 
+		// PUT 触发创建时需要的授权属性：verb 固定为 create，与 update 权限分离，
+		// 防止仅有 update 权限的用户凭空创建对象。
 		createAuthorizerAttributes := authorizer.AttributesRecord{
 			User:            userInfo,
 			ResourceRequest: true,
@@ -223,11 +240,13 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			return obj, err
 		}
 		// Dedup owner references before updating managed fields
+		// 入库前先去重，避免重复引用被计入 managedFields 造成后续冲突。
 		dedupOwnerReferencesAndAddWarning(obj, req.Context(), false)
 		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 			result, err := requestFunc()
 			// If the object wasn't committed to storage because it's serialized size was too large,
 			// it is safe to remove managedFields (which can be large) and try again.
+			// 仅对“对象过大”重试一次，且必须在确认未写入后进行，避免重复应用变更。
 			if isTooLargeError(err) {
 				if accessor, accessorErr := meta.Accessor(obj); accessorErr == nil {
 					accessor.SetManagedFields(nil)
@@ -244,6 +263,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		}
 		span.AddEvent("Write to database call succeeded", attribute.Int("len", len(body)))
 
+		// 语义上 PUT 触发了创建时返回 201，其余情况返回 200。
 		status := http.StatusOK
 		if wasCreated {
 			status = http.StatusCreated
@@ -255,6 +275,10 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 	}
 }
 
+// withAuthorization 在 create-on-update 路径上补做 create 授权，再执行校验准入。
+//
+// 使用 sync.Once 缓存授权结果：存储层可能因冲突重试而多次调用校验函数，
+// 授权判断不必也不应在每次重试时重复执行。
 func withAuthorization(validate rest.ValidateObjectFunc, a authorizer.UnconditionalAuthorizer, attributes authorizer.Attributes) rest.ValidateObjectFunc {
 	var once sync.Once
 	var authorizerDecision authorizer.Decision
@@ -268,6 +292,7 @@ func withAuthorization(validate rest.ValidateObjectFunc, a authorizer.Unconditio
 			authorizerDecision, authorizerReason, authorizerErr = a.Authorize(ctx, attributes)
 		})
 		// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
+		// 顺序不可颠倒：Allow 优先于 error，否则 RBAC 的部分失败会被误报为 500。
 		if authorizerDecision == authorizer.DecisionAllow {
 			// Continue to validating admission
 			return validate(ctx, obj)
@@ -282,6 +307,9 @@ func withAuthorization(validate rest.ValidateObjectFunc, a authorizer.Unconditio
 }
 
 // updateToCreateOptions creates a CreateOptions with the same field values as the provided UpdateOptions.
+//
+// 仅复制 dryRun/fieldManager/fieldValidation 三个语义等价的字段，其余字段
+// 在 create 与 update 之间并不通用。
 func updateToCreateOptions(uo *metav1.UpdateOptions) *metav1.CreateOptions {
 	if uo == nil {
 		return nil

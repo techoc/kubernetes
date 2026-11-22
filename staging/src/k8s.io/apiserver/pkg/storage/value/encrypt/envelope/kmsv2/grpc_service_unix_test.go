@@ -38,6 +38,7 @@ const (
 	testProviderName = "providerName"
 )
 
+// testSocket 保存抽象 unix socket 的路径与 endpoint URL 两种形式。
 type testSocket struct {
 	path     string
 	endpoint string
@@ -64,12 +65,14 @@ func TestKMSPluginLateStart(t *testing.T) {
 
 	ctx := testContext(t)
 
+	// 插件尚未启动时也应能构造 service，这是"非阻塞 Dial"的核心契约。
 	service, err := NewGRPCService(ctx, s.endpoint, testProviderName, callTimeout)
 	if err != nil {
 		t.Fatalf("failed to create envelope service, error: %v", err)
 	}
 	defer destroyService(service)
 
+	// 在调用超时窗口内启动插件，后续 Encrypt 应能成功。
 	time.Sleep(callTimeout / 2)
 	_ = mock.NewBase64Plugin(t, s.path)
 
@@ -81,6 +84,8 @@ func TestKMSPluginLateStart(t *testing.T) {
 	}
 }
 
+// TestTimeouts 覆盖调用超时与插件/服务端启动先后顺序的组合：
+// 零超时永远失败（无效配置），超时大于插件延迟才成功。
 func TestTimeouts(t *testing.T) {
 	t.Parallel()
 	var testCases = []struct {
@@ -183,6 +188,9 @@ func TestTimeouts(t *testing.T) {
 }
 
 // TestIntermittentConnectionLoss tests the scenario where the connection with kms-plugin is intermittently lost.
+//
+// 期望 gRPC 客户端在插件重启后自动重连，期间发起的调用最终成功，
+// 验证的是客户端连接管理而非插件实现。
 func TestIntermittentConnectionLoss(t *testing.T) {
 	t.Parallel()
 	var (
@@ -326,6 +334,7 @@ func TestGRPCServiceConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+// destroyService 关闭底层 gRPC 连接，避免测试泄漏连接。
 func destroyService(service kmsservice.Service) {
 	if service != nil {
 		s := service.(*gRPCService)
@@ -359,6 +368,8 @@ func TestInvalidConfiguration(t *testing.T) {
 	}
 }
 
+// TestKMSOperationsMetric 验证 Encrypt/Decrypt/Status 各自写入带方法名与状态码
+// 标签的延迟直方图；Reset 是为了支持 go test -count X 重复运行。
 func TestKMSOperationsMetric(t *testing.T) {
 	endpoint := newEndpoint()
 	_ = mock.NewBase64Plugin(t, endpoint.path)
@@ -447,6 +458,7 @@ func TestKMSOperationsMetric(t *testing.T) {
 	}
 }
 
+// testContext 返回一个随测试结束自动取消的 context。
 func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

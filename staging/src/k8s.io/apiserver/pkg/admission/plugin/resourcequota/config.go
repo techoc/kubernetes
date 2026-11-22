@@ -28,17 +28,23 @@ import (
 )
 
 var (
+	// 独立 scheme 仅服务于配置文件解码，不与全局 scheme 混用，避免注册冲突。
 	scheme = runtime.NewScheme()
+	// EnableStrict 让未知字段直接报错，防止配置拼写错误被静默忽略。
 	codecs = serializer.NewCodecFactory(scheme, serializer.EnableStrict)
 )
 
 func init() {
+	// 注册内部类型及 v1/v1beta1 与内部版本之间的转换。
 	install.Install(scheme)
 }
 
 // LoadConfiguration loads the provided configuration.
+// 解析 ResourceQuota 准入控制器的配置文件；返回的是内部版本，调用方无需
+// 关心外部版本差异。nil 输入被视为“未配置”，返回默认配置。
 func LoadConfiguration(config io.Reader) (*resourcequotaapi.Configuration, error) {
 	// if no config is provided, return a default configuration
+	// 借助外部版本构造再转换，保证与真实解码路径共用同一套默认值逻辑。
 	if config == nil {
 		externalConfig := &resourcequotav1.Configuration{}
 		scheme.Default(externalConfig)
@@ -53,11 +59,13 @@ func LoadConfiguration(config io.Reader) (*resourcequotaapi.Configuration, error
 	if err != nil {
 		return nil, err
 	}
+	// UniversalDecoder 依据 apiVersion/kind 选择版本并转换到内部类型。
 	decoder := codecs.UniversalDecoder()
 	decodedObj, err := runtime.Decode(decoder, data)
 	if err != nil {
 		return nil, err
 	}
+	// 解码结果应为内部 Configuration；类型不符说明配置写错了 kind。
 	resourceQuotaConfiguration, ok := decodedObj.(*resourcequotaapi.Configuration)
 	if !ok {
 		return nil, fmt.Errorf("unexpected type: %T", decodedObj)

@@ -24,6 +24,8 @@ import (
 )
 
 // TestNamespaceContext validates that a namespace can be get/set on a context object
+// 验证 NewDefaultContext 默认使用 default 命名空间，
+// 而 NewContext 不携带命名空间（NamespaceFrom 返回 ok=false）。
 func TestNamespaceContext(t *testing.T) {
 	ctx := NewDefaultContext()
 	result, ok := NamespaceFrom(ctx)
@@ -42,6 +44,8 @@ func TestNamespaceContext(t *testing.T) {
 }
 
 // TestUserContext validates that a userinfo can be get/set on a context object
+// 验证空上下文取不到用户，WithUser 后能完整读回 Name/UID/Groups/Extra。
+// Extra 是多值 map，必须逐值比较而非只比较键。
 func TestUserContext(t *testing.T) {
 	ctx := NewContext()
 	_, ok := UserFrom(ctx)

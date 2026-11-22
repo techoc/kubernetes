@@ -33,13 +33,17 @@ import (
 // WithCORS is a simple CORS implementation that wraps an http Handler.
 // Pass nil for allowedMethods and allowedHeaders to use the defaults. If allowedOriginPatterns
 // is empty or nil, no CORS support is installed.
+// 安全边界：只有 Origin 命中白名单正则时才回写 CORS 头；未命中时仍转发请求，
+// 但浏览器会因缺少允许头而拦截响应。
 func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMethods []string, allowedHeaders []string, exposedHeaders []string, allowCredentials string) http.Handler {
 	if len(allowedOriginPatterns) == 0 {
+		// 未配置来源白名单即完全关闭 CORS，而不是默认放行。
 		return handler
 	}
 	allowedOriginPatternsREs := allowedOriginRegexps(allowedOriginPatterns)
 
 	// Set defaults for methods and headers if nothing was passed
+	// 预先把列表拼成响应头字符串，避免每个请求重复拼接。
 	if allowedMethods == nil {
 		allowedMethods = []string{"POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH"}
 	}
@@ -57,6 +61,7 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		origin := req.Header.Get("Origin")
+		// 非浏览器客户端不带 Origin，直接透传。
 		if origin == "" {
 			handler.ServeHTTP(w, req)
 			return
@@ -66,6 +71,7 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 			return
 		}
 
+		// 回显具体 Origin 而非 "*"，以便与 Allow-Credentials 共存。
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", allowMethodsResponseHeader)
 		w.Header().Set("Access-Control-Allow-Headers", allowHeadersResponseHeader)
@@ -73,6 +79,7 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 		w.Header().Set("Access-Control-Allow-Credentials", allowCredentials)
 
 		// Stop here if its a preflight OPTIONS request
+		// 预检请求不进入业务 handler，直接 204 返回。
 		if req.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -108,6 +115,8 @@ func isOriginAllowed(originHeader string, allowedOriginPatternsREs []*regexp.Reg
 	return false
 }
 
+// allowedOriginRegexps 把白名单字符串编译为正则；配置非法时直接 Fatal，
+// 因为静默忽略会让管理员误以为 CORS 已生效。
 func allowedOriginRegexps(allowedOrigins []string) []*regexp.Regexp {
 	res, err := compileRegexps(allowedOrigins)
 	if err != nil {

@@ -30,6 +30,8 @@ import (
 
 // WithFailedAuthenticationAudit decorates a failed http.Handler used in WithAuthentication handler.
 // It is meant to log only failed authentication requests.
+//
+// 未配置审计后端或策略时直接返回原 handler，避免为每个失败请求付出额外开销。
 func WithFailedAuthenticationAudit(failedHandler http.Handler, sink audit.Sink, policy audit.PolicyRuleEvaluator) http.Handler {
 	if sink == nil || policy == nil {
 		return failedHandler
@@ -37,24 +39,29 @@ func WithFailedAuthenticationAudit(failedHandler http.Handler, sink audit.Sink, 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ac, err := evaluatePolicyAndCreateAuditEvent(req, policy, sink)
 		if err != nil {
+			// 审计事件创建失败时拒绝继续处理：不能在没有审计记录的情况下响应认证请求。
 			utilruntime.HandleError(fmt.Errorf("failed to create audit event: %v", err))
 			responsewriters.InternalError(w, req, errors.New("failed to create audit event"))
 			return
 		}
 
 		if !ac.Enabled() {
+			// 当前审计级别不记录该请求，无需装饰 ResponseWriter。
 			failedHandler.ServeHTTP(w, req)
 			return
 		}
 
+		// 把尝试过的认证方式写进状态消息，便于事后排查"为何认证失败"。
 		ac.SetEventResponseStatus(&metav1.Status{
 			Message: getAuthMethods(req),
 		})
+		// 用装饰后的 writer 捕获失败响应体/状态码，写入审计事件。
 		rw := decorateResponseWriter(req.Context(), w, true)
 		failedHandler.ServeHTTP(rw, req)
 	})
 }
 
+// getAuthMethods 收集请求中出现过的凭据类型，仅用于审计消息，不涉及凭据内容本身。
 func getAuthMethods(req *http.Request) string {
 	authMethods := []string{}
 

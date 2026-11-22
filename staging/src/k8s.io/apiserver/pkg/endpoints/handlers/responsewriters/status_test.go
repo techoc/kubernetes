@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestBadStatusErrorToAPIStatus 覆盖“状态错误结构体为空”的边界情况：
+// 没有 Code/Reason 时回退到 500，且仍要补齐 TypeMeta，客户端才能正常解析。
 func TestBadStatusErrorToAPIStatus(t *testing.T) {
 	err := errors.StatusError{}
 	actual := ErrorToAPIStatus(&err)
@@ -40,6 +42,9 @@ func TestBadStatusErrorToAPIStatus(t *testing.T) {
 	}
 }
 
+// TestAPIStatus 校验常见 apierrors 到 metav1.Status 的映射：HTTP 码、
+// Reason、Message 与 Details 必须与错误构造函数保持一致，
+// 否则客户端（尤其是 kubectl 的格式化输出）会得到错误提示。
 func TestAPIStatus(t *testing.T) {
 	cases := map[error]metav1.Status{
 		errors.NewNotFound(schema.GroupResource{Group: "legacy.kubernetes.io", Resource: "foos"}, "bar"): {
@@ -78,6 +83,7 @@ func TestAPIStatus(t *testing.T) {
 	}
 	for k, v := range cases {
 		actual := ErrorToAPIStatus(k)
+		// TypeMeta 由转换函数统一填充，测试期望值里只写业务字段。
 		v.APIVersion = "v1"
 		v.Kind = "Status"
 		if !reflect.DeepEqual(actual, &v) {

@@ -14,9 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package dryrun 提供对 DryRun 选项的判定。单独成包是为了让 registry
+// 等底层代码无需依赖 metav1 选项类型。
 package dryrun
 
 // IsDryRun returns true if the DryRun flag is an actual dry-run.
+//
+// 约定：空切片（未指定）表示真实执行；只要包含任意值即视为 dry-run。
+// 具体合法值（All 等）由 API 校验负责，此处不做值检查。
 func IsDryRun(flag []string) bool {
 	return len(flag) > 0
 }

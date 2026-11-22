@@ -27,16 +27,23 @@ import (
 
 // NewAuthorizer returns an authorizer which accepts a given set of paths.
 // Each path is either a fully matching path or it ends in * in case a prefix match is done. A leading / is optional.
+//
+// 该授权器只处理非资源请求（/healthz、/metrics 等本地端点）：资源请求一律
+// 返回 NoOpinion，交由后续授权器决定，避免误放行 API 对象访问。
+// 通配符只允许出现在末尾，前缀匹配意味着授权范围随路径语义放大，
+// 因此拒绝中间的 '*'，防止 "/*/foo" 这类含糊规则被误写成过度授权。
 func NewAuthorizer(alwaysAllowPaths []string) (authorizer.Authorizer, error) {
 	var prefixes []string
 	paths := sets.NewString()
 	for _, p := range alwaysAllowPaths {
+		// 统一去掉前导 '/'，这样配置 "/healthz" 与 "healthz" 等价。
 		p = strings.TrimPrefix(p, "/")
 		if len(p) == 0 {
 			// matches "/"
 			paths.Insert(p)
 			continue
 		}
+		// 检查除最后一个字符外是否还有 '*'：只允许尾随通配。
 		if strings.ContainsRune(p[:len(p)-1], '*') {
 			return nil, fmt.Errorf("only trailing * allowed in %q", p)
 		}
@@ -48,6 +55,7 @@ func NewAuthorizer(alwaysAllowPaths []string) (authorizer.Authorizer, error) {
 	}
 
 	return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+		// 只对非资源请求表态；资源请求留给 RBAC 等授权器。
 		if a.IsResourceRequest() {
 			return authorizer.DecisionNoOpinion, "", nil
 		}
@@ -63,6 +71,7 @@ func NewAuthorizer(alwaysAllowPaths []string) (authorizer.Authorizer, error) {
 			}
 		}
 
+		// 未匹配时返回 NoOpinion 而非 Deny，保证授权链中的后续授权器仍有决定权。
 		return authorizer.DecisionNoOpinion, "", nil
 	}), nil
 }

@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestSimpleNameGenerator 验证生成的名字保留前缀且不是裸前缀本身：
+// 后者会导致同一 generateName 的多次创建产生冲突。
 func TestSimpleNameGenerator(t *testing.T) {
 	name := SimpleNameGenerator.GenerateName("foo")
 	if !strings.HasPrefix(name, "foo") || name == "foo" {

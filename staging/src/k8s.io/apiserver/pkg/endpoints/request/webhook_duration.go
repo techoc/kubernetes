@@ -24,10 +24,13 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// sumDuration 是顺序执行的组件（如 mutating webhook）的聚合方式。
 func sumDuration(d1 time.Duration, d2 time.Duration) time.Duration {
 	return d1 + d2
 }
 
+// maxDuration 是并行执行的组件（如 validating webhook）的聚合方式：
+// 并行调用的总延迟由最慢的一个决定，累加会重复计算重叠时间。
 func maxDuration(d1 time.Duration, d2 time.Duration) time.Duration {
 	if d1 > d2 {
 		return d1
@@ -54,6 +57,7 @@ type DurationTracker interface {
 
 // durationTracker implements DurationTracker by measuring function time
 // using given clock and aggregates the duration using given aggregate function
+// 聚合函数在构造时固定，因此 tracker 本身无需在调用点区分 sum/max 语义。
 type durationTracker struct {
 	clock             clock.Clock
 	latency           time.Duration
@@ -63,6 +67,7 @@ type durationTracker struct {
 
 // Track measures time spent in given function and aggregates measured
 // duration using aggregateFunction
+// 使用 defer 保证 f 发生 panic 时仍会记录已消耗的时间。
 func (t *durationTracker) Track(f func()) {
 	startedAt := t.clock.Now()
 	defer func() {
@@ -90,6 +95,7 @@ func (t *durationTracker) GetLatency() time.Duration {
 	return t.latency
 }
 
+// newSumLatencyTracker 创建累加型 tracker，适用于顺序执行或多轮往返的场景。
 func newSumLatencyTracker(c clock.Clock) DurationTracker {
 	return &durationTracker{
 		clock:             c,
@@ -97,6 +103,7 @@ func newSumLatencyTracker(c clock.Clock) DurationTracker {
 	}
 }
 
+// newMaxLatencyTracker 创建取最大型 tracker，适用于并行执行的场景。
 func newMaxLatencyTracker(c clock.Clock) DurationTracker {
 	return &durationTracker{
 		clock:             c,
@@ -106,6 +113,8 @@ func newMaxLatencyTracker(c clock.Clock) DurationTracker {
 
 // LatencyTrackers stores trackers used to measure latecny incurred in
 // components within the apiserver.
+// 每个字段的聚合方式取决于对应阶段的执行模型：串行用 sum，并行用 max。
+// 这些数据最终以审计注解形式输出，用于排查请求延迟分布。
 type LatencyTrackers struct {
 	// MutatingWebhookTracker tracks the latency incurred in mutating webhook(s).
 	// Since mutating webhooks are done sequentially, latency
@@ -171,6 +180,7 @@ type LatencyTrackers struct {
 	ImpersonationTracker DurationTracker
 }
 
+// latencyTrackersKeyType 是私有类型，避免与其他包的 context key 冲突。
 type latencyTrackersKeyType int
 
 // latencyTrackersKey is the key that associates a LatencyTrackers
@@ -185,24 +195,29 @@ func WithLatencyTrackers(parent context.Context) context.Context {
 
 // WithLatencyTrackersAndCustomClock returns a copy of parent context to which
 // an instance of LatencyTrackers is added. Tracers use given clock.
+// 提供自定义时钟是为了让测试能精确控制耗时，而不依赖真实时间。
 func WithLatencyTrackersAndCustomClock(parent context.Context, c clock.Clock) context.Context {
 	return WithValue(parent, latencyTrackersKey, &LatencyTrackers{
-		MutatingWebhookTracker:   newSumLatencyTracker(c),
+		// mutating webhook 串行执行，累加各次耗时。
+		MutatingWebhookTracker: newSumLatencyTracker(c),
+		// validating webhook 并行执行，取最大耗时以避免重复计算。
 		ValidatingWebhookTracker: newMaxLatencyTracker(c),
 		AuthenticationTracker:    newSumLatencyTracker(c),
-		AuthorizationTracker:     newMaxLatencyTracker(c),
-		APFQueueWaitTracker:      newMaxLatencyTracker(c),
-		StorageTracker:           newSumLatencyTracker(c),
-		TransformTracker:         newSumLatencyTracker(c),
-		SerializationTracker:     newSumLatencyTracker(c),
-		ResponseWriteTracker:     newSumLatencyTracker(c),
-		DecodeTracker:            newSumLatencyTracker(c),
-		ImpersonationTracker:     newSumLatencyTracker(c),
+		// 授权可能并行查询多个 authorizer，取最大而非累加。
+		AuthorizationTracker: newMaxLatencyTracker(c),
+		APFQueueWaitTracker:  newMaxLatencyTracker(c),
+		StorageTracker:       newSumLatencyTracker(c),
+		TransformTracker:     newSumLatencyTracker(c),
+		SerializationTracker: newSumLatencyTracker(c),
+		ResponseWriteTracker: newSumLatencyTracker(c),
+		DecodeTracker:        newSumLatencyTracker(c),
+		ImpersonationTracker: newSumLatencyTracker(c),
 	})
 }
 
 // LatencyTrackersFrom returns the associated LatencyTrackers instance
 // from the specified context.
+// 额外判断 wd != nil，避免有人把 typed nil 放入 context 导致调用方空指针。
 func LatencyTrackersFrom(ctx context.Context) (*LatencyTrackers, bool) {
 	wd, ok := ctx.Value(latencyTrackersKey).(*LatencyTrackers)
 	return wd, ok && wd != nil
@@ -216,6 +231,7 @@ func LatencyTrackersFrom(ctx context.Context) (*LatencyTrackers, bool) {
 // it to the http ResponseWriter object.
 // When called multiple times, the latency incurred inside the
 // transform func each time will be summed up.
+// 没有 tracker 时直接执行 transform，保证埋点缺失不影响功能路径。
 func TrackTransformResponseObjectLatency(ctx context.Context, transform func()) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.TransformTracker.Track(transform)
@@ -302,6 +318,8 @@ func TrackImpersonationLatency(ctx context.Context, d time.Duration) {
 // AuditAnnotationsFromLatencyTrackers will inspect each latency tracker
 // associated with the request context and return a set of audit
 // annotations that can be added to the API audit entry.
+// 只有非零耗时才写注解，避免为每个请求生成大量无意义的 0s 条目；
+// 注解键属于对外可观测契约，重命名会影响依赖审计日志的下游系统。
 func AuditAnnotationsFromLatencyTrackers(ctx context.Context) map[string]string {
 	const (
 		transformLatencyKey         = "apiserver.latency.k8s.io/transform-response-object"
@@ -322,6 +340,7 @@ func AuditAnnotationsFromLatencyTrackers(ctx context.Context) map[string]string 
 		return nil
 	}
 
+	// 逐项读取并只保留非零值；各 tracker 的 GetLatency 已加锁，可安全并发读取。
 	annotations := map[string]string{}
 	if latency := tracker.TransformTracker.GetLatency(); latency != 0 {
 		annotations[transformLatencyKey] = latency.String()

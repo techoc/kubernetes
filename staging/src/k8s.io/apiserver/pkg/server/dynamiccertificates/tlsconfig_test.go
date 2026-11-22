@@ -23,6 +23,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// serverKey 是测试用服务端私钥（PEM）。
 var serverKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA13f50PPWuR/InxLIoJjHdNSG+jVUd25CY7ZL2J023X2BAY+1
 M6jkLR6C2nSFZnn58ubiB74/d1g/Fg1Twd419iR615A013f+qOoyFx3LFHxU1S6e
@@ -51,6 +52,7 @@ TIIXXYhgSy/XshUbsgXQ+YGliye/rXSCTXHBXvWShOqxEMgeMYMRkcm8ZLp/DH7C
 kC2pemkLPUJqgSh1PASGcJbDJIvFGUfP69tUCYpHpk3nHzexuAg3
 -----END RSA PRIVATE KEY-----`)
 
+// serverCert 是测试用服务端证书（PEM），SAN 指向 127.0.0.1 与 webhook-test.default。
 var serverCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDQDCCAiigAwIBAgIJANWw74P5KJk2MA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX
@@ -72,6 +74,9 @@ M++C29JwS3Hwbubg6WO3wjFjoEhpCwU6qRYUz3MRp4tHO4kxKXx+oQnUiFnR7vW0
 YkNtGc1RUDHwecCTFpJtPb7Yu/E=
 -----END CERTIFICATE-----`)
 
+// TestNewStaticCertKeyContent 验证 newTLSContent 把各证书 provider 的快照
+// 汇总成一份不可变的 dynamicCertificateContent：
+// serving cert 忽略 SNI 名，SNI cert 保留名字；provider 为 nil 时得到空内容而不是报错。
 func TestNewStaticCertKeyContent(t *testing.T) {
 	testCertProvider, err := NewStaticSNICertKeyContent("test-cert", serverCert, serverKey, "foo")
 	if err != nil {

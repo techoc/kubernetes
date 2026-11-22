@@ -57,12 +57,16 @@ func init() {
 	example2install.Install(scheme)
 }
 
+// fakeNegotiater 实现 runtime.NegotiatedSerializer 的最小测试版本：
+// 只按给定媒体类型列表构造 SerializerInfo，不做真正的协商。
 type fakeNegotiater struct {
 	serializer, streamSerializer runtime.Serializer
 	framer                       runtime.Framer
 	types, streamTypes           []string
 }
 
+// SupportedMediaTypes 把预置的媒体类型字符串转换为 SerializerInfo；
+// streamTypes 中的类型会额外挂上一个 StreamSerializer。
 func (n *fakeNegotiater) SupportedMediaTypes() []runtime.SerializerInfo {
 	var out []runtime.SerializerInfo
 	for _, s := range n.types {
@@ -111,10 +115,14 @@ func (n *fakeNegotiater) DecoderToVersion(serializer runtime.Decoder, gv runtime
 }
 
 type newStorageCodecFn func(opts StorageCodecConfig) (codec runtime.Codec, encodeVersioner runtime.GroupVersioner, err error)
+
+// newStorageCodecRecorder 记录 StorageFactory 传给编码器构造函数的参数，
+// 用于断言协置/覆盖后的存储版本（StorageVersion）符合预期。
 type newStorageCodecRecorder struct {
 	opt StorageCodecConfig
 }
 
+// Decorators 返回一个包装函数：先记录入参，再调用原构造函数。
 func (c *newStorageCodecRecorder) Decorators(f newStorageCodecFn) newStorageCodecFn {
 	return func(opts StorageCodecConfig) (codec runtime.Codec, encodeVersioner runtime.GroupVersioner, err error) {
 		c.opt = opts
@@ -122,6 +130,11 @@ func (c *newStorageCodecRecorder) Decorators(f newStorageCodecFn) newStorageCode
 	}
 }
 
+// TestConfigurableStorageFactory 验证 StorageFactory 在以下场景中选择正确的
+// 存储版本与覆盖后的 etcd 配置：
+//   - cohabitating resources（同一资源名被多个组共享）中谁是主/次；
+//   - 主资源被禁用时是否退回到次资源；
+//   - 按单个资源或按组（resource="*"）设置 etcd location/prefix 覆盖。
 func TestConfigurableStorageFactory(t *testing.T) {
 	var emptyResource schema.GroupResource
 
@@ -157,6 +170,7 @@ func TestConfigurableStorageFactory(t *testing.T) {
 			wantStorageVersion:    schema.GroupVersion{Group: example.GroupName, Version: "v1"},
 		},
 		{
+			// 主资源被禁用时，同一个存储键实际由次资源接管，版本也随之切换。
 			name: "config resource is primary cohabitating resources and not enabled",
 			enabledResources: []schema.GroupVersionResource{
 				// example.Resource("replicasets").WithVersion("v1"), // <- disabled
@@ -190,6 +204,7 @@ func TestConfigurableStorageFactory(t *testing.T) {
 			wantStorageVersion: schema.GroupVersion{Group: example.GroupName, Version: "v1"},
 		},
 		{
+			// 按组覆盖：该组下所有资源共享同一 etcd location/prefix。
 			name: "override config for all resource of group",
 			enabledResources: []schema.GroupVersionResource{
 				example.Resource("replicasets").WithVersion("v1"),
@@ -251,6 +266,8 @@ func TestConfigurableStorageFactory(t *testing.T) {
 	}
 }
 
+// TestUpdateEtcdOverrides 验证 SetEtcdLocation 只影响指定资源，
+// 其它资源仍使用默认的 ServerList。
 func TestUpdateEtcdOverrides(t *testing.T) {
 	exampleinstall.Install(scheme)
 
@@ -307,6 +324,8 @@ func TestUpdateEtcdOverrides(t *testing.T) {
 	}
 }
 
+// TestConfigs 验证 Configs() 返回去重后的全部存储配置：默认配置，
+// 以及每个被覆盖资源对应的独立配置。
 func TestConfigs(t *testing.T) {
 	exampleinstall.Install(scheme)
 	defaultEtcdLocations := []string{"http://127.0.0.1", "http://127.0.0.2"}
@@ -369,6 +388,8 @@ func TestConfigs(t *testing.T) {
 var introducedLifecycles = map[reflect.Type]*apimachineryversion.Version{}
 var removedLifecycles = map[reflect.Type]*apimachineryversion.Version{}
 
+// fakeLifecycler 是带 APILifecycleIntroduced/Removed 元数据的测试对象，
+// 用于模拟不同 API 版本的生命周期，驱动存储版本选择逻辑。
 type fakeLifecycler[T, V any] struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -393,6 +414,9 @@ func (f *removedLifecycler[T, V]) APILifecycleRemoved() (major, minor int) {
 	panic("no lifecycle version set")
 }
 
+// registerFakeLifecycle 在 scheme 中按 group/version/kind 注册测试类型，
+// 并记录其引入/移除版本，使 storage factory 能按模拟版本挑选存储版本。
+// 同时注册 internal 版本条目，避免解码路径缺少内部类型。
 func registerFakeLifecycle[T, V any](sch *runtime.Scheme, group, introduced, removed string) {
 	f := fakeLifecycler[T, V]{}
 
@@ -430,6 +454,13 @@ func registerFakeLifecycle[T, V any](sch *runtime.Scheme, group, introduced, rem
 	)
 }
 
+// TestStorageFactoryCompatibilityVersion 验证在不同模拟版本（effectiveVersion）下，
+// 存储版本的选择规则：
+//   - beta 版本要保留到下一个版本，以支持降级；
+//   - GA 版本出现后仍需暂时存为上一个 beta；
+//   - alpha-only 版本直接用 alpha；
+//   - 新引入的 beta（无 alpha 前身）立即使用 beta；
+//   - 早于某 API 引入版本的模拟版本退化为最新版本。
 func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 	// Creates a scheme with stub types for unit test
 	sch := runtime.NewScheme()

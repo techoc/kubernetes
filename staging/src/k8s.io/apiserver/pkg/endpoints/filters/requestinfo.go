@@ -25,6 +25,10 @@ import (
 )
 
 // WithRequestInfo attaches a RequestInfo to the context.
+//
+// 该过滤器必须尽早安装：后续的鉴权、准入、审计都依赖上下文中解析出的
+// 动词/资源/命名空间信息。解析失败说明路由与解析器配置不一致，属于服务端
+// 配置错误，因此返回 500 而不是 4xx，避免把内部问题伪装成客户端错误。
 func WithRequestInfo(handler http.Handler, resolver request.RequestInfoResolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -34,6 +38,7 @@ func WithRequestInfo(handler http.Handler, resolver request.RequestInfoResolver)
 			return
 		}
 
+		// WithContext 生成新请求而非就地修改，保证并发安全；下游看到的上下文已携带 RequestInfo。
 		req = req.WithContext(request.WithRequestInfo(ctx, info))
 
 		handler.ServeHTTP(w, req)

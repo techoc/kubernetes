@@ -27,6 +27,9 @@ import (
 const fpSlack = 1e-10
 
 // TestConcAlloc tests computeConcurrencyAllocation with a bunch of randomly generated cases.
+//
+// 用固定种子跑一万次随机用例：分配算法涉及多段线性规划，手写用例很难覆盖边界，
+// 随机化配合不变量断言更可靠；固定种子保证失败可复现。
 func TestConcAlloc(t *testing.T) {
 	rands := rand.New(rand.NewSource(1234567890))
 	for i := 0; i < 10000; i++ {
@@ -34,6 +37,8 @@ func TestConcAlloc(t *testing.T) {
 	}
 }
 
+// test1ConcAlloc 构造一组随机上限/下限/目标值，然后验证分配结果满足三条不变量：
+// 总和等于需求、越界项被夹到边界、未越界项与公平比例成正比。
 func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	probLen := ([]int{0, 1, 2, 3, 4, 6, 9})[rands.Intn(7)]
 	classes := make([]allocProblemItem, probLen)
@@ -42,6 +47,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	var requiredSumF float64
 	style := "empty"
 	if probLen > 0 {
+		// 三种构造风格分别制造"总量由下限决定""由上限决定""由目标值决定"的情形。
 		switch rands.Intn(20) {
 		case 0:
 			style = "bound from below"
@@ -79,6 +85,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 			requiredSum = int(requiredSumF)
 		}
 	}
+	// 以一定概率混入 target 为 0 的类，验证零目标类不会抢走分配份额。
 	for rands.Float64() < 0.25 {
 		// Add a class with a target of zero
 		classes = append(classes, allocProblemItem{target: 0, upperBound: rands.Float64() + 0.00001})
@@ -94,6 +101,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	for _, item := range allocs {
 		actualSumF += item
 	}
+	// 需求总量落在 [lowSum, highSum] 之外时，算法应当报错而不是硬凑一个解。
 	expectErr := lowSum-requiredSumF > fpSlack || requiredSumF-highSum > fpSlack
 	if err != nil {
 		if expectErr {
@@ -109,6 +117,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	if rd > fpSlack {
 		t.Fatalf("For requiredSum=%v, %s classes=%#+v got solution %v, %v which has sum %v", requiredSum, style, classes, allocs, fairProp, actualSumF)
 	}
+	// 逐项核对：触及边界的项必须精确等于边界，其余项必须等于 fairProp*target。
 	for idx, item := range classes {
 		target := math.Max(item.target, MinTarget)
 		alloc := fairProp * target
@@ -128,6 +137,9 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 }
 
 // partition64 calls consume n times, passing ints [0,n) and floats that sum to x
+//
+// 通过对 n-1 个随机切点排序得到递增序列，相邻差即为各份额；保证份额之和精确为 x
+// （最后一个用 1-last 补齐），从而让随机用例满足总量约束。
 func partition64(rands *rand.Rand, n int, x float64, consume func(int, float64)) {
 	if n <= 0 {
 		return
@@ -147,6 +159,7 @@ func partition64(rands *rand.Rand, n int, x float64, consume func(int, float64))
 	consume(n-1, (1-last)*x)
 }
 
+// f64RelDiff 计算相对误差；分母为 0 时返回 0，避免 0/0 产生 NaN 让比较永远失败。
 func f64RelDiff(a, b float64) float64 {
 	den := math.Max(math.Abs(a), math.Abs(b))
 	if den == 0 {

@@ -30,6 +30,10 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// testIP 编译并求值一条 CEL 表达式，按期望校验编译错误、运行错误或结果。
+//
+// 中文说明：编译错误以正则匹配，避免断言完整错误文本而随 cel-go 版本升级
+// 频繁失败；同时校验没有多余的编译错误，防止"期望的错出现了、别的错也被忽略"。
 func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr string, expectCompileErrs []string) {
 	env, err := cel.NewEnv(
 		library.IP(),
@@ -43,6 +47,7 @@ func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr st
 
 	if len(expectCompileErrs) > 0 {
 		missingCompileErrs := []string{}
+		// 记录已匹配的错误下标，用于最后确认没有未匹配的多余错误。
 		matchedCompileErrs := sets.New[int]()
 		for _, expectedCompileErr := range expectCompileErrs {
 			compiledPattern, err := regexp.Compile(expectedCompileErr)
@@ -92,6 +97,8 @@ func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr st
 	} else if err != nil {
 		t.Fatalf("%v", err)
 	} else if expectResult != nil {
+		// 结果比较借助 CEL 自身的 Equal，确保 IP 等自定义类型的相等语义
+		// 与表达式内 `==` 一致。
 		converted := res.Equal(expectResult).Value().(bool)
 		require.True(t, converted, "expectation not equal to output")
 	} else {
@@ -99,6 +106,10 @@ func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr st
 	}
 }
 
+// TestIP 覆盖 IP/CIDR CEL 库的解析、判定方法与类型行为。
+//
+// 中文说明：IPv4 与 IPv6 成对覆盖同一组方法，确保两者实现没有分叉；
+// 另含跨类型误用（把 CIDR 传给 isIP）必须编译失败的负向用例。
 func TestIP(t *testing.T) {
 	ipv4Addr, _ := netip.ParseAddr("192.168.0.1")
 	int4 := types.Int(4)

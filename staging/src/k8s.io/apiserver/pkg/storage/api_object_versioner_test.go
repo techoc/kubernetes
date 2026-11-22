@@ -23,6 +23,10 @@ import (
 	"k8s.io/apiserver/pkg/storage/testresource"
 )
 
+// TestObjectVersioner 验证 ResourceVersion 的读取、非法值处理与写入。
+//
+// 非法 RV 必须返回错误而不是 0 值，否则会把“数据损坏”误判为“版本 0”，
+// 导致 watch 从错误的起点回放。
 func TestObjectVersioner(t *testing.T) {
 	v := APIObjectVersioner{}
 	if ver, err := v.ObjectResourceVersion(&testresource.TestResource{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "5"}}); err != nil || ver != 5 {
@@ -31,6 +35,7 @@ func TestObjectVersioner(t *testing.T) {
 	if ver, err := v.ObjectResourceVersion(&testresource.TestResource{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "a"}}); err == nil || ver != 0 {
 		t.Errorf("unexpected version: %d %v", ver, err)
 	}
+	// UpdateObject 写入新的 RV，且不应顺带改动 DeletionTimestamp 等无关字段。
 	obj := &testresource.TestResource{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "a"}}
 	if err := v.UpdateObject(obj, 5); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,6 +45,8 @@ func TestObjectVersioner(t *testing.T) {
 	}
 }
 
+// TestEtcdParseResourceVersion 覆盖解析边界：空串视为 0（list/watch 的“最新”语义），
+// 非数字与纯空格属于无效输入，必须返回 Invalid 错误。
 func TestEtcdParseResourceVersion(t *testing.T) {
 	testCases := []struct {
 		Version       string
@@ -64,6 +71,7 @@ func TestEtcdParseResourceVersion(t *testing.T) {
 			switch {
 			case testCase.Err && err == nil:
 				t.Errorf("%s[%v]: unexpected non-error", testCase.Version, i)
+			// 错误类型必须是 Invalid：上层据此返回 400 而非 500。
 			case testCase.Err && !IsInvalidError(err):
 				t.Errorf("%s[%v]: unexpected error: %v", testCase.Version, i, err)
 			case !testCase.Err && err != nil:
@@ -76,6 +84,7 @@ func TestEtcdParseResourceVersion(t *testing.T) {
 	}
 }
 
+// TestCompareResourceVersion 验证比较函数返回 -1/0/1，且按数值而非字典序比较。
 func TestCompareResourceVersion(t *testing.T) {
 	five := &testresource.TestResource{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "5"}}
 	six := &testresource.TestResource{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "6"}}

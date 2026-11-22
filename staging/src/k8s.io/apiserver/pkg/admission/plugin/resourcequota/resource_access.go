@@ -33,6 +33,9 @@ import (
 
 // QuotaAccessor abstracts the get/set logic from the rest of the Evaluator.  This could be a test stub, a straight passthrough,
 // or most commonly a series of deconflicting caches.
+//
+// 中文说明：把“读配额 / 写状态”从评估逻辑中抽离，使 evaluator 可以在不感知
+// informer、LRU、singleflight 等细节的前提下工作。
 type QuotaAccessor interface {
 	// UpdateQuotaStatus is called to persist final status.  This method should write to persistent storage.
 	// An error indicates that write didn't complete successfully.
@@ -42,6 +45,8 @@ type QuotaAccessor interface {
 	GetQuotas(namespace string) ([]corev1.ResourceQuota, error)
 }
 
+// quotaAccessor 是 QuotaAccessor 的默认实现，组合 informer 缓存与若干层
+// “防冲突”缓存来降低对 apiserver 的读写压力。
 type quotaAccessor struct {
 	client kubernetes.Interface
 
@@ -64,6 +69,9 @@ type quotaAccessor struct {
 }
 
 // newQuotaAccessor creates an object that conforms to the QuotaAccessor interface to be used to retrieve quota objects.
+//
+// 中文说明：client/lister 在此处故意留空，等 SetInternalKubeClientSet 与
+// SetInternalKubeInformerFactory 注入后再使用，符合准入插件的初始化顺序。
 func newQuotaAccessor() (*quotaAccessor, error) {
 	liveLookupCache := lru.New(100)
 	updatedCache := lru.New(100)
@@ -76,12 +84,15 @@ func newQuotaAccessor() (*quotaAccessor, error) {
 	}, nil
 }
 
+// UpdateQuotaStatus 通过 status 子资源持久化配额状态，并把服务端返回的最新对象
+// 写入 updatedQuotas，供后续评估读到“真正最新”的 resourceVersion。
 func (e *quotaAccessor) UpdateQuotaStatus(newQuota *corev1.ResourceQuota) error {
 	updatedQuota, err := e.client.CoreV1().ResourceQuotas(newQuota.Namespace).UpdateStatus(context.TODO(), newQuota, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
 
+	// 以 namespace/name 为键缓存写回结果；连续的评估可以据此避免重复写冲突。
 	key := newQuota.Namespace + "/" + newQuota.Name
 	e.updatedQuotas.Add(key, updatedQuota)
 	return nil
@@ -92,6 +103,9 @@ var etcdVersioner = storage.APIObjectVersioner{}
 // checkCache compares the passed quota against the value in the look-aside cache and returns the newer
 // if the cache is out of date, it deletes the stale entry.  This only works because of etcd resourceVersions
 // being monotonically increasing integers
+//
+// 中文说明：informer 可能滞后于刚写入的结果，因此读取时以 resourceVersion
+// 较大者为准；缓存落后于调用方时立即淘汰，避免脏数据长期滞留。
 func (e *quotaAccessor) checkCache(quota *corev1.ResourceQuota) *corev1.ResourceQuota {
 	key := quota.Namespace + "/" + quota.Name
 	uncastCachedQuota, ok := e.updatedQuotas.Get(key)
@@ -100,6 +114,7 @@ func (e *quotaAccessor) checkCache(quota *corev1.ResourceQuota) *corev1.Resource
 	}
 	cachedQuota := uncastCachedQuota.(*corev1.ResourceQuota)
 
+	// 相等说明缓存并不更新，删除以免后续继续走这条无效路径。
 	if etcdVersioner.CompareResourceVersion(quota, cachedQuota) >= 0 {
 		e.updatedQuotas.Remove(key)
 		return quota
@@ -107,6 +122,8 @@ func (e *quotaAccessor) checkCache(quota *corev1.ResourceQuota) *corev1.Resource
 	return cachedQuota
 }
 
+// GetQuotas 返回指定 namespace 下所有配额；优先使用 informer 缓存，缓存尚未
+// 同步时回退到实时查询，并用 singleflight 合并同一 namespace 的并发请求。
 func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, error) {
 	// determine if there are any quotas in this namespace
 	// if there are no quotas, we don't need to do anything
@@ -116,6 +133,9 @@ func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, err
 	}
 
 	// if there are no items held in our unsynced lister, check our live-lookup LRU, if that misses, do the live lookup to prime it.
+	//
+	// 中文说明：缓存未同步时“空结果”不能当作没有配额，否则会漏掉配额校验；
+	// 实时查询结果带 TTL 缓存，避免每次请求都直连 apiserver。
 	if len(items) == 0 && !e.hasSynced() {
 		lruItemObj, ok := e.liveLookupCache.Get(namespace)
 		if !ok || lruItemObj.(liveLookupEntry).expiry.Before(time.Now()) {
@@ -126,6 +146,7 @@ func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, err
 				if err != nil {
 					return nil, err
 				}
+				// 只拷贝指针切片，避免在缓存中持有整个 List 结构。
 				newEntry := liveLookupEntry{expiry: time.Now().Add(e.liveTTL)}
 				for i := range liveList.Items {
 					newEntry.items = append(newEntry.items, &liveList.Items[i])
@@ -146,6 +167,7 @@ func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, err
 	resourceQuotas := []corev1.ResourceQuota{}
 	for i := range items {
 		quota := items[i]
+		// 用最近一次写回结果覆盖可能滞后的 informer 副本。
 		quota = e.checkCache(quota)
 		// always make a copy.  We're going to muck around with this and we should never mutate the originals
 		resourceQuotas = append(resourceQuotas, *quota)

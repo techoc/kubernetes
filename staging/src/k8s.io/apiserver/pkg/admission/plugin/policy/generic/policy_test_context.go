@@ -48,13 +48,17 @@ import (
 	"k8s.io/apiserver/pkg/util/compatibility"
 )
 
-// Logger allows t.Testing and b.Testing to be passed to PolicyTestContext
+// Logger 抽象出 *testing.T 与 *testing.B 的公共子集，使同一套测试脚手架
+// 既可用于单元测试也可用于基准测试。
 type Logger interface {
 	Helper()
 	Logf(format string, args ...interface{})
 }
 
-// PolicyTestContext is everything you need to unit test a policy plugin
+// PolicyTestContext 是测试 policy 插件所需的全部依赖的集合：
+// 已初始化的 Plugin、可直接读取内部状态的 Source，以及承载假对象的各类 tracker。
+// 它刻意把策略对象与绑定对象放在同一个 tracker 中，以便用真实的 informer 语义
+// 复现“策略先于绑定可见”之类的时序问题。
 type PolicyTestContext[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	context.Context
 	Logger        Logger
@@ -76,6 +80,10 @@ type PolicyTestContext[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	unstructuredTracker     clienttesting.ObjectTracker
 }
 
+// NewPolicyTestContext 构造一套完整的测试环境：伪造 GVR/GVK、注册进 scheme 与
+// RESTMapper、搭建 informer 与 tracker，然后像真实 apiserver 那样通过 initializer
+// 注入客户端并执行 ValidateInitialization。
+// 返回的 cancel 函数用于释放 informer goroutine；调用方务必 defer 它。
 func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	logger Logger,
 	newPolicyAccessor func(P) PolicyAccessor,
@@ -89,6 +97,7 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	var Bexample B
 
 	// Create a fake resource and kind for the provided policy and binding types
+	// 使用独立的 example.com 组，避免与真实 API 组冲突；GVR/GVK 只在本测试上下文中有效。
 	fakePolicyGVR := schema.GroupVersionResource{
 		Group:    "policy.example.com",
 		Version:  "v1",
@@ -102,6 +111,8 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	fakePolicyGVK := fakePolicyGVR.GroupVersion().WithKind("FakePolicy")
 	fakeBindingGVK := fakeBindingGVR.GroupVersion().WithKind("FakeBinding")
 
+	// scheme 需同时识别策略/绑定类型、它们的 List 类型，以及参数（param）所引用的类型；
+	// 参数类型以 unstructured 注册，因为真实场景下参数是任意 CRD。
 	policySourceTestScheme, err := func() (*runtime.Scheme, error) {
 		scheme := runtime.NewScheme()
 
@@ -116,6 +127,7 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 
 		for _, mapping := range paramMappings {
 			// Skip if it is in the scheme already
+			// 参数类型可能已被显式注册，重复注册会 panic。
 			if scheme.Recognizes(mapping.GroupVersionKind) {
 				continue
 			}
@@ -129,6 +141,8 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 		return nil, nil, err
 	}
 
+	// RESTMapper 需覆盖插件可能查找的所有类型，包括 ConfigMap（常见参数类型）；
+	// AddSpecific 用于保留参数映射中精确的资源复数形式与作用域。
 	fakeRestMapper := func() *meta.DefaultRESTMapper {
 		res := meta.NewDefaultRESTMapper([]schema.GroupVersion{
 			{
@@ -153,11 +167,15 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	fakeInformerFactory := informers.NewSharedInformerFactory(nativeClient, 30*time.Second)
 
 	// Make an object tracker specifically for our policies and bindings
+	// 策略与绑定共用同一个 tracker，因此二者的写入共享同一条 watch 事件流，
+	// 可以复现真实集群中两者的相对顺序。
 	policiesAndBindingsTracker := clienttesting.NewObjectTracker(
 		policySourceTestScheme,
 		serializer.NewCodecFactory(policySourceTestScheme).UniversalDecoder())
 
 	// Make an informer for our policies and bindings
+	// 直接用 ListWatch 包装 tracker 而非 fake clientset，是为了让 List/Watch
+	// 走与真实 informer 完全相同的 code path（包括 watch-list 语义）。
 
 	policyInformer := cache.NewSharedIndexInformer(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
@@ -187,6 +205,8 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	)
 
 	var source Source[PolicyHook[P, B, E]]
+	// 与生产路径一致：插件通过 initializer 拿到 informer factory、dynamic client 与 RESTMapper，
+	// 再据此构造 PolicySource；这里把 source 指针捕获出来以便测试直接读取编译结果。
 	plugin := NewPlugin[PolicyHook[P, B, E]](
 		admission.NewHandler(admission.Connect, admission.Create, admission.Delete, admission.Update),
 		func(sif informers.SharedInformerFactory, i1 kubernetes.Interface, i2 dynamic.Interface, r meta.RESTMapper) Source[PolicyHook[P, B, E]] {
@@ -220,6 +240,8 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 	genericInitializer.Initialize(plugin)
 	plugin.SetRESTMapper(fakeRestMapper)
 
+	// ValidateInitialization 在真实启动时也会执行；提前失败可以让测试脚手架本身的问题
+	// 在构造阶段暴露，而不是等到 Dispatch 时出现难以定位的 nil。
 	if err := plugin.ValidateInitialization(); err != nil {
 		testCancel()
 		return nil, nil, err
@@ -256,6 +278,7 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 		go policyInformer.Run(res.Done())
 		go bindingInformer.Run(res.Done())
 
+		// 必须等到 Source 的 informer 同步完成，否则首个 Dispatch 可能看到空的策略集合。
 		if !cache.WaitForCacheSync(res.Done(), res.Source.HasSynced) {
 			return fmt.Errorf("timed out waiting for initial cache sync")
 		}
@@ -270,6 +293,9 @@ func NewPolicyTestContext[P, B runtime.Object, E Evaluator](
 //
 // Be aware the UpdateAndWait will modify the ResourceVersion of the
 // provided objects.
+//
+// UpdateAndWait 写入对象后会阻塞等待 policy source 观察到新版本；
+// 由于它会改写传入对象的 ResourceVersion，调用方不能依赖原始 RV。
 func (p *PolicyTestContext[P, B, E]) UpdateAndWait(objects ...runtime.Object) error {
 	return p.update(true, objects...)
 }
@@ -278,6 +304,8 @@ func (p *PolicyTestContext[P, B, E]) UpdateAndWait(objects ...runtime.Object) er
 //
 // Be aware the Update will modify the ResourceVersion of the
 // provided objects.
+//
+// Update 只写入不等待，适用于故意构造“source 尚未同步”的中间状态。
 func (p *PolicyTestContext[P, B, E]) Update(objects ...runtime.Object) error {
 	return p.update(false, objects...)
 }
@@ -285,6 +313,9 @@ func (p *PolicyTestContext[P, B, E]) Update(objects ...runtime.Object) error {
 // Objects the given object in the test, or creates it if it doesn't exist
 // Depending upon object type, waits afterward until the object is synced
 // by the policy source
+//
+// update 是 Update/UpdateAndWait 的公共实现；超时统一为 5 秒，
+// 一旦 source 未在期限内观察到此版本即视为测试失败，避免无限挂起。
 func (p *PolicyTestContext[P, B, E]) update(wait bool, objects ...runtime.Object) error {
 	for _, object := range objects {
 		if err := p.updateOne(object); err != nil {
@@ -309,6 +340,10 @@ func (p *PolicyTestContext[P, B, E]) update(wait bool, objects ...runtime.Object
 // by the policy source. Note that policies that are not bound are skipped,
 // so you should not try to wait for an unbound policy. Create both the binding
 // and policy, then wait.
+//
+// WaitForReconcile 按对象类型分三种等待方式：
+// 策略/绑定等待其出现在 Hooks() 中，参数则等待 param informer 观察到相同 RV。
+// 注意 Source 尚未同步时直接返回 nil，避免在 Start 之前调用时误判。
 func (p *PolicyTestContext[P, B, E]) WaitForReconcile(timeoutCtx context.Context, object runtime.Object) error {
 	if !p.Source.HasSynced() {
 		return nil
@@ -326,6 +361,7 @@ func (p *PolicyTestContext[P, B, E]) WaitForReconcile(timeoutCtx context.Context
 
 	switch objectGVK {
 	case p.policyGVK:
+		// 未绑定的策略不会进入 Hooks()，因此只对已绑定的策略轮询。
 		return wait.PollUntilContextCancel(timeoutCtx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
 			policies := p.Source.Hooks()
 			for _, policy := range policies {
@@ -357,6 +393,8 @@ func (p *PolicyTestContext[P, B, E]) WaitForReconcile(timeoutCtx context.Context
 	default:
 		// Do nothing, params are visible immediately
 		// Loop until one of the params is visible via get of the param informer
+		// 参数类型没有专门索引，只能通过按需创建的 param informer 观察；
+		// informer 可能尚未创建，因此轮询中要容忍 nil。
 		return wait.PollUntilContextCancel(timeoutCtx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
 			informer, scope := p.Source.(*policySource[P, B, E]).getParamInformer(objectGVK)
 			if informer == nil {
@@ -382,6 +420,7 @@ func (p *PolicyTestContext[P, B, E]) WaitForReconcile(timeoutCtx context.Context
 			}
 
 			// Ensure RV matches
+			// 只比对名称不足以确认是最新写入，必须同时校验 RV。
 			fetchedMeta, err := meta.Accessor(fetched)
 			if err != nil {
 				return true, err
@@ -394,6 +433,8 @@ func (p *PolicyTestContext[P, B, E]) WaitForReconcile(timeoutCtx context.Context
 	}
 }
 
+// waitForDelete 轮询直到对象从 policy source（策略/绑定）或 param informer（参数）中消失。
+// 对参数类型，informer 不存在意味着从未观察到该类型，可视为已删除。
 func (p *PolicyTestContext[P, B, E]) waitForDelete(ctx context.Context, objectGVK schema.GroupVersionKind, name types.NamespacedName) error {
 	srce := p.Source.(*policySource[P, B, E])
 
@@ -423,6 +464,7 @@ func (p *PolicyTestContext[P, B, E]) waitForDelete(ctx context.Context, objectGV
 		default:
 			// Do nothing, params are visible immediately
 			// Loop until the param is deleted from the param informer
+			// informer 为 nil 说明从未观察到该类型，删除条件已满足。
 			informer, scope := p.Source.(*policySource[P, B, E]).getParamInformer(objectGVK)
 			if informer == nil {
 				return true, nil
@@ -447,6 +489,8 @@ func (p *PolicyTestContext[P, B, E]) waitForDelete(ctx context.Context, objectGV
 	})
 }
 
+// updateOne 按对象类型写入对应 tracker，并在已存在时退化为 Update。
+// 每次写入都重新生成 RV，使测试能够区分“旧版本已同步”与“新版本已同步”。
 func (p *PolicyTestContext[P, B, E]) updateOne(object runtime.Object) error {
 	objectMeta, err := meta.Accessor(object)
 	if err != nil {
@@ -460,6 +504,7 @@ func (p *PolicyTestContext[P, B, E]) updateOne(object runtime.Object) error {
 
 	switch objectGVK {
 	case p.policyGVK:
+		// tracker 没有 upsert，先试 Update，NotFound 时再 Create。
 		err := p.policyAndBindingTracker.Update(p.policyGVR, object, objectMeta.GetNamespace())
 		if errors.IsNotFound(err) {
 			err = p.policyAndBindingTracker.Create(p.policyGVR, object, objectMeta.GetNamespace())
@@ -474,6 +519,8 @@ func (p *PolicyTestContext[P, B, E]) updateOne(object runtime.Object) error {
 
 		return err
 	default:
+		// 参数对象走 dynamic client：unstructured 与 typed 分别落在不同 tracker，
+		// 与真实客户端的分层保持一致。
 		if _, ok := object.(*unstructured.Unstructured); ok {
 			if err := p.unstructuredTracker.Create(gvr, object, objectMeta.GetNamespace()); err != nil {
 				if errors.IsAlreadyExists(err) {
@@ -493,6 +540,9 @@ func (p *PolicyTestContext[P, B, E]) updateOne(object runtime.Object) error {
 
 // Depending upon object type, waits afterward until the object is synced
 // by the policy source
+//
+// DeleteAndWait 删除对象并等待其从 source 中消失；删除不存在的对象被容忍，
+// 以便测试可以写成幂等的清理逻辑。
 func (p *PolicyTestContext[P, B, E]) DeleteAndWait(object ...runtime.Object) error {
 	for _, object := range object {
 		if err := p.deleteOne(object); err != nil && !errors.IsNotFound(err) {
@@ -526,6 +576,8 @@ func (p *PolicyTestContext[P, B, E]) DeleteAndWait(object ...runtime.Object) err
 	return nil
 }
 
+// deleteOne 按对象类型从对应 tracker 删除；策略/绑定与参数走不同的存储，
+// 因此不能统一用 Get 推断归属。
 func (p *PolicyTestContext[P, B, E]) deleteOne(object runtime.Object) error {
 	objectMeta, err := meta.Accessor(object)
 	if err != nil {
@@ -550,6 +602,9 @@ func (p *PolicyTestContext[P, B, E]) deleteOne(object runtime.Object) error {
 	}
 }
 
+// Dispatch 构造 AdmissionAttributes 并交给插件处理，模拟真实请求路径。
+// new 与 old 至少有一个非 nil：Create 只有 new，Delete 只有 old。
+// 对象上的 GVK 优先使用其自带值，缺失时由 inferGVK 从 scheme 推断。
 func (p *PolicyTestContext[P, B, E]) Dispatch(
 	new, old runtime.Object,
 	operation admission.Operation,
@@ -590,6 +645,9 @@ func (p *PolicyTestContext[P, B, E]) Dispatch(
 		), admission.NewObjectInterfacesFromScheme(p.scheme))
 }
 
+// inferGVK 推断对象的 GVK 与 GVR。若对象自带 GVK 则直接使用；
+// 否则从 scheme 中挑选，并优先选择伪造的 policy/binding 类型（同一 Go 类型可能注册多个 GVK）。
+// 最后经 RESTMapper 校验，保证返回的 GVR 是插件真正能解析的资源。
 func (p *PolicyTestContext[P, B, E]) inferGVK(object runtime.Object) (schema.GroupVersionKind, schema.GroupVersionResource, error) {
 	objectGVK := object.GetObjectKind().GroupVersionKind()
 	if objectGVK.Empty() {
@@ -614,6 +672,7 @@ func (p *PolicyTestContext[P, B, E]) inferGVK(object runtime.Object) (schema.Gro
 	}
 
 	// Make sure GVK is known to the fake rest mapper. To prevent cryptic error
+	// 提前校验可以把“类型未注册”转成清晰错误，而不是后续 dispatch 中的隐晦失败。
 	mapping, err := p.restMapper.RESTMapping(objectGVK.GroupKind(), objectGVK.Version)
 	if err != nil {
 		return schema.GroupVersionKind{}, schema.GroupVersionResource{}, err
@@ -621,12 +680,15 @@ func (p *PolicyTestContext[P, B, E]) inferGVK(object runtime.Object) (schema.Gro
 	return objectGVK, mapping.Resource, nil
 }
 
+// FakeList 是策略/绑定类型的 List 包装器；informer 的 List 路径要求 scheme 中存在
+// 对应的 List 类型，否则无法解码。
 type FakeList[T runtime.Object] struct {
 	metav1.TypeMeta
 	metav1.ListMeta
 	Items []T
 }
 
+// DeepCopyObject 逐项深拷贝，避免 informer 缓存与测试持有同一份对象。
 func (fl *FakeList[P]) DeepCopyObject() runtime.Object {
 	copiedItems := make([]P, len(fl.Items))
 	for i, item := range fl.Items {
@@ -639,8 +701,10 @@ func (fl *FakeList[P]) DeepCopyObject() runtime.Object {
 	}
 }
 
+// fakeAuthorizer 一律放行，让测试聚焦于策略逻辑而非授权。
 type fakeAuthorizer struct{}
 
+// Authorize 始终返回 Allow。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return authorizer.DecisionAllow, "", nil
 }

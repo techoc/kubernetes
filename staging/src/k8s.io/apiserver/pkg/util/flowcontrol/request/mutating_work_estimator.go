@@ -25,6 +25,8 @@ import (
 	"k8s.io/apiserver/pkg/util/flowcontrol/metrics"
 )
 
+// newMutatingWorkEstimator 构造写请求（mutation）的工作量估算器。
+// 写请求会向所有 watcher 广播事件，因此成本与 watcher 数量相关。
 func newMutatingWorkEstimator(countFn watchCountGetterFunc, config *WorkEstimatorConfig, maxSeatsFn maxSeatsFunc) WorkEstimatorFunc {
 	estimator := &mutatingWorkEstimator{
 		config:     config,
@@ -34,12 +36,16 @@ func newMutatingWorkEstimator(countFn watchCountGetterFunc, config *WorkEstimato
 	return estimator.estimate
 }
 
+// mutatingWorkEstimator 保存估算所需配置与外部查询函数。
 type mutatingWorkEstimator struct {
 	config     *WorkEstimatorConfig
 	countFn    watchCountGetterFunc
 	maxSeatsFn maxSeatsFunc
 }
 
+// estimate 返回写请求的初始/最终席位与额外延迟。
+// 思路：watcher 越多，事件扇出成本越高；用 finalSeats 表达总工作量，
+// 用 additionalLatency 把“宽而短”的工作重塑为“窄而长”的矩形，以适配 P&F 的调度模型。
 func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLevelName string) WorkEstimate {
 	minSeats := e.config.MinimumSeats
 	maxSeats := e.maxSeatsFn(priorityLevelName)
@@ -147,6 +153,8 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 	}
 }
 
+// isRequestExemptFromWatchEvents 标记不会产生 watch 事件的写请求。
+// serviceaccounts/token 只生成令牌、不写入存储，因此无需按 watcher 数计费。
 func isRequestExemptFromWatchEvents(requestInfo *apirequest.RequestInfo) bool {
 	// Creating token for service account does not produce any event,
 	// but still serviceaccounts can have multiple watchers.

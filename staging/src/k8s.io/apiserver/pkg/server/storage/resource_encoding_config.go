@@ -27,6 +27,8 @@ import (
 	basecompatibility "k8s.io/component-base/compatibility"
 )
 
+// ResourceEncodingConfig 决定资源在 etcd 中的存储版本与内存中的内部版本。
+// 存储版本影响持久化格式与滚动升级/降级兼容性，因此必须稳定。
 type ResourceEncodingConfig interface {
 	// StorageEncodingFor returns the serialization format for the resource.
 	// TODO this should actually return a GroupVersionKind since you can logically have multiple "matching" Kinds
@@ -37,10 +39,12 @@ type ResourceEncodingConfig interface {
 	InMemoryEncodingFor(schema.GroupResource) (schema.GroupVersion, error)
 }
 
+// CompatibilityResourceEncodingConfig 在存储版本选择上考虑版本仿真（emulation）。
 type CompatibilityResourceEncodingConfig interface {
 	BackwardCompatibileStorageEncodingFor(schema.GroupResource, runtime.Object) (schema.GroupVersion, error)
 }
 
+// DefaultResourceEncodingConfig 是 ResourceEncodingConfig 的默认实现。
 type DefaultResourceEncodingConfig struct {
 	// resources records the overriding encoding configs for individual resources.
 	resources        map[schema.GroupResource]*OverridingResourceEncoding
@@ -48,6 +52,7 @@ type DefaultResourceEncodingConfig struct {
 	effectiveVersion basecompatibility.EffectiveVersion
 }
 
+// OverridingResourceEncoding 保存单个资源的显式存储/内部版本覆盖。
 type OverridingResourceEncoding struct {
 	ExternalResourceEncoding schema.GroupVersion
 	InternalResourceEncoding schema.GroupVersion
@@ -55,14 +60,18 @@ type OverridingResourceEncoding struct {
 
 var _ ResourceEncodingConfig = &DefaultResourceEncodingConfig{}
 
+// NewDefaultResourceEncodingConfig 使用全局组件注册表中的 Kubernetes 有效版本构造配置。
 func NewDefaultResourceEncodingConfig(scheme *runtime.Scheme) *DefaultResourceEncodingConfig {
 	return NewDefaultResourceEncodingConfigForEffectiveVersion(scheme, compatibility.DefaultComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent))
 }
 
+// NewDefaultResourceEncodingConfigForEffectiveVersion 允许显式指定有效版本，
+// 便于测试或独立组件复用。
 func NewDefaultResourceEncodingConfigForEffectiveVersion(scheme *runtime.Scheme, effectiveVersion basecompatibility.EffectiveVersion) *DefaultResourceEncodingConfig {
 	return &DefaultResourceEncodingConfig{resources: map[schema.GroupResource]*OverridingResourceEncoding{}, scheme: scheme, effectiveVersion: effectiveVersion}
 }
 
+// SetResourceEncoding 为指定资源设置显式的存储版本与内部版本覆盖。
 func (o *DefaultResourceEncodingConfig) SetResourceEncoding(resourceBeingStored schema.GroupResource, externalEncodingVersion, internalVersion schema.GroupVersion) {
 	o.resources[resourceBeingStored] = &OverridingResourceEncoding{
 		ExternalResourceEncoding: externalEncodingVersion,
@@ -70,10 +79,13 @@ func (o *DefaultResourceEncodingConfig) SetResourceEncoding(resourceBeingStored 
 	}
 }
 
+// SetEffectiveVersion 替换有效版本；应在 server 启动完成前调用。
 func (o *DefaultResourceEncodingConfig) SetEffectiveVersion(effectiveVersion basecompatibility.EffectiveVersion) {
 	o.effectiveVersion = effectiveVersion
 }
 
+// StorageEncodingFor 返回资源的存储版本：优先显式覆盖，否则用组内最高优先级的
+// 外部版本。组未注册时报错，避免静默写入错误版本。
 func (o *DefaultResourceEncodingConfig) StorageEncodingFor(resource schema.GroupResource) (schema.GroupVersion, error) {
 	if !o.scheme.IsGroupRegistered(resource.Group) {
 		return schema.GroupVersion{}, fmt.Errorf("group %q is not registered in scheme", resource.Group)
@@ -88,6 +100,9 @@ func (o *DefaultResourceEncodingConfig) StorageEncodingFor(resource schema.Group
 	return o.scheme.PrioritizedVersionsForGroup(resource.Group)[0], nil
 }
 
+// BackwardCompatibileStorageEncodingFor 返回兼容（可回滚）的存储版本。
+// 与 StorageEncodingFor 的区别在于会依据仿真版本挑选 n-1 可回滚的版本，
+// 保证降级到上一版本时仍能读取数据。
 func (o *DefaultResourceEncodingConfig) BackwardCompatibileStorageEncodingFor(resource schema.GroupResource, example runtime.Object) (schema.GroupVersion, error) {
 	if !o.scheme.IsGroupRegistered(resource.Group) {
 		return schema.GroupVersion{}, fmt.Errorf("group %q is not registered in scheme", resource.Group)
@@ -106,6 +121,7 @@ func (o *DefaultResourceEncodingConfig) BackwardCompatibileStorageEncodingFor(re
 		o.scheme)
 }
 
+// InMemoryEncodingFor 返回内存中的内部版本；未覆盖时默认为组的 internal 版本。
 func (o *DefaultResourceEncodingConfig) InMemoryEncodingFor(resource schema.GroupResource) (schema.GroupVersion, error) {
 	if !o.scheme.IsGroupRegistered(resource.Group) {
 		return schema.GroupVersion{}, fmt.Errorf("group %q is not registered in scheme", resource.Group)
@@ -123,6 +139,10 @@ type introducedInterface interface {
 	APILifecycleIntroduced() (major, minor int)
 }
 
+// emulatedStorageVersion 在版本仿真开启时选择存储版本。
+// 策略是两轮扫描：先找在 MinCompatibilityVersion 之前引入的非 alpha 版本
+// （保证降级 n-1 仍可读），再放宽到 EmulationVersion 之前引入的版本。
+// 两级都找不到说明该资源在当前仿真版本下本就不应被服务，退回二进制版本。
 func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example runtime.Object, effectiveVersion basecompatibility.EffectiveVersion, scheme *runtime.Scheme) (schema.GroupVersion, error) {
 	if example == nil || effectiveVersion == nil {
 		return binaryVersionOfResource, nil

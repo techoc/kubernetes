@@ -55,6 +55,10 @@ import (
 
 // DeleteResource returns a function that will handle a resource deletion
 // TODO admission here becomes solely validating admission
+//
+// 删除流程刻意分成"静态属性准入"与"存储层删除"两段：前半段只依据请求本身
+// （命名空间、名称、DeleteOptions）构造 admission 属性，使准入插件在读取对象前就能
+// 拒绝明显非法的请求；真正的对象级校验在存储层拿到对象后再执行。
 func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -71,6 +75,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 
 		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
 		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		// 上限与客户端超时取较小者：既防止请求无限挂起，也尊重调用方更严格的时限。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
 		defer cancel()
 
@@ -83,6 +88,8 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 			return
 		}
 
+		// DeleteOptions 既可来自请求体也可来自查询参数；前者优先，后者用于兼容
+		// 无法携带 body 的客户端（如部分代理或旧版工具）。
 		options := &metav1.DeleteOptions{}
 		if allowsOptions {
 			body, err := limitedReadBodyWithRecordMetric(ctx, req, scope.MaxRequestBodyBytes, scope.Resource.GroupResource(), requestmetrics.Delete)
@@ -107,6 +114,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 					scope.err(err, w, req)
 					return
 				}
+				// 解码必须落回同一个 options 指针，否则说明 body 是别的类型，属于客户端错误。
 				if obj != options {
 					err = errors.NewBadRequest("decoded object cannot be converted to DeleteOptions")
 					scope.err(err, w, req)
@@ -125,6 +133,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 				}
 			}
 		}
+		// 特性关闭时必须剥离该字段，防止旧客户端提供的危险选项被静默接受。
 		if !utilfeature.DefaultFeatureGate.Enabled(features.AllowUnsafeMalformedObjectDeletion) && options != nil {
 			options.IgnoreStoreReadErrorWithClusterBreakingPotential = nil
 		}
@@ -138,6 +147,8 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		userInfo, _ := request.UserFrom(ctx)
 		staticAdmissionAttrs := admission.NewAttributesRecord(nil, nil, scope.Kind, namespace, name, scope.Resource, scope.Subresource, admission.Delete, options, dryrun.IsDryRun(options.DryRun), userInfo)
 
+		// AllowUnsafeMalformedObjectDeletion 允许在对象已损坏、无法正常读取时强行删除；
+		// 这是绕过一致性保护的高危操作，因此要求额外的细粒度权限并留下审计注解。
 		if utilfeature.DefaultFeatureGate.Enabled(features.AllowUnsafeMalformedObjectDeletion) {
 			if options != nil && ptr.Deref(options.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
 				// let's make sure that the audit will reflect that this delete request
@@ -165,6 +176,8 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 
 		span.AddEvent("About to delete object from database")
 		wasDeleted := true
+		// FinishRequest 防止请求因客户端断开而被中途取消：删除一旦开始，最好让它完成，
+		// 否则会留下"部分删除"的不一致状态。
 		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 			obj, deleted, err := r.Delete(ctx, name, rest.AdmissionToValidateObjectDeleteFunc(admit, staticAdmissionAttrs, scope), options)
 			wasDeleted = deleted
@@ -183,6 +196,9 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		// that will break existing clients.
 		// Other cases where resource is not instantly deleted are: namespace deletion
 		// and pod graceful deletion.
+		//
+		// 202 是历史行为：只有"显式要求级联删除且未立即完成"才返回，
+		// 是为了在不破坏既有客户端的前提下表达"已受理、稍后完成"。
 		//nolint:staticcheck // SA1019 backwards compatibility
 		//nolint: staticcheck
 		if !wasDeleted && options.OrphanDependents != nil && !*options.OrphanDependents {
@@ -208,6 +224,9 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 }
 
 // DeleteCollection returns a function that will handle a collection deletion
+//
+// 与单对象删除的关键差异：不施加 34 秒上限，因为集合删除可能涉及大量对象；
+// 也不支持 ignoreStoreReadErrorWithClusterBreakingPotential（下面显式拒绝）。
 func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -232,6 +251,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
+		// 集合删除用 ListOptions 选择目标对象；selector 与分页参数都需要校验，
+		// 否则可能被用来构造超大范围的删除。
 		listOptions := metainternalversion.ListOptions{}
 		if err := metainternalversionscheme.ParameterCodec.DecodeParameters(req.URL.Query(), scope.MetaGroupVersion, &listOptions); err != nil {
 			err = errors.NewBadRequest(err.Error())
@@ -248,6 +269,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 
 		// transform fields
 		// TODO: DecodeParametersInto should do this.
+		// 字段选择器需按资源类型转换标签，使 --field-selector metadata.name=x 之类
+		// 的通用写法能匹配到内部字段。
 		if listOptions.FieldSelector != nil {
 			fn := func(label, value string) (newLabel, newValue string, err error) {
 				return scope.Convertor.ConvertFieldLabel(scope.Kind, label, value)
@@ -309,6 +332,7 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
+		// 集合删除同样拒绝该危险选项：逐个忽略读取错误会让批量删除的语义变得不可预测。
 		if utilfeature.DefaultFeatureGate.Enabled(features.AllowUnsafeMalformedObjectDeletion) {
 			if options != nil && ptr.Deref(options.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
 				fieldErrList := field.ErrorList{
@@ -354,7 +378,11 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 // authorizeUnsafeDelete ensures that the user has permission to do
 // 'unsafe-delete-ignore-read-errors' on the resource being deleted when
 // ignoreStoreReadErrorWithClusterBreakingPotential is enabled
+//
+// 使用独立的动词而非普通 delete 权限：绕过存储读取错误可能破坏一致性，
+// 必须由集群管理员显式授予，不能由普通的资源删除权限隐含。
 func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz authorizer.UnconditionalAuthorizer) (err error) {
+	// 只对 Delete 且带选项的请求生效；其他情况无需额外授权。
 	if attr.GetOperation() != admission.Delete || attr.GetOperationOptions() == nil {
 		return nil
 	}
@@ -362,6 +390,7 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 	if !ok {
 		return errors.NewInternalError(fmt.Errorf("expected an option of type: %T, but got: %T", &metav1.DeleteOptions{}, attr.GetOperationOptions()))
 	}
+	// 未开启危险选项时无需求额外权限。
 	if !ptr.Deref(options.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
 		return nil
 	}
@@ -370,6 +399,7 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 	if !found {
 		return admission.NewForbidden(attr, fmt.Errorf("no RequestInfo found in the context"))
 	}
+	// 禁止在子资源或非资源请求上使用该选项：这些路径的语义不明确，容易误用。
 	if !requestInfo.IsResourceRequest || len(attr.GetSubresource()) > 0 {
 		return admission.NewForbidden(attr, fmt.Errorf("ignoreStoreReadErrorWithClusterBreakingPotential delete option is not allowed on a subresource or non-resource request"))
 	}
@@ -389,6 +419,9 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 	}
 	// TODO: can't use ResourceAttributesFrom from k8s.io/kubernetes/pkg/registry/authorization/util
 	// due to prevent staging --> k8s.io/kubernetes dep issue
+	//
+	// 把选择器一并带入授权属性，使基于 selector 的 RBAC 规则（如只能删除特定字段值的对象）
+	// 在批量删除场景下同样生效；解析失败也记录下来，交由授权器决定如何处理。
 	if len(requestInfo.FieldSelector) > 0 {
 		fieldSelector, err := fields.ParseSelector(requestInfo.FieldSelector)
 		if err != nil {
@@ -412,6 +445,7 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 
 	decision, reason, err := authz.Authorize(ctx, record)
 	if err != nil {
+		// 授权器出错按拒绝处理（fail closed），不能默认放行高危操作。
 		err = fmt.Errorf("error while checking permission for %q, %w", record.Verb, err)
 		klog.FromContext(ctx).V(1).Info("failed to authorize", "err", err)
 		return admission.NewForbidden(attr, err)

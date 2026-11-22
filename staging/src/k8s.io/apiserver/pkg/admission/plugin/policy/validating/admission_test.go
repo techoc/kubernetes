@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件是 ValidatingAdmissionPolicy 插件的端到端行为测试。
+// 使用 external test package（validating_test）通过公开 API 驱动插件，
+// 并用 fakeCompiler/fakeMatcher 替换 CEL 编译与匹配逻辑，
+// 从而把测试焦点放在“策略/绑定/参数的生命周期与分发语义”上，而不是 CEL 求值本身。
 package validating_test
 
 import (
@@ -50,6 +54,7 @@ import (
 )
 
 var (
+	// 命名空间级参数类型：用于验证 paramRef 的命名空间解析与跨命名空间隔离。
 	clusterScopedParamsGVK schema.GroupVersionKind = schema.GroupVersionKind{
 		Group:   "example.com",
 		Version: "v1",
@@ -63,6 +68,8 @@ var (
 	}
 
 	// Common objects
+	// denyPolicy 是一个最小可用的策略：校验表达式内容不重要，因为 fakeCompiler 会忽略它，
+	// 真正决定结果的是各测试注册的 validateFunc。
 	denyPolicy *admissionregistrationv1.ValidatingAdmissionPolicy = &admissionregistrationv1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "denypolicy.example.com",
@@ -82,6 +89,7 @@ var (
 		},
 	}
 
+	// fakeParams 是策略参数对象（非结构化），其内容不会被真实求值，仅用于验证参数解析链路。
 	fakeParams *unstructured.Unstructured = &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": paramsGVK.GroupVersion().String(),
@@ -95,6 +103,7 @@ var (
 		},
 	}
 
+	// 以下绑定变体只改变 ValidationActions，用于分别验证 Deny/Warn/Audit 三种动作的分发与副作用。
 	denyBinding *admissionregistrationv1.ValidatingAdmissionPolicyBinding = &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "denybinding.example.com",
@@ -154,6 +163,8 @@ var (
 	}
 )
 
+// newParam 构造命名空间级参数对象；namespace 为空时落到 default，
+// 因为 fake object tracker 不会自动填充默认命名空间。
 func newParam(name, namespace string, labels map[string]string) *unstructured.Unstructured {
 	if len(namespace) == 0 {
 		namespace = metav1.NamespaceDefault
@@ -173,6 +184,7 @@ func newParam(name, namespace string, labels map[string]string) *unstructured.Un
 	return res
 }
 
+// newClusterScopedParam 构造集群级参数对象，用于验证集群级 paramKind 的解析路径。
 func newClusterScopedParam(name string, labels map[string]string) *unstructured.Unstructured {
 	res := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -188,8 +200,10 @@ func newClusterScopedParam(name string, labels map[string]string) *unstructured.
 	return res
 }
 
+// 编译期断言：validateFunc 必须满足 Validator 接口，避免接口演进后测试桩静默失效。
 var _ validating.Validator = validateFunc(nil)
 
+// validateFunc 是 Validator 的函数式适配器，让每个测试用闭包直接给出校验结果。
 type validateFunc func(
 	ctx context.Context,
 	matchResource schema.GroupVersionResource,
@@ -199,15 +213,20 @@ type validateFunc func(
 	runtimeCELCostBudget int64,
 	authz authorizer.UnconditionalAuthorizer) validating.ValidateResult
 
+// CompileError 固定返回 nil：这些测试关注运行时行为，不模拟编译失败。
 func (f validateFunc) CompileError() error { return nil }
 
+// fakeCompiler 用“策略名 -> 预置校验函数”的映射替代真实的 CEL 编译，
+// 同时统计每条策略的编译次数，用于断言编译缓存是否生效（避免每次请求都重编译）。
 type fakeCompiler struct {
 	ValidateFuncs map[types.NamespacedName]validating.Validator
 
+	// lock 保护 NumCompiles：编译可能发生在多个 informer/工作协程中。
 	lock        sync.Mutex
 	NumCompiles map[types.NamespacedName]int
 }
 
+// getNumCompiles 读取某策略的累计编译次数，加锁以兼容并发访问。
 func (f *fakeCompiler) getNumCompiles(p *validating.Policy) int {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -217,6 +236,7 @@ func (f *fakeCompiler) getNumCompiles(p *validating.Policy) int {
 	}]
 }
 
+// RegisterDefinition 为指定策略注册校验函数；按 namespacedName 索引以支持同名不同命名空间。
 func (f *fakeCompiler) RegisterDefinition(definition *validating.Policy, vf validateFunc) {
 	if f.ValidateFuncs == nil {
 		f.ValidateFuncs = make(map[types.NamespacedName]validating.Validator)
@@ -228,6 +248,8 @@ func (f *fakeCompiler) RegisterDefinition(definition *validating.Policy, vf vali
 	}] = vf
 }
 
+// CompilePolicy 返回预置的校验函数并记录一次编译。
+// 未注册的策略返回 nil，插件应据此把策略视为不可用。
 func (f *fakeCompiler) CompilePolicy(policy *validating.Policy) validating.Validator {
 	nn := types.NamespacedName{
 		Name:      policy.Name,
@@ -245,6 +267,7 @@ func (f *fakeCompiler) CompilePolicy(policy *validating.Policy) validating.Valid
 	return f.ValidateFuncs[nn]
 }
 
+// Validate 把接口调用转发到函数体，实现 Validator 接口。
 func (f validateFunc) Validate(
 	ctx context.Context,
 	matchResource schema.GroupVersionResource,
@@ -265,22 +288,30 @@ func (f validateFunc) Validate(
 	)
 }
 
+// fakeMatcher 用“名称 -> 匹配函数”的映射替代真实的 CEL 匹配器，
+// 使测试可以精确控制某个策略/绑定是否命中，而不必构造完整的匹配配置。
 var _ generic.PolicyMatcher = &fakeMatcher{}
 
+// ValidateInitialization 恒成功：fakeMatcher 没有需要初始化的外部依赖。
 func (f *fakeMatcher) ValidateInitialization() error {
 	return nil
 }
 
+// GetNamespace 返回 nil 表示测试环境不提供真实命名空间对象。
 func (f *fakeMatcher) GetNamespace(ctx context.Context, name string) (*v1.Namespace, error) {
 	return nil, nil
 }
 
+// fakeMatcher 是 PolicyMatcher 的测试实现。
+// DefaultMatch 决定未注册策略的默认匹配结果；
+// 两个 map 分别按 namespacedName 覆盖策略定义与绑定的匹配逻辑。
 type fakeMatcher struct {
 	DefaultMatch         bool
 	DefinitionMatchFuncs map[types.NamespacedName]func(generic.PolicyAccessor, admission.Attributes) bool
 	BindingMatchFuncs    map[types.NamespacedName]func(generic.BindingAccessor, admission.Attributes) bool
 }
 
+// RegisterDefinition 为策略注册自定义匹配函数；nil 表示保持默认行为。
 func (f *fakeMatcher) RegisterDefinition(definition *admissionregistrationv1.ValidatingAdmissionPolicy, matchFunc func(generic.PolicyAccessor, admission.Attributes) bool) {
 	namespace, name := definition.Namespace, definition.Name
 	key := types.NamespacedName{
@@ -296,6 +327,7 @@ func (f *fakeMatcher) RegisterDefinition(definition *admissionregistrationv1.Val
 	}
 }
 
+// RegisterBinding 为绑定注册自定义匹配函数；nil 表示保持默认行为。
 func (f *fakeMatcher) RegisterBinding(binding *admissionregistrationv1.ValidatingAdmissionPolicyBinding, matchFunc func(generic.BindingAccessor, admission.Attributes) bool) {
 	namespace, name := binding.Namespace, binding.Name
 	key := types.NamespacedName{
@@ -313,6 +345,7 @@ func (f *fakeMatcher) RegisterBinding(binding *admissionregistrationv1.Validatin
 
 // Matches says whether this policy definition matches the provided admission
 // resource request
+// 等价 GVK/GVR 直接回填请求自身的值，因为 fakeMatcher 不做版本转换。
 func (f *fakeMatcher) DefinitionMatches(a admission.Attributes, o admission.ObjectInterfaces, definition generic.PolicyAccessor) (bool, schema.GroupVersionResource, schema.GroupVersionKind, error) {
 	namespace, name := definition.GetNamespace(), definition.GetName()
 	key := types.NamespacedName{
@@ -329,6 +362,7 @@ func (f *fakeMatcher) DefinitionMatches(a admission.Attributes, o admission.Obje
 
 // Matches says whether this policy definition matches the provided admission
 // resource request
+// 与 DefinitionMatches 对称：未注册的绑定回退到 DefaultMatch。
 func (f *fakeMatcher) BindingMatches(a admission.Attributes, o admission.ObjectInterfaces, binding generic.BindingAccessor) (bool, error) {
 	namespace, name := binding.GetNamespace(), binding.GetName()
 	key := types.NamespacedName{
@@ -343,6 +377,8 @@ func (f *fakeMatcher) BindingMatches(a admission.Attributes, o admission.ObjectI
 	return f.DefaultMatch, nil
 }
 
+// setupFakeTest 是 setupTestCommon 的便捷封装：默认启动 informer，
+// 大多数用例需要插件处于就绪状态才能分发请求。
 func setupFakeTest(t *testing.T, comp *fakeCompiler, match *fakeMatcher) *generic.PolicyTestContext[*validating.Policy, *validating.PolicyBinding, validating.Validator] {
 	return setupTestCommon(t, comp, match, true)
 }
@@ -356,6 +392,11 @@ func setupFakeTest(t *testing.T, comp *fakeCompiler, match *fakeMatcher) *generi
 // PolicyTracker expects FakePolicyDefinition and FakePolicyBinding types
 // !TODO: refactor this test/framework to remove startInformers argument and
 // clean up the return args, and in general make it more accessible.
+//
+// 实现细节：
+//   - 缩短策略刷新间隔，避免测试等待默认的较长周期；
+//   - RESTMapper 中显式登记参数类型与 VAP 自身，供参数解析使用；
+//   - 通过 t.Cleanup 注册取消函数，保证 informer 协程随测试结束退出。
 func setupTestCommon(
 	t *testing.T,
 	compiler *fakeCompiler,
@@ -406,6 +447,7 @@ func setupTestCommon(
 	return testContext
 }
 
+// attributeRecord 用 old/new 之一构造 FakeAttributes；两者都为 nil 属于测试编写错误，直接 panic。
 func attributeRecord(
 	old, new runtime.Object,
 	operation admission.Operation,
@@ -446,6 +488,8 @@ func attributeRecord(
 // Functionality Tests
 // //////////////////////////////////////////////////////////////////////////////
 
+// TestPluginNotReady 验证 informer 未启动（或初次 list/watch 失败）时插件拒绝处理请求，
+// 启动后同一请求可正常通过——这是“未就绪即失败关闭”的保障，避免在策略未加载时放行流量。
 func TestPluginNotReady(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -478,6 +522,8 @@ func TestPluginNotReady(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestBasicPolicyDefinitionFailure 验证最简链路：策略命中并返回 Deny 时请求被拒绝，
+// 且 Deny 动作不会产生告警或审计注解（这些只属于 Warn/Audit 动作）。
 func TestBasicPolicyDefinitionFailure(t *testing.T) {
 	datalock := sync.Mutex{}
 	numCompiles := 0
@@ -525,6 +571,7 @@ func TestBasicPolicyDefinitionFailure(t *testing.T) {
 
 // Shows that if a definition does not match the input, it will not be used.
 // But with a different input it will be used.
+// 这里用“对象名长度为偶数”作为匹配条件，构造奇偶两个输入验证匹配器的分流。
 func TestDefinitionDoesntMatch(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -607,6 +654,8 @@ func TestDefinitionDoesntMatch(t *testing.T) {
 	require.Equal(t, 1, numCompiles)
 }
 
+// TestReconfigureBinding 验证绑定参数变化时的重编译行为：
+// 指向不存在的参数应报配置错误，补上参数后恢复校验；改变绑定的参数引用会触发一次重编译。
 func TestReconfigureBinding(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -706,6 +755,7 @@ func TestReconfigureBinding(t *testing.T) {
 
 // Shows that a policy which is in effect will stop being in effect when removed
 func TestRemoveDefinition(t *testing.T) {
+	// 删除策略后，同一个请求应从“被拒绝”变为“无策略处理而放行”，验证缓存能及时失效。
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
 		DefaultMatch: true,
@@ -755,6 +805,7 @@ func TestRemoveDefinition(t *testing.T) {
 
 // Shows that a binding which is in effect will stop being in effect when removed
 func TestRemoveBinding(t *testing.T) {
+	// 与 TestRemoveDefinition 对称：策略仍在，但失去绑定后不应再被分发。
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
 		DefaultMatch: true,
@@ -797,6 +848,8 @@ func TestRemoveBinding(t *testing.T) {
 
 // Shows that an error is surfaced if a paramSource specified in a binding does
 // not actually exist
+// 此处 paramKind 指向一个未注册的 Kind，错误应明确指向“找不到 paramKind 引用的资源”，
+// 而不是笼统的 CRD 不存在，便于集群管理员定位配置问题。
 func TestInvalidParamSourceGVK(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -831,6 +884,7 @@ func TestInvalidParamSourceGVK(t *testing.T) {
 
 // Shows that an error is surfaced if a param specified in a binding does not
 // actually exist
+// 参数类型合法但实例缺失，错误取决于 ParameterNotFoundAction（此处为 Deny）。
 func TestInvalidParamSourceInstanceName(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -875,6 +929,8 @@ func TestInvalidParamSourceInstanceName(t *testing.T) {
 
 // Show that policy still gets evaluated with `nil` param if paramRef & namespaceParamRef
 // are both unset
+// 策略声明了 paramKind 但绑定未引用任何参数实例时，求值仍应发生，只是 params 为 nil；
+// 策略作者需在 CEL 中自行处理 params 缺失的情况。
 func TestEmptyParamRef(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -930,6 +986,8 @@ func TestEmptyParamRef(t *testing.T) {
 //
 // Also shows that if binding has specified params in this instance then they
 // are silently ignored.
+// 策略没有 paramKind 时，绑定上的 paramRef 不生效；这是有意的宽松处理，
+// 避免策略作者删除 paramKind 后旧绑定立刻变成配置错误。
 func TestEmptyParamSource(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -976,6 +1034,8 @@ func TestEmptyParamSource(t *testing.T) {
 // Shows what happens when multiple policies share one param type, then
 // one policy stops using the param. The expectation is the second policy
 // keeps behaving normally
+// 关键回归点：共享同一参数类型的策略不应因另一条策略修改 paramKind 而丢失参数，
+// 即参数 informer 的生命周期必须按“引用计数”而非“单一策略”管理。
 func TestMultiplePoliciesSharedParamType(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1098,6 +1158,8 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 
 // Shows that we can refer to native-typed params just fine
 // (as opposed to CRD params)
+// 原生类型参数（ConfigMap）走的是 typed client 路径，与 CRD 的 unstructured 路径不同，
+// 这里断言求值器收到的是 *v1.ConfigMap 而非 unstructured。
 func TestNativeTypeParam(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1165,6 +1227,8 @@ func TestNativeTypeParam(t *testing.T) {
 	require.EqualValues(t, 1, evaluations.Load())
 }
 
+// TestAuditValidationAction 验证 Audit 动作：多个绑定的失败结果应被合并成一条审计注解，
+// 请求本身不被拒绝，也不产生告警。
 func TestAuditValidationAction(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1248,6 +1312,8 @@ func TestAuditValidationAction(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestWarnValidationAction 验证 Warn 动作：失败信息以 HTTP Warning 头返回，
+// 不写入审计注解，请求正常放行。
 func TestWarnValidationAction(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1290,6 +1356,8 @@ func TestWarnValidationAction(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestAllValidationActions 验证 Deny+Warn+Audit 同时配置时三种副作用都会发生：
+// 请求被拒绝、产生告警、写入审计注解。
 func TestAllValidationActions(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1345,6 +1413,8 @@ func TestAllValidationActions(t *testing.T) {
 	require.ErrorContains(t, err, "I'm sorry Dave")
 }
 
+// TestNamespaceParamRefName 验证未显式指定命名空间时，paramRef 会随请求对象所属命名空间解析：
+// 不同命名空间的同名 ConfigMap 应分别被选中，且策略只编译一次。
 func TestNamespaceParamRefName(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1498,6 +1568,9 @@ func TestNamespaceParamRefName(t *testing.T) {
 	}()
 }
 
+// TestParamRef 遍历 ParamRef 配置空间：集群级/命名空间级参数、name/selector 二选一、
+// 是否指定命名空间、ParameterNotFoundAction 两种取值。跳过语义上非法的组合
+// （集群级参数 + namespace、同时设置 name 与 selector）。
 func TestParamRef(t *testing.T) {
 	for _, paramIsClusterScoped := range []bool{false, true} {
 		for _, nameIsSet := range []bool{false, true} {
@@ -1570,6 +1643,8 @@ func TestParamRef(t *testing.T) {
 // only that each ParamRef CAN be evaluated correctly for both cluster scoped
 // and namespace-scoped request kinds, and that the failure action is correctly
 // applied.
+// 命名空间级参数且 paramRef 未指定命名空间时，命名空间级请求可解析，
+// 但集群级请求无法确定命名空间，属于配置错误。
 func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIsSet, selectorIsSet, denyNotFound bool) {
 	// Create a cluster scoped and a namespace scoped CRD
 	policy := *denyPolicy
@@ -1652,6 +1727,8 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	testContext := setupFakeTest(t, compiler, matcher)
 
 	// Create library of params to try to fool the controller
+	// 参数矩阵覆盖：匹配/不匹配名称、匹配/不匹配命名空间、匹配/不匹配标签，
+	// 以及命名空间级与集群级两类对象，用来确认 ParamRef 只选中应选中的那些。
 	params := []*unstructured.Unstructured{
 		newParam(matchingParamName, v1.NamespaceDefault, nonmatchingLabels),
 		newParam(matchingParamName, matchingNamespace, nonmatchingLabels),
@@ -1690,6 +1767,8 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 	// Validate a namespaced object, and verify that the params being validated
 	// are the ones we would expect
+	// 期望集合由测试自身独立推导（与插件实现无关），再与插件实际传给求值器的参数比较，
+	// 这样即使两边共享同一错误逻辑也能暴露问题。
 	timeoutCtx, timeoutCancel := context.WithTimeout(testContext, 5*time.Second)
 	defer timeoutCancel()
 	var expectedParamsForNamespacedRequest []*unstructured.Unstructured
@@ -1800,6 +1879,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 	// Remove all params matched by namespaced, and cluster-scoped validation.
 	// Validate again to make sure NotFoundAction is respected
+	// 删除全部匹配参数后：Deny 应返回错误，Allow 应静默跳过且不调用求值器。
 	var deleted []runtime.Object
 	for _, p := range expectedParamsForNamespacedRequest {
 		deleted = append(deleted, p)
@@ -1835,6 +1915,8 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 // If the ParamKind is ClusterScoped, and namespace param is used.
 // This is a Configuration Error of the policy
+// 配置错误应在分发阶段被拒绝，且不进入求值（evaluations 保持 0），
+// 以免用错误配置静默放行或拒绝流量。
 func TestNamespaceParamRefClusterScopedParamError(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1895,6 +1977,8 @@ func TestNamespaceParamRefClusterScopedParamError(t *testing.T) {
 	require.EqualValues(t, 0, evaluations.Load())
 }
 
+// TestAuditAnnotations 验证策略产生的审计注解：Publish 动作写入注解、
+// Exclude 动作不写入、Error 动作转为错误；多个绑定的值以逗号合并。
 func TestAuditAnnotations(t *testing.T) {
 	compiler := &fakeCompiler{}
 	matcher := &fakeMatcher{
@@ -1966,6 +2050,8 @@ func TestAuditAnnotations(t *testing.T) {
 }
 
 // FakeAttributes decorates admission.Attributes. It's used to trace the added annotations.
+// 内嵌 Attributes 以复用全部默认行为，仅覆盖注解相关方法；互斥锁保护 map，
+// 因为分发过程中可能有多个校验器并发写入。
 type FakeAttributes struct {
 	admission.Attributes
 	annotations map[string]string
@@ -1977,7 +2063,8 @@ func (f *FakeAttributes) AddAnnotation(k, v string) error {
 	return f.AddAnnotationWithLevel(k, v, auditinternal.LevelMetadata)
 }
 
-// AddAnnotationWithLevel adds an annotation key value pair to FakeAttributes
+// AddAnnotationWithLevel 先写入底层 Attributes（以便触发其去重/校验逻辑），
+// 再记录到本地 map 供测试断言；底层报错时不同步本地副本，保持两者一致。
 func (f *FakeAttributes) AddAnnotationWithLevel(k, v string, _ auditinternal.Level) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -1992,6 +2079,7 @@ func (f *FakeAttributes) AddAnnotationWithLevel(k, v string, _ auditinternal.Lev
 }
 
 // GetAnnotations reads annotations from FakeAttributes
+// 返回副本而非内部 map，避免调用方在锁外修改导致数据竞争。
 func (f *FakeAttributes) GetAnnotations(_ auditinternal.Level) map[string]string {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -2002,27 +2090,33 @@ func (f *FakeAttributes) GetAnnotations(_ auditinternal.Level) map[string]string
 	return annotations
 }
 
+// warningRecorder 实现 warning.WarningRecorder，按集合记录告警文本，
+// 重复告警只计一次，便于断言“是否产生过某条告警”而不受次数影响。
 type warningRecorder struct {
 	sync.Mutex
 	warnings sets.Set[string]
 }
 
+// newWarningRecorder 创建一个空的告警记录器。
 func newWarningRecorder() *warningRecorder {
 	return &warningRecorder{warnings: sets.New[string]()}
 }
 
+// AddWarning 记录告警文本，忽略告警来源字段。
 func (r *warningRecorder) AddWarning(_, text string) {
 	r.Lock()
 	defer r.Unlock()
 	r.warnings.Insert(text)
 }
 
+// hasWarning 判断是否记录过指定文本的告警。
 func (r *warningRecorder) hasWarning(text string) bool {
 	r.Lock()
 	defer r.Unlock()
 	return r.warnings.Has(text)
 }
 
+// len 返回去重后的告警条数。
 func (r *warningRecorder) len() int {
 	r.Lock()
 	defer r.Unlock()

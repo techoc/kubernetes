@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestConversionRoundTrip 验证 v2 与 v2beta1 之间的转换在两个方向上都无损。
+// 双向往返 + 固定随机种子，用于发现转换函数丢字段或类型不匹配的问题。
 func TestConversionRoundTrip(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := v2beta1scheme.AddToScheme(scheme)
@@ -42,12 +44,14 @@ func TestConversionRoundTrip(t *testing.T) {
 	err = v2scheme.RegisterConversions(scheme)
 	require.NoError(t, err)
 
+	// 固定种子保证失败可复现。
 	fuzzer := randfill.NewWithSeed(2374375)
 
 	// v2 -> v2beta1 -> v2
 	for i := 0; i < 100; i++ {
 		expected := &v2.APIGroupDiscoveryList{}
 		fuzzer.Fill(expected)
+		// TypeMeta 需与目标版本一致，否则转换器会因版本不匹配而失败。
 		expected.TypeMeta = metav1.TypeMeta{
 			Kind:       "APIGroupDiscoveryList",
 			APIVersion: "apidiscovery.k8s.io/v2",
@@ -60,6 +64,7 @@ func TestConversionRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		actual := o2.(*v2.APIGroupDiscoveryList)
 
+		// 往返后应逐字段相等；DeepEqual 失败时用 cmp.Diff 输出可读差异。
 		if !reflect.DeepEqual(expected, actual) {
 			t.Error(cmp.Diff(expected, actual))
 		}

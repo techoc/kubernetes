@@ -23,6 +23,7 @@ import (
 )
 
 // TypeResolver resolves a type by a given name.
+// 用于把 CRD 等运行期才确定的 schema 注入 CEL 编译环境。
 type TypeResolver interface {
 	// Resolve resolves the type by its name.
 	// This function returns false if the name does not refer to a known object type.
@@ -49,6 +50,7 @@ type ResolvedType interface {
 
 // ResolverTypeProvider delegates type resolution first to the TypeResolver and then
 // to the underlying types.Provider for types not resolved by the TypeResolver.
+// 先查自定义解析器，未命中再回退到 CEL 内置类型，保证内建类型语义不变。
 type ResolverTypeProvider struct {
 	typeResolver           TypeResolver
 	underlyingTypeProvider types.Provider
@@ -97,16 +99,19 @@ func (p *ResolverTypeProvider) NewValue(structType string, fields map[string]ref
 	return p.underlyingTypeProvider.NewValue(structType, fields)
 }
 
+// EnumValue 枚举值不涉及 CRD schema，直接委托给底层 provider。
 func (p *ResolverTypeProvider) EnumValue(enumName string) ref.Val {
 	return p.underlyingTypeProvider.EnumValue(enumName)
 }
 
+// FindIdent 标识符查找同样直接委托给底层 provider。
 func (p *ResolverTypeProvider) FindIdent(identName string) (ref.Val, bool) {
 	return p.underlyingTypeProvider.FindIdent(identName)
 }
 
 // ResolverEnvOption creates the ResolverTypeProvider with a given DynamicTypeResolver
 // and returns the CEL ResolverEnvOption to apply it to the env.
+// 在应用选项时捕获当前 env 的内置 provider 作为回退，避免构造顺序耦合。
 func ResolverEnvOption(resolver TypeResolver) cel.EnvOption {
 	return func(e *cel.Env) (*cel.Env, error) {
 		tp := &ResolverTypeProvider{typeResolver: resolver, underlyingTypeProvider: e.CELTypeProvider()}

@@ -26,8 +26,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// APIGroupPrefix 是非核心（带组）资源在 URL 中的公共前缀，如 /apis/apps/v1。
 const APIGroupPrefix = "/apis"
 
+// keepUnversioned 判断某组是否应在发现文档中保持“无版本”形式。
+// 空组代表核心组，extensions 是历史遗留组，二者都必须维持旧客户端期望的格式。
 func keepUnversioned(group string) bool {
 	return group == "" || group == "extensions"
 }
@@ -35,12 +38,15 @@ func keepUnversioned(group string) bool {
 // stripVersionEncoder strips APIVersion field from the encoding output. It's
 // used to keep the responses at the discovery endpoints backward compatible
 // with release-1.1, when the responses have empty APIVersion.
+//
+// 实现方式是“编码→解码→清空 GVK→再编码”，代价较高，因此仅用于兼容路径。
 type stripVersionEncoder struct {
 	encoder    runtime.Encoder
 	serializer runtime.Serializer
 	identifier runtime.Identifier
 }
 
+// newStripVersionEncoder 构造去版本编码器，并预先算好 Identifier。
 func newStripVersionEncoder(e runtime.Encoder, s runtime.Serializer) runtime.Encoder {
 	return stripVersionEncoder{
 		encoder:    e,
@@ -49,6 +55,8 @@ func newStripVersionEncoder(e runtime.Encoder, s runtime.Serializer) runtime.Enc
 	}
 }
 
+// identifier 生成编码器的稳定标识，供缓存编码路径区分不同编码器。
+// 名称固定为 stripVersion，内部编码器可能为 nil（测试场景），需防 nil。
 func identifier(e runtime.Encoder) runtime.Identifier {
 	result := map[string]string{
 		"name": "stripVersion",
@@ -63,6 +71,7 @@ func identifier(e runtime.Encoder) runtime.Identifier {
 	return runtime.Identifier(identifier)
 }
 
+// Encode 对支持缓存的对象走 CacheEncode，避免每次请求重复做两次编解码。
 func (c stripVersionEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	if co, ok := obj.(runtime.CacheableObject); ok {
 		return co.CacheEncode(c.Identifier(), c.doEncode, w)
@@ -70,6 +79,8 @@ func (c stripVersionEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	return c.doEncode(obj, w)
 }
 
+// doEncode 执行实际的去版本编码：先编码到缓冲区，再解码回来清空 Group/Version，
+// 最后重新编码写出。中间对象会被修改，因此不能与缓存共享同一实例。
 func (c stripVersionEncoder) doEncode(obj runtime.Object, w io.Writer) error {
 	buf := bytes.NewBuffer([]byte{})
 	err := c.encoder.Encode(obj, buf)
@@ -97,6 +108,9 @@ type stripVersionNegotiatedSerializer struct {
 	runtime.NegotiatedSerializer
 }
 
+// EncoderForVersion 把版本化编码器再包一层去版本逻辑。
+// 需要同时拿到 encoder 与 decoder，但调用上下文只给 encoder，因此做尽力而为的类型断言；
+// 失败即 panic：这只影响已废弃的兼容路径，静默降级会输出错误格式反而更难排查。
 func (n stripVersionNegotiatedSerializer) EncoderForVersion(encoder runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	serializer, ok := encoder.(runtime.Serializer)
 	if !ok {

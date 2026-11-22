@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件用 testutil.GatherAndCompare 逐字比对指标输出，
+// 覆盖冒充（impersonation）请求的模式与决策两个维度，以及授权检查的独立指标。
+// 之所以做全量文本比对，是为了同时锁定指标名、标签、分桶边界等对外契约。
 package metrics
 
 import (
@@ -25,6 +28,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordImpersonationAttempt 验证冒充请求计数与耗时直方图的模式/决策标签组合。
+// mode 为空串代表请求未指定冒充模式（通常在校验阶段即被拒绝）。
 func TestRecordImpersonationAttempt(t *testing.T) {
 	RegisterMetrics()
 
@@ -133,6 +138,7 @@ func TestRecordImpersonationAttempt(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子用例前清空指标，避免前一个用例的样本污染文本比对。
 			resetMetricsForTest()
 
 			RecordImpersonationAttempt(tc.mode, tc.decision, 100*time.Millisecond)
@@ -144,6 +150,8 @@ func TestRecordImpersonationAttempt(t *testing.T) {
 	}
 }
 
+// TestRecordImpersonationAuthorizationCall 验证冒充处理器内部授权检查的指标，
+// 与请求级指标分开，便于区分“请求被拒”与“授权子系统故障/拒绝”。
 func TestRecordImpersonationAuthorizationCall(t *testing.T) {
 	RegisterMetrics()
 
@@ -263,10 +271,14 @@ func TestRecordImpersonationAuthorizationCall(t *testing.T) {
 	}
 }
 
+// TestRecordImpersonationMetricsMultiple 验证多次记录时同一标签组合的累加行为：
+// 计数递增、直方图分桶累加、不同模式/决策互不干扰。
 func TestRecordImpersonationMetricsMultiple(t *testing.T) {
 	RegisterMetrics()
 	resetMetricsForTest()
 
+	// 两次相同的 denied 样本用于验证同标签累加；随后混合不同模式与决策，
+	// 确认各标签组合独立维护自己的计数与直方图。
 	RecordImpersonationAttempt("user-info", "allowed", 100*time.Millisecond)
 	RecordImpersonationAttempt("", "denied", 50*time.Millisecond)
 	RecordImpersonationAttempt("", "denied", 50*time.Millisecond)
@@ -393,6 +405,10 @@ func TestRecordImpersonationMetricsMultiple(t *testing.T) {
 	}
 }
 
+// resetMetricsForTest 清空本包注册的所有指标。
+// 测试共用 legacyregistry 全局注册表，因此必须显式重置，否则用例之间会相互影响。
+// resetMetricsForTest 清空本包注册的所有指标。
+// 测试共用 legacyregistry 全局注册表，因此必须显式重置，否则用例之间会相互影响。
 func resetMetricsForTest() {
 	impersonationAttemptsTotal.Reset()
 	impersonationAttemptsDurationSeconds.Reset()

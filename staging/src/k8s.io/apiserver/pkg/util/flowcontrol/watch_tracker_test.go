@@ -26,6 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// httpRequest 构造只含方法、路径与查询串的最小请求，供 RequestInfo 解析。
 func httpRequest(method, path, rawQuery string) *http.Request {
 	return &http.Request{
 		Method: method,
@@ -36,6 +37,7 @@ func httpRequest(method, path, rawQuery string) *http.Request {
 	}
 }
 
+// newWatchIdentifier 构造期望的 watch 标识，减少用例噪音。
 func newWatchIdentifier(apiGroup, resource, namespace, name string) *watchIdentifier {
 	return &watchIdentifier{
 		apiGroup:  apiGroup,
@@ -45,6 +47,10 @@ func newWatchIdentifier(apiGroup, resource, namespace, name string) *watchIdenti
 	}
 }
 
+// TestRegisterWatch 验证哪些请求会被识别为 watch 并正确归类。
+//
+// 中文说明：只有 watch=true 的 GET 才注册；普通 list 返回 nil。带
+// metadata.name 字段选择器的 watch 视为单对象 watch，其余按资源/命名空间归类。
 func TestRegisterWatch(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -110,6 +116,7 @@ func TestRegisterWatch(t *testing.T) {
 				watchCount: make(map[watchIdentifier]int),
 			}
 
+			// RequestInfo 决定分组/资源/命名空间的解析，必须先注入上下文。
 			requestInfo, err := requestInfoFactory.NewRequestInfo(testCase.request)
 			if err != nil {
 				t.Fatalf("unexpected error from requestInfo creation: %#v", err)
@@ -118,6 +125,7 @@ func TestRegisterWatch(t *testing.T) {
 			r := testCase.request.WithContext(ctx)
 
 			forget := watchTracker.RegisterWatch(r)
+			// nil 表示该请求不是 watch，不应产生任何登记。
 			if testCase.expected == nil {
 				if forget != nil {
 					t.Errorf("unexpected watch registered: %#v", watchTracker.watchCount)
@@ -140,6 +148,10 @@ func TestRegisterWatch(t *testing.T) {
 	}
 }
 
+// TestGetInterestedWatchCount 验证写请求会影响多少个已注册 watch。
+//
+// 中文说明：这是优先级公平性的输入——受影响 watch 越多，请求越应被视为
+// 高成本；用例覆盖命名空间、单对象与 API 组三个维度的交叉。
 func TestGetInterestedWatchCount(t *testing.T) {
 	watchTracker := NewWatchTracker()
 
@@ -264,6 +276,10 @@ func TestGetInterestedWatchCount(t *testing.T) {
 
 }
 
+// TestGetInterestedWatchCountWithIndex 验证索引型字段选择器只匹配"空值"的 watch。
+//
+// 中文说明：spec.nodeName=node1/node2 的 watch 依赖索引查询，无法从写请求
+// 静态判断是否受影响，因此不计入——宁可低估也不能误报。
 func TestGetInterestedWatchCountWithIndex(t *testing.T) {
 	watchTracker := NewWatchTracker()
 

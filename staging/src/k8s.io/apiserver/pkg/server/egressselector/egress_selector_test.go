@@ -40,10 +40,15 @@ import (
 	"sigs.k8s.io/apiserver-network-proxy/konnectivity-client/proto/client"
 )
 
+// fakeEgressSelection 通过记录 dialer 是否被调用来识别返回的是哪个 dialer。
+//
+// Go 不允许比较函数指针，也无法用 reflect 可靠区分，因此只能用副作用判断。
 type fakeEgressSelection struct {
 	directDialerCalled bool
 }
 
+// TestEgressSelector 验证 direct 协议下各 egress 类型都能拿到直连 dialer，
+// 且 Lookup 不返回错误。
 func TestEgressSelector(t *testing.T) {
 	testcases := []struct {
 		name     string
@@ -162,11 +167,13 @@ func TestEgressSelector(t *testing.T) {
 	}
 }
 
+// fakeDirectDialer 标记直连 dialer 已被调用，返回 nil 连接便于断言。
 func (s *fakeEgressSelection) fakeDirectDialer(ctx context.Context, network, address string) (net.Conn, error) {
 	s.directDialerCalled = true
 	return nil, nil
 }
 
+// validateDirectDialer 调用 dialer 并检查它确实是直连实现（返回 nil 连接且被标记）。
 func validateDirectDialer(dialer utilnet.DialFunc, s *fakeEgressSelection) (bool, error) {
 	conn, err := dialer(context.Background(), "tcp", "127.0.0.1:8080")
 	if err != nil {
@@ -178,11 +185,13 @@ func validateDirectDialer(dialer utilnet.DialFunc, s *fakeEgressSelection) (bool
 	return s.directDialerCalled, nil
 }
 
+// fakeProxyServerConnector 可按需在“连接代理”或“建立隧道”阶段失败。
 type fakeProxyServerConnector struct {
 	connectorErr bool
 	proxierErr   bool
 }
 
+// connect 模拟连接 konnectivity 代理服务端。
 func (f *fakeProxyServerConnector) connect(context.Context) (proxier, error) {
 	if f.connectorErr {
 		return nil, fmt.Errorf("fake error")
@@ -190,10 +199,12 @@ func (f *fakeProxyServerConnector) connect(context.Context) (proxier, error) {
 	return &fakeProxier{err: f.proxierErr}, nil
 }
 
+// fakeProxier 模拟通过代理建立到目标地址的连接。
 type fakeProxier struct {
 	err bool
 }
 
+// proxy 按 err 返回错误或 nil 连接。
 func (f *fakeProxier) proxy(_ context.Context, _ string) (net.Conn, error) {
 	if f.err {
 		return nil, fmt.Errorf("fake error")
@@ -201,6 +212,9 @@ func (f *fakeProxier) proxy(_ context.Context, _ string) (net.Conn, error) {
 	return nil, nil
 }
 
+// TestMetrics 验证 egress dialer 在不同失败阶段上报的指标：
+// 连接代理失败记为 stage=connect，隧道建立失败记为 stage=proxy，
+// 成功则记录耗时直方图。
 func TestMetrics(t *testing.T) {
 	testcases := map[string]struct {
 		connectorErr bool
@@ -281,6 +295,8 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
+// TestKonnectivityClientMetrics 验证 konnectivity 客户端库的指标能被正确转发到
+// 本 apiserver 的 registry，覆盖包、流错误、拨号失败与连接数四类。
 func TestKonnectivityClientMetrics(t *testing.T) {
 	testcases := []struct {
 		name    string
@@ -347,6 +363,8 @@ konnectivity_network_proxy_client_client_connections{status="dialing"} 1
 	}
 }
 
+// TestGetTLSConfig 验证 TLSConfig 中的 ServerName 被原样传递：
+// 非空时用于 SNI 与证书校验，空时交由标准库根据地址推断。
 func TestGetTLSConfig(t *testing.T) {
 	tempDir := t.TempDir()
 

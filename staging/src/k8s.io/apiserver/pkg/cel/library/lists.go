@@ -106,6 +106,9 @@ import (
 type ListsOption func(*lists) *lists
 
 // ListsVersion sets the version of the lists library to use.
+//
+// 版本号控制函数集合的演进：新函数只在 version >= 1 时注册，保证旧版本的
+// 已编译表达式（以及已存储的 CRD 校验规则）行为不变。
 func ListsVersion(version uint32) ListsOption {
 	return func(lib *lists) *lists {
 		lib.version = version
@@ -122,20 +125,25 @@ func Lists(options ...ListsOption) cel.EnvOption {
 	return cel.Lib(l)
 }
 
+// listsLib 默认启用所有版本，供直接取用默认库的调用方使用。
 var listsLib = &lists{version: math.MaxUint32}
 
 type lists struct {
 	version uint32
 }
 
+// LibraryName 返回库名，用于 cel-go 的库去重与冲突检测。
 func (*lists) LibraryName() string {
 	return "kubernetes.lists"
 }
 
+// Types 返回空集合：列表函数只作用于已有类型，不引入新类型。
 func (*lists) Types() []*cel.Type {
 	return []*cel.Type{}
 }
 
+// declarations 声明所有重载；按类型参数展开成多个具体重载，是因为
+// CEL 的类型参数只能约束第一个操作数，而这里要约束的是 list<paramType>。
 func (l *lists) declarations() map[string][]cel.FunctionOpt {
 	decls := map[string][]cel.FunctionOpt{
 		"isSorted": templatedOverloads(comparableTypes, func(name string, paramType *cel.Type) cel.FunctionOpt {
@@ -168,6 +176,7 @@ func (l *lists) declarations() map[string][]cel.FunctionOpt {
 				cel.BinaryBinding(lastIndexOf)),
 		},
 	}
+	// includes 是 v1 新增函数；放入版本分支以免改变 v0 环境的行为。
 	if l.version >= 1 {
 		decls["includes"] = []cel.FunctionOpt{
 			cel.MemberOverload("list_includes_dyn_dyn", []*cel.Type{cel.DynType, cel.DynType}, cel.BoolType,
@@ -182,11 +191,14 @@ var paramA = cel.TypeParamType("A")
 // CEL typeParams can be used to constraint to a specific trait (e.g. traits.ComparableType) if the 1st operand is the type to constrain.
 // But the functions we need to constrain are <list<paramType>>, not just <paramType>.
 // Make sure the order of overload set is deterministic
+//
+// 用有序切片而不是 map 遍历，保证每次编译生成的重载顺序一致，避免不确定的匹配优先级。
 type namedCELType struct {
 	typeName string
 	celType  *cel.Type
 }
 
+// summableTypes 是 sum() 支持的类型；顺序即重载注册顺序。
 var summableTypes = []namedCELType{
 	{typeName: "int", celType: cel.IntType},
 	{typeName: "uint", celType: cel.UintType},
@@ -194,12 +206,15 @@ var summableTypes = []namedCELType{
 	{typeName: "duration", celType: cel.DurationType},
 }
 
+// zeroValuesOfSummableTypes 提供各类型的加法单位元，空列表 sum() 返回它。
 var zeroValuesOfSummableTypes = map[string]ref.Val{
 	"int":      types.Int(0),
 	"uint":     types.Uint(0),
 	"double":   types.Double(0.0),
 	"duration": types.Duration{Duration: 0},
 }
+
+// comparableTypes 是 isSorted/min/max 支持的类型；CEL 的可比较类型集合。
 var comparableTypes = []namedCELType{
 	{typeName: "int", celType: cel.IntType},
 	{typeName: "uint", celType: cel.UintType},
@@ -211,6 +226,7 @@ var comparableTypes = []namedCELType{
 	{typeName: "bytes", celType: cel.BytesType},
 }
 
+// CompileOptions 把声明表转换成 cel-go 的编译期选项。
 func (l *lists) CompileOptions() []cel.EnvOption {
 	options := []cel.EnvOption{}
 	for name, overloads := range l.declarations() {
@@ -220,16 +236,21 @@ func (l *lists) CompileOptions() []cel.EnvOption {
 }
 
 // IncludesOption returns the EnvOption to register the includes function directly.
+//
+// 单独暴露是为了让需要 includes 但不想引入整个库的调用方按需注册，
+// 同时避免与 Lists(v1) 重复注册。
 func IncludesOption() cel.EnvOption {
 	return cel.Function("includes",
 		cel.MemberOverload("list_includes_dyn_dyn", []*cel.Type{cel.DynType, cel.DynType}, cel.BoolType,
 			cel.BinaryBinding(includes)))
 }
 
+// ProgramOptions 返回空集合：所有函数都是纯计算，不需要运行时配置。
 func (*lists) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// isSorted 判断列表是否非递减有序；单元素与空列表视为有序。
 func isSorted(val ref.Val) ref.Val {
 	var prev traits.Comparer
 	iterable, ok := val.(traits.Iterable)
@@ -244,6 +265,7 @@ func isSorted(val ref.Val) ref.Val {
 		}
 		if prev != nil {
 			cmp := prev.Compare(next)
+			// 只检查“前 > 后”即判定无序，相等是允许的。
 			if cmp == types.IntOne {
 				return types.False
 			}
@@ -253,6 +275,7 @@ func isSorted(val ref.Val) ref.Val {
 	return types.True
 }
 
+// sum 返回一个求和的一元操作；init 提供空列表时的初值，由调用方按类型选定。
 func sum(init func() ref.Val) functions.UnaryOp {
 	return func(val ref.Val) ref.Val {
 		i := init()
@@ -288,14 +311,18 @@ func sum(init func() ref.Val) functions.UnaryOp {
 	}
 }
 
+// min 返回求最小值的一元操作。
 func min() functions.UnaryOp {
 	return cmp("min", types.IntOne)
 }
 
+// max 返回求最大值的一元操作。
 func max() functions.UnaryOp {
 	return cmp("max", types.IntNegOne)
 }
 
+// cmp 是 min/max 的共用实现：opPreferCmpResult 表示“比较结果等于它时替换当前最优值”。
+// 空列表返回错误而非零值，避免把“无定义”静默当成 0。
 func cmp(opName string, opPreferCmpResult ref.Val) functions.UnaryOp {
 	return func(val ref.Val) ref.Val {
 		var result traits.Comparer
@@ -326,6 +353,7 @@ func cmp(opName string, opPreferCmpResult ref.Val) functions.UnaryOp {
 	}
 }
 
+// indexOf 返回元素首次出现的下标，未找到返回 -1。
 func indexOf(list ref.Val, item ref.Val) ref.Val {
 	lister, ok := list.(traits.Lister)
 	if !ok {
@@ -340,6 +368,7 @@ func indexOf(list ref.Val, item ref.Val) ref.Val {
 	return types.Int(-1)
 }
 
+// lastIndexOf 返回元素最后一次出现的下标，未找到返回 -1。
 func lastIndexOf(list ref.Val, item ref.Val) ref.Val {
 	lister, ok := list.(traits.Lister)
 	if !ok {
@@ -354,6 +383,8 @@ func lastIndexOf(list ref.Val, item ref.Val) ref.Val {
 	return types.Int(-1)
 }
 
+// includes 支持两种语义：目标为列表时做成员判断，否则退化为相等比较
+// （因此 'model-a'.includes('model-a') 为 true）。
 func includes(target, arg ref.Val) ref.Val {
 	if list, ok := target.(traits.Lister); ok {
 		it := list.Iterator()

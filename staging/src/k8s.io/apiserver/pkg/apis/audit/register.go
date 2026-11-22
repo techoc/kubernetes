@@ -22,6 +22,8 @@ import (
 )
 
 // GroupName is the group name use in this package
+//
+// 审计 API 组名；内部版本与外部版本共享此组名，版本号用 runtime.APIVersionInternal 表示。
 const GroupName = "audit.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
@@ -38,10 +40,13 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
+	// SchemeBuilder 收集向 runtime.Scheme 注册审计内部类型的方法。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 把本包的已知类型注册到给定 scheme。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 注册审计内部版本的全部顶层类型（Event/Policy 及其 List）。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Event{},

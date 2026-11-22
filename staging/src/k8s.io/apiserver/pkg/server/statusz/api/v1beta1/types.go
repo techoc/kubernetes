@@ -22,6 +22,9 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // Statusz is a struct used for versioned statusz endpoint.
+//
+// 中文说明：这是 /statusz 的结构化响应体。字段一旦发布就属于 API 契约，
+// 新增字段必须可选，避免破坏旧客户端。
 type Statusz struct {
 	// TypeMeta is the type metadata for the object.
 	metav1.TypeMeta `json:""`
@@ -31,6 +34,8 @@ type Statusz struct {
 	// StartTime is the time the component process was initiated.
 	StartTime metav1.Time `json:"startTime"`
 	// UptimeSeconds is the duration in seconds for which the component has been running continuously.
+	//
+	// 中文说明：由 StartTime 推导而非独立维护，避免时钟回拨时两者互相矛盾。
 	UptimeSeconds int64 `json:"uptimeSeconds"`
 	// GoVersion is the version of the Go programming language used to build the binary.
 	// The format is not guaranteed to be consistent across different Go builds.
@@ -42,6 +47,8 @@ type Statusz struct {
 	// EmulationVersion is the Kubernetes API version which this component is emulating.
 	// if present, formatted as "<major>.<minor>"
 	// +optional
+	//
+	// 中文说明：仅在使用版本模拟（emulation）时出现；为空表示按真实构建版本行为运行。
 	EmulationVersion string `json:"emulationVersion,omitempty"`
 	// Paths contains relative URLs to other essential read-only endpoints for debugging and troubleshooting.
 	// +optional

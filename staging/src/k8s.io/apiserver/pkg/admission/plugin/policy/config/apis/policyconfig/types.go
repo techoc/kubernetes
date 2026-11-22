@@ -21,6 +21,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ValidatingAdmissionPolicyConfiguration provides configuration for the validating admission policy controller.
+// 该结构体是 apiserver 内部配置 API（非版本化），由 v1 转换而来；
+// 字段变更需同步修改 v1 类型与转换函数。
 type ValidatingAdmissionPolicyConfiguration struct {
 	metav1.TypeMeta
 
@@ -32,6 +34,8 @@ type ValidatingAdmissionPolicyConfiguration struct {
 	// Using this field requires the ManifestBasedAdmissionControlConfig
 	// feature gate to be enabled.
 	// +optional
+	// 该目录在启动时一次性加载，用于在控制面不可用时也能提供准入策略；
+	// 由于绕过 API 写入路径，加载内容不做准入校验，只接受 v1 版本以缩小解析面。
 	StaticManifestsDir string
 }
 
@@ -43,6 +47,7 @@ func (c *ValidatingAdmissionPolicyConfiguration) GetStaticManifestsDir() string 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // MutatingAdmissionPolicyConfiguration provides configuration for the mutating admission policy controller.
+// 与 ValidatingAdmissionPolicyConfiguration 结构对称，二者分别对应两类策略插件。
 type MutatingAdmissionPolicyConfiguration struct {
 	metav1.TypeMeta
 

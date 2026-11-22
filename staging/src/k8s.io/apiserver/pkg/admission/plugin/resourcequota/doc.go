@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package resourcequota enforces all incoming requests against any applied quota
 // in the namespace context of the request
+// 除配额校验外，该插件还会按 Configuration 的 LimitedResources 规则，
+// 拒绝那些消耗受限资源却没有覆盖配额的请求。
 package resourcequota

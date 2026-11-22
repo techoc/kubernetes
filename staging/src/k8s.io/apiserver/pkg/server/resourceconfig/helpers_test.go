@@ -31,6 +31,8 @@ import (
 	serverstore "k8s.io/apiserver/pkg/server/storage"
 )
 
+// TestParseRuntimeConfig 验证 --runtime-config 的合并语义：
+// 版本/资源级开关的优先级、api/all 与 api/ga 的批量设置、非法条目的容忍度。
 func TestParseRuntimeConfig(t *testing.T) {
 	scheme := newFakeScheme(t)
 	apiv1GroupVersion := apiv1.SchemeGroupVersion
@@ -520,6 +522,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			// 打印优先级版本，便于排查顺序相关的失败。
 			t.Log(scheme.PrioritizedVersionsAllGroups())
 			actualDisablers, err := MergeAPIResourceConfigs(test.defaultResourceConfig(), test.runtimeConfig, scheme)
 			if err == nil && test.err {
@@ -536,6 +539,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				t.Fatalf("%v: unexpected apiResourceDisablers. Actual: %v\n expected: %v", test.runtimeConfig, actualDisablers, expectedConfig)
 			}
 
+			// 逐资源比对启用状态，并额外遍历期望表以覆盖固定列表之外的资源。
 			for _, resourceToCheck := range apiResourcesToCheck() {
 				actual := actualDisablers.ResourceEnabled(resourceToCheck)
 				expected := test.expectedEnabledAPIs[resourceToCheck]
@@ -553,6 +557,8 @@ func TestParseRuntimeConfig(t *testing.T) {
 	}
 }
 
+// TestEmulationForwardCompatibleResourceConfig 验证模拟兼容模式：
+// 启用较低优先级版本时，同组同资源的高优先级版本也应被一并启用，除非被显式禁用。
 func TestEmulationForwardCompatibleResourceConfig(t *testing.T) {
 	scheme := newFakeScheme(t)
 	addTestGVs(t, scheme)
@@ -733,6 +739,8 @@ func TestEmulationForwardCompatibleResourceConfig(t *testing.T) {
 	}
 }
 
+// newFakeAPIResourceConfigSource 构造测试基线：默认启用若干 GA/beta 版本，
+// 并对 extensions/v1beta1 下的资源做细粒度启停。
 func newFakeAPIResourceConfigSource() *serverstore.ResourceConfig {
 	ret := serverstore.NewResourceConfig()
 	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha versions in the list.
@@ -765,6 +773,7 @@ func apiResourcesToCheck() []schema.GroupVersionResource {
 	}
 }
 
+// defaultFakeEnabledResources 是 newFakeAPIResourceConfigSource 对应的期望启用结果。
 func defaultFakeEnabledResources() map[schema.GroupVersionResource]bool {
 	return map[schema.GroupVersionResource]bool{
 		extensionsapiv1beta1.SchemeGroupVersion.WithResource("ingresses"):   true,
@@ -776,6 +785,7 @@ func defaultFakeEnabledResources() map[schema.GroupVersionResource]bool {
 	}
 }
 
+// newFakeScheme 注册测试所需的内置 API 并设置版本优先级。
 func newFakeScheme(t *testing.T) *runtime.Scheme {
 	ret := runtime.NewScheme()
 	require.NoError(t, apiv1.AddToScheme(ret))
@@ -788,6 +798,7 @@ func newFakeScheme(t *testing.T) *runtime.Scheme {
 	return ret
 }
 
+// addTestGVs 注册 test 组的多个版本与转换，用于验证版本优先级与资源差异。
 func addTestGVs(t *testing.T, s *runtime.Scheme) {
 	v1 := schema.GroupVersion{Group: "test", Version: "v1"}
 	v2alpha1 := schema.GroupVersion{Group: "test", Version: "v2alpha1"}

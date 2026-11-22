@@ -20,4 +20,8 @@ limitations under the License.
 // +groupName=apiserver.config.k8s.io
 
 // Package v1 is the v1 version of the API.
+//
+// 中文说明：本包只承载 apiserver 组件配置文件（admission/authentication/
+// authorization/encryption/tracing）的类型；它们不是 etcd 中的资源，因此
+// 走 config.k8s.io 组而非 core 组。
 package v1

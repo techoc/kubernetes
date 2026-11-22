@@ -34,11 +34,13 @@ import (
 // the parameter is nil.
 type Factory func(config io.Reader) (Interface, error)
 
+// Plugins 维护准入插件名到工厂的注册表；并发安全，注册与查找都在锁内完成。
 type Plugins struct {
 	lock     sync.Mutex
 	registry map[string]Factory
 }
 
+// NewPlugins 返回空的插件注册表，registry 在首次注册时惰性初始化。
 func NewPlugins() *Plugins {
 	return &Plugins{}
 }
@@ -46,6 +48,9 @@ func NewPlugins() *Plugins {
 // All registered admission options.
 var (
 	// PluginEnabledFn checks whether a plugin is enabled.  By default, if you ask about it, it's enabled.
+	//
+	// 该钩子由各发行版（如 kube-apiserver 的 feature gate 校验）覆盖，
+	// 用于在插件创建前做外部条件检查；默认全放行以保持库的通用性。
 	PluginEnabledFn = func(name string, config io.Reader) bool {
 		return true
 	}
@@ -55,6 +60,8 @@ var (
 type PluginEnabledFunc func(name string, config io.Reader) bool
 
 // Registered enumerates the names of all registered plugins.
+//
+// 返回排序后的名称列表，保证日志与错误输出稳定。
 func (ps *Plugins) Registered() []string {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
@@ -68,6 +75,8 @@ func (ps *Plugins) Registered() []string {
 
 // Register registers a plugin Factory by name. This
 // is expected to happen during app startup.
+//
+// 重复注册是编程错误，直接 Fatal 终止进程：静默覆盖会让实际生效的插件难以追踪。
 func (ps *Plugins) Register(name string, plugin Factory) {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
@@ -88,6 +97,9 @@ func (ps *Plugins) Register(name string, plugin Factory) {
 // the name is not known. The error is returned only when the named provider was
 // known but failed to initialize.  The config parameter specifies the io.Reader
 // handler of the configuration file for the cloud provider, or nil for no configuration.
+//
+// 返回的 bool 区分“未知插件”与“已知但初始化失败”：前者由调用方决定是否报错，
+// 后者一定是错误。
 func (ps *Plugins) getPlugin(name string, config io.Reader) (Interface, bool, error) {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
@@ -109,6 +121,9 @@ func (ps *Plugins) getPlugin(name string, config io.Reader) (Interface, bool, er
 }
 
 // splitStream reads the stream bytes and constructs two copies of it.
+//
+// 配置流只能读一次，但既要给 enabled 检查又要给工厂，因此先整体读入再复制两份。
+// 对 typed nil（如 (*bytes.Buffer)(nil)）也做判空，避免后续 ReadAll 返回误导性错误。
 func splitStream(config io.Reader) (io.Reader, io.Reader, error) {
 	if config == nil || reflect.ValueOf(config).IsNil() {
 		return nil, nil, nil
@@ -124,6 +139,10 @@ func splitStream(config io.Reader) (io.Reader, io.Reader, error) {
 
 // NewFromPlugins returns an admission.Interface that will enforce admission control decisions of all
 // the given plugins.
+//
+// 顺序即执行顺序：调用方传入的 pluginNames 顺序决定了 mutating 与 validating 链的顺序，
+// 因此配置解析阶段必须保持用户声明的次序。最终包一层 reinvocation handler，
+// 支持 mutating 插件在对象被后续插件修改后重新执行。
 func (ps *Plugins) NewFromPlugins(pluginNames []string, configProvider ConfigProvider, pluginInitializer PluginInitializer, decorator Decorator) (Interface, error) {
 	handlers := []Interface{}
 	mutationPlugins := []string{}
@@ -163,6 +182,8 @@ func (ps *Plugins) NewFromPlugins(pluginNames []string, configProvider ConfigPro
 }
 
 // InitPlugin creates an instance of the named interface.
+//
+// 空名字表示“不启用任何插件”，返回 (nil, nil) 而非错误，便于配置层统一处理。
 func (ps *Plugins) InitPlugin(name string, config io.Reader, pluginInitializer PluginInitializer) (Interface, error) {
 	if name == "" {
 		klog.Info("No admission plugin specified.")
@@ -198,8 +219,10 @@ func ValidateInitialization(plugin Interface) error {
 	return nil
 }
 
+// PluginInitializers 是初始化器的有序集合，按声明顺序依次注入依赖。
 type PluginInitializers []PluginInitializer
 
+// Initialize 依次调用每个初始化器；顺序保留是因为部分初始化器依赖前一个注入的结果。
 func (pp PluginInitializers) Initialize(plugin Interface) {
 	for _, p := range pp {
 		p.Initialize(plugin)

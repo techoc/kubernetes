@@ -41,15 +41,23 @@ import (
 )
 
 // Evaluator is used to see if quota constraints are satisfied.
+// Evaluator 是配额准入的对外入口，按请求属性判断是否满足配额约束。
 type Evaluator interface {
 	// Evaluate takes an operation and checks to see if quota constraints are satisfied.  It returns an error if they are not.
 	// The default implementation processes related operations in chunks when possible.
 	Evaluate(a admission.Attributes) error
 }
 
+// quotaEvaluator 实现 Evaluator。
+//
+// 为避免并发请求在同一命名空间上互相踩踏，同一命名空间的请求会被聚合成批，
+// 由单个 worker 串行处理：先基于一份“运行中的配额副本”试算，全部通过后再
+// 一次性回写配额状态。这既减少了更新冲突，也避免为每个请求单独 fanout。
 type quotaEvaluator struct {
 	quotaAccessor QuotaAccessor
 	// lockAcquisitionFunc acquires any required locks and returns a cleanup method to defer
+	// lockAcquisitionFunc 用于在跨 apiserver 实例时获取配额对象的分布式锁，
+	// 返回的清理函数必须 defer 调用以释放锁。
 	lockAcquisitionFunc func([]corev1.ResourceQuota) func()
 
 	ignoredResources map[schema.GroupResource]struct{}
@@ -70,25 +78,33 @@ type quotaEvaluator struct {
 	// controls the run method so that we can cleanly conform to the Evaluator interface
 	workers int
 	stopCh  <-chan struct{}
-	init    sync.Once
+	// init 保证 worker 只启动一次，即使 Evaluate 被并发调用。
+	init sync.Once
 
 	// lets us know what resources are limited by default
 	config *resourcequotaapi.Configuration
 }
 
+// admissionWaiter 表示一个正在等待配额决策的请求。
+// 结果字段在 worker goroutine 中写入，finished 关闭后由 Evaluate 读取；
+// close(finished) 提供 happens-before 保证，无需额外加锁。
 type admissionWaiter struct {
 	attributes admission.Attributes
 	finished   chan struct{}
 	result     error
 }
 
+// defaultDeny 是 waiter 的初始结果。
+// 只有确认配额更新成功后才被清除，因此任何遗漏路径都会默认拒绝，
+// 这是配额控制器的安全兜底。
 type defaultDeny struct{}
 
+// Error 返回固定的错误文本；该文本不会暴露给客户端，仅用于内部状态判断。
 func (defaultDeny) Error() string {
 	return "DEFAULT DENY"
 }
 
-// IsDefaultDeny returns true if the error is defaultDeny
+// IsDefaultDeny 判断错误是否为尚未决策的 defaultDeny 哨兵值。
 func IsDefaultDeny(err error) bool {
 	if err == nil {
 		return false
@@ -98,6 +114,7 @@ func IsDefaultDeny(err error) bool {
 	return ok
 }
 
+// newAdmissionWaiter 创建 waiter，初始结果为 defaultDeny。
 func newAdmissionWaiter(a admission.Attributes) *admissionWaiter {
 	return &admissionWaiter{
 		attributes: a,
@@ -109,6 +126,9 @@ func newAdmissionWaiter(a admission.Attributes) *admissionWaiter {
 // NewQuotaEvaluator configures an admission controller that can enforce quota constraints
 // using the provided registry.  The registry must have the capability to handle group/kinds that
 // are persisted by the server this admission controller is intercepting
+//
+// NewQuotaEvaluator 构造配额准入评估器。
+// 返回接口而非具体类型，便于在测试中替换。
 func NewQuotaEvaluator(quotaAccessor QuotaAccessor, ignoredResources map[schema.GroupResource]struct{}, quotaRegistry quota.Registry, lockAcquisitionFunc func([]corev1.ResourceQuota) func(), config *resourcequotaapi.Configuration, workers int, stopCh <-chan struct{}) Evaluator {
 	// if we get a nil config, just create an empty default.
 	if config == nil {
@@ -138,12 +158,16 @@ func NewQuotaEvaluator(quotaAccessor QuotaAccessor, ignoredResources map[schema.
 	// and often not started for some of those (e.g. aggregated apiserver)
 	// we explicitly shut it down on stopCh signal even if it wasn't
 	// effectively started.
+	// 队列内部有指标导出 goroutine，只有 ShutDown 能停止它；
+	// 而评估器并非总会被 start（例如聚合 apiserver 的某些层），
+	// 因此在构造时就挂上关闭钩子，避免 goroutine 泄漏。
 	go evaluator.shutdownOnStop()
 
 	return evaluator
 }
 
 // start begins watching and syncing.
+// start 启动 worker；重复调用由 init 保护。
 func (e *quotaEvaluator) start() {
 	defer utilruntime.HandleCrash()
 
@@ -152,18 +176,21 @@ func (e *quotaEvaluator) start() {
 	}
 }
 
+// shutdownOnStop 在 stopCh 关闭时停止队列。
 func (e *quotaEvaluator) shutdownOnStop() {
 	<-e.stopCh
 	klog.Infof("Shutting down quota evaluator")
 	e.queue.ShutDown()
 }
 
+// doWork 循环从队列取命名空间并处理，直到队列关闭。
 func (e *quotaEvaluator) doWork() {
 	workFunc := func() bool {
 		ns, admissionAttributes, quit := e.getWork()
 		if quit {
 			return true
 		}
+		// 无论是否有待处理项，都必须 completeWork 以归还队列条目。
 		defer e.completeWork(ns)
 		if len(admissionAttributes) == 0 {
 			return false
@@ -181,6 +208,8 @@ func (e *quotaEvaluator) doWork() {
 
 // checkAttributes iterates evaluates all the waiting admissionAttributes.  It will always notify all waiters
 // before returning.  The default is to deny.
+// checkAttributes 对一个命名空间的整批请求做配额检查。
+// 返回前必定关闭所有 waiter 的 finished 通道，因此不会让调用方永久阻塞。
 func (e *quotaEvaluator) checkAttributes(ns string, admissionAttributes []*admissionWaiter) {
 	// notify all on exit
 	defer func() {
@@ -197,6 +226,7 @@ func (e *quotaEvaluator) checkAttributes(ns string, admissionAttributes []*admis
 		return
 	}
 	// if limited resources are disabled, we can just return safely when there are no quotas.
+	// 没有配额且未启用“默认受限资源”时，直接放行，避免无谓的锁与更新。
 	limitedResourcesDisabled := len(e.config.LimitedResources) == 0
 	if len(quotas) == 0 && limitedResourcesDisabled {
 		for _, admissionAttribute := range admissionAttributes {
@@ -243,6 +273,7 @@ func (e *quotaEvaluator) checkQuotas(quotas []corev1.ResourceQuota, admissionAtt
 		}
 
 		// Don't update quota for admissionAttributes that correspond to dry-run requests
+		// dry-run 只验证不落账，否则会把试运行的用量永久计入配额。
 		if admissionAttribute.attributes.IsDryRun() {
 			admissionAttribute.result = nil
 			continue
@@ -263,6 +294,7 @@ func (e *quotaEvaluator) checkQuotas(quotas []corev1.ResourceQuota, admissionAtt
 			admissionAttribute.result = nil
 		}
 
+		// 把本请求的增量累积到运行副本上，后续请求看到的是累计后的用量。
 		quotas = newQuotas
 	}
 
@@ -316,6 +348,8 @@ func (e *quotaEvaluator) checkQuotas(quotas []corev1.ResourceQuota, admissionAtt
 	// you've added a new documented, then updated an old one, your resource matches both and you're only checking one
 	// updates for these quota names failed.  Get the current quotas in the namespace, compare by name, check to see if the
 	// resource versions have changed.  If not, we're going to fall through an fail everything.  If they all have, then we can try again
+	// 冲突重试：重新拉取命名空间内的配额，只对更新失败的配额重算，
+	// 因为其余配额的检查结果仍然有效。
 	newQuotas, err := e.quotaAccessor.GetQuotas(quotas[0].Namespace)
 	if err != nil {
 		// this means that updates failed.  Anything with a default deny error has failed and we need to let them know
@@ -341,6 +375,7 @@ func (e *quotaEvaluator) checkQuotas(quotas []corev1.ResourceQuota, admissionAtt
 	e.checkQuotas(quotasToCheck, admissionAttributes, remainingRetries-1)
 }
 
+// copyQuotas 深拷贝配额列表，用作运行副本。
 func copyQuotas(in []corev1.ResourceQuota) ([]corev1.ResourceQuota, error) {
 	out := make([]corev1.ResourceQuota, 0, len(in))
 	for _, quota := range in {
@@ -371,6 +406,7 @@ func limitedByDefault(usage corev1.ResourceList, limitedResources []resourcequot
 	for _, limitedResource := range limitedResources {
 		for k, v := range usage {
 			// if a resource is consumed, we need to check if it matches on the limited resource list.
+			// 只关注正用量：零或负用量不会消耗配额。
 			if v.Sign() == 1 {
 				// if we get a match, we add it to limited set
 				for _, matchContain := range limitedResource.MatchContains {
@@ -385,6 +421,7 @@ func limitedByDefault(usage corev1.ResourceList, limitedResources []resourcequot
 	return result
 }
 
+// getMatchedLimitedScopes 计算对象命中的受限 scope。
 func getMatchedLimitedScopes(evaluator quota.Evaluator, inputObject runtime.Object, limitedResources []resourcequotaapi.LimitedResource) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	scopes := []corev1.ScopedResourceSelectorRequirement{}
 	for _, limitedResource := range limitedResources {
@@ -402,6 +439,7 @@ func getMatchedLimitedScopes(evaluator quota.Evaluator, inputObject runtime.Obje
 // that capture what the usage would be if the request succeeded.  It return an error if there is insufficient quota to satisfy the request
 func (e *quotaEvaluator) checkRequest(quotas []corev1.ResourceQuota, a admission.Attributes) ([]corev1.ResourceQuota, error) {
 	evaluator := e.registry.Get(a.GetResource().GroupResource())
+	// 未注册 evaluator 的资源不受配额约束，原样返回。
 	if evaluator == nil {
 		return quotas, nil
 	}
@@ -409,6 +447,7 @@ func (e *quotaEvaluator) checkRequest(quotas []corev1.ResourceQuota, a admission
 }
 
 // CheckRequest is a static version of quotaEvaluator.checkRequest, possible to be called from outside.
+// CheckRequest 是 checkRequest 的无状态版本，供外部（如测试或其他组件）复用。
 func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluator quota.Evaluator,
 	limited []resourcequotaapi.LimitedResource) ([]corev1.ResourceQuota, error) {
 	if !evaluator.Handles(a) {
@@ -470,6 +509,8 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 		if err := evaluator.Constraints(restrictedResources, inputObject); err != nil {
 			return nil, admission.NewForbidden(a, fmt.Errorf("failed quota: %s: %v", resourceQuota.Name, err))
 		}
+		// 配额状态尚未由配额控制器初始化时拒绝请求，
+		// 否则会把未知用量当作 0 从而放行超额请求。
 		if !hasUsageStats(&resourceQuota, restrictedResources) {
 			return nil, admission.NewForbidden(a, fmt.Errorf("status unknown for quota: %s, resources: %s", resourceQuota.Name, prettyPrintResourceNames(restrictedResources)))
 		}
@@ -482,6 +523,8 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 	// the resource represents a number of unique references to external
 	// resource. In such a case an evaluator needs to process other objects in
 	// the same namespace which needs to be known.
+	// 部分 evaluator 需要命名空间信息才能统计（例如跨对象去重计数），
+	// 而客户端请求体中的对象可能未设置 namespace，这里补齐。
 	namespace := a.GetNamespace()
 	if accessor, err := meta.Accessor(inputObject); namespace != "" && err == nil {
 		if accessor.GetNamespace() == "" {
@@ -520,6 +563,8 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 
 		// if we can definitively determine that this is not a case of "create on update",
 		// then charge based on the delta.  Otherwise, bill the maximum
+		// 通过旧对象的 resourceVersion 判断这是真正的更新还是“create on update”：
+		// 无 RV 说明旧对象不存在，按全量计费更保守。
 		metadata, err := meta.Accessor(prevItem)
 		if err == nil {
 			if len(metadata.GetResourceVersion()) > 0 {
@@ -541,6 +586,7 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 							"resourceQuota", resourceQuota)
 						return quotas, err
 					}
+					// 只有旧对象也匹配该配额时才用增量，否则对象是从无到有地进入配额范围。
 					if match {
 						deltaUsageIndexMap[index] = deltaUsage
 					}
@@ -575,6 +621,7 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 	// verify that for every resource that had limited by default consumption
 	// enabled that there was a corresponding quota that covered its use.
 	// if not, we reject the request.
+	// “默认受限”资源必须被某个配额覆盖，否则无法限制其用量，拒绝请求。
 	hasNoCoveringQuota := limitedResourceNamesSet.Difference(restrictedResourcesSet)
 	if len(hasNoCoveringQuota) > 0 {
 		return quotas, admission.NewForbidden(a, fmt.Errorf("insufficient quota to consume: %v", strings.Join(hasNoCoveringQuota.List(), ",")))
@@ -595,6 +642,7 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 		return quotas, nil
 	}
 
+	// 以下在副本上累加用量，调用方在全部请求检查通过后再持久化。
 	outQuotas, err := copyQuotas(quotas)
 	if err != nil {
 		return nil, err
@@ -611,10 +659,12 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 		requestedUsage := quota.Mask(deltaUsage, hardResources)
 		newUsage := quota.Add(resourceQuota.Status.Used, requestedUsage)
 
+		// 更新 status 子资源时不再校验配额，否则配额控制器自身回写 used 会被拦截。
 		if a.GetSubresource() != "status" {
 			maskedNewUsage := quota.Mask(newUsage, quota.ResourceNames(requestedUsage))
 
 			if allowed, exceeded := quota.LessThanOrEqual(maskedNewUsage, resourceQuota.Status.Hard); !allowed {
+				// 错误消息只列出超出的资源，避免泄露完整配额详情。
 				failedRequestedUsage := quota.Mask(requestedUsage, exceeded)
 				failedUsed := quota.Mask(resourceQuota.Status.Used, exceeded)
 				failedHard := quota.Mask(resourceQuota.Status.Hard, exceeded)
@@ -634,6 +684,7 @@ func CheckRequest(quotas []corev1.ResourceQuota, a admission.Attributes, evaluat
 	return outQuotas, nil
 }
 
+// getScopeSelectorsFromQuota 把配额的 Scopes 与 ScopeSelector 统一转换成选择器表达式。
 func getScopeSelectorsFromQuota(quota corev1.ResourceQuota) []corev1.ScopedResourceSelectorRequirement {
 	selectors := []corev1.ScopedResourceSelectorRequirement{}
 	for _, scope := range quota.Spec.Scopes {
@@ -647,7 +698,9 @@ func getScopeSelectorsFromQuota(quota corev1.ResourceQuota) []corev1.ScopedResou
 	return selectors
 }
 
+// Evaluate 是 Evaluator 的实现：把请求交给按命名空间聚合的 worker 并等待结果。
 func (e *quotaEvaluator) Evaluate(a admission.Attributes) error {
+	// 首次调用时启动 worker，保证即便装配层忘记显式启动也能工作。
 	e.init.Do(e.start)
 
 	// is this resource ignored?
@@ -662,6 +715,7 @@ func (e *quotaEvaluator) Evaluate(a admission.Attributes) error {
 	if evaluator == nil {
 		// create an object count evaluator if no evaluator previously registered
 		// note, we do not need aggregate usage here, so we pass a nil informer func
+		// 未知资源退化为“对象计数”评估器，至少能支持 count/<resource> 形式的配额。
 		evaluator = generic.NewObjectCountEvaluator(gr, nil, "")
 		e.registry.Add(evaluator)
 		klog.Infof("quota admission added evaluator for: %s", gr)
@@ -676,6 +730,7 @@ func (e *quotaEvaluator) Evaluate(a admission.Attributes) error {
 	e.addWork(waiter)
 
 	// wait for completion or timeout
+	// 超时后返回 500：此处无法确定配额是否满足，不能默认放行。
 	select {
 	case <-waiter.finished:
 	case <-time.After(10 * time.Second):
@@ -685,6 +740,7 @@ func (e *quotaEvaluator) Evaluate(a admission.Attributes) error {
 	return waiter.result
 }
 
+// addWork 把请求加入对应命名空间的待处理列表。
 func (e *quotaEvaluator) addWork(a *admissionWaiter) {
 	e.workLock.Lock()
 	defer e.workLock.Unlock()
@@ -692,9 +748,12 @@ func (e *quotaEvaluator) addWork(a *admissionWaiter) {
 	ns := a.attributes.GetNamespace()
 	// this Add can trigger a Get BEFORE the work is added to a list, but this is ok because the getWork routine
 	// waits the worklock before retrieving the work to do, so the writes in this method will be observed
+	// 先入队再写 map：getWork 取到条目后会获取同一把锁，
+	// 因此这里对 work/dirtyWork 的写入必然对它可见。
 	e.queue.Add(ns)
 
 	if e.inProgress.Has(ns) {
+		// 该命名空间正在处理中，放入 dirty 列表待本轮结束后立即再处理。
 		e.dirtyWork[ns] = append(e.dirtyWork[ns], a)
 		return
 	}
@@ -702,6 +761,7 @@ func (e *quotaEvaluator) addWork(a *admissionWaiter) {
 	e.work[ns] = append(e.work[ns], a)
 }
 
+// completeWork 结束一个命名空间的处理，并把 dirty 列表提升为下一轮工作。
 func (e *quotaEvaluator) completeWork(ns string) {
 	e.workLock.Lock()
 	defer e.workLock.Unlock()
@@ -728,6 +788,8 @@ func (e *quotaEvaluator) getWork() (string, []*admissionWaiter, bool) {
 	// at this point, we know we have a coherent view of e.work.  It is entirely possible
 	// that our workqueue has another item requeued to it, but we'll pick it up early.  This ok
 	// because the next time will go into our dirty list
+	// 取出工作后立即标记 inProgress，之后 addWork 会转入 dirtyWork，
+	// 从而保证同一命名空间不会有两个 worker 并发处理。
 
 	work := e.work[ns]
 	delete(e.work, ns)
@@ -744,6 +806,7 @@ func prettyPrint(item corev1.ResourceList) string {
 	for key := range item {
 		keys = append(keys, string(key))
 	}
+	// 排序保证错误消息稳定，便于测试断言与日志比对。
 	sort.Strings(keys)
 	for _, key := range keys {
 		value := item[corev1.ResourceName(key)]
@@ -753,6 +816,7 @@ func prettyPrint(item corev1.ResourceList) string {
 	return strings.Join(parts, ",")
 }
 
+// prettyPrintResourceNames 把资源名排序后拼接，用于稳定的错误消息。
 func prettyPrintResourceNames(a []corev1.ResourceName) string {
 	values := []string{}
 	for _, value := range a {

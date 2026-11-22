@@ -38,6 +38,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestParseTimeout 覆盖 timeout 查询参数的解析：缺省、0s、非法值。
+// 中文说明：0s 与缺省都表示“使用服务端默认上限”，只有真正无法解析时才报错。
 func TestParseTimeout(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -93,6 +95,9 @@ func TestParseTimeout(t *testing.T) {
 	}
 }
 
+// TestWithRequestDeadline 验证 deadline 过滤器对各输入形态的处理：
+// 正常超时、0/缺省走服务端上限、超过上限被截断、long-running 不设 deadline、
+// 非法值返回 400。中文说明：long-running 请求（watch/exec 等）不能被 deadline 杀死。
 func TestWithRequestDeadline(t *testing.T) {
 	const requestTimeoutMaximum = 60 * time.Second
 	tests := []struct {
@@ -216,6 +221,10 @@ func TestWithRequestDeadline(t *testing.T) {
 	}
 }
 
+// TestWithRequestDeadlineWithClock 用假时钟验证 deadline 基于请求到达时间
+// （ReceivedTimestamp）而非当前时间计算。
+// 中文说明：若实现误用 clock.Now()，在已过一分钟的假时钟下会得到接近一分钟的
+// 剩余时间，本用例会立即失败。
 func TestWithRequestDeadlineWithClock(t *testing.T) {
 	var (
 		hasDeadlineGot bool
@@ -253,6 +262,8 @@ func TestWithRequestDeadlineWithClock(t *testing.T) {
 	}
 }
 
+// TestWithRequestDeadlineWithInvalidTimeoutIsAudited 验证非法 timeout 被拒绝时
+// 仍然产生审计事件，避免“被过滤器短路”的请求逃过审计。
 func TestWithRequestDeadlineWithInvalidTimeoutIsAudited(t *testing.T) {
 	var handlerInvoked bool
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
@@ -283,6 +294,8 @@ func TestWithRequestDeadlineWithInvalidTimeoutIsAudited(t *testing.T) {
 	}
 }
 
+// TestWithRequestDeadlineWithPanic 验证 handler panic 时 deadline 过滤器不吞掉 panic，
+// 且会取消请求 context，确保下游 watch/长任务能及时退出。
 func TestWithRequestDeadlineWithPanic(t *testing.T) {
 	var (
 		panicErrGot interface{}
@@ -319,6 +332,8 @@ func TestWithRequestDeadlineWithPanic(t *testing.T) {
 	}
 }
 
+// TestWithRequestDeadlineWithRequestTimesOut 验证请求 context 在超时后确实被取消，
+// handler 能通过 ctx.Done() 观察到 DeadlineExceeded。
 func TestWithRequestDeadlineWithRequestTimesOut(t *testing.T) {
 	timeout := 100 * time.Millisecond
 	var errGot error
@@ -347,6 +362,8 @@ func TestWithRequestDeadlineWithRequestTimesOut(t *testing.T) {
 	}
 }
 
+// TestWithFailedRequestAudit 验证请求失败路径的审计：错误响应通过 auditResponseWriter
+// 记录，事件阶段为 ResponseStarted 且带 ResponseStatus。
 func TestWithFailedRequestAudit(t *testing.T) {
 	tests := []struct {
 		name                          string
@@ -442,6 +459,7 @@ func TestWithFailedRequestAudit(t *testing.T) {
 	}
 }
 
+// newRequest 构造带审计上下文的测试请求，便于断言过滤器是否写入审计事件。
 func newRequest(t *testing.T, requestURL string) *http.Request {
 	ctx := t.Context()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
@@ -464,6 +482,7 @@ func newSerializer() runtime.NegotiatedSerializer {
 	return serializer.NewCodecFactory(scheme).WithoutConversion()
 }
 
+// fakeRequestResolver 返回空的 RequestInfo，使测试不依赖具体的路径解析逻辑。
 type fakeRequestResolver struct{}
 
 func (r fakeRequestResolver) NewRequestInfo(req *http.Request) (*request.RequestInfo, error) {

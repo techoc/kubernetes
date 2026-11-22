@@ -36,6 +36,8 @@ type InformerForResourceFunc func(schema.GroupVersionResource) (informers.Generi
 
 // ListerFuncForResourceFunc knows how to provision a lister from an informer func.
 // The lister returns errors until the informer has synced.
+//
+// 在缓存同步前返回错误而非空列表，防止配额计算把“尚未知”误判为“使用量为 0”。
 func ListerFuncForResourceFunc(f InformerForResourceFunc) quota.ListerForResourceFunc {
 	return func(gvr schema.GroupVersionResource) (cache.GenericLister, error) {
 		informer, err := f(gvr)
@@ -51,6 +53,7 @@ func ListerFuncForResourceFunc(f InformerForResourceFunc) quota.ListerForResourc
 }
 
 // cachedHasSynced returns a function that calls hasSynced() until it returns true once, then returns true
+// 缓存结果是因为 HasSynced 可能涉及锁；一旦为 true 便不可逆，可安全记忆化。
 func cachedHasSynced(hasSynced func() bool) func() bool {
 	cache := &atomic.Bool{}
 	cache.Store(false)
@@ -75,18 +78,23 @@ type protectedLister struct {
 	delegate    cache.GenericLister
 }
 
+// List 在缓存未同步时返回 notReadyErr。
 func (p *protectedLister) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	if !p.hasSynced() {
 		return nil, p.notReadyErr
 	}
 	return p.delegate.List(selector)
 }
+
+// Get 在缓存未同步时返回 notReadyErr。
 func (p *protectedLister) Get(name string) (runtime.Object, error) {
 	if !p.hasSynced() {
 		return nil, p.notReadyErr
 	}
 	return p.delegate.Get(name)
 }
+
+// ByNamespace 返回同样受同步状态保护的命名空间视图。
 func (p *protectedLister) ByNamespace(namespace string) cache.GenericNamespaceLister {
 	return &protectedNamespaceLister{p.hasSynced, p.notReadyErr, p.delegate.ByNamespace(namespace)}
 }
@@ -98,12 +106,15 @@ type protectedNamespaceLister struct {
 	delegate    cache.GenericNamespaceLister
 }
 
+// List 在缓存未同步时返回 notReadyErr。
 func (p *protectedNamespaceLister) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	if !p.hasSynced() {
 		return nil, p.notReadyErr
 	}
 	return p.delegate.List(selector)
 }
+
+// Get 在缓存未同步时返回 notReadyErr。
 func (p *protectedNamespaceLister) Get(name string) (runtime.Object, error) {
 	if !p.hasSynced() {
 		return nil, p.notReadyErr
@@ -123,6 +134,9 @@ func ListResourceUsingListerFunc(l quota.ListerForResourceFunc, resource schema.
 }
 
 // ObjectCountQuotaResourceNameFor returns the object count quota name for specified groupResource
+//
+// 核心组使用 count/<resource>，其他组使用 count/<resource>.<group>，
+// 与历史配额名称保持兼容。
 func ObjectCountQuotaResourceNameFor(groupResource schema.GroupResource) corev1.ResourceName {
 	if len(groupResource.Group) == 0 {
 		return corev1.ResourceName("count/" + groupResource.Resource)
@@ -143,11 +157,14 @@ type UsageFunc func(object runtime.Object) (corev1.ResourceList, error)
 type MatchingResourceNamesFunc func(input []corev1.ResourceName) []corev1.ResourceName
 
 // MatchesNoScopeFunc returns false on all match checks
+// 用于不区分作用域的资源（如对象计数），表示没有任何 scope 命中。
 func MatchesNoScopeFunc(scope corev1.ScopedResourceSelectorRequirement, object runtime.Object) (bool, error) {
 	return false, nil
 }
 
 // Matches returns true if the quota matches the specified item.
+//
+// 匹配需同时满足：资源名有交集，且所有 scope 选择器均命中（多个 scope 之间是 AND）。
 func Matches(
 	resourceQuota *corev1.ResourceQuota, item runtime.Object,
 	matchFunc MatchingResourceNamesFunc, scopeFunc MatchesScopeFunc) (bool, error) {
@@ -168,6 +185,8 @@ func Matches(
 	return matchResource && matchScope, nil
 }
 
+// getScopeSelectorsFromQuota 把旧式 Scopes 与新的 ScopeSelector 统一为选择器列表；
+// 旧式 scope 等价于 Exists 操作符。
 func getScopeSelectorsFromQuota(quota *corev1.ResourceQuota) []corev1.ScopedResourceSelectorRequirement {
 	selectors := []corev1.ScopedResourceSelectorRequirement{}
 	for _, scope := range quota.Spec.Scopes {
@@ -182,6 +201,9 @@ func getScopeSelectorsFromQuota(quota *corev1.ResourceQuota) []corev1.ScopedReso
 }
 
 // CalculateUsageStats is a utility function that knows how to calculate aggregate usage.
+//
+// 注意：scopeFunc 返回错误时当前实现直接返回部分结果且不返回错误
+// （保留既有行为以兼容调用方），调用方需自行判断结果完整性。
 func CalculateUsageStats(options quota.UsageStatsOptions,
 	listFunc ListFuncByNamespace,
 	scopeFunc MatchesScopeFunc,
@@ -231,6 +253,8 @@ func CalculateUsageStats(options quota.UsageStatsOptions,
 // objectCountEvaluator provides an implementation for quota.Evaluator
 // that associates usage of the specified resource based on the number of items
 // returned by the specified listing function.
+//
+// 按对象数量计量配额，只关心 Create 且非子资源的请求。
 type objectCountEvaluator struct {
 	// GroupResource that this evaluator tracks.
 	// It is used to construct a generic object count quota name
@@ -309,6 +333,7 @@ func NewObjectCountEvaluator(
 	groupResource schema.GroupResource, listFuncByNamespace ListFuncByNamespace,
 	alias corev1.ResourceName) quota.Evaluator {
 
+	// 主名称总是存在；alias 仅用于兼容旧配额名称，两者共享同一使用量。
 	resourceNames := []corev1.ResourceName{ObjectCountQuotaResourceNameFor(groupResource)}
 	if len(alias) > 0 {
 		resourceNames = append(resourceNames, alias)

@@ -21,4 +21,8 @@ limitations under the License.
 // +groupName=apiserver.config.k8s.io
 
 // Package v1alpha1 is the v1alpha1 version of the API.
+//
+// 该包同时承载两个 API 组的类型（apiserver.k8s.io 与 apiserver.config.k8s.io），
+// 主要存放 kube-apiserver 的配置文件结构（如认证、鉴权、准入、加密配置）。
+// 版本为 v1alpha1，字段语义可能变化，使用方需容忍后续的破坏性调整。
 package v1alpha1

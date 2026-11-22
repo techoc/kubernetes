@@ -50,10 +50,12 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// makeTestPod 构造带默认节点与标签的测试 Pod，便于索引/选择器相关用例复用。
 func makeTestPod(name string, resourceVersion uint64) *v1.Pod {
 	return makeTestPodDetails(name, resourceVersion, "some-node", map[string]string{"k8s-app": "my-app"})
 }
 
+// makeTestPodDetails 构造可指定节点与标签的测试 Pod。
 func makeTestPodDetails(name string, resourceVersion uint64, nodeName string, labels map[string]string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -68,6 +70,7 @@ func makeTestPodDetails(name string, resourceVersion uint64, nodeName string, la
 	}
 }
 
+// makeTestStoreElement 把 Pod 包装成存储元素，key 前缀与 newTestWatchCache 中的 keyFunc 保持一致。
 func makeTestStoreElement(pod *v1.Pod) *store.Element {
 	return &store.Element{
 		Key:    "/prefix/ns/" + pod.Name,
@@ -77,6 +80,8 @@ func makeTestStoreElement(pod *v1.Pod) *store.Element {
 	}
 }
 
+// testWatchCache 在真实 watchCache 上附加测试所需的通道：
+// bookmarkRevision 用于模拟存储层推进 resourceVersion，stopCh 用于终止后台进度请求协程。
 type testWatchCache struct {
 	*watchCache
 
@@ -84,6 +89,7 @@ type testWatchCache struct {
 	stopCh           chan struct{}
 }
 
+// getAllEventsSince 是 getAllEventsSinceLocked 的加锁包装，并把 interval 全部消费成切片。
 func (w *testWatchCache) getAllEventsSince(resourceVersion uint64, opts storage.ListOptions) ([]*watchCacheEvent, error) {
 	cacheInterval, err := w.getCacheIntervalForEvents(resourceVersion, opts)
 	if err != nil {
@@ -105,6 +111,7 @@ func (w *testWatchCache) getAllEventsSince(resourceVersion uint64, opts storage.
 	return result, nil
 }
 
+// getCacheIntervalForEvents 在读锁下构造事件区间，调用方负责消费返回的区间。
 func (w *testWatchCache) getCacheIntervalForEvents(resourceVersion uint64, opts storage.ListOptions) (*watchCacheInterval, error) {
 	w.RLock()
 	defer w.RUnlock()
@@ -113,6 +120,8 @@ func (w *testWatchCache) getCacheIntervalForEvents(resourceVersion uint64, opts 
 }
 
 // newTestWatchCache just adds a fake clock.
+//
+// 强制把容量设为用例期望值：真实实现会按负载动态调整容量，而多数用例需要确定性行为。
 func newTestWatchCache(capacity int, eventFreshDuration time.Duration, indexers *cache.Indexers) *testWatchCache {
 	keyFunc := func(obj runtime.Object) (string, error) {
 		return storage.NamespaceKeyFunc("/prefix/", obj)
@@ -147,8 +156,10 @@ func newTestWatchCache(capacity int, eventFreshDuration time.Duration, indexers 
 	return wc
 }
 
+// immediateTickerFactory 生成“立即触发”的定时器，使进度请求无需等待真实时间。
 type immediateTickerFactory struct{}
 
+// NewTimer 返回一个在创建时即就绪的定时器。
 func (t *immediateTickerFactory) NewTimer(d time.Duration) clock.Timer {
 	timer := immediateTicker{
 		c: make(chan time.Time),
@@ -157,10 +168,12 @@ func (t *immediateTickerFactory) NewTimer(d time.Duration) clock.Timer {
 	return &timer
 }
 
+// immediateTicker 的 C() 通道由 Reset 异步写入当前时间，模拟立即到期。
 type immediateTicker struct {
 	c chan time.Time
 }
 
+// Reset 清理未消费的触发后重新投递一次，返回值表示此前是否有待消费的触发。
 func (t *immediateTicker) Reset(d time.Duration) (active bool) {
 	select {
 	case <-t.c:
@@ -173,10 +186,12 @@ func (t *immediateTicker) Reset(d time.Duration) (active bool) {
 	return active
 }
 
+// C 返回触发通道。
 func (t *immediateTicker) C() <-chan time.Time {
 	return t.c
 }
 
+// Stop 表示是否有未消费的触发，并保证之后不再有新的触发。
 func (t *immediateTicker) Stop() bool {
 	select {
 	case <-t.c:
@@ -186,6 +201,8 @@ func (t *immediateTicker) Stop() bool {
 	}
 }
 
+// RequestWatchProgress 模拟存储层响应进度请求：从 bookmarkRevision 读取新版本并推进缓存。
+// 异步执行以避免在进度请求回调中直接修改缓存造成重入。
 func (w *testWatchCache) RequestWatchProgress(ctx context.Context) error {
 	go func() {
 		select {
@@ -198,10 +215,13 @@ func (w *testWatchCache) RequestWatchProgress(ctx context.Context) error {
 	return nil
 }
 
+// Stop 关闭后台进度请求协程。
 func (w *testWatchCache) Stop() {
 	close(w.stopCh)
 }
 
+// TestWatchCacheBasic 覆盖 watchCache 的 Add/Update/Delete/List/Replace 基本语义，
+// 并校验底层存储索引与预期元素一致。
 func TestWatchCacheBasic(t *testing.T) {
 	s := newTestWatchCache(2, DefaultEventFreshDuration, &cache.Indexers{})
 	defer s.Stop()
@@ -280,6 +300,7 @@ func TestWatchCacheBasic(t *testing.T) {
 	}
 }
 
+// TestEvents 验证 getAllEventsSince 在缓存未满/已满时的事件类型、前后对象与“过旧版本”错误。
 func TestEvents(t *testing.T) {
 	store := newTestWatchCache(5, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
@@ -405,6 +426,8 @@ func TestEvents(t *testing.T) {
 	}
 }
 
+// TestMarker 验证 Replace 写入的起始标记：从标记之前的版本请求会得到“过旧”，
+// 从标记版本请求则返回空集（标记本身不产生事件），之后的增量事件正常返回。
 func TestMarker(t *testing.T) {
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
@@ -441,6 +464,8 @@ func TestMarker(t *testing.T) {
 	}
 }
 
+// TestWaitUntilFreshAndGetList 验证列表读取会等待缓存推进到请求的 resourceVersion，
+// 并按 Predicate 选择标签/字段索引；无可用索引时回退全量扫描（indexUsed 为空）。
 func TestWaitUntilFreshAndGetList(t *testing.T) {
 	ctx := context.Background()
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{
@@ -553,6 +578,8 @@ func TestWaitUntilFreshAndGetList(t *testing.T) {
 	}
 }
 
+// TestWaitUntilFreshAndListFromCache 验证请求的 resourceVersion 超过缓存当前版本时，
+// 会主动请求 bookmark 推进进度，而不是直接失败。
 func TestWaitUntilFreshAndListFromCache(t *testing.T) {
 	forceRequestWatchProgressSupport(t)
 	ctx := context.Background()
@@ -580,6 +607,7 @@ func TestWaitUntilFreshAndListFromCache(t *testing.T) {
 	}
 }
 
+// TestWaitUntilFreshAndGet 验证按 key 读取同样会等待缓存达到目标版本。
 func TestWaitUntilFreshAndGet(t *testing.T) {
 	ctx := context.Background()
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
@@ -607,6 +635,8 @@ func TestWaitUntilFreshAndGet(t *testing.T) {
 	}
 }
 
+// TestWaitUntilFreshAndListTimeout 验证等待超时：错误必须同时是 Timeout 且带有
+// “resource version 过大”的原因，便于上层把它映射为 504/重试提示。
 func TestWaitUntilFreshAndListTimeout(t *testing.T) {
 	ctx := context.Background()
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
@@ -638,18 +668,24 @@ func TestWaitUntilFreshAndListTimeout(t *testing.T) {
 	}
 }
 
+// testLW 用函数字段实现 ListerWatcher，方便在测试里替换 List/Watch 行为。
 type testLW struct {
 	ListFunc  func(options metav1.ListOptions) (runtime.Object, error)
 	WatchFunc func(options metav1.ListOptions) (watch.Interface, error)
 }
 
+// List 委托给 ListFunc。
 func (t *testLW) List(options metav1.ListOptions) (runtime.Object, error) {
 	return t.ListFunc(options)
 }
+
+// Watch 委托给 WatchFunc。
 func (t *testLW) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	return t.WatchFunc(options)
 }
 
+// TestReflectorForWatchCache 验证 watchCache 可作为 reflector 的 Store：
+// List 的 resourceVersion 会推进缓存，之后按该版本读取应立即可用。
 func TestReflectorForWatchCache(t *testing.T) {
 	ctx := context.Background()
 	store := newTestWatchCache(5, DefaultEventFreshDuration, &cache.Indexers{})
@@ -689,6 +725,10 @@ func TestReflectorForWatchCache(t *testing.T) {
 	}
 }
 
+// TestDynamicCache 验证历史缓冲按事件新鲜度动态扩缩容：
+// 近期事件多则扩容（不超过上界），历史事件占比高则收缩（不低于下界），
+// 并保证缩容后 startIndex 与元素位置仍然正确。用例覆盖容量是否为 4 的倍数、
+// startIndex 是否为 0 等组合，因为环形缓冲的搬迁逻辑对这些边界敏感。
 func TestDynamicCache(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -943,6 +983,7 @@ func TestDynamicCache(t *testing.T) {
 	}
 }
 
+// loadEventWithDuration 按固定间隔填充历史缓冲，用于构造不同“新鲜度”分布。
 func loadEventWithDuration(cache *testWatchCache, count int, interval time.Duration) {
 	for i := 0; i < count; i++ {
 		event := &watchCacheEvent{
@@ -954,6 +995,8 @@ func loadEventWithDuration(cache *testWatchCache, count int, interval time.Durat
 	cache.history.endIndex = cache.history.startIndex + count
 }
 
+// checkCacheElements 校验 [startIndex,endIndex) 内每个逻辑位置都映射到正确的物理槽位，
+// 用于发现缩容/扩容后元素搬迁的错误。
 func checkCacheElements(cache *testWatchCache) bool {
 	for i := cache.history.startIndex; i < cache.history.endIndex; i++ {
 		location := i % cache.history.capacity
@@ -964,6 +1007,8 @@ func checkCacheElements(cache *testWatchCache) bool {
 	return true
 }
 
+// TestCacheIncreaseDoesNotBreakWatch 验证扩容后旧事件被正确淘汰：
+// 从已滚出缓存的版本开始 watch 必须得到“过旧”错误，而不是静默返回不完整历史。
 func TestCacheIncreaseDoesNotBreakWatch(t *testing.T) {
 	store := newTestWatchCache(2, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
@@ -997,6 +1042,9 @@ func TestCacheIncreaseDoesNotBreakWatch(t *testing.T) {
 	}
 }
 
+// TestSuggestedWatchChannelSize 验证 watch 通道容量建议值随缓存容量、索引与
+// trigger 使用情况变化：容量越大、越依赖全量触发时，通道应越大以避免丢弃事件；
+// 事件新鲜期越长，单位时间事件越少，建议值相应降低。
 func TestSuggestedWatchChannelSize(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -1164,6 +1212,8 @@ func TestSuggestedWatchChannelSize(t *testing.T) {
 	}
 }
 
+// TestCapacityUpperBound 验证容量上界按事件新鲜期成比例放大，但设有绝对上限，
+// 防止极端配置导致内存失控。
 func TestCapacityUpperBound(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -1207,6 +1257,7 @@ func TestCapacityUpperBound(t *testing.T) {
 	}
 }
 
+// BenchmarkWatchCache_updateCache 测量缓冲已满时单次写入（含扩容/淘汰判定）的开销。
 func BenchmarkWatchCache_updateCache(b *testing.B) {
 	store := newTestWatchCache(defaultUpperBoundCapacity, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
@@ -1223,6 +1274,8 @@ func BenchmarkWatchCache_updateCache(b *testing.B) {
 	}
 }
 
+// TestHistogramCacheReadWait 验证等待缓存变新鲜的耗时被记录到直方图：
+// resourceVersion 非 0 时记录实际等待时间；为 0 时无需等待，不产生观测。
 func TestHistogramCacheReadWait(t *testing.T) {
 	registry := k8smetrics.NewKubeRegistry()
 	if err := registry.Register(metrics.WatchCacheReadWait); err != nil {
@@ -1310,6 +1363,8 @@ func TestHistogramCacheReadWait(t *testing.T) {
 	}
 }
 
+// TestWatchCacheSnapshotConcurrency 验证在并发写入下从缓存快照做 LIST 的一致性：
+// 返回对象的 resourceVersion 不得超过列表版本；Exact 匹配时还必须与请求版本完全一致。
 func TestWatchCacheSnapshotConcurrency(t *testing.T) {
 	testCases := []struct {
 		name                          string
@@ -1354,6 +1409,8 @@ func TestWatchCacheSnapshotConcurrency(t *testing.T) {
 	}
 }
 
+// testWatchCacheSnapshotConcurrency 是并发快照测试的主体：后台持续更新同一个对象，
+// 前台反复 LIST 并校验版本约束。
 func testWatchCacheSnapshotConcurrency(t *testing.T, s *testWatchCache, resourceVersionMatch metav1.ResourceVersionMatch, expectItemRVLessOrEqualListRV, expectExactResourceVersion bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1406,6 +1463,7 @@ func testWatchCacheSnapshotConcurrency(t *testing.T, s *testWatchCache, resource
 	wg.Wait()
 }
 
+// getMaxItemRV 返回列表中最大的对象 resourceVersion，用于断言快照一致性。
 func getMaxItemRV(t *testing.T, versioner storage.Versioner, items []interface{}) uint64 {
 	var maxRV uint64
 	for _, item := range items {

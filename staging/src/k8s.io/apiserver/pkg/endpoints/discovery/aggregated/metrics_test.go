@@ -32,6 +32,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// formatExpectedMetrics 生成期望的聚合计数文本；计数为 0 时不输出任何行，
+// 因为 CounterVec 在未被观测前不会出现在 gather 结果中。
 func formatExpectedMetrics(aggregationCount int) io.Reader {
 	expected := ``
 	if aggregationCount > 0 {
@@ -47,6 +49,7 @@ aggregator_discovery_aggregation_count_total %d
 	return strings.NewReader(fmt.Sprintf(expected, args...))
 }
 
+// TestBasicMetrics 验证聚合结果被缓存：连续两次请求只触发一次聚合。
 func TestBasicMetrics(t *testing.T) {
 	legacyregistry.Reset()
 	manager := discoveryendpoint.NewResourceManager("apis")
@@ -68,6 +71,7 @@ func TestBasicMetrics(t *testing.T) {
 	}
 }
 
+// TestMetricsModified 验证发现内容变化后会重新聚合，计数递增。
 func TestMetricsModified(t *testing.T) {
 	legacyregistry.Reset()
 	manager := discoveryendpoint.NewResourceManager("apis")
@@ -92,6 +96,8 @@ func TestMetricsModified(t *testing.T) {
 	}
 }
 
+// TestPeerAggregatedDiscoveryMetrics 验证 peer 聚合发现的三类指标：
+// 缓存命中、缓存未命中（需重新跨节点聚合）与 no-peer 请求计数。
 func TestPeerAggregatedDiscoveryMetrics(t *testing.T) {
 	legacyregistry.Reset()
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.UnknownVersionInteroperabilityProxy, true)
@@ -113,11 +119,13 @@ func TestPeerAggregatedDiscoveryMetrics(t *testing.T) {
 	_ = legacyregistry.Register(discoveryendpoint.NoPeerDiscoveryRequestCounter)
 
 	// Make 3 peer-aggregated requests.
+	// 前两次命中缓存，第三次带 as=APIGroupDiscoveryList 的请求仍走同一缓存。
 	fetchPath(wrapped, "application/json", "/apis", "")
 	fetchPath(wrapped, "application/json;profile=foo", "/apis", "")
 	fetchPath(wrapped, "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList", "/apis", "")
 
 	// Make 2 no-peer discovery requests.
+	// 每次 InvalidateCache 后再次请求，确保计数不被缓存吞掉。
 	fetchPath(wrapped, "application/json;profile=nopeer", "/apis", "")
 	peerAggregatedDiscoveryManager.InvalidateCache()
 	fetchPath(wrapped, "application/json;profile=nopeer", "/apis", "")

@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestSortResourceInfosByGroupResource 验证排序按 (group, resource) 字典序，
+// 且空输入保持 nil/空切片语义（便于稳定比较）。
 func TestSortResourceInfosByGroupResource(t *testing.T) {
 	tests := []struct {
 		infos    []ResourceInfo

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件测试 StreamTunnel 代理：SPDY-over-WebSocket 升级后把流原样隧道到 kubelet，
+// 以及响应头拦截、连接包装、状态码指标等边界行为。
+
 package proxy
 
 import (
@@ -46,11 +49,15 @@ import (
 	"k8s.io/streaming/pkg/httpstream/spdy"
 )
 
+// TestTunnelingHandler_UpgradeStreamingAndTunneling 端到端验证：
+// 客户端通过 SPDY-over-WebSocket 升级到 TunnelingHandler，handler 再向 kubelet 发起 SPDY 连接，
+// 两端流被透明桥接；最后断言 101 状态码被计入指标。
 func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
 	// Create fake upstream SPDY server, with channel receiving SPDY streams.
+	// 该服务端模拟 kubelet：完成握手后把收到的流交给测试，并在 stopServerChan 关闭前保持连接。
 	streamChan := make(chan httpstream.Stream)
 	defer close(streamChan)
 	stopServerChan := make(chan struct{})
@@ -96,6 +103,7 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 	// Create a SPDY client stream, which will queue a SPDY server stream
 	// on the stream creation channel. Send random data on the client stream
 	// reading off the SPDY server stream, and validating it was tunneled.
+	// 1 MiB 随机数据足以暴露分片/缓冲处理错误，而不会让测试过慢。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	_, err = rand.Read(randomData)
@@ -136,6 +144,8 @@ apiserver_stream_tunnel_requests_total{code="101"} 1
 	}
 }
 
+// TestTunnelingHandler_BadRequestWithoutProtcols 验证客户端未协商子协议时直接返回 400，
+// 不会向上游发起任何 SPDY 连接（因此无需上游测试服务器）。
 func TestTunnelingHandler_BadRequestWithoutProtcols(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -173,6 +183,8 @@ apiserver_stream_tunnel_requests_total{code="400"} 1
 	}
 }
 
+// TestTunnelingHandler_BadHandshakeError 验证上游握手失败时错误被传播给客户端，
+// 并记录为 400 类指标而非 101。
 func TestTunnelingHandler_BadHandshakeError(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -224,6 +236,8 @@ apiserver_stream_tunnel_requests_total{code="400"} 1
 	}
 }
 
+// TestTunnelingHandler_UpstreamSPDYServerErrorPropagated 验证上游返回的 5xx 状态码
+// 原样传播给客户端，并按具体状态码分别计数，便于区分不同故障类型。
 func TestTunnelingHandler_UpstreamSPDYServerErrorPropagated(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -282,6 +296,8 @@ apiserver_stream_tunnel_requests_total{code="` + codeStr + `"} 1
 	}
 }
 
+// TestTunnelingResponseWriter_Hijack 验证 Hijack 的状态机：
+// 正常劫持后返回连接；已写入或已劫持时再次劫持必须报错。
 func TestTunnelingResponseWriter_Hijack(t *testing.T) {
 	// Regular hijack returns connection, nil bufio, and no error.
 	trw := &tunnelingResponseWriter{conn: &mockConn{}}
@@ -305,6 +321,9 @@ func TestTunnelingResponseWriter_Hijack(t *testing.T) {
 	assert.ErrorContains(t, err, "connection has already been hijacked")
 }
 
+// TestTunnelingResponseWriter_DelegateResponseWriter 验证写入状态机：
+// 劫持后写入返回 ErrHijacked；已写入后 WriteHeader 不再生效；
+// 通过 WriteHeader 发送 101 属于错误用法，应改为 500（升级必须走劫持连接）。
 func TestTunnelingResponseWriter_DelegateResponseWriter(t *testing.T) {
 	// Validate Header() for delegate response writer.
 	expectedHeader := http.Header{}
@@ -346,6 +365,8 @@ func TestTunnelingResponseWriter_DelegateResponseWriter(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, trw.w.(*mockResponseWriter).statusCode, "Internal server error written")
 }
 
+// TestTunnelingWebsocketUpgraderConn_LocalRemoteAddress 验证地址透传，
+// 以及底层连接为 nil 时返回零值 noopAddr 而不是 panic。
 func TestTunnelingWebsocketUpgraderConn_LocalRemoteAddress(t *testing.T) {
 	expectedLocalAddr := &net.TCPAddr{
 		IP:   net.IPv4(127, 0, 0, 1),
@@ -372,6 +393,8 @@ func TestTunnelingWebsocketUpgraderConn_LocalRemoteAddress(t *testing.T) {
 	assert.Equal(t, "", noopAddr{}.String(), "noopAddr String() returns empty string")
 }
 
+// TestTunnelingWebsocketUpgraderConn_SetDeadline 验证各 deadline 方法透传到底层连接，
+// 并在连接为 nil 时安全返回 nil。
 func TestTunnelingWebsocketUpgraderConn_SetDeadline(t *testing.T) {
 	tc := &tunnelingWebsocketUpgraderConn{conn: &mockConn{}}
 	expected := time.Now()
@@ -396,6 +419,8 @@ func TestTunnelingWebsocketUpgraderConn_SetDeadline(t *testing.T) {
 	assert.NoError(t, tc.SetReadDeadline(expected), "SetReadDeadline() with nil connection always returns nil error")
 }
 
+// expectedContentLengthHeaders 等常量定义带 Content-Length 的响应样本，
+// 用于验证拦截器按长度精确切分“头 + 体”，而不是简单按空行切分。
 var expectedContentLengthHeaders = http.Header{
 	"Content-Length": []string{"25"},
 	"Date":           []string{"Sun, 25 Feb 2024 08:09:25 GMT"},
@@ -436,6 +461,9 @@ const invalidResponseData = "INVALID/1.1 101 Switching Protocols\r\n" +
 	"X-App-Protocol: portforward.k8s.io\r\n" +
 	"\r\n"
 
+// TestTunnelingHandler_HeaderInterceptingConn 覆盖响应头拦截器的关键边界：
+// 一次写入、逐字节写入、跨越头/体边界的写入、仅用 \n 分隔、Content-Length 分片，
+// 以及非法响应的报错行为。
 func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 	// Basic http response is intercepted correctly; no extra data sent to net.Conn.
 	t.Run("simple-no-body", func(t *testing.T) {
@@ -603,12 +631,15 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 	})
 }
 
+// mockConnInitializer 同时充当“可初始化连接”和其底层连接，
+// 分别记录 InitializeWrite 写入的原始响应头与后续 body。
 type mockConnInitializer struct {
 	resp                *http.Response
 	initializeWriteConn *mockConn
 	*mockConn
 }
 
+// InitializeWrite 记录解析出的响应与原始头字节；body 由 headerInterceptingConn 另行写出。
 func (m *mockConnInitializer) InitializeWrite(backendResponse *http.Response, backendResponseBytes []byte) error {
 	m.resp = backendResponse
 	_, err := m.initializeWriteConn.Write(backendResponseBytes)
@@ -616,8 +647,10 @@ func (m *mockConnInitializer) InitializeWrite(backendResponse *http.Response, ba
 }
 
 // mockConn implements "net.Conn" interface.
+// 仅实现测试需要的行为：记录写入内容与 deadline。
 var _ net.Conn = &mockConn{}
 
+// mockConn 是记录型 net.Conn 测试替身。
 type mockConn struct {
 	written       []byte
 	localAddr     *net.TCPAddr
@@ -627,47 +660,73 @@ type mockConn struct {
 	deadlineErr   error
 }
 
+// Write 追加写入内容并报告全部写入。
 func (mc *mockConn) Write(p []byte) (int, error) {
 	mc.written = append(mc.written, p...)
 	return len(p), nil
 }
 
+// Read 恒返回 (0, nil)：测试不通过该连接读取。
 func (mc *mockConn) Read(p []byte) (int, error) { return 0, nil }
-func (mc *mockConn) Close() error               { return nil }
-func (mc *mockConn) LocalAddr() net.Addr        { return mc.localAddr }
-func (mc *mockConn) RemoteAddr() net.Addr       { return mc.remoteAddr }
+
+// Close 空实现。
+func (mc *mockConn) Close() error { return nil }
+
+// LocalAddr 返回预设的本地地址。
+func (mc *mockConn) LocalAddr() net.Addr { return mc.localAddr }
+
+// RemoteAddr 返回预设的远端地址。
+func (mc *mockConn) RemoteAddr() net.Addr { return mc.remoteAddr }
+
+// SetDeadline 同时设置读写 deadline，并返回预设错误。
 func (mc *mockConn) SetDeadline(t time.Time) error {
 	mc.SetReadDeadline(t)  //nolint:errcheck
 	mc.SetWriteDeadline(t) // nolint:errcheck
 	return mc.deadlineErr
 }
-func (mc *mockConn) SetReadDeadline(t time.Time) error  { mc.readDeadline = t; return mc.deadlineErr }
+
+// SetReadDeadline 记录读 deadline。
+func (mc *mockConn) SetReadDeadline(t time.Time) error { mc.readDeadline = t; return mc.deadlineErr }
+
+// SetWriteDeadline 记录写 deadline。
 func (mc *mockConn) SetWriteDeadline(t time.Time) error { mc.writeDeadline = t; return mc.deadlineErr }
 
 // mockResponseWriter implements "http.ResponseWriter" interface
+// 记录 header、body 与状态码，用于断言包装器的转发行为。
 type mockResponseWriter struct {
 	header     http.Header
 	written    []byte
 	statusCode int
 }
 
+// Header 返回可修改的响应头。
 func (mrw *mockResponseWriter) Header() http.Header { return mrw.header }
+
+// Write 追加响应体。
 func (mrw *mockResponseWriter) Write(p []byte) (int, error) {
 	mrw.written = append(mrw.written, p...)
 	return len(p), nil
 }
+
+// WriteHeader 记录状态码。
 func (mrw *mockResponseWriter) WriteHeader(statusCode int) { mrw.statusCode = statusCode }
 
 // fakeResponder implements "rest.Responder" interface.
+// 错误响应器在测试中不做任何输出，避免干扰隧道数据。
 var _ rest.Responder = &fakeResponder{}
 
+// fakeResponder 是 no-op 的 rest.Responder。
 type fakeResponder struct{}
 
+// Object 忽略对象响应。
 func (fr *fakeResponder) Object(statusCode int, obj runtime.Object) {}
-func (fr *fakeResponder) Error(err error)                           {}
+
+// Error 忽略错误响应。
+func (fr *fakeResponder) Error(err error) {}
 
 // justQueueStream skips the usual stream validation before
 // queueing the stream on the stream channel.
+// 测试只需要拿到流本身，因此跳过生产实现中的头部校验与回执等待。
 func justQueueStream(streams chan httpstream.Stream) func(httpstream.Stream, <-chan struct{}) error {
 	return func(stream httpstream.Stream, replySent <-chan struct{}) error {
 		streams <- stream

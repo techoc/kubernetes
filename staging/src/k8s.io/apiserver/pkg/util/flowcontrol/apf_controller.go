@@ -56,10 +56,14 @@ import (
 	flowcontrollister "k8s.io/client-go/listers/flowcontrol/v1"
 )
 
+// timeFmt 是日志中时间戳的格式，精确到毫秒即可，避免日志行过长。
 const timeFmt = "2006-01-02T15:04:05.999"
 
 const (
 	// priorityLevelMaxSeatsPercent is the percentage of the nominalCL used as max seats allocatable from work estimator
+	//
+	// 单个优先级级别可从工作估算器申请的最大席位数占比，限制宽请求对全局
+	// 并发容量的占用，避免小请求被饿死。
 	priorityLevelMaxSeatsPercent = float64(0.15)
 )
 
@@ -193,6 +197,8 @@ type configController struct {
 	nominalCLSum int
 }
 
+// updateAttempt 记录一次 FlowSchema status 更新尝试，用于限速：
+// 同一对象每分钟最多更新 6 次，防止与其它 apiserver 互相打架导致写风暴。
 type updateAttempt struct {
 	timeUpdated  time.Time
 	updatedItems sets.String // FlowSchema names
@@ -252,6 +258,9 @@ type priorityLevelState struct {
 	currentCL int
 }
 
+// seatDemandStats 汇总一个调优周期内的席位需求统计。
+// update 会丢弃零时长样本，并在偏差为 NaN（样本极少）时按 0 处理，
+// 以指数平滑方式得到稳定的需求估计，作为并发配额调整的目标值。
 type seatDemandStats struct {
 	avg           float64
 	stdDev        float64
@@ -259,6 +268,8 @@ type seatDemandStats struct {
 	smoothed      float64
 }
 
+// update 由积分器结果更新平滑统计；envelope = avg + stdDev 作为目标，
+// smoothed 只允许单调上升或按系数衰减，避免需求估计剧烈抖动。
 func (stats *seatDemandStats) update(obs fq.IntegratorResults) {
 	stats.highWatermark = int(math.Round(obs.Max))
 	if obs.Duration <= 0 {
@@ -274,6 +285,9 @@ func (stats *seatDemandStats) update(obs fq.IntegratorResults) {
 }
 
 // NewTestableController is extra flexible to facilitate testing
+//
+// 注意：函数名虽然是 NewTestableController，但返回的是生产用的 configController，
+// 仅仅把依赖（时钟、队列工厂、informer 工厂等）显式传入以便测试替换。
 func newTestableController(config TestableConfig) *configController {
 	cfgCtlr := &configController{
 		name:                   config.Name,
@@ -375,6 +389,8 @@ func (cfgCtlr *configController) Run(stopCh <-chan struct{}) error {
 	defer cfgCtlr.configQueue.ShutDown()
 
 	klog.Info("Starting API Priority and Fairness config controller")
+	// 必须等两个 informer 完成初次同步，否则会用不完整的配置启动限流，
+	// 可能把请求错误地归入 catch-all。
 	if ok := cache.WaitForCacheSync(stopCh, cfgCtlr.plInformerSynced, cfgCtlr.fsInformerSynced); !ok {
 		return fmt.Errorf("Never achieved initial sync")
 	}
@@ -390,12 +406,17 @@ func (cfgCtlr *configController) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// updateBorrowing 周期性（borrowingAdjustmentPeriod）重新计算各级别的
+// CurrentCL。调用方需持锁？——不需要：方法内部自行加写锁。
 func (cfgCtlr *configController) updateBorrowing() {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
 	cfgCtlr.updateBorrowingLocked(true, cfgCtlr.priorityLevelStates)
 }
 
+// updateBorrowingLocked 是席位借用算法的核心：先读取各优先级的席位需求，
+// 再在“最小保证（minCL）—最大可借（maxCL）”区间内按公平分配求解 CurrentCL。
+// 调用方必须持有写锁。
 func (cfgCtlr *configController) updateBorrowingLocked(setCompleters bool, plStates map[string]*priorityLevelState) {
 	items := make([]allocProblemItem, 0, len(plStates))
 	nonExemptPLNames := make([]string, 0, len(plStates))
@@ -404,10 +425,13 @@ func (cfgCtlr *configController) updateBorrowingLocked(setCompleters bool, plSta
 	var minCLSum, minCurrentCLSum int  // sums over non-exempt classes
 	remainingServerCL := cfgCtlr.nominalCLSum
 	for plName, plState := range plStates {
+		// 每个调整周期读取并重置需求积分器，得到本周期的高水位与平滑值。
 		obs := plState.seatDemandIntegrator.Reset()
 		plState.seatDemandStats.update(obs)
 		var minCurrentCL int
 		if plState.pl.Spec.Type == flowcontrol.PriorityLevelEnablementExempt {
+			// Exempt 级别不参与公平分配，直接按需求高水位保证其并发，
+			// 并从可分配总量中扣除。
 			minCurrentCL = max(plState.minCL, plState.seatDemandStats.highWatermark)
 			cclOfExempt[plName] = minCurrentCL
 			remainingServerCL -= minCurrentCL
@@ -430,12 +454,16 @@ func (cfgCtlr *configController) updateBorrowingLocked(setCompleters bool, plSta
 		}
 	}
 	if len(items) == 0 && cfgCtlr.nominalCLSum > 0 {
+		// 有名义容量却没有任何可调级别，说明配置内部不一致；只记录错误并
+		// 保留现状，避免把容量清零导致服务不可用。
 		klog.ErrorS(nil, "Impossible: no priority levels", "plStates", cfgCtlr.priorityLevelStates)
 		return
 	}
 	var allocs []float64
 	var shareFrac, fairFrac float64
 	var err error
+	// 三段式：剩余容量不足最小保证时按比例压缩；只够最小保证时给定 minCurrentCL；
+	// 否则做公平分配。
 	if remainingServerCL <= minCLSum {
 		metrics.SetFairFrac(0)
 	} else if remainingServerCL <= minCurrentCLSum {
@@ -444,6 +472,7 @@ func (cfgCtlr *configController) updateBorrowingLocked(setCompleters bool, plSta
 	} else {
 		allocs, fairFrac, err = computeConcurrencyAllocation(cfgCtlr.nominalCLSum, items)
 		if err != nil {
+			// 分配求解失败时退回到当前值（而不是清零），保证限流配置始终可用。
 			klog.ErrorS(err, "Unable to derive new concurrency limits", "plNames", nonExemptPLNames, "items", items)
 			allocs = make([]float64, len(items))
 			for idx, plName := range nonExemptPLNames {
@@ -505,6 +534,9 @@ func (cfgCtlr *configController) runWorker() {
 
 // processNextWorkItem works on one entry from the work queue.
 // Only invoke this in the one and only worker goroutine.
+//
+// 失败走 rate-limited 重试；需要延迟的情况（如状态更新过于频繁）用
+// AddAfter 而不消耗重试退避。
 func (cfgCtlr *configController) processNextWorkItem() bool {
 	obj, shutdown := cfgCtlr.configQueue.Get()
 	if shutdown {
@@ -554,6 +586,9 @@ func (cfgCtlr *configController) syncOne() (specificDelay time.Duration, err err
 // passes over PriorityLevelConfigurations and one pass over the
 // FlowSchemas --- with the work dvided among the passes according to
 // those dependencies.
+//
+// 所有对象一次性处理的好处是：FlowSchema 引用不到 PL 时可以直接在同一轮
+// 判定为 Dangling，而不需要多轮收敛。
 type cfgMeal struct {
 	cfgCtlr *configController
 
@@ -577,6 +612,8 @@ type cfgMeal struct {
 }
 
 // A buffered set of status updates for FlowSchemas
+//
+// 同时保留新值与旧值，便于日志中展示差异，也方便判断是否真的需要写入。
 type fsStatusUpdate struct {
 	flowSchema *flowcontrol.FlowSchema
 	condition  flowcontrol.FlowSchemaCondition
@@ -586,6 +623,9 @@ type fsStatusUpdate struct {
 // digestConfigObjects is given all the API objects that configure
 // cfgCtlr and writes its consequent new configState.
 // Only invoke this in the one and only worker goroutine
+//
+// 持锁完成“消化”，随后在锁外写回 FlowSchema status —— 写 API 可能再次触发
+// 本控制器，持锁写会造成死锁。
 func (cfgCtlr *configController) digestConfigObjects(newPLs []*flowcontrol.PriorityLevelConfiguration, newFSs []*flowcontrol.FlowSchema) (time.Duration, error) {
 	fsStatusUpdates := cfgCtlr.lockAndDigestConfigObjects(newPLs, newFSs)
 	var errs []error
@@ -625,6 +665,7 @@ func (cfgCtlr *configController) digestConfigObjects(newPLs []*flowcontrol.Prior
 	return suggestedDelay, utilerrors.NewAggregate(errs)
 }
 
+// apply 用 server-side apply 只写 status，避免与其他控制器争用 spec。
 func apply(client flowcontrolclient.FlowSchemaInterface, fsu fsStatusUpdate, asFieldManager string) error {
 	applyOptions := metav1.ApplyOptions{FieldManager: asFieldManager, Force: true}
 
@@ -634,6 +675,8 @@ func apply(client flowcontrolclient.FlowSchemaInterface, fsu fsStatusUpdate, asF
 	return err
 }
 
+// toFlowSchemaApplyConfiguration 把内部 fsStatusUpdate 转换为 SSA 的
+// ApplyConfiguration；目前只维护 Dangling 一个 condition。
 func toFlowSchemaApplyConfiguration(fsUpdate fsStatusUpdate) *flowcontrolapplyconfiguration.FlowSchemaApplyConfiguration {
 	condition := flowcontrolapplyconfiguration.FlowSchemaCondition().
 		WithType(fsUpdate.condition.Type).
@@ -650,6 +693,8 @@ func toFlowSchemaApplyConfiguration(fsUpdate fsStatusUpdate) *flowcontrolapplyco
 
 // shouldDelayUpdate checks to see if a flowschema has been updated too often and returns true if a delay is needed.
 // Only invoke this in the one and only worker goroutine
+//
+// 顺带清理超过一分钟的历史记录，避免切片无限增长。
 func (cfgCtlr *configController) shouldDelayUpdate(flowSchemaName string) bool {
 	numUpdatesInPastMinute := 0
 	oneMinuteAgo := cfgCtlr.clock.Now().Add(-1 * time.Minute)
@@ -676,6 +721,8 @@ func (cfgCtlr *configController) addUpdateResult(result updateAttempt) {
 	cfgCtlr.mostRecentUpdates = append([]updateAttempt{result}, cfgCtlr.mostRecentUpdates...)
 }
 
+// lockAndDigestConfigObjects 在持有写锁的情况下完成整个消化流程，并在
+// 返回后由调用方在锁外执行 status 更新。
 func (cfgCtlr *configController) lockAndDigestConfigObjects(newPLs []*flowcontrol.PriorityLevelConfiguration, newFSs []*flowcontrol.FlowSchema) []fsStatusUpdate {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
@@ -712,6 +759,9 @@ func (cfgCtlr *configController) lockAndDigestConfigObjects(newPLs []*flowcontro
 
 // Digest the new set of PriorityLevelConfiguration objects.
 // Pretend broken ones do not exist.
+//
+// 复用已有 priorityLevelState 以保留队列与需求统计；这样配置更新不会丢弃
+// 正在排队的请求。spec 非法的对象被跳过，其 FlowSchema 会因引用失效被摘除。
 func (meal *cfgMeal) digestNewPLsLocked(newPLs []*flowcontrol.PriorityLevelConfiguration) {
 	for _, pl := range newPLs {
 		state := meal.cfgCtlr.priorityLevelStates[pl.Name]
@@ -752,6 +802,9 @@ func (meal *cfgMeal) digestNewPLsLocked(newPLs []*flowcontrol.PriorityLevelConfi
 // reflect this.  This function also adds any missing mandatory
 // FlowSchema objects.  The given objects must all have distinct
 // names.
+//
+// 重名对象只可能来自直接的 API 写入（校验层已禁止），因此直接 panic：
+// 继续执行会导致优先级顺序不确定，比崩溃更难排查。
 func (meal *cfgMeal) digestFlowSchemasLocked(newFSs []*flowcontrol.FlowSchema) {
 	fsSeq := make(apihelpers.FlowSchemaSequence, 0, len(newFSs))
 	fsMap := make(map[string]*flowcontrol.FlowSchema, len(newFSs))
@@ -805,6 +858,9 @@ func (meal *cfgMeal) digestFlowSchemasLocked(newFSs []*flowcontrol.FlowSchema) {
 // behavior, or are still busy; for the rest: drop it if it has no
 // queues, otherwise start the quiescing process if that has not
 // already been started.
+//
+// 关键不变量：只要还有请求在该级别排队/执行，就不能删除状态，否则请求会
+// 失去归属；此时只标记 quiescing，待排空后再回收。
 func (meal *cfgMeal) processOldPLsLocked() {
 	for plName, plState := range meal.cfgCtlr.priorityLevelStates {
 		if meal.newPLStates[plName] != nil {
@@ -854,6 +910,9 @@ func (meal *cfgMeal) processOldPLsLocked() {
 // For all the priority levels of the new config, divide up the
 // server's total concurrency limit among them and create/update their
 // QueueSets.
+//
+// concurrencyLimit 按 nominalConcurrencyShares 占比分配；lendable/borrowing
+// 百分比决定 minCL/maxCL，从而支持级别之间的容量借用。
 func (meal *cfgMeal) finishQueueSetReconfigsLocked() {
 	for plName, plState := range meal.newPLStates {
 		nominalConcurrencyShares, lendablePercent, borrowingLimitPercent := plSpecCommons(plState.pl)
@@ -913,6 +972,9 @@ func (meal *cfgMeal) finishQueueSetReconfigsLocked() {
 // queueSetCompleterForPL returns an appropriate QueueSetCompleter for the
 // given priority level configuration.  Returns nil and an error if the given
 // object is malformed in a way that is a problem for this package.
+//
+// 这里会校验 “Type 与 union 字段一致”“Exempt 名字必须固定”等结构性约束，
+// 不满足时把该 PL 当作不存在，而不是让控制器 panic。
 func queueSetCompleterForPL(qsf fq.QueueSetFactory, queues fq.QueueSet, pl *flowcontrol.PriorityLevelConfiguration, reqsIntPair metrics.RatioedGaugePair, execSeatsObs metrics.RatioedGauge, seatDemandGauge metrics.Gauge) (fq.QueueSetCompleter, error) {
 	if (pl.Spec.Type == flowcontrol.PriorityLevelEnablementLimited) != (pl.Spec.Limited != nil) {
 		return nil, errors.New("broken union structure at the top, for Limited")
@@ -953,6 +1015,8 @@ func queueSetCompleterForPL(qsf fq.QueueSetFactory, queues fq.QueueSet, pl *flow
 	return qsc, err
 }
 
+// presyncFlowSchemaStatus 计算该 FlowSchema 期望的 Dangling condition；
+// 仅当与现有值不同才记录一次待写 status，减少无谓的 API 写入。
 func (meal *cfgMeal) presyncFlowSchemaStatus(fs *flowcontrol.FlowSchema, isDangling bool, plName string) {
 	danglingCondition := apihelpers.GetFlowSchemaConditionByType(fs, flowcontrol.FlowSchemaConditionDangling)
 	if danglingCondition == nil {
@@ -988,6 +1052,9 @@ func (meal *cfgMeal) presyncFlowSchemaStatus(fs *flowcontrol.FlowSchema, isDangl
 
 // imaginePL adds a priority level based on one of the mandatory ones
 // that does not actually exist (right now) as a real API object.
+//
+// 这是自举（bootstrap）机制：即使 operator 删除了 mandatory 对象，
+// apiserver 仍按内置原型提供 exempt 与 catch-all 级别。
 func (meal *cfgMeal) imaginePL(proto *flowcontrol.PriorityLevelConfiguration) {
 	klog.V(3).Infof("No %s PriorityLevelConfiguration found, imagining one", proto.Name)
 	labelValues := []string{proto.Name}
@@ -1019,6 +1086,8 @@ func (meal *cfgMeal) imaginePL(proto *flowcontrol.PriorityLevelConfiguration) {
 // The returned bool indicates whether the request is exempt from
 // limitation.  The startWaitingTime is when the request started
 // waiting in its queue, or `Time{}` if this did not happen.
+//
+// 只读取配置（RLock），不阻塞在队列上；真正的排队由 StartRequest 负责。
 func (cfgCtlr *configController) startRequest(ctx context.Context, rd RequestDigest,
 	noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
 	workEstimator func() fcrequest.WorkEstimate,
@@ -1082,6 +1151,8 @@ func (cfgCtlr *configController) startRequest(ctx context.Context, rd RequestDig
 // maybeReap will remove the last internal traces of the named
 // priority level if it has no more use.  Call this after getting a
 // clue that the given priority level is undesired and idle.
+//
+// 这里只向配置队列投递一个事件，真正的删除发生在下一次 syncOne。
 func (cfgCtlr *configController) maybeReap(plName string) {
 	cfgCtlr.lock.RLock()
 	defer cfgCtlr.lock.RUnlock()
@@ -1104,6 +1175,9 @@ func (cfgCtlr *configController) maybeReap(plName string) {
 // it has no more use.  Call this if both (1) plState.queues is
 // non-nil and reported being idle, and (2) cfgCtlr's lock has not
 // been released since then.
+//
+// 名字中的 “ReadLocked” 指调用方持有读锁：本函数只读字段并投递事件，
+// 不在持锁期间做任何可能阻塞的写操作。
 func (cfgCtlr *configController) maybeReapReadLocked(plName string, plState *priorityLevelState) {
 	if !(plState.quiescing && plState.numPending == 0) {
 		return
@@ -1113,6 +1187,9 @@ func (cfgCtlr *configController) maybeReapReadLocked(plName string, plState *pri
 }
 
 // computeFlowDistinguisher extracts the flow distinguisher according to the given method
+//
+// 区分符用于把同一条流打散到不同队列，实现 shuffle sharding；method 为 nil
+// 表示不做区分（返回空串，所有请求落入同一队列）。
 func computeFlowDistinguisher(rd RequestDigest, method *flowcontrol.FlowDistinguisherMethod) string {
 	if method == nil {
 		return ""
@@ -1128,6 +1205,8 @@ func computeFlowDistinguisher(rd RequestDigest, method *flowcontrol.FlowDistingu
 	}
 }
 
+// hashFlowID 把 (FlowSchema 名, 区分符) 哈希为 64 位值，供队列选择使用。
+// 使用 0 字节分隔，避免 "ab"+"c" 与 "a"+"bc" 产生相同输入。
 func hashFlowID(fsName, fDistinguisher string) uint64 {
 	hash := sha256.New()
 	var sep = [1]byte{0}
@@ -1139,6 +1218,7 @@ func hashFlowID(fsName, fDistinguisher string) uint64 {
 	return binary.LittleEndian.Uint64(sum[:8])
 }
 
+// relDiff 返回相对变化量，分母取两者绝对值的较大者；两者都为 0 时定义为 0。
 func relDiff(x, y float64) float64 {
 	diff := math.Abs(x - y)
 	den := math.Max(math.Abs(x), math.Abs(y))
@@ -1149,6 +1229,9 @@ func relDiff(x, y float64) float64 {
 }
 
 // plSpecCommons returns the (NominalConcurrencyShares, LendablePercent, BorrowingLimitPercent) of the given priority level config
+//
+// Exempt 级别没有 borrowing 概念，BorrowingLimitPercent 恒为 nil；
+// NominalConcurrencyShares 未设置时按 0 处理。
 func plSpecCommons(pl *flowcontrol.PriorityLevelConfiguration) (*int32, *int32, *int32) {
 	if limiter := pl.Spec.Limited; limiter != nil {
 		return limiter.NominalConcurrencyShares, limiter.LendablePercent, limiter.BorrowingLimitPercent

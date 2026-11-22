@@ -32,12 +32,15 @@ type statusError interface {
 	Status() metav1.Status
 }
 
+// fakeNegotiater 是 Negotiate 所需接口的最小实现，只回放预设的媒体类型列表。
 type fakeNegotiater struct {
 	serializer, streamSerializer runtime.Serializer
 	framer                       runtime.Framer
 	types, streamTypes           []string
 }
 
+// SupportedMediaTypes 由 types/streamTypes 构造 SerializerInfo；
+// 同一媒体类型若出现在 streamTypes 中则附带 StreamSerializer。
 func (n *fakeNegotiater) SupportedMediaTypes() []runtime.SerializerInfo {
 	var out []runtime.SerializerInfo
 	for _, s := range n.types {
@@ -82,6 +85,9 @@ func (n *fakeNegotiater) DecoderToVersion(serializer runtime.Decoder, gv runtime
 
 var fakeCodec = runtime.NewCodec(runtime.NoopEncoder{}, runtime.NoopDecoder{})
 
+// TestNegotiate 覆盖内容协商的主要分支：Accept 通配符、具体类型、pretty 参数
+// 的三种来源（Accept 参数、查询参数、User-Agent），以及无可用媒体类型时
+// 必须返回 406 statusError。
 func TestNegotiate(t *testing.T) {
 	testCases := []struct {
 		accept      string
@@ -243,6 +249,7 @@ func TestNegotiate(t *testing.T) {
 		},
 	}
 
+	// 逐个用例执行；用下标而非名字定位失败，便于与表项对应。
 	for i, test := range testCases {
 		req := test.req
 		if req == nil {
@@ -281,6 +288,7 @@ func TestNegotiate(t *testing.T) {
 	}
 }
 
+// fakeSerializerInfoSlice 返回 JSON 与 protobuf 两种媒体类型，用于基准测试。
 func fakeSerializerInfoSlice() []runtime.SerializerInfo {
 	result := make([]runtime.SerializerInfo, 2)
 	result[0] = runtime.SerializerInfo{
@@ -296,6 +304,8 @@ func fakeSerializerInfoSlice() []runtime.SerializerInfo {
 	return result
 }
 
+// BenchmarkNegotiateMediaTypeOptions 衡量一次协商的分配与耗时；
+// 该函数位于每个请求的热路径上，因此有基准测试守护。
 func BenchmarkNegotiateMediaTypeOptions(b *testing.B) {
 	accepted := fakeSerializerInfoSlice()
 	header := "application/vnd.kubernetes.protobuf,*/*"

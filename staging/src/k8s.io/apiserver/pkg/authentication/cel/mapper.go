@@ -28,12 +28,15 @@ var _ ClaimsMapper = &mapper{}
 var _ UserMapper = &mapper{}
 
 // mapper implements the ClaimsMapper and UserMapper interface.
+// 同一个实现同时服务于 claims 与 userInfo 两类求值，区别仅在于激活变量名。
 type mapper struct {
+	// 编译后的 CEL 表达式；求值时按顺序逐个执行。
 	compilationResults []CompilationResult
 }
 
 // CELMapper is a struct that holds the compiled expressions for
 // username, groups, uid, extra, claimValidation and userValidation
+// 将认证配置中不同用途的 CEL 表达式分组保存，便于认证插件按需调用。
 type CELMapper struct {
 	Username             ClaimsMapper
 	Groups               ClaimsMapper
@@ -58,6 +61,7 @@ func NewUserMapper(compilationResults []CompilationResult) UserMapper {
 }
 
 // EvalClaimMapping evaluates the given claim mapping expression and returns a EvaluationResult.
+// 用于期望恰好产生一个结果的映射表达式（如 username）；结果数量不符时报错。
 func (m *mapper) EvalClaimMapping(ctx context.Context, claims traits.Mapper) (EvaluationResult, error) {
 	results, err := m.eval(ctx, &varNameActivation{name: claimsVarName, value: claims})
 	if err != nil {
@@ -70,15 +74,19 @@ func (m *mapper) EvalClaimMapping(ctx context.Context, claims traits.Mapper) (Ev
 }
 
 // EvalClaimMappings evaluates the given expressions and returns a list of EvaluationResult.
+// 用于会产生多个结果的表达式（如 groups、extra）。
 func (m *mapper) EvalClaimMappings(ctx context.Context, claims traits.Mapper) ([]EvaluationResult, error) {
 	return m.eval(ctx, &varNameActivation{name: claimsVarName, value: claims})
 }
 
 // EvalUser evaluates the given user expressions and returns a list of EvaluationResult.
+// userInfo 变量在编译期已按 user.Info 的结构做类型检查。
 func (m *mapper) EvalUser(ctx context.Context, userInfo traits.Mapper) ([]EvaluationResult, error) {
 	return m.eval(ctx, &varNameActivation{name: userVarName, value: userInfo})
 }
 
+// eval 逐个执行编译后的表达式。
+// 任一表达式求值失败即整体失败：认证过程中宁可拒绝也不返回部分映射结果。
 func (m *mapper) eval(ctx context.Context, input *varNameActivation) ([]EvaluationResult, error) {
 	evaluations := make([]EvaluationResult, len(m.compilationResults))
 
@@ -99,11 +107,13 @@ func (m *mapper) eval(ctx context.Context, input *varNameActivation) ([]Evaluati
 
 var _ interpreter.Activation = &varNameActivation{}
 
+// varNameActivation 把单个变量名绑定到一个 map，供 CEL 程序解析顶层变量。
 type varNameActivation struct {
 	name  string
 	value traits.Mapper
 }
 
+// ResolveName 只解析匹配的变量名，其余名称返回未找到，避免误暴露其他变量。
 func (v *varNameActivation) ResolveName(name string) (any, bool) {
 	if v.name != name {
 		return nil, false
@@ -111,4 +121,5 @@ func (v *varNameActivation) ResolveName(name string) (any, bool) {
 	return v.value, true
 }
 
+// Parent 返回 nil：本激活无父级，不存在链式变量解析。
 func (v *varNameActivation) Parent() interpreter.Activation { return nil }

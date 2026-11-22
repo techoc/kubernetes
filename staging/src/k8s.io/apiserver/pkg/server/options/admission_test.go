@@ -25,6 +25,9 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
+// TestEnabledPluginNames 验证启用插件列表的计算规则：
+// 以 RecommendedPluginOrder 为基准，叠加 default-off、enable 与 disable
+// 三组开关，并保持推荐顺序。admission-control 是 enable 的旧别名。
 func TestEnabledPluginNames(t *testing.T) {
 	scenarios := []struct {
 		expectedPluginNames       []string
@@ -116,6 +119,7 @@ func TestEnabledPluginNames(t *testing.T) {
 				target.EnablePlugins = scenario.setAdmissionControl
 			}
 
+			// 结果必须同时满足“集合正确”与“顺序正确”，因此逐位比较。
 			actualPluginNames := target.enabledPluginNames()
 
 			if len(actualPluginNames) != len(scenario.expectedPluginNames) {
@@ -130,6 +134,9 @@ func TestEnabledPluginNames(t *testing.T) {
 	}
 }
 
+// TestValidate 验证启动期校验会拒绝以下配置：
+// 同一插件同时出现在 enable 与 disable、插件未注册、推荐顺序重复或
+// 与已注册插件集合不一致。这些错误若放过，会在运行时造成难以排查的行为差异。
 func TestValidate(t *testing.T) {
 	scenarios := []struct {
 		setEnablePlugins           []string
@@ -207,6 +214,7 @@ func TestValidate(t *testing.T) {
 
 	for index, scenario := range scenarios {
 		t.Run(fmt.Sprintf("scenario %d", index), func(t *testing.T) {
+			// 构造一个确定的插件注册表，避免依赖真实插件集合。
 			options := NewAdmissionOptions()
 			options.DefaultOffPlugins = sets.New("pluginC", "pluginD")
 			options.RecommendedPluginOrder = []string{"pluginA", "pluginB", "pluginC", "pluginD"}

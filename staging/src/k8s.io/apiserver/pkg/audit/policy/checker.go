@@ -30,6 +30,9 @@ const (
 )
 
 // NewPolicyRuleEvaluator creates a new policy rule evaluator.
+//
+// 构造时把全局 OmitStages 合并进每条规则，使后续匹配无需再重复计算；
+// 这也意味着规则级别的 OmitStages 是"全局 + 规则"的并集，只能扩大省略范围。
 func NewPolicyRuleEvaluator(policy *audit.Policy) auditinternal.PolicyRuleEvaluator {
 	for i, rule := range policy.Rules {
 		policy.Rules[i].OmitStages = unionStages(policy.OmitStages, rule.OmitStages)
@@ -37,6 +40,7 @@ func NewPolicyRuleEvaluator(policy *audit.Policy) auditinternal.PolicyRuleEvalua
 	return &policyRuleEvaluator{*policy}
 }
 
+// unionStages 对阶段列表求并集；返回顺序不保证稳定，但调用方只做集合判断。
 func unionStages(stageLists ...[]audit.Stage) []audit.Stage {
 	m := make(map[audit.Stage]bool)
 	for _, sl := range stageLists {
@@ -57,10 +61,14 @@ func NewFakePolicyRuleEvaluator(level audit.Level, stage []audit.Stage) auditint
 	return &fakePolicyRuleEvaluator{level, stage}
 }
 
+// policyRuleEvaluator 按顺序匹配策略规则，返回第一条命中的审计配置。
 type policyRuleEvaluator struct {
 	audit.Policy
 }
 
+// EvaluatePolicyRule 返回请求应采用的审计级别。
+// 规则按配置顺序匹配，首个命中者生效；全部未命中时使用全局默认级别
+// （None，即不记录），因此"未配置规则"不会产生任何审计事件。
 func (p *policyRuleEvaluator) EvaluatePolicyRule(attrs authorizer.Attributes) auditinternal.RequestAuditConfig {
 	for _, rule := range p.Rules {
 		if ruleMatches(&rule, attrs) {
@@ -92,6 +100,10 @@ func isOmitManagedFields(policyRule *audit.PolicyRule, policyDefault bool) bool 
 }
 
 // Check whether the rule matches the request attrs.
+//
+// 所有已设置的过滤字段都必须匹配（AND 语义）；未设置的字段视为通配。
+// 资源规则与非资源规则互斥：一旦指定 Namespaces/Resources 就不再匹配
+// 非资源 URL，反之亦然。
 func ruleMatches(r *audit.PolicyRule, attrs authorizer.Attributes) bool {
 	user := attrs.GetUser()
 	if len(r.Users) > 0 {
@@ -148,6 +160,9 @@ func ruleMatchesNonResource(r *audit.PolicyRule, attrs authorizer.Attributes) bo
 }
 
 // Check whether the path matches the path specification.
+//
+// 支持三种形式：精确路径、尾随 "*" 的前缀路径、单独的 "*"。
+// 前缀比较前先去掉所有 "*"，因此 "/foo*" 与 "/foo/**" 等价。
 func pathMatches(path, spec string) bool {
 	// Allow wildcard match
 	if spec == "*" {
@@ -165,6 +180,9 @@ func pathMatches(path, spec string) bool {
 }
 
 // Check whether the rule's resource fields match the request attrs.
+//
+// 资源项支持通配组合："*"、resource、"*/subresource"、"resource/*"。
+// ResourceNames 为空表示匹配任意名称，否则按名称精确过滤。
 func ruleMatchesResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool {
 	if !attrs.IsResourceRequest() {
 		return false
@@ -217,6 +235,8 @@ func ruleMatchesResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool 
 }
 
 // Utility function to check whether a string slice contains a string.
+//
+// 规则列表通常很短，线性扫描比构造 set 更划算。
 func hasString(slice []string, value string) bool {
 	for _, s := range slice {
 		if s == value {
@@ -226,11 +246,13 @@ func hasString(slice []string, value string) bool {
 	return false
 }
 
+// fakePolicyRuleEvaluator 对所有请求返回固定的级别与省略阶段，用于测试。
 type fakePolicyRuleEvaluator struct {
 	level audit.Level
 	stage []audit.Stage
 }
 
+// EvaluatePolicyRule 忽略属性，返回预设配置。
 func (f *fakePolicyRuleEvaluator) EvaluatePolicyRule(_ authorizer.Attributes) auditinternal.RequestAuditConfig {
 	return auditinternal.RequestAuditConfig{
 		Level:      f.level,

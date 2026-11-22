@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package deprecation 根据对象实现的 APILifecycle* 接口判断 API 版本是否已弃用、
+// 何时移除以及推荐的替代版本，并生成对应的警告文本。
 package deprecation
 
 import (
@@ -26,14 +28,17 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 )
 
+// apiLifecycleDeprecated 由生成的类型实现，返回弃用起始版本。
 type apiLifecycleDeprecated interface {
 	APILifecycleDeprecated() (major, minor int)
 }
 
+// apiLifecycleRemoved 由生成的类型实现，返回移除版本。
 type apiLifecycleRemoved interface {
 	APILifecycleRemoved() (major, minor int)
 }
 
+// apiLifecycleReplacement 由生成的类型实现，返回替代的 GVK。
 type apiLifecycleReplacement interface {
 	APILifecycleReplacement() schema.GroupVersionKind
 }
@@ -51,6 +56,7 @@ func MajorMinor(v version.Info) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	// Minor 可能带 "+" 或 "-build" 等后缀，只取开头的数字部分。
 	minor, err := strconv.Atoi(leadingDigits.FindString(v.Minor))
 	if err != nil {
 		return 0, 0, err
@@ -72,6 +78,7 @@ func IsDeprecated(obj runtime.Object, currentMajor, currentMinor int) bool {
 		return false
 	}
 	// no current version info available
+	// 无法确定当前版本时保守地视为已弃用，以便尽早提示用户。
 	if currentMajor == 0 && currentMinor == 0 {
 		return true
 	}
@@ -99,6 +106,9 @@ func RemovedRelease(obj runtime.Object) string {
 
 // WarningMessage returns a human-readable deprecation warning if the object implements APILifecycleDeprecated()
 // to indicate a non-zero deprecated major/minor version and has a populated GetObjectKind().GroupVersionKind().
+//
+// 缺少 GVK 时返回空字符串：警告文本需要明确是哪个组版本的哪个 Kind 被弃用，
+// 信息不完整时宁可不发警告，也不要输出令人困惑的消息。
 func WarningMessage(obj runtime.Object) string {
 	deprecated, isDeprecated := obj.(apiLifecycleDeprecated)
 	if !isDeprecated {

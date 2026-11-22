@@ -26,6 +26,11 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestRequestHeader 验证基于请求头的认证器：从配置的头部取值构造用户信息。
+//
+// 覆盖的关键规则：头部匹配大小写不敏感、多个候选头按配置顺序取第一个非空值、
+// 组头按配置顺序拼接、extra 前缀头按百分号解码后归组，以及认证后从请求中移除
+// 已被消费的头部（finalHeaders 断言），防止这些头被下游误用。
 func TestRequestHeader(t *testing.T) {
 	testcases := map[string]struct {
 		nameHeaders        []string
@@ -302,6 +307,7 @@ func TestRequestHeader(t *testing.T) {
 			if want == nil && testcase.requestHeaders != nil {
 				want = http.Header{}
 			}
+			// 消费过的认证头必须从请求中删除；残留的头可能被后端服务误当作已认证身份。
 			if diff := cmp.Diff(want, testcase.requestHeaders); len(diff) > 0 {
 				t.Errorf("unexpected final headers (-want +got):\n%s", diff)
 			}

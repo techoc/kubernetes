@@ -33,6 +33,9 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestWebhookClientConfig 验证 webhook 客户端按目标地址决定是否允许 HTTP/2：
+// 只有 localhost/回环地址才启用，外部地址强制 HTTP/1.1，以规避 HTTP/2 相关的
+// DoS 风险。
 func TestWebhookClientConfig(t *testing.T) {
 	cm, _ := NewClientManager([]schema.GroupVersion{})
 	authInfoResolver, err := NewDefaultAuthenticationInfoResolver("")
@@ -85,6 +88,8 @@ func TestWebhookClientConfig(t *testing.T) {
 	}
 }
 
+// allowHTTP2 判断 transport 的 NextProtos 是否允许 h2：未设置视为允许，
+// 显式设置则必须包含 http2.NextProtoTLS。
 func allowHTTP2(nextProtos []string) bool {
 	if len(nextProtos) == 0 {
 		// the transport expressed no NextProto preference, allow
@@ -100,6 +105,7 @@ func allowHTTP2(nextProtos []string) bool {
 	return false
 }
 
+// fakeAuthInfoResolver 返回固定 TLS 配置，测试中不关心认证细节。
 type fakeAuthInfoResolver struct{}
 
 func (f *fakeAuthInfoResolver) ClientConfigFor(server string) (*rest.Config, error) {

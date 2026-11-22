@@ -43,9 +43,13 @@ import (
 // At a high level, constrained impersonation uses multiple authorization checks to allow for the granular
 // expression of impersonation access.  For example, a service account may be authorized to impersonate the
 // node that it is associated with but only when listing pods.  See the linked KEP for further details.
+//
+// 安全边界：所有 impersonation 头都在本包内被消费并从请求头中删除，下游 handler 无法得知
+// 发生过 impersonation，从而避免其他组件基于该事实产生不同行为。
 func WithConstrainedImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorizer, s runtime.NegotiatedSerializer) http.Handler {
 	metrics.RegisterMetrics()
 
+	// 包装授权器以记录每次授权调用的耗时与结果，供 SLO 观测。
 	ma := &metricsAuthorizer{
 		delegate:                a,
 		recordAuthorizationCall: metrics.RecordImpersonationAuthorizationCall,
@@ -66,6 +70,7 @@ func WithConstrainedImpersonation(handler http.Handler, a authorizer.Uncondition
 	}
 }
 
+// constrainedImpersonationHandler 在请求进入业务 handler 前完成身份替换。
 type constrainedImpersonationHandler struct {
 	handler http.Handler
 	tracker *impersonationModesTracker
@@ -76,6 +81,7 @@ type constrainedImpersonationHandler struct {
 	metricsAuthorizer *metricsAuthorizer
 }
 
+// ServeHTTP 解析 impersonation 头，尝试各授权模式，成功后把模拟用户写入请求上下文。
 func (c *constrainedImpersonationHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
@@ -88,6 +94,7 @@ func (c *constrainedImpersonationHandler) ServeHTTP(w http.ResponseWriter, req *
 		c.handler.ServeHTTP(w, req)
 		return
 	}
+	// 授权属性由上游 filter 预先计算好，这里直接复用，保证与后续真正授权检查看到的一致。
 	attributes, err := filters.GetAuthorizerAttributes(ctx)
 	if err != nil {
 		responsewriters.InternalError(w, req, err)
@@ -110,6 +117,7 @@ func (c *constrainedImpersonationHandler) ServeHTTP(w http.ResponseWriter, req *
 	}
 	c.recordAttempt(ctx, modeFromConstraint(impersonatedUser.constraint), "allowed", duration)
 
+	// 只有到这里才替换上下文中的用户；失败的 impersonation 不会污染请求身份。
 	req = req.WithContext(request.WithUser(ctx, impersonatedUser.user))
 	httplog.LogOf(req, w).Addf("%v is impersonating %v", userString(requestor), userString(impersonatedUser.user))
 	audit.LogImpersonatedUser(ctx, impersonatedUser.user, impersonatedUser.constraint)
@@ -150,6 +158,7 @@ func processImpersonationHeaders(headers http.Header) (*user.DefaultInfo, error)
 			continue
 		}
 
+		// 头名大小写不敏感，统一小写后反转义，与旧实现的键格式保持一致。
 		extraKey := unescapeExtraKey(strings.ToLower(headerName[len(authenticationv1.ImpersonateUserExtraHeaderPrefix):]))
 
 		if wantedUser.Extra == nil {
@@ -158,6 +167,7 @@ func processImpersonationHeaders(headers http.Header) (*user.DefaultInfo, error)
 		wantedUser.Extra[extraKey] = append(wantedUser.Extra[extraKey], values...)
 	}
 
+	// 只给了 UID/组/extra 而没给用户名是无效请求，必须显式报错而不是忽略多余头。
 	if !hasUser && (hasUID || hasGroups || hasUserExtra) {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("requested %#v without impersonating a user name", wantedUser))
 	}
@@ -188,6 +198,7 @@ type impersonationModesTracker struct {
 	idxCache *modeIndexCache
 }
 
+// newImpersonationModesTracker 构建按优先级排序的模式列表，并包一层仅在 V(5) 时启用的详细日志授权器。
 func newImpersonationModesTracker(a authorizer.UnconditionalAuthorizer) *impersonationModesTracker {
 	loggingAuthorizer := authorizer.AuthorizerFunc(func(ctx context.Context, attributes authorizer.Attributes) (authorizer.Decision, string, error) {
 		decision, reason, err := a.Authorize(ctx, attributes)
@@ -232,6 +243,8 @@ func newImpersonationModesTracker(a authorizer.UnconditionalAuthorizer) *imperso
 	}
 }
 
+// getImpersonatedUser 依次尝试各 impersonation 模式，返回第一个成功的模拟用户。
+// 失败时返回首个错误（而非最后一个），因为最早的错误通常来自更严格、更有信息量的检查。
 func (t *impersonationModesTracker) getImpersonatedUser(ctx context.Context, wantedUser *user.DefaultInfo, attributes authorizer.Attributes) (*impersonatedUserInfo, error) {
 	// share a single cache key across all modes so that we only lazily build it once
 	key := &impersonationCacheKey{wantedUser: wantedUser, attributes: attributes}
@@ -278,11 +291,13 @@ func (t *impersonationModesTracker) getImpersonatedUser(ctx context.Context, wan
 // For now, constrained impersonation only supports unconditional authorization
 var _ = authorizer.UnconditionalAuthorizer(&metricsAuthorizer{})
 
+// metricsAuthorizer 给底层授权器加上按模式/结果分类的耗时指标。
 type metricsAuthorizer struct {
 	delegate                authorizer.UnconditionalAuthorizer
 	recordAuthorizationCall func(mode, decision string, duration time.Duration)
 }
 
+// Authorize 透传授权结果并记录一次调用指标。
 func (m *metricsAuthorizer) Authorize(ctx context.Context, attributes authorizer.Attributes) (authorizer.Decision, string, error) {
 	start := time.Now()
 	decision, reason, err := m.delegate.Authorize(ctx, attributes)
@@ -293,6 +308,7 @@ func (m *metricsAuthorizer) Authorize(ctx context.Context, attributes authorizer
 	return decision, reason, err
 }
 
+// modeFromConstraint 把模拟用户携带的约束名映射为指标标签；无约束即旧式 impersonation。
 func modeFromConstraint(constraint string) string {
 	if len(constraint) == 0 {
 		return "legacy"
@@ -300,6 +316,8 @@ func modeFromConstraint(constraint string) string {
 	return modeFromVerb(constraint)
 }
 
+// modeFromVerb 把授权动词映射为稳定的模式名，未知动词归入 "unknown"，
+// 避免新增动词时指标基数失控。
 func modeFromVerb(verb string) string {
 	switch {
 	case verb == "impersonate":
@@ -317,6 +335,7 @@ func modeFromVerb(verb string) string {
 	}
 }
 
+// decisionToLabel 把三态决策折叠成二值标签，仅用于指标。
 func decisionToLabel(decision authorizer.Decision) string {
 	if decision == authorizer.DecisionAllow {
 		return "allowed"

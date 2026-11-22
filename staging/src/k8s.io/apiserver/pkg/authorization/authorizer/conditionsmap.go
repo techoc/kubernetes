@@ -31,6 +31,9 @@ import (
 // ID, is a function from ConditionsData -> bool and has Allow/Deny/NoOpinion effect.
 // It must be constructed through ConditionsAwareDecisionConditionsMap.
 // During construction, all conditions are validated.
+//
+// 条件按效果分组存放，求值时 Deny 优先于 NoOpinion，NoOpinion 优先于 Allow，
+// 因此仅凭各组的非空性就能推导出可能的结果集合。
 type ConditionsMap struct {
 	// invariant: len(denyConditions) != 0 || len(allowConditions) != 0
 	//
@@ -112,6 +115,8 @@ func (c ConditionsMap) PossibleDecisions() sets.Set[Decision] {
 }
 
 // MaxConditionsPerMap is the maximum number of conditions allowed in a single ConditionsMap.
+//
+// 上限用于约束求值成本：每次请求都要遍历全部条件，且 CEL 表达式可能很昂贵。
 const MaxConditionsPerMap = 128
 
 // ConditionsAwareDecisionConditionsMap creates a ConditionsMap decision.
@@ -127,6 +132,9 @@ const MaxConditionsPerMap = 128
 //     have precedence).
 //
 // All conditions must be non-nil, this function panics if any condition is nil.
+//
+// 构造期的所有错误都不会 panic，而是返回一个"失败关闭"的决策：存在 Deny 条件时返回 Deny，
+// 否则返回 NoOpinion，确保配置错误不会意外放行请求。
 func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionConditions []Condition, allowConditions []Condition) ConditionsAwareDecision {
 	// if there are any Deny conditions, Deny is a possible decision, and thus should we fail closed with Deny in that case
 	hasDenyEffect := len(denyConditions) > 0
@@ -153,6 +161,7 @@ func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionC
 		return ConditionsAwareDecisionNoOpinion("only NoOpinion conditions always evaluate to NoOpinion", nil)
 	}
 
+	// ID 在整张 map 内唯一，跨组也不能重复，否则无法稳定地引用某个条件。
 	seenIDs := sets.New[string]()
 
 	if err := validateConditions(seenIDs, denyConditions); err != nil {
@@ -176,6 +185,8 @@ func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionC
 	}
 }
 
+// validateConditions 校验条件 ID 的唯一性与格式；ID 与类型都要求是合法 label key，
+// 以便在指标和审计中作为标签使用。
 func validateConditions(seenIDs sets.Set[string], conditions []Condition) error {
 	for _, condition := range conditions {
 
@@ -204,30 +215,42 @@ func validateConditions(seenIDs sets.Set[string], conditions []Condition) error 
 // with optional support for fast in-process conditions evaluation, by
 // setting EvaluateFunc non-nil.
 type GenericCondition struct {
-	ID           string
-	Condition    string
-	Type         string
-	Description  string
+	// ID 在所属 ConditionsMap 内唯一。
+	ID string
+	// Condition 是条件的原始表达式文本，用于展示与审计。
+	Condition string
+	// Type 是可选的分类标签。
+	Type string
+	// Description 是面向用户的说明。
+	Description string
+	// EvaluateFunc 非 nil 时可在进程内直接求值，避免回源到 CEL 引擎。
 	EvaluateFunc func(ctx context.Context, data ConditionsData) ConditionEvaluationResult
 }
 
 var _ Condition = GenericCondition{}
 
+// GetID 返回条件在 map 内的唯一标识。
 func (c GenericCondition) GetID() string {
 	return c.ID
 }
 
+// GetCondition 返回条件的原始表达式文本。
 func (c GenericCondition) GetCondition() string {
 	return c.Condition
 }
 
+// GetType 返回条件类型标签，可能为空。
 func (c GenericCondition) GetType() string {
 	return c.Type
 }
 
+// GetDescription 返回面向用户的描述。
 func (c GenericCondition) GetDescription() string {
 	return c.Description
 }
+
+// Evaluate 执行条件求值；未提供 EvaluateFunc 时返回"无法求值"，
+// 由调用方按失败关闭策略处理，而不是当作 true/false。
 func (c GenericCondition) Evaluate(ctx context.Context, data ConditionsData) ConditionEvaluationResult {
 	if c.EvaluateFunc == nil {
 		return ConditionsEvaluationResultUnevaluatable()

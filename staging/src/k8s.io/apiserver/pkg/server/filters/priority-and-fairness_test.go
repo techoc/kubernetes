@@ -57,11 +57,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestMain 初始化 klog 标志，使测试可通过 -v 观察过滤器的日志。
 func TestMain(m *testing.M) {
 	klog.InitFlags(nil)
 	os.Exit(m.Run())
 }
 
+// mockDecision 枚举假过滤器对一次请求可以做出的处理结果。
+// 用例通过选择不同结果，覆盖 APF 过滤器对每种决策的分支处理。
 type mockDecision int
 
 const (
@@ -72,10 +75,13 @@ const (
 	decisionSkipFilter
 )
 
+// defaultRequestWorkEstimator 为每个请求固定估算 1 个席位，
+// 让测试中的并发行为只取决于配置，而不受工作量估算影响。
 var defaultRequestWorkEstimator = func(req *http.Request, fsName, plName string) fcrequest.WorkEstimate {
 	return fcrequest.WorkEstimate{InitialSeats: 1}
 }
 
+// fakeApfFilter 用预设决策模拟 APF 过滤器的行为，不启动真实队列。
 type fakeApfFilter struct {
 	mockDecision mockDecision
 	postEnqueue  func()
@@ -85,6 +91,8 @@ type fakeApfFilter struct {
 	utilflowcontrol.MaxSeatsTracker
 }
 
+// Handle 依据 mockDecision 演练一次完整的 APF 生命周期，
+// 并在入队/出队时调用 hook，供用例断言当前排队数。
 func (t fakeApfFilter) Handle(ctx context.Context,
 	requestDigest utilflowcontrol.RequestDigest,
 	noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
@@ -115,13 +123,17 @@ func (t fakeApfFilter) Handle(ctx context.Context,
 	}
 }
 
+// Run 无操作：测试不使用真实控制器。
 func (t fakeApfFilter) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// Install 无操作：测试不暴露 APF 的调试端点。
 func (t fakeApfFilter) Install(c *mux.PathRecorderMux) {
 }
 
+// newApfServerWithSingleRequest 构造只处理单个请求的测试服务器，并在执行、
+// 入队、出队三个时点断言计数器的瞬时值恰为 1 或 0。
 func newApfServerWithSingleRequest(t *testing.T, decision mockDecision) *httptest.Server {
 	onExecuteFunc := func() {
 		if decision == decisionCancelWait {
@@ -152,6 +164,7 @@ func newApfServerWithSingleRequest(t *testing.T, decision mockDecision) *httptes
 	return newApfServerWithHooks(t, decision, onExecuteFunc, postExecuteFunc, postEnqueueFunc, postDequeueFunc)
 }
 
+// newApfServerWithHooks 用注入的 hook 构造测试服务器，供多请求用例协调时序。
 func newApfServerWithHooks(t *testing.T, decision mockDecision, onExecute, postExecute, postEnqueue, postDequeue func()) *httptest.Server {
 	fakeFilter := fakeApfFilter{
 		mockDecision:    decision,
@@ -163,6 +176,8 @@ func newApfServerWithHooks(t *testing.T, decision mockDecision, onExecute, postE
 	return newApfServerWithFilter(t, fakeFilter, time.Minute/4, onExecute, postExecute)
 }
 
+// newApfServerWithFilter 用任意过滤器实现构造测试服务器；注册指标是必需的，
+// 因为部分用例会抓取全局注册表。
 func newApfServerWithFilter(t *testing.T, flowControlFilter utilflowcontrol.Interface, defaultWaitLimit time.Duration, onExecute, postExecute func()) *httptest.Server {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -170,6 +185,8 @@ func newApfServerWithFilter(t *testing.T, flowControlFilter utilflowcontrol.Inte
 	return apfServer
 }
 
+// newApfHandlerWithFilter 组装与生产一致的处理器链：RequestInfo -> 注入用户 -> APF。
+// 在 APF 结束后断言"执行中"计数归零，确保无论执行还是拒绝都完成了记账。
 func newApfHandlerWithFilter(t *testing.T, flowControlFilter utilflowcontrol.Interface, defaultWaitLimit time.Duration, onExecute, postExecute func()) http.Handler {
 	requestInfoFactory := &apirequest.RequestInfoFactory{APIPrefixes: sets.NewString("apis", "api"), GrouplessAPIPrefixes: sets.NewString("api")}
 	longRunningRequestCheck := BasicLongRunningRequestCheck(sets.NewString("watch"), sets.NewString("proxy"))
@@ -203,6 +220,8 @@ func newApfHandlerWithFilter(t *testing.T, flowControlFilter utilflowcontrol.Int
 	return handler
 }
 
+// TestApfSkipLongRunningRequest 验证长时请求（此处是 proxy）绕过 APF：
+// 假过滤器被设为"不应被调用"，若被调用会 panic，因此能通过即证明跳过生效。
 func TestApfSkipLongRunningRequest(t *testing.T) {
 	server := newApfServerWithSingleRequest(t, decisionSkipFilter)
 	defer server.Close()
@@ -218,6 +237,7 @@ func TestApfSkipLongRunningRequest(t *testing.T) {
 	}
 }
 
+// TestApfRejectRequest 验证被拒绝的请求返回 429，并记录终止与请求总数指标。
 func TestApfRejectRequest(t *testing.T) {
 	server := newApfServerWithSingleRequest(t, decisionReject)
 	defer server.Close()
@@ -236,6 +256,7 @@ func TestApfRejectRequest(t *testing.T) {
 	})
 }
 
+// TestApfExemptRequest 验证免排队（exempt）路径直接执行且不产生排队统计。
 func TestApfExemptRequest(t *testing.T) {
 	server := newApfServerWithSingleRequest(t, decisionNoQueuingExecute)
 	defer server.Close()
@@ -254,6 +275,7 @@ func TestApfExemptRequest(t *testing.T) {
 	})
 }
 
+// TestApfExecuteRequest 验证经过排队后成功执行，并同时出现 inflight 与 inqueue 指标。
 func TestApfExecuteRequest(t *testing.T) {
 	server := newApfServerWithSingleRequest(t, decisionQueuingExecute)
 	defer server.Close()
@@ -273,6 +295,10 @@ func TestApfExecuteRequest(t *testing.T) {
 	})
 }
 
+// TestApfExecuteMultipleRequests 验证多个请求同时在排队/执行时计数正确。
+//
+// 通过六组 WaitGroup 让所有请求先全部入队、再全部出队、再全部执行，
+// 从而在小并发下确定性地命中"计数值等于并发数"的断言，而不靠 sleep 碰运气。
 func TestApfExecuteMultipleRequests(t *testing.T) {
 	concurrentRequests := 5
 	preStartExecute, postStartExecute := &sync.WaitGroup{}, &sync.WaitGroup{}
@@ -347,6 +373,8 @@ func TestApfExecuteMultipleRequests(t *testing.T) {
 	})
 }
 
+// TestApfCancelWaitRequest 验证请求在排队期间被取消时以 429 结束，
+// 并计入终止指标——取消同样是一种"未被执行"的终态。
 func TestApfCancelWaitRequest(t *testing.T) {
 	server := newApfServerWithSingleRequest(t, decisionCancelWait)
 	defer server.Close()
@@ -362,6 +390,8 @@ func TestApfCancelWaitRequest(t *testing.T) {
 	})
 }
 
+// fakeWatchApfFilter 以容量计数模拟并发限制，并提供在执行为前后注入 panic 的开关，
+// 用于验证 APF 在 watch 场景下的记账与恢复行为。
 type fakeWatchApfFilter struct {
 	lock     sync.Mutex
 	inflight int
@@ -374,6 +404,7 @@ type fakeWatchApfFilter struct {
 	utilflowcontrol.MaxSeatsTracker
 }
 
+// newFakeWatchApfFilter 构造指定容量的 watch 过滤器。
 func newFakeWatchApfFilter(capacity int) *fakeWatchApfFilter {
 	return &fakeWatchApfFilter{
 		capacity:        capacity,
@@ -382,6 +413,8 @@ func newFakeWatchApfFilter(capacity int) *fakeWatchApfFilter {
 	}
 }
 
+// Handle 在容量允许时占用一个名额并执行，否则直接返回（模拟拒绝/排队超限）。
+// 名额在最后释放，panic 场景由调用方保证记账仍然成对。
 func (f *fakeWatchApfFilter) Handle(ctx context.Context,
 	requestDigest utilflowcontrol.RequestDigest,
 	noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
@@ -423,6 +456,7 @@ func (f *fakeWatchApfFilter) Run(stopCh <-chan struct{}) error {
 func (t *fakeWatchApfFilter) Install(c *mux.PathRecorderMux) {
 }
 
+// wait 轮询直到所有在执行的请求结束；用于让测试在信号发出后等待名额真正释放。
 func (f *fakeWatchApfFilter) wait() error {
 	return wait.Poll(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		f.lock.Lock()
@@ -431,6 +465,11 @@ func (f *fakeWatchApfFilter) wait() error {
 	})
 }
 
+// TestApfExecuteWatchRequestsWithInitializationSignal 验证初始化信号能让被阻塞的 watch
+// 请求释放席位，从而允许后续请求进入执行。
+//
+// 场景：先用 N 个请求占满容量，发出信号后旧请求应被放行；随后新的一组请求也能执行。
+// 这里替换 newInitializationSignal 以收集信号对象，测试结束后必须恢复全局变量。
 func TestApfExecuteWatchRequestsWithInitializationSignal(t *testing.T) {
 	signalsLock := sync.Mutex{}
 	signals := []utilflowcontrol.InitializationSignal{}
@@ -510,6 +549,7 @@ func TestApfExecuteWatchRequestsWithInitializationSignal(t *testing.T) {
 	wg.Wait()
 }
 
+// TestApfRejectWatchRequestsWithInitializationSignal 验证容量为 0 时 watch 请求被拒绝（429）。
 func TestApfRejectWatchRequestsWithInitializationSignal(t *testing.T) {
 	fakeFilter := newFakeWatchApfFilter(0)
 
@@ -526,6 +566,8 @@ func TestApfRejectWatchRequestsWithInitializationSignal(t *testing.T) {
 	}
 }
 
+// TestApfWatchPanic 验证内层处理器 panic 时 panic 会传播到服务器（由更外层的
+// 恢复逻辑负责），而 APF 不吞掉它。
 func TestApfWatchPanic(t *testing.T) {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -554,6 +596,8 @@ func TestApfWatchPanic(t *testing.T) {
 	}
 }
 
+// TestApfWatchHandlePanic 覆盖 panic 发生在"执行前"与"执行后"两个位置的情形，
+// 两者都必须传播出去，且 APF 的席位记账不能遗留。
 func TestApfWatchHandlePanic(t *testing.T) {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -632,12 +676,14 @@ func TestContextClosesOnRequestProcessed(t *testing.T) {
 	wg.Wait()
 }
 
+// fakeFilterRequestDigest 记录 APF 过滤器实际收到的 RequestDigest 与 WorkEstimate。
 type fakeFilterRequestDigest struct {
 	*fakeApfFilter
 	requestDigestGot *utilflowcontrol.RequestDigest
 	workEstimateGot  fcrequest.WorkEstimate
 }
 
+// Handle 捕获 digest 与工作量估算，供用例与期望值比较。
 func (f *fakeFilterRequestDigest) Handle(ctx context.Context,
 	requestDigest utilflowcontrol.RequestDigest,
 	noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
@@ -649,6 +695,8 @@ func (f *fakeFilterRequestDigest) Handle(ctx context.Context,
 	f.workEstimateGot = workEstimator()
 }
 
+// TestApfWithRequestDigest 验证 APF 过滤器收到的请求摘要（请求信息 + 用户）
+// 与工作量估算与构造时一致，确保上下文传递链路没有丢失字段。
 func TestApfWithRequestDigest(t *testing.T) {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -690,6 +738,11 @@ func TestApfWithRequestDigest(t *testing.T) {
 	}
 }
 
+// TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter 在完整处理器链
+// （RequestInfo、Deadline、Timeout、APF、PanicRecovery）下验证 APF 的路由与记账。
+//
+// 每个子用例针对一种关键的交互点：panic 后席位是否释放、超时与写入的先后、
+// 排队请求在超时后的归宿。使用 HTTP/2 是因为需要观察 stream reset 语义。
 func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -1129,10 +1182,13 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 	})
 }
 
+// fmtError 同时输出错误的结构与文本，便于在失败日志里区分"包装错误"与底层原因。
 func fmtError(err error) string {
 	return fmt.Sprintf("%#+v=%q", err, err.Error())
 }
 
+// startAPFController 启动真实的 APF 控制器并等待目标优先级级别生效后再返回，
+// 避免请求在配置尚未同步时被错误地归类。
 func startAPFController(t *testing.T, stopCh <-chan struct{}, apfConfiguration []runtime.Object, serverConcurrency int,
 	plName string, plConcurrency int) (utilflowcontrol.Interface, <-chan error) {
 	clientset := newClientset(t, apfConfiguration...)
@@ -1174,6 +1230,7 @@ func startAPFController(t *testing.T, stopCh <-chan struct{}, apfConfiguration [
 }
 
 // returns a started http2 server, with a client function to send request to the server.
+// 必须启用 HTTP/2：测试要区分"普通超时响应"与"stream reset"两种语义。
 func newHTTP2ServerWithClient(handler http.Handler, clientTimeout time.Duration) (*httptest.Server, func(path string) (*http.Response, error)) {
 	server := httptest.NewUnstartedServer(handler)
 	server.EnableHTTP2 = true
@@ -1185,6 +1242,8 @@ func newHTTP2ServerWithClient(handler http.Handler, clientTimeout time.Duration)
 	}
 }
 
+// headerMatcher 断言 APF 把匹配到的 FlowSchema / PriorityLevelConfiguration UID
+// 写入了响应头，便于调用方观测自己落在哪个流控桶中。
 type headerMatcher struct{}
 
 // verifies that the expected flow schema and priority level UIDs are attached to the header.
@@ -1237,6 +1296,7 @@ func expectResetStreamError(t *testing.T, err error) {
 	t.Fatalf("expected a stream reset error, but got %#+v=%s", err, err.Error())
 }
 
+// newClientset 构造 fake clientset；创建失败属于测试基础设施错误，直接 Fatal。
 func newClientset(t *testing.T, objects ...runtime.Object) clientset.Interface {
 	clientset := fake.NewSimpleClientset(objects...)
 	if clientset == nil {
@@ -1248,6 +1308,9 @@ func newClientset(t *testing.T, objects ...runtime.Object) clientset.Interface {
 // builds a chain of handlers that include the panic recovery and timeout filter, so we can simulate the behavior of
 // a real apiserver.
 // the specified user is added as the authenticated user to the request context.
+//
+// 链的顺序即语义：AuditInit -> PanicRecovery -> RequestInfo -> Deadline -> Timeout -> 用户注入 -> APF。
+// 超时过滤器必须位于 APF 内层，这样 APF 的记账能观察到超时导致的取消。
 func newHandlerChain(t *testing.T, handler http.Handler, filter utilflowcontrol.Interface, userName string, requestTimeout time.Duration) http.Handler {
 	requestInfoFactory := &apirequest.RequestInfoFactory{APIPrefixes: sets.NewString("apis", "api"), GrouplessAPIPrefixes: sets.NewString("api")}
 	longRunningRequestCheck := BasicLongRunningRequestCheck(sets.NewString("watch"), sets.NewString("proxy"))
@@ -1273,6 +1336,7 @@ func newHandlerChain(t *testing.T, handler http.Handler, filter utilflowcontrol.
 	return handler
 }
 
+// unsyncedInformers 返回尚未同步的 informer 类型名，用于在失败信息中点名具体资源。
 func unsyncedInformers(status map[reflect.Type]bool) []string {
 	names := make([]string, 0)
 
@@ -1285,6 +1349,10 @@ func unsyncedInformers(status map[reflect.Type]bool) []string {
 	return names
 }
 
+// newConfiguration 构造 FlowSchema + PriorityLevelConfiguration 两个对象。
+//
+// queueLength 为 0 时使用 Reject 响应类型（立即拒绝），大于 0 时切换到 Queuing，
+// 使同一套用例能覆盖"无队列"和"有队列"两种限流形态。
 func newConfiguration(fsName, plName, user string, concurrency int32, queueLength int32) []runtime.Object {
 	fs := &flowcontrol.FlowSchema{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1374,6 +1442,7 @@ func checkForExpectedMetrics(t *testing.T, expectedMetrics []string) {
 }
 
 // gaugeValueMatch ensures that the value of gauge metrics matching the labelFilter is as expected.
+// 汇总所有匹配标签的序列，兼容同名 gauge 因其他维度拆分成多条的情况。
 func gaugeValueMatch(name string, labelFilter map[string]string, wantValue int) error {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
@@ -1410,6 +1479,7 @@ func gaugeValueMatch(name string, labelFilter map[string]string, wantValue int) 
 	return nil
 }
 
+// isClientTimeout 判断错误是否为客户端侧超时；用于区分"服务端响应超时"与"测试环境过慢"。
 func isClientTimeout(err error) bool {
 	if urlErr, ok := err.(*url.Error); ok {
 		return urlErr.Timeout()
@@ -1417,6 +1487,8 @@ func isClientTimeout(err error) bool {
 	return false
 }
 
+// isStreamReset 通过错误文本中的 INTERNAL_ERROR 识别 HTTP/2 stream reset；
+// 客户端库没有暴露更精确的类型，只能字符串匹配。
 func isStreamReset(err error) bool {
 	if err == nil {
 		return false
@@ -1429,6 +1501,9 @@ func isStreamReset(err error) bool {
 	return false
 }
 
+// TestGetRequestWaitContext 验证排队等待上限的计算规则：
+// 取剩余 deadline 的四分之一，且不超过硬上限 1 分钟；同时从"请求接收时间"起算，
+// 防止慢客户端把排队时间也算进新的等待窗口。
 func TestGetRequestWaitContext(t *testing.T) {
 	tests := []struct {
 		name                    string

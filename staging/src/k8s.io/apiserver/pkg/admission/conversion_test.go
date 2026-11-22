@@ -36,6 +36,8 @@ import (
 	example2v1 "k8s.io/apiserver/pkg/apis/example2/v1"
 )
 
+// initiateScheme 构造仅含 example 系列 API 的 scheme，
+// 覆盖同 group 版本转换（example -> example/v1）与跨 group 转换（example -> example2/v1）两种场景。
 func initiateScheme(t *testing.T) *runtime.Scheme {
 	s := runtime.NewScheme()
 	require.NoError(t, example.AddToScheme(s))
@@ -44,6 +46,9 @@ func initiateScheme(t *testing.T) *runtime.Scheme {
 	return s
 }
 
+// TestConvertToGVK 验证 ConvertToGVK 的三种路径：
+// 同 group 版本转换、跨 group 转换（字段类型可能不同，如 replicas 由 int 变为 *int32），
+// 以及 GVK 已匹配的 unstructured 直接透传（自定义资源没有内部版本）。
 func TestConvertToGVK(t *testing.T) {
 	scheme := initiateScheme(t)
 	o := NewObjectInterfacesFromScheme(scheme)
@@ -52,6 +57,7 @@ func TestConvertToGVK(t *testing.T) {
 		gvk         schema.GroupVersionKind
 		expectedObj runtime.Object
 	}{
+		// 同 group 内的版本转换，期望显式填充 TypeMeta。
 		"convert example#Pod to example/v1#Pod": {
 			obj: &example.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -81,6 +87,8 @@ func TestConvertToGVK(t *testing.T) {
 				},
 			},
 		},
+		// 跨 group 转换：example.ReplicaSet.Replicas 是 int，example2v1 是 *int32，
+		// 说明转换走的是注册的 conversion 函数而非简单的结构体拷贝。
 		"convert example#replicaset to example2/v1#replicaset": {
 			obj: &example.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -110,6 +118,7 @@ func TestConvertToGVK(t *testing.T) {
 				},
 			},
 		},
+		// GVK 已匹配的 unstructured 必须原样返回，否则自定义资源会被迫走内部版本转换而失败。
 		"no conversion for Unstructured object whose gvk matches the desired gvk": {
 			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -146,8 +155,8 @@ func TestConvertToGVK(t *testing.T) {
 	}
 }
 
-// TestRuntimeSchemeConvert verifies that scheme.Convert(x, x, nil) for an unstructured x is a no-op.
-// This did not use to be like that and we had to wrap scheme.Convert before.
+// TestRuntimeSchemeConvert 验证 scheme.Convert(x, x, nil) 对 unstructured x 是空操作。
+// 早期版本会修改对象，因此这里用 DeepCopy 做前后比对，防止回归。
 func TestRuntimeSchemeConvert(t *testing.T) {
 	scheme := initiateScheme(t)
 	obj := &unstructured.Unstructured{
@@ -165,6 +174,10 @@ func TestRuntimeSchemeConvert(t *testing.T) {
 	}
 }
 
+// TestConvertVersionedAttributes 覆盖 ConvertVersionedAttributes 的关键语义：
+// 版本已匹配时完全不动；Dirty 时保留前序插件对版本化对象所做的修改（回写 Attributes.Object），
+// 不 Dirty 时以原始对象为源；旧对象始终以 Attributes.OldObject 为源；
+// typed 与 unstructured 对象走不同路径，但结果一致。
 func TestConvertVersionedAttributes(t *testing.T) {
 	scheme := initiateScheme(t)
 	o := NewObjectInterfacesFromScheme(scheme)
@@ -175,6 +188,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 	attrs := func(obj, oldObj runtime.Object) Attributes {
 		return NewAttributesRecord(obj, oldObj, schema.GroupVersionKind{}, "", "", schema.GroupVersionResource{}, "", "", nil, false, nil)
 	}
+	// u 用 JSON 字面量构造 unstructured，便于一眼看出期望的字段差异。
 	u := func(data string) *unstructured.Unstructured {
 		t.Helper()
 		m := map[string]interface{}{}
@@ -190,6 +204,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 		ExpectedAttrs *VersionedAttributes
 	}{
 		{
+			// 版本已匹配：即使是 Dirty 也应原样返回，不触发任何转换。
 			Name: "noop",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -214,6 +229,8 @@ func TestConvertVersionedAttributes(t *testing.T) {
 			},
 		},
 		{
+			// 未修改：版本化对象被丢弃，改为从原始属性对象重新转换，
+			// 因此 name 会被覆盖为原始值。
 			Name: "clean, typed",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -237,6 +254,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 			},
 		},
 		{
+			// unstructured 场景：unstructured 没有内部版本，转换退化为原样替换。
 			Name: "clean, unstructured",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -259,6 +277,8 @@ func TestConvertVersionedAttributes(t *testing.T) {
 			},
 		},
 		{
+			// 已修改：新对象以版本化对象为源（name 保持 newpodversioned），
+			// 转换结束后 Dirty 被清除，表示版本化视图与原始对象已重新同步。
 			Name: "dirty, typed",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -285,6 +305,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 			},
 		},
 		{
+			// unstructured 的 dirty 语义与 typed 相同：保留修改后的新对象，旧对象重置为原始值。
 			Name: "dirty, unstructured",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -311,6 +332,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 			},
 		},
 		{
+			// create 请求没有旧对象：VersionedOldObject 应保持 nil，不能尝试转换。
 			Name: "nil old object",
 			Attrs: &VersionedAttributes{
 				Attributes: attrs(
@@ -365,6 +387,9 @@ func TestConvertVersionedAttributes(t *testing.T) {
 	}
 }
 
+// TestVersionedAttributesCELObjectsCaching 验证 CEL 表示是惰性构造且会被正确失效：
+// 构造 VersionedAttributes 时不应计算 CEL 值；UpdateObject 与跨版本转换后必须重新计算，
+// 且转换后仍能看到前序插件写入的更新（updated-rs）。
 func TestVersionedAttributesCELObjectsCaching(t *testing.T) {
 	scheme := initiateScheme(t)
 	o := NewObjectInterfacesFromScheme(scheme)
@@ -376,6 +401,7 @@ func TestVersionedAttributesCELObjectsCaching(t *testing.T) {
 	t.Run("lazy evaluation and cache clear on update", func(t *testing.T) {
 		vAttrs, err := NewVersionedAttributes(attrs, example2v1.SchemeGroupVersion.WithKind("ReplicaSet"), o)
 		require.NoError(t, err)
+		// 构造阶段不应计算 CEL 值，否则每个请求都要承担转换开销。
 		require.Nil(t, vAttrs.VersionedObject.celVal)
 		require.Nil(t, vAttrs.VersionedOldObject.celVal)
 
@@ -402,7 +428,8 @@ func TestVersionedAttributesCELObjectsCaching(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "updated-rs", getMetaName(uObj))
 
-		// 2. Convert GVK
+		// 2. 转换 GVK：故意把 VersionedKind 改成假值以强制走转换路径，
+		// 转换后应保留 updateRS 的内容并恢复缓存可用。
 		targetGVK := example2v1.SchemeGroupVersion.WithKind("ReplicaSet")
 		vAttrs.VersionedKind = schema.GroupVersionKind{Group: "dummy", Version: "v1", Kind: "ReplicaSet"}
 		err = ConvertVersionedAttributes(vAttrs, targetGVK, o)
@@ -420,6 +447,10 @@ func TestVersionedAttributesCELObjectsCaching(t *testing.T) {
 	})
 }
 
+// TestLazyObjectCELValue 验证 LazyObject.CELValue 在四种输入下的类型适配结果：
+// nil 返回 nil；unstructured 得到 map[string]interface{}；
+// typed 对象在 UseSchemalessTypeRef 下保持 Go 类型，否则先转为 unstructured map。
+// 同时覆盖缓存命中与 Set 导致的缓存失效。
 func TestLazyObjectCELValue(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -483,13 +514,14 @@ func TestLazyObjectCELValue(t *testing.T) {
 			require.Equal(t, tc.expectedName, getMetaName(val))
 			require.Equal(t, tc.expectedType, reflect.TypeOf(val.Value()).String())
 
-			// verify caching
+			// 第二次调用应命中缓存，返回同一个 CEL 值。
 			valCached, err := l.CELValue()
 			require.NoError(t, err)
 			require.Equal(t, val, valCached)
 		})
 	}
 
+	// Set 必须使缓存失效，否则 CEL 求值会看到旧对象。
 	t.Run("cache invalidation when Set is called", func(t *testing.T) {
 		typedObj1 := &examplev1.Pod{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"},
@@ -526,7 +558,7 @@ func TestLazyObjectCELValue(t *testing.T) {
 		require.Equal(t, "pod-schemaless-test", getMetaName(val1))
 		require.Equal(t, "v1.Pod", reflect.TypeOf(val1.Value()).String())
 
-		// Verify Set clears cached value and preserves UseSchemalessTypeRef
+		// 验证 Set 清空缓存，同时不丢失 UseSchemalessTypeRef 配置。
 		typedObj2 := &examplev1.Pod{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"},
 			ObjectMeta: metav1.ObjectMeta{Name: "pod-2-schemaless"},
@@ -542,14 +574,18 @@ func TestLazyObjectCELValue(t *testing.T) {
 	})
 }
 
+// getMetaName 取 CEL 值中的 metadata.name，测试断言用。
 func getMetaName(val ref.Val) string {
 	return getStringField(val, "metadata", "name")
 }
 
+// getAPIVersion 取 CEL 值中的 apiVersion，用于验证转换结果的目标版本。
 func getAPIVersion(val ref.Val) string {
 	return getStringField(val, "apiVersion")
 }
 
+// getStringField 沿字段路径逐层取值；任何一层不是 map 或取值为 error 时返回空串，
+// 这样断言失败时不会 panic。
 func getStringField(val ref.Val, fields ...string) string {
 	for _, field := range fields {
 		if val == nil || types.IsError(val) {

@@ -28,12 +28,16 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
+// interpretWatchError 把 etcd 的 watch 错误翻译成 API 语义错误。
+// 中文说明：ErrCompacted 必须映射为 410 Gone（ResourceExpired），客户端据此重建
+// watch 并回到最新版本；未识别的错误原样返回，避免把未知故障伪装成正常语义。
 func interpretWatchError(err error) error {
 	switch {
 	case err == etcdrpc.ErrCompacted:
 		return errors.NewResourceExpired("The resourceVersion for the provided watch is too old.")
 	}
 
+	// 损坏对象被删除属于存储层内部问题，用 StoreReadError 告知客户端重试无益。
 	var corruptobjDeletedErr *corruptObjectDeletedError
 	if goerrors.As(err, &corruptobjDeletedErr) {
 		return &errors.StatusError{
@@ -49,6 +53,7 @@ func interpretWatchError(err error) error {
 	return err
 }
 
+// 这些消息是面向用户的可操作提示：告诉客户端如何恢复（去掉/更换 continue 参数）。
 const (
 	expired         string = "The resourceVersion for the provided list is too old."
 	continueExpired string = "The provided continue parameter is too old " +
@@ -63,6 +68,9 @@ const (
 		"and now may show up in the list."
 )
 
+// interpretListError 把 list 阶段的 compaction 错误翻译为 ResourceExpired。
+// 中文说明：分页场景下不能只报错——要给出可继续的新 token，否则大列表在中途
+// compaction 后永远无法完成。
 func interpretListError(err error, paging bool, continueKey, keyPrefix string) error {
 	switch {
 	case err == etcdrpc.ErrCompacted:
@@ -78,6 +86,7 @@ func handleCompactedErrorForPaging(continueKey, keyPrefix string) error {
 	// continueToken.ResoureVersion=-1 means that the apiserver can
 	// continue the list at the latest resource version. We don't use rv=0
 	// for this purpose to distinguish from a bad token that has empty rv.
+	// 中文说明：-1 编码“从最新版本继续”，与空 rv（非法 token）区分开。
 	newToken, err := storage.EncodeContinue(continueKey, keyPrefix, -1)
 	if err != nil {
 		utilruntime.HandleError(err)

@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// 编译期断言：该控制器同时充当动态证书控制器、CA 提供者与请求头配置提供者。
 var _ dynamiccertificates.ControllerRunner = &DynamicRequestHeaderController{}
 var _ dynamiccertificates.CAContentProvider = &DynamicRequestHeaderController{}
 
@@ -33,6 +34,7 @@ var _ headerrequest.RequestHeaderAuthRequestProvider = &DynamicRequestHeaderCont
 
 // DynamicRequestHeaderController combines DynamicCAFromConfigMapController and RequestHeaderAuthRequestController
 // into one controller for dynamically filling RequestHeaderConfig struct
+// 两者共用同一个 ConfigMap，由一个控制器统一运行可避免重复的 informer 与生命周期管理。
 type DynamicRequestHeaderController struct {
 	*dynamiccertificates.ConfigMapCAController
 	*headerrequest.RequestHeaderAuthRequestController
@@ -66,6 +68,7 @@ func newDynamicRequestHeaderController(client kubernetes.Interface) (*DynamicReq
 	}, nil
 }
 
+// RunOnce 同步执行两个子控制器的首次加载，聚合错误便于启动时一次性暴露所有问题。
 func (c *DynamicRequestHeaderController) RunOnce(ctx context.Context) error {
 	errs := []error{}
 	errs = append(errs, c.ConfigMapCAController.RunOnce(ctx))
@@ -73,6 +76,7 @@ func (c *DynamicRequestHeaderController) RunOnce(ctx context.Context) error {
 	return errors.NewAggregate(errs)
 }
 
+// Run 并发运行两个子控制器，任一上下文取消即整体退出。
 func (c *DynamicRequestHeaderController) Run(ctx context.Context, workers int) {
 	go c.ConfigMapCAController.Run(ctx, workers)
 	go c.RequestHeaderAuthRequestController.Run(ctx, workers)

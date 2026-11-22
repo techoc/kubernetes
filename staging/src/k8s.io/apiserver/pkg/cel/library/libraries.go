@@ -33,6 +33,9 @@ type Library interface {
 }
 
 // KnownLibraries returns all libraries used in Kubernetes.
+//
+// 返回的集合决定了 CEL 环境里可用的函数与类型；新增库必须同时在这里注册，
+// 否则编译期会报“未声明函数”，而运行期不会有任何补救机会。
 func KnownLibraries() []Library {
 	return []Library{
 		authzLib,
@@ -49,6 +52,8 @@ func KnownLibraries() []Library {
 	}
 }
 
+// isRegisteredType reports whether typeName is declared by any known library.
+// 用于在编译前做类型名校验，避免把拼写错误的类型名当作合法的动态类型。
 func isRegisteredType(typeName string) bool {
 	for _, lib := range KnownLibraries() {
 		for _, rt := range lib.Types() {

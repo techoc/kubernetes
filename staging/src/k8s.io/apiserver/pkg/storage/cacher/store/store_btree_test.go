@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestStoreListOrdered 验证 btree 存储按 key 排序输出，而不是按插入顺序。
+// 有序性是 list 与分页语义的前提，因此必须与插入顺序无关。
 func TestStoreListOrdered(t *testing.T) {
 	store := newThreadedBtreeStoreIndexer(nil, btreeDegree)
 	require.NoError(t, store.Add(testStorageElement("foo3", "bar3", 1)))
@@ -35,6 +37,10 @@ func TestStoreListOrdered(t *testing.T) {
 	}, store.List())
 }
 
+// TestStoreListPrefix 覆盖前缀列表与 continueKey 续传的组合。
+//
+// continueKey 用 "foo1\x00" 这类带 NUL 的值，是因为 btree 的续传语义是"严格大于"，
+// 而 NUL 是 key 的最小后缀，可精确表达"从 foo1 之后开始"。
 func TestStoreListPrefix(t *testing.T) {
 	store := newThreadedBtreeStoreIndexer(nil, btreeDegree)
 	require.NoError(t, store.Add(testStorageElement("foo3", "bar3", 1)))
@@ -76,6 +82,10 @@ func TestStoreListPrefix(t *testing.T) {
 	}, items)
 }
 
+// TestStoreSnapshotter 验证快照索引的查找与回收语义。
+//
+// 快照按 resourceVersion 递增保存，GetLessOrEqual 用于让 watch 从"不晚于目标 RV"
+// 的状态起步；RemoveLess 回收旧快照以控制内存，但必须保留仍可能被请求的最新一份。
 func TestStoreSnapshotter(t *testing.T) {
 	cache := NewSnapshotter()
 	cache.Add(10, fakeIndexer{rv: 10})
@@ -131,6 +141,7 @@ func TestStoreSnapshotter(t *testing.T) {
 	assert.False(t, found)
 }
 
+// fakeIndexer 是只携带 rv 的 Indexer 桩，用于在快照测试中识别取到的是哪一份快照。
 type fakeIndexer struct {
 	rv int
 }
@@ -138,7 +149,9 @@ type fakeIndexer struct {
 func (f fakeIndexer) Add(obj interface{}) error    { return nil }
 func (f fakeIndexer) Update(obj interface{}) error { return nil }
 func (f fakeIndexer) Delete(obj interface{}) error { return nil }
-func (f fakeIndexer) Clone() Snapshot              { return f }
+
+// Clone 直接返回自身：桩没有可变状态，无需真正复制。
+func (f fakeIndexer) Clone() Snapshot { return f }
 func (f fakeIndexer) OrderedListPrefix(prefixKey, continueKey string) ([]interface{}, error) {
 	return nil, nil
 }
@@ -167,6 +180,7 @@ func (f fakeIndexer) Replace([]interface{}, string) error {
 }
 func (f fakeIndexer) Count(prefixKey, continueKey string) int { return 0 }
 
+// fakeSnapshotter 允许按用例注入 GetLessOrEqual 行为；其余方法为空实现。
 type fakeSnapshotter struct {
 	getLessOrEqual func(rv uint64) (Snapshot, bool)
 }
@@ -174,6 +188,8 @@ type fakeSnapshotter struct {
 var _ Snapshotter = (*fakeSnapshotter)(nil)
 
 func (f *fakeSnapshotter) Reset() {}
+
+// GetLessOrEqual 未注入实现时返回未找到，便于测试"无快照"分支。
 func (f *fakeSnapshotter) GetLessOrEqual(rv uint64) (Snapshot, bool) {
 	if f.getLessOrEqual == nil {
 		return nil, false

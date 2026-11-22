@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validation 校验审计策略（audit.k8s.io Policy）的字段取值与组合约束。
+// 校验失败时返回 field.ErrorList，调用方据此给出精确到字段路径的错误信息。
 package validation
 
 import (
@@ -25,6 +27,9 @@ import (
 )
 
 // ValidatePolicy validates the audit policy
+//
+// 先校验策略级的 omitStages，再逐条校验规则；所有错误会累积返回，而不是遇到
+// 第一条就停止，便于用户一次修正全部问题。
 func ValidatePolicy(policy *audit.Policy) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, validateOmitStages(policy.OmitStages, field.NewPath("omitStages"))...)
@@ -35,6 +40,8 @@ func ValidatePolicy(policy *audit.Policy) field.ErrorList {
 	return allErrs
 }
 
+// validatePolicyRule 校验单条规则：level、URL、资源与 omitStages，
+// 并检查“资源型/非资源型不能混用”的互斥约束。
 func validatePolicyRule(rule audit.PolicyRule, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, validateLevel(rule.Level, fldPath.Child("level"))...)
@@ -43,6 +50,7 @@ func validatePolicyRule(rule audit.PolicyRule, fldPath *field.Path) field.ErrorL
 	allErrs = append(allErrs, validateOmitStages(rule.OmitStages, fldPath.Child("omitStages"))...)
 
 	if len(rule.NonResourceURLs) > 0 {
+		// 一条规则只能描述资源请求或非资源请求；混用会让匹配语义含糊。
 		if len(rule.Resources) > 0 || len(rule.Namespaces) > 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("nonResourceURLs"), rule.NonResourceURLs, "rules cannot apply to both regular resources and non-resource URLs"))
 		}
@@ -65,6 +73,7 @@ var validOmitStages = []string{
 	string(audit.StagePanic),
 }
 
+// validateLevel 校验审计等级；level 是必填字段，空值按 Required 报错。
 func validateLevel(level audit.Level, fldPath *field.Path) field.ErrorList {
 	switch level {
 	case audit.LevelNone, audit.LevelMetadata, audit.LevelRequest, audit.LevelRequestResponse:
@@ -76,6 +85,8 @@ func validateLevel(level audit.Level, fldPath *field.Path) field.ErrorList {
 	}
 }
 
+// validateNonResourceURLs 要求 URL 以 '/' 开头，且 '*' 只能作为最后一步，
+// 否则前缀匹配会退化为任意位置的模式匹配，难以预测命中范围。
 func validateNonResourceURLs(urls []string, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for i, url := range urls {
@@ -94,6 +105,8 @@ func validateNonResourceURLs(urls []string, fldPath *field.Path) field.ErrorList
 	return allErrs
 }
 
+// validateResources 校验 API 组名是否为合法 DNS 子域，并检查 resourceNames
+// 不能脱离 resources 单独使用（否则无法确定要进行名称匹配的资源类型）。
 func validateResources(groupResources []audit.GroupResources, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for _, groupResource := range groupResources {
@@ -115,6 +128,7 @@ func validateResources(groupResources []audit.GroupResources, fldPath *field.Pat
 	return allErrs
 }
 
+// validateOmitStages 只允许四个已知阶段；拼写错误会让“省略”静默失效，因此必须拒绝。
 func validateOmitStages(omitStages []audit.Stage, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for i, stage := range omitStages {

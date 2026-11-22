@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package common 提供 CEL 校验器共用的 schema 抽象、无序/映射列表处理
+// 以及基于新旧值关联的递归比较工具。
 package common
 
 import (
@@ -32,6 +34,10 @@ import (
 //
 // CorrelatedObject is not thread-safe. It is the responsibility of the caller
 // to handle concurrency, if any.
+//
+// 存在的意义是"棘轮校验（ratcheting）"：新对象只需在其未变更的部分上满足
+// 旧规则。判断某部分是否变更，就要把它与旧对象中"对应的"部分配对——
+// 对 map-key 列表不能按下标配对，而应按 map 键匹配，这就是 correlate 逻辑的由来。
 type CorrelatedObject struct {
 	// Currently correlated old value during traversal of the schema/object
 	OldValue interface{}
@@ -45,6 +51,7 @@ type CorrelatedObject struct {
 
 	// Duration spent on ratcheting validation for this object and all of its
 	// children.
+	// 用指针共享同一个累计器，子节点直接累加到父节点上，避免逐层回传。
 	Duration *time.Duration
 
 	// Scratch space below, may change during validation
@@ -53,6 +60,7 @@ type CorrelatedObject struct {
 	comparisonResult *bool
 
 	// Cached map representation of a map-type list, or nil if not map-type list
+	// 惰性构建：只有真正按索引访问 map 类型列表时才需要它。
 	mapList MapList
 
 	// Children spawned by a call to `Validate` on this object
@@ -68,6 +76,7 @@ type CorrelatedObject struct {
 	children map[interface{}]*CorrelatedObject
 }
 
+// NewCorrelatedObject 创建关联树的根节点，并将计时累加器初始化为零。
 func NewCorrelatedObject(new, old interface{}, schema Schema) *CorrelatedObject {
 	d := time.Duration(0)
 	return &CorrelatedObject{
@@ -108,6 +117,7 @@ func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interf
 		// Look up keys for this index in current object
 		currentElement := asList[index]
 
+		// 旧列表的 map 表示只构建一次并缓存，因为同一列表内多次按下标访问很常见。
 		oldList := r.mapList
 		if oldList == nil {
 			oldList = MakeMapList(r.Schema, oldAsList)
@@ -120,6 +130,8 @@ func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interf
 		// We might be able to support this, but do not currently see a lot
 		// of value
 		// (would allow you to add/remove items from sets with ratcheting but not change them)
+		//
+		// set 无稳定元素标识，无法可靠配对，故一律视为不可关联，退回整体比较。
 		return nil
 	case "":
 		fallthrough
@@ -142,6 +154,9 @@ func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interf
 // If a lazy computation could not be found for all children possibly due
 // to validation logic short circuiting and skipping the children, then
 // this function simply defers to reflect.DeepEqual.
+//
+// 缓存结果以指针写入 comparisonResult：同一节点可能在多条校验路径上被反复比较，
+// 缓存把复杂度从指数级降到线性。
 func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 	start := time.Now()
 	defer func() {
@@ -191,11 +206,13 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 			if child == nil {
 				if r.mapList == nil {
 					// Treat non-correlatable array as a unit with reflect.DeepEqual
+					// 普通列表无法按下标配对时，只能整体比较，这是保守但正确的选择。
 					return reflect.DeepEqual(oldAsArray, newAsArray)
 				}
 
 				// If array is correlatable, but old not found. Just short circuit
 				// comparison
+				// 可关联列表却找不到对应旧元素，等价于新增元素，直接判不相等。
 				return false
 
 			} else if !child.CachedDeepEqual() {
@@ -262,6 +279,7 @@ func (r *CorrelatedObject) Key(field string) *CorrelatedObject {
 		return nil
 	}
 
+	// 字段 schema 可能显式声明，也可能来自 additionalProperties（自由键的 map）。
 	var propertySchema Schema
 	if prop, exists := r.Schema.Properties()[field]; exists {
 		propertySchema = prop
@@ -316,6 +334,7 @@ func (r *CorrelatedObject) Index(i int) *CorrelatedObject {
 	if i := r.Schema.Items(); i != nil {
 		itemSchema = i
 	} else {
+		// 没有 items schema 就无法继续递归校验，视为不可关联。
 		return nil
 	}
 

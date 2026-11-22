@@ -30,6 +30,7 @@ import (
 )
 
 // readOnlyVerbs contains verbs for read-only requests.
+// 只读请求不会触发 watch 扇出，因此不计入成本估算。
 var readOnlyVerbs = sets.NewString("get", "list", "watch", "proxy")
 
 // watchIdentifier identifies group of watches that are similar.
@@ -51,6 +52,7 @@ type watchIdentifier struct {
 
 // ForgetWatchFunc is a function that should be called to forget
 // the previously registered watch from the watch tracker.
+// 必须且只能调用一次，否则计数会永久泄漏。
 type ForgetWatchFunc func()
 
 // WatchTracker is an interface that allows tracking the number
@@ -75,6 +77,7 @@ type WatchTracker interface {
 // to the field in the object on which the index is built.
 type builtinIndexes map[string]string
 
+// getBuiltinIndexes 返回 watch cache 中已有的索引。
 func getBuiltinIndexes() builtinIndexes {
 	// The only existing indexes as of now are:
 	// - spec.nodeName for pods
@@ -93,10 +96,12 @@ type watchTracker struct {
 	// It can't change after creation.
 	indexes builtinIndexes
 
-	lock       sync.Mutex
+	lock sync.Mutex
+	// watchCount 按 watchIdentifier 聚合；删除到 0 时立即移除条目，防止 map 无限增长。
 	watchCount map[watchIdentifier]int
 }
 
+// NewWatchTracker 构造一个空的 watch 跟踪器。
 func NewWatchTracker() WatchTracker {
 	return &watchTracker{
 		indexes:    getBuiltinIndexes(),
@@ -105,9 +110,12 @@ func NewWatchTracker() WatchTracker {
 }
 
 const (
+	// unsetValue 表示请求未指定（或无法解析）该索引字段的 field selector。
 	unsetValue = "<unset>"
 )
 
+// getIndexValue 从 list options 中提取索引字段的精确匹配值；
+// 解析失败或未指定时返回 unsetValue，调用方据此走保守计数路径。
 func getIndexValue(r *http.Request, field string) string {
 	opts := metainternalversion.ListOptions{}
 	if err := scheme.ParameterCodec.DecodeParameters(r.URL.Query(), metav1.SchemeGroupVersion, &opts); err != nil {
@@ -123,12 +131,14 @@ func getIndexValue(r *http.Request, field string) string {
 	return unsetValue
 }
 
+// indexValue 记录某个 watch 的索引字段及取值，用于决定它是否应被计入。
 type indexValue struct {
 	resource string
 	value    string
 }
 
 // RegisterWatch implements WatchTracker interface.
+// 非 watch 请求返回 nil，调用方需容忍 nil 的 forget 函数。
 func (w *watchTracker) RegisterWatch(r *http.Request) ForgetWatchFunc {
 	requestInfo, ok := request.RequestInfoFrom(r.Context())
 	if !ok || requestInfo == nil || requestInfo.Verb != "watch" {
@@ -156,6 +166,7 @@ func (w *watchTracker) RegisterWatch(r *http.Request) ForgetWatchFunc {
 	return w.forgetWatch(identifier, index)
 }
 
+// updateIndexLocked 按 incr 调整计数；调用方必须持有锁。
 func (w *watchTracker) updateIndexLocked(identifier *watchIdentifier, index *indexValue, incr int) {
 	if index == nil {
 		w.watchCount[*identifier] += incr
@@ -174,12 +185,14 @@ func (w *watchTracker) updateIndexLocked(identifier *watchIdentifier, index *ind
 		// approximation i.e. (a)+[(b) for field value of ""] will be small.
 		// This seem to be true in almost all production clusters, which makes
 		// it a reasonable first step simplification to unblock progres on it.
+		// 未指定索引字段或取值为空的 watch 会被计入所有事件，属于保守近似。
 		if index.value == unsetValue || index.value == "" {
 			w.watchCount[*identifier] += incr
 		}
 	}
 }
 
+// forgetWatch 返回注销函数；注销后计数归零则删除 map 条目。
 func (w *watchTracker) forgetWatch(identifier *watchIdentifier, index *indexValue) ForgetWatchFunc {
 	return func() {
 		w.lock.Lock()
@@ -200,6 +213,7 @@ func (w *watchTracker) forgetWatch(identifier *watchIdentifier, index *indexValu
 //
 // TODO(wojtek-t): Figure out how to approach DELETECOLLECTION calls.
 func (w *watchTracker) GetInterestedWatchCount(requestInfo *request.RequestInfo) int {
+	// 只读请求不会产生 watch 扇出。
 	if requestInfo == nil || readOnlyVerbs.Has(requestInfo.Verb) {
 		return 0
 	}
@@ -217,6 +231,7 @@ func (w *watchTracker) GetInterestedWatchCount(requestInfo *request.RequestInfo)
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	// 从最宽泛的标识符开始逐级收窄，累加三个层级的 watch 数量。
 	result += w.watchCount[*identifier]
 
 	if requestInfo.Namespace != "" {

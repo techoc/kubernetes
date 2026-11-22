@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// maxRequestSizeBytes 是单个请求的字节上限，用于估算无界字符串/数组/映射的 CEL 预算上限。
 const maxRequestSizeBytes = apiservercel.DefaultMaxRequestSizeBytes
 
 // SchemaDeclType converts the structural schema to a CEL declaration, or returns nil if the
@@ -37,6 +38,10 @@ const maxRequestSizeBytes = apiservercel.DefaultMaxRequestSizeBytes
 // if their schema is not exposed.
 //
 // The CEL declaration for objects with XPreserveUnknownFields does not expose unknown fields.
+//
+// 返回 nil 是刻意的“不暴露”信号：调用方据此把该字段从声明中剔除，
+// 从而让 CEL 表达式无法访问没有 schema 的数据。所有 MaxElements 都是估算值，
+// 用于给 CEL 运行时预算做上界，而非精确校验。
 func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 	if s == nil {
 		return nil
@@ -54,6 +59,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 		// To validate requirements on both the int and string representation:
 		//  `type(intOrStringField) == int ? intOrStringField < 5 : double(intOrStringField.replace('%', '')) < 0.5
 		//
+		// 用 dyn 表示联合类型，所有类型检查推迟到运行时，因此表达式必须自行用 type() 守卫。
 		dyn := apiservercel.NewSimpleTypeWithMinSize("dyn", cel.DynType, nil, 1) // smallest value for a serialized x-kubernetes-int-or-string is 0
 
 		// If the schema has a maxlength constraint, bound the max elements based on the max length.
@@ -74,6 +80,8 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 		// 'apiVersion', 'kind', 'metadata.name' and 'metadata.generateName' are always accessible to validator rules
 		// at the root of resources, even if not specified in the schema.
 		// This includes the root of a custom resource and the root of XEmbeddedResource objects.
+		//
+		// 这些字段是 apiserver 隐式保证存在的，即使 CRD schema 未声明也要暴露给校验规则。
 		s = s.WithTypeAndObjectMeta()
 	}
 
@@ -81,6 +89,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 	case "array":
 		if s.Items() != nil {
 			itemsType := SchemaDeclType(s.Items(), s.Items().IsXEmbeddedResource())
+			// 元素类型不可暴露时，整个数组也不暴露，避免出现“能取到数组却无法访问元素”的半吊子声明。
 			if itemsType == nil {
 				return nil
 			}
@@ -125,6 +134,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 				}
 			}
 			if fieldType := SchemaDeclType(prop, prop.IsXEmbeddedResource()); fieldType != nil {
+				// Escape 处理与 CEL 关键字/特殊字符冲突的字段名。
 				if propName, ok := apiservercel.Escape(name); ok {
 					fields[propName] = apiservercel.NewDeclField(propName, fieldType, required[name], enumValues, prop.Default())
 				}
@@ -132,6 +142,8 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 				// properties
 				// only include required properties without a default value; default values are filled in
 				// server-side
+				//
+				// 有默认值的必填字段服务端会补全，不计入请求体积，否则会高估。
 				if required[name] && prop.Default() == nil {
 					minSerializedSize += int64(len(name)) + fieldType.MinSerializedSize + 4
 				}
@@ -168,6 +180,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 		if s.MaxLength() != nil {
 			strWithMaxLength.MaxElements = estimateMaxElementsFromMaxLength(s)
 		} else {
+			// 枚举字符串的取值受限，用最长枚举值估算比按整个请求上限更贴近实际。
 			if len(s.Enum()) > 0 {
 				strWithMaxLength.MaxElements = estimateMaxStringEnumLength(s)
 			} else {
@@ -185,6 +198,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 	return nil
 }
 
+// zeroIfNegative 把负的 maxItems/maxLength 归零；OpenAPI 中负值无意义，但不应导致预算估算为负。
 func zeroIfNegative(v int64) int64 {
 	if v < 0 {
 		return 0
@@ -194,6 +208,8 @@ func zeroIfNegative(v int64) int64 {
 
 // WithTypeAndObjectMeta ensures the kind, apiVersion and
 // metadata.name and metadata.generateName properties are specified, making a shallow copy of the provided schema if needed.
+//
+// 只在缺失时补齐；已具备全部字段时直接返回原指针，避免无谓复制。
 func WithTypeAndObjectMeta(s *spec.Schema) *spec.Schema {
 	if s.Properties != nil &&
 		s.Properties["kind"].Type.Contains("string") &&
@@ -262,6 +278,8 @@ func estimateMaxStringEnumLength(s Schema) int64 {
 
 // estimateMaxArrayItemsPerRequest estimates the maximum number of array items with
 // the provided minimum serialized size that can fit into a single request.
+//
+// +1 用于补偿元素之间的逗号分隔符。
 func estimateMaxArrayItemsFromMinSize(minSize int64) int64 {
 	// subtract 2 to account for [ and ]
 	return (maxRequestSizeBytes - 2) / (minSize + 1)
@@ -279,6 +297,8 @@ func estimateMaxAdditionalPropertiesFromMinSize(minSize int64) int64 {
 
 // estimateMaxElementsFromMaxLength estimates the maximum number of elements for a string schema
 // that is bound with a maxLength constraint.
+//
+// 乘 4 是因为 OpenAPI 的 maxLength 以码点计，而预算按字节计，单个码点最多 4 字节。
 func estimateMaxElementsFromMaxLength(s Schema) int64 {
 	// multiply the user-provided max length by 4 in the case of an otherwise-untyped string
 	// we do this because the OpenAPIv3 spec indicates that maxLength is specified in runes/code points,

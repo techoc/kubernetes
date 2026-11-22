@@ -37,6 +37,10 @@ import (
 const workItemKey = "key"
 
 // DynamicServingCertificateController dynamically loads certificates and provides a golang tls compatible dynamic GetCertificate func.
+//
+// 控制器把“静态 tls.Config 模板”与“动态证书内容”分离：baseTLSConfig 只复制一次，
+// 每次内容变化时在副本上重建 Certificates/ClientCAs/NameToCertificate，再通过
+// atomic.Value 原子替换，因而 TLS 握手无需加锁即可读到一致快照。
 type DynamicServingCertificateController struct {
 	// baseTLSConfig is the static portion of the tlsConfig for serving to clients.  It is copied and the copy is mutated
 	// based on the dynamic cert state.
@@ -63,6 +67,9 @@ type DynamicServingCertificateController struct {
 var _ Listener = &DynamicServingCertificateController{}
 
 // NewDynamicServingCertificateController returns a controller that can be used to keep a TLSConfig up to date.
+//
+// clientCA 可以为 nil（例如不需要客户端证书的服务端认证）；servingCert 与
+// sniCerts 中的证书内容为空时，syncCerts 会报错而不是让服务端无证书可用。
 func NewDynamicServingCertificateController(
 	baseTLSConfig *tls.Config,
 	clientCA CAContentProvider,
@@ -87,9 +94,13 @@ func NewDynamicServingCertificateController(
 }
 
 // GetConfigForClient is an implementation of tls.Config.GetConfigForClient
+//
+// 每次握手都从 atomic.Value 取出当前配置的副本，保证多个连接拿到的是
+// 同一份快照，而不是正在被重建的共享结构。
 func (c *DynamicServingCertificateController) GetConfigForClient(clientHello *tls.ClientHelloInfo) (*tls.Config, error) {
 	uncastObj := c.currentServingTLSConfig.Load()
 	if uncastObj == nil {
+		// 首次同步尚未完成；此时不能接受连接。
 		return nil, errors.New("dynamiccertificates: configuration not ready")
 	}
 	tlsConfig, ok := uncastObj.(*tls.Config)
@@ -106,6 +117,7 @@ func (c *DynamicServingCertificateController) GetConfigForClient(clientHello *tl
 
 	// if the client didn't set SNI, then we need to inspect the requested IP so that we can choose
 	// a certificate from our list if we specifically handle that IP.  This can happen when an IP is specifically mapped by name.
+	// 未带 SNI 时无法按主机名选证书，只能退而根据本端 IP 查表；查不到就用默认证书。
 	host, _, err := net.SplitHostPort(clientHello.Conn.LocalAddr().String())
 	if err != nil {
 		return tlsConfigCopy, nil
@@ -122,6 +134,9 @@ func (c *DynamicServingCertificateController) GetConfigForClient(clientHello *tl
 }
 
 // newTLSContent determines the next set of content for overriding the baseTLSConfig.
+//
+// 这里只收集原始 PEM 字节，不做解析；是否真正变化由 syncCerts 通过 Equal 判断，
+// 避免内容未变时重复解析证书。
 func (c *DynamicServingCertificateController) newTLSContent() (*dynamicCertificateContent, error) {
 	newContent := &dynamicCertificateContent{}
 
@@ -156,6 +171,9 @@ func (c *DynamicServingCertificateController) newTLSContent() (*dynamicCertifica
 
 // syncCerts gets newTLSContent, if it has changed from the existing, the content is parsed and stored for usage in
 // GetConfigForClient.
+//
+// 失败时保留旧配置继续服务，由调用方（worker）按限速队列重试，避免短暂的文件
+// 读取失败直接中断 TLS 服务。
 func (c *DynamicServingCertificateController) syncCerts() error {
 	newContent, err := c.newTLSContent()
 	if err != nil {
@@ -236,6 +254,9 @@ func (c *DynamicServingCertificateController) RunOnce() error {
 }
 
 // Run starts the kube-apiserver and blocks until stopCh is closed.
+//
+// 与其它控制器不同，这里只启动一个 worker：证书重建本身很轻，且 syncCerts
+// 依赖“单线程”假设来避免对 currentlyServedContent 加锁。
 func (c *DynamicServingCertificateController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -262,6 +283,7 @@ func (c *DynamicServingCertificateController) runWorker() {
 	}
 }
 
+// processNextWorkItem 处理一个同步请求；失败时进入限速重试队列。
 func (c *DynamicServingCertificateController) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -282,6 +304,8 @@ func (c *DynamicServingCertificateController) processNextWorkItem() bool {
 }
 
 // Enqueue a method to allow separate control loops to cause the certificate controller to trigger and read content.
+//
+// 队列中永远只有同一个 key，重复入队会被去重；这足以表达“需要重新同步”。
 func (c *DynamicServingCertificateController) Enqueue() {
 	c.queue.Add(workItemKey)
 }

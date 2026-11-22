@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package util 提供 webhook 准入插件共用的小工具，目前只包含 AdmissionReview
+// 版本协商的判断逻辑。
 package util
 
 import (
@@ -21,6 +23,10 @@ import (
 )
 
 // HasAdmissionReviewVersion check whether a version is accepted by a given webhook.
+//
+// 版本协商是双向的：apiserver 发送的 AdmissionReview 版本必须是 webhook 在
+// admissionReviewVersions 中声明支持的版本。webhook 配置可能包含多个版本，
+// 调用方据此挑选一个双方都支持的版本；都不支持时请求无法发送。
 func HasAdmissionReviewVersion(a string, w webhook.WebhookAccessor) bool {
 	for _, b := range w.GetAdmissionReviewVersions() {
 		if b == a {

@@ -23,6 +23,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestLoopbackHostPortIPv4 验证当监听地址是 0.0.0.0 时，自客户端应改用
+// 回环地址而不是 0.0.0.0；显式给出的具体 IP 则保持不变。
 func TestLoopbackHostPortIPv4(t *testing.T) {
 	_, ipv6only, err := isIPv6LoopbackSupported()
 	if err != nil {
@@ -54,6 +56,9 @@ func TestLoopbackHostPortIPv4(t *testing.T) {
 		t.Fatalf("expected 443 as port, got %q", port)
 	}
 }
+
+// TestLoopbackHostPortIPv6 是 IPv4 用例的 IPv6 版本；主机未提供 IPv6 回环
+// 接口时跳过，避免在受限环境里误报。
 func TestLoopbackHostPortIPv6(t *testing.T) {
 	ipv6, _, err := isIPv6LoopbackSupported()
 	if err != nil {
@@ -86,6 +91,8 @@ func TestLoopbackHostPortIPv6(t *testing.T) {
 	}
 }
 
+// isIPv6LoopbackSupported 探测本机是否存在回环地址，并区分“只有 IPv6 回环”
+// 与“同时有 IPv4 回环”两种情况，供测试决定是否执行/跳过。
 func isIPv6LoopbackSupported() (ipv6 bool, ipv6only bool, err error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

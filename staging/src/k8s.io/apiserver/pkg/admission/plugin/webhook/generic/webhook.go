@@ -50,6 +50,9 @@ import (
 )
 
 // Webhook is an abstract admission plugin with all the infrastructure to define Admit or Validate on-top.
+//
+// 它把"配置来源、匹配、调用"这些与具体插件无关的部分集中起来，
+// Mutating/Validating 插件只需实现差异化的调度逻辑。
 type Webhook struct {
 	*admission.Handler
 
@@ -119,6 +122,9 @@ type ReloadableSource interface {
 type StaticSourceFactory func(manifestsDir string) (ReloadableSource, error)
 
 // NewWebhook creates a new generic admission webhook.
+//
+// 客户端管理器同时注册 v1beta1 与 v1：webhook 服务端可能只支持旧版本，
+// 由 ClientManager 在请求时协商。默认 resolver 可被后续 initializer 覆盖。
 func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory sourceFactory, dispatcherFactory dispatcherFactory) (*Webhook, error) {
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
@@ -224,6 +230,7 @@ func (a *Webhook) SetExternalKubeInformerFactory(f informers.SharedInformerFacto
 	a.apiSource = nil
 }
 
+// SetUnconditionalAuthorizer 注入 match condition 求值所需的授权器。
 func (a *Webhook) SetUnconditionalAuthorizer(authorizer authorizer.UnconditionalAuthorizer) {
 	a.authorizer = authorizer
 }
@@ -237,6 +244,7 @@ func (a *Webhook) ValidateInitialization() error {
 		if a.apiSourceInformers == nil {
 			return fmt.Errorf("kubernetes client is not properly setup")
 		}
+		// 只有启用虚拟资源排除特性时才传入排除集合，否则传 nil 让来源不做额外过滤。
 		if a.excludeVirtualResources {
 			a.apiSource = a.apiSourceFactory(a.apiSourceInformers, a.excludedAdmissionResources)
 		} else {
@@ -264,6 +272,7 @@ func (a *Webhook) ValidateInitialization() error {
 			if a.staticSourceFactory == nil {
 				return fmt.Errorf("static webhook manifests configured in %q but no static source factory is set", a.staticManifestsDir)
 			}
+			// 文件监听需要随 server 退出而停止，因此依赖 drained 通知。
 			if a.stopCh == nil {
 				return fmt.Errorf("stopCh not set: WantsDrainedNotification must be called before ValidateInitialization")
 			}
@@ -286,6 +295,7 @@ func (a *Webhook) ValidateInitialization() error {
 		a.hookSource = a.apiSource
 	}
 
+	// 就绪条件是 namespace informer 与 hook 来源都完成首次同步。
 	a.SetReadyFunc(func() bool {
 		return a.namespaceInformer.Informer().HasSynced() && a.hookSource.HasSynced()
 	})
@@ -295,6 +305,10 @@ func (a *Webhook) ValidateInitialization() error {
 
 // ShouldCallHook returns invocation details if the webhook should be called, nil if the webhook should not be called,
 // or an error if an error was encountered during evaluation.
+//
+// 匹配顺序：namespace selector -> object selector -> rules（含等价资源）。
+// 前两步的匹配错误不会立即返回：如果最终规则不匹配，就不该因无关的
+// selector 错误而拒绝请求；只有确定要调用 webhook 时才把错误抛给用户。
 func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor, attr admission.Attributes, o admission.ObjectInterfaces, v VersionedAttributeAccessor) (*WebhookInvocation, *apierrors.StatusError) {
 	matches, matchNsErr := a.namespaceMatcher.MatchNamespaceSelector(h, attr)
 	// Should not return an error here for webhooks which do not apply to the request, even if err is an unexpected scenario.
@@ -321,6 +335,8 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 			break
 		}
 	}
+	// MatchPolicy=Equivalent 时还要检查等价资源（如 deployment 与 replicasets 的
+	// scale 子资源），否则针对某一版本的规则会漏掉其它等价形式。
 	if invocation == nil && h.GetMatchPolicy() != nil && *h.GetMatchPolicy() == v1.Equivalent {
 		attrWithOverride := &attrWithResourceOverride{Attributes: attr}
 		equivalents := o.GetEquivalentResourceMapper().EquivalentResourcesFor(attr.GetResource(), attr.GetSubresource())
@@ -337,6 +353,7 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 				m := rules.Matcher{Rule: r, Attr: attrWithOverride}
 				if m.Matches() {
 					kind := o.GetEquivalentResourceMapper().KindFor(equivalent, attr.GetSubresource())
+					// 等价资源没有对应 Kind 时无法构造请求体，属于服务端配置错误。
 					if kind.Empty() {
 						return nil, apierrors.NewInternalError(fmt.Errorf("unable to convert to %v: unknown kind", equivalent))
 					}
@@ -355,6 +372,7 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 	if invocation == nil {
 		return nil, nil
 	}
+	// 到这里已确定要调用 webhook，之前缓存的 selector 错误现在必须生效。
 	if matchNsErr != nil {
 		return nil, matchNsErr
 	}
@@ -371,6 +389,8 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 		matcher := h.GetCompiledMatcher(a.filterCompiler)
 		matchResult := matcher.Match(ctx, versionedAttr, nil, a.authorizer)
 
+		// match condition 求值失败时 fail closed：宁可拒绝请求，
+		// 也不能让策略因求值错误而被静默绕过。
 		if matchResult.Error != nil {
 			klog.Warningf("Failed evaluating match conditions, failing closed %v: %v", h.GetName(), matchResult.Error)
 			return nil, apierrors.NewForbidden(attr.GetResource().GroupResource(), attr.GetName(), matchResult.Error)
@@ -384,11 +404,14 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 	return invocation, nil
 }
 
+// attrWithResourceOverride 只覆盖资源字段，其余属性透传，
+// 用于在等价资源上复用同一个 rule matcher。
 type attrWithResourceOverride struct {
 	admission.Attributes
 	resource schema.GroupVersionResource
 }
 
+// GetResource 返回被替换后的等价资源。
 func (a *attrWithResourceOverride) GetResource() schema.GroupVersionResource { return a.resource }
 
 // isExcludedFromAllHooks returns true for non-persisted virtual resources (auth/authz reviews)
@@ -406,6 +429,12 @@ func (a *Webhook) isExcludedFromAPIHooks(attr admission.Attributes) bool {
 }
 
 // Dispatch is called by the downstream Validate or Admit methods.
+//
+// 三层排除逻辑保护集群自身可用性：
+//   - 认证/授权 review 等虚拟资源不经过任何 webhook，避免准入卡死认证链路；
+//   - 准入配置资源不经过 API 来源的 webhook，避免自我引用死锁，
+//     但静态清单来源仍可处理它们；
+//   - 其余请求等就绪后按 hookSource 全量调度。
 func (a *Webhook) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	if a.isExcludedFromAllHooks(attr.GetResource().GroupResource()) {
 		// Virtual auth/authz resources are excluded from all webhooks (static and REST-based)
@@ -425,6 +454,7 @@ func (a *Webhook) Dispatch(ctx context.Context, attr admission.Attributes, o adm
 		}
 		return nil
 	}
+	// 未就绪时拒绝而非放行：fail closed 保证配置尚未加载完时不会漏掉校验。
 	if !a.WaitForReady() {
 		return admission.NewForbidden(attr, fmt.Errorf("not yet ready to handle request"))
 	}

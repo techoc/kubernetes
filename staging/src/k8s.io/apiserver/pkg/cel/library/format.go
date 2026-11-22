@@ -94,20 +94,27 @@ func Format() cel.EnvOption {
 
 var formatLib = &format{}
 
+// format 是 "kubernetes.format" CEL 库的实现。
+// 无状态，因此用单例即可被所有编译环境共享。
 type format struct{}
 
+// LibraryName 返回库名，必须以 "kubernetes." 前缀避免与 cel-go 冲突。
 func (*format) LibraryName() string {
 	return "kubernetes.format"
 }
 
+// Types 声明库引入的自定义类型（Format），供编译期类型解析使用。
 func (*format) Types() []*cel.Type {
 	return []*cel.Type{apiservercel.FormatType}
 }
 
+// declarations 暴露函数声明，供兼容性测试核对函数集合。
 func (*format) declarations() map[string][]cel.FunctionOpt {
 	return formatLibraryDecls
 }
 
+// ZeroArgumentFunctionBinding 把无参 Go 函数包装成 CEL 重载绑定。
+// 这里显式校验参数个数为 0，防止误用导致运行期 panic。
 func ZeroArgumentFunctionBinding(binding func() ref.Val) decls.OverloadOpt {
 	return func(o *decls.OverloadDecl) (*decls.OverloadDecl, error) {
 		wrapped, err := decls.FunctionBinding(func(values ...ref.Val) ref.Val { return binding() })(o)
@@ -121,6 +128,8 @@ func ZeroArgumentFunctionBinding(binding func() ref.Val) decls.OverloadOpt {
 	}
 }
 
+// CompileOptions 注册 validate、format.named 以及每个具名格式的零参构造函数。
+// 具名格式被编译为常量返回，避免每次求值都查找 map。
 func (*format) CompileOptions() []cel.EnvOption {
 	options := make([]cel.EnvOption, 0, len(formatLibraryDecls))
 	for name, overloads := range formatLibraryDecls {
@@ -135,10 +144,14 @@ func (*format) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 无需运行期配置，格式库完全由编译期声明驱动。
 func (*format) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// ConstantFormats 把 CEL 中可用的格式名映射到校验实现。
+// MaxRegexSize 用于 CEL 的成本估算（避免正则类校验被滥用来消耗 CPU），
+// 因此必须按最坏情况保守取值。
 var ConstantFormats = map[string]apiservercel.Format{
 	"dns1123Label": {
 		Name:         "DNS1123Label",
@@ -247,6 +260,8 @@ var ConstantFormats = map[string]apiservercel.Format{
 }
 
 var formatLibraryDecls = map[string][]cel.FunctionOpt{
+	// validate 是成员函数：<Format>.validate(str) 返回 ?list<string>。
+	// 用 Optional 表达"无错误"，调用方无需区分空列表与 nil。
 	"validate": {
 		cel.MemberOverload("format-validate", []*cel.Type{apiservercel.FormatType, cel.StringType}, cel.OptionalType(cel.ListType(cel.StringType)), cel.BinaryBinding(formatValidate)),
 	},
@@ -266,6 +281,8 @@ var formatLibraryDecls = map[string][]cel.FunctionOpt{
 	},
 }
 
+// formatValidate 实现 validate 重载：类型不匹配时返回重载错误，
+// 校验通过返回 optional.none，失败返回错误消息列表。
 func formatValidate(arg1, arg2 ref.Val) ref.Val {
 	f, ok := arg1.Value().(apiservercel.Format)
 	if !ok {

@@ -27,9 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestLibraryCompatibility 锁定所有 CEL 库函数名及其引入版本。
+// 该测试是兼容性闸门：新增函数必须登记到对应 Kubernetes 版本，
+// 且库名必须以 "kubernetes." 前缀命名，避免与 cel-go 内建函数冲突。
 func TestLibraryCompatibility(t *testing.T) {
 	functionNames := sets.New[string]()
 	for _, lib := range KnownLibraries() {
+		// 前缀约定保证函数不会与上游 cel-go 声明重名。
 		if !strings.HasPrefix(lib.LibraryName(), "kubernetes.") {
 			t.Errorf("Expected all kubernetes CEL libraries to have a name package with a 'kubernetes.' prefix but got %v", lib.LibraryName())
 		}
@@ -66,6 +70,7 @@ func TestLibraryCompatibility(t *testing.T) {
 
 	// TODO: test celgo function lists
 
+	// 双向比对：多出的函数说明未登记版本，缺失的函数说明清单过期。
 	unexpected := functionNames.Difference(knownFunctions)
 	missing := knownFunctions.Difference(functionNames)
 
@@ -86,6 +91,7 @@ func TestTypeRegistration(t *testing.T) {
 		usedTypes := sets.New[*cel.Type]()
 		// scan all registered function declarations for the library
 		for _, fn := range lib.declarations() {
+			// 构造临时函数声明只为拿到重载签名；名字本身不参与校验。
 			fn, err := decls.NewFunction("placeholder-not-used", fn...)
 			if err != nil {
 				t.Fatal(err)
@@ -106,10 +112,12 @@ func TestTypeRegistration(t *testing.T) {
 		}
 		for _, lb := range lib.Types() {
 			registeredTypes.Insert(lb)
+			// legacyTypeNames 是历史遗留的未加前缀类型，迁移完成后可删除白名单。
 			if !strings.HasPrefix(lb.TypeName(), "kubernetes.") && !legacyTypeNames.Has(lb.TypeName()) {
 				t.Errorf("Expected all types in kubernetes CEL libraries to have a type name packaged with a 'kubernetes.' prefix but got %v", lb.TypeName())
 			}
 		}
+		// 函数签名中出现的自定义类型必须通过 Types() 暴露，否则编译期类型解析会失败。
 		unregistered := usedTypes.Difference(registeredTypes)
 		if len(unregistered) != 0 {
 			t.Errorf("Expected types to be registered with the %s library Type() functions, but they were not: %v", lib.LibraryName(), unregistered)

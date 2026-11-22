@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package preflight 提供 etcd 连接可用性的启动前检查，帮助 apiserver
+// 在配置错误时尽早失败，而不是等到第一次请求才报错。
 package preflight
 
 import (
@@ -27,10 +29,13 @@ import (
 const connectionTimeout = 1 * time.Second
 
 // EtcdConnection holds the Etcd server list
+// ServerList 中的地址可以是 http(s)://、tcp:// 或裸 host:port。
 type EtcdConnection struct {
 	ServerList []string
 }
 
+// serverReachable 只做 TCP 连通性探测：etcd 的 HTTP 端点可能要求认证或
+// 尚未完成 leader 选举，因此不发送业务请求。
 func (EtcdConnection) serverReachable(connURL *url.URL) bool {
 	scheme := connURL.Scheme
 	if scheme == "http" || scheme == "https" || scheme == "tcp" {
@@ -53,6 +58,8 @@ func parseServerURI(serverURI string) (*url.URL, error) {
 
 // CheckEtcdServers will attempt to reach all etcd servers once. If any
 // can be reached, return true.
+//
+// 随机化顺序可以避免所有 apiserver 同时探测同一台 etcd，造成启动风暴。
 func (con EtcdConnection) CheckEtcdServers() (done bool, err error) {
 	// Attempt to reach every Etcd server randomly.
 	serverNumber := len(con.ServerList)

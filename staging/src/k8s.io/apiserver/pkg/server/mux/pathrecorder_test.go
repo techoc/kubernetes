@@ -24,6 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestSecretHandlers 验证 UnlistedHandleFunc 注册的路径不会出现在
+// ListedPaths() 中，从而不会暴露到 OpenAPI/discovery。
 func TestSecretHandlers(t *testing.T) {
 	c := NewPathRecorderMux("test")
 	c.UnlistedHandleFunc("/secret", func(http.ResponseWriter, *http.Request) {})
@@ -32,6 +34,8 @@ func TestSecretHandlers(t *testing.T) {
 	assert.Contains(t, c.ListedPaths(), "/nonswagger")
 }
 
+// TestUnregisterHandlers 验证 Unregister 后请求返回 404，且重新注册会
+// 替换掉旧 handler（计数器 first 不再增长）。
 func TestUnregisterHandlers(t *testing.T) {
 	first := 0
 	second := 0
@@ -68,6 +72,9 @@ func TestUnregisterHandlers(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+// TestPrefixHandlers 覆盖前缀匹配的优先级与边界：
+// 更长的前缀优先、精确路径优先于前缀、带与不带结尾 '/' 的差异，
+// 以及未匹配时回落到 NotFoundHandler。
 func TestPrefixHandlers(t *testing.T) {
 	c := NewPathRecorderMux("test")
 	s := httptest.NewServer(c)

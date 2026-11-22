@@ -25,6 +25,9 @@ import (
 	"testing"
 )
 
+// TestCORSAllowedOrigins 验证 CORS 过滤器对 Origin 的匹配与响应头设置：
+// 未配置或未命中时不得返回任何 Access-Control-* 头；命中时回显 Origin 并
+// 允许凭据。正则是否锚定决定了是否会被 CVE-2022-1996 式的后缀绕过。
 func TestCORSAllowedOrigins(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -69,6 +72,9 @@ func TestCORSAllowedOrigins(t *testing.T) {
 			allowed:        true,
 		},
 		{
+			// 这里刻意展示未锚定正则的危险结果：example.com 会匹配
+			// example.com.hacker.org。真实集群靠 --cors-allowed-origins 的
+			// 启动校验阻止这种配置，过滤器本身不兜底。
 			// CVE-2022-1996: regular expression 'example.com' matches
 			// 'example.com.hacker.org' because it does not pin to the start
 			// and end of the host.
@@ -81,6 +87,7 @@ func TestCORSAllowedOrigins(t *testing.T) {
 			allowed:        true,
 		},
 		{
+			// 锚定到 //主机(:|$) 后，恶意后缀无法再匹配。
 			// with a proper regular expression we can prevent CVE-2022-1996
 			name:           "regex pins to start/end of the host name, CVE-2022-1996 is prevented",
 			allowedOrigins: []string{`//example.com(:|$)`},
@@ -166,6 +173,8 @@ func TestCORSAllowedOrigins(t *testing.T) {
 	}
 }
 
+// TestCORSAllowedMethods 验证 allowedMethods 为空时不限制 HTTP 方法，
+// 显式指定则仅回显所列方法；确保预检结果与实际允许的方法一致。
 func TestCORSAllowedMethods(t *testing.T) {
 	tests := []struct {
 		allowedMethods []string
@@ -224,6 +233,7 @@ func TestCORSAllowedMethods(t *testing.T) {
 
 }
 
+// TestCompileRegex 验证 compileRegexps 保留原始顺序与锚定语义。
 func TestCompileRegex(t *testing.T) {
 	uncompiledRegexes := []string{"endsWithMe$", "^startingWithMe"}
 	regexes, err := compileRegexps(uncompiledRegexes)

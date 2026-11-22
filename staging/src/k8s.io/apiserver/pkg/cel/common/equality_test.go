@@ -29,6 +29,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestCase 描述一条"按 keypath 遍历关联树"的用例及其期望结果。
 type TestCase struct {
 	Name string
 
@@ -55,6 +56,8 @@ type TestCase struct {
 	RootOldObject interface{}
 }
 
+// Run 执行一次遍历并校验三件事：新值、旧值、相等性判定。
+// 遍历到不可关联节点时 NewValue/OldValue 都必须期望为 nil。
 func (c TestCase) Run() error {
 	// Create the correlated object
 	correlatedObject := common.NewCorrelatedObject(c.RootObject, c.RootOldObject, c.Schema)
@@ -102,6 +105,7 @@ func (c TestCase) Run() error {
 }
 
 // Creates a *spec.Schema Schema by decoding the given YAML. Panics on error
+// YAML 形式让测试用例可以贴近真实的 OpenAPI 片段；解码失败说明用例本身写错，故 panic。
 func mustSchema(source string) *openapi.Schema {
 	d := yaml.NewYAMLOrJSONDecoder(strings.NewReader(source), 4096)
 	res := &spec.Schema{}
@@ -121,15 +125,21 @@ func mustUnstructured(source string) interface{} {
 	return res
 }
 
+// TestCorrelation 验证按 keypath 遍历关联树的结果。
+//
+// Tests ensure that the output of following keypath using the given
+// schema and root objects yields the provided new value and old value.
+// If new or old are nil, then ensures that the traversal failed due to
+// uncorrelatable field path.
+// Also confirms that CachedDeepEqual output is equal to expected result of
+// reflect.DeepEqual of the new and old values.
+//
+// 用例围绕 x-kubernetes-list-type 的语义展开：map 类型按 map-key 跨顺序关联，
+// atomic/set 不可逐项关联，只能整体比较。
 func TestCorrelation(t *testing.T) {
-	// Tests ensure that the output of following keypath using the given
-	// schema and root objects yields the provided new value and old value.
-	// If new or old are nil, then ensures that the traversal failed due to
-	// uncorrelatable field path.
-	// Also confirms that CachedDeepEqual output is equal to expected result of
-	// reflect.DeepEqual of the new and old values.
 	cases := []TestCase{
 		{
+			// 最基本的情形：普通对象字段按名称一一配对。
 			Name:          "Basic Key",
 			RootObject:    mustUnstructured(`a: b`),
 			RootOldObject: mustUnstructured(`a: b`),
@@ -142,6 +152,7 @@ func TestCorrelation(t *testing.T) {
 			OldValue: "b",
 		},
 		{
+			// atomic 列表（未声明 list-type 时的默认）不按元素关联，期望遍历失败。
 			Name:          "Atomic Array not correlatable",
 			RootObject:    mustUnstructured(`[a, b]`),
 			RootOldObject: mustUnstructured(`[a, b]`),
@@ -152,6 +163,7 @@ func TestCorrelation(t *testing.T) {
 			KeyPath: []interface{}{1},
 		},
 		{
+			// 新对象新增的键在旧对象中不存在，无法配对，遍历失败。
 			Name: "Added Key Not In Old Object",
 			RootObject: mustUnstructured(`
                 a: b
@@ -265,6 +277,7 @@ func TestCorrelation(t *testing.T) {
 			OldValue: map[string]interface{}{},
 		},
 		{
+			// 类型从列表变为 map：不相等，但根节点本身仍可比较。
 			Name: "Changed list to map",
 			RootObject: map[string]interface{}{
 				"a": "b",
@@ -293,6 +306,8 @@ func TestCorrelation(t *testing.T) {
 			OldValue: "a string",
 		},
 		{
+			// map 类型列表：新列表第 0 项应按 bar=baz 匹配到旧列表第 1 项，
+			// 从而拿到正确的旧值 bazValue——这是棘轮校验的核心场景。
 			Name: "Map list type",
 			RootObject: mustUnstructured(`
                 foo:
@@ -326,6 +341,7 @@ func TestCorrelation(t *testing.T) {
 			OldValue: "bazValue",
 		},
 		{
+			// 即使元素含 map-key 字段，list-type 为 atomic 时也不得逐项关联。
 			Name: "Atomic list item should not correlate",
 			RootObject: mustUnstructured(`
                 foo:
@@ -355,6 +371,7 @@ func TestCorrelation(t *testing.T) {
 			KeyPath: []interface{}{"foo", 0, "val"},
 		},
 		{
+			// map-key 匹配发生在内层对象内部，校验关联需递归到元素内部。
 			Name: "Map used inside of map list type should correlate",
 			RootObject: mustUnstructured(`
                 foo:
@@ -467,6 +484,7 @@ func TestCorrelation(t *testing.T) {
 			OldValue: map[string]interface{}{"baz": "value"},
 		},
 		{
+			// 列表顺序变化但 map-key 相同，语义上应视为未变更，故显式覆盖 ExpectEqual。
 			Name: "Re-ordered list considered equal to old value due to map keys",
 			RootObject: mustUnstructured(`
                 foo:
@@ -524,6 +542,8 @@ func TestCorrelation(t *testing.T) {
 			ExpectEqual: true,
 		},
 		{
+			// 未在 properties 中声明的键通过 additionalProperties 的 schema 关联，
+			// 否则自由键 map 无法做棘轮校验。
 			Name: "Correlate unknown string key via additional properties",
 			RootObject: mustUnstructured(`
                 foo:
@@ -625,6 +645,7 @@ func TestCorrelation(t *testing.T) {
             `),
 		},
 		{
+			// set 类型整体不变时应判为相等（走整体比较路径）。
 			Name: "unchanged list type set with atomic map values",
 			Schema: mustSchema(`
                 properties:
@@ -669,6 +690,7 @@ func TestCorrelation(t *testing.T) {
             `),
 		},
 		{
+			// set 类型有元素变化时应判为不相等。
 			Name: "changed list type set with atomic map values",
 			Schema: mustSchema(`
                 properties:
@@ -713,6 +735,7 @@ func TestCorrelation(t *testing.T) {
             `),
 		},
 		{
+			// 印证 set 的不可关联性：按索引下钻应得到 nil。
 			Name: "elements of list type set with atomic map values are not correlated",
 			Schema: mustSchema(`
                 properties:

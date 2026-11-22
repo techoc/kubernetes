@@ -23,6 +23,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestToStatusErr 验证 webhook 返回的 metav1.Status 如何被转换为 StatusError。
+// 关键不变量：无论 webhook 返回什么，最终对客户端都是失败状态，且状态码
+// 只接受 4xx/5xx；缺失信息时补上 "without explanation" 以保持可读性。
 func TestToStatusErr(t *testing.T) {
 	hookName := "foo"
 	deniedBy := fmt.Sprintf("admission webhook %q denied the request", hookName)
@@ -34,6 +37,7 @@ func TestToStatusErr(t *testing.T) {
 		expectedStatus string
 	}{
 		{
+			// 完全没有 Result 时也必须给出可读的拒绝原因。
 			"nil result",
 			nil,
 			deniedBy + " without explanation",
@@ -41,6 +45,7 @@ func TestToStatusErr(t *testing.T) {
 			metav1.StatusFailure,
 		},
 		{
+			// Message 优先于 Reason 用于拼装错误文本。
 			"only message",
 			&metav1.Status{
 				Message: "you shall not pass",
@@ -90,6 +95,8 @@ func TestToStatusErr(t *testing.T) {
 			metav1.StatusFailure,
 		},
 		{
+			// 2xx/3xx 对拒绝语义没有意义，统一回落为 400，避免出现
+			// “200 表示拒绝”这类自相矛盾的响应。
 			"200 status code",
 			&metav1.Status{Code: 200},
 			deniedBy + " without explanation",
@@ -118,6 +125,7 @@ func TestToStatusErr(t *testing.T) {
 			metav1.StatusFailure,
 		},
 		{
+			// Status 字段为 Success 与拒绝语义冲突，必须覆盖为 Failure。
 			"success status overridden",
 			&metav1.Status{Status: metav1.StatusSuccess},
 			deniedBy + " without explanation",
@@ -132,6 +140,8 @@ func TestToStatusErr(t *testing.T) {
 			metav1.StatusFailure,
 		},
 		{
+			// 非标准 Status 值（如 "custom"）原样保留，便于 webhook 作者
+			// 表达自定义语义。
 			"custom status preserved",
 			&metav1.Status{Status: "custom"},
 			deniedBy + " without explanation",
@@ -141,6 +151,8 @@ func TestToStatusErr(t *testing.T) {
 	}
 	for _, test := range tests {
 		err := ToStatusErr(hookName, test.result)
+		// 三处断言分别覆盖错误文本、HTTP 状态码与 Status 字段：任何一处
+		// 回退都会改变客户端可见的拒绝行为。
 		if err == nil || err.Error() != test.expectedError {
 			t.Errorf("%s: expected an error saying %q, but got %v", test.name, test.expectedError, err)
 		}

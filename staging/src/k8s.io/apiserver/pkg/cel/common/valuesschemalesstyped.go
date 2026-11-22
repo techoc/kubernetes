@@ -38,12 +38,18 @@ import (
 // Any behavioral difference is a bug. The returned ref.Val utilizes internal caching
 // for lazy reflection, which is not thread-safe and must only be used synchronously within a
 // single CEL evaluation.
+//
+// SchemalessTypedToVal 是“无 schema 的 typed 对象”进入 CEL 的入口。关键不变量：
+// 结果必须与先 ToUnstructured 再 NativeToValue 完全一致，否则 CEL 表达式的
+// 求值结果会随对象来自 typed 还是 unstructured 路径而不同。
+// 返回值内部带惰性缓存，只能在单次 CEL 求值的单 goroutine 内使用。
 func SchemalessTypedToVal(val interface{}) ref.Val {
 	if val == nil {
 		return types.NullValue
 	}
 
 	// Fast-path: immediately handle primitive types to completely bypass reflect.ValueOf overhead.
+	// 热点路径：绝大多数标量直接映射，避免反射开销。
 	switch typedVal := val.(type) {
 	case bool:
 		return types.Bool(typedVal)
@@ -60,11 +66,13 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 	case float64:
 		return types.Double(typedVal)
 	case []byte:
+		// 与 JSON 序列化保持一致：[]byte 在 unstructured 中表现为 base64 字符串。
 		if typedVal == nil {
 			return types.NullValue
 		}
 		return types.String(base64.StdEncoding.EncodeToString(typedVal))
 	case intstr.IntOrString:
+		// IntOrString 序列化后是 int 或 string，取决于其 Type 字段。
 		switch typedVal.Type {
 		case intstr.Int:
 			return types.Int(typedVal.IntVal)
@@ -78,6 +86,7 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		return types.NewErr("invalid data, got invalid reflect value: %v", v)
 	}
 
+	// nil pointer/map/slice 在 JSON 中都是 null，CEL 侧统一映射为 NullValue。
 	switch v.Kind() {
 	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice:
 		if v.IsNil() {
@@ -85,9 +94,12 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		}
 	}
 
+	// 若类型具备 ToUnstructured 能力，优先走 structured-merge-diff 的转换器，
+	// 以保证 JSON tag、omitempty、自定义序列化等语义与真实转换完全一致。
 	cacheEntry := value.TypeReflectEntryOf(v.Type())
 	if cacheEntry.CanConvertToUnstructured() {
 		if !v.CanAddr() {
+			// ToUnstructured 要求可寻址的值（可能取指针方法集）。
 			ptr := reflect.New(v.Type())
 			ptr.Elem().Set(v)
 			v = ptr.Elem()
@@ -101,6 +113,7 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		}
 		return types.DefaultTypeAdapter.NativeToValue(unstr)
 	}
+	// 无法整体转换时，按 kind 递归地惰性包装。
 	switch v.Kind() {
 	case reflect.Pointer:
 		if v.IsNil() {
@@ -125,6 +138,7 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		return types.Int(v.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		uVal := v.Uint()
+		// CEL 只有 int64；超出范围的 uint64 无法无损表示，宁可报错也不静默截断。
 		if uVal > 9223372036854775807 { // math.MaxInt64
 			return types.NewErr("unsigned value %d does not fit into int64 (overflow)", uVal)
 		}
@@ -141,11 +155,14 @@ var _ traits.Lister = &reflectSchemalessTypedList{}
 // reflectSchemalessTypedList wraps a Go slice/array as a lazy CEL Lister.
 // fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
 // guarantees that a single wrapped value is only ever accessed by a single goroutine.
+//
+// 惰性包装的收益是：表达式只访问少数下标时无需转换整个切片。
 type reflectSchemalessTypedList struct {
 	value      reflect.Value
 	fieldCache []ref.Val
 }
 
+// ConvertToNative 仅在目标为切片时允许，直接返回原始 Go 值。
 func (l *reflectSchemalessTypedList) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	switch typeDesc.Kind() {
 	case reflect.Slice:
@@ -155,6 +172,7 @@ func (l *reflectSchemalessTypedList) ConvertToNative(typeDesc reflect.Type) (int
 	}
 }
 
+// ConvertToType 只支持转换为 list 或 type，其他转换一律报错，与 CEL 标准语义一致。
 func (l *reflectSchemalessTypedList) ConvertToType(typeValue ref.Type) ref.Val {
 	switch typeValue {
 	case types.ListType:
@@ -165,6 +183,7 @@ func (l *reflectSchemalessTypedList) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", l.Type(), typeValue.TypeName())
 }
 
+// Equal 逐元素比较；先比长度可快速排除不相等的情况。
 func (l *reflectSchemalessTypedList) Equal(other ref.Val) ref.Val {
 	otherList, ok := other.(traits.Lister)
 	if !ok {
@@ -184,14 +203,17 @@ func (l *reflectSchemalessTypedList) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
+// Type 在 CEL 中始终表现为 list，即便底层是 Go 数组。
 func (l *reflectSchemalessTypedList) Type() ref.Type {
 	return types.ListType
 }
 
+// Value 暴露底层 Go 值，供需要原始类型的扩展函数使用。
 func (l *reflectSchemalessTypedList) Value() interface{} {
 	return l.value.Interface()
 }
 
+// Contains 线性扫描；CEL 列表没有哈希索引，复杂度为 O(n)。
 func (l *reflectSchemalessTypedList) Contains(val ref.Val) ref.Val {
 	sz := l.Size().(types.Int)
 	for i := range sz {
@@ -203,6 +225,7 @@ func (l *reflectSchemalessTypedList) Contains(val ref.Val) ref.Val {
 	return types.False
 }
 
+// Add 实现 CEL 的 `+`：结果退化为普通 RefValList，不再保持惰性包装。
 func (l *reflectSchemalessTypedList) Add(other ref.Val) ref.Val {
 	otherList, ok := other.(traits.Lister)
 	if !ok {
@@ -221,6 +244,7 @@ func (l *reflectSchemalessTypedList) Add(other ref.Val) ref.Val {
 	return types.NewRefValList(types.DefaultTypeAdapter, elements)
 }
 
+// Get 按需转换单个元素并缓存；下标越界返回 CEL 错误而非 panic。
 func (l *reflectSchemalessTypedList) Get(index ref.Val) ref.Val {
 	idx, ok := index.(types.Int)
 	if !ok {
@@ -241,23 +265,28 @@ func (l *reflectSchemalessTypedList) Get(index ref.Val) ref.Val {
 	return v
 }
 
+// Iterator 返回惰性迭代器；迭代同样走 Get，因此共享缓存。
 func (l *reflectSchemalessTypedList) Iterator() traits.Iterator {
 	return &reflectSchemalessTypedListIterator{reflectSchemalessTypedList: l, idx: 0}
 }
 
+// Size 返回底层切片的长度。
 func (l *reflectSchemalessTypedList) Size() ref.Val {
 	return types.Int(l.value.Len())
 }
 
+// reflectSchemalessTypedListIterator 记录当前下标，遍历时无需复制元素。
 type reflectSchemalessTypedListIterator struct {
 	*reflectSchemalessTypedList
 	idx int
 }
 
+// HasNext 判断是否还有未访问的元素。
 func (it *reflectSchemalessTypedListIterator) HasNext() ref.Val {
 	return types.Bool(it.idx < it.reflectSchemalessTypedList.value.Len())
 }
 
+// Next 返回当前元素并前进；越界时返回 CEL 错误。
 func (it *reflectSchemalessTypedListIterator) Next() ref.Val {
 	if it.idx >= it.reflectSchemalessTypedList.value.Len() {
 		return types.NewErr("no more elements")
@@ -272,11 +301,14 @@ var _ traits.Mapper = &reflectSchemalessTypedMap{}
 // reflectSchemalessTypedMap wraps a Go map as a lazy CEL Mapper.
 // fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
 // guarantees that a single wrapped value is only ever accessed by a single goroutine.
+//
+// fieldCache 同时承担“未命中”的缓存：值为 nil 表示该 key 不存在，避免重复查找。
 type reflectSchemalessTypedMap struct {
 	value      reflect.Value
 	fieldCache map[string]ref.Val
 }
 
+// ConvertToNative 仅当目标类型可赋值时返回原值。
 func (m *reflectSchemalessTypedMap) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	if m.value.Type().AssignableTo(typeDesc) {
 		return m.value.Interface(), nil
@@ -284,6 +316,7 @@ func (m *reflectSchemalessTypedMap) ConvertToNative(typeDesc reflect.Type) (inte
 	return nil, fmt.Errorf("type conversion error from '%s' to '%s'", m.Type(), typeDesc)
 }
 
+// ConvertToType 支持 map 与 type 两种目标类型。
 func (m *reflectSchemalessTypedMap) ConvertToType(typeValue ref.Type) ref.Val {
 	switch typeValue {
 	case types.MapType:
@@ -294,6 +327,7 @@ func (m *reflectSchemalessTypedMap) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", m.Type(), typeValue.TypeName())
 }
 
+// Equal 先比大小再逐 key 比较；大小不同必然不相等，可提前返回。
 func (m *reflectSchemalessTypedMap) Equal(other ref.Val) ref.Val {
 	otherMap, ok := other.(traits.Mapper)
 	if !ok {
@@ -314,14 +348,17 @@ func (m *reflectSchemalessTypedMap) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
+// Type 在 CEL 中表现为 map。
 func (m *reflectSchemalessTypedMap) Type() ref.Type {
 	return types.MapType
 }
 
+// Value 暴露底层 Go map。
 func (m *reflectSchemalessTypedMap) Value() interface{} {
 	return m.value.Interface()
 }
 
+// Contains 判断 key 是否存在；查找过程本身出错时优先返回错误。
 func (m *reflectSchemalessTypedMap) Contains(key ref.Val) ref.Val {
 	v, found := m.Find(key)
 	if v != nil && types.IsError(v) {
@@ -330,6 +367,8 @@ func (m *reflectSchemalessTypedMap) Contains(key ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
+// Find 按字符串 key 查找并缓存结果（含未命中）。
+// 非 string 的 key 在 JSON 语义下无法表示，返回错误且 found=false。
 func (m *reflectSchemalessTypedMap) Find(key ref.Val) (ref.Val, bool) {
 	keyVal, ok := key.(types.String)
 	if !ok {
@@ -362,6 +401,7 @@ func (m *reflectSchemalessTypedMap) Find(key ref.Val) (ref.Val, bool) {
 	return result, found
 }
 
+// Get 与 Find 的区别在于缺失时返回错误（对应 CEL 的索引访问语义）。
 func (m *reflectSchemalessTypedMap) Get(key ref.Val) ref.Val {
 	v, found := m.Find(key)
 	if !found {
@@ -373,24 +413,29 @@ func (m *reflectSchemalessTypedMap) Get(key ref.Val) ref.Val {
 	return v
 }
 
+// Iterator 在创建时快照 key 列表；迭代期间修改 map 不会影响本次遍历。
 func (m *reflectSchemalessTypedMap) Iterator() traits.Iterator {
 	return &reflectSchemalessTypedMapIterator{reflectSchemalessTypedMap: m, keys: m.value.MapKeys(), idx: 0}
 }
 
+// Size 返回 map 元素个数。
 func (m *reflectSchemalessTypedMap) Size() ref.Val {
 	return types.Int(m.value.Len())
 }
 
+// reflectSchemalessTypedMapIterator 遍历 key；值仍按需从 map 中取。
 type reflectSchemalessTypedMapIterator struct {
 	*reflectSchemalessTypedMap
 	keys []reflect.Value
 	idx  int
 }
 
+// HasNext 判断是否还有 key 未访问。
 func (it *reflectSchemalessTypedMapIterator) HasNext() ref.Val {
 	return types.Bool(it.idx < len(it.keys))
 }
 
+// Next 返回下一个 key 的字符串形式。
 func (it *reflectSchemalessTypedMapIterator) Next() ref.Val {
 	if it.idx >= len(it.keys) {
 		return types.NewErr("no more elements")
@@ -405,11 +450,15 @@ var _ traits.Mapper = &reflectSchemalessTypedStruct{}
 // reflectSchemalessTypedStruct wraps a Go struct as a lazy CEL Mapper.
 // fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
 // guarantees that a single wrapped value is only ever accessed by a single goroutine.
+//
+// 结构体在 CEL 中伪装成 map，字段名使用 JSON 名称（由 structured-merge-diff 的
+// 反射缓存提供），从而与 unstructured 视图保持一致。
 type reflectSchemalessTypedStruct struct {
 	value      reflect.Value
 	fieldCache map[string]ref.Val
 }
 
+// ConvertToNative 仅当目标类型可赋值时返回原结构体。
 func (s *reflectSchemalessTypedStruct) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	if s.value.Type().AssignableTo(typeDesc) {
 		return s.value.Interface(), nil
@@ -417,6 +466,7 @@ func (s *reflectSchemalessTypedStruct) ConvertToNative(typeDesc reflect.Type) (i
 	return nil, fmt.Errorf("type conversion error from struct type %v to %v", s.value.Type(), typeDesc)
 }
 
+// ConvertToType 支持 map 与 type；结构体对外表现为 map。
 func (s *reflectSchemalessTypedStruct) ConvertToType(typeValue ref.Type) ref.Val {
 	switch typeValue {
 	case types.MapType:
@@ -427,6 +477,8 @@ func (s *reflectSchemalessTypedStruct) ConvertToType(typeValue ref.Type) ref.Val
 	return types.NewErr("type conversion error from struct to %s", typeValue.TypeName())
 }
 
+// Equal 对同类型结构体直接用语义深比较（更快且避免逐字段转换）；
+// 与其他 Mapper 比较时退化为 map 语义。
 func (s *reflectSchemalessTypedStruct) Equal(other ref.Val) ref.Val {
 	otherStruct, ok := other.(*reflectSchemalessTypedStruct)
 	if ok {
@@ -455,14 +507,17 @@ func (s *reflectSchemalessTypedStruct) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
+// Type 返回 MapType：Unstructured 视图下结构体就是 map。
 func (s *reflectSchemalessTypedStruct) Type() ref.Type {
 	return types.MapType // Unstructured behaves exactly as a Map
 }
 
+// Value 暴露底层 Go 结构体。
 func (s *reflectSchemalessTypedStruct) Value() interface{} {
 	return s.value.Interface()
 }
 
+// IsSet 实现 CEL 的 `has()` 语义；unknown/error 需要原样向上传播。
 func (s *reflectSchemalessTypedStruct) IsSet(field ref.Val) ref.Val {
 	v, found := s.lookupField(field)
 	if v != nil && types.IsUnknownOrError(v) {
@@ -471,10 +526,12 @@ func (s *reflectSchemalessTypedStruct) IsSet(field ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
+// Find 是 lookupField 的导出版本，供 CEL Mapper 接口使用。
 func (s *reflectSchemalessTypedStruct) Find(key ref.Val) (ref.Val, bool) {
 	return s.lookupField(key)
 }
 
+// Get 在字段不存在时返回 CEL 错误。
 func (s *reflectSchemalessTypedStruct) Get(key ref.Val) ref.Val {
 	v, found := s.lookupField(key)
 	if !found {
@@ -483,6 +540,7 @@ func (s *reflectSchemalessTypedStruct) Get(key ref.Val) ref.Val {
 	return v
 }
 
+// Contains 判断字段是否存在（考虑 omitempty 后的可见性）。
 func (s *reflectSchemalessTypedStruct) Contains(key ref.Val) ref.Val {
 	v, found := s.Find(key)
 	if v != nil && types.IsError(v) {
@@ -491,6 +549,8 @@ func (s *reflectSchemalessTypedStruct) Contains(key ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
+// lookupField 按 JSON 字段名查找并缓存。CanOmit 用于实现 omitempty 语义：
+// 可省略且为空值的字段在 unstructured 中不存在，因此这里也视为未找到。
 func (s *reflectSchemalessTypedStruct) lookupField(key ref.Val) (ref.Val, bool) {
 	keyStr, ok := key.(types.String)
 	if !ok {
@@ -523,6 +583,7 @@ func (s *reflectSchemalessTypedStruct) lookupField(key ref.Val) (ref.Val, bool) 
 	return result, found
 }
 
+// Size 只统计在 unstructured 视图中可见的字段，与 JSON 序列化结果一致。
 func (s *reflectSchemalessTypedStruct) Size() ref.Val {
 	cacheEntry := value.TypeReflectEntryOf(s.value.Type())
 	count := 0
@@ -534,6 +595,7 @@ func (s *reflectSchemalessTypedStruct) Size() ref.Val {
 	return types.Int(count)
 }
 
+// Iterator 生成可见字段名列表；字段顺序不保证稳定，与 map 迭代语义一致。
 func (s *reflectSchemalessTypedStruct) Iterator() traits.Iterator {
 	cacheEntry := value.TypeReflectEntryOf(s.value.Type())
 	var keys []string
@@ -545,16 +607,19 @@ func (s *reflectSchemalessTypedStruct) Iterator() traits.Iterator {
 	return &reflectSchemalessTypedStructIterator{reflectSchemalessTypedStruct: s, keys: keys, idx: 0}
 }
 
+// reflectSchemalessTypedStructIterator 遍历预先生成的字段名列表。
 type reflectSchemalessTypedStructIterator struct {
 	*reflectSchemalessTypedStruct
 	keys []string
 	idx  int
 }
 
+// HasNext 判断是否还有字段未访问。
 func (it *reflectSchemalessTypedStructIterator) HasNext() ref.Val {
 	return types.Bool(it.idx < len(it.keys))
 }
 
+// Next 返回下一个字段名。
 func (it *reflectSchemalessTypedStructIterator) Next() ref.Val {
 	if it.idx >= len(it.keys) {
 		return types.NewErr("no more elements")

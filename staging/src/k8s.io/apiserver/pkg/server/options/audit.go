@@ -54,6 +54,8 @@ const (
 	defaultBatchThrottleBurst = 15               // Allow up to 15 QPS burst.
 )
 
+// appendBackend 把新后端并入已有后端；任一为 nil 时直接返回另一个，
+// 避免构造出只含空成员的 Union 后端。
 func appendBackend(existing, newBackend audit.Backend) audit.Backend {
 	if existing == nil {
 		return newBackend
@@ -64,9 +66,12 @@ func appendBackend(existing, newBackend audit.Backend) audit.Backend {
 	return audit.Union(existing, newBackend)
 }
 
+// AuditOptions 汇总审计策略文件与各输出后端（log、webhook）的配置。
 type AuditOptions struct {
 	// Policy configuration file for filtering audit events that are captured.
 	// If unspecified, a default is provided.
+	//
+	// 未配置策略文件时不会产生任何审计事件（evaluator 为 nil），后端即便启用也是空转。
 	PolicyFile string
 
 	// Plugin options
@@ -86,6 +91,8 @@ const (
 	// ModeBlockingStrict is the same as ModeBlocking, except when there is
 	// a failure during audit logging at RequestReceived stage, the whole
 	// request to apiserver will fail.
+	//
+	// 严格模式是唯一会让审计失败影响请求结果的模式，用于强合规场景。
 	ModeBlockingStrict = "blocking-strict"
 )
 
@@ -96,6 +103,7 @@ var AllowedModes = []string{
 	ModeBlockingStrict,
 }
 
+// AuditBatchOptions 控制后端是同步阻塞还是异步批量写事件。
 type AuditBatchOptions struct {
 	// Should the backend asynchronous batch events to the webhook backend or
 	// should the backend block responses?
@@ -106,6 +114,7 @@ type AuditBatchOptions struct {
 	BatchConfig pluginbuffered.BatchConfig
 }
 
+// AuditTruncateOptions 控制单事件/单批次过大时的截断行为，防止超大对象撑爆后端。
 type AuditTruncateOptions struct {
 	// Whether truncating is enabled or not.
 	Enabled bool
@@ -142,6 +151,7 @@ type AuditWebhookOptions struct {
 	GroupVersionString string
 }
 
+// NewAuditOptions 返回默认配置：webhook 默认批量异步，日志默认阻塞（写本地文件成本低且要求不丢事件）。
 func NewAuditOptions() *AuditOptions {
 	return &AuditOptions{
 		WebhookOptions: AuditWebhookOptions{
@@ -169,6 +179,7 @@ func NewAuditOptions() *AuditOptions {
 	}
 }
 
+// NewAuditTruncateOptions 返回默认的截断配置：默认关闭，开启时单批 10MB、单事件 100KB。
 func NewAuditTruncateOptions() AuditTruncateOptions {
 	return AuditTruncateOptions{
 		Enabled: false,
@@ -192,6 +203,7 @@ func (o *AuditOptions) Validate() []error {
 	return allErrors
 }
 
+// validateBackendMode 校验模式字符串；错误信息里列出全部合法值，便于用户直接修正。
 func validateBackendMode(pluginName string, mode string) error {
 	for _, m := range AllowedModes {
 		if m == mode {
@@ -201,6 +213,7 @@ func validateBackendMode(pluginName string, mode string) error {
 	return fmt.Errorf("invalid audit %s mode %s, allowed modes are %q", pluginName, mode, strings.Join(AllowedModes, ","))
 }
 
+// validateBackendBatchOptions 校验批量参数；非 batch 模式下跳过，避免对未使用字段误报。
 func validateBackendBatchOptions(pluginName string, options AuditBatchOptions) error {
 	if err := validateBackendMode(pluginName, options.Mode); err != nil {
 		return err
@@ -227,10 +240,12 @@ func validateBackendBatchOptions(pluginName string, options AuditBatchOptions) e
 	return nil
 }
 
+// knownGroupVersions 是审计事件序列化允许的组版本白名单；目前只剩 v1。
 var knownGroupVersions = []schema.GroupVersion{
 	auditv1.SchemeGroupVersion,
 }
 
+// validateGroupVersionString 校验并告警：非首选版本只打 warning 而不拒绝，保持向后兼容。
 func validateGroupVersionString(groupVersion string) error {
 	gv, err := schema.ParseGroupVersion(groupVersion)
 	if err != nil {
@@ -245,6 +260,7 @@ func validateGroupVersionString(groupVersion string) error {
 	return nil
 }
 
+// knownGroupVersion 判断组版本是否在白名单内。
 func knownGroupVersion(gv schema.GroupVersion) bool {
 	for _, knownGv := range knownGroupVersions {
 		if gv == knownGv {
@@ -254,6 +270,7 @@ func knownGroupVersion(gv schema.GroupVersion) bool {
 	return false
 }
 
+// AddFlags 注册审计相关的全部命令行参数（策略文件、日志后端、webhook 后端）。
 func (o *AuditOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -270,6 +287,10 @@ func (o *AuditOptions) AddFlags(fs *pflag.FlagSet) {
 	o.WebhookOptions.TruncateOptions.AddFlags(pluginwebhook.PluginName, fs)
 }
 
+// ApplyTo 把选项转换为 server.Config 上的策略评估器与审计后端。
+//
+// 构建顺序体现依赖关系：先有策略才能决定记录哪些事件，因此没有 evaluator 时
+// 即使配置了后端也不会创建（否则每个事件都会被策略过滤掉，纯属浪费资源）。
 func (o *AuditOptions) ApplyTo(
 	c *server.Config,
 ) error {
@@ -306,6 +327,7 @@ func (o *AuditOptions) ApplyTo(
 		if evaluator == nil {
 			klog.V(2).Info("No audit policy file provided, no events will be recorded for webhook backend")
 		} else {
+			// 配置了 EgressSelector 时必须走它建立连接，以满足控制面出网的安全策略。
 			if c.EgressSelector != nil {
 				var egressDialer utilnet.DialFunc
 				egressDialer, err = c.EgressSelector.Lookup(egressselector.ControlPlane.AsNetworkContext())
@@ -331,6 +353,8 @@ func (o *AuditOptions) ApplyTo(
 	var dynamicBackend audit.Backend
 	if webhookBackend != nil {
 		// if only webhook is enabled wrap it in the truncate options
+		//
+		// 截断包装放在最外层：批次合并后再判断大小，才能把超大批次拆分。
 		dynamicBackend = o.WebhookOptions.TruncateOptions.wrapBackend(webhookBackend, groupVersion)
 	}
 
@@ -346,6 +370,7 @@ func (o *AuditOptions) ApplyTo(
 	return nil
 }
 
+// newPolicyRuleEvaluator 加载策略文件；未指定文件时返回 (nil, nil) 表示不审计。
 func (o *AuditOptions) newPolicyRuleEvaluator() (audit.PolicyRuleEvaluator, error) {
 	if o.PolicyFile == "" {
 		return nil, nil
@@ -358,6 +383,7 @@ func (o *AuditOptions) newPolicyRuleEvaluator() (audit.PolicyRuleEvaluator, erro
 	return policy.NewPolicyRuleEvaluator(p), nil
 }
 
+// AddFlags 注册某个后端（log/webhook）的批量模式相关参数。
 func (o *AuditBatchOptions) AddFlags(pluginName string, fs *pflag.FlagSet) {
 	fs.StringVar(&o.Mode, fmt.Sprintf("audit-%s-mode", pluginName), o.Mode,
 		"Strategy for sending audit events. Blocking indicates sending events should block"+
@@ -381,19 +407,25 @@ func (o *AuditBatchOptions) AddFlags(pluginName string, fs *pflag.FlagSet) {
 			"moment if ThrottleQPS was not utilized before. Only used in batch mode.")
 }
 
+// ignoreErrorsBackend 把后端的失败吞掉并始终返回成功，对应 ModeBlocking：
+// 请求会等待写入完成，但审计失败不会导致请求失败。
 type ignoreErrorsBackend struct {
 	audit.Backend
 }
 
+// ProcessEvents 忽略底层返回的成败，始终报告成功。
 func (i *ignoreErrorsBackend) ProcessEvents(ev ...*auditinternal.Event) bool {
 	i.Backend.ProcessEvents(ev...)
 	return true
 }
 
+// String 在日志中标识这层包装，便于排查为什么错误没有向上传播。
 func (i *ignoreErrorsBackend) String() string {
 	return fmt.Sprintf("ignoreErrors<%s>", i.Backend)
 }
 
+// wrapBackend 按模式选择包装层：严格模式不包装（错误直接上抛），
+// 普通阻塞模式忽略错误，批量模式改为异步缓冲。
 func (o *AuditBatchOptions) wrapBackend(delegate audit.Backend) audit.Backend {
 	if o.Mode == ModeBlockingStrict {
 		return delegate
@@ -404,6 +436,7 @@ func (o *AuditBatchOptions) wrapBackend(delegate audit.Backend) audit.Backend {
 	return pluginbuffered.NewBackend(delegate, o.BatchConfig)
 }
 
+// Validate 校验截断参数：单批必须能容纳至少一个事件，否则任何事件都会被丢弃。
 func (o *AuditTruncateOptions) Validate(pluginName string) error {
 	config := o.TruncateConfig
 	if config.MaxEventSize <= 0 {
@@ -416,6 +449,7 @@ func (o *AuditTruncateOptions) Validate(pluginName string) error {
 	return nil
 }
 
+// AddFlags 注册截断相关参数。
 func (o *AuditTruncateOptions) AddFlags(pluginName string, fs *pflag.FlagSet) {
 	fs.BoolVar(&o.Enabled, fmt.Sprintf("audit-%s-truncate-enabled", pluginName),
 		o.Enabled, "Whether event and batch truncating is enabled.")
@@ -429,6 +463,7 @@ func (o *AuditTruncateOptions) AddFlags(pluginName string, fs *pflag.FlagSet) {
 			"if this doesn't reduce the size enough, event is discarded.")
 }
 
+// wrapBackend 在启用截断时套一层截断后端；关闭时原样返回。
 func (o *AuditTruncateOptions) wrapBackend(delegate audit.Backend, gv schema.GroupVersion) audit.Backend {
 	if !o.Enabled {
 		return delegate
@@ -436,6 +471,7 @@ func (o *AuditTruncateOptions) wrapBackend(delegate audit.Backend, gv schema.Gro
 	return plugintruncate.NewBackend(delegate, o.TruncateConfig, gv)
 }
 
+// AddFlags 注册日志后端参数（输出路径、轮转、格式、版本、压缩）。
 func (o *AuditLogOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Path, "audit-log-path", o.Path,
 		"If set, all requests coming to the apiserver will be logged to this file.  '-' means standard out.")
@@ -454,6 +490,7 @@ func (o *AuditLogOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&o.Compress, "audit-log-compress", o.Compress, "If set, the rotated log files will be compressed using gzip.")
 }
 
+// Validate 只在日志后端启用时校验，避免未启用的后端报出无关错误。
 func (o *AuditLogOptions) Validate() []error {
 	// Check whether the log backend is enabled based on the options.
 	if !o.enabled() {
@@ -497,6 +534,9 @@ func (o *AuditLogOptions) enabled() bool {
 	return o != nil && o.Path != ""
 }
 
+// getWriter 返回日志后端的目标 writer；未启用时返回 (nil, nil)。
+//
+// MaxSize 为 0 表示禁用轮转，此时直接追加写文件；否则交给 lumberjack 负责轮转。
 func (o *AuditLogOptions) getWriter() (io.Writer, error) {
 	if !o.enabled() {
 		return nil, nil
@@ -523,6 +563,9 @@ func (o *AuditLogOptions) getWriter() (io.Writer, error) {
 	}, nil
 }
 
+// ensureLogFile 预创建日志文件并设置权限：审计日志可能含敏感信息，权限必须是 0600。
+//
+// 提前创建是为了在启动阶段就暴露路径/权限问题，而不是等到第一条事件写入时才失败。
 func (o *AuditLogOptions) ensureLogFile() error {
 	if err := os.MkdirAll(filepath.Dir(o.Path), 0700); err != nil {
 		return err
@@ -535,6 +578,7 @@ func (o *AuditLogOptions) ensureLogFile() error {
 	return f.Close()
 }
 
+// newBackend 组装日志后端：底层写文件，外层依次套批量与截断。
 func (o *AuditLogOptions) newBackend(w io.Writer) audit.Backend {
 	groupVersion, _ := schema.ParseGroupVersion(o.GroupVersionString)
 	log := pluginlog.NewBackend(w, o.Format, groupVersion)
@@ -543,6 +587,7 @@ func (o *AuditLogOptions) newBackend(w io.Writer) audit.Backend {
 	return log
 }
 
+// AddFlags 注册 webhook 后端参数。
 func (o *AuditWebhookOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.ConfigFile, "audit-webhook-config-file", o.ConfigFile,
 		"Path to a kubeconfig formatted file that defines the audit webhook configuration.")
@@ -556,6 +601,7 @@ func (o *AuditWebhookOptions) AddFlags(fs *pflag.FlagSet) {
 		"API group and version used for serializing audit events written to webhook.")
 }
 
+// Validate 只在 webhook 后端启用时校验。
 func (o *AuditWebhookOptions) Validate() []error {
 	if !o.enabled() {
 		return nil
@@ -581,6 +627,8 @@ func (o *AuditWebhookOptions) enabled() bool {
 
 // newUntruncatedBackend returns a webhook backend without the truncate options applied
 // this is done so that the same trucate backend can wrap both the webhook and dynamic backends
+//
+// customDial 为 nil 时使用默认拨号器；由 ApplyTo 根据 EgressSelector 决定是否传入。
 func (o *AuditWebhookOptions) newUntruncatedBackend(customDial utilnet.DialFunc) (audit.Backend, error) {
 	groupVersion, _ := schema.ParseGroupVersion(o.GroupVersionString)
 	webhook, err := pluginwebhook.NewBackend(o.ConfigFile, groupVersion, webhook.DefaultRetryBackoffWithInitialDelay(o.InitialBackoff), customDial)
@@ -607,6 +655,9 @@ func defaultWebhookBatchConfig() pluginbuffered.BatchConfig {
 }
 
 // defaultLogBatchConfig returns the default BatchConfig used by the Log backend.
+//
+// 日志后端刻意关闭批量与异步：本地文件写入本身很快，批量只会增加延迟与锁竞争，
+// 因此 MaxBatchSize 取 1 等价于逐条写入。
 func defaultLogBatchConfig() pluginbuffered.BatchConfig {
 	return pluginbuffered.BatchConfig{
 		BufferSize: defaultBatchBufferSize,

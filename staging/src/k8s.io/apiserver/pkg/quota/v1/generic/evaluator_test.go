@@ -27,6 +27,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TestCachedHasSynced 验证 cachedHasSynced 在结果为 false 时每次都重新调用委托函数，
+// 一旦变为 true 就永久缓存，避免在缓存已同步后持续付出检查成本。
 func TestCachedHasSynced(t *testing.T) {
 
 	called := 0
@@ -67,6 +69,9 @@ func TestCachedHasSynced(t *testing.T) {
 	}
 }
 
+// TestProtectedLister 验证未同步时 protectedLister 直接返回 notReadyErr 且不触碰
+// 底层 lister；同步后才把 List/Get 委托下去。这是一个启动阶段的保护：
+// informer 缓存未就绪时读取会导致配额计算使用不完整数据。
 func TestProtectedLister(t *testing.T) {
 
 	hasSynced := false
@@ -116,22 +121,31 @@ func TestProtectedLister(t *testing.T) {
 
 var errFakeLister = errors.New("errFakeLister")
 
+// fakeLister 记录调用次数并固定返回 errFakeLister。
 type fakeLister struct {
 	called int
 }
 
+// List 记录一次调用并返回预设错误。
 func (f *fakeLister) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	f.called++
 	return nil, errFakeLister
 }
+
+// Get 记录一次调用并返回预设错误。
 func (f *fakeLister) Get(name string) (runtime.Object, error) {
 	f.called++
 	return nil, errFakeLister
 }
+
+// ByNamespace 未实现，不应被对象计数评估器调用。
 func (f *fakeLister) ByNamespace(namespace string) cache.GenericNamespaceLister {
 	panic("not implemented")
 }
 
+// TestObjectCountEvaluatorHandles 验证对象计数评估器只处理顶层的 Create：
+// Update/Delete/Connect 与子资源请求都不计入 count/<resource> 配额，
+// 否则用量会被重复计算。
 func TestObjectCountEvaluatorHandles(t *testing.T) {
 	evaluator := objectCountEvaluator{}
 	testCases := []struct {

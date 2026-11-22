@@ -36,9 +36,12 @@ import (
 type ResourceInfo struct {
 	GroupResource schema.GroupResource
 
+	// EncodingVersion 是该资源写入 etcd 时使用的版本。
 	EncodingVersion string
 	// Used to calculate decodable versions. Can only be used after all
 	// equivalent versions are registered by InstallREST.
+	//
+	// 依赖 InstallREST 完成后才能使用：等价资源映射需在所有版本注册完毕后才完整。
 	EquivalentResourceMapper runtime.EquivalentResourceRegistry
 
 	// DirectlyDecodableVersions is a list of versions that the converter for REST storage knows how to convert.  This
@@ -51,6 +54,9 @@ type ResourceInfo struct {
 }
 
 // Manager records the resources whose StorageVersions need updates, and provides a method to update those StorageVersions.
+//
+// StorageVersion 对象用于让存储迁移器判断某资源是否已全部迁移到目标版本；
+// 在更新完成前，写请求可能被阻塞（见 Completed）。
 type Manager interface {
 	// AddResourceInfo records resources whose StorageVersions need updates
 	AddResourceInfo(resources ...*ResourceInfo)
@@ -64,10 +70,12 @@ type Manager interface {
 	Completed() bool
 }
 
+// 编译期断言：默认实现满足 Manager 接口。
 var _ Manager = &defaultManager{}
 
 // defaultManager indicates if an apiserver has completed reporting its storage versions.
 type defaultManager struct {
+	// completed 用原子变量，因为它在请求热路径上被高频读取，不应争用互斥锁。
 	completed atomic.Bool
 
 	mu sync.RWMutex
@@ -80,6 +88,7 @@ type defaultManager struct {
 	managedStatus map[schema.GroupResource]*updateStatus
 }
 
+// updateStatus 记录单个 GroupResource 的更新结果：done 表示成功，lastErr 保留最近一次失败原因。
 type updateStatus struct {
 	done    bool
 	lastErr error
@@ -104,6 +113,8 @@ func (s *defaultManager) AddResourceInfo(resources ...*ResourceInfo) {
 	}
 }
 
+// addPendingManagedStatusLocked 为 ResourceInfo 的所有等价 GroupResource 建立初始（未完成）状态。
+// 调用方必须持有写锁。
 func (s *defaultManager) addPendingManagedStatusLocked(r *ResourceInfo) {
 	gvrs := r.EquivalentResourceMapper.EquivalentResourcesFor(r.GroupResource.WithVersion(""), "")
 	for _, gvr := range gvrs {
@@ -115,6 +126,9 @@ func (s *defaultManager) addPendingManagedStatusLocked(r *ResourceInfo) {
 }
 
 // UpdateStorageVersions tries to update the StorageVersions of the recorded resources
+//
+// 该方法在后台周期性调用；任何失败都会保留 PendingUpdate 状态并在下轮重试，
+// 只有全部成功才置 Completed，从而避免在存储版本未对齐时放行写请求。
 func (s *defaultManager) UpdateStorageVersions(kubeAPIServerClientConfig *rest.Config, serverID string) {
 	clientset, err := kubernetes.NewForConfig(kubeAPIServerClientConfig)
 	if err != nil {
@@ -144,6 +158,8 @@ func (s *defaultManager) UpdateStorageVersions(kubeAPIServerClientConfig *rest.C
 		decodableVersions := decodableVersions(r.DirectlyDecodableVersions, r.EquivalentResourceMapper, r.GroupResource)
 		gr := r.GroupResource
 		// Group must be a valid subdomain in DNS (RFC 1123)
+		//
+		// 核心组的 Group 为空，但 StorageVersion 资源要求合法 DNS 子域，故用 "core" 代替。
 		if len(gr.Group) == 0 {
 			gr.Group = "core"
 		}
@@ -171,6 +187,9 @@ func (s *defaultManager) UpdateStorageVersions(kubeAPIServerClientConfig *rest.C
 // ResourceInfos from different Groups may share the same underlying storage, e.g.
 // networking.k8s.io ingresses and extensions ingresses. The StorageVersion manager
 // only needs to update one StorageVersion for the equivalent Groups.
+//
+// 去重规则：若某 ResourceInfo 的所有等价 GroupResource 已被先前条目覆盖，则跳过；
+// 否则记录其全部等价资源并保留该条目。输入需已排序以保证跨 apiserver 结果一致。
 func dedupResourceInfos(infos []ResourceInfo) []ResourceInfo {
 	var ret []ResourceInfo
 	seen := make(map[schema.GroupResource]struct{})
@@ -188,14 +207,18 @@ func dedupResourceInfos(infos []ResourceInfo) []ResourceInfo {
 	return ret
 }
 
+// sortResourceInfosByGroupResource 按 group、resource 排序，稳定去重结果。
 func sortResourceInfosByGroupResource(infos []ResourceInfo) {
 	sort.Sort(byGroupResource(infos))
 }
 
+// byGroupResource 实现 sort.Interface，按 Group 再按 Resource 升序。
 type byGroupResource []ResourceInfo
 
+// Len 返回元素数量。
 func (s byGroupResource) Len() int { return len(s) }
 
+// Less 先比较 Group，相等时比较 Resource。
 func (s byGroupResource) Less(i, j int) bool {
 	if s[i].GroupResource.Group == s[j].GroupResource.Group {
 		return s[i].GroupResource.Resource < s[j].GroupResource.Resource
@@ -203,6 +226,7 @@ func (s byGroupResource) Less(i, j int) bool {
 	return s[i].GroupResource.Group < s[j].GroupResource.Group
 }
 
+// Swap 交换两个元素。
 func (s byGroupResource) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 // recordStatusSuccess marks updated ResourceInfo as completed.
@@ -212,6 +236,7 @@ func (s *defaultManager) recordStatusSuccess(r *ResourceInfo) {
 	s.recordStatusSuccessLocked(r)
 }
 
+// recordStatusSuccessLocked 把该 ResourceInfo 的全部等价资源标记为完成；调用方须持写锁。
 func (s *defaultManager) recordStatusSuccessLocked(r *ResourceInfo) {
 	gvrs := r.EquivalentResourceMapper.EquivalentResourcesFor(r.GroupResource.WithVersion(""), "")
 	for _, gvr := range gvrs {
@@ -219,6 +244,7 @@ func (s *defaultManager) recordStatusSuccessLocked(r *ResourceInfo) {
 	}
 }
 
+// recordSuccessGroupResourceLocked 仅更新受管资源；未登记的资源直接忽略。
 func (s *defaultManager) recordSuccessGroupResourceLocked(gr schema.GroupResource) {
 	if _, ok := s.managedStatus[gr]; !ok {
 		return
@@ -234,6 +260,7 @@ func (s *defaultManager) recordStatusFailure(r *ResourceInfo, err error) {
 	s.recordStatusFailureLocked(r, err)
 }
 
+// recordStatusFailureLocked 把错误传播到该 ResourceInfo 的全部等价资源；调用方须持写锁。
 func (s *defaultManager) recordStatusFailureLocked(r *ResourceInfo, err error) {
 	gvrs := r.EquivalentResourceMapper.EquivalentResourcesFor(r.GroupResource.WithVersion(""), "")
 	for _, gvr := range gvrs {
@@ -241,6 +268,7 @@ func (s *defaultManager) recordStatusFailureLocked(r *ResourceInfo, err error) {
 	}
 }
 
+// recordErrorGroupResourceLocked 记录失败原因；不把 done 置 true，以便下轮重试。
 func (s *defaultManager) recordErrorGroupResourceLocked(gr schema.GroupResource, err error) {
 	if _, ok := s.managedStatus[gr]; !ok {
 		return
@@ -249,6 +277,8 @@ func (s *defaultManager) recordErrorGroupResourceLocked(gr schema.GroupResource,
 }
 
 // PendingUpdate returns if the StorageVersion of a resource is still wait to be updated.
+//
+// 未登记的资源视为无需更新（返回 false），避免对不存在的资源做写阻塞。
 func (s *defaultManager) PendingUpdate(gr schema.GroupResource) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -278,6 +308,8 @@ func (s *defaultManager) Completed() bool {
 	return s.completed.Load()
 }
 
+// decodableVersions 合并“直接可解码”与“通过等价资源可解码”的版本，去重后返回字符串列表。
+// 该列表会写入 StorageVersion 状态，供存储迁移器判断哪些版本的数据仍可读取。
 func decodableVersions(directlyDecodableVersions []schema.GroupVersion, e runtime.EquivalentResourceRegistry, gr schema.GroupResource) []string {
 	var versions []string
 	for _, decodableVersions := range directlyDecodableVersions {

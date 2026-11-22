@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1 提供资源配额计算的基础工具：ResourceList 的相等、比较、加减、
+// 去重与集合运算。这些函数被配额准入插件与控制器共同使用，因此语义必须
+// 保持稳定。
 package v1
 
 import (
@@ -24,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// TestEquals 验证 ResourceList 的语义相等：键集合与数量都必须一致，
+// 空列表之间视为相等。
 func TestEquals(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -77,6 +82,8 @@ func TestEquals(t *testing.T) {
 	}
 }
 
+// TestLessThanOrEqual 验证 a <= b 的逐资源比较，并返回超出限制的资源名。
+// 注意：a 中存在而 b 中缺失的资源不会被视为超出，调用方需另行处理。
 func TestLessThanOrEqual(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -116,6 +123,7 @@ func TestLessThanOrEqual(t *testing.T) {
 	}
 }
 
+// TestMax 验证逐资源取较大值，缺失的键按零值参与比较。
 func TestMax(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -156,6 +164,7 @@ func TestMax(t *testing.T) {
 	}
 }
 
+// TestAdd 验证逐资源求和，结果只包含至少在一侧出现的键。
 func TestAdd(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -186,6 +195,7 @@ func TestAdd(t *testing.T) {
 	}
 }
 
+// TestSubtract 验证逐资源求差；结果允许为负数（empty-value 用例即如此）。
 func TestSubtract(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -221,6 +231,7 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
+// TestResourceNames 验证从 ResourceList 提取键名；顺序不保证，因此按集合比较。
 func TestResourceNames(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -247,6 +258,7 @@ func TestResourceNames(t *testing.T) {
 	}
 }
 
+// TestContains 验证资源名列表的成员判断。
 func TestContains(t *testing.T) {
 	testCases := map[string]struct {
 		a        []corev1.ResourceName
@@ -271,6 +283,7 @@ func TestContains(t *testing.T) {
 	}
 }
 
+// TestContainsPrefix 验证按前缀匹配资源名（如 hugepages- 前缀）。
 func TestContainsPrefix(t *testing.T) {
 	testCases := map[string]struct {
 		a        []string
@@ -295,6 +308,7 @@ func TestContainsPrefix(t *testing.T) {
 	}
 }
 
+// TestIsZero 验证零值判断：空列表与所有数量均为零的列表都算零。
 func TestIsZero(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -326,6 +340,7 @@ func TestIsZero(t *testing.T) {
 	}
 }
 
+// TestRemoveZeros 验证剔除数量为零的条目，保留非零项。
 func TestRemoveZeros(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -370,6 +385,7 @@ func TestRemoveZeros(t *testing.T) {
 	}
 }
 
+// TestIsNegative 验证找出数量为负的资源名；顺序不保证，按集合比较。
 func TestIsNegative(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList
@@ -404,6 +420,7 @@ func TestIsNegative(t *testing.T) {
 	}
 }
 
+// TestIntersection 验证交集：结果去重并排序。
 func TestIntersection(t *testing.T) {
 	testCases := map[string]struct {
 		a        []corev1.ResourceName
@@ -449,6 +466,7 @@ func TestIntersection(t *testing.T) {
 	}
 }
 
+// TestDifference 验证差集（a 有而 b 没有）：结果去重并排序。
 func TestDifference(t *testing.T) {
 	testCases := map[string]struct {
 		a        []corev1.ResourceName

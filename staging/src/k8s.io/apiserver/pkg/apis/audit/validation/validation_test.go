@@ -22,6 +22,12 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit"
 )
 
+// TestValidatePolicy 覆盖审计策略校验的两大类场景：
+//   - 合法规则：仅 level、按用户组/请求/资源过滤、非资源 URL、省略阶段等；
+//   - 非法规则：缺少或非法 level、资源与非资源条件混用、非法组名/URL、
+//     ResourceNames 缺少 Resources、非法 omitStages 等。
+//
+// 空策略本身是合法的，但包含空规则（缺少 Level）则非法。
 func TestValidatePolicy(t *testing.T) {
 	validRules := []audit.PolicyRule{
 		{ // Defaulting rule
@@ -82,6 +88,7 @@ func TestValidatePolicy(t *testing.T) {
 			Resources:       []audit.GroupResources{{Resources: []string{"secrets"}}},
 			NonResourceURLs: []string{"/logs*"},
 		}, { // invalid group name
+			// 组名不能带版本号，只接受纯组名。
 			Level:     audit.LevelMetadata,
 			Resources: []audit.GroupResources{{Group: "rbac.authorization.k8s.io/v1beta1", Resources: []string{"roles"}}},
 		}, { // invalid non-resource URLs

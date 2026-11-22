@@ -26,6 +26,10 @@ import (
 	resourcequotaapi "k8s.io/apiserver/pkg/admission/plugin/resourcequota/apis/resourcequota"
 )
 
+// TestLoadConfiguration 验证 ResourceQuota 准入配置的加载：未知/重复字段必须因严格解码而失败，
+// 三个历史 API 版本（v1alpha1、v1beta1、v1）的同一配置需解析为等价结果。
+//
+// 严格解码是安全要求：静默忽略拼错的字段会让配置看似生效实则未生效。
 func TestLoadConfiguration(t *testing.T) {
 	testcases := []struct {
 		name         string

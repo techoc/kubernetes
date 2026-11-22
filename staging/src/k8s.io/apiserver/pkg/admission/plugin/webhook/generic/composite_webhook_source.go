@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package generic 提供 webhook 准入插件的通用调度框架：从静态配置与
+// ValidatingAdmissionPolicy 等 API 来源收集 webhook，并统一调用它们。
 package generic
 
 import (
@@ -24,6 +26,10 @@ import (
 
 // compositeWebhookSource combines multiple webhook sources into a single source.
 // Static (manifest-based) webhooks are returned before API-based webhooks.
+//
+// 缓存 last* 字段是为了避免每次准入请求都重新拼接切片：Webhooks() 在热路径上
+// 被频繁调用，而底层来源通常长时间不变。比较的是切片底层数组指针，而不是
+// 逐元素比较，以保持 O(1) 判定。
 type compositeWebhookSource struct {
 	staticSource Source
 	apiSource    Source
@@ -61,6 +67,7 @@ func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 		apiSlice = c.apiSource.Webhooks()
 	}
 
+	// 先在读锁下快速判断缓存是否仍然有效，命中时不进入写锁。
 	c.mu.RLock()
 	if slicesAreEqual(c.lastStaticSlice, staticSlice) && slicesAreEqual(c.lastAPISlice, apiSlice) {
 		combined := c.lastCombined
@@ -72,6 +79,7 @@ func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Re-check under write lock.
+	// 可能在释放读锁到获取写锁之间，另一个 goroutine 已经完成重建。
 	if slicesAreEqual(c.lastStaticSlice, staticSlice) && slicesAreEqual(c.lastAPISlice, apiSlice) {
 		return c.lastCombined
 	}
@@ -87,11 +95,16 @@ func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 }
 
 // slicesAreEqual reports whether two slices share the same backing array and length.
+//
+// 只比较首元素地址：只要底层来源返回同一个切片（即使内容被原地修改），就认为
+// 未变化。这依赖来源返回稳定切片的约定，换来的是零分配的比较。
 func slicesAreEqual[T any](a, b []T) bool {
 	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
 // HasSynced returns true only when both sources have synced.
+//
+// nil 来源视为已同步：未配置的来源不阻塞准入链启动。
 func (c *compositeWebhookSource) HasSynced() bool {
 	staticSynced := c.staticSource == nil || c.staticSource.HasSynced()
 	apiSynced := c.apiSource == nil || c.apiSource.HasSynced()

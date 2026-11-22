@@ -29,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
+// TestGenericHttpResponseChecker 验证后端响应的错误映射：2xx 视为成功，
+// 4xx 映射为 BadRequest，5xx 映射为 InternalError，且错误消息取自响应体。
 func TestGenericHttpResponseChecker(t *testing.T) {
 	responseChecker := NewGenericHttpResponseChecker(v1.Resource("pods"), "foo")
 	tests := []struct {
@@ -46,6 +48,7 @@ func TestGenericHttpResponseChecker(t *testing.T) {
 			name:        "ok",
 		},
 		{
+			// 客户端错误：保留后端原始消息，便于用户看到真实原因。
 			resp: &http.Response{
 				Body:       io.NopCloser(bytes.NewBufferString("Invalid request.")),
 				StatusCode: http.StatusBadRequest,
@@ -55,6 +58,7 @@ func TestGenericHttpResponseChecker(t *testing.T) {
 			name:        "bad request",
 		},
 		{
+			// 服务端错误：同样透传消息，但归类为 internal，避免把后端故障伪装成用户输入错误。
 			resp: &http.Response{
 				Body:       io.NopCloser(bytes.NewBufferString("Pod does not exist.")),
 				StatusCode: http.StatusInternalServerError,
@@ -78,6 +82,8 @@ func TestGenericHttpResponseChecker(t *testing.T) {
 	}
 }
 
+// TestGenericHttpResponseCheckerLimitReader 验证响应体读取上限：
+// 超长错误体必须被截断到 maxReadLength，防止恶意/异常后端撑爆内存或日志。
 func TestGenericHttpResponseCheckerLimitReader(t *testing.T) {
 	responseChecker := NewGenericHttpResponseChecker(v1.Resource("pods"), "foo")
 	excessedString := strings.Repeat("a", (maxReadLength + 10000))

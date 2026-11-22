@@ -30,6 +30,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestErrors 验证 InternalError 的错误文本，并确认请求 URI 在写入前被 HTML 转义，
+// 防止把未净化的输入回显到响应中（XSS 边界）。
 func TestErrors(t *testing.T) {
 	internalError := errors.New("ARGH")
 	fns := map[string]func(http.ResponseWriter, *http.Request){
@@ -55,6 +57,8 @@ func TestErrors(t *testing.T) {
 	}
 }
 
+// TestForbidden 覆盖 Forbidden 在各类属性下的消息格式与 JSON 序列化：
+// 路径请求、资源请求、带名称与子资源的情形，同时验证 Content-Type。
 func TestForbidden(t *testing.T) {
 	u := &user.DefaultInfo{Name: "NAME"}
 	cases := []struct {

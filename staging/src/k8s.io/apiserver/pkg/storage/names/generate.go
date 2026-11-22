@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package names 提供对象名称生成策略：在用户给出的 generateName 前缀后附加
+// 随机后缀，保证名称唯一且符合 Kubernetes 的 63 字符长度限制。
 package names
 
 import (
@@ -41,11 +43,14 @@ var SimpleNameGenerator NameGenerator = simpleNameGenerator{}
 
 const (
 	// TODO: make this flexible for non-core resources with alternate naming rules.
+	// 63 是 DNS-1123 label 的最大长度；5 位随机后缀在冲突概率与可读性之间折中。
 	maxNameLength          = 63
 	randomLength           = 5
 	MaxGeneratedNameLength = maxNameLength - randomLength
 )
 
+// GenerateName 在 base 后拼接 5 位随机字符。超长的 base 会被截断到
+// MaxGeneratedNameLength，确保结果不超过 63 字符。
 func (simpleNameGenerator) GenerateName(base string) string {
 	if len(base) > MaxGeneratedNameLength {
 		base = base[:MaxGeneratedNameLength]

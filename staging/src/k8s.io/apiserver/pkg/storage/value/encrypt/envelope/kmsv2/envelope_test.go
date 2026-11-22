@@ -52,6 +52,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// 测试用固定值：keyHash/apiserverIDHash 必须与 testKeyVersion/testAPIServerID 的 SHA-256 摘要一致，
+// 指标断言依赖这两个常量。
 const (
 	testText            = "abcdefghijklmnopqrstuvwxyz"
 	testContextText     = "0123456789"
@@ -63,6 +65,9 @@ const (
 
 // testEnvelopeService is a mock Envelope service which can be used to simulate remote Envelope services
 // for testing of Envelope based encryption providers.
+//
+// 用本地对称“加密”（base64）替代真实 KMS，使测试不依赖外部服务；
+// disabled 用于模拟插件不可用，decryptCalls 用于断言缓存是否生效。
 type testEnvelopeService struct {
 	annotations  map[string][]byte
 	disabled     bool
@@ -71,6 +76,7 @@ type testEnvelopeService struct {
 	decryptCalls int32
 }
 
+// Decrypt 记录调用次数并返回 base64 解码后的明文，便于验证缓存命中次数。
 func (t *testEnvelopeService) Decrypt(ctx context.Context, uid string, req *kmsservice.DecryptRequest) ([]byte, error) {
 	atomic.AddInt32(&t.decryptCalls, 1)
 	if t.disabled {
@@ -85,6 +91,7 @@ func (t *testEnvelopeService) Decrypt(ctx context.Context, uid string, req *kmss
 	return base64.StdEncoding.DecodeString(string(req.Ciphertext))
 }
 
+// Encrypt 返回固定的 keyID/注解与“密文”，并允许用例覆盖注解以测试校验逻辑。
 func (t *testEnvelopeService) Encrypt(ctx context.Context, uid string, data []byte) (*kmsservice.EncryptResponse, error) {
 	if t.disabled {
 		return nil, fmt.Errorf("Envelope service was disabled")
@@ -109,6 +116,7 @@ func (t *testEnvelopeService) Encrypt(ctx context.Context, uid string, data []by
 	return &kmsservice.EncryptResponse{Ciphertext: ciphertext, KeyID: t.keyVersion, Annotations: annotations}, nil
 }
 
+// Status 返回当前 keyVersion，供 StateFunc 判断密钥是否轮换。
 func (t *testEnvelopeService) Status(ctx context.Context) (*kmsservice.StatusResponse, error) {
 	if t.disabled {
 		return nil, fmt.Errorf("Envelope service was disabled")
@@ -116,23 +124,28 @@ func (t *testEnvelopeService) Status(ctx context.Context) (*kmsservice.StatusRes
 	return &kmsservice.StatusResponse{KeyID: t.keyVersion}, nil
 }
 
+// SetDisabledStatus 模拟 KMS 插件上线/下线。
 func (t *testEnvelopeService) SetDisabledStatus(status bool) {
 	t.disabled = status
 }
 
+// SetAnnotations 覆盖 Encrypt 返回的注解，用于测试注解校验。
 func (t *testEnvelopeService) SetAnnotations(annotations map[string][]byte) {
 	t.annotations = annotations
 }
 
+// SetCiphertext 覆盖 Encrypt 返回的密文，用于构造异常密文。
 func (t *testEnvelopeService) SetCiphertext(ciphertext []byte) {
 	t.ciphertext = ciphertext
 }
 
+// Rotate 递增 keyVersion，模拟 KMS 侧密钥轮换。
 func (t *testEnvelopeService) Rotate() {
 	i, _ := strconv.Atoi(t.keyVersion)
 	t.keyVersion = strconv.FormatInt(int64(i+1), 10)
 }
 
+// newTestEnvelopeService 返回 keyVersion=1 的测试 KMS 服务。
 func newTestEnvelopeService() *testEnvelopeService {
 	return &testEnvelopeService{
 		keyVersion: testKeyVersion,
@@ -140,6 +153,9 @@ func newTestEnvelopeService() *testEnvelopeService {
 }
 
 // Throw error if Envelope transformer tries to contact Envelope without hitting cache.
+//
+// 三个用例分别验证：缓存有效时插件故障仍可解密；缓存过期后故障导致读失败；
+// 缓存过期但插件正常时只需一次额外的解密调用。
 func TestEnvelopeCaching(t *testing.T) {
 	testCases := []struct {
 		desc                     string
@@ -239,6 +255,7 @@ func TestEnvelopeCaching(t *testing.T) {
 	}
 }
 
+// testStateFunc 返回一个 StateFunc：每次调用生成新的随机 UID/DEK，模拟密钥状态更新。
 func testStateFunc(ctx context.Context, envelopeService kmsservice.Service, clock clock.Clock, useSeed bool) func() (State, error) {
 	return func() (State, error) {
 		transformer, encObject, cacheKey, errGen := GenerateTransformer(ctx, string(uuid.NewUUID()), envelopeService, useSeed)
@@ -259,6 +276,9 @@ func testStateFunc(ctx context.Context, envelopeService kmsservice.Service, cloc
 }
 
 // TestEnvelopeTransformerStaleness validates that staleness checks on read honor the data returned from the StateFunc.
+//
+// 判定“陈旧”的依据是 keyID 变化或 DEK 源类型变化（seed 与普通 DEK 之间迁移），
+// 陈旧数据仍可读，但读到时需要触发重写以迁移到新密钥。
 func TestEnvelopeTransformerStaleness(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -367,6 +387,10 @@ func TestEnvelopeTransformerStaleness(t *testing.T) {
 	}
 }
 
+// TestEnvelopeTransformerStateFunc 验证 StateFunc 的错误与过期语义：
+//   - 状态出错时读写都失败；
+//   - 状态有效时即使插件下线，借助缓存的 DEK 仍可正常读写；
+//   - 状态过期且插件下线时写失败，但已缓存 DEK 的读仍成功，未缓存的读失败。
 func TestEnvelopeTransformerStateFunc(t *testing.T) {
 	t.Parallel()
 
@@ -483,6 +507,8 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 	})
 }
 
+// TestTransformToStorageError 验证写入前会校验 KMS 返回的注解：
+// 非法 key、单值超限、总值超限都应被拒绝，避免把不可信元数据写入 etcd。
 func TestTransformToStorageError(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -535,6 +561,7 @@ func TestTransformToStorageError(t *testing.T) {
 	}
 }
 
+// TestEncodeDecode 验证 protobuf 编解码往返不丢字段。
 func TestEncodeDecode(t *testing.T) {
 	transformer := &envelopeTransformer{}
 
@@ -557,6 +584,8 @@ func TestEncodeDecode(t *testing.T) {
 	}
 }
 
+// TestValidateEncryptedObject 验证反序列化后的 EncryptedObject 完整性校验：
+// nil 对象、空密文、未知 DEK 源类型、空 DEK 源、空 keyID、非法注解都必须被拒绝。
 func TestValidateEncryptedObject(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -639,6 +668,8 @@ func TestValidateEncryptedObject(t *testing.T) {
 	}
 }
 
+// TestValidateAnnotations 验证注解 key 必须是合法的、至少两段的 RFC 1123 子域，
+// 且单段 ≤63 字符、总长 ≤253 字符。成功用例包含数字开头、连字符、长 FQDN 等边界。
 func TestValidateAnnotations(t *testing.T) {
 	t.Parallel()
 	successCases := []map[string][]byte{
@@ -735,6 +766,7 @@ func TestValidateAnnotations(t *testing.T) {
 	})
 }
 
+// TestValidateKeyID 验证 keyID 非空且不超过 1KB，并返回稳定的错误码供指标标签使用。
 func TestValidateKeyID(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -786,6 +818,7 @@ func TestValidateKeyID(t *testing.T) {
 	}
 }
 
+// TestValidateEncryptedDEKSource 验证 DEK 源非空且不超过 1KB。
 func TestValidateEncryptedDEKSource(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -835,6 +868,8 @@ func TestValidateEncryptedDEKSource(t *testing.T) {
 	}
 }
 
+// TestEnvelopeMetrics 验证每次加密/解密都会按 keyID 与 apiserver 身份记录使用次数，
+// 标签值均为哈希，避免把敏感 ID 暴露到指标里。
 func TestEnvelopeMetrics(t *testing.T) {
 	envelopeService := newTestEnvelopeService()
 	transformer := NewEnvelopeTransformer(envelopeService, testProviderName,
@@ -978,8 +1013,11 @@ func TestEnvelopeMetricsCache(t *testing.T) {
 	}
 }
 
+// 用于在 `go test -count X` 多次运行时只初始化一次 klog 标志。
 var flagOnce sync.Once // support running `go test -count X`
 
+// TestEnvelopeLogging 验证加解密日志包含请求上下文中的资源信息，
+// 便于审计与排障；UID 会被替换为常量以稳定断言。
 func TestEnvelopeLogging(t *testing.T) {
 	flagOnce.Do(func() {
 		klog.InitFlags(nil)
@@ -1066,6 +1104,8 @@ func TestEnvelopeLogging(t *testing.T) {
 	}
 }
 
+// TestCacheNotCorrupted 验证缓存键能区分不同的 DEK 源/注解：
+// 即使底层密文相同、仅注解变化，也不会复用错误的 DEK 缓存条目。
 func TestCacheNotCorrupted(t *testing.T) {
 	ctx := testContext(t)
 
@@ -1124,6 +1164,8 @@ func TestCacheNotCorrupted(t *testing.T) {
 	}
 }
 
+// TestGenerateCacheKey 穷举两组参数的组合，验证缓存键与参数一一对应：
+// 任意字段（DEK 源类型、DEK 源、keyID、注解）不同则键不同，完全相同则键相同。
 func TestGenerateCacheKey(t *testing.T) {
 	encryptedDEKSource1 := []byte{1, 2, 3}
 	keyID1 := "id1"
@@ -1177,6 +1219,8 @@ func TestGenerateCacheKey(t *testing.T) {
 	}
 }
 
+// TestGenerateTransformer 验证首次加密并构建转换器时的各类失败：
+// KMS 不可用、keyID 非法、DEK 源为空、注解非法都必须返回明确错误，成功路径则返回完整三件套。
 func TestGenerateTransformer(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -1256,6 +1300,8 @@ func TestGenerateTransformer(t *testing.T) {
 	}
 }
 
+// TestEnvelopeTracing_TransformToStorage 验证写入路径产生的 trace 事件序列，
+// 便于在分布式追踪中定位加密与编码阶段的耗时。
 func TestEnvelopeTracing_TransformToStorage(t *testing.T) {
 	testCases := []struct {
 		desc     string
@@ -1392,6 +1438,7 @@ func TestEnvelopeTracing_TransformFromStorage(t *testing.T) {
 	}
 }
 
+// validateTraceSpan 校验 span 名称、属性以及事件序列是否与预期一致。
 func validateTraceSpan(t *testing.T, span trace.ReadOnlySpan, spanName, providerName, apiserverID string, expected []string) {
 	t.Helper()
 
@@ -1415,6 +1462,7 @@ func validateTraceSpan(t *testing.T, span trace.ReadOnlySpan, spanName, provider
 	}
 }
 
+// errString 返回错误的字符串形式，nil 时返回空串，便于在断言消息里直接使用。
 func errString(err error) string {
 	if err == nil {
 		return ""
@@ -1423,4 +1471,5 @@ func errString(err error) string {
 	return err.Error()
 }
 
+// randomBool 随机选择 seed/非 seed 路径，使测试同时覆盖两种 DEK 源类型。
 func randomBool() bool { return utilrand.Int()%2 == 1 }

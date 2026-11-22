@@ -25,6 +25,8 @@ import (
 // The complexity of the runtime cost is O(1).
 // The returned value is the element removed, if indeed one was removed,
 // otherwise `nil`.
+//
+// 幂等：重复调用只会成功一次，返回 nil 表示该请求已被别的路径移除。
 type removeFromFIFOFunc func() *request
 
 // walkFunc is called for each request in the list in the
@@ -32,6 +34,8 @@ type removeFromFIFOFunc func() *request
 // ok: if walkFunc returns false then the iteration stops immediately.
 // walkFunc may remove the given request from the fifo,
 // but may not mutate the fifo in any othe way.
+//
+// 只允许删除当前元素，是因为 Walk 依赖元素链表指针继续遍历，插入或重排会使遍历失效。
 type walkFunc func(*request) (ok bool)
 
 // Internal interface to abstract out the implementation details
@@ -39,6 +43,8 @@ type walkFunc func(*request) (ok bool)
 //
 // Note that a fifo, including the removeFromFIFOFuncs returned from Enqueue,
 // is not safe for concurrent use by multiple goroutines.
+//
+// 抽象成接口是为了便于在测试中替换实现；生产实现是下面的 requestFIFO。
 type fifo interface {
 	// Enqueue enqueues the specified request into the list and
 	// returns a removeFromFIFOFunc function that can be used to remove the
@@ -68,6 +74,9 @@ type fifo interface {
 
 // the FIFO list implementation is not safe for concurrent use by multiple
 // goroutines.
+//
+// 内嵌 container/list 以复用 O(1) 的删除；sum 是增量维护的聚合值，
+// 避免每次调度都遍历整条队列（队列可能很长）。
 type requestFIFO struct {
 	*list.List
 
@@ -92,6 +101,7 @@ func (l *requestFIFO) Enqueue(req *request) removeFromFIFOFunc {
 	e := l.PushBack(req)
 	addToQueueSum(&l.sum, req)
 
+	// 把元素置空而不是仅 Remove，防止闭包被多次调用时重复扣减聚合值。
 	return func() *request {
 		if e.Value == nil {
 			return nil
@@ -111,6 +121,7 @@ func (l *requestFIFO) Peek() (*request, bool) {
 	return l.getFirst(false)
 }
 
+// getFirst 实现 Dequeue 与 Peek 的共用逻辑；只在成功取出时扣减聚合值。
 func (l *requestFIFO) getFirst(remove bool) (*request, bool) {
 	e := l.Front()
 	if e == nil {
@@ -149,6 +160,8 @@ func addToQueueSum(sum *queueSum, req *request) {
 	sum.TotalWorkSum += req.totalWork()
 }
 
+// deductFromQueueSum 必须与 addToQueueSum 使用的取值函数完全一致，
+// 否则请求进出队列后聚合值会漂移。
 func deductFromQueueSum(sum *queueSum, req *request) {
 	sum.InitialSeatsSum -= req.InitialSeats()
 	sum.MaxSeatsSum -= req.MaxSeats()

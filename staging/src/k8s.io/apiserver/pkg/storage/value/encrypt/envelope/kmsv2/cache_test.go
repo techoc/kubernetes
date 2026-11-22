@@ -31,6 +31,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestSimpleCacheSetError 验证缓存写入的前置条件：空 key 或 nil transformer 属于编程错误，
+// 直接 panic 而不是静默接受，避免后续解密路径出现更难定位的空指针。
 func TestSimpleCacheSetError(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	cache := newSimpleCache(fakeClock, time.Second, "providerName")
@@ -64,6 +66,8 @@ func TestSimpleCacheSetError(t *testing.T) {
 	}
 }
 
+// TestKeyFunc 验证 keyFunc 在最坏情况（最大 EDEK）下只分配一次内存，
+// 因为它在每次读写存储时都会被调用，分配数直接影响 etcd 请求延迟。
 func TestKeyFunc(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	cache := newSimpleCache(fakeClock, time.Second, "providerName")
@@ -99,6 +103,10 @@ func TestKeyFunc(t *testing.T) {
 	})
 }
 
+// TestSimpleCache 验证并发写入、过期读取与惰性清理：
+// 过期条目在下次写入触发 GC 前仍可读，之后才被清除。
+//
+// 这种“读容忍过期、写时清理”的设计让读路径无需加锁，也避免过期瞬间集中失效。
 func TestSimpleCache(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	cache := newSimpleCache(fakeClock, 5*time.Second, "providerName")
@@ -148,6 +156,7 @@ func TestSimpleCache(t *testing.T) {
 	}
 }
 
+// generateKey 生成指定长度的随机密钥材料。
 func generateKey(length int) (key []byte, err error) {
 	key = make([]byte, length)
 	if _, err = rand.Read(key); err != nil {
@@ -156,6 +165,10 @@ func generateKey(length int) (key []byte, err error) {
 	return key, nil
 }
 
+// TestMetrics 验证缓存大小指标的性质：并发写入时每个大小值只上报一次，
+// 且上报的大小单调不减（同一轮测试内不会“变小”）。
+//
+// 指标回调必须是线程安全的，否则并发写入会触发 data race 或重复计数。
 func TestMetrics(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	cache := newSimpleCache(fakeClock, 5*time.Second, "panda")

@@ -26,6 +26,11 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordAuthorizationMatchConditionEvaluationFailure 验证授权 webhook 的
+// match condition 相关指标：评估失败计数、排除计数与评估耗时直方图。
+// 中文说明：使用 legacyregistry 全局 gatherer，因此每个子用例前必须 ResetMetricsForTest，
+// 否则上一个用例的计数会污染断言。期望值刻意包含 HELP/TYPE 行，
+// 以锁定指标元数据；histogram 用 1 秒的观测落入 +Inf 桶来验证分桶与 sum/count。
 func TestRecordAuthorizationMatchConditionEvaluationFailure(t *testing.T) {
 	testCases := []struct {
 		desc      string
@@ -68,8 +73,10 @@ func TestRecordAuthorizationMatchConditionEvaluationFailure(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
+			// 全局 registry 状态必须重置，保证指标基线为零。
 			ResetMetricsForTest()
 			m := NewMatcherMetrics()
+			// 依次记录失败、排除与耗时三类事件，覆盖指标的全部写入路径。
 			m.RecordAuthorizationMatchConditionEvaluationFailure(context.Background(), tt.authztype, tt.name)
 			m.RecordAuthorizationMatchConditionExclusion(context.Background(), tt.authztype, tt.name)
 			m.RecordAuthorizationMatchConditionEvaluation(context.Background(), tt.authztype, tt.name, time.Duration(1*time.Second))

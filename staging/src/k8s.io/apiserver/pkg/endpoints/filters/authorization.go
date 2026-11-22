@@ -48,11 +48,16 @@ const (
 type recordAuthorizationMetricsFunc func(ctx context.Context, authorized authorizer.Decision, err error, authStart time.Time, authFinish time.Time)
 
 // WithAuthorization passes all authorized requests on to handler, and returns a forbidden error otherwise.
+//
+// 中文说明：这是公开入口，负责注册指标后委托内部实现；测试通过 withAuthorization
+// 注入假的指标记录函数，避免依赖全局指标注册表。
 func WithAuthorization(hhandler http.Handler, auth authorizer.UnconditionalAuthorizer, s runtime.NegotiatedSerializer) http.Handler {
 	RegisterMetrics()
 	return withAuthorization(hhandler, auth, s, recordAuthorizationMetrics)
 }
 
+// withAuthorization 是鉴权过滤器的实际实现。
+// 中文说明：a 为 nil 时直接放行并告警——这是显式的“关闭鉴权”配置，不能静默处理。
 func withAuthorization(handler http.Handler, a authorizer.UnconditionalAuthorizer, s runtime.NegotiatedSerializer, metrics recordAuthorizationMetricsFunc) http.Handler {
 	if a == nil {
 		klog.Warning("Authorization is disabled")
@@ -62,6 +67,7 @@ func withAuthorization(handler http.Handler, a authorizer.UnconditionalAuthorize
 		ctx := req.Context()
 		authorizationStart := time.Now()
 
+		// 属性缺失说明 requestinfo 过滤器没有正确安装，属于服务端装配错误。
 		attributes, err := GetAuthorizerAttributes(ctx)
 		if err != nil {
 			responsewriters.InternalError(w, req, err)
@@ -71,11 +77,14 @@ func withAuthorization(handler http.Handler, a authorizer.UnconditionalAuthorize
 
 		authorizationFinish := time.Now()
 		request.TrackAuthorizationLatency(ctx, authorizationFinish.Sub(authorizationStart))
+		// 用 defer 记录指标，确保所有返回路径（含 panic 之外的提前返回）都被计入。
 		defer func() {
 			metrics(ctx, authorized, err, authorizationStart, authorizationFinish)
 		}()
 
 		// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
+		// 中文说明：先看决策再看错误，是有意为之——允许决策优先，避免把“带错误但已允许”的
+		// 结果误判为内部错误而拒绝请求。
 		if authorized == authorizer.DecisionAllow {
 			audit.AddAuditAnnotations(ctx,
 				decisionAnnotationKey, decisionAllow,
@@ -84,11 +93,13 @@ func withAuthorization(handler http.Handler, a authorizer.UnconditionalAuthorize
 			return
 		}
 		if err != nil {
+			// 错误原因可能包含内部细节，审计里只记录固定字符串，不回显错误文本。
 			audit.AddAuditAnnotation(ctx, reasonAnnotationKey, reasonError)
 			responsewriters.InternalError(w, req, err)
 			return
 		}
 
+		// 其余情况（Deny 或 NoOpinion）统一按 Forbidden 处理。
 		klog.V(4).InfoS("Forbidden", "URI", req.RequestURI, "reason", reason)
 		audit.AddAuditAnnotations(ctx,
 			decisionAnnotationKey, decisionForbid,
@@ -97,6 +108,9 @@ func withAuthorization(handler http.Handler, a authorizer.UnconditionalAuthorize
 	})
 }
 
+// GetAuthorizerAttributes 从请求 context 构造鉴权属性。
+// 中文说明：RequestInfo 由前面的过滤器写入；缺失时返回错误而不是构造空属性，
+// 否则可能因“空资源”被策略意外放行。
 func GetAuthorizerAttributes(ctx context.Context) (authorizer.Attributes, error) {
 	attribs := authorizer.AttributesRecord{}
 
@@ -124,6 +138,8 @@ func GetAuthorizerAttributes(ctx context.Context) (authorizer.Attributes, error)
 
 	// parsing here makes it easy to keep the AttributesRecord type value-only and avoids any mutex copies when
 	// doing shallow copies in other steps.
+	// 中文说明：解析错误不立即返回，而是随属性一起传递，让鉴权器自行决定如何对待
+	// （例如拒绝或忽略选择器），保持属性构造不失败。
 	if len(requestInfo.FieldSelector) > 0 {
 		fieldSelector, err := fields.ParseSelector(requestInfo.FieldSelector)
 		if err != nil {

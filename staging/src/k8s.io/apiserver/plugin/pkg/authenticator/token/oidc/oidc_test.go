@@ -55,6 +55,9 @@ import (
 )
 
 // utilities for loading JOSE keys.
+//
+// 测试密钥放在 testdata/ 下，按算法区分加载方式；KeyID 统一取公钥的
+// SHA-256 thumbprint，使 JWT header 中的 kid 能直接匹配 key set。
 
 func loadRSAKey(t *testing.T, filepath string, alg jose.SignatureAlgorithm) *jose.JSONWebKey {
 	return loadKey(t, filepath, alg, func(b []byte) (interface{}, error) {
@@ -88,6 +91,8 @@ func loadECDSAPrivKey(t *testing.T, filepath string, alg jose.SignatureAlgorithm
 	})
 }
 
+// loadKey 读取 PEM 私钥，按需提取公钥并计算 kid；任何一步失败都直接
+// 终止测试，因为后续用例无法在缺少密钥的情况下运行。
 func loadKey(t *testing.T, filepath string, alg jose.SignatureAlgorithm, unmarshal func([]byte) (interface{}, error)) *jose.JSONWebKey {
 	data, err := os.ReadFile(filepath)
 	if err != nil {
@@ -111,10 +116,13 @@ func loadKey(t *testing.T, filepath string, alg jose.SignatureAlgorithm, unmarsh
 }
 
 // staticKeySet implements oidc.KeySet.
+// 用内存中的公钥集合替代远程 JWKS，使大部分用例无需启动 key 服务。
 type staticKeySet struct {
 	keys []*jose.JSONWebKey
 }
 
+// VerifySignature 按 JWT header 中的 kid 选钥并验签；无签名或 kid 不匹配
+// 都返回错误，模拟真实 JWKS 的行为。
 func (s *staticKeySet) VerifySignature(ctx context.Context, jwt string) (payload []byte, err error) {
 	jws, err := jose.ParseSigned(jwt)
 	if err != nil {
@@ -134,12 +142,16 @@ func (s *staticKeySet) VerifySignature(ctx context.Context, jwt string) (payload
 	return nil, fmt.Errorf("no keys matches jwk keyid")
 }
 
+// 固定时间点：now 是认证器的“当前时间”，expired/valid 分别位于其前后，
+// 用于稳定测试过期判断而不受真实时间影响。
 var (
 	expired, _ = time.Parse(time.RFC3339Nano, "2009-11-10T22:00:00Z")
 	now, _     = time.Parse(time.RFC3339Nano, "2009-11-10T23:00:00Z")
 	valid, _   = time.Parse(time.RFC3339Nano, "2009-11-11T00:00:00Z")
 )
 
+// claimsTest 描述一个完整的 OIDC 认证用例：配置、签名密钥、claim 内容
+// 以及期望结果。run 负责把占位符替换为测试服务器地址后执行。
 type claimsTest struct {
 	name                string
 	options             Options
@@ -157,6 +169,8 @@ type claimsTest struct {
 	fetchKeysFromRemote bool
 }
 
+// testClaimsServer 是同时充当 OIDC discovery、JWKS 与分布式 claim
+// 端点的测试服务器；keys 可在测试中热替换以模拟密钥轮换。
 type testClaimsServer struct {
 	*httptest.Server
 
@@ -164,12 +178,14 @@ type testClaimsServer struct {
 	mu   sync.RWMutex
 }
 
+// setKeys 原子替换 key set，供密钥轮换测试使用。
 func (c *testClaimsServer) setKeys(keys jose.JSONWebKeySet) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.keys = keys
 }
 
+// getKeys 返回当前 key set 的副本；读写锁保证与 setKeys 并发安全。
 func (c *testClaimsServer) getKeys() jose.JSONWebKeySet {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -177,6 +193,7 @@ func (c *testClaimsServer) getKeys() jose.JSONWebKeySet {
 }
 
 // Replace formats the contents of v into the provided template.
+// 所有涉及测试服务器 URL 的字符串都通过它注入，避免用例里硬编码端口。
 func replace(tmpl string, v interface{}) string {
 	t := template.Must(template.New("test").Parse(tmpl))
 	buf := bytes.NewBuffer(nil)
@@ -190,6 +207,9 @@ func replace(tmpl string, v interface{}) string {
 // OIDC responses to requests that resolve distributed claims. signer is the
 // signer used for the served JWT tokens.  claimToResponseMap is a map of
 // responses that the server will return for each claim it is given.
+//
+// 同时覆盖 discovery、JWKS、分布式 claim 三类端点，以及若干故意出错
+// 的端点（invalidkeys/badstatus），用于测试认证器的容错路径。
 func newClaimServer(t *testing.T, keys jose.JSONWebKeySet, signer jose.Signer, claimToResponseMap map[string]string, openIDConfig *string) *testClaimsServer {
 	cs := &testClaimsServer{
 		keys: keys,
@@ -222,6 +242,8 @@ func newClaimServer(t *testing.T, keys jose.JSONWebKeySet, signer jose.Signer, c
 		case "/groups":
 			fallthrough
 		case "/rabbits":
+			// 分布式 claim 端点：要求 bearer token 与 claim 名一致，
+			// 再把预置的 JSON 用同一个 signer 签成 JWT 返回。
 			if claimToResponseMap == nil {
 				t.Errorf("no claims specified in response")
 			}
@@ -249,6 +271,7 @@ func newClaimServer(t *testing.T, keys jose.JSONWebKeySet, signer jose.Signer, c
 	return cs
 }
 
+// toKeySet 把指针切片转换为 jose.JSONWebKeySet 值类型，便于 JSON 序列化。
 func toKeySet(keys []*jose.JSONWebKey) jose.JSONWebKeySet {
 	ret := jose.JSONWebKeySet{}
 	for _, k := range keys {
@@ -257,6 +280,8 @@ func toKeySet(keys []*jose.JSONWebKey) jose.JSONWebKeySet {
 	return ret
 }
 
+// run 执行单个 claimsTest：启动测试服务器、替换模板、初始化认证器，
+// 然后断言初始化错误/健康检查错误/认证错误/用户信息四类结果之一。
 func (c *claimsTest) run(t *testing.T) {
 	var (
 		signer jose.Signer
@@ -337,6 +362,8 @@ func (c *claimsTest) run(t *testing.T) {
 	}
 
 	if len(c.wantHealthErrPrefix) > 0 {
+		// 健康检查错误可能异步出现（JWKS 拉取是后台进行的），因此轮询
+		// 直到前缀匹配或超时。
 		if err := wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, true, func(context.Context) (bool, error) {
 			healthErr := a.HealthCheck()
 			if healthErr == nil {
@@ -371,6 +398,8 @@ func (c *claimsTest) run(t *testing.T) {
 	}
 
 	// wait for the authenticator to be healthy
+	// 认证器在后台异步拉取 JWKS，健康前 AuthenticateToken 可能返回
+	// “尚未就绪”类错误，因此先等待健康。
 	err = wait.PollUntilContextCancel(ctx, time.Millisecond, true, func(context.Context) (bool, error) {
 		return a.HealthCheck() == nil, nil
 	})
@@ -380,6 +409,8 @@ func (c *claimsTest) run(t *testing.T) {
 
 	got, ok, err := a.AuthenticateToken(ctx, token)
 
+	// 结果断言分三层：错误文本 -> 是否认证成功 -> 用户身份，任何一层
+	// 失败都能给出针对性的诊断信息。
 	expectErr := len(c.wantErr) > 0
 
 	if err != nil {
@@ -412,10 +443,16 @@ func (c *claimsTest) run(t *testing.T) {
 	}
 }
 
+// TestToken 是 OIDC 认证器的主测试表，覆盖：基本 claim 映射、email
+// 校验、groups（普通/分布式/聚合）、audience 校验、签名算法、discovery
+// URL、CEL claim/validation 规则、egress 选择以及 credential id。
+//
+// 同步 token ID verifier 是为了让缓存行为在测试中确定可复现。
 func TestToken(t *testing.T) {
 	synchronizeTokenIDVerifierForTest = true
 	tests := []claimsTest{
 		{
+			// 最小成功用例：username claim 直接映射为用户名。
 			name: "token",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -637,6 +674,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// 分布式 claim：groups 的值由 _claim_sources 指向的独立端点
+			// 返回，认证器需要携带 access_token 去拉取并验签。
 			name: "groups-distributed",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1232,6 +1271,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// 聚合 claim（_claim_sources 中直接内联 JWT）不受支持，
+			// 认证器应忽略该 claim 而不是报错。
 			name: "group-string-claim-aggregated-not-supported",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1345,6 +1386,8 @@ func TestToken(t *testing.T) {
 			wantErr: `oidc: parse groups claim "groups": json: cannot unmarshal number into Go value of type string`,
 		},
 		{
+			// 旧式 claim 校验：所有 RequiredValue 都必须与 token 中的值
+			// 完全相等，否则认证失败。
 			name: "required-claim",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1560,6 +1603,8 @@ func TestToken(t *testing.T) {
 		{
 			// ID tokens may contain multiple audiences:
 			// https://openid.net/specs/openid-connect-core-1_0.html#IDToken
+			//
+			// 多 audience 时采用交集语义：与配置的任一 audience 匹配即可。
 			name: "multiple-audiences",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -2149,6 +2194,8 @@ func TestToken(t *testing.T) {
 			wantHealthErrPrefix: `oidc: authenticator for issuer "https://this-will-not-work.notatld" is not healthy: Get "https://this-will-not-work.notatld/.well-known/openid-configuration": dial tcp: lookup this-will-not-work.notatld`,
 		},
 		{
+			// accounts.google.com 需要特殊处理：其 issuer 在历史上不带
+			// scheme，认证器需同时接受两种写法。
 			name: "accounts.google.com issuer",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -2209,6 +2256,8 @@ func TestToken(t *testing.T) {
 			wantErr: `oidc: verify token: oidc: expected audience "my-client" got ["my-wrong-client"]`,
 		},
 		{
+			// user validation rule 在映射完成后执行，可对最终用户身份
+			// 做二次约束（例如限制 group 前缀），失败即拒绝。
 			name: "user validation rule fails for user.username",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -2318,6 +2367,8 @@ func TestToken(t *testing.T) {
 			wantErr: `oidc: error evaluating claim validation expression: expression 'claims.hd == "example.com"' resulted in error: no such key: hd`,
 		},
 		{
+			// 1.31+ 的 CEL claim validation rule：表达式可以访问嵌套
+			// claim，失败时拒绝认证。
 			name: "claim validation rule with expression",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -2442,6 +2493,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// claim 映射也可以使用 CEL 表达式，支持从深层嵌套结构中
+			// 提取用户名。
 			name: "username claim mapping with expression",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -2615,6 +2668,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// 访问不存在的深层字段时，可选映射（optional）返回空值而不是
+			// 报错，便于兼容不同 IdP 的 payload 差异。
 			name: "claim mappings with expressions and deeply nested claim - success via optional",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -3493,6 +3548,9 @@ func TestToken(t *testing.T) {
 			wantInitErr: `issuer.url: Invalid value: "https://auth.example.com": URL must not overlap with disallowed issuers: [https://auth.example.com]`,
 		},
 		{
+			// egress 配置用于把 JWKS/claim 拉取流量导向指定的网络路径
+			// （如控制面 egress 选择器）。这里验证配置解析错误在初始化
+			// 阶段即暴露。
 			name: "invalid egress type",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -4194,6 +4252,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// 显式 discovery URL 与 issuer URL 的路径组合是易错点：
+			// 二者路径必须兼容，且 issuer 校验要按规范化后的 URL 比较。
 			name: "discovery url, issuer has a path",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -4342,6 +4402,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// jti claim 会写入 user.Extra 的 credential id，用于审计与
+			// 令牌吊销；即使未配置任何 extra 映射也应注入。
 			name: "credential id set in extra even when no extra claim mappings are defined",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -4427,6 +4489,8 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			// 非字符串 jti 无法安全地作为 credential id，因此忽略且不报错，
+			// 避免因 IdP 的类型差异导致认证整体失败。
 			name: "non-string jti claim does not set credential id in extra or error",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -4547,6 +4611,8 @@ func TestToken(t *testing.T) {
 	}
 }
 
+// TestUnmarshalClaimError 确保 claim 解析错误信息不回显 claim 内容：
+// claim 可能包含 bearer token 等敏感数据，错误信息会被写入日志。
 func TestUnmarshalClaimError(t *testing.T) {
 	// Ensure error strings returned by unmarshaling claims don't include the claim.
 	const token = "96bb299a-02e9-11e8-8673-54ee7553240e" // Fake token for testing.
@@ -4569,6 +4635,8 @@ func TestUnmarshalClaimError(t *testing.T) {
 	}
 }
 
+// TestUnmarshalClaim 验证 claim 反序列化对字符串、布尔、字符串数组以及
+// 类型不匹配的处理。
 func TestUnmarshalClaim(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -4645,6 +4713,8 @@ func TestUnmarshalClaim(t *testing.T) {
 	}
 }
 
+// TestJWKSMetricsKeySetError 验证 JWKS 拉取失败（空 key set 或非 2xx）
+// 时仍会记录失败时间戳指标，便于告警；失败不影响认证器初始化本身。
 func TestJWKSMetricsKeySetError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StructuredAuthenticationConfigurationJWKSMetrics, true)
 
@@ -4754,6 +4824,8 @@ func TestJWKSMetricsKeySetError(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected delegate to be Authenticator")
 			}
+			// 指标测试依赖 JWKS 拉取确实发生，因此等待 verifier 就绪
+			// 而不是只等认证器对象创建完成。
 			// wait for the authenticator to be initialized
 			err = wait.PollUntilContextCancel(ctx, time.Millisecond, true, func(context.Context) (bool, error) {
 				if v, _ := authenticator.idTokenVerifier(); v == nil {
@@ -4800,6 +4872,8 @@ func TestJWKSMetricsKeySetError(t *testing.T) {
 	}
 }
 
+// TestJWKSMetrics 验证成功路径的 JWKS 指标：首次拉取、密钥轮换后重新
+// 拉取，以及认证器生命周期结束后不再更新指标（避免关闭后仍写全局指标）。
 func TestJWKSMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StructuredAuthenticationConfigurationJWKSMetrics, true)
 	ResetMetrics()
@@ -4987,6 +5061,8 @@ func TestJWKSMetrics(t *testing.T) {
 	}
 }
 
+// captureTimestampMetric 读取指定 issuer/apiserver 组合的成功拉取时间戳；
+// 不存在时返回 0，用于比较取消前后是否发生变化。
 func captureTimestampMetric(t *testing.T, jwtIssuerHash, apiServerIDHash string) float64 {
 	t.Helper()
 
@@ -5015,6 +5091,8 @@ func captureTimestampMetric(t *testing.T, jwtIssuerHash, apiServerIDHash string)
 	return 0
 }
 
+// checkJWKSMetrics 断言最近一次成功拉取的 key set 哈希与时间戳指标。
+// 两个指标共同证明“拉取成功且内容已更新”。
 func checkJWKSMetrics(t *testing.T, jwtIssuerHash string, expectedJWKSHash string) {
 	t.Helper()
 
@@ -5056,12 +5134,15 @@ func checkJWKSMetrics(t *testing.T, jwtIssuerHash string, expectedJWKSHash strin
 	}
 }
 
+// errTransport 是一个总是失败的 http.RoundTripper，用于注入网络错误。
 type errTransport string
 
+// RoundTrip 返回包含错误文本的错误，供断言匹配。
 func (e errTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("%s", e)
 }
 
+// testContext 返回随测试结束自动取消的 context，避免后台 goroutine 泄漏。
 func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

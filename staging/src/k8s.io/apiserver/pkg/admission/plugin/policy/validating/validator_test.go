@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件针对 validator 的决策逻辑做单元测试：把 CEL 求值替换为预置结果，
+// 从而精确覆盖 failurePolicy、messageExpression、审计注解与预算耗尽等分支。
+
 package validating
 
 import (
@@ -42,13 +45,18 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 )
 
+// fakeCelFilter 用预置的求值结果替代真实的 CEL 执行，
+// 便于构造“表达式返回 true/false/报错”等确定场景。
 var _ cel.ConditionEvaluator = &fakeCelFilter{}
 
+// fakeCelFilter 实现 ConditionEvaluator：返回 evaluations 并按需消耗 1 点预算。
 type fakeCelFilter struct {
 	evaluations []cel.EvaluationResult
 	throwError  bool
 }
 
+// ForInput 模拟单次求值：预算耗尽时返回与真实实现一致的 ErrOutOfBudget 错误，
+// 保证 validator 对预算耗尽的处理分支能被覆盖。
 func (f *fakeCelFilter) ForInput(ctx context.Context, versionedAttr *admission.VersionedAttributes, request *admissionv1.AdmissionRequest, optionalVars cel.OptionalVariableBindings, namespace *corev1.Namespace, costBudget int64) ([]cel.EvaluationResult, int64, error) {
 	if costBudget <= 0 { // this filter will cost 1, so cost = 0 means fail.
 		return nil, -1, &apiservercel.Error{
@@ -63,21 +71,33 @@ func (f *fakeCelFilter) ForInput(ctx context.Context, versionedAttr *admission.V
 	return f.evaluations, costBudget - 1, nil
 }
 
+// CompilationErrors 恒为空：编译错误在别处测试。
 func (f *fakeCelFilter) CompilationErrors() []error {
 	return []error{}
 }
 
+// fakeCELMatcher 以固定结果替代 matchConditions 求值。
 var _ matchconditions.Matcher = &fakeCELMatcher{}
 
+// fakeCELMatcher 返回预先设定的匹配结果与错误。
 type fakeCELMatcher struct {
 	error   error
 	matches bool
 }
 
+// Match 总是返回配置好的结果；FailedConditionName 固定为占位值。
 func (f *fakeCELMatcher) Match(ctx context.Context, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, authz authorizer.UnconditionalAuthorizer) matchconditions.MatchResult {
 	return matchconditions.MatchResult{Matches: f.matches, FailedConditionName: "placeholder", Error: f.error}
 }
 
+// TestValidate 表驱动覆盖 validator.Validate 的核心决策矩阵：
+//   - 表达式结果（true/false/错误）与多条校验的组合；
+//   - failurePolicy 为 Fail/Ignore/未设置（默认 Fail）时的行为；
+//   - reason 缺省为 Invalid、显式设置时透传；
+//   - messageExpression 覆盖静态 message、求值失败或为空时回退；
+//   - 审计注解在 Fail/Ignore 下的取值；
+//   - 表达式与 messageExpression 共享同一预算；
+//   - matchConditions 不匹配时抑制失败，匹配出错时按“视为匹配”处理。
 func TestValidate(t *testing.T) {
 	ignore := v1.Ignore
 	fail := v1.Fail
@@ -159,6 +179,8 @@ func TestValidate(t *testing.T) {
 			failPolicy: &ignore,
 		},
 		{
+			// 未设置 failurePolicy 时按 Fail 处理（API 默认值由 webhook/策略定义补全，
+			// 但 validator 自身也需保持这一默认，避免绕过 API 的调用路径静默放行）。
 			name: "test error with failurepolicy nil",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -192,6 +214,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 每条校验独立产生一条决策，错误只影响其所属的那一条。
 			name: "test fail with failurepolicy ignore with multiple validations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -346,6 +369,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 未设置 reason 时使用 Invalid，而不是空字符串——API 响应需要合法的 StatusReason。
 			name: "test reason for fail no reason set",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -367,6 +391,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 显式 reason 应原样透传，供客户端据此区分 Forbidden 与 Unauthorized。
 			name: "test reason for fail reason set",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -389,6 +414,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 多条校验各自携带不同 reason，互不影响。
 			name: "test reason for failed validations multiple validations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -425,6 +451,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 静态 message 在校验失败时直接作为拒绝原因。
 			name: "test message for failed validations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -486,6 +513,8 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 过滤层整体报错时只产生一条 Deny 决策，并直接携带底层错误文本；
+			// 已求值的结果被丢弃，避免用部分结果做判断。
 			name: "test filter error",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -508,6 +537,7 @@ func TestValidate(t *testing.T) {
 			throwError: true,
 		},
 		{
+			// 即便有多条校验，过滤层报错也只合并为一条决策。
 			name: "test filter error multiple evaluations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -539,6 +569,7 @@ func TestValidate(t *testing.T) {
 			throwError: true,
 		},
 		{
+			// 没有校验规则时审计注解仍会被求值：审计注解独立于校验结果。
 			name: "test empty validations with non-empty audit annotations",
 			auditEvaluations: []cel.EvaluationResult{
 				{
@@ -559,6 +590,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 校验通过时审计注解照常发布（用于记录“策略已检查”的证据）。
 			name: "test non-empty validations with non-empty audit annotations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -596,6 +628,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 求值为 null 的注解被排除，非 null 的照常发布，二者互不影响。
 			name: "test audit annotations with null return",
 			auditEvaluations: []cel.EvaluationResult{
 				{
@@ -627,6 +660,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// 注解表达式求值出错：Fail 策略下记为 Error 动作，错误会向上传播。
 			name: "test audit annotations with failPolicy=fail",
 			auditEvaluations: []cel.EvaluationResult{
 				{
@@ -647,6 +681,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &fail,
 		},
 		{
+			// Ignore 策略下错误被吞掉，注解记为 Exclude（不发布），保证请求不受影响。
 			name: "test audit annotations with failPolicy=ignore",
 			auditEvaluations: []cel.EvaluationResult{
 				{
@@ -667,6 +702,7 @@ func TestValidate(t *testing.T) {
 			failPolicy: &ignore,
 		},
 		{
+			// messageExpression 求值成功时覆盖静态 message。
 			name: "messageExpression successful, empty message",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -694,6 +730,8 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 只有实际返回字符串结果的 messageExpression 才覆盖；
+			// 第一条的求值结果为空（零值），因此保留其静态 message。
 			name: "messageExpression for multiple validations",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -738,6 +776,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 静态 message 被 messageExpression 的结果覆盖。
 			name: "messageExpression successful, overwritten message",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -766,6 +805,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// messageExpression 求值失败时回退到原始 message，而不是丢弃拒绝原因。
 			name: "messageExpression user failure",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -794,6 +834,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 求值为纯空白视为“空消息”，同样回退到静态 message。
 			name: "messageExpression eval to empty",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -822,6 +863,8 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 多行消息会被拒绝：messageExpression 的结果必须是单行，
+			// 以免策略向 API 响应或审计日志注入换行。
 			name: "messageExpression eval to multi-line",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -850,6 +893,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 超过 5KB 的消息被拒绝，防止策略放大响应体积。
 			name: "messageExpression eval result too long",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -877,6 +921,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// null 不是合法字符串结果，回退到静态 message。
 			name: "messageExpression eval to null",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -905,6 +950,8 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			// 预算在表达式与 messageExpression 之间共享：表达式先耗尽预算后，
+			// messageExpression 无法求值，决策消息应反映预算耗尽而非原始 message。
 			name: "messageExpression out of budget after successful eval of expression",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -932,6 +979,8 @@ func TestValidate(t *testing.T) {
 			costBudget: 1, // shared between expression and messageExpression, needs 1 + 1 = 2 in total
 		},
 		{
+			// matchConditions 不匹配时，即便校验表达式报错也不产生决策：
+			// 策略未命中就不应影响请求。
 			name:    "no match surpresses failure",
 			matcher: &fakeCELMatcher{matches: false},
 			evaluations: []cel.EvaluationResult{
@@ -945,6 +994,8 @@ func TestValidate(t *testing.T) {
 			failPolicy:     &fail,
 		},
 		{
+			// matchConditions 求值出错时保守地视为“匹配”，再按 failurePolicy 决定去留，
+			// 避免条件错误被当作不匹配而静默跳过策略。
 			name:    "match error => presumed match",
 			matcher: &fakeCELMatcher{matches: true, error: fmt.Errorf("test error")},
 			evaluations: []cel.EvaluationResult{
@@ -964,6 +1015,7 @@ func TestValidate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 未显式提供匹配器时默认匹配，使大多数用例只关注决策逻辑本身。
 			var matcher matchconditions.Matcher
 			if tc.matcher == nil {
 				matcher = &fakeCELMatcher{matches: true}
@@ -987,15 +1039,18 @@ func TestValidate(t *testing.T) {
 				},
 			}
 			ctx := context.TODO()
+			// costBudget 为 0 表示使用生产默认预算；非零值用于精确控制预算耗尽场景。
 			var budget int64 = celconfig.RuntimeCELCostBudget
 			if tc.costBudget != 0 {
 				budget = tc.costBudget
 			}
 			validateResult := v.Validate(ctx, fakeVersionedAttr.GetResource(), fakeVersionedAttr, nil, nil, budget, nil)
 
+			// 决策数量必须完全一致：多一条或少一条都说明合并/短路逻辑出错。
 			require.Equal(t, len(validateResult.Decisions), len(tc.policyDecision))
 
 			for i, policyDecision := range tc.policyDecision {
+				// message 用子串匹配，因为实现可能附加表达式原文等上下文。
 				if policyDecision.Action != validateResult.Decisions[i].Action {
 					t.Errorf("Expected policy decision kind '%v' but got '%v'", policyDecision.Action, validateResult.Decisions[i].Action)
 				}
@@ -1009,6 +1064,7 @@ func TestValidate(t *testing.T) {
 					t.Errorf("Expected policy decision elapsed time '%v', but got '%v'", policyDecision.Elapsed, validateResult.Decisions[i].Elapsed)
 				}
 			}
+			// 审计注解的数量以审计求值结果为准，而不是期望列表，防止两边同时漏写而测试仍通过。
 			require.Equal(t, len(tc.auditEvaluations), len(validateResult.AuditAnnotations))
 
 			for i, auditAnnotation := range tc.auditAnnotations {
@@ -1030,6 +1086,8 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestContextCanceled 验证请求上下文被取消时校验立即中断并给出“operation interrupted”决策，
+// 而不是继续执行可能很昂贵的 CEL 表达式——这保证客户端断开后不再浪费 apiserver CPU。
 func TestContextCanceled(t *testing.T) {
 	fail := v1.Fail
 
@@ -1048,6 +1106,7 @@ func TestContextCanceled(t *testing.T) {
 		},
 	}
 	ctx, cancel := context.WithCancel(context.TODO())
+	// 立刻取消：表达式本身是嵌套 map 的昂贵计算，若未被中断会消耗大量预算。
 	cancel()
 	validationResult := v.Validate(ctx, fakeVersionedAttr.GetResource(), fakeVersionedAttr, nil, nil, celconfig.RuntimeCELCostBudget, nil)
 	if len(validationResult.Decisions) != 1 || !strings.Contains(validationResult.Decisions[0].Message, "operation interrupted") {

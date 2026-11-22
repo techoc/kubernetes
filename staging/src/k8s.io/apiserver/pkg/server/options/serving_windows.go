@@ -23,6 +23,8 @@ import (
 	"syscall"
 )
 
+// permitPortReuse 在 Windows 上总是失败：该平台不支持安全的端口复用语义，
+// 调用方应据此拒绝需要 SO_REUSEPORT 的配置。
 func permitPortReuse(network, address string, c syscall.RawConn) error {
 	return fmt.Errorf("port reuse is not supported on Windows")
 }

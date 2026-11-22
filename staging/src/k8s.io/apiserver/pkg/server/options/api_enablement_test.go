@@ -32,12 +32,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// fakeGroupRegistry 只把 apiregistration.k8s.io 视为已知组，用来触发
+// “未知 API 组”校验分支。
 type fakeGroupRegistry struct{}
 
 func (f fakeGroupRegistry) IsGroupRegistered(group string) bool {
 	return group == "apiregistration.k8s.io"
 }
 
+// TestAPIEnablementOptionsValidate 验证 --runtime-config 的合法键/值：
+// api/all=false 不能单独出现、键必须是 api/all 或 group/version、未知组必须报错。
 func TestAPIEnablementOptionsValidate(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -90,6 +94,8 @@ func TestAPIEnablementOptionsValidate(t *testing.T) {
 	}
 }
 
+// fakeGroupVersionRegistry 提供固定版本列表，模拟 scheme 的已注册 GV，
+// 用于测试 ApplyTo 在版本模拟下的告警逻辑。
 type fakeGroupVersionRegistry struct {
 	versions []schema.GroupVersion
 }
@@ -130,6 +136,8 @@ func (f fakeGroupVersionRegistry) GroupVersions() []schema.GroupVersion {
 	return f.versions
 }
 
+// fakeEffectiveVersion 是 EffectiveVersion 的测试替身，只关心 binary 与
+// emulation 两个版本，其余方法返回固定值。
 type fakeEffectiveVersion struct {
 	binaryVersion    *version.Version
 	emulationVersion *version.Version
@@ -171,8 +179,12 @@ func (f fakeEffectiveVersion) Validate() []error {
 	return nil
 }
 
+// TestAPIEnablementOptionsApplyToVersionComparison 验证：在模拟版本与二进制
+// 版本的 major/minor 不一致且显式启用了 alpha API 时发出告警；同版本或
+// 未启用 alpha API 时保持安静，避免噪声。
 func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
 	// Helper function to capture klog output
+	// 临时把 klog 输出重定向到 buffer，结束后恢复全局状态，防止影响其他测试。
 	captureKlogOutput := func(fn func()) string {
 		var buf bytes.Buffer
 		klog.SetOutput(&buf)
@@ -319,6 +331,8 @@ func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
 	}
 }
 
+// TestAPIEnablementOptionsApplyToErrorCases 验证 ApplyTo 的边界：nil 选项
+// 视为未配置；--runtime-config 的值不合法时必须报错而不是静默忽略。
 func TestAPIEnablementOptionsApplyToErrorCases(t *testing.T) {
 	// Create a default effective version for test configs
 	defaultEffectiveVersion := fakeEffectiveVersion{

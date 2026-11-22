@@ -25,12 +25,17 @@ import (
 // ErrCallingWebhook is returned for transport-layer errors calling webhooks. It
 // represents a failure to talk to the webhook, not the webhook rejecting a
 // request.
+//
+// 区分“调用失败”和“webhook 明确拒绝”很重要：前者受 failurePolicy 影响，
+// 后者是正常的准入决策。
 type ErrCallingWebhook struct {
 	WebhookName string
 	Reason      error
 	Status      *apierrors.StatusError
 }
 
+// Error 返回包含 webhook 名称的错误信息；没有底层原因时明确说明，
+// 避免日志出现空洞的 "failed calling webhook"。
 func (e *ErrCallingWebhook) Error() string {
 	if e.Reason != nil {
 		return fmt.Sprintf("failed calling webhook %q: %v", e.WebhookName, e.Reason)
@@ -43,6 +48,7 @@ type ErrWebhookRejection struct {
 	Status *apierrors.StatusError
 }
 
+// Error 直接透传 webhook 返回的状态信息，保留其原始 reason/message。
 func (e *ErrWebhookRejection) Error() string {
 	return e.Status.Error()
 }

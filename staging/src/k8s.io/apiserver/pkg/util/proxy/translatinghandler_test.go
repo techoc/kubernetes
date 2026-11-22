@@ -34,6 +34,9 @@ func (fh *fakeHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fh.served = true
 }
 
+// TestTranslatingHandler 验证请求路由决策：仅当请求是 websocket 升级且协议列表
+// （顺序无关）包含 v5.channel.k8s.io 时才交给 translator，其余情况一律走 delegate。
+// 大小写错误与 spdy 升级都应被拒绝，避免协议降级或误判。
 func TestTranslatingHandler(t *testing.T) {
 	tests := map[string]struct {
 		upgrade          string

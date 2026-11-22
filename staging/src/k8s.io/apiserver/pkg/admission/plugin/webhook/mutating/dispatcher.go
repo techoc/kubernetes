@@ -16,6 +16,10 @@ limitations under the License.
 
 // Package mutating delegates admission checks to dynamically configured
 // mutating webhooks.
+//
+// Package mutating 把准入检查委托给动态配置的变更型 webhook：负责调用远端
+// webhook、应用 JSONPatch、记录审计注解，并在对象被修改后触发必要的
+// 重新调用（reinvocation）。
 package mutating
 
 import (
@@ -56,34 +60,52 @@ const (
 	// Audit handler decides whether annotation with this prefix should be logged based on audit level.
 	// Since mutating webhook patches the request body, audit level must be greater or equal to Request
 	// for the annotation to be logged
+	//
+	// PatchAuditAnnotationPrefix 是审计注解中保存 webhook 补丁的键前缀。
+	// 补丁可能包含敏感内容，因此这类注解只在审计级别不低于 Request 时才写出。
 	PatchAuditAnnotationPrefix = "patch.webhook.admission.k8s.io/"
 	// MutationAuditAnnotationPrefix is a prefix for presisting webhook mutation existence in audit annotation.
+	// MutationAuditAnnotationPrefix 标记某次 webhook 调用是否真的改动了对象，
+	// 只记录布尔结果，不含对象内容，因此比补丁注解更安全。
 	MutationAuditAnnotationPrefix = "mutation.webhook.admission.k8s.io/"
 	// MutationAnnotationFailedOpenKeyPrefix in an annotation indicates
 	// the mutating webhook failed open when the webhook backend connection
 	// failed or returned an internal server error.
+	// 带此前缀的注解表示 webhook 在连接失败或后端 5xx 时按 failurePolicy=Ignore
+	// 放行（fail open）。留下注解是为了让安全审计能发现"本应检查却未检查"。
 	MutationAuditAnnotationFailedOpenKeyPrefix string = "failed-open." + MutationAuditAnnotationPrefix
 )
 
+// mutatingDispatcher 持有共享的 REST 客户端管理器与插件引用，本身无可变
+// 状态，因此可被所有请求并发复用。ClientManager 负责证书轮换与连接复用。
 type mutatingDispatcher struct {
 	cm     *webhookutil.ClientManager
 	plugin *Plugin
 }
 
+// newMutatingDispatcher 返回一个工厂：通用 webhook 框架在初始化时传入
+// ClientManager，延迟到此刻才构造 dispatcher，保证客户端管理器已完成配置。
 func newMutatingDispatcher(p *Plugin) func(cm *webhookutil.ClientManager) generic.Dispatcher {
 	return func(cm *webhookutil.ClientManager) generic.Dispatcher {
 		return &mutatingDispatcher{cm, p}
 	}
 }
 
+// 编译期断言：versionedAttributeAccessor 必须实现通用层的版本化属性访问器。
 var _ generic.VersionedAttributeAccessor = &versionedAttributeAccessor{}
 
+// versionedAttributeAccessor 惰性地在内部版本与 webhook 要求的版本之间
+// 转换属性。多个 webhook 可能要求不同版本；这里缓存最近一次的转换结果，
+// 只有版本变化时才重新转换，避免重复编码。
 type versionedAttributeAccessor struct {
 	versionedAttr    *admission.VersionedAttributes
 	attr             admission.Attributes
 	objectInterfaces admission.ObjectInterfaces
 }
 
+// VersionedAttribute 返回按 gvk 转换后的属性。首次调用创建，后续调用在
+// 版本不同时做增量转换；转换失败包装为 InternalError，因为对请求处理
+// 链路而言这属于服务端配置/编解码问题，而非用户输入错误。
 func (v *versionedAttributeAccessor) VersionedAttribute(gvk schema.GroupVersionKind) (*admission.VersionedAttributes, error) {
 	if v.versionedAttr == nil {
 		// First call, create versioned attributes
@@ -102,12 +124,18 @@ func (v *versionedAttributeAccessor) VersionedAttribute(gvk schema.GroupVersionK
 
 var _ generic.Dispatcher = &mutatingDispatcher{}
 
+// Dispatch 依次调用所有匹配的变更型 webhook，并把最终的变更结果写回
+// attr。变更型 hook 的语义是 fail open/closed 取决于 failurePolicy；
+// 任何未忽略的调用错误都会导致请求被拒绝。
 func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces, hooks []webhook.WebhookAccessor) error {
+	// reinvocationContext 在整条准入链内共享，用于判断 in-tree 插件是否
+	// 改动了对象，从而决定是否需要重新调用 webhook。
 	reinvokeCtx := attr.GetReinvocationContext()
 	var webhookReinvokeCtx *webhookReinvokeContext
 	if v := reinvokeCtx.Value(PluginName); v != nil {
 		webhookReinvokeCtx = v.(*webhookReinvokeContext)
 	} else {
+		// 第一次进入本插件，初始化并存入共享上下文。
 		webhookReinvokeCtx = &webhookReinvokeContext{}
 		reinvokeCtx.SetValue(PluginName, webhookReinvokeCtx)
 	}
@@ -115,8 +143,11 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 	if reinvokeCtx.IsReinvoke() && webhookReinvokeCtx.IsOutputChangedSinceLastWebhookInvocation(attr.GetObject()) {
 		// If the object has changed, we know the in-tree plugin re-invocations have mutated the object,
 		// and we need to reinvoke all eligible webhooks.
+		// 对象在两次调用之间被修改，说明此前的 mutation 可能基于过期输入，
+		// 于是要求重新调用所有声明了 IfNeeded 的 webhook。
 		webhookReinvokeCtx.RequireReinvokingPreviouslyInvokedPlugins()
 	}
+	// 记录本轮结束时的对象快照，供下一轮判断是否发生变化。
 	defer func() {
 		webhookReinvokeCtx.SetLastWebhookInvocationOutput(attr.GetObject())
 	}()
@@ -125,6 +156,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		objectInterfaces: o,
 	}
 	for i, hook := range hooks {
+		// 若之前的 hook 已产生版本化对象，则用其做匹配检查，确保匹配
+		// 看到的是最新变更后的内容。
 		attrForCheck := attr
 		if v.versionedAttr != nil {
 			attrForCheck = v.versionedAttr
@@ -134,6 +167,7 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		if statusErr != nil {
 			return statusErr
 		}
+		// nil 表示规则、对象选择器或命名空间选择器不匹配，跳过该 hook。
 		if invocation == nil {
 			continue
 		}
@@ -147,6 +181,9 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		// skipped in the first round because of mismatching labels,
 		// even if the labels become matching, the webhook does not
 		// get called during reinvocation.
+		//
+		// 重新调用阶段只重放此前确已调用过、且声明 IfNeeded 的 webhook；
+		// 第一轮被跳过的 hook 不会在重放时"补跑"，否则会改变既定语义。
 		if reinvokeCtx.IsReinvoke() && !webhookReinvokeCtx.ShouldReinvokeWebhook(invocation.Webhook.GetUID()) {
 			continue
 		}
@@ -157,6 +194,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		}
 
 		t := time.Now()
+		// round 用于审计注解键，区分首次调用（0）与重新调用（1），
+		// 便于排查同一 webhook 的多轮变更。
 		round := 0
 		if reinvokeCtx.IsReinvoke() {
 			round = 1
@@ -167,6 +206,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		ignoreClientCallFailures := hook.FailurePolicy != nil && *hook.FailurePolicy == admissionregistrationv1.Ignore
 		rejected := false
 		if err != nil {
+			// 按错误类型分别记指标：调用失败、webhook 主动拒绝、服务端内部错误
+			// 在排障时含义完全不同，不能混为一谈。
 			switch err := err.(type) {
 			case *webhookutil.ErrCallingWebhook:
 				if !ignoreClientCallFailures {
@@ -191,9 +232,12 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 		}
 		if changed {
 			// Patch had changed the object. Prepare to reinvoke all previous mutations that are eligible for re-invocation.
+			// 对象已改变，后续 webhook 看到的输入也变了，因此标记需要
+			// 重放此前已调用过的 hook。
 			webhookReinvokeCtx.RequireReinvokingPreviouslyInvokedPlugins()
 			reinvokeCtx.SetShouldReinvoke()
 		}
+		// 只有显式声明 IfNeededReinvocationPolicy 的 hook 才会被加入重放名单。
 		if hook.ReinvocationPolicy != nil && *hook.ReinvocationPolicy == admissionregistrationv1.IfNeededReinvocationPolicy {
 			webhookReinvokeCtx.AddReinvocableWebhookToPreviouslyInvoked(invocation.Webhook.GetUID())
 		}
@@ -207,6 +251,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 				if errors.Is(callErr.Reason, context.Canceled) {
 					klog.Warningf("Context canceled when calling webhook %v", hook.Name)
 				} else {
+					// failurePolicy=Ignore 时按 fail open 处理，同时留下审计
+					// 注解，便于事后发现未执行的检查。
 					klog.Warningf("Failed calling webhook, failing open %v: %v", hook.Name, callErr)
 					admissionmetrics.Metrics.ObserveWebhookFailOpen(ctx, hook.Name, "admit")
 					annotator.addFailedOpenAnnotation()
@@ -216,12 +262,15 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 				select {
 				case <-ctx.Done():
 					// parent context is canceled or timed out, no point in continuing
+					// 整个请求的上下文已结束，继续调用其余 webhook 没有意义。
 					return apierrors.NewTimeoutError("request did not complete within requested timeout", 0)
 				default:
 					// individual webhook timed out, but parent context did not, continue
+					// 仅该 webhook 超时，请求整体仍可继续。
 					continue
 				}
 			}
+			// failurePolicy=Fail（默认）时按 fail closed 处理。
 			klog.Warningf("Failed calling webhook, failing closed %v: %v", hook.Name, err)
 			return apierrors.NewInternalError(err)
 		}
@@ -232,6 +281,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 	}
 
 	// convert versionedAttr.VersionedObject to the internal version in the underlying admission.Attributes
+	// 所有 webhook 处理完后，把版本化对象转换回内部版本，后续插件
+	// 才能看到变更后的对象。Dirty 表示确实发生过改动，避免无谓转换。
 	if v.versionedAttr != nil && v.versionedAttr.VersionedObject.Object() != nil && v.versionedAttr.Dirty {
 		return o.GetObjectConvertor().Convert(v.versionedAttr.VersionedObject.Object(), v.versionedAttr.Attributes.GetObject(), nil)
 	}
@@ -241,10 +292,16 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr admission.Attrib
 
 // note that callAttrMutatingHook updates attr
 
+// callAttrMutatingHook 调用单个变更型 webhook，解析补丁并应用到 attr。
+// 返回值 changed 表示对象是否真的发生变化（用于决定是否重放），
+// annotator 会在退出时（defer）记录 mutation 审计注解，即使中途出错。
 func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admissionregistrationv1.MutatingWebhook, invocation *generic.WebhookInvocation, attr *admission.VersionedAttributes, annotator *webhookAnnotator, o admission.ObjectInterfaces, round, idx int) (bool, error) {
 	configurationName := invocation.Webhook.GetConfigurationName()
 	changed := false
+	// 无论成功失败都记录 mutation 注解，审计才能区分"未改动"与"未调用"。
 	defer func() { annotator.addMutationAnnotation(changed) }()
+	// dry-run 请求不得产生副作用；SideEffects 未声明时无法保证这一点，
+	// 因此直接拒绝，而不是猜测。
 	if attr.Attributes.IsDryRun() {
 		if h.SideEffects == nil {
 			return false, &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("Webhook SideEffects is nil"), Status: apierrors.NewBadRequest("Webhook SideEffects is nil")}
@@ -263,6 +320,8 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	if err != nil {
 		return false, &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("could not get REST client: %w", err), Status: apierrors.NewInternalError(err)}
 	}
+	// 追踪 span 携带配置名、webhook 名与请求 UID，超时结束时间限制为
+	// 500ms，避免卡住的 span 长时间占用追踪后端。
 	ctx, span := tracing.Start(ctx, "Call mutating webhook",
 		attribute.String("configuration", configurationName),
 		attribute.String("webhook", h.Name),
@@ -282,6 +341,8 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	r := client.Post().Body(request)
 
 	// if the context has a deadline, set it as a parameter to inform the backend
+	// 把剩余超时传给后端（向上取整到秒），让 webhook 侧也能提前放弃，
+	// 而不是在服务端已经超时后仍继续处理。
 	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 		// compute the timeout
 		if timeout := time.Until(deadline); timeout > 0 {
@@ -295,6 +356,8 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	}
 
 	do := func() { err = r.Do(ctx).Into(response) }
+	// 若启用了延迟追踪，则把这次调用计入 MutatingWebhookTracker，
+	// 用于统计 webhook 呼叫在请求延迟中的占比。
 	if wd, ok := endpointsrequest.LatencyTrackersFrom(ctx); ok {
 		tmp := do
 		do = func() { wd.MutatingWebhookTracker.Track(tmp) }
@@ -305,6 +368,8 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 		if se, ok := err.(*apierrors.StatusError); ok {
 			status = se
 		} else {
+			// 非 Status 错误（网络、编解码等）对用户统一视为 503，
+			// 避免泄露后端细节。
 			status = apierrors.NewServiceUnavailable("error calling webhook")
 		}
 		return false, &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("failed to call webhook: %w", err), Status: status}
@@ -316,12 +381,15 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 		return false, &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("received invalid webhook response: %w", err), Status: apierrors.NewServiceUnavailable("error validating webhook response")}
 	}
 
+	// webhook 返回的审计注解统一加上 webhook 名前缀，防止不同 webhook
+	// 之间互相覆盖键。
 	for k, v := range result.AuditAnnotations {
 		key := h.Name + "/" + k
 		if err := attr.Attributes.AddAnnotation(key, v); err != nil {
 			klog.Warningf("Failed to set admission audit annotation %s to %s for mutating webhook %s: %v", key, v, h.Name, err)
 		}
 	}
+	// 警告写入请求上下文，最终随响应头返回给客户端。
 	for _, w := range result.Warnings {
 		warning.AddWarning(ctx, "", w)
 	}
@@ -330,6 +398,7 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 		return false, &webhookutil.ErrWebhookRejection{Status: webhookerrors.ToStatusErr(h.Name, result.Result)}
 	}
 
+	// 空补丁视为无变更，直接返回，省去后续编解码开销。
 	if len(result.Patch) == 0 {
 		return false, nil
 	}
@@ -343,6 +412,7 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	}
 
 	// if a non-empty patch was provided, and we have no object we can apply it to (e.g. a DELETE admission operation), error
+	// DELETE 等操作没有可接受补丁的对象，必须报错而不是静默丢弃补丁。
 	if attr.VersionedObject.Object() == nil {
 		return false, apierrors.NewInternalError(fmt.Errorf("admission webhook %q attempted to modify the object, which is not supported for this operation", h.Name))
 	}
@@ -351,6 +421,7 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	jsonSerializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, o.GetObjectCreater(), o.GetObjectTyper(), json.SerializerOptions{})
 	switch result.PatchType {
 	// VerifyAdmissionResponse normalizes to v1 patch types, regardless of the AdmissionReview version used
+	// 响应中的 PatchType 已被规范化为 v1 类型，因此这里只处理 JSONPatch。
 	case admissionv1.PatchTypeJSONPatch:
 		objJS, err := runtime.Encode(jsonSerializer, attr.VersionedObject.Object())
 		if err != nil {
@@ -368,6 +439,7 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 	if _, ok := attr.VersionedObject.Object().(*unstructured.Unstructured); ok {
 		// Custom Resources don't have corresponding Go struct's.
 		// They are represented as Unstructured.
+		// CRD 没有静态 Go 类型，只能用 Unstructured 承载补丁结果。
 		newVersionedObject = &unstructured.Unstructured{}
 	} else {
 		newVersionedObject, err = o.GetObjectCreater().New(attr.VersionedKind)
@@ -382,14 +454,20 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *admiss
 		return false, apierrors.NewInternalError(err)
 	}
 
+	// 语义比较会忽略无意义差异（如 nil 与空集合），避免把"格式等价"
+	// 误判为实际变更从而触发不必要的重放。
 	changed = !apiequality.Semantic.DeepEqual(attr.VersionedObject.Object(), newVersionedObject)
 	span.AddEvent("Patch applied")
 	annotator.addPatchAnnotation(patchObj, result.PatchType)
 	attr.UpdateObject(newVersionedObject)
+	// 补丁可能删除了必需字段的默认值，重新执行默认化以恢复 API 不变量。
 	o.GetObjectDefaulter().Default(attr.VersionedObject.Object())
 	return changed, nil
 }
 
+// webhookAnnotator 负责把本次 webhook 调用的结果（是否变更、原始补丁、
+// 是否 fail open）写入请求的审计注解。注解键在构造时一次性生成，包含
+// 轮次与 hook 序号，保证同一请求中多次调用不会互相覆盖。
 type webhookAnnotator struct {
 	attr                    *admission.VersionedAttributes
 	failedOpenAnnotationKey string
@@ -399,6 +477,8 @@ type webhookAnnotator struct {
 	configuration           string
 }
 
+// newWebhookAnnotator 预计算三个注解键。round/idx 编码进键名，使审计日志
+// 能还原调用顺序以及是首次调用还是重放。
 func newWebhookAnnotator(attr *admission.VersionedAttributes, round, idx int, webhook, configuration string) *webhookAnnotator {
 	return &webhookAnnotator{
 		attr:                    attr,
@@ -410,6 +490,8 @@ func newWebhookAnnotator(attr *admission.VersionedAttributes, round, idx int, we
 	}
 }
 
+// addFailedOpenAnnotation 记录 fail open 事实。写注解失败只告警不中断，
+// 因为它属于尽力而为的审计增强，不能反过来导致请求失败。
 func (w *webhookAnnotator) addFailedOpenAnnotation() {
 	if w.attr == nil || w.attr.Attributes == nil {
 		return
@@ -420,6 +502,8 @@ func (w *webhookAnnotator) addFailedOpenAnnotation() {
 	}
 }
 
+// addMutationAnnotation 记录本次调用是否改变了对象。序列化失败同样只告警，
+// 避免审计辅助逻辑影响准入主路径。
 func (w *webhookAnnotator) addMutationAnnotation(mutated bool) {
 	if w.attr == nil || w.attr.Attributes == nil {
 		return
@@ -434,6 +518,8 @@ func (w *webhookAnnotator) addMutationAnnotation(mutated bool) {
 	}
 }
 
+// addPatchAnnotation 记录 webhook 返回的原始补丁。补丁按 Request 级别写入，
+// 因为其可能包含敏感字段内容；不支持的补丁类型只告警，不阻断请求。
 func (w *webhookAnnotator) addPatchAnnotation(patch interface{}, patchType admissionv1.PatchType) {
 	if w.attr == nil || w.attr.Attributes == nil {
 		return
@@ -459,6 +545,9 @@ func (w *webhookAnnotator) addPatchAnnotation(patch interface{}, patchType admis
 }
 
 // MutationAuditAnnotation logs if a webhook invocation mutated the request object
+//
+// MutationAuditAnnotation 是 mutation 注解的 JSON 载荷。字段标签必须保持
+// 稳定，因为审计日志消费者依赖这些键名。
 type MutationAuditAnnotation struct {
 	Configuration string `json:"configuration"`
 	Webhook       string `json:"webhook"`
@@ -466,6 +555,9 @@ type MutationAuditAnnotation struct {
 }
 
 // PatchAuditAnnotation logs a patch from a mutating webhook
+//
+// PatchAuditAnnotation 是 patch 注解的 JSON 载荷，Patch 使用 interface{}
+// 以便按 jsonpatch.DecodePatch 的结果原样记录。
 type PatchAuditAnnotation struct {
 	Configuration string      `json:"configuration"`
 	Webhook       string      `json:"webhook"`
@@ -473,6 +565,7 @@ type PatchAuditAnnotation struct {
 	PatchType     string      `json:"patchType,omitempty"`
 }
 
+// mutationAnnotationValue 把 mutation 信息序列化为注解字符串。
 func mutationAnnotationValue(configuration, webhook string, mutated bool) (string, error) {
 	m := MutationAuditAnnotation{
 		Configuration: configuration,
@@ -483,6 +576,7 @@ func mutationAnnotationValue(configuration, webhook string, mutated bool) (strin
 	return string(bytes), err
 }
 
+// jsonPatchAnnotationValue 把补丁及其类型序列化为注解字符串。
 func jsonPatchAnnotationValue(configuration, webhook string, patch interface{}) (string, error) {
 	p := PatchAuditAnnotation{
 		Configuration: configuration,

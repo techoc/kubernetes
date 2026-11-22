@@ -30,9 +30,11 @@ import (
 )
 
 // DefaultMetrics installs the default prometheus metrics handler
+// 只读端点：用于标准 /metrics 暴露。
 type DefaultMetrics struct{}
 
 // Install adds the DefaultMetrics handler
+// register 必须在使用处理器前调用，否则第一次抓取会缺少指标元数据。
 func (m DefaultMetrics) Install(c *mux.PathRecorderMux) {
 	register()
 	c.Handle("/metrics", legacyregistry.Handler())
@@ -40,6 +42,7 @@ func (m DefaultMetrics) Install(c *mux.PathRecorderMux) {
 
 // MetricsWithReset install the prometheus metrics handler extended with support for the DELETE method
 // which resets the metrics.
+// 重置能力主要服务于测试与调试；生产环境应通过鉴权限制访问。
 type MetricsWithReset struct{}
 
 // Install adds the MetricsWithReset handler
@@ -49,6 +52,7 @@ func (m MetricsWithReset) Install(c *mux.PathRecorderMux) {
 }
 
 // register apiserver and etcd metrics
+// 集中注册可确保各子系统指标在处理器安装时全部可见，避免抓取结果随注册顺序变化。
 func register() {
 	apimetrics.Register()
 	storagemetrics.Register()

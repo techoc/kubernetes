@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 以下类型是示例 API 中的字符串枚举，取值含义与 core/v1 保持一致。
 type (
 	ConditionStatus  string
 	PodConditionType string
@@ -47,6 +48,8 @@ type Pod struct {
 
 // PodStatus represents information about the status of a pod. Status may trail the actual
 // state of a system.
+//
+// 示例 API 不实现状态机，字段仅用于验证序列化与默认值处理路径。
 type PodStatus struct {
 	// +optional
 	Phase PodPhase
@@ -70,6 +73,7 @@ type PodStatus struct {
 	StartTime *metav1.Time
 }
 
+// PodCondition 描述 Pod 的单个状态条件。
 type PodCondition struct {
 	Type   PodConditionType
 	Status ConditionStatus
@@ -84,6 +88,9 @@ type PodCondition struct {
 }
 
 // PodSpec is a description of a pod
+//
+// 这些字段是从 core/v1 复制的子集，用于让示例 API 具备足够的结构
+// 深度以覆盖 conversion 与 field selector 等测试。
 type PodSpec struct {
 	// +optional
 	RestartPolicy RestartPolicy
@@ -158,6 +165,9 @@ type ReplicaSet struct {
 // ReplicaSetSpec is the specification of a ReplicaSet.
 // As the internal representation of a ReplicaSet, it must have
 // a Template set.
+//
+// 注意 Replicas 在内部版本是值类型，而 v1 外部版本用指针以区分
+// “未设置”与“显式 0”，这正是 conversion.go 需要特殊处理的原因。
 type ReplicaSetSpec struct {
 	// Replicas is the number of desired replicas.
 	Replicas int32

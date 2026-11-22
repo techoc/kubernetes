@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package warning 提供向 HTTP 响应附加 Warning 头的路由包装器。
 package warning
 
 import (
@@ -24,6 +25,10 @@ import (
 
 // AddWarningsHandler returns a handler that adds the provided warnings to all requests,
 // then delegates to the provided handler.
+//
+// AddWarningsHandler 为路由附加固定警告（例如 API 已弃用）。警告通过
+// context 传递，由外层过滤器统一写入 Warning 响应头；warnings 为空时
+// 直接返回原 handler，避免无意义的包装。
 func AddWarningsHandler(handler restful.RouteFunction, warnings []string) restful.RouteFunction {
 	if len(warnings) == 0 {
 		return handler

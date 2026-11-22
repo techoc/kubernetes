@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package features 定义 apiserver 使用的特性门控（feature gate）。
+//
+// 每个门控的演进遵循 Alpha → Beta → GA/Deprecated 的生命周期：
+// Alpha 默认关闭、允许删除；Beta 默认开启、承诺兼容；GA 后锁定为默认值；
+// Deprecated 表示功能将移除。LockToDefault 一旦置位，用户不能再覆盖默认值。
 package features
 
 import (
@@ -33,6 +38,9 @@ import (
 // (upper before any lower case character) order. This reduces the risk
 // of code conflicts because changes are more likely to be scattered
 // across the file.
+//
+// 约定：常量名与字符串值必须完全一致，否则 --feature-gates 无法对应；
+// 顺序按字母序排列以减少合并冲突。
 const (
 	// owner: @ilackams
 	//
@@ -99,6 +107,9 @@ const (
 	// kep: https://kep.k8s.io/5284
 	//
 	// Enables impersonation that is constrained to specific requests instead of being all or nothing.
+	//
+	// 传统 impersonation 一旦授权即拥有目标用户的全部权限；该特性把授权范围
+	// 收窄到具体请求（动词/资源/名字等），降低误用与越权风险。
 	ConstrainedImpersonation featuregate.Feature = "ConstrainedImpersonation"
 
 	// owner: @jefftree
@@ -139,6 +150,9 @@ const (
 	//
 	// Deprecated: in favor of DeclarativeValidationBeta.
 	//
+	// 已弃用：由 DeclarativeValidationBeta 取代。开启时声明式校验错误会直接返回给调用方，
+	// 关闭时始终返回手写校验错误（即“影子模式”）。注意两种实现的错误数量与文案可能不同。
+	//
 	// When enabled, declarative validation errors are returned directly to the caller,
 	// replacing hand-written validation errors for rules that have declarative implementations.
 	// When disabled, hand-written validation errors are always returned, effectively putting
@@ -151,6 +165,9 @@ const (
 	// kep: https://kep.k8s.io/4988
 	//
 	// Enabled cache inconsistency detection.
+	//
+	// 检测 watch cache 与 etcd 之间的不一致，是诊断缓存 bug 的重要手段；
+	// 开启会带来额外开销，因此历史上曾以 Alpha 形式提供。
 	DetectCacheInconsistency featuregate.Feature = "DetectCacheInconsistency"
 
 	// owner: @jefftree
@@ -171,6 +188,8 @@ const (
 	// deprecated: v1.28
 	//
 	// Enables KMS v1 API for encryption at rest.
+	//
+	// 已弃用：KMS v1 存在安全与可扩展性缺陷，应迁移到 KMS v2。
 	KMSv1 featuregate.Feature = "KMSv1"
 
 	// owner: @serathius
@@ -264,6 +283,9 @@ const (
 	//
 	// Enables http2 DOS mitigations for unauthenticated clients.
 	//
+	// 默认开启以防御未认证客户端发起 HTTP/2 攻击；位于 L7 负载均衡之后
+	// 或私有网络中的集群可评估关闭，以避免连接复用性能回退。
+	//
 	// Some known reasons to disable these mitigations:
 	//
 	// An API server that is fronted by an L7 load balancer that is set up
@@ -290,6 +312,9 @@ const (
 	// owner: @p0lyn0mial
 	//
 	// Allow the API server to stream individual items instead of chunking
+	//
+	// 开启后 watch 事件逐条流式编码，减少大对象列表带来的内存峰值；
+	// 1.33 曾因 json/proto 编码器表现更佳而回退默认值。
 	WatchList featuregate.Feature = "WatchList"
 
 	// owner: @p0lyn0mial
@@ -307,6 +332,8 @@ const (
 )
 
 func init() {
+	// 把本包的版本化门控注册到全局可变门控表，并合并 zpages 的门控。
+	// 必须在 flag 解析前完成，否则 --feature-gates 会因未知门控而报错。
 	runtime.Must(utilfeature.DefaultMutableFeatureGate.AddVersioned(defaultVersionedKubernetesFeatureGates))
 	runtime.Must(zpagesfeatures.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
@@ -317,6 +344,9 @@ func init() {
 //
 // Entries are alphabetized and separated from each other with blank lines to avoid sweeping gofmt changes
 // when adding or removing one entry.
+//
+// 每个门控按版本列出 (Version, Default, PreRelease)：门控的默认值随版本演进，
+// 同一二进制在不同 --emulated-version 下会得到不同的默认行为。
 var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
 	APIResponseCompression: {
 		{Version: version.MustParse("1.8"), Default: false, PreRelease: featuregate.Alpha},

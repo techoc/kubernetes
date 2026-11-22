@@ -26,6 +26,10 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestMutatingWebhookAccessor 验证 MutatingWebhookAccessor 在两个方向上的
+// 保真度：一是 GetMutatingWebhook 返回原始对象，二是通过各 Get* 方法
+// 重建出的 webhook 与原对象完全一致。使用 randfill 随机填充 100 轮，
+// 以便覆盖 nil/非 nil 字段组合，防止新增字段后访问器被遗漏。
 func TestMutatingWebhookAccessor(t *testing.T) {
 	f := randfill.New()
 	for i := 0; i < 100; i++ {
@@ -34,10 +38,13 @@ func TestMutatingWebhookAccessor(t *testing.T) {
 			f.Fill(orig)
 
 			// zero out any accessor type specific fields not included in the accessor
+			// ReinvocationPolicy 只属于 MutatingWebhook，访问器接口不暴露它，
+			// 因此先清零，否则往返比较会误报差异。
 			orig.ReinvocationPolicy = nil
 
 			uid := fmt.Sprintf("test.configuration.admission/%s/0", orig.Name)
 			accessor := NewMutatingWebhookAccessor(uid, "test.configuration.admission", orig)
+			// UID 用于在指标与日志中唯一定位 hook，必须原样返回。
 			if uid != accessor.GetUID() {
 				t.Errorf("expected GetUID to return %s, but got %s", accessor.GetUID(), uid)
 			}
@@ -48,9 +55,11 @@ func TestMutatingWebhookAccessor(t *testing.T) {
 			if !reflect.DeepEqual(orig, m) {
 				t.Errorf("expected GetMutatingWebhook to return original webhook, diff:\n%s", cmp.Diff(orig, m))
 			}
+			// 变更型访问器不应被当作校验型使用，避免调度器把 hook 放错阶段。
 			if _, ok := accessor.GetValidatingWebhook(); ok {
 				t.Errorf("expected GetValidatingWebhook to be nil for mutating webhook accessor")
 			}
+			// 逐字段重建，任何访问器遗漏的字段都会在这里暴露。
 			copy := &v1.MutatingWebhook{
 				Name:                    accessor.GetName(),
 				ClientConfig:            accessor.GetClientConfig(),
@@ -71,6 +80,8 @@ func TestMutatingWebhookAccessor(t *testing.T) {
 	}
 }
 
+// TestValidatingWebhookAccessor 与变更型用例对称，验证校验型访问器不会
+// 被误当作变更型使用，且所有字段可无损往返。
 func TestValidatingWebhookAccessor(t *testing.T) {
 	f := randfill.New()
 	for i := 0; i < 100; i++ {
@@ -89,6 +100,7 @@ func TestValidatingWebhookAccessor(t *testing.T) {
 			if !reflect.DeepEqual(orig, m) {
 				t.Errorf("expected GetValidatingWebhook to return original webhook, diff:\n%s", cmp.Diff(orig, m))
 			}
+			// 校验型访问器暴露变更型对象会破坏阶段隔离。
 			if _, ok := accessor.GetMutatingWebhook(); ok {
 				t.Errorf("expected GetMutatingWebhook to be nil for validating webhook accessor")
 			}

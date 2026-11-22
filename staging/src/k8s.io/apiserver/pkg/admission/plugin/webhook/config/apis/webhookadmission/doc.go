@@ -16,4 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package webhookadmission 存放 webhook 准入配置（WebhookAdmissionConfiguration）
+// 的内部 API 类型。它是纯配置载体，不对外暴露 REST 端点；深拷贝代码由
+// deepcopy-gen 生成为 zz_generated.deepcopy.go。
 package webhookadmission

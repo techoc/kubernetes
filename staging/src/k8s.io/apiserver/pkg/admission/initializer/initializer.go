@@ -27,6 +27,9 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+// pluginInitializer 持有一切可能被准入插件依赖的共享基础设施，
+// 通过 Initialize 按插件声明的 "Wants*" 接口做按需注入。
+// 字段全部为只读引用，插件只应读取而不应替换。
 type pluginInitializer struct {
 	externalClient    kubernetes.Interface
 	dynamicClient     dynamic.Interface
@@ -51,6 +54,8 @@ func New(
 	stopCh <-chan struct{},
 	restMapper meta.RESTMapper,
 ) pluginInitializer {
+	// 显式列出所有依赖，新增字段时编译器会强制所有调用点更新，
+	// 这正是该构造函数不使用选项模式的原因。
 	return pluginInitializer{
 		externalClient:    extClientset,
 		dynamicClient:     dynamicClient,
@@ -67,6 +72,7 @@ func New(
 // and provide the appropriate initialization data
 func (i pluginInitializer) Initialize(plugin admission.Interface) {
 	// First tell the plugin about drained notification, so it can pass it to further initializations.
+	// 必须最先注入：后续初始化（如启动 informer）需要据此在关闭时停止。
 	if wants, ok := plugin.(WantsDrainedNotification); ok {
 		wants.SetDrainedNotification(i.stopCh)
 	}
@@ -79,6 +85,7 @@ func (i pluginInitializer) Initialize(plugin admission.Interface) {
 		wants.InspectFeatureGates(i.featureGates)
 	}
 
+	// 客户端与 informer 工厂在特性开关之后注入，插件可在启动 informer 前按开关决策。
 	if wants, ok := plugin.(WantsExternalKubeClientSet); ok {
 		wants.SetExternalKubeClientSet(i.externalClient)
 	}
@@ -91,6 +98,8 @@ func (i pluginInitializer) Initialize(plugin admission.Interface) {
 		wants.SetExternalKubeInformerFactory(i.externalInformers)
 	}
 
+	// WantsUnconditionalAuthorizer 表示插件可以接受不经 SubjectAccessReview 包装的授权器，
+	// 通常用于插件自身已有明确授权语义的场景；两者都实现时按先无条件、后普通顺序注入。
 	if wants, ok := plugin.(WantsUnconditionalAuthorizer); ok {
 		wants.SetUnconditionalAuthorizer(i.authorizer)
 	}
@@ -102,4 +111,5 @@ func (i pluginInitializer) Initialize(plugin admission.Interface) {
 	}
 }
 
+// 编译期断言：pluginInitializer 必须满足 admission.PluginInitializer 接口。
 var _ admission.PluginInitializer = pluginInitializer{}

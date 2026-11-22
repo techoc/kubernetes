@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 提供 APF 使用的特殊指标类型：可分别设置分子与分母的
+// “比值直方图”，用于表达并发度/利用率这类会随时间波动的比例。
 package metrics
 
 import (
@@ -50,6 +52,9 @@ type TimingRatioHistogramOpts struct {
 }
 
 // timingRatioHistogramInner implements the instrumentation aspect
+//
+// 分子分母的更新必须原子完成，否则并发 Set/SetDenominator 会产生
+// 与任一真实状态都不对应的中间比值。
 type timingRatioHistogramInner struct {
 	nowFunc         func() time.Time
 	getGaugeOfRatio func() Gauge
@@ -69,6 +74,9 @@ func NewTimingRatioHistogram(opts *TimingRatioHistogramOpts) *TimingRatioHistogr
 }
 
 // NewTestableTimingHistogram adds injection of the clock
+//
+// 构造时把 InitialValue 视为分子并除以初始分母，保证底层直方图一开始
+// 就持有“比值”而非原始分子。
 func NewTestableTimingRatioHistogram(nowFunc func() time.Time, opts *TimingRatioHistogramOpts) *TimingRatioHistogram {
 	//nolint:govet // copylocks: assignment copies lock value to ratioedOpts: k8s.io/component-base/metrics.TimingHistogramOpts contains sync.Once contains sync.Mutex
 	ratioedOpts := opts.TimingHistogramOpts
@@ -117,6 +125,8 @@ func (trh *timingRatioHistogramInner) SetToCurrentTime() {
 	trh.Set(float64(trh.nowFunc().Sub(time.Unix(0, 0))))
 }
 
+// SetDenominator 更新分母并立即重算比值；分母变化本身也代表系统容量
+// 调整，需要反映到指标上。
 func (trh *timingRatioHistogramInner) SetDenominator(denominator float64) {
 	trh.Lock()
 	defer trh.Unlock()
@@ -172,6 +182,8 @@ func (v *TimingRatioHistogramVec) metrics() Registerables {
 
 // NewForLabelValuesChecked will return an error if this vec is not hidden and not yet registered
 // or there is a syntactic problem with the labelValues.
+//
+// 返回的 gauge 直接绑定到具体的 vector member，后续更新无需再次查找。
 func (v *TimingRatioHistogramVec) NewForLabelValuesChecked(initialNumerator, initialDenominator float64, labelValues []string) (RatioedGauge, error) {
 	underMember, err := v.delegate.WithLabelValuesChecked(labelValues...)
 	if err != nil {
@@ -211,6 +223,8 @@ func (v *TimingRatioHistogramVec) NewForLabelValuesSafe(initialNumerator, initia
 	}
 }
 
+// noopRatioed 是无效标签/未注册场景下的占位实现，所有操作静默丢弃，
+// 保证调用方无需到处判空。
 type noopRatioed struct{}
 
 func (noopRatioed) Set(float64)            {}
@@ -221,6 +235,7 @@ func (noopRatioed) Dec()                   {}
 func (noopRatioed) SetToCurrentTime()      {}
 func (noopRatioed) SetDenominator(float64) {}
 
+// Reset 清空所有 label 的成员，主要用于测试。
 func (v *TimingRatioHistogramVec) Reset() {
 	v.delegate.Reset()
 }

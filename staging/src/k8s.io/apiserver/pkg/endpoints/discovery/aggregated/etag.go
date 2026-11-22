@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package aggregated 实现聚合发现（Aggregated Discovery）端点：
+// 把多个 group/version 的发现信息合并成按 content-type 协商的文档，
+// 并通过 ETag 支持客户端条件请求，减少集群规模下的重复传输。
 package aggregated
 
 import (
@@ -37,6 +40,7 @@ import (
 //
 // hash should be the value of calculateETag on object. If hash is empty, then
 // the object is simply serialized without E-Tag functionality
+// 注意：hash 为空时仍会写出空的 ETag 头，调用方需自行判断是否需要 ETag 语义。
 func ServeHTTPWithETag(
 	object runtime.Object,
 	hash string,
@@ -49,6 +53,8 @@ func ServeHTTPWithETag(
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
 	quotedHash := strconv.Quote(hash)
 	w.Header().Set("ETag", quotedHash)
+	// 响应内容随 Accept 协商而变化，因此缓存键必须包含 Accept，
+	// 否则客户端可能复用错误内容类型的缓存。
 	w.Header().Set("Vary", "Accept")
 	w.Header().Set("Cache-Control", "public")
 
@@ -75,6 +81,9 @@ func ServeHTTPWithETag(
 	)
 }
 
+// calculateETag 对资源的 JSON 序列化结果取 SHA-512 摘要。
+// 使用内容哈希而非版本号，保证只要发现内容不变，ETag 就稳定；
+// JSON 序列化的字段顺序由 Go 结构体/编码器保证确定，因此哈希可复现。
 func calculateETag(resources interface{}) (string, error) {
 	serialized, err := json.Marshal(resources)
 	if err != nil {

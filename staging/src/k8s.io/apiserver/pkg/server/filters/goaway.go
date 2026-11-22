@@ -30,6 +30,9 @@ type GoawayDecider interface {
 var (
 	// randPool used to get a rand.Rand and generate a random number thread-safely,
 	// which improve the performance of using rand.Rand with a locker
+	//
+	// rand.Rand 不是并发安全的，而每个请求都加锁会形成热点；用 sync.Pool
+	// 复用实例可以避免锁竞争。种子取自全局 rand，无需额外同步。
 	randPool = &sync.Pool{
 		New: func() interface{} {
 			return rand.New(rand.NewSource(rand.Int63()))
@@ -63,6 +66,9 @@ type goaway struct {
 }
 
 // ServeHTTP implement HTTP handler
+//
+// 只在 HTTP/2 上生效：HTTP/1.1 的 "Connection: close" 语义不同，且该过滤器
+// 的目的是让长连接（HTTP/2 复用）有机会重新负载均衡。
 func (h *goaway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Proto == "HTTP/2.0" && h.decider.Goaway(r) {
 		// Send a GOAWAY and tear down the TCP connection when idle.

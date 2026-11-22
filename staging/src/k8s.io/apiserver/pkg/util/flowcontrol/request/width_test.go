@@ -29,6 +29,9 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestWorkEstimator 验证请求工作量（width）估算：按 watch/list 与是否命中缓存分别估算
+// 初始与最终占用的并发份额，并检查 watch-list 特性下的额外延迟估算。
+// 估算直接决定 APF 的排队与限流行为，因此每种请求形态都应有明确预期。
 func TestWorkEstimator(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 

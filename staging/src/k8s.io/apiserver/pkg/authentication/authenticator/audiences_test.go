@@ -21,7 +21,10 @@ import (
 	"testing"
 )
 
+// TestIntersect 覆盖 Audiences.Intersect 的边界：nil 与空切片等价，
+// 结果顺序跟随接收者而非参数，且无交集时返回非 nil 的空切片。
 func TestIntersect(t *testing.T) {
+	// 用例刻意混合 nil 与空切片，防止实现依赖切片的零值差异。
 	cs := []struct {
 		auds, tauds Audiences
 		expected    Audiences

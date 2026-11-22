@@ -40,6 +40,7 @@ const (
 	defAllowedClientNamesKey  = "names-key"
 )
 
+// expectedHeadersHolder 汇总控制器应暴露的各类头部配置，便于逐项断言。
 type expectedHeadersHolder struct {
 	usernameHeaders     []string
 	uidHeaders          []string
@@ -48,6 +49,8 @@ type expectedHeadersHolder struct {
 	allowedClientNames  []string
 }
 
+// TestRequestHeaderAuthRequestController 验证从 ConfigMap 同步请求头配置：
+// 正常数据被填充；空 ConfigMap 不应报错；非法 JSON 必须报错。
 func TestRequestHeaderAuthRequestController(t *testing.T) {
 	scenarios := []struct {
 		name           string
@@ -113,6 +116,9 @@ func TestRequestHeaderAuthRequestController(t *testing.T) {
 	}
 }
 
+// TestRequestHeaderAuthRequestControllerPreserveState 验证同步失败时保留上一次
+// 成功的配置：认证配置属于安全边界，宁可沿用旧值也不能因一次坏配置而清空，
+// 否则合法请求会被拒绝。各场景共用同一 target 以模拟连续同步。
 func TestRequestHeaderAuthRequestControllerPreserveState(t *testing.T) {
 	scenarios := []struct {
 		name           string
@@ -202,6 +208,8 @@ func TestRequestHeaderAuthRequestControllerPreserveState(t *testing.T) {
 	}
 }
 
+// TestRequestHeaderAuthRequestControllerSyncOnce 验证 RunOnce 能从 API server
+// 拉取 ConfigMap 并完成一次同步（不依赖 informer 缓存）。
 func TestRequestHeaderAuthRequestControllerSyncOnce(t *testing.T) {
 	scenarios := []struct {
 		name           string
@@ -246,6 +254,7 @@ func TestRequestHeaderAuthRequestControllerSyncOnce(t *testing.T) {
 	}
 }
 
+// defaultConfigMap 构造包含全部键的 ConfigMap，各值以 JSON 数组编码。
 func defaultConfigMap(t *testing.T, usernameHeaderVal, uidHeaderVal, groupHeadersVal, extraHeaderPrefixesVal, allowedClientNamesVal []string) *corev1.ConfigMap {
 	encode := func(val []string) string {
 		encodedVal, err := json.Marshal(val)
@@ -269,6 +278,7 @@ func defaultConfigMap(t *testing.T, usernameHeaderVal, uidHeaderVal, groupHeader
 	}
 }
 
+// newDefaultTarget 构造使用默认键名的控制器，测试只替换 lister 或 client。
 func newDefaultTarget() *RequestHeaderAuthRequestController {
 	return &RequestHeaderAuthRequestController{
 		configmapName:          defConfigMapName,
@@ -281,6 +291,7 @@ func newDefaultTarget() *RequestHeaderAuthRequestController {
 	}
 }
 
+// validateExpectedHeaders 逐项比较控制器暴露的配置与期望值。
 func validateExpectedHeaders(t *testing.T, target *RequestHeaderAuthRequestController, expected expectedHeadersHolder) {
 	if !equality.Semantic.DeepEqual(target.UsernameHeaders(), expected.usernameHeaders) {
 		t.Fatalf("incorrect usernameHeaders, got %v, wanted %v", target.UsernameHeaders(), expected.usernameHeaders)

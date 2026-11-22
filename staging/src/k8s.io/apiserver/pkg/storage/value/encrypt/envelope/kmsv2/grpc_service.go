@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Package kmsv2 transforms values for storage at rest using a Envelope provider
+//
+// 通过 gRPC 调用外部 KMS 插件完成信封加密：数据密钥由本地生成，
+// KMS 只负责包裹/解包该密钥，避免把大量数据送进 KMS。
 package kmsv2
 
 import (
@@ -47,6 +50,9 @@ type gRPCService struct {
 }
 
 // NewGRPCService returns an envelope.Service which use gRPC to communicate the remote KMS provider.
+//
+// 只支持 unix socket：KMS 插件与 apiserver 同机部署，避免把密钥材料暴露到网络。
+// callTimeout 约束每次 RPC，防止 KMS 卡住拖垮所有存储请求。
 func NewGRPCService(ctx context.Context, endpoint, providerName string, callTimeout time.Duration) (kmsservice.Service, error) {
 	klog.V(4).InfoS("Configure KMS provider", "endpoint", endpoint)
 
@@ -59,6 +65,7 @@ func NewGRPCService(ctx context.Context, endpoint, providerName string, callTime
 	s.connection, err = grpc.Dial(
 		addr,
 		grpc.WithAuthority("localhost"),
+		// unix socket 本身不经过网络，因此使用 insecure 凭据；安全性由文件权限保证。
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 		grpc.WithContextDialer(
@@ -82,6 +89,7 @@ func NewGRPCService(ctx context.Context, endpoint, providerName string, callTime
 
 	s.kmsClient = kmsapi.NewKeyManagementServiceClient(s.connection)
 
+	// ctx 结束（apiserver 关闭）时关闭连接，避免泄漏 socket。
 	go func() {
 		defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -131,6 +139,8 @@ func (g *gRPCService) Encrypt(ctx context.Context, uid string, plaintext []byte)
 }
 
 // Status returns the status of the KMSv2 provider.
+//
+// 用于健康检查与密钥轮换判断：KeyID 变化意味着需要重新包裹数据密钥。
 func (g *gRPCService) Status(ctx context.Context) (*kmsservice.StatusResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, g.callTimeout)
 	defer cancel()
@@ -143,6 +153,8 @@ func (g *gRPCService) Status(ctx context.Context) (*kmsservice.StatusResponse, e
 	return &kmsservice.StatusResponse{Version: response.Version, Healthz: response.Healthz, KeyID: response.KeyId}, nil
 }
 
+// recordMetricsInterceptor 记录每次 KMS RPC 的耗时与结果，
+// 便于区分是 KMS 慢还是存储层慢。
 func recordMetricsInterceptor(providerName string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		nowFunc := GetNowFunc(providerName)

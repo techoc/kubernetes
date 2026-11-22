@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// main 启动一个仅供本地调试的 TLS 测试 webhook 服务端，
+// 打印监听地址后永久阻塞，便于配合手工请求观察 webhook 行为。
 package main
 
 import (
@@ -26,5 +28,6 @@ func main() {
 	server := webhooktesting.NewTestServer(nil)
 	server.StartTLS()
 	fmt.Println("serving on", server.URL)
+	// 没有退出条件：由外部 Ctrl-C 终止。
 	select {}
 }

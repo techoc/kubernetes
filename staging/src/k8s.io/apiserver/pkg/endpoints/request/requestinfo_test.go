@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestGetAPIRequestInfo 表驱动地验证资源请求的 RequestInfo 解析：
+// 动词、API 前缀/组/版本、命名空间、资源、子资源与名称都必须从路径和查询参数正确推导。
 func TestGetAPIRequestInfo(t *testing.T) {
 	namespaceAll := metav1.NamespaceAll
 	successCases := []struct {
@@ -59,6 +61,7 @@ func TestGetAPIRequestInfo(t *testing.T) {
 		{MethodGet, "/api/v1/proxy/namespaces/other/pods/foo", "proxy", "api", "", "v1", "other", "pods", "", "foo", []string{"pods", "foo"}},
 		{MethodGet, "/api/v1/proxy/namespaces/other/pods/foo/subpath/not/a/subresource", "proxy", "api", "", "v1", "other", "pods", "", "foo", []string{"pods", "foo", "subpath", "not", "a", "subresource"}},
 		{MethodGet, "/api/v1/watch/pods", "watch", "api", "", "v1", namespaceAll, "pods", "", "", []string{"pods"}},
+		// watch 查询参数遵循布尔语义：1/true 为 watch，0/false 退化为 list。
 		{MethodGet, "/api/v1/pods?watch=true", "watch", "api", "", "v1", namespaceAll, "pods", "", "", []string{"pods"}},
 		{MethodGet, "/api/v1/pods?watch=false", "list", "api", "", "v1", namespaceAll, "pods", "", "", []string{"pods"}},
 		{MethodGet, "/api/v1/watch/namespaces/other/pods", "watch", "api", "", "v1", "other", "pods", "", "", []string{"pods"}},
@@ -77,6 +80,7 @@ func TestGetAPIRequestInfo(t *testing.T) {
 		{MethodPost, "/api/v1/namespaces/other/pods", "create", "api", "", "v1", "other", "pods", "", "", []string{"pods"}},
 
 		// deletecollection verb identification
+		// 集合路径上的 DELETE 是 deletecollection，而不是 delete。
 		{MethodDelete, "/api/v1/nodes", "deletecollection", "api", "", "v1", "", "nodes", "", "", []string{"nodes"}},
 		{MethodDelete, "/api/v1/namespaces", "deletecollection", "api", "", "v1", "", "namespaces", "", "", []string{"namespaces"}},
 		{MethodDelete, "/api/v1/namespaces/other/pods", "deletecollection", "api", "", "v1", "other", "pods", "", "", []string{"pods"}},
@@ -125,6 +129,7 @@ func TestGetAPIRequestInfo(t *testing.T) {
 		}
 	}
 
+	// 结构不完整的 API 路径不应被误判为资源请求。
 	errorCases := map[string]string{
 		"no resource path":            "/",
 		"just apiversion":             "/api/version/",
@@ -149,6 +154,8 @@ func TestGetAPIRequestInfo(t *testing.T) {
 	}
 }
 
+// TestGetNonAPIRequestInfo 验证 IsResourceRequest 判定：只有路径段足够且前缀合法时
+// 才视为资源请求。
 func TestGetNonAPIRequestInfo(t *testing.T) {
 	tests := map[string]struct {
 		url      string
@@ -161,6 +168,7 @@ func TestGetNonAPIRequestInfo(t *testing.T) {
 		"group get":         {"/apis/batch/v1/job/foo", true},
 		"group subresource": {"/apis/batch/v1/job/foo/scale", true},
 
+		// 以下路径缺少资源段或前缀不合法。
 		"bad root":                     {"/not-api/version/resource", false},
 		"group without enough steps":   {"/apis/extensions/v1beta1", false},
 		"group without enough steps 2": {"/apis/extensions/v1beta1/", false},
@@ -186,6 +194,8 @@ func TestGetNonAPIRequestInfo(t *testing.T) {
 	}
 }
 
+// newTestRequestInfoResolver 构造最小化的解析器：仅识别 api/apis 前缀，
+// 其中 api 为无组前缀。
 func newTestRequestInfoResolver() *RequestInfoFactory {
 	return &RequestInfoFactory{
 		APIPrefixes:          sets.NewString("api", "apis"),
@@ -193,6 +203,9 @@ func newTestRequestInfoResolver() *RequestInfoFactory {
 	}
 }
 
+// TestSelectorParsing 验证列表/删除集合类请求的选择器解析与名称提取：
+// 只有 list/watch/deletecollection 会解析选择器；重复参数以第一个为准；
+// 选择器非法时保留原始字符串并返回错误，但名称不再提取。
 func TestSelectorParsing(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -212,6 +225,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedFieldSelector: "",
 		},
 		{
+			// metadata.name 精确匹配会被提升为 RequestInfo.Name。
 			name:                  "metadata.name selector",
 			method:                MethodGet,
 			url:                   "/apis/group/version/resource?fieldSelector=metadata.name=name1",
@@ -237,6 +251,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedLabelSelector: "baz=qux",
 		},
 		{
+			// 语法错误的选择器不得被静默丢弃，必须返回错误供调用方拒绝请求。
 			name:                  "invalid selector with metadata.name",
 			method:                MethodGet,
 			url:                   "/apis/group/version/resource?fieldSelector=metadata.name=name1,foo",
@@ -264,6 +279,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedFieldSelector: "metadata.name=name1,foo",
 		},
 		{
+			// deletecollection 同样需要选择器来界定删除范围。
 			name:                  "selector on deletecollection is honored",
 			method:                MethodDelete,
 			url:                   "/apis/group/version/resource?fieldSelector=foo=bar&labelSelector=baz=qux",
@@ -273,6 +289,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedLabelSelector: "baz=qux",
 		},
 		{
+			// 重复参数取第一个，避免结果依赖 Go map 遍历顺序。
 			name:                  "selector on repeated param matches parsed param",
 			method:                MethodGet,
 			url:                   "/apis/group/version/resource?fieldSelector=metadata.name=foo&fieldSelector=metadata.name=bar&labelSelector=foo=bar&labelSelector=foo=baz",
@@ -282,6 +299,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedLabelSelector: "foo=bar",
 		},
 		{
+			// 单对象 GET 上的选择器无意义，直接忽略。
 			name:                  "selector on other verb is ignored",
 			method:                MethodGet,
 			url:                   "/apis/group/version/resource/name?fieldSelector=foo=bar&labelSelector=foo=bar",
@@ -291,6 +309,7 @@ func TestSelectorParsing(t *testing.T) {
 			expectedLabelSelector: "",
 		},
 		{
+			// 已弃用的根路径 watch 形式不解析选择器，仅为兼容旧客户端保留。
 			name:                  "selector on deprecated root type watch is not parsed",
 			method:                MethodGet,
 			url:                   "/apis/group/version/watch/resource?fieldSelector=metadata.name=foo&labelSelector=foo=bar",

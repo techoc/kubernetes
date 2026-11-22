@@ -28,15 +28,20 @@ import (
 )
 
 // IP provides a CEL representation of an IP address.
+//
+// 包装 netip.Addr 而非字符串，使 CEL 中的比较是地址语义（IPv4/IPv6 归一化）而不是字节语义。
 type IP struct {
 	netip.Addr
 }
 
 var (
+	// IPType 是对外暴露的不透明类型名，CEL 表达式中通过它做类型断言。
 	IPType = cel.OpaqueType("net.IP")
 )
 
 // ConvertToNative implements ref.Val.ConvertToNative.
+//
+// 支持转为 netip.Addr 或字符串，后者便于输出与日志。
 func (d IP) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	if reflect.TypeOf(d.Addr).AssignableTo(typeDesc) {
 		return d.Addr, nil
@@ -61,6 +66,8 @@ func (d IP) ConvertToType(typeVal ref.Type) ref.Val {
 }
 
 // Equal implements ref.Val.Equal.
+//
+// 与不同类型比较时返回 "no such overload" 而不是 false，遵循 CEL 的类型严格性。
 func (d IP) Equal(other ref.Val) ref.Val {
 	otherD, ok := other.(IP)
 	if !ok {
@@ -81,6 +88,8 @@ func (d IP) Value() any {
 
 // Size returns the size of the IP address in bytes.
 // Used in the size estimation of the runtime cost.
+//
+// CEL 运行时成本估算依赖 Size 计算内存占用，因此必须返回字节数而非字符串长度。
 func (d IP) Size() ref.Val {
 	return types.Int(int(math.Ceil(float64(d.Addr.BitLen()) / 8)))
 }

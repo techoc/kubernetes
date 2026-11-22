@@ -27,6 +27,10 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
+// CELMatcher 持有一组已编译的 matchCondition 表达式，用于对 SubjectAccessReview 求值。
+//
+// 一次 Eval 中的所有表达式都必须为 true 才匹配；任一为 false 立即短路。
+// UsesLabelSelector/UsesFieldSelector 用于跳过无用的对象转换，降低每次授权检查的开销。
 type CELMatcher struct {
 	CompilationResults []CompilationResult
 
@@ -42,14 +46,19 @@ type CELMatcher struct {
 }
 
 // eval evaluates the given SubjectAccessReview against all cel matchCondition expression
+//
+// 语义：所有条件均为 true 才算匹配；出现任何求值错误则整体失败（返回聚合错误），
+// 由调用方按各自 webhook 的 failurePolicy 决定放行还是拒绝。
 func (c *CELMatcher) Eval(ctx context.Context, r *authorizationv1.SubjectAccessReview) (bool, error) {
 	var evalErrors []error
 
+	// 未配置指标时降级为 noop，避免调用点做 nil 判断。
 	metrics := c.Metrics
 	if metrics == nil {
 		metrics = NoopMatcherMetrics{}
 	}
 	start := time.Now()
+	// 用 defer 保证无论正常返回还是提前短路都记录耗时与失败计数。
 	defer func() {
 		metrics.RecordAuthorizationMatchConditionEvaluation(ctx, c.AuthorizerType, c.AuthorizerName, time.Since(start))
 		if len(evalErrors) > 0 {
@@ -57,6 +66,7 @@ func (c *CELMatcher) Eval(ctx context.Context, r *authorizationv1.SubjectAccessR
 		}
 	}()
 
+	// 只把 Spec（即请求上下文）暴露给表达式，避免策略能窥探 review 的响应字段。
 	va := map[string]interface{}{
 		"request": convertObjectToUnstructured(&r.Spec, c.UsesFieldSelector, c.UsesLabelSelector),
 	}
@@ -66,6 +76,7 @@ func (c *CELMatcher) Eval(ctx context.Context, r *authorizationv1.SubjectAccessR
 			evalErrors = append(evalErrors, fmt.Errorf("cel evaluation error: expression '%v' resulted in error: %w", compilationResult.ExpressionAccessor.GetExpression(), err))
 			continue
 		}
+		// 防御性类型检查：编译期已限定 bool，但动态类型仍可能因实现缺陷偏离。
 		if evalResult.Type() != celgo.BoolType {
 			evalErrors = append(evalErrors, fmt.Errorf("cel evaluation error: expression '%v' eval result type should be bool but got %W", compilationResult.ExpressionAccessor.GetExpression(), evalResult.Type()))
 			continue

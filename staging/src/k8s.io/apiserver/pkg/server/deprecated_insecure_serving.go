@@ -31,8 +31,16 @@ import (
 // DeprecatedInsecureServingInfo is the main context object for the insecure http server.
 // HTTP does NOT include authentication or authorization.
 // You shouldn't be using this.  It makes sig-auth sad.
+//
+// 中文说明：这是历史上 API Server 在 localhost:8080 上提供的明文端口，
+// 无 TLS、无认证、无授权，任何能访问该端口的人都是集群管理员。
+// 保留类型仅为兼容旧测试与旧调用点，新代码必须使用 SecureServingInfo。
+// 之所以仍保留 InsecureSuperuser 之类的辅助实现，是为了让仍走该路径的代码
+// 不必到处特判 nil 用户——把「不安全」集中在一个显式类型里，便于审计与最终删除。
 type DeprecatedInsecureServingInfo struct {
 	// Listener is the secure server network listener.
+	//
+	// 中文说明：名称中的 secure 是历史遗留笔误，这里实际是明文监听器。
 	Listener net.Listener
 	// optional server name for log messages
 	Name string
@@ -40,6 +48,11 @@ type DeprecatedInsecureServingInfo struct {
 
 // Serve starts an insecure http server with the given handler. It fails only if
 // the initial listen call fails. It does not block.
+//
+// 中文说明：超时参数与安全端口保持一致（IdleTimeout 对齐 http.DefaultTransport 的
+// keep-alive，ReadHeaderTimeout 略低于请求总超时上界），以免明文端口成为
+// 慢速头部攻击的缺口。MaxHeaderBytes 与头部值数量上限共同限制资源消耗。
+// 返回的 stoppedCh 被有意丢弃：明文端口不参与优雅终止编排。
 func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Duration, stopCh <-chan struct{}) error {
 	insecureServer := &http.Server{
 		Addr:           s.Listener.Addr().String(),
@@ -50,6 +63,7 @@ func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTime
 		ReadHeaderTimeout: 32 * time.Second, // just shy of requestTimeoutUpperBound
 	}
 
+	// 仅在 go1.27+ 生效；旧版本为空实现，保持构建兼容。
 	setMaxHeaderValueCount(insecureServer)
 
 	if len(s.Name) > 0 {
@@ -62,6 +76,10 @@ func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTime
 	return err
 }
 
+// NewLoopbackClientConfig 返回指向本机明文端口的 rest.Config，供内部组件访问 apiserver。
+// 中文说明：接收者为 nil 时返回 (nil, nil)，让调用方可以无条件调用而不必判空。
+// QPS/Burst 调高是因为该 client 会被传给所有准入插件；若沿用默认限流，
+// apiserver 高负载时准入调用会被自身限流拖慢（见 #22340、#22422）。
 func (s *DeprecatedInsecureServingInfo) NewLoopbackClientConfig() (*rest.Config, error) {
 	if s == nil {
 		return nil, nil
@@ -85,8 +103,14 @@ func (s *DeprecatedInsecureServingInfo) NewLoopbackClientConfig() (*rest.Config,
 // InsecureSuperuser implements authenticator.Request to always return a superuser.
 // This is functionally equivalent to skipping authentication and authorization,
 // but allows apiserver code to stop special-casing a nil user to skip authorization checks.
+//
+// 中文说明：认证与授权逻辑本身不需要为「不安全端口」写分支：这里伪造一个
+// system:unsecured 用户并加入 system:masters，后续 RBAC 自然放行。
+// 这样删掉不安全端口时，只需移除本类型，无需清理散落的 nil 判断。
 type InsecureSuperuser struct{}
 
+// AuthenticateRequest 始终成功并返回特权用户；audiences 从请求上下文透传，
+// 以免审计与令牌校验逻辑因缺少 audience 而异常。
 func (InsecureSuperuser) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	auds, _ := authenticator.AudiencesFrom(req.Context())
 	return &authenticator.Response{

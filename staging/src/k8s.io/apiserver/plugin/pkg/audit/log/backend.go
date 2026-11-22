@@ -43,14 +43,17 @@ var AllowedFormats = []string{
 	FormatJson,
 }
 
+// backend 把审计事件写到给定的 io.Writer（通常是文件或 stdout）。
 type backend struct {
 	out     io.Writer
 	format  string
 	encoder runtime.Encoder
 }
 
+// 编译期断言：实现 audit.Backend 接口。
 var _ audit.Backend = &backend{}
 
+// NewBackend 按指定格式创建日志审计后端；encoder 用于 json 格式的序列化。
 func NewBackend(out io.Writer, format string, groupVersion schema.GroupVersion) audit.Backend {
 	return &backend{
 		out:     out,
@@ -59,6 +62,7 @@ func NewBackend(out io.Writer, format string, groupVersion schema.GroupVersion) 
 	}
 }
 
+// ProcessEvents 逐条写出事件；任一条失败都不影响其余事件，但整体返回 false。
 func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 	success := true
 	for _, ev := range events {
@@ -67,6 +71,7 @@ func (b *backend) ProcessEvents(events ...*auditinternal.Event) bool {
 	return success
 }
 
+// logEvent 按配置格式写出一条事件；失败时通过插件错误通道上报，不向调用方返回错误。
 func (b *backend) logEvent(ev *auditinternal.Event) bool {
 	line := ""
 	switch b.format {
@@ -80,6 +85,7 @@ func (b *backend) logEvent(ev *auditinternal.Event) bool {
 		}
 		line = string(bs[:])
 	default:
+		// 配置错误在运行期才暴露，交给审计插件错误回调而非静默丢弃。
 		audit.HandlePluginError(PluginName, fmt.Errorf("log format %q is not in list of known formats (%s)",
 			b.format, strings.Join(AllowedFormats, ",")), ev)
 		return false
@@ -91,14 +97,17 @@ func (b *backend) logEvent(ev *auditinternal.Event) bool {
 	return true
 }
 
+// Run 无后台工作，立即返回。
 func (b *backend) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// Shutdown 无需清理资源。
 func (b *backend) Shutdown() {
 	// Nothing to do here.
 }
 
+// String 返回插件名，用于日志与帮助信息。
 func (b *backend) String() string {
 	return PluginName
 }

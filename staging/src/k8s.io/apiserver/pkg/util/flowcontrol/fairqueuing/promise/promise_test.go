@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestWriteOnceSet 验证正常路径：Get 在 Set 前阻塞，Set 后所有读者拿到同一个值，
+// 第二次 Set 被拒绝，且 cancel 不会覆盖已经写入的值。
 func TestWriteOnceSet(t *testing.T) {
 	oldTime := time.Now()
 	cval := &oldTime
@@ -40,6 +42,7 @@ func TestWriteOnceSet(t *testing.T) {
 	goGetAndExpect(t, wr, gots, aval)
 	later := time.Now()
 	bval := &later
+	// 只有第一次 Set 生效；后续写入返回 false 且不改变已发布的值。
 	if wr.Set(bval) {
 		t.Error("second Set() returned true")
 	}
@@ -49,6 +52,8 @@ func TestWriteOnceSet(t *testing.T) {
 	goGetAndExpect(t, wr, gots, aval)
 }
 
+// TestWriteOnceCancel 验证取消路径：未 Set 时 cancel 会以初始值解除阻塞，
+// 之后 Set 不再生效（返回 false）。
 func TestWriteOnceCancel(t *testing.T) {
 	oldTime := time.Now()
 	cval := &oldTime
@@ -67,6 +72,7 @@ func TestWriteOnceCancel(t *testing.T) {
 	goGetAndExpect(t, wr, gots, cval)
 }
 
+// TestWriteOnceInitial 验证带初值的 promise：构造后立即可读，Set 永远返回 false。
 func TestWriteOnceInitial(t *testing.T) {
 	oldTime := time.Now()
 	cval := &oldTime
@@ -87,6 +93,7 @@ func TestWriteOnceInitial(t *testing.T) {
 	goGetAndExpect(t, wr, gots, aval)
 }
 
+// goGetExpectNotYet 在后台发起 Get，并断言在超时时间内没有返回值。
 func goGetExpectNotYet(t *testing.T, wr WriteOnce, gots chan interface{}, trigger string) {
 	go func() {
 		gots <- wr.Get()
@@ -99,6 +106,7 @@ func goGetExpectNotYet(t *testing.T, wr WriteOnce, gots chan interface{}, trigge
 	}
 }
 
+// goGetAndExpect 在后台发起 Get 并断言立即得到期望值。
 func goGetAndExpect(t *testing.T, wr WriteOnce, gots chan interface{}, expected interface{}) {
 	go func() {
 		gots <- wr.Get()
@@ -106,6 +114,7 @@ func goGetAndExpect(t *testing.T, wr WriteOnce, gots chan interface{}, expected 
 	expectGotValue(t, gots, expected)
 }
 
+// expectGotValue 等待 Get 的结果并与期望值做指针比较。
 func expectGotValue(t *testing.T, gots <-chan interface{}, expected interface{}) {
 	select {
 	case gotVal := <-gots:

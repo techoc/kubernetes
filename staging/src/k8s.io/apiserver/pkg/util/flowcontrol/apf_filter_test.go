@@ -38,7 +38,11 @@ import (
 
 // TestQueueWaitTimeLatencyTracker tests the queue wait times recorded by the P&F latency tracker
 // when calling Handle.
+//
+// 通过 QueueNoteFn 推进 fake clock 来制造确定的排队时长，从而避免依赖
+// 真实时间，稳定断言 APFQueueWaitTracker 的记录值。
 func TestQueueWaitTimeLatencyTracker(t *testing.T) {
+	// 指标是全局注册的，多个测试共用，必须先注册再构造控制器。
 	metrics.Register()
 
 	var fsObj *flowcontrol.FlowSchema
@@ -101,6 +105,8 @@ func TestQueueWaitTimeLatencyTracker(t *testing.T) {
 	informerFactory := informers.NewSharedInformerFactory(clientset, time.Second)
 	flowcontrolClient := clientset.FlowcontrolV1()
 	startTime := time.Now()
+	// 使用 fake clock 让排队耗时可控；QueueSetFactory 必须与该 clock
+	// 绑定，否则队列内部计时与测试推进的时间不一致。
 	clk, _ := eventclock.NewFake(startTime, 0, nil)
 	controller := newTestableController(TestableConfig{
 		Name:                   "Controller",
@@ -151,6 +157,8 @@ func TestQueueWaitTimeLatencyTracker(t *testing.T) {
 	}
 
 	// Add 1 second to the fake clock during QueueNoteFn
+	// QueueNoteFn 在请求入队/出队时被调用，借此把时钟推进 1s，模拟
+	// 请求在队列中等待了 1 秒。
 	newTime := startTime.Add(time.Second)
 	qnf := fq.QueueNoteFn(func(bool) { clk.FakePassiveClock.SetTime(newTime) })
 	ctx := request.WithLatencyTrackers(context.Background())

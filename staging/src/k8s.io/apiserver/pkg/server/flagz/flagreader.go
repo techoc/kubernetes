@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package flagz 把 apiserver 的命令行参数以只读 API 的形式暴露出来，
+// 用于核对运行中实例的实际配置。
 package flagz
 
 import (
@@ -21,6 +23,7 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 )
 
+// Reader 抽象出“读取当前参数”的能力，便于测试替换数据源。
 type Reader interface {
 	GetFlagz() map[string]string
 }
@@ -30,10 +33,15 @@ type NamedFlagSetsReader struct {
 	FlagSets cliflag.NamedFlagSets
 }
 
+// GetFlagz 返回参数名到字符串值的映射。
 func (n NamedFlagSetsReader) GetFlagz() map[string]string {
 	return convertNamedFlagSetToFlags(&n.FlagSets)
 }
 
+// convertNamedFlagSetToFlags 遍历所有 flag set 收集参数值。
+//
+// 带 "classified" 注解的参数（如 token、证书路径等敏感值）一律替换为 "CLASSIFIED"，
+// 避免通过 flagz API 泄漏凭据。
 func convertNamedFlagSetToFlags(flagSets *cliflag.NamedFlagSets) map[string]string {
 	flags := make(map[string]string)
 	for _, fs := range flagSets.FlagSets {

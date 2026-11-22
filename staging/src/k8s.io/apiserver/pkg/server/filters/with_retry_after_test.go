@@ -25,6 +25,13 @@ import (
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestWithRetryAfter 验证停机期间 Retry-After 过滤器的行为。
+//
+// 中文说明：当 shutdown-delay 结束（通道关闭）后，非豁免请求应立即得到
+// 429 + Retry-After + Connection: close，且处理器不被调用——这是为了让负载均衡
+// 尽快摘除本实例，同时让客户端知道稍后重试而不是重连同一节点。
+// 豁免清单（健康检查、metrics、本机 loopback 客户端）必须继续正常服务，
+// 否则探针失败会引发级联重启，监控也会在停机窗口丢失数据。
 func TestWithRetryAfter(t *testing.T) {
 	tests := []struct {
 		name                           string
@@ -159,9 +166,13 @@ func TestWithRetryAfter(t *testing.T) {
 			if test.safeWaitGroupIsWaiting {
 				// mark the safe wait group as waiting, it's a blocking call
 				// but since the WaitGroup counter is zero it should not block
+				//
+				// 中文说明：等待中的 SafeWaitGroup 表示停机已进入排空阶段，
+				// 此时豁免请求仍需放行，用例确认该状态不会误伤健康检查。
 				safeWG.Wait()
 			}
 
+			// 包装顺序与生产一致：先登记等待组，再叠加 Retry-After 逻辑。
 			wrapped := WithWaitGroup(handler, func(*http.Request, *apirequest.RequestInfo) bool {
 				return false
 			}, safeWG)
@@ -173,6 +184,7 @@ func TestWithRetryAfter(t *testing.T) {
 			}
 
 			req.Header.Set("User-Agent", test.userAgent)
+			// 过滤器依赖 RequestInfo 判断路径是否豁免，因此必须注入。
 			req = req.WithContext(apirequest.WithRequestInfo(req.Context(), &apirequest.RequestInfo{}))
 
 			w := httptest.NewRecorder()
@@ -198,6 +210,7 @@ func TestWithRetryAfter(t *testing.T) {
 	}
 }
 
+// newChannel 返回一个可控制「是否已关闭」的通道，用于模拟停机延迟是否结束。
 func newChannel(closed bool) <-chan struct{} {
 	ch := make(chan struct{})
 	if closed {

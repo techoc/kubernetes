@@ -24,6 +24,8 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// TestObserveCompilation 确认 CEL 编译耗时被记录进直方图：一次 2 秒的观测应使
+// 计数为 1、样本和为 2。使用 legacyregistry.Reset 隔离全局注册表，避免测试间串扰。
 func TestObserveCompilation(t *testing.T) {
 	defer legacyregistry.Reset()
 	Metrics.ObserveCompilation(2 * time.Second)
@@ -36,6 +38,7 @@ func TestObserveCompilation(t *testing.T) {
 	}
 }
 
+// TestObserveEvaluation 与上面类似，验证求值阶段耗时指标。
 func TestObserveEvaluation(t *testing.T) {
 	defer legacyregistry.Reset()
 	Metrics.ObserveEvaluation(2 * time.Second)
@@ -48,6 +51,8 @@ func TestObserveEvaluation(t *testing.T) {
 	}
 }
 
+// gatherHistogram 从默认注册表汇总指定直方图的样本数与样本和。
+// 汇总所有 Metric 是因为直方图可能带标签，产生多条序列；测试里只关心总量。
 func gatherHistogram(t *testing.T, name string) (count uint64, sum float64) {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {

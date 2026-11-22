@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package eventclock 抽象“在某个时间点触发回调”的能力，使公平队列
+// 的实现可以在测试中替换为假时钟，从而无需真实等待。
 package eventclock
 
 import (
@@ -23,6 +25,7 @@ import (
 )
 
 // RealEventClock fires event on real world time
+// 嵌入 clock.RealClock 复用 Now/Since 等时间读取方法。
 type Real struct {
 	clock.RealClock
 }
@@ -30,6 +33,8 @@ type Real struct {
 var _ Interface = Real{}
 
 // EventAfterDuration schedules an EventFunc
+// 每个事件一个 goroutine；调用方通过 ctx 取消队列时，未触发的回调
+// 仍会执行一次（接口未提供取消），因此 EventFunc 必须能容忍过期触发。
 func (Real) EventAfterDuration(f EventFunc, d time.Duration) {
 	ch := time.After(d)
 	go func() {
@@ -39,6 +44,7 @@ func (Real) EventAfterDuration(f EventFunc, d time.Duration) {
 }
 
 // EventAfterTime schedules an EventFunc
+// 若 t 已过去，time.Until 返回负值，time.After 会立即触发。
 func (r Real) EventAfterTime(f EventFunc, t time.Time) {
 	r.EventAfterDuration(f, time.Until(t))
 }

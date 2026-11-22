@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// BenchmarkHash 测量 flow ID 哈希的吞吐；该函数位于每个请求的准入热路径上，
+// 回归会直接放大 APF 的 CPU 开销。
 func BenchmarkHash(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		hashFlowID("supercalifragilistic expialidocious", "the sound of it is something quite atrocious")

@@ -31,6 +31,8 @@ import (
 )
 
 // GroupVersionRegistry provides access to registered group versions.
+//
+// 抽象出该接口是为了让 resourceconfig 不直接依赖 scheme 的具体实现，便于测试替换。
 type GroupVersionRegistry interface {
 	// IsGroupRegistered returns true if given group is registered.
 	IsGroupRegistered(group string) bool
@@ -43,6 +45,8 @@ type GroupVersionRegistry interface {
 }
 
 // MergeResourceEncodingConfigs merges the given defaultResourceConfig with specific GroupVersionResource overrides.
+//
+// 覆盖项的存储版本固定为内部版本：外部版本只用于编解码，etcd 中统一存内部形态。
 func MergeResourceEncodingConfigs(
 	defaultResourceEncoding *serverstore.DefaultResourceEncodingConfig,
 	resourceEncodingOverrides []schema.GroupVersionResource,
@@ -56,6 +60,8 @@ func MergeResourceEncodingConfigs(
 }
 
 // Recognized values for the --runtime-config parameter to enable/disable groups of APIs
+//
+// 这些是 --runtime-config 的聚合开关，可一次启用/禁用一类 API 版本。
 const (
 	APIAll   = "api/all"
 	APIGA    = "api/ga"
@@ -63,6 +69,8 @@ const (
 	APIAlpha = "api/alpha"
 )
 
+// 版本字符串的分类正则：GA 为 vN，beta 为 vNbetaM，alpha 为 vNalphaM。
+// 匹配基于版本名而非组，因此同一开关会作用于所有组。
 var (
 	gaPattern    = regexp.MustCompile(`^v\d+$`)
 	betaPattern  = regexp.MustCompile(`^v\d+beta\d+$`)
@@ -79,12 +87,16 @@ var (
 		APIAlpha: func(gv schema.GroupVersion) bool { return alphaPattern.MatchString(gv.Version) },
 	}
 
+	// 固定应用顺序：先 api/all，再按成熟度收窄，后者可覆盖前者的结果。
 	groupVersionMatchersOrder = []string{APIAll, APIGA, APIBeta, APIAlpha}
 )
 
 // MergeAPIResourceConfigs merges the given defaultAPIResourceConfig with the given resourceConfigOverrides.
 // Exclude the groups not registered in registry, and check if version is
 // not registered in group, then it will fail.
+//
+// 两级覆盖：先处理 api/* 聚合开关，再处理显式的 group/version[/resource] 项，
+// 后者优先级更高（见 applyVersionAndResourcePreferences）。
 func MergeAPIResourceConfigs(
 	defaultAPIResourceConfig *serverstore.ResourceConfig,
 	resourceConfigOverrides cliflag.ConfigurationMap,
@@ -110,6 +122,10 @@ func MergeAPIResourceConfigs(
 	return resourceConfig, nil
 }
 
+// applyVersionAndResourcePreferences 解析 group/version 与 group/version/resource 形式的覆盖项。
+//
+// 两阶段应用是刻意的：版本偏好先落地，资源偏好后落地，从而保证资源级配置拥有最高优先级，
+// 并能覆盖“版本被禁用但个别资源仍需启用”的场景。
 func applyVersionAndResourcePreferences(
 	resourceConfig *serverstore.ResourceConfig,
 	overrides cliflag.ConfigurationMap,
@@ -138,6 +154,7 @@ func applyVersionAndResourcePreferences(
 		}
 
 		tokens := strings.Split(key, "/")
+		// 非 2/3 段的键不是本函数的职责，直接忽略，交由其他配置路径处理。
 		if len(tokens) < 2 || len(tokens) > 3 {
 			continue
 		}
@@ -148,11 +165,15 @@ func applyVersionAndResourcePreferences(
 		}
 
 		// Exclude group not registered into the registry.
+		//
+		// 未注册的组静默跳过：允许同一份配置在不同发行版（组件集不同）上复用。
 		if !registry.IsGroupRegistered(groupVersion.Group) {
 			continue
 		}
 
 		// Verify that the groupVersion is registered into registry.
+		//
+		// 组已注册但版本未注册则是配置错误，必须报错而不是静默忽略。
 		if !registry.IsVersionRegistered(groupVersion) {
 			return fmt.Errorf("group version %s that has not been registered", groupVersion.String())
 		}
@@ -169,6 +190,7 @@ func applyVersionAndResourcePreferences(
 				groupVersion: groupVersion,
 			})
 		case 3:
+			// 资源名在 API 中始终为小写复数；大小写不符通常是拼写错误，提前拒绝。
 			if strings.ToLower(tokens[2]) != tokens[2] {
 				return fmt.Errorf("invalid key %v: group/version/resource and resource is always lowercase plural, not %q", key, tokens[2])
 			}
@@ -204,6 +226,8 @@ func applyVersionAndResourcePreferences(
 	return nil
 }
 
+// getRuntimeConfigValue 解析单个开关的布尔值。
+// 空字符串按 true 处理（`--runtime-config=foo/bar` 等价于显式开启），这是命令行惯例。
 func getRuntimeConfigValue(overrides cliflag.ConfigurationMap, apiKey string, defaultValue bool) (bool, error) {
 	flagValue, ok := overrides[apiKey]
 	if ok {
@@ -220,6 +244,8 @@ func getRuntimeConfigValue(overrides cliflag.ConfigurationMap, apiKey string, de
 }
 
 // ParseGroups takes in resourceConfig and returns parsed groups.
+//
+// 与 ParseGroupVersions 不同，这里保留重复的组名（未去重），由调用方决定是否需要去重。
 func ParseGroups(resourceConfig cliflag.ConfigurationMap) ([]string, error) {
 	groupVersions, err := ParseGroupVersions(resourceConfig)
 	if err != nil {
@@ -233,6 +259,9 @@ func ParseGroups(resourceConfig cliflag.ConfigurationMap) ([]string, error) {
 }
 
 // ParseGroupVersions takes in resourceConfig and returns parsed group versions.
+//
+// 与 MergeAPIResourceConfigs 不同，这里不做注册表校验，纯粹做语法解析，
+// 因此允许解析尚未注册的组版本（用于预检配置）。
 func ParseGroupVersions(resourceConfig cliflag.ConfigurationMap) ([]schema.GroupVersion, error) {
 	groupVersions := []schema.GroupVersion{}
 	for key := range resourceConfig {
@@ -257,6 +286,9 @@ func ParseGroupVersions(resourceConfig cliflag.ConfigurationMap) ([]schema.Group
 // EmulationForwardCompatibleResourceConfig creates a new ResourceConfig that besides all the enabled resources in resourceConfig,
 // enables all higher priority versions of enabled resources, excluding alpha versions.
 // This is useful for ensuring forward compatibility when a new version of an API is introduced.
+//
+// 用途：模拟“升级后”的 API 面，使旧版本客户端在启用新版本前就能感知更高优先级的版本。
+// alpha 版本不参与，因为其契约不稳定，不应被隐式启用。
 func EmulationForwardCompatibleResourceConfig(
 	resourceConfig *serverstore.ResourceConfig,
 	resourceConfigOverrides cliflag.ConfigurationMap,
@@ -273,6 +305,8 @@ func EmulationForwardCompatibleResourceConfig(
 			continue
 		}
 		// if a gv is enabled, all the versions with higher priority (all the versions before gv in PrioritizedVersionsForGroup) are also implicitly enabled for emulation forward compatibility.
+		//
+		// 按 Kubernetes 版本语义降序排列（v2 优先于 v1beta1），在遇到当前版本前逐个启用。
 		prioritizedVersions := registry.PrioritizedVersionsForGroup(gv.Group)
 		sort.Slice(prioritizedVersions, func(i, j int) bool {
 			return version.CompareKubeAwareVersionStrings(prioritizedVersions[i].Version, prioritizedVersions[j].Version) > 0
@@ -294,6 +328,8 @@ func EmulationForwardCompatibleResourceConfig(
 			continue
 		}
 		// if a gvr is enabled, all the versions with the same resource name and higher priority (all the versions before gv in PrioritizedVersionsForGroup) are also implicitly enabled for emulation forward compatibility.
+		//
+		// 资源级同理，但只在同一资源名下启用更高版本，不影响同组的其他资源。
 		prioritizedVersions := registry.PrioritizedVersionsForGroup(gvr.Group)
 		sort.Slice(prioritizedVersions, func(i, j int) bool {
 			return version.CompareKubeAwareVersionStrings(prioritizedVersions[i].Version, prioritizedVersions[j].Version) > 0
@@ -306,6 +342,9 @@ func EmulationForwardCompatibleResourceConfig(
 		}
 	}
 	// need to reapply the version preferences if there is an override of a higher priority version.
+	//
+	// 重新应用用户覆盖项：上面为兼容性隐式启用的版本可能与本应禁用的显式配置冲突，
+	// 必须让显式配置最终生效。
 	if err := applyVersionAndResourcePreferences(ret, resourceConfigOverrides, registry); err != nil {
 		return nil, err
 	}

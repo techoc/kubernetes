@@ -43,6 +43,7 @@ import (
 
 // DefaultAuthWebhookRetryBackoff is the default backoff parameters for
 // both authentication and authorization webhook used by the apiserver.
+// 5 次重试、1.5 倍增长并带抖动，用于在 webhook 后端抖动时限制重试风暴的扇出。
 func DefaultAuthWebhookRetryBackoff() *wait.Backoff {
 	return &wait.Backoff{
 		Duration: 500 * time.Millisecond,
@@ -52,11 +53,14 @@ func DefaultAuthWebhookRetryBackoff() *wait.Backoff {
 	}
 }
 
+// RequestHeaderAuthenticationOptions 配置“前置代理通过请求头传递用户身份”的认证方式。
+// 安全性依赖 ClientCAFile：只有携带受信客户端证书的连接，其请求头才可信。
 type RequestHeaderAuthenticationOptions struct {
 	// ClientCAFile is the root certificate bundle to verify client certificates on incoming requests
 	// before trusting usernames in headers.
 	ClientCAFile string
 
+	// 各类身份字段对应的请求头名称；可配置多个以支持代理切换。
 	UsernameHeaders     []string
 	UIDHeaders          []string
 	GroupHeaders        []string
@@ -64,6 +68,8 @@ type RequestHeaderAuthenticationOptions struct {
 	AllowedNames        []string
 }
 
+// Validate 检查请求头配置的合法性。
+// 空白名称会被拒绝，因为它既无法匹配请求头，又会在日志中显示为空、难以排查。
 func (s *RequestHeaderAuthenticationOptions) Validate() []error {
 	allErrors := []error{}
 
@@ -80,6 +86,8 @@ func (s *RequestHeaderAuthenticationOptions) Validate() []error {
 		allErrors = append(allErrors, err)
 	}
 
+	// 标准头缺失只会告警而非报错：聚合层（kube-aggregator）依赖这些固定头名，
+	// 但独立 apiserver 仍可能有意使用自定义头。
 	if len(s.UsernameHeaders) > 0 && !caseInsensitiveHas(s.UsernameHeaders, "X-Remote-User") {
 		klog.Warningf("--requestheader-username-headers is set without specifying the standard X-Remote-User header - API aggregation will not work")
 	}
@@ -90,6 +98,7 @@ func (s *RequestHeaderAuthenticationOptions) Validate() []error {
 		klog.Warningf("--requestheader-extra-headers-prefix is set without specifying the standard X-Remote-Extra- header prefix - API aggregation will not work")
 	}
 
+	// UID 头是后加的特性，未启用门控时直接配置属于错误，防止旧版本代理误信任该头。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.RemoteRequestHeaderUID) {
 		if len(s.UIDHeaders) > 0 {
 			allErrors = append(allErrors, fmt.Errorf("--requestheader-uid-headers requires the %q feature to be enabled", features.RemoteRequestHeaderUID))
@@ -107,6 +116,7 @@ func (s *RequestHeaderAuthenticationOptions) Validate() []error {
 	return allErrors
 }
 
+// checkForWhiteSpaceOnly 拒绝纯空白名称；逐个检查以便一次只报一个问题。
 func checkForWhiteSpaceOnly(flag string, headerNames ...string) error {
 	for _, headerName := range headerNames {
 		if len(strings.TrimSpace(headerName)) == 0 {
@@ -117,6 +127,7 @@ func checkForWhiteSpaceOnly(flag string, headerNames ...string) error {
 	return nil
 }
 
+// caseInsensitiveHas 按 HTTP 语义做大小写不敏感匹配：头名本身不区分大小写。
 func caseInsensitiveHas(headers []string, header string) bool {
 	for _, h := range headers {
 		if strings.EqualFold(h, header) {
@@ -126,6 +137,7 @@ func caseInsensitiveHas(headers []string, header string) bool {
 	return false
 }
 
+// AddFlags 注册前置代理请求头认证相关的命令行参数。
 func (s *RequestHeaderAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 	if s == nil {
 		return
@@ -156,6 +168,8 @@ func (s *RequestHeaderAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 
 // ToAuthenticationRequestHeaderConfig returns a RequestHeaderConfig config object for these options
 // if necessary, nil otherwise.
+// 未配置 ClientCAFile 时返回 nil，表示不启用该认证方式；
+// 配置了则把 CA 文件包装成动态提供者，使证书轮换无需重启。
 func (s *RequestHeaderAuthenticationOptions) ToAuthenticationRequestHeaderConfig() (*authenticatorfactory.RequestHeaderConfig, error) {
 	if len(s.ClientCAFile) == 0 {
 		return nil, nil
@@ -189,6 +203,7 @@ type ClientCertAuthenticationOptions struct {
 }
 
 // GetClientVerifyOptionFn provides verify options for your authenticator while respecting the preferred order of verifiers.
+// 显式传入的 CAContentProvider 优先于文件路径：调用方（如聚合层）可能已持有动态 CA。
 func (s *ClientCertAuthenticationOptions) GetClientCAContentProvider() (dynamiccertificates.CAContentProvider, error) {
 	if s.CAContentProvider != nil {
 		return s.CAContentProvider, nil
@@ -201,6 +216,7 @@ func (s *ClientCertAuthenticationOptions) GetClientCAContentProvider() (dynamicc
 	return dynamiccertificates.NewDynamicCAContentFromFile("client-ca-bundle", s.ClientCA)
 }
 
+// AddFlags 注册客户端证书认证相关的命令行参数。
 func (s *ClientCertAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.ClientCA, "client-ca-file", s.ClientCA, ""+
 		"If set, any request presenting a client certificate signed by one of "+
@@ -211,6 +227,7 @@ func (s *ClientCertAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 // DelegatingAuthenticationOptions provides an easy way for composing API servers to delegate their authentication to
 // the root kube API server.  The API federator will act as
 // a front proxy and direction connections will be able to delegate to the core kube API server
+// 聚合 apiserver 通常自身不持有用户数据，而是通过 TokenReview/SubjectAccessReview 委托给核心 apiserver 判定。
 type DelegatingAuthenticationOptions struct {
 	// RemoteKubeConfigFile is the file to use to connect to a "normal" kube API server which hosts the
 	// TokenAccessReview.authentication.k8s.io endpoint for checking tokens.
@@ -248,9 +265,11 @@ type DelegatingAuthenticationOptions struct {
 	Anonymous *apiserver.AnonymousAuthConfig
 }
 
+// NewDelegatingAuthenticationOptions 返回带默认值的委托认证配置。
 func NewDelegatingAuthenticationOptions() *DelegatingAuthenticationOptions {
 	return &DelegatingAuthenticationOptions{
 		// very low for responsiveness, but high enough to handle storms
+		// 缓存时间很短：既保证令牌吊销能较快生效，又能吸收短时间内的重复校验。
 		CacheTTL:   10 * time.Second,
 		ClientCert: ClientCertAuthenticationOptions{},
 		RequestHeader: RequestHeaderAuthenticationOptions{
@@ -285,6 +304,7 @@ func (s *DelegatingAuthenticationOptions) WithCustomRoundTripper(rt transport.Wr
 	s.CustomRoundTripperFn = rt
 }
 
+// Validate 校验委托认证配置；nil 接收者视为未启用，直接通过。
 func (s *DelegatingAuthenticationOptions) Validate() []error {
 	if s == nil {
 		return nil
@@ -300,6 +320,7 @@ func (s *DelegatingAuthenticationOptions) Validate() []error {
 	return allErrors
 }
 
+// AddFlags 注册委托认证相关的命令行参数。
 func (s *DelegatingAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 	if s == nil {
 		return
@@ -327,6 +348,9 @@ func (s *DelegatingAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 		"Note that this can result in authentication that treats all requests as anonymous.")
 }
 
+// ApplyTo 组装并安装委托认证器。
+// 流程：获取 kubeconfig 客户端 -> 解析客户端 CA 与请求头 CA -> 构造认证链 -> 注入 serving 配置与 OpenAPI 安全定义。
+// 任一配置来源失败都返回错误，除非显式容忍（TolerateInClusterLookupFailure）。
 func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.AuthenticationInfo, servingInfo *server.SecureServingInfo, openAPIConfig *openapicommon.Config) error {
 	if s == nil {
 		authenticationInfo.Authenticator = nil
@@ -351,6 +375,8 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 	}
 
 	// get the clientCA information
+	// 显式配置了客户端证书时优先使用；否则尝试从集群 ConfigMap 读取，
+	// 以便与核心 apiserver 的 CA 自动保持一致。
 	clientCASpecified := s.ClientCert != ClientCertAuthenticationOptions{}
 	var clientCAProvider dynamiccertificates.CAContentProvider
 	if clientCASpecified {
@@ -380,6 +406,7 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 	}
 
 	requestHeaderCAFileSpecified := len(s.RequestHeader.ClientCAFile) > 0
+	// 请求头认证同样有“显式文件 / 集群 ConfigMap / 跳过”三条路径。
 	var requestHeaderConfig *authenticatorfactory.RequestHeaderConfig
 	if requestHeaderCAFileSpecified {
 		requestHeaderConfig, err = s.RequestHeader.ToAuthenticationRequestHeaderConfig()
@@ -433,6 +460,8 @@ const (
 	authenticationConfigMapName = "extension-apiserver-authentication"
 )
 
+// createRequestHeaderConfig 从集群 ConfigMap 动态构建请求头认证配置。
+// 返回的字符串切片提供者每次读取都反映最新配置，从而支持运行期更新头名。
 func (s *DelegatingAuthenticationOptions) createRequestHeaderConfig(client kubernetes.Interface) (*authenticatorfactory.RequestHeaderConfig, error) {
 	dynamicRequestHeaderProvider, err := newDynamicRequestHeaderController(client)
 	if err != nil {
@@ -459,6 +488,7 @@ func (s *DelegatingAuthenticationOptions) createRequestHeaderConfig(client kuber
 
 // getClient returns a Kubernetes clientset. If s.RemoteKubeConfigFileOptional is true, nil will be returned
 // if no kubeconfig is specified by the user and the in-cluster config is not found.
+// 返回 nil 客户端是合法状态：表示未配置委托认证，调用方需据此跳过 TokenReview。
 func (s *DelegatingAuthenticationOptions) getClient() (kubernetes.Interface, error) {
 	var clientConfig *rest.Config
 	var err error

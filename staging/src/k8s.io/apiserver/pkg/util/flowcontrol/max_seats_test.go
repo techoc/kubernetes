@@ -31,6 +31,8 @@ import (
 )
 
 // Test_GetMaxSeats tests max seats retrieved from MaxSeatsTracker
+// 验证最大 seats 由“服务端并发上限 / handSize（向上取整）”推导，
+// 并覆盖 handSize 变化对结果的影响。
 func Test_GetMaxSeats(t *testing.T) {
 	testcases := []struct {
 		name             string
@@ -133,6 +135,7 @@ func Test_GetMaxSeats(t *testing.T) {
 			if _, err := c.digestConfigObjects([]*flowcontrolv1.PriorityLevelConfiguration{testPriorityLevel}, nil); err != nil {
 				t.Errorf("unexpected error from digestConfigObjects: %v", err)
 			}
+			// 直接读取 controller 的 tracker，验证配置摘要阶段已正确计算并写入最大 seats。
 			maxSeats := c.GetMaxSeats("test-pl")
 			if maxSeats != testcase.expectedMaxSeats {
 				t.Errorf("unexpected max seats, got=%d, want=%d", maxSeats, testcase.expectedMaxSeats)

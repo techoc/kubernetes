@@ -23,6 +23,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// mockLoadFunc is a test double for the manifest loader: it records how many
+// times it was invoked so tests can assert that reloads are actually triggered,
+// and returns canned configs/hash/error.
 type mockLoadFunc struct {
 	configs   []*admissionregistrationv1.ValidatingWebhookConfiguration
 	hash      string
@@ -35,6 +38,9 @@ func (m *mockLoadFunc) load(_ string) ([]*admissionregistrationv1.ValidatingWebh
 	return m.configs, m.hash, m.err
 }
 
+// validVWC builds a minimal valid ValidatingWebhookConfiguration. The webhook
+// must have a URL client config, an AdmissionReview version, and an explicit
+// side-effect class to pass validation.
 func validVWC(name string) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	return &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -52,6 +58,8 @@ func validVWC(name string) *admissionregistrationv1.ValidatingWebhookConfigurati
 	}
 }
 
+// invalidSelectorVWC is a valid config whose namespace selector uses an
+// unrecognized operator, which validation must reject.
 func invalidSelectorVWC(name string) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	vwc := validVWC(name)
 	vwc.Webhooks[0].NamespaceSelector = &metav1.LabelSelector{
@@ -65,6 +73,8 @@ func invalidSelectorVWC(name string) *admissionregistrationv1.ValidatingWebhookC
 
 // TestValidatingSource_ValidateBeforeStore verifies that LoadInitial rejects
 // configurations with invalid selectors and does not store them (Bug #1).
+//
+// 关键不变量：校验必须在写入缓存之前完成，否则一次坏配置会污染后续所有请求。
 func TestValidatingSource_ValidateBeforeStore(t *testing.T) {
 	mock := &mockLoadFunc{
 		configs: []*admissionregistrationv1.ValidatingWebhookConfiguration{invalidSelectorVWC("bad")},
@@ -73,6 +83,7 @@ func TestValidatingSource_ValidateBeforeStore(t *testing.T) {
 
 	src := NewValidatingSource("/tmp/test", "test-server", mock.load)
 
+	// 初始加载必须失败，且失败后不得留下任何半成品状态。
 	if err := src.LoadInitial(); err == nil {
 		t.Fatal("LoadInitial should have returned an error for invalid selector")
 	}
@@ -93,6 +104,7 @@ func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 
 	src := NewValidatingSource("/tmp/test", "test-server", mock.load)
 
+	// 先加载一份有效配置作为基线。
 	if err := src.LoadInitial(); err != nil {
 		t.Fatalf("LoadInitial failed: %v", err)
 	}
@@ -106,6 +118,7 @@ func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 	mock.configs = []*admissionregistrationv1.ValidatingWebhookConfiguration{invalidSelectorVWC("bad")}
 	mock.hash = "h2"
 
+	// 新配置非法时，reload 必须整体失败并保留旧配置，而不是清空。
 	src.checkAndReload()
 
 	reloadedWebhooks := src.Webhooks()
@@ -120,6 +133,8 @@ func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 
 // TestValidatingSource_CachedAccessorSlice verifies that Webhooks() returns
 // the same slice on repeated calls (Bug #2 — enables composite source caching).
+//
+// 复用同一底层数组可避免上层组合源每次调用都重新分配，从而让缓存命中稳定。
 func TestValidatingSource_CachedAccessorSlice(t *testing.T) {
 	mock := &mockLoadFunc{
 		configs: []*admissionregistrationv1.ValidatingWebhookConfiguration{validVWC("cfg")},
@@ -165,6 +180,7 @@ func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 	initialWebhooks := src.Webhooks()
 
 	// loadFunc returns same hash — source should detect no change
+	// 注意：loadFunc 仍会被调用（哈希由 loadFunc 计算），但结果不应替换缓存。
 	src.checkAndReload()
 
 	if mock.callCount != 2 {
@@ -182,6 +198,8 @@ func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 
 // TestValidatingSource_FilesDeletionClearsConfigs verifies that when loadFunc
 // returns empty configs with a new hash, stored configs are updated to empty.
+//
+// 删除清单文件是合法的配置变更，必须真正清空，而不是被当作校验失败保留旧值。
 func TestValidatingSource_FilesDeletionClearsConfigs(t *testing.T) {
 	mock := &mockLoadFunc{
 		configs: []*admissionregistrationv1.ValidatingWebhookConfiguration{validVWC("cfg")},
@@ -201,6 +219,7 @@ func TestValidatingSource_FilesDeletionClearsConfigs(t *testing.T) {
 	mock.configs = []*admissionregistrationv1.ValidatingWebhookConfiguration{}
 	mock.hash = "h2"
 
+	// 哈希变化 → 源必须接受新的空配置集。
 	src.checkAndReload()
 
 	webhooks := src.Webhooks()

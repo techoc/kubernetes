@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package warning 提供把警告写入 HTTP Warning 响应头的 context 机制。
+//
+// 中文说明：插件通过 context 拿到 Recorder，从而与具体的响应写入方式解耦；
+// 警告是 RFC 7234 定义的带外信息，不应影响响应状态码或正文。
 package warning
 
 import (
@@ -21,6 +25,7 @@ import (
 )
 
 // The key type is unexported to prevent collisions
+// 中文说明：与 request 包同样的未导出 key 约定，避免跨包覆盖 context 值。
 type key int
 
 const (
@@ -29,6 +34,9 @@ const (
 )
 
 // Recorder provides a method for recording warnings
+//
+// 中文说明：实现方负责把警告写入 HTTP Warning 头；输入校验（UTF-8、无控制字符）
+// 是契约的一部分，调用方不能假设 Recorder 会宽容处理非法内容。
 type Recorder interface {
 	// AddWarning adds the specified warning to the response.
 	// agent must be valid UTF-8, and must not contain spaces, quotes, backslashes, or control characters.
@@ -51,6 +59,8 @@ func warningRecorderFrom(ctx context.Context) (Recorder, bool) {
 // If no Recorder exists in the provided context, this is a no-op.
 // agent must be valid UTF-8, and must not contain spaces, quotes, backslashes, or control characters.
 // text must be valid UTF-8, and must not contain control characters.
+//
+// 中文说明：无 Recorder 时静默忽略，使插件可以在测试或非 HTTP 场景下无条件调用。
 func AddWarning(ctx context.Context, agent string, text string) {
 	recorder, ok := warningRecorderFrom(ctx)
 	if !ok {

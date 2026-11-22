@@ -29,6 +29,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// TestSimpleCache 对单分片缓存跑通用行为测试。
 func TestSimpleCache(t *testing.T) {
 	testCache(newSimpleCache(clock.RealClock{}), t)
 }
@@ -36,6 +37,9 @@ func TestSimpleCache(t *testing.T) {
 // Note: the performance profile of this benchmark may not match that in the production.
 // When making change to SimpleCache, run test with and without concurrency to better understand the impact.
 // This is a tool to test and measure high concurrency of the cache in isolation and not to the Kubernetes usage of the Cache.
+//
+// BenchmarkCacheContentions 对比单分片与 32 分片缓存在高并发下的争用差异，
+// 并覆盖不同 key 数量（256/4096/65536），用来判断分片是否值得引入。
 func BenchmarkCacheContentions(b *testing.B) {
 	for _, numKeys := range []int{1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("Simple/keys=%d", numKeys), func(b *testing.B) {
@@ -47,10 +51,13 @@ func BenchmarkCacheContentions(b *testing.B) {
 	}
 }
 
+// TestStripedCache 让分片缓存跑同一套行为测试，确认分片不改变语义。
 func TestStripedCache(t *testing.T) {
 	testCache(newStripedCache(32, fnvHashFunc, func() cache { return newSimpleCache(clock.RealClock{}) }), t)
 }
 
+// benchmarkCache 在随机 key 上做 get/remove/set 混合操作，模拟真实令牌校验的访问模式：
+// 命中后立即删除（一次性使用），未命中则写入，从而持续制造竞争。
 func benchmarkCache(cache cache, b *testing.B, numKeys int) {
 	keys := []string{}
 	for i := 0; i < numKeys; i++ {
@@ -60,6 +67,7 @@ func benchmarkCache(cache cache, b *testing.B, numKeys int) {
 
 	b.ResetTimer()
 
+	// 高并行度用于放大锁争用，使分片收益显现。
 	b.SetParallelism(500)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -74,6 +82,7 @@ func benchmarkCache(cache cache, b *testing.B, numKeys int) {
 	})
 }
 
+// testCache 验证缓存的四条基本语义：未命中、写入、覆盖、删除。
 func testCache(cache cache, t *testing.T) {
 	if result, ok := cache.get("foo"); ok || result != nil {
 		t.Errorf("Expected null, false, got %#v, %v", result, ok)
@@ -89,6 +98,7 @@ func testCache(cache cache, t *testing.T) {
 	}
 
 	// newer record overrides
+	// 后写覆盖先写，保证刷新令牌后旧身份不会残留。
 	cache.set("foo", record2, time.Hour)
 	if result, ok := cache.get("foo"); !ok || result != record2 {
 		t.Errorf("Expected %#v, true, got %#v, %v", record2, result, ok)

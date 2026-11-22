@@ -20,4 +20,8 @@ limitations under the License.
 // +groupName=resourcequota.admission.k8s.io
 
 // Package v1beta1 is the v1beta1 version of the API.
+//
+// 这是 resourcequota 准入插件配置的 v1beta1 外部版本。该组的对象只在
+// apiserver 内部使用，不对外暴露 REST 端点；+k8s 标记负责生成 deepcopy、
+// 与内部版本之间的转换以及 TypeMeta 的默认值。
 package v1beta1

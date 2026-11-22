@@ -25,6 +25,8 @@ import (
 
 // WithRequestReceivedTimestamp attaches the ReceivedTimestamp (the time the request reached
 // the apiserver) to the context.
+//
+// 该时间戳用于审计日志与请求超时计算；放在过滤器链最外层，才能最接近请求到达时刻。
 func WithRequestReceivedTimestamp(handler http.Handler) http.Handler {
 	return withRequestReceivedTimestampWithClock(handler, clock.RealClock{})
 }
@@ -33,6 +35,7 @@ func WithRequestReceivedTimestamp(handler http.Handler) http.Handler {
 func withRequestReceivedTimestampWithClock(handler http.Handler, clock clock.PassiveClock) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
+		// 只替换 Request 的 context，不修改其他字段，避免影响下游对请求的假设。
 		req = req.WithContext(request.WithReceivedTimestamp(ctx, clock.Now()))
 
 		handler.ServeHTTP(w, req)

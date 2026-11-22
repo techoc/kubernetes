@@ -48,11 +48,14 @@ func WithAuthentication(handler http.Handler, auth authenticator.Request, failed
 	return withAuthentication(handler, auth, failed, apiAuds, requestHeaderConfig, recordAuthenticationMetrics)
 }
 
+// withAuthentication 是 WithAuthentication 的可测试实现，metrics 作为参数注入。
 func withAuthentication(handler http.Handler, auth authenticator.Request, failed http.Handler, apiAuds authenticator.Audiences, requestHeaderConfig *authenticatorfactory.RequestHeaderConfig, metrics authenticationRecordMetricsFunc) http.Handler {
 	if auth == nil {
 		klog.Warning("Authentication is disabled")
 		return handler
 	}
+	// 前端代理（front-proxy）的标准头部。即使本 apiserver 未启用请求头认证，
+	// 也必须在认证成功后清除它们，防止恶意客户端伪造身份头被下游信任。
 	standardRequestHeaderConfig := &authenticatorfactory.RequestHeaderConfig{
 		UsernameHeaders:     headerrequest.StaticStringSlice{"X-Remote-User"},
 		UIDHeaders:          headerrequest.StaticStringSlice{"X-Remote-Uid"},
@@ -62,6 +65,7 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		authenticationStart := time.Now()
 
+		// 把 API 的受众集合放进上下文，供各认证器（尤其是 JWT）校验 token 的 aud。
 		if len(apiAuds) > 0 {
 			req = req.WithContext(authenticator.WithAudiences(req.Context(), apiAuds))
 		}
@@ -79,6 +83,7 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 			return
 		}
 
+		// 认证器可能忽略受众限制，这里统一再校验一次，避免 token 被跨受众重放。
 		if !audiencesAreAcceptable(apiAuds, resp.Audiences) {
 			err = fmt.Errorf("unable to match the audience: %v , accepted: %v", resp.Audiences, apiAuds)
 			klog.Error(err)
@@ -120,11 +125,13 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 			// https://github.com/golang/net/commit/97aa3a539ec716117a9d15a4659a911f50d13c3c
 			w.Header().Set("Connection", "close")
 		}
+		// 认证成功：把 user.Info 写入请求上下文，后续授权与审计从这里读取。
 		req = req.WithContext(genericapirequest.WithUser(req.Context(), resp.User))
 		handler.ServeHTTP(w, req)
 	})
 }
 
+// Unauthorized 返回认证失败时使用的处理器，统一输出 401。
 func Unauthorized(s runtime.NegotiatedSerializer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// http2 is an expensive protocol that is prone to abuse,
@@ -139,6 +146,7 @@ func Unauthorized(s runtime.NegotiatedSerializer) http.Handler {
 			w.Header().Set("Connection", "close")
 		}
 		ctx := req.Context()
+		// 错误的 GV 需要从 RequestInfo 中取得，才能按请求的组版本序列化 Status。
 		requestInfo, found := genericapirequest.RequestInfoFrom(ctx)
 		if !found {
 			responsewriters.InternalError(w, req, errors.New("no RequestInfo found in the context"))
@@ -150,6 +158,10 @@ func Unauthorized(s runtime.NegotiatedSerializer) http.Handler {
 	})
 }
 
+// audiencesAreAcceptable 判断响应受众与 API 受众是否有交集。
+//
+// 任一方为空都视为可接受：空 API 受众表示未配置限制，空响应受众表示认证器
+// 未声明受众（例如客户端证书），此时不应因为"无法比较"而拒绝。
 func audiencesAreAcceptable(apiAuds, responseAudiences authenticator.Audiences) bool {
 	if len(apiAuds) == 0 || len(responseAudiences) == 0 {
 		return true
@@ -158,6 +170,7 @@ func audiencesAreAcceptable(apiAuds, responseAudiences authenticator.Audiences) 
 	return len(apiAuds.Intersect(responseAudiences)) > 0
 }
 
+// isAnonymousUser 同时检查用户名与 unauthenticated 组，兼容只设置其中一项的认证器。
 func isAnonymousUser(u user.Info) bool {
 	if u.GetName() == user.Anonymous {
 		return true

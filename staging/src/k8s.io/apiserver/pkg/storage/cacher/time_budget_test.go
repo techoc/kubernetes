@@ -23,6 +23,11 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestTimeBudget 用假时钟验证时间预算的累积与扣减语义。
+//
+// 预算模型：随时间线性累积但不超过 maxBudget，取用时一次性清零。
+// 测试重点覆盖三个边界——长时间空闲后的封顶、时间回拨、以及负数归还，
+// 这些是真实环境中 NTP 校时和调用方误用时可能出现的场景。
 func TestTimeBudget(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 
@@ -40,6 +45,7 @@ func TestTimeBudget(t *testing.T) {
 	// wait for longer than the maxBudget
 	nextTime := time.Now().Add(10 * time.Second)
 	fakeClock.SetTime(nextTime)
+	// 空闲时间超过上限时只给到 maxBudget，防止长时间空闲后突发大额预算压垮下游。
 	if res := budget.takeAvailable(); res != budget.maxBudget {
 		t.Errorf("Expected: %v, got: %v", budget.maxBudget, res)
 	}
@@ -58,11 +64,13 @@ func TestTimeBudget(t *testing.T) {
 
 	// return a negative value to the budget
 	// we didn't advanced on time yet
+	// 负数归还应把预算压到 0 而不是负值，否则后续累积会被无谓地抵消。
 	budget.returnUnused(-time.Duration(50))
 	if res := budget.takeAvailable(); res != time.Duration(0) {
 		t.Errorf("Expected: %v, got: %v", time.Duration(0), res)
 	}
 	// handle back in time problem with an empty budget
+	// 时钟回拨：预算为空时应保持为空，不能算出负的经过时间而给出额外预算。
 	nextTime = nextTime.Add(-2 * time.Minute)
 	fakeClock.SetTime(nextTime)
 	if res := budget.takeAvailable(); res != time.Duration(0) {
@@ -77,6 +85,7 @@ func TestTimeBudget(t *testing.T) {
 	}
 
 	// handle back in time problem with time on the budget
+	// 预算非空时回拨时钟：仍应给出已累积的预算，且不因时间倒退而崩溃或放大。
 	budget.returnUnused(10 * time.Second)
 	nextTime = nextTime.Add(-2 * time.Minute)
 	fakeClock.SetTime(nextTime)

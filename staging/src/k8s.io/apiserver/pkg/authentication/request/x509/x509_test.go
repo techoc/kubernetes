@@ -41,6 +41,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// 下列常量是固定的测试证书材料，均附带生成命令与 openssl 输出，便于复现和审计。
+// 证书有效期刻意设到 2124 年，避免测试随时间失效。
 const (
 
 	/*
@@ -715,6 +717,9 @@ PKJQCs0CM0zkesktuLi/gFpuB0nEwyOgLg==
 -----END CERTIFICATE-----`
 )
 
+// TestX509 覆盖 New(...) 的证书校验与用户转换：
+// 自签/过期/未生效/服务端用途证书必须被拒，客户端证书按 CN、O 与 UID 映射用户。
+// UID 相关用例同时验证特性门控与异常 UID 编码的拒绝行为。
 func TestX509(t *testing.T) {
 	multilevelOpts := DefaultVerifyOptions()
 	multilevelOpts.Roots = x509.NewCertPool()
@@ -982,6 +987,7 @@ func TestX509(t *testing.T) {
 			}
 
 			if testCase.ExpectOK {
+				// 组顺序来自证书中 O 字段的排列，比较前排序避免顺序差异导致误报。
 				sort.Strings(testCase.ExpectResponse.User.GetGroups())
 				sort.Strings(resp.User.GetGroups())
 				if diff := cmp.Diff(testCase.ExpectResponse, resp); diff != "" {
@@ -992,6 +998,8 @@ func TestX509(t *testing.T) {
 	}
 }
 
+// TestX509Verifier 覆盖 NewVerifier：先校验证书链，再按 AllowedCNs 过滤，
+// 只有通过校验时才调用内层 authenticator，否则内层不得被调用。
 func TestX509Verifier(t *testing.T) {
 	multilevelOpts := DefaultVerifyOptions()
 	multilevelOpts.Roots = x509.NewCertPool()
@@ -1150,16 +1158,19 @@ func TestX509Verifier(t *testing.T) {
 	}
 }
 
+// getDefaultVerifyOptions 返回带默认根证书池的校验选项。
 func getDefaultVerifyOptions(t *testing.T) x509.VerifyOptions {
 	options := DefaultVerifyOptions()
 	options.Roots = getRootCertPool(t)
 	return options
 }
 
+// getRootCertPool 返回仅包含测试根 CA 的证书池。
 func getRootCertPool(t *testing.T) *x509.CertPool {
 	return getRootCertPoolFor(t, rootCACert)
 }
 
+// getRootCertPoolFor 构造包含指定 PEM 证书的根证书池。
 func getRootCertPoolFor(t *testing.T, certs ...string) *x509.CertPool {
 	pool := x509.NewCertPool()
 	for _, cert := range certs {
@@ -1168,6 +1179,7 @@ func getRootCertPoolFor(t *testing.T, certs ...string) *x509.CertPool {
 	return pool
 }
 
+// getCertsFromFile 从 testdata/<name>.pem 读取并解析证书。
 func getCertsFromFile(t *testing.T, names ...string) []*x509.Certificate {
 	certs := []*x509.Certificate{}
 	for _, name := range names {
@@ -1181,6 +1193,7 @@ func getCertsFromFile(t *testing.T, names ...string) []*x509.Certificate {
 	return certs
 }
 
+// getCert 解码 PEM 并解析为 *x509.Certificate；解析失败直接终止测试。
 func getCert(t *testing.T, pemData string) *x509.Certificate {
 	t.Helper()
 
@@ -1193,6 +1206,7 @@ func getCert(t *testing.T, pemData string) *x509.Certificate {
 	return cert
 }
 
+// getCerts 解析多个 PEM 证书。
 func getCerts(t *testing.T, pemData ...string) []*x509.Certificate {
 	certs := []*x509.Certificate{}
 	for _, pemData := range pemData {
@@ -1202,6 +1216,9 @@ func getCerts(t *testing.T, pemData ...string) []*x509.Certificate {
 }
 
 // Modifies the cert's Subject to use custom value for the UID.
+//
+// 用于构造"UID 编码异常"的证书：先移除原 UID 属性，再插入任意 ASN.1 值，
+// 以覆盖空值、非字符串、多个 UID 等边界。
 func toCertWithUIDValue(t *testing.T, pemData string, val any) []*x509.Certificate {
 	cert := getCert(t, pemData)
 
@@ -1224,6 +1241,8 @@ func toCertWithUIDValue(t *testing.T, pemData string, val any) []*x509.Certifica
 	return []*x509.Certificate{cert}
 }
 
+// TestCertificateIdentifier 验证 certificateIdentifier 的稳定字符串格式：
+// SN/SKID/AKID 三段缺失时也要输出空值占位，保证同一证书的标识可比较。
 func TestCertificateIdentifier(t *testing.T) {
 	tt := []struct {
 		name               string

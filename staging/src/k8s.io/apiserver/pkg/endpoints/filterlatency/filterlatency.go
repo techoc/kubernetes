@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package filterlatency 提供成对的 HTTP 中间件，用于测量单个 filter 的
+// 耗时：TrackStarted 记录起点，TrackCompleted 在下一层返回时计算差值。
+//
+// 之所以需要成对使用，是因为 filter 链是嵌套调用，仅靠一次包装无法
+// 精确界定“本 filter 自身”的执行时间。
 package filterlatency
 
 import (
@@ -38,6 +43,8 @@ const requestFilterRecordKey requestFilterRecordKeyType = iota
 
 const minFilterLatencyToLog = 100 * time.Millisecond
 
+// requestFilterRecord 保存当前正在测量的 filter 名称与起始时间。
+// 记录放在 context 中，使同一次请求内成对的 Started/Completed 能共享状态。
 type requestFilterRecord struct {
 	name             string
 	startedTimestamp time.Time
@@ -62,6 +69,8 @@ func TrackStarted(handler http.Handler, tp trace.TracerProvider, name string) ht
 
 // TrackCompleted measures the timestamp the given handler has completed execution and then
 // it updates the corresponding metric with the filter latency duration.
+//
+// 指标标签只有 filter 名，不包含用户输入，避免高基数。
 func TrackCompleted(handler http.Handler) http.Handler {
 	return trackCompleted(handler, clock.RealClock{}, func(ctx context.Context, fr *requestFilterRecord, completedAt time.Time) {
 		latency := completedAt.Sub(fr.startedTimestamp)
@@ -78,6 +87,8 @@ func trackStarted(handler http.Handler, tp trace.TracerProvider, name string, cl
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := tracer.Start(r.Context(), name)
 		defer span.End()
+		// 如果已有记录，说明同一 filter 名被重复包裹：复用并覆盖起点，
+		// 让测量对准最内层实际执行的那一次。
 		if fr := requestFilterRecordFrom(ctx); fr != nil {
 			fr.name = name
 			fr.startedTimestamp = clock.Now()
@@ -97,6 +108,8 @@ func trackStarted(handler http.Handler, tp trace.TracerProvider, name string, cl
 func trackCompleted(handler http.Handler, clock clock.PassiveClock, action func(context.Context, *requestFilterRecord, time.Time)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The previous filter has just completed.
+		// 在进入下一层之前取时间点，因此 action 统计的是“本 filter 到此处
+		// 为止”的耗时，而不是整个请求的耗时。
 		completedAt := clock.Now()
 
 		defer handler.ServeHTTP(w, r)

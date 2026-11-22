@@ -24,7 +24,10 @@ import (
 )
 
 // expectFindMetric find a metric with the given name nad labels or reports a fatal test error.
+// 注意：本函数只校验标签数量是否与期望一致，并不断言该指标确实存在，
+// 因此它更适合做“标签集合是否被意外扩展”的守卫，而不是存在性检查。
 func expectFindMetric(t *testing.T, name string, expectedLabels map[string]string) {
+	// 从 legacyregistry 收集当前进程注册的全部指标，避免测试依赖全局变量。
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
 		t.Fatalf("Failed to gather metrics: %s", err)
@@ -37,6 +40,8 @@ func expectFindMetric(t *testing.T, name string, expectedLabels map[string]strin
 	for _, mf := range metrics {
 		if mf.GetName() == name {
 			for _, metric := range mf.GetMetric() {
+				// 只对标签子集匹配的样本做数量校验；多出来的标签意味着
+				// 指标契约被破坏，通常是新增标签却未同步更新测试。
 				if testutil.LabelsMatch(metric, expectedLabels) {
 					gotLabelCount := len(metric.GetLabel())
 					wantLabelCount := len(expectedLabels)
@@ -53,6 +58,8 @@ func expectFindMetric(t *testing.T, name string, expectedLabels map[string]strin
 
 // expectHistogramCountTotal ensures that the sum of counts of metrics matching the labelFilter is as
 // expected.
+// 直方图按标签组合拆成多个样本，因此这里累加所有匹配样本的 SampleCount，
+// 用于验证“某类调用共发生了多少次”，而不关心具体落在哪个桶。
 func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string]string, wantCount int) {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
@@ -73,6 +80,7 @@ func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string
 	}
 	if wantCount != counterSum {
 		t.Errorf("Wanted count %d, got %d for metric %s with labels %#+v", wantCount, counterSum, name, labelFilter)
+		// 失败时打印同名指标的全部样本，便于定位是哪一组标签多算或少算。
 		for _, mf := range metrics {
 			if mf.GetName() == name {
 				for _, metric := range mf.GetMetric() {
@@ -85,6 +93,8 @@ func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string
 
 // expectCounterValue ensures that the counts of metrics matching the labelFilter is as
 // expected.
+// 与直方图版本不同，这里累加的是 Counter 的值：同一指标的不同标签组合
+// 各自维护独立计数器，断言总和对标签划分方式不敏感。
 func expectCounterValue(t *testing.T, name string, labelFilter map[string]string, wantCount int) {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {

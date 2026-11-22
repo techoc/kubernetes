@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 注册并记录 apiserver 的请求级指标。
+//
+// 指标标签（verb、scope、subresource 等）经过规范化，以保证基数可控：
+// 未知动词归入 "other"，未知响应码走 strconv 回退，dryRun 会去重排序。
 package metrics
 
 import (
@@ -42,6 +46,7 @@ import (
 
 // resettableCollector is the interface implemented by prometheus.MetricVec
 // that can be used by Prometheus to collect metrics and reset their values.
+// 测试与重新注册时需要清空累计值，故统一保留 Reset 能力。
 type resettableCollector interface {
 	compbasemetrics.Registerable
 	Reset()
@@ -49,6 +54,7 @@ type resettableCollector interface {
 
 const (
 	APIServerComponent string = "apiserver"
+	// OtherRequestMethod 是所有未知动词的聚合标签，用于限制指标基数。
 	OtherRequestMethod string = "other"
 )
 
@@ -144,6 +150,7 @@ var (
 		[]string{"verb", "group", "version", "resource", "subresource", "scope", "component"},
 	)
 	// TLSHandshakeErrors is a number of requests dropped with 'TLS handshake error from' error
+	// TLS 握手失败通常来自证书不匹配或客户端配置错误，可据此定位接入问题。
 	TLSHandshakeErrors = compbasemetrics.NewCounter(
 		&compbasemetrics.CounterOpts{
 			Subsystem:      APIServerComponent,
@@ -152,6 +159,7 @@ var (
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 	)
+	// WatchEvents 统计发送给 watch 客户端的事件数，按资源维度拆分。
 	WatchEvents = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Subsystem:      APIServerComponent,
@@ -405,6 +413,7 @@ const (
 var registerMetrics sync.Once
 
 // Register all metrics.
+// 使用 sync.Once 保证重复调用（例如多个 server 实例初始化）不会重复注册。
 func Register() {
 	registerMetrics.Do(func() {
 		for _, metric := range metrics {
@@ -414,6 +423,7 @@ func Register() {
 }
 
 // Reset all metrics.
+// 仅供测试使用；生产环境重置会导致累计值丢失。
 func Reset() {
 	for _, metric := range metrics {
 		metric.Reset()
@@ -422,6 +432,7 @@ func Reset() {
 
 // ResetLabelAllowLists resets the label allow lists for all metrics.
 // NOTE: This is only used for testing.
+// 指标稳定后可能启用标签白名单，测试需要还原白名单状态以免污染后续用例。
 func ResetLabelAllowLists() {
 	for _, metric := range metrics {
 		if counterVec, ok := metric.(*compbasemetrics.CounterVec); ok {
@@ -449,6 +460,7 @@ func ResetLabelAllowLists() {
 
 // UpdateInflightRequestMetrics reports concurrency metrics classified by
 // mutating vs Readonly.
+// 执行阶段写入 current_inflight_requests；等待阶段写入 current_inqueue_requests。
 func UpdateInflightRequestMetrics(phase string, nonmutating, mutating int) {
 	for _, kc := range []struct {
 		kind  string
@@ -462,14 +474,18 @@ func UpdateInflightRequestMetrics(phase string, nonmutating, mutating int) {
 	}
 }
 
+// RecordFilterLatency 记录单个过滤器的耗时（秒），用于定位请求处理链中的瓶颈。
 func RecordFilterLatency(ctx context.Context, name string, elapsed time.Duration) {
 	requestFilterDuration.WithContext(ctx).WithLabelValues(name).Observe(elapsed.Seconds())
 }
 
+// RecordTimestampComparisonLatency 记录 UPDATE/PATCH 中旧对象与新对象比较的耗时，
+// codePath 标识实际走的比较路径，便于发现回退到慢路径的情况。
 func RecordTimestampComparisonLatency(codePath string, elapsed time.Duration) {
 	requestTimestampComparisonDuration.WithLabelValues(codePath).Observe(elapsed.Seconds())
 }
 
+// RecordRequestPostTimeout 记录请求超时后执行 handler 的状态（panic/error/ok/pending）。
 func RecordRequestPostTimeout(source string, status string) {
 	requestPostTimeoutTotal.WithLabelValues(source, status).Inc()
 }
@@ -477,6 +493,7 @@ func RecordRequestPostTimeout(source string, status string) {
 // RecordRequestAbort records that the request was aborted possibly due to a timeout.
 func RecordRequestAbort(req *http.Request, requestInfo *request.RequestInfo) {
 	if requestInfo == nil {
+		// 非标准请求流中没有 RequestInfo，用请求方法与路径兜底，保证指标仍可记录。
 		requestInfo = &request.RequestInfo{Verb: req.Method, Path: req.URL.Path}
 	}
 
@@ -491,6 +508,7 @@ func RecordRequestAbort(req *http.Request, requestInfo *request.RequestInfo) {
 }
 
 // RecordDroppedRequest records that the request was rejected via http.TooManyRequests.
+// 队列满时调用；以 429 计入常规请求计数器，使限流与普通请求口径一致。
 func RecordDroppedRequest(req *http.Request, requestInfo *request.RequestInfo, component string, isMutatingRequest bool) {
 	if requestInfo == nil {
 		requestInfo = &request.RequestInfo{Verb: req.Method, Path: req.URL.Path}
@@ -507,6 +525,7 @@ func RecordDroppedRequest(req *http.Request, requestInfo *request.RequestInfo, c
 	if requestInfo.IsResourceRequest {
 		requestCounter.WithContext(req.Context()).WithLabelValues(reportedVerb, dryRun, requestInfo.APIGroup, requestInfo.APIVersion, requestInfo.Resource, requestInfo.Subresource, scope, component, codeToString(http.StatusTooManyRequests)).Inc()
 	} else {
+		// 非资源请求没有 group/version/resource，用空标签占位以保持标签维度数量一致。
 		requestCounter.WithContext(req.Context()).WithLabelValues(reportedVerb, dryRun, "", "", "", requestInfo.Subresource, scope, component, codeToString(http.StatusTooManyRequests)).Inc()
 	}
 }
@@ -581,11 +600,13 @@ func MonitorRequest(req *http.Request, verb, group, version, resource, subresour
 	elapsedSeconds := elapsed.Seconds()
 	requestCounter.WithContext(req.Context()).WithLabelValues(reportedVerb, dryRun, group, version, resource, subresource, scope, component, codeToString(httpCode)).Inc()
 	// MonitorRequest happens after authentication, so we can trust the username given by the request
+	// 认证之后才能区分内部自请求，避免客户端伪造身份刷指标。
 	info, ok := request.UserFrom(req.Context())
 	if ok && info.GetName() == user.APIServerUser {
 		apiSelfRequestCounter.WithContext(req.Context()).WithLabelValues(reportedVerb, group, resource, subresource).Inc()
 	}
 	if deprecated {
+		// 已弃用 API 的调用同时在审计事件中打注解，便于迁移统计。
 		deprecatedRequestGauge.WithContext(req.Context()).WithLabelValues(group, version, resource, subresource, removedRelease).Set(1)
 		audit.AddAuditAnnotation(req.Context(), deprecatedAnnotationKey, "true")
 		if len(removedRelease) > 0 {
@@ -596,6 +617,8 @@ func MonitorRequest(req *http.Request, verb, group, version, resource, subresour
 	fieldValidation := cleanFieldValidation(req.URL)
 	fieldValidationRequestLatencies.WithContext(req.Context()).WithLabelValues(fieldValidation)
 
+	// SLI 延迟剔除 webhook 与 APF 排队时间：这些时间取决于用户配置而非 apiserver 自身性能。
+	// dryRun 请求不计入，避免干扰真实负载的服务等级指标。
 	if wd, ok := request.LatencyTrackersFrom(req.Context()); ok && dryRun == "" {
 		sliLatency := elapsedSeconds - (wd.MutatingWebhookTracker.GetLatency() + wd.ValidatingWebhookTracker.GetLatency() + wd.APFQueueWaitTracker.GetLatency()).Seconds()
 		requestSliLatencies.WithContext(req.Context()).WithLabelValues(reportedVerb, group, version, resource, subresource, scope, component).Observe(sliLatency)
@@ -615,6 +638,7 @@ func InstrumentRouteFunc(verb, group, version, resource, subresource, scope, com
 			requestReceivedTimestamp = time.Now()
 		}
 
+		// 包装 ResponseWriter 以捕获状态码与响应体大小。
 		delegate := &ResponseWriterDelegator{ResponseWriter: response.ResponseWriter}
 
 		rw := responsewriter.WrapForHTTP1Or2(delegate)
@@ -698,6 +722,7 @@ func CleanListScope(ctx context.Context, opts *metainternalversion.ListOptions) 
 func CanonicalVerb(verb string, scope string) string {
 	switch verb {
 	case MethodGet, MethodHead:
+		// 集合范围内（cluster/namespace）的 GET 实为 LIST。
 		if scope != "resource" && scope != "" {
 			return request.MethodList
 		}
@@ -718,6 +743,7 @@ func CleanVerb(verb string, request *http.Request, requestInfo *request.RequestI
 	if verb == MethodWatchList {
 		reportedVerb = MethodWatch
 	}
+	// Apply patch 在语义上是独立的操作，单独归类便于区分普通 patch。
 	if verb == MethodPatch && request.Header.Get("Content-Type") == string(types.ApplyPatchType) {
 		reportedVerb = MethodApply
 	}
@@ -737,6 +763,7 @@ func determineRequestNamespaceAndName(ctx context.Context, opts *metainternalver
 	if requestNamespace, ok := request.NamespaceFrom(ctx); ok && len(requestNamespace) > 0 {
 		namespace = requestNamespace
 	} else if opts != nil && opts.FieldSelector != nil {
+		// 路径未带命名空间时，字段选择器可能是唯一来源。
 		if selectorNamespace, ok := opts.FieldSelector.RequiresExactMatch("metadata.namespace"); ok {
 			namespace = selectorNamespace
 		}
@@ -771,6 +798,7 @@ func cleanVerb(verb, suggestedVerb string, request *http.Request, requestInfo *r
 func getVerbIfWatch(req *http.Request) string {
 	if strings.ToUpper(req.Method) == MethodGet || strings.ToUpper(req.Method) == request.MethodList {
 		// see apimachinery/pkg/runtime/conversion.go Convert_Slice_string_To_bool
+		// 遵循与 API 解码一致的布尔判定：0/false 以外都视为 true。
 		if values := req.URL.Query()["watch"]; len(values) > 0 {
 			if value := strings.ToLower(values[0]); value != "0" && value != "false" {
 				return request.MethodWatch
@@ -780,6 +808,7 @@ func getVerbIfWatch(req *http.Request) string {
 	return ""
 }
 
+// cleanDryRun 把 dryRun 查询参数规范化为空、逗号分隔的去重列表或 "invalid"。
 func cleanDryRun(u *url.URL) string {
 	// avoid allocating when we don't see dryRun in the query
 	if !strings.Contains(u.RawQuery, "dryRun") {
@@ -796,6 +825,8 @@ func cleanDryRun(u *url.URL) string {
 	return strings.Join(utilsets.NewString(dryRun...).List(), ",")
 }
 
+// cleanFieldValidation 规范化 fieldValidation 参数；非法或缺失统一标记，
+// 防止用户传入任意值导致标签基数膨胀。
 func cleanFieldValidation(u *url.URL) string {
 	// avoid allocating when we don't see dryRun in the query
 	if !strings.Contains(u.RawQuery, "fieldValidation") {
@@ -823,16 +854,19 @@ type ResponseWriterDelegator struct {
 	wroteHeader bool
 }
 
+// Unwrap 让上层可以拿到原始 ResponseWriter（例如 http.ResponseController 需要）。
 func (r *ResponseWriterDelegator) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
 
+// WriteHeader 记录状态码；重复调用以第一次为准（与 net/http 语义一致）。
 func (r *ResponseWriterDelegator) WriteHeader(code int) {
 	r.status = code
 	r.wroteHeader = true
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Write 在未显式写状态码时补记 200，并累计已写入字节数。
 func (r *ResponseWriterDelegator) Write(b []byte) (int, error) {
 	if !r.wroteHeader {
 		r.WriteHeader(http.StatusOK)
@@ -842,15 +876,18 @@ func (r *ResponseWriterDelegator) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Status 返回已记录的状态码。
 func (r *ResponseWriterDelegator) Status() int {
 	return r.status
 }
 
+// ContentLength 返回响应体累计字节数。
 func (r *ResponseWriterDelegator) ContentLength() int {
 	return int(r.written)
 }
 
 // Small optimization over Itoa
+// 常见状态码直接返回常量字符串，避免热路径上的整数转字符串分配。
 func codeToString(s int) string {
 	switch s {
 	case 100:

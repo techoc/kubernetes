@@ -28,7 +28,10 @@ import (
 	"k8s.io/apiserver/pkg/quota/v1/generic"
 )
 
+// TestPrettyPrint 验证资源用量字符串按资源名排序输出（稳定格式），
+// 这是准入拒绝消息与状态字段可重复的前提。
 func TestPrettyPrint(t *testing.T) {
+	// 测试辅助：把字面量转换为 ResourceList，避免重复 MustParse。
 	toResourceList := func(resources map[corev1.ResourceName]string) corev1.ResourceList {
 		resourceList := corev1.ResourceList{}
 		for key, value := range resources {
@@ -68,6 +71,9 @@ func TestPrettyPrint(t *testing.T) {
 	}
 }
 
+// TestHasUsageStats 验证判断“某个配额是否已有相关资源用量”的口径：
+// 只有 hard 中没有相关资源、但 used 中出现了相关资源时才算有统计；
+// hard 为空视为未知，仍按有统计处理（保守）。
 func TestHasUsageStats(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceQuota
@@ -128,12 +134,15 @@ func TestHasUsageStats(t *testing.T) {
 	}
 }
 
+// fakeEvaluator 被调用即测试失败：用于证明某些请求根本不应进入配额评估。
 type fakeEvaluator struct{}
 
 func (fakeEvaluator) Evaluate(a admission.Attributes) error {
 	return errors.New("should not be called")
 }
 
+// TestExcludedOperations 验证非命名空间资源与 Namespace 创建不会触发配额
+// 评估：前者没有所属命名空间，后者本身不消耗命名空间内的配额。
 func TestExcludedOperations(t *testing.T) {
 	a := &QuotaAdmission{
 		evaluator: fakeEvaluator{},

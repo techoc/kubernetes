@@ -24,13 +24,20 @@ import (
 
 // ErrorType decodes the error to determine the error type
 // that the metrics understand.
+//
+// 该函数把内部 PolicyDecision 映射为指标维度。之所以按消息前缀判断，
+// 是因为 PolicyDecision 只携带文本消息，没有独立的错误分类字段；前缀
+// 由编译器和 CEL 运行时固定产生，修改这些文案会破坏指标归类。
 func ErrorType(decision *PolicyDecision) celmetrics.ValidationErrorType {
+	// 评估结果为允许即视为无错误，不进入失败指标。
 	if decision.Evaluation == EvalAdmit {
 		return celmetrics.ValidationNoError
 	}
+	// 编译期失败与运行期失败分开统计，便于区分策略编写错误和求值问题。
 	if strings.HasPrefix(decision.Message, "compilation") {
 		return celmetrics.ValidationCompileError
 	}
+	// 超出成本预算单独归类：这类失败通常是策略过于复杂，而非策略逻辑错误。
 	if strings.HasPrefix(decision.Message, "validation failed due to running out of cost budget") {
 		return celmetrics.ValidatingOutOfBudget
 	}

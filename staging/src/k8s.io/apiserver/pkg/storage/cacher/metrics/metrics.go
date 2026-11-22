@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 watch cache 的可观测指标：初始化耗时、事件收发与分发、
+// 容量变化、一致性读以及 watch 分片等。所有指标均为 ALPHA 稳定性。
 package metrics
 
 import (
@@ -39,6 +41,9 @@ const (
 //
 // StageTotal is the end-to-end latency of a successfully delivered event.
 // The remaining stages measure individual segments of that path.
+//
+// 分段设计便于定位瓶颈：storage_to_cache 高说明 etcd 解码或反射器处理慢，
+// cache_to_watcher 高说明下游客户端消费不过来（背压）。
 type DispatchStage int
 
 const (
@@ -73,6 +78,8 @@ var dispatchStageName = [numDispatchStages]string{
  * the metric stability policy.
  */
 var (
+	// 注意：cache_list_* 系列已标记 DeprecatedVersion 1.37.0，
+	// 由 storage 层统一的指标替代；保留是为了兼容现有监控面板。
 	listCacheCount = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:         namespace,
@@ -281,6 +288,9 @@ var (
 var registerMetrics sync.Once
 
 // Register all metrics.
+//
+// 使用 sync.Once 保证重复调用安全；分片相关指标只在特性门控开启时注册，
+// 否则会在指标暴露时凭空多出恒为零的 series。
 func Register() {
 	// Register the metrics.
 	registerMetrics.Do(func() {
@@ -320,11 +330,14 @@ func RecordListCacheMetrics(groupResource schema.GroupResource, indexName string
 // RecordResourceVersion sets the current resource version for a given resource type.
 // The resource version is truncated to the 15 least significant digits to prevent
 // the metric from growing indefinitely and losing precision when it exceeds 2^53-1.
+//
+// 指标只用于观察增长趋势，取模不影响该用途。
 func RecordResourceVersion(groupResource schema.GroupResource, resourceVersion uint64) {
 	watchCacheResourceVersion.WithLabelValues(groupResource.Group, groupResource.Resource).Set(float64(resourceVersion % 1000000000000000))
 }
 
 // RecordShardedWatchStarted increments the active sharded watch gauge for the given resource.
+// 必须与 RecordShardedWatchStopped 成对调用，否则 gauge 会漂移。
 func RecordShardedWatchStarted(groupResource schema.GroupResource) {
 	WatchShardsTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
@@ -351,6 +364,9 @@ func RecordsWatchCacheCapacityChange(groupResource schema.GroupResource, old, ne
 
 // WatcherMetricsObservers holds pre-resolved (group, resource) observers for
 // every dispatch stage, so the hot path never touches the label map.
+//
+// 预解析（WithLabelValues）把标签查找从每次事件分发移到连接建立时，
+// 这对高频 watch 事件路径是显著优化。
 type WatcherMetricsObservers struct {
 	stageDurations [numDispatchStages]compbasemetrics.ObserverMetric
 }
@@ -366,12 +382,15 @@ func NewWatcherMetricsObservers(groupResource schema.GroupResource) *WatcherMetr
 
 // ObserveStage records the duration spent in the given dispatch stage.
 func (d *WatcherMetricsObservers) ObserveStage(stage DispatchStage, duration time.Duration) {
+	// 越界的 stage 直接忽略，避免热路径 panic。
 	if stage < 0 || stage >= numDispatchStages {
 		return
 	}
 	observe(d.stageDurations[stage], duration)
 }
 
+// observe 把负时长钳制为 0：时钟回拨或计算误差可能产生负值，
+// 直方图不接受负数。
 func observe(m compbasemetrics.ObserverMetric, duration time.Duration) {
 	if duration < 0 {
 		duration = 0
@@ -379,6 +398,7 @@ func observe(m compbasemetrics.ObserverMetric, duration time.Duration) {
 	m.Observe(duration.Seconds())
 }
 
+// noopObserver 用于未启用指标或测试场景，避免调用方到处判空。
 type noopObserver struct{}
 
 func (noopObserver) Observe(float64) {}

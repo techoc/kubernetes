@@ -26,6 +26,9 @@ import (
 
 // makes sure that we never get:
 // Internal error occurred: [some error, object does not implement the Object interfaces]
+//
+// 中文说明：fakeObj 没有实现 ObjectMeta 访问器，用于验证取名字失败时不会把内部错误
+// 泄露成 Internal error，而是退化为固定的 "Unknown/errorGettingName"。
 func TestNewForbidden(t *testing.T) {
 	attributes := NewAttributesRecord(
 		&fakeObj{},
@@ -48,6 +51,7 @@ func TestNewForbidden(t *testing.T) {
 	}
 }
 
+// fakeObj 只实现 ObjectKind，不实现 metav1.Object，模拟缺少 ObjectMeta 的对象。
 type fakeObj struct{}
 type fakeObjKind struct{}
 

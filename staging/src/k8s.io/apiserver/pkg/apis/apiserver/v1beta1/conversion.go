@@ -21,6 +21,9 @@ import (
 	apiserver "k8s.io/apiserver/pkg/apis/apiserver"
 )
 
+// Convert_v1beta1_EgressSelection_To_apiserver_EgressSelection 手写转换，
+// 在自动生成的字段拷贝之上把已弃用的 "master" 名称改写为 "controlplane"。
+// 这样内部版本与下游消费者只需处理新的命名，同时旧配置文件仍可加载。
 func Convert_v1beta1_EgressSelection_To_apiserver_EgressSelection(in *EgressSelection, out *apiserver.EgressSelection, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_EgressSelection_To_apiserver_EgressSelection(in, out, s); err != nil {
 		return err

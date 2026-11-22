@@ -24,6 +24,7 @@ import (
 )
 
 // StaticVerifierFn is a VerifyOptionFunc that always returns the same value.  This allows verify options that cannot change.
+// 第二个返回值为 false 时表示“无可用校验配置”，调用方据此决定是否跳过校验。
 func StaticVerifierFn(opts x509.VerifyOptions) VerifyOptionFunc {
 	return func() (x509.VerifyOptions, bool) {
 		return opts, true
@@ -32,7 +33,10 @@ func StaticVerifierFn(opts x509.VerifyOptions) VerifyOptionFunc {
 
 // NewStaticVerifierFromFile creates a new verification func from a file.  It reads the content and then fails.
 // It will return a nil function if you pass an empty CA file.
+//
+// 一次性读取 CA 文件并构造证书池，之后不再重读；需要热加载的场景应使用动态证书实现。
 func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
+	// 空路径表示未配置客户端 CA，返回 nil 让调用方按“不校验”处理。
 	if len(clientCA) == 0 {
 		return nil, nil
 	}
@@ -49,6 +53,7 @@ func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
 }
 
 // StringSliceProvider is a way to get a string slice value.  It is heavily used for authentication headers among other places.
+// 抽象成接口是为了支持动态值（如轮转的请求头/证书），同时保持调用方无锁读取。
 type StringSliceProvider interface {
 	// Value returns the current string slice.  Callers should never mutate the returned value.
 	Value() []string

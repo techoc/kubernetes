@@ -39,6 +39,9 @@ import (
 // the gorestful handler (used for the API) which falls through to the nonGoRestful handler on unregistered paths,
 // and the nonGoRestful handler (which can contain a fallthrough of its own)
 // FullHandlerChain -> Director -> {GoRestfulContainer,NonGoRestfulMux} based on inspection of registered web services
+//
+// 分层原因：gorestful 无法在不破坏 swagger 的前提下做通配路由，所以用一个 director
+// 在其前面做路由判定，未匹配的请求交给普通 mux 处理。
 type APIServerHandler struct {
 	// FullHandlerChain is the one that is eventually served with.  It should include the full filter
 	// chain and then call the Director.
@@ -70,6 +73,8 @@ type APIServerHandler struct {
 // It is normally used to apply filtering like authentication and authorization
 type HandlerChainBuilderFn func(apiHandler http.Handler) http.Handler
 
+// NewAPIServerHandler 组装 director、gorestful 容器与非 gorestful mux。
+// handlerChainBuilder 用于在最外层套上鉴权/审计等过滤器，保证所有路径（包括 404）都经过它们。
 func NewAPIServerHandler(name string, s runtime.NegotiatedSerializer, handlerChainBuilder HandlerChainBuilderFn, notFoundHandler http.Handler) *APIServerHandler {
 	nonGoRestfulMux := mux.NewPathRecorderMux(name)
 	if notFoundHandler != nil {
@@ -107,17 +112,20 @@ func (a *APIServerHandler) ListedPaths() []string {
 		handledPaths = append(handledPaths, ws.RootPath())
 	}
 	handledPaths = append(handledPaths, a.NonGoRestfulMux.ListedPaths()...)
+	// 排序保证 / 索引输出稳定，便于用户与测试比较。
 	sort.Strings(handledPaths)
 
 	return handledPaths
 }
 
+// director 按注册的 web service 根路径决定请求交给 gorestful 还是普通 mux。
 type director struct {
 	name               string
 	goRestfulContainer *restful.Container
 	nonGoRestfulMux    *mux.PathRecorderMux
 }
 
+// ServeHTTP 实现路由分发。注意 /apis 需要特殊处理，见上方 Director 字段的长注释。
 func (d director) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := req.URL.Path
 
@@ -138,6 +146,9 @@ func (d director) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		case strings.HasPrefix(path, ws.RootPath()):
 			// ensure an exact match or a path boundary match
+			//
+			// 仅前缀匹配不够：/apis/appsfoo 不应被 /apis/apps 认领，
+			// 因此要求下一字符是 '/' 或路径已结束。
 			if len(path) == len(ws.RootPath()) || path[len(ws.RootPath())] == '/' {
 				klog.V(5).Infof("%v: %v %q satisfied by gorestful with webservice %v", d.name, req.Method, path, ws.RootPath())
 				// don't use servemux here because gorestful servemuxes get messed up when removing webservices
@@ -153,6 +164,8 @@ func (d director) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	d.nonGoRestfulMux.ServeHTTP(w, req)
 }
 
+// logStackOnRecover 是 gorestful 的 panic 恢复钩子：记录完整调用栈并返回 500。
+// 用独立的 buffer 一次性输出，避免 panic 路径上的多行日志交错。
 // TODO: Unify with RecoverPanics?
 func logStackOnRecover(s runtime.NegotiatedSerializer, panicReason interface{}, w http.ResponseWriter) {
 	var buffer bytes.Buffer
@@ -173,6 +186,8 @@ func logStackOnRecover(s runtime.NegotiatedSerializer, panicReason interface{}, 
 	responsewriters.ErrorNegotiated(apierrors.NewGenericServerResponse(http.StatusInternalServerError, "", schema.GroupResource{}, "", "", 0, false), s, schema.GroupVersion{}, w, &http.Request{Header: headers})
 }
 
+// serviceErrorHandler 把 gorestful 内部错误转换为标准的 Status 响应，
+// 保证错误格式与 API 其他部分一致（客户端只需处理一种错误结构）。
 func serviceErrorHandler(s runtime.NegotiatedSerializer, serviceErr restful.ServiceError, request *restful.Request, resp *restful.Response) {
 	responsewriters.ErrorNegotiated(
 		apierrors.NewGenericServerResponse(serviceErr.Code, "", schema.GroupResource{}, "", serviceErr.Message, 0, false),

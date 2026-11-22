@@ -24,16 +24,20 @@ import (
 	"k8s.io/apiserver/pkg/util/webhook"
 )
 
+// doNothingAdmission 只满足 admission.Interface 的最小实现，用于让
+// serviceWanter 嵌入而不必重复实现 Handles。
 type doNothingAdmission struct{}
 
 func (doNothingAdmission) Handles(o admission.Operation) bool { return false }
 
+// fakeServiceResolver 是一个恒返回 nil 的解析器，仅用于身份比较。
 type fakeServiceResolver struct{}
 
 func (f *fakeServiceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	return nil, nil
 }
 
+// serviceWanter 同时实现 WantsServiceResolver，记录注入进来的解析器。
 type serviceWanter struct {
 	doNothingAdmission
 	got ServiceResolver
@@ -41,6 +45,8 @@ type serviceWanter struct {
 
 func (s *serviceWanter) SetServiceResolver(sr webhook.ServiceResolver) { s.got = sr }
 
+// TestWantsServiceResolver 验证初始化器会通过 WantsServiceResolver 接口把
+// 同一个解析器实例注入给插件（而不是复制或包装）。
 func TestWantsServiceResolver(t *testing.T) {
 	sw := &serviceWanter{}
 	fsr := &fakeServiceResolver{}

@@ -33,6 +33,9 @@ import (
 )
 
 // Creates a cacher based given storageConfig.
+//
+// 装饰器模式：在原始存储之上叠加 watch cache 与 delegator。delegator 让
+// 读请求走缓存、写请求直连存储，从而同时获得缓存收益与强一致的写入。
 func StorageWithCacher() generic.StorageDecorator {
 	return func(
 		storageConfig *storagebackend.ConfigForResource,
@@ -54,7 +57,8 @@ func StorageWithCacher() generic.StorageDecorator {
 		}
 
 		cacherConfig := cacherstorage.Config{
-			Storage:             s,
+			Storage: s,
+			// APIObjectVersioner 使用 resourceVersion 做 CAS，是所有内置资源的默认语义。
 			Versioner:           storage.APIObjectVersioner{},
 			GroupResource:       storageConfig.GroupResource,
 			EventsHistoryWindow: storageConfig.EventsHistoryWindow,
@@ -72,6 +76,7 @@ func StorageWithCacher() generic.StorageDecorator {
 			return nil, func() {}, err
 		}
 		delegator := cacherstorage.NewCacheDelegator(cacher, s)
+		// 用 sync.Once 包裹销毁，防止调用方重复调用 destroy 导致底层存储被二次关闭。
 		var once sync.Once
 		destroyFunc := func() {
 			once.Do(func() {
@@ -85,6 +90,8 @@ func StorageWithCacher() generic.StorageDecorator {
 	}
 }
 
+// objectTypeToArgs 为日志生成对象标识：unstructured 对象输出 apiVersion/kind，
+// 其余输出 Go 类型名，便于在海量资源中快速定位是哪一类存储启用了缓存。
 func objectTypeToArgs(obj runtime.Object) []interface{} {
 	// special-case unstructured objects that tell us their apiVersion/kind
 	if u, isUnstructured := obj.(*unstructured.Unstructured); isUnstructured {

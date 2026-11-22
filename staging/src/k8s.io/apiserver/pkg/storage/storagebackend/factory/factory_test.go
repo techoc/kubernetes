@@ -32,6 +32,8 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
+// mockKV 是 clientv3.KV 的替身：只有 Get 可定制，其它方法返回零值，
+// 足以模拟健康检查所依赖的最小读写面。
 type mockKV struct {
 	get func(ctx context.Context) (*clientv3.GetResponse, error)
 }
@@ -58,6 +60,8 @@ func (mockKV) Txn(ctx context.Context) clientv3.Txn {
 	return nil
 }
 
+// TestCreateHealthcheck 验证健康检查遵守 HealthcheckTimeout：默认超时为
+// 2 秒，可由配置覆盖；etcd 响应过慢时应返回 DeadlineExceeded。
 func TestCreateHealthcheck(t *testing.T) {
 	etcdConfig := testserver.NewTestConfig(t)
 	client := testserver.RunEtcd(t, etcdConfig)
@@ -148,6 +152,9 @@ func TestCreateHealthcheck(t *testing.T) {
 	}
 }
 
+// TestCreateReadycheck 验证就绪检查使用 ReadycheckTimeout（而不是
+// HealthcheckTimeout）：即便 healthcheck 超时被调大，就绪检查仍按自己的
+// 超时判定。
 func TestCreateReadycheck(t *testing.T) {
 	etcdConfig := testserver.NewTestConfig(t)
 	client := testserver.RunEtcd(t, etcdConfig)
@@ -200,6 +207,7 @@ func TestCreateReadycheck(t *testing.T) {
 			want:         context.DeadlineExceeded,
 		},
 		{
+			// 最后一个用例专门确认 readycheck 不会被 HealthcheckTimeout 影响。
 			name: "timeouts if response time higher than default timeout with custom healthcheck timeout",
 			cfg: storagebackend.Config{
 				Type:               storagebackend.StorageTypeETCD3,
@@ -249,6 +257,8 @@ func TestCreateReadycheck(t *testing.T) {
 	}
 }
 
+// TestRateLimitHealthcheck 验证健康检查的节流：在 HealthcheckTimeout/2 时间内，
+// 并发调用应复用同一结果，最多只访问一次 etcd；超时窗口过后才允许再次访问。
 func TestRateLimitHealthcheck(t *testing.T) {
 	etcdConfig := testserver.NewTestConfig(t)
 	client := testserver.RunEtcd(t, etcdConfig)
@@ -358,6 +368,8 @@ func TestRateLimitHealthcheck(t *testing.T) {
 
 }
 
+// TestTimeTravelHealthcheck 覆盖“慢响应晚于新请求返回”的竞态：
+// 旧请求的错误结果不得覆盖已缓存的新结果。
 func TestTimeTravelHealthcheck(t *testing.T) {
 	etcdConfig := testserver.NewTestConfig(t)
 	client := testserver.RunEtcd(t, etcdConfig)
@@ -389,6 +401,9 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 				// based on cfg.HealthcheckTimeout / 2, the timeout will race with
 				// the race limiter to server the new request from the cache or allow
 				// it to go through
+				//
+				// 这里用 2/3 的超时时间制造“旧请求仍在途、新请求已开始”的窗口；
+				// 随后断言缓存被新结果更新、旧错误被丢弃。
 				if val == 1 {
 					select {
 					case <-ctx.Done():

@@ -27,7 +27,9 @@ import (
 
 // Install registers the API group and adds types to a scheme
 func Install(scheme *runtime.Scheme) {
+	// 内部版本用于策略求值，外部版本 v1 用于磁盘/网络序列化；两者都需注册才能转换。
 	utilruntime.Must(audit.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))
+	// 只声明 v1 为优先版本，确保写入时始终选择 v1 而非内部版本。
 	utilruntime.Must(scheme.SetVersionPriority(v1.SchemeGroupVersion))
 }

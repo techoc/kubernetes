@@ -35,9 +35,11 @@ import (
 )
 
 // BenchmarkValidate tests that ValidatingWebhook#Validate works as expected
+// 可通过 WEBHOOK_TEST_SERVER_URL 指向独立 webhook 服务，避免把 webhook 自身开销计入基准。
 func BenchmarkValidate(b *testing.B) {
 	testServerURL := os.Getenv("WEBHOOK_TEST_SERVER_URL")
 	if len(testServerURL) == 0 {
+		// 未提供外部服务时退化到进程内 TLS 服务器；此时基准包含 webhook 处理成本，仅供相对比较。
 		b.Log("warning, WEBHOOK_TEST_SERVER_URL not set, starting in-process server, benchmarks will include webhook cost.")
 		b.Log("to run a standalone server, run:")
 		b.Log("go run k8s.io/apiserver/pkg/admission/plugin/webhook/testing/main/main.go")
@@ -54,11 +56,13 @@ func BenchmarkValidate(b *testing.B) {
 		b.Fatalf("this should never happen? %v", err)
 	}
 
+	// 所有子基准共享同一个停止信号；defer close 保证 informer 协程退出。
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
 	for _, tt := range webhooktesting.NewNonMutatingTestCases(serverURL) {
 		// For now, skip failure cases or tests that explicitly skip benchmarking
+		// 失败路径涉及错误构造与重试，不能代表正常校验的吞吐。
 		if !tt.ExpectAllow || tt.SkipBenchmark {
 			continue
 		}
@@ -73,6 +77,7 @@ func BenchmarkValidate(b *testing.B) {
 			ns := "webhook-test"
 			client, informer := webhooktesting.NewFakeValidatingDataSource(ns, tt.Webhooks, stopCh)
 
+			// 注入 fake 依赖，使基准只测量插件逻辑与 HTTP 往返。
 			wh.SetAuthenticationInfoResolverWrapper(webhooktesting.Wrapper(webhooktesting.NewAuthenticationInfoResolver(new(int32))))
 			wh.SetServiceResolver(webhooktesting.NewServiceResolver(*serverURL))
 			wh.SetExternalKubeClientSet(client)
@@ -83,12 +88,14 @@ func BenchmarkValidate(b *testing.B) {
 				return
 			}
 
+			// 等 informer 缓存同步完成，否则首个请求可能因配置尚未加载而失败。
 			informer.Start(stopCh)
 			informer.WaitForCacheSync(stopCh)
 
 			attr := webhooktesting.NewAttribute(ns, nil, tt.IsDryRun)
 
 			b.ResetTimer()
+			// 并行执行，模拟 apiserver 多个请求处理协程同时调用准入插件。
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					wh.Validate(context.TODO(), attr, objectInterfaces)
@@ -99,6 +106,7 @@ func BenchmarkValidate(b *testing.B) {
 }
 
 // TestValidate tests that ValidatingWebhook#Validate works as expected
+// 覆盖允许/拒绝、dry-run、错误信息以及 webhook 拒绝指标和审计注解。
 func TestValidate(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -137,21 +145,25 @@ func TestValidate(t *testing.T) {
 		informer.Start(stopCh)
 		informer.WaitForCacheSync(stopCh)
 
+		// 指标是全局状态，用例声明了期望指标时先清空，避免前序用例污染。
 		if len(tt.ExpectRejectionMetrics) > 0 {
 			admissionmetrics.Metrics.WebhookRejectionGathererForTest().Reset()
 		}
 
 		attr := webhooktesting.NewAttribute(ns, nil, tt.IsDryRun)
 		err = wh.Validate(context.TODO(), attr, objectInterfaces)
+		// 约定：err == nil 等价于允许；拒绝、调用失败均表现为非 nil 错误。
 		if tt.ExpectAllow != (err == nil) {
 			t.Errorf("%s: expected allowed=%v, but got err=%v", tt.Name, tt.ExpectAllow, err)
 		}
 		// ErrWebhookRejected is not an error for our purposes
+		// webhook 主动拒绝属于正常业务结果，仍需校验错误文案是否透传。
 		if tt.ErrorContains != "" {
 			if err == nil || !strings.Contains(err.Error(), tt.ErrorContains) {
 				t.Errorf("%s: expected an error saying %q, but got %v", tt.Name, tt.ErrorContains, err)
 			}
 		}
+		// 所有失败都必须以 StatusError 形式返回，客户端才能拿到规范的状态码与原因。
 		if _, isStatusErr := err.(*errors.StatusError); err != nil && !isStatusErr {
 			t.Errorf("%s: expected a StatusError, got %T", tt.Name, err)
 		}
@@ -164,6 +176,7 @@ func TestValidate(t *testing.T) {
 				t.Errorf("unexpected collecting result:\n%s", err)
 			}
 		}
+		// webhook 返回的审计注解应被合并进属性，供后续审计阶段记录。
 		fakeAttr, ok := attr.(*webhooktesting.FakeAttributes)
 		if !ok {
 			t.Errorf("Unexpected error, failed to convert attr to webhooktesting.FakeAttributes")
@@ -178,6 +191,7 @@ func TestValidate(t *testing.T) {
 }
 
 // TestValidateCachedClient tests that ValidatingWebhook#Validate should cache restClient
+// 同一个 webhook 反复校验时，认证信息解析结果应命中缓存，避免每个请求都访问 kube-apiserver。
 func TestValidateCachedClient(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -203,6 +217,7 @@ func TestValidateCachedClient(t *testing.T) {
 		client, informer := webhooktesting.NewFakeValidatingDataSource(ns, tt.Webhooks, stopCh)
 
 		// override the webhook source. The client cache will stay the same.
+		// 用计数器记录解析器被调用次数：为 0 说明命中了缓存。
 		cacheMisses := new(int32)
 		wh.SetAuthenticationInfoResolverWrapper(webhooktesting.Wrapper(webhooktesting.NewAuthenticationInfoResolver(cacheMisses)))
 		wh.SetExternalKubeClientSet(client)
@@ -221,10 +236,12 @@ func TestValidateCachedClient(t *testing.T) {
 			t.Errorf("%s: expected allowed=%v, but got err=%v", tt.Name, tt.ExpectAllow, err)
 		}
 
+		// 期望缓存未命中却从未调用解析器，说明配置未生效。
 		if tt.ExpectCacheMiss && *cacheMisses == 0 {
 			t.Errorf("%s: expected cache miss, but got no AuthenticationInfoResolver call", tt.Name)
 		}
 
+		// 期望命中缓存却调用了解析器，说明缓存键或失效逻辑有问题。
 		if !tt.ExpectCacheMiss && *cacheMisses > 0 {
 			t.Errorf("%s: expected client to be cached, but got %d AuthenticationInfoResolver calls", tt.Name, *cacheMisses)
 		}
@@ -232,6 +249,7 @@ func TestValidateCachedClient(t *testing.T) {
 }
 
 // TestValidateWebhookDuration tests that ValidatingWebhook#Validate sets webhook duration in context correctly
+// 延迟追踪器只在请求上下文已初始化时写入；未初始化时不应凭空创建。
 func TestValidateWebhookDuration(ts *testing.T) {
 	clk := clocktesting.FakeClock{}
 	testServer := webhooktesting.NewTestServerWithHandler(ts, webhooktesting.ClockSteppingWebhookHandler(ts, &clk))
@@ -250,6 +268,7 @@ func TestValidateWebhookDuration(ts *testing.T) {
 	for _, test := range webhooktesting.NewValidationDurationTestCases(serverURL) {
 		ts.Run(test.Name, func(t *testing.T) {
 			ctx := context.TODO()
+			// 只有 InitContext 的用例才注入延迟追踪器，用于区分“未初始化”与“已初始化但为零”。
 			if test.InitContext {
 				ctx = request.WithLatencyTrackersAndCustomClock(ctx, &clk)
 			}
@@ -278,6 +297,7 @@ func TestValidateWebhookDuration(ts *testing.T) {
 			_ = wh.Validate(ctx, webhooktesting.NewAttribute(ns, nil, test.IsDryRun), objectInterfaces)
 			wd, ok := request.LatencyTrackersFrom(ctx)
 			if !ok {
+				// 上下文未注入追踪器时，插件不应擅自创建。
 				if test.InitContext {
 					t.Errorf("expected webhook duration to be initialized")
 				}
@@ -287,6 +307,7 @@ func TestValidateWebhookDuration(ts *testing.T) {
 				t.Errorf("expected webhook duration to not be initialized")
 				return
 			}
+			// 校验型 webhook 只应更新校验耗时，变更型耗时保持为零。
 			if wd.MutatingWebhookTracker.GetLatency() != 0 {
 				t.Errorf("expected admit duration to be equal to 0 got %q", wd.MutatingWebhookTracker.GetLatency())
 			}
@@ -298,6 +319,7 @@ func TestValidateWebhookDuration(ts *testing.T) {
 }
 
 // TestValidatePanicHandling tests that panics should not escape the dispatcher
+// webhook 调用链中的 panic 必须被转换为 StatusError，否则会打垮整个 apiserver 进程。
 func TestValidatePanicHandling(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -323,6 +345,7 @@ func TestValidatePanicHandling(t *testing.T) {
 		ns := "webhook-test"
 		client, informer := webhooktesting.NewFakeValidatingDataSource(ns, tt.Webhooks, stopCh)
 
+		// 故意使用会 panic 的解析器，验证 dispatcher 的 recover 逻辑。
 		wh.SetAuthenticationInfoResolverWrapper(webhooktesting.Wrapper(webhooktesting.NewPanickingAuthenticationInfoResolver("Start panicking!"))) // see Aladdin, it's awesome
 		wh.SetServiceResolver(webhooktesting.NewServiceResolver(*serverURL))
 		wh.SetExternalKubeClientSet(client)

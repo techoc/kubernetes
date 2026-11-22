@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件验证 CorruptObjectDeleter 的安全边界：只有显式设置
+// IgnoreStoreReadErrorWithClusterBreakingPotential 时才允许删除无法解码的对象，
+// 且必须绕过调用方的准入校验、改用内置的删除校验，避免不可读对象被任意删除。
+
 package registry
 
 import (
@@ -49,6 +53,8 @@ type fakeStorage struct {
 	cachedExistingObject    runtime.Object
 }
 
+// Delete 记录调用参数并按配置模拟存储层行为。
+// 正常路径会把 nil 对象传给 deleteValidation：损坏对象无法解码，校验器必须能处理 nil。
 func (s *fakeStorage) Delete(ctx context.Context, key string, out runtime.Object, preconditions *storage.Preconditions, deleteValidation storage.ValidateObjectFunc, cachedExistingObject runtime.Object, opts storage.DeleteOptions) error {
 	s.deleteCalled = true
 	s.key = key
@@ -65,6 +71,8 @@ func (s *fakeStorage) Delete(ctx context.Context, key string, out runtime.Object
 	return deleteValidation(ctx, nil)
 }
 
+// TestCorruptObjectDeleterDelete 覆盖 IgnoreStoreReadErrorWithClusterBreakingPotential
+// 的取值、存储层返回的错误类型、dry-run 以及后端未调用校验器（模拟 bug）等组合。
 func TestCorruptObjectDeleterDelete(t *testing.T) {
 	for _, test := range []struct {
 		name               string
@@ -76,6 +84,7 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 		wantErr            func(error) bool
 	}{
 		{
+			// 未显式开启“忽略读错误”时必须失败关闭，绝不触碰存储层。
 			name:    "options nil, should return internal error",
 			opts:    nil,
 			wantErr: errors.IsInternalError,
@@ -86,11 +95,14 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 			wantErr: errors.IsInternalError,
 		},
 		{
+			// 显式 false 与未设置等价：都拒绝删除。
 			name:    "option false, should return internal error",
 			opts:    &metav1.DeleteOptions{IgnoreStoreReadErrorWithClusterBreakingPotential: ptr.To(false)},
 			wantErr: errors.IsInternalError,
 		},
 		{
+			// 开启后对象实际可解码：这是正常删除路径，存储层返回的 InvalidObj
+			// 说明对象状态不满足删除条件，应映射为 Conflict 而非内部错误。
 			name:               "option true, object decodable, store returns InvalidObj",
 			opts:               &metav1.DeleteOptions{IgnoreStoreReadErrorWithClusterBreakingPotential: ptr.To(true)},
 			deleteErr:          storage.NewInvalidObjError("/pods/foo", "object is decodable"),
@@ -98,6 +110,7 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 			wantErr:            errors.IsConflict,
 		},
 		{
+			// 核心用例：对象损坏、删除成功，返回 deleted=true。
 			name:               "option true, object not decodable, delete succeeds",
 			opts:               &metav1.DeleteOptions{IgnoreStoreReadErrorWithClusterBreakingPotential: ptr.To(true)},
 			deleteErr:          nil,
@@ -113,6 +126,8 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 			wantErr:            errors.IsNotFound,
 		},
 		{
+			// dry-run 与真实删除走同一校验路径，但不改变存储状态；
+			// 这里验证“允许删除”的判定结果与真实删除一致。
 			name:               "option true, dry run, object not decodable, store honors the validator",
 			opts:               &metav1.DeleteOptions{IgnoreStoreReadErrorWithClusterBreakingPotential: new(true), DryRun: []string{"All"}},
 			expectDeleteCalled: true,
@@ -134,6 +149,8 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 			wantErr:            errors.IsNotFound,
 		},
 		{
+			// 后端未调用校验器就删除（bug 场景）必须被识别为内部错误，
+			// 否则会绕过安全校验静默删除对象。
 			name:               "option true, dry run, store deletes without invoking the validator",
 			opts:               &metav1.DeleteOptions{IgnoreStoreReadErrorWithClusterBreakingPotential: new(true), DryRun: []string{"All"}},
 			bypassValidator:    true,
@@ -182,6 +199,8 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 				t.Errorf("Expected storage Delete called=%t, but got %t", test.expectDeleteCalled, fs.deleteCalled)
 			}
 			if fs.deleteCalled {
+				// 删除调用的参数同样是安全契约的一部分：
+				// 固定 key、必须要求 transform/decode 错误可忽略、禁止前置条件与缓存对象。
 				if want, got := "/pods/foo", fs.key; want != got {
 					t.Errorf("Expected storage Delete to be called with key %q, but got %q", want, got)
 				}

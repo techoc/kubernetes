@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package reconcilers 提供 apiserver 级别的后台协调器，例如把本实例的
+// peer 访问地址以租约形式写入共享存储，供其它 apiserver 在版本偏斜时转发请求。
+//
+// 中文说明：协调器只依赖存储与 client-go，不依赖具体资源实现，便于在 apiserver 内复用。
 package reconcilers
 
 import (
@@ -46,11 +50,13 @@ const (
 	APIServerIdentityLabel = "apiserverIdentity"
 )
 
+// PeerAdvertiseAddress 是本 apiserver 对外声明的地址，用于版本偏斜时被 peer 反代。
 type PeerAdvertiseAddress struct {
 	PeerAdvertiseIP   string
 	PeerAdvertisePort string
 }
 
+// peerEndpointLeases 封装底层 lease 存储；baseKey 下每个 serverId 对应一个 key。
 type peerEndpointLeases struct {
 	storage   storage.Interface
 	destroyFn func()
@@ -58,6 +64,9 @@ type peerEndpointLeases struct {
 	leaseTime time.Duration
 }
 
+// PeerEndpointLeaseReconciler 维护“本 apiserver 的 peer 地址”在共享存储中的租约。
+// 中文说明：用 lease（TTL）而非静态配置，才能让实例崩溃后在有限时间内自动过期，
+// 避免 peer 一直把流量转发到不存在的地址。
 type PeerEndpointLeaseReconciler interface {
 	// GetEndpoint retrieves the endpoint for a given apiserverId
 	GetEndpoint(serverId string) (string, error)
@@ -77,6 +86,9 @@ type peerEndpointLeaseReconciler struct {
 }
 
 // NewPeerEndpointLeaseReconciler creates a new peer endpoint lease reconciler
+//
+// 中文说明：这里只做存储读写，不使用 watch，因此 newFunc/newListFunc 留空；
+// destroyFn 用 sync.Once 包裹，保证 Stop 与 Destroy 重复调用安全。
 func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, baseKey string, leaseTime time.Duration) (PeerEndpointLeaseReconciler, error) {
 	// note that newFunc, newListFunc
 	// can be left blank unless the storage.Watch method is used
@@ -100,6 +112,8 @@ func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, ba
 // which ensures that the peer kube-apiservers are fetching the updated endpoint info for a given apiserver
 // in the case when the peer wants to proxy the request to the given apiserver because it can not serve the
 // request itself due to version mismatch.
+//
+// 中文说明：controller 与 reconciler 分离，便于把“调度节奏/生命周期”和“存储交互”分开测试。
 type PeerEndpointLeaseController struct {
 	reconciler       PeerEndpointLeaseReconciler
 	endpointInterval time.Duration
@@ -143,6 +157,9 @@ func (c *PeerEndpointLeaseController) Start(stopCh <-chan struct{}) {
 }
 
 // RunPeerEndpointReconciler periodically updates the peer endpoint leases
+//
+// 中文说明：先轮询 /readyz，确保本实例真正可服务后再声明自己；
+// 否则 peer 可能把请求转发到一个尚未就绪的实例。
 func (c *PeerEndpointLeaseController) Run(stopCh <-chan struct{}) {
 	// wait until process is ready
 	wait.PollImmediateUntil(100*time.Millisecond, func() (bool, error) {
@@ -159,6 +176,9 @@ func (c *PeerEndpointLeaseController) Run(stopCh <-chan struct{}) {
 }
 
 // Stop cleans up this apiserver's peer endpoint leases.
+//
+// 中文说明：先 StopReconciling 再 RemoveLease，避免删除后又有一个并发
+// Reconcile 把 key 写回来；最后按 2*interval 超时兜底，etcd 不可达时也要能完成关停。
 func (c *PeerEndpointLeaseController) Stop() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -228,6 +248,9 @@ func (c *PeerEndpointLeaseController) UpdatePeerEndpointLeases() error {
 // 1. store the apiserverId as a label
 // 2. store the values passed to --peer-advertise-ip and --peer-advertise-port flags to kube-apiserver as an annotation
 // with value of format <ip:port>
+//
+// 中文说明：key 用 serverId 而非 ip:port，是因为同一 IP 上可能跑多个实例；
+// 代价是不校验 ip/port 的唯一性，冲突时以最后一次写入为准。
 func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, endpointPorts []corev1.EndpointPort) error {
 	// reconcile endpoints only if apiserver was not shutdown
 	if r.stopReconcilingCalled.Load() {
@@ -261,6 +284,7 @@ func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, en
 		// something changed between load and store (not including resource
 		// version), meaning we can't refresh the TTL without actually
 		// changing a field.
+		// 中文说明：递增 Generation 正是为了“制造变化”，否则 TTL 不会刷新。
 		existing.Generation++
 
 		klog.V(6).Infof("Resetting TTL on server IP %q listed in storage to %v", ip, leaseTime)
@@ -269,6 +293,8 @@ func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, en
 }
 
 // ListLeases retrieves a list of the current server IPs from storage
+// 中文说明：Recursive + RV "0"（NotOlderThan）读本地/最新缓存，避免为发现请求
+// 付出线性一致读的成本；租约数据的时效性由 TTL 保证。
 func (r *peerEndpointLeaseReconciler) ListLeases() ([]string, error) {
 	storageOpts := storage.ListOptions{
 		ResourceVersion:      "0",
@@ -291,6 +317,7 @@ func (r *peerEndpointLeaseReconciler) ListLeases() ([]string, error) {
 }
 
 // GetLease retrieves the server IP and port for a specific server id
+// 中文说明：空 serverId 直接报错，避免 key 退化为 baseKey 而匹配到任意租约。
 func (r *peerEndpointLeaseReconciler) GetLease(serverId string) (string, error) {
 	var fullAddr string
 	if serverId == "" {

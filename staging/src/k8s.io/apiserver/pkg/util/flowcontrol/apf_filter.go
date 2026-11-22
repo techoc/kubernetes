@@ -39,6 +39,7 @@ import (
 
 // ConfigConsumerAsFieldManager is how the config consuminng
 // controller appears in an ObjectMeta ManagedFieldsEntry.Manager
+// 固定该名称可让多个 API server 的 server-side apply 修改同一字段时正确合并。
 const ConfigConsumerAsFieldManager = "api-priority-and-fairness-config-consumer-v1"
 
 // Interface defines how the API Priority and Fairness filter interacts with the underlying system.
@@ -91,6 +92,7 @@ func New(
 	flowcontrolClient flowcontrolclient.FlowcontrolV1Interface,
 	serverConcurrencyLimit int,
 ) Interface {
+	// 生产环境使用真实时钟；测试通过 NewTestable 注入假时钟。
 	clk := eventclock.Real{}
 	return NewTestable(TestableConfig{
 		Name:                   "Controller",
@@ -148,10 +150,13 @@ type TestableConfig struct {
 }
 
 // NewTestable is extra flexible to facilitate testing
+// 通过注入时钟、field manager 与队列工厂，可在单测中确定性地复现调度行为。
 func NewTestable(config TestableConfig) Interface {
 	return newTestableController(config)
 }
 
+// Handle 是 APF 的主入口：分类请求、排队、按公平性调度，并在获得席位后执行 execFn。
+// 返回前保证 execFn 已结束，调用方可安全地认为请求处理完成。
 func (cfgCtlr *configController) Handle(ctx context.Context, requestDigest RequestDigest,
 	noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
 	workEstimator func() fcrequest.WorkEstimate,
@@ -159,6 +164,7 @@ func (cfgCtlr *configController) Handle(ctx context.Context, requestDigest Reque
 	execFn func()) {
 	fs, pl, isExempt, req, startWaitingTime := cfgCtlr.startRequest(ctx, requestDigest, noteFn, workEstimator, queueNoteFn)
 	queued := startWaitingTime != time.Time{}
+	// req == nil 表示被拒绝（队列满/超时），此时仍需记录等待时长。
 	if req == nil {
 		if queued {
 			observeQueueWaitTime(ctx, pl.Name, fs.Name, strconv.FormatBool(req != nil), cfgCtlr.clock.Since(startWaitingTime))
@@ -177,6 +183,7 @@ func (cfgCtlr *configController) Handle(ctx context.Context, requestDigest Reque
 		}
 	}()
 	idle = req.Finish(func() {
+		// Finish 只在真正获得执行机会时回调；exempt 请求不经过队列。
 		if queued {
 			observeQueueWaitTime(ctx, pl.Name, fs.Name, strconv.FormatBool(req != nil), cfgCtlr.clock.Since(startWaitingTime))
 		}
@@ -191,12 +198,14 @@ func (cfgCtlr *configController) Handle(ctx context.Context, requestDigest Reque
 		}()
 		execFn()
 	})
+	// 排队但未被执行（例如 ctx 取消）时也记录等待时长，便于诊断拒绝原因。
 	if queued && !executed {
 		observeQueueWaitTime(ctx, pl.Name, fs.Name, strconv.FormatBool(req != nil), cfgCtlr.clock.Since(startWaitingTime))
 	}
 	panicking = false
 }
 
+// observeQueueWaitTime 同时上报 APF 指标与请求级延迟跟踪，供 SLO 监控使用。
 func observeQueueWaitTime(ctx context.Context, priorityLevelName, flowSchemaName, execute string, waitTime time.Duration) {
 	metrics.ObserveWaitingDuration(ctx, priorityLevelName, flowSchemaName, execute, waitTime)
 	endpointsrequest.TrackAPFQueueWaitLatency(ctx, waitTime)

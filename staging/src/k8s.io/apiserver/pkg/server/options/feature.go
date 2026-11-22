@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// FeatureOptions 汇总调试与流控相关的命令行开关，是 server.Config 对应字段的
+// 配置入口。
 type FeatureOptions struct {
 	EnableProfiling           bool
 	DebugSocketPath           string
@@ -35,6 +37,8 @@ type FeatureOptions struct {
 	EnablePriorityAndFairness bool
 }
 
+// NewFeatureOptions 用 server.Config 的默认值初始化，保证命令行默认与
+// 直接构造 Config 的行为一致；优先级与公平性调度默认开启。
 func NewFeatureOptions() *FeatureOptions {
 	defaults := server.NewConfig(serializer.CodecFactory{})
 
@@ -46,6 +50,7 @@ func NewFeatureOptions() *FeatureOptions {
 	}
 }
 
+// AddFlags 注册本组选项的 flag；对 nil 接收者静默返回，便于组合式调用。
 func (o *FeatureOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -61,6 +66,10 @@ func (o *FeatureOptions) AddFlags(fs *pflag.FlagSet) {
 		"If true, replace the max-in-flight handler with an enhanced one that queues and dispatches with priority and fairness")
 }
 
+// ApplyTo 把选项写入 server.Config，并在启用 APF 时构造 FlowControl。
+// APF 依赖 core 客户端与 informer（读取 FlowSchema/PriorityLevelConfiguration），
+// 缺失客户端直接报错；同时总并发额度由上取整的两个 in-flight 上限之和决定，
+// 二者都为 0 时无法推导额度，也视为配置错误。
 func (o *FeatureOptions) ApplyTo(c *server.Config, clientset kubernetes.Interface, informers informers.SharedInformerFactory) error {
 	if o == nil {
 		return nil
@@ -88,6 +97,7 @@ func (o *FeatureOptions) ApplyTo(c *server.Config, clientset kubernetes.Interfac
 	return nil
 }
 
+// Validate 目前无额外校验；保留方法以统一选项生命周期，后续约束加在这里。
 func (o *FeatureOptions) Validate() []error {
 	if o == nil {
 		return nil

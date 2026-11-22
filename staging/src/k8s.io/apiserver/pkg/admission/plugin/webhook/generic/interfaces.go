@@ -24,11 +24,15 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
 )
 
+// VersionedAttributeAccessor 为某个 GVK 提供版本化的准入属性视图。
+// webhook 可以请求与原始请求不同版本的对象，因此需要按 GVK 单独转换。
 type VersionedAttributeAccessor interface {
 	VersionedAttribute(gvk schema.GroupVersionKind) (*admission.VersionedAttributes, error)
 }
 
 // Source can list dynamic webhook plugins.
+// Source 抽象动态 webhook 配置的来源（例如来自 API 的配置对象）。
+// HasSynced 用于判断配置是否已完成初始同步，未同步前调用方应视为无 hook。
 type Source interface {
 	Webhooks() []webhook.WebhookAccessor
 	HasSynced() bool
@@ -36,6 +40,9 @@ type Source interface {
 
 // WebhookInvocation describes how to call a webhook, including the resource and subresource the webhook registered for,
 // and the kind that should be sent to the webhook.
+//
+// 一个 webhook 的匹配规则以 Resource/Subresource 为准，但实际发送的对象
+// 可能是 Kind 指定的版本；两者分离是为了支持 webhook 要求旧版本的场景。
 type WebhookInvocation struct {
 	Webhook     webhook.WebhookAccessor
 	Resource    schema.GroupVersionResource

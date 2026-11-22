@@ -26,6 +26,9 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 同时注册内部版本与 v1 外部版本，并把 v1 设为版本优先级最高者。
+// 该 example 组只用于 apiserver 的测试与示例，不会真正对外提供服务。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(example.AddToScheme(scheme))
 	utilruntime.Must(examplev1.AddToScheme(scheme))

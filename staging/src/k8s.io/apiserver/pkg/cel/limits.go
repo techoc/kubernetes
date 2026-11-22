@@ -20,10 +20,13 @@ import celconfig "k8s.io/apiserver/pkg/apis/cel"
 
 const (
 	// DefaultMaxRequestSizeBytes is the size of the largest request that will be accepted
+	// 与 apiserver 的请求体上限保持一致，CEL 的 cost budget 与实际可接收
+	// 请求规模挂钩，避免出现“请求能进、表达式必然超预算”的死角。
 	DefaultMaxRequestSizeBytes = celconfig.MaxRequestSizeBytes
 
 	// MaxDurationSizeJSON
 	// OpenAPI duration strings follow RFC 3339, section 5.6 - see the comment on maxDatetimeSizeJSON
+	// duration 的 JSON 表示上限含两侧引号，用于 cost 估算时按最坏长度计。
 	MaxDurationSizeJSON = 32
 	// MaxDatetimeSizeJSON
 	// OpenAPI datetime strings follow RFC 3339, section 5.6, and the longest possible
@@ -49,6 +52,7 @@ const (
 	MinNumberSize = 1
 
 	// MaxFormatSize is the maximum size we allow for format strings
+	// 限制 format 参数长度，防止通过超长正则等格式串放大编译/匹配成本。
 	MaxFormatSize          = 64
 	MaxNameFormatRegexSize = 128
 )

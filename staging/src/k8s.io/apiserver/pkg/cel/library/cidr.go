@@ -100,26 +100,37 @@ import (
 //	cidr('192.168.0.1/24') == cidr('192.168.0.1/24').masked() // returns false, CIDR was not in canonical format
 //	cidr('192.168.0.0/16').prefixLength() // returns 16
 //	cidr('::1/128').prefixLength() // returns 128
+//
+// CIDR 返回一个可装入 CEL 环境的库选项。解析刻意比 net.ParseCIDR 更严格：
+// 拒绝 IPv4 映射的 IPv6 地址与掩码后非零的网络地址，保证 cidr() 的结果
+// 是规范化的网络地址，避免“同一子网多种写法”导致策略比较失效。
 func CIDR() cel.EnvOption {
 	return cel.Lib(cidrsLib)
 }
 
+// cidrsLib 是无状态的库单例；所有重载都通过函数表按需注册。
 var cidrsLib = &cidrs{}
 
+// cidrs 实现 cel.Library 接口，仅用于挂载 CIDR/IP 类型与函数声明。
 type cidrs struct{}
 
+// LibraryName 用于 CEL 环境的库标识与调试；改名会被视为不同库。
 func (*cidrs) LibraryName() string {
 	return "kubernetes.net.cidr"
 }
 
+// declarations 返回库内所有函数重载，供 CompileOptions 批量注册。
 func (*cidrs) declarations() map[string][]cel.FunctionOpt {
 	return cidrLibraryDecls
 }
 
+// Types 声明库引入的抽象类型，使 CEL 类型检查认识 CIDR 与 IP。
 func (*cidrs) Types() []*cel.Type {
 	return []*cel.Type{apiservercel.CIDRType, apiservercel.IPType}
 }
 
+// cidrLibraryDecls 把 CEL 函数名映射到重载列表。string 重载放在前面，
+// 便于调用方直接用字符串字面量而无需先构造 CIDR/IP。
 var cidrLibraryDecls = map[string][]cel.FunctionOpt{
 	"cidr": {
 		cel.Overload("string_to_cidr", []*cel.Type{cel.StringType}, apiservercel.CIDRType,
@@ -159,6 +170,7 @@ var cidrLibraryDecls = map[string][]cel.FunctionOpt{
 	},
 }
 
+// CompileOptions 注册类型与全部函数重载；每个环境只需调用一次。
 func (*cidrs) CompileOptions() []cel.EnvOption {
 	options := []cel.EnvOption{cel.Types(apiservercel.CIDRType)}
 	for name, overloads := range cidrLibraryDecls {
@@ -167,10 +179,13 @@ func (*cidrs) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 该库不需要运行期钩子（无状态函数），返回空列表。
 func (*cidrs) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// stringToCIDR 实现 cidr(string)：解析失败以 CEL 错误返回，使表达式在该点
+// 短路/按策略的失败处理，而不是得到静默的空值。
 func stringToCIDR(arg ref.Val) ref.Val {
 	s, ok := arg.Value().(string)
 	if !ok {
@@ -187,6 +202,7 @@ func stringToCIDR(arg ref.Val) ref.Val {
 	}
 }
 
+// cidrToString 实现 CIDR 的 string() 转换，输出带掩码的规范字符串。
 func cidrToString(arg ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -196,14 +212,18 @@ func cidrToString(arg ref.Val) ref.Val {
 	return types.String(cidr.Prefix.String())
 }
 
+// cidrContainsIPString 是 containsIP(string) 重载：先解析 IP 再做包含判断。
 func cidrContainsIPString(arg ref.Val, other ref.Val) ref.Val {
 	return cidrContainsIP(arg, stringToIP(other))
 }
 
+// cidrContainsCIDRString 是 containsCIDR(string) 重载：先解析子网再判断包含。
 func cidrContainsCIDRString(arg ref.Val, other ref.Val) ref.Val {
 	return cidrContainsCIDR(arg, stringToCIDR(other))
 }
 
+// cidrContainsIP 判断 CIDR 是否包含某个 IP。参数顺序错误时返回重载错误，
+// 避免把用户手误当成 false。
 func cidrContainsIP(arg ref.Val, other ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -218,6 +238,8 @@ func cidrContainsIP(arg ref.Val, other ref.Val) ref.Val {
 	return types.Bool(cidr.Contains(ip.Addr))
 }
 
+// cidrContainsCIDR 判断包含关系：既要网段重叠，还要被包含方的前缀长度不短于
+// 容器（即容器范围更宽），否则 CIDR 只覆盖对方的一部分。
 func cidrContainsCIDR(arg ref.Val, other ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -232,6 +254,7 @@ func cidrContainsCIDR(arg ref.Val, other ref.Val) ref.Val {
 	return types.Bool(cidr.Overlaps(containsCIDR.Prefix) && cidr.Prefix.Bits() <= containsCIDR.Prefix.Bits())
 }
 
+// prefixLength 返回掩码位数（0-32/128），供策略做数值比较。
 func prefixLength(arg ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -241,6 +264,7 @@ func prefixLength(arg ref.Val) ref.Val {
 	return types.Int(cidr.Prefix.Bits())
 }
 
+// isCIDR 只做校验并返回布尔值，不产生错误；用于策略中的条件判断。
 func isCIDR(arg ref.Val) ref.Val {
 	s, ok := arg.Value().(string)
 	if !ok {
@@ -251,6 +275,7 @@ func isCIDR(arg ref.Val) ref.Val {
 	return types.Bool(err == nil)
 }
 
+// cidrToIP 取子网的网络地址作为 IP 返回；注意不是任意主机地址。
 func cidrToIP(arg ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -262,6 +287,7 @@ func cidrToIP(arg ref.Val) ref.Val {
 	}
 }
 
+// masked 返回规范化（清除主机位）后的 CIDR，可用于把用户输入统一成网络地址。
 func masked(arg ref.Val) ref.Val {
 	cidr, ok := arg.(apiservercel.CIDR)
 	if !ok {
@@ -278,6 +304,8 @@ func masked(arg ref.Val) ref.Val {
 // We use this function to parse CIDR notation in the CEL library
 // so that we can share the common logic of rejecting strings
 // that IPv4-mapped IPv6 addresses or contain non-zero bits after the mask.
+// netip.ParsePrefix 本身已拒绝掩码后仍有主机位的写法；这里额外拒绝
+// IPv4-mapped IPv6，避免同一地址族出现两种表示。
 func parseCIDR(raw string) (netip.Prefix, error) {
 	net, err := netip.ParsePrefix(raw)
 	if err != nil {

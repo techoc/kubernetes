@@ -31,6 +31,9 @@ import (
 )
 
 // AdmissionResponse contains the fields extracted from an AdmissionReview response
+//
+// 中文说明：只保留准入逻辑关心的字段，隐藏 AdmissionReview 的版本差异；
+// 这样调用方无需区分 v1/v1beta1，也便于日后新增版本。
 type AdmissionResponse struct {
 	AuditAnnotations map[string]string
 	Allowed          bool
@@ -43,6 +46,12 @@ type AdmissionResponse struct {
 // VerifyAdmissionResponse checks the validity of the provided admission review object, and returns the
 // audit annotations, whether the response allowed the request, any provided patch/patchType/status,
 // or an error if the provided admission review was not valid.
+//
+// 中文说明：这是信任外部 webhook 输出的第一道校验。UID 必须与请求一致，
+// 否则响应可能属于另一个并发请求（重放/串扰）；GVK 必须匹配，防止服务端返回错误版本。
+// 对 mutating webhook，patch 与 patchType 必须成对出现——只给 patch 无法安全应用；
+// 对 validating webhook，出现 patch 一律拒绝，因为它无权修改对象。
+// v1beta1 分支不校验 GVK/UID：该版本协议本身未要求，保持向后兼容。
 func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object) (*AdmissionResponse, error) {
 	switch r := review.(type) {
 	case *admissionv1.AdmissionReview:
@@ -75,6 +84,7 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 			patch = r.Response.Patch
 			if r.Response.PatchType != nil {
 				patchType = *r.Response.PatchType
+				// 空字符串虽非 nil，但同样无法应用，必须拒绝。
 				if len(patchType) == 0 {
 					return nil, fmt.Errorf("webhook returned invalid response.patchType of %q", patchType)
 				}
@@ -111,6 +121,9 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 			patch = r.Response.Patch
 			if len(r.Response.Patch) > 0 {
 				// patch type was not verified in v1beta1 admissionreview handling. pin to only supported version if a patch is provided.
+				//
+				// 中文说明：v1beta1 的 PatchType 语义模糊，这里统一假定为 JSONPatch，
+				// 这是该版本事实上的唯一用法，避免引入未经验证的补丁类型。
 				patchType = admissionv1.PatchTypeJSONPatch
 			}
 		}
@@ -131,6 +144,10 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 
 // CreateAdmissionObjects returns the unique request uid, the AdmissionReview object to send the webhook and to decode the response into,
 // or an error if the webhook does not support receiving any of the admission review versions we know to send
+//
+// 中文说明：按 webhook 声明的版本偏好顺序选择第一个受支持的版本；
+// request 与 response 必须是同一版本的对象，否则解码会失败。
+// UID 在每次调用时新生成，用于把并发请求的响应严格对应起来。
 func CreateAdmissionObjects(versionedAttributes *admission.VersionedAttributes, invocation *generic.WebhookInvocation) (uid types.UID, request, response runtime.Object, err error) {
 	for _, version := range invocation.Webhook.GetAdmissionReviewVersions() {
 		switch version {
@@ -152,6 +169,11 @@ func CreateAdmissionObjects(versionedAttributes *admission.VersionedAttributes, 
 }
 
 // CreateV1AdmissionReview creates an AdmissionReview for the provided admission.Attributes
+//
+// 中文说明：Kind/Resource 取自 webhook 配置的匹配目标，RequestKind/RequestResource
+// 取自实际请求——两者可能不同（例如通过转换版本访问），webhook 需要能区分，
+// 否则无法正确判断自己是否应处理该请求。
+// UserInfo 的 Extra 需逐项复制为 authenticationv1.ExtraValue，直接赋值类型不兼容。
 func CreateV1AdmissionReview(uid types.UID, versionedAttributes *admission.VersionedAttributes, invocation *generic.WebhookInvocation) *admissionv1.AdmissionReview {
 	attr := versionedAttributes.Attributes
 	gvk := invocation.Kind
@@ -218,6 +240,9 @@ func CreateV1AdmissionReview(uid types.UID, versionedAttributes *admission.Versi
 }
 
 // CreateV1beta1AdmissionReview creates an AdmissionReview for the provided admission.Attributes
+//
+// 中文说明：字段布局与 v1 完全一致，仅类型不同；保留独立实现是为了让 v1beta1
+// 的兼容行为（如不校验 GVK）可以单独演进，而不影响 v1 路径。
 func CreateV1beta1AdmissionReview(uid types.UID, versionedAttributes *admission.VersionedAttributes, invocation *generic.WebhookInvocation) *admissionv1beta1.AdmissionReview {
 	attr := versionedAttributes.Attributes
 	gvk := invocation.Kind

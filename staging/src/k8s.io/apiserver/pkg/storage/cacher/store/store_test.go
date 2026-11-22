@@ -27,6 +27,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TestStoreSingleKey 对 cache.Indexer 与 btree 两种实现运行同一组基本操作，
+// 确保二者在 Add/Update/Replace/Delete 语义上完全一致（btree 是性能优化替代品）。
 func TestStoreSingleKey(t *testing.T) {
 	t.Run("cache.Indexer", func(t *testing.T) {
 		store := NewIndexer(testStoreIndexers())
@@ -38,6 +40,8 @@ func TestStoreSingleKey(t *testing.T) {
 	})
 }
 
+// testStoreSingleKey 覆盖单 key 的生命周期：新增、更新（含相同值不同 RV）、
+// Replace 全量替换，以及重复删除（幂等，不返回 NotFound）。
 func testStoreSingleKey(t *testing.T, store Indexer) {
 	assertStoreEmpty(t, store, "foo")
 
@@ -59,6 +63,8 @@ func testStoreSingleKey(t *testing.T, store Indexer) {
 	require.NoError(t, store.Delete(testStorageElement("foo", "", 0)))
 }
 
+// TestStoreIndexerSingleKey 验证二级索引在对象更新时会被正确维护：
+// 值变化后旧索引项必须消失、新索引项必须出现，Replace/Delete 后索引同样被清理。
 func TestStoreIndexerSingleKey(t *testing.T) {
 	t.Run("cache.Indexer", func(t *testing.T) {
 		store := NewIndexer(testStoreIndexers())
@@ -70,6 +76,7 @@ func TestStoreIndexerSingleKey(t *testing.T) {
 	})
 }
 
+// testStoreIndexerSingleKey 通过 by_val 索引观察对象在 store 中的可见性变化。
 func testStoreIndexerSingleKey(t *testing.T, store Indexer) {
 	items, err := store.ByIndex("by_val", "bar")
 	require.NoError(t, err)
@@ -122,6 +129,8 @@ func testStoreIndexerSingleKey(t *testing.T, store Indexer) {
 	require.NoError(t, store.Delete(testStorageElement("foo", "", 0)))
 }
 
+// assertStoreEmpty 从 Get/GetByKey/List 三个入口确认 store 为空，
+// 避免单一入口的缓存掩盖不一致。
 func assertStoreEmpty(t *testing.T, store Indexer, nonExistingKey string) {
 	item, ok, err := store.Get(testStorageElement(nonExistingKey, "", 0))
 	require.NoError(t, err)
@@ -137,6 +146,7 @@ func assertStoreEmpty(t *testing.T, store Indexer, nonExistingKey string) {
 	assert.Empty(t, items)
 }
 
+// assertStoreSingleKey 断言 store 中恰好只有指定 key，且值/资源版本符合预期。
 func assertStoreSingleKey(t *testing.T, store Indexer, expectKey, expectValue string, expectRV int) {
 	item, ok, err := store.Get(testStorageElement(expectKey, "", expectRV))
 	require.NoError(t, err)
@@ -152,24 +162,31 @@ func assertStoreSingleKey(t *testing.T, store Indexer, expectKey, expectValue st
 	assert.Equal(t, []interface{}{testStorageElement(expectKey, expectValue, expectRV)}, items)
 }
 
+// testStorageElement 构造带 key 的测试元素；rv 用于验证更新后存储的是新版本。
 func testStorageElement(key, value string, rv int) *Element {
 	return &Element{Key: key, Object: fakeObj{value: value, rv: rv}}
 }
 
+// fakeObj 是最小的 runtime.Object 替身，只需携带索引值与 RV。
 type fakeObj struct {
 	value string
 	rv    int
 }
 
+// GetObjectKind 返回 nil：测试不依赖 GVK。
 func (f fakeObj) GetObjectKind() schema.ObjectKind { return nil }
-func (f fakeObj) DeepCopyObject() runtime.Object   { return nil }
+
+// DeepCopyObject 返回 nil：store 测试不做深拷贝。
+func (f fakeObj) DeepCopyObject() runtime.Object { return nil }
 
 var _ runtime.Object = (*fakeObj)(nil)
 
+// testStoreIndexFunc 以对象的值作为唯一索引键。
 func testStoreIndexFunc(obj interface{}) ([]string, error) {
 	return []string{obj.(fakeObj).value}, nil
 }
 
+// testStoreIndexers 构造名为 by_val 的索引集合。
 func testStoreIndexers() *cache.Indexers {
 	indexers := cache.Indexers{}
 	indexers["by_val"] = testStoreIndexFunc

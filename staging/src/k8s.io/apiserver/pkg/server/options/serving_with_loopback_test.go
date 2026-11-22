@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件测试 loopback（自调用）服务证书的自动生成与健康检查：
+// 未配置主证书时应自动生成自签名证书，并在证书过期后通过 livez/healthz 暴露问题。
+
 package options
 
 import (
@@ -31,6 +34,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestEmptyMainCert 验证未提供主证书时，WithLoopback 仍能生成 loopback 证书、
+// 产生可用于自调用的 client config，并把证书挂到 SNICerts 上。
 func TestEmptyMainCert(t *testing.T) {
 	secureServingInfo := &server.SecureServingInfo{}
 	var loopbackClientConfig *rest.Config
@@ -57,6 +62,8 @@ func TestEmptyMainCert(t *testing.T) {
 	}
 }
 
+// TestApplyToConfig 验证 loopback 证书健康检查的注册与过期行为：
+// 未过期时检查通过，超过 maxAge 后返回 LoopbackCertificateExpiredError。
 func TestApplyToConfig(t *testing.T) {
 	type testcase struct {
 		name    string
@@ -105,6 +112,7 @@ func TestApplyToConfig(t *testing.T) {
 				"/healthz": cfg.HealthzChecks,
 			}
 
+			// 两个端点都必须挂上同一个证书检查，否则运维无法从任一标准端点发现问题。
 			for endpoint, checks := range checkSet {
 				var foundChecker healthz.HealthChecker
 

@@ -31,14 +31,22 @@ import (
 // information about the request with request.RequestInfoFrom(ctx) and
 // to return different responses depending on the APIVersion in the
 // request.
+//
+// 该接口把 create 与 update 的默认化/校验策略合并，便于同时支持两者的资源
+// （如大多数 CRD）只实现一套逻辑；同时实现 RESTUpdateStrategy 也意味着
+// 需要单独处理 status 子资源等更新路径。
 type RESTCreateUpdateStrategy interface {
 	RESTCreateStrategy
 	// AllowCreateOnUpdate returns true if the object can be created by a PUT.
+	// 返回 true 时，PUT 到不存在的对象会走 create 路径（upsert 语义）。
 	AllowCreateOnUpdate(ctx context.Context) bool
 	// PrepareForUpdate is invoked on update before validation to normalize
 	// the object.  For example: remove fields that are not to be persisted,
 	// sort order-insensitive list fields, etc.  This should not remove fields
 	// whose presence would be considered a validation error.
+	//
+	// 调用顺序保证：先 PrepareForUpdate 再 ValidateUpdate，因此校验看到的是
+	// 归一化后的对象；若在校验中做归一化会导致同一请求的校验结果不一致。
 	PrepareForUpdate(ctx context.Context, obj, old runtime.Object)
 	// ValidateUpdate is invoked after default fields in the object have been
 	// filled in before the object is persisted.  This method should not mutate
@@ -63,10 +71,16 @@ type RESTCreateUpdateStrategy interface {
 	//
 	// Warnings should not be returned for fields which cannot be resolved by the caller.
 	// For example, do not warn about spec fields in a status update.
+	//
+	// 警告在 ValidateUpdate 通过之后、Canonicalize 之前产生，因此可以基于
+	// 已默认化的字段给出提示；且不得修改对象。
 	WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string
 	// AllowUnconditionalUpdate returns true if the object can be updated
 	// unconditionally (irrespective of the latest resource version), when
 	// there is no resource version specified in the object.
+	//
+	// 这是危险的兼容性开关：关闭时，缺少 resourceVersion 的更新必须报冲突，
+	// 以避免并发写互相覆盖。
 	AllowUnconditionalUpdate(ctx context.Context) bool
 }
 

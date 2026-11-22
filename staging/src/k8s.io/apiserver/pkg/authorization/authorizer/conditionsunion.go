@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// namedConditionsAwareDecision 把条件授权器的名字与其判定绑定，
+// 名字用于错误信息去重、以及追踪最终结论由哪个授权器贡献。
 type namedConditionsAwareDecision struct {
 	conditionalAuthorizerName string
 	d                         ConditionsAwareDecision
@@ -33,6 +35,9 @@ type namedConditionsAwareDecision struct {
 
 // ConditionsAwareDecisionUnion is a builder struct for a Union-typed ConditionsAwareDecision.
 // ConditionsAwareDecisionUnion is not thread-safe.
+//
+// 该 builder 缓存了两个派生值（是否含无条件 Allow/Deny、可能判定并集），
+// 以便在大量子判定时避免重复遍历。
 type ConditionsAwareDecisionUnion struct {
 	// Note: Remember to register any fields added here to the deepcopy in ToDecision
 	inner []namedConditionsAwareDecision
@@ -59,6 +64,8 @@ func (unionMap *ConditionsAwareDecisionUnion) Add(conditionalAuthorizerName stri
 		return // all items after the first concrete Allow or Deny aren't anyways used in evaluation, so they are not added to inner
 	}
 
+	// 名字为空或重复都记录错误而不立即返回：让 Add 收集完全部问题，
+	// 最终由 ToDecision 以 fail-closed 方式一次性暴露。
 	if len(conditionalAuthorizerName) == 0 {
 		unionMap.errs = append(unionMap.errs, fmt.Errorf("conditionalAuthorizerName must be non-empty"))
 	}
@@ -79,6 +86,7 @@ func (unionMap *ConditionsAwareDecisionUnion) Add(conditionalAuthorizerName stri
 	unionMap.subDecisionsPossibleDecisions.Insert(d.PossibleDecisions().UnsortedList()...)
 }
 
+// hasConditionalAuthorizerName 判断名字是否已添加过，用于检测重复。
 func (unionMap *ConditionsAwareDecisionUnion) hasConditionalAuthorizerName(conditionalAuthorizerName string) bool {
 	return slices.ContainsFunc(unionMap.inner, func(nd namedConditionsAwareDecision) bool {
 		return nd.conditionalAuthorizerName == conditionalAuthorizerName
@@ -92,6 +100,7 @@ func (unionMap *ConditionsAwareDecisionUnion) hasConditionalAuthorizerName(condi
 // as a conservative approximation. Otherwise, NoOpinion is returned.
 // FailureDecision is not thread-safe.
 func (unionMap *ConditionsAwareDecisionUnion) FailureDecision() Decision {
+	// 只要存在 Deny 的可能就返回 Deny；安全边界上宁可误拒不可误放。
 	if unionMap.PossibleDecisions().Has(DecisionDeny) {
 		return DecisionDeny
 	}
@@ -137,6 +146,7 @@ func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecisi
 	}
 
 	// If we only have one possible outcome, consolidate to an unconditional decision without evaluation.
+	// 单一可能结果意味着条件表达式无关紧要，可以省去运行期求值。
 	if possibleDecisions := unionMap.PossibleDecisions(); possibleDecisions.Len() == 1 {
 		onlyPossibleDecision := possibleDecisions.UnsortedList()[0]
 		// Collect the certainly deciding decisions' reasons and errors. When the only possible
@@ -169,6 +179,7 @@ func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecisi
 		}
 	}
 
+	// 多个可能结果时保留 Union 结构，交由运行期对条件求值。
 	return ConditionsAwareDecision{
 		decisionType: conditionsAwareDecisionTypeUnion,
 		union: ConditionsAwareDecisionUnion{
@@ -180,6 +191,8 @@ func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecisi
 	}
 }
 
+// collectReasonsAndErrors 递归收集与目标判定同类型的叶子节点的 reason/error，
+// 并在 reason 前加上授权器名字路径，便于定位是哪一层给出的结论。
 func collectReasonsAndErrors(authorizerNamePrefix []string, condAwareDecision ConditionsAwareDecision, unconditionalDecisionToCollect Decision) (aggregateReasons []string, aggregateErrors []error) {
 	if (unconditionalDecisionToCollect == DecisionAllow && condAwareDecision.IsAllow()) ||
 		(unconditionalDecisionToCollect == DecisionNoOpinion && condAwareDecision.IsNoOpinion()) ||

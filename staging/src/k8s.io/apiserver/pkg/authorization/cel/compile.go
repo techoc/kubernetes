@@ -30,6 +30,7 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 )
 
+// CEL 表达式中暴露给用户的变量名。这些名字属于 API 契约，改名会破坏现有 authorizer 配置。
 const (
 	subjectAccessReviewRequestVarName = "request"
 
@@ -59,6 +60,7 @@ type Compiler interface {
 	CompileCELExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error)
 }
 
+// compiler 持有已按兼容版本扩展过的 CEL 环境集合。
 type compiler struct {
 	envSet *environment.EnvSet
 }
@@ -70,13 +72,18 @@ func NewDefaultCompiler() Compiler {
 }
 
 // NewCompiler returns a new Compiler.
+//
+// 通过 mustBuildEnv 注入 request 变量声明；构建失败属于编程错误，直接 panic。
 func NewCompiler(env *environment.EnvSet) Compiler {
 	return &compiler{
 		envSet: mustBuildEnv(env),
 	}
 }
 
+// CompileCELExpression 编译单个条件表达式并校验返回类型。
+// 同时静态扫描 AST 判断是否引用了 fieldSelector/labelSelector，供求值时跳过无用转换。
 func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error) {
+	// 统一构造错误结果，始终带回 accessor 以便调用方定位是哪个表达式出错。
 	resultError := func(errorString string, errType apiservercel.ErrorType) (CompilationResult, error) {
 		err := &apiservercel.Error{
 			Type:   errType,
@@ -102,6 +109,7 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor) (C
 			break
 		}
 	}
+	// 返回类型不符属于用户配置错误（Invalid），而非内部错误。
 	if !found {
 		var reason string
 		if len(returnTypes) == 1 {
@@ -168,6 +176,8 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor) (C
 	}, nil
 }
 
+// mustBuildEnv 在基础环境上扩展出 request 变量及其类型声明。
+// 构建失败说明声明有误，属于启动期不可恢复错误，故 panic。
 func mustBuildEnv(baseEnv *environment.EnvSet) *environment.EnvSet {
 	field := func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField {
 		return apiservercel.NewDeclField(name, declType, required, nil, nil)
@@ -232,6 +242,7 @@ func buildResourceAttributesType(field func(name string, declType *apiservercel.
 	return apiservercel.NewObjectType("kubernetes.ResourceAttributes", fields(resourceAttributesFields...))
 }
 
+// buildFieldSelectorType 声明 fieldSelector 的 CEL 类型：rawSelector 与结构化 requirements 二选一。
 func buildFieldSelectorType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	return apiservercel.NewObjectType("kubernetes.FieldSelectorAttributes", fields(
 		field("rawSelector", apiservercel.StringType, false),
@@ -239,6 +250,7 @@ func buildFieldSelectorType(field func(name string, declType *apiservercel.DeclT
 	))
 }
 
+// buildLabelSelectorType 声明 labelSelector 的 CEL 类型，结构与 fieldSelector 相同。
 func buildLabelSelectorType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	return apiservercel.NewObjectType("kubernetes.LabelSelectorAttributes", fields(
 		field("rawSelector", apiservercel.StringType, false),
@@ -246,6 +258,7 @@ func buildLabelSelectorType(field func(name string, declType *apiservercel.DeclT
 	))
 }
 
+// buildSelectorRequirementType 声明选择器条目的 CEL 类型（key/operator/values）。
 func buildSelectorRequirementType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	return apiservercel.NewObjectType("kubernetes.SelectorRequirement", fields(
 		field("key", apiservercel.StringType, false),
@@ -263,8 +276,15 @@ func buildNonResourceAttributesType(field func(name string, declType *apiserverc
 	))
 }
 
+// convertObjectToUnstructured 把 SubjectAccessReviewSpec 转成 CEL 可直接访问的 map。
+//
+// 必须与上面的 DeclType 声明逐字段保持一致：声明里有而这里缺失的字段在求值时会报“no such key”，
+// 反之则会暴露未声明的数据。includeFieldSelector/includeLabelSelector 为 false 时跳过
+// 相应选择器的转换，这是一条纯粹的性能优化路径。
 func convertObjectToUnstructured(obj *authorizationv1.SubjectAccessReviewSpec, includeFieldSelector, includeLabelSelector bool) map[string]interface{} {
 	// Construct version containing every SubjectAccessReview user and string attribute field, even omitempty ones, for evaluation by CEL
+	//
+	// extra 为 nil 时替换为空 map，保证表达式里 .extra 始终可访问而不会因 null 报错。
 	extra := obj.Extra
 	if extra == nil {
 		extra = map[string]authorizationv1.ExtraValue{}
@@ -287,6 +307,7 @@ func convertObjectToUnstructured(obj *authorizationv1.SubjectAccessReviewSpec, i
 		}
 
 		if includeFieldSelector && obj.ResourceAttributes.FieldSelector != nil {
+			// 结构化 requirements 与原始 rawSelector 互斥，后写入者生效（与 API 语义一致）。
 			if len(obj.ResourceAttributes.FieldSelector.Requirements) > 0 {
 				requirements := make([]map[string]interface{}, 0, len(obj.ResourceAttributes.FieldSelector.Requirements))
 				for _, r := range obj.ResourceAttributes.FieldSelector.Requirements {

@@ -56,6 +56,7 @@ type watchJSON struct {
 }
 
 // roundTripOrDie round trips an object to get defaults set.
+// 往返一次可应用默认值并规范化字段，使测试中的期望对象与实际编码输出一致。
 func roundTripOrDie(codec runtime.Codec, object runtime.Object) runtime.Object {
 	data, err := runtime.Encode(codec, object)
 	if err != nil {
@@ -68,6 +69,7 @@ func roundTripOrDie(codec runtime.Codec, object runtime.Object) runtime.Object {
 	return obj
 }
 
+// watchTestTable 是 websocket 测试使用的事件序列（新增/修改/删除）。
 var watchTestTable = []struct {
 	t   watch.EventType
 	obj runtime.Object
@@ -77,6 +79,8 @@ var watchTestTable = []struct {
 	{watch.Deleted, &endpointstesting.Simple{ObjectMeta: metav1.ObjectMeta{Name: "bar"}}},
 }
 
+// podWatchTestTable 使用 Pod 覆盖自定义类型注册后的编码路径；
+// 延迟构造是因为必须在所有类型注册完成后才能 round-trip。
 func podWatchTestTable() []struct {
 	t   watch.EventType
 	obj runtime.Object
@@ -92,6 +96,8 @@ func podWatchTestTable() []struct {
 	}
 }
 
+// TestWatchWebsocket 验证 websocket 协议下事件按序透传、类型与内容一致，
+// 并在 watcher 停止后连接进入不可再读状态。
 func TestWatchWebsocket(t *testing.T) {
 	simpleStorage := &SimpleRESTStorage{}
 	_ = rest.Watcher(simpleStorage) // Give compile error if this doesn't work.
@@ -143,6 +149,8 @@ func TestWatchWebsocket(t *testing.T) {
 	}
 }
 
+// TestWatchWebsocketClientClose 验证客户端关闭 websocket 后服务端能感知
+// 并关闭 watcher；中间插入的非 watch 数据应被忽略而不破坏事件流。
 func TestWatchWebsocketClientClose(t *testing.T) {
 	simpleStorage := &SimpleRESTStorage{}
 	_ = rest.Watcher(simpleStorage) // Give compile error if this doesn't work.
@@ -219,6 +227,8 @@ func TestWatchWebsocketClientClose(t *testing.T) {
 	require.ErrorContains(t, err, "use of closed network connection")
 }
 
+// TestWatchClientClose 验证流式 HTTP watch 中，客户端关闭响应体后
+// 服务端 watcher 被取消，避免后台 goroutine 泄漏。
 func TestWatchClientClose(t *testing.T) {
 	ctx := t.Context()
 	simpleStorage := &SimpleRESTStorage{}
@@ -268,6 +278,9 @@ func TestWatchClientClose(t *testing.T) {
 	require.ErrorContains(t, err, "http: read on closed response body")
 }
 
+// TestWatchRead 是核心的编码兼容性测试：对 HTTP 自定界与 websocket 两种
+// 传输，逐一验证 JSON、protobuf 及其 legacy "stream=watch" 形式的
+// Content-Type 协商与帧解码结果。
 func TestWatchRead(t *testing.T) {
 	simpleStorage := &SimpleRESTStorage{}
 	_ = rest.Watcher(simpleStorage) // Give compile error if this doesn't work.
@@ -431,6 +444,8 @@ func TestWatchRead(t *testing.T) {
 	}
 }
 
+// TestWatchHTTPAccept 验证不支持的 Accept 类型返回 406，而不是回退到
+// 某种隐式格式导致客户端误解响应。
 func TestWatchHTTPAccept(t *testing.T) {
 	ctx := t.Context()
 	simpleStorage := &SimpleRESTStorage{}
@@ -460,6 +475,8 @@ func TestWatchHTTPAccept(t *testing.T) {
 	}
 }
 
+// TestWatchParamParsing 验证命名空间、resourceVersion 与选择器参数从
+// URL 到 storage 请求的传递，覆盖根路径与命名空间路径两种形式。
 func TestWatchParamParsing(t *testing.T) {
 	simpleStorage := &SimpleRESTStorage{}
 	handler := handle(map[string]rest.Storage{
@@ -576,6 +593,8 @@ func TestWatchParamParsing(t *testing.T) {
 	}
 }
 
+// TestWatchProtocolSelection 验证根据 Connection/Upgrade 头识别 websocket；
+// 识别为 websocket 但缺少 Sec-Websocket-* 头时应返回 400，而非 200。
 func TestWatchProtocolSelection(t *testing.T) {
 	simpleStorage := &SimpleRESTStorage{}
 	handler := handle(map[string]rest.Storage{"simples": simpleStorage})
@@ -630,6 +649,7 @@ func TestWatchProtocolSelection(t *testing.T) {
 }
 
 // BenchmarkWatchHTTP measures the cost of serving a watch.
+// 使用 ASCII 名称作为基线，排除 UTF-8 转义带来的额外开销。
 func BenchmarkWatchHTTP(b *testing.B) {
 	items := benchmarkItems(b)
 
@@ -643,6 +663,8 @@ func BenchmarkWatchHTTP(b *testing.B) {
 	runWatchHTTPBenchmark(b, toObjectSlice(items), "")
 }
 
+// BenchmarkWatchHTTP_UTF8 与 ASCII 基线对照，量化 self-link 中
+// UTF-8 转义的成本。
 func BenchmarkWatchHTTP_UTF8(b *testing.B) {
 	items := benchmarkItems(b)
 
@@ -656,6 +678,7 @@ func BenchmarkWatchHTTP_UTF8(b *testing.B) {
 	runWatchHTTPBenchmark(b, toObjectSlice(items), "")
 }
 
+// toObjectSlice 把 Pod 切片转为 runtime.Object 切片，供基准测试使用。
 func toObjectSlice(in []example.Pod) []runtime.Object {
 	var res []runtime.Object
 	for _, pod := range in {
@@ -664,6 +687,8 @@ func toObjectSlice(in []example.Pod) []runtime.Object {
 	return res
 }
 
+// runWatchHTTPBenchmark 先建立 watch 连接并启动消费者 goroutine，
+// 再在循环中投递事件；计时只覆盖事件发送/编码路径。
 func runWatchHTTPBenchmark(b *testing.B, items []runtime.Object, contentType string) {
 	ctx := b.Context()
 	simpleStorage := &SimpleRESTStorage{}
@@ -758,6 +783,8 @@ func BenchmarkWatchProtobuf(b *testing.B) {
 	runWatchHTTPBenchmark(b, toObjectSlice(items), "application/vnd.kubernetes.protobuf")
 }
 
+// fakeCachingObject 实现 runtime.CacheableObject，首次编码后复用字节，
+// 用于衡量 watch 中对象缓存编码带来的收益。
 type fakeCachingObject struct {
 	obj runtime.Object
 
@@ -766,6 +793,7 @@ type fakeCachingObject struct {
 	err  error
 }
 
+// CacheEncode 只在首次调用时编码，之后直接写出缓存字节。
 func (f *fakeCachingObject) CacheEncode(_ runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	f.once.Do(func() {
 		buffer := bytes.NewBuffer(nil)
@@ -781,14 +809,17 @@ func (f *fakeCachingObject) CacheEncode(_ runtime.Identifier, encode func(runtim
 	return err
 }
 
+// GetObject 返回被包装的对象，供编码器访问类型信息。
 func (f *fakeCachingObject) GetObject() runtime.Object {
 	return f.obj
 }
 
+// GetObjectKind 代理到内部对象。
 func (f *fakeCachingObject) GetObjectKind() schema.ObjectKind {
 	return f.obj.GetObjectKind()
 }
 
+// DeepCopyObject 丢弃缓存，只复制内部对象，保证副本语义正确。
 func (f *fakeCachingObject) DeepCopyObject() runtime.Object {
 	return &fakeCachingObject{obj: f.obj.DeepCopyObject()}
 }
@@ -796,6 +827,7 @@ func (f *fakeCachingObject) DeepCopyObject() runtime.Object {
 var _ runtime.CacheableObject = &fakeCachingObject{}
 var _ runtime.Object = &fakeCachingObject{}
 
+// wrapCachingObject 把 Pod 切片包装为 fakeCachingObject 切片。
 func wrapCachingObject(in []example.Pod) []runtime.Object {
 	var res []runtime.Object
 	for _, pod := range in {
@@ -804,12 +836,14 @@ func wrapCachingObject(in []example.Pod) []runtime.Object {
 	return res
 }
 
+// BenchmarkWatchCachingObjectJSON 衡量 JSON 下缓存编码的 watch 性能。
 func BenchmarkWatchCachingObjectJSON(b *testing.B) {
 	items := benchmarkItems(b)
 
 	runWatchHTTPBenchmark(b, wrapCachingObject(items), "")
 }
 
+// BenchmarkWatchCachingObjectProtobuf 衡量 protobuf 下缓存编码的 watch 性能。
 func BenchmarkWatchCachingObjectProtobuf(b *testing.B) {
 	items := benchmarkItems(b)
 

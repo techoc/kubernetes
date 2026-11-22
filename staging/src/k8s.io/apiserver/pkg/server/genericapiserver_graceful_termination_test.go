@@ -51,18 +51,22 @@ import (
 	"golang.org/x/net/http2"
 )
 
+// TestMain 初始化 klog 标志，使测试中的 klog 输出遵循统一配置。
 func TestMain(m *testing.M) {
 	klog.InitFlags(nil)
 	os.Exit(m.Run())
 }
 
 // doer sends a request to the server
+// 把“发请求并等待结果”封装成可调用对象，便于在不同连接策略下复用。
 type doer func(client *http.Client, gci func(httptrace.GotConnInfo), path string, timeout time.Duration) result
 
+// Do 调用底层函数。
 func (d doer) Do(client *http.Client, gci func(httptrace.GotConnInfo), path string, timeout time.Duration) result {
 	return d(client, gci, path, timeout)
 }
 
+// result 保存请求结果；response 可能为 nil（连接失败时），断言时需先检查。
 type result struct {
 	err      error
 	response *http.Response
@@ -75,6 +79,7 @@ type wrappedLifecycleSignal struct {
 	after  func(lifecycleSignal)
 }
 
+// Signal 在真实信号前后执行注入的回调，用于在正确的生命周期点做断言。
 func (w *wrappedLifecycleSignal) Signal() {
 	if w.before != nil {
 		w.before(w.lifecycleSignal)
@@ -85,6 +90,8 @@ func (w *wrappedLifecycleSignal) Signal() {
 	}
 }
 
+// wrapLifecycleSignalsWithRecorder 为所有生命周期信号安装记录回调，
+// 以便最终校验信号顺序。
 func wrapLifecycleSignalsWithRecorder(t *testing.T, signals *lifecycleSignals, before func(lifecycleSignal)) {
 	// it's important to record the signal being fired on a 'before' callback
 	// to avoid flakes, since on the server the signaling of events are
@@ -97,6 +104,7 @@ func wrapLifecycleSignalsWithRecorder(t *testing.T, signals *lifecycleSignals, b
 	signals.ShutdownInitiated = wrapLifecycleSignal(t, signals.ShutdownInitiated, before, nil)
 }
 
+// wrapLifecycleSignal 用包装器替换原信号，保留原信号语义。
 func wrapLifecycleSignal(t *testing.T, delegated lifecycleSignal, before, after func(_ lifecycleSignal)) lifecycleSignal {
 	return &wrappedLifecycleSignal{
 		lifecycleSignal: delegated,
@@ -109,17 +117,25 @@ func wrapLifecycleSignal(t *testing.T, delegated lifecycleSignal, before, after 
 // the test to execute its steps, this allows us to intercept the
 // signal and execute verification steps inside the goroutine that
 // is executing the test.
+//
+// 通过让信号发送方阻塞在 doneCh 上，测试可以在两个信号之间插入
+// 任意验证逻辑，而无需依赖脆弱的 sleep。
 type signalInterceptingTestStep struct {
 	doneCh chan struct{}
 }
 
+// done 返回完成信号，信号发送方等待它关闭后才继续。
 func (ts signalInterceptingTestStep) done() <-chan struct{} {
 	return ts.doneCh
 }
+
+// execute 执行测试步骤，完成后关闭 doneCh 放行服务端。
 func (ts signalInterceptingTestStep) execute(fn func()) {
 	defer close(ts.doneCh)
 	fn()
 }
+
+// newSignalInterceptingTestStep 创建拦截步骤。
 func newSignalInterceptingTestStep() *signalInterceptingTestStep {
 	return &signalInterceptingTestStep{
 		doneCh: make(chan struct{}),
@@ -176,6 +192,10 @@ func newSignalInterceptingTestStep() *signalInterceptingTestStep {
 //	        <-stoppedCh
 //	             |
 //	         return nil
+//
+// 本用例关闭 ShutdownSendRetryAfter：HTTP server 停止监听后，新连接直接
+// 被拒绝（connection refused），而不是收到 429；已有的 in-flight 请求
+// 仍需被处理完成并写入审计。
 func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t *testing.T) {
 	fakeAudit := &fakeAudit{}
 	s := newGenericAPIServer(t, fakeAudit, false)
@@ -404,6 +424,9 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 //     <-stoppedCh
 //     |
 //     return nil
+//
+// 本用例开启 ShutdownSendRetryAfter：在 in-flight 请求排空期间继续监听，
+// 新请求收到带 Retry-After 的 429，给客户端明确的“换实例重试”信号。
 func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t *testing.T) {
 	fakeAudit := &fakeAudit{}
 	s := newGenericAPIServer(t, fakeAudit, true)
@@ -564,6 +587,8 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 	}
 }
 
+// TestMuxAndDiscoveryComplete 验证 MuxAndDiscoveryComplete 信号只在所有
+// 注册的 mux/discovery 子信号完成后才触发。
 func TestMuxAndDiscoveryComplete(t *testing.T) {
 	// setup
 	testSignal1 := make(chan struct{})
@@ -611,6 +636,9 @@ func TestMuxAndDiscoveryComplete(t *testing.T) {
 	}
 }
 
+// TestPreShutdownHooks 验证 pre-shutdown hook 在 ShutdownDelayDuration 之后
+// 仍能成功访问 API server（两种 ShutdownSendRetryAfter 配置下都成立），
+// 这是 hook 用于优雅摘流的前提。
 func TestPreShutdownHooks(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -691,17 +719,20 @@ func TestPreShutdownHooks(t *testing.T) {
 	}
 }
 
+// signalRecorder 线程安全地记录生命周期信号的触发顺序。
 type signalRecorder struct {
 	lock  sync.Mutex
 	order []string
 }
 
+// before 记录信号名。
 func (r *signalRecorder) before(s lifecycleSignal) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.order = append(r.order, s.Name())
 }
 
+// verify 比对实际记录顺序与期望顺序。
 func (r *signalRecorder) verify(got []string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -712,12 +743,15 @@ func (r *signalRecorder) verify(got []string) error {
 	return nil
 }
 
+// inFlightRequest 描述一个被故意阻塞、贯穿关闭流程的请求。
 type inFlightRequest struct {
 	blockedCh, startedCh chan struct{}
 	resultCh             chan result
 	url                  string
 }
 
+// setupInFlightNonLongRunningRequestHandler 注册一个普通请求处理器，
+// 它先通知测试“已到达服务端”，再阻塞直到被显式放行。
 func setupInFlightNonLongRunningRequestHandler(s *GenericAPIServer) *inFlightRequest {
 	inflight := &inFlightRequest{
 		blockedCh: make(chan struct{}),
@@ -735,6 +769,8 @@ func setupInFlightNonLongRunningRequestHandler(s *GenericAPIServer) *inFlightReq
 	return inflight
 }
 
+// setupInFlightWatchRequestHandler 模拟 watch：阻塞到被放行后，再等待
+// ServerShutdownSignal.ShuttingDown，以验证关闭信号会传递给 watch 处理器。
 func setupInFlightWatchRequestHandler(s *GenericAPIServer) *inFlightRequest {
 	inflight := &inFlightRequest{
 		blockedCh: make(chan struct{}),
@@ -761,6 +797,7 @@ func setupInFlightWatchRequestHandler(s *GenericAPIServer) *inFlightRequest {
 	return inflight
 }
 
+// launch 异步发送请求，结果写入 resultCh。
 func (ifr *inFlightRequest) launch(doer doer, client *http.Client) {
 	go func() {
 		result := doer.Do(client, func(httptrace.GotConnInfo) {}, ifr.url, 0)
@@ -768,6 +805,7 @@ func (ifr *inFlightRequest) launch(doer doer, client *http.Client) {
 	}()
 }
 
+// unblockAndWaitForResult 放行被阻塞的请求并等待其响应。
 func (ifr *inFlightRequest) unblockAndWaitForResult(t *testing.T) result {
 	close(ifr.blockedCh)
 
@@ -781,11 +819,14 @@ func (ifr *inFlightRequest) unblockAndWaitForResult(t *testing.T) result {
 	return resultGot
 }
 
+// preShutdownHookHandler 用于协调测试与 pre-shutdown hook 的执行时机。
 type preShutdownHookHandler struct {
 	blockedCh chan struct{}
 	resultCh  chan result
 }
 
+// setupPreShutdownHookHandler 注册一个会向 API server 发起调用的
+// pre-shutdown hook，调用时机由测试通过 blockedCh 控制。
 func setupPreShutdownHookHandler(t *testing.T, s *GenericAPIServer, doer doer, client *http.Client) *preShutdownHookHandler {
 	hook := &preShutdownHookHandler{
 		blockedCh: make(chan struct{}),
@@ -806,6 +847,8 @@ func setupPreShutdownHookHandler(t *testing.T, s *GenericAPIServer, doer doer, c
 	return hook
 }
 
+// fakeAudit 同时充当审计后端与策略评估器，记录已审计的请求 ID
+// 以及 Shutdown 是否完成。
 type fakeAudit struct {
 	shutdownCh chan struct{}
 	lock       sync.Mutex
@@ -813,6 +856,7 @@ type fakeAudit struct {
 	completed  bool
 }
 
+// Run 启动一个等待 stopCh 的 goroutine，模拟审计后端的生命周期。
 func (a *fakeAudit) Run(stopCh <-chan struct{}) error {
 	a.shutdownCh = make(chan struct{})
 	go func() {
@@ -822,6 +866,7 @@ func (a *fakeAudit) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// Shutdown 等待 Run 的 stopCh 关闭后标记完成。
 func (a *fakeAudit) Shutdown() {
 	<-a.shutdownCh
 
@@ -830,10 +875,12 @@ func (a *fakeAudit) Shutdown() {
 	a.completed = true
 }
 
+// String 返回后端标识。
 func (a *fakeAudit) String() string {
 	return "fake-audit"
 }
 
+// shutdownCompleted 报告 Shutdown 是否已被调用完成。
 func (a *fakeAudit) shutdownCompleted() bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
@@ -841,6 +888,7 @@ func (a *fakeAudit) shutdownCompleted() bool {
 	return a.completed
 }
 
+// ProcessEvents 记录事件中的 AuditID。
 func (a *fakeAudit) ProcessEvents(events ...*auditinternal.Event) bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
@@ -854,6 +902,7 @@ func (a *fakeAudit) ProcessEvents(events ...*auditinternal.Event) bool {
 	return true
 }
 
+// requestAudited 判断指定 AuditID 是否被记录。
 func (a *fakeAudit) requestAudited(auditID string) bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
@@ -861,12 +910,14 @@ func (a *fakeAudit) requestAudited(auditID string) bool {
 	return exists
 }
 
+// EvaluatePolicyRule 对所有请求返回 Metadata 级别，足以验证审计链路。
 func (a *fakeAudit) EvaluatePolicyRule(attrs authorizer.Attributes) audit.RequestAuditConfig {
 	return audit.RequestAuditConfig{
 		Level: auditinternal.LevelMetadata,
 	}
 }
 
+// assertRequestAudited 校验响应头带 audit-id 且后端确实收到该事件。
 func assertRequestAudited(resultGot result, backend *fakeAudit) error {
 	resp := resultGot.response
 	if resp == nil {
@@ -882,10 +933,12 @@ func assertRequestAudited(resultGot result, backend *fakeAudit) error {
 	return nil
 }
 
+// waitForeverUntilSignaled 等待生命周期信号，超时即测试失败。
 func waitForeverUntilSignaled(t *testing.T, s lifecycleSignal) {
 	waitForeverUntil(t, s.Signaled(), fmt.Sprintf("Expected the server to signal %s event", s.Name()))
 }
 
+// waitForeverUntil 等待 channel 关闭；超时使用统一上限，避免永久挂起。
 func waitForeverUntil(t *testing.T, ch <-chan struct{}, msg string) {
 	select {
 	case <-ch:
@@ -894,6 +947,7 @@ func waitForeverUntil(t *testing.T, ch <-chan struct{}, msg string) {
 	}
 }
 
+// shouldReuseConnection 断言请求复用了已有 TCP 连接。
 func shouldReuseConnection(t *testing.T) func(httptrace.GotConnInfo) {
 	return func(ci httptrace.GotConnInfo) {
 		if !ci.Reused {
@@ -902,6 +956,7 @@ func shouldReuseConnection(t *testing.T) func(httptrace.GotConnInfo) {
 	}
 }
 
+// shouldUseNewConnection 断言请求使用了新的 TCP 连接。
 func shouldUseNewConnection(t *testing.T) func(httptrace.GotConnInfo) {
 	return func(ci httptrace.GotConnInfo) {
 		if ci.Reused {
@@ -910,6 +965,7 @@ func shouldUseNewConnection(t *testing.T) func(httptrace.GotConnInfo) {
 	}
 }
 
+// assertResponseStatusCode 断言请求无错误且状态码符合预期。
 func assertResponseStatusCode(resultGot result, statusCodeExpected int) error {
 	if resultGot.err != nil {
 		return fmt.Errorf("Expected no error, but got: %v", resultGot.err)
@@ -920,6 +976,7 @@ func assertResponseStatusCode(resultGot result, statusCodeExpected int) error {
 	return nil
 }
 
+// requestMustFailWithRetryHeader 断言请求被 429 拒绝且带 Retry-After: 5。
 func requestMustFailWithRetryHeader(resultGot result, statusCodedExpected int) error {
 	if resultGot.err != nil {
 		return fmt.Errorf("Expected no error, but got: %v", resultGot.err)
@@ -934,6 +991,7 @@ func requestMustFailWithRetryHeader(resultGot result, statusCodedExpected int) e
 	return nil
 }
 
+// waitForAPIServerStarted 轮询 /echo 直到服务端可用，避免固定 sleep。
 func waitForAPIServerStarted(t *testing.T, doer doer) {
 	client := newClient(true)
 	i := 1
@@ -959,6 +1017,7 @@ func waitForAPIServerStarted(t *testing.T, doer doer) {
 	}
 }
 
+// setupDoer 构造指向测试 server 的 doer，并支持通过 httptrace 观察连接复用。
 func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 	_, port, err := info.HostPort()
 	if err != nil {
@@ -975,6 +1034,7 @@ func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 		}
 
 		// setup request timeout
+		// timeout 为 0 表示不设超时（用于需要长期保持的 in-flight 请求）。
 		var ctx context.Context
 		if timeout > 0 {
 			var cancel context.CancelFunc
@@ -1006,6 +1066,8 @@ func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 	}
 }
 
+// newClient 创建信任测试 CA 的 HTTP/2 客户端；
+// useNewConnection 为 true 时禁用 keep-alive，强制每次新建连接。
 func newClient(useNewConnection bool) *http.Client {
 	clientCACertPool := x509.NewCertPool()
 	clientCACertPool.AppendCertsFromPEM(backendCrt)
@@ -1027,12 +1089,17 @@ func newClient(useNewConnection bool) *http.Client {
 	}
 }
 
+// getOpenAPIDefinitionsForTest 提供最小的 OpenAPI 定义集合，
+// 让 server 初始化无需依赖完整 API 类型。
 func getOpenAPIDefinitionsForTest(_ kubeopenapi.ReferenceCallback) map[string]kubeopenapi.OpenAPIDefinition {
 	return map[string]kubeopenapi.OpenAPIDefinition{
 		"io.k8s.apimachinery.pkg.apis.meta.v1.APIGroupList": {},
 	}
 }
 
+// newGenericAPIServer 构造测试用 GenericAPIServer。
+// keepListening 控制 ShutdownSendRetryAfter；ShutdownDelayDuration 设短
+// 以缩短测试时间，但仍留出验证窗口。
 func newGenericAPIServer(t *testing.T, fAudit *fakeAudit, keepListening bool) *GenericAPIServer {
 	config, _ := setUp(t)
 	config.ShutdownDelayDuration = 100 * time.Millisecond
@@ -1074,11 +1141,13 @@ func newGenericAPIServer(t *testing.T, fAudit *fakeAudit, keepListening bool) *G
 	return s
 }
 
+// wrappedListener 记录新连接，便于观察连接复用行为。
 type wrappedListener struct {
 	net.Listener
 	t *testing.T
 }
 
+// Accept 接受连接并记录是否为 TCP 连接。
 func (ln wrappedListener) Accept() (net.Conn, error) {
 	c, err := ln.Listener.Accept()
 

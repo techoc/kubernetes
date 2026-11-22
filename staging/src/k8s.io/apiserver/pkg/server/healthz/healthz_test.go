@@ -34,6 +34,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestInstallHandler 验证默认 /healthz 端点的契约：200、text/plain、正文 "ok"。
+// 这是探针与监控依赖的稳定接口，字段变化会影响外部系统。
 func TestInstallHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	InstallHandler(mux)
@@ -55,6 +57,8 @@ func TestInstallHandler(t *testing.T) {
 	}
 }
 
+// TestInstallPathHandler 验证同一 mux 上可挂载多个自定义路径（如 /healthz/test 与
+// /healthz/ready），互不干扰。
 func TestInstallPathHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	InstallPathHandler(mux, "/healthz/test")
@@ -95,6 +99,11 @@ func TestInstallPathHandler(t *testing.T) {
 
 }
 
+// testMultipleChecks 用同一套用例分别覆盖 /healthz 与自定义路径。
+//
+// 用例覆盖 verbose、exclude、子路径 /ping 与 /bad 的组合，锁定了响应正文格式：
+// "[+]name ok"、"[+]name excluded: ok"、"[-]name failed: reason withheld"。
+// 其中 "reason withheld" 是安全约束——失败原因不能回显给未授权调用方。
 func testMultipleChecks(path, name string, t *testing.T) {
 	tests := []struct {
 		path             string
@@ -148,14 +157,18 @@ func testMultipleChecks(path, name string, t *testing.T) {
 	}
 }
 
+// TestMultipleChecks 以默认 /healthz 路径运行通用检查用例。
 func TestMultipleChecks(t *testing.T) {
 	testMultipleChecks("", "healthz", t)
 }
 
+// TestMultiplePathChecks 以自定义 /ready 路径运行同一套用例，确认路径不影响语义。
 func TestMultiplePathChecks(t *testing.T) {
 	testMultipleChecks("/ready", "ready", t)
 }
 
+// TestCheckerNames 验证 checkerNames 保持注册顺序：
+// verbose 输出依赖顺序与注册顺序一致，便于对照配置排查。
 func TestCheckerNames(t *testing.T) {
 	n1 := "n1"
 	n2 := "n2"
@@ -184,6 +197,7 @@ func TestCheckerNames(t *testing.T) {
 	}
 }
 
+// TestFormatQuoted 验证名称列表被格式化为逗号分隔的带引号字符串（用于错误提示）。
 func TestFormatQuoted(t *testing.T) {
 	n1 := "n1"
 	n2 := "n2"
@@ -207,6 +221,8 @@ func TestFormatQuoted(t *testing.T) {
 	}
 }
 
+// TestGetExcludedChecks 验证从查询串解析 exclude 参数：无参数为空集，
+// 重复出现时累加，而不是取最后一个。
 func TestGetExcludedChecks(t *testing.T) {
 	tests := []struct {
 		name string
@@ -235,6 +251,8 @@ func TestGetExcludedChecks(t *testing.T) {
 	}
 }
 
+// TestMetrics 验证健康检查端点也会被指标中间件计数，且子资源标签使用路径本身。
+// 先 Reset 再断言，避免其他测试残留的计数干扰精确匹配。
 func TestMetrics(t *testing.T) {
 	mux := http.NewServeMux()
 	InstallHandler(mux)
@@ -264,6 +282,7 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
+// createGetRequestWithUrl 构造仅含 URL 的 GET 请求，用于单元测试查询串解析。
 func createGetRequestWithUrl(rawUrlString string) *http.Request {
 	url, _ := url.Parse(rawUrlString)
 	return &http.Request{
@@ -273,6 +292,8 @@ func createGetRequestWithUrl(rawUrlString string) *http.Request {
 	}
 }
 
+// TestInformerSyncHealthChecker 验证 informer 同步检查器：全部启动则健康，
+// 任一未启动则报错（用于阻止流量在缓存未热时进入）。
 func TestInformerSyncHealthChecker(t *testing.T) {
 	t.Run("test that check returns nil when all informers are started", func(t *testing.T) {
 		healthChecker := NewInformerSyncHealthz(cacheSyncWaiterStub{
@@ -303,6 +324,7 @@ func TestInformerSyncHealthChecker(t *testing.T) {
 	})
 }
 
+// cacheSyncWaiterStub 用固定的 map 冒充 cache.WaitForCacheSync，便于构造同步状态。
 type cacheSyncWaiterStub struct {
 	startedByInformerType map[reflect.Type]bool
 }
@@ -313,6 +335,10 @@ func (s cacheSyncWaiterStub) WaitForCacheSync(_ <-chan struct{}) map[reflect.Typ
 	return s.startedByInformerType
 }
 
+// TestInstallPathHandlerWithHealthyFunc 验证"曾经健康"回调只触发一次。
+//
+// 场景：通道未关闭时检查失败；关闭后成功并调用回调；再次请求成功但回调不重复调用。
+// 这保证了上层只在该路径首次转为健康时执行一次性初始化逻辑。
 func TestInstallPathHandlerWithHealthyFunc(t *testing.T) {
 	mux := http.NewServeMux()
 	readyzCh := make(chan struct{})
@@ -359,6 +385,7 @@ func TestInstallPathHandlerWithHealthyFunc(t *testing.T) {
 	}
 }
 
+// readyOnChanClose 是"通道关闭即健康"的检查器，用于模拟启动完成的信号。
 type readyOnChanClose struct {
 	ch <-chan struct{}
 }

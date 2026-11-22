@@ -28,6 +28,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// mockEndpointVersion 描述单个 endpoint 的版本或错误。
 type mockEndpointVersion struct {
 	Endpoint string
 	Version  string
@@ -39,6 +40,7 @@ type MockEtcdClient struct {
 	EndpointVersion []mockEndpointVersion
 }
 
+// getEndpoints 汇总所有 mock endpoint 名。
 func (m MockEtcdClient) getEndpoints() []string {
 	var endpoints []string
 	for _, ev := range m.EndpointVersion {
@@ -47,6 +49,7 @@ func (m MockEtcdClient) getEndpoints() []string {
 	return endpoints
 }
 
+// getVersion 按 endpoint 返回预置版本或错误。
 func (m MockEtcdClient) getVersion(endpoint string) (string, error) {
 	for _, ev := range m.EndpointVersion {
 		if ev.Endpoint == endpoint {
@@ -57,6 +60,7 @@ func (m MockEtcdClient) getVersion(endpoint string) (string, error) {
 	return "", fmt.Errorf("No version found")
 }
 
+// Endpoints 实现 client 接口。
 func (m *MockEtcdClient) Endpoints() []string {
 	return m.getEndpoints()
 }
@@ -73,6 +77,8 @@ func (m *MockEtcdClient) Status(ctx context.Context, endpoint string) (*clientv3
 	}, nil
 }
 
+// TestSupports 验证未探测时的默认语义：
+// RequestWatchProgress 默认不支持，RangeStream 默认支持，未知特性记录错误并返回 false。
 func TestSupports(t *testing.T) {
 	tests := []struct {
 		testName       string
@@ -110,6 +116,8 @@ func TestSupports(t *testing.T) {
 	}
 }
 
+// TestSupportsRequestWatchProgress 以多轮探测模拟多个 etcd client 先后初始化，
+// 验证“一旦有 endpoint 不支持就永久关闭、不能被后续 client 重新打开”的粘滞语义。
 func TestSupportsRequestWatchProgress(t *testing.T) {
 	type testCase struct {
 		endpointsVersion []mockEndpointVersion
@@ -275,6 +283,7 @@ func TestSupportsRequestWatchProgress(t *testing.T) {
 	}
 }
 
+// TestMarkUnsupported 验证 RangeStream 被标记不支持后，经过 recheck 间隔才重新报告支持。
 func TestMarkUnsupported(t *testing.T) {
 	f := newDefaultFeatureSupportChecker()
 	fakeClock := testingclock.NewFakeClock(time.Now())

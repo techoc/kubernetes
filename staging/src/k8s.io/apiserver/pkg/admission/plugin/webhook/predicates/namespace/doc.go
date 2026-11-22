@@ -17,4 +17,10 @@ limitations under the License.
 // Package namespace defines the utilities that are used by the webhook
 // plugin to decide if a webhook should be applied to an object based on its
 // namespace.
+//
+// 命名空间谓词是准入 webhook 的第一层过滤：只有当对象的命名空间满足
+// namespaceSelector 时，才可能把请求发送给该 webhook。selector 的匹配需要
+// 读取 Namespace 对象，因此这里区分了 "不匹配" 与 "无法判断" 两种结果——
+// 后者（例如 namespace 尚不存在或 API 调用失败）必须交由调用方按
+// failurePolicy 决定，而不能静默地当作不匹配处理。
 package namespace

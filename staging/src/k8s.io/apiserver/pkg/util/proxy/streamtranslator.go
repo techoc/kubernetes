@@ -36,6 +36,9 @@ import (
 
 // StreamTranslatorHandler is a handler which translates WebSocket stream data
 // to SPDY to proxy to kubelet (and ContainerRuntime).
+//
+// 这是 exec/attach/port-forward 迁移到 WebSocket 协议期间的兼容层：
+// 客户端用 WebSocket 连到 apiserver，apiserver 再以 SPDY 连到 kubelet。
 type StreamTranslatorHandler struct {
 	// Location is the location of the upstream proxy. It is used as the location to Dial on the upstream server
 	// for upgrade requests.
@@ -43,6 +46,7 @@ type StreamTranslatorHandler struct {
 	// Transport provides an optional round tripper to use to proxy. If nil, the default proxy transport is used
 	Transport http.RoundTripper
 	// MaxBytesPerSec throttles stream Reader/Writer if necessary
+	// 0 表示不限速。限速作用在单个流上，而非底层连接。
 	MaxBytesPerSec int64
 	// Options define the requested streams (e.g. stdin, stdout).
 	Options Options
@@ -59,10 +63,13 @@ func NewStreamTranslatorHandler(location *url.URL, transport http.RoundTripper, 
 	}
 }
 
+// ServeHTTP upgrades the inbound WebSocket connection and bridges it to an
+// upstream SPDY stream.
 func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Create WebSocket server, including particular streams requested. If this websocket
 	// endpoint is not able to be upgraded, the websocket library will return errors
 	// to the client.
+	// 升级失败视为客户端错误（400），此时还没有可用的 websocket 流来回写状态。
 	websocketStreams, err := webSocketServerStreams(req, w, h.Options)
 	if err != nil {
 		// Client error increments bad request status code.
@@ -72,6 +79,8 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 	defer websocketStreams.conn.Close()
 
 	// Creating SPDY executor, ensuring redirects are not followed.
+	// 不跟随重定向是安全边界：Location 指向集群内 kubelet，被重定向到任意
+	// 地址会变成 SSRF 通道。
 	spdyRoundTripper, err := spdy.NewRoundTripperWithConfig(spdy.RoundTripperConfig{UpgradeTransport: h.Transport, PingPeriod: 5 * time.Second})
 	if err != nil {
 		metrics.IncStreamTranslatorRequest(req.Context(), strconv.Itoa(http.StatusInternalServerError))
@@ -94,6 +103,8 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 	// can be throttled if the transfer rate exceeds the "MaxBytesPerSec" (zero means unset). Throttling
 	// the streams instead of the underlying connection *may* not perform the same if two streams
 	// traveling the same direction (e.g. stdout, stderr) are being maxed out.
+	// 方向说明：stdin 是 websocket -> SPDY，因此用 Reader 限速；stdout/stderr
+	// 是 SPDY -> websocket，因此用 Writer 限速。
 	opts := remotecommand.StreamOptions{}
 	if h.Options.Stdin {
 		stdin := websocketStreams.stdinStream
@@ -117,6 +128,7 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 		opts.Stderr = stderr
 	}
 	if h.Options.Tty {
+		// TTY 模式下必须转发终端尺寸，否则远端程序无法正确渲染。
 		opts.Tty = true
 		opts.TerminalSizeQueue = &translatorSizeQueue{resizeChan: websocketStreams.resizeChan}
 	}
@@ -153,6 +165,8 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 // translatorSizeQueue feeds the size events from the WebSocket
 // resizeChan into the SPDY client input. Implements TerminalSizeQueue
 // interface.
+//
+// resizeChan 关闭时返回 nil，这是 TerminalSizeQueue 约定“没有更多尺寸更新”的信号。
 type translatorSizeQueue struct {
 	resizeChan chan remotecommand.TerminalSize
 }
@@ -167,6 +181,9 @@ func (t *translatorSizeQueue) Next() *remotecommand.TerminalSize {
 
 // codeExitToStatusError converts a passed CodeExitError to the type necessary
 // to send through an error stream using "writeStatus".
+//
+// 容器内命令以非零码退出不是 apiserver 的错误，因此以 StatusFailure 加
+// NonZeroExitCodeReason 回传，客户端 kubectl 据此返回相同退出码。
 func codeExitToStatusError(exitErr exec.CodeExitError) *apierrors.StatusError {
 	rc := exitErr.ExitStatus()
 	return &apierrors.StatusError{

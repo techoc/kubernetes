@@ -23,14 +23,17 @@ import (
 )
 
 var (
+	// SchemeBuilder collects the functions that add this group's types.
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme adds this group's types to a scheme.
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
 // GroupName is the group name use in this package
 const GroupName = "example2.apiserver.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 内部版本：Version 为 runtime.APIVersionInternal，仅供测试内部的类型注册。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind

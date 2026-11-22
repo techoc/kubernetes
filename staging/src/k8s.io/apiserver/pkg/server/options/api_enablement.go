@@ -32,10 +32,13 @@ import (
 
 // APIEnablementOptions contains the options for which resources to turn on and off.
 // Given small aggregated API servers, this option isn't required for "normal" API servers
+//
+// 对应 --runtime-config 参数：以 key=value 的形式覆盖默认的资源启用状态。
 type APIEnablementOptions struct {
 	RuntimeConfig cliflag.ConfigurationMap
 }
 
+// NewAPIEnablementOptions 创建带空 RuntimeConfig 的选项对象。
 func NewAPIEnablementOptions() *APIEnablementOptions {
 	return &APIEnablementOptions{
 		RuntimeConfig: make(cliflag.ConfigurationMap),
@@ -63,6 +66,9 @@ func (s *APIEnablementOptions) AddFlags(fs *pflag.FlagSet) {
 // But in the advanced (and usually not recommended) case of delegated apiservers there can be more.
 // Validate will filter out the known groups of each registry.
 // If anything is left over after that, an error is returned.
+//
+// 注意：这里只校验“组是否存在”，不校验具体版本/资源是否可用，那部分由
+// MergeAPIResourceConfigs 在 ApplyTo 中处理。
 func (s *APIEnablementOptions) Validate(registries ...GroupRegistry) []error {
 	if s == nil {
 		return nil
@@ -93,6 +99,9 @@ func (s *APIEnablementOptions) Validate(registries ...GroupRegistry) []error {
 }
 
 // ApplyTo override MergedResourceConfig with defaults and registry
+//
+// 合并默认资源启用状态与 --runtime-config 覆盖项；若启用了版本模拟
+// （EmulationForwardCompatible），再按模拟版本调整启用集合。
 func (s *APIEnablementOptions) ApplyTo(c *server.Config, defaultResourceConfig *serverstore.ResourceConfig, registry resourceconfig.GroupVersionRegistry) error {
 	if s == nil {
 		return nil
@@ -110,6 +119,8 @@ func (s *APIEnablementOptions) ApplyTo(c *server.Config, defaultResourceConfig *
 	c.MergedResourceConfig = mergedResourceConfig
 
 	binVersion, emulatedVersion := c.EffectiveVersion.BinaryVersion(), c.EffectiveVersion.EmulationVersion()
+	// 模拟版本低于二进制版本时，开启 alpha API 属于不受支持的行为：
+	// 只告警而不拒绝启动，给运维保留显式承担风险的余地。
 	if binVersion != nil && emulatedVersion != nil && (binVersion.Major() != emulatedVersion.Major() || binVersion.Minor() != emulatedVersion.Minor()) {
 		for _, version := range registry.PrioritizedVersionsAllGroups() {
 			if strings.Contains(version.Version, "alpha") {
@@ -138,6 +149,8 @@ type GroupRegistry interface {
 	IsGroupRegistered(group string) bool
 }
 
+// isGroupRegistered 只要任一 registry 认识该组就算通过；用于组合多个
+// apiserver 的 registry（委托场景）。
 func isGroupRegistered(group string, registries []GroupRegistry) bool {
 	for _, registry := range registries {
 		if registry.IsGroupRegistered(group) {

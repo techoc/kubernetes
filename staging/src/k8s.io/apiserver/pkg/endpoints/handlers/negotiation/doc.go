@@ -15,4 +15,6 @@ limitations under the License.
 */
 
 // Package negotiation contains media type negotiation logic.
+// 负责根据请求的 Accept/Content-Type 头选择序列化格式，
+// 并处理版本转换与默认媒体类型的回退规则。
 package negotiation

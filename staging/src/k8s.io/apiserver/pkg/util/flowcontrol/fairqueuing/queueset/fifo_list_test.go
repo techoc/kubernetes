@@ -26,6 +26,7 @@ import (
 	fcrequest "k8s.io/apiserver/pkg/util/flowcontrol/request"
 )
 
+// TestFIFOWithEnqueueDequeueSingleRequest 验证单个请求入队后出队返回同一指针，队列归零。
 func TestFIFOWithEnqueueDequeueSingleRequest(t *testing.T) {
 	req := &request{}
 
@@ -44,6 +45,7 @@ func TestFIFOWithEnqueueDequeueSingleRequest(t *testing.T) {
 	}
 }
 
+// TestFIFOWithEnqueueDequeueMultipleRequests 验证多个请求按入队顺序出队。
 func TestFIFOWithEnqueueDequeueMultipleRequests(t *testing.T) {
 	arrival := []*request{{}, {}, {}, {}, {}, {}}
 
@@ -61,6 +63,7 @@ func TestFIFOWithEnqueueDequeueMultipleRequests(t *testing.T) {
 	verifyOrder(t, arrival, dequeued)
 }
 
+// TestFIFOWithEnqueueDequeueSomeRequestsRemainInQueue 验证只取一半后队列顺序仍正确。
 func TestFIFOWithEnqueueDequeueSomeRequestsRemainInQueue(t *testing.T) {
 	list := newRequestFIFO()
 
@@ -79,6 +82,8 @@ func TestFIFOWithEnqueueDequeueSomeRequestsRemainInQueue(t *testing.T) {
 	verifyOrder(t, arrival[:half], dequeued)
 }
 
+// TestFIFOWithRemoveMultipleRequestsInArrivalOrder 验证 remove 函数按入队顺序移除，
+// 且重复调用返回 nil（幂等）。
 func TestFIFOWithRemoveMultipleRequestsInArrivalOrder(t *testing.T) {
 	list := newRequestFIFO()
 
@@ -106,6 +111,7 @@ func TestFIFOWithRemoveMultipleRequestsInArrivalOrder(t *testing.T) {
 	}
 }
 
+// TestFIFORemoveFromFIFOFunc 验证 remove 闭包返回被移除请求的指针，第二次返回 nil。
 func TestFIFORemoveFromFIFOFunc(t *testing.T) {
 	list := newRequestFIFO()
 	reqWant := &request{}
@@ -121,6 +127,7 @@ func TestFIFORemoveFromFIFOFunc(t *testing.T) {
 	}
 }
 
+// TestFIFOWithRemoveMultipleRequestsInRandomOrder 验证任意位置移除后剩余顺序保持不变。
 func TestFIFOWithRemoveMultipleRequestsInRandomOrder(t *testing.T) {
 	list := newRequestFIFO()
 
@@ -151,6 +158,7 @@ func TestFIFOWithRemoveMultipleRequestsInRandomOrder(t *testing.T) {
 	}
 }
 
+// TestFIFOWithRemoveIsIdempotent 验证对同一请求重复 remove 不会影响其他条目。
 func TestFIFOWithRemoveIsIdempotent(t *testing.T) {
 	list := newRequestFIFO()
 
@@ -179,6 +187,8 @@ func TestFIFOWithRemoveIsIdempotent(t *testing.T) {
 	verifyOrder(t, orderExpected, remainingRequests)
 }
 
+// TestFIFOQueueWorkEstimate 验证 QueueSum 随入队/移除/dequeue 精确增减，
+// 并覆盖两种幂等路径：remove 重复调用、dequeue 后再 remove。
 func TestFIFOQueueWorkEstimate(t *testing.T) {
 	qs := &queueSet{estimatedServiceDuration: time.Second}
 	list := newRequestFIFO()
@@ -265,6 +275,7 @@ func TestFIFOQueueWorkEstimate(t *testing.T) {
 	}
 }
 
+// TestFIFOWithWalk 验证 Walk 按 FIFO 顺序访问全部元素。
 func TestFIFOWithWalk(t *testing.T) {
 	list := newRequestFIFO()
 
@@ -278,6 +289,7 @@ func TestFIFOWithWalk(t *testing.T) {
 	verifyOrder(t, arrival, visited)
 }
 
+// verifyOrder 逐元素比较指针，确保顺序与身份都一致。
 func verifyOrder(t *testing.T, expected, actual []*request) {
 	if len(expected) != len(actual) {
 		t.Fatalf("Expected slice length: %d, but got: %d", len(expected), len(actual))
@@ -289,6 +301,7 @@ func verifyOrder(t *testing.T, expected, actual []*request) {
 	}
 }
 
+// walkAll 收集 Walk 访问到的所有请求，便于断言顺序。
 func walkAll(l fifo) []*request {
 	visited := make([]*request, 0)
 	l.Walk(func(req *request) bool {

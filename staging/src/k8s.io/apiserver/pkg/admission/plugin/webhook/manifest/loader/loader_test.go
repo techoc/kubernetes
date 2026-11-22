@@ -30,6 +30,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
+// TestValidateWebhookClientConfig 验证静态清单中的 clientConfig 只允许 URL 形式：
+// 静态清单不经过 API 服务器的 Service 解析流程，因此 service 引用会被明确拒绝。
 func TestValidateWebhookClientConfig(t *testing.T) {
 	url := "https://example.com"
 	tests := []struct {
@@ -62,6 +64,7 @@ func TestValidateWebhookClientConfig(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
+				// 断言错误信息包含定位信息，便于用户修正清单。
 				if !strings.Contains(err.Error(), tt.errContains) {
 					t.Errorf("error %q does not contain %q", err.Error(), tt.errContains)
 				}
@@ -74,14 +77,18 @@ func TestValidateWebhookClientConfig(t *testing.T) {
 	}
 }
 
+// TestLoadManifests 验证目录加载：按扩展名筛选、支持单对象与 v1.List、
+// 拒绝不支持的类型，并对重名配置报错；成功时返回非空的内容哈希用于变更检测。
 func TestLoadManifests(t *testing.T) {
 	// Build a minimal decoder (admissionregistration types only, no full client-go scheme)
+	// 只注册必要类型，避免测试依赖整个 client-go scheme。
 	s := runtime.NewScheme()
 	utilruntime.Must(admissionregistrationv1.AddToScheme(s))
 	s.AddUnversionedTypes(metav1.SchemeGroupVersion, &metav1.List{}, &metav1.Status{})
 	decoder := serializer.NewCodecFactory(s).UniversalDeserializer()
 
 	// Simple accept function that extracts the typed object (no kube-apiserver defaulting)
+	// 测试用 accept 不做默认值填充，只做类型断言，聚焦加载逻辑本身。
 	accept := func(obj runtime.Object) ([]*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 		vwc, ok := obj.(*admissionregistrationv1.ValidatingWebhookConfiguration)
 		if !ok {
@@ -115,11 +122,13 @@ webhooks:
 			wantConfigs: 1,
 		},
 		{
+			// 空目录是合法状态：表示当前没有静态 webhook。
 			name:        "empty directory",
 			files:       map[string]string{},
 			wantConfigs: 0,
 		},
 		{
+			// 非 webhook 类型必须报错，而不是被静默忽略，避免配置笔误被掩盖。
 			name: "unsupported resource type",
 			files: map[string]string{
 				"wrong.yaml": `apiVersion: v1
@@ -132,6 +141,7 @@ metadata:
 			wantErrContain: "error loading",
 		},
 		{
+			// v1.List 会被展开为其中的每个 webhook 配置。
 			name: "v1.List with validating webhook",
 			files: map[string]string{
 				"list.yaml": `apiVersion: v1
@@ -152,6 +162,7 @@ items:
 			wantConfigs: 1,
 		},
 		{
+			// 跨文件重名必须失败：否则后加载的配置会静默覆盖先加载的。
 			name: "duplicate webhook config names",
 			files: map[string]string{
 				"01-wh.yaml": `apiVersion: admissionregistration.k8s.io/v1
@@ -207,6 +218,7 @@ webhooks:
 			if len(configs) != tt.wantConfigs {
 				t.Errorf("expected %d configs, got %d", tt.wantConfigs, len(configs))
 			}
+			// 有配置时哈希必须非空，调用方据此判断配置是否发生变化。
 			if tt.wantConfigs > 0 && hash == "" {
 				t.Error("expected non-empty hash")
 			}
@@ -214,6 +226,8 @@ webhooks:
 	}
 }
 
+// TestValidatingLoadResult_GetWebhookAccessors 验证访问器按 webhook 粒度展开，
+// 而不是按配置对象粒度。
 func TestValidatingLoadResult_GetWebhookAccessors(t *testing.T) {
 	url := "https://example.com"
 	result := &ValidatingLoadResult{
@@ -241,6 +255,7 @@ func TestValidatingLoadResult_GetWebhookAccessors(t *testing.T) {
 	}
 }
 
+// TestMutatingLoadResult_GetWebhookAccessors 验证变更类 webhook 的访问器展开。
 func TestMutatingLoadResult_GetWebhookAccessors(t *testing.T) {
 	url := "https://example.com"
 	result := &MutatingLoadResult{

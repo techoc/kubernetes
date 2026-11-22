@@ -24,27 +24,33 @@ import (
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 )
 
+// fakeBackend 记录收到的事件，用于验证 Union 的分发行为。
 type fakeBackend struct {
 	events []*auditinternal.Event
 }
 
+// ProcessEvents 保存事件并始终报告成功。
 func (f *fakeBackend) ProcessEvents(events ...*auditinternal.Event) bool {
 	f.events = append(f.events, events...)
 	return true
 }
 
+// Run 立即返回，fake 后端没有后台循环。
 func (f *fakeBackend) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// Shutdown 无资源需要释放。
 func (f *fakeBackend) Shutdown() {
 	// Nothing to do here.
 }
 
+// String 返回空字符串即可满足 Backend 接口。
 func (f *fakeBackend) String() string {
 	return ""
 }
 
+// TestUnion 验证 Union 把每个事件按原顺序广播给所有后端。
 func TestUnion(t *testing.T) {
 	backends := []Backend{
 		new(fakeBackend),
@@ -81,25 +87,32 @@ func TestUnion(t *testing.T) {
 	}
 }
 
+// cannotMultipleRunBackend 用于验证 Union.Run 不会对每个后端启动多次。
+// 如果 Run 被重复调用，close(started) 会 panic，测试因此失败。
 type cannotMultipleRunBackend struct {
 	started chan struct{}
 }
 
+// ProcessEvents 忽略事件。
 func (b *cannotMultipleRunBackend) ProcessEvents(events ...*auditinternal.Event) bool {
 	return true
 }
 
+// Run 关闭 started 作为"已启动一次"的标记。
 func (b *cannotMultipleRunBackend) Run(stopCh <-chan struct{}) error {
 	close(b.started)
 	return nil
 }
 
+// Shutdown 无资源需要释放。
 func (b *cannotMultipleRunBackend) Shutdown() {}
 
+// String 用于错误信息中的后端标识。
 func (b *cannotMultipleRunBackend) String() string {
 	return "cannotMultipleRunBackend"
 }
 
+// TestUnionRun 验证 Union 只对每个后端调用一次 Run（重复 close 会 panic）。
 func TestUnionRun(t *testing.T) {
 	backends := []Backend{
 		&cannotMultipleRunBackend{started: make(chan struct{})},

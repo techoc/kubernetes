@@ -19,6 +19,7 @@ package request
 import "net/http"
 
 const (
+	// MethodApply 是服务端 apply（SSA）的伪 HTTP 方法，用于审计与授权判断。
 	MethodApply            string = "APPLY"
 	MethodConnect          string = http.MethodConnect
 	MethodCreate           string = "CREATE"

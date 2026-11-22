@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// FakeHandler 是可配置接受/拒绝行为的假准入插件，用于验证链式调用顺序与短路逻辑。
+// admitCalled/validateCalled 记录被调用的阶段，测试据此断言“准入阶段不会触发校验阶段”等不变量。
 type FakeHandler struct {
 	*Handler
 	name                     string
@@ -33,6 +35,7 @@ type FakeHandler struct {
 	validate, validateCalled bool
 }
 
+// Admit 记录本次调用，并根据 admit 开关决定接受或拒绝。
 func (h *FakeHandler) Admit(ctx context.Context, a Attributes, o ObjectInterfaces) (err error) {
 	h.admitCalled = true
 	if h.admit {
@@ -41,6 +44,7 @@ func (h *FakeHandler) Admit(ctx context.Context, a Attributes, o ObjectInterface
 	return fmt.Errorf("Don't admit")
 }
 
+// Validate 记录本次调用，并根据 validate 开关决定接受或拒绝。
 func (h *FakeHandler) Validate(ctx context.Context, a Attributes, o ObjectInterfaces) (err error) {
 	h.validateCalled = true
 	if h.validate {
@@ -49,6 +53,8 @@ func (h *FakeHandler) Validate(ctx context.Context, a Attributes, o ObjectInterf
 	return fmt.Errorf("Don't validate")
 }
 
+// makeHandler 构造一个同时处理 admit 与 validate、且行为一致的假插件；
+// ops 指定它声明支持的 Operation，未声明的操作会被链直接跳过。
 func makeHandler(name string, accept bool, ops ...Operation) *FakeHandler {
 	return &FakeHandler{
 		name:     name,
@@ -58,9 +64,13 @@ func makeHandler(name string, accept bool, ops ...Operation) *FakeHandler {
 	}
 }
 
+// TestAdmitAndValidate 验证链式准入的几条核心语义：
+// 只调用声明支持该 Operation 的插件；某一插件拒绝后立即短路，后续插件不再被调用；
+// 且 Admit 与 Validate 两个阶段互不串扰。
 func TestAdmitAndValidate(t *testing.T) {
 	sysns := metav1.NamespaceSystem
 	otherns := "default"
+	// calls 精确描述每个用例中“应当被调用的插件”，用来检测漏调用与多调用。
 	tests := []struct {
 		name      string
 		ns        string
@@ -71,6 +81,7 @@ func TestAdmitAndValidate(t *testing.T) {
 		calls     map[string]bool
 	}{
 		{
+			// 所有插件都支持 Create，全部按序执行并接受。
 			name:      "all accept",
 			ns:        sysns,
 			operation: Create,
@@ -84,6 +95,7 @@ func TestAdmitAndValidate(t *testing.T) {
 			accept: true,
 		},
 		{
+			// b 不声明 Create，应被忽略；a、c 正常执行。
 			name:      "ignore handler",
 			ns:        otherns,
 			operation: Create,
@@ -97,6 +109,7 @@ func TestAdmitAndValidate(t *testing.T) {
 			accept: true,
 		},
 		{
+			// 没有插件声明 Connect，链为空，直接放行。
 			name:      "ignore all",
 			ns:        sysns,
 			operation: Connect,
@@ -110,6 +123,7 @@ func TestAdmitAndValidate(t *testing.T) {
 			accept: true,
 		},
 		{
+			// b 拒绝 Delete 后短路，c 本就不支持 Delete，因此 c 不应被调用。
 			name:      "reject one",
 			ns:        otherns,
 			operation: Delete,
@@ -126,6 +140,7 @@ func TestAdmitAndValidate(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("testcase = %s", test.name)
 		// call admit and check that validate was not called at all
+		// 第一阶段：只跑 Admit，同时确认没有任何插件误触发 Validate。
 		err := test.chain.Admit(context.TODO(), NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		accepted := (err == nil)
 		if accepted != test.accept {
@@ -147,6 +162,7 @@ func TestAdmitAndValidate(t *testing.T) {
 		}
 
 		// call validate and check that admit was not called at all
+		// 第二阶段：只跑 Validate，同样确认 Admit 未被误触发。
 		err = test.chain.Validate(context.TODO(), NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		accepted = (err == nil)
 		if accepted != test.accept {
@@ -168,6 +184,8 @@ func TestAdmitAndValidate(t *testing.T) {
 	}
 }
 
+// TestHandles 验证 chainAdmissionHandler.Handles 的聚合语义：
+// 只要有任一插件声明支持该 Operation 即为 true。
 func TestHandles(t *testing.T) {
 	chain := chainAdmissionHandler{
 		makeHandler("a", true, Update, Delete, Create),

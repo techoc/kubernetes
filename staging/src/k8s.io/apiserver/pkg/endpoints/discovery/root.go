@@ -52,6 +52,9 @@ type GroupLister interface {
 // rootAPIsHandler creates a webservice serving api group discovery.
 // The list of APIGroups may change while the server is running because additional resources
 // are registered or removed.  It is not safe to cache the values.
+//
+// 因此读路径统一加 RLock，写路径加 Lock；apiGroupNames 单独维护插入顺序，
+// 因为 map 迭代顺序不稳定，而发现输出需要可预测的顺序。
 type rootAPIsHandler struct {
 	// addresses is used to build cluster IPs for discovery.
 	addresses Addresses
@@ -66,6 +69,7 @@ type rootAPIsHandler struct {
 	apiGroupNames []string
 }
 
+// NewRootAPIsHandler 构造 /apis 发现处理器，并沿用旧版空 APIVersion 的兼容序列化。
 func NewRootAPIsHandler(addresses Addresses, serializer runtime.NegotiatedSerializer) *rootAPIsHandler {
 	// Because in release 1.1, /apis returns response with empty APIVersion, we
 	// use stripVersionNegotiatedSerializer to keep the response backwards
@@ -79,6 +83,7 @@ func NewRootAPIsHandler(addresses Addresses, serializer runtime.NegotiatedSerial
 	}
 }
 
+// AddGroup 新增或更新一个 API 组；已存在时只覆盖内容，不重复追加顺序项。
 func (s *rootAPIsHandler) AddGroup(apiGroup metav1.APIGroup) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -91,6 +96,7 @@ func (s *rootAPIsHandler) AddGroup(apiGroup metav1.APIGroup) {
 	}
 }
 
+// RemoveGroup 删除 API 组，并同步从顺序列表中移除，保持两个结构一致。
 func (s *rootAPIsHandler) RemoveGroup(groupName string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -104,6 +110,7 @@ func (s *rootAPIsHandler) RemoveGroup(groupName string) {
 	}
 }
 
+// Groups 返回当前所有 API 组的发现信息；结果按插入顺序排列。
 func (s *rootAPIsHandler) Groups(ctx context.Context, req *http.Request) ([]metav1.APIGroup, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -122,6 +129,7 @@ func (s *rootAPIsHandler) groupsLocked(ctx context.Context, req *http.Request) [
 		orderedGroups = append(orderedGroups, s.apiGroups[groupName])
 	}
 
+	// 复制一份再写入 ServerAddressByClientCIDRs，避免修改缓存中的 APIGroup 对象。
 	groups := make([]metav1.APIGroup, len(orderedGroups))
 	for i := range orderedGroups {
 		groups[i] = orderedGroups[i]
@@ -131,6 +139,7 @@ func (s *rootAPIsHandler) groupsLocked(ctx context.Context, req *http.Request) [
 	return groups
 }
 
+// ServeHTTP 输出 APIGroupList；整个序列化过程持有读锁，保证输出的一致性快照。
 func (s *rootAPIsHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -140,6 +149,7 @@ func (s *rootAPIsHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 	responsewriters.WriteObjectNegotiated(s.serializer, negotiation.DefaultEndpointRestrictions, schema.GroupVersion{}, resp, req, http.StatusOK, &groupList, false)
 }
 
+// restfulHandle 把 go-restful 请求桥接回标准 net/http 处理逻辑。
 func (s *rootAPIsHandler) restfulHandle(req *restful.Request, resp *restful.Response) {
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }

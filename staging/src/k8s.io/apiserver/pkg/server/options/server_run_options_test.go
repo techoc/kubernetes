@@ -30,6 +30,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestServerRunOptionsValidate 表驱动验证 Validate 对各类非法取值的拒绝与对合法配置的放行。
+// 每个用例只改动一个字段，错误消息断言用于锁定用户可见的诊断文本。
 func TestServerRunOptionsValidate(t *testing.T) {
 	testComponent := "test"
 	testCases := []struct {
@@ -278,6 +280,7 @@ func TestServerRunOptionsValidate(t *testing.T) {
 
 	for _, testcase := range testCases {
 		t.Run(testcase.name, func(t *testing.T) {
+			// 模拟版本需要先写入注册表，Validate 会据此校验 [min, max] 区间。
 			if testcase.emulationVersion != "" {
 				effectiveVersion := testcase.testOptions.ComponentGlobalsRegistry.EffectiveVersionFor(testcase.testOptions.ComponentName)
 				effectiveVersion.(basecompatibility.MutableEffectiveVersion).SetEmulationVersion(version.MustParse(testcase.emulationVersion))
@@ -294,6 +297,8 @@ func TestServerRunOptionsValidate(t *testing.T) {
 	}
 }
 
+// newTestRegistry 构造只注册一个测试组件的版本注册表。
+// 固定二进制版本 1.35、最低兼容 1.32，使仿真版本区间断言可预测。
 func newTestRegistry(componentName string) basecompatibility.ComponentGlobalsRegistry {
 	registry := basecompatibility.NewComponentGlobalsRegistry()
 	featureGate := utilfeature.DefaultFeatureGate.DeepCopy()
@@ -302,6 +307,8 @@ func newTestRegistry(componentName string) basecompatibility.ComponentGlobalsReg
 	return registry
 }
 
+// TestValidateCorsAllowedOriginList 验证 CORS 来源正则的校验规则：
+// 空列表合法（表示禁用 CORS），空字符串条目非法，正则必须锚定到 origin 头中 host 的起止位置。
 func TestValidateCorsAllowedOriginList(t *testing.T) {
 	tests := []struct {
 		regexp           [][]string
@@ -351,6 +358,7 @@ func TestValidateCorsAllowedOriginList(t *testing.T) {
 		for _, regexp := range test.regexp {
 			t.Run(fmt.Sprintf("regexp/%s", regexp), func(t *testing.T) {
 				options := NewServerRunOptions()
+				// 先确认默认配置本身合法，否则无法判断后续错误是否由被测字段引起。
 				if errs := options.Validate(); len(errs) != 0 {
 					t.Fatalf("wrong test setup: %#v", errs)
 				}
@@ -373,6 +381,7 @@ func TestValidateCorsAllowedOriginList(t *testing.T) {
 	}
 }
 
+// TestServerRunOptionsWithShutdownWatchTerminationGracePeriod 验证 watch 关闭宽限期的默认值与负值校验。
 func TestServerRunOptionsWithShutdownWatchTerminationGracePeriod(t *testing.T) {
 	tests := []struct {
 		name             string

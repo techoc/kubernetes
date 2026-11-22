@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package discovery 实现 API 发现端点：/api、/apis、/apis/<group>/<version> 等
+// 路径返回服务端支持的组、版本与资源列表，客户端依赖这些信息进行服务发现。
 package discovery
 
 import (
@@ -28,10 +30,12 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
+// APIResourceLister 提供某个组版本下的资源列表，由各 API 安装器实现。
 type APIResourceLister interface {
 	ListAPIResources() []metav1.APIResource
 }
 
+// APIResourceListerFunc 把普通函数适配成 APIResourceLister。
 type APIResourceListerFunc func() []metav1.APIResource
 
 func (f APIResourceListerFunc) ListAPIResources() []metav1.APIResource {
@@ -47,6 +51,10 @@ type APIVersionHandler struct {
 	apiResourceLister APIResourceLister
 }
 
+// NewAPIVersionHandler 构造单个组版本的发现处理器。
+//
+// 对部分历史遗留的组（见 keepUnversioned），响应体需要去掉 apiVersion 字段以
+// 兼容 1.1 时代的客户端行为，因此在这里替换序列化器。
 func NewAPIVersionHandler(serializer runtime.NegotiatedSerializer, groupVersion schema.GroupVersion, apiResourceLister APIResourceLister) *APIVersionHandler {
 	if keepUnversioned(groupVersion.Group) {
 		// Because in release 1.1, /apis/extensions returns response with empty
@@ -62,6 +70,7 @@ func NewAPIVersionHandler(serializer runtime.NegotiatedSerializer, groupVersion 
 	}
 }
 
+// AddToWebService 把 GET / 路由注册到给定的 WebService 上。
 func (s *APIVersionHandler) AddToWebService(ws *restful.WebService) {
 	mediaTypes, _ := negotiation.MediaTypesForSerializer(s.serializer)
 	ws.Route(ws.GET("/").To(s.handle).
@@ -77,6 +86,10 @@ func (s *APIVersionHandler) handle(req *restful.Request, resp *restful.Response)
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }
 
+// ServeHTTP 以协商后的格式输出该组版本的 APIResourceList。
+//
+// 这里传入空的 GroupVersion 作为错误响应上下文，因为响应内容本身已带有
+// 组版本信息，错误编码不需要额外的 GV。
 func (s *APIVersionHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	responsewriters.WriteObjectNegotiated(s.serializer, negotiation.DefaultEndpointRestrictions, schema.GroupVersion{}, w, req, http.StatusOK,
 		&metav1.APIResourceList{GroupVersion: s.groupVersion.String(), APIResources: s.apiResourceLister.ListAPIResources()}, false)

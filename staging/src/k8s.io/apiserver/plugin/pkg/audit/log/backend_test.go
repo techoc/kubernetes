@@ -37,9 +37,14 @@ import (
 )
 
 func init() {
+	// 注册审计类型，供 JSON 测试反序列化使用。
 	install.Install(audit.Scheme)
 }
 
+// TestLogEventsLegacy 验证 legacy 单行文本格式的字段布局。
+//
+// 该格式被日志采集器长期依赖，字段顺序与占位符（<none>/<unknown>/<deferred>）
+// 属于兼容性契约，因此用正则做精确匹配。
 func TestLogEventsLegacy(t *testing.T) {
 	for _, test := range []struct {
 		event    *auditinternal.Event
@@ -105,6 +110,8 @@ func TestLogEventsLegacy(t *testing.T) {
 	}
 }
 
+// TestLogEventsJson 验证 JSON 格式的可逆性：写出的事件再解码回来必须与原对象完全相等，
+// 保证结构化审计日志不丢字段、不改变类型。
 func TestLogEventsJson(t *testing.T) {
 	for _, event := range []*auditinternal.Event{
 		{

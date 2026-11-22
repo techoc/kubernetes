@@ -37,6 +37,8 @@ import (
 var defaultReloadInterval = 1 * time.Minute
 
 // SetReloadIntervalForTests sets the reload interval for testing and returns a function to restore the original value.
+//
+// 这是包级全局变量，测试必须用返回的函数恢复原值，否则会污染同包其他用例。
 func SetReloadIntervalForTests(interval time.Duration) func() {
 	original := defaultReloadInterval
 	defaultReloadInterval = interval
@@ -47,6 +49,8 @@ func SetReloadIntervalForTests(interval time.Duration) func() {
 
 // ValidatingWebhookLoadFunc loads validating webhook configurations from a directory.
 // Returns the configurations, a hash string for change detection, and any error.
+//
+// hash 由文件内容计算，用于在内容未变时跳过重建 accessor 的开销。
 type ValidatingWebhookLoadFunc func(dir string) ([]*admissionregistrationv1.ValidatingWebhookConfiguration, string, error)
 
 // MutatingWebhookLoadFunc loads mutating webhook configurations from a directory.
@@ -57,12 +61,16 @@ type MutatingWebhookLoadFunc func(dir string) ([]*admissionregistrationv1.Mutati
 type accessorBuilder[T runtime.Object] func(configs []T) []webhook.WebhookAccessor
 
 // webhookData holds the currently loaded webhook configurations and pre-built accessors.
+//
+// 配置与 accessor 放在同一个不可变快照里整体原子替换，读者不会看到半更新的状态。
 type webhookData[T runtime.Object] struct {
 	configurations []T
 	accessors      []webhook.WebhookAccessor
 }
 
 // staticWebhookSource provides webhook configurations loaded from manifest files.
+//
+// 所有可变状态都用 atomic 保存：读路径（每个准入请求）无锁，写路径（重载循环）单线程。
 type staticWebhookSource[T runtime.Object] struct {
 	manifestsDir   string
 	apiServerID    string
@@ -117,6 +125,9 @@ func NewMutatingSource(manifestsDir, apiServerID string, loadFunc MutatingWebhoo
 }
 
 // LoadInitial performs the initial load of webhook manifests.
+//
+// 失败直接返回错误，让 apiserver 启动失败：静态清单是启动前提，静默降级会让本应被拦截的
+// 请求放行。
 func (s *staticWebhookSource[T]) LoadInitial() error {
 	configs, hash, err := s.loadFunc(s.manifestsDir)
 	if err != nil {
@@ -156,6 +167,8 @@ func (s *staticWebhookSource[T]) RunReloadLoop(ctx context.Context) {
 	)
 }
 
+// checkAndReload 尝试重载清单；任何失败都保留上一次成功的配置，避免短暂的文件错误
+// 导致准入策略全部失效。
 func (s *staticWebhookSource[T]) checkAndReload() {
 	configs, hash, err := s.loadFunc(s.manifestsDir)
 	if err != nil {
@@ -189,6 +202,8 @@ func (s *staticWebhookSource[T]) HasSynced() bool {
 }
 
 // Webhooks returns the list of webhook accessors.
+//
+// 返回的切片属于不可变快照，调用方不得修改；初始加载完成前返回 nil。
 func (s *staticWebhookSource[T]) Webhooks() []webhook.WebhookAccessor {
 	current := s.current.Load()
 	if current == nil {
@@ -207,6 +222,7 @@ func (s *staticWebhookSource[T]) Webhooks() []webhook.WebhookAccessor {
 func validateAccessors(accessors []webhook.WebhookAccessor) error {
 	var errs []error
 	for _, a := range accessors {
+		// 选择器解析失败时 informer 的过滤逻辑会 panic 或静默放行，必须在加载期暴露。
 		if _, err := a.GetParsedNamespaceSelector(); err != nil {
 			errs = append(errs, fmt.Errorf("webhook %q: invalid namespaceSelector: %w", a.GetName(), err))
 		}
@@ -214,5 +230,6 @@ func validateAccessors(accessors []webhook.WebhookAccessor) error {
 			errs = append(errs, fmt.Errorf("webhook %q: invalid objectSelector: %w", a.GetName(), err))
 		}
 	}
+	// 汇总所有错误而非首个错误，便于一次性修复多个清单。
 	return errors.Join(errs...)
 }

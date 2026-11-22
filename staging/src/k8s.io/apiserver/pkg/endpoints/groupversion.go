@@ -36,6 +36,8 @@ import (
 )
 
 // ConvertabilityChecker indicates what versions a GroupKind is available in.
+//
+// 用于在解码时确定有哪些目标版本可用，避免把对象转换到未注册的版本。
 type ConvertabilityChecker interface {
 	// VersionsForGroupKind indicates what versions are available to convert a group kind. This determines
 	// what our decoding abilities are.
@@ -47,7 +49,11 @@ type ConvertabilityChecker interface {
 // /${storage_key}[/${object_name}]
 // Where 'storage_key' points to a rest.Storage object stored in storage.
 // This object should contain all parameterization necessary for running a particular API version
+//
+// 一个 APIGroupVersion 对应"一个 group/version 的全部资源"；不同版本共享同一份 Storage，
+// 差异由 Serializer/Convertor 承担，因此这里的字段大多是编解码与授权所需的依赖注入点。
 type APIGroupVersion struct {
+	// Storage 以 URL 中的资源段为键，映射到具体实现；同一个对象可能在多个路径下暴露（如 status 子资源）。
 	Storage map[string]rest.Storage
 
 	Root string
@@ -75,6 +81,9 @@ type APIGroupVersion struct {
 	Serializer     runtime.NegotiatedSerializer
 	ParameterCodec runtime.ParameterCodec
 
+	// 下面这组是 scheme 能力的拆分注入：Typer/Creater 负责类型识别与实例化，
+	// Convertor 负责版本转换，UnsafeConvertor 跳过校验（用于内部可信路径），
+	// TypeConverter 服务于 server-side apply 的字段管理。
 	Typer                 runtime.ObjectTyper
 	Creater               runtime.ObjectCreater
 	Convertor             runtime.ObjectConvertor
@@ -97,12 +106,16 @@ type APIGroupVersion struct {
 
 	// The limit on the request body size that would be accepted and decoded in a write request.
 	// 0 means no limit.
+	// 限制请求体大小是防御超大对象耗尽内存的第一道闸门；0 表示不限制。
 	MaxRequestBodyBytes int64
 }
 
 // InstallREST registers the REST handlers (storage, watch, proxy and redirect) into a restful Container.
 // It is expected that the provided path root prefix will serve all operations. Root MUST NOT end
 // in a slash.
+//
+// 返回聚合发现所需的资源描述、存储版本信息，以及注册过程中的错误集合。
+// 错误以 Aggregate 返回而不是立即失败，是为了让调用方一次性看到所有冲突。
 func (g *APIGroupVersion) InstallREST(container *restful.Container) ([]apidiscoveryv2.APIResourceDiscovery, []*storageversion.ResourceInfo, error) {
 	prefix := path.Join(g.Root, g.GroupVersion.Group, g.GroupVersion.Version)
 	installer := &APIInstaller{
@@ -122,6 +135,10 @@ func (g *APIGroupVersion) InstallREST(container *restful.Container) ([]apidiscov
 	return aggregatedDiscoveryResources, removeNonPersistedResources(resourceInfos), utilerrors.NewAggregate(registrationErrors)
 }
 
+// removeNonPersistedResources 过滤掉无需向存储版本 API 登记的资源。
+//
+// EncodingVersion 为空说明该资源不落盘（如子资源、虚拟资源），让它们进入存储版本
+// 屏障会造成永远无法完成的迁移等待。
 func removeNonPersistedResources(infos []*storageversion.ResourceInfo) []*storageversion.ResourceInfo {
 	var filtered []*storageversion.ResourceInfo
 	for _, info := range infos {
@@ -140,6 +157,7 @@ type staticLister struct {
 	list []metav1.APIResource
 }
 
+// ListAPIResources 直接返回构造时固定的列表：发现信息在安装时已确定，运行期不再变化。
 func (s staticLister) ListAPIResources() []metav1.APIResource {
 	return s.list
 }

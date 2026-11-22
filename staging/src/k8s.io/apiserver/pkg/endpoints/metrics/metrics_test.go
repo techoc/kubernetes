@@ -31,6 +31,9 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestCleanVerb 验证指标 verb 标签的归一化。
+// 中文说明：指标标签基数必须受控，因此未知 verb 统一归为 "other"；
+// 带 watch=true 的 GET/LIST 要改写为 WATCH，否则 watch 的延迟/流量会被计入读请求。
 func TestCleanVerb(t *testing.T) {
 	testCases := []struct {
 		desc          string
@@ -244,6 +247,8 @@ func TestCleanVerb(t *testing.T) {
 	}
 }
 
+// TestCleanScope 验证 scope 标签推导：单对象请求为 resource，集合请求按命名空间
+// 或集群区分，POST 无对象名但仍是 resource。
 func TestCleanScope(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -300,6 +305,8 @@ func TestCleanScope(t *testing.T) {
 	}
 }
 
+// TestCleanFieldValidation 验证 fieldValidation 查询参数如何成为指标标签；
+// 缺省时为空标签，非法/未知值由实现决定归一化策略。
 func TestCleanFieldValidation(t *testing.T) {
 	testCases := []struct {
 		name                    string
@@ -356,6 +363,8 @@ func TestCleanFieldValidation(t *testing.T) {
 	}
 }
 
+// TestResponseWriterDecorator 验证装饰器能通过 Unwrap 暴露被包装的 writer，
+// 这是 responsewriter 链式解包约定的基础。
 func TestResponseWriterDecorator(t *testing.T) {
 	decorator := &ResponseWriterDelegator{
 		ResponseWriter: &responsewriter.FakeResponseWriter{},
@@ -367,6 +376,8 @@ func TestResponseWriterDecorator(t *testing.T) {
 	}
 }
 
+// TestRecordDroppedRequests 验证被丢弃请求会计入 apiserver_request_total，
+// 并按 resource/scope/verb 打标签，供 flowcontrol 排查限流。
 func TestRecordDroppedRequests(t *testing.T) {
 	testedMetrics := []string{
 		"apiserver_request_total",
@@ -470,6 +481,8 @@ func TestRecordDroppedRequests(t *testing.T) {
 	}
 }
 
+// TestCleanListScope 验证 list 请求的 scope 标签来源优先级：RequestInfo 优先，
+// 其次 context 中的 namespace，再次 fieldSelector（跨命名空间 list 视为 cluster）。
 func TestCleanListScope(t *testing.T) {
 	scenarios := []struct {
 		name          string

@@ -31,6 +31,9 @@ import (
 // RecommendedOptions contains the recommended options for running an API server.
 // If you add something to this list, it should be in a logical grouping.
 // Each of them can be nil to leave the feature unconfigured on ApplyTo.
+//
+// 中文说明：各子选项可为 nil，表示不启用对应功能；聚合型 apiserver
+// 通过替换个别字段即可获得与 kube-apiserver 一致的基础行为。
 type RecommendedOptions struct {
 	Etcd           *EtcdOptions
 	SecureServing  *SecureServingOptionsWithLoopback
@@ -52,6 +55,8 @@ type RecommendedOptions struct {
 	Traces *TracingOptions
 }
 
+// NewRecommendedOptions 构造一组相互匹配的默认选项；prefix/codec 决定 etcd
+// 键前缀与存储编码。
 func NewRecommendedOptions(prefix string, codec runtime.Codec) *RecommendedOptions {
 	sso := NewSecureServingOptions()
 
@@ -80,6 +85,7 @@ func NewRecommendedOptions(prefix string, codec runtime.Codec) *RecommendedOptio
 	}
 }
 
+// AddFlags 把各子选项的标志注册到同一 FlagSet，保证命令行接口一致。
 func (o *RecommendedOptions) AddFlags(fs *pflag.FlagSet) {
 	o.Etcd.AddFlags(fs)
 	o.SecureServing.AddFlags(fs)
@@ -95,6 +101,9 @@ func (o *RecommendedOptions) AddFlags(fs *pflag.FlagSet) {
 
 // ApplyTo adds RecommendedOptions to the server configuration.
 // pluginInitializers can be empty, it is only need for additional initializers.
+//
+// 中文说明：应用顺序有依赖——egress selector 要先于 tracing（tracing 依赖
+// 出站连接），客户端要早于 features/admission（二者需要 kube client）。
 func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.Etcd.ApplyTo(&config.Config); err != nil {
 		return err
@@ -120,6 +129,8 @@ func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.CoreAPI.ApplyTo(config); err != nil {
 		return err
 	}
+	// 没有 ClientConfig（例如仅本地测试）时跳过客户端构造，features 与
+	// admission 需能接受 nil 客户端。
 	var kubeClient kubernetes.Interface
 	var dynamicClient dynamic.Interface
 	if config.ClientConfig != nil {
@@ -136,6 +147,7 @@ func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.Features.ApplyTo(&config.Config, kubeClient, config.SharedInformerFactory); err != nil {
 		return err
 	}
+	// 额外初始化器必须在所有 ApplyTo 之后执行，才能读到已填充的配置。
 	initializers, err := o.ExtraAdmissionInitializers(config)
 	if err != nil {
 		return err
@@ -148,6 +160,7 @@ func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	return nil
 }
 
+// Validate 汇总所有子选项的错误；不短路，便于一次性报告全部配置问题。
 func (o *RecommendedOptions) Validate() []error {
 	errors := []error{}
 	errors = append(errors, o.Etcd.Validate()...)

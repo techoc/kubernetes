@@ -32,6 +32,9 @@ type cacheIntervalSource interface {
 // watchCacheInterval serves as an abstraction over a source
 // of watchCacheEvents. It delegates iteration to a cacheIntervalSource
 // and holds common metadata (resourceVersion, initialEventsEndBookmark).
+//
+// 区间对象让 watch 在持有 cache 读锁的极短时间内“预订”一段事件范围，
+// 之后的遍历在锁外完成，避免长时间阻塞写入路径。
 type watchCacheInterval struct {
 	// source provides the iteration logic for this interval.
 	source cacheIntervalSource
@@ -41,6 +44,9 @@ type watchCacheInterval struct {
 	resourceVersion uint64
 
 	// initialEventsEndBookmark will be sent after sending all events in cacheInterval
+	//
+	// 仅用于 SendInitialEvents 语义：客户端据此得知“初始事件已发完”，
+	// 后续可以安全地以 bookmark 的 RV 作为 watch 起点。
 	initialEventsEndBookmark *watchCacheEvent
 }
 
@@ -51,9 +57,14 @@ func (wci *watchCacheInterval) Next() (*watchCacheEvent, error) {
 	return wci.source.Next()
 }
 
+// indexerFunc 按下标取出事件；下标对环形缓冲区需取模。
 type indexerFunc func(int) *watchCacheEvent
+
+// indexValidator 判断下标是否仍在有效窗口内（未被环形缓冲区覆盖）。
 type indexValidator func(int) bool
 
+// newCacheInterval 构造基于环形缓冲区的事件区间。
+// locker 应为 watchCache 读锁的 RLocker，因为 indexer/indexValidator 只读。
 func newCacheInterval(startIndex, endIndex int, indexer indexerFunc, indexValidator indexValidator, resourceVersion uint64, locker sync.Locker) *watchCacheInterval {
 	return &watchCacheInterval{
 		source: &historyCacheIntervalSource{
@@ -72,11 +83,14 @@ func newCacheInterval(startIndex, endIndex int, indexer indexerFunc, indexValida
 // returned by Next() need to be events from a List() done on the underlying store of
 // the watch cache.
 // The items returned in the interval will be sorted by Key.
+//
+// rv=0 的 list/watch 不走事件历史，而是直接从存储快照取全量对象，包装成 Added 事件。
 func newCacheIntervalFromStore(resourceVersion uint64, snap store.Snapshot, key string, matchesSingle bool) (*watchCacheInterval, error) {
 	buffer := &watchCacheIntervalBuffer{}
 	var allItems []interface{}
 	var err error
 	if matchesSingle {
+		// 按 name 精确查询只需取一个对象，避免全量遍历。
 		item, exists, err := snap.GetByKey(key)
 		if err != nil {
 			return nil, err
@@ -110,6 +124,8 @@ func newCacheIntervalFromStore(resourceVersion uint64, snap store.Snapshot, key 
 // newCacheIntervalFromLazySnapshot builds an interval backed by an immutable store snapshot
 // Unlike newCacheIntervalFromStore, it captures snapshot reference which takes O(1) under watch-cache RLock
 // and defers O(N) traversal to first Next() call post lock release
+//
+// 这是大集群 list 的关键优化：持锁时间与对象数无关，避免全量 list 期间阻塞写请求。
 func newCacheIntervalFromLazySnapshot(resourceVersion uint64, snap store.Snapshot) *watchCacheInterval {
 	return &watchCacheInterval{
 		source: &lazySnapshotCacheIntervalSource{
@@ -120,6 +136,7 @@ func newCacheIntervalFromLazySnapshot(resourceVersion uint64, snap store.Snapsho
 	}
 }
 
+// storeElementToWatchCacheEvent 把存储元素转换为 Added 事件；标签与字段预先算好，避免每次过滤重算。
 func storeElementToWatchCacheEvent(elem *store.Element, resourceVersion uint64) *watchCacheEvent {
 	return &watchCacheEvent{
 		Type:            watch.Added,
@@ -220,6 +237,7 @@ func (s *historyCacheIntervalSource) Next() (*watchCacheEvent, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	// 拿到锁后必须重新校验：等待锁期间环形缓冲区可能已覆盖起点，此时数据已丢失。
 	if valid := s.indexValidator(s.startIndex); !valid {
 		return nil, fmt.Errorf("cache interval invalidated, interval startIndex: %d", s.startIndex)
 	}
@@ -231,6 +249,7 @@ func (s *historyCacheIntervalSource) Next() (*watchCacheEvent, error) {
 	return nil, nil
 }
 
+// fillBuffer 一次批量取满缓冲区，把锁获取频率从“每事件一次”降到“每 100 个事件一次”。
 func (s *historyCacheIntervalSource) fillBuffer() {
 	s.buffer.startIndex = 0
 	s.buffer.endIndex = 0
@@ -275,6 +294,8 @@ type lazySnapshotCacheIntervalSource struct {
 	currentIndex int
 }
 
+// Next 首次调用时才物化快照内容；此后逐条转换为 Added 事件。
+// 该方法不持锁，因此不同 watcher 可并行遍历各自快照。
 func (s *lazySnapshotCacheIntervalSource) Next() (*watchCacheEvent, error) {
 	if !s.loaded {
 		items, err := s.snapshot.OrderedListPrefix("", "")
@@ -295,6 +316,7 @@ func (s *lazySnapshotCacheIntervalSource) Next() (*watchCacheEvent, error) {
 	return storeElementToWatchCacheEvent(elem, s.resourceVersion), nil
 }
 
+// bufferSize 是批量预取的容量；权衡锁竞争与单次持锁时长。
 const bufferSize = 100
 
 // watchCacheIntervalBuffer is used to reduce acquiring
@@ -320,6 +342,9 @@ func (wcib *watchCacheIntervalBuffer) next() (*watchCacheEvent, bool) {
 	// done, event if the watch event is aged out from the watch
 	// cache, it will not be GCed during the lifetime of the watcher
 	// that holds a reference to the buffer.
+	//
+	// 置 nil 是必要的内存回收措施：长连接的 watcher 可能长期持有缓冲区，
+	// 不清空会让已过期的对象无法被 GC。
 	wcib.buffer[wcib.startIndex] = nil
 	wcib.startIndex++
 	return next, true

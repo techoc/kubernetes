@@ -18,9 +18,10 @@ package mutating
 
 import (
 	"context"
-	"github.com/google/go-cmp/cmp"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +41,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDispatcher 是 MutatingAdmissionPolicy 分发器的端到端用例。
+//
+// 中文说明：每个用例给出对象、匹配规则与 mutation 表达式，断言补丁应用后的最终对象。
+// 覆盖的要点包括：ApplyConfiguration 补丁、多策略叠加、匹配/不匹配、reinvocation
+// 以及默认值在补丁后生效（策略写入的字段会被 defaulter 补齐）。
+// 类型转换器基于内置的 OpenAPI 客户端预热，因此测试不依赖网络。
 func TestDispatcher(t *testing.T) {
 	deploymentGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	deploymentGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
@@ -604,6 +611,7 @@ func TestDispatcher(t *testing.T) {
 	tcManager := patch.NewTypeConverterManager(nil, openapitest.NewEmbeddedFileClient())
 	go tcManager.Run(ctx)
 
+	// 预热类型转换器：轮询直到 Deployment 的 schema 可用，否则首个用例会拿到 503。
 	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, time.Second, true, func(context.Context) (done bool, err error) {
 		converter := tcManager.GetTypeConverter(deploymentGVK)
 		return converter != nil, nil
@@ -696,14 +704,18 @@ func TestDispatcher(t *testing.T) {
 	}
 }
 
+// testParamScope 把测试参数当作命名空间级对象处理。
 type testParamScope struct{}
 
+// Name 返回命名空间作用域。
 func (t testParamScope) Name() meta.RESTScopeName {
 	return meta.RESTScopeNameNamespace
 }
 
 var _ meta.RESTScope = testParamScope{}
 
+// fakeSetDefaultForDeployment 只补默认的更新策略类型，避免引入完整 defaulter 的
+// 依赖与噪音，同时仍能验证「补丁后执行 defaulting」这一行为。
 func fakeSetDefaultForDeployment(obj *appsv1.Deployment) {
 	// Just default strategy type so the tests have a defaulted field to observe
 	strategy := &obj.Spec.Strategy

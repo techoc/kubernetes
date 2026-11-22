@@ -36,10 +36,14 @@ type RESTDeleteStrategy interface {
 	runtime.ObjectTyper
 }
 
+// GarbageCollectionPolicy 表示删除对象时对其依赖对象的默认处理方式。
+// 只有实现了 GarbageCollectionDeleteStrategy 的资源才有意义。
 type GarbageCollectionPolicy string
 
 const (
+	// DeleteDependents 级联删除依赖对象（默认）。
 	DeleteDependents GarbageCollectionPolicy = "DeleteDependents"
+	// OrphanDependents 保留依赖对象，仅移除其 ownerReferences。
 	OrphanDependents GarbageCollectionPolicy = "OrphanDependents"
 	// Unsupported means that the resource knows that it cannot be GC'd, so the finalizers
 	// should never be set in storage.
@@ -50,6 +54,7 @@ const (
 // orphan dependents by default.
 type GarbageCollectionDeleteStrategy interface {
 	// DefaultGarbageCollectionPolicy returns the default garbage collection behavior.
+	// 仅当请求未显式指定 orphanDependents / propagationPolicy 时使用。
 	DefaultGarbageCollectionPolicy(ctx context.Context) GarbageCollectionPolicy
 }
 
@@ -72,15 +77,25 @@ type RESTGracefulDeleteStrategy interface {
 // where we set deletionTimestamp is pkg/registry/generic/registry/store.go.
 // This function is responsible for setting deletionTimestamp during gracefulDeletion,
 // other one for cascading deletions.
+//
+// 两个布尔返回值的语义：
+//   - graceful: 本次请求应执行优雅删除，调用方需持久化更新后的对象；
+//   - gracefulPending: 对象已处于优雅删除中，本次请求只需等待，不做写入。
+//
+// 注意：这里在写入前提前校验 preconditions 只是尽早失败，真正的强制仍在
+// 存储层完成，二者不可互相替代（存在检查与写入之间的竞态）。
 func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.Object, options *metav1.DeleteOptions) (graceful, gracefulPending bool, err error) {
 	objectMeta, gvk, kerr := objectMetaAndKind(strategy, obj)
 	if kerr != nil {
 		return false, false, kerr
 	}
+	// 先校验 DeleteOptions 本身，避免把非法参数带入后续逻辑。
 	if errs := validation.ValidateDeleteOptions(options); len(errs) > 0 {
 		return false, false, errors.NewInvalid(schema.GroupKind{Group: metav1.GroupName, Kind: "DeleteOptions"}, "", errs)
 	}
 	// Checking the Preconditions here to fail early. They'll be enforced later on when we actually do the deletion, too.
+	// UID 不匹配通常意味着“对象已被删除并重建”，这与 ResourceVersion 冲突
+	// 是两类不同的用户错误，错误信息中要能区分。
 	if options.Preconditions != nil {
 		if options.Preconditions.UID != nil && *options.Preconditions.UID != objectMeta.GetUID() {
 			return false, false, errors.NewConflict(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, objectMeta.GetName(), fmt.Errorf("the UID in the precondition (%s) does not match the UID in record (%s). The object might have been deleted and then recreated", *options.Preconditions.UID, objectMeta.GetUID()))
@@ -91,6 +106,8 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 	}
 
 	// Negative values will be treated as the value `1s` on the delete path.
+	// 负数在旧客户端里表示“立即删除”，这里统一规范为 1s，避免下游出现
+	// 负时长导致的计时异常。
 	if gracePeriodSeconds := options.GracePeriodSeconds; gracePeriodSeconds != nil && *gracePeriodSeconds < 0 {
 		options.GracePeriodSeconds = ptr.To[int64](1)
 	}
@@ -121,6 +138,7 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 			return false, false, nil
 		}
 		// only a shorter grace period may be provided by a user
+		// 只允许缩短宽限期：延长会破坏“删除已开始”的承诺，导致对象迟迟不消失。
 		if options.GracePeriodSeconds != nil {
 			period := int64(*options.GracePeriodSeconds)
 			if period >= *objectMeta.GetDeletionGracePeriodSeconds() {
@@ -152,6 +170,7 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 	}
 
 	// `CheckGracefulDelete` will be implemented by specific strategy
+	// 由具体资源决定是否需要优雅删除，并负责填充默认的 GracePeriodSeconds。
 	if !gracefulStrategy.CheckGracefulDelete(ctx, obj, options) {
 		return false, false, nil
 	}
@@ -175,6 +194,9 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 }
 
 // AdmissionToValidateObjectDeleteFunc returns a admission validate func for object deletion
+//
+// 删除路径的准入使用一个“虚拟”的属性记录：新对象为 nil，旧对象为待删除对象
+// 的深拷贝，避免准入插件意外修改存储中的对象。
 func AdmissionToValidateObjectDeleteFunc(admit admission.Interface, staticAttributes admission.Attributes, objInterfaces admission.ObjectInterfaces) ValidateObjectFunc {
 	mutatingAdmission, isMutatingAdmission := admit.(admission.MutationInterface)
 	validatingAdmission, isValidatingAdmission := admit.(admission.ValidationInterface)
@@ -183,6 +205,7 @@ func AdmissionToValidateObjectDeleteFunc(admit admission.Interface, staticAttrib
 	validating := isValidatingAdmission && validatingAdmission.Handles(staticAttributes.GetOperation())
 
 	return func(ctx context.Context, old runtime.Object) error {
+		// 两种准入都未注册时完全跳过，删除路径不应为此付出额外开销。
 		if !mutating && !validating {
 			return nil
 		}

@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestReadEgressSelectorConfiguration 覆盖配置文件读取：不存在、空文件、未知字段、
+// 重复字段、类型错误以及合法配置，重点验证严格解码会拒绝未知/重复字段。
 func TestReadEgressSelectorConfiguration(t *testing.T) {
 	testcases := []struct {
 		name           string
@@ -381,6 +383,8 @@ egressSelections:
 	}
 }
 
+// TestValidateEgressSelectorConfiguration 验证语义校验：egress 选择项必须唯一、
+// 名称必须是预定义类型、连接配置必须与代理协议匹配，防止运行时出现歧义路由。
 func TestValidateEgressSelectorConfiguration(t *testing.T) {
 	testcases := []struct {
 		name        string

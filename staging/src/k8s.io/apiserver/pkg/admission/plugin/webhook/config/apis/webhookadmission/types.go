@@ -21,6 +21,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // WebhookAdmission provides configuration for the webhook admission controller.
+//
+// 该类型是外部配置 API 的一部分，字段名与 JSON 标签一经发布即不可更改。
 type WebhookAdmission struct {
 	metav1.TypeMeta
 
@@ -34,6 +36,9 @@ type WebhookAdmission struct {
 	// resources are supported.
 	// Using this field requires the ManifestBasedAdmissionControlConfig
 	// feature gate to be enabled.
+	//
+	// 与 KubeConfigFile 不同，这里加载的是完整的 WebhookConfiguration 对象，支持运行时
+	// 自动重载；未开启 feature gate 时该字段会被拒绝，以免用户误以为配置已生效。
 	// +optional
 	StaticManifestsDir string
 }

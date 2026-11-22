@@ -26,6 +26,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestContentEncodingSupported 验证 Accept-Encoding 的协商结果：
+// 只有特性门控开启且客户端接受 gzip 时才返回 "gzip"，其余情况一律返回空串（不压缩）。
 func TestContentEncodingSupported(t *testing.T) {
 	scenarios := []struct {
 		name              string
@@ -55,6 +57,7 @@ func TestContentEncodingSupported(t *testing.T) {
 			expectedEncoding: "",
 		},
 		{
+			// 逗号分隔、含多个编码时仍应识别出 gzip。
 			name:              "multiple encodings with gzip",
 			acceptEncoding:    "deflate, gzip",
 			featureGate:       features.APIResponseCompression,
@@ -62,6 +65,7 @@ func TestContentEncodingSupported(t *testing.T) {
 			expectedEncoding:  "gzip",
 		},
 		{
+			// 只声明不支持的编码时不压缩，而不是回退到 deflate。
 			name:              "unsupported encoding only",
 			acceptEncoding:    "deflate",
 			featureGate:       features.APIResponseCompression,
@@ -94,6 +98,7 @@ func TestContentEncodingSupported(t *testing.T) {
 	}
 }
 
+// TestResponseContentEncodingSupported 验证内部辅助函数同样受 APIResponseCompression 门控约束。
 func TestResponseContentEncodingSupported(t *testing.T) {
 	scenarios := []struct {
 		name                          string

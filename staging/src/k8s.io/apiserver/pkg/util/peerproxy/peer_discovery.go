@@ -48,9 +48,16 @@ const (
 	// address" errors. With the default rate limiting (exponential backoff starting at 5ms),
 	// 20 retries per lease provides approximately 60-90 seconds of retry window, which is
 	// sufficient for both identity and endpoint leases to be established during normal startup.
+	//
+	// 启动期 identity lease 可能先于 endpoint lease 创建，此时解析对端地址会
+	// 得到 "missing port in address"。20 次、从 5ms 开始的指数退避约覆盖
+	// 60-90 秒，足以等到两类 lease 都就绪。
 	maxRetries = 20
 )
 
+// RunPeerDiscoveryCacheSync 启动 peer 发现缓存的同步 worker，并在退出时
+// 注销 informer 事件处理器、关闭队列。workers 并发处理同一个 lease 队列，
+// 但每次同步都是全量重建，重复处理是幂等的。
 func (h *peerProxyHandler) RunPeerDiscoveryCacheSync(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	defer h.peerLeaseQueue.ShutDown()
@@ -69,15 +76,21 @@ func (h *peerProxyHandler) RunPeerDiscoveryCacheSync(ctx context.Context, worker
 	<-ctx.Done()
 }
 
+// enqueueLease 把 lease 名放入队列；同步时以名称重新从 lister 读取，
+// 避免持有可能过期的对象引用。
 func (h *peerProxyHandler) enqueueLease(lease *v1.Lease) {
 	h.peerLeaseQueue.Add(lease.Name)
 }
 
+// runWorker 持续从队列取任务直到队列关闭。
 func (h *peerProxyHandler) runWorker(ctx context.Context) {
 	for h.processNextElectionItem(ctx) {
 	}
 }
 
+// processNextElectionItem 处理一个队列项并保证 Done 被调用，使队列的
+// 进行中计数正确；syncPeerDiscoveryCache 失败时由
+// handleSyncPeerDiscoveryCacheErr 决定重试或丢弃。
 func (h *peerProxyHandler) processNextElectionItem(ctx context.Context) bool {
 	key, shutdown := h.peerLeaseQueue.Get()
 	if shutdown {
@@ -90,6 +103,10 @@ func (h *peerProxyHandler) processNextElectionItem(ctx context.Context) bool {
 	return true
 }
 
+// syncPeerDiscoveryCache 根据当前 identity lease 全量重建对等发现缓存。
+// 先写入 raw cache，再由单写者的 refilter 应用排除规则，避免并发读写
+// 过滤后的缓存。单个 peer 拉取失败不会中止整体重建，返回值仅用于触发
+// 重试。
 func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 	var fetchDiscoveryErr error
 	// Rebuild the peer discovery cache from available leases.
@@ -102,6 +119,7 @@ func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 
 	newCache := map[string]PeerDiscoveryCacheEntry{}
 	for _, l := range leases {
+		// 过滤掉非本集群的、已删除 tombstone 或 holder 信息缺失的 lease。
 		_, ok := h.isValidPeerIdentityLease(l)
 		if !ok {
 			continue
@@ -112,6 +130,7 @@ func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 			fetchDiscoveryErr = err
 		}
 		// Only add if there is at least one GVR or group
+		// 空发现结果不缓存：可能对端尚未就绪，下次同步会重试。
 		if len(discoveryEntry.GVRs) > 0 || len(discoveryEntry.GroupDiscovery) > 0 {
 			newCache[l.Name] = discoveryEntry
 		}
@@ -124,6 +143,9 @@ func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 	return fetchDiscoveryErr
 }
 
+// fetchNewDiscoveryFor 解析对端地址并分别拉取 /api 与 /apis 的发现
+// 文档，汇总 GVR 集合与按组去重的发现项。core/v1 会记录在 GVR 集合中
+// 以便路由，但不写入聚合发现文档，因为它不由 /apis 提供。
 func (h *peerProxyHandler) fetchNewDiscoveryFor(ctx context.Context, serverID string) (PeerDiscoveryCacheEntry, error) {
 	hostport, err := h.hostportInfo(serverID)
 	if err != nil {
@@ -139,6 +161,7 @@ func (h *peerProxyHandler) fetchNewDiscoveryFor(ctx context.Context, serverID st
 
 	// Use a slice to preserve order from the peer.
 	// Use a map to track seen groups to avoid duplicates.
+	// 保留对端返回顺序（切片）同时去重（map），兼得稳定输出与正确性。
 	groupList := make([]apidiscoveryv2.APIGroupDiscovery, 0)
 	seenGroups := make(map[string]struct{})
 
@@ -181,6 +204,9 @@ func (h *peerProxyHandler) fetchNewDiscoveryFor(ctx context.Context, serverID st
 	}, discoveryErr
 }
 
+// aggregateDiscovery 以 apiserver 自身身份向对端发起发现请求。Accept
+// 头优先请求不含 peer 信息的 V2（AcceptV2NoPeer），避免对端把我们的
+// 对等聚合再嵌套进来，形成循环或重复。
 func (h *peerProxyHandler) aggregateDiscovery(ctx context.Context, path string, hostport string) (*apidiscoveryv2.APIGroupDiscoveryList, error) {
 	req, err := http.NewRequest(http.MethodGet, path, nil)
 	if err != nil {
@@ -199,6 +225,8 @@ func (h *peerProxyHandler) aggregateDiscovery(ctx context.Context, path string, 
 	// Fallback to V2 and V1 in that order if V2Local is not recognized.
 	req.Header.Add("Accept", discovery.AcceptV2NoPeer+","+discovery.AcceptV2+","+discovery.AcceptV1)
 
+	// 用内存 ResponseWriter 承接代理响应，便于在进程内直接解码，无需
+	// 建立回环连接。
 	writer := responsewriterutil.NewInMemoryResponseWriter()
 	h.proxyRequestToDestinationAPIServer(req, writer, hostport, schema.GroupVersionResource{})
 	if writer.RespCode() != http.StatusOK {
@@ -214,6 +242,9 @@ func (h *peerProxyHandler) aggregateDiscovery(ctx context.Context, path string, 
 }
 
 // handleSyncPeerDiscoveryCacheErr checks if an error happened during peer discovery sync and makes sure we will retry later.
+//
+// 有界重试：未超过 maxRetries 时按速率限制重新入队；超过后丢弃并
+// 上报，避免一个永久失败的对端拖住队列。
 func (h *peerProxyHandler) handleSyncPeerDiscoveryCacheErr(err error, key string) {
 	if err == nil {
 		h.peerLeaseQueue.Forget(key)
@@ -231,9 +262,13 @@ func (h *peerProxyHandler) handleSyncPeerDiscoveryCacheErr(err error, key string
 	klog.Infof("Dropping lease %s out of the queue: %v", key, err)
 }
 
+// isValidPeerIdentityLease 校验 lease 是否代表一个可代理的同集群对端：
+// 需能处理 tombstone、匹配标签选择器、不是自身、且 holderIdentity 非空。
+// 任一条件不满足都返回 false，调用方据此跳过而不是报错。
 func (h *peerProxyHandler) isValidPeerIdentityLease(obj interface{}) (*v1.Lease, bool) {
 	lease, ok := obj.(*v1.Lease)
 	if !ok {
+		// 删除事件可能以 tombstone 到达，需要从中还原 Lease。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("unexpected object type: %T", obj))
@@ -250,6 +285,8 @@ func (h *peerProxyHandler) isValidPeerIdentityLease(obj interface{}) (*v1.Lease,
 		return nil, false
 	}
 
+	// 目前只支持单一 key=value 形式的标签选择器；更复杂的表达式会被
+	// 拒绝，因为这些 lease 由 apiserver 自身以固定标签创建。
 	if h.identityLeaseLabelSelector != nil && h.identityLeaseLabelSelector.String() != "" {
 		identityLeaseLabel := strings.Split(h.identityLeaseLabelSelector.String(), "=")
 		if len(identityLeaseLabel) != 2 {
@@ -265,6 +302,7 @@ func (h *peerProxyHandler) isValidPeerIdentityLease(obj interface{}) (*v1.Lease,
 	}
 
 	// Ignore self.
+	// 代理给自己会造成请求回环，必须排除。
 	if lease.Name == h.serverID {
 		return nil, false
 	}
@@ -277,6 +315,8 @@ func (h *peerProxyHandler) isValidPeerIdentityLease(obj interface{}) (*v1.Lease,
 	return lease, true
 }
 
+// findServiceableByPeerFromPeerDiscoveryCache 返回声明可服务该 GVR 的
+// 对端 ID。排除规则已在 filtered cache 中应用，这里再剔除自身作为兜底。
 func (h *peerProxyHandler) findServiceableByPeerFromPeerDiscoveryCache(gvr schema.GroupVersionResource) []string {
 	var serviceableByIDs []string
 	cacheMap := h.gvExclusionManager.GetFilteredPeerDiscoveryCache()

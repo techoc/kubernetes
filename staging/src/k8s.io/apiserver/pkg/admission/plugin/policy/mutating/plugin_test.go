@@ -40,6 +40,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// setupTest 构造 MutatingAdmissionPolicy 的端到端测试环境：
+// 真实的 PolicySource/Dispatcher，加上注入的 compiler（用于绕过 CEL 编译），
+// 并注册 Pod 的 RESTMapping，使匹配逻辑可以解析资源。
 func setupTest(
 	t *testing.T,
 	compiler func(*v1.MutatingAdmissionPolicy) mutating.PolicyEvaluator,
@@ -51,7 +54,7 @@ func setupTest(
 		mutating.NewMutatingAdmissionPolicyBindingAccessor,
 		compiler,
 		func(a authorizer.UnconditionalAuthorizer, m *matching.Matcher, i kubernetes.Interface) generic.Dispatcher[mutating.PolicyHook] {
-			// Use embedded schemas rather than discovery schemas
+			// 使用内嵌 schema 而不是 discovery schema，避免测试依赖真实集群。
 			return mutating.NewDispatcher(a, m, patch.NewTypeConverterManager(nil, openapitest.NewEmbeddedFileClient()))
 		},
 		nil,
@@ -76,16 +79,17 @@ func setupTest(
 	return testContext
 }
 
-// Show that a compiler that always sets an annotation on the object works
+// TestBasicPatch 展示一个总是设置注解的 compiler 能正常工作：
+// 用 annotationPatcher 替代真实 CEL 求值，验证分发链路会把补丁写回对象。
 func TestBasicPatch(t *testing.T) {
 	expectedAnnotations := map[string]string{"foo": "bar"}
 
-	// Treat all policies as setting foo annotation to bar
+	// 把所有 policy 都当作“将 foo 注解设为 bar”处理
 	testContext := setupTest(t, func(p *v1.MutatingAdmissionPolicy) mutating.PolicyEvaluator {
 		return mutating.PolicyEvaluator{Mutators: []patch.Patcher{annotationPatcher{expectedAnnotations}}}
 	})
 
-	// Set up a policy and binding that match, no params
+	// 构造能匹配的 policy 与 binding，不带参数
 	require.NoError(t, testContext.UpdateAndWait(
 		&v1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "policy"},
@@ -113,13 +117,15 @@ func TestBasicPatch(t *testing.T) {
 		},
 	))
 
-	// Show that if we run an object through the policy, it gets the annotation
+	// 验证对象经过 policy 后获得该注解
 	testObject := &corev1.ConfigMap{}
 	err := testContext.Dispatch(testObject, nil, admission.Create)
 	require.NoError(t, err)
 	require.Equal(t, expectedAnnotations, testObject.Annotations)
 }
 
+// TestJSONPatch 验证 JSONPatch 类型的变更：smdPatcher 直接返回目标对象，
+// 因此结果等价于用补丁对象整体覆盖。
 func TestJSONPatch(t *testing.T) {
 	patchObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -170,7 +176,7 @@ func TestJSONPatch(t *testing.T) {
 		},
 	))
 
-	// Show that if we run an object through the policy, it gets the annotation
+	// 验证对象经过 policy 后获得补丁中的注解与 data
 	testObject := &corev1.ConfigMap{}
 	err := testContext.Dispatch(testObject, nil, admission.Create)
 	require.NoError(t, err)
@@ -182,6 +188,8 @@ func TestJSONPatch(t *testing.T) {
 	}, testObject)
 }
 
+// TestSSAPatch 验证服务端应用（SSA）补丁路径：smdPatcher 走 ApplyStructuredMergeDiff，
+// 结果应与 JSONPatch 用例一致，说明两种补丁类型最终都落到同一对象表示。
 func TestSSAPatch(t *testing.T) {
 	patchObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -232,7 +240,7 @@ func TestSSAPatch(t *testing.T) {
 		},
 	))
 
-	// Show that if we run an object through the policy, it gets the annotation
+	// 验证对象经过 policy 后获得补丁中的注解与 data
 	testObject := &corev1.ConfigMap{}
 	err := testContext.Dispatch(testObject, nil, admission.Create)
 	require.NoError(t, err)
@@ -244,6 +252,8 @@ func TestSSAPatch(t *testing.T) {
 	}, testObject)
 }
 
+// TestSSAMapList 验证 SSA 合并语义作用于 map list（这里用 initContainers）时
+// 会追加而非替换已有元素：注入的 init 容器应排在原有容器之后。
 func TestSSAMapList(t *testing.T) {
 	patchObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -299,7 +309,7 @@ func TestSSAMapList(t *testing.T) {
 		},
 	))
 
-	// Show that if we run an object through the policy, it gets the annotation
+	// 验证注入的 init 容器追加在原有 init 容器之后
 	testObject := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: corev1.PodSpec{
@@ -332,10 +342,12 @@ func TestSSAMapList(t *testing.T) {
 	}, testObject)
 }
 
+// annotationPatcher 是测试用 Patcher：直接设置注解，不做 CEL 求值。
 type annotationPatcher struct {
 	annotations map[string]string
 }
 
+// Patch 在版本化对象的副本上设置注解后返回。
 func (ap annotationPatcher) Patch(ctx context.Context, request patch.Request, runtimeCELCostBudget int64) (runtime.Object, error) {
 	obj := request.VersionedAttributes.VersionedObject.Object().DeepCopyObject()
 	accessor, err := meta.Accessor(obj)
@@ -346,10 +358,12 @@ func (ap annotationPatcher) Patch(ctx context.Context, request patch.Request, ru
 	return obj, nil
 }
 
+// smdPatcher 是测试用 Patcher：把预置的结构化合并补丁应用到对象上。
 type smdPatcher struct {
 	patch *unstructured.Unstructured
 }
 
+// Patch 委托给 ApplyStructuredMergeDiff，走真实的 SSA 合并逻辑。
 func (sp smdPatcher) Patch(ctx context.Context, request patch.Request, runtimeCELCostBudget int64) (runtime.Object, error) {
 	return patch.ApplyStructuredMergeDiff(request.TypeConverter, request.VersionedAttributes.VersionedObject.Object(), sp.patch)
 }

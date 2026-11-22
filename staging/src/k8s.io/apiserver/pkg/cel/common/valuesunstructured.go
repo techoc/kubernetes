@@ -35,8 +35,12 @@ import (
 // UnstructuredToVal converts a Kubernetes unstructured data element to a CEL Val.
 // The root schema of custom resource schemas is expected to contain type meta and object meta schemas.
 // If Embedded resources do not contain type meta and object meta schemas, they will be added automatically.
+//
+// 转换严格以 OpenAPI schema 为准：数据与 schema 不符时返回 CEL error 值而不是 panic，
+// 让策略求值失败而不是让 apiserver 崩溃。
 func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 	if unstructured == nil {
+		// nullable=false 的字段出现 null 属于数据/schema 不一致，显式报错。
 		if schema.Nullable() {
 			return types.NullValue
 		}
@@ -62,6 +66,7 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 		}
 		if schema.IsXEmbeddedResource() || schema.Properties() != nil {
 			if schema.IsXEmbeddedResource() {
+				// 内嵌资源自动补上 apiVersion/kind/metadata，使其在 CEL 中表现与顶层资源一致。
 				schema = schema.WithTypeAndObjectMeta()
 			}
 			return &unstructuredMap{
@@ -111,6 +116,7 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 			return types.NewErr("invalid array type, expected Items with a non-empty Schema")
 		}
 		typedList := unstructuredList{elements: l, itemsSchema: schema.Items()}
+		// list-type 决定相等性与合并语义：map 按 key、set 按元素、atomic 按整体顺序。
 		listType := schema.XListType()
 		if listType != "" {
 			switch listType {
@@ -133,6 +139,7 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 		if !ok {
 			return types.NewErr("invalid data, expected string, got %T", unstructured)
 		}
+		// format 决定字符串在 CEL 中的实际类型，使 duration/date 等可直接参与比较。
 		switch schema.Format() {
 		case "duration":
 			d, err := strfmt.ParseDuration(str)
@@ -202,6 +209,7 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 		return types.Bool(b)
 	}
 
+	// 无类型但保留未知字段：以不透明值处理，仅支持相等比较。
 	if schema.IsXPreserveUnknownFields() {
 		return &unknownPreserved{u: unstructured}
 	}
@@ -217,22 +225,27 @@ type unknownPreserved struct {
 	u interface{}
 }
 
+// ConvertToNative 不支持转换：该值没有 CEL 类型声明，转换语义未定义。
 func (t *unknownPreserved) ConvertToNative(refType reflect.Type) (interface{}, error) {
 	return nil, fmt.Errorf("type conversion to '%s' not supported for values preserved by x-kubernetes-preserve-unknown-fields", refType)
 }
 
+// ConvertToType 同样不支持显式类型转换。
 func (t *unknownPreserved) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("type conversion to '%s' not supported for values preserved by x-kubernetes-preserve-unknown-fields", typeValue.TypeName())
 }
 
+// Equal 用语义相等（而非 Go ==）比较，以便正确处理 map/slice 等不可比较类型。
 func (t *unknownPreserved) Equal(other ref.Val) ref.Val {
 	return types.Bool(equality.Semantic.DeepEqual(t.u, other.Value()))
 }
 
+// Type 返回 UnknownType，表示 CEL 不应尝试对其做类型化操作。
 func (t *unknownPreserved) Type() ref.Type {
 	return types.UnknownType
 }
 
+// Value 返回原始数据，供 Equal 使用。
 func (t *unknownPreserved) Value() interface{} {
 	return t.u // used by Equal checks
 }
@@ -246,6 +259,7 @@ type unstructuredMapList struct {
 	mapOfList map[interface{}]interface{}
 }
 
+// getMap 懒构建 key->元素 索引；只有在做相等比较时才需要，避免每次求值都付出 O(n) 代价。
 func (t *unstructuredMapList) getMap() map[interface{}]interface{} {
 	t.Do(func() {
 		t.mapOfList = make(map[interface{}]interface{}, len(t.elements))
@@ -310,6 +324,7 @@ func (t *unstructuredMapList) Equal(other ref.Val) ref.Val {
 		}
 		seen[k] = struct{}{}
 	}
+	// seen 与 tMap 大小一致才能排除重复 key 造成的假阳性。
 	return types.Bool(len(seen) == len(tMap))
 }
 
@@ -352,6 +367,7 @@ type unstructuredSetList struct {
 	setErr    ref.Val
 }
 
+// getSet 懒构建集合；任一元素无法转成 key 时缓存错误值，保证重复调用结果一致。
 func (t *unstructuredSetList) getSet() (map[interface{}]struct{}, ref.Val) {
 	t.Do(func() {
 		t.set = make(map[interface{}]struct{}, len(t.elements))
@@ -417,6 +433,8 @@ type unstructuredList struct {
 
 var _ = traits.Lister(&unstructuredList{})
 
+// ConvertToNative 把列表转为 Go 切片；元素类型为 string 时逐项断言，
+// 以便与 cel-go 期望的 []string 互操作。
 func (t *unstructuredList) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	switch typeDesc.Kind() {
 	case reflect.Slice:
@@ -440,6 +458,7 @@ func (t *unstructuredList) ConvertToNative(typeDesc reflect.Type) (interface{}, 
 	return nil, fmt.Errorf("type conversion error from '%s' to '%s'", t.Type(), typeDesc)
 }
 
+// ConvertToType 支持转为 list 自身或 list 类型对象。
 func (t *unstructuredList) ConvertToType(typeValue ref.Type) ref.Val {
 	switch typeValue {
 	case types.ListType:
@@ -450,6 +469,7 @@ func (t *unstructuredList) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", t.Type(), typeValue.TypeName())
 }
 
+// Equal 对 atomic 列表按位置逐项比较。
 func (t *unstructuredList) Equal(other ref.Val) ref.Val {
 	oList, ok := other.(traits.Lister)
 	if !ok {
@@ -468,14 +488,17 @@ func (t *unstructuredList) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
+// Type 返回 CEL list 类型。
 func (t *unstructuredList) Type() ref.Type {
 	return types.ListType
 }
 
+// Value 返回底层元素切片。
 func (t *unstructuredList) Value() interface{} {
 	return t.elements
 }
 
+// Add 实现列表拼接，返回新的 refValList，不修改原列表。
 func (t *unstructuredList) Add(other ref.Val) ref.Val {
 	oList, ok := other.(traits.Lister)
 	if !ok {
@@ -492,6 +515,7 @@ func (t *unstructuredList) Add(other ref.Val) ref.Val {
 	return types.NewRefValList(types.DefaultTypeAdapter, elements)
 }
 
+// Contains 逐元素比较；若某次比较返回 error，则继续寻找 true，全部失败才返回该 error。
 func (t *unstructuredList) Contains(val ref.Val) ref.Val {
 	if types.IsUnknownOrError(val) {
 		return val
@@ -515,6 +539,7 @@ func (t *unstructuredList) Contains(val ref.Val) ref.Val {
 	return types.False
 }
 
+// Get 按索引取值，越界返回 CEL error。
 func (t *unstructuredList) Get(idx ref.Val) ref.Val {
 	iv, isInt := idx.(types.Int)
 	if !isInt {
@@ -527,6 +552,7 @@ func (t *unstructuredList) Get(idx ref.Val) ref.Val {
 	return UnstructuredToVal(t.elements[i], t.itemsSchema)
 }
 
+// Iterator 预先把元素转成 CEL 值，避免迭代过程中重复转换。
 func (t *unstructuredList) Iterator() traits.Iterator {
 	items := make([]ref.Val, len(t.elements))
 	for i, item := range t.elements {
@@ -542,16 +568,19 @@ type listIterator struct {
 	idx   int
 }
 
+// HasNext 报告是否还有未读元素。
 func (it *listIterator) HasNext() ref.Val {
 	return types.Bool(it.idx < len(it.items))
 }
 
+// Next 返回当前元素并前进；调用方需先用 HasNext 判断。
 func (it *listIterator) Next() ref.Val {
 	item := it.items[it.idx]
 	it.idx++
 	return item
 }
 
+// Size 返回元素个数。
 func (t *unstructuredList) Size() ref.Val {
 	return types.Int(len(t.elements))
 }
@@ -566,6 +595,7 @@ type unstructuredMap struct {
 
 var _ = traits.Mapper(&unstructuredMap{})
 
+// ConvertToNative 只支持转为 Go map。
 func (t *unstructuredMap) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	switch typeDesc.Kind() {
 	case reflect.Map:
@@ -574,6 +604,7 @@ func (t *unstructuredMap) ConvertToNative(typeDesc reflect.Type) (interface{}, e
 	return nil, fmt.Errorf("type conversion error from '%s' to '%s'", t.Type(), typeDesc)
 }
 
+// ConvertToType 支持转为 map 自身或 map 类型对象。
 func (t *unstructuredMap) ConvertToType(typeValue ref.Type) ref.Val {
 	switch typeValue {
 	case types.MapType:
@@ -584,6 +615,8 @@ func (t *unstructuredMap) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", t.Type(), typeValue.TypeName())
 }
 
+// Equal 对已知字段按 schema 递归比较；遇到未知字段时退化为非结构化深比较，
+// 保证与 x-kubernetes-preserve-unknown-fields 的数据也能正确判等。
 func (t *unstructuredMap) Equal(other ref.Val) ref.Val {
 	oMap, isMap := other.(traits.Mapper)
 	if !isMap {
@@ -625,14 +658,17 @@ func (t *unstructuredMap) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
+// Type 返回 CEL map 类型。
 func (t *unstructuredMap) Type() ref.Type {
 	return types.MapType
 }
 
+// Value 返回底层 map。
 func (t *unstructuredMap) Value() interface{} {
 	return t.value
 }
 
+// Contains 实现 CEL 的 in 操作符。
 func (t *unstructuredMap) Contains(key ref.Val) ref.Val {
 	v, found := t.Find(key)
 	if v != nil && types.IsUnknownOrError(v) {
@@ -642,6 +678,7 @@ func (t *unstructuredMap) Contains(key ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
+// Get 按键取值；缺失时返回 CEL error，与 cel-go 的 map 语义一致。
 func (t *unstructuredMap) Get(key ref.Val) ref.Val {
 	v, found := t.Find(key)
 	if found {
@@ -650,6 +687,7 @@ func (t *unstructuredMap) Get(key ref.Val) ref.Val {
 	return types.ValOrErr(key, "no such key: %v", key)
 }
 
+// Iterator 只遍历 schema 声明过的键，并对属性名做 CEL 转义。
 func (t *unstructuredMap) Iterator() traits.Iterator {
 	isObject := t.schema.Properties() != nil
 	keys := make([]ref.Val, len(t.value))
@@ -675,20 +713,25 @@ type mapIterator struct {
 	idx  int
 }
 
+// HasNext 报告是否还有未读键。
 func (it *mapIterator) HasNext() ref.Val {
 	return types.Bool(it.idx < len(it.keys))
 }
 
+// Next 返回当前键并前进。
 func (it *mapIterator) Next() ref.Val {
 	key := it.keys[it.idx]
 	it.idx++
 	return key
 }
 
+// Size 返回 map 条目数。
 func (t *unstructuredMap) Size() ref.Val {
 	return types.Int(len(t.value))
 }
 
+// Find 按键查找并转换为 CEL 值；属性名需先反转义。
+// 对带 properties 的对象，值为 null 的可空字段视同缺失，与 CEL 可选字段语义保持一致。
 func (t *unstructuredMap) Find(key ref.Val) (ref.Val, bool) {
 	isObject := t.schema.Properties() != nil
 	keyStr, ok := key.(types.String)

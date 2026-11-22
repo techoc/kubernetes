@@ -21,6 +21,9 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// x509MissingSANCounter 统计因服务端证书缺少 SAN 扩展而失败或受影响的 webhook 请求数。
+// Help 文案保留 “either/or” 表述：在部分运行环境中能观测到请求失败，
+// 在另一些环境中只能观测到连接失败，二者择一计数，避免重复统计。
 var x509MissingSANCounter = metrics.NewCounter(
 	&metrics.CounterOpts{
 		Subsystem: "webhooks",
@@ -34,6 +37,7 @@ var x509MissingSANCounter = metrics.NewCounter(
 	},
 )
 
+// x509InsecureSHA1Counter 统计服务端证书使用不安全 SHA1 签名导致失败或受影响的 webhook 请求数。
 var x509InsecureSHA1Counter = metrics.NewCounter(
 	&metrics.CounterOpts{
 		Subsystem: "webhooks",
@@ -47,6 +51,7 @@ var x509InsecureSHA1Counter = metrics.NewCounter(
 )
 
 func init() {
+	// 注册到 legacyregistry，与 apiserver 其他指标共用同一 /metrics 出口。
 	legacyregistry.MustRegister(x509MissingSANCounter)
 	legacyregistry.MustRegister(x509InsecureSHA1Counter)
 }

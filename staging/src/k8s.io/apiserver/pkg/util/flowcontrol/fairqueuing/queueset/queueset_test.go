@@ -49,6 +49,9 @@ import (
 
 // fairAlloc computes the max-min fair allocation of the given
 // capacity to the given demands (which slice is not side-effected).
+//
+// 即先按需求升序满足小需求，剩余容量再在未满足者之间均分；
+// 测试用它计算“公平情况下每个客户端应得的平均并发”。
 func fairAlloc(demands []float64, capacity float64) []float64 {
 	count := len(demands)
 	indices := make([]int, count)
@@ -84,6 +87,8 @@ func fairAlloc(demands []float64, capacity float64) []float64 {
 	return alloc
 }
 
+// TestFairAlloc 用几组手算结果验证 max-min 公平分配，包括需求为 0、
+// 容量不足与容量充足的情况。
 func TestFairAlloc(t *testing.T) {
 	if e, a := []float64{0, 0}, fairAlloc([]float64{0, 0}, 42); !reflect.DeepEqual(e, a) {
 		t.Errorf("Expected %#+v, got #%+v", e, a)
@@ -102,6 +107,8 @@ func TestFairAlloc(t *testing.T) {
 	}
 }
 
+// uniformClient 描述一个“均匀客户端”：若干线程不断发起同步请求，
+// 用于在模拟时间内观察 QueueSet 的公平性。
 type uniformClient struct {
 	hash     uint64
 	nThreads int
@@ -129,6 +136,8 @@ type uniformClient struct {
 	finalSeats uint64
 }
 
+// newUniformClient 构造基线客户端：每个请求占 1 个席位，分两个执行阶段
+// （initial/final seats 都为 1）。
 func newUniformClient(hash uint64, nThreads, nCalls int, execDuration, thinkDuration time.Duration) uniformClient {
 	return uniformClient{
 		hash:          hash,
@@ -141,16 +150,21 @@ func newUniformClient(hash uint64, nThreads, nCalls int, execDuration, thinkDura
 	}
 }
 
+// setSplit 让一半线程只在评估期后半段运行，用于构造“先低需求后高需求”
+// 的场景（见 TestWindup）。
 func (uc uniformClient) setSplit() uniformClient {
 	uc.split = true
 	return uc
 }
 
+// setInitWidth 设置请求第一阶段的席位宽度，用于测试宽请求与窄请求混跑。
 func (uc uniformClient) setInitWidth(seats uint64) uniformClient {
 	uc.initialSeats = seats
 	return uc
 }
 
+// pad 设置在回复已释放后仍继续占用席位的时长，以及第二阶段席位宽度；
+// 用于验证“占用席位”与“对客户端可见的并发”之间的区别。
 func (uc uniformClient) pad(finalSeats int, duration time.Duration) uniformClient {
 	uc.finalSeats = uint64(finalSeats)
 	uc.padDuration = duration
@@ -171,6 +185,9 @@ func (uc uniformClient) pad(finalSeats int, duration time.Duration) uniformClien
 // in a non-split scenario this is a singleton with one expectation.
 // expectAllRequests indicates whether all requests are expected to get dispatched.
 // expectedAverages, if provided, replaces the normal calculation of expected results.
+//
+// 中文说明：场景驱动的测试框架。每个客户端线程交替“思考”和发起同步请求，
+// 测试测量平均并发并与 max-min 公平分配结果比较；margin 用于容忍离散化误差。
 type uniformScenario struct {
 	name                                     string
 	qs                                       fq.QueueSet
@@ -190,6 +207,7 @@ type uniformScenario struct {
 	dontDump                                 bool
 }
 
+// exercise 构建场景状态并启动所有客户端线程，然后在假时钟上推进到评估终点。
 func (us uniformScenario) exercise(t *testing.T) {
 	uss := uniformScenarioState{
 		t:                         t,
@@ -206,6 +224,8 @@ func (us uniformScenario) exercise(t *testing.T) {
 	uss.exercise()
 }
 
+// uniformScenarioState 保存一次场景运行的动态状态：已执行/被拒绝次数、
+// 各客户端的席位积分器，以及用于比对的独立需求积分器。
 type uniformScenarioState struct {
 	t *testing.T
 	uniformScenario
@@ -249,6 +269,7 @@ func (uss *uniformScenarioState) exercise() {
 	uss.finalReview()
 }
 
+// uniformScenarioThread 代表一个客户端线程，按假时钟调度依次发起 callK。
 type uniformScenarioThread struct {
 	uss                 *uniformScenarioState
 	i, j                int
@@ -258,6 +279,8 @@ type uniformScenarioThread struct {
 	fsName              string
 }
 
+// start 安排第一次调用；初始延迟按线程与客户端编号错开，
+// 避免所有线程在同一时刻发起请求造成非真实的同步效应。
 func (ust *uniformScenarioThread) start() {
 	initialDelay := time.Duration(90*ust.j + 20*ust.i)
 	if ust.uc.split && ust.j >= ust.uc.nThreads/2 {
@@ -267,13 +290,15 @@ func (ust *uniformScenarioThread) start() {
 	ust.uss.clk.EventAfterDuration(ust.genCallK(0), initialDelay)
 }
 
-// generates an EventFunc that does call k
+// genCallK 返回一个只调用 callK(k) 的 EventFunc，供假时钟调度使用。
 func (ust *uniformScenarioThread) genCallK(k int) func(time.Time) {
 	return func(time.Time) {
 		ust.callK(k)
 	}
 }
 
+// callK 发起第 k 次请求：StartRequest → Finish 执行 → 安排下一次调用。
+// 请求被拒绝时计入 rejects，而不是让测试 panic。
 func (ust *uniformScenarioThread) callK(k int) {
 	if k >= ust.nCalls {
 		return
@@ -323,6 +348,8 @@ func (ust *uniformScenarioThread) callK(k int) {
 	}
 }
 
+// insistRequestFromUser 通过 QueueSet 的调试转储确认该用户名的请求确实
+// 出现在队列或正在执行中；每 100 次调用抽样一次，用于发现请求“消失”的错误。
 func insistRequestFromUser(t *testing.T, qs fq.QueueSet, username string) {
 	qsd := qs.Dump(true)
 	goodRequest := func(rd debug.RequestDump) bool {
@@ -343,6 +370,8 @@ func insistRequestFromUser(t *testing.T, qs fq.QueueSet, username string) {
 	t.Errorf("Failed to find request from user %s", username)
 }
 
+// evalTo 把假时钟推进到 lim，计算各客户端的平均并发并与公平分配结果比较。
+// 若配置了 seatDemandIntegratorSubject，还额外核对积分器的时长/均值/标准差。
 func (uss *uniformScenarioState) evalTo(lim time.Time, last, expectFair bool, margin float64) {
 	uss.clk.Run(&lim)
 	uss.clk.SetTime(lim)
@@ -403,6 +432,8 @@ func (uss *uniformScenarioState) evalTo(lim time.Time, last, expectFair bool, ma
 	}
 }
 
+// finalReview 在场景结束后检查：请求成功/失败是否符合预期，并核对
+// inqueue、executing、rejected、epoch advance 等指标的快照。
 func (uss *uniformScenarioState) finalReview() {
 	if uss.expectAllRequests && uss.failedCount > 0 {
 		uss.t.Errorf("Expected all requests to be successful but got %v failed requests", uss.failedCount)
@@ -481,6 +512,7 @@ func (uss *uniformScenarioState) finalReview() {
 	}
 }
 
+// TestMain 初始化 klog 标志，使测试可以按需打开详细日志。
 func TestMain(m *testing.M) {
 	klog.InitFlags(nil)
 	os.Exit(m.Run())
@@ -489,6 +521,8 @@ func TestMain(m *testing.M) {
 // TestNoRestraint tests whether the no-restraint factory gives every client what it asks for
 // even though that is unfair.
 // Expects fairness when there is no competition, unfairness when there is competition.
+// 无竞争时每个客户端都能拿满自己的需求，因此“公平”；有竞争时谁抢得多
+// 谁就得到更多，因而按设计是不公平的。
 func TestNoRestraint(t *testing.T) {
 	metrics.Register()
 	testCases := []struct {
@@ -528,6 +562,8 @@ func TestNoRestraint(t *testing.T) {
 	}
 }
 
+// TestBaseline 是最简基线：单客户端、并发 1，检查公平性以及
+// inqueue/executing 指标的最终快照。
 func TestBaseline(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -565,6 +601,8 @@ func TestBaseline(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestExampt 覆盖“无队列”（DesiredNumQueues=-1）即 Exempt 形态：
+// 请求不排队，直接按并发限制执行，平均并发应等于手工计算的 7.5。
 func TestExampt(t *testing.T) {
 	metrics.Register()
 	for concurrencyLimit := 0; concurrencyLimit <= 2; concurrencyLimit += 2 {
@@ -605,6 +643,9 @@ func TestExampt(t *testing.T) {
 	}
 }
 
+// TestSeparations 系统扫描 think/pad/finalSeats/客户端数/并发数的组合，
+// 验证“席位占用”与“客户端可见并发”的分离：只有在 pad 或 finalSeats
+// 不同时，才需要显式给出 expectedAverages。
 func TestSeparations(t *testing.T) {
 	flts := func(avgs ...float64) []float64 { return avgs }
 	for _, seps := range []struct {
@@ -678,6 +719,8 @@ func TestSeparations(t *testing.T) {
 	}
 }
 
+// TestUniformFlowsHandSize1 在 HandSize=1（每轮只派发一个请求）下验证
+// 两个相同客户端仍能获得接近均等的份额。
 func TestUniformFlowsHandSize1(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -716,6 +759,8 @@ func TestUniformFlowsHandSize1(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestUniformFlowsHandSize3 与上一个用例相同，但 HandSize=3，
+// 验证一次派发多个请求时公平性不会被批量效应破坏。
 func TestUniformFlowsHandSize3(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -753,6 +798,8 @@ func TestUniformFlowsHandSize3(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestDifferentFlowsExpectEqual 中两个客户端的线程数与节奏不同，
+// 但总需求都超过其公平份额，因此最终应得到相等的并发。
 func TestDifferentFlowsExpectEqual(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -792,6 +839,9 @@ func TestDifferentFlowsExpectEqual(t *testing.T) {
 }
 
 // TestSeatSecondsRollover checks that there is not a problem with SeatSeconds overflow.
+//
+// 用超长（以季度计）的服务时长与大量席位，把 SeatSeconds 推到接近
+// 64 位上限，验证虚拟时间纪元（epoch）能正确回绕而不是溢出。
 func TestSeatSecondsRollover(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -833,6 +883,8 @@ func TestSeatSecondsRollover(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestDifferentFlowsExpectUnequal 中两个客户端需求都低于公平份额？
+// 不是：它们都超过份额，但需求强度不同时仍应各自拿满需求，而不是平均分。
 func TestDifferentFlowsExpectUnequal(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -871,6 +923,8 @@ func TestDifferentFlowsExpectUnequal(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestDifferentWidths 让一个客户端使用 2 席位的宽请求，验证宽请求
+// 按席位（而非按请求数）参与公平分配。
 func TestDifferentWidths(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -908,6 +962,8 @@ func TestDifferentWidths(t *testing.T) {
 	}.exercise(t)
 }
 
+// TestTooWide 验证宽请求（7 席位）在并发 6 的情况下无法全部同时执行，
+// 但仍能在一段时间内获得其应有份额，而不是被饿死。
 func TestTooWide(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -961,6 +1017,9 @@ func TestTooWide(t *testing.T) {
 // in the first half and an unfair result in the second half.
 // This func has two test cases, bounding the amount of unfairness
 // in the second half.
+//
+// 用例通过 margin2 给出第二阶段的公平容差：upper-bound 仍视为公平，
+// lower-bound 则明确预期不公平（由实现的 windup 补偿 hack 只能部分修正）。
 func TestWindup(t *testing.T) {
 	metrics.Register()
 	testCases := []struct {
@@ -1009,6 +1068,9 @@ func TestWindup(t *testing.T) {
 	}
 }
 
+// TestDifferentFlowsWithoutQueuing 覆盖 DesiredNumQueues=0 的“直接拒绝”
+// 形态：无队列可排，超并发限制的请求立即被拒绝，因此结果不公平且
+// rejectReason 为 concurrency-limit。
 func TestDifferentFlowsWithoutQueuing(t *testing.T) {
 	metrics.Register()
 	now := time.Now()
@@ -1059,6 +1121,9 @@ func TestDifferentFlowsWithoutQueuing(t *testing.T) {
 //     if the scheduler gets the cancel done before StartRequest finishes;
 //     the test handles this without regard to whether the implementation will ever do that.
 //  8. Check that the above took exactly 1 second.
+//
+// 该测试的关键是 queueNoteFn 计数：请求入队/离队各通知一次，取消路径
+// 也不能遗漏，否则上层（APF 过滤器）的 in-queue 指标会漂移。
 func TestContextCancel(t *testing.T) {
 	metrics.Register()
 	metrics.Reset()
@@ -1159,6 +1224,8 @@ func TestContextCancel(t *testing.T) {
 	}
 }
 
+// countingPromiseFactoryFactory 返回会维护 goroutine 计数的 promise 工厂，
+// 使测试里的异步执行能被假时钟准确感知（否则时钟可能提前推进）。
 func countingPromiseFactoryFactory(activeCounter counter.GoRoutineCounter) promiseFactoryFactory {
 	return func(qs *queueSet) promiseFactory {
 		return func(initial interface{}, doneCtx context.Context, doneVal interface{}) promise.WriteOnce {
@@ -1167,6 +1234,8 @@ func countingPromiseFactoryFactory(activeCounter counter.GoRoutineCounter) promi
 	}
 }
 
+// TestTotalRequestsExecutingWithPanic 验证执行中的请求发生 panic 时，
+// totRequestsExecuting 仍会被正确递减，避免并发计数永久泄漏。
 func TestTotalRequestsExecutingWithPanic(t *testing.T) {
 	metrics.Register()
 	metrics.Reset()
@@ -1227,6 +1296,9 @@ func TestTotalRequestsExecutingWithPanic(t *testing.T) {
 	}
 }
 
+// TestFindDispatchQueueLocked 直接构造 queueSet 内部状态，逐次调用
+// findDispatchQueueToBoundLocked 验证选队逻辑：优先选虚拟起始时间最小
+// 且“放得下”的队列，放不下时按轮转索引继续尝试。
 func TestFindDispatchQueueLocked(t *testing.T) {
 	const G = 3 * time.Millisecond
 	qs0 := &queueSet{estimatedServiceDuration: G}
@@ -1410,6 +1482,8 @@ func TestFindDispatchQueueLocked(t *testing.T) {
 	}
 }
 
+// TestFinishRequestLocked 验证请求结束后：执行数、席位占用会立即减少，
+// 但席位真正释放要等 AdditionalLatency 到期。
 func TestFinishRequestLocked(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1489,6 +1563,7 @@ func TestFinishRequestLocked(t *testing.T) {
 	}
 }
 
+// TestRequestSeats 验证 MaxSeats 取 initial/final 两阶段席位的较大者。
 func TestRequestSeats(t *testing.T) {
 	qs := &queueSet{estimatedServiceDuration: time.Second}
 	tests := []struct {
@@ -1523,6 +1598,8 @@ func TestRequestSeats(t *testing.T) {
 	}
 }
 
+// TestRequestWork 验证总工作量 = 初始席位×服务时长 + 最终席位×额外延迟，
+// 这正是虚拟时间推进所依据的权重。
 func TestRequestWork(t *testing.T) {
 	qs := &queueSet{estimatedServiceDuration: 2 * time.Second}
 	request := &request{
@@ -1540,6 +1617,8 @@ func TestRequestWork(t *testing.T) {
 	}
 }
 
+// newFIFO 构造一个已放入给定请求的 FIFO，并回填每个请求的
+// removeFromQueueLocked 回调。
 func newFIFO(requests ...*request) fifo {
 	l := newRequestFIFO()
 	for i := range requests {
@@ -1548,14 +1627,17 @@ func newFIFO(requests ...*request) fifo {
 	return l
 }
 
+// newGaugePair 构造测试用的请求数指标对（等待/执行两组 gauge）。
 func newGaugePair(clk clock.PassiveClock) metrics.RatioedGaugePair {
 	return metrics.RatioedGaugeVecPhasedElementPair(metrics.PriorityLevelConcurrencyGaugeVec, 1, 1, []string{"test"})
 }
 
+// newExecSeatsGauge 构造测试用的执行席位数 gauge。
 func newExecSeatsGauge(clk clock.PassiveClock) metrics.RatioedGauge {
 	return metrics.PriorityLevelExecutionSeatsGaugeVec.NewForLabelValuesSafe(0, 1, []string{"test"})
 }
 
+// float64close 用相对误差 1e-10 判断浮点近似相等，NaN 先归一为 0。
 func float64close(x, y float64) bool {
 	x0 := float64NaNTo0(x)
 	y0 := float64NaNTo0(y)
@@ -1564,6 +1646,7 @@ func float64close(x, y float64) bool {
 	return den == 0 || diff/den < 1e-10
 }
 
+// uint64max 返回两个 uint64 中较大者（Go 1.21 前没有内建 max 可用）。
 func uint64max(a, b uint64) uint64 {
 	if b > a {
 		return b
@@ -1571,6 +1654,7 @@ func uint64max(a, b uint64) uint64 {
 	return a
 }
 
+// float64NaNTo0 把 NaN 映射为 0，便于对积分器在无样本时的结果做比较。
 func float64NaNTo0(x float64) float64 {
 	if math.IsNaN(x) {
 		return 0
@@ -1578,6 +1662,8 @@ func float64NaNTo0(x float64) float64 {
 	return x
 }
 
+// qsComplete 用指定并发上限完成 QueueSet 构造；并发分母不能为 0，
+// 否则指标计算会除零。
 func qsComplete(qsc fq.QueueSetCompleter, concurrencyLimit int) fq.QueueSet {
 	concurrencyDenominator := concurrencyLimit
 	if concurrencyDenominator <= 0 {

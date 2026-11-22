@@ -39,6 +39,8 @@ const (
 )
 
 // Level defines the amount of information logged during auditing
+//
+// 等级越高记录的信息越多，代价也越大；策略中按请求类别选择合适等级。
 type Level string
 
 // Valid audit levels
@@ -56,6 +58,8 @@ const (
 )
 
 // Stage defines the stages in request handling that audit events may be generated.
+//
+// 同一次请求可能在不同阶段产生多条事件，通过 Stage 字段区分。
 type Stage string
 
 // Valid audit stages.
@@ -76,6 +80,8 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Event captures all the information that can be included in an API audit log.
+//
+// 这是审计事件的内部表示，最终会被转换为 audit.k8s.io/v1 等外部版本写出。
 type Event struct {
 	metav1.TypeMeta
 
@@ -151,6 +157,7 @@ type Event struct {
 	Annotations map[string]string
 }
 
+// AuthenticationMetadata 记录认证阶段产生的附加信息，供审计与后续授权参考。
 type AuthenticationMetadata struct {
 	// ImpersonationConstraint is the verb associated with the constrained impersonation mode that was used to authorize
 	// the ImpersonatedUser associated with this audit event.  It is only set when constrained impersonation was used.
@@ -173,6 +180,9 @@ type EventList struct {
 
 // Policy defines the configuration of audit logging, and the rules for how different request
 // categories are logged.
+//
+// 策略中 Rules 严格有序，请求命中第一条匹配规则后即停止；没有任何规则命中时
+// 采用等级 None（即不记录）。
 type Policy struct {
 	metav1.TypeMeta
 	// ObjectMeta is included for interoperability with API infrastructure.
@@ -213,6 +223,9 @@ type PolicyList struct {
 
 // PolicyRule maps requests based off metadata to an audit Level.
 // Requests must match the rules of every field (an intersection of rules).
+//
+// 各字段之间是“与”关系；单个字段内部的列表是“或”关系，空列表表示不限制。
+// 资源型规则（Resources/Namespaces）与非资源型规则（NonResourceURLs）不能同时设置。
 type PolicyRule struct {
 	// The Level that requests matching this rule are recorded at.
 	Level Level
@@ -272,6 +285,9 @@ type PolicyRule struct {
 }
 
 // GroupResources represents resource kinds in an API group.
+//
+// 一个 GroupResources 项把 API 组与若干资源/子资源、实例名绑定在一起，
+// 用于表达“某组下的某些资源”这一规则维度。
 type GroupResources struct {
 	// Group is the name of the API group that contains the resources.
 	// The empty string represents the core API group.
@@ -301,6 +317,8 @@ type GroupResources struct {
 }
 
 // ObjectReference contains enough information to let you inspect or modify the referred object.
+//
+// 审计事件中只记录定位对象所需的坐标，不复制对象内容。
 type ObjectReference struct {
 	// +optional
 	Resource string

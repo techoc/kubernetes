@@ -45,6 +45,9 @@ type result struct {
 }
 
 // Return processes the result returned by a ResultFunc function
+//
+// panic 的优先级高于 error：panic 意味着执行者状态未知，
+// 不能让一个“看似成功”的返回值掩盖它。
 func (r *result) Return() (runtime.Object, error) {
 	switch {
 	case r.reason != nil:
@@ -58,6 +61,8 @@ func (r *result) Return() (runtime.Object, error) {
 		if status, ok := r.object.(*metav1.Status); ok {
 			// An api.Status object with status != success is considered an "error",
 			// which interrupts the normal response flow.
+			// 这是 Kubernetes API 的约定：handler 可以用 Status 对象表达失败，
+			// 而不必返回 error。
 			if status.Status != metav1.StatusSuccess {
 				return nil, errors.FromObject(status)
 			}
@@ -76,10 +81,15 @@ const (
 	// how much time the post-timeout receiver goroutine will wait for the sender
 	// (child goroutine executing ResultFunc) to send a result after the request.
 	// had timed out.
+	//
+	// 上限而非无限等待，防止一个卡死的 handler 让负责收尾的 goroutine 永久驻留。
 	postTimeoutLoggerWait = 5 * time.Minute
 )
 
 // FinishRequest makes a given ResultFunc asynchronous and handles errors returned by the response.
+//
+// 异步执行的意义：请求超时后 HTTP 处理函数可以立即返回，而实际存储操作
+// 可能仍在进行；这里负责把两者的结果与 panic 边界衔接起来。
 func FinishRequest(ctx context.Context, fn ResultFunc) (runtime.Object, error) {
 	return finishRequest(ctx, fn, postTimeoutLoggerWait, logPostTimeoutResult)
 }
@@ -87,6 +97,7 @@ func FinishRequest(ctx context.Context, fn ResultFunc) (runtime.Object, error) {
 func finishRequest(ctx context.Context, fn ResultFunc, postTimeoutWait time.Duration, postTimeoutLogger PostTimeoutLoggerFunc) (runtime.Object, error) {
 	// the channel needs to be buffered since the post-timeout receiver goroutine
 	// waits up to 5 minutes for the child goroutine to return.
+	// 缓冲为 1 可保证发送方不会因接收方已放弃而阻塞泄漏。
 	resultCh := make(chan *result, 1)
 
 	go func() {
@@ -97,6 +108,7 @@ func finishRequest(ctx context.Context, fn ResultFunc, postTimeoutWait time.Dura
 			reason := recover()
 			if reason != nil {
 				// do not wrap the sentinel ErrAbortHandler panic value
+				// ErrAbortHandler 是 net/http 用于静默中止响应的哨兵值，包装会破坏其语义。
 				if reason != http.ErrAbortHandler {
 					// Same as stdlib http server code. Manually allocate stack
 					// trace buffer size to prevent excessively large logs
@@ -129,6 +141,8 @@ func finishRequest(ctx context.Context, fn ResultFunc, postTimeoutWait time.Dura
 		// (sender) is still executing the ResultFunc function.
 		// kick off a goroutine (receiver) here to wait for the sender (goroutine executing ResultFunc)
 		// to send the result and then log details of the result.
+		//
+		// 这个收尾 goroutine 只做观测与指标记录，不影响已返回给客户端的超时响应。
 		defer func() {
 			go func() {
 				timedOutAt := time.Now()
@@ -169,6 +183,7 @@ func logPostTimeoutResult(timedOutAt time.Time, r *result) {
 		status = metrics.PostTimeoutHandlerOK
 	}
 
+	// 无论结果如何都记录一条错误日志：请求已超时，后续完成都值得关注。
 	metrics.RecordRequestPostTimeout(metrics.PostTimeoutSourceRestHandler, status)
 	err := fmt.Errorf("FinishRequest: post-timeout activity - time-elapsed: %s, panicked: %t, err: %v, panic-reason: %v",
 		time.Since(timedOutAt), r.reason != nil, r.err, r.reason)

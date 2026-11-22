@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 为 etcd3 存储层测试启动本地 etcd 实例并构造对应的存储配置。
 package testing
 
 import (
@@ -30,11 +31,15 @@ type EtcdTestServer struct {
 	V3Client *kubernetes.Client
 }
 
+// Terminate 保留为空操作：etcd 进程的生命周期已交给 testing.TB 的 cleanup 管理，
+// 由 t.Cleanup 保证测试结束时回收。
 func (e *EtcdTestServer) Terminate(t testing.TB) {
 	// no-op, server termination moved to test cleanup
 }
 
 // NewUnsecuredEtcd3TestClientServer creates a new client and server for testing
+//
+// 返回未启用 TLS 的本地 etcd 客户端，以及指向该实例、带测试前缀的存储配置。
 func NewUnsecuredEtcd3TestClientServer(t testing.TB) (*EtcdTestServer, *storagebackend.Config) {
 	server := &EtcdTestServer{}
 	server.V3Client = testserver.RunEtcd(t, nil)

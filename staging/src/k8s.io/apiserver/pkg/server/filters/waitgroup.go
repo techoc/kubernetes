@@ -34,6 +34,9 @@ import (
 // request handler and then invoke Done() when the handler finishes.
 // NOTE: implementations must ensure that it is thread-safe
 // when invoked from multiple goroutines.
+//
+// 中文说明：与 sync.WaitGroup 不同，Add 在 Wait 之后返回错误而不是 panic，
+// 这样优雅停机时新请求可以被明确拒绝。
 type RequestWaitGroup interface {
 	// Add adds delta, which may be negative, similar to sync.WaitGroup.
 	// If Add with a positive delta happens after Wait, it will return error,
@@ -51,6 +54,8 @@ func WithWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 	return withWaitGroup(handler, longRunning, wg, isRequestExemptFromRetryAfter)
 }
 
+// withWaitGroup 是实际实现：长请求（watch、exec 等）不计入等待组，否则停机
+// 会被永远阻塞；普通请求在进入 handler 前 Add，退出时 Done。
 func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningRequestCheck, wg RequestWaitGroup, isRequestExemptFn isRequestExemptFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -71,6 +76,9 @@ func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 			// this means 'WithRetryAfter' has started sending Retry-After response.
 			// we are going to exempt the same set of requests that WithRetryAfter are
 			// exempting from being rejected with a Retry-After response.
+			//
+			// 中文说明：豁免集合必须与 WithRetryAfter 保持一致，否则健康检查等
+			// 请求会在停机窗口内被误拒，负载均衡器会把整个实例摘除。
 			if isRequestExemptFn(req) {
 				handler.ServeHTTP(w, req)
 				return
@@ -87,9 +95,12 @@ func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 	})
 }
 
+// waitGroupWriteRetryAfterToResponse 返回 503 + Retry-After: 1，提示客户端
+// 立刻重试（大概率会命中另一个尚未停机的实例）。
 func waitGroupWriteRetryAfterToResponse(w http.ResponseWriter) {
 	w.Header().Add("Retry-After", "1")
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
+	// 防止内容嗅探，错误体必须按声明的 JSON 类型处理。
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	statusErr := apierrors.NewServiceUnavailable("apiserver is shutting down").Status()
 	w.WriteHeader(int(statusErr.Code))

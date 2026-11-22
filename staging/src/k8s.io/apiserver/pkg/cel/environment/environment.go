@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package environment 管理 Kubernetes 中 CEL 环境的构建与版本演进。
+// 每个 EnvSet 同时维护“写入时校验用”的 NewExpressions 环境和“读取历史
+// 表达式用”的 StoredExpressions 环境，二者的差异是滚动升级兼容性的关键。
 package environment
 
 import (
@@ -82,6 +85,8 @@ type EnvSet struct {
 	storedExpressions *cel.Env
 }
 
+// newEnvSet 以空 CEL 环境为基底，再叠加版本化选项。两个环境从同一基底
+// 分叉，确保差异只来自 VersionedOptions 的版本过滤。
 func newEnvSet(compatibilityVersion *version.Version, opts []VersionedOptions) (*EnvSet, error) {
 	base, err := cel.NewEnv()
 	if err != nil {
@@ -91,6 +96,8 @@ func newEnvSet(compatibilityVersion *version.Version, opts []VersionedOptions) (
 	return baseSet.Extend(opts...)
 }
 
+// mustNewEnvSet 用于包内静态初始化；配置错误属于编程错误，直接 panic
+// 而不是让 apiserver 带着残缺的 CEL 环境启动。
 func mustNewEnvSet(ver *version.Version, opts []VersionedOptions) *EnvSet {
 	envSet, err := newEnvSet(ver, opts)
 	if err != nil {
@@ -204,6 +211,10 @@ type VersionedOptions struct {
 // This EnvSet is not mutated.
 // The returned EnvSet has the same compatibility version as the EnvSet that was extended.
 //
+// 两个环境分别扩展：NewExpressions 用本 EnvSet 的兼容版本过滤，且尊重
+// feature gate；StoredExpressions 用“最大版本”过滤且忽略 feature gate，
+// 以保证任何历史表达式都能被编译。
+//
 // Extend is an expensive operation and each call to Extend that adds DeclTypes increases
 // the depth of a chain of resolvers. For these reasons, calls to Extend should be kept
 // to a minimum.
@@ -239,6 +250,10 @@ func (e *EnvSet) Extend(options ...VersionedOptions) (*EnvSet, error) {
 	return e, nil
 }
 
+// filterAndBuildOpts 按版本/feature gate 过滤选项，并合并成一个 cel.Lib。
+//
+// 合并成单个 Library 而非逐个 Extend，是为了减少 resolver 链深度：
+// 每次 Extend 引入 DeclType 都会叠加一层 resolver，深链会拖慢编译。
 func (e *EnvSet) filterAndBuildOpts(base *cel.Env, compatVer *version.Version, honorFeatureGateEnablement bool, opts []VersionedOptions) (cel.EnvOption, error) {
 	var envOpts []cel.EnvOption
 	var progOpts []cel.ProgramOption
@@ -258,6 +273,8 @@ func (e *EnvSet) filterAndBuildOpts(base *cel.Env, compatVer *version.Version, h
 			allowedByVersion = true
 		}
 
+		// 版本区间与 feature gate 是“或”关系：只要任一维度允许，就纳入
+		// 该环境；两者都拒绝时才跳过。
 		if allowedByFeatureGate || allowedByVersion {
 			envOpts = append(envOpts, opt.EnvOptions...)
 			progOpts = append(progOpts, opt.ProgramOptions...)
@@ -267,6 +284,8 @@ func (e *EnvSet) filterAndBuildOpts(base *cel.Env, compatVer *version.Version, h
 
 	if len(declTypes) > 0 {
 		provider := apiservercel.NewDeclTypeProvider(declTypes...)
+		// 1.31 起允许把 CEL 关键字当作字段名（如对象里真有名为 "true"
+		// 的字段），这是向后兼容的语法放宽，因此按版本门控。
 		if compatVer.AtLeast(version.MajorMinor(1, 31)) {
 			provider.SetRecognizeKeywordAsFieldName(true)
 		}
@@ -284,15 +303,19 @@ func (e *EnvSet) filterAndBuildOpts(base *cel.Env, compatVer *version.Version, h
 	return combined, nil
 }
 
+// envLoader 把 envOptions 与 programOptions 打包成一个 cel.Lib，
+// 使一次 Extend 就能同时应用编译期与运行期配置。
 type envLoader struct {
 	envOpts  []cel.EnvOption
 	progOpts []cel.ProgramOption
 }
 
+// CompileOptions 返回编译期选项。
 func (e *envLoader) CompileOptions() []cel.EnvOption {
 	return e.envOpts
 }
 
+// ProgramOptions 返回运行期选项（如 cost limit）。
 func (e *envLoader) ProgramOptions() []cel.ProgramOption {
 	return e.progOpts
 }

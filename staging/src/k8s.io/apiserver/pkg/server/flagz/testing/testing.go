@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 为 flagz 端点提供测试辅助：校验结构化响应的
+// TypeMeta、对象名、标志集合以及弃用 Warning 头。
 package testing
 
 import (
@@ -29,6 +31,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VerifyStructuredResponse 按 Accept 头选择解码器解析响应体，并与期望对象
+// 逐项比较；wantDeprecationHeader 控制是否要求出现 deprecated 的 Warning。
 func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, warnings []string, want interface{}, wantDeprecationHeader bool) {
 	t.Helper()
 
@@ -42,6 +46,7 @@ func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, wa
 	if gotTypeMeta != wantTypeMeta {
 		t.Errorf("type meta mismatch: got %v, want %v", gotTypeMeta, wantTypeMeta)
 	}
+	// 只检查期望中的标志，避免测试因实现新增标志而脆弱。
 	for k, v := range wantFlags {
 		gotV, ok := gotFlags[k]
 		if !ok {
@@ -65,6 +70,8 @@ func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, wa
 	}
 }
 
+// unmarshalFunc 根据 Accept 头返回对应的解码函数，保证测试走的是客户端
+// 实际使用的序列化路径。
 func unmarshalFunc(t *testing.T, acceptHeader string) func([]byte, interface{}) error {
 	switch {
 	case strings.Contains(acceptHeader, "application/json"):
@@ -79,6 +86,7 @@ func unmarshalFunc(t *testing.T, acceptHeader string) func([]byte, interface{}) 
 	return nil
 }
 
+// wantFields 从期望对象中提取需要比较的字段，兼容两个 API 版本。
 func wantFields(t *testing.T, want interface{}) (metav1.TypeMeta, string, map[string]string) {
 	t.Helper()
 	switch w := want.(type) {
@@ -92,6 +100,7 @@ func wantFields(t *testing.T, want interface{}) (metav1.TypeMeta, string, map[st
 	}
 }
 
+// gotFields 依据 apiVersion 选择具体类型解码响应体，再取出对应字段。
 func gotFields(t *testing.T, unmarshal func([]byte, interface{}) error, body []byte, apiVersion string) (metav1.TypeMeta, string, map[string]string) {
 	var gotName string
 	var gotTypeMeta metav1.TypeMeta

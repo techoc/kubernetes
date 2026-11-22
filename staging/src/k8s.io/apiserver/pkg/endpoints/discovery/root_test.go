@@ -53,6 +53,7 @@ func init() {
 	)
 }
 
+// decodeResponse 读取并反序列化响应体；t.Log 输出原始 JSON 便于失败时定位。
 func decodeResponse(t *testing.T, resp *http.Response, obj interface{}) error {
 	defer resp.Body.Close()
 
@@ -67,6 +68,7 @@ func decodeResponse(t *testing.T, resp *http.Response, obj interface{}) error {
 	return nil
 }
 
+// getGroupList 请求 discovery 根路径并解析为 APIGroupList。
 func getGroupList(t *testing.T, server *httptest.Server) (*metav1.APIGroupList, error) {
 	ctx := t.Context()
 	req, err := http.NewRequestWithContext(ctx, request.MethodGet, server.URL, nil)
@@ -85,6 +87,8 @@ func getGroupList(t *testing.T, server *httptest.Server) (*metav1.APIGroupList, 
 	return &groupList, err
 }
 
+// contextHandler 在请求上下文中注入 RequestInfo，模拟真实 apiserver 的过滤链，
+// 因为发现处理器依赖它区分 /api 与 /apis 前缀。
 func contextHandler(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -101,6 +105,10 @@ func contextHandler(handler http.Handler) http.Handler {
 	})
 }
 
+// TestDiscoveryAtAPIS 验证 /apis 根发现端点的增删行为与服务地址回填。
+// 中文说明：空列表、加入组、移除组三步构成完整生命周期；
+// ServerAddressByClientCIDRs 必须由 handler 的 addresses 计算得出，
+// 因为客户端会根据来源 IP 选择可达的 apiserver 地址。
 func TestDiscoveryAtAPIS(t *testing.T) {
 	handler := NewRootAPIsHandler(DefaultAddresses{DefaultAddress: "192.168.1.1"}, codecs)
 
@@ -152,6 +160,11 @@ func TestDiscoveryAtAPIS(t *testing.T) {
 	assert.Empty(t, groupList.Groups)
 }
 
+// TestDiscoveryOrdering 验证组列表的顺序语义。
+// 中文说明：发现文档的顺序对客户端有实际影响——它决定了 kubectl 等工具
+// 遍历组的先后（例如同名资源的优先解析）。规则是「按注册顺序、不排序」；
+// 重复注册不改变位置，移除后重新加入则排到末尾。
+// 该用例同时断言内部 Groups() 与 HTTP 响应一致，防止两条路径实现分叉。
 func TestDiscoveryOrdering(t *testing.T) {
 	handler := NewRootAPIsHandler(DefaultAddresses{DefaultAddress: "192.168.1.1"}, codecs)
 

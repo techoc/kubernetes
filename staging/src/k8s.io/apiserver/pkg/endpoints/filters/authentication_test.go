@@ -45,6 +45,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestAuthenticateRequestWithAud 验证认证响应中的 audience 与 API server
+// 期望 audience 的交集规则：只有两者存在交集才放行，否则交给失败处理器。
 func TestAuthenticateRequestWithAud(t *testing.T) {
 	success, failed := 0, 0
 	testcases := []struct {
@@ -123,6 +125,8 @@ func TestAuthenticateRequestWithAud(t *testing.T) {
 	}
 }
 
+// TestAuthenticateMetrics 验证认证指标回调在每条路径上都被调用一次，
+// 且传出的 ok/err 与认证结果一致。
 func TestAuthenticateMetrics(t *testing.T) {
 	testcases := []struct {
 		name         string
@@ -208,6 +212,8 @@ func TestAuthenticateMetrics(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequest 验证认证成功时用户被写入 context，
+// 并且 Authorization 头被清除，避免下游组件重复使用凭据。
 func TestAuthenticateRequest(t *testing.T) {
 	success := make(chan struct{})
 	auth := WithAuthentication(
@@ -240,6 +246,8 @@ func TestAuthenticateRequest(t *testing.T) {
 	<-success
 }
 
+// TestAuthenticateRequestFailed 验证认证器返回 (nil, false, nil) 时
+// 走失败处理器而不是成功处理器。
 func TestAuthenticateRequestFailed(t *testing.T) {
 	failed := make(chan struct{})
 	auth := WithAuthentication(
@@ -261,6 +269,8 @@ func TestAuthenticateRequestFailed(t *testing.T) {
 	<-failed
 }
 
+// TestAuthenticateRequestError 验证认证器返回错误时走失败处理器，
+// 而不是把错误当成“未认证”静默继续。
 func TestAuthenticateRequestError(t *testing.T) {
 	failed := make(chan struct{})
 	auth := WithAuthentication(
@@ -282,6 +292,11 @@ func TestAuthenticateRequestError(t *testing.T) {
 	<-failed
 }
 
+// TestAuthenticateRequestClearHeaders 验证 requestheader 认证模式下
+// 请求头清理的安全边界：
+//   - 配置的 user/uid/group/extra 头在认证后必须被移除，防止后端误用伪造身份；
+//   - 未配置的头（包括“看起来相关”的无关头）必须保留；
+//   - 头名大小写不敏感，extra 前缀内的 URL 转义键也要匹配。
 func TestAuthenticateRequestClearHeaders(t *testing.T) {
 	testcases := map[string]struct {
 		nameHeaders        []string
@@ -515,6 +530,9 @@ func TestAuthenticateRequestClearHeaders(t *testing.T) {
 	}
 }
 
+// TestUnauthenticatedHTTP2ClientConnectionClose 验证 HTTP/2 下未认证请求
+// 的连接处理：开启 DOS 缓解后，每个未认证请求都应关闭连接而不是复用；
+// 已认证请求（known）则可复用同一连接。feature gate 关闭时所有请求都复用。
 func TestUnauthenticatedHTTP2ClientConnectionClose(t *testing.T) {
 	s := httptest.NewUnstartedServer(WithAuthentication(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }),
@@ -705,6 +723,8 @@ func TestUnauthenticatedHTTP2ClientConnectionClose(t *testing.T) {
 	}
 }
 
+// TestAuthenticationLatencyTracked 验证认证阶段耗时在进入成功处理器之前
+// 已作为审计注解写入 context，供后续审计事件使用。
 func TestAuthenticationLatencyTracked(t *testing.T) {
 	successHandlerCalled := false
 	handler := WithAuthentication(

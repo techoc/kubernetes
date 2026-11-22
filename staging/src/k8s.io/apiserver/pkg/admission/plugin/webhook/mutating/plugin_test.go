@@ -39,6 +39,9 @@ import (
 )
 
 // BenchmarkAdmit tests the performance cost of invoking a mutating webhook
+//
+// 若未设置 WEBHOOK_TEST_SERVER_URL，会在进程内起一个测试服务端，此时测得的时间包含
+// webhook 本身的处理开销，只适合做相对比较。
 func BenchmarkAdmit(b *testing.B) {
 	testServerURL := os.Getenv("WEBHOOK_TEST_SERVER_URL")
 	if len(testServerURL) == 0 {
@@ -110,6 +113,9 @@ func BenchmarkAdmit(b *testing.B) {
 }
 
 // TestAdmit tests that MutatingWebhook#Admit works as expected
+//
+// 覆盖允许/拒绝、patch 应用、注解、状态码、拒绝指标以及重调用决策等场景；
+// 每个用例都会重新构造插件与 informer，避免用例间状态串扰。
 func TestAdmit(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -159,6 +165,7 @@ func TestAdmit(t *testing.T) {
 			}
 
 			if len(tt.ExpectRejectionMetrics) > 0 {
+				// 指标是全局的，必须在断言前重置，否则前序用例的计数会污染结果。
 				admissionmetrics.Metrics.WebhookRejectionGathererForTest().Reset()
 			}
 			err = wh.Admit(context.TODO(), attr, objectInterfaces)
@@ -176,6 +183,7 @@ func TestAdmit(t *testing.T) {
 					t.Errorf("expected an error saying %q, but got: %v", tt.ErrorContains, err)
 				}
 			}
+			// 准入错误必须包装成 StatusError，否则客户端拿到的是 500 而不是预期的状态码。
 			if statusErr, isStatusErr := err.(*errors.StatusError); err != nil && !isStatusErr {
 				t.Errorf("expected a StatusError, got %T", err)
 			} else if isStatusErr {
@@ -204,6 +212,7 @@ func TestAdmit(t *testing.T) {
 			}
 			reinvocationCtx := fakeAttr.Attributes.GetReinvocationContext()
 			reinvocationCtx.SetIsReinvoke()
+			// 重调用决策按 "配置名/webhook名/序号" 记录，这里逐个校验各 webhook 是否被标记。
 			for webhook, expectReinvoke := range tt.ExpectReinvokeWebhooks {
 				shouldReinvoke := reinvocationCtx.Value(PluginName).(*webhookReinvokeContext).ShouldReinvokeWebhook(fmt.Sprintf("test-webhooks/%s/0", webhook))
 				if expectReinvoke != shouldReinvoke {
@@ -215,6 +224,9 @@ func TestAdmit(t *testing.T) {
 }
 
 // TestAdmitCachedClient tests that MutatingWebhook#Admit should cache restClient
+//
+// 用计数器统计 AuthenticationInfoResolver 调用次数：只替换 webhook 源而不换客户端配置，
+// 若 REST 客户端缓存正确，第二轮及之后不应再解析认证信息。
 func TestAdmitCachedClient(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -269,6 +281,9 @@ func TestAdmitCachedClient(t *testing.T) {
 }
 
 // TestWebhookDuration tests that MutatingWebhook#Admit sets webhook duration in context correctly
+//
+// 使用假时钟让 webhook 处理器可控地推进时间，从而精确断言延迟跟踪器中的累计耗时；
+// 只有请求上下文里预置了跟踪器时才应记录。
 func TestWebhookDuration(ts *testing.T) {
 	clk := clocktesting.FakeClock{}
 	testServer := webhooktesting.NewTestServerWithHandler(ts, webhooktesting.ClockSteppingWebhookHandler(ts, &clk))

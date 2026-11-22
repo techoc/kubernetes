@@ -23,4 +23,7 @@ import (
 	"syscall"
 )
 
+// shutdownSignals 是除 Windows 外平台触发优雅关闭的信号集合。
+// 选择 SIGTERM 是因为编排系统（如 kubelet、容器运行时）先发 SIGTERM 通知进程
+// 退出，超时后才发 SIGKILL；拦截它才能完成优雅终止。
 var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}

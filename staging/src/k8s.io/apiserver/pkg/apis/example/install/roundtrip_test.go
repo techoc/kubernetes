@@ -23,6 +23,8 @@ import (
 	examplefuzzer "k8s.io/apiserver/pkg/apis/example/fuzzer"
 )
 
+// TestRoundTrip 验证 example API 组在所有已注册版本之间往返编解码不丢信息。
+// 先跑 JSON 往返，再跑 protobuf 往返；后者能暴露 JSON 测试遗漏的 tag/字段映射问题。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, Install, examplefuzzer.Funcs)
 	roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, examplefuzzer.Funcs)

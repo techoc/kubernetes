@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestEtcdHealthCheck 覆盖 /healthz 返回体的三种形态：健康、不健康、非法 JSON。
+// 前两者验证对 etcd 字符串型 health 字段的解析，后者验证反序列化错误被透传。
 func TestEtcdHealthCheck(t *testing.T) {
 	tests := []struct {
 		data      string

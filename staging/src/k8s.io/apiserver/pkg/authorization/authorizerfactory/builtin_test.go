@@ -24,6 +24,7 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// TestNewAlwaysAllowAuthorizer 验证 AlwaysAllow 授权器无条件放行。
 func TestNewAlwaysAllowAuthorizer(t *testing.T) {
 	aaa := NewAlwaysAllowAuthorizer()
 	if decision, _, _ := aaa.Authorize(context.Background(), nil); decision != authorizer.DecisionAllow {
@@ -31,6 +32,7 @@ func TestNewAlwaysAllowAuthorizer(t *testing.T) {
 	}
 }
 
+// TestNewAlwaysDenyAuthorizer 验证 AlwaysDeny 授权器不会返回 Allow。
 func TestNewAlwaysDenyAuthorizer(t *testing.T) {
 	ada := NewAlwaysDenyAuthorizer()
 	if decision, _, _ := ada.Authorize(context.Background(), nil); decision == authorizer.DecisionAllow {
@@ -38,6 +40,8 @@ func TestNewAlwaysDenyAuthorizer(t *testing.T) {
 	}
 }
 
+// TestPrivilegedGroupAuthorizer 验证只有属于特权组的用户被放行。
+// 重复传入同一组名用于确认实现不会因重复项产生异常。
 func TestPrivilegedGroupAuthorizer(t *testing.T) {
 	auth := NewPrivilegedGroups("allow-01", "allow-01")
 

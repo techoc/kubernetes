@@ -29,13 +29,18 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// 共享的测试属性：指标只关心标签（operation/type/rejected 等），因此这里
+// 用固定的 GVK/GVR 和一次 CREATE 请求即可，无需构造真实对象。
 var (
 	kind     = schema.GroupVersionKind{Group: "kgroup", Version: "kversion", Kind: "kind"}
 	resource = schema.GroupVersionResource{Group: "rgroup", Version: "rversion", Resource: "resource"}
 	attr     = admission.NewAttributesRecord(nil, nil, kind, "ns", "name", resource, "subresource", admission.Create, &metav1.CreateOptions{}, false, nil)
 )
 
+// TestObserveAdmissionStep 验证 WithStepMetrics 会在 admit 与 validate 两个
+// 阶段分别记录直方图与摘要，且 rejected 标签为 false。
 func TestObserveAdmissionStep(t *testing.T) {
+	// 指标注册在全局 registry 中，测试结束必须清理，否则会污染同包其它用例。
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
 	handler := WithStepMetrics(&mutatingAndValidatingFakeHandler{admission.NewHandler(admission.Create), true, true})
@@ -58,6 +63,8 @@ func TestObserveAdmissionStep(t *testing.T) {
 	expectFindMetric(t, "apiserver_admission_step_admission_duration_seconds_summary", wantLabels)
 }
 
+// TestObserveAdmissionController 验证 WithControllerMetrics 为每个插件名
+// 单独打标签；name 标签是区分不同 admission controller 的关键维度。
 func TestObserveAdmissionController(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -80,6 +87,8 @@ func TestObserveAdmissionController(t *testing.T) {
 	expectHistogramCountTotal(t, "apiserver_admission_controller_admission_duration_seconds", wantLabels, 1)
 }
 
+// TestObserveWebhook 验证 webhook 请求计数与耗时直方图；非 200/300 的
+// 状态码会被归类为 "600"（表示非 HTTP 状态），用于区分“没拿到响应”。
 func TestObserveWebhook(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -119,6 +128,8 @@ func TestObserveWebhook(t *testing.T) {
 	expectHistogramCountTotal(t, "apiserver_admission_webhook_admission_duration_seconds", wantLabelsHistogramValidate, 1)
 }
 
+// TestObserveWebhookRejection 验证拒绝计数按 error_type 与 rejection_code
+// 区分；rejection_code=0 表示 apiserver 内部错误（webhook 未返回有效状态码）。
 func TestObserveWebhookRejection(t *testing.T) {
 	Metrics.reset()
 	Metrics.ObserveWebhookRejection(context.TODO(), "x", stepAdmit, string(admission.Create), WebhookRejectionNoError, 500)
@@ -159,6 +170,8 @@ func TestObserveWebhookRejection(t *testing.T) {
 	expectCounterValue(t, "apiserver_admission_webhook_rejection_count", wantLabelsAPIServerInternalError, 1)
 }
 
+// TestObserveWebhookFailOpen 验证 failurePolicy=FailOpen 且调用失败时的计数，
+// 这类事件意味着请求被放行但准入保障已失效，运维上需要关注。
 func TestObserveWebhookFailOpen(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -176,6 +189,8 @@ func TestObserveWebhookFailOpen(t *testing.T) {
 	expectCounterValue(t, "apiserver_admission_webhook_fail_open_count", wantLabelsCounterValidate, 1)
 }
 
+// TestObserveMatchConditionEvalError 覆盖 webhook 与 policy 两类来源在
+// admit/validate 两个阶段下的 matchCondition 求值错误计数。
 func TestObserveMatchConditionEvalError(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -213,6 +228,8 @@ func TestObserveMatchConditionEvalError(t *testing.T) {
 	expectCounterValue(t, "apiserver_admission_match_condition_evaluation_errors_total", wantLabelsCounterWebhookValidate, 1)
 }
 
+// TestObserveMatchConditionExclusion 验证 matchCondition 返回 false 导致
+// hook 被跳过时的计数；这类“排除”不等于错误，需要独立指标区分。
 func TestObserveMatchConditionExclusion(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -254,6 +271,7 @@ func TestObserveMatchConditionExclusion(t *testing.T) {
 	expectCounterValue(t, "apiserver_admission_match_condition_exclusions_total", wantLabelsCounterWebhookValidate, 1)
 }
 
+// TestObserveMatchConditionEvaluationTime 验证求值耗时直方图按来源/阶段打标签。
 func TestObserveMatchConditionEvaluationTime(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
@@ -291,9 +309,13 @@ func TestObserveMatchConditionEvaluationTime(t *testing.T) {
 	expectHistogramCountTotal(t, "apiserver_admission_match_condition_evaluation_seconds", wantLabelsCounterWebhookValidate, 1)
 }
 
+// TestWithMetrics 验证 WithMetrics 包装器：只有当底层 handler 实现了对应
+// 接口（MutationInterface/ValidationInterface）时才应产生指标，且拒绝时
+// rejected 标签必须为 true。表驱动覆盖 mutating/validating/both 三种形态。
 func TestWithMetrics(t *testing.T) {
 	defer Metrics.reset()
 	defer legacyregistry.Reset()
+	// admit/validate 字段既表示期望的成功与否，也决定后续标签过滤条件。
 	type Test struct {
 		name            string
 		ns              string
@@ -365,6 +387,8 @@ func TestWithMetrics(t *testing.T) {
 		h := WithMetrics(test.handler, Metrics.ObserveAdmissionController, test.name)
 
 		// test mutation
+		// 这里传入空 GVK/GVR 是有意的：指标只依赖 operation 等标签，
+		// 构造完整属性反而会引入无关噪声。
 		err := h.(admission.MutationInterface).Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		if test.admit && err != nil {
 			t.Errorf("expected admit to succeed, but failed: %v", err)
@@ -386,6 +410,7 @@ func TestWithMetrics(t *testing.T) {
 
 		if err != nil {
 			// skip validation step if mutation failed
+			// 变更失败时 apiserver 不会进入验证阶段，所以这里也不能断言 validate 指标。
 			continue
 		}
 
@@ -411,6 +436,8 @@ func TestWithMetrics(t *testing.T) {
 	}
 }
 
+// mutatingAndValidatingFakeHandler 同时实现变更与验证接口，便于验证包装器
+// 在两条路径上都记录指标。
 type mutatingAndValidatingFakeHandler struct {
 	*admission.Handler
 	admit    bool
@@ -431,6 +458,7 @@ func (h *mutatingAndValidatingFakeHandler) Validate(ctx context.Context, a admis
 	return fmt.Errorf("don't validate")
 }
 
+// validatingFakeHandler 只实现验证接口。
 type validatingFakeHandler struct {
 	*admission.Handler
 	validate bool
@@ -443,6 +471,7 @@ func (h *validatingFakeHandler) Validate(ctx context.Context, a admission.Attrib
 	return fmt.Errorf("don't validate")
 }
 
+// mutatingFakeHandler 只实现变更接口。
 type mutatingFakeHandler struct {
 	*admission.Handler
 	admit bool

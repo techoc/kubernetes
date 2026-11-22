@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 apiserver 中 CEL 编译与求值的耗时指标。
 package metrics
 
 import (
@@ -24,6 +25,8 @@ import (
 )
 
 // TODO(jiahuif) CEL is to be used in multiple components, revise naming when that happens.
+// 指标命名固定为 apiserver_cel_*，沿用 BETA 稳定性级别；后续若被其他组件复用
+// 需要重新审视命名与稳定性承诺。
 const (
 	namespace = "apiserver"
 	subsystem = "cel"
@@ -32,6 +35,7 @@ const (
 // Metrics provides access to CEL metrics.
 var Metrics = newCelMetrics()
 
+// CelMetrics 持有 CEL 编译与求值耗时直方图。
 type CelMetrics struct {
 	compilationTime *metrics.Histogram
 	evaluationTime  *metrics.Histogram
@@ -55,6 +59,7 @@ func newCelMetrics() *CelMetrics {
 		}),
 	}
 
+	// 注册到 legacy registry，使指标通过 /metrics 端点暴露。
 	legacyregistry.MustRegister(m.compilationTime)
 	legacyregistry.MustRegister(m.evaluationTime)
 

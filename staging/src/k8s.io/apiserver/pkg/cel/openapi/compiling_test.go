@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件验证由 OpenAPI schema 推导出的 CEL 类型在编译期与运行期的一致性：
+// 同名但类型不同的字段必须在编译期被拒绝，而不是等到求值时产生难以理解的错误。
+
 package openapi
 
 import (
@@ -30,6 +33,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestMultipleTypes 验证多个同名不同类型的对象变量在同一表达式中时的类型检查行为。
 func TestMultipleTypes(t *testing.T) {
 	env, err := buildTestEnv()
 	if err != nil {
@@ -41,14 +45,17 @@ func TestMultipleTypes(t *testing.T) {
 		expectEvalResult   bool
 	}{
 		{
+			// 两边类型一致（都是 string），编译通过且值相等。
 			expression:       "foo.foo == bar.bar",
 			expectEvalResult: true,
 		},
 		{
+			// foo 没有 bar 字段：未知字段属于编译期错误，必须被拒绝。
 			expression:         "foo.bar == 'value'",
 			expectCompileError: true,
 		},
 		{
+			// 同名但类型不同：foo.foo 是 string，bar.foo 不存在，直接比较字符串字面量仍可编译。
 			expression:       "foo.foo == 'value'",
 			expectEvalResult: true,
 		},
@@ -57,10 +64,13 @@ func TestMultipleTypes(t *testing.T) {
 			expectEvalResult: true,
 		},
 		{
+			// 两边都有 common 字段且都是 int64，1 + 2 = 3 > 2。
 			expression:       "foo.common + bar.common <= 2",
 			expectEvalResult: false, // 3 > 2
 		},
 		{
+			// confusion 在 foo 中是 string、在 bar 中是 int64，跨类型比较应在编译期被拒绝，
+			// 这正是“同名不同类型不能互相混淆”的核心断言。
 			expression:         "foo.confusion == bar.confusion",
 			expectCompileError: true,
 		},
@@ -102,6 +112,8 @@ func TestMultipleTypes(t *testing.T) {
 // "bar".
 // foo is an object with a string field "foo", an integer field "common", and a string field "confusion"
 // bar is an object with a string field "bar", an integer field "common", and an integer field "confusion"
+//
+// 两个变量共享字段名 common 但类型一致，confusion 则类型冲突——用于验证类型系统的隔离性。
 func buildTestEnv() (*cel.Env, error) {
 	fooType := common.SchemaDeclType(simpleMapSchema("foo", spec.StringProperty()), true).MaybeAssignTypeName("fooType")
 	barType := common.SchemaDeclType(simpleMapSchema("bar", spec.Int64Property()), true).MaybeAssignTypeName("barType")
@@ -125,6 +137,8 @@ func buildTestEnv() (*cel.Env, error) {
 	return env.Env(environment.NewExpressions)
 }
 
+// simpleMapSchema 构造一个只含三个字段的对象 schema；
+// confusionSchema 由调用方指定，用于制造两个变量间的类型差异。
 func simpleMapSchema(fieldName string, confusionSchema *spec.Schema) common.Schema {
 	return &Schema{Schema: &spec.Schema{
 		SchemaProps: spec.SchemaProps{
@@ -138,11 +152,13 @@ func simpleMapSchema(fieldName string, confusionSchema *spec.Schema) common.Sche
 	}}
 }
 
+// simpleActivation 是只暴露 foo/bar 两个变量的最小 interpreter.Activation 实现。
 type simpleActivation struct {
 	foo any
 	bar any
 }
 
+// ResolveName 按名字解析变量；未声明的名字返回 false，交由 CEL 报告未定义变量。
 func (a *simpleActivation) ResolveName(name string) (interface{}, bool) {
 	switch name {
 	case "foo":
@@ -154,6 +170,7 @@ func (a *simpleActivation) ResolveName(name string) (interface{}, bool) {
 	}
 }
 
+// Parent 返回 nil：测试不需要嵌套作用域。
 func (a *simpleActivation) Parent() interpreter.Activation {
 	return nil
 }

@@ -33,8 +33,11 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestMetrics 验证 WithAuthentication 在不同认证结果下记录的指标：
+// success/error/failure 三类结果，以及 audience 交叉校验失败时仍记 error。
 func TestMetrics(t *testing.T) {
 	// Excluding authentication_duration_seconds since it is difficult to predict its values.
+	// 同样排除延迟类指标：它们依赖真实时钟，无法稳定断言。
 	metrics := []string{
 		"authenticated_user_requests",
 		"authentication_attempts",
@@ -81,6 +84,7 @@ func TestMetrics(t *testing.T) {
 				`,
 		},
 		{
+			// audience 不交集属于认证失败，按 error 计数，而不是 failure。
 			desc: "auth failed due to audiences not intersecting",
 			response: &authenticator.Response{
 				User:      &user.DefaultInfo{Name: "admin"},
@@ -95,6 +99,7 @@ func TestMetrics(t *testing.T) {
 				`,
 		},
 		{
+			// 响应未携带 Audiences 时视为“通配”，不做交集校验。
 			desc: "audiences not supplied in the response",
 			response: &authenticator.Response{
 				User: &user.DefaultInfo{Name: "admin"},
@@ -136,6 +141,7 @@ func TestMetrics(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
+			// 每个子测试前后都重置，避免前一个用例的计数污染期望值。
 			defer authenticatedUserCounter.Reset()
 			defer authenticatedAttemptsCounter.Reset()
 			done := make(chan struct{})
@@ -163,6 +169,9 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
+// TestRecordAuthorizationMetricsMetrics 验证授权结果到
+// authorization_attempts_total 的映射：Allow/Deny/NoOpinion/error，
+// 且 Allow 即使带 error 也按 allowed 计数（决策优先于错误）。
 func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
 	// Excluding authorization_duration_seconds since it is difficult to predict its values.
 	metrics := []string{
@@ -215,6 +224,8 @@ func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
 				`,
 		},
 		{
+			// 决策为 Allow 时错误被忽略，指标仍记 allowed；这是
+			// apiserver WithAuthorization filter 的既有行为。
 			desc: "authorizer decided allow with error",
 			authorizer: fakeAuthorizer{
 				authorizer.DecisionAllow,
@@ -259,6 +270,7 @@ func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
 			handler := WithAuthorization(&fakeHTTPHandler{}, tt.authorizer, negotiatedSerializer)
 			// TODO: fake audit injector
 
+			// 构造一个合法的资源请求；路径只影响属性，不影响指标断言。
 			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "/api/v1/namespaces/default/pods", nil)
 			req = withTestContext(req, nil, audit)
 			req.RemoteAddr = "127.0.0.1"

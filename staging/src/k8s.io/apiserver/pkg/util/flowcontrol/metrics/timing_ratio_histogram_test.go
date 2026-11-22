@@ -36,6 +36,8 @@ const (
 
 var errMetricNotFound = errors.New("not found")
 
+// TestTimingRatioHistogramVecElementSimple 验证 Checked 构造函数在标签合法时
+// 能正常记录，并与 exerciseTimingRatioHistogram 的预期计数一致。
 func TestTimingRatioHistogramVecElementSimple(t *testing.T) {
 	testHistogramName := "vec_element_simple"
 	t0 := time.Now()
@@ -57,6 +59,8 @@ func TestTimingRatioHistogramVecElementSimple(t *testing.T) {
 	exerciseTimingRatioHistogram(t, testHistogramName, t0, clk, registry, tro)
 }
 
+// TestTimingRatioHistogramVecElementSafeEarly 验证在注册之前创建 Safe 元素也能工作；
+// 这类元素底层使用懒注册的 observer。
 func TestTimingRatioHistogramVecElementSafeEarly(t *testing.T) {
 	testHistogramName := "vec_element_safe_early"
 	t0 := time.Now()
@@ -75,6 +79,8 @@ func TestTimingRatioHistogramVecElementSafeEarly(t *testing.T) {
 	exerciseTimingRatioHistogram(t, testHistogramName, t0, clk, registry, tro)
 }
 
+// TestTimingRatioHistogramVecElementSafeLate 验证注册之后再创建 Safe 元素的行为，
+// 与 Early 变体共同覆盖两种初始化顺序。
 func TestTimingRatioHistogramVecElementSafeLate(t *testing.T) {
 	testHistogramName := "vec_element_safe_late"
 	t0 := time.Now()
@@ -105,6 +111,9 @@ func TestTimingRatioHistogramVecElementSafeLate(t *testing.T) {
 // progress.  The exercise checks that the count in the observer is
 // correct at each step.  The observer is expected to get one
 // observation at the end of each nanosecond.
+//
+// 测试刻意包含小幅负向时间跳变，模拟问题 #96459 中观测到的单调时钟回退；
+// 设计约定是忽略回退、只按净前进量记数，因此期望计数始终基于不回退的 dt。
 func exerciseTimingRatioHistogram(t *testing.T, histogramName string, t0 time.Time, clk *testclock.FakePassiveClock, registry compbasemetrics.KubeRegistry, tro RatioedGauge) {
 	samplingPeriod := time.Nanosecond
 	steppingPeriod := time.Millisecond
@@ -128,6 +137,7 @@ func exerciseTimingRatioHistogram(t *testing.T, histogramName string, t0 time.Ti
 		}
 		clk.SetTime(t1)
 		tro.Set(1)
+		// 采样周期为 1ns，因此期望样本数等于累计前进的纳秒数。
 		expectedCount := int64(dt / samplingPeriod)
 		actualCount, err := getHistogramCount(registry, histogramName)
 		if err != nil && !(err == errMetricNotFound && expectedCount == 0) {
@@ -164,6 +174,7 @@ func getHistogramCount(registry compbasemetrics.KubeRegistry, metricName string)
 	return 0, errMetricNotFound
 }
 
+// BenchmarkTimingRatioHistogram 测量单实例 TimingRatioHistogram 在时间推进下的 Set 开销。
 func BenchmarkTimingRatioHistogram(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -191,6 +202,7 @@ func BenchmarkTimingRatioHistogram(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingRatioHistogramVecElementSimple 测量已校验标签的 Vec 元素 Set 开销。
 func BenchmarkTimingRatioHistogramVecElementSimple(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -221,6 +233,7 @@ func BenchmarkTimingRatioHistogramVecElementSimple(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingRatioHistogramVecElementSafeEarly 测量注册前创建的 Safe 元素开销。
 func BenchmarkTimingRatioHistogramVecElementSafeEarly(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -248,6 +261,7 @@ func BenchmarkTimingRatioHistogramVecElementSafeEarly(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingRatioHistogramVecElementSafeLate 测量注册后创建 Safe 元素的延迟路径开销。
 func BenchmarkTimingRatioHistogramVecElementSafeLate(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()

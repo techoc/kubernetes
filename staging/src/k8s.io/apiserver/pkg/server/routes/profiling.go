@@ -24,10 +24,13 @@ import (
 )
 
 // Profiling adds handlers for pprof under /debug/pprof.
+// 注意：pprof 端点会暴露调用栈与运行时细节，应由鉴权层（通常仅允许 system:masters 或
+// 本地回环地址）保护，因此这里使用 Unlisted 注册，不出现在 API 发现文档中。
 type Profiling struct{}
 
 // Install adds the Profiling webservice to the given mux.
 func (d Profiling) Install(c *mux.PathRecorderMux) {
+	// 裸 /debug/pprof 重定向到带斜杠的索引页，保持标准库 pprof 的行为。
 	c.UnlistedHandleFunc("/debug/pprof", redirectTo("/debug/pprof/"))
 	c.UnlistedHandlePrefix("/debug/pprof/", http.HandlerFunc(pprof.Index))
 	c.UnlistedHandleFunc("/debug/pprof/profile", pprof.Profile)

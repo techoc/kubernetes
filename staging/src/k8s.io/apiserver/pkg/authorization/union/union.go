@@ -53,6 +53,9 @@ type NamedAuthorizer struct {
 }
 
 // New returns an authorizer that authorizes against a chain of authorizer.Authorizer objects
+//
+// 名称必须唯一，因为 ConditionsAwareAuthorize 之后需要按名称找回对应的
+// authorizer 来求值条件；重名会导致条件被错误地交给另一个授权器处理。
 func New(authorizationHandlers ...NamedAuthorizer) (authorizer.Authorizer, error) {
 	nameToAuthorizer := make(map[string]authorizer.Authorizer, len(authorizationHandlers))
 	for _, handler := range authorizationHandlers {
@@ -73,6 +76,9 @@ func New(authorizationHandlers ...NamedAuthorizer) (authorizer.Authorizer, error
 }
 
 // Authorizes against a chain of authorizer.Authorizer objects and returns nil if successful and returns error if unsuccessful
+//
+// 短路语义：第一个返回 Allow 或 Deny 的授权器决定结果；NoOpinion 继续向后。
+// 全部为 NoOpinion 时聚合各授权器的 reason 与 error 一并返回，便于诊断。
 func (authzHandler unionAuthzHandler) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	var (
 		errlist    []error
@@ -86,6 +92,7 @@ func (authzHandler unionAuthzHandler) Authorize(ctx context.Context, a authorize
 			errlist = append(errlist, err)
 		}
 		if len(reason) != 0 {
+			// 带授权器名前缀，避免多个 reason 合并后无法区分来源。
 			reasonlist = append(reasonlist, fmt.Sprintf("%s: %s", currAuthzHandler.AuthorizerName, reason))
 		}
 		switch decision {
@@ -115,6 +122,7 @@ func (authzHandler unionAuthzHandler) ConditionsAwareAuthorize(ctx context.Conte
 		decisions.Add(currAuthzHandler.AuthorizerName, decision)
 
 		// If there is any Allow/Deny decision leaf, no need to walk the chain further.
+		// 无条件的 Allow/Deny 与 Authorize 的短路行为保持一致。
 		if decision.ContainsUnconditionalAllowOrDeny() {
 			return decisions.ToDecision()
 		}
@@ -160,6 +168,7 @@ func (authzHandler unionAuthzHandler) EvaluateConditions(ctx context.Context, un
 		case unevaluatedSubDecision.IsConditionsMap(), unevaluatedSubDecision.IsUnion():
 			decision, reason, err = authzHandler.evaluateConditions(ctx, currentAuthorizerName, unevaluatedSubDecision, data)
 			// Guard against impossible evaluations.
+			// 求值结果必须是该子决策声明过的可能结果之一，否则 fail closed。
 			if !unevaluatedSubDecision.PossibleDecisions().Has(decision) {
 				decision, reason, err = unevaluatedSubDecision.FailureDecision(), "failed closed", fmt.Errorf("evaluated to decision %s, but only %v were possible", decision, sets.List(unevaluatedSubDecision.PossibleDecisions()))
 			}
@@ -185,6 +194,7 @@ func (authzHandler unionAuthzHandler) EvaluateConditions(ctx context.Context, un
 	return authorizer.DecisionNoOpinion, strings.Join(reasonlist, "\n"), utilerrors.NewAggregate(errlist)
 }
 
+// evaluateConditions 按名称找回子授权器并委托其求值条件；找不到时 fail closed。
 func (authzHandler unionAuthzHandler) evaluateConditions(ctx context.Context, authorizerName string, unevaluatedSubDecision authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	authorizer, ok := authzHandler.nameToAuthorizer[authorizerName]
 	if !ok {
@@ -202,6 +212,9 @@ func NewRuleResolvers(authorizationHandlers ...authorizer.RuleResolver) authoriz
 }
 
 // RulesFor against a chain of authorizer.RuleResolver objects and returns nil if successful and returns error if unsuccessful
+//
+// 与 Authorize 不同，规则查询需要汇总所有子授权器的结果，无法短路；
+// 任一子授权器报告不完整（incomplete）时整体即为不完整。
 func (authzHandler unionAuthzRulesHandler) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	var (
 		errList              []error

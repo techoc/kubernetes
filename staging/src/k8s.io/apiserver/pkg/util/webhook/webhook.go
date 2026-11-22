@@ -39,6 +39,7 @@ const defaultRequestTimeout = 30 * time.Second
 
 // DefaultRetryBackoffWithInitialDelay returns the default backoff parameters for webhook retry from a given initial delay.
 // Handy for the client that provides a custom initial delay only.
+// 重试策略与认证/授权 webhook 保持一致：5 步、1.5 倍增长、20% 抖动，抑制同步重试风暴。
 func DefaultRetryBackoffWithInitialDelay(initialBackoffDelay time.Duration) wait.Backoff {
 	return wait.Backoff{
 		Duration: initialBackoffDelay,
@@ -50,6 +51,7 @@ func DefaultRetryBackoffWithInitialDelay(initialBackoffDelay time.Duration) wait
 
 // GenericWebhook defines a generic client for webhooks with commonly used capabilities,
 // such as retry requests.
+// 字段可被调用方覆盖以定制重试策略；零值 ShouldRetry 会回退到 DefaultShouldRetry。
 type GenericWebhook struct {
 	RestClient   *rest.RESTClient
 	RetryBackoff wait.Backoff
@@ -60,6 +62,7 @@ type GenericWebhook struct {
 // If the error reason is one of: networking (connection reset) or http (InternalServerError (500), GatewayTimeout (504), TooManyRequests (429)),
 // or apierrors.SuggestsClientDelay() returns true, then the function advises a retry.
 // Otherwise it returns false for an immediate fail.
+// 只重试明确可恢复的错误：4xx（除 429）等确定性失败重试无益，反而放大负载。
 func DefaultShouldRetry(err error) bool {
 	// these errors indicate a transient error that should be retried.
 	if utilnet.IsConnectionReset(err) || utilnet.IsHTTP2ConnectionLost(err) || apierrors.IsInternalError(err) || apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) {
@@ -73,6 +76,8 @@ func DefaultShouldRetry(err error) bool {
 }
 
 // NewGenericWebhook creates a new GenericWebhook from the provided rest.Config.
+// 启动时校验 scheme 是否已注册所需 groupVersion，尽早暴露装配错误，
+// 否则首个 webhook 调用才会失败且错误信息不够直接。
 func NewGenericWebhook(scheme *runtime.Scheme, codecFactory serializer.CodecFactory, config *rest.Config, groupVersions []schema.GroupVersion, retryBackoff wait.Backoff) (*GenericWebhook, error) {
 	for _, groupVersion := range groupVersions {
 		if !scheme.IsVersionRegistered(groupVersion) {
@@ -86,6 +91,7 @@ func NewGenericWebhook(scheme *runtime.Scheme, codecFactory serializer.CodecFact
 	clientConfig.ContentType = runtime.ContentTypeJSON
 	clientConfig.ContentConfig.NegotiatedSerializer = serializer.NegotiatedSerializerWrapper(runtime.SerializerInfo{Serializer: codec})
 
+	// 包一层证书指标：webhook 后端使用缺失 SAN 或 SHA-1 证书时给出可观测的告警。
 	clientConfig.Wrap(x509metrics.NewDeprecatedCertificateRoundTripperWrapperConstructor(
 		x509MissingSANCounter,
 		x509InsecureSHA1Counter,
@@ -135,6 +141,7 @@ func WithExponentialBackoff(ctx context.Context, retryBackoff wait.Backoff, webh
 
 	switch {
 	// we check for webhookErr first, if webhookErr is set it's the most important error to return.
+	// 上下文取消/超时时 wait 返回的错误信息较笼统，优先返回真实的 webhook 错误更有诊断价值。
 	case webhookErr != nil:
 		return webhookErr
 	case err != nil:
@@ -144,6 +151,9 @@ func WithExponentialBackoff(ctx context.Context, retryBackoff wait.Backoff, webh
 	}
 }
 
+// LoadKubeconfig 从 kubeconfig 文件构造 webhook 客户端配置。
+// 与委托认证的客户端不同，这里禁用客户端限流（QPS=-1），因为限流应在请求入口处统一实施，
+// 在 webhook 客户端再次限流会造成重复排队并放大延迟。
 func LoadKubeconfig(kubeConfigFile string, customDial utilnet.DialFunc) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	loadingRules.ExplicitPath = kubeConfigFile
@@ -161,6 +171,7 @@ func LoadKubeconfig(kubeConfigFile string, customDial utilnet.DialFunc) (*rest.C
 	// https://github.com/kubernetes/client-go/blob/master/tools/clientcmd/overrides.go
 	//
 	// Set this to something reasonable so request to webhooks don't hang forever.
+	// 这是包含读取响应体在内的绝对超时，防止异常后端无限占用连接。
 	clientConfig.Timeout = defaultRequestTimeout
 
 	// Avoid client-side rate limiting talking to the webhook backend.

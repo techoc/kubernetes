@@ -22,14 +22,19 @@ import (
 )
 
 var (
+	// SchemeBuilder 收集本包的注册函数；外部通过 AddToScheme 一次性把
+	// 内部版本类型挂到自己的 scheme 上。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 是 SchemeBuilder.AddToScheme 的别名，便于调用方书写。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
 // GroupName is the group name use in this package
 const GroupName = "apiserver.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 本包只注册内部版本（APIVersionInternal），配置的版本化表示由
+// 外部版本包负责转换。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -42,6 +47,8 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
+// addKnownTypes 向 scheme 注册本组的所有内部类型。
+// 新增策略配置类型时必须同步添加，否则反序列化会失败。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ValidatingAdmissionPolicyConfiguration{},

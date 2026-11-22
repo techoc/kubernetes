@@ -102,6 +102,8 @@ var (
 	}
 )
 
+// TestEquality 验证按 OpenAPI 扩展（listType=map/set/atomic）实现的相等语义：
+// map/set 列表与元素顺序无关，atomic 列表则要求顺序与内容完全一致。
 func TestEquality(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -412,6 +414,8 @@ func TestEquality(t *testing.T) {
 	}
 }
 
+// TestLister 验证 listType=map 的列表在 CEL 中表现为 lister：
+// 按 map key 查找、Contains 语义以及 `+` 合并时按 key 覆盖。
 func TestLister(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -547,6 +551,8 @@ func TestLister(t *testing.T) {
 	}
 }
 
+// TestMapper 验证对象与 map 的 Mapper 行为：Size、Get、Iterator 与 Contains。
+// 两类 schema 的区别只在于属性来源（Properties vs AdditionalProperties）。
 func TestMapper(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -629,6 +635,8 @@ func TestMapper(t *testing.T) {
 	}
 }
 
+// BenchmarkUnstructuredToVal 测量把 unstructured map-list 转换为 CEL 值的分配与耗时，
+// 这是每次 CEL 求值都会走的热路径。
 func BenchmarkUnstructuredToVal(b *testing.B) {
 	u := []interface{}{
 		map[string]interface{}{
@@ -655,6 +663,7 @@ func BenchmarkUnstructuredToVal(b *testing.B) {
 	}
 }
 
+// BenchmarkUnstructuredToValWithEscape 测量需要转义 map key（含 "." 等字符）时的额外开销。
 func BenchmarkUnstructuredToValWithEscape(b *testing.B) {
 	u := []interface{}{
 		map[string]interface{}{

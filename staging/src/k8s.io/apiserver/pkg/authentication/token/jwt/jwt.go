@@ -18,6 +18,8 @@ package jwt
 
 // CredentialIDForJTI converts a given JTI string into a credential identifier for use in a
 // users 'extra' info.
+// JTI 为空时不生成标识，避免把空值当作可用的凭据 ID；
+// 前缀 "JTI=" 让消费方能在 extra 字段中区分不同来源的凭据标识。
 func CredentialIDForJTI(jti string) string {
 	if len(jti) == 0 {
 		return ""

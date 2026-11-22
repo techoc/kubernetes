@@ -42,6 +42,8 @@ import (
 
 const gzipContentOrDieEncodingLevel = 1
 
+// TestWatchResponseWriter 验证 watch 响应写入器在不压缩/压缩两种模式下
+// 正确设置 Content-Encoding 与 Vary 头，并把数据按预期写出。
 func TestWatchResponseWriter(t *testing.T) {
 	scenarios := []struct {
 		name                    string
@@ -120,6 +122,7 @@ func TestWatchResponseWriter(t *testing.T) {
 	}
 }
 
+// TestWatchResponseWriterDoubleClose 验证重复 Close 是幂等的，不会 panic 或重复写终止帧。
 func TestWatchResponseWriterDoubleClose(t *testing.T) {
 	scenarios := []struct {
 		name      string
@@ -152,6 +155,8 @@ func TestWatchResponseWriterDoubleClose(t *testing.T) {
 	}
 }
 
+// gzipContentOrDie 生成期望的 gzip 字节序列；flush 控制是否在结尾 flush，
+// 以便与实现产生逐字节一致的输出进行比较。
 func gzipContentOrDie(data []byte, level int, flush bool) []byte {
 	buf := &bytes.Buffer{}
 	gw, err := gzip.NewWriterLevel(buf, level)
@@ -172,11 +177,15 @@ func gzipContentOrDie(data []byte, level int, flush bool) []byte {
 	return buf.Bytes()
 }
 
+// TestGzipNewReaderFailsOnUncompressedContent 验证 gzip 读取器对非 gzip 数据报错，
+// 防止错误地把明文内容当作压缩流处理。
 func TestGzipNewReaderFailsOnUncompressedContent(t *testing.T) {
 	_, err := gzip.NewReader(bytes.NewReader([]byte(`{"type":"ADDED","object":{}}`)))
 	require.Error(t, err)
 }
 
+// TestPerFlushGzipWriter 验证每次写入都会 flush，使 watch 事件能及时送达客户端，
+// 而不会被 gzip 缓冲滞留。
 func TestPerFlushGzipWriter(t *testing.T) {
 	scenarios := []struct {
 		name          string
@@ -235,6 +244,8 @@ func TestPerFlushGzipWriter(t *testing.T) {
 // events and the initial-events-end bookmark, then measures heap.
 // The perFlushGzipWriter releases the gzip.Writer back to the pool on Flush,
 // so idle connections after initial events should not hold gzip state.
+// BenchmarkPerFlushGzipWriterMemory 测量逐事件 flush 的分配开销，
+// 用于评估压缩对大流量 watch 的内存压力。
 func BenchmarkPerFlushGzipWriterMemory(b *testing.B) {
 	klog.SetLogger(logr.Discard())
 	featuregatetesting.SetFeatureGateDuringTest(b, utilfeature.DefaultFeatureGate, features.WatchListCompression, true)
@@ -328,6 +339,8 @@ func BenchmarkPerFlushGzipWriterMemory(b *testing.B) {
 	b.ReportMetric(float64(heapGrowth)/1024/1024, "MB-heap-growth/op")
 }
 
+// TestWatchServerCompression 端到端验证 watch 服务器的压缩开关：客户端声明
+// Accept-Encoding 时才压缩，且解压后的事件流与未压缩时一致。
 func TestWatchServerCompression(t *testing.T) {
 	simpleEventFn := func(name string) watch.Event {
 		return watch.Event{

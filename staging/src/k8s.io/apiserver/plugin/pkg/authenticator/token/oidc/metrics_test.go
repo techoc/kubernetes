@@ -34,6 +34,9 @@ const (
 	testKeySet      = `{"keys":[{"kty":"RSA","use":"sig","kid":"test"}]}`
 )
 
+// TestRecordAuthenticationLatency 验证认证延迟直方图只在缓存未命中时记录，
+// 且 result 标签区分 success/failure；未匹配 issuer 的请求不产生任何样本。
+// 期望值直接以 Prometheus 文本格式给出，任何标签或桶的改动都会让测试失败。
 func TestRecordAuthenticationLatency(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -109,31 +112,40 @@ func TestRecordAuthenticationLatency(t *testing.T) {
 	}
 }
 
+// dummyAuthenticator 返回预设的认证结果，用于驱动指标记录路径。
 type dummyAuthenticator struct {
 	response *authenticator.Response
 	ok       bool
 	err      error
 }
 
+// AuthenticateToken 原样返回预设结果。
 func (a *dummyAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	return a.response, a.ok, a.err
 }
 
+// HealthCheck 不应在指标测试中被调用。
 func (a *dummyAuthenticator) HealthCheck() error {
 	panic("should not be called")
 }
 
+// dummyClock 提供确定的计时结果（Since 固定返回 1ns），
+// 使直方图 sum 可被精确断言。
 type dummyClock struct {
 }
 
+// Now 返回真实当前时间（仅用于满足接口）。
 func (d dummyClock) Now() time.Time {
 	return time.Now()
 }
 
+// Since 固定返回 1ns，保证期望文本中的 sum=1e-09 稳定。
 func (d dummyClock) Since(t time.Time) time.Duration {
 	return time.Duration(1)
 }
 
+// TestRecordJWKSFetchKeySetSuccess 验证 JWKS 成功获取后以
+// apiserver_id_hash/jwt_issuer_hash/hash 三个哈希标签暴露最后一份 key set。
 func TestRecordJWKSFetchKeySetSuccess(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info [ALPHA] Information about the last JWKS fetched by the JWT authenticator with hash as label, split by api server identity and jwt issuer.
@@ -155,6 +167,8 @@ func TestRecordJWKSFetchKeySetSuccess(t *testing.T) {
 	}
 }
 
+// TestRecordJWKSFetchKeySetFailure 验证失败路径仍会更新“最后获取时间戳”指标，
+// 即使没有 key set 信息可暴露——运维可据此发现持续失败的 JWKS 拉取。
 func TestRecordJWKSFetchKeySetFailure(t *testing.T) {
 	ResetMetrics()
 	RegisterMetrics()
@@ -178,6 +192,8 @@ func TestRecordJWKSFetchKeySetFailure(t *testing.T) {
 	}
 }
 
+// TestJWKSHashCollector_MultipleAuthenticators 验证多个 issuer 的信息可同时存在，
+// 标签组合不同即视为不同的时间序列。
 func TestJWKSHashCollector_MultipleAuthenticators(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info [ALPHA] Information about the last JWKS fetched by the JWT authenticator with hash as label, split by api server identity and jwt issuer.
@@ -204,6 +220,8 @@ func TestJWKSHashCollector_MultipleAuthenticators(t *testing.T) {
 	}
 }
 
+// TestJWKSHashCollector_UpdateExistingHash 验证同一 issuer 重新拉取后
+// 只保留最新 key set 的哈希，旧哈希不残留（info 型指标必须替换而非累加）。
 func TestJWKSHashCollector_UpdateExistingHash(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info [ALPHA] Information about the last JWKS fetched by the JWT authenticator with hash as label, split by api server identity and jwt issuer.
@@ -229,6 +247,8 @@ func TestJWKSHashCollector_UpdateExistingHash(t *testing.T) {
 	}
 }
 
+// TestJWKSHashCollector_DeleteHash 验证删除某个 issuer 的指标后不会影响其他 issuer，
+// 防止认证器被移除时留下永久残留的时间序列。
 func TestJWKSHashCollector_DeleteHash(t *testing.T) {
 	ResetMetrics()
 	RegisterMetrics()

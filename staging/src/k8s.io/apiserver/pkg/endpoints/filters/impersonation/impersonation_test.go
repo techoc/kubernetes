@@ -34,8 +34,14 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// impersonateAuthorizer 是一个可编程的测试鉴权器：按被模拟用户所属的
+// 组和请求的 verb/resource 决定放行。它刻意覆盖多种授权粒度（仅 user、
+// 仅 group、特定 extra key、特定 scope 名），以便验证过滤器确实为每种
+// 模拟维度发起独立的 impersonate 鉴权，而不是只检查一次。
 type impersonateAuthorizer struct{}
 
+// Authorize 根据用户名、组及请求属性返回鉴权决策。返回 NoOpinion 加
+// error 用于模拟鉴权器故障；"deny by default" 模拟明确的拒绝。
 func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	user := a.GetUser()
 
@@ -44,12 +50,15 @@ func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 		return authorizer.DecisionAllow, "", nil
 
 	case user.GetName() == "tester":
+		// 触发鉴权器返回错误，验证过滤器把错误映射为 403。
 		return authorizer.DecisionNoOpinion, "", fmt.Errorf("works on my machine")
 
 	case user.GetName() == "deny-me":
 		return authorizer.DecisionNoOpinion, "denied", nil
 	}
 
+	// 各分支故意只授予单一维度的 impersonate 权限，供用例验证
+	// "未授权维度必须失败"。
 	if len(user.GetGroups()) > 0 && user.GetGroups()[0] == "wheel" && a.GetVerb() == "impersonate" && a.GetResource() == "users" {
 		return authorizer.DecisionAllow, "", nil
 	}
@@ -70,19 +79,25 @@ func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 		return authorizer.DecisionAllow, "", nil
 	}
 
+	// escaped-scopes 用于验证 URL 解码后的 extra key 也能正确授权。
 	if len(user.GetGroups()) > 1 && (user.GetGroups()[1] == "escaped-scopes" || user.GetGroups()[1] == "almost-escaped-scopes") {
 		return authorizer.DecisionAllow, "", nil
 	}
 
+	// 只允许 impersonate 名为 scope-a 的 extra，用于验证按名称粒度的
+	// 授权；用例中请求包含 scope-b，因此应被拒绝。
 	if len(user.GetGroups()) > 1 && user.GetGroups()[1] == "extra-setter-particular-scopes" &&
 		a.GetVerb() == "impersonate" && a.GetResource() == "userextras" && a.GetSubresource() == "scopes" && a.GetName() == "scope-a" && a.GetAPIGroup() == "authentication.k8s.io" {
 		return authorizer.DecisionAllow, "", nil
 	}
 
+	// 只授予 project 这一 extra key 的权限，不应覆盖 scopes。
 	if len(user.GetGroups()) > 1 && user.GetGroups()[1] == "extra-setter-project" && a.GetVerb() == "impersonate" && a.GetResource() == "userextras" && a.GetSubresource() == "project" && a.GetAPIGroup() == "authentication.k8s.io" {
 		return authorizer.DecisionAllow, "", nil
 	}
 
+	// everything-impersonater 覆盖 user/uid/group/extra scopes 全部维度，
+	// 用于"全字段模拟"的正向用例。
 	if len(user.GetGroups()) > 0 && user.GetGroups()[0] == "everything-impersonater" && a.GetVerb() == "impersonate" && a.GetResource() == "users" && a.GetAPIGroup() == "" {
 		return authorizer.DecisionAllow, "", nil
 	}
@@ -102,6 +117,14 @@ func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 	return authorizer.DecisionNoOpinion, "deny by default", nil
 }
 
+// TestImpersonationFilter 同时驱动 WithImpersonation 与
+// WithConstrainedImpersonation 两个过滤器，覆盖以下不变量：
+//   - 未携带模拟头时用户保持不变，且请求可正常通过；
+//   - 只给 group/extra/uid 而不给 user 属于非法请求（400），避免语义歧义；
+//   - 每个模拟维度都需单独鉴权，任一维度被拒即整体 403；
+//   - system:authenticated / system:unauthenticated 组按匿名与已认证语义
+//     自动补齐且不会重复；
+//   - 模拟头在传给下游 handler 前必须被剥离，防止被误当作真实凭据。
 func TestImpersonationFilter(t *testing.T) {
 	testCases := []struct {
 		name                    string
@@ -115,6 +138,7 @@ func TestImpersonationFilter(t *testing.T) {
 	}{
 		{
 			name: "not-impersonating",
+			// 无模拟头：原用户应原样透传。
 			user: &user.DefaultInfo{
 				Name: "tester",
 			},
@@ -125,6 +149,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "impersonating-error",
+			// 鉴权器报错时不得放行，应返回 403。
 			user: &user.DefaultInfo{
 				Name: "tester",
 			},
@@ -136,6 +161,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "impersonating-group-without-user",
+			// 只模拟组而不指明用户会使身份不完整，属于请求格式错误。
 			user: &user.DefaultInfo{
 				Name: "tester",
 			},
@@ -169,6 +195,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-group",
+			// 有 user 权限但没有 group 权限，整体必须失败。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel"},
@@ -183,6 +210,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "allowed-group",
+			// 成功模拟后自动补上 system:authenticated。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel", "group-impersonater"},
@@ -198,6 +226,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-userextra-1",
+			// 没有任何 userextras 权限，模拟 extra 必须 403。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel"},
@@ -213,6 +242,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-userextra-2",
+			// 只有 project 权限，不能用来模拟 scopes。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel", "extra-setter-project"},
@@ -228,6 +258,8 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-userextra-3",
+			// 只授权 scope-a，但请求含 scope-b：批量请求中任一未授权值
+			// 都要导致整体拒绝，不能部分放行。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel", "extra-setter-particular-scopes"},
@@ -258,6 +290,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "percent-escaped-userextras",
+			// extra key 经过百分号编码后应被解码为原始 UTF-8 字符串。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel", "escaped-scopes"},
@@ -273,6 +306,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "almost-percent-escaped-userextras",
+			// 非法百分号序列不能被解码，应保留原样而不是报错。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"wheel", "almost-escaped-scopes"},
@@ -302,6 +336,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-impersonating",
+			// 仅服务账号权限不能用于模拟普通用户。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"sa-impersonater"},
@@ -315,6 +350,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "allowed-sa-impersonating",
+			// 模拟服务账号时应自动补齐 serviceaccounts 相关组。
 			user: &user.DefaultInfo{
 				Name:   "dev",
 				Groups: []string{"sa-impersonater"},
@@ -330,6 +366,8 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "anonymous-username-prevents-adding-authenticated-group",
+			// 模拟匿名用户时只能得到 unauthenticated 组，不能误加
+			// authenticated 组，否则会放大匿名身份的权限。
 			user: &user.DefaultInfo{
 				Name: "system:admin",
 			},
@@ -343,6 +381,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "unauthenticated-group-prevents-adding-authenticated-group",
+			// 显式模拟 unauthenticated 组时不得再追加 authenticated。
 			user: &user.DefaultInfo{
 				Name: "system:admin",
 			},
@@ -357,6 +396,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "unauthenticated-group-prevents-double-adding-authenticated-group",
+			// 已显式给出 authenticated 时不得重复添加。
 			user: &user.DefaultInfo{
 				Name: "system:admin",
 			},
@@ -399,6 +439,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "anonymous-user-prevents-double-adding-unauthenticated-group",
+			// 模拟匿名且显式列出 unauthenticated 组时只保留一份。
 			user: &user.DefaultInfo{
 				Name: "system:admin",
 			},
@@ -413,6 +454,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "allowed-user-impersonation-with-uid",
+			// UID 模拟需要单独的 uids/impersonate 权限，此处已授予。
 			user: &user.DefaultInfo{
 				Name: "dev",
 				Groups: []string{
@@ -431,6 +473,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "disallowed-user-impersonation-with-uid",
+			// 未授权的具体 UID 值必须导致 403。
 			user: &user.DefaultInfo{
 				Name: "dev",
 				Groups: []string{
@@ -447,6 +490,7 @@ func TestImpersonationFilter(t *testing.T) {
 		},
 		{
 			name: "allowed-impersonation-with-all-headers",
+			// 同时模拟 user/uid/group/extra，验证所有维度组合后结果完整。
 			user: &user.DefaultInfo{
 				Name: "dev",
 				Groups: []string{
@@ -471,6 +515,8 @@ func TestImpersonationFilter(t *testing.T) {
 	var actualUser user.Info
 	var lock sync.Mutex
 
+	// doNothingHandler 只观察并断言：下游绝不能看到任何 Impersonate-*
+	// 请求头，否则下游可能误以为这些头是真实凭据。
 	doNothingHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		currentCtx := req.Context()
 		user, exists := request.UserFrom(currentCtx)
@@ -497,6 +543,9 @@ func TestImpersonationFilter(t *testing.T) {
 		}
 
 	})
+	// delegateHandler 在调用过滤链前注入测试上下文（含模拟用户），
+	// 并在过滤链之后记录最终用户。由于测试服务器在独立 goroutine 中
+	// 处理请求，用锁保护 ctx 与 actualUser 的读写。
 	delegateHandler := func(delegate http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			defer func() {
@@ -521,6 +570,7 @@ func TestImpersonationFilter(t *testing.T) {
 		})
 	}
 
+	// 两种过滤器必须表现一致，仅允许的模拟维度集合不同。
 	handlersToTest := map[string]http.Handler{
 		"impersonation":            delegateHandler(WithImpersonation(doNothingHandler, impersonateAuthorizer{}, serializer.NewCodecFactory(runtime.NewScheme()))),
 		"constrainedImpersonation": delegateHandler(WithConstrainedImpersonation(doNothingHandler, impersonateAuthorizer{}, serializer.NewCodecFactory(runtime.NewScheme()))),
@@ -534,6 +584,8 @@ func TestImpersonationFilter(t *testing.T) {
 				func() {
 					lock.Lock()
 					defer lock.Unlock()
+					// 构造带用户与请求信息的上下文；请求信息决定鉴权器
+					// 看到的 resource，模拟头则由请求头传入。
 					ctx = request.WithUser(request.NewContext(), tc.user)
 					ctx = request.WithRequestInfo(ctx, &request.RequestInfo{
 						IsResourceRequest: true,
@@ -573,6 +625,8 @@ func TestImpersonationFilter(t *testing.T) {
 					return
 				}
 
+				// 即使请求被拒绝，也不应产生半模拟的用户；这里统一校验
+				// 最终用户与期望完全一致。
 				if !apiequality.Semantic.DeepEqual(actualUser, tc.expectedUser) {
 					t.Errorf("%s: expected %#v, actual %#v", tc.name, tc.expectedUser, actualUser)
 					return

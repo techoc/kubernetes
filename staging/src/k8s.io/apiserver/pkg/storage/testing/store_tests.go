@@ -47,8 +47,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// KeyValidation 用于在写入成功后由测试套件回调，校验 key 在底层存储中的实际状态。
+// 不同后端（etcd3、watchcache）的检查方式不同，因此由调用方注入。
 type KeyValidation func(ctx context.Context, t *testing.T, key string)
 
+// RunTestCreate 校验 Create 的基本语义：新建对象返回非空 resourceVersion，
+// 且禁止客户端在创建时预设 resourceVersion（否则并发写会绕过版本控制）。
 func RunTestCreate(ctx context.Context, t *testing.T, store storage.Interface, validation KeyValidation) {
 	tests := []struct {
 		name          string
@@ -67,6 +71,7 @@ func RunTestCreate(ctx context.Context, t *testing.T, store storage.Interface, v
 		t.Run(tt.name, func(t *testing.T) {
 			out := &example.Pod{} // reset
 			// verify that kv pair is empty before set
+			// 先确认 key 为空，避免上一次运行的残留数据掩盖 Create 的问题
 			key := computePodKey(tt.inputObj)
 			if err := store.Get(ctx, key, storage.GetOptions{}, out); !storage.IsNotFound(err) {
 				t.Fatalf("expecting empty result on key %s, got %v", key, err)
@@ -80,6 +85,7 @@ func RunTestCreate(ctx context.Context, t *testing.T, store storage.Interface, v
 				return
 			}
 			// basic tests of the output
+			// 输出对象必须带回写入的名字，并且被分配了新的 resourceVersion
 			if tt.inputObj.ObjectMeta.Name != out.ObjectMeta.Name {
 				t.Errorf("pod name want=%s, get=%s", tt.inputObj.ObjectMeta.Name, out.ObjectMeta.Name)
 			}
@@ -91,6 +97,7 @@ func RunTestCreate(ctx context.Context, t *testing.T, store storage.Interface, v
 	}
 }
 
+// RunTestCreateWithTTL 校验带 TTL 的创建：租约到期后对象应被清除，watcher 收到 Deleted 事件。
 func RunTestCreateWithTTL(ctx context.Context, t *testing.T, store storage.Interface) {
 	input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	out := &example.Pod{}
@@ -107,6 +114,8 @@ func RunTestCreateWithTTL(ctx context.Context, t *testing.T, store storage.Inter
 	testCheckEventType(t, w, watch.Deleted)
 }
 
+// RunTestCreateWithKeyExist 校验对已存在的 key 再次 Create 会返回 AlreadyExists，
+// 而不是静默覆盖——覆盖会绕过 resourceVersion 的乐观并发控制。
 func RunTestCreateWithKeyExist(ctx context.Context, t *testing.T, store storage.Interface) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key, _ := testPropagateStore(ctx, t, store, obj)
@@ -118,10 +127,14 @@ func RunTestCreateWithKeyExist(ctx context.Context, t *testing.T, store storage.
 	}
 }
 
+// RunTestGet 覆盖 Get 的 resourceVersion 语义：不指定 RV 时读取最新值，
+// 指定 RV 时按 NotOlderThan 处理（可能返回更新的版本），RV=0 表示不保证一致性。
 func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 	// create an object to test
+	// 创建一个对象，随后更新一次，以便测试按精确 resourceVersion 读取
 	key, createdObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	// update the object once to allow get by exact resource version to be tested
+	// 更新一次，使 createdObj 的 resourceVersion 落后于最新值
 	updateObj := createdObj.DeepCopy()
 	updateObj.Annotations = map[string]string{"test-annotation": "1"}
 	storedObj := &example.Pod{}
@@ -134,6 +147,7 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 		t.Fatalf("Update failed: %v", err)
 	}
 	// create an additional object to increment the resource version for pods above the resource version of the foo object
+	// 再创建一个对象，把全局 RV 推高到 foo 的 RV 之上，用于验证"请求 RV 落后于最新"的场景
 	secondObj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar", Namespace: "test-ns"}}
 	lastUpdatedObj := &example.Pod{}
 	if err := store.Create(ctx, computePodKey(secondObj), secondObj, lastUpdatedObj, 0); err != nil {
@@ -144,6 +158,8 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 	lastUpdatedCurrentRV, _ := strconv.Atoi(lastUpdatedObj.ResourceVersion)
 
 	// TODO(jpbetz): Add exact test cases
+	// 注意：这里的用例故意只断言"可接受的输出集合"而非精确值，
+	// 因为 Get 的 NotOlderThan 语义允许返回比请求更新的版本。
 	tests := []struct {
 		name                 string
 		key                  string
@@ -164,6 +180,7 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 		// when the object didn't yet exist.
 		// As a result, we allow it by setting ignoreNotFound and allowing an empty
 		// object in expectedOut.
+		// RV=0 表示"任意旧版本"，因此允许对象尚不存在时的空结果。
 		name:                 "resource version 0",
 		key:                  key,
 		ignoreNotFound:       true,
@@ -172,6 +189,7 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 	}, {
 		// Given that Get with set ResourceVersion is effectively always
 		// NotOlderThan semantic, both versions of object are allowed.
+		// 带 RV 的 Get 实际是 NotOlderThan 语义，所以旧版本和新版本都算合法结果。
 		name:                 "object created resource version",
 		key:                  key,
 		expectedAlternatives: []*example.Pod{createdObj, storedObj},
@@ -213,6 +231,7 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 			// version) will also return the result synchronized to at least ResourceVersion X.
 			// By parallelizing test cases we ensure that the order in which test cases are defined
 			// doesn't automatically preclude some scenarios from happening.
+			// 并行化可让用例之间不因定义顺序而互相"预热"，避免掩盖异步实现的时序问题。
 			t.Parallel()
 
 			out := &example.Pod{}
@@ -242,6 +261,8 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 	}
 }
 
+// RunTestUnconditionalDelete 校验不带前置条件的 Delete：返回被删对象的最终状态，
+// 且其 resourceVersion 必须比删除前更新（删除本身也消耗一次版本号）。
 func RunTestUnconditionalDelete(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
@@ -286,6 +307,8 @@ func RunTestUnconditionalDelete(ctx context.Context, t *testing.T, store storage
 	}
 }
 
+// RunTestConditionalDelete 校验 UID 前置条件：UID 不匹配时必须返回 Invalid 错误，
+// 防止删除掉同名但已被重建的对象。
 func RunTestConditionalDelete(ctx context.Context, t *testing.T, store storage.Interface) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns", UID: "A"}}
 	key, storedObj := testPropagateStore(ctx, t, store, obj)
@@ -355,6 +378,7 @@ func RunTestConditionalDelete(ctx context.Context, t *testing.T, store storage.I
 // - https://github.com/kubernetes/kubernetes/pull/78713
 //   [DONE] Added TestPreconditionalDeleteWithSuggestion
 
+// RunTestDeleteWithSuggestion 校验 Delete 接受 suggestion 参数但不因此改变行为。
 func RunTestDeleteWithSuggestion(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
@@ -368,10 +392,13 @@ func RunTestDeleteWithSuggestion(ctx context.Context, t *testing.T, store storag
 	}
 }
 
+// RunTestDeleteWithSuggestionAndConflict 校验 suggestion 已过期（期间发生过更新）时，
+// Delete 仍应基于最新版本完成删除，而不是报冲突。
 func RunTestDeleteWithSuggestionAndConflict(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
 	// First update, so originalPod is outdated.
+	// 先做一次更新，使 originalPod 相对存储中的当前版本已经过期。
 	updatedPod := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -395,14 +422,17 @@ func RunTestDeleteWithSuggestionAndConflict(ctx context.Context, t *testing.T, s
 }
 
 // RunTestDeleteWithConflict tests the case when another conflicting update happened before the delete completed.
+// 删除的 validate 阶段发生并发更新时，实现应重新读取并重试，最终删除成功且返回更新后的对象。
 func RunTestDeleteWithConflict(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, _ := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
 	// First update, so originalPod is outdated.
+	// 先更新一次，让 originalPod 过期；随后在 Delete 的 validate 回调中再注入一次并发更新。
 	updatedPod := &example.Pod{}
 	validateCount := 0
 	updateCount := 0
 	// Simulate a conflicting update in the middle of delete.
+	// 模拟删除执行期间发生的并发更新：validate 会被重试，第二次起不再注入更新。
 	validateAllWithUpdate := func(_ context.Context, _ runtime.Object) error {
 		validateCount++
 		if validateCount > 1 {
@@ -439,10 +469,13 @@ func RunTestDeleteWithConflict(ctx context.Context, t *testing.T, store storage.
 	expectNoDiff(t, "incorrect pod:", updatedPod, out)
 }
 
+// RunTestDeleteWithSuggestionOfDeletedObject 校验对象已被删除后，再用过期的 suggestion
+// 发起删除会得到 NotFound，而不是成功或内部错误（幂等删除的边界）。
 func RunTestDeleteWithSuggestionOfDeletedObject(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
 	// First delete, so originalPod is outdated.
+	// 先删除一次，使 originalPod 成为过期数据。
 	deletedPod := &example.Pod{}
 	if err := store.Delete(ctx, key, deletedPod, nil, storage.ValidateAllObjectFunc, originalPod, storage.DeleteOptions{}); err != nil {
 		t.Errorf("Unexpected failure during deletion: %v", err)
@@ -455,10 +488,13 @@ func RunTestDeleteWithSuggestionOfDeletedObject(ctx context.Context, t *testing.
 	}
 }
 
+// RunTestValidateDeletionWithSuggestion 校验 validateDeletion 回调的调用次数：
+// 建议对象过期时允许重试一次，但实现也可以直接忽略 suggestion 只调用一次。
 func RunTestValidateDeletionWithSuggestion(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
 	// Check that validaing fresh object fails is called once and fails.
+	// 校验函数直接返回错误时，删除必须立即失败且只调用一次。
 	validationCalls := 0
 	validationError := fmt.Errorf("validation error")
 	validateNothing := func(_ context.Context, _ runtime.Object) error {
@@ -501,6 +537,7 @@ func RunTestValidateDeletionWithSuggestion(ctx context.Context, t *testing.T, st
 
 	// Implementations of the storage interface are allowed to ignore the suggestion,
 	// in which case just one validation call is possible.
+	// 实现可以忽略 suggestion，此时只调用一次校验也是合法的，因此用上界而非精确值断言。
 	if calls > 2 {
 		t.Errorf("validate function should have been called at most twice, called %d", calls)
 	}
@@ -512,10 +549,12 @@ func RunTestValidateDeletionWithSuggestion(ctx context.Context, t *testing.T, st
 
 // RunTestValidateDeletionWithOnlySuggestionValid tests the case of delete with validateDeletion function,
 // when the suggested cachedExistingObject passes the validate function while the current version does not pass the validate function.
+// 即只有过期缓存能通过校验：此时必须拒绝删除，并且不得真的删掉当前对象。
 func RunTestValidateDeletionWithOnlySuggestionValid(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns", Labels: map[string]string{"foo": "bar"}}})
 
 	// Check that validaing fresh object fails is called once and fails.
+	// 校验函数直接报错时，删除应立即失败且只调用一次。
 	validationCalls := 0
 	validationError := fmt.Errorf("validation error")
 	validateNothing := func(_ context.Context, _ runtime.Object) error {
@@ -559,6 +598,7 @@ func RunTestValidateDeletionWithOnlySuggestionValid(ctx context.Context, t *test
 
 	// Implementations of the storage interface are allowed to ignore the suggestion,
 	// in which case just one validation call is possible.
+	// 同上：允许只调用一次，断言取上界。
 	if calls > 2 {
 		t.Errorf("validate function should have been called at most twice, called %d", calls)
 	}
@@ -569,10 +609,13 @@ func RunTestValidateDeletionWithOnlySuggestionValid(ctx context.Context, t *test
 	expectNoDiff(t, "incorrect pod:", updatedPod, out)
 }
 
+// RunTestPreconditionalDeleteWithSuggestion 校验 UID 前置条件与 suggestion 组合使用：
+// suggestion 过期不影响基于最新 UID 的删除成功。
 func RunTestPreconditionalDeleteWithSuggestion(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}})
 
 	// First update, so originalPod is outdated.
+	// 先更新一次（同时修改 UID），让 originalPod 与 UID 前置条件都指向旧状态。
 	updatedPod := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -597,10 +640,12 @@ func RunTestPreconditionalDeleteWithSuggestion(ctx context.Context, t *testing.T
 
 // RunTestPreconditionalDeleteWithOnlySuggestionPass tests the case of delete with preconditions,
 // when the suggested cachedExistingObject passes the preconditions while the current version does not pass the preconditions.
+// 前置条件只对过期 suggestion 成立时，删除必须失败，绝不能误删当前版本。
 func RunTestPreconditionalDeleteWithOnlySuggestionPass(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns", UID: "myUID"}})
 
 	// First update, so originalPod is outdated.
+	// 更新 UID，使原始对象的前置条件只对过期数据成立。
 	updatedPod := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -626,6 +671,9 @@ func RunTestPreconditionalDeleteWithOnlySuggestionPass(ctx context.Context, t *t
 	expectNoDiff(t, "incorrect pod:", updatedPod, out)
 }
 
+// RunTestList 校验 List 的核心契约：resourceVersion 与 resourceVersionMatch 的组合语义、
+// 分页/continue、前缀递归展开，以及 watchcache 是否按预期回源 etcd。
+// watchCacheEnabled 为 true 时会额外比对 recorder 记录的 etcd 请求，确保缓存层没有多做/少做查询。
 func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, compact Compaction, watchCacheEnabled bool, recorder *KubernetesRecorder) {
 	initialRV, createdPods, updatedPod, err := seedMultiLevelData(ctx, store)
 	if err != nil {
@@ -635,6 +683,7 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 	list := &example.PodList{}
 	storageOpts := storage.ListOptions{
 		// Ensure we're listing from "now".
+		// 空 RV 表示一致读，取当前最新版本作为后续 continue token 的基准。
 		ResourceVersion: "",
 		Predicate:       storage.Everything,
 		Recursive:       true,
@@ -643,6 +692,7 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 		t.Errorf("Unexpected error: %v", err)
 	}
 	continueRV := mustParseResourceVersion(t, list.ResourceVersion)
+	// 预先构造一个指向 second/foo 的 continue token，用于测试"客户端自带 token"的路径。
 	secondContinuation, err := storage.EncodeContinue("/pods/second/foo", "/pods/second/", int64(continueRV))
 	if err != nil {
 		t.Fatal(err)
@@ -653,9 +703,13 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 		return nil, fields.Set{"metadata.name": pod.Name, "spec.nodeName": pod.Spec.NodeName}, nil
 	}
 	// Compact and increase RV to test consistent List.
+	// 压缩早期版本，用于验证过旧的 RV/continue token 会被明确拒绝而不是静默返回错误数据。
 	compact(ctx, t, createdPods[0].ResourceVersion)
 	currentRV := fmt.Sprintf("%d", continueRV+1)
 
+	// 测试表字段说明：expectRV 要求响应原样回显请求 RV（match=Exact 时必须）；
+	// expectRVFunc 用于允许"不早于"某版本的模糊断言；expectCacherRequestsToEtcd
+	// 描述 watchcache 打开时预期下推到 etcd 的请求序列。
 	tests := []struct {
 		name                       string
 		rv                         string
@@ -1443,6 +1497,8 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 			expectedOut:  []example.Pod{},
 		},
 		// match=Exact
+		// 以下一组用例验证 match=Exact 的历史快照语义：返回的是"该 RV 时刻"的完整列表，
+		// 因此随着写入次数增加，期望结果逐条累积。
 		{
 			name:           "test List with resource version set before first write, match=Exact",
 			prefix:         "/pods/",
@@ -1651,6 +1707,7 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 			},
 		},
 		// limit, match=Exact
+		// 带 limit 的 Exact 列表需要在指定 RV 的快照上分页，continue token 里的 RV 必须与该快照一致。
 		{
 			name:   "test List with limit, resource version of second write, match=Exact",
 			prefix: "/pods/",
@@ -1870,6 +1927,8 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 			},
 		},
 		// Continue
+		// continue token 中携带起始 key 与 RV；RV 早于压缩点时必须报"continue 过旧"，
+		// 否则分页会基于已被清理的历史数据，产生重复或遗漏。
 		{
 			name:   "test List with continue, resource version before first write",
 			prefix: "/pods/",
@@ -2236,6 +2295,7 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 			}
 
 			// If a client requests an exact resource version, it must be echoed back to them.
+			// match=Exact 时响应 RV 必须原样回显请求值，客户端据此继续分页。
 			if tt.expectRV != "" {
 				if tt.expectRV != out.ResourceVersion {
 					t.Errorf("resourceVersion in list response want=%s, got=%s", tt.expectRV, out.ResourceVersion)
@@ -2270,6 +2330,8 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 	}
 }
 
+// ExpectContinueMatches 比较两个 continue token；不相等时解码 base64 后再报错，
+// 便于定位 token 内容（起始 key + RV）的差异，而不是只看到两串乱码。
 func ExpectContinueMatches(t *testing.T, expect, got string) {
 	t.Helper()
 	if expect == got {
@@ -2291,6 +2353,8 @@ func ExpectContinueMatches(t *testing.T, expect, got string) {
 // RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError verifies that, when
 // ExpectTransformOrDecodeError is true, the delete will fail if a concurrent write makes it
 // possible to decode the object.
+// 该选项的语义是"我预期对象读不出来"；一旦对象变得可读，就说明前提不成立，
+// 继续删除可能掩盖数据损坏，因此必须返回 Invalid 错误。
 func RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(ctx context.Context, t testing.TB, store storage.Interface, setFailing func(bool)) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(obj)
@@ -2302,6 +2366,7 @@ func RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(ctx conte
 	// During validation (immediately before executing the optimistic delete transaction),
 	// simulate a concurrent update that both increases the current revision and allows the next
 	// TransformFromStorage/Decode to succeed.
+	// 在乐观删除事务提交前注入并发写：既推高版本号，又让后续解码恢复成功。
 	validateCount := 0
 	injectUpdate := func(_ context.Context, _ runtime.Object) error {
 		validateCount++
@@ -2320,6 +2385,7 @@ func RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(ctx conte
 	}
 
 	// Initially, TransformFromStorage or Decode should fail.
+	// 初始状态下对象不可读，这是本次删除的前提条件。
 	setFailing(true)
 
 	err := store.Delete(ctx, key, &example.Pod{}, nil, injectUpdate, nil,
@@ -2331,6 +2397,7 @@ func RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(ctx conte
 
 // RunTestDeleteExpectedTransformOrDecodeError tests that an object that cannot be transformed or
 // decoded from storage can be deleted using the ExpectTransformOrDecodeError option.
+// 这是"卡住的坏对象"的唯一清理途径：管理员显式声明预期不可读后允许删除。
 func RunTestDeleteExpectedTransformOrDecodeError(ctx context.Context, t testing.TB, store storage.Interface, setFailing func(bool)) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(obj)
@@ -2354,6 +2421,8 @@ func RunTestDeleteExpectedTransformOrDecodeError(ctx context.Context, t testing.
 // RunTestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeError verifies that, when
 // ExpectTransformOrDecodeError is true, passing a suggested object does not bypass transformation
 // or decoding of the serialized object in storage.
+// 关键不变量：suggestion 只是缓存副本，绝不能替代对存储中真实字节的解码校验，
+// 否则客户端可用任意建议对象删掉任意 key。
 func RunTestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeError(ctx context.Context, t testing.TB, store storage.Interface) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(obj)
@@ -2369,6 +2438,9 @@ func RunTestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeError(ctx con
 	}
 }
 
+// RunTestConsistentList 校验"一致读"对缓存的副作用：不带 RV 的 List 必须返回一致 RV，
+// 并（在 watchcache 实现中）把缓存推进到该 RV；此后 RV=0 的读也只能返回不早于该点的数据。
+// listFromCacheSnapshot 为 true 时，负 continue RV 也会触发缓存同步。
 func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Interface, increaseRV IncreaseRVFunc, cacheEnabled, consistentReadsSupported, listFromCacheSnapshot bool) {
 	outPod := &example.Pod{}
 	inPod := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "foo"}}
@@ -2377,6 +2449,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 	lastResourceWriteRV, err := strconv.Atoi(outPod.ResourceVersion)
 	require.NoError(t, err)
 
+	// 人为推进一次全局 RV，使"一致读 RV"与"最后一次写入 RV"可区分。
 	increaseRV(ctx, t)
 	consistentRV := lastResourceWriteRV + 1
 	cacheSyncRV := 0
@@ -2388,6 +2461,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 		validateResponseRV func(*testing.T, int)
 	}{
 		{
+			// 一致读之前，缓存可能还没观察到最新写入；etcd 则永远指向最新 RV。
 			name:      "Non-consistent list before consistent read",
 			requestRV: "0",
 			validateResponseRV: func(t *testing.T, rv int) {
@@ -2401,6 +2475,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			},
 		},
 		{
+			// 不带 RV 的 List 必须落到最新一致点，并记录该点供后续用例比对。
 			name:      "LIST without RV returns consistent RV",
 			requestRV: "",
 			validateResponseRV: func(t *testing.T, rv int) {
@@ -2409,6 +2484,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			},
 		},
 		{
+			// 负 continue RV 表示"从最新一致点继续"，同样必须返回一致 RV。
 			name:          "List with negative continue RV returns consistent RV",
 			continueToken: encodeContinueOrDie("/pods/a", -1),
 			validateResponseRV: func(t *testing.T, rv int) {
@@ -2419,6 +2495,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			},
 		},
 		{
+			// 一致读是否把缓存推到 cacheSyncRV，取决于实现是否支持一致读。
 			name:      "Non-consistent request after consistent read",
 			requestRV: "0",
 			validateResponseRV: func(t *testing.T, rv int) {
@@ -2457,6 +2534,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			tc.validateResponseRV(t, parsedOutRV)
 		})
 		// Update RV on each read to test multiple reads for consistent RV.
+		// 每轮读后都推进 RV，确保后续用例验证的是"新的"一致点而非上一轮残留。
 		increaseRV(ctx, t)
 		consistentRV++
 	}
@@ -2464,6 +2542,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 
 // seedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
 // from before any were created along with the full set of objects that were persisted
+// created 按创建顺序返回（含随后被删除的 baz），便于测试用例按下标引用。长度固定为 6。
 func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV string, created []*example.Pod, updated *example.Pod, err error) {
 	// Setup storage with the following structure:
 	//  /
@@ -2517,6 +2596,7 @@ func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV
 	}
 
 	// we want to figure out the resourceVersion before we create anything
+	// 先记录"任何写入之前"的 RV，作为 match=Exact 请求过旧版本时的基准。
 	initialList := &example.PodList{}
 	if err := store.GetList(ctx, "/pods/", storage.ListOptions{Predicate: storage.Everything, Recursive: true}, initialList); err != nil {
 		return "", nil, nil, fmt.Errorf("failed to determine starting resourceVersion: %w", err)
@@ -2548,6 +2628,7 @@ func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV
 	// We now delete bazSecond provided it has been created first. We do this to enable
 	// testing cases that had an object exist initially and then was deleted and how this
 	// would be reflected in responses of different calls.
+	// 删除 baz 是为了覆盖"曾存在后又被删除"的对象在 List/Get 中的表现。
 	storedObj := &example.Pod{}
 	if err := store.Delete(ctx, computePodKey(bazSecond), storedObj, nil, storage.ValidateAllObjectFunc, nil, storage.DeleteOptions{}); err != nil {
 		return "", nil, nil, fmt.Errorf("failed to delete object: %w", err)
@@ -2559,10 +2640,13 @@ func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV
 	return initialRV, created, updated, nil
 }
 
+// RunTestGetListNonRecursive 校验非递归 List（Recursive=false）只作用于单个 key，
+// 并且仍然遵守 resourceVersion / resourceVersionMatch 的组合语义。
 func RunTestGetListNonRecursive(ctx context.Context, t *testing.T, increaseRV IncreaseRVFunc, store storage.Interface) {
 	key, prevStoredObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	prevRV, _ := strconv.Atoi(prevStoredObj.ResourceVersion)
 
+	// 更新一次，制造"前一版本"与"当前版本"两个可区分的快照。
 	storedObj := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, storedObj, false, nil,
 		func(_ runtime.Object, _ storage.ResponseMeta) (runtime.Object, *uint64, error) {
@@ -2574,8 +2658,11 @@ func RunTestGetListNonRecursive(ctx context.Context, t *testing.T, increaseRV In
 	}
 	objRV, _ := strconv.Atoi(storedObj.ResourceVersion)
 	// Increase RV to test consistent List.
+	// 再推高一次全局 RV，确保"一致读"不会退化成直接返回最后一次写入的版本。
 	increaseRV(ctx, t)
 
+	// 注意：exact 与 notOlderThan 对同一 RV 的期望不同——exact 必须返回该 RV 的快照，
+	// notOlderThan 则允许返回更新的版本，故用 expectedAlternatives 表达多解。
 	tests := []struct {
 		name                 string
 		key                  string
@@ -2685,6 +2772,7 @@ func RunTestGetListNonRecursive(ctx context.Context, t *testing.T, increaseRV In
 			// version) will also return the result synchronized to at least ResourceVersion X.
 			// By parallelizing test cases we ensure that the order in which test cases are defined
 			// doesn't automatically preclude some scenarios from happening.
+			// 并行化避免用例按定义顺序互相预热缓存。
 			t.Parallel()
 
 			out := &example.PodList{}
@@ -2720,6 +2808,8 @@ func RunTestGetListNonRecursive(ctx context.Context, t *testing.T, increaseRV In
 }
 
 // RunTestGetListRecursivePrefix tests how recursive parameter works for object keys that are prefixes of each other.
+// 关键点：foo 是 foobar 的前缀，非递归 List 必须按"key 边界"精确匹配，
+// 不能把 /pods/test-ns/foo 当成 /pods/test-ns/foobar 的父路径。
 func RunTestGetListRecursivePrefix(ctx context.Context, t *testing.T, store storage.Interface) {
 	fooKey, fooObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	fooBarKey, fooBarObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foobar", Namespace: "test-ns"}})
@@ -2805,6 +2895,7 @@ func RunTestGetListRecursivePrefix(ctx context.Context, t *testing.T, store stor
 
 	for _, listType := range listTypes {
 		t.Run(listType.name, func(t *testing.T) {
+			// 同一组前缀语义必须在 Exact / 一致读 / NotOlderThan 三种模式下保持一致。
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
 					out := &example.PodList{}
@@ -2827,9 +2918,11 @@ func RunTestGetListRecursivePrefix(ctx context.Context, t *testing.T, store stor
 
 // errorInjector decides, per object storage key, whether transformation should
 // fail and with which error. Returning nil delegates to default behavior.
+// 注入点放在 transformer 而非存储层，这样无需改动后端即可模拟"损坏对象"。
 type errorInjector func(key string) error
 
 // idOf extracts the numeric suffix from an object key like ".../foo-000002" -> 2.
+// 用例按 id 决定哪些对象损坏，因此需要从 key 反解出编号。
 func idOf(t *testing.T, key string) int {
 	t.Helper()
 	name := key[strings.LastIndex(key, "/")+1:]
@@ -2843,11 +2936,14 @@ func idOf(t *testing.T, key string) int {
 // errInjectingTransformer wraps an existing transformer and lets an errorInjector
 // fail transformation for selected keys on read. Writes (TransformToStorage)
 // delegate to the embedded transformer.
+// 仅拦截读取路径：写入必须继续成功，否则无法先准备好"坏数据"。
 type errInjectingTransformer struct {
 	value.Transformer
 	inject errorInjector
 }
 
+// TransformFromStorage 在真正解码前按 key 注入错误；dataCtx 的 AuthenticatedData
+// 携带对象 key，是唯一能定位"哪个对象"的信息来源。
 func (t *errInjectingTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) (out []byte, stale bool, err error) {
 	if injErr := t.inject(string(dataCtx.AuthenticatedData())); injErr != nil {
 		return nil, false, injErr
@@ -2855,6 +2951,8 @@ func (t *errInjectingTransformer) TransformFromStorage(ctx context.Context, data
 	return t.Transformer.TransformFromStorage(ctx, data, dataCtx)
 }
 
+// newErrInjectingModifier 把 errorInjector 包装成 TransformerModifier，
+// 供 store.UpdateTransformer 在测试期间临时替换 transformer。
 func newErrInjectingModifier(inject errorInjector) TransformerModifier {
 	return func(orig value.Transformer) value.Transformer {
 		return &errInjectingTransformer{Transformer: orig, inject: inject}
@@ -2862,6 +2960,8 @@ func newErrInjectingModifier(inject errorInjector) TransformerModifier {
 }
 
 // RunTestGetListWithErrorAggregation tests aggregation of errors while the list operation is in progress
+// 校验错误聚合：损坏对象（corruptErr）应被收集进 API Status 的 causes，
+// 而其他错误必须立即中止；聚合数量有硬上限（100），超限后追加哨兵条目。
 func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store InterfaceWithTransformerOverride, corruptErr error) {
 	// the test creates n objects and assigns each object unique id i ie. 1 <= i <= n
 	objNameFn := func(id int) string {
@@ -2875,6 +2975,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 
 	// errUnexpected is a non-corrupt transform error. The aggregator treats it as
 	// fatal and aborts the list, unlike corruptErr which is collected.
+	// 这是"聚合只针对损坏对象"这一不变量的判别器。
 	errUnexpected := errors.New("bits flipped")
 
 	tests := []struct {
@@ -3138,6 +3239,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 			// we construct the names of the objects in a way that ensures
 			// that the order of creation is also the lexicographical
 			// order by which etcd List operation returns the objects
+			// 零填充保证 id 顺序与字典序一致，从而遍历顺序可预测。
 			for j := 1; j <= test.n; j++ {
 				obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{
 					Name:      objNameFn(j),
@@ -3149,6 +3251,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 			}
 
 			// step 2: list the N objects, we expect no error
+			// 先做一次基线 List，确认损坏注入前数据完整。
 			out := &example.PodList{}
 			storageOpts := storage.ListOptions{
 				Predicate: storage.Everything,
@@ -3163,6 +3266,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 			}
 
 			// step 3: change the transformer so the marked objects appear corrupt
+			// 用 defer 恢复，避免损坏状态泄漏到后续子测试。
 			revertTransformer := store.UpdateTransformer(newErrInjectingModifier(func(key string) error {
 				return test.inject(t, key)
 			}))
@@ -3183,6 +3287,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 
 // RunTestGetListWithoutErrorAggregation tests that when the AllowUnsafeMalformedObjectDeletion
 // feature is disabled, GetList maintains backward compatibility by aborting on the first error.
+// 兼容性要求：未启用特性时行为必须与旧版本完全一致，返回裸 InternalError 而非聚合的 Status。
 func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, store InterfaceWithTransformerOverride, corruptErr error) {
 	prefix := "/pods/ns/"
 	objNameFn := func(id int) string {
@@ -3255,8 +3360,12 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 	}
 }
 
+// CallsValidation 由调用方提供，用于观察一次 List 的页大小与实际处理的底层对象数；
+// 二者不相等时通常意味着过滤或分页放大了扫描量。
 type CallsValidation func(t *testing.T, pageSize, estimatedProcessedObjects uint64)
 
+// RunTestListContinuation 校验分页语义：limit 只在一致读下生效，
+// 且翻页时必须沿用首页返回的 RV，否则不同页可能来自不同快照。
 func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.Interface, validation CallsValidation) {
 	// Setup storage with the following structure:
 	//  /
@@ -3405,6 +3514,8 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 	}
 }
 
+// RunTestListPaginationRareObject 校验"稀有对象"分页：1000 个对象中只有 1 个匹配，
+// 实现必须扫描整个列表才能确定没有下一页，且 validation 能观察到实际扫描量。
 func RunTestListPaginationRareObject(ctx context.Context, t *testing.T, store storage.Interface, validation CallsValidation) {
 	podCount := 1000
 	var pods []*example.Pod
@@ -3446,6 +3557,8 @@ func RunTestListPaginationRareObject(ctx context.Context, t *testing.T, store st
 	}
 }
 
+// RunTestListContinuationWithFilter 校验过滤 + 分页：limit 统计的是"匹配后"的对象数，
+// 但底层可能需要多读若干条来凑够一页，validation 的第二个参数即反映这种放大。
 func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store storage.Interface, validation CallsValidation) {
 	foo1 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "1", Name: "foo"}}
 	bar2 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "2", Name: "bar"}} // this should not match
@@ -3554,9 +3667,17 @@ func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store 
 	}
 }
 
+// Compaction 由调用方提供，用于把存储的历史版本压缩到给定 RV；
+// 套件借此验证过期 RV / continue token 的错误处理。
 type Compaction func(ctx context.Context, t *testing.T, resourceVersion string)
+
+// IncreaseRVFunc 由调用方提供，用于推进存储的全局 RV 而不写入对象，
+// 以便区分"写入产生的 RV"与"当前一致点 RV"。
 type IncreaseRVFunc func(ctx context.Context, t *testing.T) (revision int64)
 
+// RunTestListInconsistentContinuation 校验 continue token 过期后的恢复路径：
+// 实现应返回 API Status 并在其中附带一个"不一致但可用"的新 token，
+// 客户端据此可以继续翻页，而不是从头开始。
 func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, store storage.Interface, compaction Compaction) {
 	// Setup storage with the following structure:
 	//  /
@@ -3642,6 +3763,7 @@ func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, stor
 	}
 
 	// compact to latest revision.
+	// 压缩到最新版本，使旧 continue token 中携带的 RV 落在压缩点之前。
 	lastRVString := preset[2].storedObj.ResourceVersion
 	compaction(ctx, t, lastRVString)
 
@@ -3704,21 +3826,30 @@ func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, stor
 	}
 }
 
+// PrefixTransformerModifier 用于替换实现内部的 PrefixTransformer，
+// 返回的 transformer 由实现负责安装，调用方不直接持有它。
 type PrefixTransformerModifier func(*PrefixTransformer) value.Transformer
 
+// InterfaceWithPrefixTransformer 是支持替换 PrefixTransformer 的存储实现，
+// 仅供需要观察"前缀 + 数据"字节形态的测试使用（如 staleness、序列化归一化）。
 type InterfaceWithPrefixTransformer interface {
 	storage.Interface
 
 	UpdatePrefixTransformer(PrefixTransformerModifier) func()
 }
 
+// TransformerModifier 用于在不关心 PrefixTransformer 细节时替换 transformer。
 type TransformerModifier func(value.Transformer) value.Transformer
 
+// InterfaceWithTransformerOverride 允许测试临时替换 transformer 并返回恢复函数，
+// 用于模拟对象损坏或加解密失败。
 type InterfaceWithTransformerOverride interface {
 	storage.Interface
 	UpdateTransformer(TransformerModifier) func()
 }
 
+// RunTestListResourceVersionMatch 校验 List 在 match=Exact 下返回的是可复现的快照：
+// 用响应中的 RV 再发一次 Exact 列表，结果必须完全一致；NotOlderThan 同理。
 func RunTestListResourceVersionMatch(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer) {
 	nextPod := func(index uint32) (string, *example.Pod) {
 		obj := &example.Pod{
@@ -3773,6 +3904,7 @@ func RunTestListResourceVersionMatch(ctx context.Context, t *testing.T, store In
 	}
 
 	// List objects from the returned resource version.
+	// 用首页返回的 RV 做 Exact 读，结果必须与首次列表逐字节一致。
 	options = storage.ListOptions{
 		Predicate:            predicate,
 		ResourceVersion:      result1.ResourceVersion,
@@ -3788,6 +3920,7 @@ func RunTestListResourceVersionMatch(ctx context.Context, t *testing.T, store In
 	expectNoDiff(t, "incorrect lists", result1, result2)
 
 	// Now also verify the  ResourceVersionMatchNotOlderThan.
+	// 再用 NotOlderThan 读一次，然后把响应 RV 作为 Exact 基准复读，验证其自洽性。
 	options.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
 
 	result3 := example.PodList{}
@@ -3806,6 +3939,9 @@ func RunTestListResourceVersionMatch(ctx context.Context, t *testing.T, store In
 	expectNoDiff(t, "incorrect lists", result3, result4)
 }
 
+// RunTestGuaranteedUpdate 覆盖 GuaranteedUpdate 的关键语义：
+// ignoreNotFound 的两种行为、UID 前置条件、内容未变时短路不写（避免无意义的 RV 递增），
+// 以及 transformer 报告 stale 时必须强制重写。
 func RunTestGuaranteedUpdate(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer, validation KeyValidation) {
 	inputObj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns", UID: "A"}}
 	key := computePodKey(inputObj)
@@ -3893,11 +4029,14 @@ func RunTestGuaranteedUpdate(ctx context.Context, t *testing.T, store InterfaceW
 			key, storeObj := testPropagateStore(ctx, t, store, inputObj)
 
 			out := &example.Pod{}
+			// 每个用例用不同的 annotation 值区分写入内容；expectNoUpdate 时置空，
+			// 让 update func 返回与已存内容完全相同的对象，以触发短路逻辑。
 			annotations := map[string]string{"version": fmt.Sprintf("%d", i)}
 			if tt.expectNoUpdate {
 				annotations = nil
 			}
 
+			// 模拟 transformer 认为数据陈旧（如加密 key 轮转），此时即使内容相同也必须重写。
 			if tt.transformStale {
 				revertTransformer := store.UpdatePrefixTransformer(
 					func(transformer *PrefixTransformer) value.Transformer {
@@ -3910,6 +4049,7 @@ func RunTestGuaranteedUpdate(ctx context.Context, t *testing.T, store InterfaceW
 			version := storeObj.ResourceVersion
 			err := store.GuaranteedUpdate(ctx, tt.key, out, tt.ignoreNotFound, tt.precondition,
 				storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
+					// ignoreNotFound 且 key 不存在时，实现应传入零值对象而非报错。
 					if tt.expectNotFoundErr && tt.ignoreNotFound {
 						if pod := obj.(*example.Pod); pod.Name != "" {
 							t.Errorf("%s: expecting zero value, but get=%#v", tt.name, pod)
@@ -3946,8 +4086,10 @@ func RunTestGuaranteedUpdate(ctx context.Context, t *testing.T, store InterfaceW
 			}
 
 			// verify that kv pair is not empty after set and that the underlying data matches expectations
+			// 通过后端特定的 validation 检查存储中的原始字节，而不只信任返回对象。
 			validation(ctx, t, key)
 
+			// 版本号是"是否真正写入"的最终判据：短路时不得递增 RV。
 			switch tt.expectNoUpdate {
 			case true:
 				if version != out.ResourceVersion {
@@ -3962,6 +4104,7 @@ func RunTestGuaranteedUpdate(ctx context.Context, t *testing.T, store InterfaceW
 	}
 }
 
+// RunTestGuaranteedUpdateWithTTL 校验更新时携带 TTL 会让对象过期并产生 Deleted 事件。
 func RunTestGuaranteedUpdateWithTTL(ctx context.Context, t *testing.T, store storage.Interface) {
 	input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(input)
@@ -3983,6 +4126,8 @@ func RunTestGuaranteedUpdateWithTTL(ctx context.Context, t *testing.T, store sto
 	testCheckEventType(t, w, watch.Deleted)
 }
 
+// RunTestGuaranteedUpdateChecksStoredData 校验"短路"判断基于存储中的序列化字节，
+// 而非解码后的对象：字节不一致（如历史遗留的空格）或 transformer 报告 stale 时都必须重写。
 func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer) {
 	input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(input)
@@ -3999,6 +4144,7 @@ func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, 
 
 	// this update should write the canonical value to etcd because the new serialization differs
 	// from the stored serialization
+	// 第一次更新：存储中是非规范字节，必须重写为规范形式。
 	input.ResourceVersion = initial.ResourceVersion
 	out := &example.Pod{}
 	err := store.GuaranteedUpdate(ctx, key, out, true, nil,
@@ -4015,6 +4161,7 @@ func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, 
 	lastVersion := out.ResourceVersion
 
 	// this update should not write to etcd because the input matches the stored data
+	// 第二次更新：内容与规范字节完全一致，应短路且 RV 不变。
 	input = out
 	out = &example.Pod{}
 	err = store.GuaranteedUpdate(ctx, key, out, true, nil,
@@ -4036,6 +4183,7 @@ func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, 
 	defer revertTransformer()
 
 	// this update should write to etcd because the transformer reported stale
+	// 第三次更新：字节相同但 transformer 声明陈旧，必须强制重写（加密轮转场景）。
 	err = store.GuaranteedUpdate(ctx, key, out, true, nil,
 		func(_ runtime.Object, _ storage.ResponseMeta) (runtime.Object, *uint64, error) {
 			return input, nil, nil
@@ -4048,9 +4196,12 @@ func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, 
 	}
 }
 
+// RunTestGuaranteedUpdateWithConflict 用两个并发 GuaranteedUpdate 强制冲突：
+// 后提交的一方必须重新读取最新值并再次调用 update 函数，而不是覆盖对方的写入。
 func RunTestGuaranteedUpdateWithConflict(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, _ := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
+	// 两个 WaitGroup 交叉握手：保证双方都进入 update 函数后再继续，使冲突必然发生。
 	errChan := make(chan error, 1)
 	var firstToFinish sync.WaitGroup
 	var secondToEnter sync.WaitGroup
@@ -4093,6 +4244,9 @@ func RunTestGuaranteedUpdateWithConflict(ctx context.Context, t *testing.T, stor
 	}
 }
 
+// RunTestGuaranteedUpdateWithSuggestionAndConflict 校验 suggestion 与冲突重试的交互：
+// 过期 suggestion 触发冲突后应回源读取再重试；而当前 suggestion 下 update 函数返回错误时
+// 不得重试（否则会放大 admission 拒绝的代价）。
 func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
@@ -4159,11 +4313,14 @@ func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *te
 	}
 	// Implementations of the storage interface are allowed to ignore the suggestion,
 	// in which case two attempts are possible.
+	// 允许实现忽略 suggestion，因此用上界断言。
 	if attempts > 2 {
 		t.Errorf("update function should have been called at most twice, called %d", attempts)
 	}
 }
 
+// RunTestTransformationFailure 校验单个坏对象不会"污染"整个存储：
+// List/Get/Update/Delete 都应返回 InternalError，但其他 key 仍可正常访问。
 func RunTestTransformationFailure(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer) {
 	barFirst := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "first", Name: "bar"},
@@ -4194,6 +4351,7 @@ func RunTestTransformationFailure(ctx context.Context, t *testing.T, store Inter
 	}
 
 	// create a second resource with an invalid prefix
+	// 用一个不匹配的前缀写入第二个对象，模拟"存储中的字节无法被当前 transformer 解开"。
 	revertTransformer := store.UpdatePrefixTransformer(
 		func(transformer *PrefixTransformer) value.Transformer {
 			return NewPrefixTransformer([]byte("otherprefix!"), false)
@@ -4243,6 +4401,8 @@ func RunTestTransformationFailure(ctx context.Context, t *testing.T, store Inter
 	}
 }
 
+// RunTestStats 校验 Stats 的计数与平均大小估算：对象数随增删变化，
+// 平均大小按编码 + 转换后的字节数计算；sizeEnabled 为 false 时大小字段必须恒为 0。
 func RunTestStats(ctx context.Context, t *testing.T, store storage.Interface, codec runtime.Codec, transformer value.Transformer, sizeEnabled bool) {
 	assertStats(t, store, sizeEnabled, storage.Stats{ObjectCount: 0, EstimatedAverageObjectSizeBytes: 0})
 
@@ -4271,6 +4431,7 @@ func RunTestStats(ctx context.Context, t *testing.T, store storage.Interface, co
 		t.Errorf("Update failed: %v", err)
 	}
 	// ResourceVerson is not stored.
+	// resourceVersion 是元数据，不参与大小估算，因此清空后再计算。
 	bar.ResourceVersion = ""
 	barSize = objectSize(t, codec, bar, transformer)
 	assertStats(t, store, sizeEnabled, storage.Stats{ObjectCount: 2, EstimatedAverageObjectSizeBytes: (fooSize + barSize) / 2})
@@ -4291,6 +4452,8 @@ func RunTestStats(ctx context.Context, t *testing.T, store storage.Interface, co
 	assertStats(t, store, sizeEnabled, storage.Stats{ObjectCount: 0, EstimatedAverageObjectSizeBytes: 0})
 }
 
+// assertStats 先做一次一致读，确保异步实现（watchcache）的统计已追上最新状态，
+// 再比对期望值；sizeEnabled 为 false 时忽略大小字段。
 func assertStats(t *testing.T, store storage.Interface, sizeEnabled bool, expectStats storage.Stats) {
 	t.Helper()
 	// Execute consistent LIST to refresh state of cache.
@@ -4311,6 +4474,8 @@ func assertStats(t *testing.T, store storage.Interface, sizeEnabled bool, expect
 	}
 }
 
+// objectSize 计算对象落盘后的字节数：先编码，再经过 transformer（可能加密/加前缀），
+// 与 Stats 的估算口径保持一致。
 func objectSize(t *testing.T, codec runtime.Codec, obj runtime.Object, transformer value.Transformer) int64 {
 	data, err := runtime.Encode(codec, obj)
 	if err != nil {
@@ -4323,6 +4488,8 @@ func objectSize(t *testing.T, codec runtime.Codec, obj runtime.Object, transform
 	return int64(len(data))
 }
 
+// RunTestListPaging 校验分页期间的新写入不会"插队"到已翻过的页里：
+// 翻页过程中创建 test-5，最终结果仍必须是创建时的 4 个对象。
 func RunTestListPaging(ctx context.Context, t *testing.T, store storage.Interface) {
 	out := &example.Pod{}
 	for i := 0; i < 4; i++ {
@@ -4358,6 +4525,7 @@ func RunTestListPaging(ctx context.Context, t *testing.T, store storage.Interfac
 			break
 		}
 		if calls == 2 {
+			// 在翻页中途插入新对象：continue token 固定的 RV 快照应使其不可见。
 			name := "test-5"
 			pod := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "paging"}}
 			key := computePodKey(pod)
@@ -4375,6 +4543,9 @@ func RunTestListPaging(ctx context.Context, t *testing.T, store storage.Interfac
 	}
 }
 
+// RunTestNamespaceScopedList 覆盖命名空间范围与字段选择器的组合矩阵：
+// 重点验证 metadata.namespace 选择器与请求路径中的 namespace 前缀同时存在时的取交集行为，
+// 以及带索引字段（spec.nodeName）时过滤仍与全量扫描结果一致。
 func RunTestNamespaceScopedList(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
 		name               string
@@ -4775,6 +4946,8 @@ func RunTestNamespaceScopedList(ctx context.Context, t *testing.T, store storage
 	}
 }
 
+// RunTestCompactRevision 校验 CompactRevision 与 Exact List 的联动：
+// 压缩点之前的 RV 必须报"too old"，且 CompactRevision() 要反映最新压缩点。
 func RunTestCompactRevision(ctx context.Context, t *testing.T, store storage.Interface, increaseRV IncreaseRVFunc, compact Compaction) {
 	listOut := &example.PodList{}
 	if err := store.GetList(ctx, "/pods/", storage.ListOptions{
@@ -4788,6 +4961,7 @@ func RunTestCompactRevision(ctx context.Context, t *testing.T, store storage.Int
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	compactedRV := store.CompactRevision()
+	// 当前 RV 尚未被压缩，否则 Exact 读会立刻失败，后续步骤失去意义。
 	if compactedRV >= int64(currentRV) {
 		t.Fatalf("Expected current RV not be compacted, current: %d, compacted: %d", currentRV, compactedRV)
 	}
@@ -4800,6 +4974,7 @@ func RunTestCompactRevision(ctx context.Context, t *testing.T, store storage.Int
 		t.Errorf("Unexpected error: %v", err)
 	}
 	increaseRV(ctx, t)
+	// 压缩到当前 RV 之后：上面保存的 listOut.ResourceVersion 由此变得过旧。
 	expectCompactedRV := currentRV + 1
 	compact(ctx, t, fmt.Sprintf("%d", expectCompactedRV))
 	if err := store.GetList(ctx, "/pods/", storage.ListOptions{
@@ -4816,7 +4991,10 @@ func RunTestCompactRevision(ctx context.Context, t *testing.T, store storage.Int
 	}
 }
 
+// RunTestKeySchema 校验 key 格式的前置校验：空 key、"."/".."、缺少资源前缀等
+// 必须在触达后端之前就被拒绝，避免把非法路径当作合法 key 写入。
 func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface) {
+	// Create：非法 key 一律拒绝；"/pods/" 这类"资源前缀"本身以及其下的单段/两段 key 合法。
 	createObj := &example.Pod{}
 	createOut := &example.Pod{}
 	require.ErrorContains(t, store.Create(ctx, "", createObj, createOut, 0), "empty key")
@@ -4832,6 +5010,7 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, store.Create(ctx, "/pods/namespace", createObj, createOut, 0))
 	require.NoError(t, store.Create(ctx, "/pods/namespace/name", createObj, createOut, 0))
 
+	// GetList：注意 "/pods"（无尾斜杠）仅在非递归时非法，递归列表允许用它作为前缀根。
 	listOut := &example.PodList{}
 	recursiveListOpts := storage.ListOptions{Predicate: storage.Everything, Recursive: true}
 	nonRecursiveListOpts := storage.ListOptions{Predicate: storage.Everything, Recursive: false}
@@ -4848,6 +5027,7 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, store.GetList(ctx, "/pods/namespace", recursiveListOpts, listOut))
 	require.NoError(t, store.GetList(ctx, "/pods/namespace/name", recursiveListOpts, listOut))
 
+	// Get：与 List 相同的 key 校验规则。
 	getOut := &example.Pod{}
 	getOpts := storage.GetOptions{}
 	require.ErrorContains(t, store.Get(ctx, "", getOpts, getOut), "empty key")
@@ -4862,6 +5042,7 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, store.Get(ctx, "/pods/namespace", getOpts, getOut))
 	require.NoError(t, store.Get(ctx, "/pods/namespace/name", getOpts, getOut))
 
+	// Watch：非法 key 必须在建立 watcher 之前失败；合法 key 返回可 Stop 的 watcher。
 	_, err := store.Watch(ctx, "", recursiveListOpts)
 	require.ErrorContains(t, err, "empty key")
 	_, err = store.Watch(ctx, "/", recursiveListOpts)
@@ -4890,6 +5071,7 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, err)
 	w.Stop()
 
+	// GuaranteedUpdate：校验在调用 update func 之前完成，避免副作用发生在非法 key 上。
 	updateIn := &example.Pod{}
 	updateOut := &example.Pod{}
 	updateFunc := func(input runtime.Object, res storage.ResponseMeta) (output runtime.Object, ttl *uint64, err error) {
@@ -4907,6 +5089,7 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, store.GuaranteedUpdate(ctx, "/pods/namespace", updateOut, false, nil, updateFunc, nil))
 	require.NoError(t, store.GuaranteedUpdate(ctx, "/pods/namespace/name", updateOut, false, nil, updateFunc, nil))
 
+	// Delete：注意这里用 "/foo"（无尾斜杠）验证资源前缀校验对删除路径同样生效。
 	deleteOut := &example.Pod{}
 	deleteFunc := func(ctx context.Context, obj runtime.Object) error {
 		return nil
@@ -4925,6 +5108,8 @@ func RunTestKeySchema(ctx context.Context, t *testing.T, store storage.Interface
 	require.NoError(t, store.Delete(ctx, "/pods/namespace/name", deleteOut, nil, deleteFunc, nil, deleteOpts))
 }
 
+// mustParseResourceVersion 用 storage.APIObjectVersioner 解析 RV；
+// 解析失败直接 Fatal，因为后续所有断言都依赖一个可比较的整数版本号。
 func mustParseResourceVersion(t *testing.T, resourceVersion string) int64 {
 	t.Helper()
 	versioner := storage.APIObjectVersioner{}

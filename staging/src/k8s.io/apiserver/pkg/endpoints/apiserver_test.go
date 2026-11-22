@@ -77,6 +77,8 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
+// alwaysMutatingDeny 是一个拒绝一切修改的变更类准入插件，用于验证删除/更新/创建
+// 路径都会经过变更准入。
 type alwaysMutatingDeny struct{}
 
 func (alwaysMutatingDeny) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
@@ -89,6 +91,8 @@ func (alwaysMutatingDeny) Handles(operation admission.Operation) bool {
 
 var _ admission.MutationInterface = &alwaysMutatingDeny{}
 
+// alwaysValidatingDeny 是一个拒绝一切请求的校验类准入插件，用于验证各写路径
+// 都会经过校验准入。
 type alwaysValidatingDeny struct{}
 
 func (alwaysValidatingDeny) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
@@ -140,6 +144,7 @@ func init() {
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 }
 
+// addGrouplessTypes 注册无组（core 风格，/api 前缀）的测试类型与转换。
 func addGrouplessTypes() {
 	scheme.AddKnownTypes(grouplessGroupVersion,
 		&genericapitesting.Simple{}, &genericapitesting.SimpleList{}, &metav1.ListOptions{},
@@ -151,6 +156,8 @@ func addGrouplessTypes() {
 	utilruntime.Must(genericapitesting.RegisterConversions(scheme))
 }
 
+// addTestTypes 注册 test.group 的测试类型。SimpleXGSubresource 同时在
+// test.group 与 test.group2 下注册，用于验证跨组子资源的行为。
 func addTestTypes() {
 	scheme.AddKnownTypes(testGroupVersion,
 		&genericapitesting.Simple{}, &genericapitesting.SimpleList{},
@@ -172,6 +179,7 @@ func addTestTypes() {
 	utilruntime.Must(genericapitesting.RegisterConversions(scheme))
 }
 
+// addNewTestTypes 注册 test.group/version2 的测试类型，用于多版本场景。
 func addNewTestTypes() {
 	scheme.AddKnownTypes(newGroupVersion,
 		&genericapitesting.Simple{}, &genericapitesting.SimpleList{},
@@ -209,20 +217,26 @@ func init() {
 }
 
 // defaultAPIServer exposes nested objects for testability.
+// defaultAPIServer 暴露内部的 restful.Container，便于测试检查已注册的路由与
+// 生产媒体类型。
 type defaultAPIServer struct {
 	http.Handler
 	container *restful.Container
 }
 
+// handleWithWarnings 在 handle 基础上叠加警告记录过滤器，用于字段校验警告的测试。
 func handleWithWarnings(storage map[string]rest.Storage) http.Handler {
 	return genericapifilters.WithWarningRecorder(handle(storage))
 }
 
 // uses the default settings
+// handle 用默认准入配置装配一个测试用 apiserver handler。
 func handle(storage map[string]rest.Storage) http.Handler {
 	return handleInternal(storage, admissionControl, nil)
 }
 
+// handleInternal 安装无组、test.group/version、test.group/version2 三个 API 组，
+// 并串联审计、请求截止时间、RequestInfo 与审计 ID 过滤器。
 func handleInternal(storage map[string]rest.Storage, admissionControl admission.Interface, auditSink audit.Sink) http.Handler {
 	container := restful.NewContainer()
 	container.Router(restful.CurlyRouter{})
@@ -294,6 +308,7 @@ func handleInternal(storage map[string]rest.Storage, admissionControl admission.
 	return &defaultAPIServer{handler, container}
 }
 
+// testRequestInfoResolver 返回测试用的 RequestInfo 解析器（/api 为无组前缀）。
 func testRequestInfoResolver() *request.RequestInfoFactory {
 	return &request.RequestInfoFactory{
 		APIPrefixes:          sets.NewString("api", "apis"),
@@ -301,6 +316,7 @@ func testRequestInfoResolver() *request.RequestInfoFactory {
 	}
 }
 
+// TestSimpleSetupRight 是编解码器的自检：Simple 经编码再解码必须保持不变。
 func TestSimpleSetupRight(t *testing.T) {
 	s := &genericapitesting.Simple{ObjectMeta: metav1.ObjectMeta{Name: "aName"}}
 	wire, err := runtime.Encode(codec, s)
@@ -316,6 +332,7 @@ func TestSimpleSetupRight(t *testing.T) {
 	}
 }
 
+// TestSimpleOptionsSetupRight 验证 options 类型的编解码往返无损。
 func TestSimpleOptionsSetupRight(t *testing.T) {
 	s := &genericapitesting.SimpleGetOptions{}
 	wire, err := runtime.Encode(codec, s)
@@ -331,6 +348,8 @@ func TestSimpleOptionsSetupRight(t *testing.T) {
 	}
 }
 
+// SimpleRESTStorage 是测试用的通用存储桩：记录收到的请求参数，并可注入错误
+// 或自定义返回，从而在不依赖真实存储的情况下验证 handler 行为。
 type SimpleRESTStorage struct {
 	lock sync.Mutex
 
@@ -375,6 +394,7 @@ func (storate *SimpleRESTStorage) GetSingularName() string {
 	return "simple"
 }
 
+// List 记录收到的选择器并返回预设列表与错误。
 func (storage *SimpleRESTStorage) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	storage.checkContext(ctx)
 	result := &genericapitesting.SimpleList{
@@ -394,6 +414,7 @@ func (storage *SimpleRESTStorage) List(ctx context.Context, options *metainterna
 	return result, storage.errors["list"]
 }
 
+// SimpleStream 实现 rest.Streamer，用于测试二进制/流式 GET 响应。
 type SimpleStream struct {
 	version     string
 	accept      string
@@ -420,6 +441,7 @@ func (s *SimpleStream) InputStream(_ context.Context, version, accept string) (i
 	return s, false, s.contentType, s.err
 }
 
+// OutputConnect 是一个固定返回预设文本的 http.Handler，用于 connect 测试。
 type OutputConnect struct {
 	response string
 }
@@ -428,6 +450,7 @@ func (h *OutputConnect) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(h.response))
 }
 
+// Get 对 id=="binary" 返回流对象，其余返回预设 item。
 func (storage *SimpleRESTStorage) Get(ctx context.Context, id string, options *metav1.GetOptions) (runtime.Object, error) {
 	storage.checkContext(ctx)
 	if id == "binary" {
@@ -440,6 +463,7 @@ func (storage *SimpleRESTStorage) checkContext(ctx context.Context) {
 	storage.actualNamespace, storage.namespacePresent = request.NamespaceFrom(ctx)
 }
 
+// Delete 记录被删除的 id 与选项，并执行删除校验回调。
 func (storage *SimpleRESTStorage) Delete(ctx context.Context, id string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	storage.checkContext(ctx)
 	storage.deleted = id
@@ -469,6 +493,7 @@ func (storage *SimpleRESTStorage) NewList() runtime.Object {
 func (storage *SimpleRESTStorage) Destroy() {
 }
 
+// Create 记录创建的对象，并依次执行注入函数与创建校验。
 func (storage *SimpleRESTStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	storage.checkContext(ctx)
 	storage.created = obj.(*genericapitesting.Simple)
@@ -485,6 +510,7 @@ func (storage *SimpleRESTStorage) Create(ctx context.Context, obj runtime.Object
 	return obj, err
 }
 
+// Update 通过 objInfo 计算出新对象，再执行注入函数与更新校验。
 func (storage *SimpleRESTStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	storage.checkContext(ctx)
 	obj, err := objInfo.UpdatedObject(ctx, &storage.item)
@@ -505,6 +531,7 @@ func (storage *SimpleRESTStorage) Update(ctx context.Context, name string, objIn
 }
 
 // Implement ResourceWatcher.
+// Watch 记录 watch 参数并返回一个可供测试手动推送事件的 FakeWatcher。
 func (storage *SimpleRESTStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	storage.lock.Lock()
 	defer storage.lock.Unlock()
@@ -536,6 +563,7 @@ func (storage *SimpleRESTStorage) Watcher() *watch.FakeWatcher {
 }
 
 // Implement Connecter
+// ConnecterRESTStorage 实现 rest.Connecter，记录 Connect 收到的参数与 responder。
 type ConnecterRESTStorage struct {
 	connectHandler http.Handler
 	handlerFunc    func() http.Handler
@@ -557,6 +585,7 @@ func (s *ConnecterRESTStorage) New() runtime.Object {
 func (s *ConnecterRESTStorage) Destroy() {
 }
 
+// Connect 记录 connect 参数，并返回预设或按需构造的 handler。
 func (s *ConnecterRESTStorage) Connect(ctx context.Context, id string, options runtime.Object, responder rest.Responder) (http.Handler, error) {
 	s.receivedConnectOptions = options
 	s.receivedID = id
@@ -571,6 +600,7 @@ func (s *ConnecterRESTStorage) ConnectMethods() []string {
 	return []string{request.MethodGet, request.MethodPost, request.MethodPut, request.MethodDelete}
 }
 
+// NewConnectOptions 返回空 options；takesPath 非空时声明需要捕获 URL 尾部路径。
 func (s *ConnecterRESTStorage) NewConnectOptions() (runtime.Object, bool, string) {
 	if len(s.takesPath) > 0 {
 		return s.emptyConnectOptions, true, s.takesPath
@@ -582,6 +612,8 @@ func (s *ConnecterRESTStorage) GetSingularName() string {
 	return "simple"
 }
 
+// MetadataRESTStorage 在 SimpleRESTStorage 之上实现 rest.StorageMetadata，
+// 用于验证自定义 Produces MIME 类型会反映到注册的路由中。
 type MetadataRESTStorage struct {
 	*SimpleRESTStorage
 	types []string
@@ -597,6 +629,8 @@ func (m *MetadataRESTStorage) ProducesObject(verb string) interface{} {
 
 var _ rest.StorageMetadata = &MetadataRESTStorage{}
 
+// GetWithOptionsRESTStorage 实现 GetterWithOptions，并可选择把 URL 尾部路径
+// 作为选项传入。
 type GetWithOptionsRESTStorage struct {
 	*SimpleRESTStorage
 	optionsReceived runtime.Object
@@ -620,6 +654,7 @@ func (r *GetWithOptionsRESTStorage) NewGetOptions() (runtime.Object, bool, strin
 
 var _ rest.GetterWithOptions = &GetWithOptionsRESTStorage{}
 
+// GetWithOptionsRootRESTStorage 是集群级（非命名空间）的 GetterWithOptions 变体。
 type GetWithOptionsRootRESTStorage struct {
 	*SimpleTypedStorage
 	optionsReceived runtime.Object
@@ -651,6 +686,7 @@ func (r *GetWithOptionsRootRESTStorage) NewGetOptions() (runtime.Object, bool, s
 
 var _ rest.GetterWithOptions = &GetWithOptionsRootRESTStorage{}
 
+// NamedCreaterRESTStorage 实现带名称的创建接口（POST 到具体对象名）。
 type NamedCreaterRESTStorage struct {
 	*SimpleRESTStorage
 	createdName string
@@ -673,6 +709,7 @@ func (storage *NamedCreaterRESTStorage) Create(ctx context.Context, name string,
 	return obj, err
 }
 
+// SimpleTypedStorage 是只实现 Get 的极简存储桩，类型由 baseType 决定。
 type SimpleTypedStorage struct {
 	errors   map[string]error
 	item     runtime.Object
@@ -702,6 +739,7 @@ func (storage *SimpleTypedStorage) GetSingularName() string {
 	return "simple"
 }
 
+// bodyOrDie 读取并关闭响应体，读取失败直接 panic（仅用于测试断言消息）。
 func bodyOrDie(response *http.Response) string {
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
@@ -711,10 +749,12 @@ func bodyOrDie(response *http.Response) string {
 	return string(body)
 }
 
+// extractBody 用全局 codec 解码响应体到 object，同时返回原始文本。
 func extractBody(response *http.Response, object runtime.Object) (string, error) {
 	return extractBodyDecoder(response, object, codec)
 }
 
+// extractBodyDecoder 与 extractBody 相同，但使用调用方指定的解码器。
 func extractBodyDecoder(response *http.Response, object runtime.Object, decoder runtime.Decoder) (string, error) {
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
@@ -724,6 +764,7 @@ func extractBodyDecoder(response *http.Response, object runtime.Object, decoder 
 	return string(body), runtime.DecodeInto(decoder, body, object)
 }
 
+// extractBodyObject 解码响应体为任意 runtime.Object，并返回原始文本。
 func extractBodyObject(response *http.Response, decoder runtime.Decoder) (runtime.Object, string, error) {
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
@@ -734,6 +775,7 @@ func extractBodyObject(response *http.Response, decoder runtime.Decoder) (runtim
 	return obj, string(body), err
 }
 
+// TestNotFound 覆盖路由未命中与不支持的方法：期望 404 或 405，而不是 500。
 func TestNotFound(t *testing.T) {
 	type T struct {
 		Method string
@@ -828,6 +870,7 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
+// UnimplementedRESTStorage 不实现任何动词接口，用于验证“未实现的动词不会被注册”。
 type UnimplementedRESTStorage struct{}
 
 func (UnimplementedRESTStorage) NamespaceScoped() bool {
@@ -905,6 +948,8 @@ func TestUnimplementedRESTStorage(t *testing.T) {
 	}
 }
 
+// OnlyGetRESTStorage 只实现 Get/List，用于验证部分实现的存储仍会注册路由，
+// 未实现的方法返回 405 而非 404。
 type OnlyGetRESTStorage struct {
 	UnimplementedRESTStorage
 }
@@ -976,6 +1021,8 @@ func TestSomeUnimplementedRESTStorage(t *testing.T) {
 	}
 }
 
+// TestList 验证 LIST 的命名空间来源（URL 路径优先，旧的 ?namespace 参数被忽略）
+// 以及 label/field 选择器是否正确传给存储层。
 func TestList(t *testing.T) {
 	cases := []struct {
 		url       string
@@ -1157,6 +1204,7 @@ func TestList(t *testing.T) {
 	}
 }
 
+// TestRequestsWithInvalidQuery 验证非法查询参数在进入存储前即返回 400。
 func TestRequestsWithInvalidQuery(t *testing.T) {
 	storage := map[string]rest.Storage{}
 
@@ -1204,6 +1252,7 @@ func TestRequestsWithInvalidQuery(t *testing.T) {
 	}
 }
 
+// TestListCompression 验证 LIST 响应在客户端声明 gzip 时被压缩，且解压后内容正确。
 func TestListCompression(t *testing.T) {
 	cases := []struct {
 		url            string
@@ -1297,6 +1346,7 @@ func TestListCompression(t *testing.T) {
 	}
 }
 
+// TestLogs 对未注册的 /logs 路径发起请求，仅验证不会导致 panic（历史回归测试）。
 func TestLogs(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{})
@@ -1322,6 +1372,7 @@ func TestLogs(t *testing.T) {
 	t.Logf("Data: %s", string(body))
 }
 
+// TestErrorList 验证存储层返回错误时 LIST 映射为 500。
 func TestErrorList(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -1347,6 +1398,7 @@ func TestErrorList(t *testing.T) {
 	}
 }
 
+// TestNonEmptyList 验证非空列表的序列化：条目数量与内容都应与存储一致。
 func TestNonEmptyList(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -1397,6 +1449,8 @@ func TestNonEmptyList(t *testing.T) {
 	}
 }
 
+// TestMetadata 验证 rest.StorageMetadata.ProducesMIMETypes 会影响注册路由的
+// Produces 列表，确保自定义媒体类型被正确暴露。
 func TestMetadata(t *testing.T) {
 	simpleStorage := &MetadataRESTStorage{&SimpleRESTStorage{}, []string{"text/plain"}}
 	h := handle(map[string]rest.Storage{"simple": simpleStorage})
@@ -1434,6 +1488,7 @@ func TestMetadata(t *testing.T) {
 	}
 }
 
+// TestGet 验证单对象 GET 返回存储中的对象。
 func TestGet(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -1469,6 +1524,7 @@ func TestGet(t *testing.T) {
 	}
 }
 
+// BenchmarkGet 测量 GET 热路径（含默认 gzip 协商）的开销。
 func BenchmarkGet(b *testing.B) {
 	ctx := b.Context()
 	storage := map[string]rest.Storage{}
@@ -1506,6 +1562,7 @@ func BenchmarkGet(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkGetNoCompression 测量禁用压缩时的 GET 开销，用于对比压缩成本。
 func BenchmarkGetNoCompression(b *testing.B) {
 	ctx := b.Context()
 	storage := map[string]rest.Storage{}
@@ -1553,6 +1610,7 @@ func BenchmarkGetNoCompression(b *testing.B) {
 	b.StopTimer()
 }
 
+// TestGetCompression 验证 GET 在 Accept-Encoding: gzip 下返回可解压的压缩响应。
 func TestGetCompression(t *testing.T) {
 	storage := map[string]rest.Storage{}
 	simpleStorage := SimpleRESTStorage{
@@ -1621,6 +1679,8 @@ func TestGetCompression(t *testing.T) {
 	}
 }
 
+// TestGetPretty 验证 pretty 输出的触发条件：Accept 参数、?pretty 查询参数，
+// 以及 curl/Wget/浏览器等 User-Agent。
 func TestGetPretty(t *testing.T) {
 	storage := map[string]rest.Storage{}
 	simpleStorage := SimpleRESTStorage{
@@ -1707,6 +1767,8 @@ func TestGetPretty(t *testing.T) {
 	}
 }
 
+// TestGetTable 验证 Table 输出协商：不支持的版本返回 406，支持的版本返回
+// 正确的列定义、单元格与内嵌对象。
 func TestGetTable(t *testing.T) {
 	now := metav1.Now()
 	obj := genericapitesting.Simple{
@@ -1903,6 +1965,7 @@ func TestGetTable(t *testing.T) {
 	}
 }
 
+// TestWatchTable 验证 watch 事件也能按 Table 形式编码，且事件序列与预期一致。
 func TestWatchTable(t *testing.T) {
 	obj := genericapitesting.Simple{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo1", Namespace: "ns1", ResourceVersion: "10", CreationTimestamp: metav1.NewTime(time.Unix(1, 0)), UID: types.UID("abcdef0123")},
@@ -2133,6 +2196,7 @@ func TestWatchTable(t *testing.T) {
 	}
 }
 
+// watcher 根据响应的 Content-Type 构造流式解码器，用于解析 watch 事件流。
 func watcher(mediaType string, r io.ReadCloser) streaming.Decoder {
 	info, ok := runtime.SerializerInfoForMediaType(metainternalversionscheme.Codecs.SupportedMediaTypes(), mediaType)
 	if !ok || info.StreamSerializer == nil {
@@ -2144,6 +2208,8 @@ func watcher(mediaType string, r io.ReadCloser) streaming.Decoder {
 	return d
 }
 
+// TestGetPartialObjectMetadata 验证 PartialObjectMetadata 的协商与降级：
+// 不支持的版本返回 406，支持时返回只含元数据的对象，客户端偏好顺序决定版本。
 func TestGetPartialObjectMetadata(t *testing.T) {
 	now := metav1.Time{Time: metav1.Now().Rfc3339Copy().Local()}
 	storage := map[string]rest.Storage{}
@@ -2327,6 +2393,8 @@ func TestGetPartialObjectMetadata(t *testing.T) {
 	}
 }
 
+// TestGetBinary 验证流式（非结构化）GET：响应体原样透传，Content-Type 来自
+// Streamer 而非内容协商。
 func TestGetBinary(t *testing.T) {
 	ctx := t.Context()
 	simpleStorage := SimpleRESTStorage{
@@ -2362,6 +2430,7 @@ func TestGetBinary(t *testing.T) {
 	}
 }
 
+// validateSimpleGetOptionsParams 校验 SimpleGetOptions 生成的参数文档与预期一致。
 func validateSimpleGetOptionsParams(t *testing.T, route *restful.Route) {
 	// Validate name and description
 	expectedParams := map[string]string{
@@ -2383,6 +2452,7 @@ func validateSimpleGetOptionsParams(t *testing.T, route *restful.Route) {
 	}
 }
 
+// TestGetWithOptionsRouteParams 验证 GET 路由暴露了 options 的参数文档。
 func TestGetWithOptionsRouteParams(t *testing.T) {
 	storage := map[string]rest.Storage{}
 	simpleStorage := GetWithOptionsRESTStorage{
@@ -2403,6 +2473,8 @@ func TestGetWithOptionsRouteParams(t *testing.T) {
 	}
 }
 
+// TestGetWithOptions 验证 URL 尾部路径（subpath）在各种形态下都能正确解析，
+// 包括命名空间级/集群级以及作为子资源的情况。
 func TestGetWithOptions(t *testing.T) {
 
 	cases := []struct {
@@ -2540,6 +2612,7 @@ func TestGetWithOptions(t *testing.T) {
 	}
 }
 
+// TestGetMissing 验证 NotFound 错误映射为 404。
 func TestGetMissing(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -2564,6 +2637,7 @@ func TestGetMissing(t *testing.T) {
 	}
 }
 
+// TestGetRetryAfter 验证 ServerTimeout 错误会带出 Retry-After 响应头。
 func TestGetRetryAfter(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -2591,6 +2665,7 @@ func TestGetRetryAfter(t *testing.T) {
 	}
 }
 
+// TestConnect 验证 connect 子资源把请求交给存储返回的 handler，并透传响应体。
 func TestConnect(t *testing.T) {
 	ctx := t.Context()
 	responseText := "Hello World"
@@ -2631,6 +2706,7 @@ func TestConnect(t *testing.T) {
 	}
 }
 
+// TestConnectResponderObject 验证通过 Responder 返回对象时状态码与编码正确。
 func TestConnectResponderObject(t *testing.T) {
 	ctx := t.Context()
 	itemID := "theID"
@@ -2676,6 +2752,7 @@ func TestConnectResponderObject(t *testing.T) {
 	}
 }
 
+// TestConnectResponderError 验证通过 Responder 返回错误时映射为对应的状态码。
 func TestConnectResponderError(t *testing.T) {
 	ctx := t.Context()
 	itemID := "theID"
@@ -2720,6 +2797,7 @@ func TestConnectResponderError(t *testing.T) {
 	}
 }
 
+// TestConnectWithOptionsRouteParams 验证 connect 路由暴露 options 参数文档。
 func TestConnectWithOptionsRouteParams(t *testing.T) {
 	connectStorage := &ConnecterRESTStorage{
 		connectHandler:      &OutputConnect{},
@@ -2747,6 +2825,7 @@ func TestConnectWithOptionsRouteParams(t *testing.T) {
 	}
 }
 
+// TestConnectWithOptions 验证 connect 的查询参数被解析进 options。
 func TestConnectWithOptions(t *testing.T) {
 	ctx := t.Context()
 	responseText := "Hello World"
@@ -2798,6 +2877,7 @@ func TestConnectWithOptions(t *testing.T) {
 	}
 }
 
+// TestConnectWithOptionsAndPath 验证 connect 的 URL 尾部路径被写入 options.Path。
 func TestConnectWithOptionsAndPath(t *testing.T) {
 	ctx := t.Context()
 	responseText := "Hello World"
@@ -2851,6 +2931,7 @@ func TestConnectWithOptionsAndPath(t *testing.T) {
 	}
 }
 
+// TestDelete 验证 DELETE 请求到达存储并带上正确的对象名。
 func TestDelete(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -2879,6 +2960,7 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+// TestDeleteWithOptions 验证请求体中的 DeleteOptions 被解析并传给存储。
 func TestDeleteWithOptions(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -2925,6 +3007,7 @@ func TestDeleteWithOptions(t *testing.T) {
 	}
 }
 
+// TestDeleteWithOptionsQuery 验证通过查询参数传入的 DeleteOptions 生效。
 func TestDeleteWithOptionsQuery(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -2967,6 +3050,8 @@ func TestDeleteWithOptionsQuery(t *testing.T) {
 	}
 }
 
+// TestDeleteWithOptionsQueryAndBody 验证查询参数与请求体同时存在时的优先级：
+// 以请求体为准。
 func TestDeleteWithOptionsQueryAndBody(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3012,6 +3097,7 @@ func TestDeleteWithOptionsQueryAndBody(t *testing.T) {
 	}
 }
 
+// TestDeleteInvokesAdmissionControl 验证删除路径同时经过变更与校验准入。
 func TestDeleteInvokesAdmissionControl(t *testing.T) {
 	// TODO: remove mutating deny when we removed it from the endpoint implementation and ported all plugins
 	for _, admit := range []admission.Interface{alwaysMutatingDeny{}, alwaysValidatingDeny{}} {
@@ -3043,6 +3129,7 @@ func TestDeleteInvokesAdmissionControl(t *testing.T) {
 	}
 }
 
+// TestDeleteMissing 验证删除不存在的对象返回 404。
 func TestDeleteMissing(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3070,6 +3157,7 @@ func TestDeleteMissing(t *testing.T) {
 	}
 }
 
+// TestUpdate 验证 PUT 的更新流程；请求体允许省略 namespace，由 handler 补齐。
 func TestUpdate(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3111,6 +3199,7 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// TestUpdateInvokesAdmissionControl 验证更新路径经过准入且拒绝时返回 403。
 func TestUpdateInvokesAdmissionControl(t *testing.T) {
 	for _, admit := range []admission.Interface{alwaysMutatingDeny{}, alwaysValidatingDeny{}} {
 		testName := fmt.Sprintf("%T", admit)
@@ -3158,6 +3247,7 @@ func TestUpdateInvokesAdmissionControl(t *testing.T) {
 	}
 }
 
+// TestUpdateRequiresMatchingName 验证 PUT 请求体必须带有与 URL 一致的对象名。
 func TestUpdateRequiresMatchingName(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3194,6 +3284,7 @@ func TestUpdateRequiresMatchingName(t *testing.T) {
 	}
 }
 
+// TestUpdateAllowsMissingNamespace 验证更新时对象可省略 namespace。
 func TestUpdateAllowsMissingNamespace(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3276,6 +3367,8 @@ func TestUpdateDisallowsMismatchedNamespaceOnError(t *testing.T) {
 	}
 }
 
+// TestUpdatePreventsMismatchedNamespace 验证对象声明的 namespace 与 URL 不一致
+// 时被拒绝（安全边界，防止跨命名空间写入）。
 func TestUpdatePreventsMismatchedNamespace(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3314,6 +3407,7 @@ func TestUpdatePreventsMismatchedNamespace(t *testing.T) {
 	}
 }
 
+// TestUpdateMissing 验证更新不存在的对象返回 404。
 func TestUpdateMissing(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3353,6 +3447,7 @@ func TestUpdateMissing(t *testing.T) {
 	}
 }
 
+// TestCreateNotFound 验证创建时存储返回 NotFound 会被原样映射。
 func TestCreateNotFound(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{
@@ -3386,6 +3481,7 @@ func TestCreateNotFound(t *testing.T) {
 	}
 }
 
+// TestCreateChecksDecode 验证请求体类型与资源不匹配时返回 400。
 func TestCreateChecksDecode(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{"simple": &SimpleRESTStorage{}})
@@ -3418,6 +3514,8 @@ func TestCreateChecksDecode(t *testing.T) {
 	}
 }
 
+// TestParentResourceIsRequired 验证注册子资源时其父资源也必须注册，否则
+// InstallREST 应报错；同时确认命名空间级子资源能正确解析命名空间。
 func TestParentResourceIsRequired(t *testing.T) {
 	storage := &SimpleTypedStorage{
 		baseType: &genericapitesting.SimpleRoot{}, // a root scoped type
@@ -3503,6 +3601,7 @@ func TestParentResourceIsRequired(t *testing.T) {
 	}
 }
 
+// TestNamedCreaterWithName 验证带名称的创建接口收到 URL 中的名称。
 func TestNamedCreaterWithName(t *testing.T) {
 	ctx := t.Context()
 	pathName := "helloworld"
@@ -3537,6 +3636,7 @@ func TestNamedCreaterWithName(t *testing.T) {
 	}
 }
 
+// TestNamedCreaterWithoutName 验证带名称的创建接口在 URL 缺少名称时返回 400。
 func TestNamedCreaterWithoutName(t *testing.T) {
 	ctx := t.Context()
 	storage := &NamedCreaterRESTStorage{
@@ -3583,6 +3683,7 @@ func TestNamedCreaterWithoutName(t *testing.T) {
 	}
 }
 
+// namePopulatorAdmissionControl 是校验类准入桩，用于断言准入看到的名称。
 type namePopulatorAdmissionControl struct {
 	t            *testing.T
 	populateName string
@@ -3601,6 +3702,8 @@ func (npac *namePopulatorAdmissionControl) Handles(operation admission.Operation
 
 var _ admission.ValidationInterface = &namePopulatorAdmissionControl{}
 
+// TestNamedCreaterWithGenerateName 验证 generateName 流程：存储层补全名称后，
+// 校验准入看到的应是补全后的名称。
 func TestNamedCreaterWithGenerateName(t *testing.T) {
 	ctx := t.Context()
 	populateName := "bar"
@@ -3673,6 +3776,7 @@ func TestNamedCreaterWithGenerateName(t *testing.T) {
 	}
 }
 
+// TestUpdateChecksDecode 验证更新请求体类型不匹配时返回 400。
 func TestUpdateChecksDecode(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{"simple": &SimpleRESTStorage{}})
@@ -3705,6 +3809,7 @@ func TestUpdateChecksDecode(t *testing.T) {
 	}
 }
 
+// TestCreate 验证基本创建流程与 201 响应。
 func TestCreate(t *testing.T) {
 	ctx := t.Context()
 	storage := SimpleRESTStorage{
@@ -3761,6 +3866,7 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+// TestCreateYAML 验证以 YAML 提交并协商 YAML 响应的创建流程。
 func TestCreateYAML(t *testing.T) {
 	ctx := t.Context()
 	storage := SimpleRESTStorage{
@@ -3827,6 +3933,7 @@ func TestCreateYAML(t *testing.T) {
 	}
 }
 
+// TestCreateInNamespace 验证创建时对象命名空间由 URL 决定。
 func TestCreateInNamespace(t *testing.T) {
 	ctx := t.Context()
 	storage := SimpleRESTStorage{
@@ -3883,6 +3990,7 @@ func TestCreateInNamespace(t *testing.T) {
 	}
 }
 
+// TestCreateInvokeAdmissionControl 验证创建路径经过准入且拒绝时返回 403。
 func TestCreateInvokeAdmissionControl(t *testing.T) {
 	for _, admit := range []admission.Interface{alwaysMutatingDeny{}, alwaysValidatingDeny{}} {
 		testName := fmt.Sprintf("%T", admit)
@@ -3924,6 +4032,7 @@ func TestCreateInvokeAdmissionControl(t *testing.T) {
 	}
 }
 
+// expectAPIStatus 发起请求、断言状态码，并解码返回的 metav1.Status。
 func expectAPIStatus(t *testing.T, method, url string, data []byte, code int) *metav1.Status {
 	t.Helper()
 	ctx := t.Context()
@@ -3951,6 +4060,7 @@ func expectAPIStatus(t *testing.T, method, url string, data []byte, code int) *m
 	return &status
 }
 
+// TestDelayReturnsError 验证存储返回 AlreadyExists 时映射为 409 且带 Details。
 func TestDelayReturnsError(t *testing.T) {
 	storage := SimpleRESTStorage{
 		injectedFunction: func(obj runtime.Object) (runtime.Object, error) {
@@ -3967,6 +4077,7 @@ func TestDelayReturnsError(t *testing.T) {
 	}
 }
 
+// UnregisteredAPIObject 是未注册到 scheme 的类型，用于触发编码错误。
 type UnregisteredAPIObject struct {
 	Value string
 }
@@ -3982,6 +4093,7 @@ func (obj *UnregisteredAPIObject) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// TestWriteJSONDecodeError 验证编码失败时返回 500 且错误信息包含类型未注册的提示。
 func TestWriteJSONDecodeError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		responsewriters.WriteObjectNegotiated(codecs, negotiation.DefaultEndpointRestrictions, newGroupVersion, w, req, http.StatusOK, &UnregisteredAPIObject{"Undecodable"}, false)
@@ -4001,6 +4113,7 @@ func TestWriteJSONDecodeError(t *testing.T) {
 	}
 }
 
+// marshalError 在序列化时总是返回错误，用于测试 WriteRawJSON 的错误处理。
 type marshalError struct {
 	err error
 }
@@ -4009,6 +4122,7 @@ func (m *marshalError) MarshalJSON() ([]byte, error) {
 	return []byte{}, m.err
 }
 
+// TestWriteRAWJSONMarshalError 验证 WriteRawJSON 在 Marshal 失败时返回 500。
 func TestWriteRAWJSONMarshalError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		responsewriters.WriteRawJSON(http.StatusOK, &marshalError{errors.New("Undecodable")}, w)
@@ -4025,6 +4139,7 @@ func TestWriteRAWJSONMarshalError(t *testing.T) {
 	}
 }
 
+// TestCreateTimeout 验证请求超时后返回 504 且原因为 Timeout。
 func TestCreateTimeout(t *testing.T) {
 	testOver := make(chan struct{})
 	defer close(testOver)
@@ -4052,6 +4167,7 @@ func TestCreateTimeout(t *testing.T) {
 	}
 }
 
+// TestCreateChecksAPIVersion 验证请求体的 apiVersion 与路由不匹配时返回 400。
 func TestCreateChecksAPIVersion(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{"simple": &SimpleRESTStorage{}})
@@ -4085,6 +4201,7 @@ func TestCreateChecksAPIVersion(t *testing.T) {
 	}
 }
 
+// TestCreateDefaultsAPIVersion 验证省略 apiVersion 时按路由的版本进行默认化。
 func TestCreateDefaultsAPIVersion(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{"simple": &SimpleRESTStorage{}})
@@ -4122,6 +4239,7 @@ func TestCreateDefaultsAPIVersion(t *testing.T) {
 	}
 }
 
+// TestUpdateChecksAPIVersion 验证更新时 apiVersion 不匹配会返回 400。
 func TestUpdateChecksAPIVersion(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{"simple": &SimpleRESTStorage{}})
@@ -4172,6 +4290,8 @@ func runRequest(t testing.TB, path, verb string, data []byte, contentType string
 	return response
 }
 
+// SimpleRESTStorageWithDeleteCollection 在 SimpleRESTStorage 之上增加
+// DeleteCollection，用于覆盖集合删除路径。
 type SimpleRESTStorageWithDeleteCollection struct {
 	SimpleRESTStorage
 }
@@ -4429,6 +4549,8 @@ other: bar`)
 	}
 }
 
+// SimpleXGSubresourceRESTStorage 是一个跨组子资源存储：其返回对象的 GVK
+// 与父资源不同，用于验证 GroupVersionKindProvider 的处理。
 type SimpleXGSubresourceRESTStorage struct {
 	item    genericapitesting.SimpleXGSubresource
 	itemGVK schema.GroupVersionKind
@@ -4459,6 +4581,8 @@ func (storage *SimpleXGSubresourceRESTStorage) GetSingularName() string {
 	return "simple"
 }
 
+// TestXGSubresource 验证跨组子资源返回的 apiVersion/kind 来自存储声明的 GVK，
+// 而不是父资源的 GVK。
 func TestXGSubresource(t *testing.T) {
 	ctx := t.Context()
 	container := restful.NewContainer()
@@ -4547,6 +4671,7 @@ func TestXGSubresource(t *testing.T) {
 	}
 }
 
+// readBodyOrDie 读取全部内容，失败即 panic（仅用于测试）。
 func readBodyOrDie(r io.Reader) []byte {
 	body, err := io.ReadAll(r)
 	if err != nil {
@@ -4602,11 +4727,13 @@ func BenchmarkUpdateProtobuf(b *testing.B) {
 	b.StopTimer()
 }
 
+// newTestServer 为 handler 套上 RequestInfo 过滤器后启动测试服务器。
 func newTestServer(handler http.Handler) *httptest.Server {
 	handler = genericapifilters.WithRequestInfo(handler, newTestRequestInfoResolver())
 	return httptest.NewServer(handler)
 }
 
+// newTestRequestInfoResolver 返回另一份测试用 RequestInfo 解析器。
 func newTestRequestInfoResolver() *request.RequestInfoFactory {
 	return &request.RequestInfoFactory{
 		APIPrefixes:          sets.NewString("api", "apis"),
@@ -4616,6 +4743,7 @@ func newTestRequestInfoResolver() *request.RequestInfoFactory {
 
 const benchmarkSeed = 100
 
+// benchmarkItems 用固定随机种子生成可复现的基准测试数据。
 func benchmarkItems(b *testing.B) []example.Pod {
 	clientapiObjectFuzzer := fuzzer.FuzzerFor(examplefuzzer.Funcs, rand.NewSource(benchmarkSeed), codecs)
 	items := make([]example.Pod, 3)

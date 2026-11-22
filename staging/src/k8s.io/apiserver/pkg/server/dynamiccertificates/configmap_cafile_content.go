@@ -39,6 +39,9 @@ import (
 
 // ConfigMapCAController provies a CAContentProvider that can dynamically react to configmap changes
 // It also fulfills the authenticator interface to provide verifyoptions
+//
+// 控制器只 watch 单个 ConfigMap 的单个 key：CA 轮换必须以集群内对象为唯一事实来源，
+// 而不是本地文件，这样所有 apiserver 副本能在同一时刻看到同一份 bundle。
 type ConfigMapCAController struct {
 	name string
 
@@ -50,6 +53,8 @@ type ConfigMapCAController struct {
 	configMapInformer cache.SharedIndexInformer
 
 	// caBundle is a caBundleAndVerifier that contains the last read, non-zero length content of the file
+	//
+	// 用 atomic.Value 保存不可变快照：认证热路径上读 CA 不加锁，替换时整对象原子换掉。
 	caBundle atomic.Value
 
 	listeners []Listener
@@ -65,6 +70,7 @@ var _ ControllerRunner = &ConfigMapCAController{}
 // NewDynamicCAFromConfigMapController returns a CAContentProvider based on a configmap that automatically reloads content.
 // It is near-realtime via an informer.
 func NewDynamicCAFromConfigMapController(purpose, namespace, name, key string, kubeClient kubernetes.Interface) (*ConfigMapCAController, error) {
+	// purpose 用于区分不同用途的 CA（如 client-ca、requestheader-client-ca），会出现在指标与日志中。
 	if len(purpose) == 0 {
 		return nil, fmt.Errorf("missing purpose for ca bundle")
 	}
@@ -80,6 +86,9 @@ func NewDynamicCAFromConfigMapController(purpose, namespace, name, key string, k
 	caContentName := fmt.Sprintf("%s::%s::%s::%s", purpose, namespace, name, key)
 
 	// we construct our own informer because we need such a small subset of the information available.  Just one namespace.
+	//
+	// 不用共享 informer 是为了把 watch 范围压到“单命名空间 + 单对象”，
+	// resync 周期设得很长（12h）因为这里依赖 watch 事件而非定期全量。
 	uncastConfigmapInformer := corev1informers.NewFilteredConfigMapInformer(kubeClient, namespace, 12*time.Hour, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, func(listOptions *v1.ListOptions) {
 		listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", name).String()
 	})
@@ -106,6 +115,7 @@ func NewDynamicCAFromConfigMapController(purpose, namespace, name, key string, k
 			if cast, ok := obj.(*corev1.ConfigMap); ok {
 				return cast.Name == c.configmapName && cast.Namespace == c.configmapNamespace
 			}
+			// 删除事件可能以 tombstone 形式到达，必须解包后再比较，否则会漏掉删除。
 			if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 				if cast, ok := tombstone.Obj.(*corev1.ConfigMap); ok {
 					return cast.Name == c.configmapName && cast.Namespace == c.configmapNamespace
@@ -131,12 +141,15 @@ func NewDynamicCAFromConfigMapController(purpose, namespace, name, key string, k
 	return c, nil
 }
 
+// keyFn 返回队列键；格式与 DeletionHandlingMetaNamespaceKeyFunc 一致，便于排查日志时对照。
 func (c *ConfigMapCAController) keyFn() string {
 	// this format matches DeletionHandlingMetaNamespaceKeyFunc for our single key
 	return c.configmapNamespace + "/" + c.configmapName
 }
 
 // AddListener adds a listener to be notified when the CA content changes.
+//
+// 注意：必须在 Run 之前调用。listeners 切片没有加锁，运行期追加会与 loadCABundle 并发读写。
 func (c *ConfigMapCAController) AddListener(listener Listener) {
 	c.listeners = append(c.listeners, listener)
 }
@@ -153,6 +166,8 @@ func (c *ConfigMapCAController) loadCABundle() error {
 	}
 
 	// check to see if we have a change. If the values are the same, do nothing.
+	//
+	// 内容未变时直接返回，避免重建 x509 证书池与无谓地唤醒所有 listener。
 	if !c.hasCAChanged([]byte(caBundle)) {
 		return nil
 	}
@@ -163,6 +178,7 @@ func (c *ConfigMapCAController) loadCABundle() error {
 	}
 	c.caBundle.Store(caBundleAndVerifier)
 
+	// 先换快照再通知：listener 被唤醒后必须能读到新内容，顺序不能反。
 	for _, listener := range c.listeners {
 		listener.Enqueue()
 	}
@@ -193,6 +209,9 @@ func (c *ConfigMapCAController) hasCAChanged(caBundle []byte) bool {
 func (c *ConfigMapCAController) RunOnce(ctx context.Context) error {
 	// Ignore the error when running once because when using a dynamically loaded ca file, because we think it's better to have nothing for
 	// a brief time than completely crash.  If crashing is necessary, higher order logic like a healthcheck and cause failures.
+	//
+	// 启动阶段容忍失败：此时 informer 尚未同步，读不到 ConfigMap 是正常的；
+	// 后续 Run 中的重试会补齐。
 	_ = c.loadCABundle()
 	return nil
 }
@@ -214,9 +233,14 @@ func (c *ConfigMapCAController) Run(ctx context.Context, workers int) {
 	}
 
 	// doesn't matter what workers say, only start one.
+	//
+	// 单 worker 足够：只有一个对象要处理，多 worker 只会增加对同一快照的竞争。
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
 	// start timer that rechecks every minute, just in case.  this also serves to prime the controller quickly.
+	//
+	// 周期性兜底轮询：watch 可能因网络问题漏事件，定期重读可最终收敛；
+	// 同时保证启动后立即做一次加载，不必等第一个事件。
 	go wait.PollImmediateUntil(FileRefreshDuration, func() (bool, error) {
 		c.queue.Add(workItemKey)
 		return false, nil
@@ -230,6 +254,7 @@ func (c *ConfigMapCAController) runWorker() {
 	}
 }
 
+// processNextWorkItem 处理一个队列项；失败时用限速队列重试，避免 ConfigMap 长期不可读时空转。
 func (c *ConfigMapCAController) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -265,6 +290,9 @@ func (c *ConfigMapCAController) CurrentCABundleContent() []byte {
 }
 
 // VerifyOptions provides verifyoptions compatible with authenticators
+//
+// 第二个返回值为 false 时调用方必须拒绝请求：没有可信 CA 就无从校验客户端证书，
+// 宁可拒绝也不能放行。
 func (c *ConfigMapCAController) VerifyOptions() (x509.VerifyOptions, bool) {
 	uncastObj := c.caBundle.Load()
 	if uncastObj == nil {

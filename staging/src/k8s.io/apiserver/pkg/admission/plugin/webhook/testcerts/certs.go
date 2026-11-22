@@ -16,9 +16,12 @@ limitations under the License.
 
 // This file was generated using openssl by the gencerts.sh script
 // and holds raw certificates for the webhook tests.
+//
+// 证书均为测试专用的自签材料，禁止用于任何生产环境。
 
 package testcerts
 
+// CAKey 是测试 CA 的私钥（PEM），用于在测试中构建信任链。
 var CAKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEArqnW4K+UsmPzbSB7JYhN0HNsJNItjw/87SJxIjGqUttC+2ts
 +Y+BddcQgO0EfzP68QJ6+H7itmzdqWPTfoZJiuy+twXxgFwMH2WCKB6I5CgnVHcD
@@ -47,6 +50,7 @@ vBpvC0Vkp5Dg32asmME40LbYpMu2BV4E1wK17i+DZVUMezNO0mABykWecyPYdmxL
 bJtLu4yaP84W433T5E6G7Im+x+KjXI7TRzpQZFQnVadmmpuurUY=
 -----END RSA PRIVATE KEY-----`)
 
+// CACert 是测试 CA 证书（PEM），测试中作为受信根。
 var CACert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDPTCCAiWgAwIBAgIJALTyMgMR6YygMA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX
@@ -68,6 +72,7 @@ D7NLhM1JHUiqNQStDq9mDKLHKmp++UScrNc66b6egN1sIPBHyLu8ApzcF2YHuEYC
 RGyWZ0sJtjzWjK7IU9RdmLI=
 -----END CERTIFICATE-----`)
 
+// BadCAKey 是另一套 CA 的私钥，用于构造“证书链不被信任”的失败场景。
 var BadCAKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEArgYoZAUDj1/dQ2G+dMib+b1m39ACK6wBt4zDjl8x5iUZZjDy
 O1l/Hj6n3NUHphFsYZ5070ds8GwXANvYGFi3F6GFiRW/R5lcChmhxhY5JJtWquDp
@@ -96,6 +101,7 @@ a3ARRbiRKU/IX5I9ToclJ3h0a1nVr1kzV/E5f+5FgQ9swkTNEbM8gBsc5X9ZayjD
 Hfv6+p7TH3bReXDKtpOUgso0dIy2anN6Ppu1wODtrFnUOJ9wkO4OSg==
 -----END RSA PRIVATE KEY-----`)
 
+// BadCACert 是与 BadCAKey 配套的 CA 证书，用于验证 TLS 校验失败路径。
 var BadCACert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDPTCCAiWgAwIBAgIJAIaoBDrksTyaMA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX
@@ -117,6 +123,7 @@ eLarZIVV5Ia/FziGHoi7Q44C66pXD437xmkR1ueExoKwXbBt4c5GeH1rJjUVnlyk
 pMokZBC57nXx8krZVEu1SRA=
 -----END CERTIFICATE-----`)
 
+// ServerKey 是测试 webhook 服务端的私钥。
 var ServerKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA13f50PPWuR/InxLIoJjHdNSG+jVUd25CY7ZL2J023X2BAY+1
 M6jkLR6C2nSFZnn58ubiB74/d1g/Fg1Twd419iR615A013f+qOoyFx3LFHxU1S6e
@@ -145,6 +152,7 @@ TIIXXYhgSy/XshUbsgXQ+YGliye/rXSCTXHBXvWShOqxEMgeMYMRkcm8ZLp/DH7C
 kC2pemkLPUJqgSh1PASGcJbDJIvFGUfP69tUCYpHpk3nHzexuAg3
 -----END RSA PRIVATE KEY-----`)
 
+// ServerCert 是测试 webhook 服务端证书，SAN 指向 127.0.0.1 与 webhook-test.default。
 var ServerCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDQDCCAiigAwIBAgIJANWw74P5KJk2MA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX
@@ -166,6 +174,7 @@ M++C29JwS3Hwbubg6WO3wjFjoEhpCwU6qRYUz3MRp4tHO4kxKXx+oQnUiFnR7vW0
 YkNtGc1RUDHwecCTFpJtPb7Yu/E=
 -----END CERTIFICATE-----`)
 
+// ClientKey 是测试客户端（apiserver 侧 webhook 调用方）的私钥。
 var ClientKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEAo3q//YITCuCWOSLPAdXSGUU+KvydADr63dy5CDTW5wBovnh9
 9Lb0r7iZUkSklk0nMbqVILMGt87MuuW2sdge2paWMlhMlh1R5gWuKSQUahF6pHrD
@@ -194,6 +203,7 @@ ImRWsYCAaX97313xYhjTT4jJzNU4fdnJ5hFte+Nt7BK1h/ze4+0XGJBK7wnDqaqg
 kL0SB6nxr/Gqnhwx+wEaLkfhiy7Gx0E0IoSGEELsW/MMgvzzAo1/jaM=
 -----END RSA PRIVATE KEY-----`)
 
+// ClientCert 是测试客户端证书，用于验证 mTLS 客户端身份。
 var ClientCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDVTCCAj2gAwIBAgIJANWw74P5KJk3MA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX

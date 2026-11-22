@@ -23,6 +23,11 @@ import (
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 )
 
+// TestAddAnnotation 覆盖准入注解的写入契约：注解键必须形如 <plugin 域名>/<key>，
+// 同一键不可被覆盖，非法键被拒绝且不留下痕迹。
+//
+// 注解最终会随审计事件输出（getAnnotations(LevelMetadata)），因此写入校验
+// 同时是防止插件互相篡改审计记录的边界。
 func TestAddAnnotation(t *testing.T) {
 	attr := &attributesRecord{}
 
@@ -39,6 +44,8 @@ func TestAddAnnotation(t *testing.T) {
 	assert.Equal(t, "value1", annotations["foo.admission.k8s.io/key1"], "admission annotations should not be overwritten")
 
 	// test invalid plugin names
+	//
+	// 非法输入覆盖四类错误：DNS 子域名格式错误、缺少插件名、缺少 key、空串。
 	var testCases = map[string]string{
 		"invalid dns subdomain": "INVALID-DNS-Subdomain/policy",
 		"no plugin name":        "policy",
@@ -53,6 +60,8 @@ func TestAddAnnotation(t *testing.T) {
 	}
 
 	// test all saved annotations
+	//
+	// 最终只应留下两条合法注解：失败的写入不能产生残留。
 	assert.Equal(
 		t,
 		map[string]string{

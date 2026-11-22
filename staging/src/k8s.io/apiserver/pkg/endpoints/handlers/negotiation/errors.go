@@ -25,6 +25,9 @@ import (
 )
 
 // errNotAcceptable indicates Accept negotiation has failed
+//
+// 这些错误类型都实现 Status()，以便 responsewriters 把错误直接转成 metav1.Status
+// 返回给客户端；错误文案是 API 契约的一部分，不要随意改写。
 type errNotAcceptable struct {
 	accepted []string
 }
@@ -34,10 +37,12 @@ func NewNotAcceptableError(accepted []string) error {
 	return errNotAcceptable{accepted}
 }
 
+// Error 把可接受的媒体类型列表拼成人类可读的提示。
 func (e errNotAcceptable) Error() string {
 	return fmt.Sprintf("only the following media types are accepted: %v", strings.Join(e.accepted, ", "))
 }
 
+// Status 映射为 HTTP 406，告知客户端请求的 Accept 无法满足。
 func (e errNotAcceptable) Status() metav1.Status {
 	return metav1.Status{
 		Status:  metav1.StatusFailure,
@@ -49,6 +54,9 @@ func (e errNotAcceptable) Status() metav1.Status {
 
 // errNotAcceptableConversion indicates Accept negotiation has failed specifically
 // for a conversion to a known type.
+//
+// 与 errNotAcceptable 的区别是携带 target，便于客户端知道是"哪种转换"不被接受，
+// 例如请求 Table 输出但协商到了 protobuf 时。
 type errNotAcceptableConversion struct {
 	target   string
 	accepted []string
@@ -89,6 +97,7 @@ func (e errUnsupportedMediaType) Error() string {
 	return fmt.Sprintf("the body of the request was in an unknown format - accepted media types include: %v", strings.Join(e.accepted, ", "))
 }
 
+// Status 映射为 HTTP 415：请求体格式无法解析，与 406（响应格式无法满足）语义不同。
 func (e errUnsupportedMediaType) Status() metav1.Status {
 	return metav1.Status{
 		Status:  metav1.StatusFailure,

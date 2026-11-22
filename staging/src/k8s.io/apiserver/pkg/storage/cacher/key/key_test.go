@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestHasPathPrefix 用正反用例固定路径前缀的边界语义：
+// 精确匹配、斜杠边界、UTF-8 多字节前缀，以及不做路径归一化。
 func TestHasPathPrefix(t *testing.T) {
 	validTestcases := []struct {
 		s      string

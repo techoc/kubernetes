@@ -51,20 +51,24 @@ import (
 )
 
 const (
-	sampleText        = "abcdefghijklmnopqrstuvwxyz"
+	// sampleText 是测试用的明文样本
+	sampleText = "abcdefghijklmnopqrstuvwxyz"
+	// sampleContextText 是测试用的关联数据（AAD）样本
 	sampleContextText = "0123456789"
 )
 
 var (
+	// sampleInvalidKeyID 是超过 KeyIDMaxSize 的 keyID，用于验证长度校验。
 	sampleInvalidKeyID = string(make([]byte, envelopekmsv2.KeyIDMaxSize+1))
 )
 
-// testEnvelopeService is a mock envelope service which can be used to simulate remote Envelope services
-// for testing of the envelope transformer with other transformers.
+// testEnvelopeService 是模拟远端 Envelope 服务的 mock，
+// 用于在与其他 transformer 组合时测试 envelope transformer。
 type testEnvelopeService struct {
 	err error
 }
 
+// Decrypt 对 base64 数据解码；设置了 err 时直接返回错误。
 func (t *testEnvelopeService) Decrypt(data []byte) ([]byte, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -72,6 +76,7 @@ func (t *testEnvelopeService) Decrypt(data []byte) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(string(data))
 }
 
+// Encrypt 对数据做 base64 编码；设置了 err 时直接返回错误。
 func (t *testEnvelopeService) Encrypt(data []byte) ([]byte, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -79,8 +84,8 @@ func (t *testEnvelopeService) Encrypt(data []byte) ([]byte, error) {
 	return []byte(base64.StdEncoding.EncodeToString(data)), nil
 }
 
-// testKMSv2EnvelopeService is a mock kmsv2 envelope service which can be used to simulate remote Envelope v2 services
-// for testing of the envelope transformer with other transformers.
+// testKMSv2EnvelopeService 是模拟远端 KMS v2 Envelope 服务的 mock，
+// 记录 Encrypt 调用次数以支持 DEK 轮换相关断言。
 type testKMSv2EnvelopeService struct {
 	err                error
 	keyID              string
@@ -88,6 +93,7 @@ type testKMSv2EnvelopeService struct {
 	encryptAnnotations map[string][]byte
 }
 
+// Decrypt 解码 base64 密文。
 func (t *testKMSv2EnvelopeService) Decrypt(ctx context.Context, uid string, req *kmsservice.DecryptRequest) ([]byte, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -95,6 +101,7 @@ func (t *testKMSv2EnvelopeService) Decrypt(ctx context.Context, uid string, req 
 	return base64.StdEncoding.DecodeString(string(req.Ciphertext))
 }
 
+// Encrypt 统计调用次数并返回 base64 密文、固定 keyID 与注解。
 func (t *testKMSv2EnvelopeService) Encrypt(ctx context.Context, uid string, data []byte) (*kmsservice.EncryptResponse, error) {
 	t.encryptCalls++
 	if t.err != nil {
@@ -107,6 +114,7 @@ func (t *testKMSv2EnvelopeService) Encrypt(ctx context.Context, uid string, data
 	}, nil
 }
 
+// Status 返回健康状态；版本固定为 v2beta1。
 func (t *testKMSv2EnvelopeService) Status(ctx context.Context) (*kmsservice.StatusResponse, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -114,31 +122,33 @@ func (t *testKMSv2EnvelopeService) Status(ctx context.Context) (*kmsservice.Stat
 	return &kmsservice.StatusResponse{Healthz: "ok", KeyID: t.keyID, Version: "v2beta1"}, nil
 }
 
-// The factory method to create mock envelope service.
+// newMockEnvelopeService 是创建 mock envelope 服务的工厂。
 func newMockEnvelopeService(ctx context.Context, endpoint string, timeout time.Duration) (envelope.Service, error) {
 	return &testEnvelopeService{nil}, nil
 }
 
-// The factory method to create mock envelope service which always returns error.
+// newMockErrorEnvelopeService 是始终返回错误的 mock envelope 服务工厂。
 func newMockErrorEnvelopeService(endpoint string, timeout time.Duration) (envelope.Service, error) {
 	return &testEnvelopeService{errors.New("test")}, nil
 }
 
-// The factory method to create mock envelope kmsv2 service.
+// newMockEnvelopeKMSv2Service 是创建 mock KMS v2 服务的工厂。
 func newMockEnvelopeKMSv2Service(ctx context.Context, endpoint, providerName string, timeout time.Duration) (kmsservice.Service, error) {
 	return &testKMSv2EnvelopeService{nil, "1", 0, nil}, nil
 }
 
-// The factory method to create mock envelope kmsv2 service which always returns error.
+// newMockErrorEnvelopeKMSv2Service 是始终返回错误的 mock KMS v2 服务工厂。
 func newMockErrorEnvelopeKMSv2Service(endpoint string, timeout time.Duration) (kmsservice.Service, error) {
 	return &testKMSv2EnvelopeService{errors.New("test"), "1", 0, nil}, nil
 }
 
-// The factory method to create mock envelope kmsv2 service that always returns invalid keyID.
+// newMockInvalidKeyIDEnvelopeKMSv2Service 是总是返回非法 keyID 的 mock KMS v2 服务工厂。
 func newMockInvalidKeyIDEnvelopeKMSv2Service(ctx context.Context, endpoint string, timeout time.Duration, keyID string) (kmsservice.Service, error) {
 	return &testKMSv2EnvelopeService{nil, keyID, 0, nil}, nil
 }
 
+// TestLegacyConfig 验证旧版（v1beta1 之前风格）配置文件能被正确解析并转换为
+// 内部 EncryptionConfiguration，包括 identity/aesgcm/kms/aescbc/secretbox 各类 provider。
 func TestLegacyConfig(t *testing.T) {
 	legacyV1Config := "testdata/valid-configs/legacy.yaml"
 	legacyConfigObject, _, err := loadConfig(legacyV1Config, false)
@@ -186,10 +196,14 @@ func TestLegacyConfig(t *testing.T) {
 	}
 }
 
+// TestEncryptionProviderConfigCorrect 验证各类 provider 组合的端到端行为：
+// 每种顺序的配置都能加载、KMSCloseGracePeriod 计算正确，
+// 并且用任一 transformer 写入的数据可被所有 transformer 读出
+// （读到非自身写入的数据时应报告 stale）。
 func TestEncryptionProviderConfigCorrect(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
-	// Set factory for mock envelope service
+	// 替换 envelope 服务工厂为 mock，避免测试依赖真实 KMS 插件
 	factory := envelopeServiceFactory
 	factoryKMSv2 := EnvelopeKMSv2ServiceFactory
 	envelopeServiceFactory = newMockEnvelopeService
@@ -201,10 +215,10 @@ func TestEncryptionProviderConfigCorrect(t *testing.T) {
 
 	ctx := testContext(t)
 
-	// Creates compound/prefix transformers with different ordering of available transformers.
-	// Transforms data using one of them, and tries to untransform using the others.
-	// Repeats this for all possible combinations.
-	// Math for GracePeriod is explained at - https://github.com/kubernetes/kubernetes/blob/c9ed04762f94a319d7b1fb718dc345491a32bea6/staging/src/k8s.io/apiserver/pkg/server/options/encryptionconfig/config.go#L159-L163
+	// 构造各种可用 transformer 的不同排序，用其中一个加密，再尝试用其余解密，
+	// 对所有组合重复这一过程。
+	// GracePeriod 的计算见 config.go 中对应注释，原始推导见：
+	// https://github.com/kubernetes/kubernetes/blob/c9ed04762f94a319d7b1fb718dc345491a32bea6/staging/src/k8s.io/apiserver/pkg/server/options/encryptionconfig/config.go#L159-L163
 	expectedKMSCloseGracePeriod := 46 * time.Second
 	correctConfigWithIdentityFirst := "testdata/valid-configs/identity-first.yaml"
 	identityFirstEncryptionConfiguration, err := LoadEncryptionConfig(ctx, correctConfigWithIdentityFirst, false, "")
@@ -326,6 +340,8 @@ func TestEncryptionProviderConfigCorrect(t *testing.T) {
 	}
 }
 
+// TestKMSv1Deprecation 验证 KMSv1 feature gate 关闭时，含 KMSv1 provider 的配置
+// 会返回弃用错误；打开时则可正常加载。
 func TestKMSv1Deprecation(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -357,6 +373,8 @@ func TestKMSv1Deprecation(t *testing.T) {
 	}
 }
 
+// TestKMSvsEnablement 验证 KMSv1/KMSv2 feature gate 组合与配置中 provider 组合的
+// 兼容性：混用或使用被禁用版本的配置应在加载阶段报错。
 func TestKMSvsEnablement(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -456,6 +474,8 @@ func TestKMSvsEnablement(t *testing.T) {
 	}
 }
 
+// TestKMSMaxTimeout 验证 KMSCloseGracePeriod 的计算与 KMS provider 超时的关系，
+// 并覆盖非法 provider 配置的报错路径。
 func TestKMSMaxTimeout(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
@@ -704,6 +724,9 @@ func TestKMSMaxTimeout(t *testing.T) {
 	}
 }
 
+// TestKMSPluginHealthz 验证由加密配置生成的 healthz 检查项：
+// 配置非法时返回错误；KMSv1/KMSv2 provider 会分别产生对应的探针，
+// 且探针名与期望一致。
 func TestKMSPluginHealthz(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
@@ -854,7 +877,7 @@ func TestKMSPluginHealthz(t *testing.T) {
 	}
 }
 
-// tests for masking rules
+// 通配符掩码规则的测试。
 func TestWildcardMasking(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
@@ -1264,6 +1287,8 @@ func TestWildcardMasking(t *testing.T) {
 	}
 }
 
+// TestWildcardStructure 验证通配符资源（如 "*.apps"、"*."）的匹配结构：
+// 掩码后每个具体资源应映射到正确的 transformer，且不允许歧义或重复覆盖。
 func TestWildcardStructure(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 	testCases := []struct {
@@ -1443,6 +1468,8 @@ func TestWildcardStructure(t *testing.T) {
 	}
 }
 
+// TestKMSPluginHealthzTTL 验证 KMSv1 探针根据检查结果切换 TTL：
+// 健康时用较长的正 TTL，失败时用较短的负 TTL 以便快速重试。
 func TestKMSPluginHealthzTTL(t *testing.T) {
 	ctx := testContext(t)
 
@@ -1488,6 +1515,7 @@ func TestKMSPluginHealthzTTL(t *testing.T) {
 	}
 }
 
+// TestKMSv2PluginHealthzTTL 验证 KMSv2 探针的 TTL 切换逻辑与 KMSv1 一致。
 func TestKMSv2PluginHealthzTTL(t *testing.T) {
 	ctx := testContext(t)
 
@@ -1534,6 +1562,8 @@ func TestKMSv2PluginHealthzTTL(t *testing.T) {
 	}
 }
 
+// TestKMSv2InvalidKeyID 验证 Status RPC 返回空 keyID 或超长 keyID 时，
+// 探针会记录 invalid_key_id 指标（按 error 标签区分），合法 keyID 则不计数。
 func TestKMSv2InvalidKeyID(t *testing.T) {
 	ctx := testContext(t)
 	invalidKeyIDService, _ := newMockInvalidKeyIDEnvelopeKMSv2Service(ctx, "unix:///tmp/testprovider.sock", 3*time.Second, "")
@@ -1613,6 +1643,8 @@ func TestKMSv2InvalidKeyID(t *testing.T) {
 	}
 }
 
+// TestCBCKeyRotationWithOverlappingProviders 验证两个配置存在重叠 provider 时
+// 的 AES-CBC 密钥轮换：旧配置写入的数据应能被新配置读取，反之亦然。
 func TestCBCKeyRotationWithOverlappingProviders(t *testing.T) {
 	testCBCKeyRotationWithProviders(
 		t,
@@ -1623,6 +1655,8 @@ func TestCBCKeyRotationWithOverlappingProviders(t *testing.T) {
 	)
 }
 
+// TestCBCKeyRotationWithoutOverlappingProviders 验证两个配置没有重叠 provider 时
+// 仍可通过各自持有的密钥完成跨配置读取（密钥轮换的兼容性场景）。
 func TestCBCKeyRotationWithoutOverlappingProviders(t *testing.T) {
 	testCBCKeyRotationWithProviders(
 		t,
@@ -1633,6 +1667,9 @@ func TestCBCKeyRotationWithoutOverlappingProviders(t *testing.T) {
 	)
 }
 
+// testCBCKeyRotationWithProviders 是两类 CBC 轮换测试的共用逻辑：
+// 用第一份配置加密，验证前缀与往返；再用第二份配置读取（应报告 stale），
+// 最后用第二份配置重新加密并验证前缀。
 func testCBCKeyRotationWithProviders(t *testing.T, firstEncryptionConfig, firstPrefix, secondEncryptionConfig, secondPrefix string) {
 	p := getTransformerFromEncryptionConfig(t, firstEncryptionConfig)
 
@@ -1686,6 +1723,8 @@ func testCBCKeyRotationWithProviders(t *testing.T, firstEncryptionConfig, firstP
 	}
 }
 
+// getTransformerFromEncryptionConfig 加载配置并返回其唯一的 transformer；
+// 测试辅助函数，要求配置恰好包含一个资源。
 func getTransformerFromEncryptionConfig(t *testing.T, encryptionConfigPath string) value.Transformer {
 	ctx := testContext(t)
 
@@ -1703,6 +1742,8 @@ func getTransformerFromEncryptionConfig(t *testing.T, encryptionConfigPath strin
 	panic("unreachable")
 }
 
+// TestIsKMSv2ProviderHealthyError 验证 KMSv2 status 响应的健康判定：
+// healthz 非 ok、版本不匹配、keyID 非法等情况都应返回错误并记录相应指标。
 func TestIsKMSv2ProviderHealthyError(t *testing.T) {
 	probe := &kmsv2PluginProbe{name: "testplugin"}
 
@@ -1781,7 +1822,7 @@ func TestIsKMSv2ProviderHealthyError(t *testing.T) {
 	}
 }
 
-// test to ensure KMSv2 API version is not changed after the first status response
+// 确保首次 status 响应之后 KMSv2 API 版本不再变化。
 func TestKMSv2SameVersionFromStatus(t *testing.T) {
 	probe := &kmsv2PluginProbe{name: "testplugin"}
 	service, _ := newMockEnvelopeKMSv2Service(testContext(t), "unix:///tmp/testprovider.sock", "providerName", 3*time.Second)
@@ -1827,12 +1868,14 @@ func TestKMSv2SameVersionFromStatus(t *testing.T) {
 	}
 }
 
+// testContext 返回带测试清理的可取消 context。
 func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	return ctx
 }
 
+// errString 把 error 转成字符串，nil 时返回空串，便于与期望子串比较。
 func errString(err error) string {
 	if err == nil {
 		return ""
@@ -1841,8 +1884,10 @@ func errString(err error) string {
 	return err.Error()
 }
 
+// TestComputeEncryptionConfigHash 通过空字符串的 sha256 已知值，
+// 确认 computeEncryptionConfigHash 确实使用 sha256 并带有 "sha256:" 前缀。
 func TestComputeEncryptionConfigHash(t *testing.T) {
-	// hash the empty string to be sure that sha256 is being used
+	// 对空字符串做哈希，以确认使用的是 sha256
 	expect := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	sum := computeEncryptionConfigHash([]byte(""))
 	if expect != sum {
@@ -1850,6 +1895,9 @@ func TestComputeEncryptionConfigHash(t *testing.T) {
 	}
 }
 
+// Test_kmsv2PluginProbe_rotateDEKOnKeyIDChange 验证 KMSv2 探针在 keyID 变化、
+// 过期、useSeed 配置切换等情况下是否正确地决定“是否重新生成 DEK”：
+// 通过 wantEncryptCalls 断言是否调用了 Encrypt，通过 wantLogs 断言关键日志。
 func Test_kmsv2PluginProbe_rotateDEKOnKeyIDChange(t *testing.T) {
 	defaultUseSeed := GetKDF("")
 
@@ -2170,6 +2218,8 @@ func Test_kmsv2PluginProbe_rotateDEKOnKeyIDChange(t *testing.T) {
 	}
 }
 
+// validState 用给定 keyID 与是否使用 seed 生成一个完整的 envelopekmsv2.State，
+// 作为 rotateDEK 测试的“已有状态”输入。
 func validState(t *testing.T, keyID string, exp time.Time, useSeed bool) envelopekmsv2.State {
 	t.Helper()
 
@@ -2188,6 +2238,7 @@ func validState(t *testing.T, keyID string, exp time.Time, useSeed bool) envelop
 	}
 }
 
+// logLines 把 klog 输出拆成行并去掉时间戳/级别前缀，便于与期望日志比较。
 func logLines(logs string) []string {
 	if len(logs) == 0 {
 		return nil
@@ -2200,6 +2251,8 @@ func logLines(logs string) []string {
 	return lines
 }
 
+// TestGetEncryptionConfigHash 验证 GetEncryptionConfigHash 对空文件、缺失文件
+// 返回明确错误，对合法文件返回稳定的 sha256 哈希。
 func TestGetEncryptionConfigHash(t *testing.T) {
 	t.Parallel()
 

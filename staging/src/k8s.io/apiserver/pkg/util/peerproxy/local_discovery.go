@@ -25,6 +25,9 @@ import (
 
 // RunLocalDiscoveryCacheSync populated the localDiscoveryInfoCache and
 // starts a goroutine to periodically refresh the local discovery cache.
+//
+// 初始填充失败会直接返回错误，阻止 server 启动：没有发现缓存就无法判断某资源应由本机
+// 还是 peer 处理，贸然运行会把请求转发到错误的位置。
 func (h *peerProxyHandler) RunLocalDiscoveryCacheSync(stopCh <-chan struct{}) error {
 	klog.Info("localDiscoveryCacheInvalidation goroutine started")
 	// Populate the cache initially.
@@ -37,6 +40,7 @@ func (h *peerProxyHandler) RunLocalDiscoveryCacheSync(stopCh <-chan struct{}) er
 			select {
 			case <-h.localDiscoveryCacheTicker.C:
 				klog.V(4).Infof("Invalidating local discovery cache")
+				// 刷新失败时保留旧缓存：旧数据只是可能过时，总比完全没有数据导致全部请求被转发要好。
 				if err := h.populateLocalDiscoveryCache(); err != nil {
 					klog.Errorf("Failed to repopulate local discovery cache: %v", err)
 				}
@@ -54,12 +58,15 @@ func (h *peerProxyHandler) RunLocalDiscoveryCacheSync(stopCh <-chan struct{}) er
 	return nil
 }
 
+// populateLocalDiscoveryCache 从 discovery 拉取全部 group/version 的资源列表，
+// 并重建 GVR 集合后整体替换缓存。
 func (h *peerProxyHandler) populateLocalDiscoveryCache() error {
 	_, resourcesByGV, _, err := h.discoveryClient.GroupsAndMaybeResources()
 	if err != nil {
 		return fmt.Errorf("error getting API group resources from discovery: %w", err)
 	}
 
+	// 先构建新集合再一次性替换，避免读者看到部分填充的缓存。
 	freshLocalDiscoveryResponse := map[schema.GroupVersionResource]bool{}
 	for gv, resources := range resourcesByGV {
 		for _, resource := range resources.APIResources {
@@ -78,6 +85,8 @@ func (h *peerProxyHandler) populateLocalDiscoveryCache() error {
 
 // shouldServeLocally checks if the requested resource is present in the local
 // discovery cache indicating the request can be served by this server.
+//
+// 缓存缺失或类型异常时返回 false（交给 peer 处理），属于保守选择。
 func (h *peerProxyHandler) shouldServeLocally(gvr schema.GroupVersionResource) bool {
 	cacheValue := h.localDiscoveryInfoCache.Load()
 	if cacheValue == nil {

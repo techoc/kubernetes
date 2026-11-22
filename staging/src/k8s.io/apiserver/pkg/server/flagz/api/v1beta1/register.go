@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	// GroupName 是 flagz 使用的 API 组；Version 固定为 v1beta1。
 	GroupName = "config.k8s.io"
 	Version   = "v1beta1"
 )
@@ -39,6 +40,7 @@ var (
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
+	// 只注册 Flagz；metav1.AddToGroupVersion 负责注册 ListOptions 等元类型。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Flagz{},
 	)

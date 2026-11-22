@@ -23,6 +23,9 @@ import (
 	"time"
 )
 
+// TestRealEventClock 验证 EventAfterDuration 与 EventAfterTime 都会在
+// 不早于请求时刻触发，且两种调度方式混合时触发顺序仍按时间递增。
+// 用例故意使用真实的 4 秒等待，因此属于慢测试。
 func TestRealEventClock(t *testing.T) {
 	ec := Real{}
 	var numDone int32
@@ -46,6 +49,8 @@ func TestRealEventClock(t *testing.T) {
 	}
 	try(true, time.Millisecond*3300)
 	for i := 0; i < batchSize; i++ {
+		// 部分延迟为负（rand.Intn(30)-3 可能小于 0），用于验证过期时间
+		// 会立即触发而不是被丢弃。
 		d := time.Duration(rand.Intn(30)-3) * time.Millisecond * 100
 		try(i%2 == 0, d)
 	}
@@ -56,6 +61,7 @@ func TestRealEventClock(t *testing.T) {
 	lastTime := now
 	for i := 0; i <= batchSize; i++ {
 		nextTime := <-times
+		// 立即触发的过期事件时间戳可能早于 now，跳过它们再检查单调性。
 		if nextTime.Before(now) {
 			continue
 		}

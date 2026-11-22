@@ -36,10 +36,12 @@ var (
 
 func init() {
 	utilruntime.Must(admissionregistrationv1.AddToScheme(testScheme))
+	// v1.List 与 v1.Status 是无版本类型，需要显式注册才能解码 List 文件。
 	testScheme.AddUnversionedTypes(metav1.SchemeGroupVersion, &metav1.List{}, &metav1.Status{})
 	testCodecs = serializer.NewCodecFactory(testScheme, serializer.EnableStrict)
 }
 
+// acceptTestPolicy 模拟生产环境中的类型接受函数，同时接受单个对象与 List。
 func acceptTestPolicy(obj runtime.Object) ([]*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
 	switch p := obj.(type) {
 	case *admissionregistrationv1.ValidatingAdmissionPolicy:
@@ -55,6 +57,7 @@ func acceptTestPolicy(obj runtime.Object) ([]*admissionregistrationv1.Validating
 	}
 }
 
+// acceptTestBinding 模拟生产环境中的类型接受函数，同时接受单个对象与 List。
 func acceptTestBinding(obj runtime.Object) ([]*admissionregistrationv1.ValidatingAdmissionPolicyBinding, error) {
 	switch b := obj.(type) {
 	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
@@ -70,6 +73,8 @@ func acceptTestBinding(obj runtime.Object) ([]*admissionregistrationv1.Validatin
 	}
 }
 
+// TestLoadPolicyManifests 覆盖从目录加载静态策略清单的主要场景：正常加载、
+// 空目录、悬空引用、重名、类型不支持、List 文件、以及参数化策略的拒绝。
 func TestLoadPolicyManifests(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -80,6 +85,7 @@ func TestLoadPolicyManifests(t *testing.T) {
 		wantErrContain string
 	}{
 		{
+			// 正常路径：一个策略 + 一个绑定，绑定引用已存在的策略。
 			name: "load policy and binding",
 			files: map[string]string{
 				"policy.yaml": `
@@ -112,12 +118,14 @@ spec:
 			wantBindings: 1,
 		},
 		{
+			// 空目录是合法配置：静态清单可选。
 			name:         "empty directory",
 			files:        map[string]string{},
 			wantPolicies: 0,
 			wantBindings: 0,
 		},
 		{
+			// 悬空引用必须在加载期拒绝，否则策略永远不会生效且难以排查。
 			name: "binding references non-existent policy",
 			files: map[string]string{
 				"binding.yaml": `
@@ -135,6 +143,7 @@ spec:
 			wantErrContain: "does not exist",
 		},
 		{
+			// 同一名称在两个文件中出现时，后加载的会静默覆盖前者，因此必须报错。
 			name: "duplicate policy names",
 			files: map[string]string{
 				"01-policy.yaml": `
@@ -172,6 +181,7 @@ spec:
 			wantErrContain: "duplicate",
 		},
 		{
+			// 目录中出现非策略类型（如 ConfigMap）应导致加载失败。
 			name: "unsupported resource type",
 			files: map[string]string{
 				"wrong.yaml": `
@@ -185,6 +195,7 @@ metadata:
 			wantErrContain: "error loading",
 		},
 		{
+			// v1.List 允许把多个对象打包进一个文件，加载器需逐个展开。
 			name: "v1.List with policy and binding",
 			files: map[string]string{
 				"list.yaml": `
@@ -218,6 +229,7 @@ items:
 			wantBindings: 1,
 		},
 		{
+			// 静态清单不支持 paramKind：静态文件无法引用集群内对象。
 			name: "policy with paramKind rejected",
 			files: map[string]string{
 				"policy.yaml": `
@@ -243,6 +255,7 @@ spec:
 			wantErrContain: "paramKind is not supported",
 		},
 		{
+			// 同理，绑定上的 paramRef 也不被静态清单支持。
 			name: "binding with paramRef rejected",
 			files: map[string]string{
 				"policy.yaml": `
@@ -278,6 +291,8 @@ spec:
 			wantErrContain: "paramRef",
 		},
 		{
+			// 静态策略名称带 .static.k8s.io 后缀，绑定引用也必须带后缀，
+			// 否则无法区分静态策略与 API 策略。
 			name: "binding policyName missing static suffix",
 			files: map[string]string{
 				"binding.yaml": `
@@ -298,6 +313,7 @@ spec:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 每个用例使用独立临时目录，避免文件互相影响。
 			dir := t.TempDir()
 			for name, content := range tt.files {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
@@ -336,6 +352,8 @@ spec:
 	}
 }
 
+// TestValidateBindingReferences 验证绑定引用校验：所有绑定都指向存在的策略时
+// 通过，存在悬空引用时报错。
 func TestValidateBindingReferences(t *testing.T) {
 	policies := []*admissionregistrationv1.ValidatingAdmissionPolicy{
 		{ObjectMeta: metav1.ObjectMeta{Name: "policy-a"}},

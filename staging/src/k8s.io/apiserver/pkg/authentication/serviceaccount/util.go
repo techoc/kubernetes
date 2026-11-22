@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package serviceaccount 提供 ServiceAccount 用户名/组名的构造与解析工具。
+// 用户名格式固定为 system:serviceaccount:<namespace>:<name>，这个格式是
+// 授权策略与审计日志的稳定契约，不能随意更改。
 package serviceaccount
 
 import (
@@ -81,6 +84,8 @@ func MakeUsername(namespace, name string) string {
 
 // MatchesUsername checks whether the provided username matches the namespace and name without
 // allocating. Use this when checking a service account namespace and name against a known string.
+//
+// 逐段比较前缀而不是先拆分再拼装，避免认证热路径上产生额外分配。
 func MatchesUsername(namespace, name string, username string) bool {
 	if !strings.HasPrefix(username, ServiceAccountUsernamePrefix) {
 		return false
@@ -104,6 +109,9 @@ var invalidUsernameErr = fmt.Errorf("Username must be in the form %s", MakeUsern
 
 // SplitUsername returns the namespace and ServiceAccount name embedded in the given username,
 // or an error if the username is not a valid name produced by MakeUsername
+//
+// 除格式外还校验 namespace 与 name 是否符合 API 命名规则：用户名可能来自用户可控
+// 的输入（例如 impersonation 头），必须拒绝能构造出非法对象名的情况。
 func SplitUsername(username string) (string, string, error) {
 	if !strings.HasPrefix(username, ServiceAccountUsernamePrefix) {
 		return "", "", invalidUsernameErr
@@ -124,6 +132,8 @@ func SplitUsername(username string) (string, string, error) {
 }
 
 // MakeGroupNames generates service account group names for the given namespace
+//
+// 每个 ServiceAccount 同时属于全局组和本 namespace 组，RBAC 可以按其中之一授权。
 func MakeGroupNames(namespace string) []string {
 	return []string{
 		AllServiceAccountsGroup,
@@ -145,6 +155,9 @@ func UserInfo(namespace, name, uid string) user.Info {
 	}).UserInfo()
 }
 
+// ServiceAccountInfo 汇总构造 user.Info 所需的 ServiceAccount 身份信息。
+// 可选字段（Pod/Node/webhook/attestation 等）只在调用方确实提供时写入 Extra，
+// 这样审计与授权逻辑可以据此区分 token 的来源与绑定对象。
 type ServiceAccountInfo struct {
 	Name, Namespace, UID                                                  string
 	PodName, PodUID                                                       string
@@ -155,6 +168,7 @@ type ServiceAccountInfo struct {
 	AttestationAdmissionReviewAPIGroups                                   []string
 }
 
+// UserInfo 把 ServiceAccountInfo 转换为 user.Info，并填充所有已设置的 Extra 键。
 func (sa *ServiceAccountInfo) UserInfo() user.Info {
 	info := &user.DefaultInfo{
 		Name:   MakeUsername(sa.Namespace, sa.Name),
@@ -212,6 +226,9 @@ func (sa *ServiceAccountInfo) UserInfo() user.Info {
 }
 
 // IsServiceAccountToken returns true if the secret is a valid api token for the service account
+//
+// 只检查类型与注解中的 name/uid，不验证 secret 内容；用于垃圾回收时判断
+// 某个旧式 token Secret 是否仍属于该 ServiceAccount。
 func IsServiceAccountToken(secret *v1.Secret, sa *v1.ServiceAccount) bool {
 	if secret.Type != v1.SecretTypeServiceAccountToken {
 		return false

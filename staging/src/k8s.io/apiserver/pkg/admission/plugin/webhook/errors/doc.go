@@ -15,4 +15,6 @@ limitations under the License.
 */
 
 // Package errors contains utilities for admission webhook specific errors
+// 把 webhook 调用失败转换为带合适状态码的 API StatusError，
+// 让客户端能区分 webhook 拒绝与 apiserver 内部错误。
 package errors

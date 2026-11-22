@@ -36,6 +36,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// intervalFromEvents 用给定事件构造一个覆盖 [0,len) 的 watchCacheInterval。
+// locker 用独立互斥锁，避免依赖真实 watchCache 的锁。
 func intervalFromEvents(events []*watchCacheEvent) *watchCacheInterval {
 	startIndex, endIndex, locker := 0, len(events), &sync.Mutex{}
 	indexer := func(i int) *watchCacheEvent {
@@ -49,10 +51,12 @@ func intervalFromEvents(events []*watchCacheEvent) *watchCacheInterval {
 	return newCacheInterval(startIndex, endIndex, indexer, indexValidator, 0, locker)
 }
 
+// historySource 断言并取出 interval 的 history 来源，简化测试中的类型断言。
 func historySource(wci *watchCacheInterval) *historyCacheIntervalSource {
 	return wci.source.(*historyCacheIntervalSource)
 }
 
+// bufferFromEvents 把事件复制进一个满起始的 interval buffer，模拟已填充状态。
 func bufferFromEvents(events []*watchCacheEvent) *watchCacheIntervalBuffer {
 	wcib := &watchCacheIntervalBuffer{
 		buffer:     make([]*watchCacheEvent, bufferSize),
@@ -64,6 +68,8 @@ func bufferFromEvents(events []*watchCacheEvent) *watchCacheIntervalBuffer {
 	return wcib
 }
 
+// generateEvents 生成 [start,end) 范围内的 Added 事件，resourceVersion 与序号一致，
+// 便于断言事件顺序。
 func generateEvents(start, end int) []*watchCacheEvent {
 	n := end - start
 	events := make([]*watchCacheEvent, n)
@@ -76,6 +82,7 @@ func generateEvents(start, end int) []*watchCacheEvent {
 	return events
 }
 
+// verifyEvent 校验 next 返回了预期事件；分别处理“无事件”“nil 事件”“内容不符”三种失败。
 func verifyEvent(ok bool, event, expectedEvent *watchCacheEvent) error {
 	if !ok {
 		return fmt.Errorf("expected event: %#v, got no event", expectedEvent)
@@ -92,6 +99,7 @@ func verifyEvent(ok bool, event, expectedEvent *watchCacheEvent) error {
 	return nil
 }
 
+// verifyNoEvent 校验 next 表示缓冲已耗尽且没有返回事件。
 func verifyNoEvent(ok bool, event *watchCacheEvent) error {
 	if ok {
 		return errors.New("unexpected bool value indicating buffer is not empty")
@@ -103,6 +111,7 @@ func verifyNoEvent(ok bool, event *watchCacheEvent) error {
 	return nil
 }
 
+// TestIntervalBufferIsFull 验证缓冲满的边界：恰好 bufferSize 即视为满，越界亦然。
 func TestIntervalBufferIsFull(t *testing.T) {
 	cases := []struct {
 		endIndex int
@@ -122,6 +131,7 @@ func TestIntervalBufferIsFull(t *testing.T) {
 	}
 }
 
+// TestIntervalBufferIsEmpty 验证 startIndex == endIndex 时为空，其余为非空。
 func TestIntervalBufferIsEmpty(t *testing.T) {
 	cases := []struct {
 		startIndex int
@@ -145,6 +155,7 @@ func TestIntervalBufferIsEmpty(t *testing.T) {
 	}
 }
 
+// TestIntervalBufferNext 验证按序取出全部事件后，下一次 next 返回空。
 func TestIntervalBufferNext(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -181,6 +192,8 @@ func TestIntervalBufferNext(t *testing.T) {
 	}
 }
 
+// TestFillBuffer 验证 fillBuffer 的分批填充：每消费 bufferSize 个事件后缓冲应耗尽，
+// 再次 fillBuffer 不应产生多余事件。覆盖 0、少于、等于、多于 bufferSize 四种规模。
 func TestFillBuffer(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -243,6 +256,9 @@ func TestFillBuffer(t *testing.T) {
 	}
 }
 
+// TestCacheIntervalNextFromWatchCache 验证从 watchCache 历史环形缓冲读取事件：
+// 覆盖未填满、恰好填满、超出容量三种传播程度，以及起始索引偏移；
+// 并在每次重新填充缓冲时人为缩短历史窗口，确认区间失效能被检测并返回错误。
 func TestCacheIntervalNextFromWatchCache(t *testing.T) {
 	// Have the capacity such that it facilitates
 	// filling the interval buffer more than once
@@ -373,6 +389,8 @@ func TestCacheIntervalNextFromWatchCache(t *testing.T) {
 	}
 }
 
+// TestCacheIntervalNextFromStore 验证从存储（而非历史缓冲）构造的区间能按 resourceVersion
+// 返回全部对象，且消费完后返回 nil 事件。
 func TestCacheIntervalNextFromStore(t *testing.T) {
 	getAttrsFunc := func(obj runtime.Object) (labels.Set, fields.Set, error) {
 		pod, ok := obj.(*v1.Pod)
@@ -438,6 +456,8 @@ func TestCacheIntervalNextFromStore(t *testing.T) {
 
 // TestCacheIntervalFromStoreSorted verifies newCacheIntervalFromStore returns
 // events sorted by Key for both indexer backends.
+//
+// 逆序插入是刻意的：任何按插入顺序返回的实现都会直接失败。
 func TestCacheIntervalFromStoreSorted(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -528,15 +548,18 @@ func TestCacheIntervalSourceSelection(t *testing.T) {
 	}
 }
 
+// countingSnapshot 记录 OrderedListPrefix 调用次数，用于验证惰性快照只读取一次。
 type countingSnapshot struct {
 	items                  []interface{}
 	orderedListPrefixCalls int
 }
 
+// GetByKey 始终未命中，模拟按 key 查询不支持的快照实现。
 func (s *countingSnapshot) GetByKey(string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
+// OrderedListPrefix 返回预置条目并计数。
 func (s *countingSnapshot) OrderedListPrefix(_, _ string) ([]interface{}, error) {
 	s.orderedListPrefixCalls++
 	return s.items, nil
@@ -544,6 +567,8 @@ func (s *countingSnapshot) OrderedListPrefix(_, _ string) ([]interface{}, error)
 
 // TestLazySnapshotCacheIntervalSourceEmpty checks that on an empty snapshot Next() returns
 // no events, and that repeated calls still read the snapshot only once.
+//
+// 只读一次是性能与一致性要求：重复读取会在快照变化时产生重复或遗漏。
 func TestLazySnapshotCacheIntervalSourceEmpty(t *testing.T) {
 	snap := &countingSnapshot{}
 	wci := newCacheIntervalFromLazySnapshot(100, snap)

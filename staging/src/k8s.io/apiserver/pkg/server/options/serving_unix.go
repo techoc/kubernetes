@@ -26,14 +26,19 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// permitPortReuse 在建立 socket 前设置 SO_REUSEPORT，允许多个 apiserver 实例监听同一端口，
+// 由内核做连接分发（例如滚动升级期间的零停机）。
 func permitPortReuse(network, addr string, conn syscall.RawConn) error {
 	return conn.Control(func(fd uintptr) {
 		if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
+			// 设置失败只告警：可能是不支持该选项的平台，此时退化为独占端口。
 			klog.Warningf("failed to set SO_REUSEPORT on socket: %v", err)
 		}
 	})
 }
 
+// permitAddressReuse 设置 SO_REUSEADDR，使重启时能立即重用仍处于 TIME_WAIT 的地址，
+// 避免因端口残留而启动失败。
 func permitAddressReuse(network, addr string, conn syscall.RawConn) error {
 	return conn.Control(func(fd uintptr) {
 		if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {

@@ -26,6 +26,8 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 )
 
+// TestStorageObjectCountTracker 覆盖 Get 的四种结果：未记录、计数为零、
+// 正常值、以及超过陈旧阈值后仍返回旧值但附带 ObjectCountStaleErr。
 func TestStorageObjectCountTracker(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -63,6 +65,7 @@ func TestStorageObjectCountTracker(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 用假时钟精确控制“上次更新时间”，无需真实等待。
 			fakeClock := &testclock.FakePassiveClock{}
 			tracker := &objectCountTracker{
 				clock:  fakeClock,
@@ -84,6 +87,7 @@ func TestStorageObjectCountTracker(t *testing.T) {
 			if test.countExpected != stats.ObjectCount {
 				t.Errorf("Expected count: %d, but got: %d", test.countExpected, stats.ObjectCount)
 			}
+			// 负数计数是无效输入，应被拒绝且不污染缓存。
 			if test.count <= -1 && len(tracker.counts) > 0 {
 				t.Errorf("Expected the cache to be empty, but got: %d", len(tracker.counts))
 			}
@@ -91,6 +95,8 @@ func TestStorageObjectCountTracker(t *testing.T) {
 	}
 }
 
+// TestStorageObjectCountTrackerWithPrune 验证 prune 只删除陈旧时间达到
+// 阈值的条目，边界上（恰好 60 分钟）的条目仍被保留。
 func TestStorageObjectCountTrackerWithPrune(t *testing.T) {
 	fakeClock := &testclock.FakePassiveClock{}
 	tracker := &objectCountTracker{

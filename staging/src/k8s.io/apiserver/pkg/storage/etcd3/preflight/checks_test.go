@@ -24,6 +24,7 @@ import (
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestParseServerURIGood 验证普通 etcd URL 能解析出正确的 host:port。
 func TestParseServerURIGood(t *testing.T) {
 	connURL, err := parseServerURI("https://127.0.0.1:2379")
 	if err != nil {
@@ -36,6 +37,7 @@ func TestParseServerURIGood(t *testing.T) {
 	}
 }
 
+// TestParseServerURIGoodUnix 验证 unix:// 形式的地址同样能解析出 host 部分。
 func TestParseServerURIGoodUnix(t *testing.T) {
 	connURL, err := parseServerURI("unix://127.0.0.1:21002112605")
 	if err != nil {
@@ -48,6 +50,7 @@ func TestParseServerURIGoodUnix(t *testing.T) {
 	}
 }
 
+// TestParseServerURIBad 验证非法 URI 会返回解析错误，而不是得到空 host。
 func TestParseServerURIBad(t *testing.T) {
 	_, err := parseServerURI("-invalid uri$@#%")
 	if err == nil {
@@ -55,6 +58,7 @@ func TestParseServerURIBad(t *testing.T) {
 	}
 }
 
+// TestEtcdConnection 验证不可达地址会被判定为不可用。
 func TestEtcdConnection(t *testing.T) {
 	etcd := new(EtcdConnection)
 
@@ -64,6 +68,7 @@ func TestEtcdConnection(t *testing.T) {
 	}
 }
 
+// TestCheckEtcdServersEmpty 验证 ServerList 为空时返回“不可用”而不是报错。
 func TestCheckEtcdServersEmpty(t *testing.T) {
 	etcd := new(EtcdConnection)
 	result, err := etcd.CheckEtcdServers()
@@ -75,6 +80,7 @@ func TestCheckEtcdServersEmpty(t *testing.T) {
 	}
 }
 
+// TestCheckEtcdServersUri 验证列表中任一地址非法时应显式报错。
 func TestCheckEtcdServersUri(t *testing.T) {
 	etcd := new(EtcdConnection)
 	etcd.ServerList = []string{"-invalid uri$@#%"}
@@ -87,6 +93,7 @@ func TestCheckEtcdServersUri(t *testing.T) {
 	}
 }
 
+// TestCheckEtcdServers 验证空字符串地址解析后不可达，返回“不可用”。
 func TestCheckEtcdServers(t *testing.T) {
 	etcd := new(EtcdConnection)
 	etcd.ServerList = []string{""}
@@ -99,6 +106,7 @@ func TestCheckEtcdServers(t *testing.T) {
 	}
 }
 
+// TestPollCheckServer 验证用极短超时轮询不可达服务时最终返回超时错误。
 func TestPollCheckServer(t *testing.T) {
 	err := utilwait.PollImmediate(1*time.Microsecond,
 		2*time.Microsecond,

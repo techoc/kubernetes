@@ -29,6 +29,9 @@ var (
 )
 
 // LegacyGroupName is the group name use in this package
+//
+// 旧的 resourcequota.admission.k8s.io 组名必须继续注册：已存在的配置对象可能仍以该组名
+// 序列化，删除会导致升级后配置无法解码。
 const LegacyGroupName = "resourcequota.admission.k8s.io"
 
 // LegacySchemeGroupVersion is group version used to register these objects
@@ -40,10 +43,13 @@ const GroupName = "apiserver.config.k8s.io"
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
+// addKnownTypes 同时注册新旧两个组名指向同一个内部 Configuration 类型，
+// 使旧配置文件在迁移期仍能被识别。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(LegacySchemeGroupVersion,
 		&Configuration{},
 	)
+	// 新组名下的 kind 名为 ResourceQuotaConfiguration，避免与其他 apiserver 配置重名。
 	scheme.AddKnownTypeWithName(SchemeGroupVersion.WithKind("ResourceQuotaConfiguration"),
 		&Configuration{},
 	)

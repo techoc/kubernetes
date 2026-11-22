@@ -30,6 +30,10 @@ import (
 
 // StorageReadinessHook implements PostStartHook functionality for checking readiness
 // of underlying storage for registered resources.
+//
+// StorageReadinessHook 在启动后等待各资源的底层存储（如 etcd 连接、
+// 迁移完成）就绪。它只在超时前尽力等待，超时后仅告警而不阻止启动，
+// 因为单点存储慢不应让整个控制面无法起来。
 type StorageReadinessHook struct {
 	timeout time.Duration
 
@@ -45,6 +49,8 @@ func NewStorageReadinessHook(timeout time.Duration) *StorageReadinessHook {
 	}
 }
 
+// RegisterStorage 为某 GVR 登记就绪检查。同一 GVR 重复登记只告警并
+// 保留首次的检查函数，避免后注册者覆盖已验证过的实现。
 func (h *StorageReadinessHook) RegisterStorage(gvr metav1.GroupVersionResource, storage rest.StorageWithReadiness) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -56,6 +62,8 @@ func (h *StorageReadinessHook) RegisterStorage(gvr metav1.GroupVersionResource, 
 	}
 }
 
+// check 串行执行全部检查，返回是否全部就绪。持锁执行是为了防止注册
+// 与遍历并发修改 map；检查本身应足够轻量。
 func (h *StorageReadinessHook) check() bool {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -74,6 +82,8 @@ func (h *StorageReadinessHook) check() bool {
 	return false
 }
 
+// Hook 以 100ms 间隔轮询直到全部就绪或超时。超时被视为非致命：返回
+// nil 让其余 post-start hook 继续执行，只记录告警。
 func (h *StorageReadinessHook) Hook(ctx PostStartHookContext) error {
 	deadlineCtx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()

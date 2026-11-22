@@ -36,6 +36,10 @@ import (
 
 var _ runtime.CacheableObject = &mockCacheableObject{}
 
+// mockCacheableObject 模拟支持缓存编码的存储对象。
+//
+// 中文说明：真实实现由 etcd 缓存提供，可在不重新序列化的情况下按目标格式
+// 编码；这里用包装对象验证 watch 编码器的解包逻辑。
 type mockCacheableObject struct {
 	gvk schema.GroupVersionKind
 	obj runtime.Object
@@ -62,6 +66,8 @@ func (m *mockCacheableObject) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 }
 
 // CacheEncode implements runtime.CacheableObject interface.
+//
+// 中文说明：先深拷贝再编码，模拟缓存对象的不可变语义，防止编码过程改动缓存内容。
 func (m *mockCacheableObject) CacheEncode(id runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	return encode(m.obj.DeepCopyObject(), w)
 }
@@ -71,16 +77,19 @@ func (m *mockCacheableObject) GetObject() runtime.Object {
 	return m.obj
 }
 
+// mockNamer 返回空名字，满足 RequestScope 对 Namer 的最小依赖。
 type mockNamer struct{}
 
 func (*mockNamer) Namespace(_ *http.Request) (string, error)           { return "", nil }
 func (*mockNamer) Name(_ *http.Request) (string, string, error)        { return "", "", nil }
 func (*mockNamer) ObjectName(_ runtime.Object) (string, string, error) { return "", "", nil }
 
+// mockEncoder 记录被编码的对象，便于断言最终写出的是什么。
 type mockEncoder struct {
 	obj runtime.Object
 }
 
+// Encode 保存对象并返回成功，不实际写字节。
 func (e *mockEncoder) Encode(obj runtime.Object, _ io.Writer) error {
 	e.obj = obj
 	return nil
@@ -90,6 +99,10 @@ func (e *mockEncoder) Identifier() runtime.Identifier {
 	return runtime.Identifier("")
 }
 
+// TestCacheableObject 验证 watch 编码器对缓存对象按目标类型做转换。
+//
+// 中文说明：目标 GVK 为 nil 时原样输出；为 PartialObjectMetadata 或 Table 时
+// 必须在编码前转换，否则客户端会收到与请求类型不符的对象。
 func TestCacheableObject(t *testing.T) {
 	pomGVK := metav1.SchemeGroupVersion.WithKind("PartialObjectMetadata")
 	tableGVK := metav1.SchemeGroupVersion.WithKind("Table")
@@ -148,6 +161,7 @@ func TestCacheableObject(t *testing.T) {
 			expectedObj: podMeta,
 			expectedErr: nil,
 		},
+		// NoHeaders + IncludeNone 让表格只有一行且无表头，便于精确比较。
 		{
 			desc:        "cacheableObject as Table",
 			object:      &mockCacheableObject{obj: pod},
@@ -181,6 +195,10 @@ func TestCacheableObject(t *testing.T) {
 	}
 }
 
+// TestAsPartialObjectMetadataList 验证列表转换保留 ListMeta。
+//
+// 中文说明：resourceVersion、continue token 与剩余数量是分页协议的一部分，
+// 转换时丢失会导致客户端分页错乱。
 func TestAsPartialObjectMetadataList(t *testing.T) {
 	var remainingItemCount int64 = 10
 	pods := &examplev1.PodList{
@@ -213,6 +231,10 @@ func TestAsPartialObjectMetadataList(t *testing.T) {
 	}
 }
 
+// TestWatchEncoderIdentifier 用反射守住 WatchEvent 的字段数。
+//
+// 中文说明：watchEncoder 的 identifier 与编码逻辑手写引用了 WatchEvent 的字段；
+// 一旦上游给 WatchEvent 增删字段，这里会失败以提醒同步修改，避免缓存键与输出脱节。
 func TestWatchEncoderIdentifier(t *testing.T) {
 	eventFields := reflect.VisibleFields(reflect.TypeOf(metav1.WatchEvent{}))
 	if len(eventFields) != 2 {

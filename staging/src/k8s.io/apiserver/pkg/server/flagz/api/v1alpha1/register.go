@@ -24,8 +24,11 @@ import (
 )
 
 const (
+	// GroupName 为 flagz 端点所属的 API 组。flagz 与 zpages 类似属于诊断接口，
+	// 不暴露在核心组中，避免污染 v1 API 的稳定性承诺。
 	GroupName = "config.k8s.io"
-	Version   = "v1alpha1"
+	// Version 为 flagz API 的版本，目前仅 v1alpha1。
+	Version = "v1alpha1"
 )
 
 // SchemeGroupVersion is group version used to register these objects
@@ -38,6 +41,8 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 向 scheme 注册 Flagz 类型，并加入组版本级的元数据（TypeMeta 等）。
+// 只注册 Flagz 一个类型：该端点只读，不提供 create/update 语义。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Flagz{},

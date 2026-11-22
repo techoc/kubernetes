@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package rules 判断一次准入请求是否命中 webhook 配置中的 RuleWithOperations。
+// 匹配维度包括 scope、operation、apiGroup、apiVersion 和 resource/subresource，
+// 语义与 ValidatingWebhookConfiguration/MutatingWebhookConfiguration 文档一致。
 package rules
 
 import (
@@ -26,12 +29,16 @@ import (
 )
 
 // Matcher determines if the Attr matches the Rule.
+//
+// 所有字段都是只读的；Matches 不会有副作用，可在同一 Matcher 上重复调用。
 type Matcher struct {
 	Rule v1.RuleWithOperations
 	Attr admission.Attributes
 }
 
 // Matches returns if the Attr matches the Rule.
+//
+// 五个条件必须同时满足（逻辑与）。各子检查独立求值，短路顺序无业务含义。
 func (r *Matcher) Matches() bool {
 	return r.scope() &&
 		r.operation() &&
@@ -40,6 +47,7 @@ func (r *Matcher) Matches() bool {
 		r.resource()
 }
 
+// exactOrWildcard 判断 requested 是否出现在 items 中，列表中包含 "*" 时视为匹配任意值。
 func exactOrWildcard(items []string, requested string) bool {
 	for _, item := range items {
 		if item == "*" {
@@ -53,8 +61,12 @@ func exactOrWildcard(items []string, requested string) bool {
 	return false
 }
 
+// namespaceResource 用于识别“对 namespaces 对象本身”的请求。
+// 这类请求的 namespace 字段被设置为目标 namespace 名，但对象本身是集群作用域的，
+// 必须单独处理，否则会被误判为 namespaced 请求。
 var namespaceResource = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
 
+// scope 实现作用域匹配：Rule.Scope 为空或 AllScopes 时匹配一切。
 func (r *Matcher) scope() bool {
 	if r.Rule.Scope == nil || *r.Rule.Scope == v1.AllScopes {
 		return true
@@ -72,14 +84,17 @@ func (r *Matcher) scope() bool {
 	}
 }
 
+// group 匹配 API group，支持 "*" 通配。
 func (r *Matcher) group() bool {
 	return exactOrWildcard(r.Rule.APIGroups, r.Attr.GetResource().Group)
 }
 
+// version 匹配 API version，支持 "*" 通配。
 func (r *Matcher) version() bool {
 	return exactOrWildcard(r.Rule.APIVersions, r.Attr.GetResource().Version)
 }
 
+// operation 匹配操作类型；OperationAll（"*"）匹配所有操作。
 func (r *Matcher) operation() bool {
 	attrOp := r.Attr.GetOperation()
 	for _, op := range r.Rule.Operations {
@@ -95,6 +110,8 @@ func (r *Matcher) operation() bool {
 	return false
 }
 
+// splitResource 把 "resource/subresource" 形式的规则项拆成两部分；
+// 没有 "/" 时 subresource 为空串。
 func splitResource(resSub string) (res, sub string) {
 	parts := strings.SplitN(resSub, "/", 2)
 	if len(parts) == 2 {
@@ -103,6 +120,10 @@ func splitResource(resSub string) (res, sub string) {
 	return parts[0], ""
 }
 
+// resource 匹配 resource 及其 subresource。
+// 规则项中的 "*" 与空字符串各有含义：资源部分的 "*" 匹配任意资源，
+// subresource 部分的 "*" 匹配“任意 subresource（含无 subresource 的情况）”。
+// 例如规则 "pods" 只匹配 pods 本身，而 "pods/*" 匹配 pods 的所有子资源。
 func (r *Matcher) resource() bool {
 	opRes, opSub := r.Attr.GetResource().Resource, r.Attr.GetSubresource()
 	for _, res := range r.Rule.Resources {
@@ -118,6 +139,10 @@ func (r *Matcher) resource() bool {
 
 // IsExemptAdmissionConfigurationResource determines if an admission.Attributes object is describing
 // the admission of a ValidatingWebhookConfiguration or a MutatingWebhookConfiguration or a ValidatingAdmissionPolicy or a ValidatingAdmissionPolicyBinding
+//
+// 对 admissionregistration.k8s.io 配置对象自身的请求豁免准入 webhook 与策略，
+// 否则自引用的策略可能导致递归或无法自举（bootstrap）——例如在集群还没有任何
+// 可用 webhook 时就无法创建第一个 webhook 配置。
 func IsExemptAdmissionConfigurationResource(attr admission.Attributes) bool {
 	gvk := attr.GetKind()
 	if gvk.Group == "admissionregistration.k8s.io" {

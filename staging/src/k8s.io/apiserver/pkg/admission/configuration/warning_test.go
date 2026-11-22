@@ -25,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestExcludedResourcesNamedByRule 验证按规则匹配“被排除资源”的逻辑：
+// 只有规则里显式列出的 group/resource 才应命中，通配符（'*'）故意不展开，
+// 因为通配符规则本身无法精确指向某个资源，误报会把整条 webhook 标记为
+// 可能影响认证/授权这类系统关键路径。
 func TestExcludedResourcesNamedByRule(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -55,6 +59,7 @@ func TestExcludedResourcesNamedByRule(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 固定一组默认排除项，模拟 apiserver 自带的“不应被 webhook 拦截”的资源集合。
 			excluded := sets.New(
 				schema.GroupResource{Group: "authentication.k8s.io", Resource: "tokenreviews"},
 				schema.GroupResource{Group: "authorization.k8s.io", Resource: "subjectaccessreviews"},
@@ -68,6 +73,9 @@ func TestExcludedResourcesNamedByRule(t *testing.T) {
 
 // TestLogExcludedResourcesForWebhook is a smoke test ensuring the logging helpers run without
 // panicking when no resources are excluded.
+//
+// 中文说明：这里只验证 mutating/validating 两条日志路径在“排除集合为空”时
+// 不会因 nil 集合或空切片而 panic；日志内容本身不是断言目标。
 func TestLogExcludedResourcesForWebhook(t *testing.T) {
 	logExcludedResourcesForValidatingWebhook("test-config", []v1.ValidatingWebhook{{
 		Name:  "test-webhook",

@@ -24,13 +24,18 @@ import (
 
 // ErrorType decodes the error to determine the error type
 // that the metrics understand.
+// 这里用错误字符串前缀而非错误类型来分类，是因为错误来自 CEL 编译与求值层，
+// 该层未导出可用于类型断言的错误值；改动上述错误消息会导致指标分类静默退化，
+// 因此这些字符串实际上构成隐式契约。
 func ErrorType(err error) celmetrics.MutationErrorType {
 	if err == nil {
 		return celmetrics.MutationNoError
 	}
+	// 编译期错误（如表达式类型不匹配、未知变量）单独计数，便于区分策略编写错误与运行时失败。
 	if strings.HasPrefix(err.Error(), "compilation") {
 		return celmetrics.MutationCompileError
 	}
+	// 预算耗尽说明策略本身合法但过于昂贵，属于需要策略作者关注的另一类问题。
 	if strings.HasPrefix(err.Error(), "validation failed due to running out of cost budget") {
 		return celmetrics.MutatingOutOfBudget
 	}

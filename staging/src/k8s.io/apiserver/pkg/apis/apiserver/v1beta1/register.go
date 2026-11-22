@@ -26,6 +26,9 @@ const GroupName = "apiserver.k8s.io"
 const ConfigGroupName = "apiserver.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// 中文说明：这是“运行时对象”使用的组，与配置文件组 apiserver.config.k8s.io
+// 分开，避免配置对象被当作普通 API 资源暴露。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 // ConfigSchemeGroupVersion is group version used to register these objects
@@ -43,10 +46,15 @@ func init() {
 	// We only register manually written functions here. The registration of the
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
+	//
+	// 中文说明：手写注册与生成代码分离，保证未运行生成器时包仍可编译。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
 // Adds the list of known types to the given scheme.
+//
+// 中文说明：EgressSelectorConfiguration 属于运行时组，其余三个是配置文件组；
+// 两组分别注册，避免 scheme 中出现跨组混淆。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&EgressSelectorConfiguration{},

@@ -25,6 +25,9 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordWebhookMetrics 验证三条 webhook 指标被正确记录并带上 name/result 标签：
+// 耗时直方图、总调用数，以及因超时/错误而 fail-open（NoOpinion）的次数。
+// 每个用例前重置指标，避免全局注册表在用例间串数据。
 func TestRecordWebhookMetrics(t *testing.T) {
 	testCases := []struct {
 		desc     string

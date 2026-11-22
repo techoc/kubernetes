@@ -16,4 +16,7 @@ limitations under the License.
 
 // Package testcerts contains generated key pairs used by the unit tests of
 // mutating and validating webhooks. They are for testing only.
+//
+// 中文说明：这些证书仅供 mutating/validating webhook 的单元测试使用，
+// 不可用于任何生产环境或作为信任根。
 package testcerts

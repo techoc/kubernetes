@@ -36,6 +36,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestPeerAggregatedDiscovery 验证 peer 聚合发现的启用条件与 profile 选择：
+// 特性门控关闭、请求 nopeer、或 provider 为 nil 时只返回本地组；否则合并 peer 组。
 func TestPeerAggregatedDiscovery(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	localGroup := newAPIGroup("local.example.com", "v1", "local-resource")
@@ -129,6 +131,8 @@ func TestPeerAggregatedDiscovery(t *testing.T) {
 	}
 }
 
+// TestPeerAggregatedDiscovery_ETagHandling 验证缓存失效后 ETag 随 peer 资源
+// 变化而更新，未变化时保持稳定。
 func TestPeerAggregatedDiscovery_ETagHandling(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.UnknownVersionInteroperabilityProxy, true)
 	manager := discoveryendpoint.NewResourceManager("apis")
@@ -176,6 +180,7 @@ func TestPeerAggregatedDiscovery_ETagHandling(t *testing.T) {
 	assert.NotEqual(t, etag1, etag3, "ETag should change when resources change")
 }
 
+// TestFetchFromCache 验证从缓存组装文档时本地与 peer 资源的组合结果。
 func TestFetchFromCache(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -243,6 +248,9 @@ func TestFetchFromCache(t *testing.T) {
 	}
 }
 
+// TestMergeResources 覆盖 mergeResources 的各类合并场景：同 g/v 增加资源、
+// 同组增加版本、全新组、顺序差异、verbs/subresources 合并，以及无变化时的
+// 短路返回（返回原切片而非新切片）。
 func TestMergeResources(t *testing.T) {
 	r1 := apidiscoveryv2.APIResourceDiscovery{Resource: "r1"}
 	r2 := apidiscoveryv2.APIResourceDiscovery{Resource: "r2"}
@@ -445,6 +453,7 @@ func TestMergeResources(t *testing.T) {
 	}
 }
 
+// mockPeerDiscoveryProvider 是固定返回预置资源的 PeerDiscoveryProvider。
 type mockPeerDiscoveryProvider struct {
 	resources map[string][]apidiscoveryv2.APIGroupDiscovery
 }
@@ -464,6 +473,7 @@ func (m *mockPeerDiscoveryProvider) GetPeerResources() map[string][]apidiscovery
 	return m.resources
 }
 
+// addResource 向指定 server 追加一个组发现结果，必要时初始化 map。
 func (m *mockPeerDiscoveryProvider) addResource(serverID string, gvr schema.GroupVersionResource, groupDiscovery apidiscoveryv2.APIGroupDiscovery) {
 	if m.resources == nil {
 		m.resources = make(map[string][]apidiscoveryv2.APIGroupDiscovery)
@@ -475,6 +485,7 @@ func (m *mockPeerDiscoveryProvider) addResource(serverID string, gvr schema.Grou
 	m.resources[serverID] = append(m.resources[serverID], groupDiscovery)
 }
 
+// newAPIGroup 构造只含一个版本、一个资源的组发现对象。
 func newAPIGroup(groupName, versionName, resourceName string) apidiscoveryv2.APIGroupDiscovery {
 	return apidiscoveryv2.APIGroupDiscovery{
 		ObjectMeta: metav1.ObjectMeta{Name: groupName},

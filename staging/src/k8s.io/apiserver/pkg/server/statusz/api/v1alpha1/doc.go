@@ -19,4 +19,6 @@ limitations under the License.
 // +k8s:openapi-model-package=io.k8s.apiserver.pkg.server.statusz.api.v1alpha1
 
 // Package v1alpha1 contains API Schema definitions for the statusz v1alpha1 API group
+//
+// 该包只包含类型定义与生成代码；v1alpha1 表示 schema 仍可能在不保证兼容的前提下调整。
 package v1alpha1

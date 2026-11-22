@@ -44,6 +44,11 @@ import (
 // TODO(apelisse): Tests in this file should be more hermertic by always
 // removing objects that they create. That would avoid name-collisions.
 
+// Tester 是 rest.Storage 的通用一致性测试驱动器：通过组合不同的 Test* 入口，
+// 各资源的 registry 测试可以复用同一套行为断言。
+//
+// 标志位（clusterScope/createOnUpdate/generatesName/returnDeletedObject）用于
+// 表达资源的策略差异，避免为每种策略复制测试。
 type Tester struct {
 	*testing.T
 	storage             rest.Storage
@@ -56,6 +61,7 @@ type Tester struct {
 	requestInfo         *genericapirequest.RequestInfo
 }
 
+// New 构造 Tester；默认使用 "foo%d" 命名，可通过 Namer 覆盖。
 func New(t *testing.T, storage rest.Storage) *Tester {
 	return &Tester{
 		T:       t,
@@ -64,6 +70,7 @@ func New(t *testing.T, storage rest.Storage) *Tester {
 	}
 }
 
+// defaultNamer 生成稳定且互不冲突的对象名。
 func defaultNamer(i int) string {
 	return fmt.Sprintf("foo%d", i)
 }
@@ -75,21 +82,25 @@ func (t *Tester) Namer(namer func(int) string) *Tester {
 	return t
 }
 
+// ClusterScope 声明被测资源是集群作用域。
 func (t *Tester) ClusterScope() *Tester {
 	t.clusterScope = true
 	return t
 }
 
+// AllowCreateOnUpdate 声明资源允许 update 时创建（create-on-update）。
 func (t *Tester) AllowCreateOnUpdate() *Tester {
 	t.createOnUpdate = true
 	return t
 }
 
+// GeneratesName 声明资源会根据 generateName 生成名字。
 func (t *Tester) GeneratesName() *Tester {
 	t.generatesName = true
 	return t
 }
 
+// ReturnDeletedObject 声明删除接口会返回被删除对象而非仅 Status。
 func (t *Tester) ReturnDeletedObject() *Tester {
 	t.returnDeletedObject = true
 	return t
@@ -130,6 +141,7 @@ func (t *Tester) TestContext() context.Context {
 	return ctx
 }
 
+// getObjectMetaOrFail 取 ObjectMeta；非元数据对象直接终止测试。
 func (t *Tester) getObjectMetaOrFail(obj runtime.Object) metav1.Object {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
@@ -138,6 +150,8 @@ func (t *Tester) getObjectMetaOrFail(obj runtime.Object) metav1.Object {
 	return objMeta
 }
 
+// setObjectMeta 为测试对象设置名称/命名空间并清理客户端可控的系统字段，
+// 模拟 API server 在创建前的规范化行为。
 func (t *Tester) setObjectMeta(obj runtime.Object, name string) {
 	meta := t.getObjectMetaOrFail(obj)
 	meta.SetName(name)
@@ -161,6 +175,9 @@ type SetRVFunc func(uint64)
 type UpdateFunc func(runtime.Object) runtime.Object
 
 // Test creating an object.
+//
+// 覆盖：元数据填充、名称生成、dry-run 不落盘且结果一致、重复创建、命名空间
+// 处理（集群/命名空间作用域行为不同）、校验与非法名称。
 func (t *Tester) TestCreate(valid runtime.Object, createFn CreateFunc, getFn GetFunc, invalid ...runtime.Object) {
 	dryRunOpts := metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}}
 	opts := metav1.CreateOptions{}
@@ -193,6 +210,9 @@ func (t *Tester) TestCreate(valid runtime.Object, createFn CreateFunc, getFn Get
 }
 
 // Test updating an object.
+//
+// 覆盖：更新结果一致性、资源版本过旧冲突、对象不存在、命名空间不匹配、
+// 校验失败、UID 不匹配、旧对象传递、UpdatedObject 错误传播、generation 处理。
 func (t *Tester) TestUpdate(valid runtime.Object, createFn CreateFunc, getFn GetFunc, updateFn UpdateFunc, invalidUpdateFn ...UpdateFunc) {
 	dryRunOpts := metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}}
 	opts := metav1.UpdateOptions{}
@@ -213,6 +233,8 @@ func (t *Tester) TestUpdate(valid runtime.Object, createFn CreateFunc, getFn Get
 }
 
 // Test deleting an object.
+//
+// 覆盖：删除不存在对象、非优雅删除（含 dry-run）、UID/ResourceVersion 前置条件。
 func (t *Tester) TestDelete(valid runtime.Object, createFn CreateFunc, getFn GetFunc, isNotFoundFn IsErrorFunc) {
 	dryRunOpts := metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}}
 	opts := metav1.DeleteOptions{}
@@ -227,6 +249,8 @@ func (t *Tester) TestDelete(valid runtime.Object, createFn CreateFunc, getFn Get
 }
 
 // Test gracefully deleting an object.
+//
+// 覆盖宽限期默认值、显式值、nil 视为 0、延长/缩短宽限期、立即删除。
 func (t *Tester) TestDeleteGraceful(valid runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	t.testDeleteDryRunGracefulHasdefault(valid.DeepCopyObject(), createFn, expectedGrace)
 	t.testDeleteGracefulHasDefault(valid.DeepCopyObject(), createFn, getFn, expectedGrace)
@@ -238,6 +262,8 @@ func (t *Tester) TestDeleteGraceful(valid runtime.Object, createFn CreateFunc, g
 }
 
 // Test getting object.
+//
+// 覆盖存在/不存在、命名空间不匹配，以及命名空间作用域资源的跨命名空间访问。
 func (t *Tester) TestGet(valid runtime.Object) {
 	t.testGetFound(valid.DeepCopyObject())
 	t.testGetNotFound(valid.DeepCopyObject())
@@ -248,6 +274,8 @@ func (t *Tester) TestGet(valid runtime.Object) {
 }
 
 // Test listing objects.
+//
+// 覆盖空列表、正常列表、标签选择器与 Table 转换。
 func (t *Tester) TestList(valid runtime.Object, assignFn AssignFunc) {
 	t.testListNotFound(assignFn)
 	t.testListFound(valid.DeepCopyObject(), assignFn)
@@ -256,6 +284,9 @@ func (t *Tester) TestList(valid runtime.Object, assignFn AssignFunc) {
 }
 
 // Test watching objects.
+//
+// 分别用标签与字段选择器验证 watch 的过滤语义：pass 集合必须收到事件，
+// fail 集合必须收不到。
 func (t *Tester) TestWatch(
 	valid runtime.Object, emitFn EmitFunc,
 	labelsPass, labelsFail []labels.Set, fieldsPass, fieldsFail []fields.Set, actions []string) {
@@ -934,6 +965,8 @@ func (t *Tester) testDeleteWithResourceVersion(obj runtime.Object, createFn Crea
 // =============================================================================
 // Graceful Deletion tests.
 
+// testDeleteDryRunGracefulHasdefault 验证 dry-run 删除会返回带 deletionTimestamp
+// 与默认宽限期的对象，但不会真正移除。
 func (t *Tester) testDeleteDryRunGracefulHasdefault(obj runtime.Object, createFn CreateFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -961,6 +994,8 @@ func (t *Tester) testDeleteDryRunGracefulHasdefault(obj runtime.Object, createFn
 	}
 }
 
+// testDeleteGracefulHasDefault 验证未指定宽限期时使用资源默认值，且设置
+// deletionTimestamp 会推进 generation。
 func (t *Tester) testDeleteGracefulHasDefault(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -995,6 +1030,7 @@ func (t *Tester) testDeleteGracefulHasDefault(obj runtime.Object, createFn Creat
 	}
 }
 
+// testDeleteGracefulWithValue 验证显式宽限期被采纳。
 func (t *Tester) testDeleteGracefulWithValue(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -1029,6 +1065,7 @@ func (t *Tester) testDeleteGracefulWithValue(obj runtime.Object, createFn Create
 	}
 }
 
+// testDeleteGracefulExtend 验证第二次删除请求的宽限期被忽略，已设置的宽限期保持不变。
 func (t *Tester) testDeleteGracefulExtend(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -1071,6 +1108,8 @@ func (t *Tester) testDeleteGracefulExtend(obj runtime.Object, createFn CreateFun
 	}
 }
 
+// testDeleteGracefulImmediate 验证在已有优雅删除的情况下，宽限期为 0 的
+// 第二次删除会立即移除对象。
 func (t *Tester) testDeleteGracefulImmediate(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -1114,6 +1153,7 @@ func (t *Tester) testDeleteGracefulImmediate(obj runtime.Object, createFn Create
 	}
 }
 
+// testDeleteGracefulUsesZeroOnNil 验证 nil DeleteOptions 等价于宽限期 0（立即删除）。
 func (t *Tester) testDeleteGracefulUsesZeroOnNil(obj runtime.Object, createFn CreateFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -1136,6 +1176,8 @@ func (t *Tester) testDeleteGracefulUsesZeroOnNil(obj runtime.Object, createFn Cr
 }
 
 // Regression test for bug discussed in #27539
+// 第二次删除可以缩短宽限期，但 deletionTimestamp 必须相应提前，保证
+// “到期时间 = 时间戳 + 宽限期” 始终成立。
 func (t *Tester) testDeleteGracefulShorten(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
 	ctx := t.TestContext()
 
@@ -1240,6 +1282,7 @@ func (t *Tester) testGetDifferentNamespace(obj runtime.Object) {
 }
 
 func (t *Tester) testGetFound(obj runtime.Object) {
+	// 创建后立即读取，二者除 resourceVersion 外应完全一致。
 	ctx := t.TestContext()
 	t.setObjectMeta(obj, t.namer(1))
 
@@ -1260,6 +1303,8 @@ func (t *Tester) testGetFound(obj runtime.Object) {
 	}
 }
 
+// testGetMimatchedNamespace 验证命名空间作用域资源不能跨命名空间读取；
+// 集群作用域资源则忽略命名空间。
 func (t *Tester) testGetMimatchedNamespace(obj runtime.Object) {
 	ctx1 := genericapirequest.WithNamespace(genericapirequest.NewContext(), "bar1")
 	if t.requestInfo != nil {
@@ -1323,6 +1368,7 @@ func listToItems(listObj runtime.Object) ([]runtime.Object, error) {
 	return result, nil
 }
 
+// testListFound 验证不带选择器时返回全部对象，顺序与 assignFn 写入顺序一致。
 func (t *Tester) testListFound(obj runtime.Object, assignFn AssignFunc) {
 	ctx := t.TestContext()
 
@@ -1349,6 +1395,7 @@ func (t *Tester) testListFound(obj runtime.Object, assignFn AssignFunc) {
 	}
 }
 
+// testListMatchLabels 验证标签选择器只返回匹配的对象。
 func (t *Tester) testListMatchLabels(obj runtime.Object, assignFn AssignFunc) {
 	ctx := t.TestContext()
 	testLabels := map[string]string{"key": "value"}
@@ -1384,6 +1431,7 @@ func (t *Tester) testListMatchLabels(obj runtime.Object, assignFn AssignFunc) {
 	}
 }
 
+// testListNotFound 验证空存储返回空列表而非 nil/错误。
 func (t *Tester) testListNotFound(assignFn AssignFunc) {
 	ctx := t.TestContext()
 	_ = assignFn([]runtime.Object{})
@@ -1509,6 +1557,8 @@ func (t *Tester) testListTableConversion(obj runtime.Object, assignFn AssignFunc
 // =============================================================================
 // Watching tests.
 
+// testWatchFields 用字段选择器验证 watch 过滤：pass 集合必须收到事件，
+// fail 集合在 500ms 内不得收到事件。
 func (t *Tester) testWatchFields(obj runtime.Object, emitFn EmitFunc, fieldsPass, fieldsFail []fields.Set, actions []string) {
 	ctx := t.TestContext()
 
@@ -1558,6 +1608,7 @@ func (t *Tester) testWatchFields(obj runtime.Object, emitFn EmitFunc, fieldsPass
 	}
 }
 
+// testWatchLabels 用标签选择器验证 watch 过滤，语义与 testWatchFields 相同。
 func (t *Tester) testWatchLabels(obj runtime.Object, emitFn EmitFunc, labelsPass, labelsFail []labels.Set, actions []string) {
 	ctx := t.TestContext()
 

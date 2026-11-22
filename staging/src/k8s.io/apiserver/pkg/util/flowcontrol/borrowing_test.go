@@ -39,6 +39,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// borrowingTestConstraints 描述单个优先级级别的借入/借出上限（百分比）。
 type borrowingTestConstraints struct {
 	lendable, borrowing int32
 }
@@ -60,6 +61,8 @@ type borrowingTestConstraints struct {
 func TestBorrowing(t *testing.T) {
 	clientsPerFlow := [2]int{24, 6}
 	metrics.Register()
+	// 两个场景只在 lendable/borrowing 百分比上不同，用来分别触发两种上限。
+	// 预期结果相同：flow 0 借到 16，flow 1 维持自身的 6。
 	for _, testCase := range []struct {
 		name        string
 		constraints []borrowingTestConstraints
@@ -82,6 +85,8 @@ func TestBorrowing(t *testing.T) {
 			plcObjs := make([]*flowcontrol.PriorityLevelConfiguration, 2)
 			usernames := make([]string, 2)
 			cfgObjs := []runtime.Object{}
+			// 为每个 flow 构造"用户 -> FlowSchema -> PriorityLevelConfiguration"的映射，
+			// 使用户名成为唯一区分维度，避免请求被其他规则捕获。
 			for flow := 0; flow < 2; flow++ {
 				usernames[flow] = fmt.Sprintf("test-user%d", flow)
 				plName := fmt.Sprintf("test-pl%d", flow)
@@ -132,6 +137,8 @@ func TestBorrowing(t *testing.T) {
 				}
 				cfgObjs = append(cfgObjs, fsObjs[flow], plcObjs[flow])
 			}
+			// 总并发上限设为 24，高于两个级别名义值之和（12+12），
+			// 使借入行为成为决定实际并发的因素。
 			clientset := clientsetfake.NewSimpleClientset(cfgObjs...)
 			informerFactory := informers.NewSharedInformerFactory(clientset, time.Second)
 			flowcontrolClient := clientset.FlowcontrolV1()
@@ -165,6 +172,7 @@ func TestBorrowing(t *testing.T) {
 			}()
 
 			// ensure that the controller has run its first loop.
+			// 先等控制器完成首次调谐，否则请求会因找不到优先级配置而被拒。
 			err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 				return controller.hasPriorityLevelState(plcObjs[0].Name), nil
 			})
@@ -193,6 +201,8 @@ func TestBorrowing(t *testing.T) {
 				}
 				concIntegrator := fq.NewNamedIntegrator(clk, username)
 				concIntegrators[flow] = concIntegrator
+				// 用积分器统计"同时在执行的请求数"的时间平均，而不是瞬时采样，
+				// 避免调度抖动导致读数偏差。
 				exec := func() {
 					concIntegrator.Inc()
 					clk.Sleep(250 * time.Millisecond)
@@ -208,6 +218,7 @@ func TestBorrowing(t *testing.T) {
 			}
 			startWG.Wait()
 			// Make sure the controller has had time to sense the load and adjust
+			// 前 10 秒用于预热，借入可能在这段时间内的任意时刻开始，故不计入统计。
 			clk.Sleep(10 * time.Second)
 			// Start the stats that matter from now
 			for _, ci := range concIntegrators {
@@ -243,6 +254,8 @@ func TestBorrowing(t *testing.T) {
 	}
 }
 
+// testUser 是仅携带用户名的最小 user.Info 实现，归入 system:authenticated
+// 以模拟真实已认证用户；FlowSchema 按用户名精确匹配。
 type testUser struct{ name string }
 
 func (tu testUser) GetName() string               { return tu.name }

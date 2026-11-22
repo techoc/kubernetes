@@ -55,6 +55,8 @@ const benchmarkSeed = 100
 //go:embed testdata/exemplar_pod.yaml
 var benchmarkExemplarPodYAML []byte
 
+// TestSerializeObjectParallel 在并发下反复序列化同一大对象，验证：
+// 压缩协商（gzip）正确、响应头稳定，且并发路径不存在数据竞争或 panic。
 func TestSerializeObjectParallel(t *testing.T) {
 	largePayload := bytes.Repeat([]byte("0123456789abcdef"), defaultGzipThresholdBytes/16+1)
 	type test struct {
@@ -124,6 +126,8 @@ func TestSerializeObjectParallel(t *testing.T) {
 	}
 }
 
+// TestSerializeObject 覆盖 SerializeObject 的主要分支：是否压缩、media type、
+// 编码错误与状态码，重点验证小负载不压缩、大负载按阈值压缩的边界行为。
 func TestSerializeObject(t *testing.T) {
 	smallPayload := []byte("{test-object,test-object}")
 	largePayload := bytes.Repeat([]byte("0123456789abcdef"), defaultGzipThresholdBytes/16+1)
@@ -400,6 +404,8 @@ func TestSerializeObject(t *testing.T) {
 	}
 }
 
+// TestDeferredResponseWriter_Write 验证延迟写策略：在累计数据达到压缩阈值前不提交响应头，
+// 从而能根据实际大小决定是否启用 gzip；阈值两侧的用例覆盖该切换点。
 func TestDeferredResponseWriter_Write(t *testing.T) {
 	smallChunk := bytes.Repeat([]byte("b"), defaultGzipThresholdBytes-1)
 	largeChunk := bytes.Repeat([]byte("b"), defaultGzipThresholdBytes+1)
@@ -565,6 +571,8 @@ func TestDeferredResponseWriter_Write(t *testing.T) {
 	}
 }
 
+// benchmarkChunkingGzip 以固定块大小和次数驱动 deferredResponseWriter，
+// 用于观察分块写入与 gzip 压缩的成本。
 func benchmarkChunkingGzip(b *testing.B, count int, chunk []byte) {
 	mockResponseWriter := httptest.NewRecorder()
 	mockResponseWriter.Body = nil
@@ -596,6 +604,7 @@ func benchmarkChunkingGzip(b *testing.B, count int, chunk []byte) {
 	}
 }
 
+// BenchmarkChunkingGzip 覆盖不同块大小与数量的组合，用于评估流式压缩的开销。
 func BenchmarkChunkingGzip(b *testing.B) {
 	tests := []struct {
 		count int
@@ -655,6 +664,7 @@ func BenchmarkChunkingGzip(b *testing.B) {
 	}
 }
 
+// toProtoBuf 把 PodList 序列化为 protobuf，供编码基准复用。
 func toProtoBuf(b *testing.B, list *v1.PodList) []byte {
 	out, err := list.Marshal()
 	if err != nil {
@@ -663,6 +673,7 @@ func toProtoBuf(b *testing.B, list *v1.PodList) []byte {
 	return out
 }
 
+// toJSON 把 PodList 序列化为 JSON，供编码基准复用。
 func toJSON(b *testing.B, list *v1.PodList) []byte {
 	out, err := json.Marshal(list)
 	if err != nil {
@@ -671,6 +682,7 @@ func toJSON(b *testing.B, list *v1.PodList) []byte {
 	return out
 }
 
+// benchmarkSerializeObject 按是否协商 gzip 测量 SerializeObject 的完整开销。
 func benchmarkSerializeObject(b *testing.B, payload []byte, gzip bool) {
 	req := &http.Request{
 		URL: &url.URL{Path: "/path"},
@@ -701,6 +713,8 @@ func benchmarkSerializeObject(b *testing.B, payload []byte, gzip bool) {
 	b.ReportMetric(float64(responseBytesTotal/b.N), "writtenBytes/op")
 }
 
+// BenchmarkSerializeObject 按列表规模、media type 与是否压缩做笛卡尔积基准，
+// 并额外报告每次操作写出的字节数。
 func BenchmarkSerializeObject(b *testing.B) {
 	for _, count := range []int{1_000, 10_000, 100_000} {
 		b.Run(fmt.Sprintf("Count=%d", count), func(b *testing.B) {
@@ -726,6 +740,8 @@ func BenchmarkSerializeObject(b *testing.B) {
 	}
 }
 
+// benchmarkProtobufEncodeWithAllocator 在单线程下对比池化与普通 Allocator 的编码开销。
+// 先做一次 warmup，避免把首次初始化的成本计入基准。
 func benchmarkProtobufEncodeWithAllocator(b *testing.B, encoder runtime.EncoderWithAllocator, object runtime.Object, pooled bool) {
 	simpleAllocator := &runtime.SimpleAllocator{}
 	discard := io.Discard
@@ -762,6 +778,8 @@ func benchmarkProtobufEncodeWithAllocator(b *testing.B, encoder runtime.EncoderW
 	}
 }
 
+// benchmarkProtobufEncodeWithAllocatorParallel 在并发下对比池化与普通 Allocator；
+// 池化路径能显著减少高并发时的分配竞争。
 func benchmarkProtobufEncodeWithAllocatorParallel(b *testing.B, encoder runtime.EncoderWithAllocator, object runtime.Object, pooled bool) {
 	discard := io.Discard
 
@@ -801,6 +819,8 @@ func benchmarkProtobufEncodeWithAllocatorParallel(b *testing.B, encoder runtime.
 	})
 }
 
+// benchmarkItems 用固定种子从 exemplar pod 生成 n 个变体，
+// 保证各次基准运行的数据一致、结果可比。
 func benchmarkItems(b *testing.B, n int) *v1.PodList {
 	b.Helper()
 	pod := v1.Pod{}
@@ -830,6 +850,8 @@ func benchmarkItems(b *testing.B, n int) *v1.PodList {
 	return list
 }
 
+// BenchmarkStreamingProtobufPodListAllocatorReuse 对比单线程/并发、
+// 复用/不复用 Allocator 四种组合下 protobuf 编码的吞吐与分配。
 func BenchmarkStreamingProtobufPodListAllocatorReuse(b *testing.B) {
 	counts := []int{50, 500, 5_000}
 	modes := []struct {
@@ -870,12 +892,14 @@ func BenchmarkStreamingProtobufPodListAllocatorReuse(b *testing.B) {
 	}
 }
 
+// fakeResponseRecorder 可模拟“编码开始后写响应失败”，用于验证错误处理路径。
 type fakeResponseRecorder struct {
 	*httptest.ResponseRecorder
 	fe                 *fakeEncoder
 	errorAfterEncoding bool
 }
 
+// Write 在 encodeCalled 后按需返回错误，模拟底层连接中断。
 func (frw *fakeResponseRecorder) Write(buf []byte) (int, error) {
 	if frw.errorAfterEncoding && frw.fe.encodeCalled {
 		return 0, errors.New("returning a requested error")
@@ -883,6 +907,8 @@ func (frw *fakeResponseRecorder) Write(buf []byte) (int, error) {
 	return frw.ResponseRecorder.Write(buf)
 }
 
+// fakeEncoder 按预置的 partial 分片与 errs 序列产生输出/错误，
+// 用于精确控制编码器的写入时序。
 type fakeEncoder struct {
 	obj     runtime.Object
 	buf     []byte
@@ -892,6 +918,7 @@ type fakeEncoder struct {
 	encodeCalled bool
 }
 
+// Encode 先写 partial 分片再返回预置错误，模拟“写了一部分后失败”的编码器。
 func (e *fakeEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	e.obj = obj
 	if len(e.errs) > 0 {
@@ -909,10 +936,12 @@ func (e *fakeEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
+// Identifier 返回固定的编码器标识，测试中不关心其内容。
 func (e *fakeEncoder) Identifier() runtime.Identifier {
 	return runtime.Identifier("fake")
 }
 
+// gzipContent 以指定压缩级别生成 gzip 数据，供构造期望值。
 func gzipContent(data []byte, level int) []byte {
 	buf := &bytes.Buffer{}
 	gw, err := gzip.NewWriterLevel(buf, level)
@@ -928,6 +957,8 @@ func gzipContent(data []byte, level int) []byte {
 	return buf.Bytes()
 }
 
+// TestStreamingGzipIntegration 端到端验证流式编码与 gzip 的交互：
+// 小对象不压缩、大对象压缩，流式编码会分多次写出。
 func TestStreamingGzipIntegration(t *testing.T) {
 	largeChunk := bytes.Repeat([]byte("b"), defaultGzipThresholdBytes+1)
 	tcs := []struct {
@@ -1023,16 +1054,20 @@ func TestStreamingGzipIntegration(t *testing.T) {
 	}
 }
 
+// writeCounter 统计底层写次数，用于判断是否发生流式写出（多次 Write）。
 type writeCounter struct {
 	writeCount int
 	io.Writer
 }
 
+// Write 递增计数后转发写入。
 func (b *writeCounter) Write(data []byte) (int, error) {
 	b.writeCount++
 	return b.Writer.Write(data)
 }
 
+// BenchmarkJSONStreaming 对比流式与非流式集合编码在 1000 个 Pod 上的
+// 吞吐与内存分配，用于评估流式编码的收益。
 func BenchmarkJSONStreaming(b *testing.B) {
 	scheme := runtime.NewScheme()
 	if err := v1.AddToScheme(scheme); err != nil {

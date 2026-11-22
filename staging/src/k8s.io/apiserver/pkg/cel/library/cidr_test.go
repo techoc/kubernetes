@@ -30,6 +30,8 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// testCIDR 编译并执行表达式，支持三种期望：编译错误（可多条，按正则匹配）、
+// 运行时错误（精确文本）或具体结果值。
 func testCIDR(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr string, expectCompileErrs []string) {
 	env, err := cel.NewEnv(
 		library.IP(),
@@ -42,6 +44,7 @@ func testCIDR(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr 
 	compiled, issues := env.Compile(expr)
 
 	if len(expectCompileErrs) > 0 {
+		// 每条期望错误用正则匹配；同时要求没有未匹配的多余错误，防止错误信息漂移被掩盖。
 		missingCompileErrs := []string{}
 		matchedCompileErrs := sets.New[int]()
 		for _, expectedCompileErr := range expectCompileErrs {
@@ -99,6 +102,8 @@ func testCIDR(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr 
 	}
 }
 
+// TestCIDR 覆盖 net.CIDR 扩展的所有方法：解析（含非法输入）、containsIP、
+// containsCIDR、ip/prefixLength/masked，以及 IPv4 与 IPv6 两种地址族。
 func TestCIDR(t *testing.T) {
 	ipv4CIDR, _ := netip.ParsePrefix("192.168.0.0/24")
 	ipv4Addr, _ := netip.ParseAddr("192.168.0.0")

@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// convertUrlValuesToSimpleGetOptions 把查询参数转换为 SimpleGetOptions，
+// 仅用于测试工具；缺省参数显式置空，避免复用旧对象时残留值。
 func convertUrlValuesToSimpleGetOptions(in *url.Values, out *SimpleGetOptions, s conversion.Scope) error {
 	// Skip TypeMeta field.
 
@@ -50,6 +52,8 @@ func convertUrlValuesToSimpleGetOptions(in *url.Values, out *SimpleGetOptions, s
 	return nil
 }
 
+// RegisterConversions 注册 url.Values 到 SimpleGetOptions 的转换函数，
+// 供测试中的参数编解码路径使用。
 func RegisterConversions(s *runtime.Scheme) error {
 	if err := s.AddConversionFunc((*url.Values)(nil), (*SimpleGetOptions)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertUrlValuesToSimpleGetOptions(a.(*url.Values), b.(*SimpleGetOptions), scope)

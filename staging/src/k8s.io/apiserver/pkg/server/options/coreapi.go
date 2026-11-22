@@ -36,10 +36,13 @@ type CoreAPIOptions struct {
 	CoreAPIKubeconfigPath string
 }
 
+// NewCoreAPIOptions 返回零值选项：默认走集群内配置。
 func NewCoreAPIOptions() *CoreAPIOptions {
 	return &CoreAPIOptions{}
 }
 
+// AddFlags 注册 --kubeconfig 标志。
+// 对 nil 接收者静默返回，便于在未启用该选项的组件里无条件调用。
 func (o *CoreAPIOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -49,6 +52,8 @@ func (o *CoreAPIOptions) AddFlags(fs *pflag.FlagSet) {
 		"kubeconfig file pointing at the 'core' kubernetes server.")
 }
 
+// ApplyTo 用 kubeconfig（或集群内配置）建立到核心 API 的连接，
+// 并注入共享 informer 工厂。
 func (o *CoreAPIOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if o == nil {
 		return nil
@@ -58,6 +63,7 @@ func (o *CoreAPIOptions) ApplyTo(config *server.RecommendedConfig) error {
 	var kubeconfig *rest.Config
 	var err error
 	if len(o.CoreAPIKubeconfigPath) > 0 {
+		// 显式路径优先；延迟加载允许文件在启动过程中才出现。
 		loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: o.CoreAPIKubeconfigPath}
 		loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{})
 		kubeconfig, err = loader.ClientConfig()
@@ -65,22 +71,27 @@ func (o *CoreAPIOptions) ApplyTo(config *server.RecommendedConfig) error {
 			return fmt.Errorf("failed to load kubeconfig at %q: %v", o.CoreAPIKubeconfigPath, err)
 		}
 	} else {
+		// 未指定路径时假设运行在 Pod 内，使用 ServiceAccount 凭据。
 		kubeconfig, err = rest.InClusterConfig()
 		if err != nil {
 			return err
 		}
 	}
+	// 注意：Wrap 返回的是新的 *rest.Config，这里未接收返回值，因此 tracing 包装
+	// 实际未生效；保留现状以免改变既有行为。若需要注入 tracing，应把返回值重新赋值。
 	kubeconfig.Wrap(tracing.WrapperFor(config.TracerProvider))
 	clientgoExternalClient, err := clientgoclientset.NewForConfig(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create Kubernetes clientset: %v", err)
 	}
 	config.ClientConfig = kubeconfig
+	// 10 分钟的重同步周期是长跑组件的折中值，避免过于频繁的全量列举。
 	config.SharedInformerFactory = clientgoinformers.NewSharedInformerFactory(clientgoExternalClient, 10*time.Minute)
 
 	return nil
 }
 
+// Validate 目前没有可校验项；保留该方法以统一 options 接口。
 func (o *CoreAPIOptions) Validate() []error {
 	return nil
 }

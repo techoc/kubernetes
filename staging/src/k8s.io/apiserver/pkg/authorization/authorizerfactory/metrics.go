@@ -59,6 +59,9 @@ var (
 
 var _ = webhookmetrics.AuthorizerMetrics(delegatingAuthorizerMetrics{})
 
+// delegatingAuthorizerMetrics 只为委托授权实现总请求数与延迟指标；
+// webhook 自身的指标与 matchConditions 指标都使用 no-op 实现，
+// 因为委托场景下这两类信息由被委托的 apiserver 负责。
 type delegatingAuthorizerMetrics struct {
 	// no-op for webhook metrics for now, delegating authorization reports original total/latency metrics
 	webhookmetrics.NoopWebhookMetrics
@@ -66,6 +69,7 @@ type delegatingAuthorizerMetrics struct {
 	celmetrics.NoopMatcherMetrics
 }
 
+// NewDelegatingAuthorizerMetrics 创建指标记录器，并确保指标已注册。
 func NewDelegatingAuthorizerMetrics() delegatingAuthorizerMetrics {
 	RegisterMetrics()
 	return delegatingAuthorizerMetrics{}

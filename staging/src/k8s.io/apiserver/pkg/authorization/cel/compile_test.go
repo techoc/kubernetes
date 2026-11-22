@@ -27,6 +27,8 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
+// TestCompileCELExpression 校验授权 CEL 表达式的编译行为：合法表达式通过，
+// 引用未定义字段、语法错误、返回类型非 bool、未声明变量等必须被拒绝。
 func TestCompileCELExpression(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -78,6 +80,7 @@ func TestCompileCELExpression(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// create new compiler because it depends on the feature gate
+			// 编译器缓存了按 feature gate 构建的环境，每个用例新建以避免状态复用。
 			compiler := NewDefaultCompiler()
 
 			_, err := compiler.CompileCELExpression(&SubjectAccessReviewMatchCondition{
@@ -93,6 +96,8 @@ func TestCompileCELExpression(t *testing.T) {
 	}
 }
 
+// TestBuildRequestType 验证手写的 CEL 类型声明与 SubjectAccessReview API 结构一致：
+// 字段数与字段类型都必须匹配，否则策略作者看到的 request 对象会与真实请求不符。
 func TestBuildRequestType(t *testing.T) {
 	f := func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField {
 		return apiservercel.NewDeclField(name, declType, required, nil, nil)
@@ -125,6 +130,8 @@ func TestBuildRequestType(t *testing.T) {
 	}
 }
 
+// compareFieldsForType 逐个字段比对 Go 类型与 CEL 声明类型；字段名以 json tag 为准，
+// 因为 CEL 中暴露的名字就是序列化后的名字。
 func compareFieldsForType(t *testing.T, nativeType reflect.Type, declType *apiservercel.DeclType, field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) error {
 	for i := 0; i < nativeType.NumField(); i++ {
 		nativeField := nativeType.Field(i)
@@ -149,6 +156,8 @@ func compareFieldsForType(t *testing.T, nativeType reflect.Type, declType *apise
 	return nil
 }
 
+// nativeTypeToCELType 把 Go 类型映射为对应的 CEL 类型；嵌套结构会递归比对，
+// 遇到未覆盖的类型直接失败，提醒在新增 API 字段时同步更新 CEL 类型声明。
 func nativeTypeToCELType(t *testing.T, nativeType reflect.Type, field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	switch nativeType {
 	case reflect.TypeOf(""), reflect.TypeOf(metav1.LabelSelectorOperator("")), reflect.TypeOf(metav1.FieldSelectorOperator("")):

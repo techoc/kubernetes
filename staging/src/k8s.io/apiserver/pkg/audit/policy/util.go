@@ -22,6 +22,8 @@ import (
 )
 
 // AllStages returns all possible stages
+//
+// 用于把“省略阶段”取反：策略里写 OmitStages 时，其余阶段才是需要记录的。
 func AllStages() sets.String {
 	return sets.NewString(
 		string(audit.StageRequestReceived),
@@ -42,6 +44,8 @@ func AllLevels() sets.String {
 }
 
 // InvertStages subtracts the given array of stages from all stages
+//
+// 返回值保持集合的排序顺序，保证同一输入得到稳定输出。
 func InvertStages(stages []audit.Stage) []audit.Stage {
 	s := ConvertStagesToStrings(stages)
 	a := AllStages()

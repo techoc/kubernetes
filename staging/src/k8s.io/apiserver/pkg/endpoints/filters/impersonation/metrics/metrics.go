@@ -79,6 +79,8 @@ var (
 
 var registerMetrics sync.Once
 
+// RegisterMetrics 把模拟相关指标注册到 legacy registry。
+// 用 sync.Once 保证重复调用（例如测试中多次构造 server）不会因重复注册而 panic。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(impersonationAttemptsTotal)
@@ -88,11 +90,15 @@ func RegisterMetrics() {
 	})
 }
 
+// RecordImpersonationAttempt 记录一次模拟请求的计数与耗时。
+// mode 与 decision 是有限的枚举值，避免指标基数失控。
 func RecordImpersonationAttempt(mode, decision string, duration time.Duration) {
 	impersonationAttemptsTotal.WithLabelValues(mode, decision).Inc()
 	impersonationAttemptsDurationSeconds.WithLabelValues(mode, decision).Observe(duration.Seconds())
 }
 
+// RecordImpersonationAuthorizationCall 记录模拟流程内部发起的单次授权检查。
+// 与整体尝试分开统计，便于区分"请求慢"与"授权慢"。
 func RecordImpersonationAuthorizationCall(mode, decision string, duration time.Duration) {
 	impersonationAuthorizationAttemptsTotal.WithLabelValues(mode, decision).Inc()
 	impersonationAuthorizationAttemptsDurationSeconds.WithLabelValues(mode, decision).Observe(duration.Seconds())

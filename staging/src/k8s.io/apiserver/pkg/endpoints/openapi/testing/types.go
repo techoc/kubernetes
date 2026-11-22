@@ -14,12 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供 openapi 相关测试所需的极简 API 类型。
 package testing
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestType 是 openapi 测试用的最小 runtime.Object 实现：
+// 没有字段、GVK 固定，用来验证定义生成与命名逻辑而不受业务类型干扰。
+//
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type TestType struct {
@@ -29,9 +33,11 @@ func (t TestType) GetObjectKind() schema.ObjectKind {
 	return t
 }
 
+// SetGroupVersionKind 空实现：GVK 由类型固定，忽略外部设置。
 func (t TestType) SetGroupVersionKind(kind schema.GroupVersionKind) {
 }
 
+// GroupVersionKind 返回固定的 test/v1 TestType。
 func (t TestType) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   "test",

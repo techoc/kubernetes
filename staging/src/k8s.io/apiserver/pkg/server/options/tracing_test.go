@@ -33,6 +33,8 @@ var (
 	samplingRate = int32(12345)
 )
 
+// TestValidateTracingOptions 验证 TracingOptions.Validate 只检查配置文件是否存在：
+// nil 与空配置合法，不存在的路径报错。
 func TestValidateTracingOptions(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -62,6 +64,7 @@ func TestValidateTracingOptions(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// nil 接收者也必须可调用，因此 Validate 内部需处理 nil。
 			errs := tc.contents.Validate()
 			if !tc.expectError && len(errs) != 0 {
 				t.Errorf("Calling Validate expected no error, got %v", errs)
@@ -72,6 +75,8 @@ func TestValidateTracingOptions(t *testing.T) {
 	}
 }
 
+// TestReadTracingConfiguration 验证追踪配置文件的严格解码：
+// 重复字段、未知字段、错误类型都必须报错，避免拼写错误被静默忽略。
 func TestReadTracingConfiguration(t *testing.T) {
 	testcases := []struct {
 		name           string
@@ -88,6 +93,7 @@ func TestReadTracingConfiguration(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
+			// 文件不存在时必须返回可读的错误，而不是空配置。
 			name:           "absent",
 			createFile:     false,
 			contents:       ``,
@@ -136,6 +142,7 @@ samplingRatePerMillion: 12345
 			expectedError: nil,
 		},
 		{
+			// endpoint 也接受 IP 地址形式。
 			name:       "ip address",
 			createFile: true,
 			contents: `
@@ -149,6 +156,7 @@ endpoint: 127.0.0.1:4317
 			expectedError: nil,
 		},
 		{
+			// 其他类型即使能解码，也必须因未注册到本地 scheme 而失败。
 			name:       "wrong_type",
 			createFile: true,
 			contents: `
@@ -195,6 +203,7 @@ spec:
 			if err != nil && tc.expectedError == nil {
 				t.Errorf("unexpected error calling ReadTracingConfiguration got: %#v", err)
 			}
+			// 用 HasPrefix 比较，只约束错误前缀，避免对底层错误文本过度耦合。
 			if err != nil && tc.expectedError != nil && !strings.HasPrefix(err.Error(), *tc.expectedError) {
 				t.Errorf("calling ReadTracingConfiguration expected error: %s, got %#v", *tc.expectedError, err)
 			}

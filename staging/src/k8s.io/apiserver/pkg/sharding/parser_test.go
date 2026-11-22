@@ -22,6 +22,11 @@ import (
 	apisharding "k8s.io/apimachinery/pkg/sharding"
 )
 
+// TestParse 覆盖 shardRange 表达式的解析：合法输入产生有序的区间列表，
+// 各类畸形输入必须报错。
+//
+// 解析器是安全边界的一部分：它只接受固定文法（单一函数、字符串十六进制字面量、
+// 仅 || 连接），从而杜绝任意 CEL 表达式进入分片逻辑。
 func TestParse(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -87,6 +92,10 @@ func TestParse(t *testing.T) {
 			},
 		},
 		// Error cases
+		//
+		// 错误用例分四类：十六进制格式（缺 0x、空值、超长、非法字符、位数不足）、
+		// 不支持的字段/函数、越界语法（&&、比较、嵌套调用、参数个数）、
+		// 区间语义非法（起点等于或大于终点）。
 		{
 			name:    "missing 0x prefix on start",
 			input:   "shardRange(object.metadata.uid, '0000000000000000', '0x8000000000000000')",
@@ -205,6 +214,8 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// TestParseRoundTrip 验证 Parse 与 String 互逆：规范输入经序列化后应逐字节相同，
+// 且再次解析结果稳定。这保证配置比较与去重不会因格式漂移而产生误判。
 func TestParseRoundTrip(t *testing.T) {
 	tests := []string{
 		"shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')",

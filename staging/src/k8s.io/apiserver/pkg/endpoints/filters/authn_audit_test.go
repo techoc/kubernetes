@@ -29,6 +29,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestFailedAuthnAudit 验证认证失败时仍生成一条审计事件，
+// 并在消息中记录所使用的认证方式（basic），便于排查凭证问题。
 func TestFailedAuthnAudit(t *testing.T) {
 	ctx := t.Context()
 	sink := &fakeAuditSink{}
@@ -62,6 +64,8 @@ func TestFailedAuthnAudit(t *testing.T) {
 	}
 }
 
+// TestFailedMultipleAuthnAudit 验证请求同时携带多种凭证（basic + 客户端证书）时，
+// 失败消息会把所有尝试过的认证方式都列出，而不是只报第一个。
 func TestFailedMultipleAuthnAudit(t *testing.T) {
 	ctx := t.Context()
 	sink := &fakeAuditSink{}
@@ -96,6 +100,8 @@ func TestFailedMultipleAuthnAudit(t *testing.T) {
 	}
 }
 
+// TestFailedAuthnAuditWithoutAuthorization 验证未携带任何凭证时也会生成审计事件，
+// 并给出明确的 "no credentials provided" 说明。
 func TestFailedAuthnAuditWithoutAuthorization(t *testing.T) {
 	ctx := t.Context()
 	sink := &fakeAuditSink{}
@@ -128,6 +134,9 @@ func TestFailedAuthnAuditWithoutAuthorization(t *testing.T) {
 	}
 }
 
+// TestFailedAuthnAuditOmitted 验证审计策略未包含该阶段时不应产生事件：
+// 策略只允许 StageResponseStarted，而认证失败发生在请求早期，
+// 因此不应因过滤器而绕过策略配置。
 func TestFailedAuthnAuditOmitted(t *testing.T) {
 	ctx := t.Context()
 	sink := &fakeAuditSink{}

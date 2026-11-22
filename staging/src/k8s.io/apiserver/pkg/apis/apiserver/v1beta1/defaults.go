@@ -23,10 +23,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// addDefaultingFuncs 把默认值函数注册进 scheme，供解码时自动填充。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_WebhookConfiguration 为结构化的 webhook 授权缓存配置填充默认值。
+// TTL 只在零值时取默认，显式配置（包括负值）保持原样，由校验层拒绝非法值；
+// 缓存开关默认开启，以降低高频授权检查对 webhook 的压力。
 func SetDefaults_WebhookConfiguration(obj *WebhookConfiguration) {
 	if obj.AuthorizedTTL.Duration == 0 {
 		obj.AuthorizedTTL.Duration = 5 * time.Minute

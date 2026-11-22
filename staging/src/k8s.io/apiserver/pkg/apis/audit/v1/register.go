@@ -43,6 +43,9 @@ func init() {
 	// We only register manually written functions here. The registration of the
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
+	//
+	// 手工编写的注册与 zz_generated 中的注册分开，保证在生成文件尚未产出时
+	// 包仍可编译，也避免生成器覆盖这里的内容。
 	localSchemeBuilder.Register(addKnownTypes)
 }
 
@@ -53,6 +56,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&Policy{},
 		&PolicyList{},
 	)
+	// 注册 metav1 的公共类型（如 List/Status/DeleteOptions），否则这些类型
+	// 在 audit.k8s.io/v1 下无法编解码。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

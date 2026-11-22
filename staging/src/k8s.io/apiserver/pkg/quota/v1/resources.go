@@ -27,6 +27,8 @@ import (
 )
 
 // Equals returns true if the two lists are equivalent
+// 使用 Quantity.Cmp 而非 ==，因为 resource.Quantity 的内部表示（后缀/缓存字符串）
+// 可能不同但数值相等。
 func Equals(a corev1.ResourceList, b corev1.ResourceList) bool {
 	if len(a) != len(b) {
 		return false
@@ -47,6 +49,7 @@ func Equals(a corev1.ResourceList, b corev1.ResourceList) bool {
 
 // LessThanOrEqual returns true if a < b for each key in b
 // If false, it returns the keys in a that exceeded b
+// 只比较 b 中出现的 key：a 独有的资源不受 b 约束。
 func LessThanOrEqual(a corev1.ResourceList, b corev1.ResourceList) (bool, []corev1.ResourceName) {
 	result := true
 	resourceNames := []corev1.ResourceName{}
@@ -62,6 +65,7 @@ func LessThanOrEqual(a corev1.ResourceList, b corev1.ResourceList) (bool, []core
 }
 
 // Max returns the result of Max(a, b) for each named resource
+// 返回新对象且逐项 DeepCopy，避免调用方修改结果时污染输入。
 func Max(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
 	for key, value := range a {
@@ -82,6 +86,7 @@ func Max(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 }
 
 // Add returns the result of a + b for each named resource
+// 第二个循环负责补上仅存在于 b 的资源；DeepCopy 保证输入不被复用。
 func Add(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
 	for key, value := range a {
@@ -101,6 +106,7 @@ func Add(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 
 // SubtractWithNonNegativeResult - subtracts and returns result of a - b but
 // makes sure we don't return negative values to prevent negative resource usage.
+// 结果中保留值为 0 的条目，便于状态对比时识别“曾经有、现在为 0”的资源。
 func SubtractWithNonNegativeResult(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 	zero := resource.MustParse("0")
 
@@ -126,6 +132,7 @@ func SubtractWithNonNegativeResult(a corev1.ResourceList, b corev1.ResourceList)
 }
 
 // Subtract returns the result of a - b for each named resource
+// 与 SubtractWithNonNegativeResult 不同，这里允许负数结果；仅存在于 b 的资源取负值。
 func Subtract(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
 	for key, value := range a {
@@ -146,6 +153,7 @@ func Subtract(a corev1.ResourceList, b corev1.ResourceList) corev1.ResourceList 
 }
 
 // Mask returns a new resource list that only has the values with the specified names
+// 用于把聚合后的用量裁剪到当前 quota 关心的资源集合。
 func Mask(resources corev1.ResourceList, names []corev1.ResourceName) corev1.ResourceList {
 	nameSet := ToSet(names)
 	result := corev1.ResourceList{}
@@ -158,6 +166,7 @@ func Mask(resources corev1.ResourceList, names []corev1.ResourceName) corev1.Res
 }
 
 // ResourceNames returns a list of all resource names in the ResourceList
+// 顺序不保证稳定（来自 map 迭代），需要确定性时调用方应自行排序。
 func ResourceNames(resources corev1.ResourceList) []corev1.ResourceName {
 	result := []corev1.ResourceName{}
 	for resourceName := range resources {
@@ -177,6 +186,7 @@ func Contains(items []corev1.ResourceName, item corev1.ResourceName) bool {
 }
 
 // ContainsPrefix returns true if the specified item has a prefix that contained in given prefix Set
+// 常用于判断 count/<resource> 一类带前缀的扩展资源。
 func ContainsPrefix(prefixSet []string, item corev1.ResourceName) bool {
 	for _, prefix := range prefixSet {
 		if strings.HasPrefix(string(item), prefix) {
@@ -187,6 +197,7 @@ func ContainsPrefix(prefixSet []string, item corev1.ResourceName) bool {
 }
 
 // Intersection returns the intersection of both list of resources, deduped and sorted
+// 排序与去重使结果可直接用于比较或作为 map key 集合。
 func Intersection(a []corev1.ResourceName, b []corev1.ResourceName) []corev1.ResourceName {
 	result := make([]corev1.ResourceName, 0, len(a))
 	for _, item := range a {
@@ -227,6 +238,7 @@ func IsZero(a corev1.ResourceList) bool {
 }
 
 // RemoveZeros returns a new resource list that only has no zero values
+// 注意：直接复用 Quantity 值而非深拷贝，调用方不应修改返回的条目。
 func RemoveZeros(a corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
 	for key, value := range a {
@@ -238,6 +250,7 @@ func RemoveZeros(a corev1.ResourceList) corev1.ResourceList {
 }
 
 // IsNegative returns the set of resource names that have a negative value.
+// 负用量意味着控制器记账出错，调用方据此拒绝更新而不是把负值写回状态。
 func IsNegative(a corev1.ResourceList) []corev1.ResourceName {
 	results := []corev1.ResourceName{}
 	zero := resource.MustParse("0")
@@ -260,6 +273,9 @@ func ToSet(resourceNames []corev1.ResourceName) sets.String {
 
 // CalculateUsage calculates and returns the requested ResourceList usage.
 // If an error is returned, usage only contains the resources which encountered no calculation errors.
+//
+// 流程：先求 hardLimits 与各 evaluator 可统计资源的交集，再逐个 evaluator 汇总用量；
+// 某个 evaluator 失败时将其资源从结果中剔除并记录错误，保证返回的用量不会因部分失败而偏小。
 func CalculateUsage(namespaceName string, scopes []corev1.ResourceQuotaScope, hardLimits corev1.ResourceList, registry Registry, scopeSelector *corev1.ScopeSelector) (corev1.ResourceList, error) {
 	// find the intersection between the hard resources on the quota
 	// and the resources this controller can track to know what we can
@@ -290,6 +306,7 @@ func CalculateUsage(namespaceName string, scopes []corev1.ResourceQuotaScope, ha
 			// remember the error
 			errors = append(errors, err)
 			// exclude resources which encountered calculation errors
+			// 剔除失败资源，避免把它们的用量当作 0 返回。
 			matchedResources = Difference(matchedResources, intersection)
 			continue
 		}

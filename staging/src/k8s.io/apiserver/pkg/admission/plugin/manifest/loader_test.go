@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// Test_splitYAMLDocuments 覆盖 YAML 多文档切分：单文档、多文档、JSON、以及
+// 首尾/中间空文档的处理。空文档必须被丢弃，否则下游会拿到无法解码的空对象。
 func Test_splitYAMLDocuments(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -148,6 +150,10 @@ kind: C
 	}
 }
 
+// TestLoadFiles 覆盖目录加载规则：只读 yaml/yml/json、不递归子目录、跳过空文件、
+// 按文件名排序以保证结果确定，并对空路径/不存在目录报错。
+//
+// 确定性排序很重要：哈希由文档顺序参与计算，否则同一目录会反复触发重载。
 func TestLoadFiles(t *testing.T) {
 	t.Run("empty dir returns no docs", func(t *testing.T) {
 		dir := t.TempDir()
@@ -165,6 +171,7 @@ func TestLoadFiles(t *testing.T) {
 
 	t.Run("reads yaml and json files", func(t *testing.T) {
 		dir := t.TempDir()
+		// .txt 用于确认扩展名过滤生效。
 		if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("kind: A"), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -242,6 +249,7 @@ func TestLoadFiles(t *testing.T) {
 
 	t.Run("skips subdirectories", func(t *testing.T) {
 		dir := t.TempDir()
+		// 子目录中的文件不应被加载：加载范围限定为单层目录，避免意外递归。
 		if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("kind: A"), 0644); err != nil {
 			t.Fatal(err)
 		}

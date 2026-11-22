@@ -29,6 +29,8 @@ import (
 // QueuingConfig and the second consumes the DispatchingConfig.  They
 // are separated so that errors from the first phase can be found
 // before committing to a concurrency allotment for the second.
+//
+// 两阶段构造的意义：排队参数校验失败时不必回滚已分配的分发资源。
 type QueueSetFactory interface {
 	// BeginConstruction does the first phase of creating a QueueSet.
 	// The RatioedGaugePair observes number of requests,
@@ -56,6 +58,8 @@ type QueueSetCompleter interface {
 // https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1040-priority-and-fairness/README.md
 // .  Some day we may have connections between priority levels, but
 // today is not that day.
+//
+// 每个非豁免优先级对应一个 QueueSet；多个 QueueSet 之间通过公平性维度解耦。
 type QueueSet interface {
 	// BeginConfigChange starts the two-step process of updating the
 	// configuration.  No change is made until Complete is called.  If
@@ -65,6 +69,9 @@ type QueueSet interface {
 	// not changed, so that the queues continue draining as before.
 	// In any case, reconfiguration does not discard any queue unless
 	// and until it is undesired and empty.
+	//
+	// 中文说明：重配置是原地生效的，不会丢弃仍在使用的队列，
+	// 避免配置热更新导致已排队请求被静默拒绝。
 	BeginConfigChange(QueuingConfig) (QueueSetCompleter, error)
 
 	// IsIdle returns a bool indicating whether the QueueSet was idle
@@ -87,6 +94,9 @@ type QueueSet interface {
 	// was idle at the moment of the return.  Otherwise idle==false
 	// and the client must call the Finish method of the Request
 	// exactly once.
+	//
+	// 注意：StartRequest 不阻塞；真正等待发生在 Request.Finish。
+	// 返回 nil Request 表示队列已满，调用方应以 429 拒绝。
 	StartRequest(ctx context.Context, width *request.WorkEstimate, hashValue uint64, flowDistinguisher, fsName string, descr1, descr2 interface{}, queueNoteFn QueueNoteFn) (req Request, idle bool)
 
 	// Dump saves and returns the instant internal state of the queue-set.
@@ -120,6 +130,8 @@ type QueuingConfig struct {
 	// A value of zero means to respect the ConcurrencyLimit of the DispatchingConfig.
 	// A negative value means to always dispatch immediately upon arrival
 	// (i.e., the requests are "exempt" from limitation).
+	//
+	// 0 表示沿用分发配置的并发上限；负值表示完全豁免，不做排队。
 	DesiredNumQueues int
 
 	// QueueLengthLimit is the maximum number of requests that may be waiting in a given queue at a time
@@ -137,5 +149,6 @@ type DispatchingConfig struct {
 
 	// ConcurrencyDenominator is used in relative metrics of concurrency.
 	// It equals ConcurrencyLimit except when that is zero.
+	// 为 0 的 ConcurrencyLimit 不能作分母，故单独提供分母值。
 	ConcurrencyDenominator int
 }

@@ -31,6 +31,9 @@ import (
 	"k8s.io/apiserver/pkg/cel/mutation/dynamic"
 )
 
+// TestTypeResolver 验证 DynamicTypeResolver 能把 CEL 的对象字面量
+// （Object{...} / Object.spec{...} / JSONPatch{...}）解析成对应的动态值，
+// 并在编译期捕获字段类型错误与未声明类型。
 func TestTypeResolver(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
@@ -39,6 +42,7 @@ func TestTypeResolver(t *testing.T) {
 		expectCompileError string
 	}{
 		{
+			// 非对象字面量走普通求值路径，不受类型解析器影响。
 			name:          "not an object",
 			expression:    `string(114514)`,
 			expectedValue: "114514",
@@ -49,6 +53,7 @@ func TestTypeResolver(t *testing.T) {
 			expectedValue: map[string]any{},
 		},
 		{
+			// 嵌套对象字面量；整数统一映射为 int64，与 JSON 数值语义一致。
 			name:       "Object.spec",
 			expression: "Object{spec: Object.spec{replicas: 3}}",
 			expectedValue: map[string]any{
@@ -62,6 +67,8 @@ func TestTypeResolver(t *testing.T) {
 			// list literal does not require new Path code of the type provider
 			// comparing to the object literal.
 			// This test case serves as a note of "supported syntax"
+			//
+			// 列表字面量不需要类型解析器新增路径逻辑，但仍需保证嵌套元素能正确解析。
 			name: "Object.spec.template.containers",
 			expression: `Object{
 				spec: Object.spec{
@@ -123,8 +130,9 @@ func TestTypeResolver(t *testing.T) {
 			expectedValue: true,
 		},
 		{
-			name:               "invalid type",
-			expression:         "Invalid{}",
+			name:       "invalid type",
+			expression: "Invalid{}",
+			// 未声明的类型必须在编译期失败，而不是运行期产生不可预期的对象。
 			expectCompileError: "undeclared reference to 'Invalid'",
 		},
 		{
@@ -133,6 +141,8 @@ func TestTypeResolver(t *testing.T) {
 			expectedValue: &JSONPatchVal{Op: "add", Path: "/spec/replicas", Val: types.Int(3)},
 		},
 		{
+			// JSONPatch 支持 add/remove/replace/move/copy/test 六种操作；
+			// 值语义由 JSONPatchVal 承载，后续会被转换为真正的 JSON Patch。
 			name:          "JSONPatch add",
 			expression:    `JSONPatch{op: "add", path: "/spec/replicas", value: 3}`,
 			expectedValue: &JSONPatchVal{Op: "add", Path: "/spec/replicas", Val: types.Int(3)},
@@ -163,6 +173,8 @@ func TestTypeResolver(t *testing.T) {
 			expectedValue: &JSONPatchVal{Op: "test", Path: "/spec/replicas", Val: types.Int(3)},
 		},
 		{
+			// op 取值不在枚举内不会在编译期报错，但后续应用 patch 时会失败；
+			// 这是有意的分层：语法/类型与运行时语义分别校验。
 			name:          "JSONPatch invalid op",
 			expression:    `JSONPatch{op: "invalid", path: "/spec/replicas", value: 3}`,
 			expectedValue: &JSONPatchVal{Op: "invalid", Path: "/spec/replicas", Val: types.Int(3)},
@@ -196,6 +208,7 @@ func TestTypeResolver(t *testing.T) {
 			expectCompileError: "undeclared reference to 'Invalid'",
 		},
 		{
+			// 字段类型不匹配必须编译期失败，避免把错误类型写入对象。
 			name:               "JSONPatch invalid op type",
 			expression:         `JSONPatch{op: 1, path: "/spec/replicas", value: 3}`,
 			expectCompileError: "expected type of field 'op' is 'string' but provided type is 'int'",
@@ -245,6 +258,9 @@ func TestTypeResolver(t *testing.T) {
 
 // TestCELOptional is an exploration test to demonstrate how CEL optional library
 // behave for the use cases that the mutation library requires.
+//
+// 说明 optional 语义在“对象字面量”与“map 索引”两种语法下的差异，
+// 这些差异会直接影响策略作者能否安全地表达“字段缺失时保持不设置”。
 func TestCELOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name                 string
@@ -294,6 +310,7 @@ func TestCELOptional(t *testing.T) {
 			// 1. If e evaluates to a map, then has(e.f) indicates whether the string f is
 			// a key in the map (note that f must syntactically be an identifier).
 			//
+			// 对 map 使用 has 时，存在性判断基于 key，而不是对象字段元数据。
 			name: "has on a map, de-sugared, non-existing field, returns false",
 			// has marco supports only the dot access syntax.
 			expression:  `has({"foo": 1}.bar)`,
@@ -339,6 +356,8 @@ func TestCELOptional(t *testing.T) {
 
 // mustCreateEnv creates the default env for testing, with given option.
 // it fatally fails the test if the env fails to set up.
+//
+// 使用 StoredExpressions 环境，模拟策略被写入 API 后再次编译的情形。
 func mustCreateEnv(t testing.TB, envOptions ...cel.EnvOption) *cel.Env {
 	envSet, err := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).
 		Extend(environment.VersionedOptions{

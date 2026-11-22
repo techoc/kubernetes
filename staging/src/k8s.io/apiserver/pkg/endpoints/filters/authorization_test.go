@@ -38,6 +38,10 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// TestGetAuthorizerAttributes 验证请求经 RequestInfo 解析后，
+// 授权属性（动词、资源、命名空间、选择器）的映射是否正确。
+// 重点用例：非资源路径不应带资源字段；非法选择器应把解析错误一并带上，
+// 以便授权器（如 RBAC 的 selector 规则）拒绝而不是忽略。
 func TestGetAuthorizerAttributes(t *testing.T) {
 	basicLabelRequirement, err := labels.NewRequirement("foo", selection.DoubleEquals, []string{"bar"})
 	if err != nil {
@@ -213,6 +217,7 @@ func TestGetAuthorizerAttributes(t *testing.T) {
 				ctx := req.Context()
 				attribs, err = GetAuthorizerAttributes(ctx)
 			})
+			// 处理器内读取上下文，验证 WithRequestInfo 已把属性写入 ctx。
 			handler = WithRequestInfo(handler, newTestRequestInfoResolver())
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -225,16 +230,21 @@ func TestGetAuthorizerAttributes(t *testing.T) {
 	}
 }
 
+// fakeAuthorizer 返回预设的决策，用于驱动审计注解测试。
 type fakeAuthorizer struct {
 	decision authorizer.Decision
 	reason   string
 	err      error
 }
 
+// Authorize 忽略属性，直接返回构造时设定的结果。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return f.decision, f.reason, f.err
 }
 
+// TestAuditAnnotation 验证授权结果被写入审计事件注解：
+// allow/forbid 时记录决策与原因，出错时决策注解缺省而原因注解记录错误，
+// 这样审计日志能区分“被拒绝”和“鉴权出错”两种失败。
 func TestAuditAnnotation(t *testing.T) {
 	testcases := map[string]struct {
 		authorizer         fakeAuthorizer
@@ -285,6 +295,7 @@ func TestAuditAnnotation(t *testing.T) {
 
 		var annotation string
 		var ok bool
+		// 出错用例不写决策注解，因此只在该字段非空时断言。
 		if len(tc.decisionAnnotation) > 0 {
 			annotation, ok = ae.GetEventAnnotation(decisionAnnotationKey)
 			assert.True(t, ok, k+": decision annotation not found")

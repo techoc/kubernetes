@@ -40,6 +40,9 @@ import (
 
 // PriorityAndFairnessClassification identifies the results of
 // classification for API Priority and Fairness
+//
+// 该结果用于回写响应头，让客户端/代理知道请求被哪个 FlowSchema 与
+// PriorityLevelConfiguration 处理，但不暴露其可读名称（见 setResponseHeaders）。
 type PriorityAndFairnessClassification struct {
 	FlowSchemaName    string
 	FlowSchemaUID     apitypes.UID
@@ -52,12 +55,15 @@ var waitingMark = &requestWatermark{
 	phase: epmetrics.WaitingPhase,
 }
 
+// 执行/等待中的请求数用原子变量按读写分开统计，避免热点锁；
+// watermark 在后台周期性记录指标。
 var atomicMutatingExecuting, atomicReadOnlyExecuting atomic.Int32
 var atomicMutatingWaiting, atomicReadOnlyWaiting atomic.Int32
 
 // newInitializationSignal is defined for testing purposes.
 var newInitializationSignal = utilflowcontrol.NewInitializationSignal
 
+// truncateLogField 截断日志字段，避免过长的 FlowSchema/PL 名污染访问日志。
 func truncateLogField(s string) string {
 	const maxFieldLogLength = 64
 
@@ -67,8 +73,10 @@ func truncateLogField(s string) string {
 	return s
 }
 
+// initAPFOnce 保证水位标记的指标观察器只接线一次。
 var initAPFOnce sync.Once
 
+// priorityAndFairnessHandler 把 APF 的排队/调度逻辑接入 HTTP 处理链。
 type priorityAndFairnessHandler struct {
 	handler                 http.Handler
 	longRunningRequestCheck apirequest.LongRunningRequestCheck
@@ -85,6 +93,7 @@ type priorityAndFairnessHandler struct {
 	newReqWaitCtxFn func(context.Context) (context.Context, context.CancelFunc)
 }
 
+// Handle 是 APF 过滤器的主体：分类、排队、执行或拒绝。
 func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestInfo, ok := apirequest.RequestInfoFrom(ctx)
@@ -101,12 +110,16 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 	isWatchRequest := watchVerbs.Has(requestInfo.Verb)
 
 	// Skip tracking long running non-watch requests.
+	// 长连接（exec/port-forward 等）可能持续很久，占用 APF 并发额度会
+	// 导致正常请求饥饿；watch 例外，因为它需要按初始化时间计费。
 	if h.longRunningRequestCheck != nil && h.longRunningRequestCheck(r, requestInfo) && !isWatchRequest {
 		klog.V(6).Infof("Serving RequestInfo=%#+v, user.Info=%#+v as longrunning\n", requestInfo, user)
 		h.handler.ServeHTTP(w, r)
 		return
 	}
 
+	// classification 由 noteFn 在 APF 完成分类后填充；
+	// estimateWork 与 setResponseHeaders 依赖它。
 	var classification *PriorityAndFairnessClassification
 	noteFn := func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string) {
 		classification = &PriorityAndFairnessClassification{
@@ -139,6 +152,7 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 		return workEstimate
 	}
 
+	// served 标记请求是否真正进入 handler；为 false 说明被 APF 拒绝。
 	var served bool
 	isMutatingRequest := !nonMutatingRequestVerbs.Has(requestInfo.Verb)
 	noteExecutingDelta := func(delta int32) {
@@ -171,6 +185,9 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 	if isWatchRequest {
 		// This channel blocks calling handler.ServeHTTP() until closed, and is closed inside execute().
 		// If APF rejects the request, it is never closed.
+		//
+		// watch 的关键点：APF 只把“初始化”视为一次请求的生命周期，
+		// 因此需要一个信号把初始化完成与真正的长连接处理衔接起来。
 		shouldStartWatchCh := make(chan struct{})
 
 		watchInitializationSignal := newInitializationSignal()
@@ -219,6 +236,7 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 		}
 
 		// Ensure that an item can be put to resultCh asynchronously.
+		// 缓冲 1 保证负责 APF 的 goroutine 总能投递结果而不泄漏。
 		resultCh := make(chan interface{}, 1)
 
 		// Call Handle in a separate goroutine.
@@ -305,6 +323,8 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 		}()
 	}
 
+	// 未被 APF 放行即视为拒绝：返回 429，并按该优先级的历史丢弃速率
+	// 计算 Retry-After，避免客户端立即重试造成雪崩。
 	if !served {
 		setResponseHeaders(classification, w)
 
@@ -362,6 +382,8 @@ func StartPriorityAndFairnessWatermarkMaintenance(stopCh <-chan struct{}) {
 	startWatermarkMaintenance(waitingMark, stopCh)
 }
 
+// setResponseHeaders 只暴露 UID 而非名字：名字可能透露优先级分类策略，
+// 且集群管理员为分类起的名称不应被普通客户端看到。
 func setResponseHeaders(classification *PriorityAndFairnessClassification, w http.ResponseWriter) {
 	if classification == nil {
 		return
@@ -374,6 +396,7 @@ func setResponseHeaders(classification *PriorityAndFairnessClassification, w htt
 	w.Header().Set(flowcontrol.ResponseHeaderMatchedFlowSchemaUID, string(classification.FlowSchemaUID))
 }
 
+// tooManyRequests 返回 429 与 Retry-After 头。
 func tooManyRequests(req *http.Request, w http.ResponseWriter, retryAfter string) {
 	// Return a 429 status indicating "Too Many Requests"
 	w.Header().Set("Retry-After", retryAfter)
@@ -393,12 +416,16 @@ func tooManyRequests(req *http.Request, w http.ResponseWriter, retryAfter string
 //     (b) a request whose context has no deadline
 //
 // clock comes in handy for testing the function
+//
+// 排队等待时间取请求截止时间的四分之一：既给排队留出空间，
+// 又保证被放行后仍有大部分时间用于真正处理。
 func getRequestWaitContext(ctx context.Context, defaultRequestWaitLimit time.Duration, clock utilsclock.PassiveClock) (context.Context, context.CancelFunc) {
 	if ctx.Err() != nil {
 		return ctx, func() {}
 	}
 
 	reqArrivedAt := clock.Now()
+	// 用接收时间而非当前时间计算剩余预算，避免在队列外耗时被忽略。
 	if reqReceivedTimestamp, ok := apirequest.ReceivedTimestampFrom(ctx); ok {
 		reqArrivedAt = reqReceivedTimestamp
 	}

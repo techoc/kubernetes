@@ -26,6 +26,8 @@ import (
 )
 
 // ExpressionAccessor is an interface that provides access to a CEL expression.
+//
+// 把"表达式文本"与"期望返回类型"解耦，使编译器无需了解具体的配置结构体。
 type ExpressionAccessor interface {
 	GetExpression() string
 	ReturnTypes() []*celgo.Type
@@ -45,6 +47,9 @@ type EvaluationResult struct {
 }
 
 // Compiler provides a CEL expression compiler configured with the desired authentication related CEL variables.
+//
+// claims 与 user 两套变量环境不同（前者来自 IdP 的 token claims，后者是
+// 已构造的 UserInfo），因此分成两个编译入口，避免变量互相泄漏。
 type Compiler interface {
 	CompileClaimsExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error)
 	CompileUserExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error)

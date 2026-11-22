@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package handlers contains HTTP handlers to implement the apiserver APIs.
+//
+// 每个 handler 对应一类 REST 动作（create/update/delete/get/list/watch），
+// 负责解码、准入、持久化、watch 流以及错误到 HTTP 状态码的映射。
 package handlers

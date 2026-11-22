@@ -38,6 +38,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestJSONPatch 验证 JSONPatch 表达式的语义：test/add/remove/replace/copy/move
+// 对 map、list 与嵌套字段的作用，以及错误分支（非法路径、类型不匹配等）。
+//
+// 中文说明：JSONPatch 遵循 RFC 6902。特别值得注意的用例：
+//   - test 操作失败时整条补丁不生效（对象保持原样），这是乐观并发保护的基础；
+//   - 删除 map 键与删除 list 元素语义不同，前者按键名、后者按下标；
+//   - copy/move 到 list 末尾使用 "-" 追加。
 func TestJSONPatch(t *testing.T) {
 	deploymentGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 	tests := []struct {
@@ -799,10 +806,12 @@ func TestJSONPatch(t *testing.T) {
 	}
 }
 
+// makeDeployment 返回仅含一个容器的最小 Deployment，作为补丁测试的基准对象。
 func makeDeployment() *appsv1.Deployment {
 	return makeDeploymentWithContainers([]corev1.Container{{Name: "a"}})
 }
 
+// makeDeploymentWithContainers 用给定容器列表构造 Deployment。
 func makeDeploymentWithContainers(containers []corev1.Container) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{
@@ -815,6 +824,8 @@ func makeDeploymentWithContainers(containers []corev1.Container) *appsv1.Deploym
 	}
 }
 
+// makeDeploymentWithInit 同时设置 initContainers 与 containers，
+// 用于验证补丁能区分这两个同名结构的列表。
 func makeDeploymentWithInit(initContainers []corev1.Container, containers []corev1.Container) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{
@@ -828,6 +839,8 @@ func makeDeploymentWithInit(initContainers []corev1.Container, containers []core
 	}
 }
 
+// makeDeploymentWithComplexPodSpec 构造带 affinity 与 tolerations 的 PodSpec，
+// 用于测试对深层嵌套、含列表的结构打补丁。
 func makeDeploymentWithComplexPodSpec() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{

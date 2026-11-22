@@ -23,7 +23,12 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit/fuzzer"
 )
 
+// TestRoundTrip 验证 audit API 组在 JSON 与 protobuf 两种序列化下都能无损往返。
+//
+// 中文说明：使用 fuzzer 生成随机对象覆盖零值、nil 指针与边界组合；这类测试能
+// 发现手工编写的转换/深拷贝函数遗漏字段的问题，因此每个 API 组都应保留。
 func TestRoundTrip(t *testing.T) {
+	// JSON 往返验证标签与类型转换；protobuf 往返额外验证生成的 marshal 代码。
 	roundtrip.RoundTripTestForAPIGroup(t, Install, fuzzer.Funcs)
 	roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, fuzzer.Funcs)
 }

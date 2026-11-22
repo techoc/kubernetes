@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package options 是通用 api server 使用的公共 flags 与选项。
+// 它只依赖最小集合，不引用具体实现，以确保可被多个组件复用
+// （例如需要生成或校验配置的 CLI 命令）。
+//
 // package options is the public flags and options used by a generic api
 // server. It takes a minimal set of dependencies and does not reference
 // implementations, in order to ensure it may be reused by multiple components

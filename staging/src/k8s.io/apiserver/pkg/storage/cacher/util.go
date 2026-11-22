@@ -22,6 +22,9 @@ import (
 )
 
 // calculateRetryAfterForUnreadyCache calculates the retry duration based on the cache downtime.
+//
+// 指数退避：停机越久，客户端重试间隔越长，避免缓存刚恢复就被大量重试打垮；
+// 结果限制在 [1, 30] 秒，兼顾恢复速度与保护。
 func calculateRetryAfterForUnreadyCache(downtime time.Duration) int {
 	factor := 0.06
 	result := math.Exp(factor * downtime.Seconds())

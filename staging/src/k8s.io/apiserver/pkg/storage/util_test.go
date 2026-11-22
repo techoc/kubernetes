@@ -42,6 +42,7 @@ func init() {
 	utilruntime.Must(example2v1.AddToScheme(scheme))
 }
 
+// TestHighWaterMark 验证 HighWaterMark 只增不减，并在并发更新下收敛到最大值。
 func TestHighWaterMark(t *testing.T) {
 	var h storage.HighWaterMark
 
@@ -54,6 +55,7 @@ func TestHighWaterMark(t *testing.T) {
 		}
 	}
 
+	// 300 个协程并发更新随机值，最终结果必须等于其中最大的那个。
 	m := int64(0)
 	wg := sync.WaitGroup{}
 	for i := 0; i < 300; i++ {
@@ -73,6 +75,7 @@ func TestHighWaterMark(t *testing.T) {
 	}
 }
 
+// TestHasInitialEventsEndBookmarkAnnotation 验证仅当注解值为 "true" 时才认作初始事件结束书签。
 func TestHasInitialEventsEndBookmarkAnnotation(t *testing.T) {
 	createPod := func(name string) *example.Pod {
 		return &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: name}}

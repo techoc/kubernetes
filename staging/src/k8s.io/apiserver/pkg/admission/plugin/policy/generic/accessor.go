@@ -21,14 +21,27 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// PolicyAccessor is the narrow view of an admission policy that the generic
+// dispatcher needs. Both ValidatingAdmissionPolicy and MutatingAdmissionPolicy
+// implement it, so the dispatcher logic can be shared between the two plugins.
 type PolicyAccessor interface {
+	// GetName returns the policy name (cluster-scoped).
 	GetName() string
+	// GetNamespace is always empty for current cluster-scoped policies; it is
+	// present so a future namespaced policy variant can reuse this interface.
 	GetNamespace() string
+	// GetParamKind describes the Kind of the policy's param resource, or nil
+	// when the policy takes no parameters.
 	GetParamKind() *v1.ParamKind
+	// GetMatchConstraints restricts which requests the policy applies to.
 	GetMatchConstraints() *v1.MatchResources
+	// GetFailurePolicy decides behavior when evaluation fails; nil means Fail.
 	GetFailurePolicy() *v1.FailurePolicyType
 }
 
+// BindingAccessor is the narrow view of a policy binding that the generic
+// dispatcher needs. ValidatingAdmissionPolicyBinding and
+// MutatingAdmissionPolicyBinding both implement it.
 type BindingAccessor interface {
 	GetName() string
 	GetNamespace() string
@@ -37,7 +50,9 @@ type BindingAccessor interface {
 	// which is cluster-scoped, so namespace is usually left blank.
 	// But we leave the door open to add a namespaced vesion in the future
 	GetPolicyName() types.NamespacedName
+	// GetParamRef points at the param object this binding supplies, if any.
 	GetParamRef() *v1.ParamRef
 
+	// GetMatchResources further narrows the policy's match constraints.
 	GetMatchResources() *v1.MatchResources
 }

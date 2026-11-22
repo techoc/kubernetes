@@ -33,6 +33,7 @@ import (
 var cfgScheme = runtime.NewScheme()
 
 // validEgressSelectorNames contains the set of valid egress selector names.
+// 这三个名称是 API 契约，分别对应控制面、集群内与 etcd 三类出站流量。
 var validEgressSelectorNames = sets.NewString("controlplane", "cluster", "etcd")
 
 func init() {
@@ -45,6 +46,9 @@ func init() {
 // It does this by returning a nil configuration, which preserves backward compatibility.
 // This works because prior to this there was no egress selector configuration.
 // It returns an error if the file did not exist.
+//
+// 空路径返回 nil,nil 是刻意的向后兼容：未配置时等价于“直连”，
+// 调用方无需区分“未配置”和“配置为空”。
 func ReadEgressSelectorConfiguration(configFilePath string) (*apiserver.EgressSelectorConfiguration, error) {
 	if configFilePath == "" {
 		return nil, nil
@@ -54,6 +58,7 @@ func ReadEgressSelectorConfiguration(configFilePath string) (*apiserver.EgressSe
 	if err != nil {
 		return nil, fmt.Errorf("unable to read egress selector configuration from %q [%v]", configFilePath, err)
 	}
+	// EnableStrict 拒绝未知字段，防止拼写错误被静默忽略而回退到不安全的直连。
 	config, gvk, err := serializer.NewCodecFactory(cfgScheme, serializer.EnableStrict).UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
 		return nil, err
@@ -76,6 +81,7 @@ func ValidateEgressSelectorConfiguration(config *apiserver.EgressSelectorConfigu
 	}
 	for _, service := range config.EgressSelections {
 		fldPath := field.NewPath("service", "connection")
+		// 不同协议允许的 transport 不同，分派到各自校验器。
 		switch service.Connection.ProxyProtocol {
 		case apiserver.ProtocolDirect:
 			allErrs = append(allErrs, validateDirectConnection(service.Connection, fldPath)...)
@@ -97,6 +103,7 @@ func ValidateEgressSelectorConfiguration(config *apiserver.EgressSelectorConfigu
 
 	seen := sets.String{}
 	for i, service := range config.EgressSelections {
+		// 名称大小写不敏感：EGRESSSELECTION 是枚举语义，而非任意标识符。
 		canonicalName := strings.ToLower(service.Name)
 		fldPath := field.NewPath("service", "connection")
 		// no duplicate check
@@ -115,6 +122,7 @@ func ValidateEgressSelectorConfiguration(config *apiserver.EgressSelectorConfigu
 	return allErrs
 }
 
+// validateHTTPConnectTransport 要求 HTTP CONNECT 必须且只能配置 TCP 或 UDS 之一。
 func validateHTTPConnectTransport(transport *apiserver.Transport, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if transport == nil {
@@ -141,6 +149,7 @@ func validateHTTPConnectTransport(transport *apiserver.Transport, fldPath *field
 	return allErrs
 }
 
+// validateGRPCTransport 要求 gRPC 必须使用 UDS（konnectivity 的约定）。
 func validateGRPCTransport(transport *apiserver.Transport, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if transport == nil {
@@ -160,6 +169,7 @@ func validateGRPCTransport(transport *apiserver.Transport, fldPath *field.Path) 
 	return allErrs
 }
 
+// validateDirectConnection 直连不允许配置 transport，否则配置意图不明确。
 func validateDirectConnection(connection apiserver.Connection, fldPath *field.Path) field.ErrorList {
 	if connection.Transport != nil {
 		return field.ErrorList{field.Invalid(
@@ -172,6 +182,7 @@ func validateDirectConnection(connection apiserver.Connection, fldPath *field.Pa
 	return nil
 }
 
+// validateUDSConnection 要求 UDS 必须指定 socket 名称。
 func validateUDSConnection(udsConfig *apiserver.UDSTransport, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if udsConfig.UDSName == "" {
@@ -183,6 +194,8 @@ func validateUDSConnection(udsConfig *apiserver.UDSTransport, fldPath *field.Pat
 	return allErrs
 }
 
+// validateTCPConnection 按 URL scheme 校验：http 禁止 TLS 配置，https 必须配置 TLS，
+// 其他 scheme 一律拒绝，避免配置被静默忽略。
 func validateTCPConnection(tcpConfig *apiserver.TCPTransport, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -204,6 +217,8 @@ func validateTCPConnection(tcpConfig *apiserver.TCPTransport, fldPath *field.Pat
 	return allErrs
 }
 
+// validateTLSConfig 校验 TLS 必需字段并确认引用的证书文件存在；
+// 路径检查在启动期完成，避免运行时才发现代理不可用。
 func validateTLSConfig(tlsConfig *apiserver.TLSConfig, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 

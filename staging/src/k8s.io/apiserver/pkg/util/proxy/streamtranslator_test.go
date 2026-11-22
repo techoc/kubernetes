@@ -56,6 +56,8 @@ import (
 // data received from the websocket client upstream to the SPDY server (by translating the
 // websocket data into spdy). The returned data read on the websocket client STDOUT is then
 // compared the random data sent on STDIN to ensure they are the same.
+// 端到端验证 WebSocket(v5) 客户端经流转换器连到 SPDY(v4) 后端时的
+// STDIN→STDOUT 数据通路，并确认成功请求被计为 200。
 func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -157,6 +159,7 @@ apiserver_stream_translator_requests_total{code="200"} 1
 // data received from the websocket client upstream to the SPDY server (by translating the
 // websocket data into spdy). The returned data read on the websocket client STDERR is then
 // compared the random data sent on STDIN to ensure they are the same.
+// 覆盖 STDIN→STDERR 通路，确认标准错误流在协议转换后仍独立转发。
 func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -252,6 +255,8 @@ apiserver_stream_translator_requests_total{code="200"} 1
 }
 
 // Returns a random exit code in the range(1-127).
+// 非零退出码必须通过 error 流以结构化 Status 传回，测试用随机码避免
+// 偶然命中固定值而失去区分度。
 func randomExitCode() int {
 	errorCode := mrand.Intn(127) // Range: (0 - 126)
 	errorCode += 1               // Range: (1 - 127)
@@ -260,6 +265,7 @@ func randomExitCode() int {
 
 // TestStreamTranslator_ErrorStream tests the error stream by sending an error with a random
 // exit code, then validating the error arrives on the error stream.
+// 非零退出码属于正常命令结果，不应被记为 HTTP 失败：指标仍应是 200。
 func TestStreamTranslator_ErrorStream(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -368,6 +374,8 @@ apiserver_stream_translator_requests_total{code="200"} 1
 
 // TestStreamTranslator_MultipleReadChannels tests two streams (STDOUT, STDERR) reading from
 // the connections at the same time.
+// 验证同一连接上 STDOUT 与 STDERR 能并行读取且互不干扰（多读通道的
+// 并发正确性）。
 func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -476,6 +484,8 @@ apiserver_stream_translator_requests_total{code="200"} 1
 }
 
 // TestStreamTranslator_ThrottleReadChannels tests two streams (STDOUT, STDERR) using rate limited streams.
+// 限速值略低于待传数据量，确保节流路径真实生效而不仅是配置被接受；
+// 数据完整性仍需保持一致。
 func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 	// Create upstream fake SPDY server which copies STDIN back onto STDOUT and STDERR stream.
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -573,6 +583,7 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 
 // fakeTerminalSizeQueue implements TerminalSizeQueue, returning a random set of
 // "maxSizes" number of TerminalSizes, storing the TerminalSizes in "sizes" slice.
+// 记录已下发的尺寸，便于事后逐一比对；返回 nil 表示队列结束。
 type fakeTerminalSizeQueue struct {
 	maxSizes      int
 	terminalSizes []remotecommand.TerminalSize
@@ -580,6 +591,7 @@ type fakeTerminalSizeQueue struct {
 
 // newTerminalSizeQueue returns a pointer to a fakeTerminalSizeQueue passing
 // "max" number of random TerminalSizes created.
+// 预分配容量，避免高并发 resize 场景下反复扩容。
 func newTerminalSizeQueue(max int) *fakeTerminalSizeQueue {
 	return &fakeTerminalSizeQueue{
 		maxSizes:      max,
@@ -611,6 +623,8 @@ func randomTerminalSize() remotecommand.TerminalSize {
 }
 
 // TestStreamTranslator_MultipleWriteChannels
+// 注意：函数名与上方注释不一致（历史遗留），实际测试的是 TTY resize 通道；
+// 通过 10000 次随机尺寸验证宽度/高度在 WebSocket→SPDY 转换中无丢失、无乱序。
 func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -706,6 +720,7 @@ apiserver_stream_translator_requests_total{code="200"} 1
 
 // TestStreamTranslator_WebSocketServerErrors validates that when there is a problem creating
 // the websocket server as the first step of the StreamTranslator an error is properly returned.
+// 使用不受支持的 v4 子协议触发握手失败，验证转换器返回 400 而非静默接受。
 func TestStreamTranslator_WebSocketServerErrors(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
@@ -776,6 +791,8 @@ apiserver_stream_translator_requests_total{code="400"} 1
 
 // TestStreamTranslator_BlockRedirects verifies that the StreamTranslator will *not* follow
 // redirects; it will thrown an error instead.
+// 代理必须拒绝跟随重定向：跟随会把凭据/升级请求转发到后端指定地址，
+// 属于 SSRF/凭据泄露风险，因此所有 3xx 都映射为 500。
 func TestStreamTranslator_BlockRedirects(t *testing.T) {
 	metrics.Register()
 	t.Cleanup(metrics.ResetForTest)
@@ -853,6 +870,7 @@ apiserver_stream_translator_requests_total{code="500"} 1
 
 // streamContext encapsulates the structures necessary to communicate through
 // a SPDY connection, including the Reader/Writer streams.
+// 测试用后端把升级后的各条流集中在一个结构里，便于 handler 回环数据。
 type streamContext struct {
 	conn         io.Closer
 	stdinStream  io.ReadCloser
@@ -863,6 +881,8 @@ type streamContext struct {
 	writeStatus  func(status *apierrors.StatusError) error
 }
 
+// streamAndReply 把升级出的 stream 与“已回写 header”信号配对，测试用它
+// 等待每条流就绪。
 type streamAndReply struct {
 	httpstream.Stream
 	replySent <-chan struct{}
@@ -872,6 +892,8 @@ type streamAndReply struct {
 // connection with remote command streams defined in passed options. Returns a streamContext
 // structure containing the Reader/Writer streams to communicate through the SDPY connection.
 // Returns an error if unable to upgrade the HTTP connection to a SPDY connection.
+// 按 opts 计算期望流数（error 流始终存在），等所有流都建立后才返回，
+// 避免测试与生产代码在流注册时序上产生竞态。
 func createSPDYServerStreams(t *testing.T, w http.ResponseWriter, req *http.Request, opts Options) (*streamContext, error) {
 	_, err := httpstream.Handshake(req, w, []string{rcconstants.StreamProtocolV4Name})
 	if err != nil {
@@ -960,6 +982,8 @@ WaitForStreams:
 	return ctx, nil
 }
 
+// v4WriteStatusFunc 以 v4 协议格式把 StatusError 序列化写入 error 流；
+// 非零退出码就通过这条路径回传。
 func v4WriteStatusFunc(stream io.Writer) func(status *apierrors.StatusError) error {
 	return func(status *apierrors.StatusError) error {
 		bs, err := json.Marshal(status.Status())
@@ -971,6 +995,8 @@ func v4WriteStatusFunc(stream io.Writer) func(status *apierrors.StatusError) err
 	}
 }
 
+// fakeTransport 构造跳过校验的客户端 transport，用于连接测试用自签名
+// SPDY 服务端。
 func fakeTransport() (http.RoundTripper, error) {
 	cfg := &transport.Config{
 		TLS: transport.TLSConfig{

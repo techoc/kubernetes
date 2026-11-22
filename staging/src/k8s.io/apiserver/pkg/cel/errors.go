@@ -65,6 +65,9 @@ func (v *Error) Error() string {
 	return v.Detail
 }
 
+// Is 让 *Error 能通过 errors.Is 与哨兵错误匹配。
+// 只按 Type 归类，不比较 Detail，调用方可以据此区分"表达式非法"
+// 与"求值内部错误"，而不必依赖错误文本。
 func (v *Error) Is(err error) bool {
 	switch v.Type {
 	case ErrorTypeRequired:
@@ -115,10 +118,13 @@ func NewCompilationError(issues *cel.Issues) *CompilationError {
 		}}
 }
 
+// Error 返回面向用户的编译错误文本。
 func (e *CompilationError) Error() string {
 	return e.err.Error()
 }
 
+// Unwrap 同时暴露内部 *Error 与 ErrCompilation 哨兵，
+// 这样 errors.Is 既能匹配 ErrInvalid（经由 *Error.Is），也能匹配 ErrCompilation。
 func (e *CompilationError) Unwrap() []error {
 	return []error{e.err, ErrCompilation}
 }

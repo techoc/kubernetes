@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package eventclock 的测试实现：Fake 时钟不会自行前进，时间只由 SetTime/Run 推进。
 package eventclock
 
 import (
@@ -43,6 +44,8 @@ type waitGroupCounter struct {
 // of GoRoutineCounter
 var _ counter.GoRoutineCounter = (*waitGroupCounter)(nil)
 
+// Add 记录 goroutine 计数的变化；在 klog 高详细级别下附上调用栈片段，
+// 便于在测试失败时定位“谁在没有正确计数”的问题。
 func (wgc *waitGroupCounter) Add(delta int) {
 	klogV := klog.V(7)
 	if klogV.Enabled() {
@@ -70,6 +73,8 @@ func (wgc *waitGroupCounter) Add(delta int) {
 	wgc.wg.Add(delta)
 }
 
+// stackExcerpt / stackFrame 是调用栈的精简表示（文件名:行号），
+// 只用于日志，避免在日志中输出完整路径。
 type stackExcerpt []stackFrame
 
 type stackFrame struct {
@@ -193,6 +198,9 @@ func (fec *Fake) Run(limit *time.Time) {
 // SetTime sets the time and runs to completion all events that should
 // be started by the given time --- including any further events they
 // schedule
+//
+// 事件在独立 goroutine 中执行并计入 clientWG，因此 SetTime 会等它们全部
+// 完成后才返回，保证测试观察到的状态是确定的。
 func (fec *Fake) SetTime(t time.Time) {
 	fec.FakePassiveClock.SetTime(t)
 	for {
@@ -238,6 +246,8 @@ func (fec *Fake) Sleep(duration time.Duration) {
 
 // EventAfterDuration schedules the given function to be invoked once
 // the given duration has passed.
+//
+// 若启用了 fuzz，实际触发时间会随机后移，用于暴露对精确时序的依赖。
 func (fec *Fake) EventAfterDuration(f eventclock.EventFunc, d time.Duration) {
 	fec.waitersLock.Lock()
 	defer fec.waitersLock.Unlock()

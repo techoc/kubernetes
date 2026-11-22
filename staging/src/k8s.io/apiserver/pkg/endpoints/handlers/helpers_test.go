@@ -28,6 +28,7 @@ import (
 )
 
 func TestLazyTruncatedUserAgent(t *testing.T) {
+	// 短的 UA 原样输出；超长 UA 被截断，防止审计/日志字段膨胀。
 	req := &http.Request{}
 	req.Header = http.Header{}
 
@@ -44,11 +45,13 @@ func TestLazyTruncatedUserAgent(t *testing.T) {
 	uaTruncated := &lazyTruncatedUserAgent{req}
 	assert.NotEqual(t, ua, fmt.Sprintf("%v", uaTruncated))
 
+	// nil 请求时返回固定占位值而非 panic。
 	usUnknown := &lazyTruncatedUserAgent{}
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", usUnknown))
 }
 
 func TestLazyClientIP(t *testing.T) {
+	// 客户端 IP 取自 X-Forwarded-For；无请求时返回 unknown。
 	req := &http.Request{}
 	req.Header = http.Header{}
 
@@ -63,6 +66,7 @@ func TestLazyClientIP(t *testing.T) {
 }
 
 func TestLazyAccept(t *testing.T) {
+	// Accept 头直接透传；无请求时返回 unknown。
 	req := &http.Request{}
 	req.Header = http.Header{}
 
@@ -77,6 +81,7 @@ func TestLazyAccept(t *testing.T) {
 }
 
 func TestLazyVerb(t *testing.T) {
+	// verb 依赖 RequestInfo：watch=true 的 GET 应被识别为 watch。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyVerb{}))
 
 	u, _ := url.Parse("?watch=true")
@@ -86,6 +91,7 @@ func TestLazyVerb(t *testing.T) {
 }
 
 func TestLazyApiGroup(t *testing.T) {
+	// API 组从上下文中的 RequestInfo 读取；缺失时保持 unknown。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyAPIGroup{}))
 
 	scopeWithEmptyReq := &lazyAPIGroup{&http.Request{}}
@@ -98,6 +104,7 @@ func TestLazyApiGroup(t *testing.T) {
 }
 
 func TestLazyApiVersion(t *testing.T) {
+	// API 版本同样来自 RequestInfo。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyAPIVersion{}))
 
 	scopeWithEmptyReq := &lazyAPIVersion{&http.Request{}}
@@ -110,6 +117,7 @@ func TestLazyApiVersion(t *testing.T) {
 }
 
 func TestLazyName(t *testing.T) {
+	// 对象名来自 RequestInfo.Name；无值时保持 unknown。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyName{}))
 
 	scopeWithEmptyReq := &lazyName{&http.Request{}}
@@ -122,6 +130,7 @@ func TestLazyName(t *testing.T) {
 }
 
 func TestLazySubresource(t *testing.T) {
+	// 子资源名来自 RequestInfo.Subresource。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazySubresource{}))
 
 	scopeWithEmptyReq := &lazySubresource{&http.Request{}}
@@ -134,6 +143,7 @@ func TestLazySubresource(t *testing.T) {
 }
 
 func TestLazyNamespace(t *testing.T) {
+	// 命名空间来自 RequestInfo.Namespace。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyNamespace{}))
 
 	scopeWithEmptyReq := &lazyNamespace{&http.Request{}}
@@ -146,6 +156,7 @@ func TestLazyNamespace(t *testing.T) {
 }
 
 func TestLazyResource(t *testing.T) {
+	// 资源名来自 RequestInfo.Resource。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyResource{}))
 
 	resourceWithEmptyReq := &lazyResource{&http.Request{}}
@@ -158,6 +169,7 @@ func TestLazyResource(t *testing.T) {
 }
 
 func TestLazyScope(t *testing.T) {
+	// scope 由是否存在 namespace 推导：有命名空间即 namespace 级。
 	assert.Equal(t, "unknown", fmt.Sprintf("%v", &lazyScope{}))
 
 	scopeWithEmptyReq := &lazyScope{&http.Request{}}

@@ -31,6 +31,8 @@ import (
 )
 
 // fakeHandler implements Interface
+// fakeHandler 是可控的准入插件替身：返回值与注解都由测试用例指定，
+// 便于验证 WithAudit 装饰器只增加审计信息、不改变决策。
 type fakeHandler struct {
 	// return value of Admit()
 	admit error
@@ -48,6 +50,7 @@ var _ Interface = &fakeHandler{}
 var _ MutationInterface = &fakeHandler{}
 var _ ValidationInterface = &fakeHandler{}
 
+// Admit 写入变异阶段的注解并返回预设错误。
 func (h fakeHandler) Admit(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	for k, v := range h.admitAnnotations {
 		a.AddAnnotation(k, v)
@@ -55,6 +58,7 @@ func (h fakeHandler) Admit(ctx context.Context, a Attributes, o ObjectInterfaces
 	return h.admit
 }
 
+// Validate 写入校验阶段的注解并返回预设错误。
 func (h fakeHandler) Validate(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	for k, v := range h.validateAnnotations {
 		a.AddAnnotation(k, v)
@@ -62,14 +66,18 @@ func (h fakeHandler) Validate(ctx context.Context, a Attributes, o ObjectInterfa
 	return h.validate
 }
 
+// Handles 返回预设的操作处理能力。
 func (h fakeHandler) Handles(o Operation) bool {
 	return h.handles
 }
 
+// attributes 构造一个空属性记录，足够覆盖注解读写路径。
 func attributes() Attributes {
 	return NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, "", "", schema.GroupVersionResource{}, "", "", nil, false, nil)
 }
 
+// TestWithAudit 验证 WithAudit 包装后：返回值与底层 handler 一致，
+// 且插件添加的注解被原样转发到审计事件（含变异与校验两个阶段）。
 func TestWithAudit(t *testing.T) {
 	var testCases = map[string]struct {
 		admit               error
@@ -142,6 +150,7 @@ func TestWithAudit(t *testing.T) {
 	}
 	for tcName, tc := range testCases {
 		var handler Interface = fakeHandler{tc.admit, tc.admitAnnotations, tc.validate, tc.validateAnnotations, tc.handles}
+		// 审计上下文是注解落点；未初始化时 AddAnnotation 无处可写。
 		ctx := audit.WithAuditContext(context.Background())
 		ac := audit.AuditContextFrom(ctx)
 		if err := ac.Init(audit.RequestAuditConfig{Level: auditinternal.LevelMetadata}, nil); err != nil {
@@ -151,6 +160,7 @@ func TestWithAudit(t *testing.T) {
 		auditHandler := WithAudit(handler)
 		a := attributes()
 
+		// Handles 必须原样透传，否则装饰器会改变插件被调用的时机。
 		assert.Equal(t, handler.Handles(Create), auditHandler.Handles(Create), tcName+": WithAudit decorator should not effect the return value")
 
 		mutator, ok := handler.(MutationInterface)
@@ -165,6 +175,7 @@ func TestWithAudit(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, validator.Validate(ctx, a, nil), auditValidator.Validate(ctx, a, nil), tcName+": WithAudit decorator should not effect the return value")
 
+		// 校验阶段后写的注解会覆盖变异阶段的同名注解，因此以 validate 侧为准合并期望值。
 		annotations := make(map[string]string, len(tc.admitAnnotations)+len(tc.validateAnnotations))
 		for k, v := range tc.admitAnnotations {
 			annotations[k] = v
@@ -180,6 +191,9 @@ func TestWithAudit(t *testing.T) {
 	}
 }
 
+// TestWithAuditConcurrency 模拟 store.DeleteCollection 这类对同一属性记录
+// 并发调用 Admit 的场景，确保审计装饰器在并发下不 panic、不改变返回值。
+// 用 -race 运行才能发现真正的数据竞争。
 func TestWithAuditConcurrency(t *testing.T) {
 	admitAnnotations := map[string]string{
 		"plugin.example.com/foo": "foo",

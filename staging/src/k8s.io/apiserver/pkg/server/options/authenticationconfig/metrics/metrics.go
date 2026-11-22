@@ -67,6 +67,9 @@ var (
 var registerMetrics sync.Once
 var configHashProvider = configmetrics.NewAtomicHashProvider()
 
+// RegisterMetrics 注册认证配置控制器的指标，重复调用是安全的。
+// 使用 legacyregistry 而不是自定义 registry，是为了让这些指标随
+// /metrics 一起暴露，无需额外接线。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(authenticationConfigAutomaticReloadsTotal)
@@ -75,17 +78,22 @@ func RegisterMetrics() {
 	})
 }
 
+// ResetMetricsForTest 仅供测试清空累计值，避免用例之间相互污染。
 func ResetMetricsForTest() {
 	authenticationConfigAutomaticReloadsTotal.Reset()
 	authenticationConfigAutomaticReloadLastTimestampSeconds.Reset()
 }
 
+// RecordAuthenticationConfigAutomaticReloadFailure 记录一次自动重载失败。
+// apiServerID 以哈希形式作为标签，避免把实例标识直接写进指标。
 func RecordAuthenticationConfigAutomaticReloadFailure(apiServerID string) {
 	apiServerIDHash := getHash(apiServerID)
 	authenticationConfigAutomaticReloadsTotal.WithLabelValues("failure", apiServerIDHash).Inc()
 	authenticationConfigAutomaticReloadLastTimestampSeconds.WithLabelValues("failure", apiServerIDHash).SetToCurrentTime()
 }
 
+// RecordAuthenticationConfigAutomaticReloadSuccess 记录一次成功重载，
+// 并更新“最后应用的配置”信息指标。
 func RecordAuthenticationConfigAutomaticReloadSuccess(apiServerID, authConfigData string) {
 	apiServerIDHash := getHash(apiServerID)
 	authenticationConfigAutomaticReloadsTotal.WithLabelValues("success", apiServerIDHash).Inc()
@@ -94,10 +102,13 @@ func RecordAuthenticationConfigAutomaticReloadSuccess(apiServerID, authConfigDat
 	RecordAuthenticationConfigLastConfigInfo(apiServerID, authConfigData)
 }
 
+// RecordAuthenticationConfigLastConfigInfo 更新当前配置的实例/内容哈希。
+// 只暴露哈希而非原文，防止配置中的敏感内容进入监控系统。
 func RecordAuthenticationConfigLastConfigInfo(apiServerID, authConfigData string) {
 	configHashProvider.SetHashes(getHash(apiServerID), getHash(authConfigData))
 }
 
+// getHash 返回带算法前缀的哈希；空输入返回空串，使“未设置”在指标中可区分。
 func getHash(data string) string {
 	if len(data) == 0 {
 		return ""

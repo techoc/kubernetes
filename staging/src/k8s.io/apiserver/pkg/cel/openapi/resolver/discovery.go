@@ -28,17 +28,23 @@ import (
 )
 
 // ClientDiscoveryResolver uses client-go discovery to resolve schemas at run time.
+//
+// 相比内置定义，它能解析 CRD 等非内置类型，代价是每次解析要走一次
+// OpenAPI v3 文档拉取（通常由 discovery 客户端缓存）。
 type ClientDiscoveryResolver struct {
 	Discovery discovery.DiscoveryInterface
 }
 
 var _ SchemaResolver = (*ClientDiscoveryResolver)(nil)
 
+// ResolveSchema 拉取 OpenAPI v3 文档，先按 group/version 定位路径条目，
+// 再在 components.schemas 中通过 x-kubernetes-group-version-kind 扩展找到具体 GVK。
 func (r *ClientDiscoveryResolver) ResolveSchema(gvk schema.GroupVersionKind) (*spec.Schema, error) {
 	p, err := r.Discovery.OpenAPIV3().Paths()
 	if err != nil {
 		return nil, err
 	}
+	// OpenAPI v3 以 "api/<version>" 或 "apis/<group>/<version>" 为路径键。
 	resourcePath := resourcePathFromGV(gvk.GroupVersion())
 	c, ok := p[resourcePath]
 	if !ok {
@@ -57,6 +63,7 @@ func (r *ClientDiscoveryResolver) ResolveSchema(gvk schema.GroupVersionKind) (*s
 	if err != nil {
 		return nil, err
 	}
+	// 以组件内引用为起点展开所有 $ref，得到自包含的 schema。
 	s, err := PopulateRefs(func(ref string) (*spec.Schema, bool) {
 		s, ok := resp.Components.Schemas[strings.TrimPrefix(ref, refPrefix)]
 		return s, ok
@@ -67,6 +74,8 @@ func (r *ClientDiscoveryResolver) ResolveSchema(gvk schema.GroupVersionKind) (*s
 	return s, nil
 }
 
+// resolveRef 遍历所有组件 schema，返回 GVK 扩展匹配的第一个引用。
+// 找不到时返回包装了 ErrSchemaNotFound 的错误，便于调用方判定是否需要回退。
 func resolveRef(resp *schemaResponse, gvk schema.GroupVersionKind) (string, error) {
 	for ref, s := range resp.Components.Schemas {
 		var gvks []schema.GroupVersionKind
@@ -83,6 +92,8 @@ func resolveRef(resp *schemaResponse, gvk schema.GroupVersionKind) (string, erro
 	return "", fmt.Errorf("cannot resolve group version kind %q: %w", gvk, ErrSchemaNotFound)
 }
 
+// resourcePathFromGV 生成 OpenAPI v3 中 group/version 对应的路径前缀。
+// core 组没有 group 段，因此是 "api/<version>"。
 func resourcePathFromGV(gv schema.GroupVersion) string {
 	var resourcePath string
 	if len(gv.Group) == 0 {
@@ -93,6 +104,8 @@ func resourcePathFromGV(gv schema.GroupVersion) string {
 	return resourcePath
 }
 
+// schemaResponse 只解析 OpenAPI v3 文档中需要的 components.schemas 部分，
+// 避免把整个文档反序列化成大对象。
 type schemaResponse struct {
 	Components struct {
 		Schemas map[string]*spec.Schema `json:"schemas"`

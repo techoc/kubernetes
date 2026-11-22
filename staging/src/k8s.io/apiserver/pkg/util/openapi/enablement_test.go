@@ -28,6 +28,9 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// schema_k8sio_api_apps_v1_DeploymentCondition 是一份手写的 OpenAPI 定义替身，
+// 模拟代码生成器的产物：包含 enum 与描述中的 "Possible enum values" 段落，
+// 用于验证特性门控关闭时这些信息会被剥离。
 func schema_k8sio_api_apps_v1_DeploymentCondition(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -88,12 +91,16 @@ func schema_k8sio_api_apps_v1_DeploymentCondition(ref common.ReferenceCallback) 
 	}
 }
 
+// getOpenAPIDefs 是传给被测函数的定义来源，只包含上面那一个类型。
 var getOpenAPIDefs common.GetOpenAPIDefinitions = func(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
 		"k8s.io/api/apps/v1.DeploymentCondition": schema_k8sio_api_apps_v1_DeploymentCondition(ref),
 	}
 }
 
+// TestGetOpenAPIDefinitionsWithoutDisabledFeatures 验证 OpenAPIEnums 门控决定
+// enum 信息（Enum 列表与描述中的 enum 说明）是否出现在返回的定义中。
+// 两个子用例分别对应门控开/关，断言方式为扫描所有属性查找 enum 痕迹。
 func TestGetOpenAPIDefinitionsWithoutDisabledFeatures(t *testing.T) {
 	for _, tc := range []struct {
 		enabled        bool

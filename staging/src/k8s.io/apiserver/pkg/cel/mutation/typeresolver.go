@@ -36,10 +36,16 @@ const JSONPatchTypeName = "JSONPatch"
 // CEL expressions without schema information about the object.
 type DynamicTypeResolver struct{}
 
+// Resolve 按类型名惰性构造 CEL 类型。
+//
+// 之所以叫"动态"：变异表达式在编译时可能拿不到 OpenAPI schema，只能从表达式里
+// 用到的字段路径推断类型。返回 (nil, false) 表示不归本解析器负责，交由调用链
+// 上其他解析器处理，这是 CEL 类型解析的组合约定。
 func (r *DynamicTypeResolver) Resolve(name string) (common.ResolvedType, bool) {
 	if name == JSONPatchTypeName {
 		return &JSONPatchType{}, true
 	}
+	// "Object" 或 "Object.xxx" 形式统一交给 dynamic 包构造，后者从后缀路径推导字段类型。
 	if name == ObjectTypeName || strings.HasPrefix(name, ObjectTypeName+".") {
 		return dynamic.NewObjectType(name), true
 	}

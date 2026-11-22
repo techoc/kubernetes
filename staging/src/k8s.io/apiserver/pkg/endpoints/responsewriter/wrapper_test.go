@@ -28,6 +28,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestWithHTTP1 验证多层包装后 Flush/CloseNotify/Hijack 仍可透传，
+// 且 GetOriginal 能穿透所有装饰器拿到原始 writer。
 func TestWithHTTP1(t *testing.T) {
 	var originalWant http.ResponseWriter
 	counterGot := &counter{}
@@ -83,6 +85,8 @@ func TestWithHTTP1(t *testing.T) {
 	sendRequest(t, server)
 }
 
+// TestWithHTTP2 与 HTTP/1 用例对称，但 HTTP/2 不支持 Hijack：
+// 包装后也不应“凭空”暴露 Hijacker，否则调用方会误判连接能力。
 func TestWithHTTP2(t *testing.T) {
 	var originalWant http.ResponseWriter
 	counterGot := &counter{}
@@ -132,6 +136,8 @@ func TestWithHTTP2(t *testing.T) {
 	sendRequest(t, server)
 }
 
+// TestGetOriginal 覆盖解包边界：未包装、单层、多层均返回原始 writer；
+// 自引用装饰器属于实现错误，应通过 panic 暴露而不是死循环。
 func TestGetOriginal(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -256,6 +262,7 @@ func assertCloseNotifierFlusherHijacker(t *testing.T, hijackableExpected bool, w
 	}
 }
 
+// counter 统计装饰器链上各方法被调用的次数，用于验证“每层包装恰好透传一次”。
 type counter struct {
 	FlushInvoked       int
 	HijackInvoked      int
@@ -274,6 +281,8 @@ func (c *counter) assert(t *testing.T, expected *counter) {
 	}
 }
 
+// fakeResponseWriterDecorator 显式实现 Unwrap 与三个可选接口，模拟真实装饰器；
+// 每个方法先计数再委托，以便断言调用穿透层数。
 type fakeResponseWriterDecorator struct {
 	http.ResponseWriter
 	counter *counter

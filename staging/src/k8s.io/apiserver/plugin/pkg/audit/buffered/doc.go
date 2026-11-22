@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package buffered 实现 audit.Backend 接口：把进入的审计事件攒成批次，
+// 再把批次交给下游（delegate）audit.Backend，以降低下游的调用频率。
+// 批处理会引入延迟，因此必须配合缓冲区大小与超时一起调优，
+// 避免事件长时间滞留在内存中。
+//
 // Package buffered provides an implementation for the audit.Backend interface
 // that batches incoming audit events and sends batches to the delegate audit.Backend.
 package buffered

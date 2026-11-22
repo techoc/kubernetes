@@ -21,6 +21,9 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ValidatingAdmissionPolicyConfiguration provides configuration for the validating admission policy controller.
+//
+// 中文说明：这是组件配置文件（--admission-control-config-file）中的片段，
+// 不是可通过 API 创建的资源；使用内部版本 + v1 转换以保持向后兼容。
 type ValidatingAdmissionPolicyConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -32,12 +35,17 @@ type ValidatingAdmissionPolicyConfiguration struct {
 	// Using this field requires the ManifestBasedAdmissionControlConfig
 	// feature gate to be enabled.
 	// +optional
+	//
+	// 中文说明：仅支持 admissionregistration.k8s.io/v1 是为了避免为静态清单
+	// 维护多版本兼容矩阵；配置对象名必须以 .static.k8s.io 结尾。
 	StaticManifestsDir string `json:"staticManifestsDir,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // MutatingAdmissionPolicyConfiguration provides configuration for the mutating admission policy controller.
+//
+// 中文说明：与 validating 版本结构相同但类型独立，便于两者将来独立演进。
 type MutatingAdmissionPolicyConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -49,5 +57,8 @@ type MutatingAdmissionPolicyConfiguration struct {
 	// Using this field requires the ManifestBasedAdmissionControlConfig
 	// feature gate to be enabled.
 	// +optional
+	//
+	// 中文说明：mutating 策略可改变对象内容，因此该目录的写入权限等同于
+	// 对集群内所有匹配对象的修改权限，部署时须严格限制。
 	StaticManifestsDir string `json:"staticManifestsDir,omitempty"`
 }

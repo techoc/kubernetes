@@ -32,6 +32,9 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestTotals 验证存储转换计数指标的 status 标签映射：
+// 成功为 OK，gRPC 错误用 code 名，普通错误为 unknown-non-grpc，
+// 被包裹的 gRPC 错误也应被正确识别。
 func TestTotals(t *testing.T) {
 	nonStatusErr := errors.New("test error")
 	failedPreconditionErr := status.Error(codes.FailedPrecondition, "test error")
@@ -145,6 +148,8 @@ func TestTotals(t *testing.T) {
 	}
 }
 
+// TestLatency 验证转换耗时直方图按 transformer 前缀与转换方向区分，
+// 并检查 10s/5s 落在正确的桶中。
 func TestLatency(t *testing.T) {
 	testCases := []struct {
 		desc               string

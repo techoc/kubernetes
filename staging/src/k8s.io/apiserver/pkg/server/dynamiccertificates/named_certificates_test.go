@@ -36,16 +36,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// testCertSpec 描述测试证书的自签名参数：host 作为 CN，names/ips 作为 SAN。
 type testCertSpec struct {
 	host       string
 	names, ips []string // in certificate
 }
 
+// namedtestCertSpec 在证书参数之外附带“显式 SNI 名称”（对应
+// --tls-sni-cert-key 的显式名字列表）。
 type namedtestCertSpec struct {
 	testCertSpec
 	explicitNames []string // as --tls-sni-cert-key explicit names
 }
 
+// TestBuiltNamedCertificates 验证 SNI 证书映射的构建规则：DNS SAN 与显式
+// 名称进入映射，IP 地址被忽略；同名时显式名称优先，且映射值必须指向正确
+// 的证书（通过证书签名索引校验）。
 func TestBuiltNamedCertificates(t *testing.T) {
 	tests := []struct {
 		certs         []namedtestCertSpec
@@ -136,6 +142,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
+			// 显式名称优先于证书内 SAN：同一名称出现冲突时后者胜出。
 			// two certs with the same name, explicit trumps
 			certs: []namedtestCertSpec{
 				{
@@ -177,6 +184,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
+			// 通配符与普通名称可共存；映射键保留用户书写形式，不做规范化。
 			// wildcards
 			certs: []namedtestCertSpec{
 				{
@@ -245,6 +253,8 @@ NextTest:
 	}
 }
 
+// parseIPList 把字符串 IP 转为 net.IP；使用 ParseIPSloppy 是为了与
+// Kubernetes 其他组件对历史遗留地址写法的处理保持一致。
 func parseIPList(ips []string) []net.IP {
 	var netIPs []net.IP
 	for _, ip := range ips {
@@ -253,6 +263,7 @@ func parseIPList(ips []string) []net.IP {
 	return netIPs
 }
 
+// createTestTLSCerts 生成自签名证书并包装成静态 SNI 内容提供者。
 func createTestTLSCerts(spec testCertSpec, names []string) (certProvider SNICertKeyContentProvider, err error) {
 	certPem, keyPem, err := generateSelfSignedCertKey(spec.host, parseIPList(spec.ips), spec.names)
 	if err != nil {
@@ -262,10 +273,13 @@ func createTestTLSCerts(spec testCertSpec, names []string) (certProvider SNICert
 	return NewStaticSNICertKeyContent("test-cert", certPem, keyPem, names...)
 }
 
+// x509CertSignature 用证书签名字节作为测试内的唯一标识，便于把映射结果
+// 反查回输入证书的下标。
 func x509CertSignature(cert *x509.Certificate) string {
 	return base64.StdEncoding.EncodeToString(cert.Signature)
 }
 
+// certSignature 从 provider 当前内容解析出 x509 证书并返回其签名。
 func certSignature(certProvider CertKeyContentProvider) (string, error) {
 	currentCert, currentKey := certProvider.CurrentCertKeyContent()
 
@@ -284,6 +298,8 @@ func certSignature(certProvider CertKeyContentProvider) (string, error) {
 // generateSelfSignedCertKey creates a self-signed certificate and key for the given host.
 // Host may be an IP or a DNS name
 // You may also specify additional subject alt names (either ip or dns names) for the certificate
+// 有效期 100 年、IsCA=true 仅为了让测试证书无需额外信任链即可使用；
+// 这不是生产证书生成器。
 func generateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestInputStreamReader 端到端验证 LocationStreamer 直接读取远程流内容。
 func TestInputStreamReader(t *testing.T) {
 	resultString := "Test output"
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -60,6 +61,8 @@ func TestInputStreamReader(t *testing.T) {
 	}
 }
 
+// TestInputStreamNullLocation 验证 Location 为空时返回 nil 流而非错误，
+// 调用方据此判断“无重定向”而不是当作失败。
 func TestInputStreamNullLocation(t *testing.T) {
 	streamer := &LocationStreamer{
 		Location: nil,
@@ -73,6 +76,7 @@ func TestInputStreamNullLocation(t *testing.T) {
 	}
 }
 
+// testTransport 用预置的 HTTP 响应文本伪造 RoundTripper，避免真实网络。
 type testTransport struct {
 	body string
 }
@@ -87,6 +91,8 @@ func fakeTransport(mime, message string) http.RoundTripper {
 	return &testTransport{body: content}
 }
 
+// TestInputStreamContentType 验证上游响应的 Content-Type 被原样透传，
+// 供调用方决定如何解释流。
 func TestInputStreamContentType(t *testing.T) {
 	location, _ := url.Parse("http://www.example.com")
 	streamer := &LocationStreamer{
@@ -104,6 +110,7 @@ func TestInputStreamContentType(t *testing.T) {
 	}
 }
 
+// TestInputStreamTransport 验证自定义 Transport 被用于拉取流。
 func TestInputStreamTransport(t *testing.T) {
 	message := "hello world"
 	location, _ := url.Parse("http://www.example.com")
@@ -128,6 +135,8 @@ func fakeInternalServerErrorTransport(mime, message string) http.RoundTripper {
 	return &testTransport{body: content}
 }
 
+// TestInputStreamInternalServerErrorTransport 验证 5xx 响应经 ResponseChecker 转换
+// 为 InternalError，且保留上游给的消息作为原因。
 func TestInputStreamInternalServerErrorTransport(t *testing.T) {
 	message := "Pod is in PodPending"
 	location, _ := url.Parse("http://www.example.com")
@@ -149,6 +158,8 @@ func TestInputStreamInternalServerErrorTransport(t *testing.T) {
 	}
 }
 
+// TestInputStreamRedirects 验证 PreventRedirects 生效：重定向必须报错而不是被跟随，
+// 否则 apiserver 会被诱导去访问任意地址（SSRF 风险）。
 func TestInputStreamRedirects(t *testing.T) {
 	const redirectPath = "/redirect"
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

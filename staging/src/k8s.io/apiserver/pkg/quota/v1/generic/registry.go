@@ -24,6 +24,9 @@ import (
 )
 
 // implements a basic registry
+//
+// simpleRegistry 是 Evaluator 的进程内注册表，按 GroupResource 唯一索引；
+// 读写锁允许高频的 Get 与低频的 Add/Remove 并发。
 type simpleRegistry struct {
 	lock sync.RWMutex
 	// evaluators tracked by the registry
@@ -31,30 +34,35 @@ type simpleRegistry struct {
 }
 
 // NewRegistry creates a simple registry with initial list of evaluators
+// 初始列表按 GroupResource 去重，后出现的条目覆盖先出现的。
 func NewRegistry(evaluators []quota.Evaluator) quota.Registry {
 	return &simpleRegistry{
 		evaluators: evaluatorsByGroupResource(evaluators),
 	}
 }
 
+// Add 注册或替换某个 GroupResource 的 evaluator。
 func (r *simpleRegistry) Add(e quota.Evaluator) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.evaluators[e.GroupResource()] = e
 }
 
+// Remove 删除某个 evaluator；若不存在则为空操作。
 func (r *simpleRegistry) Remove(e quota.Evaluator) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	delete(r.evaluators, e.GroupResource())
 }
 
+// Get 返回对应 GroupResource 的 evaluator，不存在时返回 nil。
 func (r *simpleRegistry) Get(gr schema.GroupResource) quota.Evaluator {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	return r.evaluators[gr]
 }
 
+// List 返回当前所有 evaluator 的快照；顺序不确定，调用方不应依赖。
 func (r *simpleRegistry) List() []quota.Evaluator {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -63,6 +71,7 @@ func (r *simpleRegistry) List() []quota.Evaluator {
 }
 
 // evaluatorsByGroupResource converts a list of evaluators to a map by group resource.
+// 重复条目按“后者胜出”处理，与 Add 的覆盖语义保持一致。
 func evaluatorsByGroupResource(items []quota.Evaluator) map[schema.GroupResource]quota.Evaluator {
 	result := map[schema.GroupResource]quota.Evaluator{}
 	for _, item := range items {

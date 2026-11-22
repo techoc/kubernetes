@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package bearertoken 提供基于 Authorization: Bearer 头的令牌认证。
 package bearertoken
 
 import (
@@ -29,6 +30,7 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
+// TestAuthenticateRequest 验证合法 Bearer 头能解析出 token 并交给 TokenFunc。
 func TestAuthenticateRequest(t *testing.T) {
 	auth := New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		if token != "token" {
@@ -44,6 +46,8 @@ func TestAuthenticateRequest(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestIncludingValueAfterToken 验证 token 后追加多余内容时仍只取第一个 token，
+// 其余片段被忽略而不会拼接进 token。
 func TestAuthenticateRequestIncludingValueAfterToken(t *testing.T) {
 	testCases := []struct {
 		Req *http.Request
@@ -66,6 +70,8 @@ func TestAuthenticateRequestIncludingValueAfterToken(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenInvalid 验证 TokenFunc 返回 (nil,false,nil) 时，
+// 认证器会补上 invalidToken 错误，避免出现“未通过但无错误”的含糊结果。
 func TestAuthenticateRequestTokenInvalid(t *testing.T) {
 	auth := New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		return nil, false, nil
@@ -81,6 +87,8 @@ func TestAuthenticateRequestTokenInvalid(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenInvalidCustomError 验证 TokenFunc 返回的自定义错误被原样透传，
+// 不会被 invalidToken 覆盖。
 func TestAuthenticateRequestTokenInvalidCustomError(t *testing.T) {
 	customError := errors.New("custom")
 	auth := New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
@@ -97,6 +105,7 @@ func TestAuthenticateRequestTokenInvalidCustomError(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenError 验证认证器返回的普通错误被透传，且不返回用户信息。
 func TestAuthenticateRequestTokenError(t *testing.T) {
 	auth := New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		return nil, false, errors.New("error")
@@ -109,13 +118,19 @@ func TestAuthenticateRequestTokenError(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestBadValue 验证缺少 token 或非 Bearer 格式的请求不会调用 TokenFunc，
+// 而是以“未认证、无错误”返回，把请求交给后续认证器处理。
 func TestAuthenticateRequestBadValue(t *testing.T) {
 	testCases := []struct {
 		Req *http.Request
 	}{
+		// 无 Authorization 头
 		{Req: &http.Request{}},
+		// 只有 scheme，没有 token
 		{Req: &http.Request{Header: http.Header{"Authorization": []string{"Bearer"}}}},
+		// scheme 大小写不匹配
 		{Req: &http.Request{Header: http.Header{"Authorization": []string{"bear token"}}}},
+		// 用了冒号而非空格
 		{Req: &http.Request{Header: http.Header{"Authorization": []string{"Bearer: token"}}}},
 	}
 	for i, testCase := range testCases {
@@ -130,23 +145,29 @@ func TestAuthenticateRequestBadValue(t *testing.T) {
 	}
 }
 
+// dummyRecorder 是测试用 warning.Recorder，记录最近一条 warning 供断言。
 type dummyRecorder struct {
 	agent string
 	text  string
 }
 
+// AddWarning 实现 warning.Recorder 接口。
 func (r *dummyRecorder) AddWarning(agent, text string) {
 	r.agent = agent
 	r.text = text
 	return
 }
 
+// getWarning 返回最近一次记录的 warning 文本。
 func (r *dummyRecorder) getWarning() string {
 	return r.text
 }
 
+// 编译期断言：dummyRecorder 实现 warning.Recorder。
 var _ warning.Recorder = &dummyRecorder{}
 
+// TestBearerToken 以表驱动方式覆盖认证、Authorization 头清理与 warning 的端到端行为：
+// 仅认证成功时才移除头，其余情况保留原头以免掩盖问题或丢失下游所需信息。
 func TestBearerToken(t *testing.T) {
 	tests := map[string]struct {
 		AuthorizationHeaders []string
@@ -158,6 +179,7 @@ func TestBearerToken(t *testing.T) {
 		ExpectedAuthorizationHeaders []string
 		ExpectedRecordedWarning      string
 	}{
+		// 以下情况应视为“未处理”：不认证、不返回错误，并保留原始 Authorization 头。
 		"no header": {
 			AuthorizationHeaders:         nil,
 			ExpectedUserName:             "",
@@ -186,6 +208,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedErr:                  false,
 			ExpectedAuthorizationHeaders: []string{"Bearer "},
 		},
+		// 成功认证后必须删除头，防止凭据被上游或下游意外记录。
 		"valid bearer token removing header": {
 			AuthorizationHeaders: []string{"Bearer 123"},
 			TokenAuth: authenticator.TokenFunc(func(ctx context.Context, t string) (*authenticator.Response, bool, error) {
@@ -196,6 +219,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedErr:                  false,
 			ExpectedAuthorizationHeaders: nil,
 		},
+		// 认证器拒绝且未返回错误时，由 AuthenticateRequest 补上 invalidToken。
 		"invalid bearer token": {
 			AuthorizationHeaders:         []string{"Bearer 123"},
 			TokenAuth:                    authenticator.TokenFunc(func(ctx context.Context, t string) (*authenticator.Response, bool, error) { return nil, false, nil }),
@@ -204,6 +228,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedErr:                  true,
 			ExpectedAuthorizationHeaders: []string{"Bearer 123"},
 		},
+		// 双空格会被切成空 token；此时应记录 warning 提示调用方修正头格式。
 		"valid bearer token with a space": {
 			AuthorizationHeaders:         []string{"Bearer  token"},
 			ExpectedUserName:             "",
@@ -212,6 +237,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedAuthorizationHeaders: []string{"Bearer  token"},
 			ExpectedRecordedWarning:      invalidTokenWithSpaceWarning,
 		},
+		// 认证器错误必须原样返回，不能退化为 invalidToken。
 		"error bearer token": {
 			AuthorizationHeaders: []string{"Bearer 123"},
 			TokenAuth: authenticator.TokenFunc(func(ctx context.Context, t string) (*authenticator.Response, bool, error) {
@@ -225,10 +251,13 @@ func TestBearerToken(t *testing.T) {
 	}
 
 	for k, tc := range tests {
+		// 每个用例独立的 recorder，避免 warning 串扰。
 		dc := dummyRecorder{agent: "", text: ""}
 		ctx := genericapirequest.NewDefaultContext()
+		// 通过 context 注入 recorder，warning.AddWarning 才能被记录。
 		ctxWithRecorder := warning.WithWarningRecorder(ctx, &dc)
 		req, _ := http.NewRequestWithContext(ctxWithRecorder, "GET", "/", nil)
+		// 允许同一用例添加多个头；Get 只读取第一个。
 		for _, h := range tc.AuthorizationHeaders {
 			req.Header.Add("Authorization", h)
 		}

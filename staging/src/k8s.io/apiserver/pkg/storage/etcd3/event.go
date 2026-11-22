@@ -24,6 +24,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// event 是 etcd watch 事件的内部归一化表示；把创建/删除/进度通知等不同
+// 形态统一成结构体，便于 cache 层按同一套逻辑处理。
 type event struct {
 	key              string
 	value            []byte
@@ -42,6 +44,8 @@ type event struct {
 	// note that we decided to extend the event
 	// struct field to eliminate contention
 	// between startWatching and processEvent
+	// 用事件字段而非共享状态传递“初始事件已同步完”，避免两个 goroutine
+	// 为同一个标记加锁。
 	isInitialEventsEndBookmark bool
 	// isInitialEvent indicates the event was generated from an initial state sync.
 	isInitialEvent bool
@@ -49,6 +53,7 @@ type event struct {
 }
 
 // parseKV converts a KeyValue retrieved from an initial sync() listing to a synthetic isCreated event.
+// 初始 list 没有真实的 watch 事件，合成 created 事件让下游与增量路径共用逻辑。
 func parseKV(kv *mvccpb.KeyValue) *event {
 	return &event{
 		key:            string(kv.Key),
@@ -61,6 +66,8 @@ func parseKV(kv *mvccpb.KeyValue) *event {
 	}
 }
 
+// parseEvent 把 etcd 原始事件转换为内部 event。删除事件必须带 PrevKv，
+// 否则无法判断对象此前是否存在/内容是否匹配（常见于 revision 已被压缩）。
 func parseEvent(e *clientv3.Event) (*event, error) {
 	if !e.IsCreate() && e.PrevKv == nil {
 		// If the previous value is nil, error. One example of how this is possible is if the previous value has been compacted already.
@@ -81,6 +88,8 @@ func parseEvent(e *clientv3.Event) (*event, error) {
 	return ret, nil
 }
 
+// progressNotifyEvent 生成 etcd 进度通知事件：不携带数据，只推进 revision，
+// 让 watcher 能确认“已看到该 revision 之前的所有事件”。
 func progressNotifyEvent(rev int64) *event {
 	return &event{
 		rev:              rev,

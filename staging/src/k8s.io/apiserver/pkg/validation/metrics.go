@@ -27,6 +27,7 @@ const (
 )
 
 // ValidationMetrics is the interface for validation metrics.
+// 用接口而非全局计数器，便于测试替换并避免各包直接依赖具体实现。
 type ValidationMetrics interface {
 	IncDeclarativeValidationMismatchMetric(validationIdentifier string)
 	IncDeclarativeValidationPanicMetric(validationIdentifier string)
@@ -34,6 +35,9 @@ type ValidationMetrics interface {
 	Reset()
 }
 
+// validationMetricsInstance 是生产实现。
+// 同时维护“总量”和“按 validation identifier 拆分”的两个计数器：
+// 前者用于长期趋势（BETA），后者用于定位具体规则（ALPHA，新增标签较灵活）。
 var validationMetricsInstance = &validationMetrics{
 	DeclarativeValidationMismatchCounter: metrics.NewCounter(
 		&metrics.CounterOpts{
@@ -85,8 +89,11 @@ var validationMetricsInstance = &validationMetrics{
 }
 
 // Metrics provides access to validation metrics.
+// 包级可变变量而非常量：测试可以通过替换它注入假指标实现。
 var Metrics ValidationMetrics = validationMetricsInstance
 
+// init 在导入时注册指标；相对于显式 Register 调用，这保证任何使用
+// Metrics 的组件都不会忘记注册。
 func init() {
 	legacyregistry.MustRegister(validationMetricsInstance.DeclarativeValidationMismatchCounter)
 	legacyregistry.MustRegister(validationMetricsInstance.DeclarativeValidationMismatchCounterVector)
@@ -95,6 +102,7 @@ func init() {
 	legacyregistry.MustRegister(validationMetricsInstance.DuplicateValidationErrorCounter)
 }
 
+// validationMetrics 是 ValidationMetrics 的生产实现，持有全部底层计数器。
 type validationMetrics struct {
 	DeclarativeValidationMismatchCounter       *metrics.Counter
 	DeclarativeValidationMismatchCounterVector *metrics.CounterVec
@@ -113,6 +121,7 @@ func (m *validationMetrics) Reset() {
 }
 
 // IncDeclarativeValidationMismatchMetric increments the counter for the declarative_validation_mismatch_total metric.
+// 同时更新聚合计数与按标识拆分计数，二者始终成对增长。
 func (m *validationMetrics) IncDeclarativeValidationMismatchMetric(validationIdentifier string) {
 	m.DeclarativeValidationMismatchCounter.Inc()
 	m.DeclarativeValidationMismatchCounterVector.WithLabelValues(validationIdentifier).Inc()
@@ -129,6 +138,7 @@ func (m *validationMetrics) IncDuplicateValidationErrorMetric() {
 	m.DuplicateValidationErrorCounter.Inc()
 }
 
+// ResetValidationMetricsInstance 重置全局指标实例，供测试清理状态。
 func ResetValidationMetricsInstance() {
 	validationMetricsInstance.Reset()
 }

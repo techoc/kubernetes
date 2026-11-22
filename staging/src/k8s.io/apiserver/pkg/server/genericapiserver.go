@@ -69,7 +69,11 @@ import (
 )
 
 // Info about an API group.
+//
+// APIGroupInfo 描述一个 API 组的安装信息：版本优先级、各版本的资源存储、
+// 编解码器与 OpenAPI 定义。它是 InstallAPIGroup* 的唯一输入。
 type APIGroupInfo struct {
+	// PrioritizedVersions 按优先级从高到低排列；发现文档与默认版本选择都依赖该顺序。
 	PrioritizedVersions []schema.GroupVersion
 	// Info about the resources in this group. It's a map from version to resource to the storage.
 	VersionedResourcesStorageMap map[string]map[string]rest.Storage
@@ -98,6 +102,7 @@ type APIGroupInfo struct {
 	StaticOpenAPISpec map[string]*spec.Schema
 }
 
+// destroyStorage 关闭该组所有版本的存储；只在服务器销毁时调用一次。
 func (a *APIGroupInfo) destroyStorage() {
 	for _, stores := range a.VersionedResourcesStorageMap {
 		for _, store := range stores {
@@ -107,6 +112,10 @@ func (a *APIGroupInfo) destroyStorage() {
 }
 
 // GenericAPIServer contains state for a Kubernetes cluster api server.
+//
+// 该结构只承载“通用”能力；具体 API 组由 kube-apiserver/aggregator 通过
+// InstallAPIGroup* 注入。生命周期钩子（post-start/pre-shutdown）在
+// PrepareRun 之后才会真正生效。
 type GenericAPIServer struct {
 	// discoveryAddresses is used to build cluster IPs for discovery.
 	discoveryAddresses discovery.Addresses
@@ -309,6 +318,9 @@ type GenericAPIServer struct {
 
 // DelegationTarget is an interface which allows for composition of API servers with top level handling that works
 // as expected.
+//
+// 组合模式：kube-apiserver 在最外层，聚合层与各 API 组按顺序委托。每个
+// 实现的 NextDelegate 指向下一环，直到 emptyDelegate 返回 404。
 type DelegationTarget interface {
 	// UnprotectedHandler returns a handler that is NOT protected by a normal chain
 	UnprotectedHandler() http.Handler
@@ -340,23 +352,34 @@ type DelegationTarget interface {
 	Destroy()
 }
 
+// UnprotectedHandler 返回未经认证/授权链保护的 handler；仅供内部组合使用，
+// 直接对外暴露会绕过所有安全过滤。
 func (s *GenericAPIServer) UnprotectedHandler() http.Handler {
 	// when we delegate, we need the server we're delegating to choose whether or not to use gorestful
 	return s.Handler.Director
 }
+
+// PostStartHooks 返回可被组合的 post-start 钩子集合。
 func (s *GenericAPIServer) PostStartHooks() map[string]postStartHookEntry {
 	return s.postStartHooks
 }
+
+// PreShutdownHooks 返回可被组合的 pre-shutdown 钩子集合。
 func (s *GenericAPIServer) PreShutdownHooks() map[string]preShutdownHookEntry {
 	return s.preShutdownHooks
 }
+
+// HealthzChecks 返回 /healthz 汇总使用的检查项。
 func (s *GenericAPIServer) HealthzChecks() []healthz.HealthChecker {
 	return s.healthzRegistry.checks
 }
+
+// ListedPaths 返回根路径索引页展示的路径列表。
 func (s *GenericAPIServer) ListedPaths() []string {
 	return s.listedPathProvider.ListedPaths()
 }
 
+// NextDelegate 返回委托链中的下一环。
 func (s *GenericAPIServer) NextDelegate() DelegationTarget {
 	return s.delegationTarget
 }
@@ -393,12 +416,14 @@ func (s *GenericAPIServer) Destroy() {
 	}
 }
 
+// emptyDelegate 是委托链的终点：未匹配的请求最终落到这里的 handler。
 type emptyDelegate struct {
 	// handler is called at the end of the delegation chain
 	// when a request has been made against an unregistered HTTP path the individual servers will simply pass it through until it reaches the handler.
 	handler http.Handler
 }
 
+// NewEmptyDelegate 返回不带自定义 handler 的链尾（默认 404）。
 func NewEmptyDelegate() DelegationTarget {
 	return emptyDelegate{}
 }
@@ -436,14 +461,19 @@ func (s emptyDelegate) Destroy() {
 }
 
 // preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+// 未导出的类型把“必须先 PrepareRun”编码进类型系统，避免漏装 healthz/OpenAPI。
 type preparedGenericAPIServer struct {
 	*GenericAPIServer
 }
 
 // PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
+//
+// 顺序很重要：先递归准备委托链，再安装本层的 OpenAPI 与健康检查，
+// 这样根路径索引才能看到所有已注册端点。
 func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 	s.delegationTarget.PrepareRun()
 
+	// OpenAPI 安装可能较重，skipOpenAPIInstallation 允许 kube-aggregator 等自行处理。
 	if s.openAPIConfig != nil && !s.skipOpenAPIInstallation {
 		s.OpenAPIVersionedService, s.StaticOpenAPISpec = routes.OpenAPI{
 			Config: s.openAPIConfig,
@@ -460,6 +490,7 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 	s.installLivez()
 
 	// as soon as shutdown is initiated, readiness should start failing
+	// 让负载均衡在 ShutdownDelayDuration 窗口内先停止发送流量。
 	readinessStopCh := s.lifecycleSignals.ShutdownInitiated.Signaled()
 	err := s.addReadyzShutdownCheck(readinessStopCh)
 	if err != nil {
@@ -487,6 +518,7 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 // Deprecated: use RunWithContext instead. Run will not get removed to avoid
 // breaking consumers, but should not be used in new code.
 func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
+	// 兼容旧调用方：把 channel 适配为 context 后复用新实现。
 	ctx := wait.ContextForChannel(stopCh)
 	return s.RunWithContext(ctx)
 }
@@ -533,6 +565,9 @@ func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
 // |                       listenerStoppedCh
 // |                               |
 // |      HTTPServerStoppedListening (httpServerStoppedListeningCh)
+//
+// 核心不变量：先停止接收新请求，再等待在途请求排空，最后才关闭监听，
+// 从而避免优雅终止期间出现 connection refused。
 func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 	stopCh := ctx.Done()
 	delayedStopCh := s.lifecycleSignals.AfterShutdownDelayDuration
@@ -781,8 +816,10 @@ func (s preparedGenericAPIServer) NonBlockingRunWithContext(ctx context.Context,
 		close(internalStopCh)
 	}()
 
+	// post-start 钩子只在监听成功后运行，避免对外宣告一个无法服务的实例。
 	s.RunPostStartHooks(ctx)
 
+	// 通知 systemd 启动完成（非 systemd 环境下为空操作）。
 	if _, err := systemd.SdNotify(true, "READY=1\n"); err != nil {
 		klog.Errorf("Unable to send systemd daemon successful start message: %v\n", err)
 	}
@@ -794,6 +831,7 @@ func (s preparedGenericAPIServer) NonBlockingRunWithContext(ctx context.Context,
 func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *APIGroupInfo, typeConverter managedfields.TypeConverter) error {
 	var resourceInfos []*storageversion.ResourceInfo
 	for _, groupVersion := range apiGroupInfo.PrioritizedVersions {
+		// 没有资源的版本不注册，否则会在发现文档中出现空版本。
 		if len(apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version]) == 0 {
 			klog.Warningf("Skipping API %v because it has no resources.", groupVersion)
 			continue
@@ -817,6 +855,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 		resourceInfos = append(resourceInfos, r...)
 
 		// Aggregated discovery only aggregates resources under /apis
+		// 旧版 /api 使用单独的 manager，避免与 /apis 的组名冲突。
 		if apiPrefix == APIGroupPrefix {
 			s.AggregatedDiscoveryGroupManager.AddGroupVersion(
 				groupVersion.Group,
@@ -840,6 +879,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 
 	}
 
+	// 存储随服务器关闭一起销毁；注册为 destroy 函数而非立即执行。
 	s.RegisterDestroyFunc(apiGroupInfo.destroyStorage)
 
 	if s.FeatureGate.Enabled(features.StorageVersionAPI) &&
@@ -857,6 +897,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 // The <apiGroupInfo> passed into this function shouldn't be used elsewhere as the
 // underlying storage will be destroyed on this servers shutdown.
 func (s *GenericAPIServer) InstallLegacyAPIGroup(apiPrefix string, apiGroupInfo *APIGroupInfo) error {
+	// 只允许显式登记的旧前缀（通常是 /api），防止任意路径被当成核心组。
 	if !s.legacyAPIGroupPrefixes.Has(apiPrefix) {
 		return fmt.Errorf("%q is not in the allowed legacy API prefixes: %v", apiPrefix, s.legacyAPIGroupPrefixes.List())
 	}
@@ -923,6 +964,7 @@ func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) erro
 				Version:      groupVersion.Version,
 			})
 		}
+		// 首选版本始终是 PrioritizedVersions[0]，即使它没有资源（保持 API 契约稳定）。
 		preferredVersionForDiscovery := metav1.GroupVersionForDiscovery{
 			GroupVersion: apiGroupInfo.PrioritizedVersions[0].String(),
 			Version:      apiGroupInfo.PrioritizedVersions[0].Version,
@@ -942,6 +984,7 @@ func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) erro
 
 // registerStorageReadinessCheck registers the readiness checks for all underlying storages
 // for a given APIGroup.
+// 仅注册实现了 rest.StorageWithReadiness 的存储，其他存储视为始终就绪。
 func (s *GenericAPIServer) registerStorageReadinessCheck(groupName string, apiGroupInfo *APIGroupInfo) {
 	for version, storageMap := range apiGroupInfo.VersionedResourcesStorageMap {
 		for resource, storage := range storageMap {
@@ -964,9 +1007,11 @@ func (s *GenericAPIServer) InstallAPIGroup(apiGroupInfo *APIGroupInfo) error {
 	return s.InstallAPIGroups(apiGroupInfo)
 }
 
+// getAPIGroupVersion 校验资源名并组装单版本的安装描述。
 func (s *GenericAPIServer) getAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupVersion schema.GroupVersion, apiPrefix string) (*genericapi.APIGroupVersion, error) {
 	storage := make(map[string]rest.Storage)
 	for k, v := range apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version] {
+		// 资源名参与 URL 与 RBAC 规则，必须小写，避免大小写绕过授权。
 		if strings.ToLower(k) != k {
 			return nil, fmt.Errorf("resource names must be lowercase only, not %q", k)
 		}
@@ -978,8 +1023,10 @@ func (s *GenericAPIServer) getAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupV
 	return version, nil
 }
 
+// newAPIGroupVersion 构造 APIGroupVersion，并把所有版本共享的 scheme/授权器等注入。
 func (s *GenericAPIServer) newAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupVersion schema.GroupVersion) *genericapi.APIGroupVersion {
 
+	// 记录每个资源在该组内可用的全部版本，用于转换与发现。
 	allServedVersionsByResource := map[string][]string{}
 	for version, resourcesInVersion := range apiGroupInfo.VersionedResourcesStorageMap {
 		for resource := range resourcesInVersion {
@@ -1017,6 +1064,7 @@ func (s *GenericAPIServer) newAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupV
 // NewDefaultAPIGroupInfo returns an APIGroupInfo stubbed with "normal" values
 // exposed for easier composition from other packages
 func NewDefaultAPIGroupInfo(group string, scheme *runtime.Scheme, parameterCodec runtime.ParameterCodec, codecs serializer.CodecFactory) APIGroupInfo {
+	// 默认启用流式集合编码，降低大列表的峰值内存。
 	opts := []serializer.CodecFactoryOptionsMutator{
 		serializer.WithStreamingCollectionEncodingToJSON(),
 		serializer.WithStreamingCollectionEncodingToProtobuf(),
@@ -1024,6 +1072,7 @@ func NewDefaultAPIGroupInfo(group string, scheme *runtime.Scheme, parameterCodec
 	if utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
 		opts = append(opts, serializer.WithSerializer(cbor.NewSerializerInfo))
 	}
+	// 仅在需要附加选项时重建 codec factory，否则复用调用方传入的实例。
 	if len(opts) != 0 {
 		codecs = serializer.NewCodecFactory(scheme, opts...)
 	}
@@ -1060,6 +1109,7 @@ func (s *GenericAPIServer) getOpenAPIModels(apiPrefix string, apiGroupInfos ...*
 	if err != nil {
 		return nil, err
 	}
+	// 同一批安装的组共享一份 OpenAPI spec，保证跨组类型引用一致。
 	for _, apiGroupInfo := range apiGroupInfos {
 		apiGroupInfo.StaticOpenAPISpec = openAPISpec
 	}

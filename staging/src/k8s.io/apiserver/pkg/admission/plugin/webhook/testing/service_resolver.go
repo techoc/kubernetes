@@ -23,16 +23,19 @@ import (
 	"k8s.io/apiserver/pkg/util/webhook"
 )
 
+// serviceResolver 总是返回固定 URL，用于把 webhook 请求导向测试服务器。
 type serviceResolver struct {
 	base url.URL
 }
 
 // NewServiceResolver returns a static service resolve that return the given URL or
 // an error for the failResolve namespace.
+// 特殊命名空间 failResolve 用于模拟服务解析失败的分支。
 func NewServiceResolver(base url.URL) webhook.ServiceResolver {
 	return &serviceResolver{base}
 }
 
+// ResolveEndpoint 忽略 namespace/name/port，直接返回预置 URL。
 func (f serviceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	if namespace == "failResolve" {
 		return nil, fmt.Errorf("couldn't resolve service location")
@@ -41,6 +44,7 @@ func (f serviceResolver) ResolveEndpoint(namespace, name string, port int32) (*u
 	return &u, nil
 }
 
+// panickingResolver 在解析时 panic，用于验证调用方对 panic 的恢复处理。
 type panickingResolver struct {
 	panicMessage string
 }
@@ -50,6 +54,7 @@ func NewPanickingServiceResolver(panicMessage string) webhook.ServiceResolver {
 	return &panickingResolver{panicMessage}
 }
 
+// ResolveEndpoint 无条件 panic，消息由构造时指定。
 func (f panickingResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	panic(f.panicMessage)
 }

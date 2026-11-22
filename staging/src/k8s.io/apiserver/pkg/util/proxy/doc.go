@@ -33,4 +33,8 @@ limitations under the License.
 // the TunnelingConnection. A lot of the other code in streamtunnel.go
 // is for properly upgrading both the upstream SPDY connection and the
 // downstream WebSocket connection before streaming begins.
+//
+// 中文说明：本包中的代理都位于 apiserver 与后端（kubelet/peer apiserver）之间，
+// 负责协议适配与连接升级。WebSocket 侧的握手与流封装必须严格遵循对应子协议，
+// 否则 kubectl 等客户端会出现难以诊断的挂起。
 package proxy

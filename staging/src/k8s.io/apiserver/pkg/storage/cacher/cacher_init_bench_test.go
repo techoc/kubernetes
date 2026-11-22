@@ -38,6 +38,9 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// BenchmarkCacherInit 测量从零初始化 cacher（含 etcd 全量回填）的耗时与内存，
+// 覆盖 EtcdRangeStream 与 ConcurrentWatchObjectDecode 两个 feature gate 的四种组合。
+// 数据量固定为 15 万 Pod，以模拟大规模集群启动时的缓存预热成本。
 func BenchmarkCacherInit(b *testing.B) {
 	const pods = 150_000
 
@@ -78,9 +81,11 @@ func BenchmarkCacherInit(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
+					// Wait 阻塞到缓存完成初次同步，使测量包含全量回填成本。
 					if err := cacher.Wait(ctx); err != nil {
 						b.Fatal(err)
 					}
+					// Stop 与资源大小估算重置不计入计时，避免污染迭代结果。
 					b.StopTimer()
 					cacher.Stop()
 					etcd3.TestOnlyResetResourceSizeEstimator(etcdStorage)
@@ -92,6 +97,8 @@ func BenchmarkCacherInit(b *testing.B) {
 	}
 }
 
+// loadExemplarPod 读取一个真实形状的 Pod 作为种子模板；
+// 用真实对象而非最小对象可以让 JSON/protobuf 大小更接近生产。
 func loadExemplarPod(b *testing.B) *corev1.Pod {
 	const path = "testdata/exemplar_pod.yaml"
 	data, err := os.ReadFile(path)
@@ -105,6 +112,8 @@ func loadExemplarPod(b *testing.B) *corev1.Pod {
 	return &pod
 }
 
+// randomizeCorev1Pod 为每个种子对象生成唯一名字/UID/节点名，
+// 避免 etcd 中键冲突，同时模拟节点分布。
 func randomizeCorev1Pod(pod *corev1.Pod, ns string) {
 	pod.Namespace = ns
 	pod.Name = pod.GenerateName + utilrand.String(10)
@@ -113,6 +122,9 @@ func randomizeCorev1Pod(pod *corev1.Pod, ns string) {
 	pod.Spec.NodeName = "some-node-prefix-" + utilrand.String(6)
 }
 
+// seedCorev1PodsParallel 用 errgroup 并发写入种子 Pod：
+// 一个 goroutine 生成对象，workers 个 goroutine 消费并写入 etcd。
+// 有界 channel 限制内存占用，避免 15 万对象一次性驻留。
 func seedCorev1PodsParallel(b *testing.B, ctx context.Context, etcdStorage storage.Interface, namespaces, podsPerNS, workers int) {
 	exemplar := loadExemplarPod(b)
 	g, gctx := errgroup.WithContext(ctx)

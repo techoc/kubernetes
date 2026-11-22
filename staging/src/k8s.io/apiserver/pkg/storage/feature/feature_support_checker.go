@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package feature 探测 etcd 后端是否支持某些可选特性（如 RequestWatchProgress、
+// RangeStream），并把结果缓存起来供存储层在请求路径上快速查询。
 package feature
 
 import (
@@ -34,16 +36,22 @@ import (
 
 var (
 	// Define these static versions to use for checking version of etcd, issue on kubernetes #123192
+	//
+	// 这些版本号对应已知 bug 的修复版本，写成常量避免每次探测都解析字符串。
 	v3_4_31 = version.MustParseSemantic("3.4.31")
 	v3_5_0  = version.MustParseSemantic("3.5.0")
 	v3_5_13 = version.MustParseSemantic("3.5.13")
 
 	// DefaultFeatureSupportChecker is a shared global etcd FeatureSupportChecker.
+	//
+	// 全局共享，使不同存储实例对同一集群得到一致的结论。
 	DefaultFeatureSupportChecker FeatureSupportChecker = newDefaultFeatureSupportChecker()
 )
 
 // rangeStreamRecheckInterval is how long RangeStream stays marked unsupported
 // before Supports reports it supported again. See storage.RangeStream.
+//
+// 不永久禁用 RangeStream，是为了在 etcd 升级后自动恢复能力，而无需重启 apiserver。
 const rangeStreamRecheckInterval = 10 * time.Minute
 
 // FeatureSupportChecker to define Supports functions.
@@ -66,6 +74,10 @@ type FeatureSupportChecker interface {
 	MarkUnsupported(feature storage.Feature)
 }
 
+// defaultFeatureSupportChecker 缓存探测结果。
+//
+// progressNotifySupported 为 nil 表示“尚未探测”；RangeStream 用时间戳而非布尔值，
+// 以便在 recheck 间隔后自动重新允许。
 type defaultFeatureSupportChecker struct {
 	lock                     sync.Mutex
 	progressNotifySupported  *bool
@@ -74,6 +86,7 @@ type defaultFeatureSupportChecker struct {
 	checkingEndpoint         map[string]struct{}
 }
 
+// newDefaultFeatureSupportChecker 创建空的检查器。
 func newDefaultFeatureSupportChecker() *defaultFeatureSupportChecker {
 	return &defaultFeatureSupportChecker{
 		checkingEndpoint: make(map[string]struct{}),
@@ -94,6 +107,7 @@ func (f *defaultFeatureSupportChecker) Supports(feature storage.Feature) bool {
 		f.lock.Lock()
 		defer f.lock.Unlock()
 
+		// 未探测前按“不支持”处理，避免向旧 etcd 发送其无法理解的参数。
 		return ptr.Deref(f.progressNotifySupported, false)
 	case storage.RangeStream:
 		f.lock.Lock()
@@ -110,6 +124,9 @@ func (f *defaultFeatureSupportChecker) Supports(feature storage.Feature) bool {
 }
 
 // CheckClient accepts client and calculate the support per endpoint and caches it.
+//
+// 每个 endpoint 只探测一次（checkingEndpoint 去重），探测在后台异步进行，
+// 避免阻塞存储初始化。
 func (f *defaultFeatureSupportChecker) CheckClient(ctx context.Context, c client, feature storage.Feature) {
 	switch feature {
 	case storage.RequestWatchProgress:
@@ -119,6 +136,7 @@ func (f *defaultFeatureSupportChecker) CheckClient(ctx context.Context, c client
 	}
 }
 
+// MarkUnsupported 记录 RangeStream 在某 endpoint 上不可用，并启动重新探测计时。
 func (f *defaultFeatureSupportChecker) MarkUnsupported(feature storage.Feature) {
 	switch feature {
 	case storage.RangeStream:
@@ -130,6 +148,7 @@ func (f *defaultFeatureSupportChecker) MarkUnsupported(feature storage.Feature) 
 	}
 }
 
+// checkClient 为每个尚未探测的 endpoint 启动一个带指数退避的后台探测 goroutine。
 func (f *defaultFeatureSupportChecker) checkClient(ctx context.Context, c client) {
 	// start with 10 ms, multiply by 2 each step, until 15 s and stays on 15 seconds.
 	delayFunc := wait.Backoff{
@@ -157,6 +176,10 @@ func (f *defaultFeatureSupportChecker) checkClient(ctx context.Context, c client
 	}
 }
 
+// clientSupportsRequestWatchProgress 汇总单个 endpoint 的探测结果。
+//
+// 关键语义：只要有一个 endpoint 不支持，整体就标记为不支持；
+// 只有从未见过不支持的 endpoint 时才置为 true。
 func (f *defaultFeatureSupportChecker) clientSupportsRequestWatchProgress(ctx context.Context, c client, ep string) error {
 	supported, err := endpointSupportsRequestWatchProgress(ctx, c, ep)
 	if err != nil {
@@ -177,6 +200,8 @@ func (f *defaultFeatureSupportChecker) clientSupportsRequestWatchProgress(ctx co
 }
 
 // Sub interface of etcd client.
+//
+// 只抽取探测所需的两个方法，便于测试注入假客户端。
 type client interface {
 	// Endpoints returns list of endpoints in etcd client.
 	Endpoints() []string
@@ -190,6 +215,8 @@ type client interface {
 // Based on this issues:
 //   - https://github.com/etcd-io/etcd/issues/15220 - Fixed in etcd v3.4.25+ and v3.5.8+
 //   - https://github.com/etcd-io/etcd/issues/17507 - Fixed in etcd v3.4.31+ and v3.5.13+
+//
+// 判定规则：3.4.x 需 >= 3.4.31；3.5.x 需 >= 3.5.13；其余（3.6+）视为支持。
 func endpointSupportsRequestWatchProgress(ctx context.Context, c client, endpoint string) (bool, error) {
 	resp, err := c.Status(ctx, endpoint)
 	if err != nil {

@@ -29,11 +29,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试夹具：tim 是普通用户，attrs/rules 覆盖命名空间、集群、非资源、子资源等各类请求。
 var (
 	tim = &user.DefaultInfo{
 		Name:   "tim@k8s.io",
 		Groups: []string{"humans", "developers"},
 	}
+	// attrs 以名字索引请求属性，test() 通过名字选取，便于用例表达“某类请求命中某条规则”。
 	attrs = map[string]authorizer.Attributes{
 		"namespaced": &authorizer.AttributesRecord{
 			User:            tim,
@@ -97,6 +99,7 @@ var (
 		},
 	}
 
+	// rules 覆盖用户/用户组、动词、资源/子资源、通配符、非资源 URL、资源名与 omitStages 等匹配维度。
 	rules = map[string]audit.PolicyRule{
 		"default": {
 			Level: audit.LevelMetadata,
@@ -198,6 +201,8 @@ var (
 	}
 )
 
+// test 组装策略并断言给定请求得到的审计级别与 omitStages。
+// 规则按声明顺序求值，第一条匹配即生效，因此 ruleNames 的顺序本身就是被测语义的一部分。
 func test(t *testing.T, req string, expLevel audit.Level, policyStages, expOmitStages []audit.Stage, ruleNames ...string) {
 	policy := audit.Policy{OmitStages: policyStages}
 	for _, rule := range ruleNames {
@@ -211,6 +216,7 @@ func test(t *testing.T, req string, expLevel audit.Level, policyStages, expOmitS
 		req, strings.Join(ruleNames, ","), expOmitStages, auditConfig.OmitStages)
 }
 
+// testAuditLevel 用同一组规则对四类请求逐一断言，验证规则匹配与“首条匹配优先”语义。
 func testAuditLevel(t *testing.T, stages []audit.Stage) {
 	test(t, "namespaced", audit.LevelMetadata, stages, stages, "default")
 	test(t, "namespaced", audit.LevelNone, stages, stages, "create")
@@ -264,6 +270,7 @@ func testAuditLevel(t *testing.T, stages []audit.Stage) {
 	test(t, "ClusterRoleUpdate", audit.LevelRequestResponse, stages, stages, "getGroupWildCardMatchingWithSubresourceWildcardMatching")
 }
 
+// TestChecker 覆盖无全局 omitStages 时的规则匹配，以及规则级 omitStages 的合并。
 func TestChecker(t *testing.T) {
 	testAuditLevel(t, nil)
 
@@ -276,6 +283,7 @@ func TestChecker(t *testing.T) {
 	test(t, "nonResource", audit.LevelRequest, nil, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted, audit.StageResponseComplete}, "only audit panic", "getPods", "default")
 }
 
+// TestCheckerPolicyOmitStages 验证策略级 omitStages 会与规则级 omitStages 取并集。
 func TestCheckerPolicyOmitStages(t *testing.T) {
 	policyStages := []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted}
 	testAuditLevel(t, policyStages)
@@ -290,6 +298,8 @@ func TestCheckerPolicyOmitStages(t *testing.T) {
 }
 
 // stageEqual returns true if s1 and s2 are super set of each other
+//
+// 用集合比较而非切片比较，因为阶段顺序没有语义。
 func stageEqual(s1, s2 []audit.Stage) bool {
 	m1 := make(map[audit.Stage]bool)
 	m2 := make(map[audit.Stage]bool)
@@ -310,6 +320,7 @@ func stageEqual(s1, s2 []audit.Stage) bool {
 	return true
 }
 
+// TestUnionStages 验证 unionStages 的去重与并集语义，包括 nil、重复元素与完全重叠的情况。
 func TestUnionStages(t *testing.T) {
 	var testCases = []struct {
 		s1, s2, exp []audit.Stage
@@ -367,6 +378,8 @@ func TestUnionStages(t *testing.T) {
 	}
 }
 
+// TestOmitManagedFields 验证 OmitManagedFields 的三态优先级：
+// 规则未设置时继承策略级默认值，设置后覆盖策略级值。
 func TestOmitManagedFields(t *testing.T) {
 	// this authorizer.Attributes should match all policy rules
 	// specified in this test.

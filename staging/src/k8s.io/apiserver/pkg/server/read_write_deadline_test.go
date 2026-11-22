@@ -31,6 +31,11 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestRequestTimeoutBehavior 验证请求超时在写/刷新响应前后的不同表现。
+//
+// 中文说明：超时过滤器在未写出响应时能返回 504；一旦已写出，就只能标记
+// writer 超时并中止连接。用例同时覆盖 HTTP/1.1 与 HTTP/2，因为两者的
+// 连接中止语义（EOF vs stream reset）不同，客户端必须都能正确处理。
 func TestRequestTimeoutBehavior(t *testing.T) {
 	type setup struct {
 		name                        string
@@ -203,6 +208,8 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 		// first due to the roundtrip time added to the arrival of the error from
 		// the server, nevertheless it could cause flakes in CI due to overload, so we
 		// need to check for either error to be flake free.
+		// 中文说明：两个来源的错误都合法，因此用 wantEitherOr 而非固定断言，
+		// 否则 CI 负载波动会造成偶发失败。
 		{
 			setup: setup{
 				name:                        "client specifies a timeout",
@@ -277,6 +284,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 				//  - if the client does not specify a timeout parameter in
 				//  the request URI then it should default to --request-timeout
 				//  - otherwise, it should be the timeout specified by the client
+				// 中文说明：服务端会取二者较小值，这里两个值相等或客户端更小，便于精确断言。
 				reqCtxTimeoutWant := config.RequestTimeout
 				if setup.clientTimeout > 0 {
 					reqCtxTimeoutWant = setup.clientTimeout
@@ -345,6 +353,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					<-waiter.wait()
 
 					// write to the ResponseWriter object after timeout happens
+					// 中文说明：此时必须返回 ErrHandlerTimeout，证明 writer 已被标记为超时。
 					_, err := w.Write([]byte("a"))
 					want.handlerWriteErr.verify(t, err)
 
@@ -431,6 +440,7 @@ type verifier interface {
 	verify(t *testing.T, got error)
 }
 
+// wantNoError 断言没有错误。
 type wantNoError struct{}
 
 func (v wantNoError) verify(t *testing.T, got error) {
@@ -440,6 +450,7 @@ func (v wantNoError) verify(t *testing.T, got error) {
 	}
 }
 
+// wantContains 断言错误文本包含指定子串，用于匹配底层库的措辞。
 type wantContains struct {
 	contains string
 }
@@ -457,6 +468,7 @@ func (v wantContains) verify(t *testing.T, got error) {
 	}
 }
 
+// wantError 断言错误链中包含指定哨兵错误（errors.Is 语义）。
 type wantError struct {
 	err error
 }
@@ -474,6 +486,7 @@ func (v wantError) verify(t *testing.T, got error) {
 	}
 }
 
+// wantEitherOr 接受哨兵错误或子串任一匹配，用于容忍竞态导致的两种合法结果。
 type wantEitherOr struct {
 	err      error
 	contains string
@@ -492,11 +505,13 @@ func (v wantEitherOr) verify(t *testing.T, got error) {
 	}
 }
 
+// waiter 抽象 handler 中等待超时的方式，便于区分"固定时长"与"由测试关闭通道"。
 type waiter interface {
 	wait() <-chan time.Time
 	close()
 }
 
+// waitWithDuration 按固定时长等待，用于客户端自身超时的场景。
 type waitWithDuration struct {
 	after time.Duration
 }
@@ -504,6 +519,7 @@ type waitWithDuration struct {
 func (w waitWithDuration) wait() <-chan time.Time { return time.After(w.after) }
 func (w waitWithDuration) close()                 {}
 
+// waitWithChannelClose 让 handler 阻塞到测试主动关闭通道，避免依赖真实时间。
 type waitWithChannelClose struct {
 	after chan time.Time
 }

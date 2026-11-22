@@ -22,6 +22,8 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// TestResource 是仅供测试使用的资源，包含最小的对象元数据与一个
+// 整数字段；JSON 标签决定存储层序列化后的形态。
 type TestResource struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`

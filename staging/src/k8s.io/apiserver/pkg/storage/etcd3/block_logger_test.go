@@ -29,6 +29,9 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestBlockLogger 验证阻塞日志器“间隔 + 阈值”双重触发条件以及聚合行为：
+// 只有当累计等待超过阈值且距上次记录已过 interval 时才会输出一条日志，
+// 输出中的 eventCount/timeWaiting 是聚合值而非单次事件。
 func TestBlockLogger(t *testing.T) {
 	groupResource := schema.GroupResource{Group: "test", Resource: "pods"}
 	msg := "Test message"
@@ -44,6 +47,7 @@ func TestBlockLogger(t *testing.T) {
 		expectedWait  time.Duration
 	}{
 		{
+			// 间隔已过且累计等待超阈值：应当记录，计数包含触发本次 recordWait(0)。
 			name:          "log when interval passed and threshold exceeded",
 			interval:      1 * time.Second,
 			threshold:     100 * time.Millisecond,
@@ -54,6 +58,7 @@ func TestBlockLogger(t *testing.T) {
 			expectedWait:  200 * time.Millisecond,
 		},
 		{
+			// 间隔未到：即便累计等待超阈值也不应记录，避免日志刷屏。
 			name:       "do not log when interval not passed",
 			interval:   5 * time.Second,
 			threshold:  100 * time.Millisecond,
@@ -62,6 +67,7 @@ func TestBlockLogger(t *testing.T) {
 			expectLog:  false,
 		},
 		{
+			// 单次等待未超阈值：视为正常抖动，不记录。
 			name:       "do not log when threshold not exceeded",
 			interval:   1 * time.Second,
 			threshold:  500 * time.Millisecond,
@@ -70,6 +76,7 @@ func TestBlockLogger(t *testing.T) {
 			expectLog:  false,
 		},
 		{
+			// 多次事件应聚合成一条日志，计数与时长累加。
 			name:          "aggregate multiple events",
 			interval:      1 * time.Second,
 			threshold:     100 * time.Millisecond,
@@ -83,6 +90,7 @@ func TestBlockLogger(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 把 klog 重定向到 buffer，以便断言日志内容而不污染测试输出。
 			var buf bytes.Buffer
 			flags := &flag.FlagSet{}
 			klog.InitFlags(flags)
@@ -92,6 +100,7 @@ func TestBlockLogger(t *testing.T) {
 			klog.LogToStderr(false)
 			klog.SetOutput(&buf)
 
+			// 使用假时钟让间隔判断完全确定，避免依赖真实时间导致偶发失败。
 			currentTime := time.Unix(0, 0)
 			fakeClock := testingclock.NewFakeClock(currentTime)
 			logger := newBlockLogger(tc.interval, tc.threshold, msg, "Pod", groupResource, fakeClock)

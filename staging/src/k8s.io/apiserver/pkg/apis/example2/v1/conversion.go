@@ -21,12 +21,18 @@ import (
 	example "k8s.io/apiserver/pkg/apis/example"
 )
 
+// Convert_example_ReplicaSetSpec_To_v1_ReplicaSetSpec 把手写的转换函数
+// 用于 ReplicaSetSpec：内部版本 Replicas 是 int32，外部版本是 *int32。
+// 生成器无法自动完成这种“值 -> 指针”的语义转换，所以显式分配。
 func Convert_example_ReplicaSetSpec_To_v1_ReplicaSetSpec(in *example.ReplicaSetSpec, out *ReplicaSetSpec, s conversion.Scope) error {
 	out.Replicas = new(int32)
 	*out.Replicas = int32(in.Replicas)
 	return nil
 }
 
+// Convert_v1_ReplicaSetSpec_To_example_ReplicaSetSpec 是反向转换。
+// 外部版本的 nil 表示“未设置”，这里保持内部版本的零值（0），
+// 由默认值填充逻辑决定最终取值。
 func Convert_v1_ReplicaSetSpec_To_example_ReplicaSetSpec(in *ReplicaSetSpec, out *example.ReplicaSetSpec, s conversion.Scope) error {
 	if in.Replicas != nil {
 		out.Replicas = *in.Replicas

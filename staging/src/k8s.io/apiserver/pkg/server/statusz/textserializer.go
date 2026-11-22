@@ -31,17 +31,23 @@ import (
 )
 
 // statuszTextSerializer implements runtime.Serializer for text/plain output.
+// 只实现编码方向：statusz 是只读端点，从不反序列化请求体。
 type statuszTextSerializer struct {
 	componentName string
 	reg           statuszRegistry
 }
 
 // Encode writes the statusz information in plain text format to the given writer, using the provided obj.
+//
+// 所有动态值都经过 html.EscapeString 转义：该输出可能被浏览器直接打开，
+// 转义可避免组件名、版本号等字段注入标记。
 func (s statuszTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, headerFmt, s.componentName); err != nil {
 		return err
 	}
 
+	// 每次请求随机选择分隔符，减少用户脚本对固定输出格式的依赖，
+	// 使输出更适合人读而非机器解析。
 	randomIndex := rand.Intn(len(delimiters))
 	delim := html.EscapeString(delimiters[randomIndex])
 
@@ -55,6 +61,7 @@ func (s statuszTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	goVersion := html.EscapeString(statuszObj.GoVersion)
 	binaryVersion := html.EscapeString(statuszObj.BinaryVersion)
 
+	// 可选行：仅在对应字段非空时输出，避免出现空值行。
 	var emulationVersion string
 	if statuszObj.EmulationVersion != "" {
 		emulationVersion = fmt.Sprintf(`Emulation version%s %s`, delim, html.EscapeString(statuszObj.EmulationVersion))
@@ -83,6 +90,7 @@ func (s statuszTextSerializer) Decode(data []byte, gvk *schema.GroupVersionKind,
 }
 
 // Identifier returns a unique identifier for this serializer.
+// 常量标识符使运行时可以按序列化器类型做缓存与比较。
 func (s statuszTextSerializer) Identifier() runtime.Identifier {
 	return runtime.Identifier("statuszTextSerializer")
 }

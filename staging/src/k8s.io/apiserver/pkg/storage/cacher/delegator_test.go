@@ -27,6 +27,10 @@ import (
 	"k8s.io/apiserver/pkg/storage/cacher/consistency"
 )
 
+// TestConsistencyCheckerDigestMatches 验证 watch cache 与 etcd 的分页摘要一致：
+// 写入超过一页的 Pod 后，用一致性检查器分别从缓存和底层存储计算 digest，
+// 二者必须相等且使用相同的 ResourceVersion。
+// 数据量刻意跨页，以覆盖分页路径而非单页快路径。
 func TestConsistencyCheckerDigestMatches(t *testing.T) {
 	ctx, store, terminate := testSetup(t)
 	t.Cleanup(terminate)
@@ -43,6 +47,7 @@ func TestConsistencyCheckerDigestMatches(t *testing.T) {
 		resourceVersion = out.ResourceVersion
 	}
 
+	// 先做一次 list 促使缓存追上最新 RV，否则 digest 会因缓存滞后而不一致。
 	t.Log("Execute list to ensure cache is up to date")
 	outList := &example.PodList{}
 	err := store.cacher.GetList(ctx, "/pods/", storage.ListOptions{ResourceVersion: resourceVersion, Recursive: true, Predicate: storage.Everything, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}, outList)

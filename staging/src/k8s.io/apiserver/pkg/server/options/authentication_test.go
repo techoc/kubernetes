@@ -28,6 +28,8 @@ import (
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 )
 
+// TestToAuthenticationRequestHeaderConfig 验证把选项转换为请求头认证配置：
+// 未配置 ClientCAFile 时不生成配置，配置了才生成且保留全部头名设置。
 func TestToAuthenticationRequestHeaderConfig(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -72,6 +74,7 @@ func TestToAuthenticationRequestHeaderConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			if resultConfig != nil {
+				// CA 内容提供者内部持有函数值，无法用 DeepEqual 比较，断言非空后置空。
 				if resultConfig.CAContentProvider == nil {
 					t.Error("missing requestheader verify")
 				}
@@ -85,6 +88,8 @@ func TestToAuthenticationRequestHeaderConfig(t *testing.T) {
 	}
 }
 
+// TestApplyToFallback 验证委托认证选项在各种 kubeconfig/集群内配置组合下的降级行为：
+// 要么返回错误，要么生成可用的认证器（匿名或依赖 tokenreview 的认证器）。
 func TestApplyToFallback(t *testing.T) {
 
 	f, err := os.CreateTemp("", "authkubeconfig")

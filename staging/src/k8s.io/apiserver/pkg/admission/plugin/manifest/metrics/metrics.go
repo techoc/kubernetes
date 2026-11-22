@@ -83,6 +83,8 @@ var registerMetrics sync.Once
 
 // configHashProviders stores providers per plugin for config info metrics.
 // Each plugin has its own provider that stores [apiserver_id_hash, config_hash].
+//
+// 按插件分开存储，避免不同插件（webhook/policy）的配置哈希互相覆盖。
 var configHashProviders = map[ManifestType]*configmetrics.AtomicHashProvider{
 	ValidatingWebhookManifestType: configmetrics.NewAtomicHashProvider(),
 	MutatingWebhookManifestType:   configmetrics.NewAtomicHashProvider(),
@@ -91,6 +93,9 @@ var configHashProviders = map[ManifestType]*configmetrics.AtomicHashProvider{
 }
 
 // multiTypeConfigInfoCollector emits config info metrics for multiple manifest types.
+//
+// 用自定义 collector 而不是 GaugeVec，是因为配置哈希按插件分别保存在
+// AtomicHashProvider 中，且只有成功加载过配置的插件才应暴露该指标。
 type multiTypeConfigInfoCollector struct {
 	metrics.BaseStableCollector
 	desc *metrics.Desc
@@ -98,10 +103,13 @@ type multiTypeConfigInfoCollector struct {
 
 var _ metrics.StableCollector = &multiTypeConfigInfoCollector{}
 
+// DescribeWithStability 向 registry 声明本 collector 产出的唯一指标描述。
 func (c *multiTypeConfigInfoCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- c.desc
 }
 
+// CollectWithStability 为每个已上报配置的插件输出一条常量 1 的 info 指标。
+// 配置内容只以哈希形式出现，避免在指标中泄漏原文。
 func (c *multiTypeConfigInfoCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	// Emit a metric for each plugin that has data
 	for manifestType, provider := range configHashProviders {
@@ -115,6 +123,7 @@ func (c *multiTypeConfigInfoCollector) CollectWithStability(ch chan<- metrics.Me
 	}
 }
 
+// RegisterMetrics 注册清单式准入配置相关指标；sync.Once 防止重复注册 panic。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(admissionManifestAutomaticReloadsTotal)
@@ -124,6 +133,8 @@ func RegisterMetrics() {
 	})
 }
 
+// ResetMetricsForTest 清空计数器与时间戳，供测试隔离使用。
+// info 指标由无状态 collector 即时计算，无需重置。
 func ResetMetricsForTest() {
 	admissionManifestAutomaticReloadsTotal.Reset()
 	admissionManifestAutomaticReloadLastTimestampSeconds.Reset()
@@ -137,6 +148,9 @@ func RecordAutomaticReloadFailure(manifestType ManifestType, apiServerID string)
 }
 
 // RecordAutomaticReloadSuccess records a successful reload for the given manifest type.
+//
+// 成功时额外更新配置哈希，失败则保留上一次成功的哈希——监控上"最后生效的
+// 配置"不应因为一次失败的重载而丢失。
 func RecordAutomaticReloadSuccess(manifestType ManifestType, apiServerID, configHash string) {
 	apiServerIDHash := getHash(apiServerID)
 	admissionManifestAutomaticReloadsTotal.WithLabelValues("success", string(manifestType), apiServerIDHash).Inc()
@@ -153,6 +167,8 @@ func RecordLastConfigInfo(manifestType ManifestType, apiServerID, configHash str
 	}
 }
 
+// getHash 对标识类字符串取 SHA-256 前缀并加算法前缀，避免在指标标签中
+// 暴露原始 apiserver 身份（可能含主机名等敏感信息）。
 func getHash(data string) string {
 	if len(data) == 0 {
 		return ""

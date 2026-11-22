@@ -24,6 +24,9 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit"
 )
 
+// TestInvertStages 覆盖 InvertStages 的补集语义：返回所有未被传入的审计阶段。
+// 关键边界是空输入（返回全部阶段）与全量输入（返回空集），顺序不重要，
+// 因此用 ElementsMatch 而非 Equal 做断言。
 func TestInvertStages(t *testing.T) {
 	for _, test := range []struct {
 		desc           string

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package identity 提供不做任何转换的 value.Transformer，并在读取时拒绝已加密数据，
+// 作为未启用静态加密时的安全兜底。
 package identity
 
 import (
@@ -24,6 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/storage/value"
 )
 
+// 单例转换器；该前缀是 etcd 中加密数据的保留标记，出现在非加密转换器读到的数据里说明配置错位。
 var (
 	transformer      = identityTransformer{}
 	encryptedPrefix  = []byte("k8s:enc:")
@@ -32,6 +35,8 @@ var (
 
 // identityTransformer performs no transformation on provided data, but validates
 // that the data is not encrypted data during TransformFromStorage
+//
+// 用途：作为"未配置加密"时的占位转换器，同时防止误把加密数据当作明文返回。
 type identityTransformer struct{}
 
 // NewEncryptCheckTransformer returns an identityTransformer which returns an error

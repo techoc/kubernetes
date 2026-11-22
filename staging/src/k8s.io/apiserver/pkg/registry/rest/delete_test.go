@@ -29,11 +29,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// mockStrategy 同时实现删除与优雅删除策略，供 BeforeDelete 使用。
 type mockStrategy struct {
 	RESTDeleteStrategy
 	RESTGracefulDeleteStrategy
 }
 
+// ObjectKinds 从对象自身读取 GVK；缺少 kind/version 时返回对应的 runtime 错误。
 func (m mockStrategy) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	if len(gvk.Kind) == 0 {
@@ -45,6 +47,10 @@ func (m mockStrategy) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind
 	return []schema.GroupVersionKind{obj.GetObjectKind().GroupVersionKind()}, false, nil
 }
 
+// TestBeforeDelete 穷举 (DeletionGracePeriodSeconds, GracePeriodSeconds)
+// 的取值组合，验证 BeforeDelete 如何归一化宽限期并决定是否走优雅删除：
+// 负值被转换为允许的最小值 1；更短的宽限期不会把删除时间推到过去；
+// 结果为 pending 时由调用方等待，否则立即删除。
 func TestBeforeDelete(t *testing.T) {
 	type args struct {
 		strategy RESTDeleteStrategy
@@ -54,6 +60,7 @@ func TestBeforeDelete(t *testing.T) {
 	}
 
 	// snapshot and restore real metav1Now function
+	// 固定“当前时间”，否则基于 now 与宽限期的断言会随真实时钟漂移。
 	originalMetav1Now := metav1Now
 	t.Cleanup(func() {
 		metav1Now = originalMetav1Now
@@ -344,6 +351,7 @@ func TestBeforeDelete(t *testing.T) {
 				t.Errorf("options.GracePeriodSeconds = %v, want %v", ptr.Deref(tt.args.options.GracePeriodSeconds, 0), ptr.Deref(tt.wantGracePeriodSeconds, 0))
 			}
 			if tt.wantDeletionTimestamp != nil {
+				// 当新宽限期会落在过去时，删除时间戳必须被钳制到 now，而不是回退到过去。
 				if !reflect.DeepEqual(tt.args.pod.DeletionTimestamp, tt.wantDeletionTimestamp) {
 					t.Errorf("pod.deletionTimestamp = %v, want %v", tt.args.pod.DeletionTimestamp, tt.wantDeletionTimestamp)
 				}

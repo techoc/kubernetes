@@ -47,6 +47,8 @@ import (
  * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
  * the metric stability policy.
  */
+// clientCertificateExpirationHistogram 记录客户端证书剩余寿命的分布。
+// 分桶覆盖 30 分钟到 1 年，便于运维在证书到期前收到告警。
 var clientCertificateExpirationHistogram = metrics.NewHistogram(
 	&metrics.HistogramOpts{
 		Namespace: "apiserver",
@@ -78,6 +80,8 @@ var registerMetricsOnce sync.Once
 // registerMetrics registers the x509 authentication metrics with the legacy
 // registry. Do not use an init() function because feature gates (e.g., NativeHistograms)
 // must be parsed before the histogram metric is created and registered.
+//
+// 使用 sync.Once 保证重复创建 authenticator（例如动态配置重建）不会重复注册指标。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(clientCertificateExpirationHistogram)
@@ -85,6 +89,9 @@ func registerMetrics() {
 }
 
 // UserConversion defines an interface for extracting user info from a client certificate chain
+//
+// 传入的是 Verify 返回的整条链（[0] 为客户端证书，其后为中间/根 CA），
+// 实现方可以按需使用链上任意证书；返回 ok=false 表示不做认证决定。
 type UserConversion interface {
 	User(chain []*x509.Certificate) (*authenticator.Response, bool, error)
 }
@@ -97,6 +104,7 @@ func (f UserConversionFunc) User(chain []*x509.Certificate) (*authenticator.Resp
 	return f(chain)
 }
 
+// columnSeparatedHex 把字节串编码为大写、冒号分隔的十六进制，便于人眼比对证书标识。
 func columnSeparatedHex(d []byte) string {
 	h := strings.ToUpper(hex.EncodeToString(d))
 	var sb strings.Builder
@@ -109,6 +117,8 @@ func columnSeparatedHex(d []byte) string {
 	return sb.String()
 }
 
+// certificateIdentifier 生成稳定的证书标识（序列号 + SKID + AKID），
+// 用于错误信息中定位具体证书，而不必记录整张证书内容。
 func certificateIdentifier(c *x509.Certificate) string {
 	return fmt.Sprintf(
 		"SN=%d, SKID=%s, AKID=%s",
@@ -122,9 +132,15 @@ func certificateIdentifier(c *x509.Certificate) string {
 // for cases where the options (particularly the CAs) can change.  If the bool is false, then the returned VerifyOptions
 // are ignored and the authenticator will express "no opinion".  This allows a clear signal for cases where a CertPool
 // is eventually expected, but not currently present.
+//
+// 返回 ok=false 表示“目前无法给出验证选项”（例如 client CA 尚未加载），
+// 此时认证器应表达无意见而不是拒绝请求，以便与动态 CA 重载配合。
 type VerifyOptionFunc func() (x509.VerifyOptions, bool)
 
 // Authenticator implements request.Authenticator by extracting user info from verified client certificates
+//
+// 认证流程：从 TLS 握手中取出客户端证书链 → 用 verifyOptionsFn 提供的 CA 校验 →
+// 用 UserConversion 把合法链转换为 user.Info。
 type Authenticator struct {
 	verifyOptionsFn VerifyOptionFunc
 	user            UserConversion
@@ -132,18 +148,24 @@ type Authenticator struct {
 
 // New returns a request.Authenticator that verifies client certificates using the provided
 // VerifyOptions, and converts valid certificate chains into user.Info using the provided UserConversion
+//
+// 静态选项的便捷构造函数；需要动态 CA 时使用 NewDynamic。
 func New(opts x509.VerifyOptions, user UserConversion) *Authenticator {
 	return NewDynamic(StaticVerifierFn(opts), user)
 }
 
 // NewDynamic returns a request.Authenticator that verifies client certificates using the provided
 // VerifyOptionFunc (which may be dynamic), and converts valid certificate chains into user.Info using the provided UserConversion
+//
+// 每次请求都会调用 verifyOptionsFn，因此 CA 轮换无需重建认证器。
 func NewDynamic(verifyOptionsFn VerifyOptionFunc, user UserConversion) *Authenticator {
 	registerMetrics()
 	return &Authenticator{verifyOptionsFn, user}
 }
 
 // AuthenticateRequest authenticates the request using presented client certificates
+//
+// 没有客户端证书时返回 (nil, false, nil)，表示本认证器无意见，由其它认证器接管。
 func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	if req.TLS == nil || len(req.TLS.PeerCertificates) == 0 {
 		return nil, false, nil
@@ -189,6 +211,8 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 					- for the step 3, see: staging/src/k8s.io/client-go/transport/transport.go
 	*/
 
+	// 观测客户端证书剩余有效期，用于提前发现即将过期的客户端证书。
+	// remaining 可能为负（证书已过期），这是有意保留的信号。
 	remaining := req.TLS.PeerCertificates[0].NotAfter.Sub(time.Now())
 	clientCertificateExpirationHistogram.WithContext(req.Context()).Observe(remaining.Seconds())
 	chains, err := req.TLS.PeerCertificates[0].Verify(optsCopy)
@@ -200,6 +224,8 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 		)
 	}
 
+	// 一条证书可能产生多条合法链；依次尝试转换，任意一条成功即认证通过。
+	// 若所有链都失败，则把错误聚合返回，保留每条链的失败原因。
 	var errlist []error
 	for _, chain := range chains {
 		user, ok, err := a.user.User(chain)
@@ -216,6 +242,9 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 }
 
 // Verifier implements request.Authenticator by verifying a client cert on the request, then delegating to the wrapped auth
+//
+// 与 Authenticator 的区别：这里只把证书校验当作“前置门槛”，真正的身份仍由
+// 内层 authenticator（通常是 bearer token）决定，从而支持证书 + token 双重认证。
 type Verifier struct {
 	verifyOptionsFn VerifyOptionFunc
 	auth            authenticator.Request
@@ -236,6 +265,8 @@ func NewDynamicCAVerifier(verifyOptionsFn VerifyOptionFunc, auth authenticator.R
 }
 
 // AuthenticateRequest verifies the presented client certificate, then delegates to the wrapped auth
+//
+// 校验失败直接返回错误（不降级为无意见），因为客户端已经主动出示了证书。
 func (a *Verifier) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	if req.TLS == nil || len(req.TLS.PeerCertificates) == 0 {
 		return nil, false, nil
@@ -263,6 +294,7 @@ func (a *Verifier) AuthenticateRequest(req *http.Request) (*authenticator.Respon
 	return a.auth.AuthenticateRequest(req)
 }
 
+// verifySubject 执行可选的 CN 白名单校验；白名单为空表示不限制。
 func (a *Verifier) verifySubject(subject pkix.Name) error {
 	// No CN restrictions
 	if len(a.allowedCommonNames.Value()) == 0 {
@@ -279,6 +311,8 @@ func (a *Verifier) verifySubject(subject pkix.Name) error {
 
 // DefaultVerifyOptions returns VerifyOptions that use the system root certificates, current time,
 // and requires certificates to be valid for client auth (x509.ExtKeyUsageClientAuth)
+//
+// 其它字段留空即采用 Go 的默认值：系统根证书、当前时间。
 func DefaultVerifyOptions() x509.VerifyOptions {
 	return x509.VerifyOptions{
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
@@ -286,6 +320,10 @@ func DefaultVerifyOptions() x509.VerifyOptions {
 }
 
 // CommonNameUserConversion builds user info from a certificate chain using the subject's CommonName
+//
+// 用户名取证书 Subject.CommonName，组取 Subject.Organization（这是 k8s 长期约定）；
+// 同时把证书 SHA256 指纹写入 CredentialIDKey，便于审计时追踪具体凭据。
+// 另外按特性门控尝试从证书解析 UID。
 var CommonNameUserConversion = UserConversionFunc(func(chain []*x509.Certificate) (*authenticator.Response, bool, error) {
 	if len(chain[0].Subject.CommonName) == 0 {
 		return nil, false, nil
@@ -312,6 +350,9 @@ var CommonNameUserConversion = UserConversionFunc(func(chain []*x509.Certificate
 
 var uidOID = asn1util.X509UID()
 
+// parseUIDFromCert 从证书 Subject 的自定义 OID 中解析 UID。
+// 特性门控关闭时直接返回空串，保持与旧版本行为一致。
+// 出现多个 UID 或空 UID 视为配置错误，必须拒绝而不是挑选其中一个。
 func parseUIDFromCert(cert *x509.Certificate) (string, error) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.AllowParsingUserUIDFromCertAuth) {
 		return "", nil

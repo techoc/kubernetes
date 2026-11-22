@@ -24,10 +24,14 @@ import (
 // Combine combines the DefinitionsSchemaResolver with a secondary schema resolver.
 // The resulting schema resolver uses the DefinitionsSchemaResolver for a GVK that DefinitionsSchemaResolver knows,
 // and the secondary otherwise.
+//
+// 典型用法：内置类型走静态 definitions（快且无需网络），CRD 等动态类型回退到
+// 基于发现（discovery）的解析器。
 func (d *DefinitionsSchemaResolver) Combine(secondary SchemaResolver) SchemaResolver {
 	return &combinedSchemaResolver{definitions: d, secondary: secondary}
 }
 
+// combinedSchemaResolver 按“静态优先、动态兜底”的顺序委派解析请求。
 type combinedSchemaResolver struct {
 	definitions *DefinitionsSchemaResolver
 	secondary   SchemaResolver
@@ -38,6 +42,7 @@ type combinedSchemaResolver struct {
 // If the DefinitionsSchemaResolver knows the gvk, the DefinitionsSchemaResolver handles the resolution,
 // otherwise, the secondary does.
 func (r *combinedSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (*spec.Schema, error) {
+	// 直接查 gvkToRef 判断是否已知，避免先解析失败再回退带来的额外错误处理路径。
 	if _, ok := r.definitions.gvkToRef[gvk]; ok {
 		return r.definitions.ResolveSchema(gvk)
 	}

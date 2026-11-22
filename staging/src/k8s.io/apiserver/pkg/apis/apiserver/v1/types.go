@@ -25,6 +25,9 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // AdmissionConfiguration provides versioned configuration for admission controllers.
+//
+// 这是准入控制器的顶层配置对象，由 --admission-control-config-file 指向的文件
+// 解码得到；每个插件只能出现一次。
 type AdmissionConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -53,6 +56,8 @@ type AdmissionPluginConfiguration struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // AuthenticationConfiguration provides versioned configuration for authentication.
+//
+// 认证配置的聚合入口：JWT 与匿名认证的配置都在这里声明，替代大量命令行参数。
 type AuthenticationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -221,6 +226,9 @@ const (
 )
 
 // ClaimValidationRule provides the configuration for a single claim validation rule.
+//
+// 校验规则有两种互斥的写法：静态的 claim/requiredValue 组合，或 CEL 表达式。
+// 前者适合简单存在性检查，后者用于复杂约束。
 type ClaimValidationRule struct {
 	// claim is the name of a required claim.
 	// Same as --oidc-required-claim flag.
@@ -258,6 +266,9 @@ type ClaimValidationRule struct {
 }
 
 // ClaimMappings provides the configuration for claim mapping
+//
+// 把 JWT claims 映射为 user.Info 的 username/groups/uid/extra。claim 与
+// expression 互斥，使用 expression 时可以做更灵活的值变换。
 type ClaimMappings struct {
 	// username represents an option for the username attribute.
 	// The claim's value must be a singular string.
@@ -321,6 +332,8 @@ type ClaimMappings struct {
 }
 
 // PrefixedClaimOrExpression provides the configuration for a single prefixed claim or expression.
+//
+// prefix 用于避免不同 IdP 的用户名/组名冲突，通常配置为 issuer URL 或固定前缀。
 type PrefixedClaimOrExpression struct {
 	// claim is the JWT claim to use.
 	// Mutually exclusive with expression.
@@ -347,6 +360,8 @@ type PrefixedClaimOrExpression struct {
 }
 
 // ClaimOrExpression provides the configuration for a single claim or expression.
+//
+// 与 PrefixedClaimOrExpression 的区别是不支持 prefix（用于 uid 等无需前缀的字段）。
 type ClaimOrExpression struct {
 	// claim is the JWT claim to use.
 	// Either claim or expression must be set.
@@ -369,6 +384,8 @@ type ClaimOrExpression struct {
 }
 
 // ExtraMapping provides the configuration for a single extra mapping.
+//
+// extra 键必须带域名前缀，以便与内置或第三方扩展属性区分。
 type ExtraMapping struct {
 	// key is a string to use as the extra attribute key.
 	// key must be a domain-prefix path (e.g. example.org/foo). All characters before the first "/" must be a valid
@@ -396,6 +413,8 @@ type ExtraMapping struct {
 }
 
 // UserValidationRule provides the configuration for a single user info validation rule.
+//
+// 认证完成的最后一道关卡，常用于阻止 IdP 用户冒用 system: 前缀的身份。
 type UserValidationRule struct {
 	// expression represents the expression which will be evaluated by CEL.
 	// Must return true for the validation to pass.
@@ -418,6 +437,7 @@ type UserValidationRule struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// AuthorizationConfiguration 是授权链的版本化配置，替代 --authorization-modes。
 type AuthorizationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -429,6 +449,8 @@ type AuthorizationConfiguration struct {
 }
 
 const (
+	// 授权器类型与失败策略的合法取值；字符串会直接出现在配置文件与指标中，
+	// 修改需要保持向后兼容。
 	TypeWebhook                                          AuthorizerType = "Webhook"
 	FailurePolicyNoOpinion                               string         = "NoOpinion"
 	FailurePolicyDeny                                    string         = "Deny"
@@ -436,8 +458,13 @@ const (
 	AuthorizationWebhookConnectionInfoTypeInCluster      string         = "InClusterConfig"
 )
 
+// AuthorizerType 标识授权器的类型。
 type AuthorizerType string
 
+// AuthorizerConfiguration 描述授权链中的单个授权器。
+//
+// Name 会出现在指标与日志中，因此必须是合法的 DNS1123 名称；Webhook 字段仅在
+// Type=Webhook 时允许设置。
 type AuthorizerConfiguration struct {
 	// Type refers to the type of the authorizer
 	// "Webhook" is supported in the generic API server
@@ -458,6 +485,10 @@ type AuthorizerConfiguration struct {
 	Webhook *WebhookConfiguration `json:"webhook,omitempty"`
 }
 
+// WebhookConfiguration 描述 Webhook 授权器的连接、缓存与失败策略。
+//
+// 缓存 TTL 与是否缓存分别可配：授权结果可能在短期内变化，管理员需要在
+// 一致性（短 TTL/关闭缓存）与 webhook 负载之间权衡。
 type WebhookConfiguration struct {
 	// The duration to cache 'authorized' responses from the webhook
 	// authorizer.
@@ -522,6 +553,7 @@ type WebhookConfiguration struct {
 	MatchConditions []WebhookMatchCondition `json:"matchConditions"`
 }
 
+// WebhookConnectionInfo 描述如何连接授权 webhook。
 type WebhookConnectionInfo struct {
 	// Controls how the webhook should communicate with the server.
 	// Valid values:
@@ -537,6 +569,10 @@ type WebhookConnectionInfo struct {
 	KubeConfigFile *string `json:"kubeConfigFile"`
 }
 
+// WebhookMatchCondition 是决定是否把请求发送给该 webhook 的 CEL 条件。
+//
+// 条件在 SubjectAccessReview 上求值，因此可以基于 user/group/资源属性做
+// 细粒度过滤，减少不必要的远程调用。
 type WebhookMatchCondition struct {
 	// expression represents the expression which will be evaluated by CEL. Must evaluate to bool.
 	// CEL expressions have access to the contents of the SubjectAccessReview in v1 version.
@@ -557,6 +593,8 @@ type WebhookMatchCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TracingConfiguration provides versioned configuration for tracing clients.
+//
+// 直接嵌入 component-base 的 tracing 配置，保持与其他组件的一致。
 type TracingConfiguration struct {
 	metav1.TypeMeta `json:""`
 

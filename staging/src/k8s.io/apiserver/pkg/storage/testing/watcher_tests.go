@@ -47,6 +47,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// RunTestWatch 是存储层 watch 语义的通用一致性测试，分别以非递归/递归两种方式执行。
+// 所有 storage.Interface 实现（etcd3、cacher）都应能通过该测试。
 func RunTestWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	testWatch(ctx, t, store, false)
 	testWatch(ctx, t, store, true)
@@ -204,6 +206,8 @@ func testWatch(ctx context.Context, t *testing.T, store storage.Interface, recur
 //   - For testing with etcd, watch from 0 is able to return events for objects
 //     whose previous version has been compacted. If testing with cacher, we
 //     expect compaction to be nil.
+//
+// 该测试同时覆盖“从当前状态重建 watch”与压缩后 410 Gone 的行为。
 func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Interface, compaction Compaction) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
@@ -289,6 +293,7 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 	})
 }
 
+// RunTestDeleteTriggerWatch 验证从对象当前 RV 开始 watch 时，删除会产生 Deleted 事件。
 func RunTestDeleteTriggerWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	w, err := store.Watch(ctx, key, storage.ListOptions{ResourceVersion: storedObj.ResourceVersion, Predicate: storage.Everything})
@@ -301,6 +306,7 @@ func RunTestDeleteTriggerWatch(ctx context.Context, t *testing.T, store storage.
 	testCheckEventType(t, w, watch.Deleted)
 }
 
+// RunTestWatchFromNonZero 验证从对象当前 RV 开始 watch 能收到后续 Modified 事件。
 func RunTestWatchFromNonZero(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
@@ -318,6 +324,8 @@ func RunTestWatchFromNonZero(ctx context.Context, t *testing.T, store storage.In
 	testCheckResult(t, w, watch.Event{Type: watch.Modified, Object: out})
 }
 
+// RunTestDelayedWatchDelivery 验证消费者处理缓慢时事件不会丢失：
+// 缓冲区应至少能容纳实现定义的数量，Stop 后已排队事件仍会送达。
 func RunTestDelayedWatchDelivery(ctx context.Context, t *testing.T, store storage.Interface) {
 	_, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	startRV := storedObj.ResourceVersion
@@ -377,6 +385,8 @@ func RunTestDelayedWatchDelivery(ctx context.Context, t *testing.T, store storag
 	}
 }
 
+// RunTestWatchError 通过注入失败的 transformer 触发读取错误，
+// 验证 watch 通道会收到 watch.Error 事件而不是静默丢事件。
 func RunTestWatchError(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer) {
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(obj)
@@ -413,6 +423,8 @@ func RunTestWatchError(ctx context.Context, t *testing.T, store InterfaceWithPre
 	testCheckEventType(t, w, watch.Error)
 }
 
+// RunTestWatchWithUnsafeDelete 验证数据损坏时的删除路径：
+// 普通删除因解码失败而拒绝，ExpectTransformOrDecodeError 允许绕过并清理坏数据。
 func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store InterfaceWithTransformerOverride, corruptErr error) {
 	obj := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -475,6 +487,7 @@ func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store Inter
 	})
 }
 
+// RunTestWatchContextCancel 验证已取消的上下文会让 watch 通道立即关闭，而不是报错。
 func RunTestWatchContextCancel(ctx context.Context, t *testing.T, store storage.Interface) {
 	canceledCtx, cancel := context.WithCancel(ctx)
 	cancel()
@@ -498,6 +511,7 @@ func RunTestWatchContextCancel(ctx context.Context, t *testing.T, store storage.
 	}
 }
 
+// RunTestWatcherTimeout 验证不读取结果的 watcher 不会无限阻塞其他 watcher 或写入。
 func RunTestWatcherTimeout(ctx context.Context, t *testing.T, store storage.Interface) {
 	// initialRV is used to initate the watcher at the beginning of the world.
 	podList := example.PodList{}
@@ -555,6 +569,8 @@ func RunTestWatcherTimeout(ctx context.Context, t *testing.T, store storage.Inte
 	}
 }
 
+// RunTestWatchDeleteEventObjectHaveLatestRV 验证删除事件的 RV 已更新，
+// 客户端因此可以安全地以该 RV 继续 watch。
 func RunTestWatchDeleteEventObjectHaveLatestRV(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
@@ -578,6 +594,8 @@ func RunTestWatchDeleteEventObjectHaveLatestRV(ctx context.Context, t *testing.T
 	testCheckResult(t, w, watch.Event{Type: watch.Deleted, Object: deletedObj})
 }
 
+// RunTestWatchInitializationSignal 验证 watch 建立后会触发初始化信号，
+// 供优先级与公平性（APF）在服务恢复时解除请求阻塞。
 func RunTestWatchInitializationSignal(ctx context.Context, t *testing.T, store storage.Interface) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	t.Cleanup(cancel)
@@ -648,7 +666,9 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 	})
 }
 
+// RunTestClusterScopedWatch tests watches of cluster-scoped resources.
 // It tests watches of cluster-scoped resources.
+// 覆盖按名称、field selector、以及 deletecollection 等场景下的事件分发。
 func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
 		name string
@@ -803,6 +823,8 @@ func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.
 }
 
 // It tests watch of namespace-scoped resources.
+// RunTestNamespaceScopedWatch tests watches of namespace-scoped resources.
+// 重点验证 /pods/ 与 /pods/ns 前缀的递归 watch 不会串到其他命名空间。
 func RunTestNamespaceScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
 		name string
@@ -1123,6 +1145,9 @@ func RunTestNamespaceScopedWatch(ctx context.Context, t *testing.T, store storag
 // TODO(#109831): ProgressNotify feature is effectively implementing the same
 //
 //	functionality, so we should refactor this functionality to share the same input.
+//
+// RunTestWatchDispatchBookmarkEvents 验证 ListOptions.SendInitialEvents 下
+// 是否按实现能力分发 Bookmark 事件（expectedWatchBookmarks 由实现声明）。
 func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store storage.Interface, expectedWatchBookmarks bool) {
 	key, storedObj := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 	startRV := storedObj.ResourceVersion
@@ -1194,6 +1219,9 @@ func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store
 // TODO(#109831): ProgressNotify feature is effectively implementing the same
 //
 //	functionality, so we should refactor this functionality to share the same input.
+//
+// RunTestOptionalWatchBookmarksWithCorrectResourceVersion 验证 bookmark 事件的 RV
+// 不小于此前已分发事件，保证客户端用其续 watch 时不会回退。
 func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context, t *testing.T, store storage.Interface) {
 	// Compute the initial resource version.
 	list := &example.PodList{}
@@ -1292,6 +1320,8 @@ func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context
 // when SendInitialEvents option is set against various implementations.
 // Backward compatibility is defined as RV = "" || RV = "O" and AllowWatchBookmark is set to false.
 // In that case we expect a watch request to be established.
+// RunSendInitialEventsBackwardCompatibility 验证旧客户端不设置 SendInitialEvents 时，
+// 行为保持与以往一致（不会突然收到大量初始事件）。
 func RunSendInitialEventsBackwardCompatibility(ctx context.Context, t *testing.T, store storage.Interface) {
 	opts := storage.ListOptions{Predicate: storage.Everything}
 	opts.SendInitialEvents = ptr.To(true)
@@ -1313,6 +1343,8 @@ func RunSendInitialEventsBackwardCompatibility(ctx context.Context, t *testing.T
 // where:
 // - false indicates the value of the param was set to "false" by a test case
 // - true  indicates the value of the param was set to "true" by a test case
+// RunWatchSemantics 覆盖 watch 的核心语义：同名对象多次更新、删除、
+// 以及带 SendInitialEvents 时的 Added/Bookmark 顺序。
 func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interface) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 	trueVal, falseVal := true, false
@@ -1616,6 +1648,8 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 //
 // note that this scenario differs from the one in RunWatchSemantics
 // by adding the pod to a different ns to advance the global RV
+// RunWatchSemanticInitialEventsExtended 是 RunWatchSemantics 的扩展场景，
+// 覆盖带 annotation 的对象与初始事件书签的组合。
 func RunWatchSemanticInitialEventsExtended(ctx context.Context, t *testing.T, store storage.Interface) {
 	trueVal := true
 	expectedInitialEventsInStrictOrder := func(initialPods []*example.Pod, globalResourceVersion string) []watch.Event {
@@ -1664,6 +1698,7 @@ func RunWatchSemanticInitialEventsExtended(ctx context.Context, t *testing.T, st
 	TestCheckNoMoreResultsWithIgnoreFunc(t, w, nil)
 }
 
+// RunWatchListMatchSingle 验证 watch 与 list 使用同一 selector 时结果一致。
 func RunWatchListMatchSingle(ctx context.Context, t *testing.T, store storage.Interface) {
 	trueVal := true
 	expectedInitialEventsInStrictOrder := func(initialPod *example.Pod, globalResourceVersion string) []watch.Event {
@@ -1719,6 +1754,8 @@ func RunWatchListMatchSingle(ctx context.Context, t *testing.T, store storage.In
 	TestCheckNoMoreResultsWithIgnoreFunc(t, w, nil)
 }
 
+// RunWatchErrorIsBlockingFurtherEvents 验证某个事件解码失败后，watch 会以错误终止，
+// 而不会跳过该事件继续分发后续事件（否则客户端会漏数据）。
 func RunWatchErrorIsBlockingFurtherEvents(ctx context.Context, t *testing.T, store InterfaceWithPrefixTransformer) {
 	foo := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "foo"}}
 	fooKey := fmt.Sprintf("/pods/%s/%s", foo.Namespace, foo.Name)
@@ -1786,6 +1823,7 @@ func RunWatchErrorIsBlockingFurtherEvents(ctx context.Context, t *testing.T, sto
 	wg.Wait()
 }
 
+// makePod 构造名为 pod-<prefix> 的测试对象。
 func makePod(namePrefix string) *example.Pod {
 	return &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1794,30 +1832,36 @@ func makePod(namePrefix string) *example.Pod {
 	}
 }
 
+// testWatchStruct 描述一次写入及其期望产生的 watch 事件。
 type testWatchStruct struct {
 	obj         *example.Pod
 	expectEvent bool
 	watchType   watch.EventType
 }
 
+// basePod 返回无命名空间的基线对象。
 func basePod(podName string) *example.Pod {
 	return baseNamespacedPod(podName, "")
 }
 
+// basePodUpdated 在基线对象上增加 Running 状态，用于触发 Modified。
 func basePodUpdated(podName string) *example.Pod {
 	return baseNamespacedPodUpdated(podName, "")
 }
 
+// basePodAssigned 设置 nodeName，用于验证 field selector 过滤。
 func basePodAssigned(podName, nodeName string) *example.Pod {
 	return baseNamespacedPodAssigned(podName, "", nodeName)
 }
 
+// baseNamespacedPod 返回指定命名空间的基线对象。
 func baseNamespacedPod(podName, namespace string) *example.Pod {
 	return &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},
 	}
 }
 
+// baseNamespacedPodUpdated 返回带 Running 状态的命名空间对象。
 func baseNamespacedPodUpdated(podName, namespace string) *example.Pod {
 	return &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},
@@ -1825,6 +1869,7 @@ func baseNamespacedPodUpdated(podName, namespace string) *example.Pod {
 	}
 }
 
+// baseNamespacedPodAssigned 返回设置了 nodeName 的命名空间对象。
 func baseNamespacedPodAssigned(podName, namespace, nodeName string) *example.Pod {
 	return &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},

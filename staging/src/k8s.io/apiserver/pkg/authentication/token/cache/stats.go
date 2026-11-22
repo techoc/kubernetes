@@ -26,6 +26,8 @@ import (
 )
 
 var (
+	// requestLatency 记录缓存查找耗时，按 hit/miss 区分：miss 时包含回源验证的延迟，
+	// 两条曲线分离才能看出缓存到底省了多少。
 	requestLatency = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Namespace:      "authentication",
@@ -70,6 +72,7 @@ var registerMetricsOnce sync.Once
 // Do not use an init() function because feature gates (e.g., NativeHistograms)
 // must be parsed before the histogram metric is created and registered.
 func registerMetrics() {
+	// sync.Once 保证重复构造 authenticator 时不会重复注册（重复注册会 panic）。
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(
 			requestLatency,
@@ -81,20 +84,27 @@ func registerMetrics() {
 }
 
 const (
+	// hitTag/missTag 是缓存查找结果的标签值。
 	hitTag  = "hit"
 	missTag = "miss"
 
+	// fetchFailedTag/fetchOkTag 是回源验证（token review）结果的标签值。
 	fetchFailedTag = "error"
 	fetchOkTag     = "ok"
 
+	// fetchInFlightTag 统计正在回源的请求；fetchBlockedTag 统计因 singleflight
+	// 合并而等待其他回源结果的请求，二者之差反映实际的回源并发度。
 	fetchInFlightTag = "in_flight"
 	fetchBlockedTag  = "blocked"
 )
 
+// statsCollector 是无状态的方法集合，仅用于给调用点提供可读的指标接口。
 type statsCollector struct{}
 
 var stats = statsCollector{}
 
+// authenticating 返回一个回调，在认证结束时按命中与否记录计数与延迟。
+// 采用“开始返回闭包”的形式，避免调用方手工记录开始时间。
 func (statsCollector) authenticating(ctx context.Context) func(hit bool) {
 	start := time.Now()
 	return func(hit bool) {
@@ -112,11 +122,14 @@ func (statsCollector) authenticating(ctx context.Context) func(hit bool) {
 	}
 }
 
+// blocking 标记一次等待他人回源的阻塞，返回递减 gauge 的清理函数。
 func (statsCollector) blocking(ctx context.Context) func() {
 	activeFetchCount.WithContext(ctx).WithLabelValues(fetchBlockedTag).Inc()
 	return activeFetchCount.WithContext(ctx).WithLabelValues(fetchBlockedTag).Dec
 }
 
+// fetching 标记一次真实的回源请求，返回记录结果并递减 gauge 的清理函数。
+// gauge 的递减放在返回的闭包里而不是 defer 中，是为了让调用方能精确控制结束点。
 func (statsCollector) fetching(ctx context.Context) func(ok bool) {
 	activeFetchCount.WithContext(ctx).WithLabelValues(fetchInFlightTag).Inc()
 	return func(ok bool) {

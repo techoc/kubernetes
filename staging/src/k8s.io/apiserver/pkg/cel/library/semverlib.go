@@ -98,6 +98,10 @@ import (
 // semver("1.2.3").compareTo(semver("1.2.3")) // returns 0
 // semver("1.2.3").compareTo(semver("2.0.0")) // returns -1
 // semver("1.2.3").compareTo(semver("0.1.2")) // returns 1
+// SemverLib 注册 Kubernetes 的 semver 扩展函数库。
+//
+// 版本参数用于控制库的演进：新增重载（例如带 normalize 参数的 semver/isSemver）
+// 只在 version >= 1 时暴露，使旧兼容版本的表达式环境保持不变。
 func SemverLib(options ...SemverOption) cel.EnvOption {
 	semverLib := &semverLibType{}
 	for _, o := range options {
@@ -106,6 +110,7 @@ func SemverLib(options ...SemverOption) cel.EnvOption {
 	return cel.Lib(semverLib)
 }
 
+// semverLib 是未指定版本时使用的实例，包含全部版本的重载。
 var semverLib = &semverLibType{version: math.MaxUint32} // include all versions
 
 type semverLibType struct {
@@ -113,8 +118,10 @@ type semverLibType struct {
 }
 
 // StringsOption is a functional interface for configuring the strings library.
+// SemverOption 配置 semver 库启用的特性版本。
 type SemverOption func(*semverLibType) *semverLibType
 
+// SemverVersion 返回一个把库版本设置为 version 的选项。
 func SemverVersion(version uint32) SemverOption {
 	return func(lib *semverLibType) *semverLibType {
 		lib.version = version
@@ -130,6 +137,10 @@ func (*semverLibType) Types() []*cel.Type {
 	return []*cel.Type{apiservercel.SemverType}
 }
 
+// declarations 汇总库中所有函数的声明。
+//
+// 在函数内部构造而不是用包级变量，是为了避免与 apiservercel.SemverType 的
+// 初始化顺序形成循环依赖。
 func (lib *semverLibType) declarations() map[string][]cel.FunctionOpt {
 	fnOpts := map[string][]cel.FunctionOpt{
 		"semver": {
@@ -157,6 +168,8 @@ func (lib *semverLibType) declarations() map[string][]cel.FunctionOpt {
 			cel.MemberOverload("semver_patch", []*cel.Type{apiservercel.SemverType}, cel.IntType, cel.UnaryBinding(semverPatch)),
 		},
 	}
+	// 带 normalize 参数的重载属于 v1 新增能力，只在版本 >= 1 时提供，
+	// 以免改变旧环境下的表达式语义。
 	if lib.version >= 1 {
 		fnOpts["semver"] = append(fnOpts["semver"], cel.Overload("string_bool_to_semver", []*cel.Type{cel.StringType, cel.BoolType}, apiservercel.SemverType, cel.BinaryBinding((stringToSemverNormalize))))
 		fnOpts["isSemver"] = append(fnOpts["isSemver"], cel.Overload("is_semver_string_bool", []*cel.Type{cel.StringType, cel.BoolType}, cel.BoolType, cel.BinaryBinding(isSemverNormalize)))
@@ -181,6 +194,9 @@ func (*semverLibType) ProgramOptions() []cel.ProgramOption {
 func isSemver(arg ref.Val) ref.Val {
 	return isSemverNormalize(arg, types.Bool(false))
 }
+
+// isSemverNormalize 判断字符串是否为合法 semver；normalize 为 true 时先做容错
+// 规范化再校验。
 func isSemverNormalize(arg ref.Val, normalizeArg ref.Val) ref.Val {
 	str, ok := arg.Value().(string)
 	if !ok {
@@ -212,6 +228,9 @@ func isSemverNormalize(arg ref.Val, normalizeArg ref.Val) ref.Val {
 func stringToSemver(arg ref.Val) ref.Val {
 	return stringToSemverNormalize(arg, types.Bool(false))
 }
+
+// stringToSemverNormalize 把字符串解析为 Semver 值；失败时返回 CEL 错误值，
+// 由表达式求值框架传播。
 func stringToSemverNormalize(arg ref.Val, normalizeArg ref.Val) ref.Val {
 	str, ok := arg.Value().(string)
 	if !ok {
@@ -312,6 +331,9 @@ func semverCompareTo(arg ref.Val, other ref.Val) ref.Val {
 // only major or major.minor components specified, and removes any leading 0s.
 // normalizeAndParse is based on semver.ParseTolerant but does not trim extra whitespace and is
 // guaranteed to not change behavior in the future.
+//
+// 不能直接使用 semver.ParseTolerant：它会随库版本变化，而 CEL 表达式的行为必须
+// 在 Kubernetes 版本之间保持稳定，因此这里固定实现。
 func normalizeAndParse(s string) (semver.Version, error) {
 	s = strings.TrimPrefix(s, "v")
 
@@ -321,6 +343,8 @@ func normalizeAndParse(s string) (semver.Version, error) {
 	for i, p := range parts {
 		if len(p) > 1 {
 			p = strings.TrimLeft(p, "0")
+			// 全是 0 的情况保留一个 "0"；若去掉 0 后首位不是数字（如预发布
+			// 标识），也补回一个 "0"。
 			if len(p) == 0 || !strings.ContainsAny(p[0:1], "0123456789") {
 				p = "0" + p
 			}
@@ -330,6 +354,7 @@ func normalizeAndParse(s string) (semver.Version, error) {
 
 	// Fill up shortened versions.
 	if len(parts) < 3 {
+		// 短版本不允许携带预发布/构建元数据，否则补齐后会改变其含义。
 		if strings.ContainsAny(parts[len(parts)-1], "+-") {
 			return semver.Version{}, errors.New("short version cannot contain PreRelease/Build meta data")
 		}

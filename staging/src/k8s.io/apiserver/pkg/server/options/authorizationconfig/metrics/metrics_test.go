@@ -25,9 +25,12 @@ import (
 )
 
 const (
-	testAPIServerID     = "testAPIServerID"
+	testAPIServerID = "testAPIServerID"
+	// testAPIServerIDHash 是 testAPIServerID 的 sha256 摘要；指标只暴露哈希，
+	// 避免把实例 ID 直接写入监控系统。
 	testAPIServerIDHash = "sha256:14f9d63e669337ac6bfda2e2162915ee6a6067743eddd4e5c374b572f951ff37"
-	testConfigData      = `
+	// testConfigData 是一份合法配置，用于验证成功路径同时更新配置哈希指标。
+	testConfigData = `
 apiVersion: apiserver.config.k8s.io/v1
 kind: AuthorizationConfiguration
 authorizers:
@@ -50,6 +53,8 @@ authorizers:
 `
 )
 
+// TestRecordAuthorizationConfigAutomaticReloadFailure 验证失败计数带 status=failure
+// 与实例哈希标签。
 func TestRecordAuthorizationConfigAutomaticReloadFailure(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authorization_config_controller_automatic_reloads_total [BETA] Total number of automatic reloads of authorization configuration split by status and apiserver identity.
@@ -69,6 +74,8 @@ func TestRecordAuthorizationConfigAutomaticReloadFailure(t *testing.T) {
 	}
 }
 
+// TestRecordAuthorizationConfigAutomaticReloadSuccess 验证成功路径同时更新计数与
+// “最后应用的配置哈希” gauge。
 func TestRecordAuthorizationConfigAutomaticReloadSuccess(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authorization_config_controller_automatic_reloads_total [BETA] Total number of automatic reloads of authorization configuration split by status and apiserver identity.
@@ -92,6 +99,8 @@ func TestRecordAuthorizationConfigAutomaticReloadSuccess(t *testing.T) {
 	}
 }
 
+// TestAuthorizationConfigAutomaticReloadLastTimestampSeconds 验证最后重载时间戳按
+// status 分别记录，且能正确序列化为 Prometheus 文本格式。
 func TestAuthorizationConfigAutomaticReloadLastTimestampSeconds(t *testing.T) {
 	testCases := []struct {
 		expectedValue string
@@ -133,6 +142,8 @@ func TestAuthorizationConfigAutomaticReloadLastTimestampSeconds(t *testing.T) {
 	}
 }
 
+// TestRecordAuthorizationConfigAutomaticReloadSuccess_StaleMetricCleanup 验证配置
+// 变化后旧的 hash 标签被移除，避免监控里出现幽灵配置。
 func TestRecordAuthorizationConfigAutomaticReloadSuccess_StaleMetricCleanup(t *testing.T) {
 	ResetMetricsForTest()
 	RegisterMetrics()

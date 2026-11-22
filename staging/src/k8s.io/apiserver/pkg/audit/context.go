@@ -42,6 +42,10 @@ type key int
 const auditKey key = iota
 
 // AuditContext holds the information for constructing the audit events for the current request.
+//
+// 中文说明：并发模型是本类型的核心——initialized/sink/requestAuditConfig 只写一次，
+// 由 atomic.Bool 保证无锁读取安全；event 则被多个过滤器并发读写，统一由 lock 保护。
+// 任何新增字段都要明确归入其中一类。
 type AuditContext struct {
 	// initialized indicates whether requestAuditConfig and sink have been populated and are safe to read unguarded.
 	// This should only be set via Init().
@@ -65,6 +69,9 @@ type AuditContext struct {
 }
 
 // Enabled checks whether auditing is enabled for this audit context.
+//
+// 中文说明：未初始化时返回 true，是为了让认证等早期阶段仍能收集注解；
+// 真正的 Level 判断要等策略求值后（Init）才能确定。
 func (ac *AuditContext) Enabled() bool {
 	if ac == nil {
 		// protect against nil pointers
@@ -78,6 +85,9 @@ func (ac *AuditContext) Enabled() bool {
 	return ac.requestAuditConfig.Level != auditinternal.LevelNone
 }
 
+// Init 绑定本次请求的策略结果与 sink。
+// 中文说明：只允许初始化一次——第二次说明装配逻辑有误，返回错误而不是覆盖，
+// 否则已产生的注解可能被悄悄丢弃。
 func (ac *AuditContext) Init(requestAuditConfig RequestAuditConfig, sink Sink) error {
 	ac.lock.Lock()
 	defer ac.lock.Unlock()
@@ -104,6 +114,9 @@ func (ac *AuditContext) visitEvent(f func(event *auditinternal.Event)) {
 }
 
 // ProcessEventStage returns true on success, false if there was an error processing the stage.
+//
+// 中文说明：未初始化/无 sink/命中 OmitStages 都视为成功跳过；StageRequestReceived
+// 的时间戳复用请求到达时间，保证与 RequestReceivedTimestamp 一致。
 func (ac *AuditContext) ProcessEventStage(ctx context.Context, stage auditinternal.Stage) bool {
 	if ac == nil || !ac.initialized.Load() {
 		return true
@@ -294,6 +307,9 @@ func (ac *AuditContext) GetEventAnnotations() map[string]string {
 // as at that point the audit event has already been sent to the audit sink.
 // Handlers that are unaware of their position in the overall request flow should
 // prefer AddAuditAnnotation over LogAnnotation to avoid dropping annotations.
+//
+// 中文说明：同名 key 只允许写一次且值必须相同；冲突时保留先到的值并告警，
+// 以免后来的过滤器覆盖安全相关的审计信息。
 func AddAuditAnnotation(ctx context.Context, key, value string) {
 	ac := AuditContextFrom(ctx)
 	if !ac.Enabled() {
@@ -309,6 +325,9 @@ func AddAuditAnnotation(ctx context.Context, key, value string) {
 // AddAuditAnnotations is a bulk version of AddAuditAnnotation. Refer to AddAuditAnnotation for
 // restrictions on when this can be called.
 // keysAndValues are the key-value pairs to add, and must have an even number of items.
+//
+// 中文说明：奇数个参数时丢弃最后一个并记录错误，而不是整体失败，保证已配对的
+// 注解仍能写入。
 func AddAuditAnnotations(ctx context.Context, keysAndValues ...string) {
 	ac := AuditContextFrom(ctx)
 	if !ac.Enabled() {
@@ -343,6 +362,7 @@ func AddAuditAnnotationsMap(ctx context.Context, annotations map[string]string) 
 }
 
 // addAuditAnnotationLocked records the audit annotation on the event.
+// 中文说明：必须持有 ac.lock；冲突告警包含 AuditID，便于在日志中定位具体请求。
 func addAuditAnnotationLocked(ac *AuditContext, key, value string) {
 	ae := &ac.event
 	if ae.Annotations == nil {
@@ -356,6 +376,8 @@ func addAuditAnnotationLocked(ac *AuditContext, key, value string) {
 }
 
 // WithAuditContext returns a new context that stores the AuditContext.
+//
+// 中文说明：已存在则原样返回，避免多个过滤器各自创建 AuditContext 导致事件分叉。
 func WithAuditContext(parent context.Context) context.Context {
 	if AuditContextFrom(parent) != nil {
 		return parent // Avoid double registering.
@@ -404,6 +426,9 @@ func AuditIDFrom(ctx context.Context) (types.UID, bool) {
 // If the length of the Audit-ID value exceeds the limit, we truncate it to keep
 // the first N (maxAuditIDLength) characters.
 // This is intended to be used in logging only.
+//
+// 中文说明：截断是为了防止客户端通过超长 Audit-ID 头放大日志体积；
+// 不要用它做审计事件关联，关联请用完整 AuditID。
 func GetAuditIDTruncated(ctx context.Context) string {
 	auditID, ok := AuditIDFrom(ctx)
 	if !ok {

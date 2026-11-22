@@ -20,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 由生成的 RegisterDefaults 调用；example2/v1 目前没有默认值，
+// 因此保持空实现，仅保留注册钩子以便将来添加字段默认值时不改调用点。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	// return RegisterDefaults(scheme)
 	return nil

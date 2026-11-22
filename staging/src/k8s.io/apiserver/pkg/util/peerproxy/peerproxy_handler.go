@@ -53,9 +53,15 @@ import (
 )
 
 const (
+	// PeerProxiedHeader 标记请求已经过一次转发；接收方据此只在本机处理，
+	// 防止滚动升级期间多个 apiserver 互相转发形成环路。
 	PeerProxiedHeader = "x-kubernetes-peer-proxied"
 )
 
+// peerProxyHandler 在混合版本集群中把请求转发给真正能提供该资源的 apiserver。
+//
+// 典型场景：滚动升级后新版本的 CRD/聚合 API 只在部分实例上存在，
+// 客户端连到任一实例都期望成功，因此需要按"谁有该 GVR"来路由。
 type peerProxyHandler struct {
 	name string
 	// Identity for this server.
@@ -75,6 +81,8 @@ type peerProxyHandler struct {
 	// Cache that stores resources served by this apiserver. Refreshed periodically.
 	// We always look up in the local discovery cache first, to check whether the
 	// request can be served by this apiserver instead of proxying it to a peer.
+	//
+	// 先查本地、再考虑转发，可以避免"本机能服务却绕一圈"的额外延迟与故障面。
 	localDiscoveryInfoCache              atomic.Value
 	localDiscoveryCacheTicker            *time.Ticker
 	localDiscoveryInfoCachePopulated     chan struct{}
@@ -82,6 +90,8 @@ type peerProxyHandler struct {
 	// rawPeerDiscoveryCache stores unfiltered resources and groups served by peer apiservers.
 	// The map is from string (serverID) to PeerDiscoveryCacheEntry.
 	// Written ONLY by peerLeaseQueue worker when peer leases change.
+	//
+	// 用 atomic.Value 发布整张 map：读者永远看到某个完整版本，不会观察到写一半的状态。
 	rawPeerDiscoveryCache atomic.Value // map[string]PeerDiscoveryCacheEntry
 	proxyTransport        http.RoundTripper
 	// Worker queue that keeps the rawPeerDiscoveryCache up-to-date.
@@ -104,14 +114,20 @@ type responder struct {
 	ctx context.Context
 }
 
+// RegisterCacheInvalidationCallback 注册回调，供上层在发现信息变化时清空代理缓存。
 func (h *peerProxyHandler) RegisterCacheInvalidationCallback(cb func()) {
 	h.cacheInvalidationCallback.Store(&cb)
 }
 
+// HasFinishedSync 报告所有依赖的 informer 是否已完成初次同步。
 func (h *peerProxyHandler) HasFinishedSync() bool {
 	return h.finishedSync.Load()
 }
 
+// WaitForCacheSync 等待身份租约、处理注册、GV 排除与本地发现缓存全部就绪。
+//
+// 任一环节等待失败都返回错误而不是继续运行：在信息不全时转发请求，
+// 会导致合法请求被误判为"无实例可服务"而失败。
 func (h *peerProxyHandler) WaitForCacheSync(stopCh <-chan struct{}) error {
 	ok := cache.WaitForNamedCacheSync("mixed-version-proxy", stopCh, h.apiserverIdentityInformer.Informer().HasSynced)
 	if !ok {
@@ -129,6 +145,7 @@ func (h *peerProxyHandler) WaitForCacheSync(stopCh <-chan struct{}) error {
 	}
 
 	// Wait for localDiscoveryInfoCache to be populated.
+	// 本地发现缓存由独立 ticker 填充，必须等到首份数据，否则所有请求都会走转发路径。
 	select {
 	case <-h.localDiscoveryInfoCachePopulated:
 	case <-stopCh:
@@ -151,6 +168,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 		}
 
 		// Allow non-resource requests
+		// /healthz、/version 等请求不涉及具体资源，本机即可应答。
 		if !requestInfo.IsResourceRequest {
 			klog.V(3).Infof("Not a resource request skipping proxying")
 			handler.ServeHTTP(w, r)
@@ -158,6 +176,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 		}
 
 		// Request has already been proxied once, it must be served locally
+		// 环路防护：已经转发过的请求若再转发，会在集群内无限乒乓。
 		if r.Header.Get(PeerProxiedHeader) == "true" {
 			klog.V(3).Infof("Already rerouted once, skipping proxying to peer")
 			handler.ServeHTTP(w, r)
@@ -182,6 +201,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 		// find servers that are capable of serving this request
 		peerServerIDs := h.findServiceableByPeerFromPeerDiscoveryCache(gvr)
 		if len(peerServerIDs) == 0 {
+			// 没有任何实例声明可服务该 GVR：交给本地处理，让原生逻辑返回 404 等标准错误。
 			klog.V(3).Infof("gvr %v is not served by anything in this cluster", gvr)
 			handler.ServeHTTP(w, r)
 			return
@@ -196,6 +216,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 			return
 		}
 
+		// 随机选择一个对等端，避免所有实例都转发到同一台造成热点。
 		endpointIndex := rand.Intn(len(peerEndpoints))
 		peerEndpoint := peerEndpoints[endpointIndex]
 		h.proxyRequestToDestinationAPIServer(r, w, peerEndpoint, gvr)
@@ -203,6 +224,9 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 }
 
 // resolveServingLocation resolves the host:port addresses for the given peer IDs.
+//
+// 部分对等端解析失败不影响可用性：只要还有至少一个可解析地址就继续转发，
+// 仅在全部失败时才返回错误。
 func (h *peerProxyHandler) resolveServingLocation(peerIDs []string) ([]string, error) {
 	var peerServerEndpoints []string
 	var errs []error
@@ -225,6 +249,7 @@ func (h *peerProxyHandler) resolveServingLocation(peerIDs []string) ([]string, e
 	return peerServerEndpoints, errors.Join(errs...)
 }
 
+// hostportInfo 从身份租约 reconciler 查询对等端地址，并校验其格式合法。
 func (h *peerProxyHandler) hostportInfo(apiserverKey string) (string, error) {
 	hostPort, err := h.reconciler.GetEndpoint(apiserverKey)
 	if err != nil {
@@ -239,6 +264,10 @@ func (h *peerProxyHandler) hostportInfo(apiserverKey string) (string, error) {
 	return hostPort, nil
 }
 
+// proxyRequestToDestinationAPIServer 构造指向对等端的请求并完成转发。
+//
+// 使用 AuthProxyRoundTripper 以原用户身份转发：授权仍在对等端重新执行一次，
+// 代理本身不构成权限提升路径。
 func (h *peerProxyHandler) proxyRequestToDestinationAPIServer(req *http.Request, rw http.ResponseWriter, host string, gvr schema.GroupVersionResource) {
 	// write a new location based on the existing request pointed at the target service
 	location := &url.URL{}
@@ -258,6 +287,7 @@ func (h *peerProxyHandler) proxyRequestToDestinationAPIServer(req *http.Request,
 		return
 	}
 
+	// 包装响应写入器以捕获状态码，供成功指标记录。
 	delegate := &epmetrics.ResponseWriterDelegator{ResponseWriter: rw}
 	w := responsewriter.WrapForHTTP1Or2(delegate)
 	handler := proxy.NewUpgradeAwareHandler(location, proxyRoundTripper, true, false, &responder{w: w, ctx: req.Context()})
@@ -266,6 +296,8 @@ func (h *peerProxyHandler) proxyRequestToDestinationAPIServer(req *http.Request,
 	metrics.IncPeerProxiedRequest(req.Context(), strconv.Itoa(delegate.Status()), gvr.Group, gvr.Version, gvr.Resource)
 }
 
+// buildProxyRoundtripper 用请求中的用户身份构造转发用的 RoundTripper。
+// 缺少用户信息说明过滤器顺序有误，直接拒绝而不是匿名转发。
 func (h *peerProxyHandler) buildProxyRoundtripper(req *http.Request) (http.RoundTripper, error) {
 	user, ok := apirequest.UserFrom(req.Context())
 	if !ok {
@@ -275,6 +307,7 @@ func (h *peerProxyHandler) buildProxyRoundtripper(req *http.Request) (http.Round
 	return transport.NewAuthProxyRoundTripper(user.GetName(), user.GetUID(), user.GetGroups(), user.GetExtra(), h.proxyTransport), nil
 }
 
+// Error 在转发失败时向客户端返回 503，表示对等端暂时不可用。
 func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 	klog.ErrorS(err, "Error while proxying request to destination apiserver")
 	http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -282,6 +315,8 @@ func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 
 // GetPeerResources implements PeerDiscoveryProvider interface
 // Returns a map of serverID -> []apidiscoveryv2.APIGroupDiscovery served by peer servers
+//
+// 排除本机：调用方聚合的是"其他实例"的发现信息，混入自身会重复。
 func (h *peerProxyHandler) GetPeerResources() map[string][]apidiscoveryv2.APIGroupDiscovery {
 	result := make(map[string][]apidiscoveryv2.APIGroupDiscovery)
 	cacheMap := h.gvExclusionManager.GetFilteredPeerDiscoveryCache()

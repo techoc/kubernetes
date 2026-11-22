@@ -24,6 +24,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
+// TestExecutionWithRoutine 验证长时请求路径下，handler 设置的任务会在
+// 请求结束后被执行（锁释放等收尾逻辑依赖此行为）。
 func TestExecutionWithRoutine(t *testing.T) {
 	var executed bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,8 @@ func TestExecutionWithRoutine(t *testing.T) {
 	}
 }
 
+// TestAppendTask 验证 AppendTask 只在上下文已有 Task 时生效：
+// 没有 Task 时返回 false 且回调不得执行，调用方据此决定是否自行处理。
 func TestAppendTask(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -77,6 +81,7 @@ func TestAppendTask(t *testing.T) {
 					t.Func = func() {}
 				}
 
+				// 关键断言：返回值的语义是“是否成功追加”，而不是“是否执行”。
 				appended = AppendTask(ctx, &Task{taskToAppend})
 			})
 			ts := httptest.NewServer(WithRoutine(handler, func(_ *http.Request, _ *request.RequestInfo) bool { return true }))

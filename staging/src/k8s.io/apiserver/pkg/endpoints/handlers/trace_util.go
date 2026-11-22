@@ -22,6 +22,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+// traceFields 构造 HTTP 请求的 trace 属性集合。
+//
+// 除 protocol/url 外都通过 Stringer 惰性求值：RequestInfo 等字段需要解析，
+// 而大多数请求不会采样到 trace，用延迟求值避免为未采样的请求付出解析开销。
+// user-agent 做了截断，防止恶意超长头撑爆 trace 后端。
 func traceFields(req *http.Request) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		attribute.Stringer("accept", &lazyAccept{req: req}),

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 记录 apiserver 出站连接（egress dialer）的拨号次数、延迟与失败，
+// 用于区分故障发生在连接代理服务器阶段还是代理转发阶段。
 package metrics
 
 import (
@@ -44,9 +46,11 @@ const (
 
 var (
 	// Use buckets ranging from 5 ms to 12.5 seconds.
+	// 桶的跨度覆盖本机代理（毫秒级）到跨网络代理（十秒级）两种典型场景。
 	latencyBuckets = []float64{0.005, 0.025, 0.1, 0.5, 2.5, 12.5}
 
 	// Metrics provides access to all dial metrics.
+	// 进程级单例，在包初始化时注册到 legacy registry。
 	Metrics = newDialMetrics()
 )
 
@@ -59,6 +63,7 @@ type DialMetrics struct {
 }
 
 // newDialMetrics create a new DialMetrics, configured with default metric names.
+// 指标以 ALPHA 稳定性注册，名称与标签集合一旦发布即属于兼容性契约。
 func newDialMetrics() *DialMetrics {
 	starts := metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -101,16 +106,17 @@ func newDialMetrics() *DialMetrics {
 }
 
 // Clock returns the clock.
+// 暴露时钟是为了让调用方与指标使用同一时间基准，避免延迟统计出现负值。
 func (m *DialMetrics) Clock() clock.Clock {
 	return m.clock
 }
 
-// SetClock sets the clock.
+// SetClock sets the clock. 仅供测试替换为假时钟。
 func (m *DialMetrics) SetClock(c clock.Clock) {
 	m.clock = c
 }
 
-// Reset resets the metrics.
+// Reset resets the metrics. 用于测试之间隔离状态。
 func (m *DialMetrics) Reset() {
 	m.starts.Reset()
 	m.latencies.Reset()
@@ -118,16 +124,19 @@ func (m *DialMetrics) Reset() {
 }
 
 // ObserveDialStart records the start of a dial attempt, labeled by protocol, transport.
+// 注意：start 与 latency/failure 是不同指标，调用方需自行保证成对记录。
 func (m *DialMetrics) ObserveDialStart(protocol, transport string) {
 	m.starts.WithLabelValues(protocol, transport).Inc()
 }
 
 // ObserveDialLatency records the latency of a dial, labeled by protocol, transport.
+// elapsed 以秒为单位入桶，与指标名中的 _seconds 保持一致。
 func (m *DialMetrics) ObserveDialLatency(elapsed time.Duration, protocol, transport string) {
 	m.latencies.WithLabelValues(protocol, transport).Observe(elapsed.Seconds())
 }
 
 // ObserveDialFailure records a failed dial, labeled by protocol, transport, and the stage the dial failed at.
+// stage 用于定位故障点：connect 表示连不上代理，proxy 表示代理拒绝了转发请求。
 func (m *DialMetrics) ObserveDialFailure(protocol, transport, stage string) {
 	m.failures.WithLabelValues(protocol, transport, stage).Inc()
 }

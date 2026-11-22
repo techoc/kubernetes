@@ -28,6 +28,9 @@ import (
 // conditionsAwareDecisionType is a small enum-like type for keeping track of what type a ConditionsAwareDecision is.
 // These values must never be exposed to users outside of this package, and should not be used for anything else than
 // keeping track of what type of a ConditionsAwareDecision is.
+//
+// 中文说明：刻意与 Decision 的取值错开（11-14），避免类型转换或日志打印时
+// 与无条件决策混淆。
 type conditionsAwareDecisionType int
 
 const (
@@ -57,6 +60,9 @@ const (
 // The zero value (ConditionsAwareDecision{}) is equivalent to ConditionsAwareDecisionDeny().
 // A ConditionsAwareDecision is passed by value.
 // Important: A ConditionsAwareDecision is immutable after construction.
+//
+// 中文说明：不可变 + 按值传递，使决策可以安全地在并发评估中共享；条件树
+// 由 Union 与 ConditionsMap 递归组成，评估到叶子才得到最终结论。
 type ConditionsAwareDecision struct {
 	decisionType conditionsAwareDecisionType
 
@@ -68,6 +74,8 @@ type ConditionsAwareDecision struct {
 }
 
 // ConditionsAwareDecisionDeny constructs a Deny decision with the given reason and error.
+//
+// 中文说明：Deny 取零值，使未初始化的决策天然 fail-closed。
 func ConditionsAwareDecisionDeny(reason string, err error) ConditionsAwareDecision {
 	return ConditionsAwareDecision{
 		// conditionsAwareDecisionTypeDeny == 0 == zero value
@@ -99,6 +107,9 @@ func ConditionsAwareDecisionNoOpinion(reason string, err error) ConditionsAwareD
 // ConditionsAwareDecisionFromParts is meant to be used by conditions-unaware Authorizer implementations
 // in order to implement ConditionsAwareAuthorize as:
 // "return authorizer.ConditionsAwareDecisionFromParts(self.Authorize(ctx, a))"
+//
+// 中文说明：未知的 Decision 值一律按 Deny 处理并附加错误，保证新增枚举值时
+// 不会因遗漏分支而意外放行。
 func ConditionsAwareDecisionFromParts(unconditional Decision, reason string, err error) ConditionsAwareDecision {
 	switch unconditional {
 	case DecisionAllow:
@@ -151,6 +162,8 @@ func (d ConditionsAwareDecision) IsUnion() bool {
 }
 
 // IsUnconditional is true if d is Allow, Deny or NoOpinion.
+//
+// 中文说明：调用方可用它判断是否必须进入条件求值路径。
 func (d ConditionsAwareDecision) IsUnconditional() bool {
 	return d.IsAllow() || d.IsDeny() || d.IsNoOpinion()
 }
@@ -166,6 +179,9 @@ func (d ConditionsAwareDecision) IsUnconditional() bool {
 // Authorize() as "return self.ConditionsAwareAuthorize(ctx, attrs).unconditionalParts()"
 //
 // Private for now, to not encourage callers to perform conditions-aware logic where not needed.
+//
+// 中文说明：把条件决策降级为无条件决策时采取 fail-closed——返回 Deny 且不返回
+// error，因为返回 error 会让 HTTP 层响应 500 而非 403，且暴露内部状态。
 func (d ConditionsAwareDecision) unconditionalParts() (Decision, string, error) {
 	switch {
 	case d.IsAllow():
@@ -187,6 +203,8 @@ func (d ConditionsAwareDecision) unconditionalParts() (Decision, string, error) 
 // ConditionsAwareDecision. The return value is a subset of {Allow, Deny, NoOpinion},
 // but never the empty set. If the set only contains a single value, it means the
 // decision is unconditional.
+//
+// 中文说明：集合语义用于判断"是否可能拒绝"，是 FailureDecision 的决策依据。
 func (d ConditionsAwareDecision) PossibleDecisions() sets.Set[Decision] {
 	switch {
 	case d.IsAllow():
@@ -207,6 +225,9 @@ func (d ConditionsAwareDecision) PossibleDecisions() sets.Set[Decision] {
 // ConditionsAwareDecision. If this decision is or could evaluate to Deny
 // this function returns DecisionDeny to the caller, in order to fail closed
 // as a conservative approximation. Otherwise, NoOpinion is returned.
+//
+// 中文说明：只要条件树中存在任何可能 Deny 的分支，就保守地返回 Deny；
+// 否则返回 NoOpinion，让后续授权器继续判断。
 func (d ConditionsAwareDecision) FailureDecision() Decision {
 	if d.PossibleDecisions().Has(DecisionDeny) {
 		return DecisionDeny
@@ -216,6 +237,9 @@ func (d ConditionsAwareDecision) FailureDecision() Decision {
 
 // ContainsUnconditionalAllowOrDeny returns true whether there union contains at least one
 // Allow or Deny decision within the tree of decisions.
+//
+// 中文说明：用于判断是否值得做条件求值——若树中不存在任何 Allow/Deny 叶子，
+// 求值不可能改变最终结论。
 func (d ConditionsAwareDecision) ContainsUnconditionalAllowOrDeny() bool {
 	if d.IsAllow() || d.IsDeny() {
 		return true
@@ -229,6 +253,9 @@ func (d ConditionsAwareDecision) ContainsUnconditionalAllowOrDeny() bool {
 // UnionedDecisions returns an iterator for unioned sub-decisions.
 // This iterator is non-empty if and only if IsUnion() == true.
 // Sub-decisions iteration order is preserved.
+//
+// 中文说明：保留顺序是因为 union 的语义依赖顺序（先到先得/短路），
+// 迭代时不能重排。
 func (d ConditionsAwareDecision) UnionedDecisions() iter.Seq2[string, ConditionsAwareDecision] {
 	return func(yield func(string, ConditionsAwareDecision) bool) {
 		for _, subDecision := range d.union.inner {
@@ -254,6 +281,9 @@ func (d ConditionsAwareDecision) Error() error {
 }
 
 // String returns a human-readable representation of the decision.
+//
+// 中文说明：输出刻意不包含敏感对象内容，只含 reason/error 与条件数量，
+// 可安全写入日志与审计。
 func (d ConditionsAwareDecision) String() string {
 	if d.IsUnion() {
 		// No need to take d.reason or d.err into account, as they are always zero for the union.

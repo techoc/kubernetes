@@ -37,7 +37,13 @@ import (
 // a new version of Go changes the error type returned, then some of these tests
 // might fail during GoLang update, we can fix the broken test(s) by changing the
 // wanted error in the test setup to the new observed error.
+//
+// 中文说明：本文件用真实 net/http 服务器刻画 per-request 读/写 deadline 的底层行为，
+// 作为 filters 中 SetReadDeadline/SetWriteDeadline 实现的“事实基线”。断言依赖
+// 标准库错误文本，升级 Go 时可能需要同步调整。
 
+// TestPerRequestWithWriteEventuallyReturnsDeadlineError 验证：deadline 过后持续写入，
+// 直到内核/缓冲写满时 Write 才返回超时错误；期间不 flush 时客户端拿不到内容。
 func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 	// This test documents the behavior of the per request write deadline
 	// using a standard net http server.
@@ -155,6 +161,8 @@ func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 	}
 }
 
+// TestPerRequestWithFlushReturnsErrorAfterDeadline 验证 deadline 过后的 FlushError
+// 立即返回超时错误——即使此前写入的数据还停留在缓冲区。
 func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 	// This test documents the behavior of the per request write deadline
 	// using a standard net http server.
@@ -260,6 +268,8 @@ func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 	}
 }
 
+// TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline 验证在 deadline
+// 之前写入、deadline 之后才 flush 的内容不会到达客户端。
 func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing.T) {
 	// This test documents the behavior of the per handler write
 	// deadline using a standard net http server.
@@ -361,6 +371,8 @@ func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing
 	}
 }
 
+// TestPerRequestWithClientReceivesContentFlushedBeforeDeadline 验证 deadline 前已
+// 写入并 flush 的内容可以到达客户端；deadline 后的写入失败不应影响已发送部分。
 func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) {
 	// This test documents the behavior of the per handler write
 	// deadline using a standard net http server.
@@ -494,6 +506,8 @@ func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) 
 	}
 }
 
+// TestPerRequestWithHandlerShouldAbortWriteAfterDeadline 验证无限写入的 handler 会在
+// deadline 到达时因 Write 报错而终止，不会永久挂起占用连接。
 func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
 	// This test documents the behavior of the per handler write
 	// deadline using a standard net http server.
@@ -586,6 +600,8 @@ func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
 	}
 }
 
+// TestPerRequestWithBodyReadShouldTimeoutAfterDeadline 验证读 deadline 能中断
+// “客户端迟迟不发送 body”的请求，避免服务端 goroutine 被慢客户端拖住。
 func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 	// This test documents the behavior of the per handler read
 	// deadline using a standard net http server.
@@ -699,6 +715,8 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 	}
 }
 
+// TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline 验证 deadline 前
+// 已读到的 body 数据不会因后续读取超时而丢失或回滚。
 func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testing.T) {
 	// This test documents the behavior of the per request read
 	// deadline using a standard net http server.
@@ -832,6 +850,8 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 	}
 }
 
+// TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline 验证空 body 的
+// 读取不受读 deadline 影响（无数据可读时无需等待网络）。
 func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testing.T) {
 	// This test documents the behavior of the per request read
 	// deadline using a standard net http server.
@@ -921,6 +941,8 @@ func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testi
 
 }
 
+// TestPerRequestWithHijackedConnectionShouldResetDeadline 验证 hijack 后的连接
+// 不受 handler 设置的读/写 deadline 约束——hijack 相当于接管原始 net.Conn。
 func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 	// This test documents the behavior of the per handler read/write
 	// deadline using a standard net http server.
@@ -1008,6 +1030,8 @@ func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 	wantNoError{}.verify(t, err)
 }
 
+// TestPerRequestWithConnectionIsReused 验证首个请求超时后连接仍可复用，
+// 从而确认分母端 deadline 不会污染 keep-alive 连接的后续请求。
 func TestPerRequestWithConnectionIsReused(t *testing.T) {
 	// This test documents the behavior of the per request write deadline
 	// using a standard net http server.
@@ -1149,6 +1173,8 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 	}
 }
 
+// TestPerRequestWithSlowReader 是一个跳过的手动实验：模拟慢速读客户端，
+// 用于复现“写超时被慢读放大”的场景，不适合放进常规 CI。
 func TestPerRequestWithSlowReader(t *testing.T) {
 	// This test documents the behavior of the per handler write
 	// deadline using a standard net http server.
@@ -1311,6 +1337,7 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 	wantContains{contains: "stream error: stream ID 1; INTERNAL_ERROR; received from peer"}.verify(t, err)
 }
 
+// sendWithTrace 发送 GET 并在拿到连接时回调 f，用于断言复用/新建连接。
 func sendWithTrace(t *testing.T, client *http.Client, url string, f func(*testing.T, httptrace.GotConnInfo)) (*http.Response, error) {
 	t.Helper()
 	ctx := t.Context()
@@ -1343,6 +1370,7 @@ func shouldUseNewConnection(t *testing.T, ci httptrace.GotConnInfo) {
 	}
 }
 
+// neverEnding 是无限可读的 io.Reader，用于让 handler 持续写入直到 deadline。
 type neverEnding byte
 
 func (b neverEnding) Read(p []byte) (n int, err error) {
@@ -1359,6 +1387,7 @@ func closeResponseBody(t *testing.T, resp *http.Response) {
 	}
 }
 
+// waiter 抽象 handler 等待 deadline 到期的两种方式：睡眠或 channel 关闭。
 type waiter interface {
 	wait() <-chan time.Time
 	close()
@@ -1402,6 +1431,7 @@ func (w waitForClose) wait() <-chan time.Time {
 
 func (w waitForClose) close() { close(w.after) }
 
+// chanErr 是带超时的错误通道包装：先取错误，再等通道关闭以确保 handler goroutine 退出。
 type chanErr chan error
 
 func (ch chanErr) wait(t *testing.T, timeoutCh <-chan time.Time) error {
@@ -1432,10 +1462,12 @@ func (ch chanErr) wait(t *testing.T, timeoutCh <-chan time.Time) error {
 	return err
 }
 
+// verifier 统一断言错误形态，使各用例可以把“期望错误”作为数据而非代码表达。
 type verifier interface {
 	verify(t *testing.T, got error)
 }
 
+// wantNoError 断言没有错误。
 type wantNoError struct{}
 
 func (v wantNoError) verify(t *testing.T, got error) {
@@ -1445,6 +1477,7 @@ func (v wantNoError) verify(t *testing.T, got error) {
 	}
 }
 
+// wantContains 断言错误文本包含给定子串；用于标准库错误文本可能随版本微调的场景。
 type wantContains struct {
 	contains string
 }
@@ -1462,6 +1495,7 @@ func (v wantContains) verify(t *testing.T, got error) {
 	}
 }
 
+// wantError 用 errors.Is 断言具体错误（如 os.ErrDeadlineExceeded）。
 type wantError struct {
 	err error
 }
@@ -1479,6 +1513,7 @@ func (v wantError) verify(t *testing.T, got error) {
 	}
 }
 
+// wantEitherOr 接受两种等价的可观察错误：标准库在不同版本/并发压力下可能返回其一。
 type wantEitherOr struct {
 	err      error
 	contains string

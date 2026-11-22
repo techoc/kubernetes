@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package flowcontrol 实现 API 优先级与公平性（APF）的配置控制器与请求过滤器。
+// 本文件是 configController 的测试：用轻量的假 QueueSetFactory 观察配置
+// 消化（digest）过程中队列集的生命周期，以及 FlowSchema 的匹配结果。
 package flowcontrol
 
 import (
@@ -46,13 +49,17 @@ import (
 
 // Some tests print a lot of debug logs which slows down tests considerably,
 // causing them to even timeout.
+// 因此调试日志默认关闭，仅在本地排查匹配或队列问题时临时打开。
 var testDebugLogs = false
 
+// TestMain 注册 klog 的命令行标志（测试可用 -v 调整日志级别），然后运行测试集。
 func TestMain(m *testing.M) {
 	klog.InitFlags(nil)
 	os.Exit(m.Run())
 }
 
+// mandPLs 按名称索引内置的强制优先级配置。
+// 强制配置不可删除，所以测试计算“期望存活的 PL 集合”时总要并入它们。
 var mandPLs = func() map[string]*flowcontrol.PriorityLevelConfiguration {
 	ans := make(map[string]*flowcontrol.PriorityLevelConfiguration)
 	for _, mand := range fcboot.MandatoryPriorityLevelConfigurations {
@@ -62,12 +69,16 @@ var mandPLs = func() map[string]*flowcontrol.PriorityLevelConfiguration {
 }()
 
 // in general usage, the boolean returned may be inaccurate by the time the caller examines it.
+// 加锁是为了避免与 controller 的 reconcile 循环并发读写 priorityLevelStates。
 func (cfgCtlr *configController) hasPriorityLevelState(plName string) bool {
 	cfgCtlr.lock.Lock()
 	defer cfgCtlr.lock.Unlock()
 	return cfgCtlr.priorityLevelStates[plName] != nil
 }
 
+// ctlrTestState 既是 controller 的测试夹具，也实现了 fq.QueueSetFactory，
+// 用最小化的队列集替代真实 fairqueuing 实现，使测试可以精确断言
+// 哪些队列集被创建、哪些仍有活跃请求。
 type ctlrTestState struct {
 	t               *testing.T
 	cfgCtlr         *configController
@@ -80,19 +91,27 @@ type ctlrTestState struct {
 	queues          map[string]*ctlrTestQueueSet
 }
 
+// heldRequest 表示一个已经进入队列、但被测试故意挂起未完成的请求，
+// 用来模拟“配置变更时仍有请求在执行”的场景。
 type heldRequest struct {
 	rd       RequestDigest
 	finishCh chan struct{}
 }
 
+// 编译期断言：ctlrTestState 必须满足 QueueSetFactory 接口，
+// 这样它才能作为 QueueSetFactory 注入 controller。
 var _ fq.QueueSetFactory = (*ctlrTestState)(nil)
 
+// ctlrTestQueueSetCompleter 是构建队列集过程中的中间态，
+// 与真实实现一样支持“从零构建”和“原地重配置”两种来源。
 type ctlrTestQueueSetCompleter struct {
 	cts *ctlrTestState
 	cqs *ctlrTestQueueSet
 	qc  fq.QueuingConfig
 }
 
+// ctlrTestQueueSet 记录某个优先级队列集的活跃请求数，
+// IsIdle 与 controller 的“是否可安全删除”判断都依赖 countActive。
 type ctlrTestQueueSet struct {
 	cts         *ctlrTestState
 	qc          fq.QueuingConfig
@@ -100,24 +119,33 @@ type ctlrTestQueueSet struct {
 	countActive int
 }
 
+// ctlrTestRequest 保存请求的描述信息，便于调试日志输出，
+// 并在 Finish 时把活跃计数还回去。
 type ctlrTestRequest struct {
 	cqs            *ctlrTestQueueSet
 	qsName         string
 	descr1, descr2 interface{}
 }
 
+// BeginConstruction 返回一个 completer，Complete 时才真正创建并登记队列集；
+// 这与真实工厂一致，保证 controller 先拿到 QueuingConfig 再完成构建。
 func (cts *ctlrTestState) BeginConstruction(qc fq.QueuingConfig, rip metrics.RatioedGaugePair, eso metrics.RatioedGauge, sdi metrics.Gauge) (fq.QueueSetCompleter, error) {
 	return ctlrTestQueueSetCompleter{cts, nil, qc}, nil
 }
 
+// BeginConfigChange 复用已有队列集，仅在 Complete 时替换其配置，
+// 这样测试可以验证“配置变更不会丢失排队中的请求”。
 func (cqs *ctlrTestQueueSet) BeginConfigChange(qc fq.QueuingConfig) (fq.QueueSetCompleter, error) {
 	return ctlrTestQueueSetCompleter{cqs.cts, cqs, qc}, nil
 }
 
+// Dump 返回空的队列集快照；调试接口在测试中无意义。
 func (cqs *ctlrTestQueueSet) Dump(bool) debug.QueueSetDump {
 	return debug.QueueSetDump{}
 }
 
+// Complete 登记或更新队列集：首次构建时按名称建表，重配置时原地更新 qc/dc。
+// 持有 cts.lock 是因为 controller 可能在另一个 goroutine 中读取队列集。
 func (cqc ctlrTestQueueSetCompleter) Complete(dc fq.DispatchingConfig) fq.QueueSet {
 	cqc.cts.lock.Lock()
 	defer cqc.cts.lock.Unlock()
@@ -131,6 +159,7 @@ func (cqc ctlrTestQueueSetCompleter) Complete(dc fq.DispatchingConfig) fq.QueueS
 	return qs
 }
 
+// IsIdle 表示队列集是否可被回收；只有零活跃请求时 controller 才允许删除它。
 func (cqs *ctlrTestQueueSet) IsIdle() bool {
 	cqs.cts.lock.Lock()
 	defer cqs.cts.lock.Unlock()
@@ -138,6 +167,8 @@ func (cqs *ctlrTestQueueSet) IsIdle() bool {
 	return cqs.countActive == 0
 }
 
+// StartRequest 立刻返回一个未完成的请求并递增活跃计数；
+// 第二个返回值恒为 false，因为测试队列集从不让请求等待空闲座位。
 func (cqs *ctlrTestQueueSet) StartRequest(ctx context.Context, width *fcrequest.WorkEstimate, hashValue uint64, flowDistinguisher, fsName string, descr1, descr2 interface{}, queueNoteFn fq.QueueNoteFn) (req fq.Request, idle bool) {
 	cqs.cts.lock.Lock()
 	defer cqs.cts.lock.Unlock()
@@ -148,6 +179,8 @@ func (cqs *ctlrTestQueueSet) StartRequest(ctx context.Context, width *fcrequest.
 	return &ctlrTestRequest{cqs, cqs.qc.Name, descr1, descr2}, false
 }
 
+// Finish 执行请求的实际工作并递减活跃计数；返回是否已无活跃请求，
+// 对应真实实现中“最后一个请求离开时队列集变空闲”的语义。
 func (ctr *ctlrTestRequest) Finish(execute func()) bool {
 	execute()
 	ctr.cqs.cts.lock.Lock()
@@ -159,12 +192,15 @@ func (ctr *ctlrTestRequest) Finish(execute func()) bool {
 	return ctr.cqs.countActive == 0
 }
 
+// getQueueSetNames 返回所有已登记队列集的名称快照（含空闲的）。
 func (cts *ctlrTestState) getQueueSetNames() sets.String {
 	cts.lock.Lock()
 	defer cts.lock.Unlock()
 	return sets.StringKeySet(cts.queues)
 }
 
+// getNonIdleQueueSetNames 返回仍有活跃请求的队列集名称；
+// 这些队列集不允许被回收，因此可用于检测“过早删除”。
 func (cts *ctlrTestState) getNonIdleQueueSetNames() sets.String {
 	cts.lock.Lock()
 	defer cts.lock.Unlock()
@@ -177,6 +213,7 @@ func (cts *ctlrTestState) getNonIdleQueueSetNames() sets.String {
 	return ans
 }
 
+// hasNonIdleQueueSet 判断指定名称的队列集是否存在且仍有活跃请求。
 func (cts *ctlrTestState) hasNonIdleQueueSet(name string) bool {
 	cts.lock.Lock()
 	defer cts.lock.Unlock()
@@ -184,6 +221,8 @@ func (cts *ctlrTestState) hasNonIdleQueueSet(name string) bool {
 	return qs != nil && qs.countActive > 0
 }
 
+// addHeldRequest 把一个挂起请求记到其期望的 PL 名下，
+// 之后测试再按 PL 是否仍然存在决定何时放行它。
 func (cts *ctlrTestState) addHeldRequest(plName string, rd RequestDigest, finishCh chan struct{}) {
 	cts.lock.Lock()
 	defer cts.lock.Unlock()
@@ -195,6 +234,9 @@ func (cts *ctlrTestState) addHeldRequest(plName string, rd RequestDigest, finish
 	}
 }
 
+// popHeldRequest 取走任意一个挂起请求（后进先出），并返回该请求所属 PL
+// 以及该 PL 名下剩余的挂起请求数。没有挂起请求时返回 nil。
+// 返回计数是为了让调试日志能反映该 PL 还剩多少请求未完成。
 func (cts *ctlrTestState) popHeldRequest() (plName string, hr *heldRequest, nCount int) {
 	cts.lock.Lock()
 	defer cts.lock.Unlock()
@@ -222,6 +264,8 @@ func (cts *ctlrTestState) popHeldRequest() (plName string, hr *heldRequest, nCou
 	}
 }
 
+// mandQueueSetNames 是内置强制 FlowSchema/PL 对应的队列集名称集合，
+// 它们在任何一次消化后都必须存在。
 var mandQueueSetNames = func() sets.String {
 	mandQueueSetNames := sets.NewString()
 	for _, mpl := range fcboot.MandatoryPriorityLevelConfigurations {
@@ -230,6 +274,9 @@ var mandQueueSetNames = func() sets.String {
 	return mandQueueSetNames
 }()
 
+// TestConfigConsumer 是配置控制器的随机化测试：反复生成并消化
+// FlowSchema/PL 配置，同时发送请求，验证队列集只增不减到“应当存在”的程度。
+// 外层固定种子保证可复现，每个 trial 再从外层 RNG 派生独立种子。
 func TestConfigConsumer(t *testing.T) {
 	rngOuter := rand.New(rand.NewSource(1234567890123456789))
 	for i := 1; i <= 10; i++ {
@@ -268,6 +315,8 @@ func TestConfigConsumer(t *testing.T) {
 					t.Logf("For %s, newFTRs=%#+v", trialStep, newFTRs)
 				}
 				// Check that the latest digestion did the right thing
+				// 重新计算“应当存活”的 PL：强制 PL 永不删除，非空闲 PL 因仍有请求
+				// 也必须保留，其余加上本步期望的 PL 即为最终集合。
 				nextPLNames := sets.NewString()
 				for oldPLName := range persistingPLNames {
 					if mandPLs[oldPLName] != nil || cts.hasNonIdleQueueSet(oldPLName) {
@@ -322,6 +371,7 @@ func TestConfigConsumer(t *testing.T) {
 				}
 				_ = ctlr.lockAndDigestConfigObjects(newPLs, newFSs)
 			}
+			// 收尾：放行所有仍挂起的请求，等待它们退出，避免 goroutine 泄漏。
 			for plName, hr, nCount := cts.popHeldRequest(); hr != nil; plName, hr, nCount = cts.popHeldRequest() {
 				if testDebugLogs {
 					desired := desiredPLNames.Has(plName) || mandPLs[plName] != nil
@@ -334,6 +384,8 @@ func TestConfigConsumer(t *testing.T) {
 	}
 }
 
+// TestAPFControllerWithGracefulShutdown 验证 controller 在关闭 stopCh 后
+// 能干净地退出 Run：先等到它完成首次 reconcile，再关闭并检查返回错误为 nil。
 func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 	const plName = "test-ps"
 	fs := &flowcontrol.FlowSchema{
@@ -392,6 +444,7 @@ func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 	stopCh, controllerCompletedCh := make(chan struct{}), make(chan struct{})
 	var controllerErr error
 
+	// 先启动 informer 并等待缓存同步，否则 controller 的首次 digest 可能看到空配置。
 	informerFactory.Start(stopCh)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -401,6 +454,7 @@ func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 		t.Fatalf("WaitForCacheSync did not successfully complete, resources=%#v", names)
 	}
 
+	// controller.Run 阻塞到 stopCh 关闭，放到独立 goroutine 中并记录错误。
 	go func() {
 		defer close(controllerCompletedCh)
 		controllerErr = controller.Run(stopCh)
@@ -414,6 +468,7 @@ func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 		t.Errorf("expected the controller to reconcile the priority level configuration object: %s, error: %s", plName, err)
 	}
 
+	// 关闭后必须等待 Run 返回，才能确认退出路径没有报错。
 	close(stopCh)
 	t.Log("waiting for the controller Run function to shutdown gracefully")
 	<-controllerCompletedCh
@@ -423,6 +478,7 @@ func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 	}
 }
 
+// unsynced 从 informer 同步结果中挑出尚未同步的资源类型名称，用于生成清晰的失败信息。
 func unsynced(status map[reflect.Type]bool) []string {
 	names := make([]string, 0)
 
@@ -435,6 +491,9 @@ func unsynced(status map[reflect.Type]bool) []string {
 	return names
 }
 
+// checkNewFS 为一个 FlowSchema 发出其所有测试请求，并断言 controller 选中的
+// FlowSchema 与优先级配置符合预期。大部分请求立即完成，少量被挂起以制造
+// 跨 digest 的活跃请求；startWG 保证所有请求都真正开始执行后才返回。
 func checkNewFS(cts *ctlrTestState, rng *rand.Rand, trialName string, ftr *fsTestingRecord, catchAlls map[bool]*flowcontrol.FlowSchema) {
 	t := cts.t
 	ctlr := cts.cfgCtlr
@@ -475,6 +534,7 @@ func checkNewFS(cts *ctlrTestState, rng *rand.Rand, trialName string, ftr *fsTes
 					})
 					cts.requestWG.Done()
 				}(matches, isResource, rdu)
+				// 80% 的请求立即放行；其余挂起，等下一次 digest 时再按 PL 存活情况释放。
 				if rng.Float32() < 0.8 {
 					if testDebugLogs {
 						t.Logf("Immediate request %#+v, plName=%s", rdu, expectedPLName)
@@ -489,6 +549,10 @@ func checkNewFS(cts *ctlrTestState, rng *rand.Rand, trialName string, ftr *fsTes
 	startWG.Wait()
 }
 
+// genPLs 随机生成一批优先级配置，并返回“好的”与“坏的”名称集合：
+// 坏名称引用不存在的 PL，用于测试 FlowSchema 指向悬空 PL 时的降级行为。
+// 为保持配置在多次 digest 之间部分延续，旧 PL 有 2/3 的概率被重新生成；
+// 强制 PL 则以 1/2 的概率被显式包含（即使不包含，controller 也会内置它们）。
 func genPLs(rng *rand.Rand, trial string, oldPLNames sets.String, n int) (pls []*flowcontrol.PriorityLevelConfiguration, plMap map[string]*flowcontrol.PriorityLevelConfiguration, goodNames, badNames sets.String) {
 	pls = make([]*flowcontrol.PriorityLevelConfiguration, 0, n)
 	plMap = make(map[string]*flowcontrol.PriorityLevelConfiguration, n)
@@ -520,6 +584,9 @@ func genPLs(rng *rand.Rand, trial string, oldPLNames sets.String, n int) (pls []
 	return
 }
 
+// genFSs 随机生成一批 FlowSchema，并同时维护“当前优先级最高”的 catch-all
+// FlowSchema（区分资源请求与非资源请求），供 checkNewFS 判断匹配优先级。
+// 强制 catch-all 与强制 exempt FlowSchema 按概率出现，以覆盖内置配置的交互。
 func genFSs(t *testing.T, rng *rand.Rand, trial string, goodPLNames, badPLNames sets.String, n int) (newFSs []*flowcontrol.FlowSchema, newFSMap map[string]*flowcontrol.FlowSchema, newFTRs map[string]*fsTestingRecord, catchAlls map[bool]*flowcontrol.FlowSchema) {
 	newFTRs = map[string]*fsTestingRecord{}
 	catchAlls = map[bool]*flowcontrol.FlowSchema{
@@ -555,6 +622,8 @@ func genFSs(t *testing.T, rng *rand.Rand, trial string, goodPLNames, badPLNames 
 	return
 }
 
+// fsPrecedes 判断 a 是否比 b 更早匹配：先比较 MatchingPrecedence，再按名称字典序
+// 打破平局，与 controller 的匹配顺序保持一致。
 func fsPrecedes(a, b *flowcontrol.FlowSchema) bool {
 	if a.Spec.MatchingPrecedence < b.Spec.MatchingPrecedence {
 		return true

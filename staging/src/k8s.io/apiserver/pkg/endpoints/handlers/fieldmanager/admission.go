@@ -32,6 +32,9 @@ const InvalidManagedFieldsAfterMutatingAdmissionWarningFormat = ".metadata.manag
 
 // NewManagedFieldsValidatingAdmissionController validates the managedFields after calling
 // the provided admission and resets them to their original state if they got changed to an invalid value
+//
+// 包装器而非改造每个插件：managedFields 只能由服务器写入，任何插件误改都
+// 应被回滚并提示，而不是让无效状态进入存储。
 func NewManagedFieldsValidatingAdmissionController(wrap admission.Interface) admission.Interface {
 	if wrap == nil {
 		return nil
@@ -39,6 +42,7 @@ func NewManagedFieldsValidatingAdmissionController(wrap admission.Interface) adm
 	return &managedFieldsValidatingAdmissionController{wrap: wrap}
 }
 
+// managedFieldsValidatingAdmissionController 把准入调用包裹在 managedFields 快照/校验之间。
 type managedFieldsValidatingAdmissionController struct {
 	wrap admission.Interface
 }
@@ -66,12 +70,16 @@ func (admit *managedFieldsValidatingAdmissionController) Admit(ctx context.Conte
 		// just call the wrapped admission
 		return mutationInterface.Admit(ctx, a, o)
 	}
+	// 在调用前保存引用切片；随后插件可能替换整个 managedFields，故此处只保存浅拷贝即可，
+	// 因为回滚时直接整块替换。
 	managedFieldsBeforeAdmission := objectMeta.GetManagedFields()
 	if err := mutationInterface.Admit(ctx, a, o); err != nil {
 		return err
 	}
 	managedFieldsAfterAdmission := objectMeta.GetManagedFields()
 	if err := managedfields.ValidateManagedFields(managedFieldsAfterAdmission); err != nil {
+		// 回滚而非拒绝：历史插件可能无意破坏该字段，拒绝会导致升级后请求全挂。
+		// 以 warning 告知客户端，便于定位有问题的插件。
 		objectMeta.SetManagedFields(managedFieldsBeforeAdmission)
 		warning.AddWarning(ctx, "",
 			fmt.Sprintf(InvalidManagedFieldsAfterMutatingAdmissionWarningFormat,

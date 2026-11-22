@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package install 把 apiserver 配置的各版本类型注册到 runtime.Scheme。
 package install
 
 import (
@@ -26,6 +27,10 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 注册顺序与版本优先级决定了解码未指定 apiVersion 的对象时的默认版本，
+// 以及编码时的首选版本。internal 版本必须先注册，之后各外部版本才能通过
+// 转换器与它互转。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(apiserver.AddToScheme(scheme))
 

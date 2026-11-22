@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package consistency 对比 watch 缓存与 etcd 的快照摘要，用于发现缓存漏事件或脏数据。
+//
+// 中文说明：一致性检查是只读的诊断工具，检查结果通过 cacher 的 MarkConsistent
+// 暴露，不能反向影响正常的读写路径。
 package consistency
 
 import (
@@ -33,6 +37,9 @@ import (
 	cachertesting "k8s.io/apiserver/pkg/storage/cacher/testing"
 )
 
+// TestConsistencyCheckerDigest 验证缓存与 etcd 的摘要比对：缓存未就绪时报错不判一致；
+// 内容一致时摘要相同；namespace/name/resourceVersion 任一变化都会改变摘要；
+// 漏掉 watch 的写/删事件会体现在 DiffDetail 中。
 func TestConsistencyCheckerDigest(t *testing.T) {
 	newListFunc := func() runtime.Object { return &example.PodList{} }
 	testCases := []struct {
@@ -256,6 +263,9 @@ func TestConsistencyCheckerDigest(t *testing.T) {
 	}
 }
 
+// TestConsistencyCheckerListOpts 验证两侧使用不同的 list 选项：缓存侧读最新
+// （RV=0/NotOlderThan），etcd 侧按指定 RV 精确读并限制分页大小。参数选错会
+// 导致摘要比较失去意义（例如拿不同版本对比）。
 func TestConsistencyCheckerListOpts(t *testing.T) {
 	newListFunc := func() runtime.Object { return &example.PodList{} }
 

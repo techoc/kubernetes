@@ -37,6 +37,9 @@ import (
 // gate is disabled it dispatches as before. The production excluded set is auth/authz virtual
 // resources; here a core resource is marked excluded so the mechanism can be exercised with the
 // fixtures the webhook test harness supports.
+//
+// 中文说明：用例核心是"排除生效时拒绝型 webhook 根本不会被调用"——通过同一个
+// 必然拒绝的 webhook，在门控开/关两种状态下的结果差异来证明请求被跳过而非被放行。
 func TestExcludeVirtualResources(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -65,6 +68,7 @@ func TestExcludeVirtualResources(t *testing.T) {
 		FailurePolicy: &fail,
 		SideEffects:   &none,
 		// Empty (non-nil) selectors match everything; nil would parse to "matches nothing".
+		// 中文说明：区分 nil 与空结构体是常见陷阱，注释保留以提醒后来者。
 		NamespaceSelector:       &metav1.LabelSelector{},
 		ObjectSelector:          &metav1.LabelSelector{},
 		AdmissionReviewVersions: []string{"v1"},
@@ -77,6 +81,7 @@ func TestExcludeVirtualResources(t *testing.T) {
 
 	// WantsExcludedAdmissionResources wiring. NewAttribute issues a request for the core "pod"
 	// resource, so mark that excluded.
+	// 中文说明：用生产中的可选接口做断言，顺带验证插件确实实现了该接口。
 	wants, ok := interface{}(wh).(initializer.WantsExcludedAdmissionResources)
 	if !ok {
 		t.Fatal("plugin does not implement WantsExcludedAdmissionResources")
@@ -104,18 +109,24 @@ func TestExcludeVirtualResources(t *testing.T) {
 	o := webhooktesting.NewObjectInterfacesForTest()
 
 	// Gate enabled: the excluded resource is skipped, so the rejecting webhook is never called.
+	// 中文说明：nil 结果证明请求被跳过；若实现退化为"放行"，本用例无法区分，
+	// 因此还需下面的门控关闭分支共同构成证据。
 	wantsFeatures.InspectFeatureGates(newExcludeGate(t, true))
 	if err := wh.Admit(context.TODO(), attr, o); err != nil {
 		t.Errorf("with gate enabled, expected the excluded resource to be skipped (nil), got: %v", err)
 	}
 
 	// Gate disabled: the webhook is dispatched and rejects the request.
+	// 中文说明：门控关闭后排除列表不再生效，期望拿到错误。
 	wantsFeatures.InspectFeatureGates(newExcludeGate(t, false))
 	if err := wh.Admit(context.TODO(), attr, o); err == nil {
 		t.Error("with gate disabled, expected the webhook to reject the request, got nil")
 	}
 }
 
+// newExcludeGate 构造只包含被测门控的独立 FeatureGate。
+//
+// 中文说明：使用私有 gate 而非全局 DefaultFeatureGate，避免测试并行时互相干扰。
 func newExcludeGate(t *testing.T, enabled bool) featuregate.FeatureGate {
 	t.Helper()
 	gate := featuregate.NewFeatureGate()

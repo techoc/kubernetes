@@ -59,6 +59,7 @@ type defaultDecoder struct {
 // decode decodes value of bytes into object. It will also set the object resource version to rev.
 // On success, objPtr would be set to the object.
 func (d *defaultDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) error {
+	// 校验传入的是指针：codec 要求目标必须是可写的指针，否则无法填充对象。
 	if _, err := conversion.EnforcePtr(objPtr); err != nil {
 		// nolint:errorlint // this code was moved from store.go as is
 		return fmt.Errorf("unable to convert output object to pointer: %v", err)
@@ -68,6 +69,7 @@ func (d *defaultDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) 
 		return err
 	}
 	// being unable to set the version does not prevent the object from being extracted
+	// 版本不一致会导致后续写操作的冲突校验失败，但对象本身仍可读取，因此只告警不报错。
 	if err := d.versioner.UpdateObject(objPtr, uint64(rev)); err != nil {
 		klog.Errorf("failed to update object version: %v", err)
 	}
@@ -75,6 +77,9 @@ func (d *defaultDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) 
 }
 
 // decodeListItem decodes bytes value in array into object.
+//
+// 列表条目解码会在每次迭代中被调用，因此这里统计逐条目解码延迟，帮助定位
+// 大规模 List 请求的耗时瓶颈。
 func (d *defaultDecoder) DecodeListItem(ctx context.Context, data []byte, rev uint64, newItemFunc func() runtime.Object) (runtime.Object, error) {
 	startedAt := time.Now()
 	defer func() {

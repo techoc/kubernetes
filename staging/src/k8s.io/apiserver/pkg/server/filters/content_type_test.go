@@ -22,12 +22,15 @@ import (
 	"testing"
 )
 
+// noopHandler 返回一个不做任何响应的 handler，让测试只关注过滤器写入的头部。
 func noopHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// noop
 	})
 }
 
+// TestWithContentType 验证 WithContentType 会设置 Content-Type，
+// 并且始终附加 nosniff，防止浏览器按内容嗅探出可执行的 MIME 类型。
 func TestWithContentType(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/text", WithContentType(noopHandler(), "text/plain"))
@@ -49,6 +52,7 @@ func TestWithContentType(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			mux.ServeHTTP(w, req)
+			// nosniff 是安全边界：缺少它时浏览器可能忽略声明的 Content-Type。
 			if nosniffHeader := w.Header().Get("X-Content-Type-Options"); nosniffHeader != "nosniff" {
 				t.Errorf("expected nosniff header to be set, got %v", nosniffHeader)
 			}

@@ -22,7 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// GroupName 是旧组名，仅用于 AdmissionConfiguration 与 EgressSelectorConfiguration 的兼容。
 const GroupName = "apiserver.k8s.io"
+
+// ConfigGroupName 是配置类 API 的组名，用于认证/授权/追踪等配置。
 const ConfigGroupName = "apiserver.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
@@ -43,11 +46,13 @@ func init() {
 	// We only register manually written functions here. The registration of the
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
+	// 默认值函数与类型注册分开登记，生成文件缺失时仍可编译（只是缺少生成部分）。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
 // Adds the list of known types to the given scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
+	// 两组分别注册，保证同一 Go 类型可以出现在不同组名下而互不覆盖。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&AdmissionConfiguration{},
 		&EgressSelectorConfiguration{},
@@ -57,6 +62,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&AuthorizationConfiguration{},
 		&TracingConfiguration{},
 	)
+	// 注册 TypeMeta 等通用元数据类型，否则解码时无法识别 apiVersion/kind。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	metav1.AddToGroupVersion(scheme, ConfigSchemeGroupVersion)
 	return nil

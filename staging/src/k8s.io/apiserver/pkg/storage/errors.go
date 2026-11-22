@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件集中定义 StorageError 及其判定函数。
+
 package storage
 
 import (
@@ -30,6 +32,8 @@ var (
 	ErrStorageNotReady            = errors.New("storage not ready")
 )
 
+// 存储错误的机器可读分类。ErrCode 使用 iota+1，使零值不会被误判为
+// 某个合法错误码（零值 StorageError 不应匹配任何判定函数）。
 const (
 	ErrCodeKeyNotFound int = iota + 1
 	ErrCodeKeyExists
@@ -82,6 +86,7 @@ func NewUnreachableError(key string, rv int64) *StorageError {
 	}
 }
 
+// NewTimeoutError 构造超时错误；msg 会作为附加错误保留，便于上层日志定位。
 func NewTimeoutError(key, msg string) *StorageError {
 	return &StorageError{
 		Code: ErrCodeTimeout,
@@ -109,6 +114,7 @@ func NewCorruptObjError(key string, err error) *StorageError {
 	}
 }
 
+// StorageError 是存储层错误的统一表示；Code 决定上层如何映射为 API 错误。
 type StorageError struct {
 	Code            int
 	Key             string
@@ -118,8 +124,11 @@ type StorageError struct {
 	err error
 }
 
+// Unwrap 暴露内部错误，使 errors.Is/As 可以穿透。
 func (e *StorageError) Unwrap() error { return e.err }
 
+// Error 输出包含所有定位信息；errCodeToMessage 缺失时 Message 为空，
+// 但仍保留数字 Code 便于排查。
 func (e *StorageError) Error() string {
 	return fmt.Sprintf("StorageError: %s, Code: %d, Key: %s, ResourceVersion: %d, AdditionalErrorMsg: %v",
 		errCodeToMessage[e.Code], e.Code, e.Key, e.ResourceVersion, e.err)
@@ -158,6 +167,8 @@ func IsInvalidObj(err error) bool {
 // IsCorruptObject returns true if and only if:
 // a) the given object data retrieved from the storage is not transformable, or
 // b) the given object failed to decode properly
+//
+// 与 isErrCode 不同，这里使用 errors.As 以支持被包装的错误链。
 func IsCorruptObject(err error) bool {
 	if err == nil {
 		return false
@@ -186,6 +197,7 @@ type InvalidError struct {
 	Errs field.ErrorList
 }
 
+// Error 聚合所有字段级错误，保证调用方能看到全部校验失败项。
 func (e InvalidError) Error() string {
 	return e.Errs.ToAggregate().Error()
 }
@@ -207,13 +219,17 @@ type InternalError struct {
 
 	// retain the inner error to maintain the error tree, so as to enable us
 	// to do proper error checking, but we also need to be backward compatible.
+	//
+	// Reason 是公开的稳定文本，err 仅用于错误链，不参与 Error() 输出。
 	err error
 }
 
+// Error 只返回 Reason，保持与历史输出格式兼容。
 func (e InternalError) Error() string {
 	return e.Reason
 }
 
+// Unwrap 暴露内部错误以支持 errors.Is/As。
 func (e InternalError) Unwrap() error { return e.err }
 
 // IsInternalError returns true if and only if err is an InternalError.
@@ -230,6 +246,10 @@ var tooLargeResourceVersionCauseMsg = "Too large resource version"
 
 // NewTooLargeResourceVersionError returns a timeout error with the given retrySeconds for a request for
 // a minimum resource version that is larger than the largest currently available resource version for a requested resource.
+//
+// 使用 Timeout + 特定 Cause 而不是自定义错误类型：这样既能让通用客户端
+// 识别为可重试，又能让 watch 缓存逻辑通过 IsTooLargeResourceVersion
+// 精确区分“版本尚未追上”与真正的超时。
 func NewTooLargeResourceVersionError(minimumResourceVersion, currentRevision uint64, retrySeconds int) error {
 	err := apierrors.NewTimeoutError(fmt.Sprintf("Too large resource version: %d, current: %d", minimumResourceVersion, currentRevision), retrySeconds)
 	err.ErrStatus.Details.Causes = []metav1.StatusCause{

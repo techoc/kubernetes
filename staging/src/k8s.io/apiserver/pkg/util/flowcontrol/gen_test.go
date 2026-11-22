@@ -37,11 +37,15 @@ import (
 	"k8s.io/apiserver/pkg/util/flowcontrol/metrics"
 )
 
+// noRestraintQSF 是不施加并发限制的队列工厂，用于在不引入额外调度行为的前提下
+// 校验生成的 PriorityLevelConfiguration 结构是否合法。
 var noRestraintQSF = fqtesting.NewNoRestraintFactory()
 
 // genPL creates a valid PriorityLevelConfiguration with the given
 // name and randomly generated spec.  The given name must not be one
 // of the mandatory ones.
+// 生成的配置 95% 使用排队响应，同时随机化队列数/HandSize，
+// 以覆盖 APF 队列算法的不同参数组合。
 func genPL(rng *rand.Rand, name string) *flowcontrol.PriorityLevelConfiguration {
 	plc := &flowcontrol.PriorityLevelConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -60,6 +64,7 @@ func genPL(rng *rand.Rand, name string) *flowcontrol.PriorityLevelConfiguration 
 			QueueLengthLimit: 5}
 	}
 	labelVals := []string{"test"}
+	// 构造队列集会同步校验配置；生成非法配置时直接 panic 以便暴露生成器 bug。
 	_, err := queueSetCompleterForPL(noRestraintQSF, nil, plc, metrics.RatioedGaugeVecPhasedElementPair(metrics.PriorityLevelConcurrencyGaugeVec, 1, 1, labelVals), metrics.PriorityLevelExecutionSeatsGaugeVec.NewForLabelValuesSafe(0, 1, labelVals), fq.NewNamedIntegrator(clock.RealClock{}, name))
 	if err != nil {
 		panic(err)
@@ -68,6 +73,9 @@ func genPL(rng *rand.Rand, name string) *flowcontrol.PriorityLevelConfiguration 
 }
 
 // A FlowSchema together with characteristics relevant to testing
+// fsTestingRecord 把一个 FlowSchema 与其“应匹配/不匹配”的请求摘要关联起来。
+// digests 的第一层是“是否匹配”，第二层是“是否为资源请求”，
+// 便于测试按维度统计匹配行为。
 type fsTestingRecord struct {
 	fs *flowcontrol.FlowSchema
 	// Does this reference an existing priority level?
@@ -78,21 +86,26 @@ type fsTestingRecord struct {
 	digests map[bool]map[bool][]RequestDigest
 }
 
+// addDigest 按匹配结果与请求类别归档一个摘要。
 func (ftr *fsTestingRecord) addDigest(digest RequestDigest, matches bool) {
 	ftr.digests[matches][digest.RequestInfo.IsResourceRequest] = append(ftr.digests[matches][digest.RequestInfo.IsResourceRequest], digest)
 }
 
+// addDigests 批量归档摘要。
 func (ftr *fsTestingRecord) addDigests(digests []RequestDigest, matches bool) {
 	for _, digest := range digests {
 		ftr.addDigest(digest, matches)
 	}
 }
 
+// flowDistinguisherMethodTypes 是合法的区分方法集合。
 var flowDistinguisherMethodTypes = sets.NewString(
 	string(flowcontrol.FlowDistinguisherMethodByUserType),
 	string(flowcontrol.FlowDistinguisherMethodByNamespaceType),
 )
 
+// mandFTRExempt 对应内置的 exempt FlowSchema：
+// 只有 system:privileged 组能匹配，普通已认证用户不匹配。
 var mandFTRExempt = &fsTestingRecord{
 	fs:         fcboot.MandatoryFlowSchemaExempt,
 	wellFormed: true,
@@ -150,6 +163,7 @@ var mandFTRExempt = &fsTestingRecord{
 	},
 }
 
+// mandFTRCatchAll 对应内置的 catch-all FlowSchema：匹配所有已认证请求。
 var mandFTRCatchAll = &fsTestingRecord{
 	fs:         fcboot.MandatoryFlowSchemaCatchAll,
 	wellFormed: true,
@@ -192,6 +206,9 @@ var mandFTRCatchAll = &fsTestingRecord{
 // relatively likely to be well formed but might not be.  An ill
 // formed spec references a priority level drawn from badPLNames.
 // goodPLNames may be empty, but badPLNames may not.
+//
+// 关键不变量：所有名字都以传入的 name 为前缀，因此不同 FlowSchema 的
+// 匹配摘要互不重叠，测试可以只凭名字判断某请求应匹配哪个 schema。
 func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool, goodPLNames, badPLNames sets.String) *fsTestingRecord {
 	fs := &flowcontrol.FlowSchema{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -206,6 +223,7 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 			false: {false: {}, true: {}},
 			true:  {false: {}, true: {}}},
 	}
+	// 90% 概率引用合法优先级；否则生成“悬空引用”，用于覆盖非法配置路径。
 	dangleStatus := flowcontrol.ConditionFalse
 	if rng.Float32() < 0.9 && len(goodPLNames) > 0 {
 		fs.Spec.PriorityLevelConfiguration = flowcontrol.PriorityLevelConfigurationReference{Name: pickSetString(rng, goodPLNames)}
@@ -249,6 +267,7 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 		ftr.addDigests(ruleSkippingRDigests, false)
 		ftr.addDigests(ruleSkippingNDigests, false)
 	}
+	// 无规则时仍需构造“不匹配任何规则”的摘要，以验证空规则集的行为。
 	if nRules == 0 {
 		var skippingRDigests, skippingNDigests []RequestDigest
 		_, _, _, skippingRDigests, skippingNDigests = genPolicyRuleWithSubjects(t, rng, name+"-1", false, false, false, false, false)
@@ -261,6 +280,7 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 	return ftr
 }
 
+// noextra 表示不带 Extra 字段的用户，用于避免测试数据意外携带额外属性。
 var noextra = make(map[string][]string)
 
 // Generate one valid PolicyRulesWithSubjects.  Also returns: matching
@@ -298,6 +318,7 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 		matchingUIs = append(matchingUIs, smus...)
 		skippingUIs = append(skippingUIs, ssus...)
 	}
+	// 需要匹配“全部请求”时，追加一个通配主体（* 用户/组或认证+未认证组）。
 	if matchAllResourceRequests || matchAllNonResourceRequests {
 		switch rng.Intn(3) {
 		case 0:
@@ -309,6 +330,7 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 		}
 		matchingUIs = append(matchingUIs, skippingUIs...)
 	}
+	// 若集合中已有规则匹配全部，则不存在“跳过”主体；否则至少生成一个反例。
 	if someMatchesAllResourceRequests || someMatchesAllNonResourceRequests {
 		skippingUIs = []user.Info{}
 	} else if nSubj == 0 {
@@ -351,6 +373,8 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 	if testDebugLogs {
 		t.Logf("For pfx=%s, mayMatchClusterScope=%v, someMatchesAllResourceRequests=%v, someMatchesAllNonResourceRequests=%v, marr=%v, manrr=%v: generated prws=%s, mu=%s, su=%s, mrr=%s, mnr=%s, srr=%s, snr=%s", pfx, mayMatchClusterScope, someMatchesAllResourceRequests, someMatchesAllNonResourceRequests, matchAllResourceRequests, matchAllNonResourceRequests, fcfmt.Fmt(rule), fcfmt.Fmt(matchingUIs), fcfmt.Fmt(skippingUIs), fcfmt.Fmt(matchingRRIs), fcfmt.Fmt(matchingNRIs), fcfmt.Fmt(skippingRRIs), fcfmt.Fmt(skippingNRIs))
 	}
+	// 用主体×请求的笛卡尔积得到候选摘要；skip 摘要覆盖“主体不匹配”“请求不匹配”
+	// 以及“两者都不匹配”三种反例。
 	matchingRDigests := cross(matchingUIs, matchingRRIs)
 	skippingRDigests := append(append(cross(matchingUIs, skippingRRIs),
 		cross(skippingUIs, matchingRRIs)...),
@@ -359,6 +383,7 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 	skippingNDigests := append(append(cross(matchingUIs, skippingNRIs),
 		cross(skippingUIs, matchingNRIs)...),
 		cross(skippingUIs, skippingNRIs)...)
+	// 随机抽取一个子集，控制用例规模并增加覆盖多样性。
 	matchingRDigests = shuffleAndTakeDigests(t, rng, &rule, true, matchingRDigests, (1+rng.Intn(2))*(1+rng.Intn(2)))
 	skippingRDigests = shuffleAndTakeDigests(t, rng, &rule, false, skippingRDigests, (1+rng.Intn(2))*(1+rng.Intn(2)))
 	matchingNDigests = shuffleAndTakeDigests(t, rng, &rule, true, matchingNDigests, (1+rng.Intn(2))*(1+rng.Intn(2)))
@@ -366,6 +391,7 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 	return rule, matchingRDigests, matchingNDigests, skippingRDigests, skippingNDigests
 }
 
+// cross 生成用户与请求信息的全部组合。
 func cross(uis []user.Info, ris []*request.RequestInfo) []RequestDigest {
 	ans := make([]RequestDigest, 0, len(uis)*len(ris))
 	for _, ui := range uis {
@@ -376,6 +402,8 @@ func cross(uis []user.Info, ris []*request.RequestInfo) []RequestDigest {
 	return ans
 }
 
+// shuffleAndTakeDigests 随机抽取 n 个摘要，并在规则非 nil 时即时验证
+// 每个摘要的匹配结果与 toMatch 一致——这是生成器正确性的自检。
 func shuffleAndTakeDigests(t *testing.T, rng *rand.Rand, rule *flowcontrol.PolicyRulesWithSubjects, toMatch bool, digests []RequestDigest, n int) []RequestDigest {
 	ans := make([]RequestDigest, 0, n)
 	for len(ans) < n && len(digests) > 0 {
@@ -406,8 +434,10 @@ func shuffleAndTakeDigests(t *testing.T, rng *rand.Rand, rule *flowcontrol.Polic
 	return ans
 }
 
+// uCounter 为 uniqify 提供进程内唯一的标识来源。
 var uCounter uint32 = 1
 
+// uniqify 给用户附加递增的 Extra 值，使原本相同的摘要在去重/哈希时被视为不同条目。
 func uniqify(in RequestDigest) RequestDigest {
 	u1 := in.User.(*user.DefaultInfo)
 	u2 := *u1
@@ -424,6 +454,7 @@ func uniqify(in RequestDigest) RequestDigest {
 func genSubject(rng *rand.Rand, pfx string) (flowcontrol.Subject, []user.Info, []user.Info) {
 	subject := flowcontrol.Subject{}
 	var matchingUIs, skippingUIs []user.Info
+	// 三种主体类型大致等概率出现。
 	x := rng.Float32()
 	switch {
 	case x < 0.33:
@@ -439,6 +470,7 @@ func genSubject(rng *rand.Rand, pfx string) (flowcontrol.Subject, []user.Info, [
 	return subject, matchingUIs, skippingUIs
 }
 
+// genUser 生成 User 主体及匹配/不匹配的用户；不匹配者仅名字多一个后缀。
 func genUser(rng *rand.Rand, pfx string) (*flowcontrol.UserSubject, []user.Info, []user.Info) {
 	mui := &user.DefaultInfo{
 		Name:   pfx + "-u",
@@ -453,12 +485,16 @@ func genUser(rng *rand.Rand, pfx string) (*flowcontrol.UserSubject, []user.Info,
 	return &flowcontrol.UserSubject{Name: mui.Name}, []user.Info{mui}, skips
 }
 
+// groupCover 是所有已认证/未认证用户都会属于的两个基础组，
+// 用于生成不会干扰前缀匹配的“噪声”组。
 var groupCover = []string{"system:authenticated", "system:unauthenticated"}
 
+// mg 随机选择一个基础组。
 func mg(rng *rand.Rand) string {
 	return groupCover[rng.Intn(len(groupCover))]
 }
 
+// mkUserSubject 构造匹配任意名字的 User 主体（名字可为 "*"）。
 func mkUserSubject(username string) flowcontrol.Subject {
 	return flowcontrol.Subject{
 		Kind: flowcontrol.SubjectKindUser,
@@ -466,6 +502,7 @@ func mkUserSubject(username string) flowcontrol.Subject {
 	}
 }
 
+// mkGroupSubject 构造匹配指定组的主体（组名可为 "*"）。
 func mkGroupSubject(group string) flowcontrol.Subject {
 	return flowcontrol.Subject{
 		Kind:  flowcontrol.SubjectKindGroup,
@@ -473,6 +510,8 @@ func mkGroupSubject(group string) flowcontrol.Subject {
 	}
 }
 
+// genGroup 生成 Group 主体及匹配/不匹配的用户，
+// 随机在匹配组的相对位置插入噪声组，以检验组匹配与顺序无关。
 func genGroup(rng *rand.Rand, pfx string) (*flowcontrol.GroupSubject, []user.Info, []user.Info) {
 	name := pfx + "-g"
 	ui := &user.DefaultInfo{
@@ -502,6 +541,8 @@ func genGroup(rng *rand.Rand, pfx string) (*flowcontrol.GroupSubject, []user.Inf
 	return &flowcontrol.GroupSubject{Name: name}, []user.Info{ui}, []user.Info{skipper}
 }
 
+// genServiceAccount 生成 ServiceAccount 主体及匹配/不匹配用户；
+// 5% 概率使用 "*" 名字以覆盖通配语义。
 func genServiceAccount(rng *rand.Rand, pfx string) (*flowcontrol.ServiceAccountSubject, []user.Info, []user.Info) {
 	ns := pfx + "-ns"
 	name := pfx + "-n"
@@ -515,6 +556,7 @@ func genServiceAccount(rng *rand.Rand, pfx string) (*flowcontrol.ServiceAccountS
 		Groups: []string{pfx + "-g1", mg(rng), pfx + "-g2"},
 		Extra:  noextra}
 	var skips []user.Info
+	// 不匹配者要么 namespace 少/多一个字符，要么用户名多一个后缀。
 	if mname == "*" || rng.Intn(2) == 0 {
 		skips = []user.Info{&user.DefaultInfo{
 			Name:   fmt.Sprintf("system:serviceaccount:%sx:%s", ns, name),
@@ -536,6 +578,7 @@ func genServiceAccount(rng *rand.Rand, pfx string) (*flowcontrol.ServiceAccountS
 func genResourceRule(rng *rand.Rand, pfx string, mayMatchClusterScope, matchAllResources, someMatchesAllResources bool) (flowcontrol.ResourcePolicyRule, []*request.RequestInfo, []*request.RequestInfo) {
 	namespaces := []string{pfx + "-n1", pfx + "-n2", pfx + "-n3"}
 	rnamespaces := namespaces
+	// 10% 概率把第一个命名空间置空并标记 ClusterScope，覆盖集群级规则。
 	if mayMatchClusterScope && rng.Float32() < 0.1 {
 		namespaces[0] = ""
 		rnamespaces = namespaces[1:]
@@ -577,6 +620,7 @@ func genResourceRule(rng *rand.Rand, pfx string, mayMatchClusterScope, matchAllR
 	return rr, matchingRIs, skippingRIs
 }
 
+// genRRIs 在 verbs/groups/resources/namespaces 的笛卡尔积中随机取 m 个不同的请求。
 func genRRIs(rng *rand.Rand, m int, verbs, apiGroups, resources, namespaces []string) []*request.RequestInfo {
 	nv := len(verbs)
 	ng := len(apiGroups)
@@ -595,6 +639,8 @@ func genRRIs(rng *rand.Rand, m int, verbs, apiGroups, resources, namespaces []st
 	return ans
 }
 
+// genNRRIs 在 verbs×urls 中随机取 m 个非资源请求；
+// 随机追加 "/more" 以覆盖前缀匹配（而非精确匹配）的语义。
 func genNRRIs(rng *rand.Rand, m int, verbs, urls []string) []*request.RequestInfo {
 	nv := len(verbs)
 	nu := len(urls)
@@ -613,6 +659,7 @@ func genNRRIs(rng *rand.Rand, m int, verbs, urls []string) []*request.RequestInf
 	return ans
 }
 
+// chooseInts 无放回地随机抽取 m 个 [0,n) 的整数。
 func chooseInts(rng *rand.Rand, n, m int) []int {
 	ans := sets.NewInt()
 	for len(ans) < m {
@@ -641,6 +688,8 @@ func genNonResourceRule(rng *rand.Rand, pfx string, matchAllNonResources, someMa
 			[]string{"/" + pfx + "/b/p1", "/" + pfx + "/b/p2", "/" + pfx + "/b/p3"})
 	}
 	// choose a proper subset of fields to consider wildcarding; only matters if not matching all
+	// 注意：非通配分支会同时加入 "/*" 前缀与不带尾斜杠的路径，
+	// 覆盖“前缀匹配”与“精确匹配”两种 URL 语义。
 	starMask := rng.Intn(3)
 	if matchAllNonResources || starMask&1 == 1 && rng.Float32() < 0.1 {
 		nrr.Verbs = []string{flowcontrol.VerbAll}
@@ -654,6 +703,8 @@ func genNonResourceRule(rng *rand.Rand, pfx string, matchAllNonResources, someMa
 	return nrr, matchingRIs, skippingRIs
 }
 
+// pickSetString 从集合中随机取一个元素；集合为空时 panic，
+// 因为调用方都保证 badPLNames 非空。
 func pickSetString(rng *rand.Rand, set sets.String) string {
 	i, n := 0, rng.Intn(len(set))
 	for s := range set {

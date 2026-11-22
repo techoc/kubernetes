@@ -35,6 +35,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// Ignored 是一个最小 runtime.Object，用于让 GetAttrs 决定匹配结果；
+// 它不支持 DeepCopy，确保选择器逻辑不会意外深拷贝对象。
 type Ignored struct {
 	ID string
 }
@@ -44,6 +46,8 @@ func (obj *Ignored) DeepCopyObject() runtime.Object {
 	panic("Ignored does not support DeepCopy")
 }
 
+// TestSelectionPredicate 验证 label/field 选择器同时满足才算匹配，
+// 并覆盖 GetAttrs 返回错误时错误原样上抛、以及单键匹配的快捷路径。
 func TestSelectionPredicate(t *testing.T) {
 	table := map[string]struct {
 		labelSelector, fieldSelector string
@@ -131,6 +135,9 @@ func TestSelectionPredicate(t *testing.T) {
 
 // shardSelectorMatchingEverything matches all objects but, unlike
 // sharding.Everything(), is not Empty().
+//
+// 这个区别很重要：Empty() 会让 SelectionPredicate 走“无分片”的快速路径，
+// 而这里要测试的是“有分片但范围覆盖全部对象”的行为。
 func shardSelectorMatchingEverything() sharding.Selector {
 	return sharding.NewSelector(sharding.ShardRangeRequirement{
 		Key:   "object.metadata.uid",
@@ -139,6 +146,8 @@ func shardSelectorMatchingEverything() sharding.Selector {
 	})
 }
 
+// shardSelectorExcludingUID 构造一个覆盖 [0, hash(uid)) 的范围，使指定
+// UID 恰好落在范围之外，用于测试“对象不属于本分片”的情况。
 func shardSelectorExcludingUID(uid string) sharding.Selector {
 	return sharding.NewSelector(sharding.ShardRangeRequirement{
 		Key:   "object.metadata.uid",
@@ -147,6 +156,9 @@ func shardSelectorExcludingUID(uid string) sharding.Selector {
 	})
 }
 
+// TestSelectionPredicateEmpty 验证 Empty() 的判定：
+// 仅当 label/field 都是 Everything 且（门控关闭或分片选择器为空）时才为空。
+// Empty 表示可以走全量 list/watch 的快速路径。
 func TestSelectionPredicateEmpty(t *testing.T) {
 	mustParseLabel := func(s string) labels.Selector {
 		parsed, err := labels.Parse(s)
@@ -231,6 +243,8 @@ func TestSelectionPredicateEmpty(t *testing.T) {
 	}
 }
 
+// TestSelectionPredicateMatchesShardOnly 验证仅有分片选择器时，Matches
+// 不会调用 GetAttrs（label/field 都是 Everything），并受 feature gate 控制。
 func TestSelectionPredicateMatchesShardOnly(t *testing.T) {
 	uid := "shard-only-uid"
 	obj := &metav1.PartialObjectMetadata{
@@ -280,6 +294,9 @@ func TestSelectionPredicateMatchesShardOnly(t *testing.T) {
 	}
 }
 
+// TestSelectionPredicateMatcherIndex 验证选择器到存储索引查询参数的映射：
+// 只有正相等（=）条件能下推为索引项，!= 等否定条件无法利用索引。
+// 另外覆盖了 list namespace 时自动补 metadata.namespace 索引的逻辑。
 func TestSelectionPredicateMatcherIndex(t *testing.T) {
 	testCases := map[string]struct {
 		labelSelector, fieldSelector string
@@ -305,6 +322,8 @@ func TestSelectionPredicateMatcherIndex(t *testing.T) {
 			expected:      []MatchValue{{IndexName: FieldIndex("uid"), Value: "12345"}},
 		},
 		"Match field for listing namespace pods without metadata.namespace field selector": {
+			// 命名空间 list 隐含 namespace 约束，即使调用方没写
+			// metadata.namespace 选择器，也应下推为索引条件。
 			labelSelector: "",
 			fieldSelector: "",
 			indexLabels:   []string{},
@@ -389,6 +408,7 @@ func TestSelectionPredicateMatcherIndex(t *testing.T) {
 			expected:      []MatchValue{{IndexName: FieldIndex("uid"), Value: "12345"}, {IndexName: LabelIndex("name"), Value: "foo"}},
 		},
 		"Negative match field and label": {
+			// 两个否定条件都无法用索引表达，结果为 nil。
 			labelSelector: "name!=foo",
 			fieldSelector: "uid!=12345",
 			indexLabels:   []string{"name"},

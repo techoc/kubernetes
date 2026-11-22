@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestDisabledVersion 验证组版本级开关：先禁用再显式启用，最终以启用为准；
+// 未被提及的版本同样视为禁用。
 func TestDisabledVersion(t *testing.T) {
 	g1v1 := schema.GroupVersion{Group: "group1", Version: "version1"}
 	g1v2 := schema.GroupVersion{Group: "group1", Version: "version2"}
@@ -43,6 +45,9 @@ func TestDisabledVersion(t *testing.T) {
 	}
 }
 
+// TestDisabledResource 验证资源级覆盖规则与版本级的优先级关系：
+//   - 版本被禁用时，未显式启用的资源随之禁用，但显式启用的资源仍然生效；
+//   - 版本启用时，未指定的资源默认启用，显式禁用的资源保持禁用。
 func TestDisabledResource(t *testing.T) {
 	g1v1 := schema.GroupVersion{Group: "group1", Version: "version1"}
 	g1v1rUnspecified := g1v1.WithResource("unspecified")
@@ -102,6 +107,8 @@ func TestDisabledResource(t *testing.T) {
 	}
 }
 
+// TestAnyVersionForGroupEnabled 验证 AnyResourceForGroupEnabled 在多种配置形态下的判定：
+// 组内任一版本被启用，或任一资源被显式启用，都应返回 true；空配置与全禁用返回 false。
 func TestAnyVersionForGroupEnabled(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -28,11 +28,11 @@ import (
 )
 
 const (
-	// PluginName indicates the name of admission plug-in
+	// PluginName 是准入插件注册名；必须与配置中启用的插件名一致。
 	PluginName = "ValidatingAdmissionWebhook"
 )
 
-// Register registers a plugin
+// Register 把 ValidatingAdmissionWebhook 插件注册到插件注册表。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(configFile io.Reader) (admission.Interface, error) {
 		plugin, err := NewValidatingAdmissionWebhook(configFile)
@@ -44,7 +44,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 是 admission.Interface 的校验型实现，实际逻辑复用通用 webhook 插件。
 type Plugin struct {
 	*generic.Webhook
 }
@@ -52,7 +52,9 @@ type Plugin struct {
 var _ admission.ValidationInterface = &Plugin{}
 var _ initializer.WantsManifestLoaders = &Plugin{}
 
-// SetManifestLoaders provides the manifest load functions for scheme-based defaulting and validation.
+// SetManifestLoaders 提供基于 manifest 的默认化与校验所需的加载函数。
+// 未配置 manifest 加载器时静默返回，保持静态清单特性可选，
+// 不影响原有 webhook 配置路径。
 func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 	if loaders == nil || loaders.LoadValidatingWebhookManifests == nil {
 		return
@@ -60,6 +62,7 @@ func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 	loadFunc := loaders.LoadValidatingWebhookManifests
 	a.Webhook.SetStaticSourceFactory(func(manifestsDir string) (generic.ReloadableSource, error) {
 		src := source.NewValidatingSource(manifestsDir, a.Webhook.GetAPIServerID(), source.ValidatingWebhookLoadFunc(loadFunc))
+		// 启动时立即加载一次，让配置错误在启动阶段就暴露，而不是首个请求时才失败。
 		if err := src.LoadInitial(); err != nil {
 			return nil, err
 		}
@@ -67,8 +70,10 @@ func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 	})
 }
 
-// NewValidatingAdmissionWebhook returns a generic admission webhook plugin.
+// NewValidatingAdmissionWebhook 返回通用准入 webhook 插件实例。
 func NewValidatingAdmissionWebhook(configFile io.Reader) (*Plugin, error) {
+	// 校验型 webhook 只关心会改变对象或触发删除语义的操作；Connect 也纳入是因为
+	// 子资源连接请求同样可能被策略审查。
 	handler := admission.NewHandler(admission.Connect, admission.Create, admission.Delete, admission.Update)
 	p := &Plugin{}
 	var err error
@@ -79,7 +84,7 @@ func NewValidatingAdmissionWebhook(configFile io.Reader) (*Plugin, error) {
 	return p, nil
 }
 
-// Validate makes an admission decision based on the request attributes.
+// Validate 基于请求属性做准入决策；实际分发由通用 webhook 逻辑完成。
 func (a *Plugin) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	return a.Webhook.Dispatch(ctx, attr, o)
 }

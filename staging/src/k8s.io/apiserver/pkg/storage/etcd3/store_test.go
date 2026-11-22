@@ -73,17 +73,25 @@ func init() {
 	utilruntime.Must(example.AddToScheme(scheme))
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 
+	// grpclog 的 Info/Warning 输出丢弃，只保留 Error：etcd 嵌入式实例在测试中
+	// 会产生大量噪音，但错误仍需要可见。
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2(io.Discard, io.Discard, os.Stderr))
 }
 
+// newPod 返回测试用的 example.Pod 空对象。
 func newPod() runtime.Object {
 	return &example.Pod{}
 }
 
+// newPodList 返回测试用的 example.PodList 空对象。
 func newPodList() runtime.Object {
 	return &example.PodList{}
 }
 
+// checkStorageInvariants 断言写入 etcd 的原始值满足存储层不变量：
+// 能被 codec 解码，且持久化对象不应携带 resourceVersion/selfLink。
+// 中文说明：RV 由 etcd 在读取时填充，selfLink 已被废弃；若写入时就带上它们，
+// 说明序列化路径有误，会污染后续读出的对象。
 func checkStorageInvariants(etcdClient *clientv3.Client, codec runtime.Codec) storagetesting.KeyValidation {
 	return func(ctx context.Context, t *testing.T, key string) {
 		getResp, err := etcdClient.KV.Get(ctx, key)
@@ -107,75 +115,90 @@ func checkStorageInvariants(etcdClient *clientv3.Client, codec runtime.Codec) st
 	}
 }
 
+// TestCreate 验证创建语义，并额外检查落盘的原始字节满足存储不变量。
 func TestCreate(t *testing.T) {
 	ctx, store, etcdClient := testSetup(t)
 	storagetesting.RunTestCreate(ctx, t, store, checkStorageInvariants(etcdClient.Client, store.codec))
 }
 
+// TestCreateWithTTL 验证带 TTL 的创建：对象应挂到 lease 上并在到期后消失。
 func TestCreateWithTTL(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestCreateWithTTL(ctx, t, store)
 }
 
+// TestCreateWithKeyExist 验证对已存在 key 的创建应返回 AlreadyExists。
 func TestCreateWithKeyExist(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestCreateWithKeyExist(ctx, t, store)
 }
 
+// TestGet 验证按键读取，包括不存在与 resourceVersion 匹配选项。
 func TestGet(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGet(ctx, t, store)
 }
 
+// TestUnconditionalDelete 验证无条件删除：对象不存在时返回 NotFound。
 func TestUnconditionalDelete(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestUnconditionalDelete(ctx, t, store)
 }
 
+// TestConditionalDelete 验证带前置条件（UID/RV）的删除：条件不满足时返回冲突。
 func TestConditionalDelete(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestConditionalDelete(ctx, t, store)
 }
 
+// TestDeleteWithSuggestion 验证冲突响应中携带当前对象（suggestion），供客户端重试。
 func TestDeleteWithSuggestion(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestDeleteWithSuggestion(ctx, t, store)
 }
 
+// TestDeleteWithSuggestionAndConflict 验证删除时建议值本身已过期（并发修改）的处理。
 func TestDeleteWithSuggestionAndConflict(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestDeleteWithSuggestionAndConflict(ctx, t, store)
 }
 
+// TestDeleteWithSuggestionOfDeletedObject 验证对象已被删除时不再返回建议值。
 func TestDeleteWithSuggestionOfDeletedObject(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestDeleteWithSuggestionOfDeletedObject(ctx, t, store)
 }
 
+// TestValidateDeletionWithSuggestion 验证前置条件校验失败时返回的建议值。
 func TestValidateDeletionWithSuggestion(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestValidateDeletionWithSuggestion(ctx, t, store)
 }
 
+// TestValidateDeletionWithOnlySuggestionValid 验证仅当建议值满足全部前置条件时才被返回。
 func TestValidateDeletionWithOnlySuggestionValid(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestValidateDeletionWithOnlySuggestionValid(ctx, t, store)
 }
 
+// TestDeleteWithConflict 验证删除遇到 resourceVersion 冲突时返回 Conflict 并附当前对象。
 func TestDeleteWithConflict(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestDeleteWithConflict(ctx, t, store)
 }
 
+// testTransformer 包装真实转换器，可通过 setFailing 注入变换失败。
 type testTransformer struct {
 	value.Transformer
 	fail atomic.Bool
 }
 
+// setFailing 切换是否注入合成错误；使用原子布尔以支持并发访问。
 func (tt *testTransformer) setFailing(c bool) {
 	tt.fail.Store(c)
 }
 
+// TransformFromStorage 在失败模式下直接返回合成错误，模拟密文损坏。
 func (tt *testTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) (out []byte, stale bool, err error) {
 	if tt.fail.Load() {
 		return nil, false, errors.New("synthetic error")
@@ -183,15 +206,18 @@ func (tt *testTransformer) TransformFromStorage(ctx context.Context, data []byte
 	return tt.Transformer.TransformFromStorage(ctx, data, dataCtx)
 }
 
+// testCodec 包装真实 codec，可通过 setFailing 注入解码失败。
 type testCodec struct {
 	runtime.Codec
 	fail atomic.Bool
 }
 
+// setFailing 切换是否注入解码错误。
 func (tc *testCodec) setFailing(c bool) {
 	tc.fail.Store(c)
 }
 
+// Decode 在失败模式下返回合成错误，模拟存储内容无法被解析。
 func (tc *testCodec) Decode(data []byte, defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	if tc.fail.Load() {
 		return nil, nil, errors.New("synthetic error")
@@ -199,6 +225,8 @@ func (tc *testCodec) Decode(data []byte, defaults *schema.GroupVersionKind, into
 	return tc.Codec.Decode(data, defaults, into)
 }
 
+// TestDeleteWithConflictAndMissingExpectedTransformOrDecodeError 验证：当损坏数据并非
+// 由预期的变换/解码错误导致时，即使开启不安全删除门控也不应放行。
 func TestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 
@@ -208,6 +236,8 @@ func TestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(t *testing.T
 	storagetesting.RunTestDeleteWithConflictAndMissingExpectedTransformOrDecodeError(ctx, t, s, codec.setFailing)
 }
 
+// TestDeleteWithConflictAndExpectedTransformError 验证变换失败时可走不安全删除路径
+// （AllowUnsafeMalformedObjectDeletion），避免损坏对象永久阻塞删除。
 func TestDeleteWithConflictAndExpectedTransformError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 
@@ -217,6 +247,7 @@ func TestDeleteWithConflictAndExpectedTransformError(t *testing.T) {
 	storagetesting.RunTestDeleteExpectedTransformOrDecodeError(ctx, t, s, transformer.setFailing)
 }
 
+// TestDeleteWithConflictAndExpectedDecodeError 验证解码失败时的不安全删除路径。
 func TestDeleteWithConflictAndExpectedDecodeError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 
@@ -226,6 +257,8 @@ func TestDeleteWithConflictAndExpectedDecodeError(t *testing.T) {
 	storagetesting.RunTestDeleteExpectedTransformOrDecodeError(ctx, t, s, codec.setFailing)
 }
 
+// TestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeFailure 验证建议值场景下
+// 错误类型不匹配时的拒绝行为。
 func TestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeFailure(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 
@@ -233,36 +266,44 @@ func TestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeFailure(t *testi
 	storagetesting.RunTestDeleteWithSuggestionAndMissingExpectedTransformOrDecodeError(ctx, t, store)
 }
 
+// TestPreconditionalDeleteWithSuggestion 验证带前置条件的删除在冲突时返回建议值。
 func TestPreconditionalDeleteWithSuggestion(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestPreconditionalDeleteWithSuggestion(ctx, t, store)
 }
 
+// TestPreconditionalDeleteWithSuggestionPass 验证前置条件满足时删除成功且不返回建议值。
 func TestPreconditionalDeleteWithSuggestionPass(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestPreconditionalDeleteWithOnlySuggestionPass(ctx, t, store)
 }
 
+// TestListPaging 验证分页：continue token 能正确续读且不重不漏。
 func TestListPaging(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestListPaging(ctx, t, store)
 }
 
+// TestGetListNonRecursive 验证非递归列举只返回直接子节点（模拟「目录」语义）。
 func TestGetListNonRecursive(t *testing.T) {
 	ctx, store, client := testSetup(t)
 	storagetesting.RunTestGetListNonRecursive(ctx, t, increaseRVFunc(client.Client), store)
 }
 
+// TestGetListRecursivePrefix 验证递归前缀列举返回所有后代。
 func TestGetListRecursivePrefix(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGetListRecursivePrefix(ctx, t, store)
 }
 
+// TestKeySchema 验证键的编码/解码往返，确保路径结构稳定。
 func TestKeySchema(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestKeySchema(ctx, t, store)
 }
 
+// TestGetListWithErrorAggregation 验证门控开启时，列举会聚合损坏对象错误并继续，
+// 而不是整批失败——这保证单个坏对象不会让整个 LIST 不可用。
 func TestGetListWithErrorAggregation(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 	ctx, s, _ := testSetup(t)
@@ -271,6 +312,7 @@ func TestGetListWithErrorAggregation(t *testing.T) {
 	storagetesting.RunTestGetListWithErrorAggregation(ctx, t, &storeWithTransformerOverride{Interface: store, store: s}, corruptErr)
 }
 
+// TestGetListWithoutErrorAggregation 验证门控关闭时，遇到损坏对象直接返回错误。
 func TestGetListWithoutErrorAggregation(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, false)
 	ctx, s, _ := testSetup(t)
@@ -278,10 +320,14 @@ func TestGetListWithoutErrorAggregation(t *testing.T) {
 	storagetesting.RunTestGetListWithoutErrorAggregation(ctx, t, &storeWithTransformerOverride{Interface: s, store: s}, corruptErr)
 }
 
+// storeWithPrefixTransformer 让测试临时替换 store 与 watcher 的前缀转换器。
 type storeWithPrefixTransformer struct {
 	*store
 }
 
+// UpdatePrefixTransformer 替换转换器并返回恢复函数。
+// 中文说明：必须同时更新 store 与 watcher 的转换器，否则二者对同一份数据
+// 使用不同前缀，测试会出现难以解释的解码失败。
 func (s *storeWithPrefixTransformer) UpdatePrefixTransformer(modifier storagetesting.PrefixTransformerModifier) func() {
 	originalTransformer := s.transformer.(*storagetesting.PrefixTransformer)
 	transformer := *originalTransformer
@@ -293,12 +339,15 @@ func (s *storeWithPrefixTransformer) UpdatePrefixTransformer(modifier storagetes
 	}
 }
 
+// storeWithTransformerOverride 把 storage.Interface 调用委托给包装后的 store，
+// 同时保留原始 *store 以便修改其转换器。
 type storeWithTransformerOverride struct {
 	storage.Interface
 	// we need the original *store instance to mutate the transformer
 	store *store
 }
 
+// UpdateTransformer 替换任意转换器并返回恢复函数，同样同步 watcher。
 func (s *storeWithTransformerOverride) UpdateTransformer(modifier storagetesting.TransformerModifier) func() {
 	orig := s.store.transformer
 	next := modifier(orig)
@@ -310,36 +359,46 @@ func (s *storeWithTransformerOverride) UpdateTransformer(modifier storagetesting
 	}
 }
 
+// TestGuaranteedUpdate 验证「读取-修改-重试」的保证式更新，包括写回不变量检查。
 func TestGuaranteedUpdate(t *testing.T) {
 	ctx, store, client := testSetup(t)
 	storagetesting.RunTestGuaranteedUpdate(ctx, t, &storeWithPrefixTransformer{store}, checkStorageInvariants(client.Client, store.codec))
 }
 
+// TestGuaranteedUpdateWithTTL 验证更新时 TTL 的变更（设置/清除）语义。
 func TestGuaranteedUpdateWithTTL(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGuaranteedUpdateWithTTL(ctx, t, store)
 }
 
+// TestGuaranteedUpdateChecksStoredData 验证更新不会覆盖「读取后又被外部修改」的数据，
+// 而是基于最新存储内容重新应用变更。
 func TestGuaranteedUpdateChecksStoredData(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGuaranteedUpdateChecksStoredData(ctx, t, &storeWithPrefixTransformer{store})
 }
 
+// TestGuaranteedUpdateWithConflict 验证更新遇到 RV 冲突时自动重试并最终成功。
 func TestGuaranteedUpdateWithConflict(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGuaranteedUpdateWithConflict(ctx, t, store)
 }
 
+// TestGuaranteedUpdateWithSuggestionAndConflict 验证带建议值的更新冲突处理。
 func TestGuaranteedUpdateWithSuggestionAndConflict(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx, t, store)
 }
 
+// TestTransformationFailure 验证读取时变换失败会返回错误而不是返回损坏数据。
 func TestTransformationFailure(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestTransformationFailure(ctx, t, &storeWithPrefixTransformer{store})
 }
 
+// TestList 在 EtcdRangeStream 开关两种取值下验证 LIST 契约。
+// 中文说明：开启时必须确实走 RangeStream，关闭时不得发起流式请求——
+// 通过 KVRecorder 计数来断言，避免功能开关形同虚设。
 func TestList(t *testing.T) {
 	for _, rangeStream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rangeStream=%v", rangeStream), func(t *testing.T) {
@@ -361,6 +420,9 @@ func TestList(t *testing.T) {
 
 // TestGetListStreamFallsBackToPaginated verifies that a GetList against a server without
 // RangeStream support marks the feature unsupported and serves from the paginated path.
+//
+// 中文说明：Unimplemented 是「服务端不支持」的确定信号，因此必须记住并停止重试，
+// 否则每个 LIST 都会先失败一次再回退，造成持续的性能损失。
 func TestGetListStreamFallsBackToPaginated(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EtcdRangeStream, true)
 	resetFeatureSupportCheckerDuringTest(t)
@@ -416,6 +478,9 @@ etcd_requests_total{group="",operation="list",resource="pods"} 1
 
 // TestGetListStreamMultiChunk verifies the streamed request shapes on lists spanning
 // multiple RangeStream chunks (the etcd server chunks streams at 10 keys).
+//
+// 中文说明：同时验证 Exact（固定 RV，看不到之后写入）与 NotOlderThan（可见最新写入）
+// 两种语义，以及流式列举不应产生分页字段。
 func TestGetListStreamMultiChunk(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EtcdRangeStream, true)
 	resetFeatureSupportCheckerDuringTest(t)
@@ -472,6 +537,7 @@ func TestGetListStreamMultiChunk(t *testing.T) {
 	}
 }
 
+// TestListMetrics 在流式开关两种取值下验证 LIST 指标口径一致。
 func TestListMetrics(t *testing.T) {
 	for _, rangeStream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rangeStream=%v", rangeStream), func(t *testing.T) {
@@ -482,6 +548,7 @@ func TestListMetrics(t *testing.T) {
 	}
 }
 
+// testListMetrics 断言一次 LIST 后四个存储指标的完整输出。
 func testListMetrics(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 
@@ -522,6 +589,7 @@ apiserver_storage_list_total{group="",index="",resource="pods",storage="etcd"} 1
 	}
 }
 
+// TestConsistentList 验证一致性列举（resourceVersion=0 的 quorum 读）语义。
 func TestConsistentList(t *testing.T) {
 	for _, rangeStream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rangeStream=%v", rangeStream), func(t *testing.T) {
@@ -533,6 +601,9 @@ func TestConsistentList(t *testing.T) {
 	}
 }
 
+// TestCompactRevision 验证 store 能观察到 etcd 的压缩版本变化。
+// 中文说明：依赖 ListFromCacheSnapshot 开启的专用 watch——压缩事件不会通过
+// 普通资源 watch 传递，必须单独监听 compact key。
 func TestCompactRevision(t *testing.T) {
 	// Test requires store to observe extenal changes to compaction revision, requiring dedicated watch on compact key which is enabled by ListFromCacheSnapshot.
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, true)
@@ -540,6 +611,9 @@ func TestCompactRevision(t *testing.T) {
 	storagetesting.RunTestCompactRevision(ctx, t, store, increaseRVFunc(client.Client), compactStorage(store, client.Client))
 }
 
+// checkStorageCallsInvariants 校验分页列举的实际 etcd 调用次数与变换读取次数。
+// 中文说明：apiserver 在收到非满页时会指数级放大 pageSize，因此调用次数应远小于
+// 「每页固定 1000」的朴素实现；这里按 1+2+4+... 的几何级数推算期望值。
 func checkStorageCallsInvariants(transformer *storagetesting.PrefixTransformer, recorder *storagetesting.KVRecorder) storagetesting.CallsValidation {
 	return func(t *testing.T, pageSize, estimatedProcessedObjects uint64) {
 		if reads := transformer.GetReadsAndReset(); reads != estimatedProcessedObjects {
@@ -570,6 +644,7 @@ func checkStorageCallsInvariants(transformer *storagetesting.PrefixTransformer, 
 	}
 }
 
+// TestListContinuation 验证分页续读的完整流程与调用次数约束。
 func TestListContinuation(t *testing.T) {
 	ctx, store, client := testSetup(t)
 	validation := checkStorageCallsInvariants(
@@ -577,6 +652,7 @@ func TestListContinuation(t *testing.T) {
 	storagetesting.RunTestListContinuation(ctx, t, store, validation)
 }
 
+// TestListPaginationRareObject 验证「稀有对象」场景下分页仍能覆盖全部数据。
 func TestListPaginationRareObject(t *testing.T) {
 	// ListFromCacheSnapshots adds additional Get call to read compact key.
 	// TODO: Rewrite call validation to only count calls to pods.
@@ -587,6 +663,7 @@ func TestListPaginationRareObject(t *testing.T) {
 	storagetesting.RunTestListPaginationRareObject(ctx, t, store, validation)
 }
 
+// TestListContinuationWithFilter 验证带字段/标签过滤的分页续读。
 func TestListContinuationWithFilter(t *testing.T) {
 	ctx, store, client := testSetup(t)
 	validation := checkStorageCallsInvariants(
@@ -594,11 +671,15 @@ func TestListContinuationWithFilter(t *testing.T) {
 	storagetesting.RunTestListContinuationWithFilter(ctx, t, store, validation)
 }
 
+// TestNamespaceScopedList 验证按命名空间前缀列举只返回该命名空间的对象。
 func TestNamespaceScopedList(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestNamespaceScopedList(ctx, t, store)
 }
 
+// compactStorage 对给定 RV 执行 etcd 压缩，并在需要时等待 store 观察到压缩版本。
+// 中文说明：压缩可能需要重试（已压缩的 RV 会返回错误），因此第二次失败才视为失败；
+// 开启 ListFromCacheSnapshot 时必须轮询 CompactRevision，否则后续断言会与压缩竞态。
 func compactStorage(s *store, client *clientv3.Client) storagetesting.Compaction {
 	return func(ctx context.Context, t *testing.T, resourceVersion string) {
 		versioner := storage.APIObjectVersioner{}
@@ -631,6 +712,8 @@ func compactStorage(s *store, client *clientv3.Client) storagetesting.Compaction
 	}
 }
 
+// increaseRVFunc 通过一次无关写入推进 etcd 全局 revision，并返回新值。
+// 中文说明：用于模拟「期间发生了其他写入」，测试 RV 的推进与快照边界。
 func increaseRVFunc(client *clientv3.Client) storagetesting.IncreaseRVFunc {
 	return func(ctx context.Context, t *testing.T) int64 {
 		resp, err := client.KV.Put(ctx, "increaseRV", "ok")
@@ -641,16 +724,19 @@ func increaseRVFunc(client *clientv3.Client) storagetesting.IncreaseRVFunc {
 	}
 }
 
+// TestListInconsistentContinuation 验证续读期间发生压缩时的错误（410 Gone）与提示。
 func TestListInconsistentContinuation(t *testing.T) {
 	ctx, store, client := testSetup(t)
 	storagetesting.RunTestListInconsistentContinuation(ctx, t, store, compactStorage(store, client.Client))
 }
 
+// TestListResourceVersionMatch 验证 Exact 与 NotOlderThan 两种 RV 匹配语义。
 func TestListResourceVersionMatch(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 	storagetesting.RunTestListResourceVersionMatch(ctx, t, &storeWithPrefixTransformer{store})
 }
 
+// TestStats 在开启/关闭大小估算两种模式下验证 Stats 输出。
 func TestStats(t *testing.T) {
 	for _, sizeBasedListCostEstimate := range []bool{true, false} {
 		t.Run(fmt.Sprintf("SizeBasedListCostEstimate=%v", sizeBasedListCostEstimate), func(t *testing.T) {
@@ -674,6 +760,8 @@ func TestStats(t *testing.T) {
 // impact.
 // =======================================================================
 
+// TestPrefix 验证配置前缀会被规范化为「以 / 开头、以 / 结尾」的形式。
+// 中文说明：规范化保证键空间不会因多余斜杠或缺少前导斜杠而与相邻前缀混淆。
 func TestPrefix(t *testing.T) {
 	testcases := map[string]string{
 		"custom/prefix":     "/custom/prefix/",
@@ -688,6 +776,9 @@ func TestPrefix(t *testing.T) {
 	}
 }
 
+// Test_growSlice 验证按对象大小预估扩容切片时，容量与长度不被破坏。
+// 中文说明：growSlice 在反序列化 LIST 结果前预分配，既能避免多次扩容，
+// 又必须遵守 maxCapacity 上限，防止恶意/异常大小导致内存暴涨。
 func Test_growSlice(t *testing.T) {
 	type args struct {
 		initialCapacity int
@@ -781,6 +872,9 @@ func Test_growSlice(t *testing.T) {
 	}
 }
 
+// TestLeaseMaxObjectCount 验证单个 lease 挂载对象数达到上限后会换用新 lease。
+// 中文说明：限制单 lease 对象数可避免 lease 撤销时一次性删除过多键；
+// 新 lease 的计数应从 1 重新开始。
 func TestLeaseMaxObjectCount(t *testing.T) {
 	ctx, store, _ := testSetup(t, withLeaseConfig(LeaseManagerConfig{
 		ReuseDurationSeconds: defaultLeaseReuseDurationSeconds,
@@ -825,6 +919,7 @@ func TestLeaseMaxObjectCount(t *testing.T) {
 // Test-setup related function are following.
 // ===================================================
 
+// newTestLeaseManagerConfig 把 lease 复用窗口缩短到 1 秒，适配测试的全局超时。
 func newTestLeaseManagerConfig() LeaseManagerConfig {
 	cfg := NewDefaultLeaseManagerConfig()
 	// As 30s is the default timeout for testing in global configuration,
@@ -834,10 +929,12 @@ func newTestLeaseManagerConfig() LeaseManagerConfig {
 	return cfg
 }
 
+// newTestTransformer 返回带固定测试前缀的转换器，便于断言落盘字节。
 func newTestTransformer() value.Transformer {
 	return storagetesting.NewPrefixTransformer([]byte(defaultTestPrefix), false)
 }
 
+// setupOptions 收集 testSetup 的可覆盖参数。
 type setupOptions struct {
 	client         func(testing.TB) *kubernetes.Client
 	codec          runtime.Codec
@@ -850,8 +947,10 @@ type setupOptions struct {
 	leaseConfig    LeaseManagerConfig
 }
 
+// setupOption 是 testSetup 的函数式选项。
 type setupOption func(*setupOptions)
 
+// withClientConfig 用指定 etcd 配置启动测试实例。
 func withClientConfig(config *embed.Config) setupOption {
 	return func(options *setupOptions) {
 		options.client = func(t testing.TB) *kubernetes.Client {
@@ -860,36 +959,42 @@ func withClientConfig(config *embed.Config) setupOption {
 	}
 }
 
+// withPrefix 覆盖存储层全局前缀。
 func withPrefix(prefix string) setupOption {
 	return func(options *setupOptions) {
 		options.prefix = prefix
 	}
 }
 
+// withResourcePrefix 覆盖资源级前缀（如 /pods/）。
 func withResourcePrefix(prefix string) setupOption {
 	return func(options *setupOptions) {
 		options.resourcePrefix = prefix
 	}
 }
 
+// withLeaseConfig 覆盖 lease 管理器配置。
 func withLeaseConfig(leaseConfig LeaseManagerConfig) setupOption {
 	return func(options *setupOptions) {
 		options.leaseConfig = leaseConfig
 	}
 }
 
+// withTransformer 覆盖存储使用的值转换器。
 func withTransformer(transformer value.Transformer) setupOption {
 	return func(options *setupOptions) {
 		options.transformer = transformer
 	}
 }
 
+// withCodec 覆盖存储使用的编解码器。
 func withCodec(codec runtime.Codec) setupOption {
 	return func(options *setupOptions) {
 		options.codec = codec
 	}
 }
 
+// withDefaults 填入一组可直接使用的默认配置，作为选项链的起点。
 func withDefaults(options *setupOptions) {
 	options.client = func(t testing.TB) *kubernetes.Client {
 		return testserver.RunEtcd(t, nil)
@@ -906,6 +1011,8 @@ func withDefaults(options *setupOptions) {
 
 var _ setupOption = withDefaults
 
+// testSetup 启动嵌入式 etcd 并构造被测 store，注册清理以终止实例与 compactor。
+// 中文说明：withDefaults 被放在选项链最前，使调用方提供的选项能覆盖默认值。
 func testSetup(t testing.TB, opts ...setupOption) (context.Context, *store, *kubernetes.Client) {
 	setupOpts := setupOptions{}
 	opts = append([]setupOption{withDefaults}, opts...)
@@ -938,6 +1045,10 @@ func testSetup(t testing.TB, opts ...setupOption) (context.Context, *store, *kub
 	return ctx, store, client
 }
 
+// TestPrepareKey 验证键规范化：补全全局前缀、按递归与否追加结尾斜杠，
+// 并拒绝包含 "." 或 ".." 路径段的键。
+// 中文说明：路径段校验是安全边界——".." 可让键逃逸出预期前缀，
+// 从而读写其他资源甚至其他组件的数据。
 func TestPrepareKey(t *testing.T) {
 	validKeys := []string{
 		"/pods/foo/bar/baz/a.b.c/",
@@ -1028,6 +1139,8 @@ func TestPrepareKey(t *testing.T) {
 	})
 }
 
+// TestInvalidKeys 验证所有公开存储方法对非法键统一返回 "invalid key" 错误，
+// 避免某些入口绕过校验。
 func TestInvalidKeys(t *testing.T) {
 	const invalidKey = "/foo/bar/../baz"
 	expectedError := fmt.Sprintf("invalid key: %q", invalidKey)
@@ -1050,6 +1163,7 @@ func TestInvalidKeys(t *testing.T) {
 	expectInvalidKey("GuaranteedUpdate", store.GuaranteedUpdate(ctx, invalidKey, nil, true, nil, nil, nil))
 }
 
+// BenchmarkStore_GetList 测量大对象场景下 LIST 的吞吐，覆盖不同对象大小与选择器。
 func BenchmarkStore_GetList(b *testing.B) {
 	generateBigPod := func(index int, total int, expect int) runtime.Object {
 		l := map[string]string{}
@@ -1239,10 +1353,13 @@ func BenchmarkStoreList(b *testing.B) {
 	}
 }
 
+// computePodKey 按 /pods/<namespace>/<name> 规则生成测试键。
 func computePodKey(obj *example.Pod) string {
 	return fmt.Sprintf("/pods/%s/%s", obj.Namespace, obj.Name)
 }
 
+// TestGetCurrentResourceVersion 验证返回的是 etcd 全局 revision，
+// 且无关写入会推进该值但不改变已有对象的 RV。
 func TestGetCurrentResourceVersion(t *testing.T) {
 	ctx, store, _ := testSetup(t)
 
@@ -1289,6 +1406,7 @@ func TestGetCurrentResourceVersion(t *testing.T) {
 	require.Equal(t, currentPodRV, podRV, "didn't expect to see the pod's RV changed")
 }
 
+// BenchmarkStoreStats 测量 Stats 调用的开销，数据集模拟多个命名空间下的海量对象。
 func BenchmarkStoreStats(b *testing.B) {
 	klog.SetLogger(logr.Discard())
 	data := storagetesting.PrepareBenchmarkData(50, 3_000, 5_000)
@@ -1328,6 +1446,8 @@ func BenchmarkStatsCacheCleanKeys(b *testing.B) {
 	}
 }
 
+// TestPrefixGetKeys 验证 getKeys 只返回资源前缀下的键，
+// 不会误包含同名前缀（如 /registry/podskey）或全局前缀下的其他键。
 func TestPrefixGetKeys(t *testing.T) {
 	ctx, store, c := testSetup(t, withPrefix("/registry"), withResourcePrefix("/pods"))
 	_, err := c.KV.Put(ctx, "key", "a")
@@ -1361,6 +1481,8 @@ func TestPrefixGetKeys(t *testing.T) {
 	}
 }
 
+// TestPrefixStats 验证 Stats 在关闭/开启大小估算时的差异：
+// 开启后应报告资源前缀下对象的平均大小（此处为 3 字节）。
 func TestPrefixStats(t *testing.T) {
 	tcs := []struct {
 		name        string

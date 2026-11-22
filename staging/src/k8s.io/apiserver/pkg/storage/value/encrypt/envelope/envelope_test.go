@@ -40,11 +40,13 @@ const (
 
 // testEnvelopeService is a mock Envelope service which can be used to simulate remote Envelope services
 // for testing of Envelope based encryption providers.
+// 用 "keyVersion:base64" 的简单文本协议模拟远端 KMS，便于验证缓存与轮换。
 type testEnvelopeService struct {
 	disabled   bool
 	keyVersion string
 }
 
+// Decrypt 从 "<version>:<base64>" 中取出密文；disabled 时模拟 KMS 不可用。
 func (t *testEnvelopeService) Decrypt(data []byte) ([]byte, error) {
 	if t.disabled {
 		return nil, fmt.Errorf("Envelope service was disabled")
@@ -56,6 +58,7 @@ func (t *testEnvelopeService) Decrypt(data []byte) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(dataChunks[1])
 }
 
+// Encrypt 返回带当前 keyVersion 前缀的密文。
 func (t *testEnvelopeService) Encrypt(data []byte) ([]byte, error) {
 	if t.disabled {
 		return nil, fmt.Errorf("Envelope service was disabled")
@@ -63,15 +66,18 @@ func (t *testEnvelopeService) Encrypt(data []byte) ([]byte, error) {
 	return []byte(t.keyVersion + ":" + base64.StdEncoding.EncodeToString(data)), nil
 }
 
+// SetDisabledStatus 切换模拟的 KMS 可用性。
 func (t *testEnvelopeService) SetDisabledStatus(status bool) {
 	t.disabled = status
 }
 
+// Rotate 递增 keyVersion，模拟 KMS 侧密钥轮换。
 func (t *testEnvelopeService) Rotate() {
 	i, _ := strconv.Atoi(t.keyVersion)
 	t.keyVersion = strconv.FormatInt(int64(i+1), 10)
 }
 
+// newTestEnvelopeService 返回 keyVersion=1 的模拟 KMS。
 func newTestEnvelopeService() *testEnvelopeService {
 	return &testEnvelopeService{
 		keyVersion: "1",
@@ -79,6 +85,8 @@ func newTestEnvelopeService() *testEnvelopeService {
 }
 
 // Throw error if Envelope transformer tries to contact Envelope without hitting cache.
+// TestEnvelopeCaching 验证 DEK 缓存能让读取在 KMS 故障时仍成功；
+// cacheSize=0 时没有缓存，插件故障会直接导致读取失败。
 func TestEnvelopeCaching(t *testing.T) {
 	testCases := []struct {
 		desc                     string
@@ -149,6 +157,7 @@ func TestEnvelopeCaching(t *testing.T) {
 }
 
 // Makes Envelope transformer hit cache limit, throws error if it misbehaves.
+// 写入超过缓存容量的条目后仍能全部读回，验证缓存淘汰不会导致解密失败。
 func TestEnvelopeCacheLimit(t *testing.T) {
 	cbcTransformer := func(block cipher.Block) (value.Transformer, error) {
 		return aestransformer.NewCBCTransformer(block), nil
@@ -185,6 +194,7 @@ func TestEnvelopeCacheLimit(t *testing.T) {
 	}
 }
 
+// BenchmarkEnvelopeCBCRead 测量经 KMS 信封 + CBC 读取的开销。
 func BenchmarkEnvelopeCBCRead(b *testing.B) {
 	cbcTransformer := func(block cipher.Block) (value.Transformer, error) {
 		return aestransformer.NewCBCTransformer(block), nil
@@ -193,6 +203,7 @@ func BenchmarkEnvelopeCBCRead(b *testing.B) {
 	benchmarkRead(b, envelopeTransformer, 1024)
 }
 
+// BenchmarkAESCBCRead 是 CBC 基线，用于对比信封模式的额外开销。
 func BenchmarkAESCBCRead(b *testing.B) {
 	block, err := aes.NewCipher(bytes.Repeat([]byte("a"), 32))
 	if err != nil {
@@ -203,11 +214,13 @@ func BenchmarkAESCBCRead(b *testing.B) {
 	benchmarkRead(b, aesCBCTransformer, 1024)
 }
 
+// BenchmarkEnvelopeGCMRead 测量经 KMS 信封 + GCM 读取的开销。
 func BenchmarkEnvelopeGCMRead(b *testing.B) {
 	envelopeTransformer := NewEnvelopeTransformer(newTestEnvelopeService(), testEnvelopeCacheSize, aestransformer.NewGCMTransformer)
 	benchmarkRead(b, envelopeTransformer, 1024)
 }
 
+// BenchmarkAESGCMRead 是 GCM 基线，用于对比信封模式的额外开销。
 func BenchmarkAESGCMRead(b *testing.B) {
 	block, err := aes.NewCipher(bytes.Repeat([]byte("a"), 32))
 	if err != nil {
@@ -222,6 +235,7 @@ func BenchmarkAESGCMRead(b *testing.B) {
 	benchmarkRead(b, aesGCMTransformer, 1024)
 }
 
+// benchmarkRead 预热一次写入后只测量读取路径，并断言不会返回 stale。
 func benchmarkRead(b *testing.B, transformer value.Transformer, valueLength int) {
 	ctx := context.Background()
 	dataCtx := value.DefaultContext(testContextText)
@@ -246,6 +260,7 @@ func benchmarkRead(b *testing.B, transformer value.Transformer, valueLength int)
 }
 
 // remove after 1.13
+// TestBackwardsCompatibility 验证旧格式（2 字节长度 + DEK + 数据）写入的数据仍能被读取。
 func TestBackwardsCompatibility(t *testing.T) {
 	envelopeService := newTestEnvelopeService()
 	cbcTransformer := func(block cipher.Block) (value.Transformer, error) {
@@ -280,6 +295,7 @@ func TestBackwardsCompatibility(t *testing.T) {
 }
 
 // remove after 1.13
+// oldTransformToStorage 复刻旧版封装格式，仅用于向后兼容测试。
 func oldTransformToStorage(ctx context.Context, t *envelopeTransformer, data []byte, dataCtx value.Context) ([]byte, error) {
 	newKey, err := generateKey(32)
 	if err != nil {

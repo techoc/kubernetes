@@ -30,12 +30,16 @@ import (
 	authenticationv1beta1 "k8s.io/api/authentication/v1beta1"
 )
 
+// TestRoundTrip 用随机填充的 TokenReview 验证 v1 <-> v1beta1 转换可逆：
+// 客户端与 apiserver 可能使用不同版本，任何转换丢字段都会导致认证结果不一致。
+// 使用随机种子（日志中打印）以便失败时可复现。
 func TestRoundTrip(t *testing.T) {
 	f := randfill.New()
 	seed := time.Now().UnixNano()
 	t.Logf("seed = %v", seed)
 	f.RandSource(rand.New(rand.NewSource(seed)))
 
+	// 多次随机迭代，覆盖 map/slice 为 nil 与非 nil 等边界形态。
 	for i := 0; i < 1000; i++ {
 		original := &authenticationv1.TokenReview{}
 		f.Fill(&original.Spec)
@@ -54,6 +58,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// v1StatusToV1beta1Status 手工实现状态降级转换；测试依赖其与生产转换逻辑等价。
 func v1StatusToV1beta1Status(in authenticationv1.TokenReviewStatus) authenticationv1beta1.TokenReviewStatus {
 	return authenticationv1beta1.TokenReviewStatus{
 		Authenticated: in.Authenticated,
@@ -63,6 +68,7 @@ func v1StatusToV1beta1Status(in authenticationv1.TokenReviewStatus) authenticati
 	}
 }
 
+// v1UserToV1beta1User 转换 UserInfo；Extra 为 map，需逐项复制类型。
 func v1UserToV1beta1User(u authenticationv1.UserInfo) authenticationv1beta1.UserInfo {
 	var extra map[string]authenticationv1beta1.ExtraValue
 	if u.Extra != nil {
@@ -79,6 +85,7 @@ func v1UserToV1beta1User(u authenticationv1.UserInfo) authenticationv1beta1.User
 	}
 }
 
+// v1beta1SpecToV1Spec 是 spec 的升级转换，用于回程。
 func v1beta1SpecToV1Spec(in authenticationv1beta1.TokenReviewSpec) authenticationv1.TokenReviewSpec {
 	return authenticationv1.TokenReviewSpec{
 		Token:     in.Token,

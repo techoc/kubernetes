@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package format 提供惰性格式化工具：只有真正打印时才展开大型 APF 对象，
+// 避免低日志级别下的序列化开销。
 package format
 
 import (
@@ -33,6 +35,7 @@ import (
 // objects here are formatted into golang source.
 
 // Stringer marks the given value for custom formatting by this package.
+// 仅保存引用，不做任何拷贝或序列化，因此构造本身几乎零成本。
 type Stringer struct{ val interface{} }
 
 // Fmt marks the given value for custom formatting by this package.
@@ -41,6 +44,7 @@ func Fmt(val interface{}) Stringer {
 }
 
 // String formats to a string in full detail
+// APF API 对象输出 JSON（便于复制进 issue），其他类型输出 Go 源码形式。
 func (sr Stringer) String() string {
 	if sr.val == nil {
 		return "nil"
@@ -88,6 +92,7 @@ func ToJSON(val interface{}) string {
 
 // FmtPriorityLevelConfiguration returns a golang source expression
 // equivalent to the given value
+// 输出可直接粘贴进测试代码，用于构造期望值。
 func FmtPriorityLevelConfiguration(pl *flowcontrol.PriorityLevelConfiguration) string {
 	if pl == nil {
 		return "nil"
@@ -145,6 +150,7 @@ func FmtFlowSchemaSpec(fsSpec *flowcontrol.FlowSchemaSpec) string {
 
 // BufferFlowSchemaSpec writes a golang source expression for the
 // given value to the given buffer
+// 手写拼接而非反射，保证输出稳定且不触发未导出字段的格式化问题。
 func BufferFlowSchemaSpec(buf *bytes.Buffer, fsSpec *flowcontrol.FlowSchemaSpec) {
 	buf.WriteString(fmt.Sprintf("flowcontrolv1.FlowSchemaSpec{PriorityLevelConfiguration: %#+v, MatchingPrecedence: %d, DistinguisherMethod: ",
 		fsSpec.PriorityLevelConfiguration,
@@ -203,6 +209,7 @@ func BufferFmtPolicyRulesWithSubjectsSlim(buf *bytes.Buffer, rule flowcontrol.Po
 }
 
 // FmtUsers produces a golang source expression of the value.
+// 用于在日志中展示请求主体集合。
 func FmtUsers(list []user.Info) string {
 	var buf bytes.Buffer
 	buf.WriteString("[]user.Info{")

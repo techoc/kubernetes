@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件测试动态类型（schema 未知时）的对象值实现：
+// optional 字段的转换语义、类型名与字段路径的一致性校验，以及转换为原生 map 的递归逻辑。
+
 package dynamic
 
 import (
@@ -25,6 +28,8 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
+// TestOptional 验证 CEL optional 值在转换为原生表示时的行为：
+// optional.of(x) 展开为 x，optional.none() 当前只能表现为 nil。
 func TestOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -32,6 +37,7 @@ func TestOptional(t *testing.T) {
 		expected map[string]any
 	}{
 		{
+			// 注意零值也要保留：optional.of(0) 与“字段缺失”语义不同，不能在此处被丢弃。
 			name: "present",
 			fields: map[string]ref.Val{
 				"zero": types.OptionalOf(types.IntZero),
@@ -41,6 +47,8 @@ func TestOptional(t *testing.T) {
 			},
 		},
 		{
+			// 已知局限：转换层无法区分 optional.none() 与显式 null，
+			// 需要在转换前先过滤掉 optional.none()。
 			name: "none",
 			fields: map[string]ref.Val{
 				"absent": types.OptionalNone,
@@ -65,6 +73,9 @@ func TestOptional(t *testing.T) {
 	}
 }
 
+// TestCheckTypeNamesMatchFieldPathNames 验证类型名必须由字段路径推导：
+// 嵌套对象、map 值、list 元素都要满足 <父类型>.<字段名> 的命名规则。
+// 这是防止表达式引用任意类型、把 patch 写到错误路径上的关键校验。
 func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -72,6 +83,7 @@ func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 		expectError string
 	}{
 		{
+			// 正常路径：struct 字段、map 值与 list 元素都使用与路径一致的类型名。
 			name: "valid",
 			obj: &ObjectVal{
 				objectType: types.NewObjectType("Object"),
@@ -96,6 +108,7 @@ func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 			},
 		},
 		{
+			// 子对象类型名与字段名不匹配（Object.spec 出现在 invalid 字段下）。
 			name: "invalid struct field",
 			obj: &ObjectVal{
 				objectType: types.NewObjectType("Object"),
@@ -107,6 +120,7 @@ func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 			expectError: "unexpected type name \"Object.spec\", expected \"Object.invalid\"",
 		},
 		{
+			// map 的条目类型同样受约束，否则可借 map 绕过字段路径检查。
 			name: "invalid map field",
 			obj: &ObjectVal{
 				objectType: types.NewObjectType("Object"),
@@ -127,6 +141,7 @@ func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 			expectError: "unexpected type name \"Object.spec.invalid\", expected \"Object.spec.m\"",
 		},
 		{
+			// list 元素类型同样受约束。
 			name: "invalid list field",
 			obj: &ObjectVal{
 				objectType: types.NewObjectType("Object"),
@@ -165,6 +180,9 @@ func TestCheckTypeNamesMatchFieldPathNames(t *testing.T) {
 	}
 }
 
+// TestConvertField 验证 ObjectVal 到 map[string]any 的递归转换：
+// 覆盖 list/map 中混合标量与嵌套对象、带/不带 type adapter 的两种构造方式，
+// 以及 map 键非字符串、list 元素不可转换等错误路径。
 func TestConvertField(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -173,6 +191,7 @@ func TestConvertField(t *testing.T) {
 		expectError string
 	}{
 		{
+			// 不带 type adapter 的构造方式：元素为原生 CEL 值，需直接转换。
 			name: "list of primitives and object",
 			fields: map[string]ref.Val{
 				"list": types.NewRefValList(nil, []ref.Val{
@@ -193,6 +212,7 @@ func TestConvertField(t *testing.T) {
 			},
 		},
 		{
+			// 带 type adapter 的路径应产生与上面完全相同的结果，二者不可有行为差异。
 			name: "list of primitives and object (traits.Lister)",
 			fields: map[string]ref.Val{
 				"list": types.NewRefValList(types.DefaultTypeAdapter, []ref.Val{
@@ -213,6 +233,7 @@ func TestConvertField(t *testing.T) {
 			},
 		},
 		{
+			// map 值中的嵌套对象需递归转换，整型统一转成 int64 以匹配 JSON 数值语义。
 			name: "map of primitives and object",
 			fields: map[string]ref.Val{
 				"map": types.NewRefValMap(nil, map[ref.Val]ref.Val{
@@ -233,6 +254,7 @@ func TestConvertField(t *testing.T) {
 			},
 		},
 		{
+			// 与 list 相同：带 type adapter 的 map 结果必须与不带时一致。
 			name: "map of primitives and object (traits.Mapper)",
 			fields: map[string]ref.Val{
 				"map": types.NewRefValMap(types.DefaultTypeAdapter, map[ref.Val]ref.Val{
@@ -253,6 +275,7 @@ func TestConvertField(t *testing.T) {
 			},
 		},
 		{
+			// 非字符串键无法表示为 JSON 对象键，必须报错而不是静默丢弃。
 			name: "invalid map key type",
 			fields: map[string]ref.Val{
 				"badMap": types.NewRefValMap(nil, map[ref.Val]ref.Val{
@@ -262,6 +285,7 @@ func TestConvertField(t *testing.T) {
 			expectError: "not string",
 		},
 		{
+			// list 元素内部的 map 键非法时，错误应向上冒泡到调用方。
 			name: "invalid list element error",
 			fields: map[string]ref.Val{
 				"badList": types.DefaultTypeAdapter.NativeToValue([]any{

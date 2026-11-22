@@ -33,6 +33,7 @@ import (
 )
 
 // Feature is the name of each feature in storage that we check in feature_support_checker.
+// 用别名而非新类型，方便直接把字符串常量作为 map key 与开关使用。
 type Feature = string
 
 // RequestWatchProgress is an etcd feature for progress notification requests.
@@ -42,6 +43,9 @@ var RequestWatchProgress Feature = "RequestWatchProgress"
 // RangeStream is an etcd feature (etcd 3.7+) for the streaming list RPC.
 // Default: true. MarkUnsupported flips it to false on an Unimplemented response,
 // reverting to true after a recheck interval.
+//
+// 这种“乐观启用 + 失败降级 + 定期重探”的模式避免了启动时探测带来的
+// 额外延迟，同时保证与旧版 etcd 的兼容性。
 var RangeStream Feature = "RangeStream"
 
 // Versioner abstracts setting and retrieving metadata fields from database response
@@ -50,6 +54,9 @@ var RangeStream Feature = "RangeStream"
 // a no-op. A resourceVersion of type uint64 is a 'raw' resourceVersion,
 // intended to be sent directly to or from the backend. A resourceVersion of
 // type string is a 'safe' resourceVersion, intended for consumption by users.
+//
+// 该不变量是 etcd 乐观并发控制的基础：resourceVersion 不参与对象内容比较，
+// 否则无意义的重复写入会不断递增版本号并唤醒所有 watcher。
 type Versioner interface {
 	// UpdateObject sets storage metadata into an API object. Returns an error if the object
 	// cannot be updated correctly. May return nil if the requested object does not need metadata
@@ -91,6 +98,7 @@ type ResponseMeta struct {
 
 // IndexerFunc is a function that for a given object computes
 // `<value of an index>` for a particular `<index>`.
+// 返回单个字符串意味着一个索引键对应一个值；多值索引需编码为单一字符串。
 type IndexerFunc func(obj runtime.Object) string
 
 // IndexerFuncs is a mapping from `<index name>` to function that
@@ -98,6 +106,7 @@ type IndexerFunc func(obj runtime.Object) string
 type IndexerFuncs map[string]IndexerFunc
 
 // Everything accepts all objects.
+// 注意：SelectionPredicate 内含接口字段，不要直接修改此包级变量。
 var Everything = SelectionPredicate{
 	Label: labels.Everything(),
 	Field: fields.Everything(),
@@ -112,6 +121,8 @@ type MatchValue struct {
 // Pass an UpdateFunc to Interface.GuaranteedUpdate to make an update
 // that is guaranteed to succeed.
 // See the comment for GuaranteedUpdate for more details.
+//
+// 返回的 ttl 为 nil 表示保持原 TTL；非 nil 则覆盖。返回 error 会中止重试。
 type UpdateFunc func(input runtime.Object, res ResponseMeta) (output runtime.Object, ttl *uint64, err error)
 
 // ValidateObjectFunc is a function to act on a given object. An error may be returned
@@ -127,6 +138,7 @@ func ValidateAllObjectFunc(ctx context.Context, obj runtime.Object) error {
 }
 
 // Preconditions must be fulfilled before an operation (update, delete, etc.) is carried out.
+// 仅包含不可变身份字段（UID）与乐观锁字段（ResourceVersion）。
 type Preconditions struct {
 	// Specifies the target UID.
 	// +optional
@@ -142,6 +154,8 @@ func NewUIDPreconditions(uid string) *Preconditions {
 	return &Preconditions{UID: &u}
 }
 
+// Check verifies the preconditions against obj. A nil receiver means "no
+// preconditions" and always succeeds, so callers need not branch on nil.
 func (p *Preconditions) Check(key string, obj runtime.Object) error {
 	if p == nil {
 		return nil
@@ -173,6 +187,8 @@ func (p *Preconditions) Check(key string, obj runtime.Object) error {
 
 // Interface offers a common interface for object marshaling/unmarshaling operations and
 // hides all the storage-related operations behind it.
+//
+// 所有实现都必须保证方法并发安全；ctx 的取消应尽快中止底层请求。
 type Interface interface {
 	// Returns Versioner associated with this interface.
 	Versioner() Versioner
@@ -193,6 +209,7 @@ type Interface interface {
 
 	// Watch begins watching the specified key. Events are decoded into API objects,
 	// and any items selected by 'p' are sent down to returned watch.Interface.
+	// 调用方负责关闭返回的 watch.Interface；resourceVersion "0" 的语义见下。
 	// resourceVersion may be used to specify what version to begin watching,
 	// which should be the current resourceVersion, and no longer rv+1
 	// (e.g. reconnecting without missing any updates).
@@ -217,6 +234,7 @@ type Interface interface {
 
 	// GuaranteedUpdate keeps calling 'tryUpdate()' to update key 'key' (of type 'destination')
 	// retrying the update until success if there is index conflict.
+	// 这是“读-改-写”的原子替代：tryUpdate 可能被多次调用，必须幂等。
 	// Note that object passed to tryUpdate may change across invocations of tryUpdate() if
 	// other writers are simultaneously updating it, so tryUpdate() needs to take into account
 	// the current contents of the object when deciding how the update object should look.
@@ -346,7 +364,8 @@ type ListOptions struct {
 }
 
 // WatchEventWithRecordTime wraps a runtime.Object with the timestamp at which the
-// storage layer decoded the corresponding watch event. It is produced by the
+// storage layer decoded the corresponding watch event.
+// 该类型只在进程内部流转，绝不能泄漏给客户端。 It is produced by the
 // storage layer only when ListOptions.RecordTimestamps is set, and is consumed
 // and stripped by the watch cache before the underlying object is stored or
 // serialized. It is never sent to watch clients.
@@ -368,6 +387,11 @@ type DeleteOptions struct {
 	ExpectTransformOrDecodeError bool
 }
 
+// ValidateListOptions validates ListOptions and computes the etcd revision to
+// read at, plus the continue key for paginated requests.
+//
+// withRev 为 0 表示“读取最新版本”；continue 令牌与 resourceVersion 互斥，
+// 因为令牌本身已经固定了遍历起点。
 func ValidateListOptions(keyPrefix string, versioner Versioner, opts ListOptions) (withRev int64, continueKey string, err error) {
 	if opts.Recursive && len(opts.Predicate.Continue) > 0 {
 		continueKey, continueRV, err := DecodeContinue(opts.Predicate.Continue, keyPrefix)
@@ -417,6 +441,10 @@ type Stats struct {
 	EstimatedAverageObjectSizeBytes int64
 }
 
+// PrepareKey validates and normalizes a storage key before use.
+//
+// 拒绝 "." 与 ".." 路径段是安全要求：key 来自用户可控的资源名/命名空间，
+// 若不拦截可越过前缀边界访问其他资源的数据。
 func PrepareKey(resourcePrefix, key string, recursive bool) (string, error) {
 	if key == ".." ||
 		strings.HasPrefix(key, "../") ||
@@ -440,6 +468,7 @@ func PrepareKey(resourcePrefix, key string, recursive bool) (string, error) {
 	if recursive && !strings.HasSuffix(key, "/") {
 		key += "/"
 	}
+	// 前缀检查必须放在规范化之后，否则 "/a/../b" 之类的输入可能绕过。
 	if !strings.HasPrefix(key, resourcePrefix) {
 		return "", fmt.Errorf("invalid key: %q lacks resource prefix: %q", key, resourcePrefix)
 	}

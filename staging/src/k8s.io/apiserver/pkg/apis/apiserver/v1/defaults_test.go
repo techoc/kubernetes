@@ -25,6 +25,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestKMSProviderTimeoutDefaults 验证 KMSConfiguration 在未显式设置 timeout 时
+// 会补上默认值，已设置时保持不变。
 func TestKMSProviderTimeoutDefaults(t *testing.T) {
 	testCases := []struct {
 		desc string
@@ -53,6 +55,9 @@ func TestKMSProviderTimeoutDefaults(t *testing.T) {
 	}
 }
 
+// TestKMSProviderCacheDefaults 验证 cacheSize 的默认化规则：
+// nil 时设置默认值；显式提供（含 0 与负数）时原样保留；
+// v2 协议不使用缓存，因此 v2 下不补 cacheSize。
 func TestKMSProviderCacheDefaults(t *testing.T) {
 	var (
 		zero     int32 = 0
@@ -107,6 +112,8 @@ func TestKMSProviderCacheDefaults(t *testing.T) {
 	}
 }
 
+// TestKMSProviderAPIVersionDefaults 验证 apiVersion 的默认化：
+// 缺省时置为默认版本，显式 v2 时不再补 cacheSize。
 func TestKMSProviderAPIVersionDefaults(t *testing.T) {
 	testCases := []struct {
 		desc string

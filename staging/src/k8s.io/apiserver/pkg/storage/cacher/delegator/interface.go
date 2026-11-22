@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package delegator 决定一次 list/watch 请求能否由 watch cache 直接服务，
+// 还是必须委托给底层 etcd。判断依据是 ResourceVersion 语义（Exact、
+// NotOlderThan、Continue、一致读）以及缓存是否支持进度通知。
 package delegator
 
 import (
@@ -22,6 +25,8 @@ import (
 	etcdfeature "k8s.io/apiserver/pkg/storage/feature"
 )
 
+// ShouldDelegateListMeta 把 API 层的 ListOptions 转换为存储层 ListOptions
+// 后做委托判断；供只需要 metav1 选项的调用方使用。
 func ShouldDelegateListMeta(opts *metav1.ListOptions, cache Helper) (Result, error) {
 	return ShouldDelegateList(
 		storage.ListOptions{
@@ -35,6 +40,9 @@ func ShouldDelegateListMeta(opts *metav1.ListOptions, cache Helper) (Result, err
 		}, cache)
 }
 
+// ShouldDelegateList 按 ResourceVersionMatch 的语义决定是否委托 etcd：
+// Exact 必须精确读取；NotOlderThan 允许缓存；空值则依次考虑 continue、
+// 旧式精确匹配和一致读。未知取值保守地委托给 etcd，避免返回错误数据。
 func ShouldDelegateList(opts storage.ListOptions, cache Helper) (Result, error) {
 	// see https://kubernetes.io/docs/reference/using-api/api-concepts/#semantics-for-get-and-list
 	switch opts.ResourceVersionMatch {
@@ -48,6 +56,9 @@ func ShouldDelegateList(opts storage.ListOptions, cache Helper) (Result, error) 
 			return cache.ShouldDelegateContinue(opts.Predicate.Continue, opts.Recursive)
 		}
 		// Legacy exact match
+		//
+		// 中文说明：旧客户端用 limit+rv 表达“从某个版本开始分页”，
+		// 语义上等同 Exact，因此走同一条判断路径。
 		if opts.Predicate.Limit > 0 && len(opts.ResourceVersion) > 0 && opts.ResourceVersion != "0" {
 			return cache.ShouldDelegateExactRV(opts.ResourceVersion, opts.Recursive)
 		}
@@ -61,6 +72,8 @@ func ShouldDelegateList(opts storage.ListOptions, cache Helper) (Result, error) 
 	}
 }
 
+// Helper 由具体缓存实现（cacher 或 CacheWithoutSnapshots）提供，
+// 让委托判断逻辑与缓存内部细节解耦。
 type Helper interface {
 	ShouldDelegateExactRV(rv string, recursive bool) (Result, error)
 	ShouldDelegateContinue(continueToken string, recursive bool) (Result, error)
@@ -76,6 +89,8 @@ type Result struct {
 	ConsistentRead bool
 }
 
+// CacheWithoutSnapshots 表示“缓存不可用（如已关闭或处于恢复期）”的退化实现：
+// 除 NotOlderThan 外一律委托 etcd，保证语义正确性优先于性能。
 type CacheWithoutSnapshots struct{}
 
 var _ Helper = CacheWithoutSnapshots{}
@@ -95,6 +110,8 @@ func (c CacheWithoutSnapshots) ShouldDelegateExactRV(rv string, recursive bool) 
 	}, nil
 }
 
+// ShouldDelegateConsistentRead 在 etcd 支持 WatchProgressNotify 时可以不委托，
+// 否则必须直读 etcd 才能保证读到最新数据。
 func (c CacheWithoutSnapshots) ShouldDelegateConsistentRead() (Result, error) {
 	return Result{
 		ShouldDelegate: !ConsistentReadSupported(),

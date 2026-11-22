@@ -29,10 +29,13 @@ import (
 )
 
 const (
+	// 轮询 fake clock 时使用的间隔与总超时：避免依赖固定 sleep，减少偶发失败。
 	waitDelay   = time.Millisecond
 	waitTimeout = 100 * waitDelay
 )
 
+// TestCompact 用假时钟驱动 Compactor，验证压缩总是保持在“上次写入的
+// revision 之前一个版本”，从而既能清理旧数据，又不影响仍在 watch 的客户端。
 func TestCompact(t *testing.T) {
 	client := testserver.RunEtcd(t, nil).Client
 	ctx := context.Background()
@@ -94,6 +97,7 @@ func TestCompact(t *testing.T) {
 	}
 }
 
+// assertCompacted 断言指定 revision 已被压缩：按该版本读取应返回 ErrCompacted。
 func assertCompacted(t *testing.T, ctx context.Context, client *clientv3.Client, rev int64) {
 	t.Helper()
 	_, err := client.Get(ctx, "/somekey", clientv3.WithRev(rev))
@@ -102,6 +106,7 @@ func assertCompacted(t *testing.T, ctx context.Context, client *clientv3.Client,
 	}
 }
 
+// assertNotCompacted 断言指定 revision 仍可读取。
 func assertNotCompacted(t *testing.T, ctx context.Context, client *clientv3.Client, rev int64) {
 	t.Helper()
 	_, err := client.Get(ctx, "/somekey", clientv3.WithRev(rev))
@@ -110,6 +115,8 @@ func assertNotCompacted(t *testing.T, ctx context.Context, client *clientv3.Clie
 	}
 }
 
+// TestCompactIntervalZero 验证 interval=0 时压缩循环被禁用：
+// 不应有 goroutine 在 fake clock 上等待，推进时钟也不产生任何效果。
 func TestCompactIntervalZero(t *testing.T) {
 	client := testserver.RunEtcd(t, nil).Client
 	clock := testingclock.NewFakeClock(time.Now())
@@ -122,6 +129,7 @@ func TestCompactIntervalZero(t *testing.T) {
 	clockNoWaiters(t, clock)
 }
 
+// waitForClockWaiters 轮询等待后台循环注册到 fake clock，避免直接 sleep 固定时长。
 func waitForClockWaiters(t *testing.T, clock *testingclock.FakeClock) {
 	t.Helper()
 	for start := time.Now(); time.Since(start) < waitTimeout; {
@@ -133,6 +141,7 @@ func waitForClockWaiters(t *testing.T, clock *testingclock.FakeClock) {
 	t.Fatal("No waiters")
 }
 
+// clockNoWaiters 在一段时间内持续确认 fake clock 上没有等待者。
 func clockNoWaiters(t *testing.T, clock *testingclock.FakeClock) {
 	t.Helper()
 	for start := time.Now(); time.Since(start) < waitTimeout; {

@@ -22,4 +22,7 @@ limitations under the License.
 
 // +groupName=example.apiserver.k8s.io
 
+// Package v1 是 example API 组的 v1 版本，仅用于测试 apiserver 的
+// 版本化、转换与序列化机制。它刻意保持最小化，避免测试依赖真实的
+// 内置 API 语义。
 package v1

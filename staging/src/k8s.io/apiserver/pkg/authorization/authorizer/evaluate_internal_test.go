@@ -22,6 +22,15 @@ import (
 	"testing"
 )
 
+// TestConditionsMapPartiallyEvaluate 是 partiallyEvaluateConditionsMapInternal 的白盒测试，
+// 逐类覆盖 Deny/NoOpinion/Allow 条件的优先级：
+//   - 任一 Deny 条件为真 => Deny（错误与不可求值均被忽略）；
+//   - 求值错误 => fail closed（根据是否存在 Deny 条件收敛为 Deny 或 NoOpinion）；
+//   - 否则任一 NoOpinion 条件为真 => NoOpinion；
+//   - 否则任一 Allow 条件为真 => Allow；
+//   - 都不满足 => NoOpinion（"no conditions matched"）。
+//
+// 不可自行求值的条件回退到 evaluateFunc；部分用例同时用 ConditionsMap.Evaluate 交叉验证。
 func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 	evalErr := errors.New("eval error")
 
@@ -29,6 +38,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 	falseResult := ConditionEvaluationResultBoolean(false)
 	errResult := ConditionEvaluationResultError(evalErr)
 
+	// cond 构造可自行求值的条件，EvaluateFunc 返回固定结果。
 	cond := func(id string, result ConditionEvaluationResult) GenericCondition {
 		return GenericCondition{
 			ID: id,
@@ -37,11 +47,13 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 			},
 		}
 	}
+	// condDesc 同 cond，但附带描述，用于断言 reason 中拼接的描述文本。
 	condDesc := func(id string, desc string, result ConditionEvaluationResult) GenericCondition {
 		c := cond(id, result)
 		c.Description = desc
 		return c
 	}
+	// unevalCond 构造没有 EvaluateFunc 的条件，只能由外部 evaluateFunc 求值。
 	unevalCond := func(id string) GenericCondition {
 		return GenericCondition{ID: id} // nil EvaluateFunc → unevaluatable
 	}
@@ -637,6 +649,8 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 					// when testing a ConditionsMap of only NoOpinion conditions, add a "filler" Deny condition
 					// that evaluates to false, it doesn't anyways influence the outcome, but to avoid the constructor
 					// to always statically fold the ConditionsAwareDecision to NoOpinion.
+					// 仅 NoOpinion 的 ConditionsMap 会在构造时被静态折叠，加入恒为 false 的 Deny 条件
+					// 才能保留 ConditionsMap 形态以测试求值路径。
 					if len(sc.denyConditions) == 0 && len(sc.allowConditions) == 0 {
 						sc.denyConditions = append(sc.denyConditions, cond("filler-deny-false", falseResult))
 					}

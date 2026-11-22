@@ -23,10 +23,14 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
+// dataString 实现 AuthenticatedData，用作缓存键的 authenticated data。
 type dataString string
 
+// AuthenticatedData 返回关联数据；AES-GCM 解密时需提供相同值。
 func (d dataString) AuthenticatedData() []byte { return []byte(d) }
 
+// Test_simpleCache 验证 simpleCache 的键匹配、TTL 过期与 GC 行为：
+// 键包含 authenticated data，过期项在读取时返回 nil，并在后续写入触发 GC 时被清除。
 func Test_simpleCache(t *testing.T) {
 	info1 := []byte{1}
 	info2 := []byte{2}
@@ -119,6 +123,7 @@ func Test_simpleCache(t *testing.T) {
 	}
 }
 
+// twiPtrEquals 断言指针相等：缓存必须返回同一实例，而非内容相等的副本。
 func twiPtrEquals(t *testing.T, want, got *transformerWithInfo) {
 	t.Helper()
 
@@ -127,6 +132,7 @@ func twiPtrEquals(t *testing.T, want, got *transformerWithInfo) {
 	}
 }
 
+// cacheLenEquals 断言底层 LRU 的长度，用于验证 GC 是否按预期执行。
 func cacheLenEquals(t *testing.T, cache *simpleCache, want int) {
 	t.Helper()
 

@@ -29,6 +29,9 @@ import (
 )
 
 // DebugSocket installs profiling and debugflag as a Unix-Domain socket.
+//
+// 使用 Unix socket 而非 TCP 端口，是为了不把 pprof 和调试开关暴露到网络上：
+// 只有能访问该 socket 文件的本机进程才能调用，文件权限即是访问控制边界。
 type DebugSocket struct {
 	path string
 	mux  *http.ServeMux
@@ -43,6 +46,7 @@ func NewDebugSocket(path string) *DebugSocket {
 }
 
 // InstallProfiling installs profiling endpoints in the socket.
+// 注册标准的 net/http/pprof 端点；先重定向无斜杠路径，保证两种写法都可用。
 func (s *DebugSocket) InstallProfiling() {
 	s.mux.HandleFunc("/debug/pprof", redirectTo("/debug/pprof/"))
 	s.mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -53,6 +57,8 @@ func (s *DebugSocket) InstallProfiling() {
 }
 
 // InstallDebugFlag installs debug flag endpoints in the socket.
+//
+// 每个开关注册为 /debug/flags/<flag>，并加入索引页；同一 mux 可重复调用以挂载多个开关。
 func (s *DebugSocket) InstallDebugFlag(flag string, handler func(http.ResponseWriter, *http.Request)) {
 	f := DebugFlags{}
 	s.mux.HandleFunc("/debug/flags", f.Index)
@@ -73,6 +79,7 @@ func (s *DebugSocket) Run(stopCh <-chan struct{}) error {
 
 // RunWithContext starts the server and waits for the context to be cancelled to close the server.
 func (s *DebugSocket) RunWithContext(ctx context.Context) error {
+	// 先删除残留的 socket 文件：进程异常退出时文件会留下，不清理会导致 bind 失败。
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove (%v): %v", s.path, err)
 	}
@@ -84,6 +91,7 @@ func (s *DebugSocket) RunWithContext(ctx context.Context) error {
 	defer l.Close()
 
 	srv := http.Server{Handler: s.mux}
+	// 上下文取消后关闭服务器，使 Serve 返回；否则调试 socket 会阻止进程退出。
 	go func() {
 		<-ctx.Done()
 		srv.Close()

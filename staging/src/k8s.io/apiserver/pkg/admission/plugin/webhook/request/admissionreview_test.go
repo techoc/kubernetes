@@ -39,6 +39,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestVerifyAdmissionResponse 覆盖 webhook 响应的校验与 v1beta1 兼容修正。
+// 中文说明：v1 校验严格（group/version/kind/uid/patch 一致性都必须正确），
+// 而 v1beta1 历史上允许缺失或错误，必须继续宽容处理，否则旧 webhook 会集体失效。
 func TestVerifyAdmissionResponse(t *testing.T) {
 	v1beta1JSONPatch := admissionv1beta1.PatchTypeJSONPatch
 	v1JSONPatch := admissionv1.PatchTypeJSONPatch
@@ -81,6 +84,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectAllowed: true,
 		},
 		// Allowed mutating
+		// 中文说明：mutating 与 validating 的差异只在是否允许返回 patch，allowed 本身语义相同。
 		{
 			name:     "v1beta1 allowed mutating",
 			uid:      "123",
@@ -102,6 +106,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// Audit annotations
+		// 中文说明：审计注解原样透传到审计事件，不做合并或去重。
 		{
 			name: "v1beta1 auditAnnotations",
 			uid:  "123",
@@ -130,6 +135,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// Patch
+		// 中文说明：v1beta1 缺省 patchType 时按 JSONPatch 处理，v1 则要求显式声明。
 		{
 			name:     "v1beta1 patch",
 			uid:      "123",
@@ -163,6 +169,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// Result
+		// 中文说明：拒绝时 Status 直接回传给客户端，因此内容必须保真。
 		{
 			name: "v1beta1 result",
 			uid:  "123",
@@ -191,6 +198,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// Missing response
+		// 中文说明：空响应视为协议错误，必须拒绝而不是当作 allow。
 		{
 			name:      "v1beta1 no response",
 			uid:       "123",
@@ -207,6 +215,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// v1 invalid responses
+		// 中文说明：v1 契约要求回显正确的 TypeMeta 与请求 uid，用于防止响应错配。
 		{
 			name: "v1 wrong group",
 			uid:  "123",
@@ -345,6 +354,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		},
 
 		// v1beta1 invalid responses that we have to allow/fixup for compatibility
+		// 中文说明：这些响应在 v1 下非法，但为了让既有 v1beta1 webhook 继续工作而放行/修正。
 		{
 			name: "v1beta1 wrong group/version/kind",
 			uid:  "123",
@@ -415,6 +425,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 断言顺序：先看错误，再逐字段比对，任何字段偏差都视为协议违规。
 			result, err := VerifyAdmissionResponse(tc.uid, tc.mutating, tc.review)
 			if err != nil {
 				if len(tc.expectErr) > 0 {
@@ -449,6 +460,11 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 	}
 }
 
+// TestCreateAdmissionObjects 验证 AdmissionReview 请求的构造：版本协商、等价资源映射
+// 与字段填充。
+// 中文说明：请求中的 Kind/Resource 是“规则意图”的版本（extensions/v1beta1），
+// 而 RequestKind/RequestResource 保留客户端原始版本（apps/v1），两者不能混淆；
+// 版本选择遵循 webhook 声明的优先顺序。
 func TestCreateAdmissionObjects(t *testing.T) {
 	internalObj := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "2", Name: "myname", Namespace: "myns"}}
 	internalObjOld := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1", Name: "myname", Namespace: "myns"}}
@@ -485,6 +501,7 @@ func TestCreateAdmissionObjects(t *testing.T) {
 	}{
 		{
 			name: "no supported versions",
+			// 未声明 AdmissionReviewVersions 时无法协商出可用版本。
 			invocation: &generic.WebhookInvocation{
 				Webhook: webhook.NewMutatingWebhookAccessor("mywebhook", "mycfg", &admissionregistrationv1.MutatingWebhook{}),
 			},
@@ -492,6 +509,7 @@ func TestCreateAdmissionObjects(t *testing.T) {
 		},
 		{
 			name: "no known supported versions",
+			// 声明了版本但不在服务端已知集合内，同样视为不兼容。
 			invocation: &generic.WebhookInvocation{
 				Webhook: webhook.NewMutatingWebhookAccessor("mywebhook", "mycfg", &admissionregistrationv1.MutatingWebhook{
 					AdmissionReviewVersions: []string{"vX"},
@@ -501,6 +519,7 @@ func TestCreateAdmissionObjects(t *testing.T) {
 		},
 		{
 			name: "v1",
+			// v1 在列表首位，因此协商结果为 v1。
 			attrs: &admission.VersionedAttributes{
 				VersionedObject:    admission.NewLazyObject(versionedObj.DeepCopyObject()),
 				VersionedOldObject: admission.NewLazyObject(versionedObjOld.DeepCopyObject()),
@@ -544,6 +563,7 @@ func TestCreateAdmissionObjects(t *testing.T) {
 		},
 		{
 			name: "v1beta1",
+			// 与上例同样的输入，仅调换声明顺序即得到 v1beta1 请求，验证协商是顺序敏感的。
 			attrs: &admission.VersionedAttributes{
 				VersionedObject:    admission.NewLazyObject(versionedObj.DeepCopyObject()),
 				VersionedOldObject: admission.NewLazyObject(versionedObjOld.DeepCopyObject()),
@@ -607,6 +627,7 @@ func TestCreateAdmissionObjects(t *testing.T) {
 			if len(uid) == 0 {
 				t.Errorf("expected uid, got none")
 			}
+			// 请求/响应分别整体比对，避免逐字段断言遗漏新增字段。
 			if e, a := tc.expectRequest(uid), request; !reflect.DeepEqual(e, a) {
 				t.Errorf("unexpected: %v", cmp.Diff(e, a))
 			}

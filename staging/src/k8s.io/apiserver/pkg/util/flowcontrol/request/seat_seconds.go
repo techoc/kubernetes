@@ -26,6 +26,8 @@ import (
 // `SeatSeconds(n)` represents `n/ssScale` seat-seconds.
 // The `ssScale` constant is private to the implementation here,
 // no other code should use it.
+//
+// 使用无符号定点数而非浮点，是为了让 APF 的账务累加在长时间运行后仍然精确、可比较。
 type SeatSeconds uint64
 
 // MaxSeatsSeconds is the maximum representable value of SeatSeconds
@@ -37,6 +39,8 @@ const MinSeatSeconds = SeatSeconds(0)
 // SeatsTimeDuration produces the SeatSeconds value for the given factors.
 // This is intended only to produce small values, increments in work
 // rather than amount of work done since process start.
+//
+// 参数是"并发份额 × 持续时间"：先换算成纳秒再按 ssScale 放大，四舍五入避免长期偏差。
 func SeatsTimesDuration(seats float64, duration time.Duration) SeatSeconds {
 	return SeatSeconds(int64(math.Round(seats * float64(duration/time.Nanosecond) / (1e9 / ssScale))))
 }
@@ -49,12 +53,16 @@ func (ss SeatSeconds) ToFloat() float64 {
 
 // DurationPerSeat returns duration per seat.
 // This division may lose precision.
+//
+// 用于把累计工作量换算成"每份额可用的时长"，供公平性算法比较。
 func (ss SeatSeconds) DurationPerSeat(seats float64) time.Duration {
 	return time.Duration(float64(ss) / seats * (float64(time.Second) / ssScale))
 }
 
 // String converts to a string.
 // This is suitable for large as well as small values.
+//
+// 手工拆分整数/小数部分，避免浮点格式化在大数值下丢失精度。
 func (ss SeatSeconds) String() string {
 	const div = SeatSeconds(ssScale)
 	quo := ss / div
@@ -62,4 +70,5 @@ func (ss SeatSeconds) String() string {
 	return fmt.Sprintf("%d.%08dss", quo, rem)
 }
 
+// ssScale 是定点小数位数对应的缩放因子（1e8 即 8 位小数）。
 const ssScale = 1e8

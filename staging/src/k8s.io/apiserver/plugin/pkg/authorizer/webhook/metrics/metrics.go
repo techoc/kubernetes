@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 webhook 授权器的指标接口与实现，覆盖请求计数/延迟、
+// 单次 webhook 调用结果以及 fail open 次数。
 package metrics
 
 import (
@@ -35,12 +37,14 @@ type AuthorizerMetrics interface {
 	cel.MatcherMetrics
 }
 
+// NoopAuthorizerMetrics 是关闭指标时的空实现，避免调用点到处做 nil 判断。
 type NoopAuthorizerMetrics struct {
 	NoopRequestMetrics
 	NoopWebhookMetrics
 	cel.NoopMatcherMetrics
 }
 
+// RequestMetrics 记录整个 webhook 授权请求的计数与延迟。
 type RequestMetrics interface {
 	// RecordRequestTotal increments the total number of requests for the webhook authorizer
 	RecordRequestTotal(ctx context.Context, code string)
@@ -49,11 +53,16 @@ type RequestMetrics interface {
 	RecordRequestLatency(ctx context.Context, code string, latency float64)
 }
 
+// NoopRequestMetrics 是 RequestMetrics 的空实现。
 type NoopRequestMetrics struct{}
 
-func (NoopRequestMetrics) RecordRequestTotal(context.Context, string)            {}
+// RecordRequestTotal 不做任何记录。
+func (NoopRequestMetrics) RecordRequestTotal(context.Context, string) {}
+
+// RecordRequestLatency 不做任何记录。
 func (NoopRequestMetrics) RecordRequestLatency(context.Context, string, float64) {}
 
+// WebhookMetrics 按单个 webhook 维度记录调用结果。
 type WebhookMetrics interface {
 	// RecordWebhookEvaluation increments with each round-trip of a webhook authorizer.
 	// result is one of:
@@ -77,13 +86,20 @@ type WebhookMetrics interface {
 	RecordWebhookFailOpen(ctx context.Context, name, result string)
 }
 
+// NoopWebhookMetrics 是 WebhookMetrics 的空实现。
 type NoopWebhookMetrics struct{}
 
+// RecordWebhookEvaluation 不做任何记录。
 func (NoopWebhookMetrics) RecordWebhookEvaluation(ctx context.Context, name, result string) {}
+
+// RecordWebhookDuration 不做任何记录。
 func (NoopWebhookMetrics) RecordWebhookDuration(ctx context.Context, name, result string, duration float64) {
 }
+
+// RecordWebhookFailOpen 不做任何记录。
 func (NoopWebhookMetrics) RecordWebhookFailOpen(ctx context.Context, name, result string) {}
 
+// 指标只注册一次；重复注册会 panic，用 Once 保证并发初始化安全。
 var registerWebhookMetrics sync.Once
 
 // RegisterMetrics registers authorizer metrics.
@@ -95,6 +111,7 @@ func RegisterWebhookMetrics() {
 	})
 }
 
+// ResetMetricsForTest 清空指标，仅供测试使用。
 func ResetMetricsForTest() {
 	webhookEvaluations.Reset()
 	webhookDuration.Reset()
@@ -107,6 +124,7 @@ const (
 )
 
 var (
+	// result 标签区分 canceled/timeout/error/success，便于区分"客户端放弃"与"后端故障"。
 	webhookEvaluations = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -130,6 +148,7 @@ var (
 		[]string{"name", "result"},
 	)
 
+	// fail open 计数是安全相关的关键信号：它意味着授权被跳过，请求可能被放行。
 	webhookFailOpen = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -144,23 +163,30 @@ var (
 
 type webhookMetrics struct{}
 
+// NewWebhookMetrics 注册并返回真实指标实现。
 func NewWebhookMetrics() WebhookMetrics {
 	RegisterWebhookMetrics()
 	return webhookMetrics{}
 }
 
+// ResetWebhookMetricsForTest 清空指标，仅供测试使用。
 func ResetWebhookMetricsForTest() {
 	webhookEvaluations.Reset()
 	webhookDuration.Reset()
 	webhookFailOpen.Reset()
 }
 
+// RecordWebhookEvaluation 增加一次 webhook 调用计数。
 func (webhookMetrics) RecordWebhookEvaluation(ctx context.Context, name, result string) {
 	webhookEvaluations.WithContext(ctx).WithLabelValues(name, result).Inc()
 }
+
+// RecordWebhookDuration 记录一次 webhook 调用耗时。
 func (webhookMetrics) RecordWebhookDuration(ctx context.Context, name, result string, duration float64) {
 	webhookDuration.WithContext(ctx).WithLabelValues(name, result).Observe(duration)
 }
+
+// RecordWebhookFailOpen 记录一次因超时/错误导致的 fail open。
 func (webhookMetrics) RecordWebhookFailOpen(ctx context.Context, name, result string) {
 	webhookFailOpen.WithContext(ctx).WithLabelValues(name, result).Inc()
 }

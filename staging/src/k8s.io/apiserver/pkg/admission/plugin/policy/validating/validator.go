@@ -39,6 +39,8 @@ import (
 )
 
 // validator implements the Validator interface
+// validator 持有一组已编译的 CEL 求值器，对单个请求依次执行匹配条件、
+// validation 表达式、messageExpression 与审计注解表达式。
 type validator struct {
 	celMatcher            matchconditions.Matcher
 	validationFilter      cel.ConditionEvaluator
@@ -47,9 +49,13 @@ type validator struct {
 	failPolicy            *v1.FailurePolicyType
 	// compileError holds any compilation error from the CEL expressions.
 	// If non-nil, the validator will return an error result based on the failPolicy.
+	// 编译错误延迟到求值阶段处理：策略对象本身仍可存在，但每次准入都会按
+	// failurePolicy 返回相应决策（Ignore 放行、Fail 拒绝）。
 	compileError error
 }
 
+// NewValidator 组装 validator。各 filter 可同时为 nil（表示策略未配置该部分），
+// 但一旦传入 err 非 nil，Validate 将不再执行表达式。
 func NewValidator(validationFilter cel.ConditionEvaluator, celMatcher matchconditions.Matcher, auditAnnotationFilter, messageFilter cel.ConditionEvaluator, failPolicy *v1.FailurePolicyType, err error) Validator {
 	return &validator{
 		celMatcher:            celMatcher,
@@ -61,6 +67,8 @@ func NewValidator(validationFilter cel.ConditionEvaluator, celMatcher matchcondi
 	}
 }
 
+// policyDecisionActionForError 把 CEL 求值/匹配错误映射为准入动作：
+// Ignore 表示失败时放行，其余（含默认 Fail）一律拒绝，确保失败关闭。
 func policyDecisionActionForError(f v1.FailurePolicyType) PolicyDecisionAction {
 	if f == v1.Ignore {
 		return ActionAdmit
@@ -68,6 +76,8 @@ func policyDecisionActionForError(f v1.FailurePolicyType) PolicyDecisionAction {
 	return ActionDeny
 }
 
+// auditAnnotationEvaluationForError 错误期间不发布审计注解值：
+// Ignore 时直接排除，否则记为错误供审计记录。
 func auditAnnotationEvaluationForError(f v1.FailurePolicyType) PolicyAuditAnnotationAction {
 	if f == v1.Ignore {
 		return AuditAnnotationActionExclude
@@ -75,20 +85,26 @@ func auditAnnotationEvaluationForError(f v1.FailurePolicyType) PolicyAuditAnnota
 	return AuditAnnotationActionError
 }
 
+// CompileError 返回编译期错误；nil 表示表达式可用。
 func (v *validator) CompileError() error {
 	return v.compileError
 }
 
 // Validate takes a list of Evaluation and a failure policy and converts them into actionable PolicyDecisions
 // runtimeCELCostBudget was added for testing purpose only. Callers should always use const RuntimeCELCostBudget from k8s.io/apiserver/pkg/apis/cel/config.go as input.
-
+// Validate 把 CEL 求值结果翻译成可执行的准入决策与审计注解。整体顺序：
+// 匹配条件 -> validation 表达式 -> message 表达式 -> 审计注解表达式。
+// 任一阶段出错都按 failurePolicy 决定放行或拒绝，宁可失败关闭也不能
+// 静默放行未经验证的请求。
 func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVersionResource, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, namespace *corev1.Namespace, runtimeCELCostBudget int64, authz authorizer.UnconditionalAuthorizer) ValidateResult {
+	// failPolicy 未设置时按 Fail 处理：默认策略必须保证安全。
 	var f v1.FailurePolicyType
 	if v.failPolicy == nil {
 		f = v1.Fail
 	} else {
 		f = *v.failPolicy
 	}
+	// 编译失败直接短路，避免对不可用的表达式做任何求值。
 	if v.compileError != nil {
 		return ValidateResult{
 			Decisions: []PolicyDecision{
@@ -100,6 +116,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 			},
 		}
 	}
+	// 先评估 matchConditions；不匹配则整个策略不产生任何决策。
 	if v.celMatcher != nil {
 		matchResults := v.celMatcher.Match(ctx, versionedAttr, versionedParams, authz)
 		if matchResults.Error != nil {
@@ -120,10 +137,13 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 		}
 	}
 
+	// 绑定 versionedParams 与 authorizer，使表达式可访问 params 和授权检查；
+	// messageExpression 不允许调用 authorizer，故使用不含 Authorizer 的绑定。
 	optionalVars := cel.OptionalVariableBindings{VersionedParams: versionedParams, Authorizer: authz}
 	expressionOptionalVars := cel.OptionalVariableBindings{VersionedParams: versionedParams}
 	admissionRequest := cel.CreateAdmissionRequest(versionedAttr.Attributes, metav1.GroupVersionResource(matchedResource), metav1.GroupVersionKind(versionedAttr.VersionedKind))
 	// Decide which fields are exposed
+	// namespace 对象可能为 nil（集群级资源），由 CreateNamespaceObject 处理。
 	ns := cel.CreateNamespaceObject(namespace)
 	evalResults, remainingBudget, err := v.validationFilter.ForInput(ctx, versionedAttr, admissionRequest, optionalVars, ns, runtimeCELCostBudget)
 	if err != nil {
@@ -138,11 +158,14 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 		}
 	}
 	decisions := make([]PolicyDecision, len(evalResults))
+	// message 表达式使用剩余预算，避免 validation 已耗尽预算后仍可无限求值。
 	messageResults, _, err := v.messageFilter.ForInput(ctx, versionedAttr, admissionRequest, expressionOptionalVars, ns, remainingBudget)
 	for i, evalResult := range evalResults {
 		var decision = &decisions[i]
 		decision.Elapsed = evalResult.Elapsed
 		// TODO: move this to generics
+		// 求值结果需还原为 ValidationCondition 才能拿到 reason/message 等元数据；
+		// 类型不符属于内部错误，按失败策略处理。
 		validation, ok := evalResult.ExpressionAccessor.(*ValidationCondition)
 		if !ok {
 			klog.Error("Invalid type conversion to ValidationCondition")
@@ -161,10 +184,12 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 			decision.Evaluation = EvalError
 			decision.Message = evalResult.Error.Error()
 		} else if errors.Is(err, apiservercel.ErrInternal) || errors.Is(err, apiservercel.ErrOutOfBudget) {
+			// message 表达式整体失败（内部错误或预算耗尽）同样按失败策略处理。
 			decision.Action = policyDecisionActionForError(f)
 			decision.Evaluation = EvalError
 			decision.Message = fmt.Sprintf("failed messageExpression: %s", err)
 		} else if evalResult.EvalResult != celtypes.True {
+			// 表达式返回非 true 即拒绝；Reason 缺省为 Invalid。
 			decision.Action = ActionDeny
 			decision.Evaluation = EvalDeny
 			if validation.Reason == nil {
@@ -181,6 +206,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 				if message, ok = messageResult.EvalResult.Value().(string); ok {
 					message = strings.TrimSpace(message)
 					// deny excessively long message from EvalResult
+					// 限制长度与换行，防止用户通过策略注入超大或伪造多行的状态消息。
 					if len(message) > celconfig.MaxEvaluatedMessageExpressionSizeBytes {
 						klog.V(2).InfoS("excessively long message denied", "message", message)
 						message = ""
@@ -211,6 +237,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 		}
 	}
 
+	// 审计注解表达式即使 validation 已拒绝仍要求值：拒绝事件同样需要携带注解。
 	options := cel.OptionalVariableBindings{VersionedParams: versionedParams}
 	auditAnnotationEvalResults, _, err := v.auditAnnotationFilter.ForInput(ctx, versionedAttr, admissionRequest, options, namespace, runtimeCELCostBudget)
 	if err != nil {
@@ -227,6 +254,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 
 	auditAnnotationResults := make([]PolicyAuditAnnotation, len(auditAnnotationEvalResults))
 	for i, evalResult := range auditAnnotationEvalResults {
+		// 未配置 valueExpression 的注解不产生结果。
 		if evalResult.ExpressionAccessor == nil {
 			continue
 		}
@@ -246,6 +274,8 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 			auditAnnotationResult.Action = auditAnnotationEvaluationForError(f)
 			auditAnnotationResult.Error = evalResult.Error.Error()
 		} else {
+			// 只接受 string 或 null：空字符串/null 表示不发布，其他类型视为错误，
+			// 防止把复杂对象混入审计注解。
 			switch evalResult.EvalResult.Type() {
 			case celtypes.StringType:
 				value := strings.TrimSpace(evalResult.EvalResult.Value().(string))

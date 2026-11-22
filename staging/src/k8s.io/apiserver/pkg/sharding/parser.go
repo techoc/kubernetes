@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package sharding 解析并校验 CEL 形式的分片选择器表达式（shardRange(...) 与 ||），
+// 把文本转换为 apimachinery 的 sharding.Selector。
+//
+// 注意：这里的 CEL 只做语法解析、不做求值；解析出的 AST 被白名单式遍历，
+// 任何超出 shardRange/|| 的语法都会被拒绝，从而避免把任意 CEL 带入服务端。
 package sharding
 
 import (
@@ -39,18 +44,22 @@ import (
 // Only the shardRange() function and || operator are permitted. The CEL
 // expression is parsed but never evaluated — the AST is walked to extract
 // shard range requirements.
+//
+// 所有区间必须使用同一个字段，否则无法用单一分片键做一致性路由，直接报错。
 func Parse(expr string) (apisharding.Selector, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, fmt.Errorf("empty shard selector is not allowed; omit the parameter for unfiltered lists")
 	}
 
+	// 不注册任何宏，防止宏展开引入非预期的 AST 结构。
 	p, err := celparser.NewParser(celparser.Macros( /* no macros */ ))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL parser: %w", err)
 	}
 
 	parsed, errs := p.Parse(common.NewTextSource(expr))
+	// 只报告首个错误即可：后续错误通常是首个错误的级联。
 	if errs != nil && len(errs.GetErrors()) > 0 {
 		return nil, fmt.Errorf("CEL parse error: %s", errs.GetErrors()[0].Message)
 	}
@@ -103,6 +112,7 @@ func walkExpr(e ast.Expr) ([]apisharding.ShardRangeRequirement, error) {
 			return []apisharding.ShardRangeRequirement{req}, nil
 		}
 
+		// 白名单：其余任何函数（包括合法的 CEL 内置函数）一律拒绝。
 		return nil, fmt.Errorf("unsupported function %q; only shardRange() and || are allowed", fn)
 	}
 
@@ -123,6 +133,7 @@ func parseShardRangeCall(call ast.CallExpr) (apisharding.ShardRangeRequirement, 
 	}
 
 	// Validate field path
+	// 只允许能稳定映射到分片键的字段，避免出现无法按对象定位的分片。
 	switch fieldPath {
 	case "object.metadata.uid", "object.metadata.namespace":
 		// ok
@@ -173,6 +184,9 @@ func extractFieldPath(e ast.Expr) (string, error) {
 
 // extractHexLiteral extracts a hex string from a CEL string literal.
 // The literal must be a single-quoted string like '0xff' with a 0x prefix.
+//
+// 严格要求 16 位十六进制，使区间边界可以直接按无符号 64 位整数比较；
+// 唯一例外是 2^64（17 位），用作开区间上界。
 func extractHexLiteral(e ast.Expr, name string) (string, error) {
 	if e.Kind() != ast.LiteralKind {
 		return "", fmt.Errorf("%s must be a string literal (e.g. '0xff'), got expression kind %v", name, e.Kind())
@@ -197,6 +211,7 @@ func extractHexLiteral(e ast.Expr, name string) (string, error) {
 	}
 
 	for _, c := range hex {
+		// 只接受小写十六进制，保证同一数值只有一种规范写法。
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return "", fmt.Errorf("%s: invalid hex character %q in %q", name, string(c), s)
 		}
@@ -209,6 +224,7 @@ func extractHexLiteral(e ast.Expr, name string) (string, error) {
 			return "", fmt.Errorf("%s: 17-digit hex value must be '0x10000000000000000' (2^64), got %q", name, s)
 		}
 	} else if len(hex) != 16 {
+		// 给出补零后的建议值，降低用户手写分片区间的出错率。
 		padded := "0x" + strings.Repeat("0", 16-len(hex)) + hex
 		return "", fmt.Errorf("%s must be a 0x-prefixed 16-digit hex value, got %q (did you mean %q?)", name, s, padded)
 	}

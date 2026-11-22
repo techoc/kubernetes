@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供 statusz 端点的响应断言辅助函数，供各版本 statusz 的
+// handler 测试复用（校验结构字段、编码协商与弃用告警）。
 package testing
 
 import (
@@ -31,6 +33,8 @@ import (
 
 // VerifyStructuredResponse verifies that the response body matches the expected static fields
 // and checks for the presence/absence of warnings.
+//
+// 按 Accept 头选择对应的反序列化器，因此同一组期望值可以同时验证 JSON/YAML/CBOR 三种编码。
 func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, warnings []string, want interface{}, wantDeprecationHeader bool) {
 	t.Helper()
 
@@ -56,6 +60,7 @@ func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, wa
 		}
 	}
 
+	// 已弃用 API 版本必须通过 Warning 头提示客户端，未弃用版本则不得出现。
 	if wantDeprecationHeader {
 		if !foundWarning {
 			t.Errorf("want warning 'deprecated', got none or different: %v", warnings)
@@ -67,6 +72,7 @@ func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, wa
 	}
 }
 
+// unmarshalFunc 根据 Accept 头返回对应的解码函数；无法识别的编码直接失败。
 func unmarshalFunc(t *testing.T, acceptHeader string) func([]byte, interface{}) error {
 	switch {
 	case strings.Contains(acceptHeader, "application/json"):
@@ -81,6 +87,7 @@ func unmarshalFunc(t *testing.T, acceptHeader string) func([]byte, interface{}) 
 	return nil
 }
 
+// wantFields 从期望对象中提取参与比较的字段。
 func wantFields(t *testing.T, want interface{}) (metav1.TypeMeta, string, []string) {
 	t.Helper()
 	switch w := want.(type) {
@@ -94,6 +101,7 @@ func wantFields(t *testing.T, want interface{}) (metav1.TypeMeta, string, []stri
 	return metav1.TypeMeta{}, "", nil
 }
 
+// gotFields 按 apiVersion 选择具体类型反序列化响应体，避免跨版本字段混淆。
 func gotFields(t *testing.T, unmarshal func([]byte, interface{}) error, body []byte, apiVersion string) (metav1.TypeMeta, string, []string) {
 	t.Helper()
 	switch apiVersion {

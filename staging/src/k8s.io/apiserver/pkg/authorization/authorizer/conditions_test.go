@@ -48,6 +48,11 @@ func unionDecision(decisions ...authorizer.ConditionsAwareDecision) authorizer.C
 	return u.ToDecision()
 }
 
+// TestConditionsAwareDecision 是 ConditionsAwareDecision 的构造与并集化简的回归测试。
+//
+// 核心不变量（fail closed）：任何非法输入——条件过多、重复 ID、非法标签、
+// 空 ConditionsMap——都必须收敛为 NoOpinion 或 Deny 并带错误，绝不能放行；
+// 同时无条件的 Allow/Deny 会短路并集，ConditionsMap 则保留多结果。
 func TestConditionsAwareDecision(t *testing.T) {
 	unexpectedErr := fmt.Errorf("unexpected things happened")
 	otherErr := fmt.Errorf("other error")
@@ -307,6 +312,8 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantString:      `NoOpinion(reason="only NoOpinion conditions always evaluate to NoOpinion")`,
 		},
 		// Union constructor simplification cases
+		// 并集化简：单个无条件决策直接塌缩；单个 ConditionsMap 保留为 Union；
+		// 全部 NoOpinion 时合并原因与错误。以下用例逐项锁定这些规则。
 		{
 			name: "union: empty yields NoOpinion",
 			testDecisions: []authorizer.ConditionsAwareDecision{
@@ -1083,6 +1090,7 @@ func (a sampleAuthorizer) EvaluateConditions(ctx context.Context, unevaluated au
 	return celEvaluateConditions(ctx, unevaluated.ConditionsMap(), data)
 }
 
+// objWithLabels 构造带指定标签的非结构化对象；labels 为空时也保持合法（无 metadata）。
 func objWithLabels(lbls map[string]string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{Object: map[string]any{}}
 	if len(lbls) > 0 {
@@ -1091,6 +1099,8 @@ func objWithLabels(lbls map[string]string) *unstructured.Unstructured {
 	return obj
 }
 
+// unconditionalParts 把决策拆成 (Decision, reason, error)；若决策是 ConditionsMap 等有条件结果，
+// 则按 fail-closed 返回 FailureDecision 且不返回 error（返回 500 会掩盖真正的授权结论）。
 func unconditionalParts(d authorizer.ConditionsAwareDecision) (authorizer.Decision, string, error) {
 	switch {
 	case d.IsAllow():
@@ -1111,6 +1121,8 @@ func unconditionalParts(d authorizer.ConditionsAwareDecision) (authorizer.Decisi
 // TestConditionsAwareDecisionConditionsMap_ClonesInputSlices verifies that
 // ConditionsAwareDecisionConditionsMap defensively copies its input slices, so that
 // callers mutating the slices after construction cannot alter the resulting decision.
+//
+// 防御性拷贝避免调用方在构造后修改切片，悄悄改变授权判定（属于安全边界）。
 func TestConditionsAwareDecisionConditionsMap_ClonesInputSlices(t *testing.T) {
 	denyConditions := []authorizer.Condition{authorizer.GenericCondition{ID: "deny-orig"}}
 	noOpinionConditions := []authorizer.Condition{authorizer.GenericCondition{ID: "nop-orig"}}
@@ -1146,6 +1158,8 @@ func TestConditionsAwareDecisionConditionsMap_ClonesInputSlices(t *testing.T) {
 	}
 }
 
+// TestSampleAuthorizer 构造一个会返回 CEL 条件的示例授权器，验证：
+// 条件未评估时对"不认识条件"的调用方 fail closed，评估后得到最终 Allow/Deny。
 func TestSampleAuthorizer(t *testing.T) {
 	type evalCase struct {
 		name      string
@@ -1426,6 +1440,8 @@ func TestSampleAuthorizer(t *testing.T) {
 	}
 }
 
+// celEvaluateConditions 用 object/oldObject 作为变量求值 ConditionsMap。
+// 任何构建或转换失败都走 FailureDecision + "failed closed"，不允许降级为放行。
 func celEvaluateConditions(ctx context.Context, conditionsMap authorizer.ConditionsMap, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	env, err := cel.NewEnv(
 		cel.Variable("object", cel.DynType),
@@ -1460,6 +1476,7 @@ func celEvaluateConditions(ctx context.Context, conditionsMap authorizer.Conditi
 }
 
 // evalCEL compiles and evaluates a single CEL expression, returning true/false.
+// 结果不是 bool 也视为错误，避免把非布尔值误当作允许。
 func evalCEL(env *cel.Env, expr string, vars map[string]any) (bool, error) {
 	ast, issues := env.Compile(expr)
 	if issues != nil && issues.Err() != nil {
@@ -1480,6 +1497,7 @@ func evalCEL(env *cel.Env, expr string, vars map[string]any) (bool, error) {
 	return result, nil
 }
 
+// objectToResolveVal 把运行时对象转换为 CEL 可用的 map；nil 或 typed-nil 返回 nil，表示条件中引用的对象不存在。
 func objectToResolveVal(r runtime.Object) (interface{}, error) {
 	if r == nil || reflect.ValueOf(r).IsNil() {
 		return nil, nil
@@ -1491,6 +1509,8 @@ func objectToResolveVal(r runtime.Object) (interface{}, error) {
 	return ret, nil
 }
 
+// TestConditionsAwareDecisionUnionedDecisions 验证 UnionedDecisions 迭代器：
+// 非并集决策没有子项，并集按加入顺序产出子决策（含嵌套并集的扁平化语义）。
 func TestConditionsAwareDecisionUnionedDecisions(t *testing.T) {
 	condMap := authorizer.ConditionsAwareDecisionConditionsMap(
 		nil, nil,

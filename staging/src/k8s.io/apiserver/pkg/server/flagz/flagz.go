@@ -41,6 +41,7 @@ import (
 )
 
 var (
+	// 预先计算两个版本的 Kind，避免在每次请求的协商路径上重复拼接。
 	v1alpha1FlagzKind         = v1alpha1.SchemeGroupVersion.WithKind("Flagz")
 	v1beta1FlagzKind          = v1beta1.SchemeGroupVersion.WithKind("Flagz")
 	recognizedStructuredKinds = map[schema.GroupVersionKind]bool{
@@ -49,6 +50,7 @@ var (
 	}
 )
 
+// DefaultFlagzPath 是 flagz 端点的固定挂载路径。
 const DefaultFlagzPath = "/flagz"
 
 // flagzCodecFactory wraps a CodecFactory to filter out unsupported media types (like protobuf)
@@ -58,11 +60,14 @@ type flagzCodecFactory struct {
 	supportedMediaTypes []runtime.SerializerInfo
 }
 
+// mux 抽象出挂载端点所需的最小接口，便于在测试中替换。
 type mux interface {
 	Handle(path string, handler http.Handler)
 }
 
 // Install installs the flagz endpoint to the given mux.
+// 内部总是注册 v1alpha1 与 v1beta1 两个版本，v1alpha1 标记为已弃用，
+// 结构化响应会按内容协商选择版本并附带 Warning 头。
 func Install(m mux, componentName string, flagReader Reader, opts ...Option) {
 	reg := &registry{
 		reader:                flagReader,
@@ -87,6 +92,9 @@ func Install(m mux, componentName string, flagReader Reader, opts ...Option) {
 
 // newFlagzCodecFactory creates a codec factory with the standard serializers for flagz,
 // filtering out unsupported media types (e.g., protobuf).
+// 过滤是必要的：flagz 是文本型调试端点，protobuf 既无意义又会让协商错误信息
+// 列出实际不可用的类型。遇到未知媒体类型时返回错误但仍返回可用的工厂，
+// 由调用方决定是否仅记录日志。
 func newFlagzCodecFactory(scheme *runtime.Scheme, componentName string, flagReader Reader) (*flagzCodecFactory, error) {
 	codecFactoryOpts := []serializer.CodecFactoryOptionsMutator{
 		serializer.WithSerializer(func(_ runtime.ObjectCreater, _ runtime.ObjectTyper) runtime.SerializerInfo {
@@ -135,10 +143,15 @@ func newFlagzCodecFactory(scheme *runtime.Scheme, componentName string, flagRead
 	}, err
 }
 
+// SupportedMediaTypes 返回过滤后的媒体类型列表，覆盖内嵌 CodecFactory 的同名方法，
+// 使内容协商只看到真正可用的类型。
 func (f *flagzCodecFactory) SupportedMediaTypes() []runtime.SerializerInfo {
 	return f.supportedMediaTypes
 }
 
+// handleFlagz 返回端点的 HTTP 处理器：无 Accept 头时默认输出 text/plain，
+// 否则按内容协商返回 JSON/YAML/CBOR 结构化响应。
+// 指标上报放在 defer 中，确保错误路径也能记录 group/version/deprecated。
 func handleFlagz(componentName string, reg *registry, serializer runtime.NegotiatedSerializer, restrictions negotiate.FlagzEndpointRestrictions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestReceivedTimestamp, ok := request.ReceivedTimestampFrom(r.Context())
@@ -167,6 +180,7 @@ func handleFlagz(componentName string, reg *registry, serializer runtime.Negotia
 		}()
 
 		acceptHeader := r.Header.Get("Accept")
+		// 没有 Accept 头时按纯文本处理，方便 curl/kubectl 直接读取。
 		if strings.TrimSpace(acceptHeader) == "" {
 			writePlainTextResponse(v1beta1Flagz(componentName, reg.reader), serializer, w, reg)
 			return
@@ -202,6 +216,8 @@ func handleFlagz(componentName string, reg *registry, serializer runtime.Negotia
 			group = mediaType.Convert.Group
 			version = mediaType.Convert.Version
 			deprecated = reg.deprecatedVersions()[version]
+			// 弃用版本通过 Warning 头提示调用方升级，而不是直接拒绝请求，
+			// 以免破坏仍在使用旧版本的客户端。
 			if deprecated {
 				w.Header().Set("Warning", `299 - "This version of the flagz endpoint is deprecated. Please use a newer version."`)
 			}
@@ -222,6 +238,9 @@ func handleFlagz(componentName string, reg *registry, serializer runtime.Negotia
 	}
 }
 
+// writePlainTextResponse 输出 text/plain；成功编码后的字节被缓存，
+// 因为标志在进程生命周期内基本不变，这样可以省去每个请求的重复编码。
+// 缓存由 registry 的锁保护，写入失败只记录错误，因为响应头已发出。
 func writePlainTextResponse(obj runtime.Object, serializer runtime.NegotiatedSerializer, w http.ResponseWriter, reg *registry) {
 	reg.cachedPlainTextResponseLock.Lock()
 	defer reg.cachedPlainTextResponseLock.Unlock()
@@ -259,6 +278,8 @@ func writePlainTextResponse(obj runtime.Object, serializer runtime.NegotiatedSer
 	}
 }
 
+// writeStructuredResponse 按协商结果写出结构化对象；
+// 最后一个参数 true 表示该响应可以被缓存（GET 且无副作用）。
 func writeStructuredResponse(obj runtime.Object, serializer runtime.NegotiatedSerializer, targetGV schema.GroupVersion, restrictions negotiate.FlagzEndpointRestrictions, w http.ResponseWriter, r *http.Request) {
 	responsewriters.WriteObjectNegotiated(
 		serializer,
@@ -272,6 +293,8 @@ func writeStructuredResponse(obj runtime.Object, serializer runtime.NegotiatedSe
 	)
 }
 
+// handleStructuredResponse 根据协商出的 GVK 选择对应版本的 Flagz 对象写出；
+// 两个版本的数据内容相同，只是 API 形状不同。
 func handleStructuredResponse(w http.ResponseWriter, r *http.Request, componentName string, reg *registry, serializer runtime.NegotiatedSerializer, restrictions negotiate.FlagzEndpointRestrictions, mediaType negotiation.MediaTypeOptions) {
 	switch *mediaType.Convert {
 	case v1alpha1FlagzKind:
@@ -291,6 +314,8 @@ func handleStructuredResponse(w http.ResponseWriter, r *http.Request, componentN
 	}
 }
 
+// v1alpha1Flagz 构造 v1alpha1 版本的 Flagz 对象；对象名使用组件名，
+// 与 /flagz 的单一资源语义一致。
 func v1alpha1Flagz(componentName string, flagReader Reader) *v1alpha1.Flagz {
 	flags := flagReader.GetFlagz()
 	return &v1alpha1.Flagz{
@@ -305,6 +330,7 @@ func v1alpha1Flagz(componentName string, flagReader Reader) *v1alpha1.Flagz {
 	}
 }
 
+// v1beta1Flagz 构造 v1beta1 版本的 Flagz 对象，是默认的结构化输出版本。
 func v1beta1Flagz(componentName string, flagReader Reader) *v1beta1.Flagz {
 	flags := flagReader.GetFlagz()
 	return &v1beta1.Flagz{

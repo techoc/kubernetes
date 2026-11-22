@@ -29,11 +29,15 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// envTypeAndVersion 把兼容版本与 CEL 环境类型（新表达式/已存储表达式）配对，
+// 因为两者的可用函数集合不同。
 type envTypeAndVersion struct {
 	version *version.Version
 	envType Type
 }
 
+// TestBaseEnvironment 验证 CEL 环境的版本门控：同一表达式在引入版本之前必须编译失败、
+// 之后必须可用；同时验证 StoredExpressions 始终启用最新特性（已写入 etcd 的表达式不能失效）。
 func TestBaseEnvironment(t *testing.T) {
 	widgetsType := apiservercel.NewObjectType("Widget",
 		map[string]*apiservercel.DeclField{
@@ -374,6 +378,7 @@ func TestBaseEnvironment(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					// 有效表达式必须既编译通过，求值结果也为 true。
 					for _, valid := range tc.validExpressions {
 						if ok, err := isValid(validationEnv, valid, activation); !ok {
 							if err != nil {
@@ -382,6 +387,7 @@ func TestBaseEnvironment(t *testing.T) {
 							t.Error("expected expression to return true")
 						}
 					}
+					// 无效表达式只要编译失败即可，不关心具体错误文本。
 					for _, invalid := range tc.invalidExpressions {
 						if ok, _ := isValid(validationEnv, invalid, activation); ok {
 							t.Errorf("expected invalid expression to result in error")
@@ -393,6 +399,7 @@ func TestBaseEnvironment(t *testing.T) {
 	}
 }
 
+// isValid 编译并求值表达式，仅当无错误且结果为 true 时返回 true。
 func isValid(env *cel.Env, expr string, activation any) (bool, error) {
 	ast, issues := env.Compile(expr)
 	if len(issues.Errors()) > 0 {
@@ -409,12 +416,14 @@ func isValid(env *cel.Env, expr string, activation any) (bool, error) {
 	return result.Value() == true, nil
 }
 
+// fakeAuthorizer 是固定返回预设决策的授权器，用于测试 authorizer CEL 扩展。
 type fakeAuthorizer struct {
 	decision authorizer.Decision
 	reason   string
 	err      error
 }
 
+// Authorize 忽略输入，直接返回预设结果。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return f.decision, f.reason, f.err
 }

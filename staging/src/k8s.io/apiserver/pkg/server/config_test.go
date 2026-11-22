@@ -54,6 +54,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestAuthorizeClientBearerTokenNoops 验证配置缺项时函数是纯 no-op：
+// 不 panic、不修改任何输入。组合覆盖 nil/空配置/仅有 bearer token 三类输入。
 func TestAuthorizeClientBearerTokenNoops(t *testing.T) {
 	// All of these should do nothing (not panic, no side-effects)
 	cfgGens := []func() *rest.Config{
@@ -87,6 +89,11 @@ func TestAuthorizeClientBearerTokenNoops(t *testing.T) {
 	}
 }
 
+// TestAuthorizeClientBearerTokenRequiredGroups 验证环回客户端使用的 bearer token 会以
+// system:masters 组身份通过认证。
+//
+// 这是安全边界上的关键约定：该 token 只存在于进程内，拥有它等同集群管理员，
+// 因此实现必须把它绑定到特权组，而不是普通用户身份。测试锁定了这一点。
 func TestAuthorizeClientBearerTokenRequiredGroups(t *testing.T) {
 	fakeAuthenticator := authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
 		return &authenticator.Response{User: &user.DefaultInfo{}}, false, nil
@@ -115,6 +122,10 @@ func TestAuthorizeClientBearerTokenRequiredGroups(t *testing.T) {
 	}
 }
 
+// TestNewWithDelegate 验证委托（delegate）链式 apiserver 的端到端行为。
+//
+// wrapping 服务包装 delegate 服务，最终暴露的路径应是两者的并集，而健康检查
+// 也应包含两边注册的项。这确保聚合层与 kube-apiserver 组合时不会互相遮蔽。
 func TestNewWithDelegate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -150,6 +161,7 @@ func TestNewWithDelegate(t *testing.T) {
 	})
 
 	// this wires up swagger
+	// PrepareRun 会安装健康检查与发现端点，因此必须在发起请求前调用。
 	delegateServer.PrepareRun()
 
 	wrappingConfig := NewConfig(codecs)
@@ -185,6 +197,7 @@ func TestNewWithDelegate(t *testing.T) {
 	defer server.Close()
 
 	// Wait for the hooks to finish before checking the response
+	// 先等两个 post-start hook 完成，否则 healthz 的 poststarthook 子检查可能尚未注册。
 	<-delegatePostStartHookChan
 	<-wrappingPostStartHookChan
 	expectedPaths := []string{
@@ -266,6 +279,7 @@ healthz check failed
 	checkPath(server.URL+"/bar", http.StatusUnauthorized, ``, t)
 }
 
+// checkPath 断言某个 URL 的状态码与响应正文；先 dump 响应便于失败时排查。
 func checkPath(url string, expectedStatusCode int, expectedBody string, t *testing.T) {
 	t.Run(url, func(t *testing.T) {
 		resp, err := http.Get(url)
@@ -289,6 +303,9 @@ func checkPath(url string, expectedStatusCode int, expectedBody string, t *testi
 	})
 }
 
+// checkExpectedPathsAtRoot 校验 OpenAPI 根路径暴露的路径集合与预期完全一致。
+//
+// 双向比较：多出的路径说明误暴露了端点，缺失的路径说明注册丢失，两者都要报错。
 func checkExpectedPathsAtRoot(url string, expectedPaths []string, t *testing.T) {
 	t.Run(url, func(t *testing.T) {
 		resp, err := http.Get(url)
@@ -322,6 +339,11 @@ func checkExpectedPathsAtRoot(url string, expectedPaths []string, t *testing.T) 
 	})
 }
 
+// TestAuthenticationAuditAnnotationsDefaultChain 验证默认处理器链中审计上下文的生命周期：
+// 认证阶段添加的注解与 handler 内添加的注解都应出现在最终审计事件里。
+//
+// 关键约束：WithAudit 不得重复包裹上下文（否则注解会写到不同的副本上而丢失），
+// 且同一条事件在链条中被原地修改，各阶段看到的是同一份注解。
 func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 	authn := authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
 		// confirm that we can set an audit annotation in a handler before WithAudit
@@ -402,17 +424,23 @@ func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 	}
 }
 
+// testBackend 收集审计事件的测试后端；嵌入 nil Backend 使误调用其他方法立即 panic。
 type testBackend struct {
 	events []*auditinternal.Event
 
 	audit.Backend // nil panic if anything other than ProcessEvents called
 }
 
+// ProcessEvents 记录事件并返回成功，避免触发审计丢弃计数。
 func (b *testBackend) ProcessEvents(events ...*auditinternal.Event) bool {
 	b.events = append(b.events, events...)
 	return true
 }
 
+// TestNewErrorForbiddenSerializer 验证拒绝创建支持未允许媒体类型（cbor）的 apiserver。
+//
+// 这是安全相关的白名单：只有 json/yaml/protobuf 被当作安全可协商格式，
+// 其他类型必须先通过特性门控显式启用。
 func TestNewErrorForbiddenSerializer(t *testing.T) {
 	config := CompletedConfig{
 		&completedConfig{
@@ -431,6 +459,8 @@ func TestNewErrorForbiddenSerializer(t *testing.T) {
 	}
 }
 
+// TestNewFeatureGatedSerializer 验证开启 CBORServingAndStorage 特性后，
+// 同样的 cbor 序列化器可以被接受——说明限制由门控而非硬编码决定。
 func TestNewFeatureGatedSerializer(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 

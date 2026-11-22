@@ -21,6 +21,9 @@ import (
 )
 
 // AuthenticatorMetrics specifies a set of methods that are used to register various metrics
+//
+// AuthenticatorMetrics 把指标上报抽象为两个函数，使 webhook 认证器
+// 不直接依赖 metrics 包，便于测试与复用。
 type AuthenticatorMetrics struct {
 	// RecordRequestTotal increments the total number of requests for webhooks
 	RecordRequestTotal func(ctx context.Context, code string)
@@ -29,6 +32,7 @@ type AuthenticatorMetrics struct {
 	RecordRequestLatency func(ctx context.Context, code string, latency float64)
 }
 
+// noopMetrics 是空实现，用于未配置指标的场景，避免调用点到处判空。
 type noopMetrics struct{}
 
 func (noopMetrics) RequestTotal(context.Context, string)            {}

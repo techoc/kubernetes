@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 记录认证配置控制器自动重载的结果、时间戳与生效配置哈希。
 package metrics
 
 import (
@@ -41,6 +42,8 @@ jwt:
 `
 )
 
+// TestRecordAuthenticationConfigAutomaticReloadFailure 验证失败计数只带 status=failure 标签，
+// 且 apiserver_id_hash 是对原始 ID 做哈希后的稳定值（避免泄露主机名）。
 func TestRecordAuthenticationConfigAutomaticReloadFailure(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authentication_config_controller_automatic_reloads_total [BETA] Total number of automatic reloads of authentication configuration split by status and apiserver identity.
@@ -60,6 +63,8 @@ func TestRecordAuthenticationConfigAutomaticReloadFailure(t *testing.T) {
 	}
 }
 
+// TestRecordAuthenticationConfigAutomaticReloadSuccess 验证成功时同时更新计数与
+// last_config_info（后者以配置内容哈希为标签，值为 1，用于表达"当前生效的配置"）。
 func TestRecordAuthenticationConfigAutomaticReloadSuccess(t *testing.T) {
 	expectedValue := `
 	# HELP apiserver_authentication_config_controller_automatic_reloads_total [BETA] Total number of automatic reloads of authentication configuration split by status and apiserver identity.
@@ -83,6 +88,8 @@ func TestRecordAuthenticationConfigAutomaticReloadSuccess(t *testing.T) {
 	}
 }
 
+// TestAuthenticationConfigAutomaticReloadLastTimestampSeconds 验证时间戳 gauge 按
+// status 分标签暴露，且保留秒级精度。
 func TestAuthenticationConfigAutomaticReloadLastTimestampSeconds(t *testing.T) {
 	testCases := []struct {
 		expectedValue string
@@ -124,6 +131,8 @@ func TestAuthenticationConfigAutomaticReloadLastTimestampSeconds(t *testing.T) {
 	}
 }
 
+// TestRecordAuthenticationConfigAutomaticReloadSuccess_StaleMetricCleanup 验证配置切换后
+// 旧哈希对应的 gauge 会被清除，避免监控端误以为存在多个生效配置。
 func TestRecordAuthenticationConfigAutomaticReloadSuccess_StaleMetricCleanup(t *testing.T) {
 	ResetMetricsForTest()
 	RegisterMetrics()

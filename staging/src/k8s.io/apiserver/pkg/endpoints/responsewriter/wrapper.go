@@ -55,6 +55,9 @@ type UserProvidedDecorator interface {
 //     implements the UserProvidedDecorator interface. A user-provided decorator
 //     may or may not implement http.CloseNotifier, http.Flusher or http.Hijacker.
 //   - "inner": the ResponseWriter that the user-provided decorator extends.
+//
+// 关键不变量：返回对象暴露的可选接口集合必须与 inner 完全一致，
+// 否则调用方按接口断言时会误判连接能力（例如 HTTP/2 下谎报可 Hijack）。
 func WrapForHTTP1Or2(decorator UserProvidedDecorator) http.ResponseWriter {
 	// from go net/http documentation:
 	// The default HTTP/1.x and HTTP/2 ResponseWriter implementations support Flusher
@@ -105,6 +108,7 @@ type CloseNotifierFlusher interface {
 // GetOriginal goes through the chain of wrapped http.ResponseWriter objects
 // and returns the original http.ResponseWriter object provided to the first
 // request handler in the filter chain.
+// 用于需要访问底层连接（如 hijack、flush）的过滤器绕过装饰层。
 func GetOriginal(w http.ResponseWriter) http.ResponseWriter {
 	decorator, ok := w.(UserProvidedDecorator)
 	if !ok {
@@ -114,6 +118,7 @@ func GetOriginal(w http.ResponseWriter) http.ResponseWriter {
 	inner := decorator.Unwrap()
 	if inner == w {
 		// infinite cycle here, we should never be here though.
+		// 自引用会无限递归，宁可 panic 也不要栈溢出。
 		panic("http.ResponseWriter decorator chain has a cycle")
 	}
 
@@ -138,6 +143,7 @@ type outerWithCloseNotifyAndFlush struct {
 }
 
 func (wr outerWithCloseNotifyAndFlush) CloseNotify() <-chan bool {
+	// 优先使用装饰器自己的实现，它可能带有额外语义；否则回退到 inner。
 	if notifier, ok := wr.UserProvidedDecorator.(http.CloseNotifier); ok {
 		return notifier.CloseNotify()
 	}
@@ -145,6 +151,7 @@ func (wr outerWithCloseNotifyAndFlush) CloseNotify() <-chan bool {
 	return wr.InnerCloseNotifierFlusher.CloseNotify()
 }
 
+// Flush 同样优先委托给装饰器，保证装饰器对 flush 的拦截不被绕过。
 func (wr outerWithCloseNotifyAndFlush) Flush() {
 	if flusher, ok := wr.UserProvidedDecorator.(http.Flusher); ok {
 		flusher.Flush()
@@ -171,6 +178,7 @@ type outerWithCloseNotifyFlushAndHijack struct {
 	InnerHijacker http.Hijacker
 }
 
+// Hijack 仅在 inner 本身可 hijack 时才会被调用到（外层类型只在那种情况下构造）。
 func (wr outerWithCloseNotifyFlushAndHijack) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := wr.UserProvidedDecorator.(http.Hijacker); ok {
 		return hijacker.Hijack()

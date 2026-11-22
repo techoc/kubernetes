@@ -30,6 +30,10 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 )
 
+// TestLazyMapType 验证 lazy MapValue 的三条核心性质：
+//  1. 通过 MapValue 暴露的变量可被 CEL 正常求值；
+//  2. 每个变量表达式至多求值一次（结果被缓存），重复引用不会重复计算；
+//  3. 未被引用的变量绝不求值，包括被布尔短路跳过的分支。
 func TestLazyMapType(t *testing.T) {
 	env, variablesType, err := buildTestEnv()
 	if err != nil {
@@ -106,10 +110,12 @@ func TestLazyMapType(t *testing.T) {
 	}
 }
 
+// testActivation 是 CEL 求值激活环境，只暴露 variables 一个名字。
 type testActivation struct {
 	variables *MapValue
 }
 
+// compileAndRun 是“编译→建程序→求值”的便捷封装，失败时带上原始表达式便于定位。
 func compileAndRun(env *cel.Env, activation *testActivation, exp string) (ref.Val, error) {
 	ast, issues := env.Compile(exp)
 	if issues != nil {
@@ -126,6 +132,8 @@ func compileAndRun(env *cel.Env, activation *testActivation, exp string) (ref.Va
 	return v, nil
 }
 
+// buildTestEnv 构造带 variables 变量声明的 CEL 环境；Fields 手工填充，
+// 以便测试按需动态追加变量而无需重新构建环境。
 func buildTestEnv() (*cel.Env, *apiservercel.DeclType, error) {
 	variablesType := apiservercel.NewMapType(apiservercel.StringType, apiservercel.AnyType, 0)
 	variablesType.Fields = make(map[string]*apiservercel.DeclField)
@@ -146,6 +154,7 @@ func buildTestEnv() (*cel.Env, *apiservercel.DeclType, error) {
 	return env, variablesType, err
 }
 
+// ResolveName 实现 interpreter.Activation，只解析 variables 名字。
 func (a *testActivation) ResolveName(name string) (any, bool) {
 	switch name {
 	case "variables":
@@ -155,6 +164,7 @@ func (a *testActivation) ResolveName(name string) (any, bool) {
 	}
 }
 
+// Parent 返回 nil，表示没有上层激活作用域。
 func (a *testActivation) Parent() interpreter.Activation {
 	return nil
 }

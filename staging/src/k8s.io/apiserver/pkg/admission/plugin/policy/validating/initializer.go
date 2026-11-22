@@ -22,10 +22,18 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
+// CELPolicyEvaluator is the interface the validating policy plugin exposes to
+// the admission chain. It embeds InitializationValidator so the plugin can be
+// initialized once (type-checking, informer sync) before serving traffic, and
+// Run/HasSynced let the apiserver lifecycle manage its background loops.
 type CELPolicyEvaluator interface {
 	admission.InitializationValidator
 
+	// Validate evaluates all matching policies for the given attributes and
+	// returns an admission error if any policy denies the request.
 	Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error
+	// HasSynced reports whether policy and param caches have synced.
 	HasSynced() bool
+	// Run starts background work and returns when stopCh is closed.
 	Run(stopCh <-chan struct{})
 }

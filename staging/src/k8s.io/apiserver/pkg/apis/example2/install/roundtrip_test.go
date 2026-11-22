@@ -23,6 +23,9 @@ import (
 	examplefuzzer "k8s.io/apiserver/pkg/apis/example/fuzzer"
 )
 
+// TestRoundTrip 验证 example2 组在 Install 注册的所有版本都能无损往返：
+// JSON 编码与 protobuf 编码各走一遍，确保转换函数与 tag 一致。
+// 两个检查必须同时存在——protobuf 路径会暴露 JSON 测试覆盖不到的字段编号问题。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, Install, examplefuzzer.Funcs)
 	roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, examplefuzzer.Funcs)

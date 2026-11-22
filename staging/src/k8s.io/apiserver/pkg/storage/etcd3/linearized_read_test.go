@@ -24,17 +24,16 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 )
 
+// TestLinearizedReadRevisionInvariant 验证线性化读不会抬高 etcd 的 store revision。
+// 背景（etcd 文档 [1]）：线性化请求必须经过 Raft 共识，一轮共识会向 Raft log
+// 追加条目，etcd 可能把其中部分体现为响应头中更高的 store revision。
+// Kubernetes 会在 List 等响应中暴露该 revision，因此它最终是面向客户端的。
+// 默认情况下 *etcd3.store{} 发出的所有请求（包括读）都是线性化的，
+// 但我们不希望非变更请求导致 List 的 resourceVersion 增长。
+// 当前 etcd 的 revision 递增机制保证线性化读不会递增 KV store revision，
+// 本测试用于在该实现细节变化时及时报警。
+// [1] https://etcd.io/docs/v3.5/learning/api_guarantees/#isolation-level-and-consistency-of-replicas
 func TestLinearizedReadRevisionInvariant(t *testing.T) {
-	// The etcd documentation [1] states that "linearized requests must go through the Raft consensus process."
-	// A full round of Raft consensus adds a new item to the Raft log, some of which is surfaced by etcd as a
-	// higher store revision in the response header. Kubernetes exposes this header revision in e.g. List calls,
-	// so it is ultimately client-facing. By default, all the requests that our *etcd3.store{} issues are
-	// linearized. However, this also includes *read* requests, and we would not expect non-mutating requests
-	// against etcd to, by "go[ing] through the Raft consensus process," result in a higher resource version on
-	// List calls. Today, the mechanism etcd uses to increment the store revision ensures that linearized reads
-	// do *not* bump the key-value store revision. This test exists to ensure that we notice if this implementation
-	// detail ever changes.
-	// [1] https://etcd.io/docs/v3.5/learning/api_guarantees/#isolation-level-and-consistency-of-replicas
 	ctx, store, etcdClient := testSetup(t)
 
 	dir := "/pods/"
@@ -48,7 +47,8 @@ func TestLinearizedReadRevisionInvariant(t *testing.T) {
 	originalRevision := out.ResourceVersion
 
 	for i := 0; i < 5; i++ {
-		if _, err := etcdClient.KV.Get(ctx, key); err != nil { // this is by default linearizable, the only option the client library exposes is WithSerializable() to make it *not* a linearized read
+		// 默认即为线性化读；客户端库只提供 WithSerializable() 来改成非线性的读
+		if _, err := etcdClient.KV.Get(ctx, key); err != nil {
 			t.Fatalf("failed to get key: %v", err)
 		}
 	}
@@ -59,6 +59,7 @@ func TestLinearizedReadRevisionInvariant(t *testing.T) {
 	}
 	finalRevision := list.ResourceVersion
 
+	// revision 不变才说明线性化读没有产生新的 Raft 写入。
 	if originalRevision != finalRevision {
 		t.Fatalf("original revision (%s) did not match final revision after linearized reads (%s)", originalRevision, finalRevision)
 	}

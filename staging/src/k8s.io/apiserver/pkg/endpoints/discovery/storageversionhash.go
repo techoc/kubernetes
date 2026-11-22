@@ -25,6 +25,10 @@ import (
 // <group/version/kind> tuple.
 // WARNING: this function is subject to change. Clients shouldn't depend on
 // this function.
+//
+// 该哈希出现在 API 发现文档中，供客户端判断某个资源的存储版本是否变化
+// （例如 storage migration 后）。只取 SHA-256 前 8 字节并以 base64 编码，
+// 是在“冲突概率足够低”和“发现文档体积/可读性”之间取的折中。
 func StorageVersionHash(group, version, kind string) string {
 	gvk := group + "/" + version + "/" + kind
 	bytes := sha256.Sum256([]byte(gvk))

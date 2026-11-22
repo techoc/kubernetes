@@ -275,6 +275,8 @@ func TestCheckForHostnameError(t *testing.T) {
 	}
 }
 
+// TestCheckRespForNoSAN 直接对 PeerCertificates 调用检查器，
+// 验证缺少 SAN 的证书会被判定为不安全并增加计数。
 func TestCheckRespForNoSAN(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -344,6 +346,8 @@ func TestCheckRespForNoSAN(t *testing.T) {
 	}
 }
 
+// TestCheckForInsecureAlgorithmError 通过真实 TLS 往返触发 SHA-1 签名校验错误，
+// 覆盖“服务器证书”和“中间 CA 证书”两种 SHA-1 场景。
 func TestCheckForInsecureAlgorithmError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -435,6 +439,7 @@ func TestCheckForInsecureAlgorithmError(t *testing.T) {
 	}
 }
 
+// TestCheckRespSHA1SignedCert 直接对证书链调用检查器，验证 SHA-1 签名识别不依赖握手错误。
 func TestCheckRespSHA1SignedCert(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -509,6 +514,8 @@ func TestCheckRespSHA1SignedCert(t *testing.T) {
 	}
 }
 
+// Test_x509DeprecatedCertificateMetricsRTWrapper_RoundTrip 验证包装器只负责计数与注解，
+// 不会改变底层 RoundTripper 返回的响应或错误。
 func Test_x509DeprecatedCertificateMetricsRTWrapper_RoundTrip(t *testing.T) {
 	// register the test metrics
 	testCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "testCounter"})
@@ -585,42 +592,52 @@ func Test_x509DeprecatedCertificateMetricsRTWrapper_RoundTrip(t *testing.T) {
 	}
 }
 
+// testRoundTripper 是可替换的 RoundTripper，便于返回固定响应/错误。
 type testRoundTripper func(req *http.Request) (*http.Response, error)
 
+// RoundTrip 调用底层函数。
 func (rt testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt(req)
 }
 
+// newTestRoundTripper 返回始终产出给定响应/错误的 RoundTripper。
 func newTestRoundTripper(resp *http.Response, err error) testRoundTripper {
 	return func(_ *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 }
 
+// testPositiveChecker 对任何输入都报告“发现已弃用特征”。
 type testPositiveChecker struct {
 	counterRaiser
 }
 
+// CheckRoundTripError 始终返回 true。
 func (c *testPositiveChecker) CheckRoundTripError(_ error) bool {
 	return true
 }
 
+// CheckPeerCertificates 始终返回 true。
 func (c *testPositiveChecker) CheckPeerCertificates(_ []*x509.Certificate) bool {
 	return true
 }
 
+// testNegativeChecker 对任何输入都报告“未发现已弃用特征”。
 type testNegativeChecker struct {
 	counterRaiser
 }
 
+// CheckRoundTripError 始终返回 false。
 func (c *testNegativeChecker) CheckRoundTripError(_ error) bool {
 	return false
 }
 
+// CheckPeerCertificates 始终返回 false。
 func (c *testNegativeChecker) CheckPeerCertificates(_ []*x509.Certificate) bool {
 	return false
 }
 
+// httpResponseWithCert 返回带一张证书的响应。
 func httpResponseWithCert() *http.Response {
 	return &http.Response{
 		TLS: &tls.ConnectionState{
@@ -631,10 +648,13 @@ func httpResponseWithCert() *http.Response {
 	}
 }
 
+// httpResponseNoCert 返回不带 TLS 状态的响应。
 func httpResponseNoCert() *http.Response {
 	return &http.Response{}
 }
 
+// testServer 启动一个使用给定证书的 TLS 测试服务器，并把 URL 主机名固定为 localhost，
+// 以便对“证书 SAN 不含匹配主机名”的场景做可控验证。
 func testServer(t *testing.T, serverCert []byte) (*httptest.Server, *url.URL) {
 	rootCAs := x509.NewCertPool()
 	rootCAs.AppendCertsFromPEM(caCert)
@@ -666,6 +686,7 @@ func testServer(t *testing.T, serverCert []byte) (*httptest.Server, *url.URL) {
 	return tlsServer, serverURL
 }
 
+// getSingleCounterValueFromRegistry 从注册表取出唯一计数器的当前值；-1 表示失败。
 func getSingleCounterValueFromRegistry(t *testing.T, r metrics.Gatherer, name string) int {
 	mfs, err := r.Gather()
 	if err != nil {

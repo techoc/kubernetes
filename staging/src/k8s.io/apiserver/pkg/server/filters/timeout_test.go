@@ -47,23 +47,28 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// recorder 是并发安全的计数器，用于统计超时回调被调用的次数。
 type recorder struct {
 	lock  sync.Mutex
 	count int
 }
 
+// Record 原子地递增计数。
 func (r *recorder) Record() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.count++
 }
 
+// Count 返回当前计数。
 func (r *recorder) Count() int {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return r.count
 }
 
+// newHandler 构造一个行为由 channel 控制的 handler：要么写响应，要么 panic。
+// 用 channel 而非 sleep 驱动，使超时与完成之间的竞争可复现。
 func newHandler(responseCh <-chan string, panicCh <-chan interface{}, writeErrCh chan<- error) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -76,6 +81,8 @@ func newHandler(responseCh <-chan string, panicCh <-chan interface{}, writeErrCh
 	})
 }
 
+// TestTimeout 覆盖 WithTimeout 的关键路径：正常完成、超时返回 504、
+// handler panic 被恢复，以及超时后 handler 仍尝试写响应时不重复写。
 func TestTimeout(t *testing.T) {
 	origReallyCrash := runtime.ReallyCrash
 	runtime.ReallyCrash = false
@@ -201,6 +208,8 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
+// TestTimeoutHeaders 验证超时后继续修改响应头是安全的：
+// 响应头一旦提交（超时响应已写出），后续 Set 不应影响已发送的内容或导致 panic。
 func TestTimeoutHeaders(t *testing.T) {
 	origReallyCrash := runtime.ReallyCrash
 	runtime.ReallyCrash = false
@@ -253,6 +262,8 @@ func TestTimeoutHeaders(t *testing.T) {
 	res.Body.Close()
 }
 
+// TestTimeoutRequestHeaders 验证超时后 handler 继续修改请求头不会引发数据竞争
+// （超时包装器会冻结请求头，见 WithTimeoutForNonLongRunningRequests）。
 func TestTimeoutRequestHeaders(t *testing.T) {
 	origReallyCrash := runtime.ReallyCrash
 	runtime.ReallyCrash = false
@@ -314,6 +325,8 @@ func TestTimeoutRequestHeaders(t *testing.T) {
 	res.Body.Close()
 }
 
+// TestTimeoutWithLogging 验证超时与请求日志过滤器组合时仍返回 504，
+// 且超时后 handler 修改请求头不会破坏日志链路。
 func TestTimeoutWithLogging(t *testing.T) {
 	origReallyCrash := runtime.ReallyCrash
 	runtime.ReallyCrash = false
@@ -374,6 +387,8 @@ func TestTimeoutWithLogging(t *testing.T) {
 	res.Body.Close()
 }
 
+// TestErrConnKilled 验证 http.ErrAbortHandler panic 被静默处理：
+// 不应记录堆栈，只记录一条 “Timeout or abort while handling” 日志。
 func TestErrConnKilled(t *testing.T) {
 	var buf bytes.Buffer
 	klog.SetOutput(&buf)
@@ -415,15 +430,19 @@ func TestErrConnKilled(t *testing.T) {
 	}
 }
 
+// panicOnNonReuseTransport 在第二次取到连接时断言连接被复用，
+// 用于验证 HTTP/2 下 panic 不会导致连接被关闭。
 type panicOnNonReuseTransport struct {
 	Transport   http.RoundTripper
 	gotConnSeen bool
 }
 
+// RoundTrip 直接委托给底层 Transport。
 func (t *panicOnNonReuseTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.Transport.RoundTrip(req)
 }
 
+// GotConn 在首次之后检查 Reused，未复用即 panic。
 func (t *panicOnNonReuseTransport) GotConn(info httptrace.GotConnInfo) {
 	if !t.gotConnSeen {
 		t.gotConnSeen = true
@@ -436,6 +455,8 @@ func (t *panicOnNonReuseTransport) GotConn(info httptrace.GotConnInfo) {
 
 // TestErrConnKilledHTTP2 check if HTTP/2 connection is not closed when an HTTP handler panics
 // The net/http library recovers the panic and sends an HTTP/2 RST_STREAM.
+//
+// 与 HTTP/1 不同，HTTP/2 只重置单个流，连接应保持可复用。
 func TestErrConnKilledHTTP2(t *testing.T) {
 	var buf bytes.Buffer
 	klog.SetOutput(&buf)
@@ -518,6 +539,8 @@ func TestErrConnKilledHTTP2(t *testing.T) {
 	}
 }
 
+// TestResponseWriterDecorator 验证超时 writer 正确实现 UserProvidedDecorator，
+// 使下游过滤器能够解包拿到原始 ResponseWriter。
 func TestResponseWriterDecorator(t *testing.T) {
 	decorator := &baseTimeoutWriter{
 		w: &responsewriter.FakeResponseWriter{},
@@ -529,6 +552,8 @@ func TestResponseWriterDecorator(t *testing.T) {
 	}
 }
 
+// isStackTraceLoggedByRuntime 判断日志中是否包含 runtime 的 panic 堆栈，
+// 用于断言 ErrAbortHandler 不应产生堆栈噪音。
 func isStackTraceLoggedByRuntime(message string) bool {
 	// Check the captured output for the following patterns to find out if the
 	// stack trace is included in the log:

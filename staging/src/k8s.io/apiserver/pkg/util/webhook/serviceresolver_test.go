@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestDefaultServiceResolver 验证 service 引用的解析格式：
+// 需要同时提供 namespace 与 name，端口来自参数，结果为集群内 DNS 形式。
 func TestDefaultServiceResolver(t *testing.T) {
 	scenarios := []struct {
 		serviceName      string

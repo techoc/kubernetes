@@ -25,6 +25,9 @@ import (
 )
 
 // Test provides a test() function that returns true.
+//
+// 仅供测试使用：默认版本号取 MaxUint32，即“所有版本的函数都注册”。
+// 通过 TestVersion 可以模拟特定 CEL 库版本下的函数集合，用于验证库版本控制逻辑。
 func Test(options ...TestOption) cel.EnvOption {
 	t := &testLib{version: math.MaxUint32}
 	for _, o := range options {
@@ -33,16 +36,20 @@ func Test(options ...TestOption) cel.EnvOption {
 	return cel.Lib(t)
 }
 
+// testLib 是一个可配置版本的假 CEL 库实现。
 type testLib struct {
 	version uint32
 }
 
+// LibraryName 返回库名，cel-go 用它做去重与冲突检测。
 func (*testLib) LibraryName() string {
 	return "kubernetes.test"
 }
 
+// TestOption 用于在构造 testLib 时注入配置。
 type TestOption func(*testLib) *testLib
 
+// TestVersion 指定库版本；不同版本暴露不同的函数集合，以模拟真实的版本演进。
 func TestVersion(version uint32) func(lib *testLib) *testLib {
 	return func(sl *testLib) *testLib {
 		sl.version = version
@@ -50,6 +57,8 @@ func TestVersion(version uint32) func(lib *testLib) *testLib {
 	}
 }
 
+// CompileOptions 按版本注册函数：version 0 时 test() 返回 true；
+// version >= 1 时 test() 改为返回 false 并新增 testV1()，用于观测实际生效的版本。
 func (t *testLib) CompileOptions() []cel.EnvOption {
 	var options []cel.EnvOption
 
@@ -78,6 +87,7 @@ func (t *testLib) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 返回空集合：测试库没有运行时需要的额外配置。
 func (*testLib) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }

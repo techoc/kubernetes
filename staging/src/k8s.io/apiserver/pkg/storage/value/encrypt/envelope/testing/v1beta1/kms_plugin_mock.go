@@ -47,6 +47,10 @@ const (
 
 // Base64Plugin gRPC sever for a mock KMS provider.
 // Uses base64 to simulate encrypt and decrypt.
+//
+// 这是测试替身而非真正的加密实现：base64 只做可逆编码，用来验证 KMS v2
+// 客户端的协议交互（重载、健康检查、失败状态）而不引入真实密钥管理。
+// 用互斥锁保护共享状态，因为 gRPC 服务端会并发调用各 RPC。
 type Base64Plugin struct {
 	grpcServer         *grpc.Server
 	listener           net.Listener
@@ -69,11 +73,13 @@ func NewBase64Plugin(t *testing.T, socketPath string) *Base64Plugin {
 	}
 
 	// Make sure we don't have a leftover socket.
+	// 上一次测试异常退出可能残留 socket 文件，listen 会因此失败。
 	_ = os.Remove(socketPath)
 	kmsapi.RegisterKeyManagementServiceServer(server, result)
 	if err := result.start(); err != nil {
 		t.Fatalf("failed to start KMS plugin, err: %v", err)
 	}
+	// 注册清理，确保测试结束或失败时关闭 server 并删除 socket。
 	t.Cleanup(result.CleanUp)
 	if err := waitForBase64PluginToBeUp(result); err != nil {
 		t.Fatalf("failed to start KMS plugin: err: %v", err)
@@ -82,6 +88,9 @@ func NewBase64Plugin(t *testing.T, socketPath string) *Base64Plugin {
 }
 
 // waitForBase64PluginToBeUp waits until the plugin is ready to serve requests.
+//
+// Serve 在独立 goroutine 中启动，监听建立后仍可能尚未可服务，因此用一次
+// Encrypt 探活作为就绪信号。
 func waitForBase64PluginToBeUp(plugin *Base64Plugin) error {
 	var gRPCErr error
 	pollErr := wait.PollImmediate(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
@@ -115,11 +124,14 @@ func (s *Base64Plugin) start() error {
 	}
 	klog.InfoS("Starting KMS Plugin", "socketPath", s.socketPath)
 
+	// Serve 阻塞直到 Stop，必须放在 goroutine 中。
 	go s.grpcServer.Serve(s.listener)
 	return nil
 }
 
 // CleanUp stops gRPC server and the underlying listener.
+//
+// 同时删除 socket 文件，否则下一次测试可能复用到已失效的 socket。
 func (s *Base64Plugin) CleanUp() {
 	s.grpcServer.Stop()
 	_ = s.listener.Close()
@@ -127,6 +139,8 @@ func (s *Base64Plugin) CleanUp() {
 }
 
 // EnterFailedState places the plugin into failed state.
+//
+// 进入失败态后所有加解密返回 FailedPrecondition，用于模拟 KMS 密钥被禁用。
 func (s *Base64Plugin) EnterFailedState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -156,6 +170,7 @@ func (s *Base64Plugin) Decrypt(ctx context.Context, request *kmsapi.DecryptReque
 		return nil, status.Error(codes.FailedPrecondition, "failed precondition - key disabled")
 	}
 
+	// 先按编码长度分配缓冲，再以实际解码长度切片返回。
 	buf := make([]byte, base64.StdEncoding.DecodedLen(len(request.Cipher)))
 	n, err := base64.StdEncoding.Decode(buf, request.Cipher)
 	if err != nil {
@@ -170,6 +185,7 @@ func (s *Base64Plugin) Encrypt(ctx context.Context, request *kmsapi.EncryptReque
 	klog.V(3).InfoS("Received Encrypt Request", "plain", string(request.Plain))
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 记录最后一次请求，供测试断言客户端传入的明文。
 	s.lastEncryptRequest = request
 
 	if s.inFailedState {

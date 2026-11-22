@@ -36,6 +36,10 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
+// Authz 为 CEL 提供授权检查函数库。
+// 注意：只有 API 中向 CEL 表达式提供了 'authorizer' 变量的字段才支持授权检查；
+// 具体哪些字段可用请查阅使用 CEL 的 API 字段文档。
+//
 // Authz provides a CEL function library extension for performing authorization checks.
 // Note that authorization checks are only supported for CEL expression fields in the API
 // where an 'authorizer' variable is provided to the CEL expression. See the
@@ -221,18 +225,23 @@ import (
 // Examples:
 //
 //	authorizer.group('').resource('pods').labelSelector('app=example').check('list').allowed()
+//
+// Authz 返回可注册到 CEL 环境的授权函数库。
 func Authz() cel.EnvOption {
 	return cel.Lib(authzLib)
 }
 
 var authzLib = &authz{}
 
+// authz 实现 cel.Library，提供 path/group/serviceAccount/resource 等函数。
 type authz struct{}
 
+// LibraryName 返回库名称，用于环境配置与冲突检测。
 func (*authz) LibraryName() string {
 	return "kubernetes.authz"
 }
 
+// Types 返回该库引入的 CEL 对象类型。
 func (*authz) Types() []*cel.Type {
 	return []*cel.Type{
 		AuthorizerType,
@@ -242,10 +251,14 @@ func (*authz) Types() []*cel.Type {
 		DecisionType}
 }
 
+// declarations 返回函数重载声明。
 func (*authz) declarations() map[string][]cel.FunctionOpt {
 	return authzLibraryDecls
 }
 
+// authzLibraryDecls 定义 Authz 库的全部函数重载：
+// 以 Authorizer 为接收者的 path/group/serviceAccount，以 GroupCheck 为接收者的 resource，
+// 以 ResourceCheck 为接收者的 subresource/namespace/name/check，以及 Decision 上的查询方法。
 var authzLibraryDecls = map[string][]cel.FunctionOpt{
 	"path": {
 		cel.MemberOverload("authorizer_path", []*cel.Type{AuthorizerType, cel.StringType}, PathCheckType,
@@ -287,6 +300,7 @@ var authzLibraryDecls = map[string][]cel.FunctionOpt{
 			cel.UnaryBinding(decisionReason))},
 }
 
+// CompileOptions 把声明转换为 CEL 环境选项。
 func (*authz) CompileOptions() []cel.EnvOption {
 	options := make([]cel.EnvOption, 0, len(authzLibraryDecls))
 	for name, overloads := range authzLibraryDecls {
@@ -295,10 +309,14 @@ func (*authz) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 无额外程序选项：授权检查在绑定的 Go 函数内同步完成。
 func (*authz) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// AuthzSelectors 为授权检查增加 fieldSelector 与 labelSelector 过滤能力，
+// 需要同时启用 Authz 库。使用方式与可用性参见 Authz 库文档。
+//
 // AuthzSelectors provides a CEL function library extension for adding fieldSelector and
 // labelSelector filters to authorization checks. This requires the Authz library.
 // See documentation of the Authz library for use and availability of the authorizer variable.
@@ -326,26 +344,33 @@ func (*authz) ProgramOptions() []cel.ProgramOption {
 // Examples:
 //
 //	authorizer.group('').resource('pods').labelSelector('app=example').check('list').allowed()
+//
+// AuthzSelectors 返回可注册到 CEL 环境的选择器扩展库。
 func AuthzSelectors() cel.EnvOption {
 	return cel.Lib(authzSelectorsLib)
 }
 
 var authzSelectorsLib = &authzSelectors{}
 
+// authzSelectors 实现 cel.Library，只新增 fieldSelector/labelSelector 两个函数。
 type authzSelectors struct{}
 
+// LibraryName 返回库名称。
 func (*authzSelectors) LibraryName() string {
 	return "kubernetes.authzSelectors"
 }
 
+// Types 返回该库使用的对象类型：只扩展 ResourceCheck。
 func (*authzSelectors) Types() []*cel.Type {
 	return []*cel.Type{ResourceCheckType}
 }
 
+// declarations 返回函数重载声明。
 func (*authzSelectors) declarations() map[string][]cel.FunctionOpt {
 	return authzSelectorsLibraryDecls
 }
 
+// authzSelectorsLibraryDecls 定义选择器扩展的函数重载。
 var authzSelectorsLibraryDecls = map[string][]cel.FunctionOpt{
 	"fieldSelector": {
 		cel.MemberOverload("authorizer_fieldselector", []*cel.Type{ResourceCheckType, cel.StringType}, ResourceCheckType,
@@ -355,6 +380,7 @@ var authzSelectorsLibraryDecls = map[string][]cel.FunctionOpt{
 			cel.BinaryBinding(resourceCheckLabelSelector))},
 }
 
+// CompileOptions 把声明转换为 CEL 环境选项。
 func (*authzSelectors) CompileOptions() []cel.EnvOption {
 	options := make([]cel.EnvOption, 0, len(authzSelectorsLibraryDecls))
 	for name, overloads := range authzSelectorsLibraryDecls {
@@ -363,10 +389,12 @@ func (*authzSelectors) CompileOptions() []cel.EnvOption {
 	return options
 }
 
+// ProgramOptions 无额外程序选项。
 func (*authzSelectors) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{}
 }
 
+// authorizerPath 实现 authorizer.path(string)：路径去空白后不能为空。
 func authorizerPath(arg1, arg2 ref.Val) ref.Val {
 	authz, ok := arg1.(authorizerVal)
 	if !ok {
@@ -378,6 +406,7 @@ func authorizerPath(arg1, arg2 ref.Val) ref.Val {
 		return types.MaybeNoSuchOverloadErr(arg1)
 	}
 
+	// 空白路径既无法匹配任何 API 路径，也容易掩盖配置错误，直接报错。
 	if len(strings.TrimSpace(path)) == 0 {
 		return types.NewErr("path must not be empty")
 	}
@@ -385,6 +414,7 @@ func authorizerPath(arg1, arg2 ref.Val) ref.Val {
 	return authz.pathCheck(path)
 }
 
+// authorizerGroup 实现 authorizer.group(string)：空字符串表示 core group。
 func authorizerGroup(arg1, arg2 ref.Val) ref.Val {
 	authz, ok := arg1.(authorizerVal)
 	if !ok {
@@ -399,6 +429,8 @@ func authorizerGroup(arg1, arg2 ref.Val) ref.Val {
 	return authz.groupCheck(group)
 }
 
+// authorizerServiceAccount 实现 authorizer.serviceAccount(namespace, name)：
+// 返回以该 ServiceAccount 身份进行后续检查的 Authorizer。
 func authorizerServiceAccount(args ...ref.Val) ref.Val {
 	argn := len(args)
 	if argn != 3 {
@@ -420,6 +452,7 @@ func authorizerServiceAccount(args ...ref.Val) ref.Val {
 		return types.MaybeNoSuchOverloadErr(args[2])
 	}
 
+	// 在编译/求值阶段校验名称格式，避免构造出不可能存在的 SA 身份。
 	if errors := apimachineryvalidation.ValidateServiceAccountName(name, false); len(errors) > 0 {
 		return types.NewErr("Invalid service account name")
 	}
@@ -429,6 +462,7 @@ func authorizerServiceAccount(args ...ref.Val) ref.Val {
 	return authz.serviceAccount(namespace, name)
 }
 
+// groupCheckResource 实现 GroupCheck.resource(string)：资源名不能为空。
 func groupCheckResource(arg1, arg2 ref.Val) ref.Val {
 	groupCheck, ok := arg1.(groupCheckVal)
 	if !ok {
@@ -446,6 +480,7 @@ func groupCheckResource(arg1, arg2 ref.Val) ref.Val {
 	return groupCheck.resourceCheck(resource)
 }
 
+// resourceCheckSubresource 设置子资源名；空字符串表示无子资源。
 func resourceCheckSubresource(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -457,11 +492,14 @@ func resourceCheckSubresource(arg1, arg2 ref.Val) ref.Val {
 		return types.MaybeNoSuchOverloadErr(arg1)
 	}
 
+	// 值类型拷贝后修改，保持 CEL 值的不可变语义。
 	result := resourceCheck
 	result.subresource = subresource
 	return result
 }
 
+// resourceCheckFieldSelector 记录原始字段选择器字符串；
+// 解析推迟到 Authorize 时进行，解析失败时仍会发起检查并带上解析错误。
 func resourceCheckFieldSelector(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -478,6 +516,7 @@ func resourceCheckFieldSelector(arg1, arg2 ref.Val) ref.Val {
 	return result
 }
 
+// resourceCheckLabelSelector 记录原始标签选择器字符串，解析同样推迟到 Authorize。
 func resourceCheckLabelSelector(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -494,6 +533,7 @@ func resourceCheckLabelSelector(arg1, arg2 ref.Val) ref.Val {
 	return result
 }
 
+// resourceCheckNamespace 设置命名空间；空字符串表示集群级资源。
 func resourceCheckNamespace(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -510,6 +550,7 @@ func resourceCheckNamespace(arg1, arg2 ref.Val) ref.Val {
 	return result
 }
 
+// resourceCheckName 设置资源名；空字符串表示不限定具体实例。
 func resourceCheckName(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -526,6 +567,7 @@ func resourceCheckName(arg1, arg2 ref.Val) ref.Val {
 	return result
 }
 
+// pathCheckCheck 执行非资源请求的授权检查。verb 为 HTTP 方法。
 func pathCheckCheck(arg1, arg2 ref.Val) ref.Val {
 	pathCheck, ok := arg1.(pathCheckVal)
 	if !ok {
@@ -540,6 +582,7 @@ func pathCheckCheck(arg1, arg2 ref.Val) ref.Val {
 	return pathCheck.Authorize(context.TODO(), httpRequestVerb)
 }
 
+// resourceCheckCheck 执行资源请求的授权检查。
 func resourceCheckCheck(arg1, arg2 ref.Val) ref.Val {
 	resourceCheck, ok := arg1.(resourceCheckVal)
 	if !ok {
@@ -554,6 +597,7 @@ func resourceCheckCheck(arg1, arg2 ref.Val) ref.Val {
 	return resourceCheck.Authorize(context.TODO(), apiVerb)
 }
 
+// decisionErrored 返回检查是否出错。
 func decisionErrored(arg ref.Val) ref.Val {
 	decision, ok := arg.(decisionVal)
 	if !ok {
@@ -563,6 +607,7 @@ func decisionErrored(arg ref.Val) ref.Val {
 	return types.Bool(decision.err != nil)
 }
 
+// decisionError 返回错误字符串；无错误时返回空串。
 func decisionError(arg ref.Val) ref.Val {
 	decision, ok := arg.(decisionVal)
 	if !ok {
@@ -575,6 +620,8 @@ func decisionError(arg ref.Val) ref.Val {
 	return types.String(decision.err.Error())
 }
 
+// decisionAllowed 仅在决策为 Allow 时返回 true；
+// NoOpinion 不算 allowed，避免把“无意见”误当作授权通过。
 func decisionAllowed(arg ref.Val) ref.Val {
 	decision, ok := arg.(decisionVal)
 	if !ok {
@@ -584,6 +631,7 @@ func decisionAllowed(arg ref.Val) ref.Val {
 	return types.Bool(decision.authDecision == authorizer.DecisionAllow)
 }
 
+// decisionReason 返回授权决策的原因字符串。
 func decisionReason(arg ref.Val) ref.Val {
 	decision, ok := arg.(decisionVal)
 	if !ok {
@@ -594,33 +642,41 @@ func decisionReason(arg ref.Val) ref.Val {
 }
 
 var (
-	AuthorizerType    = cel.ObjectType("kubernetes.authorization.Authorizer")
-	PathCheckType     = cel.ObjectType("kubernetes.authorization.PathCheck")
-	GroupCheckType    = cel.ObjectType("kubernetes.authorization.GroupCheck")
+	// AuthorizerType 是 authorizer 变量的 CEL 类型。
+	AuthorizerType = cel.ObjectType("kubernetes.authorization.Authorizer")
+	// PathCheckType 是非资源路径检查的 CEL 类型。
+	PathCheckType = cel.ObjectType("kubernetes.authorization.PathCheck")
+	// GroupCheckType 是 API group 级检查的 CEL 类型。
+	GroupCheckType = cel.ObjectType("kubernetes.authorization.GroupCheck")
+	// ResourceCheckType 是资源级检查的 CEL 类型。
 	ResourceCheckType = cel.ObjectType("kubernetes.authorization.ResourceCheck")
-	DecisionType      = cel.ObjectType("kubernetes.authorization.Decision")
+	// DecisionType 是授权决策结果的 CEL 类型。
+	DecisionType = cel.ObjectType("kubernetes.authorization.Decision")
 )
 
-// Resource represents an API resource
+// Resource 表示一个 API 资源。
 type Resource interface {
-	// GetName returns the name of the object as presented in the request.  On a CREATE operation, the client
-	// may omit name and rely on the server to generate the name.  If that is the case, this method will return
-	// the empty string
+	// GetName 返回请求中呈现的对象名称。CREATE 操作中客户端可能省略名称、
+	// 由服务端生成，此时该方法返回空字符串
 	GetName() string
-	// GetNamespace is the namespace associated with the request (if any)
+	// GetNamespace 返回请求关联的命名空间（若有）
 	GetNamespace() string
-	// GetResource is the name of the resource being requested.  This is not the kind.  For example: pods
+	// GetResource 返回被请求的资源名（不是 kind）。例如：pods
 	GetResource() schema.GroupVersionResource
-	// GetSubresource is the name of the subresource being requested.  This is a different resource, scoped to the parent resource, but it may have a different kind.
-	// For instance, /pods has the resource "pods" and the kind "Pod", while /pods/foo/status has the resource "pods", the sub resource "status", and the kind "Pod"
-	// (because status operates on pods). The binding resource for a pod though may be /pods/foo/binding, which has resource "pods", subresource "binding", and kind "Binding".
+	// GetSubresource 返回被请求的子资源名。子资源是作用在父资源上的另一种资源，kind 可能不同。
+	// 例如 /pods 的资源是 "pods"、kind 是 "Pod"，而 /pods/foo/status 的资源是 "pods"、
+	// 子资源是 "status"、kind 仍是 "Pod"（因为 status 作用于 pod）。pod 的绑定子资源则是
+	// /pods/foo/binding，资源 "pods"、子资源 "binding"、kind "Binding"。
 	GetSubresource() string
 }
 
+// NewAuthorizerVal 为给定用户与授权器构造 CEL authorizer 值。
 func NewAuthorizerVal(userInfo user.Info, authorizer authorizer.UnconditionalAuthorizer) ref.Val {
 	return authorizerVal{receiverOnlyObjectVal: receiverOnlyVal(AuthorizerType), userInfo: userInfo, authAuthorizer: authorizer}
 }
 
+// NewResourceAuthorizerVal 构造已预填当前请求资源信息的 ResourceCheck 值，
+// 使 CEL 中的 authorizer 变量默认针对当前请求的资源做检查。
 func NewResourceAuthorizerVal(userInfo user.Info, authorizer authorizer.UnconditionalAuthorizer, requestResource Resource) ref.Val {
 	a := authorizerVal{receiverOnlyObjectVal: receiverOnlyVal(AuthorizerType), userInfo: userInfo, authAuthorizer: authorizer}
 	resource := requestResource.GetResource()
@@ -632,20 +688,25 @@ func NewResourceAuthorizerVal(userInfo user.Info, authorizer authorizer.Uncondit
 	return r
 }
 
+// authorizerVal 是 CEL 中 authorizer 变量的实现，持有身份与底层授权器。
 type authorizerVal struct {
 	receiverOnlyObjectVal
 	userInfo       user.Info
 	authAuthorizer authorizer.UnconditionalAuthorizer
 }
 
+// pathCheck 构造针对指定路径的检查对象。
 func (a authorizerVal) pathCheck(path string) pathCheckVal {
 	return pathCheckVal{receiverOnlyObjectVal: receiverOnlyVal(PathCheckType), authorizer: a, path: path}
 }
 
+// groupCheck 构造针对指定 API group 的检查对象。
 func (a authorizerVal) groupCheck(group string) groupCheckVal {
 	return groupCheckVal{receiverOnlyObjectVal: receiverOnlyVal(GroupCheckType), authorizer: a, group: group}
 }
 
+// serviceAccount 返回以指定 ServiceAccount 为身份的 authorizerVal；
+// 底层授权器保持不变，只有 userInfo 被替换。
 func (a authorizerVal) serviceAccount(namespace, name string) authorizerVal {
 	sa := &serviceaccount.ServiceAccountInfo{Name: name, Namespace: namespace}
 	return authorizerVal{
@@ -655,12 +716,14 @@ func (a authorizerVal) serviceAccount(namespace, name string) authorizerVal {
 	}
 }
 
+// pathCheckVal 表示一次非资源路径检查。
 type pathCheckVal struct {
 	receiverOnlyObjectVal
 	authorizer authorizerVal
 	path       string
 }
 
+// Authorize 以当前身份对路径发起授权检查。
 func (a pathCheckVal) Authorize(ctx context.Context, verb string) ref.Val {
 	attr := &authorizer.AttributesRecord{
 		Path: a.path,
@@ -672,16 +735,19 @@ func (a pathCheckVal) Authorize(ctx context.Context, verb string) ref.Val {
 	return newDecision(decision, err, reason)
 }
 
+// groupCheckVal 表示针对某个 API group 的检查构造器。
 type groupCheckVal struct {
 	receiverOnlyObjectVal
 	authorizer authorizerVal
 	group      string
 }
 
+// resourceCheck 构造针对指定资源的检查对象。
 func (g groupCheckVal) resourceCheck(resource string) resourceCheckVal {
 	return resourceCheckVal{receiverOnlyObjectVal: receiverOnlyVal(ResourceCheckType), groupCheck: g, resource: resource}
 }
 
+// resourceCheckVal 表示一次资源检查的完整参数。
 type resourceCheckVal struct {
 	receiverOnlyObjectVal
 	groupCheck    groupCheckVal
@@ -693,6 +759,8 @@ type resourceCheckVal struct {
 	labelSelector string
 }
 
+// Authorize 以当前身份对资源发起授权检查。
+// APIVersion 固定为 "*"：CEL 表达式不感知请求的具体版本，匹配任意版本更符合语义。
 func (a resourceCheckVal) Authorize(ctx context.Context, verb string) ref.Val {
 	attr := &authorizer.AttributesRecord{
 		ResourceRequest: true,
@@ -706,6 +774,8 @@ func (a resourceCheckVal) Authorize(ctx context.Context, verb string) ref.Val {
 		User:            a.groupCheck.authorizer.userInfo,
 	}
 
+	// 选择器解析失败时不丢弃检查，而是把解析错误一并交给授权器，
+	// 由授权器按自身策略处理（通常意味着更严格）。
 	if len(a.fieldSelector) > 0 {
 		selector, err := fields.ParseSelector(a.fieldSelector)
 		if err != nil {
@@ -727,10 +797,12 @@ func (a resourceCheckVal) Authorize(ctx context.Context, verb string) ref.Val {
 	return newDecision(decision, err, reason)
 }
 
+// newDecision 把授权器返回值包装为 CEL decision 值。
 func newDecision(authDecision authorizer.Decision, err error, reason string) decisionVal {
 	return decisionVal{receiverOnlyObjectVal: receiverOnlyVal(DecisionType), authDecision: authDecision, err: err, reason: reason}
 }
 
+// decisionVal 是 CEL 中 Decision 对象的实现。
 type decisionVal struct {
 	receiverOnlyObjectVal
 	err          error
@@ -738,24 +810,23 @@ type decisionVal struct {
 	reason       string
 }
 
-// receiverOnlyObjectVal provides an implementation of ref.Val for
-// any object type that has receiver functions but does not expose any fields to
-// CEL.
+// receiverOnlyObjectVal 为“只有接收者函数、不向 CEL 暴露任何字段”的对象类型
+// 提供 ref.Val 实现。
 type receiverOnlyObjectVal struct {
 	typeValue *types.Type
 }
 
-// receiverOnlyVal returns a receiverOnlyObjectVal for the given type.
+// receiverOnlyVal 返回给定类型的 receiverOnlyObjectVal。
 func receiverOnlyVal(objectType *cel.Type) receiverOnlyObjectVal {
 	return receiverOnlyObjectVal{typeValue: types.NewTypeValue(objectType.String())}
 }
 
-// ConvertToNative implements ref.Val.ConvertToNative.
+// ConvertToNative 实现 ref.Val.ConvertToNative：这些对象不支持转为 Go 原生类型。
 func (a receiverOnlyObjectVal) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	return nil, fmt.Errorf("type conversion error from '%s' to '%v'", a.typeValue.String(), typeDesc)
 }
 
-// ConvertToType implements ref.Val.ConvertToType.
+// ConvertToType 实现 ref.Val.ConvertToType：只允许转回自身类型或 type 类型。
 func (a receiverOnlyObjectVal) ConvertToType(typeVal ref.Type) ref.Val {
 	switch typeVal {
 	case a.typeValue:
@@ -766,7 +837,7 @@ func (a receiverOnlyObjectVal) ConvertToType(typeVal ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", a.typeValue, typeVal)
 }
 
-// Equal implements ref.Val.Equal.
+// Equal 实现 ref.Val.Equal：仅当另一方是同一类型的 receiverOnlyObjectVal 时比较。
 func (a receiverOnlyObjectVal) Equal(other ref.Val) ref.Val {
 	o, ok := other.(receiverOnlyObjectVal)
 	if !ok {
@@ -775,12 +846,12 @@ func (a receiverOnlyObjectVal) Equal(other ref.Val) ref.Val {
 	return types.Bool(a == o)
 }
 
-// Type implements ref.Val.Type.
+// Type 实现 ref.Val.Type。
 func (a receiverOnlyObjectVal) Type() ref.Type {
 	return a.typeValue
 }
 
-// Value implements ref.Val.Value.
+// Value 实现 ref.Val.Value：这些对象不能作为普通值读取。
 func (a receiverOnlyObjectVal) Value() any {
 	return types.NoSuchOverloadErr()
 }

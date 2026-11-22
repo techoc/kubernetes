@@ -29,6 +29,8 @@ import (
 	"k8s.io/apiserver/pkg/apis/apiserver"
 )
 
+// TestStructure 覆盖 EncryptionConfiguration 的整体结构校验：资源/provider 数量、必填字段、
+// KMS 版本兼容性等。reload=true 表示对运行中配置的热更新校验。
 func TestStructure(t *testing.T) {
 	root := field.NewPath("resources")
 	firstResourcePath := root.Index(0)
@@ -930,6 +932,8 @@ func TestStructure(t *testing.T) {
 	}
 }
 
+// TestKey 校验 identity/aesgcm/aescbc/secretbox 的 key 名称与密钥长度，
+// 错误的密钥长度会导致加密器初始化失败，必须在配置期拦截。
 func TestKey(t *testing.T) {
 	root := field.NewPath("resources")
 	path := root.Index(0).Child("provider").Index(0).Child("key").Index(0)
@@ -977,6 +981,7 @@ func TestKey(t *testing.T) {
 	}
 }
 
+// TestKMSProviderTimeout 校验 KMS 调用超时必须为正；0 或负值会让每次加解密立即超时。
 func TestKMSProviderTimeout(t *testing.T) {
 	timeoutField := field.NewPath("Resource").Index(0).Child("Provider").Index(0).Child("KMS").Child("Timeout")
 	negativeTimeout := &metav1.Duration{Duration: -1 * time.Minute}
@@ -1014,6 +1019,7 @@ func TestKMSProviderTimeout(t *testing.T) {
 	}
 }
 
+// TestKMSEndpoint 校验 KMS endpoint 必须使用 unix:// scheme，防止误配成网络地址。
 func TestKMSEndpoint(t *testing.T) {
 	endpointField := field.NewPath("Resource").Index(0).Child("Provider").Index(0).Child("kms").Child("endpoint")
 	testCases := []struct {
@@ -1054,6 +1060,7 @@ func TestKMSEndpoint(t *testing.T) {
 	}
 }
 
+// TestKMSProviderCacheSize 校验 v1 KMS 的 cacheSize 必须非零；为 0 会使 DEK 缓存失效。
 func TestKMSProviderCacheSize(t *testing.T) {
 	root := field.NewPath("resources")
 	cacheField := root.Index(0).Child("kms").Child("cachesize")
@@ -1097,6 +1104,8 @@ func TestKMSProviderCacheSize(t *testing.T) {
 	}
 }
 
+// TestKMSProviderAPIVersion 校验只接受已实现的 KMS API 版本（v1/v2），
+// 避免配置了未知协议导致 apiserver 无法与插件通信。
 func TestKMSProviderAPIVersion(t *testing.T) {
 	apiVersionField := field.NewPath("Resource").Index(0).Child("Provider").Index(0).Child("KMS").Child("APIVersion")
 
@@ -1130,6 +1139,9 @@ func TestKMSProviderAPIVersion(t *testing.T) {
 	}
 }
 
+// TestKMSProviderName 校验 KMS provider 名称的格式与唯一性。
+// reload=true 时还需要与已存在的 provider 名称集合比较：重载后名称复用时，
+// 插件无法区分新旧配置，KMSEndpoint 也无法安全路由。
 func TestKMSProviderName(t *testing.T) {
 	nameField := field.NewPath("Resource").Index(0).Child("Provider").Index(0).Child("KMS").Child("name")
 

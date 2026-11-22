@@ -20,4 +20,7 @@ limitations under the License.
 // +groupName=resourcequota.admission.k8s.io
 
 // Package v1alpha1 is the v1alpha1 version of the API.
+//
+// 这是 resourcequota 准入配置的外部版本；conversion-gen 会生成到内部
+// 包（apis/resourcequota）的转换代码，因此字段语义必须与内部类型保持一致。
 package v1alpha1

@@ -24,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestPreconditionsCheckWithNilObject 验证前置条件检查在对象为 nil 时返回
+// 内部错误而非 panic；错误须可被 errors.As 识别为 InternalError。
 func TestPreconditionsCheckWithNilObject(t *testing.T) {
 	p := &Preconditions{}
 	err := p.Check("foo", nil)
@@ -40,6 +42,9 @@ func TestPreconditionsCheckWithNilObject(t *testing.T) {
 	}
 }
 
+// TestValidateListOptions 覆盖 list 请求 revision 的归一化规则：
+// continue token 与 resourceVersion 的互斥、非法值报错、不同 match 策略
+// 以及“只有递归且带 limit 时才保留精确 revision”的兼容语义。
 func TestValidateListOptions(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -49,6 +54,7 @@ func TestValidateListOptions(t *testing.T) {
 		expectedContinueKey string
 	}{
 		{
+			// continue token 自带 revision，再指定 resourceVersion 会产生歧义。
 			name: "specifying resource version when using continue",
 			opts: ListOptions{
 				Recursive:       true,
@@ -99,6 +105,7 @@ func TestValidateListOptions(t *testing.T) {
 			expectedContinueKey: "continue",
 		},
 		{
+			// continue token 内 revision 为 0 视为非法：无法定位分页起点。
 			name: "continueRV = 0",
 			opts: ListOptions{
 				ResourceVersion: "",
@@ -127,6 +134,7 @@ func TestValidateListOptions(t *testing.T) {
 			expectedRev: 0,
 		},
 		{
+			// NotOlderThan 在缓存层没有精确快照语义，归一化为 0（任意不旧于）。
 			name: "rev resolve to 0 if ResourceVersionMatchNotOlderThan",
 			opts: ListOptions{
 				ResourceVersion:      "200",

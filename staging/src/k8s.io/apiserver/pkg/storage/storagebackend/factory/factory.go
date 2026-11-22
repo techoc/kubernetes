@@ -27,9 +27,13 @@ import (
 )
 
 // DestroyFunc is to destroy any resources used by the storage returned in Create() together.
+// 调用方必须把 Create 返回的 DestroyFunc 与存储实例绑定，在关闭时成对释放，
+// 否则会泄漏 etcd 客户端连接与后台 goroutine。
 type DestroyFunc func()
 
 // Create creates a storage backend based on given config.
+// 当前仅支持 etcd3（以及未显式配置时默认 etcd3）。etcd2 被显式拒绝而
+// 不是静默回退，是为了让仍在使用旧配置的部署尽早暴露问题。
 func Create(c storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, DestroyFunc, error) {
 	switch c.Type {
 	case storagebackend.StorageTypeETCD2:
@@ -42,6 +46,8 @@ func Create(c storagebackend.ConfigForResource, newFunc, newListFunc func() runt
 }
 
 // CreateHealthCheck creates a healthcheck function based on given config.
+// 返回的函数用于存活探针；它与 ready check 分开，是因为 etcd 短暂不可用时
+// 可能仍应保持进程存活，避免重启放大故障。
 func CreateHealthCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() error, error) {
 	switch c.Type {
 	case storagebackend.StorageTypeETCD2:
@@ -53,6 +59,8 @@ func CreateHealthCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() 
 	}
 }
 
+// CreateReadyCheck 创建就绪检查函数。stopCh 关闭后检查应尽快返回，
+// 避免关停期间探针阻塞优雅退出。
 func CreateReadyCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() error, error) {
 	switch c.Type {
 	case storagebackend.StorageTypeETCD2:
@@ -64,6 +72,8 @@ func CreateReadyCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() e
 	}
 }
 
+// CreateProber 返回可直接调用的 etcd 探针（Probe/Close），
+// 适合需要自行控制探测节奏的调用方。
 func CreateProber(c storagebackend.Config) (Prober, error) {
 	switch c.Type {
 	case storagebackend.StorageTypeETCD2:
@@ -75,6 +85,8 @@ func CreateProber(c storagebackend.Config) (Prober, error) {
 	}
 }
 
+// CreateMonitor 返回 etcd 指标采集器；与 CreateProber 共用同一实现，
+// 因为两者都需要建立独立于主存储连接的短连接来做探测与采集。
 func CreateMonitor(c storagebackend.Config) (metrics.Monitor, error) {
 	switch c.Type {
 	case storagebackend.StorageTypeETCD2:
@@ -87,6 +99,7 @@ func CreateMonitor(c storagebackend.Config) (metrics.Monitor, error) {
 }
 
 // Prober is an interface that defines the Probe function for doing etcd readiness/liveness checks.
+// Close 用于释放探针持有的连接，必须与创建配对调用。
 type Prober interface {
 	Probe(ctx context.Context) error
 	Close() error

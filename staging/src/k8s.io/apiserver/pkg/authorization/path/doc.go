@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package path contains an authorizer that allows certain paths and path prefixes.
+//
+// 该授权器按请求路径做白名单匹配，通常用于 /healthz、/metrics 等
+// 不经过资源授权链的端点；它不感知用户身份，因此配置必须谨慎。
 package path

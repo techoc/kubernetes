@@ -70,10 +70,16 @@ Example:
 type EncryptionConfiguration struct {
 	metav1.TypeMeta
 	// resources is a list containing resources, and their corresponding encryption providers.
+	//
+	// 中文说明：列表按顺序匹配，靠前的条目优先；这保证了“个别资源例外、
+	// 其余走默认”的配置写法可表达。
 	Resources []ResourceConfiguration `json:"resources"`
 }
 
 // ResourceConfiguration stores per resource configuration.
+//
+// 中文说明：一个条目把一组资源绑定到有序的 provider 链；链中第一个是写入
+// 使用的 provider，其余用于读取历史数据（轮换密钥时的关键约束）。
 type ResourceConfiguration struct {
 	// resources is a list of kubernetes resources which have to be encrypted. The resource names are derived from `resource` or `resource.group` of the group/version/resource.
 	// eg: pandas.awesome.bears.example is a custom resource with 'group': awesome.bears.example, 'resource': pandas.
@@ -87,6 +93,9 @@ type ResourceConfiguration struct {
 }
 
 // ProviderConfiguration stores the provided configuration for an encryption provider.
+//
+// 中文说明：每个字段对应一种 provider，同一结构内通常只设置一个；由校验逻辑
+// 保证互斥，而不是靠类型系统。
 type ProviderConfiguration struct {
 	// aesgcm is the configuration for the AES-GCM transformer.
 	AESGCM *AESConfiguration `json:"aesgcm,omitempty"`
@@ -101,6 +110,8 @@ type ProviderConfiguration struct {
 }
 
 // AESConfiguration contains the API configuration for an AES transformer.
+//
+// 中文说明：密钥长度校验发生在 provider 构建阶段，配置 API 层只做结构描述。
 type AESConfiguration struct {
 	// keys is a list of keys to be used for creating the AES transformer.
 	// Each key has to be 32 bytes long for AES-CBC and 16, 24 or 32 bytes for AES-GCM.
@@ -115,6 +126,9 @@ type SecretboxConfiguration struct {
 }
 
 // Key contains name and secret of the provided key for a transformer.
+//
+// 中文说明：name 用于标识轮换中的某一代密钥，必须稳定且唯一；secret 是
+// base64 编码的原始密钥材料。
 type Key struct {
 	// name is the name of the key to be used while storing data to disk.
 	Name string `json:"name"`
@@ -123,17 +137,24 @@ type Key struct {
 }
 
 // String implements Stringer interface in a log safe way.
+//
+// 中文说明：刻意隐藏 secret，避免配置对象被日志或错误信息打印时泄露密钥。
 func (k Key) String() string {
 	return fmt.Sprintf("Name: %s, Secret: [REDACTED]", k.Name)
 }
 
 // IdentityConfiguration is an empty struct to allow identity transformer in provider configuration.
+//
+// 中文说明：空结构体作为显式“不加密”的标记，与字段缺失（未配置）在语义上
+// 区分开。
 type IdentityConfiguration struct{}
 
 // KMSConfiguration contains the name, cache size and path to configuration file for a KMS based envelope transformer.
 type KMSConfiguration struct {
 	// apiVersion of KeyManagementService
 	// +optional
+	//
+	// 中文说明：留空时按实现默认版本处理，便于配置在版本升级间复用。
 	APIVersion string `json:"apiVersion"`
 	// name is the name of the KMS plugin to be used.
 	Name string `json:"name"`

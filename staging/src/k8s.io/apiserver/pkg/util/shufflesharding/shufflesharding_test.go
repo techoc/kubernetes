@@ -25,6 +25,9 @@ import (
 	"testing"
 )
 
+// TestRequiredEntropyBits 验证熵位需求计算：handSize 张互不相同的牌放入 deckSize
+// 张牌的牌堆，所需熵为 deckSize 的 handSize 次幂取 2 的对数向上取整。
+// 这两个用例同时也是 MaxHashBits 边界的参照点（60 恰好是上限）。
 func TestRequiredEntropyBits(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -55,6 +58,9 @@ func TestRequiredEntropyBits(t *testing.T) {
 	}
 }
 
+// TestNewDealer 覆盖构造 Dealer 的所有拒绝条件：
+// 非正参数、手牌多于牌堆、牌堆过大、所需熵超过哈希位上限，以及一个正常用例。
+// 错误信息按值比较，等于锁定了错误文案这一对测试可见的契约。
 func TestNewDealer(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -110,6 +116,8 @@ func TestNewDealer(t *testing.T) {
 	}
 }
 
+// TestCardDuplication 验证发牌的两个不变量：手牌数量正确、卡片在牌堆范围内且互不重复。
+// 分片（shuffle sharding）的正确性依赖这两点——一旦重复，隔离假设即告失效。
 func TestCardDuplication(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -198,6 +206,11 @@ func ff(n, m int) int {
 	return ans
 }
 
+// TestUniformDistribution 穷举整个哈希空间，验证每手牌的命中次数都落在
+// [floor, ceil] 的极窄区间内，即发牌近似均匀。
+//
+// 这是分布质量的核心证据：若映射偏斜，热门手牌会集中流量，破坏分片隔离效果。
+// 对 deckSize=64 额外把哈希空间放大到"恰好覆盖"的规模，使断言更严格。
 func TestUniformDistribution(t *testing.T) {
 	const spare = 64 - MaxHashBits
 	tests := []struct {
@@ -216,6 +229,7 @@ func TestUniformDistribution(t *testing.T) {
 		}
 		handCoordinateMap := make(map[int]int) // maps coded hand to count of times seen
 
+		// 计算理论命中区间：哈希空间除以组合数，再乘每组的排列数。
 		fallingFactorial := ff(test.deckSize, test.handSize)
 		permutations := ff(test.handSize, test.handSize)
 		allCoordinateCount := fallingFactorial / permutations
@@ -225,6 +239,7 @@ func TestUniformDistribution(t *testing.T) {
 		aHand := make([]int, test.handSize)
 		for i := 0; i < test.hashMax; i++ {
 			aHand = dealer.DealIntoHand(uint64(i), aHand)
+			// 排序后手牌被视为组合而非排列，才能按"组合"统计命中次数。
 			sort.IntSlice(aHand).Sort()
 			handCoordinate := 0
 			for _, card := range aHand {
@@ -250,12 +265,16 @@ func TestUniformDistribution(t *testing.T) {
 		goodPct := 100 * float64(goodSum) / float64(numHandsSeen)
 
 		t.Logf("good percentage = %v, histogram = %v", goodPct, histogram)
+		// 要求全部手牌都在中心区间内，而不只是"大多数"——均匀性是硬性要求。
 		if goodSum != numHandsSeen {
 			t.Errorf("Only %v percent of the hands got a central count", goodPct)
 		}
 	}
 }
 
+// TestDealer_DealIntoHand 验证 DealIntoHand 对输入切片的处理：
+// 无论传入 nil、长度不足、恰好或超长，最终返回的手牌长度都恰为 handSize。
+// 该函数会复用并调整调用方切片，这些用例锁定了复用语义。
 func TestDealer_DealIntoHand(t *testing.T) {
 	dealer, _ := NewDealer(6, 6)
 

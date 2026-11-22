@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 apiserver 之间请求转发（peer proxy）与
+// peer 发现同步相关的指标。
+//
+// 中文说明：这些指标用于定位版本偏斜期间哪个组件在持续重路由或同步失败。
 package metrics
 
 import (
@@ -33,6 +37,7 @@ const (
 	errorType  = "type"
 
 	// ProxyErrorEndpointResolution indicates a failure to resolve the network address of a peer apiserver.
+	// 中文说明：以下错误原因作为指标 type 标签，取值必须稳定，否则会导致看板断档。
 	ProxyErrorEndpointResolution = "endpoint_resolution"
 	// ProxyErrorTransport indicates a failure to build the proxy transport for the request.
 	ProxyErrorTransport = "proxy_transport"
@@ -47,6 +52,8 @@ const (
 
 var registerMetricsOnce sync.Once
 
+// 中文说明：指标用 sync.Once 注册，重复调用安全；标签刻意不包含 peer 地址，
+// 以防止基数爆炸。
 var (
 	// peerProxiedRequestsTotal counts the number of requests that were proxied to a peer kube-apiserver.
 	peerProxiedRequestsTotal = metrics.NewCounterVec(
@@ -82,6 +89,7 @@ var (
 	)
 )
 
+// Register 把 peer proxy 指标注册到 legacy registry，幂等。
 func Register() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(peerProxiedRequestsTotal)
@@ -91,6 +99,7 @@ func Register() {
 }
 
 // Only used for tests.
+// 中文说明：清空全局 registry，仅测试可用；生产路径调用会破坏指标注册状态。
 func Reset() {
 	legacyregistry.Reset()
 }

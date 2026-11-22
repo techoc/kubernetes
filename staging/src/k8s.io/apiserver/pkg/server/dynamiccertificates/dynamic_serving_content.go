@@ -33,6 +33,7 @@ import (
 )
 
 // DynamicCertKeyPairContent provides a CertKeyContentProvider that can dynamically react to new file content
+// 它监听证书/私钥文件变化并原子替换内存中的内容，供 TLS 握手并发读取。
 type DynamicCertKeyPairContent struct {
 	name string
 
@@ -42,6 +43,7 @@ type DynamicCertKeyPairContent struct {
 	keyFile string
 
 	// certKeyPair is a certKeyContent that contains the last read, non-zero length content of the key and cert
+	// 用 atomic.Value 发布，读路径无需锁；写入的是不可变快照。
 	certKeyPair atomic.Value
 
 	listeners []Listener
@@ -50,10 +52,12 @@ type DynamicCertKeyPairContent struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
+// 编译期断言：同时实现内容提供者与控制器运行接口。
 var _ CertKeyContentProvider = &DynamicCertKeyPairContent{}
 var _ ControllerRunner = &DynamicCertKeyPairContent{}
 
 // NewDynamicServingContentFromFiles returns a dynamic CertKeyContentProvider based on a cert and key filename
+// 构造时立即加载一次，确保启动即暴露文件缺失或证书不匹配的问题。
 func NewDynamicServingContentFromFiles(purpose, certFile, keyFile string) (*DynamicCertKeyPairContent, error) {
 	if len(certFile) == 0 || len(keyFile) == 0 {
 		return nil, fmt.Errorf("missing filename for serving cert")
@@ -77,6 +81,7 @@ func NewDynamicServingContentFromFiles(purpose, certFile, keyFile string) (*Dyna
 }
 
 // AddListener adds a listener to be notified when the serving cert content changes.
+// 必须在 Run 之前注册；运行期并发修改 listeners 不受支持。
 func (c *DynamicCertKeyPairContent) AddListener(listener Listener) {
 	c.listeners = append(c.listeners, listener)
 }
@@ -96,6 +101,7 @@ func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 	}
 
 	// Ensure that the key matches the cert and both are valid
+	// 这一步同时校验配对关系；文件更新可能先后到达，不匹配时保留旧内容。
 	_, err = tls.X509KeyPair(cert, key)
 	if err != nil {
 		return err
@@ -107,6 +113,7 @@ func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 	}
 
 	// check to see if we have a change. If the values are the same, do nothing.
+	// 内容未变时不触发 listener，避免无谓的 TLS 配置重建（会中断连接池）。
 	existing, ok := c.certKeyPair.Load().(*certKeyContent)
 	if ok && existing != nil && existing.Equal(newCertKey) {
 		return nil
@@ -136,9 +143,11 @@ func (c *DynamicCertKeyPairContent) Run(ctx context.Context, workers int) {
 	defer klog.InfoS("Shutting down controller", "name", c.name)
 
 	// doesn't matter what workers say, only start one.
+	// 单 worker 即可：加载是幂等的，且需要串行化 listener 通知。
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
 	// start the loop that watches the cert and key files until stopCh is closed.
+	// 定时重试覆盖 fsnotify 失效（例如文件被整体替换、inotify 丢失）的情况。
 	go wait.Until(func() {
 		if err := c.watchCertKeyFile(ctx.Done()); err != nil {
 			klog.ErrorS(err, "Failed to watch cert and key file, will retry later")
@@ -148,6 +157,7 @@ func (c *DynamicCertKeyPairContent) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// watchCertKeyFile 用 fsnotify 监听两个文件；watch 建立前先入队一次以兜底。
 func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) error {
 	// Trigger a check here to ensure the content will be checked periodically even if the following watch fails.
 	c.queue.Add(workItemKey)
@@ -187,10 +197,12 @@ func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) err
 // will be loaded and used.
 func (c *DynamicCertKeyPairContent) handleWatchEvent(e fsnotify.Event, w *fsnotify.Watcher) error {
 	// This should be executed after restarting the watch (if applicable) to ensure no file event will be missing.
+	// defer 保证“重挂 watch 失败”时也仍会触发一次重载。
 	defer c.queue.Add(workItemKey)
 	if !e.Has(fsnotify.Remove) && !e.Has(fsnotify.Rename) {
 		return nil
 	}
+	// kubelet/容器场景常用“rename 后重建”方式更新文件，需重新挂到新 inode 上。
 	if err := w.Remove(e.Name); err != nil {
 		klog.InfoS("Failed to remove file watch, it may have been deleted", "file", e.Name, "err", err)
 	}
@@ -200,11 +212,13 @@ func (c *DynamicCertKeyPairContent) handleWatchEvent(e fsnotify.Event, w *fsnoti
 	return nil
 }
 
+// runWorker 持续处理队列直到队列关闭。
 func (c *DynamicCertKeyPairContent) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
+// processNextWorkItem 处理一个重载请求；失败时按速率限制重试，成功则 Forget。
 func (c *DynamicCertKeyPairContent) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -231,6 +245,7 @@ func (c *DynamicCertKeyPairContent) Name() string {
 
 // CurrentCertKeyContent provides cert and key byte content
 func (c *DynamicCertKeyPairContent) CurrentCertKeyContent() ([]byte, []byte) {
+	// 构造时已保证至少加载过一次，因此这里的类型断言是安全的。
 	certKeyContent := c.certKeyPair.Load().(*certKeyContent)
 	return certKeyContent.cert, certKeyContent.key
 }

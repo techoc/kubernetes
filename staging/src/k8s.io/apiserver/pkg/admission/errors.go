@@ -23,6 +23,11 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
+// extractResourceName 尽力为错误消息提取资源名。
+// 优先使用 Attributes 上的名字；名字为空（例如 create 时名称尚未生成）时退回对象元数据，
+// 再不行就使用固定的 "Unknown" 占位符。永不返回错误：错误格式化本身不能因为取不到名字而失败，
+// 唯一的例外路径用 "Unknown/errorGettingName" 表示，其中斜杠保证这个名字在任何资源名下都非法，
+// 从而不会与真实对象混淆。
 func extractResourceName(a Attributes) (name string, resource schema.GroupResource, err error) {
 	resource = a.GetResource().GroupResource()
 
@@ -40,6 +45,7 @@ func extractResourceName(a Attributes) (name string, resource schema.GroupResour
 		}
 
 		// this is necessary because name object name generation has not occurred yet
+		// 对象名可能尚未由 API server 生成，此时 generateName 是最有信息量的标识。
 		if len(accessor.GetName()) > 0 {
 			name = accessor.GetName()
 		} else if len(accessor.GetGenerateName()) > 0 {
@@ -50,6 +56,10 @@ func extractResourceName(a Attributes) (name string, resource schema.GroupResour
 }
 
 // NewForbidden is a utility function to return a well-formatted admission control error response
+//
+// 中文说明：把插件返回的任意错误包装成带资源/名称上下文的
+// Forbidden，便于用户定位是哪个对象被拒。已经是 Forbidden 的错误直接透传，避免重复包装后
+// 原因链被改写、客户端无法用 IsForbidden 判断。
 func NewForbidden(a Attributes, internalError error) error {
 	// do not double wrap an error of same type
 	if apierrors.IsForbidden(internalError) {
@@ -63,6 +73,8 @@ func NewForbidden(a Attributes, internalError error) error {
 }
 
 // NewNotFound is a utility function to return a well-formatted admission control error response
+//
+// 中文说明：与 NewForbidden 对称，供插件表示“请求引用的对象不存在”。
 func NewNotFound(a Attributes) error {
 	name, resource, err := extractResourceName(a)
 	if err != nil {

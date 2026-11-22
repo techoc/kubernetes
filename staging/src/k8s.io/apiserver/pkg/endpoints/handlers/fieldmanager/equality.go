@@ -36,15 +36,20 @@ import (
 )
 
 var (
+	// avoidTimestampEqualities 是忽略 managedFields 时间戳的等价比较器；
+	// 只在首次调用时构建，之后只读，因此无需加锁。
 	avoidTimestampEqualities     conversion.Equalities
 	initAvoidTimestampEqualities sync.Once
 )
 
+// getAvoidTimestampEqualities 惰性构建比较器。可通过环境变量
+// KUBE_APISERVER_AVOID_NOOP_SSA_TIMESTAMP_UPDATES 关闭该优化（设为 false），
+// 以便出现问题时快速回退，无需重新发版。
 func getAvoidTimestampEqualities() conversion.Equalities {
 	initAvoidTimestampEqualities.Do(func() {
 		if avoidNoopTimestampUpdatesString, exists := os.LookupEnv("KUBE_APISERVER_AVOID_NOOP_SSA_TIMESTAMP_UPDATES"); exists {
 			if ret, err := strconv.ParseBool(avoidNoopTimestampUpdatesString); err == nil && !ret {
-				// leave avoidTimestampEqualities empty.
+				// 保持 avoidTimestampEqualities 为空，调用方据此跳过优化。
 				return
 			} else {
 				klog.Errorf("failed to parse envar KUBE_APISERVER_AVOID_NOOP_SSA_TIMESTAMP_UPDATES: %v", err)
@@ -54,15 +59,14 @@ func getAvoidTimestampEqualities() conversion.Equalities {
 		var eqs = equality.Semantic.Copy()
 		err := eqs.AddFuncs(
 			func(a, b metav1.ManagedFieldsEntry) bool {
-				// Two objects' managed fields are equivalent if, ignoring timestamp,
-				//	the objects are deeply equal.
+				// 忽略 timestamp 后深度相等，则两条 managed fields 视为等价。
 				a.Time = nil
 				b.Time = nil
 				return reflect.DeepEqual(a, b)
 			},
 			func(a, b unstructured.Unstructured) bool {
-				// Check if the managed fields are equal by converting to structured types and leveraging the above
-				// function, then, ignoring the managed fields, equality check the rest of the unstructured data.
+				// 先把 managed fields 转成结构化类型并复用上面的函数比较，
+				// 然后在忽略 managedFields 路径的前提下比较其余 unstructured 数据。
 				if !avoidTimestampEqualities.DeepEqual(a.GetManagedFields(), b.GetManagedFields()) {
 					return false
 				}
@@ -79,14 +83,17 @@ func getAvoidTimestampEqualities() conversion.Equalities {
 	return avoidTimestampEqualities
 }
 
+// equalIgnoringValueAtPath 比较两个值，但跳过 path 指向的子树。
+// 任何一方不是 map 时视为可忽略（无法继续下探），这是为了让比较只关注
+// 确实可比较的结构化部分，而不是把类型差异当成对象变化。
 func equalIgnoringValueAtPath(a, b any, path []string) bool {
-	if len(path) == 0 { // found the value to ignore
+	if len(path) == 0 { // 已到达需要忽略的值
 		return true
 	}
 	aMap, aOk := a.(map[string]any)
 	bMap, bOk := b.(map[string]any)
 	if !aOk || !bOk {
-		// Can't traverse into non-maps, ignore
+		// 无法下探到非 map，忽略
 		return true
 	}
 	if len(aMap) != len(bMap) {
@@ -109,14 +116,15 @@ func equalIgnoringValueAtPath(a, b any, path []string) bool {
 	return true
 }
 
-// IgnoreManagedFieldsTimestampsTransformer reverts timestamp updates
-// if the non-managed parts of the object are equivalent
+// IgnoreManagedFieldsTimestampsTransformer 在对象的非 managed 部分等价时，
+// 撤销 managedFields 中的时间戳更新，避免无意义的 ResourceVersion 递增。
 func IgnoreManagedFieldsTimestampsTransformer(
 	_ context.Context,
 	newObj runtime.Object,
 	oldObj runtime.Object,
 ) (res runtime.Object, err error) {
 	equalities := getAvoidTimestampEqualities()
+	// 优化被环境变量关闭时直接返回。
 	if len(equalities.Equalities) == 0 {
 		return newObj, nil
 	}
@@ -134,23 +142,14 @@ func IgnoreManagedFieldsTimestampsTransformer(
 		metrics.RecordTimestampComparisonLatency(outcome, time.Since(start))
 	}()
 
-	// If managedFields modulo timestamps are unchanged
-	//		and
-	//	rest of object is unchanged
-	//		then
-	//	revert any changes to timestamps in managed fields
-	//		(to prevent spurious ResourceVersion bump)
+	// 若 managedFields 去掉时间戳后未变，且对象其余部分也未变，
+	// 则回滚 managedFields 中的时间戳变更（防止 ResourceVersion 无谓递增）。
 	//
-	// Procecure:
-	// Do a quicker check to see if just managed fields modulo timestamps are
-	//	unchanged. If so, then do the full, slower check.
+	// 流程：
+	// 先快速检查 managedFields（忽略时间戳）是否未变；若未变再做完整的慢速检查。
 	//
-	// In most cases which actually update the object, the managed fields modulo
-	//	timestamp check will fail, and we will be able to return early.
-	//
-	// In other cases, the managed fields may be exactly the same,
-	// 	except for timestamp, but the objects are the different. This is the
-	//	slow path which checks the full object.
+	// 多数真正修改对象的请求会在“managedFields 忽略时间戳”检查处失败并提前返回；
+	// 只有 managedFields 恰好只在时间戳上不同、而对象本身有差异时，才进入慢速路径。
 	oldAccessor, err := meta.Accessor(oldObj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire accessor for oldObj: %v", err)
@@ -165,20 +164,16 @@ func IgnoreManagedFieldsTimestampsTransformer(
 	newManagedFields := accessor.GetManagedFields()
 
 	if len(oldManagedFields) != len(newManagedFields) {
-		// Return early if any managed fields entry was added/removed.
-		// We want to retain user expectation that even if they write to a field
-		// whose value did not change, they will still result as the field
-		// manager at the end.
+		// 有任何 managed fields 条目增删就提前返回。
+		// 需要保留用户预期：即使写入的字段值没变，也应体现为该字段的 manager。
 		return newObj, nil
 	} else if len(newManagedFields) == 0 {
-		// This transformation only makes sense when managedFields are
-		// non-empty
+		// managedFields 为空时该转换没有意义
 		return newObj, nil
 	}
 
-	// This transformation only makes sense if the managed fields has at least one
-	// changed timestamp; and are otherwise equal. Return early if there are no
-	// changed timestamps.
+	// 只有至少一个时间戳变化、其余部分相等时该转换才有意义。
+	// 没有任何时间戳变化时提前返回。
 	allTimesUnchanged := true
 	for i, e := range newManagedFields {
 		if !e.Time.Equal(oldManagedFields[i].Time) {
@@ -193,25 +188,21 @@ func IgnoreManagedFieldsTimestampsTransformer(
 
 	eqFn := equalities.DeepEqual
 	if _, ok := newObj.(*unstructured.Unstructured); ok {
-		// Use strict equality with unstructured
+		// unstructured 使用严格等价：nil 与空值必须区分，否则会掩盖真实的字段差异
 		eqFn = equalities.DeepEqualWithNilDifferentFromEmpty
 	}
 
-	// This condition ensures the managed fields are always compared first. If
-	//	this check fails, the if statement will short circuit. If the check
-	// 	succeeds the slow path is taken which compares entire objects.
+	// 先比较 managed fields：若不等，if 短路，不会进入整对象比较的慢路径；
+	// 若相等，再对整个对象做慢速比较。
 	if !eqFn(oldManagedFields, newManagedFields) {
 		return newObj, nil
 	}
 
 	if eqFn(newObj, oldObj) {
-		// Remove any changed timestamps, so that timestamp is not the only
-		// change seen by etcd.
+		// 去掉变化的时间戳，使 etcd 看不到任何变化。
 		//
-		// newManagedFields is known to be exactly pairwise equal to
-		// oldManagedFields except for timestamps.
-		//
-		// Simply replace possibly changed new timestamps with their old values.
+		// 已知 newManagedFields 除时间戳外与 oldManagedFields 逐项相等，
+		// 因此直接用旧值覆盖可能已变化的新时间戳。
 		for idx := 0; idx < len(oldManagedFields); idx++ {
 			newManagedFields[idx].Time = oldManagedFields[idx].Time
 		}

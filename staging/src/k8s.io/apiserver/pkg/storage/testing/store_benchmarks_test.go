@@ -26,6 +26,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestWatchLatencyTimestampRoundTrip 验证 watch 延迟时间戳的序列化/反序列化
+// 在纳秒精度下无损往返。
 func TestWatchLatencyTimestampRoundTrip(t *testing.T) {
 	now := time.Unix(0, time.Now().UnixNano()) // Round to nano precision
 	serialized := serializeTimestamp(now)
@@ -38,6 +40,8 @@ func TestWatchLatencyTimestampRoundTrip(t *testing.T) {
 	}
 }
 
+// TestWatchLatencyTracker_RecordWriteAndHandleEvent 验证百分位计算：
+// 在 100 个样本中 P99 应取自排序后的第 99 个值（50ms），而不是最大值（100ms）。
 func TestWatchLatencyTracker_RecordWriteAndHandleEvent(t *testing.T) {
 	initialTime := time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC)
 	fakeClock := testingclock.NewFakeClock(initialTime)
@@ -55,6 +59,7 @@ func TestWatchLatencyTracker_RecordWriteAndHandleEvent(t *testing.T) {
 		}
 		tracker.RecordWrite(pod)
 
+		// 通过假时钟精确控制每个事件的延迟，使统计结果可复现。
 		var delay time.Duration
 		switch i {
 		case 99:
@@ -68,6 +73,7 @@ func TestWatchLatencyTracker_RecordWriteAndHandleEvent(t *testing.T) {
 		tracker.HandleEvent(pod)
 
 		// Reset back to base fake clock time for the next pod so it's not cumulative
+		// 每个样本独立计时，避免延迟累加改变分布。
 		fakeClock.SetTime(initialTime)
 	}
 

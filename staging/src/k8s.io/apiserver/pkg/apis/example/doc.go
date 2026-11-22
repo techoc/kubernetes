@@ -19,4 +19,7 @@ limitations under the License.
 
 // package example contains an example API used to demonstrate how to create api groups. Moreover, this is
 // used within tests.
+//
+// 该包同时作为“如何定义 API 组”的参考实现：类型、注册与转换都遵循
+// apiserver 的标准约定，但不对外提供服务。
 package example

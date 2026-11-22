@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Package source provides a Source implementation that loads policy configurations from manifest files.
+//
+// 该包把磁盘上的清单文件视为唯一事实来源，通过轮询目录 mtime/内容哈希实现热加载；
+// 加载与编译失败时保留上一份可用的 hooks，避免把配置错误放大成请求失败。
 package source
 
 import (
@@ -31,9 +34,11 @@ import (
 )
 
 // defaultReloadInterval is the default interval at which the manifest directory is checked for changes.
+// 1 分钟在“配置生效延迟”和“目录扫描开销”之间取折中；测试可临时覆盖。
 var defaultReloadInterval = 1 * time.Minute
 
 // SetReloadIntervalForTests sets the reload interval for testing and returns a function to restore the original value.
+// 返回恢复函数而不是依赖 defer 内的全局状态，避免测试间相互污染。
 func SetReloadIntervalForTests(interval time.Duration) func() {
 	original := defaultReloadInterval
 	defaultReloadInterval = interval
@@ -43,15 +48,21 @@ func SetReloadIntervalForTests(interval time.Duration) func() {
 }
 
 // PolicyLoadFunc loads policy and binding manifests from a directory.
+// 返回加载到的策略、绑定以及内容哈希；哈希用于在内容未变时跳过重新编译。
 type PolicyLoadFunc[P, B runtime.Object] func(dir string) ([]P, []B, string, error)
 
 // PolicyCompiler compiles a policy into an Evaluator.
+// 编译可能失败（例如 CEL 表达式非法），此时整个清单集视为无效。
 type PolicyCompiler[P runtime.Object, E generic.Evaluator] func(P) (E, error)
 
 // BindingPolicyName extracts the policy name referenced by a binding.
+// 绑定通过策略名与策略关联，而非通过对象引用，以保持清单文件可独立编辑。
 type BindingPolicyName[B runtime.Object] func(B) string
 
 // StaticPolicySource provides policy configurations loaded from manifest files.
+//
+// 所有可变状态都通过 atomic 发布：读请求只 Load 不可变快照，
+// 后台 reload 构造新切片后整体替换指针，因此 Hooks 无需加锁即可并发调用。
 type StaticPolicySource[P, B runtime.Object, E generic.Evaluator] struct {
 	manifestsDir         string
 	apiServerID          string
@@ -61,12 +72,14 @@ type StaticPolicySource[P, B runtime.Object, E generic.Evaluator] struct {
 	getBindingPolicyName BindingPolicyName[B]
 	manifestType         metrics.ManifestType
 
+	// current 指向当前生效的 hooks 切片；先完成编译再一次性发布，读者不会看到半成品。
 	current      atomic.Pointer[[]generic.PolicyHook[P, B, E]]
 	lastReadHash atomic.Pointer[string] // hash of last file content read (for short-circuiting)
 	hasSynced    atomic.Bool
 }
 
 // NewStaticPolicySource creates a new static policy source that loads configurations from the specified directory.
+// 构造函数不做 IO：初次加载由 LoadInitial 完成，便于调用方在启动失败时统一处理错误。
 func NewStaticPolicySource[P, B runtime.Object, E generic.Evaluator](
 	manifestsDir, apiServerID string,
 	compiler PolicyCompiler[P, E],
@@ -94,10 +107,12 @@ func (s *StaticPolicySource[P, B, E]) LoadInitial() error {
 		return err
 	}
 
+	// 编译失败同样视为启动错误：带着无效策略启动会让准入行为与配置不符。
 	hooks, err := s.compile(policies, bindings)
 	if err != nil {
 		return err
 	}
+	// 先存内容哈希再置 hasSynced，保证观察者看到 synced 时快照已就绪。
 	s.current.Store(&hooks)
 	s.lastReadHash.Store(&hash)
 	s.hasSynced.Store(true)
@@ -110,6 +125,7 @@ func (s *StaticPolicySource[P, B, E]) LoadInitial() error {
 // RunReloadLoop watches for configuration changes and reloads when detected.
 // It blocks until ctx is canceled.
 func (s *StaticPolicySource[P, B, E]) RunReloadLoop(ctx context.Context) {
+	// WatchUntil 负责按 reloadInterval 周期性触发回调，并在 ctx 取消时退出。
 	filesystem.WatchUntil(
 		ctx,
 		s.reloadInterval,
@@ -118,12 +134,16 @@ func (s *StaticPolicySource[P, B, E]) RunReloadLoop(ctx context.Context) {
 			s.checkAndReload()
 		},
 		func(err error) {
+			// 目录暂时不可读（如挂载卷重建）不应导致进程退出，仅记录并等待下一轮。
 			klog.ErrorS(err, "watching manifest directory", "plugin", string(s.manifestType), "dir", s.manifestsDir)
 		},
 	)
 }
 
+// compile 将策略与绑定按策略名归组并逐一编译，任一策略编译失败则整体失败，
+// 以避免部分生效造成的策略集不一致。
 func (s *StaticPolicySource[P, B, E]) compile(policies []P, bindings []B) ([]generic.PolicyHook[P, B, E], error) {
+	// 一次遍历建立 policy -> bindings 索引，避免 O(policies*bindings) 的嵌套扫描。
 	bindingsByPolicy := make(map[string][]B)
 	for _, binding := range bindings {
 		policyName := s.getBindingPolicyName(binding)
@@ -132,6 +152,7 @@ func (s *StaticPolicySource[P, B, E]) compile(policies []P, bindings []B) ([]gen
 
 	var hooks []generic.PolicyHook[P, B, E]
 	for _, policy := range policies {
+		// 策略类型由调用方泛型决定，这里用结构断言取名字，避免为每种类型增加约束。
 		nameGetter, ok := any(policy).(interface{ GetName() string })
 		if !ok {
 			return nil, fmt.Errorf("policy type %T does not implement GetName()", policy)
@@ -140,6 +161,7 @@ func (s *StaticPolicySource[P, B, E]) compile(policies []P, bindings []B) ([]gen
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile policy %q: %w", nameGetter.GetName(), err)
 		}
+		// 没有匹配绑定的策略也会保留，但其 hooks 不会被触发。
 		hook := generic.PolicyHook[P, B, E]{
 			Policy:    policy,
 			Bindings:  bindingsByPolicy[nameGetter.GetName()],
@@ -151,6 +173,7 @@ func (s *StaticPolicySource[P, B, E]) compile(policies []P, bindings []B) ([]gen
 	return hooks, nil
 }
 
+// checkAndReload 执行一次轮询：加载失败或编译失败时保留旧快照，仅记录指标与日志。
 func (s *StaticPolicySource[P, B, E]) checkAndReload() {
 	policies, bindings, hash, err := s.loadFunc(s.manifestsDir)
 	if err != nil {
@@ -160,6 +183,7 @@ func (s *StaticPolicySource[P, B, E]) checkAndReload() {
 	}
 
 	// Short-circuit if file content hasn't changed since last read.
+	// 目录扫描本身有成本，内容哈希相同则跳过解析与编译。
 	if last := s.lastReadHash.Load(); last != nil && hash == *last {
 		return
 	}
@@ -167,10 +191,12 @@ func (s *StaticPolicySource[P, B, E]) checkAndReload() {
 
 	hooks, err := s.compile(policies, bindings)
 	if err != nil {
+		// 编译失败时哈希已更新，下轮不会再因相同内容重复报错，直到文件再次变化。
 		klog.ErrorS(err, "compiling manifest config", "plugin", string(s.manifestType), "dir", s.manifestsDir)
 		metrics.RecordAutomaticReloadFailure(s.manifestType, s.apiServerID)
 		return
 	}
+	// 原子替换快照；已在进行中的请求继续使用旧快照，保证单请求内策略一致。
 	s.current.Store(&hooks)
 
 	klog.InfoS("reloaded manifest config", "plugin", string(s.manifestType), "dir", s.manifestsDir)
@@ -183,6 +209,7 @@ func (s *StaticPolicySource[P, B, E]) HasSynced() bool {
 }
 
 // Hooks returns the list of policy hooks.
+// 返回的快照只读，调用方不得修改其元素。
 func (s *StaticPolicySource[P, B, E]) Hooks() []generic.PolicyHook[P, B, E] {
 	current := s.current.Load()
 	if current == nil {

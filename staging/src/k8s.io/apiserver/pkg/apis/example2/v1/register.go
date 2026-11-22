@@ -29,11 +29,15 @@ const GroupName = "example2.apiserver.k8s.io"
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
+//
+// 用于在只需要 GroupKind 的场合（如 RESTMapper、事件引用）省略版本。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource
+//
+// 与 Kind 对称，用于构造不带版本号的资源标识。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
@@ -41,6 +45,9 @@ func Resource(resource string) schema.GroupResource {
 var (
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
 	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	//
+	// 区分 SchemeBuilder 与 localSchemeBuilder 是为了让生成代码注册到前者，
+	// 而本包只把手写函数注册到后者。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
@@ -54,6 +61,9 @@ func init() {
 }
 
 // Adds the list of known types to the given scheme.
+//
+// 除本组类型外还要注册 metav1 的公共类型，否则编解码与 discovery 会缺少
+// ListOptions 等元数据操作所需的注册。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ReplicaSet{},

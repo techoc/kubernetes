@@ -20,6 +20,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addConversionFuncs 注册本版本需要的、无法由代码生成器产出的转换函数。
+//
+// 之所以保留这个钩子，是因为 conversion-gen 只能处理字段一一对应的机械转换；
+// 一旦将来需要特殊处理（例如字段重命名、默认值填充），就在这里补充手写函数，
+// 而不必改动 generated 代码。当前没有此类需求。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	// Add non-generated conversion functions here. Currently there are none.
 	return nil

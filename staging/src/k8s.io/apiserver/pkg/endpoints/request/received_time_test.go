@@ -23,6 +23,9 @@ import (
 	"time"
 )
 
+// TestWithRequestReceiveTime 验证请求到达时间在 context 中的存取：
+// 非零时间必须能原样取回，零值时间必须被视为“未设置”，
+// 以便超时过滤器区分“已有到达时间”和“从未记录”。
 func TestWithRequestReceiveTime(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -45,6 +48,7 @@ func TestWithRequestReceiveTime(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			parent := context.TODO()
 			ctx := WithReceivedTimestamp(parent, test.receivedTimestamp)
+			// 空时间不应被写入 context，否则下游会把零值当作真实时间。
 			if ctx == nil {
 				t.Fatal("WithReceivedTimestamp: expected a non nil context, got nil")
 			}

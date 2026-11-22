@@ -22,6 +22,8 @@ import (
 	"os/signal"
 )
 
+// onlyOneSignalHandler 通过 close 实现“只能初始化一次”的断言：
+// 重复调用会 panic，提示调用方流程有误。
 var onlyOneSignalHandler = make(chan struct{})
 var shutdownHandler chan os.Signal
 
@@ -37,9 +39,13 @@ func SetupSignalHandler() <-chan struct{} {
 // SetupSignalContext is same as SetupSignalHandler, but a context.Context is returned.
 // Only one of SetupSignalContext and SetupSignalHandler should be called, and only can
 // be called once.
+//
+// 第一次信号触发优雅关闭（cancel context），第二次信号直接退出，
+// 保证关闭卡住时运维仍能强制终止进程。
 func SetupSignalContext() context.Context {
 	close(onlyOneSignalHandler) // panics when called twice
 
+	// 缓冲 2 以容纳“第二次信号”，避免 goroutine 尚未处理时被阻塞。
 	shutdownHandler = make(chan os.Signal, 2)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,6 +62,8 @@ func SetupSignalContext() context.Context {
 
 // RequestShutdown emulates a received event that is considered as shutdown signal (SIGTERM/SIGINT)
 // This returns whether a handler was notified
+//
+// 用于测试或内部触发关闭；非阻塞发送，无人监听时返回 false。
 func RequestShutdown() bool {
 	if shutdownHandler != nil {
 		select {

@@ -21,6 +21,10 @@ import (
 	"testing"
 )
 
+// TestAuthenticatorMetrics 验证 webhook token 认证器在三种情况下上报的
+// 状态码：正常 200、后端返回 500、以及客户端证书校验失败（未真正调用
+// webhook，记为 "<error>"）。total 与 latency 两个指标必须使用相同的
+// 状态码标签，否则按状态聚合的延迟与计数会对不上。
 func TestAuthenticatorMetrics(t *testing.T) {
 	scenarios := []struct {
 		name                            string
@@ -100,6 +104,8 @@ func TestAuthenticatorMetrics(t *testing.T) {
 	}
 }
 
+// fakeAuthenticatorMetrics 记录最后一次上报的状态码与延迟，用于断言
+// 认证器选择了正确的标签。
 type fakeAuthenticatorMetrics struct {
 	totalCode string
 
@@ -107,10 +113,12 @@ type fakeAuthenticatorMetrics struct {
 	latencyCode string
 }
 
+// RequestTotal 记录总请求指标的状态码。
 func (f *fakeAuthenticatorMetrics) RequestTotal(_ context.Context, code string) {
 	f.totalCode = code
 }
 
+// RequestLatency 记录延迟指标的状态码与延迟值。
 func (f *fakeAuthenticatorMetrics) RequestLatency(_ context.Context, code string, latency float64) {
 	f.latency = latency
 	f.latencyCode = code

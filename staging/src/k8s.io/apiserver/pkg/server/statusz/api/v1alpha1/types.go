@@ -22,6 +22,8 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // Statusz is a struct used for versioned statusz endpoint.
+//
+// statusz 面向运维排障：只暴露进程级的只读信息，不包含任何用户数据。
 type Statusz struct {
 	// TypeMeta is the type metadata for the object.
 	metav1.TypeMeta `json:""`
@@ -31,6 +33,7 @@ type Statusz struct {
 	// StartTime is the time the component process was initiated.
 	StartTime metav1.Time `json:"startTime"`
 	// UptimeSeconds is the duration in seconds for which the component has been running continuously.
+	// 以秒为整数便于消费方直接做阈值判断，无需解析时间戳。
 	UptimeSeconds int64 `json:"uptimeSeconds"`
 	// GoVersion is the version of the Go programming language used to build the binary.
 	// The format is not guaranteed to be consistent across different Go builds.
@@ -46,5 +49,7 @@ type Statusz struct {
 	// Paths contains relative URLs to other essential read-only endpoints for debugging and troubleshooting.
 	// +optional
 	// +listType=set
+	// listType=set 保证同一路径不会重复出现，也便于生成服务端 apply 的
+	// 语义；顺序无意义。
 	Paths []string `json:"paths"`
 }

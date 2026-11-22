@@ -111,10 +111,13 @@ var codecs serializer.CodecFactory
 // as the feature gate is now locked to true starting with v1.29
 // Note: it cannot be set by an end user
 // KDF enablement is tracked per KMS provider to allow tests to run in parallel.
+//
+// 按 KMS 名称分键而非全局开关，是为了让并行集成测试互不干扰。
 var kdfEnabledPerKMS sync.Map // map[string]bool, KMS name -> KDF enabled
 
 // this function should only be called in tests to swap enablement of the KMSv2KDF feature
 // Caller must guarantee that all KMS providers have distinct names across all tests.
+// 返回的函数用于恢复默认行为（删除该条目的记录）。
 func SetKDFForTests(kmsName string, b bool) func() {
 	if len(kmsName) == 0 { // guarantee that GetKDF("") returns the default value
 		panic("empty KMS name used in test")
@@ -138,6 +141,8 @@ func GetKDF(kmsName string) bool {
 	return kdfEnabled.(bool) // this will panic if a non-bool ever gets stored, which should never happen
 }
 
+// init 初始化配置编解码器并注册所有加密相关指标；指标必须先注册，
+// 否则后续访问会因重复注册而 panic。
 func init() {
 	configScheme := runtime.NewScheme()
 	utilruntime.Must(apiserver.AddToScheme(configScheme))
@@ -148,11 +153,13 @@ func init() {
 	metrics.RegisterMetrics()
 }
 
+// kmsPluginHealthzResponse 缓存最近一次探针结果及其时间，用于 TTL 内的短路。
 type kmsPluginHealthzResponse struct {
 	err      error
 	received time.Time
 }
 
+// kmsPluginProbe 是 KMS v1 的健康探针：通过 encrypt/decrypt "ping" 验证链路。
 type kmsPluginProbe struct {
 	name         string
 	ttl          time.Duration
@@ -161,7 +168,9 @@ type kmsPluginProbe struct {
 	l            *sync.Mutex
 }
 
+// kmsv2PluginProbe 是 KMS v2 的健康探针：调用 Status 并根据 key ID 维护 DEK/seed 状态。
 type kmsv2PluginProbe struct {
+	// state 用 atomic 发布，后台轮询与存储读写可并发访问。
 	state        atomic.Pointer[envelopekmsv2.State]
 	name         string
 	ttl          time.Duration
@@ -172,12 +181,15 @@ type kmsv2PluginProbe struct {
 	version      string
 }
 
+// kmsHealthChecker 把多个探针聚合成单个健康检查端点，避免逐个暴露。
 type kmsHealthChecker []healthz.HealthChecker
 
+// Name 返回聚合端点的固定名称。
 func (k kmsHealthChecker) Name() string {
 	return kmsReloadHealthCheckName
 }
 
+// Check 串行执行全部探针并合并错误；串行是有意的，避免对 KMS 插件造成突发压力。
 func (k kmsHealthChecker) Check(req *http.Request) error {
 	var errs []error
 
@@ -191,12 +203,14 @@ func (k kmsHealthChecker) Check(req *http.Request) error {
 	return utilerrors.Reduce(utilerrors.NewAggregate(errs))
 }
 
+// toHealthzCheck 把 v1 探针适配为带序号名称的 healthz 检查。
 func (h *kmsPluginProbe) toHealthzCheck(idx int) healthz.HealthChecker {
 	return healthz.NamedCheck(fmt.Sprintf("kms-provider-%d", idx), func(r *http.Request) error {
 		return h.check()
 	})
 }
 
+// toHealthzCheck 把 v2 探针适配为 healthz 检查，透传请求上下文用于取消。
 func (h *kmsv2PluginProbe) toHealthzCheck(idx int) healthz.HealthChecker {
 	return healthz.NamedCheck(fmt.Sprintf("kms-provider-%d", idx), func(r *http.Request) error {
 		return h.check(r.Context())
@@ -212,6 +226,7 @@ type EncryptionConfiguration struct {
 	HealthChecks []healthz.HealthChecker
 
 	// EncryptionFileContentHash is the hash of the encryption config file.
+	// 只保留哈希而不保留原文，避免明文密钥长期驻留内存。
 	EncryptionFileContentHash string
 
 	// KMSCloseGracePeriod is the duration we will wait before closing old transformers.
@@ -234,6 +249,7 @@ func LoadEncryptionConfig(ctx context.Context, filepath string, reload bool, api
 		return nil, fmt.Errorf("error while building transformers: %w", err)
 	}
 
+	// 动态重载或仅使用 v2 时统一暴露一个聚合端点，避免配置变更导致健康检查名称漂移。
 	if reload || (kmsUsed.v2Used && !kmsUsed.v1Used) {
 		kmsHealthChecks = []healthz.HealthChecker{kmsHealthChecker(kmsHealthChecks)}
 	}
@@ -260,6 +276,7 @@ func getTransformerOverridesAndKMSPluginHealthzCheckers(ctx context.Context, con
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// 下标用于生成稳定的检查名（kms-provider-N）。
 	for i := range probes {
 		probe := probes[i]
 		kmsHealthChecks = append(kmsHealthChecks, probe.toHealthzCheck(i))
@@ -268,6 +285,7 @@ func getTransformerOverridesAndKMSPluginHealthzCheckers(ctx context.Context, con
 	return transformers, kmsHealthChecks, kmsUsed, nil
 }
 
+// healthChecker 抽象“可转换为 healthz 检查”的探针。
 type healthChecker interface {
 	toHealthzCheck(idx int) healthz.HealthChecker
 }
@@ -297,6 +315,7 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 			if _, masked := resourceToPrefixTransformer[anyResourceInGroup]; masked {
 				// an earlier rule already configured a transformer for *.group, masking this rule
 				// return error since this is not allowed
+				// 前面的通配规则已覆盖该资源，后续更具体的规则将永不生效，属于配置错误。
 				return nil, nil, nil, fmt.Errorf("resource %q is masked by earlier rule %q", grYAMLString(gr), grYAMLString(anyResourceInGroup))
 			}
 
@@ -314,6 +333,7 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 
 	transformers := make(map[schema.GroupResource]storagevalue.Transformer, len(resourceToPrefixTransformer))
 	for gr, transList := range resourceToPrefixTransformer {
+		// 按配置顺序尝试各前缀；都不匹配时报错，而不是静默返回明文。
 		transformers[gr] = storagevalue.NewPrefixTransformers(fmt.Errorf("no matching prefix found"), transList...)
 	}
 
@@ -325,6 +345,7 @@ func (h *kmsPluginProbe) check() error {
 	h.l.Lock()
 	defer h.l.Unlock()
 
+	// TTL 内直接复用上次结果（无论成功失败），避免每个健康检查请求都打到插件。
 	if (time.Since(h.lastResponse.received)) < h.ttl {
 		return h.lastResponse.err
 	}
@@ -336,6 +357,7 @@ func (h *kmsPluginProbe) check() error {
 		return fmt.Errorf("failed to perform encrypt section of the healthz check for KMS Provider %s, error: %w", h.name, err)
 	}
 
+	// 解密刚加密的数据，验证加解密链路完整（包括密钥可用性）。
 	if _, err := h.service.Decrypt(p); err != nil {
 		h.lastResponse = &kmsPluginHealthzResponse{err: err, received: time.Now()}
 		h.ttl = kmsPluginHealthzNegativeTTL
@@ -343,6 +365,7 @@ func (h *kmsPluginProbe) check() error {
 	}
 
 	h.lastResponse = &kmsPluginHealthzResponse{err: nil, received: time.Now()}
+	// 成功时使用较长的 TTL，减少对插件的调用频率。
 	h.ttl = kmsPluginHealthzPositiveTTL
 	return nil
 }
@@ -417,6 +440,8 @@ func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKey
 	// happy path, should be the common case
 	// TODO maybe add success metrics?
 	if errGen == nil && encObject.KeyID == statusKeyID {
+		// 只有 Status 与 Encrypt 返回同一 key ID 时才发布新状态，
+		// 否则视为轮换未完成，继续使用旧状态。
 		h.state.Store(&envelopekmsv2.State{
 			Transformer:                           transformer,
 			EncryptedObjectKeyID:                  encObject.KeyID,
@@ -434,6 +459,7 @@ func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKey
 		if errGen == nil {
 			klogV6 := klog.V(6)
 			if klogV6.Enabled() {
+				// 只输出 key ID 的哈希，避免把密钥标识写入日志。
 				klogV6.InfoS("successfully rotated DEK",
 					"uid", uid,
 					"useSeed", useSeed,
@@ -461,6 +487,7 @@ func (h *kmsv2PluginProbe) getCurrentState() (envelopekmsv2.State, error) {
 		return envelopekmsv2.State{}, fmt.Errorf("got unexpected nil transformer")
 	}
 
+	// 用一个占位的非空 EncryptedData 走一遍校验，确保状态字段自洽。
 	encryptedObjectCopy := kmstypes.EncryptedObject{
 		KeyID:                  state.EncryptedObjectKeyID,
 		EncryptedDEKSource:     state.EncryptedObjectEncryptedDEKSource,
@@ -483,6 +510,7 @@ func (h *kmsv2PluginProbe) getCurrentState() (envelopekmsv2.State, error) {
 	return state, nil
 }
 
+// isKMSv2ProviderHealthyAndMaybeRotateDEK 校验 Status 响应并触发必要的 DEK 轮换。
 func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.Context, response *kmsservice.StatusResponse) error {
 	var errs []error
 	if response.Healthz != "ok" {
@@ -495,6 +523,7 @@ func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.C
 		if len(h.version) == 0 {
 			h.version = response.Version
 		}
+		// 插件在运行期切换 API 版本会让客户端语义不一致，视为不健康。
 		if h.version != response.Version {
 			errs = append(errs, fmt.Errorf("KMSv2 API version should not change after the initial status response version %s, got %s", h.version, response.Version))
 		}
@@ -502,6 +531,7 @@ func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.C
 
 	if errCode, err := envelopekmsv2.ValidateKeyID(response.KeyID); err != nil {
 		envelopemetrics.RecordInvalidKeyIDFromStatus(h.name, string(errCode))
+		// KeyID 可能敏感，只记录哈希。
 		errs = append(errs, fmt.Errorf("got invalid KMSv2 KeyID hash %q: %w", envelopekmsv2.GetHashIfNotEmpty(response.KeyID), err))
 	} else {
 		envelopemetrics.RecordKeyIDFromStatus(h.name, response.KeyID, h.apiServerID)
@@ -522,6 +552,7 @@ func loadConfig(filepath string, reload bool) (*apiserver.EncryptionConfiguratio
 		return nil, "", fmt.Errorf("error while loading file: %w", err)
 	}
 
+	// 严格模式解码：拒绝未知字段，避免拼写错误导致安全配置被静默忽略。
 	configObj, gvk, err := codecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("error decoding encryption provider configuration file %q: %w", filepath, err)
@@ -534,6 +565,7 @@ func loadConfig(filepath string, reload bool) (*apiserver.EncryptionConfiguratio
 	return config, contentHash, validation.ValidateEncryptionConfiguration(config, reload).ToAggregate()
 }
 
+// loadDataAndHash 读取文件内容并计算哈希；空文件视为错误。
 func loadDataAndHash(filepath string) ([]byte, string, error) {
 	data, err := os.ReadFile(filepath)
 	if err != nil {
@@ -571,9 +603,11 @@ func prefixTransformersAndProbes(ctx context.Context, config apiserver.ResourceC
 
 		switch {
 		case provider.AESGCM != nil:
+			// 推荐默认：AEAD，性能与完整性兼得。
 			transformer, transformerErr = aesPrefixTransformer(provider.AESGCM, aestransformer.NewGCMTransformer, aesGCMTransformerPrefixV1)
 
 		case provider.AESCBC != nil:
+			// CBC 仅用于兼容读取历史数据。
 			cbcTransformer := func(block cipher.Block) (storagevalue.Transformer, error) {
 				return aestransformer.NewCBCTransformer(block), nil
 			}
@@ -590,6 +624,7 @@ func prefixTransformersAndProbes(ctx context.Context, config apiserver.ResourceC
 			}
 
 		case provider.Identity != nil:
+			// identity 即“不加密但校验”，用于迁移期间保留明文读写能力。
 			transformer = storagevalue.PrefixTransformer{
 				Transformer: identity.NewEncryptCheckTransformer(),
 				Prefix:      []byte{},
@@ -609,14 +644,17 @@ func prefixTransformersAndProbes(ctx context.Context, config apiserver.ResourceC
 	return transformers, probes, &kmsUsed, nil
 }
 
+// blockTransformerFunc 抽象“由 cipher.Block 构造 Transformer”的差异（GCM 会失败，CBC 不会）。
 type blockTransformerFunc func(cipher.Block) (storagevalue.Transformer, error)
 
+// aesPrefixTransformer 支持多密钥轮换：每个密钥有独立前缀，第一个密钥用于写，全部密钥可用于读。
 func aesPrefixTransformer(config *apiserver.AESConfiguration, fn blockTransformerFunc, prefix string) (storagevalue.PrefixTransformer, error) {
 	var result storagevalue.PrefixTransformer
 
 	if len(config.Keys) == 0 {
 		return result, fmt.Errorf("aes provider has no valid keys")
 	}
+	// 先整体校验再构造，避免构造到一半才发现后面的密钥非法。
 	for _, key := range config.Keys {
 		if key.Name == "" {
 			return result, fmt.Errorf("key with invalid name provided")
@@ -643,6 +681,7 @@ func aesPrefixTransformer(config *apiserver.AESConfiguration, fn blockTransforme
 		}
 
 		// Create a new PrefixTransformer for this key
+		// 前缀包含密钥名，读取时据此分流到正确密钥；写入始终使用第一个。
 		keyTransformers = append(keyTransformers,
 			storagevalue.PrefixTransformer{
 				Transformer: transformer,
@@ -662,6 +701,7 @@ func aesPrefixTransformer(config *apiserver.AESConfiguration, fn blockTransforme
 	return result, nil
 }
 
+// secretboxPrefixTransformer 与 AES 版本同构，但密钥长度固定为 32 字节（256 位）。
 func secretboxPrefixTransformer(config *apiserver.SecretboxConfiguration) (storagevalue.PrefixTransformer, error) {
 	var result storagevalue.PrefixTransformer
 
@@ -685,6 +725,7 @@ func secretboxPrefixTransformer(config *apiserver.SecretboxConfiguration) (stora
 			return result, fmt.Errorf("could not obtain secret for named key %s: %s", keyData.Name, err)
 		}
 
+		// 长度不符直接报错，而不是截断或补零（那会静默降低安全性）。
 		if len(key) != 32 {
 			return result, fmt.Errorf("expected key size 32 for secretbox provider, got %v", len(key))
 		}
@@ -720,6 +761,7 @@ var (
 	EnvelopeKMSv2ServiceFactory = envelopekmsv2.NewGRPCService
 )
 
+// kmsState 汇总一组资源使用的 KMS 版本与超时，用于计算关闭旧 transformer 的宽限期。
 type kmsState struct {
 	v1Used, v2Used bool
 	kmsTimeoutSum  time.Duration
@@ -742,6 +784,7 @@ func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguratio
 	kmsName := config.Name
 	switch config.APIVersion {
 	case kmsAPIVersionV1:
+		// KMSv1 已弃用：默认关闭，必须显式开启特性门控才能使用。
 		if !utilfeature.DefaultFeatureGate.Enabled(features.KMSv1) {
 			return storagevalue.PrefixTransformer{}, nil, nil, fmt.Errorf("KMSv1 is deprecated and will only receive security updates going forward. Use KMSv2 instead.  Set --feature-gates=KMSv1=true to use the deprecated KMSv1 feature.")
 		}
@@ -783,6 +826,7 @@ func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguratio
 			apiServerID:  apiServerID,
 		}
 		// initialize state so that Load always works
+		// 先放入仅含 provider 名的空状态，避免 transformer 构造后读到 nil。
 		probe.state.Store(&envelopekmsv2.State{
 			KMSProviderName: kmsName,
 		})
@@ -803,6 +847,8 @@ func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguratio
 	}
 }
 
+// primeAndProbeKMSv2 启动后台轮询：尽快拿到首个 key ID/DEK，并持续在 key 变更时轮换。
+// 插件不可用不会阻断 apiserver 启动，但写入会在 DEK 过期后失败。
 func primeAndProbeKMSv2(ctx context.Context, probe *kmsv2PluginProbe, kmsName string) {
 	runProbeCheckAndLog := func(ctx context.Context, depth int) error {
 		if err := probe.check(ctx); err != nil {
@@ -853,6 +899,7 @@ func primeAndProbeKMSv2(ctx context.Context, probe *kmsv2PluginProbe, kmsName st
 		})
 }
 
+// envelopePrefixTransformer 构造 KMS v1 信封转换器：DEK 由 KMS 加密，数据用 DEK 加密。
 func envelopePrefixTransformer(config *apiserver.KMSConfiguration, envelopeService envelope.Service, prefix string) storagevalue.PrefixTransformer {
 	baseTransformerFunc := func(block cipher.Block) (storagevalue.Transformer, error) {
 		gcm, err := aestransformer.NewGCMTransformer(block)
@@ -864,6 +911,7 @@ func envelopePrefixTransformer(config *apiserver.KMSConfiguration, envelopeServi
 		// v1.25: write using AES-GCM only but support reads via AES-GCM and fallback to AES-CBC for backwards compatibility
 		// TODO(aramase): Post v1.25: We cannot drop CBC read support until we automate storage migration.
 		// We could have a release note that hard requires users to perform storage migration.
+		// 第一个元素负责加密（GCM），CBC 仅用于读取历史数据。
 		return unionTransformers{gcm, aestransformer.NewCBCTransformer(block)}, nil
 	}
 
@@ -873,8 +921,11 @@ func envelopePrefixTransformer(config *apiserver.KMSConfiguration, envelopeServi
 	}
 }
 
+// unionTransformers 依次尝试多个 transformer，第一个成功者胜出。
 type unionTransformers []storagevalue.Transformer
 
+// TransformFromStorage 返回 stale=true 表示数据是用非首选算法读出的，
+// 从而促使上层重写为当前格式。
 func (u unionTransformers) TransformFromStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) (out []byte, stale bool, err error) {
 	var errs []error
 	for i := range u {
@@ -894,6 +945,7 @@ func (u unionTransformers) TransformFromStorage(ctx context.Context, data []byte
 	return nil, false, fmt.Errorf("unionTransformers: unable to transform from storage")
 }
 
+// TransformToStorage 始终使用首选（第一个）transformer 写入。
 func (u unionTransformers) TransformToStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) (out []byte, err error) {
 	return u[0].TransformToStorage(ctx, data, dataCtx)
 }
@@ -904,15 +956,18 @@ func computeEncryptionConfigHash(data []byte) string {
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 }
 
+// 编译期断言：动态 transformer 同时是资源转换器与健康检查器。
 var _ storagevalue.ResourceTransformers = &DynamicTransformers{}
 var _ healthz.HealthChecker = &DynamicTransformers{}
 
 // DynamicTransformers holds transformers that may be dynamically updated via a single external actor, likely a controller.
 // This struct must avoid locks (even read write locks) as it is inline to all calls to storage.
+// 因此用 atomic.Value 整体替换快照，读路径零锁。
 type DynamicTransformers struct {
 	transformTracker *atomic.Value
 }
 
+// transformTracker 是不可变快照：更新时整体替换，避免读者看到半更新的状态。
 type transformTracker struct {
 	transformerOverrides  map[schema.GroupResource]storagevalue.Transformer
 	kmsPluginHealthzCheck healthz.HealthChecker
@@ -954,6 +1009,7 @@ func (d *DynamicTransformers) Name() string {
 
 // TransformerForResource returns the transformer for the given resource.
 func (d *DynamicTransformers) TransformerForResource(resource schema.GroupResource) storagevalue.Transformer {
+	// 返回轻量代理而非当前 transformer：后续 Set 后仍能取到最新实现。
 	return &resourceTransformer{
 		resource:         resource,
 		transformTracker: d.transformTracker,
@@ -982,43 +1038,56 @@ func (d *DynamicTransformers) Set(
 	// by the time we spawn this go routine, the new transformers have already been set and will be used for new requests.
 	// if the server starts shutting down during sleep duration then the transformers will correctly closed early because their lifetime is tied to the api-server drain notifier.
 	go func() {
+		// 延迟关闭是必要的：旧 transformer 可能仍被在读请求持有。
 		time.Sleep(oldTransformTracker.kmsCloseGracePeriod)
 		oldTransformTracker.closeTransformers()
 	}()
 }
 
+// 编译期断言：resourceTransformer 实现 Transformer。
 var _ storagevalue.Transformer = &resourceTransformer{}
 
+// resourceTransformer 每次调用都从最新快照解析实际 transformer，
+// 使配置热加载对已注册的存储层透明。
 type resourceTransformer struct {
 	resource         schema.GroupResource
 	transformTracker *atomic.Value
 }
 
+// TransformFromStorage 委托给最新的 transformer。
 func (r *resourceTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) ([]byte, bool, error) {
 	return r.transformer().TransformFromStorage(ctx, data, dataCtx)
 }
 
+// TransformToStorage 委托给最新的 transformer。
 func (r *resourceTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) ([]byte, error) {
 	return r.transformer().TransformToStorage(ctx, data, dataCtx)
 }
 
+// transformer 按资源名在最新快照中查找匹配项。
 func (r *resourceTransformer) transformer() storagevalue.Transformer {
 	return transformerFromOverrides(r.transformTracker.Load().(*transformTracker).transformerOverrides, r.resource)
 }
 
+// 编译期断言：StaticTransformers 实现 ResourceTransformers。
 var _ storagevalue.ResourceTransformers = &StaticTransformers{}
 
+// StaticTransformers 是启动期固定不变的资源到 transformer 映射。
 type StaticTransformers map[schema.GroupResource]storagevalue.Transformer
 
+// TransformerForResource 按资源查找，遵循同样的通配回退规则。
 func (s StaticTransformers) TransformerForResource(resource schema.GroupResource) storagevalue.Transformer {
 	return transformerFromOverrides(s, resource)
 }
 
+// anyGroupAnyResource 是最终兜底的 "*.*" 规则键。
 var anyGroupAnyResource = schema.GroupResource{
 	Group:    "*",
 	Resource: "*",
 }
 
+// transformerFromOverrides 按 精确资源 -> group/* -> *.* -> identity 的顺序回退，
+// 并统一包一层 requestInfoTransformer 以便审计/指标拿到资源信息。
 func transformerFromOverrides(transformerOverrides map[schema.GroupResource]storagevalue.Transformer, resource schema.GroupResource) (out storagevalue.Transformer) {
 	defer func() { out = newRequestInfoTransformer(resource, out) }()
 
@@ -1037,9 +1106,11 @@ func transformerFromOverrides(transformerOverrides map[schema.GroupResource]stor
 		return transformer
 	}
 
+	// 无匹配规则时保持明文（但会校验写入数据），兼容未配置加密的集群。
 	return identity.NewEncryptCheckTransformer()
 }
 
+// grYAMLString 生成配置中使用的资源字符串，core 组的 "*" 表示为 "*."。
 func grYAMLString(gr schema.GroupResource) string {
 	if gr.Group == "" && gr.Resource == "*" {
 		return "*."
@@ -1048,8 +1119,11 @@ func grYAMLString(gr schema.GroupResource) string {
 	return gr.String()
 }
 
+// 编译期断言：requestInfoTransformer 实现 Transformer。
 var _ storagevalue.Transformer = &requestInfoTransformer{}
 
+// requestInfoTransformer 为底层 transformer 注入资源信息，
+// 使 KMS/指标能在没有 HTTP 上下文的场景下识别资源。
 type requestInfoTransformer struct {
 	baseValueCtx context.Context
 	delegate     storagevalue.Transformer
@@ -1062,23 +1136,28 @@ func newRequestInfoTransformer(resource schema.GroupResource, delegate storageva
 	}
 }
 
+// TransformFromStorage 使用合并后的上下文调用底层实现。
 func (l *requestInfoTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) ([]byte, bool, error) {
 	return l.delegate.TransformFromStorage(l.withBaseValueCtx(ctx), data, dataCtx)
 }
 
+// TransformToStorage 使用合并后的上下文调用底层实现。
 func (l *requestInfoTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx storagevalue.Context) ([]byte, error) {
 	return l.delegate.TransformToStorage(l.withBaseValueCtx(ctx), data, dataCtx)
 }
 
+// withBaseValueCtx 合并请求上下文与预置资源信息；真实请求上下文优先。
 func (l *requestInfoTransformer) withBaseValueCtx(ctx context.Context) context.Context {
 	return &joinValueContext{Context: ctx, baseValueCtx: l.baseValueCtx}
 }
 
+// joinValueContext 实现上下文值回退：先查请求上下文，再查预置上下文。
 type joinValueContext struct {
 	context.Context
 	baseValueCtx context.Context
 }
 
+// Value 按上述回退顺序查找 key。
 func (j *joinValueContext) Value(key any) any {
 	if val := j.Context.Value(key); val != nil {
 		return val

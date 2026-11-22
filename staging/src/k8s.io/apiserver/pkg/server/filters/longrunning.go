@@ -25,6 +25,10 @@ import (
 )
 
 // BasicLongRunningRequestCheck returns true if the given request has one of the specified verbs or one of the specified subresources, or is a profiler request.
+//
+// 判断分三类：特殊动词（如 watch/proxy）、资源请求的特殊子资源（如 exec/log/portforward）、
+// 以及非资源路径下的 pprof 端点。pprof 用于线上诊断，可能持续很久，
+// 因此不能受请求超时限制。
 func BasicLongRunningRequestCheck(longRunningVerbs, longRunningSubresources sets.String) apirequest.LongRunningRequestCheck {
 	return func(r *http.Request, requestInfo *apirequest.RequestInfo) bool {
 		if longRunningVerbs.Has(requestInfo.Verb) {

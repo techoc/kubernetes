@@ -34,6 +34,10 @@ var (
 	key2 = [32]byte{0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02}
 )
 
+// TestSecretboxKeyRotation 验证前缀转换器在密钥轮换时的读取语义：
+// 加密时总是用第一个（当前）密钥并写入对应前缀；读取时必须能识别
+// 旧前缀解密旧数据，并把"用了非首密钥"标记为 stale，触发上层回写。
+// 同时确认 secretbox 不是认证加密存储——上下文不同也仍能解密。
 func TestSecretboxKeyRotation(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	ctx := context.Background()
@@ -47,6 +51,7 @@ func TestSecretboxKeyRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 写入必须使用首个转换器的前缀，否则轮换顺序就失去意义。
 	if !bytes.HasPrefix(out, []byte("first:")) {
 		t.Fatalf("unexpected prefix: %q", out)
 	}
@@ -60,12 +65,16 @@ func TestSecretboxKeyRotation(t *testing.T) {
 
 	// verify changing the context does not fails storage
 	// Secretbox is not currently an authenticating store
+	// 这记录的是当前实现的已知属性：secretbox 不绑定 dataCtx，
+	// 因此改变上下文仍可解密（不同于 AES-GCM 等认证模式）。
 	_, _, err = p.TransformFromStorage(ctx, out, value.DefaultContext([]byte("incorrect_context")))
 	if err != nil {
 		t.Fatalf("secretbox is not authenticated")
 	}
 
 	// reverse the order, use the second key
+	// 调换顺序模拟"新密钥成为当前密钥"：旧数据仍能读，但必须报告
+	// stale 以便上层用新密钥重写。
 	p = value.NewPrefixTransformers(testErr,
 		value.PrefixTransformer{Prefix: []byte("second:"), Transformer: NewSecretboxTransformer(key2)},
 		value.PrefixTransformer{Prefix: []byte("first:"), Transformer: NewSecretboxTransformer(key1)},
@@ -79,6 +88,8 @@ func TestSecretboxKeyRotation(t *testing.T) {
 	}
 }
 
+// BenchmarkSecretboxRead 测量不同值大小与是否命中旧密钥（stale）时的
+// 解密吞吐；解码路径与密钥选择逻辑都会影响结果。
 func BenchmarkSecretboxRead(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -97,6 +108,7 @@ func BenchmarkSecretboxRead(b *testing.B) {
 	}
 }
 
+// BenchmarkSecretboxWrite 测量不同值大小下的加密吞吐。
 func BenchmarkSecretboxWrite(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -113,6 +125,9 @@ func BenchmarkSecretboxWrite(b *testing.B) {
 	}
 }
 
+// benchmarkSecretboxRead 先写入一次，再重复读取。expectStale 时把密钥
+// 顺序反过来，使读取必须走非首转换器，从而测量该路径的成本并确认
+// stale 标志正确。
 func benchmarkSecretboxRead(b *testing.B, keyLength int, valueLength int, expectStale bool) {
 	p := value.NewPrefixTransformers(nil,
 		value.PrefixTransformer{Prefix: []byte("first:"), Transformer: NewSecretboxTransformer(key1)},
@@ -148,6 +163,7 @@ func benchmarkSecretboxRead(b *testing.B, keyLength int, valueLength int, expect
 	b.StopTimer()
 }
 
+// benchmarkSecretboxWrite 重复加密固定内容，测量纯写入路径。
 func benchmarkSecretboxWrite(b *testing.B, keyLength int, valueLength int) {
 	p := value.NewPrefixTransformers(nil,
 		value.PrefixTransformer{Prefix: []byte("first:"), Transformer: NewSecretboxTransformer(key1)},
@@ -168,6 +184,9 @@ func benchmarkSecretboxWrite(b *testing.B, keyLength int, valueLength int) {
 	b.StopTimer()
 }
 
+// TestRoundTrip 用 0..17、128、1024 字节的随机数据验证加解密可逆。
+// 特别覆盖 0 字节与 1..17 字节：这些长度落在 secretbox 的块边界与
+// nonce 开销附近，是编码实现最容易出错的区间。
 func TestRoundTrip(t *testing.T) {
 	lengths := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 128, 1024}
 

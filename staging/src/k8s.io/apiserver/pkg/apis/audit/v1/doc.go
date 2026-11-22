@@ -23,4 +23,7 @@ limitations under the License.
 
 // +groupName=audit.k8s.io
 
+// Package v1 定义审计事件的 v1 外部版本类型（audit.k8s.io/v1）。
+// 该版本是写入审计日志和 webhook 的稳定线格式；内部表示见
+// k8s.io/apiserver/pkg/apis/audit，两者之间的转换由 conversion-gen 生成。
 package v1

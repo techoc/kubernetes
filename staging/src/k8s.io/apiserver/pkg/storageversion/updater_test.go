@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 预置的 ServerStorageVersion 样本：ssv3 的 encoding 与 ssv1/ssv2 不同，
+// ssv4 增加了可解码版本但 encoding 不变，用于覆盖不同聚合场景。
 var (
 	v1   = "v1"
 	v2   = "v2"
@@ -61,6 +63,9 @@ var (
 	}
 )
 
+// TestLocalUpdateStorageVersion 验证单实例本地更新后的聚合结果：
+// 所有实例 encoding 一致时设置 CommonEncodingVersion 并置条件为 True，
+// 否则清除 CommonEncodingVersion 并置为 False；LastTransitionTime 仅在状态变化时更新。
 func TestLocalUpdateStorageVersion(t *testing.T) {
 	tests := []struct {
 		old                            v1alpha1.StorageVersionStatus
@@ -131,6 +136,7 @@ func TestLocalUpdateStorageVersion(t *testing.T) {
 	}
 }
 
+// commonVersionTrueCondition 构造“所有 encoding 版本一致”的条件。
 func commonVersionTrueCondition() []v1alpha1.StorageVersionCondition {
 	return []v1alpha1.StorageVersionCondition{{
 		Type:    v1alpha1.AllEncodingVersionsEqual,
@@ -139,6 +145,8 @@ func commonVersionTrueCondition() []v1alpha1.StorageVersionCondition {
 		Message: "Common encoding version set",
 	}}
 }
+
+// commonVersionFalseCondition 构造“encoding 版本不一致”的条件。
 func commonVersionFalseCondition() []v1alpha1.StorageVersionCondition {
 	return []v1alpha1.StorageVersionCondition{{
 		Type:    v1alpha1.AllEncodingVersionsEqual,
@@ -148,6 +156,9 @@ func commonVersionFalseCondition() []v1alpha1.StorageVersionCondition {
 	}}
 }
 
+// TestSetCommonEncodingVersion 验证仅根据现有 StorageVersions 重算
+// CommonEncodingVersion 与条件；名字中的 init/transition 表示该用例
+// 是否应更新 LastTransitionTime。
 func TestSetCommonEncodingVersion(t *testing.T) {
 	tests := []struct {
 		name                           string

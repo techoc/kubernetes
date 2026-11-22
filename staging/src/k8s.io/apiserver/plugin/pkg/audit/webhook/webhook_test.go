@@ -53,6 +53,8 @@ func newWebhookHandler(t *testing.T, list runtime.Object, cb func(events runtime
 	}
 }
 
+// testWebhookHandler 是模拟审计接收端的 HTTP handler：解码请求体并回调，
+// 用于断言 backend 实际发送的事件内容与类型。
 type testWebhookHandler struct {
 	t *testing.T
 
@@ -62,6 +64,7 @@ type testWebhookHandler struct {
 	serializer runtime.Serializer
 }
 
+// ServeHTTP 读取并解码请求体；失败时返回 500 并记录断言错误。
 func (t *testWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err := func() error {
 		body, err := io.ReadAll(r.Body)
@@ -73,6 +76,7 @@ func (t *testWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return fmt.Errorf("decode request body: %v", err)
 		}
+		// 校验解码结果的顶层类型，防止 backend 发送了错误的结构。
 		if reflect.TypeOf(obj).Elem() != reflect.TypeOf(t.list).Elem() {
 			return fmt.Errorf("expected %T, got %T", t.list, obj)
 		}
@@ -89,6 +93,8 @@ func (t *testWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
+// newWebhook 用临时 kubeconfig 构造指向 endpoint 的审计 backend；
+// 测试中启用 InsecureSkipTLSVerify 以简化 httptest 服务器的证书处理。
 func newWebhook(t *testing.T, endpoint string, groupVersion schema.GroupVersion) *backend {
 	config := v1.Config{
 		Clusters: []v1.NamedCluster{
@@ -106,6 +112,7 @@ func newWebhook(t *testing.T, endpoint string, groupVersion schema.GroupVersion)
 	// NOTE(ericchiang): Do we need to use a proper serializer?
 	require.NoError(t, stdjson.NewEncoder(f).Encode(config), "writing kubeconfig")
 
+	// 有限次退避：测试中不应无限重试，否则失败会表现为超时而非明确错误。
 	retryBackoff := wait.Backoff{
 		Duration: 500 * time.Millisecond,
 		Factor:   1.5,
@@ -118,6 +125,7 @@ func newWebhook(t *testing.T, endpoint string, groupVersion schema.GroupVersion)
 	return b.(*backend)
 }
 
+// TestWebhook 端到端验证 backend 能把事件序列化为 auditv1 并成功 POST 到接收端。
 func TestWebhook(t *testing.T) {
 	versions := []schema.GroupVersion{auditv1.SchemeGroupVersion}
 	for _, version := range versions {

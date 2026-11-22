@@ -25,16 +25,17 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 )
 
-// ListedPathProvider is an interface for providing paths that should be reported at /.
+// ListedPathProvider 提供应在 / 处报告的路径。
 type ListedPathProvider interface {
-	// ListedPaths is an alphabetically sorted list of paths to be reported at /.
+	// ListedPaths 返回按字母序排序的、应在 / 处报告的路径列表。
 	ListedPaths() []string
 }
 
-// ListedPathProviders is a convenient way to combine multiple ListedPathProviders
+// ListedPathProviders 是组合多个 ListedPathProvider 的便捷类型。
 type ListedPathProviders []ListedPathProvider
 
-// ListedPaths unions and sorts the included paths.
+// ListedPaths 合并并排序所有包含的路径。
+// 使用 set 去重，因为多个 provider 可能报告同一路径（例如 /healthz 与 /readyz 共享前缀处理）。
 func (p ListedPathProviders) ListedPaths() []string {
 	ret := sets.String{}
 	for _, provider := range p {
@@ -46,10 +47,11 @@ func (p ListedPathProviders) ListedPaths() []string {
 	return ret.List()
 }
 
-// Index provides a webservice for the http root / listing all known paths.
+// Index 为 http 根路径 / 提供 web 服务，列出所有已知路径。
 type Index struct{}
 
-// Install adds the Index webservice to the given mux.
+// Install 把 Index web 服务安装到给定 mux。
+// 使用 UnlistedHandle：/ 与 /index.html 自身不应出现在根路径列表中。
 func (i Index) Install(pathProvider ListedPathProvider, mux *mux.PathRecorderMux) {
 	handler := IndexLister{StatusCode: http.StatusOK, PathProvider: pathProvider}
 
@@ -57,13 +59,13 @@ func (i Index) Install(pathProvider ListedPathProvider, mux *mux.PathRecorderMux
 	mux.UnlistedHandle("/index.html", handler)
 }
 
-// IndexLister lists the available indexes with the status code provided
+// IndexLister 以给定状态码列出可用索引。
 type IndexLister struct {
 	StatusCode   int
 	PathProvider ListedPathProvider
 }
 
-// ServeHTTP serves the available paths.
+// ServeHTTP 输出可用路径列表，格式为 metav1.RootPaths 的 JSON。
 func (i IndexLister) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	responsewriters.WriteRawJSON(i.StatusCode, metav1.RootPaths{Paths: i.PathProvider.ListedPaths()}, w)
 }

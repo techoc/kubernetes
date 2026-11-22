@@ -35,9 +35,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// alphaPattern 匹配形如 v1alpha1 的版本名，用于区分 alpha API。
 var alphaPattern = regexp.MustCompile(`^v\d+alpha\d+$`)
 
 // resourceExpirationEvaluator holds info for deciding if a particular rest.Storage needs to excluded from the API
+// 判断依据来自生成代码中的 APILifecycleRemoved/APILifecycleIntroduced，
+// 以及若干用于发布窗口内“宽限”的环境变量。
 type resourceExpirationEvaluator struct {
 	currentVersion                          *apimachineryversion.Version
 	emulationForwardCompatible              bool
@@ -65,6 +68,8 @@ type ResourceExpirationEvaluator interface {
 	ShouldServeForVersion(majorRemoved, minorRemoved int) bool
 }
 
+// ResourceExpirationEvaluatorOptions 收集构造 evaluator 所需的全部输入，
+// 便于调用方（尤其是测试）逐项覆盖。
 type ResourceExpirationEvaluatorOptions struct {
 	// CurrentVersion is the current version of the apiserver.
 	CurrentVersion *apimachineryversion.Version
@@ -80,6 +85,8 @@ type ResourceExpirationEvaluatorOptions struct {
 	RuntimeConfigEmulationForwardCompatible bool
 }
 
+// NewResourceExpirationEvaluator 以完整版本号构造 evaluator；
+// 内部只保留 major.minor，pre-release 仅用于 alpha 判断。
 func NewResourceExpirationEvaluator(currentVersion *apimachineryversion.Version) (ResourceExpirationEvaluator, error) {
 	opts := ResourceExpirationEvaluatorOptions{
 		CurrentVersion: apimachineryversion.MajorMinor(currentVersion.Major(), currentVersion.Minor()),
@@ -88,6 +95,7 @@ func NewResourceExpirationEvaluator(currentVersion *apimachineryversion.Version)
 	return NewResourceExpirationEvaluatorFromOptions(opts)
 }
 
+// NewResourceExpirationEvaluatorFromOptions 按选项构造 evaluator，并读取发布窗口相关的环境变量。
 func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorOptions) (ResourceExpirationEvaluator, error) {
 	currentVersion := opts.CurrentVersion
 	if currentVersion == nil {
@@ -104,6 +112,7 @@ func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorO
 	ret.isAlpha = strings.Contains(opts.Prerelease, "alpha")
 	ret.isAlphaZero = strings.Contains(opts.Prerelease, "alpha.0")
 
+	// 环境变量仅在显式设置时生效；解析失败直接报错，避免静默使用错误的发布策略。
 	if envString, ok := os.LookupEnv("KUBE_APISERVER_STRICT_REMOVED_API_HANDLING_IN_ALPHA"); !ok {
 		// do nothing
 	} else if envBool, err := strconv.ParseBool(envString); err != nil {
@@ -124,6 +133,7 @@ func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorO
 }
 
 // isNotRemoved checks if a resource is removed due to the APILifecycleRemoved information.
+// 需要先转换到目标版本再断言 removedInterface，因为删除注解按外部版本生成。
 func (e *resourceExpirationEvaluator) isNotRemoved(gv schema.GroupVersion, versioner runtime.ObjectVersioner, resourceServingInfo rest.Storage) bool {
 	internalPtr := resourceServingInfo.New()
 
@@ -141,12 +151,14 @@ func (e *resourceExpirationEvaluator) isNotRemoved(gv schema.GroupVersion, versi
 
 	removed, ok := versionedPtr.(removedInterface)
 	if !ok {
+		// 没有删除注解即视为尚未移除。
 		return true
 	}
 	majorRemoved, minorRemoved := removed.APILifecycleRemoved()
 	return e.ShouldServeForVersion(majorRemoved, minorRemoved)
 }
 
+// ShouldServeForVersion 根据 API 的移除版本与当前版本/ prerelease 阶段决定是否继续服务。
 func (e *resourceExpirationEvaluator) ShouldServeForVersion(majorRemoved, minorRemoved int) bool {
 	removedVer := apimachineryversion.MajorMinor(uint(majorRemoved), uint(minorRemoved))
 	if removedVer.GreaterThan(e.currentVersion) {
@@ -158,6 +170,7 @@ func (e *resourceExpirationEvaluator) ShouldServeForVersion(majorRemoved, minorR
 	// at this point major and minor are equal, so this API should be removed when the current release GAs.
 	// If this is an alpha tag, don't remove by default, but allow the option.
 	// If the cluster-admin has requested serving one more release, allow it.
+	// 恰好处于移除版本时，默认只在 GA 后移除；alpha 阶段留出清理测试的时间。
 	if e.isAlpha && !e.isAlphaZero && e.strictRemovedHandlingInAlpha { // don't serve in alpha.1+ if we want strict handling
 		return false
 	}
@@ -170,6 +183,7 @@ func (e *resourceExpirationEvaluator) ShouldServeForVersion(majorRemoved, minorR
 	return false
 }
 
+// removedInterface 由 prerelease-lifecycle-gen 生成，声明 API 的移除版本。
 type removedInterface interface {
 	APILifecycleRemoved() (major, minor int)
 }
@@ -197,6 +211,7 @@ func (e *resourceExpirationEvaluator) removeDeletedKinds(groupName string, versi
 				continue
 			}
 
+			// 必须调用 Destroy 释放后台协程/连接，否则移除资源会泄漏。
 			klog.V(1).Infof("Removing resource %v.%v.%v because it is time to stop serving it per APILifecycle.", resourceName, apiVersion, groupName)
 			storage := versionToResource[resourceName]
 			storage.Destroy()
@@ -204,6 +219,7 @@ func (e *resourceExpirationEvaluator) removeDeletedKinds(groupName string, versi
 		}
 		versionedResourcesStorageMap[apiVersion] = versionToResource
 
+		// 版本下已无资源，整个版本也应从发现文档中消失。
 		if len(versionedResourcesStorageMap[apiVersion]) == 0 {
 			versionsToRemove.Insert(apiVersion)
 		}
@@ -215,6 +231,7 @@ func (e *resourceExpirationEvaluator) removeDeletedKinds(groupName string, versi
 	}
 }
 
+// RemoveUnavailableKinds 先剔除已声明移除的 API，再剔除当前版本尚未引入的 API。
 func (e *resourceExpirationEvaluator) RemoveUnavailableKinds(groupName string, versioner runtime.ObjectVersioner, versionedResourcesStorageMap map[string]map[string]rest.Storage, apiResourceConfigSource serverstorage.APIResourceConfigSource) error {
 	e.removeDeletedKinds(groupName, versioner, versionedResourcesStorageMap)
 	return e.removeUnintroducedKinds(groupName, versioner, versionedResourcesStorageMap, apiResourceConfigSource)
@@ -225,6 +242,7 @@ func (e *resourceExpirationEvaluator) RemoveUnavailableKinds(groupName string, v
 func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, versioner runtime.ObjectVersioner, versionedResourcesStorageMap map[string]map[string]rest.Storage, apiResourceConfigSource serverstorage.APIResourceConfigSource) error {
 	versionsToRemove := sets.NewString()
 	prioritizedVersions := versioner.PrioritizedVersionsForGroup(groupName)
+	// 从高到低排序，随后倒序遍历即可先处理低优先级版本。
 	sort.Slice(prioritizedVersions, func(i, j int) bool {
 		return version.CompareKubeAwareVersionStrings(prioritizedVersions[i].Version, prioritizedVersions[j].Version) > 0
 	})
@@ -276,6 +294,7 @@ func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, 
 
 	for _, apiVersion := range versionsToRemove.List() {
 		gv := schema.GroupVersion{Group: groupName, Version: apiVersion}
+		// 用户显式启用了一个尚未引入的版本，说明配置与二进制不匹配，应尽早报错而非静默忽略。
 		if apiResourceConfigSource != nil && apiResourceConfigSource.VersionExplicitlyEnabled(gv) {
 			return fmt.Errorf(
 				"cannot enable version %s in runtime-config because all the resources have been introduced after the current version %s. Consider setting --runtime-config-emulation-forward-compatible=true",
@@ -287,8 +306,10 @@ func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, 
 	return nil
 }
 
+// shouldServeBasedOnVersionIntroduced 判断“当前版本尚未引入”的资源是否应因兼容/模拟模式而继续服务。
 func (e *resourceExpirationEvaluator) shouldServeBasedOnVersionIntroduced(gvr schema.GroupVersionResource, versioner runtime.ObjectVersioner, resourceServingInfo rest.Storage,
 	apiResourceConfigSource serverstorage.APIResourceConfigSource, lowerPriorityEnabled bool) (bool, error) {
+	// 未声明引入版本时按 0.0 处理，即始终视为已引入。
 	verIntroduced := apimachineryversion.MajorMinor(0, 0)
 	internalPtr := resourceServingInfo.New()
 
@@ -335,6 +356,7 @@ func (e *resourceExpirationEvaluator) shouldServeBasedOnVersionIntroduced(gvr sc
 	return false, nil
 }
 
+// shouldRemoveResourceAndSubresources 判断资源本身或其父资源是否在删除集合中。
 func shouldRemoveResourceAndSubresources(resourcesToRemove sets.String, resourceName string) bool {
 	for _, resourceToRemove := range resourcesToRemove.List() {
 		if resourceName == resourceToRemove {

@@ -25,15 +25,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// ObjectSelectorProvider 由 webhook/policy 配置对象实现，暴露解析后的
+// objectSelector；解析失败说明配置非法，调用方需按内部错误处理。
 type ObjectSelectorProvider interface {
 	// GetObjectSelector gets the webhook ObjectSelector field.
 	GetParsedObjectSelector() (labels.Selector, error)
 }
 
 // Matcher decides if a request selected by the ObjectSelector.
+//
+// 无状态、可并发复用；真正的匹配语义在 matchObject 中。
 type Matcher struct {
 }
 
+// matchObject 用 selector 匹配对象标签。对象为 nil 或缺少 metadata 时一律
+// 视为不匹配——宁可少调用 webhook，也不因无法判定而误触发。
 func matchObject(obj runtime.Object, selector labels.Selector) bool {
 	if obj == nil {
 		return false
@@ -49,11 +55,15 @@ func matchObject(obj runtime.Object, selector labels.Selector) bool {
 
 // MatchObjectSelector decides whether the request matches the ObjectSelector
 // of the webhook. Only when they match, the webhook is called.
+//
+// 新旧对象取“或”是刻意的：UPDATE 时即使新对象不再匹配，旧对象匹配也应
+// 触发 webhook，否则无法实现“移除标签时做清理”这类策略。
 func (m *Matcher) MatchObjectSelector(p ObjectSelectorProvider, attr admission.Attributes) (bool, *apierrors.StatusError) {
 	selector, err := p.GetParsedObjectSelector()
 	if err != nil {
 		return false, apierrors.NewInternalError(err)
 	}
+	// 空 selector 表示不设限，所有请求都匹配。
 	if selector.Empty() {
 		return true, nil
 	}

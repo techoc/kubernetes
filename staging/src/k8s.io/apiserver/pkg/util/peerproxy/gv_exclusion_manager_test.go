@@ -28,6 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestGetExclusionSet 验证排除集合由“当前活跃 GV”与“最近删除 GV”合并而成：
+// 已删除但尚未过宽限期的 GV 仍需排除，避免继续把请求路由到对等端。
 func TestGetExclusionSet(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -84,10 +86,7 @@ func TestGetExclusionSet(t *testing.T) {
 			},
 		},
 		{
-			// A GV can appear in both active and deleted sets if:
-			// 1. CRD was deleted (moved from active to deleted)
-			// 2. CRD was recreated (added back to active)
-			// 3. Reaper hasn't cleaned up the deleted entry yet
+			// 关键不变式：同一 GV 同时出现在两个集合中时，结果只保留一份。
 			name: "same GV in both active and deleted",
 			activeGVs: map[schema.GroupVersion]struct{}{
 				{Group: "apps", Version: "v1"}: {},
@@ -126,6 +125,7 @@ func TestGetExclusionSet(t *testing.T) {
 	}
 }
 
+// TestReapExpiredGVs 验证回收器只清理超过宽限期的删除记录，保留近期记录。
 func TestReapExpiredGVs(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -181,6 +181,8 @@ func TestReapExpiredGVs(t *testing.T) {
 	}
 }
 
+// TestDetectDiff 验证 diffGVs 对新增/删除/同尺寸替换的判定，
+// 其中“同尺寸但内容不同”是最容易漏判的场景。
 func TestDetectDiff(t *testing.T) {
 	_ = NewGVExclusionManager(5*time.Minute, &atomic.Value{}, &atomic.Pointer[func()]{})
 
@@ -268,6 +270,8 @@ func TestDetectDiff(t *testing.T) {
 	}
 }
 
+// TestFilterPeerDiscoveryCache 验证过滤对等端发现缓存时只移除被排除的 GVR，
+// 且保留所有对等端条目（即使其 GVR 被清空）。
 func TestFilterPeerDiscoveryCache(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -399,6 +403,8 @@ func TestFilterPeerDiscoveryCache(t *testing.T) {
 	}
 }
 
+// TestFilterPeerCacheEntry 验证单个对等端条目中 GVR 与分组发现信息的一致性过滤：
+// 被排除的 GV 既要从 GVR 集合移除，也要从 GroupDiscovery 中移除。
 func TestFilterPeerCacheEntry(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -490,6 +496,8 @@ func TestFilterPeerCacheEntry(t *testing.T) {
 	}
 }
 
+// TestFilterGroupDiscovery 验证分组发现过滤：仅移除被排除的版本，
+// 分组的所有版本都被排除时整个分组应消失。
 func TestFilterGroupDiscovery(t *testing.T) {
 	tests := []struct {
 		name             string

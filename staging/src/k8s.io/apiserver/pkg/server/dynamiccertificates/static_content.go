@@ -21,6 +21,8 @@ import (
 	"crypto/x509"
 )
 
+// staticCAContent 是永不变化的 CAContentProvider；AddListener 为空实现，
+// 因为不存在“更新事件”可通知。
 type staticCAContent struct {
 	name     string
 	caBundle *caBundleAndVerifier
@@ -49,14 +51,17 @@ func (c *staticCAContent) Name() string {
 func (c *staticCAContent) AddListener(Listener) {}
 
 // CurrentCABundleContent provides ca bundle byte content
+// 返回的切片与内部状态共享，调用方不得修改。
 func (c *staticCAContent) CurrentCABundleContent() (cabundle []byte) {
 	return c.caBundle.caBundle
 }
 
+// VerifyOptions 总是返回 true，因为静态内容在构造时已完成校验。
 func (c *staticCAContent) VerifyOptions() (x509.VerifyOptions, bool) {
 	return c.caBundle.verifyOptions, true
 }
 
+// staticCertKeyContent 是永不轮换的证书/私钥对。
 type staticCertKeyContent struct {
 	name string
 	cert []byte
@@ -66,6 +71,8 @@ type staticCertKeyContent struct {
 // NewStaticCertKeyContent returns a CertKeyContentProvider that always returns the same value
 func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvider, error) {
 	// Ensure that the key matches the cert and both are valid
+	// 构造时即校验，避免把不匹配的证书/私钥带入运行期，直到握手时才
+	// 以晦涩的 TLS 错误暴露。
 	_, err := tls.X509KeyPair(cert, key)
 	if err != nil {
 		return nil, err
@@ -90,6 +97,8 @@ func (c *staticCertKeyContent) CurrentCertKeyContent() ([]byte, []byte) {
 	return c.cert, c.key
 }
 
+// staticSNICertKeyContent 在静态证书基础上附带 SNI 名称列表，
+// 用于为特定 ServerName 选择不同证书。
 type staticSNICertKeyContent struct {
 	staticCertKeyContent
 	sniNames []string
@@ -113,6 +122,7 @@ func NewStaticSNICertKeyContent(name string, cert, key []byte, sniNames ...strin
 	}, nil
 }
 
+// SNINames 返回该证书可响应的 SNI 名称；顺序无关，调用方通常做集合匹配。
 func (c *staticSNICertKeyContent) SNINames() []string {
 	return c.sniNames
 }

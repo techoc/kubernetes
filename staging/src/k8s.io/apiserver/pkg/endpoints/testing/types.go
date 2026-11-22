@@ -22,6 +22,7 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// Simple 是最小的命名空间级测试资源，仅含元数据、一个字符串字段与标签。
 type Simple struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`
@@ -33,6 +34,7 @@ type Simple struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// SimpleRoot 与 Simple 字段相同，但用于测试集群级（root）资源的 handler 路径。
 type SimpleRoot struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`
@@ -44,6 +46,8 @@ type SimpleRoot struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// SimpleGetOptions 用于测试 GET 查询参数解析；Path 的 JSON 名刻意与字段名
+// 不同，以覆盖按 tag 取参数的逻辑。
 type SimpleGetOptions struct {
 	metav1.TypeMeta `json:""`
 	Param1          string `json:"param1"`
@@ -51,6 +55,7 @@ type SimpleGetOptions struct {
 	Path            string `json:"atAPath"`
 }
 
+// SwaggerDoc 返回手写的参数描述，测试 OpenAPI 文档生成是否合并该结果。
 func (SimpleGetOptions) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"param1": "description for param1",
@@ -60,6 +65,7 @@ func (SimpleGetOptions) SwaggerDoc() map[string]string {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// SimpleList 是 Simple 的列表形态，用于测试 list 响应的编码与分页元数据。
 type SimpleList struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata,inline"`
@@ -71,6 +77,7 @@ type SimpleList struct {
 
 // SimpleXGSubresource is a cross group subresource, i.e. the subresource does not belong to the
 // same group as its parent resource.
+// SimpleXGSubresource 用于验证“子资源与父资源属于不同 API 组”时的路由与鉴权。
 type SimpleXGSubresource struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`

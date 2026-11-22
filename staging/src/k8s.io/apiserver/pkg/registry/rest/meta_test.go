@@ -24,6 +24,10 @@ import (
 )
 
 // TestWipeObjectMetaSystemFields validates that system populated fields are set on an object
+//
+// TestWipeObjectMetaSystemFields 验证清空系统字段后，创建时间、UID、
+// 删除相关字段与 SelfLink 都回到零值。这些字段只能由服务端填写，
+// 客户端传入时必须被抹掉。
 func TestWipeObjectMetaSystemFields(t *testing.T) {
 	resource := metav1.ObjectMeta{}
 	WipeObjectMetaSystemFields(&resource)
@@ -45,6 +49,9 @@ func TestWipeObjectMetaSystemFields(t *testing.T) {
 }
 
 // TestFillObjectMetaSystemFields validates that system populated fields are set on an object
+//
+// TestFillObjectMetaSystemFields 验证新建对象时服务端会填充创建时间与
+// 唯一 UID，这是对象持久化前必须满足的元数据不变量。
 func TestFillObjectMetaSystemFields(t *testing.T) {
 	resource := metav1.ObjectMeta{}
 	FillObjectMetaSystemFields(&resource)
@@ -57,6 +64,10 @@ func TestFillObjectMetaSystemFields(t *testing.T) {
 }
 
 // TestHasObjectMetaSystemFieldValues validates that true is returned if and only if all fields are populated
+//
+// TestHasObjectMetaSystemFieldValues 验证该判定只在全部系统字段就绪时
+// 返回 true；存储层用它区分"新建对象"与"已持久化对象"，误判会导致
+// 重复分配 UID。
 func TestHasObjectMetaSystemFieldValues(t *testing.T) {
 	resource := metav1.ObjectMeta{}
 	objMeta, err := meta.Accessor(&resource)
@@ -72,6 +83,10 @@ func TestHasObjectMetaSystemFieldValues(t *testing.T) {
 	}
 }
 
+// TestEnsureObjectNamespaceMatchesRequestNamespace 验证请求命名空间与
+// 对象命名空间的一致性规则：完全一致通过；集群级请求遇到带命名空间
+// 的对象、或命名空间请求遇到无命名空间的对象时，为向后兼容而强制对齐
+// 而非报错；两者都非空且不同才拒绝，防止通过 URL 命名空间越权写入。
 func TestEnsureObjectNamespaceMatchesRequestNamespace(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -128,6 +143,7 @@ func TestEnsureObjectNamespaceMatchesRequestNamespace(t *testing.T) {
 				t.Fatalf("unexpected err: %v", err)
 			}
 
+			// 即使无需报错，也要确认对象命名空间被对齐到期望值。
 			if obj.Namespace != tc.expectObjNS {
 				t.Fatalf("expected obj ns %q, got %q", tc.expectObjNS, obj.Namespace)
 			}

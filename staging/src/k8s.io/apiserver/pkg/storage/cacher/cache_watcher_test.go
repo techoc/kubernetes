@@ -47,6 +47,8 @@ import (
 
 // verifies the cacheWatcher.process goroutine is properly cleaned up even if
 // the writes to cacheWatcher.result channel is blocked.
+//
+// 把 result 缓冲设为 0 使写入阻塞，再验证 Stop 仍能触发 forget() 两次（不因写阻塞而泄漏协程）。
 func TestCacheWatcherCleanupNotBlockedByResult(t *testing.T) {
 	var lock sync.RWMutex
 	var w *cacheWatcher
@@ -80,6 +82,10 @@ func TestCacheWatcherCleanupNotBlockedByResult(t *testing.T) {
 	}
 }
 
+// TestCacheWatcherHandlesFiltering 验证字段过滤器与 watch 事件类型的转换语义：
+//   - 对象进入/离开过滤集合时，需分别合成 Added/Deleted 事件；
+//   - 过滤集合外的变更应被丢弃；
+//   - 集合内的连续变更保持 Modified。
 func TestCacheWatcherHandlesFiltering(t *testing.T) {
 	filter := func(_ string, _ labels.Set, field fields.Set, _ runtime.Object) bool {
 		return field["spec.nodeName"] == "host"
@@ -210,6 +216,8 @@ TestCase:
 	}
 }
 
+// TestCacheWatcherStoppedInAnotherGoroutine 回归测试 Stop 与超时定时器并发触发时的死锁/阻塞：
+// 重复多轮以放大竞态窗口；每轮都要求 Stop 在 1 秒内完成。
 func TestCacheWatcherStoppedInAnotherGoroutine(t *testing.T) {
 	var w *cacheWatcher
 	done := make(chan struct{})
@@ -252,6 +260,8 @@ func TestCacheWatcherStoppedInAnotherGoroutine(t *testing.T) {
 	}
 }
 
+// TestCacheWatcherStoppedOnDestroy 验证 cacher 停止后，所有活跃 watch 的 ResultChan 都会被关闭，
+// 避免客户端协程永久挂起。
 func TestCacheWatcherStoppedOnDestroy(t *testing.T) {
 	backingStorage := &cachertesting.MockStorage{}
 	cacher, _, err := newTestCacher(backingStorage)
@@ -293,6 +303,8 @@ func TestCacheWatcherStoppedOnDestroy(t *testing.T) {
 
 }
 
+// TestResourceVersionAfterInitEvents 验证初始事件（来自 store 的快照）与通过 input 通道
+// 重复投递的同一事件不会造成重复输出：processInterval 应按起始 resourceVersion 去重。
 func TestResourceVersionAfterInitEvents(t *testing.T) {
 	const numObjects = 10
 	store := store.NewIndexer(nil)
@@ -346,6 +358,8 @@ func TestResourceVersionAfterInitEvents(t *testing.T) {
 	wg.Wait()
 }
 
+// TestTimeBucketWatchersBasic 验证按截止时间分桶的 watcher 集合：
+// 同一时刻的 watcher 归入同一桶，popExpiredWatchers 只返回已过期且每个桶只弹出一次。
 func TestTimeBucketWatchersBasic(t *testing.T) {
 	filter := func(_ string, _ labels.Set, _ fields.Set, _ runtime.Object) bool {
 		return true
@@ -390,6 +404,7 @@ func TestTimeBucketWatchersBasic(t *testing.T) {
 	}
 }
 
+// makeWatchCacheEvent 构造一个指定 resourceVersion 的 Added 事件，供排空相关用例复用。
 func makeWatchCacheEvent(rv uint64) *watchCacheEvent {
 	return &watchCacheEvent{
 		Type: watch.Added,
@@ -404,6 +419,8 @@ func makeWatchCacheEvent(rv uint64) *watchCacheEvent {
 }
 
 // TestCacheWatcherDraining verifies the cacheWatcher.process goroutine is properly cleaned up when draining was requested
+//
+// 排空（drain）语义：请求停止后仍把已入队的事件全部发送给客户端，然后关闭通道。
 func TestCacheWatcherDraining(t *testing.T) {
 	var lock sync.RWMutex
 	var w *cacheWatcher
@@ -445,6 +462,8 @@ func TestCacheWatcherDraining(t *testing.T) {
 
 // TestCacheWatcherDrainingRequestedButNotDrained verifies the cacheWatcher.process goroutine is properly cleaned up when draining was requested
 // but the client never actually get any data
+//
+// 客户端不消费时，排空不能无限阻塞，协程仍须退出。
 func TestCacheWatcherDrainingRequestedButNotDrained(t *testing.T) {
 	var lock sync.RWMutex
 	var w *cacheWatcher
@@ -479,6 +498,8 @@ func TestCacheWatcherDrainingRequestedButNotDrained(t *testing.T) {
 
 // TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived verifies if the watcher will be stopped
 // when adding an item times out and the bookmarkAfterResourceVersion hasn't been received
+//
+// 未收到 bookmark 时不排空：直接停止，避免客户端无限期等待一个永远不会来的书签。
 func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived(t *testing.T) {
 	var lock sync.RWMutex
 	var w *cacheWatcher
@@ -531,6 +552,9 @@ func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived(t *testing.T
 
 // TestCacheWatcherDrainingNoBookmarkAfterResourceVersionSent checks if the watcher's input
 // channel is drained if the bookmarkAfterResourceVersion was received but not sent
+//
+// 已收到但尚未发出 bookmark 时必须排空：保证客户端能看到初始事件结束标记，
+// 同时顺带断言分发延迟指标的分阶段统计。
 func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionSent(t *testing.T) {
 	makePod := func(rv uint64) *v1.Pod {
 		return &v1.Pod{
@@ -635,6 +659,8 @@ apiserver_watch_events_dispatch_duration_seconds_count{group="",resource="pods",
 	}
 }
 
+// TestBookmarkAfterResourceVersionWatchers 验证等待初始事件 bookmark 的 watcher 调度策略：
+// 在收到 bookmark 前会被立即反复标记为过期以便重试；收到后改为按正常 bookmark 频率调度。
 func TestBookmarkAfterResourceVersionWatchers(t *testing.T) {
 	newWatcher := func(id string, deadline time.Time) *cacheWatcher {
 		w := newCacheWatcher(0, func(_ string, _ labels.Set, _ fields.Set, _ runtime.Object) bool { return true }, func(bool) {}, storage.APIObjectVersioner{}, deadline, true, schema.GroupResource{Resource: "pods"}, metrics.NewNoopWatcherMetricsObservers(), nil, id)
@@ -692,6 +718,7 @@ func TestBookmarkAfterResourceVersionWatchers(t *testing.T) {
 	}
 }
 
+// gatherWithoutBuckets 返回去掉直方图分桶的采集器，使指标比较不依赖桶边界配置。
 func gatherWithoutBuckets(gatherer compbasemetrics.Gatherer) testutil.GathererFunc {
 	return func() ([]*testutil.MetricFamily, error) {
 		got, err := gatherer.Gather()

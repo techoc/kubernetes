@@ -28,6 +28,9 @@ import (
 
 // DefinitionsSchemaResolver resolves the schema of a built-in type
 // by looking up the OpenAPI definitions.
+//
+// gvkToRef 是预建的 GVK→定义名索引；resolver 构建后只读，可并发使用。
+// 之所以预建索引，是因为 CEL 编译期可能对同一 GVK 反复解析 schema。
 type DefinitionsSchemaResolver struct {
 	defs     map[string]common.OpenAPIDefinition
 	gvkToRef map[schema.GroupVersionKind]string
@@ -37,6 +40,9 @@ type DefinitionsSchemaResolver struct {
 // An example working setup:
 // getDefinitions = "k8s.io/kubernetes/pkg/generated/openapi".GetOpenAPIDefinitions
 // scheme         = "k8s.io/client-go/kubernetes/scheme".Scheme
+//
+// 需要传入 scheme，是因为定义名到 GVK 的映射依赖 scheme 中的类型注册；
+// 一个定义名可能对应多个 GVK（例如同一 Go 类型被多个组使用）。
 func NewDefinitionsSchemaResolver(getDefinitions common.GetOpenAPIDefinitions, schemes ...*runtime.Scheme) *DefinitionsSchemaResolver {
 	gvkToRef := make(map[schema.GroupVersionKind]string)
 	namer := openapi.NewDefinitionNamer(schemes...)
@@ -44,6 +50,7 @@ func NewDefinitionsSchemaResolver(getDefinitions common.GetOpenAPIDefinitions, s
 	for name := range defs {
 		_, e := namer.GetDefinitionName(name)
 		gvks := extensionsToGVKs(e)
+		// 同一 GVK 若被多个定义名覆盖，后写入者生效；正常情况下不会冲突。
 		for _, gvk := range gvks {
 			gvkToRef[gvk] = name
 		}
@@ -54,6 +61,8 @@ func NewDefinitionsSchemaResolver(getDefinitions common.GetOpenAPIDefinitions, s
 	}
 }
 
+// ResolveSchema 返回给定 GVK 的完整 schema（所有 $ref 已展开）。
+// 返回深拷贝的 schema，避免调用方修改包级定义缓存。
 func (d *DefinitionsSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (*spec.Schema, error) {
 	ref, ok := d.gvkToRef[gvk]
 	if !ok {
@@ -74,6 +83,9 @@ func (d *DefinitionsSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (
 	return s, nil
 }
 
+// extensionsToGVKs 从定义扩展中解析 x-kubernetes-group-version-kind 列表。
+// 任何类型断言失败都返回 nil（视为无 GVK），而不是部分结果，
+// 以免把不完整的映射注入索引造成难以排查的错误。
 func extensionsToGVKs(extensions spec.Extensions) []schema.GroupVersionKind {
 	gvksAny, ok := extensions[extGVK]
 	if !ok {

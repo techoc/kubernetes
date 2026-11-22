@@ -32,6 +32,9 @@ import (
 // dynamic client fallback are converted to the same representation the param
 // informer returns, so that policy evaluation behaves identically regardless of
 // which path resolved the param.
+//
+// 动态客户端回退路径拿到的是 unstructured，而 informer 路径缓存的是具体类型；若不做归一化，
+// 同一条策略在两条路径上会看到不同的对象形态（例如 TypeMeta 是否为空），导致 CEL 求值结果不一致。
 func TestConvertParamToInformerRepresentation(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -42,6 +45,7 @@ func TestConvertParamToInformerRepresentation(t *testing.T) {
 		wantErr       bool
 	}{
 		{
+			// 已知类型应被解码成具体类型，且 TypeMeta 清空，以对齐 client-go 缓存的形态。
 			name: "typed kind converts to typed object with empty TypeMeta",
 			gvk:  schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"},
 			param: &unstructured.Unstructured{
@@ -69,6 +73,7 @@ func TestConvertParamToInformerRepresentation(t *testing.T) {
 			},
 		},
 		{
+			// 未知类型（如 CRD 未注册）无法解码，应原样保留 unstructured。
 			name: "unknown kind stays unstructured",
 			gvk:  schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "TestParam"},
 			param: &unstructured.Unstructured{
@@ -87,6 +92,7 @@ func TestConvertParamToInformerRepresentation(t *testing.T) {
 			wantUnchanged: true,
 		},
 		{
+			// 声明为已知类型但字段结构不匹配时必须报错，不能静默降级成 unstructured。
 			name: "typed kind with mismatched data errors",
 			gvk:  schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"},
 			param: &unstructured.Unstructured{
@@ -112,6 +118,7 @@ func TestConvertParamToInformerRepresentation(t *testing.T) {
 			}
 			require.NoError(t, err, "unexpected error during conversion")
 			if tt.wantUnchanged {
+				// 用 Same 而非 Equal：必须是同一个指针，证明没有发生无谓的拷贝/重建。
 				require.Same(t, tt.param, converted, "expected the unstructured param to be returned unchanged")
 				return
 			}

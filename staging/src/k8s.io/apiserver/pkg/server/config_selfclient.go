@@ -26,8 +26,13 @@ import (
 
 // LoopbackClientServerNameOverride is passed to the apiserver from the loopback client in order to
 // select the loopback certificate via SNI if TLS is used.
+//
+// 该名字同时用于两个目的：SNI 选择 loopback 证书，以及客户端校验证书
+// 中的 DNS SAN；两者必须一致，否则握手失败。
 const LoopbackClientServerNameOverride = "apiserver-loopback-client"
 
+// NewClientConfig 构造指向本 apiserver 自身的 REST 配置。
+// 返回 nil 表示未启用 TLS（此时调用方不应创建回环客户端）。
 func (s *SecureServingInfo) NewClientConfig(caCert []byte) (*restclient.Config, error) {
 	if s == nil || (s.Cert == nil && len(s.SNICerts) == 0) {
 		return nil, nil
@@ -40,6 +45,8 @@ func (s *SecureServingInfo) NewClientConfig(caCert []byte) (*restclient.Config, 
 
 	return &restclient.Config{
 		// Do not limit loopback client QPS.
+		// 回环客户端代表 apiserver 自身内部调用，限流会造成自死锁式
+		// 的排队，因此显式关闭。
 		QPS:  -1,
 		Host: "https://" + net.JoinHostPort(host, port),
 		TLSClientConfig: restclient.TLSClientConfig{
@@ -48,6 +55,8 @@ func (s *SecureServingInfo) NewClientConfig(caCert []byte) (*restclient.Config, 
 	}, nil
 }
 
+// NewLoopbackClientConfig 在 NewClientConfig 基础上加入 bearer token 和
+// SNI ServerName，用于以特权身份访问自身 API。
 func (s *SecureServingInfo) NewLoopbackClientConfig(token string, loopbackCert []byte) (*restclient.Config, error) {
 	c, err := s.NewClientConfig(loopbackCert)
 	if err != nil || c == nil {
@@ -74,6 +83,7 @@ func LoopbackHostPort(bindAddress string) (string, string, error) {
 	isIPv6 := netutils.IsIPv6String(host)
 
 	// Value is expected to be an IP or DNS name, not "0.0.0.0".
+	// 通配地址不能直接用于连接，必须替换为具体回环地址。
 	if host == "0.0.0.0" || host == "::" {
 		// Get ip of local interface, but fall back to "localhost".
 		// Note that "localhost" is resolved with the external nameserver first with Go's stdlib.
@@ -84,6 +94,9 @@ func LoopbackHostPort(bindAddress string) (string, string, error) {
 }
 
 // getLoopbackAddress returns the ip address of local loopback interface. If any error occurs or loopback interface is not found, will fall back to "localhost"
+//
+// 优先返回字面 IP 而非 "localhost"：某些环境的 DNS 搜索域会把
+// localhost.<domain> 解析到非回环地址，导致回环客户端连错地方。
 func getLoopbackAddress(wantIPv6 bool) string {
 	addrs, err := net.InterfaceAddrs()
 	if err == nil {

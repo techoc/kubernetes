@@ -19,6 +19,9 @@ limitations under the License.
 // manifest validation. Type-specific defaulting and validation (e.g., scheme-based
 // defaulting via internal types) are injected by callers through the AcceptObjectFunc
 // callback.
+//
+// 泛型参数 T 让 validating/mutating 两类配置共用同一套文件遍历与校验逻辑，
+// 类型相关的默认值与字段校验则通过回调注入，避免在包内做类型分支。
 package loader
 
 import (
@@ -35,12 +38,18 @@ import (
 // AcceptObjectFunc extracts typed items from a decoded runtime.Object, applying
 // defaulting and validation. Returns the extracted items, or an error if the
 // object type is not recognized or processing fails.
+//
+// 返回切片是因为一个文件对象可能展开为多个配置项；由调用方决定默认值
+// 与校验规则，loader 只负责结构性检查。
 type AcceptObjectFunc[T metav1.Object] func(obj runtime.Object) ([]T, error)
 
 // LoadManifests loads webhook configurations from manifest files in dir using
 // the provided decoder and acceptObject callback. It handles file I/O, YAML
 // splitting, decoding, v1.List unwrapping, manifest name validation, webhook
 // client config validation, and deterministic sorting by name.
+//
+// 返回的 hash 覆盖全部文件内容，供上层做变更检测；排序保证相同的文件集合
+// 总是产生相同的顺序，便于比较与测试。
 func LoadManifests[T metav1.Object](
 	dir string,
 	decoder runtime.Decoder,
@@ -52,6 +61,7 @@ func LoadManifests[T metav1.Object](
 	}
 
 	configs := make([]T, 0)
+	// seenNames 记录名字到文件路径的映射，用于跨文件检测重名。
 	seenNames := map[string]string{}
 
 	for _, fd := range fileDocs {
@@ -60,13 +70,14 @@ func LoadManifests[T metav1.Object](
 			return nil, "", fmt.Errorf("error loading %s: %w", fd.FilePath, err)
 		}
 
-		items, err := acceptFileObject(obj, fd.FilePath, seenNames, decoder, acceptObject)
+		items, err := acceptFileObject[T](obj, fd.FilePath, seenNames, decoder, acceptObject)
 		if err != nil {
 			return nil, "", fmt.Errorf("error loading %s: %w", fd.FilePath, err)
 		}
 		configs = append(configs, items...)
 	}
 
+	// 按名字稳定排序，消除文件系统遍历顺序的不确定性。
 	sort.Slice(configs, func(i, j int) bool {
 		return configs[i].GetName() < configs[j].GetName()
 	})
@@ -85,6 +96,7 @@ func acceptFileObject[T metav1.Object](
 	acceptObject AcceptObjectFunc[T],
 ) ([]T, error) {
 	// Handle generic v1.List by recursing into each item
+	// 递归处理 List，使生效中的校验对嵌套项同样适用。
 	if list, ok := obj.(*metav1.List); ok {
 		var allItems []T
 		for _, rawItem := range list.Items {
@@ -92,7 +104,7 @@ func acceptFileObject[T metav1.Object](
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode list item: %w", err)
 			}
-			items, err := acceptFileObject(itemObj, filePath, seenNames, decoder, acceptObject)
+			items, err := acceptFileObject[T](itemObj, filePath, seenNames, decoder, acceptObject)
 			if err != nil {
 				return nil, err
 			}
@@ -129,6 +141,7 @@ func validateAcceptedItem[T metav1.Object](item T, filePath string, seenNames ma
 
 // validateWebhookClientConfigs validates that all webhooks in a configuration
 // use URL-based client config (service references are not supported for manifests).
+// 静态清单没有 Service 解析能力，因此明确拒绝 service 引用，只允许 url。
 func validateWebhookClientConfigs(obj runtime.Object, configName, filePath string) error {
 	switch c := obj.(type) {
 	case *admissionregistrationv1.ValidatingWebhookConfiguration:
@@ -151,6 +164,7 @@ func validateWebhookClientConfigs(obj runtime.Object, configName, filePath strin
 
 // ValidateWebhookClientConfig checks that a webhook uses URL-based client config
 // (service references are not supported for static manifests).
+// 错误信息包含 webhook 名、配置名与文件路径，便于在大量清单中定位问题来源。
 func ValidateWebhookClientConfig(webhookName, configName, filePath string, cc admissionregistrationv1.WebhookClientConfig) error {
 	if cc.Service != nil {
 		return fmt.Errorf("webhook %q in %q (file %q): clientConfig.service is not supported for static manifests; use clientConfig.url instead", webhookName, configName, filePath)
@@ -178,6 +192,8 @@ type MutatingLoadResult struct {
 }
 
 // BuildValidatingAccessors builds webhook accessors from validating webhook configurations.
+// uid 中拼接出现次数（names[n]），是为了在同一配置内存在同名 webhook 时
+// 仍能生成唯一标识，而不是让后者覆盖前者。
 func BuildValidatingAccessors(configs []*admissionregistrationv1.ValidatingWebhookConfiguration) []webhook.WebhookAccessor {
 	var accessors []webhook.WebhookAccessor
 	for _, config := range configs {
@@ -194,6 +210,7 @@ func BuildValidatingAccessors(configs []*admissionregistrationv1.ValidatingWebho
 }
 
 // BuildMutatingAccessors builds webhook accessors from mutating webhook configurations.
+// 与 validating 版本结构一致，仅构造函数不同。
 func BuildMutatingAccessors(configs []*admissionregistrationv1.MutatingWebhookConfiguration) []webhook.WebhookAccessor {
 	var accessors []webhook.WebhookAccessor
 	for _, config := range configs {

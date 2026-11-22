@@ -17,4 +17,8 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=audit.k8s.io
 
+// Package audit 定义审计事件的内部 API 类型。
+//
+// 这些类型与 audit.k8s.io/v1 的版本化类型一一对应，但不受 API 兼容性保证约束，
+// 仅供 apiserver 内部使用；对外序列化一律经由 v1 转换完成。
 package audit

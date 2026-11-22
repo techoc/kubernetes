@@ -16,6 +16,10 @@ limitations under the License.
 
 // Package install installs the example2 API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+//
+// 中文说明：install 包是 API 组的「注册入口」，被 apiserver 的 scheme 初始化代码引用。
+// 它把内部版本（example2）与外部版本（example2/v1）同时加入同一个 scheme，
+// 这样编解码器才能在两者之间转换；缺少任一版本都会导致 REST 存储无法序列化。
 package install
 
 import (
@@ -27,9 +31,16 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 中文说明：example 是 example2 的「前身」组，两者共享内部类型，故一并注册；
+// example2/v1 是唯一对外暴露的版本。注册顺序不影响结果，但 SetVersionPriority 决定了
+// 无版本偏好时的默认序列化版本，必须指向外部版本而非内部版本。
 func Install(scheme *runtime.Scheme) {
+	// example 组提供内部类型，example2 的存储/转换依赖它。
 	utilruntime.Must(example.AddToScheme(scheme))
 	utilruntime.Must(example2.AddToScheme(scheme))
+	// 外部版本必须注册，否则客户端请求的 v1 无法解码。
 	utilruntime.Must(example2v1.AddToScheme(scheme))
+	// 将 v1 设为默认版本，保证未显式指定版本的转换有确定结果。
 	utilruntime.Must(scheme.SetVersionPriority(example2v1.SchemeGroupVersion))
 }

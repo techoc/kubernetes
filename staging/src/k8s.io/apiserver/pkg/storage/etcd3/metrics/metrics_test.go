@@ -29,6 +29,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordDecodeError 验证解码错误计数按 group/resource 打标签。
 func TestRecordDecodeError(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	defer registry.Reset()
@@ -60,6 +61,7 @@ func TestRecordDecodeError(t *testing.T) {
 	}
 }
 
+// TestRecordEtcdEvent 验证从 etcd 收到的事件按 group/resource 计数。
 func TestRecordEtcdEvent(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	defer registry.Reset()
@@ -90,6 +92,8 @@ apiserver_storage_events_received_total{group="apps",resource="deployments"} 1
 	}
 }
 
+// TestRecordEtcdBookmark 验证 bookmark（progress notify）事件按资源计数；
+// callCount 用于确认重复记录会累加。
 func TestRecordEtcdBookmark(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	registry.MustRegister(etcdBookmarkTotal)
@@ -123,10 +127,13 @@ etcd_bookmark_total{group="apps",resource="deployments"} 1
 	}
 }
 
+// TestRecordEtcdRequest 验证请求延迟直方图、请求计数与错误计数：
+// 成功请求只增加总数，失败请求额外增加错误计数；两类都记录 0.3s 的耗时。
 func TestRecordEtcdRequest(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 
 	// modify default sinceInSeconds to constant NOW
+	// 把时基固定为 0.3s，使直方图分桶结果可预测，避免依赖真实时钟。
 	sinceInSeconds = func(t time.Time) float64 {
 		return time.Unix(0, 300*int64(time.Millisecond)).Sub(t).Seconds()
 	}
@@ -245,6 +252,8 @@ etcd_request_errors_total{group="bar",operation="foo",resource="baz"} 1
 	}
 }
 
+// TestStorageSizeCollector 验证存储大小收集器：配置 getter 时输出各集群物理大小，
+// 未配置时不产生任何样本（而不是报错或输出 0）。
 func TestStorageSizeCollector(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	registry.CustomMustRegister(storageMonitor)
@@ -290,6 +299,8 @@ func TestStorageSizeCollector(t *testing.T) {
 
 }
 
+// TestUpdateStoreStats 验证对象数量、体积估算与旧版 apiserver_storage_objects 的同步更新；
+// 拉取失败时三者都置为 -1，用哨兵值区分"未知"与"零"。
 func TestUpdateStoreStats(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	registry.Register(objectCounts)
@@ -376,6 +387,8 @@ apiserver_resource_size_estimate_bytes{group="foo",resource="bar"} -1
 	}
 }
 
+// TestDeleteStoreStats 验证资源被卸载后清理对应标签的指标，
+// 避免长生命周期进程里遗留无效的时间序列。
 func TestDeleteStoreStats(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 	registry.MustRegister(objectCounts)
@@ -429,6 +442,7 @@ apiserver_storage_objects{resource="bar2.foo2"} 20
 	}
 }
 
+// fakeEtcdMonitor 返回固定存储大小，用于隔离真实的 etcd 客户端。
 type fakeEtcdMonitor struct {
 	storageSize int64
 }

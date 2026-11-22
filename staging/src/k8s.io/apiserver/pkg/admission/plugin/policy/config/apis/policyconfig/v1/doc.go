@@ -18,4 +18,7 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/apiserver/pkg/admission/plugin/policy/config/apis/policyconfig
 
 // Package v1 is the v1 version of the API.
+//
+// v1 是策略类准入插件配置的稳定版本。转换目标（conversion-gen）指向无版本号的
+// policyconfig 包，因此任何字段调整都必须保持二者可双向无损转换。
 package v1

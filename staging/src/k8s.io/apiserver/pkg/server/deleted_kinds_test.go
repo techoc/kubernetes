@@ -33,6 +33,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test_newResourceExpirationEvaluator 验证从版本字符串识别 alpha/beta 通道：
+// 只关心 major.minor；alpha.0 与其他 alpha 的严格移除语义不同，需区分。
 func Test_newResourceExpirationEvaluator(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -84,6 +86,8 @@ func Test_newResourceExpirationEvaluator(t *testing.T) {
 	}
 }
 
+// defaultObj 没有生命周期元数据；测试中不应调用其 runtime.Object 方法，
+// 故直接 panic 以暴露误用。
 type defaultObj struct {
 }
 
@@ -94,6 +98,7 @@ func (r *defaultObj) DeepCopyObject() runtime.Object {
 	panic("don't do this either")
 }
 
+// removedInObj 只声明移除版本，用于测试“已移除”判定。
 type removedInObj struct {
 	major, minor int
 }
@@ -108,6 +113,7 @@ func (r *removedInObj) APILifecycleRemoved() (major, minor int) {
 	return r.major, r.minor
 }
 
+// IntroducedInObj 只声明引入版本，用于测试“尚未引入”判定。
 type IntroducedInObj struct {
 	major, minor int
 }
@@ -122,6 +128,7 @@ func (r *IntroducedInObj) APILifecycleIntroduced() (major, minor int) {
 	return r.major, r.minor
 }
 
+// introducedAndRemovedInObj 同时声明引入与移除版本，用于验证区间判定。
 type introducedAndRemovedInObj struct {
 	majorIntroduced, minorIntroduced int
 	majorRemoved, minorRemoved       int
@@ -140,6 +147,8 @@ func (r *introducedAndRemovedInObj) APILifecycleRemoved() (major, minor int) {
 	return r.majorRemoved, r.minorRemoved
 }
 
+// 以下构造器简化表驱动用例中的 storage 声明，分别表达“已移除”“从未移除”
+// “某版本引入”“引入且移除”四种生命周期。
 func storageRemovedIn(major, minor int) *introducedAndRemovedInStorage {
 	return &introducedAndRemovedInStorage{majorRemoved: major, minorRemoved: minor}
 }
@@ -156,11 +165,14 @@ func storageIntroducedAndRemovedIn(majorIntroduced, minorIntroduced, majorRemove
 	return &introducedAndRemovedInStorage{majorIntroduced: majorIntroduced, minorIntroduced: minorIntroduced, majorRemoved: majorRemoved, minorRemoved: minorRemoved}
 }
 
+// introducedAndRemovedInStorage 是 rest.Storage 测试替身，New() 根据设置的
+// 版本字段返回不同生命周期对象，从而复用同一套 storage map。
 type introducedAndRemovedInStorage struct {
 	majorIntroduced, minorIntroduced int
 	majorRemoved, minorRemoved       int
 }
 
+// New 按字段组合返回对应的生命周期测试对象；全部为零表示无生命周期信息。
 func (r *introducedAndRemovedInStorage) New() runtime.Object {
 	if r.majorIntroduced == 0 && r.minorIntroduced == 0 && r.majorRemoved == 0 && r.minorRemoved == 0 {
 		return &defaultObj{}
@@ -176,6 +188,9 @@ func (r *introducedAndRemovedInStorage) New() runtime.Object {
 
 func (r *introducedAndRemovedInStorage) Destroy() {}
 
+// Test_resourceExpirationEvaluator_isNotRemoved 验证“是否仍应提供”判定：
+// 当前版本已移除即 false，但延迟一个版本、alpha 通道（非严格）等兼容开关
+// 会让它继续存在；未来才移除或从未移除则为 true。
 func Test_resourceExpirationEvaluator_isNotRemoved(t *testing.T) {
 	tests := []struct {
 		name                        string
@@ -279,6 +294,8 @@ func Test_resourceExpirationEvaluator_isNotRemoved(t *testing.T) {
 	}
 }
 
+// dummyConvertor 记录最近一次 ConvertToVersion 的 GroupVersioner，并返回
+// 固定版本列表，用于验证转换器被以正确版本调用。
 type dummyConvertor struct {
 	called              runtime.GroupVersioner
 	prioritizedVersions []schema.GroupVersion
@@ -305,6 +322,7 @@ func (d *dummyConvertor) PrioritizedVersionsAllGroups() []schema.GroupVersion {
 	return d.prioritizedVersions
 }
 
+// checkErr 断言错误包含（或不包含）期望文本，简化表驱动测试中的错误检查。
 func checkErr(t *testing.T, actual error, expected string) {
 	t.Helper()
 	switch {
@@ -318,6 +336,8 @@ func checkErr(t *testing.T, actual error, expected string) {
 	}
 }
 
+// Test_removeDeletedKinds 验证删除过期资源：同一版本内按资源名删除，
+// 其子资源（prefix/...）一并删除；整版资源都被移除时该版本整体消失。
 func Test_removeDeletedKinds(t *testing.T) {
 	groupName := "group.name"
 	tests := []struct {
@@ -394,6 +414,9 @@ func Test_removeDeletedKinds(t *testing.T) {
 	}
 }
 
+// Test_removeUnIntroducedKinds 验证尚未引入的资源/版本被剔除：未到引入
+// 版本的 API 不能提前暴露；emulation/runtime-config forward-compatible
+// 开关的优先级与报错规则也在本测试中固定下来。
 func Test_removeUnIntroducedKinds(t *testing.T) {
 	groupName := "group.name"
 	resource1 := "resource1"
@@ -1068,6 +1091,8 @@ func Test_removeUnIntroducedKinds(t *testing.T) {
 				{Group: groupName, Version: "v2beta1"},
 				{Group: groupName, Version: "v2beta2"},
 				{Group: groupName, Version: "v2alpha1"}}}
+			// 先启用所有版本，再合并 --runtime-config，确保测试覆盖“显式启用
+			// 未来版本”的错误分支。
 			resourceConfig.EnableVersions(convertor.PrioritizedVersionsForGroup(groupName)...)
 			resourceConfig, err := resourceconfig.MergeAPIResourceConfigs(resourceConfig, tt.runtimeConfig, convertor)
 			require.NoError(t, err)
@@ -1084,6 +1109,9 @@ func Test_removeUnIntroducedKinds(t *testing.T) {
 	}
 }
 
+// Test_RemoveUnavailableKinds 是 removeUnintroducedKinds 的对外入口版本，
+// 同时处理“已移除”与“未引入”两类不可用资源；用例与内部函数保持一致，
+// 用于防止两条路径行为漂移。
 func Test_RemoveUnavailableKinds(t *testing.T) {
 	groupName := "group.name"
 	resource1 := "resource1"
@@ -1549,6 +1577,8 @@ func Test_RemoveUnavailableKinds(t *testing.T) {
 	}
 }
 
+// Test_shouldRemoveResource 验证子资源随父资源删除：匹配规则按
+// “精确或前缀+斜杠”判断，避免误删名字仅共享前缀的兄弟资源。
 func Test_shouldRemoveResource(t *testing.T) {
 	tests := []struct {
 		name              string

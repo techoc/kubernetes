@@ -26,6 +26,9 @@ import (
 
 // TestConditionsAwareDecisionUnionAdd exercises the Add method's bookkeeping behavior:
 // it must reject duplicate authorizer names and stop appending after the first Allow/Deny leaf.
+//
+// 中文说明：重复的 authorizer 名称会造成条件重复计数，必须 fail closed；
+// 无条件的 Allow/Deny 已经决定最终结果，后续加入的子决策不再影响并集。
 func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 	noOp := authorizer.ConditionsAwareDecisionNoOpinion("", nil)
 	allow := authorizer.ConditionsAwareDecisionAllow("a", nil)
@@ -126,6 +129,8 @@ func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 // ConditionsAwareDecisionUnion.ToDecision has produced a decision, further calls to
 // the builder's Add cannot mutate that decision — the builder's internal state
 // (including its memoized possible-decisions set) is defensively copied.
+//
+// 该不变量保证决策对象可以安全地跨 goroutine 共享，而不受构建器后续修改影响。
 func TestConditionsAwareDecisionUnion_AddAfterToDecisionDoesNotMutate(t *testing.T) {
 	// Build a union with two ConditionsMap sub-decisions. Neither is an unconditional
 	// Allow/Deny leaf, so the builder does NOT short-circuit subsequent Add calls.

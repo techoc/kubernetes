@@ -33,6 +33,10 @@ import (
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+// TestAuditValidOptions 验证合法的审计选项组合能正确装配 AuditBackend：
+// expected 是后端包装链的字符串形态（例如 "union[buffered<log>,ignoreErrors<webhook>]"），
+// 它同时锁定了批处理模式、错误忽略策略与 union 顺序。
+// 未配置策略文件时不应创建任何后端（expected 为空）。
 func TestAuditValidOptions(t *testing.T) {
 	tmpDir := t.TempDir()
 	auditPath := filepath.Join(tmpDir, "audit")
@@ -152,6 +156,8 @@ func TestAuditValidOptions(t *testing.T) {
 			require.NotNil(t, options)
 
 			// Verify flags don't change defaults.
+			// 解析空参数集后选项必须与初始默认值完全一致：
+			// 这能捕获 AddFlags 默认值写错导致的静默差异。
 			fs := pflag.NewFlagSet("Test", pflag.PanicOnError)
 			options.AddFlags(fs)
 			require.NoError(t, fs.Parse(nil))
@@ -175,10 +181,12 @@ func TestAuditValidOptions(t *testing.T) {
 			}
 
 			if options.LogOptions.Path == "-" {
+				// "-" 表示标准输出，且不得在磁盘上创建同名文件。
 				assert.Equal(t, os.Stdout, w)
 				assert.NoFileExists(t, options.LogOptions.Path)
 			} else if options.LogOptions.MaxSize == 0 {
 				// When MaxSize is 0, we return a raw file writer (os.File) for unlimited size
+				// MaxSize=0 表示不轮转，使用原始 os.File；否则应得到 lumberjack 轮转器。
 				file, ok := w.(*os.File)
 				assert.True(t, ok, "Writer should be of type *os.File when MaxSize is 0")
 				assert.FileExists(t, options.LogOptions.Path)
@@ -193,6 +201,7 @@ func TestAuditValidOptions(t *testing.T) {
 	}
 }
 
+// TestAuditLogMaxSizeZero 单独验证 MaxSize=0 时返回可用的原始文件 writer。
 func TestAuditLogMaxSizeZero(t *testing.T) {
 	tmpDir := t.TempDir()
 	auditPath := filepath.Join(tmpDir, "audit")
@@ -217,6 +226,8 @@ func TestAuditLogMaxSizeZero(t *testing.T) {
 	require.NoError(t, file.Close())
 }
 
+// TestAuditInvalidOptions 验证非法选项（格式、模式、负缓冲、截断参数越界等）
+// 都会被 Validate 拒绝，防止配置错误在运行期才暴露。
 func TestAuditInvalidOptions(t *testing.T) {
 	tmpDir := t.TempDir()
 	auditPath := filepath.Join(tmpDir, "audit")
@@ -296,6 +307,7 @@ func TestAuditInvalidOptions(t *testing.T) {
 	}
 }
 
+// makeTmpWebhookConfig 生成最小可用的审计 webhook kubeconfig。
 func makeTmpWebhookConfig(t *testing.T) string {
 	config := v1.Config{
 		Clusters: []v1.NamedCluster{
@@ -309,6 +321,7 @@ func makeTmpWebhookConfig(t *testing.T) string {
 	return f.Name()
 }
 
+// makeTmpPolicy 生成请求/响应级别的最小审计策略文件。
 func makeTmpPolicy(t *testing.T) string {
 	pol := auditv1.Policy{
 		TypeMeta: metav1.TypeMeta{

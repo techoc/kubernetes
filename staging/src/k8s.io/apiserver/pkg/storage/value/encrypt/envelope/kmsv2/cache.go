@@ -34,17 +34,22 @@ import (
 // this statically enforces that transformers placed in the cache are not used for encryption.
 // this is relevant in the context of nonce collision since transformers that are created
 // from encrypted DEKs retrieved from etcd cannot maintain their nonce counter state.
+// 只缓存 value.Read 可以从类型上禁止拿缓存里的 transformer 去加密，避免
+// 从 etcd 恢复的 DEK 因 nonce 计数器状态丢失而重复 nonce（GCM 下是灾难性的）。
 type simpleCache struct {
 	cache *utilcache.Expiring
 	ttl   time.Duration
 	// hashPool is a per cache pool of hash.Hash (to avoid allocations from building the Hash)
 	// SHA-256 is used to prevent collisions
+	// 缓存键是 DEK 的 SHA-256，既压缩内存又避免把明文 DEK 作为 map 键。
 	hashPool        *sync.Pool
 	providerName    string
 	mu              sync.Mutex                          // guards call to set
 	recordCacheSize func(providerName string, size int) // for unit tests
 }
 
+// newSimpleCache 构造带过期时间的缓存；AllowExpiredGet 是安全的，因为
+// 对同一密文 DEK，解出的明文 DEK 恒定，过期后仍可复用。
 func newSimpleCache(clock clock.Clock, ttl time.Duration, providerName string) *simpleCache {
 	cache := utilcache.NewExpiringWithClock(clock)
 	cache.AllowExpiredGet = true // for a given key, the value (the decryptTransformer) is always the same
@@ -71,6 +76,8 @@ func (c *simpleCache) get(key []byte) value.Read {
 }
 
 // set caches the record for the key
+// panic 而非返回错误：空 key/空 transformer 说明调用方逻辑错误，继续运行
+// 只会把问题推迟到更难排查的解密失败。
 func (c *simpleCache) set(key []byte, transformer value.Read) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -87,6 +94,7 @@ func (c *simpleCache) set(key []byte, transformer value.Read) {
 
 // keyFunc generates a string key by hashing the inputs.
 // This lowers the memory requirement of the cache.
+// 复用 hash.Hash 并跳过 base64，是为了在高频读取路径上减少内存分配。
 func (c *simpleCache) keyFunc(s []byte) string {
 	h := c.hashPool.Get().(hash.Hash)
 	h.Reset()
@@ -101,6 +109,8 @@ func (c *simpleCache) keyFunc(s []byte) string {
 }
 
 // toString performs unholy acts to avoid allocations
+// 依赖 unsafe 把字节切片零拷贝转成字符串；调用方必须保证 b 之后不再被修改，
+// hash.Sum 返回的正是刚分配且不再复用的切片，满足该前提。
 func toString(b []byte) string {
 	// unsafe.SliceData relies on cap whereas we want to rely on len
 	if len(b) == 0 {

@@ -62,6 +62,10 @@ func init() {
 	codecs = runtimeserializer.NewCodecFactory(scheme)
 }
 
+// fuzzAPIGroups 随机生成一组 APIGroupDiscovery 用于测试。
+//
+// 额外约束：每个组至少有一个版本（否则 ResourceManager 会跳过该组），版本按
+// Kubernetes 版本序降序排列，并清空 TypeMeta 只保留 Name，保证输出可预期。
 func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv2.APIGroupDiscoveryList {
 	fuzzer := randfill.NewWithSeed(seed)
 	fuzzer.NumElements(atLeastNumGroups, maxNumGroups)
@@ -101,6 +105,7 @@ func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv
 	}
 }
 
+// fetchPathV2Beta1 以 v2beta1 格式请求并解码响应，用于验证版本偏斜兼容。
 func fetchPathV2Beta1(handler http.Handler, acceptPrefix string, path string, etag string) (*http.Response, []byte, *apidiscoveryv2beta1.APIGroupDiscoveryList) {
 	acceptSuffix := ";g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList"
 	r, bytes := fetchPathHelper(handler, acceptPrefix+acceptSuffix, path, etag)
@@ -116,6 +121,7 @@ func fetchPathV2Beta1(handler http.Handler, acceptPrefix string, path string, et
 	return r, bytes, decoded
 }
 
+// fetchPath 同时接受 v2 与 v2beta1 的 Accept 头，解码为 v2 结构。
 func fetchPath(handler http.Handler, acceptPrefix string, path string, etag string) (*http.Response, []byte, *apidiscoveryv2.APIGroupDiscoveryList) {
 	acceptSuffix := ";g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList,"
 	acceptSuffixV2Beta1 := ";g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList,"
@@ -131,6 +137,7 @@ func fetchPath(handler http.Handler, acceptPrefix string, path string, etag stri
 	return r, bytes, decoded
 }
 
+// fetchPathHelper 构造请求并执行，按需设置 If-None-Match（自动补引号）。
 func fetchPathHelper(handler http.Handler, accept string, path string, etag string) (*http.Response, []byte) {
 	// Expect json-formatted apis group list
 	w := httptest.NewRecorder()
@@ -431,6 +438,8 @@ func TestUpdateService(t *testing.T) {
 	assert.NotEqual(t, secondDocument, initialDocument, "should have returned expected document")
 }
 
+// TestMultipleSources 验证多个 source 的组版本按优先级合并后统一输出：
+// 通过 SetGroupVersionPriority 指定顺序，避免依赖版本名的字母序。
 func TestMultipleSources(t *testing.T) {
 	type pair struct {
 		manager discoveryendpoint.ResourceManager
@@ -655,6 +664,8 @@ func TestAbuse(t *testing.T) {
 	waitGroup.Wait()
 }
 
+// TestVersionSortingNoPriority 验证未设置优先级时按 Kubernetes 版本序排序
+// （v2 > v1 > v2beta1 > v1beta1 > v1alpha1）。
 func TestVersionSortingNoPriority(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -687,6 +698,7 @@ func TestVersionSortingNoPriority(t *testing.T) {
 	assert.Equal(t, "v1alpha1", versions[4].Version)
 }
 
+// TestVersionSortingWithPriority 验证显式设置的版本优先级可以覆盖默认排序。
 func TestVersionSortingWithPriority(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 

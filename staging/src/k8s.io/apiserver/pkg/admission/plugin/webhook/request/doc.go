@@ -15,4 +15,8 @@ limitations under the License.
 */
 
 // Package request creates admissionReview request based on admission attributes.
+//
+// 该包只负责把准入属性（对象、旧对象、用户信息、dry-run 等）编码成
+// admission.k8s.io/v1 AdmissionReview 请求体，供 webhook 调用方使用；
+// 它不发送网络请求，也不解释 webhook 的响应。
 package request

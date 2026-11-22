@@ -44,6 +44,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestValidateDeclaratively 端到端验证声明式校验的接入：对象先转换为外部版本，
+// 再调用 scheme 注册的 ValidateFunc。
+// 中文说明：覆盖 create/update 的不可变检查、子资源校验、未知子资源、校验选项，
+// 以及非法子资源路径的错误处理。
 func TestValidateDeclaratively(t *testing.T) {
 	valid := &Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -183,6 +187,7 @@ func TestValidateDeclaratively(t *testing.T) {
 }
 
 // Fake internal pod type, since core.Pod cannot be imported by this package
+// 中文说明：只保留校验相关字段，避免引入 k8s.io/kubernetes 造成循环依赖。
 type Pod struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -208,6 +213,9 @@ func (p Pod) DeepCopyObject() runtime.Object {
 // TestGatherDeclarativeValidationMismatches tests all mismatch
 // scenarios across imperative and declarative errors for
 // the gatherDeclarativeValidationMismatches function
+//
+// 中文说明：该函数决定哪些 imperative/declarative 错误视为“同一错误”，
+// 覆盖类型、字段、origin 与 lifecycle 标注等匹配维度。
 func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 	pathStandard := field.NewPath("spec", "standard")
 	pathBeta := field.NewPath("spec", "beta")
@@ -394,6 +402,8 @@ func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 
 // TestCompareDeclarativeErrorsAndEmitMismatches tests expected
 // logging of mismatch information given match & mismatch error conditions.
+// 中文说明：迁移期需要同时观测两套校验的差异，本用例锁定日志输出条件，防止
+// 静默漂移或日志刷屏。
 func TestCompareDeclarativeErrorsAndEmitMismatches(t *testing.T) {
 	replicasPath := field.NewPath("spec").Child("replicas")
 	minReadySecondsPath := field.NewPath("spec").Child("minReadySeconds")
@@ -458,6 +468,8 @@ func TestCompareDeclarativeErrorsAndEmitMismatches(t *testing.T) {
 	}
 }
 
+// TestRunDeclarativeValidationWithRecover 验证校验函数 panic 时被恢复并转换成
+// InternalError，而不是让请求 goroutine 崩溃。
 func TestRunDeclarativeValidationWithRecover(t *testing.T) {
 	ctx := genericapirequest.WithRequestInfo(context.Background(), &genericapirequest.RequestInfo{
 		APIGroup:   "",
@@ -530,6 +542,8 @@ func TestRunDeclarativeValidationWithRecover(t *testing.T) {
 	}
 }
 
+// TestRecordDuplicateValidationErrors 验证重复的声明式错误会通过指标暴露。
+// 中文说明：重复通常意味着同一规则被多次生成，属于开发期问题，需要可观测性。
 func TestRecordDuplicateValidationErrors(t *testing.T) {
 	ctx := context.Background()
 
@@ -595,6 +609,8 @@ func TestRecordDuplicateValidationErrors(t *testing.T) {
 	}
 }
 
+// equalErrorLists 比较两个错误列表，对 nil/空切片的差异保持宽容
+// （语义上二者都表示“无错误”）。
 func equalErrorLists(a, b field.ErrorList) bool {
 	// If both are nil, consider them equal
 	if a == nil && b == nil {
@@ -608,6 +624,8 @@ func equalErrorLists(a, b field.ErrorList) bool {
 	return reflect.DeepEqual(a, b)
 }
 
+// TestMetricIdentifier 验证校验指标的标识构造：包含 GroupKind、操作、子资源与
+// 版本信息，且非法输入返回错误而非生成歧义标签。
 func TestMetricIdentifier(t *testing.T) {
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypes(schema.GroupVersion{Version: "v1"}, &v1.Pod{})
@@ -698,6 +716,10 @@ func TestMetricIdentifier(t *testing.T) {
 	}
 }
 
+// TestValidateDeclarativelyWithMigrationChecks 覆盖迁移期的错误合并规则：
+// 标准/DV 覆盖、beta 阶段门控、alpha 阶段 shadow，以及无 origin 的特殊配对。
+// 中文说明：这些规则决定最终返回给用户的是 imperative 还是 declarative 错误，
+// 直接关系到版本升级期间的兼容性。
 func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
 	// Standard Lifecycle (Enforced by default in explicit strategy)
 	// Standard HV error marked as covered. In a fully migrated state, this should be deleted from source.

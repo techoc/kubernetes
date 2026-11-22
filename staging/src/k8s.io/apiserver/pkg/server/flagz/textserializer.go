@@ -27,9 +27,12 @@ import (
 )
 
 var (
+	// delimiters 每次编码随机选一个，刻意让输出不可被机器稳定解析，
+	// 从而阻止调用方把该调试端点当作正式 API 依赖。
 	delimiters = []string{":", ": ", "=", " "}
 )
 
+// headerFmt 是固定头部；其中明确声明输出格式不受兼容性保证。
 const headerFmt = `
 %s flagz
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
@@ -42,11 +45,13 @@ type flagzTextSerializer struct {
 }
 
 // Encode writes the flagz information in plain text format to the given writer, using the provided obj.
+// 参数按字典序排序，保证同一进程内输出顺序稳定，便于人工比对。
 func (s flagzTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, headerFmt, s.componentName); err != nil {
 		return err
 	}
 
+	// 随机分隔符是有意为之，见 delimiters 的说明。
 	randomIndex := rand.Intn(len(delimiters))
 	separator := delimiters[randomIndex]
 
@@ -67,11 +72,13 @@ func (s flagzTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 }
 
 // Decode is not supported for text/plain serialization.
+// flagz 是只读端点，解码没有语义。
 func (s flagzTextSerializer) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	return nil, nil, fmt.Errorf("decode not supported for text/plain")
 }
 
 // Identifier returns a unique identifier for this serializer.
+// 固定标识符用于序列化器缓存，避免每次请求重新构造。
 func (s flagzTextSerializer) Identifier() runtime.Identifier {
 	return runtime.Identifier("flagzTextSerializer")
 }

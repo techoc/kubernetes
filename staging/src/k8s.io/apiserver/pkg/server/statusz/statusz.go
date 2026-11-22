@@ -45,7 +45,10 @@ import (
 )
 
 var (
-	delimiters            = []string{":", ": ", "=", " "}
+	// delimiters 用于把路径或 flag 形式的启动参数切分为可读片段。
+	delimiters = []string{":", ": ", "=", " "}
+	// nonDebuggingEndpoints 列出不对应调试能力的顶层路径，聚合展示时跳过，
+	// 避免 statusz 把所有 API 与文档端点当作调试端点列出。
 	nonDebuggingEndpoints = map[string]bool{
 		"/apis":        true,
 		"/api":         true,
@@ -53,16 +56,20 @@ var (
 		"/openapi":     true,
 		"/.well-known": true,
 	}
-	v1alpha1StatuszKind       = v1alpha1.SchemeGroupVersion.WithKind("Statusz")
-	v1beta1StatuszKind        = v1beta1.SchemeGroupVersion.WithKind("Statusz")
+	v1alpha1StatuszKind = v1alpha1.SchemeGroupVersion.WithKind("Statusz")
+	v1beta1StatuszKind  = v1beta1.SchemeGroupVersion.WithKind("Statusz")
+	// recognizedStructuredKinds 限定协商时可选的 kind，防止请求任意类型。
 	recognizedStructuredKinds = map[schema.GroupVersionKind]bool{
 		v1alpha1StatuszKind: true,
 		v1beta1StatuszKind:  true,
 	}
 )
 
+// DefaultStatuszPath 是 statusz 端点的标准挂载路径。
 const DefaultStatuszPath = "/statusz"
 
+// headerFmt 是纯文本响应的头部；明确声明不保证机器可解析，
+// 因为 statusz 面向调试而非自动化客户端。
 const headerFmt = `
 %s statusz
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
@@ -75,12 +82,16 @@ type statuszCodecFactory struct {
 	supportedMediaTypes []runtime.SerializerInfo
 }
 
+// mux 是 Install 所需的最小注册接口，避免依赖具体路由实现。
 type mux interface {
 	Handle(path string, handler http.Handler)
 }
 
+// ListedPathsOption 是 registry 的选项之一，用于注入可展示的路径列表。
 type ListedPathsOption []string
 
+// NewRegistry 创建 statusz registry。
+// v1alpha1 被标记为已弃用：对外推荐使用 v1beta1。
 func NewRegistry(effectiveVersion compatibility.EffectiveVersion, opts ...Option) statuszRegistry {
 	r := &registry{
 		effectiveVersion:      effectiveVersion,
@@ -93,6 +104,8 @@ func NewRegistry(effectiveVersion compatibility.EffectiveVersion, opts ...Option
 	return r
 }
 
+// Install 在 mux 上挂载 /statusz 端点。
+// 注册失败时仅记录错误并继续：statusz 是调试辅助，不应阻止组件启动。
 func Install(m mux, componentName string, reg statuszRegistry) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
@@ -109,6 +122,8 @@ func Install(m mux, componentName string, reg statuszRegistry) {
 
 // newStatuszCodecFactory creates a codec factory with the standard serializers for statusz,
 // filtering out unsupported media types (e.g., protobuf).
+// 过滤 protobuf：statusz 的类型没有 protobuf 定义，若保留会在协商错误消息中
+// 出现实际不可用的媒体类型。
 func newStatuszCodecFactory(scheme *runtime.Scheme, componentName string, reg statuszRegistry) (*statuszCodecFactory, error) {
 	codecFactoryOpts := []serializer.CodecFactoryOptionsMutator{
 		serializer.WithSerializer(func(_ runtime.ObjectCreater, _ runtime.ObjectTyper) runtime.SerializerInfo {
@@ -157,16 +172,22 @@ func newStatuszCodecFactory(scheme *runtime.Scheme, componentName string, reg st
 	}, err
 }
 
+// SupportedMediaTypes 返回过滤后的媒体类型列表，供内容协商与错误消息使用。
 func (f *statuszCodecFactory) SupportedMediaTypes() []runtime.SerializerInfo {
 	return f.supportedMediaTypes
 }
 
+// handleStatusz 构造 statusz 的 HTTP handler。
+// 没有 Accept 头时返回 v1beta1 纯文本；否则按 statusz 专属的协商规则
+// 选择结构化版本。指标中的 group/version 必须反映实际协商结果，
+// 因此在这里手动调用 MonitorRequest 而不是使用通用中间件。
 func handleStatusz(componentName string, reg statuszRegistry, serializer runtime.NegotiatedSerializer, restrictions negotiate.StatuszEndpointRestrictions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestReceivedTimestamp, ok := request.ReceivedTimestampFrom(r.Context())
 		if !ok {
 			requestReceivedTimestamp = time.Now()
 		}
+		// 用 delegator 捕获实际写出的状态码与长度，供监控使用。
 		delegate := &metrics.ResponseWriterDelegator{ResponseWriter: w}
 		w = responsewriter.WrapForHTTP1Or2(delegate)
 
@@ -226,6 +247,7 @@ func handleStatusz(componentName string, reg statuszRegistry, serializer runtime
 			group = mediaType.Convert.Group
 			version = mediaType.Convert.Version
 			deprecated = reg.deprecatedVersions()[version]
+			// 弃用版本通过 Warning 头提示客户端迁移，但保持可用以维持兼容。
 			if deprecated {
 				w.Header().Set("Warning", `299 - "This version of the statusz endpoint is deprecated. Please use a newer version."`)
 			}
@@ -246,6 +268,7 @@ func handleStatusz(componentName string, reg statuszRegistry, serializer runtime
 	}
 }
 
+// handleStructuredResponse 按协商出的 kind 选择对应 API 版本的结构体。
 func handleStructuredResponse(w http.ResponseWriter, r *http.Request, componentName string, reg statuszRegistry, serializer runtime.NegotiatedSerializer, restrictions negotiate.StatuszEndpointRestrictions, mediaType negotiation.MediaTypeOptions) {
 	switch *mediaType.Convert {
 	case v1alpha1StatuszKind:
@@ -265,6 +288,8 @@ func handleStructuredResponse(w http.ResponseWriter, r *http.Request, componentN
 	}
 }
 
+// writePlainTextResponse 用 text/plain 序列化器输出；找不到序列化器或编码失败
+// 时返回 500，因为此时内容已不可信。
 func writePlainTextResponse(obj runtime.Object, serializer runtime.NegotiatedSerializer, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	// Find the text/plain serializer
@@ -286,6 +311,8 @@ func writePlainTextResponse(obj runtime.Object, serializer runtime.NegotiatedSer
 	}
 }
 
+// writeStructuredResponse 走标准对象协商写出路径，保证与其它 API 端点一致的
+// 内容类型与编码行为。
 func writeStructuredResponse(obj runtime.Object, serializer runtime.NegotiatedSerializer, targetGV schema.GroupVersion, restrictions negotiate.StatuszEndpointRestrictions, w http.ResponseWriter, r *http.Request) {
 	responsewriters.WriteObjectNegotiated(
 		serializer,
@@ -299,12 +326,15 @@ func writeStructuredResponse(obj runtime.Object, serializer runtime.NegotiatedSe
 	)
 }
 
+// v1alpha1Statusz 组装 v1alpha1 版本的 statusz 对象。
+// 运行时长按秒向下取整并钳制为非负，避免时钟回拨导致负值。
 func v1alpha1Statusz(componentName string, reg statuszRegistry) *v1alpha1.Statusz {
 	startTime := reg.processStartTime()
 	upTimeSeconds := max(0, int64(time.Since(startTime).Seconds()))
 	goVersion := reg.goVersion()
 	binaryVersion := reg.binaryVersion().String()
 	var emulationVersion string
+	// 未启用版本模拟时留空，而不是填二进制版本，以区分两种情况。
 	if reg.emulationVersion() != nil {
 		emulationVersion = reg.emulationVersion().String()
 	}
@@ -329,6 +359,8 @@ func v1alpha1Statusz(componentName string, reg statuszRegistry) *v1alpha1.Status
 	return data
 }
 
+// v1beta1Statusz 组装 v1beta1 版本的 statusz 对象，内容与 v1alpha1 相同，
+// 仅在 API 版本与字段契约上不同。
 func v1beta1Statusz(componentName string, reg statuszRegistry) *v1beta1.Statusz {
 	startTime := reg.processStartTime()
 	upTimeSeconds := max(0, int64(time.Since(startTime).Seconds()))
@@ -359,12 +391,15 @@ func v1beta1Statusz(componentName string, reg statuszRegistry) *v1beta1.Statusz 
 	return data
 }
 
+// uptime 把启动时间格式化为 "N hr MM min SS sec" 的人类可读形式。
 func uptime(t time.Time) string {
 	upSince := int64(time.Since(t).Seconds())
 	return fmt.Sprintf("%d hr %02d min %02d sec",
 		upSince/3600, (upSince/60)%60, upSince%60)
 }
 
+// aggregatePaths 把具体路径折叠为顶层目录并去重排序，
+// 例如 /metrics/foo 折叠为 /metrics；跳过非调试端点与根路径。
 func aggregatePaths(listedPaths []string) []string {
 	paths := make(map[string]bool)
 	for _, listedPath := range listedPaths {

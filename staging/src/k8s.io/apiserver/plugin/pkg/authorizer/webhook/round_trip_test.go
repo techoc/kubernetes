@@ -30,6 +30,8 @@ import (
 	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 )
 
+// TestRoundTrip 用随机数据填充 v1 SubjectAccessReview，转换到 v1beta1 再转回，
+// 验证两版之间手工转换函数的保真度；seed 被打印以便复现失败用例。
 func TestRoundTrip(t *testing.T) {
 	f := randfill.New()
 	seed := time.Now().UnixNano()

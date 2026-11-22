@@ -22,6 +22,8 @@ import (
 )
 
 // ObjectMetaFieldsSet returns a fields that represent the ObjectMeta.
+// 字段集合用于字段选择器（fieldSelector）匹配；集群级资源没有命名空间，
+// 因此 hasNamespaceField 决定是否暴露 metadata.namespace。
 func ObjectMetaFieldsSet(objectMeta *metav1.ObjectMeta, hasNamespaceField bool) fields.Set {
 	if !hasNamespaceField {
 		return fields.Set{
@@ -35,6 +37,8 @@ func ObjectMetaFieldsSet(objectMeta *metav1.ObjectMeta, hasNamespaceField bool) 
 }
 
 // AdObjectMetaField add fields that represent the ObjectMeta to source.
+// 与 ObjectMetaFieldsSet 不同，这里原地修改并返回同一个 map，
+// 调用方需明确其副作用（通常是在已有字段集合上追加）。
 func AddObjectMetaFieldsSet(source fields.Set, objectMeta *metav1.ObjectMeta, hasNamespaceField bool) fields.Set {
 	source["metadata.name"] = objectMeta.Name
 	if hasNamespaceField {
@@ -44,6 +48,7 @@ func AddObjectMetaFieldsSet(source fields.Set, objectMeta *metav1.ObjectMeta, ha
 }
 
 // MergeFieldsSets merges a fields'set from fragment into the source.
+// fragment 中的键覆盖 source 中的同名键，调用方据此实现“特化字段优先”的语义。
 func MergeFieldsSets(source fields.Set, fragment fields.Set) fields.Set {
 	for k, value := range fragment {
 		source[k] = value

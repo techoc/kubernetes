@@ -18,8 +18,11 @@ package v1
 
 import kruntime "k8s.io/apimachinery/pkg/runtime"
 
+// addDefaultingFuncs 把默认值函数注册进 scheme，供解码时自动填充。
 func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_Configuration 当前无默认值可填。保留空实现是为了让生成代码
+// 有明确注册点，同时为将来新增字段预留兼容入口（新增字段默认值应加在此处）。
 func SetDefaults_Configuration(obj *Configuration) {}

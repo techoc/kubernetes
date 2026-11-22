@@ -37,6 +37,9 @@ import (
 // gate is disabled it dispatches as before. The production excluded set is auth/authz virtual
 // resources; here a core resource is marked excluded so the mechanism can be exercised with the
 // fixtures the webhook test harness supports.
+//
+// 测试思路：同一套断言在开关开/关两种配置下各跑一次，只有“是否调用 webhook”这一变量不同。
+// 由于 webhook 配置为 fail policy 且总是拒绝，开关生效时 Validate 返回 nil 即证明未分发。
 func TestExcludeVirtualResources(t *testing.T) {
 	testServer := webhooktesting.NewTestServer(t)
 	testServer.StartTLS()
@@ -116,6 +119,8 @@ func TestExcludeVirtualResources(t *testing.T) {
 	}
 }
 
+// newExcludeGate 构造一个只包含目标开关的独立 FeatureGate。
+// 用独立实例而非全局 DefaultFeatureGate，避免与其他并行测试相互污染。
 func newExcludeGate(t *testing.T, enabled bool) featuregate.FeatureGate {
 	t.Helper()
 	gate := featuregate.NewFeatureGate()

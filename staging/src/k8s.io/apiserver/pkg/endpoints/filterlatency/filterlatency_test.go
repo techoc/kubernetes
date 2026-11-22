@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件验证请求过滤器耗时统计的包装器：
+// trackStarted 负责在上下文中放置/覆盖过滤记录，trackCompleted 负责在请求结束时回调，
+// 两者还共同维护 OpenTelemetry span 的嵌套关系。
+
 package filterlatency
 
 import (
@@ -30,6 +34,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestTrackStartedWithContextAlreadyHasFilterRecord 验证上下文已有过滤记录时，
+// trackStarted 会用当前过滤器覆盖它：同一个请求内嵌套过滤器应各自计时，而不是复用外层记录。
 func TestTrackStartedWithContextAlreadyHasFilterRecord(t *testing.T) {
 	ctx := t.Context()
 	filterName := "my-filter"
@@ -74,6 +80,8 @@ func TestTrackStartedWithContextAlreadyHasFilterRecord(t *testing.T) {
 	}
 }
 
+// TestTrackStartedWithContextDoesNotHaveFilterRecord 验证上下文为空时 trackStarted
+// 也能正常注入记录，覆盖最外层过滤器（第一个进入请求链）的场景。
 func TestTrackStartedWithContextDoesNotHaveFilterRecord(t *testing.T) {
 	ctx := t.Context()
 	filterName := "my-filter"
@@ -114,6 +122,8 @@ func TestTrackStartedWithContextDoesNotHaveFilterRecord(t *testing.T) {
 	}
 }
 
+// TestTrackCompletedContextHasFilterRecord 验证请求结束后回调被调用一次，
+// 且拿到的是上下文中的记录与完成时刻（用假时钟保证时间可断言）。
 func TestTrackCompletedContextHasFilterRecord(t *testing.T) {
 	ctx := t.Context()
 	var (
@@ -158,6 +168,8 @@ func TestTrackCompletedContextHasFilterRecord(t *testing.T) {
 	}
 }
 
+// TestTrackCompletedContextDoesNotHaveFilterRecord 验证没有过滤记录时回调不会被调用，
+// 否则会产生没有开始时间、无法计算的耗时样本。
 func TestTrackCompletedContextDoesNotHaveFilterRecord(t *testing.T) {
 	ctx := t.Context()
 	var actionCallCount, handlerCallCount int
@@ -185,6 +197,8 @@ func TestTrackCompletedContextDoesNotHaveFilterRecord(t *testing.T) {
 	}
 }
 
+// TestStartedAndCompletedOpenTelemetryTracing 验证 TrackStarted/TrackCompleted
+// 成对使用时生成一个以过滤器命名的 span，且处理器只被调用一次。
 func TestStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	ctx := t.Context()
 	filterName := "my-filter"
@@ -222,6 +236,8 @@ func TestStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	}
 }
 
+// TestNestedStartedAndCompletedOpenTelemetryTracing 验证嵌套过滤器的 span 结构：
+// 开始顺序为外到内，结束顺序为内到外，符合 span 的栈式生命周期。
 func TestNestedStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	outerFilterName := "outer-filter"
 	innerFilterName := "inner-filter"
@@ -258,6 +274,8 @@ func TestNestedStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	checkSpans(t, fakeRecorder.Ended(), []string{innerFilterName, outerFilterName})
 }
 
+// checkSpans 断言 span 数量与名称顺序完全一致；顺序本身是断言的一部分，
+// 因此这里用 Fatalf 而非仅比较集合。
 func checkSpans[T sdktrace.ReadOnlySpan](t *testing.T, output []T, spanNames []string) {
 	if len(output) != len(spanNames) {
 		t.Fatalf("got %d; expected len(output) == %d", len(output), len(spanNames))

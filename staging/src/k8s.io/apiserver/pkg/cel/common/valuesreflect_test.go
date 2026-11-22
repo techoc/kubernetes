@@ -16,6 +16,23 @@ limitations under the License.
 
 package common
 
+// 本文件直接测试 valuesreflect.go 中用于实现
+// x-kubernetes-list-type=map 语义（Add 时按 key 合并、Equal 时忽略顺序）的
+// Go map key 构造过程。values_test.go 中的 TestListAdd 通过 CEL 求值做端到端覆盖，
+// 这里的测试则断言 key 的具体形态——包括超过 3 个 key 属性时使用的
+// fmt %#v 序列化字符串形式——使构造结果直接可见于断言中。
+//
+// 存在两个 key 构造函数，两者的 key 永不互相比较：
+//
+//   - typedMapList.toMapKey 通过反射按未转义的 JSON 属性名读取结构体字段，
+//     并保留字段声明的 Go 类型（例如 int32 字段贡献 int32）。
+//     指针字段会被解引用，因此按值而非按地址比较。
+//
+//   - refValMapKey 通过 CEL accessor 按转义后的属性名读取 key 值。
+//     accessor 返回 CEL 规范化后的值（所有整数为 int64、具名字符串类型为 string、
+//     指针已解引用），正是这一点让同一逻辑元素在 typed struct、unstructured map
+//     与 CEL 字面量 map 三种表示下得到相同的 key。
+//
 // This file directly tests construction of the golang map keys used to implement
 // x-kubernetes-list-type=map semantics (merge on Add, order-insensitive Equal) in
 // valuesreflect.go. TestListAdd in values_test.go covers the same dimensions end-to-end
@@ -42,6 +59,8 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
+// keyTestEntry 覆盖 key 构造中会遇到的各种字段形态：
+// 普通值、int32、需转义的 CEL 保留字、指针、以及不可比较的 []byte。
 type keyTestEntry struct {
 	Name     string  `json:"name"`
 	Port     int32   `json:"port"`
@@ -53,6 +72,8 @@ type keyTestEntry struct {
 	Raw      []byte  `json:"raw"` // not comparable in go
 }
 
+// keyTestWideEntry 提供 4 个 key 属性，用于触发序列化 key 的路径，
+// 并验证值中空白不会造成 key 碰撞。
 type keyTestWideEntry struct {
 	K1 string `json:"k1"`
 	K2 string `json:"k2"`
@@ -60,6 +81,9 @@ type keyTestWideEntry struct {
 	K4 string `json:"k4"`
 }
 
+// TestTypedMapListToMapKey 验证 typedMapList.toMapKey 生成的 key：
+// 1~3 个属性使用数组 key（保留 Go 类型），4 个及以上退化为 %#v 序列化字符串；
+// 指针按被指向的值比较；不可比较值同样走序列化；非法输入返回 *types.Err。
 func TestTypedMapListToMapKey(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -164,6 +188,7 @@ func TestTypedMapListToMapKey(t *testing.T) {
 			}
 			got := list.toMapKey(reflect.ValueOf(tc.element))
 			if tc.wantErr {
+				// 错误以 CEL 的 *types.Err 形式返回，作为 key 仍可用于相等比较。
 				if _, isErr := got.(*types.Err); !isErr {
 					t.Errorf("toMapKey() = %#v (%T), want *types.Err", got, got)
 				}
@@ -172,12 +197,14 @@ func TestTypedMapListToMapKey(t *testing.T) {
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("toMapKey() = %#v (%T), want %#v (%T)", got, got, tc.want, tc.want)
 			}
+			// 指针 key 的等价性：不同地址、相同值必须得到同一个 key（可直接 == 比较）。
 			if tc.sameKeyElement != nil {
 				same := list.toMapKey(reflect.ValueOf(tc.sameKeyElement))
 				if got != same {
 					t.Errorf("elements with equal key values produced distinct keys: %#v != %#v", got, same)
 				}
 			}
+			// 反向验证：值不同必须得到不同 key，防止 key 构造丢失字段。
 			if tc.differentKeyElement != nil {
 				different := list.toMapKey(reflect.ValueOf(tc.differentKeyElement))
 				if got == different {
@@ -188,7 +215,11 @@ func TestTypedMapListToMapKey(t *testing.T) {
 	}
 }
 
+// TestRefValMapKey 验证 refValMapKey 通过 CEL accessor 构造 key，
+// 并断言同一逻辑元素在 typed struct 与 CEL 原生 map 两种表示下得到相同 key——
+// 这是 list-type=map 在混合类型输入下正确合并的前提。
 func TestRefValMapKey(t *testing.T) {
+	// typedStructOf 构造一个无 schema 的 typedStruct，使属性查找按 Go 结构体字段进行。
 	typedStructOf := func(v interface{}) ref.Val {
 		return &typedStruct{
 			value:      reflect.ValueOf(v),
@@ -283,6 +314,7 @@ func TestRefValMapKey(t *testing.T) {
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("refValMapKey() = %#v (%T), want %#v (%T)", got, got, tc.want, tc.want)
 			}
+			// 跨表示一致性：把同一逻辑元素写成 CEL map，key 必须完全相同。
 			if tc.equivalentCELMap != nil {
 				celMapKey := refValMapKey(types.DefaultTypeAdapter.NativeToValue(tc.equivalentCELMap), tc.escapedKeyProps)
 				if got != celMapKey {

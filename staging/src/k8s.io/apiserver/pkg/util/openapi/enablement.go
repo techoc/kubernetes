@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package openapi 提供 apiserver 对外暴露 OpenAPI 定义时的辅助逻辑，
+// 包括按特性门控状态裁剪 schema（例如关闭 OpenAPIEnums 时移除枚举信息）。
 package openapi
 
 import (
@@ -31,6 +33,8 @@ const enumTypeDescriptionHeader = "Possible enum values:"
 
 // GetOpenAPIDefinitionsWithoutDisabledFeatures wraps a GetOpenAPIDefinitions to revert
 // any change to the schema that was made by disabled features.
+// 目的：生成的 OpenAPI 定义可能包含默认启用的特性内容，但运行时特性门控关闭时，
+// 对外暴露的 schema 必须与门控状态一致，否则客户端会看到实际不可用的字段。
 func GetOpenAPIDefinitionsWithoutDisabledFeatures(GetOpenAPIDefinitions common.GetOpenAPIDefinitions) common.GetOpenAPIDefinitions {
 	return func(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 		defs := GetOpenAPIDefinitions(ref)
@@ -45,6 +49,7 @@ func restoreDefinitions(defs map[string]common.OpenAPIDefinition) {
 	if !utilfeature.DefaultFeatureGate.Enabled(genericfeatures.OpenAPIEnums) {
 		for gvk, def := range defs {
 			orig := &def.Schema
+			// pruneEnums 未发生修改时返回同一指针，可据此跳过回写，减少 map 更新。
 			if ret := pruneEnums(orig); ret != orig {
 				def.Schema = *ret
 				defs[gvk] = def
@@ -53,6 +58,9 @@ func restoreDefinitions(defs map[string]common.OpenAPIDefinition) {
 	}
 }
 
+// pruneEnums 从 schema 中移除枚举值及描述中的枚举段落，返回可能被克隆的新 schema。
+// 使用写时复制（copy-on-write）：只有真正需要修改的节点才克隆，
+// 避免深拷贝整棵 schema 树。
 func pruneEnums(schema *spec.Schema) *spec.Schema {
 	walker := schemamutation.Walker{
 		SchemaCallback: func(schema *spec.Schema) *spec.Schema {

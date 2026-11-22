@@ -16,4 +16,7 @@ limitations under the License.
 
 // Package mutating makes calls to mutating webhooks during the admission
 // process.
+//
+// 该包负责 MutatingWebhookConfiguration 的执行：匹配规则、调用 webhook、
+// 校验并应用返回的 JSONPatch，以及失败策略（failurePolicy）的处理。
 package mutating

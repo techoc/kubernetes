@@ -18,6 +18,9 @@ package dynamiccertificates
 
 import "testing"
 
+// TestDynamicCertificateContentEquals 验证证书内容相等性判断：nil 与空对象
+// 不相等（nil 表示未配置），并且 CA、证书、私钥任一字节变化都必须检测到，
+// 否则动态重载会漏掉更新。
 func TestDynamicCertificateContentEquals(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -107,6 +110,7 @@ func TestDynamicCertificateContentEquals(t *testing.T) {
 	}
 }
 
+// TestCABundleContentEquals 单独验证 CA bundle 的相等性语义。
 func TestCABundleContentEquals(t *testing.T) {
 	tests := []struct {
 		name     string

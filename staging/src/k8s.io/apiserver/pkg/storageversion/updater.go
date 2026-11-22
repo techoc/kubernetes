@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package storageversion 维护每个资源的 StorageVersion 对象：记录各
+// apiserver 实例使用的编码版本，并计算公共编码版本，供迁移与降级判断。
 package storageversion
 
 import (
@@ -29,6 +31,7 @@ import (
 )
 
 // Client has the methods required to update the storage version.
+// 只暴露更新所需的最小方法集，便于测试替换。
 type Client interface {
 	Create(context.Context, *v1alpha1.StorageVersion, metav1.CreateOptions) (*v1alpha1.StorageVersion, error)
 	UpdateStatus(context.Context, *v1alpha1.StorageVersion, metav1.UpdateOptions) (*v1alpha1.StorageVersion, error)
@@ -37,6 +40,9 @@ type Client interface {
 
 // SetCommonEncodingVersion updates the CommonEncodingVersion and the AllEncodingVersionsEqual
 // condition based on the StorageVersions.
+//
+// 公共编码版本取所有实例编码版本的“交集”——只有全部实例一致时才设置；
+// 任一实例不同就清空，迫使调用方继续使用可解码的版本。
 func SetCommonEncodingVersion(sv *v1alpha1.StorageVersion) {
 	var oldCommonEncodingVersion *string
 	if sv.Status.CommonEncodingVersion != nil {
@@ -79,6 +85,7 @@ func SetCommonEncodingVersion(sv *v1alpha1.StorageVersion) {
 	setStatusCondition(&sv.Status.Conditions, condition, forceTransition)
 }
 
+// findStatusCondition 返回第一个匹配类型的条件指针；找不到返回 nil。
 func findStatusCondition(conditions []v1alpha1.StorageVersionCondition,
 	conditionType v1alpha1.StorageVersionConditionType) *v1alpha1.StorageVersionCondition {
 	for i := range conditions {
@@ -123,6 +130,9 @@ func setStatusCondition(conditions *[]v1alpha1.StorageVersionCondition, newCondi
 }
 
 // updateStorageVersionFor updates the storage version object for the resource.
+//
+// 有限重试（3 次）：StorageVersion 是集群级共享对象，多 apiserver 并发
+// 更新时冲突很常见，但不应无限重试拖慢启动。
 func updateStorageVersionFor(c Client, apiserverID string, gr schema.GroupResource, encodingVersion string, decodableVersions []string, servedVersions []string) error {
 	retries := 3
 	var retry int
@@ -147,6 +157,8 @@ func updateStorageVersionFor(c Client, apiserverID string, gr schema.GroupResour
 
 func singleUpdate(c Client, apiserverID string, gr schema.GroupResource, encodingVersion string, decodableVersions []string, servedVersions []string) error {
 	shouldCreate := false
+	// 对象名固定为 "<group>.<resource>"，core 组则形如 ".pods"；
+	// 这是 StorageVersion 的命名约定，不能随意更改。
 	name := fmt.Sprintf("%s.%s", gr.Group, gr.Resource)
 	sv, err := c.Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -159,6 +171,8 @@ func singleUpdate(c Client, apiserverID string, gr schema.GroupResource, encodin
 	}
 	updatedSV := localUpdateStorageVersion(sv, apiserverID, encodingVersion, decodableVersions, servedVersions)
 	if shouldCreate {
+		// 先 Create 再单独 UpdateStatus：status 是子资源，创建请求中
+		// 携带的 status 会被忽略。
 		createdSV, err := c.Create(context.TODO(), updatedSV, metav1.CreateOptions{})
 		if err != nil {
 			return err
@@ -174,6 +188,9 @@ func singleUpdate(c Client, apiserverID string, gr schema.GroupResource, encodin
 
 // localUpdateStorageVersion updates the input storageversion with given server storageversion info.
 // The function updates the input storageversion in place.
+//
+// 以 apiserverID 为键做 upsert：同一实例重启后只更新自己的条目，
+// 不会把其它实例的信息覆盖掉。
 func localUpdateStorageVersion(sv *v1alpha1.StorageVersion, apiserverID, encodingVersion string, decodableVersions []string, servedVersions []string) *v1alpha1.StorageVersion {
 	newSSV := v1alpha1.ServerStorageVersion{
 		APIServerID:       apiserverID,

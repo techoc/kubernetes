@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 )
 
+// TestMajorMinor 覆盖版本号解析：空值、非数字、前导零以及带后缀的 minor。
 func TestMajorMinor(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -107,6 +108,8 @@ func TestMajorMinor(t *testing.T) {
 	}
 }
 
+// TestIsDeprecated 验证弃用判定：未实现接口或弃用版本为 0 时返回 false；
+// 当前版本未知时保守返回 true；否则按 major/minor 字典序比较。
 func TestIsDeprecated(t *testing.T) {
 	tests := []struct {
 		name string
@@ -183,6 +186,7 @@ func TestIsDeprecated(t *testing.T) {
 	}
 }
 
+// TestRemovedRelease 验证移除版本格式化：任一组件非零才输出 "major.minor"。
 func TestRemovedRelease(t *testing.T) {
 	tests := []struct {
 		name string
@@ -224,6 +228,7 @@ func TestRemovedRelease(t *testing.T) {
 	}
 }
 
+// TestWarningMessage 验证警告文本随可用接口逐步扩展：弃用 -> 移除 -> 替代。
 func TestWarningMessage(t *testing.T) {
 	tests := []struct {
 		name string
@@ -283,9 +288,12 @@ func TestWarningMessage(t *testing.T) {
 	}
 }
 
+// fakeObject 未实现任何生命周期接口。
 type fakeObject struct {
 	unstructured.Unstructured
 }
+
+// fakeDeprecatedObject 只实现 APILifecycleDeprecated。
 type fakeDeprecatedObject struct {
 	unstructured.Unstructured
 	major int
@@ -294,6 +302,7 @@ type fakeDeprecatedObject struct {
 
 func (f *fakeDeprecatedObject) APILifecycleDeprecated() (int, int) { return f.major, f.minor }
 
+// fakeRemovedObject 同时实现弃用与移除接口。
 type fakeRemovedObject struct {
 	unstructured.Unstructured
 	major        int
@@ -305,6 +314,7 @@ type fakeRemovedObject struct {
 func (f *fakeRemovedObject) APILifecycleDeprecated() (int, int) { return f.major, f.minor }
 func (f *fakeRemovedObject) APILifecycleRemoved() (int, int)    { return f.removedMajor, f.removedMinor }
 
+// fakeReplacedObject 实现全部三个生命周期接口。
 type fakeReplacedObject struct {
 	unstructured.Unstructured
 	major        int

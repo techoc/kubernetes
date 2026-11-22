@@ -27,6 +27,8 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestAuthenticateRequest 验证能从 Sec-Websocket-Protocol 中解析出
+// base64url 编码的 bearer token，并把 token 交给底层 authenticator。
 func TestAuthenticateRequest(t *testing.T) {
 	auth := NewProtocolAuthenticator(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		if token != "token" {
@@ -46,6 +48,8 @@ func TestAuthenticateRequest(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestMultipleConnectionHeaders 验证 Connection 头含多个值
+// （"not", "upgrade"）时仍能识别出 upgrade，而不是按逗号拼接后的整串比较。
 func TestAuthenticateRequestMultipleConnectionHeaders(t *testing.T) {
 	auth := NewProtocolAuthenticator(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		if token != "token" {
@@ -65,6 +69,8 @@ func TestAuthenticateRequestMultipleConnectionHeaders(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenInvalid 验证底层 authenticator 返回
+// (nil, false, nil) 时，本层统一转换为 errInvalidToken。
 func TestAuthenticateRequestTokenInvalid(t *testing.T) {
 	auth := NewProtocolAuthenticator(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		return nil, false, nil
@@ -84,6 +90,8 @@ func TestAuthenticateRequestTokenInvalid(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenInvalidCustomError 验证底层返回的具体错误
+// 必须原样透传，不能被包装或替换。
 func TestAuthenticateRequestTokenInvalidCustomError(t *testing.T) {
 	customError := errors.New("custom")
 	auth := NewProtocolAuthenticator(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
@@ -104,6 +112,8 @@ func TestAuthenticateRequestTokenInvalidCustomError(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestTokenError 验证底层返回错误时，请求既不被认证
+// 也不返回响应对象。
 func TestAuthenticateRequestTokenError(t *testing.T) {
 	auth := NewProtocolAuthenticator(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		return nil, false, errors.New("error")
@@ -120,6 +130,9 @@ func TestAuthenticateRequestTokenError(t *testing.T) {
 	}
 }
 
+// TestAuthenticateRequestBadValue 覆盖三种“没有可解析 token”的情况：
+// 请求缺少任何 header、协议名不是 bearer 前缀、bearer 前缀后为空。
+// 这些情况下都不应调用底层 authenticator，也不应报错。
 func TestAuthenticateRequestBadValue(t *testing.T) {
 	testCases := []struct {
 		Req *http.Request
@@ -148,6 +161,8 @@ func TestAuthenticateRequestBadValue(t *testing.T) {
 	}
 }
 
+// TestBearerToken 表驱动地验证协议头处理：解析 token 后必须把 bearer 项从
+// Sec-Websocket-Protocol 中移除（避免把凭据回显给客户端），并保留其它协议项。
 func TestBearerToken(t *testing.T) {
 	tests := map[string]struct {
 		ProtocolHeaders []string
@@ -187,6 +202,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedProtocolHeaders: []string{"base64url.bearer.authorization.k8s.io."},
 		},
 		"valid bearer token removing header": {
+			// 两个独立的头值：一个含 bearer，一个含普通协议；期望合并后只留下普通协议。
 			ProtocolHeaders: []string{"base64url.bearer.authorization.k8s.io.dG9rZW4", "dummy, dummy2"},
 			TokenAuth: authenticator.TokenFunc(func(ctx context.Context, t string) (*authenticator.Response, bool, error) {
 				return &authenticator.Response{User: &user.DefaultInfo{Name: "myuser"}}, true, nil
@@ -197,6 +213,7 @@ func TestBearerToken(t *testing.T) {
 			ExpectedProtocolHeaders: []string{"dummy,dummy2"},
 		},
 		"invalid bearer token": {
+			// 认证失败时错误返回，但头保持原样，便于客户端重试。
 			ProtocolHeaders:         []string{"base64url.bearer.authorization.k8s.io.dG9rZW4,dummy"},
 			TokenAuth:               authenticator.TokenFunc(func(ctx context.Context, t string) (*authenticator.Response, bool, error) { return nil, false, nil }),
 			ExpectedUserName:        "",

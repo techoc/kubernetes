@@ -42,11 +42,15 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// wantTmpl 是 text/plain 响应的固定头部模板，测试中只校验该头部，
+// 因为分隔符被刻意随机化，无法逐字匹配参数行。
 const wantTmpl = `
 %s flagz
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
 `
 
+// TestHandleFlagz 覆盖 flagz 端点的内容协商：text/plain 回退、JSON/YAML/CBOR
+// 结构化输出、弃用版本的 Warning 头，以及缺少必要 Accept 参数时的 406。
 func TestHandleFlagz(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 
@@ -109,6 +113,7 @@ func TestHandleFlagz(t *testing.T) {
 			},
 		},
 		{
+			// 弃用版本仍可访问，但必须通过 Warning 头提示客户端迁移。
 			name:          "deprecated version request",
 			acceptHeader:  "application/json;v=v1alpha1;g=config.k8s.io;as=Flagz",
 			componentName: "test-server",
@@ -176,6 +181,7 @@ func TestHandleFlagz(t *testing.T) {
 			},
 		},
 		{
+			// 没有 Accept 头时默认 text/plain，保持与旧客户端兼容。
 			name:          "no accept header falls back to text/plain",
 			acceptHeader:  "",
 			componentName: "test-server",
@@ -204,6 +210,7 @@ func TestHandleFlagz(t *testing.T) {
 			),
 		},
 		{
+			// 首选子句无法满足时，*/* 兜底使请求退回 text/plain 而非 406。
 			name:          "bad json header falls back to text/plain with wildcard",
 			acceptHeader:  "application/json;v=foo;g=config.k8s.io;as=Flagz,*/*",
 			componentName: "test-server",
@@ -309,6 +316,7 @@ func TestHandleFlagz(t *testing.T) {
 	}
 }
 
+// unmarshalResponse 按响应 Content-Type 选择解码器，验证每种格式都能被独立解析。
 func unmarshalResponse(t *testing.T, contentType string, body []byte, got interface{}) {
 	t.Helper()
 	switch {
@@ -329,6 +337,8 @@ func unmarshalResponse(t *testing.T, contentType string, body []byte, got interf
 	}
 }
 
+// TestCache 验证 text/plain 响应被缓存：即使底层 FlagSet 新增了参数，
+// 第二次请求仍返回同一份缓存内容（参数在进程生命周期内不变，缓存是安全的）。
 func TestCache(t *testing.T) {
 	fakeFlagName := "test-flag"
 	fakeFlagValue := "test-value"
@@ -364,6 +374,7 @@ func TestCache(t *testing.T) {
 		t.Fatalf("cached response should not be nil")
 	}
 	cached := capturedReg.cachedPlainTextResponse
+	// 故意在首次请求后新增 flag，验证第二次响应未变化（即命中缓存）。
 	fs.String("new-flag", "new-value", "usage")
 
 	w = httptest.NewRecorder()
@@ -380,6 +391,9 @@ func TestCache(t *testing.T) {
 // are explicitly handled. If this test fails, a new media type was added
 // to the codec factory and needs to be explicitly added to the supported
 // or unsupported list in newFlagzCodecFactory.
+//
+// 这是一道防回归护栏：codec factory 支持的类型集合变化时，必须显式决定
+// flagz 端点是否支持该类型，避免默认行为悄悄改变。
 func TestNewFlagzCodecFactory(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 	scheme := runtime.NewScheme()
@@ -392,6 +406,8 @@ func TestNewFlagzCodecFactory(t *testing.T) {
 	}
 }
 
+// TestMetrics 验证请求指标按协商结果打标：text/plain 无 group/version，
+// 结构化请求则带上 config.k8s.io 与具体版本，便于按版本观察迁移进度。
 func TestMetrics(t *testing.T) {
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	fs.String("test-flag", "test-value", "usage")

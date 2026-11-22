@@ -16,4 +16,7 @@ limitations under the License.
 
 // Package truncate provides an implementation for the audit.Backend interface
 // that truncates audit events and sends them to the delegate audit.Backend.
+//
+// 审计后端有单条事件大小上限；该实现把超限事件裁剪到配置的字节数以内，
+// 并在事件上记录被截断的字段，既保证不丢事件又不破坏下游后端的约束。
 package truncate

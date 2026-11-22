@@ -26,6 +26,8 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 同时注册内部版本与 v1 版本，这样配置解码和转换都能在同一 scheme 内完成。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(webhookadmission.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))

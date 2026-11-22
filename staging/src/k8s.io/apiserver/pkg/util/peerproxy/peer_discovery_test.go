@@ -47,6 +47,8 @@ import (
 	peerproxymetrics "k8s.io/apiserver/pkg/util/peerproxy/metrics"
 )
 
+// TestRunPeerDiscoveryCacheSync 验证对端 discovery 缓存随 Lease 事件正确增删改：
+// 只有匹配 label selector 的 Lease 被视为对端，更新持有者会触发刷新，删除会移除缓存项。
 func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 	testCases := []struct {
 		desc                string
@@ -242,6 +244,8 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 	}
 }
 
+// TestPeerDiscoveryMetrics 验证同步失败的两类错误分别计入
+// hostport_resolution 与 fetch_discovery，便于定位是端点解析还是网络请求问题。
 func TestPeerDiscoveryMetrics(t *testing.T) {
 	testCases := []struct {
 		desc             string
@@ -325,6 +329,8 @@ func TestPeerDiscoveryMetrics(t *testing.T) {
 	}
 }
 
+// setupPeerProxyHandler 用 fake clientset/informer/reconciler 构造 handler，
+// 避免测试依赖真实集群。
 func setupPeerProxyHandler(t *testing.T, labelSelector string) (*peerProxyHandler, *fakeReconciler, cache.SharedIndexInformer, *fake.Clientset, informers.SharedInformerFactory) {
 	localServerID := "local-server"
 	fakeClient := fake.NewSimpleClientset()
@@ -355,6 +361,8 @@ func setupPeerProxyHandler(t *testing.T, labelSelector string) (*peerProxyHandle
 }
 
 // newTestTLSServer creates a new httptest.NewTLSServer that serves discovery endpoints.
+//
+// 返回固定的 discovery 内容（testgroup/v1/testresources），供对端缓存断言使用。
 func newTestTLSServer(t *testing.T) *httptest.Server {
 	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/apis" || r.URL.Path == "/api" {
@@ -385,27 +393,33 @@ func newTestTLSServer(t *testing.T) *httptest.Server {
 	}))
 }
 
+// fakeReconciler 只用内存 map 模拟 serverID 到 endpoint 的映射。
 type fakeReconciler struct {
 	endpoints map[string]string
 }
 
+// newFakeReconciler 创建空的 fake reconciler。
 func newFakeReconciler() *fakeReconciler {
 	return &fakeReconciler{
 		endpoints: make(map[string]string),
 	}
 }
 
+// UpdateLease 空实现：测试直接通过 setEndpoint 注入端点。
 func (f *fakeReconciler) UpdateLease(serverID string, publicIP string, ports []corev1.EndpointPort) error {
 	return nil
 }
 
+// DeleteLease 空实现。
 func (f *fakeReconciler) DeleteLease(serverID string) error {
 	return nil
 }
 
+// Destroy 空实现。
 func (f *fakeReconciler) Destroy() {
 }
 
+// GetEndpoint 返回注入的端点；未注入时返回错误，用于模拟解析失败。
 func (f *fakeReconciler) GetEndpoint(serverID string) (string, error) {
 	endpoint, ok := f.endpoints[serverID]
 	if !ok {
@@ -414,17 +428,21 @@ func (f *fakeReconciler) GetEndpoint(serverID string) (string, error) {
 	return endpoint, nil
 }
 
+// RemoveLease 空实现。
 func (f *fakeReconciler) RemoveLease(serverID string) error {
 	return nil
 }
 
+// StopReconciling 空实现。
 func (f *fakeReconciler) StopReconciling() {
 }
 
+// setEndpoint 注入 serverID 对应的对端地址。
 func (f *fakeReconciler) setEndpoint(serverID, endpoint string) {
 	f.endpoints[serverID] = endpoint
 }
 
+// makePeerDiscoveryCacheEntry 构造只含单个 GVR 的期望缓存项。
 func makePeerDiscoveryCacheEntry(group, version, resource string) PeerDiscoveryCacheEntry {
 	return PeerDiscoveryCacheEntry{
 		GVRs: map[schema.GroupVersionResource]bool{

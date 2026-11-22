@@ -38,10 +38,14 @@ import (
 )
 
 const (
+	// 3 分钟与 Go 默认的 TCP keep-alive 探测节奏兼容，既能及时发现
+	// 半开连接，又不会给网络设备造成过多探测流量。
 	defaultKeepAlivePeriod = 3 * time.Minute
 )
 
 // tlsConfig produces the tls.Config to serve with.
+// 静态 TLS 参数在这里确定；证书内容则通过 GetConfigForClient 动态获取，
+// 从而支持运行期热更新证书而无需重建 listener。
 func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		// Can't use SSLv3 because of POODLE and BEAST
@@ -62,6 +66,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 	}
 	if len(s.CipherSuites) > 0 {
 		tlsConfig.CipherSuites = s.CipherSuites
+		// 对显式配置的不安全套件只告警不拒绝：兼容性优先，
+		// 但让运维在日志中能发现风险配置。
 		insecureCiphers := flag.InsecureTLSCiphers()
 		for i := 0; i < len(s.CipherSuites); i++ {
 			for cipherName, cipherID := range insecureCiphers {
@@ -78,6 +84,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 	if s.ClientCA != nil {
 		// Populate PeerCertificates in requests, but don't reject connections without certificates
 		// This allows certificates to be validated by authenticators, while still allowing other auth types
+		// 因此这里用 RequestClientCert 而不是 RequireAndVerifyClientCert：
+		// 是否需要客户端证书由认证器决定，而不是 TLS 层。
 		tlsConfig.ClientAuth = tls.RequestClientCert
 	}
 
@@ -107,6 +115,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 			}
 		}()
 		// start controllers if possible
+		// RunOnce 仅用于预热；文件必须已经存在，失败并不致命，
+		// 后续 Run 阶段仍会重试并最终 fail closed。
 		if controller, ok := s.ClientCA.(dynamiccertificates.ControllerRunner); ok {
 			// runonce to try to prime data.  If this fails, it's ok because we fail closed.
 			// Files are required to be populated already, so this is for convenience.
@@ -145,6 +155,7 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 		}
 		go dynamicCertificateController.Run(1, stopCh)
 
+		// 每次握手都会回调，返回当前最新证书；这才是热更新的关键接线。
 		tlsConfig.GetConfigForClient = dynamicCertificateController.GetConfigForClient
 	}
 
@@ -171,6 +182,8 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 		MaxHeaderBytes: 1 << 20,
 		TLSConfig:      tlsConfig,
 
+		// IdleTimeout 与客户端 transport 的 keep-alive 对齐，
+		// 避免两端对连接空闲时间判断不一致而反复重建连接。
 		IdleTimeout:       90 * time.Second, // matches http.DefaultTransport keep-alive timeout
 		ReadHeaderTimeout: 32 * time.Second, // just shy of requestTimeoutUpperBound
 	}
@@ -209,6 +222,8 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 	}
 
 	// use tlsHandshakeErrorWriter to handle messages of tls handshake error
+	// 握手错误通常来自扫描器或配置错误，数量可能极大；
+	// 由专用 writer 降级到 V(5) 并计入指标，避免刷爆日志。
 	tlsErrorWriter := &tlsHandshakeErrorWriter{os.Stderr}
 	tlsErrorLogger := log.New(tlsErrorWriter, "", 0)
 	secureServer.ErrorLog = tlsErrorLogger
@@ -234,6 +249,8 @@ func RunServer(
 	}
 
 	// Shutdown server gracefully.
+	// Shutdown 会等待活跃请求完成（受 shutDownTimeout 限制），
+	// 这是在快速退出与不中断请求之间取的折中。
 	serverShutdownCh, listenerStoppedCh := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(serverShutdownCh)
@@ -258,6 +275,8 @@ func RunServer(
 
 		err := server.Serve(listener)
 
+		// Serve 在未收到 stopCh 时返回错误属于意外（例如 listener 失效），
+		// 直接 panic 让上层重启进程，而不是静默接受不可用状态。
 		msg := fmt.Sprintf("Stopped listening on %s", ln.Addr().String())
 		select {
 		case <-stopCh:
@@ -280,6 +299,7 @@ type tcpKeepAliveListener struct {
 	net.Listener
 }
 
+// Accept 接受连接并启用 TCP keep-alive；非 TCP 连接保持不变。
 func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
 	c, err := ln.Listener.Accept()
 	if err != nil {
@@ -300,6 +320,8 @@ type tlsHandshakeErrorWriter struct {
 
 const tlsHandshakeErrorPrefix = "http: TLS handshake error"
 
+// Write 只对握手错误做降级处理并计数；其他日志原样输出，
+// 因为那些通常是真正需要关注的服务端错误。
 func (w *tlsHandshakeErrorWriter) Write(p []byte) (int, error) {
 	if strings.Contains(string(p), tlsHandshakeErrorPrefix) {
 		klog.V(5).Info(string(p))

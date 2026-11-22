@@ -41,6 +41,9 @@ import (
 //
 // TestToValue also tests that UnstructuredToValue and TypedToValue behave identically
 // for a Kubernetes object.
+//
+// 核心不变量：同一对象经 typed 与 unstructured 两条路径转换后，在 CEL 中求值结果必须一致。
+// 测试用例以表达式 + 期望 true 的形式编写，差异会直接表现为求值失败。
 func TestToValue(t *testing.T) {
 	struct1value := Struct{S: "hello", I: 10, B: true, F: 1.5}
 	struct1 := typedValue{value: struct1value, schema: structSchema}
@@ -1017,6 +1020,9 @@ func TestToValue(t *testing.T) {
 	}
 }
 
+// TestReflectiveWrapperValueReturnsGoValue 验证基于反射的包装器在 Value() 与
+// ConvertToNative 上返回原始 Go 类型，而不是退化成通用的 list/map，
+// 否则 CEL 扩展函数（如 quantity/ip）会因类型不匹配而无法接收参数。
 func TestReflectiveWrapperValueReturnsGoValue(t *testing.T) {
 	list := common.TypedToVal([]int64{1, 2, 3}, &openapi.Schema{Schema: intArraySchema})
 	if _, ok := list.Value().([]int64); !ok {
@@ -1035,6 +1041,8 @@ func TestReflectiveWrapperValueReturnsGoValue(t *testing.T) {
 	}
 }
 
+// TestReflectiveMapListWithThreeKeysEqual 验证三键 map list 的比较与元素顺序无关：
+// 声明为 list-map-keys 的列表在 CEL 中应表现为集合语义。
 func TestReflectiveMapListWithThreeKeysEqual(t *testing.T) {
 	type ThreeKeyMapListEntry struct {
 		Key1  string `json:"key1"`
@@ -1090,6 +1098,8 @@ func TestReflectiveMapListWithThreeKeysEqual(t *testing.T) {
 	})
 }
 
+// TestListAdd 覆盖 listType=map/set 语义下 `+` 运算符的合并行为，
+// 包括 map key 冲突、set 去重、嵌套 set 以及 CEL 保留字键的转义。
 func TestListAdd(t *testing.T) {
 	// IfEntry has a map key prop that is a CEL reserved word and so requires escaping.
 	type IfEntry struct {
@@ -1592,6 +1602,8 @@ func TestListAdd(t *testing.T) {
 	}
 }
 
+// schemalessTypedToValActivation 构造无 schema 的激活值，用于验证
+// 缺少 OpenAPI 信息时类型推断的退化行为。
 func schemalessTypedToValActivation(vals map[string]typedValue) map[string]interface{} {
 	activation := make(map[string]interface{}, len(vals))
 	for k, tv := range vals {
@@ -1600,6 +1612,7 @@ func schemalessTypedToValActivation(vals map[string]typedValue) map[string]inter
 	return activation
 }
 
+// testSchemalessTypedToVal 在 schemaless 转换下执行表达式并核对错误或结果。
 func testSchemalessTypedToVal(t *testing.T, env *cel.Env, tt testCase) {
 	out, err := evalExpression(t, env, tt.expression, schemalessTypedToValActivation(tt.activation))
 	if err != nil && len(tt.wantErr) == 0 {
@@ -1618,6 +1631,7 @@ func testSchemalessTypedToVal(t *testing.T, env *cel.Env, tt testCase) {
 	}
 }
 
+// testTypedToVal 在带 schema 的 typed 转换下执行表达式并核对错误或结果。
 func testTypedToVal(t *testing.T, env *cel.Env, tt testCase) {
 	typedOut, typedErr := evalExpression(t, env, tt.expression, typedToValActivation(tt.activation))
 	if typedErr != nil && len(tt.wantErr) == 0 {
@@ -1636,6 +1650,8 @@ func testTypedToVal(t *testing.T, env *cel.Env, tt testCase) {
 	}
 }
 
+// testUnstructuredToVal 先把对象转成 unstructured 再执行表达式，
+// 用于对照 typed 路径的行为是否一致。
 func testUnstructuredToVal(t *testing.T, tt testCase, env *cel.Env) {
 	a, err := unstructuredToValActivation(tt.activation)
 	if err != nil {
@@ -1658,6 +1674,7 @@ func testUnstructuredToVal(t *testing.T, tt testCase, env *cel.Env) {
 	}
 }
 
+// evalExpression 编译并执行表达式，把编译期问题视为测试失败。
 func evalExpression(t *testing.T, env *cel.Env, expression string, activation map[string]interface{}) (ref.Val, error) {
 	ast, iss := env.Compile(expression)
 	if iss.Err() != nil {
@@ -1673,6 +1690,8 @@ func evalExpression(t *testing.T, env *cel.Env, expression string, activation ma
 	return out, err
 }
 
+// Struct 是测试用的简单对象，字段名刻意避开 omitempty，
+// 用于验证零值字段在 CEL 中是否仍然可见（has() 语义）。
 type Struct struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`

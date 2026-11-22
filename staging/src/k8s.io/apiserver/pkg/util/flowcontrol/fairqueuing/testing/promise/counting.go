@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package promise 提供带 goroutine 活动计数的 WriteOnce 测试实现。
+// 它用于需要精确观测“有多少 goroutine 处于阻塞/活跃”的公平排队测试，
+// 与生产实现相比多维护了一个 counter.GoRoutineCounter。
 package promise
 
 import (
@@ -30,6 +33,9 @@ import (
 // the given counter is decremented for a goroutine waiting for this
 // varible to be set and incremented when such a goroutine is
 // unblocked.
+//
+// 计数约定：进入 Wait 前 -1，被唤醒时按 waitingCount 一次性 +N，
+// 使计数器始终等于“当前可运行的 goroutine 数”。
 type countingPromise struct {
 	lock          sync.Locker
 	cond          sync.Cond
@@ -59,14 +65,16 @@ func NewCountingWriteOnce(activeCounter counter.GoRoutineCounter, lock sync.Lock
 		lock:          lock,
 		cond:          *sync.NewCond(lock),
 		activeCounter: activeCounter,
-		isSet:         initial != nil,
-		value:         initial,
+		// initial 非 nil 即视为已设置，避免调用方额外调用 Set。
+		isSet: initial != nil,
+		value: initial,
 	}
 	if doneCh != nil {
 		activeCounter.Add(1) // count start of the following goroutine
 		go func() {
 			defer activeCounter.Add(-1) // count completion of this goroutine
 			defer runtime.HandleCrash()
+			// 阻塞在 channel receive 前先“挂起”本 goroutine，防止计数器虚高。
 			activeCounter.Add(-1) // count suspension for channel receive
 			<-doneCh
 			// Whatever goroutine unblocked the preceding receive MUST
@@ -79,6 +87,8 @@ func NewCountingWriteOnce(activeCounter counter.GoRoutineCounter, lock sync.Lock
 	return p
 }
 
+// Get 在未设置时阻塞，并同步调整 goroutine 计数。
+// 调用方必须在不持有 lock 的情况下调用，否则 cond.Wait 无法重新获取锁。
 func (p *countingPromise) Get() interface{} {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -90,12 +100,14 @@ func (p *countingPromise) Get() interface{} {
 	return p.value
 }
 
+// Set 只生效一次；返回 false 表示此前已被设置（例如先被取消）。
 func (p *countingPromise) Set(value interface{}) bool {
 	if p.isSet {
 		return false
 	}
 	p.isSet = true
 	p.value = value
+	// 一次性唤醒所有等待者，并按人数补回活跃计数。
 	if p.waitingCount > 0 {
 		p.activeCounter.Add(p.waitingCount)
 		p.waitingCount = 0

@@ -46,18 +46,22 @@ import (
 	pointer "k8s.io/utils/ptr"
 )
 
+// testCondition 是仅含表达式文本的 ExpressionAccessor 测试实现。
 type testCondition struct {
 	Expression string
 }
 
+// GetExpression 返回表达式文本。
 func (tc *testCondition) GetExpression() string {
 	return tc.Expression
 }
 
+// ReturnTypes 声明条件表达式应返回 bool。
 func (tc *testCondition) ReturnTypes() []*celgo.Type {
 	return []*celgo.Type{celgo.BoolType}
 }
 
+// TestCompile 验证编译阶段能逐个报告语法错误而不影响同一批中的合法表达式。
 func TestCompile(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -127,6 +131,9 @@ func TestCompile(t *testing.T) {
 	}
 }
 
+// TestCondition 覆盖条件求值的完整语义：对象/元数据/参数/命名空间变量、
+// 删除时 object 为 null、运行时错误、authorizer 子语言以及 CEL 库的版本门控。
+// 每个用例显式声明期望的 EvalResult 或错误子串。
 func TestCondition(t *testing.T) {
 	simpleLabelSelector, err := labels.NewRequirement("apple", selection.Equals, []string{"banana"})
 	if err != nil {
@@ -348,6 +355,8 @@ func TestCondition(t *testing.T) {
 			params:       configMapParams,
 		},
 		{
+			// 删除请求中 object 必须为 null，oldObject 才是被删除的对象；
+			// 这是策略表达式区分 create/update/delete 的基础约定。
 			name: "test Object null in delete",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -440,6 +449,8 @@ func TestCondition(t *testing.T) {
 			params:       crdParams,
 		},
 		{
+			// paramKind 已声明但未提供参数时，params 必须为 null 而不是报错，
+			// 让策略可以用表达式自行决定是否放行。
 			name: "test deny paramKind without paramRef",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -730,6 +741,8 @@ func TestCondition(t *testing.T) {
 			}),
 		},
 		{
+			// 单次调用的 cost limit 由特性门控控制，超限应报"实际成本超限"
+			// 而不是普通的运行时错误。
 			name: "test perCallLimit exceed",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -747,6 +760,8 @@ func TestCondition(t *testing.T) {
 			testPerCallLimit: 1,
 		},
 		{
+			// namespaceObject 只暴露部分元数据；managedFields/ownerReferences
+			// 等字段不可见，访问它们应产生"未定义字段"错误。
 			name: "test namespaceObject",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -805,6 +820,7 @@ func TestCondition(t *testing.T) {
 			namespaceObject: nsObject,
 		},
 		{
+			// 兼容版本低于函数引入版本时，新库函数不可见（编译失败）。
 			name: "cel lib not recognized in version earlier than introduced version",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -835,6 +851,8 @@ func TestCondition(t *testing.T) {
 			compatibilityVersion: v130,
 		},
 		{
+			// 已存储的表达式（StoredExpressions）不受兼容版本门控，
+			// 否则升级后会无法求值历史上已写入的对象。
 			name: "cel lib always recognized in stored expression",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -854,6 +872,7 @@ func TestCondition(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 关闭环境缓存，确保每个用例拿到独立的 CEL 环境（cost limit 等配置不同）。
 			environment.DisableBaseEnvSetCachingForTests()
 
 			if tc.testPerCallLimit == 0 {
@@ -919,6 +938,9 @@ func TestCondition(t *testing.T) {
 	}
 }
 
+// TestRuntimeCELCostBudget 验证运行时成本预算与单次调用上限：
+// 预算耗尽应终止后续规则并返回 -1 remaining；未耗尽时返回精确的剩余预算。
+// authorizer 等扩展库调用按更高成本计入，覆盖 StrictCostEnforcement 路径。
 func TestRuntimeCELCostBudget(t *testing.T) {
 	checkCost := int64(350000)
 
@@ -944,6 +966,7 @@ func TestRuntimeCELCostBudget(t *testing.T) {
 		exceedPerCallLimit       bool
 	}{
 		{
+			// 第一条就耗尽预算：后续规则不再执行，且不返回任何求值结果。
 			name: "expression exceed RuntimeCELCostBudget at fist expression",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -1029,6 +1052,7 @@ func TestRuntimeCELCostBudget(t *testing.T) {
 			expectRemainingBudget:    pointer.To(int64(0)),
 		},
 		{
+			// authorizer 调用被计为高成本（checkCost），用于防止策略滥用授权检查。
 			name: "Extended library cost: authz check",
 			validations: []ExpressionAccessor{
 				&testCondition{
@@ -1345,6 +1369,8 @@ func newObjectInterfacesForTest() admission.ObjectInterfaces {
 	return admission.NewObjectInterfacesFromScheme(scheme)
 }
 
+// newValidAttribute 构造 CREATE 或 DELETE 的 Endpoints 属性。
+// 删除场景下 object 为 nil、oldObject 非空，用于验证 oldObject 语义。
 func newValidAttribute(object runtime.Object, isDelete bool) admission.Attributes {
 	var oldObject runtime.Object
 	if !isDelete {
@@ -1374,6 +1400,7 @@ func newValidAttribute(object runtime.Object, isDelete bool) admission.Attribute
 
 }
 
+// TestCompilationErrors 验证 CompilationErrors 只收集有错误的条目并保持原顺序。
 func TestCompilationErrors(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -1469,9 +1496,11 @@ func TestCompilationErrors(t *testing.T) {
 	}
 }
 
+// denyAll 与 errorAll 是两个常用的固定授权器行为。
 var denyAll = fakeAuthorizer{defaultResult: authorizerResult{decision: authorizer.DecisionDeny, reason: "fake reason", err: nil}}
 var errorAll = fakeAuthorizer{defaultResult: authorizerResult{decision: authorizer.DecisionNoOpinion, reason: "", err: fmt.Errorf("fake authz error")}}
 
+// newAuthzAllowMatch 构造"仅当属性完全匹配时才 Allow，否则 Deny"的授权器。
 func newAuthzAllowMatch(match authorizer.AttributesRecord) fakeAuthorizer {
 	return fakeAuthorizer{
 		match: &authorizerMatch{
@@ -1482,22 +1511,26 @@ func newAuthzAllowMatch(match authorizer.AttributesRecord) fakeAuthorizer {
 	}
 }
 
+// fakeAuthorizer 先比较完整属性记录，命中则返回预设结果，否则返回默认结果。
 type fakeAuthorizer struct {
 	match         *authorizerMatch
 	defaultResult authorizerResult
 }
 
+// authorizerResult 表示一次授权决策的完整返回值。
 type authorizerResult struct {
 	decision authorizer.Decision
 	reason   string
 	err      error
 }
 
+// authorizerMatch 把期望匹配的属性与命中后的结果绑定在一起。
 type authorizerMatch struct {
 	authorizerResult
 	match authorizer.AttributesRecord
 }
 
+// Authorize 实现 authorizer.UnconditionalAuthorizer。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	if f.match != nil {
 		other, ok := a.(*authorizer.AttributesRecord)
@@ -1514,6 +1547,8 @@ func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) 
 	return f.defaultResult.decision, f.defaultResult.reason, f.defaultResult.err
 }
 
+// endpointCreateAttributes 构造带完整 GVK/GVR 的 Endpoints CREATE 属性，
+// 用于 authorizer.requestResource 等依赖资源信息的用例。
 func endpointCreateAttributes() admission.Attributes {
 	name := "endpoints1"
 	namespace := "default"
@@ -1537,6 +1572,7 @@ func endpointCreateAttributes() admission.Attributes {
 	return admission.NewAttributesRecord(object, oldObject, gvk, namespace, name, gvr, "", admission.Create, &metav1.CreateOptions{}, false, nil)
 }
 
+// endpointStatusUpdateAttributes 在 CREATE 属性基础上改为 status 子资源的 UPDATE。
 func endpointStatusUpdateAttributes() admission.Attributes {
 	attrs := endpointCreateAttributes()
 	return admission.NewAttributesRecord(

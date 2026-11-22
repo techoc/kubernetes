@@ -32,13 +32,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
+// testSocket 描述测试用的 unix socket：path 是 Linux abstract socket 名，
+// endpoint 是传给 KMS 客户端的 URL。
 type testSocket struct {
 	path     string
 	endpoint string
 }
 
-// newEndpoint constructs a unique name for a Linux Abstract Socket to be used in a test.
-// This package uses Linux Domain Sockets to remove the need for clean-up of socket files.
+// newEndpoint 为测试构造唯一的 Linux Abstract Socket 名称。
+// 使用 abstract socket 可避免测试结束后遗留 socket 文件需要清理。
 func newEndpoint() *testSocket {
 	p := fmt.Sprintf("@%s.sock", uuid.NewUUID())
 
@@ -48,9 +50,9 @@ func newEndpoint() *testSocket {
 	}
 }
 
-// TestKMSPluginLateStart tests the scenario where kms-plugin pod/container starts after kube-apiserver pod/container.
-// Since the Dial to kms-plugin is non-blocking we expect the construction of gRPC service to succeed even when
-// kms-plugin is not yet up - dialing happens in the background.
+// TestKMSPluginLateStart 模拟 kms-plugin 在 kube-apiserver 之后启动：
+// 由于 Dial 是非阻塞的，即使插件尚未就绪，gRPC 服务也应能构造成功，
+// 实际连接在后台建立；插件启动后 Encrypt 应正常工作。
 func TestKMSPluginLateStart(t *testing.T) {
 	t.Parallel()
 	callTimeout := 3 * time.Second
@@ -64,6 +66,7 @@ func TestKMSPluginLateStart(t *testing.T) {
 	}
 	defer destroyService(service)
 
+	// 等一半超时时间后再启动插件，确保构造阶段插件确实不在。
 	time.Sleep(callTimeout / 2)
 	_ = mock.NewBase64Plugin(t, s.path)
 
@@ -74,7 +77,8 @@ func TestKMSPluginLateStart(t *testing.T) {
 	}
 }
 
-// TestTimeout tests behaviour of the kube-apiserver based on the supplied timeout and delayed start of kms-plugin.
+// TestTimeouts 验证在插件启动延迟与调用超时的不同组合下，apiserver 的行为：
+// 超时为 0 属于非法配置；超时小于插件延迟时调用失败；超时足够时成功。
 func TestTimeouts(t *testing.T) {
 	t.Parallel()
 	var testCases = []struct {
@@ -85,12 +89,14 @@ func TestTimeouts(t *testing.T) {
 		wantErr            string
 	}{
 		{
+			// 超时为 0 且插件未启动：调用必然超时
 			desc:        "timeout zero - expect failure when call from kube-apiserver arrives before plugin starts",
 			callTimeout: 0 * time.Second,
 			pluginDelay: 3 * time.Second,
 			wantErr:     "rpc error: code = DeadlineExceeded desc = context deadline exceeded",
 		},
 		{
+			// 插件已就绪，但超时为 0 仍是非法值，调用失败
 			desc:               "timeout zero but kms-plugin already up - still failure - zero timeout is an invalid value",
 			callTimeout:        0 * time.Second,
 			pluginDelay:        0 * time.Second,
@@ -98,11 +104,13 @@ func TestTimeouts(t *testing.T) {
 			wantErr:            "rpc error: code = DeadlineExceeded desc = context deadline exceeded",
 		},
 		{
+			// 超时大于插件延迟：成功
 			desc:        "timeout greater than kms-plugin delay - expect success",
 			callTimeout: 6 * time.Second,
 			pluginDelay: 3 * time.Second,
 		},
 		{
+			// 超时小于插件延迟：失败
 			desc:        "timeout less than kms-plugin delay - expect failure",
 			callTimeout: 3 * time.Second,
 			pluginDelay: 6 * time.Second,
@@ -130,7 +138,7 @@ func TestTimeouts(t *testing.T) {
 
 			kubeAPIServerWG.Add(1)
 			go func() {
-				// Simulating late start of kube-apiserver - plugin is up before kube-apiserver, if requested by the testcase.
+				// 模拟 kube-apiserver 晚启动：如用例要求，插件会先于 apiserver 就绪。
 				time.Sleep(tt.kubeAPIServerDelay)
 
 				service, err = NewGRPCService(ctx, socketName.endpoint, tt.callTimeout)
@@ -140,19 +148,19 @@ func TestTimeouts(t *testing.T) {
 				}
 				defer destroyService(service)
 				kubeAPIServerWG.Done()
-				// Keeping kube-apiserver up to process requests.
+				// 保持 kube-apiserver 存活以处理请求。
 				testCompletedWG.Wait()
 			}()
 
 			kmsPluginWG.Add(1)
 			go func() {
-				// Simulating delayed start of kms-plugin, kube-apiserver is up before the plugin, if requested by the testcase.
+				// 模拟 kms-plugin 延迟启动：如用例要求，apiserver 会先于插件就绪。
 				time.Sleep(tt.pluginDelay)
 
 				_ = mock.NewBase64Plugin(t, socketName.path)
 
 				kmsPluginWG.Done()
-				// Keeping plugin up to process requests.
+				// 保持插件存活以处理请求。
 				testCompletedWG.Wait()
 			}()
 
@@ -170,13 +178,14 @@ func TestTimeouts(t *testing.T) {
 				t.Fatalf("got %q, want nil", err.Error())
 			}
 
-			// Collecting kms-plugin - allowing plugin to clean-up.
+			// 收集 kms-plugin，允许其完成清理。
 			kmsPluginWG.Wait()
 		})
 	}
 }
 
-// TestIntermittentConnectionLoss tests the scenario where the connection with kms-plugin is intermittently lost.
+// TestIntermittentConnectionLoss 模拟与 kms-plugin 的连接间歇性中断：
+// 插件停止后发起 Encrypt（调用会阻塞等待重连），随后重启插件，请求应最终成功。
 func TestIntermittentConnectionLoss(t *testing.T) {
 	t.Parallel()
 	var (
@@ -188,12 +197,12 @@ func TestIntermittentConnectionLoss(t *testing.T) {
 		endpoint   = newEndpoint()
 		encryptErr error
 	)
-	// Start KMS Plugin
+	// 启动 KMS Plugin
 	f := mock.NewBase64Plugin(t, endpoint.path)
 
 	ctx := testContext(t)
 
-	//  connect to kms plugin
+	// 连接到 kms plugin
 	service, err := NewGRPCService(ctx, endpoint.endpoint, timeout)
 	if err != nil {
 		t.Fatalf("failed to create envelope service, error: %v", err)
@@ -207,7 +216,7 @@ func TestIntermittentConnectionLoss(t *testing.T) {
 	t.Log("Connected to KMSPlugin")
 	f.CleanUp()
 
-	// Stop KMS Plugin - simulating connection loss
+	// 停止 KMS Plugin，模拟连接中断
 	t.Log("KMS Plugin is stopping")
 	time.Sleep(2 * time.Second)
 
@@ -215,7 +224,7 @@ func TestIntermittentConnectionLoss(t *testing.T) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-		// Call service to encrypt data.
+		// 调用 service 加密数据。
 		t.Log("Sending encrypt request")
 		wg1.Done()
 		_, err := service.Encrypt(data)
@@ -225,8 +234,9 @@ func TestIntermittentConnectionLoss(t *testing.T) {
 	}()
 
 	wg1.Wait()
+	// 在请求挂起期间让连接中断持续一段时间，再恢复插件。
 	time.Sleep(blackOut)
-	// Start KMS Plugin
+	// 重启 KMS Plugin
 	_ = mock.NewBase64Plugin(t, endpoint.path)
 	t.Log("Restarted KMS Plugin")
 
@@ -237,6 +247,8 @@ func TestIntermittentConnectionLoss(t *testing.T) {
 	}
 }
 
+// TestUnsupportedVersion 验证插件返回不支持的 KMS API 版本时，
+// Encrypt 与 Decrypt 都返回版本不匹配错误。
 func TestUnsupportedVersion(t *testing.T) {
 	t.Parallel()
 	ver := "invalid"
@@ -276,30 +288,30 @@ func TestUnsupportedVersion(t *testing.T) {
 	}
 }
 
-// Normal encryption and decryption operation.
+// TestGRPCService 验证常规的加密再解密往返。
 func TestGRPCService(t *testing.T) {
 	t.Parallel()
-	// Start a test gRPC server.
+	// 启动测试用 gRPC server。
 	endpoint := newEndpoint()
 	_ = mock.NewBase64Plugin(t, endpoint.path)
 
 	ctx := testContext(t)
 
-	// Create the gRPC client service.
+	// 创建 gRPC 客户端服务。
 	service, err := NewGRPCService(ctx, endpoint.endpoint, 1*time.Second)
 	if err != nil {
 		t.Fatalf("failed to create envelope service, error: %v", err)
 	}
 	defer destroyService(service)
 
-	// Call service to encrypt data.
+	// 调用 service 加密数据。
 	data := []byte("test data")
 	cipher, err := service.Encrypt(data)
 	if err != nil {
 		t.Fatalf("failed when execute encrypt, error: %v", err)
 	}
 
-	// Call service to decrypt data.
+	// 调用 service 解密数据。
 	result, err := service.Decrypt(cipher)
 	if err != nil {
 		t.Fatalf("failed when execute decrypt, error: %v", err)
@@ -310,16 +322,17 @@ func TestGRPCService(t *testing.T) {
 	}
 }
 
-// Normal encryption and decryption operation by multiple go-routines.
+// TestGRPCServiceConcurrentAccess 验证多个 goroutine 并发加解密时的正确性，
+// 用于发现客户端连接复用上的竞态。
 func TestGRPCServiceConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	// Start a test gRPC server.
+	// 启动测试用 gRPC server。
 	endpoint := newEndpoint()
 	_ = mock.NewBase64Plugin(t, endpoint.path)
 
 	ctx := testContext(t)
 
-	// Create the gRPC client service.
+	// 创建 gRPC 客户端服务。
 	service, err := NewGRPCService(ctx, endpoint.endpoint, 15*time.Second)
 	if err != nil {
 		t.Fatalf("failed to create envelope service, error: %v", err)
@@ -332,14 +345,14 @@ func TestGRPCServiceConcurrentAccess(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			// Call service to encrypt data.
+			// 调用 service 加密数据。
 			data := []byte("test data")
 			cipher, err := service.Encrypt(data)
 			if err != nil {
 				t.Errorf("failed when execute encrypt, error: %v", err)
 			}
 
-			// Call service to decrypt data.
+			// 调用 service 解密数据。
 			result, err := service.Decrypt(cipher)
 			if err != nil {
 				t.Errorf("failed when execute decrypt, error: %v", err)
@@ -354,6 +367,7 @@ func TestGRPCServiceConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+// destroyService 关闭底层 gRPC 连接；service 为 nil 时安全返回。
 func destroyService(service Service) {
 	if service != nil {
 		s := service.(*gRPCService)
@@ -361,10 +375,11 @@ func destroyService(service Service) {
 	}
 }
 
-// Test all those invalid configuration for KMS provider.
+// TestInvalidConfiguration 验证 KMS provider 的非法配置：
+// 空 endpoint 与非 unix scheme 都应在构造阶段失败。
 func TestInvalidConfiguration(t *testing.T) {
 	t.Parallel()
-	// Start a test gRPC server.
+	// 启动测试用 gRPC server。
 	_ = mock.NewBase64Plugin(t, newEndpoint().path)
 
 	ctx := testContext(t)
@@ -387,6 +402,7 @@ func TestInvalidConfiguration(t *testing.T) {
 	}
 }
 
+// testContext 返回带测试清理的可取消 context。
 func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

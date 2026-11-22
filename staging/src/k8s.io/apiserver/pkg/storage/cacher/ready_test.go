@@ -26,6 +26,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// Test_newReady 验证 ready.wait 在 setReady 之前会阻塞，之后全部等待者成功返回。
 func Test_newReady(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
@@ -49,6 +50,8 @@ func Test_newReady(t *testing.T) {
 	}
 }
 
+// Test_newReadySetIdempotent 验证 setError/setReady 的幂等性与 generation 递增规则：
+// 重复调用不应改变状态，只有 pending->ready 的跃迁才递增 generation。
 func Test_newReadySetIdempotent(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
@@ -92,6 +95,7 @@ func Test_newReadySetIdempotent(t *testing.T) {
 
 // Test_newReadyRacy executes all the possible transitions randomly.
 // It must run with the race detector enabled.
+// 该用例用于让 -race 覆盖 ready 的全部状态转换路径。
 func Test_newReadyRacy(t *testing.T) {
 	concurrency := 1000
 	errCh := make(chan error, concurrency)
@@ -124,6 +128,7 @@ func Test_newReadyRacy(t *testing.T) {
 	}
 }
 
+// Test_newReadyStop 验证 stop 会让所有等待者以错误返回，而不是永久阻塞。
 func Test_newReadyStop(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
@@ -147,6 +152,7 @@ func Test_newReadyStop(t *testing.T) {
 	}
 }
 
+// Test_newReadyCheck 验证非阻塞 check 在初始、就绪、停止三种状态下的返回。
 func Test_newReadyCheck(t *testing.T) {
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
 	// it starts as false
@@ -173,6 +179,7 @@ func Test_newReadyCheck(t *testing.T) {
 	}
 }
 
+// Test_newReadyCancelPending 验证等待者可被 context 取消唤醒，避免请求无法中止。
 func Test_newReadyCancelPending(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
@@ -197,6 +204,7 @@ func Test_newReadyCancelPending(t *testing.T) {
 	}
 }
 
+// Test_newReadyStateChangeTimestamp 验证 check 返回的“距上次状态变更的时长”随时钟推进而重置。
 func Test_newReadyStateChangeTimestamp(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	fakeClock.SetTime(time.Now())
@@ -228,12 +236,14 @@ func Test_newReadyStateChangeTimestamp(t *testing.T) {
 	checkReadyTransitionTime(t, ready, 2*time.Minute)
 }
 
+// checkReadyTransitionTime 断言 ready 报告的距上次状态变更时长。
 func checkReadyTransitionTime(t *testing.T, r *ready, expectedLastStateChangeDuration time.Duration) {
 	if lastStateChangeDuration, _ := r.check(); lastStateChangeDuration != expectedLastStateChangeDuration {
 		t.Errorf("unexpected last state change duration: %v, expected: %v", lastStateChangeDuration, expectedLastStateChangeDuration)
 	}
 }
 
+// TestReadyError 验证未就绪时错误文案包含底层错误原因，便于定位存储问题。
 func TestReadyError(t *testing.T) {
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
 	_, _, err := ready.checkAndReadGeneration()

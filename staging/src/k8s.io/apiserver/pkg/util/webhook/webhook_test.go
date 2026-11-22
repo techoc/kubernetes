@@ -521,6 +521,8 @@ func TestTLSConfig(t *testing.T) {
 	}
 }
 
+// TestRequestTimeout 验证请求级超时生效：服务端永不响应时客户端仍按
+// 配置的 Timeout 返回，而不是永久挂起。
 func TestRequestTimeout(t *testing.T) {
 	done := make(chan struct{})
 
@@ -587,6 +589,9 @@ func TestRequestTimeout(t *testing.T) {
 }
 
 // TestWithExponentialBackoff ensures that the webhook's exponential backoff support works as expected
+//
+// 服务端依次返回可重试的超时、500、不可重试的 406、200；第一次调用应止步于 406，
+// 第二次调用应成功，验证重试判定与状态码传播。
 func TestWithExponentialBackoff(t *testing.T) {
 	count := 0 // To keep track of the requests
 	gr := schema.GroupResource{
@@ -691,6 +696,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 	}
 }
 
+// bootstrapTestDir 创建测试用临时目录，并在测试结束时自动清理。
 func bootstrapTestDir(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "")
 
@@ -776,6 +782,8 @@ func newTestServer(clientCert, clientKey, caCert []byte, handler func(http.Respo
 	return server, nil
 }
 
+// TestWithExponentialBackoffContextIsAlreadyCanceled 验证 ctx 已取消时不应发起
+// 任何一次 webhook 调用，并返回包装后的 context.Canceled。
 func TestWithExponentialBackoffContextIsAlreadyCanceled(t *testing.T) {
 	alwaysRetry := func(e error) bool {
 		return true
@@ -803,6 +811,8 @@ func TestWithExponentialBackoffContextIsAlreadyCanceled(t *testing.T) {
 	}
 }
 
+// TestWithExponentialBackoffWebhookErrorIsMostImportant 验证 webhook 自身错误优先于
+// ctx 取消错误：调用方需要看到真实失败原因，而不是被取消掩盖。
 func TestWithExponentialBackoffWebhookErrorIsMostImportant(t *testing.T) {
 	alwaysRetry := func(e error) bool {
 		return true
@@ -832,6 +842,8 @@ func TestWithExponentialBackoffWebhookErrorIsMostImportant(t *testing.T) {
 	}
 }
 
+// TestWithExponentialBackoffWithRetryExhaustedWhileContextIsNotCanceled 验证重试次数
+// 用尽后返回最后一次 webhook 错误。
 func TestWithExponentialBackoffWithRetryExhaustedWhileContextIsNotCanceled(t *testing.T) {
 	alwaysRetry := func(e error) bool {
 		return true
@@ -859,6 +871,8 @@ func TestWithExponentialBackoffWithRetryExhaustedWhileContextIsNotCanceled(t *te
 	}
 }
 
+// TestWithExponentialBackoffParametersNotSet 验证零值 Backoff（Steps=0）不会发起
+// 任何调用，并返回明确的 interrupted 错误，而不是 panic 或静默成功。
 func TestWithExponentialBackoffParametersNotSet(t *testing.T) {
 	alwaysRetry := func(e error) bool {
 		return true
@@ -881,6 +895,8 @@ func TestWithExponentialBackoffParametersNotSet(t *testing.T) {
 	}
 }
 
+// TestGenericWebhookWithExponentialBackoff 验证重试预算按调用独立计算：
+// 两次调用各自重试 Steps 次，而不是共享一个计数器。
 func TestGenericWebhookWithExponentialBackoff(t *testing.T) {
 	attemptsPerCallExpected := 5
 	webhook := &GenericWebhook{
@@ -912,6 +928,7 @@ func TestGenericWebhookWithExponentialBackoff(t *testing.T) {
 	}
 }
 
+// getSingleCounterValueFromRegistry 从注册表读取指定计数器值；读取失败或未找到返回 -1。
 func getSingleCounterValueFromRegistry(t *testing.T, r metrics.Gatherer, name string) int {
 	mfs, err := r.Gather()
 	if err != nil {
@@ -933,6 +950,8 @@ func getSingleCounterValueFromRegistry(t *testing.T, r metrics.Gatherer, name st
 	return -1
 }
 
+// TestRESTConfigContentType 验证 webhook 客户端强制使用 JSON 内容类型，
+// 即使调用方配置了其他 ContentType，因为 webhook 协议只接受 JSON。
 func TestRESTConfigContentType(t *testing.T) {
 	server, err := newTestServer(clientCert, clientKey, caCert, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Content-Type"); got != runtime.ContentTypeJSON {

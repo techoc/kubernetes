@@ -28,6 +28,11 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
+// TestCompileValidatingPolicyExpression 覆盖准入策略中 CEL 表达式的编译行为。
+//
+// 每个用例同时以 validation 表达式和 auditAnnotation.valueExpression 两种形式
+// 编译，确保两条编译路径共享相同的变量声明与错误处理；envType 用于验证
+// NewExpressions 与 StoredExpressions 两个环境的能力差异。
 func TestCompileValidatingPolicyExpression(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -178,6 +183,8 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 	}
 
 	// Include the test library, which includes the test() function in the storage environment during test
+	// 用 1.999 这样的"未来版本"引入 test()，使该函数只出现在存储表达式环境，
+	// 从而验证两个环境的能力差异。
 	base := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
 	extended, err := base.Extend(environment.VersionedOptions{
 		IntroducedVersion: version.MajorMinor(1, 999),
@@ -229,6 +236,7 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 							t.Errorf("Expected expression '%s' to contain '%v' but got no error", expr, expectErr)
 							return
 						}
+						// 只断言错误信息包含关键片段，避免测试与 cel-go 的完整错误格式耦合。
 						if !strings.Contains(result.Error.Error(), expectErr) {
 							t.Errorf("Expected validation '%s' error to contain '%v' but got: %v", expr, expectErr, result.Error)
 						}
@@ -253,6 +261,8 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 	}
 }
 
+// BenchmarkCompile 测量编译一个典型表达式的开销，并随机切换可选变量声明，
+// 以覆盖两条编译缓存路径。
 func BenchmarkCompile(b *testing.B) {
 	compiler := NewCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 	b.ResetTimer()
@@ -268,6 +278,7 @@ func BenchmarkCompile(b *testing.B) {
 	}
 }
 
+// fakeValidationCondition 是测试用的校验表达式，返回类型固定为 bool。
 type fakeValidationCondition struct {
 	Expression string
 }
@@ -280,6 +291,7 @@ func (v *fakeValidationCondition) ReturnTypes() []*celgo.Type {
 	return []*celgo.Type{celgo.BoolType}
 }
 
+// fakeAuditAnnotationCondition 是测试用的审计注解表达式，允许 string 或 null。
 type fakeAuditAnnotationCondition struct {
 	ValueExpression string
 }

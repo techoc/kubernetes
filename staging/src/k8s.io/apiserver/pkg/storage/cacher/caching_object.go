@@ -43,6 +43,9 @@ type metaRuntimeInterface interface {
 }
 
 // serializationResult captures a result of serialization.
+//
+// once 保证同一编码格式只序列化一次：并发 watch 请求会共享同一个结果，
+// 这是 watch cache 能承受高并发 fan-out 的关键。
 type serializationResult struct {
 	// once should be used to ensure serialization is computed once.
 	once sync.Once
@@ -54,6 +57,9 @@ type serializationResult struct {
 }
 
 // serializationsCache is a type for caching serialization results.
+//
+// 以编码格式标识为键缓存序列化结果。
+// 用 map + copy-on-write 而不是加锁的 map，是为了让读路径完全无锁。
 type serializationsCache map[runtime.Identifier]*serializationResult
 
 // cachingObject is an object that is able to cache its serializations
@@ -61,6 +67,9 @@ type serializationsCache map[runtime.Identifier]*serializationResult
 //
 // cachingObject implements the metav1.Object interface (accessors for
 // all metadata fields).
+//
+// 同一对象通常要被成百上千个 watch 连接序列化，缓存结果把 CPU 成本从 O(连接数)
+// 降到 O(编码格式数)。
 type cachingObject struct {
 	lock sync.RWMutex
 
@@ -80,6 +89,8 @@ type cachingObject struct {
 	// serializations is a cache containing object`s serializations.
 	// The value stored in atomic.Value is of type serializationsCache.
 	// The atomic.Value type is used to allow fast-path.
+	//
+	// 写入时整体替换 map（配合 lock），读取时只做一次原子 Load，避免读锁竞争。
 	serializations atomic.Value
 }
 
@@ -99,6 +110,7 @@ func newCachingObject(object runtime.Object) (*cachingObject, error) {
 	return nil, fmt.Errorf("can't cast object to metav1.Object: %#v", object)
 }
 
+// getSerializationResult 取出（必要时创建）指定编码格式的结果占位符。
 func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializationResult {
 	// Fast-path for getting from cache.
 	serializations := o.serializations.Load().(serializationsCache)
@@ -110,6 +122,7 @@ func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializa
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
+	// 拿到写锁后必须重新 Load：期间可能已被其他 goroutine 插入。
 	serializations = o.serializations.Load().(serializationsCache)
 	// Check if in the meantime it wasn't inserted.
 	if result, exists := serializations[id]; exists {
@@ -117,6 +130,7 @@ func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializa
 	}
 
 	// Insert an entry for <id>. This requires copy of existing map.
+	// 复制而非原地插入，保证已经拿到旧 map 的读者不会看到并发写。
 	newSerializations := make(serializationsCache)
 	for k, v := range serializations {
 		newSerializations[k] = v
@@ -133,6 +147,8 @@ func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializa
 // function in case of cache miss.
 // It assumes that for a given identifier, the encode function always encodes
 // each input object into the same output format.
+//
+// 契约：同一 id 必须对应确定的编码方式，否则缓存会返回错误格式的字节。
 func (o *cachingObject) CacheEncode(id runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	result := o.getSerializationResult(id)
 	result.once.Do(func() {
@@ -141,6 +157,9 @@ func (o *cachingObject) CacheEncode(id runtime.Identifier, encode func(runtime.O
 		//   in cases where encoding is making subtle object modifications,
 		//   e.g. #82497
 		//   Figure out if we can somehow avoid this under some conditions.
+		//
+		// 传 GetObject() 的深拷贝而不是原对象：某些 encoder 会就地修改对象，
+		// 直接编码会污染缓存中的共享对象。
 		result.err = encode(o.GetObject(), buffer)
 		result.raw = buffer.Bytes()
 	})
@@ -148,6 +167,7 @@ func (o *cachingObject) CacheEncode(id runtime.Identifier, encode func(runtime.O
 	if result.err != nil {
 		return result.err
 	}
+	// 支持 splice 的 writer 可直接拼接字节，省一次拷贝（流式响应的热路径）。
 	if b, support := w.(runtime.Splice); support {
 		b.Splice(result.raw)
 		return nil
@@ -177,6 +197,8 @@ func (o *cachingObject) DeepCopyObject() runtime.Object {
 	// DeepCopyObject on cachingObject is not expected to be called anywhere.
 	// However, to be on the safe-side, we implement it, though given the
 	// cache is only an optimization we ignore copying it.
+	//
+	// 新副本的 deepCopied 置 true：底层对象已经是独立副本，无需再拷贝一次。
 	result := &cachingObject{
 		deepCopied: true,
 	}
@@ -205,6 +227,10 @@ func shouldLogCacheInvalidation(now time.Time) bool {
 	return false
 }
 
+// invalidateCacheLocked 清空序列化缓存；调用方必须已持有写锁。
+//
+// 正常情况下缓存不应失效（对象进缓存后视为不可变），因此这里打 warning 并附调用栈，
+// 便于发现意外的写路径。
 func (o *cachingObject) invalidateCacheLocked() {
 	if cache, ok := o.serializations.Load().(serializationsCache); ok && len(cache) == 0 {
 		return
@@ -224,6 +250,11 @@ func (o *cachingObject) invalidateCacheLocked() {
 // - setters check if operations isn't noop and if so,
 //   invalidate the cache and delegate for the underlying object
 
+// conditionalSet 是所有 setter 的共用骨架：先无锁快速判断是否 no-op，
+// 真正需要修改时再加写锁、二次确认、惰性深拷贝并失效缓存。
+//
+// 两次 isNoop 判断是典型的 double-checked locking：第一次避免无谓加锁，
+// 第二次防止两个 setter 同时通过快速路径后重复拷贝。
 func (o *cachingObject) conditionalSet(isNoop func() bool, set func()) {
 	if fastPath := func() bool {
 		o.lock.RLock()
@@ -237,6 +268,7 @@ func (o *cachingObject) conditionalSet(isNoop func() bool, set func()) {
 	if isNoop() {
 		return
 	}
+	// 首次修改才深拷贝：缓存对象默认与缓存内部共享，写前复制避免污染其他读者。
 	if !o.deepCopied {
 		o.object = o.object.DeepCopyObject().(metaRuntimeInterface)
 		o.deepCopied = true

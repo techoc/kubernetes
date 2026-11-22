@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// encodeContinueOrDie 构造测试用的 continue token（JSON + base64url）。
 func encodeContinueOrDie(apiVersion string, resourceVersion int64, nextKey string) string {
 	out, err := json.Marshal(&continueToken{APIVersion: apiVersion, ResourceVersion: resourceVersion, StartKey: nextKey})
 	if err != nil {
@@ -41,6 +42,9 @@ func encodeContinueOrDie(apiVersion string, resourceVersion int64, nextKey strin
 	return base64.RawURLEncoding.EncodeToString(out)
 }
 
+// Test_decodeContinue 验证 continue token 的解码与校验。
+// 关键安全用例是路径穿越（../、./）必须被拒绝，否则客户端可构造
+// token 跳出 keyPrefix 指定的键空间。
 func Test_decodeContinue(t *testing.T) {
 	type args struct {
 		continueValue string
@@ -123,6 +127,9 @@ func Test_decodeContinue(t *testing.T) {
 	}
 }
 
+// TestPrepareContinueTokenRemainingItemCount 验证 remainingItemCount 的语义：
+// 只有能精确计数时才上报，否则必须为 nil。
+// 带 label selector 或启用分片时无法精确知道剩余数量，因此省略该字段。
 func TestPrepareContinueTokenRemainingItemCount(t *testing.T) {
 	tests := []struct {
 		name                      string

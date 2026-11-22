@@ -21,29 +21,37 @@ import (
 	"testing"
 )
 
+// writerWithFlush 同时实现 Write 与 Flush，用于验证每次写入后都会刷新。
 type writerWithFlush struct {
 	writeCount, flushCount int
 	err                    error
 }
 
+// Flush 记录刷新次数。
 func (w *writerWithFlush) Flush() {
 	w.flushCount++
 }
 
+// Write 记录写入次数并返回预设错误。
 func (w *writerWithFlush) Write(p []byte) (n int, err error) {
 	w.writeCount++
 	return len(p), w.err
 }
 
+// writerWithNoFlush 只实现 Write，用于验证没有 Flusher 时仍能正常写入。
 type writerWithNoFlush struct {
 	writeCount int
 }
 
+// Write 记录写入次数。
 func (w *writerWithNoFlush) Write(p []byte) (n int, err error) {
 	w.writeCount++
 	return len(p), nil
 }
 
+// TestWriteWithFlush 验证底层实现了 Flush 时，每次 Write 都会触发一次 Flush。
+//
+// 中文说明：流式响应依赖这一行为把数据及时推送给客户端。
 func TestWriteWithFlush(t *testing.T) {
 	w := &writerWithFlush{}
 	fw := Wrap(w)
@@ -61,6 +69,7 @@ func TestWriteWithFlush(t *testing.T) {
 	}
 }
 
+// TestWriteWithoutFlush 验证底层不支持 Flush 时写入照常进行，不 panic。
 func TestWriteWithoutFlush(t *testing.T) {
 	w := &writerWithNoFlush{}
 	fw := Wrap(w)
@@ -75,6 +84,7 @@ func TestWriteWithoutFlush(t *testing.T) {
 	}
 }
 
+// TestWriteError 验证底层写入错误被原样返回（不被包装），调用方可按需判断。
 func TestWriteError(t *testing.T) {
 	e := fmt.Errorf("Error")
 	w := &writerWithFlush{err: e}

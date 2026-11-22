@@ -24,21 +24,27 @@ import (
 )
 
 // mockSource implements Source for testing.
+//
+// hasSynced 单独可控，便于覆盖组合源在部分就绪时的行为。
 type mockSource struct {
 	webhooks  []webhook.WebhookAccessor
 	hasSynced bool
 }
 
+// Webhooks 返回 mock 预置的 webhook 列表。
 func (m *mockSource) Webhooks() []webhook.WebhookAccessor {
 	return m.webhooks
 }
 
+// HasSynced 返回 mock 的同步状态。
 func (m *mockSource) HasSynced() bool {
 	return m.hasSynced
 }
 
 var _ Source = &mockSource{}
 
+// createTestValidatingWebhook 构造一个最小可用的 validating webhook accessor，
+// URL 指向 example.com，避免真实网络调用。
 func createTestValidatingWebhook(uid, name string) webhook.WebhookAccessor {
 	return webhook.NewValidatingWebhookAccessor(uid, name, &v1.ValidatingWebhook{
 		Name: "test.webhook.io",
@@ -49,6 +55,8 @@ func createTestValidatingWebhook(uid, name string) webhook.WebhookAccessor {
 	})
 }
 
+// TestCompositeWebhookSource_Webhooks 验证组合源的拼接顺序：
+// 静态源在前、API 源在后，且任一源为空或为 nil 时都能正常工作。
 func TestCompositeWebhookSource_Webhooks(t *testing.T) {
 	staticWebhook := createTestValidatingWebhook("static-1", "static-config")
 	apiWebhook := createTestValidatingWebhook("api-1", "api-config")
@@ -104,6 +112,8 @@ func TestCompositeWebhookSource_Webhooks(t *testing.T) {
 	}
 }
 
+// TestCompositeWebhookSource_Caching 验证组合源以底层切片是否变化作为缓存依据：
+// 输入不变时复用同一结果，底层变化后重新拼接。
 func TestCompositeWebhookSource_Caching(t *testing.T) {
 	staticWebhook := createTestValidatingWebhook("static-1", "static-config")
 	apiWebhook := createTestValidatingWebhook("api-1", "api-config")
@@ -137,6 +147,8 @@ func TestCompositeWebhookSource_Caching(t *testing.T) {
 	}
 }
 
+// TestCompositeWebhookSource_HasSynced 验证组合源的同步语义：所有非 nil 源都同步才算同步，
+// 单个 nil 源（例如未启用静态配置）不阻塞整体。
 func TestCompositeWebhookSource_HasSynced(t *testing.T) {
 	tests := []struct {
 		name         string

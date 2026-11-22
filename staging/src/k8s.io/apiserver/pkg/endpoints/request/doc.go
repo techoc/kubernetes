@@ -17,4 +17,9 @@ limitations under the License.
 // Package request contains everything around extracting info from
 // a http request object.
 // TODO: this package is temporary. Handlers must move into pkg/apiserver/handlers to avoid dependency cycle
+//
+// Package request 负责从 HTTP 请求中提取请求信息（如 RequestInfo、用户、超时），
+// 并把它们放进 context 供下游过滤器与 handler 使用。
+// 本包刻意保持低依赖：它被几乎所有 endpoints 子包引用，任何重量级依赖
+// 都可能引入循环依赖。
 package request

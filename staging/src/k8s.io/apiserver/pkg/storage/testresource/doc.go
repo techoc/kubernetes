@@ -16,4 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package testresource 提供用于存储层测试的示例资源类型。
+// 这些类型只服务于测试与基准，不对外发布 API；放在独立包中是为了让
+// 测试数据与生产代码的 API 表面彻底隔离。
 package testresource

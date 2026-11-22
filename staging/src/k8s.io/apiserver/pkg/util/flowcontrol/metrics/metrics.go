@@ -30,11 +30,13 @@ import (
 	basemetricstestutil "k8s.io/component-base/metrics/testutil"
 )
 
+// 指标命名空间/子系统：所有 APF 指标统一为 apiserver_flowcontrol_*。
 const (
 	namespace = "apiserver"
 	subsystem = "flowcontrol"
 )
 
+// 标签名与取值。phase 同时是导出常量，因为 flowcontrol 内部需要复用同一字符串。
 const (
 	requestKind         = "request_kind"
 	priorityLevel       = "priority_level"
@@ -46,10 +48,13 @@ const (
 )
 
 var (
-	queueLengthBuckets            = []float64{0, 10, 25, 50, 100, 250, 500, 1000}
+	// 队列长度桶：按 0/10/25/50/100/250/500/1000 分档，覆盖从空闲到严重积压。
+	queueLengthBuckets = []float64{0, 10, 25, 50, 100, 250, 500, 1000}
+	// 请求耗时桶：从 0 到 30s，关注 APF 关心的排队/执行时延量级。
 	requestDurationSecondsBuckets = []float64{0, 0.005, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30}
 )
 
+// registerMetrics 保证指标只注册一次；重复注册会 panic。
 var registerMetrics sync.Once
 
 // Register all metrics.
@@ -61,11 +66,14 @@ func Register() {
 	})
 }
 
+// resettable 抽象出支持 Reset 的指标，用于测试隔离。
 type resettable interface {
 	Reset()
 }
 
 // Reset all resettable metrics to zero
+//
+// 仅供测试：生产环境不会重置累计计数器。
 func Reset() {
 	for _, metric := range metrics {
 		if rm, ok := metric.(resettable); ok {
@@ -83,11 +91,15 @@ func GatherAndCompare(expected string, metricNames ...string) error {
 type Registerables []compbasemetrics.Registerable
 
 // Append adds more
+//
+// 返回新切片而非原地追加，避免多个指标列表共享底层数组互相污染。
 func (rs Registerables) Append(more ...compbasemetrics.Registerable) Registerables {
 	return append(rs, more...)
 }
 
+// APF 指标定义。字段含义直接写在各自 Help 中；这里补充“为什么这样设计”的说明。
 var (
+	// 被拒绝请求数，按原因细分，用于区分“超时拒绝”与“并发超限拒绝”。
 	apiserverRejectedRequestsTotal = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -98,6 +110,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema, "reason"},
 	)
+	// 已分发（开始执行）的请求数，用于计算拒绝率的分母。
 	apiserverDispatchedRequestsTotal = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -150,6 +163,8 @@ var (
 		},
 		LabelNamePhase, requestKind,
 	)
+	// 虚拟时间相关的内部指标（R/S），用于理解调度器的进度计量；
+	// 普通用户一般不需要关注，排查饥饿或调度异常时才有用。
 	apiserverCurrentR = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -200,6 +215,7 @@ var (
 		},
 		[]string{priorityLevel, "bound"},
 	)
+	// 队列中待处理请求数：判断 APF 是否成为瓶颈的首要指标。
 	apiserverCurrentInqueueRequests = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -220,6 +236,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 请求入队后看到的队列长度；与 current_inqueue_requests 不同，它反映“入队时刻的瞬时值”。
 	apiserverRequestQueueLength = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Namespace:      namespace,
@@ -231,6 +248,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 正在执行的请求数（WATCH 只计初始阶段），用于观察并发占用。
 	apiserverCurrentExecutingRequests = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -241,6 +259,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 正在占用的并发席位；与请求数的差异体现不同请求的“成本”不同。
 	apiserverCurrentExecutingSeats = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -251,6 +270,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 排队等待时长；按是否最终执行（execute 标签）区分，可发现被拒绝请求的长等待。
 	apiserverRequestWaitingSeconds = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Namespace:      namespace,
@@ -262,6 +282,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema, "execute"},
 	)
+	// 执行时长；type 标签区分 watch 与 regular。
 	apiserverRequestExecutionSeconds = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Namespace:      namespace,
@@ -273,6 +294,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema, "type"},
 	)
+	// watch 数量采样；watch 在 APF 中占用的席位与普通请求不同，需单独观测。
 	watchCountSamples = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Namespace:      namespace,
@@ -284,6 +306,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 进度计回跳次数；回跳意味着虚拟时间基线被重置，属于异常信号。
 	apiserverEpochAdvances = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -294,6 +317,7 @@ var (
 		},
 		[]string{priorityLevel, "success"},
 	)
+	// 估计席位；桶上限 100 覆盖当前单请求最大席位（10）并留出余量。
 	apiserverWorkEstimatedSeats = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Namespace: namespace,
@@ -307,6 +331,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 因无可用席位而未能分发的次数；持续增长说明优先级配置过于拥挤。
 	apiserverDispatchWithNoAccommodation = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Namespace:      namespace,
@@ -317,6 +342,7 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
+	// 以下三个 gauge 分别对应优先级配置中的 nominal/min/max 席位，便于与当前值对照。
 	apiserverNominalConcurrencyLimits = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -347,6 +373,7 @@ var (
 		},
 		[]string{priorityLevel},
 	)
+	// ApiserverSeatDemands 记录“可用需求/名义席位”的比值，用于观察各优先级是否长期超载。
 	ApiserverSeatDemands = NewTimingRatioHistogramVec(
 		&compbasemetrics.TimingHistogramOpts{
 			Namespace: namespace,
@@ -363,6 +390,7 @@ var (
 		},
 		priorityLevel,
 	)
+	// 席位需求的统计量（高水位/均值/标准差/平滑值/目标值），供自动调整并发限制的算法使用。
 	apiserverSeatDemandHighWatermarks = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -413,6 +441,7 @@ var (
 		},
 		[]string{priorityLevel},
 	)
+	// 每个优先级可获得的公平并发份额；无标签，反映全局分配结果。
 	apiserverFairFracs = compbasemetrics.NewGauge(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -421,6 +450,7 @@ var (
 			Help:           "Fair fraction of server's concurrency to allocate to each priority level that can use it",
 			StabilityLevel: compbasemetrics.ALPHA,
 		})
+	// 当前推导出的并发限制；与 nominal 的差异体现自动调整的即时效果。
 	apiserverCurrentConcurrencyLimits = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Namespace:      namespace,
@@ -432,6 +462,7 @@ var (
 		[]string{priorityLevel},
 	)
 
+	// metrics 是注册与重置的统一清单；复合直方图通过 metrics() 展开其内部指标。
 	metrics = Registerables{
 		apiserverRejectedRequestsTotal,
 		apiserverDispatchedRequestsTotal,
@@ -468,12 +499,15 @@ var (
 		Append(ApiserverSeatDemands.metrics()...)
 )
 
+// indexOnce 惰性创建并缓存某个标签组合的 RatioedGauge。
+// 用 sync.Once 是因为创建过程涉及向直方图注册标签值，重复创建会浪费内存。
 type indexOnce struct {
 	labelValues []string
 	once        sync.Once
 	gauge       RatioedGauge
 }
 
+// getGauge 返回缓存的 gauge，首次调用时以 (0,1) 的初始比率创建。
 func (io *indexOnce) getGauge() RatioedGauge {
 	io.once.Do(func() {
 		io.gauge = readWriteConcurrencyGaugeVec.NewForLabelValuesSafe(0, 1, io.labelValues)
@@ -481,6 +515,7 @@ func (io *indexOnce) getGauge() RatioedGauge {
 	return io.gauge
 }
 
+// 读写 × 等待/执行 四种组合的惰性 gauge，暴露为包级函数变量以便调用点零分配获取。
 var waitingReadonly = indexOnce{labelValues: []string{LabelValueWaiting, epmetrics.ReadOnlyKind}}
 var executingReadonly = indexOnce{labelValues: []string{LabelValueExecuting, epmetrics.ReadOnlyKind}}
 var waitingMutating = indexOnce{labelValues: []string{LabelValueWaiting, epmetrics.MutatingKind}}
@@ -519,6 +554,9 @@ func SetCurrentR(priorityLevel string, r float64) {
 }
 
 // SetLatestS sets the latest-S (virtual time of dispatched request) gauge for the given priority level
+//
+// 同时更新当前 R、最新 S 以及“下一批可分发请求”的 S 边界（含折扣版本），
+// 这些量共同描述队列调度进度，必须一次性原子地写入同一次调整结果。
 func SetDispatchMetrics(priorityLevel string, r, s, sMin, sMax, discountedSMin, discountedSMax float64) {
 	apiserverDispatchR.WithLabelValues(priorityLevel).Set(r)
 	apiserverLatestS.WithLabelValues(priorityLevel).Set(s)
@@ -555,6 +593,8 @@ func ObserveWaitingDuration(ctx context.Context, priorityLevel, flowSchema, exec
 }
 
 // ObserveExecutionDuration observes the execution duration for flow control
+//
+// watch 请求只统计初始阶段，因此单独打上 type=watch 标签，避免与普通请求的耗时混在一起。
 func ObserveExecutionDuration(ctx context.Context, priorityLevel, flowSchema string, executionTime time.Duration) {
 	reqType := "regular"
 	if requestInfo, ok := apirequest.RequestInfoFrom(ctx); ok && requestInfo.Verb == "watch" {
@@ -584,12 +624,14 @@ func AddDispatchWithNoAccommodation(priorityLevel, flowSchema string) {
 	apiserverDispatchWithNoAccommodation.WithLabelValues(priorityLevel, flowSchema).Inc()
 }
 
+// SetPriorityLevelConfiguration 记录某优先级配置的三个席位边界。
 func SetPriorityLevelConfiguration(priorityLevel string, nominalCL, minCL, maxCL int) {
 	apiserverNominalConcurrencyLimits.WithLabelValues(priorityLevel).Set(float64(nominalCL))
 	apiserverMinimumConcurrencyLimits.WithLabelValues(priorityLevel).Set(float64(minCL))
 	apiserverMaximumConcurrencyLimits.WithLabelValues(priorityLevel).Set(float64(maxCL))
 }
 
+// NotePriorityLevelConcurrencyAdjustment 记录一次自动调整的输入与结果，便于回溯限制变化的原因。
 func NotePriorityLevelConcurrencyAdjustment(priorityLevel string, seatDemandHWM, seatDemandAvg, seatDemandStdev, seatDemandSmoothed, seatDemandTarget float64, currentCL int) {
 	apiserverSeatDemandHighWatermarks.WithLabelValues(priorityLevel).Set(seatDemandHWM)
 	apiserverSeatDemandAverages.WithLabelValues(priorityLevel).Set(seatDemandAvg)
@@ -599,6 +641,7 @@ func NotePriorityLevelConcurrencyAdjustment(priorityLevel string, seatDemandHWM,
 	apiserverCurrentConcurrencyLimits.WithLabelValues(priorityLevel).Set(float64(currentCL))
 }
 
+// SetFairFrac 记录服务器并发中分配给各优先级的公平份额。
 func SetFairFrac(fairFrac float64) {
 	apiserverFairFracs.Set(fairFrac)
 }

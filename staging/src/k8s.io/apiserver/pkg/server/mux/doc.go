@@ -15,4 +15,9 @@ limitations under the License.
 */
 
 // Package mux contains abstractions for http multiplexing of APIs.
+//
+// 中文说明：mux 包封装了 API Server 的 HTTP 路径复用（路由）能力。核心是 PathRecorderMux：
+// 它在标准库 ServeMux 之上记录已注册路径，用于启动时生成 /paths、/metrics 等自省端点，
+// 并支持在注册阶段检测路径冲突。之所以不直接暴露 http.ServeMux，是因为 API Server
+// 需要在运行期枚举路由（例如 discovery 与健康检查），而标准库不提供该能力。
 package mux

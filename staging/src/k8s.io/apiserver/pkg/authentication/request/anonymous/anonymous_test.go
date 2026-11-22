@@ -26,6 +26,8 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestAnonymous 验证未配置限制时，任何请求都会被认证为 system:anonymous，
+// 并带有 system:unauthenticated 组。
 func TestAnonymous(t *testing.T) {
 	a := NewAuthenticator(nil)
 	r, ok, err := a.AuthenticateRequest(&http.Request{})
@@ -43,6 +45,8 @@ func TestAnonymous(t *testing.T) {
 	}
 }
 
+// TestAnonymousRestricted 验证配置 conditions 后，只有路径匹配的请求才允许
+// 匿名认证；未匹配的请求应返回未认证而不是错误。
 func TestAnonymousRestricted(t *testing.T) {
 	a := NewAuthenticator([]apiserver.AnonymousAuthCondition{
 		{
@@ -90,6 +94,7 @@ func TestAnonymousRestricted(t *testing.T) {
 			wantAllowed: true,
 		},
 		{
+			// 未列入 conditions 的路径不得匿名访问。
 			desc:        "/api",
 			path:        "https://123.123.123.123/api",
 			wantAllowed: false,

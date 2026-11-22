@@ -21,4 +21,7 @@ limitations under the License.
 // another group ("example"). This happens if a type is moved to a different
 // group. It's not recommended to move types across groups, though Kubernetes
 // have a few cases due to historical reasons. This package is for tests.
+//
+// 中文说明：该包专用于测试“类型迁移到其他 API 组”的场景，验证转换生成器能同时
+// 引用 example2 与 example 两个内部版本；生产代码不要模仿这种跨组迁移。
 package example2

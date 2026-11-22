@@ -116,4 +116,9 @@ limitations under the License.
 // queue’s virtual start time is advanced by G. When a request
 // finishes being served, and the actual service time was S, the
 // queue’s virtual start time is decremented by G - S.
+//
+// 中文说明：处理请求时并非真的收发包，而是把“服务时间”折算进虚拟时钟：
+// 每个请求按初始估计 G 参与排队，完成后再用实际耗时修正队列的虚拟起始时间。
+// 关键不变量是“虚拟时间只增不减且所有队列以同一速率推进”，这样才能保证
+// 公平性上界为 C 个请求；任何直接改写 request 的 finish time 的实现都会破坏它。
 package queueset

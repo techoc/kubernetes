@@ -31,11 +31,14 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// SecureServingOptionsWithLoopback 在普通安全服务配置之上补充回环客户端配置，
+// 供 apiserver 组件以自身身份访问本机 API。
 type SecureServingOptionsWithLoopback struct {
 	*SecureServingOptions
 	clock clock.PassiveClock
 }
 
+// WithLoopback 返回带回环支持的包装；clock 可注入以便测试证书过期逻辑。
 func (o *SecureServingOptions) WithLoopback() *SecureServingOptionsWithLoopback {
 	return &SecureServingOptionsWithLoopback{
 		SecureServingOptions: o,
@@ -47,6 +50,7 @@ func (o *SecureServingOptions) WithLoopback() *SecureServingOptionsWithLoopback 
 // to avoid kube-apiserver disruptions due to certificate expiration.
 // When this certificate expires, restarting kube-apiserver will automatically
 // regenerate a new certificate with fresh validity dates.
+// 回环证书是进程内自签的，重启即重新生成，因此长有效期是安全的。
 const maxAge = (3*365 + 1) * 24 * time.Hour
 
 // ApplyTo fills up serving information in the server configuration.
@@ -54,12 +58,14 @@ func (s *SecureServingOptionsWithLoopback) ApplyTo(secureServingInfo **server.Se
 	return s.applyTo(secureServingInfo, loopbackClientConfig, nil)
 }
 
+// HealthzLivezHealthChecksAdder 抽象健康检查注册接口，避免依赖完整 server.Config。
 type HealthzLivezHealthChecksAdder interface {
 	AddHealthzChecks(checks ...healthz.HealthChecker)
 	AddLivezChecks(checks ...healthz.HealthChecker)
 }
 
 func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.SecureServingInfo, loopbackClientConfig **rest.Config, healthCheckAdder HealthzLivezHealthChecksAdder) error {
+	// 三项任一缺失都意味着未启用安全服务，直接跳过而非报错。
 	if s == nil || s.SecureServingOptions == nil || secureServingInfo == nil {
 		return nil
 	}
@@ -74,6 +80,7 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 
 	// create self-signed cert+key with the fake server.LoopbackClientServerNameOverride and
 	// let the server return it when the loopback client connects.
+	// 证书仅用于本机回环，SNI 使用固定伪主机名，不需要（也无法）由外部 CA 签发。
 	certPem, keyPem, err := certutil.GenerateSelfSignedCertKeyWithOptions(certutil.SelfSignedCertKeyOptions{
 		Host:   server.LoopbackClientServerNameOverride,
 		MaxAge: maxAge,
@@ -87,12 +94,14 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 	}
 
 	// Write to the front of SNICerts so that this overrides any other certs with the same name
+	// 必须排在前面：SNI 匹配按顺序命中，回环伪主机名不能被其他证书抢先。
 	(*secureServingInfo).SNICerts = append([]dynamiccertificates.SNICertKeyContentProvider{certProvider}, (*secureServingInfo).SNICerts...)
 
 	secureLoopbackClientConfig, err := (*secureServingInfo).NewLoopbackClientConfig(uuid.New().String(), certPem)
 	switch {
 	// if we failed and there's no fallback loopback client config, we need to fail
 	case err != nil && *loopbackClientConfig == nil:
+		// 回滚刚插入的 SNI 证书，避免留下无效配置。
 		(*secureServingInfo).SNICerts = (*secureServingInfo).SNICerts[1:]
 		return err
 
@@ -109,6 +118,7 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 	return nil
 }
 
+// ApplyToConfig 是 ApplyTo 的便捷版本，直接使用 server.Config 上的字段。
 func (s *SecureServingOptionsWithLoopback) ApplyToConfig(cfg *server.Config) error {
 	return s.applyTo(&cfg.SecureServing, &cfg.LoopbackClientConfig, cfg)
 }
@@ -119,6 +129,7 @@ func (s *SecureServingOptionsWithLoopback) ApplyToConfig(cfg *server.Config) err
 func (s *SecureServingOptionsWithLoopback) addLoopbackServingCertificateHealthCheck(healthCheckAdder HealthzLivezHealthChecksAdder) {
 	expirationDate := s.clock.Now().Add(maxAge)
 	check := healthz.NamedCheck("loopback-serving-certificate", func(r *http.Request) error {
+		// 过期后 liveness 失败，由 kubelet 重启容器以生成新证书。
 		if s.clock.Now().After(expirationDate) {
 			return LoopbackCertificateExpiredError{}
 		}
@@ -130,8 +141,10 @@ func (s *SecureServingOptionsWithLoopback) addLoopbackServingCertificateHealthCh
 	healthCheckAdder.AddLivezChecks(check)
 }
 
+// LoopbackCertificateExpiredError 表示回环服务证书已过期，属于重启即可自愈的状态。
 type LoopbackCertificateExpiredError struct{}
 
+// Error 返回稳定的错误文案，便于健康检查消费者识别。
 func (lcee LoopbackCertificateExpiredError) Error() string {
 	return "loopback serving certificate is expired"
 }

@@ -35,6 +35,10 @@ import (
 	"k8s.io/apiserver/pkg/storage/value"
 )
 
+// TestGCMDataStable 是磁盘数据兼容性守卫：GCM 的 nonce 长度必须恒为 12 字节。
+//
+// 若 Go 标准库或本实现改变 nonce 布局，历史上写入 etcd 的密文将无法解密。
+// 这个测试失败意味着需要保留旧解密路径，而不是简单更新期望值。
 func TestGCMDataStable(t *testing.T) {
 	block, err := aes.NewCipher([]byte("0123456789abcdef"))
 	if err != nil {
@@ -66,6 +70,8 @@ func TestGCMDataStable(t *testing.T) {
 	}
 }
 
+// TestGCMUnsafeNonceOverflow 验证计数器 nonce 回绕时触发致命告警：
+// 计数器复用会直接破坏 GCM 的保密性，必须让进程尽快失败（crypto wear-out）。
 func TestGCMUnsafeNonceOverflow(t *testing.T) {
 	var msgFatal string
 	var count int
@@ -119,6 +125,7 @@ func TestGCMUnsafeNonceOverflow(t *testing.T) {
 	}
 }
 
+// assertNonce 断言计数器 nonce 的当前值。
 func assertNonce(t *testing.T, nonce *atomic.Uint64, want uint64) {
 	t.Helper()
 
@@ -127,6 +134,7 @@ func assertNonce(t *testing.T, nonce *atomic.Uint64, want uint64) {
 	}
 }
 
+// runEncrypt 执行一次加密，用于推进 nonce 计数器。
 func runEncrypt(t *testing.T, transformer value.Transformer) {
 	t.Helper()
 
@@ -141,6 +149,8 @@ func runEncrypt(t *testing.T, transformer value.Transformer) {
 
 // TestGCMUnsafeCompatibility asserts that encryptions performed via
 // NewGCMTransformerWithUniqueKeyUnsafe can be decrypted via NewGCMTransformer.
+//
+// 加密器与解密器走不同构造路径，必须保证线上密文可被默认读取路径解密。
 func TestGCMUnsafeCompatibility(t *testing.T) {
 	transformerEncrypt, key, err := NewGCMTransformerWithUniqueKeyUnsafe()
 	if err != nil {
@@ -178,6 +188,8 @@ func TestGCMUnsafeCompatibility(t *testing.T) {
 	}
 }
 
+// TestGCMLegacyDataCompatibility 验证历史版本写入的密文仍可解密；
+// legacyCiphertext 是固定版本的真实输出，属于跨版本兼容性的黄金样本。
 func TestGCMLegacyDataCompatibility(t *testing.T) {
 	block, err := aes.NewCipher([]byte("snorlax_awesomes"))
 	if err != nil {
@@ -204,6 +216,8 @@ func TestGCMLegacyDataCompatibility(t *testing.T) {
 	}
 }
 
+// TestExtendedNonceGCMLegacyDataCompatibility 验证扩展 nonce（KDF 派生）格式的历史密文
+// 仍可解密，防止格式演进破坏已有数据。
 func TestExtendedNonceGCMLegacyDataCompatibility(t *testing.T) {
 	// recorded output from NewKDFExtendedNonceGCMTransformerWithUniqueSeed from https://github.com/kubernetes/kubernetes/pull/118828
 	const (
@@ -228,6 +242,8 @@ func TestExtendedNonceGCMLegacyDataCompatibility(t *testing.T) {
 	}
 }
 
+// TestGCMUnsafeNonceGen 在并发下验证 nonce 生成：每个并发加密必须拿到唯一的计数值，
+// 且前 4 字节随机前缀不全为零。nonce 重复会直接导致密文可被伪造。
 func TestGCMUnsafeNonceGen(t *testing.T) {
 	block, err := aes.NewCipher([]byte("abcdefghijklmnop"))
 	if err != nil {
@@ -292,6 +308,7 @@ func TestGCMUnsafeNonceGen(t *testing.T) {
 	}
 }
 
+// TestGCMNonce 验证三种 GCM 实现的 nonce 布局：随机部分非零、计数器严格递增。
 func TestGCMNonce(t *testing.T) {
 	t.Run("gcm", func(t *testing.T) {
 		testGCMNonce(t, newGCMTransformer, 0, func(_ int, nonce []byte) {
@@ -319,6 +336,7 @@ func TestGCMNonce(t *testing.T) {
 	})
 }
 
+// testGCMNonce 对给定 transformer 做多次加密，检查 nonce 前缀与计数器。
 func testGCMNonce(t *testing.T, f transformerFunc, infoLen int, check func(int, []byte)) {
 	key := []byte("abcdefghijklmnopabcdefghijklmnop")
 	block, err := aes.NewCipher(key)
@@ -358,6 +376,8 @@ func testGCMNonce(t *testing.T, f transformerFunc, infoLen int, check func(int, 
 	}
 }
 
+// TestGCMKeyRotation 验证密钥轮换：用旧 key 加密的数据在新 key 配置下仍可解密，
+// 并通过 stale 标志通知调用方需要重写为最新 key。
 func TestGCMKeyRotation(t *testing.T) {
 	t.Run("gcm", func(t *testing.T) {
 		testGCMKeyRotation(t, newGCMTransformer)
@@ -372,6 +392,7 @@ func TestGCMKeyRotation(t *testing.T) {
 	})
 }
 
+// testGCMKeyRotation 是 GCM 三种实现的共用轮换测试。
 func testGCMKeyRotation(t *testing.T, f transformerFunc) {
 	key1 := []byte("abcdefghijklmnopabcdefghijklmnop")
 	key2 := []byte("0123456789abcdef0123456789abcdef")
@@ -428,6 +449,10 @@ func testGCMKeyRotation(t *testing.T, f transformerFunc) {
 	}
 }
 
+// TestCBCKeyRotation 验证 CBC 模式下的密钥轮换与 stale 标记。
+//
+// 与 GCM 的关键差异：CBC 不提供认证，篡改的 dataCtx 不会导致解密失败，
+// 因此该测试明确断言“CBC 不支持认证”这一已知限制。
 func TestCBCKeyRotation(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 	block1, err := aes.NewCipher([]byte("abcdefghijklmnop"))
@@ -481,12 +506,14 @@ func TestCBCKeyRotation(t *testing.T) {
 	}
 }
 
+// gcmBenchmarks 列出参与基准测试的三种 GCM 实现。
 var gcmBenchmarks = []namedTransformerFunc{
 	{name: "gcm-random-nonce", f: newGCMTransformer},
 	{name: "gcm-counter-nonce", f: newGCMTransformerWithUniqueKeyUnsafeTest},
 	{name: "gcm-extended-nonce", f: newHKDFExtendedNonceGCMTransformerTest},
 }
 
+// BenchmarkGCMRead 基准测试 GCM 解密，覆盖不同 key 长度、值大小与是否命中旧 key（stale）。
 func BenchmarkGCMRead(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -514,6 +541,7 @@ func BenchmarkGCMRead(b *testing.B) {
 	}
 }
 
+// BenchmarkGCMWrite 基准测试 GCM 加密。
 func BenchmarkGCMWrite(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -539,6 +567,8 @@ func BenchmarkGCMWrite(b *testing.B) {
 	}
 }
 
+// benchmarkGCMRead 构造双 key 的 PrefixTransformers 并重复解密。
+// expectStale 通过反转 key 顺序模拟“密文由旧 key 加密”。
 func benchmarkGCMRead(b *testing.B, f transformerFunc, keyLength int, valueLength int, expectStale bool) {
 	key1 := bytes.Repeat([]byte("a"), keyLength)
 	key2 := bytes.Repeat([]byte("b"), keyLength)
@@ -585,6 +615,7 @@ func benchmarkGCMRead(b *testing.B, f transformerFunc, keyLength int, valueLengt
 	b.StopTimer()
 }
 
+// benchmarkGCMWrite 重复加密固定大小的数据。
 func benchmarkGCMWrite(b *testing.B, f transformerFunc, keyLength int, valueLength int) {
 	key1 := bytes.Repeat([]byte("a"), keyLength)
 	key2 := bytes.Repeat([]byte("b"), keyLength)
@@ -616,6 +647,7 @@ func benchmarkGCMWrite(b *testing.B, f transformerFunc, keyLength int, valueLeng
 	b.StopTimer()
 }
 
+// BenchmarkCBCRead 基准测试 CBC 解密。
 func BenchmarkCBCRead(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -634,6 +666,7 @@ func BenchmarkCBCRead(b *testing.B) {
 	}
 }
 
+// BenchmarkCBCWrite 基准测试 CBC 加密。
 func BenchmarkCBCWrite(b *testing.B) {
 	tests := []struct {
 		keyLength   int
@@ -650,6 +683,7 @@ func BenchmarkCBCWrite(b *testing.B) {
 	}
 }
 
+// benchmarkCBCRead 构造双 key 的 CBC PrefixTransformers 并重复解密。
 func benchmarkCBCRead(b *testing.B, keyLength int, valueLength int, expectStale bool) {
 	block1, err := aes.NewCipher(bytes.Repeat([]byte("a"), keyLength))
 	if err != nil {
@@ -693,6 +727,7 @@ func benchmarkCBCRead(b *testing.B, keyLength int, valueLength int, expectStale 
 	b.StopTimer()
 }
 
+// benchmarkCBCWrite 重复执行 CBC 加密。
 func benchmarkCBCWrite(b *testing.B, keyLength int, valueLength int) {
 	block1, err := aes.NewCipher(bytes.Repeat([]byte("a"), keyLength))
 	if err != nil {
@@ -721,6 +756,8 @@ func benchmarkCBCWrite(b *testing.B, keyLength int, valueLength int) {
 	b.StopTimer()
 }
 
+// TestRoundTrip 对多种实现与 0..17 字节的边界长度做加密/解密往返，
+// 重点覆盖分组边界（AES 块大小 16）与空输入。
 func TestRoundTrip(t *testing.T) {
 	lengths := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 128, 1024}
 
@@ -791,13 +828,16 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// namedTransformerFunc 给 transformer 构造函数起名，供基准测试的子测试命名。
 type namedTransformerFunc struct {
 	name string
 	f    transformerFunc
 }
 
+// transformerFunc 是测试用构造器：根据 block/key 产生一个 transformer。
 type transformerFunc func(t testing.TB, block cipher.Block, key []byte) value.Transformer
 
+// newGCMTransformer 测试包装：构造随机 nonce 的 GCM。
 func newGCMTransformer(t testing.TB, block cipher.Block, _ []byte) value.Transformer {
 	t.Helper()
 
@@ -809,6 +849,8 @@ func newGCMTransformer(t testing.TB, block cipher.Block, _ []byte) value.Transfo
 	return transformer
 }
 
+// newGCMTransformerWithUniqueKeyUnsafeTest 测试包装：构造计数器 nonce 的 GCM，
+// 溢出时直接 die。
 func newGCMTransformerWithUniqueKeyUnsafeTest(t testing.TB, block cipher.Block, _ []byte) value.Transformer {
 	t.Helper()
 
@@ -821,6 +863,7 @@ func newGCMTransformerWithUniqueKeyUnsafeTest(t testing.TB, block cipher.Block, 
 	return transformer
 }
 
+// newHKDFExtendedNonceGCMTransformerTest 测试包装：构造 KDF 派生扩展 nonce 的 GCM。
 func newHKDFExtendedNonceGCMTransformerTest(t testing.TB, _ cipher.Block, key []byte) value.Transformer {
 	t.Helper()
 

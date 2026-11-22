@@ -35,6 +35,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// nsTimeFmt 是日志中时间戳的格式，精确到纳秒，便于对齐虚拟时间推进。
 const nsTimeFmt = "2006-01-02 15:04:05.000000000"
 
 // queueSetFactory implements the QueueSetFactory interface
@@ -48,6 +49,9 @@ type queueSetFactory struct {
 // - whose Set method is invoked with the queueSet locked, and
 // - whose Get method is invoked with the queueSet not locked.
 // The parameters are the same as for `promise.NewWriteOnce`.
+//
+// 这条锁约定很关键：Set 在持锁状态下调用，Get 在释放锁后调用，
+// 从而避免等待者持有锁阻塞调度器。
 type promiseFactory func(initial interface{}, doneCtx context.Context, doneVal interface{}) promise.WriteOnce
 
 // promiseFactoryFactory returns the promiseFactory to use for the given queueSet
@@ -55,6 +59,7 @@ type promiseFactoryFactory func(*queueSet) promiseFactory
 
 // `*queueSetCompleter` implements QueueSetCompleter.  Exactly one of
 // the fields `factory` and `theSet` is non-nil.
+// factory 非 nil 表示首次构造，theSet 非 nil 表示在既有队列集上重配置。
 type queueSetCompleter struct {
 	factory              *queueSetFactory
 	reqsGaugePair        metrics.RatioedGaugePair
@@ -82,6 +87,9 @@ type queueSetCompleter struct {
 // changes what request is oldest in a queue, because that change means
 // that the anti-windup hack in boundNextDispatchLocked needs to be
 // applied wrt the revised oldest request in the queue.
+//
+// 不变量：totRequestsWaiting/totSeatsWaiting/totSeatsInUse 等计数器必须与
+// 各 queue 中的实际请求保持一致，任何修改都应在持锁状态下同时更新。
 type queueSet struct {
 	clock                    eventclock.Interface
 	estimatedServiceDuration time.Duration
@@ -172,6 +180,7 @@ func NewQueueSetFactory(c eventclock.Interface) fq.QueueSetFactory {
 }
 
 // newTestableQueueSetFactory creates a new QueueSetFactory object with the given promiseFactoryFactory
+// 可替换 promiseFactory 让测试能够精确控制请求被派发/取消的时机。
 func newTestableQueueSetFactory(c eventclock.Interface, promiseFactoryFactory promiseFactoryFactory) fq.QueueSetFactory {
 	return &queueSetFactory{
 		clock:                 c,
@@ -179,6 +188,7 @@ func newTestableQueueSetFactory(c eventclock.Interface, promiseFactoryFactory pr
 	}
 }
 
+// BeginConstruction 校验排队配置并返回构造器；此时尚未创建 queueSet。
 func (qsf *queueSetFactory) BeginConstruction(qCfg fq.QueuingConfig, reqsGaugePair metrics.RatioedGaugePair, execSeatsGauge metrics.RatioedGauge, seatDemandIntegrator metrics.Gauge) (fq.QueueSetCompleter, error) {
 	dealer, err := checkConfig(qCfg)
 	if err != nil {
@@ -196,6 +206,7 @@ func (qsf *queueSetFactory) BeginConstruction(qCfg fq.QueuingConfig, reqsGaugePa
 // checkConfig returns a non-nil Dealer if the config is valid and
 // calls for one, and returns a non-nil error if the given config is
 // invalid.
+// DesiredNumQueues <= 0 表示不排队（仅并发限制），此时不需要 dealer。
 func checkConfig(qCfg fq.QueuingConfig) (*shufflesharding.Dealer, error) {
 	if qCfg.DesiredNumQueues <= 0 {
 		return nil, nil
@@ -207,11 +218,13 @@ func checkConfig(qCfg fq.QueuingConfig) (*shufflesharding.Dealer, error) {
 	return dealer, err
 }
 
+// Complete 完成 queueSet 的构造或重配置，并应用派发配置。
 func (qsc *queueSetCompleter) Complete(dCfg fq.DispatchingConfig) fq.QueueSet {
 	qs := qsc.theSet
 	if qs == nil {
 		qs = &queueSet{
-			clock:                    qsc.factory.clock,
+			clock: qsc.factory.clock,
+			// 初始估计服务时长为 3ms，后续由实际观测修正；用于 anti-windup 估算。
 			estimatedServiceDuration: 3 * time.Millisecond,
 			reqsGaugePair:            qsc.reqsGaugePair,
 			execSeatsGauge:           qsc.execSeatsGauge,
@@ -228,6 +241,7 @@ func (qsc *queueSetCompleter) Complete(dCfg fq.DispatchingConfig) fq.QueueSet {
 }
 
 // createQueues is a helper method for initializing an array of n queues
+// baseIndex 保证新增队列的 index 连续，避免与既有队列冲突。
 func createQueues(n, baseIndex int) []*queue {
 	fqqueues := make([]*queue, n)
 	for i := 0; i < n; i++ {
@@ -236,6 +250,7 @@ func createQueues(n, baseIndex int) []*queue {
 	return fqqueues
 }
 
+// BeginConfigChange 在已有 queueSet 上准备一次配置变更；实际变更在 Complete 时生效。
 func (qs *queueSet) BeginConfigChange(qCfg fq.QueuingConfig) (fq.QueueSetCompleter, error) {
 	dealer, err := checkConfig(qCfg)
 	if err != nil {
@@ -265,6 +280,7 @@ func (qs *queueSet) setConfiguration(ctx context.Context, qCfg fq.QueuingConfig,
 				createQueues(qCfg.DesiredNumQueues-numQueues, len(qs.queues))...)
 		}
 	} else {
+		// 关闭排队时保留旧的 QueueLengthLimit/HandSize，以便再次启用时沿用。
 		qCfg.QueueLengthLimit = qs.qCfg.QueueLengthLimit
 		qCfg.HandSize = qs.qCfg.HandSize
 	}
@@ -272,6 +288,7 @@ func (qs *queueSet) setConfiguration(ctx context.Context, qCfg fq.QueuingConfig,
 	qs.qCfg = qCfg
 	qs.dCfg = dCfg
 	qs.dealer = dealer
+	// 指标分母随配置更新；qll 至少为 1，避免除零。
 	qll := qCfg.QueueLengthLimit
 	if qll < 1 {
 		qll = 1
@@ -283,6 +300,7 @@ func (qs *queueSet) setConfiguration(ctx context.Context, qCfg fq.QueuingConfig,
 	qs.reqsGaugePair.RequestsExecuting.SetDenominator(float64(dCfg.ConcurrencyDenominator))
 	qs.execSeatsGauge.SetDenominator(float64(dCfg.ConcurrencyDenominator))
 
+	// 配置放宽后立即尝试派发，避免等待下一次事件才释放积压请求。
 	qs.dispatchAsMuchAsPossibleLocked()
 }
 
@@ -313,6 +331,7 @@ func (qs *queueSet) StartRequest(ctx context.Context, workEstimate *fqrequest.Wo
 	// ========================================================================
 	// Step 0:
 	// Apply only concurrency limit, if zero queues desired
+	// 不排队模式下只做并发限制：容量不足立即拒绝，否则直接开始执行。
 	if qs.qCfg.DesiredNumQueues < 1 {
 		if !qs.canAccommodateSeatsLocked(workEstimate.MaxSeats()) {
 			klog.V(5).Infof("QS(%s): rejecting request %q %#+v %#+v because %d seats are asked for, %d seats are in use (%d are executing) and the limit is %d",
@@ -368,22 +387,27 @@ func (req *request) MaxSeats() int {
 	return req.workEstimate.MaxSeats()
 }
 
+// InitialSeats 返回请求初始占用的席位，用于计算服务时间对虚拟时钟的修正。
 func (req *request) InitialSeats() int {
 	return int(req.workEstimate.InitialSeats)
 }
 
+// NoteQueued 通知调用方请求进入/离开队列，用于其内部指标或状态跟踪。
 func (req *request) NoteQueued(inQueue bool) {
 	if req.queueNoteFn != nil {
 		req.queueNoteFn(inQueue)
 	}
 }
 
+// Finish 等待派发决定，执行 execFn，并保证无论 execFn 是否 panic 都会释放席位。
+// 返回 QueueSet 是否因此变为空闲。
 func (req *request) Finish(execFn func()) bool {
 	exec, idle := req.wait()
 	if !exec {
 		return idle
 	}
 	func() {
+		// defer 放在内层函数中，确保 execFn panic 时仍能走完成路径。
 		defer func() {
 			idle = req.qs.finishRequestAndDispatchAsMuchAsPossible(req)
 		}()
@@ -394,6 +418,7 @@ func (req *request) Finish(execFn func()) bool {
 	return idle
 }
 
+// wait 阻塞等待决策，并在取消/超时时从队列中移除请求。
 func (req *request) wait() (bool, bool) {
 	qs := req.qs
 
@@ -423,8 +448,10 @@ func (req *request) wait() (bool, bool) {
 	// TODO(aaron-prindle) add metrics for this case
 	klog.V(5).Infof("QS(%s): Ejecting request %#+v %#+v from its queue", qs.qCfg.Name, req.descr1, req.descr2)
 	// remove the request from the queue as its queue wait time has exceeded
+	// 只有确实仍在队列中时才需要回滚计数；已派发的请求取消属于正常执行路径。
 	queue := req.queue
 	if req.removeFromQueueLocked() != nil {
+		// 队首变化后需要重新应用 anti-windup，故延迟 boundNextDispatchLocked。
 		defer qs.boundNextDispatchLocked(queue)
 		qs.totRequestsWaiting--
 		qs.totSeatsWaiting -= req.MaxSeats()
@@ -440,12 +467,14 @@ func (req *request) wait() (bool, bool) {
 	return false, qs.isIdleLocked()
 }
 
+// IsIdle 返回当前 queueSet 是否没有等待或执行中的请求。
 func (qs *queueSet) IsIdle() bool {
 	qs.lock.Lock()
 	defer qs.lock.Unlock()
 	return qs.isIdleLocked()
 }
 
+// isIdleLocked 的调用方必须已持有锁。
 func (qs *queueSet) isIdleLocked() bool {
 	return qs.totRequestsWaiting == 0 && qs.totRequestsExecuting == 0
 }
@@ -471,6 +500,7 @@ func (qs *queueSet) syncTimeLocked(ctx context.Context) {
 	qs.currentR = prevR + incrR
 	switch {
 	case prevR > qs.currentR:
+		// 无符号量回绕意味着溢出，记录错误但不回退状态。
 		klog.ErrorS(errors.New("queueset::currentR overflow"), "Overflow", "QS", qs.qCfg.Name, "when", realNow.Format(nsTimeFmt), "prevR", prevR, "incrR", incrR, "currentR", qs.currentR)
 	case qs.currentR >= highR:
 		qs.advanceEpoch(ctx, realNow, incrR)
@@ -489,6 +519,9 @@ const highR = rDecrement + rDecrement/2
 // advanceEpoch subtracts rDecrement from the global progress meter R
 // and all the readings that have been taked from that meter.
 // The now and incrR parameters are only used to add info to the log messages.
+//
+// 所有 R 值同时平移，因此队列之间的相对顺序不变；这是避免计数器溢出的
+// 唯一安全做法（只改全局 R 会破坏公平性）。
 func (qs *queueSet) advanceEpoch(ctx context.Context, now time.Time, incrR fqrequest.SeatSeconds) {
 	oldR := qs.currentR
 	qs.currentR -= rDecrement
@@ -504,6 +537,7 @@ func (qs *queueSet) advanceEpoch(ctx context.Context, now time.Time, incrR fqreq
 		}
 		oldNextDispatchR := queue.nextDispatchR
 		queue.nextDispatchR -= rDecrement
+		// 无符号量下溢会回绕成极大值，说明状态已损坏，记录后继续（不中断服务）。
 		if queue.nextDispatchR > oldNextDispatchR {
 			klog.ErrorS(errors.New("queue::nextDispatchR underflow"), "Underflow", "QS", qs.qCfg.Name, "queue", qIdx, "oldNextDispatchR", oldNextDispatchR, "newNextDispatchR", queue.nextDispatchR, "incrR", incrR)
 			success = false
@@ -523,6 +557,9 @@ func (qs *queueSet) advanceEpoch(ctx context.Context, now time.Time, incrR fqreq
 
 // getVirtualTimeRatio calculates the rate at which virtual time has
 // been advancing, according to the logic in `doc.go`.
+//
+// 返回“每单位真实时间推进多少虚拟时间”：活跃队列越多，虚拟时间推进越慢，
+// 从而在队列之间分摊并发额度。
 func (qs *queueSet) getVirtualTimeRatioLocked() float64 {
 	activeQueues := 0
 	seatsRequested := 0
@@ -554,6 +591,7 @@ func (qs *queueSet) shuffleShardAndRejectOrEnqueueLocked(ctx context.Context, wo
 	queueIdx := qs.shuffleShardLocked(hashValue, descr1, descr2)
 	queue := qs.queues[queueIdx]
 
+	// 入队/出队都可能改变队首，统一在返回前修正 virtualStart。
 	defer qs.boundNextDispatchLocked(queue)
 
 	// Create a request and enqueue
@@ -562,14 +600,15 @@ func (qs *queueSet) shuffleShardAndRejectOrEnqueueLocked(ctx context.Context, wo
 		fsName:            fsName,
 		flowDistinguisher: flowDistinguisher,
 		ctx:               ctx,
-		decision:          qs.promiseFactory(nil, ctx, decisionCancel),
-		arrivalTime:       qs.clock.Now(),
-		arrivalR:          qs.currentR,
-		queue:             queue,
-		descr1:            descr1,
-		descr2:            descr2,
-		queueNoteFn:       queueNoteFn,
-		workEstimate:      qs.completeWorkEstimate(workEstimate),
+		// 默认决策为 cancel：若请求在派发前 ctx 结束，promise 会以 cancel 完成。
+		decision:     qs.promiseFactory(nil, ctx, decisionCancel),
+		arrivalTime:  qs.clock.Now(),
+		arrivalR:     qs.currentR,
+		queue:        queue,
+		descr1:       descr1,
+		descr2:       descr2,
+		queueNoteFn:  queueNoteFn,
+		workEstimate: qs.completeWorkEstimate(workEstimate),
 	}
 	if ok := qs.rejectOrEnqueueToBoundLocked(req); !ok {
 		return nil
@@ -580,6 +619,9 @@ func (qs *queueSet) shuffleShardAndRejectOrEnqueueLocked(ctx context.Context, wo
 
 // shuffleShardLocked uses shuffle sharding to select a queue index
 // using the given hashValue and the shuffle sharding parameters of the queueSet.
+//
+// 在“手牌”中选择当前排队工作量最小的队列；offset 轮换保证手牌重叠的流不会
+// 总是偏向同一队列，从而消除系统性偏差。
 func (qs *queueSet) shuffleShardLocked(hashValue uint64, descr1, descr2 interface{}) int {
 	var backHand [8]int
 	// Deal into a data structure, so that the order of visit below is not necessarily the order of the deal.
@@ -619,6 +661,7 @@ func (qs *queueSet) rejectOrEnqueueToBoundLocked(request *request) bool {
 	queue := request.queue
 	curQueueLength := queue.requestsWaiting.Length()
 	// rejects the newly arrived request if resource criteria not met
+	// 两个条件必须同时满足才拒绝：仍有并发余量时即便队列满也应先派发。
 	if qs.totSeatsInUse >= qs.dCfg.ConcurrencyLimit &&
 		curQueueLength >= qs.qCfg.QueueLengthLimit {
 		return false
@@ -634,12 +677,14 @@ func (qs *queueSet) enqueueToBoundLocked(request *request) {
 	now := qs.clock.Now()
 	if queue.requestsWaiting.Length() == 0 && queue.requestsExecuting.Len() == 0 {
 		// the queue’s start R is set to the virtual time.
+		// 空队列从当前虚拟时间开始，避免继承历史积压造成的过早 virtualStart。
 		queue.nextDispatchR = qs.currentR
 		klogV := klog.V(6)
 		if klogV.Enabled() {
 			klogV.Infof("QS(%s) at t=%s R=%v: initialized queue %d start R due to request %#+v %#+v", qs.qCfg.Name, now.Format(nsTimeFmt), queue.nextDispatchR, queue.index, request.descr1, request.descr2)
 		}
 	}
+	// Enqueue 返回一个删除函数，取消时用它从队列中摘除请求。
 	request.removeFromQueueLocked = queue.requestsWaiting.Enqueue(request)
 	qs.totRequestsWaiting++
 	qs.totSeatsWaiting += request.MaxSeats()
@@ -656,6 +701,7 @@ func (qs *queueSet) dispatchAsMuchAsPossibleLocked() {
 	}
 }
 
+// dispatchSansQueueLocked 在“不排队”模式下直接让请求开始执行，仅受并发限制约束。
 func (qs *queueSet) dispatchSansQueueLocked(ctx context.Context, workEstimate *fqrequest.WorkEstimate, flowDistinguisher, fsName string, descr1, descr2 interface{}) *request {
 	// does not call metrics.SetDispatchMetrics because there is no queuing and thus no interesting virtual world
 	now := qs.clock.Now()
@@ -665,12 +711,13 @@ func (qs *queueSet) dispatchSansQueueLocked(ctx context.Context, workEstimate *f
 		flowDistinguisher: flowDistinguisher,
 		ctx:               ctx,
 		startTime:         now,
-		decision:          qs.promiseFactory(decisionExecute, ctx, decisionCancel),
-		arrivalTime:       now,
-		arrivalR:          qs.currentR,
-		descr1:            descr1,
-		descr2:            descr2,
-		workEstimate:      qs.completeWorkEstimate(workEstimate),
+		// 无需等待：决策直接置为 execute。
+		decision:     qs.promiseFactory(decisionExecute, ctx, decisionCancel),
+		arrivalTime:  now,
+		arrivalR:     qs.currentR,
+		descr1:       descr1,
+		descr2:       descr2,
+		workEstimate: qs.completeWorkEstimate(workEstimate),
 	}
 	qs.totRequestsExecuting++
 	qs.totSeatsInUse += req.MaxSeats()
@@ -706,7 +753,9 @@ func (qs *queueSet) dispatchLocked() bool {
 	metrics.AddSeatsInQueues(request.ctx, qs.qCfg.Name, request.fsName, -request.MaxSeats())
 	request.NoteQueued(false)
 	qs.reqsGaugePair.RequestsWaiting.Add(-1)
+	// 派发后队首变化，需要修正 virtualStart。
 	defer qs.boundNextDispatchLocked(queue)
+	// 若请求在派发前已被取消，Set 返回 false；此时不能再执行它。
 	if !request.decision.Set(decisionExecute) {
 		qs.seatDemandIntegrator.Set(float64(qs.totSeatsInUse + qs.totSeatsWaiting))
 		return true
@@ -733,6 +782,7 @@ func (qs *queueSet) dispatchLocked() bool {
 			request.workEstimate, queue.index, queue.nextDispatchR, queue.requestsWaiting.Length(), queue.requestsExecuting.Len(), queue.seatsInUse, qs.totSeatsInUse)
 	}
 	// When a request is dequeued for service -> qs.virtualStart += G * width
+	// 单个请求的工作量若异常巨大，说明估算或配置有误，仅记录日志而不阻断。
 	if request.totalWork() > rDecrement/100 { // A single increment should never be so big
 		klog.Errorf("QS(%s) at t=%s R=%v: dispatching request %#+v %#+v with implausibly high work %v from queue %d with start R %v",
 			qs.qCfg.Name, request.startTime.Format(nsTimeFmt), qs.currentR, request.descr1, request.descr2,
@@ -749,12 +799,14 @@ func (qs *queueSet) canAccommodateSeatsLocked(seats int) bool {
 	switch {
 	case qs.qCfg.DesiredNumQueues < 0:
 		// This is code for exemption from limitation
+		// 负值表示豁免流（exempt），完全不受并发限制。
 		return true
 	case seats > qs.dCfg.ConcurrencyLimit:
 		// we have picked the queue with the minimum virtual finish time, but
 		// the number of seats this request asks for exceeds the concurrency limit.
 		// TODO: this is a quick fix for now, once we have borrowing in place we will not need it
 		if qs.totRequestsExecuting == 0 {
+			// 单个请求超过总并发额度时，允许其在系统空闲时独占执行，避免永久饥饿。
 			// TODO: apply additional lateny associated with this request, as described in the KEP
 			return true
 		}
@@ -783,6 +835,7 @@ func (qs *queueSet) findDispatchQueueToBoundLocked() (*queue, *request) {
 	var minIndex int
 	nq := len(qs.queues)
 	for range qs.queues {
+		// 轮询起点每次前移一位，使虚拟完成时间相同的队列轮流获胜。
 		qs.robinIndex = (qs.robinIndex + 1) % nq
 		queue := qs.queues[qs.robinIndex]
 		oldestWaiting, _ := queue.requestsWaiting.Peek()
@@ -824,6 +877,7 @@ func (qs *queueSet) findDispatchQueueToBoundLocked() (*queue, *request) {
 	// If the requested final seats exceed capacity of that queue,
 	// we reduce them to current capacity and adjust additional latency
 	// to preserve the total amount of work.
+	// 这是“超出并发上限的请求”的补偿：减少席位、增加延迟，保持总工作量守恒。
 	if oldestReqFromMinQueue.workEstimate.FinalSeats > uint64(qs.dCfg.ConcurrencyLimit) {
 		finalSeats := uint64(qs.dCfg.ConcurrencyLimit)
 		additionalLatency := oldestReqFromMinQueue.workEstimate.finalWork.DurationPerSeat(float64(finalSeats))
@@ -836,6 +890,7 @@ func (qs *queueSet) findDispatchQueueToBoundLocked() (*queue, *request) {
 	// win in the case that the virtual finish times are the same
 	qs.robinIndex = minIndex
 
+	// 派发点早于到达点说明虚拟时间被错误推进，记录但继续运行。
 	if minQueue.nextDispatchR < oldestReqFromMinQueue.arrivalR {
 		klog.ErrorS(errors.New("dispatch before arrival"), "Inconceivable!", "QS", qs.qCfg.Name, "queue", minQueue.index, "dispatchR", minQueue.nextDispatchR, "request", oldestReqFromMinQueue)
 	}
@@ -871,6 +926,7 @@ func (qs *queueSet) finishRequestLocked(r *request) {
 	// TODO: for now we keep the logic localized so it is easier to see
 	//  how the counters are tracked for queueset and queue, in future we
 	//  can refactor to move this function.
+	// releaseSeatsLocked 幂等性由调用方保证：只在延迟结束或立即释放时调用一次。
 	releaseSeatsLocked := func() {
 		defer qs.removeQueueIfEmptyLocked(r)
 
@@ -912,6 +968,7 @@ func (qs *queueSet) finishRequestLocked(r *request) {
 		// so the seats allocated to this request will be released after
 		// AdditionalLatency elapses, this ensures that the additional
 		// latency has no impact on the user experience.
+		// 延迟释放期间席位仍计入 totSeatsInUse，从而真正降低并发而不是仅做统计。
 		qs.clock.EventAfterDuration(func(_ time.Time) {
 			qs.lockAndSyncTime(r.ctx)
 			defer qs.lock.Unlock()
@@ -935,6 +992,7 @@ func (qs *queueSet) finishRequestLocked(r *request) {
 
 		// When a request finishes being served, and the actual service time was S,
 		// the queue’s start R is decremented by (G - S)*width.
+		// 实际服务时间短于估计时把多算的虚拟时间退还，长于估计则提前推进。
 		r.queue.nextDispatchR -= fqrequest.SeatsTimesDuration(float64(r.InitialSeats()), qs.estimatedServiceDuration-actualServiceDuration)
 		qs.boundNextDispatchLocked(r.queue)
 	} else {
@@ -963,6 +1021,8 @@ func (qs *queueSet) boundNextDispatchLocked(queue *queue) {
 	}
 }
 
+// removeQueueIfEmptyLocked 在队列数超过期望值且队列已空时按“自然淘汰”移除队列，
+// 避免配置缩容时立即丢弃仍在排队的请求。
 func (qs *queueSet) removeQueueIfEmptyLocked(r *request) {
 	if r.queue == nil {
 		return
@@ -987,12 +1047,15 @@ func (qs *queueSet) removeQueueIfEmptyLocked(r *request) {
 // and then updates the 'index' field of the queues to be correct
 func removeQueueAndUpdateIndexes(queues []*queue, index int) []*queue {
 	keptQueues := append(queues[:index], queues[index+1:]...)
+	// 删除后所有后继队列的 index 需要前移，以维持 index == 切片下标的约定。
 	for i := index; i < len(keptQueues); i++ {
 		keptQueues[i].index--
 	}
 	return keptQueues
 }
 
+// Dump 返回队列集的可观测快照，供调试端点使用；includeRequestDetails
+// 决定是否包含请求级细节（可能较敏感/昂贵）。
 func (qs *queueSet) Dump(includeRequestDetails bool) debug.QueueSetDump {
 	qs.lock.Lock()
 	defer qs.lock.Unlock()
@@ -1014,6 +1077,8 @@ func (qs *queueSet) Dump(includeRequestDetails bool) debug.QueueSetDump {
 	return d
 }
 
+// OnRequestDispatched 记录一次成功派发；由上层在请求真正开始处理后调用。
+// 类型断言失败时静默返回，使该函数可安全地用于任意 fq.Request 实现。
 func OnRequestDispatched(r fq.Request) {
 	req, ok := r.(*request)
 	if !ok {

@@ -35,9 +35,13 @@ type EndpointSliceGetter interface {
 	GetEndpointSlices(namespaceName, serviceName string) ([]*discoveryv1.EndpointSlice, error)
 }
 
+// indexKey 是索引名；值与索引函数返回的 "namespace/serviceName" 格式对应。
 const indexKey = "namespaceName_serviceName"
 
 // ensureServiceNameIndexer ensures that indexer has a namespace/serviceName indexer
+//
+// 先检查再添加，因为同一个 informer 可能被多个组件共享；并发添加时依赖
+// AddIndexers 的报错检测竞态，若索引最终存在则视为成功。
 func ensureServiceNameIndexer(indexer cache.Indexer) error {
 	if _, exists := indexer.GetIndexers()[indexKey]; exists {
 		return nil
@@ -71,6 +75,9 @@ func ensureServiceNameIndexer(indexer cache.Indexer) error {
 // long as it runs, even if if the EndpointSliceGetter is destroyed. Use
 // NewEndpointSliceListerGetter if you want want to fetch EndpointSlices without changing
 // the underlying cache.)
+//
+// 该实现以 O(1) 的索引查询换取对共享 informer 缓存的副作用，适合长期运行、
+// 查询频繁的场景。
 func NewEndpointSliceIndexerGetter(sliceInformer discoveryv1informer.EndpointSliceInformer) (EndpointSliceGetter, error) {
 	indexer := sliceInformer.Informer().GetIndexer()
 	if err := ensureServiceNameIndexer(indexer); err != nil {
@@ -83,6 +90,7 @@ type endpointSliceIndexerGetter struct {
 	indexer cache.Indexer
 }
 
+// GetEndpointSlices 通过索引直接取出某 Service 的所有 EndpointSlice。
 func (e *endpointSliceIndexerGetter) GetEndpointSlices(namespaceName, serviceName string) ([]*discoveryv1.EndpointSlice, error) {
 	objs, err := e.indexer.ByIndex(indexKey, namespaceName+"/"+serviceName)
 	if err != nil {
@@ -101,6 +109,8 @@ func (e *endpointSliceIndexerGetter) GetEndpointSlices(namespaceName, serviceNam
 
 // NewEndpointSliceListerGetter returns an EndpointSliceGetter that uses a lister to do a
 // full selection on every lookup.
+//
+// 相比索引版本，它不修改共享缓存，但每次查询都要遍历命名空间下的全部切片。
 func NewEndpointSliceListerGetter(sliceLister discoveryv1lister.EndpointSliceLister) (EndpointSliceGetter, error) {
 	return &endpointSliceListerGetter{lister: sliceLister}, nil
 }
@@ -109,6 +119,7 @@ type endpointSliceListerGetter struct {
 	lister discoveryv1lister.EndpointSliceLister
 }
 
+// GetEndpointSlices 用 service-name 标签选择器过滤命名空间内的所有切片。
 func (e *endpointSliceListerGetter) GetEndpointSlices(namespaceName, serviceName string) ([]*discoveryv1.EndpointSlice, error) {
 	return e.lister.EndpointSlices(namespaceName).List(labels.SelectorFromSet(labels.Set{discoveryv1.LabelServiceName: serviceName}))
 }

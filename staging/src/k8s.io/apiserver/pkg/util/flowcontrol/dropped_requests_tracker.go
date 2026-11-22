@@ -26,12 +26,15 @@ import (
 
 const (
 	// maxRetryAfter represents the maximum possible retryAfter.
+	// 上限 32 秒：再长的 Retry-After 会让客户端长时间空转，也可能被误当作服务不可用。
 	maxRetryAfter = int64(32)
 )
 
 // DroppedRequestsTracker is an interface that allows tracking
 // a history od dropped requests in the system for the purpose
 // of adjusting RetryAfter header to avoid system overload.
+// DroppedRequestsTracker 按优先级跟踪被丢弃请求的历史，
+// 据此动态调整 Retry-After，避免客户端在过载时盲目重试形成正反馈。
 type DroppedRequestsTracker interface {
 	// RecordDroppedRequest records a request that was just
 	// dropped from processing.
@@ -49,10 +52,14 @@ type unixStat struct {
 	requests int64
 }
 
+// droppedRequestsStats 保存单个优先级级别的丢弃统计。
+// 设计要点：绝大多数调用命中读锁快路径（同一秒内自增原子计数），
+// 仅在跨秒时获取写锁并重算 retryAfter。
 type droppedRequestsStats struct {
 	lock sync.RWMutex
 
 	// history stores the history of dropped requests.
+	// 只保留与当前 retryAfter 窗口相关的条目，防止无界增长。
 	history []unixStat
 
 	// To reduce lock-contention, we store the information about
@@ -65,6 +72,7 @@ type droppedRequestsStats struct {
 	retryAfterUpdateUnix int64
 }
 
+// newDroppedRequestsStats 创建统计对象，初始 Retry-After 为 1 秒。
 func newDroppedRequestsStats(nowUnix int64) *droppedRequestsStats {
 	result := &droppedRequestsStats{
 		// We assume that we can bump at any time after first dropped request.
@@ -74,6 +82,8 @@ func newDroppedRequestsStats(nowUnix int64) *droppedRequestsStats {
 	return result
 }
 
+// recordDroppedRequest 记录一次丢弃；同一秒内走读锁快路径，
+// 跨秒时切换到写锁，把上一秒的计数归档并重新计算 Retry-After。
 func (s *droppedRequestsStats) recordDroppedRequest(unixTime int64) {
 	// Short path - if the current second matches passed time,
 	// just update the stats.
@@ -107,6 +117,8 @@ func (s *droppedRequestsStats) recordDroppedRequest(unixTime int64) {
 	s.updateRetryAfterIfNeededLocked(unixTime)
 }
 
+// updateHistory 追加统计并裁剪过期条目。
+// 保留窗口取 2*retryAfter（上限 maxRetryAfter），因为判断与展示只需该窗口。
 func (s *droppedRequestsStats) updateHistory(unixTime int64, count int64) {
 	s.history = append(s.history, unixStat{unixTime: unixTime, requests: count})
 
@@ -139,6 +151,8 @@ func (s *droppedRequestsStats) updateHistory(unixTime int64, count int64) {
 // on a single spike.
 //
 // We're working with the interval [unixTime-retryAfter, unixTime).
+//
+// 调用方必须持有写锁。
 func (s *droppedRequestsStats) updateRetryAfterIfNeededLocked(unixTime int64) {
 	retryAfter := s.retryAfter.Load()
 
@@ -152,6 +166,8 @@ func (s *droppedRequestsStats) updateRetryAfterIfNeededLocked(unixTime int64) {
 		}
 	}
 
+	// 需求超过 3 倍窗口时翻倍（类似 TCP 退避），但受速率限制：
+	// 距离上次增长不足 retryAfter 秒则忽略，避免单个尖峰引发连续翻倍。
 	if unixTime-s.retryAfterUpdateUnix >= retryAfter && droppedRequests >= 3*retryAfter {
 		// We try to mimic the TCP algorithm and thus are doubling
 		// the retryAfter here.
@@ -164,6 +180,7 @@ func (s *droppedRequestsStats) updateRetryAfterIfNeededLocked(unixTime int64) {
 		return
 	}
 
+	// 需求低于窗口时线性递减，逐步恢复到 1 秒。
 	if droppedRequests < retryAfter && retryAfter > 1 {
 		// We try to mimc the TCP algorithm and thus are linearly
 		// scaling down the retryAfter here.
@@ -176,6 +193,7 @@ func (s *droppedRequestsStats) updateRetryAfterIfNeededLocked(unixTime int64) {
 // droppedRequestsTracker implement DroppedRequestsTracker interface
 // for the purpose of adjusting RetryAfter header for newly dropped
 // requests to avoid system overload.
+// droppedRequestsTracker 按优先级名称聚合 droppedRequestsStats。
 type droppedRequestsTracker struct {
 	now func() time.Time
 
@@ -189,6 +207,7 @@ func NewDroppedRequestsTracker() DroppedRequestsTracker {
 	return newDroppedRequestsTracker(clock.RealClock{}.Now)
 }
 
+// newDroppedRequestsTracker 允许注入时钟，便于测试退避行为。
 func newDroppedRequestsTracker(now func() time.Time) *droppedRequestsTracker {
 	return &droppedRequestsTracker{
 		now:     now,
@@ -196,6 +215,7 @@ func newDroppedRequestsTracker(now func() time.Time) *droppedRequestsTracker {
 	}
 }
 
+// RecordDroppedRequest 记录某优先级的一次丢弃；优先级的统计对象按需惰性创建。
 func (t *droppedRequestsTracker) RecordDroppedRequest(plName string) {
 	unixTime := t.now().Unix()
 
@@ -210,6 +230,7 @@ func (t *droppedRequestsTracker) RecordDroppedRequest(plName string) {
 		t.lock.RUnlock()
 
 		// Slow path taking writer lock to update the map.
+		// 双重检查：解锁后可能有其他 goroutine 先创建了该条目。
 		t.lock.Lock()
 		defer t.lock.Unlock()
 		if plStats, ok := t.plStats[plName]; ok {
@@ -223,6 +244,7 @@ func (t *droppedRequestsTracker) RecordDroppedRequest(plName string) {
 	stats.recordDroppedRequest(unixTime)
 }
 
+// GetRetryAfter 返回该优先级的建议 Retry-After；从未丢弃过则返回 1 秒。
 func (t *droppedRequestsTracker) GetRetryAfter(plName string) int64 {
 	t.lock.RLock()
 	defer t.lock.RUnlock()

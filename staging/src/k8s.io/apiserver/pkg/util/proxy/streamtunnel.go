@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 stream tunnel 代理：部分网络环境不支持 SPDY 升级但支持 WebSocket，
+// 这里在两者之间做协议转换。关键是保留 HTTP 响应头语义：后端返回的 101 或
+// 错误响应必须先被解析，再决定如何初始化下游连接。
+
 package proxy
 
 import (
@@ -59,6 +63,10 @@ func NewTunnelingHandler(upgradeHandler http.Handler) *TunnelingHandler {
 // a wrapped WebSockets connection which communicates SPDY framed data. In the
 // case the upstream upgrade fails, we delegate communication to the passed
 // in "w" ResponseWriter.
+//
+// 中文说明：客户端必须在 WebSocket 子协议中声明 SPDY 隧道协议，否则无法确定
+// 上游应使用哪个 SPDY 版本，直接 400 拒绝。writer 中的 w 与 conn 互斥：
+// 升级成功用 conn，失败则用 w 写普通 HTTP 错误响应。
 func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	logger := klog.FromContext(req.Context())
 	logger.V(4).Info("TunnelingHandler ServeHTTP")
@@ -96,6 +104,9 @@ func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // createSPDYRequest modifies the passed request to remove
 // WebSockets headers and add SPDY upgrade information, including
 // spdy protocols acceptable to the client.
+//
+// 中文说明：必须克隆请求——原请求仍被下游 WebSocket 升级使用，直接修改会破坏它。
+// 请求体被丢弃：SPDY 升级请求本身无 body，保留它会让上游误读。
 func createSPDYRequest(req *http.Request, spdyProtocols ...string) *http.Request {
 	clone := utilnet.CloneRequest(req)
 	// Clean up the websocket headers from the http request.
@@ -116,6 +127,9 @@ func createSPDYRequest(req *http.Request, spdyProtocols ...string) *http.Request
 
 // spdyProtocolsFromWebsocketProtocols returns a list of spdy protocols by filtering
 // to Kubernetes websocket subprotocols prefixed with "SPDY/3.1+", then removing the prefix
+//
+// 中文说明：只接受同时带 Kubernetes 前缀与后缀的子协议，避免把无关的
+// 自定义子协议误当成 SPDY 版本传给上游。
 func spdyProtocolsFromWebsocketProtocols(req *http.Request) []string {
 	var spdyProtocols []string
 	for _, protocol := range gwebsocket.Subprotocols(req) {
@@ -133,6 +147,9 @@ var _ http.Hijacker = &tunnelingResponseWriter{}
 // Only non-upgrade responses can be written using WriteHeader() and Write().
 // Once Write or WriteHeader is called, Hijack returns an error.
 // Once Hijack is called, Write, WriteHeader, and Hijack return errors.
+//
+// 中文说明：状态机是单向的（written / hijacked 至多一个为真），互斥锁保证并发安全。
+// 这种严格性让「升级成功」与「返回普通错误」两条路径不会交叉，避免写出半截响应。
 type tunnelingResponseWriter struct {
 	logger klog.Logger
 	// w is used to delegate Header(), WriteHeader(), and Write() calls
@@ -184,6 +201,9 @@ func (w *tunnelingResponseWriter) Write(p []byte) (int, error) {
 }
 
 // WriteHeader is delegated to the stored "http.ResponseWriter".
+//
+// 中文说明：101 必须经由 Hijack 后的连接发出，直接 WriteHeader(101) 会绕过
+// WebSocket 握手逻辑；这里转换为 500，让配置错误显式失败而非静默产生坏连接。
 func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -211,6 +231,10 @@ func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 // headerInterceptingConn wraps the tunneling "net.Conn" to drain the
 // HTTP response status/headers from the upstream SPDY connection, then use
 // that to decide how to initialize the delegate connection for writes.
+//
+// 中文说明：SPDY 客户端期望先读到完整的 HTTP 响应头，再开始读写帧；
+// 因此这里先缓冲并解析头部，解析成功后才初始化真正的下游连接，
+// 并把剩余字节（可能已含 body）转发出去。
 type headerInterceptingConn struct {
 	logger klog.Logger
 	// initializableConn is delegated to for all net.Conn methods.
@@ -244,6 +268,10 @@ var lfLF = []byte("\n\n")
 // Write intercepts to initially swallow the HTTP response, then
 // delegate to the tunneling "net.Conn" once the response has been
 // seen and processed.
+//
+// 中文说明：头部可能分多次 Write 到达，因此在未见分隔符前持续累积并返回成功；
+// 一旦识别出完整头部，解析后立即把同一批数据里的 body 字节转发。
+// 缓冲区上限防止恶意上游发送无限长的「头部」耗尽内存。
 func (h *headerInterceptingConn) Write(b []byte) (int, error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -297,6 +325,8 @@ func (h *headerInterceptingConn) Write(b []byte) (int, error) {
 	return len(b), err
 }
 
+// tunnelingWebsocketUpgraderConn 在收到后端响应头之前延迟初始化，
+// 之后把读写委派给真正的连接（WebSocket 或 hijack 后的原始连接）。
 type tunnelingWebsocketUpgraderConn struct {
 	// req is the websocket request, used for upgrading
 	req *http.Request
@@ -311,6 +341,12 @@ type tunnelingWebsocketUpgraderConn struct {
 	err error
 }
 
+// InitializeWrite 根据后端响应决定下游连接的形态：
+//   - 101：校验 Upgrade/Connection 头后，升级为 WebSocket 并包装成隧道连接；
+//   - 其他状态：把原始响应字节回放到 hijack 得到的连接上，透传给客户端。
+//
+// 中文说明：错误路径会关闭可能已打开的连接，避免泄漏；升级后不再向 ResponseWriter
+// 写错误（此时 HTTP 响应已提交，再写会产生无效数据）。
 func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.Response, backendResponseBytes []byte) (err error) {
 	// make sure we close a connection we open in error cases
 	var conn net.Conn
@@ -333,6 +369,7 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 	if backendResponse.StatusCode == http.StatusSwitchingProtocols {
 		connectionHeader := strings.ToLower(backendResponse.Header.Get(httpstream.HeaderConnection))
 		upgradeHeader := strings.ToLower(backendResponse.Header.Get(httpstream.HeaderUpgrade))
+		// 校验后端确实同意 SPDY 升级；缺失头说明后端行为异常，不能继续隧道化。
 		if !strings.Contains(connectionHeader, strings.ToLower(httpstream.HeaderUpgrade)) || !strings.Contains(upgradeHeader, strings.ToLower(spdy.HeaderSpdy31)) {
 			logger.Error(nil, "Unable to upgrade: missing upgrade headers in response", "headers", backendResponse.Header)
 			u.err = fmt.Errorf("unable to upgrade: missing upgrade headers in response")
@@ -381,6 +418,9 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 		return u.err
 	}
 	// replay the backend response bytes to the hijacked conn
+	//
+	// 中文说明：设置写超时，避免客户端不读取时永久阻塞；回放的是原始字节，
+	// 保证状态行、头部与 body 与后端完全一致。
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	_, err = conn.Write(backendResponseBytes)
 	if err != nil {
@@ -391,6 +431,7 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 	return nil
 }
 
+// Read 在初始化前返回空读而非阻塞，避免上游在握手完成前卡住。
 func (u *tunnelingWebsocketUpgraderConn) Read(b []byte) (n int, err error) {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -403,6 +444,8 @@ func (u *tunnelingWebsocketUpgraderConn) Read(b []byte) (n int, err error) {
 	// return empty read without blocking until we are initialized
 	return 0, nil
 }
+
+// Write 在初始化前直接报错：调用方不应在响应头确定之前写数据。
 func (u *tunnelingWebsocketUpgraderConn) Write(b []byte) (n int, err error) {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -414,6 +457,8 @@ func (u *tunnelingWebsocketUpgraderConn) Write(b []byte) (n int, err error) {
 	}
 	return 0, fmt.Errorf("Write called before Initialize")
 }
+
+// Close 在未初始化时记录关闭状态并写一个 500 响应，防止后续 InitializeWrite 再升级。
 func (u *tunnelingWebsocketUpgraderConn) Close() error {
 	u.lock.Lock()
 	defer u.lock.Unlock()
@@ -429,6 +474,8 @@ func (u *tunnelingWebsocketUpgraderConn) Close() error {
 	http.Error(u.w, u.err.Error(), http.StatusInternalServerError)
 	return nil
 }
+
+// LocalAddr 在初始化前返回空地址，避免调用方因 nil 解引用而 panic。
 func (u *tunnelingWebsocketUpgraderConn) LocalAddr() net.Addr {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -437,6 +484,8 @@ func (u *tunnelingWebsocketUpgraderConn) LocalAddr() net.Addr {
 	}
 	return noopAddr{}
 }
+
+// RemoteAddr 在初始化前返回空地址，理由同 LocalAddr。
 func (u *tunnelingWebsocketUpgraderConn) RemoteAddr() net.Addr {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -445,6 +494,8 @@ func (u *tunnelingWebsocketUpgraderConn) RemoteAddr() net.Addr {
 	}
 	return noopAddr{}
 }
+
+// SetDeadline 在初始化前是空操作：尚无底层连接可设置超时。
 func (u *tunnelingWebsocketUpgraderConn) SetDeadline(t time.Time) error {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -453,6 +504,8 @@ func (u *tunnelingWebsocketUpgraderConn) SetDeadline(t time.Time) error {
 	}
 	return nil
 }
+
+// SetReadDeadline 在初始化前是空操作。
 func (u *tunnelingWebsocketUpgraderConn) SetReadDeadline(t time.Time) error {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -461,6 +514,8 @@ func (u *tunnelingWebsocketUpgraderConn) SetReadDeadline(t time.Time) error {
 	}
 	return nil
 }
+
+// SetWriteDeadline 在初始化前是空操作。
 func (u *tunnelingWebsocketUpgraderConn) SetWriteDeadline(t time.Time) error {
 	u.lock.RLock()
 	defer u.lock.RUnlock()
@@ -470,6 +525,7 @@ func (u *tunnelingWebsocketUpgraderConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+// noopAddr 是初始化前的占位地址，Network/String 均为空以表明「尚不可知」。
 type noopAddr struct{}
 
 func (n noopAddr) Network() string { return "" }

@@ -63,12 +63,15 @@ import (
 var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
+// init 注册 meta 与 example 类型，供存储层的编解码与策略测试使用。
 func init() {
 	metav1.AddToGroupVersion(scheme, metav1.SchemeGroupVersion)
 	utilruntime.Must(example.AddToScheme(scheme))
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 }
 
+// testGracefulStrategy 始终声明可优雅删除，用于验证删除走
+// GuaranteedUpdate 而非直接删除。
 type testGracefulStrategy struct {
 	testRESTStrategy
 }
@@ -79,6 +82,8 @@ func (t testGracefulStrategy) CheckGracefulDelete(ctx context.Context, obj runti
 
 var _ rest.RESTGracefulDeleteStrategy = testGracefulStrategy{}
 
+// testOrphanDeleteStrategy 把默认垃圾回收策略设为 Orphan，用于验证
+// 未显式指定传播策略时的默认行为。
 type testOrphanDeleteStrategy struct {
 	*testRESTStrategy
 }
@@ -87,6 +92,9 @@ func (t *testOrphanDeleteStrategy) DefaultGarbageCollectionPolicy(ctx context.Co
 	return rest.OrphanDependents
 }
 
+// mutatingDeleteRESTStrategy 在 CheckGracefulDelete 中改写传入的
+// DeleteOptions，用于验证 DeleteCollection 不会把同一份 options 共享给
+// 多个对象而被互相污染。
 type mutatingDeleteRESTStrategy struct {
 	runtime.ObjectTyper
 }
@@ -97,6 +105,9 @@ func (t *mutatingDeleteRESTStrategy) CheckGracefulDelete(ctx context.Context, ob
 	return true
 }
 
+// testRESTStrategy 是可由测试调整行为的 REST 策略：命名空间范围、
+// create-on-update、无条件更新等开关，以及 PrepareForCreate 打标签的
+// 副作用，便于断言策略确实被调用。
 type testRESTStrategy struct {
 	runtime.ObjectTyper
 	names.NameGenerator
@@ -141,10 +152,15 @@ func (t *testRESTStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtim
 }
 func (t *testRESTStrategy) Canonicalize(obj runtime.Object) {}
 
+// NewTestGenericStoreRegistry 返回基于 etcd 测试实例、未启用 cache 的
+// Store 及其清理函数。
 func NewTestGenericStoreRegistry(t *testing.T) (factory.DestroyFunc, *Store) {
 	return newTestGenericStoreRegistry(t, scheme, false)
 }
 
+// TestCompleteWithOptionsDefaultsStoreKeyFuncs 验证 CompleteWithOptions 会
+// 根据是否命名空间范围补齐 KeyRootFunc/KeyFunc，生成 /pods 或
+// /pods/<ns> 前缀的存储键。
 func TestCompleteWithOptionsDefaultsStoreKeyFuncs(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -209,6 +225,9 @@ func TestCompleteWithOptionsDefaultsStoreKeyFuncs(t *testing.T) {
 	}
 }
 
+// TestDefaultStoreKeyFuncs 覆盖默认键函数的边界：命名空间缺失、名称为空、
+// 名称含 "/"（会破坏层级键）都必须报错；集群级资源忽略意外传入的
+// 命名空间。
 func TestDefaultStoreKeyFuncs(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -329,6 +348,7 @@ func TestDefaultStoreKeyFuncs(t *testing.T) {
 	}
 }
 
+// getPodAttrs 把 Pod 名称映射为标签，供选择器测试使用。
 func getPodAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	pod := obj.(*example.Pod)
 	return labels.Set{"name": pod.ObjectMeta.Name}, nil, nil
@@ -350,6 +370,8 @@ func matchPodName(names ...string) storage.SelectionPredicate {
 	}
 }
 
+// matchEverything 返回匹配所有对象的选择器，属性函数返回 nil 表示
+// 无需额外属性。
 func matchEverything() storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label: labels.Everything(),
@@ -360,6 +382,9 @@ func matchEverything() storage.SelectionPredicate {
 	}
 }
 
+// TestStoreList 验证 ListPredicate 在空集合、全量、按名称过滤以及
+// 无命名空间上下文时的行为。比较使用 DeepDerivative，因为存储层会
+// 回填 ResourceVersion 等字段。
 func TestStoreList(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "bar"},
@@ -437,6 +462,9 @@ func TestStoreList(t *testing.T) {
 
 // TestStoreListResourceVersion tests that if List with ResourceVersion > 0, it will wait until
 // the results are as fresh as given version.
+//
+// 验证带 ResourceVersion 的 List 会阻塞到存储追平该版本：先以 rev+1
+// 发起 List，确认 500ms 内不返回，创建第二个对象后才返回两条结果。
 func TestStoreListResourceVersion(t *testing.T) {
 	fooPod := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "foo"},
@@ -499,6 +527,8 @@ func TestStoreListResourceVersion(t *testing.T) {
 	}
 }
 
+// TestStoreCreate 验证创建路径的准入拒绝、重复创建、优雅删除期间再次
+// 创建（必须返回带 "object is being deleted:" 的 AlreadyExists）等语义。
 func TestStoreCreate(t *testing.T) {
 	gracefulPeriod := int64(50)
 	podA := &example.Pod{
@@ -577,12 +607,16 @@ type sequentialNameGenerator struct {
 	seq int
 }
 
+// GenerateName 追加递增序号；测试通过重置 seq 模拟名称空间耗尽。
 func (m *sequentialNameGenerator) GenerateName(base string) string {
 	generated := fmt.Sprintf("%s%d", base, m.seq)
 	m.seq++
 	return generated
 }
 
+// TestStoreCreateWithRetryNameGenerate 验证 GenerateName 冲突时的重试：
+// 前 8 个候选名已被占用时，重试次数耗尽后应返回 AlreadyExists，而不是
+// 无限循环。
 func TestStoreCreateWithRetryNameGenerate(t *testing.T) {
 
 	namedObj := func(id int) *example.Pod {
@@ -631,6 +665,9 @@ func TestStoreCreateWithRetryNameGenerate(t *testing.T) {
 	}
 }
 
+// TestNewCreateOptionsFromUpdateOptions 用 randfill 随机填充 UpdateOptions
+// 后转换为 CreateOptions，并比较 JSON 形态。目的是在任一选项结构体新增
+// 字段时立即暴露转换器遗漏，而不是悄悄丢字段。
 func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
 
@@ -683,6 +720,8 @@ func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 	}
 }
 
+// TestNewDeleteOptionsFromUpdateOptions 与 CreateOptions 的转换测试同理；
+// 两者字段集合不同，因此先删除各自独有的键再比较。
 func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
 
@@ -744,6 +783,9 @@ func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 	}
 }
 
+// TestStoreCreateHooks 用里程碑序列验证创建钩子的调用顺序与失败路径：
+// BeginCreate → 存储写入 → FinishCreate(success) → AfterCreate →
+// Decorator。BeginCreate 失败时后续钩子都不得执行。
 func TestStoreCreateHooks(t *testing.T) {
 	// To track which hooks were called in what order.  Not all hooks can
 	// mutate the object.
@@ -887,6 +929,8 @@ func TestStoreCreateHooks(t *testing.T) {
 	}
 }
 
+// isQualifiedResource 断言错误详情中的 Kind 与 Group 与请求资源一致，
+// 确保客户端能据此定位错误对象。
 func isQualifiedResource(err error, kind, group string) bool {
 	if err.(errors.APIStatus).Status().Details.Kind != kind || err.(errors.APIStatus).Status().Details.Group != group {
 		return false
@@ -894,6 +938,7 @@ func isQualifiedResource(err error, kind, group string) bool {
 	return true
 }
 
+// updateAndVerify 执行一次更新并回读，确认写入与读取结果一致。
 func updateAndVerify(t *testing.T, ctx context.Context, registry *Store, pod *example.Pod) bool {
 	obj, _, err := registry.Update(ctx, pod.Name, rest.DefaultUpdatedObjectInfo(pod), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if err != nil {
@@ -912,6 +957,8 @@ func updateAndVerify(t *testing.T, ctx context.Context, registry *Store, pod *ex
 	return true
 }
 
+// TestStoreUpdate 覆盖更新路径：不存在对象的 NotFound、create-on-update、
+// 过期 ResourceVersion 的 Conflict、更新准入拒绝，以及正常更新。
 func TestStoreUpdate(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test"},
@@ -996,6 +1043,8 @@ func TestStoreUpdate(t *testing.T) {
 
 }
 
+// TestNoOpUpdates 验证内容未变化的更新仍然返回正确对象，但不应写存储
+// （ResourceVersion 保持不变），避免无意义地触发 watch 事件。
 func TestNoOpUpdates(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
@@ -1052,6 +1101,9 @@ func TestNoOpUpdates(t *testing.T) {
 	}
 }
 
+// TestStoreUpdateHooks 验证更新钩子的顺序：BeginUpdate → 存储写入 →
+// FinishUpdate(success) → AfterUpdate → Decorator；BeginUpdate 失败时
+// 后续钩子不执行。创建钩子在此场景中不得被触发。
 func TestStoreUpdateHooks(t *testing.T) {
 	// To track which hooks were called in what order.  Not all hooks can
 	// mutate the object.
@@ -1189,6 +1241,8 @@ func TestStoreUpdateHooks(t *testing.T) {
 	}
 }
 
+// TestStoreCreateOnUpdateHooks 验证 create-on-update 走创建钩子而非更新
+// 钩子，顺序与普通创建一致；TTL 失败时 FinishCreate 必须收到 false。
 func TestStoreCreateOnUpdateHooks(t *testing.T) {
 	// To track which hooks were called in what order.  Not all hooks can
 	// mutate the object.
@@ -1329,6 +1383,9 @@ func TestStoreCreateOnUpdateHooks(t *testing.T) {
 	}
 }
 
+// TestStoreUpdateHooksInnerRetry 通过 staleGuaranteedUpdateStorage 强制
+// GuaranteedUpdate 内部重试，验证每次重试都会重新执行 BeginUpdate/
+// FinishUpdate，且只有最后一次成功后才执行 AfterUpdate/Decorator。
 func TestStoreUpdateHooksInnerRetry(t *testing.T) {
 	// To track which hooks were called in what order.  Not all hooks can
 	// mutate the object.
@@ -1438,6 +1495,8 @@ func TestStoreUpdateHooksInnerRetry(t *testing.T) {
 	}
 }
 
+// TestStoreGet 验证读取不存在对象返回 NotFound，以及 create-on-update
+// 后可以正常 Get。
 func TestStoreGet(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "foo"},
@@ -1459,6 +1518,8 @@ func TestStoreGet(t *testing.T) {
 	}
 }
 
+// TestStoreDelete 验证非优雅删除：删除不存在的对象返回 NotFound 且
+// 不触发 AfterDelete；删除成功后才调用 AfterDelete 并真正移除对象。
 func TestStoreDelete(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
@@ -1508,6 +1569,8 @@ func TestStoreDelete(t *testing.T) {
 	}
 }
 
+// TestStoreGracefulDeleteWithResourceVersion 验证带 ResourceVersion
+// 前置条件的优雅删除（grace=0）能立即完成并移除对象。
 func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
@@ -1569,6 +1632,10 @@ func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 // race condition where the graceful delete is unable to complete
 // in prior operation, but the pod remains with deletion timestamp
 // and grace period set to 0.
+//
+// 中文说明：对象已带 DeletionTimestamp 且宽限期为 0 时，BeforeDelete
+// 必须判定为"可立即删除"（graceful/gracefulPending 均为 false），
+// 使上一次未完成的删除能够在本次重试中收尾。
 func TestGracefulStoreCanDeleteIfExistingGracePeriodZero(t *testing.T) {
 	deletionTimestamp := metav1.NewTime(time.Now())
 	deletionGracePeriodSeconds := int64(0)
@@ -1602,6 +1669,9 @@ func TestGracefulStoreCanDeleteIfExistingGracePeriodZero(t *testing.T) {
 	}
 }
 
+// TestGracefulStoreHandleFinalizers 验证带 finalizer 的对象在删除后仅被
+// 标记删除（设置 DeletionTimestamp/Generation 递增），直到 finalizer 被
+// 移除才真正删除；GC 开关两种取值下行为一致。
 func TestGracefulStoreHandleFinalizers(t *testing.T) {
 	initialGeneration := int64(1)
 	podWithFinalizer := &example.Pod{
@@ -1686,6 +1756,9 @@ func TestGracefulStoreHandleFinalizers(t *testing.T) {
 	}
 }
 
+// TestNonGracefulStoreHandleFinalizers 与优雅删除用例对称，但使用非优雅
+// 策略：删除通过 GuaranteedUpdate 设置 DeletionTimestamp 与 0 宽限期，
+// 同样要等 finalizer 移除后才消失。
 func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 	initialGeneration := int64(1)
 	podWithFinalizer := &example.Pod{
@@ -1787,6 +1860,9 @@ func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 	}
 }
 
+// TestStoreDeleteWithOrphanDependents 穷举 OrphanDependents 选项（true/
+// false/nil）与删除策略（默认/orphan）的组合，验证孤儿 finalizer 的
+// 增删规则：显式选项优先级最高，nil 时由策略默认值决定。
 func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 	initialGeneration := int64(1)
 	podWithOrphanFinalizer := func(name string) *example.Pod {
@@ -2058,6 +2134,11 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 }
 
 // Test the DeleteOptions.PropagationPolicy is handled correctly
+//
+// TestStoreDeletionPropagation 验证 PropagationPolicy（Foreground/
+// Background/Orphan/默认）与已有 finalizer 的组合如何决定最终 finalizer：
+// Foreground 加 DeleteDependents，Orphan 加 OrphanDependents，Background
+// 与默认策略无额外 finalizer 时直接删除。
 func TestStoreDeletionPropagation(t *testing.T) {
 	initialGeneration := int64(1)
 
@@ -2279,17 +2360,22 @@ func TestStoreDeletionPropagation(t *testing.T) {
 	}
 }
 
+// storageWithCounter 包装底层存储并统计 GetList 调用次数，用于验证
+// DeleteCollection 的分页行为。
 type storageWithCounter struct {
 	storage.Interface
 
 	listCounter int64
 }
 
+// GetList 计数后透传。
 func (s *storageWithCounter) GetList(ctx context.Context, key string, opts storage.ListOptions, listObj runtime.Object) error {
 	atomic.AddInt64(&s.listCounter, 1)
 	return s.Interface.GetList(ctx, key, opts, listObj)
 }
 
+// TestStoreDeleteCollection 验证批量删除按页处理：10 个对象、页大小 2
+// 时应发起 5 次 list，且最终全部删除。页大小被临时调小以便覆盖分页。
 func TestStoreDeleteCollection(t *testing.T) {
 	testContext := genericapirequest.WithNamespace(genericapirequest.NewContext(), "test")
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
@@ -2334,6 +2420,8 @@ func TestStoreDeleteCollection(t *testing.T) {
 	}
 }
 
+// TestStoreDeleteCollectionNoMutateOptions 验证删除策略即使改写
+// DeleteOptions，也不会污染调用方传入的原始选项（每个对象需独立副本）。
 func TestStoreDeleteCollectionNoMutateOptions(t *testing.T) {
 	podA := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 	podB := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar"}}
@@ -2364,6 +2452,8 @@ func TestStoreDeleteCollectionNoMutateOptions(t *testing.T) {
 	}
 }
 
+// TestStoreDeleteCollectionNotFound 并发发起两次批量删除，验证对象已被
+// 另一路删除时返回的 NotFound 被吞掉，不导致整体失败。
 func TestStoreDeleteCollectionNotFound(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
@@ -2405,6 +2495,8 @@ func TestStoreDeleteCollectionNotFound(t *testing.T) {
 	}
 }
 
+// TestStoreDeleteCollectionWorkDistributorExited 验证删除校验函数返回错误
+// 时，错误原样向上返回，而不是被 worker 吞掉或包装。
 func TestStoreDeleteCollectionWorkDistributorExited(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
@@ -2436,6 +2528,8 @@ func TestStoreDeleteCollectionWorkDistributorExited(t *testing.T) {
 	}
 }
 
+// TestStoreDeleteCollectionWithContextCancellation 验证上下文取消后 worker
+// 立即停止：删除校验只应被调用一次，且返回 context.Canceled。
 func TestStoreDeleteCollectionWithContextCancellation(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
@@ -2483,6 +2577,9 @@ func TestStoreDeleteCollectionWithContextCancellation(t *testing.T) {
 
 // Test whether objects deleted with DeleteCollection are correctly delivered
 // to watchers.
+//
+// TestStoreDeleteCollectionWithWatch 验证批量删除的每个对象都以 DELETED
+// 事件送达 watcher，避免批量路径绕过 watch 通知。
 func TestStoreDeleteCollectionWithWatch(t *testing.T) {
 	podA := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
@@ -2521,6 +2618,8 @@ func TestStoreDeleteCollectionWithWatch(t *testing.T) {
 	}
 }
 
+// TestStoreWatch 验证 WatchPredicate 在单名、多名与无命名空间上下文下的
+// 事件投递。
 func TestStoreWatch(t *testing.T) {
 	testContext := genericapirequest.WithNamespace(genericapirequest.NewContext(), "test")
 	noNamespaceContext := genericapirequest.NewContext()
@@ -2578,6 +2677,9 @@ func TestStoreWatch(t *testing.T) {
 	}
 }
 
+// newTestGenericStoreRegistry 创建基于 etcd 测试实例的 Store，可选叠加
+// watch cache。启用 cache 时必须等待其初始化完成，否则 Get/List/Watch
+// 可能返回 429。
 func newTestGenericStoreRegistry(t *testing.T, scheme *runtime.Scheme, hasCacheEnabled bool) (factory.DestroyFunc, *Store) {
 	podPrefix := "/pods/"
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
@@ -2663,6 +2765,8 @@ func newTestGenericStoreRegistry(t *testing.T, scheme *runtime.Scheme, hasCacheE
 	}
 }
 
+// TestFinalizeDelete 验证删除完成时返回的 Status 包含名称、组、资源与
+// UID，客户端据此确认删除的是预期对象。
 func TestFinalizeDelete(t *testing.T) {
 	// Verify that it returns the expected Status.
 	destroyFunc, s := NewTestGenericStoreRegistry(t)
@@ -2690,6 +2794,7 @@ func TestFinalizeDelete(t *testing.T) {
 	}
 }
 
+// fakeRequestInfo 构造资源请求信息，供按 group 区分的错误详情测试。
 func fakeRequestInfo(resource, apiGroup string) *genericapirequest.RequestInfo {
 	return &genericapirequest.RequestInfo{
 		IsResourceRequest: true,
@@ -2706,6 +2811,8 @@ func fakeRequestInfo(resource, apiGroup string) *genericapirequest.RequestInfo {
 	}
 }
 
+// TestQualifiedResource 验证 Update/Get/Delete/Create 的错误详情都带上了
+// 请求对应的 Kind 与 Group，而不是默认资源名。
 func TestQualifiedResource(t *testing.T) {
 	podA := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test"},
@@ -2769,6 +2876,8 @@ func TestQualifiedResource(t *testing.T) {
 	}
 }
 
+// denyCreateValidation 与 denyUpdateValidation 模拟准入拒绝，返回普通
+// 错误以验证存储层不会把其误当作 NotFound/Conflict。
 func denyCreateValidation(ctx context.Context, obj runtime.Object) error {
 	return fmt.Errorf("admission denied")
 }
@@ -2777,6 +2886,9 @@ func denyUpdateValidation(ctx context.Context, obj, old runtime.Object) error {
 	return fmt.Errorf("admission denied")
 }
 
+// fakeStrategy 按请求的 group/version 返回不同的默认垃圾回收策略：
+// extensions 与 apps/v1beta1、v1beta2 为向后兼容选择 Orphan，其余
+// 选择 DeleteDependents。
 type fakeStrategy struct {
 	runtime.ObjectTyper
 	names.NameGenerator
@@ -2799,6 +2911,9 @@ func (fakeStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.Gar
 	return rest.OrphanDependents
 }
 
+// TestDeletionFinalizersForGarbageCollection 验证删除时按请求 group/version
+// 决定添加哪种 finalizer，并保持旧版本（extensions/apps v1beta*）的
+// Orphan 兼容语义。
 func TestDeletionFinalizersForGarbageCollection(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
@@ -2867,6 +2982,8 @@ func TestDeletionFinalizersForGarbageCollection(t *testing.T) {
 	}
 }
 
+// TestMarkAsDeleting 验证 DeletionTimestamp 的语义：未设置或设置在未来
+// 时改写为当前时间；已处于过去则保持不变，保证删除时间单调不倒退。
 func TestMarkAsDeleting(t *testing.T) {
 	now := time.Now()
 	soon := now.Add(time.Second)
@@ -2911,6 +3028,8 @@ func TestMarkAsDeleting(t *testing.T) {
 	}
 }
 
+// staleGuaranteedUpdateStorage 总是把 cachedObj 作为 GuaranteedUpdate 的
+// 缓存建议传入，用于模拟缓存落后于持久化状态的场景。
 type staleGuaranteedUpdateStorage struct {
 	storage.Interface
 	cachedObj runtime.Object
@@ -2923,6 +3042,8 @@ func (s *staleGuaranteedUpdateStorage) GuaranteedUpdate(
 	return s.Interface.GuaranteedUpdate(ctx, key, destination, ignoreNotFound, preconditions, tryUpdate, s.cachedObj)
 }
 
+// TestDeleteWithCachedObject 验证删除判定必须基于持久化对象而非缓存：
+// 缓存对象无 finalizer，但持久化对象有，因此不能立即删除。
 func TestDeleteWithCachedObject(t *testing.T) {
 	podName := "foo"
 	podWithFinalizer := &example.Pod{
@@ -2955,6 +3076,8 @@ func TestDeleteWithCachedObject(t *testing.T) {
 	}
 }
 
+// TestPreconditionalUpdateWithCachedObject 验证缓存中旧 UID 不会导致
+// 前置条件误判：删除并以新 UID 重建后，更新仍应成功。
 func TestPreconditionalUpdateWithCachedObject(t *testing.T) {
 	podName := "foo"
 	pod := &example.Pod{
@@ -3006,6 +3129,10 @@ func TestPreconditionalUpdateWithCachedObject(t *testing.T) {
 // TestRetryDeleteValidation checks if the deleteValidation is called again if
 // the GuaranteedUpdate in the Delete handler conflicts with a simultaneous
 // Update.
+//
+// TestRetryDeleteValidation 用并发 Update 制造冲突，验证删除在内部重试时
+// 会再次调用 deleteValidation（因此调用次数为 2），保证最终删除决定基于
+// 最新对象。
 func TestRetryDeleteValidation(t *testing.T) {
 	testContext := genericapirequest.WithNamespace(genericapirequest.NewContext(), "test")
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
@@ -3087,10 +3214,13 @@ func TestRetryDeleteValidation(t *testing.T) {
 	}
 }
 
+// emptyIndexFunc 是测试用的空索引函数。
 func emptyIndexFunc(obj interface{}) ([]string, error) {
 	return []string{}, nil
 }
 
+// TestValidateIndexers 验证索引名必须以 "f:"（字段）或 "l:"（标签）开头
+// 且带实际字段名；nil 索引合法，裸 "f" 或缺少前缀的索引都非法。
 func TestValidateIndexers(t *testing.T) {
 	testcases := []struct {
 		name          string

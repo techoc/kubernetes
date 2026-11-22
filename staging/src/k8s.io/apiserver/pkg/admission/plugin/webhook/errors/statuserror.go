@@ -25,10 +25,15 @@ import (
 )
 
 // ToStatusErr returns a StatusError with information about the webhook plugin
+//
+// 入参 result 可能来自不受信任的 webhook，因此这里会把状态码提升到 4xx
+// 以上、把状态强制为 Failure，并统一加上 “denied the request” 前缀，
+// 防止 webhook 用 2xx/3xx 表达拒绝而误导客户端。
 func ToStatusErr(webhookName string, result *metav1.Status) *apierrors.StatusError {
 	deniedBy := fmt.Sprintf("admission webhook %q denied the request", webhookName)
 	const noExp = "without explanation"
 
+	// webhook 未给出状态时，按失败处理。
 	if result == nil {
 		result = &metav1.Status{Status: metav1.StatusFailure}
 	}
@@ -42,6 +47,7 @@ func ToStatusErr(webhookName string, result *metav1.Status) *apierrors.StatusErr
 		result.Status = metav1.StatusFailure
 	}
 
+	// 保留 webhook 自带的说明，但强制加上来源前缀，便于排查是哪个 webhook 拒绝的。
 	switch {
 	case len(result.Message) > 0:
 		result.Message = fmt.Sprintf("%s: %s", deniedBy, result.Message)
@@ -57,6 +63,9 @@ func ToStatusErr(webhookName string, result *metav1.Status) *apierrors.StatusErr
 }
 
 // NewDryRunUnsupportedErr returns a StatusError with information about the webhook plugin
+//
+// dry-run 请求不会真正持久化，webhook 声明不支持 dry-run 时必须直接返回 400，
+// 而不是静默放行，否则会掩盖 dry-run 的副作用检查语义。
 func NewDryRunUnsupportedErr(webhookName string) *apierrors.StatusError {
 	reason := fmt.Sprintf("admission webhook %q does not support dry run", webhookName)
 	return apierrors.NewBadRequest(reason)

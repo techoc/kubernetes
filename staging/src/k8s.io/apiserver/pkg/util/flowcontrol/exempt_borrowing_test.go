@@ -30,6 +30,10 @@ import (
 	flowcontrol "k8s.io/api/flowcontrol/v1"
 )
 
+// TestUpdateBorrowing 验证优先级与公平性（APF）中受限优先级借还 seat 的算法：
+// 豁免优先级可以借用其余优先级闲置的并发额度，而非豁免优先级只能在
+// minCL（保证下限）与 nominalCL（名义额度）之间按需获得额度。
+// 三个场景分别覆盖“所有人超额争抢”“非豁免各得一半”“仅一个优先级愿意出借”。
 func TestUpdateBorrowing(t *testing.T) {
 	startTime := time.Now()
 	clk, _ := testeventclock.NewFake(startTime, 0, nil)
@@ -42,6 +46,8 @@ func TestUpdateBorrowing(t *testing.T) {
 	k8sClient := clientsetfake.NewSimpleClientset(plcLow, plcExempt, plcHigh, plcMid)
 	informerFactory := informers.NewSharedInformerFactory(k8sClient, 0)
 	flowcontrolClient := k8sClient.FlowcontrolV1()
+	// 把非豁免优先级的 nominal shares 之和放大 6 倍作为服务端并发上限，
+	// 这样测试中每一档都能明确区分 minCL/nominalCL 的取值。
 	serverCL := int(*plcHigh.Spec.Limited.NominalConcurrencyShares+
 		*plcMid.Spec.Limited.NominalConcurrencyShares+
 		*plcLow.Spec.Limited.NominalConcurrencyShares) * 6
@@ -70,6 +76,7 @@ func TestUpdateBorrowing(t *testing.T) {
 	// Scenario 1: everybody wants more than ServerConcurrencyLimit.
 	// Test the case of exempt borrowing so much that less than minCL
 	// is available to each non-exempt.
+	// 所有人超额时，豁免档拿走全部额外额度，非豁免档只能保留 minCL。
 	stateExempt.seatDemandIntegrator.Set(float64(serverCL + 100))
 	stateHigh.seatDemandIntegrator.Set(float64(serverCL + 100))
 	stateMid.seatDemandIntegrator.Set(float64(serverCL + 100))
@@ -98,6 +105,8 @@ func TestUpdateBorrowing(t *testing.T) {
 	}
 
 	// Scenario 2: non-exempt want more than serverCL but get halfway between minCL and minCurrentCL.
+	// 非豁免档在 minCL 与 nominalCL 之间按需求平分，剩余额度归豁免档。
+	// 需要在两个调整周期各更新一次，因为额度调整是渐进收敛而非一步到位。
 	expectedHigh := (stateHigh.nominalCL + stateHigh.minCL) / 2
 	expectedMid := (stateMid.nominalCL + stateMid.minCL) / 2
 	expectedLow := (stateLow.nominalCL + stateLow.minCL) / 2
@@ -130,6 +139,8 @@ func TestUpdateBorrowing(t *testing.T) {
 
 	// Scenario 3: only mid is willing to lend, and exempt borrows all of that.
 	// Test the case of regular borrowing.
+	// mid 需求降到 1，说明它不再需要自己的名义额度，豁免档因此可以借走其差额；
+	// high/low 仍超额，保持 nominalCL。
 	expectedHigh = stateHigh.nominalCL
 	expectedMid = stateMid.minCL
 	expectedLow = stateLow.nominalCL

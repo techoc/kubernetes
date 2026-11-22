@@ -39,6 +39,7 @@ import (
 )
 
 func init() {
+	// 测试用编解码器只注册 corev1，与 peer endpoint lease 实际存储的 Endpoints 类型一致。
 	var scheme = runtime.NewScheme()
 
 	metav1.AddToGroupVersion(scheme, metav1.SchemeGroupVersion)
@@ -50,6 +51,8 @@ func init() {
 
 var codecs serializer.CodecFactory
 
+// serverInfo 描述测试中一个 API server 的 lease 状态：
+// existingIP 为初始登记的地址，newIP 非空表示测试期间发生地址变更。
 type serverInfo struct {
 	existingIP     string
 	id             string
@@ -59,6 +62,8 @@ type serverInfo struct {
 	expectEndpoint string
 }
 
+// NewFakePeerEndpointReconciler 构造直接使用 storage.Interface 的 reconciler，
+// 跳过真实 client，便于在单测中精确控制 lease 内容。
 func NewFakePeerEndpointReconciler(t *testing.T, baseKey string, s storage.Interface) peerEndpointLeaseReconciler {
 	return peerEndpointLeaseReconciler{serverLeases: &peerEndpointLeases{
 		storage:   s,
@@ -68,6 +73,7 @@ func NewFakePeerEndpointReconciler(t *testing.T, baseKey string, s storage.Inter
 	}}
 }
 
+// SetKeys 为每个测试 server 写入初始 lease。
 func (f *peerEndpointLeaseReconciler) SetKeys(servers []serverInfo) error {
 	for _, server := range servers {
 		if err := f.UpdateLease(server.id, server.existingIP, server.ports); err != nil {
@@ -77,6 +83,8 @@ func (f *peerEndpointLeaseReconciler) SetKeys(servers []serverInfo) error {
 	return nil
 }
 
+// TestPeerEndpointLeaseReconciler 验证 lease 地址的选取规则：
+// 已有地址优先沿用，新地址出现时以新地址为准，无已有地址时直接登记新地址。
 func TestPeerEndpointLeaseReconciler(t *testing.T) {
 	// enable feature flags
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -97,6 +105,7 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 		expectLeases []string
 	}{
 		{
+			// 已有地址未变化时应原样保留，不因每次调谐而重写。
 			testName: "existing IP satisfy",
 			servers: []serverInfo{{
 				existingIP:     "4.3.2.1",
@@ -112,6 +121,7 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 			expectLeases: []string{"4.3.2.1", "1.2.3.4"},
 		},
 		{
+			// 地址变更（例如 API server 重建）后应以新地址覆盖旧值。
 			testName: "existing IP + new IP = should return the new IP",
 			servers: []serverInfo{{
 				existingIP:     "4.3.2.2",
@@ -129,6 +139,7 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 			expectLeases: []string{"4.3.2.1", "1.1.1.1"},
 		},
 		{
+			// 首次登记场景：没有历史 lease，直接采用当前地址。
 			testName: "no existing IP, should return new IP",
 			servers: []serverInfo{{
 				id:             "server-1",
@@ -189,6 +200,8 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 	}
 }
 
+// TestPeerLeaseRemoveEndpoints 验证 lease 删除语义：正常启动时只删除目标 lease，
+// 已停止调谐的实例不再执行删除。
 func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 	// enable feature flags
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -210,6 +223,7 @@ func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 		apiServerStartup bool
 	}{
 		{
+			// API server 启动时清理自身旧 lease，其他实例的 lease 必须保留。
 			testName: "successful remove previous endpoints before apiserver starts",
 			servers: []serverInfo{
 				{
@@ -227,6 +241,7 @@ func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 			apiServerStartup: true,
 		},
 		{
+			// 已 StopReconciling 的实例即使传入新 IP 也不应改写 lease。
 			testName: "stop reconciling with new IP not in existing ip list",
 			servers: []serverInfo{{
 				existingIP: "1.2.3.4",

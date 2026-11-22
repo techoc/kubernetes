@@ -35,14 +35,17 @@ const (
 	// idleTimeout is the read/write deadline set for websocket server connection. Reading
 	// or writing the connection will return an i/o timeout if this deadline is exceeded.
 	// Currently, we use the same value as the kubelet websocket server.
+	// 中文说明：与 kubelet 保持一致，避免两端超时策略不同造成“半死”连接。
 	defaultIdleConnectionTimeout = 4 * time.Hour
 
 	// Deadline for writing errors to the websocket connection before io/timeout.
+	// 中文说明：错误写不出去时不能无限等待，否则会拖住 handler。
 	writeErrorDeadline = 10 * time.Second
 )
 
 // Options contains details about which streams are required for
 // remote command execution.
+// 中文说明：只有被请求的流才会真正建立，未请求的通道在协议里标记为 Ignore。
 type Options struct {
 	Stdin  bool
 	Stdout bool
@@ -52,6 +55,8 @@ type Options struct {
 
 // conns contains the connection and streams used when
 // forwarding an attach or execute session into a container.
+// 中文说明：writeStatus 把 apiserver 的错误以 Status JSON 写入专用错误通道，
+// 客户端据此区分“会话结束”与“传输中断”。
 type conns struct {
 	conn         io.Closer
 	stdinStream  io.ReadCloser
@@ -65,6 +70,9 @@ type conns struct {
 
 // Create WebSocket server streams to respond to a WebSocket client. Creates the streams passed
 // in the stream options.
+//
+// 中文说明：resize 事件在独立 goroutine 中读取，并捕获 panic——resize 流关闭时的
+// panic 不应传播到 HTTP handler。
 func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts Options) (*conns, error) {
 	ctx, err := createWebSocketStreams(req, w, opts)
 	if err != nil {
@@ -91,6 +99,8 @@ func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts Optio
 }
 
 // Read terminal resize events off of passed stream and queue into passed channel.
+// 中文说明：解码失败即视为流结束并关闭 channel；ctx.Done 分支避免请求结束时
+// goroutine 泄漏。
 func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- remotecommand.TerminalSize) {
 	defer close(channel)
 
@@ -114,6 +124,8 @@ func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- re
 
 // createChannels returns the standard channel types for a shell connection (STDIN 0, STDOUT 1, STDERR 2)
 // along with the approximate duplex value. It also creates the error (3) and resize (4) channels.
+//
+// 中文说明：错误通道始终写、resize 始终读——客户端必须能收到错误，也能随时调整窗口。
 func createChannels(opts Options) []wsstream.ChannelType {
 	// open the requested channels, and always open the error channel
 	channels := make([]wsstream.ChannelType, 5)
@@ -143,6 +155,9 @@ func writeChannel(real bool) wsstream.ChannelType {
 
 // createWebSocketStreams returns a "conns" struct containing the websocket connection and
 // streams needed to perform an exec or an attach.
+//
+// 中文说明：仅声明 v5 子协议是有意为之——apiserver 作为服务端只需支持 kubelet 当前的
+// 协议版本；不兼容的旧客户端会被协商拒绝。
 func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts Options) (*conns, error) {
 	channels := createChannels(opts)
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{

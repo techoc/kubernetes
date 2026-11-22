@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 定义 apiserver 流式代理（RemoteCommand/PortForward 及 WebSocket）的指标。
+// 指标按状态码或子资源/代理类型打标签，用于观察流式连接的成败与路由方式。
 package metrics
 
 import (
@@ -69,6 +71,7 @@ var (
 	)
 )
 
+// Register 把本包的指标注册到全局 registry；sync.Once 保证重复调用安全。
 func Register() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(streamTranslatorRequestsTotal)
@@ -77,6 +80,7 @@ func Register() {
 	})
 }
 
+// ResetForTest 清空所有计数器，仅供测试使用。
 func ResetForTest() {
 	streamTranslatorRequestsTotal.Reset()
 	streamTunnelRequestsTotal.Reset()

@@ -21,6 +21,8 @@ import (
 )
 
 type (
+	// 这些别名用于验证 casttype 标签在代码生成中的行为，
+	// 本身不含额外语义。
 	ConditionStatus  string
 	PodConditionType string
 	PodPhase         string
@@ -30,6 +32,9 @@ type (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Pod is a collection of containers, used as either input (create, update) or as output (list, get).
+//
+// 中文说明：本包是测试用的示例 API，结构刻意模仿 core/v1 的 Pod，
+// 用来覆盖 apiserver 的通用机制（序列化、转换、patch），并非真实资源。
 type Pod struct {
 	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
@@ -53,6 +58,9 @@ type Pod struct {
 
 // PodStatus represents information about the status of a pod. Status may trail the actual
 // state of a system.
+//
+// 中文说明：status 由系统写入，客户端提交的 status 会被忽略，这一点在
+// 存储层的策略中强制，而非依赖类型定义。
 type PodStatus struct {
 	// Current condition of the pod.
 	// More info: http://kubernetes.io/docs/user-guide/pod-states#pod-phase
@@ -84,6 +92,10 @@ type PodStatus struct {
 	StartTime *metav1.Time `json:"startTime,omitempty" protobuf:"bytes,7,opt,name=startTime"`
 }
 
+// PodCondition 描述 Pod 的一个状态条件。
+//
+// 中文说明：Conditions 使用 merge 策略与 type 作为合并键，保证不同控制面组件
+// 可以并发更新各自负责的条件而不互相覆盖。
 type PodCondition struct {
 	// Type is the type of the condition.
 	// Currently only Ready.
@@ -108,6 +120,9 @@ type PodCondition struct {
 }
 
 // PodSpec is a description of a pod
+//
+// 中文说明：部分字段关闭了 conversion-gen，说明它们在内部版本中
+// 不存在，转换时会丢失——测试正是用来确认这种有意的信息损失被正确处理。
 type PodSpec struct {
 	// Restart policy for all containers within the pod.
 	// One of Always, OnFailure, Never.
@@ -182,6 +197,9 @@ type PodSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PodList is a list of Pods.
+//
+// 中文说明：列表类型需要独立的 TypeMeta/ListMeta，以便分页与 watch 时
+// 携带 resourceVersion；Items 不加 omitempty 以区分空列表与缺省字段。
 type PodList struct {
 	metav1.TypeMeta `json:""`
 	// Standard list metadata.

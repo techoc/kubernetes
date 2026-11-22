@@ -27,6 +27,10 @@ import (
 // schemaOf is the callback to find the corresponding schema by the ref.
 // This function will not mutate the original schema. If the schema needs to be
 // mutated, a copy will be returned, otherwise it returns the original schema.
+//
+// CEL 的类型检查不接受 $ref，因此必须在构建 CEL 类型前把引用内联展开。
+// 循环引用会以空 object 占位截断，避免无限递归；这也意味着循环结构在 CEL 中
+// 只能被当作不透明对象处理。
 func PopulateRefs(schemaOf func(ref string) (*spec.Schema, bool), rootRef string) (*spec.Schema, error) {
 	visitedRefs := sets.New[string]()
 	rootSchema, ok := schemaOf(rootRef)
@@ -37,6 +41,9 @@ func PopulateRefs(schemaOf func(ref string) (*spec.Schema, bool), rootRef string
 	return populateRefs(schemaOf, visitedRefs, rootSchema)
 }
 
+// populateRefs 是 PopulateRefs 的递归实现。
+// visited 记录当前递归路径上的 ref（而非全局已访问集合），因此同一 ref 出现在
+// 不同分支时仍会被各自展开，只有真正的环才会被截断。
 func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.Set[string], schema *spec.Schema) (*spec.Schema, error) {
 	result := *schema
 	changed := false
@@ -51,6 +58,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 		}
 		visited.Insert(ref)
 		// restore visited state at the end of the recursion.
+		// 回溯时移除，保证 visited 只描述当前路径。
 		defer func() {
 			visited.Delete(ref)
 		}()
@@ -79,6 +87,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 		changed = true
 		result.Properties = props
 	}
+	// map 类型的值同样可能带 ref。
 	if result.AdditionalProperties != nil && result.AdditionalProperties.Schema != nil {
 		populated, err := populateRefs(schemaOf, visited, result.AdditionalProperties.Schema)
 		if err != nil {
@@ -104,12 +113,14 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 			result.Items = &newItems
 		}
 	}
+	// 未发生任何改动时返回原指针，调用方据此判断是否产生拷贝。
 	if changed {
 		return &result, nil
 	}
 	return schema, nil
 }
 
+// refOf 提取 schema 中的 $ref；返回空串表示不是引用。
 func refOf(schema *spec.Schema) (string, bool) {
 	if schema.Ref.GetURL() != nil {
 		return schema.Ref.String(), true
@@ -117,6 +128,7 @@ func refOf(schema *spec.Schema) (string, bool) {
 	// A Ref may be wrapped in allOf to preserve its description
 	// see https://github.com/kubernetes/kubernetes/issues/106387
 	// For kube-openapi, allOf is only used for wrapping a Ref.
+	// 只检查一层 allOf：kube-openapi 的约定保证不会出现更深的嵌套。
 	for _, allOf := range schema.AllOf {
 		if ref, isRef := refOf(&allOf); isRef {
 			return ref, isRef

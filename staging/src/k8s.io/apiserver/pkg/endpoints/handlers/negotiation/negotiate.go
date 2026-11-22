@@ -31,6 +31,8 @@ import (
 )
 
 // MediaTypesForSerializer returns a list of media and stream media types for the server.
+// 流式类型用于 watch；开启 CBOR 特性门控时额外提供 CBOR Sequence，
+// 因为 CBOR 的流式格式并非简单的 “;stream=watch” 参数化形式。
 func MediaTypesForSerializer(ns runtime.NegotiatedSerializer) (mediaTypes, streamMediaTypes []string) {
 	for _, info := range ns.SupportedMediaTypes() {
 		mediaTypes = append(mediaTypes, info.MediaType)
@@ -48,6 +50,8 @@ func MediaTypesForSerializer(ns runtime.NegotiatedSerializer) (mediaTypes, strea
 
 // NegotiateOutputMediaType negotiates the output structured media type and a serializer, or
 // returns an error.
+// 客户端可通过 Accept 参数请求 pretty 输出；未显式请求时，已知的人类客户端
+// （curl/Wget/浏览器）会自动获得 pretty 序列化。
 func NegotiateOutputMediaType(req *http.Request, ns runtime.NegotiatedSerializer, restrictions EndpointRestrictions) (MediaTypeOptions, runtime.SerializerInfo, error) {
 	mediaType, ok := NegotiateMediaTypeOptions(req.Header.Get("Accept"), ns.SupportedMediaTypes(), restrictions)
 	if !ok {
@@ -63,6 +67,7 @@ func NegotiateOutputMediaType(req *http.Request, ns runtime.NegotiatedSerializer
 }
 
 // NegotiateOutputMediaTypeStream returns a stream serializer for the given request.
+// 只有声明了 StreamSerializer 的类型才能用于 watch，否则返回 NotAcceptable。
 func NegotiateOutputMediaTypeStream(req *http.Request, ns runtime.NegotiatedSerializer, restrictions EndpointRestrictions) (runtime.SerializerInfo, error) {
 	mediaType, ok := NegotiateMediaTypeOptions(req.Header.Get("Accept"), ns.SupportedMediaTypes(), restrictions)
 	if !ok || mediaType.Accepted.StreamSerializer == nil {
@@ -79,6 +84,7 @@ func NegotiateInputSerializer(req *http.Request, streaming bool, ns runtime.Nego
 }
 
 // NegotiateInputSerializerForMediaType returns the appropriate serializer for the given media type or an error.
+// 空 Content-Type 时回退到首个受支持类型，保持与历史客户端（如 kubectl）的兼容。
 func NegotiateInputSerializerForMediaType(mediaType string, streaming bool, ns runtime.NegotiatedSerializer) (runtime.SerializerInfo, error) {
 	mediaTypes := ns.SupportedMediaTypes()
 	if len(mediaType) == 0 {
@@ -103,6 +109,7 @@ func isPrettyPrint(req *http.Request) bool {
 	// DEPRECATED: should be part of the content type
 	if req.URL != nil {
 		// avoid an allocation caused by parsing the URL query
+		// 先做廉价的子串检查，只有确实包含 pretty 时才解析 query。
 		if strings.Contains(req.URL.RawQuery, "pretty") {
 			pp := req.URL.Query().Get("pretty")
 			if len(pp) > 0 {
@@ -138,12 +145,18 @@ type EndpointRestrictions interface {
 // content-type negotiation to verify server support for specific options
 var DefaultEndpointRestrictions = emptyEndpointRestrictions{}
 
+// emptyEndpointRestrictions 只允许不请求类型转换、仅 watch 流的保守策略。
 type emptyEndpointRestrictions struct{}
 
+// AllowsMediaTypeTransform 仅当客户端没有请求 GVK 转换时放行。
 func (emptyEndpointRestrictions) AllowsMediaTypeTransform(mimeType string, mimeSubType string, gvk *schema.GroupVersionKind) bool {
 	return gvk == nil
 }
-func (emptyEndpointRestrictions) AllowsServerVersion(string) bool  { return false }
+
+// AllowsServerVersion 默认不允许指定服务端版本。
+func (emptyEndpointRestrictions) AllowsServerVersion(string) bool { return false }
+
+// AllowsStreamSchema 仅允许 watch。
 func (emptyEndpointRestrictions) AllowsStreamSchema(s string) bool { return s == "watch" }
 
 // MediaTypeOptions describes information for a given media type that may alter
@@ -172,6 +185,7 @@ type MediaTypeOptions struct {
 	Profile string
 
 	// unrecognized is a list of all unrecognized keys
+	// 记录未知参数而非直接报错，为未来扩展参数留出前向兼容空间。
 	Unrecognized []string
 
 	// the accepted media type from the client
@@ -185,6 +199,7 @@ func acceptMediaTypeOptions(params map[string]string, accepts *runtime.Serialize
 	var options MediaTypeOptions
 
 	// extract all known parameters
+	// 未知参数只记录不拒绝；但若 endpoint 限制不满足，则整个媒体类型被跳过。
 	for k, v := range params {
 		switch k {
 
@@ -239,6 +254,7 @@ func acceptMediaTypeOptions(params map[string]string, accepts *runtime.Serialize
 		}
 	}
 
+	// 最终由 endpoint 决定是否接受该媒体类型及其转换请求。
 	if !endpoint.AllowsMediaTypeTransform(accepts.MediaTypeType, accepts.MediaTypeSubType, options.Convert) {
 		return MediaTypeOptions{}, false
 	}
@@ -249,6 +265,8 @@ func acceptMediaTypeOptions(params map[string]string, accepts *runtime.Serialize
 
 // NegotiateMediaTypeOptions returns the most appropriate content type given the accept header and
 // a list of alternatives along with the accepted media type parameters.
+// 按客户端偏好顺序遍历 Accept 子句，返回第一个被服务端与 endpoint 同时接受的选项；
+// 空 Accept 时回退到服务端首个类型。
 func NegotiateMediaTypeOptions(header string, accepted []runtime.SerializerInfo, endpoint EndpointRestrictions) (MediaTypeOptions, bool) {
 	if len(header) == 0 && len(accepted) > 0 {
 		return MediaTypeOptions{
@@ -261,6 +279,7 @@ func NegotiateMediaTypeOptions(header string, accepted []runtime.SerializerInfo,
 		clause := &clauses[i]
 		for i := range accepted {
 			accepts := &accepted[i]
+			// 支持精确匹配以及 type/*、*/* 通配。
 			switch {
 			case clause.Type == accepts.MediaTypeType && clause.SubType == accepts.MediaTypeSubType,
 				clause.Type == accepts.MediaTypeType && clause.SubType == "*",

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package generic 提供 quota.Configuration 的通用实现，
+// 把 evaluator 列表与忽略资源集合组合成配额控制器可用的配置。
 package generic
 
 import (
@@ -22,6 +24,8 @@ import (
 )
 
 // implements a basic configuration
+//
+// 该实现不可变：构造后只读，因此无需加锁即可并发访问。
 type simpleConfiguration struct {
 	evaluators       []quota.Evaluator
 	ignoredResources map[schema.GroupResource]struct{}
@@ -35,10 +39,12 @@ func NewConfiguration(evaluators []quota.Evaluator, ignoredResources map[schema.
 	}
 }
 
+// IgnoredResources 返回不参与配额计算的资源集合。
 func (c *simpleConfiguration) IgnoredResources() map[schema.GroupResource]struct{} {
 	return c.ignoredResources
 }
 
+// Evaluators 返回按顺序执行的配额 evaluator 列表。
 func (c *simpleConfiguration) Evaluators() []quota.Evaluator {
 	return c.evaluators
 }

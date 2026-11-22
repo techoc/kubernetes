@@ -38,6 +38,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestEtcdOptionsValidate 覆盖 etcd 后端配置的校验分支：
+// 必填的服务器列表、后端类型、override 格式、加密配置联动以及存储媒体类型。
 func TestEtcdOptionsValidate(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -208,6 +210,8 @@ func TestEtcdOptionsValidate(t *testing.T) {
 	}
 }
 
+// TestParseWatchCacheSizes 验证 watch cache 大小参数的解析：
+// 缺少 "#size"、size 非数字或为负数都应报错，正常值映射到 GroupResource。
 func TestParseWatchCacheSizes(t *testing.T) {
 	testCases := []struct {
 		name                  string
@@ -261,6 +265,8 @@ func TestParseWatchCacheSizes(t *testing.T) {
 	}
 }
 
+// TestKMSHealthzEndpoint 验证根据加密配置为每个 KMS provider 生成健康检查，
+// 以及自动重载模式下改为单个 kms-providers 聚合检查；SkipHealthEndpoints 时完全不注册。
 func TestKMSHealthzEndpoint(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
@@ -372,6 +378,9 @@ func TestKMSHealthzEndpoint(t *testing.T) {
 	}
 }
 
+// TestReadinessCheck 验证 etcd 健康检查的注册规则：
+// 主服务器与 override 服务器各生成 healthz/livez 检查，readyz 额外有对应的 readiness 检查；
+// 相同服务器集合的 override 会去重，且与服务器书写顺序无关。
 func TestReadinessCheck(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -445,6 +454,7 @@ func TestReadinessCheck(t *testing.T) {
 	}
 }
 
+// healthChecksAreEqual 比较健康检查名称集合；忽略通用的 log/ping 检查。
 func healthChecksAreEqual(t *testing.T, want []string, healthChecks []healthz.HealthChecker, checkerType string) {
 	t.Helper()
 
@@ -462,6 +472,8 @@ func healthChecksAreEqual(t *testing.T, want []string, healthChecks []healthz.He
 	}
 }
 
+// TestRestOptionsStorageObjectCountTracker 验证 REST 选项复用 serverConfig 的对象计数跟踪器，
+// 否则 APF 的工作量估算会看不到真实的存储对象数。
 func TestRestOptionsStorageObjectCountTracker(t *testing.T) {
 	serverConfig := server.NewConfig(codecs)
 	etcdOptions := &EtcdOptions{}
@@ -477,7 +489,10 @@ func TestRestOptionsStorageObjectCountTracker(t *testing.T) {
 	}
 }
 
+// TestMonitorCache 验证 etcd 指标 monitor 的缓存：只初始化一次、并发 get 共享同一实例、
+// close 后拒绝继续使用。
 func TestMonitorCache(t *testing.T) {
+	// setCreateMonitor 临时替换包级工厂函数，测试结束后恢复，避免影响其他用例。
 	setCreateMonitor := func(t *testing.T, fn func(storagebackend.Config) (metrics.Monitor, error)) {
 		t.Helper()
 		original := createMonitor
@@ -523,6 +538,7 @@ func TestMonitorCache(t *testing.T) {
 					t.Fatalf("second get() returned error: %v", err)
 				}
 
+				// 工厂只应被调用一次，后续命中缓存。
 				if got := createCalls.Load(); got != 1 {
 					t.Fatalf("expected createMonitor to be called once, got %d", got)
 				}
@@ -550,6 +566,7 @@ func TestMonitorCache(t *testing.T) {
 
 				cache.close()
 
+				// close 必须释放底层 monitor，避免 goroutine/连接泄漏。
 				if got := monitor.closeCalls.Load(); got != 1 {
 					t.Fatalf("expected close to be called once, got %d", got)
 				}
@@ -584,6 +601,7 @@ func TestMonitorCache(t *testing.T) {
 				allowInit := make(chan struct{})
 				var createCalls atomic.Int32
 
+				// 卡住初始化流程，让所有并发调用都堆在缓存锁上，从而验证单次初始化语义。
 				setCreateMonitor(t, func(cfg storagebackend.Config) (metrics.Monitor, error) {
 					if createCalls.Add(1) == 1 {
 						close(initStarted)
@@ -641,6 +659,7 @@ func TestMonitorCache(t *testing.T) {
 	}
 }
 
+// fakeMonitor 记录 Close 调用次数，提供空的指标实现。
 type fakeMonitor struct {
 	closeCalls atomic.Int32
 }

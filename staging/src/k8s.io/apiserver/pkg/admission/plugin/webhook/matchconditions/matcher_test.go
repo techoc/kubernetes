@@ -37,6 +37,8 @@ import (
 
 var _ cel.ConditionEvaluator = &fakeCelFilter{}
 
+// fakeCelFilter 是可编程的 ConditionEvaluator：要么整体抛错，要么返回
+// 预置的求值结果，用来隔离 Matcher 的聚合逻辑。
 type fakeCelFilter struct {
 	evaluations []cel.EvaluationResult
 	throwError  bool
@@ -53,7 +55,12 @@ func (f *fakeCelFilter) CompilationErrors() []error {
 	return []error{}
 }
 
+// TestMatch 验证 matchConditions 的聚合语义：
+//   - 全部为 true（或没有任何条件）才算匹配；
+//   - 任一为 false 即不匹配，并报告首个失败条件名；
+//   - 出现求值错误时，由 failurePolicy 决定是返回错误（Fail）还是当作不匹配（Ignore）。
 func TestMatch(t *testing.T) {
+	// 属性内容不影响 Matcher 逻辑，这里只需要一个合法的 VersionedAttributes。
 	fakeAttr := admission.NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, "default", "foo", schema.GroupVersionResource{}, "", admission.Create, nil, false, nil)
 	fakeVersionedAttr, _ := admission.NewVersionedAttributes(fakeAttr, schema.GroupVersionKind{}, nil)
 	fail := v1.Fail
@@ -93,6 +100,7 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
+			// 空条件列表按“匹配”处理：matchConditions 是额外收窄，不是必需项。
 			name:        "test empty evals",
 			evaluations: []cel.EvaluationResult{},
 			shouldMatch: true,
@@ -149,6 +157,8 @@ func TestMatch(t *testing.T) {
 			returnedName: "test1",
 		},
 		{
+			// 即使先出现 true，首个 false 仍应作为失败条件返回；顺序对
+			// 用户排查很关键，不能只报“有失败”。
 			name: "test mixed with no match last",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -193,6 +203,7 @@ func TestMatch(t *testing.T) {
 			returnedName: "test1",
 		},
 		{
+			// 未显式设置 failurePolicy 时默认按 Fail 处理，错误必须上抛。
 			name: "test error, no fail policy",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -218,6 +229,7 @@ func TestMatch(t *testing.T) {
 			expectError: "test error",
 		},
 		{
+			// Ignore 策略下，求值错误被吞掉，结果等同于“不匹配”。
 			name: "test error, fail policy ignore",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -257,6 +269,8 @@ func TestMatch(t *testing.T) {
 			throwError:  false,
 		},
 		{
+			// 单个结果内携带 Error（而非 filter 整体抛错）同样按
+			// failurePolicy 处理；默认 Fail 时错误必须出现在结果中。
 			name: "test mix of true, errors and fail policy not set",
 			evaluations: []cel.EvaluationResult{
 				{
@@ -340,6 +354,8 @@ func TestMatch(t *testing.T) {
 			ctx := context.TODO()
 			matchResult := m.Match(ctx, fakeVersionedAttr, nil, nil)
 
+			// 错误断言优先于匹配结果：错误路径下 Matches/FailedConditionName
+			// 没有定义。
 			if matchResult.Error != nil {
 				if len(tc.expectError) == 0 {
 					t.Fatal(matchResult.Error)

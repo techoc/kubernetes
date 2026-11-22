@@ -29,6 +29,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// TestGetValidatingWebhookConfig 验证管理器能从 informer 缓存中读出
+// ValidatingWebhookConfiguration 并转换为访问器。
+// 中文说明：使用 synctest 让 informer 的异步通知在虚拟时间下确定性地完成，
+// 避免 sleep 造成的偶发失败。创建前应为空，创建后应出现且内容一致。
 func TestGetValidatingWebhookConfig(t *testing.T) { synctest.Test(t, testGetValidatingWebhookConfig) }
 func testGetValidatingWebhookConfig(t *testing.T) {
 	// Build a test client that the admission plugin can use to look up the ValidatingWebhookConfiguration
@@ -90,11 +94,13 @@ func (mock *mockCreateValidatingWebhookAccessor) calledNTimes() int { return moc
 func (mock *mockCreateValidatingWebhookAccessor) resetCounter()     { mock.numberOfCalls = 0 }
 func (mock *mockCreateValidatingWebhookAccessor) incrementCounter() { mock.numberOfCalls++ }
 
+// fn 是可注入的构造器，计数每次创建；用于验证「智能重载」只在必要时重建访问器。
 func (mock *mockCreateValidatingWebhookAccessor) fn(uid string, configurationName string, h *v1.ValidatingWebhook) webhook.WebhookAccessor {
 	mock.incrementCounter()
 	return webhook.NewValidatingWebhookAccessor(uid, configurationName, h)
 }
 
+// configurationTotalWebhooks 统计所有配置中的 webhook 总数，作为期望访问器数量。
 func configurationTotalWebhooks(configurations []*v1.ValidatingWebhookConfiguration) int {
 	total := 0
 	for _, configuration := range configurations {
@@ -103,6 +109,12 @@ func configurationTotalWebhooks(configurations []*v1.ValidatingWebhookConfigurat
 	return total
 }
 
+// TestGetValidatingWebhookConfigSmartReload 验证配置更新时只重建受影响的访问器。
+//
+// 中文说明：「智能重载」的意义在于：未变化的 webhook 复用已有访问器，
+// 避免每次配置变更都重建全部对象（重建会丢弃内部缓存与状态）。
+// 用例通过统计构造器调用次数来量化：numberOfCreations 是首次创建数，
+// numberOfRefreshes 是更新阶段的重建数，后者应只覆盖真正变化的条目。
 func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 	type args struct {
 		createWebhookConfigurations []*v1.ValidatingWebhookConfiguration
@@ -214,6 +226,7 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 				manager := NewValidatingWebhookConfigurationManager(informerFactory, nil)
 				managerStructPtr := manager.(*validatingWebhookConfigurationManager)
 				fakeWebhookAccessorCreator := &mockCreateValidatingWebhookAccessor{}
+				// 注入计数构造器，之后所有创建都会经过它。
 				managerStructPtr.createValidatingWebhookAccessor = fakeWebhookAccessorCreator.fn
 				informerFactory.Start(stop)
 				informerFactory.WaitForCacheSync(stop)

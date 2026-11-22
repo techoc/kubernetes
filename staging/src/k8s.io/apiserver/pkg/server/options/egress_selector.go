@@ -43,6 +43,7 @@ func NewEgressSelectorOptions() *EgressSelectorOptions {
 }
 
 // AddFlags adds flags related to admission for a specific APIServer to the specified FlagSet
+// 注：注释中的 "admission" 是历史遗留，实际注册的是出站流量选择器参数。
 func (o *EgressSelectorOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -55,6 +56,7 @@ func (o *EgressSelectorOptions) AddFlags(fs *pflag.FlagSet) {
 // ApplyTo adds the egress selector settings to the server configuration.
 // In case egress selector settings were not provided by a cluster-admin
 // they will be prepared from the recommended/default/no-op values.
+// 读取配置后必须先校验再构造选择器：非法配置在启动期失败，好过运行期所有出站请求失败。
 func (o *EgressSelectorOptions) ApplyTo(c *server.Config) error {
 	if o == nil {
 		return nil
@@ -78,6 +80,7 @@ func (o *EgressSelectorOptions) ApplyTo(c *server.Config) error {
 }
 
 // Validate verifies flags passed to EgressSelectorOptions.
+// 未配置文件时视为使用直连网络，无需进一步校验。
 func (o *EgressSelectorOptions) Validate() []error {
 	if o == nil || o.ConfigFile == "" {
 		return nil

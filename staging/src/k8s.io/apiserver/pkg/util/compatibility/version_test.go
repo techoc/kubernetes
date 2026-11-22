@@ -23,6 +23,8 @@ import (
 	basecompatibility "k8s.io/component-base/compatibility"
 )
 
+// TestValidateKubeEffectiveVersion 覆盖 emulation/minCompatibility 版本组合的校验：
+// 只有 emulation >= minCompatibility >= binary 的版本下限时才算合法。
 func TestValidateKubeEffectiveVersion(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -58,6 +60,8 @@ func TestValidateKubeEffectiveVersion(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 以 1.33 作为二进制版本，得到对应的版本下限；随后显式设置
+			// 仿真版本与最低兼容版本，交由 Validate 检查区间关系。
 			binaryVersion := version.MustParseGeneric("1.33")
 			versionFloor := kubeEffectiveVersionFloors(binaryVersion)
 			effective := basecompatibility.NewEffectiveVersion(binaryVersion, false, versionFloor, versionFloor)

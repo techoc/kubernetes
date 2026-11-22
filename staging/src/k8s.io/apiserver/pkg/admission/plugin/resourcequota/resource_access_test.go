@@ -34,6 +34,8 @@ import (
 	"k8s.io/utils/lru"
 )
 
+// TestLRUCacheLookup 验证 GetQuotas 的两级查找：先查 liveLookupCache，
+// 未命中或已过期时回退到 informer/client。用负 TTL 模拟过期条目。
 func TestLRUCacheLookup(t *testing.T) {
 	namespace := "foo"
 	resourceQuota := &corev1.ResourceQuota{
@@ -131,6 +133,9 @@ func TestLRUCacheLookup(t *testing.T) {
 // TestGetQuotas ensures we do not have multiple LIST calls to the apiserver
 // in-flight at any one time. This is to ensure the issue described in #22422 do
 // not happen again.
+//
+// 并发压测：同命名空间的 10 个并发调用应被 singleflight 合并为 1 次 LIST；
+// 不同命名空间互不共享，因此各 1 次。删除缓存后再调用应再触发一次 LIST。
 func TestGetQuotas(t *testing.T) {
 	var (
 		testNamespace1              = "test-a"

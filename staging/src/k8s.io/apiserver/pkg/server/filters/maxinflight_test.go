@@ -32,6 +32,8 @@ import (
 	fcmetrics "k8s.io/apiserver/pkg/util/flowcontrol/metrics"
 )
 
+// createMaxInflightServer 构造带 max-in-flight 过滤器的测试服务器。
+// callsWg 用于等待请求到达，blockWg 用于把请求卡在处理中，从而稳定地复现并发饱和场景。
 func createMaxInflightServer(t *testing.T, callsWg, blockWg *sync.WaitGroup, disableCallsWg *bool, disableCallsWgMutex *sync.Mutex, nonMutating, mutating int) *httptest.Server {
 	fcmetrics.Register()
 	longRunningRequestCheck := BasicLongRunningRequestCheck(sets.NewString("watch"), sets.NewString("proxy"))
@@ -40,6 +42,7 @@ func createMaxInflightServer(t *testing.T, callsWg, blockWg *sync.WaitGroup, dis
 	handler := WithMaxInFlightLimit(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// A short, accounted request that does not wait for block WaitGroup.
+			// dontwait 路径用于验证未饱和时请求可正常通过。
 			if strings.Contains(r.URL.Path, "dontwait") {
 				return
 			}
@@ -63,6 +66,7 @@ func createMaxInflightServer(t *testing.T, callsWg, blockWg *sync.WaitGroup, dis
 	return httptest.NewServer(handler)
 }
 
+// withFakeUser 通过 Groups 请求头把测试请求标记为特权组，用于验证 system:masters 豁免。
 func withFakeUser(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(r.Header["Groups"]) > 0 {
@@ -82,6 +86,9 @@ func withFakeUser(handler http.Handler) http.Handler {
 //   - subsequent "short" requests are rejected instantly with appropriate error,
 //   - subsequent "long" requests are handled normally,
 //   - we correctly recover after some "short" requests finish, i.e. we can process new ones.
+//
+// 中文说明：长请求（watch/proxy）不占并发配额，即使挂起也不影响计数；
+// 短请求达到上限后立即返回 429，且拒绝路径不阻塞；请求完成后配额应释放。
 func TestMaxInFlightNonMutating(t *testing.T) {
 	const AllowedNonMutatingInflightRequestsNo = 3
 
@@ -172,6 +179,8 @@ func TestMaxInFlightNonMutating(t *testing.T) {
 	}
 }
 
+// TestMaxInFlightMutating 验证变更请求使用独立的并发配额：
+// 变更配额耗尽时返回 429，但读请求仍可正常通过。
 func TestMaxInFlightMutating(t *testing.T) {
 	const AllowedMutatingInflightRequestsNo = 3
 
@@ -268,6 +277,8 @@ func expectHTTPPost(url string, code int, groups ...string) error {
 	return nil
 }
 
+// TestMaxInFlightSkipsMasters 验证 system:masters 组绕过 max-in-flight 限制：
+// 即使变更配额已耗尽，特权请求仍直接放行。
 func TestMaxInFlightSkipsMasters(t *testing.T) {
 	const AllowedMutatingInflightRequestsNo = 3
 

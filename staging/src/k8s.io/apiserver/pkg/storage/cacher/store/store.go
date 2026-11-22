@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package store 为 watch 缓存提供线程安全的索引存储，元素按 key 有序，
+// 支持按前缀分页与快照读取。
 package store
 
 import (
@@ -55,9 +57,17 @@ const (
 	// StoreList/List=All/Paginate=True/RV=Empty-24          494.4k ± 0%   494.4k ± 0%       ~ (p=0.424 n=10)   494.6k ± 0%  +0.06% (p=0.000 n=10)   492.7k ± 0%  -0.34% (p=0.000 n=10)   494.5k ± 0%  +0.02% (p=0.009 n=10)   493.0k ± 0%  -0.28% (p=0.000 n=10)   494.4k ± 0%       ~ (p=0.424 n=10)
 	// StoreList/List=Namespace/Paginate=False/RV=Empty-24   32.43k ± 0%   32.44k ± 0%       ~ (p=0.579 n=10)   32.43k ± 0%       ~ (p=0.971 n=10)   32.45k ± 0%       ~ (p=0.517 n=10)   32.44k ± 0%       ~ (p=0.670 n=10)   32.46k ± 0%       ~ (p=0.256 n=10)   32.41k ± 0%       ~ (p=0.247 n=10)
 	// geomean                                               4.872k        4.887k       +0.31%                  4.870k       -0.03%                  4.885k       +0.28%                  4.880k       +0.17%                  4.875k       +0.06%                  4.876k       +0.08%
+	//
+	// 中文说明：degree 越大节点越扁平、查找层级越少，但单节点拷贝成本越高；
+	// 基准显示 16 在时间与分配上整体最优，故固定为该值。
 	btreeDegree = 16
 )
 
+// Indexer 是带索引能力的有序存储接口，语义与 client-go 的 Indexer 相近，
+// 但增加了按前缀有序遍历与快照能力。
+//
+// 中文说明：实现必须并发安全；Clone 返回的快照与主存储隔离，用于长时间
+// 的 List 请求而不阻塞写入。
 type Indexer interface {
 	Add(obj interface{}) error
 	Update(obj interface{}) error
@@ -73,11 +83,16 @@ type Indexer interface {
 	OrderedListPrefix(prefix, continueKey string) ([]interface{}, error)
 }
 
+// Snapshot 是某一时刻的只读视图。
+//
+// 中文说明：快照只在创建时复制必要结构，读取期间不受后续写入影响，
+// 从而为 watch 事件提供一致的列表基线。
 type Snapshot interface {
 	GetByKey(key string) (item interface{}, exists bool, err error)
 	OrderedListPrefix(prefix, continueKey string) ([]interface{}, error)
 }
 
+// NewIndexer 基于给定的索引函数构造线程安全索引器。
 func NewIndexer(indexers *cache.Indexers) Indexer {
 	return newThreadedBtreeStoreIndexer(ElementIndexers(indexers), btreeDegree)
 }
@@ -87,6 +102,9 @@ func NewIndexer(indexers *cache.Indexers) Indexer {
 // labels. To avoid computing them multiple times (to serve the event
 // in different List/Watch requests), in the underlying store we are
 // keeping structs (key, object, labels, fields).
+//
+// 中文说明：预先物化 key/labels/fields 是把计算成本从每次 List/Watch 分摊到
+// 写入一次，这是缓存层可扩展的关键。
 type Element struct {
 	Key    string
 	Object runtime.Object
@@ -94,6 +112,7 @@ type Element struct {
 	Fields fields.Set
 }
 
+// ElementKey 是供 cache.Indexer 使用的 key 提取函数。
 func ElementKey(obj interface{}) (string, error) {
 	elem, ok := obj.(*Element)
 	if !ok {
@@ -102,6 +121,7 @@ func ElementKey(obj interface{}) (string, error) {
 	return elem.Key, nil
 }
 
+// ElementObject 是供 cache.Indexer 使用的对象提取函数。
 func ElementObject(obj interface{}) (runtime.Object, error) {
 	elem, ok := obj.(*Element)
 	if !ok {
@@ -110,6 +130,7 @@ func ElementObject(obj interface{}) (runtime.Object, error) {
 	return elem.Object, nil
 }
 
+// ElementIndexFunc 包装索引函数，使其接收解包后的 runtime.Object。
 func ElementIndexFunc(objIndexFunc cache.IndexFunc) cache.IndexFunc {
 	return func(obj interface{}) (strings []string, e error) {
 		seo, err := ElementObject(obj)
@@ -120,6 +141,9 @@ func ElementIndexFunc(objIndexFunc cache.IndexFunc) cache.IndexFunc {
 	}
 }
 
+// ElementIndexers 把整套索引函数批量适配到 Element 包装上。
+//
+// 中文说明：nil 输入返回空 map 而非 nil，调用方可直接遍历而无需判空。
 func ElementIndexers(indexers *cache.Indexers) cache.Indexers {
 	if indexers == nil {
 		return cache.Indexers{}

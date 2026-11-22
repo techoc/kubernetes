@@ -24,6 +24,9 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
+// TestLatencyTrackersFrom 验证请求上下文中的 LatencyTrackers：
+// 未注入时应报告不存在；注入后各 tracker 初始为 0；
+// 多次 Track 后，串行的 mutating 阶段累加耗时，并行的 validating 与 APF 阶段取最大值。
 func TestLatencyTrackersFrom(t *testing.T) {
 	type testCase struct {
 		Durations    []time.Duration
@@ -42,6 +45,7 @@ func TestLatencyTrackersFrom(t *testing.T) {
 			t.Error("expected LatencyTrackersFrom to not be initialized")
 		}
 
+		// 使用假时钟精确控制每次 Track 的耗时。
 		clk := clocktesting.FakeClock{}
 		ctx := WithLatencyTrackersAndCustomClock(parent, &clk)
 		wd, ok := LatencyTrackersFrom(ctx)
@@ -52,6 +56,7 @@ func TestLatencyTrackersFrom(t *testing.T) {
 			t.Error("expected values to be initialized to 0")
 		}
 
+		// 依次推进假时钟并记录耗时，三种 tracker 看到相同的一组时长。
 		for _, d := range tc.Durations {
 			wd.MutatingWebhookTracker.Track(func() { clk.Step(d) })
 			wd.ValidatingWebhookTracker.Track(func() { clk.Step(d) })
@@ -63,14 +68,17 @@ func TestLatencyTrackersFrom(t *testing.T) {
 			t.Errorf("expected webhook duration to be initialized")
 		}
 
+		// mutating webhook 串行执行：耗时累加
 		if wd.MutatingWebhookTracker.GetLatency() != tc.SumDurations {
 			t.Errorf("expected admit duration: %q, but got: %q", tc.SumDurations, wd.MutatingWebhookTracker.GetLatency())
 		}
 
+		// validating webhook 并行执行：耗时取最大
 		if wd.ValidatingWebhookTracker.GetLatency() != tc.MaxDuration {
 			t.Errorf("expected validate duration: %q, but got: %q", tc.MaxDuration, wd.ValidatingWebhookTracker.GetLatency())
 		}
 
+		// APF 队列等待：多个队列取最大等待时间
 		if wd.APFQueueWaitTracker.GetLatency() != tc.MaxDuration {
 			t.Errorf("expected priority & fairness duration: %q, but got: %q", tc.MaxDuration, wd.APFQueueWaitTracker.GetLatency())
 		}

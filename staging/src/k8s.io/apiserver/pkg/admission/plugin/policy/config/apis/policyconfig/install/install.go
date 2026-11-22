@@ -16,6 +16,9 @@ limitations under the License.
 
 // Package install installs the policyconfig API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+//
+// policyconfig 是 MutatingAdmissionPolicy 等策略配置的 API 组；
+// 本包只负责把它挂到 scheme 上，不做任何业务逻辑。
 package install
 
 import (
@@ -26,6 +29,9 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 先注册内部版本与 v1 版本，再把 v1 设为该组的首选版本，
+// 保证序列化/解码默认走 v1。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(policyconfig.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))

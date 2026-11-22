@@ -45,6 +45,9 @@ var _ rest.GracefulDeleter = &corruptObjectDeleter{}
 // 'AfterDelete' of the registry.
 //
 // WARNING: This may break the cluster if the resource being deleted has dependencies.
+//
+// 这是“逃生舱”：仅在对象已损坏到无法读取时，允许绕过常规删除流程直接清除，
+// 因此刻意跳过准入、finalizer 与删除后钩子。
 func NewCorruptObjectDeleter(store *Store) rest.GracefulDeleter {
 	return &corruptObjectDeleter{store: store}
 }
@@ -66,6 +69,8 @@ type corruptObjectDeleter struct {
 //
 // Getting this error back means the object is corrupt at the latest revision
 // and the delete would have gone through.
+//
+// 借用删除校验函数作为探针：它被调用即说明对象确实无法解码，dry run 应当“成功”。
 var errUnsafeDeleteDryRun = errors.New("aborting unsafe delete, dry run requested")
 
 // errUnsafeDeleteDryRunBypassed indicates the storage deleted the object
@@ -74,6 +79,8 @@ var errUnsafeDeleteDryRun = errors.New("aborting unsafe delete, dry run requeste
 // the same parameter that carries delete admission for regular deletion
 // requests, see Store.Delete. A backend that triggers this error has a bug
 // that allows object deletion without running delete admission.
+//
+// 一旦出现，说明存储实现存在安全缺陷（绕过删除准入），必须按内部错误上报。
 var errUnsafeDeleteDryRunBypassed = errors.New("storage deleted the object despite the dry run request")
 
 // Delete performs an unsafe deletion of the given resource from the storage.
@@ -81,10 +88,14 @@ var errUnsafeDeleteDryRunBypassed = errors.New("storage deleted the object despi
 // NOTE: This function should NEVER be used for any normal deletion
 // flow, it is exclusively used when the user enables
 // 'IgnoreStoreReadErrorWithClusterBreakingPotential' in the delete options.
+//
+// 返回的 runtime.Object 恒为 nil：损坏对象无法解码，调用方不应依赖其内容。
 func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, opts *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	if opts == nil || !ptr.Deref[bool](opts.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
 		// this is a developer error, we should never be here, since the unsafe
 		// deleter is wired in the rest layer only when the option is enabled
+		//
+		// 双重保险：若装配逻辑被改坏，宁可报 500 也不要在无授权的情况下删除对象。
 		return nil, false, apierrors.NewInternalError(errors.New("initialization error, expected normal deletion flow to be used"))
 	}
 
@@ -97,12 +108,16 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 	// deal with corrupt objects (its dry run simulation is Get + decode).
 	// The call below must always land in the etcd3 store, see Delete in
 	// https://github.com/kubernetes/kubernetes/blob/6a5cc912a3c2a2c241fe05abea563079bf574abd/staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go#L336-L354
+	//
+	// 直接取内层存储，避免 DryRunnableStorage 的 Get+decode 模拟在损坏对象上失败。
 	storageBackend := d.store.Storage.Storage
 	klog.FromContext(ctx).V(1).Info("Going to perform unsafe object deletion", "object", klog.KRef(genericapirequest.NamespaceValue(ctx), name))
 	out := d.store.NewFunc()
 	// ExpectTransformOrDecodeError forces a live read from etcd and makes
 	// the delete fail unless the object is corrupt: not found and
 	// decodable objects return errors.
+	//
+	// 该选项是安全边界：它保证只有真正损坏的对象才会被这条路径删除。
 	storageOpts := storage.DeleteOptions{ExpectTransformOrDecodeError: true}
 	// we don't have the old object in the cache, neither can it be
 	// retrieved from the storage and decoded into an object
@@ -112,6 +127,7 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 	var nilPreconditions *storage.Preconditions = nil
 	var nilCachedExistingObject runtime.Object = nil
 	if dryrun.IsDryRun(opts.DryRun) {
+		// dry run 时把校验函数当作“对象损坏确认器”：它被执行即代表删除本会成功。
 		err := storageBackend.Delete(
 			ctx, key, out, nilPreconditions,
 			func(context.Context, runtime.Object) error { return errUnsafeDeleteDryRun },
@@ -131,6 +147,7 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 			return nil, false, storeerr.InterpretDeleteError(err, qualifiedResource, name)
 		}
 	}
+	// 真实删除：ValidateAllObjectFunc 无条件放行，因为无法解码对象、也就无法做有意义的校验。
 	if err := storageBackend.Delete(ctx, key, out, nilPreconditions, rest.ValidateAllObjectFunc, nilCachedExistingObject, storageOpts); err != nil {
 		return nil, false, storeerr.InterpretDeleteError(err, qualifiedResource, name)
 	}

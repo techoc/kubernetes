@@ -27,6 +27,9 @@ import (
 // StorageDecorator is a function signature for producing a storage.Interface
 // and an associated DestroyFunc from given parameters. cacheKeyFunc is used by
 // cache layers to compute resource keys from objects.
+//
+// 装饰器模式让同一套 etcd 后端可以按需包上 cacher 等能力；registry 只依赖此签名，
+// 因此是否启用缓存属于装配期决策，不影响上层逻辑。
 type StorageDecorator func(
 	config *storagebackend.ConfigForResource,
 	resourcePrefix string,
@@ -39,6 +42,8 @@ type StorageDecorator func(
 
 // UndecoratedStorage returns the given a new storage from the given config
 // without any decoration.
+//
+// 仅创建底层 KV 存储，不包缓存；需要直连 etcd 语义的调用方使用。
 func UndecoratedStorage(
 	config *storagebackend.ConfigForResource,
 	resourcePrefix string,
@@ -54,6 +59,8 @@ func UndecoratedStorage(
 // NewRawStorage creates the low level kv storage. This is a work-around for current
 // two layer of same storage interface.
 // TODO: Once cacher is enabled on all registries (event registry is special), we will remove this method.
+//
+// 直接返回 etcd 客户端实现，绕过装饰器参数，供内部装配代码使用。
 func NewRawStorage(config *storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, factory.DestroyFunc, error) {
 	return factory.Create(*config, newFunc, newListFunc, resourcePrefix)
 }

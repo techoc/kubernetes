@@ -27,6 +27,8 @@ import (
 	"github.com/google/cel-go/common/types/traits"
 )
 
+// TestConvertToType 验证每种 CEL 值的类型自描述与幂等转换：
+// ConvertToType(TypeType) 返回类型名，转回自身类型后与原值相等。
 func TestConvertToType(t *testing.T) {
 	objType := NewObjectType("TestObject", map[string]*DeclField{})
 	tests := []struct {
@@ -61,6 +63,7 @@ func TestConvertToType(t *testing.T) {
 	}
 }
 
+// TestEqual 验证各类值的自反相等性（x == x 恒为 true）。
 func TestEqual(t *testing.T) {
 	vals := []interface{}{
 		true, []byte("bytes"), float64(1.2), int64(-42), uint64(63), time.Duration(300),
@@ -75,6 +78,8 @@ func TestEqual(t *testing.T) {
 	}
 }
 
+// TestListValueAdd 验证列表拼接不展开元素，而是把右操作数作为整体追加；
+// 嵌套列表转 native 时保持二维结构。
 func TestListValueAdd(t *testing.T) {
 	lv := NewListValue()
 	lv.Append(testValue(t, 1, "first"))
@@ -99,6 +104,8 @@ func TestListValueAdd(t *testing.T) {
 	}
 }
 
+// TestListValueContains 验证 contains 语义：元素存在返回 true，缺失返回 false，
+// 类型不匹配（如用 int 查找字符串列表）返回错误而非静默 false。
 func TestListValueContains(t *testing.T) {
 	lv := NewListValue()
 	lv.Append(testValue(t, 1, "first"))
@@ -119,6 +126,7 @@ func TestListValueContains(t *testing.T) {
 	}
 }
 
+// TestListValueContainsNestedList 验证嵌套列表按深度相等比较，而不是按引用。
 func TestListValueContainsNestedList(t *testing.T) {
 	lvA := NewListValue()
 	lvA.Append(testValue(t, 1, int64(1)))
@@ -146,6 +154,7 @@ func TestListValueContainsNestedList(t *testing.T) {
 	}
 }
 
+// TestListValueConvertToNative 验证空列表、字符串列表和嵌套列表到 Go 切片的转换。
 func TestListValueConvertToNative(t *testing.T) {
 	lv := NewListValue()
 	none, err := lv.ConvertToNative(reflect.TypeOf([]interface{}{}))
@@ -189,6 +198,7 @@ func TestListValueConvertToNative(t *testing.T) {
 	}
 }
 
+// TestListValueIterator 验证迭代器按索引顺序产出元素且类型为 IteratorType。
 func TestListValueIterator(t *testing.T) {
 	lv := NewListValue()
 	lv.Append(testValue(t, 1, "first"))
@@ -208,6 +218,8 @@ func TestListValueIterator(t *testing.T) {
 	}
 }
 
+// TestMapValueConvertToNative 验证 map 的键查找、迭代，以及转换为
+// map[string]uint64 和结构体的行为（含不同目标类型）。
 func TestMapValueConvertToNative(t *testing.T) {
 	mv := NewMapValue()
 	none, err := mv.ConvertToNative(reflect.TypeOf(map[string]interface{}{}))
@@ -275,6 +287,7 @@ func TestMapValueConvertToNative(t *testing.T) {
 	}
 }
 
+// TestMapValueEqual 验证 map 与自身相等。
 func TestMapValueEqual(t *testing.T) {
 	mv := NewMapValue()
 	name := NewField(1, "name")
@@ -288,6 +301,7 @@ func TestMapValueEqual(t *testing.T) {
 	}
 }
 
+// TestMapValueNotEqual 验证字段数量不同或字段值不同的 map 不相等。
 func TestMapValueNotEqual(t *testing.T) {
 	mv := NewMapValue()
 	name := NewField(1, "name")
@@ -311,6 +325,7 @@ func TestMapValueNotEqual(t *testing.T) {
 	}
 }
 
+// TestMapValueIsSet 验证 IsSet 用于 CEL has() 语义：仅显式添加的 key 为 true。
 func TestMapValueIsSet(t *testing.T) {
 	mv := NewMapValue()
 	if mv.IsSet(types.String("name")) != types.False {
@@ -322,6 +337,8 @@ func TestMapValueIsSet(t *testing.T) {
 	}
 }
 
+// TestObjectValueEqual 验证对象相等性包含默认值语义：
+// 未设置但声明了默认值的字段会在比较时参与，因此字段缺失与字段显式设置可能不同。
 func TestObjectValueEqual(t *testing.T) {
 	objType := NewObjectType("Notice", map[string]*DeclField{
 		"name":     {Name: "name", Type: StringType},

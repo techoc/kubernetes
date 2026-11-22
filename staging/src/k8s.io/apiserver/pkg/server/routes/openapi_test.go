@@ -24,6 +24,9 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestGroupVersionFromPath 验证从 OpenAPI 路径前缀解析 group/version 的规则：
+// 只接受恰好两段（api/v1 或 apis/<group>/<version>），多一段或少一段都视为无效，
+// 否则会误把资源路径当成版本路径。
 func TestGroupVersionFromPath(t *testing.T) {
 	tests := []struct {
 		path        string
@@ -49,10 +52,16 @@ func TestGroupVersionFromPath(t *testing.T) {
 	}
 }
 
+// gvk 构造 x-kubernetes-group-version-kind 扩展中的单条记录，保持测试数据与 JSON 结构一致。
 func gvk(group, version, kind string) map[string]interface{} {
 	return map[string]interface{}{"group": group, "version": version, "kind": kind}
 }
 
+// TestFilterScopedGVKs 验证按 group/version 裁剪共享类型的 GVK 扩展。
+//
+// 背景：同一 Go 类型（如 DeleteOptions）会被多个 group 引用，但每个 group 的 OpenAPI
+// 文档只应声明自己那一条，否则客户端会看到不属于该组的 kind。核心组（空 group）
+// 的条目总是保留，因为它是跨组通用的元类型。
 func TestFilterScopedGVKs(t *testing.T) {
 	tests := []struct {
 		name     string

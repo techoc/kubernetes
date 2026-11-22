@@ -28,6 +28,9 @@ import (
 )
 
 // WithWarningRecorder attaches a deduplicating k8s.io/apiserver/pkg/warning#WarningRecorder to the request context.
+//
+// 中文说明：Warning 头是逐请求的，且同一消息重复出现只会让客户端日志变噪音，
+// 因此这里每个请求新建一个 recorder，而不是全局共享。
 func WithWarningRecorder(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		recorder := &recorder{writer: w}
@@ -36,6 +39,8 @@ func WithWarningRecorder(handler http.Handler) http.Handler {
 	})
 }
 
+// 总量上限设为 4KB 左右，单条 256 rune：HTTP 头过大可能被代理拒绝，
+// 但截断粒度必须落在 rune 边界，避免产生非法 UTF-8。
 var (
 	truncateAtTotalRunes = 4 * 1024
 	truncateItemRunes    = 256
@@ -46,6 +51,8 @@ type recordedWarning struct {
 	text  string
 }
 
+// recorder 收集单个请求产生的 warning，并在超过上限后统一截断重放。
+// 它会被多个 goroutine 并发调用（不同 webhook/插件），因此所有状态都由 lock 保护。
 type recorder struct {
 	// lock guards calls to AddWarning from multiple threads
 	lock sync.Mutex
@@ -66,6 +73,8 @@ type recorder struct {
 	writer http.ResponseWriter
 }
 
+// AddWarning 追加一条 Warning 头；重复文本、空文本以及已进入截断模式后的溢出
+// 输入都会被丢弃。
 func (r *recorder) AddWarning(agent, text string) {
 	if len(text) == 0 {
 		return
@@ -112,6 +121,9 @@ func (r *recorder) AddWarning(agent, text string) {
 	}
 
 	// otherwise, enable truncation, reset, and replay the existing items as truncated warnings
+	//
+	// 中文说明：一旦超限就不可逆地进入截断模式，并清空已写头重新生成，
+	// 保证最终响应里所有 warning 长度一致、不会出现“前几条完整后面残缺”。
 	r.truncating = true
 	r.written = 0
 	r.writer.Header().Del("Warning")

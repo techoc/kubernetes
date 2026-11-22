@@ -43,6 +43,9 @@ import (
 // in the context of a specific request. The params have already been resolved
 // and any error in configuration or setting up the invocation is stored in
 // the Error field.
+//
+// 一个绑定若通过 selector 匹配到多个 param，会展开成多条 invocation，
+// 因此下游 delegate 必须能处理"同一绑定多次求值"的情况。
 type PolicyInvocation[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	// Relevant policy for this hook.
 	// This field is always populated
@@ -77,6 +80,8 @@ type PolicyInvocation[P runtime.Object, B runtime.Object, E Evaluator] struct {
 // (in contrast to generic.PolicyDispatcher which only selects active policies and params)
 type dispatcherDelegate[P, B runtime.Object, E Evaluator] func(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces, versionedAttributes webhookgeneric.VersionedAttributeAccessor, invocations []PolicyInvocation[P, B, E]) ([]PolicyError, *apierrors.StatusError)
 
+// policyDispatcher 负责从所有 hook 中筛出与当前请求匹配的 (policy, binding, param)，
+// 再交给 delegate 执行具体的变异或校验。泛型参数让 webhook 与 VAP/MAP 复用同一套调度。
 type policyDispatcher[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	newPolicyAccessor  func(P) PolicyAccessor
 	newBindingAccessor func(B) BindingAccessor
@@ -84,6 +89,7 @@ type policyDispatcher[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	delegate           dispatcherDelegate[P, B, E]
 }
 
+// NewPolicyDispatcher 组装调度器；matcher 与 delegate 由具体插件提供。
 func NewPolicyDispatcher[P runtime.Object, B runtime.Object, E Evaluator](
 	newPolicyAccessor func(P) PolicyAccessor,
 	newBindingAccessor func(B) BindingAccessor,
@@ -103,6 +109,8 @@ func NewPolicyDispatcher[P runtime.Object, B runtime.Object, E Evaluator](
 // request. It then resolves all params and creates an Invocation for each
 // matching policy-binding-param tuple. The delegate is then called with the
 // list of tuples.
+//
+// Start 无后台工作，满足 Dispatcher 接口即可。
 func (d *policyDispatcher[P, B, E]) Start(ctx context.Context) error {
 	return nil
 }
@@ -120,6 +128,8 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 	}
 
 	var policyErrors []PolicyError
+	// 配置错误先收集而不是立即返回：单个策略配置错误不应阻止其它策略生效，
+	// 最终是否拒绝由各策略的 FailurePolicy 决定。
 	addConfigError := func(err error, definition PolicyAccessor, binding BindingAccessor) {
 		var message error
 		if binding == nil {
@@ -145,6 +155,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 		} else if !matches {
 			continue
 		} else if hook.ConfigurationError != nil {
+			// 策略本身已匹配，但编译期就配置有误（如 CEL 无法编译）。
 			addConfigError(hook.ConfigurationError, policyAccessor, nil)
 			continue
 		}
@@ -203,6 +214,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 
 	if len(relevantHooks) > 0 {
 		extraPolicyErrors, statusError := d.delegate(ctx, a, o, versionedAttrAccessor, relevantHooks)
+		// delegate 返回的 StatusError 是硬性失败（例如无法构造请求对象），直接终止。
 		if statusError != nil {
 			return statusError
 		}
@@ -226,6 +238,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 		case v1.Fail:
 			filteredErrors = append(filteredErrors, e)
 		default:
+			// 未知取值按 Fail 处理，避免配置异常导致策略被静默跳过。
 			filteredErrors = append(filteredErrors, e)
 		}
 	}
@@ -240,6 +253,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 			// Should never happen.
 			return apierrors.NewInternalError(fmt.Errorf("failed to create status error"))
 		}
+		// 先清空占位消息，下面用第一条真实的拒绝原因填充。
 		err.ErrStatus.Message = ""
 
 		for _, policyError := range filteredErrors {
@@ -272,6 +286,9 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 //
 // The dynamicClient and restMapper parameters enable direct API fallback when
 // the informer cache hasn't received the watch event for a newly created param yet.
+//
+// 参数解析失败会被上抛为配置错误，最终由绑定的 FailurePolicy 决定是否拒绝请求；
+// 因此这里的错误信息要足够具体，便于用户定位是 paramKind、namespace 还是 selector 的问题。
 func CollectParams(
 	paramKind *v1.ParamKind,
 	paramInformer informers.GenericInformer,
@@ -312,6 +329,7 @@ func CollectParams(
 		// If the param informer for this admission policy has not yet
 		// had time to perform an initial listing, don't attempt to use
 		// it.
+		// 限时 1 秒等待首次同步：准入路径不能无限阻塞，超时按配置错误处理。
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 
@@ -397,6 +415,7 @@ func CollectParams(
 	}
 
 	// Apply fail action for params not found case
+	// Deny 动作下"没找到参数"本身就要拒绝请求，否则绑定会静默失效。
 	if len(params) == 0 && paramRef.ParameterNotFoundAction != nil && *paramRef.ParameterNotFoundAction == v1.DenyAction {
 		return nil, errors.New("no params found for policy binding with `Deny` parameterNotFoundAction")
 	}
@@ -407,6 +426,9 @@ func CollectParams(
 // getParamDirectly performs a direct API call to retrieve a param when the informer
 // cache doesn't have it yet. This handles the race condition where a param resource
 // is created but the watch event hasn't propagated to the informer cache.
+//
+// 直接读 API 比"重试等 watch"更可预测：一次同步 GET 要么拿到对象，
+// 要么明确 NotFound，避免在准入路径上引入不确定的等待时间。
 func getParamDirectly(
 	dynamicClient dynamic.Interface,
 	restMapper meta.RESTMapper,
@@ -465,6 +487,9 @@ func getParamDirectly(
 // representing it as unstructured and without TypeMeta. This ensures that CEL expressions
 // receive param objects identically regardless of if the object was received via the informer
 // or if an informer cache miss resulted in a get request to fetch the object.
+//
+// 关键一致性要求：同一 param 无论来自缓存还是直接 GET，CEL 看到的对象形态必须相同，
+// 否则同一表达式会在两条路径上给出不同结果。
 func convertParamToInformerRepresentation(gvk schema.GroupVersionKind, param *unstructured.Unstructured) (runtime.Object, error) {
 	typed, err := clientgoscheme.Scheme.New(gvk)
 	if err != nil {
@@ -474,18 +499,23 @@ func convertParamToInformerRepresentation(gvk schema.GroupVersionKind, param *un
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(param.UnstructuredContent(), typed); err != nil {
 		return nil, fmt.Errorf("failed to convert param %v to typed object: %w", gvk, err)
 	}
+	// informer 中的对象不带 TypeMeta，这里清空以保持两条路径一致。
 	typed.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 	return typed, nil
 }
 
 var _ webhookgeneric.VersionedAttributeAccessor = &versionedAttributeAccessor{}
 
+// versionedAttributeAccessor 按 GVK 缓存转换结果。
+// 同一次请求内多个策略可能请求同一 GVK，缓存避免重复的版本转换开销。
+// 非并发安全：仅在 Dispatch 的单线程筛选阶段使用。
 type versionedAttributeAccessor struct {
 	versionedAttrs   map[schema.GroupVersionKind]*admission.VersionedAttributes
 	attr             admission.Attributes
 	objectInterfaces admission.ObjectInterfaces
 }
 
+// VersionedAttribute 返回指定 GVK 的属性视图，首次调用时创建并缓存。
 func (v *versionedAttributeAccessor) VersionedAttribute(gvk schema.GroupVersionKind) (*admission.VersionedAttributes, error) {
 	if val, ok := v.versionedAttrs[gvk]; ok {
 		return val, nil
@@ -498,6 +528,8 @@ func (v *versionedAttributeAccessor) VersionedAttribute(gvk schema.GroupVersionK
 	return versionedAttr, nil
 }
 
+// PolicyError 描述某条策略/绑定在本次请求中的失败。
+// 保留 Policy 与 Binding 引用，便于按 FailurePolicy 决策并生成可定位的错误信息。
 type PolicyError struct {
 	Policy  PolicyAccessor
 	Binding BindingAccessor
@@ -505,6 +537,7 @@ type PolicyError struct {
 	Reason  metav1.StatusReason
 }
 
+// Error 生成用户可读的拒绝原因；有绑定时同时指出策略与绑定名称。
 func (c PolicyError) Error() string {
 	if c.Binding != nil {
 		return fmt.Sprintf("policy '%s' with binding '%s' denied request: %s", c.Policy.GetName(), c.Binding.GetName(), c.Message.Error())

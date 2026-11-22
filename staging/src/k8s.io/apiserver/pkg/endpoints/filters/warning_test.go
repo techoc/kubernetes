@@ -22,6 +22,9 @@ import (
 	"testing"
 )
 
+// Test_recorder_AddWarning 覆盖 Warning 头的序列化与去重。
+// 中文说明：agent 为空的警告格式为 `299 - "text"`；同一 text 只保留第一次出现，
+// 非法 agent/含换行 text 因会破坏 HTTP 头语法而被丢弃。
 func Test_recorder_AddWarning(t *testing.T) {
 	type args struct {
 		agent string
@@ -99,7 +102,10 @@ func Test_recorder_AddWarning(t *testing.T) {
 	}
 }
 
+// TestTruncation 验证警告总量/单项长度超限时的截断策略：先按单项截断，
+// 再按总量截断最早条目，且保持原有顺序。
 func TestTruncation(t *testing.T) {
+	// 临时缩小阈值，避免测试依赖生产常量；defer 恢复以免影响其它用例。
 	originalTotalRunes, originalItemRunes := truncateAtTotalRunes, truncateItemRunes
 	truncateAtTotalRunes, truncateItemRunes = 25, 5
 	defer func() {

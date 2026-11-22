@@ -20,6 +20,10 @@ import (
 	"testing"
 )
 
+// TestCertKeyContentEquals 验证证书内容的相等判断，用于决定是否需要重新加载。
+//
+// nil 与空对象必须区分：两者都返回 false 才能触发一次“从无到有”的加载；
+// 但两个 nil 视为相等，避免空快照被反复判定为变化。
 func TestCertKeyContentEquals(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -77,6 +81,8 @@ func TestCertKeyContentEquals(t *testing.T) {
 	}
 }
 
+// TestSNICertKeyContentEquals 在证书/私钥比较之外，额外要求 SNI 名称列表完全一致
+// （顺序敏感、长度敏感）：名称变化同样意味着需要更新 TLS 配置。
 func TestSNICertKeyContentEquals(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -24,6 +24,9 @@ import (
 var (
 	// health probes and metrics scraping are never rejected, we will continue
 	// serving these requests after shutdown delay duration elapses.
+	//
+	// 探针与指标抓取豁免的原因是：它们通常来自本机或监控系统，
+	// 在优雅关闭窗口内仍需要反映真实状态；拒绝它们会让外部误判实例已死。
 	pathPrefixesExemptFromRetryAfter = []string{
 		"/readyz",
 		"/livez",
@@ -40,6 +43,9 @@ type isRequestExemptFunc func(*http.Request) bool
 type retryAfterParams struct {
 	// TearDownConnection is true when we should send a 'Connection: close'
 	// header in the response so net/http can tear down the TCP connection.
+	//
+	// 关闭连接是为了防止客户端复用已有连接继续发送请求，
+	// 迫使其通过新建连接（可能命中新实例）重试。
 	TearDownConnection bool
 
 	// Message describes why Retry-After response has been sent by the server
@@ -70,6 +76,7 @@ func WithRetryAfter(handler http.Handler, shutdownDelayDurationElapsedCh <-chan 
 
 	// NOTE: both WithRetryAfter and WithWaitGroup must use the same exact isRequestExemptFunc 'isRequestExemptFromRetryAfter,
 	// otherwise SafeWaitGroup might wait indefinitely and will prevent the server from shutting down gracefully.
+	// 两者判断不一致会导致被 wait group 跟踪的请求被这里提前拒绝，或反之，最终卡住优雅退出。
 	return withRetryAfter(handler, isRequestExemptFromRetryAfter, func() (*retryAfterParams, bool) {
 		select {
 		case <-shutdownDelayDurationElapsedCh:
@@ -80,9 +87,11 @@ func WithRetryAfter(handler http.Handler, shutdownDelayDurationElapsedCh <-chan 
 	})
 }
 
+// withRetryAfter 是带可注入策略的实现，便于测试替换豁免与触发条件。
 func withRetryAfter(handler http.Handler, isRequestExemptFn isRequestExemptFunc, shouldRespondWithRetryAfterFn shouldRespondWithRetryAfterFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		params, send := shouldRespondWithRetryAfterFn()
+		// 未到关闭窗口或请求豁免时，正常交给下游处理。
 		if !send || isRequestExemptFn(req) {
 			handler.ServeHTTP(w, req)
 			return
@@ -99,6 +108,7 @@ func withRetryAfter(handler http.Handler, isRequestExemptFn isRequestExemptFunc,
 		}
 
 		// Return a 429 status asking the client to try again after 5 seconds
+		// 固定 5 秒是经验值：足够 kube-proxy/负载均衡摘除该实例，又不至于让客户端等待过久。
 		w.Header().Set("Retry-After", "5")
 		http.Error(w, params.Message, http.StatusTooManyRequests)
 	})
@@ -116,10 +126,14 @@ func isRequestExemptFromRetryAfter(r *http.Request) bool {
 // the one set by the local loopback.
 // NOTE: we can't look up the authenticated user informaion from the
 // request context since the authentication filter has not executed yet.
+//
+// 因此只能依赖 User-Agent 识别内部回环请求；该判断只影响“是否拒绝”，
+// 不参与任何鉴权决策，伪造 UA 最多换来一次正常处理。
 func isKubeApiserverUserAgent(req *http.Request) bool {
 	return strings.HasPrefix(req.UserAgent(), "kube-apiserver/")
 }
 
+// hasExemptPathPrefix 判断路径是否属于探针/指标等豁免前缀。
 func hasExemptPathPrefix(r *http.Request) bool {
 	for _, whiteListedPrefix := range pathPrefixesExemptFromRetryAfter {
 		if strings.HasPrefix(r.URL.Path, whiteListedPrefix) {

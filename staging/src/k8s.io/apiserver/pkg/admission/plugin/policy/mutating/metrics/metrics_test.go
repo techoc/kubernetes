@@ -26,10 +26,14 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// metricsObserver 是测试用例要触发的指标记录动作。
 type metricsObserver func()
 
+// TestNoUtils 验证 mutating admission policy 的 check 计数与耗时指标，
+// 以及 ObserveAdmission / ObserveRejection 两条路径产出的指标完全一致。
 func TestNoUtils(t *testing.T) {
 
+	// 只比对这两个指标，避免其他全局指标的噪声干扰。
 	metrics := []string{
 		"apiserver_mutating_admission_policy_check_total",
 		"apiserver_mutating_admission_policy_check_duration_seconds",
@@ -57,6 +61,7 @@ func TestNoUtils(t *testing.T) {
             # TYPE apiserver_mutating_admission_policy_check_total counter
             apiserver_mutating_admission_policy_check_total{error_type="invalid_error",policy="policy.example.com",policy_binding="binding.example.com"} 1
 			`,
+			// 10 秒耗时落在 +Inf 桶内，因此除 +Inf 外各桶计数均为 0。
 			observer: func() {
 				Metrics.ObserveAdmission(context.TODO(), time.Duration(10)*time.Second, "policy.example.com", "binding.example.com", MutatingInvalidError)
 			},
@@ -78,12 +83,14 @@ func TestNoUtils(t *testing.T) {
             # TYPE apiserver_mutating_admission_policy_check_total counter
             apiserver_mutating_admission_policy_check_total{error_type="invalid_error",policy="policy.example.com",policy_binding="binding.example.com"} 1
 			`,
+			// 拒绝路径期望产出与 admit 路径相同的样本，证明两者共享同一组指标。
 			observer: func() {
 				Metrics.ObserveRejection(context.TODO(), time.Duration(10)*time.Second, "policy.example.com", "binding.example.com", MutatingInvalidError)
 			},
 		},
 	}
 
+	// 先清空全局指标，避免其他测试残留影响基线。
 	Metrics.Reset()
 
 	for _, tt := range testCases {

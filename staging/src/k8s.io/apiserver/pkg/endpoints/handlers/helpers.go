@@ -26,9 +26,15 @@ import (
 )
 
 const (
+	// User-Agent 会进入访问日志与审计记录。限制长度是为了防止
+	// 超长（甚至恶意构造）的 UA 撑大日志、拖慢日志管道。
 	maxUserAgentLength      = 1024
 	userAgentTruncateSuffix = "...TRUNCATED"
 )
+
+// 下面这些 lazy* 类型都实现 Stringer，在真正需要打印（访问日志、
+// 审计）时才读取请求信息。这样在不开日志的路径上不产生额外开销，
+// 也避免在日志级别不够时仍构造字符串。
 
 // lazyTruncatedUserAgent implements String() string and it will
 // return user-agent which may be truncated.
@@ -36,6 +42,8 @@ type lazyTruncatedUserAgent struct {
 	req *http.Request
 }
 
+// String 返回截断后的 User-Agent；请求为空时返回 "unknown"，
+// 保证日志字段始终有值而不会 panic。
 func (lazy *lazyTruncatedUserAgent) String() string {
 	ua := "unknown"
 	if lazy.req != nil {
@@ -53,6 +61,8 @@ type lazyClientIP struct {
 	req *http.Request
 }
 
+// String 返回客户端 IP；GetClientIP 会考虑 X-Forwarded-For 等头，
+// 仅在输出日志时才做这项解析。
 func (lazy *lazyClientIP) String() string {
 	if lazy.req != nil {
 		if ip := utilnet.GetClientIP(lazy.req); ip != nil {
@@ -68,6 +78,7 @@ type lazyAccept struct {
 	req *http.Request
 }
 
+// String 返回 Accept 头原值。
 func (lazy *lazyAccept) String() string {
 	if lazy.req != nil {
 		accept := lazy.req.Header.Get("Accept")
@@ -83,6 +94,7 @@ type lazyAPIGroup struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回 API 组；缺失时返回 "unknown"。
 func (lazy *lazyAPIGroup) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -101,6 +113,7 @@ type lazyAPIVersion struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回 API 版本。
 func (lazy *lazyAPIVersion) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -119,6 +132,7 @@ type lazyName struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回对象名。
 func (lazy *lazyName) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -137,6 +151,7 @@ type lazySubresource struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回子资源名。
 func (lazy *lazySubresource) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -155,6 +170,7 @@ type lazyNamespace struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回命名空间。
 func (lazy *lazyNamespace) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -173,6 +189,8 @@ type lazyAuditID struct {
 	req *http.Request
 }
 
+// String 返回截断后的审计 ID，便于把访问日志与具体审计记录关联，
+// 同时避免在日志里暴露完整 ID。
 func (lazy *lazyAuditID) String() string {
 	if lazy.req != nil {
 		return audit.GetAuditIDTruncated(lazy.req.Context())
@@ -187,6 +205,8 @@ type lazyVerb struct {
 	req *http.Request
 }
 
+// String 返回归一化后的 HTTP 动词（例如把 GET/LIST 区分开），
+// 与请求指标使用同一套归一化逻辑，保证日志与指标口径一致。
 func (lazy *lazyVerb) String() string {
 	if lazy.req == nil {
 		return "unknown"
@@ -200,6 +220,7 @@ type lazyResource struct {
 	req *http.Request
 }
 
+// String 从 RequestInfo 返回资源名。
 func (lazy *lazyResource) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
@@ -218,6 +239,8 @@ type lazyScope struct {
 	req *http.Request
 }
 
+// String 返回清洗后的 scope（resource/namespace/cluster），
+// 清洗可避免把高基数命名空间带入日志或指标。
 func (lazy *lazyScope) String() string {
 	if lazy.req != nil {
 		ctx := lazy.req.Context()
