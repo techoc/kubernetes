@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package latest 提供构造最新版调度器组件配置的入口。
 package latest
 
 import (
@@ -23,9 +24,10 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 )
 
-// Default creates a default configuration of the latest versioned type.
-// This function needs to be updated whenever we bump the scheduler's component config version.
+// Default 创建最新版（带版本号的）类型的默认配置。
+// 每当调度器组件配置版本升级时，都需要同步更新此函数。
 func Default() (*config.KubeSchedulerConfiguration, error) {
+	// 先填带版本号的类型：默认值只在该类型的 scheme 上注册。
 	versionedCfg := v1.KubeSchedulerConfiguration{}
 	versionedCfg.DebuggingConfiguration = *v1alpha1.NewRecommendedDebuggingConfiguration()
 
@@ -34,10 +36,9 @@ func Default() (*config.KubeSchedulerConfiguration, error) {
 	if err := scheme.Scheme.Convert(&versionedCfg, &cfg, nil); err != nil {
 		return nil, err
 	}
-	// We don't set this field in pkg/scheduler/apis/config/{version}/conversion.go
-	// because the field will be cleared later by API machinery during
-	// conversion. See KubeSchedulerConfiguration internal type definition for
-	// more details.
+	// 不在 pkg/scheduler/apis/config/{version}/conversion.go 中设置该字段，
+	// 因为转换过程中 API machinery 会将其清空。更多细节见
+	// KubeSchedulerConfiguration 内部类型的定义。
 	cfg.TypeMeta.APIVersion = v1.SchemeGroupVersion.String()
 	return &cfg, nil
 }

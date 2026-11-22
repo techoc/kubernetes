@@ -30,6 +30,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestWorkloadForest_AddPodGroup 验证 AddPodGroup 能把独立及嵌套的 PodGroup 正确加入森林，并维护层级关系。
 func TestWorkloadForest_AddPodGroup(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 	pg2 := st.MakePodGroup().Name("pg2").Namespace("ns1").UID("uid2").Obj()
@@ -168,6 +169,7 @@ func TestWorkloadForest_AddPodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_UpdatePodGroup 验证 UpdatePodGroup 能更新已有 PodGroup 信息并保持层级关系正确。
 func TestWorkloadForest_UpdatePodGroup(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").MinCount(1).Obj()
 	updatedPG1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").MinCount(2).Obj()
@@ -214,6 +216,7 @@ func TestWorkloadForest_UpdatePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_DeletePodGroup 验证 DeletePodGroup 能删除 PodGroup，且不会破坏其余层级结构。
 func TestWorkloadForest_DeletePodGroup(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 	pg2 := st.MakePodGroup().Name("pg2").Namespace("ns1").UID("uid2").Obj()
@@ -322,6 +325,7 @@ func TestWorkloadForest_DeletePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetPodGroup 验证 GetPodGroup 能按命名空间和名称查找到正确对象，不存在时返回错误。
 func TestWorkloadForest_GetPodGroup(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 
@@ -380,6 +384,7 @@ func TestWorkloadForest_GetPodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetCompositePodGroup 验证 GetCompositePodGroup 能按命名空间和名称查找到正确的 CompositePodGroup。
 func TestWorkloadForest_GetCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 
@@ -421,6 +426,7 @@ func TestWorkloadForest_GetCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_AddCompositePodGroup 验证 AddCompositePodGroup 能把独立及嵌套的 CPG 加入森林并维护父子关系。
 func TestWorkloadForest_AddCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 	cpg2 := st.MakeCompositePodGroup().Name("cpg2").Namespace("ns1").Obj()
@@ -525,6 +531,7 @@ func TestWorkloadForest_AddCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_UpdateCompositePodGroup 验证 UpdateCompositePodGroup 能更新已有 CPG 的信息。
 func TestWorkloadForest_UpdateCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").MinGroupCount(1).Obj()
 	updatedCPG1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").MinGroupCount(2).Obj()
@@ -571,6 +578,7 @@ func TestWorkloadForest_UpdateCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_DeleteCompositePodGroup 验证 DeleteCompositePodGroup 能删除 CPG，并正确处理其父子关系。
 func TestWorkloadForest_DeleteCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 	cpg3WithParent := st.MakeCompositePodGroup().Name("cpg3").Namespace("ns1").ParentCompositePodGroup("cpg1").Obj()
@@ -683,6 +691,7 @@ func TestWorkloadForest_DeleteCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetRootLookupInfoForPod 验证 GetRootLookupInfoForPod 能为属于不同层级结构的 Pod 找到正确的根实体。
 func TestWorkloadForest_GetRootLookupInfoForPod(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 	pg2WithParent := st.MakePodGroup().Name("pg2").Namespace("ns1").UID("uid2").ParentCompositePodGroup("cpg1").Obj()
@@ -791,6 +800,7 @@ func TestWorkloadForest_GetRootLookupInfoForPod(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetRootLookupInfoForPodGroup 验证 GetRootLookupInfoForPodGroup 能为独立及嵌套的 PodGroup 找到正确的根实体。
 func TestWorkloadForest_GetRootLookupInfoForPodGroup(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 	pg2WithParent := st.MakePodGroup().Name("pg2").Namespace("ns1").UID("uid2").ParentCompositePodGroup("cpg1").Obj()
@@ -917,6 +927,7 @@ func TestWorkloadForest_GetRootLookupInfoForPodGroup(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetRootLookupInfoForCPG 验证 GetRootLookupInfoForCPG 能为 CPG 找到正确的根实体。
 func TestWorkloadForest_GetRootLookupInfoForCPG(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 	cpg2WithParent := st.MakeCompositePodGroup().Name("cpg2").Namespace("ns1").ParentCompositePodGroup("cpg1").Obj()
@@ -985,6 +996,7 @@ func TestWorkloadForest_GetRootLookupInfoForCPG(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_GetLeafPodGroups 验证 GetLeafPodGroups 能递归收集 CPG 层级下所有叶子 PodGroup。
 func TestWorkloadForest_GetLeafPodGroups(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 	pg2WithParent := st.MakePodGroup().Name("pg2").Namespace("ns1").UID("uid2").ParentCompositePodGroup("cpg1").Obj()
@@ -1098,6 +1110,7 @@ func TestWorkloadForest_GetLeafPodGroups(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_BuildPodGroupInfoForPG 验证 BuildPodGroupInfoForPG 能为 PodGroup 构建包含层级信息的 PodGroupInfo。
 func TestWorkloadForest_BuildPodGroupInfoForPG(t *testing.T) {
 	pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").Obj()
 
@@ -1154,6 +1167,7 @@ func TestWorkloadForest_BuildPodGroupInfoForPG(t *testing.T) {
 	}
 }
 
+// TestWorkloadForest_BuildPodGroupInfoForCPG 验证 BuildPodGroupInfoForCPG 能为 CPG 层级构建包含父子关系的 PodGroupInfo。
 func TestWorkloadForest_BuildPodGroupInfoForCPG(t *testing.T) {
 	pg1WithParent := st.MakePodGroup().Name("pg1").Namespace("ns1").UID("uid1").MinCount(2).ParentCompositePodGroup("cpg1").Obj()
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").MinGroupCount(1).Obj()
@@ -1218,7 +1232,7 @@ func TestWorkloadForest_BuildPodGroupInfoForCPG(t *testing.T) {
 			visited := sets.New[fwk.EntityKey]()
 			gotInfo := wf.buildPodGroupInfoForCPG(logger, tt.cpg, visited)
 
-			// Note: Children are sorted by name in buildPodGroupInfoForCPG, so it is deterministic.
+			// buildPodGroupInfoForCPG 会按名称对子节点排序，因此结果顺序是确定的。
 			if diff := cmp.Diff(tt.wantInfo, gotInfo); diff != "" {
 				t.Errorf("Unexpected PodGroupInfo (-want,+got)\n%s", diff)
 			}

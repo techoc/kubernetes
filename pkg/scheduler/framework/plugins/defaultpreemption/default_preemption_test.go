@@ -127,7 +127,7 @@ func getDefaultDefaultPreemptionArgs() *config.DefaultPreemptionArgs {
 var nodeResourcesFitFunc = frameworkruntime.FactoryAdapter(feature.Features{}, noderesources.NewFit)
 var podTopologySpreadFunc = frameworkruntime.FactoryAdapter(feature.Features{}, podtopologyspread.New)
 
-// TestPlugin returns Error status when trying to `AddPod` or `RemovePod` on the nodes which have the {k,v} label pair defined on the nodes.
+// TestPlugin 在带有指定 {k,v} 标签的节点上执行 AddPod/RemovePod 时返回 Error 状态。
 type TestPlugin struct {
 	name string
 }
@@ -166,8 +166,8 @@ func (pl *TestPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.
 	return nil
 }
 
-// SkipOnDeferredFilterPlugin is a mock plugin used to verify that skipped plugins
-// are bypassed in preemption and reprieve dry-runs.
+// SkipOnDeferredFilterPlugin 是一个 mock 插件，用于验证在抢占与回补的模拟运行中，
+// 被 Skip 的插件会被跳过。
 type SkipOnDeferredFilterPlugin struct{}
 
 func newSkipOnDeferredFilterPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
@@ -178,8 +178,7 @@ func (pl *SkipOnDeferredFilterPlugin) Name() string {
 	return "skip-on-deferred"
 }
 
-// PreFilter returns Skip for deferred resize pods, causing the framework to
-// bypass execution of its Filter method. For other pods, it returns Success.
+// PreFilter 对延迟扩容的 Pod 返回 Skip，使框架跳过其 Filter 方法；其他 Pod 返回 Success。
 func (pl *SkipOnDeferredFilterPlugin) PreFilter(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if compresource.IsPodResizeDeferred(p) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -191,8 +190,7 @@ func (pl *SkipOnDeferredFilterPlugin) PreFilterExtensions() fwk.PreFilterExtensi
 	return nil
 }
 
-// Filter always returns Unschedulable. This method should only be reached
-// and executed if PreFilter did not return Skip (i.e. for non-deferred pods).
+// Filter 总是返回 Unschedulable。只有在 PreFilter 未返回 Skip 时（即非延迟 Pod）才会执行到这里。
 func (pl *SkipOnDeferredFilterPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	return fwk.NewStatus(fwk.Unschedulable, "SkipOnDeferredFilterPlugin: always fail for non-deferred pods")
 }
@@ -407,7 +405,7 @@ func TestPostFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				st.MakePod().Name("p1").UID("p1").Namespace(v1.NamespaceDefault).Node("node1").Obj(),
 			},
-			// label the node with key as "error" so that the TestPlugin will fail with error.
+			// 给节点打上值为 "error" 的标签，使 TestPlugin 返回错误。
 			nodes: []*v1.Node{st.MakeNode().Name("node1").Capacity(largeRes).Label("error", "true").Obj()},
 			filteredNodesStatuses: framework.NewNodeToStatus(map[string]*fwk.Status{
 				"node1": fwk.NewStatus(fwk.Unschedulable),
@@ -422,7 +420,7 @@ func TestPostFilter(t *testing.T) {
 				st.MakePod().Name("p1").UID("p1").Namespace(v1.NamespaceDefault).Node("node1").Obj(),
 				st.MakePod().Name("p2").UID("p2").Namespace(v1.NamespaceDefault).Node("node2").Req(mediumRes).Obj(),
 			},
-			// even though node1 will fail with error but node2 will still be returned as a valid nominated node.
+			// 即便 node1 会报错，node2 仍会作为有效的提名节点返回。
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Capacity(largeRes).Label("error", "true").Obj(),
 				st.MakeNode().Name("node2").Capacity(largeRes).Obj(),
@@ -457,12 +455,12 @@ func TestPostFilter(t *testing.T) {
 				v1.ResourceMemory: "200",
 			}).Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj(),
 			pods: []*v1.Pod{
-				// Resizing pod itself is running on node1 with cached resource requests
+				// 正在扩容的 Pod 自身运行在 node1 上，使用缓存中的资源请求量。
 				st.MakePod().Name("p").UID("p").Namespace(v1.NamespaceDefault).Node("node1").Priority(highPriority).Req(map[v1.ResourceName]string{
 					v1.ResourceCPU:    "100m",
 					v1.ResourceMemory: "100",
 				}).Obj(),
-				// Victim pod to preempt
+				// 待抢占的受害者 Pod。
 				st.MakePod().Name("p1").UID("p1").Namespace(v1.NamespaceDefault).Priority(lowPriority).Node("node1").Req(map[v1.ResourceName]string{
 					v1.ResourceCPU:    "100m",
 					v1.ResourceMemory: "100",
@@ -528,7 +526,7 @@ func TestPostFilter(t *testing.T) {
 					v1.ResourceCPU:    "100m",
 					v1.ResourceMemory: "100",
 				}).Obj(),
-				// p2 is a low priority victim running on node2 (not the host node!)
+				// p2 是运行在 node2 上的低优先级受害者（并非宿主节点！）。
 				st.MakePod().Name("p2").UID("p2").Namespace(v1.NamespaceDefault).Priority(lowPriority).Node("node2").Req(map[v1.ResourceName]string{
 					v1.ResourceCPU:    "100m",
 					v1.ResourceMemory: "100",
@@ -558,7 +556,7 @@ func TestPostFilter(t *testing.T) {
 	for _, asyncAPICallsEnabled := range []bool{true, false} {
 		for _, tt := range tests {
 			t.Run(fmt.Sprintf("%s (Async API calls enabled: %v)", tt.name, asyncAPICallsEnabled), func(t *testing.T) {
-				// index the potential victim pods in the fake client so that the victims deletion logic does not fail
+				// 在 fake client 中为潜在受害者 Pod 建索引，否则删除逻辑会失败。
 				podItems := []v1.Pod{}
 				for _, pod := range tt.pods {
 					podItems = append(podItems, *pod)
@@ -587,7 +585,7 @@ func TestPostFilter(t *testing.T) {
 					}
 				}
 
-				// Register NodeResourceFit as the Filter & PreFilter plugin.
+				// 把 NodeResourceFit 注册为 Filter 和 PreFilter 插件。
 				nodeResourcesFitFuncWithFeatures := frameworkruntime.FactoryAdapter(tt.features, noderesources.NewFit)
 				registeredPlugins := []tf.RegisterPluginFunc{
 					tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
@@ -643,13 +641,13 @@ func TestPostFilter(t *testing.T) {
 				}
 
 				state := framework.NewCycleState()
-				// Ensure <state> is populated.
+				// 确认 <state> 已被填充。
 				if _, status, _ := f.RunPreFilterPlugins(ctx, state, tt.pod); !status.IsSuccess() {
 					t.Errorf("Unexpected PreFilter Status: %v", status)
 				}
 
 				gotResult, gotStatus := p.PostFilter(ctx, state, tt.pod, tt.filteredNodesStatuses)
-				// As we cannot compare two errors directly due to miss the equal method for how to compare two errors, so just need to compare the reasons.
+				// 错误类型没有可用的相等比较方法，无法直接比较两个 error，因此只比较原因字符串。
 				if gotStatus.Code() == fwk.Error {
 					if diff := cmp.Diff(tt.wantStatus.Reasons(), gotStatus.Reasons()); diff != "" {
 						t.Errorf("Unexpected status (-want, +got):\n%s", diff)
@@ -738,7 +736,7 @@ func TestDryRunPreemption(t *testing.T) {
 			},
 			nodeNames: []string{"node1", "node2"},
 			testPods: []*v1.Pod{
-				// Name the pod as "node1" to fit "MatchFilter" plugin.
+				// 把 Pod 命名为 "node1" 以匹配 "MatchFilter" 插件。
 				st.MakePod().Name("node1").UID("node1").Priority(highPriority).Obj(),
 			},
 			initPods: []*v1.Pod{
@@ -1287,12 +1285,9 @@ func TestDryRunPreemption(t *testing.T) {
 			disableParallelism: true,
 			expected: [][]candidate{
 				{
-					// Even though the DefaultPreemptionArgs constraints suggest that the
-					// minimum number of candidates is 2, we get three candidates here
-					// because we're okay with being a little over (in production, if a
-					// non-PDB violating candidate isn't found close to the offset, the
-					// number of additional candidates returned will be at most
-					// approximately equal to the parallelism in dryRunPreemption).
+					// 尽管 DefaultPreemptionArgs 配置要求最少 2 个候选，这里仍得到 3 个：
+					// 允许多返回一些候选是安全的。生产中若在 offset 附近找不到不违反 PDB 的候选，
+					// 额外返回的候选数量最多与 dryRunPreemption 的并行度相当。
 					// cycle=0 => offset=4 => node5 (yes, pdb), node1 (yes, pdb), node2 (no, pdb), node3 (yes)
 					candidate{
 						name: "node1",
@@ -1326,7 +1321,7 @@ func TestDryRunPreemption(t *testing.T) {
 			testPods: []*v1.Pod{
 				st.MakePod().Name("p").UID("p").Priority(highPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "3"}).Obj(),
 			},
-			// victimPodWithDRANodeAllocatable consumes 3 CPUs (out of the 5 CPUs on the node) - 1 through standard request and 2 through DRA claim
+			// victimPodWithDRANodeAllocatable 消耗 3 个 CPU（节点共 5 个）：1 个来自标准请求，2 个来自 DRA 声明。
 			initPods: []*v1.Pod{victimPodWithDRANodeAllocatable},
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
@@ -1341,9 +1336,9 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 			},
-			// Filter is called 2 times:
-			// 1. To check if the preemptor fits on the simulated node after evicting the victim.
-			// 2. To check if the preemptor still fits when the victim is reprieved (added back).
+			// Filter 被调用 2 次：
+			// 1. 检查驱逐受害者后抢占者能否适配模拟节点。
+			// 2. 检查把受害者恢复（加回）后抢占者是否仍能适配。
 			expectedNumFilterCalled: []int32{2},
 		},
 		{
@@ -1358,10 +1353,10 @@ func TestDryRunPreemption(t *testing.T) {
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
 			},
-			// Since feature gate is disabled, DRA footprint (2 CPUs) is ignored.
-			// Remaining capacity with victim reprieved = 5 - 1 = 4 CPUs.
-			// Preemptor (3 CPUs) fits, so reprieve check succeeds.
-			// No candidates are returned since the preemptor can schedule via reprieve (no eviction needed).
+			// 特性开关关闭，DRA 占用的 2 个 CPU 被忽略。
+			// 受害者恢复后的剩余容量 = 5 - 1 = 4 个 CPU。
+			// 抢占者（3 个 CPU）可以适配，恢复检查通过。
+			// 由于无需驱逐即可调度，因此不返回任何候选。
 			expected: [][]candidate{
 				{},
 			},
@@ -1382,9 +1377,9 @@ func TestDryRunPreemption(t *testing.T) {
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
 			},
-			// Reprieve victimPodStandard (1 CPU): requested = 1, remaining = 4. Preemptor fits. Reprieved!
-			// Reprieve victimPodWithDRANodeAllocatable (3 CPU): requested = 3 + 1 (standard) = 4, remaining = 1. Preemptor does not fit. Not reprieved!
-			// So only victimPodWithDRANodeAllocatable is evicted.
+			// 恢复 victimPodStandard（1 CPU）：请求量 = 1，剩余 = 4，抢占者适配，恢复成功。
+			// 恢复 victimPodWithDRANodeAllocatable（3 CPU）：请求量 = 3 + 1（标准）= 4，剩余 = 1，抢占者不适配，恢复失败。
+			// 因此只驱逐 victimPodWithDRANodeAllocatable。
 			expected: [][]candidate{
 				{
 					candidate{
@@ -1395,10 +1390,10 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 			},
-			// Filter is called 3 times:
-			// 1. To check if the preemptor fits on the simulated node after evicting both victims.
-			// 2. To check if the preemptor still fits when the standard victim is reprieved (added back).
-			// 3. To check if the preemptor still fits when the DRA victim is reprieved (added back).
+			// Filter 被调用 3 次：
+			// 1. 检查驱逐两个受害者后抢占者能否适配模拟节点。
+			// 2. 检查标准受害者恢复后抢占者是否仍能适配。
+			// 3. 检查 DRA 受害者恢复后抢占者是否仍能适配。
 			expectedNumFilterCalled: []int32{3},
 		},
 	}
@@ -1417,8 +1412,8 @@ func TestDryRunPreemption(t *testing.T) {
 					capacity = tt.nodeCapacity
 				}
 				nodeWrapper := st.MakeNode().Capacity(capacity)
-				// Split node name by '/' to form labels in a format of
-				// {"hostname": tpKeys[0], "zone": tpKeys[1], "region": tpKeys[2]}
+				// 按 '/' 拆分节点名，拼成
+				// {"hostname": tpKeys[0], "zone": tpKeys[1], "region": tpKeys[2]} 格式的标签。
 				tpKeys := strings.Split(nodeName, "/")
 				nodeWrapper.Name(tpKeys[0])
 				for i, labelVal := range strings.Split(nodeName, "/") {
@@ -1429,7 +1424,7 @@ func TestDryRunPreemption(t *testing.T) {
 			}
 			snapshot := internalcache.NewSnapshot(tt.initPods, nodes)
 
-			// For each test, register a FakeFilterPlugin along with essential plugins and tt.registerPlugins.
+			// 每个用例都注册一个 FakeFilterPlugin，以及必需插件和 tt.registerPlugins。
 			fakePlugin := tf.FakeFilterPlugin{
 				FailedNodeReturnCodeMap: fakeFilterRCMap,
 			}
@@ -1454,9 +1449,8 @@ func TestDryRunPreemption(t *testing.T) {
 			informerFactory := informers.NewSharedInformerFactory(clientsetfake.NewClientset(objs...), 0)
 			parallelism := parallelize.DefaultParallelism
 			if tt.disableParallelism {
-				// We need disableParallelism because of the non-deterministic nature
-				// of the results of tests that set custom minCandidateNodesPercentage
-				// or minCandidateNodesAbsolute. This is only done in a handful of tests.
+				// 设置自定义 minCandidateNodesPercentage 或 minCandidateNodesAbsolute 的用例
+				// 结果具有不确定性，因此必须关闭并行；仅少数用例需要这样做。
 				parallelism = 1
 			}
 
@@ -1493,20 +1487,19 @@ func TestDryRunPreemption(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Using 4 as a seed source to test getOffsetAndNumCandidates() deterministically.
-			// However, we need to do it after informerFactory.WaitforCacheSync() which might
-			// set a seed.
+			// 用固定值 4 作为随机种子，使 getOffsetAndNumCandidates() 的测试可复现。
+			// 但必须放在 informerFactory.WaitforCacheSync() 之后，因为该函数可能会设置种子。
 			getOffsetRand = rand.New(rand.NewSource(4)).Int31n
 			var prevNumFilterCalled int32
 			for cycle, pod := range tt.testPods {
 				state := framework.NewCycleState()
-				// Some tests rely on PreFilter plugin to compute its CycleState.
+				// 部分用例依赖 PreFilter 插件计算其 CycleState。
 				if _, status, _ := fwk.RunPreFilterPlugins(ctx, state, pod); !status.IsSuccess() {
 					t.Errorf("cycle %d: Unexpected PreFilter Status: %v", cycle, status)
 				}
 				offset, numCandidates := pl.GetOffsetAndNumCandidates(int32(len(nodeInfos)))
 				got, _, _ := pl.Evaluator.DryRunPreemption(ctx, state, pod, nodeInfos, tt.pdbs, offset, numCandidates)
-				// Sort the values (inner victims) and the candidate itself (by its NominatedNodeName).
+				// 对 value（内部受害者列表）和候选本身（按 NominatedNodeName）分别排序。
 				for i := range got {
 					victims := got[i].Victims().Pods
 					sort.Slice(victims, func(i, j int) bool {
@@ -1601,8 +1594,8 @@ func TestSelectBestCandidate(t *testing.T) {
 			expected: []string{"node2"},
 		},
 		{
-			// pickOneNodeForPreemption adjusts pod priorities when finding the sum of the victims. This
-			// test ensures that the logic works correctly.
+			// pickOneNodeForPreemption 在计算受害者优先级总和时会调整 Pod 优先级。
+			// 该测试确保这段逻辑正确。
 			name:           "sum of adjusted priorities is considered",
 			registerPlugin: tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
 			nodeNames:      []string{"node1", "node2", "node3"},
@@ -1890,7 +1883,7 @@ func TestCustomSelection(t *testing.T) {
 				st.MakePod().Name("v2").UID("v2").Node("node2").Priority(midPriority).Req(largeRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("v3").UID("v3").Node("node3").Priority(lowPriority).Req(largeRes).StartTime(epochTime).Obj(),
 			},
-			// highPriority can preempt anything, but not other highPriority
+			// highPriority 可以抢占任何其他 Pod，但不能抢占同为 highPriority 的对象。
 			expected: map[string][]string{"node2": {"v2"}, "node3": {"v3"}},
 		},
 		{
@@ -1903,7 +1896,7 @@ func TestCustomSelection(t *testing.T) {
 				st.MakePod().Name("v2").UID("v2").Node("node2").Priority(midPriority).Req(largeRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("v3").UID("v3").Node("node3").Priority(lowPriority).Req(largeRes).StartTime(epochTime).Obj(),
 			},
-			// midPriority can't preempt anything
+			// midPriority 无法抢占任何对象。
 			expected: map[string][]string{},
 		},
 		{
@@ -1916,7 +1909,7 @@ func TestCustomSelection(t *testing.T) {
 				st.MakePod().Name("v2").UID("v2").Node("node2").Priority(midPriority).Req(largeRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("v3").UID("v3").Node("node3").Priority(lowPriority).Req(largeRes).StartTime(epochTime).Obj(),
 			},
-			// the lowPriority and midPriority pods can be preempted but not the highPriority pod
+			// lowPriority 和 midPriority 的 Pod 可被抢占，highPriority 的 Pod 则不行。
 			expected: map[string][]string{"node2": {"v2"}, "node3": {"v3"}},
 		},
 		{
@@ -2067,13 +2060,13 @@ func TestCustomSelection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Override eligibility logic
+			// 覆盖抢占资格判断逻辑。
 			if tt.eligiblePods != nil {
 				pl.IsEligiblePod = tt.eligiblePods
 			}
 			offset, numCandidates := pl.GetOffsetAndNumCandidates(int32(len(nodeInfos)))
 			candidates, _, _ := pl.Evaluator.DryRunPreemption(ctx, state, tt.pod, nodeInfos, nil, offset, numCandidates)
-			// check that the candidates match what's expected
+			// 校验候选节点是否符合预期。
 			if len(tt.expected) != len(candidates) {
 				candidateNames := []string{}
 				for _, c := range candidates {
@@ -2099,7 +2092,7 @@ func TestCustomSelection(t *testing.T) {
 					t.Errorf("Unexpected victims on node %s (-want,+got):\n%s", selected.Name(), diff)
 				}
 
-				// remove selected from candidates
+				// 从候选列表中移除已选中的节点。
 				notSelected := []preemption.Candidate{}
 				for _, c := range candidates {
 					if c.Name() != selected.Name() {
@@ -2113,7 +2106,7 @@ func TestCustomSelection(t *testing.T) {
 }
 
 func TestCustomOrdering(t *testing.T) {
-	// Two arbitrary examples of custom selection ordering to check that they behave as expected
+	// 两个自定义选择顺序的示例，用于验证其行为符合预期。
 	orderByOldestStart := func(pod1, pod2 *v1.Pod) bool {
 		return util.GetPodStartTime(pod1).Before(util.GetPodStartTime(pod2))
 	}
@@ -2194,14 +2187,14 @@ func TestCustomOrdering(t *testing.T) {
 			orderVictims: orderByOldestStartVictim,
 			nodeNames:    []string{"node1"},
 			preemptor:    st.MakePod().Name("p2").UID("p2").Priority(highPriority).Req(largeRes).Obj(),
-			// size victims to require at least two to be preempted
+			// 设定受害者规模，使抢占至少需要驱逐两个对象。
 			pods: []*v1.Pod{
 				st.MakePod().Name("v1").UID("v1").Node("node1").Priority(lowPriority).Req(mediumRes).StartTime(epochTime2).Obj(),
 				st.MakePod().Name("v2").UID("v2").Node("node1").Priority(lowPriority).Req(mediumRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("v3").UID("v3").Node("node1").Priority(lowPriority).Req(mediumRes).StartTime(epochTime1).Obj(),
 			},
 			features: feature.Features{EnableGenericWorkload: true},
-			// the two newest pods (v1, v3) are selected; v2 (oldest) is reprieved
+			// 选中最新创建的两个 Pod（v1、v3）；最老的 v2 被恢复。
 			expectedPods: []string{"v3", "v1"},
 		},
 		{
@@ -2209,14 +2202,14 @@ func TestCustomOrdering(t *testing.T) {
 			orderVictims: orderByPodNameVictim,
 			nodeNames:    []string{"node1"},
 			preemptor:    st.MakePod().Name("p2").UID("p2").Priority(highPriority).Req(largeRes).Obj(),
-			// size victims to require at least two to be preempted
+			// 设定受害者规模，使抢占至少需要驱逐两个对象。
 			pods: []*v1.Pod{
 				st.MakePod().Name("foo").UID("v1").Node("node1").Priority(lowPriority).Req(mediumRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("bar").UID("v2").Node("node1").Priority(lowPriority).Req(mediumRes).StartTime(epochTime).Obj(),
 				st.MakePod().Name("baz").UID("v3").Node("node1").Priority(midPriority).Req(mediumRes).StartTime(epochTime).Obj(),
 			},
 			features: feature.Features{EnableGenericWorkload: true},
-			// the last pods in alphabetic order are selected, despite one with higher priority
+			// 按字母序靠后的 Pod 被选中，即使其中一个优先级更高。
 			expectedPods: []string{"baz", "foo"},
 		},
 		{
@@ -2233,7 +2226,7 @@ func TestCustomOrdering(t *testing.T) {
 				st.MakePodGroup().Name("pg1").UID("pg1").Namespace(v1.NamespaceDefault).DisruptionModeAll().Obj(),
 			},
 			features: feature.Features{EnableGenericWorkload: true},
-			// v1 (standalone) is reprieved because it is more important than pg1 in this custom ordering; pg1 pods (v2, v3) are selected
+			// 在此自定义顺序下 v1（独立 Pod）比 pg1 更重要，因此被恢复；pg1 的 Pod（v2、v3）被选中。
 			expectedPods: []string{"v2", "v3"},
 		},
 		{
@@ -2251,7 +2244,7 @@ func TestCustomOrdering(t *testing.T) {
 				st.MakePodGroup().Name("pg-large").UID("pg-large").Namespace(v1.NamespaceDefault).DisruptionModeAll().Obj(),
 			},
 			features: feature.Features{EnableGenericWorkload: true},
-			// pg-small is reprieved because smaller groups are more important in this custom ordering; pg-large pods (v2, v3) are selected
+			// 此自定义顺序认为小群组更重要，因此 pg-small 被恢复；pg-large 的 Pod（v2、v3）被选中。
 			expectedPods: []string{"v2", "v3"},
 		},
 		{
@@ -2268,7 +2261,7 @@ func TestCustomOrdering(t *testing.T) {
 				st.MakePodGroup().Name("pg-z").UID("pg-z").Namespace(v1.NamespaceDefault).DisruptionModeAll().Obj(),
 			},
 			features: feature.Features{EnableGenericWorkload: true},
-			// pg-a is reprieved because it is alphabetically earlier; pg-z pod (v2) is selected
+			// pg-a 因字母序靠前而被恢复；pg-z 的 Pod（v2）被选中。
 			expectedPods: []string{"v2"},
 		},
 		{
@@ -2390,7 +2383,7 @@ func TestCustomOrdering(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Override ordering logic
+			// 覆盖排序逻辑。
 			if tt.orderVictims != nil {
 				pl.MoreImportantVictim = tt.orderVictims
 			}
@@ -2403,8 +2396,8 @@ func TestCustomOrdering(t *testing.T) {
 			for _, p := range candidates[0].Victims().Pods {
 				podNames = append(podNames, p.Name)
 			}
-			// For PodGroups / CompositePodGroups, the order of pods within a group is indeterminate due to map iteration in ScheduledPods().
-			// For standalone pods, MoreImportantVictim establishes a deterministic order that must be preserved.
+			// PodGroup / CompositePodGroup 内部的 Pod 顺序因 ScheduledPods() 中的 map 遍历而不确定。
+			// 独立 Pod 则由 MoreImportantVictim 给出确定顺序，必须保持不变。
 			if len(tt.podGroups) > 0 || len(tt.compositePodGroups) > 0 {
 				sort.Strings(podNames)
 				sort.Strings(tt.expectedPods)
@@ -2740,7 +2733,7 @@ func TestPreempt(t *testing.T) {
 				},
 			},
 			registerPlugin: tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
-			// sum of priorities of all victims on node1 is larger than node2, node2 is chosen.
+			// node1 上所有受害者的优先级总和大于 node2，因此选择 node2。
 			want:         framework.NewPostFilterResultWithNominatedNode("node2"),
 			expectedPods: []string{"p2.1"},
 		},
@@ -2797,7 +2790,7 @@ func TestPreempt(t *testing.T) {
 						}
 					}
 
-					// Need to protect deletedPodNames and patchedPodNames to prevent DATA RACE panic.
+					// 需要保护 deletedPodNames 和 patchedPodNames，避免数据竞争。
 					var mu sync.RWMutex
 					deletedPodNames := sets.New[string]()
 					patchedPodNames := sets.New[string]()
@@ -2859,8 +2852,8 @@ func TestPreempt(t *testing.T) {
 					nodes := make([]*v1.Node, len(test.nodeNames))
 					for i, name := range test.nodeNames {
 						node := st.MakeNode().Name(name).Capacity(veryLargeRes).Obj()
-						// Split node name by '/' to form labels in a format of
-						// {"hostname": node.Name[0], "zone": node.Name[1], "region": node.Name[2]}
+						// 按 '/' 拆分节点名，拼成
+						// {"hostname": node.Name[0], "zone": node.Name[1], "region": node.Name[2]} 格式的标签。
 						node.Labels = make(map[string]string)
 						for i, label := range strings.Split(node.Name, "/") {
 							node.Labels[labelKeys[i]] = label
@@ -2870,14 +2863,14 @@ func TestPreempt(t *testing.T) {
 						cache.AddNode(logger, node)
 						nodes[i] = node
 
-						// Set nodeInfo to extenders to mock extenders' cache for preemption.
+						// 把 nodeInfo 设置给 extender，模拟抢占时 extender 的缓存。
 						cachedNodeInfo := framework.NewNodeInfo()
 						cachedNodeInfo.SetNode(node)
 						cachedNodeInfoMap[node.Name] = cachedNodeInfo
 					}
 					var extenders []fwk.Extender
 					for _, extender := range test.extenders {
-						// Set nodeInfoMap as extenders cached node information.
+						// 把 nodeInfoMap 作为 extender 缓存的节点信息。
 						extender.CachedNodeNameToInfo = cachedNodeInfoMap
 						extenders = append(extenders, extender)
 					}
@@ -2915,7 +2908,7 @@ func TestPreempt(t *testing.T) {
 						t.Errorf("Unexpected preFilterStatus: %v", s)
 					}
 
-					// Call preempt and check the expected results.
+					// 调用抢占并检查预期结果。
 					features := feature.Features{
 						EnableAsyncPreemption: asyncPreemptionEnabled,
 					}
@@ -2924,8 +2917,7 @@ func TestPreempt(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					// so that these nodes are eligible for preemption, we set their status
-					// to Unschedulable.
+					// 为让这些节点成为抢占候选，将其状态设为 Unschedulable。
 
 					nodeToStatusMap := framework.NewDefaultNodeToStatus()
 					for _, n := range nodes {
@@ -2940,7 +2932,7 @@ func TestPreempt(t *testing.T) {
 					}
 
 					if asyncPreemptionEnabled {
-						// Wait for the pod to be deleted.
+						// 等待 Pod 被删除。
 						if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 							mu.RLock()
 							defer mu.RUnlock()
@@ -2950,7 +2942,7 @@ func TestPreempt(t *testing.T) {
 						}
 					} else {
 						mu.RLock()
-						// If async preemption is disabled, the pod should be deleted immediately.
+						// 未开启异步抢占时，Pod 应立即被删除。
 						if len(deletedPodNames) != len(test.expectedPods) {
 							t.Errorf("expected %v pods to be deleted, got %v.", len(test.expectedPods), len(deletedPodNames))
 						}
@@ -2962,7 +2954,7 @@ func TestPreempt(t *testing.T) {
 						t.Errorf("unexpected difference in the set of patched and deleted pods: %s", diff)
 					}
 
-					// Make sure that the DisruptionTarget condition has been added to the pod status
+					// 确认 DisruptionTarget condition 已加入 Pod status。
 					for _, patchedPod := range patchedPods {
 						expectedPodCondition := &v1.PodCondition{
 							Type:    v1.DisruptionTarget,
@@ -2993,7 +2985,7 @@ func TestPreempt(t *testing.T) {
 					if res != nil && res.NominatingInfo != nil {
 						test.preemptor.Status.NominatedNodeName = res.NominatedNodeName
 					}
-					// Manually set the deleted Pods' deletionTimestamp to non-nil.
+					// 手动把已删除 Pod 的 deletionTimestamp 设为非空。
 					for _, pod := range testPods {
 						if deletedPodNames.Has(pod.Name) {
 							now := metav1.Now()
@@ -3003,7 +2995,7 @@ func TestPreempt(t *testing.T) {
 					}
 					mu.RUnlock()
 
-					// Call preempt again and make sure it doesn't preempt any more pods.
+					// 再次调用抢占，确认不会继续驱逐更多 Pod。
 					res, status = pl.Evaluator.Preempt(ctx, framework.NewCycleState(), test.preemptor, framework.NewDefaultNodeToStatus())
 					if !status.IsSuccess() && !status.IsRejected() {
 						t.Errorf("unexpected error in preemption: %v", status.AsError())
@@ -3792,14 +3784,14 @@ func TestPreEnqueue(t *testing.T) {
 				return false, nil
 			}
 
-			// Fill the cycle state
+			// 填充 cycle state。
 			state := framework.NewCycleState()
 			if _, status, _ := f.RunPreFilterPlugins(ctx, state, tt.podToTriggerPreemption); !status.IsSuccess() {
 				t.Errorf("Unexpected PreFilter Status: %v", status)
 			}
 
-			// Trigger preemption. Given custom PreemptPod implementation, the async preemption will not finish until
-			// finishPreemption is closed.
+			// 触发抢占。由于使用自定义的 PreemptPod 实现，
+			// 异步抢占会一直阻塞到 finishPreemption 被关闭。
 			if tt.features.EnableGenericWorkload && tt.podToTriggerPreemption.Spec.SchedulingGroup != nil && tt.pgInfo != nil {
 				var pgSchedulingFunc fwk.PodGroupSchedulingFunc = func(_ context.Context) (*fwk.PodGroupAssignments, *fwk.Status) {
 					nodeInfo, _ := f.SnapshotSharedLister().NodeInfos().Get("node1")
@@ -3875,7 +3867,7 @@ func TestDefaultPreemption_PodGroupPostFilter_ErrorWrapping(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Create a node and a pod with an empty UID to induce a raw cache failure during preemption.
+			// 创建 UID 为空的节点和 Pod，以在抢占过程中触发原始缓存失败。
 			node := st.MakeNode().Name("node1").Capacity(veryLargeRes).Obj()
 			invalidPod := st.MakePod().Name("pod-empty-uid").UID("").Node("node1").Priority(lowPriority).Obj()
 			testPods := []*v1.Pod{invalidPod}
@@ -4259,7 +4251,7 @@ func getCounterFromGatherer(g componentmetrics.Gatherer, name string, resultLabe
 	return uint64(vals[resultLabelValue]), nil
 }
 
-// newPGInfo creates a PodGroupInfo representing a standalone PodGroup.
+// newPGInfo 创建代表独立 PodGroup 的 PodGroupInfo。
 func newPGInfo(pg *v1beta1.PodGroup, pods ...*v1.Pod) *framework.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:            pg.Name,
@@ -4270,7 +4262,7 @@ func newPGInfo(pg *v1beta1.PodGroup, pods ...*v1.Pod) *framework.PodGroupInfo {
 	}
 }
 
-// newCPGInfo creates a PodGroupInfo representing a CompositePodGroup hierarchy.
+// newCPGInfo 创建代表 CompositePodGroup 层级的 PodGroupInfo。
 func newCPGInfo(cpg *v1alpha3.CompositePodGroup, children []*framework.PodGroupInfo, pods ...*v1.Pod) *framework.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:              cpg.Name,
@@ -4282,8 +4274,8 @@ func newCPGInfo(cpg *v1alpha3.CompositePodGroup, children []*framework.PodGroupI
 	}
 }
 
-// extractGroups is an auxiliary method to extract all PodGroups and CompositePodGroups
-// API objects from a PodGroupInfo, useful for setting up tests.
+// extractGroups 从 PodGroupInfo 中提取所有 PodGroup 和 CompositePodGroup API 对象，
+// 便于测试准备数据。
 func extractGroups(pgInfo *framework.PodGroupInfo) ([]*v1beta1.PodGroup, []*v1alpha3.CompositePodGroup) {
 	var pgs []*v1beta1.PodGroup
 	var cpgs []*v1alpha3.CompositePodGroup

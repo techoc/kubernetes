@@ -110,7 +110,7 @@ func TestGCEDiskConflicts(t *testing.T) {
 			if diff := cmp.Diff(test.preFilterWantStatus, preFilterGotStatus); diff != "" {
 				t.Errorf("Unexpected PreFilter status (-want, +got): %s", diff)
 			}
-			// If PreFilter fails, then Filter will not run.
+			// PreFilter 失败时不会走到 Filter，因此只有 PreFilter 成功才检查 Filter 结果。
 			if test.preFilterWantStatus.IsSuccess() {
 				gotStatus := p.(fwk.FilterPlugin).Filter(ctx, cycleState, test.pod, test.nodeInfo)
 				if diff := cmp.Diff(test.wantStatus, gotStatus); diff != "" {
@@ -185,7 +185,7 @@ func TestAWSDiskConflicts(t *testing.T) {
 			if diff := cmp.Diff(test.preFilterWantStatus, preFilterGotStatus); diff != "" {
 				t.Errorf("Unexpected PreFilter status (-want, +got): %s", diff)
 			}
-			// If PreFilter fails, then Filter will not run.
+			// PreFilter 失败时不会走到 Filter，因此只有 PreFilter 成功才检查 Filter 结果。
 			if test.preFilterWantStatus.IsSuccess() {
 				gotStatus := p.(fwk.FilterPlugin).Filter(ctx, cycleState, test.pod, test.nodeInfo)
 				if diff := cmp.Diff(test.wantStatus, gotStatus); diff != "" {
@@ -266,7 +266,7 @@ func TestRBDDiskConflicts(t *testing.T) {
 			if diff := cmp.Diff(test.preFilterWantStatus, preFilterGotStatus); diff != "" {
 				t.Errorf("Unexpected PreFilter status (-want, +got): %s", diff)
 			}
-			// If PreFilter fails, then Filter will not run.
+			// PreFilter 失败时不会走到 Filter，因此只有 PreFilter 成功才检查 Filter 结果。
 			if test.preFilterWantStatus.IsSuccess() {
 				gotStatus := p.(fwk.FilterPlugin).Filter(ctx, cycleState, test.pod, test.nodeInfo)
 				if diff := cmp.Diff(test.wantStatus, gotStatus); diff != "" {
@@ -347,7 +347,7 @@ func TestISCSIDiskConflicts(t *testing.T) {
 			if diff := cmp.Diff(test.preFilterWantStatus, preFilterGotStatus); diff != "" {
 				t.Errorf("Unexpected PreFilter status (-want, +got): %s", diff)
 			}
-			// If PreFilter fails, then Filter will not run.
+			// PreFilter 失败时不会走到 Filter，因此只有 PreFilter 成功才检查 Filter 结果。
 			if test.preFilterWantStatus.IsSuccess() {
 				gotStatus := p.(fwk.FilterPlugin).Filter(ctx, cycleState, test.pod, test.nodeInfo)
 				if diff := cmp.Diff(test.wantStatus, gotStatus); diff != "" {
@@ -359,12 +359,12 @@ func TestISCSIDiskConflicts(t *testing.T) {
 }
 
 func TestAccessModeConflicts(t *testing.T) {
-	// Required for querying lister for PVCs in the same namespace.
+	// Pod 必须使用 default 命名空间，这样 PVC lister 才能查到同命名空间的 PVC。
 	podWithOnePVC := st.MakePod().Name("pod-with-one-pvc").Namespace(metav1.NamespaceDefault).PVC("claim-with-rwop-1").Node("node-1").Obj()
 	podWithTwoPVCs := st.MakePod().Name("pod-with-two-pvcs").Namespace(metav1.NamespaceDefault).PVC("claim-with-rwop-1").PVC("claim-with-rwop-2").Node("node-1").Obj()
 	podWithOneConflict := st.MakePod().Name("pod-with-one-conflict").Namespace(metav1.NamespaceDefault).PVC("claim-with-rwop-1").Node("node-1").Obj()
 	podWithTwoConflicts := st.MakePod().Name("pod-with-two-conflicts").Namespace(metav1.NamespaceDefault).PVC("claim-with-rwop-1").PVC("claim-with-rwop-2").Node("node-1").Obj()
-	// Required for querying lister for PVCs in the same namespace.
+	// Pod 必须使用 default 命名空间，这样 PVC lister 才能查到同命名空间的 PVC。
 	podWithReadWriteManyPVC := st.MakePod().Name("pod-with-rwx").Namespace(metav1.NamespaceDefault).PVC("claim-with-rwx").Node("node-1").Obj()
 
 	node := &v1.Node{
@@ -475,7 +475,7 @@ func TestAccessModeConflicts(t *testing.T) {
 			if diff := cmp.Diff(test.preFilterWantStatus, preFilterGotStatus); diff != "" {
 				t.Errorf("Unexpected PreFilter status (-want, +got): %s", diff)
 			}
-			// If PreFilter fails, then Filter will not run.
+			// PreFilter 失败时不会走到 Filter，因此只有 PreFilter 成功才检查 Filter 结果。
 			if test.preFilterWantStatus.IsSuccess() {
 				gotStatus := p.(fwk.FilterPlugin).Filter(ctx, cycleState, test.pod, test.nodeInfo)
 				if diff := cmp.Diff(test.wantStatus, gotStatus); diff != "" {

@@ -26,11 +26,12 @@ import (
 
 const maxUtilization = 100
 
-// buildRequestedToCapacityRatioScorerFunction allows users to apply bin packing
-// on core resources like CPU, Memory as well as extended resources like accelerators.
+// buildRequestedToCapacityRatioScorerFunction 构造按“请求量/容量”打分的函数，
+// 可用于 CPU、内存等核心资源，也可用于加速器之类的扩展资源。
 func buildRequestedToCapacityRatioScorerFunction(scoringFunctionShape helper.FunctionShape, resources []config.ResourceSpec) func([]int64, []int64, []int64) int64 {
 	rawScoringFunction := helper.BuildBrokenLinearFunction(scoringFunctionShape)
 	resourceScoringFunction := func(requested, capacity int64) int64 {
+		// 容量为 0 或请求超过容量时，视为 100% 利用率，由形状函数给出最差档位的分数。
 		if capacity == 0 || requested > capacity {
 			return rawScoringFunction(maxUtilization)
 		}
@@ -40,16 +41,19 @@ func buildRequestedToCapacityRatioScorerFunction(scoringFunctionShape helper.Fun
 	return func(requested, _, allocable []int64) int64 {
 		var nodeScore, weightSum int64
 		for i := range requested {
+			// 可分配量为 0 的资源不参与打分，也不能计入权重，否则会拉低均值。
 			if allocable[i] == 0 {
 				continue
 			}
 			weight := resources[i].Weight
 			resourceScore := resourceScoringFunction(requested[i], allocable[i])
+			// 只累加正分，避免某些资源形状函数给出负值时把其他资源的分数抵消掉。
 			if resourceScore > 0 {
 				nodeScore += resourceScore * weight
 				weightSum += weight
 			}
 		}
+		// 没有任何资源贡献分数时返回 0，避免除以零。
 		if weightSum == 0 {
 			return 0
 		}
@@ -57,14 +61,14 @@ func buildRequestedToCapacityRatioScorerFunction(scoringFunctionShape helper.Fun
 	}
 }
 
+// requestedToCapacityRatioScorer 根据配置的资源权重和利用率曲线构造打分函数。
 func requestedToCapacityRatioScorer(resources []config.ResourceSpec, shape []config.UtilizationShapePoint) func([]int64, []int64, []int64) int64 {
 	shapes := make([]helper.FunctionShapePoint, 0, len(shape))
 	for _, point := range shape {
 		shapes = append(shapes, helper.FunctionShapePoint{
 			Utilization: int64(point.Utilization),
-			// MaxCustomPriorityScore may diverge from the max score used in the scheduler and defined by MaxNodeScore,
-			// therefore we need to scale the score returned by requested to capacity ratio to the score range
-			// used by the scheduler.
+			// 自定义优先级的最大分可能与调度器使用的 MaxNodeScore 不同，
+			// 因此要把“请求/容量比”的分数缩放到调度器使用的分值区间。
 			Score: int64(point.Score) * (fwk.MaxNodeScore / config.MaxCustomPriorityScore),
 		})
 	}

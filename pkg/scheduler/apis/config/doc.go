@@ -17,4 +17,11 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=kubescheduler.config.k8s.io
 
+// Package config 定义调度器的内部 API 类型。
+//
+// 这里的类型是调度器在运行期实际使用的表示形式，与 v1 等外部版本分开：
+//   - 外部版本负责序列化与兼容性，内部版本负责承载业务逻辑
+//   - 两者之间通过 conversion 和 defaulting 函数互相转换
+//
+// 该包同时提供 DeepCopy 生成指令与 API 组名声明，供代码生成器使用。
 package config

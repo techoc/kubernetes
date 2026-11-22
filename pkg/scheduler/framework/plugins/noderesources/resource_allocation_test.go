@@ -48,6 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestResourceAllocationScorerCalculateRequests 验证资源分配打分器对 Pod 请求量的计算。
 func TestResourceAllocationScorerCalculateRequests(t *testing.T) {
 	const oneMi = 1048576
 	tests := []struct {
@@ -93,7 +94,7 @@ func TestResourceAllocationScorerCalculateRequests(t *testing.T) {
 					},
 				},
 			},
-			// should accumulate once per container without a request
+			// 没有资源请求的容器也应各累加一次 overhead。
 			expected: map[v1.ResourceName]int64{
 				v1.ResourceCPU:    2 * util.DefaultMilliCPURequest,
 				v1.ResourceMemory: 2 * util.DefaultMemoryRequest,
@@ -262,11 +263,12 @@ func TestResourceAllocationScorerCalculateRequests(t *testing.T) {
 	}
 }
 
+// TestCalculateResourceAllocatableRequest 验证可分配资源与已分配资源的计算。
 func TestCalculateResourceAllocatableRequest(t *testing.T) {
 	testCalculateResourceAllocatableRequest(ktesting.Init(t))
 }
 func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
-	// Initialize test variables
+	// 初始化各测试共用变量。
 	nodeName := "resource-node"
 	driverName := "test-driver"
 	testClaim := "test-claim"
@@ -282,7 +284,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 		ConsumableCapacity:     true,
 	}
 
-	// Define test cases
+	// 定义覆盖不同 DRA 与资源类型的用例。
 	tests := map[string]struct {
 		enableDRAExtendedResource bool
 		node                      *v1.Node
@@ -348,7 +350,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 			draObjects: []apiruntime.Object{
 				deviceClassWithExtendResourceName,
 				st.MakeResourceSlice(nodeName, driverName).Devices("device-1", "device-2").Obj(),
-				// Create a resource claim that fully allocates device-1
+				// 构造把 device-1 完全占用的 ResourceClaim。
 				st.MakeResourceClaim().
 					Name(testClaim).
 					Request(deviceClassName).
@@ -376,7 +378,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 			draObjects: []apiruntime.Object{
 				deviceClassWithExtendResourceName,
 				st.MakeResourceSlice(nodeName, driverName).Devices("device-1", "device-2").Obj(),
-				// Create a resource claim with shared device allocation (consumable capacity)
+				// 构造共享分配（可消费容量）的 ResourceClaim。
 				st.MakeResourceClaim().
 					Name(testClaim).
 					Request(deviceClassName).
@@ -405,7 +407,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 			draObjects: []apiruntime.Object{
 				deviceClassWithExtendResourceName,
 				st.MakeResourceSlice(nodeName, driverName).Devices("device-1", "device-2", "device-3").Obj(),
-				// Mix of fully allocated and shared device allocations
+				// 混合完全分配与共享分配。
 				st.MakeResourceClaim().
 					Name("test-claim-1").
 					Request(deviceClassName).
@@ -417,7 +419,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 									Driver:  driverName,
 									Pool:    nodeName,
 									Device:  "device-1",
-									// No ShareID = fully allocated device
+									// 无 ShareID 表示设备被完全占用。
 								},
 							},
 						},
@@ -440,7 +442,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 						},
 					}).
 					Obj(),
-				// device-3 remains unallocated
+				// device-3 保持未分配。
 			},
 			expectedAllocatable: 3, // 3 allocatable devices `device-1`, `device-2`, `device-3`
 			expectedAllocated:   2, // 2 allocated (1 full `test-claim-1` + 1 shared `test-claim-2`)
@@ -459,21 +461,21 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 						Selectors: []resourceapi.DeviceSelector{
 							{
 								CEL: &resourceapi.CELDeviceSelector{
-									// Realistic GPU selection: match test driver with at least 8GB memory and SOME- model
+									// 模拟真实 GPU 选择：匹配测试驱动，要求内存至少 8GB 且型号以 SOME- 开头。
 									Expression: `device.driver == "test-driver" && device.capacity["test-driver"].memory.compareTo(quantity("8Gi")) >= 0 && device.attributes["test-driver"].model.startsWith("SOME-")`,
 								},
 							},
 						},
 					},
 				},
-				// Create a custom resource slice with per-device node selection
+				// 构造设备级节点选择的 ResourceSlice。
 				&resourceapi.ResourceSlice{
 					ObjectMeta: metav1.ObjectMeta{Name: "per-device-slice"},
 					Spec: resourceapi.ResourceSliceSpec{
 						Driver:                 driverName, // Match the CEL expression driver
 						Pool:                   resourceapi.ResourcePool{Name: "per-device-pool", ResourceSliceCount: 1},
 						PerDeviceNodeSelection: ptr.To(true), // Enable per-device node selection
-						// Note: No NodeName, AllNodes, or NodeSelector at slice level when PerDeviceNodeSelection is true
+						// 注意 PerDeviceNodeSelection 开启时，slice 级别不能设置 NodeName/AllNodes/NodeSelector。
 						Devices: []resourceapi.Device{
 							{
 								Name:     "device-1",
@@ -497,7 +499,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 							},
 							{
 								Name: "device-3",
-								// Use a node selector to ensure nodeMatches is exercised for this device
+								// 用节点选择器确保该设备会走到 nodeMatches 判断。
 								NodeSelector: &v1.NodeSelector{
 									NodeSelectorTerms: []v1.NodeSelectorTerm{
 										{
@@ -521,7 +523,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 						},
 					},
 				},
-				// Create a resource claim that allocates gpu-1
+				// 构造占用 gpu-1 的 ResourceClaim。
 				st.MakeResourceClaim().
 					Name("test-claim").
 					Request(deviceClassName).
@@ -546,7 +548,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 
 	for name, tc := range tests {
 		tCtx.SyncTest(name, func(tCtx ktesting.TContext) {
-			// Setup environment, create required objects
+			// 搭建测试环境，创建所需对象。
 			if !tc.enableDRAExtendedResource {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(tCtx, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 			}
@@ -575,7 +577,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 				}
 			}
 
-			// Test calculateResourceAllocatableRequest API
+			// 验证 calculateResourceAllocatableRequest 的计算结果。
 			allocatable, allocated := scorer.calculateResourceAllocatableRequest(tCtx, nodeInfo, tc.extendedResource, draPreScoreState)
 			if !cmp.Equal(allocatable, tc.expectedAllocatable) {
 				tCtx.Errorf("Expected allocatable=%v, but got %v", tc.expectedAllocatable, allocatable)
@@ -587,8 +589,8 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 	}
 }
 
-// newTestDRAManager creates a DefaultDRAManager for testing purposes.
-// Only usable in a syntest bubble.
+// newTestDRAManager 创建测试用 DefaultDRAManager。
+// 只能在 syntest bubble 中使用。
 func newTestDRAManager(tCtx ktesting.TContext, objects ...apiruntime.Object) *dynamicresources.DefaultDRAManager {
 	tCtx = tCtx.WithCancel()
 	client := fake.NewClientset(objects...)
@@ -620,20 +622,19 @@ func newTestDRAManager(tCtx ktesting.TContext, objects ...apiruntime.Object) *dy
 	informerFactory.Start(tCtx.Done())
 	tCtx.Cleanup(func() {
 		tCtx.Cancel("test has completed")
-		// Now we can wait for all goroutines to stop.
+		// 现在可以等待所有 goroutine 退出。
 		informerFactory.Shutdown()
 	})
 	informerFactory.WaitForCacheSync(tCtx.Done())
 
-	// Wait for full initialization of manager, including
-	// processing of all informer events.
+	// 等待 manager 完全初始化，包括所有 informer 事件的处理。
 	tCtx.Wait()
 
 	return draManager
 }
 
-// getCachedDeviceMatch checks the cache for a DeviceMatches result
-// returns (matches, found)
+// getCachedDeviceMatch 查询 DeviceMatches 缓存。
+// 返回 (是否匹配, 是否命中)。
 func (r *resourceAllocationScorer) getCachedDeviceMatch(expression string, driver string, poolName string, deviceName string) (bool, bool) {
 	key := buildDeviceMatchCacheKey(expression, driver, poolName, deviceName)
 
@@ -644,14 +645,15 @@ func (r *resourceAllocationScorer) getCachedDeviceMatch(expression string, drive
 	return false, false
 }
 
-// setCachedDeviceMatch stores a DeviceMatches result in the cache
+// setCachedDeviceMatch 把 DeviceMatches 结果写入缓存。
 func (r *resourceAllocationScorer) setCachedDeviceMatch(expression string, driver string, poolName string, deviceName string, matches bool) {
 	key := buildDeviceMatchCacheKey(expression, driver, poolName, deviceName)
 	r.deviceMatchCache.Store(key, matches)
 }
 
+// TestDeviceMatchCaching 验证设备匹配结果的缓存读写行为。
 func TestDeviceMatchCaching(t *testing.T) {
-	// Create a scorer with caching enabled
+	// 创建启用缓存的打分器。
 	scorer := &resourceAllocationScorer{
 		DRACaches: DRACaches{
 			celCache: cel.NewCache(10, cel.Features{}),
@@ -663,8 +665,7 @@ func TestDeviceMatchCaching(t *testing.T) {
 	poolName := "example-pool"
 	deviceName := "device-1"
 
-	// Test cache operations
-	// Initially, cache should be empty
+	// 验证缓存操作：初始时缓存应为空。
 	matches, found := scorer.getCachedDeviceMatch(expression, driverName, poolName, deviceName)
 	if found {
 		t.Errorf("Cache should be empty initially, but found an entry")
@@ -673,10 +674,10 @@ func TestDeviceMatchCaching(t *testing.T) {
 		t.Errorf("Matches should be false initially, but got true")
 	}
 
-	// Store a result in cache
+	// 向缓存写入结果。
 	scorer.setCachedDeviceMatch(expression, driverName, poolName, deviceName, true)
 
-	// Retrieve from cache
+	// 从缓存读取。
 	matches, found = scorer.getCachedDeviceMatch(expression, driverName, poolName, deviceName)
 	if !found {
 		t.Errorf("Result should be found in cache, but was not")
@@ -685,7 +686,7 @@ func TestDeviceMatchCaching(t *testing.T) {
 		t.Errorf("Cached result should match what we stored, expected true but got false")
 	}
 
-	// Test caching with error
+	// 验证错误结果的缓存行为。
 	scorer.setCachedDeviceMatch(expression, driverName, poolName, deviceName, false)
 
 	matches, found = scorer.getCachedDeviceMatch(expression, driverName, poolName, deviceName)
@@ -696,7 +697,7 @@ func TestDeviceMatchCaching(t *testing.T) {
 		t.Errorf("Cached result should match what we stored, expected false but got true")
 	}
 
-	// Test that different devices have different cache keys
+	// 验证不同设备对应不同缓存键。
 	matches, found = scorer.getCachedDeviceMatch(expression, driverName, poolName, "device-2")
 	if found {
 		t.Errorf("Different device should not hit cache")
@@ -705,7 +706,7 @@ func TestDeviceMatchCaching(t *testing.T) {
 		t.Errorf("Matches should be false for uncached entry")
 	}
 
-	// Test that different pools have different cache keys
+	// 验证不同设备池对应不同缓存键。
 	matches, found = scorer.getCachedDeviceMatch(expression, driverName, "other-pool", deviceName)
 	if found {
 		t.Errorf("Different pool should not hit cache")
@@ -715,13 +716,14 @@ func TestDeviceMatchCaching(t *testing.T) {
 	}
 }
 
+// BenchmarkDeviceMatchCaching 对比设备匹配缓存命中与未命中的性能。
 func BenchmarkDeviceMatchCaching(b *testing.B) {
 	expression := `device.attributes["example.com"].test_attr == "test-value"`
 	driverName := "example.com/test-driver"
 	poolName := "example-pool"
 	deviceName := "device-1"
 
-	// Create a scorer with caching enabled
+	// 创建启用缓存的打分器。
 	scorer := &resourceAllocationScorer{
 		DRACaches: DRACaches{
 			celCache: cel.NewCache(10, cel.Features{}),
@@ -729,7 +731,7 @@ func BenchmarkDeviceMatchCaching(b *testing.B) {
 	}
 
 	b.Run("WithoutCache", func(b *testing.B) {
-		// Disable caching by creating a new scorer each time
+		// 每次创建新打分器以禁用缓存。
 		for i := 0; i < b.N; i++ {
 			freshScorer := &resourceAllocationScorer{
 				DRACaches: DRACaches{
@@ -737,24 +739,24 @@ func BenchmarkDeviceMatchCaching(b *testing.B) {
 				},
 			}
 
-			// This will always be a cache miss
+			// 必然缓存未命中。
 			_, _ = freshScorer.getCachedDeviceMatch(expression, driverName, poolName, deviceName)
 		}
 	})
 
 	b.Run("WithCache", func(b *testing.B) {
-		// Pre-warm the cache
+		// 预热缓存。
 		scorer.setCachedDeviceMatch(expression, driverName, poolName, deviceName, true)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// This should always be a cache hit
+			// 必然缓存命中。
 			_, _ = scorer.getCachedDeviceMatch(expression, driverName, poolName, deviceName)
 		}
 	})
 }
 
-// getCachedNodeMatch checks the cache for a NodeMatches result
+// getCachedNodeMatch 查询 NodeMatches 缓存。
 func (r *resourceAllocationScorer) getCachedNodeMatch(nodeName string, nodeNameToMatch string, allNodesMatch bool, nodeSelectorHash string) (bool, bool) {
 	key := buildNodeMatchCacheKey(nodeName, nodeNameToMatch, allNodesMatch, nodeSelectorHash)
 
@@ -765,21 +767,22 @@ func (r *resourceAllocationScorer) getCachedNodeMatch(nodeName string, nodeNameT
 	return false, false
 }
 
-// setCachedNodeMatch stores a NodeMatches result in the cache
+// setCachedNodeMatch 把 NodeMatches 结果写入缓存。
 func (r *resourceAllocationScorer) setCachedNodeMatch(nodeName string, nodeNameToMatch string, allNodesMatch bool, nodeSelectorHash string, matches bool) {
 	key := buildNodeMatchCacheKey(nodeName, nodeNameToMatch, allNodesMatch, nodeSelectorHash)
 	r.nodeMatchCache.Store(key, matches)
 }
 
+// TestNodeMatchCaching 验证节点匹配结果的缓存读写行为。
 func TestNodeMatchCaching(t *testing.T) {
-	// Create a scorer with caching enabled
+	// 创建启用缓存的打分器。
 	scorer := &resourceAllocationScorer{
 		DRACaches: DRACaches{
 			celCache: cel.NewCache(10, cel.Features{}),
 		},
 	}
 
-	// Create test node
+	// 创建测试节点。
 	testNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node-1",
@@ -790,7 +793,7 @@ func TestNodeMatchCaching(t *testing.T) {
 		},
 	}
 
-	// Test cases for different NodeMatches scenarios
+	// 覆盖不同 NodeMatches 场景的用例。
 	testCases := []struct {
 		name            string
 		nodeNameToMatch string
@@ -844,14 +847,14 @@ func TestNodeMatchCaching(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			nodeSelectorStr := tc.nodeSelector.String()
 
-			// First call should be a cache miss
+			// 第一次调用应缓存未命中。
 			_, found1 := scorer.getCachedNodeMatch(testNode.Name, tc.nodeNameToMatch, tc.allNodesMatch, nodeSelectorStr)
 			assert.False(t, found1, "Cache should be empty initially")
 
-			// Simulate setting a cached result
+			// 模拟写入缓存结果。
 			scorer.setCachedNodeMatch(testNode.Name, tc.nodeNameToMatch, tc.allNodesMatch, nodeSelectorStr, tc.expectedMatch)
 
-			// Second call should be a cache hit
+			// 第二次调用应缓存命中。
 			matches2, found2 := scorer.getCachedNodeMatch(testNode.Name, tc.nodeNameToMatch, tc.allNodesMatch, nodeSelectorStr)
 			assert.True(t, found2, "Result should be found in cache")
 			assert.Equal(t, tc.expectedMatch, matches2, "Cached result should match expected value")
@@ -859,6 +862,7 @@ func TestNodeMatchCaching(t *testing.T) {
 	}
 }
 
+// TestNodeMatchesCacheHit 验证重复调用 nodeMatches 会命中缓存。
 func TestNodeMatchesCacheHit(t *testing.T) {
 	scorer := &resourceAllocationScorer{
 		DRACaches: DRACaches{
@@ -898,8 +902,9 @@ func TestNodeMatchesCacheHit(t *testing.T) {
 	}
 }
 
+// BenchmarkNodeMatchCaching 对比节点匹配缓存命中与未命中的性能。
 func BenchmarkNodeMatchCaching(b *testing.B) {
-	// Create test node
+	// 创建测试节点。
 	testNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node-1",
@@ -910,7 +915,7 @@ func BenchmarkNodeMatchCaching(b *testing.B) {
 		},
 	}
 
-	// Create a complex NodeSelector to make the test meaningful
+	// 构造较复杂的 NodeSelector，让测试有实际意义。
 	nodeSelector := &v1.NodeSelector{
 		NodeSelectorTerms: []v1.NodeSelectorTerm{
 			{
@@ -932,7 +937,7 @@ func BenchmarkNodeMatchCaching(b *testing.B) {
 	b.Run("WithoutCache", func(b *testing.B) {
 		nodeSelectorStr := nodeSelector.String()
 
-		// Create a new scorer for each iteration to avoid caching
+		// 每轮创建新打分器以避免缓存影响。
 		for i := 0; i < b.N; i++ {
 			freshScorer := &resourceAllocationScorer{
 				DRACaches: DRACaches{
@@ -940,7 +945,7 @@ func BenchmarkNodeMatchCaching(b *testing.B) {
 				},
 			}
 
-			// This will always be a cache miss
+			// 必然缓存未命中。
 			_, _ = freshScorer.getCachedNodeMatch(testNode.Name, "", false, nodeSelectorStr)
 		}
 	})
@@ -948,19 +953,19 @@ func BenchmarkNodeMatchCaching(b *testing.B) {
 	b.Run("WithCache", func(b *testing.B) {
 		nodeSelectorStr := nodeSelector.String()
 
-		// Create a scorer and pre-warm the cache
+		// 创建打分器并预热缓存。
 		scorer := &resourceAllocationScorer{
 			DRACaches: DRACaches{
 				celCache: cel.NewCache(10, cel.Features{}),
 			},
 		}
 
-		// Pre-warm the cache
+		// 预热缓存。
 		scorer.setCachedNodeMatch(testNode.Name, "", false, nodeSelectorStr, true)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// This should always be a cache hit
+			// 必然缓存命中。
 			_, _ = scorer.getCachedNodeMatch(testNode.Name, "", false, nodeSelectorStr)
 		}
 	})

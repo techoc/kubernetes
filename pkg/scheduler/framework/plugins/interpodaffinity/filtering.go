@@ -30,110 +30,97 @@ import (
 )
 
 const (
-	// preFilterStateKey is the key in CycleState to InterPodAffinity pre-computed data for Filtering.
-	// Using the name of the plugin will likely help us avoid collisions with other plugins.
+	// preFilterStateKey 是 CycleState 中存放过滤阶段预计算数据的键。
+	// 用插件名作前缀可降低与其他插件的键冲突概率。
 	preFilterStateKey = "PreFilter" + Name
 
-	// ErrReasonExistingAntiAffinityRulesNotMatch is used for ExistingPodsAntiAffinityRulesNotMatch predicate error.
+	// ErrReasonExistingAntiAffinityRulesNotMatch 用于已有 Pod 的反亲和规则拒绝待调度 Pod 的场景。
 	ErrReasonExistingAntiAffinityRulesNotMatch = "node(s) didn't satisfy existing pods anti-affinity rules"
-	// ErrReasonAffinityRulesNotMatch is used for PodAffinityRulesNotMatch predicate error.
+	// ErrReasonAffinityRulesNotMatch 用于亲和规则不满足的场景。
 	ErrReasonAffinityRulesNotMatch = "node(s) didn't match pod affinity rules"
-	// ErrReasonAntiAffinityRulesNotMatch is used for PodAntiAffinityRulesNotMatch predicate error.
+	// ErrReasonAntiAffinityRulesNotMatch 用于反亲和规则冲突的场景。
 	ErrReasonAntiAffinityRulesNotMatch = "node(s) didn't match pod anti-affinity rules"
 )
 
-// preFilterState is computed at PreFilter and used at Filter.
+// preFilterState 在 PreFilter 阶段计算，供 Filter 阶段使用。
 //
-// Overview of InterPodAffinityHostnameFastPath optimization:
-// The InterPodAffinityHostnameFastPath feature optimizes performance of PreFilter and Filter for required
-// (anti) affinity that exclusively uses the kubernetes.io/hostname topology.
+// InterPodAffinityHostnameFastPath 优化概览：
+// 该特性针对仅使用 kubernetes.io/hostname 拓扑的硬性（反）亲和规则，
+// 优化 PreFilter 与 Filter 的性能。
 //
-// In the general case, an existing pod anywhere in the cluster can affect whether an incoming pod
-// schedules on a particular node (for example, if they need to share the same "zone"). To handle this,
-// the standard algorithm performs a heavy, cluster-wide topology map construction during PreFilter to
-// track matching pods across all topologies. During Filter, the scheduler must then iterate over every label
-// on a candidate node and perform hash map lookups to verify constraints against this global map.
+// 一般情况下，集群中任意位置的已有 Pod 都可能影响待调度 Pod 能否落到某个节点
+// （例如要求同 zone），因此标准算法在 PreFilter 阶段构建全集群拓扑映射，
+// Filter 时再遍历候选节点的每个标签做哈希查找。
 //
-// However, when rules use the `kubernetes.io/hostname` topology key, they only care about pods on that
-// exact local node. By decoupling hostname-scoped rules, we can completely bypass the expensive topology
-// map construction in PreFilter and the node-label iteration loops in Filter.
+// 当规则只使用 kubernetes.io/hostname 时，只关心该节点本地的 Pod。
+// 将主机域规则单独拆出后，可完全跳过 PreFilter 的拓扑图构建与 Filter 的节点标签遍历。
 //
-// How this works in more detail:
+// 具体做法：
 //
-//  1. Existing pods' Anti-Affinity:
-//     Existing pods may have anti-affinity terms that reject the incoming pod. Hostname-scoped terms from
-//     existing pods are never added to the global topology map (existingClusterWideAntiAffinityCounts).
-//     In Filter, the expensive node-label map lookups are skipped, falling back to a cheap local check against the candidate node's pods.
+//  1. 已有 Pod 的反亲和：
+//     已有 Pod 的主机域反亲和项不加入全局拓扑图（existingClusterWideAntiAffinityCounts），
+//     Filter 中直接对候选节点上的 Pod 做本地检查。
 //
-//  2. Incoming pod's Anti-Affinity:
-//     Likewise, the incoming pod's own hostname-scoped anti-affinity terms bypass global map construction
-//     and are deferred to a cheap local check during Filter.
+//  2. 待调度 Pod 的反亲和：
+//     同理，待调度 Pod 自身的主机域反亲和项也不构建全局映射，
+//     推迟到 Filter 阶段做廉价的本地检查。
 //
-//  3. Incoming pod's Affinity:
-//     Affinity is trickier because it requires finding a single existing pod that matches ALL affinity terms at once.
-//     - Mixed Topology: If the incoming pod has at least one non-hostname-scoped affinity term, PreFilter
-//     must construct the global clusterWideAffinityCounts map to correctly track matches across all topology domains.
-//     - Exclusively Hostname-Scoped: If ALL affinity terms on the incoming pod are hostname-scoped, we
-//     completely bypass building the global affinity map. Affinity is verified entirely during the local Filter phase.
+//  3. 待调度 Pod 的亲和：
+//     亲和更复杂：需要找到一个同时满足所有亲和项的 Pod。
+//     - 混合拓扑：只要有一个非主机域亲和项，就必须构建全局簇映射来跨拓扑域跟踪匹配。
+//     - 纯主机域：全部亲和项都是主机域时，完全跳过全局映射，只在本地 Filter 阶段验证。
 //
-//  4. Self-Affinity Fallback (matchingHostScopedAffinityPodsCount):
-//     If no existing pods match the incoming pod's affinity rules, we still allow the pod to schedule if it
-//     satisfies its own affinity terms (self-affinity). Normally, we know no other matching pods exist because
-//     the global map (clusterWideAffinityCounts) remains empty. But if we bypass building the global map
-//     (as described in #3), we lose that cluster-wide visibility. To fix this, instead of building the map
-//     during PreFilter, we maintain a counter (`matchingHostScopedAffinityPodsCount`)
-//     just to track if ANY matching pods exist anywhere. If this counter remains exactly zero, we can allow the self-matching pod to schedule.
-
-//  5. PreFilterExtensions (Preemption / AddPod / RemovePod):
-//     When the scheduler simulates evicting pods for preemption, it avoids rebuilding state from scratch by
-//     incrementally updating the PreFilter state (via AddPod/RemovePod). If an incoming pod has only host-scoped terms,
-//     simulating the removal or addition of pod becomes a lightweight increment or decrement of a counter (matchingHostScopedAffinityPodsCount) instead
-//     a global topology map update.
+//  4. 自亲和回退（matchingHostScopedAffinityPodsCount）：
+//     若没有其他 Pod 匹配亲和规则，但待调度 Pod 自身满足规则，也应允许调度。
+//     通常全局映射为空即可判定无人匹配；跳过构建映射后则失去该全局视角。
+//     因此改用一个计数器（matchingHostScopedAffinityPodsCount）跟踪是否有任何匹配 Pod，
+//     只要它仍为 0 就允许自亲和 Pod 调度。
+//
+//  5. PreFilterExtensions（抢占 / AddPod / RemovePod）：
+//     抢占模拟驱逐 Pod 时通过 AddPod/RemovePod 增量更新状态，避免从头重建。
+//     纯主机域规则下，增删模拟仅需增减计数器（matchingHostScopedAffinityPodsCount），
+//     无需更新全局拓扑图。
 
 type preFilterState struct {
-	// existingClusterWideAntiAffinityCounts is a map of topology pairs to the number of existing pods that have anti-affinity terms matching the incoming pod.
-	// It tracks existing pods' anti-affinity rules that the incoming pod violates.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled, this only considers non-hostname-scoped terms (hostname-scoped are checked locally in Filter).
-	// If the feature gate is disabled, this considers all terms (both hostname and non-hostname scoped).
+	// existingClusterWideAntiAffinityCounts 记录拓扑对到已有 Pod 数量的映射，
+	// 这些 Pod 的反亲和项匹配待调度 Pod，即待调度 Pod 违反了它们的规则。
+	// 启用 InterPodAffinityHostnameFastPath 时只统计非主机域项（主机域项在 Filter 本地检查）；
+	// 关闭时统计所有项。
 	existingClusterWideAntiAffinityCounts topologyToMatchedTermCount
-	// clusterWideAffinityCounts is a map of topology pairs to the number of existing pods that match the incoming pod's affinity terms.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled this tracks matches for the terms in clusterWideAffinityTerms (which includes both hostname and non-hostname scoped terms if ANY non-hostname scoped term exists, and is empty otherwise).
-	// If the feature gate is disabled, this tracks matches for all affinity terms.
+	// clusterWideAffinityCounts 记录拓扑对到匹配待调度 Pod 亲和项的已有 Pod 数量。
+	// 启用快速路径时只跟踪 clusterWideAffinityTerms 中的项：存在非主机域项时包含全部亲和项，否则为空；
+	// 关闭时跟踪所有亲和项。
 	clusterWideAffinityCounts topologyToMatchedTermCount
-	// clusterWideAntiAffinityCounts is a map of topology pairs to the number of existing pods that match the incoming pod's anti-affinity terms.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled, this tracks matches only for non-hostname-scoped terms.
-	// If the feature gate is disabled, this tracks matches for all anti-affinity terms.
+	// clusterWideAntiAffinityCounts 记录拓扑对到匹配待调度 Pod 反亲和项的已有 Pod 数量。
+	// 启用快速路径时只跟踪非主机域项；关闭时跟踪所有反亲和项。
 	clusterWideAntiAffinityCounts topologyToMatchedTermCount
-	// podInfo of the incoming pod.
+	// podInfo 是待调度 Pod 的信息。
 	podInfo fwk.PodInfo
-	// A copy of the incoming pod's namespace labels.
+	// namespaceLabels 是待调度 Pod 所在命名空间的标签副本。
 	namespaceLabels labels.Set
 
-	// hostScopedAffinityTerms are the incoming pod's affinity terms that will be checked node-locally in Filter.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled, this is populated ONLY if the incoming pod has exclusively hostname-scoped affinity terms.
-	// If the feature gate is disabled, this remains empty.
+	// hostScopedAffinityTerms 是待调度 Pod 中将在 Filter 本地检查的亲和项。
+	// 启用快速路径时，仅当所有亲和项都是主机域时才填充；关闭时始终为空。
 	hostScopedAffinityTerms []fwk.AffinityTerm
-	// hostScopedAntiAffinityTerms are the incoming pod's anti-affinity terms that will be checked node-locally in Filter.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled, this contains all hostname-scoped anti-affinity terms from the incoming pod.
-	// If the feature gate is disabled, this remains empty.
+	// hostScopedAntiAffinityTerms 是待调度 Pod 中将在 Filter 本地检查的反亲和项。
+	// 启用快速路径时包含所有主机域反亲和项；关闭时始终为空。
 	hostScopedAntiAffinityTerms []fwk.AffinityTerm
-	// clusterWideAffinityTerms contains affinity terms from the incoming pod that require a global cluster scan.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled: it is populated with ALL affinity terms from the incoming pod (both hostname and non-hostname scoped), if the incoming pod has at least one non-hostname-scoped affinity term. It is empty if the incoming pod has ONLY hostname-scoped affinity terms.
-	// If the feature gate is disabled: it contains the incoming pod's ALL affinity terms regardless of their scope.
+	// clusterWideAffinityTerms 是需要全集群扫描的亲和项。
+	// 启用快速路径时：只要存在非主机域项，就填入待调度 Pod 的所有亲和项；纯主机域时为空。
+	// 关闭时：无论作用域，包含所有亲和项。
 	clusterWideAffinityTerms []fwk.AffinityTerm
-	// clusterWideAntiAffinityTerms contains anti-affinity terms from the incoming pod that require a global cluster scan.
-	// If the InterPodAffinityHostnameFastPath feature gate is enabled: it contains only the non-hostname-scoped anti-affinity terms from the incoming pod.
-	// If the feature gate is disabled: it contains ALL anti-affinity terms (both hostname and non-hostname scoped) from the incoming pod.
+	// clusterWideAntiAffinityTerms 是需要全集群扫描的反亲和项。
+	// 启用快速路径时只包含非主机域反亲和项；关闭时包含所有反亲和项。
 	clusterWideAntiAffinityTerms []fwk.AffinityTerm
-	// matchingHostScopedAffinityPodsCount is the total number of pods in the cluster that match the incoming pod's host-scoped affinity terms.
-	// It is used to optimize checks when all affinity terms in the incoming pod are host-scoped.
-	// This will be 0 if the InterPodAffinityHostnameFastPath feature gate is disabled.
+	// matchingHostScopedAffinityPodsCount 是集群中匹配待调度 Pod 主机域亲和项的 Pod 总数。
+	// 仅当所有亲和项都是主机域时用于优化检查。
+	// 快速路径关闭时该值恒为 0。
 	matchingHostScopedAffinityPodsCount int64
-	// enableInterPodAffinityHostnameFastPath is true if the InterPodAffinityHostnameFastPath feature gate is enabled.
+	// enableInterPodAffinityHostnameFastPath 表示是否启用了对应的特性门控。
 	enableInterPodAffinityHostnameFastPath bool
 }
 
-// Clone the prefilter state.
+// Clone 返回 preFilterState 的副本，供框架在分支节点时复制状态。
 func (s *preFilterState) Clone() fwk.StateData {
 	if s == nil {
 		return nil
@@ -143,7 +130,7 @@ func (s *preFilterState) Clone() fwk.StateData {
 	copy.clusterWideAffinityCounts = s.clusterWideAffinityCounts.clone()
 	copy.clusterWideAntiAffinityCounts = s.clusterWideAntiAffinityCounts.clone()
 	copy.existingClusterWideAntiAffinityCounts = s.existingClusterWideAntiAffinityCounts.clone()
-	// No need to deep copy the podInfo because it shouldn't change.
+	// podInfo 在调度周期内不变，直接共享引用即可。
 	copy.podInfo = s.podInfo
 	copy.namespaceLabels = s.namespaceLabels
 	copy.clusterWideAffinityTerms = s.clusterWideAffinityTerms
@@ -155,16 +142,16 @@ func (s *preFilterState) Clone() fwk.StateData {
 	return &copy
 }
 
-// updateWithPod updates the preFilterState counters with the (anti)affinity matches for the given podInfo.
+// updateWithPod 按给定 Pod 的（反）亲和匹配情况增量更新 preFilterState 计数器，
+// multiplier 取 +1 表示添加、-1 表示移除，用于抢占模拟。
 func (s *preFilterState) updateWithPod(pInfo fwk.PodInfo, node *v1.Node, multiplier int64) {
 	if s == nil {
 		return
 	}
 
-	// Process the existing pod's anti-affinity terms to see if the incoming pod violates them.
+	// 处理已有 Pod 的反亲和项，判断待调度 Pod 是否违反这些规则。
 	if s.enableInterPodAffinityHostnameFastPath {
-		// We iterate over the terms and manually check the topology key on the fly because
-		// the existing pod's terms are not pre-classified by scope.
+		// 已有 Pod 的亲和项未按作用域预分类，因此在这里逐项检查拓扑键。
 		for _, t := range pInfo.GetRequiredAntiAffinityTerms() {
 			if t.TopologyKey != v1.LabelHostname {
 				if t.Matches(s.podInfo.GetPod(), s.namespaceLabels) {
@@ -175,55 +162,49 @@ func (s *preFilterState) updateWithPod(pInfo fwk.PodInfo, node *v1.Node, multipl
 	} else {
 		s.existingClusterWideAntiAffinityCounts.updateWithAntiAffinityTerms(pInfo.GetRequiredAntiAffinityTerms(), s.podInfo.GetPod(), s.namespaceLabels, node, multiplier)
 	}
-	// Process the incoming pod's affinity and anti-affinity terms.
+	// 处理待调度 Pod 自身的亲和与反亲和项。
 	if s.enableInterPodAffinityHostnameFastPath {
-		// Here we only evaluate the terms in s.clusterWideAffinityTerms and s.clusterWideAntiAffinityTerms as those require global evaluation.
-		// Unlike for the existing pods, we do not need to manually check the topology key for incoming pod's terms because they have been preprocessed by classifyTermsBasedOnScope() during PreFilter.
+		// 只需评估 s.clusterWideAffinityTerms 与 s.clusterWideAntiAffinityTerms 中需要全局计算的项。
+		// 待调度 Pod 的项已在 PreFilter 中按作用域预处理，无需再手动检查拓扑键。
 		s.clusterWideAffinityCounts.updateWithAffinityTerms(s.clusterWideAffinityTerms, pInfo.GetPod(), node, multiplier)
-		// The incoming pod's terms have the namespaceSelector merged into the namespaces, and so
-		// here we don't lookup the updated pod's namespace labels, hence passing nil for nsLabels.
+		// 待调度 Pod 的 namespaceSelector 已合并进 namespaces，无需再查命名空间标签，故传 nil。
 		s.clusterWideAntiAffinityCounts.updateWithAntiAffinityTerms(s.clusterWideAntiAffinityTerms, pInfo.GetPod(), nil, node, multiplier)
 
 		if len(s.hostScopedAffinityTerms) > 0 {
-			// hostScopedAffinityTerms only gets populated if ALL affinity terms of the incoming pod are host-scoped.
+			// hostScopedAffinityTerms 只在所有亲和项都是主机域时填充。
 			//
-			// This plugin keeps a running global counter of all matching pods in the cluster.
-			// This counter is populated and updated iff the incoming pod has ONLY host-scoped affinity terms.
-			//
-			// If this counter is exactly 0, the plugin knows no existing pods satisfy the rules, permitting the first pod in a self-affinity group to pass this affinity check.
-			// (If the pod has any non-host scoped affinity terms, this counter remains 0 and the plugin checks 'len(clusterWideAffinityCounts) == 0' instead).
-			//
-			// The multiplier (+1 or -1) adjusts this counter during "what-if" scheduling simulations like preemption.
+			// 插件维护一个全局匹配 Pod 计数器，仅在纯主机域亲和项场景下更新。
+			// 计数为 0 表示没有已有 Pod 满足规则，允许自亲和组中的第一个 Pod 通过检查。
+			// 若存在非主机域项，则不依赖该计数，而改查 len(clusterWideAffinityCounts) == 0。
+			// multiplier（+1/-1）在抢占等模拟场景中调整计数。
 			if podMatchesAllAffinityTerms(s.hostScopedAffinityTerms, pInfo.GetPod()) {
 				s.matchingHostScopedAffinityPodsCount += multiplier
 			}
 		}
 	} else {
 		s.clusterWideAffinityCounts.updateWithAffinityTerms(s.podInfo.GetRequiredAffinityTerms(), pInfo.GetPod(), node, multiplier)
-		// The incoming pod's terms have the namespaceSelector merged into the namespaces, and so
-		// here we don't lookup the updated pod's namespace labels, hence passing nil for nsLabels.
+		// 待调度 Pod 的 namespaceSelector 已合并进 namespaces，无需再查命名空间标签，故传 nil。
 		s.clusterWideAntiAffinityCounts.updateWithAntiAffinityTerms(s.podInfo.GetRequiredAntiAffinityTerms(), pInfo.GetPod(), nil, node, multiplier)
 	}
 }
 
-// classifyTermsBasedOnScope groups the (anti-)affinity terms of the incoming pod into lists:
-// - clusterWideAffinityTerms - terms that need to be evaluated in a global check (across the entire cluster)
-// - clusterWideAntiAffinityTerms - terms that need to be evaluated in a global check
-// - hostScopedAffinityTerms - terms that can be evaluated locally on each node, skipping the expensive global scan
-// Note that a term may be in more than one list at a time.
+// classifyTermsBasedOnScope 将待调度 Pod 的（反）亲和项按作用域分组：
+//   - clusterWideAffinityTerms：需要全集群范围评估的亲和项
+//   - clusterWideAntiAffinityTerms：需要全集群范围评估的反亲和项
+//   - hostScopedAffinityTerms：可在节点本地评估的亲和项，跳过昂贵的全局扫描
 //
-// For affinity, we are deciding if a candidate node is valid for the incoming pod to land on.
-// A node becomes valid if it (or its wider topology, like a zone) already hosts pods that match the incoming pod's rules.
-// The algorithm searches for a SINGLE existing pod in that topology that matches ALL of the incoming pod's affinity rules at once.
-// Because we must find this "single multi-matching pod" in the wider topology, we cannot evaluate the host-scoped and non-host-scoped terms independently; we must keep them grouped together in `clusterWideAffinityTerms`.
+// 注意同一项可能同时出现在多个列表中。
 //
-// For anti-affinity, we check with an OR of "Violated" (Violated A OR Violated B) to determine if a node violates ANY anti-affinity constraints of the incoming pod.
-// Regardless of other terms, hostname-scoped anti-affinity can always be checked locally to avoid global scans for those specific terms.
-// For example, if a pod has both hostname and zone anti-affinity rules, we can reject the node immediately if it violates the hostname rule, without checking the zone rule.
-// Since a violation of either is sufficient to reject a node, they don't need to be checked together.
+// 对于亲和：节点（或其所在 zone 等更广拓扑）上已有匹配 Pod 时节点才可用。
+// 算法要在该拓扑中找到一个同时满足所有亲和项的 Pod，
+// 因此主机域与非主机域项不能独立评估，必须一起留在 clusterWideAffinityTerms 中。
 //
-// If a pod has only hostScopedAffinityTerms and only hostScopedAntiAffinityTerms, both clusterWideAffinityTerms and clusterWideAntiAffinityTerms will be empty.
-// When that happens, pl.getIncomingAffinityAntiAffinityCounts exits early, skipping the expensive parallel loop over all nodes in the cluster.
+// 对于反亲和：只需任一约束被违反即拒绝节点。
+// 主机域反亲和总是可以本地检查，无需全局扫描；
+// 例如同时有主机名与 zone 反亲和规则时，若违反主机名规则可立即拒绝节点，不必再查 zone 规则。
+//
+// 若 Pod 只有主机域亲和与反亲和项，两个 clusterWide 列表均为空，
+// 此时 getIncomingAffinityAntiAffinityCounts 会提前返回，跳过遍历全集群的并行循环。
 func (s *preFilterState) classifyTermsBasedOnScope() {
 	if s.allHostScoped() {
 		s.hostScopedAffinityTerms = s.podInfo.GetRequiredAffinityTerms()
@@ -240,7 +221,8 @@ func (s *preFilterState) classifyTermsBasedOnScope() {
 	}
 }
 
-// allHostScoped determines if we can bypass expensive global topology scans. If all affinity terms are host-scoped, we only need to check the local node's pods, which is much faster.
+// allHostScoped 判断是否可跳过昂贵的全局拓扑扫描：
+// 所有亲和项都是主机域时，只需检查本节点 Pod，速度更快。
 func (s *preFilterState) allHostScoped() bool {
 	for _, t := range s.podInfo.GetRequiredAffinityTerms() {
 		if t.TopologyKey != v1.LabelHostname {
@@ -250,43 +232,51 @@ func (s *preFilterState) allHostScoped() bool {
 	return true
 }
 
+// topologyPair 表示拓扑键与对应取值组成的一对，作为计数映射的键。
 type topologyPair struct {
 	key   string
 	value string
 }
+
+// topologyToMatchedTermCount 记录各拓扑对上匹配项的 Pod 数量。
 type topologyToMatchedTermCount map[topologyPair]int64
 
+// merge 将另一个计数映射累加到当前映射中。
 func (m topologyToMatchedTermCount) merge(toMerge topologyToMatchedTermCount) {
 	for pair, count := range toMerge {
 		m[pair] += count
 	}
 }
 
+// mergeWithList 将列表形式的计数累加到当前映射中。
 func (m topologyToMatchedTermCount) mergeWithList(toMerge topologyToMatchedTermCountList) {
 	for _, tmtc := range toMerge {
 		m[tmtc.topologyPair] += tmtc.count
 	}
 }
 
+// clone 返回计数映射的浅拷贝。
 func (m topologyToMatchedTermCount) clone() topologyToMatchedTermCount {
 	copy := make(topologyToMatchedTermCount, len(m))
 	copy.merge(m)
 	return copy
 }
 
+// update 按节点上 tk 拓扑键的标签值增减对应拓扑对的计数，
+// 计数归零时删除该项以节省内存。
 func (m topologyToMatchedTermCount) update(node *v1.Node, tk string, value int64) {
 	if tv, ok := node.Labels[tk]; ok {
 		pair := topologyPair{key: tk, value: tv}
 		m[pair] += value
-		// value could be negative, hence we delete the entry if it is down to zero.
+		// value 可能为负，计数归零后删除条目避免保留无效键。
 		if m[pair] == 0 {
 			delete(m, pair)
 		}
 	}
 }
 
-// updates the topologyToMatchedTermCount map with the specified value
-// for each affinity term if "targetPod" matches ALL terms.
+// updateWithAffinityTerms 在 targetPod 匹配所有亲和项时，
+// 逐项按指定 value 更新计数映射。
 func (m topologyToMatchedTermCount) updateWithAffinityTerms(
 	terms []fwk.AffinityTerm, pod *v1.Pod, node *v1.Node, value int64) {
 	if podMatchesAllAffinityTerms(terms, pod) {
@@ -296,10 +286,10 @@ func (m topologyToMatchedTermCount) updateWithAffinityTerms(
 	}
 }
 
-// updates the topologyToMatchedTermCount map with the specified value
-// for each anti-affinity term matched the target pod.
+// updateWithAntiAffinityTerms 对所有匹配 targetPod 的反亲和项，
+// 按指定 value 更新计数映射。
 func (m topologyToMatchedTermCount) updateWithAntiAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod, nsLabels labels.Set, node *v1.Node, value int64) {
-	// Check anti-affinity terms.
+	// 逐项检查反亲和是否匹配。
 	for _, t := range terms {
 		if t.Matches(pod, nsLabels) {
 			m.update(node, t.TopologyKey, value)
@@ -307,16 +297,17 @@ func (m topologyToMatchedTermCount) updateWithAntiAffinityTerms(terms []fwk.Affi
 	}
 }
 
-// topologyToMatchedTermCountList is a slice equivalent of topologyToMatchedTermCount map.
-// The use of slice improves the performance of PreFilter,
-// especially due to faster iteration when merging than with topologyToMatchedTermCount.
+// topologyToMatchedTermCountList 是计数映射的切片形式，
+// PreFilter 中合并切片比遍历 map 更快。
 type topologyToMatchedTermCountList []topologyPairCount
 
+// topologyPairCount 是切片形式的一个拓扑对计数条目。
 type topologyPairCount struct {
 	topologyPair topologyPair
 	count        int64
 }
 
+// recordMatch 按节点上 tk 拓扑键的标签值向切片追加一条匹配记录。
 func (m *topologyToMatchedTermCountList) recordMatch(node *v1.Node, tk string, value int64) {
 	if tv, ok := node.Labels[tk]; ok {
 		pair := topologyPair{key: tk, value: tv}
@@ -327,8 +318,8 @@ func (m *topologyToMatchedTermCountList) recordMatch(node *v1.Node, tk string, v
 	}
 }
 
-// appends the specified value to the topologyToMatchedTermCountList
-// for each affinity term if "targetPod" matches ALL terms.
+// appendWithAffinityTerms 在 targetPod 匹配所有亲和项时，
+// 逐项向列表追加指定值。
 func (m *topologyToMatchedTermCountList) appendWithAffinityTerms(
 	terms []fwk.AffinityTerm, pod *v1.Pod, node *v1.Node, value int64) {
 	if podMatchesAllAffinityTerms(terms, pod) {
@@ -338,10 +329,10 @@ func (m *topologyToMatchedTermCountList) appendWithAffinityTerms(
 	}
 }
 
-// appends the specified value to the topologyToMatchedTermCountList
-// for each anti-affinity term matched the target pod.
+// appendWithAntiAffinityTerms 对所有匹配 targetPod 的反亲和项，
+// 逐项向列表追加指定值。
 func (m *topologyToMatchedTermCountList) appendWithAntiAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod, nsLabels labels.Set, node *v1.Node, value int64) {
-	// Check anti-affinity terms.
+	// 逐项检查反亲和是否匹配。
 	for _, t := range terms {
 		if t.Matches(pod, nsLabels) {
 			m.recordMatch(node, t.TopologyKey, value)
@@ -349,15 +340,14 @@ func (m *topologyToMatchedTermCountList) appendWithAntiAffinityTerms(terms []fwk
 	}
 }
 
-// podMatchesAllAffinityTerms returns true if the given terms list is not empty and given pod matches all the given terms.
-// Useful for checking affinity. For anti-affinity, use podMatchesAnyAffinityTerms.
+// podMatchesAllAffinityTerms 在项列表非空且 Pod 匹配所有项时返回 true。
+// 用于亲和检查；反亲和请用 podMatchesAnyAffinityTerms。
 func podMatchesAllAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod) bool {
 	if len(terms) == 0 {
 		return false
 	}
 	for _, t := range terms {
-		// The incoming pod NamespaceSelector was merged into the Namespaces set, and so
-		// we are not explicitly passing in namespace labels.
+		// 待调度 Pod 的 namespaceSelector 已合并进 Namespaces，无需显式传入命名空间标签。
 		if !t.Matches(pod, nil) {
 			return false
 		}
@@ -365,8 +355,7 @@ func podMatchesAllAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod) bool {
 	return true
 }
 
-// podMatchesAnyAffinityTerms returns true if the given pod matches any of the given terms.
-// Useful for checking anti-affinity.
+// podMatchesAnyAffinityTerms 在 Pod 匹配任一项时返回 true，用于反亲和检查。
 func podMatchesAnyAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod) bool {
 	for _, t := range terms {
 		if t.Matches(pod, nil) {
@@ -376,20 +365,16 @@ func podMatchesAnyAffinityTerms(terms []fwk.AffinityTerm, pod *v1.Pod) bool {
 	return false
 }
 
-// getExistingAntiAffinityCounts evaluates anti-affinity terms of existing pods
-// to see if the incoming pod matches them. It executes a concurrent scan over nodes to count instances where the incoming pod creates a scheduling conflict.
+// getExistingAntiAffinityCounts 并发扫描节点，评估已有 Pod 的反亲和项是否匹配待调度 Pod，
+// 统计会产生调度冲突的情况。返回两个值：
 //
-// Returns two values:
+//  1. 拓扑对到匹配 Pod 数量的映射：启用快速路径时只统计非主机域项
+//     （主机域项在 Filter 中动态检查），关闭时统计所有匹配项。
 //
-//  1. topologyToMatchedTermCount: A map of topologies to the number of existing pods whose anti-affinity terms match the incoming pod.
-//     - If InterPodAffinityHostnameFastPath is ENABLED: Only non-hostname scoped terms are tallied here (host-scoped terms are evaluated dynamically during Filter).
-//     - If DISABLED: All matched anti-affinity terms are counted here.
+//  2. hasHostScopedAntiAffinity：是否存在主机域反亲和项。启用快速路径时
+//     为 true 表示 Filter 需要做节点本地检查；关闭时恒为 false。
 //
-//  2. hasHostScopedAntiAffinity (bool): Whether any evaluated existing pod has a hostname-scoped anti-affinity term.
-//     - If InterPodAffinityHostnameFastPath is ENABLED: Returns true if a hostname-scoped term  was encountered. This indicates that a node-local check is required in Filter.
-//     - If DISABLED: Always returns false.
-//
-// If hasHostScopedAntiAffinity is false and the count map is empty, the Filter phase can be skipped.
+// 若该布尔值为 false 且计数映射为空，Filter 阶段可直接跳过。
 func (pl *InterPodAffinity) getExistingAntiAffinityCounts(ctx context.Context, incomingPod *v1.Pod, nsLabels labels.Set, nodes []fwk.NodeInfo) (topologyToMatchedTermCount, bool) {
 	antiAffinityCountsList := make([]topologyToMatchedTermCountList, len(nodes))
 	index := int32(-1)
@@ -419,7 +404,7 @@ func (pl *InterPodAffinity) getExistingAntiAffinityCounts(ctx context.Context, i
 	pl.parallelizer.Until(ctx, len(nodes), processNode, pl.Name())
 
 	result := make(topologyToMatchedTermCount)
-	// Traditional for loop is slightly faster in this case than its "for range" equivalent.
+	// 此场景下传统 for 循环比 for range 略快。
 	for i := 0; i <= int(index); i++ {
 		result.mergeWithList(antiAffinityCountsList[i])
 	}
@@ -427,15 +412,10 @@ func (pl *InterPodAffinity) getExistingAntiAffinityCounts(ctx context.Context, i
 	return result, hasHostScopedAntiAffinity.Load()
 }
 
-// getIncomingAffinityAntiAffinityCounts scans all nodes concurrently to count how many
-// existing pods match the incoming pod's affinity and anti-affinity terms.
-//
-// Returns two maps (topology -> matching pod count):
-// 1. Affinity matches (existing pods satisfying the incoming pod's constraints).
-// 2. Anti-affinity matches (existing pods violating the incoming pod's constraints).
-//
-// Note: If the InterPodAffinityHostnameFastPath feature is enabled, the caller passes
-// pre-filtered term lists containing only the terms that require global evaluation (see docstring for classifyTermsBasedOnScope).
+// getIncomingAffinityAntiAffinityCounts 并发扫描所有节点，
+// 统计匹配待调度 Pod 亲和与反亲和项的已有 Pod 数量。
+// 返回两张（拓扑 -> 匹配数）映射：亲和匹配与反亲和冲突。
+// 启用快速路径时，调用方只传入需要全局评估的项（见 classifyTermsBasedOnScope）。
 func (pl *InterPodAffinity) getIncomingAffinityAntiAffinityCounts(ctx context.Context, affinityTerms, antiAffinityTerms []fwk.AffinityTerm, allNodes []fwk.NodeInfo) (topologyToMatchedTermCount, topologyToMatchedTermCount) {
 	clusterWideAffinityCounts := make(topologyToMatchedTermCount)
 	clusterWideAntiAffinityCounts := make(topologyToMatchedTermCount)
@@ -454,8 +434,7 @@ func (pl *InterPodAffinity) getIncomingAffinityAntiAffinityCounts(ctx context.Co
 		antiAffinity := make(topologyToMatchedTermCountList, 0)
 		for _, existingPod := range nodeInfo.GetPods() {
 			affinity.appendWithAffinityTerms(affinityTerms, existingPod.GetPod(), node, 1)
-			// The incoming pod's terms have the namespaceSelector merged into the namespaces, and so
-			// here we don't lookup the existing pod's namespace labels, hence passing nil for nsLabels.
+			// 待调度 Pod 的 namespaceSelector 已合并进 namespaces，无需查已有 Pod 的命名空间标签。
 			antiAffinity.appendWithAntiAffinityTerms(antiAffinityTerms, existingPod.GetPod(), nil, node, 1)
 		}
 
@@ -475,33 +454,24 @@ func (pl *InterPodAffinity) getIncomingAffinityAntiAffinityCounts(ctx context.Co
 	return clusterWideAffinityCounts, clusterWideAntiAffinityCounts
 }
 
-// PreFilter is invoked at the prefilter extension point to pre-compute state for the node-by-node Filter phase.
-// Its primary job is to evaluate the incoming pod against existing pods in the cluster to build
-// hash maps mapping topology pairs to match counts used to enforce affinity and anti-affinity.
+// PreFilter 在预过滤扩展点执行，为逐节点的 Filter 阶段预计算状态：
+// 将待调度 Pod 与集群中已有 Pod 比对，构建（拓扑对 -> 匹配数）映射以强制执行亲和/反亲和。
 //
-// If the InterPodAffinityHostnameFastPath feature gate is DISABLED:
-//  1. Existing Pods' Anti-Affinity: Queries the cache for the subset of nodes housing pods with ANY required
-//     anti-affinity. Iterates over all pods on ONLY these nodes to populate `existingClusterWideAntiAffinityCounts`,
-//     which tracks topologies that reject the incoming pod.
-//  2. Incoming Pod's Constraints: Iterates over ALL nodes and ALL pods in the cluster, evaluating whether each
-//     existing pod matches the incoming pod's anti-affinity and affinity terms, populating the
-//     `clusterWideAntiAffinityCounts` and `clusterWideAffinityCounts` global maps.
+// 关闭 InterPodAffinityHostnameFastPath 时：
+//  1. 已有 Pod 的反亲和：只查询含硬性反亲和 Pod 的节点子集，
+//     遍历这些节点上的 Pod 填充 existingClusterWideAntiAffinityCounts。
+//  2. 待调度 Pod 的约束：遍历全部节点与 Pod，填充 clusterWideAntiAffinityCounts 与
+//     clusterWideAffinityCounts 两张全局映射。
 //
-// If the InterPodAffinityHostnameFastPath feature gate is ENABLED:
-// The logic reduces the size of the maps by ignoring exactly `kubernetes.io/hostname` (host-scoped) terms.
-//  1. Existing Pods' Anti-Affinity: Queries the cache for a narrower subset of nodes: ONLY nodes housing pods
-//     with NON-host-scoped anti-affinity. It iterates over pods on these nodes to build the
-//     `existingClusterWideAntiAffinityCounts` map. It also compares this node array length against the total
-//     anti-affinity node array length to determine if host-scoped anti-affinity checks are needed later in Filter.
-//  2. Incoming Pod's Constraints: Categorizes the incoming pod's terms into host-scoped and cluster-wide lists.
-//     It iterates over ALL nodes and ALL pods in the cluster, evaluating whether each existing pod matches the
-//     non-host-scoped terms on the incoming pod, building maps exclusively for those terms.
-//  3. Self-Affinity Fallback: If the incoming pod has exclusively host-scoped affinity terms, no map is built.
-//     Instead, PreFilter triggers a fast parallel traversal over ALL nodes and ALL pods to count the number of matching pods in
-//     `matchingHostScopedAffinityPodsCount`.
+// 开启快速路径时，通过忽略 kubernetes.io/hostname 项来缩小映射规模：
+//  1. 已有 Pod 的反亲和：只查询含非主机域反亲和 Pod 的节点，构建全局映射；
+//     并对比节点数组长度判断 Filter 阶段是否还需做主机域检查。
+//  2. 待调度 Pod 的约束：按作用域分类，只为非主机域项构建全局映射。
+//  3. 自亲和回退：全部亲和项都是主机域时不建映射，
+//     改为并行遍历全部节点统计匹配 Pod 数到 matchingHostScopedAffinityPodsCount。
 //
-// Finally, if no global tracking maps were populated, no host-scoped evaluation is needed, and the incoming pod
-// has no terms of its own, PreFilter returns `fwk.Skip` to completely bypass this plugin during the Filter phase.
+// 若没有构建任何全局映射、无需主机域检查且待调度 Pod 无约束，
+// 则返回 fwk.Skip 让 Filter 阶段完全跳过该插件。
 func (pl *InterPodAffinity) PreFilter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, allNodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -550,7 +520,7 @@ func (pl *InterPodAffinity) PreFilter(ctx context.Context, cycleState fwk.CycleS
 
 		s.clusterWideAffinityCounts, s.clusterWideAntiAffinityCounts = pl.getIncomingAffinityAntiAffinityCounts(ctx, s.clusterWideAffinityTerms, s.clusterWideAntiAffinityTerms, allNodes)
 
-		// Check if a pod with matching host-scoped affinity exists on the cluster
+		// 检查集群中是否存在匹配主机域亲和项的 Pod，用于自亲和回退判定。
 		if len(s.hostScopedAffinityTerms) > 0 {
 			s.matchingHostScopedAffinityPodsCount = pl.countMatchingHostScopedAffinityPodsGlobally(ctx, allNodes, s)
 		}
@@ -574,6 +544,7 @@ func (pl *InterPodAffinity) PreFilter(ctx context.Context, cycleState fwk.CycleS
 	return nil, nil
 }
 
+// countMatchingHostScopedAffinityPodsGlobally 并行统计全集群中匹配主机域亲和项的 Pod 数量。
 func (pl *InterPodAffinity) countMatchingHostScopedAffinityPodsGlobally(ctx context.Context, allNodes []fwk.NodeInfo, s *preFilterState) int64 {
 	var count int64
 	countMatchingPodsOnNode := func(i int) {
@@ -592,12 +563,12 @@ func (pl *InterPodAffinity) countMatchingHostScopedAffinityPodsGlobally(ctx cont
 	return count
 }
 
-// PreFilterExtensions returns prefilter extensions, pod add and remove.
+// PreFilterExtensions 返回 PreFilter 扩展（AddPod/RemovePod）。
 func (pl *InterPodAffinity) PreFilterExtensions() fwk.PreFilterExtensions {
 	return pl
 }
 
-// AddPod from pre-computed data in cycleState.
+// AddPod 在抢占模拟中添加 Pod 时增量更新预计算状态。
 func (pl *InterPodAffinity) AddPod(ctx context.Context, cycleState fwk.CycleState, podToSchedule *v1.Pod, podInfoToAdd fwk.PodInfo, nodeInfo fwk.NodeInfo) *fwk.Status {
 	state, err := getPreFilterState(cycleState)
 	if err != nil {
@@ -607,7 +578,7 @@ func (pl *InterPodAffinity) AddPod(ctx context.Context, cycleState fwk.CycleStat
 	return nil
 }
 
-// RemovePod from pre-computed data in cycleState.
+// RemovePod 在抢占模拟中移除 Pod 时增量更新预计算状态。
 func (pl *InterPodAffinity) RemovePod(ctx context.Context, cycleState fwk.CycleState, podToSchedule *v1.Pod, podInfoToRemove fwk.PodInfo, nodeInfo fwk.NodeInfo) *fwk.Status {
 	state, err := getPreFilterState(cycleState)
 	if err != nil {
@@ -617,10 +588,11 @@ func (pl *InterPodAffinity) RemovePod(ctx context.Context, cycleState fwk.CycleS
 	return nil
 }
 
+// getPreFilterState 从 CycleState 读取本插件的预计算状态。
 func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	c, err := cycleState.Read(preFilterStateKey)
 	if err != nil {
-		// preFilterState doesn't exist, likely PreFilter wasn't invoked.
+		// 读不到状态通常意味着 PreFilter 未被调用。
 		return nil, fmt.Errorf("error reading %q from cycleState: %w", preFilterStateKey, err)
 	}
 
@@ -631,12 +603,10 @@ func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	return s, nil
 }
 
-// Checks if scheduling the pod onto this node would break any anti-affinity
-// terms indicated by the existing pods.
+// satisfyExistingPodsAntiAffinity 检查将 Pod 调度到该节点是否违反已有 Pod 声明的反亲和规则。
 func satisfyExistingPodsAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.existingClusterWideAntiAffinityCounts) > 0 {
-		// Iterate over topology pairs to get any of the pods being affected by
-		// the scheduled pod anti-affinity terms
+		// 遍历节点标签对应的拓扑对，找出受待调度 Pod 反亲和项影响的匹配。
 		for topologyKey, topologyValue := range nodeInfo.Node().Labels {
 			tp := topologyPair{key: topologyKey, value: topologyValue}
 			if state.existingClusterWideAntiAffinityCounts[tp] > 0 {
@@ -645,9 +615,9 @@ func satisfyExistingPodsAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInf
 		}
 	}
 
-	// Local check for host-scoped anti-affinity
+	// 对主机域反亲和做节点本地检查。
 	if state.enableInterPodAffinityHostnameFastPath {
-		// Topology label kubernetes.io/hostname must be present on the node for the terms to match.
+		// 节点必须带有 kubernetes.io/hostname 标签，主机域项才可能匹配。
 		if _, ok := nodeInfo.Node().Labels[v1.LabelHostname]; ok {
 			for _, existingPodInfo := range nodeInfo.GetPodsWithRequiredAntiAffinity() {
 				for _, term := range existingPodInfo.GetRequiredAntiAffinityTerms() {
@@ -664,9 +634,9 @@ func satisfyExistingPodsAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInf
 	return true
 }
 
-// nodeTopologyConflictsWithAntiAffinity checks if the node's wider topology domain houses pods that conflict with the incoming pod's anti-affinity rules.
-// It checks the rules with topology other than kubernetes.io/hostname.
-// This is done based on the map of counts (state.clusterWideAntiAffinityCounts) precomputed in PreFilter.
+// nodeTopologyConflictsWithAntiAffinity 检查节点的更广拓扑域中是否存在与待调度 Pod
+// 反亲和规则冲突的 Pod（仅限非 kubernetes.io/hostname 拓扑），
+// 依据 PreFilter 预计算的 clusterWideAntiAffinityCounts。
 func nodeTopologyConflictsWithAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.clusterWideAntiAffinityCounts) > 0 {
 		for _, term := range state.clusterWideAntiAffinityTerms {
@@ -681,15 +651,15 @@ func nodeTopologyConflictsWithAntiAffinity(state *preFilterState, nodeInfo fwk.N
 	return false
 }
 
-// nodePodsConflictWithAntiAffinity returns true if the target node already hosts pods that conflict with the incoming pod's host-scoped anti-affinity rules.
-// It is used for anti-affinity terms with the kubernetes.io/hostname topologyKey.
-// Term matching is evaluated dynamically based on the node's PodInfo list because calculating pre-computed counts globally for every individual node would consume excessive resources.
+// nodePodsConflictWithAntiAffinity 判断目标节点上是否已有与待调度 Pod 主机域反亲和规则冲突的 Pod。
+// 用于 topologyKey 为 kubernetes.io/hostname 的反亲和项；
+// 由于为每个节点预计算全局计数代价过高，这里基于节点 PodInfo 列表动态匹配。
 func nodePodsConflictWithAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.hostScopedAntiAffinityTerms) == 0 {
 		return false
 	}
 	if _, ok := nodeInfo.Node().Labels[v1.LabelHostname]; !ok {
-		// Topology label kubernetes.io/hostname must be present on the node for the terms to match.
+		// 节点必须带有 kubernetes.io/hostname 标签，主机域项才可能匹配。
 		return false
 	}
 
@@ -703,8 +673,8 @@ func nodePodsConflictWithAntiAffinity(state *preFilterState, nodeInfo fwk.NodeIn
 	return false
 }
 
-// satisfyPodAntiAffinity checks if the incoming pod's anti-affinity rules are satisfied by the existing pods on the node.
-// This is used ONLY when the fast-path feature gate is disabled.
+// satisfyPodAntiAffinity 检查节点上已有 Pod 是否满足待调度 Pod 的反亲和规则。
+// 仅在快速路径特性关闭时使用。
 func satisfyPodAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.clusterWideAntiAffinityCounts) > 0 {
 		for _, term := range state.podInfo.GetRequiredAntiAffinityTerms() {
@@ -719,15 +689,15 @@ func satisfyPodAntiAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	return true
 }
 
-// nodePodsSatisfyAffinity performs a fast-path check to see if the target node already hosts at least one pod that satisfies the affinity rules (or if the pod satisfies self-affinity).
-// It is used exclusively when ALL affinity terms on the incoming pod have the kubernetes.io/hostname topologyKey, in which case the global check is not required.
-// Term matching is evaluated dynamically against the local node's PodInfo list because precomputing counts globally for every individual node would consume excessive resources.
+// nodePodsSatisfyAffinity 快速检查目标节点上是否已有满足亲和规则的 Pod（或满足自亲和）。
+// 仅当所有亲和项都是 kubernetes.io/hostname 拓扑时使用，跳过全局检查；
+// 为每个节点预计算全局计数代价过高，因此基于本地 PodInfo 动态匹配。
 func nodePodsSatisfyAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.hostScopedAffinityTerms) == 0 {
 		return true
 	}
 	if _, ok := nodeInfo.Node().Labels[v1.LabelHostname]; !ok {
-		// Topology label kubernetes.io/hostname must be present on the node for the terms to match.
+		// 节点必须带有 kubernetes.io/hostname 标签，主机域项才可能匹配。
 		return false
 	}
 
@@ -736,13 +706,13 @@ func nodePodsSatisfyAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool 
 			return true
 		}
 	}
-	// existing matching pod not found, check if self-affinity is satisfied
+	// 未找到匹配的已有 Pod，检查是否满足自亲和。
 	return satisfiesSelfAffinityCheck(state, nodeInfo)
 }
 
-// nodeTopologyMatchesAffinity verifies if the node's topology domain houses at least one pod matching the affinity terms (or if the pod satisfies self-affinity).
-// It is used exclusively when the pod has AT LEAST ONE affinity term with a topologyKey other than kubernetes.io/hostname, in which case ALL affinity terms are evaluated here.
-// This relies on the map of counts (state.clusterWideAffinityCounts) pre-computed during PreFilter.
+// nodeTopologyMatchesAffinity 检查节点拓扑域中是否有匹配亲和项的 Pod（或满足自亲和）。
+// 仅当存在至少一个非 kubernetes.io/hostname 亲和项时使用，此时所有亲和项都在这里评估。
+// 依据 PreFilter 预计算的 clusterWideAffinityCounts。
 func nodeTopologyMatchesAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if len(state.clusterWideAffinityTerms) > 0 {
 		podsExist := true
@@ -753,7 +723,7 @@ func nodeTopologyMatchesAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) b
 					podsExist = false
 				}
 			} else {
-				// All topology labels must exist on the node - also in case of self-affinity.
+				// 即使是自亲和场景，节点也必须具备所有拓扑标签，否则不满足约束。
 				return false
 			}
 		}
@@ -766,11 +736,9 @@ func nodeTopologyMatchesAffinity(state *preFilterState, nodeInfo fwk.NodeInfo) b
 	return true
 }
 
-// This pod may be the first pod in a series that have affinity to themselves. In order
-// to not leave such pods in pending state forever, we check that if no other pod
-// in the cluster matches the namespace and selector of this pod, the pod matches
-// its own terms, and the node has all the requested topologies, then we allow the pod
-// to pass the affinity check.
+// 该 Pod 可能是一组自亲和 Pod 中的第一个。为避免其永久 Pending，
+// 当集群中没有其他 Pod 匹配其命名空间与选择器、且自身满足亲和项、
+// 节点具备所需全部拓扑标签时，允许通过亲和检查。
 func satisfiesSelfAffinityCheck(state *preFilterState, nodeInfo fwk.NodeInfo) bool {
 	if state.enableInterPodAffinityHostnameFastPath {
 		if state.matchingHostScopedAffinityPodsCount <= 0 && podMatchesAllAffinityTerms(state.podInfo.GetRequiredAffinityTerms(), state.podInfo.GetPod()) {
@@ -784,41 +752,28 @@ func satisfiesSelfAffinityCheck(state *preFilterState, nodeInfo fwk.NodeInfo) bo
 		return false
 	}
 
-	// When FG is disabled, topologies were fully evaluated in nodeTopologyMatchesAffinity before this fallback.
-	// The `len(state.clusterWideAffinityCounts) == 0` check is performed by the caller.
+	// 特性关闭时，拓扑已在 nodeTopologyMatchesAffinity 中完整评估；
+	// 调用方会检查 len(state.clusterWideAffinityCounts) == 0。
 	if podMatchesAllAffinityTerms(state.podInfo.GetRequiredAffinityTerms(), state.podInfo.GetPod()) {
 		return true
 	}
 	return false
 }
 
-// Filter is invoked at the filter extension point to evaluate if a pod can be scheduled on the specified node.
-// It uses the maps pre-computed in PreFilter to perform fast O(1) topology checks, and dynamically evaluates
-// host-scoped terms locally on the node to avoid traversing the entire cluster.
+// Filter 在过滤扩展点判断 Pod 能否调度到指定节点。
+// 借助 PreFilter 预计算的映射做 O(1) 拓扑检查，主机域项则在节点本地动态评估，避免遍历全集群。
 //
-// If the InterPodAffinityHostnameFastPath feature gate is DISABLED:
-//  1. Affinity: Uses `clusterWideAffinityCounts` (which contains ALL affinity terms) to verify the node's
-//     topology domain houses matching pods. If there are no matching pods globally, and the incoming pod
-//     matches its own affinity on this node, it is allowed to schedule.
-//  2. Incoming Pod's Anti-Affinity: Uses `clusterWideAntiAffinityCounts` to verify the node's topology
-//     domain does not house pods that conflict with the incoming pod's anti-affinity terms.
-//  3. Existing Pods' Anti-Affinity: Uses `existingClusterWideAntiAffinityCounts` to verify the node's
-//     topology domain does not house existing pods that reject the incoming pod.
+// 关闭 InterPodAffinityHostnameFastPath 时：
+//  1. 亲和：用 clusterWideAffinityCounts 检查节点拓扑域中的匹配 Pod；
+//     全局无匹配且 Pod 满足自亲和时允许调度。
+//  2. 待调度 Pod 的反亲和：用 clusterWideAntiAffinityCounts 检查拓扑冲突。
+//  3. 已有 Pod 的反亲和：用 existingClusterWideAntiAffinityCounts 检查是否拒绝该 Pod。
 //
-// If the InterPodAffinityHostnameFastPath feature gate is ENABLED:
-// The logic cleanly separates cluster-wide topological checks from host-local pod checks.
-//  1. Affinity:
-//     - If the incoming pod's affinity terms are EXCLUSIVELY host-scoped, it dynamically iterates over
-//     the node's pods to find a match. If there are no matching pods anywhere in the cluster, and the incoming pod
-//     matches its own affinity on this node, it is allowed to schedule.
-//     - Otherwise, it uses `clusterWideAffinityCounts` to verify topological matches.
-//  2. Incoming Pod's Anti-Affinity:
-//     - Uses `clusterWideAntiAffinityCounts` to check for conflicts with non-host-scoped terms.
-//     - Dynamically iterates over the local node's pods to check for conflicts with host-scoped terms.
-//  3. Existing Pods' Anti-Affinity:
-//     - Uses `existingClusterWideAntiAffinityCounts` to check for topological rejections from existing pods.
-//     - Dynamically iterates over the local node's pods that have host-scoped anti-affinity to see if
-//     they reject the incoming pod.
+// 开启快速路径时，全局拓扑检查与节点本地 Pod 检查彻底分离：
+//  1. 亲和：纯主机域项时动态遍历节点 Pod 找匹配；全集群无匹配且满足自亲和则允许调度；
+//     否则用 clusterWideAffinityCounts 检查拓扑匹配。
+//  2. 待调度 Pod 的反亲和：非主机域项查全局计数，主机域项本地动态检查。
+//  3. 已有 Pod 的反亲和：全局计数检查拓扑拒绝，并本地遍历有主机域反亲和的节点 Pod。
 func (pl *InterPodAffinity) Filter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil

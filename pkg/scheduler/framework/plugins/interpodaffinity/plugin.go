@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// Name is the name of the plugin used in the plugin registry and configurations.
+// Name 是插件在插件注册表和配置中使用的名字。
 const Name = names.InterPodAffinity
 
 var _ fwk.PreFilterPlugin = &InterPodAffinity{}
@@ -43,7 +43,7 @@ var _ fwk.ScorePlugin = &InterPodAffinity{}
 var _ fwk.EnqueueExtensions = &InterPodAffinity{}
 var _ fwk.SignPlugin = &InterPodAffinity{}
 
-// InterPodAffinity is a plugin that checks inter pod affinity
+// InterPodAffinity 是检查 Pod 间亲和性/反亲和性的插件。
 type InterPodAffinity struct {
 	parallelizer                                       fwk.Parallelizer
 	args                                               config.InterPodAffinityArgs
@@ -53,23 +53,22 @@ type InterPodAffinity struct {
 	enableInterPodAffinityHostnameFastPath             bool
 }
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *InterPodAffinity) Name() string {
 	return Name
 }
 
-// Inter pod affinity make feasibility and scoring dependent on the placement of other
-// pods in addition the current pod and node, so we cannot sign pods with these
-// constraints.
+// SignPod 为 Pod 生成签名片段。
+// Pod 间亲和性使可行性和打分不仅取决于当前 Pod 与节点，还取决于其他 Pod 的放置，
+// 因此带有这些约束的 Pod 无法被签名。
 func (pl *InterPodAffinity) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	if pod.Spec.Affinity != nil && (pod.Spec.Affinity.PodAffinity != nil || pod.Spec.Affinity.PodAntiAffinity != nil) {
 		return nil, fwk.NewStatus(fwk.Unschedulable, "pods with InterPodAffinity are not signable")
 	}
 
-	// If this option is set then we only consider affinity between pods that have affinity configured,
-	// so we can ignore the pods labels if it doesn't have rules set.
-	// Otherwise we need to include the pod's labels to ensure we catch affinity between the pod
-	// and other pods which may have affinity rules set.
+	// 开启该选项时，只考虑配置了亲和性的 Pod 之间的亲和关系，
+	// 因此未设置规则的 Pod 的标签可以忽略。
+	// 否则必须带上该 Pod 的标签，才能捕获它与那些设置了亲和规则的 Pod 之间的亲和关系。
 	if pl.args.IgnorePreferredTermsOfExistingPods {
 		return nil, nil
 	}
@@ -79,24 +78,20 @@ func (pl *InterPodAffinity) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.Sig
 	}, nil
 }
 
-// EventsToRegister returns the possible events that may make a failed Pod
-// schedulable
+// EventsToRegister 返回可能让本插件判定为不可调度的 Pod 变为可调度的事件。
 func (pl *InterPodAffinity) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
-		// All ActionType includes the following events:
-		// - Delete. An unschedulable Pod may fail due to violating an existing Pod's anti-affinity constraints,
-		// deleting an existing Pod may make it schedulable.
-		// - UpdatePodLabel. Updating on an existing Pod's labels (e.g., removal) may make
-		// an unschedulable Pod schedulable.
-		// - Add. An unschedulable Pod may fail due to violating pod-affinity constraints,
-		// adding an assigned Pod may make it schedulable.
+		// 这些 ActionType 包含以下事件：
+		// - Delete：不可调度的 Pod 可能因违反某个已有 Pod 的反亲和约束而失败，删除该 Pod 可能使其可调度。
+		// - UpdatePodLabel：修改已有 Pod 的标签（例如移除）可能使不可调度的 Pod 变为可调度。
+		// - Add：不可调度的 Pod 可能因违反 Pod 亲和约束而失败，新增一个已分配的 Pod 可能使其可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.Add | fwk.UpdatePodLabel | fwk.Delete}, QueueingHintFn: pl.isSchedulableAfterAssignedPodChange},
 		{Event: fwk.ClusterEvent{Resource: fwk.TargetPod, ActionType: fwk.UpdatePodLabel}, QueueingHintFn: pl.isSchedulableAfterTargetPodUpdateLabel},
 		{Event: fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add | fwk.UpdateNodeLabel}, QueueingHintFn: pl.isSchedulableAfterNodeChange},
 	}, nil
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回一个新的插件实例。
 func New(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	if h.SnapshotSharedLister() == nil {
 		return nil, fmt.Errorf("SnapshotSharedlister is nil")
@@ -120,6 +115,7 @@ func New(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.Fea
 	return pl, nil
 }
 
+// getArgs 从 runtime.Object 中取出 InterPodAffinityArgs，类型不符时返回错误。
 func getArgs(obj runtime.Object) (config.InterPodAffinityArgs, error) {
 	ptr, ok := obj.(*config.InterPodAffinityArgs)
 	if !ok {
@@ -128,13 +124,11 @@ func getArgs(obj runtime.Object) (config.InterPodAffinityArgs, error) {
 	return *ptr, nil
 }
 
-// Updates Namespaces with the set of namespaces identified by NamespaceSelector.
-// If successful, NamespaceSelector is set to nil.
-// The assumption is that the term is for an incoming pod, in which case
-// namespaceSelector is either unrolled into Namespaces (and so the selector
-// is set to Nothing()) or is Empty(), which means match everything. Therefore,
-// there when matching against this term, there is no need to lookup the existing
-// pod's namespace labels to match them against term's namespaceSelector explicitly.
+// mergeAffinityTermNamespacesIfNotEmpty 用 NamespaceSelector 选出的命名空间集合更新 Namespaces，
+// 成功后将 NamespaceSelector 置空。
+// 这里假设该 term 属于待调度的 Pod：此时 namespaceSelector 要么被展开进 Namespaces
+// （选择器设为 Nothing()），要么是 Empty()（匹配所有）。因此在匹配该 term 时，
+// 无需再查找已有 Pod 所在命名空间的标签来显式匹配 term 的 namespaceSelector。
 func (pl *InterPodAffinity) mergeAffinityTermNamespacesIfNotEmpty(at *fwk.AffinityTerm) error {
 	if at.NamespaceSelector.Empty() {
 		return nil
@@ -150,24 +144,24 @@ func (pl *InterPodAffinity) mergeAffinityTermNamespacesIfNotEmpty(at *fwk.Affini
 	return nil
 }
 
-// GetNamespaceLabelsSnapshot returns a snapshot of the labels associated with
-// the namespace.
+// GetNamespaceLabelsSnapshot 返回命名空间关联标签的快照。
 func GetNamespaceLabelsSnapshot(logger klog.Logger, ns string, nsLister listersv1.NamespaceLister) (nsLabels labels.Set) {
 	podNS, err := nsLister.Get(ns)
 	if err == nil {
-		// Create and return snapshot of the labels.
+		// 复制一份标签快照，避免后续读到 lister 中的变化。
 		return labels.Merge(podNS.Labels, nil)
 	}
 	logger.V(3).Info("getting namespace, assuming empty set of namespace labels", "namespace", ns, "err", err)
 	return
 }
 
+// isSchedulableAfterAssignedPodChange 在已分配 Pod 发生变化后，判断目标 Pod 是否可能变为可调度。
 func (pl *InterPodAffinity) isSchedulableAfterAssignedPodChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalPod, modifiedPod, err := util.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
 		return fwk.Queue, err
 	}
-	// We don't need to check cases where NodeName or NominatedNodeName changes on a pod because in those cases Add/Delete event is fired
+	// Pod 的 NodeName 或 NominatedNodeName 变化会触发 Add/Delete 事件，无需在此处理。
 	if (modifiedPod != nil && modifiedPod.Spec.NodeName == "" && modifiedPod.Status.NominatedNodeName == "") ||
 		(originalPod != nil && originalPod.Spec.NodeName == "" && originalPod.Status.NominatedNodeName == "") {
 		logger.V(5).Info("the added/updated/deleted pod is unscheduled, so it doesn't make the target pod schedulable",
@@ -185,9 +179,9 @@ func (pl *InterPodAffinity) isSchedulableAfterAssignedPodChange(logger klog.Logg
 		return fwk.Queue, err
 	}
 
-	// Pod is updated. Return Queue when the updated pod matching the target pod's affinity or not matching anti-affinity.
-	// Note that, we don't need to check each affinity individually when the Pod has more than one affinity
-	// because the current PodAffinity looks for a **single** existing pod that can satisfy **all** the terms of inter-pod affinity of an incoming pod.
+	// Pod 被更新：当更新后的 Pod 匹配目标 Pod 的亲和性、或不再匹配反亲和性时入队。
+	// 注意，即使 Pod 有多个亲和项也无需逐项检查，
+	// 因为当前的 PodAffinity 要求**单个**已有 Pod 就能满足待调度 Pod 的**全部**亲和项。
 	if modifiedPod != nil && originalPod != nil {
 		if !podMatchesAllAffinityTerms(terms, originalPod) && podMatchesAllAffinityTerms(terms, modifiedPod) {
 			logger.V(5).Info("a scheduled pod was updated to match the target pod's affinity, and the pod may be schedulable now",
@@ -204,7 +198,7 @@ func (pl *InterPodAffinity) isSchedulableAfterAssignedPodChange(logger klog.Logg
 		return fwk.QueueSkip, nil
 	}
 
-	// Pod is added. Return Queue when the added pod matching the target pod's affinity.
+	// Pod 被添加：当新增的 Pod 匹配目标 Pod 的亲和性时入队。
 	if modifiedPod != nil {
 		if podMatchesAllAffinityTerms(terms, modifiedPod) {
 			logger.V(5).Info("a scheduled pod was added and it matches the target pod's affinity",
@@ -216,7 +210,7 @@ func (pl *InterPodAffinity) isSchedulableAfterAssignedPodChange(logger klog.Logg
 		return fwk.QueueSkip, nil
 	}
 
-	// Pod is deleted. Return Queue when the deleted pod matches the target pod's anti-affinity or vice versa.
+	// Pod 被删除：当被删除的 Pod 匹配目标 Pod 的反亲和性（或反之）时入队。
 
 	if podMatchesAnyAffinityTerms(antiTerms, originalPod) {
 		logger.V(5).Info("a scheduled pod was deleted and it matches the target pod's anti-affinity. The pod may be schedulable now",
@@ -239,14 +233,15 @@ func (pl *InterPodAffinity) isSchedulableAfterAssignedPodChange(logger klog.Logg
 	return fwk.QueueSkip, nil
 }
 
+// isSchedulableAfterTargetPodUpdateLabel 在目标 Pod 标签变化后返回入队提示。
 func (pl *InterPodAffinity) isSchedulableAfterTargetPodUpdateLabel(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
-	// The pod can become schedulable after an update to its labels because e.g. some other
-	// pod might have anti-affinity on the old labels but not on the new ones.
+	// 标签更新后 Pod 可能变为可调度：例如其他 Pod 可能对旧标签有反亲和性，但对新标签没有。
 	logger.V(5).Info("the target pod labels have changed and it may be schedulable now",
 		"pod", klog.KObj(pod))
 	return fwk.Queue, nil
 }
 
+// isSchedulableAfterNodeChange 在节点发生变化后，判断目标 Pod 是否可能变为可调度。
 func (pl *InterPodAffinity) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalNode, modifiedNode, err := util.As[*v1.Node](oldObj, newObj)
 	if err != nil {
@@ -258,14 +253,14 @@ func (pl *InterPodAffinity) isSchedulableAfterNodeChange(logger klog.Logger, pod
 		return fwk.Queue, err
 	}
 
-	// When queuing this Pod:
-	// - 1. A new node is added with the pod affinity topologyKey, the pod may become schedulable.
-	// - 2. The original node does not have the pod affinity topologyKey but the modified node does, the pod may become schedulable.
-	// - 3. Both the original and modified nodes have the pod affinity topologyKey and they differ, the pod may become schedulable.
+	// 以下情况需要将该 Pod 入队：
+	// - 1. 新增的节点带有 Pod 亲和性的 topologyKey，Pod 可能变为可调度。
+	// - 2. 原节点没有 Pod 亲和性的 topologyKey，而更新后的节点有，Pod 可能变为可调度。
+	// - 3. 原节点与更新后的节点都有 Pod 亲和性的 topologyKey 且值不同，Pod 可能变为可调度。
 	for _, term := range terms {
 		if originalNode == nil {
 			if _, ok := modifiedNode.Labels[term.TopologyKey]; ok {
-				// Case 1: A new node is added with the pod affinity topologyKey.
+				// 情况 1：新增的节点带有 Pod 亲和性的 topologyKey。
 				logger.V(5).Info("A node with a matched pod affinity topologyKey was added and it may make the pod schedulable",
 					"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 				return fwk.Queue, nil
@@ -276,14 +271,14 @@ func (pl *InterPodAffinity) isSchedulableAfterNodeChange(logger klog.Logger, pod
 		modifiedTopologyValue, modifiedHasKey := modifiedNode.Labels[term.TopologyKey]
 
 		if !originalHasKey && modifiedHasKey {
-			// Case 2: Original node does not have the pod affinity topologyKey, but the modified node does.
+			// 情况 2：原节点没有 Pod 亲和性的 topologyKey，而更新后的节点有。
 			logger.V(5).Info("A node got updated to have the topology key of pod affinity, which may make the pod schedulable",
 				"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.Queue, nil
 		}
 
 		if originalHasKey && modifiedHasKey && (originalTopologyValue != modifiedTopologyValue) {
-			// Case 3: Both nodes have the pod affinity topologyKey, but the values differ.
+			// 情况 3：两个节点都有 Pod 亲和性的 topologyKey，但值不同。
 			logger.V(5).Info("A node is moved to a different domain of pod affinity, which may make the pod schedulable",
 				"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.Queue, nil
@@ -295,17 +290,17 @@ func (pl *InterPodAffinity) isSchedulableAfterNodeChange(logger klog.Logger, pod
 		return fwk.Queue, err
 	}
 
-	// When queuing this Pod:
-	// - 1. A new node is added, the pod may become schedulable.
-	// - 2. The original node have the pod anti-affinity topologyKey but the modified node does not, the pod may become schedulable.
-	// - 3. Both the original and modified nodes have the pod anti-affinity topologyKey and they differ, the pod may become schedulable.
+	// 以下情况需要将该 Pod 入队：
+	// - 1. 新增了节点，Pod 可能变为可调度。
+	// - 2. 原节点有 Pod 反亲和性的 topologyKey，而更新后的节点没有，Pod 可能变为可调度。
+	// - 3. 原节点与更新后的节点都有 Pod 反亲和性的 topologyKey 且值不同，Pod 可能变为可调度。
 	for _, term := range antiTerms {
 		if originalNode == nil {
-			// Case 1: A new node is added.
-			// We always requeue the Pod with anti-affinity because:
-			// - the node without the topology key is always allowed to have a Pod with anti-affinity.
-			// - the addition of a node with the topology key makes Pods schedulable only when the topology it joins doesn't have any Pods that the Pod hates.
-			//   But, it's out-of-scope of this QHint to check which Pods are in the topology this Node is in.
+			// 情况 1：新增了节点。
+			// 带反亲和性的 Pod 一律重新入队，因为：
+			// - 没有 topologyKey 的节点总是允许放置带反亲和性的 Pod。
+			// - 带 topologyKey 的新节点只有在它所加入的拓扑域中没有该 Pod 排斥的 Pod 时才使其可调度。
+			//   而检查该节点所在拓扑域中有哪些 Pod 超出了本 QueueingHint 的职责范围。
 			logger.V(5).Info("A node was added and it may make the pod schedulable",
 				"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.Queue, nil
@@ -315,16 +310,16 @@ func (pl *InterPodAffinity) isSchedulableAfterNodeChange(logger klog.Logger, pod
 		modifiedTopologyValue, modifiedHasKey := modifiedNode.Labels[term.TopologyKey]
 
 		if originalHasKey && !modifiedHasKey {
-			// Case 2: The original node have the pod anti-affinity topologyKey but the modified node does not.
-			// Note that we don't need to check the opposite case (!originalHasKey && modifiedHasKey)
-			// because the node without the topology label can always accept pods with pod anti-affinity.
+			// 情况 2：原节点有 Pod 反亲和性的 topologyKey，而更新后的节点没有。
+			// 注意无需检查相反情况（!originalHasKey && modifiedHasKey），
+			// 因为没有该拓扑标签的节点总能接受带 Pod 反亲和性的 Pod。
 			logger.V(5).Info("A node got updated to not have the topology key of pod anti-affinity, which may make the pod schedulable",
 				"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.Queue, nil
 		}
 
 		if originalHasKey && modifiedHasKey && (originalTopologyValue != modifiedTopologyValue) {
-			// Case 3: Both nodes have the pod anti-affinity topologyKey, but the values differ.
+			// 情况 3：两个节点都有 Pod 反亲和性的 topologyKey，但值不同。
 			logger.V(5).Info("A node is moved to a different domain of pod anti-affinity, which may make the pod schedulable",
 				"pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.Queue, nil

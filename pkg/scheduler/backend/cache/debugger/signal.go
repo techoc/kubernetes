@@ -20,6 +20,5 @@ package debugger
 
 import "syscall"
 
-// compareSignal is the signal to trigger cache compare. For non-windows
-// environment it's SIGUSR2.
+// compareSignal 是触发缓存比对的信号；非 Windows 环境下取 SIGUSR2。
 var compareSignal = syscall.SIGUSR2

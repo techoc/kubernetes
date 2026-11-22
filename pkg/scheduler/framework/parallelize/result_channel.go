@@ -18,15 +18,14 @@ package parallelize
 
 import "context"
 
-// ResultChannel supports non-blocking send and receive operation to capture result.
-// A maximum of one result is kept in the channel and the rest of the results sent
-// are ignored, unless the existing result is received and the channel becomes empty
-// again.
+// ResultChannel 支持非阻塞的结果发送与接收。
+// 通道内最多保留一个结果：先到的结果被接收后，后续结果才有机会写入；
+// 通道非空时的其余发送都会被丢弃。这样发送方永远不会因为结果没人读而被卡住。
 type ResultChannel[T comparable] struct {
 	ch chan T
 }
 
-// Send sends a result without blocking the sender.
+// Send 非阻塞地发送一个结果；通道已满时直接丢弃，避免拖慢调用方。
 func (e *ResultChannel[T]) Send(result T) {
 	select {
 	case e.ch <- result:
@@ -34,14 +33,15 @@ func (e *ResultChannel[T]) Send(result T) {
 	}
 }
 
-// SendWithCancel sends a result without blocking the sender and calls
-// cancel function.
+// SendWithCancel 非阻塞地发送结果并调用 cancel 取消上下文。
+// 用于并行任务中：一旦有 goroutine 得到结果，就通知其他 goroutine 停止。
 func (e *ResultChannel[T]) SendWithCancel(result T, cancel context.CancelFunc) {
 	e.Send(result)
 	cancel()
 }
 
-// Receive receives a result from channel without blocking on the receiver.
+// Receive 非阻塞地接收一个结果；通道为空时返回零值，
+// 调用方可用零值区分“尚无结果”与“已有结果”。
 func (e *ResultChannel[T]) Receive() T {
 	select {
 	case result := <-e.ch:
@@ -52,7 +52,7 @@ func (e *ResultChannel[T]) Receive() T {
 	}
 }
 
-// NewResultChannel returns a new ResultChannel.
+// NewResultChannel 创建一个容量为 1 的 ResultChannel。
 func NewResultChannel[T comparable]() *ResultChannel[T] {
 	return &ResultChannel[T]{
 		ch: make(chan T, 1),

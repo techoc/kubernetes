@@ -25,10 +25,12 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
+// fakeData 是测试 CycleState 读写与克隆行为的占位状态数据。
 type fakeData struct {
 	data string
 }
 
+// Clone 返回 fakeData 的副本，满足 fwk.StateData 接口。
 func (f *fakeData) Clone() fwk.StateData {
 	copy := &fakeData{
 		data: f.data,
@@ -38,8 +40,8 @@ func (f *fakeData) Clone() fwk.StateData {
 
 var key fwk.StateKey = "fakedata_key"
 
-// createCycleStateWithFakeData creates *CycleState with fakeData.
-// The given data is used in stored fakeData.
+// createCycleStateWithFakeData 创建一个写入了 fakeData 的 CycleState，
+// 并按参数配置插件指标记录和跳过插件集合，便于构造克隆测试的输入和期望值。
 func createCycleStateWithFakeData(data string, recordPluginMetrics bool, skipAllPostFilterPlugins bool, skipPlugins ...[]string) *CycleState {
 	c := NewCycleState()
 	c.Write(key, &fakeData{
@@ -56,8 +58,8 @@ func createCycleStateWithFakeData(data string, recordPluginMetrics bool, skipAll
 	return c
 }
 
-// isCycleStateEqual returns whether two CycleState, which has fakeData in storage, is equal or not.
-// And if they are not equal, returns message which shows why not equal.
+// isCycleStateEqual 比较两个只存放 fakeData 的 CycleState 是否一致，
+// 不一致时返回说明差异原因的消息，便于测试失败时定位。
 func isCycleStateEqual(a, b *CycleState) (bool, string) {
 	if a == nil && b == nil {
 		return true, ""
@@ -125,6 +127,8 @@ func isCycleStateEqual(a, b *CycleState) (bool, string) {
 	return true, ""
 }
 
+// TestCycleStateClone 验证 Clone 会完整复制 CycleState 的字段和存储数据，
+// 且克隆体上的写入不会反向影响原状态。
 func TestCycleStateClone(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -182,7 +186,7 @@ func TestCycleStateClone(t *testing.T) {
 			}
 
 			if state == nil || stateCopy == nil {
-				// not need to run the rest check in this case.
+				// nil 状态下没有可比较的克隆结果，跳过后续写入检查。
 				return
 			}
 
@@ -194,6 +198,7 @@ func TestCycleStateClone(t *testing.T) {
 	}
 }
 
+// TestPlacementCycleState 验证 PlacementCycleState 的存取、清空以及克隆时共享引用的语义。
 func TestPlacementCycleState(t *testing.T) {
 	t.Run("nil by default", func(t *testing.T) {
 		state := NewCycleState()
@@ -248,7 +253,7 @@ func TestPlacementCycleState(t *testing.T) {
 
 		cloned := state.Clone().(*CycleState)
 
-		// The cloned state should reference the same PlacementCycleState.
+		// 克隆体应共享同一个 PlacementCycleState 引用。
 		if cloned.GetPlacementCycleState() == nil {
 			t.Fatal("cloned state should have non-nil PlacementCycleState")
 		}
@@ -261,8 +266,8 @@ func TestPlacementCycleState(t *testing.T) {
 			t.Errorf("expected 'placement-data', got %q", data.(*fakeData).data)
 		}
 
-		// Writes to the PlacementCycleState via the clone should be visible from the original,
-		// since it's a shared reference (same as podGroupCycleState behavior).
+		// 通过克隆体对 PlacementCycleState 的写入应在原状态中可见，
+		// 因为它是一个共享引用（与 podGroupCycleState 的行为一致）。
 		cloned.GetPlacementCycleState().Write("newkey", &fakeData{data: "new"})
 		newData, err := state.GetPlacementCycleState().Read("newkey")
 		if err != nil {
@@ -276,7 +281,7 @@ func TestPlacementCycleState(t *testing.T) {
 	t.Run("clone with nil placement state", func(t *testing.T) {
 		state := NewCycleState()
 		state.Write(key, &fakeData{data: "data"})
-		// Do not set PlacementCycleState — leave nil.
+		// 不设置 PlacementCycleState，保留 nil 以验证克隆后仍为 nil。
 
 		cloned := state.Clone().(*CycleState)
 		if cloned.GetPlacementCycleState() != nil {

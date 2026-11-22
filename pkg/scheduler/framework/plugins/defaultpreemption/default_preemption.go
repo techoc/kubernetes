@@ -38,35 +38,30 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// Name of the plugin used in the plugin registry and configurations.
+// Name 是插件在注册表和配置中使用的名字。
 const Name = names.DefaultPreemption
 
-// IsEligiblePodFunc is a function which may be assigned to the DefaultPreemption plugin.
-// This may implement rules/filtering around preemption eligibility, which is in addition to
-// the internal requirement that the victim has lower priority than the preemptor pod.
-// Any customizations should always allow system services to preempt normal pods, to avoid
-// problems if system pods are unable to find space.
+// IsEligiblePodFunc 可赋给 DefaultPreemption，用于扩展抢占资格的过滤规则；
+// 这只是对“受害者优先级低于抢占者”这一内部要求的补充。
+// 任何自定义实现都应允许系统服务抢占普通 Pod，避免系统 Pod 无处可去。
 //
-// For PodGroup victims, this function is called once per affected node: nodeInfo reflects
-// that specific node, while victim always represents the entire PodGroup across all its nodes.
-// The victim is eligible only if the function returns true for every affected node.
+// 对 PodGroup 受害者，该函数对每个受影响的节点调用一次：nodeInfo 对应当前节点，
+// victim 始终代表跨所有节点的整个 PodGroup。只有每个受影响节点都返回 true 才算合格。
 type IsEligiblePodFunc func(nodeInfo fwk.NodeInfo, victim preemption.Victim, preemptor *v1.Pod) bool
 
-// MoreImportantVictimFunc is a function which may be assigned to the DefaultPreemption plugin.
-// Implementations should return true if the first victim is more important than the second victim
-// and the second one should be considered for preemption before the first one.
-// For performance reasons, the search for nodes eligible for preemption is done by omitting all
-// eligible victims from a node then checking whether the preemptor fits on the node without them,
-// before adding back victims (starting from the most important) that still fit with the preemptor.
-// The default behavior is to not consider pod affinity between the preemptor and the victims,
-// as affinity between pods that are eligible to preempt each other isn't recommended.
+// MoreImportantVictimFunc 可赋给 DefaultPreemption：若第一个受害者比第二个更重要
+// （因此应更晚被抢占），返回 true。
+// 出于性能考虑，寻找可抢占节点的方式是：先从节点移除所有合格受害者，检查抢占者能否放下，
+// 再从最重要的受害者开始逐个放回仍能容纳的受害者。
+// 默认不考量抢占者与受害者之间的 Pod 亲和性，因为可互相抢占的 Pod 之间设亲和性本就不推荐。
 type MoreImportantVictimFunc func(victim1, victim2 preemption.Victim) bool
 
+// podGroupEvaluator 抽象出 PodGroup 抢占的执行入口。
 type podGroupEvaluator interface {
 	Preempt(ctx context.Context, pgInfo fwk.PodGroupInfo, podGroupSchedulingFunc fwk.PodGroupSchedulingFunc) (*fwk.PodGroupPostFilterResult, *fwk.Status)
 }
 
-// DefaultPreemption is a PostFilter plugin implements the preemption logic.
+// DefaultPreemption 是实现抢占逻辑的 PostFilter 插件。
 type DefaultPreemption struct {
 	fh   fwk.Handle
 	fts  feature.Features
@@ -79,32 +74,28 @@ type DefaultPreemption struct {
 	cpgSnapshotLister fwk.CompositePodGroupLister
 	podGroupEvaluator podGroupEvaluator
 
-	// IsEligiblePod returns whether a victim (individual pod/pod group) is allowed to be preempted by a preemptor pod.
-	// This filtering is in addition to the internal requirement that the victim pod have lower
-	// priority than the preemptor pod. Any customizations should always allow system services
-	// to preempt normal pods, to avoid problems if system pods are unable to find space.
+	// IsEligiblePod 判断受害者（单个 Pod/PodGroup）能否被抢占者抢占。
+	// 这是对“受害者优先级更低”这一内部要求的补充过滤。任何自定义实现都应允许系统服务
+	// 抢占普通 Pod，避免系统 Pod 无处可去。
 	IsEligiblePod IsEligiblePodFunc
 
-	// MoreImportantVictim is used to sort eligible victims in-place in descending order of highest to
-	// lowest importance. Victims with higher importance are less likely to be preempted.
+	// MoreImportantVictim 用于就地按重要性从高到低排序合格受害者，越重要的越不会被抢占。
 	//
-	// By default, potential preemption victims are evaluated using a cascading set of rules. The system prioritizes based on
-	// priority first, always deferring to higher-priority victims.
-	// If GenericWorkload is disabled, it simply falls back to prioritizing older victims. However,
-	// if WAP is enabled, it factors in the victim type by favoring PodGroups over standalone Pods. When comparing multiple PodGroups,
-	// it prioritizes those with larger group sizes, ultimately using the start time as the final tiebreaker.
+	// 默认采用级联规则评估候选受害者：先看优先级，始终优先保留高优先级者。
+	// 禁用 GenericWorkload 时退化为优先保留运行更久的 Pod；启用 WAP 时还会考量受害者类型，
+	// 相对独立 Pod 更偏向保留 PodGroup；多个 PodGroup 之间先比组大小，最后以启动时间兜底。
 	MoreImportantVictim MoreImportantVictimFunc
 }
 
 var _ fwk.PostFilterPlugin = &DefaultPreemption{}
 var _ fwk.PreEnqueuePlugin = &DefaultPreemption{}
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名，用于日志等场合。
 func (pl *DefaultPreemption) Name() string {
 	return Name
 }
 
-// New initializes a new plugin and returns it. The plugin type is retained to allow modification.
+// New 初始化并返回一个新插件，保留具体类型以便外部修改其可配置字段。
 func New(_ context.Context, dpArgs runtime.Object, fh fwk.Handle, fts feature.Features) (*DefaultPreemption, error) {
 	args, ok := dpArgs.(*config.DefaultPreemptionArgs)
 	if !ok {
@@ -132,23 +123,22 @@ func New(_ context.Context, dpArgs runtime.Object, fh fwk.Handle, fts feature.Fe
 		pl.cpgSnapshotLister = fh.SnapshotSharedLister().CompositePodGroups()
 	}
 
-	// Default behavior: No additional filtering, beyond the internal requirement that the victim
-	// has lower priority than the preemptor.
+	// 默认行为：除“受害者优先级更低”外不做额外过滤。
 	pl.IsEligiblePod = func(nodeInfo fwk.NodeInfo, victim preemption.Victim, preemptor *v1.Pod) bool {
 		return true
 	}
 
-	// Default behavior, defines the order for victims sorting. The order is:
-	// 1. Higher Priority.
-	// 2. Workload Type: CompositePodGroup > PodGroup > Individual Pod.
-	// 3. For individual Pods: Older StartTime (longer runtime).
-	// 4. For Group types: Larger Group Size, then Older StartTime.
+	// 默认的受害者排序规则，依次为：
+	// 1. 优先级更高者优先保留；
+	// 2. 工作负载类型：CompositePodGroup > PodGroup > 独立 Pod；
+	// 3. 独立 Pod 之间：启动时间更早（运行更久）者优先保留；
+	// 4. 组类型之间：组更大者优先，其次启动时间更早者。
 	pl.MoreImportantVictim = preemption.MoreImportantVictim
 
 	return &pl, nil
 }
 
-// PostFilter invoked at the postFilter extension point.
+// PostFilter 在 postFilter 扩展点调用。
 func (pl *DefaultPreemption) PostFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, m fwk.NodeToStatusReader) (*fwk.PostFilterResult, *fwk.Status) {
 	defer func() {
 		metrics.PreemptionAttempts.Inc()
@@ -162,6 +152,7 @@ func (pl *DefaultPreemption) PostFilter(ctx context.Context, state fwk.CycleStat
 	return result, status
 }
 
+// PreEnqueue 在异步抢占进行期间阻止相关 Pod 入队。
 func (pl *DefaultPreemption) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Status {
 	if !pl.fts.EnableAsyncPreemption {
 		return nil
@@ -170,16 +161,14 @@ func (pl *DefaultPreemption) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Sta
 		var rootUID types.UID
 		if !pl.fts.EnableCompositePodGroup {
 			pg, err := pl.pgLister.Get(p.Namespace, *p.Spec.SchedulingGroup.PodGroupName)
-			// If the pg is not found do not block the pod. It's not a default preemption responsibility
-			// to block pods from pod group without pg from entering the queue.
+			// 找不到 PodGroup 时不要阻塞 Pod：阻止无 PG 的组内 Pod 入队不是默认抢占插件的职责。
 			if err != nil {
 				return nil
 			}
 			rootUID = pg.GetUID()
 		} else {
 			snapshot, err := pl.fh.PodGroupManager().BuildHierarchySnapshotFromPod(p)
-			// If the root group cannot be resolved, do not block the pod. It's not a default preemption responsibility
-			// to block pods from a pod group whose root group is missing from entering the queue.
+			// 根组无法解析时不要阻塞 Pod：阻止根组缺失的组内 Pod 入队不是默认抢占插件的职责。
 			if err != nil {
 				return nil
 			}
@@ -215,36 +204,29 @@ func (pl *DefaultPreemption) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Sta
 	return nil
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让被本插件拒绝的 Pod 变为可调度的事件。
 func (pl *DefaultPreemption) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	if pl.fts.EnableAsyncPreemption {
 		return []fwk.ClusterEventWithHint{
-			// We need to register the event to tell the scheduling queue that the pod could be un-gated after some Pods' deletion.
+			// 注册该事件是为了通知调度队列：Pod 可能在其他 Pod 删除后解除阻塞。
 			{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.Delete}, QueueingHintFn: pl.isPodSchedulableAfterAssignedPodDeletion},
 		}, nil
 	}
 
-	// When the async preemption is disabled, PreEnqueue always returns nil, and hence pods never get rejected by this plugin.
+	// 禁用异步抢占时 PreEnqueue 恒返回 nil，因此本插件不会拒绝任何 Pod。
 	return nil, nil
 }
 
-// isPodSchedulableAfterAssignedPodDeletion returns the queueing hint for the pod after the assigned pod deletion event,
-// which always return Skip.
-// The default preemption plugin is a bit tricky;
-// the pods rejected by it are the ones that have run/are running the preemption asynchronously.
-// And, those pods should always have the other plugins in pInfo.UnschedulablePlugins
-// which failure will be resolved by the preemption.
-// The reason why we return Skip here is that the preemption plugin should not make the decision of when to requeueing Pods,
-// and rather, those plugins should be responsible for that.
+// isPodSchedulableAfterAssignedPodDeletion 返回已分配 Pod 删除事件后 Pod 的入队提示，恒为 Skip。
+// 这里有点绕：被本插件拒绝的 Pod 正是那些已经/正在异步抢占的 Pod，
+// 它们的 pInfo.UnschedulablePlugins 中总有其他插件，抢占完成后由那些插件来解决失败原因。
+// 因此抢占插件不该越俎代庖决定何时重新入队，而应交给那些插件负责。
 func (pl *DefaultPreemption) isPodSchedulableAfterAssignedPodDeletion(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	return fwk.QueueSkip, nil
 }
 
-// calculateNumCandidates returns the number of candidates the FindCandidates
-// method must produce from dry running based on the constraints given by
-// <minCandidateNodesPercentage> and <minCandidateNodesAbsolute>. The number of
-// candidates returned will never be greater than <numNodes>.
+// calculateNumCandidates 根据 MinCandidateNodesPercentage 与 MinCandidateNodesAbsolute
+// 计算 FindCandidates 试运行需产生的候选节点数，结果不会超过 numNodes。
 func (pl *DefaultPreemption) calculateNumCandidates(numNodes int32) int32 {
 	n := (numNodes * pl.args.MinCandidateNodesPercentage) / 100
 	if n < pl.args.MinCandidateNodesAbsolute {
@@ -256,18 +238,17 @@ func (pl *DefaultPreemption) calculateNumCandidates(numNodes int32) int32 {
 	return n
 }
 
-// getOffsetRand is a dedicated random source for GetOffsetAndNumCandidates calls.
-// It defaults to rand.Int31n, but is a package variable so it can be overridden to make unit tests deterministic.
+// getOffsetRand 是 GetOffsetAndNumCandidates 专用的随机源。
+// 默认是 rand.Int31n，做成包变量便于单测覆盖为确定性实现。
 var getOffsetRand = rand.Int31n
 
-// GetOffsetAndNumCandidates chooses a random offset and calculates the number
-// of candidates that should be shortlisted for dry running preemption.
+// GetOffsetAndNumCandidates 选取一个随机偏移量，并计算进入抢占试运行的候选数量。
 func (pl *DefaultPreemption) GetOffsetAndNumCandidates(numNodes int32) (int32, int32) {
 	return getOffsetRand(numNodes), pl.calculateNumCandidates(numNodes)
 }
 
-// This function is not applicable for out-of-tree preemption plugins that exercise
-// different preemption candidates on the same nominated node.
+// CandidatesToVictimsMap 把候选节点映射为其受害者集合。
+// 对在同一提名节点上尝试不同候选的树外抢占插件，本方法不适用。
 func (pl *DefaultPreemption) CandidatesToVictimsMap(candidates []preemption.Candidate) map[string]*extenderv1.Victims {
 	m := make(map[string]*extenderv1.Victims, len(candidates))
 	for _, c := range candidates {
@@ -276,13 +257,11 @@ func (pl *DefaultPreemption) CandidatesToVictimsMap(candidates []preemption.Cand
 	return m
 }
 
-// SelectVictimsOnNode finds the minimum set of pods that should be preempted to make enough room for the preemptor to be
-// scheduled on the node represented by nodeInfo (the "main node").
+// SelectVictimsOnNode 找出最小的受害者集合，使抢占者能放入 nodeInfo 代表的节点（“主节点”）。
 //
-// On entry, nodeInfo represents only the main node. If the candidate victims include a PodGroup that spans additional nodes,
-// SelectVictimsOnNode discovers those nodes from victim.AffectedNodes() during the removal pass and extends its internal nameToNode map
-// accordingly, so PreFilterExtension hooks can run against them. See also the block comment inside the function body for the
-// NodeInfo-mutation contract across main vs. remote nodes.
+// 进入函数时 nodeInfo 只代表主节点。若候选受害者中有跨节点的 PodGroup，
+// 本函数会在移除阶段从 victim.AffectedNodes() 发现这些节点并扩展内部 nameToNode，
+// 以便 PreFilterExtension 钩子能在其上执行。主节点与远端节点的 NodeInfo 修改约定见函数体内的块注释。
 func (pl *DefaultPreemption) SelectVictimsOnNode(
 	ctx context.Context,
 	cycleState fwk.CycleState,
@@ -291,23 +270,21 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 	allPossibleVictims []*preemption.DomainVictim,
 	pdbs []*policy.PodDisruptionBudget) ([]*v1.Pod, int, *fwk.Status) {
 	logger := klog.FromContext(ctx)
-	// Within a single SelectVictimsOnNode evaluation we mutate NodeInfo only for the main node (the node we are trying to fit the preemptor onto).
-	// Filter plugins are re-run against mainNode below via RunFilterPluginsWithNominatedPods, so they must see the post-removal state
-	// of mainNode reflected in NodeInfo.
+	// 在一次 SelectVictimsOnNode 评估中，我们只修改主节点的 NodeInfo（即试图放入抢占者的节点）。
+	// 稍后会通过 RunFilterPluginsWithNominatedPods 对主节点重跑 Filter，因此它们必须看到移除后的状态。
 	//
-	// For remote nodes that are only affected because a PodGroup victim has members there, we deliberately do NOT mutate their NodeInfo.
-	// Instead we invoke PreFilterExtension Remove/AddPod with the remote NodeInfo so that plugins can update any CycleState they keep
-	// about those pods (e.g. topology spread skew, pod affinity counters). Plugins that read remote NodeInfo directly during Filter
-	// (rather than CycleState) will observe stale state for those nodes; this is acceptable because we only run the Filter pass
-	// against mainNode here.
+	// 对仅因 PodGroup 受害者成员所在而受影响的远端节点，我们刻意不修改其 NodeInfo，
+	// 只把远端 NodeInfo 传给 PreFilterExtension 的 Remove/AddPod，让插件更新自己维护的 CycleState
+	// （如拓扑分布倾斜、Pod 亲和计数）。Filter 期间直接读远端 NodeInfo 的插件会看到旧状态；
+	// 这可以接受，因为这里的 Filter 只针对主节点运行。
 	mainNodeName := nodeInfo.Node().Name
 	nameToNode := map[string]fwk.NodeInfo{mainNodeName: nodeInfo}
 
 	removeVictim := func(dv *preemption.DomainVictim) error {
 		for _, pi := range dv.Pods() {
 			nodeInfo := nameToNode[pi.GetPod().Spec.NodeName]
-			// See the block comment in SelectVictimsOnNode: only mainNode's NodeInfo
-			// is mutated; remote nodes go through PreFilterExtension only.
+			// 见 SelectVictimsOnNode 的块注释：只修改主节点的 NodeInfo，
+			// 远端节点仅通过 PreFilterExtension 处理。
 			if pi.GetPod().Spec.NodeName == mainNodeName {
 				if err := nodeInfo.RemovePod(logger, pi.GetPod()); err != nil {
 					return err
@@ -324,8 +301,8 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 	addVictim := func(pu *preemption.DomainVictim) error {
 		for _, pi := range pu.Pods() {
 			nodeInfo := nameToNode[pi.GetPod().Spec.NodeName]
-			// See the block comment in SelectVictimsOnNode: only mainNode's NodeInfo
-			// is mutated; remote nodes go through PreFilterExtension only.
+			// 见 SelectVictimsOnNode 的块注释：只修改主节点的 NodeInfo，
+			// 远端节点仅通过 PreFilterExtension 处理。
 			if pi.GetPod().Spec.NodeName == mainNodeName {
 				nodeInfo.AddPodInfo(pi)
 			}
@@ -345,16 +322,15 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 		}
 	}
 
-	// No preemption victims found for incoming preemptor, and so we don't need to evaluate the node again since its state didn't change.
+	// 没有可抢占的受害者，节点状态未变，无需再次评估。
 	if len(potentialVictims) == 0 {
 		return nil, 0, fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "No preemption victims found for incoming pod")
 	}
 
-	// As the first step, remove all victims eligible for preemption from the node.
+	// 第一步：移除节点上所有可抢占的受害者。
 	for _, victim := range potentialVictims {
-		// If a Victim is a PodGroup spanning multiple nodes, some affected nodes
-		// might not be in the nameToNode map yet. We add them to ensure
-		// they are considered during preemption.
+		// 若受害者是跨节点的 PodGroup，某些受影响节点可能还不在 nameToNode 中，
+		// 先补进去，确保抢占时会考虑到它们。
 		for name, nodeInfo := range victim.AffectedNodes() {
 			if _, ok := nameToNode[name]; !ok {
 				nameToNode[name] = nodeInfo
@@ -365,25 +341,19 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 		}
 	}
 
-	// If the preemptor does not fit after removing all the eligible victims,
-	// we are almost done and this node is not suitable for preemption. The only
-	// condition that we could check is if the preemptor is failing to schedule due to
-	// inter-pod affinity to one or more victims, but we have decided not to
-	// support this case for performance reasons. Having affinity to lower
-	// importance (priority) pods is not a recommended configuration anyway.
+	// 移除所有合格受害者后仍放不下抢占者，则该节点不适合抢占，可以收尾了。
+	// 唯一还能检查的是抢占者是否因与某些受害者的 Pod 亲和而调度失败，
+	// 但出于性能考虑不支持该场景；对低优先级 Pod 设亲和性本就不推荐。
 	if status := pl.fh.RunFilterPluginsWithNominatedPods(ctx, cycleState, preemptor, nodeInfo); !status.IsSuccess() {
 		return nil, 0, status
 	}
 
-	// Sort potentialVictims by descending importance, which ensures reprieve of
-	// higher importance victims first.
+	// 按重要性降序排列候选受害者，确保优先恢复更重要的受害者。
 	sort.Slice(potentialVictims, func(i, j int) bool {
 		return pl.MoreImportantVictim(potentialVictims[i], potentialVictims[j])
 	})
 
-	// Try to reprieve as many pods as possible. We first try to reprieve the PDB
-	// violating victims and then other non-violating ones. In both cases, we start
-	// from the highest importance victims.
+	// 尽量多恢复受害者：先处理违反 PDB 的，再处理不违反的，且都从最重要的开始尝试。
 	violatingVictims, nonViolatingVictims := preemption.FilterVictimsWithPDBViolation(potentialVictims, pdbs)
 	var victims []*preemption.DomainVictim
 	reprieveVictim := func(v *preemption.DomainVictim) (bool, error) {
@@ -419,14 +389,14 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 		}
 	}
 
-	// Now we try to reprieve non-violating victims.
+	// 接着尝试恢复不违反 PDB 的受害者。
 	for _, v := range nonViolatingVictims {
 		if _, err := reprieveVictim(v); err != nil {
 			return nil, 0, fwk.AsStatus(err)
 		}
 	}
 
-	// Sort victims after reprieving pods to keep the victims sorted in order of importance from high to low.
+	// 恢复操作后重新排序，使最终受害者列表按重要性从高到低排列。
 	if len(violatingVictims) != 0 && len(nonViolatingVictims) != 0 {
 		sort.Slice(victims, func(i, j int) bool { return pl.MoreImportantVictim(victims[i], victims[j]) })
 	}
@@ -440,14 +410,12 @@ func (pl *DefaultPreemption) SelectVictimsOnNode(
 	return victimPods, numViolatingVictim, nil
 }
 
-// PodEligibleToPreemptOthers returns one bool and one string. The bool
-// indicates whether this pod should be considered for preempting other pods or
-// not. The string includes the reason if this pod isn't eligible.
-// There're several reasons:
-//  1. The pod has a preemptionPolicy of Never.
-//  2. The pod has already preempted other pods and the victims are in their graceful termination period.
-//     Currently we check the node that is nominated for this pod, and as long as there are
-//     terminating pods on this node, we don't attempt to preempt more pods.
+// PodEligibleToPreemptOthers 返回一个布尔值和一个原因字符串：
+// 布尔值表示 Pod 是否可考虑抢占其他 Pod，不可用时字符串给出原因。
+// 不可用的情形包括：
+//  1. Pod 的 preemptionPolicy 为 Never；
+//  2. Pod 已经抢占过其他 Pod，且受害者仍在优雅终止期。
+//     当前只检查其提名节点：只要该节点上还有正在终止的 Pod，就不再尝试抢占更多 Pod。
 func (pl *DefaultPreemption) PodEligibleToPreemptOthers(_ context.Context, pod *v1.Pod, nominatedNodeStatus *fwk.Status) (bool, string) {
 	if pod.Spec.PreemptionPolicy != nil && *pod.Spec.PreemptionPolicy == v1.PreemptNever {
 		return false, "not eligible due to preemptionPolicy=Never."
@@ -456,8 +424,7 @@ func (pl *DefaultPreemption) PodEligibleToPreemptOthers(_ context.Context, pod *
 	nodeInfos := pl.fh.MutableSnapshotSharedLister().NodeInfos()
 	nomNodeName := pod.Status.NominatedNodeName
 	if len(nomNodeName) > 0 {
-		// If the pod's nominated node is considered as UnschedulableAndUnresolvable by the filters,
-		// then the pod should be considered for preempting again.
+		// 若过滤器认为提名节点 UnschedulableAndUnresolvable，则应允许该 Pod 再次尝试抢占。
 		if nominatedNodeStatus.Code() == fwk.UnschedulableAndUnresolvable {
 			return true, ""
 		}
@@ -466,7 +433,7 @@ func (pl *DefaultPreemption) PodEligibleToPreemptOthers(_ context.Context, pod *
 			for _, p := range nodeInfo.GetPods() {
 				victim := preemption.NewPodVictim(p, pl.pgSnapshotLister, pl.cpgSnapshotLister)
 				if pl.isPreemptionAllowed(nodeInfo, victim, pod) && preemption.PodTerminatingByPreemption(p.GetPod()) {
-					// There is a terminating pod on the nominated node.
+					// 提名节点上存在正在终止的 Pod。
 					return false, "not eligible due to a terminating pod on the nominated node."
 				}
 			}
@@ -475,18 +442,18 @@ func (pl *DefaultPreemption) PodEligibleToPreemptOthers(_ context.Context, pod *
 	return true, ""
 }
 
-// isPreemptionAllowed returns whether the "victim" residing on "nodeInfo" can be preempted by the preemptor pod
+// isPreemptionAllowed 判断 nodeInfo 上的受害者能否被抢占者抢占。
 func (pl *DefaultPreemption) isPreemptionAllowed(nodeInfo fwk.NodeInfo, victim preemption.Victim, preemptor *v1.Pod) bool {
-	// The victim must have lower priority than the pod, in addition to any filtering implemented by IsEligiblePod
+	// 除 IsEligiblePod 的过滤外，受害者优先级必须低于抢占者。
 	return victim.Priority() < corev1helpers.PodPriority(preemptor) && pl.IsEligiblePod(nodeInfo, victim, preemptor)
 }
 
-// OrderedScoreFuncs returns a list of ordered score functions to select preferable node where victims will be preempted.
+// OrderedScoreFuncs 返回按优先级排列的节点打分函数；本插件不提供自定义打分，返回 nil。
 func (pl *DefaultPreemption) OrderedScoreFuncs(ctx context.Context, nodesToVictims map[string]*extenderv1.Victims) []func(node string) int64 {
 	return nil
 }
 
-// isPreemptionAllowedAcrossAllVictimNodes returns whether the victim can be preempted on all its affected nodes.
+// isPreemptionAllowedAcrossAllVictimNodes 判断受害者在其所有受影响节点上都可被抢占。
 func (pl *DefaultPreemption) isPreemptionAllowedAcrossAllVictimNodes(victim *preemption.DomainVictim, preemptor *v1.Pod) bool {
 	if victim.Priority() >= corev1helpers.PodPriority(preemptor) {
 		return false
@@ -501,7 +468,7 @@ func (pl *DefaultPreemption) isPreemptionAllowedAcrossAllVictimNodes(victim *pre
 	return true
 }
 
-// PodGroupPostFilter runs a default preemption for the pod group.
+// PodGroupPostFilter 为 PodGroup 执行默认抢占。
 func (pl *DefaultPreemption) PodGroupPostFilter(ctx context.Context, state fwk.PodGroupCycleState, pgInfo fwk.PodGroupInfo, pgSchedulingFunc fwk.PodGroupSchedulingFunc) (postFilterResult *fwk.PodGroupPostFilterResult, status *fwk.Status) {
 	defer func() {
 		metrics.WorkloadPreemptionAttempts.WithLabelValues(status.Code().String()).Inc()

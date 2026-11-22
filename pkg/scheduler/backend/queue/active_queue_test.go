@@ -55,7 +55,7 @@ func TestClose(t *testing.T) {
 
 	aq.close()
 
-	// make sure the in-flight events and pods are cleaned up by close()
+	// 验证 close() 会清理所有进行中的事件与 Pod。
 
 	if len(aq.listInFlightEvents()) != 0 {
 		t.Fatalf("in-flight events should be cleaned up, but %v item(s) is remaining", len(aq.listInFlightEvents()))

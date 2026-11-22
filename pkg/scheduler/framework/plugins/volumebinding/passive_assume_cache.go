@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package volumebinding 实现卷绑定调度插件，在调度过程中处理 Pod 的持久卷声明（PVC）。
 package volumebinding
 
 import (
@@ -29,41 +30,37 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// informer is the subset of [cache.SharedInformer] that newAssumeCache depends upon.
+// informer 是 newAssumeCache 所需 [cache.SharedInformer] 的最小子集。
 type informer interface {
 	AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error)
 	GetIndexer() cache.Indexer
 }
 
-// passiveAssumeCache is a cache on top of the informer that allows for updating
-// objects outside of informer events and also restoring the informer
-// cache's version of the object.
+// passiveAssumeCache 是构建在 informer 之上的缓存，既允许在 informer 事件之外更新对象，
+// 也允许恢复到 informer 缓存中的对象版本。
 //
-// An informer update always overrides the assumed object.
+// informer 的更新总会覆盖 assumed 对象。
 //
-// This is different from pkg/scheduler/util/assumecache in:
-//   - this does not dispatch events
-//   - this is always up-to-date with the informer
-//   - this only allow assuming objects yet to be sent to the apiserver,
-//     not the ones returned from the apiserver
+// 它与 pkg/scheduler/util/assumecache 的区别在于：
+//   - 不派发事件
+//   - 始终与 informer 保持同步
+//   - 只允许 assume 尚未发送到 apiserver 的对象，不允许 assume 从 apiserver 返回的对象
 type passiveAssumeCache[T v1.Object] struct {
-	// The logger that was chosen when setting up the cache.
-	// Will be used for all operations.
+	// 创建缓存时选定的 logger，所有操作都使用它。
 	logger klog.Logger
 	gr     schema.GroupResource
 
-	// Synchronizes updates to all fields below.
-	// Although [store] have its own lock, we still need to hold our lock
-	// before reading from either [store] or [assumed] if we compare
-	// ResourceVersion between them.
+	// 同步对以下所有字段的更新。
+	// 虽然 [store] 自带锁，但比较两者的 ResourceVersion 时，
+	// 仍需先持有本锁再读取 [store] 或 [assumed]。
 	rwMutex sync.RWMutex
 
-	// Objects from informer
+	// 来自 informer 的对象。
 	store   cache.Indexer
 	assumed map[string]T
 }
 
-// newAssumeCache creates an assume cache for objects of type T.
+// newAssumeCache 为类型 T 的对象创建一个 assume 缓存。
 func newAssumeCache[T v1.Object](logger klog.Logger, informer informer, gr schema.GroupResource) (*passiveAssumeCache[T], error) {
 	c := &passiveAssumeCache[T]{
 		logger:  logger,
@@ -82,7 +79,7 @@ func newAssumeCache[T v1.Object](logger klog.Logger, informer informer, gr schem
 	return c, err
 }
 
-// Receives events from informer. May expire the assumed object if it is older.
+// mayExpire 接收来自 informer 的事件；若 assumed 对象已过期，则使其失效。
 func (c *passiveAssumeCache[T]) mayExpire(key string) {
 	c.rwMutex.Lock()
 	defer c.rwMutex.Unlock()
@@ -92,7 +89,7 @@ func (c *passiveAssumeCache[T]) mayExpire(key string) {
 		return
 	}
 
-	// Get the latest version to avoid overwriting newer object from [Assume]
+	// 取最新版本，避免覆盖 [Assume] 写入的更新对象。
 	obj, exists, err := c.store.GetByKey(key)
 	if err != nil {
 		utilruntime.HandleErrorWithLogger(c.logger, err, "mayExpire get", "key", key)
@@ -107,7 +104,7 @@ func (c *passiveAssumeCache[T]) mayExpire(key string) {
 			return
 		}
 
-		// Only overwrite assumed object if version is newer (not resync).
+		// 仅当版本更新时才覆盖 assumed 对象，避免 resync 造成误失效。
 		if assumed.GetResourceVersion() == newMeta.GetResourceVersion() {
 			c.logger.V(10).Info("ignoring resync of assumed object", "key", key, "version", assumed.GetResourceVersion())
 			expire = false
@@ -123,6 +120,7 @@ func (c *passiveAssumeCache[T]) mayExpire(key string) {
 	}
 }
 
+// add 处理 informer 的添加事件：可能的过期判定依赖对象 key。
 func (c *passiveAssumeCache[T]) add(obj any) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -132,10 +130,12 @@ func (c *passiveAssumeCache[T]) add(obj any) {
 	c.mayExpire(key)
 }
 
+// update 处理 informer 的更新事件；旧对象内容无关紧要，复用 add 即可。
 func (c *passiveAssumeCache[T]) update(_, obj any) {
 	c.add(obj)
 }
 
+// delete 处理 informer 的删除事件。
 func (c *passiveAssumeCache[T]) delete(obj any) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -145,9 +145,9 @@ func (c *passiveAssumeCache[T]) delete(obj any) {
 	c.mayExpire(key)
 }
 
-// ByIndex returns the stored objects whose set of indexed values for the named index includes the given indexed value
+// ByIndex 返回指定索引中索引值匹配给定值存储对象。
 //
-// The index is evaluated on the object from store. Objects from [Assume] will present in the result but will not affect the index.
+// 索引只在 store 中的对象上计算。[Assume] 的对象会出现在结果中，但不参与索引。
 func (c *passiveAssumeCache[T]) ByIndex(indexName, indexedValue string) ([]T, error) {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
@@ -159,7 +159,7 @@ func (c *passiveAssumeCache[T]) ByIndex(indexName, indexedValue string) ([]T, er
 	return c.replaceAssumed(objs), nil
 }
 
-// Get the object by its key.
+// Get 根据 key 获取对象。
 func (c *passiveAssumeCache[T]) Get(key string) (T, error) {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
@@ -170,13 +170,14 @@ func (c *passiveAssumeCache[T]) Get(key string) (T, error) {
 	}
 
 	assumed, ok := c.assumed[key]
+	// 未 assume，或 informer 对象更新时，以 informer 对象为准。
 	if !ok || assumed.GetResourceVersion() != obj.GetResourceVersion() { // not assumed or Informer object is newer
 		return obj, nil
 	}
 	return assumed, nil
 }
 
-// GetAPIObj gets the informer cache's version by its key.
+// GetAPIObj 根据 key 获取 informer 缓存中的对象版本。
 func (c *passiveAssumeCache[T]) GetAPIObj(key string) (T, error) {
 	obj, ok, err := c.store.GetByKey(key)
 	var zero T
@@ -193,10 +194,12 @@ func (c *passiveAssumeCache[T]) GetAPIObj(key string) (T, error) {
 	return v, nil
 }
 
+// keyOf 返回对象的 namespace/name 键。
 func keyOf[T v1.Object](obj T) string {
 	return cache.MetaObjectToName(obj).String()
 }
 
+// replaceAssumed 把列表中的对象替换为版本匹配的 assumed 对象。
 func (c *passiveAssumeCache[T]) replaceAssumed(objs []any) []T {
 	allObjs := make([]T, 0, len(objs))
 	for _, obj := range objs {
@@ -206,8 +209,8 @@ func (c *passiveAssumeCache[T]) replaceAssumed(objs []any) []T {
 			continue
 		}
 		assumed, ok := c.assumed[keyOf(v)]
+		// 版本一致才替换，说明 assumed 对象尚未进入 informer。
 		if ok && assumed.GetResourceVersion() == v.GetResourceVersion() {
-			// assumed object is not in informer yet
 			v = assumed
 		}
 		allObjs = append(allObjs, v)
@@ -215,13 +218,10 @@ func (c *passiveAssumeCache[T]) replaceAssumed(objs []any) []T {
 	return allObjs
 }
 
-// Assume updates the object in-memory only.
+// Assume 只在内存中更新对象。
 //
-// The version of the object must be equal to
-// the current object, otherwise an error is returned.
-// If an update is received via the informer while such an
-// object is assumed, it gets dropped in favor of the
-// newer object from the apiserver.
+// 对象的版本必须与当前对象一致，否则返回错误。
+// 若 assume 期间收到 informer 更新，则丢弃 assumed 对象，采用 apiserver 的更新版本。
 func (c *passiveAssumeCache[T]) Assume(obj T) error {
 	key := keyOf(obj)
 
@@ -241,7 +241,7 @@ func (c *passiveAssumeCache[T]) Assume(obj T) error {
 	return nil
 }
 
-// Restore the informer cache's version of the object.
+// Restore 恢复对象到 informer 缓存中的版本。
 func (c *passiveAssumeCache[T]) Restore(obj T) {
 	key := keyOf(obj)
 

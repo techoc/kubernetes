@@ -31,7 +31,7 @@ import (
 
 var configDecoder = scheme.Codecs.UniversalDecoder()
 
-// NewFramework creates a Framework from the register functions and options.
+// NewFramework 根据注册函数与选项创建 Framework。
 func NewFramework(ctx context.Context, fns []RegisterPluginFunc, profileName string, opts ...runtime.Option) (framework.Framework, error) {
 	registry := runtime.Registry{}
 	profile := &schedulerapi.KubeSchedulerProfile{
@@ -44,81 +44,81 @@ func NewFramework(ctx context.Context, fns []RegisterPluginFunc, profileName str
 	return runtime.NewFramework(ctx, registry, profile, opts...)
 }
 
-// RegisterPluginFunc is a function signature used in method RegisterFilterPlugin()
-// to register a Filter Plugin to a given registry.
+// RegisterPluginFunc 是 RegisterFilterPlugin() 等函数使用的函数签名，
+// 用于把插件注册到给定的 registry。
 type RegisterPluginFunc func(reg *runtime.Registry, profile *schedulerapi.KubeSchedulerProfile)
 
-// RegisterQueueSortPlugin returns a function to register a QueueSort Plugin to a given registry.
+// RegisterQueueSortPlugin 返回一个函数，用于向给定 registry 注册 QueueSort 插件。
 func RegisterQueueSortPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "QueueSort")
 }
 
-// RegisterPreFilterPlugin returns a function to register a PreFilter Plugin to a given registry.
+// RegisterPreFilterPlugin 返回一个函数，用于向给定 registry 注册 PreFilter 插件。
 func RegisterPreFilterPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PreFilter")
 }
 
-// RegisterFilterPlugin returns a function to register a Filter Plugin to a given registry.
+// RegisterFilterPlugin 返回一个函数，用于向给定 registry 注册 Filter 插件。
 func RegisterFilterPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "Filter")
 }
 
-// RegisterPostFilterPlugin returns a function to register a PostFilter Plugin to a given registry.
+// RegisterPostFilterPlugin 返回一个函数，用于向给定 registry 注册 PostFilter 插件。
 func RegisterPostFilterPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PostFilter")
 }
 
-// RegisterPodGroupPostFilterPlugin returns a function to register a PodGroupPostFilter Plugin to a given registry.
+// RegisterPodGroupPostFilterPlugin 返回一个函数，用于向给定 registry 注册 PodGroupPostFilter 插件。
 func RegisterPodGroupPostFilterPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PodGroupPostFilter")
 }
 
-// RegisterReservePlugin returns a function to register a Reserve Plugin to a given registry.
+// RegisterReservePlugin 返回一个函数，用于向给定 registry 注册 Reserve 插件。
 func RegisterReservePlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "Reserve")
 }
 
-// RegisterPermitPlugin returns a function to register a Permit Plugin to a given registry.
+// RegisterPermitPlugin 返回一个函数，用于向给定 registry 注册 Permit 插件。
 func RegisterPermitPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "Permit")
 }
 
-// RegisterPreBindPlugin returns a function to register a PreBind Plugin to a given registry.
+// RegisterPreBindPlugin 返回一个函数，用于向给定 registry 注册 PreBind 插件。
 func RegisterPreBindPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PreBind")
 }
 
-// RegisterScorePlugin returns a function to register a Score Plugin to a given registry.
+// RegisterScorePlugin 返回一个函数，用于向给定 registry 注册带权重的 Score 插件。
 func RegisterScorePlugin(pluginName string, pluginNewFunc runtime.PluginFactory, weight int32) RegisterPluginFunc {
 	return RegisterPluginAsExtensionsWithWeight(pluginName, weight, pluginNewFunc, "Score")
 }
 
-// RegisterPreScorePlugin returns a function to register a Score Plugin to a given registry.
+// RegisterPreScorePlugin 返回一个函数，用于向给定 registry 注册 PreScore 插件。
 func RegisterPreScorePlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PreScore")
 }
 
-// RegisterBindPlugin returns a function to register a Bind Plugin to a given registry.
+// RegisterBindPlugin 返回一个函数，用于向给定 registry 注册 Bind 插件。
 func RegisterBindPlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "Bind")
 }
 
-// RegisterPlacementGeneratePlugin returns a function to register a PlacementGenerate Plugin to a given registry.
+// RegisterPlacementGeneratePlugin 返回一个函数，用于向给定 registry 注册 PlacementGenerate 插件。
 func RegisterPlacementGeneratePlugin(pluginName string, pluginNewFunc runtime.PluginFactory) RegisterPluginFunc {
 	return RegisterPluginAsExtensions(pluginName, pluginNewFunc, "PlacementGenerate")
 }
 
-// RegisterPlacementScorePlugin returns a function to register a PlacementScore Plugin to a given registry.
+// RegisterPlacementScorePlugin 返回一个函数，用于向给定 registry 注册带权重的 PlacementScore 插件。
 func RegisterPlacementScorePlugin(pluginName string, pluginNewFunc runtime.PluginFactory, weight int32) RegisterPluginFunc {
 	return RegisterPluginAsExtensionsWithWeight(pluginName, weight, pluginNewFunc, "PlacementScore")
 }
 
-// RegisterPluginAsExtensions returns a function to register a Plugin as given extensionPoints to a given registry.
+// RegisterPluginAsExtensions 返回一个函数，把插件按默认权重 1 注册到给定的多个扩展点。
 func RegisterPluginAsExtensions(pluginName string, pluginNewFunc runtime.PluginFactory, extensions ...string) RegisterPluginFunc {
 	return RegisterPluginAsExtensionsWithWeight(pluginName, 1, pluginNewFunc, extensions...)
 }
 
-// RegisterPluginAsExtensionsWithWeight returns a function to register a Plugin as given extensionPoints with weight to a given registry.
+// RegisterPluginAsExtensionsWithWeight 返回一个函数，把插件按指定权重注册到给定的多个扩展点。
 func RegisterPluginAsExtensionsWithWeight(pluginName string, weight int32, pluginNewFunc runtime.PluginFactory, extensions ...string) RegisterPluginFunc {
 	return func(reg *runtime.Registry, profile *schedulerapi.KubeSchedulerProfile) {
 		reg.Register(pluginName, pluginNewFunc)
@@ -129,7 +129,7 @@ func RegisterPluginAsExtensionsWithWeight(pluginName string, weight int32, plugi
 			}
 			ps.Enabled = append(ps.Enabled, schedulerapi.Plugin{Name: pluginName, Weight: weight})
 		}
-		// Use defaults from latest config API version.
+		// 使用最新配置 API 版本的默认值，确保测试 profile 与真实配置一致。
 		var gvk schema.GroupVersionKind
 		gvk = kubeschedulerconfigv1.SchemeGroupVersion.WithKind(pluginName + "Args")
 		if args, _, err := configDecoder.Decode(nil, &gvk, nil); err == nil {
@@ -141,6 +141,7 @@ func RegisterPluginAsExtensionsWithWeight(pluginName string, weight int32, plugi
 	}
 }
 
+// getPluginSetByExtension 按扩展点名称返回 profile 中对应的插件集合；未知扩展点返回 nil。
 func getPluginSetByExtension(plugins *schedulerapi.Plugins, extension string) *schedulerapi.PluginSet {
 	switch extension {
 	case "QueueSort":
@@ -174,7 +175,7 @@ func getPluginSetByExtension(plugins *schedulerapi.Plugins, extension string) *s
 	}
 }
 
-// BuildNodeInfos build NodeInfo slice from a v1.Node slice
+// BuildNodeInfos 从 v1.Node 切片构建 NodeInfo 切片。
 func BuildNodeInfos(nodes []*v1.Node) []fwk.NodeInfo {
 	res := make([]fwk.NodeInfo, len(nodes))
 	for i := 0; i < len(nodes); i++ {

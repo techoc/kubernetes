@@ -31,6 +31,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_isSchedulableAfterNodeChange 验证节点变化时的队列提示：只有影响拓扑分布约束匹配结果的
+// 变化（相关标签或污点）才需要重新入队。
 func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	testcases := []struct {
 		name             string
@@ -156,8 +158,10 @@ func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger, ctx := ktesting.NewTestContext(t)
+			// 队列提示只看 Pod/Node 对象本身，不依赖快照内容，用空快照即可。
 			snapshot := cache.NewSnapshot(nil, nil)
 			pl := plugintesting.SetupPlugin(ctx, t, topologySpreadFunc, &config.PodTopologySpreadArgs{DefaultingType: config.ListDefaulting}, snapshot)
+			// SetupPlugin 返回框架接口，需断言回具体插件才能调用内部的 hint 方法。
 			p := pl.(*PodTopologySpread)
 			actualHint, err := p.isSchedulableAfterNodeChange(logger, tc.pod, tc.oldNode, tc.newNode)
 			if tc.expectedErr {
@@ -176,6 +180,8 @@ func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterAssignedPodChange 验证已分配 Pod 变化时的队列提示：
+// 只有被约束选择器选中的 Pod 增减才可能改变分布计数。
 func Test_isSchedulableAfterAssignedPodChange(t *testing.T) {
 	testcases := []struct {
 		name           string
@@ -365,6 +371,8 @@ func Test_isSchedulableAfterAssignedPodChange(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterTargetPodChange 验证待调度 Pod 自身变化时的队列提示：
+// 新增容忍或匹配选择器标签可能让原先不可调度的 Pod 变得可调度。
 func Test_isSchedulableAfterTargetPodChange(t *testing.T) {
 	testcases := []struct {
 		name                                         string
@@ -422,6 +430,7 @@ func Test_isSchedulableAfterTargetPodChange(t *testing.T) {
 			snapshot := cache.NewSnapshot(nil, nil)
 			pl := plugintesting.SetupPlugin(ctx, t, topologySpreadFunc, &config.PodTopologySpreadArgs{DefaultingType: config.ListDefaulting}, snapshot)
 			p := pl.(*PodTopologySpread)
+			// 该开关决定 node 污点策略是否生效，需按用例覆盖开/关两种行为。
 			p.enableNodeInclusionPolicyInPodTopologySpread = tc.enableNodeInclusionPolicyInPodTopologySpread
 
 			actualHint, err := p.isSchedulableAfterTargetPodChange(logger, tc.pod, tc.oldPod, tc.newPod)

@@ -43,6 +43,8 @@ func init() {
 	metrics.Register()
 }
 
+// TestDefaultBinder 验证默认绑定插件在同步与异步 API 调用模式下都能正确创建 Binding，
+// 并且在绑定请求失败时返回错误状态。
 func TestDefaultBinder(t *testing.T) {
 	testPod := st.MakePod().Name("foo").Namespace("ns").Obj()
 	testNode := "foohost.kubernetes.mydomain.com"

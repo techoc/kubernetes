@@ -35,13 +35,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestNodeAllocatableChange 验证节点可分配资源变化能被正确检测。
 func TestNodeAllocatableChange(t *testing.T) {
 	newQuantity := func(value int64) resource.Quantity {
 		return *resource.NewQuantity(value, resource.BinarySI)
 	}
 	for _, test := range []struct {
 		name string
-		// changed is true if it's expected that the function detects the change and returns event.
+		// changed 表示期望该函数检测出变化并返回对应事件。
 		changed        bool
 		oldAllocatable v1.ResourceList
 		newAllocatable v1.ResourceList
@@ -70,10 +71,11 @@ func TestNodeAllocatableChange(t *testing.T) {
 	}
 }
 
+// TestNodeLabelsChange 验证节点标签变化能被正确检测。
 func TestNodeLabelsChange(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		// changed is true if it's expected that the function detects the change and returns event.
+		// changed 表示期望该函数检测出变化并返回对应事件。
 		changed   bool
 		oldLabels map[string]string
 		newLabels map[string]string
@@ -84,7 +86,7 @@ func TestNodeLabelsChange(t *testing.T) {
 			oldLabels: map[string]string{"foo": "bar"},
 			newLabels: map[string]string{"foo": "bar"},
 		},
-		// Labels changed.
+		// 标签发生变化。
 		{
 			name:      "new object has more labels",
 			changed:   true,
@@ -103,10 +105,11 @@ func TestNodeLabelsChange(t *testing.T) {
 	}
 }
 
+// TestNodeTaintsChange 验证节点污点变化能被正确检测。
 func TestNodeTaintsChange(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		// changed is true if it's expected that the function detects the change and returns event.
+		// changed 表示期望该函数检测出变化并返回对应事件。
 		changed   bool
 		oldTaints []v1.Taint
 		newTaints []v1.Taint
@@ -135,6 +138,7 @@ func TestNodeTaintsChange(t *testing.T) {
 	}
 }
 
+// TestNodeConditionsChange 验证节点 Condition 变化能被正确检测，并防止 NodeCondition 结构变化后遗漏更新逻辑。
 func TestNodeConditionsChange(t *testing.T) {
 	nodeConditionType := reflect.TypeOf(v1.NodeCondition{})
 	if nodeConditionType.NumField() != 6 {
@@ -143,7 +147,7 @@ func TestNodeConditionsChange(t *testing.T) {
 
 	for _, test := range []struct {
 		name string
-		// changed is true if it's expected that the function detects the change and returns event.
+		// changed 表示期望该函数检测出变化并返回对应事件。
 		changed       bool
 		oldConditions []v1.NodeCondition
 		newConditions []v1.NodeCondition
@@ -190,6 +194,7 @@ func TestNodeConditionsChange(t *testing.T) {
 	}
 }
 
+// TestNodeSchedulingPropertiesChange 验证节点各类调度属性变化会生成正确的事件集合。
 func TestNodeSchedulingPropertiesChange(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -278,6 +283,7 @@ func TestNodeSchedulingPropertiesChange(t *testing.T) {
 	}
 }
 
+// TestExtractNodeFeaturesChange 验证节点声明特性变化的检测结果。
 func TestExtractNodeFeaturesChange(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -345,6 +351,7 @@ func TestExtractNodeFeaturesChange(t *testing.T) {
 	}
 }
 
+// Test_podSchedulingPropertiesChange 验证 Pod 调度属性变化生成的事件，覆盖 DRA 开关与目标 Pod 场景。
 func Test_podSchedulingPropertiesChange(t *testing.T) {
 	podWithBigRequest := &v1.Pod{
 		Spec: v1.PodSpec{

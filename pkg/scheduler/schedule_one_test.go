@@ -223,7 +223,7 @@ func (pl *numericMapPlugin) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
-// NewNoPodsFilterPlugin initializes a noPodsFilterPlugin and returns it.
+// NewNoPodsFilterPlugin 初始化并返回 noPodsFilterPlugin。
 func NewNoPodsFilterPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &noPodsFilterPlugin{}, nil
 }
@@ -301,12 +301,12 @@ func newTrueMapPlugin() frameworkruntime.PluginFactory {
 
 type noPodsFilterPlugin struct{}
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pl *noPodsFilterPlugin) Name() string {
 	return "NoPodsFilter"
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用，拒绝节点上已有 Pod 的情况。
 func (pl *noPodsFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if len(nodeInfo.GetPods()) == 0 {
 		return nil
@@ -345,14 +345,14 @@ const (
 	fakeSpecifiedNodeNameAnnotation = "fake-specified-node-name"
 )
 
-// fakeNodeSelectorDependOnPodAnnotation schedules pod to the specified one node from pod.Annotations[fakeSpecifiedNodeNameAnnotation].
+// fakeNodeSelectorDependOnPodAnnotation 把 Pod 调度到 pod.Annotations[fakeSpecifiedNodeNameAnnotation] 指定的节点。
 type fakeNodeSelectorDependOnPodAnnotation struct{}
 
 func (f *fakeNodeSelectorDependOnPodAnnotation) Name() string {
 	return "FakeNodeSelectorDependOnPodAnnotation"
 }
 
-// Filter selects the specified one node and rejects other non-specified nodes.
+// Filter 只接受注解指定的节点，拒绝其他节点。
 func (f *fakeNodeSelectorDependOnPodAnnotation) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	resolveNodeNameFromPodAnnotation := func(pod *v1.Pod) (string, error) {
 		if pod == nil {
@@ -458,9 +458,8 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 		"pod4": "match-node3",
 	}
 
-	// Set up scheduler for the 3 nodes.
-	// We use a fake filter that only allows one particular node. We create two
-	// profiles, each with a different node in the filter configuration.
+	// 为三个节点搭建调度器。
+	// 使用只允许特定节点的假过滤器，并配置两个 profile，各自放行不同节点。
 	objs := append([]runtime.Object{
 		&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ""}}}, nodes...)
 	client := clientsetfake.NewClientset(objs...)
@@ -513,7 +512,7 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Capture the bindings and events' controllers.
+	// 捕获绑定与事件的上报 controller。
 	var wg sync.WaitGroup
 	wg.Add(2 * len(pods))
 	bindings := make(map[string]string)
@@ -540,7 +539,7 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 	}
 	defer stopFn()
 
-	// Run scheduler.
+	// 运行调度器。
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 	if err = sched.WaitForHandlersSync(ctx); err != nil {
@@ -548,7 +547,7 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 	}
 	go sched.Run(ctx)
 
-	// Send pods to be scheduled.
+	// 发送待调度的 Pod。
 	for _, p := range pods {
 		_, err := client.CoreV1().Pods("").Create(ctx, p, metav1.CreateOptions{})
 		if err != nil {
@@ -557,7 +556,7 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Verify correct bindings and reporting controllers.
+	// 验证绑定结果和上报的 controller 正确。
 	if diff := cmp.Diff(wantBindings, bindings); diff != "" {
 		t.Errorf("pods were scheduled incorrectly (-want, +got):\n%s", diff)
 	}
@@ -566,10 +565,10 @@ func TestSchedulerMultipleProfilesScheduling(t *testing.T) {
 	}
 }
 
-// TestSchedulerGuaranteeNonNilNodeInSchedulingCycle is for detecting potential panic on nil Node when iterating Nodes.
+// TestSchedulerGuaranteeNonNilNodeInSchedulingCycle 用于检测遍历节点时遇到 nil Node 可能引发的 panic。
 func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 	if goruntime.GOOS == "windows" {
-		// TODO: remove skip once the failing test has been fixed.
+		// TODO: 修复失败的测试后移除跳过。
 		t.Skip("Skip failing test on Windows.")
 	}
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -595,7 +594,7 @@ func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 		nodeName := fmt.Sprintf("node%d", i)
 		initialNodes = append(initialNodes, st.MakeNode().Name(nodeName).UID(nodeName).Obj())
 	}
-	// Randomly scatter initial pods onto nodes.
+	// 把初始 Pod 随机分散到各节点上。
 	for i := 0; i < initialPodNumber; i++ {
 		podName := fmt.Sprintf("scheduled-pod%d", i)
 		assignedNodeName := fmt.Sprintf("node%d", random.Intn(initialNodeNumber))
@@ -632,7 +631,7 @@ func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Run scheduler.
+	// 运行调度器。
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 	go sched.Run(ctx)
@@ -641,7 +640,7 @@ func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 	deleteNodesOneRound := func() {
 		for i := 0; i < deleteNodeNumberPerRound; i++ {
 			if deleteNodeIndex >= initialNodeNumber {
-				// all initial nodes are already deleted
+				// 所有初始节点都已被删除。
 				return
 			}
 			deleteNodeName := fmt.Sprintf("node%d", deleteNodeIndex)
@@ -658,7 +657,7 @@ func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 		}
 		for i := 0; i < createPodNumberPerRound; i++ {
 			podName := fmt.Sprintf("pod%d", createPodIndex)
-			// Note: the node(specifiedNodeName) may already be deleted, which leads pod scheduled failed.
+			// 注意：指定的节点可能已被删除，导致 Pod 调度失败。
 			specifiedNodeName := fmt.Sprintf("node%d", random.Intn(initialNodeNumber))
 
 			waitSchedulingPod := st.MakePod().Namespace(fakeNamespace).Name(podName).UID(podName).Annotation(fakeSpecifiedNodeNameAnnotation, specifiedNodeName).SchedulerName(fakeSchedulerName).Obj()
@@ -669,14 +668,14 @@ func TestSchedulerGuaranteeNonNilNodeInSchedulingCycle(t *testing.T) {
 		}
 	}
 
-	// Following we start 2 goroutines asynchronously to detect potential racing issues:
-	// 1) One is responsible for deleting several nodes in each round;
-	// 2) Another is creating several pods in each round to trigger scheduling;
-	// Those two goroutines will stop until ctx.Done() is called, which means all waiting pods are scheduled at least once.
+	// 启动两个 goroutine 以检测竞态：
+	// 1) 一个每轮删除若干节点；
+	// 2) 另一个每轮创建若干 Pod 触发调度。
+	// 两个 goroutine 会一直运行到 ctx.Done()，即所有等待中的 Pod 都至少被调度过一次。
 	go wait.Until(deleteNodesOneRound, 10*time.Millisecond, ctx.Done())
 	go wait.Until(createPodsOneRound, 9*time.Millisecond, ctx.Done())
 
-	// Capture the events to wait all pods to be scheduled at least once.
+	// 捕获事件，等待所有 Pod 至少被调度一次。
 	allWaitSchedulingPods := sets.New[string]()
 	for i := 0; i < waitSchedulingPodNumber; i++ {
 		allWaitSchedulingPods.Insert(fmt.Sprintf("pod%d", i))
@@ -747,15 +746,14 @@ func TestSchedulerScheduleOne(t *testing.T) {
 		expectNominatedNodeName  string
 		expectBind               *v1.Binding
 		eventReason              string
-		// If nil, the test case is run with both enabled and disabled
+		// nil 表示启用和禁用都跑一遍。
 		nominatedNodeNameForExpectationEnabled *bool
-		// If nil, the test case is run with both enabled and disabled
+		// nil 表示启用和禁用都跑一遍。
 		asyncAPICallsEnabled *bool
-		// If nil, the test case is run with both true and false
+		// nil 表示 true 和 false 都跑一遍。
 		scheduleAsPodGroup *bool
-		// postSchedulingCycle is run after ScheduleOne function returns
-		// (synchronous part of scheduling is done and binding goroutine is launched)
-		// and before blocking execution on waiting for event with eventReason
+		// postSchedulingCycle 在 ScheduleOne 返回之后（同步调度完成、绑定 goroutine 已启动），
+		// 且在阻塞等待 eventReason 事件之前执行。
 		postSchedulingCycle func(context.Context, *Scheduler)
 	}
 	table := []testItem{
@@ -834,7 +832,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			podToAdmit:                             &podToAdmit{pluginName: "FakePermit", pod: testPod.UID},
 			mockScheduleResult:                     scheduleResultOk,
 			nominatedNodeNameForExpectationEnabled: ptr.To(false),
-			// PodGroup scheduling cycle treats Wait status from Permit as unschedulable.
+			// PodGroup 调度周期把 Permit 返回的 Wait 视为不可调度。
 			scheduleAsPodGroup: ptr.To(false),
 			expectAssumedPod:   assignedTestPod,
 			expectBind:         fakeBinding,
@@ -849,11 +847,11 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			podToAdmit:              &podToAdmit{pluginName: "FakePermit", pod: testPod.UID},
 			mockScheduleResult:      scheduleResultOk,
 			expectNominatedNodeName: testNode.Name,
-			// Depending on the timing, if asyncAPICallsEnabled, we might miss NNN update because the nnn update is overwritten by the binding.
-			// So, it's safe to run this test with asyncAPICallsEnabled = false only.
+			// 时序原因下异步 API 调用可能让 NNN 的更新被绑定操作覆盖而丢失。
+			// 因此该用例只在 asyncAPICallsEnabled = false 时运行。
 			asyncAPICallsEnabled:                   ptr.To(false),
 			nominatedNodeNameForExpectationEnabled: ptr.To(true),
-			// PodGroup scheduling cycle treats Wait status from Permit as unschedulable.
+			// PodGroup 调度周期把 Permit 返回的 Wait 视为不可调度。
 			scheduleAsPodGroup: ptr.To(false),
 			expectAssumedPod:   assignedTestPod,
 			expectBind:         fakeBinding,
@@ -893,7 +891,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			name:    "prebind isn't called and nominated node name isn't set, if preflight returns skip",
 			sendPod: testPod,
 			registerPluginFuncs: []tf.RegisterPluginFunc{
-				// Configure it to return error on prebind to make sure it's not called.
+				// 让插件在 prebind 返回错误，以确认它不会被调用。
 				tf.RegisterPreBindPlugin("FakePreBind", tf.NewFakePreBindPlugin(fwk.NewStatus(fwk.Skip), fwk.NewStatus(fwk.Error, "rejected on prebind"))),
 			},
 			mockScheduleResult:                     scheduleResultOk,
@@ -910,8 +908,8 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			},
 			mockScheduleResult:                     scheduleResultOk,
 			nominatedNodeNameForExpectationEnabled: ptr.To(true),
-			// Depending on the timing, if asyncAPICallsEnabled, we might miss NNN update because the nnn update is overwritten by the binding.
-			// So, it's safe to run this test with asyncAPICallsEnabled = false only.
+			// 异步 API 调用可能让 NNN 更新被绑定操作覆盖而丢失。
+			// 因此该用例只在 asyncAPICallsEnabled = false 时运行。
 			asyncAPICallsEnabled:    ptr.To(false),
 			expectNominatedNodeName: testNode.Name,
 			expectAssumedPod:        assignedTestPod,
@@ -928,8 +926,8 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			expectErrorPod:                         assignedTestPod,
 			expectForgetPod:                        assignedTestPod,
 			nominatedNodeNameForExpectationEnabled: ptr.To(true),
-			// Depending on the timing, if asyncAPICallsEnabled, we might miss NNN update because the nnn update is overwritten by the binding.
-			// So, it's safe to run this test with asyncAPICallsEnabled = false only.
+			// 异步 API 调用可能让 NNN 更新被绑定操作覆盖而丢失。
+			// 因此该用例只在 asyncAPICallsEnabled = false 时运行。
 			asyncAPICallsEnabled:    ptr.To(false),
 			expectNominatedNodeName: testNode.Name,
 			expectAssumedPod:        assignedTestPod,
@@ -946,7 +944,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			mockScheduleResult: scheduleResultOk,
 			postSchedulingCycle: func(ctx context.Context, sched *Scheduler) {
 				<-blockingPreBindStartCh // Wait for plugin to start
-				// Trigger preemption from "outside"
+				// 从「外部」触发抢占。
 				if bp := sched.Profiles[testSchedulerName].GetPodInPreBind(testPod.UID); bp != nil {
 					bp.CancelPod("context cancelled externally")
 				}
@@ -1008,9 +1006,9 @@ func TestSchedulerScheduleOne(t *testing.T) {
 				p.Status.NominatedNodeName = "existing-node"
 				return p
 			}(),
-			// Depending on the timing, if asyncAPICallsEnabled, the NNN update might not be sent yet while checking the expectNominatedNodeName.
-			// So, asyncAPICallsEnabled is set to false.
-			// TODO(Argh4k): create a method on APIDispatcher to wait for all API calls to finish to ease testing.
+			// 异步调用时，检查 NNN 的更新可能尚未发出。
+			// 因此这里固定 asyncAPICallsEnabled = false。
+			// TODO(Argh4k): 在 APIDispatcher 上提供等待所有 API 调用完成的方法，简化测试。
 			asyncAPICallsEnabled:    ptr.To(false),
 			expectNominatedNodeName: "",
 			eventReason:             "FailedScheduling",
@@ -1046,12 +1044,12 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			group := &v1.PodSchedulingGroup{
 				PodGroupName: new("pg"),
 			}
-			// When scheduling a pod as a pod group, set scheduling group to all relevant pods.
+			// 按 PodGroup 调度时，给所有相关 Pod 设置 scheduling group。
 			item.sendPod = withSchedulingGroup(item.sendPod, group)
 			item.expectErrorPod = withSchedulingGroup(item.expectErrorPod, group)
 			item.expectPodInBackoffQ = withSchedulingGroup(item.expectPodInBackoffQ, group)
 			if item.expectPodInUnschedulable != nil {
-				// Pods from a pod group skip unschedulableEntities structure and land directly in the backoffQ.
+				// PodGroup 的 Pod 会跳过 unschedulableEntities，直接进入 backoffQ。
 				item.expectPodInBackoffQ = withSchedulingGroup(item.expectPodInUnschedulable, group)
 				item.expectPodInUnschedulable = nil
 			}
@@ -1124,7 +1122,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			mu.Lock()
 			updatedNominatedNodeName = strings.Trim(string(nnn), "\"")
 			if updatedNominatedNodeName == "null" {
-				// NNN has to be cleared with this patch.
+				// NNN 必须通过这次 patch 清除。
 				updatedNominatedNodeName = ""
 			}
 			mu.Unlock()
@@ -1210,23 +1208,21 @@ func TestSchedulerScheduleOne(t *testing.T) {
 
 		<-called
 
-		// TODO(Argh4k): Re-enable this assumption for item.expectError != nil once solution to
-		// https://github.com/kubernetes/kubernetes/issues/137125 is agreed upon and implemented.
-		// Right now, handleSchedulingFailure does not guarantee that all updates
-		// to nominated nodes will be send out as patch calls as its:
-		// - refreshes pod with data from informer cache that can be not up to date
-		// - with async calls enabled the previous update to NNN can still be sitting in async queue
+		// TODO(Argh4k): 待 https://github.com/kubernetes/kubernetes/issues/137125 的方案确定并实现后，
+		// 重新对 item.expectError != nil 启用该断言。
+		// 目前 handleSchedulingFailure 不保证对提名节点的所有更新都会以 patch 发出，因为：
+		// - 它会用可能不是最新的 informer 缓存数据刷新 Pod
+		// - 启用异步调用时，前一次 NNN 更新可能还留在异步队列里
 		mu.Lock()
-		// Cases with expected error are tested below
+		// 预期出错的用例在下面单独测试。
 		if item.expectError == nil && item.expectNominatedNodeName != updatedNominatedNodeName {
 			t.Errorf("Expected nominated node name %q, got %q", item.expectNominatedNodeName, updatedNominatedNodeName)
 		}
 		mu.Unlock()
 
-		// When a pod is scheduled as a pod group, it is assumed first in the snapshot,
-		// meaning that assumed and forgotten pods obtained from cache would be nil in some cases.
-		// It also sometimes differently sets nodeName on an error pod,
-		// which is irrelevant for the actual correctness.
+		// 按 PodGroup 调度时会先在快照中 assume Pod，
+		// 因此从缓存拿到的 assume/forgotten Pod 在某些情况下为 nil。
+		// 出错 Pod 的 nodeName 有时也会以不同方式设置，这与实际正确性无关。
 		if !scheduleAsPodGroup {
 			if diff := cmp.Diff(item.expectAssumedPod, gotAssumedPod); diff != "" {
 				t.Errorf("Unexpected assumed pod (-want,+got):\n%s", diff)
@@ -1254,8 +1250,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 		if diff := cmp.Diff(item.expectBind, gotBinding); diff != "" {
 			t.Errorf("Unexpected binding (-want,+got):\n%s", diff)
 		}
-		// We have to use wait here because the Pod goes to the binding cycle in some test cases
-		// and the inflight pods might not be empty immediately at this point in such case.
+		// 这里需要轮询等待：某些用例中 Pod 进入绑定周期，此时 inflight Pod 可能不会立即清空。
 		if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 			return len(queue.InFlightPods()) == 0, nil
 		}); err != nil {
@@ -1264,8 +1259,8 @@ func TestSchedulerScheduleOne(t *testing.T) {
 		podsInBackoffQ := queue.PodsInBackoffQ()
 		if item.expectPodInBackoffQ != nil {
 			if scheduleAsPodGroup {
-				// For pod groups, the pod might be in pending pod group pods instead of backoffQ.
-				// We can check if it's still in the scheduling queue via GetPod.
+				// PodGroup 的 Pod 可能位于 pending pod group pods 而非 backoffQ。
+				// 可用 GetPod 检查它是否仍在调度队列中。
 				_, ok := queue.GetPod(item.expectPodInBackoffQ.Name, item.expectPodInBackoffQ.Namespace, item.expectPodInBackoffQ.Spec.SchedulingGroup)
 				if !ok {
 					t.Errorf("Expected to find pod in scheduling queue, but it's not there.\nWant: %v", item.expectPodInBackoffQ)
@@ -1291,7 +1286,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 		stopFunc()
 	}
 
-	// Test with AsyncAPICalls and NominatedNodeNameForExpectation feature gates
+	// 在 AsyncAPICalls 与 NominatedNodeNameForExpectation 特性门控组合下运行测试。
 	for _, item := range table {
 		asyncAPICallsEnabled := []bool{true, false}
 		if item.asyncAPICallsEnabled != nil {
@@ -1307,12 +1302,12 @@ func TestSchedulerScheduleOne(t *testing.T) {
 				if item.scheduleAsPodGroup != nil {
 					scheduleAsPodGroup = []bool{*item.scheduleAsPodGroup}
 				}
-				// Test scheduling scenarios treating the pod as individual or part of a pod group.
+				// 分别把 Pod 当作独立个体和 PodGroup 成员来测试调度场景。
 				for _, scheduleAsPodGroup := range scheduleAsPodGroup {
 					t.Run(fmt.Sprintf("%s (AsyncAPICalls: %v, NominatedNodeNameForExpectation: %v, Schedule as PodGroup: %v)", item.name,
 						asyncAPICallsEnabled, nominatedNodeNameForExpectationEnabled, scheduleAsPodGroup), func(t *testing.T) {
 						if scheduleAsPodGroup {
-							// When scheduling pod as a pod group, GenericWorkload feature gate has to be enabled.
+							// 按 PodGroup 调度时必须启用 GenericWorkload 特性门控。
 							featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 						}
 						testFunc(t, item, scheduleAsPodGroup, schedFeatures{
@@ -1464,19 +1459,19 @@ func TestHandleSchedulingFailureForDeferredResizePod(t *testing.T) {
 	nominatingInfo := &fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node1"}
 	sched.handleSchedulingFailure(ctx, schedFramework, poppedPod, fwk.NewStatus(fwk.Unschedulable, "no fit"), nominatingInfo, time.Now())
 
-	// Assert queue status: pod should be added back to the queue
+	// 断言队列状态：Pod 应被放回队列。
 	_, found := queue.GetPod(pod.Name, pod.Namespace, nil)
 	if !found {
 		t.Errorf("expected pod to be in queue")
 	}
 
-	// Retrieve the pod from client to verify status updates
+	// 从客户端取回 Pod，验证状态更新。
 	updatedPod, err := client.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Assert PodScheduled status condition remains True
+	// 断言 PodScheduled 状态条件仍为 True。
 	var gotScheduledStatus v1.ConditionStatus
 	for _, cond := range updatedPod.Status.Conditions {
 		if cond.Type == v1.PodScheduled {
@@ -1487,7 +1482,7 @@ func TestHandleSchedulingFailureForDeferredResizePod(t *testing.T) {
 		t.Errorf("expected PodScheduled condition status to remain True, got %v", gotScheduledStatus)
 	}
 
-	// Assert NominatedNodeName remains empty
+	// 断言 NominatedNodeName 仍为空。
 	if updatedPod.Status.NominatedNodeName != "" {
 		t.Errorf("expected NominatedNodeName to remain empty, got %q", updatedPod.Status.NominatedNodeName)
 	}
@@ -1717,8 +1712,8 @@ func TestSignatures(t *testing.T) {
 	}
 }
 
-// Tests the logic removing pods from inFlightPods after Permit (needed to fix issue https://github.com/kubernetes/kubernetes/issues/129967).
-// This needs to be a separate test case, because it mocks the waitOnPermit and runPrebindPlugins functions.
+// 验证 Permit 后从 inFlightPods 移除 Pod 的逻辑（用于修复 https://github.com/kubernetes/kubernetes/issues/129967）。
+// 该逻辑需要单独用例，因为这里 mock 了 waitOnPermit 与 runPrebindPlugins。
 func TestScheduleOneMarksPodAsProcessedBeforePreBind(t *testing.T) {
 	testNode := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", UID: types.UID("node1")}}
 	client := clientsetfake.NewClientset(&testNode)
@@ -2024,8 +2019,7 @@ func TestScheduleOneMarksPodAsProcessedBeforePreBind(t *testing.T) {
 				if gotPodIsInFlightAtRunPreBindPlugins {
 					t.Errorf("unexpected pod being in flight at start of RunPreBindPlugins")
 				}
-				// We have to use wait here
-				// because the Pod goes to the binding cycle in some test cases and the inflight pods might not be empty immediately at this point in such case.
+				// 这里需要轮询等待：某些用例中 Pod 进入绑定周期，此时 inflight Pod 可能不会立即清空。
 				if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 					return len(queue.InFlightPods()) == 0, nil
 				}); err != nil {
@@ -2037,8 +2031,8 @@ func TestScheduleOneMarksPodAsProcessedBeforePreBind(t *testing.T) {
 	}
 }
 
-// Fake Framework allows mocking calls to WaitOnPermit, RunPreBindPlugins and RunPostBindPlugins, to allow for
-// simpler and more efficient testing of Scheduler's logic within the bindingCycle.
+// FakeFramework 允许 mock WaitOnPermit、RunPreBindPlugins 与 RunPostBindPlugins，
+// 以便更简单高效地测试调度器在绑定周期内的逻辑。
 type FakeFramework struct {
 	framework.Framework
 	queue               internalqueue.SchedulingQueue
@@ -2100,7 +2094,7 @@ func TestSchedulerNoPhantomPodAfterDelete(t *testing.T) {
 			}
 			scheduler, errChan := setupTestSchedulerWithOnePodOnNode(ctx, t, client, queuedPodStore, scache, apiDispatcher, firstPod, &node, bindingChan, fns...)
 
-			// We use conflicted pod ports to incur fit predicate failure.
+			// 用冲突的 Pod 端口触发 fit 断言失败。
 			secondPod := podWithPort("bar", "", 8080)
 			if err := queuedPodStore.Add(secondPod); err != nil {
 				t.Fatal(err)
@@ -2130,10 +2124,9 @@ func TestSchedulerNoPhantomPodAfterDelete(t *testing.T) {
 				t.Fatalf("timeout in fitting after %v", wait.ForeverTestTimeout)
 			}
 
-			// We mimic the workflow of cache behavior when a pod is removed by user.
-			// Note: if the schedulernodeinfo timeout would be super short, the first pod would expire
-			// and would be removed itself (without any explicit actions on schedulernodeinfo). Even in that case,
-			// explicitly AddPod will as well correct the behavior.
+			// 模拟用户删除 Pod 时缓存的行为。
+			// 注意：如果 schedulernodeinfo 超时极短，第一个 Pod 会自行过期并被移除（无需显式操作）。
+			// 即便如此，显式调用 AddPod 也能纠正这一行为。
 			firstPod.Spec.NodeName = node.Name
 			if err := scache.AddPod(logger, firstPod); err != nil {
 				t.Fatalf("err: %v", err)
@@ -2180,7 +2173,7 @@ func TestSchedulerFailedSchedulingReasons(t *testing.T) {
 
 			scache := internalcache.New(ctx, apiDispatcher, false, false)
 
-			// Design the baseline for the pods, and we will make nodes that don't fit it later.
+			// 先设定 Pod 的资源基线，随后构造放不下它的节点。
 			var cpu = int64(4)
 			var mem = int64(500)
 			podWithTooBigResourceRequests := podWithResources("bar", "", v1.ResourceList{
@@ -2191,7 +2184,7 @@ func TestSchedulerFailedSchedulingReasons(t *testing.T) {
 				v1.ResourceMemory: *(resource.NewQuantity(mem, resource.DecimalSI)),
 			})
 
-			// create several nodes which cannot schedule the above pod
+			// 创建若干无法容纳上述 Pod 的节点。
 			var nodes []*v1.Node
 			var objects []runtime.Object
 			for i := 0; i < 100; i++ {
@@ -2215,7 +2208,7 @@ func TestSchedulerFailedSchedulingReasons(t *testing.T) {
 				objects = append(objects, &node)
 			}
 
-			// Create expected failure reasons for all the nodes. Hopefully they will get rolled up into a non-spammy summary.
+			// 构造所有节点的预期失败原因，期望它们被汇总成简洁的摘要。
 			failedNodeStatues := framework.NewDefaultNodeToStatus()
 			for _, node := range nodes {
 				failedNodeStatues.Set(node.Name, fwk.NewStatus(
@@ -2265,7 +2258,7 @@ func TestSchedulerWithVolumeBinding(t *testing.T) {
 	assumeErr := fmt.Errorf("assume err")
 	bindErr := fmt.Errorf("bind err")
 
-	// This can be small because we wait for pod to finish scheduling first
+	// 因为会先等 Pod 完成调度，所以超时时间可以设得很短。
 	chanTimeout := 2 * time.Second
 
 	table := []struct {
@@ -2370,14 +2363,14 @@ func TestSchedulerWithVolumeBinding(t *testing.T) {
 					t.Fatal(err)
 				}
 				s.ScheduleOne(ctx)
-				// Wait for pod to succeed or fail scheduling
+				// 等待 Pod 调度成功或失败。
 				select {
 				case <-eventChan:
 				case <-time.After(wait.ForeverTestTimeout):
 					t.Fatalf("scheduling timeout after %v", wait.ForeverTestTimeout)
 				}
 				stopFunc()
-				// Wait for scheduling to return an error or succeed binding.
+				// 等待调度返回错误或绑定成功。
 				var (
 					gotErr  error
 					gotBind *v1.Binding
@@ -2506,12 +2499,12 @@ func TestSchedulerBinding(t *testing.T) {
 					t.Error(status.AsError())
 				}
 
-				// Checking default binding.
+				// 检查默认绑定器。
 				if wantBound := test.wantBinderID == -1; defaultBound != wantBound {
 					t.Errorf("got bound with default binding: %v, want %v", defaultBound, wantBound)
 				}
 
-				// Checking extenders binding.
+				// 检查扩展绑定器。
 				for i, ext := range test.extenders {
 					wantBound := i == test.wantBinderID
 					if gotBound := ext.(*fakeExtender).gotBind; gotBound != wantBound {
@@ -2726,8 +2719,8 @@ func TestUpdatePodStatus(t *testing.T) {
 					patch := action.(clienttesting.PatchAction)
 					actualPatchData = string(patch.GetPatch())
 					patchCalled <- struct{}{}
-					// For this test, we don't care about the result of the patched pod, just that we got the expected
-					// patch request, so just returning &v1.Pod{} here is OK because scheduler doesn't use the response.
+					// 本用例只关心是否收到预期的 patch 请求，不关心 patch 后的 Pod 结果；
+					// 调度器不使用响应，因此这里返回 &v1.Pod{} 即可。
 					return true, &v1.Pod{}, nil
 				})
 
@@ -3021,8 +3014,7 @@ func TestFindNodesThatPassExtenders(t *testing.T) {
 
 func TestSchedulerSchedulePod(t *testing.T) {
 	fts := feature.Features{
-		// Feature gate(s) that are beta (enabled by default) must be explicitly set
-		// to true here to match the default feature gate state.
+		// beta 阶段（默认启用）的特性门控必须在这里显式设为 true，以匹配默认状态。
 		EnableStorageCapacityScoring: true,
 	}
 	tests := []struct {
@@ -3079,7 +3071,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			wErr:      nil,
 		},
 		{
-			// Fits on a node where the pod ID matches the node name
+			// 仅当 Pod ID 与节点名匹配时才可调度。
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				tf.RegisterFilterPlugin("MatchFilter", tf.NewMatchFilterPlugin),
@@ -3204,7 +3196,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			},
 		},
 		{
-			// Pod with existing PVC
+			// 引用已存在 PVC 的 Pod。
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				tf.RegisterPreFilterPlugin(volumebinding.Name, frameworkruntime.FactoryAdapter(fts, volumebinding.New)),
@@ -3231,7 +3223,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			wErr:      nil,
 		},
 		{
-			// Pod with non existing PVC
+			// 引用不存在 PVC 的 Pod。
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				tf.RegisterPreFilterPlugin(volumebinding.Name, frameworkruntime.FactoryAdapter(fts, volumebinding.New)),
@@ -3255,7 +3247,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			},
 		},
 		{
-			// Pod with deleting PVC
+			// 引用正在删除的 PVC 的 Pod。
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				tf.RegisterPreFilterPlugin(volumebinding.Name, frameworkruntime.FactoryAdapter(fts, volumebinding.New)),
@@ -3538,7 +3530,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			},
 			pod:       st.MakePod().Name("test-prefilter").UID("test-prefilter").Obj(),
 			wantNodes: sets.New("node2"),
-			// since this case has no score plugin, we'll only try to find one node in Filter stage
+			// 该用例没有打分插件，Filter 阶段找到一个节点即可。
 			wantEvaluatedNodes: ptr.To[int32](1),
 		},
 		{
@@ -3655,8 +3647,8 @@ func TestSchedulerSchedulePod(t *testing.T) {
 							Status: fwk.NewStatus(fwk.Skip),
 						},
 						FakeFilterPlugin: &tf.FakeFilterPlugin{
-							// This Filter plugin shouldn't be executed in the Filter extension point due to skip.
-							// To confirm that, return the status code Error to all Nodes.
+							// 由于 PreFilter 返回 skip，该 Filter 插件不应在 Filter 扩展点执行。
+							// 为确认这点，让它对每个节点都返回 Error 状态。
 							FailedNodeReturnCodeMap: map[string]fwk.Code{
 								"node1": fwk.Error, "node2": fwk.Error, "node3": fwk.Error,
 							},
@@ -3726,7 +3718,7 @@ func TestSchedulerSchedulePod(t *testing.T) {
 			},
 			pod:       st.MakePod().Name("test-prefilter").UID("test-prefilter").Obj(),
 			wantNodes: sets.New("node1", "node2"),
-			// since this case has no score plugin, we'll only try to find one node in Filter stage
+			// 该用例没有打分插件，Filter 阶段找到一个节点即可。
 			wantEvaluatedNodes: ptr.To[int32](1),
 		},
 		{
@@ -4655,11 +4647,11 @@ func TestFairEvaluationForNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// To make numAllNodes % nodesToFind != 0
+	// 让 numAllNodes % nodesToFind != 0，以覆盖不能整除的情况。
 	sched.percentageOfNodesToScore = 30
 	nodesToFind := int(sched.numFeasibleNodesToFind(fwk.PercentageOfNodesToScore(), int32(numAllNodes)))
 
-	// Iterating over all nodes more than twice
+	// 迭代节点超过两轮，验证跨轮次的行为。
 	for i := 0; i < 2*(numAllNodes/nodesToFind+1); i++ {
 		podInfo := queuedPodInfoForPod(&v1.Pod{})
 		nodesThatFit, _, _, err := sched.findNodesThatFitPod(ctx, fwk, framework.NewCycleState(), podInfo)
@@ -4706,7 +4698,7 @@ func TestPreferNominatedNodeFilterCallCounts(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// create three nodes in the cluster.
+			// 在集群中创建三个节点。
 			nodes := makeNodeList([]string{"node1", "node2", "node3"})
 			client := clientsetfake.NewClientset(test.pod)
 			informerFactory := informers.NewSharedInformerFactory(client, 0)
@@ -4790,7 +4782,7 @@ func makeNodeList(nodeNames []string) []*v1.Node {
 	return result
 }
 
-// makeScheduler makes a simple Scheduler for testing.
+// makeScheduler 创建测试用的简单调度器。
 func makeScheduler(ctx context.Context, nodes []*v1.Node) *Scheduler {
 	logger := klog.FromContext(ctx)
 	cache := internalcache.New(ctx, nil, false, false)
@@ -4841,8 +4833,8 @@ func interruptOnBind(client *clientsetfake.Clientset) chan *v1.Binding {
 	return bindingChan
 }
 
-// queuedPodStore: pods queued before processing.
-// cache: scheduler cache that might contain assumed pods.
+// queuedPodStore：等待处理的 Pod。
+// cache：调度器缓存，可能包含已 assume 的 Pod。
 func setupTestSchedulerWithOnePodOnNode(ctx context.Context, t *testing.T, client clientset.Interface, queuedPodStore *clientcache.FIFO, scache internalcache.Cache, apiDispatcher *apidispatcher.APIDispatcher,
 	pod *v1.Pod, node *v1.Node, bindingChan chan *v1.Binding, fns ...tf.RegisterPluginFunc) (*Scheduler, chan error) {
 	scheduler, errChan := setupTestScheduler(ctx, t, client, queuedPodStore, scache, apiDispatcher, nil, nil, fns...)
@@ -4872,8 +4864,8 @@ func setupTestSchedulerWithOnePodOnNode(ctx context.Context, t *testing.T, clien
 	return scheduler, errChan
 }
 
-// queuedPodStore: pods queued before processing.
-// scache: scheduler cache that might contain assumed pods.
+// queuedPodStore：等待处理的 Pod。
+// scache：调度器缓存，可能包含已 assume 的 Pod。
 func setupTestScheduler(ctx context.Context, t *testing.T, client clientset.Interface, queuedPodStore *clientcache.FIFO, cache internalcache.Cache, apiDispatcher *apidispatcher.APIDispatcher,
 	informerFactory informers.SharedInformerFactory, broadcaster events.EventBroadcaster, fns ...tf.RegisterPluginFunc) (*Scheduler, chan error) {
 
@@ -4983,9 +4975,7 @@ func setupTestSchedulerWithVolumeBinding(ctx context.Context, t *testing.T, clie
 	return s, bindingChan, errChan
 }
 
-// This is a workaround because golint complains that errors cannot
-// end with punctuation.  However, the real predicate error message does
-// end with a period.
+// 这里绕过 golint：它要求错误信息不能以标点结尾，但真实的 predicate 错误信息确实以句点结尾。
 func makePredicateError(failReason string) error {
 	s := fmt.Sprintf("0/1 nodes are available: %v.", failReason)
 	return errors.New(s)
@@ -5103,7 +5093,7 @@ func TestEvaluateNominatedNode(t *testing.T) {
 }
 
 func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
-	// Setup feature gate
+	// 设置特性门控。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScalingSchedulerPreemption, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DynamicResourceAllocation, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRASchedulerFilterTimeout, true)
@@ -5115,12 +5105,12 @@ func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Create a node and a deferred resize pod assigned to that node
+	// 创建一个节点和一个分配到该节点、延迟调整大小的 Pod。
 	node := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
 	pod := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Node("node1").
 		Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()
 
-	// Setup Cache, snapshot, and informer factory
+	// 创建缓存、快照与 informer factory。
 	cache := internalcache.New(ctx, nil, false, false /* CompositePodGroup */)
 	cache.AddNode(logger, node)
 	snapshot := internalcache.NewEmptySnapshot()
@@ -5130,7 +5120,7 @@ func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(clientsetfake.NewSimpleClientset(), 0)
 
-	// Register a list of plugins to check if they skip/run
+	// 注册一批插件，检查哪些被跳过、哪些被执行。
 	fts := feature.NewSchedulerFeaturesFromGates(utilfeature.DefaultFeatureGate)
 	registerPlugins := []tf.RegisterPluginFunc{
 		tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
@@ -5173,13 +5163,13 @@ func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
 	state := framework.NewCycleState()
 	podInfo := queuedPodInfoForPod(pod)
 
-	// Run schedulePod
+	// 执行 schedulePod。
 	_, _ = sched.schedulePod(ctx, schedFramework, state, podInfo)
 
-	// Verify the skipped plugins
+	// 验证被跳过的插件。
 	skipped := state.GetSkipFilterPlugins()
 
-	// Irrelevant plugins should be skipped
+	// 不相关的插件应被跳过。
 	irrelevant := []string{
 		nodeaffinity.Name,
 		podtopologyspread.Name,
@@ -5201,7 +5191,7 @@ func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
 		}
 	}
 
-	// Relevant plugins must NOT be skipped
+	// 相关的插件不应被跳过。
 	relevant := []string{
 		nodename.Name,
 		noderesources.Name,
@@ -5213,8 +5203,7 @@ func TestScheduler_DeferredResizePluginSkipping(t *testing.T) {
 		}
 	}
 
-	// Assert lengths for future-proofing. If new plugins are registered in this test but not
-	// categorized as relevant/irrelevant or not implemented properly, these length assertions will fail.
+	// 断言长度以防未来遗漏：若新增插件未归入相关/不相关列表或实现有误，这些断言会失败。
 	if len(relevant) != 2 {
 		t.Errorf("Expected exactly 2 relevant plugins, got %d", len(relevant))
 	}
@@ -5257,12 +5246,12 @@ func TestScheduler_DeferredResizePostFilterPluginSkipping(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Create a node and a deferred resize pod assigned to that node
+			// 创建一个节点和一个分配到该节点、延迟调整大小的 Pod。
 			node := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
 			pod := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Node("node1").
 				Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()
 
-			// Setup Cache, snapshot, and informer factory
+			// 创建缓存、快照与 informer factory。
 			cache := internalcache.New(ctx, nil, false, false /* CompositePodGroup */)
 			cache.AddNode(logger, node)
 			snapshot := internalcache.NewEmptySnapshot()
@@ -5272,7 +5261,7 @@ func TestScheduler_DeferredResizePostFilterPluginSkipping(t *testing.T) {
 
 			informerFactory := informers.NewSharedInformerFactory(clientsetfake.NewSimpleClientset(pod), 0)
 
-			// Register both DynamicResources (irrelevant) and DefaultPreemption (relevant)
+			// 同时注册 DynamicResources（不相关）与 DefaultPreemption（相关）。
 			fts := feature.NewSchedulerFeaturesFromGates(utilfeature.DefaultFeatureGate)
 			registerPlugins := []tf.RegisterPluginFunc{
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
@@ -5297,10 +5286,10 @@ func TestScheduler_DeferredResizePostFilterPluginSkipping(t *testing.T) {
 
 			state := framework.NewCycleState()
 
-			// Run PostFilter plugins directly
+			// 直接运行 PostFilter 插件。
 			_, status := schedFramework.RunPostFilterPlugins(ctx, state, pod, framework.NewDefaultNodeToStatus())
 
-			// Verify the result
+			// 验证结果。
 			if status.Code() != tc.expectedCode {
 				t.Errorf("Expected status code %v, got %v (status: %v)", tc.expectedCode, status.Code(), status)
 			}

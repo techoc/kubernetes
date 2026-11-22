@@ -34,6 +34,7 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// nodeWithTaints 构造一个仅带名称与污点列表的节点，省去测试中无关字段的铺垫。
 func nodeWithTaints(nodeName string, taints []v1.Taint) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -45,6 +46,7 @@ func nodeWithTaints(nodeName string, taints []v1.Taint) *v1.Node {
 	}
 }
 
+// podWithTolerations 构造一个仅带名称与容忍列表的 Pod，与 nodeWithTaints 配套使用。
 func podWithTolerations(podName string, tolerations []v1.Toleration) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -56,6 +58,8 @@ func podWithTolerations(podName string, tolerations []v1.Toleration) *v1.Pod {
 	}
 }
 
+// TestTaintTolerationScore 验证打分阶段：对 PreferNoSchedule 污点，容忍污点的节点应得高分，
+// 不可容忍污点数量越多得分越低，且分数与可容忍污点数量无关。
 func TestTaintTolerationScore(t *testing.T) {
 	tests := []struct {
 		name                               string
@@ -64,7 +68,7 @@ func TestTaintTolerationScore(t *testing.T) {
 		expectedList                       fwk.NodeScoreList
 		enableTaintTolerationComparisonOps bool
 	}{
-		// basic test case
+		// 基础场景：同一污点，能容忍的节点得分高于不能容忍的节点。
 		{
 			name: "node with taints tolerated by the pod, gets a higher score than those node with intolerable taints",
 			pod: podWithTolerations("pod1", []v1.Toleration{{
@@ -90,7 +94,7 @@ func TestTaintTolerationScore(t *testing.T) {
 				{Name: "nodeB", Score: 0},
 			},
 		},
-		// the count of taints that are tolerated by pod, does not matter.
+		// 只要污点都被容忍，节点得满分；可容忍污点的数量不影响得分。
 		{
 			name: "the nodes that all of their taints are tolerated by the pod, get the same score, no matter how many tolerable taints a node has",
 			pod: podWithTolerations("pod1", []v1.Toleration{
@@ -133,7 +137,7 @@ func TestTaintTolerationScore(t *testing.T) {
 				{Name: "nodeC", Score: fwk.MaxNodeScore},
 			},
 		},
-		// the count of taints on a node that are not tolerated by pod, matters.
+		// 与可容忍污点相反，不可容忍污点的数量会影响得分。
 		{
 			name: "the more intolerable taints a node has, the lower score it gets.",
 			pod: podWithTolerations("pod1", []v1.Toleration{{
@@ -169,7 +173,7 @@ func TestTaintTolerationScore(t *testing.T) {
 				{Name: "nodeC", Score: 0},
 			},
 		},
-		// taints-tolerations priority only takes care about the taints and tolerations that have effect PreferNoSchedule
+		// 打分插件只关注 PreferNoSchedule 类型的污点与容忍；其他 effect 不参与打分。
 		{
 			name: "only taints and tolerations that have effect PreferNoSchedule are checked by taints-tolerations priority function",
 			pod: podWithTolerations("pod1", []v1.Toleration{
@@ -214,10 +218,10 @@ func TestTaintTolerationScore(t *testing.T) {
 		},
 		{
 			name: "Default behaviour No taints and tolerations, lands on node with no taints",
-			//pod without tolerations
+			// Pod 不带任何容忍。
 			pod: podWithTolerations("pod1", []v1.Toleration{}),
 			nodes: []*v1.Node{
-				//Node without taints
+				// 节点不带任何污点。
 				nodeWithTaints("nodeA", []v1.Taint{}),
 				nodeWithTaints("nodeB", []v1.Taint{
 					{
@@ -287,11 +291,13 @@ func TestTaintTolerationScore(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 测试上下文携带 klog logger，取消上下文可让插件启动的 goroutine 在用例结束后退出。
 			_, ctx := ktesting.NewTestContext(t)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			state := framework.NewCycleState()
+			// 打分只依赖快照中的节点列表，不需要真实缓存，故用空 Pod 列表构造快照。
 			snapshot := cache.NewSnapshot(nil, test.nodes)
 			fh, _ := runtime.NewFramework(ctx, nil, nil, runtime.WithSnapshotSharedLister(snapshot))
 			p, err := New(ctx, nil, fh, feature.Features{
@@ -302,6 +308,7 @@ func TestTaintTolerationScore(t *testing.T) {
 				t.Fatalf("creating plugin: %v", err)
 			}
 			nodeInfos := tf.BuildNodeInfos(test.nodes)
+			// 先走 PreScore，确保插件在打分前已准备好共享状态（如最大不可容忍污点数）。
 			status := p.(fwk.PreScorePlugin).PreScore(ctx, state, test.pod, nodeInfos)
 			if !status.IsSuccess() {
 				t.Errorf("unexpected error: %v", status)
@@ -316,6 +323,7 @@ func TestTaintTolerationScore(t *testing.T) {
 				gotList = append(gotList, fwk.NodeScore{Name: nodeName, Score: score})
 			}
 
+			// 打分结果需经归一化后才落到 0..MaxNodeScore 区间，与实际调度链路保持一致。
 			status = p.(fwk.ScorePlugin).ScoreExtensions().NormalizeScore(ctx, state, test.pod, gotList)
 			if !status.IsSuccess() {
 				t.Errorf("unexpected error: %v", status)
@@ -328,6 +336,8 @@ func TestTaintTolerationScore(t *testing.T) {
 	}
 }
 
+// TestTaintTolerationFilter 验证过滤阶段：NoSchedule 污点会挡住无对应容忍的 Pod，
+// PreferNoSchedule 污点则不会；同时覆盖 Gt/Lt 数值比较操作符的行为。
 func TestTaintTolerationFilter(t *testing.T) {
 	tests := []struct {
 		name                               string
@@ -448,6 +458,8 @@ func TestTaintTolerationFilter(t *testing.T) {
 	}
 }
 
+// TestTaintTolerationFilterWithFeatureGate 验证 EnableTaintTolerationComparisonOperators 开关：
+// 关闭时 Gt/Lt 容忍被忽略，只有 Equal/Exists 生效。
 func TestTaintTolerationFilterWithFeatureGate(t *testing.T) {
 	tests := []struct {
 		name                               string
@@ -534,6 +546,9 @@ func TestTaintTolerationFilterWithFeatureGate(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterNodeChange 验证节点变更事件的重排队提示：
+// 只有污点变化让节点从不可调度变为可调度时才提示 Queue，无关变更则 QueueSkip，
+// 传入非 Node 对象时返回错误并保守地提示 Queue。
 func TestIsSchedulableAfterNodeChange(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -599,6 +614,8 @@ func TestIsSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterTargetPodTolerationChange 验证目标 Pod 容忍变更事件：
+// 新增容忍可能让此前被污点挡住的 Pod 变为可调度，因此提示 Queue。
 func Test_isSchedulableAfterTargetPodTolerationChange(t *testing.T) {
 	testcases := map[string]struct {
 		pod            *v1.Pod
@@ -652,6 +669,8 @@ func Test_isSchedulableAfterTargetPodTolerationChange(t *testing.T) {
 	}
 }
 
+// TestTaintToleration_DeferredResizeSkipped 验证延迟原地扩缩容中的 Pod 会被 PreFilter 跳过，
+// 但 Filter 仍按普通 Pod 处理并返回 Success。
 func TestTaintToleration_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

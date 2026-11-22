@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package dynamicresources 实现动态资源分配（DRA）调度插件。
+// 本文件实现由 DRA 支撑的扩展资源（extended resources）处理逻辑。
 package dynamicresources
 
 import (
@@ -45,63 +47,58 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Extended Resources Backed by DRA - Scheduler Plugin Workflow by each extension points
+// DRA 支撑的扩展资源——调度插件各扩展点的工作流程：
 //
 // PreFilter - preFilterExtendedResources()
-// - for pods using extended resources, find existing claim or create in-memory claim with temporary name "<extended-resources>"
-// - the in-memory claim is used to track and allocate resources, claim object is created in PreBind extension point.
-// - store the claim in stateData for Filter extension point
+// - 对使用扩展资源的 Pod，查找已有 claim，或创建名为 "<extended-resources>" 的内存态 claim。
+// - 内存态 claim 用于跟踪与分配资源，真正的 claim 对象在 PreBind 扩展点创建。
+// - 将 claim 存入 stateData，供 Filter 扩展点使用。
 //
 // Filter - filterExtendedResources()
-// - if stale claim with Spec is identified, return Unschedulable for PostFilter extension point to cleanup
-// - check which resources satisfied by device plugin vs need DRA
-// - if extended resources need to be allocated through DRA, create node-specific claim
+// - 若发现上一轮遗留的带 Spec 的陈旧 claim，返回 Unschedulable，让 PostFilter 清理。
+// - 区分哪些资源由 device plugin 满足、哪些需要走 DRA。
+// - 对需要 DRA 分配的扩展资源，创建节点专属的 claim。
 //
 // PostFilter
-// - if extended resource claim has real name (not "<extended-resources>"):
-//   - it's stale from prior cycle -> delete it -> trigger retry
+// - 若扩展资源 claim 已有真实名字（非 "<extended-resources>"）：
+//   - 说明是上一轮遗留，删除它并触发重试。
 //
 // Reserve
-// - Store allocation results from Filter in stateData
-// - Mark the claim as "allocation in-flight" via SignalClaimPendingAllocation()
+// - 把 Filter 阶段的分配结果存入 stateData。
+// - 通过 SignalClaimPendingAllocation() 把 claim 标记为"分配进行中"。
 //
 // Unreserve
-// - Remove claim from in-flight allocations and restore assume cache
-// - Delete claim from API server if it has real name
+// - 从进行中分配里移除 claim 并恢复 assume cache。
+// - 若 claim 已有真实名字，则从 API server 删除。
 //
 // PreBind - bindClaim()
-// - For "<extended-resources>" claims: create in API server and update stateData
-// - Update claim status: add finalizer, allocation, and pod reservation
-// - Store in assume cache (poll for extended resource claims)
-// - Update pod.Status.ExtendedResourceClaimStatus with request mappings
+// - 对 "<extended-resources>" claim：在 API server 创建并更新 stateData。
+// - 更新 claim 状态：添加 finalizer、分配结果和 Pod 预留。
+// - 存入 assume cache（轮询等待扩展资源 claim）。
+// - 用请求映射更新 pod.Status.ExtendedResourceClaimStatus。
 
 const (
-	// specialClaimInMemName is the name of the special resource claim that
-	// exists only in memory. The claim will get a generated name when it is
-	// written to API server.
+	// specialClaimInMemName 是只存在于内存中的特殊 resource claim 的名字。
+	// 写入 API server 时该 claim 会获得一个生成名。
 	//
-	// It's intentionally not a valid ResourceClaim name to avoid conflicts with
-	// some actual ResourceClaim in the apiserver.
+	// 故意采用不合法的 ResourceClaim 名字，避免与 apiserver 中真实的 ResourceClaim 冲突。
 	specialClaimInMemName = "<extended-resources>"
 
-	// AssumeExtendedResourceTimeoutDefaultSeconds is the default timeout for waiting
-	// for the extended resource claim to be updated in assumed cache.
+	// AssumeExtendedResourceTimeoutDefaultSeconds 是等待扩展资源 claim 出现在 assume cache 中的默认超时（秒）。
 	AssumeExtendedResourceTimeoutDefaultSeconds = 120
 )
 
-// draExtendedResource stores data for extended resources backed by DRA.
-// It will remain empty when the DRAExtendedResource feature is disabled.
+// draExtendedResource 保存由 DRA 支撑的扩展资源数据；DRAExtendedResource 特性关闭时为空。
 type draExtendedResource struct {
-	// May have extended resource backed by DRA.
+	// Pod 请求中可能由 DRA 支撑的标量资源。
 	podScalarResources map[v1.ResourceName]int64
 }
 
-// hasDeviceClassMappedExtendedResource returns true when the given resource list has an extended resource, that has
-// a mapping to a device class.
+// hasDeviceClassMappedExtendedResource 判断给定资源列表中是否存在映射到 DeviceClass 的扩展资源。
 func hasDeviceClassMappedExtendedResource(reqs v1.ResourceList, cache fwk.DeviceClassResolver) bool {
 	for rName, rValue := range reqs {
 		if rValue.IsZero() {
-			// We only care about the resources requested by the pod we are trying to schedule.
+			// 只关心当前待调度 Pod 实际请求的资源。
 			continue
 		}
 		if schedutil.IsDRAExtendedResourceName(rName) {
@@ -113,9 +110,8 @@ func hasDeviceClassMappedExtendedResource(reqs v1.ResourceList, cache fwk.Device
 	return false
 }
 
-// findExtendedResourceClaim looks for the extended resource claim, i.e., the claim with special annotation
-// set to "true", and with the pod as owner. It must be called with all ResourceClaims in the cluster.
-// The returned ResourceClaim is read-only.
+// findExtendedResourceClaim 查找扩展资源 claim，即带有特殊注解且以该 Pod 为属主的 claim。
+// 调用时必须传入集群中所有 ResourceClaim；返回的 ResourceClaim 应视为只读。
 func findExtendedResourceClaim(pod *v1.Pod, resourceClaims []*resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	for _, c := range resourceClaims {
 		if c.Annotations[resourceapi.ExtendedResourceClaimAnnotation] == "true" {
@@ -129,26 +125,20 @@ func findExtendedResourceClaim(pod *v1.Pod, resourceClaims []*resourceapi.Resour
 	return nil
 }
 
-// preFilterExtendedResources checks if there is any extended resource in the
-// pod requests that has a device class mapping, i.e., there is a device class
-// that has spec.ExtendedResourceName or its implicit extended resource name
-// matching the given extended resource in that pod requests.
+// preFilterExtendedResources 检查 Pod 请求中是否存在映射到 DeviceClass 的扩展资源
+// （即某 DeviceClass 的 spec.ExtendedResourceName 或隐式扩展资源名与之匹配）。
 //
-// It looks for the special resource claim for the pod created from prior scheduling
-// cycle. If not found, it creates the special claim with no Requests in the Spec,
-// with a temporary UID, and the specialClaimInMemName name.
-// Either way, the special claim is stored in state.claims.
+// 该函数会查找上一调度周期为 Pod 创建的特殊 claim；若不存在，则创建一个 Spec 中无 Request、
+// 带临时 UID、名字为 specialClaimInMemName 的特殊 claim。两种情况下 claim 都会存入 state.claims。
+// 同时，draExtendedResource 也会写入 cycle state。
 //
-// In addition, draExtendedResource is also stored in the cycle state.
-//
-// It returns the special ResourceClaim and an error status. It returns nil for both
-// if the feature is disabled or not required for the Pod.
+// 返回特殊 ResourceClaim 与错误状态；特性关闭或 Pod 不需要时两者均为 nil。
 func (pl *DynamicResources) preFilterExtendedResources(pod *v1.Pod, logger klog.Logger, s *stateData) (*resourceapi.ResourceClaim, *fwk.Status) {
 	if !pl.fts.EnableDRAExtendedResource {
 		return nil, nil
 	}
 
-	// Try to build device class mapping from cache
+	// 从缓存构建扩展资源名到 DeviceClass 的映射。
 	cache := pl.draManager.DeviceClassResolver()
 	reqs := resourcehelper.PodRequests(pod, resourcehelper.PodResourcesOptions{})
 
@@ -164,29 +154,24 @@ func (pl *DynamicResources) preFilterExtendedResources(pod *v1.Pod, logger klog.
 		return nil, statusError(logger, err, "listing ResourceClaims")
 	}
 
-	// Check if the special resource claim has been created from prior scheduling cycle.
+	// 检查上一调度周期是否已创建特殊 claim。
 	//
-	// If it was already allocated earlier, that allocation might not be valid anymore.
-	// We could try to check that, but it depends on various factors that are difficult to
-	// cover (basically needs to replicate allocator logic) and if it turns out that the
-	// allocation is stale, we would have to schedule with those allocated devices not
-	// available for a new allocation. This situation should be rare (= binding failure),
-	// so we solve it via brute-force
-	// - Kick off deallocation in the background.
-	// - Mark the pod as unschedulable. Successful deallocation will make it schedulable again.
+	// 即使之前已分配过，该分配也可能已失效。要精确判断需复刻分配器逻辑，涉及因素太多难以覆盖；
+	// 而且一旦发现分配陈旧，这些设备又无法立即用于新一轮分配。这种情况很罕见（表现为绑定失败），
+	// 因此采用暴力处理：
+	// - 在后台触发释放（deallocation）。
+	// - 将 Pod 标记为不可调度；释放成功后即可重新调度。
 	extendedResourceClaim := findExtendedResourceClaim(pod, resourceClaims)
 	if extendedResourceClaim != nil {
 		return extendedResourceClaim, nil
 	}
-	// Create one special claim for all extended resources backed by DRA in the Pod.
-	// Create the ResourceClaim with pod as owner, with a generated name that uses
-	// <pod name>-extended-resources- as base. The final name will get truncated if it
-	// would be too long.
+	// 为 Pod 中所有由 DRA 支撑的扩展资源创建一个特殊 claim。
+	// 该 claim 以 Pod 为属主，生成名以 <pod name>-extended-resources- 为前缀；名字过长时会被截断。
 	return &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: pod.Namespace,
 			Name:      specialClaimInMemName,
-			// fake temporary UID for use in SignalClaimPendingAllocation
+			// 伪造的临时 UID，仅供 SignalClaimPendingAllocation 使用。
 			UID:          types.UID(uuid.NewUUID()),
 			GenerateName: pod.Name + "-extended-resources-",
 			OwnerReferences: []metav1.OwnerReference{
@@ -206,23 +191,21 @@ func (pl *DynamicResources) preFilterExtendedResources(pod *v1.Pod, logger klog.
 	}, nil
 }
 
-// filterExtendedResources computes the special claim's Requests based on the
-// node's Allocatable. It returns:
-// - nil if nothing needs to be allocated, all the extended resources are satisfied by device plugin, or
-// - the special claim updated to match what needs to be allocated through DRA for the node
+// filterExtendedResources 根据节点的 Allocatable 计算特殊 claim 的 Request，返回：
+// - nil：无需分配，扩展资源全部由 device plugin 满足；或
+// - 更新后的特殊 claim：包含该节点上需要通过 DRA 分配的资源。
 //
-// It returns an error when the pod's extended resource requests cannot be allocated
-// from node's Allocatable, nor matching any device class's explicit or implicit
-// ExtendedResourceName.
+// 当 Pod 的扩展资源请求既无法从节点 Allocatable 分配，也匹配不到任何 DeviceClass 的
+// 显式/隐式 ExtendedResourceName 时，返回错误。
 func (pl *DynamicResources) filterExtendedResources(state *stateData, pod *v1.Pod, nodeInfo fwk.NodeInfo, logger klog.Logger) (*resourceapi.ResourceClaim, []v1.ContainerExtendedResourceRequest, *fwk.Status) {
 	extendedResourceClaim := state.claims.extendedResourceClaim()
 	if extendedResourceClaim == nil {
-		// Nothing to do.
+		// 没有特殊 claim，无需处理。
 		return nil, nil, nil
 	}
 
-	// The claim is from the prior scheduling cycle, return unschedulable such that it can be
-	// deleted at the PostFilter phase, and retry anew.
+	// claim 来自上一调度周期且 Spec 已有 Request，返回不可调度，
+	// 使 PostFilter 阶段能删除它并重新尝试。
 	if extendedResourceClaim.Spec.Devices.Requests != nil {
 		return nil, nil, statusUnschedulable(logger, "cannot schedule extended resource claim", "pod", klog.KObj(pod), "node", klog.KObj(nodeInfo.Node()), "claim", klog.KObj(extendedResourceClaim))
 	}
@@ -234,42 +217,35 @@ func (pl *DynamicResources) filterExtendedResources(state *stateData, pod *v1.Po
 		if !schedutil.IsDRAExtendedResourceName(rName) {
 			continue
 		}
-		// Skip in case request quantity is zero
+		// 请求量为 0 的资源跳过。
 		if rQuant == 0 {
 			continue
 		}
 		allocatable, okScalar := nodeInfo.GetAllocatable().GetScalarResources()[rName]
 		isBackedByDRA := cache.GetDeviceClass(rName) != nil
 		if isBackedByDRA && allocatable == 0 {
-			// node needs to provide the resource via DRA
+			// 节点 Allocatable 中该资源为 0，需要经 DRA 提供。
 			extendedResources[rName] = rQuant
 			hasExtendedResource = true
 		} else if !okScalar {
-			// has request neither provided by device plugin, nor backed by DRA,
-			// hence the pod does not fit the node.
+			// 该资源既不由 device plugin 提供、也不由 DRA 支撑，Pod 无法落到该节点。
 			return nil, nil, statusUnschedulable(logger, "cannot fit resource", "pod", klog.KObj(pod), "node", klog.KObj(nodeInfo.Node()), "resource", rName)
 		}
 	}
-	// No extended resources backed by DRA on this node.
-	// The pod may have extended resources, but they are all backed by device
-	// plugin, hence the noderesources plugin should have checked if the node
-	// can fit the pod.
-	// This dynamic resources plugin Filter phase has nothing left to do.
+	// 该节点上没有需要 DRA 支撑的扩展资源。Pod 即便请求了扩展资源，也全部由 device plugin 提供，
+	// 节点能否容纳 Pod 由 noderesources 插件负责检查，本插件的 Filter 阶段无需做事。
 	if state.claims.noUserClaim() && !hasExtendedResource {
-		// It cannot be allocated when reaching here, as the claim from prior scheduling cycle
-		// would return unschedulable earlier in this function.
+		// 走到这里说明无需分配：上一周期的 claim 已在前面返回不可调度。
 		return nil, nil, nil
 	}
 
 	if extendedResourceClaim.Status.Allocation != nil {
-		// If it is already allocated, then we cannot simply allocate it again.
-		//
-		// It cannot be allocated when reaching here, as the claim found from prior scheduling cycle
-		// would return unschedulable earlier in this function.
+		// 已分配的 claim 不能再次分配。走到这里说明无需分配：
+		// 上一周期的 claim 已在前面返回不可调度。
 		return nil, nil, nil
 	}
 
-	// Each node needs its own, potentially different variant of the claim.
+	// 每个节点可能有不同的分配需求，因此需要节点专属的 claim 副本。
 	nodeExtendedResourceClaim := extendedResourceClaim.DeepCopy()
 	reqs, mappings := createRequestsAndMappings(pod, extendedResources, logger, cache)
 	nodeExtendedResourceClaim.Spec.Devices.Requests = reqs
@@ -277,12 +253,12 @@ func (pl *DynamicResources) filterExtendedResources(state *stateData, pod *v1.Po
 	return nodeExtendedResourceClaim, mappings, nil
 }
 
-// isSpecialClaimName return true when the name is the specialClaimInMemName.
+// isSpecialClaimName 判断名字是否为内存态特殊 claim 的名字。
 func isSpecialClaimName(name string) bool {
 	return name == specialClaimInMemName
 }
 
-// deleteClaim deletes the claim after removing the finalizer from the claim, if there is any.
+// deleteClaim 先移除 claim 上的（若存在）finalizer，再删除该 claim。
 func (pl *DynamicResources) deleteClaim(ctx context.Context, claim *resourceapi.ResourceClaim) error {
 	refreshClaim := false
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -295,7 +271,7 @@ func (pl *DynamicResources) deleteClaim(ctx context.Context, claim *resourceapi.
 		} else {
 			refreshClaim = true
 		}
-		// Remove the finalizer to unblock removal first.
+		// 先移除 finalizer，否则删除会被阻塞。
 		builtinControllerFinalizer := slices.Index(claim.Finalizers, resourceapi.Finalizer)
 		if builtinControllerFinalizer >= 0 {
 			claim.Finalizers = slices.Delete(claim.Finalizers, builtinControllerFinalizer, builtinControllerFinalizer+1)
@@ -319,6 +295,8 @@ func (pl *DynamicResources) deleteClaim(ctx context.Context, claim *resourceapi.
 	return nil
 }
 
+// partitionContainerIndices 把容器分成两组：长生命周期容器（普通容器与 sidecar init 容器）
+// 和短生命周期容器（非 sidecar 的 init 容器）。前者可复用其资源请求，后者需按峰值单独处理。
 func partitionContainerIndices(containers []v1.Container, numInitContainers int) ([]int, []int) {
 	longLivedContainerIndices := make([]int, 0, len(containers))
 	shortLivedInitContainerIndices := make([]int, 0, numInitContainers)
@@ -334,11 +312,9 @@ func partitionContainerIndices(containers []v1.Container, numInitContainers int)
 	return longLivedContainerIndices, shortLivedInitContainerIndices
 }
 
-// createResourceRequestAndMappings returns the request and mappings for the given container and resource.
-// reusableRequests is a list of other DeviceRequests this container can use before requesting its own.
-// items in reusableRequests may be nil.
-// The returned request may be nil if no additional request was required.
-// The returned mappings may be empty if this container does not use this resource.
+// createResourceRequestAndMappings 为给定容器与资源生成 DeviceRequest 及请求映射。
+// reusableRequests 是该容器可复用的其他 DeviceRequest（元素可能为 nil），复用不足部分才新建请求。
+// 若无需额外请求，返回的 request 为 nil；若容器不使用该资源，返回的 mappings 为空。
 func createResourceRequestAndMappings(containerIndex int, container *v1.Container, rName v1.ResourceName, className string, reusableRequests []*resourceapi.DeviceRequest) (*resourceapi.DeviceRequest, []v1.ContainerExtendedResourceRequest) {
 	var mappings []v1.ContainerExtendedResourceRequest
 	creqs := container.Resources.Requests
@@ -372,8 +348,7 @@ func createResourceRequestAndMappings(containerIndex int, container *v1.Containe
 	for k := range creqs {
 		keys = append(keys, k.String())
 	}
-	// resource requests in a container is a map, their names must
-	// be sorted to determine the resource's index order.
+	// 容器内的资源请求是 map，迭代顺序不确定；排序后才能确定资源在请求中的索引。
 	slices.Sort(keys)
 	ridx := 0
 	for j := range keys {
@@ -382,16 +357,15 @@ func createResourceRequestAndMappings(containerIndex int, container *v1.Containe
 			break
 		}
 	}
-	// containerIndex is the index of the container in the list of initContainers + containers.
-	// ridx is the index of the extended resource request in the sorted all requests in the container.
-	// crq is the quantity of the extended resource request.
+	// 请求名由容器在（initContainers + containers）列表中的下标和
+	// 资源在容器内排序后请求中的下标拼成，保证稳定且唯一。
 	reqName := fmt.Sprintf("container-%d-request-%d", containerIndex, ridx)
 	deviceReq := resourceapi.DeviceRequest{
-		Name: reqName, // need to be container name index - extended resource name index
+		Name: reqName, // 名字需体现容器下标与扩展资源下标
 		Exactly: &resourceapi.ExactDeviceRequest{
 			DeviceClassName: className,
 			AllocationMode:  resourceapi.DeviceAllocationModeExactCount,
-			Count:           crq - sum, // the extra devices to request
+			Count:           crq - sum, // 复用后可省下的设备数，这里只申请差额
 		},
 	}
 	mappings = append(mappings, v1.ContainerExtendedResourceRequest{
@@ -403,18 +377,19 @@ func createResourceRequestAndMappings(containerIndex int, container *v1.Containe
 	return &deviceReq, mappings
 }
 
+// createRequestsAndMappings 为 Pod 中所有扩展资源生成 DeviceRequest 列表及容器请求映射。
+// 普通容器与 sidecar 各自独立申请；短生命周期 init 容器按顺序复用后续长生命周期容器的请求，
+// 仅需申请其中的峰值差额。
 func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceName]int64, logger klog.Logger, deviceClassMapping fwk.DeviceClassResolver) ([]resourceapi.DeviceRequest, []v1.ContainerExtendedResourceRequest) {
 	containers := slices.Clone(pod.Spec.InitContainers)
 	containers = append(containers, pod.Spec.Containers...)
 	longLivedContainerIndices, shortLivedInitContainerIndices := partitionContainerIndices(containers, len(pod.Spec.InitContainers))
 
-	// all requests across all containers and resource types
+	// 汇总所有容器、所有资源类型的请求与映射。
 	var deviceRequests []resourceapi.DeviceRequest
-	// all mappings across all containers and resource types
 	var mappings []v1.ContainerExtendedResourceRequest
 
-	// Sort resource names to ensure deterministic ordering of device requests and mappings.
-	// Maps have non-deterministic iteration order in Go, so we extract and sort the keys.
+	// Go 的 map 迭代顺序不确定，必须先提取资源名并排序，保证生成的请求与映射顺序稳定。
 	resourceNames := make([]v1.ResourceName, 0, len(extendedResources))
 	for resource := range extendedResources {
 		resourceNames = append(resourceNames, resource)
@@ -423,31 +398,28 @@ func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceNam
 
 	for _, resource := range resourceNames {
 		class := deviceClassMapping.GetDeviceClass(resource)
-		// skip if the resource does not map to a device class
+		// 没有对应 DeviceClass 的资源跳过，由其他机制处理。
 		if class == nil {
 			continue
 		}
 
-		// shortLivedResourceMappings is the mapping of container+resource→request for short lived containers (init non-sidecar container)
+		// 短生命周期容器（非 sidecar init 容器）的 container+resource→request 映射。
 		var shortLivedResourceMappings []v1.ContainerExtendedResourceRequest
-		// longLivedResourceMappings is the mapping of container+resource→request for long lived containers (init sidecar or regular container)
+		// 长生命周期容器（sidecar init 容器或普通容器）的 container+resource→request 映射。
 		var longLivedResourceMappings []v1.ContainerExtendedResourceRequest
 
-		// longLivedResourceRequests is the list of requests for a given resource by long-lived containers.
-		// The length of this list is the same as the length of containers.
-		// Entries may be nil if the container at that index did not produce a request for that resource.
-		// Requests at later indices are reusable by non-sidecar initContainers at earlier indices.
+		// 长生命周期容器对该资源的请求列表，长度与容器数相同；未产生请求的槽位为 nil。
+		// 靠后的请求可被更早执行的非 sidecar init 容器复用。
 		longLivedResourceRequests := make([]*resourceapi.DeviceRequest, len(containers))
 		for _, i := range longLivedContainerIndices {
 			containerRequest, containerMappings := createResourceRequestAndMappings(i, &containers[i], resource, class.Name, nil)
-			longLivedResourceRequests[i] = containerRequest                                     // might be nil
-			longLivedResourceMappings = append(longLivedResourceMappings, containerMappings...) // might be zero-length
+			longLivedResourceRequests[i] = containerRequest                                     // 可能为 nil
+			longLivedResourceMappings = append(longLivedResourceMappings, containerMappings...) // 可能为空
 		}
 
-		// maxShortLivedResourceRequest is the maximum request for a given resource by short-lived containers
+		// 短生命周期容器中该资源请求量最大的那个。
 		var maxShortLivedResourceRequest *resourceapi.DeviceRequest
-		// shortLivedRequestNames is all request names for a given resource by short-lived containers. All mappings to any name in
-		// this set will be replaced by maxShortLivedResourceRequest.Name.
+		// 短生命周期容器产生的所有请求名；指向这些名字的映射都会被改写为最大请求的名字。
 		shortLivedRequestNames := sets.New[string]()
 		for _, i := range shortLivedInitContainerIndices {
 			containerRequest, containerMappings := createResourceRequestAndMappings(i, &containers[i], resource, class.Name, longLivedResourceRequests[i:])
@@ -457,10 +429,10 @@ func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceNam
 					maxShortLivedResourceRequest = containerRequest
 				}
 			}
-			shortLivedResourceMappings = append(shortLivedResourceMappings, containerMappings...) // might be zero-length
+			shortLivedResourceMappings = append(shortLivedResourceMappings, containerMappings...) // 可能为空
 		}
 
-		// rewrite mappings to short-lived requests to use the maximum short-lived request name
+		// init 容器顺序执行，只需一个能覆盖峰值的请求；把各 init 容器的映射统一指向最大请求名。
 		if maxShortLivedResourceRequest != nil && len(shortLivedRequestNames) > 1 {
 			shortLivedRequestNames.Delete(maxShortLivedResourceRequest.Name)
 			for i := range shortLivedResourceMappings {
@@ -470,7 +442,7 @@ func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceNam
 			}
 		}
 
-		// append non-nil requests
+		// 只收集非 nil 的请求。
 		if maxShortLivedResourceRequest != nil {
 			deviceRequests = append(deviceRequests, *maxShortLivedResourceRequest)
 		}
@@ -479,7 +451,7 @@ func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceNam
 				deviceRequests = append(deviceRequests, *request)
 			}
 		}
-		// append mappings
+		// 汇总映射。
 		mappings = append(mappings, longLivedResourceMappings...)
 		mappings = append(mappings, shortLivedResourceMappings...)
 	}
@@ -490,12 +462,9 @@ func createRequestsAndMappings(pod *v1.Pod, extendedResources map[v1.ResourceNam
 	return deviceRequests, mappings
 }
 
-// waitForExtendedClaimInAssumeCache polls the assume cache until the extended resource claim
-// becomes visible. This is necessary because extended resource claims are created in the API
-// server, and the informer update may not have reached the assume cache yet.
-//
-// AssumeClaimAfterAPICall returns ErrNotFound when the informer update hasn't arrived,
-// so we poll with a timeout.
+// waitForExtendedClaimInAssumeCache 轮询 assume cache，直到扩展资源 claim 可见。
+// claim 由 API server 创建，informer 的更新可能尚未到达 assume cache，
+// 而 AssumeClaimAfterAPICall 在 informer 更新未到达时会返回 ErrNotFound，因此需要带超时地轮询。
 func (pl *DynamicResources) waitForExtendedClaimInAssumeCache(
 	ctx context.Context,
 	claim *resourceapi.ResourceClaim,
@@ -520,11 +489,11 @@ func (pl *DynamicResources) waitForExtendedClaimInAssumeCache(
 
 	if pollErr != nil {
 		logger.V(5).Info("Claim not stored in assume cache after retries", "claim", klog.KObj(claim), "err", pollErr)
-		// Note: We log but don't fail - the claim was created successfully
+		// claim 已在 API server 创建成功，此处仅记录日志、不返回失败。
 	}
 }
 
-// createExtendedResourceClaimInAPI creates an extended resource claim in the API server.
+// createExtendedResourceClaimInAPI 在 API server 中创建扩展资源 claim。
 func (pl *DynamicResources) createExtendedResourceClaimInAPI(
 	ctx context.Context,
 	pod *v1.Pod,
@@ -533,7 +502,7 @@ func (pl *DynamicResources) createExtendedResourceClaimInAPI(
 ) (*resourceapi.ResourceClaim, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("preparing to create claim for extended resources", "pod", klog.KObj(pod), "node", nodeName)
-	// Get the node-specific claim that was prepared during Filter phase
+	// 取 Filter 阶段准备好的节点专属 claim。
 	nodeAllocation, ok := state.nodeAllocations[nodeName]
 	if !ok || nodeAllocation.extendedResourceClaim == nil {
 		return nil, fmt.Errorf("extended resource claim not found for node %s", nodeName)
@@ -541,7 +510,7 @@ func (pl *DynamicResources) createExtendedResourceClaimInAPI(
 	claim := nodeAllocation.extendedResourceClaim.DeepCopy()
 
 	logger.V(5).Info("create claim for extended resources", "pod", klog.KObj(pod), "node", nodeName, "resourceclaim", klog.Format(claim))
-	// Clear fields which must or can not be set during creation.
+	// 清除创建时不能或无需设置的字段。
 	claim.Status.Allocation = nil
 	claim.Name = ""
 	claim.UID = ""
@@ -557,8 +526,7 @@ func (pl *DynamicResources) createExtendedResourceClaimInAPI(
 	return createdClaim, nil
 }
 
-// patchPodExtendedResourceClaimStatus updates the pod's status with information about
-// the extended resource claim.
+// patchPodExtendedResourceClaimStatus 将扩展资源 claim 的信息（请求映射与 claim 名）写入 Pod status。
 func (pl *DynamicResources) patchPodExtendedResourceClaimStatus(
 	ctx context.Context,
 	pod *v1.Pod,
@@ -586,26 +554,24 @@ func (pl *DynamicResources) patchPodExtendedResourceClaimStatus(
 	return nil
 }
 
-// unreserveExtendedResourceClaim cleans up the scheduler-owned extended resource claim
-// when scheduling fails. It reverts the assume cache, and deletes the claim from the API
-// server if it was already created.
+// unreserveExtendedResourceClaim 在调度失败时清理调度器持有的扩展资源 claim：
+// 恢复 assume cache，并对已写入 API server 的 claim 执行删除。
 func (pl *DynamicResources) unreserveExtendedResourceClaim(ctx context.Context, pod *v1.Pod, state *stateData) {
 	extendedResourceClaim := state.claims.extendedResourceClaim()
 	if extendedResourceClaim == nil {
-		// there is no extended resource claim
+		// 没有扩展资源 claim，无需清理。
 		return
 	}
 
-	// If the claim was marked as pending allocation (in-flight), remove that marker and restore
-	// the assumed claim state to what it was before this scheduling attempt.
+	// 若 claim 被标记为分配进行中，先移除该标记，并把 assume cache 恢复到此轮调度前的状态。
 	if deleted := pl.draManager.ResourceClaims().MaybeRemoveClaimPendingAllocation(state.claims.getInitialExtendedResourceClaimUID(), false); deleted {
 		pl.draManager.ResourceClaims().AssumedClaimRestore(extendedResourceClaim.Namespace, extendedResourceClaim.Name)
 	}
 	if isSpecialClaimName(extendedResourceClaim.Name) {
-		// In memory temporary extended resource claim does not need to be deleted
+		// 内存态临时 claim 无需删除。
 		return
 	}
-	// Claim was written to API server, need to delete it to prevent orphaned resources.
+	// claim 已写入 API server，必须删除，否则会留下孤立资源。
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("delete extended resource backed by DRA", "resourceclaim", klog.KObj(extendedResourceClaim), "pod", klog.KObj(pod), "claim.UID", extendedResourceClaim.UID)
 	extendedResourceClaim = extendedResourceClaim.DeepCopy()

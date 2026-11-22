@@ -86,7 +86,7 @@ func TestEventHandlers_MoveToActiveOnNominatedNodeUpdate(t *testing.T) {
 
 	unschedulablePods := []*v1.Pod{highPriorityPod, medNominatedPriorityPod, medPriorityPod, lowPriorityPod}
 
-	// Make pods schedulable on Delete event, but not when nominated node appears.
+	// 让 Pod 在 Delete 事件中变为可调度，但提名节点出现时不触发。
 	queueHintForPodDelete := func(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 		oldPod, _, err := util.As[*v1.Pod](oldObj, newObj)
 		if err != nil {
@@ -165,7 +165,7 @@ func TestEventHandlers_MoveToActiveOnNominatedNodeUpdate(t *testing.T) {
 			client := fake.NewClientset(objs...)
 			informerFactory := informers.NewSharedInformerFactory(client, 0)
 
-			// apiDispatcher is unused in the test, but intializing it anyway.
+			// 本测试用不到 apiDispatcher，但仍照常初始化。
 			apiDispatcher := apidispatcher.New(client, 16, apicalls.Relevances)
 			apiDispatcher.Run(logger)
 			defer apiDispatcher.Close()
@@ -177,12 +177,12 @@ func TestEventHandlers_MoveToActiveOnNominatedNodeUpdate(t *testing.T) {
 				internalqueue.WithMetricsRecorder(recorder),
 				internalqueue.WithQueueingHintMapPerProfile(queueingHintMap),
 				internalqueue.WithAPIDispatcher(apiDispatcher),
-				// disable backoff queue
+				// 禁用退避队列。
 				internalqueue.WithPodInitialBackoffDuration(0),
 				internalqueue.WithPodMaxBackoffDuration(0))
 			schedulerCache := internalcache.New(ctx, nil, false, false /* CompositePodGroup */)
 
-			// Put test pods into unschedulable queue
+			// 将测试 Pod 放入不可调度队列。
 			for _, pod := range unschedulablePods {
 				queue.Add(ctx, pod)
 				entity, err := queue.Pop(logger)
@@ -278,7 +278,7 @@ func withPodName(pod *v1.Pod, name string) *v1.Pod {
 	return pod
 }
 
-// test for informers of resources we care about is registered
+// 验证我们关心的资源对应的 informer 已注册。
 func TestAddAllEventHandlers(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -707,7 +707,7 @@ func TestAdmissionCheck(t *testing.T) {
 						ResourceClaimName: "node-allocatable-claim",
 						Mapping: []v1.NodeAllocatableMappedResources{{
 							Name:     v1.ResourceCPU,
-							Quantity: new(resource.MustParse(nodeCPUCapacity[v1.ResourceCPU])), // We should exceed node capacity since we also request 1 CPU in standard request.
+							Quantity: new(resource.MustParse(nodeCPUCapacity[v1.ResourceCPU])), // 标准要求里还额外请求了 1 CPU，因此总量会超出节点容量。
 						}},
 					},
 				}
@@ -745,10 +745,10 @@ func TestAdmissionCheck(t *testing.T) {
 				p.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
 					{
 						ResourceClaimName: "node-allocatable-claim",
-						Containers:        []string{"bar"}, // Default container name created by st.MakePod() is usually "bar" (let's use that or empty containers since it's just PerPod)
+						Containers:        []string{"bar"}, // st.MakePod() 默认容器名通常是 "bar"；这里是 PerPod 开销，用不用容器名都行。
 						Overhead: []v1.NodeAllocatableOverheadResources{{
 							Name:   v1.ResourceCPU,
-							PerPod: new(resource.MustParse(nodeCPUCapacity[v1.ResourceCPU])), // 1 CPU + nodeCPUCapacity CPU > nodeCPUCapacity
+							PerPod: new(resource.MustParse(nodeCPUCapacity[v1.ResourceCPU])), // 1 CPU + 节点容量的 CPU > 节点容量。
 						}},
 					},
 				}
@@ -763,7 +763,7 @@ func TestAdmissionCheck(t *testing.T) {
 			pod: func() *v1.Pod {
 				p := st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Obj()
 				cpuQty := resource.MustParse(nodeCPUCapacity[v1.ResourceCPU])
-				cpuQty.Sub(resource.MustParse("1")) // Now cpuQty + 1 CPU (request) = nodeCPUCapacity CPU
+				cpuQty.Sub(resource.MustParse("1")) // 此时 cpuQty + 1 CPU（请求量）= 节点容量的 CPU 数。
 				p.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
 					{
 						ResourceClaimName: "node-allocatable-claim",
@@ -883,7 +883,7 @@ func TestAddPod(t *testing.T) {
 			}
 
 			if tt.pod.Spec.SchedulingGroup == nil {
-				// Pod has no pod group, so there is no pod group state to check, the test can complete.
+				// Pod 不属于任何 PodGroup，无需检查组状态，测试到此结束。
 				return
 			}
 
@@ -1182,7 +1182,7 @@ func TestUpdatePod(t *testing.T) {
 			}
 
 			if tt.newPod.Spec.SchedulingGroup == nil {
-				// Pod has no pod group, so there is no pod group state to check, the test can complete.
+				// Pod 不属于任何 PodGroup，无需检查组状态，测试到此结束。
 				return
 			}
 			pgs, err := sched.Cache.PodGroupStates().Get(tt.oldPod.Namespace, *tt.oldPod.Spec.SchedulingGroup.PodGroupName)
@@ -1386,7 +1386,7 @@ func TestDeletePod(t *testing.T) {
 			}
 
 			if tt.initialPod.Spec.SchedulingGroup == nil {
-				// Pod has no pod group, so there is no pod group state to check, the test can complete.
+				// Pod 不属于任何 PodGroup，无需检查组状态，测试到此结束。
 				return
 			}
 			pgs, err := sched.Cache.PodGroupStates().Get(tt.initialPod.Namespace, *tt.initialPod.Spec.SchedulingGroup.PodGroupName)
@@ -2076,7 +2076,7 @@ func TestEventHandlers_DeferredResize(t *testing.T) {
 			if tt.isAdd {
 				sched.addPod(tt.initialPod)
 			} else {
-				// For update test, first simulate addPod for the initial pod
+				// 更新用例中，先为初始 Pod 模拟一次 addPod。
 				sched.addPod(tt.initialPod)
 				sched.updatePod(tt.initialPod, tt.updatedPod)
 			}

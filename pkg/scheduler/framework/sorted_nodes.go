@@ -24,35 +24,41 @@ import (
 
 var _ SortedScoredNodes = (*sortedNodeScores)(nil)
 
+// sortedNodeScores 是基于最大堆实现的已评分节点列表。
 type sortedNodeScores struct {
 	nodes nodeScoreHeap
 }
 
-// NewSortedScoredNodes creates a SortedScoredNodes backed by a max-heap keyed on TotalScore.
+// NewSortedScoredNodes 创建一个以 TotalScore 为键的最大堆支持的 SortedScoredNodes。
+// 同分时再按 Randomizer 排序，避免固定偏向某些节点，让调度结果有随机性。
 func NewSortedScoredNodes(nodeScoreList []fwk.NodePluginScores) SortedScoredNodes {
 	var h nodeScoreHeap = nodeScoreList
 	heap.Init(&h)
 	return &sortedNodeScores{nodes: h}
 }
 
+// Pop 弹出并当前得分最高的节点。
 func (s *sortedNodeScores) Pop() fwk.NodePluginScores {
 	return heap.Pop(&s.nodes).(fwk.NodePluginScores)
 }
 
+// Len 返回堆中剩余的节点数。
 func (s *sortedNodeScores) Len() int {
 	return s.nodes.Len()
 }
 
-// UnorderedList returns all nodes in heap-internal order (not sorted by score).
-// Only the outer slice is copied. Each NodePluginScores.Scores slice is still
-// shared with the heap. Callers must not mutate the returned elements.
+// UnorderedList 以堆内部顺序返回所有节点（未按得分排序）。
+// 仅复制外层切片，每个 NodePluginScores.Scores 切片仍与堆共享。
+// 调用方不得修改返回的元素，否则会破坏堆的不变式。
 func (s *sortedNodeScores) UnorderedList() []fwk.NodePluginScores {
 	result := make([]fwk.NodePluginScores, len(s.nodes))
 	copy(result, s.nodes)
 	return result
 }
 
-// nodeScoreHeap is a heap of fwk.NodePluginScores.
+// nodeScoreHeap 是 fwk.NodePluginScores 的最大堆。
+// 排序先比较 TotalScore，同分再用 Randomizer 打破平局，
+// 防止得分相同的节点总是以固定顺序被选中。
 type nodeScoreHeap []fwk.NodePluginScores
 
 var _ heap.Interface = &nodeScoreHeap{}

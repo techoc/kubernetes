@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apicache 通过调度队列或缓存转发 Pod 状态更新与绑定等 API 调用，
+// 使调用方无需直接访问 apiserver，并支持异步执行。
 package apicache
 
 import (
@@ -25,12 +27,13 @@ import (
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/backend/queue"
 )
 
-// APICache is responsible for sending API calls' requests through scheduling queue or cache.
+// APICache 负责把 API 调用请求经由调度队列或缓存转发出去。
 type APICache struct {
 	schedulingQueue internalqueue.SchedulingQueue
 	cache           internalcache.Cache
 }
 
+// New 创建一个使用给定调度队列与缓存的 APICache。
 func New(schedulingQueue internalqueue.SchedulingQueue, cache internalcache.Cache) *APICache {
 	return &APICache{
 		schedulingQueue: schedulingQueue,
@@ -38,29 +41,26 @@ func New(schedulingQueue internalqueue.SchedulingQueue, cache internalcache.Cach
 	}
 }
 
-// PatchPodStatus sends a patch request for a Pod's status through a scheduling queue.
-// The patch could be first applied to the cached Pod object and then the API call is executed asynchronously.
-// It returns a channel that can be used to wait for the call's completion.
+// PatchPodStatus 通过调度队列发送 Pod 状态的 patch 请求。
+// patch 可能先应用到缓存中的 Pod 对象，再异步执行真正的 API 调用。
+// 返回的 channel 可用于等待调用完成。
 func (c *APICache) PatchPodStatus(pod *v1.Pod, conditions []*v1.PodCondition, nominatingInfo *fwk.NominatingInfo) (<-chan error, error) {
 	return c.schedulingQueue.PatchPodStatus(pod, conditions, nominatingInfo)
 }
 
-// BindPod sends a binding request through a cache. The binding could be first applied to the cached Pod object
-// and then the API call is executed asynchronously.
-// It returns a channel that can be used to wait for the call's completion.
+// BindPod 通过缓存发送绑定请求。绑定可能先应用到缓存中的 Pod 对象，
+// 再异步执行真正的 API 调用。返回的 channel 可用于等待调用完成。
 func (c *APICache) BindPod(binding *v1.Binding) (<-chan error, error) {
 	return c.cache.BindPod(binding)
 }
 
-// WaitOnFinish blocks until the result of an API call is sent to the given onFinish channel
-// (returned by methods BindPod or PreemptPod).
-//
-// It returns the error received from the channel.
-// It also returns nil if the call was skipped or overwritten,
-// as these are considered successful lifecycle outcomes.
+// WaitOnFinish 阻塞等待 API 调用的结果被写入 onFinish channel（由 BindPod 或 PreemptPod 等方法返回）。
+// 它返回从 channel 收到的错误；若调用被跳过或被覆盖，也返回 nil，
+// 因为这些都属于生命周期的正常结果。
 func (c *APICache) WaitOnFinish(ctx context.Context, onFinish <-chan error) error {
 	select {
 	case err := <-onFinish:
+		// 只把意料之外的错误交给调用方，可预期的错误视为正常的生命周期结束，不向上抛。
 		if fwk.IsUnexpectedError(err) {
 			return err
 		}

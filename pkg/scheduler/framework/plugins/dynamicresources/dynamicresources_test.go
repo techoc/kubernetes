@@ -81,6 +81,8 @@ func init() {
 	metrics.InitMetrics()
 }
 
+// TestPostFilterNoOpStatusHasNoUserVisibleReason 验证 PostFilter 无操作路径返回的状态
+// 不带用户可见的 Reason：内部 no-op 不应污染 API 返回的原因列表。
 func TestPostFilterNoOpStatusHasNoUserVisibleReason(t *testing.T) {
 	pod := st.MakePod().Name("pod").Namespace("default").Obj()
 
@@ -102,7 +104,10 @@ func TestPostFilterNoOpStatusHasNoUserVisibleReason(t *testing.T) {
 	})
 }
 
+// 测试中复用的对象类型、名称及预设对象。
+// 大量用例共享这些变量，便于通过 DeepCopy 做局部修改后比较。
 var (
+	// Pod 与 PodGroup 的 GVK，用于构造消费者引用。
 	podKind      = v1.SchemeGroupVersion.WithKind("Pod")
 	podGroupKind = schedulingapi.SchemeGroupVersion.WithKind("PodGroup")
 
@@ -123,7 +128,7 @@ var (
 	claimName2                          = podName + "-" + resourceName2
 	className                           = "my-resource-class"
 	namespace                           = "default"
-	attrName                            = resourceapi.QualifiedName("healthy") // device attribute only available on non-default node
+	attrName                            = resourceapi.QualifiedName("healthy") // 仅非默认节点具备该设备属性
 	extendedResourceName                = "example.com/gpu"
 	extendedResourceName2               = "example.com/gpu2"
 	implicitExtendedResourceName        = "deviceclass.resource.kubernetes.io/my-resource-class"
@@ -266,7 +271,7 @@ var (
 					ResourceClaims(schedulingapi.PodGroupResourceClaim{Name: resourceName, ResourceClaimTemplateName: &claimName}).
 					Obj()
 
-	// Node with "instance-1" device and no device attributes.
+	// 带 "instance-1" 设备且无设备属性的节点
 	workerNode                                 = &st.MakeNode().Name(nodeName).Label("kubernetes.io/hostname", nodeName).Node
 	workerNodeSlice                            = st.MakeResourceSlice(nodeName, driver).Device("instance-1").Obj()
 	largeWorkerNodeSlice                       = st.MakeResourceSlice(nodeName, driver).Device("instance-1").Device("instance-2").Device("instance-3").Device("instance-4").Obj()
@@ -288,11 +293,11 @@ var (
 		return nativeSlice
 	}
 
-	// Node with same device, but now with a "healthy" boolean attribute.
+	// 设备相同，但多了 "healthy" 布尔属性
 	workerNode2      = &st.MakeNode().Name(node2Name).Label("kubernetes.io/hostname", node2Name).Node
 	workerNode2Slice = st.MakeResourceSlice(node2Name, driver).Device("instance-1", map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{attrName: {BoolValue: ptr.To(true)}}).Obj()
 
-	// Yet another node, same as the second one.
+	// 又一个节点，与第二个节点相同
 	workerNode3      = &st.MakeNode().Name(node3Name).Label("kubernetes.io/hostname", node3Name).Node
 	workerNode3Slice = st.MakeResourceSlice(node3Name, driver).Device("instance-1", map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{attrName: {BoolValue: ptr.To(true)}}).Obj()
 
@@ -305,7 +310,7 @@ var (
 	}()
 	brokenSelector = resourceapi.DeviceSelector{
 		CEL: &resourceapi.CELDeviceSelector{
-			// Not set for workerNode.
+			// workerNode 没有该属性，此选择器在它上面求值会失败
 			Expression: fmt.Sprintf(`device.attributes["%s"].%s`, driver, attrName),
 		},
 	}
@@ -902,7 +907,7 @@ var (
 		Effect: resourceapi.DeviceTaintEffectNoSchedule,
 	}
 
-	// for DRA Device Binding Conditions
+	// DRA 设备绑定条件相关
 	bindingConditions        = []string{"condition"}
 	bindingFailureConditions = []string{"failed"}
 
@@ -925,7 +930,7 @@ var (
 	}()
 
 	allocationResultWithBindingConditions = &resourceapi.AllocationResult{
-		AllocationTimestamp: new(metav1.Time), // Non-nil, actual value not checked.
+		AllocationTimestamp: new(metav1.Time), // 只需非 nil，具体值不校验
 		Devices: resourceapi.DeviceAllocationResult{
 			Results: []resourceapi.DeviceRequestAllocationResult{{
 				Driver:                   driver,
@@ -940,7 +945,7 @@ var (
 	}
 
 	allocationResultWithBindingConditions2 = &resourceapi.AllocationResult{
-		AllocationTimestamp: new(metav1.Time), // Non-nil, actual value not checked.
+		AllocationTimestamp: new(metav1.Time), // 只需非 nil，具体值不校验
 		Devices: resourceapi.DeviceAllocationResult{
 			Results: []resourceapi.DeviceRequestAllocationResult{{
 				Driver:                   driver2,
@@ -1035,6 +1040,7 @@ var (
 	}
 )
 
+// taintDevices 给 ResourceSlice 中所有设备加上污点，返回深拷贝。
 func taintDevices(slice *resourceapi.ResourceSlice) *resourceapi.ResourceSlice {
 	slice = slice.DeepCopy()
 	for i := range slice.Spec.Devices {
@@ -1043,29 +1049,31 @@ func taintDevices(slice *resourceapi.ResourceSlice) *resourceapi.ResourceSlice {
 	return slice
 }
 
+// reserve 将 claim 标记为已被指定 Pod 预留。
 func reserve(claim *resourceapi.ResourceClaim, pod *v1.Pod) *resourceapi.ResourceClaim {
 	return st.FromResourceClaim(claim).
 		ReservedForPod(pod.Name, types.UID(pod.UID)).
 		Obj()
 }
 
+// reserveFor 将 claim 标记为已被给定的一组消费者预留。
 func reserveFor(claim *resourceapi.ResourceClaim, bindings ...resourceapi.ResourceClaimConsumerReference) *resourceapi.ResourceClaim {
 	return st.FromResourceClaim(claim).
 		ReservedFor(bindings...).
 		Obj()
 }
 
-// addAllocationTimestamp adds an AllocationTimestamp to a claim.
-// Non-nil is all that matters for the go-cmp comparison.
-// Test cases involving binding conditions must ensure that they
-// have such a non-nil time stamp in their expected claims starting
-// with PreBind because PreBind adds it when the feature is on.
+// addAllocationTimestamp 为 claim 添加 AllocationTimestamp。
+// go-cmp 比较时只关心其是否为非 nil，具体值无关。
+// 涉及绑定条件的用例中，从 PreBind 阶段开始的期望 claim 必须带上该时间戳，
+// 因为特性开启时 PreBind 会自动写入。
 func addAllocationTimestamp(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	claim.Status.Allocation.AllocationTimestamp = new(metav1.Time)
 	return claim
 }
 
+// adminAccess 将 claim 的请求与分配结果都标记为管理员访问。
 func adminAccess(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	for i := range claim.Spec.Devices.Requests {
@@ -1079,6 +1087,7 @@ func adminAccess(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	return claim
 }
 
+// breakCELInClaim 故意破坏 claim 中的 CEL 选择器，制造运行时错误场景。
 func breakCELInClaim(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	for i := range claim.Spec.Devices.Requests {
@@ -1092,6 +1101,7 @@ func breakCELInClaim(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClai
 	return claim
 }
 
+// breakCELInClass 用会出错的选择器替换 DeviceClass 中的所有选择器。
 func breakCELInClass(class *resourceapi.DeviceClass) *resourceapi.DeviceClass {
 	class = class.DeepCopy()
 	for i := range class.Spec.Selectors {
@@ -1104,16 +1114,15 @@ func breakCELInClass(class *resourceapi.DeviceClass) *resourceapi.DeviceClass {
 	return class
 }
 
+// updateDeviceClassName 替换 claim 中请求使用的设备类名，返回深拷贝。
 func updateDeviceClassName(claim *resourceapi.ResourceClaim, deviceClassName string) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	for i := range claim.Spec.Devices.Requests {
-		// If the firstAvailable list is empty we update the device class name
-		// on the base request.
+		// 没有 firstAvailable 子请求时，改基础请求的类名
 		if len(claim.Spec.Devices.Requests[i].FirstAvailable) == 0 {
 			claim.Spec.Devices.Requests[i].Exactly.DeviceClassName = deviceClassName
 		} else {
-			// If subrequests are specified, update the device class name on
-			// all of them.
+			// 有子请求时逐个替换，否则基础请求的类名不会生效
 			for j := range claim.Spec.Devices.Requests[i].FirstAvailable {
 				claim.Spec.Devices.Requests[i].FirstAvailable[j].DeviceClassName = deviceClassName
 			}
@@ -1122,6 +1131,7 @@ func updateDeviceClassName(claim *resourceapi.ResourceClaim, deviceClassName str
 	return claim
 }
 
+// getDefaultDynamicResourcesArgs 返回经过 v1 默认化与转换的内部配置参数。
 func getDefaultDynamicResourcesArgs() *config.DynamicResourcesArgs {
 	v1dra := &kubeschedulerconfigv1.DynamicResourcesArgs{}
 	configv1.SetDefaults_DynamicResourcesArgs(v1dra)
@@ -1130,39 +1140,36 @@ func getDefaultDynamicResourcesArgs() *config.DynamicResourcesArgs {
 	return dra
 }
 
-// result defines the expected outcome of some operation. It covers
-// operation's status and the state of the world (= objects).
+// result 定义某次操作的期望结果，涵盖操作状态与世界状态（即各对象）。
 type result struct {
 	status *fwk.Status
-	// changes contains a mapping of name to an update function for
-	// the corresponding object. These functions apply exactly the expected
-	// changes to a copy of the object as it existed before the operation.
+	// 对象名到更新函数的映射。函数对操作前对象的副本施加期望的变更。
 	changes change
 
-	// added contains objects created by the operation.
+	// 操作创建的对象。
 	added []metav1.Object
 
-	// removed contains objects deleted by the operation.
+	// 操作删除的对象。
 	removed []metav1.Object
 
-	// assumedClaim is the one claim which is expected to be assumed,
-	// nil if none.
+	// 期望被假定的 claim，没有则为 nil。
 	assumedClaim *resourceapi.ResourceClaim
 
-	// inFlightClaims is a list of claims which are expected to be tracked as
-	// in flight, nil if none.
+	// 期望被跟踪为执行中的 claim 列表，没有则为 nil。
 	inFlightClaims []metav1.Object
 }
 
-// change contains functions for modifying objects of a certain type. These
-// functions will get called for all objects of that type. If they needs to
-// make changes only to a particular instance, then it must check the name.
+// change 保存按对象类型修改对象的函数。
+// 这些函数会对该类型的所有对象调用；若只想改特定实例，函数内部需自行检查名称。
 type change struct {
 	claim func(*resourceapi.ResourceClaim) *resourceapi.ResourceClaim
 	pod   func(*v1.Pod) *v1.Pod
 }
+
+// perNodeResult 是按节点名索引的期望结果。
 type perNodeResult map[string]result
 
+// forNode 返回指定节点的期望结果；nil 映射返回零值结果。
 func (p perNodeResult) forNode(nodeName string) result {
 	if p == nil {
 		return result{}
@@ -1170,8 +1177,10 @@ func (p perNodeResult) forNode(nodeName string) result {
 	return p[nodeName]
 }
 
+// perNodeScoreResult 是按节点名索引的期望得分。
 type perNodeScoreResult map[string]int64
 
+// forNode 返回指定节点的期望得分；nil 映射返回 0。
 func (p perNodeScoreResult) forNode(nodeName string) int64 {
 	if p == nil {
 		return 0
@@ -1179,6 +1188,7 @@ func (p perNodeScoreResult) forNode(nodeName string) int64 {
 	return p[nodeName]
 }
 
+// want 汇总一次调度流程中各扩展点的期望结果。
 type want struct {
 	preenqueue               result
 	preFilterResult          *fwk.PreFilterResult
@@ -1198,19 +1208,15 @@ type want struct {
 	podGroupPostFilterResult *fwk.PodGroupPostFilterResult
 	postfilter               result
 
-	// unreserveAfterBindFailure, if set, triggers a call to Unreserve
-	// after PreBind, as if the actual Bind had failed.
+	// 非空时在 PreBind 之后调用 Unreserve，模拟真正 Bind 失败的场景。
 	unreserveAfterBindFailure *result
 
-	// unreserveBeforePreBind, if set, triggers a call to Unreserve
-	// before PreBind, as if the some other PreBind plugin had failed.
+	// 非空时在 PreBind 之前调用 Unreserve，模拟其他 PreBind 插件失败的场景。
 	unreserveBeforePreBind *result
 }
 
-// prepare contains changes for objects in the API server.
-// Those changes are applied before running the steps. This can
-// be used to simulate concurrent changes by some other entities
-// like a resource driver.
+// prepare 定义执行各扩展点前对 API server 中对象的变更。
+// 用于模拟资源驱动等其他实体并发修改对象的场景。
 type prepare struct {
 	filter     change
 	prescore   change
@@ -1221,18 +1227,17 @@ type prepare struct {
 	postfilter change
 }
 
+// testPluginCase 是 TestPlugin 表驱动测试的单个用例。
 type testPluginCase struct {
-	// patchTestCase gets called right before the test case is tested.
-	// It can be used to update time stamps in those test cases
-	// which are sensitive to the current time.
+	// 在用例执行前调用，用于更新对当前时间敏感的时间戳。
 	patchTestCase func(tc *testPluginCase)
-	// existingPods is a list of pods already running or assumed on nodes.
-	// These are pre-populated into the NodeInfo cache for their respective
-	// nodes before scheduling the main pod under test.
+	// 已在节点上运行或假定的 Pod。
+	// 调度被测 Pod 前，它们会被预先填充到各自节点的 NodeInfo 缓存中。
 	existingPods []*v1.Pod
 
-	args      *config.DynamicResourcesArgs
-	nodes     []*v1.Node // default if unset is workerNode
+	args *config.DynamicResourcesArgs
+	// 未设置时默认为 workerNode
+	nodes     []*v1.Node
 	pod       *v1.Pod
 	claims    []*resourceapi.ResourceClaim
 	classes   []*resourceapi.DeviceClass
@@ -1240,28 +1245,26 @@ type testPluginCase struct {
 
 	inFlightClaims []*resourceapi.ResourceClaim
 
-	// objs get stored directly in the fake client, without passing
-	// through reactors, in contrast to the types above.
+	// 与上面的类型不同，objs 直接存入 fake client，不经过 reactors 处理。
 	objs []apiruntime.Object
 
 	prepare prepare
 	want    want
 
-	// Invoke Filter with a canceled context.
+	// 为 true 时用已取消的 context 调用 Filter。
 	cancelFilter bool
 
-	// disableDRAAdminAccess is set to true to test behavior with the DRAAdminAccess feature gate disabled (emulates v1.35).
+	// 为 true 时模拟 DRAAdminAccess 门控关闭（v1.35 行为）。
 	disableDRAAdminAccess bool
-	// disableDRADeviceBindingConditions is set to true if the DRADeviceBindingConditions feature gate is disabled.
+	// 为 true 时模拟 DRADeviceBindingConditions 门控关闭。
 	disableDRADeviceBindingConditions bool
-	// disableDRAResourceClaimDeviceStatus is set to true if the DRAResourceClaimDeviceStatus feature gate is disabled.
+	// 为 true 时模拟 DRAResourceClaimDeviceStatus 门控关闭。
 	disableDRAResourceClaimDeviceStatus bool
-	// enableDRANodeAllocatableResourcesis set to true if the DRANodeAllocatableResources feature gate is enabled.
+	// 为 true 时模拟 DRANodeAllocatableResources 门控开启。
 	enableDRANodeAllocatableResources bool
-	// enableDRAConsumableCapacity is set to true if the DRAConsumableCapacity feature gate is enabled.
+	// 为 true 时模拟 DRAConsumableCapacity 门控开启。
 	enableDRAConsumableCapacity bool
-	// Feature gates. False is chosen so that the uncommon case
-	// doesn't need to be set.
+	// 以下门控默认取 false，这样少见的关闭情形无需显式设置。
 	disableDRA bool
 
 	enableDRAExtendedResource        bool
@@ -1275,10 +1278,13 @@ type testPluginCase struct {
 	metrics                          func(ktesting.TContext, compbasemetrics.Gatherer)
 }
 
+// TestPlugin 运行 DRA 插件各扩展点的主表驱动测试。
 func TestPlugin(t *testing.T) {
 	testPlugin(ktesting.Init(t))
 }
 
+// TestPreFilterReusesPendingAllocationWithNilNodeSelector 验证 PreFilter 能复用
+// NodeSelector 为 nil 的 pending allocation，不会因空选择器而触发 panic。
 func TestPreFilterReusesPendingAllocationWithNilNodeSelector(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGatesDuringTest(tCtx, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -1343,6 +1349,8 @@ func TestPreFilterReusesPendingAllocationWithNilNodeSelector(t *testing.T) {
 	}
 }
 
+// TestFilterReusesPendingAllocationRequiresDRAOptionalNodeOperations 验证复用 pending allocation 后，
+// Filter 只在节点声明了 DRAOptionalNodeOperations 特性时才允许调度。
 func TestFilterReusesPendingAllocationRequiresDRAOptionalNodeOperations(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGatesDuringTest(tCtx, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -1400,6 +1408,7 @@ func TestFilterReusesPendingAllocationRequiresDRAOptionalNodeOperations(t *testi
 	assert.True(t, statusWithFeature.IsSuccess(), "expected success when node has DRAOptionalNodeOperations feature")
 }
 
+// testPlugin 执行 TestPlugin 的用例表，逐一驱动插件的各个扩展点并校验期望结果。
 func testPlugin(tCtx ktesting.TContext) {
 	testcases := map[string]testPluginCase{
 		"empty": {
@@ -1661,8 +1670,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"with-resources-has-finalizer": {
-			// As before. but the finalizer is already set. Could happen if
-			// the scheduler got interrupted.
+			// 同上，但 finalizer 已设置。调度器被中断后重试时会出现这种情况。
 			pod: podWithClaimName,
 			claims: func() []*resourceapi.ResourceClaim {
 				claim := pendingClaim
@@ -1694,8 +1702,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"with-resources-finalizer-gets-removed": {
-			// As before. but the finalizer is already set. Then it gets
-			// removed before the scheduler reaches PreBind.
+			// 同上，finalizer 已设置，但在调度器到达 PreBind 前被移除。
 			pod: podWithClaimName,
 			claims: func() []*resourceapi.ResourceClaim {
 				claim := pendingClaim
@@ -1736,8 +1743,8 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"with-resources-finalizer-gets-added": {
-			// No finalizer initially, then it gets added before
-			// the scheduler reaches PreBind. Shouldn't happen?
+			// 起初没有 finalizer，随后在调度器到达 PreBind 前被加上。
+			// 正常流程不应出现，这里覆盖异常时序。
 			pod:     podWithClaimName,
 			claims:  []*resourceapi.ResourceClaim{pendingClaim},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -1867,10 +1874,8 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 
-		// The two test cases for device tainting only need to cover
-		// whether the feature gate is passed through to the allocator
-		// correctly. The actual logic around device taints and allocation
-		// is in the allocator.
+		// 设备污点的两个用例只需验证特性门控是否正确传给 allocator。
+		// 污点与分配的实际逻辑在 allocator 中。
 		"tainted-device-disabled": {
 			enableDRADeviceTaints: false,
 			pod:                   podWithClaimName,
@@ -1919,9 +1924,8 @@ func testPlugin(tCtx ktesting.TContext) {
 		},
 
 		"request-admin-access-with-DRAAdminAccess-featuregate": {
-			// When the DRAAdminAccess feature gate is enabled,
-			// Because the pending claim asks for admin access,
-			// allocation succeeds despite resources being exhausted.
+			// DRAAdminAccess 门控开启时，pending claim 请求管理员访问，
+			// 即使资源已被其他 claim 占满也能分配成功。
 			pod:     podWithClaimName,
 			claims:  []*resourceapi.ResourceClaim{adminAccess(pendingClaim), otherAllocatedClaim},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -1950,9 +1954,8 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"request-admin-access-without-DRAAdminAccess-featuregate": {
-			// When the DRAAdminAccess feature gate is disabled,
-			// even though the pending claim requests admin access,
-			// the scheduler returns an unschedulable status.
+			// DRAAdminAccess 门控关闭时，即使 pending claim 请求管理员访问，
+			// 调度器也返回不可调度状态。
 			pod:     podWithClaimName,
 			claims:  []*resourceapi.ResourceClaim{adminAccess(pendingClaim), otherAllocatedClaim},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -1968,8 +1971,7 @@ func testPlugin(tCtx ktesting.TContext) {
 		},
 
 		"structured-ignore-allocated-admin-access": {
-			// The allocated claim uses admin access, so a second claim may use
-			// the same device.
+			// 已分配的 claim 使用了管理员访问，因此第二个 claim 可以共用同一设备。
 			pod:     podWithClaimName,
 			claims:  []*resourceapi.ResourceClaim{pendingClaim, adminAccess(otherAllocatedClaim)},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -2026,11 +2028,9 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 
-		// When pod scheduling encounters CEL runtime errors for some nodes, but not all,
-		// it should still not schedule the pod because there is something wrong with it.
-		// Scheduling it would make it harder to detect that there is a problem.
-		//
-		// This matches the "keeps pod pending because of CEL runtime errors" E2E test.
+		// 部分节点出现 CEL 运行时错误时也不应调度 Pod：
+		// 调度成功会掩盖 Pod 自身的问题，增加排查难度。
+		// 对应 E2E 用例 "keeps pod pending because of CEL runtime errors"。
 		"CEL-runtime-error-for-one-of-two-nodes": {
 			nodes:   []*v1.Node{workerNode, workerNode2},
 			pod:     podWithClaimName,
@@ -2046,7 +2046,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 
-		// When two nodes where found, PreScore gets called.
+		// 找到两个可行节点时会调用 PreScore。
 		"CEL-runtime-error-for-one-of-three-nodes": {
 			nodes:   []*v1.Node{workerNode, workerNode2, workerNode3},
 			pod:     podWithClaimName,
@@ -2060,7 +2060,7 @@ func testPlugin(tCtx ktesting.TContext) {
 					},
 				},
 				prescore: result{
-					// This is the error found during Filter.
+					// 这是 Filter 阶段发现的错误
 					status: fwk.NewStatus(fwk.UnschedulableAndUnresolvable, `filter node worker: claim default/my-pod-my-resource: selector #0 on device some-driver/worker/instance-1: CEL runtime error: no such key: healthy. consider using CEL optional chaining (.? followed by orValue()) or guarding the check with has() for optional fields`),
 				},
 			},
@@ -2079,8 +2079,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"wrong-topology": {
-			// PostFilter tries to get the pod scheduleable by
-			// deallocating the claim.
+			// PostFilter 尝试通过释放 claim 让 Pod 变得可调度。
 			pod:    podWithClaimName,
 			claims: []*resourceapi.ResourceClaim{allocatedClaimWithWrongTopology},
 			want: want{
@@ -2090,7 +2089,7 @@ func testPlugin(tCtx ktesting.TContext) {
 					},
 				},
 				postfilter: result{
-					// Claims get deallocated immediately.
+					// claim 会被立即释放
 					changes: change{
 						claim: func(in *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 							return st.FromResourceClaim(in).
@@ -2227,7 +2226,7 @@ func testPlugin(tCtx ktesting.TContext) {
 				},
 				unreserveAfterBindFailure: &result{
 					assumedClaim: addAllocationTimestamp(reserveFor(allocatedPodGroupClaim, podGroupReservation)),
-					// The PodGroup is not removed from ReservedFor
+					// PodGroup 仍保留在 ReservedFor 中
 				},
 			},
 		},
@@ -2236,7 +2235,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			pod:                             groupedPodWithClaimName,
 			podGroups:                       []*schedulingapi.PodGroup{podGroupWithClaimName},
 			objs: []apiruntime.Object{
-				// Pods in the PodGroup
+				// PodGroup 中的 Pod
 				groupedPodWithClaimName,
 			},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -2265,7 +2264,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			pod:                             groupedPodWithClaimName,
 			podGroups:                       []*schedulingapi.PodGroup{podGroupWithClaimName},
 			objs: []apiruntime.Object{
-				// Pods in the PodGroup
+				// PodGroup 中的 Pod
 				groupedPodWithClaimName,
 			},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -2286,7 +2285,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			pod:                             groupedPodWithClaimName,
 			podGroups:                       []*schedulingapi.PodGroup{podGroupWithClaimName},
 			objs: []apiruntime.Object{
-				// Pods in the PodGroup
+				// PodGroup 中的 Pod
 				groupedPodWithClaimName,
 			},
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -2321,10 +2320,10 @@ func testPlugin(tCtx ktesting.TContext) {
 			pod:                             groupedPodWithClaimName,
 			podGroups:                       []*schedulingapi.PodGroup{podGroupWithClaimName},
 			objs: []apiruntime.Object{
-				// Pods in the PodGroup
+				// PodGroup 中的 Pod
 				groupedPodWithClaimName,
 				st.MakePod().Name(podName + "-2").Namespace(namespace).
-					Node(nodeName). // Scheduled, this Pod still needs the PodGroup's claim
+					Node(nodeName). // 已调度，该 Pod 仍需要 PodGroup 的 claim
 					PodGroupName(podGroupName).
 					Obj(),
 			},
@@ -2753,22 +2752,20 @@ func testPlugin(tCtx ktesting.TContext) {
 			want: want{
 				filter: perNodeResult{
 					workerNode.Name: {
-						// Timeouts return Error so the pod retries via backoff.
+						// 超时返回 Error，使 Pod 通过退避重试
 						status: fwk.AsStatus(fmt.Errorf("node %s: timed out trying to allocate devices", workerNode.Name)),
 					},
 				},
-				// No postfilter: Error aborts scheduling immediately.
+				// 不设 postfilter：Error 会立即中止调度
 			},
-			// Skipping this test case on Windows as a 1ns timeout is not guaranteed to
-			// expire immediately on Windows due to its coarser timer granularity -
-			// typically in the range of 0.5 to 15.6 ms
+			// Windows 定时器粒度较粗（通常 0.5~15.6ms），1ns 超时无法保证立即到期，
+			// 因此跳过该用例。
 			skipOnWindows: "coarse timer granularity",
 		},
 		"timeout_disabled": {
-			// This variant uses the normal test objects to avoid excessive runtime.
-			// It could theoretically pass even though the 1 ns limit is enforced
-			// although it shouldn't be (which then would be a false positive),
-			// but that's unlikely.
+			// 该变体使用常规测试对象以避免运行时间过长。
+			// 理论上，即便 1ns 限制被强制执行（本不该如此）用例也可能通过（假阳性），
+			// 但概率很低。
 			disableDRASchedulerFilterTimeout: true,
 			args:                             &config.DynamicResourcesArgs{},
 			pod:                              podWithClaimName,
@@ -2874,7 +2871,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			prepare: prepare{
 				prebind: change{
 					claim: func(in *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
-						// Simulate deallocation before PreBind runs.
+						// 模拟 PreBind 执行前 claim 在别处被释放
 						return st.FromResourceClaim(in).
 							Allocation(nil).
 							Obj()
@@ -2893,15 +2890,14 @@ func testPlugin(tCtx ktesting.TContext) {
 			classes: []*resourceapi.DeviceClass{deviceClass},
 			objs:    []apiruntime.Object{fabricSlice},
 			args: &config.DynamicResourcesArgs{
-				// Time out quickly in PreBind. There's no controller which sets the
-				// binding conditions.
+				// PreBind 中快速超时：测试环境没有控制器去设置绑定条件
 				BindingTimeout: &metav1.Duration{Duration: time.Second},
 			},
 			want: want{
 				reserve: result{
 					inFlightClaims: []metav1.Object{func() *resourceapi.ResourceClaim {
 						claim := bindClaim.DeepCopy()
-						// Will get set in PreBind.
+						// 该字段会在 PreBind 中写入，这里先清空
 						claim.Status.Allocation.AllocationTimestamp = nil
 						return claim
 					}()},
@@ -2914,7 +2910,7 @@ func testPlugin(tCtx ktesting.TContext) {
 							return reserve(bindClaim, podWithClaimName)
 						},
 					},
-					// From PreBind itself, when checking isPodReadyForBinding times out.
+					// 来自 PreBind 自身：检查 isPodReadyForBinding 时超时
 					status: fwk.AsStatus(errors.New("device binding timeout")),
 				},
 			},
@@ -2925,15 +2921,14 @@ func testPlugin(tCtx ktesting.TContext) {
 			classes: []*resourceapi.DeviceClass{deviceClass},
 			objs:    []apiruntime.Object{fabricSlice},
 			args: &config.DynamicResourcesArgs{
-				// Time out quickly in PreBind. There's no controller which sets the
-				// binding conditions.
+				// PreBind 中快速超时：测试环境没有控制器去设置绑定条件
 				BindingTimeout: &metav1.Duration{Duration: time.Second},
 			},
 			want: want{
 				reserve: result{
 					inFlightClaims: []metav1.Object{func() *resourceapi.ResourceClaim {
 						claim := bindClaim.DeepCopy()
-						// Will get set in PreBind.
+						// 该字段会在 PreBind 中写入，这里先清空
 						claim.Status.Allocation.AllocationTimestamp = nil
 						return claim
 					}()},
@@ -2946,7 +2941,7 @@ func testPlugin(tCtx ktesting.TContext) {
 							return reserve(bindClaim, podWithClaimName)
 						},
 					},
-					// From PreBind itself, when checking isPodReadyForBinding times out.
+					// 来自 PreBind 自身：检查 isPodReadyForBinding 时超时
 					status: fwk.AsStatus(errors.New("device binding timeout")),
 				},
 			},
@@ -2968,14 +2963,14 @@ func testPlugin(tCtx ktesting.TContext) {
 				},
 			},
 			metrics: func(tCtx ktesting.TContext, g compbasemetrics.Gatherer) {
-				// Counter: allocations_total should have exactly one event
+				// Counter：allocations_total 应恰好有一个事件
 				allocs, err := testutil.GetCounterValuesFromGatherer(
 					g,
 					"scheduler_dra_bindingconditions_allocations_total",
 					map[string]string{
 						"status": "success",
 					},
-					"driver", // group by driver label
+					"driver", // 按 driver 标签分组
 				)
 				require.NoError(tCtx, err)
 
@@ -2985,7 +2980,7 @@ func testPlugin(tCtx ktesting.TContext) {
 				}
 				require.InEpsilon(tCtx, float64(1), totalAllocs, 0.1, "expected exactly one successful allocation with BindingConditions")
 
-				// Histogram: one success sample with requires_bindingconditions=true
+				// Histogram：requires_bindingconditions=true 的成功样本应有一个
 				hist, err := testutil.GetHistogramVecFromGatherer(
 					g,
 					"scheduler_dra_bindingconditions_wait_duration_seconds",
@@ -3025,7 +3020,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			claims: func() []*resourceapi.ResourceClaim {
 				claim := allocatedClaim.DeepCopy()
 				claim.Status.Allocation = allocationResultWithBindingConditions.DeepCopy()
-				// This claim has binding conditions but is timed out.
+				// 该 claim 带绑定条件，但已超时
 				claim.Status.Allocation.AllocationTimestamp = ptr.To(metav1.NewTime(time.Now().Add(-10 * time.Minute)))
 				claim.Status.Devices = []resourceapi.AllocatedDeviceStatus{
 					{
@@ -3057,20 +3052,18 @@ func testPlugin(tCtx ktesting.TContext) {
 		},
 		"prebind-fail-with-binding-timeout": {
 			patchTestCase: func(tc *testPluginCase) {
-				// The time stamps must be injected into the test case right
-				// before it starts to get tested.
+				// 时间戳必须在用例即将开始执行时才注入，避免测试运行时流逝导致过期
 				now := time.Now()
 
-				// Set the allocation time so that the claim is not timed out
-				// yet when the test starts, but then times out relatively quickly (the 10 seconds)
-				// when the test executes PreBind.
+				// 设置分配时间：测试开始时还未超时，但到 PreBind 执行时（约 10 秒后）很快超时
+				// 这样能稳定命中超时路径。
 				bindingTimeout := tc.args.BindingTimeout.Duration
 				timeoutAfter := 10 * time.Second
 				allocatedAt := now.Add(-bindingTimeout).Add(timeoutAfter)
 
 				claim := allocatedClaim.DeepCopy()
 				claim.Status.Allocation = allocationResultWithBindingConditions.DeepCopy()
-				// This claim has binding conditions but is not timed out.
+				// 该 claim 带绑定条件，但此刻尚未超时
 				claim.Status.Allocation.AllocationTimestamp = ptr.To(metav1.NewTime(allocatedAt))
 				claim.Status.Devices = []resourceapi.AllocatedDeviceStatus{
 					{
@@ -3096,10 +3089,10 @@ func testPlugin(tCtx ktesting.TContext) {
 				BindingTimeout: &metav1.Duration{Duration: 600 * time.Second},
 			},
 			pod:    podWithClaimName,
-			claims: nil, // Set in patchTestCase.
+			claims: nil, // 由 patchTestCase 设置
 			want: want{
 				prebind: result{
-					assumedClaim: nil, // Set in patchTestCase.
+					assumedClaim: nil, // 由 patchTestCase 设置
 					changes: change{
 						claim: func(in *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 							return st.FromResourceClaim(in).
@@ -3107,12 +3100,12 @@ func testPlugin(tCtx ktesting.TContext) {
 								Obj()
 						},
 					},
-					// From isPodReadyForBinding.
+					// 来自 isPodReadyForBinding 的错误
 					status: fwk.AsStatus(fmt.Errorf("%w: claim=%s", ErrDeviceBindingTimeout, claim.Name)),
 				},
 			},
 			metrics: func(tCtx ktesting.TContext, g compbasemetrics.Gatherer) {
-				// Counter: timeouts_total should have exactly one event
+				// Counter：timeouts_total 应恰好有一个事件
 				timeouts, err := testutil.GetCounterValuesFromGatherer(
 					g,
 					"scheduler_dra_bindingconditions_allocations_total",
@@ -3129,7 +3122,7 @@ func testPlugin(tCtx ktesting.TContext) {
 				}
 				require.InEpsilon(tCtx, float64(1), totalTimeouts, 0.1, "expected exactly one timeout with BindingConditions")
 
-				// Histogram: one timeout sample with requires_bindingconditions=true
+				// Histogram：requires_bindingconditions=true 的超时样本应有一个
 				hist, err := testutil.GetHistogramVecFromGatherer(
 					g,
 					"scheduler_dra_bindingconditions_wait_duration_seconds",
@@ -3146,7 +3139,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			claims: func() []*resourceapi.ResourceClaim {
 				claim := allocatedClaim.DeepCopy()
 				claim.Status.Allocation = allocationResultWithBindingConditions.DeepCopy()
-				// This claim has binding conditions but is timed out.
+				// 该 claim 带绑定条件，但已超时
 				claim.Status.Allocation.AllocationTimestamp = ptr.To(metav1.NewTime(time.Now().Add(-10 * time.Minute)))
 				claim.Status.Devices = []resourceapi.AllocatedDeviceStatus{
 					{
@@ -3181,9 +3174,8 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"bound-claim-without-binding-conditions": {
-			// This test ensures that when DRADeviceBindingConditions is enabled,
-			// but the claim has no binding conditions or binding failures,
-			// the plugin proceeds as if all conditions are satisfied.
+			// 验证 DRADeviceBindingConditions 开启但 claim 没有绑定条件或失败条件时，
+			// 插件按"条件全部满足"继续处理。
 			pod:    podWithClaimTemplateInStatus,
 			claims: []*resourceapi.ResourceClaim{allocatedClaim, otherClaim},
 			want: want{
@@ -3423,11 +3415,10 @@ func testPlugin(tCtx ktesting.TContext) {
 			nodes:                             []*v1.Node{workerNodeWithCapacity},
 			pod:                               podWithClaimReferenceInContainer,
 			patchTestCase: func(tc *testPluginCase) {
-				// In a real scheduling cycle, the Assume phase pre-populates the Pod's
-				// NodeAllocatableResourceClaimStatuses in the cache before PreBind runs.
-				// Because this plugin unit test skips the Assume phase, we must manually
-				// inject the expected status into the mock Pod to satisfy the equality check
-				// in patchNodeAllocatableResourceClaimStatus.
+				// 真实调度周期中，Assume 阶段会在 PreBind 之前把 Pod 的
+				// NodeAllocatableResourceClaimStatuses 预填充到缓存。
+				// 该单元测试跳过 Assume，因此必须手动向 mock Pod 注入期望状态，
+				// 才能通过 patchNodeAllocatableResourceClaimStatus 的相等性检查。
 				tc.pod = tc.pod.DeepCopy()
 				tc.pod.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
 					{
@@ -3455,7 +3446,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			}(),
 			want: want{
 				filter: perNodeResult{
-					workerNodeWithCapacity.Name: {status: nil}, // Expect Success
+					workerNodeWithCapacity.Name: {status: nil}, // 期望成功
 				},
 				reserve: result{
 					inFlightClaims: []metav1.Object{allocatedClaim},
@@ -3579,7 +3570,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			nodes:                             []*v1.Node{workerNodeWithCapacity},
 			pod:                               podWithClaimReferenceInContainer,
 			patchTestCase: func(tc *testPluginCase) {
-				// Simulate the Assume phase by pre-populating the status
+				// 模拟 Assume 阶段：预填充状态
 				tc.pod = tc.pod.DeepCopy()
 				tc.pod.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
 					{
@@ -3651,7 +3642,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			nodes:                             []*v1.Node{workerNodeWithCapacity},
 			pod:                               podWithClaimReferenceInContainer,
 			patchTestCase: func(tc *testPluginCase) {
-				// Simulate the Assume phase by pre-populating the status
+				// 模拟 Assume 阶段：预填充状态
 				tc.pod = tc.pod.DeepCopy()
 				tc.pod.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
 					{
@@ -3802,7 +3793,7 @@ func testPlugin(tCtx ktesting.TContext) {
 				slice.Spec.Devices[0].NodeAllocatableResources = map[v1.ResourceName]resourceapi.NodeAllocatableResource{
 					v1.ResourceCPU: {Mapping: &resourceapi.NodeAllocatableMapping{DeviceMultiplier: new(apiresource.MustParse("1"))}},
 				}
-				// Other pod already on this node using the same claim in the same namespace!
+				// 同一命名空间下已有其他 Pod 在该节点使用同一个 claim
 				otherPod := st.MakePod().Name("other-pod").Namespace("default").
 					Node(nodeName).
 					PodResourceClaims(v1.PodResourceClaim{
@@ -3852,7 +3843,7 @@ func testPlugin(tCtx ktesting.TContext) {
 						Overhead: &resourceapi.NodeAllocatableOverhead{PerPod: apiresource.NewQuantity(100, apiresource.DecimalSI)},
 					},
 				}
-				// Other pod already on this node using the same claim in the same namespace!
+				// 同一命名空间下已有其他 Pod 在该节点使用同一个 claim
 				otherPod := st.MakePod().Name("other-pod").Namespace("default").
 					Node(nodeName).
 					PodResourceClaims(v1.PodResourceClaim{
@@ -3906,7 +3897,7 @@ func testPlugin(tCtx ktesting.TContext) {
 				slice.Spec.Devices[0].NodeAllocatableResources = map[v1.ResourceName]resourceapi.NodeAllocatableResource{
 					v1.ResourceMemory: {Overhead: &resourceapi.NodeAllocatableOverhead{PerPod: apiresource.NewQuantity(100, apiresource.DecimalSI)}},
 				}
-				// Other pod already on this node using the same claim in the same namespace!
+				// 同一命名空间下已有其他 Pod 在该节点使用同一个 claim
 				otherPod := st.MakePod().Name("other-pod").Namespace("default").
 					Node(nodeName).
 					PodResourceClaims(v1.PodResourceClaim{
@@ -4123,10 +4114,10 @@ func testPlugin(tCtx ktesting.TContext) {
 
 				require.False(tCtx, tc.enableDRAWorkloadResourceClaims, "DRAWorkloadResourceClaims cannot be enabled when DRAAdminAccess is disabled")
 			} else {
-				// These features can't be set with pre-1.36 emulation
+				// 1.36 之前的模拟版本不支持设置这些特性门控
 				featuregatetesting.SetFeatureGatesDuringTest(tCtx, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 					features.DRAWorkloadResourceClaims: tc.enableDRAWorkloadResourceClaims,
-					features.GenericWorkload:           tc.enableDRAWorkloadResourceClaims, // dependency of DRAWorkloadResourceClaims
+					features.GenericWorkload:           tc.enableDRAWorkloadResourceClaims, // DRAWorkloadResourceClaims 的依赖门控
 				})
 			}
 			if tc.disableDRADeviceBindingConditions {
@@ -4194,7 +4185,7 @@ func testPlugin(tCtx ktesting.TContext) {
 						potentialNodes = append(potentialNodes, nodeInfo)
 					}
 					if status.Code() == fwk.Error {
-						// An error aborts scheduling.
+						// Error 会立即中止调度
 						return
 					}
 				}
@@ -4261,7 +4252,7 @@ func testPlugin(tCtx ktesting.TContext) {
 						testCtx.verify(tCtx, tc.want.unreserve, initialObjects, tc.pod, nil, status)
 					})
 				} else {
-					// PodGroup cycle state is cleared before asynchronous binding.
+					// 异步绑定前清空 PodGroup cycle state
 					testCtx.state.(*framework.CycleState).SetPodGroupSchedulingCycle(nil)
 
 					if tc.want.unreserveBeforePreBind != nil {
@@ -4317,7 +4308,7 @@ func testPlugin(tCtx ktesting.TContext) {
 						testCtx.verify(tCtx, tc.want.postfilter, initialObjects, tc.pod, nil, status)
 					})
 				} else {
-					result, status := testCtx.p.PostFilter(tCtx, testCtx.state, tc.pod, nil /* filteredNodeStatusMap not used by plugin */)
+					result, status := testCtx.p.PostFilter(tCtx, testCtx.state, tc.pod, nil /* 插件不使用 filteredNodeStatusMap */)
 					tCtx.Run("postfilter", func(tCtx ktesting.TContext) {
 						assert.Equal(tCtx, tc.want.postFilterResult, result)
 						testCtx.verify(tCtx, tc.want.postfilter, initialObjects, tc.pod, nil, status)
@@ -4331,15 +4322,18 @@ func testPlugin(tCtx ktesting.TContext) {
 	}
 }
 
+// setupMetrics 为测试创建独立的指标注册表。
+// 由于特性门控未全局设置，不能使用 metrics.Register()，
+// 故新建 registry 而非复用全局注册表。
 func setupMetrics(features feature.Features) compbasemetrics.KubeRegistry {
-	// Since feature gate is not set globally, we can't use metrics.Register().
-	// We use a new registry instead of using global registry.
+	// 特性门控未全局设置，不能使用 metrics.Register()；
+	// 这里用独立 registry 避免污染全局状态
 	testRegistry := compbasemetrics.NewKubeRegistry()
 	if features.EnableDRAExtendedResource {
 		testRegistry.MustRegister(metrics.ResourceClaimCreatesTotal)
 		metrics.ResourceClaimCreatesTotal.Reset()
 	}
-	// DRA DeviceBindingConditions metrics.
+	// DRA 设备绑定条件相关指标
 	if features.EnableDRADeviceBindingConditions {
 		testRegistry.MustRegister(metrics.DRABindingConditionsAllocationsTotal)
 		testRegistry.MustRegister(metrics.DRABindingConditionsPreBindDuration)
@@ -4350,6 +4344,7 @@ func setupMetrics(features feature.Features) compbasemetrics.KubeRegistry {
 	return testRegistry
 }
 
+// testContext 汇总测试所需的客户端、管理器、插件实例与状态。
 type testContext struct {
 	client          *fake.Clientset
 	informerFactory informers.SharedInformerFactory
@@ -4360,12 +4355,13 @@ type testContext struct {
 	state           fwk.CycleState
 }
 
+// verify 校验一次扩展点调用的状态与对象变更是否符合期望。
 func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialObjects []metav1.Object, testPod *v1.Pod, result interface{}, status *fwk.Status) {
 	tCtx.Helper()
 	if expected.status == nil {
 		assert.Nil(tCtx, status, status.AsError())
 	} else if actualErr := status.AsError(); actualErr != nil {
-		// Compare only the error strings.
+		// 只比较错误字符串，错误类型细节不在测试范围
 		assert.ErrorContains(tCtx, actualErr, expected.status.AsError().Error())
 	} else {
 		assert.Equal(tCtx, expected.status, status)
@@ -4375,8 +4371,7 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 	wantObjects = append(wantObjects, expected.added...)
 	for _, remove := range expected.removed {
 		for i, obj := range wantObjects {
-			// This is a bit relaxed (no GVR comparison, no UID
-			// comparison) to simplify writing the test cases.
+			// 这里故意宽松：不比较 GVR 和 UID，简化用例编写
 			if obj.GetName() == remove.GetName() && obj.GetNamespace() == remove.GetNamespace() {
 				wantObjects = append(wantObjects[0:i], wantObjects[i+1:]...)
 				break
@@ -4391,7 +4386,7 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 		objects = []metav1.Object{}
 	}
 
-	// Separate objects by type for easier comparison
+	// 按对象类型分开比较，差异输出更清晰
 	var wantClaims, actualClaims []metav1.Object
 	var wantPods, actualPods []metav1.Object
 
@@ -4417,20 +4412,20 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 		tCtx.Errorf("Stored objects are different (- expected, + actual):\n%s", diff)
 	}
 
-	// Sometimes assert strips the diff too much, let's do it ourselves...
+	// assert 生成的 diff 有时过于简略，这里自己用 cmp 输出完整差异
 	ignoreFieldsInResourceClaims := []cmp.Option{
 		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "UID", "ResourceVersion"),
 		cmp.Transformer("AllocationTimestamp", func(result resourceapi.AllocationResult) resourceapi.AllocationResult {
-			// Replace all allocation timestamps with the empty timestamp before comparison
-			// because the actual value is unpredictable (not running in a synctest bubble).
+			// 比较前把分配时间戳统一替换为空值：
+			// 测试不在 synctest bubble 中运行，实际时间戳无法预测。
 			if result.AllocationTimestamp != nil {
 				result.AllocationTimestamp = new(metav1.Time)
 			}
 			return result
 		}),
-		// It does not matter which specific device is allocated for the testing purpose.
+		// 测试不关心具体分配了哪个设备
 		cmpopts.IgnoreFields(resourceapi.DeviceRequestAllocationResult{}, "Device"),
-		// ShareID is dynamically generated by the allocator for shared devices, so it cannot set in expected results.
+		// 共享设备的 ShareID 由 allocator 动态生成，无法写进期望值
 		cmpopts.IgnoreFields(resourceapi.DeviceRequestAllocationResult{}, "ShareID"),
 	}
 	if diff := cmp.Diff(wantClaims, actualClaims, ignoreFieldsInResourceClaims...); diff != "" {
@@ -4456,14 +4451,14 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 	if expected.assumedClaim != nil {
 		expectAssumedClaims = append(expectAssumedClaims, expected.assumedClaim)
 	}
-	// actualAssumedClaims are claims in assumed cache with different latest and api object
-	// sameAssumedClaims are claims in assumed cache with same latest and api object
+	// actualAssumedClaims 是 assumed cache 中 latest 与 api 对象不同的 claim
+	// sameAssumedClaims 是两者相同的 claim
 	actualAssumedClaims, sameAssumedClaims := tc.listAssumedClaims()
 
-	// error when expecting no claims in assumed cache with different latest and api object
+	// 期望没有"latest 与 api 不同"的 claim，但实际存在时报错
 	if len(expectAssumedClaims) == 0 && len(actualAssumedClaims) != 0 {
-		// In case we delete the claim API object,  wait for assumed cache to sync with informer,
-		// then assumed cache should be empty.
+		// 删除 claim API 对象后，等待 assumed cache 与 informer 同步，
+		// 之后 assumed cache 应为空。
 		err := wait.PollUntilContextTimeout(tCtx, 200*time.Millisecond, time.Minute, true,
 			func(ctx context.Context) (bool, error) {
 				actualAssumedClaims, sameAssumedClaims = tc.listAssumedClaims()
@@ -4474,8 +4469,8 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 		}
 	}
 	if len(expectAssumedClaims) > 0 {
-		// it is not an error as long as the expected claim is present in the assumed cache, no
-		// matter its latest and api object are different or not.
+		// 只要期望的 claim 出现在 assumed cache 中即可，
+		// 不关心其 latest 与 api 对象是否相同。
 		for _, expected := range expectAssumedClaims {
 			seen := false
 			for _, actual := range actualAssumedClaims {
@@ -4500,6 +4495,7 @@ func (tc *testContext) verify(tCtx ktesting.TContext, expected result, initialOb
 	}
 }
 
+// listAll 列出 API server 中所有的 ResourceClaim，并排序。
 func (tc *testContext) listAll(tCtx ktesting.TContext) (objects []metav1.Object) {
 	tCtx.Helper()
 	claims, err := tc.client.ResourceV1().ResourceClaims("").List(tCtx, metav1.ListOptions{})
@@ -4511,6 +4507,8 @@ func (tc *testContext) listAll(tCtx ktesting.TContext) (objects []metav1.Object)
 	return
 }
 
+// listAssumedClaims 返回 assumed cache 中的 claim，
+// 分别收集 latest 与 api 对象不同和相同的两组。
 func (tc *testContext) listAssumedClaims() ([]metav1.Object, []metav1.Object) {
 	var assumedClaims []metav1.Object
 	var sameClaims []metav1.Object
@@ -4529,6 +4527,7 @@ func (tc *testContext) listAssumedClaims() ([]metav1.Object, []metav1.Object) {
 	return assumedClaims, sameClaims
 }
 
+// listInFlightClaims 返回所有跟踪中的执行中 allocation 对应的 claim，并排序。
 func (tc *testContext) listInFlightClaims() []metav1.Object {
 	var inFlightClaims []metav1.Object
 	for _, inFlight := range tc.draManager.resourceClaimTracker.allInFlightAllocationsRLocked() {
@@ -4538,7 +4537,7 @@ func (tc *testContext) listInFlightClaims() []metav1.Object {
 	return inFlightClaims
 }
 
-// updateAPIServer modifies objects and stores any changed object in the API server.
+// updateAPIServer 按 updates 修改对象，并把发生变化的对象写回 API server。
 func (tc *testContext) updateAPIServer(tCtx ktesting.TContext, objects []metav1.Object, updates change) []metav1.Object {
 	modified := update(objects, updates)
 	for i := range modified {
@@ -4562,6 +4561,7 @@ func (tc *testContext) updateAPIServer(tCtx ktesting.TContext, objects []metav1.
 	return modified
 }
 
+// sortObjects 按命名空间、名称对对象排序，便于稳定比较。
 func sortObjects(objects []metav1.Object) {
 	sort.Slice(objects, func(i, j int) bool {
 		if objects[i].GetNamespace() < objects[j].GetNamespace() {
@@ -4571,9 +4571,8 @@ func sortObjects(objects []metav1.Object) {
 	})
 }
 
-// update walks through all existing objects, finds the corresponding update
-// function based on name and kind, and replaces those objects that have an
-// update function. The rest is left unchanged.
+// update 遍历所有对象，按类型找到对应的更新函数并替换对象；
+// 没有更新函数的对象保持不变。
 func update(objects []metav1.Object, updates change) []metav1.Object {
 	var updated []metav1.Object
 
@@ -4594,6 +4593,8 @@ func update(objects []metav1.Object, updates change) []metav1.Object {
 	return updated
 }
 
+// setup 搭建测试环境：创建 fake client、informer、DRA 管理器与插件实例，
+// 并等待所有 informer 同步完成。
 func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v1.Node, claims []*resourceapi.ResourceClaim, classes []*resourceapi.DeviceClass, podGroups []*schedulingapi.PodGroup, objs []apiruntime.Object, features feature.Features, failPatch bool, apiReactors []cgotesting.Reactor) (result *testContext) {
 	tCtx.Helper()
 
@@ -4601,7 +4602,7 @@ func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v
 	tc.client = fake.NewSimpleClientset(objs...)
 	reactor := createReactor(tc.client.Tracker(), failPatch)
 	tc.client.PrependReactor("*", "*", reactor)
-	// Prepends reactors to the client.
+	// 将用例提供的 reactors 前插到 client，使其先于默认 reactor 处理请求
 	tc.client.ReactionChain = append(apiReactors, tc.client.ReactionChain...)
 
 	tc.informerFactory = informers.NewSharedInformerFactory(tc.client, 0)
@@ -4617,16 +4618,12 @@ func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v
 	doneCheckers = append(doneCheckers, resourceSliceTracker.HasSyncedChecker())
 
 	claimsCache := assumecache.NewAssumeCache(tCtx.Logger(), tc.informerFactory.Resource().V1().ResourceClaims().Informer(), "resource claim", "", nil)
-	// NewAssumeCache calls the informer's AddEventHandler method to register
-	// a handler in order to stay in sync with the informer's store, but
-	// NewAssumeCache does not return the ResourceEventHandlerRegistration.
-	// We call AddEventHandler of the assume cache, passing it a noop
-	// ResourceEventHandler in order to get access to the
-	// ResourceEventHandlerRegistration returned by the informer.
+	// NewAssumeCache 会通过 informer 的 AddEventHandler 注册处理器以保持同步，
+	// 但不返回 ResourceEventHandlerRegistration。
+	// 这里给 assume cache 额外注册一个空处理器，借机拿到 informer 返回的注册对象。
 	//
-	// This is not the registered handler that is used by the DRA
-	// manager, but it is close enough because the assume cache
-	// uses a single boolean for "is synced" for all handlers.
+	// 这不是 DRA manager 实际使用的处理器，但足够接近：
+	// assume cache 对所有处理器共用一个"已同步"布尔值。
 	doneCheckers = append(doneCheckers, claimsCache.AddEventHandler(cache.ResourceEventHandlerFuncs{}).HasSyncedChecker())
 
 	tc.draManager = NewDRAManager(tCtx, claimsCache, resourceSliceTracker, tc.informerFactory)
@@ -4670,8 +4667,7 @@ func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v
 	tCtx.ExpectNoError(err, "create plugin")
 	tc.p = pl.(*DynamicResources)
 
-	// The tests use the API to create the objects because then reactors
-	// get triggered.
+	// 通过 API 创建对象，以便触发 reactors
 	for _, claim := range claims {
 		_, err := tc.client.ResourceV1().ResourceClaims(claim.Namespace).Create(tCtx, claim, metav1.CreateOptions{})
 		tCtx.ExpectNoError(err, "create resource claim")
@@ -4687,17 +4683,16 @@ func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v
 
 	tc.informerFactory.Start(tCtx.Done())
 	tCtx.Cleanup(func() {
-		// Need to cancel before waiting for the shutdown.
+		// 必须先取消，再等待关闭，否则 Shutdown 会一直阻塞
 		tCtx.Cancel("test is done")
-		// Now we can wait for all goroutines to stop.
+		// 此时可以等待所有 goroutine 停止
 		tc.informerFactory.Shutdown()
 	})
 
 	tc.informerFactory.WaitForCacheSync(tCtx.Done())
-	// The above does not tell us if the registered handlers (e.g. from NewAssumeCache)
-	// are synced, we need to wait until the event handlers confirm that they are synced.
-	// This ensures that the assume cache is in sync with the informer's
-	// store which has been informed by at least one full LIST of the underlying storage.
+	// WaitForCacheSync 不保证已注册的处理器（如 NewAssumeCache 注册的）也已同步，
+	// 因此还要等事件处理器自己确认同步。
+	// 这确保 assume cache 与 informer store 一致，且 store 至少经历过一次全量 LIST。
 	cache.WaitFor(tCtx, "event handlers", doneCheckers...)
 
 	for _, node := range nodes {
@@ -4715,10 +4710,9 @@ func setup(tCtx ktesting.TContext, args *config.DynamicResourcesArgs, nodes []*v
 	return tc
 }
 
-// createReactor implements the logic required for the UID and ResourceVersion
-// fields to work when using the fake client. Add it with client.PrependReactor
-// to your fake client. ResourceVersion handling is required for conflict
-// detection during updates, which is covered by some scenarios.
+// createReactor 让 fake client 正确处理 UID 与 ResourceVersion 字段。
+// 用 client.PrependReactor 添加到 fake client。
+// ResourceVersion 处理是更新时冲突检测的前提，部分用例依赖该行为。
 func createReactor(tracker cgotesting.ObjectTracker, failPatch bool) func(action cgotesting.Action) (handled bool, ret apiruntime.Object, err error) {
 	var nameCounter int
 	var uidCounter int
@@ -4748,9 +4742,8 @@ func createReactor(tracker cgotesting.ObjectTracker, failPatch bool) func(action
 		defer mutex.Unlock()
 		switch action.GetVerb() {
 		case "create":
-			// PodGroups are created before Pods and some tests need
-			// predetermined UIDs for those PodGroups to match a ResourceClaim's
-			// status.reservedFor list.
+			// PodGroup 先于 Pod 创建，部分用例需要预设 UID 来匹配
+			// ResourceClaim 的 status.reservedFor 列表。
 			if obj.GetUID() != "" && action.GetResource() != podGroupGVR {
 				return true, nil, errors.New("UID must not be set on create")
 			}
@@ -4800,9 +4793,12 @@ func createReactor(tracker cgotesting.ObjectTracker, failPatch bool) func(action
 	}
 }
 
+// TestIsSchedulableAfterClaimChange 验证 ResourceClaim 变更事件的队列提示计算。
 func TestIsSchedulableAfterClaimChange(t *testing.T) {
 	testIsSchedulableAfterClaimChange(ktesting.Init(t))
 }
+
+// testIsSchedulableAfterClaimChange 执行 claim 变更提示的用例表。
 func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 	testcases := map[string]struct {
 		pod            *v1.Pod
@@ -4934,10 +4930,10 @@ func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 			oldObj := tc.oldObj
 			newObj := tc.newObj
 			if claim, ok := tc.newObj.(*resourceapi.ResourceClaim); ok {
-				// Add or update through the client and wait until the event is processed.
+				// 通过 client 新增或更新对象，并等待事件被处理完
 				claimKey := claim.Namespace + "/" + claim.Name
 				if tc.oldObj == nil {
-					// Some test claims already have it. Clear for create.
+					// 部分测试 claim 预先带了 UID，创建前需清空
 					createClaim := claim.DeepCopy()
 					createClaim.UID = ""
 					storedClaim, err := testCtx.client.ResourceV1().ResourceClaims(createClaim.Namespace).Create(tCtx, createClaim, metav1.CreateOptions{})
@@ -4951,7 +4947,7 @@ func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 						tCtx.Fatalf("retrieve old claim: expected no error, got: %v", err)
 					}
 					updateClaim := claim.DeepCopy()
-					// The test claim doesn't have those (generated dynamically), so copy them.
+					// 测试 claim 没有这些字段（由 client 动态生成），需从缓存中的对象复制
 					updateClaim.UID = cachedClaim.(*resourceapi.ResourceClaim).UID
 					updateClaim.ResourceVersion = cachedClaim.(*resourceapi.ResourceClaim).ResourceVersion
 
@@ -4962,7 +4958,7 @@ func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 					claim = storedClaim
 				}
 
-				// Eventually the assume cache will have it, too.
+				// 等待 assume cache 也同步到最新对象
 				tCtx.Wait()
 				cachedClaim, err := testCtx.draManager.resourceClaimTracker.cache.Get(claimKey)
 				tCtx.ExpectNoError(err, "retrieve claim")
@@ -4970,9 +4966,8 @@ func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 					tCtx.Errorf("cached claim not updated yet")
 				}
 
-				// This has the actual UID and ResourceVersion,
-				// which is relevant for
-				// isSchedulableAfterClaimChange.
+				// 使用带有真实 UID 与 ResourceVersion 的对象，
+				// isSchedulableAfterClaimChange 依赖这些字段。
 				newObj = claim
 			}
 			gotHint, err := testCtx.p.isSchedulableAfterClaimChange(tCtx.Logger(), tc.pod, oldObj, newObj)
@@ -4993,9 +4988,12 @@ func testIsSchedulableAfterClaimChange(tCtx ktesting.TContext) {
 	}
 }
 
+// TestIsSchedulableAfterTargetPodUpdate 验证目标 Pod 更新事件的队列提示计算。
 func TestIsSchedulableAfterTargetPodUpdate(t *testing.T) {
 	testIsSchedulableAfterTargetPodUpdate(ktesting.Init(t))
 }
+
+// testIsSchedulableAfterTargetPodUpdate 执行目标 Pod 更新提示的用例表。
 func testIsSchedulableAfterTargetPodUpdate(tCtx ktesting.TContext) {
 	testcases := map[string]struct {
 		objs     []apiruntime.Object
@@ -5027,7 +5025,7 @@ func testIsSchedulableAfterTargetPodUpdate(tCtx ktesting.TContext) {
 			pod:  podWithTwoClaimTemplates,
 			obj: func() *v1.Pod {
 				pod := podWithTwoClaimTemplates.DeepCopy()
-				// Only one of two claims created.
+				// 两个 claim 中只创建了一个 claim
 				pod.Status.ResourceClaimStatuses = []v1.PodResourceClaimStatus{{
 					Name:              pod.Spec.ResourceClaims[0].Name,
 					ResourceClaimName: &claimName,
@@ -5065,22 +5063,22 @@ func testIsSchedulableAfterTargetPodUpdate(tCtx ktesting.TContext) {
 	}
 }
 
-// mockDeviceClassResolver is a simple mock implementation of fwk.DeviceClassResolver for testing
+// mockDeviceClassResolver 是 fwk.DeviceClassResolver 的简单 mock，
+// 按资源名从预置映射中返回 DeviceClass。
 type mockDeviceClassResolver struct {
 	mapping map[v1.ResourceName]*resourceapi.DeviceClass
 }
 
+// GetDeviceClass 按资源名返回预置的 DeviceClass，未找到时返回 nil。
 func (m *mockDeviceClassResolver) GetDeviceClass(resourceName v1.ResourceName) *resourceapi.DeviceClass {
 	return m.mapping[resourceName]
 }
 
-// TestAllocatorSelection covers the selection of a structured allocation implementation
-// based on actual Kubernetes feature gates. This test lives here instead of
-// k8s.io/dynamic-resource-allocation/structured because that code has no access
-// to feature gate definitions.
+// TestAllocatorSelection 验证如何根据实际 Kubernetes 特性门控选择 structured allocator 实现。
+// 该测试放在这里而非 k8s.io/dynamic-resource-allocation/structured，
+// 因为那边无法访问本仓库的特性门控定义。
 func TestAllocatorSelection(t *testing.T) {
-	// We want to be sure that each feature as identified by the fields in structured.Features
-	// is covered by a dedicated test cases.
+	// 确保 structured.Features 的每个字段都有专门的用例覆盖
 	allFeatures := sets.New[string]()
 	coveredFeatures := sets.New[string]()
 	featureType := reflect.TypeFor[structured.Features]()
@@ -5093,39 +5091,34 @@ func TestAllocatorSelection(t *testing.T) {
 		usingFeatureGroup    bool
 		expectImplementation string
 	}{
-		// The most conservative implementation: only used when explicitly asking
-		// for the most stable Kubernetes (no alpha or beta features).
+		// 最保守的实现：仅在明确要求最稳定 Kubernetes（不含 alpha/beta 特性）时使用
 		"only-GA": {
 			features:             "AllAlpha=false,AllBeta=false",
 			usingFeatureGroup:    true,
 			expectImplementation: "stable",
 		},
 
-		// By default, some beta features are on and the incubating implementation
-		// is used.
+		// 默认情况下部分 beta 特性开启，使用 incubating 实现
 		"default": {
 			features:             "",
 			usingFeatureGroup:    true,
 			expectImplementation: "incubating",
 		},
 
-		// Alpha features may need the experimental implementation, if there are any
-		// and if those influence allocation.
+		// Alpha 特性可能需要 experimental 实现（如果它们影响分配）
 		"alpha": {
 			features:             "AllAlpha=true,AllBeta=true",
 			usingFeatureGroup:    true,
 			expectImplementation: "experimental",
 		},
 
-		// Let's also determine which allocator is picked for each of the
-		// individual features which influence that decision.
+		// 再逐个检查影响选择决策的特性会选中哪个 allocator
 		"AdminAccess": {
 			features:             "AllAlpha=false,AllBeta=false,DRAAdminAccess=true",
 			expectImplementation: "stable",
 		},
 		"CompatibilityGroups": {
-			// DRAPartitionableDevices must be enabled together with the
-			// compatibility groups gate (feature dependency).
+			// DRAPartitionableDevices 必须与兼容组门控同时开启（特性依赖）
 			features:             "AllAlpha=false,AllBeta=false,DRADeviceCompatibilityGroups=true,DRAPartitionableDevices=true",
 			expectImplementation: "experimental",
 		},
@@ -5173,8 +5166,7 @@ func TestAllocatorSelection(t *testing.T) {
 			fts := feature.NewSchedulerFeaturesFromGates(featureGate)
 			features := AllocatorFeatures(fts)
 
-			// Slightly hacky: most arguments are not valid and the constructor
-			// is expected to not use them yet.
+			// 略取巧：大部分参数并不合法，但当前构造函数还不应使用它们
 			allocator, err := structured.NewAllocator(tCtx, features, structured.AllocatedState{}, nil, nil, nil)
 			tCtx.ExpectNoError(err, "create allocator")
 			allocatorType := fmt.Sprintf("%T", allocator)
@@ -5198,6 +5190,8 @@ func TestAllocatorSelection(t *testing.T) {
 	}
 }
 
+// Test_allocationResultRequiresDRAOptionalNodeOperations 验证只要分配结果中
+// 任一设备带 SkipNodeOperations，就判定需要节点支持 DRAOptionalNodeOperations。
 func Test_allocationResultRequiresDRAOptionalNodeOperations(t *testing.T) {
 	testcases := map[string]struct {
 		alloc *resourceapi.AllocationResult
@@ -5294,6 +5288,7 @@ func Test_allocationResultRequiresDRAOptionalNodeOperations(t *testing.T) {
 	}
 }
 
+// Test_computesScore 验证得分计算：按设备属性、分配状态等因素为节点打分。
 func Test_computesScore(t *testing.T) {
 	testcases := map[string]struct {
 		claims        []*resourceapi.ResourceClaim
@@ -5563,6 +5558,7 @@ func Test_computesScore(t *testing.T) {
 	}
 }
 
+// TestNormalizeScore 验证分数归一化逻辑。
 func TestNormalizeScore(t *testing.T) {
 	testcases := map[string]struct {
 		scores         fwk.NodeScoreList
@@ -5734,10 +5730,13 @@ func TestNormalizeScore(t *testing.T) {
 	}
 }
 
+// TestGatherAllocatedState 验证从 informer 缓存收集已分配状态的结果。
 func TestGatherAllocatedState(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testGatherAllocatedState(tCtx)
 }
+
+// testGatherAllocatedState 执行已分配状态收集的用例表。
 func testGatherAllocatedState(tCtx ktesting.TContext) {
 	testcases := map[string]struct {
 		allocatedResourceClaims   []*resourceapi.ResourceClaim
@@ -5856,7 +5855,7 @@ func testGatherAllocatedState(tCtx ktesting.TContext) {
 				}
 			}
 
-			// Start the test from here
+			// 从这里开始正式执行收集与校验
 			allocatedState, err := draManager.ResourceClaims().GatherAllocatedState()
 			if err != nil {
 				if !tc.expectErr {
@@ -5871,7 +5870,7 @@ func testGatherAllocatedState(tCtx ktesting.TContext) {
 			allocatedSharedDeviceIDs := allocatedState.AllocatedSharedDeviceIDs
 			aggregatedCapacity := allocatedState.AggregatedCapacity
 
-			// Verify the counts match expectations
+			// 校验各类计数与期望一致
 			if allocatedDeviceIDs.Len() != tc.expectedIDAllocated {
 				tCtx.Errorf("expected %d allocated device IDs, got %d", tc.expectedIDAllocated, allocatedDeviceIDs.Len())
 			}
@@ -5879,7 +5878,7 @@ func testGatherAllocatedState(tCtx ktesting.TContext) {
 				tCtx.Errorf("expected %d allocated shared device IDs, got %d", tc.expectedSharedIDAllocated, allocatedSharedDeviceIDs.Len())
 			}
 
-			// Verify aggregated capacity is initialized
+			// 聚合容量必须初始化，否则后续读取会 panic
 			if aggregatedCapacity == nil {
 				tCtx.Error("aggregatedCapacity should not be nil")
 			}
@@ -5909,6 +5908,8 @@ func testGatherAllocatedState(tCtx ktesting.TContext) {
 
 }
 
+// TestDynamicResources_DeferredResizeSkipped 验证延迟扩容的 Pod 跳过 PreFilter，
+// 且 Filter 直接成功，不因 DRA 资源检查受阻。
 func TestDynamicResources_DeferredResizeSkipped(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScalingSchedulerPreemption, true)
 	ctx := context.Background()
@@ -5931,6 +5932,7 @@ func TestDynamicResources_DeferredResizeSkipped(t *testing.T) {
 	}
 }
 
+// TestPodGroupPostFilter 验证 PodGroup 级别的 PostFilter 行为。
 func TestPodGroupPostFilter(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -5944,11 +5946,11 @@ func TestPodGroupPostFilter(t *testing.T) {
 		classes                               []*resourceapi.DeviceClass
 		objs                                  []apiruntime.Object
 
-		// Inputs to PodGroupPostFilter
+		// PodGroupPostFilter 的输入
 		unscheduledPods       []*v1.Pod
 		unavailableClaimNames []string
 
-		// Expected results
+		// 期望结果
 		wantStatus   *fwk.Status
 		verifyClaims func(tCtx ktesting.TContext, testCtx *testContext)
 	}
@@ -6005,7 +6007,7 @@ func TestPodGroupPostFilter(t *testing.T) {
 			podGroups:                 []*schedulingapi.PodGroup{podGroupWithClaimName},
 			unscheduledPods:           []*v1.Pod{groupedPodWithClaimName},
 			claims: func() []*resourceapi.ResourceClaim {
-				// Create an extended resource claim owned by the pod
+				// 创建一个由 Pod 拥有的扩展资源 claim
 				claim := inUseClaim.DeepCopy()
 				claim.Name = "pod-extended-resources"
 				if claim.Annotations == nil {
@@ -6149,7 +6151,7 @@ func TestPodGroupPostFilter(t *testing.T) {
 				}
 
 				for _, pod := range tc.unscheduledPods {
-					// Initialize the stateData of the pod with unavailable claims
+					// 用 Pod 的 claim 及不可用 claim 初始化 stateData
 					s := &stateData{}
 					userClaims, err := testCtx.p.podResourceClaims(pod)
 					require.NoError(tCtx, err)
@@ -6195,6 +6197,8 @@ func TestPodGroupPostFilter(t *testing.T) {
 		})
 	}
 }
+
+// TestPreQueueingHint 验证 preQueueingHint 的默认行为。
 func TestPreQueueingHint(t *testing.T) {
 	tests := map[string]struct {
 		oldObj, newObj interface{}
@@ -6284,7 +6288,7 @@ func TestPreQueueingHint(t *testing.T) {
 				t.Fatalf("preQueueingHint returned unexpected error: %v", err)
 			}
 			if tc.wantKeys == nil {
-				// nil wantKeys means AllPods should be true
+				// wantKeys 为 nil 表示期望 AllPods=true
 				if !got.AllPods {
 					t.Errorf("expected AllPods=true, got %+v", got)
 				}
@@ -6308,13 +6312,13 @@ func TestPreQueueingHint(t *testing.T) {
 	}
 }
 
+// TestPreQueueingHint_WithPodInIndexer 验证当索引器中存在引用某 claim 的 Pod 时，
+// preQueueingHint 返回该 Pod 的 key。
 func TestPreQueueingHint_WithPodInIndexer(t *testing.T) {
-	// Verify that when a pod referencing a claim exists in the indexer,
-	// preQueueingHint returns that pod's key.
 	logger := klog.Background()
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{podResourceClaimIndexPrefix + "-test": podResourceClaimIndexFunc})
 
-	// Add a pod that references "claim-x" in namespace "ns1".
+	// 添加一个引用 ns1/claim-x 的 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-pod", Namespace: "ns1"},
 		Spec: v1.PodSpec{
@@ -6343,13 +6347,13 @@ func TestPreQueueingHint_WithPodInIndexer(t *testing.T) {
 	}
 }
 
+// TestPreQueueingHint_SharedClaimMultiplePods 验证共享 claim 被多个 Pod 引用时，
+// preQueueingHint 返回所有引用它的 Pod。
 func TestPreQueueingHint_SharedClaimMultiplePods(t *testing.T) {
-	// Verify that for a shared claim referenced by multiple pods,
-	// preQueueingHint returns all referencing pods.
 	logger := klog.Background()
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{podResourceClaimIndexPrefix + "-test": podResourceClaimIndexFunc})
 
-	// Add multiple pods referencing the same shared claim.
+	// 添加多个引用同一共享 claim 的 Pod
 	for _, name := range []string{"pod-a", "pod-b", "pod-c"} {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns1"},

@@ -39,8 +39,7 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// PodGroupEvaluator is a preemption evaluator that knows how to run
-// preemption where a preemptor is a pod group and the domain is the whole cluster.
+// PodGroupEvaluator 是抢占评估器，处理以 PodGroup 为抢占者、整个集群为域的抢占场景。
 type PodGroupEvaluator struct {
 	Handle                         fwk.Handle
 	pdbLister                      policylisters.PodDisruptionBudgetLister
@@ -51,6 +50,7 @@ type PodGroupEvaluator struct {
 	Executor *Executor
 }
 
+// NewPodGroupEvaluator 创建一个 PodGroup 抢占评估器。
 func NewPodGroupEvaluator(fh fwk.Handle, executor *Executor, fts feature.Features) *PodGroupEvaluator {
 	evaluator := &PodGroupEvaluator{
 		Handle:                         fh,
@@ -59,13 +59,14 @@ func NewPodGroupEvaluator(fh fwk.Handle, executor *Executor, fts feature.Feature
 		enablePodGroupPreemptionPolicy: fts.EnablePodGroupPreemptionPolicy,
 		Executor:                       executor,
 	}
+	// 仅特性开启时才取组合 PodGroup 快照，避免不必要的初始化。
 	if fts.EnableCompositePodGroup {
 		evaluator.compositePodGroupSnapshot = fh.MutableSnapshotSharedLister().CompositePodGroups()
 	}
 	return evaluator
 }
 
-// evaluate determines the victims for preemption, without actuation.
+// evaluate 只评估并选出受害者，不实际执行抢占。
 func (ev *PodGroupEvaluator) evaluate(ctx context.Context, preemptor *podGroupPreemptor, domain *domain, podGroupSchedulingFunc fwk.PodGroupSchedulingFunc) (res *selectVictimsResult, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -80,31 +81,23 @@ func (ev *PodGroupEvaluator) evaluate(ctx context.Context, preemptor *podGroupPr
 	return ev.selectVictimsOnDomain(ctx, preemptor, domain, pdbs, podGroupSchedulingFunc)
 }
 
-// Preempt implements the preemption logic where the preemptor is a pod group
-// and the domain is the whole cluster. It preempts pod from the cluster
-// in order to make enough room for the pod group to be scheduled.
-// It returns PodGroupPreemptorResult which contains the mapping of nominated nodes
-// for each pod in the pod group, and a status of the whole preemption process.
-// The preemption logic modifies the NodeInfo provided by a Handle
-// podGroupSchedulingFunc is a function that will be run to check feasibility of a pod group
-// scheduling after modifying the node state.
-// It is called only once, after all victims are removed from NodeInfos.
-// Then the logic tries to reprieve as many victims as possible with preemptor
-// pods assumed in their place.
-// The caller is expected to backup the NodeInfo before calling this function
-// And rollback the state to the backup after function is finished.
+// Preempt 实现以 PodGroup 为抢占者、整个集群为域的抢占逻辑：
+// 从集群中抢占 Pod，为整个 PodGroup 腾出足够空间。
+// 返回 PodGroupPreemptorResult，包含组内每个 Pod 的提名节点映射及整个抢占过程的状态。
+// 该逻辑会修改 Handle 提供的 NodeInfo，因此调用方需在调用前备份、调用后回滚。
+// podGroupSchedulingFunc 在移除所有受害者后仅调用一次，用于检查修改后的节点状态下
+// PodGroup 是否可调度；随后逻辑会在假定抢占者 Pod 已就位的前提下，尽量恢复更多受害者。
 func (ev *PodGroupEvaluator) Preempt(ctx context.Context, pgInfo fwk.PodGroupInfo, podGroupSchedulingFunc fwk.PodGroupSchedulingFunc) (*fwk.PodGroupPostFilterResult, *fwk.Status) {
 	logger := klog.FromContext(ctx)
-	// In case of workload-aware preemption, the domain is whole cluster.
-	// We do not make a snapshot of node info. Those nodes will be shared
-	// with the PodGroup scheduling algorithm passed as podGroupSchedulingFunc.
+	// 工作负载感知抢占以整个集群为域。这里不复制 NodeInfo 快照：
+	// 这些节点要与传入的 PodGroup 调度算法共享同一份可变状态。
 	domain, err := newDomainForWorkloadPreemption(logger, ev.Handle.MutableSnapshotSharedLister(), ev.podGroupSnapshot, ev.compositePodGroupSnapshot, "cluster-domain")
 	if err != nil {
 		return nil, fwk.AsStatus(fmt.Errorf("failed to create domain: %w", err))
 	}
 	preemptor := newPodGroupPreemptor(pgInfo, ev.enablePodGroupPreemptionPolicy)
 
-	// Ensure the preemptor is eligible to preempt other pods.
+	// 先确认抢占者具备抢占资格，避免无谓的受害者筛选。
 	if ok, msg := ev.preemptorEligibleToPreemptOthers(ctx, preemptor); !ok {
 		logger.V(5).Info("Preemptor is not eligible for preemption", "preemptor", preemptor.getObj(), "type", preemptor.getType(), "reason", msg)
 		return nil, fwk.NewStatus(fwk.Unschedulable, msg)
@@ -130,15 +123,15 @@ func (ev *PodGroupEvaluator) Preempt(ctx context.Context, pgInfo fwk.PodGroupInf
 	return &fwk.PodGroupPostFilterResult{NominatingInfos: res.nominatedNodeNames}, status
 }
 
+// selectVictimsResult 保存受害者筛选结果：提名节点、被破坏的 PodGroup 数量及受害者列表。
 type selectVictimsResult struct {
 	nominatedNodeNames     map[types.NamespacedName]*fwk.NominatingInfo
 	numPodGroupDisruptions int
 	victims                *extenderv1.Victims
 }
 
-// selectVictimsOnDomain selects a set of victims that can be removed from the
-// domain in order to make enough room for the preemptor to be scheduled.
-// It prioritizes victims that are not protected by a PDB.
+// selectVictimsOnDomain 选出一组受害者，移除它们可为抢占者腾出足够空间。
+// 优先选择不受 PDB 保护的受害者，以尽量减少对可用性的影响。
 func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 	ctx context.Context,
 	preemptor *podGroupPreemptor,
@@ -151,10 +144,9 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 
 	mutableLister := ev.Handle.MutableSnapshotSharedLister()
 
-	// removePods removes all victims from the snapshot.
-	// This is called before the podGroupSchedulingFunc so it does not have
-	// to update any cycle states as podGroupSchedulingFunc creates empty CycleStates
-	// and fills them by running PreFilter plugins for preemptor pods.
+	// removePods 从快照中移除所有受害者。
+	// 必须在 podGroupSchedulingFunc 之前调用：后者会创建空的 CycleState，
+	// 并通过为抢占者 Pod 运行 PreFilter 插件来填充，无需我们更新任何 cycle state。
 	removePods := func(v *DomainVictim) error {
 		for _, pi := range v.Pods() {
 			if err := mutableLister.RemovePod(logger, pi.GetPod(), pi.GetPod().Spec.NodeName); err != nil {
@@ -164,10 +156,9 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 		return nil
 	}
 
-	// addVictimPodsWithPreFilter simulates adding back victim's pods to the snapshot
-	// and calls PreFilterExtensionAddPod() for all preemptor pods's proposed valid assignments.
-	// The node passed to the RunPreFilterExtensionAddPod will have the victim pod
-	// added.
+	// addVictimPodsWithPreFilter 模拟把受害者的 Pod 加回快照，
+	// 并对抢占者所有有效候选分配调用 PreFilterExtensionAddPod()。
+	// 传给 RunPreFilterExtensionAddPod 的 NodeInfo 已包含被加回的受害者 Pod。
 	addVictimPodsWithPreFilter := func(v *DomainVictim, preemptorAssignments []fwk.ProposedAssignment) error {
 		for _, pi := range v.Pods() {
 			nodeInfo := nameToNode[pi.GetPod().Spec.NodeName]
@@ -184,10 +175,9 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 		return nil
 	}
 
-	// removeVictimPodsWithPreFilter removes all victims from the snapshot
-	// and calls PreFilterExtensionRemovePod(victim) for all preemptor pods.
-	// The node passed to the RunPreFilterExtensionRemovePod will have the victim pod
-	// removed.
+	// removeVictimPodsWithPreFilter 从快照中移除所有受害者，
+	// 并对所有抢占者 Pod 调用 PreFilterExtensionRemovePod(victim)。
+	// 传给 RunPreFilterExtensionRemovePod 的 NodeInfo 已移除受害者 Pod。
 	removeVictimPodsWithPreFilter := func(v *DomainVictim, preemptorAssignments []fwk.ProposedAssignment) error {
 		for _, pi := range v.Pods() {
 			nodeInfo := nameToNode[pi.GetPod().Spec.NodeName]
@@ -212,14 +202,13 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 		}
 	}
 
-	// No preemption victims found for incoming preemptor.
+	// 没有可抢占对象，直接判定为不可调度且该状态无法通过再排队解决。
 	if len(potentialVictims) == 0 {
 		return nil, fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "No preemption victims found for incoming preemptor")
 	}
 
-	// PodGroup being a victim can have pods spread between current domain and other domains
-	// We need to pull data about nodes from outside of the current domain
-	// if a pod group has a pod on it.
+	// 作为受害者的 PodGroup，其 Pod 可能分布在当前域之外。
+	// 需要把这些外部节点的信息补充进来，才能正确模拟移除后的调度。
 	for _, victim := range potentialVictims {
 		for name, nodeInfo := range victim.AffectedNodes() {
 			_, ok := nameToNode[name]
@@ -233,7 +222,7 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 		}
 	}
 
-	// If the scheduling failed after removing all potential victims, return the status.
+	// 即使移除全部潜在受害者仍调度失败，说明抢占帮不上忙，直接返回失败状态。
 	podGroupAssignments, status := podGroupSchedulingFunc(ctx)
 	if !status.IsSuccess() {
 		return nil, status
@@ -248,24 +237,19 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 
 	validAssignment := make([]fwk.ProposedAssignment, 0, len(podGroupAssignments.ProposedAssignments))
 
-	// Prepare podInfos for each of the assigned preemptor pods
+	// 只保留已分配到具体节点的抢占者 Pod，未分配的不参与后续模拟。
 	for _, assignment := range podGroupAssignments.ProposedAssignments {
 		if assignment.GetNodeName() != "" {
 			validAssignment = append(validAssignment, assignment)
 		}
 	}
 
-	// reprieveVictim tries to reprieve a victim as a single unit.
-	// It adds all victim's pods back to snapshot and to CycleStates of preemptor pods
-	// It then goes through preemptor's proposed assignments and runs FilterPlugins for a given preemptor
-	// pod on proposed node.
-	// If all FilterPlugins succeed, it returns true.
-	// Preemptor pods are evaluated in the same order as in the scheduling cycle.
-	// This logic uses the CycleState returned for each of the preemptor pods from the
-	// scheduling algorithm called on a cluster without victims.
-	// This means that the CycleState for the Nth preemptor pod was created with:
-	// - all previous preemptor pods assumed and reserved
-	// - no knowledge of upcoming preemptor pods
+	// reprieveVictim 尝试以 PodGroup 为单位整体恢复一个受害者：
+	// 把该受害者的所有 Pod 加回快照和抢占者的 CycleState，
+	// 再按调度周期中的相同顺序，对抢占者的每个候选分配运行 FilterPlugins。
+	// 全部通过则返回 true。
+	// 这里复用的 CycleState 来自“无受害者集群”上的那次调度，因此第 N 个抢占者的状态
+	// 是在“前面抢占者均已假定并预留资源、且不知道后续抢占者”的前提下创建的。
 	reprieveVictim := func(v *DomainVictim, preemptorAssignments []fwk.ProposedAssignment) (fits bool, err error) {
 		if err = addVictimPodsWithPreFilter(v, preemptorAssignments); err != nil {
 			return false, err
@@ -291,9 +275,9 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 				}
 				return false, nil
 			}
-			// Simulate assuming a preemptor pod and reserving stateful plugins resources.
-			// We do not need to add the preemptor pod to the cycle state of upcoming preemptor pods.
-			// This is because the cycle state was created with them already assumed.
+			// 模拟假定抢占者 Pod 并预留有状态插件的资源。
+			// 无需把该 Pod 加入后续抢占者的 CycleState，因为这些状态创建时
+			// 已经假定所有前序抢占者就位。
 			if err = mutableLister.AddPod(assignment.GetPodInfo(), assignment.GetNodeName()); err != nil {
 				return false, err
 			}
@@ -308,9 +292,8 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 		return fits, nil
 	}
 
-	// Try to reprieve as many pods as possible. We first try to reprieve the PDB
-	// violating victims and then other non-violating ones. In both cases, we start
-	// from the highest importance victims.
+	// 尽量恢复更多受害者：先处理违反 PDB 的，再处理未违反的；
+	// 两类都从优先级最高的受害者开始尝试恢复。
 	var victimsToPreempt []*DomainVictim
 	for _, violatingVictim := range violatingVictims {
 		v := violatingVictim.Victim
@@ -365,6 +348,7 @@ func (ev *PodGroupEvaluator) selectVictimsOnDomain(
 	}, nil
 }
 
+// toPodNames 把 Pod 列表格式化为 "namespace/name" 逗号分隔的字符串，仅用于日志。
 func toPodNames(pods []fwk.PodInfo) string {
 	names := make([]string, len(pods))
 	for i, p := range pods {
@@ -373,14 +357,14 @@ func toPodNames(pods []fwk.PodInfo) string {
 	return strings.Join(names, ",")
 }
 
-// isPreemptionAllowed returns whether the victim residing on nodeInfo can be preempted by the preemptor
+// isPreemptionAllowed 判断给定受害者是否可被抢占者抢占：
+// 只有优先级低于抢占者的对象才可能被抢占。
 func (ev *PodGroupEvaluator) isPreemptionAllowed(victim Victim, preemptor *podGroupPreemptor) bool {
 	return victim.Priority() < preemptor.priority
 }
 
-// preemptorEligibleToPreemptOthers returns one bool and one string. The bool
-// indicates whether this preemptor should be considered for preempting other pods or
-// not. The string includes the reason if this preemptor isn't eligible.
+// preemptorEligibleToPreemptOthers 判断抢占者是否有资格抢占其他 Pod。
+// 返回布尔值表示是否具备资格；不具备时，字符串给出具体原因。
 func (ev *PodGroupEvaluator) preemptorEligibleToPreemptOthers(_ context.Context, preemptor *podGroupPreemptor) (bool, string) {
 	if preemptor.PreemptionPolicy() == schedulingapi.PreemptNever {
 		return false, "not eligible due to preemptionPolicy=Never."
@@ -389,8 +373,8 @@ func (ev *PodGroupEvaluator) preemptorEligibleToPreemptOthers(_ context.Context,
 	return true, ""
 }
 
-// isOngoingPreemption checks whether there is an ongoing preemption on the
-// nominated nodes for pods from this pod group.
+// isOngoingPreemption 检查该 PodGroup 的 Pod 所提名的节点上是否正在进行抢占，
+// 避免对同一批节点重复发起抢占。
 func (ev *PodGroupEvaluator) isOngoingPreemption(_ context.Context, preemptor *podGroupPreemptor, nameToNode map[string]fwk.NodeInfo) bool {
 	nominatedNodes := sets.New[string]()
 	for _, pod := range preemptor.Members() {
@@ -412,8 +396,8 @@ func (ev *PodGroupEvaluator) isOngoingPreemption(_ context.Context, preemptor *p
 	return false
 }
 
-// buildCurrentNominatingInfos builds a map of nominating infos based on
-// currently set NNN for the preemptor pods
+// buildCurrentNominatingInfos 根据抢占者 Pod 当前设置的 NNN（提名节点名）
+// 构造提名信息映射。
 func buildCurrentNominatingInfos(preemptor *podGroupPreemptor) map[types.NamespacedName]*fwk.NominatingInfo {
 	n := make(map[types.NamespacedName]*fwk.NominatingInfo)
 	for _, pod := range preemptor.Members() {

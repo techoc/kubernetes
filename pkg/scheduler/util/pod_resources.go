@@ -16,17 +16,13 @@ limitations under the License.
 
 package util
 
-// For each of these resources, a container that doesn't request the resource explicitly
-// will be treated as having requested the amount indicated below, for the purpose
-// of computing priority only. This ensures that when scheduling zero-request pods, such
-// pods will not all be scheduled to the node with the smallest in-use request,
-// and that when scheduling regular pods, such pods will not see zero-request pods as
-// consuming no resources whatsoever. We chose these values to be similar to the
-// resources that we give to cluster addon pods (#10653). But they are pretty arbitrary.
-// As described in #11713, we use request instead of limit to deal with resource requirements.
+// 仅用于计算优先级时，未显式声明这些资源的容器会被视为请求了下方指定的数量。
+// 这样既可避免零请求 Pod 全部涌向已用请求量最小的节点，也可避免普通 Pod 误以为
+// 零请求 Pod 完全不消耗资源。数值参照集群插件 Pod 的资源配额选取（#10653），
+// 但基本是拍脑袋定的。如 #11713 所述，这里用 request 而非 limit 来描述资源需求。
 const (
-	// DefaultMilliCPURequest defines default milli cpu request number.
+	// DefaultMilliCPURequest 定义默认的 milli CPU 请求量。
 	DefaultMilliCPURequest int64 = 100 // 0.1 core
-	// DefaultMemoryRequest defines default memory request size.
+	// DefaultMemoryRequest 定义默认的内存请求量。
 	DefaultMemoryRequest int64 = 200 * 1024 * 1024 // 200 MB
 )

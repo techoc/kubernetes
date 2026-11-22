@@ -23,35 +23,36 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// Entity is either a pod or a podgroup that gets recorded in the metrics.
+// Entity 表示被记录进指标的实体，可以是单个 Pod 或 PodGroup。
 type Entity interface {
-	// Size returns the number of pods within the entity (1 for a single pod, or the pod count for a pod group).
+	// Size 返回实体包含的 Pod 数量（单个 Pod 为 1，PodGroup 为其包含的 Pod 数）。
 	Size() int
-	// Type returns the entity type (e.g. "pod" or "podgroup").
+	// Type 返回实体类型（如 "pod" 或 "podgroup"）。
 	Type() fwk.EntityKeyType
 }
 
-// MetricRecorder represents a metric recorder which maintains a metric through Add(), Remove(), Update(), and Clear().
+// MetricRecorder 通过 Add、Remove、Update、Clear 维护队列中的实体指标。
 type MetricRecorder interface {
-	// Add records the addition of an entity.
+	// Add 记录新增一个实体。
 	Add(entity Entity)
-	// Remove records the removal of an entity.
+	// Remove 记录移除一个实体。
 	Remove(entity Entity)
-	// Update records the update of an entity.
+	// Update 记录实体的更新（Pod 数变化）。
 	Update(oldEntity, newEntity Entity)
-	// Clear resets recorded metrics to zero.
+	// Clear 将已记录的指标重置为零。
 	Clear()
 }
 
 var _ MetricRecorder = &QueuedEntitiesRecorder{}
 
-// QueuedEntitiesRecorder is an implementation of MetricRecorder.
+// QueuedEntitiesRecorder 是 MetricRecorder 的实现，
+// 分别维护 Pod 数量 Gauge 与按实体类型划分的 Gauge。
 type QueuedEntitiesRecorder struct {
 	pods     metrics.GaugeMetric
 	entities func(entityType string) metrics.GaugeMetric
 }
 
-// NewActiveEntitiesRecorder returns ActivePods and ActiveEntities in a Prometheus metric fashion.
+// NewActiveEntitiesRecorder 创建记录活跃 Pod 与活跃实体数量的指标记录器。
 func NewActiveEntitiesRecorder() *QueuedEntitiesRecorder {
 	return &QueuedEntitiesRecorder{
 		pods:     ActivePods(),
@@ -59,7 +60,7 @@ func NewActiveEntitiesRecorder() *QueuedEntitiesRecorder {
 	}
 }
 
-// NewUnschedulableEntitiesRecorder returns UnschedulablePods and UnschedulableEntities in a Prometheus metric fashion.
+// NewUnschedulableEntitiesRecorder 创建记录不可调度 Pod 与实体数量的指标记录器。
 func NewUnschedulableEntitiesRecorder() *QueuedEntitiesRecorder {
 	return &QueuedEntitiesRecorder{
 		pods:     UnschedulablePods(),
@@ -67,7 +68,7 @@ func NewUnschedulableEntitiesRecorder() *QueuedEntitiesRecorder {
 	}
 }
 
-// NewBackoffEntitiesRecorder returns BackoffPods and BackoffEntities in a Prometheus metric fashion.
+// NewBackoffEntitiesRecorder 创建记录退避中 Pod 与实体数量的指标记录器。
 func NewBackoffEntitiesRecorder() *QueuedEntitiesRecorder {
 	return &QueuedEntitiesRecorder{
 		pods:     BackoffPods(),
@@ -75,7 +76,7 @@ func NewBackoffEntitiesRecorder() *QueuedEntitiesRecorder {
 	}
 }
 
-// NewGatedEntitiesRecorder returns GatedPods and GatedEntities in a Prometheus metric fashion.
+// NewGatedEntitiesRecorder 创建记录被 gating 的 Pod 与实体数量的指标记录器。
 func NewGatedEntitiesRecorder() *QueuedEntitiesRecorder {
 	return &QueuedEntitiesRecorder{
 		pods:     GatedPods(),
@@ -83,7 +84,8 @@ func NewGatedEntitiesRecorder() *QueuedEntitiesRecorder {
 	}
 }
 
-// EntityToLabel converts an Entity to an entity metric label string.
+// EntityToLabel 将实体类型转换为指标使用的标签字符串；
+// 未知类型返回 false，调用方据此跳过计数。
 func EntityToLabel(entity Entity) (string, bool) {
 	if entity == nil {
 		return "", false
@@ -99,8 +101,7 @@ func EntityToLabel(entity Entity) (string, bool) {
 	return "", false
 }
 
-// Add records the addition of an entity.
-// It increments pending pods and queued entities metric counters.
+// Add 记录新增实体：按 Pod 数量累加 Pod 计数，并按实体类型递增实体计数。
 func (r *QueuedEntitiesRecorder) Add(entity Entity) {
 	r.pods.Add(float64(entity.Size()))
 	if label, ok := EntityToLabel(entity); ok {
@@ -108,8 +109,7 @@ func (r *QueuedEntitiesRecorder) Add(entity Entity) {
 	}
 }
 
-// Remove records the removal of an entity.
-// It decrements pending pods and queued entities metric counters.
+// Remove 记录移除实体：按 Pod 数量扣减 Pod 计数，并按实体类型递减实体计数。
 func (r *QueuedEntitiesRecorder) Remove(entity Entity) {
 	r.pods.Add(-float64(entity.Size()))
 	if label, ok := EntityToLabel(entity); ok {
@@ -117,23 +117,21 @@ func (r *QueuedEntitiesRecorder) Remove(entity Entity) {
 	}
 }
 
-// Update records the update of an entity.
-// It updates pending pods metric counter only.
-// It shouldn't update queued entities metric, because the entity type cannot be changed, and an entity will always be a single object.
+// Update 记录实体更新，只调整 Pod 数量指标。
+// 实体类型不会改变，且一个实体始终对应一个对象，因此无需改动实体计数。
 func (r *QueuedEntitiesRecorder) Update(oldEntity, newEntity Entity) {
 	diff := newEntity.Size() - oldEntity.Size()
 	r.pods.Add(float64(diff))
 }
 
-// Clear resets pending pods and queued entities metric counters to 0.
+// Clear 将 Pod 数量与各类实体计数全部重置为 0。
 func (r *QueuedEntitiesRecorder) Clear() {
 	r.pods.Set(float64(0))
 	r.entities(Pod).Set(float64(0))
 	r.entities(PodGroup).Set(float64(0))
 }
 
-// histogramVecMetric is the data structure passed in the buffer channel between the main framework thread
-// and the metricsRecorder goroutine.
+// histogramVecMetric 是主框架线程与指标记录 goroutine 之间通过缓冲通道传递的直方图数据。
 type histogramVecMetric struct {
 	metric      *metrics.HistogramVec
 	labelValues []string
@@ -157,33 +155,33 @@ type counterVecMetric struct {
 	value       float64
 }
 
-// MetricAsyncRecorder records metric in a separate goroutine to avoid overhead in the critical path.
+// MetricAsyncRecorder 在独立 goroutine 中上报指标，避免指标写入阻塞调度关键路径。
 type MetricAsyncRecorder struct {
-	// bufferCh is a channel that serves as a metrics buffer before the metricsRecorder goroutine reports it.
+	// bufferCh 是指标上报前的缓冲通道；缓冲区满时新指标会被丢弃。
 	bufferCh chan *histogramVecMetric
-	// if bufferSize is reached, incoming metrics will be discarded.
+	// 缓冲区达到 bufferSize 后，新来的指标会被丢弃，而非阻塞调用方。
 	bufferSize int
-	// how often the recorder runs to flush the metrics.
+	// 指标刷新的时间间隔。
 	interval time.Duration
 
-	// aggregatedInflightEventMetric is only to record InFlightEvents metric asynchronously.
-	// It's a map from gaugeVecMetricKey to the aggregated value
-	// and the aggregated value is flushed to Prometheus every time the interval is reached.
-	// Note that we don't lock the map deliberately because we assume the queue takes lock before updating the in-flight events.
+	// aggregatedInflightEventMetric 仅用于异步记录 InFlightEvents：
+	// 按 gaugeVecMetricKey 聚合变更量，每隔 interval 刷新到 Prometheus。
+	// 故意不加锁：假设调用方（队列）在更新在途事件前已持有锁。
 	aggregatedInflightEventMetric              map[gaugeVecMetricKey]int
 	aggregatedInflightEventMetricLastFlushTime time.Time
 	aggregatedInflightEventMetricBufferCh      chan *gaugeVecMetric
 
-	// counterBufferCh is a channel for async counter increments.
+	// counterBufferCh 是异步计数器增量的缓冲通道。
 	counterBufferCh chan *counterVecMetric
 
-	// stopCh is used to stop the goroutine which periodically flushes metrics.
+	// stopCh 用于停止定期刷新指标的 goroutine。
 	stopCh <-chan struct{}
-	// IsStoppedCh indicates whether the goroutine is stopped. It's used in tests only to make sure
-	// the metric flushing goroutine is stopped so that tests can collect metrics for verification.
+	// IsStoppedCh 在刷新 goroutine 退出时关闭；仅用于测试中确认指标已停止写入，便于采集校验。
 	IsStoppedCh chan struct{}
 }
 
+// NewMetricsAsyncRecorder 创建异步指标记录器并启动其刷新 goroutine。
+// bufferSize 为各通道的缓冲大小，interval 为刷新周期，stopCh 关闭时停止刷新。
 func NewMetricsAsyncRecorder(bufferSize int, interval time.Duration, stopCh <-chan struct{}) *MetricAsyncRecorder {
 	recorder := &MetricAsyncRecorder{
 		bufferCh:                      make(chan *histogramVecMetric, bufferSize),
@@ -200,25 +198,26 @@ func NewMetricsAsyncRecorder(bufferSize int, interval time.Duration, stopCh <-ch
 	return recorder
 }
 
-// ObserveFrameworkExtensionPointDurationAsync observes the framework_extension_point_duration_seconds metric.
-// The metric will be flushed to Prometheus asynchronously.
+// ObserveFrameworkExtensionPointDurationAsync 记录 framework_extension_point_duration_seconds，
+// 实际写入 Prometheus 由后台 goroutine 异步完成。
 func (r *MetricAsyncRecorder) ObserveFrameworkExtensionPointDurationAsync(extensionPoint, status, profileName string, value float64) {
 	r.observeMetricAsync(FrameworkExtensionPointDuration, value, extensionPoint, status, profileName)
 }
 
-// ObservePluginDurationAsync observes the plugin_execution_duration_seconds metric.
-// The metric will be flushed to Prometheus asynchronously.
+// ObservePluginDurationAsync 记录 plugin_execution_duration_seconds，
+// 实际写入 Prometheus 由后台 goroutine 异步完成。
 func (r *MetricAsyncRecorder) ObservePluginDurationAsync(extensionPoint, pluginName, status string, value float64) {
 	r.observeMetricAsync(PluginExecutionDuration, value, pluginName, extensionPoint, status)
 }
 
-// ObserveQueueingHintDurationAsync observes the queueing_hint_execution_duration_seconds metric.
-// The metric will be flushed to Prometheus asynchronously.
+// ObserveQueueingHintDurationAsync 记录 queueing_hint_execution_duration_seconds，
+// 实际写入 Prometheus 由后台 goroutine 异步完成。
 func (r *MetricAsyncRecorder) ObserveQueueingHintDurationAsync(pluginName, event, hint string, value float64) {
 	r.observeMetricAsync(queueingHintExecutionDuration, value, pluginName, event, hint)
 }
 
-// ObserveCounterAsync increments a counter metric asynchronously.
+// ObserveCounterAsync 异步累加计数器指标。
+// 缓冲区满时直接丢弃，不影响主流程。
 func (r *MetricAsyncRecorder) ObserveCounterAsync(m *metrics.CounterVec, value float64, labelValues ...string) {
 	newMetric := &counterVecMetric{
 		metric:      m,
@@ -231,16 +230,15 @@ func (r *MetricAsyncRecorder) ObserveCounterAsync(m *metrics.CounterVec, value f
 	}
 }
 
-// ObserveInFlightEventsAsync observes the in_flight_events metric.
+// ObserveInFlightEventsAsync 记录 in_flight_events 指标的增量。
 //
-// Note that this function is not goroutine-safe;
-// we don't lock the map deliberately for the performance reason and we assume the queue (i.e., the caller) takes lock before updating the in-flight events.
+// 该函数不是并发安全的：出于性能考虑故意不给 map 加锁，
+// 依赖调用方（队列）在更新在途事件前持有锁。
 func (r *MetricAsyncRecorder) ObserveInFlightEventsAsync(eventLabel string, valueToAdd float64, forceFlush bool) {
 	r.aggregatedInflightEventMetric[gaugeVecMetricKey{metricName: InFlightEvents.Name, labelValue: eventLabel}] += int(valueToAdd)
 
-	// Only flush the metric to the channel if the interval is reached.
-	// The values are flushed to Prometheus in the run() function, which runs once the interval time.
-	// Note: we implement this flushing here, not in FlushMetrics, because, if we did so, we would need to implement a lock for the map, which we want to avoid.
+	// 仅在达到刷新周期时才把聚合值送入通道，由 run() 写入 Prometheus。
+	// 刷新逻辑放在这里而非 FlushMetrics，是为了避免给该 map 加锁。
 	if forceFlush || time.Since(r.aggregatedInflightEventMetricLastFlushTime) > r.interval {
 		for key, value := range r.aggregatedInflightEventMetric {
 			newMetric := &gaugeVecMetric{
@@ -254,11 +252,12 @@ func (r *MetricAsyncRecorder) ObserveInFlightEventsAsync(eventLabel string, valu
 			}
 		}
 		r.aggregatedInflightEventMetricLastFlushTime = time.Now()
-		// reset
+		// 重置聚合值，进入下一个统计周期。
 		r.aggregatedInflightEventMetric = make(map[gaugeVecMetricKey]int)
 	}
 }
 
+// observeMetricAsync 将直方图观测值异步写入缓冲通道，缓冲区满时丢弃。
 func (r *MetricAsyncRecorder) observeMetricAsync(m *metrics.HistogramVec, value float64, labelsValues ...string) {
 	newMetric := &histogramVecMetric{
 		metric:      m,
@@ -271,7 +270,8 @@ func (r *MetricAsyncRecorder) observeMetricAsync(m *metrics.HistogramVec, value 
 	}
 }
 
-// run flushes buffered metrics into Prometheus every second.
+// run 每隔 interval 将缓冲的指标刷新到 Prometheus，
+// 收到 stopCh 信号时关闭 IsStoppedCh 并退出。
 func (r *MetricAsyncRecorder) run() {
 	for {
 		r.FlushMetrics()
@@ -284,7 +284,7 @@ func (r *MetricAsyncRecorder) run() {
 	}
 }
 
-// FlushMetrics tries to clean up the bufferCh by reading at most bufferSize metrics.
+// FlushMetrics 最多读取 bufferSize 条指标以清空缓冲通道。
 func (r *MetricAsyncRecorder) FlushMetrics() {
 	for i := 0; i < r.bufferSize; i++ {
 		select {
@@ -293,14 +293,14 @@ func (r *MetricAsyncRecorder) FlushMetrics() {
 		case m := <-r.counterBufferCh:
 			m.metric.WithLabelValues(m.labelValues...).Add(m.value)
 		default:
-			// no more value
+			// 缓冲区已空。
 		}
 
 		select {
 		case m := <-r.aggregatedInflightEventMetricBufferCh:
 			m.metric.WithLabelValues(m.labelValues...).Add(m.valueToAdd)
 		default:
-			// no more value
+			// 缓冲区已空。
 		}
 	}
 }

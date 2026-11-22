@@ -22,16 +22,17 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 )
 
-// classResourceMap holds a map of storage class to resource.
+// classResourceMap 把存储类名映射到对应的存储资源信息。
 type classResourceMap map[string]*StorageResource
 
-// volumeCapacityScorer calculates the score based on class storage resource information.
+// volumeCapacityScorer 根据各存储类的资源信息计算节点得分。
 type volumeCapacityScorer func(classResourceMap) int64
 
-// buildScorerFunction builds volumeCapacityScorer from the scoring function shape.
+// buildScorerFunction 根据给定的函数形状构造 volumeCapacityScorer。
 func buildScorerFunction(scoringFunctionShape helper.FunctionShape) volumeCapacityScorer {
 	rawScoringFunction := helper.BuildBrokenLinearFunction(scoringFunctionShape)
 	f := func(requested, capacity int64) int64 {
+		// 容量为 0 或请求超过容量都按最大利用率计分：此时应给最低分。
 		if capacity == 0 || requested > capacity {
 			return rawScoringFunction(maxUtilization)
 		}
@@ -40,7 +41,7 @@ func buildScorerFunction(scoringFunctionShape helper.FunctionShape) volumeCapaci
 	}
 	return func(classResources classResourceMap) int64 {
 		var nodeScore int64
-		// in alpha stage, all classes have the same weight
+		// alpha 阶段所有存储类权重相同，直接用类的数量作为权重和。
 		weightSum := len(classResources)
 		if weightSum == 0 {
 			return 0

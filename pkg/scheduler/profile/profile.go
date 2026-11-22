@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package profile holds the definition of a scheduling Profile.
+// Package profile 定义调度器 Profile：把一个调度器名字与一组框架插件绑定起来。
 package profile
 
 import (
@@ -31,10 +31,10 @@ import (
 	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
-// RecorderFactory builds an EventRecorder for a given scheduler name.
+// RecorderFactory 为指定调度器名字创建一个事件记录器。
 type RecorderFactory func(string) events.EventRecorderLogger
 
-// newProfile builds a Profile for the given configuration.
+// newProfile 根据给定配置构建单个 Profile。
 func newProfile(ctx context.Context, cfg config.KubeSchedulerProfile, r frameworkruntime.Registry, recorderFact RecorderFactory,
 	opts ...frameworkruntime.Option) (framework.Framework, error) {
 	recorder := recorderFact(cfg.SchedulerName)
@@ -42,10 +42,10 @@ func newProfile(ctx context.Context, cfg config.KubeSchedulerProfile, r framewor
 	return frameworkruntime.NewFramework(ctx, r, &cfg, opts...)
 }
 
-// Map holds frameworks indexed by scheduler name.
+// Map 以调度器名字为键保存各个框架实例。
 type Map map[string]framework.Framework
 
-// NewMap builds the frameworks given by the configuration, indexed by name.
+// NewMap 根据配置为各调度器构建框架，并按名字索引。
 func NewMap(ctx context.Context, cfgs []config.KubeSchedulerProfile, r frameworkruntime.Registry, recorderFact RecorderFactory,
 	opts ...frameworkruntime.Option) (Map, error) {
 	m := make(Map)
@@ -56,6 +56,7 @@ func NewMap(ctx context.Context, cfgs []config.KubeSchedulerProfile, r framework
 		if err != nil {
 			return nil, fmt.Errorf("creating profile for scheduler name %s: %v", cfg.SchedulerName, err)
 		}
+		// 所有 Profile 共用同一个队列排序插件和配置，否则无法在多个 Profile 间混排 Pod。
 		if err := v.validate(cfg, p); err != nil {
 			return nil, err
 		}
@@ -64,16 +65,17 @@ func NewMap(ctx context.Context, cfgs []config.KubeSchedulerProfile, r framework
 	return m, nil
 }
 
-// HandlesSchedulerName returns whether a profile handles the given scheduler name.
+// HandlesSchedulerName 判断是否存在处理该调度器名字的 Profile。
 func (m Map) HandlesSchedulerName(name string) bool {
 	_, ok := m[name]
 	return ok
 }
 
-// Close closes all frameworks registered in this map.
+// Close 关闭 Map 中所有已注册的框架。
 func (m Map) Close() error {
 	var errs []error
 	for name, f := range m {
+		// 逐个关闭并汇总错误，避免一个框架失败就跳过其余框架的清理。
 		err := f.Close()
 		if err != nil {
 			errs = append(errs, fmt.Errorf("framework %s failed to close: %w", name, err))
@@ -82,19 +84,21 @@ func (m Map) Close() error {
 	return errors.Join(errs...)
 }
 
-// NewRecorderFactory returns a RecorderFactory for the broadcaster.
+// NewRecorderFactory 基于事件广播器创建一个 RecorderFactory。
 func NewRecorderFactory(b events.EventBroadcaster) RecorderFactory {
 	return func(name string) events.EventRecorderLogger {
 		return b.NewRecorder(scheme.Scheme, name)
 	}
 }
 
+// cfgValidator 校验新 Profile 与已有 Profile 的一致性。
 type cfgValidator struct {
 	m             Map
 	queueSort     string
 	queueSortArgs runtime.Object
 }
 
+// validate 校验单个 Profile 的合法性，并与先前 Profile 比较队列排序配置。
 func (v *cfgValidator) validate(cfg config.KubeSchedulerProfile, f framework.Framework) error {
 	if len(f.ProfileName()) == 0 {
 		return errors.New("scheduler name is needed")
@@ -106,6 +110,7 @@ func (v *cfgValidator) validate(cfg config.KubeSchedulerProfile, f framework.Fra
 		return fmt.Errorf("duplicate profile with scheduler name %q", f.ProfileName())
 	}
 
+	// 队列排序插件只能有一个，取第一个即可。
 	queueSort := f.ListPlugins().QueueSort.Enabled[0].Name
 	var queueSortArgs runtime.Object
 	for _, plCfg := range cfg.PluginConfig {

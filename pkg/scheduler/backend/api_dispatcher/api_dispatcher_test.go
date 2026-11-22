@@ -33,6 +33,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
+// registerAndResetMetrics 在测试中开启异步 API 特性门并清空相关指标，
+// 避免上一个用例的计数干扰断言。
 func registerAndResetMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerAsyncAPICalls, true)
 	metrics.Register()
@@ -47,13 +49,13 @@ const (
 	mockCallTypeHigh fwk.APICallType = "high"
 )
 
-// mockRelevances defines a standard set of relevances for testing purposes.
+// mockRelevances 定义测试用的标准关联度集合。
 var mockRelevances = fwk.APICallRelevances{
 	mockCallTypeLow:  1,
 	mockCallTypeHigh: 2,
 }
 
-// mockAPICall is a mock implementation of fwk.APICall for detailed testing.
+// mockAPICall 是 fwk.APICall 的模拟实现，各方法可通过注入的函数定制行为。
 type mockAPICall struct {
 	callType  fwk.APICallType
 	uid       types.UID
@@ -63,14 +65,17 @@ type mockAPICall struct {
 	isNoOpFn  func() bool
 }
 
+// CallType 返回模拟调用的调用类型。
 func (mac *mockAPICall) CallType() fwk.APICallType {
 	return mac.callType
 }
 
+// UID 返回模拟调用关联对象的 UID。
 func (mac *mockAPICall) UID() types.UID {
 	return mac.uid
 }
 
+// Execute 执行模拟调用；未注入函数时默认成功。
 func (mac *mockAPICall) Execute(ctx context.Context, client clientset.Interface) error {
 	if mac.executeFn != nil {
 		return mac.executeFn(ctx, client)
@@ -78,6 +83,7 @@ func (mac *mockAPICall) Execute(ctx context.Context, client clientset.Interface)
 	return nil
 }
 
+// Merge 合并同 UID 的旧调用；未注入函数时默认成功。
 func (mac *mockAPICall) Merge(oldCall fwk.APICall) error {
 	if mac.mergeFn != nil {
 		return mac.mergeFn(oldCall)
@@ -85,6 +91,7 @@ func (mac *mockAPICall) Merge(oldCall fwk.APICall) error {
 	return nil
 }
 
+// Sync 用调用的最新状态同步缓存对象；未注入函数时原样返回。
 func (mac *mockAPICall) Sync(obj metav1.Object) (metav1.Object, error) {
 	if mac.syncFn != nil {
 		return mac.syncFn(obj)
@@ -92,16 +99,18 @@ func (mac *mockAPICall) Sync(obj metav1.Object) (metav1.Object, error) {
 	return obj, nil
 }
 
+// IsNoOp 判断调用是否已无需执行；默认返回仍需执行。
 func (mac *mockAPICall) IsNoOp() bool {
 	if mac.isNoOpFn != nil {
 		return mac.isNoOpFn()
 	}
-	// A default return value indicating the call is still needed.
+	// 默认认为调用仍需执行。
 	return false
 }
 
+// TestAPIDispatcherLifecycle 验证 dispatcher 的完整生命周期：加入、合并、同步、执行与指标上报。
 func TestAPIDispatcherLifecycle(t *testing.T) {
-	// Reset all async API metrics
+	// 清空异步 API 指标，保证后续断言只统计本用例的行为。
 	registerAndResetMetrics(t)
 
 	logger, _ := ktesting.NewTestContext(t)
@@ -165,7 +174,7 @@ func TestAPIDispatcherLifecycle(t *testing.T) {
 		t.Errorf("Expected call2's sync to be called once, but was %v times", mergeCalls)
 	}
 
-	// Run should be started earlier, but was delayed on purpose to verify the pre-run state (merging and syncing).
+	// 此处故意推迟 Run，以验证运行前的合并与同步逻辑已经生效。
 	dispatcher.Run(logger)
 	defer dispatcher.Close()
 
@@ -177,7 +186,7 @@ func TestAPIDispatcherLifecycle(t *testing.T) {
 		t.Errorf("Expected call2's IsNoOp() to be called two times, but was %v times", executeCalls)
 	}
 
-	// Verify execution metrics
+	// 校验执行指标：一次成功的调用应被准确计数。
 	testutil.AssertVectorCount(t, "scheduler_async_api_call_execution_total", map[string]string{"call_type": "low", "result": "success"}, 1)
 	testutil.AssertHistogramTotalCount(t, "scheduler_async_api_call_execution_duration_seconds", map[string]string{"call_type": "low", "result": "success"}, 1)
 }

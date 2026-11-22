@@ -33,16 +33,16 @@ import (
 
 var queuedAPICallCmpOpts = []cmp.Option{
 	cmp.AllowUnexported(queuedAPICall{}, mockAPICall{}),
-	// Comparison of function fields is not reliable, so they are ignored.
+	// 函数字段无法可靠比较，比较时忽略它们。
 	cmpopts.IgnoreFields(mockAPICall{}, "executeFn", "mergeFn", "syncFn"),
 }
 
-// verifyQueueState is a test helper to check both the queue length and pending call metrics.
+// verifyQueueState 同时校验队列长度与待处理调用的指标值。
 func verifyQueueState(t *testing.T, cq *callQueue, expectedPendingCalls map[string]int) {
 	t.Helper()
 
 	expectedQueueLen := 0
-	// Check pending call metrics
+	// 逐类型校验待处理调用数指标。
 	for callType, expected := range expectedPendingCalls {
 		expectedQueueLen += expected
 
@@ -59,7 +59,7 @@ func verifyQueueState(t *testing.T, cq *callQueue, expectedPendingCalls map[stri
 	}
 }
 
-// verifyCalls is a test helper to check the content of the apiCalls.
+// verifyCalls 校验 apiCalls 中的内容与期望一致。
 func verifyCalls(t *testing.T, cq *callQueue, calls ...*queuedAPICall) {
 	t.Helper()
 
@@ -73,7 +73,7 @@ func verifyCalls(t *testing.T, cq *callQueue, calls ...*queuedAPICall) {
 	}
 }
 
-// verifyInFlight is a test helper to check the content of the inFlightEntities.
+// verifyInFlight 校验 inFlightEntities 中的内容与期望一致。
 func verifyInFlight(t *testing.T, cq *callQueue, uids ...types.UID) {
 	t.Helper()
 
@@ -87,7 +87,7 @@ func verifyInFlight(t *testing.T, cq *callQueue, uids ...types.UID) {
 	}
 }
 
-// expectOnFinish is a test helper that waits for an error on a channel and checks if it matches the expected error.
+// expectOnFinish 等待 channel 上的错误，并校验其是否与期望错误一致。
 func expectOnFinish(t *testing.T, onFinish <-chan error, expectedErr error) {
 	t.Helper()
 
@@ -330,7 +330,7 @@ func TestCallQueuePop(t *testing.T) {
 			t.Fatalf("Unexpected error while adding call2: %v", err)
 		}
 
-		// Verify pending calls after adding
+		// 校验添加后各类调用的待处理计数。
 		verifyQueueState(t, cq, map[string]int{"low": 2})
 
 		poppedCall, err := cq.pop()

@@ -28,68 +28,70 @@ import (
 	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
-// ErrReasonFake is a fake error message denotes the filter function errored.
+// ErrReasonFake 是伪插件 Filter 失败时使用的假原因。
 const ErrReasonFake = "Nodes failed the fake plugin"
 
-// FalseFilterPlugin is a filter plugin which always return Unschedulable when Filter function is called.
+// FalseFilterPlugin 是一个 Filter 总是返回 Unschedulable 的测试插件。
 type FalseFilterPlugin struct{}
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FalseFilterPlugin) Name() string {
 	return "FalseFilter"
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用。
 func (pl *FalseFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	return fwk.NewStatus(fwk.Unschedulable, ErrReasonFake)
 }
 
-// NewFalseFilterPlugin initializes a FalseFilterPlugin and returns it.
+// NewFalseFilterPlugin 创建并返回一个 FalseFilterPlugin。
 func NewFalseFilterPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &FalseFilterPlugin{}, nil
 }
 
-// TrueFilterPlugin is a filter plugin which always return Success when Filter function is called.
+// TrueFilterPlugin 是一个 Filter 总是返回 Success 的测试插件。
 type TrueFilterPlugin struct{}
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *TrueFilterPlugin) Name() string {
 	return "TrueFilter"
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用。
 func (pl *TrueFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
-// NewTrueFilterPlugin initializes a TrueFilterPlugin and returns it.
+// NewTrueFilterPlugin 创建并返回一个 TrueFilterPlugin。
 func NewTrueFilterPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &TrueFilterPlugin{}, nil
 }
 
+// FakePreFilterAndFilterPlugin 组合了 FakePreFilterPlugin 与 FakeFilterPlugin，
+// 用于同时测试两个扩展点。
 type FakePreFilterAndFilterPlugin struct {
 	*FakePreFilterPlugin
 	*FakeFilterPlugin
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl FakePreFilterAndFilterPlugin) Name() string {
 	return "FakePreFilterAndFilterPlugin"
 }
 
-// FakeFilterPlugin is a test filter plugin to record how many times its Filter() function have
-// been called, and it returns different 'Code' depending on its internal 'failedNodeReturnCodeMap'.
+// FakeFilterPlugin 记录 Filter() 被调用的次数，并按 failedNodeReturnCodeMap
+// 对指定节点返回预设的状态码。
 type FakeFilterPlugin struct {
 	NumFilterCalled         int32
 	FailedNodeReturnCodeMap map[string]fwk.Code
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakeFilterPlugin) Name() string {
 	return "FakeFilter"
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用。
 func (pl *FakeFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	atomic.AddInt32(&pl.NumFilterCalled, 1)
 
@@ -100,7 +102,7 @@ func (pl *FakeFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.
 	return nil
 }
 
-// NewFakeFilterPlugin initializes a fakeFilterPlugin and returns it.
+// NewFakeFilterPlugin 返回一个创建 FakeFilterPlugin 的工厂函数。
 func NewFakeFilterPlugin(failedNodeReturnCodeMap map[string]fwk.Code) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakeFilterPlugin{
@@ -109,16 +111,15 @@ func NewFakeFilterPlugin(failedNodeReturnCodeMap map[string]fwk.Code) frameworkr
 	}
 }
 
-// MatchFilterPlugin is a filter plugin which return Success when the evaluated pod and node
-// have the same name; otherwise return Unschedulable.
+// MatchFilterPlugin 在 Pod 与节点同名时返回 Success，否则返回 Unschedulable。
 type MatchFilterPlugin struct{}
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *MatchFilterPlugin) Name() string {
 	return "MatchFilter"
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用。
 func (pl *MatchFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	node := nodeInfo.Node()
 	if node == nil {
@@ -130,34 +131,34 @@ func (pl *MatchFilterPlugin) Filter(_ context.Context, _ fwk.CycleState, pod *v1
 	return fwk.NewStatus(fwk.Unschedulable, ErrReasonFake)
 }
 
-// NewMatchFilterPlugin initializes a MatchFilterPlugin and returns it.
+// NewMatchFilterPlugin 创建并返回一个 MatchFilterPlugin。
 func NewMatchFilterPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &MatchFilterPlugin{}, nil
 }
 
-// FakePreFilterPlugin is a test filter plugin.
+// FakePreFilterPlugin 是用于测试 PreFilter 扩展点的插件，直接返回预置的结果与状态。
 type FakePreFilterPlugin struct {
 	Result *fwk.PreFilterResult
 	Status *fwk.Status
 	name   string
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakePreFilterPlugin) Name() string {
 	return pl.name
 }
 
-// PreFilter invoked at the PreFilter extension point.
+// PreFilter 在 PreFilter 扩展点调用。
 func (pl *FakePreFilterPlugin) PreFilter(_ context.Context, _ fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	return pl.Result, pl.Status
 }
 
-// PreFilterExtensions no extensions implemented by this plugin.
+// PreFilterExtensions 返回 nil：该插件不提供扩展。
 func (pl *FakePreFilterPlugin) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// NewFakePreFilterPlugin initializes a fakePreFilterPlugin and returns it.
+// NewFakePreFilterPlugin 返回一个创建 FakePreFilterPlugin 的工厂函数。
 func NewFakePreFilterPlugin(name string, result *fwk.PreFilterResult, status *fwk.Status) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakePreFilterPlugin{
@@ -168,26 +169,26 @@ func NewFakePreFilterPlugin(name string, result *fwk.PreFilterResult, status *fw
 	}
 }
 
-// FakeReservePlugin is a test reserve plugin.
+// FakeReservePlugin 是用于测试 Reserve 扩展点的插件。
 type FakeReservePlugin struct {
 	Status *fwk.Status
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakeReservePlugin) Name() string {
 	return "FakeReserve"
 }
 
-// Reserve invoked at the Reserve extension point.
+// Reserve 在 Reserve 扩展点调用。
 func (pl *FakeReservePlugin) Reserve(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ string) *fwk.Status {
 	return pl.Status
 }
 
-// Unreserve invoked at the Unreserve extension point.
+// Unreserve 在 Unreserve 扩展点调用。
 func (pl *FakeReservePlugin) Unreserve(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ string) {
 }
 
-// NewFakeReservePlugin initializes a fakeReservePlugin and returns it.
+// NewFakeReservePlugin 返回一个创建 FakeReservePlugin 的工厂函数。
 func NewFakeReservePlugin(status *fwk.Status) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakeReservePlugin{
@@ -196,23 +197,23 @@ func NewFakeReservePlugin(status *fwk.Status) frameworkruntime.PluginFactory {
 	}
 }
 
-// FakePostFilterPlugin is a test post filter plugin.
+// FakePostFilterPlugin 是用于测试 PostFilter 扩展点的插件。
 type FakePostFilterPlugin struct {
 	Result *fwk.PostFilterResult
 	Status *fwk.Status
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakePostFilterPlugin) Name() string {
 	return "FakePostFilter"
 }
 
-// PostFilter invoked at the PostFilter extension point.
+// PostFilter 在 PostFilter 扩展点调用。
 func (pl *FakePostFilterPlugin) PostFilter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeToStatusReader) (*fwk.PostFilterResult, *fwk.Status) {
 	return pl.Result, pl.Status
 }
 
-// NewFakePostFilterPlugin initializes a fakePostFilterPlugin and returns it.
+// NewFakePostFilterPlugin 返回一个创建 FakePostFilterPlugin 的工厂函数。
 func NewFakePostFilterPlugin(result *fwk.PostFilterResult, status *fwk.Status) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakePostFilterPlugin{
@@ -222,28 +223,28 @@ func NewFakePostFilterPlugin(result *fwk.PostFilterResult, status *fwk.Status) f
 	}
 }
 
-// FakePreBindPlugin is a test prebind plugin.
+// FakePreBindPlugin 是用于测试 PreBind 扩展点的插件。
 type FakePreBindPlugin struct {
 	PreBindPreFlightStatus *fwk.Status
 	PreBindStatus          *fwk.Status
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakePreBindPlugin) Name() string {
 	return "FakePreBind"
 }
 
-// PreBindPreFlight invoked at the PreBind extension point.
+// PreBindPreFlight 在 PreBind 预检阶段调用。
 func (pl *FakePreBindPlugin) PreBindPreFlight(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ string) (*fwk.PreBindPreFlightResult, *fwk.Status) {
 	return &fwk.PreBindPreFlightResult{AllowParallel: false}, pl.PreBindPreFlightStatus
 }
 
-// PreBind invoked at the PreBind extension point.
+// PreBind 在 PreBind 扩展点调用。
 func (pl *FakePreBindPlugin) PreBind(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ string) *fwk.Status {
 	return pl.PreBindStatus
 }
 
-// NewFakePreBindPlugin initializes a fakePreBindPlugin and returns it.
+// NewFakePreBindPlugin 返回一个创建 FakePreBindPlugin 的工厂函数。
 func NewFakePreBindPlugin(preBindPreFlightStatus, preBindStatus *fwk.Status) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakePreBindPlugin{
@@ -253,24 +254,24 @@ func NewFakePreBindPlugin(preBindPreFlightStatus, preBindStatus *fwk.Status) fra
 	}
 }
 
-// FakePermitPlugin is a test permit plugin.
+// FakePermitPlugin 是用于测试 Permit 扩展点的插件。
 type FakePermitPlugin struct {
 	Handle  fwk.Handle
 	Status  *fwk.Status
 	Timeout time.Duration
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakePermitPlugin) Name() string {
 	return "FakePermit"
 }
 
-// Permit invoked at the Permit extension point.
+// Permit 在 Permit 扩展点调用。
 func (pl *FakePermitPlugin) Permit(_ context.Context, _ fwk.CycleState, p *v1.Pod, _ string) (*fwk.Status, time.Duration) {
 	return pl.Status, pl.Timeout
 }
 
-// NewFakePermitPlugin initializes a fakePermitPlugin and returns it.
+// NewFakePermitPlugin 返回一个创建 FakePermitPlugin 的工厂函数。
 func NewFakePermitPlugin(status *fwk.Status, timeout time.Duration) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, h fwk.Handle) (fwk.Plugin, error) {
 		return &FakePermitPlugin{
@@ -281,6 +282,8 @@ func NewFakePermitPlugin(status *fwk.Status, timeout time.Duration) frameworkrun
 	}
 }
 
+// FakePreScoreAndScorePlugin 是用于测试 PreScore/Score 扩展点的插件，
+// 返回预置的分数与状态。
 type FakePreScoreAndScorePlugin struct {
 	name           string
 	score          int64
@@ -288,23 +291,27 @@ type FakePreScoreAndScorePlugin struct {
 	scoreStatus    *fwk.Status
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名。
 func (pl *FakePreScoreAndScorePlugin) Name() string {
 	return pl.name
 }
 
+// Score 在 Score 扩展点调用，返回预置分数。
 func (pl *FakePreScoreAndScorePlugin) Score(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	return pl.score, pl.scoreStatus
 }
 
+// ScoreExtensions 返回 nil：该插件不提供分数规整扩展。
 func (pl *FakePreScoreAndScorePlugin) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
+// PreScore 在 PreScore 扩展点调用，返回预置状态。
 func (pl *FakePreScoreAndScorePlugin) PreScore(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) *fwk.Status {
 	return pl.preScoreStatus
 }
 
+// NewFakePreScoreAndScorePlugin 返回一个创建 FakePreScoreAndScorePlugin 的工厂函数。
 func NewFakePreScoreAndScorePlugin(name string, score int64, preScoreStatus, scoreStatus *fwk.Status) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakePreScoreAndScorePlugin{
@@ -316,7 +323,7 @@ func NewFakePreScoreAndScorePlugin(name string, score int64, preScoreStatus, sco
 	}
 }
 
-// NewEqualPrioritizerPlugin returns a factory function to build equalPrioritizerPlugin.
+// NewEqualPrioritizerPlugin 返回一个工厂函数，用于构建得分恒为 1 的 EqualPrioritizerPlugin。
 func NewEqualPrioritizerPlugin() frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 		return &FakePreScoreAndScorePlugin{

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package preemption 提供抢占调度框架：评估候选节点、选择被抢占的 Pod（victims）并执行抢占。
 package preemption
 
 import (
@@ -40,29 +41,25 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// Interface is expected to be implemented by different preemption plugins as all those member
-// methods might have different behavior compared with the default preemption.
+// Interface 由各抢占插件实现：这些成员方法相对默认抢占逻辑可能有不同行为。
 type Interface interface {
-	// GetOffsetAndNumCandidates chooses a random offset and calculates the number of candidates that should be
-	// shortlisted for dry running preemption.
+	// GetOffsetAndNumCandidates 选择一个随机偏移量，并计算试运行（dry run）抢占时需要筛选的候选节点数量。
 	GetOffsetAndNumCandidates(nodes int32) (int32, int32)
-	// CandidatesToVictimsMap builds a map from the target node to a list of to-be-preempted Pods and the number of PDB violation.
+	// CandidatesToVictimsMap 构造从目标节点到待抢占 Pod 列表及 PDB 违规数的映射。
 	CandidatesToVictimsMap(candidates []Candidate) map[string]*extenderv1.Victims
-	// PodEligibleToPreemptOthers returns one bool and one string. The bool indicates whether this pod should be considered for
-	// preempting other pods or not. The string includes the reason if this pod isn't eligible.
+	// PodEligibleToPreemptOthers 返回两个值：布尔值表示该 Pod 是否可考虑抢占其他 Pod，
+	// 字符串说明不可抢占的原因。
 	PodEligibleToPreemptOthers(ctx context.Context, pod *v1.Pod, nominatedNodeStatus *fwk.Status) (bool, string)
-	// SelectVictimsOnNode finds the minimum set of pods that should be preempted in order to make enough room
-	// for the preemptor pod to be scheduled on the selected node (represented by nodeInfo).
-	// The candidate victims (allPossibleVictims) may include pods that span additional nodes (e.g., pod groups).
-	// Note that `cycleState` is cloned by the caller, and `nodeInfo` is a snapshot copy.
+	// SelectVictimsOnNode 找出最小被抢占 Pod 集合，使抢占者能落到指定节点（由 nodeInfo 表示）。
+	// 候选 victims（allPossibleVictims）可能包含跨节点的 Pod（如 PodGroup）。
+	// 注意：cycleState 由调用方克隆，nodeInfo 是快照副本，实现可安全修改。
 	SelectVictimsOnNode(ctx context.Context, cycleState fwk.CycleState, preemptor *v1.Pod, nodeInfo fwk.NodeInfo, allPossibleVictims []*DomainVictim, pdbs []*policy.PodDisruptionBudget) ([]*v1.Pod, int, *fwk.Status)
-	// OrderedScoreFuncs returns a list of ordered score functions to select preferable node where victims will be preempted.
-	// The ordered score functions will be processed one by one iff we find more than one node with the highest score.
-	// Default score functions will be processed if nil returned here for backwards-compatibility.
+	// OrderedScoreFuncs 返回按优先级排列的打分函数，用于选出最适合执行抢占的节点。
+	// 仅当出现多个节点同分时才依次调用后续函数；返回 nil 时使用默认评分函数以保持向后兼容。
 	OrderedScoreFuncs(ctx context.Context, nodesToVictims map[string]*extenderv1.Victims) []func(node string) int64
 }
 
-// Evaluator is a preemption evaluator. It runs preemption logic with a given Interface.
+// Evaluator 是抢占评估器，使用给定的 Interface 执行抢占逻辑。
 type Evaluator struct {
 	PluginName                string
 	Handler                   fwk.Handle
@@ -75,7 +72,7 @@ type Evaluator struct {
 	executor *Executor
 }
 
-// NewEvaluator creates a new Evaluator.
+// NewEvaluator 创建一个新的 Evaluator，并从 framework handle 中提取 Pod/PDB lister 与快照。
 func NewEvaluator(pluginName string, fh fwk.Handle, i Interface, executor *Executor) *Evaluator {
 	ev := &Evaluator{
 		PluginName: pluginName,
@@ -94,7 +91,7 @@ func NewEvaluator(pluginName string, fh fwk.Handle, i Interface, executor *Execu
 	return ev
 }
 
-// evaluate determines victims for preemption, without actuation.
+// evaluate 只做抢占评估（选出最佳候选），不实际执行抢占动作。
 func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1.Pod, m fwk.NodeToStatusReader) (_ Candidate, _ *fwk.PostFilterResult, status *fwk.Status) {
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
@@ -102,10 +99,9 @@ func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1
 		metrics.PreemptionEvaluationDuration.WithLabelValues("pod", status.Code().String()).Observe(metrics.SinceInSeconds(startTime))
 	}()
 
-	// 0) Fetch the latest version of <pod>.
-	// It's safe to directly fetch pod here. Because the informer cache has already been
-	// initialized when creating the Scheduler obj.
-	// However, tests may need to manually initialize the shared pod informer.
+	// 0) 获取 <pod> 的最新版本。
+	// 调度器创建时 informer 缓存已初始化，这里直接读取是安全的；
+	// 但测试场景可能需要手动初始化共享 Pod informer。
 	podNamespace, podName := pod.Namespace, pod.Name
 	pod, err := ev.PodLister.Pods(podNamespace).Get(podName)
 	if err != nil {
@@ -113,14 +109,14 @@ func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1
 		return nil, nil, fwk.AsStatus(err)
 	}
 
-	// 1) Ensure the preemptor is eligible to preempt other pods.
+	// 1) 确认抢占者有资格抢占其他 Pod。
 	nominatedNodeStatus := m.Get(pod.Status.NominatedNodeName)
 	if ok, msg := ev.PodEligibleToPreemptOthers(ctx, pod, nominatedNodeStatus); !ok {
 		logger.V(5).Info("Pod is not eligible for preemption", "pod", klog.KObj(pod), "reason", msg)
 		return nil, nil, fwk.NewStatus(fwk.Unschedulable, msg)
 	}
 
-	// 2) Find all preemption candidates.
+	// 2) 获取所有节点，供后续筛选抢占候选。
 	allNodes, err := ev.Handler.MutableSnapshotSharedLister().NodeInfos().List()
 	if err != nil {
 		return nil, nil, fwk.AsStatus(err)
@@ -131,7 +127,8 @@ func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1
 		return nil, nil, fwk.AsStatus(err)
 	}
 
-	// Return a FitError only when there are no candidates that fit the pod.
+	// 仅在完全没有可用候选时才返回 FitError：此时抢占对调度无帮助，
+	// 顺便清空 Pod 原有的 nominatedNodeName 状态。
 	if len(candidates) == 0 {
 		logger.V(2).Info("No preemption candidate is found; preemption is not helpful for scheduling", "pod", klog.KObj(pod))
 		fitError := &framework.FitError{
@@ -139,21 +136,21 @@ func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1
 			NumAllNodes: len(allNodes),
 			Diagnosis: framework.Diagnosis{
 				NodeToStatus: nodeToStatusMap,
-				// Leave UnschedulablePlugins or PendingPlugins as nil as it won't be used on moving Pods.
+				// 此错误用于清空 nominatedNodeName，不会参与 Pod 迁移，故无需设置插件列表。
 			},
 		}
 		fitError.Diagnosis.NodeToStatus.SetAbsentNodesStatus(fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "Preemption is not helpful for scheduling"))
-		// Specify nominatedNodeName to clear the pod's nominatedNodeName status, if applicable.
+		// 返回空的 nominatedNodeName，以清除 Pod 可能残留的 nominatedNodeName 状态。
 		return nil, framework.NewPostFilterResultWithNominatedNode(""), fwk.NewStatus(fwk.Unschedulable, fitError.Error())
 	}
 
-	// 3) Interact with registered Extenders to filter out some candidates if needed.
+	// 3) 与已注册的 Extender 交互，按需过滤候选节点。
 	candidates, status = ev.callExtenders(logger, pod, candidates)
 	if !status.IsSuccess() {
 		return nil, nil, status
 	}
 
-	// 4) Find the best candidate.
+	// 4) 从候选中选出最优节点。
 	bestCandidate := ev.SelectCandidate(ctx, candidates)
 	if bestCandidate == nil || len(bestCandidate.Name()) == 0 {
 		return nil, nil, fwk.NewStatus(fwk.Unschedulable, "no candidate node for preemption")
@@ -162,22 +159,19 @@ func (ev *Evaluator) evaluate(ctx context.Context, state fwk.CycleState, pod *v1
 	return bestCandidate, nil, fwk.NewStatus(fwk.Success)
 }
 
-// Preempt returns a PostFilterResult carrying suggested nominatedNodeName, along with a Status.
-// The semantics of returned <PostFilterResult, Status> varies on different scenarios:
+// Preempt 执行抢占，返回携带建议 nominatedNodeName 的 PostFilterResult 以及 Status。
+// 不同场景下 <PostFilterResult, Status> 组合的语义如下：
 //
-//   - <nil, Error>. This denotes it's a transient/rare error that may be self-healed in future cycles.
+//   - <nil, Error>：暂态/罕见错误，后续调度周期可能自愈。
 //
-//   - <nil, Unschedulable>. This status is mostly as expected like the preemptor is waiting for the
-//     victims to be fully terminated.
+//   - <nil, Unschedulable>：属预期情况，例如抢占者正在等待 victims 完全终止。
 //
-//   - In both cases above, a nil PostFilterResult is returned to keep the pod's nominatedNodeName unchanged.
+//   - 上述两种情况都返回 nil PostFilterResult，以保持 Pod 的 nominatedNodeName 不变。
 //
-//   - <non-nil PostFilterResult, Unschedulable>. It indicates the pod cannot be scheduled even with preemption.
-//     In this case, a non-nil PostFilterResult is returned and result.NominatingMode instructs how to deal with
-//     the nominatedNodeName.
+//   - <non-nil PostFilterResult, Unschedulable>：即使抢占也无法调度该 Pod。
+//     此时返回非 nil 结果，由 result.NominatingMode 指示如何处理 nominatedNodeName。
 //
-//   - <non-nil PostFilterResult, Success>. It's the regular happy path
-//     and the non-empty nominatedNodeName will be applied to the preemptor pod.
+//   - <non-nil PostFilterResult, Success>：常规成功路径，非空的 nominatedNodeName 会写入抢占者 Pod。
 func (ev *Evaluator) Preempt(ctx context.Context, state fwk.CycleState, pod *v1.Pod, m fwk.NodeToStatusReader) (*fwk.PostFilterResult, *fwk.Status) {
 	logger := klog.FromContext(ctx)
 
@@ -188,7 +182,7 @@ func (ev *Evaluator) Preempt(ctx context.Context, state fwk.CycleState, pod *v1.
 
 	logger.V(2).Info("the target node for the preemption is determined", "node", bestCandidate.Name(), "pod", klog.KObj(pod))
 
-	// 5) Actuate the preemption.
+	// 5) 真正执行抢占动作。
 	if status := ev.executor.actuatePodPreemption(ctx, bestCandidate, pod, ev.PluginName); !status.IsSuccess() {
 		return nil, status
 	}
@@ -196,14 +190,13 @@ func (ev *Evaluator) Preempt(ctx context.Context, state fwk.CycleState, pod *v1.
 	return framework.NewPostFilterResultWithNominatedNode(bestCandidate.Name()), fwk.NewStatus(fwk.Success, fmt.Sprintf("found a potential placement for pod on node %v, preempting %d victims", bestCandidate.Name(), len(bestCandidate.Victims().Pods)))
 }
 
-// FindCandidates calculates a slice of preemption candidates.
-// Each candidate is executable to make the given <pod> schedulable.
+// findCandidates 计算抢占候选切片，每个候选都可执行并使给定 <pod> 可被调度。
 func (ev *Evaluator) findCandidates(ctx context.Context, state fwk.CycleState, allNodes []fwk.NodeInfo, pod *v1.Pod, m fwk.NodeToStatusReader) ([]Candidate, *framework.NodeToStatus, error) {
 	if len(allNodes) == 0 {
 		return nil, nil, errors.New("no nodes available")
 	}
 	logger := klog.FromContext(ctx)
-	// Get a list of nodes with failed predicates (Unschedulable) that may be satisfied by removing pods from the node.
+	// 找出因不可调度（Unschedulable）而失败的节点——这些节点可通过移除 Pod 来满足调度条件。
 	potentialNodes, err := m.NodesForStatusCode(ev.Handler.MutableSnapshotSharedLister().NodeInfos(), fwk.Unschedulable)
 	if err != nil {
 		return nil, nil, err
@@ -222,10 +215,9 @@ func (ev *Evaluator) findCandidates(ctx context.Context, state fwk.CycleState, a
 	return ev.DryRunPreemption(ctx, state, pod, potentialNodes, pdbs, offset, candidatesNum)
 }
 
-// callExtenders calls given <extenders> to select the list of feasible candidates.
-// We will only check <candidates> with extenders that support preemption.
-// Extenders which do not support preemption may later prevent preemptor from being scheduled on the nominated
-// node. In that case, scheduler will find a different host for the preemptor in subsequent scheduling cycles.
+// callExtenders 调用支持抢占的 extender 过滤候选。
+// 不支持抢占的 extender 虽不参与此处筛选，但之后仍可能阻止抢占者落到 nominated 节点；
+// 若发生这种情况，调度器会在后续调度周期为抢占者另选节点。
 func (ev *Evaluator) callExtenders(logger klog.Logger, pod *v1.Pod, candidates []Candidate) ([]Candidate, *fwk.Status) {
 	extenders := ev.Handler.Extenders()
 	nodeLister := ev.Handler.MutableSnapshotSharedLister().NodeInfos()
@@ -233,8 +225,7 @@ func (ev *Evaluator) callExtenders(logger klog.Logger, pod *v1.Pod, candidates [
 		return candidates, nil
 	}
 
-	// Migrate candidate slice to victimsMap to adapt to the Extender interface.
-	// It's only applicable for candidate slice that have unique nominated node name.
+	// 将候选切片转成 victimsMap 以适配 Extender 接口；该转换仅适用于 nominated 节点名唯一的场景。
 	victimsMap := ev.CandidatesToVictimsMap(candidates)
 	if len(victimsMap) == 0 {
 		return candidates, nil
@@ -252,7 +243,7 @@ func (ev *Evaluator) callExtenders(logger klog.Logger, pod *v1.Pod, candidates [
 			}
 			return nil, fwk.AsStatus(err)
 		}
-		// Check if the returned victims are valid.
+		// 校验 extender 返回的 victims 是否有效：节点至少要有一个 victim。
 		for nodeName, victims := range nodeNameToVictims {
 			if victims == nil || len(victims.Pods) == 0 {
 				if extender.IsIgnorable() {
@@ -263,11 +254,10 @@ func (ev *Evaluator) callExtenders(logger klog.Logger, pod *v1.Pod, candidates [
 				return nil, fwk.AsStatus(fmt.Errorf("expected at least one victim pod on node %q", nodeName))
 			}
 		}
-		// Replace victimsMap with new result after preemption. So the
-		// rest of extenders can continue use it as parameter.
+		// 用本轮结果替换 victimsMap，供后续 extender 继续作为输入使用。
 		victimsMap = nodeNameToVictims
 
-		// If node list becomes empty, no preemption can happen regardless of other extenders.
+		// 节点列表已空，后续 extender 再怎么过滤也不可能有抢占，直接结束。
 		if len(victimsMap) == 0 {
 			break
 		}
@@ -283,8 +273,8 @@ func (ev *Evaluator) callExtenders(logger klog.Logger, pod *v1.Pod, candidates [
 	return newCandidates, nil
 }
 
-// SelectCandidate chooses the best-fit candidate from given <candidates> and return it.
-// NOTE: This method is exported for easier testing in default preemption.
+// SelectCandidate 从给定 <candidates> 中选出最合适的候选并返回。
+// 注意：导出此方法是为了便于默认抢占插件的测试。
 func (ev *Evaluator) SelectCandidate(ctx context.Context, candidates []Candidate) Candidate {
 	logger := klog.FromContext(ctx)
 
@@ -299,8 +289,7 @@ func (ev *Evaluator) SelectCandidate(ctx context.Context, candidates []Candidate
 	scoreFuncs := ev.OrderedScoreFuncs(ctx, victimsMap)
 	candidateNode := pickOneNodeForPreemption(logger, victimsMap, scoreFuncs)
 
-	// Same as candidatesToVictimsMap, this logic is not applicable for out-of-tree
-	// preemption plugins that exercise different candidates on the same nominated node.
+	// 与 CandidatesToVictimsMap 同理：对于在同一 nominated 节点上试跑不同候选的外部抢占插件，此逻辑不适用。
 	if victims := victimsMap[candidateNode]; victims != nil {
 		return &candidate{
 			victims: victims,
@@ -308,12 +297,13 @@ func (ev *Evaluator) SelectCandidate(ctx context.Context, candidates []Candidate
 		}
 	}
 
-	// We shouldn't reach here.
+	// 理论上不会走到这里。
 	utilruntime.HandleErrorWithContext(ctx, nil, "Unexpected case no candidate was selected", "candidates", candidates)
-	// To not break the whole flow, return the first candidate.
+	// 为不中断整个流程，兜底返回第一个候选。
 	return candidates[0]
 }
 
+// getPodDisruptionBudgets 通过 lister 获取全部 PDB；lister 为 nil 时返回空。
 func getPodDisruptionBudgets(pdbLister policylisters.PodDisruptionBudgetLister) ([]*policy.PodDisruptionBudget, error) {
 	if pdbLister != nil {
 		return pdbLister.List(labels.Everything())
@@ -321,19 +311,15 @@ func getPodDisruptionBudgets(pdbLister policylisters.PodDisruptionBudgetLister) 
 	return nil, nil
 }
 
-// pickOneNodeForPreemption chooses one node among the given nodes.
-// It assumes pods in each map entry are ordered by decreasing priority.
-// If the scoreFuns is not empty, It picks a node based on score scoreFuns returns.
-// If the scoreFuns is empty,
-// It picks a node based on the following criteria:
-// 1. A node with minimum number of PDB violations.
-// 2. A node with minimum highest priority victim is picked.
-// 3. Ties are broken by sum of priorities of all victims.
-// 4. If there are still ties, node with the minimum number of victims is picked.
-// 5. If there are still ties, node with the latest start time of all highest priority victims is picked.
-// 6. If there are still ties, the first such node is picked (sort of randomly).
-// The 'minNodes1' and 'minNodes2' are being reused here to save the memory
-// allocation and garbage collection time.
+// pickOneNodeForPreemption 从给定节点中选出一个。
+// 假设每个 map 条目中的 Pod 已按优先级降序排列。
+// 若 scoreFuncs 非空，则按这些函数返回的分数挑选；否则按以下规则依次比较：
+// 1. PDB 违规数最少的节点。
+// 2. 最高优先级 victim  priority 最小的节点。
+// 3. 仍相同则比较所有 victim 优先级之和。
+// 4. 仍相同则选 victim 数量最少的节点。
+// 5. 仍相同则选最高优先级 victims 启动时间最晚的节点。
+// 6. 仍相同则取第一个这样的节点（近似随机）。
 func pickOneNodeForPreemption(logger klog.Logger, nodesToVictims map[string]*extenderv1.Victims, scoreFuncs []func(node string) int64) string {
 	if len(nodesToVictims) == 0 {
 		return ""
@@ -346,57 +332,54 @@ func pickOneNodeForPreemption(logger klog.Logger, nodesToVictims map[string]*ext
 
 	if len(scoreFuncs) == 0 {
 		minNumPDBViolatingScoreFunc := func(node string) int64 {
-			// The smaller the NumPDBViolations, the higher the score.
+			// PDB 违规越少，分数越高。
 			return -nodesToVictims[node].NumPDBViolations
 		}
 		minHighestPriorityScoreFunc := func(node string) int64 {
-			// highestPodPriority is the highest priority among the victims on this node.
+			// highestPodPriority 是该节点 victims 中的最高优先级。
 			highestPodPriority := corev1helpers.PodPriority(nodesToVictims[node].Pods[0])
-			// The smaller the highestPodPriority, the higher the score.
+			// 最高优先级越低，分数越高：尽量抢占优先级较低的 Pod。
 			return -int64(highestPodPriority)
 		}
 		minSumPrioritiesScoreFunc := func(node string) int64 {
 			var sumPriorities int64
 			for _, pod := range nodesToVictims[node].Pods {
-				// We add MaxInt32+1 to all priorities to make all of them >= 0. This is
-				// needed so that a node with a few pods with negative priority is not
-				// picked over a node with a smaller number of pods with the same negative
-				// priority (and similar scenarios).
+				// 所有优先级加 MaxInt32+1 使其非负，避免负优先级场景下
+				// "少量负值 Pod 的节点"因总和较小被误选。
 				sumPriorities += int64(corev1helpers.PodPriority(pod)) + int64(math.MaxInt32+1)
 			}
-			// The smaller the sumPriorities, the higher the score.
+			// 优先级总和越小，分数越高。
 			return -sumPriorities
 		}
 		minNumPodsScoreFunc := func(node string) int64 {
-			// The smaller the length of pods, the higher the score.
+			// victim 数量越少，分数越高。
 			return -int64(len(nodesToVictims[node].Pods))
 		}
 		latestStartTimeScoreFunc := func(node string) int64 {
-			// Get the earliest start time of all pods on the current node.
+			// 取该节点所有 Pod 中最早的启动时间。
 			earliestStartTimeOnNode := util.GetEarliestPodStartTime(nodesToVictims[node])
 			if earliestStartTimeOnNode == nil {
 				utilruntime.HandleErrorWithLogger(logger, nil, "Unexpected nil earliestStartTime for node", "node", node)
 				return int64(math.MinInt64)
 			}
-			// The bigger the earliestStartTimeOnNode, the higher the score.
+			// 最早启动时间越晚，分数越高：尽量少影响运行已久的 Pod。
 			return earliestStartTimeOnNode.UnixNano()
 		}
 
-		// Each scoreFunc scores the nodes according to specific rules and keeps the name of the node
-		// with the highest score. If and only if the scoreFunc has more than one node with the highest
-		// score, we will execute the other scoreFunc in order of precedence.
+		// 每个评分函数按各自规则打分并保留最高分节点；仅当出现多个同分节点时，
+		// 才按优先级顺序执行下一个评分函数。
 		scoreFuncs = []func(string) int64{
-			// A node with a minimum number of PDB is preferable.
+			// 优先选 PDB 违规最少的节点。
 			minNumPDBViolatingScoreFunc,
-			// A node with a minimum highest priority victim is preferable.
+			// 其次选最高优先级 victim 优先级最低的节点。
 			minHighestPriorityScoreFunc,
-			// A node with the smallest sum of priorities is preferable.
+			// 再者选 victim 优先级总和最小的节点。
 			minSumPrioritiesScoreFunc,
-			// A node with the minimum number of pods is preferable.
+			// 然后选 victim 数量最少的节点。
 			minNumPodsScoreFunc,
-			// A node with the latest start time of all highest priority victims is preferable.
+			// 最后选最高优先级 victims 启动时间最晚的节点。
 			latestStartTimeScoreFunc,
-			// If there are still ties, then the first Node in the list is selected.
+			// 仍有同分时取列表中的第一个节点。
 		}
 	}
 
@@ -422,11 +405,9 @@ func pickOneNodeForPreemption(logger klog.Logger, nodesToVictims map[string]*ext
 	return allCandidates[0]
 }
 
-// DryRunPreemption simulates Preemption logic on <potentialNodes> in parallel,
-// returns preemption candidates and a map indicating filtered nodes statuses.
-// The number of candidates depends on the constraints defined in the plugin's args. In the returned list of
-// candidates, ones that do not violate PDB are preferred over ones that do.
-// NOTE: This method is exported for easier testing in default preemption.
+// DryRunPreemption 并行地在 <potentialNodes> 上模拟抢占，返回抢占候选及被过滤节点的状态映射。
+// 候选数量取决于插件参数中的约束；返回列表里不违反 PDB 的候选排在违反 PDB 的候选之前。
+// 注意：导出此方法是为了便于默认抢占插件的测试。
 func (ev *Evaluator) DryRunPreemption(ctx context.Context, state fwk.CycleState, pod *v1.Pod, potentialNodes []fwk.NodeInfo,
 	pdbs []*policy.PodDisruptionBudget, offset int32, candidatesNum int32) ([]Candidate, *framework.NodeToStatus, error) {
 
@@ -442,20 +423,17 @@ func (ev *Evaluator) DryRunPreemption(ctx context.Context, state fwk.CycleState,
 
 	var mu sync.Mutex
 	var errs []error
-	// checkNode evaluates a single candidate node in isolation. Each goroutine builds its own Domain
-	// via NewDomainForPodByPodPreemption, so a PodGroup victim that spans nodes A and B will be
-	// considered as a candidate victim in both A's and B's evaluations. This is intentional: SelectCandidate
-	// downstream picks at most one candidate per preemption attempt, so the PodGroup is preempted at most
-	// once. Do not assume cross-goroutine coordination here — checkNode must remain independent.
+	// checkNode 独立评估单个候选节点。每个 goroutine 通过 NewDomainForPodByPodPreemption 构建自己的 Domain，
+	// 因此跨 A、B 两节点的 PodGroup victim 会同时出现在 A 和 B 的评估中。这是有意为之：
+	// 下游 SelectCandidate 每次抢占最多只选一个候选，故该 PodGroup 最多被抢占一次。
+	// 不要在此假设 goroutine 之间有协调——checkNode 必须保持独立。
 	checkNode := func(i int) {
 		nodeInfo := potentialNodes[(int(offset)+i)%len(potentialNodes)]
 		logger.V(5).Info("Check the potential node for preemption", "node", nodeInfo.Node().Name)
 
-		// GetVictimsOnNode is called with a shared nodeInfo. The returned DomainVictims
-		// will contain shared, non-cloned NodeInfos for affected nodes. This is safe because
-		// SelectVictimsOnNode only mutates the main node's NodeInfo (which is passed as a cloned
-		// copy via nodeInfo.Snapshot()). Remote nodes' NodeInfos are only passed to
-		// PreFilterExtension Add/RemovePod hooks, which must not mutate NodeInfo.
+		// GetVictimsOnNode 使用共享的 nodeInfo，返回的 DomainVictims 中受影响节点的 NodeInfo 也是共享的。
+		// 这是安全的：SelectVictimsOnNode 只会修改主节点的 NodeInfo（通过 nodeInfo.Snapshot() 传入克隆副本），
+		// 远端节点的 NodeInfo 仅传给 PreFilterExtension 的 Add/RemovePod 钩子，这些钩子不得修改 NodeInfo。
 		allPossibleVictims, err := ev.GetVictimsOnNode(ctx, nodeInfo)
 		if err != nil {
 			mu.Lock()
@@ -499,18 +477,15 @@ func (ev *Evaluator) DryRunPreemption(ctx context.Context, state fwk.CycleState,
 	return append(nonViolatingCandidates.get(), violatingCandidates.get()...), nodeStatuses, utilerrors.NewAggregate(errs)
 }
 
-// GetVictimsOnNode returns a list of potential preemption victims on the given node.
-// If GenericWorkload is enabled, it groups pods belonging to the same PodGroup
-// (with disruption mode All) across the cluster into a single victim.
-// If GenericWorkload is disabled, it treats each pod on the node as an individual victim.
+// GetVictimsOnNode 返回给定节点上潜在的被抢占对象（victim）列表。
+// 开启 GenericWorkload 时，会把集群内属于同一 PodGroup（中断模式为 All）的 Pod 合并为一个 victim；
+// 关闭时，节点上的每个 Pod 各算一个 victim。
 func (ev *Evaluator) GetVictimsOnNode(ctx context.Context, nodeInfo fwk.NodeInfo) ([]*DomainVictim, error) {
 	fh := ev.Handler
 
-	// If GenericWorkload is disabled, we treat each pod on the node
-	// as an individual preemption victim. We bypass getCrossNodesVictims and call NewPodVictim
-	// with a nil pgLister to force using the pod's own priority. Otherwise, if we used the
-	// pgLister, it would resolve to the PodGroup's priority, which might be nil (treated as 0)
-	// when GenericWorkload is disabled.
+	// GenericWorkload 关闭时，每个 Pod 独立作为 victim。此处绕过 getCrossNodesVictims，
+	// 并向 NewPodVictim 传 nil pgLister 以强制使用 Pod 自身优先级；否则 pgLister 会解析出
+	// PodGroup 优先级，而在该特性关闭时它可能为 nil（被当作 0）。
 	if !ev.executor.fts.EnableGenericWorkload {
 		var victims []Victim
 		for _, podInfo := range nodeInfo.GetPods() {

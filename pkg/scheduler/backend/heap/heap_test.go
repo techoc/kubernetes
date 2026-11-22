@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file was copied from client-go/tools/cache/heap.go and modified
-// for our non thread-safe heap
+// 本文件复制自 client-go/tools/cache/heap.go，并针对本包非线程安全的堆做了修改。
 
 package heap
 
@@ -27,60 +26,75 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
+// testHeapObjectKeyFunc 从测试对象中提取 name 作为堆的键，
+// 使堆通过 name 而非值来定位元素。
 func testHeapObjectKeyFunc(obj testHeapObject) string {
 	return obj.name
 }
 
+// testHeapObject 是堆的测试元素：name 作为键，val 用于比较优先级，size 模拟资源大小。
 type testHeapObject struct {
 	name string
 	val  interface{}
 	size int
 }
 
+// Size 实现 metrics.Entity 接口，返回元素占有的资源量。
 func (obj testHeapObject) Size() int {
 	return obj.size
 }
 
+// Type 实现 metrics.Entity 接口，返回固定的测试类型标识。
 func (obj testHeapObject) Type() fwk.EntityKeyType {
 	return fwk.EntityKeyType("test")
 }
 
+// testMetricRecorder 以整数累计堆操作引起的资源量变化，
+// 用底层数值直接断言 Add/Remove/Update/Clear 的差值是否正确。
 type testMetricRecorder int
 
+// Add 累加新增实体的大小；nil 接收者时不记录，堆可据此关闭指标。
 func (tmr *testMetricRecorder) Add(entity metrics.Entity) {
 	if tmr != nil {
 		*tmr += testMetricRecorder(entity.Size())
 	}
 }
 
+// Remove 减去移除实体的大小；nil 接收者时不记录。
 func (tmr *testMetricRecorder) Remove(entity metrics.Entity) {
 	if tmr != nil {
 		*tmr -= testMetricRecorder(entity.Size())
 	}
 }
 
+// Update 只记大小差值，避免同键覆盖时先减后加相互抵消。
 func (tmr *testMetricRecorder) Update(oldEntity, newEntity metrics.Entity) {
 	if tmr != nil {
 		*tmr += testMetricRecorder(newEntity.Size() - oldEntity.Size())
 	}
 }
 
+// Clear 重置累计值，用于验证堆清空后的状态。
 func (tmr *testMetricRecorder) Clear() {
 	if tmr != nil {
 		*tmr = 0
 	}
 }
 
+// mkHeapObj 构造测试元素，减少各测试中重复的字面量。
 func mkHeapObj(name string, val interface{}, size int) testHeapObject {
 	return testHeapObject{name: name, val: val, size: size}
 }
 
+// compareInts 按 val 的整数值升序比较，决定堆的弹出顺序。
 func compareInts(val1 testHeapObject, val2 testHeapObject) bool {
 	first := val1.val.(int)
 	second := val2.val.(int)
 	return first < second
 }
 
+// expectPopOrder 依次弹出堆中全部元素并断言顺序；
+// 顺序不符通常意味着堆不变式在更新或删除后被破坏。
 func expectPopOrder(t *testing.T, h *Heap[testHeapObject], want []int) {
 	t.Helper()
 	var got []int
@@ -96,7 +110,7 @@ func expectPopOrder(t *testing.T, h *Heap[testHeapObject], want []int) {
 	}
 }
 
-// TestHeap_Peek tests that Peek returns the minimum element after each insertion.
+// TestHeap_Peek 验证每次插入后 Peek 都返回当前最小元素，且空堆返回零值与 false。
 func TestHeap_Peek(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	const amount = 500
@@ -115,8 +129,8 @@ func TestHeap_Peek(t *testing.T) {
 	}
 }
 
-// TestHeap_Delete tests Heap.Delete and ensures that heap invariant is
-// preserved after deleting items.
+// TestHeap_Delete 验证 Delete 只依赖键定位元素，且删除头、尾、中间及不存在的元素后
+// 堆不变式依然保持。
 func TestHeap_Delete(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	h.AddOrUpdate(mkHeapObj("foo", 10, 1))
@@ -124,7 +138,7 @@ func TestHeap_Delete(t *testing.T) {
 	h.AddOrUpdate(mkHeapObj("bal", 31, 3))
 	h.AddOrUpdate(mkHeapObj("baz", 11, 4))
 
-	// Delete head. Delete should work with "key" and doesn't care about the value.
+	// 删除只按键定位，传入的 value 与堆中实际值可以不同。
 	if obj := h.Delete(mkHeapObj("bar", 200, 2)); obj.name == "" {
 		t.Fatalf("Failed to delete head.")
 	}
@@ -135,15 +149,15 @@ func TestHeap_Delete(t *testing.T) {
 	h.AddOrUpdate(mkHeapObj("zab", 30, 5))
 	h.AddOrUpdate(mkHeapObj("faz", 30, 6))
 	len := h.data.Len()
-	// Delete non-existing item.
+	// 删除不存在的元素不应改变堆的长度。
 	if obj := h.Delete(mkHeapObj("non-existent", 10, 7)); obj.name != "" || len != h.data.Len() {
 		t.Fatalf("Didn't expect any item removal")
 	}
-	// Delete tail.
+	// 删除尾部元素。
 	if obj := h.Delete(mkHeapObj("bal", 31, 3)); obj.name == "" {
 		t.Fatalf("Failed to delete tail.")
 	}
-	// Delete one of the items with value 30.
+	// 删除两个值为 30 的元素之一。
 	if obj := h.Delete(mkHeapObj("zab", 30, 5)); obj.name == "" {
 		t.Fatalf("Failed to delete item.")
 	}
@@ -160,8 +174,8 @@ func TestHeap_Delete(t *testing.T) {
 	}
 }
 
-// TestHeap_AddOrUpdate_Update tests update capabilities of Heap.Update
-// and ensures that heap invariant is preserved after adding items.
+// TestHeap_AddOrUpdate_Update 验证 AddOrUpdate 对已有键执行更新，
+// 且无论元素被移到堆头还是堆尾，堆不变式都保持。
 func TestHeap_AddOrUpdate_Update(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	h.AddOrUpdate(mkHeapObj("foo", 10, 1))
@@ -169,7 +183,7 @@ func TestHeap_AddOrUpdate_Update(t *testing.T) {
 	h.AddOrUpdate(mkHeapObj("bal", 31, 3))
 	h.AddOrUpdate(mkHeapObj("baz", 11, 4))
 
-	// Update an item to a value that should push it to the head.
+	// 把元素更新为最小值，应将其上浮到堆头。
 	h.AddOrUpdate(mkHeapObj("baz", 0, 5))
 	if h.data.queue[0].key != "baz" || h.data.keyIndex["baz"] != 0 {
 		t.Fatalf("expected baz to be at the head")
@@ -178,14 +192,14 @@ func TestHeap_AddOrUpdate_Update(t *testing.T) {
 	if e, a := 0, item.val; err != nil || a != e {
 		t.Fatalf("expected %d, got %d", e, a)
 	}
-	// Update bar to push it farther back in the queue.
+	// 把元素更新为最大值，应将其下沉到队尾。
 	h.AddOrUpdate(mkHeapObj("bar", 100, 6))
 	if h.data.queue[0].key != "foo" || h.data.keyIndex["foo"] != 0 {
 		t.Fatalf("expected foo to be at the head")
 	}
 }
 
-// TestHeap_Get tests Heap.Get.
+// TestHeap_Get 验证 Get 按对象中的键查找元素，而不是按值比较。
 func TestHeap_Get(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	h.AddOrUpdate(mkHeapObj("foo", 10, 1))
@@ -193,19 +207,19 @@ func TestHeap_Get(t *testing.T) {
 	h.AddOrUpdate(mkHeapObj("bal", 31, 3))
 	h.AddOrUpdate(mkHeapObj("baz", 11, 4))
 
-	// Get works with the key.
+	// 即使传入的 value 与堆中不同，仍能按键命中。
 	item, exists := h.Get(mkHeapObj("baz", 0, 4))
 	if !exists || item.val != 11 {
 		t.Fatalf("unexpected error in getting element")
 	}
-	// Get non-existing object.
+	// 查找不存在的键应返回 false。
 	_, exists = h.Get(mkHeapObj("non-existing", 0, 5))
 	if exists {
 		t.Fatalf("didn't expect to get any object")
 	}
 }
 
-// TestHeap_GetByKey tests Heap.GetByKey and is very similar to TestHeap_Get.
+// TestHeap_GetByKey 验证 GetByKey 直接按键查找，行为与 TestHeap_Get 基本一致。
 func TestHeap_GetByKey(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	h.AddOrUpdate(mkHeapObj("foo", 10, 1))
@@ -217,14 +231,14 @@ func TestHeap_GetByKey(t *testing.T) {
 	if !exists || item.val != 11 {
 		t.Fatalf("unexpected error in getting element")
 	}
-	// Get non-existing object.
+	// 查找不存在的键应返回 false。
 	_, exists = h.GetByKey("non-existing")
 	if exists {
 		t.Fatalf("didn't expect to get any object")
 	}
 }
 
-// TestHeap_List tests Heap.List function.
+// TestHeap_List 验证 List 返回堆中全部元素，且空堆返回空列表。
 func TestHeap_List(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	list := h.List()
@@ -254,6 +268,7 @@ func TestHeap_List(t *testing.T) {
 	}
 }
 
+// TestHeapHas 验证 Has 对空堆、有元素但键不存在、单元素与多元素命中以及删除后的判断。
 func TestHeapHas(t *testing.T) {
 	t.Run("empty heap", func(t *testing.T) {
 		h := New(testHeapObjectKeyFunc, compareInts)
@@ -298,6 +313,8 @@ func TestHeapHas(t *testing.T) {
 	})
 }
 
+// TestHeapZeroAndOneElement 覆盖空堆与单元素堆的边界情况：
+// 弹空堆应报错，单元素的增删查改都应正确。
 func TestHeapZeroAndOneElement(t *testing.T) {
 	t.Run("pop single element", func(t *testing.T) {
 		h := New(testHeapObjectKeyFunc, compareInts)
@@ -338,6 +355,7 @@ func TestHeapZeroAndOneElement(t *testing.T) {
 	})
 }
 
+// TestHeapPopOrder 验证不同插入顺序（升序、降序、乱序及重复值）下弹出顺序始终升序。
 func TestHeapPopOrder(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -395,6 +413,7 @@ func TestHeapPopOrder(t *testing.T) {
 	}
 }
 
+// TestHeapDeleteMiddle 验证删除中间、头部及部分元素后，剩余元素仍能按序弹出。
 func TestHeapDeleteMiddle(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -451,6 +470,8 @@ func TestHeapDeleteMiddle(t *testing.T) {
 	}
 }
 
+// TestHeapUpdatePriority 验证对已有元素更新优先级后，堆会重新调整位置，
+// 包括更新为同值、更小值、更大值及整体顺序反转。
 func TestHeapUpdatePriority(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -519,6 +540,7 @@ func TestHeapUpdatePriority(t *testing.T) {
 	}
 }
 
+// TestHeapLen 验证 Len 在增删、更新（不改变长度）及弹出操作后的计数正确。
 func TestHeapLen(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -585,6 +607,8 @@ func TestHeapLen(t *testing.T) {
 	}
 }
 
+// TestHeapPopAllAndReuse 验证堆被弹空后仍可复用：用相同或不同的键重新插入，
+// 都能得到正确的弹出顺序，不会残留旧状态。
 func TestHeapPopAllAndReuse(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -636,6 +660,7 @@ func TestHeapPopAllAndReuse(t *testing.T) {
 	}
 }
 
+// TestHeapDeleteAll 验证以任意顺序删除全部元素后堆变空，且之后仍能继续插入和弹出。
 func TestHeapDeleteAll(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -684,7 +709,7 @@ func TestHeapDeleteAll(t *testing.T) {
 			if e, a := 0, h.Len(); a != e {
 				t.Fatalf("expected %d, got %d", e, a)
 			}
-			// Heap should still be usable.
+			// 全部删除后堆应处于可复用的干净状态。
 			h.AddOrUpdate(mkHeapObj("new", 5, 1))
 			item, err := h.Pop()
 			if e, a := 5, item.val; err != nil || a != e {
@@ -694,26 +719,28 @@ func TestHeapDeleteAll(t *testing.T) {
 	}
 }
 
+// TestHeapLargeScale 以 1000 个元素做混合插入、更新、删除和弹出，
+// 验证规模较大时堆仍能保持整体有序。
 func TestHeapLargeScale(t *testing.T) {
 	h := New(testHeapObjectKeyFunc, compareInts)
 	const amount = 1000
 
-	// Insert items in descending order.
+	// 降序插入，构造最坏的输入顺序。
 	for i := amount; i > 0; i-- {
 		h.AddOrUpdate(mkHeapObj(string([]rune{'a', rune(i)}), i, 1))
 	}
 
-	// Update a subset to new priorities.
+	// 更新部分元素的优先级，触发堆重排。
 	for i := 1; i <= amount; i += 10 {
 		h.AddOrUpdate(mkHeapObj(string([]rune{'a', rune(i)}), amount+i, 1))
 	}
 
-	// Delete a subset.
+	// 删除部分元素。
 	for i := 5; i <= amount; i += 10 {
 		h.Delete(mkHeapObj(string([]rune{'a', rune(i)}), 0, 1))
 	}
 
-	// Pop all remaining and verify sorted order.
+	// 依次弹出剩余元素，验证全局升序。
 	prevNum := 0
 	for h.Len() > 0 {
 		item, err := h.Pop()
@@ -728,6 +755,8 @@ func TestHeapLargeScale(t *testing.T) {
 	}
 }
 
+// TestHeapWithRecorder 验证 NewWithRecorder 接入的指标记录器随增删更新正确变化，
+// 特别覆盖“查找对象与堆中对象 size 不一致”时仍按实际存储值扣减。
 func TestHeapWithRecorder(t *testing.T) {
 	metricRecorder := new(testMetricRecorder)
 	h := NewWithRecorder(testHeapObjectKeyFunc, compareInts, metricRecorder)
@@ -751,12 +780,12 @@ func TestHeapWithRecorder(t *testing.T) {
 	if *metricRecorder != 7 {
 		t.Errorf("expected count to be 7 (3+4) but got %d", *metricRecorder)
 	}
-	// Update an existing item with a different size.
+	// 更新已有元素的 size，指标应只记差值。
 	h.AddOrUpdate(mkHeapObj("baz", 100, 5))
 	if *metricRecorder != 9 {
 		t.Errorf("expected count to be 9 (5+4) but got %d", *metricRecorder)
 	}
-	// Delete an item using a lookup object whose size doesn't match the stored one.
+	// 删除时按实际存储的元素大小扣减，而非查找对象的大小。
 	if obj := h.Delete(mkHeapObj("baz", 100, 0)); obj.name == "" {
 		t.Fatalf("Failed to delete item")
 	}

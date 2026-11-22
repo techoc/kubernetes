@@ -61,45 +61,41 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// ErrNoNodesAvailable is used to describe the error that no nodes available to schedule pods.
+// ErrNoNodesAvailable 表示没有可用节点来调度 Pod。
 var ErrNoNodesAvailable = fmt.Errorf("no nodes available to schedule pods")
 
-// Scheduler watches for new unscheduled pods. It attempts to find
-// nodes that they fit on and writes bindings back to the api server.
+// Scheduler 监听新出现的未调度 Pod，为其寻找合适的节点，并把绑定结果写回 apiserver。
 type Scheduler struct {
-	// It is expected that changes made via Cache will be observed
-	// by NodeLister and Algorithm.
+	// 通过 Cache 做出的改动，应当能被 NodeLister 与 Algorithm 观察到。
 	Cache internalcache.Cache
 
 	Extenders []fwk.Extender
 
-	// NextEntity should be a function that blocks until the next entity (pod or pod group)
-	// is available. We don't use a channel for this, because scheduling
-	// a pod may take some amount of time and we don't want pods to get
-	// stale while they sit in a channel.
+	// NextEntity 应阻塞直到下一个实体（Pod 或 PodGroup）可用。
+	// 这里不用 channel，是因为调度一个实体可能耗时较长，
+	// 实体若堆积在 channel 中会因等待而变得陈旧。
 	NextEntity func(logger klog.Logger) (framework.QueuedEntityInfo, error)
 
-	// FailureHandler is called upon a scheduling failure.
+	// FailureHandler 在调度失败时调用。
 	FailureHandler FailureHandlerFn
 
-	// SchedulePod tries to schedule the given pod to one of the nodes in the node list.
-	// Return a struct of ScheduleResult with the name of suggested host on success,
-	// otherwise will return a FitError with reasons.
+	// SchedulePod 尝试把给定 Pod 调度到节点列表中的某个节点。
+	// 成功时返回包含推荐主机名的 ScheduleResult，失败时返回带原因的 FitError。
 	SchedulePod func(ctx context.Context, fwk framework.Framework, state fwk.CycleState, podInfo *framework.QueuedPodInfo) (ScheduleResult, error)
 
-	// Close this to shut down the scheduler.
+	// 关闭此通道即可关停调度器。
 	StopEverything <-chan struct{}
 
-	// SchedulingQueue holds pods to be scheduled
+	// SchedulingQueue 保存待调度的 Pod。
 	SchedulingQueue internalqueue.SchedulingQueue
 
-	// If possible, indirect operation on APIDispatcher, e.g. through SchedulingQueue, is preferred.
-	// Is nil iff SchedulerAsyncAPICalls feature gate is disabled.
-	// Adding a call to APIDispatcher should not be done directly by in-tree usages.
-	// framework.APICache should be used instead.
+	// 如有可能，应优先通过调度队列等间接方式操作 APIDispatcher。
+	// 仅当 SchedulerAsyncAPICalls 特性门关闭时该字段才为 nil。
+	// 树内代码不应直接向 APIDispatcher 添加调用，
+	// 应改走 framework.APICache。
 	APIDispatcher *apidispatcher.APIDispatcher
 
-	// Profiles are the scheduling profiles.
+	// Profiles 是调度配置文件的集合。
 	Profiles profile.Map
 
 	client clientset.Interface
@@ -112,12 +108,12 @@ type Scheduler struct {
 
 	nextStartNodeIndex int
 
-	// logger *must* be initialized when creating a Scheduler,
-	// otherwise logging functions will access a nil sink and
-	// panic.
+	// logger 在创建 Scheduler 时必须初始化，
+	// 否则日志函数会访问 nil sink 并 panic。
 	logger klog.Logger
 
-	// registeredHandlers contains the registrations of all handlers. It's used to check if all handlers have finished syncing before the scheduling cycles start.
+	// registeredHandlers 保存所有事件处理器的注册句柄，
+	// 用于在调度周期开始前确认它们都已完成同步。
 	registeredHandlers []cache.ResourceEventHandlerRegistration
 
 	nominatedNodeNameForExpectationEnabled              bool
@@ -125,21 +121,23 @@ type Scheduler struct {
 	inPlacePodVerticalScalingSchedulerPreemptionEnabled bool
 }
 
+// applyDefaultHandlers 把调度与失败处理挂载到默认实现上。
 func (sched *Scheduler) applyDefaultHandlers() {
 	sched.SchedulePod = sched.schedulePod
 	sched.FailureHandler = sched.handleSchedulingFailure
 }
 
+// schedulerOptions 保存 New 可覆盖的调度器构建参数。
 type schedulerOptions struct {
 	clock                  clock.WithTicker
 	componentConfigVersion string
 	kubeConfig             *restclient.Config
-	// Overridden by profile level percentageOfNodesToScore if set in v1.
+	// 若在 v1 配置中设置了 profile 级别的 percentageOfNodesToScore，此处的值会被覆盖。
 	percentageOfNodesToScore          int32
 	podInitialBackoffSeconds          int64
 	podMaxBackoffSeconds              int64
 	podMaxInUnschedulablePodsDuration time.Duration
-	// Contains out-of-tree plugins to be merged with the in-tree registry.
+	// 保存待与树内注册表合并的树外插件。
 	frameworkOutOfTreeRegistry frameworkruntime.Registry
 	profiles                   []schedulerapi.KubeSchedulerProfile
 	extenders                  []schedulerapi.Extender
@@ -149,41 +147,39 @@ type schedulerOptions struct {
 	nodeInfoSnapshot           *internalcache.Snapshot
 }
 
-// Option configures a Scheduler
+// Option 用于配置 Scheduler 的构建参数。
 type Option func(*schedulerOptions)
 
-// ScheduleResult represents the result of scheduling a pod.
+// ScheduleResult 表示一次 Pod 调度的结果。
 type ScheduleResult struct {
-	// Name of the selected node.
+	// 被选中节点的名称。
 	SuggestedHost string
-	// The number of nodes the scheduler evaluated the pod against in the filtering
-	// phase and beyond.
+	// 调度器在过滤及后续阶段评估该 Pod 时检查的节点数。
 	EvaluatedNodes int
-	// The number of nodes out of the evaluated ones that fit the pod.
+	// 被评估节点中适合该 Pod 的节点数。
 	FeasibleNodes int
-	// The nominating info for scheduling cycle.
+	// 本次调度周期的提名信息。
 	nominatingInfo *fwk.NominatingInfo
 }
 
-// WithComponentConfigVersion sets the component config version to the
-// KubeSchedulerConfiguration version used. The string should be the full
-// scheme group/version of the external type we converted from (for example
-// "kubescheduler.config.k8s.io/v1")
+// WithComponentConfigVersion 设置所使用的组件配置版本。
+// 参数应为转换来源外部类型的完整 scheme group/version
+// （例如 "kubescheduler.config.k8s.io/v1"）。
 func WithComponentConfigVersion(apiVersion string) Option {
 	return func(o *schedulerOptions) {
 		o.componentConfigVersion = apiVersion
 	}
 }
 
-// WithKubeConfig sets the kube config for Scheduler.
+// WithKubeConfig 为 Scheduler 设置 kube 配置。
 func WithKubeConfig(cfg *restclient.Config) Option {
 	return func(o *schedulerOptions) {
 		o.kubeConfig = cfg
 	}
 }
 
-// WithProfiles sets profiles for Scheduler. By default, there is one profile
-// with the name "default-scheduler".
+// WithProfiles 为 Scheduler 设置调度配置文件。
+// 默认只有一个名为 "default-scheduler" 的配置文件。
 func WithProfiles(p ...schedulerapi.KubeSchedulerProfile) Option {
 	return func(o *schedulerOptions) {
 		o.profiles = p
@@ -191,15 +187,15 @@ func WithProfiles(p ...schedulerapi.KubeSchedulerProfile) Option {
 	}
 }
 
-// WithParallelism sets the parallelism for all scheduler algorithms. Default is 16.
+// WithParallelism 设置所有调度算法的并行度，默认值为 16。
 func WithParallelism(threads int32) Option {
 	return func(o *schedulerOptions) {
 		o.parallelism = threads
 	}
 }
 
-// WithPercentageOfNodesToScore sets percentageOfNodesToScore for Scheduler.
-// The default value of 0 will use an adaptive percentage: 50 - (num of nodes)/125.
+// WithPercentageOfNodesToScore 设置 Scheduler 的 percentageOfNodesToScore。
+// 默认值 0 表示使用自适应百分比：50 - (节点数)/125。
 func WithPercentageOfNodesToScore(percentageOfNodesToScore *int32) Option {
 	return func(o *schedulerOptions) {
 		if percentageOfNodesToScore != nil {
@@ -208,60 +204,59 @@ func WithPercentageOfNodesToScore(percentageOfNodesToScore *int32) Option {
 	}
 }
 
-// WithFrameworkOutOfTreeRegistry sets the registry for out-of-tree plugins. Those plugins
-// will be appended to the default registry.
+// WithFrameworkOutOfTreeRegistry 设置树外插件注册表，这些插件会追加到默认注册表之后。
 func WithFrameworkOutOfTreeRegistry(registry frameworkruntime.Registry) Option {
 	return func(o *schedulerOptions) {
 		o.frameworkOutOfTreeRegistry = registry
 	}
 }
 
-// WithPodInitialBackoffSeconds sets podInitialBackoffSeconds for Scheduler, the default value is 1
+// WithPodInitialBackoffSeconds 设置 Scheduler 的 Pod 初始退避秒数，默认值为 1。
 func WithPodInitialBackoffSeconds(podInitialBackoffSeconds int64) Option {
 	return func(o *schedulerOptions) {
 		o.podInitialBackoffSeconds = podInitialBackoffSeconds
 	}
 }
 
-// WithPodMaxBackoffSeconds sets podMaxBackoffSeconds for Scheduler, the default value is 10
+// WithPodMaxBackoffSeconds 设置 Scheduler 的 Pod 最大退避秒数，默认值为 10。
 func WithPodMaxBackoffSeconds(podMaxBackoffSeconds int64) Option {
 	return func(o *schedulerOptions) {
 		o.podMaxBackoffSeconds = podMaxBackoffSeconds
 	}
 }
 
-// WithPodMaxInUnschedulablePodsDuration sets podMaxInUnschedulablePodsDuration for PriorityQueue.
+// WithPodMaxInUnschedulablePodsDuration 设置 PriorityQueue 中 Pod 停留在不可调度队列的最长时间。
 func WithPodMaxInUnschedulablePodsDuration(duration time.Duration) Option {
 	return func(o *schedulerOptions) {
 		o.podMaxInUnschedulablePodsDuration = duration
 	}
 }
 
-// WithExtenders sets extenders for the Scheduler
+// WithExtenders 为 Scheduler 设置 extender。
 func WithExtenders(e ...schedulerapi.Extender) Option {
 	return func(o *schedulerOptions) {
 		o.extenders = e
 	}
 }
 
-// WithClock sets clock for PriorityQueue, the default clock is clock.RealClock.
+// WithClock 为 PriorityQueue 设置时钟，默认使用 clock.RealClock。
 func WithClock(clock clock.WithTicker) Option {
 	return func(o *schedulerOptions) {
 		o.clock = clock
 	}
 }
 
-// FrameworkCapturer is used for registering a notify function in building framework.
+// FrameworkCapturer 用于在构建 framework 时注册一个通知回调。
 type FrameworkCapturer func(schedulerapi.KubeSchedulerProfile)
 
-// WithBuildFrameworkCapturer sets a notify function for getting buildFramework details.
+// WithBuildFrameworkCapturer 设置回调，以便在构建 framework 时获取其细节。
 func WithBuildFrameworkCapturer(fc FrameworkCapturer) Option {
 	return func(o *schedulerOptions) {
 		o.frameworkCapturer = fc
 	}
 }
 
-// WithNodeInfoSnapshot sets the nodeInfoSnapshot for Scheduler.
+// WithNodeInfoSnapshot 为 Scheduler 设置 nodeInfoSnapshot。
 func WithNodeInfoSnapshot(snapshot *internalcache.Snapshot) Option {
 	return func(o *schedulerOptions) {
 		o.nodeInfoSnapshot = snapshot
@@ -275,14 +270,12 @@ var defaultSchedulerOptions = schedulerOptions{
 	podMaxBackoffSeconds:              int64(internalqueue.DefaultPodMaxBackoffDuration.Seconds()),
 	podMaxInUnschedulablePodsDuration: internalqueue.DefaultPodMaxInUnschedulablePodsDuration,
 	parallelism:                       int32(parallelize.DefaultParallelism),
-	// Ideally we would statically set the default profile here, but we can't because
-	// creating the default profile may require testing feature gates, which may get
-	// set dynamically in tests. Therefore, we delay creating it until New is actually
-	// invoked.
+	// 理想情况下可以在此处静态设置默认 profile，但创建默认 profile 可能需要
+	// 检查特性门，而特性门在测试中会动态改变。因此推迟到 New 被调用时再创建。
 	applyDefaultProfile: true,
 }
 
-// New returns a Scheduler
+// New 创建并返回一个 Scheduler。
 func New(ctx context.Context,
 	client clientset.Interface,
 	informerFactory informers.SharedInformerFactory,
@@ -328,10 +321,10 @@ func New(ctx context.Context,
 		snapshot = internalcache.NewEmptySnapshot()
 	}
 	metricsRecorder := metrics.NewMetricsAsyncRecorder(1000, time.Second, stopEverything)
-	// waitingPods holds all the pods that are in the scheduler and waiting in the permit stage
+	// waitingPods 保存调度器中所有处于 permit 阶段等待的 Pod。
 	waitingPods := frameworkruntime.NewWaitingPodsMap()
 
-	// podsInPreBind holds all the pods that are in the scheduler in the preBind phase
+	// podsInPreBind 保存调度器中所有处于 preBind 阶段的 Pod。
 	podsInPreBind := frameworkruntime.NewPodsInPreBindMap()
 
 	var resourceClaimCache *assumecache.AssumeCache
@@ -346,8 +339,7 @@ func New(ctx context.Context,
 			SliceInformer:            informerFactory.Resource().V1().ResourceSlices(),
 			KubeClient:               client,
 		}
-		// If device taint rules are disabled, the additional informers are not needed and
-		// the tracker turns into a simple wrapper around the slice informer.
+		// 关闭设备污点规则时无需额外的 informer，tracker 退化为对 slice informer 的简单包装。
 		if resourceSliceTrackerOpts.EnableDeviceTaintRules {
 			resourceSliceTrackerOpts.TaintInformer = informerFactory.Resource().V1().DeviceTaintRules()
 		}
@@ -412,7 +404,7 @@ func New(ctx context.Context,
 		return nil, returnErr
 	}
 
-	// Extract pod signing functions from each profile
+	// 从每个 profile 中提取 Pod 签名函数，供调度队列使用。
 	podSigners := make(map[string]internalqueue.PodSigner)
 	for profileName, profile := range profiles {
 		podSigners[profileName] = profile.SignPod
@@ -445,7 +437,7 @@ func New(ctx context.Context,
 		fwk.SetAPICacher(apiCache)
 	}
 
-	// Setup cache debugger.
+	// 初始化缓存调试器，便于在运行时比对缓存与 informer 状态。
 	debugger := cachedebugger.New(nodeLister, podLister, schedulerCache, podQueue)
 	debugger.ListenForSignal(ctx)
 
@@ -480,12 +472,12 @@ func New(ctx context.Context,
 	return sched, nil
 }
 
-// defaultQueueingHintFn is the default queueing hint function.
-// It always returns Queue as the queueing hint.
+// defaultQueueingHintFn 是默认的入队提示函数，总是返回 Queue。
 var defaultQueueingHintFn = func(_ klog.Logger, _ *v1.Pod, _, _ interface{}) (fwk.QueueingHint, error) {
 	return fwk.Queue, nil
 }
 
+// buildQueueingHintMap 汇总各插件注册的事件及其入队提示函数。
 func buildQueueingHintMap(ctx context.Context, es []fwk.EnqueueExtensions) (internalqueue.QueueingHintMap, error) {
 	queueingHintMap := make(internalqueue.QueueingHintMap)
 	var returnErr error
@@ -495,17 +487,15 @@ func buildQueueingHintMap(ctx context.Context, es []fwk.EnqueueExtensions) (inte
 			returnErr = errors.Join(returnErr, err)
 		}
 
-		// This will happen when plugin registers with empty events, it's usually the case a pod
-		// will become reschedulable only for self-update, e.g. schedulingGates plugin, the pod
-		// will enter into the activeQ via priorityQueue.Update().
+		// 插件注册空事件列表通常意味着 Pod 只能通过自身更新重新变为可调度
+		// （如 schedulingGates 插件），这类 Pod 会经 priorityQueue.Update() 回到 activeQ。
 		if len(events) == 0 {
 			continue
 		}
 
-		// Note: Rarely, a plugin implements EnqueueExtensions but returns nil.
-		// We treat it as: the plugin is not interested in any event, and hence pod failed by that plugin
-		// cannot be moved by any regular cluster event.
-		// So, we can just ignore such EventsToRegister here.
+		// 注意：极少情况下插件实现了 EnqueueExtensions 却返回 nil。
+		// 这视为该插件不关注任何事件，被它拒绝的 Pod 无法靠常规集群事件重新入队，
+		// 因此这里直接忽略这样的 EventsToRegister。
 
 		for _, event := range events {
 			fn := event.QueueingHintFn
@@ -534,7 +524,7 @@ func buildQueueingHintMap(ctx context.Context, es []fwk.EnqueueExtensions) (inte
 	return queueingHintMap, nil
 }
 
-// Run begins watching and scheduling. It starts scheduling and blocked until the context is done.
+// Run 开始监听与调度，会一直阻塞直到 ctx 结束。
 func (sched *Scheduler) Run(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	sched.SchedulingQueue.Run(logger)
@@ -543,12 +533,9 @@ func (sched *Scheduler) Run(ctx context.Context) {
 		sched.APIDispatcher.Run(logger)
 	}
 
-	// We need to start scheduleOne loop in a dedicated goroutine,
-	// because scheduleOne function hangs on getting the next item
-	// from the SchedulingQueue.
-	// If there are no new pods to schedule, it will be hanging there
-	// and if done in this goroutine it will be blocking closing
-	// SchedulingQueue, in effect causing a deadlock on shutdown.
+	// scheduleOne 会阻塞等待调度队列中的下一个实体。若没有待调度对象，它会一直挂起；
+	// 因此必须放在独立 goroutine 中运行，否则会阻塞当前 goroutine 关闭 SchedulingQueue，
+	// 进而在关停时形成死锁。
 	go wait.UntilWithContext(ctx, sched.ScheduleOne, 0)
 
 	<-ctx.Done()
@@ -557,15 +544,14 @@ func (sched *Scheduler) Run(ctx context.Context) {
 	}
 	sched.SchedulingQueue.Close()
 
-	// If the plugins satisfy the io.Closer interface, they are closed.
+	// 实现了 io.Closer 的插件会在此被关闭。
 	err := sched.Profiles.Close()
 	if err != nil {
 		logger.Error(err, "Failed to close plugins")
 	}
 }
 
-// NewInformerFactory creates a SharedInformerFactory and initializes a scheduler specific
-// in-place podInformer.
+// NewInformerFactory 创建 SharedInformerFactory，并初始化调度器专用的 Pod informer。
 func NewInformerFactory(cs clientset.Interface, resyncPeriod time.Duration, informerName *cache.InformerName) informers.SharedInformerFactory {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(cs, resyncPeriod, informers.WithInformerName(informerName))
 	informerFactory.InformerFor(&v1.Pod{}, func(cs clientset.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
@@ -574,6 +560,7 @@ func NewInformerFactory(cs clientset.Interface, resyncPeriod time.Duration, info
 	return informerFactory
 }
 
+// buildExtenders 构造 HTTP extender，并把被忽略的扩展资源同步到各 profile 的插件参数中。
 func buildExtenders(logger klog.Logger, extenders []schedulerapi.Extender, profiles []schedulerapi.KubeSchedulerProfile) ([]fwk.Extender, error) {
 	var fExtenders []fwk.Extender
 	if len(extenders) == 0 {
@@ -599,12 +586,12 @@ func buildExtenders(logger klog.Logger, extenders []schedulerapi.Extender, profi
 			}
 		}
 	}
-	// place ignorable extenders to the tail of extenders
+	// 可忽略的 extender 放到队尾，让不可忽略者先执行。
 	fExtenders = append(fExtenders, ignorableExtenders...)
 
-	// If there are any extended resources found from the Extenders, append them to the pluginConfig for each profile.
-	// This should only have an effect on ComponentConfig, where it is possible to configure Extenders and
-	// plugin args (and in which case the extender ignored resources take precedence).
+	// 把 extender 中被忽略的扩展资源写入每个 profile 的 pluginConfig。
+	// 这仅对 ComponentConfig 生效——只有它同时支持配置 Extender 和插件参数，
+	// 且此时 extender 的忽略资源优先。
 	if len(ignoredExtendedResources) == 0 {
 		return fExtenders, nil
 	}
@@ -614,7 +601,7 @@ func buildExtenders(logger klog.Logger, extenders []schedulerapi.Extender, profi
 		var found = false
 		for k := range prof.PluginConfig {
 			if prof.PluginConfig[k].Name == noderesources.Name {
-				// Update the existing args
+				// 更新已有插件参数，避免重复添加配置。
 				pc := &prof.PluginConfig[k]
 				args, ok := pc.Args.(*schedulerapi.NodeResourcesFitArgs)
 				if !ok {
@@ -632,8 +619,10 @@ func buildExtenders(logger klog.Logger, extenders []schedulerapi.Extender, profi
 	return fExtenders, nil
 }
 
+// FailureHandlerFn 定义调度失败时的处理函数签名。
 type FailureHandlerFn func(ctx context.Context, fwk framework.Framework, podInfo *framework.QueuedPodInfo, status *fwk.Status, nominatingInfo *fwk.NominatingInfo, start time.Time)
 
+// unionedGVKs 把所有 profile 关注的事件资源及其动作类型取并集。
 func unionedGVKs(queueingHintsPerProfile internalqueue.QueueingHintMapPerProfile) map[fwk.EventResource]fwk.ActionType {
 	gvkMap := make(map[fwk.EventResource]fwk.ActionType)
 	for _, queueingHints := range queueingHintsPerProfile {
@@ -648,8 +637,8 @@ func unionedGVKs(queueingHintsPerProfile internalqueue.QueueingHintMapPerProfile
 	return gvkMap
 }
 
-// newPodInformer creates a shared index informer that returns only non-terminal pods.
-// The PodInformer allows indexers to be added, but note that only non-conflict indexers are allowed.
+// newPodInformer 创建只返回非终态 Pod 的共享索引 informer。
+// 该 informer 允许添加索引器，但只允许添加不冲突的索引器。
 func newPodInformer(cs clientset.Interface, resyncPeriod time.Duration, informerName *cache.InformerName) cache.SharedIndexInformer {
 	selector := fmt.Sprintf("status.phase!=%v,status.phase!=%v", v1.PodSucceeded, v1.PodFailed)
 	tweakListOptions := func(options *metav1.ListOptions) {
@@ -662,8 +651,8 @@ func newPodInformer(cs clientset.Interface, resyncPeriod time.Duration, informer
 		InformerName:     informerName,
 	})
 
-	// Dropping `.metadata.managedFields` to improve memory usage.
-	// The Extract workflow (i.e. `ExtractPod`) should be unused.
+	// 丢弃 `.metadata.managedFields` 以降低内存占用。
+	// Extract 流程（即 `ExtractPod`）应当不会被用到。
 	trim := func(obj interface{}) (interface{}, error) {
 		if accessor, err := meta.Accessor(obj); err == nil {
 			if accessor.GetManagedFields() != nil {
@@ -676,6 +665,7 @@ func newPodInformer(cs clientset.Interface, resyncPeriod time.Duration, informer
 	return informer
 }
 
+// CurrentCycle 返回当前调度周期编号；队列未初始化时返回 0。
 func (sched *Scheduler) CurrentCycle() int64 {
 	if sched.SchedulingQueue != nil {
 		return sched.SchedulingQueue.SchedulingCycle()

@@ -30,6 +30,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestPodGroupMemberPods_Add 验证 add 按 PodGroup 建立索引，且能按键取回成员。
 func TestPodGroupMemberPods_Add(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
@@ -89,6 +90,7 @@ func TestPodGroupMemberPods_Add(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Get 覆盖 Pod 存在、同组不存在、整组不存在三种查询路径。
 func TestPodGroupMemberPods_Get(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
@@ -138,6 +140,7 @@ func TestPodGroupMemberPods_Get(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Has 验证 has 只按 UID 判断成员是否存在。
 func TestPodGroupMemberPods_Has(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
@@ -186,6 +189,7 @@ func TestPodGroupMemberPods_Has(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Update 验证更新会替换缓存中的 PodInfo，未命中则不做改动。
 func TestPodGroupMemberPods_Update(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	updatedPod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").Label("updated", "true").PodGroupName("pg1").Obj()
@@ -229,6 +233,7 @@ func TestPodGroupMemberPods_Update(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Delete 验证删除成员，以及组内最后一个 Pod 被删时清理组键。
 func TestPodGroupMemberPods_Delete(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
@@ -298,6 +303,7 @@ func TestPodGroupMemberPods_Delete(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Clear 验证清空整组时返回被移除的成员，且不影响其他组。
 func TestPodGroupMemberPods_Clear(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
@@ -361,6 +367,7 @@ func TestPodGroupMemberPods_Clear(t *testing.T) {
 	}
 }
 
+// TestPodGroupMemberPods_Len 验证 len 返回所有组的成员总数。
 func TestPodGroupMemberPods_Len(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()

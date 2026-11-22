@@ -20,23 +20,22 @@ import (
 	v1 "k8s.io/kube-scheduler/config/v1"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = v1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = v1.SchemeGroupVersion
 
 var (
-	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 在外部类型的基础上扩展 SchemeBuilder 实例。
+	// 本包还在此注册默认值与转换的初始化函数。
 	localSchemeBuilder = &v1.SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是将本 API 组与版本注册到 scheme 的全局函数。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处只注册手写的函数，生成函数的注册放在生成文件里。
+	// 这样即使生成文件缺失，代码依然可以编译。
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }

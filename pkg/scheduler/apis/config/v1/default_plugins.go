@@ -28,7 +28,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// getDefaultPlugins returns the default set of plugins.
+// getDefaultPlugins 返回默认的插件集合。
+// 权重较低的插件在 Score 阶段影响较小，顺序本身不决定执行优先级，框架按扩展点归类执行。
 func getDefaultPlugins() *v1.Plugins {
 	plugins := &v1.Plugins{
 		MultiPoint: v1.PluginSet{
@@ -54,11 +55,13 @@ func getDefaultPlugins() *v1.Plugins {
 			},
 		},
 	}
+	// 根据 feature gate 叠加实验性插件，默认列表本身保持与开关无关。
 	applyFeatureGates(plugins)
 
 	return plugins
 }
 
+// applyFeatureGates 根据启用的 feature gate 向配置中追加或插入对应的插件。
 func applyFeatureGates(config *v1.Plugins) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.NodeDeclaredFeatures) {
 		config.MultiPoint.Enabled = append(config.MultiPoint.Enabled, v1.Plugin{Name: names.NodeDeclaredFeatures})
@@ -77,12 +80,10 @@ func applyFeatureGates(config *v1.Plugins) {
 	}
 }
 
+// applyDynamicResources 将 DynamicResources 插件插入到默认插件列表中。
 func applyDynamicResources(config *v1.Plugins) {
-	// This plugin should come before DefaultPreemption because if
-	// there is a problem with a Pod and PostFilter gets called to
-	// resolve the problem, it is better to first deallocate an
-	// idle ResourceClaim than it is to evict some Pod that might
-	// be doing useful work.
+	// 该插件必须排在 DefaultPreemption 之前：当 Pod 出问题而触发 PostFilter 时，
+	// 先释放空闲的 ResourceClaim 比驱逐一个可能仍在干活的 Pod 代价更小。
 	for i := range config.MultiPoint.Enabled {
 		if config.MultiPoint.Enabled[i].Name == names.DefaultPreemption {
 			extended := make([]v1.Plugin, 0, len(config.MultiPoint.Enabled)+1)
@@ -95,16 +96,18 @@ func applyDynamicResources(config *v1.Plugins) {
 	}
 }
 
+// applyGangScheduling 追加 GangScheduling 插件以支持 gang 调度。
 func applyGangScheduling(config *v1.Plugins) {
 	config.MultiPoint.Enabled = append(config.MultiPoint.Enabled, v1.Plugin{Name: names.GangScheduling})
 }
 
+// applyTopologyAwareWorkloadScheduling 追加拓扑感知调度所需的插件。
 func applyTopologyAwareWorkloadScheduling(config *v1.Plugins) {
 	config.MultiPoint.Enabled = append(config.MultiPoint.Enabled, v1.Plugin{Name: names.TopologyPlacementGenerator})
 	config.MultiPoint.Enabled = append(config.MultiPoint.Enabled, v1.Plugin{Name: names.PodGroupPodsCount, Weight: ptr.To[int32](1)})
 }
 
-// mergePlugins merges the custom set into the given default one, handling disabled sets.
+// mergePlugins 将自定义插件集合合并到给定的默认集合中，并处理禁用集合。
 func mergePlugins(logger klog.Logger, defaultPlugins, customPlugins *v1.Plugins) *v1.Plugins {
 	if customPlugins == nil {
 		return defaultPlugins
@@ -129,27 +132,28 @@ func mergePlugins(logger klog.Logger, defaultPlugins, customPlugins *v1.Plugins)
 	return defaultPlugins
 }
 
+// pluginIndex 记录插件在自定义列表中的位置及其定义，用于判断它是否替换了默认插件。
 type pluginIndex struct {
 	index  int
 	plugin v1.Plugin
 }
 
+// mergePluginSet 合并单个扩展点的默认插件集合与自定义插件集合。
 func mergePluginSet(logger klog.Logger, defaultPluginSet, customPluginSet v1.PluginSet) v1.PluginSet {
 	disabledPlugins := sets.New[string]()
 	enabledCustomPlugins := make(map[string]pluginIndex)
-	// replacedPluginIndex is a set of index of plugins, which have replaced the default plugins.
+	// replacedPluginIndex 记录已替换默认插件的自定义插件在列表中的下标。
 	replacedPluginIndex := sets.New[int]()
 	var disabled []v1.Plugin
 	for _, disabledPlugin := range customPluginSet.Disabled {
-		// if the user is manually disabling any (or all, with "*") default plugins for an extension point,
-		// we need to track that so that the MultiPoint extension logic in the framework can know to skip
-		// inserting unspecified default plugins to this point.
+		// 用户为某个扩展点手动禁用（或用 "*" 禁用全部）默认插件时，必须记录下来，
+		// 这样 framework 中的 MultiPoint 逻辑才知道不要把未显式指定的默认插件补回该扩展点。
 		disabled = append(disabled, v1.Plugin{Name: disabledPlugin.Name})
 		disabledPlugins.Insert(disabledPlugin.Name)
 	}
 
-	// With MultiPoint, we may now have some disabledPlugins in the default registry
-	// For example, we enable PluginX with Filter+Score through MultiPoint but disable its Score plugin by default.
+	// 引入 MultiPoint 后，默认配置中也可能存在被禁用的插件。
+	// 例如通过 MultiPoint 同时启用了插件 X 的 Filter 与 Score，但默认禁用了它的 Score。
 	for _, disabledPlugin := range defaultPluginSet.Disabled {
 		disabled = append(disabled, v1.Plugin{Name: disabledPlugin.Name})
 		disabledPlugins.Insert(disabledPlugin.Name)
@@ -164,10 +168,10 @@ func mergePluginSet(logger klog.Logger, defaultPluginSet, customPluginSet v1.Plu
 			if disabledPlugins.Has(defaultEnabledPlugin.Name) {
 				continue
 			}
-			// The default plugin is explicitly re-configured, update the default plugin accordingly.
+			// 默认插件被显式重新配置时，用自定义配置覆盖它。
 			if customPlugin, ok := enabledCustomPlugins[defaultEnabledPlugin.Name]; ok {
 				logger.Info("Default plugin is explicitly re-configured; overriding", "plugin", defaultEnabledPlugin.Name)
-				// Update the default plugin in place to preserve order.
+				// 原位替换以保留默认插件的相对顺序。
 				defaultEnabledPlugin = customPlugin.plugin
 				replacedPluginIndex.Insert(customPlugin.index)
 			}
@@ -175,9 +179,9 @@ func mergePluginSet(logger klog.Logger, defaultPluginSet, customPluginSet v1.Plu
 		}
 	}
 
-	// Append all the custom plugins which haven't replaced any default plugins.
-	// Note: duplicated custom plugins will still be appended here.
-	// If so, the instantiation of scheduler framework will detect it and abort.
+	// 追加所有没有替换默认插件的自定义插件。
+	// 注意：重复的自定义插件仍会被追加到这里，
+	// 此时 scheduler framework 的实例化会检测到重复并直接终止。
 	for index, plugin := range customPluginSet.Enabled {
 		if !replacedPluginIndex.Has(index) {
 			enabledPlugins = append(enabledPlugins, plugin)
@@ -186,11 +190,10 @@ func mergePluginSet(logger klog.Logger, defaultPluginSet, customPluginSet v1.Plu
 	return v1.PluginSet{Enabled: enabledPlugins, Disabled: disabled}
 }
 
-// applyDeferredPodScheduling inserts the DeferredPodScheduling plugin.
-// It must be placed before NodeResourcesFit so that if a node has preemption disabled,
-// the pod fails on DeferredPodScheduling first. This ensures DeferredPodScheduling is recorded
-// as the failing plugin, allowing its Queueing Hint to trigger a retry when the policy is enabled.
-// It must run after basic filters like NodeName to avoid useless retries on irrelevant node events.
+// applyDeferredPodScheduling 插入 DeferredPodScheduling 插件。
+// 它必须位于 NodeResourcesFit 之前：这样当某节点禁用了抢占时，Pod 会先在
+// DeferredPodScheduling 失败，从而被记录为失败插件，便于其 Queueing Hint 在策略启用后触发重试。
+// 同时它必须排在 NodeName 等基础过滤器之后，避免对无关的节点事件做无用的重试。
 func applyDeferredPodScheduling(config *v1.Plugins) {
 	idx := slices.IndexFunc(config.MultiPoint.Enabled, func(p v1.Plugin) bool {
 		return p.Name == names.NodeResourcesFit

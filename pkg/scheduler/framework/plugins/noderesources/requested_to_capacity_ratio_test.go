@@ -38,6 +38,8 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// TestRequestedToCapacityRatioScoringStrategy 校验请求容量比评分策略：
+// 根据节点已用/可用资源与自定义函数形状，验证各节点得到的归一化分数。
 func TestRequestedToCapacityRatioScoringStrategy(t *testing.T) {
 	shape := []config.UtilizationShapePoint{
 		{Utilization: 0, Score: 10},
@@ -155,6 +157,8 @@ func TestRequestedToCapacityRatioScoringStrategy(t *testing.T) {
 	}
 }
 
+// TestBrokenLinearFunction 校验折线函数能把利用率映射到配置的分数，
+// 并在区间端点上正确插值。
 func TestBrokenLinearFunction(t *testing.T) {
 	type Assertion struct {
 		p        int64
@@ -221,6 +225,8 @@ func TestBrokenLinearFunction(t *testing.T) {
 	}
 }
 
+// TestResourceBinPackingSingleExtended 校验单种扩展资源下的装箱评分：
+// 资源利用率越接近目标，节点得分越高。
 func TestResourceBinPackingSingleExtended(t *testing.T) {
 	extendedResource1 := map[string]int64{
 		"intel.com/foo": 4,
@@ -243,24 +249,24 @@ func TestResourceBinPackingSingleExtended(t *testing.T) {
 		name           string
 	}{
 		{
-			//  Node1 Score = Node2 Score = 0 as the incoming Pod doesn't request extended resource.
+			//  新 Pod 未请求扩展资源，因此节点1、节点2 得分都为 0。
 			pod:            st.MakePod().Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResource2), makeNode("node2", 4000, 10000*1024*1024, extendedResource1)},
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 0}, {Name: "node2", Score: 0}},
 			name:           "nothing scheduled, nothing requested",
 		},
 		{
-			// Node1 scores (used resources) on 0-MaxNodeScore scale
-			// Node1 Score:
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分（按已用资源，0-MaxNodeScore 刻度）
+			// 节点1 得分：
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * maxUtilization = 25 = rawScoringFunction(25)
-			// Node1 Score: 2
-			// Node2 scores (used resources) on 0-MaxNodeScore scale
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分： 2
+			// 节点2 得分（按已用资源，0-MaxNodeScore 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),4)
 			//  = 2/4 * maxUtilization = 50 = rawScoringFunction(50)
-			// Node2 Score: 5
+			// 节点2 得分： 5
 			pod:            st.MakePod().Req(extendedResource3).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResource2), makeNode("node2", 4000, 10000*1024*1024, extendedResource1)},
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 2}, {Name: "node2", Score: 5}},
@@ -268,17 +274,17 @@ func TestResourceBinPackingSingleExtended(t *testing.T) {
 			pods:           []*v1.Pod{st.MakePod().Obj()},
 		},
 		{
-			// Node1 scores (used resources) on 0-MaxNodeScore scale
-			// Node1 Score:
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分（按已用资源，0-MaxNodeScore 刻度）
+			// 节点1 得分：
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * maxUtilization = 25 = rawScoringFunction(25)
-			// Node1 Score: 2
-			// Node2 scores (used resources) on 0-MaxNodeScore scale
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分： 2
+			// 节点2 得分（按已用资源，0-MaxNodeScore 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((2+2),4)
 			//  = 4/4 * maxUtilization = maxUtilization = rawScoringFunction(maxUtilization)
-			// Node2 Score: 10
+			// 节点2 得分： 10
 			pod:            st.MakePod().Req(extendedResource3).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResource2), makeNode("node2", 4000, 10000*1024*1024, extendedResource1)},
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 2}, {Name: "node2", Score: 10}},
@@ -286,17 +292,17 @@ func TestResourceBinPackingSingleExtended(t *testing.T) {
 			pods:           []*v1.Pod{st.MakePod().Req(extendedResource3).Node("node2").Obj()},
 		},
 		{
-			// Node1 scores (used resources) on 0-MaxNodeScore scale
-			// Node1 Score:
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分（按已用资源，0-MaxNodeScore 刻度）
+			// 节点1 得分：
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+4),8)
 			//  = 4/8 * maxUtilization = 50 = rawScoringFunction(50)
-			// Node1 Score: 5
-			// Node2 scores (used resources) on 0-MaxNodeScore scale
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分： 5
+			// 节点2 得分（按已用资源，0-MaxNodeScore 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+4),4)
 			//  = 4/4 * maxUtilization = maxUtilization = rawScoringFunction(maxUtilization)
-			// Node2 Score: 10
+			// 节点2 得分： 10
 			pod:            st.MakePod().Req(extendedResource4).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResource2), makeNode("node2", 4000, 10000*1024*1024, extendedResource1)},
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 5}, {Name: "node2", Score: 10}},
@@ -356,6 +362,7 @@ func TestResourceBinPackingSingleExtended(t *testing.T) {
 	}
 }
 
+// TestResourceBinPackingMultipleExtended 校验多种扩展资源按权重加权后的装箱评分。
 func TestResourceBinPackingMultipleExtended(t *testing.T) {
 	extendedResources1 := map[string]int64{
 		"intel.com/foo": 4,
@@ -386,29 +393,29 @@ func TestResourceBinPackingMultipleExtended(t *testing.T) {
 
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node1 scores (used resources) on 0-10 scale
-			// Node1 Score:
+			// 节点1 得分（按已用资源，0-10 刻度）
+			// 节点1 得分：
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+0),8)
 			//  = 0/8 * 100 = 0 = rawScoringFunction(0)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+0),4)
 			//  = 0/4 * 100 = 0 = rawScoringFunction(0)
-			// Node1 Score: (0 * 3) + (0 * 5) / 8 = 0
+			// 节点1 得分： (0 * 3) + (0 * 5) / 8 = 0
 
-			// Node2 scores (used resources) on 0-10 scale
-			// rawScoringFunction(used + requested / available)
+			// 节点2 得分（按已用资源，0-10 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+0),4)
 			//  = 0/4 * 100 = 0 = rawScoringFunction(0)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+0),8)
 			//  = 0/8 * 100 = 0 = rawScoringFunction(0)
-			// Node2 Score: (0 * 3) + (0 * 5) / 8 = 0
+			// 节点2 得分： (0 * 3) + (0 * 5) / 8 = 0
 
 			pod:            st.MakePod().Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResources2), makeNode("node2", 4000, 10000*1024*1024, extendedResources1)},
@@ -419,29 +426,29 @@ func TestResourceBinPackingMultipleExtended(t *testing.T) {
 
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node1 scores (used resources) on 0-10 scale
-			// Node1 Score:
+			// 节点1 得分（按已用资源，0-10 刻度）
+			// 节点1 得分：
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * 100 = 25 = rawScoringFunction(25)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),4)
 			//  = 2/4 * 100 = 50 = rawScoringFunction(50)
-			// Node1 Score: (2 * 3) + (5 * 5) / 8 = 4
+			// 节点1 得分： (2 * 3) + (5 * 5) / 8 = 4
 
-			// Node2 scores (used resources) on 0-10 scale
-			// rawScoringFunction(used + requested / available)
+			// 节点2 得分（按已用资源，0-10 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),4)
 			//  = 2/4 * 100 = 50 = rawScoringFunction(50)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * 100 = 25 = rawScoringFunction(25)
-			// Node2 Score: (5 * 3) + (2 * 5) / 8 = 3
+			// 节点2 得分： (5 * 3) + (2 * 5) / 8 = 3
 
 			pod:            st.MakePod().Req(extendedResourcePod1).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResources2), makeNode("node2", 4000, 10000*1024*1024, extendedResources1)},
@@ -455,28 +462,28 @@ func TestResourceBinPackingMultipleExtended(t *testing.T) {
 
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node1 scores (used resources) on 0-10 scale
-			// Node1 Score:
+			// 节点1 得分（按已用资源，0-10 刻度）
+			// 节点1 得分：
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * 100 = 25 = rawScoringFunction(25)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),4)
 			//  = 2/4 * 100 = 50 = rawScoringFunction(50)
-			// Node1 Score: (2 * 3) + (5 * 5) / 8 = 4
-			// Node2 scores (used resources) on 0-10 scale
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分： (2 * 3) + (5 * 5) / 8 = 4
+			// 节点2 得分（按已用资源，0-10 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((2+2),4)
 			//  = 4/4 * 100 = 100 = rawScoringFunction(100)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((2+2),8)
 			//  = 4/8 *100 = 50 = rawScoringFunction(50)
-			// Node2 Score: (10 * 3) + (5 * 5) / 8 = 7
+			// 节点2 得分： (10 * 3) + (5 * 5) / 8 = 7
 
 			pod:            st.MakePod().Req(extendedResourcePod1).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResources2), makeNode("node2", 4000, 10000*1024*1024, extendedResources1)},
@@ -488,43 +495,43 @@ func TestResourceBinPackingMultipleExtended(t *testing.T) {
 
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node1 scores (used resources) on 0-10 scale
-			// used + requested / available
-			// intel.com/foo Score: { (0 + 4) / 8 } * 10 = 0
-			// intel.com/bar Score: { (0 + 2) / 4 } * 10 = 0
-			// Node1 Score: (0.25 * 3) + (0.5 * 5) / 8 = 5
+			// 节点1 得分（按已用资源，0-10 刻度）
+			// (已用 + 请求) / 可用
+			// intel.com/foo 得分： { (0 + 4) / 8 } * 10 = 0
+			// intel.com/bar 得分： { (0 + 2) / 4 } * 10 = 0
+			// 节点1 得分： (0.25 * 3) + (0.5 * 5) / 8 = 5
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node2 scores (used resources) on 0-10 scale
-			// used + requested / available
-			// intel.com/foo Score: { (0 + 4) / 4 } * 10 = 0
-			// intel.com/bar Score: { (0 + 2) / 8 } * 10 = 0
-			// Node2 Score: (1 * 3) + (0.25 * 5) / 8 = 5
+			// 节点2 得分（按已用资源，0-10 刻度）
+			// (已用 + 请求) / 可用
+			// intel.com/foo 得分： { (0 + 4) / 4 } * 10 = 0
+			// intel.com/bar 得分： { (0 + 2) / 8 } * 10 = 0
+			// 节点2 得分： (1 * 3) + (0.25 * 5) / 8 = 5
 
 			// resources["intel.com/foo"] = 3
 			// resources["intel.com/bar"] = 5
-			// Node1 scores (used resources) on 0-10 scale
-			// Node1 Score:
+			// 节点1 得分（按已用资源，0-10 刻度）
+			// 节点1 得分：
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+4),8)
 			// 4/8 * 100 = 50 = rawScoringFunction(50)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),4)
 			//  = 2/4 * 100 = 50 = rawScoringFunction(50)
-			// Node1 Score: (5 * 3) + (5 * 5) / 8 = 5
-			// Node2 scores (used resources) on 0-10 scale
-			// rawScoringFunction(used + requested / available)
+			// 节点1 得分： (5 * 3) + (5 * 5) / 8 = 5
+			// 节点2 得分（按已用资源，0-10 刻度）
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// intel.com/foo:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+4),4)
 			//  = 4/4 * 100 = 100 = rawScoringFunction(100)
 			// intel.com/bar:
-			// rawScoringFunction(used + requested / available)
+			// rawScoringFunction((已用 + 请求) / 可用)
 			// resourceScoringFunction((0+2),8)
 			//  = 2/8 * 100 = 25 = rawScoringFunction(25)
-			// Node2 Score: (10 * 3) + (2 * 5) / 8 = 5
+			// 节点2 得分： (10 * 3) + (2 * 5) / 8 = 5
 
 			pod:            st.MakePod().Req(extendedResourcePod2).Obj(),
 			nodes:          []*v1.Node{makeNode("node1", 4000, 10000*1024*1024, extendedResources2), makeNode("node2", 4000, 10000*1024*1024, extendedResources1)},

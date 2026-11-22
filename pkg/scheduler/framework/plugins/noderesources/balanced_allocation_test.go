@@ -38,6 +38,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestNodeResourcesBalancedAllocation 验证节点资源均衡分配插件的打分结果。
 func TestNodeResourcesBalancedAllocation(t *testing.T) {
 	testNodeResourcesBalancedAllocation(ktesting.Init(t))
 }
@@ -59,7 +60,7 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		draObjects                 []apiruntime.Object
 	}{
 		{
-			// bestEffort pods, skip in PreScore
+			// BestEffort Pod 没有资源请求，PreScore 阶段应跳过。
 			name:                       "nothing scheduled, nothing requested, skip in PreScore",
 			requestedPod:               st.MakePod().Obj(),
 			nodes:                      []*v1.Node{makeNode("node1", 4000, 10000, nil), makeNode("node2", 4000, 10000, nil)},
@@ -69,12 +70,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 0 -> 3000/4000 (0% -> 75%)
-			//  Memory: 0 -> 5000/10000 (0% -> 50%)
+			//  CPU: 0 -> 3000/4000（0% -> 75%）
+			//  Memory: 0 -> 5000/10000（0% -> 50%）
 			//  Score: 68 (100 -> 87)
 			// Node2
-			//  CPU: 0 -> 3000/6000 (0% -> 50%)
-			//  Memory: 0 -> 5000/10000 (0% -> 50%)
+			//  CPU: 0 -> 3000/6000（0% -> 50%）
+			//  Memory: 0 -> 5000/10000（0% -> 50%）
 			//  Score: 75 (100 -> 100)
 			name:         "nothing scheduled, resources requested, differently sized nodes",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
@@ -87,12 +88,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 0 -> 5000/20000 (0% -> 25%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 0 -> 5000/20000（0% -> 25%）
 			//  Score: 73 (85 -> 82)
 			// Node2
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 5000 -> 10000/20000 (25% -> 50%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 5000 -> 10000/20000（25% -> 50%）
 			//  Score: 74 (97 -> 95)
 			name:         "resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
@@ -110,12 +111,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 0 -> 5000/20000 (0% -> 25%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 0 -> 5000/20000（0% -> 25%）
 			//  Score: 73 (85 -> 82)
 			// Node2
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 5000 -> 10000/50000 (10% -> 20%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 5000 -> 10000/50000（10% -> 20%）
 			//  Score: 70 (90 -> 80)
 			name:         "resources requested, pods scheduled with resources, differently sized nodes",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
@@ -133,12 +134,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 3000/3000 (100% -> 100%)
-			//  Memory: 0 -> 5000/5000 (0% -> 100%)
+			//  CPU: 3000 -> 3000/3000（100% -> 100%）
+			//  Memory: 0 -> 5000/5000（0% -> 100%）
 			//  Score: 100 (50 -> 100)
 			// Node2
-			//  CPU: 0 -> 0/10000 (0% -> 0%)
-			//  Memory: 0 -> 5000/5000 (0% -> 100%)
+			//  CPU: 0 -> 0/10000（0% -> 0%）
+			//  Memory: 0 -> 5000/5000（0% -> 100%）
 			//  Score: 50 (100 -> 50)
 			name:         "resources requested, pods scheduled with resources, nodes to reach min/max score",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{"memory": "2000"}).Req(map[v1.ResourceName]string{"memory": "3000"}).Obj(),
@@ -155,12 +156,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 6000/6000 (50% -> 100%)
-			//  Memory: 0 -> 0/10000 (0% -> 0%)
+			//  CPU: 3000 -> 6000/6000（50% -> 100%）
+			//  Memory: 0 -> 0/10000（0% -> 0%）
 			//  Score: 62 (75 -> 50)
 			// Node2
-			//  CPU: 3000 -> 6000/6000 (50% -> 100%)
-			//  Memory: 5000 -> 5000/10000 (50% -> 50%)
+			//  CPU: 3000 -> 6000/6000（50% -> 100%）
+			//  Memory: 5000 -> 5000/10000（50% -> 50%）
 			//  Score: 62 (100 -> 75)
 			name:         "requested resources at node capacity",
 			requestedPod: st.MakePod().Req(cpuOnly("1000m")).Req(cpuOnly("2000m")).Obj(),
@@ -178,14 +179,14 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 3000/3500 (85.7% -> 85.7%)
-			//  Memory: 5000 -> 5000/40000 (12.5% -> 12.5%)
-			//  GPU: 3 -> 4/8 (37.5% -> 50%)
+			//  CPU: 3000 -> 3000/3500（85.7% -> 85.7%）
+			//  Memory: 5000 -> 5000/40000（12.5% -> 12.5%）
+			//  GPU: 3 -> 4/8（37.5% -> 50%）
 			//  Score: 75 (69 -> 70)
 			// Node2
-			//  CPU: 3000 -> 3000/3500 (85.7% -> 85.7%)
-			//  Memory: 5000 -> 5000/40000 (12.5% -> 12.5%)
-			//  GPU: 0 -> 1/8 (0% -> 12.5%)
+			//  CPU: 3000 -> 3000/3500（85.7% -> 85.7%）
+			//  Memory: 5000 -> 5000/40000（12.5% -> 12.5%）
+			//  GPU: 0 -> 1/8（0% -> 12.5%）
 			//  Score: 76 (62 -> 65)
 			name:         "scalar resource is included in the score computation if pod requests the scalar resource",
 			requestedPod: st.MakePod().Req(cpuAndMemoryAndGpu("0", "0", "1")).Obj(),
@@ -207,13 +208,13 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 0 -> 3000/3500 (0% -> 85.7%)
-			//  Memory: 0 -> 5000/40000 (0% -> 12.5%)
-			//  GPU: 0 -> 0/8 (scalar resource not requested by pod, ignored)
+			//  CPU: 0 -> 3000/3500（0% -> 85.7%）
+			//  Memory: 0 -> 5000/40000（0% -> 12.5%）
+			//  GPU: 0 -> 0/8（Pod 未请求该标量资源，忽略）
 			//  Score: 56 (100 -> 63)
 			// Node2
-			//  CPU: 0 -> 3000/3500 (0% -> 85.7%)
-			//  Memory: 0 -> 5000/40000 (0% -> 12.5%)
+			//  CPU: 0 -> 3000/3500（0% -> 85.7%）
+			//  Memory: 0 -> 5000/40000（0% -> 12.5%）
 			//  Score: 56 (100 -> 63)
 			name:         "scalar resource is not included in the score computation if pod doesn't request the scalar resource",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
@@ -231,14 +232,14 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			runPreScore: true,
 		},
 		{
-			// Whether or not prescore was called, the end result should be the same.
+			// 是否调用 PreScore，最终分数应保持一致。
 			// Node1
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 0 -> 5000/20000 (0% -> 25%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 0 -> 5000/20000（0% -> 25%）
 			//  Score: 73 (85 -> 82)
 			// Node2
-			//  CPU: 3000 -> 6000/10000 (30% -> 60%)
-			//  Memory: 5000 -> 10000/20000 (25% -> 50%)
+			//  CPU: 3000 -> 6000/10000（30% -> 60%）
+			//  Memory: 5000 -> 10000/20000（25% -> 50%）
 			//  Score: 74 (97 -> 95)
 			name:         "resources requested, pods scheduled with resources if PreScore not called",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
@@ -256,14 +257,14 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 3000/3500 (86% -> 86%)
-			//  Memory: 0 -> 0/40000 (0% -> 0%)
-			//  DRA: 0 -> 1/8 (0% -> 12%)
+			//  CPU: 3000 -> 3000/3500（86% -> 86%）
+			//  Memory: 0 -> 0/40000（0% -> 0%）
+			//  DRA: 0 -> 1/8（0% -> 12%）
 			//  Score: 76 (60 -> 62)
 			// Node2
-			//  CPU: 3000 -> 3000/3500 (86% -> 86%)
-			//  Memory: 5000 -> 5000/40000 (12% -> 12%)
-			//  DRA: unsatisfiable
+			//  CPU: 3000 -> 3000/3500（86% -> 86%）
+			//  Memory: 5000 -> 5000/40000（12% -> 12%）
+			//  DRA: 无法满足
 			//  Score: 75 (63 -> 63)
 			name:         "include DRA resource on a node for balanced resource allocation",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{extendedResourceDRA: "1"}).Obj(),
@@ -286,14 +287,14 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 		},
 		{
 			// Node1
-			//  CPU: 3000 -> 3000/3500 (86% -> 86%)
-			//  Memory: 0 -> 0/40000 (0% -> 0%)
-			//  DRA: 0 -> 1/8 (0% -> 12%)
+			//  CPU: 3000 -> 3000/3500（86% -> 86%）
+			//  Memory: 0 -> 0/40000（0% -> 0%）
+			//  DRA: 0 -> 1/8（0% -> 12%）
 			//  Score: 76 (60 -> 62)
 			// Node2
-			//  CPU: 3000 -> 3000/3500 (86% -> 86%)
-			//  Memory: 5000 -> 5000/40000 (12% -> 12%)
-			//  DRA: unsatisfiable
+			//  CPU: 3000 -> 3000/3500（86% -> 86%）
+			//  Memory: 5000 -> 5000/40000（12% -> 12%）
+			//  DRA: 无法满足
 			//  Score: 75 (63 -> 63)
 			name:         "include DRA resource on a node for balanced resource allocation if PreScore not called",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{extendedResourceDRA: "1"}).Obj(),

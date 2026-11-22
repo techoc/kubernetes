@@ -27,12 +27,15 @@ import (
 )
 
 var (
+	// 对比校验错误时忽略 BadValue 与 Detail：测试只关心错误类型和字段路径。
 	ignoreBadValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
-	defaultResources     = []config.ResourceSpec{
+	// 默认的 CPU/内存权重配置。
+	defaultResources = []config.ResourceSpec{
 		{Name: string(v1.ResourceCPU), Weight: 1},
 		{Name: string(v1.ResourceMemory), Weight: 1},
 	}
-	extendedRes         = "abc.com/xyz"
+	extendedRes = "abc.com/xyz"
+	// 包含扩展资源的权重配置，用于测试扩展资源参与评分的路径。
 	extendedResourceSet = []config.ResourceSpec{
 		{Name: string(v1.ResourceCPU), Weight: 1},
 		{Name: string(v1.ResourceMemory), Weight: 1},
@@ -40,6 +43,7 @@ var (
 	}
 )
 
+// makeNode 构造一个 Capacity 与 Allocatable 相同的节点，便于测试只关注资源数量本身。
 func makeNode(node string, milliCPU, memory int64, extendedResource map[string]int64) *v1.Node {
 	resourceList := make(map[v1.ResourceName]resource.Quantity)
 	for res, quantity := range extendedResource {

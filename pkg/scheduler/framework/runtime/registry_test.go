@@ -27,6 +27,7 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
+// TestDecodeInto 验证 DecodeInto 能把 JSON 与 YAML 格式的插件配置解码到目标结构体。
 func TestDecodeInto(t *testing.T) {
 	type PluginFooConfig struct {
 		FooTest string `json:"fooTest,omitempty"`
@@ -73,26 +74,27 @@ func TestDecodeInto(t *testing.T) {
 	}
 }
 
-// isRegistryEqual compares two registries for equality. This function is used in place of
-// reflect.DeepEqual() and cmp() as they don't compare function values.
+// isRegistryEqual 比较两个 Registry 是否等价。
+// 不使用 reflect.DeepEqual 或 cmp，因为它们无法比较函数值：
+// 这里改为调用工厂构造插件，再比较插件名。
 func isRegistryEqual(registryX, registryY Registry) bool {
 	for name, pluginFactory := range registryY {
 		if val, ok := registryX[name]; ok {
 			p1, _ := pluginFactory(nil, nil, nil)
 			p2, _ := val(nil, nil, nil)
 			if p1.Name() != p2.Name() {
-				// pluginFactory functions are not the same.
+				// 两个工厂构造出的插件名不同，视为不同工厂
 				return false
 			}
 		} else {
-			// registryY contains an entry that is not present in registryX
+			// registryY 包含 registryX 没有的条目
 			return false
 		}
 	}
 
 	for name := range registryX {
 		if _, ok := registryY[name]; !ok {
-			// registryX contains an entry that is not present in registryY
+			// registryX 包含 registryY 没有的条目
 			return false
 		}
 	}
@@ -100,14 +102,18 @@ func isRegistryEqual(registryX, registryY Registry) bool {
 	return true
 }
 
+// mockNoopPlugin 是以 UUID 作为名称的空插件，用于区分不同工厂实例。
 type mockNoopPlugin struct {
 	uuid string
 }
 
+// Name 返回插件的 UUID。
 func (p *mockNoopPlugin) Name() string {
 	return p.uuid
 }
 
+// NewMockNoopPluginFactory 返回一个构造空插件的工厂，
+// 每个工厂实例生成不同的 UUID 以便测试区分。
 func NewMockNoopPluginFactory() PluginFactory {
 	uuid := uuid.New().String()
 	return func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
@@ -115,6 +121,7 @@ func NewMockNoopPluginFactory() PluginFactory {
 	}
 }
 
+// TestMerge 验证 Registry.Merge 合并两个注册表，遇到重名工厂时报错且不覆盖原条目。
 func TestMerge(t *testing.T) {
 	m1 := NewMockNoopPluginFactory()
 	m2 := NewMockNoopPluginFactory()
@@ -170,6 +177,7 @@ func TestMerge(t *testing.T) {
 	}
 }
 
+// TestRegister 验证 Registry.Register 注册新工厂成功，重复注册同名工厂时报错且不覆盖。
 func TestRegister(t *testing.T) {
 	m1 := NewMockNoopPluginFactory()
 	m2 := NewMockNoopPluginFactory()
@@ -221,6 +229,7 @@ func TestRegister(t *testing.T) {
 	}
 }
 
+// TestUnregister 验证 Registry.Unregister 删除已注册工厂成功，删除不存在的工厂时报错。
 func TestUnregister(t *testing.T) {
 	m1 := NewMockNoopPluginFactory()
 	m2 := NewMockNoopPluginFactory()

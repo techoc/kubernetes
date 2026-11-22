@@ -21,16 +21,17 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
-// leastResourceScorer favors nodes with fewer requested resources.
-// It calculates the percentage of memory, CPU and other resources requested by pods scheduled on the node, and
-// prioritizes based on the minimum of the average of the fraction of requested to capacity.
+// leastResourceScorer 倾向于给已请求资源更少的节点打分更高。
+// 它计算调度到节点上的 Pod 所请求的内存、CPU 及其他资源占容量的百分比，
+// 并以"请求量/容量"比例的平均值中的最小值作为打分依据。
 //
-// Details:
+// 计算细节：
 // (cpu((capacity-requested)*MaxNodeScore*cpuWeight/capacity) + memory((capacity-requested)*MaxNodeScore*memoryWeight/capacity) + ...)/weightSum
 func leastResourceScorer(resources []config.ResourceSpec) func([]int64, []int64, []int64) int64 {
 	return func(requested, _, allocable []int64) int64 {
 		var nodeScore, weightSum int64
 		for i := range requested {
+			// 容量为 0 的资源无法参与比例计算，跳过以免除零。
 			if allocable[i] == 0 {
 				continue
 			}
@@ -39,6 +40,7 @@ func leastResourceScorer(resources []config.ResourceSpec) func([]int64, []int64,
 			nodeScore += resourceScore * weight
 			weightSum += weight
 		}
+		// 所有资源容量都为 0 时没有有效信息，保守地给 0 分。
 		if weightSum == 0 {
 			return 0
 		}
@@ -46,9 +48,9 @@ func leastResourceScorer(resources []config.ResourceSpec) func([]int64, []int64,
 	}
 }
 
-// The unused capacity is calculated on a scale of 0-MaxNodeScore
-// 0 being the lowest priority and `MaxNodeScore` being the highest.
-// The more unused resources the higher the score is.
+// leastRequestedScore 将未使用的容量映射到 0-MaxNodeScore 区间。
+// 0 表示优先级最低，`MaxNodeScore` 表示最高。
+// 剩余资源越多，得分越高。
 func leastRequestedScore(requested, capacity int64) int64 {
 	if capacity == 0 {
 		return 0

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apidispatcher 负责调度器内部的 API 调用分发。
 package apidispatcher
 
 import (
@@ -28,7 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// APIDispatcher implements the fwk.APIDispatcher interface and allows for queueing and dispatching API calls asynchronously.
+// APIDispatcher 实现 fwk.APIDispatcher 接口，允许将 API 调用排队并异步派发。
 type APIDispatcher struct {
 	cancel func()
 
@@ -36,7 +37,7 @@ type APIDispatcher struct {
 	callQueue *callQueue
 }
 
-// New returns a new APIDispatcher object.
+// New 返回一个新的 APIDispatcher 对象。
 func New(client clientset.Interface, parallelization int, apiCallRelevances fwk.APICallRelevances) *APIDispatcher {
 	d := APIDispatcher{
 		client:    client,
@@ -46,8 +47,8 @@ func New(client clientset.Interface, parallelization int, apiCallRelevances fwk.
 	return &d
 }
 
-// Add adds an API call to the dispatcher's queue. It returns an error if the call is not enqueued
-// (e.g., if it's skipped). The caller should handle ErrCallSkipped if returned.
+// Add 把一个 API 调用加入派发器的队列。如果调用没有入队（例如被跳过），则返回错误。
+// 调用方应当处理返回的 ErrCallSkipped。
 func (ad *APIDispatcher) Add(newAPICall fwk.APICall, opts fwk.APICallOptions) error {
 	apiCall := &queuedAPICall{
 		APICall:  newAPICall,
@@ -56,16 +57,14 @@ func (ad *APIDispatcher) Add(newAPICall fwk.APICall, opts fwk.APICallOptions) er
 	return ad.callQueue.add(apiCall)
 }
 
-// SyncObject performs a two-way synchronization between the given object
-// and a pending API call held within the dispatcher and returns the modified object.
+// SyncObject 在给定对象与派发器中待处理的 API 调用之间做双向同步，返回修改后的对象。
 func (ad *APIDispatcher) SyncObject(obj metav1.Object) (metav1.Object, error) {
 	return ad.callQueue.syncObject(obj)
 }
 
-// Run starts the main processing loop of the APIDispatcher, which pops calls
-// from the queue and dispatches them to worker goroutines for execution.
+// Run 启动 APIDispatcher 的主处理循环，从队列中取出调用并交给 worker goroutine 执行。
 func (ad *APIDispatcher) Run(logger klog.Logger) {
-	// Create a new context to allow to cancel the APICalls' execution when the APIDispatcher is closed.
+	// 使用独立的 context，这样关闭 APIDispatcher 时可以取消正在执行的 API 调用。
 	ctx, cancel := context.WithCancel(context.Background())
 	ad.cancel = cancel
 
@@ -73,7 +72,7 @@ func (ad *APIDispatcher) Run(logger klog.Logger) {
 		for {
 			select {
 			case <-ctx.Done():
-				// APIDispatcher is closed.
+				// APIDispatcher 已关闭。
 				return
 			default:
 			}
@@ -84,7 +83,7 @@ func (ad *APIDispatcher) Run(logger klog.Logger) {
 				continue
 			}
 			if apiCall == nil {
-				// callController is closed.
+				// callController 已关闭。
 				return
 			}
 
@@ -108,7 +107,7 @@ func (ad *APIDispatcher) Run(logger klog.Logger) {
 	}()
 }
 
-// Close shuts down the APIDispatcher.
+// Close 关闭 APIDispatcher。
 func (ad *APIDispatcher) Close() {
 	ad.callQueue.close()
 	if ad.cancel != nil {

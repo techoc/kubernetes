@@ -25,146 +25,128 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DefaultPreemptionArgs holds arguments used to configure the
-// DefaultPreemption plugin.
+// DefaultPreemptionArgs 保存 DefaultPreemption 插件的配置参数。
 type DefaultPreemptionArgs struct {
 	metav1.TypeMeta
 
-	// MinCandidateNodesPercentage is the minimum number of candidates to
-	// shortlist when dry running preemption as a percentage of number of nodes.
-	// Must be in the range [0, 100]. Defaults to 10% of the cluster size if
-	// unspecified.
+	// MinCandidateNodesPercentage 是试运行抢占时，候选节点入围数量占节点总数的百分比下限。
+	// 取值范围 [0, 100]。未指定时默认为集群规模的 10%。
 	MinCandidateNodesPercentage int32
-	// MinCandidateNodesAbsolute is the absolute minimum number of candidates to
-	// shortlist. The likely number of candidates enumerated for dry running
-	// preemption is given by the formula:
+	// MinCandidateNodesAbsolute 是入围候选节点的绝对数量下限。
+	// 试运行抢占时枚举的候选节点数量大致为：
 	// numCandidates = max(numNodes * minCandidateNodesPercentage, minCandidateNodesAbsolute)
-	// We say "likely" because there are other factors such as PDB violations
-	// that play a role in the number of candidates shortlisted. Must be at least
-	// 0 nodes. Defaults to 100 nodes if unspecified.
+	// 之所以说「大致」，是因为 PDB 冲突等其他因素也会影响最终入围数量。必须至少为 0。未指定时默认为 100。
 	MinCandidateNodesAbsolute int32
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// InterPodAffinityArgs holds arguments used to configure the InterPodAffinity plugin.
+// InterPodAffinityArgs 保存 InterPodAffinity 插件的配置参数。
 type InterPodAffinityArgs struct {
 	metav1.TypeMeta
 
-	// HardPodAffinityWeight is the scoring weight for existing pods with a
-	// matching hard affinity to the incoming pod.
+	// HardPodAffinityWeight 是对与传入 Pod 硬亲和性匹配的现有 Pod 的打分权重。
 	HardPodAffinityWeight int32
 
-	// IgnorePreferredTermsOfExistingPods configures the scheduler to ignore existing pods' preferred affinity
-	// rules when scoring candidate nodes, unless the incoming pod has inter-pod affinities.
+	// IgnorePreferredTermsOfExistingPods 让调度器在候选节点打分时忽略现有 Pod 的 preferred 亲和规则，
+	// 除非传入的 Pod 自身定义了 Pod 间亲和性。
 	IgnorePreferredTermsOfExistingPods bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeResourcesFitArgs holds arguments used to configure the NodeResourcesFit plugin.
+// NodeResourcesFitArgs 保存 NodeResourcesFit 插件的配置参数。
 type NodeResourcesFitArgs struct {
 	metav1.TypeMeta
 
-	// IgnoredResources is the list of resources that NodeResources fit filter
-	// should ignore.
+	// IgnoredResources 是 NodeResources fit 过滤器应忽略的资源列表。
 	IgnoredResources []string
-	// IgnoredResourceGroups defines the list of resource groups that NodeResources fit filter should ignore.
-	// e.g. if group is ["example.com"], it will ignore all resource names that begin
-	// with "example.com", such as "example.com/aaa" and "example.com/bbb".
-	// A resource group name can't contain '/'.
+	// IgnoredResourceGroups 是 NodeResources fit 过滤器应忽略的资源组列表。
+	// 例如组为 ["example.com"] 时，会忽略所有以 "example.com" 开头的资源名，
+	// 如 "example.com/aaa" 和 "example.com/bbb"。资源组名不能包含 '/'。
 	IgnoredResourceGroups []string
 
-	// ScoringStrategy selects the node resource scoring strategy.
+	// ScoringStrategy 选择节点资源打分策略。
 	ScoringStrategy *ScoringStrategy
 }
 
-// PodTopologySpreadConstraintsDefaulting defines how to set default constraints
-// for the PodTopologySpread plugin.
+// PodTopologySpreadConstraintsDefaulting 定义 PodTopologySpread 插件设置默认约束的方式。
 type PodTopologySpreadConstraintsDefaulting string
 
 const (
-	// SystemDefaulting instructs to use the kubernetes defined default.
+	// SystemDefaulting 表示使用 Kubernetes 预定义的默认值。
 	SystemDefaulting PodTopologySpreadConstraintsDefaulting = "System"
-	// ListDefaulting instructs to use the config provided default.
+	// ListDefaulting 表示使用配置中提供的默认值。
 	ListDefaulting PodTopologySpreadConstraintsDefaulting = "List"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodTopologySpreadArgs holds arguments used to configure the PodTopologySpread plugin.
+// PodTopologySpreadArgs 保存 PodTopologySpread 插件的配置参数。
 type PodTopologySpreadArgs struct {
 	metav1.TypeMeta
 
-	// DefaultConstraints defines topology spread constraints to be applied to
-	// Pods that don't define any in `pod.spec.topologySpreadConstraints`.
-	// `.defaultConstraints[*].labelSelectors` must be empty, as they are
-	// deduced from the Pod's membership to Services, ReplicationControllers,
-	// ReplicaSets or StatefulSets.
-	// When not empty, .defaultingType must be "List".
+	// DefaultConstraints 定义施加到未在 `pod.spec.topologySpreadConstraints` 中声明任何约束的 Pod 上的拓扑分布约束。
+	// `.defaultConstraints[*].labelSelectors` 必须为空，因为它们由 Pod 与 Service、ReplicationController、
+	// ReplicaSet 或 StatefulSet 的归属关系推导得出。
+	// 非空时，.defaultingType 必须是 "List"。
 	DefaultConstraints []v1.TopologySpreadConstraint
 
-	// DefaultingType determines how .defaultConstraints are deduced. Can be one
-	// of "System" or "List".
+	// DefaultingType 决定 .defaultConstraints 的推导方式，可以是 "System" 或 "List"。
 	//
-	// - "System": Use kubernetes defined constraints that spread Pods among
-	//   Nodes and Zones.
-	// - "List": Use constraints defined in .defaultConstraints.
+	// - "System"：使用 Kubernetes 定义的约束，在节点和可用区间分散 Pod。
+	// - "List"：使用 .defaultConstraints 中定义的约束。
 	//
-	// Defaults to "System".
+	// 默认为 "System"。
 	// +optional
 	DefaultingType PodTopologySpreadConstraintsDefaulting
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeResourcesBalancedAllocationArgs holds arguments used to configure NodeResourcesBalancedAllocation plugin.
+// NodeResourcesBalancedAllocationArgs 保存 NodeResourcesBalancedAllocation 插件的配置参数。
 type NodeResourcesBalancedAllocationArgs struct {
 	metav1.TypeMeta
 
-	// Resources to be considered when scoring.
-	// The default resource set includes "cpu" and "memory", only valid weight is 1.
+	// 打分时考虑的资源列表。
+	// 默认资源集包含 "cpu" 和 "memory"，唯一合法的权重是 1。
 	Resources []ResourceSpec
 }
 
-// UtilizationShapePoint represents a single point of a priority function shape.
+// UtilizationShapePoint 表示优先级函数形状上的一个点。
 type UtilizationShapePoint struct {
-	// Utilization (x axis). Valid values are 0 to 100. Fully utilized node maps to 100.
+	// 利用率（x 轴）。取值 0 到 100，100 表示节点完全用满。
 	Utilization int32
-	// Score assigned to a given utilization (y axis). Valid values are 0 to 10.
+	// 给定利用率对应的分数（y 轴）。取值 0 到 10。
 	Score int32
 }
 
-// ResourceSpec represents single resource.
+// ResourceSpec 表示单个资源。
 type ResourceSpec struct {
-	// Name of the resource.
+	// 资源名称。
 	Name string
-	// Weight of the resource.
+	// 资源权重。
 	Weight int64
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// VolumeBindingArgs holds arguments used to configure the VolumeBinding plugin.
+// VolumeBindingArgs 保存 VolumeBinding 插件的配置参数。
 type VolumeBindingArgs struct {
 	metav1.TypeMeta
 
-	// BindTimeoutSeconds is the timeout in seconds in volume binding operation.
-	// Value must be non-negative integer. The value zero indicates no waiting.
-	// If this value is nil, the default value will be used.
+	// BindTimeoutSeconds 是卷绑定操作的超时秒数。
+	// 必须是非负整数，0 表示不等待。nil 时使用默认值。
 	BindTimeoutSeconds int64
 
-	// Shape specifies the points defining the score function shape, which is
-	// used to score nodes based on the utilization of statically provisioned
-	// PVs. The utilization is calculated by dividing the total requested
-	// storage of the pod by the total capacity of feasible PVs on each node.
-	// Each point contains utilization (ranges from 0 to 100) and its
-	// associated score (ranges from 0 to 10). You can turn the priority by
-	// specifying different scores for different utilization numbers.
-	// The default shape points are:
-	// 1) 0 for 0 utilization
-	// 2) 10 for 100 utilization
-	// All points must be sorted in increasing order by utilization.
+	// Shape 指定打分函数形状的点集，用于根据静态制备 PV 的利用率给节点打分。
+	// 利用率等于 Pod 请求的总存储量除以每个节点上可行 PV 的总容量。
+	// 每个点包含利用率（0 到 100）和对应分数（0 到 10）。
+	// 通过给不同利用率指定不同分数，可以反转优先级方向。
+	// 默认形状点为：
+	// 1) 利用率 0 对应分数 0
+	// 2) 利用率 100 对应分数 10
+	// 所有点必须按利用率递增排序。
 	// +featureGate=StorageCapacityScoring
 	// +optional
 	Shape []UtilizationShapePoint
@@ -172,116 +154,94 @@ type VolumeBindingArgs struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeAffinityArgs holds arguments to configure the NodeAffinity plugin.
+// NodeAffinityArgs 保存 NodeAffinity 插件的配置参数。
 type NodeAffinityArgs struct {
 	metav1.TypeMeta
 
-	// AddedAffinity is applied to all Pods additionally to the NodeAffinity
-	// specified in the PodSpec. That is, Nodes need to satisfy AddedAffinity
-	// AND .spec.NodeAffinity. AddedAffinity is empty by default (all Nodes
-	// match).
-	// When AddedAffinity is used, some Pods with affinity requirements that match
-	// a specific Node (such as Daemonset Pods) might remain unschedulable.
+	// AddedAffinity 在 PodSpec 指定的 NodeAffinity 之外额外施加到所有 Pod 上。
+	// 也就是说，节点必须同时满足 AddedAffinity 与 .spec.NodeAffinity。
+	// AddedAffinity 默认为空（所有节点都匹配）。
+	// 使用 AddedAffinity 时，某些亲和性要求匹配特定节点的 Pod（如 DaemonSet Pod）可能保持不可调度。
 	AddedAffinity *v1.NodeAffinity
 }
 
-// ScoringStrategyType the type of scoring strategy used in NodeResourcesFit plugin.
+// ScoringStrategyType 是 NodeResourcesFit 插件使用的打分策略类型。
 type ScoringStrategyType string
 
 const (
-	// LeastAllocated strategy prioritizes nodes with least allocated resources.
+	// LeastAllocated 策略优先选择已分配资源最少的节点。
 	LeastAllocated ScoringStrategyType = "LeastAllocated"
-	// MostAllocated strategy prioritizes nodes with most allocated resources.
+	// MostAllocated 策略优先选择已分配资源最多的节点。
 	MostAllocated ScoringStrategyType = "MostAllocated"
-	// RequestedToCapacityRatio strategy allows specifying a custom shape function
-	// to score nodes based on the request to capacity ratio.
+	// RequestedToCapacityRatio 策略允许指定自定义形状函数，按请求量与容量之比给节点打分。
 	RequestedToCapacityRatio ScoringStrategyType = "RequestedToCapacityRatio"
 )
 
-// ScoringStrategy define ScoringStrategyType for node resource plugin
+// ScoringStrategy 为节点资源插件定义 ScoringStrategyType。
 type ScoringStrategy struct {
-	// Type selects which strategy to run.
+	// Type 选择运行哪种策略。
 	Type ScoringStrategyType
 
-	// Resources to consider when scoring.
-	// The default resource set includes "cpu" and "memory" with an equal weight.
-	// Allowed weights go from 1 to 100.
-	// Weight defaults to 1 if not specified or explicitly set to 0.
+	// 打分时考虑的资源。
+	// 默认资源集包含 "cpu" 和 "memory"，权重相等。
+	// 允许的权重范围是 1 到 100。
+	// 未指定或显式设为 0 时，权重默认为 1。
 	Resources []ResourceSpec
 
-	// Arguments specific to RequestedToCapacityRatio strategy.
+	// RequestedToCapacityRatio 策略特有的参数。
 	RequestedToCapacityRatio *RequestedToCapacityRatioParam
 }
 
-// RequestedToCapacityRatioParam define RequestedToCapacityRatio parameters
+// RequestedToCapacityRatioParam 定义 RequestedToCapacityRatio 的参数。
 type RequestedToCapacityRatioParam struct {
-	// Shape is a list of points defining the scoring function shape.
+	// Shape 是定义打分函数形状的点列表。
 	Shape []UtilizationShapePoint
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DynamicResourcesArgs holds arguments used to configure the DynamicResources plugin.
+// DynamicResourcesArgs 保存 DynamicResources 插件的配置参数。
 type DynamicResourcesArgs struct {
 	metav1.TypeMeta
 
-	// FilterTimeout limits the amount of time that the filter operation may
-	// take per node to search for devices that can be allocated to scheduler
-	// a pod to that node.
+	// FilterTimeout 限制 filter 操作在每个节点上查找可分配给 Pod 的设备时所花的时间。
 	//
-	// In typical scenarios, this operation should complete in 10 to 200
-	// milliseconds, but could also be longer depending on the number of
-	// requests per ResourceClaim, number of ResourceClaims, number of
-	// published devices in ResourceSlices, and the complexity of the
-	// requests. Other checks besides CEL evaluation also take time (usage
-	// checks, match attributes, etc.).
+	// 典型情况下该操作在 10 到 200 毫秒内完成，但也可能更久，取决于每个 ResourceClaim 的请求数、
+	// ResourceClaim 数量、ResourceSlice 中发布的设备数量以及请求的复杂度。
+	// CEL 求值之外的检查（使用检查、属性匹配等）同样耗时。
 	//
-	// Therefore the scheduler plugin applies this timeout. If the timeout
-	// is reached, the Pod is considered unschedulable for the node.
-	// If filtering succeeds for some other node(s), those are picked instead.
-	// If filtering fails for all of them, the Pod is placed in the
-	// unschedulable queue. It will get checked again if changes in
-	// e.g. ResourceSlices or ResourceClaims indicate that
-	// another scheduling attempt might succeed. If this fails repeatedly,
-	// exponential backoff slows down future attempts.
+	// 因此该插件施加此超时。超时后，Pod 对该节点被视为不可调度。
+	// 如果其他节点的过滤成功，就选择那些节点；如果全部失败，Pod 进入不可调度队列。
+	// 当 ResourceSlice 或 ResourceClaim 等变化表明再次调度可能成功时会重新检查。
+	// 若反复失败，指数退避会减慢后续尝试。
 	//
-	// The default is 10 seconds.
-	// This is sufficient to prevent worst-case scenarios while not impacting normal
-	// usage of DRA. However, slow filtering can slow down Pod scheduling
-	// also for Pods not using DRA. Administators can reduce the timeout
-	// after checking the
-	// `scheduler_plugin_execution_duration_seconds` metrics.
-	// That tracks the time spend in each Filter operation.
-	// There's also `scheduler_framework_extension_point_duration_seconds`
-	// which tracks the duration of filtering overall.
+	// 默认 10 秒。
+	// 这足以防止最坏情况，同时不影响 DRA 的正常使用。但过滤变慢也会拖慢不使用 DRA 的 Pod 的调度。
+	// 管理员可在查看
+	// `scheduler_plugin_execution_duration_seconds` 指标后调低该值，
+	// 该指标记录每次 Filter 操作的耗时。
+	// 另有 `scheduler_framework_extension_point_duration_seconds` 记录整体过滤阶段耗时。
 	//
-	// Setting it to zero completely disables the timeout.
+	// 设为 0 会完全禁用超时。
 	FilterTimeout *metav1.Duration
 
-	// BindingTimeout limits how long the PreBind extension point may wait for
-	// ResourceClaim device BindingConditions to become satisfied when such
-	// conditions are present. While waiting, the scheduler periodically checks
-	// device status. If the timeout elapses before all required conditions are
-	// true (or any bindingFailureConditions become true), the allocation is
-	// cleared and the Pod re-enters scheduling queue. Note that the same or other node may be
-	// chosen if feasible; otherwise the Pod is placed in the unschedulable queue and
-	// retried based on cluster changes and backoff.
+	// BindingTimeout 限制 PreBind 扩展点等待 ResourceClaim 设备 BindingConditions 满足的时长。
+	// 等待期间调度器周期性检查设备状态。若超时前所有必需条件未变为 true
+	// （或任一 bindingFailureConditions 变为 true），则清除分配，Pod 重新进入调度队列。
+	// 注意：若仍可行，可能选择同一节点或其他节点；否则 Pod 进入不可调度队列，按集群变化和退避重试。
 	//
-	// Defaults & feature gates:
-	//   - Defaults to 10 minutes when the DRADeviceBindingConditions feature gate is enabled.
-	//   - Has effect only when BOTH DRADeviceBindingConditions and
-	//     DRAResourceClaimDeviceStatus are enabled; otherwise omit this field.
-	//   - When DRADeviceBindingConditions is disabled, setting this field is considered an error.
+	// 默认值与特性门控：
+	//   - DRADeviceBindingConditions 启用时默认 10 分钟。
+	//   - 仅当 DRADeviceBindingConditions 与 DRAResourceClaimDeviceStatus 同时启用时才生效；否则省略该字段。
+	//   - DRADeviceBindingConditions 禁用时设置该字段视为错误。
 	//
-	// Valid values:
-	//   - >=1s (non-zero). No upper bound is enforced.
+	// 合法取值：
+	//   - >=1s（非零），不设上限。
 	//
-	// Tuning guidance:
-	//   - Lower values reduce time-to-retry when devices aren’t ready but can
-	//     increase churn if drivers typically need longer to report readiness.
-	//   - Review scheduler latency metrics (e.g. PreBind duration in
-	//     `scheduler_framework_extension_point_duration_seconds`) and driver
-	//     readiness behavior before tightening this timeout.
+	// 调优建议：
+	//   - 较小的值可缩短设备未就绪时的重试间隔，但如果驱动通常需要更长时间报告就绪，可能增加抖动。
+	//   - 收紧该超时前，先查看调度器延迟指标（如 `scheduler_framework_extension_point_duration_seconds`
+	//     中的 PreBind 耗时）以及驱动的就绪行为。
 	BindingTimeout *metav1.Duration
 }
 

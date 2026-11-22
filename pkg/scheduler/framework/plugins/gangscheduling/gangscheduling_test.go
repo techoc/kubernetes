@@ -45,7 +45,7 @@ import (
 )
 
 func init() {
-	// This is required for tests where cache is initialized, and cache attempts to update metrics.
+	// 部分测试会初始化 cache 并更新指标，因此必须先注册指标，否则会 panic。
 	metrics.Register()
 }
 
@@ -741,7 +741,7 @@ func Test_isSchedulableAfterCompositePodGroupAdded(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CompositePodGroup, tc.isCompositePodGroupEnabled)
 			logger, ctx := ktesting.NewTestContext(t)
 
-			// Must create clientset with objects
+			// 用测试对象构造 clientset，供 informer 读取。
 			var objs []runtime.Object
 			for _, pg := range tc.pgs {
 				objs = append(objs, pg)
@@ -752,7 +752,7 @@ func Test_isSchedulableAfterCompositePodGroupAdded(t *testing.T) {
 
 			informerFactory := informers.NewSharedInformerFactory(fake.NewClientset(objs...), 0)
 
-			// We need to wait for informers to sync
+			// 等待 informer 完成同步后再继续。
 			for _, pg := range tc.pgs {
 				if err := informerFactory.Scheduling().V1beta1().PodGroups().Informer().GetStore().Add(pg); err != nil {
 					t.Fatalf("Failed to add podGroup %s to store: %v", pg.Name, err)
@@ -1146,7 +1146,7 @@ func TestGangSchedulingFlow(t *testing.T) {
 				t.Fatalf("Failed to create framework: %v", err)
 			}
 
-			// Populate informers and manager state for the test case.
+			// 按用例准备 informer 存储与 manager 内部状态。
 			for _, pg := range tt.initialPodGroups {
 				err := podGroupInformer.Informer().GetStore().Add(pg)
 				if err != nil {
@@ -1180,7 +1180,7 @@ func TestGangSchedulingFlow(t *testing.T) {
 				t.Fatalf("Unexpected PreEnqueue status (-want,+got):\n%s", diff)
 			}
 			if !gotPreEnqueueStatus.IsSuccess() {
-				// Pod is rejected.
+				// Pod 在 PreEnqueue 阶段被拒绝，无需继续。
 				return
 			}
 
@@ -1188,7 +1188,7 @@ func TestGangSchedulingFlow(t *testing.T) {
 				t.Fatalf("Failed to update snapshot: %v", err)
 			}
 
-			// Simulate that other pods have already hit Permit and are now waiting.
+			// 模拟同组其他 Pod 已进入 Permit 并处于等待状态。
 			for _, p := range tt.podsWaitingOnPermit {
 				pod := p.DeepCopy()
 				pod.Spec.NodeName = "some-node"
@@ -1201,7 +1201,7 @@ func TestGangSchedulingFlow(t *testing.T) {
 				}
 			}
 
-			// Clear activated pods to assert those activated in tt.pod Permit.
+			// 清空已激活列表，便于断言 tt.pod 的 Permit 到底激活了哪些 Pod。
 			fakeActivator.activatedPods = nil
 
 			cycleState := schedulerframework.NewCycleState()
@@ -1212,8 +1212,8 @@ func TestGangSchedulingFlow(t *testing.T) {
 			pod := tt.pod.DeepCopy()
 			pod.Spec.NodeName = "some-node"
 
-			// In a pod group scheduling cycle, a snapshot is taken after all
-			// waiting pods are assumed, so that Permit can read from it.
+			// PodGroup 调度周期中，会在假定所有等待中的 Pod 之后再生成快照，
+			// 这样 Permit 才能从快照中读到它们。
 			if tt.isDuringPodGroupSchedulingCycle {
 				if err := cache.UpdateSnapshot(logger, snapshot); err != nil {
 					t.Fatalf("Failed to update snapshot: %v", err)
@@ -1222,12 +1222,12 @@ func TestGangSchedulingFlow(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create pod info for %q: %v", pod.Name, err)
 				}
-				// Assume pod in the snapshot, as in a pod group scheduling cycle.
+				// 与 PodGroup 调度周期一致，在快照中假定该 Pod。
 				if err := snapshot.AssumePod(podInfo); err != nil {
 					t.Fatalf("Failed to assume pod %q in snapshot: %v", pod.Name, err)
 				}
 			} else {
-				// Assume pod in the cache, as in a pod-by-pod scheduling cycle, where Permit reads from cache.
+				// 与逐个 Pod 调度周期一致，在 cache 中假定该 Pod；Permit 从 cache 读取。
 				if err := cache.AssumePod(logger, pod); err != nil {
 					t.Fatalf("Failed to assume pod %q in cache: %v", pod.Name, err)
 				}
@@ -1241,7 +1241,7 @@ func TestGangSchedulingFlow(t *testing.T) {
 				t.Fatalf("Unexpected Permit status (-want, +got):\n%s", diff)
 			}
 			if gotPermitStatus.Code() == fwk.Wait {
-				// Pod waits for others from a gang. Simulate its eventual forget.
+				// Pod 需等待同组其他成员，模拟最终被 Forget 的过程。
 				if tt.isDuringPodGroupSchedulingCycle {
 					if err := snapshot.ForgetPod(logger, pod); err != nil {
 						t.Fatalf("Failed to forget pod %q from snapshot: %v", pod.Name, err)

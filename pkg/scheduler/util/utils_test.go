@@ -43,6 +43,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestGetPodFullName 校验 GetPodFullName 返回 "名字_命名空间" 格式。
 func TestGetPodFullName(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -57,6 +58,7 @@ func TestGetPodFullName(t *testing.T) {
 	}
 }
 
+// newPriorityPodWithStartTime 构造一个带优先级和启动时间的测试 Pod。
 func newPriorityPodWithStartTime(name string, priority int32, startTime time.Time) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,6 +73,7 @@ func newPriorityPodWithStartTime(name string, priority int32, startTime time.Tim
 	}
 }
 
+// TestGetEarliestPodStartTime 校验 GetEarliestPodStartTime 能取到一组 Pod 中最早的启动时间。
 func TestGetEarliestPodStartTime(t *testing.T) {
 	var priority int32 = 1
 	currentTime := time.Now()
@@ -128,6 +131,7 @@ func TestGetEarliestPodStartTime(t *testing.T) {
 	}
 }
 
+// TestMoreImportantPod 校验优先级/启动时间共同决定的 Pod 重要性比较规则。
 func TestMoreImportantPod(t *testing.T) {
 	currentTime := time.Now()
 	pod1 := newPriorityPodWithStartTime("pod1", 1, currentTime)
@@ -166,13 +170,14 @@ func TestMoreImportantPod(t *testing.T) {
 	}
 }
 
+// TestPatchPodStatus 表驱动校验 PatchPodStatus 的各种情形：
+// 正常打补丁、patch 生成失败、API 报错以及重试次数等。
 func TestPatchPodStatus(t *testing.T) {
 	tests := []struct {
 		name   string
 		pod    v1.Pod
 		client *clientsetfake.Clientset
-		// validateErr checks if error returned from PatchPodStatus is expected one or not.
-		// (true means error is expected one.)
+		// validateErr 判断 PatchPodStatus 返回的错误是否符合预期（true 表示预期出错）。
 		validateErr    func(goterr error) bool
 		statusToUpdate v1.PodStatus
 		nilOldStatus   bool
@@ -199,9 +204,8 @@ func TestPatchPodStatus(t *testing.T) {
 			},
 		},
 		{
-			// ref: #101697, #94626 - ImagePullSecrets are allowed to have empty secret names
-			// which would fail the 2-way merge patch generation on Pod patches
-			// due to the mergeKey being the name field
+			// ref: #101697, #94626 - ImagePullSecrets 允许出现空名字，
+			// 但 mergeKey 是 name 字段，这会让 Pod patch 的两路合并补丁生成失败。
 			name:   "Should update pod conditions successfully on a pod Spec with secrets with empty name",
 			client: clientsetfake.NewClientset(),
 			pod: v1.Pod{
@@ -210,7 +214,7 @@ func TestPatchPodStatus(t *testing.T) {
 					Name:      "pod1",
 				},
 				Spec: v1.PodSpec{
-					// this will serialize to imagePullSecrets:[{}]
+					// 会序列化为 imagePullSecrets:[{}]，用来复现空名字的场景。
 					ImagePullSecrets: make([]v1.LocalObjectReference, 1),
 				},
 			},
@@ -232,15 +236,15 @@ func TestPatchPodStatus(t *testing.T) {
 				client.PrependReactor("patch", "pods", func(action clienttesting.Action) (bool, runtime.Object, error) {
 					defer func() { reqcount++ }()
 					if reqcount == 0 {
-						// return an connection refused error for the first patch request.
+						// 第一次 patch 返回 connection refused，触发重试。
 						return true, &v1.Pod{}, fmt.Errorf("connection refused: %w", syscall.ECONNREFUSED)
 					}
 					if reqcount == 1 {
-						// not return error for the second patch request.
+						// 第二次 patch 成功，验证重试能恢复。
 						return false, &v1.Pod{}, nil
 					}
 
-					// return error if requests comes in more than three times.
+					// 超过三次说明重试次数失控，直接报错。
 					return true, nil, errors.New("requests comes in more than three times.")
 				})
 
@@ -273,11 +277,11 @@ func TestPatchPodStatus(t *testing.T) {
 				client.PrependReactor("patch", "pods", func(action clienttesting.Action) (bool, runtime.Object, error) {
 					defer func() { reqcount++ }()
 					if reqcount >= 4 {
-						// return error if requests comes in more than four times.
+						// 重试超过四次说明没有按上限收敛，直接报错。
 						return true, nil, errors.New("requests comes in more than four times.")
 					}
 
-					// return an connection refused error for the first patch request.
+					// 每次都返回 connection refused，验证重试最多四次。
 					return true, &v1.Pod{}, fmt.Errorf("connection refused: %w", syscall.ECONNREFUSED)
 				})
 
@@ -341,7 +345,7 @@ func TestPatchPodStatus(t *testing.T) {
 			}
 			err = PatchPodStatus(ctx, client, tc.pod.Name, tc.pod.Namespace, oldStatus, &tc.statusToUpdate)
 			if err != nil && tc.validateErr == nil {
-				// shouldn't be error
+				// 该用例预期成功，出现错误即失败。
 				t.Fatal(err)
 			}
 			if tc.validateErr != nil {
@@ -363,6 +367,8 @@ func TestPatchPodStatus(t *testing.T) {
 	}
 }
 
+// TestPatchPodGroupStatus 表驱动校验 PodGroupStatus 的补丁更新逻辑，
+// 覆盖正常更新、旧状态为空以及 API 报错等场景。
 func TestPatchPodGroupStatus(t *testing.T) {
 	now := metav1.NewTime(time.Now().Truncate(time.Second))
 
@@ -370,8 +376,7 @@ func TestPatchPodGroupStatus(t *testing.T) {
 		name     string
 		podGroup schedulingv1beta1.PodGroup
 		client   *clientsetfake.Clientset
-		// validateErr checks if error returned from PatchPodGroupStatus is expected one or not.
-		// (true means error is expected one.)
+		// validateErr 判断 PatchPodGroupStatus 返回的错误是否符合预期（true 表示预期出错）。
 		validateErr    func(goterr error) bool
 		statusToUpdate *schedulingv1beta1.PodGroupStatus
 		nilOldStatus   bool
@@ -619,6 +624,7 @@ func TestPatchPodGroupStatus(t *testing.T) {
 	}
 }
 
+// TestBindPod 校验 BindPod 能正确构造绑定请求并处理 API 错误。
 func TestBindPod(t *testing.T) {
 	binding := &v1.Binding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -736,7 +742,7 @@ func TestBindPod(t *testing.T) {
 	}
 }
 
-// Test_As tests the As function with Pod.
+// Test_As_Pod 校验泛型 As 函数把新旧对象转成 *v1.Pod 的行为。
 func Test_As_Pod(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -791,7 +797,7 @@ func Test_As_Pod(t *testing.T) {
 	}
 }
 
-// Test_As_Node tests the As function with Node.
+// Test_As_Node 校验泛型 As 函数把新旧对象转成 *v1.Node 的行为。
 func Test_As_Node(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -840,7 +846,7 @@ func Test_As_Node(t *testing.T) {
 	}
 }
 
-// Test_As_KMetadata tests the As function with Pod.
+// Test_As_KMetadata 校验泛型 As 函数把新旧对象转成 klog.KMetadata 的行为。
 func Test_As_KMetadata(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -894,6 +900,8 @@ func Test_As_KMetadata(t *testing.T) {
 	}
 }
 
+// TestGetHostPorts 校验 GetHostPorts 能从 Pod 的容器端口中提取宿主端口列表，
+// 并忽略未指定宿主端口的条目。
 func TestGetHostPorts(t *testing.T) {
 	tests := []struct {
 		pod  *v1.Pod

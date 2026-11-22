@@ -22,6 +22,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestPluginsNames 验证 Plugins.Names 会汇总所有扩展点的插件名并去重。
+// 同一插件出现在多个扩展点时只应报告一次。
 func TestPluginsNames(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -40,66 +40,63 @@ var (
 	updateMetricsPeriod = 1 * time.Second
 )
 
-// New returns a Cache implementation.
-// It automatically starts a go routine that exports cache metrics.
-// "ctx" is the context that would close the background goroutine.
+// New 返回一个 Cache 实现，并自动启动导出缓存指标的 goroutine。
+// ctx 用于关闭该后台 goroutine。
 func New(ctx context.Context, apiDispatcher fwk.APIDispatcher, genericWorkloadEnabled, compositePodGroupEnabled bool) Cache {
 	cache := newCache(ctx, updateMetricsPeriod, apiDispatcher, genericWorkloadEnabled, compositePodGroupEnabled)
 	cache.run()
 	return cache
 }
 
-// nodeInfoListItem holds a NodeInfo pointer and acts as an item in a doubly
-// linked list. When a NodeInfo is updated, it goes to the head of the list.
-// The items closer to the head are the most recently updated items.
+// nodeInfoListItem 持有 NodeInfo 指针，作为双向链表节点。
+// NodeInfo 更新时会被移到链表头部，越靠近头部越新；
+// UpdateSnapshot 借此只扫描上次快照后有变化的节点。
 type nodeInfoListItem struct {
 	info *framework.NodeInfo
 	next *nodeInfoListItem
 	prev *nodeInfoListItem
 }
 
+// cacheImpl 是 scheduler cache 的具体实现，维护 Pod/Node/镜像/PodGroup 等状态。
 type cacheImpl struct {
 	stop   <-chan struct{}
 	period time.Duration
 
-	// This mutex guards all fields within this cache struct.
+	// mu 保护该结构体的所有字段。
 	mu sync.RWMutex
-	// a set of assumed pod keys.
-	// The key could further be used to get an entry in podStates.
+	// assumedPods 保存已假定调度的 Pod 键，可用该键在 podStates 中查到对应条目。
 	assumedPods sets.Set[string]
-	// a map from pod key to podState.
+	// podStates 保存 Pod 键到 Pod 状态的映射。
 	podStates map[string]*podState
 	nodes     map[string]*nodeInfoListItem
-	// headNode points to the most recently updated NodeInfo in "nodes". It is the
-	// head of the linked list.
+	// headNode 指向 nodes 中最近更新的 NodeInfo，即链表头部。
 	headNode *nodeInfoListItem
 	nodeTree *nodeTree
-	// A map from image name to its ImageStateSummary.
+	// imageStates 保存镜像名到镜像状态摘要的映射。
 	imageStates map[string]*fwk.ImageStateSummary
-	// podGroupStates stores the runtime state for each known pod group (only if GenericWorkload feature gate is enabled).
+	// podGroupStates 保存各 PodGroup 的运行时状态（仅当 GenericWorkload 特性门开启时有效）。
 	podGroupStates map[fwk.EntityKey]*podGroupState
-	// compositePodGroupStates stores the runtime state for each known composite pod group (only if CompositePodGroup feature gate is enabled).
+	// compositePodGroupStates 保存各组合 PodGroup 的运行时状态（仅当 CompositePodGroup 特性门开启时有效）。
 	compositePodGroupStates map[fwk.EntityKey]*compositePodGroupState
-	// genericWorkloadEnabled stores the GenericWorkload feature gate value.
+	// genericWorkloadEnabled 记录 GenericWorkload 特性门的取值。
 	genericWorkloadEnabled bool
-	// compositePodGroupEnabled stores the CompositePodGroup feature gate value.
+	// compositePodGroupEnabled 记录 CompositePodGroup 特性门的取值。
 	compositePodGroupEnabled bool
-	// apiDispatcher is used for the methods that are expected to send API calls.
-	// It's non-nil only if the SchedulerAsyncAPICalls feature gate is enabled.
+	// apiDispatcher 用于需要发送 API 调用的方法，仅当 SchedulerAsyncAPICalls 特性门开启时非 nil。
 	apiDispatcher fwk.APIDispatcher
 
-	// pvcRefCountsDelta contains the delta of changes to PVCRefCounts since the last snapshot.
-	// Keys are in the format "namespace/name". This data struct serves as an optimization for avoiding
-	// burdensome PVC ref count aggregations during scheduler cycles. PVCRefCountsDelta holds the incoming
-	// deltas from events handlers while within the scheduler cycle, we only apply and reset the delta to
-	// avoid global re-calculation.
+	// pvcRefCountsDelta 保存自上次快照以来 PVCRefCounts 的变化量，键格式为 "namespace/name"。
+	// 事件处理器持续写入增量，调度周期内只应用并清空这些增量，
+	// 避免每次快照都重新聚合全部 PVC 引用计数。
 	pvcRefCountsDelta map[string]int
 }
 
+// podState 保存缓存中单个 Pod 的状态。
 type podState struct {
 	pod *v1.Pod
 }
 
+// newCache 创建缓存实例但不启动后台 goroutine，便于测试控制。
 func newCache(ctx context.Context, period time.Duration, apiDispatcher fwk.APIDispatcher, genericWorkloadEnabled, compositePodGroupEnabled bool) *cacheImpl {
 	logger := klog.FromContext(ctx)
 	return &cacheImpl{
@@ -120,23 +117,22 @@ func newCache(ctx context.Context, period time.Duration, apiDispatcher fwk.APIDi
 	}
 }
 
-// newNodeInfoListItem initializes a new nodeInfoListItem.
+// newNodeInfoListItem 创建一个 nodeInfoListItem。
 func newNodeInfoListItem(ni *framework.NodeInfo) *nodeInfoListItem {
 	return &nodeInfoListItem{
 		info: ni,
 	}
 }
 
-// moveNodeInfoToHead moves a NodeInfo to the head of "cache.nodes" doubly
-// linked list. The head is the most recently updated NodeInfo.
-// We assume cache lock is already acquired.
+// moveNodeInfoToHead 把 NodeInfo 移到 cache.nodes 链表头部，表示它是最近更新的节点。
+// 调用方需持有缓存锁。
 func (cache *cacheImpl) moveNodeInfoToHead(logger klog.Logger, name string) {
 	ni, ok := cache.nodes[name]
 	if !ok {
 		utilruntime.HandleErrorWithLogger(logger, nil, "No node info with given name found in the cache", "node", klog.KRef("", name))
 		return
 	}
-	// if the node info list item is already at the head, we are done.
+	// 已经在头部则无需调整指针。
 	if ni == cache.headNode {
 		return
 	}
@@ -155,9 +151,8 @@ func (cache *cacheImpl) moveNodeInfoToHead(logger klog.Logger, name string) {
 	cache.headNode = ni
 }
 
-// removeNodeInfoFromList removes a NodeInfo from the "cache.nodes" doubly
-// linked list.
-// We assume cache lock is already acquired.
+// removeNodeInfoFromList 从 cache.nodes 双向链表中移除 NodeInfo。
+// 调用方需持有缓存锁。
 func (cache *cacheImpl) removeNodeInfoFromList(logger klog.Logger, name string) {
 	ni, ok := cache.nodes[name]
 	if !ok {
@@ -171,17 +166,15 @@ func (cache *cacheImpl) removeNodeInfoFromList(logger klog.Logger, name string) 
 	if ni.next != nil {
 		ni.next.prev = ni.prev
 	}
-	// if the removed item was at the head, we must update the head.
+	// 删除的是头节点时，需要把头指针后移。
 	if ni == cache.headNode {
 		cache.headNode = ni.next
 	}
 	delete(cache.nodes, name)
 }
 
-// Dump produces a dump of the current scheduler cache. This is used for
-// debugging purposes only and shouldn't be confused with UpdateSnapshot
-// function.
-// This method is expensive, and should be only used in non-critical path.
+// Dump 导出当前调度缓存的完整快照，仅用于调试，与 UpdateSnapshot 无关。
+// 该方法开销较大，不应在关键路径上调用。
 func (cache *cacheImpl) Dump() *Dump {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
@@ -197,12 +190,9 @@ func (cache *cacheImpl) Dump() *Dump {
 	}
 }
 
-// UpdateSnapshot takes a snapshot of cached NodeInfo map. This is called at
-// beginning of every scheduling cycle.
-// The snapshot only includes Nodes that are not deleted at the time this function is called.
-// nodeInfo.Node() is guaranteed to be not nil for all the nodes in the snapshot.
-// This function tracks generation number of NodeInfo and updates only the
-// entries of an existing snapshot that have changed after the snapshot was taken.
+// UpdateSnapshot 在每次调度周期开始时对缓存的 NodeInfo 做快照。
+// 快照只包含调用时尚未删除的节点，且每个节点的 nodeInfo.Node() 保证非 nil。
+// 它按 NodeInfo 的 generation 增量更新现有快照中发生变化的条目。
 func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapshot) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -212,35 +202,26 @@ func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapsho
 		nodeSnapshot.ForgetPlacement()
 	}
 
-	// Get the last generation of the snapshot.
+	// 取快照记录的上次 generation，作为增量更新的起点。
 	snapshotGeneration := nodeSnapshot.generation
 
-	// NodeInfoList and HavePodsWithAffinityNodeInfoList must be re-created if a node was added
-	// or removed from the cache.
+	// 节点增删会使所有列表失效，需要整体重建。
 	updateAllLists := false
-	// HavePodsWithAffinityNodeInfoList must be re-created if a node changed its
-	// status from having pods with affinity to NOT having pods with affinity or the other
-	// way around.
+	// 节点在"有/无亲和性 Pod"之间变化时，亲和性列表需要重建。
 	updateNodesHavePodsWithAffinity := false
-	// HavePodsWithRequiredAntiAffinityNodeInfoList must be re-created if a node changed its
-	// status from having pods with required anti-affinity to NOT having pods with required
-	// anti-affinity or the other way around.
+	// 节点在"有/无强制反亲和性 Pod"之间变化时，对应列表需要重建。
 	updateNodesHavePodsWithRequiredAntiAffinity := false
 
-	// Forget all assumed pods from a previous snapshot version.
-	// This is a safety check in case any pod wasn't forgotten in the previous scheduling cycle.
+	// 清除上一版快照中的假定 Pod，防止上个周期遗漏 Forget 造成状态残留。
 	nodeSnapshot.forgetAllAssumedPods(logger)
 
-	// HavePodsWithRequiredNonHostScopedAntiAffinityNodeInfoList must be re-created if a node changed its status
-	// from having pods with required anti-affinity with topologyKey other than kubernetes.io/hostname to NOT
-	// having such pods, or the other way around.
+	// 节点在"有/无非主机级强制反亲和性 Pod"之间变化时（topologyKey 非 kubernetes.io/hostname），列表需要重建。
 	updateNodesHavePodsWithRequiredNonHostScopedAntiAffinity := false
 
-	// Start from the head of the NodeInfo doubly linked list and update snapshot
-	// of NodeInfos updated after the last snapshot.
+	// 从链表头部开始，只更新上次快照之后变更过的 NodeInfo。
 	for node := cache.headNode; node != nil; node = node.next {
 		if node.info.Generation <= snapshotGeneration {
-			// all the nodes are updated before the existing snapshot. We are done.
+			// generation 已不新于快照，后面的节点更旧，可以停止扫描。
 			break
 		}
 		if np := node.info.Node(); np != nil {
@@ -251,9 +232,7 @@ func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapsho
 				nodeSnapshot.nodeInfoMap[np.Name] = existing
 			}
 			clone := node.info.SnapshotConcrete()
-			// We track nodes that have pods with affinity, here we check if this node changed its
-			// status from having pods with affinity to NOT having pods with affinity or the other
-			// way around.
+			// 比较新旧状态，判断节点是否在"有无亲和性 Pod"上发生了变化。
 			if (len(existing.PodsWithAffinity) > 0) != (len(clone.PodsWithAffinity) > 0) {
 				updateNodesHavePodsWithAffinity = true
 			}
@@ -263,26 +242,23 @@ func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapsho
 			if (len(existing.PodsWithRequiredNonHostScopedAntiAffinity) > 0) != (len(clone.PodsWithRequiredNonHostScopedAntiAffinity) > 0) {
 				updateNodesHavePodsWithRequiredNonHostScopedAntiAffinity = true
 			}
-			// We need to preserve the original pointer of the NodeInfo struct since it
-			// is used in the NodeInfoList, which we may not update.
+			// 原地赋值以保留原指针：NodeInfoList 等列表可能仍引用它。
 			*existing = *clone
 		}
 	}
-	// Update the snapshot generation with the latest NodeInfo generation.
+	// 把快照 generation 推进到缓存中最新的位置。
 	if cache.headNode != nil {
 		nodeSnapshot.generation = cache.headNode.info.Generation
 	}
 
-	// Comparing to pods in nodeTree.
-	// Deleted nodes get removed from the tree, but they might remain in the nodes map
-	// if they still have non-deleted Pods.
+	// 已删除节点会从 nodeTree 移除，但若其上还有未删除的 Pod，仍可能留在 nodes map 中。
+	// 因此需要用 nodeTree 的节点数校准快照，清掉幽灵节点。
 	if len(nodeSnapshot.nodeInfoMap) > cache.nodeTree.numNodes {
 		cache.removeDeletedNodesFromSnapshot(nodeSnapshot)
 		updateAllLists = true
 	}
 
-	// Apply the deltas for PVC reference count to the snapshot.
-	// This no-op if the snapshot is built afresh i.e. updateAllLists=true
+	// 把 PVC 引用计数增量应用到快照；若快照将整体重建（updateAllLists=true）则无需应用。
 	if !updateAllLists {
 		if err := cache.applyPVCRefCountDelta(nodeSnapshot); err != nil {
 			logger.Error(err, "rebuilding node snapshot due to unexpected error from refreshing PVC ref counts")
@@ -301,17 +277,16 @@ func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapsho
 			len(nodeSnapshot.nodeInfoList), cache.nodeTree.numNodes,
 			len(nodeSnapshot.nodeInfoMap), len(cache.nodes))
 		logger.Error(nil, errMsg)
-		// We will try to recover by re-creating the lists for the next scheduling cycle, but still return an
-		// error to surface the problem, the error will likely cause a failure to the current scheduling cycle.
+		// 重建列表供下个周期使用以自愈，但仍返回错误暴露异常；这通常会导致当前周期失败。
 		cache.updateNodeInfoSnapshotList(logger, nodeSnapshot, true)
 		return errors.New(errMsg)
 	}
 
 	if cache.genericWorkloadEnabled {
-		// Take a snapshot of pod group states for this scheduling cycle.
+		// 为本调度周期快照 PodGroup 状态。
 		cache.updatePodGroupStateSnapshot(nodeSnapshot)
 		if cache.compositePodGroupEnabled {
-			// Take a snapshot of composite pod group states for this scheduling cycle.
+			// 为本调度周期快照组合 PodGroup 状态。
 			cache.updateCompositePodGroupStateSnapshot(nodeSnapshot)
 		}
 	}
@@ -319,18 +294,16 @@ func (cache *cacheImpl) UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapsho
 	return nil
 }
 
-// updatePodGroupStateSnapshot updates the pod group state portion of the given snapshot.
-// It assumes that the cache lock is already held.
-// It removes entries that no longer exist in the live cache
-// and clones entries whose generation has advanced since the last snapshot.
+// updatePodGroupStateSnapshot 更新快照中的 PodGroup 状态部分：
+// 删除缓存中已不存在的条目，克隆 generation 已推进的条目。调用方需持有缓存锁。
 func (cache *cacheImpl) updatePodGroupStateSnapshot(snapshot *Snapshot) {
-	// Remove pod group states from snapshot that no longer exist in cache.
+	// 删除缓存中已不存在的 PodGroup 状态。
 	for key := range snapshot.podGroupStates {
 		if _, exists := cache.podGroupStates[key]; !exists {
 			delete(snapshot.podGroupStates, key)
 		}
 	}
-	// Clone only pod group states that changed since the last snapshot.
+	// 只克隆自上次快照以来发生变化的 PodGroup 状态，避免拷贝整个状态集。
 	for key, podGroupState := range cache.podGroupStates {
 		if existing, ok := snapshot.podGroupStates[key]; ok && existing.generation == podGroupState.generation {
 			continue
@@ -339,18 +312,16 @@ func (cache *cacheImpl) updatePodGroupStateSnapshot(snapshot *Snapshot) {
 	}
 }
 
-// updateCompositePodGroupStateSnapshot updates the composite pod group state portion of the given snapshot.
-// It assumes that the cache lock is already held.
-// It removes entries that no longer exist in the live cache
-// and clones entries whose generation has advanced since the last snapshot.
+// updateCompositePodGroupStateSnapshot 更新快照中的组合 PodGroup 状态部分：
+// 删除缓存中已不存在的条目，克隆 generation 已推进的条目。调用方需持有缓存锁。
 func (cache *cacheImpl) updateCompositePodGroupStateSnapshot(snapshot *Snapshot) {
-	// Remove pod group states from snapshot that no longer exist in cache.
+	// 删除缓存中已不存在的组合 PodGroup 状态。
 	for key := range snapshot.compositePodGroupStates {
 		if _, exists := cache.compositePodGroupStates[key]; !exists {
 			delete(snapshot.compositePodGroupStates, key)
 		}
 	}
-	// Clone only pod group states that changed since the last snapshot.
+	// 只克隆自上次快照以来发生变化的组合 PodGroup 状态。
 	for key, cpgState := range cache.compositePodGroupStates {
 		if existing, ok := snapshot.compositePodGroupStates[key]; ok && existing.generation == cpgState.generation {
 			continue
@@ -359,13 +330,14 @@ func (cache *cacheImpl) updateCompositePodGroupStateSnapshot(snapshot *Snapshot)
 	}
 }
 
+// updateNodeInfoSnapshotList 重建或增量更新快照中的各类节点列表（含 PVC 引用计数汇总）。
 func (cache *cacheImpl) updateNodeInfoSnapshotList(logger klog.Logger, snapshot *Snapshot, updateAll bool) {
 	snapshot.havePodsWithAffinityNodeInfoList = make([]fwk.NodeInfo, 0, cache.nodeTree.numNodes)
 	snapshot.havePodsWithRequiredAntiAffinityNodeInfoList = make([]fwk.NodeInfo, 0, cache.nodeTree.numNodes)
 	snapshot.havePodsWithRequiredNonHostScopedAntiAffinityNodeInfoList = make([]fwk.NodeInfo, 0, cache.nodeTree.numNodes)
 	if updateAll {
 		snapshot.usedPVCRefCounts = make(map[string]int)
-		// Take a snapshot of the nodes order in the tree
+		// 按 nodeTree 中的节点顺序重建列表，保证调度时的节点遍历顺序稳定。
 		snapshot.nodeInfoList = make([]fwk.NodeInfo, 0, cache.nodeTree.numNodes)
 		nodesList, err := cache.nodeTree.list()
 		if err != nil {
@@ -390,7 +362,7 @@ func (cache *cacheImpl) updateNodeInfoSnapshotList(logger klog.Logger, snapshot 
 				utilruntime.HandleErrorWithLogger(logger, nil, "Node exists in nodeTree but not in NodeInfoMap, this should not happen", "node", klog.KRef("", nodeName))
 			}
 		}
-		// reset the deltas if update all
+		// 全量重建后 PVC 引用计数已是最新，清空增量避免重复应用。
 		cache.pvcRefCountsDelta = map[string]int{}
 	} else {
 		for _, nodeInfo := range snapshot.nodeInfoList {
@@ -407,7 +379,7 @@ func (cache *cacheImpl) updateNodeInfoSnapshotList(logger klog.Logger, snapshot 
 	}
 }
 
-// If certain nodes were deleted after the last snapshot was taken, we should remove them from the snapshot.
+// removeDeletedNodesFromSnapshot 把自上次快照后已被删除的节点从快照中清除。
 func (cache *cacheImpl) removeDeletedNodesFromSnapshot(snapshot *Snapshot) {
 	toDelete := len(snapshot.nodeInfoMap) - cache.nodeTree.numNodes
 	for name := range snapshot.nodeInfoMap {
@@ -421,22 +393,18 @@ func (cache *cacheImpl) removeDeletedNodesFromSnapshot(snapshot *Snapshot) {
 	}
 }
 
-// NodeCount returns the number of nodes in the cache.
-// DO NOT use outside of tests.
+// NodeCount 返回缓存中的节点数。仅限测试使用，不应在生产代码中调用。
 func (cache *cacheImpl) NodeCount() int {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 	return len(cache.nodes)
 }
 
-// PodCount returns the number of pods in the cache (including those from deleted nodes).
-// DO NOT use outside of tests.
+// PodCount 返回缓存中的 Pod 数（含已删除节点上的 Pod）。仅限测试使用，不应在生产代码中调用。
 func (cache *cacheImpl) PodCount() (int, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-	// podFilter is expected to return true for most or all of the pods. We
-	// can avoid expensive array growth without wasting too much memory by
-	// pre-allocating capacity.
+	// 直接累加各节点的 Pod 数，无需构造切片，避免无谓的内存分配。
 	count := 0
 	for _, n := range cache.nodes {
 		count += len(n.info.Pods)
@@ -444,6 +412,7 @@ func (cache *cacheImpl) PodCount() (int, error) {
 	return count, nil
 }
 
+// AssumePod 把一个待调度 Pod 假定分配到其目标节点并加入缓存。
 func (cache *cacheImpl) AssumePod(logger klog.Logger, pod *v1.Pod) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -459,8 +428,7 @@ func (cache *cacheImpl) AssumePod(logger klog.Logger, pod *v1.Pod) error {
 	return cache.addPod(logger, pod, true)
 }
 
-// validateAssumedPod checks that the given pod is currently assumed.
-// Assumes that lock is already acquired.
+// validateAssumedPod 校验 Pod 当前确实处于假定状态且节点未变。调用方需持有缓存锁。
 func (cache *cacheImpl) validateAssumedPod(pod *v1.Pod, key string, currState *podState) error {
 	if currState.pod.Spec.NodeName != pod.Spec.NodeName {
 		return fmt.Errorf("pod %v(%v) was assumed on %v but assigned to %v", key, klog.KObj(pod), pod.Spec.NodeName, currState.pod.Spec.NodeName)
@@ -471,9 +439,8 @@ func (cache *cacheImpl) validateAssumedPod(pod *v1.Pod, key string, currState *p
 	return nil
 }
 
-// ForgetPod forgets an assumed pod from the cache. It should be called when the pod
-// still exists, as an undo operation for AssumePod.
-// If the pod is a pod group member, it is moved from assumed to unscheduled pods of that pod group state in cache.
+// ForgetPod 从缓存中撤销一个假定 Pod，应在 Pod 仍存在时作为 AssumePod 的逆操作调用。
+// 若该 Pod 是 PodGroup 成员，会将其从 PodGroup 状态的 assumed 集合移回未调度集合。
 func (cache *cacheImpl) ForgetPod(logger klog.Logger, pod *v1.Pod) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -485,7 +452,7 @@ func (cache *cacheImpl) ForgetPod(logger klog.Logger, pod *v1.Pod) error {
 
 	currState, ok := cache.podStates[key]
 	if !ok {
-		// Pod does not exist in the cache anymore.
+		// Pod 已不在缓存中，无需处理。
 		return nil
 	}
 	if err := cache.validateAssumedPod(pod, key, currState); err != nil {
@@ -494,10 +461,8 @@ func (cache *cacheImpl) ForgetPod(logger klog.Logger, pod *v1.Pod) error {
 	return cache.removePod(logger, pod, true)
 }
 
-// RemoveAssumedPod removes an assumed pod from the cache. It should be called when the assumed
-// pod was removed from the cluster to correctly clean up internal state.
-// It differs from ForgetPod in how it handles pod group members, as it removes the pod from
-// the pod group state in the cache.
+// RemoveAssumedPod 在假定 Pod 确已从集群移除时清理缓存中的内部状态。
+// 与 ForgetPod 的区别在于：它会把 Pod 从 PodGroup 状态中彻底删除，而不是移回未调度集合。
 func (cache *cacheImpl) RemoveAssumedPod(logger klog.Logger, pod *v1.Pod) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -509,7 +474,7 @@ func (cache *cacheImpl) RemoveAssumedPod(logger klog.Logger, pod *v1.Pod) error 
 
 	currState, ok := cache.podStates[key]
 	if !ok {
-		// Pod does not exist in the cache anymore.
+		// Pod 已不在缓存中，无需处理。
 		return nil
 	}
 	if err := cache.validateAssumedPod(pod, key, currState); err != nil {
@@ -518,7 +483,7 @@ func (cache *cacheImpl) RemoveAssumedPod(logger klog.Logger, pod *v1.Pod) error 
 	return cache.removePod(logger, pod, false)
 }
 
-// Assumes that lock is already acquired.
+// addPod 把 Pod 加入缓存；assumePod 为 true 时标记为假定状态。调用方需持有缓存锁。
 func (cache *cacheImpl) addPod(logger klog.Logger, pod *v1.Pod, assumePod bool) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -530,6 +495,8 @@ func (cache *cacheImpl) addPod(logger klog.Logger, pod *v1.Pod, assumePod bool) 
 		cache.nodes[pod.Spec.NodeName] = n
 	}
 
+	// 先减旧、后加新，使增量只反映本次变更的净效果。
+	// 先减旧、后加新，使增量只反映本次变更的净效果。
 	// new_delta = old_delta + (PVCRefCounts_after − PVCRefCounts_before)
 	cache.refreshPVCRefCountsDelta(n.info, -1)
 	defer cache.refreshPVCRefCountsDelta(n.info, 1)
@@ -555,7 +522,7 @@ func (cache *cacheImpl) addPod(logger klog.Logger, pod *v1.Pod, assumePod bool) 
 	return nil
 }
 
-// Assumes that lock is already acquired.
+// updatePod 用新 Pod 替换旧 Pod。调用方需持有缓存锁。
 func (cache *cacheImpl) updatePod(logger klog.Logger, oldPod, newPod *v1.Pod) error {
 	if err := cache.removePod(logger, oldPod, false); err != nil {
 		return err
@@ -563,10 +530,8 @@ func (cache *cacheImpl) updatePod(logger klog.Logger, oldPod, newPod *v1.Pod) er
 	return cache.addPod(logger, newPod, false)
 }
 
-// Assumes that lock is already acquired.
-// Removes a pod from the cached node info. If the node information was already
-// removed and there are no more pods left in the node, cleans up the node from
-// the cache.
+// removePod 从缓存的节点信息中移除 Pod；若节点已无 Node 对象且不再有 Pod，则清理缓存中的节点条目。
+// 调用方需持有缓存锁。
 func (cache *cacheImpl) removePod(logger klog.Logger, pod *v1.Pod, forgetPod bool) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -606,6 +571,7 @@ func (cache *cacheImpl) removePod(logger klog.Logger, pod *v1.Pod, forgetPod boo
 	return nil
 }
 
+// AddPod 处理 Pod 的 Add 事件：若已假定则该为 Added 并更新，否则直接加入缓存。
 func (cache *cacheImpl) AddPod(logger klog.Logger, pod *v1.Pod) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -618,13 +584,12 @@ func (cache *cacheImpl) AddPod(logger klog.Logger, pod *v1.Pod) error {
 	currState, ok := cache.podStates[key]
 	switch {
 	case ok && cache.assumedPods.Has(key):
-		// When assuming, we've already added the Pod to cache,
-		// Just update here to make sure the Pod's status is up-to-date.
+		// 假定时 Pod 已在缓存中，这里只需用 Add 事件的数据更新，保证状态最新。
 		if err = cache.updatePod(logger, currState.pod, pod); err != nil {
 			utilruntime.HandleErrorWithLogger(logger, err, "Error occurred while updating pod")
 		}
 		if currState.pod.Spec.NodeName != pod.Spec.NodeName {
-			// The pod was added to a different node than it was assumed to.
+			// 实际绑定的节点与假定节点不同，说明调度器可能已放弃该 Pod，忽略更新。
 			logger.Info("Pod was added to a different node than it was assumed", "podKey", key, "pod", klog.KObj(pod), "assumedNode", klog.KRef("", pod.Spec.NodeName), "currentNode", klog.KRef("", currState.pod.Spec.NodeName))
 			return nil
 		}
@@ -638,6 +603,7 @@ func (cache *cacheImpl) AddPod(logger klog.Logger, pod *v1.Pod) error {
 	return nil
 }
 
+// UpdatePod 处理 Pod 的 Update 事件，替换缓存中的旧 Pod 对象。
 func (cache *cacheImpl) UpdatePod(logger klog.Logger, oldPod, newPod *v1.Pod) error {
 	key, err := framework.GetPodKey(oldPod)
 	if err != nil {
@@ -652,8 +618,7 @@ func (cache *cacheImpl) UpdatePod(logger klog.Logger, oldPod, newPod *v1.Pod) er
 		return fmt.Errorf("pod %v(%v) is not added to scheduler cache, so cannot be updated", key, klog.KObj(oldPod))
 	}
 
-	// An assumed pod won't have Update/Remove event. It needs to have Add event
-	// before Update event, in which case the state would change from Assumed to Added.
+	// 假定状态的 Pod 不应收到 Update 事件；它必须先收到 Add 事件完成从 Assumed 到 Added 的转换。
 	if cache.assumedPods.Has(key) {
 		return fmt.Errorf("assumed pod %v(%v) should not be updated", key, klog.KObj(oldPod))
 	}
@@ -665,6 +630,7 @@ func (cache *cacheImpl) UpdatePod(logger klog.Logger, oldPod, newPod *v1.Pod) er
 	return cache.updatePod(logger, oldPod, newPod)
 }
 
+// RemovePod 处理 Pod 的 Delete 事件，从缓存中移除对应 Pod。
 func (cache *cacheImpl) RemovePod(logger klog.Logger, pod *v1.Pod) error {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -681,8 +647,7 @@ func (cache *cacheImpl) RemovePod(logger klog.Logger, pod *v1.Pod) error {
 	if currState.pod.Spec.NodeName != pod.Spec.NodeName {
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod was added to a different node than it was assumed", "podKey", key, "pod", klog.KObj(pod), "assumedNode", klog.KRef("", pod.Spec.NodeName), "currentNode", klog.KRef("", currState.pod.Spec.NodeName))
 		if pod.Spec.NodeName != "" {
-			// An empty NodeName is possible when the scheduler misses a Delete
-			// event and it gets the last known state from the informer cache.
+			// 若调度器漏掉了 Delete 事件，从 informer 缓存拿到的可能是 NodeName 为空的旧状态，属正常情况。
 			utilruntime.HandleErrorWithLogger(logger, nil, "Scheduler cache is corrupted and can badly affect scheduling decisions")
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 		}
@@ -690,6 +655,7 @@ func (cache *cacheImpl) RemovePod(logger klog.Logger, pod *v1.Pod) error {
 	return cache.removePod(logger, currState.pod, false)
 }
 
+// IsAssumedPod 返回 Pod 是否处于假定调度状态。
 func (cache *cacheImpl) IsAssumedPod(pod *v1.Pod) (bool, error) {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -702,8 +668,8 @@ func (cache *cacheImpl) IsAssumedPod(pod *v1.Pod) (bool, error) {
 	return cache.assumedPods.Has(key), nil
 }
 
-// GetPod might return a pod for which its node has already been deleted from
-// the main cache. This is useful to properly process pod update events.
+// GetPod 返回缓存中的 Pod；其所在节点可能已从主缓存删除，
+// 这对正确处理 Pod 更新事件很有用。
 func (cache *cacheImpl) GetPod(pod *v1.Pod) (*v1.Pod, error) {
 	key, err := framework.GetPodKey(pod)
 	if err != nil {
@@ -721,6 +687,7 @@ func (cache *cacheImpl) GetPod(pod *v1.Pod) (*v1.Pod, error) {
 	return podState.pod, nil
 }
 
+// AddNode 处理 Node 的 Add 事件，更新节点树、节点信息与镜像状态。
 func (cache *cacheImpl) AddNode(logger klog.Logger, node *v1.Node) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -739,6 +706,7 @@ func (cache *cacheImpl) AddNode(logger klog.Logger, node *v1.Node) {
 	n.info.SetNode(node)
 }
 
+// UpdateNode 处理 Node 的 Update 事件，用新节点信息替换缓存中的旧数据。
 func (cache *cacheImpl) UpdateNode(logger klog.Logger, oldNode, newNode *v1.Node) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -757,12 +725,10 @@ func (cache *cacheImpl) UpdateNode(logger klog.Logger, oldNode, newNode *v1.Node
 	n.info.SetNode(newNode)
 }
 
-// RemoveNode removes a node from the cache's tree.
-// The node might still have pods because their deletion events didn't arrive
-// yet. Those pods are considered removed from the cache, being the node tree
-// the source of truth.
-// However, we keep a ghost node with the list of pods until all pod deletion
-// events have arrived. A ghost node is skipped from snapshots.
+// RemoveNode 从缓存的节点树中移除节点。
+// 节点上可能还有 Pod，其删除事件尚未到达；节点树是事实来源，这些 Pod 视为已移除。
+// 但缓存仍保留一个含 Pod 列表的幽灵节点，直到所有 Pod 删除事件到齐；
+// 幽灵节点不会进入快照。
 func (cache *cacheImpl) RemoveNode(logger klog.Logger, node *v1.Node) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -772,14 +738,12 @@ func (cache *cacheImpl) RemoveNode(logger klog.Logger, node *v1.Node) error {
 		return fmt.Errorf("node %v is not found", node.Name)
 	}
 
-	// only subtract the PVCRefCount into the delta map
+	// 仅扣减增量：节点删除后可由 RemovePod 继续扣减其上的 Pod 引用，无需再次加回。
 	cache.refreshPVCRefCountsDelta(n.info, -1)
 
 	n.info.RemoveNode()
-	// We remove NodeInfo for this node only if there aren't any pods on this node.
-	// We can't do it unconditionally, because notifications about pods are delivered
-	// in a different watch, and thus can potentially be observed later, even though
-	// they happened before node removal.
+	// 只有节点上已无 Pod 时才删除 NodeInfo。Pod 与节点来自不同的 watch，
+	// 即使 Pod 删除发生在节点删除之前，事件也可能延后到达，不能无条件清理。
 	if len(n.info.Pods) == 0 {
 		cache.removeNodeInfoFromList(logger, node.Name)
 	} else {
@@ -792,8 +756,7 @@ func (cache *cacheImpl) RemoveNode(logger klog.Logger, node *v1.Node) error {
 	return nil
 }
 
-// GetNode returns the copy of node stored in the cache.
-// DO NOT use outside of tests.
+// GetNode 返回缓存中节点的副本。仅限测试使用，不应在生产代码中调用。
 func (cache *cacheImpl) GetNode(name string) (*framework.NodeInfo, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
@@ -805,14 +768,14 @@ func (cache *cacheImpl) GetNode(name string) (*framework.NodeInfo, error) {
 	return n.info.SnapshotConcrete(), nil
 }
 
-// addNodeImageStates adds states of the images on given node to the given nodeInfo and update the imageStates in
-// scheduler cache. This function assumes the lock to scheduler cache has been acquired.
+// addNodeImageStates 把节点上的镜像状态写入 nodeInfo，并同步更新缓存的 imageStates。
+// 调用方需持有缓存锁。
 func (cache *cacheImpl) addNodeImageStates(node *v1.Node, nodeInfo *framework.NodeInfo) {
 	newSum := make(map[string]*fwk.ImageStateSummary)
 
 	for _, image := range node.Status.Images {
 		for _, name := range image.Names {
-			// update the entry in imageStates
+			// 更新全局镜像状态：记录该镜像在哪些节点上可用。
 			state, ok := cache.imageStates[name]
 			if !ok {
 				state = &fwk.ImageStateSummary{
@@ -823,7 +786,7 @@ func (cache *cacheImpl) addNodeImageStates(node *v1.Node, nodeInfo *framework.No
 			} else {
 				state.Nodes.Insert(node.Name)
 			}
-			// create the ImageStateSummary for this image
+			// 每个镜像名只保留一个摘要对象，避免同一镜像的多个名称重复创建。
 			if _, ok := newSum[name]; !ok {
 				newSum[name] = state
 			}
@@ -832,9 +795,8 @@ func (cache *cacheImpl) addNodeImageStates(node *v1.Node, nodeInfo *framework.No
 	nodeInfo.ImageStates = newSum
 }
 
-// removeNodeImageStates removes the given node record from image entries having the node
-// in imageStates cache. After the removal, if any image becomes free, i.e., the image
-// is no longer available on any node, the image entry will be removed from imageStates.
+// removeNodeImageStates 从 imageStates 中移除该节点对各镜像的记录。
+// 若某镜像不再出现在任何节点上，则连同镜像条目一起删除。
 func (cache *cacheImpl) removeNodeImageStates(node *v1.Node) {
 	if node == nil {
 		return
@@ -846,9 +808,7 @@ func (cache *cacheImpl) removeNodeImageStates(node *v1.Node) {
 			if ok {
 				state.Nodes.Delete(node.Name)
 				if state.Nodes.Len() == 0 {
-					// Remove the unused image to make sure the length of
-					// imageStates represents the total number of different
-					// images on all nodes
+					// 清理未被使用的镜像，保证 imageStates 的大小等于各节点上不同镜像的总数。
 					delete(cache.imageStates, name)
 				}
 			}
@@ -856,11 +816,12 @@ func (cache *cacheImpl) removeNodeImageStates(node *v1.Node) {
 	}
 }
 
+// run 启动定期更新缓存指标的后台 goroutine。
 func (cache *cacheImpl) run() {
 	go wait.Until(cache.updateMetrics, cache.period, cache.stop)
 }
 
-// updateMetrics updates cache size metric values for pods, assumed pods, and nodes
+// updateMetrics 更新 Pod、假定 Pod 及节点数量的缓存大小指标。
 func (cache *cacheImpl) updateMetrics() {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
@@ -870,13 +831,12 @@ func (cache *cacheImpl) updateMetrics() {
 	metrics.CacheSize.WithLabelValues("nodes").Set(float64(len(cache.nodes)))
 }
 
-// isPodGroupMember returns true if the pod belongs to a pod group,
-// provided that GenericWorkload feature gate is enabled.
+// isPodGroupMember 判断 Pod 是否属于某个 PodGroup；仅在 GenericWorkload 特性门开启时为真。
 func (cache *cacheImpl) isPodGroupMember(pod *v1.Pod) bool {
 	return cache.genericWorkloadEnabled && pod.Spec.SchedulingGroup != nil
 }
 
-// AddPodGroupMember adds not assigned and not assumed pod to its pod group state in the cache.
+// AddPodGroupMember 把一个未分配、未假定的 Pod 加入缓存中对应的 PodGroup 状态。
 func (cache *cacheImpl) AddPodGroupMember(pod *v1.Pod) {
 	if !cache.isPodGroupMember(pod) {
 		return
@@ -887,7 +847,7 @@ func (cache *cacheImpl) AddPodGroupMember(pod *v1.Pod) {
 	cache.addPodGroupMember(pod)
 }
 
-// UpdatePodGroupMember updates a pod's entry inside its pod group state in the cache.
+// UpdatePodGroupMember 更新缓存中 Pod 在所属 PodGroup 状态里的条目。
 func (cache *cacheImpl) UpdatePodGroupMember(logger klog.Logger, oldPod, newPod *v1.Pod) {
 	if !cache.isPodGroupMember(newPod) {
 		return
@@ -898,7 +858,7 @@ func (cache *cacheImpl) UpdatePodGroupMember(logger klog.Logger, oldPod, newPod 
 	cache.updatePodGroupMember(logger, oldPod, newPod)
 }
 
-// RemovePodGroupMember removes the pod from its pod group state in the cache.
+// RemovePodGroupMember 从缓存中移除 Pod 在其 PodGroup 状态里的条目。
 func (cache *cacheImpl) RemovePodGroupMember(pod *v1.Pod) {
 	if !cache.isPodGroupMember(pod) {
 		return
@@ -909,8 +869,7 @@ func (cache *cacheImpl) RemovePodGroupMember(pod *v1.Pod) {
 	cache.removePodGroupMember(pod)
 }
 
-// addPodGroupMember adds the pod to its pod group state, creating the group entry if it doesn't exist yet.
-// Assumes that the cache lock is already held.
+// addPodGroupMember 把 Pod 加入其 PodGroup 状态，必要时创建该组条目。调用方需持有缓存锁。
 func (cache *cacheImpl) addPodGroupMember(pod *v1.Pod) {
 	key := fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	podGroupState, exists := cache.podGroupStates[key]
@@ -922,13 +881,12 @@ func (cache *cacheImpl) addPodGroupMember(pod *v1.Pod) {
 	podGroupState.addPod(pod)
 }
 
-// updatePodGroupMember updates the pod entry inside its pod group state.
-// Assumes that the cache lock is already held.
+// updatePodGroupMember 更新 Pod 在其 PodGroup 状态中的条目。调用方需持有缓存锁。
 func (cache *cacheImpl) updatePodGroupMember(logger klog.Logger, oldPod, newPod *v1.Pod) {
 	key := fwk.PodGroupKey(newPod.Namespace, *newPod.Spec.SchedulingGroup.PodGroupName)
 	podGroupState, exists := cache.podGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod add action.
+		// 正常情况下该状态应由早前的 Pod Add 事件创建；缺失说明漏掉了 Add 事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod group state not found for update, this indicates a missed add event", "pod", klog.KObj(newPod), "fwk.EntityKey", key)
 		return
 	}
@@ -936,8 +894,7 @@ func (cache *cacheImpl) updatePodGroupMember(logger klog.Logger, oldPod, newPod 
 	podGroupState.updatePod(oldPod, newPod)
 }
 
-// removePodGroupMember removes the pod from its pod group state, deleting the group entry when empty.
-// Assumes that the cache lock is already held.
+// removePodGroupMember 从 PodGroup 状态中移除 Pod，组为空时删除该组条目。调用方需持有缓存锁。
 func (cache *cacheImpl) removePodGroupMember(pod *v1.Pod) {
 	key := fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	podGroupState, exists := cache.podGroupStates[key]
@@ -946,14 +903,13 @@ func (cache *cacheImpl) removePodGroupMember(pod *v1.Pod) {
 	}
 	podGroupState.deletePod(pod.UID)
 	if podGroupState.empty() {
-		// podGroupState can exist without the member pods, but when the PodGroup object exists.
-		// Only when there are no member pods and the PodGroup object is removed, the podGroupState can be removed.
+		// 即使没有成员 Pod，只要 PodGroup 对象仍存在，状态就应保留；
+		// 只有成员为空且对象已移除时才删除状态。
 		delete(cache.podGroupStates, key)
 	}
 }
 
-// assumePodGroupMember marks the pod as assumed in its pod group state.
-// Assumes that the cache lock is already held.
+// assumePodGroupMember 把 Pod 在其 PodGroup 状态中标记为假定调度。调用方需持有缓存锁。
 func (cache *cacheImpl) assumePodGroupMember(pod *v1.Pod) {
 	key := fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	podGroupState, exists := cache.podGroupStates[key]
@@ -965,28 +921,29 @@ func (cache *cacheImpl) assumePodGroupMember(pod *v1.Pod) {
 	podGroupState.assumePod(pod)
 }
 
-// forgetPodGroupMember moves the pod back from assumed to unscheduled in its pod group state.
-// Assumes that the cache lock is already held.
+// forgetPodGroupMember 把 Pod 从 PodGroup 状态的 assumed 集合移回未调度集合。调用方需持有缓存锁。
 func (cache *cacheImpl) forgetPodGroupMember(logger klog.Logger, pod *v1.Pod) {
 	key := fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	pgs, exists := cache.podGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod add or assume action.
+		// 状态应由早前的 Add 或 Assume 事件创建；缺失说明漏掉了事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod group state not found for forget, this indicates a missed add or assume event", "pod", klog.KObj(pod), "fwk.EntityKey", key)
 		return
 	}
 	pgs.forgetPod(pod.UID)
 }
 
-// PodGroupStates returns the PodGroupStateLister for this cache.
+// PodGroupStates 返回此缓存的 PodGroupStateLister。
 func (cache *cacheImpl) PodGroupStates() fwk.PodGroupStateLister {
 	return &podGroupStateListerImpl{cache: cache}
 }
 
+// podGroupStateListerImpl 实现 PodGroup 状态的查询接口。
 type podGroupStateListerImpl struct {
 	cache *cacheImpl
 }
 
+// Get 按命名空间和组名返回缓存中的 PodGroup 状态。
 func (l *podGroupStateListerImpl) Get(namespace, podGroupName string) (fwk.PodGroupState, error) {
 	if !l.cache.genericWorkloadEnabled {
 		return nil, fmt.Errorf("generic workload feature gate is disabled")
@@ -1002,16 +959,17 @@ func (l *podGroupStateListerImpl) Get(namespace, podGroupName string) (fwk.PodGr
 	return podGroupState, nil
 }
 
-// PodGroups returns the PodGroupLister for this cache.
+// PodGroups 返回此缓存的 PodGroupLister。
 func (cache *cacheImpl) PodGroups() fwk.PodGroupLister {
 	return &podGroupListerImpl{cache: cache}
 }
 
+// podGroupListerImpl 实现 PodGroup 对象的查询接口。
 type podGroupListerImpl struct {
 	cache *cacheImpl
 }
 
-// Get returns the cached pod group object.
+// Get 返回缓存中的 PodGroup 对象。
 func (l *podGroupListerImpl) Get(namespace, name string) (*schedulingv1beta1.PodGroup, error) {
 	if !l.cache.genericWorkloadEnabled {
 		return nil, fmt.Errorf("generic workload feature gate is disabled")
@@ -1031,15 +989,17 @@ func (l *podGroupListerImpl) Get(namespace, name string) (*schedulingv1beta1.Pod
 	return pg, nil
 }
 
-// CompositePodGroupStates returns the CompositePodGroupStateLister for this cache.
+// CompositePodGroupStates 返回此缓存的 CompositePodGroupStateLister。
 func (cache *cacheImpl) CompositePodGroupStates() fwk.CompositePodGroupStateLister {
 	return &compositePodGroupStateListerImpl{cache: cache}
 }
 
+// compositePodGroupStateListerImpl 实现组合 PodGroup 状态的查询接口。
 type compositePodGroupStateListerImpl struct {
 	cache *cacheImpl
 }
 
+// Get 按命名空间和组名返回缓存中的组合 PodGroup 状态。
 func (l *compositePodGroupStateListerImpl) Get(namespace string, podGroupName string) (fwk.CompositePodGroupState, error) {
 	if !l.cache.compositePodGroupEnabled {
 		return nil, fmt.Errorf("composite pod group feature gate is disabled")
@@ -1055,16 +1015,17 @@ func (l *compositePodGroupStateListerImpl) Get(namespace string, podGroupName st
 	return cpgs, nil
 }
 
-// CompositePodGroups returns the CompositePodGroupLister for this cache.
+// CompositePodGroups 返回此缓存的 CompositePodGroupLister。
 func (cache *cacheImpl) CompositePodGroups() fwk.CompositePodGroupLister {
 	return &compositePodGroupListerImpl{cache: cache}
 }
 
+// compositePodGroupListerImpl 实现组合 PodGroup 对象的查询接口。
 type compositePodGroupListerImpl struct {
 	cache *cacheImpl
 }
 
-// Get returns the cached pod group object.
+// Get 返回缓存中的组合 PodGroup 对象。
 func (l *compositePodGroupListerImpl) Get(namespace, name string) (*schedulingv1alpha3.CompositePodGroup, error) {
 	if !l.cache.compositePodGroupEnabled {
 		return nil, fmt.Errorf("composite pod group feature gate is disabled")
@@ -1084,10 +1045,10 @@ func (l *compositePodGroupListerImpl) Get(namespace, name string) (*schedulingv1
 	return cpg, nil
 }
 
-// BindPod handles the pod binding by adding a bind API call to the dispatcher.
-// This method should be used only if the SchedulerAsyncAPICalls feature gate is enabled.
+// BindPod 通过向 dispatcher 添加 bind API 调用来处理 Pod 绑定。
+// 仅当 SchedulerAsyncAPICalls 特性门开启时才应调用此方法。
 func (cache *cacheImpl) BindPod(binding *v1.Binding) (<-chan error, error) {
-	// Don't store anything in the cache, as the pod is already assumed, and in case of a binding failure, it will be forgotten.
+	// 不改动缓存：Pod 已被假定，绑定失败时会被 Forget，无需在此重复处理。
 	onFinish := make(chan error, 1)
 	err := cache.apiDispatcher.Add(apicalls.Implementations.PodBinding(binding), fwk.APICallOptions{
 		OnFinish: onFinish,
@@ -1098,18 +1059,15 @@ func (cache *cacheImpl) BindPod(binding *v1.Binding) (<-chan error, error) {
 	return onFinish, nil
 }
 
-// refreshPVCRefCountsDelta accumulates the given node's PVC reference counts
-// into cache.pvcRefCountsDelta, which is later applied to the snapshot during
-// UpdateSnapshot. sign should be +1 to add the node's contribution or -1 to
-// remove it.
+// refreshPVCRefCountsDelta 把节点的 PVC 引用计数累加到 cache.pvcRefCountsDelta，
+// 供 UpdateSnapshot 时应用。sign 为 +1 表示加入节点贡献，-1 表示移除。
 func (cache *cacheImpl) refreshPVCRefCountsDelta(nodeInfo *framework.NodeInfo, sign int) {
 	for key, count := range nodeInfo.PVCRefCounts {
 		cache.pvcRefCountsDelta[key] += sign * count
 	}
 }
 
-// applyPVCRefCountDelta merges cache.pvcRefCountsDelta into the snapshot's
-// PVC ref counts, removes entries that reach zero, and clears the delta.
+// applyPVCRefCountDelta 把增量合并到快照的 PVC 引用计数，删除归零条目并清空增量。
 func (cache *cacheImpl) applyPVCRefCountDelta(snapshot *Snapshot) error {
 	for key, delta := range cache.pvcRefCountsDelta {
 		snapshot.usedPVCRefCounts[key] += delta
@@ -1125,7 +1083,7 @@ func (cache *cacheImpl) applyPVCRefCountDelta(snapshot *Snapshot) error {
 	return nil
 }
 
-// AddPodGroup adds a pod group object to the cache.
+// AddPodGroup 把 PodGroup 对象加入缓存，并维护其与父组合 PodGroup 的关联。
 func (cache *cacheImpl) AddPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	if !cache.genericWorkloadEnabled {
 		return
@@ -1147,8 +1105,7 @@ func (cache *cacheImpl) AddPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 
 	parentKey := fwk.CompositePodGroupKey(podGroup.Namespace, *podGroup.Spec.ParentCompositePodGroupName)
 
-	// Even if the parent composite pod group has not been observed in the cache yet, we can assume that it
-	// will be observed eventually, and we should create an entry (placeholder) representing it in the cache.
+	// 父组合 PodGroup 可能尚未到达，但迟早会被观察到；先创建占位条目，避免丢失父子关系。
 	parent, parentExists := cache.compositePodGroupStates[parentKey]
 	if !parentExists {
 		parent = newCompositePodGroupState()
@@ -1157,7 +1114,7 @@ func (cache *cacheImpl) AddPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	parent.addChild(key)
 }
 
-// UpdatePodGroup updates a pod group object in the cache.
+// UpdatePodGroup 更新缓存中的 PodGroup 对象。
 func (cache *cacheImpl) UpdatePodGroup(logger klog.Logger, oldPodGroup, newPodGroup *schedulingv1beta1.PodGroup) {
 	if !cache.genericWorkloadEnabled {
 		return
@@ -1168,14 +1125,14 @@ func (cache *cacheImpl) UpdatePodGroup(logger klog.Logger, oldPodGroup, newPodGr
 	key := fwk.PodGroupKey(newPodGroup.Namespace, newPodGroup.Name)
 	pgs, exists := cache.podGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod group add action.
+		// 状态应由早前的 Add 事件创建；缺失说明漏掉了事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod group state not found for update, this indicates a missed add event", "podGroup", klog.KObj(newPodGroup))
 		return
 	}
 	pgs.setPodGroup(newPodGroup)
 }
 
-// RemovePodGroup removes a pod group object from the cache.
+// RemovePodGroup 从缓存中移除 PodGroup 对象及其父子关联。
 func (cache *cacheImpl) RemovePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup) {
 	if !cache.genericWorkloadEnabled {
 		return
@@ -1186,7 +1143,7 @@ func (cache *cacheImpl) RemovePodGroup(logger klog.Logger, podGroup *schedulingv
 	key := fwk.PodGroupKey(podGroup.Namespace, podGroup.Name)
 	pgs, exists := cache.podGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod group add action.
+		// 状态应由早前的 Add 事件创建；缺失说明漏掉了事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod group state not found for removal", "podGroup", klog.KObj(podGroup))
 		return
 	}
@@ -1196,7 +1153,7 @@ func (cache *cacheImpl) RemovePodGroup(logger klog.Logger, podGroup *schedulingv
 		if parent, exists := cache.compositePodGroupStates[parentKey]; exists {
 			parent.removeChild(key)
 			if parent.empty() {
-				// podGroupState can exist without the PodGroup object, but when any of the member pods exists.
+				// 父组合对象即使没有子节点，只要自身对象仍存在就应保留；此处为空说明对象也已移除。
 				delete(cache.compositePodGroupStates, parentKey)
 			}
 		}
@@ -1208,7 +1165,7 @@ func (cache *cacheImpl) RemovePodGroup(logger klog.Logger, podGroup *schedulingv
 	}
 }
 
-// AddCompositePodGroup adds a composite pod group to the cache.
+// AddCompositePodGroup 把组合 PodGroup 加入缓存，并维护其与父级的关系。
 func (cache *cacheImpl) AddCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup) {
 	if !cache.compositePodGroupEnabled {
 		return
@@ -1238,7 +1195,7 @@ func (cache *cacheImpl) AddCompositePodGroup(logger klog.Logger, cpg *scheduling
 	parent.addChild(key)
 }
 
-// UpdateCompositePodGroup updates a composite pod group in the cache.
+// UpdateCompositePodGroup 更新缓存中的组合 PodGroup 对象。
 func (cache *cacheImpl) UpdateCompositePodGroup(logger klog.Logger, oldCPG, newCPG *schedulingv1alpha3.CompositePodGroup) {
 	if !cache.compositePodGroupEnabled {
 		return
@@ -1248,14 +1205,14 @@ func (cache *cacheImpl) UpdateCompositePodGroup(logger klog.Logger, oldCPG, newC
 	key := fwk.CompositePodGroupKey(newCPG.Namespace, newCPG.Name)
 	pgs, exists := cache.compositePodGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod group add action.
+		// 状态应由早前的 Add 事件创建；缺失说明漏掉了事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Pod group state not found for update, this indicates a missed add event", "podGroup", klog.KObj(newCPG))
 		return
 	}
 	pgs.setCompositePodGroup(newCPG)
 }
 
-// RemoveCompositePodGroup removes a composite pod group from the cache.
+// RemoveCompositePodGroup 从缓存中移除组合 PodGroup 及其父子关联。
 func (cache *cacheImpl) RemoveCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup) {
 	if !cache.compositePodGroupEnabled {
 		return
@@ -1266,7 +1223,7 @@ func (cache *cacheImpl) RemoveCompositePodGroup(logger klog.Logger, cpg *schedul
 	key := fwk.CompositePodGroupKey(cpg.Namespace, cpg.Name)
 	cpgs, exists := cache.compositePodGroupStates[key]
 	if !exists {
-		// This should not happen: the pod group state should have been already created by a prior pod group add action.
+		// 状态应由早前的 Add 事件创建；缺失说明漏掉了事件。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Composite pod group state not found for removal", "compositePodGroup", klog.KObj(cpg))
 		return
 	}
@@ -1289,7 +1246,7 @@ func (cache *cacheImpl) RemoveCompositePodGroup(logger klog.Logger, cpg *schedul
 	}
 }
 
-// BuildHierarchySnapshotFromPod returns a snapshot of the pod group hierarchy for the given pod.
+// BuildHierarchySnapshotFromPod 返回给定 Pod 所属 PodGroup 层级的快照。
 func (cache *cacheImpl) BuildHierarchySnapshotFromPod(pod *v1.Pod) (fwk.PodGroupManager, error) {
 	if pod.Spec.SchedulingGroup == nil {
 		return nil, fmt.Errorf("pod has no scheduling group")
@@ -1298,7 +1255,7 @@ func (cache *cacheImpl) BuildHierarchySnapshotFromPod(pod *v1.Pod) (fwk.PodGroup
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 
-	// 1. Find root CPG/PG by traversing upwards
+	// 1. 沿父级链向上找到根 CPG/PG。
 	currentKey := fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	pgs, exists := cache.podGroupStates[currentKey]
 	if !exists {
@@ -1328,7 +1285,7 @@ func (cache *cacheImpl) BuildHierarchySnapshotFromPod(pod *v1.Pod) (fwk.PodGroup
 		}
 	}
 
-	// 2. We have the root key. Now traverse downwards and update the snapshot.
+	// 2. 从根开始向下遍历，填充层级快照。
 	snapshot := NewEmptySnapshot()
 	visited := sets.New[fwk.EntityKey]()
 	err := cache.buildPodGroupStateSnapshotTree(currentKey, snapshot, visited)
@@ -1338,8 +1295,8 @@ func (cache *cacheImpl) BuildHierarchySnapshotFromPod(pod *v1.Pod) (fwk.PodGroup
 	return snapshot, nil
 }
 
-// buildPodGroupStateSnapshotTree recursively builds a snapshot of the pod group state tree starting from the given key.
-// It assumes that the cache lock is held by the caller.
+// buildPodGroupStateSnapshotTree 从给定键开始递归构建 PodGroup 状态树快照。
+// 调用方需持有缓存锁。
 func (cache *cacheImpl) buildPodGroupStateSnapshotTree(key fwk.EntityKey, snapshot *Snapshot, visited sets.Set[fwk.EntityKey]) error {
 	if visited.Has(key) {
 		return fmt.Errorf("cycle detected in composite pod group hierarchy: %s", key.String())
@@ -1372,8 +1329,8 @@ func (cache *cacheImpl) buildPodGroupStateSnapshotTree(key fwk.EntityKey, snapsh
 	return nil
 }
 
-// GetRootKeyForGroup returns the root key of the given EntityKey.
-// The key must be of PodGroupKey or CompositePodGroupKey type.
+// GetRootKeyForGroup 返回给定 EntityKey 所在层级的根键。
+// 键必须是 PodGroupKey 或 CompositePodGroupKey 类型。
 func (cache *cacheImpl) GetRootKeyForGroup(key fwk.EntityKey) (fwk.EntityKey, bool, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()

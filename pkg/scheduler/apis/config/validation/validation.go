@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validation 校验调度器配置（KubeSchedulerConfiguration）的合法性。
 package validation
 
 import (
@@ -34,14 +35,14 @@ import (
 	schedfeature "k8s.io/kubernetes/pkg/scheduler/framework/plugins/feature"
 )
 
-// ValidateKubeSchedulerConfiguration ensures validation of the KubeSchedulerConfiguration struct
+// ValidateKubeSchedulerConfiguration 校验 KubeSchedulerConfiguration 各字段，返回所有错误的聚合。
 func ValidateKubeSchedulerConfiguration(cc *config.KubeSchedulerConfiguration) utilerrors.Aggregate {
 	var errs []error
 	errs = append(errs, componentbasevalidation.ValidateClientConnectionConfiguration(&cc.ClientConnection, field.NewPath("clientConnection")).ToAggregate())
 	errs = append(errs, componentbasevalidation.ValidateLeaderElectionConfiguration(&cc.LeaderElection, field.NewPath("leaderElection")).ToAggregate())
 
-	// TODO: This can be removed when ResourceLock is not available
-	// Only ResourceLock values with leases are allowed
+	// TODO: 当不再支持 ResourceLock 字段时可以删除此校验。
+	// 目前只允许 leases 这一种值。
 	if cc.LeaderElection.LeaderElect && cc.LeaderElection.ResourceLock != "leases" {
 		leaderElectionPath := field.NewPath("leaderElection")
 		errs = append(errs, field.Invalid(leaderElectionPath.Child("resourceLock"), cc.LeaderElection.ResourceLock, `resourceLock value must be "leases"`))
@@ -60,6 +61,7 @@ func ValidateKubeSchedulerConfiguration(cc *config.KubeSchedulerConfiguration) u
 			profile := &cc.Profiles[i]
 			path := profilesPath.Index(i)
 			errs = append(errs, validateKubeSchedulerProfile(path, cc.APIVersion, profile)...)
+			// 调度器名重复会导致 Pod 选择调度器时产生歧义，必须报错。
 			if idx, ok := existingProfiles[profile.SchedulerName]; ok {
 				errs = append(errs, field.Duplicate(path.Child("schedulerName"), profilesPath.Index(idx).Child("schedulerName")))
 			}
@@ -83,6 +85,7 @@ func ValidateKubeSchedulerConfiguration(cc *config.KubeSchedulerConfiguration) u
 	return utilerrors.Flatten(utilerrors.NewAggregate(errs))
 }
 
+// validatePercentageOfNodesToScore 校验打分节点百分比在 [0,100] 范围内；nil 表示未设置，由默认逻辑处理。
 func validatePercentageOfNodesToScore(path *field.Path, percentageOfNodesToScore *int32) error {
 	if percentageOfNodesToScore != nil {
 		if *percentageOfNodesToScore < 0 || *percentageOfNodesToScore > 100 {
@@ -92,14 +95,14 @@ func validatePercentageOfNodesToScore(path *field.Path, percentageOfNodesToScore
 	return nil
 }
 
+// invalidPlugins 记录某个配置版本中已移除或弃用的插件名。
 type invalidPlugins struct {
 	schemeGroupVersion string
 	plugins            []string
 }
 
-// invalidPluginsByVersion maintains a list of removed/deprecated plugins in each version.
-// Remember to add an entry to that list when creating a new component config
-// version (even if the list of invalid plugins is empty).
+// invalidPluginsByVersion 按版本维护已移除/弃用插件列表。
+// 新增组件配置版本时记得在此加入条目，即使该版本的无效插件列表为空。
 var invalidPluginsByVersion = []invalidPlugins{
 	{
 		schemeGroupVersion: v1.SchemeGroupVersion.String(),
@@ -112,8 +115,8 @@ var invalidPluginsByVersion = []invalidPlugins{
 	},
 }
 
-// isPluginInvalid checks if a given plugin was removed/deprecated in the given component
-// config version or earlier.
+// isPluginInvalid 检查插件在给定配置版本或更早版本中是否已被移除/弃用。
+// 返回是否无效以及首次使其无效的版本号。
 func isPluginInvalid(apiVersion string, name string) (bool, string) {
 	for _, dp := range invalidPluginsByVersion {
 		for _, plugin := range dp.plugins {
@@ -121,6 +124,7 @@ func isPluginInvalid(apiVersion string, name string) (bool, string) {
 				return true, dp.schemeGroupVersion
 			}
 		}
+		// 列表按版本递增排列；到达配置所用版本后无需再检查更早的条目。
 		if apiVersion == dp.schemeGroupVersion {
 			break
 		}
@@ -128,6 +132,7 @@ func isPluginInvalid(apiVersion string, name string) (bool, string) {
 	return false, ""
 }
 
+// validatePluginSetForInvalidPlugins 校验插件集中启用（Enabled）的插件是否已在当前版本中失效。
 func validatePluginSetForInvalidPlugins(path *field.Path, apiVersion string, ps config.PluginSet) []error {
 	var errs []error
 	for i, plugin := range ps.Enabled {
@@ -138,6 +143,7 @@ func validatePluginSetForInvalidPlugins(path *field.Path, apiVersion string, ps 
 	return errs
 }
 
+// validateKubeSchedulerProfile 校验单个调度 profile：名字非空、百分比合法、插件配置合法。
 func validateKubeSchedulerProfile(path *field.Path, apiVersion string, profile *config.KubeSchedulerProfile) []error {
 	var errs []error
 	if len(profile.SchedulerName) == 0 {
@@ -148,6 +154,7 @@ func validateKubeSchedulerProfile(path *field.Path, apiVersion string, profile *
 	return errs
 }
 
+// validatePluginConfig 校验各扩展点启用的插件，以及 pluginConfig 中的插件名、参数类型与参数值。
 func validatePluginConfig(path *field.Path, apiVersion string, profile *config.KubeSchedulerProfile) []error {
 	var errs []error
 	m := map[string]interface{}{
@@ -201,13 +208,13 @@ func validatePluginConfig(path *field.Path, apiVersion string, profile *config.K
 		if invalid, invalidVersion := isPluginInvalid(apiVersion, name); invalid {
 			errs = append(errs, field.Invalid(pluginConfigPath, name, fmt.Sprintf("was invalid in version %q (KubeSchedulerConfiguration is version %q)", invalidVersion, apiVersion)))
 		} else if validateFunc, ok := m[name]; ok {
-			// type mismatch, no need to validate the `args`.
+			// 参数类型与校验函数签名不符时报告类型错误，避免反射调用时 panic。
 			if reflect.TypeOf(args) != reflect.ValueOf(validateFunc).Type().In(1) {
 				errs = append(errs, field.Invalid(pluginConfigPath.Child("args"), args, "has to match plugin args"))
 			} else {
 				in := []reflect.Value{reflect.ValueOf(pluginConfigPath.Child("args")), reflect.ValueOf(args)}
 				res := reflect.ValueOf(validateFunc).Call(in)
-				// It's possible that validation function return a Aggregate, just append here and it will be flattened at the end of CC validation.
+				// 校验函数可能返回错误聚合，先直接追加，最后统一展平。
 				if res[0].Interface() != nil {
 					errs = append(errs, res[0].Interface().(error))
 				}
@@ -217,6 +224,8 @@ func validatePluginConfig(path *field.Path, apiVersion string, profile *config.K
 	return errs
 }
 
+// validateCommonQueueSort 校验所有 profile 的 queueSort 插件及其参数一致，且最多只启用一个。
+// 队列排序决定全局出队顺序，多 profile 不一致会导致调度顺序不确定。
 func validateCommonQueueSort(path *field.Path, profiles []config.KubeSchedulerProfile) []error {
 	var errs []error
 	var canon config.PluginSet
@@ -254,7 +263,7 @@ func validateCommonQueueSort(path *field.Path, profiles []config.KubeSchedulerPr
 	return errs
 }
 
-// validateExtenders validates the configured extenders for the Scheduler
+// validateExtenders 校验调度器扩展器：权重、管理资源名与唯一性，以及最多一个扩展器实现 bind。
 func validateExtenders(fldPath *field.Path, extenders []config.Extender) []error {
 	var errs []error
 	binders := 0
@@ -279,14 +288,14 @@ func validateExtenders(fldPath *field.Path, extenders []config.Extender) []error
 			extenderManagedResources.Insert(resource.Name)
 		}
 	}
+	// 多个 bind 扩展器会让绑定走向不确定，因此最多只允许一个。
 	if binders > 1 {
 		errs = append(errs, field.Invalid(fldPath, fmt.Sprintf("found %d extenders implementing bind", binders), "only one extender can implement bind"))
 	}
 	return errs
 }
 
-// validateExtendedResourceName checks whether the specified name is a valid
-// extended resource name.
+// validateExtendedResourceName 校验资源名是合法限定名，且符合扩展资源命名规范。
 func validateExtendedResourceName(path *field.Path, name v1.ResourceName) []error {
 	var validationErrors []error
 	for _, msg := range validation.IsQualifiedName(string(name)) {

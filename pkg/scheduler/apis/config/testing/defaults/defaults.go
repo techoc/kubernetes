@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// PluginsV1 is the set of default v1 plugins (before MultiPoint expansion)
+// PluginsV1 是 v1 版本的默认插件集合（MultiPoint 扩展之前）。
 var PluginsV1 = &config.Plugins{
 	MultiPoint: config.PluginSet{
 		Enabled: []config.Plugin{
@@ -52,7 +52,7 @@ var PluginsV1 = &config.Plugins{
 	},
 }
 
-// ExpandedPluginsV1 default set of v1 plugins after MultiPoint expansion
+// ExpandedPluginsV1 是 v1 版本 MultiPoint 展开后的默认插件集合。
 var ExpandedPluginsV1 = &config.Plugins{
 	PreEnqueue: config.PluginSet{
 		Enabled: []config.Plugin{
@@ -127,25 +127,17 @@ var ExpandedPluginsV1 = &config.Plugins{
 	},
 	Score: config.PluginSet{
 		Enabled: []config.Plugin{
-			// Weight is tripled because:
-			// - This is a score coming from user preference.
-			// - Usage of node tainting to group nodes in the cluster is increasing becoming a use-case
-			// for many user workloads
+			// 权重设为三倍：该分数来自用户偏好，且用污点给节点分组的做法越来越常见。
 			{Name: names.TaintToleration, Weight: 3},
-			// Weight is doubled because:
-			// - This is a score coming from user preference.
+			// 权重翻倍：该分数来自用户偏好。
 			{Name: names.NodeAffinity, Weight: 2},
 			{Name: names.NodeResourcesFit, Weight: 1},
 			{Name: names.VolumeBinding, Weight: 1},
-			// Weight is doubled because:
-			// - This is a score coming from user preference.
-			// - It makes its signal comparable to NodeResourcesLeastAllocated.
+			// 权重翻倍：来自用户偏好，并使其信号强度与 NodeResourcesLeastAllocated 相当。
 			{Name: names.PodTopologySpread, Weight: 2},
-			// Weight is doubled because:
-			// - This is a score coming from user preference.
+			// 权重翻倍：该分数来自用户偏好。
 			{Name: names.InterPodAffinity, Weight: 2},
-			// Weight is doubled because:
-			// - This is a score coming from user preference.
+			// 权重翻倍：该分数来自用户偏好。
 			{Name: names.DynamicResources, Weight: 2},
 			{Name: names.NodeResourcesBalancedAllocation, Weight: 1},
 			{Name: names.ImageLocality, Weight: 1},
@@ -175,7 +167,7 @@ var ExpandedPluginsV1 = &config.Plugins{
 	},
 }
 
-// PluginConfigsV1 default plugin configurations.
+// PluginConfigsV1 是 v1 版本的默认插件参数配置。
 var PluginConfigsV1 = []config.PluginConfig{
 	{
 		Name: "DefaultPreemption",

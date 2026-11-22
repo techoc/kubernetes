@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// CacheComparer is an implementation of the Scheduler's cache comparer.
+// CacheComparer 比较 informer 中的真实状态与调度器缓存快照，用于排查缓存不一致。
 type CacheComparer struct {
 	NodeLister corelisters.NodeLister
 	PodLister  corelisters.PodLister
@@ -37,7 +37,7 @@ type CacheComparer struct {
 	PodQueue   internalqueue.SchedulingQueue
 }
 
-// Compare compares the nodes and pods of NodeLister with Cache.Snapshot.
+// Compare 比较 NodeLister/PodLister 中的节点和 Pod 与缓存快照的差异。
 func (c *CacheComparer) Compare(logger klog.Logger) error {
 	logger.V(3).Info("Cache comparer started")
 	defer logger.V(3).Info("Cache comparer finished")
@@ -52,8 +52,10 @@ func (c *CacheComparer) Compare(logger klog.Logger) error {
 		return err
 	}
 
+	// 快照是缓存某一时刻的视图，之后对它做比对不会干扰调度器运行。
 	dump := c.Cache.Dump()
 
+	// Pod 可能在队列中尚未被调度，不能算作缓存缺失；这里忽略错误仅用于调试。
 	pendingPods, _ := c.PodQueue.PendingPods()
 
 	if missed, redundant := c.CompareNodes(nodes, dump.Nodes); len(missed)+len(redundant) != 0 {
@@ -67,7 +69,7 @@ func (c *CacheComparer) Compare(logger klog.Logger) error {
 	return nil
 }
 
-// CompareNodes compares actual nodes with cached nodes.
+// CompareNodes 比较真实节点与缓存中的节点，返回缺失和多余的名字。
 func (c *CacheComparer) CompareNodes(nodes []*v1.Node, nodeinfos map[string]*framework.NodeInfo) (missed, redundant []string) {
 	actual := []string{}
 	for _, node := range nodes {
@@ -82,7 +84,7 @@ func (c *CacheComparer) CompareNodes(nodes []*v1.Node, nodeinfos map[string]*fra
 	return compareStrings(actual, cached)
 }
 
-// ComparePods compares actual pods with cached pods.
+// ComparePods 比较真实 Pod 与缓存中的 Pod；等待队列中的 Pod 视为已缓存。
 func (c *CacheComparer) ComparePods(pods, waitingPods []*v1.Pod, nodeinfos map[string]*framework.NodeInfo) (missed, redundant []string) {
 	actual := []string{}
 	for _, pod := range pods {
@@ -102,6 +104,7 @@ func (c *CacheComparer) ComparePods(pods, waitingPods []*v1.Pod, nodeinfos map[s
 	return compareStrings(actual, cached)
 }
 
+// compareStrings 对两个有序字符串序列做差集，actual 中缺失的记入 missed，cached 中多出的记入 redundant。
 func compareStrings(actual, cached []string) (missed, redundant []string) {
 	missed, redundant = []string{}, []string{}
 

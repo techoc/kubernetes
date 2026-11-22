@@ -21,18 +21,18 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// unschedulableEntities holds pods and pod groups that cannot be scheduled.
+// unschedulableEntities 保存暂时无法调度的 Pod 和 PodGroup。
 type unschedulableEntities struct {
-	// entityInfoMap is a map keyed by an entity's key and the value is the QueuedEntityInfo.
+	// entityInfoMap 以实体的 key 为索引，保存对应的 QueuedEntityInfo。
 	entityInfoMap map[string]framework.QueuedEntityInfo
 	keyFunc       func(framework.QueuedEntityInfo) string
-	// unschedulableRecorder and gatedRecorder track the number of entities in the unschedulable queue.
-	// unschedulableRecorder tracks standard unschedulable entities, while gatedRecorder tracks entities
-	// that are specifically blocked by scheduling gates.
+	// 两个 recorder 分别统计不可调度队列中两类实体的数量：
+	// unschedulableRecorder 统计普通不可调度实体，gatedRecorder 统计被调度门禁阻塞的实体。
+	// 分开计数便于观察门禁解除前后的队列变化。
 	unschedulableRecorder, gatedRecorder metrics.MetricRecorder
 }
 
-// newUnschedulableEntities initializes a new object of unschedulableEntities.
+// newUnschedulableEntities 初始化一个 unschedulableEntities 对象。
 func newUnschedulableEntities(unschedulableRecorder, gatedRecorder metrics.MetricRecorder) *unschedulableEntities {
 	return &unschedulableEntities{
 		entityInfoMap:         make(map[string]framework.QueuedEntityInfo),
@@ -42,28 +42,27 @@ func newUnschedulableEntities(unschedulableRecorder, gatedRecorder metrics.Metri
 	}
 }
 
-// updateMetricsOnStateChange handles the metric accounting when an entity changes
-// between Gated and Unschedulable states.
+// updateMetricsOnStateChange 处理实体在 Gated 和 Unschedulable 状态间切换时的指标记账。
 func (u *unschedulableEntities) updateMetricsOnStateChange(gatedBefore, isGated bool, entity framework.QueuedEntityInfo) {
 	if gatedBefore == isGated {
 		return
 	}
 
 	if gatedBefore {
-		// Transition: Gated -> Ungated
+		// 状态切换：Gated -> Ungated，门禁解除后归入普通不可调度计数。
 		u.gatedRecorder.Remove(entity)
 		u.unschedulableRecorder.Add(entity)
 	} else {
-		// Transition: Ungated -> Gated
+		// 状态切换：Ungated -> Gated，被门禁阻塞后改由 gated 计数。
 		u.gatedRecorder.Add(entity)
 		u.unschedulableRecorder.Remove(entity)
 	}
 }
 
-// addOrUpdate adds an entity to the unschedulable entityInfoMap.
-// The event should show which event triggered the addition and is used for the metric recording.
-// 'strategy' is the previous queuing strategy, helps determine if the entity moved into a different
-// queue or newly added to correctly maintain incoming entities metrics.
+// addOrUpdate 把实体加入不可调度的 entityInfoMap。
+// event 标记触发加入的事件，用于指标记录。
+// strategy 是实体原先的排队策略，据此判断它是从其他队列迁入还是全新加入，
+// 从而正确维护流入实体的指标。
 func (u *unschedulableEntities) addOrUpdate(entity framework.QueuedEntityInfo, gatedBefore bool, event string, strategy *queueingStrategy) {
 	entityKey := u.keyFunc(entity)
 	if _, exists := u.entityInfoMap[entityKey]; exists {
@@ -79,8 +78,8 @@ func (u *unschedulableEntities) addOrUpdate(entity framework.QueuedEntityInfo, g
 	u.entityInfoMap[entityKey] = entity
 }
 
-// delete deletes an entity from the unschedulable entityInfoMap.
-// The `gated` parameter is used to figure out which metric should be decreased.
+// delete 从不可调度的 entityInfoMap 中删除实体。
+// gated 参数指明实体当时的状态，用于确定该减少哪个计数器。
 func (u *unschedulableEntities) delete(entity framework.QueuedEntityInfo, gated bool) {
 	entityKey := u.keyFunc(entity)
 	if _, exists := u.entityInfoMap[entityKey]; exists {
@@ -93,8 +92,7 @@ func (u *unschedulableEntities) delete(entity framework.QueuedEntityInfo, gated 
 	delete(u.entityInfoMap, entityKey)
 }
 
-// get returns the QueuedEntityInfo if an entity with the same key is found in the map.
-// It returns nil otherwise.
+// get 查找 map 中 key 相同的实体并返回其 QueuedEntityInfo，找不到则返回 nil。
 func (u *unschedulableEntities) get(entity framework.QueuedEntityInfo) framework.QueuedEntityInfo {
 	entityKey := u.keyFunc(entity)
 	if entity, exists := u.entityInfoMap[entityKey]; exists {
@@ -103,7 +101,7 @@ func (u *unschedulableEntities) get(entity framework.QueuedEntityInfo) framework
 	return nil
 }
 
-// clear removes all the entries from the unschedulable entityInfoMap.
+// clear 清空不可调度的 entityInfoMap 及对应的指标记录。
 func (u *unschedulableEntities) clear() {
 	u.entityInfoMap = make(map[string]framework.QueuedEntityInfo)
 	u.unschedulableRecorder.Clear()

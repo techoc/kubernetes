@@ -50,17 +50,20 @@ var (
 	hugePages1Gi = v1.ResourceName(v1.ResourceHugePagesPrefix + "1Gi")
 )
 
-// mockDRAManager is a mock implementation of fwk.SharedDRAManager.
+// mockDRAManager 是 fwk.SharedDRAManager 的模拟实现，
+// 从预置的 claims 和 resourceSlices 提供数据，其余方法返回空结果。
 type mockDRAManager struct {
 	fwk.SharedDRAManager
 	claims         []*resourceapi.ResourceClaim
 	resourceSlices []*resourceapi.ResourceSlice
 }
 
+// ResourceClaims 返回自身作为 ResourceClaimTracker。
 func (m *mockDRAManager) ResourceClaims() fwk.ResourceClaimTracker {
 	return m
 }
 
+// Get 按 namespace/name 从预置列表查找 claim。
 func (m *mockDRAManager) Get(namespace, name string) (*resourceapi.ResourceClaim, error) {
 	for _, claim := range m.claims {
 		if claim.Namespace == namespace && claim.Name == name {
@@ -70,44 +73,56 @@ func (m *mockDRAManager) Get(namespace, name string) (*resourceapi.ResourceClaim
 	return nil, fmt.Errorf("claim %s/%s not found", namespace, name)
 }
 
+// AssumeClaimAfterAPICall 是空实现：模拟场景无需维护 assume cache。
 func (m *mockDRAManager) AssumeClaimAfterAPICall(claim *resourceapi.ResourceClaim) error {
 	return nil
 }
 
+// AssumedClaimRestore 是空实现。
 func (m *mockDRAManager) AssumedClaimRestore(namespace, name string) {}
 
+// GetPendingAllocation 返回 nil：模拟场景中没有 pending 分配。
 func (m *mockDRAManager) GetPendingAllocation(uid types.UID) *resourceapi.AllocationResult {
 	return nil
 }
 
+// SignalClaimPendingAllocation 是空实现，返回 nil 表示成功。
 func (m *mockDRAManager) SignalClaimPendingAllocation(uid types.UID, claim *resourceapi.ResourceClaim) error {
 	return nil
 }
 
+// MaybeRemoveClaimPendingAllocation 不做任何事，返回未删除。
 func (m *mockDRAManager) MaybeRemoveClaimPendingAllocation(_ types.UID, _ bool) (deleted bool) {
 	return false
 }
 
+// List 返回空列表。
 func (m *mockDRAManager) List() ([]*resourceapi.ResourceClaim, error) {
 	return nil, nil
 }
 
+// GatherAllocatedState 返回空状态。
 func (m *mockDRAManager) GatherAllocatedState() (*structured.AllocatedState, error) {
 	return nil, nil
 }
 
+// ListAllAllocatedDevices 返回空集合。
 func (m *mockDRAManager) ListAllAllocatedDevices() (sets.Set[structured.DeviceID], error) {
 	return nil, nil
 }
 
+// ResourceSlices 返回自身作为 ResourceSliceLister。
 func (m *mockDRAManager) ResourceSlices() fwk.ResourceSliceLister {
 	return m
 }
 
+// ListWithDeviceTaintRules 返回预置的 ResourceSlice 列表。
 func (m *mockDRAManager) ListWithDeviceTaintRules() ([]*resourceapi.ResourceSlice, error) {
 	return m.resourceSlices, nil
 }
 
+// TestValidateNodeAllocatableDRAClaimSharing 校验节点可分配 DRA claim 的共享规则：
+// 被映射到节点可分配资源的 claim 不能被多个 Pod 共享。
 func TestValidateNodeAllocatableDRAClaimSharing(t *testing.T) {
 	claimName := "node-allocatable-claim"
 	claimNameSpace := "test-ns"
@@ -546,6 +561,8 @@ func TestValidateNodeAllocatableDRAClaimSharing(t *testing.T) {
 	}
 }
 
+// TestBuildNodeAllocatableDRAInfo 表驱动校验 buildNodeAllocatableDRAInfo 对
+// 节点可分配设备/扩展资源的解析结果。
 func TestBuildNodeAllocatableDRAInfo(t *testing.T) {
 	cpuDevicePerInstance := resourceapi.Device{
 		Name: "cpu0",
@@ -1295,7 +1312,7 @@ func TestBuildNodeAllocatableDRAInfo(t *testing.T) {
 				Containers:        []string{"c1"},
 				Mapping: []v1.NodeAllocatableMappedResources{{
 					Name: v1.ResourceCPU,
-					// Extract quantity correctly from "driver-b.example.com",
+					// 验证能从 "driver-b.example.com" 的设备映射中正确取出数量。
 					Quantity: new(resource.MustParse("8")),
 				}},
 			}},
@@ -1356,6 +1373,8 @@ func TestBuildNodeAllocatableDRAInfo(t *testing.T) {
 	}
 }
 
+// TestPatchNodeAllocatableResourceClaimStatus 校验节点可分配资源 claim status 的补丁更新，
+// 包括正常更新与 API 报错等场景。
 func TestPatchNodeAllocatableResourceClaimStatus(t *testing.T) {
 	pod := st.MakePod().Name("test-pod").Namespace("test-ns").UID("pod-uid").Obj()
 
@@ -1502,6 +1521,8 @@ func TestPatchNodeAllocatableResourceClaimStatus(t *testing.T) {
 	}
 }
 
+// TestClearNodeAllocatableResourceClaimStatus 校验 Unreserve 时能清除 Pod 上记录的
+// 节点可分配资源 claim status。
 func TestClearNodeAllocatableResourceClaimStatus(t *testing.T) {
 	pod := st.MakePod().Name("test-pod").Namespace("test-ns").UID("pod-uid").Obj()
 
@@ -1572,6 +1593,8 @@ func TestClearNodeAllocatableResourceClaimStatus(t *testing.T) {
 	}
 }
 
+// TestNodeFitsNativeResources 表驱动校验节点原生资源（cpu/内存/hugepages 等）
+// 是否能满足 Pod 的请求。
 func TestNodeFitsNativeResources(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1728,7 +1751,7 @@ func TestNodeFitsNativeResources(t *testing.T) {
 				if a.Code() != b.Code() {
 					return false
 				}
-				// Only compare reasons if the code is Unschedulable
+				// 只有不可调度状态才需要比较具体原因。
 				if a.Code() == fwk.Unschedulable {
 					return cmp.Diff(a.Reasons(), b.Reasons()) == ""
 				}
@@ -1741,6 +1764,8 @@ func TestNodeFitsNativeResources(t *testing.T) {
 	}
 }
 
+// TestValidatePodLevelResourcesCoverDRA 校验 Pod 级资源请求能覆盖 DRA 设备提供的
+// 节点可分配资源，且不超出设备容量。
 func TestValidatePodLevelResourcesCoverDRA(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -2080,6 +2105,7 @@ func TestValidatePodLevelResourcesCoverDRA(t *testing.T) {
 	}
 }
 
+// TestFilterSlicesForNode 校验 filterSlicesForNode 只保留与指定节点关联的 ResourceSlice。
 func TestFilterSlicesForNode(t *testing.T) {
 	nodeName := "node1"
 	otherNodeName := "node2"
@@ -2154,7 +2180,7 @@ func TestFilterSlicesForNode(t *testing.T) {
 				gotNames = append(gotNames, slice.Name)
 			}
 
-			// Sort slices to make comparison stable.
+			// 排序后再比较，避免 map/集合遍历顺序带来的不稳定。
 			sort.Strings(gotNames)
 			sort.Strings(tt.wantNames)
 

@@ -33,6 +33,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestMatchingSchedulingGroup 校验同一调度组（含命名空间与组名）的匹配规则。
 func TestMatchingSchedulingGroup(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -86,11 +87,13 @@ func TestMatchingSchedulingGroup(t *testing.T) {
 	}
 }
 
+// fakeSharedLister 包装真实 SharedLister，可让指定实体键的查询返回错误。
 type fakeSharedLister struct {
 	fwk.SharedLister
 	faultyEntityKeys sets.Set[fwk.EntityKey]
 }
 
+// CompositePodGroupStates 返回包装后的组合 PodGroup 状态 lister。
 func (f *fakeSharedLister) CompositePodGroupStates() fwk.CompositePodGroupStateLister {
 	return &fakeCompositePodGroupStateLister{
 		CompositePodGroupStateLister: f.SharedLister.CompositePodGroupStates(),
@@ -98,6 +101,7 @@ func (f *fakeSharedLister) CompositePodGroupStates() fwk.CompositePodGroupStateL
 	}
 }
 
+// PodGroupStates 返回包装后的 PodGroup 状态 lister。
 func (f *fakeSharedLister) PodGroupStates() fwk.PodGroupStateLister {
 	return &fakePodGroupStateLister{
 		PodGroupStateLister: f.SharedLister.PodGroupStates(),
@@ -105,11 +109,13 @@ func (f *fakeSharedLister) PodGroupStates() fwk.PodGroupStateLister {
 	}
 }
 
+// fakeCompositePodGroupStateLister 可让指定组合 PodGroup 的查询返回错误。
 type fakeCompositePodGroupStateLister struct {
 	fwk.CompositePodGroupStateLister
 	faultyEntityKeys sets.Set[fwk.EntityKey]
 }
 
+// Get 查询组合 PodGroup 状态；命中故障键时返回错误。
 func (l *fakeCompositePodGroupStateLister) Get(namespace, name string) (fwk.CompositePodGroupState, error) {
 	if l.faultyEntityKeys.Has(fwk.CompositePodGroupKey(namespace, name)) {
 		return nil, fmt.Errorf("composite pod group %s/%s not found", namespace, name)
@@ -117,11 +123,13 @@ func (l *fakeCompositePodGroupStateLister) Get(namespace, name string) (fwk.Comp
 	return l.CompositePodGroupStateLister.Get(namespace, name)
 }
 
+// fakePodGroupStateLister 可让指定 PodGroup 的查询返回错误。
 type fakePodGroupStateLister struct {
 	fwk.PodGroupStateLister
 	faultyEntityKeys sets.Set[fwk.EntityKey]
 }
 
+// Get 查询 PodGroup 状态；命中故障键时返回错误。
 func (l *fakePodGroupStateLister) Get(namespace, name string) (fwk.PodGroupState, error) {
 	if l.faultyEntityKeys.Has(fwk.PodGroupKey(namespace, name)) {
 		return nil, fmt.Errorf("pod group %s/%s not found", namespace, name)
@@ -129,6 +137,7 @@ func (l *fakePodGroupStateLister) Get(namespace, name string) (fwk.PodGroupState
 	return l.PodGroupStateLister.Get(namespace, name)
 }
 
+// TestGetPodGroupStates 校验从根实体遍历获取 PodGroup 状态的过程，含缺失实体与深度超限场景。
 func TestGetPodGroupStates(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -246,7 +255,7 @@ func TestGetPodGroupStates(t *testing.T) {
 				if err != nil {
 					errors = append(errors, err)
 				} else {
-					// Each PG has a single pod with the name matching the PG name.
+					// 每个 PodGroup 只有一个 Pod，其名字与 PodGroup 名一致。
 					gotPodGroups.Insert(string(pgState.AllPods().UnsortedList()[0]))
 				}
 			}
@@ -261,6 +270,7 @@ func TestGetPodGroupStates(t *testing.T) {
 	}
 }
 
+// TestGetPodGroupStates_EarlyBreak 校验消费者提前中断迭代后生成器能及时停止，不会继续产出结果。
 func TestGetPodGroupStates_EarlyBreak(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)

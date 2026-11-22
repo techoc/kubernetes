@@ -33,6 +33,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
+// TestImageLocalityPriority 验证镜像本地性打分，覆盖阈值、镜像卷与 init 容器等场景。
+// 测试数据与节点变量名中的数字代表镜像大小（MB），便于核对预期分数。
 func TestImageLocalityPriority(t *testing.T) {
 	test40250 := v1.PodSpec{
 		Containers: []v1.Container{
@@ -276,12 +278,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/40 gcr.io/250
 
 			// Node1
-			// Image: gcr.io/40:latest 40MB
-			// Score: 0 (40M/2 < 23M, min-threshold)
+			// 镜像: gcr.io/40:latest 40MB
+			// 分数: 0 (40M/2 < 23M，低于最小阈值)
 
 			// Node2
-			// Image: gcr.io/250:latest 250MB
-			// Score: 100 * (250M/2 - 23M)/(1000M * 2 - 23M) = 5
+			// 镜像: gcr.io/250:latest 250MB
+			// 分数: 100 * (250M/2 - 23M)/(1000M * 2 - 23M) = 5
 			pod:          &v1.Pod{Spec: test40250},
 			nodes:        []*v1.Node{makeImageNode("node1", node403002000), makeImageNode("node2", node25010)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 0}, {Name: "node2", Score: 5}},
@@ -291,12 +293,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/40 gcr.io/300
 
 			// Node1
-			// Image: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB
-			// Score: 100 * ((40M + 300M)/2 - 23M)/(1000M * 2 - 23M) = 7
+			// 镜像: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB
+			// 分数: 100 * ((40M + 300M)/2 - 23M)/(1000M * 2 - 23M) = 7
 
 			// Node2
-			// Image: not present
-			// Score: 0
+			// 镜像: 不存在
+			// 分数: 0
 			pod:          &v1.Pod{Spec: test40300},
 			nodes:        []*v1.Node{makeImageNode("node1", node403002000), makeImageNode("node2", node25010)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 7}, {Name: "node2", Score: 0}},
@@ -306,12 +308,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/4000 gcr.io/10
 
 			// Node1
-			// Image: gcr.io/4000:latest 2000MB
-			// Score: 100 (4000 * 1/2 >= 1000M * 2, max-threshold)
+			// 镜像: gcr.io/4000:latest 2000MB
+			// 分数: 100 (4000 * 1/2 >= 1000M * 2，达到最大阈值)
 
 			// Node2
-			// Image: gcr.io/10:latest 10MB
-			// Score: 0 (10M/2 < 23M, min-threshold)
+			// 镜像: gcr.io/10:latest 10MB
+			// 分数: 0 (10M/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: testMinMax},
 			nodes:        []*v1.Node{makeImageNode("node1", node400030), makeImageNode("node2", node25010)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}},
@@ -321,16 +323,16 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/4000 gcr.io/10
 
 			// Node1
-			// Image: gcr.io/4000:latest 4000MB
-			// Score: 100 * (4000M/3 - 23M)/(1000M * 2 - 23M) = 66
+			// 镜像: gcr.io/4000:latest 4000MB
+			// 分数: 100 * (4000M/3 - 23M)/(1000M * 2 - 23M) = 66
 
 			// Node2
-			// Image: gcr.io/10:latest 10MB
-			// Score: 0 (10M*1/3 < 23M, min-threshold)
+			// 镜像: gcr.io/10:latest 10MB
+			// 分数: 0 (10M*1/3 < 23M，低于最小阈值)
 
 			// Node3
-			// Image:
-			// Score: 0
+			// 镜像: 无
+			// 分数: 0
 			pod:          &v1.Pod{Spec: testMinMax},
 			nodes:        []*v1.Node{makeImageNode("node1", node400030), makeImageNode("node2", node25010), makeImageNode("node3", nodeWithNoImages)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 66}, {Name: "node2", Score: 0}, {Name: "node3", Score: 0}},
@@ -340,16 +342,16 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/300 gcr.io/600 gcr.io/900
 
 			// Node1
-			// Image: gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
-			// Score: 100 * (600M * 2/3 + 900M * 2/3 - 23M) / (1000M * 3 - 23M) = 32
+			// 镜像: gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
+			// 分数: 100 * (600M * 2/3 + 900M * 2/3 - 23M) / (1000M * 3 - 23M) = 32
 
 			// Node2
-			// Image: gcr.io/300:latest 300MB, gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
-			// Score: 100 * (300M * 1/3 + 600M * 2/3 + 900M * 2/3 - 23M) / (1000M *3 - 23M) = 36
+			// 镜像: gcr.io/300:latest 300MB, gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
+			// 分数: 100 * (300M * 1/3 + 600M * 2/3 + 900M * 2/3 - 23M) / (1000M *3 - 23M) = 36
 
 			// Node3
-			// Image:
-			// Score: 0
+			// 镜像: 无
+			// 分数: 0
 			pod:          &v1.Pod{Spec: test300600900},
 			nodes:        []*v1.Node{makeImageNode("node1", node60040900), makeImageNode("node2", node300600900), makeImageNode("node3", nodeWithNoImages)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 32}, {Name: "node2", Score: 36}, {Name: "node3", Score: 0}},
@@ -359,12 +361,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/30 gcr.io/40
 
 			// Node1
-			// Image: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
-			// Score: 100 * (30M + 40M * 1/2 - 23M) / (1000M * 2 - 23M) = 1
+			// 镜像: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
+			// 分数: 100 * (30M + 40M * 1/2 - 23M) / (1000M * 2 - 23M) = 1
 
 			// Node2
-			// Image: 100 * (30M - 23M) / (1000M * 2 - 23M) = 0
-			// Score: 0
+			// 镜像: 100 * (30M - 23M) / (1000M * 2 - 23M) = 0
+			// 分数: 0
 			pod:          &v1.Pod{Spec: test3040},
 			nodes:        []*v1.Node{makeImageNode("node1", node203040), makeImageNode("node2", node400030)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 1}, {Name: "node2", Score: 0}},
@@ -374,12 +376,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/30  ImageVolume: gcr.io/300
 
 			// Node1
-			// Image: gcr.io/300:latest 300MB
-			// Score: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
+			// 镜像: gcr.io/300:latest 300MB
+			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
 			// Node2
-			// Image: gcr.io/30:latest 30MB
-			// Score: 0 (30M * 1/2 < 23M, min-threshold)
+			// 镜像: gcr.io/30:latest 30MB
+			// 分数: 0 (30M * 1/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: testImageVolume},
 			nodes:        []*v1.Node{makeImageNode("node1", node300600900), makeImageNode("node2", node400030)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 6}, {Name: "node2", Score: 0}},
@@ -389,12 +391,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/30  gcr.io/300
 
 			// Node1
-			// Image: gcr.io/300:latest 300MB
-			// Score: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
+			// 镜像: gcr.io/300:latest 300MB
+			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
 			// Node2
-			// Image: gcr.io/30:latest 30MB
-			// Score: 0 (30M * 1/2 < 23M, min-threshold)
+			// 镜像: gcr.io/30:latest 30MB
+			// 分数: 0 (30M * 1/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: test30300AsContainers},
 			nodes:        []*v1.Node{makeImageNode("node1", node300600900), makeImageNode("node2", node400030)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 6}, {Name: "node2", Score: 0}},
@@ -404,12 +406,12 @@ func TestImageLocalityPriority(t *testing.T) {
 			// Pod: gcr.io/30  InitContainers: gcr.io/300
 
 			// Node1
-			// Image: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB, gcr.io/2000:latest 2000MB
-			// Score: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
+			// 镜像: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB, gcr.io/2000:latest 2000MB
+			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
 			// Node2
-			// Image: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
-			// Score: 100 * (30M * 1/2  - 23M) / (1000M * 2 - 23M) = 0
+			// 镜像: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
+			// 分数: 100 * (30M * 1/2  - 23M) / (1000M * 2 - 23M) = 0
 			pod:          &v1.Pod{Spec: test30Init300},
 			nodes:        []*v1.Node{makeImageNode("node1", node403002000), makeImageNode("node2", node203040)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 6}, {Name: "node2", Score: 0}},
@@ -434,9 +436,9 @@ func TestImageLocalityPriority(t *testing.T) {
 			var gotList fwk.NodeScoreList
 			for _, n := range test.nodes {
 				nodeName := n.ObjectMeta.Name
-				// Currently, we use the snapshot instead of the tf.BuildNodeInfos to build the nodeInfo since some
-				// fields like ImageStates is essential for the Score plugin but the latter does not construct that.
-				// We should enhance the BuildNodeInfos to achieve feature parity with the core logic.
+				// 这里用 snapshot 而非 tf.BuildNodeInfos 构造 nodeInfo：ImageStates 等字段
+				// 对 Score 插件必不可少，但 BuildNodeInfos 不会填充它们。
+				// 后续应增强 BuildNodeInfos，使其与核心逻辑能力对齐。
 				nodeInfo, err := snapshot.NodeInfos().Get(nodeName)
 				if err != nil {
 					t.Errorf("failed to get node %q from snapshot: %v", nodeName, err)
@@ -455,6 +457,7 @@ func TestImageLocalityPriority(t *testing.T) {
 	}
 }
 
+// TestImageSignature 验证 SignPod 生成的镜像签名：镜像名去重并排序，且统一补全 :latest 标签。
 func TestImageSignature(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -531,6 +534,7 @@ func TestImageSignature(t *testing.T) {
 
 }
 
+// TestNormalizedImageName 验证镜像引用规范化：无标签或摘要时补 :latest，已有标签或摘要则原样保留。
 func TestNormalizedImageName(t *testing.T) {
 	for _, testCase := range []struct {
 		Name   string
@@ -551,6 +555,7 @@ func TestNormalizedImageName(t *testing.T) {
 	}
 }
 
+// makeImageNode 根据给定的节点状态构造带镜像列表的 Node，供打分测试复用。
 func makeImageNode(node string, status v1.NodeStatus) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: node},
@@ -558,6 +563,7 @@ func makeImageNode(node string, status v1.NodeStatus) *v1.Node {
 	}
 }
 
+// getImageFakeDigest 为给定内容生成确定性的伪摘要，供测试构造带摘要的镜像引用。
 func getImageFakeDigest(fakeContent string) string {
 	hash := sha256.Sum256([]byte(fakeContent))
 	return "sha256:" + hex.EncodeToString(hash[:])

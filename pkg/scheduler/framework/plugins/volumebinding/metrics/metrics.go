@@ -21,11 +21,11 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// VolumeSchedulerSubsystem - subsystem name used by scheduler
+// VolumeSchedulerSubsystem 是调度器上报卷相关指标时使用的子系统名。
 const VolumeSchedulerSubsystem = "scheduler_volume"
 
 var (
-	// VolumeBindingRequestSchedulerBinderCache tracks the number of volume binder cache operations.
+	// VolumeBindingRequestSchedulerBinderCache 统计卷绑定器缓存的操作次数。
 	VolumeBindingRequestSchedulerBinderCache = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      VolumeSchedulerSubsystem,
@@ -35,7 +35,7 @@ var (
 		},
 		[]string{"operation"},
 	)
-	// VolumeSchedulingStageFailed tracks the number of failed volume scheduling operations.
+	// VolumeSchedulingStageFailed 统计卷调度阶段失败的操作次数。
 	VolumeSchedulingStageFailed = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      VolumeSchedulerSubsystem,
@@ -47,8 +47,8 @@ var (
 	)
 )
 
-// RegisterVolumeSchedulingMetrics is used for scheduler, because the volume binding cache is a library
-// used by scheduler process.
+// RegisterVolumeSchedulingMetrics 由调度器调用，把卷调度指标注册到全局 registry。
+// 卷绑定缓存本身只是一个库，无法自行决定何时注册指标。
 func RegisterVolumeSchedulingMetrics() {
 	legacyregistry.MustRegister(VolumeBindingRequestSchedulerBinderCache)
 	legacyregistry.MustRegister(VolumeSchedulingStageFailed)

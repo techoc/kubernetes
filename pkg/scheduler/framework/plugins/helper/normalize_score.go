@@ -20,10 +20,9 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// DefaultNormalizeScore generates a Normalize Score function that can normalize the
-// scores from [0, max(scores)] to [0, maxPriority]. If reverse is set to true, it
-// reverses the scores by subtracting it from maxPriority.
-// Note: The input scores are always assumed to be non-negative integers.
+// DefaultNormalizeScore 生成一个 Normalize Score 函数，把分数从 [0, max(scores)]
+// 归一化到 [0, maxPriority]。reverse 为 true 时，用 maxPriority 减去分数以反转排名。
+// 注意：输入分数一律假定为非负整数。
 func DefaultNormalizeScore(maxPriority int64, reverse bool, scores fwk.NodeScoreList) *fwk.Status {
 	var maxCount int64
 	for i := range scores {
@@ -32,6 +31,7 @@ func DefaultNormalizeScore(maxPriority int64, reverse bool, scores fwk.NodeScore
 		}
 	}
 
+	// 全零分数无法做分母；反转时统一给满分，否则保持零分。
 	if maxCount == 0 {
 		if reverse {
 			for i := range scores {

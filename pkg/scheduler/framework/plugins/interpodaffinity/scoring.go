@@ -29,25 +29,27 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// preScoreStateKey is the key in CycleState to InterPodAffinity pre-computed data for Scoring.
+// preScoreStateKey 是 CycleState 中存放 InterPodAffinity 打分预计算数据的键。
 const preScoreStateKey = "PreScore" + Name
 
+// scoreMap 按拓扑键、拓扑值累计亲和性得分。
 type scoreMap map[string]map[string]int64
 
-// preScoreState computed at PreScore and used at Score.
+// preScoreState 在 PreScore 阶段计算，供 Score 阶段使用。
 type preScoreState struct {
 	topologyScore scoreMap
 	podInfo       fwk.PodInfo
-	// A copy of the incoming pod's namespace labels.
+	// 复制待调度 Pod 的命名空间标签，避免遍历期间因外部变更看到不一致的数据。
 	namespaceLabels labels.Set
 }
 
-// Clone implements the mandatory Clone interface. We don't really copy the data since
-// there is no need for that.
+// Clone 实现必需的 Clone 接口。本状态在读取后不再修改，因此直接复用同一实例即可。
 func (s *preScoreState) Clone() fwk.StateData {
 	return s
 }
 
+// processTerm 若 Pod 匹配该亲和性条目，就在条目拓扑键对应的拓扑值上累加权重。
+// multiplier 为 1 表示亲和，-1 表示反亲和。
 func (m scoreMap) processTerm(term *fwk.AffinityTerm, weight int32, pod *v1.Pod, nsLabels labels.Set, node *v1.Node, multiplier int32) {
 	if term.Matches(pod, nsLabels) {
 		if tpValue, tpValueExist := node.Labels[term.TopologyKey]; tpValueExist {
@@ -59,12 +61,14 @@ func (m scoreMap) processTerm(term *fwk.AffinityTerm, weight int32, pod *v1.Pod,
 	}
 }
 
+// processTerms 逐个处理带权重的亲和性条目。
 func (m scoreMap) processTerms(terms []fwk.WeightedAffinityTerm, pod *v1.Pod, nsLabels labels.Set, node *v1.Node, multiplier int32) {
 	for _, term := range terms {
 		m.processTerm(&term.AffinityTerm, term.Weight, pod, nsLabels, node, multiplier)
 	}
 }
 
+// append 把另一张得分表按拓扑键与值合并进当前表。
 func (m scoreMap) append(other scoreMap) {
 	for topology, oScores := range other {
 		scores := m[topology]
@@ -78,6 +82,7 @@ func (m scoreMap) append(other scoreMap) {
 	}
 }
 
+// processExistingPod 汇总一个已存在 Pod 对待调度 Pod 的双向亲和性/反亲和性得分。
 func (pl *InterPodAffinity) processExistingPod(
 	state *preScoreState,
 	existingPod fwk.PodInfo,
@@ -90,41 +95,29 @@ func (pl *InterPodAffinity) processExistingPod(
 		return
 	}
 
-	// For every soft pod affinity term of <pod>, if <existingPod> matches the term,
-	// increment <p.counts> for every node in the cluster with the same <term.TopologyKey>
-	// value as that of <existingPods>`s node by the term`s weight.
-	// Note that the incoming pod's terms have the namespaceSelector merged into the namespaces, and so
-	// here we don't lookup the existing pod's namespace labels, hence passing nil for nsLabels.
+	// 待调度 Pod 的软亲和条目若匹配已存在 Pod，就在该 Pod 所在节点的拓扑值上加对应权重。
+	// 待调度 Pod 的条目已把 namespaceSelector 合并进 namespaces，因此这里无需查命名空间标签。
 	topoScore.processTerms(state.podInfo.GetPreferredAffinityTerms(), existingPod.GetPod(), nil, existingPodNode, 1)
 
-	// For every soft pod anti-affinity term of <pod>, if <existingPod> matches the term,
-	// decrement <p.counts> for every node in the cluster with the same <term.TopologyKey>
-	// value as that of <existingPod>`s node by the term`s weight.
-	// Note that the incoming pod's terms have the namespaceSelector merged into the namespaces, and so
-	// here we don't lookup the existing pod's namespace labels, hence passing nil for nsLabels.
+	// 软反亲和同理，权重取负值表示惩罚。
+	// 条目已合并 namespaceSelector，这里同样不需要命名空间标签。
 	topoScore.processTerms(state.podInfo.GetPreferredAntiAffinityTerms(), existingPod.GetPod(), nil, existingPodNode, -1)
 
-	// For every hard pod affinity term of <existingPod>, if <pod> matches the term,
-	// increment <p.counts> for every node in the cluster with the same <term.TopologyKey>
-	// value as that of <existingPod>'s node by the constant <args.hardPodAffinityWeight>
+	// 已存在 Pod 的硬亲和条目若匹配待调度 Pod，按配置的固定权重加分。
 	if pl.args.HardPodAffinityWeight > 0 && len(existingPodNode.Labels) != 0 {
 		for _, t := range existingPod.GetRequiredAffinityTerms() {
 			topoScore.processTerm(&t, pl.args.HardPodAffinityWeight, incomingPod, state.namespaceLabels, existingPodNode, 1)
 		}
 	}
 
-	// For every soft pod affinity term of <existingPod>, if <pod> matches the term,
-	// increment <p.counts> for every node in the cluster with the same <term.TopologyKey>
-	// value as that of <existingPod>'s node by the term's weight.
+	// 反向处理：已存在 Pod 的软亲和条目若匹配待调度 Pod，按其权重加分。
 	topoScore.processTerms(existingPod.GetPreferredAffinityTerms(), incomingPod, state.namespaceLabels, existingPodNode, 1)
 
-	// For every soft pod anti-affinity term of <existingPod>, if <pod> matches the term,
-	// decrement <pm.counts> for every node in the cluster with the same <term.TopologyKey>
-	// value as that of <existingPod>'s node by the term's weight.
+	// 反向的软反亲和条目同样按负权重扣分。
 	topoScore.processTerms(existingPod.GetPreferredAntiAffinityTerms(), incomingPod, state.namespaceLabels, existingPodNode, -1)
 }
 
-// PreScore builds and writes cycle state used by Score and NormalizeScore.
+// PreScore 构建并写入供 Score 与 NormalizeScore 使用的 CycleState。
 func (pl *InterPodAffinity) PreScore(
 	pCtx context.Context,
 	cycleState fwk.CycleState,
@@ -141,14 +134,12 @@ func (pl *InterPodAffinity) PreScore(
 	hasPreferredAntiAffinityConstraints := affinity != nil && affinity.PodAntiAffinity != nil && len(affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution) > 0
 	hasConstraints := hasPreferredAffinityConstraints || hasPreferredAntiAffinityConstraints
 
-	// Optionally ignore calculating preferences of existing pods' affinity rules
-	// if the incoming pod has no inter-pod affinities.
+	// 待调度 Pod 自身没有亲和性约束时，可选择跳过对现有 Pod 偏好的计算。
 	if pl.args.IgnorePreferredTermsOfExistingPods && !hasConstraints {
 		return fwk.NewStatus(fwk.Skip)
 	}
 
-	// Unless the pod being scheduled has preferred affinity terms, we only
-	// need to process nodes hosting pods with affinity.
+	// 待调度 Pod 没有软偏好时，只需处理承载了带亲和性 Pod 的节点，缩小扫描范围。
 	var allNodes []fwk.NodeInfo
 	var err error
 	if hasConstraints {
@@ -168,7 +159,7 @@ func (pl *InterPodAffinity) PreScore(
 	}
 
 	if state.podInfo, err = framework.NewPodInfo(pod); err != nil {
-		// Ideally we never reach here, because errors will be caught by PreFilter
+		// 理论上不会走到这里，PreFilter 已拦截这类错误。
 		return fwk.AsStatus(fmt.Errorf("failed to parse pod: %w", err))
 	}
 
@@ -192,11 +183,9 @@ func (pl *InterPodAffinity) PreScore(
 	processNode := func(i int) {
 		nodeInfo := allNodes[i]
 
-		// Unless the pod being scheduled has preferred affinity terms, we only
-		// need to process pods with affinity in the node.
+		// 待调度 Pod 有软偏好时，任何现有 Pod 都可能匹配其条目，必须全量处理。
 		podsToProcess := nodeInfo.GetPodsWithAffinity()
 		if hasConstraints {
-			// We need to process all the pods.
 			podsToProcess = nodeInfo.GetPods()
 		}
 
@@ -222,6 +211,7 @@ func (pl *InterPodAffinity) PreScore(
 	return nil
 }
 
+// getPreScoreState 从 CycleState 中读取 PreScore 阶段写入的状态。
 func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	c, err := cycleState.Read(preScoreStateKey)
 	if err != nil {
@@ -235,10 +225,8 @@ func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	return s, nil
 }
 
-// Score invoked at the Score extension point.
-// The "score" returned in this function is the sum of weights got from cycleState which have its topologyKey matching with the node's labels.
-// it is normalized later.
-// Note: the returned "score" is positive for pod-affinity, and negative for pod-antiaffinity.
+// Score 在 Score 扩展点调用，返回节点标签匹配的所有拓扑值上的权重之和。
+// 该分数会在 NormalizeScore 中归一化；亲和性为正分，反亲和性为负分。
 func (pl *InterPodAffinity) Score(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	node := nodeInfo.Node()
 
@@ -256,7 +244,7 @@ func (pl *InterPodAffinity) Score(ctx context.Context, cycleState fwk.CycleState
 	return score, nil
 }
 
-// NormalizeScore normalizes the score for each filteredNode.
+// NormalizeScore 将各节点的原始分数线性归一化到 [0, MaxNodeScore]。
 func (pl *InterPodAffinity) NormalizeScore(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, scores fwk.NodeScoreList) *fwk.Status {
 	s, err := getPreScoreState(cycleState)
 	if err != nil {
@@ -291,7 +279,7 @@ func (pl *InterPodAffinity) NormalizeScore(ctx context.Context, cycleState fwk.C
 	return nil
 }
 
-// ScoreExtensions of the Score plugin.
+// ScoreExtensions 返回该 Score 插件的扩展接口实现。
 func (pl *InterPodAffinity) ScoreExtensions() fwk.ScoreExtensions {
 	return pl
 }

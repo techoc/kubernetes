@@ -45,9 +45,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
-// NewInTreeRegistry builds the registry with all the in-tree plugins.
-// A scheduler that runs out of tree plugins can register additional plugins
-// through the WithFrameworkOutOfTreeRegistry option.
+// NewInTreeRegistry 构建包含所有 in-tree 插件的注册表。
+// 运行 out-of-tree 插件的调度器可通过 WithFrameworkOutOfTreeRegistry 选项追加注册。
 func NewInTreeRegistry() runtime.Registry {
 	fts := plfeature.NewSchedulerFeaturesFromGates(feature.DefaultFeatureGate)
 	registry := runtime.Registry{

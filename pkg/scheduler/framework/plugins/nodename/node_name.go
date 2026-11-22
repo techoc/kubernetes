@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// NodeName is a plugin that checks if a pod spec node name matches the current node.
+// NodeName 是一个检查 Pod 的 spec.nodeName 是否与当前节点匹配的插件。
 type NodeName struct{}
 
 var _ fwk.PreFilterPlugin = &NodeName{}
@@ -36,40 +36,40 @@ var _ fwk.EnqueueExtensions = &NodeName{}
 var _ fwk.SignPlugin = &NodeName{}
 
 const (
-	// Name is the name of the plugin used in the plugin registry and configurations.
+	// Name 是插件在插件注册表和配置中使用的名字。
 	Name = names.NodeName
 
-	// ErrReason returned when node name doesn't match.
+	// ErrReason 是节点名不匹配时返回的原因。
 	ErrReason = "node(s) didn't match the requested node name"
 )
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让本插件判定为不可调度的 Pod 变为可调度的事件。
 func (pl *NodeName) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
-		// We don't need the QueueingHintFn here because the scheduling of Pods will be always retried with backoff when this Event happens.
-		// (the same as Queue)
+		// 这里不需要 QueueingHintFn：该事件发生时 Pod 的调度总会带退避重试。
+		// （效果等同于 Queue）
 		{Event: fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add}},
 	}, nil
 }
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *NodeName) Name() string {
 	return Name
 }
 
-// NodeName scoring and feasibility are dependent on the NodeName field.
+// SignPod 根据 NodeName 字段生成签名片段。
+// 节点的可行性与打分都取决于 NodeName 字段。
 func (pl *NodeName) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	return []fwk.SignFragment{
 		{Key: fwk.NodeNameSignerName, Value: pod.Spec.NodeName},
 	}, nil
 }
 
-// PreFilter invoked at the prefilter extension point.
+// PreFilter 在 prefilter 扩展点调用。
 func (pl *NodeName) PreFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if pod.Spec.NodeName != "" {
-		// Pod already has a target node specified in spec.nodeName (e.g. assigned pod with deferred resize or static node assignment).
-		// We restrict evaluation to that node - other nodes will be considered as UnschedulableAndUnresolvable and therefore won't be a target of preemption.
+		// Pod 已经在 spec.nodeName 里指定了目标节点（例如延迟调整大小的已分配 Pod，或静态节点分配）。
+		// 只在该节点上评估：其他节点会被判为 UnschedulableAndUnresolvable，因而不会成为抢占目标。
 		return &fwk.PreFilterResult{
 			NodeNames: sets.New(pod.Spec.NodeName),
 		}, nil
@@ -77,12 +77,12 @@ func (pl *NodeName) PreFilter(ctx context.Context, state fwk.CycleState, pod *v1
 	return nil, nil
 }
 
-// PreFilterExtensions returns prefilter extensions, which is nil for this plugin.
+// PreFilterExtensions 返回 prefilter 扩展；本插件没有，返回 nil。
 func (pl *NodeName) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用。
 func (pl *NodeName) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 
 	if !Fits(pod, nodeInfo) {
@@ -91,12 +91,12 @@ func (pl *NodeName) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, n
 	return nil
 }
 
-// Fits actually checks if the pod fits the node.
+// Fits 真正检查 Pod 是否适配该节点。
 func Fits(pod *v1.Pod, nodeInfo fwk.NodeInfo) bool {
 	return len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == nodeInfo.Node().Name
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回一个新的插件实例。
 func New(_ context.Context, _ runtime.Object, _ fwk.Handle, _ feature.Features) (fwk.Plugin, error) {
 	return &NodeName{}, nil
 }

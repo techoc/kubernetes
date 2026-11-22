@@ -47,6 +47,8 @@ func init() {
 	metrics.Register()
 }
 
+// mockProposedAssignment 是测试用的 ProposedAssignment 实现，
+// 只携带节点名和 PodInfo，不提供 CycleState。
 type mockProposedAssignment struct {
 	nodeName string
 	podInfo  *framework.PodInfo
@@ -54,22 +56,28 @@ type mockProposedAssignment struct {
 
 var _ fwk.ProposedAssignment = &mockProposedAssignment{}
 
+// GetNodeName 返回拟分配到的节点名。
 func (pa *mockProposedAssignment) GetNodeName() string {
 	return pa.nodeName
 }
 
+// GetPod 返回拟分配的 Pod。
 func (pa *mockProposedAssignment) GetPod() *v1.Pod {
 	return pa.podInfo.GetPod()
 }
 
+// GetPodInfo 返回拟分配 Pod 的 PodInfo。
 func (pa *mockProposedAssignment) GetPodInfo() fwk.PodInfo {
 	return pa.podInfo
 }
 
+// GetCycleState 返回 nil：ScorePlacement 不需要 cycle state。
 func (pa *mockProposedAssignment) GetCycleState() fwk.CycleState {
 	return nil
 }
 
+// TestScorePlacement 验证 ScorePlacement 的得分等于快照中已分配 Pod、
+// 已假定 Pod 与拟分配 Pod 数量之和，并覆盖 composite pod group 的多级层级。
 func TestScorePlacement(t *testing.T) {
 	type scheduledPod struct {
 		pathToRoot   []string
@@ -96,8 +104,8 @@ func TestScorePlacement(t *testing.T) {
 	tests := []struct {
 		name          string
 		podGroupInfo  fwk.PodGroupInfo
-		assignedPods  []scheduledPod // Pods to be added to the snapshot
-		assumedPods   []scheduledPod // Pods to be assumed in the snapshot
+		assignedPods  []scheduledPod // 加入快照（已分配）的 Pod
+		assumedPods   []scheduledPod // 在快照中假定的 Pod
 		placement     *fwk.PodGroupAssignments
 		expectedScore int64
 	}{
@@ -114,7 +122,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 5, // 1 assumed + 2 assigned + 2 proposed = 5
+			expectedScore: 5, // 1 假定 + 2 已分配 + 2 拟分配 = 5
 		},
 		{
 			name:         "no assumed pods",
@@ -125,7 +133,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 3, // 1 assigned + 2 proposed = 3
+			expectedScore: 3, // 1 已分配 + 2 拟分配 = 3
 		},
 		{
 			name:         "no assigned pods",
@@ -136,7 +144,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 3, // 1 assumed + 2 proposed = 3
+			expectedScore: 3, // 1 假定 + 2 拟分配 = 3
 		},
 		{
 			name:         "no assigned pods, no assumed pods",
@@ -144,7 +152,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 2, // 2 proposed
+			expectedScore: 2, // 2 拟分配
 		},
 		{
 			name:         "for cpg existing assigned and assumed pods across multi-level hierarchies",
@@ -168,7 +176,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 5, // 1 assumed + 2 assigned across pg1 and pg2 + 2 proposed = 5
+			expectedScore: 5, // 1 假定 + 2 已分配（分属 pg1、pg2）+ 2 拟分配 = 5
 		},
 		{
 			name:         "for cpg with no assumed pods",
@@ -182,7 +190,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 3, // 1 assigned + 2 proposed = 3
+			expectedScore: 3, // 1 已分配 + 2 拟分配 = 3
 		},
 		{
 			name:         "for cpg with no assigned pods",
@@ -196,7 +204,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 3, // 1 assumed + 2 proposed = 3
+			expectedScore: 3, // 1 假定 + 2 拟分配 = 3
 		},
 		{
 			name:         "for cpg with no assigned pods, no assumed pods",
@@ -204,7 +212,7 @@ func TestScorePlacement(t *testing.T) {
 			placement: &fwk.PodGroupAssignments{
 				ProposedAssignments: proposedAssignments,
 			},
-			expectedScore: 2, // 2 proposed
+			expectedScore: 2, // 2 拟分配
 		},
 	}
 
@@ -311,6 +319,8 @@ func TestScorePlacement(t *testing.T) {
 	}
 }
 
+// TestNormalizePlacementScore 验证分数按最大值线性归一化到 0-100 区间：
+// 最低分得 0，最高分得 100，中间分按比例缩放；全为 0 时报错。
 func TestNormalizePlacementScore(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -325,8 +335,8 @@ func TestNormalizePlacementScore(t *testing.T) {
 				{Score: 50},
 				{Score: 110},
 			},
-			// Normalized score is calculated as: score * (MaxScore - MinScore) / maxCount.
-			// With MinScore=0, MaxScore=100, and maxCount=110 (using integer division):
+			// 归一化公式：score * (MaxScore - MinScore) / maxCount。
+			// MinScore=0、MaxScore=100、maxCount=110（整数除法）：
 			// 10 * 100 / 110 = 9
 			// 50 * 100 / 110 = 45
 			// 110 * 100 / 110 = 100
@@ -357,7 +367,7 @@ func TestNormalizePlacementScore(t *testing.T) {
 			},
 		},
 		{
-			name: "some minimal score that is far from a group of scores located closely", // to test that normalization will not distribute it evenly
+			name: "some minimal score that is far from a group of scores located closely", // 验证归一化不会把极端低分与聚集的高分均匀拉开
 			scores: []fwk.PlacementScore{
 				{Score: 11},
 				{Score: 100},
@@ -404,6 +414,7 @@ func TestNormalizePlacementScore(t *testing.T) {
 	}
 }
 
+// makePodGroupInfoFromPG 由 PodGroup 对象构造测试用 PodGroupInfo。
 func makePodGroupInfoFromPG(pg *schedulingapi.PodGroup) fwk.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:      pg.Name,
@@ -413,6 +424,7 @@ func makePodGroupInfoFromPG(pg *schedulingapi.PodGroup) fwk.PodGroupInfo {
 	}
 }
 
+// makePodGroupInfoFromCPG 由 CompositePodGroup 对象构造测试用 PodGroupInfo。
 func makePodGroupInfoFromCPG(cpg *schedulingv1alpha3.CompositePodGroup) fwk.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:              cpg.Name,
@@ -422,6 +434,7 @@ func makePodGroupInfoFromCPG(cpg *schedulingv1alpha3.CompositePodGroup) fwk.PodG
 	}
 }
 
+// makePodGroup 构造名为 "root" 的测试用 PodGroupInfo。
 func makePodGroup() fwk.PodGroupInfo {
 	return makePodGroupInfoFromPG(&schedulingapi.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{
@@ -431,6 +444,7 @@ func makePodGroup() fwk.PodGroupInfo {
 	})
 }
 
+// makeCompositePodGroup 构造名为 "root" 的测试用 composite pod group 的 PodGroupInfo。
 func makeCompositePodGroup() fwk.PodGroupInfo {
 	return makePodGroupInfoFromCPG(&schedulingv1alpha3.CompositePodGroup{
 		ObjectMeta: metav1.ObjectMeta{

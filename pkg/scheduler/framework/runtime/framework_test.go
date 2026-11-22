@@ -83,8 +83,8 @@ func init() {
 	metrics.Register()
 }
 
-// TestScoreWithNormalizePlugin implements ScoreWithNormalizePlugin interface.
-// TestScorePlugin only implements ScorePlugin interface.
+// TestScoreWithNormalizePlugin 实现了 ScoreWithNormalizePlugin 相关接口。
+// TestScorePlugin 仅实现 ScorePlugin 接口。
 var _ fwk.ScorePlugin = &TestScoreWithNormalizePlugin{}
 var _ fwk.ScorePlugin = &TestScorePlugin{}
 
@@ -100,6 +100,7 @@ var statusCmpOpts = []cmp.Option{
 	}),
 }
 
+// newScoreWithNormalizePlugin1 创建 scoreWithNormalizePlugin1 打分插件。
 func newScoreWithNormalizePlugin1(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	var inj injectedResult
 	if err := DecodeInto(injArgs, &inj); err != nil {
@@ -108,6 +109,7 @@ func newScoreWithNormalizePlugin1(_ context.Context, injArgs runtime.Object, f f
 	return &TestScoreWithNormalizePlugin{scoreWithNormalizePlugin1, inj}, nil
 }
 
+// newScoreWithNormalizePlugin2 创建 scoreWithNormalizePlugin2 打分插件。
 func newScoreWithNormalizePlugin2(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	var inj injectedResult
 	if err := DecodeInto(injArgs, &inj); err != nil {
@@ -116,6 +118,7 @@ func newScoreWithNormalizePlugin2(_ context.Context, injArgs runtime.Object, f f
 	return &TestScoreWithNormalizePlugin{scoreWithNormalizePlugin2, inj}, nil
 }
 
+// newScorePlugin1 创建 scorePlugin1 打分插件。
 func newScorePlugin1(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	var inj injectedResult
 	if err := DecodeInto(injArgs, &inj); err != nil {
@@ -124,6 +127,7 @@ func newScorePlugin1(_ context.Context, injArgs runtime.Object, f fwk.Handle) (f
 	return &TestScorePlugin{scorePlugin1, inj}, nil
 }
 
+// newScorePlugin2 创建 scorePlugin2 打分插件。
 func newScorePlugin2(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	var inj injectedResult
 	if err := DecodeInto(injArgs, &inj); err != nil {
@@ -132,16 +136,19 @@ func newScorePlugin2(_ context.Context, injArgs runtime.Object, f fwk.Handle) (f
 	return &TestScorePlugin{scorePlugin2, inj}, nil
 }
 
+// newPlacementScorePluginFactory 返回一个构造指定名字 placement 打分插件的工厂函数。
 func newPlacementScorePluginFactory(name string) func(context.Context, runtime.Object, fwk.Handle) (fwk.Plugin, error) {
 	return func(context.Context, runtime.Object, fwk.Handle) (fwk.Plugin, error) {
 		return &testPlacementScorePlugin{name: name}, nil
 	}
 }
 
+// newPluginNotImplementingScore 创建一个不实现 ScorePlugin 的插件。
 func newPluginNotImplementingScore(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &PluginNotImplementingScore{}, nil
 }
 
+// TestScoreWithNormalizePlugin 是带归一化打分能力的测试插件。
 type TestScoreWithNormalizePlugin struct {
 	name string
 	inj  injectedResult
@@ -163,7 +170,7 @@ func (pl *TestScoreWithNormalizePlugin) ScoreExtensions() fwk.ScoreExtensions {
 	return pl
 }
 
-// TestScorePlugin only implements ScorePlugin interface.
+// TestScorePlugin 仅实现 ScorePlugin 接口。
 type TestScorePlugin struct {
 	name string
 	inj  injectedResult
@@ -185,17 +192,19 @@ func (pl *TestScorePlugin) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
-// PluginNotImplementingScore doesn't implement the ScorePlugin interface.
+// PluginNotImplementingScore 故意不实现 ScorePlugin 接口。
 type PluginNotImplementingScore struct{}
 
 func (pl *PluginNotImplementingScore) Name() string {
 	return pluginNotImplementingScore
 }
+
+// newTestPlugin 创建 TestPlugin。
 func newTestPlugin(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	return &TestPlugin{name: testPlugin}, nil
 }
 
-// TestPlugin implements all Plugin interfaces.
+// TestPlugin 实现了所有框架插件接口。
 type TestPlugin struct {
 	name string
 	inj  injectedResult
@@ -290,11 +299,12 @@ func (pl *TestPlugin) PodGroupPostFilter(ctx context.Context, state fwk.PodGroup
 	return pl.inj.PodGroupPostFilterResult, fwk.NewStatus(fwk.Code(pl.inj.PodGroupPostFilterStatus), injectReason)
 }
 
+// newTestCloseErrorPlugin 创建 TestCloseErrorPlugin。
 func newTestCloseErrorPlugin(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	return &TestCloseErrorPlugin{name: testCloseErrorPlugin}, nil
 }
 
-// TestCloseErrorPlugin implements for Close test.
+// TestCloseErrorPlugin 用于测试 Close 阶段返回错误的场景。
 type TestCloseErrorPlugin struct {
 	name string
 }
@@ -309,7 +319,7 @@ func (pl *TestCloseErrorPlugin) Close() error {
 	return errClose
 }
 
-// TestPreFilterPlugin only implements PreFilterPlugin interface.
+// TestPreFilterPlugin 仅实现 PreFilterPlugin 接口。
 type TestPreFilterPlugin struct {
 	PreFilterCalled int
 }
@@ -327,7 +337,7 @@ func (pl *TestPreFilterPlugin) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// TestPreFilterWithExtensionsPlugin implements Add/Remove interfaces.
+// TestPreFilterWithExtensionsPlugin 实现了 PreFilter 的 Add/Remove 扩展接口。
 type TestPreFilterWithExtensionsPlugin struct {
 	PreFilterCalled int
 	AddCalled       int
@@ -359,6 +369,7 @@ func (pl *TestPreFilterWithExtensionsPlugin) PreFilterExtensions() fwk.PreFilter
 	return pl
 }
 
+// TestDuplicatePlugin 用于验证重复注册检测的同名插件。
 type TestDuplicatePlugin struct {
 }
 
@@ -376,11 +387,12 @@ func (dp *TestDuplicatePlugin) PreFilterExtensions() fwk.PreFilterExtensions {
 
 var _ fwk.PreFilterPlugin = &TestDuplicatePlugin{}
 
+// newDuplicatePlugin 创建同名插件，用于验证重复注册。
 func newDuplicatePlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &TestDuplicatePlugin{}, nil
 }
 
-// TestPermitPlugin only implements PermitPlugin interface.
+// TestPermitPlugin 仅实现 PermitPlugin 接口。
 type TestPermitPlugin struct {
 	PreFilterCalled int
 }
@@ -394,6 +406,7 @@ func (pp *TestPermitPlugin) Permit(ctx context.Context, state fwk.CycleState, p 
 
 var _ fwk.PreEnqueuePlugin = &TestPreEnqueuePlugin{}
 
+// TestPreEnqueuePlugin 仅实现 PreEnqueue 接口的测试插件。
 type TestPreEnqueuePlugin struct{}
 
 func (pl *TestPreEnqueuePlugin) Name() string {
@@ -406,11 +419,12 @@ func (pl *TestPreEnqueuePlugin) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.
 
 var _ fwk.QueueSortPlugin = &TestQueueSortPlugin{}
 
+// newQueueSortPlugin 创建空实现的 QueueSort 插件。
 func newQueueSortPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &TestQueueSortPlugin{}, nil
 }
 
-// TestQueueSortPlugin is a no-op implementation for QueueSort extension point.
+// TestQueueSortPlugin 是 QueueSort 扩展点的空实现。
 type TestQueueSortPlugin struct{}
 
 func (pl *TestQueueSortPlugin) Name() string {
@@ -423,11 +437,12 @@ func (pl *TestQueueSortPlugin) Less(_, _ fwk.QueuedEntityInfo) bool {
 
 var _ fwk.BindPlugin = &TestBindPlugin{}
 
+// newBindPlugin 创建空实现的 Bind 插件。
 func newBindPlugin(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	return &TestBindPlugin{}, nil
 }
 
-// TestBindPlugin is a no-op implementation for Bind extension point.
+// TestBindPlugin 是 Bind 扩展点的空实现。
 type TestBindPlugin struct{}
 
 func (t TestBindPlugin) Name() string {
@@ -438,7 +453,7 @@ func (t TestBindPlugin) Bind(ctx context.Context, state fwk.CycleState, p *v1.Po
 	return nil
 }
 
-// TestPlacementGeneratePlugin only implements GeneratePlacements extension point.
+// TestPlacementGeneratePlugin 仅实现 GeneratePlacements 扩展点。
 type TestPlacementGeneratePlugin struct {
 	name string
 	inj  injectedResult
@@ -452,6 +467,7 @@ func (pl *TestPlacementGeneratePlugin) GeneratePlacements(ctx context.Context, s
 	return &fwk.GeneratePlacementsResult{Placements: pl.inj.GeneratePlacementsResult}, fwk.NewStatus(fwk.Code(pl.inj.GeneratePlacementsStatus), injectReason)
 }
 
+// newTestPlacementGeneratePlugin 创建 placement 生成插件。
 func newTestPlacementGeneratePlugin(_ context.Context, injArgs runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
 	var inj injectedResult
 	if err := DecodeInto(injArgs, &inj); err != nil {
@@ -460,7 +476,7 @@ func newTestPlacementGeneratePlugin(_ context.Context, injArgs runtime.Object, _
 	return &TestPlacementGeneratePlugin{placementGeneratePlugin, inj}, nil
 }
 
-// nolint:errcheck   // Ignore the error returned by Register as before
+// nolint:errcheck   // 与之前一样忽略 Register 返回的错误
 var registry = func() Registry {
 	r := make(Registry)
 	r.Register(scoreWithNormalizePlugin1, newScoreWithNormalizePlugin1)
@@ -487,7 +503,7 @@ var defaultWeights = map[string]int32{
 
 var state = framework.NewCycleState()
 
-// Pod is only used for logging errors.
+// Pod 仅用于错误日志中的上下文。
 var pod = &v1.Pod{}
 var node = &v1.Node{
 	ObjectMeta: metav1.ObjectMeta{
@@ -513,6 +529,7 @@ var (
 	errInjectedFilterStatus = errors.New(injectFilterReason)
 )
 
+// newFrameworkWithQueueSortAndBind 创建一个带 QueueSort 与 Bind 插件的框架，用于测试初始化错误。
 func newFrameworkWithQueueSortAndBind(ctx context.Context, r Registry, profile config.KubeSchedulerProfile, opts ...Option) (framework.Framework, error) {
 	if _, ok := r[queueSortPlugin]; !ok {
 		r[queueSortPlugin] = newQueueSortPlugin
@@ -530,11 +547,12 @@ func newFrameworkWithQueueSortAndBind(ctx context.Context, r Registry, profile c
 	return NewFramework(ctx, r, &profile, opts...)
 }
 
+// TestInitFrameworkWithScorePlugins 验证带打分插件的框架初始化。
 func TestInitFrameworkWithScorePlugins(t *testing.T) {
 	tests := []struct {
 		name    string
 		plugins *config.Plugins
-		// If initErr is true, we expect framework initialization to fail.
+		// initErr 为 true 表示期望框架初始化失败。
 		initErr bool
 	}{
 		{
@@ -582,6 +600,7 @@ func TestInitFrameworkWithScorePlugins(t *testing.T) {
 	}
 }
 
+// TestNewFrameworkErrors 验证框架初始化时的各类错误路径。
 func TestNewFrameworkErrors(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -666,6 +685,7 @@ func TestNewFrameworkErrors(t *testing.T) {
 	}
 }
 
+// TestNewFramework_PlacementFeasible 验证框架对 PlacementFeasible 扩展点的处理。
 func TestNewFramework_PlacementFeasible(t *testing.T) {
 	tests := []struct {
 		name                       string
@@ -786,6 +806,7 @@ func (p *mockGangSchedulingWithPlacementFeasible) PlacementFeasible(_ context.Co
 
 var _ framework.PlacementFeasiblePlugin = &mockGangSchedulingWithPlacementFeasible{}
 
+// TestPodGroupPostFilterPlugins 验证 PodGroupPostFilter 插件的行为。
 func TestPodGroupPostFilterPlugins(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -893,7 +914,7 @@ func TestPodGroupPostFilterPlugins(t *testing.T) {
 	}
 }
 
-// mockDefaultPreemptionPlugin is used to simulate a default preemption plugin that implements PodGroupPostFilterPlugin
+// mockDefaultPreemptionPlugin 模拟一个实现了 PodGroupPostFilterPlugin 的默认抢占插件。
 type mockDefaultPreemptionPlugin struct {
 	TestPlugin
 }
@@ -902,10 +923,12 @@ func (pl *mockDefaultPreemptionPlugin) PodGroupPostFilter(ctx context.Context, s
 	return nil, nil
 }
 
+// newMockDefaultPreemptionPlugin 创建模拟默认抢占插件的工厂。
 func newMockDefaultPreemptionPlugin(_ context.Context, injArgs runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 	return &mockDefaultPreemptionPlugin{TestPlugin: TestPlugin{name: defaultPreemptionPlugin}}, nil
 }
 
+// TestRunPodGroupPostFilterPlugins 验证 RunPodGroupPostFilterPlugins 依次执行插件。
 func TestRunPodGroupPostFilterPlugins(t *testing.T) {
 	pod1 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "p1"}}
 	tests := []struct {
@@ -1146,6 +1169,7 @@ func TestRunPodGroupPostFilterPlugins(t *testing.T) {
 	}
 }
 
+// mockPlacementFeasiblePlugin 可配置名字与返回状态的 PlacementFeasible 插件桩。
 type mockPlacementFeasiblePlugin struct {
 	name   string
 	status *fwk.Status
@@ -1159,6 +1183,7 @@ func (p *mockPlacementFeasiblePlugin) PlacementFeasible(ctx context.Context, pla
 	return p.status
 }
 
+// TestRunPlacementFeasiblePlugins 验证 RunPlacementFeasiblePlugins 依次执行插件。
 func TestRunPlacementFeasiblePlugins(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1256,6 +1281,7 @@ func TestRunPlacementFeasiblePlugins(t *testing.T) {
 	}
 }
 
+// TestNewFrameworkMultiPointExpansion 验证 MultiPoint 插件配置展开后的框架构建。
 func TestNewFrameworkMultiPointExpansion(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1672,6 +1698,7 @@ func TestNewFrameworkMultiPointExpansion(t *testing.T) {
 	}
 }
 
+// TestPreEnqueuePlugins 验证 PreEnqueue 插件的行为。
 func TestPreEnqueuePlugins(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1698,7 +1725,7 @@ func TestPreEnqueuePlugins(t *testing.T) {
 			registry := Registry{}
 			cfgPls := &config.Plugins{}
 			for _, pl := range tt.plugins {
-				// register all plugins
+				// 注册所有插件。
 				tmpPl := pl
 				if err := registry.Register(pl.Name(),
 					func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
@@ -1706,7 +1733,7 @@ func TestPreEnqueuePlugins(t *testing.T) {
 					}); err != nil {
 					t.Fatalf("fail to register preEnqueue plugin (%s)", pl.Name())
 				}
-				// append plugins to filter pluginset
+				// 把插件追加到 Filter 插件集。
 				cfgPls.PreEnqueue.Enabled = append(
 					cfgPls.PreEnqueue.Enabled,
 					config.Plugin{Name: pl.Name()},
@@ -1730,6 +1757,7 @@ func TestPreEnqueuePlugins(t *testing.T) {
 	}
 }
 
+// TestRunPreScorePlugins 验证 RunPreScorePlugins 的行为。
 func TestRunPreScorePlugins(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -1860,6 +1888,7 @@ func TestRunPreScorePlugins(t *testing.T) {
 	}
 }
 
+// TestRunScorePlugins 验证 RunScorePlugins 的打分与加权行为。
 func TestRunScorePlugins(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1868,7 +1897,7 @@ func TestRunScorePlugins(t *testing.T) {
 		pluginConfigs  []config.PluginConfig
 		want           []fwk.NodePluginScores
 		skippedPlugins sets.Set[string]
-		// If err is true, we expect RunScorePlugin to fail.
+		// err 为 true 表示期望 RunScorePlugin 失败。
 		err bool
 	}{
 		{
@@ -1898,7 +1927,7 @@ func TestRunScorePlugins(t *testing.T) {
 					},
 				},
 			},
-			// scorePlugin1 Score returns 1, weight=1, so want=1.
+			// scorePlugin1 返回 1，权重为 1，因此期望为 1。
 			want: []fwk.NodePluginScores{
 				{
 					Name: "node1",
@@ -1946,8 +1975,8 @@ func TestRunScorePlugins(t *testing.T) {
 					},
 				},
 			},
-			// scoreWithNormalizePlugin1 Score returns 10, NormalizeScore overrides to 5, weight=1.
-			// RawScores captures pre-NormalizeScore (10), Scores captures post-normalize post-weighting (5*1=5).
+			// scoreWithNormalizePlugin1 返回 10，NormalizeScore 改写为 5，权重为 1。
+			// RawScores 记录归一化前的值（10），Scores 记录归一化并加权后的值（5*1=5）。
 			want: []fwk.NodePluginScores{
 				{
 					Name: "node1",
@@ -2006,9 +2035,9 @@ func TestRunScorePlugins(t *testing.T) {
 					},
 				},
 			},
-			// scorePlugin1: Score=1, weight=1 → RawScores=1, Scores=1.
-			// scoreWithNormalizePlugin1: Score=3, NormalizeScore→4, weight=1 → RawScores=3, Scores=4.
-			// scoreWithNormalizePlugin2: Score=4, NormalizeScore→5, weight=2 → RawScores=4, Scores=10.
+			// scorePlugin1：Score=1，权重=1，故 RawScores=1、Scores=1。
+			// scoreWithNormalizePlugin1：Score=3，NormalizeScore 改为 4，权重=1，故 RawScores=3、Scores=4。
+			// scoreWithNormalizePlugin2：Score=4，NormalizeScore 改为 5，权重=2，故 RawScores=4、Scores=10。
 			want: []fwk.NodePluginScores{
 				{
 					Name: "node1",
@@ -2176,7 +2205,7 @@ func TestRunScorePlugins(t *testing.T) {
 					},
 				},
 			},
-			// scorePlugin1 Score returns 1, weight=3, so Scores=3, RawScores=1.
+			// scorePlugin1 返回 1，权重为 3，因此 Scores=3、RawScores=1。
 			want: []fwk.NodePluginScores{
 				{
 					Name: "node1",
@@ -2312,7 +2341,7 @@ func TestRunScorePlugins(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Inject the results via Args in PluginConfig.
+			// 通过 PluginConfig 的 Args 注入期望结果。
 			profile := config.KubeSchedulerProfile{
 				Plugins:      tt.plugins,
 				PluginConfig: tt.pluginConfigs,
@@ -2349,6 +2378,7 @@ func TestRunScorePlugins(t *testing.T) {
 	}
 }
 
+// TestRunRawScorePlugins 验证 RunScorePlugins 返回的原始分数。
 func TestRunRawScorePlugins(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -2490,6 +2520,7 @@ func TestRunRawScorePlugins(t *testing.T) {
 	}
 }
 
+// TestNormalizeScores 验证归一化分数的计算逻辑。
 func TestNormalizeScores(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -2592,7 +2623,7 @@ func TestNormalizeScores(t *testing.T) {
 					},
 				},
 			},
-			// scoreWithNormalizePlugin2 has weight=2, normalizeRes=10 → weighted score=20.
+			// scoreWithNormalizePlugin2 权重为 2、归一化结果为 10，故加权分数为 20。
 			want: []fwk.NodePluginScores{
 				{
 					Name: nodeName,
@@ -2649,8 +2680,8 @@ func TestNormalizeScores(t *testing.T) {
 					},
 				},
 			},
-			// scorePlugin1: no NormalizeScore, raw scores preserved per node.
-			// scoreWithNormalizePlugin1: NormalizeScore sets all nodes to 8.
+			// scorePlugin1 没有 NormalizeScore，原始分数按节点保留。
+			// scoreWithNormalizePlugin1 的 NormalizeScore 把所有节点设为 8。
 			want: []fwk.NodePluginScores{
 				{
 					Name: "node1",
@@ -2834,6 +2865,7 @@ func TestNormalizeScores(t *testing.T) {
 	}
 }
 
+// TestPreFilterPlugins 验证 PreFilter 插件的行为。
 func TestPreFilterPlugins(t *testing.T) {
 	preFilter1 := &TestPreFilterPlugin{}
 	preFilter2 := &TestPreFilterWithExtensionsPlugin{}
@@ -2880,6 +2912,7 @@ func TestPreFilterPlugins(t *testing.T) {
 	})
 }
 
+// TestRunPreFilterPlugins 验证 RunPreFilterPlugins 的行为。
 func TestRunPreFilterPlugins(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -2980,7 +3013,7 @@ func TestRunPreFilterPlugins(t *testing.T) {
 					inj:  injectedResult{PreFilterStatus: int(fwk.Unschedulable)},
 				},
 				{
-					// to make sure this plugin is executed, this plugin return Skip and we confirm it via wantSkippedPlugins.
+					// 为确保该插件被执行，它返回 Skip，并通过 wantSkippedPlugins 验证。
 					name: "skip",
 					inj:  injectedResult{PreFilterStatus: int(fwk.Skip)},
 				},
@@ -2997,7 +3030,7 @@ func TestRunPreFilterPlugins(t *testing.T) {
 					inj:  injectedResult{PreFilterStatus: int(fwk.UnschedulableAndUnresolvable)},
 				},
 				{
-					// to make sure this plugin is not executed, this plugin return Skip and we confirm it via wantSkippedPlugins.
+					// 为确保该插件未被执行，它返回 Skip，并通过 wantSkippedPlugins 验证。
 					name: "skip",
 					inj:  injectedResult{PreFilterStatus: int(fwk.Skip)},
 				},
@@ -3013,7 +3046,7 @@ func TestRunPreFilterPlugins(t *testing.T) {
 					inj:  injectedResult{PreFilterResult: &fwk.PreFilterResult{NodeNames: sets.New[string]()}},
 				},
 				{
-					// to make sure this plugin is not executed, this plugin return Skip and we confirm it via wantSkippedPlugins.
+					// 为确保该插件未被执行，它返回 Skip，并通过 wantSkippedPlugins 验证。
 					name: "skip",
 					inj:  injectedResult{PreFilterStatus: int(fwk.Skip)},
 				},
@@ -3069,6 +3102,7 @@ func TestRunPreFilterPlugins(t *testing.T) {
 	}
 }
 
+// TestRunPreFilterExtensionRemovePod 验证 RemovePod 扩展被调用的时机。
 func TestRunPreFilterExtensionRemovePod(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -3109,7 +3143,7 @@ func TestRunPreFilterExtensionRemovePod(t *testing.T) {
 				},
 				{
 					name: "skipped",
-					// To confirm it's skipped, return error so that this test case will fail when it isn't skipped.
+					// 为确认该插件被跳过，这里返回错误；若未跳过，用例就会失败。
 					inj: injectedResult{PreFilterRemovePodStatus: int(fwk.Error)},
 				},
 			},
@@ -3156,6 +3190,7 @@ func TestRunPreFilterExtensionRemovePod(t *testing.T) {
 	}
 }
 
+// TestRunPreFilterExtensionAddPod 验证 AddPod 扩展被调用的时机。
 func TestRunPreFilterExtensionAddPod(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -3196,7 +3231,7 @@ func TestRunPreFilterExtensionAddPod(t *testing.T) {
 				},
 				{
 					name: "skipped",
-					// To confirm it's skipped, return error so that this test case will fail when it isn't skipped.
+					// 为确认该插件被跳过，这里返回错误；若未跳过，用例就会失败。
 					inj: injectedResult{PreFilterAddPodStatus: int(fwk.Error)},
 				},
 			},
@@ -3244,6 +3279,7 @@ func TestRunPreFilterExtensionAddPod(t *testing.T) {
 	}
 }
 
+// TestFilterPlugins 验证 Filter 插件的行为。
 func TestFilterPlugins(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -3292,7 +3328,7 @@ func TestFilterPlugins(t *testing.T) {
 			},
 			wantStatus: fwk.NewStatus(fwk.UnschedulableAndUnresolvable, injectFilterReason).WithPlugin("TestPlugin"),
 		},
-		// following tests cover multiple-plugins scenarios
+		// 以下用例覆盖多插件组合场景。
 		{
 			name: "ErrorAndErrorFilters",
 			plugins: []*TestPlugin{
@@ -3416,7 +3452,7 @@ func TestFilterPlugins(t *testing.T) {
 			registry := Registry{}
 			cfgPls := &config.Plugins{}
 			for _, pl := range tt.plugins {
-				// register all plugins
+				// 注册所有插件。
 				tmpPl := pl
 				if err := registry.Register(pl.name,
 					func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
@@ -3424,7 +3460,7 @@ func TestFilterPlugins(t *testing.T) {
 					}); err != nil {
 					t.Fatalf("fail to register filter plugin (%s)", pl.name)
 				}
-				// append plugins to filter pluginset
+				// 把插件追加到 Filter 插件集。
 				cfgPls.Filter.Enabled = append(
 					cfgPls.Filter.Enabled,
 					config.Plugin{Name: pl.name})
@@ -3450,6 +3486,7 @@ func TestFilterPlugins(t *testing.T) {
 	}
 }
 
+// TestPostFilterPlugins 验证 PostFilter 插件的行为。
 func TestPostFilterPlugins(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -3560,7 +3597,7 @@ func TestPostFilterPlugins(t *testing.T) {
 			registry := Registry{}
 			cfgPls := &config.Plugins{}
 			for _, pl := range tt.plugins {
-				// register all plugins
+				// 注册所有插件。
 				tmpPl := pl
 				if err := registry.Register(pl.name,
 					func(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
@@ -3568,7 +3605,7 @@ func TestPostFilterPlugins(t *testing.T) {
 					}); err != nil {
 					t.Fatalf("fail to register postFilter plugin (%s)", pl.name)
 				}
-				// append plugins to filter pluginset
+				// 把插件追加到 Filter 插件集。
 				cfgPls.PostFilter.Enabled = append(
 					cfgPls.PostFilter.Enabled,
 					config.Plugin{Name: pl.name},
@@ -3595,6 +3632,7 @@ func TestPostFilterPlugins(t *testing.T) {
 	}
 }
 
+// TestFilterPluginsWithNominatedPods 验证被提名 Pod 对 Filter 插件的影响。
 func TestFilterPluginsWithNominatedPods(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -3763,6 +3801,7 @@ func TestFilterPluginsWithNominatedPods(t *testing.T) {
 	}
 }
 
+// TestPreBindPlugins 验证 PreBind 插件的行为。
 func TestPreBindPlugins(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -3925,6 +3964,7 @@ func TestPreBindPlugins(t *testing.T) {
 	}
 }
 
+// TestGetPreBindPluginGroups 验证 PreBind 插件分组逻辑。
 func TestGetPreBindPluginGroups(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -4108,6 +4148,7 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 	}
 }
 
+// TestPreBindPreFlightPlugins 验证 PreBindPreFlight 插件的行为。
 func TestPreBindPreFlightPlugins(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -4212,6 +4253,7 @@ func TestPreBindPreFlightPlugins(t *testing.T) {
 	}
 }
 
+// TestReservePlugins 验证 Reserve 插件的行为。
 func TestReservePlugins(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -4374,6 +4416,7 @@ func TestReservePlugins(t *testing.T) {
 	}
 }
 
+// TestPermitPlugins 验证 Permit 插件的行为。
 func TestPermitPlugins(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -4517,13 +4560,14 @@ func TestPermitPlugins(t *testing.T) {
 	}
 }
 
-// withMetricsRecorder set metricsRecorder for the scheduling frameworkImpl.
+// withMetricsRecorder 为调度框架设置指标记录器。
 func withMetricsRecorder(recorder *metrics.MetricAsyncRecorder) Option {
 	return func(o *frameworkOptions) {
 		o.metricsRecorder = recorder
 	}
 }
 
+// TestRecordingMetrics 验证扩展点执行指标的记录。
 func TestRecordingMetrics(t *testing.T) {
 	state.SetRecordPluginMetrics(true)
 	tests := []struct {
@@ -4783,10 +4827,10 @@ func TestRecordingMetrics(t *testing.T) {
 
 			tt.action(ctx, f)
 
-			// Stop the goroutine which records metrics and ensure it's stopped.
+			// 停止记录指标的 goroutine 并确保其已退出。
 			cancel()
 			<-recorder.IsStoppedCh
-			// Try to clean up the metrics buffer again in case it's not empty.
+			// 再清理一次指标缓冲区，防止仍有残留。
 			recorder.FlushMetrics()
 
 			collectAndCompareFrameworkMetrics(t, tt.wantExtensionPoint, tt.wantStatus)
@@ -4795,6 +4839,7 @@ func TestRecordingMetrics(t *testing.T) {
 	}
 }
 
+// TestRunBindPlugins 验证 Bind 插件的行为。
 func TestRunBindPlugins(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -4901,16 +4946,17 @@ func TestRunBindPlugins(t *testing.T) {
 				t.Errorf("got status code %s, want %s", st.Code(), tt.wantStatus)
 			}
 
-			// Stop the goroutine which records metrics and ensure it's stopped.
+			// 停止记录指标的 goroutine 并确保其已退出。
 			cancel()
 			<-recorder.IsStoppedCh
-			// Try to clean up the metrics buffer again in case it's not empty.
+			// 再清理一次指标缓冲区，防止仍有残留。
 			recorder.FlushMetrics()
 			collectAndCompareFrameworkMetrics(t, "Bind", tt.wantStatus)
 		})
 	}
 }
 
+// TestPermitWaitDurationMetric 验证 Permit 等待时长指标。
 func TestPermitWaitDurationMetric(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -4973,6 +5019,7 @@ func TestPermitWaitDurationMetric(t *testing.T) {
 	}
 }
 
+// TestWaitOnPermit 验证 WaitOnPermit 的等待与超时行为。
 func TestWaitOnPermit(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5044,6 +5091,7 @@ func TestWaitOnPermit(t *testing.T) {
 	}
 }
 
+// TestListPlugins 验证 ListPlugins 返回各扩展点启用的插件。
 func TestListPlugins(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -5092,6 +5140,7 @@ func TestListPlugins(t *testing.T) {
 	}
 }
 
+// TestClose 验证框架关闭时会调用各插件的 Close。
 func TestClose(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -5139,10 +5188,12 @@ func TestClose(t *testing.T) {
 	}
 }
 
+// buildScoreConfigDefaultWeights 用默认权重构建打分插件配置。
 func buildScoreConfigDefaultWeights(ps ...string) *config.Plugins {
 	return buildScoreConfigWithWeights(defaultWeights, ps...)
 }
 
+// buildScoreConfigWithWeights 用指定权重构建打分插件配置。
 func buildScoreConfigWithWeights(weights map[string]int32, ps ...string) *config.Plugins {
 	var plugins []config.Plugin
 	for _, p := range ps {
@@ -5151,6 +5202,7 @@ func buildScoreConfigWithWeights(weights map[string]int32, ps ...string) *config
 	return &config.Plugins{Score: config.PluginSet{Enabled: plugins}}
 }
 
+// injectedResult 通过插件参数注入的测试期望结果。
 type injectedResult struct {
 	ScoreRes                 int64                         `json:"scoreRes,omitempty"`
 	NormalizeRes             int64                         `json:"normalizeRes,omitempty"`
@@ -5177,6 +5229,7 @@ type injectedResult struct {
 	PodGroupPostFilterResult *fwk.PodGroupPostFilterResult `json:"podGroupPostFilterResult,omitempty"`
 }
 
+// setScoreRes 根据注入结果生成插件 Score 的返回值。
 func setScoreRes(inj injectedResult) (int64, *fwk.Status) {
 	if fwk.Code(inj.ScoreStatus) != fwk.Success {
 		return 0, fwk.NewStatus(fwk.Code(inj.ScoreStatus), "injecting failure.")
@@ -5184,6 +5237,7 @@ func setScoreRes(inj injectedResult) (int64, *fwk.Status) {
 	return inj.ScoreRes, nil
 }
 
+// injectNormalizeRes 根据注入结果改写节点分数。
 func injectNormalizeRes(inj injectedResult, scores fwk.NodeScoreList) *fwk.Status {
 	if fwk.Code(inj.NormalizeStatus) != fwk.Success {
 		return fwk.NewStatus(fwk.Code(inj.NormalizeStatus), "injecting failure.")
@@ -5194,6 +5248,7 @@ func injectNormalizeRes(inj injectedResult, scores fwk.NodeScoreList) *fwk.Statu
 	return nil
 }
 
+// collectAndComparePluginMetrics 校验插件级指标标签与值。
 func collectAndComparePluginMetrics(t *testing.T, wantExtensionPoint, wantPlugin string, wantStatus fwk.Code) {
 	t.Helper()
 	m := metrics.PluginExecutionDuration.WithLabelValues(wantPlugin, wantExtensionPoint, wantStatus.String())
@@ -5212,6 +5267,7 @@ func collectAndComparePluginMetrics(t *testing.T, wantExtensionPoint, wantPlugin
 	checkLatency(t, value)
 }
 
+// collectAndCompareFrameworkMetrics 校验框架级指标标签与值。
 func collectAndCompareFrameworkMetrics(t *testing.T, wantExtensionPoint string, wantStatus fwk.Code) {
 	t.Helper()
 	m := metrics.FrameworkExtensionPointDuration.WithLabelValues(wantExtensionPoint, wantStatus.String(), testProfileName)
@@ -5230,6 +5286,7 @@ func collectAndCompareFrameworkMetrics(t *testing.T, wantExtensionPoint string, 
 	checkLatency(t, value)
 }
 
+// collectAndComparePermitWaitDuration 校验 Permit 等待时长指标。
 func collectAndComparePermitWaitDuration(t *testing.T, wantRes string) {
 	m := metrics.PermitWaitDuration.WithLabelValues(wantRes)
 	count, err := testutil.GetHistogramMetricCount(m)
@@ -5252,6 +5309,7 @@ func collectAndComparePermitWaitDuration(t *testing.T, wantRes string) {
 	}
 }
 
+// mustNewPodInfo 把 Pod 转成 PodInfo，失败则让测试终止。
 func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	podInfo, err := framework.NewPodInfo(pod)
 	if err != nil {
@@ -5260,7 +5318,7 @@ func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	return podInfo
 }
 
-// BuildNodeInfos build NodeInfo slice from a v1.Node slice
+// BuildNodeInfos 从 v1.Node 切片构建 NodeInfo 切片。
 func BuildNodeInfos(nodes []*v1.Node) []fwk.NodeInfo {
 	res := make([]fwk.NodeInfo, len(nodes))
 	for i := 0; i < len(nodes); i++ {
@@ -5270,6 +5328,7 @@ func BuildNodeInfos(nodes []*v1.Node) []fwk.NodeInfo {
 	return res
 }
 
+// TestRunPlacementGeneratePlugins 验证 RunPlacementGeneratePlugins 的行为。
 func TestRunPlacementGeneratePlugins(t *testing.T) {
 	nodeResources := []*v1.Node{
 		st.MakeNode().Name("node1").Obj(),
@@ -5389,11 +5448,13 @@ func TestRunPlacementGeneratePlugins(t *testing.T) {
 	}
 }
 
+// placementScoreResult placement 打分测试中的期望结果。
 type placementScoreResult struct {
 	score  int64
 	status *fwk.Status
 }
 
+// testPlacementScorePlugin placement 打分测试用插件。
 type testPlacementScorePlugin struct {
 	name        string
 	weight      int32
@@ -5421,8 +5482,9 @@ func (pl *testPlacementScorePlugin) NormalizePlacementScore(ctx context.Context,
 	return pl.normalizeFn(scores)
 }
 
+// TestRunPlacementScorePlugins 验证 placement 打分与归一化行为。
 func TestRunPlacementScorePlugins(t *testing.T) {
-	// 3 placements, the content doesn't matter as they're not used in the test
+	// 三个 placement，内容无关紧要，测试不会使用。
 	placements := []*fwk.Placement{{}, {}, {}}
 
 	tests := []struct {
@@ -5664,6 +5726,7 @@ func TestRunPlacementScorePlugins(t *testing.T) {
 	}
 }
 
+// TestPluginEvaluationTotalMetric 验证插件执行次数指标。
 func TestPluginEvaluationTotalMetric(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -5717,7 +5780,7 @@ func TestPluginEvaluationTotalMetric(t *testing.T) {
 		t.Fatalf("failed to register score plugin %q: %v", scorePluginName, err)
 	}
 
-	// Profile 1: exercise PreFilter, Filter, PreScore and Score extension points.
+	// Profile 1：覆盖 PreFilter、Filter、PreScore 和 Score 扩展点。
 	cfgPls1 := &config.Plugins{}
 	cfgPls1.PreFilter.Enabled = append(cfgPls1.PreFilter.Enabled, config.Plugin{Name: preFilterPluginName})
 	cfgPls1.Filter.Enabled = append(cfgPls1.Filter.Enabled, config.Plugin{Name: filterPluginNameA})
@@ -5748,7 +5811,7 @@ func TestPluginEvaluationTotalMetric(t *testing.T) {
 		t.Fatalf("RunScorePlugins returned unexpected status: %v", st)
 	}
 
-	// Profile 2: exercise a different plugin and profile label on Filter.
+	// Profile 2：在 Filter 上使用不同的插件与 profile 标签。
 	cfgPls2 := &config.Plugins{}
 	cfgPls2.Filter.Enabled = append(cfgPls2.Filter.Enabled, config.Plugin{Name: filterPluginNameB})
 	profile2 := config.KubeSchedulerProfile{

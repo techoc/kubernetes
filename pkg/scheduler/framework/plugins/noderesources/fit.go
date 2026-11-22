@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package noderesources 提供节点资源调度插件，负责检查节点资源是否够用并按资源使用率打分。
 package noderesources
 
 import (
@@ -50,18 +51,18 @@ var _ fwk.SignPlugin = &Fit{}
 var _ fwk.PlacementScorePlugin = &Fit{}
 
 const (
-	// Name is the name of the plugin used in the plugin registry and configurations.
+	// Name 是插件在注册表和配置中使用的名字。
 	Name = names.NodeResourcesFit
 
-	// preFilterStateKey is the key in CycleState to NodeResourcesFit pre-computed data.
-	// Using the name of the plugin will likely help us avoid collisions with other plugins.
+	// preFilterStateKey 是 CycleState 中存放 NodeResourcesFit 预计算数据的键。
+	// 键名带上插件名，可避免与其他插件冲突。
 	preFilterStateKey = "PreFilter" + Name
 
-	// preScoreStateKey is the key in CycleState to NodeResourcesFit pre-computed data for Scoring.
+	// preScoreStateKey 是 CycleState 中存放 NodeResourcesFit 打分预计算数据的键。
 	preScoreStateKey = "PreScore" + Name
 )
 
-// nodeResourceStrategyTypeMap maps strategy to scorer implementation
+// nodeResourceStrategyTypeMap 把评分策略类型映射到对应的打分器构造函数。
 var nodeResourceStrategyTypeMap = map[config.ScoringStrategyType]scorer{
 	config.LeastAllocated: func(strategy *config.ScoringStrategy) *resourceAllocationScorer {
 		resources := strategy.Resources
@@ -89,7 +90,7 @@ var nodeResourceStrategyTypeMap = map[config.ScoringStrategyType]scorer{
 	},
 }
 
-// Fit is a plugin that checks if a node has sufficient resources.
+// Fit 是检查节点资源是否充足的插件，同时提供基于资源使用率的打分能力。
 type Fit struct {
 	ignoredResources                                   sets.Set[string]
 	ignoredResourceGroups                              sets.Set[string]
@@ -103,37 +104,36 @@ type Fit struct {
 	placementScorer *resourceAllocationScorer
 }
 
-// ScoreExtensions of the Score plugin.
+// ScoreExtensions 返回 nil：本插件不需要调整归一化前的分数。
 func (f *Fit) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
-// preFilterState computed at PreFilter and used at Filter.
+// preFilterState 在 PreFilter 阶段计算、在 Filter 阶段使用的 Pod 资源请求快照。
 type preFilterState struct {
 	framework.Resource
 }
 
-// Clone the prefilter state.
+// Clone 返回自身；该状态只读，无需深拷贝。
 func (s *preFilterState) Clone() fwk.StateData {
 	return s
 }
 
-// preScoreState computed at PreScore and used at Score.
+// preScoreState 在 PreScore 阶段计算、在 Score 阶段使用的状态。
 type preScoreState struct {
-	// podRequests have the same order as the resources defined in NodeResourcesBalancedAllocationArgs.Resources,
-	// same for other place we store a list like that.
+	// podRequests 的顺序与 NodeResourcesBalancedAllocationArgs.Resources 中定义的资源顺序一致，
+	// 其他存放此类列表的地方也遵循同样约定。
 	podRequests []int64
-	// DRA extended resource scoring related info.
+	// DRA 扩展资源打分相关信息。
 	*draPreScoreState
 }
 
-// Clone implements the mandatory Clone interface. We don't really copy the data since
-// there is no need for that.
+// Clone 实现必需的 Clone 接口。状态是只读的，无需真正拷贝数据。
 func (s *preScoreState) Clone() fwk.StateData {
 	return s
 }
 
-// PreScore calculates incoming pod's resource requests and writes them to the cycle state used.
+// PreScore 计算待调度 Pod 的资源请求列表并写入 cycle state，供 Score 阶段使用。
 func (f *Fit) PreScore(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) *fwk.Status {
 	podRequests := f.calculatePodResourceRequestList(pod, f.resources)
 	state := &preScoreState{
@@ -153,6 +153,7 @@ func (f *Fit) PreScore(ctx context.Context, cycleState fwk.CycleState, pod *v1.P
 	return nil
 }
 
+// getPreScoreState 从 cycle state 读取 PreScore 阶段写入的状态；类型不符时返回错误。
 func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	c, err := cycleState.Read(preScoreStateKey)
 	if err != nil {
@@ -166,12 +167,13 @@ func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	return s, nil
 }
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名，用于日志等场景。
 func (f *Fit) Name() string {
 	return Name
 }
 
-// Filtering and scoring based on the container resources and overheads.
+// SignPod 基于容器资源请求与 overhead 生成签名片段。
+// 集群中使用 DRA 扩展资源时，资源需求无法仅用静态请求描述，因此禁用该签名。
 func (pl *Fit) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	opts := ResourceRequestsOptions{
 		EnablePodLevelResources:   pl.enablePodLevelResources,
@@ -180,7 +182,7 @@ func (pl *Fit) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *f
 	if pl.enableDRAExtendedResource {
 		podRequest := computePodResourceRequest(pod, opts)
 		for rName, rQuant := range podRequest.ScalarResources {
-			// Skip in case request quantity is zero
+			// 请求量为 0 的资源跳过。
 			if rQuant == 0 {
 				continue
 			}
@@ -195,6 +197,7 @@ func (pl *Fit) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *f
 	}, nil
 }
 
+// getScorer 根据评分策略类型从映射表中取得对应的打分器构造函数并构造打分器。
 func getScorer(strategy *config.ScoringStrategy) (*resourceAllocationScorer, error) {
 	if strategy == nil {
 		return nil, fmt.Errorf("scoring strategy not specified")
@@ -206,7 +209,7 @@ func getScorer(strategy *config.ScoringStrategy) (*resourceAllocationScorer, err
 	return scorerFactory(strategy), nil
 }
 
-// NewFit initializes a new plugin and returns it.
+// NewFit 校验参数并按评分策略与特性开关初始化插件。
 func NewFit(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	args, ok := plArgs.(*config.NodeResourcesFitArgs)
 	if !ok {
@@ -224,8 +227,7 @@ func NewFit(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.
 		scorer.enableDRAExtendedResource = true
 		scorer.draManager = h.SharedDRAManager()
 		scorer.draFeatures = dynamicresources.AllocatorFeatures(fts)
-		// Create a CEL cache for device class selector compilation
-		// This cache improves performance by avoiding recompilation of the same CEL expressions
+		// 为 DeviceClass 选择器编译创建 CEL 缓存，避免重复编译相同的 CEL 表达式。
 		scorer.DRACaches.celCache = cel.NewCache(10, cel.Features{
 			EnableConsumableCapacity: fts.EnableDRAConsumableCapacity,
 			EnableListTypeAttributes: fts.EnableDRAListTypeAttributes,
@@ -261,7 +263,7 @@ func NewFit(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.
 	return pl, nil
 }
 
-// ResourceRequestsOptions contains feature gate flags for resource request computation.
+// ResourceRequestsOptions 汇总影响资源请求计算的特性开关。
 type ResourceRequestsOptions struct {
 	EnablePodLevelResources                            bool
 	EnableDRAExtendedResource                          bool
@@ -269,10 +271,9 @@ type ResourceRequestsOptions struct {
 	EnableInPlacePodVerticalScalingSchedulerPreemption bool
 }
 
-// shouldDelegateResourceToDRA checks if the given resource should be delegated to the DRA plugin.
-// It returns true if:
-//  1. The resource is not a scalar resource in the node's allocatable (not provided by device plugin)
-//  2. A device class mapping exists for the resource in the cache (when draManager is available)
+// shouldDelegateResourceToDRA 判断给定资源是否应交给 DRA 插件处理。满足以下条件时返回 true：
+//  1. 该资源不在节点 Allocatable 的标量资源中（即不由 device plugin 提供）；
+//  2. 缓存中存在该资源到 DeviceClass 的映射（前提是有 draManager）。
 func shouldDelegateResourceToDRA(rName v1.ResourceName, nodeInfo fwk.NodeInfo, draManager fwk.SharedDRAManager, opts ResourceRequestsOptions) bool {
 	if !opts.EnableDRAExtendedResource {
 		return false
@@ -288,21 +289,18 @@ func shouldDelegateResourceToDRA(rName v1.ResourceName, nodeInfo fwk.NodeInfo, d
 		return false
 	}
 
-	// If draManager is available, check the cache for a mapping
+	// draManager 可用时，检查缓存中是否存在资源到 DeviceClass 的映射。
 	cache := draManager.DeviceClassResolver()
 	return cache.GetDeviceClass(rName) != nil
 }
 
-// computePodResourceRequest returns a framework.Resource that covers the largest
-// width in each resource dimension. Because init-containers run sequentially, we collect
-// the max in each dimension iteratively. In contrast, we sum the resource vectors for
-// regular containers since they run simultaneously.
+// computePodResourceRequest 返回一个在各资源维度上覆盖峰值需求的 framework.Resource。
+// init 容器顺序执行，因此逐维度取最大值；普通容器并行执行，因此累加各容器资源向量。
+// Pod 的 Overhead 资源也会计入最终请求总量。
 //
-// # The resources defined for Overhead should be added to the calculated Resource request sum
+// 示例：
 //
-// Example:
-//
-// Pod:
+// Pod：
 //
 //	InitContainers
 //	  IC1:
@@ -319,11 +317,11 @@ func shouldDelegateResourceToDRA(rName v1.ResourceName, nodeInfo fwk.NodeInfo, d
 //	    CPU: 1
 //	    Memory: 1G
 //
-// Result: CPU: 3, Memory: 3G
+// 结果：CPU: 3, Memory: 3G
 func computePodResourceRequest(pod *v1.Pod, opts ResourceRequestsOptions) *preFilterState {
-	// pod hasn't scheduled yet so we don't need to worry about InPlacePodVerticalScalingEnabled
+	// Pod 尚未调度，无需考虑原地垂直扩缩容（InPlacePodVerticalScaling）。
 	reqs := resource.PodRequests(pod, resource.PodResourcesOptions{
-		// SkipPodLevelResources is set to false when PodLevelResources feature is enabled.
+		// PodLevelResources 特性开启时才不跳过 Pod 级资源。
 		SkipPodLevelResources:                    !opts.EnablePodLevelResources,
 		UseDRANodeAllocatableResourceClaimStatus: opts.EnableDRANodeAllocatableResources,
 	})
@@ -332,7 +330,7 @@ func computePodResourceRequest(pod *v1.Pod, opts ResourceRequestsOptions) *preFi
 	return result
 }
 
-// PreFilter invoked at the prefilter extension point.
+// PreFilter 在 PreFilter 扩展点计算 Pod 的资源请求并写入 cycle state。
 func (f *Fit) PreFilter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	result := computePodResourceRequest(pod, ResourceRequestsOptions{EnablePodLevelResources: f.enablePodLevelResources})
 
@@ -340,15 +338,16 @@ func (f *Fit) PreFilter(ctx context.Context, cycleState fwk.CycleState, pod *v1.
 	return nil, nil
 }
 
-// PreFilterExtensions returns prefilter extensions, pod add and remove.
+// PreFilterExtensions 返回 nil：本插件不需要 Pod 增删的增量更新钩子。
 func (f *Fit) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
+// getPreFilterState 从 cycle state 读取 PreFilter 阶段写入的 Pod 资源请求状态。
 func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	c, err := cycleState.Read(preFilterStateKey)
 	if err != nil {
-		// preFilterState doesn't exist, likely PreFilter wasn't invoked.
+		// 读不到状态说明 PreFilter 可能未被调用。
 		return nil, fmt.Errorf("error reading %q from cycleState: %w", preFilterStateKey, err)
 	}
 
@@ -359,8 +358,7 @@ func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	return s, nil
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让此前被本插件判定不可调度的 Pod 重新变得可调度的集群事件。
 func (f *Fit) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	events := []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.Delete}, QueueingHintFn: f.isSchedulableAfterAssignedPodDelete},
@@ -368,12 +366,12 @@ func (f *Fit) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, e
 	}
 	if f.enableDRAExtendedResource {
 		events = append(events,
-			// A pod might be waiting for an exteneded resurce from a class to get created or modified.
+			// Pod 可能在等待某 DeviceClass 关联的扩展资源被创建或修改。
 			fwk.ClusterEventWithHint{Event: fwk.ClusterEvent{Resource: fwk.DeviceClass, ActionType: fwk.Add | fwk.Update}, QueueingHintFn: f.isSchedulableAfterDeviceClassEvent})
 	}
 	if f.enableInPlacePodVerticalScaling {
-		// If InPlacePodVerticalScaling (KEP 1287) is enabled, then UpdatePodScaleDown event should be registered
-		// for this plugin since a Pod update may free up resources that make other Pods schedulable.
+		// 开启原地垂直扩缩容（KEP 1287）时需注册 UpdatePodScaleDown：Pod 缩容会释放资源，
+		// 可能让其他 Pod 变得可调度。
 		events = append(events,
 			fwk.ClusterEventWithHint{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.UpdatePodScaleDown}, QueueingHintFn: f.isSchedulableAfterAssignedPodScaleDown},
 			fwk.ClusterEventWithHint{Event: fwk.ClusterEvent{Resource: fwk.TargetPod, ActionType: fwk.UpdatePodScaleDown}, QueueingHintFn: f.isSchedulableAfterTargetPodScaleDown})
@@ -386,8 +384,8 @@ func (f *Fit) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, e
 	return events, nil
 }
 
-// isSchedulableAfterAssignedPodDelete is invoked whenever a scheduled pod
-// is deleted and checks whether that change could make a previously unschedulable pod schedulable.
+// isSchedulableAfterAssignedPodDelete 在已调度 Pod 被删除时调用，
+// 判断该变化是否可能让此前不可调度的 Pod 变得可调度。
 func (f *Fit) isSchedulableAfterAssignedPodDelete(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	deletedPod, _, err := schedutil.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
@@ -406,20 +404,20 @@ func (f *Fit) isSchedulableAfterAssignedPodDelete(logger klog.Logger, pod *v1.Po
 		}
 	}
 
-	// any deletion event to a scheduled pod could make the unscheduled pod schedulable.
+	// 已调度 Pod 的任何删除事件都可能释放资源，因此一律提示重新入队。
 	logger.V(5).Info("another scheduled pod was deleted, and it may make the unscheduled pod schedulable", "pod", klog.KObj(pod), "deletedPod", klog.KObj(deletedPod))
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterTargetPodScaleDown is invoked when the target pod is scaled down, making itself schedulable.
+// isSchedulableAfterTargetPodScaleDown 在目标 Pod 自身缩容时调用，缩容后它可能已可调度，直接提示重新入队。
 func (f *Fit) isSchedulableAfterTargetPodScaleDown(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	logger.V(5).Info("the target pod got scaled down and it may be schedulable now", "pod", klog.KObj(pod))
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterTargetPodScaleUp is invoked when the target pod is scaled up.
-// Requeuing is necessary because a pod parked in UnschedulableAndUnresolvable (fitting naturally)
-// may exceed available headroom upon scaling up further, requiring preemption to clear space.
+// isSchedulableAfterTargetPodScaleUp 在目标 Pod 自身扩容时调用。需要重新入队：
+// 原本因自然可容纳而处于 UnschedulableAndUnresolvable 状态的 Pod，扩容后可能超出剩余空间，
+// 需要通过抢占腾出资源。
 func (f *Fit) isSchedulableAfterTargetPodScaleUp(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	if !resource.IsPodResizeDeferred(pod) {
 		logger.V(5).Info("the target pod got scaled up, but it is not a deferred resize pod", "pod", klog.KObj(pod))
@@ -429,9 +427,8 @@ func (f *Fit) isSchedulableAfterTargetPodScaleUp(logger klog.Logger, pod *v1.Pod
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterAssignedPodScaleUp checks if another assigned pod scaled up on the same node.
-// Requeuing is necessary because a competing scale-up can consume the free headroom a parked pod
-// was waiting for, forcing the deferred pod back into active evaluation to initiate preemption.
+// isSchedulableAfterAssignedPodScaleUp 检查是否有同节点上的其他已调度 Pod 扩容。
+// 需要重新入队：竞争性的扩容会消耗延迟调度 Pod 正在等待的空余资源，使其重新进入评估以发起抢占。
 func (f *Fit) isSchedulableAfterAssignedPodScaleUp(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	_, modifiedPod, err := schedutil.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
@@ -449,8 +446,8 @@ func (f *Fit) isSchedulableAfterAssignedPodScaleUp(logger klog.Logger, pod *v1.P
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterAssignedPodScaleDown is invoked when a scheduled pod got scaled down, and checks
-// whether that change could make a previously unschedulable pod schedulable.
+// isSchedulableAfterAssignedPodScaleDown 在已调度 Pod 缩容时调用，
+// 检查释放的资源是否正是此前不可调度 Pod 所请求的资源。
 func (f *Fit) isSchedulableAfterAssignedPodScaleDown(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalPod, modifiedPod, err := schedutil.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
@@ -459,7 +456,7 @@ func (f *Fit) isSchedulableAfterAssignedPodScaleDown(logger klog.Logger, pod *v1
 
 	if !f.haveEnoughRelevantResourcesDecreased(pod, originalPod, modifiedPod) {
 		if loggerV := logger.V(10); loggerV.Enabled() {
-			// Log more information.
+			// 详细日志下输出对象 diff，便于定位变更细节。
 			loggerV.Info("pod got scaled down, but the modification isn't related to the resource requests of the target pod", "pod", klog.KObj(pod), "modifiedPod", klog.KObj(modifiedPod), "diff", diff.Diff(originalPod, modifiedPod))
 		} else {
 			logger.V(5).Info("pod got scaled down, but the modification isn't related to the resource requests of the target pod", "pod", klog.KObj(pod), "modifiedPod", klog.KObj(modifiedPod))
@@ -471,32 +468,31 @@ func (f *Fit) isSchedulableAfterAssignedPodScaleDown(logger klog.Logger, pod *v1
 	return fwk.Queue, nil
 }
 
-// haveAnyEnoughRelevantResourcesDecreased checks whether a scheduled pod's resource request that the target pod also requests got reduced.
+// haveEnoughRelevantResourcesDecreased 检查已调度 Pod 缩容后，目标 Pod 也请求的相关资源是否确有减少。
 func (f *Fit) haveEnoughRelevantResourcesDecreased(targetPod *v1.Pod, originalPod, modifiedPod *v1.Pod) bool {
 	if modifiedPod.Spec.NodeName == "" {
-		// If the update event is for a unscheduled Pod,
-		// it wouldn't make targetPod schedulable.
+		// 未调度 Pod 的更新不占用节点资源，不会让目标 Pod 变得可调度。
 		return false
 	}
 
 	if f.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(targetPod) {
-		// A pod with deferred resize is already bound to a specific node, so changes to other nodes do not affect its schedulability.
+		// 延迟扩容的 Pod 已绑定到特定节点，其他节点的变化不影响其可调度性。
 		if modifiedPod.Spec.NodeName != targetPod.Spec.NodeName {
 			return false
 		}
 	}
 
-	// the other pod was scheduled, so modification or deletion may free up some resources.
+	// 另一个 Pod 已调度到节点上，其修改或删除可能释放资源。
 	originalMaxResourceReq, modifiedMaxResourceReq := &framework.Resource{}, &framework.Resource{}
 	opts := resource.PodResourcesOptions{UseStatusResources: f.enableInPlacePodVerticalScaling, InPlacePodLevelResourcesVerticalScalingEnabled: f.enableInPlacePodLevelResourcesVerticalScaling}
 	originalMaxResourceReq.SetMaxResource(resource.PodRequests(originalPod, opts))
 	modifiedMaxResourceReq.SetMaxResource(resource.PodRequests(modifiedPod, opts))
 
-	// check whether the resource request of the modified pod is less than the original pod.
+	// 逐个检查目标 Pod 请求的资源，判断修改后的请求是否比原来少。
 	podRequests := resource.PodRequests(targetPod, opts)
 	for rName, rValue := range podRequests {
 		if rValue.IsZero() {
-			// We only care about the resources requested by the pod we are trying to schedule.
+			// 只关心待调度 Pod 实际请求的资源。
 			continue
 		}
 		switch rName {
@@ -521,21 +517,21 @@ func (f *Fit) haveEnoughRelevantResourcesDecreased(targetPod *v1.Pod, originalPo
 	return false
 }
 
-// isSchedulableAfterNodeChange is invoked whenever a node added or changed. It checks whether
-// that change could make a previously unschedulable pod schedulable.
+// isSchedulableAfterNodeChange 在节点新增或变更时调用，
+// 检查该变化是否可能让此前不可调度的 Pod 变得可调度。
 func (f *Fit) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalNode, modifiedNode, err := schedutil.As[*v1.Node](oldObj, newObj)
 	if err != nil {
 		return fwk.Queue, err
 	}
 	if f.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
-		// A pod with deferred resize is already bound to a specific node, so changes to other nodes do not affect its schedulability.
+		// 延迟扩容的 Pod 已绑定到特定节点，其他节点的变化不影响其可调度性。
 		if modifiedNode.Name != pod.Spec.NodeName {
 			logger.V(5).Info("node was updated, but it is a different node than the deferred resize pod's node", "pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 			return fwk.QueueSkip, nil
 		}
 	}
-	// Use the DRA manager's extended resource cache for event handlers
+	// 事件处理时使用 DRA manager 的扩展资源缓存。
 	var draManager fwk.SharedDRAManager
 	if f.enableDRAExtendedResource {
 		draManager = f.handle.SharedDRAManager()
@@ -546,17 +542,17 @@ func (f *Fit) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldO
 		EnableDRAExtendedResource: f.enableDRAExtendedResource,
 	}
 
-	// Leaving in the queue, since the pod won't fit into the modified node anyway.
+	// 变更后的节点仍容不下 Pod，无需重新入队。
 	if !isFit(pod, modifiedNode, draManager, opts) {
 		logger.V(5).Info("node was created or updated, but it doesn't have enough resource(s) to accommodate this pod", "pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 		return fwk.QueueSkip, nil
 	}
-	// The pod will fit, so since it's add, unblock scheduling.
+	// 新增节点且能容纳 Pod，解除阻塞、允许重新调度。
 	if originalNode == nil {
 		logger.V(5).Info("node was added and it might fit the pod's resource requests", "pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 		return fwk.Queue, nil
 	}
-	// The pod will fit, but since there was no increase in available resources, the change won't make the pod schedulable.
+	// 节点虽能容纳 Pod，但可用资源未增加，本次变更不会改变调度结论。
 	if !haveAnyRequestedResourcesIncreased(pod, originalNode, modifiedNode, draManager, opts) {
 		logger.V(5).Info("node was updated, but haven't changed the pod's resource requestments fit assessment", "pod", klog.KObj(pod), "node", klog.KObj(modifiedNode))
 		return fwk.QueueSkip, nil
@@ -566,8 +562,8 @@ func (f *Fit) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldO
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterDeviceClassChange is invoked whenever a device class added or changed. It checks whether
-// that change could make a previously unschedulable pod schedulable.
+// isSchedulableAfterDeviceClassEvent 在 DeviceClass 新增或变更时调用，
+// 检查其扩展资源名是否与 Pod 请求匹配，从而判断是否值得重新入队。
 func (f *Fit) isSchedulableAfterDeviceClassEvent(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalClass, modifiedClass, err := schedutil.As[*resourceapi.DeviceClass](oldObj, newObj)
 	if err != nil {
@@ -579,7 +575,7 @@ func (f *Fit) isSchedulableAfterDeviceClassEvent(logger klog.Logger, pod *v1.Pod
 			return fwk.QueueSkip, nil
 		}
 	} else {
-		// only check implicit extended resource name for Add, as device class name does not change during Update.
+		// 只有新增时才检查隐式扩展资源名：Update 不会改变 DeviceClass 的名字。
 		reqs := resource.PodRequests(pod, resource.PodResourcesOptions{})
 		if _, ok := reqs[v1.ResourceName(resourceapi.ResourceDeviceClassPrefix+modifiedClass.Name)]; ok {
 			logger.V(5).Info("device class was added, and may now fit the pod's resource requests", "pod", klog.KObj(pod), "deviceclass", klog.KObj(modifiedClass))
@@ -597,7 +593,7 @@ func (f *Fit) isSchedulableAfterDeviceClassEvent(logger klog.Logger, pod *v1.Pod
 	return fwk.QueueSkip, nil
 }
 
-// haveAnyRequestedResourcesIncreased returns true if any of the resources requested by the pod have increased or if allowed pod number increased.
+// haveAnyRequestedResourcesIncreased 判断变更后的节点是否增加了 Pod 请求的任一资源（或可容纳 Pod 数上限）。
 func haveAnyRequestedResourcesIncreased(pod *v1.Pod, originalNode, modifiedNode *v1.Node, draManager fwk.SharedDRAManager, opts ResourceRequestsOptions) bool {
 	podRequest := computePodResourceRequest(pod, opts)
 	originalNodeInfo := framework.NewNodeInfo()
@@ -623,7 +619,7 @@ func haveAnyRequestedResourcesIncreased(pod *v1.Pod, originalNode, modifiedNode 
 	}
 
 	for rName, rQuant := range podRequest.ScalarResources {
-		// Skip in case request quantity is zero
+		// 请求量为 0 的资源跳过。
 		if rQuant == 0 {
 			continue
 		}
@@ -639,8 +635,8 @@ func haveAnyRequestedResourcesIncreased(pod *v1.Pod, originalNode, modifiedNode 
 	return false
 }
 
-// isFit checks if the pod fits the node. If the node is nil, it returns false.
-// It constructs a fake NodeInfo object for the node and checks if the pod fits the node.
+// isFit 检查 Pod 是否能落到节点上；节点为 nil 时返回 false。
+// 该方法构造一个临时的 NodeInfo 并调用 Fits 完成检查。
 func isFit(pod *v1.Pod, node *v1.Node, draManager fwk.SharedDRAManager, opts ResourceRequestsOptions) bool {
 	if node == nil {
 		return false
@@ -651,9 +647,8 @@ func isFit(pod *v1.Pod, node *v1.Node, draManager fwk.SharedDRAManager, opts Res
 	return len(Fits(pod, nodeInfo, draManager, opts)) == 0
 }
 
-// Filter invoked at the filter extension point.
-// Checks if a node has sufficient resources, such as cpu, memory, gpu, opaque int resources etc to run a pod.
-// It returns a list of insufficient resources, if empty, then the node has all the resources requested by the pod.
+// Filter 在 Filter 扩展点检查节点资源（CPU、内存、GPU、扩展资源等）是否足够运行 Pod。
+// 返回不足资源列表；列表为空表示节点满足 Pod 的全部资源请求。
 func (f *Fit) Filter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	s, err := getPreFilterState(cycleState)
 	if err != nil {
@@ -674,7 +669,7 @@ func (f *Fit) Filter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod
 	insufficientResources := fitsRequest(s, nodeInfo, f.ignoredResources, f.ignoredResourceGroups, draManager, opts, pod)
 
 	if len(insufficientResources) != 0 {
-		// We will keep all failure reasons.
+		// 汇总所有不足资源的原因，便于诊断。
 		failureReasons := make([]string, 0, len(insufficientResources))
 		statusCode := fwk.Unschedulable
 		for i := range insufficientResources {
@@ -691,25 +686,25 @@ func (f *Fit) Filter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod
 	return nil
 }
 
-// InsufficientResource describes what kind of resource limit is hit and caused the pod to not fit the node.
+// InsufficientResource 描述导致 Pod 无法落到节点上的资源瓶颈。
 type InsufficientResource struct {
 	ResourceName v1.ResourceName
-	// We explicitly have a parameter for reason to avoid formatting a message on the fly
-	// for common resources, which is expensive for cluster autoscaler simulations.
+	// 显式保存原因字符串，避免对常见资源在运行时格式化消息——集群自动扩缩容模拟中这很昂贵。
 	Reason    string
 	Requested int64
 	Used      int64
 	Capacity  int64
-	// Unresolvable indicates whether this node could be schedulable for the pod by the preemption,
-	// which is determined by comparing the node's size and the pod's request.
+	// Unresolvable 表示抢占也无法让该节点容纳 Pod，判断依据是节点容量与 Pod 请求量的对比。
 	Unresolvable bool
 }
 
-// Fits checks if node have enough resources to host the pod.
+// Fits 检查节点是否有足够资源容纳 Pod，返回不足资源列表。
 func Fits(pod *v1.Pod, nodeInfo fwk.NodeInfo, draManager fwk.SharedDRAManager, opts ResourceRequestsOptions) []InsufficientResource {
 	return fitsRequest(computePodResourceRequest(pod, opts), nodeInfo, nil, nil, draManager, opts, pod)
 }
 
+// fitsRequest 逐资源维度比较 Pod 请求与节点剩余量，返回所有不足资源；
+// 会跳过用户配置的忽略资源、交由 DRA 处理的资源，并处理原地扩缩容场景下的缓存差异。
 func fitsRequest(podRequest *preFilterState, nodeInfo fwk.NodeInfo, ignoredExtendedResources, ignoredResourceGroups sets.Set[string], draManager fwk.SharedDRAManager, opts ResourceRequestsOptions, pod *v1.Pod) []InsufficientResource {
 	insufficientResources := make([]InsufficientResource, 0, 4)
 
@@ -766,14 +761,13 @@ func fitsRequest(podRequest *preFilterState, nodeInfo fwk.NodeInfo, ignoredExten
 	}
 
 	for rName, rQuant := range deltaScalarResources {
-		// Skip in case request quantity is zero
+		// 请求量为 0 的资源跳过。
 		if rQuant == 0 {
 			continue
 		}
 
 		if v1helper.IsExtendedResourceName(rName) {
-			// If this resource is one of the extended resources that should be ignored, we will skip checking it.
-			// rName is guaranteed to have a slash due to API validation.
+			// 属于忽略列表的扩展资源跳过检查。API 校验保证 rName 一定包含斜杠，可安全拆分前缀。
 			var rNamePrefix string
 			if ignoredResourceGroups.Len() > 0 {
 				rNamePrefix = strings.Split(string(rName), "/")[0]
@@ -801,11 +795,9 @@ func fitsRequest(podRequest *preFilterState, nodeInfo fwk.NodeInfo, ignoredExten
 	return insufficientResources
 }
 
-// adjustDeltasToAccomodateCacheDiscrepancy calculates the resource requests to evaluate
-// for a pod. For an assigned pod, its desired resources are already accounted for in the
-// node cache (max(desired, allocated, actual)), so ideally we only check if the node is
-// overallocated. This function exists to amortize asynchronous discrepancies between the
-// pod info in the scheduling queue and the node snapshot cache.
+// adjustDeltasToAccomodateCacheDiscrepancy 计算用于检查 Pod 的资源增量。
+// 对已分配节点上的 Pod，节点缓存已计入它的期望资源（取 desired、allocated、actual 的最大值），
+// 理论上只需检查节点是否超卖。此函数用于抹平调度队列中的 Pod 信息与节点快照缓存之间的异步差异。
 func adjustDeltasToAccomodateCacheDiscrepancy(opts ResourceRequestsOptions, podRequest *preFilterState, nodeInfo fwk.NodeInfo, pod *v1.Pod) (int64, int64, int64, map[v1.ResourceName]int64) {
 	deltaMilliCPU := podRequest.MilliCPU
 	deltaMemory := podRequest.Memory
@@ -828,10 +820,9 @@ func adjustDeltasToAccomodateCacheDiscrepancy(opts ResourceRequestsOptions, podR
 	}
 
 	cachedRes := cachedPodInfo.CalculateResource().Resource
-	// We take max(0, ...) to prevent negative deltas when podRequest < cachedRes (e.g., during scale-down
-	// or asynchronous cache lag). Allowing a negative delta would improperly reduce the node's requested
-	// usage before the Kubelet has actually freed the resources. If a stale larger cachedRes causes
-	// preemption to fail, eventual cache convergence will emit a scale-down event to wake up the pod.
+	// 用 max(0, ...) 防止 podRequest < cachedRes 时出现负增量（如缩容过程或缓存异步滞后）。
+	// 负增量会在 kubelet 真正释放资源前错误地减少节点已用量；若陈旧的较大 cachedRes 导致抢占失败，
+	// 缓存最终收敛后会发出缩容事件重新唤醒该 Pod。
 	deltaMilliCPU = max(0, podRequest.MilliCPU-cachedRes.GetMilliCPU())
 	deltaMemory = max(0, podRequest.Memory-cachedRes.GetMemory())
 	deltaEphemeralStorage = max(0, podRequest.EphemeralStorage-cachedRes.GetEphemeralStorage())
@@ -846,7 +837,7 @@ func adjustDeltasToAccomodateCacheDiscrepancy(opts ResourceRequestsOptions, podR
 	return deltaMilliCPU, deltaMemory, deltaEphemeralStorage, deltaScalarResources
 }
 
-// Score invoked at the Score extension point.
+// Score 在 Score 扩展点根据节点资源使用率打分。
 func (f *Fit) Score(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	s, err := getPreScoreState(state)
 	if err != nil {
@@ -867,12 +858,12 @@ func (f *Fit) Score(ctx context.Context, state fwk.CycleState, pod *v1.Pod, node
 	return f.score(ctx, pod, nodeInfo, s.podRequests, s.draPreScoreState)
 }
 
-// PlacementScoreExtensions is not used by this plugin.
+// PlacementScoreExtensions 返回 nil：本插件不使用放置打分扩展。
 func (f *Fit) PlacementScoreExtensions() fwk.PlacementScoreExtensions {
 	return nil
 }
 
-// ScorePlacement scores capacity ratio on all nodes in the placement including all assigned pod group pods' resource requests.
+// ScorePlacement 对放置方案中涉及的所有节点按容量比打分，包含该 PodGroup 内已分配 Pod 的资源请求。
 func (f *Fit) ScorePlacement(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, placement *fwk.PodGroupAssignments) (int64, *fwk.Status) {
 	return f.placementScorer.scorePlacement(ctx, podGroup, placement)
 }

@@ -37,6 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// pluginConfigs 是所有默认插件配置的期望值，供默认值测试比对。
 var pluginConfigs = []configv1.PluginConfig{
 	{
 		Name: "DefaultPreemption",
@@ -130,6 +131,7 @@ var pluginConfigs = []configv1.PluginConfig{
 	},
 }
 
+// TestSchedulerDefaults 校验 KubeSchedulerConfiguration 各字段是否被正确赋予默认值。
 func TestSchedulerDefaults(t *testing.T) {
 	enable := true
 	unknownPluginConfigs := append([]configv1.PluginConfig{}, pluginConfigs...)
@@ -722,6 +724,7 @@ func TestSchedulerDefaults(t *testing.T) {
 	}
 }
 
+// TestPluginArgsDefaults 校验各插件参数是否被正确赋予默认值。
 func TestPluginArgsDefaults(t *testing.T) {
 	tests := []struct {
 		name     string

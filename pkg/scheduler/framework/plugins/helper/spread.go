@@ -27,13 +27,18 @@ import (
 )
 
 var (
+	// rcKind、rsKind、ssKind 是支持推算选择器的控制器类型。
+	// 只识别这三种内置工作负载，其他控制器一律忽略。
 	rcKind = v1.SchemeGroupVersion.WithKind("ReplicationController")
 	rsKind = appsv1.SchemeGroupVersion.WithKind("ReplicaSet")
 	ssKind = appsv1.SchemeGroupVersion.WithKind("StatefulSet")
 )
 
-// DefaultSelector returns a selector deduced from the Services, Replication
-// Controllers, Replica Sets, and Stateful Sets matching the given pod.
+// DefaultSelector 根据与给定 Pod 匹配的 Service、ReplicationController、
+// ReplicaSet 和 StatefulSet 推导出一个标签选择器。
+//
+// 推导结果比 Pod 自身标签更严格：选择器用于统计"同一工作负载的 Pod"，
+// 因此要尽量缩小范围，避免把无关 Pod 算进亲和性计算。
 func DefaultSelector(
 	pod *v1.Pod,
 	sl corelisters.ServiceLister,
@@ -42,8 +47,8 @@ func DefaultSelector(
 	ssl appslisters.StatefulSetLister,
 ) labels.Selector {
 	labelSet := make(labels.Set)
-	// Since services, RCs, RSs and SSs match the pod, they won't have conflicting
-	// labels. Merging is safe.
+	// 这些 Service/RC/RS/SS 都能匹配该 Pod，说明其选择器与该 Pod 标签一致，
+	// 因此合并不会引入冲突的标签要求。
 
 	if services, err := GetPodServices(sl, pod); err == nil {
 		for _, service := range services {
@@ -86,13 +91,13 @@ func DefaultSelector(
 			}
 		}
 	default:
-		// Not owned by a supported controller.
+		// 不支持的控制器类型，保持从 Service 推导出的选择器即可
 	}
 
 	return selector
 }
 
-// GetPodServices gets the services that have the selector that match the labels on the given pod.
+// GetPodServices 返回所有选择器能匹配给定 Pod 标签的 Service。
 func GetPodServices(sl corelisters.ServiceLister, pod *v1.Pod) ([]*v1.Service, error) {
 	allServices, err := sl.Services(pod.Namespace).List(labels.Everything())
 	if err != nil {
@@ -103,7 +108,7 @@ func GetPodServices(sl corelisters.ServiceLister, pod *v1.Pod) ([]*v1.Service, e
 	for i := range allServices {
 		service := allServices[i]
 		if service.Spec.Selector == nil {
-			// services with nil selectors match nothing, not everything.
+			// 空选择器不匹配任何 Pod（而非匹配所有），故跳过
 			continue
 		}
 		selector := labels.Set(service.Spec.Selector).AsSelectorPreValidated()

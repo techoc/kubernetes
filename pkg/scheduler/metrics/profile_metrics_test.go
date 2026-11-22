@@ -24,6 +24,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRecordGeneratedPlacements 验证 RecordGeneratedPlacements 按 profile 累加候选放置计数。
 func TestRecordGeneratedPlacements(t *testing.T) {
 	InitMetrics()
 	registry := metrics.NewKubeRegistry()
@@ -44,6 +45,7 @@ func TestRecordGeneratedPlacements(t *testing.T) {
 	}
 }
 
+// TestObservePlacementEvaluation 验证放置评估的计数器与耗时直方图按结果和 profile 正确记录。
 func TestObservePlacementEvaluation(t *testing.T) {
 	InitMetrics()
 	registry := metrics.NewKubeRegistry()
@@ -68,8 +70,8 @@ func TestObservePlacementEvaluation(t *testing.T) {
 		t.Errorf("unexpected placement_evaluations_total metric output:\n%v", err)
 	}
 
-	// The duration histogram is recorded alongside the counter, so its sample
-	// count per profile/result must match the number of evaluations recorded above.
+	// 耗时直方图与计数器是同步记录的，所以每个 profile/结果组合的样本数
+	// 必须与上面记录的评估次数一致。
 	for _, tc := range []struct {
 		profile   string
 		result    string

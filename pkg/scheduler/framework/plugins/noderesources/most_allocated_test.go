@@ -35,6 +35,7 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// TestMostAllocatedScoringStrategy 验证 MostAllocated 策略的打分结果与配置校验。
 func TestMostAllocatedScoringStrategy(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -47,14 +48,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 		wantStatusCode fwk.Code
 	}{
 		{
-			// Node1 scores (used resources) on 0-MaxNodeScore scale
-			// CPU Score: (0 * MaxNodeScore)  / 4000 = 0
-			// Memory Score: (0 * MaxNodeScore) / 10000 = 0
-			// Node1 Score: (0 + 0) / 2 = 0
-			// Node2 scores (used resources) on 0-MaxNodeScore scale
-			// CPU Score: (0 * MaxNodeScore) / 4000 = 0
-			// Memory Score: (0 * MaxNodeScore) / 10000 = 0
-			// Node2 Score: (0 + 0) / 2 = 0
+			// 以下为 0~MaxNodeScore 刻度上的分数（已用资源），node1：
+			// CPU 分数：(0 * MaxNodeScore)  / 4000 = 0
+			// 内存分数：(0 * MaxNodeScore) / 10000 = 0
+			// node1 分数：(0 + 0) / 2 = 0
+			// node2（已用资源）：
+			// CPU 分数：(0 * MaxNodeScore) / 4000 = 0
+			// 内存分数：(0 * MaxNodeScore) / 10000 = 0
+			// node2 分数：(0 + 0) / 2 = 0
 			name:         "nothing scheduled, nothing requested",
 			requestedPod: st.MakePod().Obj(),
 			nodes: []*v1.Node{
@@ -66,14 +67,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
-			// CPU Score: (3000 * MaxNodeScore) / 4000 = 75
-			// Memory Score: (5000 * MaxNodeScore) / 10000 = 50
-			// Node1 Score: (75 + 50) / 2 = 62
-			// Node2 scores on 0-MaxNodeScore scale
-			// CPU Score: (3000 * MaxNodeScore) / 6000 = 50
-			// Memory Score: (5000 * MaxNodeScore) / 10000 = 50
-			// Node2 Score: (50 + 50) / 2 = 50
+			// node1（0~MaxNodeScore 刻度）：
+			// CPU 分数：(3000 * MaxNodeScore) / 4000 = 75
+			// 内存分数：(5000 * MaxNodeScore) / 10000 = 50
+			// node1 分数：(75 + 50) / 2 = 62
+			// node2（0~MaxNodeScore 刻度）：
+			// CPU 分数：(3000 * MaxNodeScore) / 6000 = 50
+			// 内存分数：(5000 * MaxNodeScore) / 10000 = 50
+			// node2 分数：(50 + 50) / 2 = 50
 			name: "nothing scheduled, resources requested, differently sized nodes",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -103,14 +104,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			wantStatusCode: fwk.Error,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
-			// CPU Score: (6000 * MaxNodeScore) / 10000 = 60
-			// Memory Score: (0 * MaxNodeScore) / 20000 = 0
-			// Node1 Score: (60 + 0) / 2 = 30
-			// Node2 scores on 0-MaxNodeScore scale
-			// CPU Score: (6000 * MaxNodeScore) / 10000 = 60
-			// Memory Score: (5000 * MaxNodeScore) / 20000 = 25
-			// Node2 Score: (60 + 25) / 2 = 42
+			// node1（0~MaxNodeScore 刻度）：
+			// CPU 分数：(6000 * MaxNodeScore) / 10000 = 60
+			// 内存分数：(0 * MaxNodeScore) / 20000 = 0
+			// node1 分数：(60 + 0) / 2 = 30
+			// node2（0~MaxNodeScore 刻度）：
+			// CPU 分数：(6000 * MaxNodeScore) / 10000 = 60
+			// 内存分数：(5000 * MaxNodeScore) / 20000 = 25
+			// node2 分数：(60 + 25) / 2 = 42
 			name:         "no resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().Obj(),
 			nodes: []*v1.Node{
@@ -127,14 +128,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
-			// CPU Score: (6000 * MaxNodeScore) / 10000 = 60
-			// Memory Score: (5000 * MaxNodeScore) / 20000 = 25
-			// Node1 Score: (60 + 25) / 2 = 42
-			// Node2 scores on 0-MaxNodeScore scale
-			// CPU Score: (6000 * MaxNodeScore) / 10000 = 60
-			// Memory Score: (10000 * MaxNodeScore) / 20000 = 50
-			// Node2 Score: (60 + 50) / 2 = 55
+			// node1（0~MaxNodeScore 刻度）：
+			// CPU 分数：(6000 * MaxNodeScore) / 10000 = 60
+			// 内存分数：(5000 * MaxNodeScore) / 20000 = 25
+			// node1 分数：(60 + 25) / 2 = 42
+			// node2（0~MaxNodeScore 刻度）：
+			// CPU 分数：(6000 * MaxNodeScore) / 10000 = 60
+			// 内存分数：(10000 * MaxNodeScore) / 20000 = 50
+			// node2 分数：(60 + 50) / 2 = 55
 			name: "resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -152,14 +153,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
-			// CPU Score: 5000 * MaxNodeScore / 5000 return 100
-			// Memory Score: (9000 * MaxNodeScore) / 10000 = 90
-			// Node1 Score: (100 + 90) / 2 = 95
-			// Node2 scores on 0-MaxNodeScore scale
-			// CPU Score: (5000 * MaxNodeScore) / 10000 = 50
-			// Memory Score: 9000 * MaxNodeScore / 9000 return 100
-			// Node2 Score: (50 + 100) / 2 = 75
+			// node1（0~MaxNodeScore 刻度）：
+			// CPU 分数：5000 * MaxNodeScore / 5000，返回 100
+			// 内存分数：(9000 * MaxNodeScore) / 10000 = 90
+			// node1 分数：(100 + 90) / 2 = 95
+			// node2（0~MaxNodeScore 刻度）：
+			// CPU 分数：(5000 * MaxNodeScore) / 10000 = 50
+			// 内存分数：9000 * MaxNodeScore / 9000 return 100
+			// node2 分数：(50 + 100) / 2 = 75
 			name: "resources requested equal node capacity",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "2000", "memory": "4000"}).
@@ -174,12 +175,12 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// CPU Score: (3000 *100) / 4000 = 75
-			// Memory Score: (5000 *100) / 10000 = 50
-			// Node1 Score: (75 * 1 + 50 * 2) / (1 + 2) = 58
-			// CPU Score: (3000 *100) / 6000 = 50
-			// Memory Score: (5000 *100) / 10000 = 50
-			// Node2 Score: (50 * 1 + 50 * 2) / (1 + 2) = 50
+			// CPU 分数：(3000 *100) / 4000 = 75
+			// 内存分数：(5000 *100) / 10000 = 50
+			// node1 分数：(75 * 1 + 50 * 2) / (1 + 2) = 58
+			// CPU 分数：(3000 *100) / 6000 = 50
+			// 内存分数：(5000 *100) / 10000 = 50
+			// node2 分数：(50 * 1 + 50 * 2) / (1 + 2) = 50
 			name: "nothing scheduled, resources requested, differently sized nodes",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -197,14 +198,14 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
-			// CPU Fraction: 300 / 250 = 100%
-			// Memory Fraction: 600 / 1000 = 60%
-			// Node1 Score: (100 + 60) / 2 = 80
-			// Node2 scores on 0-MaxNodeScore scale
-			// CPU Fraction: 100 / 250 = 40%
-			// Memory Fraction: 200 / 1000 = 20%
-			// Node2 Score: (20 + 40) / 2 = 30
+			// node1（0~MaxNodeScore 刻度）：
+			// CPU 占比：300 / 250 = 100%
+			// 内存占比：600 / 1000 = 60%
+			// node1 分数：(100 + 60) / 2 = 80
+			// node2（0~MaxNodeScore 刻度）：
+			// CPU 占比：100 / 250 = 40%
+			// 内存占比：200 / 1000 = 20%
+			// node2 分数：(20 + 40) / 2 = 30
 			name:         "no resources requested, pods scheduled, nonzero request for resource",
 			requestedPod: st.MakePod().Container("container").Obj(),
 			nodes: []*v1.Node{
@@ -219,7 +220,7 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// resource with negative weight is not allowed
+			// 资源权重不允许为负。
 			name: "resource with negative weight",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -240,7 +241,7 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// resource with zero weight is not allowed
+			// 资源权重不允许为零。
 			name: "resource with zero weight",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -261,7 +262,7 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// resource weight should be less than MaxNodeScore
+			// 资源权重必须小于 MaxNodeScore。
 			name: "resource weight larger than MaxNodeScore",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -281,10 +282,10 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// Bypass extended resource if the pod does not request.
-			// For both nodes: cpuScore and memScore are 50
-			// Given that extended resource score are intentionally bypassed,
-			// the final scores are:
+			// Pod 未请求扩展资源时跳过该资源，不计入打分。
+			// 两个节点的 CPU 与内存分数均为 50。
+			// 由于扩展资源分数被有意跳过，
+			// 最终分数为：
 			// - node1: (50 + 50) / 2 = 50
 			// - node2: (50 + 50) / 2 = 50
 			name: "bypass extended resource if the pod does not request",
@@ -301,12 +302,12 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 50}, {Name: "node2", Score: 50}},
 		},
 		{
-			// Honor extended resource if the pod requests.
-			// For both nodes: cpuScore and memScore are 50.
-			// In terms of extended resource score:
+			// Pod 请求了扩展资源时，需将其纳入打分。
+			// 两个节点的 CPU 与内存分数均为 50。
+			// 扩展资源分数：
 			// - node1 get: 2 / 4 * 100 = 50
 			// - node2 get: 2 / 10 * 100 = 20
-			// So the final scores are:
+			// 最终分数为：
 			// - node1: (50 + 50 + 50) / 3 = 50
 			// - node2: (50 + 50 + 20) / 3 = 40
 			name: "honor extended resource if the pod request",
@@ -322,11 +323,11 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			expectedScores: []fwk.NodeScore{{Name: "node1", Score: 50}, {Name: "node2", Score: 40}},
 		},
 		{
-			// If the node doesn't have a resource
-			// CPU Score: (3000 * 100) / 6000 = 50
-			// Memory Score: (4000 * 100) / 10000 = 40
-			// Node1 Score: (50 * 1 + 40 * 1) / (1 + 1) = 45
-			// Node2 Score: (50 * 1 + 40 * 1) / (1 + 1) = 45
+			// 节点不具备某项资源时，只在存在的资源上计算。
+			// CPU 分数：(3000 * 100) / 6000 = 50
+			// 内存分数：(4000 * 100) / 10000 = 40
+			// node1 分数：(50 * 1 + 40 * 1) / (1 + 1) = 45
+			// node2 分数：(50 * 1 + 40 * 1) / (1 + 1) = 45
 			name: "if the node doesn't have a resource",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "3000", "memory": "4000"}).

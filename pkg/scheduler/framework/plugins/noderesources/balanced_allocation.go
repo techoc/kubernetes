@@ -32,8 +32,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// BalancedAllocation is a score plugin that calculates the difference between the cpu and memory fraction
-// of capacity, and prioritizes the host based on how close the two metrics are to each other.
+// BalancedAllocation 是打分插件，计算 CPU 与内存占容量比例之间的差异，
+// 并优先选择这两个指标更接近的节点。
 type BalancedAllocation struct {
 	handle fwk.Handle
 	resourceAllocationScorer
@@ -43,44 +43,43 @@ var _ fwk.PreScorePlugin = &BalancedAllocation{}
 var _ fwk.ScorePlugin = &BalancedAllocation{}
 var _ fwk.SignPlugin = &BalancedAllocation{}
 
-// BalancedAllocationName is the name of the plugin used in the plugin registry and configurations.
+// BalancedAllocationName 是插件在插件注册表与配置中使用的名称。
 const (
 	BalancedAllocationName = names.NodeResourcesBalancedAllocation
 
-	// balancedAllocationPreScoreStateKey is the key in CycleState to NodeResourcesBalancedAllocation pre-computed data for Scoring.
+	// balancedAllocationPreScoreStateKey 是 CycleState 中存放
+	// NodeResourcesBalancedAllocation 打分预计算数据的键。
 	balancedAllocationPreScoreStateKey = "PreScore" + BalancedAllocationName
 )
 
-// draPreScoreState holds the pre-computed data for DRA extended resources scoring.
+// draPreScoreState 保存 DRA 扩展资源打分所需的预计算数据。
 type draPreScoreState struct {
-	// allocatedState holds the DRA allocated state for DRA extended resources scoring.
+	// allocatedState 保存 DRA 扩展资源打分所需的 DRA 分配状态。
 	allocatedState *structured.AllocatedState
-	// resourceSlices holds the list of resource slices for DRA extended resource scoring.
+	// resourceSlices 保存 DRA 扩展资源打分所需的资源分片列表。
 	resourceSlices []*resourceapi.ResourceSlice
 }
 
-// balancedAllocationPreScoreState computed at PreScore and used at Score.
+// balancedAllocationPreScoreState 在 PreScore 阶段计算，供 Score 阶段使用。
 type balancedAllocationPreScoreState struct {
-	// podRequests have the same order of the resources defined in NodeResourcesFitArgs.Resources,
-	// same for other place we store a list like that.
+	// podRequests 的元素顺序与 NodeResourcesFitArgs.Resources 中定义的资源顺序一致，
+	// 其他保存此类列表的地方也是如此。
 	podRequests []int64
-	// DRA extended resource scoring state.
+	// DRA 扩展资源打分状态。
 	*draPreScoreState
 }
 
-// Clone implements the mandatory Clone interface. We don't really copy the data since
-// there is no need for that.
+// Clone 实现必需的 Clone 接口。这里无需复制数据，直接返回自身即可。
 func (s *balancedAllocationPreScoreState) Clone() fwk.StateData {
 	return s
 }
 
-// PreScore calculates incoming pod's resource requests and writes them to the cycle state used.
+// PreScore 计算入站 Pod 的资源请求，并写入本次调度周期的状态供后续使用。
 func (ba *BalancedAllocation) PreScore(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) *fwk.Status {
 	podRequests := ba.calculatePodResourceRequestList(pod, ba.resources)
 	if ba.isBestEffortPod(podRequests) {
-		// Skip BalancedAllocation scoring for best-effort pods to
-		// prevent a large number of pods from being scheduled to the same node.
-		// See https://github.com/kubernetes/kubernetes/issues/129138 for details.
+		// BestEffort Pod 没有资源请求，若参与均衡打分会把大量 Pod 引向同一节点。
+		// 详见 https://github.com/kubernetes/kubernetes/issues/129138。
 		return fwk.NewStatus(fwk.Skip)
 	}
 	state := &balancedAllocationPreScoreState{
@@ -99,6 +98,7 @@ func (ba *BalancedAllocation) PreScore(ctx context.Context, cycleState fwk.Cycle
 	return nil
 }
 
+// getBalancedAllocationPreScoreState 从调度周期状态中取出均衡打分的预计算结果。
 func getBalancedAllocationPreScoreState(cycleState fwk.CycleState) (*balancedAllocationPreScoreState, error) {
 	c, err := cycleState.Read(balancedAllocationPreScoreStateKey)
 	if err != nil {
@@ -112,12 +112,12 @@ func getBalancedAllocationPreScoreState(cycleState fwk.CycleState) (*balancedAll
 	return s, nil
 }
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (ba *BalancedAllocation) Name() string {
 	return BalancedAllocationName
 }
 
-// Filtering and scoring based on the container resources and overheads.
+// SignPod 根据容器资源及开销生成 Pod 签名片段。
 func (pl *BalancedAllocation) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	opts := ResourceRequestsOptions{
 		EnablePodLevelResources:   pl.enablePodLevelResources,
@@ -126,7 +126,7 @@ func (pl *BalancedAllocation) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.S
 	if pl.enableDRAExtendedResource {
 		podRequest := computePodResourceRequest(pod, opts)
 		for rName, rQuant := range podRequest.ScalarResources {
-			// Skip in case request quantity is zero
+			// 请求量为 0 的资源不影响均衡性，无需检查是否需要交给 DRA 处理。
 			if rQuant == 0 {
 				continue
 			}
@@ -142,10 +142,11 @@ func (pl *BalancedAllocation) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.S
 	}, nil
 }
 
-// Score invoked at the score extension point.
+// Score 在 Score 扩展点调用，为节点计算均衡打分。
 func (ba *BalancedAllocation) Score(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	s, err := getBalancedAllocationPreScoreState(state)
 	if err != nil {
+		// PreScore 未写入状态时在此兜底重新计算，避免插件在未启用 PreScore 的路径上失效。
 		s = &balancedAllocationPreScoreState{podRequests: ba.calculatePodResourceRequestList(pod, ba.resources)}
 		if ba.isBestEffortPod(s.podRequests) {
 			return 0, nil
@@ -161,20 +162,20 @@ func (ba *BalancedAllocation) Score(ctx context.Context, state fwk.CycleState, p
 		}
 	}
 
-	// ba.score favors nodes with balanced resource usage rate.
-	// It calculates the standard deviation for those resources and prioritizes the node based on how close the usage of those resources is to each other.
-	// Detail: score = (1 - std) * MaxNodeScore, where std is calculated by the root square of Σ((fraction(i)-mean)^2)/len(resources)
-	// The algorithm is partly inspired by:
+	// ba.score 偏好资源使用率均衡的节点：计算各资源使用率的标准差，
+	// 使用率越接近得分越高。公式为 score = (1 - std) * MaxNodeScore，
+	// 其中 std = √Σ((fraction(i)-mean)^2)/len(resources)。
+	// 算法部分借鉴了：
 	// "Wei Huang et al. An Energy Efficient Virtual Machine Placement Algorithm with Balanced Resource Utilization"
 	return ba.score(ctx, pod, nodeInfo, s.podRequests, s.draPreScoreState)
 }
 
-// ScoreExtensions of the Score plugin.
+// ScoreExtensions 返回 Score 插件的扩展接口；本插件不需要扩展，返回 nil。
 func (ba *BalancedAllocation) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
-// NewBalancedAllocation initializes a new plugin and returns it.
+// NewBalancedAllocation 校验参数并初始化一个新的均衡分配插件。
 func NewBalancedAllocation(_ context.Context, baArgs runtime.Object, h fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	args, ok := baArgs.(*config.NodeResourcesBalancedAllocationArgs)
 	if !ok {
@@ -201,30 +202,29 @@ func NewBalancedAllocation(_ context.Context, baArgs runtime.Object, h fwk.Handl
 	}, nil
 }
 
+// balancedResourceScorer 根据加入待调度 Pod 前后节点均衡度的改善程度打分。
 func balancedResourceScorer(requested, allocated, allocatable []int64) int64 {
-	// Compute the score for the node with pending pod requests
+	// 计算加入待调度 Pod 请求后节点的得分。
 	scoreWithPod := balancedResourceScore(requested, allocatable)
-	// Compute the score for the node without pending pod requests
+	// 计算未加入待调度 Pod 请求时节点的得分。
 	scoreWithoutPod := balancedResourceScore(allocated, allocatable)
-	// Score based on the improvement to the node balance (before vs after adding the pod).
-	// Scores with/without pod are in range [MaxNodeScore/2, MaxNodeScore].
-	// Therefore, their difference will be in range [-MaxNodeScore/2, MaxNodeScore/2].
-	// This operation brings the range back to [MaxNodeScore/2, MaxNodeScore]
-	// to be closer to the original implementation that only considered the score after adding the pod.
-	// If the difference to the balance is small, the score will be around 75.
-	// If the balance is improved, the score will move towards 100.
-	// If the balance is decreased, the score will move towards 50.
+	// 用加入前后得分之差衡量均衡性的变化。两种得分都在 [MaxNodeScore/2, MaxNodeScore] 区间，
+	// 差值落在 [-MaxNodeScore/2, MaxNodeScore/2]，这里把结果平移回 [MaxNodeScore/2, MaxNodeScore]，
+	// 以贴近只考虑加入 Pod 后得分的旧实现：变化小约为 75，均衡改善趋近 100，恶化趋近 50。
 	return fwk.MaxNodeScore/2 + (fwk.MaxNodeScore/2+scoreWithPod-scoreWithoutPod)/2
 }
 
+// balancedResourceScore 根据各资源请求占比的标准差计算节点均衡得分。
 func balancedResourceScore(requested, allocatable []int64) int64 {
 	var resourceToFractions []float64
 	var totalFraction float64
 	for i := range requested {
+		// 无可分配容量的资源无法计算占比，跳过以免影响均衡度判断。
 		if allocatable[i] == 0 {
 			continue
 		}
 		fraction := float64(requested[i]) / float64(allocatable[i])
+		// 占比封顶为 1，避免超额请求放大标准差。
 		if fraction > 1 {
 			fraction = 1
 		}
@@ -234,9 +234,9 @@ func balancedResourceScore(requested, allocatable []int64) int64 {
 
 	std := 0.0
 
-	// For most cases, resources are limited to cpu and memory, the std could be simplified to std := (fraction1-fraction2)/2
-	// len(fractions) > 2: calculate std based on the well-known formula - root square of Σ((fraction(i)-mean)^2)/len(fractions)
-	// Otherwise, set the std to zero is enough.
+	// 常见情况下只有 CPU 和内存两种资源，标准差可简化为 (fraction1-fraction2)/2；
+	// 多于两种时套用标准公式 √(Σ((fraction(i)-mean)^2)/len(fractions))；
+	// 其他情况（0 或 1 种资源）无差异可言，标准差置 0 即可。
 	if len(resourceToFractions) == 2 {
 		std = math.Abs((resourceToFractions[0] - resourceToFractions[1]) / 2)
 	} else if len(resourceToFractions) > 2 {
@@ -248,7 +248,6 @@ func balancedResourceScore(requested, allocatable []int64) int64 {
 		std = math.Sqrt(sum / float64(len(resourceToFractions)))
 	}
 
-	// STD (standard deviation) is always a positive value. 1-deviation lets the score to be higher for node which has least deviation and
-	// multiplying it with `MaxNodeScore` provides the scaling factor needed.
+	// 标准差非负，1-std 使偏差最小的节点得分最高，再乘 MaxNodeScore 完成分数缩放。
 	return int64((1 - std) * float64(fwk.MaxNodeScore))
 }

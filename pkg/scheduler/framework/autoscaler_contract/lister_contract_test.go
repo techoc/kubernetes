@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file helps to detect whether we changed the interface of Listers.
-// This is important for downstream projects who import the Listers to not
-// breaking their codes.
+// 本文件用于检测 Listers 的接口是否发生变化。
+// 这对于导入这些 Listers 的下游项目很重要，避免破坏它们的代码。
 
 package contract
 
@@ -46,6 +45,7 @@ var _ fwk.ResourceClaimTracker = &resourceClaimTrackerContract{}
 var _ fwk.DeviceClassResolver = &deviceClassResolverContract{}
 var _ fwk.SharedDRAManager = &sharedDRAManagerContract{}
 
+// nodeInfoListerContract 用于锁定 fwk.NodeInfoLister 接口的方法签名。
 type nodeInfoListerContract struct{}
 
 func (c *nodeInfoListerContract) List() ([]fwk.NodeInfo, error) {
@@ -68,12 +68,14 @@ func (c *nodeInfoListerContract) Get(_ string) (fwk.NodeInfo, error) {
 	return nil, nil
 }
 
+// storageInfoListerContract 用于锁定 fwk.StorageInfoLister 接口的方法签名。
 type storageInfoListerContract struct{}
 
 func (c *storageInfoListerContract) IsPVCUsedByPods(_ string) bool {
 	return false
 }
 
+// shareListerContract 用于锁定 fwk.SharedLister 接口的方法签名。
 type shareListerContract struct{}
 
 func (c *shareListerContract) NodeInfos() fwk.NodeInfoLister {
@@ -100,18 +102,21 @@ func (c *shareListerContract) CompositePodGroups() fwk.CompositePodGroupLister {
 	return nil
 }
 
+// podGroupListerContract 用于锁定 fwk.PodGroupLister 接口的方法签名。
 type podGroupListerContract struct{}
 
 func (c *podGroupListerContract) Get(_ string, _ string) (*schedulingapi.PodGroup, error) {
 	return nil, nil
 }
 
+// podGroupStateListerContract 用于锁定 fwk.PodGroupStateLister 接口的方法签名。
 type podGroupStateListerContract struct{}
 
 func (c *podGroupStateListerContract) Get(_ string, _ string) (fwk.PodGroupState, error) {
 	return nil, nil
 }
 
+// podGroupStateContract 用于锁定 fwk.PodGroupState 接口的方法签名。
 type podGroupStateContract struct{}
 
 func (c *podGroupStateContract) AllPods() sets.Set[types.UID] {
@@ -142,30 +147,35 @@ func (c *podGroupStateContract) ScheduledPods() []*v1.Pod {
 	return nil
 }
 
+// compositePodGroupListerContract 用于锁定 fwk.CompositePodGroupLister 接口的方法签名。
 type compositePodGroupListerContract struct{}
 
 func (c *compositePodGroupListerContract) Get(_ string, _ string) (*schedulingv1alpha3.CompositePodGroup, error) {
 	return nil, nil
 }
 
+// compositePodGroupStateListerContract 用于锁定 fwk.CompositePodGroupStateLister 接口的方法签名。
 type compositePodGroupStateListerContract struct{}
 
 func (c *compositePodGroupStateListerContract) Get(_ string, _ string) (fwk.CompositePodGroupState, error) {
 	return nil, nil
 }
 
+// compositePodGroupStateContract 用于锁定 fwk.CompositePodGroupState 接口的方法签名。
 type compositePodGroupStateContract struct{}
 
 func (c *compositePodGroupStateContract) GetChildren() []fwk.EntityKey {
 	return nil
 }
 
+// resourceSliceListerContract 用于锁定 fwk.ResourceSliceLister 接口的方法签名。
 type resourceSliceListerContract struct{}
 
 func (c *resourceSliceListerContract) ListWithDeviceTaintRules() ([]*resourceapi.ResourceSlice, error) {
 	return nil, nil
 }
 
+// deviceClassListerContract 用于锁定 fwk.DeviceClassLister 接口的方法签名。
 type deviceClassListerContract struct{}
 
 func (c *deviceClassListerContract) List() ([]*resourceapi.DeviceClass, error) {
@@ -176,6 +186,7 @@ func (c *deviceClassListerContract) Get(_ string) (*resourceapi.DeviceClass, err
 	return nil, nil
 }
 
+// resourceClaimTrackerContract 用于锁定 fwk.ResourceClaimTracker 接口的方法签名。
 type resourceClaimTrackerContract struct{}
 
 func (r *resourceClaimTrackerContract) List() ([]*resourceapi.ResourceClaim, error) {
@@ -213,6 +224,7 @@ func (r *resourceClaimTrackerContract) AssumeClaimAfterAPICall(_ *resourceapi.Re
 func (r *resourceClaimTrackerContract) AssumedClaimRestore(_, _ string) {
 }
 
+// sharedDRAManagerContract 用于锁定 fwk.SharedDRAManager 接口的方法签名。
 type sharedDRAManagerContract struct{}
 
 func (s *sharedDRAManagerContract) ResourceClaims() fwk.ResourceClaimTracker {
@@ -231,6 +243,7 @@ func (s *sharedDRAManagerContract) DeviceClassResolver() fwk.DeviceClassResolver
 	return nil
 }
 
+// deviceClassResolverContract 用于锁定 fwk.DeviceClassResolver 接口的方法签名。
 type deviceClassResolverContract struct{}
 
 func (d *deviceClassResolverContract) GetDeviceClass(_ v1.ResourceName) *resourceapi.DeviceClass {

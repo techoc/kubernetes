@@ -22,8 +22,9 @@ import (
 	"testing"
 )
 
+// checkLatency 在 Windows 上不检查延迟值：
+// Windows 的 time.Now() 精度较低，连续两次调用可能得到相同时间戳，
+// 导致延迟指标为 0（SinceInSeconds 返回 0），因此此处不做断言。
+// See: https://github.com/golang/go/issues/8687
 func checkLatency(t *testing.T, value float64) {
-	// On Windows, time.Now() is not as precise, 2 consecutive calls may return the same timestamp,
-	// thus, the latency metric may be 0 (SinceInSeconds will return 0).
-	// See: https://github.com/golang/go/issues/8687
 }

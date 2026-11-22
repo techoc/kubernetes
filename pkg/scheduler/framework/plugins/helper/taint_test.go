@@ -22,7 +22,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// TestDoNotScheduleTaintsFilterFunc 验证过滤器只保留阻止调度的污点。
+// NoSchedule 和 NoExecute 必须保留，PreferNoSchedule 只是软约束应被过滤掉。
 func TestDoNotScheduleTaintsFilterFunc(t *testing.T) {
+	// 每种 effect 各构造一个污点，expected 表示是否应被过滤器接纳。
 	tests := []struct {
 		name     string
 		taint    *v1.Taint
@@ -51,8 +54,10 @@ func TestDoNotScheduleTaintsFilterFunc(t *testing.T) {
 		},
 	}
 
+	// 取一次过滤器即可，它不是每个用例都需要重建的无状态函数。
 	filterPredicate := DoNotScheduleTaintsFilterFunc()
 
+	// 固化切片下标，避免子闭包捕获循环变量导致串用例。
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {

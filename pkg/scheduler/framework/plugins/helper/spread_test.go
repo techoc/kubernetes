@@ -32,8 +32,10 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestGetPodServices 验证 GetPodServices 只返回与 Pod 标签匹配的 Service。
 func TestGetPodServices(t *testing.T) {
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
+	// 构造三个 selector 各不相同的 Service 放入 fake informer。
 	var services []*v1.Service
 	for i := 0; i < 3; i++ {
 		service := &v1.Service{
@@ -50,6 +52,7 @@ func TestGetPodServices(t *testing.T) {
 		services = append(services, service)
 		fakeInformerFactory.Core().V1().Services().Informer().GetStore().Add(service)
 	}
+	// 前三个 Pod 的标签分别匹配一个 Service，后两个没有匹配项。
 	var pods []*v1.Pod
 	for i := 0; i < 5; i++ {
 		pod := st.MakePod().Name(fmt.Sprintf("test-pod-%d", i)).
@@ -103,6 +106,7 @@ func TestGetPodServices(t *testing.T) {
 	}
 }
 
+// TestDefaultSelector 验证默认选择器会合并 Service 与各类 OwnerReference 的标签。
 func TestDefaultSelector(t *testing.T) {
 	const (
 		namespace                 = "test"
@@ -127,9 +131,8 @@ func TestDefaultSelector(t *testing.T) {
 
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 
-	// Create fake service
+	// 以下辅助函数把测试所需的各类资源写入 fake informer。
 	addFakeService := func() error {
-		// Create fake service
 		service := &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      serviceName,
@@ -144,7 +147,7 @@ func TestDefaultSelector(t *testing.T) {
 		return fakeInformerFactory.Core().V1().Services().Informer().GetStore().Add(service)
 	}
 
-	// Create fake ReplicaSet
+	// 构造带标签选择器的 ReplicaSet。
 	addFakeReplicaSet := func() error {
 		replicaSet := &appsv1.ReplicaSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -162,7 +165,7 @@ func TestDefaultSelector(t *testing.T) {
 		return fakeInformerFactory.Apps().V1().ReplicaSets().Informer().GetStore().Add(replicaSet)
 	}
 
-	// Create fake ReplicationController
+	// 构造带标签选择器的 ReplicationController。
 	addFakeReplicationController := func() error {
 		replicationController := &v1.ReplicationController{
 			ObjectMeta: metav1.ObjectMeta{
@@ -178,7 +181,7 @@ func TestDefaultSelector(t *testing.T) {
 		return fakeInformerFactory.Core().V1().ReplicationControllers().Informer().GetStore().Add(replicationController)
 	}
 
-	// Create fake StatefulSet
+	// 构造带标签选择器的 StatefulSet。
 	addFakeStatefulSet := func() error {
 		statefulSet := &appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -245,7 +248,7 @@ func TestDefaultSelector(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Add fake resources if needed.
+			// 按需注入测试用例依赖的 fake 资源。
 			if test.addFakeResourceList != nil {
 				for _, addFakeResource := range test.addFakeResourceList {
 					err := addFakeResource()

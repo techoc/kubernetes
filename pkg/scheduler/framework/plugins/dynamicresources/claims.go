@@ -25,26 +25,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// claimStore manages all ResourceClaims for the pod, whether they were
-// created by the user directly (ResourceClaim) or indirectly (ResourceClaimTemplate)
-// as well as the special ResourceClaim for extended resources.
+// claimStore 管理 Pod 的所有 ResourceClaim：包括用户直接创建的（ResourceClaim）、
+// 通过模板间接创建的（ResourceClaimTemplate），以及调度器为扩展资源生成的特殊 Claim。
 //
-// The zero value is usable and empty.
+// 零值可用且表示空集合。
 type claimStore struct {
-	// claims contains all user-owned claims, optionally followed by the special ResourceClaim for extended resources.
+	// claims 保存所有用户持有的 Claim，末尾可选地跟着扩展资源的特殊 Claim。
 	claims []*resourceapi.ResourceClaim
-	// bindTo lists the objects to which each of the claims should be bound:
-	// either a Pod or its PodGroup. It is always empty when PodGroup claims are
-	// disabled.
+	// bindTo 列出每个 Claim 应绑定到的对象（Pod 或其 PodGroup）。
+	// PodGroup Claim 特性关闭时该列表始终为空。
 	bindTo []resourceapi.ResourceClaimConsumerReference
-	// numUserOwned is the number of claims without the special ResourceClaim.
+	// numUserOwned 是用户持有的 Claim 数量，不含末尾的特殊 Claim。
 	numUserOwned int
-	// initialExtendedResourceClaimUID is the initial extended resource claim UID from PreFilter phase.
-	// It is different from the UID set by API server when the in-memory, temproary claim is written to the API server in PreBind phase.
+	// initialExtendedResourceClaimUID 是 PreFilter 阶段生成的扩展资源 Claim 的临时 UID。
+	// PreBind 阶段把内存中的临时 Claim 写入 API 服务器后，API 服务器会分配新的 UID，
+	// 因此两者不同。
 	initialExtendedResourceClaimUID types.UID
 }
 
-// newClaimStore stores the list of user-owned claims and the optional claim owned by the scheduler.
+// newClaimStore 保存用户持有的 Claim 列表以及可选的调度器持有的扩展资源 Claim。
 func newClaimStore(claims []*resourceapi.ResourceClaim, extendedResourceClaim *resourceapi.ResourceClaim, claimBindings []resourceapi.ResourceClaimConsumerReference) claimStore {
 	cs := claimStore{
 		claims:                          claims,
@@ -59,19 +58,18 @@ func newClaimStore(claims []*resourceapi.ResourceClaim, extendedResourceClaim *r
 	return cs
 }
 
-// empty returns true when there are no ResourceClaims.
+// empty 在没有任何 ResourceClaim 时返回 true。
 func (cs *claimStore) empty() bool {
 	return len(cs.claims) == 0
 }
 
-// len returns number of all claims, whether they are owned by the user or the scheduler.
+// len 返回 Claim 总数，包括用户持有和调度器持有的。
 func (cs *claimStore) len() int {
 	return len(cs.claims)
 }
 
-// all returns an iterator for all claims, whether they are owned by the user
-// or the scheduler. If there is a special ResourceClaim for extended resoures,
-// then it comes last.
+// all 返回遍历所有 Claim（用户或调度器持有）的迭代器。
+// 扩展资源的特殊 Claim 若存在，总是排在最后。
 func (cs *claimStore) all() iter.Seq2[int, *resourceapi.ResourceClaim] {
 	return func(yield func(int, *resourceapi.ResourceClaim) bool) {
 		for i, claim := range cs.claims {
@@ -82,7 +80,7 @@ func (cs *claimStore) all() iter.Seq2[int, *resourceapi.ResourceClaim] {
 	}
 }
 
-// allUserClaims returns an iterator which excludes the special ResourceClaim for extended resoures.
+// allUserClaims 返回仅遍历用户持有 Claim 的迭代器，排除扩展资源的特殊 Claim。
 func (cs *claimStore) allUserClaims() iter.Seq2[int, *resourceapi.ResourceClaim] {
 	return func(yield func(int, *resourceapi.ResourceClaim) bool) {
 		for i, claim := range cs.claims[0:cs.numUserOwned] {
@@ -93,9 +91,8 @@ func (cs *claimStore) allUserClaims() iter.Seq2[int, *resourceapi.ResourceClaim]
 	}
 }
 
-// toAllocate returns an iterator for all claims which have no allocation result.
-// the index returned is the original index in the underlying claim store, it
-// may not be sequentially numbered (e.g. 0, 1, 2 ...).
+// toAllocate 返回遍历所有尚未分配（Status.Allocation 为空）Claim 的迭代器。
+// 产出的索引是 Claim 在底层存储中的原始下标，可能不连续。
 func (cs *claimStore) toAllocate() iter.Seq2[int, *resourceapi.ResourceClaim] {
 	return func(yield func(int, *resourceapi.ResourceClaim) bool) {
 		for i, claim := range cs.claims {
@@ -109,8 +106,8 @@ func (cs *claimStore) toAllocate() iter.Seq2[int, *resourceapi.ResourceClaim] {
 	}
 }
 
-// extendedResourceClaim returns the special ResourceClaim if there is one, otherwise nil.
-// The ResourceClaim is read-only and must be cloned before modifying it.
+// extendedResourceClaim 返回扩展资源的特殊 Claim，不存在时返回 nil。
+// 返回的 Claim 是只读的，修改前必须先克隆。
 func (cs *claimStore) extendedResourceClaim() *resourceapi.ResourceClaim {
 	if cs.numUserOwned == len(cs.claims) {
 		return nil
@@ -118,24 +115,23 @@ func (cs *claimStore) extendedResourceClaim() *resourceapi.ResourceClaim {
 	return cs.claims[cs.numUserOwned]
 }
 
-// noUserClaim returns true when there is no user claim.
+// noUserClaim 在没有用户持有的 Claim 时返回 true。
 func (cs *claimStore) noUserClaim() bool {
 	return cs.numUserOwned == 0
 }
 
-// get returns the claim at the input index
+// get 返回指定下标处的 Claim。
 func (cs claimStore) get(i int) *resourceapi.ResourceClaim {
 	return cs.claims[i]
 }
 
-// set sets the input claim at the input index for the internal claims slice.
+// set 用给定 Claim 替换内部切片中指定下标处的元素。
 func (cs claimStore) set(i int, c *resourceapi.ResourceClaim) {
 	cs.claims[i] = c
 }
 
-// getBinding returns a reference to the object to which the ResourceClaim at
-// the given index should be bound: either a Pod or its PodGroup. For extended
-// resource claims, it always returns a reference to the Pod.
+// getBinding 返回指定下标的 Claim 应绑定到的对象引用（Pod 或其 PodGroup）。
+// 扩展资源 Claim 始终绑定到 Pod。
 func (cs claimStore) getBinding(i int, pod *v1.Pod) resourceapi.ResourceClaimConsumerReference {
 	if i >= len(cs.bindTo) {
 		return resourceapi.ResourceClaimConsumerReference{
@@ -148,10 +144,8 @@ func (cs claimStore) getBinding(i int, pod *v1.Pod) resourceapi.ResourceClaimCon
 	return cs.bindTo[i]
 }
 
-// updateExtendedResourceClaim updates the input claim as extended resource
-// claim in the internal claims slice.
-// It returns error when there is no extended resource claim in the internal
-// claims slice.
+// updateExtendedResourceClaim 用给定 Claim 替换内部的扩展资源 Claim。
+// 若内部存储中不存在扩展资源 Claim，则返回错误。
 func (cs *claimStore) updateExtendedResourceClaim(c *resourceapi.ResourceClaim) error {
 	if cs.numUserOwned == len(cs.claims) {
 		return fmt.Errorf("no extended resource claim")
@@ -160,9 +154,8 @@ func (cs *claimStore) updateExtendedResourceClaim(c *resourceapi.ResourceClaim) 
 	return nil
 }
 
-// getInitialExtendedResourceClaimUID returns the UID of the claim in use until
-// PreBind creates the ResourceClaim in API server.
-// It can only be called when extended resource claim exists.
+// getInitialExtendedResourceClaimUID 返回 PreBind 在 API 服务器创建真实 Claim 之前
+// 所使用的临时 Claim UID。仅当扩展资源 Claim 存在时才能调用。
 func (cs claimStore) getInitialExtendedResourceClaimUID() types.UID {
 	return cs.initialExtendedResourceClaimUID
 }

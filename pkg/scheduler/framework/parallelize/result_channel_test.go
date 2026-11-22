@@ -24,9 +24,11 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestErrorChannel 验证 ResultChannel 的接收、发送以及携带取消的发送行为。
 func TestErrorChannel(t *testing.T) {
 	errCh := NewResultChannel[error]()
 
+	// 空通道应立即返回零值。
 	if actualErr := errCh.Receive(); actualErr != nil {
 		t.Errorf("expect nil from err channel, but got %v", actualErr)
 	}
@@ -39,6 +41,7 @@ func TestErrorChannel(t *testing.T) {
 
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
+	// SendWithCancel 发送的上下文应在接收后被取消。
 	errCh.SendWithCancel(err, cancel)
 	if actualErr := errCh.Receive(); !errors.Is(actualErr, err) {
 		t.Errorf("expect %v from err channel, but got %v", err, actualErr)

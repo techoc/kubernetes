@@ -37,8 +37,11 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// 两个 team 标签，用于构造 namespace selector 的测试数据。
 var nsLabelT1 = map[string]string{"team": "team1"}
 var nsLabelT2 = map[string]string{"team": "team2"}
+
+// 四个 namespace，分属两个 team，用于验证 namespace selector 的匹配行为。
 var namespaces = []runtime.Object{
 	&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "subteam1.team1", Labels: nsLabelT1}},
 	&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "subteam2.team1", Labels: nsLabelT1}},
@@ -46,6 +49,7 @@ var namespaces = []runtime.Object{
 	&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "subteam2.team2", Labels: nsLabelT2}},
 }
 
+// TestPreferredAffinity 验证 Pod 亲和性/反亲和性优先项的打分行为。
 func TestPreferredAffinity(t *testing.T) {
 	labelRgChina := map[string]string{
 		"region": "China",
@@ -69,7 +73,7 @@ func TestPreferredAffinity(t *testing.T) {
 	podLabelSecurityS2 := map[string]string{
 		"security": "S2",
 	}
-	// considered only preferredDuringSchedulingIgnoredDuringExecution in pod affinity
+	// 下列亲和性定义只使用 preferredDuringSchedulingIgnoredDuringExecution 项。
 	stayWithS1InRegion := &v1.Affinity{
 		PodAffinity: &v1.PodAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
@@ -205,7 +209,7 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 		},
 	}
-	// to stay away from security S2 in any az.
+	// 尽量避开任意 az 中 security=S2 的 Pod。
 	awayFromS2InAz := &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
@@ -227,7 +231,7 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 		},
 	}
-	// to stay with security S1 in same region, stay away from security S2 in any az.
+	// 尽量与同 region 的 security=S1 Pod 共处，同时避开任意 az 中 security=S2 的 Pod。
 	stayWithS1InRegionAwayFromS2InAz := &v1.Affinity{
 		PodAffinity: &v1.PodAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
@@ -453,9 +457,9 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			wantStatus: fwk.NewStatus(fwk.Skip),
 		},
-		// the node(node1) that have the label {"region": "China"} (match the topology key) and that have existing pods that match the labelSelector get high score
-		// the node(node3) that don't have the label {"region": "whatever the value is"} (mismatch the topology key) but that have existing pods that match the labelSelector get low score
-		// the node(node2) that have the label {"region": "China"} (match the topology key) but that have existing pods that mismatch the labelSelector get low score
+		// node1 带 topology key 标签且上面有匹配 labelSelector 的 Pod，得高分。
+		// node3 缺 topology key 标签，即便有匹配的 Pod 也得低分。
+		// node2 带 topology key 标签，但上面的 Pod 不匹配 labelSelector，同样低分。
 		{
 			name: "Affinity: pod that matches topology key & pods in nodes will get high score comparing to others" +
 				"which doesn't match either pods in nodes or in topology key",
@@ -472,10 +476,9 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}, {Name: "node3", Score: 0}},
 		},
-		// the node1(node1) that have the label {"region": "China"} (match the topology key) and that have existing pods that match the labelSelector get high score
-		// the node2(node2) that have the label {"region": "China"}, match the topology key and have the same label value with node1, get the same high score with node1
-		// the node3(node3) that have the label {"region": "India"}, match the topology key but have a different label value, don't have existing pods that match the labelSelector,
-		// get a low score.
+		// node1 带 topology key 标签且有匹配的 Pod，得高分。
+		// node2 与 node1 的 region 标签值相同，同属一个拓扑域，因此同样得高分。
+		// node3 虽带 topology key 但值不同，且没有匹配的 Pod，得低分。
 		{
 			name: "All the nodes that have the same topology key & label value with one of them has an existing pod that match the affinity rules, have the same score",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: stayWithS1InRegion}},
@@ -489,10 +492,9 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: fwk.MaxNodeScore}, {Name: "node3", Score: 0}},
 		},
-		// there are 2 regions, say regionChina(node1,node3,node4) and regionIndia(node2,node5), both regions have nodes that match the preference.
-		// But there are more nodes(actually more existing pods) in regionChina that match the preference than regionIndia.
-		// Then, nodes in regionChina get higher score than nodes in regionIndia, and all the nodes in regionChina should get a same score(high score),
-		// while all the nodes in regionIndia should get another same score(low score).
+		// 两个 region 都有匹配优先项的节点，但 China region 中匹配的 Pod 更多。
+		// 因此 China region 内的节点得分更高，且同一 region 内得分相同；
+		// India region 内的节点则统一为较低分。
 		{
 			name: "Affinity: nodes in one region has more matching pods comparing to other region, so the region which has more matches will get high score",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: stayWithS2InRegion}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -513,7 +515,7 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}, {Name: "node3", Score: fwk.MaxNodeScore}, {Name: "node4", Score: fwk.MaxNodeScore}, {Name: "node5", Score: 0}},
 		},
-		// Test with the different operators and values for pod affinity scheduling preference, including some match failures.
+		// 覆盖亲和性优先项中各种 operator 和 value，包含匹配失败的情形。
 		{
 			name: "Affinity: different Label operators and values for pod affinity scheduling preference, including some match failures ",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: affinity3}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -529,8 +531,8 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 20}, {Name: "node2", Score: fwk.MaxNodeScore}, {Name: "node3", Score: 0}},
 		},
-		// Test the symmetry cases for affinity, the difference between affinity and symmetry is not the pod wants to run together with some existing pods,
-		// but the existing pods have the inter pod affinity preference while the pod to schedule satisfy the preference.
+		// 亲和性的对称场景：不是待调度 Pod 声明亲和性，
+		// 而是已有 Pod 声明了亲和性，待调度 Pod 恰好满足其偏好。
 		{
 			name: "Affinity symmetry: considered only the preferredDuringSchedulingIgnoredDuringExecution in pod affinity symmetry",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: ""}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS2}},
@@ -588,12 +590,11 @@ func TestPreferredAffinity(t *testing.T) {
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: fwk.MaxNodeScore}, {Name: "node3", Score: 0}},
 		},
 
-		// The pod to schedule prefer to stay away from some existing pods at node level using the pod anti affinity.
-		// the nodes that have the label {"node": "bar"} (match the topology key) and that have existing pods that match the labelSelector get low score
-		// the nodes that don't have the label {"node": "whatever the value is"} (mismatch the topology key) but that have existing pods that match the labelSelector get high score
-		// the nodes that have the label {"node": "bar"} (match the topology key) but that have existing pods that mismatch the labelSelector get high score
-		// there are 2 nodes, say node1 and node2, both nodes have pods that match the labelSelector and have topology-key in node.Labels.
-		// But there are more pods on node1 that match the preference than node2. Then, node1 get a lower score than node2.
+		// 反亲和性场景：待调度 Pod 希望在节点级别避开某些已有 Pod。
+		// 带 topology key 标签且上面有匹配 Pod 的节点得低分；
+		// 缺 topology key 标签、或上面 Pod 不匹配的节点得高分。
+		// node1 和 node2 都带 topology key 且有匹配 Pod，
+		// 但 node1 上匹配的 Pod 更多，因此分数比 node2 更低。
 		{
 			name: "Anti Affinity: pod that does not match existing pods in node will get high score ",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: awayFromS1InAz}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -634,7 +635,7 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 0}, {Name: "node2", Score: fwk.MaxNodeScore}},
 		},
-		// Test the symmetry cases for anti affinity
+		// 反亲和性的对称场景。
 		{
 			name: "Anti Affinity symmetry: the existing pods in node which has anti affinity match will get high score",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: ""}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS2}},
@@ -648,7 +649,7 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 0}, {Name: "node2", Score: fwk.MaxNodeScore}},
 		},
-		// Test both  affinity and anti-affinity
+		// 亲和性与反亲和性同时生效的场景。
 		{
 			name: "Affinity and Anti Affinity: considered only preferredDuringSchedulingIgnoredDuringExecution in both pod affinity & anti affinity",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: stayWithS1InRegionAwayFromS2InAz}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -662,10 +663,10 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}},
 		},
-		// Combined cases considering both affinity and anti-affinity, the pod to schedule and existing pods have the same labels (they are in the same RC/service),
-		// the pod prefer to run together with its brother pods in the same region, but wants to stay away from them at node level,
-		// so that all the pods of a RC/service can stay in a same region but trying to separate with each other
-		// node-1,node-3,node-4 are in ChinaRegion others node-2,node-5 are in IndiaRegion
+		// 组合场景：待调度 Pod 与已有 Pod 标签相同（同属一个 RC/Service）。
+		// 它希望与同组 Pod 同处一个 region，但在节点级别相互分散，
+		// 即同一 RC/Service 的 Pod 集中在同一 region、又尽量分布在不同节点。
+		// node1、node3、node4 属于 China region，node2、node5 属于 India region。
 		{
 			name: "Affinity and Anti Affinity: considering both affinity and anti-affinity, the pod to schedule and existing pods have the same labels",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: stayWithS1InRegionAwayFromS2InAz}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -687,11 +688,11 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}, {Name: "node3", Score: fwk.MaxNodeScore}, {Name: "node4", Score: fwk.MaxNodeScore}, {Name: "node5", Score: 0}},
 		},
-		// Consider Affinity, Anti Affinity and symmetry together.
-		// for Affinity, the weights are:                8,  0,  0,  0
-		// for Anti Affinity, the weights are:           0, -5,  0,  0
-		// for Affinity symmetry, the weights are:       0,  0,  8,  0
-		// for Anti Affinity symmetry, the weights are:  0,  0,  0, -5
+		// 亲和性、反亲和性及其对称场景同时生效。
+		// 亲和性权重：              8,  0,  0,  0
+		// 反亲和性权重：            0, -5,  0,  0
+		// 亲和性对称权重：          0,  0,  8,  0
+		// 反亲和性对称权重：        0,  0,  0, -5
 		{
 			name: "Affinity and Anti Affinity and symmetry: considered only preferredDuringSchedulingIgnoredDuringExecution in both pod affinity & anti affinity & symmetry",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: "", Affinity: stayWithS1InRegionAwayFromS2InAz}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -709,9 +710,8 @@ func TestPreferredAffinity(t *testing.T) {
 			},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: fwk.MaxNodeScore}, {Name: "node2", Score: 0}, {Name: "node3", Score: fwk.MaxNodeScore}, {Name: "node4", Score: 0}},
 		},
-		// Cover https://github.com/kubernetes/kubernetes/issues/82796 which panics upon:
-		// 1. Some nodes in a topology don't have pods with affinity, but other nodes in the same topology have.
-		// 2. The incoming pod doesn't have affinity.
+		// 回归 https://github.com/kubernetes/kubernetes/issues/82796：
+		// 同一拓扑域中部分节点有带亲和性的 Pod、部分没有，且待调度 Pod 自身无亲和性时，曾发生 panic。
 		{
 			name: "Avoid panic when partial nodes in a topology don't have pods with affinity",
 			pod:  &v1.Pod{Spec: v1.PodSpec{NodeName: ""}, ObjectMeta: metav1.ObjectMeta{Labels: podLabelSecurityS1}},
@@ -911,6 +911,7 @@ func TestPreferredAffinity(t *testing.T) {
 	}
 }
 
+// TestPreferredAffinityWithHardPodAffinitySymmetricWeight 验证硬亲和性对称权重对打分的影响。
 func TestPreferredAffinityWithHardPodAffinitySymmetricWeight(t *testing.T) {
 	podLabelServiceS1 := map[string]string{
 		"service": "S1",

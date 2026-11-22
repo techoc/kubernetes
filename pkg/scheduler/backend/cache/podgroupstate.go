@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cache 中的本文件实现 PodGroup 与 CompositePodGroup 的运行时状态管理。
 package cache
 
 import (
@@ -31,32 +32,27 @@ import (
 
 var generation atomic.Int64
 
-// nextPodGroupGeneration increments generation numbers monotonically for a pod group state (instead of per-instance increment)
-// to prevent generation reset or collision when a pod group is deleted and recreated with the same name.
+// nextPodGroupGeneration 为 PodGroup 状态分配全局单调递增的 generation，而不是在每个实例内自增。
+// 这样同名 PodGroup 被删除后重建时，generation 不会重置或与之前的实例冲突。
 func nextPodGroupGeneration() int64 {
 	return generation.Add(1)
 }
 
-// podGroupStateData holds data and functionality shared between podGroupState and podGroupStateSnapshot.
-// Note that the podGroup field is populated from the observed PodGroup API object,
-// while other fields are populated from observed Pod objects. This means podGroupStateData
-// can exist without a corresponding PodGroup API object as long as at least one
-// Pod references it.
+// podGroupStateData 保存 podGroupState 与 podGroupStateSnapshot 共享的数据和操作。
+// 注意 podGroup 字段来自观察到的 PodGroup API 对象，其余字段来自观察到的 Pod 对象。
+// 因此只要至少有一个 Pod 引用它，podGroupStateData 就可以在没有对应 PodGroup API 对象的情况下存在。
 type podGroupStateData struct {
-	// generation gets bumped whenever the data is changed.
-	// It's used to detect changes and avoid unnecessary cloning when taking a snapshot.
+	// 数据变化时递增，用于检测变更并在打快照时避免不必要的克隆。
 	generation int64
-	// allPods tracks all pods belonging to the group that are known to the scheduler.
+	// 记录调度器已知的、属于该组的所有 Pod。
 	allPods map[types.UID]*v1.Pod
-	// unscheduledPods tracks all pods that are unscheduled for this group,
-	// i.e., are neither assumed nor assigned.
+	// 记录该组中尚未调度的 Pod，即既未 assume 也未分配。
 	unscheduledPods sets.Set[types.UID]
-	// assumedPods tracks pods that have reached the Reserve stage and are waiting
-	// for the rest of the gang to arrive before being allowed to bind.
+	// 记录已到达 Reserve 阶段、等待 gang 中其余 Pod 到齐后才允许绑定的 Pod。
 	assumedPods map[types.UID]*v1.Pod
-	// assignedPods tracks all pods belonging to the group that are assigned (bound).
+	// 记录该组中已分配（绑定）的 Pod。
 	assignedPods sets.Set[types.UID]
-	// podGroup is the cached API object of the PodGroup.
+	// 缓存的 PodGroup API 对象。
 	podGroup *schedulingv1beta1.PodGroup
 }
 
@@ -69,15 +65,13 @@ func newPodGroupStateData() podGroupStateData {
 	}
 }
 
-// addPod adds the pod to this group.
-// Depending on the NodeName, it can insert the pod into either assignedPods or unscheduledPods.
+// addPod 把 Pod 加入该组，依据 NodeName 将其放入 assignedPods 或 unscheduledPods。
 func (d *podGroupStateData) addPod(pod *v1.Pod) {
 	d.generation = nextPodGroupGeneration()
 	d.allPods[pod.UID] = pod
 	if pod.Spec.NodeName != "" {
 		d.assignedPods.Insert(pod.UID)
-		// Clear from unscheduled or assumed in case the pod previously existed in the pod group
-		// in a different state, e.g., external binding of a previously-queued pod group member.
+		// 清理该 Pod 之前可能处于的其他状态，例如先前排队的组成员被外部绑定。
 		d.unscheduledPods.Delete(pod.UID)
 		delete(d.assumedPods, pod.UID)
 	} else {
@@ -85,20 +79,19 @@ func (d *podGroupStateData) addPod(pod *v1.Pod) {
 	}
 }
 
-// updatePod updates the pod in this group.
-// In case of binding, it moves the pod to assignedPods.
+// updatePod 更新组内的 Pod，绑定时将其移入 assignedPods。
 func (d *podGroupStateData) updatePod(oldPod, newPod *v1.Pod) {
 	d.generation = nextPodGroupGeneration()
 	d.allPods[newPod.UID] = newPod
 	if oldPod.Spec.NodeName == "" && newPod.Spec.NodeName != "" {
 		d.assignedPods.Insert(newPod.UID)
-		// Clear pod from unscheduled and assumed when it is assigned.
+		// 分配后从 unscheduled 与 assumed 中清除。
 		d.unscheduledPods.Delete(newPod.UID)
 		delete(d.assumedPods, newPod.UID)
 	}
 }
 
-// deletePod removes the pod from this pod group state.
+// deletePod 从该组状态中移除 Pod。
 func (d *podGroupStateData) deletePod(podUID types.UID) {
 	d.generation = nextPodGroupGeneration()
 	delete(d.allPods, podUID)
@@ -107,18 +100,16 @@ func (d *podGroupStateData) deletePod(podUID types.UID) {
 	d.assignedPods.Delete(podUID)
 }
 
-// assumePod marks a pod as assumed within the pod group state.
+// assumePod 将 Pod 标记为组内已 assume。
 func (d *podGroupStateData) assumePod(pod *v1.Pod) {
 	storedPod, ok := d.allPods[pod.UID]
-	// A scheduling pod may be removed from the cluster.
-	// In that case, we just ignore it.
+	// 调度中的 Pod 可能已从集群删除，此时直接忽略。
 	if !ok {
 		return
 	}
 
 	d.generation = nextPodGroupGeneration()
-	// If the pod stored in the state is already assigned, put it into assignedPods.
-	// Otherwise put it to assumedPods.
+	// 状态中保存的 Pod 若已分配，则放入 assignedPods，否则放入 assumedPods。
 	if storedPod.Spec.NodeName != "" {
 		d.assignedPods.Insert(pod.UID)
 	} else {
@@ -127,12 +118,11 @@ func (d *podGroupStateData) assumePod(pod *v1.Pod) {
 	d.unscheduledPods.Delete(pod.UID)
 }
 
-// forgetPod moves a pod back from the assumed state to unscheduled within the pod group state.
+// forgetPod 将 Pod 从 assume 状态退回组内未调度状态。
 func (d *podGroupStateData) forgetPod(podUID types.UID) {
 
 	pod := d.allPods[podUID]
-	// A scheduling pod may be removed from the cluster.
-	// In that case, we just ignore it.
+	// 调度中的 Pod 可能已从集群删除，此时直接忽略。
 	if pod == nil {
 		return
 	}
@@ -141,8 +131,7 @@ func (d *podGroupStateData) forgetPod(podUID types.UID) {
 
 	delete(d.assumedPods, podUID)
 
-	// If the pod is already assigned, put it into assignedPods.
-	// Otherwise, put it into unscheduledPods.
+	// 已分配的放入 assignedPods，否则放回 unscheduledPods。
 	if pod.Spec.NodeName != "" {
 		d.assignedPods.Insert(podUID)
 	} else {
@@ -150,7 +139,7 @@ func (d *podGroupStateData) forgetPod(podUID types.UID) {
 	}
 }
 
-// scheduledPods returns the pods that are either assumed or assigned for this pod group.
+// scheduledPods 返回该组中已 assume 或已分配的 Pod。
 func (d *podGroupStateData) scheduledPods() []*v1.Pod {
 	scheduledPods := make([]*v1.Pod, 0, len(d.assignedPods)+len(d.assumedPods))
 	for uid := range d.assignedPods {
@@ -162,26 +151,24 @@ func (d *podGroupStateData) scheduledPods() []*v1.Pod {
 	return scheduledPods
 }
 
-// empty returns true when the pod group state contains no pods.
+// empty 在组内无任何 Pod 时返回 true。
 func (d *podGroupStateData) empty() bool {
 	return len(d.allPods) == 0 && d.podGroup == nil
 }
 
-// allPodsCount returns the number of all pods known to the scheduler for this group.
+// allPodsCount 返回调度器已知的该组 Pod 总数。
 func (d *podGroupStateData) allPodsCount() int {
 	return len(d.allPods)
 }
 
-// scheduledPodsCount returns the number of pods for this group that are either assumed or assigned.
+// scheduledPodsCount 返回该组中已 assume 或已分配的 Pod 数量。
 func (d *podGroupStateData) scheduledPodsCount() int {
 	return len(d.assumedPods) + len(d.assignedPods)
 }
 
-// clone returns a clone of the pod group state data.
-// It does not deep copy the inner Pod and PodGroup objects
-// as they should not be mutated by the scheduler.
-// Cache's and snapshot's objects are read-only from the outside,
-// unless mutated explicitly by the methods.
+// clone 克隆组状态数据。
+// 不深拷贝内部的 Pod 与 PodGroup 对象：它们不应被调度器修改。
+// 从外部看，缓存与快照中的对象都是只读的，除非由相应方法显式修改。
 func (d *podGroupStateData) clone() podGroupStateData {
 	return podGroupStateData{
 		generation:      d.generation,
@@ -193,19 +180,19 @@ func (d *podGroupStateData) clone() podGroupStateData {
 	}
 }
 
-// setPodGroup sets the PodGroup object.
+// setPodGroup 设置 PodGroup 对象。
 func (d *podGroupStateData) setPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	d.generation = nextPodGroupGeneration()
 	d.podGroup = podGroup
 }
 
-// removePodGroup removes the PodGroup object.
+// removePodGroup 移除 PodGroup 对象。
 func (d *podGroupStateData) removePodGroup() {
 	d.generation = nextPodGroupGeneration()
 	d.podGroup = nil
 }
 
-// unscheduledPodsMap returns all unscheduled pods for this pod group.
+// unscheduledPodsMap 返回该组所有未调度的 Pod，以 Pod 名为键。
 func (d *podGroupStateData) unscheduledPodsMap() map[string]*v1.Pod {
 	result := make(map[string]*v1.Pod, len(d.unscheduledPods))
 	for podUID := range d.unscheduledPods {
@@ -215,18 +202,15 @@ func (d *podGroupStateData) unscheduledPodsMap() map[string]*v1.Pod {
 	return result
 }
 
-// compositePodGroupStateData holds data and functionality shared between compositePodGroupState and compositePodGroupStateSnapshot.
-// Note that the compositePodGroup field is populated from the observed CompositePodGroup API object,
-// while other fields are populated from observed child PodGroups and CompositePodGroups. This means compositePodGroupStateData
-// can exist without a corresponding CompositePodGroup API object as long as at least one
-// child references it.
+// compositePodGroupStateData 保存 compositePodGroupState 与 compositePodGroupStateSnapshot 共享的数据和操作。
+// 注意 compositePodGroup 来自观察到的 CompositePodGroup API 对象，其余字段来自观察到的子 PodGroup 与 CompositePodGroup。
+// 因此只要至少有一个子对象引用它，就可以在没有对应 CompositePodGroup API 对象的情况下存在。
 type compositePodGroupStateData struct {
-	// generation gets bumped whenever the data is changed.
-	// It's used to detect changes and avoid unnecessary cloning when taking a snapshot.
+	// 数据变化时递增，用于检测变更并在打快照时避免不必要的克隆。
 	generation int64
-	// compositePodGroup is the cached API object of the CompositePodGroup.
+	// 缓存的 CompositePodGroup API 对象。
 	compositePodGroup *schedulingv1alpha3.CompositePodGroup
-	// children tracks all keys for child pod groups and composite pod groups.
+	// 记录所有子 PodGroup 与 CompositePodGroup 的键。
 	children sets.Set[fwk.EntityKey]
 }
 
@@ -236,11 +220,9 @@ func newCompositePodGroupStateData() compositePodGroupStateData {
 	}
 }
 
-// clone returns a clone of the composite pod group state data.
-// It does not deep copy the inner CompositePodGroup object
-// as it should not be mutated by the scheduler.
-// Cache's and snapshot's objects are read-only from the outside,
-// unless mutated explicitly by the methods.
+// clone 克隆组合组状态数据。
+// 不深拷贝内部的 CompositePodGroup 对象：它不应被调度器修改。
+// 从外部看，缓存与快照中的对象都是只读的，除非由相应方法显式修改。
 func (d *compositePodGroupStateData) clone() compositePodGroupStateData {
 	return compositePodGroupStateData{
 		generation:        d.generation,
@@ -249,7 +231,7 @@ func (d *compositePodGroupStateData) clone() compositePodGroupStateData {
 	}
 }
 
-// empty returns true when the composite pod group state contains no composite pod group.
+// empty 在组合组状态中既无 CompositePodGroup 也无子对象时返回 true。
 func (d *compositePodGroupStateData) empty() bool {
 	return d.compositePodGroup == nil && len(d.children) == 0
 }
@@ -264,19 +246,19 @@ func (d *compositePodGroupStateData) removeCompositePodGroup() {
 	d.compositePodGroup = nil
 }
 
-// addChild adds a child group to this group.
+// addChild 添加一个子组。
 func (d *compositePodGroupStateData) addChild(child fwk.EntityKey) {
 	d.generation = nextPodGroupGeneration()
 	d.children.Insert(child)
 }
 
-// removeChild removes a child group from this group.
+// removeChild 移除一个子组。
 func (d *compositePodGroupStateData) removeChild(child fwk.EntityKey) {
 	d.generation = nextPodGroupGeneration()
 	d.children.Delete(child)
 }
 
-// getChildren returns all child groups for this group.
+// getChildren 返回所有子组的键。
 func (d *compositePodGroupStateData) getChildren() []fwk.EntityKey {
 	var children []fwk.EntityKey
 	for child := range d.children {
@@ -285,7 +267,7 @@ func (d *compositePodGroupStateData) getChildren() []fwk.EntityKey {
 	return children
 }
 
-// podGroupState holds the runtime state of a pod group.
+// podGroupState 保存 PodGroup 的运行时状态。
 type podGroupState struct {
 	lock sync.RWMutex
 	podGroupStateData
@@ -295,14 +277,14 @@ func newPodGroupState() *podGroupState {
 	return &podGroupState{podGroupStateData: newPodGroupStateData()}
 }
 
-// snapshot returns a deep copy of the live pod group state as an immutable snapshot.
-// It must be called under the cache lock.
+// snapshot 返回当前组状态的深拷贝快照，内容不可变。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) snapshot() *podGroupStateSnapshot {
 	return &podGroupStateSnapshot{podGroupStateData: pgs.podGroupStateData.clone()}
 }
 
-// empty returns true when the group contains no pods and the cached PodGroup object is nil.
-// It must be called under the cache lock.
+// empty 在组内无 Pod 且缓存的 PodGroup 对象为 nil 时返回 true。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) empty() bool {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -310,9 +292,8 @@ func (pgs *podGroupState) empty() bool {
 	return pgs.podGroupStateData.empty()
 }
 
-// addPod adds the pod to this group.
-// Depending on the NodeName, it can insert the pod into either assignedPods or unscheduledPods.
-// It must be called under the cache lock.
+// addPod 把 Pod 加入该组，依据 NodeName 放入 assignedPods 或 unscheduledPods。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) addPod(pod *v1.Pod) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -320,9 +301,8 @@ func (pgs *podGroupState) addPod(pod *v1.Pod) {
 	pgs.podGroupStateData.addPod(pod)
 }
 
-// updatePod updates the pod in this group.
-// In case of binding, it moves the pod to assignedPods.
-// It must be called under the cache lock.
+// updatePod 更新组内的 Pod，绑定时将其移入 assignedPods。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) updatePod(oldPod, newPod *v1.Pod) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -330,8 +310,8 @@ func (pgs *podGroupState) updatePod(oldPod, newPod *v1.Pod) {
 	pgs.podGroupStateData.updatePod(oldPod, newPod)
 }
 
-// deletePod removes the pod from this pod group state.
-// It must be called under the cache lock.
+// deletePod 从组状态中移除 Pod。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) deletePod(podUID types.UID) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -339,8 +319,8 @@ func (pgs *podGroupState) deletePod(podUID types.UID) {
 	pgs.podGroupStateData.deletePod(podUID)
 }
 
-// assumePod marks a pod as assumed within the pod group state.
-// It must be called under the cache lock.
+// assumePod 将 Pod 标记为组内已 assume。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) assumePod(pod *v1.Pod) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -348,8 +328,8 @@ func (pgs *podGroupState) assumePod(pod *v1.Pod) {
 	pgs.podGroupStateData.assumePod(pod)
 }
 
-// forgetPod moves a pod back from the assumed state to unscheduled within the pod group state.
-// It must be called under the cache lock.
+// forgetPod 将 Pod 从 assume 状态退回组内未调度状态。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) forgetPod(podUID types.UID) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -357,8 +337,8 @@ func (pgs *podGroupState) forgetPod(podUID types.UID) {
 	pgs.podGroupStateData.forgetPod(podUID)
 }
 
-// setPodGroup sets the PodGroup object.
-// It must be called under the cache lock.
+// setPodGroup 设置 PodGroup 对象。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) setPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -367,8 +347,8 @@ func (pgs *podGroupState) setPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	pgs.podGroupStateData.generation = nextPodGroupGeneration()
 }
 
-// removePodGroup removes the PodGroup object.
-// It must be called under the cache lock.
+// removePodGroup 移除 PodGroup 对象。
+// 必须在缓存锁的保护下调用。
 func (pgs *podGroupState) removePodGroup() {
 	pgs.lock.Lock()
 	defer pgs.lock.Unlock()
@@ -377,7 +357,7 @@ func (pgs *podGroupState) removePodGroup() {
 	pgs.podGroupStateData.generation = nextPodGroupGeneration()
 }
 
-// AllPods returns the UIDs of all pods known to the scheduler for this group.
+// AllPods 返回调度器已知的该组所有 Pod 的 UID。
 func (pgs *podGroupState) AllPods() sets.Set[types.UID] {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -385,7 +365,7 @@ func (pgs *podGroupState) AllPods() sets.Set[types.UID] {
 	return sets.KeySet(pgs.podGroupStateData.allPods)
 }
 
-// AllPodsCount returns the number of all pods known to the scheduler for this group.
+// AllPodsCount 返回调度器已知的该组 Pod 总数。
 func (pgs *podGroupState) AllPodsCount() int {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -393,9 +373,8 @@ func (pgs *podGroupState) AllPodsCount() int {
 	return pgs.podGroupStateData.allPodsCount()
 }
 
-// UnscheduledPods returns all pods that are unscheduled for this group,
-// i.e., are neither assumed nor assigned.
-// The returned map type corresponds to the argument of the PodActivator.Activate method.
+// UnscheduledPods 返回该组所有未调度的 Pod，即既未 assume 也未分配。
+// 返回的 map 类型与 PodActivator.Activate 方法的参数一致。
 func (pgs *podGroupState) UnscheduledPods() map[string]*v1.Pod {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -403,8 +382,7 @@ func (pgs *podGroupState) UnscheduledPods() map[string]*v1.Pod {
 	return pgs.podGroupStateData.unscheduledPodsMap()
 }
 
-// AssumedPods returns the UIDs of all pods for this group in the assumed state,
-// i.e., that have passed the Reserve stage.
+// AssumedPods 返回该组中处于 assume 状态（已通过 Reserve 阶段）的 Pod 的 UID。
 func (pgs *podGroupState) AssumedPods() sets.Set[types.UID] {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -412,7 +390,7 @@ func (pgs *podGroupState) AssumedPods() sets.Set[types.UID] {
 	return sets.KeySet(pgs.podGroupStateData.assumedPods)
 }
 
-// AssignedPods returns the UIDs of all pods already assigned (bound) for this group.
+// AssignedPods 返回该组中已分配（绑定）的 Pod 的 UID。
 func (pgs *podGroupState) AssignedPods() sets.Set[types.UID] {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -420,7 +398,7 @@ func (pgs *podGroupState) AssignedPods() sets.Set[types.UID] {
 	return pgs.podGroupStateData.assignedPods.Clone()
 }
 
-// ScheduledPods returns the pods that are either assumed or assigned for this pod group.
+// ScheduledPods 返回该组中已 assume 或已分配的 Pod。
 func (pgs *podGroupState) ScheduledPods() []*v1.Pod {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -428,7 +406,7 @@ func (pgs *podGroupState) ScheduledPods() []*v1.Pod {
 	return pgs.podGroupStateData.scheduledPods()
 }
 
-// ScheduledPodsCount returns the number of pods for this group that are either assumed or assigned.
+// ScheduledPodsCount 返回该组中已 assume 或已分配的 Pod 数量。
 func (pgs *podGroupState) ScheduledPodsCount() int {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -436,7 +414,7 @@ func (pgs *podGroupState) ScheduledPodsCount() int {
 	return pgs.podGroupStateData.scheduledPodsCount()
 }
 
-// PodGroup returns the PodGroup API object.
+// PodGroup 返回缓存的 PodGroup API 对象。
 func (pgs *podGroupState) PodGroup() *schedulingv1beta1.PodGroup {
 	pgs.lock.RLock()
 	defer pgs.lock.RUnlock()
@@ -444,25 +422,25 @@ func (pgs *podGroupState) PodGroup() *schedulingv1beta1.PodGroup {
 	return pgs.podGroupStateData.podGroup
 }
 
-// compositePodGroupState holds the runtime state of a composite pod group.
+// compositePodGroupState 保存 CompositePodGroup 的运行时状态。
 type compositePodGroupState struct {
 	lock sync.RWMutex
 	compositePodGroupStateData
 }
 
-// newCompositePodGroupState creates a new compositePodGroupState.
+// newCompositePodGroupState 创建新的 compositePodGroupState。
 func newCompositePodGroupState() *compositePodGroupState {
 	return &compositePodGroupState{compositePodGroupStateData: newCompositePodGroupStateData()}
 }
 
-// snapshot returns a deep copy of the live composite pod group state as an immutable snapshot.
-// It must be called under the cache lock.
+// snapshot 返回当前组合组状态的深拷贝快照，内容不可变。
+// 必须在缓存锁的保护下调用。
 func (cpgs *compositePodGroupState) snapshot() *compositePodGroupStateSnapshot {
 	return &compositePodGroupStateSnapshot{compositePodGroupStateData: cpgs.compositePodGroupStateData.clone()}
 }
 
-// empty returns true when the composite pod group state contains no composite pod group and no children.
-// It must be called under the cache lock.
+// empty 在组合组状态中既无 CompositePodGroup 也无子对象时返回 true。
+// 必须在缓存锁的保护下调用。
 func (cpgs *compositePodGroupState) empty() bool {
 	cpgs.lock.RLock()
 	defer cpgs.lock.RUnlock()
@@ -470,8 +448,8 @@ func (cpgs *compositePodGroupState) empty() bool {
 	return cpgs.compositePodGroupStateData.empty()
 }
 
-// setCompositePodGroup sets the CompositePodGroup object.
-// It must be called under the cache lock.
+// setCompositePodGroup 设置 CompositePodGroup 对象。
+// 必须在缓存锁的保护下调用。
 func (cpgs *compositePodGroupState) setCompositePodGroup(compositePodGroup *schedulingv1alpha3.CompositePodGroup) {
 	cpgs.lock.Lock()
 	defer cpgs.lock.Unlock()
@@ -479,8 +457,8 @@ func (cpgs *compositePodGroupState) setCompositePodGroup(compositePodGroup *sche
 	cpgs.compositePodGroupStateData.setCompositePodGroup(compositePodGroup)
 }
 
-// removeCompositePodGroup removes the CompositePodGroup object.
-// It must be called under the cache lock.
+// removeCompositePodGroup 移除 CompositePodGroup 对象。
+// 必须在缓存锁的保护下调用。
 func (cpgs *compositePodGroupState) removeCompositePodGroup() {
 	cpgs.lock.Lock()
 	defer cpgs.lock.Unlock()
@@ -488,7 +466,7 @@ func (cpgs *compositePodGroupState) removeCompositePodGroup() {
 	cpgs.compositePodGroupStateData.removeCompositePodGroup()
 }
 
-// CompositePodGroup returns the CompositePodGroup API object.
+// CompositePodGroup 返回缓存的 CompositePodGroup API 对象。
 func (cpgs *compositePodGroupState) CompositePodGroup() *schedulingv1alpha3.CompositePodGroup {
 	cpgs.lock.RLock()
 	defer cpgs.lock.RUnlock()
@@ -496,7 +474,7 @@ func (cpgs *compositePodGroupState) CompositePodGroup() *schedulingv1alpha3.Comp
 	return cpgs.compositePodGroupStateData.compositePodGroup
 }
 
-// GetChildren returns the keys of child pod groups or composite pod groups.
+// GetChildren 返回子 PodGroup 或子 CompositePodGroup 的键。
 func (cpgs *compositePodGroupState) GetChildren() []fwk.EntityKey {
 	cpgs.lock.RLock()
 	defer cpgs.lock.RUnlock()
@@ -504,70 +482,69 @@ func (cpgs *compositePodGroupState) GetChildren() []fwk.EntityKey {
 	return cpgs.compositePodGroupStateData.getChildren()
 }
 
-// podGroupStateSnapshot is an immutable, point-in-time copy of a podGroupState.
-// It is taken before a pod group scheduling cycle and used to track states of pods
-// during the cycle without modifying the live state of pods.
+// podGroupStateSnapshot 是 podGroupState 在某一时刻的不可变副本。
+// 在 PodGroup 调度周期开始前生成，用于在周期内跟踪 Pod 状态而不改动实时状态。
 type podGroupStateSnapshot struct {
 	podGroupStateData
 }
 
-// assumePod marks a pod within the pod group state snapshot as assumed.
+// assumePod 在快照中把 Pod 标记为已 assume。
 func (s *podGroupStateSnapshot) assumePod(pod *v1.Pod) {
 	s.podGroupStateData.assumePod(pod)
 }
 
-// forgetPod removes a pod from the assumed state within the snapshot.
+// forgetPod 在快照中把 Pod 从 assume 状态移除。
 func (s *podGroupStateSnapshot) forgetPod(podUID types.UID) {
 	s.podGroupStateData.forgetPod(podUID)
 }
 
-// AllPods returns the UIDs of all pods known to the scheduler for this group.
+// AllPods 返回调度器已知的该组所有 Pod 的 UID。
 func (s *podGroupStateSnapshot) AllPods() sets.Set[types.UID] {
 	return sets.KeySet(s.podGroupStateData.allPods)
 }
 
-// UnscheduledPods returns all pods that are unscheduled for this group.
+// UnscheduledPods 返回该组所有未调度的 Pod。
 func (s *podGroupStateSnapshot) UnscheduledPods() map[string]*v1.Pod {
 	return s.podGroupStateData.unscheduledPodsMap()
 }
 
-// AssumedPods returns the UIDs of all assumed pods for this group.
+// AssumedPods 返回该组中所有已 assume 的 Pod 的 UID。
 func (s *podGroupStateSnapshot) AssumedPods() sets.Set[types.UID] {
 	return sets.KeySet(s.podGroupStateData.assumedPods)
 }
 
-// AssignedPods returns the UIDs of all assigned (bound) pods for this group.
+// AssignedPods 返回该组中已分配（绑定）的 Pod 的 UID。
 func (s *podGroupStateSnapshot) AssignedPods() sets.Set[types.UID] {
 	return s.podGroupStateData.assignedPods
 }
 
-// ScheduledPods returns the pods that are either assumed or assigned for this pod group.
+// ScheduledPods 返回该组中已 assume 或已分配的 Pod。
 func (s *podGroupStateSnapshot) ScheduledPods() []*v1.Pod {
 	return s.podGroupStateData.scheduledPods()
 }
 
-// AllPodsCount returns the number of all pods known to the scheduler for this group.
+// AllPodsCount 返回调度器已知的该组 Pod 总数。
 func (s *podGroupStateSnapshot) AllPodsCount() int {
 	return s.podGroupStateData.allPodsCount()
 }
 
-// ScheduledPodsCount returns the number of pods for this group that are either assumed or assigned.
+// ScheduledPodsCount 返回该组中已 assume 或已分配的 Pod 数量。
 func (s *podGroupStateSnapshot) ScheduledPodsCount() int {
 	return s.podGroupStateData.scheduledPodsCount()
 }
 
-// Clone returns a pod group state snapshot with cloned podGroupStateData.
+// Clone 返回一个克隆了 podGroupStateData 的组状态快照。
 func (s *podGroupStateSnapshot) Clone() *podGroupStateSnapshot {
 	return &podGroupStateSnapshot{podGroupStateData: s.podGroupStateData.clone()}
 }
 
-// compositePodGroupStateSnapshot is an immutable, point-in-time copy of a compositePodGroupState.
-// It is taken before a pod group scheduling cycle and used to track states of composite pod groups.
+// compositePodGroupStateSnapshot 是 compositePodGroupState 在某一时刻的不可变副本。
+// 在 PodGroup 调度周期开始前生成，用于跟踪组合组的状态。
 type compositePodGroupStateSnapshot struct {
 	compositePodGroupStateData
 }
 
-// GetChildren returns the keys of the child groups.
+// GetChildren 返回子组的键。
 func (s *compositePodGroupStateSnapshot) GetChildren() []fwk.EntityKey {
 	return s.compositePodGroupStateData.getChildren()
 }

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package parallelize 为调度框架提供并行执行能力。
 package parallelize
 
 import (
@@ -24,23 +25,23 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// DefaultParallelism is the default parallelism used in scheduler.
+// DefaultParallelism 是调度器使用的默认并行度。
 const DefaultParallelism int = 16
 
-// Parallelizer implements k8s.io/kube-scheduler/framework.Parallelizer helps run scheduling operations in parallel chunks where possible, to improve performance and CPU utilization.
-// It wraps logic of k8s.io/client-go/util/workqueue to run operations on multiple workers.
+// Parallelizer 实现 k8s.io/kube-scheduler/framework.Parallelizer，
+// 在可行处把调度操作分块并行执行，以提升性能和 CPU 利用率。
+// 它在 k8s.io/client-go/util/workqueue 之上封装了多 worker 执行逻辑。
 type Parallelizer struct {
 	parallelism int
 }
 
-// NewParallelizer returns an object holding the parallelism (number of workers).
+// NewParallelizer 返回持有给定并行度（worker 数量）的对象。
 func NewParallelizer(p int) Parallelizer {
 	return Parallelizer{parallelism: p}
 }
 
-// chunkSizeFor returns a chunk size for the given number of items to use for
-// parallel work. The size aims to produce good CPU utilization.
-// returns max(1, min(sqrt(n), n/Parallelism))
+// chunkSizeFor 根据待处理项数计算并行任务的块大小，目标是获得良好的 CPU 利用率。
+// 返回 max(1, min(sqrt(n), n/Parallelism))。
 func chunkSizeFor(n, parallelism int) int {
 	s := int(math.Sqrt(float64(n)))
 
@@ -52,9 +53,8 @@ func chunkSizeFor(n, parallelism int) int {
 	return s
 }
 
-// numWorkersForChunkSize returns number of workers (goroutines)
-// that will be created in workqueue.ParallelizeUntil
-// for given parallelism, pieces and chunkSize values.
+// numWorkersForChunkSize 返回在给定 parallelism、pieces 和 chunkSize 下，
+// workqueue.ParallelizeUntil 将创建的 worker（goroutine）数量。
 func numWorkersForChunkSize(parallelism, pieces, chunkSize int) int {
 	chunks := (pieces + chunkSize - 1) / chunkSize
 	if chunks < parallelism {
@@ -63,15 +63,15 @@ func numWorkersForChunkSize(parallelism, pieces, chunkSize int) int {
 	return parallelism
 }
 
-// Until is a wrapper around workqueue.ParallelizeUntil to use in scheduling algorithms.
-// A given operation will be a label that is recorded in the goroutine metric.
+// Until 是 workqueue.ParallelizeUntil 的包装，用于调度算法。
+// operation 会作为标签记录在 goroutine 指标中。
 func (p Parallelizer) Until(ctx context.Context, pieces int, doWorkPiece workqueue.DoWorkPieceFunc, operation string) {
 	chunkSize := chunkSizeFor(pieces, p.parallelism)
 	workers := numWorkersForChunkSize(p.parallelism, pieces, chunkSize)
 
 	goroutinesMetric := metrics.Goroutines.WithLabelValues(operation)
-	// Calling single Add with workers' count is more efficient than calling Inc or Dec per each work piece.
-	// This approach improves performance of some plugins (affinity, topology spreading) as well as preemption.
+	// 一次按 worker 数量 Add，比为每个工作项调用 Inc/Dec 更高效。
+	// 这能改善部分插件（亲和性、拓扑分布）以及抢占的性能。
 	goroutinesMetric.Add(float64(workers))
 	defer goroutinesMetric.Add(float64(-workers))
 

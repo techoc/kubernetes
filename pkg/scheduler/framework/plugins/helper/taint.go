@@ -18,11 +18,12 @@ package helper
 
 import v1 "k8s.io/api/core/v1"
 
-// DoNotScheduleTaintsFilterFunc returns the filter function that can
-// filter out the node taints that reject scheduling Pod on a Node.
+// DoNotScheduleTaintsFilterFunc 返回一个过滤函数，
+// 用于筛出会阻止 Pod 调度到节点上的污点（taint）。
 func DoNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
 	return func(t *v1.Taint) bool {
-		// PodToleratesNodeTaints is only interested in NoSchedule and NoExecute taints.
+		// PodToleratesNodeTaints 只关心 NoSchedule 和 NoExecute 两种效果，
+		// PreferNoSchedule 只是软性偏好，不构成调度阻碍。
 		return t.Effect == v1.TaintEffectNoSchedule || t.Effect == v1.TaintEffectNoExecute
 	}
 }

@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resources provides a metrics collector that reports the
-// resource consumption (requests and limits) of the pods in the cluster
-// as the scheduler and kubelet would interpret it.
+// Package resources 提供指标采集器，按调度器和 kubelet 的理解口径
+// 报告集群中 Pod 的资源消耗（request 与 limit）。
 package resources
 
 import (
@@ -35,18 +34,23 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// fakePodLister 是测试用的 PodLister：忽略 selector，直接返回预置的 Pod 列表。
 type fakePodLister struct {
 	pods []*v1.Pod
 }
 
+// List 返回预置的全部 Pod，忽略 selector。
 func (l *fakePodLister) List(selector labels.Selector) (ret []*v1.Pod, err error) {
 	return l.pods, nil
 }
 
+// Pods 未实现；采集器只会调用 List。
 func (l *fakePodLister) Pods(namespace string) corelisters.PodNamespaceLister {
 	panic("not implemented")
 }
 
+// Test_podResourceCollector_Handler 校验 HTTP handler 输出的指标：
+// 已初始化 Pod 的 init 容器 request 与业务容器 limit 应被正确聚合。
 func Test_podResourceCollector_Handler(t *testing.T) {
 	h := Handler(&fakePodLister{pods: []*v1.Pod{
 		{
@@ -108,6 +112,8 @@ kube_pod_resource_request{namespace="test",node="node-one",pod="foo",priority=""
 	}
 }
 
+// Test_podResourceCollector_CollectWithStability 表驱动校验各类 Pod（空容器、无资源、
+// init 容器、重启容器等）下资源指标的计算结果。
 func Test_podResourceCollector_CollectWithStability(t *testing.T) {
 	tests := []struct {
 		name string

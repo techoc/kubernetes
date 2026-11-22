@@ -16,77 +16,76 @@ limitations under the License.
 
 package metrics
 
-// This file contains helpers for metrics that are associated to a profile.
+// 本文件包含与调度 profile 关联的指标辅助函数。
 
 var (
-	ScheduledResult           = "scheduled"
-	UnschedulableResult       = "unschedulable"
+	// ScheduledResult 表示调度成功的结果标签。
+	ScheduledResult = "scheduled"
+	// UnschedulableResult 表示 Pod 不可调度的结果标签。
+	UnschedulableResult = "unschedulable"
+	// WaitingOnPreemptionResult 表示 Pod 组正在等待抢占的结果标签。
 	WaitingOnPreemptionResult = "waiting_on_preemption"
-	ErrorResult               = "error"
-	FeasibleResult            = "feasible"
-	InfeasibleResult          = "infeasible"
+	// ErrorResult 表示调度过程出错的结果标签。
+	ErrorResult = "error"
+	// FeasibleResult 表示候选放置可行的结果标签。
+	FeasibleResult = "feasible"
+	// InfeasibleResult 表示候选放置不可行的结果标签。
+	InfeasibleResult = "infeasible"
 )
 
-// PodScheduled can records a successful scheduling attempt and the duration
-// since `start`.
+// PodScheduled 记录一次成功的调度尝试，以及自 `start` 以来的耗时。
 func PodScheduled(profile string, duration float64) {
 	observeScheduleAttemptAndLatency(ScheduledResult, profile, duration)
 }
 
-// PodUnschedulable can records a scheduling attempt for an unschedulable pod
-// and the duration since `start`.
+// PodUnschedulable 记录一次针对不可调度 Pod 的调度尝试，以及自 `start` 以来的耗时。
 func PodUnschedulable(profile string, duration float64) {
 	observeScheduleAttemptAndLatency(UnschedulableResult, profile, duration)
 }
 
-// PodScheduleError can records a scheduling attempt that had an error and the
-// duration since `start`.
+// PodScheduleError 记录一次出错的调度尝试，以及自 `start` 以来的耗时。
 func PodScheduleError(profile string, duration float64) {
 	observeScheduleAttemptAndLatency(ErrorResult, profile, duration)
 }
 
+// observeScheduleAttemptAndLatency 按结果与 profile 同时记录调度耗时和尝试次数。
 func observeScheduleAttemptAndLatency(result, profile string, duration float64) {
 	schedulingLatency.WithLabelValues(result, profile).Observe(duration)
 	scheduleAttempts.WithLabelValues(result, profile).Inc()
 }
 
-// PodGroupScheduled can records a successful pod group scheduling attempt and the duration
-// since `start`.
+// PodGroupScheduled 记录一次成功的 Pod 组调度尝试，以及自 `start` 以来的耗时。
 func PodGroupScheduled(profile string, duration float64) {
 	observePodGroupScheduleAttemptAndLatency(ScheduledResult, profile, duration)
 }
 
-// PodGroupUnschedulable can records a pod group scheduling attempt for an unschedulable pod group
-// and the duration since `start`.
+// PodGroupUnschedulable 记录一次针对不可调度 Pod 组的调度尝试，以及自 `start` 以来的耗时。
 func PodGroupUnschedulable(profile string, duration float64) {
 	observePodGroupScheduleAttemptAndLatency(UnschedulableResult, profile, duration)
 }
 
-// PodGroupWaitingOnPreemption can records a pod group scheduling attempt for an unschedulable pod group
-// waiting on preemption, and the duration since `start`.
+// PodGroupWaitingOnPreemption 记录一次因等待抢占而不可调度的 Pod 组调度尝试，以及自 `start` 以来的耗时。
 func PodGroupWaitingOnPreemption(profile string, duration float64) {
 	observePodGroupScheduleAttemptAndLatency(WaitingOnPreemptionResult, profile, duration)
 }
 
-// PodGroupScheduleError records a pod group scheduling attempt that had an error, and the
-// duration since `start`.
+// PodGroupScheduleError 记录一次出错的 Pod 组调度尝试，以及自 `start` 以来的耗时。
 func PodGroupScheduleError(profile string, duration float64) {
 	observePodGroupScheduleAttemptAndLatency(ErrorResult, profile, duration)
 }
 
+// observePodGroupScheduleAttemptAndLatency 按结果与 profile 同时记录 Pod 组调度耗时和尝试次数。
 func observePodGroupScheduleAttemptAndLatency(result, profile string, duration float64) {
 	podGroupSchedulingLatency.WithLabelValues(result, profile).Observe(duration)
 	podGroupScheduleAttempts.WithLabelValues(result, profile).Inc()
 }
 
-// RecordGeneratedPlacements records the number of candidate placements generated for a
-// pod group in a single scheduling cycle.
+// RecordGeneratedPlacements 记录单个调度周期内为 Pod 组生成的候选放置数量。
 func RecordGeneratedPlacements(profile string, count int) {
 	GeneratedPlacementsTotal.WithLabelValues(profile).Add(float64(count))
 }
 
-// ObservePlacementEvaluation records a single candidate placement evaluation and the
-// duration, by result.
+// ObservePlacementEvaluation 按结果记录一次候选放置评估及其耗时。
 func ObservePlacementEvaluation(result, profile string, duration float64) {
 	PlacementEvaluations.WithLabelValues(result, profile).Inc()
 	PlacementEvaluationDuration.WithLabelValues(result, profile).Observe(duration)

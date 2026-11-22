@@ -32,30 +32,37 @@ import (
 
 var _ metrics.MetricRecorder = &mockMetricRecorder{}
 
+// mockMetricRecorder 是测试中使用的简化指标记录器，只维护一个计数值。
 type mockMetricRecorder struct {
 	val atomic.Int64
 }
 
+// Add 按实体包含的 Pod 数累加计数。
 func (m *mockMetricRecorder) Add(entity metrics.Entity) {
 	m.val.Add(int64(entity.Size()))
 }
 
+// Remove 按实体包含的 Pod 数扣减计数。
 func (m *mockMetricRecorder) Remove(entity metrics.Entity) {
 	m.val.Add(-int64(entity.Size()))
 }
 
+// Update 按新旧实体的 Pod 数差值调整计数。
 func (m *mockMetricRecorder) Update(oldEntity, newEntity metrics.Entity) {
 	m.val.Add(int64(newEntity.Size() - oldEntity.Size()))
 }
 
+// Clear 将计数重置为 0。
 func (m *mockMetricRecorder) Clear() {
 	m.val.Store(0)
 }
 
+// value 返回当前计数。
 func (m *mockMetricRecorder) value() int64 {
 	return m.val.Load()
 }
 
+// TestUnschedulableEntities 验证不可调度实体的增删更新与 gated Pod 的指标统计是否正确。
 func TestUnschedulableEntities(t *testing.T) {
 	type action string
 
@@ -239,6 +246,7 @@ func TestUnschedulableEntities(t *testing.T) {
 	}
 }
 
+// TestUnschedulablePodGroups_Unified 验证 PodGroup 作为整体加入/删除时指标的变化。
 func TestUnschedulablePodGroups_Unified(t *testing.T) {
 	unschedulableRecorder := &mockMetricRecorder{}
 	gatedRecorder := &mockMetricRecorder{}

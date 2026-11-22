@@ -35,6 +35,8 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// TestLeastAllocatedScoringStrategy 验证 LeastAllocated 策略在各种资源请求、
+// 节点容量、权重配置及扩展资源场景下的打分结果。
 func TestLeastAllocatedScoringStrategy(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -47,11 +49,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		wantStatusCode fwk.Code
 	}{
 		{
-			// Node1 scores (remaining resources) on 0-MaxNodeScore scale
+			// node1 的打分（按剩余资源，映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
 			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
-			// Node1 Score: (100 + 100) / 2 = 100
-			// Node2 scores (remaining resources) on 0-MaxNodeScore scale
+			// node1 最终得分：(100 + 100) / 2 = 100
+			// node2 的打分（按剩余资源，映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
 			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
 			// Node2 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
@@ -66,11 +68,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 3000) * MaxNodeScore) / 4000 = 25
 			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
 			// Node1 Score: (25 + 50) / 2 = 37
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((6000 - 3000) * MaxNodeScore) / 6000 = 50
 			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
 			// Node2 Score: (50 + 50) / 2 = 50
@@ -103,11 +105,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			wantStatusCode: fwk.Error,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
 			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
 			// Node1 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
 			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
 			// Node2 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
@@ -127,11 +129,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((20000 - 0) * MaxNodeScore) / 20000 = MaxNodeScore
 			// Node1 Score: (40 + 100) / 2 = 70
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
 			// Node2 Score: (40 + 75) / 2 = 57
@@ -151,11 +153,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
 			// Node1 Score: (40 + 75) / 2 = 57
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((20000 - 10000) * MaxNodeScore) / 20000 = 50
 			// Node2 Score: (40 + 50) / 2 = 45
@@ -176,11 +178,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
 			// Node1 Score: (40 + 75) / 2 = 57
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
 			// Memory Score: ((50000 - 10000) * MaxNodeScore) / 50000 = 80
 			// Node2 Score: (40 + 80) / 2 = 60
@@ -201,11 +203,11 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// Node1 scores on 0-MaxNodeScore scale
+			// node1 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 6000) * MaxNodeScore) / 4000 = 0
 			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
 			// Node1 Score: (0 + MaxNodeScore) / 2 = 50
-			// Node2 scores on 0-MaxNodeScore scale
+			// node2 的打分（映射到 0-MaxNodeScore 区间）
 			// CPU Score: ((4000 - 6000) * MaxNodeScore) / 4000 = 0
 			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
 			// Node2 Score: (0 + 50) / 2 = 25
@@ -260,7 +262,7 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// resource with negative weight is not allowed
+			// 权重为负数的资源不被允许
 			name: "resource with negative weight",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -281,7 +283,7 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// resource with zero weight is not allowed
+			// 权重为 0 的资源不被允许
 			name: "resource with zero weight",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -304,7 +306,7 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// resource weight should be less than MaxNodeScore
+			// 资源权重必须小于 MaxNodeScore
 			name: "resource weight larger than MaxNodeScore",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -325,10 +327,9 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			},
 		},
 		{
-			// Bypass extended resource if the pod does not request.
-			// For both nodes: cpuScore and memScore are 50
-			// Given that extended resource score are intentionally bypassed,
-			// the final scores are:
+			// Pod 未请求扩展资源时跳过它。
+			// 两节点的 cpuScore 和 memScore 都是 50。
+			// 扩展资源分数被有意跳过，因此最终得分为：
 			// - node1: (50 + 50) / 2 = 50
 			// - node2: (50 + 50) / 2 = 50
 			name: "bypass extended resource if the pod does not request",
@@ -344,12 +345,12 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      extendedResourceSet,
 		},
 		{
-			// Honor extended resource if the pod requests.
-			// For both nodes: cpuScore and memScore are 50.
-			// In terms of extended resource score:
-			// - node1 get: 2 / 4 * 100 = 50
-			// - node2 get: (10 - 2) / 10 * 100 = 80
-			// So the final scores are:
+			// Pod 请求扩展资源时将其纳入计算。
+			// 两节点的 cpuScore 和 memScore 都是 50。
+			// 扩展资源分数：
+			// - node1：2 / 4 * 100 = 50
+			// - node2：(10 - 2) / 10 * 100 = 80
+			// 因此最终得分为：
 			// - node1: (50 + 50 + 50) / 3 = 50
 			// - node2: (50 + 50 + 80) / 3 = 60
 			name: "honor extended resource if the pod requests",
@@ -365,7 +366,7 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      extendedResourceSet,
 		},
 		{
-			// If the node doesn't have a resource
+			// 节点上没有扩展资源时：
 			// CPU Score: ((6000 - 3000) * 100) / 6000 = 50
 			// Memory Score: ((10000 - 4000) * 100) / 10000 = 60
 			// Node1 Score: (50 * 1 + 60 * 1) / (1 + 1) = 55

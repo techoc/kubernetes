@@ -48,22 +48,18 @@ import (
 )
 
 const (
-	// Percentage of plugin metrics to be sampled.
+	// 插件指标采样比例。
 	pluginMetricsSamplePercent = 10
-	// minFeasibleNodesToFind is the minimum number of nodes that would be scored
-	// in each scheduling cycle. This is a semi-arbitrary value to ensure that a
-	// certain minimum of nodes are checked for feasibility. This in turn helps
-	// ensure a minimum level of spreading.
+	// minFeasibleNodesToFind 是每个调度周期至少参与打分的节点数。取值带有经验性，
+	// 目的是保证检查足够数量的节点，从而维持最低程度的分散性。
 	minFeasibleNodesToFind = 100
-	// minFeasibleNodesPercentageToFind is the minimum percentage of nodes that
-	// would be scored in each scheduling cycle. This is a semi-arbitrary value
-	// to ensure that a certain minimum of nodes are checked for feasibility.
-	// This in turn helps ensure a minimum level of spreading.
+	// minFeasibleNodesPercentageToFind 是每个调度周期参与打分的最小节点百分比。
+	// 同样为经验值，用于保证检查足够比例的节点，维持最低程度的分散性。
 	minFeasibleNodesPercentageToFind = 5
 )
 
-// ScheduleOne does the entire scheduling workflow for a single scheduling entity (either a pod or a pod group).
-// It is serialized on the scheduling algorithm's host fitting.
+// ScheduleOne 对单个调度实体（Pod 或 PodGroup）执行完整的调度流程。
+// 各实体在主机选择（host fitting）算法上是串行执行的。
 func (sched *Scheduler) ScheduleOne(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	entity, err := sched.NextEntity(logger)
@@ -71,7 +67,7 @@ func (sched *Scheduler) ScheduleOne(ctx context.Context) {
 		utilruntime.HandleErrorWithLogger(logger, err, "Error while retrieving next scheduling entity from scheduling queue")
 		return
 	}
-	// entity could be nil when schedulerQueue is closed
+	// 调度队列关闭时 entity 可能为 nil。
 	if entity == nil {
 		return
 	}
@@ -89,12 +85,11 @@ func (sched *Scheduler) ScheduleOne(ctx context.Context) {
 	}
 }
 
-// scheduleOnePod does the entire scheduling workflow for a single pod.
+// scheduleOnePod 对单个 Pod 执行完整的调度流程。
 func (sched *Scheduler) scheduleOnePod(ctx context.Context, podInfo *framework.QueuedPodInfo) {
 	logger := klog.FromContext(ctx)
 	pod := podInfo.Pod
-	// TODO(knelasevero): Remove duplicated keys from log entry calls
-	// When contextualized logging hits GA
+	// TODO(knelasevero): 等上下文日志 GA 后，去掉日志调用里重复的 key。
 	// https://github.com/kubernetes/kubernetes/issues/111672
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod))
 	ctx = klog.NewContext(ctx, logger)
@@ -102,29 +97,27 @@ func (sched *Scheduler) scheduleOnePod(ctx context.Context, podInfo *framework.Q
 
 	schedFramework, err := sched.frameworkForPod(pod)
 	if err != nil {
-		// This shouldn't happen, because we only accept for scheduling the pods
-		// which specify a scheduler name that matches one of the profiles.
+		// 理论上不会发生：调度队列只接收 schedulerName 与某个 profile 匹配的 Pod。
 		logger.Error(err, "Error occurred")
 		sched.SchedulingQueue.Done(podInfo.Pod.UID)
 		return
 	}
 	if sched.skipPodSchedule(ctx, schedFramework, pod) {
-		// We don't put this Pod back to the queue, but we have to cleanup the in-flight pods/events.
+		// 此处不把 Pod 放回队列，但必须清理 in-flight 的 Pod 与事件。
 		sched.SchedulingQueue.Done(podInfo.Pod.UID)
 		return
 	}
 
 	logger.V(3).Info("Attempting to schedule pod", "pod", klog.KObj(pod))
 
-	// Synchronously attempt to find a fit for the pod.
+	// 同步为 Pod 寻找合适的节点。
 	start := time.Now()
 	state := framework.NewCycleState()
-	// For the sake of performance, scheduler does not measure and export the scheduler_plugin_execution_duration metric
-	// for every plugin execution in each scheduling cycle. Instead it samples a portion of scheduling cycles - percentage
-	// determined by pluginMetricsSamplePercent. The line below helps to randomly pick appropriate scheduling cycles.
+	// 出于性能考虑，调度器不会在每个周期都为每次插件执行采集并导出 scheduler_plugin_execution_duration 指标，
+	// 而是按 pluginMetricsSamplePercent 随机抽样部分调度周期。下面的判断即用于随机选取周期。
 	state.SetRecordPluginMetrics(rand.Intn(100) < pluginMetricsSamplePercent)
 
-	// Initialize an empty podsToActivate struct, which will be filled up by plugins or stay empty.
+	// 初始化空的 podsToActivate，由插件填充；没有插件填充时保持为空。
 	podsToActivate := framework.NewPodsToActivate()
 	state.Write(framework.PodsToActivateKey, podsToActivate)
 
@@ -137,11 +130,11 @@ func (sched *Scheduler) scheduleOnePod(ctx context.Context, podInfo *framework.Q
 		return
 	}
 
-	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
+	// 异步把 Pod 绑定到目标节点：上一步的 assume 已让缓存认为 Pod 已在节点上，因此无需等待绑定完成。
 	go sched.runBindingCycle(ctx, state, schedFramework, scheduleResult, assumedPodInfo, start, podsToActivate)
 }
 
-// runBindingCycle runs a binding cycle algorithm.
+// runBindingCycle 执行绑定周期算法。
 func (sched *Scheduler) runBindingCycle(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -165,7 +158,7 @@ func (sched *Scheduler) runBindingCycle(
 
 var clearNominatedNode = &fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: ""}
 
-// schedulingCycle tries to schedule a single Pod.
+// schedulingCycle 尝试为单个 Pod 完成调度。
 func (sched *Scheduler) schedulingCycle(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -191,8 +184,7 @@ func (sched *Scheduler) schedulingCycle(
 	return scheduleResult, assumedPodInfo, nil
 }
 
-// prepareForBindingCycle applies the schedule result, generated by the scheduling algorithm, in memory,
-// preparing for a binding cycle.
+// prepareForBindingCycle 把调度算法产生的结果应用到内存中，为绑定周期做准备。
 func (sched *Scheduler) prepareForBindingCycle(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -207,12 +199,12 @@ func (sched *Scheduler) prepareForBindingCycle(
 	}
 	assumedPod := assumedPodInfo.Pod
 
-	// Run "permit" plugins.
+	// 运行 "permit" 插件。
 	pluginsWaitTime, runPermitStatus := schedFramework.RunPermitPlugins(ctx, state, assumedPod, scheduleResult.SuggestedHost)
 	if runPermitStatus.IsWait() {
 		schedFramework.AddWaitingPod(assumedPod, pluginsWaitTime)
 	} else if !runPermitStatus.IsSuccess() {
-		// trigger un-reserve plugins to clean up state associated with the reserved Pod
+		// 触发 un-reserve 插件，清理与该 Pod 预留相关的状态。
 		err := sched.unreserveAndForget(ctx, state, schedFramework, assumedPodInfo, scheduleResult.SuggestedHost)
 		if err != nil {
 			utilruntime.HandleErrorWithContext(ctx, err, "ForgetPod failed")
@@ -234,19 +226,18 @@ func (sched *Scheduler) prepareForBindingCycle(
 		return assumedPodInfo, runPermitStatus
 	}
 
-	// At the end of a successful scheduling cycle, pop and move up Pods if needed.
+	// 调度周期成功结束后，按需弹出并上移等待中的 Pod。
 	if len(podsToActivate.Map) != 0 {
 		logger := klog.FromContext(ctx)
 		sched.SchedulingQueue.Activate(logger, podsToActivate.Map)
-		// Clear the entries after activation.
+		// 激活后清空记录。
 		podsToActivate.Map = make(map[string]*v1.Pod)
 	}
 
 	return assumedPodInfo, nil
 }
 
-// schedulingAlgorithm runs fitering and scoring phases for a single pod,
-// together with post filter when the pod is unschedulable.
+// schedulingAlgorithm 对单个 Pod 执行过滤与打分阶段；Pod 不可调度时还会执行 PostFilter。
 func (sched *Scheduler) schedulingAlgorithm(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -274,25 +265,23 @@ func (sched *Scheduler) schedulingAlgorithm(
 			return ScheduleResult{nominatingInfo: clearNominatedNode}, fwk.AsStatus(err)
 		}
 
-		// We do not want to run PostFilters for single pods in PodGroup cycle.
-		// Instead we will run PodGroupPostFilter at the end of PodGroup cycle.
+		// PodGroup 调度周期中，不为其中单个 Pod 运行 PostFilter；
+		// 而是在整个 PodGroup 周期结束时运行 PodGroupPostFilter。
 		if state.IsPodGroupSchedulingCycle() {
-			// Return nil as NominatingInfo. It can be overridden by the PodGroupPostFilter later
-			// and the final decision whether to clear NominatingInfo will be done in submitPodGroupAlgorithmResult.
+			// NominatingInfo 返回 nil，后续可能被 PodGroupPostFilter 覆盖；
+			// 是否最终清空由 submitPodGroupAlgorithmResult 决定。
 			return ScheduleResult{nominatingInfo: nil}, fwk.NewStatus(fwk.Unschedulable).WithError(err)
 		}
 
-		// SchedulePod() may have failed because the pod would not fit on any host, so we try to
-		// preempt, with the expectation that the next time the pod is tried for scheduling it
-		// will fit due to the preemption. It is also possible that a different pod will schedule
-		// into the resources that were preempted, but this is harmless.
+		// SchedulePod() 失败可能是因为没有任何节点能容纳该 Pod，因此尝试抢占，
+		// 期望下次调度时资源已腾出。即便被抢占的资源被其他 Pod 抢先占用也无害。
 
 		if !schedFramework.HasPostFilterPlugins() {
 			logger.V(3).Info("No PostFilter plugins are registered, so no preemption will be performed")
 			return ScheduleResult{nominatingInfo: clearNominatedNode}, fwk.NewStatus(fwk.Unschedulable).WithError(err)
 		}
 
-		// Run PostFilter plugins to attempt to make the pod schedulable in a future scheduling cycle.
+		// 运行 PostFilter 插件，尝试让 Pod 在未来的调度周期中可调度。
 		result, status := schedFramework.RunPostFilterPlugins(ctx, state, pod, fitError.Diagnosis.NodeToStatus)
 		msg := status.Message()
 		fitError.Diagnosis.PostFilterMsg = msg
@@ -311,7 +300,7 @@ func (sched *Scheduler) schedulingAlgorithm(
 	return scheduleResult, nil
 }
 
-// assumeAndReserve assumes and reserves the pod in scheduler's memory.
+// assumeAndReserve 在调度器内存中 assume 并 reserve 该 Pod。
 func (sched *Scheduler) assumeAndReserve(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -320,24 +309,22 @@ func (sched *Scheduler) assumeAndReserve(
 	scheduleResult ScheduleResult,
 ) (*framework.QueuedPodInfo, *fwk.Status) {
 	logger := klog.FromContext(ctx)
-	// Tell the cache to assume that a pod now is running on a given node, even though it hasn't been bound yet.
-	// This allows us to keep scheduling without waiting on binding to occur.
+	// 告知缓存：Pod 虽尚未绑定，但假定其已在目标节点上运行。
+	// 这样调度器无需等待绑定完成即可继续调度后续 Pod。
 	assumedPodInfo := podInfo.DeepCopy()
 	assumedPod := assumedPodInfo.Pod
-	// assume modifies `assumedPod` by setting NodeName=scheduleResult.SuggestedHost
+	// assume 会给 assumedPod 设置 NodeName=scheduleResult.SuggestedHost。
 	err := sched.assume(logger, state, assumedPodInfo, scheduleResult.SuggestedHost)
 	if err != nil {
-		// This is most probably result of a BUG in retrying logic.
-		// We report an error here so that pod scheduling can be retried.
-		// This relies on the fact that Error will check if the pod has been bound
-		// to a node and if so will not add it back to the unscheduled pods queue
-		// (otherwise this would cause an infinite loop).
+		// 这很可能是重试逻辑的 BUG。此处报错以便重试调度，
+		// 依赖 Error 状态会检查 Pod 是否已绑定：若已绑定则不会重新入队，
+		// 否则会造成无限循环。
 		return assumedPodInfo, fwk.AsStatus(err)
 	}
 
-	// Run the Reserve method of reserve plugins.
+	// 运行 reserve 插件的 Reserve 方法。
 	if sts := schedFramework.RunReservePluginsReserve(ctx, state, assumedPod, scheduleResult.SuggestedHost); !sts.IsSuccess() {
-		// trigger un-reserve to clean up state associated with the reserved Pod
+		// 触发 un-reserve，清理与该 Pod 预留相关的状态。
 		err := sched.unreserveAndForget(ctx, state, schedFramework, assumedPodInfo, scheduleResult.SuggestedHost)
 		if err != nil {
 			utilruntime.HandleErrorWithContext(ctx, err, "ForgetPod failed")
@@ -360,9 +347,9 @@ func (sched *Scheduler) assumeAndReserve(
 	return assumedPodInfo, nil
 }
 
-// unreserveAndForget unreserves and forgets the pod from scheduler's memory.
-// This function shouldn't be called during binding cycle with a state, where IsPodGroupSchedulingCycle is set to true,
-// but this shouldn't happen, because such pods with such state cannot reach binding.
+// unreserveAndForget 在调度器内存中取消预留并遗忘该 Pod。
+// IsPodGroupSchedulingCycle 为 true 的状态下不应在绑定周期调用此函数；
+// 不过带此状态的 Pod 也到不了绑定阶段。
 func (sched *Scheduler) unreserveAndForget(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -379,14 +366,13 @@ func (sched *Scheduler) unreserveAndForget(
 			return err
 		}
 		if assumedPodInfo.Pod.Status.NominatedNodeName != "" {
-			// Assume method removed the nomination, but since we are reverting that stage for pod groups,
-			// we need to revert that operation as well.
+			// Assume 会清除 nomination；由于此处要回滚 PodGroup 的该阶段， nomination 也需要恢复。
 			if sched.SchedulingQueue != nil {
 				nominatingInfo := &fwk.NominatingInfo{
 					NominatedNodeName: assumedPodInfo.Pod.Status.NominatedNodeName,
 					NominatingMode:    fwk.ModeOverride,
 				}
-				// AssumedPodInfo can be used here, because the whole pod object is not stored in the nominator.
+				// 这里可以用 AssumedPodInfo：nominator 并不保存完整的 Pod 对象。
 				sched.SchedulingQueue.AddNominatedPod(logger, assumedPodInfo.PodInfo, nominatingInfo)
 			}
 		}
@@ -395,7 +381,7 @@ func (sched *Scheduler) unreserveAndForget(
 	return sched.Cache.ForgetPod(logger, assumedPodInfo.Pod)
 }
 
-// bindingCycle tries to bind an assumed Pod.
+// bindingCycle 尝试绑定一个已 assume 的 Pod。
 func (sched *Scheduler) bindingCycle(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -412,24 +398,24 @@ func (sched *Scheduler) bindingCycle(
 	if sched.nominatedNodeNameForExpectationEnabled {
 		preFlightStatus = schedFramework.RunPreBindPreFlights(ctx, state, assumedPod, scheduleResult.SuggestedHost)
 		if preFlightStatus.Code() == fwk.Error ||
-			// Unschedulable status is not supported in PreBindPreFlight and hence we regard it as an error.
+			// PreBindPreFlight 不支持 Unschedulable 状态，因此一律按错误处理。
 			preFlightStatus.IsRejected() {
 			return preFlightStatus
 		}
 		if preFlightStatus.IsSuccess() || schedFramework.WillWaitOnPermit(ctx, assumedPod) {
-			// Add NominatedNodeName to tell the external components (e.g., the cluster autoscaler) that the pod is about to be bound to the node.
-			// We only do this when any of WaitOnPermit or PreBind will work because otherwise the pod will be soon bound anyway.
+			// 设置 NominatedNodeName，告知外部组件（如 cluster autoscaler）Pod 即将绑定到该节点。
+			// 仅在 WaitOnPermit 或 PreBind 会执行时设置，否则 Pod 很快就会绑定，无需通知。
 			if err := updatePod(ctx, sched.client, schedFramework.APICacher(), assumedPod, nil, &fwk.NominatingInfo{
 				NominatedNodeName: scheduleResult.SuggestedHost,
 				NominatingMode:    fwk.ModeOverride,
 			}); err != nil {
 				logger.Error(err, "Failed to update the nominated node name in the binding cycle", "pod", klog.KObj(assumedPod), "nominatedNodeName", scheduleResult.SuggestedHost)
-				// We continue the processing because it's not critical enough to stop binding cycles here.
+				// 该错误不影响大局，继续执行绑定流程。
 			}
 		}
 	}
 
-	// Run "permit" plugins.
+	// 运行 "permit" 插件。
 	if status := schedFramework.WaitOnPermit(ctx, assumedPod); !status.IsSuccess() {
 		if status.IsRejected() {
 			fitErr := &framework.FitError{
@@ -446,15 +432,13 @@ func (sched *Scheduler) bindingCycle(
 		return status
 	}
 
-	// Any failures after this point cannot lead to the Pod being considered unschedulable.
-	// We define the Pod as "unschedulable" only when Pods are rejected at specific extension points, and Permit is the last one in the scheduling/binding cycle.
-	// If a Pod fails on PreBind or Bind, it should be moved to BackoffQ for retry.
+	// 此后的任何失败都不会再把 Pod 判定为不可调度：只有在特定扩展点被拒绝才算不可调度，
+	// 而 Permit 是调度/绑定周期中最后一个这样的扩展点。PreBind 或 Bind 失败时应移入 BackoffQ 重试。
 	//
-	// We can call Done() here because
-	// we can free the cluster events stored in the scheduling queue sooner, which is worth for busy clusters memory consumption wise.
+	// 此处可以调用 Done()，尽早释放调度队列中缓存的集群事件——繁忙集群中这对内存占用很有意义。
 	sched.SchedulingQueue.Done(assumedPod.UID)
 
-	// If we are going to run prebind plugins we put the pod in binding map to optimize preemption.
+	// 若将运行 PreBind 插件，先把 Pod 放入 binding map，以便优化抢占判断。
 	if preFlightStatus.IsSuccess() {
 		var podInPreBindCancel context.CancelCauseFunc
 		ctx, podInPreBindCancel = context.WithCancelCause(ctx)
@@ -462,43 +446,42 @@ func (sched *Scheduler) bindingCycle(
 		defer schedFramework.RemovePodInPreBind(assumedPod.UID)
 		schedFramework.AddPodInPreBind(assumedPod.UID, podInPreBindCancel)
 	}
-	// Run "prebind" plugins.
+	// 运行 "prebind" 插件。
 	if status := schedFramework.RunPreBindPlugins(ctx, state, assumedPod, scheduleResult.SuggestedHost); !status.IsSuccess() {
 		return status
 	}
 
-	// Verify that pod was not preempted during prebinding.
+	// 确认 Pod 在 PreBind 期间未被抢占。
 	bindingPod := schedFramework.GetPodInPreBind(assumedPod.UID)
 	if bindingPod != nil && !bindingPod.MarkPrebound() {
 		err := context.Cause(ctx)
 		return fwk.AsStatus(err)
 	}
 
-	// Run "bind" plugins.
+	// 运行 "bind" 插件。
 	if status := sched.bind(ctx, schedFramework, assumedPod, scheduleResult.SuggestedHost, state); !status.IsSuccess() {
 		return status
 	}
 
-	// Calculating nodeResourceString can be heavy. Avoid it if klog verbosity is below 2.
+	// 计算 nodeResourceString 开销较大，日志级别低于 2 时跳过。
 	logger.V(2).Info("Successfully bound pod to node", "pod", klog.KObj(assumedPod), "node", scheduleResult.SuggestedHost, "evaluatedNodes", scheduleResult.EvaluatedNodes, "feasibleNodes", scheduleResult.FeasibleNodes)
 	metrics.PodScheduled(schedFramework.ProfileName(), metrics.SinceInSeconds(start))
 	metrics.PodSchedulingAttempts.Observe(float64(assumedPodInfo.Attempts))
 	if assumedPodInfo.InitialAttemptTimestamp != nil {
 		metrics.PodSchedulingSLIDuration.WithLabelValues(getAttemptsLabel(assumedPodInfo)).Observe(metrics.SinceInSeconds(*assumedPodInfo.InitialAttemptTimestamp))
 	}
-	// Count pods scheduled after being flushed from unschedulableEntities
+	// 统计从 unschedulableEntities 冲刷后成功调度的 Pod 数。
 	if assumedPodInfo.WasFlushedFromUnschedulable {
 		logger.V(4).Info("Pod scheduled after flush from unschedulableEntities", "pod", klog.KObj(assumedPodInfo.Pod), "unschedulablePlugins", assumedPodInfo.UnschedulablePlugins, "pendingPlugins", assumedPodInfo.PendingPlugins)
 		metrics.PodScheduledAfterFlush.Inc()
 	}
-	// Run "postbind" plugins.
+	// 运行 "postbind" 插件。
 	schedFramework.RunPostBindPlugins(ctx, state, assumedPod, scheduleResult.SuggestedHost)
 
-	// At the end of a successful binding cycle, move up Pods if needed.
+	// 绑定周期成功结束后，按需上移等待中的 Pod。
 	if len(podsToActivate.Map) != 0 {
 		sched.SchedulingQueue.Activate(logger, podsToActivate.Map)
-		// Unlike the logic in schedulingCycle(), we don't bother deleting the entries
-		// as `podsToActivate.Map` is no longer consumed.
+		// 与 schedulingCycle() 不同，这里无需删除记录，因为 podsToActivate.Map 不再被消费。
 	}
 
 	return nil
@@ -515,16 +498,15 @@ func (sched *Scheduler) handleBindingCycleError(
 	logger := klog.FromContext(ctx)
 
 	assumedPod := podInfo.Pod
-	// trigger un-reserve plugins to clean up state associated with the reserved Pod
+	// 触发 un-reserve 插件，清理与该 Pod 预留相关的状态。
 	if forgetErr := sched.unreserveAndForget(ctx, state, fwk, podInfo, scheduleResult.SuggestedHost); forgetErr != nil {
 		utilruntime.HandleErrorWithContext(ctx, forgetErr, "ForgetPod failed")
 	} else {
-		// "Forget"ing an assumed Pod in binding cycle should be treated as a PodDelete event,
-		// as the assumed Pod had occupied a certain amount of resources in scheduler cache.
+		// 绑定周期中 Forget 已 assume 的 Pod 应视为 PodDelete 事件：该 Pod 此前在调度缓存中占用了资源。
 		//
-		// Avoid moving the assumed Pod itself as it's always Unschedulable.
-		// It's intentional to "defer" this operation; otherwise MoveAllToActiveOrBackoffQueue() would
-		// add this event to in-flight events and thus move the assumed pod to backoffQ anyways if the plugins don't have appropriate QueueingHint.
+		// 不要移动这个 assumed Pod 本身，它始终是 Unschedulable 的。
+		// 这里刻意延迟执行：否则 MoveAllToActiveOrBackoffQueue() 会把该事件加入 in-flight 事件，
+		// 在插件没有合适 QueueingHint 时仍会把 assumed Pod 移入 backoffQ。
 		if status.IsRejected() {
 			defer sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodDelete, assumedPod, nil, func(pod *v1.Pod) bool {
 				return assumedPod.UID != pod.UID
@@ -545,9 +527,9 @@ func (sched *Scheduler) frameworkForPod(pod *v1.Pod) (framework.Framework, error
 	return fwk, nil
 }
 
-// skipPodSchedule returns true if we could skip scheduling the pod for specified cases.
+// skipPodSchedule 判断在特定情形下是否应跳过该 Pod 的调度。
 func (sched *Scheduler) skipPodSchedule(ctx context.Context, fwk framework.Framework, pod *v1.Pod) bool {
-	// Case 1: pod is being deleted.
+	// 情形 1：Pod 正在被删除。
 	if pod.DeletionTimestamp != nil {
 		logger := klog.FromContext(ctx)
 		fwk.EventRecorder().WithLogger(logger).Eventf(pod, nil, v1.EventTypeWarning, "FailedScheduling", "Scheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
@@ -555,9 +537,8 @@ func (sched *Scheduler) skipPodSchedule(ctx context.Context, fwk framework.Frame
 		return true
 	}
 
-	// Case 2: pod that has been assumed could be skipped.
-	// An assumed pod can be added again to the scheduling queue if it got an update event
-	// during its previous scheduling cycle but before getting assumed.
+	// 情形 2：已 assume 的 Pod 可跳过。
+	// 若 Pod 在上一调度周期中、被 assume 之前收到更新事件，可能会被重新加入调度队列。
 	isAssumed, err := sched.Cache.IsAssumedPod(pod)
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Failed to check whether pod is assumed", "pod", klog.KObj(pod))
@@ -566,9 +547,8 @@ func (sched *Scheduler) skipPodSchedule(ctx context.Context, fwk framework.Frame
 	return isAssumed
 }
 
-// schedulePod tries to schedule the given pod to one of the nodes in the node list.
-// If it succeeds, it will return the name of the node.
-// If it fails, it will return a FitError with reasons.
+// schedulePod 尝试把给定 Pod 调度到节点列表中的某个节点。
+// 成功时返回节点名，失败时返回带原因的 FitError。
 func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework, state fwk.CycleState, podInfo *framework.QueuedPodInfo) (result ScheduleResult, err error) {
 	pod := podInfo.Pod
 	trace := utiltrace.New("Scheduling", utiltrace.Field{Key: "namespace", Value: pod.Namespace}, utiltrace.Field{Key: "name", Value: pod.Name})
@@ -592,7 +572,7 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 		}
 	}
 
-	// When only one node after predicate, just use it.
+	// 过滤后只剩一个节点时直接使用它。
 	if len(feasibleNodes) == 1 {
 		node := feasibleNodes[0].Node().Name
 		if utilfeature.DefaultFeatureGate.Enabled(features.OpportunisticBatching) {
@@ -625,8 +605,7 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 	}, err
 }
 
-// Filters the nodes to find the ones that fit the pod based on the framework
-// filter plugins and filter extenders.
+// findNodesThatFitPod 根据框架过滤插件与 filter extender 过滤节点，找出能容纳 Pod 的节点。
 func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework framework.Framework, state fwk.CycleState, podInfo *framework.QueuedPodInfo) ([]fwk.NodeInfo, framework.Diagnosis, string, error) {
 	logger := klog.FromContext(ctx)
 	diagnosis := framework.Diagnosis{
@@ -636,7 +615,7 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 	if err != nil {
 		return nil, diagnosis, "", err
 	}
-	// Run "prefilter" plugins.
+	// 运行 "prefilter" 插件。
 	pod := podInfo.Pod
 	preRes, s, unscheduledPlugins := schedFramework.RunPreFilterPlugins(ctx, state, pod)
 	diagnosis.UnschedulablePlugins = unscheduledPlugins
@@ -644,10 +623,10 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 		if !s.IsRejected() {
 			return nil, diagnosis, "", s.AsError()
 		}
-		// All nodes in NodeToStatus will have the same status so that they can be handled in the preemption.
+		// NodeToStatus 中所有节点共用同一状态，便于抢占时统一处理。
 		diagnosis.NodeToStatus.SetAbsentNodesStatus(s)
 
-		// Record the messages from PreFilter in Diagnosis.PreFilterMsg.
+		// 把 PreFilter 的消息记录到 Diagnosis.PreFilterMsg。
 		msg := s.Message()
 		diagnosis.PreFilterMsg = msg
 		logger.V(5).Info("Status after running PreFilter plugins for pod", "pod", klog.KObj(pod), "status", msg)
@@ -657,20 +636,18 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 
 	var nodeHint string
 	if utilfeature.DefaultFeatureGate.Enabled(features.OpportunisticBatching) {
-		// We get the node hint even if we have a nominated name for simplicity, but we could potentially avoid it
-		// in this scenario in the future.
+		// 为简化逻辑，即使已有 nominated 节点也会获取 node hint；未来可考虑跳过。
 		nodeHint = schedFramework.GetNodeHint(ctx, pod, podInfo.PodSignature, state, sched.CurrentCycle())
 	}
 
-	// "NominatedNodeName" can potentially be set in a previous scheduling cycle as a result of preemption.
-	// This node is likely the only candidate that will fit the pod, and hence we try it first before iterating over all nodes.
-	// We take the same tack for hinted nodes from the batch module.
+	// NominatedNodeName 可能是上一周期抢占的结果，该节点很可能是唯一能容纳 Pod 的候选，
+	// 因此在遍历全部节点前优先尝试它。批处理模块给出的 hint 节点也采用同样策略。
 	if len(pod.Status.NominatedNodeName) > 0 || len(nodeHint) > 0 {
 		feasibleNodes, err := sched.evaluateNominatedNode(ctx, pod, schedFramework, state, nodeHint, diagnosis)
 		if err != nil {
 			utilruntime.HandleErrorWithContext(ctx, err, "Evaluation failed on nominated node", "pod", klog.KObj(pod), "node", pod.Status.NominatedNodeName)
 		}
-		// Nominated node passes all the filters, scheduler is good to assign this node to the pod.
+		// nominated 节点通过了全部过滤器，可以直接分配给该 Pod。
 		if len(feasibleNodes) != 0 {
 			return feasibleNodes, diagnosis, nodeHint, nil
 		}
@@ -680,8 +657,7 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 	if !preRes.AllNodes() {
 		nodes = make([]fwk.NodeInfo, 0, len(preRes.NodeNames))
 		for nodeName := range preRes.NodeNames {
-			// PreRes may return nodeName(s) which do not exist; we verify
-			// node exists in the Snapshot within the selected placement.
+			// PreRes 可能返回不存在的节点名，需确认节点确实存在于所选放置的快照中。
 			if nodeInfo, err := sched.nodeInfoSnapshot.GetNodeInPlacement(nodeName); err == nil {
 				nodes = append(nodes, nodeInfo)
 			}
@@ -689,8 +665,7 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 		diagnosis.NodeToStatus.SetAbsentNodesStatus(fwk.NewStatus(fwk.UnschedulableAndUnresolvable, fmt.Sprintf("node(s) didn't satisfy plugin(s) %v", sets.List(unscheduledPlugins))))
 	}
 	feasibleNodes, err := sched.findNodesThatPassFilters(ctx, schedFramework, state, pod, &diagnosis, nodes)
-	// always try to update the sched.nextStartNodeIndex regardless of whether an error has occurred
-	// this is helpful to make sure that all the nodes have a chance to be searched
+	// 无论是否出错都要更新 nextStartNodeIndex，保证所有节点都有机会被搜索到。
 	processedNodes := len(feasibleNodes) + diagnosis.NodeToStatus.Len()
 	sched.nextStartNodeIndex = (sched.nextStartNodeIndex + processedNodes) % len(allNodes)
 	if err != nil {
@@ -702,13 +677,11 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 		return nil, diagnosis, nodeHint, err
 	}
 	if len(feasibleNodesAfterExtender) != len(feasibleNodes) {
-		// Extenders filtered out some nodes.
+		// Extender 过滤掉了一些节点。
 		//
-		// Extender doesn't support any kind of requeueing feature like EnqueueExtensions in the scheduling framework.
-		// When Extenders reject some Nodes and the pod ends up being unschedulable,
-		// we put fwk.ExtenderName to pInfo.UnschedulablePlugins.
-		// This Pod will be requeued from unschedulable pod pool to activeQ/backoffQ
-		// by any kind of cluster events.
+		// Extender 不支持框架中 EnqueueExtensions 那样的重入队机制。
+		// 当 Extender 拒绝某些节点导致 Pod 不可调度时，把 fwk.ExtenderName 记入 pInfo.UnschedulablePlugins，
+		// 这样任何集群事件都会把该 Pod 从不可调度池重新移入 activeQ/backoffQ。
 		// https://github.com/kubernetes/kubernetes/issues/122019
 		if diagnosis.UnschedulablePlugins == nil {
 			diagnosis.UnschedulablePlugins = sets.New[string]()
@@ -720,7 +693,7 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, schedFramework 
 }
 
 func (sched *Scheduler) evaluateNominatedNode(ctx context.Context, pod *v1.Pod, schedFramework framework.Framework, state fwk.CycleState, nodeHint string, diagnosis framework.Diagnosis) ([]fwk.NodeInfo, error) {
-	// In the future we could potentially use the hint if the nominated node failed.
+	// 未来可考虑在 nominated 节点失败时利用 node hint。
 	// https://github.com/kubernetes/kubernetes/issues/135163
 	nnn := pod.Status.NominatedNodeName
 	if len(nnn) == 0 {
@@ -732,8 +705,8 @@ func (sched *Scheduler) evaluateNominatedNode(ctx context.Context, pod *v1.Pod, 
 		if _, err := sched.nodeInfoSnapshot.Get(nnn); err != nil {
 			return nil, err
 		}
-		// It's not an error if NNN is in the cluster but not in the placement.
-		// This can happen during the pod group placement scheduling cycle, where we simulate multiple potential placements.
+		// NNN 节点存在于集群但不在当前放置中，不算错误。
+		// PodGroup 放置调度周期会模拟多种潜在放置，此时就可能出现这种情况。
 		logger := klog.FromContext(ctx)
 		logger.V(4).Info("Pod's nominated node is present in the cluster but not available in the current placement", "pod", klog.KObj(pod), "node", pod.Status.NominatedNodeName)
 		return nil, nil
@@ -752,7 +725,7 @@ func (sched *Scheduler) evaluateNominatedNode(ctx context.Context, pod *v1.Pod, 
 	return feasibleNodes, nil
 }
 
-// hasScoring checks if scoring nodes is configured.
+// hasScoring 检查是否配置了节点打分（Score 插件或打分 extender）。
 func (sched *Scheduler) hasScoring(fwk framework.Framework) bool {
 	if fwk.HasScorePlugins() {
 		return true
@@ -765,7 +738,7 @@ func (sched *Scheduler) hasScoring(fwk framework.Framework) bool {
 	return false
 }
 
-// hasExtenderFilters checks if any extenders filter nodes.
+// hasExtenderFilters 检查是否存在会过滤节点的 extender。
 func (sched *Scheduler) hasExtenderFilters() bool {
 	for _, extender := range sched.Extenders {
 		if extender.IsFilter() {
@@ -775,7 +748,7 @@ func (sched *Scheduler) hasExtenderFilters() bool {
 	return false
 }
 
-// findNodesThatPassFilters finds the nodes that fit the filter plugins.
+// findNodesThatPassFilters 找出通过所有 Filter 插件的节点。
 func (sched *Scheduler) findNodesThatPassFilters(
 	ctx context.Context,
 	schedFramework framework.Framework,
@@ -789,8 +762,7 @@ func (sched *Scheduler) findNodesThatPassFilters(
 		numNodesToFind = 1
 	}
 
-	// Create feasible list with enough space to avoid growing it
-	// and allow assigning.
+	// 预分配足够容量的可行节点切片，避免扩容并允许直接按下标赋值。
 	feasibleNodes := make([]fwk.NodeInfo, numNodesToFind)
 
 	if !schedFramework.HasFilterPlugins() {
@@ -811,8 +783,7 @@ func (sched *Scheduler) findNodesThatPassFilters(
 	}
 	result := make([]*nodeStatus, numAllNodes)
 	checkNode := func(i int) {
-		// We check the nodes starting from where we left off in the previous scheduling cycle,
-		// this is to make sure all nodes have the same chance of being examined across pods.
+		// 从上个调度周期停止的位置开始检查，确保跨 Pod 调度时各节点被检查的机会均等。
 		nodeInfo := nodes[(sched.nextStartNodeIndex+i)%numAllNodes]
 		status := schedFramework.RunFilterPluginsWithNominatedPods(ctx, state, pod, nodeInfo)
 		if status.Code() == fwk.Error {
@@ -837,14 +808,12 @@ func (sched *Scheduler) findNodesThatPassFilters(
 	beginCheckNode := time.Now()
 	statusCode := fwk.Success
 	defer func() {
-		// We record Filter extension point latency here instead of in framework.go because framework.RunFilterPlugins
-		// function is called for each node, whereas we want to have an overall latency for all nodes per scheduling cycle.
-		// Note that this latency also includes latency for `addNominatedPods`, which calls framework.RunPreFilterAddPod.
+		// Filter 扩展点的耗时在这里记录而非 framework.go：RunFilterPlugins 是逐节点调用的，
+		// 而我们需要的是每个调度周期所有节点的整体耗时。注意该耗时也包含调用 RunPreFilterAddPod 的 addNominatedPods。
 		metrics.FrameworkExtensionPointDuration.WithLabelValues(metrics.Filter, statusCode.String(), schedFramework.ProfileName()).Observe(metrics.SinceInSeconds(beginCheckNode))
 	}()
 
-	// Stops searching for more nodes once the configured number of feasible nodes
-	// are found.
+	// 找到配置数量的可行节点后即停止搜索。
 	schedFramework.Parallelizer().Until(ctx, numAllNodes, checkNode, metrics.Filter)
 	feasibleNodes = feasibleNodes[:feasibleNodesLen]
 	for _, item := range result {
@@ -861,14 +830,13 @@ func (sched *Scheduler) findNodesThatPassFilters(
 	return feasibleNodes, nil
 }
 
-// numFeasibleNodesToFind returns the number of feasible nodes that once found, the scheduler stops
-// its search for more feasible nodes.
+// numFeasibleNodesToFind 返回可行节点的目标数量，找到这么多节点后调度器即停止继续搜索。
 func (sched *Scheduler) numFeasibleNodesToFind(percentageOfNodesToScore *int32, numAllNodes int32) (numNodes int32) {
 	if numAllNodes < minFeasibleNodesToFind {
 		return numAllNodes
 	}
 
-	// Use profile percentageOfNodesToScore if it's set. Otherwise, use global percentageOfNodesToScore.
+	// 优先使用 profile 中设置的 percentageOfNodesToScore，否则使用全局配置。
 	var percentage int32
 	if percentageOfNodesToScore != nil {
 		percentage = *percentageOfNodesToScore
@@ -894,9 +862,7 @@ func (sched *Scheduler) numFeasibleNodesToFind(percentageOfNodesToScore *int32, 
 func findNodesThatPassExtenders(ctx context.Context, extenders []fwk.Extender, pod *v1.Pod, feasibleNodes []fwk.NodeInfo, statuses *framework.NodeToStatus) ([]fwk.NodeInfo, error) {
 	logger := klog.FromContext(ctx)
 
-	// Extenders are called sequentially.
-	// Nodes in original feasibleNodes can be excluded in one extender, and pass on to the next
-	// extender in a decreasing manner.
+	// Extender 按顺序调用：每个 extender 都可能剔除一部分节点，传给下一个 extender 的节点集合逐步缩小。
 	for _, extender := range extenders {
 		if len(feasibleNodes) == 0 {
 			break
@@ -905,11 +871,9 @@ func findNodesThatPassExtenders(ctx context.Context, extenders []fwk.Extender, p
 			continue
 		}
 
-		// Status of failed nodes in failedAndUnresolvableMap will be added to <statuses>,
-		// so that the scheduler framework can respect the UnschedulableAndUnresolvable status for
-		// particular nodes, and this may eventually improve preemption efficiency.
-		// Note: users are recommended to configure the extenders that may return UnschedulableAndUnresolvable
-		// status ahead of others.
+		// failedAndUnresolvableMap 中节点的状态会加入 <statuses>，让调度框架能识别针对特定节点的
+		// UnschedulableAndUnresolvable 状态，最终有助于提升抢占效率。
+		// 注意：建议把可能返回该状态的 extender 配置在其他 extender 之前。
 		feasibleList, failedMap, failedAndUnresolvableMap, err := extender.Filter(pod, feasibleNodes)
 		if err != nil {
 			if extender.IsIgnorable() {
@@ -925,8 +889,7 @@ func findNodesThatPassExtenders(ctx context.Context, extenders []fwk.Extender, p
 
 		for failedNodeName, failedMsg := range failedMap {
 			if _, found := failedAndUnresolvableMap[failedNodeName]; found {
-				// failedAndUnresolvableMap takes precedence over failedMap
-				// note that this only happens if the extender returns the node in both maps
+				// failedAndUnresolvableMap 优先于 failedMap；只有在 extender 同时把节点放进两个 map 时才会出现这种情况。
 				continue
 			}
 			statuses.Set(failedNodeName, fwk.NewStatus(fwk.Unschedulable, failedMsg))
@@ -937,11 +900,8 @@ func findNodesThatPassExtenders(ctx context.Context, extenders []fwk.Extender, p
 	return feasibleNodes, nil
 }
 
-// prioritizeNodes prioritizes the nodes by running the score plugins,
-// which return a score for each node from the call to RunScorePlugins().
-// The scores from each plugin are added together to make the score for that node, then
-// any extenders are run as well.
-// All scores are finally combined (added) to get the total weighted scores of all nodes
+// prioritizeNodes 运行 Score 插件为节点打分，各插件分数相加得到节点分数，
+// 随后再运行 extender 打分。所有分数最终累加为各节点的总加权分。
 func prioritizeNodes(
 	ctx context.Context,
 	extenders []fwk.Extender,
@@ -951,8 +911,7 @@ func prioritizeNodes(
 	nodes []fwk.NodeInfo,
 ) ([]fwk.NodePluginScores, error) {
 	logger := klog.FromContext(ctx)
-	// If no priority configs are provided, then all nodes will have a score of one.
-	// This is required to generate the priority list in the required format
+	// 没有配置任何优先级时，所有节点得分均为 1，以便按要求的格式生成优先级列表。
 	if len(extenders) == 0 && !schedFramework.HasScorePlugins() {
 		result := make([]fwk.NodePluginScores, 0, len(nodes))
 		for i := range nodes {
@@ -964,19 +923,19 @@ func prioritizeNodes(
 		return result, nil
 	}
 
-	// Run PreScore plugins.
+	// 运行 PreScore 插件。
 	preScoreStatus := schedFramework.RunPreScorePlugins(ctx, state, pod, nodes)
 	if !preScoreStatus.IsSuccess() {
 		return nil, preScoreStatus.AsError()
 	}
 
-	// Run the Score plugins.
+	// 运行 Score 插件。
 	nodesScores, scoreStatus := schedFramework.RunScorePlugins(ctx, state, pod, nodes)
 	if !scoreStatus.IsSuccess() {
 		return nil, scoreStatus.AsError()
 	}
 
-	// Additional details logged at level 10 if enabled.
+	// 日志级别为 10 时输出更多细节。
 	loggerVTen := logger.V(10)
 	if loggerVTen.Enabled() {
 		for _, nodeScore := range nodesScores {
@@ -987,8 +946,7 @@ func prioritizeNodes(
 	}
 
 	if len(extenders) != 0 && nodes != nil {
-		// allNodeExtendersScores has all extenders scores for all nodes.
-		// It is keyed with node name.
+		// allNodeExtendersScores 保存所有节点在 extender 处的得分，以节点名为键。
 		allNodeExtendersScores := make(map[string]*fwk.NodePluginScores, len(nodes))
 		var mu sync.Mutex
 		var wg sync.WaitGroup
@@ -1005,7 +963,7 @@ func prioritizeNodes(
 				}()
 				prioritizedList, weight, err := extenders[extIndex].Prioritize(pod, nodes)
 				if err != nil {
-					// Prioritization errors from extender can be ignored, let k8s/other extenders determine the priorities
+					// extender 的打分错误可忽略，交由 Kubernetes 或其他 extender 决定优先级。
 					logger.V(5).Info("Failed to run extender's priority function. No score given by this extender.", "error", err, "pod", klog.KObj(pod), "extender", extenders[extIndex].Name())
 					return
 				}
@@ -1018,8 +976,8 @@ func prioritizeNodes(
 						loggerVTen.Info("Extender scored node for pod", "pod", klog.KObj(pod), "extender", extenders[extIndex].Name(), "node", nodename, "score", score)
 					}
 
-					// MaxExtenderPriority may diverge from the max priority used in the scheduler and defined by MaxNodeScore,
-					// therefore we need to scale the score returned by extenders to the score range used by the scheduler.
+					// extender 的最大优先级可能与调度器使用的 MaxNodeScore 不一致，
+					// 因此需要把 extender 返回的分数换算到调度器的分数区间。
 					finalscore := score * weight * (fwk.MaxNodeScore / extenderv1.MaxExtenderPriority)
 
 					if allNodeExtendersScores[nodename] == nil {
@@ -1036,7 +994,7 @@ func prioritizeNodes(
 				}
 			}(i)
 		}
-		// wait for all go routines to finish
+		// 等待所有 goroutine 结束。
 		wg.Wait()
 		for i := range nodesScores {
 			if score, ok := allNodeExtendersScores[nodes[i].Node().Name]; ok {
@@ -1055,22 +1013,17 @@ func prioritizeNodes(
 	return nodesScores, nil
 }
 
-// assume signals to the cache that a pod is already in the cache, so that binding can be asynchronous.
-// When called during pod group scheduling cycle, pod is assumed in the snapshot instead.
+// assume 告知缓存 Pod 已被纳入，从而允许异步绑定。
+// 在 PodGroup 调度周期中调用时，assume 作用于快照而非缓存。
 func (sched *Scheduler) assume(logger klog.Logger, state fwk.CycleState, assumedPodInfo *framework.QueuedPodInfo, host string) error {
-	// Optimistically assume that the binding will succeed and send it to apiserver
-	// in the background.
-	// If the binding fails, scheduler will release resources allocated to assumed pod
-	// immediately.
+	// 乐观地假定绑定会成功，并在后台发送给 apiserver。
+	// 若绑定失败，调度器会立即释放为 assumed Pod 分配的资源。
 	assumedPodInfo.Pod.Spec.NodeName = host
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRANodeAllocatableResources) {
-		// If DRANodeAllocatableResources is enabled, copy the calculated node allocatable resource claim status
-		// from the cycle state to the assumed pod's status. This ensures that the scheduler's
-		// cached version of the pod reflects the node allocatable resources allocated by the DRA plugin
-		// for this scheduling cycle, making this information available for NodeInfo cache update.
-		// Any potential NodeAllocatableResourceClaimStatuses from a previously failed scheduling attempt is overwritten.
-		// This field is not explicitly cleared as the Pod object is reconstructed in handleSchedulingFailure()
-		// before re-queueing.
+		// 开启 DRANodeAllocatableResources 时，把计算出的节点可分配资源 claim 状态从 cycle state
+		// 复制到 assumed Pod 的 status，使调度器缓存中的 Pod 能反映 DRA 插件在此周期分配的资源，
+		// 供 NodeInfo 缓存更新使用。此前调度失败遗留的同名字段会被覆盖。
+		// 该字段无需显式清空：handleSchedulingFailure() 重新入队前会重建 Pod 对象。
 		assumedPodInfo.Pod.Status.NodeAllocatableResourceClaimStatuses = dynamicresources.ExtractPodNodeAllocatableResourceClaimStatus(logger, state, host)
 	}
 
@@ -1086,7 +1039,7 @@ func (sched *Scheduler) assume(logger klog.Logger, state fwk.CycleState, assumed
 			return err
 		}
 	}
-	// if "assumed" is a nominated pod, we should remove it from internal cache
+	// 若 assumed Pod 是 nominated Pod，应将其从内部缓存移除。
 	if sched.SchedulingQueue != nil {
 		sched.SchedulingQueue.DeleteNominatedPodIfExists(assumedPodInfo.Pod)
 	}
@@ -1094,9 +1047,9 @@ func (sched *Scheduler) assume(logger klog.Logger, state fwk.CycleState, assumed
 	return nil
 }
 
-// bind binds a pod to a given node defined in a binding object.
-// The precedence for binding is: (1) extenders and (2) framework plugins.
-// We expect this to run asynchronously, so we handle binding metrics internally.
+// bind 把 Pod 绑定到 binding 对象指定的节点。
+// 绑定优先级：(1) extender，(2) 框架插件。
+// 该方法异步执行，因此指标在内部处理。
 func (sched *Scheduler) bind(ctx context.Context, schedFramework framework.Framework, assumed *v1.Pod, targetNode string, state fwk.CycleState) (status *fwk.Status) {
 	logger := klog.FromContext(ctx)
 	defer func() {
@@ -1110,7 +1063,7 @@ func (sched *Scheduler) bind(ctx context.Context, schedFramework framework.Frame
 	return schedFramework.RunBindPlugins(ctx, state, assumed, targetNode)
 }
 
-// TODO(#87159): Move this to a Plugin.
+// TODO(#87159): 把这段逻辑移到插件中。
 func (sched *Scheduler) extendersBinding(logger klog.Logger, pod *v1.Pod, node string) (bool, error) {
 	for _, extender := range sched.Extenders {
 		if !extender.IsBinder() || !extender.IsInterested(pod) {
@@ -1139,24 +1092,21 @@ func (sched *Scheduler) finishBinding(logger klog.Logger, fwk framework.Framewor
 }
 
 func getAttemptsLabel(p *framework.QueuedPodInfo) string {
-	// We breakdown the pod scheduling duration by attempts capped to a limit
-	// to avoid ending up with a high cardinality metric.
+	// 按尝试次数细分 Pod 调度耗时，并对次数封顶，避免指标基数过高。
 	if p.Attempts >= 15 {
 		return "15+"
 	}
 	return strconv.Itoa(p.Attempts)
 }
 
-// handleSchedulingFailure records an event for the pod that indicates the
-// pod has failed to schedule. Also, update the pod condition and nominated node name if set.
+// handleSchedulingFailure 为 Pod 记录调度失败事件，并更新 Pod condition 与 nominated node name（若有）。
 func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk framework.Framework, podInfo *framework.QueuedPodInfo, status *fwk.Status, nominatingInfo *fwk.NominatingInfo, start time.Time) {
 	podInfo = podInfo.DeepCopy()
 	calledDone := false
 	defer func() {
 		if !calledDone {
-			// Basically, AddUnschedulablePodIfNotPresent calls DonePod internally.
-			// But, AddUnschedulablePodIfNotPresent isn't called in some corner cases.
-			// Here, we call DonePod explicitly to avoid leaking the pod.
+			// AddUnschedulablePodIfNotPresent 内部通常会调用 DonePod，
+			// 但某些边界场景不会调用它，因此这里显式调用，避免 Pod 泄漏。
 			sched.SchedulingQueue.Done(podInfo.Pod.UID)
 		}
 	}()
@@ -1180,15 +1130,14 @@ func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk fram
 	err := status.AsError()
 	errMsg := status.Message()
 
-	// Clear plugin-related fields to avoid stale data from previous scheduling attempts.
-	// These fields will be repopulated below for FitError cases.
-	// We clear them here (rather than at Pop) because we sometimes want to use them
-	// for logging when a pod schedules successfully (e.g., after being flushed).
+	// 清空插件相关字段，避免残留上一次调度尝试的旧数据。FitError 场景下稍后会重新填充。
+	// 在这里清空而非在 Pop 时清空，是因为 Pod 调度成功时（如从不可调度池冲刷后）
+	// 有时仍需要这些字段用于日志。
 	podInfo.ClearRejectorPlugins()
 
 	if err == ErrNoNodesAvailable {
 		logger.V(2).Info("Unable to schedule pod; no nodes are registered to the cluster; waiting", "pod", klog.KObj(pod))
-	} else if fitError, ok := err.(*framework.FitError); ok { // Inject UnschedulablePlugins to PodInfo, which will be used later for moving Pods between queues efficiently.
+	} else if fitError, ok := err.(*framework.FitError); ok { // 把 UnschedulablePlugins 写入 PodInfo，后续可据此高效地在各队列间移动 Pod。
 		podInfo.UnschedulablePlugins = fitError.Diagnosis.UnschedulablePlugins
 		podInfo.PendingPlugins = fitError.Diagnosis.PendingPlugins
 		logger.V(2).Info("Unable to schedule pod; no fit; waiting", "pod", klog.KObj(pod), "err", errMsg)
@@ -1198,27 +1147,25 @@ func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk fram
 		utilruntime.HandleErrorWithContext(ctx, err, "Error scheduling pod; retrying", "pod", klog.KObj(pod))
 	}
 
-	// Check if the Pod exists in informer cache.
+	// 检查 Pod 是否存在于 informer 缓存中。
 	podLister := podFwk.SharedInformerFactory().Core().V1().Pods().Lister()
 	cachedPod, e := podLister.Pods(pod.Namespace).Get(pod.Name)
 	if e != nil {
 		logger.Info("Pod doesn't exist in informer cache", "pod", klog.KObj(pod), "err", e)
-		// We need to call DonePod here because we don't call AddUnschedulablePodIfNotPresent in this case.
+		// 此分支不会调用 AddUnschedulablePodIfNotPresent，因此必须显式调用 DonePod。
 	} else {
-		// In the case of extender, the pod may have been bound successfully, but timed out returning its response to the scheduler.
-		// It could result in the live version to carry .spec.nodeName, and that's inconsistent with the internal-queued version.
-		// For deferred resize pods, being assigned to a node in the cache is expected and not an inconsistent extender binding timeout.
+		// extender 场景下 Pod 可能已绑定成功，只是响应超时；此时线上版本的 .spec.nodeName
+		// 会与队列内部版本不一致。对延迟扩容的 Pod 而言，缓存中已分配节点是预期行为，不属于 extender 绑定超时导致的不一致。
 		if len(cachedPod.Spec.NodeName) != 0 && !isDeferredResize {
 			logger.Info("Pod has been assigned to node. Abort adding it back to queue.", "pod", klog.KObj(pod), "node", cachedPod.Spec.NodeName)
-			// We need to call DonePod here because we don't call AddUnschedulablePodIfNotPresent in this case.
+			// 此分支不会调用 AddUnschedulablePodIfNotPresent，因此必须显式调用 DonePod。
 		} else {
 			if cachedPod.UID != podInfo.Pod.UID {
 				logger.V(2).Info("Pod was recreated while handling scheduling failure. Skip requeueing and status updates.", "pod", klog.KObj(pod), "oldUID", podInfo.Pod.UID, "newUID", cachedPod.UID)
 				return
 			}
-			// As <cachedPod> is from SharedInformer, we need to do a DeepCopy() here.
-			// ignore this err since apiserver doesn't properly validate affinity terms
-			// and we can't fix the validation for backwards compatibility.
+			// cachedPod 来自 SharedInformer，必须 DeepCopy 后再修改。
+			// 忽略该错误：apiserver 未严格校验亲和性项，且出于兼容性无法修正校验逻辑。
 			podInfo.PodInfo, _ = framework.NewPodInfo(cachedPod.DeepCopy())
 			pod = podInfo.Pod
 			nominatedPodInfo = podInfo.PodInfo
@@ -1229,23 +1176,20 @@ func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk fram
 		}
 	}
 
-	// Deferred resize pods are already bound to and running on their assigned node. The scheduler only
-	// evaluates resize feasibility and executes preemption; Kubelet actuates the resize in-place.
-	// Return early to avoid binding operations or setting nominated node status.
+	// 延迟扩容的 Pod 已绑定并在其节点上运行，调度器只评估扩容可行性并执行抢占，
+	// 实际扩容由 kubelet 原地执行。因此提前返回，避免执行绑定或设置 nominated node 状态。
 	if isDeferredResize {
 		return
 	}
 
-	// Update the scheduling queue with the nominated pod information. Without
-	// this, there would be a race condition between the next scheduling cycle
-	// and the time the scheduler receives a Pod Update for the nominated pod.
-	// Here we check for nil only for tests.
+	// 用 nominated Pod 信息更新调度队列。否则下一调度周期与调度器收到该 Pod 更新事件之间
+	// 会存在竞态条件。这里判空仅是为了兼容测试。
 	if sched.SchedulingQueue != nil {
 		sched.SchedulingQueue.AddNominatedPod(logger, nominatedPodInfo, nominatingInfo)
 	}
 
 	if err == nil {
-		// Only tests can reach here.
+		// 只有测试能走到这里。
 		return
 	}
 
@@ -1262,7 +1206,7 @@ func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk fram
 	}
 }
 
-// truncateMessage truncates a message if it hits the NoteLengthLimit.
+// truncateMessage 在消息超过 NoteLengthLimit 时进行截断。
 func truncateMessage(message string) string {
 	max := validation.NoteLengthLimit
 	if len(message) <= max {
@@ -1274,7 +1218,7 @@ func truncateMessage(message string) string {
 
 func updatePod(ctx context.Context, client clientset.Interface, apiCacher fwk.APICacher, pod *v1.Pod, condition *v1.PodCondition, nominatingInfo *fwk.NominatingInfo) error {
 	if apiCacher != nil {
-		// When API cacher is available, use it to patch the status.
+		// 有 API cacher 时用其 patch Pod status。
 		var conditions []*v1.PodCondition
 		if condition != nil {
 			conditions = []*v1.PodCondition{condition}
@@ -1293,8 +1237,7 @@ func updatePod(ctx context.Context, client clientset.Interface, apiCacher fwk.AP
 	logger.V(3).Info("Updating pod condition and nominated node name", logValues...)
 
 	podStatusCopy := pod.Status.DeepCopy()
-	// NominatedNodeName is updated only if we are trying to set it, and the value is
-	// different from the existing one.
+	// 仅在确实要设置 NominatedNodeName 且新值与旧值不同时才执行更新。
 	nnnNeedsUpdate := nominatingInfo.Mode() == fwk.ModeOverride && pod.Status.NominatedNodeName != nominatingInfo.NominatedNodeName
 	podConditionNeedsUpdate := condition != nil && podutil.UpdatePodCondition(podStatusCopy, condition)
 	if !podConditionNeedsUpdate && !nnnNeedsUpdate {

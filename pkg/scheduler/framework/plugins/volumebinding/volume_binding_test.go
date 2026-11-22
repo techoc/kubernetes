@@ -41,6 +41,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试中使用的 StorageClass、CSIDriver 等共享对象。
 var (
 	immediate            = storagev1.VolumeBindingImmediate
 	waitForFirstConsumer = storagev1.VolumeBindingWaitForFirstConsumer
@@ -91,6 +92,7 @@ var (
 	}
 )
 
+// TestVolumeBinding 校验卷绑定插件的完整调度流程，含即时绑定与等待首消费者模式。
 func TestVolumeBinding(t *testing.T) {
 	table := []struct {
 		name                    string
@@ -1184,7 +1186,7 @@ func TestVolumeBinding(t *testing.T) {
 
 			args := item.args
 			if args == nil {
-				// default args if the args is not specified in test cases
+				// 测试用例未指定参数时使用默认值。
 				args = &config.VolumeBindingArgs{
 					BindTimeoutSeconds: 300,
 				}
@@ -1263,7 +1265,7 @@ func TestVolumeBinding(t *testing.T) {
 			assert.Equal(t, item.wantPreFilterResult, gotPreFilterResult)
 
 			if !gotPreFilterStatus.IsSuccess() {
-				// scheduler framework will skip Filter if PreFilter fails
+				// PreFilter 失败时调度框架会跳过 Filter。
 				return
 			}
 
@@ -1317,6 +1319,7 @@ func TestVolumeBinding(t *testing.T) {
 	}
 }
 
+// Test_PreBindPreFlight 校验 PreBind 前的预备检查。
 func Test_PreBindPreFlight(t *testing.T) {
 	table := []struct {
 		name       string
@@ -1376,6 +1379,7 @@ func Test_PreBindPreFlight(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterCSINodeChange 校验 CSINode 变更后 Pod 是否可以重新调度。
 func TestIsSchedulableAfterCSINodeChange(t *testing.T) {
 	table := []struct {
 		name   string
@@ -1482,6 +1486,7 @@ func TestIsSchedulableAfterCSINodeChange(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterPersistentVolumeClaimChange 校验 PVC 变更后 Pod 是否可以重新调度。
 func TestIsSchedulableAfterPersistentVolumeClaimChange(t *testing.T) {
 	table := []struct {
 		name    string
@@ -1579,6 +1584,7 @@ func TestIsSchedulableAfterPersistentVolumeClaimChange(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterStorageClassChange 校验 StorageClass 变更后 Pod 是否可以重新调度。
 func TestIsSchedulableAfterStorageClassChange(t *testing.T) {
 	table := []struct {
 		name      string
@@ -1667,6 +1673,7 @@ func TestIsSchedulableAfterStorageClassChange(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterCSIStorageCapacityChange 校验 CSI 存储容量变更后 Pod 是否可以重新调度。
 func TestIsSchedulableAfterCSIStorageCapacityChange(t *testing.T) {
 	table := []struct {
 		name    string
@@ -1896,6 +1903,7 @@ func TestIsSchedulableAfterCSIStorageCapacityChange(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterCSIDriverChange 校验 CSIDriver 变更后 Pod 是否可以重新调度。
 func TestIsSchedulableAfterCSIDriverChange(t *testing.T) {
 	table := []struct {
 		name   string
@@ -2081,6 +2089,7 @@ func TestIsSchedulableAfterCSIDriverChange(t *testing.T) {
 	}
 }
 
+// TestVolumeBinding_DeferredResizeSkipped 校验延迟扩容场景下卷绑定插件的跳过行为。
 func TestVolumeBinding_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

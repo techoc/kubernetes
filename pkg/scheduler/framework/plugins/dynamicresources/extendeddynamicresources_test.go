@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// Test_createRequestsAndMappings_requests 校验扩展资源到设备请求的转换，含容器、init 容器与 sidecar 的请求。
 func Test_createRequestsAndMappings_requests(t *testing.T) {
 	pod1 := st.MakePod().Name(podName).Namespace(namespace).
 		UID(podUID).
@@ -267,7 +268,7 @@ func Test_createRequestsAndMappings_requests(t *testing.T) {
 			if len(tc.wantDeviceRequests) != len(gotDeviceRequests) {
 				t.Fatalf("different length, want %#v, len=%v, got %#v, len=%v", tc.wantDeviceRequests, len(tc.wantDeviceRequests), gotDeviceRequests, len(gotDeviceRequests))
 			}
-			// gotDeviceRequests should already be sorted by createRequestsAndMappings
+			// createRequestsAndMappings 已对结果排序，可直接按下标顺序逐一比较。
 			for i, r := range tc.wantDeviceRequests {
 				if r.Name != gotDeviceRequests[i].Name {
 					t.Errorf("different name, want %#v, got %#v", r, gotDeviceRequests[i])
@@ -286,6 +287,7 @@ func Test_createRequestsAndMappings_requests(t *testing.T) {
 	}
 }
 
+// Test_createRequestsAndMappings_mappings 校验转换过程中生成的扩展资源到设备映射。
 func Test_createRequestsAndMappings_mappings(t *testing.T) {
 	pod1 := st.MakePod().Name(podName).Namespace(namespace).
 		UID(podUID).

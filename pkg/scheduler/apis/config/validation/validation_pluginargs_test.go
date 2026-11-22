@@ -37,9 +37,11 @@ import (
 )
 
 var (
+	// ignoreBadValueDetail 让测试只比较错误类型与字段路径，忽略具体的错误值与细节文本。
 	ignoreBadValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
 )
 
+// TestValidateDefaultPreemptionArgs 验证默认抢占插件参数的校验逻辑。
 func TestValidateDefaultPreemptionArgs(t *testing.T) {
 	cases := map[string]struct {
 		args     config.DefaultPreemptionArgs
@@ -129,6 +131,7 @@ func TestValidateDefaultPreemptionArgs(t *testing.T) {
 	}
 }
 
+// TestValidateInterPodAffinityArgs 验证 Pod 间亲和性插件参数的校验逻辑。
 func TestValidateInterPodAffinityArgs(t *testing.T) {
 	cases := map[string]struct {
 		args    config.InterPodAffinityArgs
@@ -169,6 +172,7 @@ func TestValidateInterPodAffinityArgs(t *testing.T) {
 	}
 }
 
+// TestValidatePodTopologySpreadArgs 验证 Pod 拓扑分布插件参数的校验逻辑。
 func TestValidatePodTopologySpreadArgs(t *testing.T) {
 	cases := map[string]struct {
 		args     *config.PodTopologySpreadArgs
@@ -360,6 +364,7 @@ func TestValidatePodTopologySpreadArgs(t *testing.T) {
 	}
 }
 
+// TestValidateNodeResourcesBalancedAllocationArgs 验证节点资源均衡分配插件参数的校验逻辑。
 func TestValidateNodeResourcesBalancedAllocationArgs(t *testing.T) {
 	cases := map[string]struct {
 		args     *config.NodeResourcesBalancedAllocationArgs
@@ -431,6 +436,7 @@ func TestValidateNodeResourcesBalancedAllocationArgs(t *testing.T) {
 	}
 }
 
+// TestValidateNodeAffinityArgs 验证节点亲和性插件参数的校验逻辑。
 func TestValidateNodeAffinityArgs(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -529,6 +535,7 @@ func TestValidateNodeAffinityArgs(t *testing.T) {
 	}
 }
 
+// TestValidateVolumeBindingArgs 验证卷绑定插件参数的校验逻辑。
 func TestValidateVolumeBindingArgs(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -719,6 +726,7 @@ func TestValidateVolumeBindingArgs(t *testing.T) {
 	}
 }
 
+// TestValidateFitArgs 验证资源适配插件参数的校验逻辑。
 func TestValidateFitArgs(t *testing.T) {
 	defaultScoringStrategy := &config.ScoringStrategy{
 		Type: config.LeastAllocated,
@@ -835,6 +843,7 @@ func TestValidateFitArgs(t *testing.T) {
 	}
 }
 
+// TestValidateLeastAllocatedScoringStrategy 验证 LeastAllocated 打分策略的校验逻辑。
 func TestValidateLeastAllocatedScoringStrategy(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -930,6 +939,7 @@ func TestValidateLeastAllocatedScoringStrategy(t *testing.T) {
 	}
 }
 
+// TestValidateMostAllocatedScoringStrategy 验证 MostAllocated 打分策略的校验逻辑。
 func TestValidateMostAllocatedScoringStrategy(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1025,6 +1035,7 @@ func TestValidateMostAllocatedScoringStrategy(t *testing.T) {
 	}
 }
 
+// TestValidateRequestedToCapacityRatioScoringStrategy 验证 RequestedToCapacityRatio 打分策略的校验逻辑。
 func TestValidateRequestedToCapacityRatioScoringStrategy(t *testing.T) {
 	defaultShape := []config.UtilizationShapePoint{
 		{
@@ -1226,6 +1237,7 @@ func TestValidateRequestedToCapacityRatioScoringStrategy(t *testing.T) {
 	}
 }
 
+// TestValidateDynamicResourcesArgs 验证动态资源插件参数的校验逻辑，覆盖超时值与特性门组合。
 func TestValidateDynamicResourcesArgs(t *testing.T) {
 	cases := map[string]struct {
 		args                      config.DynamicResourcesArgs
@@ -1269,7 +1281,7 @@ func TestValidateDynamicResourcesArgs(t *testing.T) {
 			},
 		},
 
-		// BindingTimeout tests
+		// 以下用例覆盖 BindingTimeout 的校验。
 		"valid BindingTimeout": {
 			args: config.DynamicResourcesArgs{
 				BindingTimeout: &metav1.Duration{Duration: 30 * time.Second},

@@ -29,19 +29,22 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// Name of the plugin used in the plugin registry and configurations.
+// Name 是插件在插件注册表和配置中使用的名字。
 const Name = names.SchedulingGates
 
-// SchedulingGates checks if a Pod carries .spec.schedulingGates.
+// SchedulingGates 检查 Pod 是否带有 .spec.schedulingGates。
 type SchedulingGates struct{}
 
 var _ fwk.PreEnqueuePlugin = &SchedulingGates{}
 var _ fwk.EnqueueExtensions = &SchedulingGates{}
 
+// Name 返回插件名称，用于日志等场景。
 func (pl *SchedulingGates) Name() string {
 	return Name
 }
 
+// PreEnqueue 在入队前检查 Pod 是否仍被调度门禁拦住；
+// 只要还有门禁未移除，就把 Pod 判为不可调度且不可通过抢占解决。
 func (pl *SchedulingGates) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Status {
 	if len(p.Spec.SchedulingGates) == 0 {
 		return nil
@@ -53,20 +56,21 @@ func (pl *SchedulingGates) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Statu
 	return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, fmt.Sprintf("waiting for scheduling gates: %v", gates))
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让本插件判定为不可调度的 Pod 变为可调度的事件。
 func (pl *SchedulingGates) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
-		// Pods can be more schedulable once it's gates are removed
+		// 门禁移除后 Pod 就有可能变得可调度
 		{Event: fwk.ClusterEvent{Resource: fwk.TargetPod, ActionType: fwk.UpdatePodSchedulingGatesEliminated}, QueueingHintFn: pl.isSchedulableAfterUpdateTargetPodSchedulingGatesEliminated},
 	}, nil
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回一个新的插件实例。
 func New(_ context.Context, _ runtime.Object, _ fwk.Handle, _ feature.Features) (fwk.Plugin, error) {
 	return &SchedulingGates{}, nil
 }
 
+// isSchedulableAfterUpdateTargetPodSchedulingGatesEliminated 在目标 Pod 的门禁被移除后返回入队提示。
+// 该事件只由门禁移除触发，直接入队即可。
 func (pl *SchedulingGates) isSchedulableAfterUpdateTargetPodSchedulingGatesEliminated(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	return fwk.Queue, nil
 }

@@ -28,27 +28,27 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// Name of the plugin used in the plugin registry and configurations.
+// Name 是插件在注册表和配置中使用的名字。
 const Name = names.DefaultBinder
 
-// DefaultBinder binds pods to nodes using a k8s client.
+// DefaultBinder 通过 k8s 客户端把 Pod 绑定到节点。
 type DefaultBinder struct {
 	handle fwk.Handle
 }
 
 var _ fwk.BindPlugin = &DefaultBinder{}
 
-// New creates a DefaultBinder.
+// New 创建一个 DefaultBinder。
 func New(_ context.Context, _ runtime.Object, handle fwk.Handle) (fwk.Plugin, error) {
 	return &DefaultBinder{handle: handle}, nil
 }
 
-// Name returns the name of the plugin.
+// Name 返回插件名。
 func (b DefaultBinder) Name() string {
 	return Name
 }
 
-// Bind binds pods to nodes using the k8s client.
+// Bind 通过 k8s 客户端把 Pod 绑定到指定节点。
 func (b DefaultBinder) Bind(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) *fwk.Status {
 	logger := klog.FromContext(ctx)
 	binding := &v1.Binding{
@@ -56,11 +56,12 @@ func (b DefaultBinder) Bind(ctx context.Context, state fwk.CycleState, p *v1.Pod
 		Target:     v1.ObjectReference{Kind: "Node", Name: nodeName},
 	}
 	if b.handle.APICacher() != nil {
-		// When API cacher is available, use it to bind the pod.
+		// 有 API cacher 时走它的绑定路径，避免直接打到 apiserver。
 		onFinish, err := b.handle.APICacher().BindPod(binding)
 		if err != nil {
 			return fwk.AsStatus(err)
 		}
+		// 绑定是异步提交的，必须等到真正完成才算成功。
 		err = b.handle.APICacher().WaitOnFinish(ctx, onFinish)
 		if err != nil {
 			return fwk.AsStatus(err)

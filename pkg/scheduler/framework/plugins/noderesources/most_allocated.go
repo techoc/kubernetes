@@ -21,16 +21,17 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
-// mostResourceScorer favors nodes with most requested resources.
-// It calculates the percentage of memory and CPU requested by pods scheduled on the node, and prioritizes
-// based on the maximum of the average of the fraction of requested to capacity.
+// mostResourceScorer 偏好已请求资源最多的节点。
+// 它计算节点上已调度 Pod 请求的 CPU 与内存占比，并按各资源请求量与容量之比
+// 的加权平均值排序。
 //
-// Details:
+// 具体公式：
 // (cpu(MaxNodeScore * requested * cpuWeight / capacity) + memory(MaxNodeScore * requested * memoryWeight / capacity) + ...) / weightSum
 func mostResourceScorer(resources []config.ResourceSpec) func(requested, _, allocable []int64) int64 {
 	return func(requested, _, allocable []int64) int64 {
 		var nodeScore, weightSum int64
 		for i := range requested {
+			// 容量为 0 时占比无意义，直接跳过，避免除零。
 			if allocable[i] == 0 {
 				continue
 			}
@@ -39,6 +40,7 @@ func mostResourceScorer(resources []config.ResourceSpec) func(requested, _, allo
 			nodeScore += resourceScore * weight
 			weightSum += weight
 		}
+		// 所有资源都被跳过说明没有可用容量，给最低分。
 		if weightSum == 0 {
 			return 0
 		}
@@ -46,18 +48,16 @@ func mostResourceScorer(resources []config.ResourceSpec) func(requested, _, allo
 	}
 }
 
-// The used capacity is calculated on a scale of 0-MaxNodeScore (MaxNodeScore is
-// constant with value set to 100).
-// 0 being the lowest priority and 100 being the highest.
-// The more resources are used the higher the score is. This function
-// is almost a reversed version of noderesources.leastRequestedScore.
+// mostRequestedScore 把已用容量换算到 0-MaxNodeScore 区间（MaxNodeScore 常量为 100），
+// 0 为最低优先级、100 为最高。资源使用越多得分越高，
+// 基本是 noderesources.leastRequestedScore 的反向版本。
 func mostRequestedScore(requested, capacity int64) int64 {
 	if capacity == 0 {
 		return 0
 	}
 	if requested > capacity {
-		// `requested` might be greater than `capacity` because pods with no
-		// requests get minimum values.
+		// 未声明 requests 的 Pod 会被赋予最小值，但某些情况下 requested 仍可能超过 capacity，
+		// 因此截断到 capacity，保证得分不超过上限。
 		requested = capacity
 	}
 

@@ -70,46 +70,57 @@ func init() {
 	metrics.Register()
 }
 
+// FakePostFilterPlugin 是用于测试抢占逻辑的 PostFilter 替身插件。
 type FakePostFilterPlugin struct {
 	numViolatingVictim int
 }
 
+// SelectVictimsOnNode 返回节点上的第一个 Pod 作为受害者。
 func (pl *FakePostFilterPlugin) SelectVictimsOnNode(ctx context.Context, cycleState fwk.CycleState, preemptor *v1.Pod, nodeInfo fwk.NodeInfo, allPossibleVictims []*DomainVictim, pdbs []*policy.PodDisruptionBudget) (victims []*v1.Pod, numViolatingVictim int, status *fwk.Status) {
 	victims = append(victims, nodeInfo.GetPods()[0].GetPod())
 	return victims, pl.numViolatingVictim, nil
 }
 
+// GetOffsetAndNumCandidates 返回全部节点作为候选。
 func (pl *FakePostFilterPlugin) GetOffsetAndNumCandidates(nodes int32) (int32, int32) {
 	return 0, nodes
 }
 
+// CandidatesToVictimsMap 在测试中不构建映射，返回 nil。
 func (pl *FakePostFilterPlugin) CandidatesToVictimsMap(candidates []Candidate) map[string]*extenderv1.Victims {
 	return nil
 }
 
+// PodEligibleToPreemptOthers 恒认为 Pod 有抢占资格。
 func (pl *FakePostFilterPlugin) PodEligibleToPreemptOthers(_ context.Context, pod *v1.Pod, nominatedNodeStatus *fwk.Status) (bool, string) {
 	return true, ""
 }
 
+// PodGroupEligibleToPreemptOthers 恒认为 PodGroup 有抢占资格。
 func (pl *FakePostFilterPlugin) PodGroupEligibleToPreemptOthers(_ context.Context, podGroupInfo *framework.PodGroupInfo) (bool, string) {
 	return true, ""
 }
 
+// OrderedScoreFuncs 在测试中不提供打分函数，返回 nil。
 func (pl *FakePostFilterPlugin) OrderedScoreFuncs(ctx context.Context, nodesToVictims map[string]*extenderv1.Victims) []func(node string) int64 {
 	return nil
 }
 
+// FakePreemptionScorePostFilterPlugin 是带受害者打分能力的 PostFilter 替身插件。
 type FakePreemptionScorePostFilterPlugin struct{}
 
+// SelectVictimsOnNode 返回第一个 Pod 作为受害者，并记录 1 次 PDB 违规。
 func (pl *FakePreemptionScorePostFilterPlugin) SelectVictimsOnNode(ctx context.Context, cycleState fwk.CycleState, preemptor *v1.Pod, nodeInfo fwk.NodeInfo, allPossibleVictims []*DomainVictim, pdbs []*policy.PodDisruptionBudget) (victims []*v1.Pod, numViolatingVictim int, status *fwk.Status) {
 	victims = append(victims, nodeInfo.GetPods()[0].GetPod())
 	return victims, 1, nil
 }
 
+// GetOffsetAndNumCandidates 返回全部节点作为候选。
 func (pl *FakePreemptionScorePostFilterPlugin) GetOffsetAndNumCandidates(nodes int32) (int32, int32) {
 	return 0, nodes
 }
 
+// CandidatesToVictimsMap 按候选节点名构建受害者映射。
 func (pl *FakePreemptionScorePostFilterPlugin) CandidatesToVictimsMap(candidates []Candidate) map[string]*extenderv1.Victims {
 	m := make(map[string]*extenderv1.Victims, len(candidates))
 	for _, c := range candidates {
@@ -118,14 +129,17 @@ func (pl *FakePreemptionScorePostFilterPlugin) CandidatesToVictimsMap(candidates
 	return m
 }
 
+// PodEligibleToPreemptOthers 恒认为 Pod 有抢占资格。
 func (pl *FakePreemptionScorePostFilterPlugin) PodEligibleToPreemptOthers(_ context.Context, pod *v1.Pod, nominatedNodeStatus *fwk.Status) (bool, string) {
 	return true, ""
 }
 
+// PodGroupEligibleToPreemptOthers 恒认为 PodGroup 有抢占资格。
 func (pl *FakePreemptionScorePostFilterPlugin) PodGroupEligibleToPreemptOthers(_ context.Context, podGroupInfo *framework.PodGroupInfo) (bool, string) {
 	return true, ""
 }
 
+// OrderedScoreFuncs 返回按受害者容器数打分的函数，容器越少分越高。
 func (pl *FakePreemptionScorePostFilterPlugin) OrderedScoreFuncs(ctx context.Context, nodesToVictims map[string]*extenderv1.Victims) []func(node string) int64 {
 	return []func(string) int64{
 		func(node string) int64 {
@@ -133,7 +147,7 @@ func (pl *FakePreemptionScorePostFilterPlugin) OrderedScoreFuncs(ctx context.Con
 			for _, pod := range nodesToVictims[node].Pods {
 				sumContainers += int64(len(pod.Spec.Containers) + len(pod.Spec.InitContainers))
 			}
-			// The smaller the sumContainers, the higher the score.
+			// 容器总数越少，得分越高。
 			return -sumContainers
 		},
 	}
@@ -269,7 +283,7 @@ func TestDryRunPreemption(t *testing.T) {
 					executor:   NewExecutor(fwk, feature.Features{}),
 				}
 				got, _, _ := pe.DryRunPreemption(ctx, state, preemptor, nodeInfos, nil, 0, int32(len(nodeInfos)))
-				// Sort the values (inner victims) and the candidate itself (by its NominatedNodeName).
+				// 先排序内层受害者列表，再按候选节点名排序候选列表，保证比较结果稳定。
 				for i := range got {
 					victims := got[i].Victims().Pods
 					sort.Slice(victims, func(i, j int) bool {
@@ -352,7 +366,7 @@ func TestSelectCandidate(t *testing.T) {
 			}
 
 			state := framework.NewCycleState()
-			// Some tests rely on PreFilter plugin to compute its CycleState.
+			// 部分用例依赖 PreFilter 插件来填充其 CycleState。
 			if _, status, _ := fwk.RunPreFilterPlugins(ctx, state, tt.pod); !status.IsSuccess() {
 				t.Errorf("Unexpected PreFilter Status: %v", status)
 			}
@@ -396,34 +410,41 @@ func newFakeExtender() *fakeExtender {
 	return &fakeExtender{}
 }
 
+// WithIgnorable 设置 extender 的错误是否可忽略。
 func (f *fakeExtender) WithIgnorable(ignorable bool) *fakeExtender {
 	f.ignorable = ignorable
 	return f
 }
 
+// WithErrProcessPreemption 设置处理抢占时是否返回错误。
 func (f *fakeExtender) WithErrProcessPreemption(errProcessPreemption bool) *fakeExtender {
 	f.errProcessPreemption = errProcessPreemption
 	return f
 }
 
+// WithSupportsPreemption 设置是否支持抢占。
 func (f *fakeExtender) WithSupportsPreemption(supportsPreemption bool) *fakeExtender {
 	f.supportsPreemption = supportsPreemption
 	return f
 }
 
+// WithReturnNoVictims 设置是否返回空受害者列表。
 func (f *fakeExtender) WithReturnNoVictims(returnsNoVictims bool) *fakeExtender {
 	f.returnsNoVictims = returnsNoVictims
 	return f
 }
 
+// Name 返回 extender 名。
 func (f *fakeExtender) Name() string {
 	return "fakeExtender"
 }
 
+// IsIgnorable 返回错误是否可忽略。
 func (f *fakeExtender) IsIgnorable() bool {
 	return f.ignorable
 }
 
+// ProcessPreemption 按配置返回受害者集或错误。
 func (f *fakeExtender) ProcessPreemption(
 	_ *v1.Pod,
 	victims map[string]*extenderv1.Victims,
@@ -441,18 +462,22 @@ func (f *fakeExtender) ProcessPreemption(
 	return nil, nil
 }
 
+// SupportsPreemption 返回是否支持抢占。
 func (f *fakeExtender) SupportsPreemption() bool {
 	return f.supportsPreemption
 }
 
+// IsInterested 对非空 Pod 均感兴趣。
 func (f *fakeExtender) IsInterested(pod *v1.Pod) bool {
 	return pod != nil
 }
 
+// Filter 是空实现，不参与过滤。
 func (f *fakeExtender) Filter(_ *v1.Pod, _ []fwk.NodeInfo) ([]fwk.NodeInfo, extenderv1.FailedNodesMap, extenderv1.FailedNodesMap, error) {
 	return nil, nil, nil, nil
 }
 
+// Prioritize 是空实现，不参与打分。
 func (f *fakeExtender) Prioritize(
 	_ *v1.Pod,
 	_ []fwk.NodeInfo,
@@ -460,18 +485,22 @@ func (f *fakeExtender) Prioritize(
 	return nil, 0, nil
 }
 
+// Bind 是空实现，绑定总是成功。
 func (f *fakeExtender) Bind(_ *v1.Binding) error {
 	return nil
 }
 
+// IsBinder 恒返回 true。
 func (f *fakeExtender) IsBinder() bool {
 	return true
 }
 
+// IsPrioritizer 恒返回 true。
 func (f *fakeExtender) IsPrioritizer() bool {
 	return true
 }
 
+// IsFilter 恒返回 true。
 func (f *fakeExtender) IsFilter() bool {
 	return true
 }
@@ -1173,6 +1202,7 @@ type customEvaluationInterface struct {
 	podEligible bool
 }
 
+// PodEligibleToPreemptOthers 按 podEligible 字段伪装抢占资格判断结果。
 func (c *customEvaluationInterface) PodEligibleToPreemptOthers(_ context.Context, pod *v1.Pod, nominatedNodeStatus *fwk.Status) (bool, string) {
 	if c.podEligible {
 		return true, ""

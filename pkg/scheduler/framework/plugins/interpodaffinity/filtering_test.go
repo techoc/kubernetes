@@ -72,6 +72,7 @@ func createPodWithAffinityTerms(namespace, nodeName string, labels map[string]st
 	}
 }
 
+// TestRequiredAffinitySingleNode 验证必需 Pod 亲和/反亲和规则在单节点场景下的过滤结果。
 func TestRequiredAffinitySingleNode(t *testing.T) {
 	podLabel := map[string]string{"service": "securityscan"}
 	pod := st.MakePod().Labels(podLabel).Node("node1").Obj()
@@ -583,6 +584,7 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 	}
 }
 
+// TestRequiredAffinityMultipleNodes 验证必需亲和/反亲和规则在多节点（含主机域 fast path）场景下的过滤结果。
 func TestRequiredAffinityMultipleNodes(t *testing.T) {
 	podLabelA := map[string]string{
 		"foo": "bar",
@@ -978,9 +980,9 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "nodeB", Labels: map[string]string{v1.LabelHostname: "nodeB"}}},
 			},
 			wantFilterStatuses: []*fwk.Status{
-				// Result for nodeA: Schedulable
+				// nodeA：可调度
 				nil,
-				// Result for nodeB: Unschedulable
+				// nodeB：不可调度
 				fwk.NewStatus(
 					fwk.UnschedulableAndUnresolvable,
 					ErrReasonAffinityRulesNotMatch,
@@ -998,12 +1000,12 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "nodeB", Labels: map[string]string{v1.LabelHostname: "nodeB"}}},
 			},
 			wantFilterStatuses: []*fwk.Status{
-				// Result for nodeA: Unschedulable
+				// nodeA：不可调度
 				fwk.NewStatus(
 					fwk.Unschedulable,
 					ErrReasonAntiAffinityRulesNotMatch,
 				),
-				// Result for nodeB: Schedulable
+				// nodeB：可调度
 				nil,
 			},
 			name: "Test incoming pod's host-scoped anti-affinity (fast path)",
@@ -1047,6 +1049,7 @@ func TestRequiredAffinityMultipleNodes(t *testing.T) {
 	}
 }
 
+// TestPreFilterDisabled 验证特性关闭时 PreFilter 不产生状态。
 func TestPreFilterDisabled(t *testing.T) {
 	pod := &v1.Pod{}
 	nodeInfo := framework.NewNodeInfo()
@@ -1064,6 +1067,7 @@ func TestPreFilterDisabled(t *testing.T) {
 	}
 }
 
+// TestPreFilterStateAddRemovePod 验证 AddPod/RemovePod 对预过滤状态的增量更新与回滚。
 func TestPreFilterStateAddRemovePod(t *testing.T) {
 	var label1 = map[string]string{
 		"region": "r1",
@@ -1357,7 +1361,7 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/InterPodAffinityHostnameFastPath=%v", test.name, interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, interPodAffinityHostnameFastPathEnabled)
 
-				// getMeta creates predicate meta data given the list of pods.
+				// getState 根据给定 Pod 列表构建插件、cycle state 与快照。
 				getState := func(pods []*v1.Pod) (*InterPodAffinity, fwk.CycleState, *preFilterState, *cache.Snapshot) {
 					snapshot := cache.NewSnapshot(pods, test.nodes)
 					_, ctx := ktesting.NewTestContext(t)
@@ -1383,15 +1387,15 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 				}
 
 				_, ctx := ktesting.NewTestContext(t)
-				// allPodsState is the state produced when all pods, including test.addedPod are given to prefilter.
+				// allPodsState 是把所有 Pod（含 test.addedPod）交给 PreFilter 后得到的状态。
 				_, _, allPodsState, _ := getState(append(test.existingPods, test.addedPod))
 
-				// state is produced for test.existingPods (without test.addedPod).
+				// state 只基于 test.existingPods 生成（不含 test.addedPod）。
 				ipa, cycleState, state, snapshot := getState(test.existingPods)
-				// clone the state so that we can compare it later when performing Remove.
+				// 克隆状态，便于执行 Remove 后作对照。
 				originalState := state.Clone()
 
-				// Add test.addedPod to state1 and verify it is equal to allPodsState.
+				// 把 test.addedPod 加入状态，验证结果与 allPodsState 一致。
 				nodeInfo := mustGetNodeInfo(t, snapshot, test.addedPod.Spec.NodeName)
 				if err := ipa.AddPod(ctx, cycleState, test.pendingPod, mustNewPodInfo(t, test.addedPod), nodeInfo); err != nil {
 					t.Errorf("error adding pod to meta: %v", err)
@@ -1414,7 +1418,7 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 					t.Errorf("State is not equal (-want,+got):\n%s", diff)
 				}
 
-				// Remove the added pod pod and make sure it is equal to the original state.
+				// 移除新增 Pod，验证状态恢复如初。
 				if err := ipa.RemovePod(ctx, cycleState, test.pendingPod, mustNewPodInfo(t, test.addedPod), nodeInfo); err != nil {
 					t.Errorf("error removing pod from meta: %v", err)
 				}
@@ -1422,7 +1426,7 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 					t.Errorf("State is not equal (-want,+got):\n%s", diff)
 				}
 
-				// Test pure RemovePod: start with allPodsState, remove addedPod, and verify it equals originalState.
+				// 单独测试 RemovePod：从全量状态出发删除 addedPod，验证结果等于初始状态。
 				ipa2, cycleState2, state2, snapshot2 := getState(append(test.existingPods, test.addedPod))
 				nodeInfo2 := mustGetNodeInfo(t, snapshot2, test.addedPod.Spec.NodeName)
 				if err := ipa2.RemovePod(ctx, cycleState2, test.pendingPod, mustNewPodInfo(t, test.addedPod), nodeInfo2); err != nil {
@@ -1436,6 +1440,7 @@ func TestPreFilterStateAddRemovePod(t *testing.T) {
 	}
 }
 
+// TestPreFilterStateClone 验证预过滤状态的 Clone 行为。
 func TestPreFilterStateClone(t *testing.T) {
 	source := &preFilterState{
 		existingClusterWideAntiAffinityCounts: topologyToMatchedTermCount{
@@ -1461,8 +1466,8 @@ func TestPreFilterStateClone(t *testing.T) {
 	}
 }
 
-// TestGetTPMapMatchingIncomingAffinityAntiAffinity tests against method getTPMapMatchingIncomingAffinityAntiAffinity
-// on Anti Affinity cases
+// TestGetTPMapMatchingIncomingAffinityAntiAffinity 测试方法 getTPMapMatchingIncomingAffinityAntiAffinity 在反亲和性场景下的行为。
+// TestGetTPMapMatchingIncomingAffinityAntiAffinity 测试方法 getTPMapMatchingIncomingAffinityAntiAffinity 在反亲和性场景下的行为。
 func TestGetTPMapMatchingIncomingAffinityAntiAffinity(t *testing.T) {
 	newPod := func(labels ...string) *v1.Pod {
 		pod := st.MakePod().Name("normal").Node("nodeA")
@@ -1615,6 +1620,7 @@ func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	return podInfo
 }
 
+// TestInterPodAffinity_DeferredResizeSkipped 验证延迟扩容的 Pod 在抢占缩容后亲和性计数被正确移除。
 func TestInterPodAffinity_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()
@@ -1632,16 +1638,17 @@ func TestInterPodAffinity_DeferredResizeSkipped(t *testing.T) {
 	}
 }
 
+// TestRemovePodHostScopedAffinityCount 验证移除 Pod 后主机域亲和性计数被正确清理。
 func TestRemovePodHostScopedAffinityCount(t *testing.T) {
 	for _, interPodAffinityHostnameFastPathEnabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("InterPodAffinityHostnameFastPath=%v", interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, interPodAffinityHostnameFastPathEnabled)
 
-			// Pending pod has self-affinity on hostname
+			// 待调度 Pod 在 hostname 域上具有自亲和性。
 			pendingPod := st.MakePod().Name("pending").Labels(map[string]string{"foo": "bar"}).
 				PodAffinityIn("foo", v1.LabelHostname, []string{"bar"}, st.PodAffinityWithRequiredReq).Obj()
 
-			// Existing pod on nodeA that satisfies the affinity
+			// nodeA 上满足该亲和性的已有 Pod。
 			existingPod := st.MakePod().Name("existing").Node("nodeA").Labels(map[string]string{"foo": "bar"}).Obj()
 
 			nodes := []*v1.Node{
@@ -1662,35 +1669,35 @@ func TestRemovePodHostScopedAffinityCount(t *testing.T) {
 			p := plugintesting.SetupPluginWithInformers(ctx, t, schedruntime.FactoryAdapter(feature.Features{EnableInterPodAffinityHostnameFastPath: interPodAffinityHostnameFastPathEnabled}, New), &config.InterPodAffinityArgs{}, snapshot, nil)
 			cycleState := framework.NewCycleState()
 
-			// 1. PreFilter
+			// 1. PreFilter 阶段
 			_, preFilterStatus := p.(fwk.PreFilterPlugin).PreFilter(ctx, cycleState, pendingPod, nodeInfos)
 			if !preFilterStatus.IsSuccess() {
 				t.Fatalf("prefilter failed with status: %v", preFilterStatus)
 			}
 
-			// NodeA should succeed initially because the existing pod is there, matching the affinity
+			// nodeA 初始应通过：其上存在满足亲和性的 Pod。
 			nodeInfoA := mustGetNodeInfo(t, snapshot, "nodeA")
 			statusA := p.(fwk.FilterPlugin).Filter(ctx, cycleState, pendingPod, nodeInfoA)
 			if !statusA.IsSuccess() {
 				t.Errorf("expected Filter to succeed on nodeA initially, but got status: %v", statusA)
 			}
 
-			// NodeB should fail initially because the first pod must land on NodeA (where the existing pod is)
+			// nodeB 初始应失败：首个 Pod 必须落在有匹配 Pod 的 nodeA 上。
 			nodeInfoB := mustGetNodeInfo(t, snapshot, "nodeB")
 			status := p.(fwk.FilterPlugin).Filter(ctx, cycleState, pendingPod, nodeInfoB)
 			if status.IsSuccess() {
 				t.Errorf("expected Filter to fail on nodeB because existing pod satisfies affinity globally, but it succeeded")
 			}
 
-			// 2. Simulate Preemption (scaledown)
-			// We remove the existing pod from nodeA
+			// 2. 模拟抢占（缩容）
+			// 从 nodeA 移除那个已有 Pod。
 			if err := p.(fwk.PreFilterExtensions).RemovePod(ctx, cycleState, pendingPod, mustNewPodInfo(t, existingPod), nodeInfoA); err != nil {
 				t.Fatalf("error removing pod: %v", err)
 			}
 
-			// 3. Filter again on NodeA and NodeB
-			// Now there are NO pods matching "foo: bar" globally.
-			// The pending pod should satisfy self-affinity and be allowed on both NodeA and NodeB.
+			// 3. 在 nodeA 与 nodeB 上重新执行 Filter
+			// 此时集群中已无任何匹配 "foo: bar" 的 Pod。
+			// 待调度 Pod 应满足自亲和性，在 nodeA 与 nodeB 上都可通过。
 			statusA = p.(fwk.FilterPlugin).Filter(ctx, cycleState, pendingPod, nodeInfoA)
 			if !statusA.IsSuccess() {
 				t.Errorf("expected Filter to succeed on nodeA after existing pod is removed, but got status: %v", statusA)
@@ -1704,21 +1711,22 @@ func TestRemovePodHostScopedAffinityCount(t *testing.T) {
 	}
 }
 
+// TestMultipleAffinityTermsRequireSingleMatchingPod 验证多个必需亲和性项必须由同一个 Pod 同时满足，以及自亲和性场景的处理。
 func TestMultipleAffinityTermsRequireSingleMatchingPod(t *testing.T) {
-	// 1. Setup an incoming pod with TWO required pod affinity terms: "foo=bar" and "baz=qux", using the hostname topology key (required for testing the FastPath optimization)
+	// 1. 构造带两个必需 Pod 亲和性项（"foo=bar" 与 "baz=qux"）的待调度 Pod，拓扑键用 hostname（FastPath 优化要求）。
 	podWithTwoAffinityTerms := st.MakePod().Name("pod-1").Namespace("default").
 		PodAffinityIn("foo", v1.LabelHostname, []string{"bar"}, st.PodAffinityWithRequiredReq).
 		PodAffinityIn("baz", v1.LabelHostname, []string{"qux"}, st.PodAffinityWithRequiredReq).Obj()
 
-	// 2. Setup existing pods to test different combinations of label matches
-	// podA only matches the first term ("foo=bar")
+	// 2. 构造已有 Pod，覆盖不同的标签匹配组合。
+	// podA 只匹配第一项（"foo=bar"）。
 	podA := st.MakePod().Name("podA").Namespace("default").Label("foo", "bar").Node("node-1").Obj()
-	// podB only matches the second term ("baz=qux")
+	// podB 只匹配第二项（"baz=qux"）。
 	podB := st.MakePod().Name("podB").Namespace("default").Label("baz", "qux").Node("node-1").Obj()
-	// podC matches BOTH terms simultaneously
+	// podC 同时匹配两项。
 	podC := st.MakePod().Name("podC").Namespace("default").Label("foo", "bar").Label("baz", "qux").Node("node-3").Obj()
 
-	// 3. Create nodes to house the existing pods: node-1 (podA, podB), node-2 (empty), node-3 (podC)
+	// 3. 创建承载已有 Pod 的节点：node-1（podA、podB）、node-2（空）、node-3（podC）。
 	nodes := []*v1.Node{
 		st.MakeNode().Name("node-1").Label(v1.LabelHostname, "node-1").Obj(),
 		st.MakeNode().Name("node-2").Label(v1.LabelHostname, "node-2").Obj(),
@@ -1733,7 +1741,7 @@ func TestMultipleAffinityTermsRequireSingleMatchingPod(t *testing.T) {
 		t.Run(fmt.Sprintf("InterPodAffinityHostnameFastPath=%v", interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, interPodAffinityHostnameFastPathEnabled)
 
-			// 4. Initialize scheduler data structures and run the PreFilter phase
+			// 4. 初始化调度数据结构并执行 PreFilter 阶段。
 			_, ctx := ktesting.NewTestContext(t)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -1750,7 +1758,7 @@ func TestMultipleAffinityTermsRequireSingleMatchingPod(t *testing.T) {
 				t.Fatalf("PreFilter failed: %v", status.Message())
 			}
 
-			// 5. Test node-1: SHOULD FAIL because InterPodAffinity requires a SINGLE existing pod to match ALL terms simultaneously (podA and podB only match one term each)
+			// 5. 测试 node-1：应失败，因为 InterPodAffinity 要求单个已有 Pod 同时匹配所有项（podA、podB 各只匹配一项）。
 			nodeInfo1 := mustGetNodeInfo(t, snapshot, "node-1")
 			status1 := p.(fwk.FilterPlugin).Filter(ctx, state, podWithTwoAffinityTerms, nodeInfo1)
 
@@ -1758,39 +1766,39 @@ func TestMultipleAffinityTermsRequireSingleMatchingPod(t *testing.T) {
 				t.Errorf("Expected filtering on node-1 to FAIL (a single pod has to match all affinity terms), but got success.")
 			}
 
-			// 6. Test node-3: SHOULD SUCCEED because podC matches both terms simultaneously on this node
+			// 6. 测试 node-3：应通过，因为 podC 在该节点上同时匹配两项。
 			nodeInfo3 := mustGetNodeInfo(t, snapshot, "node-3")
 			status3 := p.(fwk.FilterPlugin).Filter(ctx, state, podWithTwoAffinityTerms, nodeInfo3)
 			if !status3.IsSuccess() {
 				t.Errorf("Expected filtering on node-3 to SUCCEED (podC matches both terms), but got %v", status3.Message())
 			}
 
-			// 7. Test node-2: SHOULD FAIL because the node is empty and has no pods matching the terms
+			// 7. 测试 node-2：应失败，因为节点为空，无任何 Pod 匹配这些项。
 			nodeInfo2 := mustGetNodeInfo(t, snapshot, "node-2")
 			status2 := p.(fwk.FilterPlugin).Filter(ctx, state, podWithTwoAffinityTerms, nodeInfo2)
 			if status2.IsSuccess() {
 				t.Errorf("Expected filtering on node-2 to FAIL, but it SUCCEEDED")
 			}
 
-			// 8. Prepare for self-affinity test: update incoming pod itself to carry BOTH labels it requires
+			// 8. 准备自亲和性测试：让待调度 Pod 自身携带它所要求的两个标签。
 			podWithTwoAffinityTermsSelf := podWithTwoAffinityTerms.DeepCopy()
 			podWithTwoAffinityTermsSelf.Labels = map[string]string{"foo": "bar", "baz": "qux"}
 
-			// 9. Evaluate against a cluster snapshot WITHOUT podC to guarantee no existing pods can satisfy the terms
+			// 9. 在不包含 podC 的集群快照上评估，确保没有已有 Pod 能满足这些项。
 			snapshotSelf := cache.NewSnapshot([]*v1.Pod{podA, podB}, nodes)
 			nodeInfosSelf, _ := snapshotSelf.NodeInfos().List()
 			pSelf := plugintesting.SetupPluginWithInformers(ctx, t, schedruntime.FactoryAdapter(feature.Features{EnableInterPodAffinityHostnameFastPath: interPodAffinityHostnameFastPathEnabled}, New), &config.InterPodAffinityArgs{}, snapshotSelf, namespaces)
 
-			// 10. Run self-affinity evaluation: PreFilter and Filter
+			// 10. 执行自亲和性评估：PreFilter 与 Filter。
 			stateSelf := framework.NewCycleState()
-			// PreFilter must succeed
+			// PreFilter 应成功。
 			_, preFilterStatusSelf := pSelf.(fwk.PreFilterPlugin).PreFilter(ctx, stateSelf, podWithTwoAffinityTermsSelf, nodeInfosSelf)
 			if !preFilterStatusSelf.IsSuccess() && preFilterStatusSelf.Code() != fwk.Skip {
 				t.Fatalf("PreFilter failed for self-affinity: %v", preFilterStatusSelf.Message())
 			}
 
 			nodeInfo1Self := mustGetNodeInfo(t, snapshotSelf, "node-1")
-			// Filter should succeed because the incoming pod satisfies its own affinity terms (self-affinity)
+			// Filter 应成功，因为待调度 Pod 自身满足亲和性项（自亲和）。
 			filterStatusSelf := pSelf.(fwk.FilterPlugin).Filter(ctx, stateSelf, podWithTwoAffinityTermsSelf, nodeInfo1Self)
 			if !filterStatusSelf.IsSuccess() {
 				t.Errorf("Expected scheduling on node-1 to SUCCEED due to self-affinity, but got status: %v", filterStatusSelf)
@@ -1799,24 +1807,25 @@ func TestMultipleAffinityTermsRequireSingleMatchingPod(t *testing.T) {
 	}
 }
 
+// TestFastTrackInterPodAffinity 验证 fast path 开启时各拓扑层级与命名空间选择器的反亲和性判定。
 func TestFastTrackInterPodAffinity(t *testing.T) {
 	for _, interPodAffinityHostnameFastPathEnabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("InterPodAffinityHostnameFastPath=%v", interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, interPodAffinityHostnameFastPathEnabled)
 
-			// Test pods have different anti-affinity rules targeting different layers of topology and namespaces
-			// 1. Zone-scoped AntiAffinity: should taint entire zones if matches are found. (Testing cluster-wide anti-affinity)
+			// 测试用 Pod 带有针对不同拓扑层级和命名空间的各种反亲和性规则。
+			// 1. zone 级反亲和性：命中时应污染整个 zone（测试集群级反亲和性）。
 			podWithZoneAntiAffinity := st.MakePod().Name("pod-1").Namespace("default").Label("app", "foo").
 				PodAntiAffinityIn("app", "topology.kubernetes.io/zone", []string{"foo"}, st.PodAntiAffinityWithRequiredReq).Obj()
 
-			// 2. Hostname-scoped AntiAffinity: should taint only specific nodes. (Testing host-scoped fast path anti-affinity)
+			// 2. hostname 级反亲和性：只应污染特定节点（测试主机域 fast path 反亲和性）。
 			podWithHostAntiAffinity := st.MakePod().Name("pod-2").Namespace("default").Label("app", "bar").
 				PodAntiAffinityIn("app", v1.LabelHostname, []string{"bar"}, st.PodAntiAffinityWithRequiredReq).Obj()
 
-			// 3. Zone-scoped AntiAffinity with a complex NamespaceSelector (Testing that custom selectors remain unaffected by fast path changes)
+			// 3. 带复杂 NamespaceSelector 的 zone 级反亲和性（验证自定义选择器不受 fast path 改动影响）。
 			podWithNamespaceAntiAffinity := st.MakePod().Name("pod-3").Namespace("other").Label("app", "baz").
 				PodAntiAffinityIn("app", "topology.kubernetes.io/zone", []string{"blocked"}, st.PodAntiAffinityWithRequiredReq).Obj()
-			// Manually adjust the NamespaceSelector for the test since MakePod doesnt support DoesNotExist natively in a chain easily
+			// MakePod 不便于在链式调用中表达 DoesNotExist，这里手工调整 NamespaceSelector。
 			podWithNamespaceAntiAffinity.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].NamespaceSelector = &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
@@ -1826,11 +1835,11 @@ func TestFastTrackInterPodAffinity(t *testing.T) {
 				},
 			}
 
-			// Background cluster pods:
-			// "node-1" (zone-a) will host 'foo' and 'blocked' (in a ns with team=blue)
+			// 背景集群 Pod：
+			// "node-1"（zone-a）承载 'foo' 与 'blocked'（位于带 team=blue 标签的命名空间）。
 			podWithNoRulesFoo := st.MakePod().Name("pod-no-rules-foo").Namespace("default").Label("app", "foo").Node("node-1").Obj()
 			podInNsWithTeamLabel := st.MakePod().Name("pod-in-ns-with-team-label").Namespace("blue-ns").Label("app", "blocked").Label("team", "blue").Node("node-1").Obj()
-			// "node-2" (zone-b) will host 'bar'
+			// "node-2"（zone-b）承载 'bar'。
 			podWithNoRulesBar := st.MakePod().Name("pod-no-rules-bar").Namespace("default").Label("app", "bar").Node("node-2").Obj()
 
 			nodes := []*v1.Node{
@@ -1858,56 +1867,56 @@ func TestFastTrackInterPodAffinity(t *testing.T) {
 			defer cancel()
 			p := plugintesting.SetupPluginWithInformers(ctx, t, schedruntime.FactoryAdapter(feature.Features{EnableInterPodAffinityHostnameFastPath: interPodAffinityHostnameFastPathEnabled}, New), &config.InterPodAffinityArgs{}, snapshot, namespaces)
 
-			// 1. Zone Anti-Affinity (Cluster-Wide test):
-			// podWithZoneAntiAffinity repells "app=foo" in its zone.
+			// 1. zone 级反亲和性（集群范围测试）：
+			// podWithZoneAntiAffinity 排斥其所在 zone 内的 "app=foo"。
 			state1 := framework.NewCycleState()
 			_, status := p.(fwk.PreFilterPlugin).PreFilter(ctx, state1, podWithZoneAntiAffinity, nodeInfos)
 			if !status.IsSuccess() && status.Code() != fwk.Skip {
 				t.Fatalf("PreFilter failed: %v", status.Message())
 			}
 
-			// node-1 fails: It resides in zone-a, which contains podWithNoRulesFoo (app=foo).
+			// node-1 失败：它位于 zone-a，该 zone 内有 podWithNoRulesFoo（app=foo）。
 			nodeInfo1 := mustGetNodeInfo(t, snapshot, "node-1")
 			status1Node1 := p.(fwk.FilterPlugin).Filter(ctx, state1, podWithZoneAntiAffinity, nodeInfo1)
 			if status1Node1.IsSuccess() {
 				t.Errorf("Expected node-1 to be rejected (due to zone anti-affinity), but got success.")
 			}
 
-			// node-2 succeeds: It resides in zone-b, which has no pods with app=foo.
+			// node-2 通过：它位于 zone-b，该 zone 内没有 app=foo 的 Pod。
 			nodeInfo2 := mustGetNodeInfo(t, snapshot, "node-2")
 			status1Node2 := p.(fwk.FilterPlugin).Filter(ctx, state1, podWithZoneAntiAffinity, nodeInfo2)
 			if !status1Node2.IsSuccess() {
 				t.Errorf("Expected node-2 to be scheduled successfully, but got %v", status1Node2.Message())
 			}
 
-			// 2. Host Anti-Affinity (Fast Path test):
-			// podWithHostAntiAffinity repells "app=bar" on its specific hostname.
+			// 2. 主机级反亲和性（Fast Path 测试）：
+			// podWithHostAntiAffinity 排斥其所在 hostname 上的 "app=bar"。
 			state2 := framework.NewCycleState()
 			p.(fwk.PreFilterPlugin).PreFilter(ctx, state2, podWithHostAntiAffinity, nodeInfos)
 
-			// node-1 succeeds: Only has app=foo and app=blocked, doesn't match app=bar.
+			// node-1 通过：其上只有 app=foo 与 app=blocked，不匹配 app=bar。
 			status2Node1 := p.(fwk.FilterPlugin).Filter(ctx, state2, podWithHostAntiAffinity, nodeInfo1)
 			if !status2Node1.IsSuccess() {
 				t.Errorf("Expected node-1 to allow host anti-affinity, got %v", status2Node1.Message())
 			}
 
-			// node-2 fails: Contains podWithNoRulesBar (app=bar) which triggers the local host-scoped anti-affinity.
+			// node-2 失败：其上有 podWithNoRulesBar（app=bar），触发了主机域反亲和性。
 			status2Node2 := p.(fwk.FilterPlugin).Filter(ctx, state2, podWithHostAntiAffinity, nodeInfo2)
 			if status2Node2.IsSuccess() {
 				t.Errorf("Expected node-2 to fail host anti-affinity, got success.")
 			}
 
-			// 3. Namespace Anti-Affinity (Negative matching test):
-			// podWithNamespaceAntiAffinity repells "app=blocked" in ANY namespace that DOES NOT have the label "team".
+			// 3. 命名空间级反亲和性（否定匹配测试）：
+			// podWithNamespaceAntiAffinity 排斥任何不带 "team" 标签命名空间中的 "app=blocked"。
 			state3 := framework.NewCycleState()
 			_, status = p.(fwk.PreFilterPlugin).PreFilter(ctx, state3, podWithNamespaceAntiAffinity, nodeInfos)
 			if !status.IsSuccess() && status.Code() != fwk.Skip {
 				t.Fatalf("PreFilter failed: %v", status.Message())
 			}
 
-			// node-1 succeeds: Even though it has podInNsWithTeamLabel (app=blocked), that pod lives in
-			// the "blue-ns" namespace which DOES have a "team" label ("team=blue").
-			// The anti-affinity term requires the target pod's namespace to NOT have a team label.
+			// node-1 通过：虽然其上有 podInNsWithTeamLabel（app=blocked），但该 Pod 位于
+			// 带 "team" 标签（"team=blue"）的 "blue-ns" 命名空间中。
+			// 该反亲和性项要求目标 Pod 的命名空间不带 team 标签。
 			status3Node1 := p.(fwk.FilterPlugin).Filter(ctx, state3, podWithNamespaceAntiAffinity, nodeInfo1)
 			if !status3Node1.IsSuccess() {
 				t.Errorf("Expected node-1 to allow namespace anti-affinity (since blue-ns isn't matched), got %v", status3Node1.Message())

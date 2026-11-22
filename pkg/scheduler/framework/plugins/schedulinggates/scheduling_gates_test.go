@@ -28,6 +28,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPreEnqueue 验证 PreEnqueue 扩展点对带调度门禁的 Pod 返回不可调度状态，
+// 对无门禁的 Pod 返回 nil（允许入队）。
 func TestPreEnqueue(t *testing.T) {
 	tests := []struct {
 		name string
@@ -62,6 +64,8 @@ func TestPreEnqueue(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterUpdateTargetPodSchedulingGatesEliminated 验证目标 Pod 的调度门禁被清除后，
+// 插件给出 Queue 提示，让该 Pod 重新进入调度队列。
 func TestIsSchedulableAfterUpdateTargetPodSchedulingGatesEliminated(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	p, err := New(ctx, nil, nil, feature.Features{})

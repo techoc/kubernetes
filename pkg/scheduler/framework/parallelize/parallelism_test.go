@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
+// TestChunkSize 验证不同输入规模下分块大小的计算结果。
 func TestChunkSize(t *testing.T) {
 	tests := []struct {
 		input      int
@@ -58,6 +59,7 @@ func TestChunkSize(t *testing.T) {
 	}
 }
 
+// TestGoroutinesMetric 验证 Until 执行期间 goroutine 数量指标能被正确更新。
 func TestGoroutinesMetric(t *testing.T) {
 	metrics.Register()
 	metrics.Goroutines.Reset()

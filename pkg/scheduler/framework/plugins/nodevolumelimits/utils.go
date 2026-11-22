@@ -21,15 +21,15 @@ import (
 	csilibplugins "k8s.io/csi-translation-lib/plugins"
 )
 
-// isCSIMigrationOn returns a boolean value indicating whether
-// the CSI migration has been enabled for a particular storage plugin.
+// isCSIMigrationOn 判断指定存储插件是否已启用 CSI 迁移。
+// 这里仅检查插件名是否在受支持的白名单中：调用方负责先确认对应的 CSINode 存在，
+// 以及迁移特性门已打开，这里不重复判断。
 func isCSIMigrationOn(csiNode *storagev1.CSINode, pluginName string) bool {
 	if csiNode == nil || len(pluginName) == 0 {
 		return false
 	}
 
-	// In-tree storage to CSI driver migration feature should be enabled,
-	// along with the plugin-specific one
+	// 只有这些 in-tree 插件存在对应的 CSI 驱动，其余插件无需走迁移路径。
 	switch pluginName {
 	case csilibplugins.AWSEBSInTreePluginName:
 		return true

@@ -29,18 +29,17 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// workloadForest maintains a consistent view of observed PodGroup objects.
-// It ensures that scheduling queue invariants are preserved, independent of
-// asynchronous updates happening in the scheduler cache.
-// Outside of the scheduling queue, cache should be used as the source of truth.
-// This structure is not thread-safe and should be accessed only under the lock of the PriorityQueue.
+// workloadForest 维护已观察到的 PodGroup 对象的一致视图。
+// 它保证调度队列的不变量不受调度缓存异步更新的影响。
+// 调度队列之外，应以缓存为准。
+// 该结构非线程安全，只能在 PriorityQueue 的锁内访问。
 type workloadForest struct {
 	podGroups          map[fwk.EntityKey]*schedulingv1beta1.PodGroup
 	compositePodGroups map[fwk.EntityKey]*schedulingv1alpha3.CompositePodGroup
-	// children maps a parent CompositePodGroup key to its direct children keys (PodGroups or CompositePodGroups).
-	// As an invariant of this structure, a child-to-parent relationship is populated here regardless of whether
-	// the parent object has been explicitly observed yet. This prevents the need to iterate over all existing
-	// groups to retroactively link children when a parent is finally added.
+	// children 记录父 CompositePodGroup 到其直接子项（PodGroup 或 CompositePodGroup）的映射。
+	// 该结构的不变量：无论父对象是否已被观察到，子到父的关系都会先记录在此。
+	// 这样父对象最终加入时无需遍历所有组再反向补全子项。
+
 	children                   map[fwk.EntityKey]sets.Set[fwk.EntityKey]
 	isCompositePodGroupEnabled bool
 }
@@ -54,7 +53,7 @@ func newWorkloadForest(isCompositePodGroupEnabled bool) *workloadForest {
 	}
 }
 
-// addPodGroup adds a PodGroup to the forest.
+// addPodGroup 将一个 PodGroup 加入森林。
 func (wf *workloadForest) addPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	pgKey := podGroupKey(podGroup)
 	wf.podGroups[pgKey] = podGroup
@@ -71,12 +70,12 @@ func (wf *workloadForest) addPodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	wf.children[parentKey].Insert(pgKey)
 }
 
-// updatePodGroup updates a PodGroup in the forest.
+// updatePodGroup 更新森林中的一个 PodGroup。
 func (wf *workloadForest) updatePodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	wf.podGroups[podGroupKey(podGroup)] = podGroup
 }
 
-// deletePodGroup removes a PodGroup from the forest.
+// deletePodGroup 从森林中移除一个 PodGroup。
 func (wf *workloadForest) deletePodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	pgKey := podGroupKey(podGroup)
 	delete(wf.podGroups, pgKey)
@@ -96,7 +95,7 @@ func (wf *workloadForest) deletePodGroup(podGroup *schedulingv1beta1.PodGroup) {
 	}
 }
 
-// addCompositePodGroup adds a CompositePodGroup to the forest.
+// addCompositePodGroup 将一个 CompositePodGroup 加入森林。
 func (wf *workloadForest) addCompositePodGroup(cpg *schedulingv1alpha3.CompositePodGroup) {
 	cpgKey := compositePodGroupKey(cpg)
 	wf.compositePodGroups[cpgKey] = cpg
@@ -113,12 +112,12 @@ func (wf *workloadForest) addCompositePodGroup(cpg *schedulingv1alpha3.Composite
 	wf.children[parentKey].Insert(cpgKey)
 }
 
-// updateCompositePodGroup updates a CompositePodGroup in the forest.
+// updateCompositePodGroup 更新森林中的一个 CompositePodGroup。
 func (wf *workloadForest) updateCompositePodGroup(cpg *schedulingv1alpha3.CompositePodGroup) {
 	wf.compositePodGroups[compositePodGroupKey(cpg)] = cpg
 }
 
-// deleteCompositePodGroup removes a CompositePodGroup from the forest.
+// deleteCompositePodGroup 从森林中移除一个 CompositePodGroup。
 func (wf *workloadForest) deleteCompositePodGroup(cpg *schedulingv1alpha3.CompositePodGroup) {
 	cpgKey := compositePodGroupKey(cpg)
 	delete(wf.compositePodGroups, cpgKey)
@@ -139,7 +138,7 @@ func (wf *workloadForest) deleteCompositePodGroup(cpg *schedulingv1alpha3.Compos
 	}
 }
 
-// getRootLookupInfoForPod returns the lookup info of the current root PodGroup or CompositePodGroup for a given pod.
+// getRootLookupInfoForPod 返回 Pod 所属层级的根组（PodGroup 或 CompositePodGroup）的查找信息。
 func (wf *workloadForest) getRootLookupInfoForPod(pod *v1.Pod) (*framework.QueuedPodGroupInfo, bool) {
 	podGroup, exists := wf.podGroups[podGroupKeyForPod(pod)]
 	if !exists {
@@ -148,7 +147,7 @@ func (wf *workloadForest) getRootLookupInfoForPod(pod *v1.Pod) (*framework.Queue
 	return wf.getRootLookupInfoForPodGroup(podGroup)
 }
 
-// getRootLookupInfoForPodGroup returns the lookup info of the current root PodGroup or CompositePodGroup for a given PodGroup.
+// getRootLookupInfoForPodGroup 返回给定 PodGroup 所属层级的根组查找信息。
 func (wf *workloadForest) getRootLookupInfoForPodGroup(podGroup *schedulingv1beta1.PodGroup) (*framework.QueuedPodGroupInfo, bool) {
 	podGroup, exists := wf.podGroups[podGroupKey(podGroup)]
 	if !exists {
@@ -167,19 +166,19 @@ func (wf *workloadForest) getRootLookupInfoForPodGroup(podGroup *schedulingv1bet
 	return wf.getRootLookupInfoForParentCPG(*podGroup.Spec.ParentCompositePodGroupName, podGroup.Namespace)
 }
 
-// getRootLookupInfoForCPG returns the lookup info of the current root CompositePodGroup for a given CompositePodGroup.
+// getRootLookupInfoForCPG 返回给定 CompositePodGroup 所属层级的根 CPG 查找信息。
 func (wf *workloadForest) getRootLookupInfoForCPG(cpg *schedulingv1alpha3.CompositePodGroup) (*framework.QueuedPodGroupInfo, bool) {
 	return wf.getRootLookupInfoForParentCPG(cpg.Name, cpg.Namespace)
 }
 
-// getRootLookupInfoForParentCPG is a helper to traverse up the parent chain and return the lookup info of the root CompositePodGroup.
+// getRootLookupInfoForParentCPG 沿父链向上遍历，返回根 CompositePodGroup 的查找信息。
 func (wf *workloadForest) getRootLookupInfoForParentCPG(parentName, namespace string) (*framework.QueuedPodGroupInfo, bool) {
 	currParentName := parentName
 	visited := sets.New[fwk.EntityKey]()
 	for {
 		cpgKey := fwk.CompositePodGroupKey(namespace, currParentName)
 		if visited.Has(cpgKey) {
-			// TODO(jdzikowski): propagate logger to the getPod method in the scheduling queue.
+			// TODO(jdzikowski): 将 logger 传递到调度队列的 getPod 方法。
 			utilruntime.HandleError(fmt.Errorf("cycle detected in composite pod group hierarchy: %s/%s", parentName, namespace))
 			return nil, false
 		}
@@ -203,7 +202,7 @@ func (wf *workloadForest) getRootLookupInfoForParentCPG(parentName, namespace st
 	}
 }
 
-// getLeafPodGroups returns all PodGroups that are leaf nodes in the subtree rooted at the given CompositePodGroup.
+// getLeafPodGroups 返回以给定组为根的子树中所有作为叶节点的 PodGroup。
 func (wf *workloadForest) getLeafPodGroups(logger klog.Logger, rootLookupInfo *framework.QueuedPodGroupInfo) []*schedulingv1beta1.PodGroup {
 	var pgs []*schedulingv1beta1.PodGroup
 	var key fwk.EntityKey
@@ -249,20 +248,20 @@ func (wf *workloadForest) getLeafPodGroups(logger klog.Logger, rootLookupInfo *f
 	return pgs
 }
 
-// getPodGroup returns the current PodGroup object for a given lookup.
+// getPodGroup 返回查找信息对应的当前 PodGroup 对象。
 func (wf *workloadForest) getPodGroup(pgLookup *schedulingv1beta1.PodGroup) (*schedulingv1beta1.PodGroup, bool) {
 	podGroup, ok := wf.podGroups[podGroupKey(pgLookup)]
 	return podGroup, ok
 }
 
-// getCompositePodGroup returns the current CompositePodGroup object for a given lookup.
+// getCompositePodGroup 返回查找信息对应的当前 CompositePodGroup 对象。
 func (wf *workloadForest) getCompositePodGroup(cpgLookup *schedulingv1alpha3.CompositePodGroup) (*schedulingv1alpha3.CompositePodGroup, bool) {
 	podGroup, ok := wf.compositePodGroups[compositePodGroupKey(cpgLookup)]
 	return podGroup, ok
 }
 
-// buildPodGroupInfoForPG constructs a PodGroupInfo representation for a given PodGroup,
-// using the provided visited set to detect cycles in the hierarchy.
+// buildPodGroupInfoForPG 为给定 PodGroup 构造 PodGroupInfo 表示，
+// 借助 visited 集合检测层级中的环。
 func (wf *workloadForest) buildPodGroupInfoForPG(logger klog.Logger, pg *schedulingv1beta1.PodGroup, visited sets.Set[fwk.EntityKey]) *framework.PodGroupInfo {
 	key := podGroupKey(pg)
 	if visited.Has(key) {
@@ -280,8 +279,8 @@ func (wf *workloadForest) buildPodGroupInfoForPG(logger klog.Logger, pg *schedul
 	}
 }
 
-// buildPodGroupInfoForCPG recursively constructs a PodGroupInfo representation for a given CompositePodGroup
-// and all its children, using the provided visited set to detect cycles in the hierarchy.
+// buildPodGroupInfoForCPG 递归为给定 CompositePodGroup 及其所有子项构造 PodGroupInfo 表示，
+// 同样用 visited 集合防止层级成环。
 func (wf *workloadForest) buildPodGroupInfoForCPG(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup, visited sets.Set[fwk.EntityKey]) *framework.PodGroupInfo {
 	key := compositePodGroupKey(cpg)
 	if visited.Has(key) {
@@ -317,8 +316,8 @@ func (wf *workloadForest) buildPodGroupInfoForCPG(logger klog.Logger, cpg *sched
 	return pgi
 }
 
-// buildQueuedPodGroupInfo constructs a QueuedPodGroupInfo starting from the provided root lookup info,
-// building out the full hierarchy of PodGroupInfo nodes and initializing the QueuedPodInfos map.
+// buildQueuedPodGroupInfo 从给定的根查找信息出发构造 QueuedPodGroupInfo，
+// 展开完整的 PodGroupInfo 层级并初始化 QueuedPodInfos map。
 func (wf *workloadForest) buildQueuedPodGroupInfo(logger klog.Logger, rootLookup *framework.QueuedPodGroupInfo) *framework.QueuedPodGroupInfo {
 	var pgi *framework.PodGroupInfo
 	switch rootLookup.GetType() {
@@ -341,8 +340,8 @@ func (wf *workloadForest) buildQueuedPodGroupInfo(logger klog.Logger, rootLookup
 	}
 }
 
-// podGroupHasParent checks whether the given PodGroup has a parent CompositePodGroup configured
-// and the CompositePodGroup feature is enabled.
+// podGroupHasParent 检查 PodGroup 是否配置了父 CompositePodGroup，
+// 并且 CompositePodGroup 特性已启用。
 func (wf *workloadForest) podGroupHasParent(pg *schedulingv1beta1.PodGroup) bool {
 	return wf.isCompositePodGroupEnabled && pg.Spec.ParentCompositePodGroupName != nil
 }

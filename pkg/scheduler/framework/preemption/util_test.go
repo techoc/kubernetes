@@ -32,6 +32,9 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestFilterVictimsWithPDBViolation 验证 FilterVictimsWithPDBViolation 能按抢占是否违反 PDB
+// 将 victims 正确分组：违反预算的进入 violating，其余进入 nonViolating。
+// 覆盖单个 Pod、多 Pod 组、多个 PDB 共用以及 DisruptedPods 已处理等场景。
 func TestFilterVictimsWithPDBViolation(t *testing.T) {
 	newPodInfo := func(p *v1.Pod) fwk.PodInfo {
 		pi, _ := framework.NewPodInfo(p)
@@ -205,7 +208,7 @@ func TestFilterVictimsWithPDBViolation(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault},
 					Spec: policy.PodDisruptionBudgetSpec{
-						Selector: &metav1.LabelSelector{}, // matches nothing
+						Selector: &metav1.LabelSelector{}, // 空 selector 不匹配任何 Pod
 					},
 					Status: policy.PodDisruptionBudgetStatus{
 						DisruptionsAllowed: 0,
@@ -263,6 +266,9 @@ func TestFilterVictimsWithPDBViolation(t *testing.T) {
 	}
 }
 
+// TestMoreImportantVictim 验证 MoreImportantVictim 的比较顺序：
+// 优先级 > 单元类型（CPG > PG > Pod）> 启动时间/组规模等兜底规则。
+// 注意：类型权重优先于规模与启动时间，只有同类型才比较后两者。
 func TestMoreImportantVictim(t *testing.T) {
 	newPodInfo := func(p *v1.Pod) fwk.PodInfo {
 		pi, _ := framework.NewPodInfo(p)
@@ -603,6 +609,8 @@ func TestMoreImportantVictim(t *testing.T) {
 	}
 }
 
+// TestPodTerminatingByPreemption 验证只有同时满足删除时间戳、DisruptionTarget 条件为 True
+// 且原因为 PreemptionByScheduler，才判定该 Pod 是因调度器抢占而终止。
 func TestPodTerminatingByPreemption(t *testing.T) {
 	tests := []struct {
 		name string
@@ -655,6 +663,8 @@ func TestPodTerminatingByPreemption(t *testing.T) {
 	}
 }
 
+// TestGetPodPriority 验证有效优先级的取值规则：属于 PodGroup/CPG 层级时取根组优先级，
+// lister 为 nil 或父组缺失时逐级回退，最终退回 Pod 自身优先级。
 func TestGetPodPriority(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -826,6 +836,8 @@ func TestGetPodPriority(t *testing.T) {
 	}
 }
 
+// TestTraverseHierarchyUp 验证向上遍历层级的访问顺序、visitFn 提前中止、
+// CPG 成环检测，以及父组缺失时的优雅退出。
 func TestTraverseHierarchyUp(t *testing.T) {
 	namespace := metav1.NamespaceDefault
 

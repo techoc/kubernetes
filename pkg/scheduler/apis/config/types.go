@@ -26,217 +26,195 @@ import (
 )
 
 const (
-	// DefaultKubeSchedulerPort is the default port for the scheduler status server.
-	// May be overridden by a flag at startup.
+	// DefaultKubeSchedulerPort 是调度器状态服务的默认端口，
+	// 启动时可通过命令行参数覆盖。
 	DefaultKubeSchedulerPort = 10259
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeSchedulerConfiguration configures a scheduler
+// KubeSchedulerConfiguration 是调度器的配置对象。
 type KubeSchedulerConfiguration struct {
-	// TypeMeta contains the API version and kind. In kube-scheduler, after
-	// conversion from the versioned KubeSchedulerConfiguration type to this
-	// internal type, we set the APIVersion field to the scheme group/version of
-	// the type we converted from. This is done in cmd/kube-scheduler in two
-	// places: (1) when loading config from a file, (2) generating the default
-	// config. Based on the versioned type set in this field, we make decisions;
-	// for example (1) during validation to check for usage of removed plugins,
-	// (2) writing config to a file, (3) initialising the scheduler.
+	// TypeMeta 包含 API 版本和 kind。在 kube-scheduler 中，把带版本的
+	// KubeSchedulerConfiguration 转换为本内部类型后，会把 APIVersion 设为所转换类型的
+	// scheme 组/版本。这在 cmd/kube-scheduler 中有两处完成：(1) 从文件加载配置时，
+	// (2) 生成默认配置时。后续根据该字段里的版本类型做决策，例如：(1) 校验时检查是否
+	// 使用了已移除的插件，(2) 把配置写回文件，(3) 初始化调度器。
 	metav1.TypeMeta
 
-	// Parallelism defines the amount of parallelism in algorithms for scheduling a Pods. Must be greater than 0. Defaults to 16
+	// Parallelism 定义调度 Pod 时算法的并行度，必须大于 0，默认 16。
 	Parallelism int32
 
-	// LeaderElection defines the configuration of leader election client.
+	// LeaderElection 定义 leader 选举客户端的配置。
 	LeaderElection componentbaseconfig.LeaderElectionConfiguration
 
-	// ClientConnection specifies the kubeconfig file and client connection
-	// settings for the proxy server to use when communicating with the apiserver.
+	// ClientConnection 指定 proxy server 与 apiserver 通信时使用的 kubeconfig 文件和客户端连接设置。
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 
-	// DebuggingConfiguration holds configuration for Debugging related features
-	// TODO: We might wanna make this a substruct like Debugging componentbaseconfig.DebuggingConfiguration
+	// DebuggingConfiguration 保存调试相关特性的配置。
+	// TODO: 也许要把它改成类似 Debugging componentbaseconfig.DebuggingConfiguration 的子结构。
 	componentbaseconfig.DebuggingConfiguration
 
-	// PercentageOfNodesToScore is the percentage of all nodes that once found feasible
-	// for running a pod, the scheduler stops its search for more feasible nodes in
-	// the cluster. This helps improve scheduler's performance. Scheduler always tries to find
-	// at least "minFeasibleNodesToFind" feasible nodes no matter what the value of this flag is.
-	// Example: if the cluster size is 500 nodes and the value of this flag is 30,
-	// then scheduler stops finding further feasible nodes once it finds 150 feasible ones.
-	// When the value is 0, default percentage (5%--50% based on the size of the cluster) of the
-	// nodes will be scored. It is overridden by profile level PercentageOfNodesToScore.
+	// PercentageOfNodesToScore 是一个百分比：一旦找到这么多比例的节点可运行某 Pod，
+	// 调度器就停止在集群中继续搜索可行节点，借此提升性能。无论该值是多少，
+	// 调度器至少会尝试找到 "minFeasibleNodesToFind" 个可行节点。
+	// 例如集群有 500 个节点且该值为 30，找到 150 个可行节点后就停止继续搜索。
+	// 值为 0 时按集群规模使用默认百分比（5%--50%）。
+	// 该字段会被 profile 级别的 PercentageOfNodesToScore 覆盖。
 	PercentageOfNodesToScore *int32
 
-	// PodInitialBackoffSeconds is the initial backoff for unschedulable pods.
-	// If specified, it must be greater than 0. If this value is null, the default value (1s)
-	// will be used.
+	// PodInitialBackoffSeconds 是不可调度 Pod 的初始退避时长。
+	// 若指定则必须大于 0；为 null 时使用默认值（1 秒）。
 	PodInitialBackoffSeconds int64
 
-	// PodMaxBackoffSeconds is the max backoff for unschedulable pods.
-	// If specified, it must be greater than or equal to podInitialBackoffSeconds. If this value is null,
-	// the default value (10s) will be used.
+	// PodMaxBackoffSeconds 是不可调度 Pod 的最大退避时长。
+	// 若指定则必须大于或等于 podInitialBackoffSeconds；为 null 时使用默认值（10 秒）。
 	PodMaxBackoffSeconds int64
 
-	// Profiles are scheduling profiles that kube-scheduler supports. Pods can
-	// choose to be scheduled under a particular profile by setting its associated
-	// scheduler name. Pods that don't specify any scheduler name are scheduled
-	// with the "default-scheduler" profile, if present here.
+	// Profiles 是 kube-scheduler 支持的调度 profile 列表。
+	// Pod 可通过设置对应的 scheduler name 选择使用某个 profile；
+	// 未指定 scheduler name 的 Pod，若这里存在 "default-scheduler" profile，则使用它。
 	Profiles []KubeSchedulerProfile
 
-	// Extenders are the list of scheduler extenders, each holding the values of how to communicate
-	// with the extender. These extenders are shared by all scheduler profiles.
+	// Extenders 是调度扩展器列表，每个元素保存与扩展器通信所需的参数。
+	// 这些扩展器被所有调度 profile 共享。
 	Extenders []Extender
 
-	// DelayCacheUntilActive specifies when to start caching. If this is true and leader election is enabled,
-	// the scheduler will wait to fill informer caches until it is the leader. Doing so will have slower
-	// failover with the benefit of lower memory overhead while waiting to become leader.
-	// Defaults to false.
+	// DelayCacheUntilActive 指定何时开始缓存。若为 true 且启用了 leader 选举，
+	// 调度器会等到自己成为 leader 后才填充 informer 缓存。这样在等待成为 leader 期间
+	// 内存开销更低，但故障切换会更慢。默认 false。
 	DelayCacheUntilActive bool
 }
 
-// KubeSchedulerProfile is a scheduling profile.
+// KubeSchedulerProfile 定义一个调度 profile。
 type KubeSchedulerProfile struct {
-	// SchedulerName is the name of the scheduler associated to this profile.
-	// If SchedulerName matches with the pod's "spec.schedulerName", then the pod
-	// is scheduled with this profile.
+	// SchedulerName 是与该 profile 关联的调度器名称。
+	// 若 SchedulerName 与 Pod 的 "spec.schedulerName" 匹配，则该 Pod 使用此 profile 调度。
 	SchedulerName string
 
-	// PercentageOfNodesToScore is the percentage of all nodes that once found feasible
-	// for running a pod, the scheduler stops its search for more feasible nodes in
-	// the cluster. This helps improve scheduler's performance. Scheduler always tries to find
-	// at least "minFeasibleNodesToFind" feasible nodes no matter what the value of this flag is.
-	// Example: if the cluster size is 500 nodes and the value of this flag is 30,
-	// then scheduler stops finding further feasible nodes once it finds 150 feasible ones.
-	// When the value is 0, default percentage (5%--50% based on the size of the cluster) of the
-	// nodes will be scored. It will override global PercentageOfNodesToScore. If it is empty,
-	// global PercentageOfNodesToScore will be used.
+	// PercentageOfNodesToScore 是一个百分比：一旦找到这么多比例的节点可运行某 Pod，
+	// 调度器就停止在集群中继续搜索可行节点，借此提升性能。无论该值是多少，
+	// 调度器至少会尝试找到 "minFeasibleNodesToFind" 个可行节点。
+	// 例如集群有 500 个节点且该值为 30，找到 150 个可行节点后就停止继续搜索。
+	// 值为 0 时按集群规模使用默认百分比（5%--50%）。
+	// 该字段会覆盖全局的 PercentageOfNodesToScore；为空时使用全局值。
 	PercentageOfNodesToScore *int32
 
-	// Plugins specify the set of plugins that should be enabled or disabled.
-	// Enabled plugins are the ones that should be enabled in addition to the
-	// default plugins. Disabled plugins are any of the default plugins that
-	// should be disabled.
-	// When no enabled or disabled plugin is specified for an extension point,
-	// default plugins for that extension point will be used if there is any.
-	// If a QueueSort plugin is specified, the same QueueSort Plugin and
-	// PluginConfig must be specified for all profiles.
+	// Plugins 指定要启用或禁用的插件集合。
+	// Enabled 是在默认插件之外额外启用的插件；Disabled 是要禁用的默认插件。
+	// 某个扩展点若未指定启用或禁用插件，则使用该扩展点的默认插件（如果有）。
+	// 一旦指定了 QueueSort 插件，所有 profile 都必须指定相同的 QueueSort 插件和 PluginConfig。
 	Plugins *Plugins
 
-	// PluginConfig is an optional set of custom plugin arguments for each plugin.
-	// Omitting config args for a plugin is equivalent to using the default config
-	// for that plugin.
+	// PluginConfig 是每个插件的可选自定义参数集合。
+	// 省略某个插件的配置参数，等同于使用该插件的默认配置。
 	PluginConfig []PluginConfig
 }
 
-// Plugins include multiple extension points. When specified, the list of plugins for
-// a particular extension point are the only ones enabled. If an extension point is
-// omitted from the config, then the default set of plugins is used for that extension point.
-// Enabled plugins are called in the order specified here, after default plugins. If they need to
-// be invoked before default plugins, default plugins must be disabled and re-enabled here in desired order.
+// Plugins 包含多个扩展点的插件配置。一旦指定，某扩展点的插件列表就是该点唯一启用的插件。
+// 若配置中省略某个扩展点，则该扩展点使用默认插件集合。
+// Enabled 插件按此处给出的顺序、在默认插件之后调用；若要在默认插件之前调用，
+// 必须先禁用默认插件，再在此按期望顺序重新启用。
 type Plugins struct {
-	// PreEnqueue is a list of plugins that should be invoked before adding pods to the scheduling queue.
+	// PreEnqueue 是在把 Pod 加入调度队列之前调用的插件列表。
 	PreEnqueue PluginSet
 
-	// QueueSort is a list of plugins that should be invoked when sorting pods in the scheduling queue.
+	// QueueSort 是在调度队列中对 Pod 排序时调用的插件列表。
 	QueueSort PluginSet
 
-	// PreFilter is a list of plugins that should be invoked at "PreFilter" extension point of the scheduling framework.
+	// PreFilter 是在调度框架的 "PreFilter" 扩展点调用的插件列表。
 	PreFilter PluginSet
 
-	// Filter is a list of plugins that should be invoked when filtering out nodes that cannot run the Pod.
+	// Filter 是在过滤掉无法运行 Pod 的节点时调用的插件列表。
 	Filter PluginSet
 
-	// PostFilter is a list of plugins that are invoked after filtering phase, but only when no feasible nodes were found for the pod.
+	// PostFilter 是在过滤阶段之后、且没有为 Pod 找到可行节点时才调用的插件列表。
 	PostFilter PluginSet
 
-	// PreScore is a list of plugins that are invoked before scoring.
+	// PreScore 是在打分之前调用的插件列表。
 	PreScore PluginSet
 
-	// Score is a list of plugins that should be invoked when ranking nodes that have passed the filtering phase.
+	// Score 是在对通过过滤阶段的节点排序时调用的插件列表。
 	Score PluginSet
 
-	// Reserve is a list of plugins invoked when reserving/unreserving resources
-	// after a node is assigned to run the pod.
+	// Reserve 是在为 Pod 分配节点后，预留/释放资源时调用的插件列表。
 	Reserve PluginSet
 
-	// Permit is a list of plugins that control binding of a Pod. These plugins can prevent or delay binding of a Pod.
+	// Permit 是控制 Pod 绑定的插件列表，可以阻止或延迟 Pod 的绑定。
 	Permit PluginSet
 
-	// PreBind is a list of plugins that should be invoked before a pod is bound.
+	// PreBind 是在 Pod 绑定之前调用的插件列表。
 	PreBind PluginSet
 
-	// Bind is a list of plugins that should be invoked at "Bind" extension point of the scheduling framework.
-	// The scheduler call these plugins in order. Scheduler skips the rest of these plugins as soon as one returns success.
+	// Bind 是在调度框架的 "Bind" 扩展点调用的插件列表。
+	// 调度器按顺序调用这些插件，一旦某个返回成功就跳过其余插件。
 	Bind PluginSet
 
-	// PostBind is a list of plugins that should be invoked after a pod is successfully bound.
+	// PostBind 是在 Pod 成功绑定之后调用的插件列表。
 	PostBind PluginSet
 
-	// MultiPoint is a simplified config field for enabling plugins for all valid extension points
+	// MultiPoint 是简化配置字段，用于在插件所有合法的扩展点上都启用该插件。
 	MultiPoint PluginSet
 
-	// PlacementGenerate is a list of plugins that should be invoked during pod group scheduling cycle when determining placements for a pod group.
+	// PlacementGenerate 是在 PodGroup 调度周期中、为 PodGroup 决定放置方案时调用的插件列表。
 	PlacementGenerate PluginSet
 
-	// PlacementScore is a list of plugins that should be invoked during workload scheduling cycle when ranking pod group assignments.
+	// PlacementScore 是在工作负载调度周期中、对 PodGroup 放置方案排序时调用的插件列表。
 	PlacementScore PluginSet
 
-	// PodGroupPostFilter is a list of plugins that are invoked after the workload scheduling phase,
-	// but only when the PodGroup cannot be scheduled (equivalent to PostFilter for single pods).
+	// PodGroupPostFilter 是在工作负载调度阶段之后、且 PodGroup 无法被调度时才调用的插件列表
+	// （相当于单个 Pod 的 PostFilter）。
 	PodGroupPostFilter PluginSet
 }
 
-// PluginSet specifies enabled and disabled plugins for an extension point.
-// If an array is empty, missing, or nil, default plugins at that extension point will be used.
+// PluginSet 指定某个扩展点启用和禁用的插件。
+// 若数组为空、缺失或为 nil，则该扩展点使用默认插件。
 type PluginSet struct {
-	// Enabled specifies plugins that should be enabled in addition to default plugins.
-	// These are called after default plugins and in the same order specified here.
+	// Enabled 指定在默认插件之外额外启用的插件。
+	// 这些插件在默认插件之后调用，调用顺序与此处一致。
 	Enabled []Plugin
-	// Disabled specifies default plugins that should be disabled.
-	// When all default plugins need to be disabled, an array containing only one "*" should be provided.
+	// Disabled 指定要禁用的默认插件。
+	// 若要禁用所有默认插件，提供一个只包含 "*" 的数组即可。
 	Disabled []Plugin
 }
 
-// Plugin specifies a plugin name and its weight when applicable. Weight is used only for Score and PlacementScore plugins.
+// Plugin 指定插件名称及其适用时的权重。权重仅用于 Score 和 PlacementScore 插件。
 type Plugin struct {
-	// Name defines the name of plugin
+	// Name 定义插件名称。
 	Name string
-	// Weight defines the weight of plugin, only used for Score and PlacementScore plugins.
+	// Weight 定义插件权重，仅用于 Score 和 PlacementScore 插件。
 	Weight int32
 }
 
-// PluginConfig specifies arguments that should be passed to a plugin at the time of initialization.
-// A plugin that is invoked at multiple extension points is initialized once. Args can have arbitrary structure.
-// It is up to the plugin to process these Args.
+// PluginConfig 指定插件初始化时要传入的参数。
+// 在多个扩展点被调用的插件只初始化一次。Args 可以是任意结构，
+// 具体如何解析由插件自己决定。
 type PluginConfig struct {
-	// Name defines the name of plugin being configured
+	// Name 定义被配置的插件名称。
 	Name string
-	// Args defines the arguments passed to the plugins at the time of initialization. Args can have arbitrary structure.
+	// Args 定义初始化时传给插件的参数，可以是任意结构。
 	Args runtime.Object
 }
 
 /*
- * NOTE: The following variables and methods are intentionally left out of the staging mirror.
+ * 注意：以下变量和方法有意不纳入 staging 镜像。
  */
 const (
-	// DefaultPercentageOfNodesToScore defines the percentage of nodes of all nodes
-	// that once found feasible, the scheduler stops looking for more nodes.
-	// A value of 0 means adaptive, meaning the scheduler figures out a proper default.
+	// DefaultPercentageOfNodesToScore 定义默认打分节点比例：找到该比例的可行节点后就不再继续找。
+	// 值为 0 表示自适应，即由调度器自行推算一个合适的默认值。
 	DefaultPercentageOfNodesToScore = 0
 
-	// MaxCustomPriorityScore is the max score UtilizationShapePoint expects.
+	// MaxCustomPriorityScore 是 UtilizationShapePoint 期望的最大分数。
 	MaxCustomPriorityScore int64 = 10
 
-	// MaxTotalScore is the maximum total score.
+	// MaxTotalScore 是最大总分。
 	MaxTotalScore int64 = math.MaxInt64
 
-	// MaxWeight defines the max weight value allowed for custom PriorityPolicy
+	// MaxWeight 定义自定义 PriorityPolicy 允许的最大权重值。
 	MaxWeight = MaxTotalScore / MaxCustomPriorityScore
 )
 
-// Names returns the list of enabled plugin names.
+// Names 返回所有已启用插件的名称列表（去重后）。
 func (p *Plugins) Names() []string {
 	if p == nil {
 		return nil
@@ -266,83 +244,76 @@ func (p *Plugins) Names() []string {
 	return sets.List(n)
 }
 
-// Extender holds the parameters used to communicate with the extender. If a verb is unspecified/empty,
-// it is assumed that the extender chose not to provide that extension.
+// Extender 保存与扩展器通信所需的参数。若某个动词未指定/为空，
+// 就认为扩展器选择不提供该扩展能力。
 type Extender struct {
-	// URLPrefix at which the extender is available
+	// URLPrefix 是扩展器的访问地址前缀。
 	URLPrefix string
-	// Verb for the filter call, empty if not supported. This verb is appended to the URLPrefix when issuing the filter call to extender.
+	// FilterVerb 是过滤调用的 HTTP 动词，不支持时为空。
+	// 调用过滤接口时该动词会拼在 URLPrefix 之后。
 	FilterVerb string
-	// Verb for the preempt call, empty if not supported. This verb is appended to the URLPrefix when issuing the preempt call to extender.
+	// PreemptVerb 是抢占调用的动词，不支持时为空。
+	// 调用抢占接口时该动词会拼在 URLPrefix 之后。
 	PreemptVerb string
-	// Verb for the prioritize call, empty if not supported. This verb is appended to the URLPrefix when issuing the prioritize call to extender.
+	// PrioritizeVerb 是打分调用的动词，不支持时为空。
+	// 调用打分接口时该动词会拼在 URLPrefix 之后。
 	PrioritizeVerb string
-	// The numeric multiplier for the node scores that the prioritize call generates.
-	// The weight should be a positive integer
+	// Weight 是扩展器打分结果的数值乘数，必须是正整数。
 	Weight int64
-	// Verb for the bind call, empty if not supported. This verb is appended to the URLPrefix when issuing the bind call to extender.
-	// If this method is implemented by the extender, it is the extender's responsibility to bind the pod to apiserver. Only one extender
-	// can implement this function.
+	// BindVerb 是绑定调用的动词，不支持时为空。
+	// 调用绑定接口时该动词会拼在 URLPrefix 之后。
+	// 若扩展器实现了绑定，则由它负责把 Pod 绑定到 apiserver；只能有一个扩展器实现该功能。
 	BindVerb string
-	// EnableHTTPS specifies whether https should be used to communicate with the extender
+	// EnableHTTPS 指定与扩展器通信时是否使用 https。
 	EnableHTTPS bool
-	// TLSConfig specifies the transport layer security config
+	// TLSConfig 指定传输层安全配置。
 	TLSConfig *ExtenderTLSConfig
-	// HTTPTimeout specifies the timeout duration for a call to the extender. Filter timeout fails the scheduling of the pod. Prioritize
-	// timeout is ignored, k8s/other extenders priorities are used to select the node.
+	// HTTPTimeout 指定调用扩展器的超时时长。过滤超时会导致 Pod 调度失败；
+	// 打分超时则被忽略，改由 k8s/其他扩展器的打分来选择节点。
 	HTTPTimeout metav1.Duration
-	// NodeCacheCapable specifies that the extender is capable of caching node information,
-	// so the scheduler should only send minimal information about the eligible nodes
-	// assuming that the extender already cached full details of all nodes in the cluster
+	// NodeCacheCapable 表示扩展器自身能缓存节点信息，
+	// 因此调度器只需发送候选节点的最小信息——假设扩展器已缓存集群中所有节点的完整数据。
 	NodeCacheCapable bool
-	// ManagedResources is a list of extended resources that are managed by
-	// this extender.
-	// - A pod will be sent to the extender on the Filter, Prioritize and Bind
-	//   (if the extender is the binder) phases iff the pod requests at least
-	//   one of the extended resources in this list. If empty or unspecified,
-	//   all pods will be sent to this extender.
-	// - If IgnoredByScheduler is set to true for a resource, kube-scheduler
-	//   will skip checking the resource in predicates.
+	// ManagedResources 是本扩展器管理的扩展资源列表。
+	// - 只有当 Pod 请求了列表中至少一种扩展资源时，才会在 Filter、Prioritize 和 Bind
+	//   （若该扩展器负责绑定）阶段把它发给扩展器。列表为空或未指定时，所有 Pod 都会发给它。
+	// - 若某资源设置了 IgnoredByScheduler=true，kube-scheduler 在 predicate 检查时会跳过该资源。
 	// +optional
 	ManagedResources []ExtenderManagedResource
-	// Ignorable specifies if the extender is ignorable, i.e. scheduling should not
-	// fail when the extender returns an error or is not reachable.
+	// Ignorable 指定扩展器是否可忽略：若可忽略，扩展器报错或不可达时调度不会失败。
 	Ignorable bool
 }
 
-// ExtenderManagedResource describes the arguments of extended resources
-// managed by an extender.
+// ExtenderManagedResource 描述扩展器所管理的扩展资源的参数。
 type ExtenderManagedResource struct {
-	// Name is the extended resource name.
+	// Name 是扩展资源名称。
 	Name string
-	// IgnoredByScheduler indicates whether kube-scheduler should ignore this
-	// resource when applying predicates.
+	// IgnoredByScheduler 表示 kube-scheduler 在应用 predicate 时是否忽略该资源。
 	IgnoredByScheduler bool
 }
 
-// ExtenderTLSConfig contains settings to enable TLS with extender
+// ExtenderTLSConfig 包含与扩展器启用 TLS 相关的设置。
 type ExtenderTLSConfig struct {
-	// Server should be accessed without verifying the TLS certificate. For testing only.
+	// Insecure 表示访问服务端时不校验证书，仅供测试使用。
 	Insecure bool
-	// ServerName is passed to the server for SNI and is used in the client to check server
-	// certificates against. If ServerName is empty, the hostname used to contact the
-	// server is used.
+	// ServerName 通过 SNI 传给服务端，客户端也用它来校验服务端证书。
+	// 若为空，则使用连接服务端时的主机名。
 	ServerName string
 
-	// Server requires TLS client certificate authentication
+	// CertFile 是服务端要求 TLS 客户端证书认证时使用的证书文件。
 	CertFile string
-	// Server requires TLS client certificate authentication
+	// KeyFile 是服务端要求 TLS 客户端证书认证时使用的私钥文件。
 	KeyFile string
-	// Trusted root certificates for server
+	// CAFile 是校验服务端所用的可信根证书文件。
 	CAFile string
 
-	// CertData holds PEM-encoded bytes (typically read from a client certificate file).
-	// CertData takes precedence over CertFile
+	// CertData 保存 PEM 编码的字节（通常来自客户端证书文件）。
+	// CertData 优先于 CertFile。
 	CertData []byte
-	// KeyData holds PEM-encoded bytes (typically read from a client certificate key file).
-	// KeyData takes precedence over KeyFile
+	// KeyData 保存 PEM 编码的字节（通常来自客户端私钥文件）。
+	// KeyData 优先于 KeyFile。
 	KeyData []byte `datapolicy:"security-key"`
-	// CAData holds PEM-encoded bytes (typically read from a root certificates bundle).
-	// CAData takes precedence over CAFile
+	// CAData 保存 PEM 编码的字节（通常来自根证书包）。
+	// CAData 优先于 CAFile。
 	CAData []byte
 }

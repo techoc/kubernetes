@@ -30,6 +30,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestNodeUnschedulable 验证 Filter 会拒绝不可调度节点，
+// 且带对应 toleration 的 Pod 可以落到该节点上。
 func TestNodeUnschedulable(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -91,6 +93,8 @@ func TestNodeUnschedulable(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterNodeChange 验证节点变更的 QueueingHint：
+// 只有 Unschedulable 字段发生有利变化时才重新入队，无关污点变化跳过。
 func TestIsSchedulableAfterNodeChange(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -212,6 +216,8 @@ func TestIsSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterPodTolerationChange 验证目标 Pod 新增 toleration 时的 QueueingHint：
+// 只有新增能容忍不可调度污点的 toleration 才值得重新入队。
 func TestIsSchedulableAfterPodTolerationChange(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -266,6 +272,8 @@ func TestIsSchedulableAfterPodTolerationChange(t *testing.T) {
 	}
 }
 
+// TestNodeUnschedulable_DeferredResizeSkipped 验证原地扩容被推迟时 PreFilter 跳过、
+// Filter 放行，把处理交给抢占流程。
 func TestNodeUnschedulable_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

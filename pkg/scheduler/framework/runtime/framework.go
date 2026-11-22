@@ -49,12 +49,11 @@ import (
 )
 
 const (
-	// Specifies the maximum timeout a permit plugin can return.
+	// Permit 插件可返回的最大超时时间。
 	maxTimeout = 15 * time.Minute
 )
 
-// frameworkImpl is the component responsible for initializing and running scheduler
-// plugins.
+// frameworkImpl 负责初始化并运行调度器插件。
 type frameworkImpl struct {
 	registry                  Registry
 	snapshotSharedLister      fwk.SharedLister
@@ -83,7 +82,7 @@ type frameworkImpl struct {
 	placementScorePlugins      []fwk.PlacementScorePlugin
 	placementScorePluginWeight map[string]int
 
-	// pluginsMap contains all plugins, by name.
+	// pluginsMap 按名字保存所有插件。
 	pluginsMap map[string]fwk.Plugin
 
 	clientSet        clientset.Interface
@@ -113,14 +112,13 @@ type frameworkImpl struct {
 	enableSignatures bool
 }
 
-// extensionPoint encapsulates desired and applied set of plugins at a specific extension
-// point. This is used to simplify iterating over all extension points supported by the
-// frameworkImpl.
+// extensionPoint 封装某个扩展点上期望配置与实际应用的插件集合，
+// 便于统一遍历 frameworkImpl 支持的所有扩展点。
 type extensionPoint struct {
-	// the set of plugins to be configured at this extension point.
+	// 该扩展点上期望配置的插件集合。
 	plugins *config.PluginSet
-	// a pointer to the slice storing plugins implementations that will run at this
-	// extension point.
+	// 指向实际在该扩展点运行的插件切片的指针。
+
 	slicePtr interface{}
 }
 
@@ -144,7 +142,7 @@ func (f *frameworkImpl) getExtensionPoints(plugins *config.Plugins) []extensionP
 	}
 }
 
-// Extenders returns the registered extenders.
+// Extenders 返回已注册的 extender。
 func (f *frameworkImpl) Extenders() []fwk.Extender {
 	return f.extenders
 }
@@ -172,155 +170,155 @@ type frameworkOptions struct {
 	logger                 *klog.Logger
 }
 
-// Option for the frameworkImpl.
+// Option 用于配置 frameworkImpl。
 type Option func(*frameworkOptions)
 
-// WithComponentConfigVersion sets the component config version to the
-// KubeSchedulerConfiguration version used. The string should be the full
-// scheme group/version of the external type we converted from (for example
-// "kubescheduler.config.k8s.io/v1")
+// WithComponentConfigVersion 设置所使用的 KubeSchedulerConfiguration 版本。
+// 参数应为转换来源外部类型的完整 scheme group/version（例如
+// "kubescheduler.config.k8s.io/v1"）。
 func WithComponentConfigVersion(componentConfigVersion string) Option {
 	return func(o *frameworkOptions) {
 		o.componentConfigVersion = componentConfigVersion
 	}
 }
 
-// WithClientSet sets clientSet for the scheduling frameworkImpl.
+// WithClientSet 为 frameworkImpl 设置 clientSet。
 func WithClientSet(clientSet clientset.Interface) Option {
 	return func(o *frameworkOptions) {
 		o.clientSet = clientSet
 	}
 }
 
-// WithKubeConfig sets kubeConfig for the scheduling frameworkImpl.
+// WithKubeConfig 为 frameworkImpl 设置 kubeConfig。
 func WithKubeConfig(kubeConfig *restclient.Config) Option {
 	return func(o *frameworkOptions) {
 		o.kubeConfig = kubeConfig
 	}
 }
 
-// WithEventRecorder sets clientSet for the scheduling frameworkImpl.
+// WithEventRecorder 为 frameworkImpl 设置事件记录器。
 func WithEventRecorder(recorder events.EventRecorderLogger) Option {
 	return func(o *frameworkOptions) {
 		o.eventRecorder = recorder
 	}
 }
 
-// WithInformerFactory sets informer factory for the scheduling frameworkImpl.
+// WithInformerFactory 为 frameworkImpl 设置 informer 工厂。
 func WithInformerFactory(informerFactory informers.SharedInformerFactory) Option {
 	return func(o *frameworkOptions) {
 		o.informerFactory = informerFactory
 	}
 }
 
-// WithSharedDRAManager sets SharedDRAManager for the framework.
+// WithSharedDRAManager 为 framework 设置 SharedDRAManager。
 func WithSharedDRAManager(sharedDRAManager fwk.SharedDRAManager) Option {
 	return func(o *frameworkOptions) {
 		o.sharedDRAManager = sharedDRAManager
 	}
 }
 
-// WithSharedCSIManager sets SharedCSIManager for the framework.
+// WithSharedCSIManager 为 framework 设置 SharedCSIManager。
 func WithSharedCSIManager(sharedCSIManager fwk.CSIManager) Option {
 	return func(o *frameworkOptions) {
 		o.sharedCSIManager = sharedCSIManager
 	}
 }
 
-// WithSnapshotSharedLister sets the SharedLister of the snapshot.
+// WithSnapshotSharedLister 设置快照的 SharedLister。
 func WithSnapshotSharedLister(snapshotSharedLister fwk.SharedLister) Option {
 	return func(o *frameworkOptions) {
 		o.snapshotSharedLister = snapshotSharedLister
 	}
 }
 
-// WithMutableSnapshotLister sets the MutableSnapshotLister.
+// WithMutableSnapshotLister 设置 MutableSnapshotLister。
 func WithMutableSnapshotLister(mutableSnapshotLister fwk.MutableSnapshotSharedLister) Option {
 	return func(o *frameworkOptions) {
 		o.mutableSnapshotLister = mutableSnapshotLister
 	}
 }
 
-// WithPodNominator sets podNominator for the scheduling frameworkImpl.
+// WithPodNominator 为 frameworkImpl 设置 podNominator。
 func WithPodNominator(nominator fwk.PodNominator) Option {
 	return func(o *frameworkOptions) {
 		o.podNominator = nominator
 	}
 }
 
+// WithPodActivator 为 frameworkImpl 设置 podActivator。
 func WithPodActivator(activator fwk.PodActivator) Option {
 	return func(o *frameworkOptions) {
 		o.podActivator = activator
 	}
 }
 
-// WithExtenders sets extenders for the scheduling frameworkImpl.
+// WithExtenders 为 frameworkImpl 设置 extenders。
 func WithExtenders(extenders []fwk.Extender) Option {
 	return func(o *frameworkOptions) {
 		o.extenders = extenders
 	}
 }
 
-// WithParallelism sets parallelism for the scheduling frameworkImpl.
+// WithParallelism 设置 frameworkImpl 的并行度。
 func WithParallelism(parallelism int) Option {
 	return func(o *frameworkOptions) {
 		o.parallelizer = parallelize.NewParallelizer(parallelism)
 	}
 }
 
-// WithAPIDispatcher sets API dispatcher for the scheduling frameworkImpl.
+// WithAPIDispatcher 为 frameworkImpl 设置 API dispatcher。
 func WithAPIDispatcher(apiDispatcher *apidispatcher.APIDispatcher) Option {
 	return func(o *frameworkOptions) {
 		o.apiDispatcher = apiDispatcher
 	}
 }
 
-// WithPodGroupManager sets the PodGroupManager for the scheduling frameworkImpl.
+// WithPodGroupManager 为 frameworkImpl 设置 PodGroupManager。
 func WithPodGroupManager(podGroupManager fwk.PodGroupManager) Option {
 	return func(o *frameworkOptions) {
 		o.podGroupManager = podGroupManager
 	}
 }
 
-// CaptureProfile is a callback to capture a finalized profile.
+// CaptureProfile 是用于捕获最终配置的回调。
 type CaptureProfile func(config.KubeSchedulerProfile)
 
-// WithCaptureProfile sets a callback to capture the finalized profile.
+// WithCaptureProfile 设置捕获最终配置的回调。
 func WithCaptureProfile(c CaptureProfile) Option {
 	return func(o *frameworkOptions) {
 		o.captureProfile = c
 	}
 }
 
-// WithMetricsRecorder sets metrics recorder for the scheduling frameworkImpl.
+// WithMetricsRecorder 为 frameworkImpl 设置指标记录器。
 func WithMetricsRecorder(r *metrics.MetricAsyncRecorder) Option {
 	return func(o *frameworkOptions) {
 		o.metricsRecorder = r
 	}
 }
 
-// WithWaitingPods sets waitingPods for the scheduling frameworkImpl.
+// WithWaitingPods 为 frameworkImpl 设置等待中的 Pod 集合。
 func WithWaitingPods(wp *waitingPodsMap) Option {
 	return func(o *frameworkOptions) {
 		o.waitingPods = wp
 	}
 }
 
-// WithPodsInPreBind sets podsInPreBind for the scheduling frameworkImpl.
+// WithPodsInPreBind 为 frameworkImpl 设置处于 preBind 阶段的 Pod 集合。
 func WithPodsInPreBind(bp *podsInPreBindMap) Option {
 	return func(o *frameworkOptions) {
 		o.podsInPreBind = bp
 	}
 }
 
-// WithLogger overrides the default logger from k8s.io/klog.
+// WithLogger 覆盖 k8s.io/klog 的默认 logger。
 func WithLogger(logger klog.Logger) Option {
 	return func(o *frameworkOptions) {
 		o.logger = &logger
 	}
 }
 
-// defaultFrameworkOptions are applied when no option corresponding to those fields exist.
+// defaultFrameworkOptions 为未被 Option 覆盖的字段提供默认值。
 func defaultFrameworkOptions(stopCh <-chan struct{}) frameworkOptions {
 	return frameworkOptions{
 		metricsRecorder: metrics.NewMetricsAsyncRecorder(1000, time.Second, stopCh),
@@ -330,11 +328,10 @@ func defaultFrameworkOptions(stopCh <-chan struct{}) frameworkOptions {
 
 var _ framework.Framework = &frameworkImpl{}
 
-// NewFramework initializes plugins given the configuration and the registry.
+// NewFramework 根据配置与注册表初始化插件。
 //
-// It creates background goroutines (for example, via defaultFrameworkOptions -> metrics.NewMetricsAsyncRecorder)
-// which continue running until the context gets canceled. WaitForShutdown can be used to block
-// until they have terminated.
+// 它会创建后台 goroutine（例如通过 defaultFrameworkOptions -> metrics.NewMetricsAsyncRecorder），
+// 这些 goroutine 会一直运行到 context 被取消。可用 WaitForShutdown 阻塞等待它们结束。
 func NewFramework(ctx context.Context, r Registry, profile *config.KubeSchedulerProfile, opts ...Option) (framework.Framework, error) {
 	options := defaultFrameworkOptions(ctx.Done())
 	for _, opt := range opts {
@@ -372,10 +369,10 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 	}
 
 	if len(f.extenders) > 0 {
-		// Extender doesn't support any kind of requeueing feature like EnqueueExtensions in the scheduling framework.
-		// We register a defaultEnqueueExtension to fwk.ExtenderName here.
-		// And, in the scheduling cycle, when Extenders reject some Nodes and the pod ends up being unschedulable,
-		// we put fwk.ExtenderName to pInfo.UnschedulablePlugins.
+		// Extender 不支持调度框架中 EnqueueExtensions 那样的重新入队机制。
+		// 这里为 fwk.ExtenderName 注册一个默认实现；当调度周期中 Extender 拒绝某些节点导致 Pod
+		// 不可调度时，就把 fwk.ExtenderName 记入 pInfo.UnschedulablePlugins。
+
 		f.enqueueExtensions = []fwk.EnqueueExtensions{&defaultEnqueueExtension{pluginName: framework.ExtenderName}}
 	}
 
@@ -389,7 +386,7 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 		return f, nil
 	}
 
-	// get needed plugins from config
+	// 从配置中找出所需插件。
 	pg := f.pluginsNeeded(profile.Plugins)
 
 	pluginConfig := make(map[string]runtime.Object, len(profile.PluginConfig))
@@ -409,7 +406,7 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 
 	f.pluginsMap = make(map[string]fwk.Plugin)
 	for name, factory := range r {
-		// initialize only needed plugins.
+		// 只初始化需要的插件。
 		if !pg.Has(name) {
 			continue
 		}
@@ -430,14 +427,14 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 		f.fillEnqueueExtensions(p)
 	}
 
-	// initialize plugins per individual extension points
+	// 按各扩展点初始化插件列表。
 	for _, e := range f.getExtensionPoints(profile.Plugins) {
 		if err := updatePluginList(e.slicePtr, *e.plugins, f.pluginsMap); err != nil {
 			return nil, err
 		}
 	}
 
-	// initialize multiPoint plugins to their expanded extension points
+	// 将 MultiPoint 插件展开到各自对应的扩展点。
 	if len(profile.Plugins.MultiPoint.Enabled) > 0 {
 		if err := f.expandMultiPointPlugins(logger, profile); err != nil {
 			return nil, err
@@ -460,8 +457,8 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 	}
 	f.scorePluginWeight = podScoreWeights
 
-	// Verifying the score weights again since Plugin.Name() could return a different
-	// value from the one used in the configuration.
+	// 再次校验 Score 权重：Plugin.Name() 返回值可能与配置中使用的名字不同。
+
 	for _, scorePlugin := range f.scorePlugins {
 		if f.scorePluginWeight[scorePlugin.Name()] == 0 {
 			return nil, fmt.Errorf("score plugin %q is not configured with weight", scorePlugin.Name())
@@ -474,8 +471,8 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 	}
 	f.placementScorePluginWeight = placementScoreWeights
 
-	// Verifying the placement score weights again since Plugin.Name() could return a different
-	// value from the one used in the configuration.
+	// 再次校验 PlacementScore 权重：Plugin.Name() 返回值可能与配置中使用的名字不同。
+
 	for _, placementScorePlugin := range f.placementScorePlugins {
 		if f.placementScorePluginWeight[placementScorePlugin.Name()] == 0 {
 			return nil, fmt.Errorf("placement score plugin %q is not configured with weight", placementScorePlugin.Name())
@@ -486,7 +483,7 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 		f.computeBatchablePlugins()
 	}
 
-	// Use GangScheduling plugin as the only PlacementFeasiblePlugin.
+	// 使用 GangScheduling 插件作为唯一的 PlacementFeasiblePlugin。
 	if utilfeature.DefaultFeatureGate.Enabled(features.GenericWorkload) {
 		if gs, ok := f.pluginsMap[names.GangScheduling]; ok {
 			if p, ok := gs.(framework.PlacementFeasiblePlugin); ok {
@@ -510,24 +507,23 @@ func NewFramework(ctx context.Context, r Registry, profile *config.KubeScheduler
 		options.captureProfile(outputProfile)
 	}
 
-	// Logs Enabled Plugins at each extension point, taking default plugins, given config, and multipoint into consideration
+	// 记录各扩展点启用的插件，综合默认插件、用户配置与 MultiPoint 展开结果。
 	logger.V(2).Info("the scheduler starts to work with those plugins", "Plugins", *f.ListPlugins())
 	f.setInstrumentedPlugins()
 	return f, nil
 }
 
-// WaitForShutdown waits for completion of all background goroutines of a framework
-// instance created by NewFramework. The context given to NewFramework must be canceled
-// to stop those background goroutines.
+// WaitForShutdown 等待 NewFramework 创建的所有后台 goroutine 结束。
+// 必须取消传给 NewFramework 的 context，这些 goroutine 才会停止。
 func WaitForShutdown(f framework.Framework) {
 	if f.(*frameworkImpl).metricsRecorder != nil {
 		<-f.(*frameworkImpl).metricsRecorder.IsStoppedCh
 	}
 }
 
-// setInstrumentedPlugins initializes instrumented plugins from current plugins that frameworkImpl has.
+// setInstrumentedPlugins 用 frameworkImpl 当前的插件创建带指标采集的包装插件。
 func (f *frameworkImpl) setInstrumentedPlugins() {
-	// Cache metric streams for prefilter and filter plugins.
+	// 缓存 PreFilter 与 Filter 插件的指标向量，避免每次调用查表。
 	for i, pl := range f.preFilterPlugins {
 		f.preFilterPlugins[i] = &instrumentedPreFilterPlugin{
 			PreFilterPlugin: f.preFilterPlugins[i],
@@ -541,7 +537,7 @@ func (f *frameworkImpl) setInstrumentedPlugins() {
 		}
 	}
 
-	// Cache metric streams for prescore and score plugins.
+	// 缓存 PreScore 与 Score 插件的指标向量。
 	for i, pl := range f.preScorePlugins {
 		f.preScorePlugins[i] = &instrumentedPreScorePlugin{
 			PreScorePlugin: f.preScorePlugins[i],
@@ -556,19 +552,22 @@ func (f *frameworkImpl) setInstrumentedPlugins() {
 	}
 }
 
+// SetPodNominator 替换 framework 使用的 PodNominator。
 func (f *frameworkImpl) SetPodNominator(n fwk.PodNominator) {
 	f.PodNominator = n
 }
 
+// SetPodActivator 替换 framework 使用的 PodActivator。
 func (f *frameworkImpl) SetPodActivator(a fwk.PodActivator) {
 	f.PodActivator = a
 }
 
+// SetAPICacher 设置 framework 使用的 APICacher。
 func (f *frameworkImpl) SetAPICacher(c fwk.APICacher) {
 	f.apiCacher = c
 }
 
-// Close closes each plugin, when they implement io.Closer interface.
+// Close 依次关闭实现了 io.Closer 的插件。
 func (f *frameworkImpl) Close() error {
 	var errs []error
 	for name, plugin := range f.pluginsMap {
@@ -576,16 +575,15 @@ func (f *frameworkImpl) Close() error {
 			err := closer.Close()
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s failed to close: %w", name, err))
-				// We try to close all plugins even if we got errors from some.
+				// 即使部分插件关闭失败，也要尝试关闭其余插件。
 			}
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// getValidScoreWeights makes sure that, between MultiPoint-Score plugin weights and individual Score
-// plugin weights there is not an overflow of MaxTotalScore.
-// pluginType is the type of the plugin for which it's valid to define weight, such as Score or PlacementScore.
+// getValidScoreWeights 确保 MultiPoint-Score 与单独 Score 插件的权重之和不会让 MaxTotalScore 溢出。
+// pluginType 指允许定义权重的插件类型，如 Score 或 PlacementScore。
 func getValidScoreWeights(f *frameworkImpl, pluginType reflect.Type, plugins []config.Plugin) (map[string]int, error) {
 	weights := make(map[string]int)
 	var totalPriority int64
@@ -595,19 +593,19 @@ func getValidScoreWeights(f *frameworkImpl, pluginType reflect.Type, plugins []c
 			continue
 		}
 
-		// We append MultiPoint plugins to the list of Score plugins. So if this plugin has already been
-		// encountered, let the individual Score weight take precedence.
+		// MultiPoint 插件被追加到 Score 插件列表中；若某插件已出现过，以单独配置的 Score 权重为准。
+
 		if _, ok := weights[e.Name]; ok {
 			continue
 		}
-		// a weight of zero is not permitted, plugins can be disabled explicitly
-		// when configured.
+		// 权重不能为零；如需禁用插件，应在配置中显式禁用。
+
 		weights[e.Name] = int(e.Weight)
 		if weights[e.Name] == 0 {
 			weights[e.Name] = 1
 		}
 
-		// Checks totalPriority against MaxTotalScore to avoid overflow
+		// 校验 totalPriority 防止超过 MaxTotalScore 而溢出。
 		if int64(weights[e.Name])*fwk.MaxScore > fwk.MaxTotalScore-totalPriority {
 			return nil, fmt.Errorf("total score of Score plugins could overflow")
 		}
@@ -648,12 +646,12 @@ func (os *orderedSet) delete(s string) {
 }
 
 func (f *frameworkImpl) expandMultiPointPlugins(logger klog.Logger, profile *config.KubeSchedulerProfile) error {
-	// initialize MultiPoint plugins
+	// 初始化 MultiPoint 插件。
 	for _, e := range f.getExtensionPoints(profile.Plugins) {
 		plugins := reflect.ValueOf(e.slicePtr).Elem()
 		pluginType := plugins.Type().Elem()
-		// build enabledSet of plugins already registered via normal extension points
-		// to check double registration
+		// 记录在普通扩展点已启用的插件，用于检测重复注册。
+
 		enabledSet := newOrderedSet()
 		for _, plugin := range e.plugins.Enabled {
 			enabledSet.insert(plugin.Name)
@@ -668,8 +666,8 @@ func (f *frameworkImpl) expandMultiPointPlugins(logger klog.Logger, profile *con
 			continue
 		}
 
-		// track plugins enabled via multipoint separately from those enabled by specific extensions,
-		// so that we can distinguish between double-registration and explicit overrides
+		// 把通过 MultiPoint 启用的插件与通过具体扩展点启用的分开记录，
+		// 以便区分重复注册和显式覆盖。
 		multiPointEnabled := newOrderedSet()
 		overridePlugins := newOrderedSet()
 		for _, ep := range profile.Plugins.MultiPoint.Enabled {
@@ -678,54 +676,54 @@ func (f *frameworkImpl) expandMultiPointPlugins(logger klog.Logger, profile *con
 				return fmt.Errorf("%s %q does not exist", pluginType.Name(), ep.Name)
 			}
 
-			// if this plugin doesn't implement the type for the current extension we're trying to expand, skip
+			// 若该插件未实现当前待展开扩展点所需的类型，跳过。
 			if !reflect.TypeOf(pg).Implements(pluginType) {
 				continue
 			}
 
-			// a plugin that's enabled via MultiPoint can still be disabled for specific extension points
+			// MultiPoint 启用的插件仍可在具体扩展点被禁用。
 			if disabledSet.Has(ep.Name) {
 				logger.V(4).Info("Skipped disabled plugin for extension point", "plugin", ep.Name, "extension", pluginType)
 				continue
 			}
 
-			// if this plugin has already been enabled by the specific extension point,
-			// the user intent is to override the default plugin or make some other explicit setting.
-			// Either way, discard the MultiPoint value for this plugin.
-			// This maintains expected behavior for overriding default plugins (see https://github.com/kubernetes/kubernetes/pull/99582)
+			// 若该插件已由具体扩展点启用，说明用户意在覆盖默认插件或做了其他显式设置，
+			// 此时以该设置为准，丢弃 MultiPoint 的值。
+			// 这样可保持覆盖默认插件的既有行为（见 https://github.com/kubernetes/kubernetes/pull/99582）。
+
 			if enabledSet.has(ep.Name) {
 				overridePlugins.insert(ep.Name)
 				logger.Info("MultiPoint plugin is explicitly re-configured; overriding", "plugin", ep.Name)
 				continue
 			}
 
-			// if this plugin is already registered via MultiPoint, then this is
-			// a double registration and an error in the config.
+			// 若该插件已通过 MultiPoint 注册过，则属于重复注册，是配置错误。
+
 			if multiPointEnabled.has(ep.Name) {
 				return fmt.Errorf("plugin %q already registered as %q", ep.Name, pluginType.Name())
 			}
 
-			// we only need to update the multipoint set, since we already have the specific extension set from above
+			// 此处只需更新 multipoint 集合，具体扩展点的集合上面已获取。
 			multiPointEnabled.insert(ep.Name)
 		}
 
-		// Reorder plugins. Here is the expected order:
-		// - part 1: overridePlugins. Their order stay intact as how they're specified in regular extension point.
-		// - part 2: multiPointEnabled - i.e., plugin defined in multipoint but not in regular extension point.
-		// - part 3: other plugins (excluded by part 1 & 2) in regular extension point.
+		// 重排插件，期望顺序为：
+		// - 第一部分：overridePlugins，保持其在普通扩展点中的顺序；
+		// - 第二部分：multiPointEnabled，即只在 MultiPoint 中定义的插件；
+		// - 第三部分：普通扩展点中其余插件（不在前两部分内）。
 		newPlugins := reflect.New(reflect.TypeOf(e.slicePtr).Elem()).Elem()
-		// part 1
+		// 第一部分
 		for _, name := range slices.Clone(enabledSet.list) {
 			if overridePlugins.has(name) {
 				newPlugins = reflect.Append(newPlugins, reflect.ValueOf(f.pluginsMap[name]))
 				enabledSet.delete(name)
 			}
 		}
-		// part 2
+		// 第二部分
 		for _, name := range multiPointEnabled.list {
 			newPlugins = reflect.Append(newPlugins, reflect.ValueOf(f.pluginsMap[name]))
 		}
-		// part 3
+		// 第三部分
 		for _, name := range enabledSet.list {
 			newPlugins = reflect.Append(newPlugins, reflect.ValueOf(f.pluginsMap[name]))
 		}
@@ -736,8 +734,8 @@ func (f *frameworkImpl) expandMultiPointPlugins(logger klog.Logger, profile *con
 
 func shouldHaveEnqueueExtensions(p fwk.Plugin) bool {
 	switch p.(type) {
-	// Only PreEnqueue, PreFilter, Filter, Reserve, and Permit plugins can (should) have EnqueueExtensions.
-	// See the comment of EnqueueExtensions for more detailed reason here.
+	// 只有 PreEnqueue、PreFilter、Filter、Reserve 和 Permit 插件可以（也应该）有 EnqueueExtensions，
+	// 详细原因参见 EnqueueExtensions 的注释。
 	case fwk.PreEnqueuePlugin, fwk.PreFilterPlugin, fwk.FilterPlugin, fwk.ReservePlugin, fwk.PermitPlugin:
 		return true
 	}
@@ -746,15 +744,15 @@ func shouldHaveEnqueueExtensions(p fwk.Plugin) bool {
 
 func (f *frameworkImpl) fillEnqueueExtensions(p fwk.Plugin) {
 	if !shouldHaveEnqueueExtensions(p) {
-		// Ignore EnqueueExtensions from plugin which isn't PreEnqueue, PreFilter, Filter, Reserve, and Permit.
+		// 忽略其他类型插件上的 EnqueueExtensions。
 		return
 	}
 
 	ext, ok := p.(fwk.EnqueueExtensions)
 	if !ok {
-		// If interface EnqueueExtensions is not implemented, register the default enqueue extensions
-		// to the plugin because we don't know which events the plugin is interested in.
-		// This is to ensure backward compatibility.
+		// 插件未实现 EnqueueExtensions 时，为其注册默认实现；
+		// 因为我们无从得知它关心哪些事件，这样也能保持向后兼容。
+
 		f.enqueueExtensions = append(f.enqueueExtensions, &defaultEnqueueExtension{pluginName: p.Name()})
 		return
 	}
@@ -762,17 +760,20 @@ func (f *frameworkImpl) fillEnqueueExtensions(p fwk.Plugin) {
 	f.enqueueExtensions = append(f.enqueueExtensions, ext)
 }
 
-// defaultEnqueueExtension is used when a plugin does not implement EnqueueExtensions interface.
+// defaultEnqueueExtension 用于插件未实现 EnqueueExtensions 接口的情形。
 type defaultEnqueueExtension struct {
 	pluginName string
 }
 
+// Name 返回该默认扩展所代理的插件名。
 func (p *defaultEnqueueExtension) Name() string { return p.pluginName }
+
+// EventsToRegister 展开通配资源，返回所有具体集群事件以注册事件处理器。
 func (p *defaultEnqueueExtension) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
-	// need to return all specific cluster events with framework.All action instead of wildcard event
-	// because the returning values are used to register event handlers.
-	// If we return the wildcard here, it won't affect the event handlers registered by the plugin
-	// and some events may not be registered in the event handlers.
+	// 必须返回带 framework.All 动作的所有具体集群事件，而非通配符事件，
+	// 因为返回值将被用于注册事件处理器；若返回通配符，插件自己注册的事件处理器不受影响，
+	// 但可能导致部分事件未被注册。
+
 	return framework.UnrollWildCardResource(), nil
 }
 
@@ -802,21 +803,21 @@ func updatePluginList(pluginList interface{}, pluginSet config.PluginSet, plugin
 	return nil
 }
 
-// PreEnqueuePlugins returns the registered preEnqueue plugins.
+// PreEnqueuePlugins 返回已注册的 PreEnqueue 插件。
 func (f *frameworkImpl) PreEnqueuePlugins() []fwk.PreEnqueuePlugin {
 	return f.preEnqueuePlugins
 }
 
-// EnqueueExtensions returns the registered reenqueue plugins.
+// EnqueueExtensions 返回已注册的重入队扩展。
 func (f *frameworkImpl) EnqueueExtensions() []fwk.EnqueueExtensions {
 	return f.enqueueExtensions
 }
 
-// QueueSortFunc returns the function to sort entities in scheduling queue
+// QueueSortFunc 返回用于调度队列排序的比较函数。
 func (f *frameworkImpl) QueueSortFunc() fwk.LessFunc {
 	if f == nil {
-		// If frameworkImpl is nil, simply keep their order unchanged.
-		// NOTE: this is primarily for tests.
+		// frameworkImpl 为 nil 时保持原顺序不变。
+		// 注意：这主要用于测试。
 		return func(_, _ fwk.QueuedEntityInfo) bool { return false }
 	}
 
@@ -824,12 +825,11 @@ func (f *frameworkImpl) QueueSortFunc() fwk.LessFunc {
 		panic("No QueueSort plugin is registered in the frameworkImpl.")
 	}
 
-	// Only one QueueSort plugin can be enabled.
+	// 只能启用一个 QueueSort 插件。
 	return f.queueSortPlugins[0].Less
 }
 
-// If any of our preFilter, filter, preScore or score plugins haven't
-// implemented a signature, then disable the cache.
+// 只要 PreFilter、Filter、PreScore 或 Score 插件中有未实现签名机制的，就禁用缓存。
 func (f *frameworkImpl) computeBatchablePlugins() {
 	f.enableSignatures = true
 
@@ -840,7 +840,7 @@ func (f *frameworkImpl) computeBatchablePlugins() {
 		f.enableSignatures = false
 	}
 
-	// Get all plugins of compatible types.
+	// 收集所有兼容类型的插件。
 	candidatePlugins := []fwk.Plugin{}
 	for _, pl := range f.preFilterPlugins {
 		candidatePlugins = append(candidatePlugins, pl)
@@ -855,7 +855,7 @@ func (f *frameworkImpl) computeBatchablePlugins() {
 		candidatePlugins = append(candidatePlugins, pl)
 	}
 
-	// Get signature elements from plugins.
+	// 从插件中提取签名要素。
 	plugins := map[string]fwk.SignPlugin{}
 	unsupportedPlugins := sets.New[string]()
 	for _, pl := range candidatePlugins {
@@ -876,11 +876,9 @@ func (f *frameworkImpl) computeBatchablePlugins() {
 	}
 }
 
-// SignPod returns a signature for a given pod. Any two pods with the same signature should get
-// the same feasibility and scoring for the same set of nodes in the same state. If one or more plugins
-// is unable to construct a signature for the pod, the result will be nil, which means
-// there is no way to compare this pod against others, and will turn off a number of optimizations
-// for this pod.
+// SignPod 为给定 Pod 生成签名。相同签名的两个 Pod 在相同状态下对同一组节点应得到
+// 相同的可行性与评分。若有插件无法为 Pod 构造签名，则返回 nil，表示无法与其他 Pod 比较，
+// 该 Pod 上的若干优化会被关闭。
 func (f *frameworkImpl) SignPod(ctx context.Context, pod *v1.Pod) fwk.PodSignature {
 	logger := klog.FromContext(ctx)
 	var status *fwk.Status
@@ -925,12 +923,11 @@ func (f *frameworkImpl) SignPod(ctx context.Context, pod *v1.Pod) fwk.PodSignatu
 	return sigBytes
 }
 
-// RunPreFilterPlugins runs the set of configured PreFilter plugins. It returns
-// *Status and its code is set to non-success if any of the plugins returns
-// anything but Success/Skip.
-// When it returns Skip status, returned PreFilterResult and other fields in status are just ignored,
-// and coupled Filter plugin/PreFilterExtensions() will be skipped in this scheduling cycle.
-// If a non-success status is returned, then the scheduling cycle is aborted.
+// RunPreFilterPlugins 依次运行配置的 PreFilter 插件。任一插件返回 Success/Skip 之外的状态时，
+// 返回的状态码即为非成功。
+// 返回 Skip 时，PreFilterResult 及状态中的其他字段会被忽略，对应的 Filter 插件与
+// PreFilterExtensions() 在本调度周期中也不会执行。
+// 返回非成功状态时，调度周期中止。
 func (f *frameworkImpl) RunPreFilterPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod) (_ *fwk.PreFilterResult, status *fwk.Status, _ sets.Set[string]) {
 	startTime := time.Now()
 	skipPlugins := sets.New[string]()
@@ -964,14 +961,14 @@ func (f *frameworkImpl) RunPreFilterPlugins(ctx context.Context, state fwk.Cycle
 		if !s.IsSuccess() {
 			s.SetPlugin(pl.Name())
 			if s.Code() == fwk.UnschedulableAndUnresolvable {
-				// In this case, the preemption shouldn't happen in this scheduling cycle.
-				// So, no need to execute all PreFilter.
+				// 这种情况本调度周期不应发生抢占，因此无需执行剩余的 PreFilter。
+
 				return nil, s, nil
 			}
 			if s.Code() == fwk.Unschedulable {
-				// In this case, the preemption should happen later in this scheduling cycle.
-				// So we need to execute all PreFilter.
+				// 这种情况抢占会在本调度周期稍后进行，因此需要执行完所有 PreFilter。
 				// https://github.com/kubernetes/kubernetes/issues/119770
+
 				returnStatus = s
 				continue
 			}
@@ -987,7 +984,7 @@ func (f *frameworkImpl) RunPreFilterPlugins(ctx context.Context, state fwk.Cycle
 				msg = fmt.Sprintf("node(s) didn't satisfy plugin %v", sets.List(pluginsWithNodes)[0])
 			}
 
-			// When PreFilterResult filters out Nodes, the framework considers Nodes that are filtered out as getting "UnschedulableAndUnresolvable".
+			// PreFilterResult 过滤掉的节点会被框架视为 UnschedulableAndUnresolvable。
 			return result, fwk.NewStatus(fwk.UnschedulableAndUnresolvable, msg), pluginsWithNodes
 		}
 	}
@@ -1004,9 +1001,8 @@ func (f *frameworkImpl) runPreFilterPlugin(ctx context.Context, pl fwk.PreFilter
 	return result, status
 }
 
-// RunPreFilterExtensionAddPod calls the AddPod interface for the set of configured
-// PreFilter plugins. It returns directly if any of the plugins return any
-// status other than Success.
+// RunPreFilterExtensionAddPod 调用各 PreFilter 插件的 AddPod 接口，
+// 任一插件返回非 Success 状态时立即返回。
 func (f *frameworkImpl) RunPreFilterExtensionAddPod(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -1049,9 +1045,8 @@ func (f *frameworkImpl) runPreFilterExtensionAddPod(ctx context.Context, pl fwk.
 	return status
 }
 
-// RunPreFilterExtensionRemovePod calls the RemovePod interface for the set of configured
-// PreFilter plugins. It returns directly if any of the plugins return any
-// status other than Success.
+// RunPreFilterExtensionRemovePod 调用各 PreFilter 插件的 RemovePod 接口，
+// 任一插件返回非 Success 状态时立即返回。
 func (f *frameworkImpl) RunPreFilterExtensionRemovePod(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -1098,10 +1093,8 @@ func (f *frameworkImpl) runPreFilterExtensionRemovePod(ctx context.Context, pl f
 	return status
 }
 
-// RunFilterPlugins runs the set of configured Filter plugins for pod on
-// the given node. If any of these plugins doesn't return "Success", the
-// given node is not suitable for running pod.
-// Meanwhile, the failure message and status are set for the given node.
+// RunFilterPlugins 在给定节点上运行配置的 Filter 插件。任一插件未返回 Success，
+// 该节点即不适合运行此 Pod，同时会记录失败原因与状态。
 func (f *frameworkImpl) RunFilterPlugins(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -1125,8 +1118,8 @@ func (f *frameworkImpl) RunFilterPlugins(
 		}
 		if status := f.runFilterPlugin(ctx, pl, state, pod, nodeInfo); !status.IsSuccess() {
 			if !status.IsRejected() {
-				// Filter plugins are not supposed to return any status other than
-				// Success or Unschedulable.
+				// Filter 插件不应返回 Success 或 Unschedulable 之外的状态。
+
 				status = fwk.AsStatus(fmt.Errorf("running %q filter plugin: %w", pl.Name(), status.AsError()))
 			}
 			status.SetPlugin(pl.Name())
@@ -1147,8 +1140,8 @@ func (f *frameworkImpl) runFilterPlugin(ctx context.Context, pl fwk.FilterPlugin
 	return status
 }
 
-// RunPostFilterPlugins runs the set of configured PostFilter plugins until the first
-// Success, Error or UnschedulableAndUnresolvable is met; otherwise continues to execute all plugins.
+// RunPostFilterPlugins 依次运行 PostFilter 插件，遇到首个 Success、Error 或
+// UnschedulableAndUnresolvable 即返回；否则执行完所有插件。
 func (f *frameworkImpl) RunPostFilterPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, filteredNodeStatusMap fwk.NodeToStatusReader) (_ *fwk.PostFilterResult, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1165,7 +1158,7 @@ func (f *frameworkImpl) RunPostFilterPlugins(ctx context.Context, state fwk.Cycl
 		logger = klog.LoggerWithName(logger, "PostFilter")
 	}
 
-	// `result` records the last meaningful(non-noop) PostFilterResult.
+	// result 记录最后一个有意义的（非 noop）PostFilterResult。
 	var result *fwk.PostFilterResult
 	var reasons []string
 	var rejectorPlugin string
@@ -1181,15 +1174,15 @@ func (f *frameworkImpl) RunPostFilterPlugins(ctx context.Context, state fwk.Cycl
 		} else if s.Code() == fwk.UnschedulableAndUnresolvable {
 			return r, s.WithPlugin(pl.Name())
 		} else if !s.IsRejected() {
-			// Any status other than Success, Unschedulable or UnschedulableAndUnresolvable is Error.
+			// Success、Unschedulable 与 UnschedulableAndUnresolvable 之外的状态均视为 Error。
 			return nil, fwk.AsStatus(s.AsError()).WithPlugin(pl.Name())
 		} else if r != nil && r.Mode() != fwk.ModeNoop {
 			result = r
 		}
 
 		reasons = append(reasons, s.Reasons()...)
-		// Record the first failed plugin unless we proved that
-		// the latter is more relevant.
+		// 记录首个失败的插件，除非后续证实另一个更相关。
+
 		if len(rejectorPlugin) == 0 {
 			rejectorPlugin = pl.Name()
 		}
@@ -1208,7 +1201,7 @@ func (f *frameworkImpl) runPostFilterPlugin(ctx context.Context, pl fwk.PostFilt
 	return r, s
 }
 
-// RunPodGroupPostFilterPlugins runs the set of configured PodGroupPostFilter plugins.
+// RunPodGroupPostFilterPlugins 依次运行配置的 PodGroupPostFilter 插件。
 func (f *frameworkImpl) RunPodGroupPostFilterPlugins(ctx context.Context, state *framework.CycleState, podGroupInfo fwk.PodGroupInfo, pgSchedulingFunc fwk.PodGroupSchedulingFunc) (_ *fwk.PodGroupPostFilterResult, status *fwk.Status) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GenericWorkload) {
 		return nil, fwk.NewStatus(fwk.Unschedulable, "generic workload feature is disabled, cannot perform PodGroupPostFilter")
@@ -1244,7 +1237,7 @@ func (f *frameworkImpl) RunPodGroupPostFilterPlugins(ctx context.Context, state 
 				rejectorPlugin = pl.Name()
 			}
 		} else {
-			// Any status other than Success, Unschedulable or UnschedulableAndUnresolvable is Error.
+			// Success、Unschedulable 与 UnschedulableAndUnresolvable 之外的状态均视为 Error。
 			return nil, fwk.AsStatus(fmt.Errorf("error in %q PodGroupPostFilter plugins: %s", pl.Name(), status.Message())).WithPlugin(pl.Name())
 		}
 	}
@@ -1262,38 +1255,26 @@ func (f *frameworkImpl) runPodGroupPostFilterPlugin(ctx context.Context, pl fwk.
 	return res, status
 }
 
-// RunFilterPluginsWithNominatedPods runs the set of configured filter plugins
-// for nominated pod on the given node.
-// This function is called from two different places: Schedule and Preempt.
-// When it is called from Schedule, we want to test whether the pod is
-// schedulable on the node with all the existing pods on the node plus higher
-// and equal priority pods nominated to run on the node.
-// When it is called from Preempt, we should remove the victims of preemption
-// and add the nominated pods. Removal of the victims is done by
-// SelectVictimsOnNode(). Preempt removes victims from PreFilter state and
-// NodeInfo before calling this function.
+// RunFilterPluginsWithNominatedPods 在给定节点上针对提名 Pod 运行 Filter 插件。
+// 调用方有两处：Schedule 与 Preempt。
+// Schedule 调用时，要检验在当前节点所有 Pod 的基础上，再加上被提名到该节点运行的
+// 同优先级及更高优先级 Pod 之后，该 Pod 是否仍可调度。
+// Preempt 调用时，应先移除抢占受害者并加入提名 Pod；受害者的移除由
+// SelectVictimsOnNode() 完成，Preempt 会在调用本函数前把它们从 PreFilter 状态与 NodeInfo 中移除。
 func (f *frameworkImpl) RunFilterPluginsWithNominatedPods(ctx context.Context, state fwk.CycleState, pod *v1.Pod, info fwk.NodeInfo) *fwk.Status {
 	var status *fwk.Status
 
 	podsAdded := false
-	// We run filters twice in some cases. If the node has greater or equal priority
-	// nominated pods, we run them when those pods are added to PreFilter state and nodeInfo.
-	// If all filters succeed in this pass, we run them again when these
-	// nominated pods are not added. This second pass is necessary because some
-	// filters such as inter-pod affinity may not pass without the nominated pods.
-	// If there are no nominated pods for the node or if the first run of the
-	// filters fail, we don't run the second pass.
-	// We consider only equal or higher priority pods in the first pass, because
-	// those are the current "pod" must yield to them and not take a space opened
-	// for running them. It is ok if the current "pod" take resources freed for
-	// lower priority pods.
-	// Requiring that the new pod is schedulable in both circumstances ensures that
-	// we are making a conservative decision: filters like resources and inter-pod
-	// anti-affinity are more likely to fail when the nominated pods are treated
-	// as running, while filters like pod affinity are more likely to fail when
-	// the nominated pods are treated as not running. We can't just assume the
-	// nominated pods are running because they are not running right now and in fact,
-	// they may end up getting scheduled to a different node.
+	// 某些情况下会跑两轮 Filter。若节点上有优先级大于等于当前 Pod 的提名 Pod，
+	// 第一轮会把它们加入 PreFilter 状态与 nodeInfo；若第一轮全部通过，
+	// 第二轮则在不加入这些提名 Pod 的情况下再跑一遍。第二轮是必要的，因为诸如 Pod 间亲和
+	// 的过滤器在没有提名 Pod 时可能不通过。若节点没有提名 Pod，或第一轮失败，则不跑第二轮。
+	// 第一轮只考虑同优先级及更高优先级的 Pod，因为当前 Pod 必须让位于它们，不能占用
+	// 为它们预留的空间；占用低优先级 Pod 释放的资源则无妨。
+	// 要求两种情况下都可调度，是为了保守决策：资源、Pod 间反亲和等过滤器在把提名 Pod
+	// 视作运行时更可能失败，而 Pod 亲和在视作未运行时更可能失败。不能简单假定提名 Pod
+	// 已在运行——它们此刻并未运行，甚至最终可能被调度到其他节点。
+
 	logger := klog.FromContext(ctx)
 	logger = klog.LoggerWithName(logger, "FilterWithNominatedPods")
 	ctx = klog.NewContext(ctx, logger)
@@ -1319,12 +1300,11 @@ func (f *frameworkImpl) RunFilterPluginsWithNominatedPods(ctx context.Context, s
 	return status
 }
 
-// addGENominatedPods adds pods with equal or greater priority which are nominated
-// to run on the node. It returns 1) whether any pod was added, 2) augmented cycleState,
-// 3) augmented nodeInfo.
+// addGENominatedPods 加入被提名到该节点、优先级大于等于当前 Pod 的 Pod，
+// 返回 1）是否有 Pod 被加入；2）扩充后的 cycleState；3）扩充后的 nodeInfo。
 func addGENominatedPods(ctx context.Context, fh fwk.Handle, pod *v1.Pod, state fwk.CycleState, nodeInfo fwk.NodeInfo) (bool, fwk.CycleState, fwk.NodeInfo, error) {
 	if fh == nil {
-		// This may happen only in tests.
+		// 只可能发生在测试中。
 		return false, state, nodeInfo, nil
 	}
 	nominatedPodInfos := fh.NominatedPodsForNode(nodeInfo.Node().Name)
@@ -1347,10 +1327,8 @@ func addGENominatedPods(ctx context.Context, fh fwk.Handle, pod *v1.Pod, state f
 	return podsAdded, stateOut, nodeInfoOut, nil
 }
 
-// RunPreScorePlugins runs the set of configured pre-score plugins. If any
-// of these plugins returns any status other than Success/Skip, the given pod is rejected.
-// When it returns Skip status, other fields in status are just ignored,
-// and coupled Score plugin will be skipped in this scheduling cycle.
+// RunPreScorePlugins 依次运行 PreScore 插件。任一插件返回 Success/Skip 之外的状态时，Pod 被拒绝。
+// 返回 Skip 时，状态中的其他字段会被忽略，对应的 Score 插件在本调度周期中被跳过。
 func (f *frameworkImpl) RunPreScorePlugins(
 	ctx context.Context,
 	state fwk.CycleState,
@@ -1396,12 +1374,10 @@ func (f *frameworkImpl) runPreScorePlugin(ctx context.Context, pl fwk.PreScorePl
 	return status
 }
 
-// RunScorePlugins runs the set of configured scoring plugins.
-// It returns a list that stores scores from each plugin and total score for each Node.
-// It also returns *Status, which is set to non-success if any of the plugins returns
-// a non-success status.
+// RunScorePlugins 运行配置的 Score 插件，返回各插件打分及每个节点的总分。
+// 任一插件返回非成功状态时，返回的 *Status 也被置为非成功。
 //
-// This function mostly duplicates RunPlacementScorePlugins. Any changes to it should likely be reflected in both places.
+// 本函数与 RunPlacementScorePlugins 大体重复，修改其一时应考虑同步修改另一处。
 func (f *frameworkImpl) RunScorePlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (ns []fwk.NodePluginScores, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1432,7 +1408,7 @@ func (f *frameworkImpl) RunScorePlugins(ctx context.Context, state fwk.CycleStat
 	if l := klog.FromContext(ctx).V(4); l.Enabled() {
 		ctx = klog.NewContext(ctx, klog.LoggerWithName(l, "Score"))
 	}
-	// Run Score method for each node in parallel.
+	// 并行对每个节点运行 Score。
 	f.Parallelizer().Until(ctx, len(nodes), func(index int) {
 		nodeInfo := nodes[index]
 		nodeName := nodeInfo.Node().Name
@@ -1469,6 +1445,7 @@ func (f *frameworkImpl) RunScorePlugins(ctx context.Context, state fwk.CycleStat
 	return allNodePluginScores, nil
 }
 
+// RunRawScorePlugins 对单个节点运行所有未被跳过的 Score 插件，返回原始分数。
 func (f *frameworkImpl) RunRawScorePlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) ([]fwk.PluginScore, *fwk.Status) {
 	plugins := f.nonSkippedScorePlugins(state)
 	if len(plugins) == 0 {
@@ -1494,6 +1471,7 @@ func (f *frameworkImpl) runRawScorePlugins(ctx context.Context, state fwk.CycleS
 	return scores, nil
 }
 
+// NormalizeScores 对给定的原始分数执行规整并应用权重，得到最终分数。
 func (f *frameworkImpl) NormalizeScores(ctx context.Context, state fwk.CycleState, pod *v1.Pod,
 	scores []fwk.NodePluginScores) *fwk.Status {
 	plugins := f.nonSkippedScorePlugins(state)
@@ -1529,7 +1507,7 @@ func (f *frameworkImpl) normalizeScores(ctx context.Context, state fwk.CycleStat
 	defer cancel()
 	errCh := parallelize.NewResultChannel[error]()
 
-	// Pre-resolve per-plugin data into slices to avoid map lookups.
+	// 预先把各插件的数据解析成切片，避免热路径上查 map。
 	nodeScoreLists := make([]fwk.NodeScoreList, len(plugins))
 	weights := make([]int, len(plugins))
 	for i, pl := range plugins {
@@ -1537,7 +1515,7 @@ func (f *frameworkImpl) normalizeScores(ctx context.Context, state fwk.CycleStat
 		weights[i] = f.scorePluginWeight[pl.Name()]
 	}
 
-	// Run NormalizeScore method for each ScorePlugin in parallel.
+	// 并行对每个 ScorePlugin 运行 NormalizeScore。
 	f.Parallelizer().Until(ctx, len(plugins), func(index int) {
 		pl := plugins[index]
 		if pl.ScoreExtensions() == nil {
@@ -1554,7 +1532,7 @@ func (f *frameworkImpl) normalizeScores(ctx context.Context, state fwk.CycleStat
 		return fwk.AsStatus(fmt.Errorf("running Normalize on Score plugins: %w", err))
 	}
 
-	// Apply score weight for each ScorePlugin in parallel.
+	// 并行对每个 ScorePlugin 应用分数权重。
 	f.Parallelizer().Until(ctx, len(scores), func(index int) {
 		nodePluginScores := make([]fwk.PluginScore, len(plugins))
 		var totalScore int64
@@ -1581,7 +1559,7 @@ func (f *frameworkImpl) normalizeScores(ctx context.Context, state fwk.CycleStat
 	return nil
 }
 
-// nonSkippedScorePlugins returns score plugins that have not been marked for skipping in the cycle state.
+// nonSkippedScorePlugins 返回 cycleState 中未被标记为跳过的 Score 插件。
 func (f *frameworkImpl) nonSkippedScorePlugins(state fwk.CycleState) []fwk.ScorePlugin {
 	plugins := make([]fwk.ScorePlugin, 0, len(f.scorePlugins))
 	for _, pl := range f.scorePlugins {
@@ -1612,16 +1590,13 @@ func (f *frameworkImpl) runScoreExtension(ctx context.Context, pl fwk.ScorePlugi
 	return status
 }
 
-// RunPlacementScorePlugins runs the set of configured scoring plugins.
-// It returns a list that stores scores from each plugin and total score for each Placement.
-// It also returns *Status, which is set to non-success if any of the plugins returns
-// a non-success status.
+// RunPlacementScorePlugins 运行配置的 PlacementScore 插件，返回各插件打分及每个 Placement 的总分。
+// 任一插件返回非成功状态时，返回的 *Status 也被置为非成功。
 //
-// placementStates holds the per-placement cycle state for each entry in podGroupAssignments
-// (1:1 by index): placementStates[i] is the state with which podGroupAssignments[i] was
-// processed, and is passed to ScorePlacement for that placement.
+// placementStates 与 podGroupAssignments 按下标一一对应：placementStates[i] 是处理
+// podGroupAssignments[i] 时使用的状态，并作为该 Placement 的 ScorePlacement 入参传入。
 //
-// This function mostly duplicates RunScorePlugins. Any changes to it should likely be reflected in both places.
+// 本函数与 RunScorePlugins 大体重复，修改其一时应考虑同步修改另一处。
 func (f *frameworkImpl) RunPlacementScorePlugins(ctx context.Context, state fwk.PodGroupCycleState, podGroupInfo fwk.PodGroupInfo, podGroupAssignments []*fwk.PodGroupAssignments, placementStates []fwk.PlacementCycleState) (ps []fwk.PlacementPluginScores, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1650,7 +1625,7 @@ func (f *frameworkImpl) RunPlacementScorePlugins(ctx context.Context, state fwk.
 		if verboseLogs {
 			logger = klog.LoggerWithName(logger, "PlacementScore")
 		}
-		// Run ScorePlacement method for each placement in parallel.
+		// 并行对每个 Placement 运行 ScorePlacement。
 		f.Parallelizer().Until(ctx, len(podGroupAssignments), func(index int) {
 			pga := podGroupAssignments[index]
 			logger := logger
@@ -1680,7 +1655,7 @@ func (f *frameworkImpl) RunPlacementScorePlugins(ctx context.Context, state fwk.
 		}
 	}
 
-	// Run NormalizePlacementScore method for each PlacementScorePlugin in parallel.
+	// 并行对每个 PlacementScorePlugin 运行 NormalizePlacementScore。
 	f.Parallelizer().Until(ctx, len(plugins), func(index int) {
 		pl := plugins[index]
 		if pl.PlacementScoreExtensions() == nil {
@@ -1698,8 +1673,8 @@ func (f *frameworkImpl) RunPlacementScorePlugins(ctx context.Context, state fwk.
 		return nil, fwk.AsStatus(fmt.Errorf("running NormalizePlacementScore on PlacementScore plugins: %w", err))
 	}
 
-	// Apply score weight for each PlacementScorePlugin in parallel,
-	// and then, build allPlacementPluginScores.
+	// 并行对每个 PlacementScorePlugin 应用分数权重，
+	// 然后构建 allPlacementPluginScores。
 	f.Parallelizer().Until(ctx, len(podGroupAssignments), func(index int) {
 		placementPluginScores := fwk.PlacementPluginScores{
 			Placement: podGroupAssignments[index].Placement,
@@ -1752,17 +1727,18 @@ func (f *frameworkImpl) runPlacementScoreExtension(ctx context.Context, pl fwk.P
 	return status
 }
 
+// GetNodeHint 返回批处理机制为给定 Pod 签名推荐的节点。
 func (f *frameworkImpl) GetNodeHint(ctx context.Context, pod *v1.Pod, signature fwk.PodSignature, state fwk.CycleState, cycleCount int64) string {
 	return f.batch.GetNodeHint(ctx, pod, signature, state, cycleCount)
 }
 
+// StoreScheduleResults 将调度结果写入批处理缓存。
 func (f *frameworkImpl) StoreScheduleResults(ctx context.Context, signature fwk.PodSignature, hintedNode, chosenNode string, otherNodes framework.SortedScoredNodes, cycleCount int64) {
 	f.batch.StoreScheduleResults(ctx, signature, hintedNode, chosenNode, otherNodes, cycleCount)
 }
 
-// RunPreBindPlugins runs the set of configured prebind plugins. It returns a
-// failure (bool) if any of the plugins returns an error. It also returns an
-// error containing the rejection message or the error occurred in the plugin.
+// RunPreBindPlugins 运行配置的 PreBind 插件。任一插件出错时返回失败状态，
+// 其中包含拒绝原因或插件内部错误。
 func (f *frameworkImpl) RunPreBindPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1781,7 +1757,7 @@ func (f *frameworkImpl) RunPreBindPlugins(ctx context.Context, state fwk.CycleSt
 	skippedPlugins := state.GetSkipPreBindPlugins()
 	parallelPlugins := state.GetParallelPreBindPlugins()
 
-	// run operates directly on the plugin.
+	// run 直接对单个插件执行。
 	run := func(pl fwk.PreBindPlugin) *fwk.Status {
 		ctx := ctx
 		if verboseLogs {
@@ -1808,8 +1784,8 @@ func (f *frameworkImpl) RunPreBindPlugins(ctx context.Context, state fwk.CycleSt
 
 	pluginGroups := f.getPreBindPluginGroups(state, skippedPlugins, parallelPlugins)
 	for _, plugins := range pluginGroups {
-		// If there is just a single plugin in the group, running it in a separate goroutine
-		// does not provide any benefit.
+		// 组内只有一个插件时，单独起 goroutine 毫无收益，直接同步执行。
+
 		if len(plugins) == 1 {
 			if status := run(plugins[0]); status != nil {
 				return status
@@ -1830,9 +1806,8 @@ func (f *frameworkImpl) RunPreBindPlugins(ctx context.Context, state fwk.CycleSt
 	return nil
 }
 
-// getPreBindPluginGroups chunks the plugins implementing the PreBind extension point
-// into groups of plugins that can be run in parallel.
-// The returned value consists of non-skipped plugins only.
+// getPreBindPluginGroups 把 PreBind 插件切分为可并行执行的组，
+// 返回结果只包含未被跳过的插件。
 func (f *frameworkImpl) getPreBindPluginGroups(state fwk.CycleState, skippedPlugins, parallelPlugins sets.Set[string]) [][]fwk.PreBindPlugin {
 	var groups [][]fwk.PreBindPlugin
 	var group []fwk.PreBindPlugin
@@ -1867,11 +1842,10 @@ func (f *frameworkImpl) runPreBindPlugin(ctx context.Context, pl fwk.PreBindPlug
 	return status
 }
 
-// RunPreBindPreFlights runs the set of configured PreBindPreFlight functions from PreBind plugins.
-// The returning value is:
-// - Success: one or more plugins return success, meaning, some PreBind plugins will work for this pod.
-// - Skip: all plugins return skip.
-// - Error: any plugin return error.
+// RunPreBindPreFlights 依次运行 PreBind 插件的 PreBindPreFlight 函数。返回值含义：
+// - Success：至少一个插件返回成功，即有 PreBind 插件会处理该 Pod；
+// - Skip：所有插件都返回 Skip；
+// - Error：任一插件返回错误。
 func (f *frameworkImpl) RunPreBindPreFlights(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1902,12 +1876,12 @@ func (f *frameworkImpl) RunPreBindPreFlights(ctx context.Context, state fwk.Cycl
 			logger.Error(err, "Plugin failed", "plugin", pl.Name(), "pod", klog.KObj(pod), "node", nodeName)
 			return fwk.AsStatus(fmt.Errorf("running PreBindPreFlight %q: %w", pl.Name(), err))
 		case status.IsSuccess():
-			// We return success when one or more plugins return success.
+			// 只要有一个插件返回成功，整体即为成功。
 			returningStatus = nil
 		case status.IsSkip():
 			skipPlugins.Insert(pl.Name())
 		default:
-			// Other statuses are unexpected
+			// 其他状态均属意外。
 			return fwk.AsStatus(fmt.Errorf("PreBindPreFlight %s returned %q, which is unsupported. It is supposed to return Success, Skip, or Error status", pl.Name(), status.Code()))
 		}
 	}
@@ -1926,7 +1900,7 @@ func (f *frameworkImpl) runPreBindPreFlight(ctx context.Context, pl fwk.PreBindP
 	return result, status
 }
 
-// RunBindPlugins runs the set of configured bind plugins until one returns a non `Skip` status.
+// RunBindPlugins 依次运行 Bind 插件，直到某个返回非 Skip 状态。
 func (f *frameworkImpl) RunBindPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -1975,7 +1949,7 @@ func (f *frameworkImpl) runBindPlugin(ctx context.Context, bp fwk.BindPlugin, st
 	return status
 }
 
-// RunPostBindPlugins runs the set of configured postbind plugins.
+// RunPostBindPlugins 运行配置的 PostBind 插件。
 func (f *frameworkImpl) RunPostBindPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) {
 	startTime := time.Now()
 	defer func() {
@@ -2006,11 +1980,8 @@ func (f *frameworkImpl) runPostBindPlugin(ctx context.Context, pl fwk.PostBindPl
 	f.metricsRecorder.ObservePluginDurationAsync(metrics.PostBind, pl.Name(), fwk.Success.String(), metrics.SinceInSeconds(startTime))
 }
 
-// RunReservePluginsReserve runs the Reserve method in the set of configured
-// reserve plugins. If any of these plugins returns an error, it does not
-// continue running the remaining ones and returns the error. In such a case,
-// the pod will not be scheduled and the caller will be expected to call
-// RunReservePluginsUnreserve.
+// RunReservePluginsReserve 运行各 Reserve 插件的 Reserve 方法。任一插件出错即中止
+// 后续插件并返回错误。此时 Pod 不会被调度，调用方需负责调用 RunReservePluginsUnreserve 回滚。
 func (f *frameworkImpl) RunReservePluginsReserve(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -2053,15 +2024,14 @@ func (f *frameworkImpl) runReservePluginReserve(ctx context.Context, pl fwk.Rese
 	return status
 }
 
-// RunReservePluginsUnreserve runs the Unreserve method in the set of
-// configured reserve plugins.
+// RunReservePluginsUnreserve 运行各 Reserve 插件的 Unreserve 方法。
 func (f *frameworkImpl) RunReservePluginsUnreserve(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) {
 	startTime := time.Now()
 	defer func() {
 		metrics.FrameworkExtensionPointDuration.WithLabelValues(metrics.Unreserve, fwk.Success.String(), f.profileName).Observe(metrics.SinceInSeconds(startTime))
 	}()
-	// Execute the Unreserve operation of each reserve plugin in the
-	// *reverse* order in which the Reserve operation was executed.
+	// 按 Reserve 执行的*逆序*调用各插件的 Unreserve。
+
 	logger := klog.FromContext(ctx)
 	verboseLogs := logger.V(4).Enabled()
 	if verboseLogs {
@@ -2089,11 +2059,9 @@ func (f *frameworkImpl) runReservePluginUnreserve(ctx context.Context, pl fwk.Re
 	f.metricsRecorder.ObservePluginDurationAsync(metrics.Unreserve, pl.Name(), fwk.Success.String(), metrics.SinceInSeconds(startTime))
 }
 
-// RunPermitPlugins runs the set of configured Permit plugins. If any of these
-// plugins returns a status other than "Success" or "Wait", it does not continue
-// running the remaining plugins and returns an error. Otherwise, if any of the
-// plugins returns "Wait", then this function will construct the pluginsWaitTime and return status with "Wait" code.
-// This function itself will NOT create a waiting pod object and the caller should call AddWaitingPod method to do this.
+// RunPermitPlugins 运行配置的 Permit 插件。任一插件返回 Success/Wait 之外的状态时，
+// 中止后续插件并返回错误；若有插件返回 Wait，则构造 pluginsWaitTime 并返回 Wait 状态。
+// 本函数不会创建等待中的 Pod 对象，调用方需自行调用 AddWaitingPod。
 func (f *frameworkImpl) RunPermitPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (pluginsWaitTime map[string]time.Duration, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -2120,7 +2088,7 @@ func (f *frameworkImpl) RunPermitPlugins(ctx context.Context, state fwk.CycleSta
 				return nil, status.WithPlugin(pl.Name())
 			}
 			if status.IsWait() {
-				// Not allowed to be greater than maxTimeout.
+				// 超时不得超过 maxTimeout。
 				if timeout > maxTimeout {
 					timeout = maxTimeout
 				}
@@ -2151,12 +2119,11 @@ func (f *frameworkImpl) runPermitPlugin(ctx context.Context, pl fwk.PermitPlugin
 	return status, timeout
 }
 
-// RunPlacementFeasiblePlugins runs the set of configured Permit plugins that implement PlacementFeasible interface.
-// The result will be Success if all plugins return Success.
-// The only other valid statuses are Wait and Unschedulable.
-// If any plugin returns invalid status, the result will be Error and the remaining plugins won't be invoked.
-// Otherwise, if at least 1 plugin returns Unschedulable, the remaining plugins won't be invoked and the result will be Unschedulable.
-// Otherwise, if at least 1 plugin returns Wait, the remaining plugins will be invoked and the result will be Wait.
+// RunPlacementFeasiblePlugins 运行实现了 PlacementFeasible 接口的插件。
+// 全部返回 Success 时结果为 Success；其他合法状态只有 Wait 与 Unschedulable。
+// 任一插件返回非法状态时结果为 Error，后续插件不再调用；
+// 否则只要有一个返回 Unschedulable，后续插件不再调用且结果为 Unschedulable；
+// 否则只要有一个返回 Wait，仍调用后续插件，结果为 Wait。
 func (f *frameworkImpl) RunPlacementFeasiblePlugins(ctx context.Context, placementCycleState fwk.PlacementCycleState, podGroupInfo fwk.PodGroupInfo, args framework.PlacementProgress) (status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -2194,17 +2161,16 @@ func (f *frameworkImpl) runPlacementFeasiblePlugin(ctx context.Context, pl frame
 	return status
 }
 
-// AddWaitingPod creates a waiting pod instance and adds it to the framework.
-// It takes the pluginsWaitTime map returned by the RunPermitPlugins.
-// Pod will remain waiting pod for the minimum duration returned by the Permit plugins.
-// This method should only be called when RunPermitPlugins returns a Wait status and WaitOnPermit is expected to execute soon.
+// AddWaitingPod 创建一个等待中的 Pod 并加入 framework。
+// 参数取自 RunPermitPlugins 返回的 pluginsWaitTime，Pod 将等待 Permit 插件要求的最短时间。
+// 仅当 RunPermitPlugins 返回 Wait 且即将调用 WaitOnPermit 时才应调用本方法。
 func (f *frameworkImpl) AddWaitingPod(pod *v1.Pod, pluginsWaitTime map[string]time.Duration) {
 	waitingPod := newWaitingPod(pod, pluginsWaitTime)
 	f.waitingPods.add(waitingPod)
 }
 
-// RunPlacementGeneratePlugins runs the set of configured PlacementGeneratePlugins and returns the generated placements.
-// If no plugins are defined, the input placement is returned instead.
+// RunPlacementGeneratePlugins 运行配置的 PlacementGeneratePlugin 并返回生成的 Placement。
+// 未配置插件时直接返回输入的 Placement。
 func (f *frameworkImpl) RunPlacementGeneratePlugins(ctx context.Context, state fwk.PodGroupCycleState, podGroup fwk.PodGroupInfo, nodes []fwk.NodeInfo) (placements []*fwk.Placement, status *fwk.Status) {
 	startTime := time.Now()
 	defer func() {
@@ -2243,11 +2209,12 @@ func (f *frameworkImpl) runPlacementGeneratePlugin(ctx context.Context, pl fwk.P
 	return placements, status
 }
 
+// WillWaitOnPermit 判断 Pod 是否正处于等待 Permit 的状态。
 func (f *frameworkImpl) WillWaitOnPermit(ctx context.Context, pod *v1.Pod) bool {
 	return f.waitingPods.get(pod.UID) != nil
 }
 
-// WaitOnPermit will block, if the pod is a waiting pod, until the waiting pod is rejected or allowed.
+// WaitOnPermit 在 Pod 处于等待状态时阻塞，直到其被拒绝或放行。
 func (f *frameworkImpl) WaitOnPermit(ctx context.Context, pod *v1.Pod) *fwk.Status {
 	waitingPod := f.waitingPods.get(pod.UID)
 	if waitingPod == nil {
@@ -2274,27 +2241,24 @@ func (f *frameworkImpl) WaitOnPermit(ctx context.Context, pod *v1.Pod) *fwk.Stat
 	return nil
 }
 
-// SnapshotSharedLister returns the scheduler's SharedLister of the latest NodeInfo
-// snapshot. The snapshot is taken at the beginning of a scheduling cycle and remains
-// unchanged until a pod finishes "Reserve". There is no guarantee that the information
-// remains unchanged after "Reserve".
+// SnapshotSharedLister 返回最新 NodeInfo 快照的 SharedLister。
+// 快照在调度周期开始时生成，并在 Pod 完成 Reserve 前保持不变；Reserve 之后不保证信息不变。
 func (f *frameworkImpl) SnapshotSharedLister() fwk.SharedLister {
 	return f.snapshotSharedLister
 }
 
-// MutableSnapshotSharedLister returns the scheduler's MutableSnapshotSharedLister of the latest NodeInfo
-// snapshot.
-// Note: Only PodGroupPostFilter extension point can use this.
+// MutableSnapshotSharedLister 返回最新 NodeInfo 快照的可变 SharedLister。
+// 注意：仅 PodGroupPostFilter 扩展点可以使用。
 func (f *frameworkImpl) MutableSnapshotSharedLister() fwk.MutableSnapshotSharedLister {
 	return f.mutableSnapshotLister
 }
 
-// IterateOverWaitingPods acquires a read lock and iterates over the WaitingPods map.
+// IterateOverWaitingPods 获取读锁并遍历 WaitingPods。
 func (f *frameworkImpl) IterateOverWaitingPods(callback func(fwk.WaitingPod)) {
 	f.waitingPods.iterate(callback)
 }
 
-// GetWaitingPod returns a reference to a WaitingPod given its UID.
+// GetWaitingPod 按 UID 返回对应的 WaitingPod。
 func (f *frameworkImpl) GetWaitingPod(uid types.UID) fwk.WaitingPod {
 	if wp := f.waitingPods.get(uid); wp != nil {
 		return wp
@@ -2302,8 +2266,7 @@ func (f *frameworkImpl) GetWaitingPod(uid types.UID) fwk.WaitingPod {
 	return nil // Returning nil instead of *waitingPod(nil).
 }
 
-// RejectWaitingPod rejects a WaitingPod given its UID.
-// The returned value indicates if the rejection was successful.
+// RejectWaitingPod 按 UID 拒绝一个 WaitingPod，返回值表示拒绝是否成功。
 func (f *frameworkImpl) RejectWaitingPod(uid types.UID) bool {
 	if waitingPod := f.waitingPods.get(uid); waitingPod != nil {
 		return waitingPod.Reject("", "removed")
@@ -2311,12 +2274,12 @@ func (f *frameworkImpl) RejectWaitingPod(uid types.UID) bool {
 	return false
 }
 
-// AddPodInPreBind adds a pod to the pods in preBind list.
+// AddPodInPreBind 把 Pod 加入 preBind 列表。
 func (f *frameworkImpl) AddPodInPreBind(uid types.UID, cancel context.CancelCauseFunc) {
 	f.podsInPreBind.add(uid, cancel)
 }
 
-// GetPodInPreBind returns a pod that is in the binding cycle but before it is bound given its UID.
+// GetPodInPreBind 按 UID 返回处于绑定周期但尚未绑定的 Pod。
 func (f *frameworkImpl) GetPodInPreBind(uid types.UID) fwk.PodInPreBind {
 	if bp := f.podsInPreBind.get(uid); bp != nil {
 		return bp
@@ -2324,33 +2287,32 @@ func (f *frameworkImpl) GetPodInPreBind(uid types.UID) fwk.PodInPreBind {
 	return nil
 }
 
-// RemovePodInPreBind removes a pod from the pods in preBind list.
+// RemovePodInPreBind 从 preBind 列表中移除 Pod。
 func (f *frameworkImpl) RemovePodInPreBind(uid types.UID) {
 	f.podsInPreBind.remove(uid)
 }
 
-// HasFilterPlugins returns true if at least one filter plugin is defined.
+// HasFilterPlugins 判断是否至少配置了一个 Filter 插件。
 func (f *frameworkImpl) HasFilterPlugins() bool {
 	return len(f.filterPlugins) > 0
 }
 
-// HasPostFilterPlugins returns true if at least one postFilter plugin is defined.
+// HasPostFilterPlugins 判断是否至少配置了一个 PostFilter 插件。
 func (f *frameworkImpl) HasPostFilterPlugins() bool {
 	return len(f.postFilterPlugins) > 0
 }
 
-// HasScorePlugins returns true if at least one score plugin is defined.
+// HasScorePlugins 判断是否至少配置了一个 Score 插件。
 func (f *frameworkImpl) HasScorePlugins() bool {
 	return len(f.scorePlugins) > 0
 }
 
-// PodGroupPostFilterPlugins returns registered PodGroupPostFilter plugins.
+// PodGroupPostFilterPlugins 返回已注册的 PodGroupPostFilter 插件。
 func (f *frameworkImpl) PodGroupPostFilterPlugins() []fwk.PodGroupPostFilterPlugin {
 	return f.podGroupPostFilterPlugins
 }
 
-// ListPlugins returns a map of extension point name to plugin names configured at each extension
-// point. Returns nil if no plugins where configured.
+// ListPlugins 返回扩展点到该点所配置插件名的映射；未配置插件时返回 nil。
 func (f *frameworkImpl) ListPlugins() *config.Plugins {
 	m := config.Plugins{}
 
@@ -2361,7 +2323,7 @@ func (f *frameworkImpl) ListPlugins() *config.Plugins {
 		for i := 0; i < plugins.Len(); i++ {
 			name := plugins.Index(i).Interface().(fwk.Plugin).Name()
 			p := config.Plugin{Name: name}
-			// Weights apply only to score and placement score plugins.
+			// 权重仅适用于 Score 与 PlacementScore 插件。
 			if extName == "ScorePlugin" {
 				p.Weight = int32(f.scorePluginWeight[name])
 			}
@@ -2377,37 +2339,37 @@ func (f *frameworkImpl) ListPlugins() *config.Plugins {
 	return &m
 }
 
-// ClientSet returns a kubernetes clientset.
+// ClientSet 返回 Kubernetes clientset。
 func (f *frameworkImpl) ClientSet() clientset.Interface {
 	return f.clientSet
 }
 
-// KubeConfig returns a kubernetes config.
+// KubeConfig 返回 Kubernetes 客户端配置。
 func (f *frameworkImpl) KubeConfig() *restclient.Config {
 	return f.kubeConfig
 }
 
-// EventRecorder returns an event recorder.
+// EventRecorder 返回事件记录器。
 func (f *frameworkImpl) EventRecorder() events.EventRecorderLogger {
 	return f.eventRecorder
 }
 
-// SharedInformerFactory returns a shared informer factory.
+// SharedInformerFactory 返回共享 informer 工厂。
 func (f *frameworkImpl) SharedInformerFactory() informers.SharedInformerFactory {
 	return f.informerFactory
 }
 
-// SharedDRAManager returns the SharedDRAManager of the framework.
+// SharedDRAManager 返回 framework 的 SharedDRAManager。
 func (f *frameworkImpl) SharedDRAManager() fwk.SharedDRAManager {
 	return f.sharedDRAManager
 }
 
-// SharedCSIManager returns the SharedCSIManager of the framework.
+// SharedCSIManager 返回 framework 的 SharedCSIManager。
 func (f *frameworkImpl) SharedCSIManager() fwk.CSIManager {
 	return f.sharedCSIManager
 }
 
-// PodGroupManager returns the PodGroupManager of the framework.
+// PodGroupManager 返回 framework 的 PodGroupManager。
 func (f *frameworkImpl) PodGroupManager() fwk.PodGroupManager {
 	return f.podGroupManager
 }
@@ -2428,29 +2390,29 @@ func (f *frameworkImpl) pluginsNeeded(plugins *config.Plugins) sets.Set[string] 
 	for _, e := range f.getExtensionPoints(plugins) {
 		find(e.plugins)
 	}
-	// Parse MultiPoint separately since they are not returned by f.getExtensionPoints()
+	// MultiPoint 不在 getExtensionPoints 返回的范围内，需单独处理。
 	find(&plugins.MultiPoint)
 
 	return pgSet
 }
 
-// ProfileName returns the profile name associated to this framework.
+// ProfileName 返回该 framework 关联的 profile 名称。
 func (f *frameworkImpl) ProfileName() string {
 	return f.profileName
 }
 
-// PercentageOfNodesToScore returns percentageOfNodesToScore associated to a profile.
+// PercentageOfNodesToScore 返回该 profile 的 percentageOfNodesToScore。
 func (f *frameworkImpl) PercentageOfNodesToScore() *int32 {
 	return f.percentageOfNodesToScore
 }
 
-// Parallelizer returns a parallelizer holding parallelism for scheduler.
+// Parallelizer 返回保存调度器并行度设置的 parallelizer。
 func (f *frameworkImpl) Parallelizer() fwk.Parallelizer {
 	return f.parallelizer
 }
 
-// APIDispatcher returns an apiDispatcher that can be used to dispatch API calls.
-// This requires SchedulerAsyncAPICalls feature gate to be enabled.
+// APIDispatcher 返回可用于分发 API 调用的 dispatcher。
+// 需启用 SchedulerAsyncAPICalls 特性门控。
 func (f *frameworkImpl) APIDispatcher() fwk.APIDispatcher {
 	if f.apiDispatcher == nil {
 		return nil
@@ -2458,9 +2420,8 @@ func (f *frameworkImpl) APIDispatcher() fwk.APIDispatcher {
 	return f.apiDispatcher
 }
 
-// APICacher returns an apiCacher that can be used to dispatch API calls through scheduler's cache
-// instead of directly using APIDispatcher().
-// This requires SchedulerAsyncAPICalls feature gate to be enabled.
+// APICacher 返回可经由调度器缓存（而非直接使用 APIDispatcher()）分发 API 调用的 cacher。
+// 需启用 SchedulerAsyncAPICalls 特性门控。
 func (f *frameworkImpl) APICacher() fwk.APICacher {
 	if f.apiCacher == nil {
 		return nil
@@ -2468,7 +2429,7 @@ func (f *frameworkImpl) APICacher() fwk.APICacher {
 	return f.apiCacher
 }
 
-// TotalBatchedPods returns the total number of batched pods. Used only for tests
+// TotalBatchedPods 返回已批处理 Pod 的总数，仅用于测试。
 func (f *frameworkImpl) TotalBatchedPods() int64 {
 	return f.batch.batchedPods
 }

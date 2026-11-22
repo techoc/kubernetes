@@ -24,12 +24,15 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 )
 
+// 测试用例中使用的两种存储类别。
 const (
 	classHDD = "hdd"
 	classSSD = "ssd"
 )
 
+// TestScore 验证不同资源利用率和不同 function shape 下的打分结果。
 func TestScore(t *testing.T) {
+	// 把默认 shape 的分数从配置量纲换算到节点打分的分值区间。
 	defaultShape := make(helper.FunctionShape, 0, len(defaultShapePoint))
 	for _, point := range defaultShapePoint {
 		defaultShape = append(defaultShape, helper.FunctionShapePoint{
@@ -299,6 +302,7 @@ func TestScore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 每种 shape 构造一次打分函数，再用多组资源利用率逐项核对。
 			f := buildScorerFunction(tt.shape)
 			for _, c := range tt.cases {
 				gotScore := f(c.classResources)

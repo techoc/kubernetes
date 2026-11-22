@@ -31,27 +31,22 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// activeQueuer is a wrapper for activeQ related operations.
-// Its methods take the lock inside.
+// activeQueuer 封装 activeQ 的相关操作，其方法内部自行加锁。
 type activeQueuer interface {
 	underLock(func(unlockedActiveQ unlockedActiveQueuer))
 	underRLock(func(unlockedActiveQ unlockedActiveQueueReader))
 
-	// delete removes the entity from the activeQ.
-	// It returns the entity if it was removed, nil otherwise.
+	// delete 从 activeQ 中删除实体，返回被删除的实体，不存在时返回 nil。
 	delete(entityLookup framework.QueuedEntityInfo) framework.QueuedEntityInfo
 	pop(logger klog.Logger) (framework.QueuedEntityInfo, error)
 	list() []*v1.Pod
 	len() int
 	has(entityLookup framework.QueuedEntityInfo) bool
-	// add adds a new entity to the activeQ.
-	// The event should show which event triggered this addition and is used for the metric recording.
-	// Note: it does not signal the pop() method to wake up,
-	// so the caller is responsible for calling broadcast() after executing this method.
-	// 'strategy' is the previous queuing strategy, helps determine if the entity moved into a different
-	// queue or newly added to correctly maintain incoming entities metrics.
+	// add 向 activeQ 添加新实体，event 记录触发此次入队的事件用于指标统计。
+	// 注意：该方法不会唤醒阻塞中的 pop()，调用方需自行调用 broadcast()。
+	// strategy 是实体之前的排队策略，用于判断它是从其他队列移入还是新增，以正确维护入队指标。
 	add(logger klog.Logger, entity framework.QueuedEntityInfo, event string, strategy *queueingStrategy)
-	// get returns the entity matching entity inside the activeQ.
+	// get 返回 activeQ 中与给定实体匹配的实体。
 	get(entityLookup framework.QueuedEntityInfo) (framework.QueuedEntityInfo, bool)
 
 	listInFlightEvents() []interface{}
@@ -69,29 +64,27 @@ type activeQueuer interface {
 	broadcast()
 }
 
-// unlockedActiveQueuer defines activeQ methods that are not protected by the lock itself.
-// underLock() method should be used to protect these methods.
+// unlockedActiveQueuer 定义自身不加锁的 activeQ 方法，
+// 调用方需通过 underLock() 保护。
 type unlockedActiveQueuer interface {
 	unlockedActiveQueueReader
-	// update updates the pod in activeQ if oldEntity is already in the queue and the pod is present there.
-	// It returns new pod info if updated, nil otherwise.
+	// update 在 oldEntity 仍位于队列中时更新其中的 Pod 信息，成功则返回新的 podInfo。
 	update(newPod *v1.Pod, oldEntity framework.QueuedEntityInfo) *framework.QueuedPodInfo
-	// addEventsIfPodInFlight adds events to inFlightEvents if the newPod is in inFlightPods.
-	// It returns true if pushed the event to the inFlightEvents.
+	// addEventsIfPodInFlight 在 newPod 处于在途状态时把事件记入 inFlightEvents，
+	// 返回是否实际写入。
 	addEventsIfPodInFlight(oldPod, newPod *v1.Pod, events []fwk.ClusterEvent) bool
 }
 
-// unlockedActiveQueueReader defines activeQ read-only methods that are not protected by the lock itself.
-// underLock() or underRLock() method should be used to protect these methods.
+// unlockedActiveQueueReader 定义自身不加锁的 activeQ 只读方法，
+// 调用方需通过 underLock() 或 underRLock() 保护。
 type unlockedActiveQueueReader interface {
-	// get returns the entity matching entity inside the activeQ.
-	// Returns false if the entity doesn't exist in the queue.
-	// This method should be called in activeQueue.underLock() or activeQueue.underRLock().
+	// get 返回 activeQ 中与给定实体匹配的实体，不存在时返回 false。
+	// 必须在 activeQueue.underLock() 或 underRLock() 中调用。
 	get(entityLookup framework.QueuedEntityInfo) (framework.QueuedEntityInfo, bool)
 }
 
-// unlockedActiveQueue defines activeQ methods that are not protected by the lock itself.
-// activeQueue.underLock() or activeQueue.underRLock() method should be used to protect these methods.
+// unlockedActiveQueue 定义自身不加锁的 activeQ 方法，
+// 调用方需通过 underLock() 或 underRLock() 保护。
 type unlockedActiveQueue struct {
 	queue           *heap.Heap[framework.QueuedEntityInfo]
 	inFlightPods    map[types.UID]*list.Element
@@ -99,6 +92,7 @@ type unlockedActiveQueue struct {
 	metricsRecorder *metrics.MetricAsyncRecorder
 }
 
+// newUnlockedActiveQueue 创建不加锁的 activeQ 包装器，供 underLock/underRLock 内部使用。
 func newUnlockedActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], inFlightPods map[types.UID]*list.Element, inFlightEvents *list.List, metricsRecorder *metrics.MetricAsyncRecorder) *unlockedActiveQueue {
 	return &unlockedActiveQueue{
 		queue:           queue,
@@ -108,8 +102,7 @@ func newUnlockedActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], inFlig
 	}
 }
 
-// update updates the pod in activeQ if oldEntity is already in the queue and the pod is present there.
-// It returns new pod info if updated, nil otherwise.
+// update 在 oldEntity 仍位于队列中时更新其中的 Pod 信息，成功则返回新的 podInfo。
 func (uaq *unlockedActiveQueue) update(newPod *v1.Pod, oldEntity framework.QueuedEntityInfo) *framework.QueuedPodInfo {
 	if entity, exists := uaq.queue.Get(oldEntity); exists {
 		podInfo, err := entity.Update(newPod)
@@ -122,8 +115,8 @@ func (uaq *unlockedActiveQueue) update(newPod *v1.Pod, oldEntity framework.Queue
 	return nil
 }
 
-// addEventsIfPodInFlight adds events to inFlightEvents if the newPod is in inFlightPods.
-// It returns true if pushed the event to the inFlightEvents.
+// addEventsIfPodInFlight 在 newPod 处于在途状态时把事件记入 inFlightEvents，
+// 返回是否实际写入。
 func (uaq *unlockedActiveQueue) addEventsIfPodInFlight(oldPod, newPod *v1.Pod, events []fwk.ClusterEvent) bool {
 	_, ok := uaq.inFlightPods[newPod.UID]
 	if ok {
@@ -139,89 +132,70 @@ func (uaq *unlockedActiveQueue) addEventsIfPodInFlight(oldPod, newPod *v1.Pod, e
 	return ok
 }
 
-// get returns the entity matching entity inside the activeQ.
-// Returns false if the entity doesn't exist in the queue.
-// This method should be called in activeQueue.underLock() or activeQueue.underRLock().
+// get 返回 activeQ 中与给定实体匹配的实体，不存在时返回 false。
+// 必须在 activeQueue.underLock() 或 underRLock() 中调用。
 func (uaq *unlockedActiveQueue) get(entityLookup framework.QueuedEntityInfo) (framework.QueuedEntityInfo, bool) {
 	return uaq.queue.Get(entityLookup)
 }
 
-// backoffQPopper defines method that is used to pop from the backoffQ when the activeQ is empty.
+// backoffQPopper 定义 activeQ 为空时从退避队列取实体所需的方法。
 type backoffQPopper interface {
-	// popBackoff pops the item from the podBackoffQ.
+	// popBackoff 从退避队列取出一个实体。
 	popBackoff() (framework.QueuedEntityInfo, error)
-	// len returns length of the podBackoffQ queue.
+	// lenBackoff 返回退避队列的长度。
 	lenBackoff() int
 }
 
-// activeQueue implements activeQueuer. All of the fields have to be protected using the lock.
+// activeQueue 实现 activeQueuer，所有字段都必须受 lock 保护。
 type activeQueue struct {
-	// lock synchronizes all operations related to activeQ.
-	// It protects activeQ, inFlightPods, inFlightEvents, schedulingCycle and closed fields.
-	// Caution: DO NOT take "SchedulingQueue.lock" after taking "lock".
-	// You should always take "SchedulingQueue.lock" first, otherwise the queue could end up in deadlock.
-	// "lock" should not be taken after taking "backoffQueue.lock" or "nominator.nLock".
-	// Correct locking order is: SchedulingQueue.lock > lock > backoffQueue.lock > nominator.nLock.
+	// lock 同步 activeQ 相关操作，保护队列、在途 Pod、在途事件、调度周期与关闭标志。
+	// 注意：持有本锁后不得再取 SchedulingQueue.lock，否则可能死锁。
+	// 同样不得在持有 backoffQueue.lock 或 nominator.nLock 后取本锁。
+	// 正确的加锁顺序为：SchedulingQueue.lock > lock > backoffQueue.lock > nominator.nLock。
 	lock sync.RWMutex
 
-	// activeQ is heap structure that scheduler actively looks at to find pods to
-	// schedule. Head of heap is the highest priority pod.
+	// queue 是调度器主动选取待调度 Pod 的堆，堆顶为优先级最高的实体。
 	queue *heap.Heap[framework.QueuedEntityInfo]
 
-	// unlockedQueue is a wrapper of queue providing methods that are not locked themselves
-	// and can be used in the underLock() or underRLock().
+	// unlockedQueue 是 queue 的包装器，提供自身不加锁的方法，供 underLock/underRLock 内部调用。
 	unlockedQueue *unlockedActiveQueue
 
-	// cond is a condition that is notified when the pod is added to activeQ.
-	// When SchedulerPopFromBackoffQ feature is enabled,
-	// condition is also notified when the pod is added to backoffQ.
-	// It is used with lock.
+	// cond 在实体加入 activeQ 时通知等待者；启用 SchedulerPopFromBackoffQ 时，
+	// 实体加入退避队列也会通知。cond 与 lock 配合使用。
 	cond sync.Cond
 
-	// inFlightPods holds the UID of all pods which have been popped out for which Done
-	// hasn't been called yet - in other words, all pods that are currently being
-	// processed (being scheduled, in permit, or in the binding cycle).
-	//
-	// The values in the map are the entry of each pod in the inFlightEvents list.
-	// The value of that entry is the *v1.Pod at the time that scheduling of that
-	// pod started, which can be useful for logging or debugging.
+	// inFlightPods 记录已弹出但尚未调用 Done 的 Pod，即正在处理中
+	// （调度中、permit 中或绑定周期中）的 Pod。
+	// map 的值是该 Pod 在 inFlightEvents 链表中的节点，
+	// 节点内保存调度开始时的 Pod 快照，便于日志与调试。
 	inFlightPods map[types.UID]*list.Element
 
-	// inFlightEvents holds the events received by the scheduling queue
-	// (entry value is clusterEvent) together with in-flight pods (entry
-	// value is *v1.Pod). Entries get added at the end while the mutex is
-	// locked, so they get serialized.
-	//
-	// The pod entries are added in Pop and used to track which events
-	// occurred after the pod scheduling attempt for that pod started.
-	// They get removed when the scheduling attempt is done, at which
-	// point all events that occurred in the meantime are processed.
-	//
-	// After removal of a pod, events at the start of the list are no
-	// longer needed because all of the other in-flight pods started
-	// later. Those events can be removed.
+	// inFlightEvents 按时间顺序保存调度队列收到的事件（clusterEvent）与在途 Pod（*v1.Pod），
+	// 持锁时向链表尾追加，因此事件天然按序。
+	// Pod 节点在 Pop 时加入，用于标记该 Pod 调度尝试之后发生的事件；
+	// 调度完成后移除，并集中处理期间累积的事件。
+	// 移除某个 Pod 后，链表头部那些早于所有现存 Pod 启动的事件不再被任何 Pod 需要，可以清理。
 	inFlightEvents *list.List
 
-	// schedCycle represents sequence number of scheduling cycle and is incremented
-	// when a pod is popped.
+	// schedCycle 是调度周期序号，每次弹出实体时递增。
 	schedCycle int64
 
-	// closed indicates that the queue is closed.
-	// It is mainly used to let Pop() exit its control loop while waiting for an item.
+	// closed 表示队列已关闭，用于让等待中的 Pop() 退出循环。
 	closed bool
 
 	metricsRecorder *metrics.MetricAsyncRecorder
 
-	// backoffQPopper is used to pop from backoffQ when activeQ is empty.
-	// It is non-nil only when SchedulerPopFromBackoffQ feature is enabled.
+	// backoffQPopper 在 activeQ 为空时从退避队列取实体，
+	// 仅当 SchedulerPopFromBackoffQ 特性启用时非 nil。
 	backoffQPopper backoffQPopper
 
-	// lastPoppedEntityKey is the latest entity that was popped from the activeQ.
-	// It's used to check if the scheduling cycle is pending for a PodGroup matching the newly added pod.
-	// It should be cleared when the entity is re-added to the scheduling queue.
+	// lastPoppedEntityKey 记录最近弹出的实体，
+	// 用于判断当前调度周期是否在等待与新入队 Pod 匹配的 PodGroup。
+	// 实体重新入队时应清空该值。
 	lastPoppedEntityKey string
 }
 
+// newActiveQueue 创建 activeQueue 并初始化条件变量与不加锁包装器。
 func newActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], metricRecorder *metrics.MetricAsyncRecorder, backoffQPopper backoffQPopper) *activeQueue {
 	aq := &activeQueue{
 		queue:           queue,
@@ -236,26 +210,23 @@ func newActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], metricRecorder
 	return aq
 }
 
-// underLock runs the fn function under the lock.Lock.
-// fn can run unlockedActiveQueuer methods but should NOT run any other activeQueue method,
-// as it would end up in deadlock.
+// underLock 在写锁保护下执行 fn。
+// fn 只能调用 unlockedActiveQueuer 的方法，调用其他 activeQueue 方法会导致死锁。
 func (aq *activeQueue) underLock(fn func(unlockedActiveQ unlockedActiveQueuer)) {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
 	fn(aq.unlockedQueue)
 }
 
-// underLock runs the fn function under the lock.RLock.
-// fn can run unlockedActiveQueueReader methods but should NOT run any other activeQueue method,
-// as it would end up in deadlock.
+// underRLock 在读锁保护下执行 fn。
+// fn 只能调用 unlockedActiveQueueReader 的方法，调用其他 activeQueue 方法会导致死锁。
 func (aq *activeQueue) underRLock(fn func(unlockedActiveQ unlockedActiveQueueReader)) {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 	fn(aq.unlockedQueue)
 }
 
-// delete removes the entity from the activeQ.
-// It returns the entity if it was removed, nil otherwise.
+// delete 从 activeQ 中删除实体，返回被删除的实体，不存在时返回 nil。
 func (aq *activeQueue) delete(entityLookup framework.QueuedEntityInfo) framework.QueuedEntityInfo {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -263,13 +234,12 @@ func (aq *activeQueue) delete(entityLookup framework.QueuedEntityInfo) framework
 	return aq.queue.Delete(entityLookup)
 }
 
-// unlockedMoveEntityToInFlight moves the entity to the in-flight state.
-// This method should be called under the lock.
+// unlockedMoveEntityToInFlight 将实体标记为在途状态，需在持锁情况下调用。
 func (aq *activeQueue) unlockedMoveEntityToInFlight(logger klog.Logger, entity framework.QueuedEntityInfo) error {
 	entity.IncAttempts()
 	var podsToDiscard []*framework.QueuedPodInfo
 	entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
-		// If the pod is already in the map, we shouldn't overwrite the inFlightPods otherwise it'd lead to a memory leak.
+		// Pod 已在 map 中时不能覆盖，否则原链表节点泄漏。
 		// https://github.com/kubernetes/kubernetes/pull/127016
 		if _, ok := aq.inFlightPods[pInfo.Pod.UID]; ok {
 			podsToDiscard = append(podsToDiscard, pInfo)
@@ -286,7 +256,7 @@ func (aq *activeQueue) unlockedMoveEntityToInFlight(logger klog.Logger, entity f
 			return fmt.Errorf("the same pod is tracked in multiple places in the scheduler: %s", klog.KObj(podsToDiscard[0]))
 		case *framework.QueuedPodGroupInfo:
 			for _, pInfo := range podsToDiscard {
-				// Pod should always exist in the pod group, ignoring the return value.
+				// Pod 必然属于该 PodGroup，忽略返回值。
 				_ = specificEntity.RemovePod(pInfo.Pod)
 				logger.Error(nil, "Discarding the popped pod group member. It's tracked in multiple places in the scheduler", "pod", klog.KObj(pInfo), "podGroup", klog.KObj(specificEntity))
 			}
@@ -299,7 +269,7 @@ func (aq *activeQueue) unlockedMoveEntityToInFlight(logger klog.Logger, entity f
 	}
 	aq.schedCycle++
 
-	// Update metrics for unschedulable plugins.
+	// 实体出队后撤销不可调度原因对应的指标计数。
 	entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 		for plugin := range pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins) {
 			metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Dec()
@@ -309,9 +279,8 @@ func (aq *activeQueue) unlockedMoveEntityToInFlight(logger klog.Logger, entity f
 	return nil
 }
 
-// pop removes the head of the queue and returns it.
-// It blocks if the queue is empty and waits until a new entity is added to the queue.
-// It increments scheduling cycle when a pod is popped.
+// pop 取出并返回队列头部实体。队列为空时阻塞等待新实体入队，
+// 每次弹出都会递增调度周期。
 func (aq *activeQueue) pop(logger klog.Logger) (framework.QueuedEntityInfo, error) {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -319,17 +288,16 @@ func (aq *activeQueue) pop(logger klog.Logger) (framework.QueuedEntityInfo, erro
 	return aq.unlockedPop(logger)
 }
 
+// unlockedPop 是不加锁的弹出实现，调用方需持有 aq.lock。
 func (aq *activeQueue) unlockedPop(logger klog.Logger) (framework.QueuedEntityInfo, error) {
 	var entity framework.QueuedEntityInfo
 	for aq.queue.Len() == 0 {
-		// backoffQPopper is non-nil only if SchedulerPopFromBackoffQ feature is enabled.
-		// In case of non-empty backoffQ, try popping from there.
+		// backoffQPopper 仅在特性启用时非 nil；退避队列非空时可直接从那里取。
 		if aq.backoffQPopper != nil && aq.backoffQPopper.lenBackoff() != 0 {
 			break
 		}
-		// When the queue is empty, invocation of Pop() is blocked until new entity is enqueued.
-		// When Close() is called, the p.closed is set and the condition is broadcast,
-		// which causes this loop to continue and return from the Pop().
+		// 队列为空时 Pop() 阻塞等待；close() 会置位 closed 并广播条件变量，
+		// 使此循环继续执行并返回。
 		if aq.closed {
 			logger.V(2).Info("Scheduling queue is closed")
 			return nil, nil
@@ -341,7 +309,7 @@ func (aq *activeQueue) unlockedPop(logger klog.Logger) (framework.QueuedEntityIn
 		if aq.backoffQPopper == nil {
 			return nil, err
 		}
-		// Try to pop from backoffQ when activeQ is empty.
+		// activeQ 为空时转从退避队列取实体。
 		entity, err = aq.backoffQPopper.popBackoff()
 		if err != nil {
 			return nil, err
@@ -350,10 +318,9 @@ func (aq *activeQueue) unlockedPop(logger klog.Logger) (framework.QueuedEntityIn
 	}
 	err = aq.unlockedMoveEntityToInFlight(logger, entity)
 	if err != nil {
-		// Just report it as an error, but no need to stop the scheduler
-		// because it likely doesn't cause any visible issues from the scheduling perspective.
+		// 重复实体只记录错误，无需停止调度器：通常不会造成可见的调度问题。
 		utilruntime.HandleErrorWithLogger(logger, err, "Discarding the popped entity", "type", entity.Type(), "entity", klog.KObj(entity))
-		// Just ignore/discard this duplicated entity and try to pop the next one.
+		// 丢弃该实体并继续尝试弹出下一个。
 		return aq.unlockedPop(logger)
 	}
 	aq.lastPoppedEntityKey = queuedEntityKeyFunc(entity)
@@ -361,21 +328,21 @@ func (aq *activeQueue) unlockedPop(logger klog.Logger) (framework.QueuedEntityIn
 	return entity, nil
 }
 
-// isLastPoppedEntity checks if the last popped entity is the given entity.
+// isLastPoppedEntity 判断最近弹出的实体是否为给定实体。
 func (aq *activeQueue) isLastPoppedEntity(entityLookup framework.QueuedEntityInfo) bool {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 	return aq.lastPoppedEntityKey == queuedEntityKeyFunc(entityLookup)
 }
 
-// clearPoppedEntity clears the last popped entity.
+// clearPoppedEntity 清空最近弹出的实体记录。
 func (aq *activeQueue) clearPoppedEntity() {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
 	aq.lastPoppedEntityKey = ""
 }
 
-// list returns all pods that are in the queue.
+// list 返回队列中所有 Pod。
 func (aq *activeQueue) list() []*v1.Pod {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
@@ -389,22 +356,20 @@ func (aq *activeQueue) list() []*v1.Pod {
 	return result
 }
 
-// len returns length of the queue.
+// len 返回队列长度。
 func (aq *activeQueue) len() int {
 	return aq.queue.Len()
 }
 
-// has inform if entity exists in the queue.
+// has 判断实体是否在队列中。
 func (aq *activeQueue) has(entityLookup framework.QueuedEntityInfo) bool {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 	return aq.queue.Has(entityLookup)
 }
 
-// add adds a new entity to the activeQ.
-// The event should show which event triggered this addition and is used for the metric recording.
-// Note: it does not signal the pop() method to wake up,
-// so the caller is responsible for calling broadcast() after executing this method.
+// add 向 activeQ 添加新实体，event 记录触发此次入队的事件用于指标统计。
+// 注意：该方法不会唤醒阻塞中的 pop()，调用方需自行调用 broadcast()。
 func (aq *activeQueue) add(logger klog.Logger, entity framework.QueuedEntityInfo, event string, strategy *queueingStrategy) {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -414,14 +379,14 @@ func (aq *activeQueue) add(logger klog.Logger, entity framework.QueuedEntityInfo
 	logger.V(5).Info("Entity moved to an internal scheduling queue", "type", entity.Type(), "entity", klog.KObj(entity), "event", event, "queue", activeQ)
 }
 
-// get returns the entity matching entity inside the activeQ.
+// get 返回 activeQ 中与给定实体匹配的实体。
 func (aq *activeQueue) get(entityLookup framework.QueuedEntityInfo) (framework.QueuedEntityInfo, bool) {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 	return aq.unlockedQueue.get(entityLookup)
 }
 
-// listInFlightEvents returns all inFlightEvents.
+// listInFlightEvents 返回所有在途事件。
 func (aq *activeQueue) listInFlightEvents() []interface{} {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
@@ -432,7 +397,7 @@ func (aq *activeQueue) listInFlightEvents() []interface{} {
 	return values
 }
 
-// listInFlightPods returns all inFlightPods.
+// listInFlightPods 返回所有在途 Pod。
 func (aq *activeQueue) listInFlightPods() []*v1.Pod {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
@@ -443,16 +408,15 @@ func (aq *activeQueue) listInFlightPods() []*v1.Pod {
 	return pods
 }
 
-// clusterEventsForPod gets all cluster events that have happened during pod for entity is being scheduled.
+// clusterEventsForPod 获取该 Pod 调度尝试期间发生的全部集群事件。
 func (aq *activeQueue) clusterEventsForPod(logger klog.Logger, pInfo *framework.QueuedPodInfo) ([]*clusterEvent, error) {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 
 	logger.V(5).Info("Checking events for in-flight pod", "pod", klog.KObj(pInfo.Pod), "unschedulablePlugins", pInfo.UnschedulablePlugins, "inFlightEventsSize", aq.inFlightEvents.Len(), "inFlightPodsSize", len(aq.inFlightPods))
 
-	// AddUnschedulablePodIfNotPresent is called with the Pod at the end of scheduling or binding.
-	// So, given entity should have been Pop()ed before,
-	// we can assume entity must be recorded in inFlightPods and thus inFlightEvents.
+	// 调度或绑定结束时会调用 AddUnschedulablePodIfNotPresent，
+	// 因此这里的实体必然已被 Pop，应该在 inFlightPods 中有记录。
 	inFlightPod, ok := aq.inFlightPods[pInfo.Pod.UID]
 	if !ok {
 		return nil, fmt.Errorf("in flight entity isn't found in the scheduling queue. If you see this error log, it's likely a bug in the scheduler")
@@ -462,7 +426,7 @@ func (aq *activeQueue) clusterEventsForPod(logger klog.Logger, pInfo *framework.
 	for event := inFlightPod.Next(); event != nil; event = event.Next() {
 		e, ok := event.Value.(*clusterEvent)
 		if !ok {
-			// Must be another in-flight Pod (*v1.Pod). Can be ignored.
+			// 不是事件节点就必然是在途 Pod 节点，忽略即可。
 			continue
 		}
 		events = append(events, e)
@@ -470,8 +434,8 @@ func (aq *activeQueue) clusterEventsForPod(logger klog.Logger, pInfo *framework.
 	return events, nil
 }
 
-// addEventsIfPodInFlight adds events to inFlightEvents if the newPod is in inFlightPods.
-// It returns true if pushed the event to the inFlightEvents.
+// addEventsIfPodInFlight 在 newPod 处于在途状态时把事件记入 inFlightEvents，
+// 返回是否实际写入。
 func (aq *activeQueue) addEventsIfPodInFlight(oldPod, newPod *v1.Pod, events []fwk.ClusterEvent) bool {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -479,8 +443,8 @@ func (aq *activeQueue) addEventsIfPodInFlight(oldPod, newPod *v1.Pod, events []f
 	return aq.unlockedQueue.addEventsIfPodInFlight(oldPod, newPod, events)
 }
 
-// addEventIfAnyInFlight adds clusterEvent to inFlightEvents if any pod is in inFlightPods.
-// It returns true if pushed the event to the inFlightEvents.
+// addEventIfAnyInFlight 在存在任意在途 Pod 时把集群事件记入 inFlightEvents，
+// 返回是否实际写入。
 func (aq *activeQueue) addEventIfAnyInFlight(oldObj, newObj interface{}, event fwk.ClusterEvent) bool {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -497,14 +461,15 @@ func (aq *activeQueue) addEventIfAnyInFlight(oldObj, newObj interface{}, event f
 	return false
 }
 
+// schedulingCycle 返回当前调度周期序号。
 func (aq *activeQueue) schedulingCycle() int64 {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
 	return aq.schedCycle
 }
 
-// done must be called for pod returned by Pop. This allows the queue to
-// keep track of which pods are currently being processed.
+// done 必须在 Pop 返回的 Pod 处理完成后调用，
+// 以便队列跟踪哪些 Pod 仍在处理中。
 func (aq *activeQueue) done(podUID types.UID) {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
@@ -512,34 +477,30 @@ func (aq *activeQueue) done(podUID types.UID) {
 	aq.unlockedDone(podUID)
 }
 
-// unlockedDone is used by the activeQueue internally and doesn't take the lock itself.
-// It assumes the lock is already taken outside before the method is called.
+// unlockedDone 是内部实现，自身不加锁，调用方必须已持有锁。
 func (aq *activeQueue) unlockedDone(podUID types.UID) {
 	inFlightEntity, ok := aq.inFlightPods[podUID]
 	if !ok {
-		// This entity is already done()ed.
+		// 该实体已被 done()，直接返回。
 		return
 	}
 	delete(aq.inFlightPods, podUID)
 
-	// Remove the entity from the list.
+	// 从链表中移除该 Pod 节点。
 	aq.inFlightEvents.Remove(inFlightEntity)
 
 	aggrMetricsCounter := map[string]int{}
-	// Remove events which are only referred to by this Pod
-	// so that the inFlightEvents list doesn't grow infinitely.
-	// If the pod was at the head of the list, then all
-	// events between it and the next pod are no longer needed
-	// and can be removed.
+	// 清理仅被该 Pod 引用的事件，防止 inFlightEvents 无限增长。
+	// 若该 Pod 位于链表头部，则它与下一个 Pod 之间的事件都不再需要。
 	for {
 		e := aq.inFlightEvents.Front()
 		if e == nil {
-			// Empty list.
+			// 链表已空。
 			break
 		}
 		ev, ok := e.Value.(*clusterEvent)
 		if !ok {
-			// A pod, must stop pruning.
+			// 遇到 Pod 节点，停止清理。
 			break
 		}
 		aq.inFlightEvents.Remove(e)
@@ -551,26 +512,24 @@ func (aq *activeQueue) unlockedDone(podUID types.UID) {
 	}
 
 	aq.metricsRecorder.ObserveInFlightEventsAsync(metrics.PodPoppedInFlightEvent, -1,
-		// If it's the last Pod in inFlightPods, we should force-flush the metrics.
-		// Otherwise, especially in small clusters, which don't get a new Pod frequently,
-		// the metrics might not be flushed for a long time.
+		// 最后一个在途 Pod 离开时强制刷新指标；否则在小集群中
+		// 可能长时间没有新 Pod，指标迟迟得不到刷新。
 		len(aq.inFlightPods) == 0)
 }
 
-// close closes the activeQueue.
+// close 关闭 activeQueue。
 func (aq *activeQueue) close() {
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
-	// We should call done() for all in-flight pods to clean up the inFlightEvents metrics.
-	// It's safe even if the binding cycle running asynchronously calls done() afterwards
-	// done() will just be a no-op.
+	// 关闭时对所有在途 Pod 调用 done 以清理指标。
+	// 即使异步绑定周期随后再调用 done 也安全，届时它是空操作。
 	for pod := range aq.inFlightPods {
 		aq.unlockedDone(pod)
 	}
 	aq.closed = true
 }
 
-// broadcast notifies the pop() operation that new pod(s) was added to the activeQueue.
+// broadcast 通知阻塞中的 pop() 有新实体入队。
 func (aq *activeQueue) broadcast() {
 	aq.cond.Broadcast()
 }

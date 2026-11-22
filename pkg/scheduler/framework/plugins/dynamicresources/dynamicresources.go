@@ -60,122 +60,107 @@ import (
 )
 
 const (
-	// Name is the name of the plugin used in Registry and configurations.
+	// Name 是插件在注册表和配置中使用的名字。
 	Name = names.DynamicResources
 
 	stateKey fwk.StateKey = Name
 )
 
-// The state is initialized in PreFilter phase. Because we save the pointer in
-// fwk.CycleState, in the later phases we don't need to call Write method
-// to update the value
+// stateData 在 PreFilter 阶段初始化。由于存进 fwk.CycleState 的是指针，
+// 后续阶段直接修改指针指向的内容即可，无需再调用 Write 更新状态。
 type stateData struct {
-	// A copy of all claims for the Pod (i.e. 1:1 match with
-	// pod.Spec.ResourceClaims), initially with the status from the start
-	// of the scheduling cycle. Each claim instance is read-only because it
-	// might come from the informer cache. The instances get replaced when
-	// the plugin itself successfully does an Update.
+	// claims 保存该 Pod 所有 ResourceClaim 的副本（与 pod.Spec.ResourceClaims 一一对应），
+	// 初始状态取自调度周期开始时的状态。每个 claim 实例是只读的，因为它可能来自 informer 缓存；
+	// 只有在插件自身成功执行 Update 后，实例才会被替换。
 	//
-	// When the DRAExtendedResource feature is enabled, the special ResourceClaim
-	// which represents extended resource requests is also stored here.
-	// The plugin code should treat this field as a black box and only
-	// access it via its methods, in particular:
-	// - The all method can be used to iterate over all claims, including
-	//   the special one.
-	// - The allUserClaims method excludes the special one.
+	// DRAExtendedResource 特性开启时，代表扩展资源请求的那个特殊 ResourceClaim 也存这里。
+	// 插件代码应把该字段当黑盒，只通过它的方法访问，尤其：
+	// - all 方法遍历所有 claim（包括特殊 claim）；
+	// - allUserClaims 方法排除特殊 claim。
 	//
-	// Empty if the Pod has no claims and no special claim for extended
-	// resources backed by DRA, in which case the plugin has no work to do for
-	// the Pod.
+	// Pod 没有 claim、也没有 DRA 扩展资源的特殊 claim 时该字段为空，此时插件对该 Pod 无事可做。
 	claims claimStore
 
-	// draExtendedResource stores data for extended resources backed by DRA.
-	// It will remain empty when the DRAExtendedResource feature is disabled.
+	// draExtendedResource 保存 DRA 支撑的扩展资源数据。
+	// DRAExtendedResource 特性关闭时该字段为空。
 	draExtendedResource draExtendedResource
 
-	// Allocator handles claims with structured parameters, which is all of them nowadays.
+	// allocator 处理带结构化参数的 claim，如今所有 claim 都是这种。
 	allocator structured.Allocator
 
-	// mutex must be locked while accessing any of the fields below.
+	// 访问下面所有字段前必须持有 mutex。
 	mutex sync.Mutex
 
-	// The indices of all claims that:
-	// - are allocated
-	// - were not available on at least one node
+	// unavailableClaims 记录满足以下条件的 claim 下标：
+	// - 已分配；
+	// - 在至少一个节点上不可用。
 	//
-	// Set in parallel during Filter, so write access there must be
-	// protected by the mutex. Used by PostFilter.
+	// 这些下标在 Filter 中并行写入，必须持 mutex 保护。供 PostFilter 使用。
 	unavailableClaims sets.Set[int]
 
-	// informationsForClaim has one entry for each claim in claims.
+	// informationsForClaim 与 claims 中的每个 claim 一一对应。
 	informationsForClaim []informationForClaim
 
-	// nodeAllocations caches the result of Filter for the nodes, its key is node name.
+	// nodeAllocations 缓存各节点的 Filter 结果，以节点名为键。
 	nodeAllocations map[string]nodeAllocation
 
-	// claimHasNodeAllocatableMappedDevice stores whether a claim's allocation is mapped.
-	// A claim is mapped if it is allocated a device that models a node-allocatable
-	// resource (like cpu, memory) via the NodeAllocatableResources.Mapping field in the
-	// Device spec inside the ResourceSlice.
-	// This map is used in the Filter phase to prevent sharing these mapped claims across pods.
-	// Populated in PreFilter and read in Filter.
+	// claimHasNodeAllocatableMappedDevice 记录某个 claim 的分配是否被映射。
+	// 当 claim 被分配到某个设备，且该设备通过 ResourceSlice 内 Device spec 的
+	// NodeAllocatableResources.Mapping 字段建模了节点可分配资源（如 cpu、内存）时，即为被映射。
+	// Filter 阶段用该 map 防止多个 Pod 共享这类被映射的 claim。
+	// 在 PreFilter 填充，在 Filter 读取。
 	claimHasNodeAllocatableMappedDevice map[types.UID]bool
 }
 
+// Clone 实现 StateData 接口。状态原地可变，直接返回自身指针。
 func (d *stateData) Clone() fwk.StateData {
 	return d
 }
 
-// This state is persisted in the PodGroup CycleState. Because we save the
-// pointer in fwk.CycleState, in the later phases we don't need to call Write
-// method to update the value.
+// podGroupStateData 保存在 PodGroup 的 CycleState 中。由于存进 fwk.CycleState 的是指针，
+// 后续阶段直接修改指针指向的内容即可，无需再调用 Write 更新状态。
 type podGroupStateData struct {
-	// pendingAllocations stores the UIDs of ResourceClaims that are currently
-	// pending for *this* PodGroup scheduling cycle, mapped to the set of Pod UIDs of
-	// the pods sharing the pending allocation. The DRAManager continues to
-	// track inter-cycle sharing of pending allocations, including the
-	// allocations themselves and how many Pods are sharing them.
+	// pendingAllocations 记录本轮 PodGroup 调度周期中处于 pending 的 ResourceClaim UID，
+	// 映射到共享该 pending 分配的 Pod UID 集合。跨周期的 pending 分配共享情况
+	// （分配本身及共享 Pod 数量）仍由 DRAManager 继续跟踪。
 	//
-	// It does not need to be protected by a lock because a PodGroup's
-	// CycleState is only available during synchronous scheduling phases and is
-	// cleared before asynchronous phases begin.
+	// 无需加锁：PodGroup 的 CycleState 只在同步调度阶段可用，异步阶段开始前就会被清空。
 	pendingAllocations map[types.UID]sets.Set[types.UID]
 
-	// podsStateData stores the stateData of each pod in the PodGroup.
+	// podsStateData 保存 PodGroup 中每个 Pod 的 stateData。
 	podsStateData map[types.NamespacedName]*stateData
 }
 
+// Clone 实现 StateData 接口。状态原地可变，直接返回自身指针。
 func (d *podGroupStateData) Clone() fwk.StateData {
 	return d
 }
 
+// informationForClaim 保存单个 claim 在调度过程中派生出的信息。
 type informationForClaim struct {
-	// Node selector based on the claim status if allocated.
+	// availableOnNodes 是已分配时根据 claim 状态得到的节点选择器。
 	availableOnNodes *nodeaffinity.NodeSelector
 
-	// Set by Reserve, published by PreBind, empty if nothing had to be allocated.
-	// May be set by PreFilter if this allocation was made by a previous Pod's
-	// Reserve but not yet published in PreBind.
+	// allocation 由 Reserve 设置、PreBind 发布；无需分配时为空。
+	// 若分配由前一个 Pod 的 Reserve 完成但尚未在 PreBind 发布，PreFilter 也可能设置它。
 	allocation *resourceapi.AllocationResult
 }
 
-// nodeAllocation holds the allocation results and extended resource claim per node.
+// nodeAllocation 保存单个节点上的分配结果和扩展资源 claim。
 type nodeAllocation struct {
-	// allocationResults has the allocation results, matching the order of
-	// claims which had to be allocated.
+	// allocationResults 保存分配结果，顺序与需要分配的 claim 一一对应。
 	allocationResults []resourceapi.AllocationResult
-	// extendedResourceClaim has the special claim for extended resource backed by DRA
-	// created during Filter for the nodes.
+	// extendedResourceClaim 是 Filter 阶段为该节点创建的 DRA 扩展资源特殊 claim。
 	extendedResourceClaim *resourceapi.ResourceClaim
-	// containerResourceRequestMappings has the container, extended resource, and device request mappings
-	// calculated at the Filter phase, and used at the PreBind phase.
+	// containerResourceRequestMappings 是 Filter 阶段算出的容器、扩展资源与设备请求映射，
+	// 供 PreBind 阶段使用。
 	containerResourceRequestMappings []v1.ContainerExtendedResourceRequest
-	// nodeAllocatableResourceClaimStatuses stores the calculated node allocatable resource allocations through DRA.
-	// This is populated during Filter stage and passed to PreBind.
+	// nodeAllocatableResourceClaimStatuses 保存通过 DRA 计算出的节点可分配资源分配情况。
+	// 在 Filter 阶段填充，传递给 PreBind。
 	nodeAllocatableResourceClaimStatuses []v1.NodeAllocatableResourceClaimStatus
 }
 
-// DynamicResources is a plugin that ensures that ResourceClaims are allocated.
+// DynamicResources 是确保 ResourceClaim 被分配的插件。
 type DynamicResources struct {
 	enabled               bool
 	fts                   feature.Features
@@ -190,20 +175,22 @@ type DynamicResources struct {
 }
 
 const (
-	// podResourceClaimIndexPrefix is the prefix for the index function which indexes pods by
-	// the ResourceClaims that they reference. The key for looking up pods is "<namespace>/<name>".
+	// podResourceClaimIndexPrefix 是按 Pod 引用的 ResourceClaim 建立索引的索引函数名前缀。
+	// 查找 Pod 用的键格式为 "<namespace>/<name>"。
 	podResourceClaimIndexPrefix = "schedulerPodResourceClaim"
 )
 
 var (
+	// ErrDeviceBindingTimeout 表示等待设备绑定条件满足时超时。
 	ErrDeviceBindingTimeout = errors.New("device binding timeout")
-	ErrDeviceBindingFailed  = errors.New("device binding failed")
+	// ErrDeviceBindingFailed 表示设备绑定条件被判定为失败。
+	ErrDeviceBindingFailed = errors.New("device binding failed")
 )
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回 DynamicResources 插件实例。
 func New(ctx context.Context, plArgs runtime.Object, fh fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	if !fts.EnableDynamicResourceAllocation {
-		// Disabled, won't do anything.
+		// 特性关闭时返回一个空壳插件，所有扩展点都不做事。
 		return &DynamicResources{}, nil
 	}
 
@@ -225,9 +212,7 @@ func New(ctx context.Context, plArgs runtime.Object, fh fwk.Handle, fts feature.
 		).Duration,
 		fh:        fh,
 		clientset: fh.ClientSet(),
-		// This is a LRU cache for compiled CEL expressions. The most
-		// recent 10 of them get reused across different scheduling
-		// cycles.
+		// 编译后的 CEL 表达式 LRU 缓存：最近 10 条可跨调度周期复用。
 		celCache: cel.NewCache(10, cel.Features{
 			EnableConsumableCapacity: fts.EnableDRAConsumableCapacity,
 			EnableListTypeAttributes: fts.EnableDRAListTypeAttributes,
@@ -235,7 +220,7 @@ func New(ctx context.Context, plArgs runtime.Object, fh fwk.Handle, fts feature.
 		draManager: fh.SharedDRAManager(),
 	}
 
-	// Set up pod indexer for PreQueueingHint to look up pods by claim.
+	// 建立 Pod 索引，供 PreQueueingHint 按 claim 反查受影响的 Pod。
 	podInformer := fh.SharedInformerFactory().Core().V1().Pods()
 	podResourceClaimIndex := podResourceClaimIndexPrefix + "-" + fh.ProfileName()
 	if err := podInformer.Informer().AddIndexers(cache.Indexers{podResourceClaimIndex: podResourceClaimIndexFunc}); err != nil {
@@ -258,13 +243,13 @@ var _ fwk.EnqueueExtensions = &DynamicResources{}
 var _ fwk.PreBindPlugin = &DynamicResources{}
 var _ fwk.SignPlugin = &DynamicResources{}
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名，用于日志等场景。
 func (pl *DynamicResources) Name() string {
 	return Name
 }
 
-// Because it isn't simple to determine if DRA claims are single host or more complex,
-// we exclude any pod with a DRA claim from signatures. We should improve this.
+// SignPod 为 Pod 生成签名片段。
+// 判断 DRA claim 是单主机还是更复杂并不简单，这里保守地把带 DRA claim 的 Pod 排除在签名之外。
 // See https://github.com/kubernetes/kubernetes/issues/134986
 func (pl *DynamicResources) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	if len(pod.Spec.ResourceClaims) > 0 {
@@ -273,33 +258,30 @@ func (pl *DynamicResources) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.Sig
 	return nil, nil
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让被本插件判定为不可调度的 Pod 重新变得可调度的事件。
 func (pl *DynamicResources) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	if !pl.enabled {
 		return nil, nil
 	}
 
 	events := []fwk.ClusterEventWithHint{
-		// A resource might depend on node labels for topology filtering.
-		// A new or updated node may make pods schedulable.
+		// 资源拓扑过滤可能依赖节点标签，节点新增或标签/可分配量更新都可能让 Pod 可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add | fwk.UpdateNodeLabel | fwk.UpdateNodeAllocatable}},
-		// Allocation is tracked in ResourceClaims, so any changes may make the pods schedulable.
+		// 分配状态记录在 ResourceClaim 中，其任何变化都可能让 Pod 可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.ResourceClaim, ActionType: fwk.Add | fwk.Update | fwk.Delete}, QueueingHintFn: pl.isSchedulableAfterClaimChange, PreQueueingHintFn: pl.preQueueingHint},
-		// Adding the ResourceClaim name to the pod status makes pods waiting for their ResourceClaim schedulable.
+		// 把生成的 ResourceClaim 名字写入 Pod status，会让等待该 claim 的 Pod 可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.TargetPod, ActionType: fwk.UpdatePodGeneratedResourceClaim}, QueueingHintFn: pl.isSchedulableAfterTargetPodUpdate},
-		// A pod might be waiting for a class to get created or modified.
+		// Pod 可能在等设备类被创建或修改。
 		{Event: fwk.ClusterEvent{Resource: fwk.DeviceClass, ActionType: fwk.Add | fwk.Update}},
-		// Adding or updating a ResourceSlice might make a pod schedulable because new resources became available.
+		// 新增或更新 ResourceSlice 意味着有新资源可用，可能让 Pod 可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.ResourceSlice, ActionType: fwk.Add | fwk.Update}},
 	}
 
 	return events, nil
 }
 
-// PreEnqueue checks if there are known reasons why a pod currently cannot be
-// scheduled. When this fails, one of the registered events can trigger another
-// attempt.
+// PreEnqueue 检查是否存在已知原因导致 Pod 当前无法调度。
+// 返回失败后，注册的事件之一会触发新的调度尝试。
 func (pl *DynamicResources) PreEnqueue(ctx context.Context, pod *v1.Pod) (status *fwk.Status) {
 	if !pl.enabled {
 		return nil
@@ -311,11 +293,9 @@ func (pl *DynamicResources) PreEnqueue(ctx context.Context, pod *v1.Pod) (status
 	return nil
 }
 
-// podResourceClaimIndexFunc is an index function that returns ResourceClaim keys
-// (namespace/name) for any ResourceClaim referenced by a pod.
-// Extended resource claims in pod.Status.ExtendedResourceClaimStatus are
-// intentionally not indexed because the scheduler creates them during PreBind
-// and never waits for their creation.
+// podResourceClaimIndexFunc 是索引函数，返回 Pod 引用的所有 ResourceClaim 的键（namespace/name）。
+// pod.Status.ExtendedResourceClaimStatus 中的扩展资源 claim 故意不建索引：
+// 它们是调度器在 PreBind 阶段创建的，调度器不会等待其创建。
 func podResourceClaimIndexFunc(obj interface{}) ([]string, error) {
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
@@ -332,12 +312,12 @@ func podResourceClaimIndexFunc(obj interface{}) ([]string, error) {
 	return keySet.UnsortedList(), nil
 }
 
-// preQueueingHint returns the pods affected by a ResourceClaim event.
+// preQueueingHint 返回受某个 ResourceClaim 事件影响的 Pod 集合。
 func (pl *DynamicResources) preQueueingHint(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
 	if oldObj != nil && newObj != nil {
 		if oldClaim, ok := oldObj.(*resourceapi.ResourceClaim); ok {
 			if newClaim, ok := newObj.(*resourceapi.ResourceClaim); ok {
-				// Deallocation frees resources that may make other pods schedulable.
+				// 取消分配释放了资源，可能让其他 Pod 变为可调度。
 				if oldClaim.Status.Allocation != nil && newClaim.Status.Allocation == nil {
 					return fwk.PreQueueingHintResult{AllPods: true}, nil
 				}
@@ -345,7 +325,7 @@ func (pl *DynamicResources) preQueueingHint(logger klog.Logger, oldObj, newObj i
 		}
 	}
 
-	// Deletion of an allocated claim frees resources that may make other pods schedulable.
+	// 删除已分配的 claim 同样释放资源，可能让其他 Pod 可调度。
 	if newObj == nil && oldObj != nil {
 		if oldClaim, ok := oldObj.(*resourceapi.ResourceClaim); ok {
 			if oldClaim.Status.Allocation != nil {
@@ -375,19 +355,14 @@ func (pl *DynamicResources) preQueueingHint(logger klog.Logger, oldObj, newObj i
 	return fwk.PreQueueingHintResult{Pods: pods}, nil
 }
 
-// isSchedulableAfterClaimChange is invoked for add and update claim events reported by
-// an informer. It checks whether that change made a previously unschedulable
-// pod schedulable. It errs on the side of letting a pod scheduling attempt
-// happen.
+// isSchedulableAfterClaimChange 在 informer 报告 ResourceClaim 新增/更新事件时调用，
+// 判断该变化是否让之前不可调度的 Pod 变为可调度。判断不准时宁可让 Pod 重试一次。
 func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	if newObj == nil {
 		if _, ok := (oldObj).(cache.DeletedFinalStateUnknown); ok {
-			// Normally we should have seen an update event where the allocation got removed.
-			// In that case, the deleted object will have no allocation and we could skip queuing. However,
-			// here we are told that the final state of the deleted ResourceClaim is unknown, so
-			// the content of the ResourceClaim is unknown. It might not even be available at all.
-			// We could have missed the updates which add and remove the allocation, so play it safe
-			// and check pending pods.
+			// 正常情况下应先收到移除分配的更新事件，此时被删对象没有分配，可以跳过入队。
+			// 但这里明确告知被删 ResourceClaim 的最终状态未知，内容无从得知，甚至可能根本取不到。
+			// 我们可能漏掉了添加和移除分配的更新事件，保守起见检查等待中的 Pod。
 			logger.V(6).Info("claim with structured parameters got deleted, final state unknown")
 			return fwk.Queue, nil
 		}
@@ -395,27 +370,23 @@ func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, po
 
 	originalClaim, modifiedClaim, err := schedutil.As[*resourceapi.ResourceClaim](oldObj, newObj)
 	if err != nil {
-		// Shouldn't happen.
+		// 理论上不会发生。
 		return fwk.Queue, fmt.Errorf("unexpected object in isSchedulableAfterClaimChange: %w", err)
 	}
 
 	if modifiedClaim == nil {
-		// ResourceClaim deleted, final state is known (checked above)
-		// In this case we expect the allocation to be nil, but checking is cheap,
-		// so let's make sure.
+		// ResourceClaim 被删除且最终状态已知（上面已确认）。
+		// 此时预期分配为 nil，但检查代价很低，还是确认一下。
 		//
-		// Note that this relies on not missing the "allocation removed" update event.
-		// With normal informers, that could be missed because "allocation added"
-		// and "allocation removed" could be joined into a single update event
-		// which then looks like an unrelated change (allocation nil before and after).
-		// But we use an assume cache and should be the only entity which adds
-		// the allocation, so we are guaranteed to not miss the "allocation added"
-		// event and thus will also see the "allocation removed".
+		// 这依赖于不漏掉「分配被移除」的更新事件。普通 informer 可能把
+		// 「添加分配」和「移除分配」合并为一次更新，前后看起来分配都是 nil，
+		// 就像一次无关变更。但我们用的是 assume cache，且自己是唯一添加分配的实体，
+		// 因此不会漏掉「添加分配」事件，也就一定能看到「移除分配」。
 		if originalClaim.Status.Allocation == nil {
 			logger.V(6).Info("claim with structured parameters got deleted, had no allocation")
 			return fwk.QueueSkip, nil
 		}
-		// This is unusual and should not happen in practice.
+		// 这种情况很反常，实际不应发生。
 		logger.V(6).Info("claim with structured parameters got deleted, had an allocation")
 		return fwk.Queue, nil
 	}
@@ -426,9 +397,7 @@ func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, po
 			usesClaim = true
 		}
 	}); err != nil {
-		// This is not an unexpected error: we know that
-		// foreachPodResourceClaim only returns errors for "not
-		// schedulable".
+		// 这不是意外错误：foreachPodResourceClaim 只会在 Pod 不可调度时返回错误。
 		if loggerV := logger.V(6); loggerV.Enabled() {
 			owner := metav1.GetControllerOf(modifiedClaim)
 			loggerV.Info("pod is not schedulable after resource claim change", "pod", klog.KObj(pod), "claim", klog.KObj(modifiedClaim), "claimOwner", owner, "reason", err.Error())
@@ -439,14 +408,13 @@ func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, po
 	if originalClaim != nil &&
 		originalClaim.Status.Allocation != nil &&
 		modifiedClaim.Status.Allocation == nil {
-		// A claim with structured parameters was deallocated. This might have made
-		// resources available for other pods.
+		// 带结构化参数的 claim 被取消分配，可能为其他 Pod 释放了资源。
 		logger.V(6).Info("claim with structured parameters got deallocated", "pod", klog.KObj(pod), "claim", klog.KObj(modifiedClaim))
 		return fwk.Queue, nil
 	}
 
 	if !usesClaim {
-		// This was not the claim the pod was waiting for.
+		// 不是 Pod 正在等待的那个 claim。
 		logger.V(6).Info("unrelated claim got modified", "pod", klog.KObj(pod), "claim", klog.KObj(modifiedClaim))
 		return fwk.QueueSkip, nil
 	}
@@ -456,13 +424,11 @@ func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, po
 		return fwk.Queue, nil
 	}
 
-	// Modifications may or may not be relevant. If the entire
-	// status is as before, then something else must have changed
-	// and we don't care. What happens in practice is that the
-	// resource driver adds the finalizer.
+	// 修改不一定与调度有关：若整个 status 与之前相同，变化的只是 Pod 不关心的字段
+	// （实际中通常是资源驱动加了 finalizer）。
 	if apiequality.Semantic.DeepEqual(&originalClaim.Status, &modifiedClaim.Status) {
 		if loggerV := logger.V(7); loggerV.Enabled() {
-			// Log more information.
+			// 详细日志才打印对象差异。
 			loggerV.Info("claim for pod got modified where the pod doesn't care", "pod", klog.KObj(pod), "claim", klog.KObj(modifiedClaim), "diff", diff.Diff(originalClaim, modifiedClaim))
 		} else {
 			logger.V(6).Info("claim for pod got modified where the pod doesn't care", "pod", klog.KObj(pod), "claim", klog.KObj(modifiedClaim))
@@ -474,20 +440,17 @@ func (pl *DynamicResources) isSchedulableAfterClaimChange(logger klog.Logger, po
 	return fwk.Queue, nil
 }
 
-// isSchedulableAfterTargetPodUpdate is invoked for update pod events reported by
-// an informer. It checks whether that change adds the ResourceClaim(s) that the
-// pod has been waiting for.
+// isSchedulableAfterTargetPodUpdate 在 informer 报告 Pod 更新事件时调用，
+// 检查这次更新是否补上了 Pod 一直在等待的 ResourceClaim 名字。
 func (pl *DynamicResources) isSchedulableAfterTargetPodUpdate(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	_, modifiedPod, err := schedutil.As[*v1.Pod](nil, newObj)
 	if err != nil {
-		// Shouldn't happen.
+		// 理论上不会发生。
 		return fwk.Queue, fmt.Errorf("unexpected object in isSchedulableAfterTargetPodUpdate: %w", err)
 	}
 
 	if err := pl.foreachPodResourceClaim(modifiedPod, nil); err != nil {
-		// This is not an unexpected error: we know that
-		// foreachPodResourceClaim only returns errors for "not
-		// schedulable".
+		// 这不是意外错误：foreachPodResourceClaim 只会在 Pod 不可调度时返回错误。
 		logger.V(6).Info("pod is not schedulable after being updated", "pod", klog.KObj(pod))
 		return fwk.QueueSkip, nil
 	}
@@ -496,14 +459,12 @@ func (pl *DynamicResources) isSchedulableAfterTargetPodUpdate(logger klog.Logger
 	return fwk.Queue, nil
 }
 
-// podResourceClaims returns the ResourceClaims for all pod.Spec.PodResourceClaims.
+// podResourceClaims 返回 pod.Spec.ResourceClaims 引用的所有 ResourceClaim。
 func (pl *DynamicResources) podResourceClaims(pod *v1.Pod) ([]*resourceapi.ResourceClaim, error) {
 	claims := make([]*resourceapi.ResourceClaim, 0, len(pod.Spec.ResourceClaims))
 	if err := pl.foreachPodResourceClaim(pod, func(_ string, claim *resourceapi.ResourceClaim) {
-		// We store the pointer as returned by the lister. The
-		// assumption is that if a claim gets modified while our code
-		// runs, the cache will store a new pointer, not mutate the
-		// existing object that we point to here.
+		// 直接保存 lister 返回的指针。假设代码执行期间 claim 被修改时，
+		// 缓存会换成新指针，而不会原地改掉我们手里这个对象。
 		claims = append(claims, claim)
 	}); err != nil {
 		return nil, err
@@ -511,9 +472,8 @@ func (pl *DynamicResources) podResourceClaims(pod *v1.Pod) ([]*resourceapi.Resou
 	return claims, nil
 }
 
-// podResourceClaimBindings returns a list of references to objects to which
-// each of the Pod's claims should be bound, as recorded in ResourceClaims'
-// Status.ReservedFor. References are either to the Pod itself or its PodGroup.
+// podResourceClaimBindings 返回每个 Pod claim 应绑定到的对象引用列表
+// （对应 ResourceClaim 的 Status.ReservedFor），引用对象要么是 Pod 自身，要么是其 PodGroup。
 func (pl *DynamicResources) podResourceClaimBindings(pod *v1.Pod) ([]resourceapi.ResourceClaimConsumerReference, error) {
 	if !pl.fts.EnableDRAWorkloadResourceClaims {
 		return nil, nil
@@ -534,17 +494,16 @@ func (pl *DynamicResources) podResourceClaimBindings(pod *v1.Pod) ([]resourceapi
 	return bindings, nil
 }
 
-// foreachPodResourceClaim checks that each ResourceClaim for the pod exists.
-// It calls an optional handler for those claims that it finds.
+// foreachPodResourceClaim 检查 Pod 引用的每个 ResourceClaim 都存在，
+// 并对找到的 claim 调用可选回调 cb。
 func (pl *DynamicResources) foreachPodResourceClaim(pod *v1.Pod, cb func(podResourceName string, claim *resourceapi.ResourceClaim)) error {
 	for _, resource := range pod.Spec.ResourceClaims {
 		claimName, mustCheckOwner, err := resourceclaim.Name(pod, &resource)
 		if err != nil {
 			return err
 		}
-		// The claim name might be nil if no underlying resource claim
-		// was generated for the referenced claim. There are valid use
-		// cases when this might happen, so we simply skip it.
+		// 被引用的 claim 可能还没有生成对应的底层 ResourceClaim，此时名字为 nil。
+		// 这是合法的使用场景，直接跳过。
 		if claimName == nil {
 			continue
 		}
@@ -569,9 +528,8 @@ func (pl *DynamicResources) foreachPodResourceClaim(pod *v1.Pod, cb func(podReso
 	return nil
 }
 
-// PreFilter invoked at the prefilter extension point to check if pod has all
-// immediate claims bound. UnschedulableAndUnresolvable is returned if
-// the pod cannot be scheduled at the moment on any node.
+// PreFilter 在 prefilter 扩展点调用，检查 Pod 所需的所有 immediate claim 是否已绑定。
+// 若 Pod 当前在任何节点上都无法调度，返回 UnschedulableAndUnresolvable。
 func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if pl.fts.EnableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -581,10 +539,8 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 	}
 	logger := klog.FromContext(ctx)
 
-	// If the pod does not reference any claim, we don't need to do
-	// anything for it. We just initialize an empty state to record that
-	// observation for the other functions. This gets updated below
-	// if we get that far.
+	// 先初始化一个空状态：即使 Pod 不引用任何 claim，也要让后续阶段知道这一点。
+	// 若确有需要处理的 claim，下面的流程会继续填充它。
 	s := &stateData{
 		nodeAllocations: make(map[string]nodeAllocation),
 	}
@@ -594,7 +550,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 	if err != nil {
 		return nil, statusError(logger, err)
 	}
-	// If podGroupState exists add pod's state to it, so it can be use in PodGroupPostFilter.
+	// 存在 PodGroup 状态时挂上本 Pod 的状态，供 PodGroupPostFilter 使用。
 	if podGroupState != nil {
 		if podGroupState.podsStateData == nil {
 			podGroupState.podsStateData = make(map[types.NamespacedName]*stateData)
@@ -617,19 +573,19 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 	}
 	claims := newClaimStore(userClaims, extendedResourceClaim, claimBindings)
 
-	// This check covers user and extended ResourceClaim.
+	// 该检查同时覆盖用户 claim 和扩展资源 claim。
 	if claims.empty() {
 		return nil, fwk.NewStatus(fwk.Skip)
 	}
 
-	// Counts all claims which the scheduler needs to allocate itself.
+	// 统计需要调度器自己分配的 claim 数量。
 	numClaimsToAllocate := 0
 	s.informationsForClaim = make([]informationForClaim, claims.len())
 	for index, claim := range claims.all() {
 		if claim.Status.Allocation != nil &&
 			!resourceclaim.CanBeReserved(claim) &&
 			!resourceclaim.IsReservedForPod(pod, claim, pl.fts.EnableDRAWorkloadResourceClaims) {
-			// Resource is in use. The pod has to wait.
+			// 资源已被占用，Pod 只能等待。
 			return nil, statusUnschedulable(logger, "resourceclaim in use", "pod", klog.KObj(pod), "resourceclaim", klog.KObj(claim))
 		}
 
@@ -642,25 +598,17 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 		} else {
 			numClaimsToAllocate++
 
-			// Gang scheduling works by waiting for all Pods in a gang to
-			// succeed through the Reserve phase, then binding all of the Pods.
-			// Since a claim's allocation is not recorded in [stateData.claims]
-			// until PreBind, we look for a pending allocation made in Reserve
-			// here to avoid blocking this Pod on waiting for the allocation to
-			// complete.
+			// Gang 调度的做法是等 gang 中所有 Pod 都通过 Reserve，再一起绑定。
+			// 由于 claim 的分配直到 PreBind 才写入 [stateData.claims]，这里查找
+			// Reserve 阶段创建的 pending 分配，避免当前 Pod 卡在等待分配完成上。
 			//
-			// Claims with pending allocations are considered "unallocated" in
-			// that the claim's Status.Allocation needs to be populated. Claims
-			// with pending allocations are not input to the allocator, though
-			// we numClaimsToAllocate increment to create an allocator anyway to
-			// signal that some claims need their status updated in PreBind.
+			// 有 pending 分配的 claim 仍视为「未分配」，因为其 Status.Allocation 尚待填充。
+			// 这类 claim 不会作为分配器的输入，但仍会增加 numClaimsToAllocate 以创建分配器，
+			// 表示有 claim 需要在 PreBind 更新 status。
 			//
-			// Currently, sharing is limited to a single PodGroup scheduling
-			// cycle. Ungrouped Pods and Pods across different PodGroup
-			// scheduling cycles cannot share claims with pending allocations
-			// for now to limit potential impact outside of the alpha
-			// GenericWorkload feature gate. Sharing claims this way more
-			// broadly may have benefits:
+			// 目前共享仅限于同一个 PodGroup 调度周期。为控制 alpha 阶段 GenericWorkload
+			// feature gate 之外的影响，未分组的 Pod 以及跨 PodGroup 周期的 Pod 暂不能共享
+			// pending 分配的 claim。更广泛地共享这类 claim 可能有益：
 			// https://github.com/kubernetes/kubernetes/issues/137932
 			if podGroupState != nil && podGroupState.pendingAllocations[claim.UID] != nil {
 				if pendingAllocation := pl.draManager.ResourceClaims().GetPendingAllocation(claim.UID); pendingAllocation != nil {
@@ -675,31 +623,22 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 				}
 			}
 
-			// Allocation in flight? Better wait for that
-			// to finish, see inFlightAllocations
-			// documentation for details.
+			// 分配正在进行中时最好等它完成，详见 inFlightAllocations 的说明。
 			if pl.draManager.ResourceClaims().GetPendingAllocation(claim.UID) != nil {
 				return nil, statusUnschedulable(logger, fmt.Sprintf("resource claim %s is in the process of being allocated", klog.KObj(claim)))
 			}
 
-			// Continue without validating the special claim for extended resource backed by DRA.
-			// For the claim template, it is not allocated yet at this point, and it does not have a spec.
-			// For the claim from prior scheduling cycle, leave it to Filter Phase to validate.
+			// DRA 扩展资源的特殊 claim 不在这里校验：claim 模板此时还没分配也没有 spec；
+			// 上个调度周期留下的 claim 则留到 Filter 阶段校验。
 			if claim == extendedResourceClaim {
 				continue
 			}
 
-			// Check all requests and device classes. If a class
-			// does not exist, scheduling cannot proceed, no matter
-			// how the claim is being allocated.
-			//
-			// When using a control plane controller, a class might
-			// have a node filter. This is useful for trimming the
-			// initial set of potential nodes before we ask the
-			// driver(s) for information about the specific pod.
+			// 检查所有请求及其设备类：类不存在时无论 claim 如何分配都无法继续调度。
+			// 使用控制面 controller 时，设备类可能带节点过滤器，可在向驱动询问之前
+			// 先缩小候选节点范围。
 			for _, request := range claim.Spec.Devices.Requests {
-				// The requirements differ depending on whether the request has a list of
-				// alternative subrequests defined in the firstAvailable field.
+				// firstAvailable 中是否定义备选子请求，决定了校验方式。
 				switch {
 				case request.Exactly != nil:
 					if status := pl.validateDeviceClass(logger, request.Exactly.DeviceClassName, request.Name); status != nil {
@@ -722,17 +661,15 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 		}
 	}
 
-	// Pre-compute whether each claim has a node-allocatable mapped device.
-	// This is stored in CycleState and used during the Filter phase to determine
-	// whether a pod is sharing a direct mapped claim from another pod.
+	// 预先算出每个 claim 是否分配了节点可分配资源的映射设备。
+	// 结果存入 CycleState，Filter 阶段据此判断 Pod 是否在共享另一个 Pod 的直接映射 claim。
 	if pl.fts.EnableDRANodeAllocatableResources {
 		s.claimHasNodeAllocatableMappedDevice = make(map[types.UID]bool)
 		for index, claim := range claims.all() {
 			allocation := claim.Status.Allocation
 			if allocation == nil {
-				// If the claim is not yet committed to the API server (no claim.Status.Allocation),
-				// we must check if there is a pending allocation from a previous pod in this
-				// scheduling cycle.
+				// claim 尚未提交到 API server（没有 Status.Allocation）时，
+				// 要检查本调度周期内前一个 Pod 留下的 pending 分配。
 				allocation = s.informationsForClaim[index].allocation
 			}
 			if allocation != nil {
@@ -765,21 +702,14 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 			loggerV.Info("Preparing allocation with structured parameters", "pod", klog.KObj(pod), "resourceclaims", klog.KObjSlice(claimsToAllocate))
 		}
 
-		// Doing this over and over again for each pod could be avoided
-		// by setting the allocator up once and then keeping it up-to-date
-		// as changes are observed.
+		// 本可以只构建一次分配器，随后随变化增量更新，避免每个 Pod 都重复构建。
+		// 但那样会让插件难以在 Cluster Autoscaler 中使用。如果这里开销变大，
+		// 就得考虑更持久地维护和更新状态。
 		//
-		// But that would cause problems for using the plugin in the
-		// Cluster Autoscaler. If this step here turns out to be
-		// expensive, we may have to maintain and update state more
-		// persistently.
+		// claim（及其设备）只要进入 assume cache 或分配正在进行就算「已分配」。
+		// 过滤阶段这个集合不变，因此只需确定一次。
 		//
-		// Claims (and thus their devices) are treated as "allocated" if they are in the assume cache
-		// or currently their allocation is in-flight. This does not change
-		// during filtering, so we can determine that once.
-		//
-		// This might have to be retried in the unlikely case that some concurrent modification made
-		// the result invalid.
+		// 万一并发修改让结果失效（极少见），这里会重试。
 		var allocatedState *structured.AllocatedState
 		err = wait.PollUntilContextTimeout(ctx, time.Microsecond, 5*time.Second, true /* immediate */, func(context.Context) (bool, error) {
 			if pl.fts.EnableDRAConsumableCapacity {
@@ -794,7 +724,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 				if allocatedState == nil {
 					return false, errors.New("nil allocated state")
 				}
-				// Done.
+				// 完成。
 				return true, nil
 			} else {
 				allocatedDevices, err := pl.draManager.ResourceClaims().ListAllAllocatedDevices()
@@ -810,7 +740,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 					AllocatedSharedDeviceIDs: sets.New[structured.SharedDeviceID](),
 					AggregatedCapacity:       structured.NewConsumedCapacityCollection(),
 				}
-				// Done.
+				// 完成。
 				return true, nil
 			}
 		})
@@ -832,6 +762,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 	return nil, nil
 }
 
+// AllocatorFeatures 把调度器的 feature gate 集合映射为结构化分配器所需的特性集合。
 func AllocatorFeatures(fts feature.Features) structured.Features {
 	return structured.Features{
 		AdminAccess:             fts.EnableDRAAdminAccess,
@@ -848,6 +779,7 @@ func AllocatorFeatures(fts feature.Features) structured.Features {
 	}
 }
 
+// validateDeviceClass 校验请求引用的设备类存在；类不存在时返回不可调度状态。
 func (pl *DynamicResources) validateDeviceClass(logger klog.Logger, deviceClassName, requestName string) *fwk.Status {
 	if deviceClassName == "" {
 		return statusError(logger, fmt.Errorf("request %s: unsupported request type", requestName))
@@ -855,21 +787,21 @@ func (pl *DynamicResources) validateDeviceClass(logger klog.Logger, deviceClassN
 
 	_, err := pl.draManager.DeviceClasses().Get(deviceClassName)
 	if err != nil {
-		// If the class cannot be retrieved, allocation cannot proceed.
+		// 取不到类就无法继续分配。
 		if apierrors.IsNotFound(err) {
-			// Here we mark the pod as "unschedulable", so it'll sleep in
-			// the unscheduleable queue until a DeviceClass event occurs.
+			// 标记为不可调度，Pod 会留在不可调度队列中，直到收到 DeviceClass 事件。
 			return statusUnschedulable(logger, fmt.Sprintf("request %s: device class %s does not exist", requestName, deviceClassName))
 		}
 	}
 	return nil
 }
 
-// PreFilterExtensions returns prefilter extensions, pod add and remove.
+// PreFilterExtensions 返回 nil：本插件不需要 Pod 增删时的增量更新。
 func (pl *DynamicResources) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
+// getStateData 从 CycleState 读取 PreFilter 写入的动态资源状态。
 func getStateData(cs fwk.CycleState) (*stateData, error) {
 	state, err := cs.Read(stateKey)
 	if err != nil {
@@ -882,6 +814,7 @@ func getStateData(cs fwk.CycleState) (*stateData, error) {
 	return s, nil
 }
 
+// getPodGroupStateDataFromPodGroupCycleState 从 PodGroup 的 CycleState 读取动态资源状态。
 func getPodGroupStateDataFromPodGroupCycleState(pgState fwk.PodGroupCycleState) (*podGroupStateData, error) {
 	if pgState == nil {
 		return nil, nil
@@ -897,21 +830,21 @@ func getPodGroupStateDataFromPodGroupCycleState(pgState fwk.PodGroupCycleState) 
 	return s, nil
 }
 
+// getPodGroupStateData 从 Pod 的 CycleState 取关联的 PodGroup 动态资源状态。
+// GenericWorkload 特性关闭、Pod 不属于任何 PodGroup、或 PodGroup 处于异步绑定阶段时返回 nil。
 func getPodGroupStateData(cs fwk.CycleState) (*podGroupStateData, error) {
-	// This is nil if the GenericWorkload feature is disabled, the Pod does not
-	// belong to a PodGroup, or the PodGroup is in the asynchronous binding phase.
 	podGroupCycleState := cs.GetPodGroupSchedulingCycle()
 	return getPodGroupStateDataFromPodGroupCycleState(podGroupCycleState)
 }
 
+// getOrCreatePodGroupStateData 读取 PodGroup 动态资源状态，不存在时创建并写入空状态。
 func getOrCreatePodGroupStateData(cs fwk.CycleState) (*podGroupStateData, error) {
 	podGroupState, err := getPodGroupStateData(cs)
 	if errors.Is(err, fwk.ErrNotFound) {
 		podGroupCycleState := cs.GetPodGroupSchedulingCycle()
 		if podGroupCycleState == nil {
-			// This should never happen since [getPodGroupStateData] only returns
-			// [fwk.ErrNotFound] after [fwk.CycleState.GetPodGroupSchedulingCycle]
-			// already returns non-nil.
+			// 理论上不会发生：[getPodGroupStateData] 只有在
+			// [fwk.CycleState.GetPodGroupSchedulingCycle] 返回非空后才会报 ErrNotFound。
 			return nil, err
 		}
 		podGroupState := &podGroupStateData{
@@ -924,15 +857,10 @@ func getOrCreatePodGroupStateData(cs fwk.CycleState) (*podGroupStateData, error)
 	return podGroupState, err
 }
 
-// Filter invoked at the filter extension point.
-// It evaluates if a pod can fit due to the resources it requests,
-// for both allocated and unallocated claims.
-//
-// For claims that are bound, then it checks that the node affinity is
-// satisfied by the given node.
-//
-// For claims that are unbound, it checks whether the claim might get allocated
-// for the node.
+// Filter 在 filter 扩展点调用，判断 Pod 请求的资源（无论 claim 已分配还是未分配）
+// 能否放到节点上。
+// 对已绑定的 claim，检查节点是否满足其节点亲和性；
+// 对未绑定的 claim，检查它是否有可能在该节点上被分配。
 func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if pl.fts.EnableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil
@@ -963,8 +891,7 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 	if status != nil {
 		return status
 	}
-	// The pod has no user claim, it may have extended resource claim that is satisfied by device plugin.
-	// Then there is nothing left to do for this plugin.
+	// Pod 没有用户 claim；即便有扩展资源 claim，也已由 device plugin 满足，插件无事可做。
 	if nodeExtendedResourceClaim == nil && state.claims.noUserClaim() {
 		return nil
 	}
@@ -973,26 +900,25 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 	for index, claim := range state.claims.all() {
 		logger.V(10).Info("filtering based on resource claims of the pod", "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaim", klog.KObj(claim))
 
-		// This node selector only gets set if the claim is allocated.
+		// 只有 claim 已分配时才会设置该节点选择器。
 		if nodeSelector := state.informationsForClaim[index].availableOnNodes; nodeSelector != nil && !nodeSelector.Match(node) {
 			logger.V(5).Info("allocation's node selector does not match", "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaim", klog.KObj(claim))
 			unavailableClaims = append(unavailableClaims, index)
 			continue
 		}
 
-		// The claim is allocated, check whether it requires DRAOptionalNodeOperations feature on the node.
+		// 已分配的 claim 若需要 DRAOptionalNodeOperations，节点必须声明支持该特性。
 		if allocationResultRequiresDRAOptionalNodeOperations(claim.Status.Allocation) && !slices.Contains(node.Status.DeclaredFeatures, draoptionalnodeoperations.DRAOptionalNodeOperationsFeatureGate) {
 			logger.V(5).Info("allocation's device requires DRAOptionalNodeOperations feature, but node lacks it", "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaim", klog.KObj(claim))
 			unavailableClaims = append(unavailableClaims, index)
 			continue
 		}
 
-		// The claim is allocated, check whether it is ready for binding.
+		// 已分配的 claim 要检查是否就绪可绑定。
+		// 若尚未就绪（ready=false 且无错误）但已超时，或绑定判定失败（err 非空），
+		// PostFilter 应考虑取消该 claim 的分配，以便尝试其他设备。
 		if claim.Status.Allocation != nil && pl.fts.EnableDRADeviceBindingConditions && pl.fts.EnableDRAResourceClaimDeviceStatus {
 			ready, err := pl.isClaimReadyForBinding(claim)
-			// If the claim is not ready yet (ready false, no error) and binding has timed out
-			// or binding has failed (err non-nil), then the scheduler should consider deallocating this
-			// claim in PostFilter to unblock trying other devices.
 			if err != nil {
 				logger.V(5).Info("Claim failed binding conditions check", "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaim", klog.KObj(claim), "err", err)
 				unavailableClaims = append(unavailableClaims, index)
@@ -1002,15 +928,15 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 			}
 		}
 
-		// Check if it's a node-allocatable resource claim that is already allocated.
+		// 检查是否是已分配的节点可分配资源 claim。
 		if pl.fts.EnableDRANodeAllocatableResources {
 			allocation := claim.Status.Allocation
 			if allocation == nil {
-				// Check if there is a pending allocation from a previous pod in this cycle.
+				// 检查本周期前一个 Pod 留下的 pending 分配。
 				allocation = state.informationsForClaim[index].allocation
 			}
 			if allocation == nil {
-				// Not allocated yet, and no pending allocation. Skip.
+				// 既未分配也没有 pending 分配，跳过。
 				continue
 			}
 			status := pl.validateNodeAllocatableDRAClaimSharing(pod, claim, state, podGroupState)
@@ -1019,7 +945,7 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 			}
 		}
 	}
-	// Use allocator to check the node and cache the result in case that the node is picked.
+	// 用分配器检查该节点，并缓存结果以备该节点最终被选中。
 	var allocations []resourceapi.AllocationResult
 	var nodeAllocatableClaimStatus []v1.NodeAllocatableResourceClaimStatus
 	allocationsMap := make(map[types.UID]*resourceapi.AllocationResult)
@@ -1029,21 +955,17 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 			allocCtx = klog.NewContext(allocCtx, klog.LoggerWithValues(logger, "node", klog.KObj(node)))
 		}
 
-		// Apply timeout to the operation?
+		// 特性开启且配置了超时时间时，为分配操作加上超时限制。
 		if pl.fts.EnableDRASchedulerFilterTimeout && pl.filterTimeout > 0 {
 			c, cancel := context.WithTimeout(allocCtx, pl.filterTimeout)
 			defer cancel()
 			allocCtx = c
 		}
 
-		// Check which claims need to be allocated.
-		//
-		// This replaces the special ResourceClaim for extended resources with one
-		// matching the node.
+		// 确定哪些 claim 需要分配，并把扩展资源的特殊 claim 换成与当前节点匹配的那个。
 		claimsToAllocate := make([]*resourceapi.ResourceClaim, 0, state.claims.len())
-		// pendingResult holds pending allocations that were made for a previous
-		// Pod in Reserve, but before that allocation is recorded in the status
-		// by PreBind.
+		// pendingResult 保存前一个 Pod 在 Reserve 阶段创建、但尚未被 PreBind
+		// 写入 status 的 pending 分配。
 		var pendingResult []resourceapi.AllocationResult
 		extendedResourceClaim := state.claims.extendedResourceClaim()
 		for index, claim := range state.claims.toAllocate() {
@@ -1064,42 +986,34 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 		allocationResult, err := state.allocator.Allocate(allocCtx, node, claimsToAllocate)
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
-			// Timeouts are potentially transient. Return Error
-			// so the pod retries via backoff instead of sitting in the
-			// unschedulable queue waiting for a cluster event.
-			//
-			// The timeout might be caused by ResourceSlices for the node,
-			// so including the node name may help with diagnosing the failure.
+			// 超时可能是暂时的，返回 Error 让 Pod 走退避重试，
+			// 而不是留在不可调度队列里等集群事件。
+			// 超时可能由该节点的 ResourceSlice 引起，带上节点名便于排查。
 			return statusError(logger, fmt.Errorf("node %s: timed out trying to allocate devices", node.Name), "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaims", klog.KObjSlice(claimsToAllocate))
 		case errors.Is(err, structured.ErrFailedAllocationOnNode):
-			// Not a fatal error, allocation on other nodes may proceed.
-			// The error is only surfaced if allocation fails on all nodes.
+			// 非致命错误：其他节点仍可能分配成功，只有所有节点都失败时才对外报错。
 			return statusUnschedulable(logger, err.Error(), "pod", klog.KObj(pod), "node", klog.KObj(node))
 		case ctx.Err() != nil:
 			return statusUnschedulable(logger, fmt.Sprintf("asked by caller to stop allocating devices: %v", context.Cause(ctx)), "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaims", klog.KObjSlice(claimsToAllocate))
 		case err != nil:
-			// This should only fail if there is something wrong with the claim or class.
-			// Return an error to abort scheduling of it.
+			// 这种错误只应来自 claim 或设备类本身有问题，返回 Error 中止调度。
 			//
-			// This will cause retries. It would be slightly nicer to mark it as unschedulable
-			// *and* abort scheduling. Then only cluster event for updating the claim or class
-			// with the broken CEL expression would trigger rescheduling.
-			//
-			// But we cannot do both. As this shouldn't occur often, aborting like this is
-			// better than the more complicated alternative (return Unschedulable here, remember
-			// the error, then later raise it again later if needed).
+			// 这会触发重试。理想情况是既标记不可调度又中止调度，这样只有
+			// CEL 表达式有问题的 claim/类被更新时才重新调度。但两者不可兼得；
+			// 由于这种错误不该常见，直接中止比「先返回不可调度、记住错误、
+			// 之后再择机抛出」的复杂方案更好。
 			return statusError(logger, err, "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaims", klog.KObjSlice(claimsToAllocate))
 		}
-		// Check for exact length just to be sure. In practice this is all-or-nothing.
+		// 保险起见确认长度一致；实际上分配是全有或全无的。
 		if len(allocationResult) != len(claimsToAllocate) {
 			return statusUnschedulable(logger, "cannot allocate all claims", "pod", klog.KObj(pod), "node", klog.KObj(node), "resourceclaims", klog.KObjSlice(claimsToAllocate))
 		}
 
-		// Reserve uses this information.
+		// Reserve 阶段会用到这些信息。
 		allocations = append(allocationResult, pendingResult...)
 
-		// allocations contains allocationResult followed by pendingResult.
-		// The first len(claimsToAllocate) elements match claimsToAllocate.
+		// allocations 由 allocationResult 后接 pendingResult 组成，
+		// 前 len(claimsToAllocate) 个元素与 claimsToAllocate 一一对应。
 		for i, claim := range claimsToAllocate {
 			allocationsMap[claim.UID] = &allocations[i]
 		}
@@ -1113,15 +1027,14 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 		}
 	}
 
-	// Store information in state while holding the mutex.
+	// 写状态前持锁：Filter 是并行执行的，这些字段会被并发访问。
 	if state.allocator != nil || len(unavailableClaims) > 0 || len(nodeAllocatableClaimStatus) > 0 {
 		state.mutex.Lock()
 		defer state.mutex.Unlock()
 	}
 
 	if len(unavailableClaims) > 0 {
-		// Remember all unavailable claims. This might be observed
-		// concurrently, so we have to lock the state before writing.
+		// 记录所有不可用的 claim，供 PostFilter 使用；写前必须持锁。
 
 		if state.unavailableClaims == nil {
 			state.unavailableClaims = sets.New[int]()
@@ -1146,10 +1059,8 @@ func (pl *DynamicResources) Filter(ctx context.Context, cs fwk.CycleState, pod *
 	return nil
 }
 
-// PostFilter checks whether there are allocated claims that could get
-// deallocated to help get the Pod schedulable. If yes, it picks one and
-// requests its deallocation. This only gets called when filtering found no
-// suitable node.
+// PostFilter 检查是否有已分配的 claim 可以取消分配，从而让 Pod 变得可调度。
+// 若有则选一个请求取消。仅在过滤阶段找不到合适节点时才会调用。
 func (pl *DynamicResources) PostFilter(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, _ fwk.NodeToStatusReader) (*fwk.PostFilterResult, *fwk.Status) {
 	logger := klog.FromContext(ctx)
 	if !pl.enabled {
@@ -1164,8 +1075,7 @@ func (pl *DynamicResources) PostFilter(ctx context.Context, cs fwk.CycleState, p
 	if err != nil {
 		return nil, statusError(logger, err)
 	}
-	// If a Pod doesn't have any resource claims attached to it, there is no need for further processing.
-	// Thus we provide a fast path for this case to avoid unnecessary computations.
+	// Pod 没有任何 resource claim 时无需进一步处理，走快速路径省掉无用计算。
 	if state.claims.empty() {
 		logger.V(5).Info("No new claims to deallocate", "pod", klog.KObj(pod))
 		return nil, fwk.NewStatus(fwk.Unschedulable)
@@ -1175,12 +1085,13 @@ func (pl *DynamicResources) PostFilter(ctx context.Context, cs fwk.CycleState, p
 	return nil, status
 }
 
+// deallocateOrDeletePodClaims 尝试取消或删除 Pod 的一个不可用 claim。
+// 返回值的 bool 表示是否对 claim 做了处理。
 func (pl *DynamicResources) deallocateOrDeletePodClaims(ctx context.Context, pod *v1.Pod, state *stateData) (bool, *fwk.Status) {
 	logger := klog.FromContext(ctx)
 
 	extendedResourceClaim := state.claims.extendedResourceClaim()
-	// Iterating over a map is random. This is intentional here, we want to
-	// pick one claim randomly because there is no better heuristic.
+	// 遍历 map 的顺序是随机的，这里正是想要的：没有更好的启发式，就随机挑一个 claim。
 	for index := range state.unavailableClaims {
 		claim := state.claims.get(index)
 		if claim == extendedResourceClaim {
@@ -1205,8 +1116,7 @@ func (pl *DynamicResources) deallocateOrDeletePodClaims(ctx context.Context, pod
 	}
 
 	if extendedResourceClaim != nil && !isSpecialClaimName(extendedResourceClaim.Name) {
-		// If the special resource claim for extended resource backed by DRA
-		// is reserved or allocated at prior scheduling cycle, then it should be deleted.
+		// DRA 扩展资源的特殊 claim 若在上个调度周期已被预留或分配，就应删除。
 		extendedResourceClaim := extendedResourceClaim.DeepCopy()
 		if err := pl.deleteClaim(ctx, extendedResourceClaim); err != nil {
 			return true, statusError(logger, err)
@@ -1217,9 +1127,8 @@ func (pl *DynamicResources) deallocateOrDeletePodClaims(ctx context.Context, pod
 	return false, fwk.NewStatus(fwk.Unschedulable)
 }
 
-// PodGroupPostFilter checks whether there are allocated claims that could get
-// deallocated/deleted/unreserved to help get the PodGroup schedulable.
-// This only gets called when pod group cycle could not find a placement for PodGroup.
+// PodGroupPostFilter 检查是否有已分配的 claim 可以取消分配/删除/解除预留，
+// 从而让 PodGroup 变得可调度。仅在 PodGroup 调度周期找不到放置位置时才调用。
 func (pl *DynamicResources) PodGroupPostFilter(
 	ctx context.Context,
 	state fwk.PodGroupCycleState,
@@ -1248,8 +1157,8 @@ func (pl *DynamicResources) PodGroupPostFilter(
 	}
 
 	unreservePodGroup := false
-	// 1. Process pod-level claims deallocations/deletions.
-	// This mimics running PostFilter for each of the pods in pod group.
+	// 1. 先处理 Pod 级别 claim 的取消分配/删除，
+	// 相当于对 PodGroup 中每个 Pod 分别执行 PostFilter。
 	if podGroupState != nil && len(podGroupState.podsStateData) > 0 {
 		for _, pod := range pgInfo.GetUnscheduledPods() {
 			podState := podGroupState.podsStateData[types.NamespacedName{Namespace: pod.GetNamespace(), Name: pod.GetName()}]
@@ -1261,20 +1170,18 @@ func (pl *DynamicResources) PodGroupPostFilter(
 				return nil, status
 			}
 			if !foundClaim {
-				// If we make it here we know that not all pods of the PodGroup could be scheduled.
+				// 走到这里说明 PodGroup 中还有 Pod 没能调度成功。
 				unreservePodGroup = true
 			}
 		}
 	}
 
-	// 2. If at least one pod with claims did not deallocate/delete, try to unreserve PodGroup claims.
+	// 2. 若至少有一个带 claim 的 Pod 没能取消分配/删除，尝试解除 PodGroup claim 的预留。
 	if unreservePodGroup && pl.fts.EnableDRAWorkloadResourceClaims && len(pgInfo.GetUnscheduledPods()) > 0 {
-		// To let the scheduler try to find new devices in case binding the current allocation
-		// failed in some previous cycle, deallocate any PodGroup-scoped claims
-		// unavailable on all nodes and remove the PodGroup from all its claims' status.reservedFor.
-		// Note that more Pods may exist than a PodGroup's minCount, but performing
-		// a cleanup after a previous cycle is safe as long as there are no assumed
-		// nor assigned pods yet.
+		// 若上个周期绑定当前分配失败，为了让调度器尝试寻找新设备：
+		// 取消所有节点上都不可用的 PodGroup 级 claim，并从其 status.reservedFor 中移除 PodGroup。
+		// 注意 Pod 数可能超过 PodGroup 的 minCount；只要还没有 assume 或已分配的 Pod，
+		// 对上个周期做这种清理就是安全的。
 		status := pl.deallocatePodGroupClaims(ctx, podGroupState, pgInfo.GetUnscheduledPods()[0])
 		if status != nil {
 			return nil, status
@@ -1291,22 +1198,17 @@ func (pl *DynamicResources) deallocatePodGroupClaims(ctx context.Context, state 
 
 	logger := klog.FromContext(ctx)
 
-	// The podGroupState lister is based on the live cache and does not consider
-	// pods assumed within the PodGroup scheduling cycle, but the ones that
-	// happened before or outside the scheduling cycle. We use it to check
-	// whether there were no assumed or assigned pods that would use the
-	// ResourceClaim.
+	// PodGroupState lister 基于实时缓存，不包含本轮 PodGroup 调度周期内 assume 的 Pod，
+	// 只反映周期之前或之外发生的情况。这里用它确认没有其他已 assume/已分配的 Pod
+	// 会使用该 ResourceClaim。
 	podGroupState, err := pl.fh.PodGroupManager().PodGroupStates().Get(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 	if err != nil {
 		return statusError(logger, err)
 	}
-	// Since this is part of the synchronous PodGroup scheduling cycle, we
-	// know that if the PodGroup is inactive, then it will stay inactive, so
-	// it is safe to deallocate its claims.
+	// 处于同步 PodGroup 调度周期中：若 PodGroup 当前处于非活跃状态，它在本次周期内
+	// 不会再变活跃，因此可以安全地取消其 claim 的分配。
 	//
-	// If this state is not updated yet and says the PodGroup is active when
-	// it actually isn't, then a future scheduling cycle will eventually
-	// read the updated state and deallocate a claim.
+	// 若状态尚未更新、误显示活跃，后续调度周期最终也会读到更新后的状态并取消分配。
 	if podGroupState.ScheduledPodsCount() > 0 {
 		return nil
 	}
@@ -1315,8 +1217,7 @@ func (pl *DynamicResources) deallocatePodGroupClaims(ctx context.Context, state 
 		return statusError(logger, err)
 	}
 
-	// Iterating over a map is random. This is intentional here, we want to
-	// pick one claim randomly because there is no better heuristic.
+	// 遍历 map 顺序随机，这里正想随机挑一个 claim，因为没有更好的启发式。
 	for _, podState := range state.podsStateData {
 		for index := range podState.unavailableClaims {
 			claim := podState.claims.get(index)
@@ -1360,9 +1261,8 @@ func (pl *DynamicResources) deallocatePodGroupClaims(ctx context.Context, state 
 
 		if claim.Status.Allocation != nil {
 			if resourceclaim.IsReservedForPod(pod, claim, pl.fts.EnableDRAWorkloadResourceClaims) {
-				// Remove PodGroup from ReservedFor. A strategic-merge-patch is used
-				// because that allows removing an individual entry without having
-				// the latest ResourceClaim.
+				// 从 ReservedFor 中移除 PodGroup。用 strategic-merge-patch 是因为它能在
+				// 不持有最新版本 ResourceClaim 的情况下删除单个条目。
 				patch := fmt.Sprintf(`{"metadata": {"uid": %q}, "status": { "reservedFor": [ {"$patch": "delete", "uid": %q} ] }}`,
 					claim.UID,
 					podGroup.UID,
@@ -1370,7 +1270,7 @@ func (pl *DynamicResources) deallocatePodGroupClaims(ctx context.Context, state 
 				logger.V(5).Info("postfilter unreserved claim", "resourceclaim", klog.KObj(claim), "pod", klog.KObj(pod), "podgroup", klog.KObj(podGroup))
 				claim, err := pl.clientset.ResourceV1().ResourceClaims(claim.Namespace).Patch(ctx, claim.Name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}, "status")
 				if err != nil {
-					// We will get here again when pod scheduling is retried.
+					// Pod 重试调度时会再次走到这里。
 					logger.Error(err, "postfilter unreserving claim", "resourceclaim", klog.KObj(claim))
 					continue
 				} else {
@@ -1383,6 +1283,7 @@ func (pl *DynamicResources) deallocatePodGroupClaims(ctx context.Context, state 
 	return nil
 }
 
+// Score 在 score 扩展点调用，按优先备选列表给节点打分。
 func (pl *DynamicResources) Score(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	if !pl.enabled || !pl.fts.EnableDRAPrioritizedList {
 		return 0, nil
@@ -1394,7 +1295,7 @@ func (pl *DynamicResources) Score(ctx context.Context, cs fwk.CycleState, pod *v
 		return 0, statusError(logger, err)
 	}
 
-	// If there are no claims, no need to do anything.
+	// 没有 claim 就无需打分。
 	if state.claims.empty() {
 		return 0, nil
 	}
@@ -1411,21 +1312,19 @@ func (pl *DynamicResources) Score(ctx context.Context, cs fwk.CycleState, pod *v
 	return score, nil
 }
 
+// computeScore 根据各 claim 在该节点上的分配结果计算优先列表得分。
 func computeScore(iterator iter.Seq2[int, *resourceapi.ResourceClaim], allocations nodeAllocation) (int64, error) {
 	var score int64
 	unallocatedIndex := 0
 	for _, claim := range iterator {
-		// Collect the names for all allocated subrequests.
+		// 收集所有已分配子请求的名字。
 		allocatedSubRequests := sets.New[string]()
 
 		var allocation *resourceapi.AllocationResult
-		// The allocation for a claim can be in two places:
-		// 1. For claims allocated in a previous cycle (e.g. PodGroup claims), the allocation
-		//    is already in claim.Status.Allocation.
-		// 2. For claims allocated in this cycle (in Filter), the allocation is in
-		//    allocations.allocationResults.
-		// Since we iterate over all claims, we must check both and maintain a separate index
-		// for claims that needed allocation in this cycle.
+		// claim 的分配结果可能来自两处：
+		// 1. 上个周期分配的（如 PodGroup claim），已在 claim.Status.Allocation 中；
+		// 2. 本周期 Filter 阶段分配的，在 allocations.allocationResults 中。
+		// 这里遍历所有 claim，必须同时检查两处，并为本周期新分配的 claim 单独维护索引。
 		if claim.Status.Allocation != nil {
 			allocation = claim.Status.Allocation
 		} else {
@@ -1469,7 +1368,8 @@ func (pl *DynamicResources) NormalizeScore(ctx context.Context, cs fwk.CycleStat
 	return helper.DefaultNormalizeScore(fwk.MaxNodeScore, false, scores)
 }
 
-// Reserve reserves claims for the pod.
+// Reserve 为 Pod 预留 claim：把 Filter 阶段算出的分配结果标记为 pending，
+// 真正的预留留到绑定阶段落实。
 func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, nodeName string) (status *fwk.Status) {
 	if !pl.enabled {
 		return nil
@@ -1492,12 +1392,9 @@ func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod 
 	numClaimsWithAllocator := 0
 	for _, claim := range state.claims.all() {
 		if claim.Status.Allocation != nil {
-			// Allocated, but perhaps not reserved yet. We checked in PreFilter that
-			// the pod could reserve the claim. Instead of reserving here by
-			// updating the ResourceClaim status, we assume that reserving
-			// will work and only do it for real during binding. If it fails at
-			// that time, some other pod was faster and we have to try again.
-
+			// 已分配但可能尚未预留。PreFilter 已确认本 Pod 可以预留该 claim。
+			// 这里不真的更新 ResourceClaim status 做预留，而是假定预留会成功，
+			// 到绑定阶段才落实；若届时失败，说明被别的 Pod 抢先，重新调度即可。
 			continue
 		}
 
@@ -1505,7 +1402,7 @@ func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod 
 	}
 
 	if numClaimsWithAllocator == 0 {
-		// Nothing left to do.
+		// 无需分配任何 claim。
 		return nil
 	}
 	extendedResourceClaim := state.claims.extendedResourceClaim()
@@ -1518,23 +1415,22 @@ func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod 
 		}
 	}
 
-	// Prepare allocation of claims handled by the schedulder.
+	// 准备调度器负责处理的 claim 的分配结果。
 	if state.allocator != nil {
-		// Entries in these two slices match each other.
+		// 该节点的分配结果与待分配 claim 一一对应。
 		allocations, ok := state.nodeAllocations[nodeName]
 		if !ok || len(allocations.allocationResults) == 0 {
-			// This can happen only when claimsToAllocate has a single special claim template for extended resource backed by DRA,
-			// But it is satisfied by the node with device plugin, hence no DRA allocation.
+			// 只有待分配项仅为 DRA 扩展资源的特殊 claim 模板、而该资源由节点上的
+			// device plugin 满足时才会走到这里（此时没有 DRA 分配）。
 			if !needToAllocateUserClaims {
 				return nil
 			}
 
-			// We checked before that the node is suitable. This shouldn't have failed,
-			// so treat this as an error.
+			// 前面已检查该节点可用，到这里却没有分配结果，属于内部错误。
 			return statusError(logger, errors.New("claim allocation not found for node"))
 		}
 
-		// Sanity check: do we have results for all pending claims?
+		// 完整性检查：每个 pending claim 都有对应结果？
 		if len(allocations.allocationResults) != numClaimsToAllocate ||
 			len(allocations.allocationResults) != numClaimsWithAllocator {
 			return statusError(logger, fmt.Errorf("internal error, have %d allocations, %d claims to allocate, want %d claims", len(allocations.allocationResults), numClaimsToAllocate, numClaimsWithAllocator))
@@ -1542,20 +1438,16 @@ func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod 
 
 		allocIndex := 0
 		for index, claim := range state.claims.toAllocate() {
-			// The index returned is the original index in the underlying claim store, it
-			// may not be sequentially numbered (e.g. 0, 1, 2 ...).
+			// 返回的 index 是底层 claim store 中的原始下标，可能并不连续。
 			allocation := &allocations.allocationResults[allocIndex]
 			state.informationsForClaim[index].allocation = allocation
 
 			if claim == extendedResourceClaim {
-				// replace the special claim template for extended
-				// resource backed by DRA with the real instantiated claim.
+				// 把 DRA 扩展资源的特殊 claim 模板替换成真正实例化的 claim。
 				claim = allocations.extendedResourceClaim
 			}
 
-			// Strictly speaking, we don't need to store the full modified object.
-			// The allocation would be enough. The full object is useful for
-			// debugging, testing and the allocator, so let's make it realistic.
+			// 严格来说只需要存分配结果就够，但保存完整对象更便于调试、测试和分配器使用。
 			claim = claim.DeepCopy()
 			if !slices.Contains(claim.Finalizers, resourceapi.Finalizer) {
 				claim.Finalizers = append(claim.Finalizers, resourceapi.Finalizer)
@@ -1580,8 +1472,8 @@ func (pl *DynamicResources) Reserve(ctx context.Context, cs fwk.CycleState, pod 
 	return nil
 }
 
-// Unreserve clears the ReservedFor field for all claims.
-// It's idempotent, and does nothing if no state found for the given pod.
+// Unreserve 清除所有 claim 的 ReservedFor 字段。
+// 该操作幂等：找不到给定 Pod 的状态时什么都不做。
 func (pl *DynamicResources) Unreserve(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, nodeName string) {
 	if !pl.enabled {
 		return
@@ -1600,32 +1492,26 @@ func (pl *DynamicResources) Unreserve(ctx context.Context, cs fwk.CycleState, po
 
 	logger := klog.FromContext(ctx)
 
-	// we process user claims here first, extendedResourceClaim if any is handled below.
+	// 先处理用户 claim，扩展资源 claim 如有则在后面处理。
 	for _, claim := range state.claims.allUserClaims() {
-		// If allocation was in-flight, then it might not be anymore if no pods
-		// still need the pending allocation. If the allocation was removed from
-		// in-flight, we need to revert the claim object in the assume cache to
-		// what it was before. The allocation is not removed until the last Pod
-		// sharing it is Bound or Unreserved.
+		// 分配处于 in-flight 时，若已无 Pod 需要这个 pending 分配，就可以撤销。
+		// 撤销后需要把 assume cache 中的 claim 对象恢复原状。
+		// 只有共享该分配的最后一个 Pod 完成 Bound 或 Unreserve 后，分配才会被移除。
 		if deleted := pl.draManager.ResourceClaims().MaybeRemoveClaimPendingAllocation(claim.UID, false); deleted {
 			logger.V(5).Info("Released resource in allocation result", "claim", klog.KObj(claim), "uid", claim.UID, "resourceVersion", claim.ResourceVersion, "allocation", klog.Format(claim.Status.Allocation))
 			pl.draManager.ResourceClaims().AssumedClaimRestore(claim.Namespace, claim.Name)
 
-			// If we are currently asynchronously Binding Pods in a PodGroup,
-			// then the pendingAllocations set does not need to be updated. New
-			// PodGroup scheduling cycles will start with an empty set and not
-			// share pending allocations started in *this* cycle until Unreserve
-			// completes for all the Pods sharing that pending allocation and
-			// they can be Reserved again in another cycle.
+			// 若当前正在异步绑定 PodGroup 的 Pod，则无需更新 pendingAllocations 集合。
+			// 新的 PodGroup 调度周期会从空集合开始，不会共享本周期创建的 pending 分配，
+			// 直到所有共享该分配的 Pod 完成 Unreserve 并在别的周期重新 Reserve。
 			if podGroupState != nil {
 				delete(podGroupState.pendingAllocations, claim.UID)
 			}
 		}
 
-		// Ignore claims reserved for the PodGroup because other Pods in the
-		// group may still need this claim. The PodGroup may be unreserved and
-		// deallocated (in api-server) in the next scheduling cycle if the
-		// PodGroup is not schedulable (in PostFilter) and not used yet.
+		// 为 PodGroup 预留的 claim 不在这里处理，因为组内其他 Pod 可能还需要它。
+		// 若 PodGroup 不可调度（在 PostFilter 中判定）且尚未被使用，下个周期会
+		// 解除预留并在 API server 中取消分配。
 		if claim.Status.Allocation != nil &&
 			resourceclaim.IsReservedForPod(pod, claim, false /* acceptPodGroupReservation */) {
 			// Remove pod from ReservedFor. A strategic-merge-patch is used
@@ -1638,7 +1524,7 @@ func (pl *DynamicResources) Unreserve(ctx context.Context, cs fwk.CycleState, po
 			logger.V(5).Info("unreserve", "resourceclaim", klog.KObj(claim), "pod", klog.KObj(pod))
 			claim, err := pl.clientset.ResourceV1().ResourceClaims(claim.Namespace).Patch(ctx, claim.Name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}, "status")
 			if err != nil {
-				// We will get here again when pod scheduling is retried.
+				// Pod 重试调度时会再次走到这里。
 				logger.Error(err, "unreserve", "resourceclaim", klog.KObj(claim))
 			}
 		}
@@ -1653,14 +1539,11 @@ func (pl *DynamicResources) Unreserve(ctx context.Context, cs fwk.CycleState, po
 	}
 }
 
-// PreBind gets called in a separate goroutine after it has been determined
-// that the pod should get bound to this node. Because Reserve did not actually
-// reserve claims, we need to do it now. For claims with the builtin controller,
-// we also handle the allocation.
+// PreBind 在确定 Pod 应绑定到该节点后，于独立 goroutine 中调用。
+// 由于 Reserve 并未真正预留 claim，这里才落实预留；对内建 controller 管理的 claim，
+// 这里同时处理分配。
 //
-// If anything fails, we return an error and
-// the pod will have to go into the backoff queue. The scheduler will call
-// Unreserve as part of the error handling.
+// 任何失败都会返回错误，Pod 进入退避队列，调度器在错误处理中调用 Unreserve。
 func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, nodeName string) (retStatus *fwk.Status) {
 	if !pl.enabled {
 		return nil
@@ -1706,22 +1589,20 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 	}
 
 	if !pl.fts.EnableDRADeviceBindingConditions || !pl.fts.EnableDRAResourceClaimDeviceStatus {
-		// If we don't have binding conditions, we can return early.
-		// The claim is now reserved for the pod and the scheduler can proceed with binding.
+		// 不需要等待绑定条件时直接返回：claim 已为 Pod 预留，可以继续绑定。
 		return nil
 	}
 
-	// We need to check if the device is attached to the node.
+	// 判断是否有设备需要等待绑定条件就绪。
 	needToWait := hasBindingConditions(state)
 
-	// If no device needs to be prepared, we can return early.
+	// 没有设备需要准备时直接返回。
 	if !needToWait {
 		return nil
 	}
 
-	// We need to wait for the device to be attached to the node.
+	// 等待设备就绪期间记录事件和耗时指标。
 	pl.fh.EventRecorder().WithLogger(logger).Eventf(pod, nil, v1.EventTypeNormal, "BindingConditionsPending", "Scheduling", "waiting for binding conditions for device on node %s", nodeName)
-	// START: Record start time for metrics duration calculation
 	start := time.Now()
 	err = wait.PollUntilContextTimeout(ctx, 5*time.Second, pl.bindingTimeout, true,
 		func(ctx context.Context) (bool, error) {
@@ -1772,19 +1653,16 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 	}
 
 	if err != nil {
-		// Returning an error here causes another scheduling attempt.
-		// In that next attempt, PreFilter will detect the timeout or
-		// error and try to recover.
+		// 这里返回错误会触发新一轮调度尝试；下一轮 PreFilter 会检测到超时或错误并尝试恢复。
 		return statusError(logger, err, "devices", formatBCStatusOneLine(getBindingConditionsStatusForStatus(state, statusLabel)))
 	}
 
-	// If we get here, we know that reserving the claim for
-	// the pod worked and we can proceed with binding it.
+	// 能走到这里说明 claim 已成功为 Pod 预留，可以继续绑定。
 	return nil
 }
 
-// PreBindPreFlight is called before PreBind, and determines whether PreBind is going to do something for this pod, or not.
-// It just checks state.claims to determine whether there are any claims and hence the plugin has to handle them at PreBind.
+// PreBindPreFlight 在 PreBind 之前调用，判断 PreBind 是否需要为该 Pod 做事。
+// 只检查 state.claims：有 claim 时插件才需要在 PreBind 处理。
 func (pl *DynamicResources) PreBindPreFlight(ctx context.Context, cs fwk.CycleState, p *v1.Pod, nodeName string) (*fwk.PreBindPreFlightResult, *fwk.Status) {
 	result := &fwk.PreBindPreFlightResult{AllowParallel: true}
 	if !pl.enabled {
@@ -1829,15 +1707,13 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 			claimUID = claim.UID
 		}
 
-		// The scheduler was handling allocation. Now that has
-		// completed, either successfully or with a failure.
+		// 调度器此前在处理分配，现在无论成功还是失败都已结束。
 
 		if resourceClaimModified {
 			if isExtendedResourceClaim {
 				pl.waitForExtendedClaimInAssumeCache(ctx, claim)
 			} else {
-				// This can fail, but only for reasons that are okay (concurrent delete or update).
-				// Shouldn't happen in this case.
+				// 这里可能失败，但只会因为并发删除或更新这类可接受的理由；此场景下不该发生。
 				if err := pl.draManager.ResourceClaims().AssumeClaimAfterAPICall(claim); err != nil {
 					logger.V(5).Info("Claim not stored in assume cache", "err", err, "claim", klog.KObj(claim), "uid", claimUID, "resourceVersion", resourceVersion)
 				} else {
@@ -1847,20 +1723,15 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 		}
 	}()
 
-	// This logic is deferred to the end of [DynamicResources.PreBind] and runs
-	// only when that will return a successful status. It removes any
-	// allocations from in-flight which were bound successfully.
+	// 这段清理逻辑推迟到 [DynamicResources.PreBind] 末尾、且确定返回成功时才执行：
+	// 把已成功绑定的分配从 in-flight 中移除。
 	prebindSuccessCleanup := func() {
 		if allocation != nil {
 			for _, claimUID := range claimUIDs {
 				if deleted := pl.draManager.ResourceClaims().MaybeRemoveClaimPendingAllocation(claimUID, true); deleted {
-					// If we are currently asynchronously Binding Pods in a
-					// PodGroup, then the pendingAllocations set does not need
-					// to be updated. New PodGroup scheduling cycles will start
-					// with an empty set and not share pending allocations
-					// started in *this* cycle until Unreserve completes for all
-					// the Pods sharing that pending allocation and they can be
-					// Reserved again in another cycle.
+					// 若正在异步绑定 PodGroup 的 Pod，则无需更新 pendingAllocations 集合。
+					// 新周期从空集合开始，不会共享本周期的 pending 分配，
+					// 直到所有共享该分配的 Pod 完成 Unreserve 并在别的周期重新 Reserve。
 					if podGroupState != nil {
 						delete(podGroupState.pendingAllocations, claim.UID)
 					}
@@ -1888,9 +1759,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 
 	logger.V(5).Info("preparing claim status update", "claim", klog.KObj(state.claims.get(index)), "allocation", klog.Format(allocation))
 
-	// We may run into a ResourceVersion conflict because there may be some
-	// benign concurrent changes. In that case we get the latest claim and
-	// try again.
+	// 无害的并发更新可能导致 ResourceVersion 冲突，此时取最新 claim 重试。
 	refreshClaim := false
 	claim = claim.DeepCopy()
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -1910,14 +1779,14 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 			return fmt.Errorf("claim %s got deleted in the meantime", klog.KObj(claim))
 		}
 
-		// Do we need to store an allocation result from Reserve?
+		// 是否需要把 Reserve 中的分配结果写回？
 		if allocation != nil {
 			if claim.Status.Allocation != nil {
 				return fmt.Errorf("claim %s got allocated elsewhere in the meantime", klog.KObj(claim))
 			}
 
-			// The finalizer needs to be added in a normal update.
-			// If we were interrupted in the past, it might already be set and we simply continue.
+			// finalizer 必须通过普通 Update 添加。
+			// 若之前被中断过，它可能已经存在，那就直接继续。
 			if !slices.Contains(claim.Finalizers, resourceapi.Finalizer) {
 				claim.Finalizers = append(claim.Finalizers, resourceapi.Finalizer)
 				updatedClaim, err := pl.clientset.ResourceV1().ResourceClaims(claim.Namespace).Update(ctx, claim, metav1.UpdateOptions{})
@@ -1929,15 +1798,13 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 			claim.Status.Allocation = allocation
 		}
 
-		// We can simply try to add the pod here without checking
-		// preconditions. The apiserver will tell us with a
-		// non-conflict error if this isn't possible.
+		// 无需预先检查条件，直接尝试添加 Pod：条件不满足时 apiserver
+		// 会用非冲突错误告知我们。
 		claim.Status.ReservedFor = append(claim.Status.ReservedFor, binding)
 		if pl.fts.EnableDRADeviceBindingConditions &&
 			pl.fts.EnableDRAResourceClaimDeviceStatus {
-			// Once the feature gate checks get removed, this code can be moved into an else branch
-			// for `if allocation != nil` above. For now it is kept here to avoid changing normal
-			// behavior.
+			// 待 feature gate 检查移除后，这段代码可并入上面 `if allocation != nil` 的 else 分支。
+			// 目前先放在这里，避免改变正常行为。
 			if claim.Status.Allocation == nil {
 				return fmt.Errorf("claim %s got deallocated elsewhere in the meantime", klog.KObj(claim))
 			}
@@ -2135,8 +2002,8 @@ func getAllocatedDeviceStatus(claim *resourceapi.ResourceClaim, deviceRequest *r
 	return nil
 }
 
-// bindingConditionsStatusFormatter implements fmt.Stringer for lazy evaluation of device status formatting.
-// This avoids expensive processing when logging is disabled.
+// bindingConditionsStatusFormatter 实现 fmt.Stringer，延迟计算设备状态格式化结果。
+// 日志关闭时可避免这部分昂贵处理。
 type bindingConditionsStatusFormatter struct {
 	state       *stateData
 	statusLabel string
@@ -2146,19 +2013,18 @@ func (d bindingConditionsStatusFormatter) String() string {
 	return formatBCStatusOneLine(getBindingConditionsStatusForStatus(d.state, d.statusLabel))
 }
 
-// BindingConditionsStatus is a compact per-device summary for BindingConditions logging.
+// BindingConditionsStatus 是 BindingConditions 日志中单个设备的紧凑摘要。
 type BindingConditionsStatus struct {
 	Driver  string   `json:"driver"`
 	Pool    string   `json:"pool"`
 	Device  string   `json:"device"`
 	Pending []string `json:"pending,omitempty"`
-	Failed  []string `json:"failed,omitempty"` // only failure conditions that are true
+	Failed  []string `json:"failed,omitempty"` // 只记录置为 true 的失败条件
 }
 
-// listBindingConditionsStatus inspects ONE claim and returns a summary per allocated device
-// that has BindingConditions.
-// - Pending: BindingConditions that are not yet true (or all conditions if device status is missing)
-// - Failed: BindingFailureConditions that are true
+// listBindingConditionsStatus 检查单个 claim，为带 BindingConditions 的每个已分配设备返回一份摘要。
+// - Pending：尚未置为 true 的 BindingConditions（设备状态缺失时列出所有条件）
+// - Failed：置为 true 的 BindingFailureConditions
 func listBindingConditionsStatus(claim *resourceapi.ResourceClaim) []BindingConditionsStatus {
 	if claim == nil || claim.Status.Allocation == nil {
 		return nil

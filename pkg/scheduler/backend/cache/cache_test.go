@@ -48,7 +48,7 @@ import (
 
 var nodeInfoCmpOpts = []cmp.Option{
 	cmp.AllowUnexported(framework.NodeInfo{}),
-	// This field needs to be ignored because we can't call AllowUnexported for type framework.podResource (it's not visible in this package).
+	// 该字段必须忽略：framework.podResource 类型在本包不可见，无法对其调用 AllowUnexported。
 	cmpopts.IgnoreFields(framework.PodInfo{}, "cachedResource"),
 }
 
@@ -66,7 +66,7 @@ func deepEqualWithoutGeneration(actual *nodeInfoListItem, expected *framework.No
 	if (actual == nil) != (expected == nil) {
 		return errors.New("one of the actual or expected is nil and the other is not")
 	}
-	// Ignore generation field.
+	// 比较前抹掉 generation 字段。
 	if actual != nil {
 		actual.info.Generation = 0
 	}
@@ -121,8 +121,7 @@ func newNodeInfo(requestedResource *framework.Resource,
 	return nodeInfo
 }
 
-// TestAssumePodScheduled tests that after a pod is assumed, its information is aggregated
-// on node level.
+// TestAssumePodScheduled 验证 Pod 被 assume 后，其资源信息会按节点维度聚合。
 func TestAssumePodScheduled(t *testing.T) {
 	nodeName := "node"
 	testPods := []*v1.Pod{
@@ -172,7 +171,7 @@ func TestAssumePodScheduled(t *testing.T) {
 			newHostPortInfoBuilder().add("TCP", "127.0.0.1", 80).add("TCP", "127.0.0.1", 8080).build(),
 			make(map[string]*fwk.ImageStateSummary),
 		),
-	}, { // test non-zero request
+	}, { // 测试非零请求
 		name: "assumed pod without resource request",
 		pods: []*v1.Pod{testPods[3]},
 		wNodeInfo: newNodeInfo(
@@ -251,7 +250,7 @@ func TestAssumePodScheduled(t *testing.T) {
 				if err := cache.AssumePod(logger, pod); err != nil {
 					t.Fatalf("AssumePod failed: %v", err)
 				}
-				// pod already in cache so can't be assumed
+				// Pod 已在缓存中，再次 assume 应当失败。
 				if err := cache.AssumePod(logger, pod); err == nil {
 					t.Error("expected error, no error found")
 				}
@@ -273,7 +272,7 @@ func TestAssumePodScheduled(t *testing.T) {
 	}
 }
 
-// TestAddPodWillConfirm tests that a pod being Add()ed will be confirmed if assumed.
+// TestAddPodWillConfirm 验证对已 assume 的 Pod 调用 Add() 会将其转为确认状态。
 func TestAddPodWillConfirm(t *testing.T) {
 	nodeName := "node"
 
@@ -286,7 +285,7 @@ func TestAddPodWillConfirm(t *testing.T) {
 		podsToAdd    []*v1.Pod
 
 		wNodeInfo *framework.NodeInfo
-	}{ // two pod were assumed at same time. But first one is called Add() and gets confirmed.
+	}{ // 两个 Pod 同时被 assume，但对第一个调用 Add() 使其转为确认状态。
 		podsToAssume: []*v1.Pod{testPods[0], testPods[1]},
 		podsToAdd:    []*v1.Pod{testPods[0]},
 		wNodeInfo: newNodeInfo(
@@ -317,7 +316,7 @@ func TestAddPodWillConfirm(t *testing.T) {
 		if err := cache.AddPod(logger, podToAdd); err != nil {
 			t.Fatalf("AddPod failed: %v", err)
 		}
-		// pod already in added state
+		// Pod 已处于 added 状态。
 		if err := cache.AddPod(logger, podToAdd); err == nil {
 			t.Error("expected error, no error found")
 		}
@@ -342,6 +341,7 @@ func TestAddPodWillConfirm(t *testing.T) {
 	}
 }
 
+// TestDump 验证 Dump 能导出缓存中的所有节点与 Pod。
 func TestDump(t *testing.T) {
 	nodeName := "node"
 
@@ -352,7 +352,7 @@ func TestDump(t *testing.T) {
 	test := struct {
 		podsToAssume []*v1.Pod
 		podsToAdd    []*v1.Pod
-	}{ // two pod were assumed at same time. But first one is called Add() and gets confirmed.
+	}{ // 两个 Pod 同时被 assume，但对第一个调用 Add() 使其转为确认状态。
 		podsToAssume: []*v1.Pod{testPods[0], testPods[1]},
 		podsToAdd:    []*v1.Pod{testPods[0]},
 	}
@@ -388,8 +388,8 @@ func TestDump(t *testing.T) {
 
 }
 
-// TestAddPodAlwaysUpdatePodInfoInNodeInfo tests that AddPod method always updates PodInfo in NodeInfo,
-// even when the Pod is assumed one.
+// TestAddPodAlwaysUpdatesPodInfoInNodeInfo 验证 AddPod 总会更新 NodeInfo 中的 PodInfo，
+// 即使该 Pod 处于 assume 状态。
 func TestAddPodAlwaysUpdatesPodInfoInNodeInfo(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -445,7 +445,7 @@ func TestAddPodAlwaysUpdatesPodInfoInNodeInfo(t *testing.T) {
 	}
 }
 
-// TestAddPodWillReplaceAssumed tests that a pod being Add()ed will replace any assumed pod.
+// TestAddPodWillReplaceAssumed 验证 Add() 一个 Pod 会替换掉同名的 assumed Pod。
 func TestAddPodWillReplaceAssumed(t *testing.T) {
 	assumedPod := makeBasePod(t, "assumed-node-1", "test-1", "100m", "500", "", []v1.ContainerPort{{HostPort: 80}})
 	addedPod := makeBasePod(t, "actual-node", "test-1", "100m", "500", "", []v1.ContainerPort{{HostPort: 80}})
@@ -506,7 +506,7 @@ func TestAddPodWillReplaceAssumed(t *testing.T) {
 	}
 }
 
-// TestUpdatePod tests that a pod will be updated if added before.
+// TestUpdatePod 验证已添加的 Pod 可以被更新。
 func TestUpdatePod(t *testing.T) {
 	nodeName := "node"
 	testPods := []*v1.Pod{
@@ -518,7 +518,7 @@ func TestUpdatePod(t *testing.T) {
 		podsToUpdate []*v1.Pod
 
 		wNodeInfo []*framework.NodeInfo
-	}{ // add a pod and then update it twice
+	}{ // 添加一个 Pod 后连续更新两次。
 		podsToAdd:    []*v1.Pod{testPods[0]},
 		podsToUpdate: []*v1.Pod{testPods[0], testPods[1], testPods[0]},
 		wNodeInfo: []*framework.NodeInfo{newNodeInfo(
@@ -572,7 +572,7 @@ func TestUpdatePod(t *testing.T) {
 	}
 }
 
-// TestUpdatePodAndGet tests get always return latest pod state
+// TestUpdatePodAndGet 验证 Get 总是返回 Pod 的最新状态。
 func TestUpdatePodAndGet(t *testing.T) {
 	nodeName := "node"
 	testPods := []*v1.Pod{
@@ -612,14 +612,12 @@ func TestUpdatePodAndGet(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			cache := newCache(ctx, time.Second, nil, false, false)
-			// trying to get an unknown pod should return an error
-			// podToUpdate has not been added yet
+			// podToUpdate 尚未加入缓存，获取未知 Pod 应返回错误。
 			if _, err := cache.GetPod(tc.podToUpdate); err == nil {
 				t.Error("expected error, no error found")
 			}
 
-			// trying to update an unknown pod should return an error
-			// pod has not been added yet
+			// Pod 尚未加入缓存，更新未知 Pod 应返回错误。
 			if err := cache.UpdatePod(logger, tc.pod, tc.podToUpdate); err == nil {
 				t.Error("expected error, no error found")
 			}
@@ -653,6 +651,7 @@ func makePodWithEphemeralStorage(nodeName, ephemeralStorage string) *v1.Pod {
 	).Node(nodeName).Obj()
 }
 
+// TestEphemeralStorageResource 验证临时存储资源请求被正确计入节点统计。
 func TestEphemeralStorageResource(t *testing.T) {
 	nodeName := "node"
 	podE := makePodWithEphemeralStorage(nodeName, "500")
@@ -694,6 +693,7 @@ func TestEphemeralStorageResource(t *testing.T) {
 	}
 }
 
+// Test_AddPodGroupMember 验证向缓存添加 PodGroup 成员时组状态被正确更新。
 func Test_AddPodGroupMember(t *testing.T) {
 	podWithNoPodGroup := st.MakePod().Namespace("namespace").Name("non-workload-pod").Obj()
 	unscheduledPodGroupMember := st.MakePod().Namespace("namespace").Name("unscheduled-pod").PodGroupName("pg").Obj()
@@ -774,19 +774,20 @@ func Test_AddPodGroupMember(t *testing.T) {
 	}
 }
 
+// Test_UpdatePodGroupMember 验证更新 PodGroup 成员时组状态被正确更新。
 func Test_UpdatePodGroupMember(t *testing.T) {
 	podGroupName := "pg"
-	// unscheduled pod with a pod group name
+	// 未调度但带 PodGroup 名的 Pod。
 	pod := st.MakePod().Namespace("namespace").Name("unscheduled-pod").UID("pod1").
 		PodGroupName(podGroupName).Obj()
-	// updated unscheduled pod with a pod group name
+	// 更新后的未调度、带 PodGroup 名的 Pod。
 	updatedPod := st.MakePod().Namespace("namespace").Name("unscheduled-pod").UID("pod1").
 		Labels(map[string]string{"foo": "bar"}).PodGroupName(podGroupName).Obj()
-	// assigned pod with a pod group name
+	// 已分配节点且带 PodGroup 名的 Pod。
 	assignedPod := st.MakePod().Namespace("namespace").Name("assigned-pod").UID("pod2").Node("node").PodGroupName(podGroupName).Obj()
-	// pod with no pod group name
+	// 不带 PodGroup 名的 Pod。
 	noPodGroupPod := st.MakePod().Namespace("namespace").Name("no-pod-group-pod").UID("pod3").Obj()
-	// updated pod with no pod group name
+	// 更新后的不带 PodGroup 名的 Pod。
 	updatedNoPodGroupPod := st.MakePod().Namespace("namespace").Name("no-pod-group-pod").UID("pod3").
 		Labels(map[string]string{"foo": "bar"}).Obj()
 
@@ -878,6 +879,7 @@ func Test_UpdatePodGroupMember(t *testing.T) {
 	}
 }
 
+// Test_RemovePodGroupMember 验证删除 PodGroup 成员时组状态被正确更新。
 func Test_RemovePodGroupMember(t *testing.T) {
 	podGroupName := "pg"
 	pod1 := st.MakePod().Namespace("namespace").Name("unscheduled-pod").UID("pod1").
@@ -968,6 +970,7 @@ func Test_RemovePodGroupMember(t *testing.T) {
 	}
 }
 
+// Test_AddPodGroup 验证向缓存添加整个 PodGroup 的处理逻辑。
 func Test_AddPodGroup(t *testing.T) {
 	podGroup := st.MakePodGroup().Namespace("ns").Name("pg").Obj()
 	pod := st.MakePod().Namespace("ns").Name("pod1").PodGroupName("pg").Obj()
@@ -984,7 +987,7 @@ func Test_AddPodGroup(t *testing.T) {
 		name                     string
 		genericWorkloadEnabled   bool
 		compositePodGroupEnabled bool
-		initPod                  *v1.Pod // From old tests
+		initPod                  *v1.Pod // 来自旧测试用例
 		initialCPGs              []*schedulingv1alpha3.CompositePodGroup
 		podGroupsToAdd           []*schedulingv1beta1.PodGroup
 		wantPodGroups            map[fwk.EntityKey]*schedulingv1beta1.PodGroup
@@ -1141,6 +1144,7 @@ func Test_AddPodGroup(t *testing.T) {
 	}
 }
 
+// Test_UpdatePodGroup 验证更新整个 PodGroup 的处理逻辑。
 func Test_UpdatePodGroup(t *testing.T) {
 	oldPodGroup := st.MakePodGroup().Namespace("ns").Name("pg").MinCount(1).Obj()
 	newPodGroup := st.MakePodGroup().Namespace("ns").Name("pg").MinCount(2).Obj()
@@ -1194,6 +1198,7 @@ func Test_UpdatePodGroup(t *testing.T) {
 	}
 }
 
+// Test_RemovePodGroup 验证删除整个 PodGroup 的处理逻辑。
 func Test_RemovePodGroup(t *testing.T) {
 	podGroup := st.MakePodGroup().Namespace("ns").Name("pg").Obj()
 	pod := st.MakePod().Namespace("ns").Name("pod1").PodGroupName("pg").Obj()
@@ -1207,7 +1212,7 @@ func Test_RemovePodGroup(t *testing.T) {
 		name                     string
 		genericWorkloadEnabled   bool
 		compositePodGroupEnabled bool
-		initPod                  *v1.Pod // From old tests
+		initPod                  *v1.Pod // 来自旧测试用例
 		initialPodGroups         []*schedulingv1beta1.PodGroup
 		initialCPGs              []*schedulingv1alpha3.CompositePodGroup
 		podGroupToDelete         *schedulingv1beta1.PodGroup
@@ -1334,6 +1339,7 @@ func Test_RemovePodGroup(t *testing.T) {
 	}
 }
 
+// TestUpdatePodGroupStateSnapshot 验证快照更新时 PodGroup 状态与 generation 的推进规则。
 func TestUpdatePodGroupStateSnapshot(t *testing.T) {
 	podGroupName1 := "pg1"
 	podGroupName2 := "pg2"
@@ -1393,7 +1399,7 @@ func TestUpdatePodGroupStateSnapshot(t *testing.T) {
 					}
 				}
 
-				// Capture cache generations before snapshot update to detect which pod groups are going to be modified.
+				// 更新快照前记录各 PodGroup 的 cache generation，用于判断哪些组会被修改。
 				prevCacheGenerations := make(map[fwk.EntityKey]int64, len(cache.podGroupStates))
 				for key, pgs := range cache.podGroupStates {
 					prevCacheGenerations[key] = pgs.generation
@@ -1404,8 +1410,8 @@ func TestUpdatePodGroupStateSnapshot(t *testing.T) {
 					t.Fatalf("UpdateSnapshot failed: %v", err)
 				}
 
-				// For each pod group that the action modified (its cache generation advanced), the snapshot generation must have advanced too.
-				// Unmodified pod groups keep their previous generation.
+				// 对被操作修改的 PodGroup（cache generation 前进），快照 generation 也必须前进；
+				// 未修改的 PodGroup 保持原 generation。
 				for key, pgs := range snapshot.podGroupStates {
 					cachePgs, ok := cache.podGroupStates[key]
 					if !ok {
@@ -1427,8 +1433,8 @@ func TestUpdatePodGroupStateSnapshot(t *testing.T) {
 	}
 }
 
-// TestBindingPodGroupMember simulates binding and tests that when an assumed or
-// unscheduled pod gets bound, its state within pod group becomes assigned.
+// TestBindingPodGroupMember 模拟绑定过程，验证 assumed 或未调度的 Pod 被绑定后，
+// 其在 PodGroup 中的状态变为 assigned。
 func TestBindingPodGroupMember(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1461,7 +1467,7 @@ func TestBindingPodGroupMember(t *testing.T) {
 			defer cancel()
 			cache := newCache(ctx, time.Second, nil, true, false)
 
-			// Simulate the informer firing an Add event for an unscheduled pod.
+			// 模拟 informer 为未调度 Pod 触发 Add 事件。
 			cache.AddPodGroupMember(tt.pod)
 
 			if tt.assumedPod != nil {
@@ -1470,7 +1476,7 @@ func TestBindingPodGroupMember(t *testing.T) {
 				}
 			}
 
-			// Simulate the informer firing an Add event with NodeName set to bind a pod.
+			// 模拟 informer 触发带 NodeName 的 Add 事件，表示 Pod 已绑定。
 			if err := cache.AddPod(logger, tt.scheduledPod); err != nil {
 				t.Fatalf("AddPod (binding) failed: %v", err)
 			}
@@ -1492,7 +1498,7 @@ func TestBindingPodGroupMember(t *testing.T) {
 	}
 }
 
-// TestRemovePod tests after added pod is removed, its information should also be subtracted.
+// TestRemovePod 验证已添加的 Pod 被移除后，其资源信息也会从节点中扣除。
 func TestRemovePod(t *testing.T) {
 	pod := makeBasePod(t, "node-1", "test", "100m", "500", "", []v1.ContainerPort{{HostIP: "127.0.0.1", HostPort: 80, Protocol: "TCP"}})
 	nodes := []*v1.Node{
@@ -1530,7 +1536,7 @@ func TestRemovePod(t *testing.T) {
 			defer cancel()
 			nodeName := pod.Spec.NodeName
 			cache := newCache(ctx, time.Second, nil, false, false)
-			// Add/Assume pod succeeds even before adding the nodes.
+			// 即使节点尚未加入缓存，Add/Assume Pod 也应成功。
 			if tt.assume {
 				if err := cache.AddPod(logger, pod); err != nil {
 					t.Fatalf("AddPod failed: %v", err)
@@ -1556,12 +1562,12 @@ func TestRemovePod(t *testing.T) {
 				t.Errorf("pod was not deleted")
 			}
 
-			// trying to remove a pod already removed should return an error
+			// 重复移除已删除的 Pod 应返回错误。
 			if err := cache.RemovePod(logger, pod); err == nil {
 				t.Error("expected error, no error found")
 			}
 
-			// Node that owned the Pod should be at the head of the list.
+			// Pod 原所属节点应位于列表头部（便于后续资源归还）。
 			if cache.headNode.info.Node().Name != nodeName {
 				t.Errorf("node %q is not at the head of the list", nodeName)
 			}
@@ -1569,6 +1575,7 @@ func TestRemovePod(t *testing.T) {
 	}
 }
 
+// TestForgetPod 验证 ForgetPod 能清理 assume 状态且不影响已确认的 Pod。
 func TestForgetPod(t *testing.T) {
 	nodeName := "node"
 	basePod := makeBasePod(t, nodeName, "test", "100m", "500", "", []v1.ContainerPort{{HostIP: "127.0.0.1", HostPort: 80, Protocol: "TCP"}})
@@ -1607,13 +1614,14 @@ func TestForgetPod(t *testing.T) {
 		if err := isForgottenFromCache(pod, cache); err != nil {
 			t.Errorf("pod %q: %v", pod.Name, err)
 		}
-		// trying to forget a pod already forgotten should return nil
+		// 重复 Forget 已遗忘的 Pod 应返回 nil。
 		if err := cache.ForgetPod(logger, pod); err != nil {
 			t.Error("expected no error, error found")
 		}
 	}
 }
 
+// TestForgetPodGroupMember 验证 Forget PodGroup 成员时组状态的回退。
 func TestForgetPodGroupMember(t *testing.T) {
 	pod := st.MakePod().Namespace("test-ns").Name("pod-0").UID("uid-0").
 		PodGroupName("pg").Obj()
@@ -1689,6 +1697,7 @@ func TestForgetPodGroupMember(t *testing.T) {
 	}
 }
 
+// TestRemoveAssumedPod 验证删除 assumed Pod 的行为。
 func TestRemoveAssumedPod(t *testing.T) {
 	pod := st.MakePod().Namespace("test-ns").Name("pod-0").UID("uid-0").Obj()
 	assumedPod := st.MakePod().Namespace("test-ns").Name("pod-0").UID("uid-0").Node("node-1").Obj()
@@ -1795,6 +1804,7 @@ func TestRemoveAssumedPod(t *testing.T) {
 	}
 }
 
+// TestAssumePodGroupMember 验证 assume PodGroup 成员时组状态的更新。
 func TestAssumePodGroupMember(t *testing.T) {
 	pod := st.MakePod().Namespace("test-ns").Name("pod-0").UID("uid-0").
 		PodGroupName("pg").Obj()
@@ -1863,7 +1873,7 @@ func TestAssumePodGroupMember(t *testing.T) {
 	}
 }
 
-// buildNodeInfo creates a NodeInfo by simulating node operations in cache.
+// buildNodeInfo 通过在缓存中模拟节点操作来构造 NodeInfo。
 func buildNodeInfo(node *v1.Node, pods []*v1.Pod, imageStates map[string]*fwk.ImageStateSummary) *framework.NodeInfo {
 	expected := framework.NewNodeInfo()
 	expected.SetNode(node)
@@ -1882,7 +1892,7 @@ func buildNodeInfo(node *v1.Node, pods []*v1.Pod, imageStates map[string]*fwk.Im
 	return expected
 }
 
-// buildImageStates creates ImageStateSummary of image from nodes that will be added in cache.
+// buildImageStates 根据即将加入缓存的节点构造镜像的 ImageStateSummary。
 func buildImageStates(nodes []*v1.Node) map[string]*fwk.ImageStateSummary {
 	imageStates := make(map[string]*fwk.ImageStateSummary)
 	for _, item := range nodes {
@@ -1903,10 +1913,9 @@ func buildImageStates(nodes []*v1.Node) map[string]*fwk.ImageStateSummary {
 	return imageStates
 }
 
-// TestNodeOperators tests node operations of cache, including add, update
-// and remove.
+// TestNodeOperators 测试缓存的节点操作，包括添加、更新和删除。
 func TestNodeOperators(t *testing.T) {
-	// Test data
+	// 测试数据
 	cpuHalf := resource.MustParse("500m")
 	mem50m := resource.MustParse("50m")
 	resourceList1 := map[v1.ResourceName]string{
@@ -2053,7 +2062,7 @@ func TestNodeOperators(t *testing.T) {
 				nodes[nodeItem.info.Node().Name] = nodeItem.info
 			}
 
-			// Step 1: the node was added into cache successfully.
+			// 步骤 1：节点成功加入缓存。
 			got, found := cache.nodes[node.Name]
 			if !found {
 				t.Errorf("Failed to find node %v in internalcache.", node.Name)
@@ -2067,18 +2076,18 @@ func TestNodeOperators(t *testing.T) {
 					cache.nodeTree.numNodes, len(tc.nodes))
 			}
 
-			// Generations are globally unique. We check in our unit tests that they are incremented correctly.
+			// generation 全局唯一，单测中校验其递增是否正确。
 			expected.Generation = got.info.Generation
 			if diff := cmp.Diff(expected, got.info, nodeInfoCmpOpts...); diff != "" {
 				t.Errorf("Failed to add node into scheduler cache (-want,+got):\n%s", diff)
 			}
 
-			// check imageState of NodeInfo with specific image when node added
+			// 校验节点加入后 NodeInfo 中指定镜像的状态。
 			if !checkImageStateSummary(nodes, "gcr.io/80:latest", "gcr.io/300:latest") {
 				t.Error("image have different ImageStateSummary")
 			}
 
-			// Step 2: dump cached nodes successfully.
+			// 步骤 2：成功导出缓存中的节点。
 			cachedNodes := NewEmptySnapshot()
 			if err := cache.UpdateSnapshot(logger, cachedNodes); err != nil {
 				t.Error(err)
@@ -2091,12 +2100,12 @@ func TestNodeOperators(t *testing.T) {
 			if diff := cmp.Diff(expected.Snapshot(), newNode, nodeInfoCmpOpts...); diff != "" {
 				t.Errorf("Failed to clone node (-want,+got):\n%s", diff)
 			}
-			// check imageState of NodeInfo with specific image when update snapshot
+			// 校验更新快照后 NodeInfo 中指定镜像的状态。
 			if !checkImageStateSummary(cachedNodes.nodeInfoMap, "gcr.io/80:latest", "gcr.io/300:latest") {
 				t.Error("image have different ImageStateSummary")
 			}
 
-			// Step 3: update node attribute successfully.
+			// 步骤 3：成功更新节点属性。
 			node.Status.Allocatable[v1.ResourceMemory] = mem50m
 			expected.Allocatable.Memory = mem50m.Value()
 
@@ -2113,11 +2122,11 @@ func TestNodeOperators(t *testing.T) {
 			if diff := cmp.Diff(expected, got.info, nodeInfoCmpOpts...); diff != "" {
 				t.Errorf("Unexpected schedulertypes after updating node (-want, +got):\n%s", diff)
 			}
-			// check imageState of NodeInfo with specific image when update node
+			// 校验节点更新后 NodeInfo 中指定镜像的状态。
 			if !checkImageStateSummary(nodes, "gcr.io/80:latest", "gcr.io/300:latest") {
 				t.Error("image have different ImageStateSummary")
 			}
-			// Check nodeTree after update
+			// 校验更新后的 nodeTree。
 			nodesList, err = cache.nodeTree.list()
 			if err != nil {
 				t.Fatal(err)
@@ -2126,7 +2135,7 @@ func TestNodeOperators(t *testing.T) {
 				t.Errorf("unexpected cache.nodeTree after updating node")
 			}
 
-			// Step 4: the node can be removed even if it still has pods.
+			// 步骤 4：即使节点上仍有 Pod，也可以删除该节点。
 			if err := cache.RemoveNode(logger, node); err != nil {
 				t.Error(err)
 			}
@@ -2136,12 +2145,12 @@ func TestNodeOperators(t *testing.T) {
 				t.Errorf("The node object for %v should be nil", node.Name)
 			}
 
-			// trying to remove a node already removed should return an error
+			// 重复删除已移除的节点应返回错误。
 			if err := cache.RemoveNode(logger, node); err == nil {
 				t.Error("expected error, no error found")
 			}
 
-			// Check node is removed from nodeTree as well.
+			// 校验节点也已从 nodeTree 中移除。
 			nodesList, err = cache.nodeTree.list()
 			if err != nil {
 				t.Fatal(err)
@@ -2149,18 +2158,18 @@ func TestNodeOperators(t *testing.T) {
 			if cache.nodeTree.numNodes != len(tc.nodes)-1 || len(nodesList) != len(tc.nodes)-1 {
 				t.Errorf("unexpected cache.nodeTree after removing node: %v", node.Name)
 			}
-			// check imageState of NodeInfo with specific image when delete node
+			// 校验删除节点后 NodeInfo 中指定镜像的状态。
 			if !checkImageStateSummary(nodes, "gcr.io/80:latest", "gcr.io/300:latest") {
 				t.Error("image have different ImageStateSummary after removing node")
 			}
-			// Pods are still in the pods cache.
+			// Pod 仍保留在 Pod 缓存中。
 			for _, p := range tc.pods {
 				if _, err := cache.GetPod(p); err != nil {
 					t.Error(err)
 				}
 			}
 
-			// Step 5: removing pods for the removed node still succeeds.
+			// 步骤 5：为已删除节点移除 Pod 仍应成功。
 			for _, p := range tc.pods {
 				if err := cache.RemovePod(logger, p); err != nil {
 					t.Error(err)
@@ -2173,8 +2182,8 @@ func TestNodeOperators(t *testing.T) {
 	}
 }
 
-// TestPodGroupPodOperations tests that operations (Add, Update, Remove, Assume, Forget) on
-// pods with pod group name properly update PodGroupStates only when GenericWorkload feature gate is enabled.
+// TestPodGroupPodOperations 验证仅当 GenericWorkload 特性开启时，
+// 对带 PodGroup 名的 Pod 的 Add/Update/Remove/Assume/Forget 操作才会正确更新 PodGroupStates。
 func TestPodGroupPodOperations(t *testing.T) {
 	groupName := "pg"
 	pod := st.MakePod().Namespace("test-ns").Name("pod-0").UID("uid-0").
@@ -2302,8 +2311,7 @@ func TestPodGroupPodOperations(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Initialize cache with feature gate enabled to ensure group state is
-			// properly established for operations that require it.
+			// 初始化缓存时开启特性门控，确保需要状态的操作能正确建立组状态。
 			cache := newCache(ctx, time.Second, nil, true, false)
 			if tt.setup != nil {
 				tt.setup(t, cache, ctx)
@@ -2343,12 +2351,13 @@ func TestPodGroupPodOperations(t *testing.T) {
 	}
 }
 
+// TestSchedulerCache_UpdateSnapshot 验证快照更新能正确反映节点、Pod 与 PodGroup 的变更。
 func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
 	var podGroupName = "pg"
 
-	// Create a few nodes to be used in tests.
+	// 创建测试用节点。
 	var nodes []*v1.Node
 	for i := 0; i < 10; i++ {
 		node := &v1.Node{
@@ -2364,7 +2373,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 		}
 		nodes = append(nodes, node)
 	}
-	// Create a few nodes as updated versions of the above nodes
+	// 创建上述节点的更新版本。
 	var updatedNodes []*v1.Node
 	for _, n := range nodes {
 		updatedNode := n.DeepCopy()
@@ -2375,7 +2384,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 		updatedNodes = append(updatedNodes, updatedNode)
 	}
 
-	// Create a few pods for tests.
+	// 创建测试用 Pod。
 	var pods []*v1.Pod
 	for i := 0; i < 20; i++ {
 		pod := st.MakePod().Name(fmt.Sprintf("test-pod%v", i)).Namespace("test-ns").UID(fmt.Sprintf("test-puid%v", i)).
@@ -2383,7 +2392,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 		pods = append(pods, pod)
 	}
 
-	// Create a few pods as updated versions of the above pods.
+	// 创建上述 Pod 的更新版本。
 	var updatedPods []*v1.Pod
 	for _, p := range pods {
 		updatedPod := p.DeepCopy()
@@ -2392,7 +2401,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 		updatedPods = append(updatedPods, updatedPod)
 	}
 
-	// Add a few of pods with affinity
+	// 添加若干带亲和性的 Pod。
 	var podsWithAffinity []*v1.Pod
 	for i := range 20 {
 		pod := st.MakePod().Name(fmt.Sprintf("p-affinity-%v", i)).Namespace("test-ns").UID(fmt.Sprintf("puid-affinity-%v", i)).
@@ -2405,7 +2414,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 			PVC(fmt.Sprintf("test-pvc%v", pvcID)).Node(fmt.Sprintf("test-node%v", node)).Obj()
 	}
 
-	// Add a few pods with a pod group name
+	// 添加若干带 PodGroup 名的 Pod。
 	var podsWithPodGroupName []*v1.Pod
 	for i := range 20 {
 		pod := st.MakePod().Name(fmt.Sprintf("p-podgroup-%v", i)).Namespace("test-ns").UID(fmt.Sprintf("puid-podgroup-%v", i)).
@@ -2831,7 +2840,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 				addNode(0), addNode(1), addPodWithPVC(0, 0, 0), addPodWithPVC(1, 1, 1), addPodWithPVC(2, 1, 1),
 				addPodWithPVC(3, 1, 2), addPodWithPVC(4, 0, 3), addPodWithPVC(5, 0, 0),
 				addPodWithPVC(6, 1, 2), addPodWithPVC(7, 0, 4), addPodWithPVC(8, 1, 2), updateSnapshot(),
-				// Pod and node deletion
+				// 删除 Pod 与节点。
 				removeNode(0), updateSnapshot(),
 				removePodWithPVC(4, 0, 3), removePodWithPVC(5, 0, 0), updateSnapshot(),
 			},
@@ -2952,7 +2961,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 
 			cacheNodeSize := 0
 			for _, n := range cache.nodes {
-				if n.info.Node() != nil { // non-deleted nodes
+				if n.info.Node() != nil { // 未删除的节点
 					cacheNodeSize++
 				}
 			}
@@ -2960,7 +2969,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 				t.Errorf("unexpected number of nodes. Expected: %v, got: %v", len(test.expected), cacheNodeSize)
 			}
 			var i int
-			// Check that cache is in the expected state.
+			// 校验缓存处于预期状态。
 			for node := cache.headNode; node != nil; node = node.next {
 				if node.info.Node() != nil {
 					if node.info.Node().Name != test.expected[i].Name {
@@ -2969,27 +2978,27 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 					i++
 				}
 			}
-			// Make sure we visited all the cached nodes in the above for loop.
+			// 确保上面的 for 循环访问了所有缓存节点。
 			if i != cacheNodeSize {
 				t.Errorf("Not all the nodes were visited by following the NodeInfo linked list. Expected to see %v nodes, saw %v.", len(cache.nodes), i)
 			}
 
-			// Check pod group states in the snapshot.
+			// 校验快照中的 PodGroup 状态。
 			if diff := cmp.Diff(test.expectedPodGroupStatesSnapshot, snapshot.podGroupStates, podGroupStateCmpOpts...); diff != "" {
 				t.Errorf("unexpected podGroupStates in snapshot (-want, +got):\n%s", diff)
 			}
 
-			// Check number of nodes with pods with affinity
+			// 校验带亲和性 Pod 所在节点的数量。
 			if len(snapshot.havePodsWithAffinityNodeInfoList) != test.expectedHavePodsWithAffinity {
 				t.Errorf("unexpected number of HavePodsWithAffinity nodes. Expected: %v, got: %v", test.expectedHavePodsWithAffinity, len(snapshot.havePodsWithAffinityNodeInfoList))
 			}
 
-			// Compare content of the used PVC set
+			// 比较已使用 PVC 集合的内容。
 			if diff := cmp.Diff(test.expectedUsedPVCCounts, snapshot.usedPVCRefCounts); diff != "" {
 				t.Errorf("Unexpected usedPVCSet (-want +got):\n%s", diff)
 			}
 
-			// Always update the snapshot at the end of operations and compare it.
+			// 操作结束后统一更新快照并比较。
 			if err := cache.UpdateSnapshot(logger, snapshot); err != nil {
 				t.Error(err)
 			}
@@ -3001,7 +3010,7 @@ func TestSchedulerCache_UpdateSnapshot(t *testing.T) {
 }
 
 func compareCacheWithNodeInfoSnapshot(t *testing.T, cache *cacheImpl, snapshot *Snapshot) error {
-	// Compare the map.
+	// 比较 map。
 	if len(snapshot.nodeInfoMap) != cache.nodeTree.numNodes {
 		return fmt.Errorf("unexpected number of nodes in the snapshot. Expected: %v, got: %v", cache.nodeTree.numNodes, len(snapshot.nodeInfoMap))
 	}
@@ -3014,7 +3023,7 @@ func compareCacheWithNodeInfoSnapshot(t *testing.T, cache *cacheImpl, snapshot *
 			return fmt.Errorf("Unexpected node info for node (-want, +got):\n%s", diff)
 		}
 	}
-	// Compare the lists.
+	// 比较列表。
 	if len(snapshot.nodeInfoList) != cache.nodeTree.numNodes {
 		return fmt.Errorf("unexpected number of nodes in NodeInfoList. Expected: %v, got: %v", cache.nodeTree.numNodes, len(snapshot.nodeInfoList))
 	}
@@ -3063,13 +3072,14 @@ func compareCacheWithNodeInfoSnapshot(t *testing.T, cache *cacheImpl, snapshot *
 	return nil
 }
 
+// TestSchedulerCache_updateNodeInfoSnapshotList 验证节点快照列表的排序与内容。
 func TestSchedulerCache_updateNodeInfoSnapshotList(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
-	// Create a few nodes to be used in tests.
+	// 创建测试用节点。
 	var nodes []*v1.Node
 	i := 0
-	// List of number of nodes per zone, zone 0 -> 2, zone 1 -> 6
+	// 每个 zone 的节点数：zone 0 有 2 个，zone 1 有 6 个。
 	for zone, nb := range []int{2, 6} {
 		for j := 0; j < nb; j++ {
 			nodes = append(nodes, &v1.Node{
@@ -3195,7 +3205,7 @@ func TestSchedulerCache_updateNodeInfoSnapshotList(t *testing.T) {
 
 			test.operations(t)
 
-			// Always update the snapshot at the end of operations and compare it.
+			// 操作结束后统一更新快照并比较。
 			cache.updateNodeInfoSnapshotList(logger, snapshot, true)
 			if err := compareCacheWithNodeInfoSnapshot(t, cache, snapshot); err != nil {
 				t.Error(err)
@@ -3211,6 +3221,7 @@ func TestSchedulerCache_updateNodeInfoSnapshotList(t *testing.T) {
 	}
 }
 
+// BenchmarkUpdate1kNodes30kPods 基准测试 1000 节点、3 万 Pod 规模下的缓存更新性能。
 func BenchmarkUpdate1kNodes30kPods(b *testing.B) {
 	logger, _ := ktesting.NewTestContext(b)
 	cache := setupCacheOf1kNodes30kPods(b)
@@ -3245,8 +3256,8 @@ func makeBasePod(t testingMode, nodeName, objName, cpu, mem, extended string, po
 	return podWrapper.Obj()
 }
 
-// checkImageStateSummary collect ImageStateSummary of image traverse nodes,
-// the collected ImageStateSummary should be equal
+// checkImageStateSummary 遍历节点收集同一镜像的 ImageStateSummary，
+// 并校验收集到的状态一致。
 func checkImageStateSummary(nodes map[string]*framework.NodeInfo, imageNames ...string) bool {
 	for _, imageName := range imageNames {
 		var imageState *fwk.ImageStateSummary
@@ -3299,7 +3310,7 @@ func isForgottenFromCache(p *v1.Pod, c *cacheImpl) error {
 	return nil
 }
 
-// getNodeInfo returns cached data for the node name.
+// getNodeInfo 返回指定节点的缓存数据。
 func (cache *cacheImpl) getNodeInfo(nodeName string) (*v1.Node, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
@@ -3312,6 +3323,7 @@ func (cache *cacheImpl) getNodeInfo(nodeName string) (*v1.Node, error) {
 	return n.info.Node(), nil
 }
 
+// Test_AddCompositePodGroup 验证添加复合 PodGroup 的处理逻辑。
 func Test_AddCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 	cpg2 := st.MakeCompositePodGroup().Name("cpg2").Namespace("ns1").Obj()
@@ -3402,6 +3414,7 @@ func Test_AddCompositePodGroup(t *testing.T) {
 	}
 }
 
+// Test_RemoveCompositePodGroup 验证删除复合 PodGroup 的处理逻辑。
 func Test_RemoveCompositePodGroup(t *testing.T) {
 	cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").Obj()
 	cpg3WithParent := st.MakeCompositePodGroup().Name("cpg3").Namespace("ns1").ParentCompositePodGroup("cpg1").Obj()
@@ -3496,6 +3509,7 @@ func Test_RemoveCompositePodGroup(t *testing.T) {
 	}
 }
 
+// Test_BuildHierarchySnapshotFromPod 验证从 Pod 构建层级快照的逻辑。
 func Test_BuildHierarchySnapshotFromPod(t *testing.T) {
 	podNoGroup := st.MakePod().Name("p0").Namespace("ns1").UID("p0").Obj()
 	pod1 := st.MakePod().Name("p1").Namespace("ns1").UID("p1").PodGroupName("pg1").Obj()
@@ -3644,6 +3658,7 @@ func Test_BuildHierarchySnapshotFromPod(t *testing.T) {
 	}
 }
 
+// TestCache_GetRootKeyForGroup 验证按 PodGroup 查找根键的逻辑。
 func TestCache_GetRootKeyForGroup(t *testing.T) {
 	setupCacheForRootKeyTest := func(genericWorkloadEnabled, compositePodGroupEnabled bool) *cacheImpl {
 		ctx := context.Background()
@@ -3744,6 +3759,7 @@ func TestCache_GetRootKeyForGroup(t *testing.T) {
 	}
 }
 
+// TestCache_HavePodsWithRequiredNonHostScopedAntiAffinity 验证非主机域反亲和性节点的筛选。
 func TestCache_HavePodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 	testCases := []struct {
 		name                            string
@@ -3829,7 +3845,7 @@ func TestCache_HavePodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					t.Errorf("expected 0 nodes before adding pods, got %d", len(antiAffinityList))
 				}
 
-				// Add pods
+				// 添加 Pod。
 				for _, pod := range tc.pods {
 					if err := cache.AddPod(logger, pod); err != nil {
 						t.Fatalf("AddPod failed: %v", err)
@@ -3857,7 +3873,7 @@ func TestCache_HavePodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					t.Errorf("Unexpected node list after adding pods (-want +got):\n%s", cmp.Diff(expectedNodeNames, gotNodeNames))
 				}
 
-				// Update all pods, leaving the anti-affinity constraints untouched.
+				// 更新所有 Pod，但保持反亲和性约束不变。
 				var updatedPods []*v1.Pod
 				for _, pod := range tc.pods {
 					updatedPod := pod.DeepCopy()
@@ -3887,7 +3903,7 @@ func TestCache_HavePodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					t.Errorf("Unexpected node list after updating pods (-want +got):\n%s", cmp.Diff(expectedNodeNames, gotNodeNames))
 				}
 
-				// Remove all pods
+				// 移除所有 Pod。
 				for _, pod := range updatedPods {
 					if err := cache.RemovePod(logger, pod); err != nil {
 						t.Fatalf("RemovePod failed: %v", err)

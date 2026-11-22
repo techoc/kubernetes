@@ -26,41 +26,42 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// waitingPodsMap a thread-safe map used to maintain pods waiting in the permit phase.
+// waitingPodsMap 是线程安全的映射，维护处于 permit 阶段等待的 Pod。
 type waitingPodsMap struct {
 	pods map[types.UID]*waitingPod
 	mu   sync.RWMutex
 }
 
-// NewWaitingPodsMap returns a new waitingPodsMap.
+// NewWaitingPodsMap 返回一个新的 waitingPodsMap。
 func NewWaitingPodsMap() *waitingPodsMap {
 	return &waitingPodsMap{
 		pods: make(map[types.UID]*waitingPod),
 	}
 }
 
-// add a new WaitingPod to the map.
+// add 把一个 WaitingPod 加入映射。
 func (m *waitingPodsMap) add(wp *waitingPod) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.pods[wp.GetPod().UID] = wp
 }
 
-// remove a WaitingPod from the map.
+// remove 按 UID 从映射中移除一个 WaitingPod。
 func (m *waitingPodsMap) remove(uid types.UID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.pods, uid)
 }
 
-// get a WaitingPod from the map.
+// get 按 UID 从映射中取一个 WaitingPod，不存在时返回 nil。
 func (m *waitingPodsMap) get(uid types.UID) *waitingPod {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.pods[uid]
 }
 
-// iterate acquires a read lock and iterates over the WaitingPods map.
+// iterate 持有读锁遍历所有 WaitingPod，对每个元素调用 callback。
+// 回调中不应再调用本映射的写方法，以免死锁。
 func (m *waitingPodsMap) iterate(callback func(fwk.WaitingPod)) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -69,7 +70,7 @@ func (m *waitingPodsMap) iterate(callback func(fwk.WaitingPod)) {
 	}
 }
 
-// waitingPod represents a pod waiting in the permit phase.
+// waitingPod 表示在 permit 阶段等待各插件放行的 Pod。
 type waitingPod struct {
 	pod            *v1.Pod
 	pendingPlugins map[string]*time.Timer
@@ -80,20 +81,18 @@ type waitingPod struct {
 
 var _ fwk.WaitingPod = &waitingPod{}
 
-// newWaitingPod returns a new waitingPod instance.
+// newWaitingPod 根据每个 permit 插件的最长等待时间创建一个新的 waitingPod。
 func newWaitingPod(pod *v1.Pod, pluginsMaxWaitTime map[string]time.Duration) *waitingPod {
 	wp := &waitingPod{
 		pod: pod,
-		// Allow() and Reject() calls are non-blocking. This property is guaranteed
-		// by using non-blocking send to this channel. This channel has a buffer of size 1
-		// to ensure that non-blocking send will not be ignored - possible situation when
-		// receiving from this channel happens after non-blocking send.
+		// Allow() 和 Reject() 必须是非阻塞的，因此用非阻塞发送。
+		// 缓冲区大小为 1，避免接收方晚于发送方就绪时把唯一的状态通知丢掉。
 		s: make(chan *fwk.Status, 1),
 	}
 
 	wp.pendingPlugins = make(map[string]*time.Timer, len(pluginsMaxWaitTime))
-	// The time.AfterFunc calls wp.Reject which iterates through pendingPlugins map. Acquire the
-	// lock here so that time.AfterFunc can only execute after newWaitingPod finishes.
+	// time.AfterFunc 触发的 Reject 会遍历 pendingPlugins，先持锁保证定时器回调
+	// 只能在初始化完成后执行，避免读到半构造的状态。
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 	for plugin, waitTime := range pluginsMaxWaitTime {
@@ -107,12 +106,12 @@ func newWaitingPod(pod *v1.Pod, pluginsMaxWaitTime map[string]time.Duration) *wa
 	return wp
 }
 
-// GetPod returns a reference to the waiting pod.
+// GetPod 返回等待中的 Pod 引用。
 func (w *waitingPod) GetPod() *v1.Pod {
 	return w.pod
 }
 
-// GetPendingPlugins returns a list of pending permit plugin's name.
+// GetPendingPlugins 返回尚未放行的 permit 插件名字列表。
 func (w *waitingPod) GetPendingPlugins() []string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -124,9 +123,8 @@ func (w *waitingPod) GetPendingPlugins() []string {
 	return plugins
 }
 
-// Allow declares the waiting pod is allowed to be scheduled by plugin pluginName.
-// If this is the last remaining plugin to allow, then a success signal is delivered
-// to unblock the pod.
+// Allow 表示插件 pluginName 同意调度该等待中的 Pod。
+// 当它是最后一个未放行的插件时，会发送成功信号解除 Pod 的等待。
 func (w *waitingPod) Allow(pluginName string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -135,13 +133,12 @@ func (w *waitingPod) Allow(pluginName string) {
 		delete(w.pendingPlugins, pluginName)
 	}
 
-	// Only signal success status after all plugins have allowed
+	// 还有插件未放行，此时不能提前发出成功信号。
 	if len(w.pendingPlugins) != 0 {
 		return
 	}
 
-	// The select clause works as a non-blocking send.
-	// If there is no place in the buffer, it's a no-op (default case).
+	// 用 select+default 实现非阻塞发送：缓冲区满时直接跳过，避免卡住插件。
 	select {
 	case w.s <- fwk.NewStatus(fwk.Success, ""):
 	default:
@@ -149,17 +146,19 @@ func (w *waitingPod) Allow(pluginName string) {
 	w.done = true
 }
 
-// Reject declares the waiting pod unschedulable.
+// Reject 判定等待中的 Pod 不可调度。
 func (w *waitingPod) Reject(pluginName, msg string) bool {
 	return w.stopWithStatus(fwk.Unschedulable, pluginName, msg)
 }
 
-// Preempt declares the waiting pod is preempted. Compared to reject it does not mark the pod as unschedulable,
-// allowing it to be rescheduled.
+// Preempt 表示等待中的 Pod 被抢占。与 Reject 不同，它不把 Pod 标记为不可调度，
+// 因此 Pod 还有机会被重新调度。
 func (w *waitingPod) Preempt(pluginName, msg string) bool {
 	return w.stopWithStatus(fwk.Error, pluginName, msg)
 }
 
+// stopWithStatus 停止所有待处理定时器并向等待方发送给定的状态。
+// 返回 true 表示本次调用首次结束了等待，重复调用返回 false。
 func (w *waitingPod) stopWithStatus(status fwk.Code, pluginName, msg string) bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -167,8 +166,7 @@ func (w *waitingPod) stopWithStatus(status fwk.Code, pluginName, msg string) boo
 		timer.Stop()
 	}
 
-	// The select clause works as a non-blocking send.
-	// If there is no place in the buffer, it's a no-op (default case).
+	// 非阻塞发送：状态缓冲区已满说明等待方已有结论，不必覆盖。
 	select {
 	case w.s <- fwk.NewStatus(status, msg).WithPlugin(pluginName):
 	default:

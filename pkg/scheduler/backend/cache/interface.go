@@ -26,14 +26,12 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// Cache collects pods' information and provides node-level aggregated information.
-// It's intended for generic scheduler to do efficient lookup.
-// Cache's operations are pod centric. It does incremental updates based on pod events.
-// Pod events are sent via network. We don't have guaranteed delivery of all events:
-// We use Reflector to list and watch from remote.
-// Reflector might be slow and do a relist, which would lead to missing events.
+// Cache 收集 Pod 信息并提供节点级别的聚合信息，供通用调度器高效查询。
+// 操作以 Pod 为中心，根据 Pod 事件增量更新。
+// Pod 事件经网络传递，无法保证送达：我们使用 Reflector 从远端 list/watch，
+// 而 Reflector 可能变慢并执行 relist，从而漏掉部分事件。
 //
-// State Machine of a pod's events in scheduler's cache:
+// 调度器缓存中 Pod 事件的状态机：
 //
 //	+-------------------------------------------+  +----+
 //	|                            Add            |  |    |
@@ -50,121 +48,118 @@ import (
 //	+--------------------+                     Deleted
 //	      Forget
 //
-// Note that "Initial" and "Deleted" pods do not actually exist in cache.
-// Based on existing use cases, we are making the following assumptions:
-//   - No pod would be assumed twice
-//   - A pod could be added without going through scheduler. In this case, we will see Add but not Assume event.
-//   - If a pod wasn't added, it wouldn't be removed or updated.
+// 注意 "Initial" 与 "Deleted" 状态的 Pod 并不真实存在于缓存中。
+// 根据现有使用场景，我们做如下假设：
+//   - 同一个 Pod 不会被 Assume 两次
+//   - Pod 可能绕过调度器直接被创建，此时只会看到 Add 事件而没有 Assume 事件
+//   - 未被 Add 的 Pod 不会被 Remove 或 Update
 type Cache interface {
-	// NodeCount returns the number of nodes in the cache.
-	// DO NOT use outside of tests.
+	// NodeCount 返回缓存中的节点数。
+	// 仅限测试使用。
 	NodeCount() int
 
-	// PodCount returns the number of pods in the cache (including those from deleted nodes).
-	// DO NOT use outside of tests.
+	// PodCount 返回缓存中的 Pod 数（含已删除节点上的 Pod）。
+	// 仅限测试使用。
 	PodCount() (int, error)
 
-	// GetNode returns the copy of node stored in the cache.
-	// DO NOT use outside of tests.
+	// GetNode 返回缓存中节点的副本。
+	// 仅限测试使用。
 	GetNode(name string) (*framework.NodeInfo, error)
 
-	// AssumePod assumes a pod scheduled and aggregates the pod's information into its node.
+	// AssumePod 假定 Pod 已调度，并将其信息聚合到所属节点上。
 	AssumePod(logger klog.Logger, pod *v1.Pod) error
 
-	// ForgetPod forgets an assumed pod from the cache. It should be called when the pod
-	// still exists, as an undo operation for AssumePod.
+	// ForgetPod 从缓存中撤销一个 Assume 的 Pod，作为 AssumePod 的逆向操作，
+	// 仅在 Pod 仍存在时调用。
 	ForgetPod(logger klog.Logger, pod *v1.Pod) error
 
-	// RemoveAssumedPod removes an assumed pod from the cache. It should be called when the assumed
-	// pod was removed from the cluster to correctly clean up internal state.
+	// RemoveAssumedPod 从缓存中移除一个 Assume 的 Pod，在集群中该 Pod 已被删除时调用，
+	// 以正确清理内部状态。
 	RemoveAssumedPod(logger klog.Logger, pod *v1.Pod) error
 
-	// AddPod confirms an assumed pod, or adds a newly assigned pod to the cache.
+	// AddPod 确认一个 Assume 的 Pod，或把一个新分配的 Pod 加入缓存。
 	AddPod(logger klog.Logger, pod *v1.Pod) error
 
-	// UpdatePod removes oldPod's information and adds newPod's information.
+	// UpdatePod 移除 oldPod 的信息并加入 newPod 的信息。
 	UpdatePod(logger klog.Logger, oldPod, newPod *v1.Pod) error
 
-	// RemovePod removes a pod. The pod's information would be subtracted from assigned node.
+	// RemovePod 移除 Pod，并从其所在节点上扣减该 Pod 的信息。
 	RemovePod(logger klog.Logger, pod *v1.Pod) error
 
-	// GetPod returns the pod from the cache with the same namespace and the
-	// same name of the specified pod.
+	// GetPod 从缓存中返回与指定 Pod 同名同命名空间的 Pod。
 	GetPod(pod *v1.Pod) (*v1.Pod, error)
 
-	// IsAssumedPod returns true if the pod is assumed.
+	// IsAssumedPod 判断 Pod 是否处于 Assume 状态。
 	IsAssumedPod(pod *v1.Pod) (bool, error)
 
-	// AddNode adds overall information about node.
+	// AddNode 加入节点的整体信息。
 	AddNode(logger klog.Logger, node *v1.Node)
 
-	// UpdateNode updates overall information about node.
+	// UpdateNode 更新节点的整体信息。
 	UpdateNode(logger klog.Logger, oldNode, newNode *v1.Node)
 
-	// RemoveNode removes overall information about node.
+	// RemoveNode 移除节点的整体信息。
 	RemoveNode(logger klog.Logger, node *v1.Node) error
 
-	// UpdateSnapshot updates the passed infoSnapshot to the current contents of Cache.
-	// The node info contains aggregated information of pods scheduled (including assumed to be)
-	// on this node.
-	// The snapshot only includes Nodes that are not deleted at the time this function is called.
-	// nodeinfo.Node() is guaranteed to be not nil for all the nodes in the snapshot.
+	// UpdateSnapshot 将传入的快照更新到缓存当前内容。
+	// 节点信息包含该节点上已调度（含 Assume）Pod 的聚合信息。
+	// 快照只包含调用时未被删除的节点，且其中每个节点的 nodeinfo.Node() 保证非 nil。
 	UpdateSnapshot(logger klog.Logger, nodeSnapshot *Snapshot) error
 
-	// Dump produces a dump of the current cache.
+	// Dump 导出当前缓存内容。
 	Dump() *Dump
 
-	// BindPod handles the pod binding by adding a bind API call to the dispatcher.
-	// This method should be used only if the SchedulerAsyncAPICalls feature gate is enabled.
+	// BindPod 通过向 dispatcher 添加一个 bind API 调用来处理 Pod 绑定。
+	// 仅在启用 SchedulerAsyncAPICalls 特性门控时使用。
 	BindPod(binding *v1.Binding) (<-chan error, error)
 
-	// PodGroupStates returns a PodGroupStateLister.
+	// PodGroupStates 返回 PodGroupStateLister。
 	PodGroupStates() fwk.PodGroupStateLister
 
-	// PodGroups returns a PodGroupLister used to access the cached PodGroup objects.
+	// PodGroups 返回用于访问缓存中 PodGroup 对象的 PodGroupLister。
 	PodGroups() fwk.PodGroupLister
 
-	// CompositePodGroupStates returns a CompositePodGroupStateLister.
+	// CompositePodGroupStates 返回 CompositePodGroupStateLister。
 	CompositePodGroupStates() fwk.CompositePodGroupStateLister
 
-	// CompositePodGroups returns a CompositePodGroupLister used to access the cached CompositePodGroup objects.
+	// CompositePodGroups 返回用于访问缓存中 CompositePodGroup 对象的 lister。
 	CompositePodGroups() fwk.CompositePodGroupLister
 
-	// AddPodGroupMember adds not assigned and not assumed pod to its pod group state.
+	// AddPodGroupMember 将未分配、未 Assume 的 Pod 加入其 PodGroup 状态。
 	AddPodGroupMember(pod *v1.Pod)
 
-	// UpdatePodGroupMember updates a pod in its pod group state.
+	// UpdatePodGroupMember 更新 PodGroup 状态中的某个 Pod。
 	UpdatePodGroupMember(logger klog.Logger, oldPod, newPod *v1.Pod)
 
-	// RemovePodGroupMember removes a pod from its pod group state.
+	// RemovePodGroupMember 从 PodGroup 状态中移除某个 Pod。
 	RemovePodGroupMember(pod *v1.Pod)
 
-	// AddPodGroup adds a pod group object to the cache.
+	// AddPodGroup 将 PodGroup 对象加入缓存。
 	AddPodGroup(podGroup *schedulingv1beta1.PodGroup)
 
-	// UpdatePodGroup updates a pod group object in the cache.
+	// UpdatePodGroup 更新缓存中的 PodGroup 对象。
 	UpdatePodGroup(logger klog.Logger, oldPodGroup, newPodGroup *schedulingv1beta1.PodGroup)
 
-	// RemovePodGroup removes a pod group object from the cache.
+	// RemovePodGroup 从缓存中移除 PodGroup 对象。
 	RemovePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup)
 
-	// AddCompositePodGroup adds a composite pod group to the cache.
+	// AddCompositePodGroup 将 CompositePodGroup 加入缓存。
 	AddCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup)
 
-	// UpdateCompositePodGroup updates a composite pod group object in the cache.
+	// UpdateCompositePodGroup 更新缓存中的 CompositePodGroup 对象。
 	UpdateCompositePodGroup(logger klog.Logger, oldPodGroup, newPodGroup *schedulingv1alpha3.CompositePodGroup)
 
-	// RemoveCompositePodGroup removes a composite pod group from the cache.
+	// RemoveCompositePodGroup 从缓存中移除 CompositePodGroup。
 	RemoveCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup)
 
-	// BuildHierarchySnapshotFromPod returns a snapshot of the pod group hierarchy for the given pod.
+	// BuildHierarchySnapshotFromPod 返回给定 Pod 所属 PodGroup 层级的快照。
 	BuildHierarchySnapshotFromPod(pod *v1.Pod) (fwk.PodGroupManager, error)
 
-	// GetRootKeyForGroup returns the root key of the given EntityKey.
+	// GetRootKeyForGroup 返回给定 EntityKey 所在层级的根键。
 	GetRootKeyForGroup(key fwk.EntityKey) (fwk.EntityKey, bool, error)
 }
 
-// Dump is a dump of the cache state.
+// Dump 表示缓存状态的一份快照导出。
 type Dump struct {
 	AssumedPods sets.Set[string]
 	Nodes       map[string]*framework.NodeInfo

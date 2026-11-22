@@ -22,7 +22,7 @@ import (
 	internalcache "k8s.io/kubernetes/pkg/scheduler/backend/cache"
 )
 
-// Cache is used for testing
+// Cache 是用于测试的 Cache 实现：可选地用 Func 字段覆盖各方法，避免依赖真实缓存行为。
 type Cache struct {
 	internalcache.Cache
 	AssumeFunc         func(*v1.Pod)
@@ -32,7 +32,7 @@ type Cache struct {
 	UpdateSnapshotFunc func(nodeSnapshot *internalcache.Snapshot) error
 }
 
-// AssumePod allows to mock this method for testing.
+// AssumePod 允许在测试中通过 AssumeFunc 模拟该方法；未设置时回落到真实缓存。
 func (c *Cache) AssumePod(logger klog.Logger, pod *v1.Pod) error {
 	if c.AssumeFunc != nil {
 		c.AssumeFunc(pod)
@@ -41,7 +41,7 @@ func (c *Cache) AssumePod(logger klog.Logger, pod *v1.Pod) error {
 	return c.Cache.AssumePod(logger, pod)
 }
 
-// ForgetPod allows to mock this method for testing.
+// ForgetPod 允许在测试中通过 ForgetFunc 模拟该方法；未设置时回落到真实缓存。
 func (c *Cache) ForgetPod(logger klog.Logger, pod *v1.Pod) error {
 	if c.ForgetFunc != nil {
 		c.ForgetFunc(pod)
@@ -50,7 +50,7 @@ func (c *Cache) ForgetPod(logger klog.Logger, pod *v1.Pod) error {
 	return c.Cache.ForgetPod(logger, pod)
 }
 
-// IsAssumedPod allows to mock this method for testing.
+// IsAssumedPod 允许在测试中通过 IsAssumedPodFunc 模拟该方法；未设置时回落到真实缓存。
 func (c *Cache) IsAssumedPod(pod *v1.Pod) (bool, error) {
 	if c.IsAssumedPodFunc != nil {
 		return c.IsAssumedPodFunc(pod), nil
@@ -58,7 +58,7 @@ func (c *Cache) IsAssumedPod(pod *v1.Pod) (bool, error) {
 	return c.Cache.IsAssumedPod(pod)
 }
 
-// GetPod allows to mock this method for testing.
+// GetPod 允许在测试中通过 GetPodFunc 模拟该方法；未设置时回落到真实缓存。
 func (c *Cache) GetPod(pod *v1.Pod) (*v1.Pod, error) {
 	if c.GetPodFunc != nil {
 		return c.GetPodFunc(pod), nil
@@ -66,7 +66,7 @@ func (c *Cache) GetPod(pod *v1.Pod) (*v1.Pod, error) {
 	return c.Cache.GetPod(pod)
 }
 
-// UpdateSnapshot allows to mock this method for testing.
+// UpdateSnapshot 允许在测试中通过 UpdateSnapshotFunc 模拟该方法；未设置时回落到真实缓存。
 func (c *Cache) UpdateSnapshot(logger klog.Logger, nodeSnapshot *internalcache.Snapshot) error {
 	if c.UpdateSnapshotFunc != nil {
 		return c.UpdateSnapshotFunc(nodeSnapshot)

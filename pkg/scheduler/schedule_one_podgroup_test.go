@@ -69,7 +69,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// fakePodGroupPlugin simulates Filter, PostFilter, Permit and PodGroupPostFilter behaviors for PodGroup scheduling testing.
+// fakePodGroupPlugin 模拟 Filter、PostFilter、Permit 和 PodGroupPostFilter 行为的测试插件。
 type fakePodGroupPlugin struct {
 	filterStatus             map[string]*fwk.Status
 	postFilterResult         map[string]*fwk.PostFilterResult
@@ -84,8 +84,10 @@ var _ fwk.FilterPlugin = &fakePodGroupPlugin{}
 var _ fwk.PostFilterPlugin = &fakePodGroupPlugin{}
 var _ fwk.PodGroupPostFilterPlugin = &fakePodGroupPlugin{}
 
+// fakePodGroupPlugin Name 返回插件名称。
 func (mp *fakePodGroupPlugin) Name() string { return "FakePodGroupPlugin" }
 
+// fakePodGroupPlugin Filter 模拟过滤逻辑，返回预置的状态链表决。
 func (mp *fakePodGroupPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if status, ok := mp.filterStatus[pod.Name]; ok {
 		return status
@@ -93,6 +95,7 @@ func (mp *fakePodGroupPlugin) Filter(ctx context.Context, state fwk.CycleState, 
 	return fwk.NewStatus(fwk.Unschedulable, "default fake filter failure")
 }
 
+// fakePodGroupPlugin PostFilter 模拟 PostFilter 扩展点行为。
 func (mp *fakePodGroupPlugin) PostFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, filteredNodeStatusMap fwk.NodeToStatusReader) (*fwk.PostFilterResult, *fwk.Status) {
 	mp.postFilterCalled = true
 	if status, ok := mp.postFilterStatus[pod.Name]; ok {
@@ -101,10 +104,12 @@ func (mp *fakePodGroupPlugin) PostFilter(ctx context.Context, state fwk.CycleSta
 	return &fwk.PostFilterResult{NominatingInfo: clearNominatedNode}, fwk.NewStatus(fwk.Unschedulable, "default fake postfilter failure")
 }
 
+// fakePodGroupPlugin Permit 模拟 Permit 扩展点行为。
 func (mp *fakePodGroupPlugin) Permit(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	return fwk.NewStatus(fwk.Error, "unexpected call to permit"), 0
 }
 
+// fakePodGroupPlugin PodGroupPostFilter 模拟 PodGroupPostFilter 扩展点行为。
 func (mp *fakePodGroupPlugin) PodGroupPostFilter(ctx context.Context, state fwk.PodGroupCycleState, pgInfo fwk.PodGroupInfo, pgSchedulingFunc fwk.PodGroupSchedulingFunc) (*fwk.PodGroupPostFilterResult, *fwk.Status) {
 	mp.podGroupPostFilterCalled = true
 	if mp.podGroupPostFilterStatus == nil {
@@ -122,6 +127,7 @@ func (mp *fakePodGroupPlugin) PodGroupPostFilter(ctx context.Context, state fwk.
 	return &fwk.PodGroupPostFilterResult{NominatingInfos: n}, mp.podGroupPostFilterStatus
 }
 
+// fakePlacementFeasiblePlugin 模拟放置可行性检查与 Permit 行为的测试插件。
 type fakePlacementFeasiblePlugin struct {
 	placementFeasibleStatuses [][]fwk.Code
 	placementCount            int
@@ -129,10 +135,12 @@ type fakePlacementFeasiblePlugin struct {
 
 const fakePlacementFeasiblePluginDataKey = "fakePlacementFeasiblePluginDataKey"
 
+// fakePlacementFeasiblePluginData fakePlacementFeasiblePlugin 写入 CycleState 的测试数据。
 type fakePlacementFeasiblePluginData struct {
 	placementIndex int
 }
 
+// fakePlacementFeasiblePluginData Clone 返回状态数据的副本，满足 fwk.StateData 接口。
 func (d *fakePlacementFeasiblePluginData) Clone() fwk.StateData {
 	return &fakePlacementFeasiblePluginData{placementIndex: d.placementIndex}
 }
@@ -140,18 +148,20 @@ func (d *fakePlacementFeasiblePluginData) Clone() fwk.StateData {
 var _ framework.PlacementFeasiblePlugin = &fakePlacementFeasiblePlugin{}
 var _ fwk.PermitPlugin = &fakePlacementFeasiblePlugin{}
 
+// fakePlacementFeasiblePlugin Name 返回插件名称。
 func (mp *fakePlacementFeasiblePlugin) Name() string {
-	// Name has to be GangScheduling for the PlacementFeasible plugin to be used.
-	// TODO: Remove this once the restriction is taken off.
+	// 插件名必须是 GangScheduling，PlacementFeasible 插件才会被调用。
+	// TODO: 解除该限制后删除此处约束。
 	return names.GangScheduling
 }
 
-// PlacementFeasible simulates the evaluation of pod group placement constraints.
-// The mock uses a 2D slice (placementFeasibleStatuses) where:
-// - The outer slice represents distinct placements (e.g., when evaluating multiple topology placements).
-// - The inner slice represents the pod-by-pod evaluation within a single placement.
+// PlacementFeasible 模拟 PodGroup 放置约束的评估。
+// mock 使用二维数组 placementFeasibleStatuses：
+// - 外层表示不同的放置方案（例如评估多个拓扑放置时）。
+// - 内层表示单个放置方案内逐 Pod 的评估结果。
+// fakePlacementFeasiblePlugin PlacementFeasible 模拟放置可行性评估，按预置状态依次返回结果。
 func (mp *fakePlacementFeasiblePlugin) PlacementFeasible(ctx context.Context, placementCycleState fwk.PlacementCycleState, podGroupInfo fwk.PodGroupInfo, args framework.PlacementProgress) *fwk.Status {
-	// If no mock statuses are configured, always succeed.
+	// 未配置 mock 状态时一律成功。
 	if len(mp.placementFeasibleStatuses) == 0 {
 		return nil
 	}
@@ -173,9 +183,9 @@ func (mp *fakePlacementFeasiblePlugin) PlacementFeasible(ctx context.Context, pl
 	}
 	placementIndex := state.(*fakePlacementFeasiblePluginData).placementIndex
 
-	// Ensure the indices are within the bounds of the injected statuses.
+	// 确保索引不越出注入状态的边界。
 	if placementIndex < len(mp.placementFeasibleStatuses) {
-		// If the specific placement has no pod statuses configured, treat it as always successful.
+		// 某个放置方案未配置 Pod 状态时，视为始终成功。
 		if len(mp.placementFeasibleStatuses[placementIndex]) == 0 {
 			return nil
 		}
@@ -190,10 +200,12 @@ func (mp *fakePlacementFeasiblePlugin) PlacementFeasible(ctx context.Context, pl
 	return nil
 }
 
+// fakePlacementFeasiblePlugin Permit 模拟 Permit 扩展点行为。
 func (mp *fakePlacementFeasiblePlugin) Permit(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	return fwk.NewStatus(fwk.Error, "unexpected call to permit"), 0
 }
 
+// TestValidatePodGroup 验证 PodGroup 校验逻辑对各种合法与非法配置的处理。
 func TestValidatePodGroup(t *testing.T) {
 	tests := []struct {
 		name                           string
@@ -620,6 +632,7 @@ func TestValidatePodGroup(t *testing.T) {
 	}
 }
 
+// TestSkipPodGroupPodSchedule 验证属于 PodGroup 的 Pod 在调度时能被正确跳过（由 PodGroup 调度流程统一处理）。
 func TestSkipPodGroupPodSchedule(t *testing.T) {
 	p1 := st.MakePod().Name("p1").UID("p1").PodGroupName("pg").Obj()
 	p2 := st.MakePod().Name("p2").UID("p2").PodGroupName("pg").Terminating().Obj()
@@ -673,7 +686,7 @@ func TestSkipPodGroupPodSchedule(t *testing.T) {
 		Cache:           cache,
 	}
 
-	// Assume pod p3
+	// Assume Pod p3。
 	err = cache.AssumePod(logger, p3)
 	if err != nil {
 		t.Fatalf("Failed to assume pod p3: %v", err)
@@ -695,6 +708,7 @@ func TestSkipPodGroupPodSchedule(t *testing.T) {
 	}
 }
 
+// TestScheduleOnePodGroup_FinishesAttemptWhenAllPoppedPodsAreAssumed 验证当所有被弹出的 Pod 都已 assumed 时，PodGroup 调度尝试能正常结束。
 func TestScheduleOnePodGroup_FinishesAttemptWhenAllPoppedPodsAreAssumed(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
@@ -760,8 +774,7 @@ func TestScheduleOnePodGroup_FinishesAttemptWhenAllPoppedPodsAreAssumed(t *testi
 			podGroupInfo := entity.(*framework.QueuedPodGroupInfo)
 
 			if tt.memberArrivesWhileInFlight {
-				// A member arriving while its PodGroup is scheduling waits for
-				// that scheduling attempt to finish.
+				// 成员 Pod 在其 PodGroup 正在调度期间到达时，需要等待该次调度尝试结束。
 				queue.Add(ctx, p2)
 				if pendingPods := queue.PendingPodGroupPods(); len(pendingPods) != 1 || pendingPods[0].UID != p2.UID {
 					t.Fatalf("Expected pod %q to be pending, got %v", p2.Name, pendingPods)
@@ -797,6 +810,7 @@ func TestScheduleOnePodGroup_FinishesAttemptWhenAllPoppedPodsAreAssumed(t *testi
 	}
 }
 
+// TestPodGroupCycle_UpdateSnapshotError 验证更新快照失败时 PodGroup 调度周期的错误处理。
 func TestPodGroupCycle_UpdateSnapshotError(t *testing.T) {
 	p1 := st.MakePod().Name("p1").UID("p1").PodGroupName("pg").SchedulerName("test-scheduler").Obj()
 	p2 := st.MakePod().Name("p2").UID("p2").PodGroupName("pg").SchedulerName("test-scheduler").Obj()
@@ -844,7 +858,7 @@ func TestPodGroupCycle_UpdateSnapshotError(t *testing.T) {
 		t.Fatalf("Failed to create new framework: %v", err)
 	}
 
-	// Create fake cache that returns error on UpdateSnapshot
+	// 构造一个 UpdateSnapshot 返回错误的假缓存。
 	updateSnapshotErr := fmt.Errorf("update snapshot error")
 	cache := &fakecache.Cache{
 		Cache: internalcache.New(ctx, nil, true, false /* CompositePodGroup */),
@@ -879,6 +893,7 @@ func TestPodGroupCycle_UpdateSnapshotError(t *testing.T) {
 	}
 }
 
+// TestPodGroupCycle_FillsPodResultsOnFewerResults 验证调度结果数量少于 Pod 数量时，调度周期会为缺失 Pod 填充结果。
 func TestPodGroupCycle_FillsPodResultsOnFewerResults(t *testing.T) {
 	testPodGroup := st.MakePodGroup().Name("pg").Namespace("default").Obj()
 	p1 := st.MakePod().Name("p1").UID("p1").PodGroupName("pg").SchedulerName("test-scheduler").Obj()
@@ -968,7 +983,7 @@ func TestPodGroupCycle_FillsPodResultsOnFewerResults(t *testing.T) {
 		},
 	}
 
-	// Checking that scheduling algorithm is returning shorter list
+	// 校验调度算法返回的列表比预期短的情形。
 	if err := sched.Cache.UpdateSnapshot(logger, sched.nodeInfoSnapshot); err != nil {
 		t.Fatalf("Failed to update snapshot: %v", err)
 	}
@@ -980,7 +995,7 @@ func TestPodGroupCycle_FillsPodResultsOnFewerResults(t *testing.T) {
 		t.Errorf("Expected 2 pod results, got %d", len(schedulePodResult.podResults))
 	}
 
-	// Run the scheduling cycle and check that all pods are handled.
+	// 运行调度周期并检查所有 Pod 都被处理。
 	sched.podGroupCycle(ctx, schedFwk, framework.NewCycleState(), podGroupInfo, time.Now())
 
 	lock.Lock()
@@ -1012,6 +1027,7 @@ func TestPodGroupCycle_FillsPodResultsOnFewerResults(t *testing.T) {
 	}
 }
 
+// TestPodGroupCycle_PodGroupPostFilter 验证 PodGroupPostFilter 扩展点在 PodGroup 调度周期中的调用行为。
 func TestPodGroupCycle_PodGroupPostFilter(t *testing.T) {
 	tests := []struct {
 		name                             string
@@ -1085,7 +1101,7 @@ func TestPodGroupCycle_PodGroupPostFilter(t *testing.T) {
 			}
 
 			if tt.postFilterPlugin == "DefaultPreemption" {
-				// Register the same plugin as DefaultPreemption to fulfill runWorkloadAwarePreemption requirements.
+				// 注册与 DefaultPreemption 同名的插件，以满足 runWorkloadAwarePreemption 的要求。
 				registry["DefaultPreemption"] = func(ctx context.Context, obj runtime.Object, handle fwk.Handle) (fwk.Plugin, error) {
 					return &fakeDefaultPreemption{fakePodGroupPlugin: fakePlugin}, nil
 				}
@@ -1165,6 +1181,7 @@ func TestPodGroupCycle_PodGroupPostFilter(t *testing.T) {
 	}
 }
 
+// TestPodGroupSchedulingAlgorithm 验证 PodGroup 调度算法的整体行为。
 func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 	testNode := st.MakeNode().Name("node1").UID("node1").Obj()
 
@@ -1298,7 +1315,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			expectedGroupStatusCode: fwk.Unschedulable,
 			expectedPodStatus: map[string]*fwk.Status{
 				"p1": nil,
-				// The algorithm stopped evaluating the pods after Unschedulable was received from PlacementFeasible.
+				// 收到 PlacementFeasible 返回的 Unschedulable 后，算法停止继续评估 Pod。
 			},
 		},
 		{
@@ -1319,7 +1336,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			expectedPodStatus: map[string]*fwk.Status{
 				"p1": nil,
 				"p2": nil,
-				// The algorithm stopped evaluating the pods after Unschedulable was received from PlacementFeasible.
+				// 收到 PlacementFeasible 返回的 Unschedulable 后，算法停止继续评估 Pod。
 			},
 		},
 		{
@@ -1380,7 +1397,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			expectedPodStatus: map[string]*fwk.Status{
 				"p1": nil,
 				"p2": fwk.NewStatus(fwk.Error),
-				// The algorithm stopped evaluating the pods after an error occurred, so a "p3" status is not expected.
+				// 出错后算法停止评估 Pod，因此不应出现 "p3" 的状态。
 			},
 		},
 		{
@@ -1401,7 +1418,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			expectedPodStatus: map[string]*fwk.Status{
 				"p1": nil,
 				"p2": nil,
-				// The algorithm stopped evaluating the pods after an error occurred, so a "p3" status is not expected.
+				// 出错后算法停止评估 Pod，因此不应出现 "p3" 的状态。
 			},
 		},
 		{
@@ -1418,7 +1435,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			},
 			expectedGroupStatusCode: fwk.Unschedulable,
 			expectedPodStatus:       map[string]*fwk.Status{
-				// The algorithm didn't evaluate any pods whatsoever because the first call to PlacementFeasible Plugin returned Unschedulable.
+				// PlacementFeasible 插件第一次调用就返回了 Unschedulable，算法完全没有评估任何 Pod。
 			},
 		},
 		{
@@ -1435,7 +1452,7 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 			},
 			expectedGroupStatusCode: fwk.Error,
 			expectedPodStatus:       map[string]*fwk.Status{
-				// The algorithm didn't evaluate any pods whatsoever because the first call to PlacementFeasible Plugin returned Error.
+				// PlacementFeasible 插件第一次调用就返回了 Error，算法完全没有评估任何 Pod。
 			},
 		},
 	}
@@ -1545,16 +1562,19 @@ func TestPodGroupSchedulingAlgorithm(t *testing.T) {
 	}
 }
 
-// This is only needed because PlacementFeasiblePlugin mock doesn't know which placement it processes and has to assume the order of placements.
-// TODO: Remove this once the PlacementFeasiblePlugin becomes order-independent or another way of ordering placements is introduced.
+// 需要这个插件是因为 PlacementFeasiblePlugin 的 mock 不知道自己处理的是哪个放置方案，只能假定放置顺序。
+// TODO: 待 PlacementFeasiblePlugin 与顺序无关、或引入其他放置排序方式后删除。
+// orderedPlacementPlugin 按固定顺序生成放置方案的测试插件。
 type orderedPlacementPlugin struct {
 	fwk.PlacementGeneratePlugin
 }
 
+// orderedPlacementPlugin Name 返回插件名称。
 func (p *orderedPlacementPlugin) Name() string {
 	return p.PlacementGeneratePlugin.Name() + "_Ordered"
 }
 
+// orderedPlacementPlugin GeneratePlacements 生成放置方案。
 func (p *orderedPlacementPlugin) GeneratePlacements(ctx context.Context, state fwk.PodGroupCycleState, podGroup fwk.PodGroupInfo, parentPlacement *fwk.Placement) (*fwk.GeneratePlacementsResult, *fwk.Status) {
 	result, status := p.PlacementGeneratePlugin.GeneratePlacements(ctx, state, podGroup, parentPlacement)
 	if status.IsSuccess() && result != nil {
@@ -1565,6 +1585,7 @@ func (p *orderedPlacementPlugin) GeneratePlacements(ctx context.Context, state f
 	return result, status
 }
 
+// TestSubmitPodGroupAlgorithmResult 验证提交 PodGroup 调度算法结果的逻辑，包括放置方案和结果转换。
 func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
@@ -1581,9 +1602,9 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 	tests := []struct {
 		name             string
 		existingPodGroup *schedulingv1beta1.PodGroup
-		// podResultsByPodName maps each pod name to its scheduling algorithm result.
-		// The final podResults slice is built in the order of UnscheduledPods after Pop,
-		// making the test independent of pod ordering within the pod group.
+		// podResultsByPodName 把 Pod 名称映射到其调度算法结果。
+		// 最终的 podResults 按 Pop 之后 UnscheduledPods 的顺序构造，
+		// 使测试不依赖 PodGroup 内部的 Pod 顺序。
 		podResultsByPodName     map[string]algorithmResult
 		status                  *fwk.Status
 		waitingOnPreemption     bool
@@ -1786,11 +1807,11 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 			},
 		},
 		{
-			// If:
-			// - PodGroup failed scheduling
-			// - some pods were successfully evaluated
-			// - pod group preemption successfully found placement
-			// The scheduler should use the nominating info from preemption instead of suggested host from evaluation.
+			// 当：
+			// - PodGroup 调度失败
+			// - 部分 Pod 评估成功
+			// - PodGroup 抢占成功找到了放置方案
+			// 调度器应使用抢占得到的提名信息，而不是评估产生的建议节点。
 			name:                "PodGroup waiting on preemption uses nominating info instead of suggested host for successfully evaluated pods",
 			status:              fwk.NewStatus(fwk.Unschedulable, "waiting on preemption"),
 			waitingOnPreemption: true,
@@ -1904,9 +1925,9 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 				},
 			}
 
-			// Create the pod group and add the pods to queue and pop the group to set up internal queue state correctly.
+			// 创建 PodGroup、把 Pod 入队并弹出该组，以正确初始化队列内部状态。
 			schedulingQueue.AddPodGroup(logger, pg)
-			// Advance the clock between additions to keep pod ordering deterministic.
+			// 在每次加入之间推进时钟，保证 Pod 顺序确定。
 			schedulingQueue.Add(ctx, p1)
 			fakeClock.Step(time.Second)
 			schedulingQueue.Add(ctx, p2)
@@ -1922,8 +1943,8 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 
 			podGroupCycleState := framework.NewCycleState()
 
-			// Build the podResults slice in the order of UnscheduledPods after Pop,
-			// so the test is independent of pod ordering within the pod group.
+			// 按 Pop 之后 UnscheduledPods 的顺序构造 podResults 切片，
+			// 使测试不依赖 PodGroup 内部的 Pod 顺序。
 			algorithmResult := podGroupAlgorithmResult{
 				podGroupInfo:        podGroupInfo.PodGroupInfo,
 				status:              tt.status,
@@ -1932,8 +1953,7 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 			for _, pod := range podGroupInfo.UnscheduledPods {
 				result, ok := tt.podResultsByPodName[pod.Name]
 				if !ok {
-					// This pod was not processed by the algorithm (fewer results than pods in queue).
-					// Skip it — the test verifies that all queue pods are failed in this scenario.
+					// 该 Pod 未被算法处理（结果数少于队列中的 Pod 数），跳过——本场景要验证的是所有队列 Pod 都被标记为失败。
 					continue
 				}
 				placementCycleState := framework.NewCycleState()
@@ -1971,7 +1991,7 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 				t.Errorf("Unexpected pods in active queue (-want, +got):\n%s", diff)
 			}
 
-			// If there were any remaining pods of the podgroup requeued into the active queue, they must preserve their timestamp.
+			// 若 PodGroup 还有剩余 Pod 被重新入 active 队列，它们必须保留原时间戳。
 			if tt.expectPodsInActiveQueue.Len() > 0 {
 				queuedPGInfo, ok := sched.SchedulingQueue.GetPodGroup("pg", "default", fwk.PodGroupKeyType)
 				if !ok {
@@ -1993,6 +2013,7 @@ func TestSubmitPodGroupAlgorithmResult(t *testing.T) {
 	}
 }
 
+// TestUpdatePodGroupCondition 验证 PodGroup 状态条件的更新逻辑。
 func TestUpdatePodGroupCondition(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -2001,8 +2022,7 @@ func TestUpdatePodGroupCondition(t *testing.T) {
 		podGroupName     string
 		condition        *metav1.Condition
 		expectCondition  *metav1.Condition
-		// expectLastTransitionTimeUnchanged, when true, verifies that LastTransitionTime
-		// is preserved from the existing condition.
+		// expectLastTransitionTimeUnchanged 为 true 时，验证 LastTransitionTime 沿用已有条件中的值。
 		expectLastTransitionTimeUnchanged bool
 	}{
 		{
@@ -2358,7 +2378,7 @@ func TestUpdatePodGroupCondition(t *testing.T) {
 	}
 }
 
-// fakePlacementPlugin simulates Filter, PlacementGenerate and PlacementScore behaviors for PodGroup placement scheduling testing.
+// fakePlacementPlugin 模拟放置生成、打分、过滤和预留行为的测试插件。
 type fakePlacementPlugin struct {
 	name                     string
 	filterStatus             map[string]*fwk.Status            // node name to status
@@ -2375,8 +2395,10 @@ var _ fwk.PlacementGeneratePlugin = &fakePlacementPlugin{}
 var _ fwk.PlacementScorePlugin = &fakePlacementPlugin{}
 var _ fwk.ReservePlugin = &fakePlacementPlugin{}
 
+// fakePlacementPlugin Name 返回插件名称。
 func (mp *fakePlacementPlugin) Name() string { return mp.name }
 
+// fakePlacementPlugin Reserve 模拟 Reserve 扩展点。
 func (mp *fakePlacementPlugin) Reserve(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) *fwk.Status {
 	if mp.podPerNode {
 		mp.reservedNodes.Insert(nodeName)
@@ -2384,12 +2406,14 @@ func (mp *fakePlacementPlugin) Reserve(ctx context.Context, state fwk.CycleState
 	return nil
 }
 
+// fakePlacementPlugin Unreserve 模拟 Unreserve 扩展点。
 func (mp *fakePlacementPlugin) Unreserve(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) {
 	if mp.podPerNode {
 		mp.reservedNodes.Delete(nodeName)
 	}
 }
 
+// fakePlacementPlugin Filter 模拟过滤逻辑，返回预置的状态链表决。
 func (mp *fakePlacementPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if status := mp.filterStatus[nodeInfo.Node().Name]; status != nil {
 		return status
@@ -2400,14 +2424,17 @@ func (mp *fakePlacementPlugin) Filter(ctx context.Context, state fwk.CycleState,
 	return nil
 }
 
+// fakePlacementPlugin PlacementScoreExtensions 返回放置打分扩展，本测试插件不使用。
 func (mp *fakePlacementPlugin) PlacementScoreExtensions() fwk.PlacementScoreExtensions {
 	return nil
 }
 
+// fakePlacementPlugin ScorePlacement 模拟放置打分，返回预置分数或记录收到的 assignments。
 func (mp *fakePlacementPlugin) ScorePlacement(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, placement *fwk.PodGroupAssignments) (int64, *fwk.Status) {
 	return mp.scorePlacementsResult[podGroup.GetKey()][placement.Name], mp.scorePlacementsStatus[podGroup.GetKey()][placement.Name]
 }
 
+// fakePlacementPlugin GeneratePlacements 生成放置方案。
 func (mp *fakePlacementPlugin) GeneratePlacements(ctx context.Context, state fwk.PodGroupCycleState, podGroup fwk.PodGroupInfo, parentPlacement *fwk.Placement) (*fwk.GeneratePlacementsResult, *fwk.Status) {
 	parentNodes := map[string]fwk.NodeInfo{}
 	for _, node := range parentPlacement.Nodes {
@@ -2430,6 +2457,7 @@ func (mp *fakePlacementPlugin) GeneratePlacements(ctx context.Context, state fwk
 	return &fwk.GeneratePlacementsResult{Placements: placements}, mp.generatePlacementsStatus[podGroup.GetKey()]
 }
 
+// statusCmpOpt 是 fwk.Status 的比较器，便于在测试中忽略无关字段比较状态。
 var statusCmpOpt = cmp.Comparer(func(s1 *fwk.Status, s2 *fwk.Status) bool {
 	if s1 == nil || s2 == nil {
 		return s1.IsSuccess() && s2.IsSuccess()
@@ -2440,6 +2468,7 @@ var statusCmpOpt = cmp.Comparer(func(s1 *fwk.Status, s2 *fwk.Status) bool {
 	return s1.Code() == s2.Code() && s1.Plugin() == s2.Plugin() && s1.Message() == s2.Message()
 })
 
+// assertCounterValueFromGatherer 断言指定指标中某个标签值对应的计数器数值。
 func assertCounterValueFromGatherer(t *testing.T, g componentmetrics.Gatherer, name, labelName, labelValue string, want int) {
 	t.Helper()
 	got := 0
@@ -2451,6 +2480,7 @@ func assertCounterValueFromGatherer(t *testing.T, g componentmetrics.Gatherer, n
 	}
 }
 
+// assertHistogramSampleCountFromGatherer 断言指定直方图指标在给定标签下的样本数。
 func assertHistogramSampleCountFromGatherer(t *testing.T, g componentmetrics.Gatherer, name string, labels map[string]string, want int) {
 	t.Helper()
 	got := 0
@@ -2462,6 +2492,7 @@ func assertHistogramSampleCountFromGatherer(t *testing.T, g componentmetrics.Gat
 	}
 }
 
+// TestPodGroupSchedulingPlacementAlgorithm 验证带放置插件的 PodGroup 调度算法行为。
 func TestPodGroupSchedulingPlacementAlgorithm(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -2914,6 +2945,7 @@ func TestPodGroupSchedulingPlacementAlgorithm(t *testing.T) {
 	}
 }
 
+// TestPodGroupSchedulingPlacementAlgorithm_Scoring 验证放置阶段打分的正确性。
 func TestPodGroupSchedulingPlacementAlgorithm_Scoring(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -3086,22 +3118,24 @@ func TestPodGroupSchedulingPlacementAlgorithm_Scoring(t *testing.T) {
 	}
 }
 
-// placementStateTracker is a fake plugin that writes to PlacementCycleState during Filter
-// and reads from it during ScorePlacement, to verify the lifecycle of PlacementCycleState.
+// placementStateTracker 在 Filter 阶段写入 PlacementCycleState、在 ScorePlacement 阶段读取，
+// 以此验证 PlacementCycleState 的生命周期。
+// placementStateTracker 记录放置扩展点调用状态的测试插件。
 type placementStateTracker struct {
 	name string
 	mu   sync.Mutex
-	// scoreReadValues records what value was read from PlacementCycleState
-	// during each ScorePlacement call, keyed by placement name.
+	// scoreReadValues 记录每次 ScorePlacement 从 PlacementCycleState 读到的值，按放置方案名索引。
 	scoreReadValues map[string]string
-	// generatePlacementsResult defines the placements to generate.
+	// generatePlacementsResult 定义要生成的放置方案。
 	generatePlacementsResult map[string][]string
 }
 
+// placementStateData placementStateTracker 在 CycleState 中保存的状态数据。
 type placementStateData struct {
 	value string
 }
 
+// placementStateData Clone 返回状态数据的副本，满足 fwk.StateData 接口。
 func (d *placementStateData) Clone() fwk.StateData { return d }
 
 var placementStateKey fwk.StateKey = "placementStateTracker"
@@ -3110,20 +3144,22 @@ var _ fwk.FilterPlugin = &placementStateTracker{}
 var _ fwk.PlacementGeneratePlugin = &placementStateTracker{}
 var _ fwk.PlacementScorePlugin = &placementStateTracker{}
 
+// placementStateTracker Name 返回插件名称。
 func (p *placementStateTracker) Name() string { return p.name }
 
+// placementStateTracker Filter 模拟过滤逻辑，返回预置的状态链表决。
 func (p *placementStateTracker) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	placementState := state.GetPlacementCycleState()
 	if placementState == nil {
 		return fwk.NewStatus(fwk.Error, "PlacementCycleState is nil during Filter")
 	}
 
-	// Write the node name as a marker so ScorePlacement can verify
-	// which placement's state it received.
+	// 写入节点名作为标记，便于 ScorePlacement 校验收到的是哪个放置方案的状态。
 	placementState.Write(placementStateKey, &placementStateData{value: nodeInfo.Node().Name})
 	return nil
 }
 
+// placementStateTracker ScorePlacement 模拟放置打分，返回预置分数或记录收到的 assignments。
 func (p *placementStateTracker) ScorePlacement(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, placement *fwk.PodGroupAssignments) (int64, *fwk.Status) {
 	if state == nil {
 		return 0, fwk.NewStatus(fwk.Error, "PlacementCycleState is nil during ScorePlacement")
@@ -3139,10 +3175,12 @@ func (p *placementStateTracker) ScorePlacement(ctx context.Context, state fwk.Pl
 	return 1, nil
 }
 
+// placementStateTracker PlacementScoreExtensions 返回放置打分扩展，本测试插件不使用。
 func (p *placementStateTracker) PlacementScoreExtensions() fwk.PlacementScoreExtensions {
 	return nil
 }
 
+// placementStateTracker GeneratePlacements 生成放置方案。
 func (p *placementStateTracker) GeneratePlacements(ctx context.Context, state fwk.PodGroupCycleState, podGroup fwk.PodGroupInfo, parentPlacement *fwk.Placement) (*fwk.GeneratePlacementsResult, *fwk.Status) {
 	parentNodes := map[string]fwk.NodeInfo{}
 	for _, node := range parentPlacement.Nodes {
@@ -3160,6 +3198,7 @@ func (p *placementStateTracker) GeneratePlacements(ctx context.Context, state fw
 	return &fwk.GeneratePlacementsResult{Placements: resultPlacements}, nil
 }
 
+// TestPlacementCycleStateLifecycle 验证 PlacementCycleState 在调度各阶段的生命周期与数据传递。
 func TestPlacementCycleStateLifecycle(t *testing.T) {
 	for _, cpgEnabled := range []bool{false, true} {
 		t.Run(fmt.Sprintf("CompositePodGroup=%v", cpgEnabled), func(t *testing.T) {
@@ -3169,12 +3208,12 @@ func TestPlacementCycleStateLifecycle(t *testing.T) {
 				features.CompositePodGroup:               cpgEnabled,
 			})
 
-			// A single scenario exercises both isolation and continuity:
-			// - Filter writes a node-name marker into PlacementCycleState during each placement's simulation.
-			// - ScorePlacement reads from the placement state after all simulations.
-			// Assertions verify:
-			//   1. Each placement's scorer reads only the value its own simulation wrote (isolation).
-			//   2. Data written during each placement's simulation remains readable during its scoring (continuity from simulation to scoring).
+			// 单个场景同时验证隔离性与连续性：
+			// - Filter 在每次放置模拟时向 PlacementCycleState 写入节点名标记。
+			// - 所有模拟结束后 ScorePlacement 从放置状态中读取。
+			// 断言验证：
+			//   1. 每个放置方案的打分器只读到自己模拟写入的值（隔离性）。
+			//   2. 模拟阶段写入的数据在打分阶段仍可读（模拟到打分的连续性）。
 
 			nodes := []*v1.Node{
 				st.MakeNode().Name("node1").Obj(),
@@ -3260,10 +3299,10 @@ func TestPlacementCycleStateLifecycle(t *testing.T) {
 				t.Fatalf("Expected success, got: %v", result.status)
 			}
 
-			// Each placement's scorer must read only what its own simulation wrote
-			// (placementA simulated on node1, placementB on node2). This proves both:
-			//   - Continuity: data written during a placement's simulation is readable during its scoring.
-			//   - Isolation: a placement's scorer does not see another placement's writes.
+			// 每个放置方案的打分器只能读到自身模拟写入的值
+			// （placementA 在 node1 上模拟、placementB 在 node2 上）。这同时证明：
+			//   - 连续性：模拟阶段写入的数据在打分阶段可读。
+			//   - 隔离性：一个放置方案的打分器看不到另一个方案的写入。
 			expectedScoreReadValues := map[string]string{"placementA": "node1", "placementB": "node2"}
 			if diff := cmp.Diff(expectedScoreReadValues, tracker.scoreReadValues); diff != "" {
 				t.Errorf("Unexpected scoreReadValues (-want,+got)\n%s", diff)
@@ -3272,10 +3311,12 @@ func TestPlacementCycleStateLifecycle(t *testing.T) {
 	}
 }
 
+// hierarchyData 层级跟踪插件在 CycleState 中保存的数据。
 type hierarchyData struct {
 	id string
 }
 
+// hierarchyData Clone 返回状态数据的副本，满足 fwk.StateData 接口。
 func (h *hierarchyData) Clone() fwk.StateData { return &hierarchyData{id: h.id} }
 
 var hierarchyKey fwk.StateKey = "hierarchyTracker"
@@ -3286,6 +3327,7 @@ var _ fwk.PlacementScorePlugin = &multiLevelPlacementStateTracker{}
 var _ framework.PlacementFeasiblePlugin = &multiLevelPlacementStateTracker{}
 var _ fwk.PermitPlugin = &multiLevelPlacementStateTracker{}
 
+// multiLevelPlacementStateTracker 跟踪多层放置/层级状态传递的测试插件。
 type multiLevelPlacementStateTracker struct {
 	mu                            sync.Mutex
 	placementIndex                int
@@ -3296,6 +3338,7 @@ type multiLevelPlacementStateTracker struct {
 	generatePlacementsResult      map[string][]string
 }
 
+// multiLevelPlacementStateTracker Name 返回插件名称。
 func (p *multiLevelPlacementStateTracker) Name() string {
 	return names.GangScheduling
 }
@@ -3336,6 +3379,7 @@ func collectHierarchyFromPodGroupCycleState(cycleState fwk.PodGroupCycleState, r
 	return nil
 }
 
+// multiLevelPlacementStateTracker Filter 模拟过滤逻辑，返回预置的状态链表决。
 func (p *multiLevelPlacementStateTracker) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	trajectory := []string{}
 	if err := collectHierarchyFromPlacementCycleState(state.GetPlacementCycleState(), &trajectory); err != nil {
@@ -3345,10 +3389,12 @@ func (p *multiLevelPlacementStateTracker) Filter(ctx context.Context, state fwk.
 	return nil
 }
 
+// multiLevelPlacementStateTracker Permit 模拟 Permit 扩展点行为。
 func (p *multiLevelPlacementStateTracker) Permit(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	return nil, 0
 }
 
+// PlacementFeasible 在 PlacementCycleState 中记录层级轨迹，用于验证多层状态传递。
 func (p *multiLevelPlacementStateTracker) PlacementFeasible(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, args framework.PlacementProgress) *fwk.Status {
 	if args.Scheduled == 0 {
 		if podGroup.GetPodGroup() != nil {
@@ -3364,6 +3410,7 @@ func (p *multiLevelPlacementStateTracker) PlacementFeasible(ctx context.Context,
 	return nil
 }
 
+// multiLevelPlacementStateTracker ScorePlacement 模拟放置打分，返回预置分数或记录收到的 assignments。
 func (p *multiLevelPlacementStateTracker) ScorePlacement(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, placement *fwk.PodGroupAssignments) (int64, *fwk.Status) {
 	if podGroup.GetPodGroup() != nil {
 		trajectory := []string{}
@@ -3377,10 +3424,12 @@ func (p *multiLevelPlacementStateTracker) ScorePlacement(ctx context.Context, st
 	return 0, nil
 }
 
+// multiLevelPlacementStateTracker PlacementScoreExtensions 返回放置打分扩展，本测试插件不使用。
 func (p *multiLevelPlacementStateTracker) PlacementScoreExtensions() fwk.PlacementScoreExtensions {
 	return nil
 }
 
+// multiLevelPlacementStateTracker GeneratePlacements 生成放置方案。
 func (p *multiLevelPlacementStateTracker) GeneratePlacements(ctx context.Context, state fwk.PodGroupCycleState, podGroup fwk.PodGroupInfo, parentPlacement *fwk.Placement) (*fwk.GeneratePlacementsResult, *fwk.Status) {
 	if podGroup.GetPodGroup() != nil {
 		trajectory := []string{}
@@ -3397,6 +3446,7 @@ func (p *multiLevelPlacementStateTracker) GeneratePlacements(ctx context.Context
 	return &fwk.GeneratePlacementsResult{Placements: placements}, nil
 }
 
+// TestPlacementCycleStateLifecycle_MultiLevel 验证多层放置场景下 PlacementCycleState 与 PodGroupCycleState 的层级数据传递。
 func TestPlacementCycleStateLifecycle_MultiLevel(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -3535,7 +3585,7 @@ func TestPlacementCycleStateLifecycle_MultiLevel(t *testing.T) {
 		{"compositepodgroup//rootcpg", "8", "compositepodgroup//midcpg", "12", "podgroup//pg", "13"},
 		{"compositepodgroup//rootcpg", "8", "compositepodgroup//midcpg", "12", "podgroup//pg", "14"},
 	}
-	// each entry is duplicated because we record it for each leaf placement, which has the same parent
+	// 每个条目都会重复出现，因为我们对每个叶子放置方案都记录一次，而它们共享同一个父节点。
 	expectedFeasible := [][]string{
 		{"compositepodgroup//rootcpg", "1", "compositepodgroup//midcpg", "2", "podgroup//pg"},
 		{"compositepodgroup//rootcpg", "1", "compositepodgroup//midcpg", "2", "podgroup//pg"},
@@ -3569,6 +3619,7 @@ func TestPlacementCycleStateLifecycle_MultiLevel(t *testing.T) {
 	}
 }
 
+// TestCPGSchedulingPlacementAlgorithm 验证 CompositePodGroup 调度时的放置算法行为。
 func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -3589,7 +3640,7 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 	p1 := st.MakePod().Name("p1").UID("p1").PodGroupName("pg1").Obj()
 	p2 := st.MakePod().Name("p2").UID("p2").PodGroupName("pg2").Obj()
 
-	// make sure pg1 is ordered before pg2
+	// 确保 pg1 排在 pg2 之前。
 	pg1.CreationTimestamp = metav1.NewTime(time.UnixMilli(1))
 	pg2.CreationTimestamp = metav1.NewTime(time.UnixMilli(2))
 
@@ -3724,9 +3775,9 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 				},
 			},
 			placementFeasibleStatuses: [][]fwk.Code{
-				// cpg/placement1 (0, 1, 2 PGs evaluated)
+				// cpg/placement1（已评估 0、1、2 个 PodGroup）
 				{fwk.Unschedulable, fwk.Unschedulable, fwk.Unschedulable},
-				// success for the remaining placements
+				// 其余放置方案均成功。
 			},
 			expectedResults: map[string]podGroupAlgorithmResult{
 				rootPGInfo.GetKey(): {},
@@ -3815,7 +3866,7 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 					rootPGInfo.GetKey(): {
 						"placement1": 1,
 					},
-					// same priorities but only 1 PG fits in a given placement in this case
+					// 优先级相同，但此场景下每个放置方案只能容纳 1 个 PodGroup。
 					childPGInfo1.GetKey(): {
 						"placement1": 2,
 						"placement2": 1,
@@ -3993,6 +4044,7 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 	}
 }
 
+// TestCPGSchedulingPlacementAlgorithm_Scoring 验证 CompositePodGroup 放置打分的正确性。
 func TestCPGSchedulingPlacementAlgorithm_Scoring(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -4279,14 +4331,17 @@ func TestCPGSchedulingPlacementAlgorithm_Scoring(t *testing.T) {
 	}
 }
 
+// fakeDefaultPreemption 模拟默认抢占行为的测试插件。
 type fakeDefaultPreemption struct {
 	*fakePodGroupPlugin
 }
 
+// fakeDefaultPreemption Name 返回插件名称。
 func (f *fakeDefaultPreemption) Name() string {
 	return names.DefaultPreemption
 }
 
+// TestPodGroupCycle_NominatedNodes 验证 PodGroup 调度周期中提名节点的处理。
 func TestPodGroupCycle_NominatedNodes(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
@@ -4312,7 +4367,7 @@ func TestPodGroupCycle_NominatedNodes(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Mock PodGroupPostFilter to return NominatingInfos
+	// mock PodGroupPostFilter 使其返回 NominatingInfo。
 	nominatedNodes := map[string]*fwk.NominatingInfo{
 		p1.Name: {NominatingMode: fwk.ModeOverride, NominatedNodeName: "node1"},
 	}
@@ -4371,7 +4426,7 @@ func TestPodGroupCycle_NominatedNodes(t *testing.T) {
 		SchedulingQueue:  internalqueue.NewTestQueue(ctx, nil),
 	}
 
-	// Mock SchedulePod to return Unschedulable initially, and success on subsequent calls
+	// mock SchedulePod：首次返回 Unschedulable，后续调用返回成功。
 	callCount := 0
 	sched.SchedulePod = func(ctx context.Context, fwk framework.Framework, state fwk.CycleState, podInfo *framework.QueuedPodInfo) (ScheduleResult, error) {
 		callCount++
@@ -4391,7 +4446,7 @@ func TestPodGroupCycle_NominatedNodes(t *testing.T) {
 		capturedFailureHandler[podInfo.Pod.Name] = nominatingInfo
 	}
 
-	// Just inject logger explicitly in context to avoid panic
+	// 显式往 context 注入 logger，避免空指针 panic。
 	logger, _ := ktesting.NewTestContext(t)
 	ctx = klog.NewContext(ctx, logger)
 
@@ -4413,6 +4468,7 @@ func TestPodGroupCycle_NominatedNodes(t *testing.T) {
 	}
 }
 
+// TestScheduleOnePodGroup_PodGroupNotFound 验证 PodGroup 对象不存在时调度流程的处理与状态更新。
 func TestScheduleOnePodGroup_PodGroupNotFound(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
@@ -4482,7 +4538,7 @@ func TestScheduleOnePodGroup_PodGroupNotFound(t *testing.T) {
 
 	sched.scheduleOnePodGroup(ctx, podGroupInfo)
 
-	// Verify that the pods are put back into the scheduling queue's incompletePodGroupPods.
+	// 验证这些 Pod 被放回了调度队列的 incompletePodGroupPods。
 	incompletePods := queue.IncompletePodGroupPodsPods()
 	gotIncompletePods := sets.New[string]()
 	for _, pod := range incompletePods {
@@ -4494,6 +4550,7 @@ func TestScheduleOnePodGroup_PodGroupNotFound(t *testing.T) {
 	}
 }
 
+// TestScheduleOnePodGroup_SchedulerNameMismatchUpdatesStatus 验证调度器名称不匹配时会更新 PodGroup 状态。
 func TestScheduleOnePodGroup_SchedulerNameMismatchUpdatesStatus(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	p1 := st.MakePod().Name("p1").UID("p1").PodGroupName("pg").SchedulerName("sched1").Obj()
@@ -4587,6 +4644,7 @@ func TestScheduleOnePodGroup_SchedulerNameMismatchUpdatesStatus(t *testing.T) {
 	}
 }
 
+// TestCPGHierarchicalScheduling_ScheduleOnePodGroup 验证 CPG 层级结构的 PodGroup 端到端调度流程。
 func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.CompositePodGroup:               true,
@@ -4594,14 +4652,13 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 		features.TopologyAwareWorkloadScheduling: true,
 	})
 
-	// Tree structure:
+	// 树结构：
 	//                  cpg-root (Gang, MinGroupCount: 2)
 	//                  /       |       \
 	//                pg1      pg2      pg3
 	//               (Min:1)  (Min:1)  (Min:1)
 	//
-	// We will schedule cpg-root.
-	// Since MinGroupCount: 2, if 2 out of 3 child pod groups are schedulable, it should succeed!
+	// 我们要调度 cpg-root。由于 MinGroupCount: 2，3 个子 PodGroup 中有 2 个可调度即应成功。
 
 	namespace := "default"
 
@@ -4672,14 +4729,14 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Mock PlacementFeasible plugin
+	// mock PlacementFeasible 插件。
 	fakeGS := &fakePlacementFeasiblePlugin{}
 	fakeGS.placementFeasibleStatuses = [][]fwk.Code{
-		// Four distinct scheduling cycles:
-		// 1. cpg-root (success, 1 call: before children scheduling, evaluated=0)
-		// 2. pg1 scheduling (success, 2 calls: before and after p1, evaluated=0 and 1)
-		// 3. pg2 scheduling (success, 2 calls: before and after p2, evaluated=0 and 1)
-		// 4. pg3 scheduling (fails early on Evaluated=0)
+		// 四个不同的调度周期：
+		// 1. cpg-root（成功，1 次调用：子组调度前，evaluated=0）
+		// 2. pg1 调度（成功，2 次调用：p1 前后，evaluated=0 和 1）
+		// 3. pg2 调度（成功，2 次调用：p2 前后，evaluated=0 和 1）
+		// 4. pg3 调度（在 Evaluated=0 时提前失败）
 		{fwk.Success},
 		{fwk.Success, fwk.Success},
 		{fwk.Success, fwk.Success, fwk.Success},
@@ -4703,7 +4760,7 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 			Bind: config.PluginSet{
 				Enabled: []config.Plugin{{Name: defaultbinder.Name}},
 			},
-			// Enable GangScheduling to run PlacementFeasible
+			// 启用 GangScheduling 以运行 PlacementFeasible。
 			Permit: config.PluginSet{
 				Enabled: []config.Plugin{{Name: names.GangScheduling}},
 			},
@@ -4738,17 +4795,17 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 		SchedulingQueue:  internalqueue.NewTestQueue(ctx, nil),
 	}
 
-	// Mock SchedulePod to return success for all pods
+	// mock SchedulePod 使所有 Pod 都调度成功。
 	sched.SchedulePod = func(ctx context.Context, fwk framework.Framework, state fwk.CycleState, podInfo *framework.QueuedPodInfo) (ScheduleResult, error) {
 		return ScheduleResult{SuggestedHost: "node1"}, nil
 	}
 
-	// Prepare nodeInfoSnapshot which matches Cache
+	// 准备与缓存一致的 nodeInfoSnapshot。
 	if err := sched.Cache.UpdateSnapshot(logger, sched.nodeInfoSnapshot); err != nil {
 		t.Fatalf("Failed to update snapshot: %v", err)
 	}
 
-	// Run podGroupSchedulingRecursiveAlgorithm
+	// 运行 podGroupSchedulingRecursiveAlgorithm。
 	res := map[fwk.EntityKey]*podGroupAlgorithmResult{}
 	result, _ := sched.podGroupSchedulingRecursiveAlgorithm(ctx, schedFwk, framework.NewCycleState(), cpgRootInfo, cpgRootInfo.PodGroupInfo, res)
 
@@ -4757,8 +4814,8 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 		t.Errorf("Expected recursive scheduling algorithm status to be Success, got: %v", status)
 	}
 
-	// Verify that exactly the successful child pod groups (pg1 and pg2) are in the scheduled pod results
-	// pg3 should NOT be in the results because its placement was not feasible!
+	// 验证调度结果中恰好只有成功的子 PodGroup（pg1 和 pg2）。
+	// pg3 不应出现在结果中，因为它的放置不可行。
 	var successPodNames []string
 	for _, childRes := range res {
 		if childRes.podGroupInfo.CompositePodGroup != nil {
@@ -4784,10 +4841,10 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 	}
 }
 
-// TestCPGHierarchicalScheduling_Internal tests a complex, multi-level hierarchy of CompositePodGroups.
-// It verifies that Gang and Basic scheduling semantics apply correctly at each level.
+// TestCPGHierarchicalScheduling_Internal 测试一个复杂的多层 CPG 层级结构，
+// 验证 Gang 与 Basic 调度语义在每一层都被正确应用。
 //
-// Tree structure:
+// 树结构：
 //
 //	                   cpg-root (Gang, MinGroup: 2)
 //	                /               |                \
@@ -4797,15 +4854,16 @@ func TestCPGHierarchicalScheduling_ScheduleOnePodGroup(t *testing.T) {
 //	  pg1   pg2   pg3           pg4     pg5          pg6     pg7
 //	  (S)   (S)   (F)           (S)     (S)          (S->F)  (F)
 //
-// (S) = Success
-// (F) = Fail (filter unschedulable)
-// (S->F) = Success initially, but fails because its parent cpg-sub3 (MinGroup: 2) fails.
+// (S) = 成功
+// (F) = 失败（过滤不可调度）
+// (S->F) = 自身成功，但因父节点 cpg-sub3 (MinGroup: 2) 失败而失败。
 //
-// Results:
-// - cpg-sub1 succeeds (2 out of 3 groups succeed: pg1, pg2).
-// - cpg-sub2 succeeds (Basic, so pg4 and pg5 succeed independently).
-// - cpg-sub3 fails (only 1 group, pg6, succeeds, which is < MinGroup: 2. pg7 fails).
-// - cpg-root succeeds (2 out of 3 sub-groups succeed: cpg-sub1, cpg-sub2).
+// 预期结果：
+// - cpg-sub1 成功（3 个组中 2 个成功：pg1、pg2）。
+// - cpg-sub2 成功（Basic 语义，pg4 和 pg5 各自独立成功）。
+// - cpg-sub3 失败（只有 pg6 成功，1 < MinGroup 2；pg7 失败）。
+// - cpg-root 成功（3 个子组中 2 个成功：cpg-sub1、cpg-sub2）。
+// TestCPGHierarchicalScheduling_Internal 验证 CPG 层级结构调度流程的内部细节。
 func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.CompositePodGroup:               true,
@@ -4825,7 +4883,7 @@ func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 
 	ns := "default"
 
-	// Helper function to create PodGroups
+	// 创建 PodGroup 的辅助函数。
 	createPG := func(name string, minCount int32, parentCPG string) *schedulingv1beta1.PodGroup {
 		var policy schedulingv1beta1.PodGroupSchedulingPolicy
 		if minCount > 0 {
@@ -5041,7 +5099,7 @@ func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 	}
 	sched.SchedulePod = sched.schedulePod
 
-	// Run the scheduling cycle
+	// 运行调度周期。
 	if err := cache.UpdateSnapshot(logger, snapshot); err != nil {
 		t.Fatalf("Failed to update snapshot: %v", err)
 	}
@@ -5053,7 +5111,7 @@ func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	// Verify the results
+	// 校验结果。
 	successPods := []string{
 		"pg1-pod-0", "pg1-pod-1", "pg1-pod-2",
 		"pg2-pod-0", "pg2-pod-1", "pg2-pod-2",
@@ -5080,18 +5138,18 @@ func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 	}
 }
 
-// TestCPGMinGroupCount_Internal verifies that a Gang CompositePodGroup schedules its children
-// if at least MinGroupCount of them are fully schedulable.
+// TestCPGMinGroupCount_Internal 验证 Gang CPG 在至少 MinGroupCount 个子组完全可调度时
+// 会调度这些子组。
 //
-// Tree structure:
+// 树结构：
 //
 //	   cpg-root (Gang, MinGroup: 2)
 //	  /             |              \
 //	pg1            pg2            pg3
 //	(S)            (S)            (F)
 //
-// (S) = Success
-// (F) = Fail
+// (S) = 成功
+// (F) = 失败
 func TestCPGMinGroupCount_Internal(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.CompositePodGroup:               true,
@@ -5103,7 +5161,7 @@ func TestCPGMinGroupCount_Internal(t *testing.T) {
 	defer cancel()
 	logger := klog.FromContext(ctx)
 
-	// Capacity matches 2 groups. pg3 pods fail.
+	// 容量恰好容纳 2 个组，pg3 的 Pod 调度失败。
 	testNode := st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "20"}).Obj()
 	cache := internalcache.New(ctx, nil, true, true /* CompositePodGroup */)
 	cache.AddNode(logger, testNode)
@@ -5313,18 +5371,19 @@ func TestCPGMinGroupCount_Internal(t *testing.T) {
 	}
 }
 
-// TestCPGBasicWithGangChildren_Internal verifies that a Basic CompositePodGroup allows its ready
-// child Gang groups to schedule independently of each other.
+// TestCPGBasicWithGangChildren_Internal 验证 Basic CPG 允许其已就绪的 Gang 子组
+// 彼此独立地调度。
 //
-// Tree structure:
+// 树结构：
 //
 //	   cpg-root (Basic)
 //	  /            \
 //	pg1            pg2
 //	(S)            (F)
 //
-// (S) = Success
-// (F) = Fail
+// (S) = 成功
+// (F) = 失败
+// 预期：pg1 成功，pg2 失败（容量不足）。
 func TestCPGBasicWithGangChildren_Internal(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.CompositePodGroup:               true,
@@ -5538,8 +5597,7 @@ func TestCPGBasicWithGangChildren_Internal(t *testing.T) {
 	}
 }
 
-// fakeAssignmentRecordingPlugin captures pod group assignments during ScorePlacement
-// to verify that only feasible pods from successful branches of the hierarchy are scored.
+// fakeAssignmentRecordingPlugin 记录 ScorePlacement 收到的 PodGroup assignments 的测试插件。
 type fakeAssignmentRecordingPlugin struct {
 	mu          sync.Mutex
 	name        string
@@ -5548,10 +5606,12 @@ type fakeAssignmentRecordingPlugin struct {
 
 var _ fwk.PlacementScorePlugin = &fakeAssignmentRecordingPlugin{}
 
+// fakeAssignmentRecordingPlugin Name 返回插件名称。
 func (p *fakeAssignmentRecordingPlugin) Name() string {
 	return p.name
 }
 
+// fakeAssignmentRecordingPlugin ScorePlacement 模拟放置打分，返回预置分数或记录收到的 assignments。
 func (p *fakeAssignmentRecordingPlugin) ScorePlacement(ctx context.Context, state fwk.PlacementCycleState, podGroup fwk.PodGroupInfo, placement *fwk.PodGroupAssignments) (int64, *fwk.Status) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -5562,10 +5622,12 @@ func (p *fakeAssignmentRecordingPlugin) ScorePlacement(ctx context.Context, stat
 	return 1, nil
 }
 
+// fakeAssignmentRecordingPlugin PlacementScoreExtensions 返回放置打分扩展，本测试插件不使用。
 func (p *fakeAssignmentRecordingPlugin) PlacementScoreExtensions() fwk.PlacementScoreExtensions {
 	return nil
 }
 
+// TestScorePlacementPodGroupAssignments 验证对 PodGroup 放置方案打分时会传入正确的 assignments。
 func TestScorePlacementPodGroupAssignments(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.TopologyAwareWorkloadScheduling: true,
@@ -5903,6 +5965,7 @@ func TestScorePlacementPodGroupAssignments(t *testing.T) {
 	}
 }
 
+// buildHierarchicalQueuedPodGroupInfo 构造带层级信息的 QueuedPodGroupInfo，供 CPG 调度测试使用。
 func buildHierarchicalQueuedPodGroupInfo(
 	rootCPG *schedulingv1alpha3.CompositePodGroup,
 	cpgs []*schedulingv1alpha3.CompositePodGroup,

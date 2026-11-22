@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package tainttoleration 提供污点与容忍相关的调度插件。
+//
+// Filter 阶段拒绝 Pod 不能容忍的 NoSchedule/NoExecute 污点；
+// Score 阶段按 Pod 不能容忍的 PreferNoSchedule 污点数量降分，
+// 让调度器尽量避开这些节点。
 package tainttoleration
 
 import (
@@ -32,7 +37,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// TaintToleration is a plugin that checks if a pod tolerates a node's taints.
+// TaintToleration 检查 Pod 是否容忍节点的污点。
 type TaintToleration struct {
 	handle                                             fwk.Handle
 	enableTaintTolerationComparisonOperators           bool
@@ -47,28 +52,29 @@ var _ fwk.EnqueueExtensions = &TaintToleration{}
 var _ fwk.SignPlugin = &TaintToleration{}
 
 const (
-	// Name is the name of the plugin used in the plugin registry and configurations.
+	// Name 是插件在注册表和配置中使用的名称。
 	Name = names.TaintToleration
-	// preScoreStateKey is the key in CycleState to TaintToleration pre-computed data for Scoring.
+	// preScoreStateKey 是 CycleState 中存放评分预计算数据的键。
 	preScoreStateKey = "PreScore" + Name
-	// ErrReasonNotMatch is the Filter reason status when not matching.
+	// ErrReasonNotMatch 是不匹配时 Filter 返回的状态原因。
 	ErrReasonNotMatch = "node(s) had taints that the pod didn't tolerate"
 )
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *TaintToleration) Name() string {
 	return Name
 }
 
-// Feasibility and scoring based on the pod's tolerations.
+// SignPod 基于 Pod 的容忍声明生成签名片段。
+// 可行性检查与打分都依赖同一份容忍配置，因此用签名标识它。
 func (pl *TaintToleration) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	return []fwk.SignFragment{
 		{Key: fwk.TolerationsSignerName, Value: fwk.TolerationsSigner(pod)},
 	}, nil
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让本插件判定为不可调度的 Pod 变为可调度的事件。
+// 节点污点变化和 Pod 容忍变化是两类直接的触发源。
 func (pl *TaintToleration) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add | fwk.UpdateNodeTaint}, QueueingHintFn: pl.isSchedulableAfterNodeChange},
@@ -76,15 +82,15 @@ func (pl *TaintToleration) EventsToRegister(_ context.Context) ([]fwk.ClusterEve
 	}, nil
 }
 
-// isSchedulableAfterNodeChange is invoked for all node events reported by
-// an informer. It checks whether that change made a previously unschedulable
-// pod schedulable.
+// isSchedulableAfterNodeChange 对所有节点事件调用，判断变更是否让此前不可调度的 Pod 变为可调度。
+// 只有从「存在无法容忍的污点」变为「不存在」时才需要重新入队。
 func (pl *TaintToleration) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	originalNode, modifiedNode, err := util.As[*v1.Node](oldObj, newObj)
 	if err != nil {
 		return fwk.Queue, err
 	}
 
+	// 新增节点没有旧状态，保守地认为之前存在无法容忍的污点。
 	wasUntolerated := true
 	if originalNode != nil {
 		_, wasUntolerated = v1helper.FindMatchingUntoleratedTaint(logger, originalNode.Spec.Taints, pod.Spec.Tolerations, helper.DoNotScheduleTaintsFilterFunc(), pl.enableTaintTolerationComparisonOperators)
@@ -101,7 +107,8 @@ func (pl *TaintToleration) isSchedulableAfterNodeChange(logger klog.Logger, pod 
 	return fwk.QueueSkip, nil
 }
 
-// PreFilter invoked at the prefilter extension point.
+// PreFilter 在 prefilter 扩展点调用。
+// 延迟调整大小的 Pod 需要跳过本插件，避免调度与原地扩缩容的抢占逻辑冲突。
 func (pl *TaintToleration) PreFilter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -109,12 +116,13 @@ func (pl *TaintToleration) PreFilter(ctx context.Context, cycleState fwk.CycleSt
 	return nil, nil
 }
 
-// PreFilterExtensions do not exist for this plugin.
+// PreFilterExtensions 返回 nil：本插件没有需要逐节点处理的 prefilter 扩展。
 func (pl *TaintToleration) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 filter 扩展点调用，拒绝 Pod 无法容忍的节点污点。
+// 节点中只要有一个 DoNotSchedule 级别的污点未被容忍，就直接判定不可调度。
 func (pl *TaintToleration) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil
@@ -133,21 +141,22 @@ func (pl *TaintToleration) Filter(ctx context.Context, state fwk.CycleState, pod
 	return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "node(s) had untolerated taint(s)")
 }
 
-// preScoreState computed at PreScore and used at Score.
+// preScoreState 在 PreScore 阶段计算，供 Score 阶段复用。
 type preScoreState struct {
 	tolerationsPreferNoSchedule []v1.Toleration
 }
 
-// Clone implements the mandatory Clone interface. We don't really copy the data since
-// there is no need for that.
+// Clone 实现 StateData 的 Clone 接口。
+// 该状态在打分期间只读，因此直接返回原指针，避免无谓拷贝。
 func (s *preScoreState) Clone() fwk.StateData {
 	return s
 }
 
-// getAllTolerationEffectPreferNoSchedule gets the list of all Tolerations with Effect PreferNoSchedule or with no effect.
+// getAllTolerationPreferNoSchedule 收集所有 Effect 为 PreferNoSchedule 或未指定 Effect 的容忍。
+// 未指定 Effect 的容忍对所有效果生效，自然也包括 PreferNoSchedule。
 func getAllTolerationPreferNoSchedule(tolerations []v1.Toleration) (tolerationList []v1.Toleration) {
 	for _, toleration := range tolerations {
-		// Empty effect means all effects which includes PreferNoSchedule, so we need to collect it as well.
+		// 空 Effect 表示匹配所有效果，包含 PreferNoSchedule，需要一并收集。
 		if len(toleration.Effect) == 0 || toleration.Effect == v1.TaintEffectPreferNoSchedule {
 			tolerationList = append(tolerationList, toleration)
 		}
@@ -155,7 +164,7 @@ func getAllTolerationPreferNoSchedule(tolerations []v1.Toleration) (tolerationLi
 	return
 }
 
-// PreScore builds and writes cycle state used by Score and NormalizeScore.
+// PreScore 构建并写入 CycleState，供 Score 与 NormalizeScore 使用。
 func (pl *TaintToleration) PreScore(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) *fwk.Status {
 	tolerationsPreferNoSchedule := getAllTolerationPreferNoSchedule(pod.Spec.Tolerations)
 	state := &preScoreState{
@@ -165,6 +174,7 @@ func (pl *TaintToleration) PreScore(ctx context.Context, cycleState fwk.CycleSta
 	return nil
 }
 
+// getPreScoreState 从 CycleState 读取本插件的预计算状态。
 func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	c, err := cycleState.Read(preScoreStateKey)
 	if err != nil {
@@ -178,10 +188,10 @@ func getPreScoreState(cycleState fwk.CycleState) (*preScoreState, error) {
 	return s, nil
 }
 
-// CountIntolerableTaintsPreferNoSchedule gives the count of intolerable taints of a pod with effect PreferNoSchedule
+// countIntolerableTaintsPreferNoSchedule 统计节点上 Pod 无法容忍的 PreferNoSchedule 污点数量。
 func (pl *TaintToleration) countIntolerableTaintsPreferNoSchedule(logger klog.Logger, taints []v1.Taint, tolerations []v1.Toleration) (intolerableTaints int) {
 	for _, taint := range taints {
-		// check only on taints that have effect PreferNoSchedule
+		// 只检查 PreferNoSchedule 级别的污点。
 		if taint.Effect != v1.TaintEffectPreferNoSchedule {
 			continue
 		}
@@ -193,7 +203,7 @@ func (pl *TaintToleration) countIntolerableTaintsPreferNoSchedule(logger klog.Lo
 	return
 }
 
-// Score invoked at the Score extension point.
+// Score 在 score 扩展点调用，返回无法容忍的 PreferNoSchedule 污点数量。
 func (pl *TaintToleration) Score(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	logger := klog.FromContext(ctx)
 
@@ -208,17 +218,17 @@ func (pl *TaintToleration) Score(ctx context.Context, state fwk.CycleState, pod 
 	return score, nil
 }
 
-// NormalizeScore invoked after scoring all nodes.
+// NormalizeScore 在所有节点打分完成后调用，把分数归一化到 0-100。
 func (pl *TaintToleration) NormalizeScore(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, scores fwk.NodeScoreList) *fwk.Status {
 	return helper.DefaultNormalizeScore(fwk.MaxNodeScore, true, scores)
 }
 
-// ScoreExtensions of the Score plugin.
+// ScoreExtensions 返回 Score 插件的扩展接口，即插件自身。
 func (pl *TaintToleration) ScoreExtensions() fwk.ScoreExtensions {
 	return pl
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化插件并返回。
 func New(_ context.Context, _ runtime.Object, h fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	return &TaintToleration{
 		handle:                                   h,
@@ -227,9 +237,9 @@ func New(_ context.Context, _ runtime.Object, h fwk.Handle, fts feature.Features
 	}, nil
 }
 
-// isSchedulableAfterTargetPodTolerationChange is invoked whenever a pod's toleration changed.
+// isSchedulableAfterTargetPodTolerationChange 在 Pod 的容忍发生变化时调用。
 func (pl *TaintToleration) isSchedulableAfterTargetPodTolerationChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
-	// The updated Pod is the unschedulable Pod.
+	// 更新的 Pod 就是那个此前不可调度的 Pod。
 	logger.V(5).Info("a new toleration is added for the unschedulable Pod, and it may make it schedulable", "pod", klog.KObj(pod))
 	return fwk.Queue, nil
 }

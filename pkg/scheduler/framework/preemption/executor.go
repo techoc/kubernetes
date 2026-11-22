@@ -43,32 +43,31 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
+// pendingVictim 标识正在被抢占的最后一个受害者 Pod，供 PreEnqueue 检查其删除进度。
 type pendingVictim struct {
 	namespace string
 	name      string
 }
 
-// ExecutorPreemptor is an interface that represents a preemptor.
-// It's mainly used to abstract away fields needed for logging
-// purposes during preemption calls done by Executor.
+// ExecutorPreemptor 表示触发抢占的一方（Pod 或 PodGroup/CompositePodGroup）。
+// 它抽象出 Executor 在抢占过程中记录日志所需的元数据。
 type ExecutorPreemptor interface {
 	klog.KMetadata
-	// UID returns the UID of the object that is triggering preemption.
+	// UID 返回触发抢占对象的 UID。
 	UID() types.UID
-	// SchedulerName returns the scheduler name assigned to the object that is triggering preemption.
+	// SchedulerName 返回触发抢占对象指定的调度器名字。
 	SchedulerName() string
-	// Obj returns the object that is triggering preemption.
+	// Obj 返回触发抢占的对象。
 	Obj() runtime.Object
-	// Pods returns a map of pod name to pods that form a preemptor.
+	// Pods 返回构成抢占方的 Pod，以 Pod 名字为键。
 	Pods() map[string]*v1.Pod
-	// Priority returns the priority of the preemptor.
+	// Priority 返回抢占方的优先级。
 	Priority() int32
-	// Type returns the type of the preemptor.
+	// Type 返回抢占方的类型。
 	Type() string
 }
 
-// Executor is responsible for actuating the preemption process based on the provided candidate.
-// It supports both synchronous as well as asynchronous preemption.
+// Executor 根据给定的候选结果执行抢占，支持同步与异步两种模式。
 type Executor struct {
 	mu sync.RWMutex
 	fh fwk.Handle
@@ -77,21 +76,18 @@ type Executor struct {
 
 	fts feature.Features
 
-	// preempting is a set that records the pods/podgroups that are currently triggering preemption asynchronously,
-	// which is used to prevent the pods and pods from podgroups from entering the scheduling cycle meanwhile.
+	// preempting 记录正在异步触发抢占的 Pod/PodGroup UID，防止它们在抢占期间重新进入调度周期。
 	preempting sets.Set[types.UID]
-	// lastVictimsPendingPreemption is a map that records the victim pods that are currently being preempted for a given preemptor pod/podgroup,
-	// with a condition that the preemptor is waiting for one last victim to be preempted. This is used together with `preempting`
-	// to prevent the pods/podgroups from entering the scheduling cycle while waiting for preemption to complete.
+	// lastVictimsPendingPreemption 记录抢占方正在等待其被驱逐的最后一个受害者 Pod。
+	// 与 preempting 配合，避免等待抢占完成时 Pod/PodGroup 重新进入调度周期。
 	lastVictimsPendingPreemption map[types.UID]pendingVictim
 
-	// PreemptPod is a function that actually preempts a specific Pod. It returns true
-	// when the victim was preempted only in scheduler memory, without a delete call.
-	// This is exposed to be replaced during tests.
+	// PreemptPod 真正执行对单个 Pod 的抢占。若仅在调度器内存中完成（未调用删除 API）则返回 true。
+	// 暴露成字段是为了在测试中替换。
 	PreemptPod func(ctx context.Context, c Candidate, preemptor ExecutorPreemptor, victim *v1.Pod, pluginName string) (bool, error)
 }
 
-// NewExecutor creates a new preemption executor.
+// NewExecutor 创建一个新的抢占执行器。
 func NewExecutor(fh fwk.Handle, fts feature.Features) *Executor {
 	e := &Executor{
 		fh:                           fh,
@@ -106,15 +102,14 @@ func NewExecutor(fh fwk.Handle, fts feature.Features) *Executor {
 
 		preemptedInMemory := false
 		eventMessage := fmt.Sprintf("Preempted by %s %v on node %v", preemptor.Type(), preemptor.UID(), c.Name())
-		// If the victim is a WaitingPod, try to preempt it without a delete call (victim will go back to backoff queue).
-		// Otherwise we should delete the victim.
+		// 若受害者还在等待队列，尽量只在内存中抢占，让它退回 backoff 队列；否则必须调用删除 API。
 		if waitingPod := e.fh.GetWaitingPod(victim.UID); waitingPod != nil {
 			if waitingPod.Preempt(pluginName, "preempted") {
 				logger.V(2).Info("Preemptor preempted a waiting pod", "preemptorType", preemptor.Type(), "preemptor", klog.KObj(preemptor), "waitingPod", klog.KObj(victim), "node", c.Name())
 				preemptedInMemory = true
 			}
 		} else if podInPreBind := e.fh.GetPodInPreBind(victim.UID); podInPreBind != nil {
-			// If the victim is in the preBind cancel the binding process.
+			// 受害者正处于 preBind 阶段时，取消其绑定流程即可。
 			if podInPreBind.CancelPod(fmt.Sprintf("preempted by %s", pluginName)) {
 				logger.V(2).Info("Preemptor rejected a pod in preBind", "preemptorType", preemptor.Type(), "preemptor", klog.KObj(preemptor), "podInPreBind", klog.KObj(victim), "node", c.Name())
 				preemptedInMemory = true
@@ -163,8 +158,7 @@ func NewExecutor(fh fwk.Handle, fts feature.Features) *Executor {
 	return e
 }
 
-// actuatePodPreemption actuates the preemption given preemptorPod to be scheduled on targetNode and a list of
-// victims to be evicted.
+// actuatePodPreemption 执行以 preemptorPod 为抢占方、驱逐 victims 的抢占流程。
 func (e *Executor) actuatePodPreemption(ctx context.Context, candidate Candidate, preemptorPod *v1.Pod, pluginName string) *fwk.Status {
 	podPreemptor := &podExecutorPreemptor{Pod: preemptorPod}
 	if e.fts.EnableAsyncPreemption {
@@ -174,7 +168,7 @@ func (e *Executor) actuatePodPreemption(ctx context.Context, candidate Candidate
 	return e.prepareCandidate(ctx, candidate, podPreemptor, pluginName)
 }
 
-// actuatePodGroupPreemption actuates the preemption given preemptor pods, pod group and a list of victims to be evicted.
+// actuatePodGroupPreemption 执行以 PodGroup 为抢占方、驱逐 victims 的抢占流程。
 func (e *Executor) actuatePodGroupPreemption(ctx context.Context, candidate Candidate, pgInfo fwk.PodGroupInfo, pluginName string) *fwk.Status {
 	var podGroupPreemptor ExecutorPreemptor
 	if pgInfo.GetCompositePodGroup() != nil {
@@ -189,24 +183,23 @@ func (e *Executor) actuatePodGroupPreemption(ctx context.Context, candidate Cand
 	return e.prepareCandidate(ctx, candidate, podGroupPreemptor, pluginName)
 }
 
-// prepareCandidateAsync triggers a goroutine for some preparation work:
-// - Evict the victim pods
-// - Reject the victim pods if they are in waitingPod map
-// - Clear the low-priority pods' nominatedNodeName status if needed
-// The Pod won't be retried until the goroutine triggered here completes.
+// prepareCandidateAsync 启动一个 goroutine 完成以下准备工作：
+// - 驱逐受害者 Pod
+// - 若受害者在 waitingPod 表中则拒绝其绑定
+// - 必要时清除低优先级 Pod 的 nominatedNodeName
+// 在该 goroutine 完成之前，抢占方 Pod 不会被重新调度。
 //
-// See http://kep.k8s.io/4832 for how the async preemption works.
+// 异步抢占的设计见 http://kep.k8s.io/4832。
 func (e *Executor) prepareCandidateAsync(c Candidate, preemptor ExecutorPreemptor, pluginName string) {
 	observeVictims(preemptor, c)
-	// Intentionally create a new context, not using a ctx from the scheduling cycle, to create ctx,
-	// because this process could continue even after this scheduling cycle finishes.
+	// 有意使用新建的 Background context，而不是调度周期的 ctx：本流程可能延续到调度周期结束之后。
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := klog.FromContext(ctx)
 
 	victimPods := make([]*v1.Pod, 0, len(c.Victims().Pods))
 	for _, victim := range c.Victims().Pods {
 		if victim.DeletionTimestamp != nil {
-			// Graceful pod deletion has already started. Sending another API call is unnecessary.
+			// 优雅删除已开始，无需再发一次删除请求。
 			logger.V(2).Info("Victim Pod is already being deleted, skipping the API call for it", "preemptor", klog.KObj(preemptor), "node", c.Name(), "victim", klog.KObj(victim))
 			continue
 		}
@@ -218,7 +211,7 @@ func (e *Executor) prepareCandidateAsync(c Candidate, preemptor ExecutorPreempto
 	}
 
 	errCh := parallelize.NewResultChannel[error]()
-	// PreEnqueue only watches the last victim for completion, so activate when that victim won't emit a deletion event.
+	// PreEnqueue 只关注最后一个受害者的完成状态；若它在内存中被抢占（不会有删除事件），需主动激活抢占方。
 	preemptedLastVictimInMemory := false
 	preemptPod := func(index int) {
 		victim := victimPods[index]
@@ -246,37 +239,31 @@ func (e *Executor) prepareCandidateAsync(c Candidate, preemptor ExecutorPreempto
 		}()
 		defer func() {
 			if result == metrics.GoroutineResultError || preemptedLastVictimInMemory {
-				// When API call isn't successful or no victim deletion event will be produced, the preemptor's
-				// Pods may get stuck in the unschedulable pod pool in the worst case.
+				// API 调用失败或没有删除事件产生时，抢占方的 Pod 最坏可能卡在不可调度池中。
 				e.fh.Activate(logger, preemptor.Pods())
 			}
 		}()
 		defer cancel()
 		logger.V(2).Info("Start the preemption asynchronously", "preemptor", klog.KObj(preemptor), "node", c.Name(), "numVictims", len(c.Victims().Pods), "numVictimsToDelete", len(victimPods))
 
-		// Lower priority pods nominated to run on this node, may no longer fit on
-		// this node. So, we should remove their nomination. Removing their
-		// nomination updates these pods and moves them to the active queue. It
-		// lets scheduler find another place for them sooner than after waiting for preemption completion.
+		// 被提名到本节点的低优先级 Pod 在抢占后可能不再适合本节点，需清除其提名。
+		// 清除提名会更新这些 Pod 并移入活跃队列，让调度器更早为它们寻找新位置，
+		// 而不必等到抢占全部完成。
 		nominatedPods := getLowerPriorityNominatedPods(e.fh, preemptor.Priority(), c.Name())
 		if err := clearNominatedNodeName(ctx, e.fh.ClientSet(), e.fh.APICacher(), nominatedPods...); err != nil {
 			utilruntime.HandleErrorWithContext(ctx, err, "Cannot clear 'NominatedNodeName' field from lower priority pods on the same target node", "node", c.Name())
 			result = metrics.GoroutineResultError
-			// We do not return as this error is not critical.
+			// 该错误不影响主流程，继续执行。
 		}
 
 		preemptLastVictim := true
 		if len(victimPods) > 1 {
-			// In order to prevent requesting preemption of the same pod multiple times for the same preemptor,
-			// preemptor is marked as "waiting for preemption of a victim" (by adding it to preempting map).
-			// We can evict all victims in parallel, but the last one.
-			// While deleting the last victim, we want the PreEnqueue check to be able to verify if the eviction
-			// is in fact ongoing, or if it has already completed, but the function has not returned yet.
-			// In the latter case, PreEnqueue (in `IsPodRunningPreemption`) reads the state of the last victim in
-			// `lastVictimsPendingPreemption` and does not block the pod.
-			// This helps us avoid the situation where pod removal might be notified to the scheduling queue before
-			// the preemptor completes the deletion API calls and is removed from the `preempting` map - that way
-			// the preemptor could end up stuck in the unschedulable pool, with all pod removal events being ignored.
+			// 抢占方已加入 preempting 集合，避免对同一 Pod 重复发起抢占。
+			// 除最后一个受害者外，其余可并行驱逐；最后一个要特殊处理，便于 PreEnqueue 判断驱逐是否仍在进行。
+			// 若删除已完成但函数尚未返回，PreEnqueue 会通过 IsPodRunningPreemption 读取
+			// lastVictimsPendingPreemption 中最后一个受害者的状态，从而不阻塞抢占方。
+			// 这样可避免 Pod 删除事件先于抢占方从 preempting 集合中移除而被队列忽略，
+			// 导致抢占方卡在不可调度池。
 			e.fh.Parallelizer().Until(ctx, len(victimPods)-1, preemptPod, pluginName)
 			if err := errCh.Receive(); err != nil {
 				utilruntime.HandleErrorWithContext(ctx, err, "Error occurred during async preemption")
@@ -285,9 +272,7 @@ func (e *Executor) prepareCandidateAsync(c Candidate, preemptor ExecutorPreempto
 			}
 		}
 
-		// If any of the previous victims failed to be preempted, then we can skip
-		// the preemption attempt for the last victim Pod to expedite the preemptor's
-		// re-entry to the scheduling cycle.
+		// 若前面的受害者抢占失败，可跳过最后一个受害者，让抢占方尽早重回调度周期。
 		if preemptLastVictim {
 			lastVictim := victimPods[len(victimPods)-1]
 			e.mu.Lock()
@@ -311,10 +296,10 @@ func (e *Executor) prepareCandidateAsync(c Candidate, preemptor ExecutorPreempto
 	}()
 }
 
-// prepareCandidate does some preparation work before nominating the selected candidate:
-// - Evict the victim pods
-// - Reject the victim pods if they are in waitingPod map
-// - Clear the low-priority pods' nominatedNodeName status if needed
+// prepareCandidate 在提名候选节点前做如下准备：
+// - 驱逐受害者 Pod
+// - 若受害者在 waitingPod 表中则拒绝其绑定
+// - 必要时清除低优先级 Pod 的 nominatedNodeName
 func (e *Executor) prepareCandidate(ctx context.Context, c Candidate, preemptor ExecutorPreemptor, pluginName string) *fwk.Status {
 	observeVictims(preemptor, c)
 	startTime := time.Now()
@@ -333,7 +318,7 @@ func (e *Executor) prepareCandidate(ctx context.Context, c Candidate, preemptor 
 	fh.Parallelizer().Until(ctx, len(c.Victims().Pods), func(index int) {
 		victim := c.Victims().Pods[index]
 		if victim.DeletionTimestamp != nil {
-			// Graceful pod deletion has already started. Sending another API call is unnecessary.
+			// 优雅删除已开始，无需再发一次删除请求。
 			logger.V(2).Info("Victim Pod is already being deleted, skipping the API call for it", "preemptor", klog.KObj(preemptor), "node", c.Name(), "victim", klog.KObj(victim))
 			return
 		}
@@ -346,19 +331,18 @@ func (e *Executor) prepareCandidate(ctx context.Context, c Candidate, preemptor 
 		return fwk.AsStatus(err)
 	}
 
-	// Lower priority pods nominated to run on this node, may no longer fit on
-	// this node. So, we should remove their nomination. Removing their
-	// nomination updates these pods and moves them to the active queue. It
-	// lets scheduler find another place for them sooner than after waiting for preemption completion.
+	// 被提名到本节点的低优先级 Pod 在抢占后可能不再适合本节点，需清除其提名。
+	// 清除提名会更新这些 Pod 并移入活跃队列，让调度器更早为它们寻找新位置。
 	nominatedPods := getLowerPriorityNominatedPods(fh, preemptor.Priority(), c.Name())
 	if err := clearNominatedNodeName(ctx, cs, fh.APICacher(), nominatedPods...); err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Cannot clear 'NominatedNodeName' field")
-		// We do not return as this error is not critical.
+		// 该错误不影响主流程，继续执行。
 	}
 
 	return nil
 }
 
+// observeVictims 记录本次抢占的受害者数量、工作负载中断数与 PDB 违反数的指标。
 func observeVictims(preemptor ExecutorPreemptor, candidate Candidate) {
 	numVictims := float64(len(candidate.Victims().Pods))
 	if preemptor.Type() == string(fwk.PodGroupKeyType) || preemptor.Type() == string(fwk.CompositePodGroupKeyType) {
@@ -378,16 +362,17 @@ func observeVictims(preemptor ExecutorPreemptor, candidate Candidate) {
 	}
 }
 
-// IsPodRunningPreemption returns true if the pod is currently triggering preemption asynchronously.
+// IsPodRunningPreemption 判断 Pod 当前是否正在异步触发抢占。
 func (e *Executor) IsPodRunningPreemption(podUID types.UID) bool {
 	return e.isRunningPreemption(podUID)
 }
 
-// IsPodGroupRunningPreemption returns true if the pod group is currently triggering preemption asynchronously.
+// IsPodGroupRunningPreemption 判断 PodGroup 当前是否正在异步触发抢占。
 func (e *Executor) IsPodGroupRunningPreemption(podGroupUID types.UID) bool {
 	return e.isRunningPreemption(podGroupUID)
 }
 
+// isRunningPreemption 判断给定 UID 的抢占方是否仍在等待抢占完成。
 func (e *Executor) isRunningPreemption(uid types.UID) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -398,30 +383,29 @@ func (e *Executor) isRunningPreemption(uid types.UID) bool {
 
 	victim, ok := e.lastVictimsPendingPreemption[uid]
 	if !ok {
-		// Since preemptor is in `preempting` but last victim is not registered yet, the async preemption is pending.
+		// 抢占方已在 preempting 中但最后一个受害者尚未登记，说明异步抢占仍在进行。
 		return true
 	}
-	// Preemptor is waiting for preemption of one last victim. We can check if the victim has already been deleted.
+	// 抢占方正在等待最后一个受害者，可通过查询该 Pod 是否已被删除来判断抢占是否完成。
 	victimPod, err := e.podLister.Pods(victim.namespace).Get(victim.name)
 	if err != nil {
-		// Victim already deleted, preemption is done.
+		// 受害者已删除，抢占完成。
 		return false
 	}
 	if victimPod.DeletionTimestamp != nil {
-		// Victim deletion has started, preemption is done.
+		// 受害者已开始删除，抢占完成。
 		return false
 	}
-	// Preemption of the last pod is still ongoing.
+	// 最后一个 Pod 的抢占仍在进行。
 	return true
 }
 
-// clearNominatedNodeName internally submit a patch request to API server
-// to set each pods[*].Status.NominatedNodeName> to "".
+// clearNominatedNodeName 向 apiserver 提交 patch，把每个 Pod 的 Status.NominatedNodeName 置空。
 func clearNominatedNodeName(ctx context.Context, cs clientset.Interface, apiCacher fwk.APICacher, pods ...*v1.Pod) utilerrors.Aggregate {
 	var errs []error
 	for _, p := range pods {
 		if apiCacher != nil {
-			// When API cacher is available, use it to clear the NominatedNodeName.
+			// 有 API cacher 时通过它清除提名，避免直接调用 apiserver。
 			_, err := apiCacher.PatchPodStatus(p, nil, &fwk.NominatingInfo{NominatedNodeName: "", NominatingMode: fwk.ModeOverride})
 			if err != nil {
 				errs = append(errs, err)
@@ -440,13 +424,9 @@ func clearNominatedNodeName(ctx context.Context, cs clientset.Interface, apiCach
 	return utilerrors.NewAggregate(errs)
 }
 
-// getLowerPriorityNominatedPods returns pods whose priority is smaller than the
-// priority of the given "pod" and are nominated to run on the given node.
-// Note: We could possibly check if the nominated lower priority pods still fit
-// and return those that no longer fit, but that would require lots of
-// manipulation of NodeInfo and PreFilter state per nominated pod. It may not be
-// worth the complexity, especially because we generally expect to have a very
-// small number of nominated pods per node.
+// getLowerPriorityNominatedPods 返回被提名到指定节点、且优先级低于给定优先级的 Pod。
+// 理论上还可以检查这些 Pod 是否仍适合该节点，只返回不再适合的；但这需要为每个被提名 Pod
+// 操作 NodeInfo 与 PreFilter 状态，复杂度不划算——通常每个节点上的被提名 Pod 数量很少。
 func getLowerPriorityNominatedPods(pn fwk.PodNominator, priority int32, nodeName string) []*v1.Pod {
 	podInfos := pn.NominatedPodsForNode(nodeName)
 
@@ -463,74 +443,89 @@ func getLowerPriorityNominatedPods(pn fwk.PodNominator, priority int32, nodeName
 	return lowerPriorityPods
 }
 
-// podExecutorPreemptor is a wrapper around single pod used by preemption execution.
+// podExecutorPreemptor 把单个 Pod 包装成 ExecutorPreemptor。
 type podExecutorPreemptor struct {
 	*v1.Pod
 }
 
+// UID 返回 Pod 的 UID。
 func (p *podExecutorPreemptor) UID() types.UID {
 	return p.Pod.UID
 }
 
+// SchedulerName 返回 Pod 指定的调度器名字。
 func (p *podExecutorPreemptor) SchedulerName() string {
 	return p.Spec.SchedulerName
 }
 
+// GetName 返回 Pod 名字。
 func (p *podExecutorPreemptor) GetName() string {
 	return p.Name
 }
 
+// GetNamespace 返回 Pod 所在命名空间。
 func (p *podExecutorPreemptor) GetNamespace() string {
 	return p.Namespace
 }
 
+// Obj 返回底层 Pod 对象。
 func (p *podExecutorPreemptor) Obj() runtime.Object {
 	return p
 }
 
+// Pods 返回该抢占方包含的单个 Pod。
 func (p *podExecutorPreemptor) Pods() map[string]*v1.Pod {
 	return map[string]*v1.Pod{p.Name: p.Pod}
 }
 
+// Priority 返回 Pod 的优先级。
 func (p *podExecutorPreemptor) Priority() int32 {
 	return corev1helpers.PodPriority(p.Pod)
 }
 
+// Type 返回抢占方类型（Pod）。
 func (p *podExecutorPreemptor) Type() string {
 	return string(fwk.PodKeyType)
 }
 
-// podGroupExecutorPreemptor is a wrapper around pod group used by preemption execution.
+// podGroupExecutorPreemptor 把 PodGroup 包装成 ExecutorPreemptor。
 type podGroupExecutorPreemptor struct {
 	pg   *schedulingv1beta1.PodGroup
 	pods []*v1.Pod
 }
 
+// UID 返回 PodGroup 的 UID。
 func (p *podGroupExecutorPreemptor) UID() types.UID {
 	return p.pg.UID
 }
 
+// SchedulerName 返回 PodGroup 中 Pod 使用的调度器名字。
 func (p *podGroupExecutorPreemptor) SchedulerName() string {
-	// All pods in a pod group should use the same scheduler name.
+	// 同一 PodGroup 内的 Pod 应使用相同的调度器名字。
 	return p.pods[0].Spec.SchedulerName
 }
 
+// GetName 返回 PodGroup 名字。
 func (p *podGroupExecutorPreemptor) GetName() string {
 	return p.pg.Name
 }
 
+// GetNamespace 返回 PodGroup 所在命名空间。
 func (p *podGroupExecutorPreemptor) GetNamespace() string {
 	return p.pg.Namespace
 }
 
+// Obj 返回底层 PodGroup 对象。
 func (p *podGroupExecutorPreemptor) Obj() runtime.Object {
 	return p.pg
 }
 
+// Priority 返回 PodGroup 的优先级。
 func (p *podGroupExecutorPreemptor) Priority() int32 {
 	return util.PodGroupPriority(p.pg)
 }
 
+// Pods 返回 PodGroup 中未调度的 Pod，以名字为键。
 func (p *podGroupExecutorPreemptor) Pods() map[string]*v1.Pod {
 	m := make(map[string]*v1.Pod, len(p.pods))
 	for _, pod := range p.pods {
@@ -539,41 +534,49 @@ func (p *podGroupExecutorPreemptor) Pods() map[string]*v1.Pod {
 	return m
 }
 
+// Type 返回抢占方类型（PodGroup）。
 func (p *podGroupExecutorPreemptor) Type() string {
 	return string(fwk.PodGroupKeyType)
 }
 
-// compositePodGroupExecutorPreemptor is a wrapper around composite pod group used by preemption execution.
+// compositePodGroupExecutorPreemptor 把 CompositePodGroup 包装成 ExecutorPreemptor。
 type compositePodGroupExecutorPreemptor struct {
 	cpg  *schedulingv1alpha3.CompositePodGroup
 	pods []*v1.Pod
 }
 
+// UID 返回 CompositePodGroup 的 UID。
 func (p *compositePodGroupExecutorPreemptor) UID() types.UID {
 	return p.cpg.UID
 }
 
+// SchedulerName 返回 CompositePodGroup 中 Pod 使用的调度器名字。
 func (p *compositePodGroupExecutorPreemptor) SchedulerName() string {
-	// All pods in a composite pod group should use the same scheduler name.
+	// 同一 CompositePodGroup 内的 Pod 应使用相同的调度器名字。
 	return p.pods[0].Spec.SchedulerName
 }
 
+// GetName 返回 CompositePodGroup 名字。
 func (p *compositePodGroupExecutorPreemptor) GetName() string {
 	return p.cpg.Name
 }
 
+// GetNamespace 返回 CompositePodGroup 所在命名空间。
 func (p *compositePodGroupExecutorPreemptor) GetNamespace() string {
 	return p.cpg.Namespace
 }
 
+// Obj 返回底层 CompositePodGroup 对象。
 func (p *compositePodGroupExecutorPreemptor) Obj() runtime.Object {
 	return p.cpg
 }
 
+// Priority 返回 CompositePodGroup 的优先级。
 func (p *compositePodGroupExecutorPreemptor) Priority() int32 {
 	return util.CompositePodGroupPriority(p.cpg)
 }
 
+// Pods 返回 CompositePodGroup 中未调度的 Pod，以名字为键。
 func (p *compositePodGroupExecutorPreemptor) Pods() map[string]*v1.Pod {
 	m := make(map[string]*v1.Pod, len(p.pods))
 	for _, pod := range p.pods {
@@ -582,6 +585,7 @@ func (p *compositePodGroupExecutorPreemptor) Pods() map[string]*v1.Pod {
 	return m
 }
 
+// Type 返回抢占方类型（CompositePodGroup）。
 func (p *compositePodGroupExecutorPreemptor) Type() string {
 	return string(fwk.CompositePodGroupKeyType)
 }

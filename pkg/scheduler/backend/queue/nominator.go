@@ -28,30 +28,26 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// nominator is a structure that stores pods nominated to run on nodes.
-// It exists because nominatedNodeName of pod objects stored in the structure
-// may be different than what scheduler has here. We should be able to find pods
-// by their UID and update/delete them.
+// nominator 保存被提名（nominated）到各节点上运行的 Pod。
+// 之所以单独维护，是因为这里保存的 Pod 的 nominatedNodeName 可能与调度器本地看到的不同；
+// 我们需要能按 UID 找到这些 Pod 并更新或删除它们。
 type nominator struct {
-	// nLock synchronizes all operations related to nominator.
-	// It should not be used anywhere else.
-	// Caution: DO NOT take ("SchedulingQueue.lock" or "activeQueue.lock" or "backoffQueue.lock") after taking "nLock".
-	// You should always take "SchedulingQueue.lock" and "activeQueue.lock" and "backoffQueue.lock" first,
-	// otherwise the nominator could end up in deadlock.
-	// Correct locking order is: SchedulingQueue.lock > activeQueue.lock = backoffQueue.lock > nLock.
+	// nLock 保护 nominator 的所有操作，不得用于其他用途。
+	// 注意：拿到 nLock 之后不要再拿 "SchedulingQueue.lock"、"activeQueue.lock" 或 "backoffQueue.lock"，
+	// 必须先拿后三者，否则可能死锁。
+	// 正确的加锁顺序是：SchedulingQueue.lock > activeQueue.lock = backoffQueue.lock > nLock。
 	nLock sync.RWMutex
 
-	// podLister is used to verify if the given pod is alive.
+	// podLister 用于确认给定 Pod 是否仍然存在、且尚未被调度。
 	podLister listersv1.PodLister
-	// nominatedPods is a map keyed by a node name and the value is a list of
-	// pods which are nominated to run on the node. These are pods which can be in
-	// the activeQ or unschedulableEntities.
+	// nominatedPods 按节点名索引，值为被提名到该节点运行的 Pod 列表；
+	// 这些 Pod 可能位于 activeQ 或 unschedulableEntities 中。
 	nominatedPods map[string][]podRef
-	// nominatedPodToNode is map keyed by a Pod UID to the node name where it is
-	// nominated.
+	// nominatedPodToNode 按 Pod UID 索引，值为该 Pod 被提名到的节点名。
 	nominatedPodToNode map[types.UID]string
 }
 
+// newPodNominator 创建一个 nominator，podLister 可为 nil（此时不校验 Pod 存活状态）。
 func newPodNominator(podLister listersv1.PodLister) *nominator {
 	return &nominator{
 		podLister:          podLister,
@@ -60,19 +56,18 @@ func newPodNominator(podLister listersv1.PodLister) *nominator {
 	}
 }
 
-// addNominatedPod adds a pod to the nominated pods of the given node.
-// This is called during the preemption process when a node is nominated to run
-// the pod. We update the nominator's structure before sending an API request to update the pod
-// object, to avoid races with the following scheduling cycles.
+// addNominatedPod 把 Pod 加入给定节点的提名列表。
+// 在抢占流程中，为 Pod 选定节点后会调用它。我们先更新内存中的提名结构，
+// 再发送更新 Pod 对象的 API 请求，以免与后续调度周期产生竞态。
 func (npm *nominator) addNominatedPod(logger klog.Logger, pi fwk.PodInfo, nominatingInfo *fwk.NominatingInfo) {
 	npm.nLock.Lock()
 	npm.addNominatedPodUnlocked(logger, pi, nominatingInfo)
 	npm.nLock.Unlock()
 }
 
+// addNominatedPodUnlocked 是 addNominatedPod 的无锁版本，调用方必须持有 nLock。
 func (npm *nominator) addNominatedPodUnlocked(logger klog.Logger, pi fwk.PodInfo, nominatingInfo *fwk.NominatingInfo) {
-	// Always delete the pod if it already exists, to ensure we never store more than
-	// one instance of the pod.
+	// 无论 Pod 是否已存在都先删除旧记录，保证同一 Pod 在结构中只有一份。
 	npm.deleteUnlocked(pi.GetPod())
 
 	var nodeName string
@@ -82,13 +77,13 @@ func (npm *nominator) addNominatedPodUnlocked(logger klog.Logger, pi fwk.PodInfo
 		nodeName = pi.GetPod().Status.NominatedNodeName
 	}
 
-	// Empty nodeName clears nomination; do not key nominatedPods by "".
+	// 节点名为空意味着清除提名；不要用 "" 作为 nominatedPods 的键。
 	if nodeName == "" {
 		return
 	}
 
 	if npm.podLister != nil {
-		// If the pod was removed or if it was already scheduled, don't nominate it.
+		// Pod 已被删除或已经绑定到节点时，不再给它登记提名。
 		updatedPod, err := npm.podLister.Pods(pi.GetPod().Namespace).Get(pi.GetPod().Name)
 		if err != nil {
 			logger.V(4).Info("Pod doesn't exist in podLister, aborted adding it to the nominator", "pod", klog.KObj(pi.GetPod()))
@@ -110,40 +105,39 @@ func (npm *nominator) addNominatedPodUnlocked(logger klog.Logger, pi fwk.PodInfo
 	npm.nominatedPods[nodeName] = append(npm.nominatedPods[nodeName], podToRef(pi.GetPod()))
 }
 
-// UpdateNominatedPod updates the <oldPod> with <newPod>.
+// UpdateNominatedPod 用 newPodInfo 替换 oldPod 对应的提名记录。
 func (npm *nominator) UpdateNominatedPod(logger klog.Logger, oldPod *v1.Pod, newPodInfo fwk.PodInfo) {
 	npm.nLock.Lock()
 	defer npm.nLock.Unlock()
-	// In some cases, an Update event with no "NominatedNode" present is received right
-	// after a node("NominatedNode") is reserved for this pod in memory.
-	// In this case, we need to keep reserving the NominatedNode when updating the pod pointer.
+	// 有时在内存中为 Pod 预留了 NominatedNode 之后，紧接着收到一个不带 NominatedNode 的 Update 事件。
+	// 此时更新 Pod 指针时要继续保留这个预留节点，否则提名会意外丢失。
 	var nominatingInfo *fwk.NominatingInfo
-	// We won't fall into below `if` block if the Update event represents:
-	// (1) NominatedNode info is added
-	// (2) NominatedNode info is updated
-	// (3) NominatedNode info is removed
+	// 以下情况不会进入这个 if 分支：
+	// (1) Update 事件新增了 NominatedNode 信息
+	// (2) Update 事件更新了 NominatedNode 信息
+	// (3) Update 事件删除了 NominatedNode 信息
 	if nominatedNodeName(oldPod) == "" && nominatedNodeName(newPodInfo.GetPod()) == "" {
 		if nnn, ok := npm.nominatedPodToNode[oldPod.UID]; ok {
-			// This is the only case we should continue reserving the NominatedNode
+			// 只有这种情况才需要继续保留 NominatedNode
 			nominatingInfo = &fwk.NominatingInfo{
 				NominatingMode:    fwk.ModeOverride,
 				NominatedNodeName: nnn,
 			}
 		}
 	}
-	// We update irrespective of the nominatedNodeName changed or not, to ensure
-	// that pod pointer is updated.
+	// 无论 nominatedNodeName 是否变化都要更新，以确保 Pod 指针被刷新。
 	npm.deleteUnlocked(oldPod)
 	npm.addNominatedPodUnlocked(logger, newPodInfo, nominatingInfo)
 }
 
-// DeleteNominatedPodIfExists deletes <pod> from nominatedPods.
+// DeleteNominatedPodIfExists 从 nominatedPods 中删除 pod（若存在）。
 func (npm *nominator) DeleteNominatedPodIfExists(pod *v1.Pod) {
 	npm.nLock.Lock()
 	npm.deleteUnlocked(pod)
 	npm.nLock.Unlock()
 }
 
+// deleteUnlocked 是删除提名记录的无锁版本，调用方必须持有 nLock。
 func (npm *nominator) deleteUnlocked(p *v1.Pod) {
 	nnn, ok := npm.nominatedPodToNode[p.UID]
 	if !ok {
@@ -161,17 +155,20 @@ func (npm *nominator) deleteUnlocked(p *v1.Pod) {
 	delete(npm.nominatedPodToNode, p.UID)
 }
 
+// nominatedPodsForNode 返回被提名到 nodeName 的 Pod 引用副本。
+// 返回副本而不是内部切片，避免调用方修改到 nominator 的内部状态。
 func (npm *nominator) nominatedPodsForNode(nodeName string) []podRef {
 	npm.nLock.RLock()
 	defer npm.nLock.RUnlock()
 	return slices.Clone(npm.nominatedPods[nodeName])
 }
 
-// nominatedNodeName returns nominated node name of a Pod.
+// nominatedNodeName 返回 Pod 状态中的提名节点名。
 func nominatedNodeName(pod *v1.Pod) string {
 	return pod.Status.NominatedNodeName
 }
 
+// podRef 只保存提名逻辑需要的 Pod 字段，避免持有整个 Pod 指针导致状态过期。
 type podRef struct {
 	name            string
 	namespace       string
@@ -179,6 +176,7 @@ type podRef struct {
 	schedulingGroup *v1.PodSchedulingGroup
 }
 
+// podToRef 从 Pod 提取出提名所需的最小字段集合。
 func podToRef(pod *v1.Pod) podRef {
 	return podRef{
 		name:            pod.Name,
@@ -188,6 +186,7 @@ func podToRef(pod *v1.Pod) podRef {
 	}
 }
 
+// toPod 把 podRef 还原成一个最小化的 Pod 对象，供过滤插件使用。
 func (np podRef) toPod() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

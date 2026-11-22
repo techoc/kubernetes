@@ -38,6 +38,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestGetHighestAllAncestor 验证查找 Pod 所属层级中最顶层 All 约束祖先的逻辑。
 func TestGetHighestAllAncestor(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -193,6 +194,8 @@ func TestGetHighestAllAncestor(t *testing.T) {
 	}
 }
 
+// TestNewPodGroupPreemptorResolvesPreemptionPolicy 验证 PodGroup 抢占者的抢占策略解析：
+// 组内 Pod 的策略应被 PodGroup 自身策略覆盖。
 func TestNewPodGroupPreemptorResolvesPreemptionPolicy(t *testing.T) {
 	preemptNeverPod := st.MakePod().Name("p-never").PreemptionPolicy(v1.PreemptNever).Obj()
 	preemptLowerPriorityPod := st.MakePod().Name("p-lower").PreemptionPolicy(v1.PreemptLowerPriority).Obj()
@@ -286,12 +289,14 @@ func TestNewPodGroupPreemptorResolvesPreemptionPolicy(t *testing.T) {
 	}
 }
 
+// expectedVictim 描述一个预期 victims 集合：Pod 名、受影响节点与优先级。
 type expectedVictim struct {
 	pods          sets.Set[string]
 	affectedNodes sets.Set[string]
 	priority      int32
 }
 
+// TestNewDomainForWorkloadPreemption 验证为工作负载抢占构建 domain 时的受害者收集与分组。
 func TestNewDomainForWorkloadPreemption(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -978,6 +983,7 @@ func TestNewDomainForWorkloadPreemption(t *testing.T) {
 	}
 }
 
+// TestNewVictim 验证单个受害者排序时按启动时间与所属组选择 victim 的规则。
 func TestNewVictim(t *testing.T) {
 	now := metav1.Now()
 	earlier := metav1.NewTime(now.Add(-10 * time.Minute))
@@ -1077,6 +1083,7 @@ func TestNewVictim(t *testing.T) {
 	}
 }
 
+// TestNewDomainVictim 验证域级 victim 构造及受影响节点的计算。
 func TestNewDomainVictim(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -1153,12 +1160,14 @@ func TestNewDomainVictim(t *testing.T) {
 	}
 }
 
+// testPodGroupInfo 是测试中使用的简化 PodGroupInfo 实现。
 type testPodGroupInfo struct {
 	pg   *schedulingv1beta1.PodGroup
 	cpg  *schedulingv1alpha3.CompositePodGroup
 	pods []*v1.Pod
 }
 
+// GetName 返回 PodGroup 或 CompositePodGroup 的名称。
 func (t *testPodGroupInfo) GetName() string {
 	if t.cpg != nil {
 		return t.cpg.Name
@@ -1169,6 +1178,7 @@ func (t *testPodGroupInfo) GetName() string {
 	return ""
 }
 
+// GetNamespace 返回所属命名空间。
 func (t *testPodGroupInfo) GetNamespace() string {
 	if t.cpg != nil {
 		return t.cpg.Namespace
@@ -1179,6 +1189,7 @@ func (t *testPodGroupInfo) GetNamespace() string {
 	return ""
 }
 
+// GetType 返回实体类型：组合组或普通 PodGroup。
 func (t *testPodGroupInfo) GetType() fwk.EntityKeyType {
 	if t.cpg != nil {
 		return fwk.CompositePodGroupKeyType
@@ -1186,6 +1197,7 @@ func (t *testPodGroupInfo) GetType() fwk.EntityKeyType {
 	return fwk.PodGroupKeyType
 }
 
+// GetKey 返回实体的键。
 func (t *testPodGroupInfo) GetKey() string {
 	if t.cpg != nil {
 		return t.cpg.Name
@@ -1196,18 +1208,22 @@ func (t *testPodGroupInfo) GetKey() string {
 	return ""
 }
 
+// GetUnscheduledPods 返回组内未调度的 Pod。
 func (t *testPodGroupInfo) GetUnscheduledPods() []*v1.Pod {
 	return t.pods
 }
 
+// GetPodGroup 返回普通 PodGroup 对象。
 func (t *testPodGroupInfo) GetPodGroup() *schedulingv1beta1.PodGroup {
 	return t.pg
 }
 
+// GetCompositePodGroup 返回组合 PodGroup 对象。
 func (t *testPodGroupInfo) GetCompositePodGroup() *schedulingv1alpha3.CompositePodGroup {
 	return t.cpg
 }
 
+// GetChildren 返回子 PodGroup；测试用实现始终返回 nil。
 func (t *testPodGroupInfo) GetChildren() []fwk.PodGroupInfo {
 	return nil
 }

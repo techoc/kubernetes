@@ -28,6 +28,8 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestDeferredPodScheduling_PreFilter 验证 PreFilter 只在特性开启且 Pod 处于延迟调度状态时放行，
+// 其余情况返回 Skip。
 func TestDeferredPodScheduling_PreFilter(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -70,6 +72,8 @@ func TestDeferredPodScheduling_PreFilter(t *testing.T) {
 	}
 }
 
+// TestDeferredPodScheduling_Filter 验证 Filter 根据节点是否禁用 resize 抢占及节点名匹配情况返回状态：
+// 特性关闭、非延迟 Pod 或无禁用策略时放行，否则返回不可调度。
 func TestDeferredPodScheduling_Filter(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -170,6 +174,8 @@ func TestDeferredPodScheduling_Filter(t *testing.T) {
 	}
 }
 
+// TestDeferredPodScheduling_isSchedulableAfterNodeChange 验证节点变更事件的排队提示：
+// 仅当变更涉及 Pod 所分配节点且策略从"禁用"变为"启用"时才提示重新入队。
 func TestDeferredPodScheduling_isSchedulableAfterNodeChange(t *testing.T) {
 	nodeEnabled := st.MakeNode().Name("node1").Obj()
 	nodeDisabled := &v1.Node{
@@ -262,6 +268,8 @@ func TestDeferredPodScheduling_isSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// TestDeferredPodScheduling_isSchedulableAfterNodeAdd 验证节点添加事件的排队提示：
+// 仅当新增的是 Pod 所分配且未禁用 resize 抢占的节点时才提示重新入队。
 func TestDeferredPodScheduling_isSchedulableAfterNodeAdd(t *testing.T) {
 	nodeEnabled := st.MakeNode().Name("node1").Obj()
 	nodeDisabled := &v1.Node{
@@ -339,6 +347,8 @@ func TestDeferredPodScheduling_isSchedulableAfterNodeAdd(t *testing.T) {
 	}
 }
 
+// TestDeferredPodScheduling_Permit 验证 Permit 阶段：特性开启且 Pod 处于延迟状态时拒绝（等待 kubelet 执行 resize），
+// 其余情况放行。
 func TestDeferredPodScheduling_Permit(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -381,6 +391,7 @@ func TestDeferredPodScheduling_Permit(t *testing.T) {
 	}
 }
 
+// statusEqual 比较两个 Status 是否等价（Code 与 Message 一致，nil 视为相等）。
 func statusEqual(s1, s2 *fwk.Status) bool {
 	if s1 == nil && s2 == nil {
 		return true

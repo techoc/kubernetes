@@ -45,9 +45,12 @@ import (
 
 var _ fwk.SharedDRAManager = &DefaultDRAManager{}
 
-// DefaultDRAManager is the default implementation of SharedDRAManager. It obtains the DRA objects
-// from API informers, and uses an AssumeCache and a map of in-flight allocations in order
-// to avoid race conditions when modifying ResourceClaims.
+// Package dynamicresources 提供动态资源分配（DRA）调度插件，
+// 管理 ResourceClaim、ResourceSlice 与 DeviceClass。
+
+// DefaultDRAManager 是 SharedDRAManager 的默认实现。
+// 它从 API informer 获取 DRA 对象，并借助 AssumeCache 与在途分配映射
+// 避免修改 ResourceClaim 时出现竞态。
 type DefaultDRAManager struct {
 	resourceClaimTracker  *claimTracker
 	resourceSliceLister   *resourceSliceLister
@@ -55,6 +58,7 @@ type DefaultDRAManager struct {
 	extendedResourceCache *extendedresourcecache.ExtendedResourceCache
 }
 
+// NewDRAManager 创建默认的 DRA 管理器，按特性门控决定是否启用扩展资源缓存。
 func NewDRAManager(ctx context.Context, claimsCache *assumecache.AssumeCache, resourceSliceTracker *resourceslicetracker.Tracker, informerFactory informers.SharedInformerFactory) *DefaultDRAManager {
 	logger := klog.FromContext(ctx)
 	manager := &DefaultDRAManager{
@@ -72,131 +76,107 @@ func NewDRAManager(ctx context.Context, claimsCache *assumecache.AssumeCache, re
 		manager.extendedResourceCache = extendedresourcecache.NewExtendedResourceCache(logger)
 	}
 
-	// Reacting to events is more efficient than iterating over the list
-	// repeatedly in PreFilter.
+	// 通过事件增量维护已分配设备，比在 PreFilter 中反复遍历整个列表更高效。
 	manager.resourceClaimTracker.cache.AddEventHandler(manager.resourceClaimTracker.allocatedDevices.handlers())
 
 	return manager
 }
 
+// ResourceClaims 返回 ResourceClaim 跟踪器。
 func (s *DefaultDRAManager) ResourceClaims() fwk.ResourceClaimTracker {
 	return s.resourceClaimTracker
 }
 
+// ResourceSlices 返回 ResourceSlice 查询器。
 func (s *DefaultDRAManager) ResourceSlices() fwk.ResourceSliceLister {
 	return s.resourceSliceLister
 }
 
+// DeviceClasses 返回 DeviceClass 查询器。
 func (s *DefaultDRAManager) DeviceClasses() fwk.DeviceClassLister {
 	return s.deviceClassLister
 }
 
-// DeviceClassResolver will always return a valid interface implementation. It
-// wraps a nil extendedresourcecache.ExtendedResourceCache if the feature is
-// disabled.
-//
-// That's okay, extendedresourcecache.ExtendedResourceCache.GetDeviceClass
-// returns nil if called for nil.
+// DeviceClassResolver 始终返回有效的接口实现：特性关闭时包装的底层缓存为 nil。
+// 这是安全的，因为 ExtendedResourceCache.GetDeviceClass 对 nil 接收者会返回 nil。
 func (s *DefaultDRAManager) DeviceClassResolver() fwk.DeviceClassResolver {
 	return s.extendedResourceCache
 }
 
 var _ fwk.ResourceSliceLister = &resourceSliceLister{}
 
+// resourceSliceLister 基于资源切片 tracker 实现 ResourceSliceLister。
 type resourceSliceLister struct {
 	tracker *resourceslicetracker.Tracker
 }
 
+// ListWithDeviceTaintRules 返回应用了设备污点规则补丁后的 ResourceSlice 列表。
 func (l *resourceSliceLister) ListWithDeviceTaintRules() ([]*resourceapi.ResourceSlice, error) {
 	return l.tracker.ListPatchedResourceSlices()
 }
 
 var _ fwk.DeviceClassLister = &deviceClassLister{}
 
+// deviceClassLister 基于 informer lister 实现 DeviceClassLister。
 type deviceClassLister struct {
 	classLister resourcelisters.DeviceClassLister
 }
 
+// Get 按名称返回单个 DeviceClass。
 func (l *deviceClassLister) Get(className string) (*resourceapi.DeviceClass, error) {
 	return l.classLister.Get(className)
 }
 
+// List 返回所有 DeviceClass。
 func (l *deviceClassLister) List() ([]*resourceapi.DeviceClass, error) {
 	return l.classLister.List(labels.Everything())
 }
 
 var _ fwk.ResourceClaimTracker = &claimTracker{}
 
+// claimTracker 跟踪 ResourceClaim 的分配状态与在途分配。
 type claimTracker struct {
-	// cache enables temporarily storing a newer claim object
-	// while the scheduler has allocated it and the corresponding object
-	// update from the apiserver has not been processed by the claim
-	// informer callbacks. ResourceClaimTracker get added here in PreBind and removed by
-	// the informer callback (based on the "newer than" comparison in the
-	// assume cache).
+	// cache 临时存放调度器已分配、但 apiserver 更新尚未被 informer 处理的较新 Claim 对象。
+	// Claim 在 PreBind 阶段加入，在 informer 回调中（依据 assume cache 的版本比较）移除。
 	//
-	// It uses cache.MetaNamespaceKeyFunc to generate object names, which
-	// therefore are "<namespace>/<name>".
+	// 键由 cache.MetaNamespaceKeyFunc 生成，格式为 "<namespace>/<name>"。
 	//
-	// This is necessary to ensure that reconstructing the resource usage
-	// at the start of a pod scheduling cycle doesn't reuse the resources
-	// assigned to such a claim. Alternatively, claim allocation state
-	// could also get tracked across pod scheduling cycles, but that
-	// - adds complexity (need to carefully sync state with informer events
-	//   for claims and ResourceSlices)
-	// - would make integration with cluster autoscaler harder because it would need
-	//   to trigger informer callbacks.
+	// 这样可保证 Pod 调度周期开始重建资源用量时，不会复用已分配给这类 Claim 的资源。
+	// 若改为跨调度周期跟踪分配状态，则：
+	//   - 增加复杂度（需与 Claim 和 ResourceSlice 的 informer 事件仔细同步）
+	//   - 加大与 cluster autoscaler 集成的难度（需要触发 informer 回调）
 	cache *assumecache.AssumeCache
-	// inFlightMutex syncs access to inFlightAllocations.
+	// inFlightMutex 保护对 inFlightAllocations 的访问。
 	inFlightMutex sync.RWMutex
-	// inFlightAllocations is a map from claim UUIDs to claim objects for those claims
-	// for which allocation was triggered during a scheduling cycle and the
-	// corresponding claim status update call in PreBind has not been done
-	// yet. It also includes a reference count tracking how many actively
-	// scheduling Pods in a PodGroup are using that pending allocation. If
-	// another pod outside the PodGroup needs the claim, the pod is treated as
-	// "not schedulable yet". For those pods, the cluster event for the
-	// claim status update will make them schedulable.
+	// inFlightAllocations 记录调度周期内已触发分配、但 PreBind 尚未写回状态的 Claim，
+	// 键为 Claim UID。引用计数表示 PodGroup 中有多少正在调度的 Pod 共享该待定分配；
+	// 组外需要该 Claim 的 Pod 会被视为暂时不可调度，等待 Claim 状态更新事件再入队。
 	//
-	// This mechanism avoids the following problem:
-	// - Pod A triggers allocation for claim X.
-	// - Pod B shares access to that claim and gets scheduled because
-	//   the claim is assumed to be allocated.
-	// - PreBind for pod B is called first, tries to update reservedFor and
-	//   fails because the claim is not really allocated yet.
+	// 该机制避免如下问题：
+	//   - Pod A 为 Claim X 触发分配
+	//   - Pod B 共享该 Claim，因 assume 认为已分配而被调度
+	//   - Pod B 的 PreBind 先执行，更新 reservedFor 时因 Claim 实际未分配而失败
 	//
-	// We could avoid the ordering problem by allowing either pod A or pod B
-	// to set the allocation. But that is more complicated and leads to another
-	// problem:
-	// - Pod A and B get scheduled as above.
-	// - PreBind for pod A gets called first, then fails with a temporary API error.
-	//   It removes the updated claim from the in-flight claims because of that.
-	// - PreBind for pod B gets called next and succeeds with adding the
-	//   allocation and its own reservedFor entry.
-	// - The assume cache is now not reflecting that the claim is allocated,
-	//   which could lead to reusing the same resource for some other claim.
+	// 若允许 A 或 B 任一方写分配虽可规避顺序问题，却引入新问题：
+	//   - A、B 如上被调度
+	//   - A 的 PreBind 先执行但遇到临时 API 错误，从在途集合移除更新后的 Claim
+	//   - B 的 PreBind 随后成功写入分配及自己的 reservedFor
+	//   - assume cache 无法反映 Claim 已分配，导致其他 Claim 复用同一资源
 	//
-	// For pods in a PodGroup, a pending allocation may be shared among several
-	// pods in the group. In the PreBind phase, the allocation will be written
-	// for the first pod that succeeds. The scenario above is prevented by
-	// keeping the pending allocation in-flight as long as it has not been
-	// unreserved for every pod in the group, as tracked by
-	// inFlightAllocationSharers.
-	//
-	// A sync.Map is used because in practice sharing of a claim between
-	// pods is expected to be rare compared to per-pod claim, so we end up
-	// hitting the "multiple goroutines read, write, and overwrite entries
-	// for disjoint sets of keys" case that sync.Map is optimized for.
+	// 对 PodGroup 中的 Pod，待定分配可被组内多个 Pod 共享；PreBind 阶段由第一个成功的 Pod 写入。
+	// 通过引用计数保证只要还有一个组内 Pod 未取消预留，分配就保持 in-flight，避免上述竞态。
 	inFlightAllocations map[types.UID]inFlightAllocation
 	allocatedDevices    *allocatedDevices
 	logger              klog.Logger
 }
 
+// inFlightAllocation 表示一次在途分配及其共享者数量。
 type inFlightAllocation struct {
 	claim   *resourceapi.ResourceClaim
 	sharers int
 }
 
+// GetPendingAllocation 返回指定 Claim 的在途分配结果，不存在时返回 nil。
 func (c *claimTracker) GetPendingAllocation(claimUID types.UID) *resourceapi.AllocationResult {
 	c.inFlightMutex.RLock()
 	defer c.inFlightMutex.RUnlock()
@@ -208,6 +188,7 @@ func (c *claimTracker) GetPendingAllocation(claimUID types.UID) *resourceapi.All
 	return inFlight.claim.Status.Allocation
 }
 
+// SignalClaimPendingAllocation 登记一次在途分配；已有记录时只增加共享计数。
 func (c *claimTracker) SignalClaimPendingAllocation(claimUID types.UID, allocatedClaim *resourceapi.ResourceClaim) error {
 	c.inFlightMutex.Lock()
 	defer c.inFlightMutex.Unlock()
@@ -222,11 +203,8 @@ func (c *claimTracker) SignalClaimPendingAllocation(claimUID types.UID, allocate
 		return nil
 	}
 
-	// Check that the claim really is unallocated. The Pod's CycleState may be
-	// stale and this claim may have been allocated since that was calculated.
-	//
-	// Extended resources claims cannot be shared, so skip checking the assume
-	// cache because we already know it's not allocated.
+	// 检查 Claim 确实未分配：Pod 的 CycleState 可能已过期，期间该 Claim 可能已被分配。
+	// 扩展资源 Claim 不可共享，已知其未分配，无需查 assume cache。
 	if !isSpecialClaimName(allocatedClaim.Name) {
 		assumedClaim, err := c.Get(allocatedClaim.Namespace, allocatedClaim.Name)
 		if err != nil {
@@ -242,20 +220,20 @@ func (c *claimTracker) SignalClaimPendingAllocation(claimUID types.UID, allocate
 		claim:   allocatedClaim,
 		sharers: 1,
 	}
-	// This is the same verbosity as the corresponding log in the assume cache.
+	// 日志级别与 assume cache 中对应的记录保持一致。
 	c.logger.V(5).Info("Added in-flight claim", "claim", klog.KObj(allocatedClaim), "uid", claimUID, "version", allocatedClaim.ResourceVersion)
-	// There's no reason to return an error in this implementation, but the error is helpful for other implementations.
-	// For example, implementations that have to deal with fake claims might want to return an error if the allocation
-	// is for an invalid claim.
+	// 本实现没有返回错误的场景，但保留错误返回值便于其他实现扩展，
+	// 例如处理 fake Claim 时可为无效分配返回错误。
 	return nil
 }
 
+// MaybeRemoveClaimPendingAllocation 减少在途分配的共享计数，计数归零或强制删除时移除记录。
 func (c *claimTracker) MaybeRemoveClaimPendingAllocation(claimUID types.UID, forceRemove bool) (deleted bool) {
 	c.inFlightMutex.Lock()
 	defer c.inFlightMutex.Unlock()
 
 	inFlight, found := c.inFlightAllocations[claimUID]
-	// The assume cache doesn't log this, but maybe it should.
+	// assume cache 对此未记录日志，这里记一条便于排查重复删除。
 	if !found {
 		c.logger.V(5).Info("Redundant remove of in-flight claim, not found", "uid", claimUID)
 		return false
@@ -274,6 +252,7 @@ func (c *claimTracker) MaybeRemoveClaimPendingAllocation(claimUID types.UID, for
 	return false
 }
 
+// Get 从 assume cache 按命名空间与名称获取 Claim。
 func (c *claimTracker) Get(namespace, claimName string) (*resourceapi.ResourceClaim, error) {
 	obj, err := c.cache.Get(namespace + "/" + claimName)
 	if err != nil {
@@ -286,9 +265,10 @@ func (c *claimTracker) Get(namespace, claimName string) (*resourceapi.ResourceCl
 	return claim, nil
 }
 
+// List 返回 assume cache 中的所有 Claim。
 func (c *claimTracker) List() ([]*resourceapi.ResourceClaim, error) {
 	var result []*resourceapi.ResourceClaim
-	// Probably not worth adding an index for?
+	// 为 Claim 单独建索引收益不大，直接全量遍历。
 	objs := c.cache.List(nil)
 	for _, obj := range objs {
 		claim, ok := obj.(*resourceapi.ResourceClaim)
@@ -299,36 +279,31 @@ func (c *claimTracker) List() ([]*resourceapi.ResourceClaim, error) {
 	return result, nil
 }
 
-// errClaimTrackerConcurrentModification gets returned if ListAllAllocatedDevices
-// or GatherAllocatedState need to be retried.
+// errClaimTrackerConcurrentModification 表示采集过程中状态被并发修改，调用方需重试。
 //
-// There is a rare race when a claim is initially in-flight:
-// - allocated is created from cache (claim not there)
-// - someone removes from the in-flight claims and adds to the cache
-// - we start checking in-flight claims (claim not there anymore)
-// => claim ignored
+// 罕见竞态：Claim 初次处于 in-flight 时，
+//   - 从 cache 构建 allocated 集合（此时 Claim 不在 cache）
+//   - 另一 goroutine 将其从 in-flight 移入 cache
+//   - 随后检查 in-flight（Claim 已不在）
+//     => 该 Claim 被漏掉
 //
-// A proper fix would be to rewrite the assume cache, allocatedDevices,
-// and the in-flight map so that they are under a single lock. But that's
-// a pretty big change and prevents reusing the assume cache. So instead
-// we check for changes in the set of allocated devices and keep trying
-// until we get an attempt with no concurrent changes.
-//
-// A claim being first in the cache, then only in-flight cannot happen,
-// so we don't need to re-check the in-flight claims.
+// 彻底修复需把 assume cache、allocatedDevices 与 in-flight map 置于同一把锁下，
+// 改动较大且无法复用 assume cache。因此改为检查已分配设备集合是否变化，
+// 直到某次采集期间无并发修改。
+// Claim 不可能先出现在 cache 后又只存在于 in-flight，故无需反向复查。
 var errClaimTrackerConcurrentModification = errors.New("conflicting concurrent modification")
 
+// ListAllAllocatedDevices 返回集群中所有独占分配的设备 ID 集合。
 func (c *claimTracker) ListAllAllocatedDevices() (a sets.Set[structured.DeviceID], err error) {
 	c.logger.V(6).Info("Starting ListAllAllocatedDevices")
 	defer func() {
 		c.logger.V(6).Info("Finished ListAllAllocatedDevices", "allocatedDevices", logAllocatedDevices(c.logger, a), "err", err)
 	}()
 
-	// Start with a fresh set that matches the current known state of the
-	// world according to the informers.
+	// 先以 informer 视角的当前状态为基础构建集合。
 	allocated, revision := c.allocatedDevices.Get()
 
-	// Whatever is in flight also has to be checked.
+	// 在途分配尚未写入缓存，也必须计入。
 	for _, inFlight := range c.allInFlightAllocationsRLocked() {
 		claim := inFlight.claim
 		foreachAllocatedDevice(claim, func(deviceID structured.DeviceID) {
@@ -338,32 +313,24 @@ func (c *claimTracker) ListAllAllocatedDevices() (a sets.Set[structured.DeviceID
 	}
 
 	if revision == c.allocatedDevices.Revision() {
-		// Our current result is valid, nothing changed in the meantime.
+		// 版本号未变，说明采集期间状态未被修改，结果有效。
 		return allocated, nil
 	}
 
 	return nil, errClaimTrackerConcurrentModification
 }
 
-// GatherAllocatedState collects and returns the current allocation state of all devices
-// across the cluster. This includes:
-// - AllocatedDevices: Set of device IDs that are fully allocated (dedicated mode)
-// - AllocatedSharedDeviceIDs: Set of shared device IDs when consumable capacity is enabled
-// - AggregatedCapacity: Consumed capacity across all devices when consumable capacity is enabled
+// GatherAllocatedState 采集集群中所有设备当前的分配状态，包括：
+//   - AllocatedDevices：独占模式下已完整分配的设备 ID
+//   - AllocatedSharedDeviceIDs：可消费容量模式下的共享设备 ID
+//   - AggregatedCapacity：可消费容量模式下各设备已消费的容量
 //
-// The function handles two allocation models:
-//  1. Legacy dedicated mode (DRAConsumableCapacity disabled): Devices are allocated exclusively
-//     to a single claim. Shared devices are converted to their base device IDs.
-//  2. Consumable capacity mode (DRAConsumableCapacity enabled): Devices can be shared across
-//     multiple claims with capacity tracking.
+// 支持两种分配模型：
+//  1. 传统独占模式（DRAConsumableCapacity 关闭）：设备只分配给单个 Claim，共享设备折算为基础设备 ID
+//  2. 可消费容量模式（开启）：设备可按容量在多个 Claim 间共享
 //
-// The function ensures consistency by:
-// - Reading allocation state from informer-backed cache
-// - Including in-flight allocations that haven't been persisted yet
-// - Using revision numbers to detect concurrent modifications and retry if needed
-//
-// Returns errClaimTrackerConcurrentModification if the state changed during collection,
-// indicating the caller should retry.
+// 一致性保障：从 informer 缓存读取、纳入尚未持久化的在途分配，
+// 并通过版本号检测并发修改。状态变化时返回 errClaimTrackerConcurrentModification 让调用方重试。
 func (c *claimTracker) GatherAllocatedState() (s *structured.AllocatedState, err error) {
 	c.logger.V(6).Info("Starting GatherAllocatedState")
 	defer func() {
@@ -374,8 +341,7 @@ func (c *claimTracker) GatherAllocatedState() (s *structured.AllocatedState, err
 		c.logger.V(6).Info("Finished GatherAllocatedState", "allocatedDevices", logAllocatedDevices(c.logger, a), "err", err)
 	}()
 
-	// Start with a fresh set that matches the current known state of the
-	// world according to the informers.
+	// 先以 informer 视角的当前状态为基础构建集合。
 	enabledConsumableCapacity := utilfeature.DefaultFeatureGate.Enabled(features.DRAConsumableCapacity)
 
 	allocated, revision1 := c.allocatedDevices.Get()
@@ -383,24 +349,22 @@ func (c *claimTracker) GatherAllocatedState() (s *structured.AllocatedState, err
 	aggregatedCapacity, revision3 := c.allocatedDevices.Capacities()
 
 	if revision1 != revision2 || revision2 != revision3 {
-		// Already not consistent. Try again.
+		// 三个版本号不一致，读到的是中间状态，直接重试。
 		return nil, errClaimTrackerConcurrentModification
 	}
 
 	if !enabledConsumableCapacity {
-		// When the DRAConsumableCapacity feature is disabled, we fall back to the legacy
-		// dedicated device allocation model.
-		// This ensures backward compatibility with the original DRA behavior where devices
-		// could only be allocated exclusively to a single claim.
+		// 特性关闭时回退到传统的独占分配模型，
+		// 保持与原始 DRA 行为兼容：设备只能分配给单个 Claim。
 		for sharedDeviceID := range allocatedSharedDeviceIDs {
 			allocated.Insert(sharedDeviceID.GetDeviceID())
 		}
-		// Reset allocatedSharedDeviceIDs and aggregatedCapacity
+		// 独占模型下不再需要共享设备与容量聚合数据。
 		allocatedSharedDeviceIDs = sets.New[structured.SharedDeviceID]()
 		aggregatedCapacity = make(schedulerapi.ConsumedCapacityCollection)
 	}
 
-	// Whatever is in flight also has to be checked.
+	// 在途分配尚未写入缓存，也必须计入。
 	for _, inFlight := range c.allInFlightAllocationsRLocked() {
 		claim := inFlight.claim
 		foreachAllocatedDevice(claim,
@@ -419,7 +383,7 @@ func (c *claimTracker) GatherAllocatedState() (s *structured.AllocatedState, err
 			})
 	}
 	if revision1 == c.allocatedDevices.Revision() {
-		// Our current result is valid, nothing changed in the meantime.
+		// 版本号未变，说明采集期间状态未被修改，结果有效。
 		return &structured.AllocatedState{
 			AllocatedDevices:         allocated,
 			AllocatedSharedDeviceIDs: allocatedSharedDeviceIDs,
@@ -430,6 +394,7 @@ func (c *claimTracker) GatherAllocatedState() (s *structured.AllocatedState, err
 	return nil, errClaimTrackerConcurrentModification
 }
 
+// allInFlightAllocationsRLocked 返回遍历所有在途分配的迭代器，遍历期间持有读锁。
 func (c *claimTracker) allInFlightAllocationsRLocked() iter.Seq2[types.UID, inFlightAllocation] {
 	return func(yield func(types.UID, inFlightAllocation) bool) {
 		c.inFlightMutex.RLock()
@@ -442,29 +407,28 @@ func (c *claimTracker) allInFlightAllocationsRLocked() iter.Seq2[types.UID, inFl
 	}
 }
 
+// AssumeClaimAfterAPICall 在 API 调用成功后把 Claim 写入 assume cache。
 func (c *claimTracker) AssumeClaimAfterAPICall(claim *resourceapi.ResourceClaim) error {
 	return c.cache.Assume(claim)
 }
 
+// AssumedClaimRestore 撤销 assume cache 中的假设对象，回退到 informer 中的真实状态。
 func (c *claimTracker) AssumedClaimRestore(namespace, claimName string) {
 	c.cache.Restore(namespace + "/" + claimName)
 }
 
-// At V(6), log only a limited number of devices to avoid blowing up logs. For
-// many E2E tests, 10 devices is enough for all devices without having to
-// truncate, at least when running the tests sequentially.
+// V(6) 级别只记录有限数量的设备，避免日志膨胀。
+// 多数 E2E 测试（至少串行运行时）10 个设备足以覆盖全部，无需截断。
+// maxDevicesLevel6 是 V(6) 日志中最多输出的设备数。
 const maxDevicesLevel6 = 10
 
-// logAllocatedDevices returns a handle for the value in a structured log call which
-// includes varying amounts of information about the allocated devices, depending on
-// the verbosity of the logger.
+// logAllocatedDevices 返回一个结构化日志值，按日志详细程度输出不同量的已分配设备信息。
 func logAllocatedDevices(logger klog.Logger, allocatedDevices sets.Set[structured.DeviceID]) any {
-	// We need to check verbosity here because our caller's source code
-	// location may be relevant (-vmodule !).
+	// 必须在此处检查详细级别：调用方源码位置可能影响 -vmodule 匹配。
 	helper, logger := logger.WithCallStackHelper()
 	helper()
 
-	// We always produce the same output at V <= 5. 6 adds all IDs.
+	// V <= 5 输出保持一致，从 V(6) 起才输出设备 ID。
 	verbosity := 5
 	for i := 7; i > verbosity; i-- {
 		if loggerV := logger.V(i); loggerV.Enabled() {
@@ -476,6 +440,7 @@ func logAllocatedDevices(logger klog.Logger, allocatedDevices sets.Set[structure
 	return &allocatedDevicesLogger{verbosity, allocatedDevices}
 }
 
+// allocatedDevicesLogger 延迟生成已分配设备的日志内容。
 type allocatedDevicesLogger struct {
 	verbosity int
 	devices   sets.Set[structured.DeviceID]
@@ -483,6 +448,7 @@ type allocatedDevicesLogger struct {
 
 var _ logr.Marshaler = &allocatedDevicesLogger{}
 
+// MarshalLog 按详细级别生成日志内容；低于 V(6) 时不输出设备信息。
 func (a *allocatedDevicesLogger) MarshalLog() any {
 	if a.verbosity < 6 {
 		return nil

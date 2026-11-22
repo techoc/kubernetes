@@ -41,12 +41,11 @@ import (
 )
 
 const (
-	// ErrReasonMaxVolumeCountExceeded is used for MaxVolumeCount predicate error.
+	// ErrReasonMaxVolumeCountExceeded 是超过节点最大卷数量时的过滤原因。
 	ErrReasonMaxVolumeCountExceeded = "node(s) exceed max volume count"
 )
 
-// InTreeToCSITranslator contains methods required to check migratable status
-// and perform translations from InTree PV's to CSI
+// InTreeToCSITranslator 提供检查 in-tree 插件是否可迁移、以及将 in-tree PV 转换为 CSI PV 的能力。
 type InTreeToCSITranslator interface {
 	IsPVMigratable(pv *v1.PersistentVolume) bool
 	IsInlineMigratable(vol *v1.Volume) bool
@@ -57,7 +56,7 @@ type InTreeToCSITranslator interface {
 	TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error)
 }
 
-// CSILimits is a plugin that checks node volume limits.
+// CSILimits 检查节点的 CSI 卷数量是否达到上限。
 type CSILimits struct {
 	csiManager      fwk.CSIManager
 	pvLister        corelisters.PersistentVolumeLister
@@ -78,20 +77,19 @@ var _ fwk.FilterPlugin = &CSILimits{}
 var _ fwk.EnqueueExtensions = &CSILimits{}
 var _ fwk.SignPlugin = &CSILimits{}
 
-// CSIName is the name of the plugin used in the plugin registry and configurations.
+// CSIName 是该插件在插件注册表和配置文件中使用的名称。
 const CSIName = names.NodeVolumeLimits
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *CSILimits) Name() string {
 	return CSIName
 }
 
-// EventsToRegister returns the possible events that may make a Pod.
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让此前被本插件判定不可调度的 Pod 变为可调度的事件。
 func (pl *CSILimits) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
-		// We don't register any `QueueingHintFn` intentionally
-		// because any new CSINode could make pods that were rejected by CSI volumes schedulable.
+		// 故意不为 CSINode Add 注册 QueueingHintFn：
+		// 任何新增的 CSINode 都可能提供新的卷配额，让此前失败的 Pod 可调度。
 		{Event: fwk.ClusterEvent{Resource: fwk.CSINode, ActionType: fwk.Add}},
 		{Event: fwk.ClusterEvent{Resource: fwk.CSINode, ActionType: fwk.Update}, QueueingHintFn: pl.isSchedulableAfterCSINodeUpdated},
 		{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.Delete}, QueueingHintFn: pl.isSchedulableAfterAssignedPodDeleted},
@@ -100,6 +98,8 @@ func (pl *CSILimits) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWith
 	}, nil
 }
 
+// isSchedulableAfterAssignedPodDeleted 判断已分配 Pod 的删除是否释放了卷配额，
+// 从而让待调度 Pod 变得可调度。
 func (pl *CSILimits) isSchedulableAfterAssignedPodDeleted(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	deletedPod, _, err := util.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
@@ -124,6 +124,8 @@ func (pl *CSILimits) isSchedulableAfterAssignedPodDeleted(logger klog.Logger, po
 	return fwk.QueueSkip, nil
 }
 
+// isSchedulableAfterPVCAdded 判断新增的 PVC 是否是待调度 Pod 所引用的，
+// 只有引用的 PVC 创建后才可能让该 Pod 可调度。
 func (pl *CSILimits) isSchedulableAfterPVCAdded(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	_, addedPvc, err := util.As[*v1.PersistentVolumeClaim](oldObj, newObj)
 	if err != nil {
@@ -142,7 +144,7 @@ func (pl *CSILimits) isSchedulableAfterPVCAdded(logger klog.Logger, pod *v1.Pod,
 		case volumes.Ephemeral != nil:
 			pvcName = ephemeral.VolumeClaimName(pod, &volumes)
 		default:
-			// Volume is not using a PVC, ignore
+			// 该卷不使用 PVC，与本次新增的 PVC 无关。
 			continue
 		}
 
@@ -156,6 +158,8 @@ func (pl *CSILimits) isSchedulableAfterPVCAdded(logger klog.Logger, pod *v1.Pod,
 	return fwk.QueueSkip, nil
 }
 
+// isSchedulableAfterVolumeAttachmentDeleted 判断 VolumeAttachment 删除是否释放了
+// Pod 所使用卷的挂载配额，从而让 Pod 可调度。
 func (pl *CSILimits) isSchedulableAfterVolumeAttachmentDeleted(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	deletedVolumeAttachment, _, err := util.As[*storagev1.VolumeAttachment](oldObj, newObj)
 	if err != nil {
@@ -163,8 +167,7 @@ func (pl *CSILimits) isSchedulableAfterVolumeAttachmentDeleted(logger klog.Logge
 	}
 
 	for _, vol := range pod.Spec.Volumes {
-		// Check if the pod volume uses a PVC
-		// If it does, return Queue
+		// 使用 PVC 的卷会经过 VolumeAttachment，其删除可能释放配额。
 		if vol.PersistentVolumeClaim != nil {
 			logger.V(5).Info("Pod volume uses PersistentVolumeClaim, which might make this pod schedulable due to VolumeAttachment deletion", "pod", klog.KObj(pod), "volumeAttachment", klog.KObj(deletedVolumeAttachment), "volume", vol.Name)
 			return fwk.Queue, nil
@@ -180,7 +183,7 @@ func (pl *CSILimits) isSchedulableAfterVolumeAttachmentDeleted(logger klog.Logge
 		}
 
 		if translatedPV.Spec.CSI != nil && deletedVolumeAttachment.Spec.Attacher == translatedPV.Spec.CSI.Driver {
-			// deleted VolumeAttachment Attacher matches the translated PV CSI driver
+			// 被删除 VolumeAttachment 的 Attacher 与转换后 PV 的 CSI driver 一致
 			logger.V(5).Info("Pod volume is an Inline Migratable volume that matches the CSI driver, which might make this pod schedulable due to VolumeAttachment deletion",
 				"pod", klog.KObj(pod), "volumeAttachment", klog.KObj(deletedVolumeAttachment),
 				"volume", vol.Name, "csiDriver", translatedPV.Spec.CSI.Driver,
@@ -194,6 +197,8 @@ func (pl *CSILimits) isSchedulableAfterVolumeAttachmentDeleted(logger klog.Logge
 	return fwk.QueueSkip, nil
 }
 
+// isSchedulableAfterCSINodeUpdated 判断 CSINode 更新是否提高了驱动的可挂载卷上限，
+// 只有配额增加才值得重新入队。
 func (pl *CSILimits) isSchedulableAfterCSINodeUpdated(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	oldCSINode, newCSINode, err := util.As[*storagev1.CSINode](oldObj, newObj)
 	if err != nil {
@@ -209,7 +214,7 @@ func (pl *CSILimits) isSchedulableAfterCSINodeUpdated(logger klog.Logger, pod *v
 		oldLimits[d.Name] = count
 	}
 
-	// Compare new driver limits vs. old. If limit increased, queue pod.
+	// 对比新旧配额：只有上限提高才可能让此前因配额不足被拒的 Pod 可调度。
 	for _, d := range newCSINode.Spec.Drivers {
 		var oldLimit int32
 		if val, exists := oldLimits[d.Name]; exists {
@@ -231,13 +236,12 @@ func (pl *CSILimits) isSchedulableAfterCSINodeUpdated(logger klog.Logger, pod *v
 		}
 	}
 
-	// If no driver limit was increased, skip queueing.
+	// 没有驱动配额提高，入队无济于事。
 	return fwk.QueueSkip, nil
 }
 
-// PreFilter invoked at the prefilter extension point
-//
-// If the pod haven't those types of volumes, we'll skip the Filter phase
+// PreFilter 在 PreFilter 扩展点调用。
+// 若 Pod 不包含需要计数的卷类型（PVC、临时卷或可迁移的内联卷），则跳过 Filter 阶段。
 func (pl *CSILimits) PreFilter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, _ []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -253,17 +257,17 @@ func (pl *CSILimits) PreFilter(ctx context.Context, _ fwk.CycleState, pod *v1.Po
 	return nil, fwk.NewStatus(fwk.Skip)
 }
 
-// PreFilterExtensions returns prefilter extensions, pod add and remove.
+// PreFilterExtensions 返回预过滤扩展；本插件不需要 Pod 增删钩子。
 func (pl *CSILimits) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// Filter invoked at the filter extension point.
+// Filter 在 Filter 扩展点调用，检查节点的 CSI 卷数量是否超限。
 func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil
 	}
-	// If the new pod doesn't have any volume attached to it, the predicate will always be true
+	// Pod 没有任何卷，自然不会超出卷数量限制。
 	if len(pod.Spec.Volumes) == 0 {
 		return nil
 	}
@@ -275,20 +279,21 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 	csiNode, err := pl.csiManager.CSINodes().Get(node.Name)
 	if err != nil {
 		// TODO: return the error once CSINode is created by default (2 releases)
+		// 目前 CSINode 可能尚不存在，先容忍并继续，以免误判节点不可调度。
 		logger.V(5).Info("Could not get a CSINode object for the node", "node", klog.KObj(node), "err", err)
 	}
 
-	// Count CSI volumes from the new pod
+	// 统计新 Pod 需要使用的 CSI 卷。
 	newVolumes := make(map[string]string)
 	if err := pl.filterAttachableVolumes(logger, pod, csiNode, true /* new pod */, newVolumes); err != nil {
 		if apierrors.IsNotFound(err) {
-			// PVC is not found. This Pod will never be schedulable until PVC is created.
+			// PVC 不存在，在它被创建之前该 Pod 永远不可调度，无需再排队。
 			return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, err.Error())
 		}
 		return fwk.AsStatus(err)
 	}
 
-	// If the pod doesn't have any new CSI volumes, the predicate will always be true
+	// 新 Pod 不使用任何 CSI 卷，不受卷数量限制约束。
 	if len(newVolumes) == 0 {
 		return nil
 	}
@@ -306,13 +311,13 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 		}
 	}
 
-	// If the node doesn't have volume limits, the predicate will always be true
+	// 节点未声明卷上限，不做数量检查。
 	nodeVolumeLimits := getVolumeLimits(csiNode)
 	if len(nodeVolumeLimits) == 0 {
 		return nil
 	}
 
-	// Count CSI volumes from existing pods
+	// 统计节点上现有 Pod 使用的 CSI 卷。
 	attachedVolumes := make(map[string]string)
 	for _, existingPod := range nodeInfo.GetPods() {
 		if err := pl.filterAttachableVolumes(logger, existingPod.GetPod(), csiNode, false /* existing pod */, attachedVolumes); err != nil {
@@ -322,25 +327,25 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 
 	attachedVolumeCount := map[string]int{}
 	for volumeUniqueName, driverName := range attachedVolumes {
-		// Don't count single volume used in multiple pods more than once
+		// 同一卷可能被多个 Pod 引用，只计一次；从新卷集合中移除，避免重复计数。
 		delete(newVolumes, volumeUniqueName)
 		attachedVolumeCount[driverName]++
 	}
 
-	// Count CSI volumes from VolumeAttachments
+	// 再统计 VolumeAttachment 中记录但尚未出现在 Pod 里的卷。
 	volumeAttachments, err := pl.getNodeVolumeAttachmentInfo(logger, node.Name)
 	if err != nil {
 		return fwk.AsStatus(err)
 	}
 
 	for volumeUniqueName, driverName := range volumeAttachments {
-		// Avoid double-counting volumes already used by existing pods
+		// 已在现有 Pod 中统计过的卷不要重复计数。
 		if _, exists := attachedVolumes[volumeUniqueName]; !exists {
 			attachedVolumeCount[driverName]++
 		}
 	}
 
-	// Count the new volumes count per driver
+	// 按驱动统计新 Pod 引入的卷数量。
 	newVolumeCount := map[string]int{}
 	for _, driverName := range newVolumes {
 		newVolumeCount[driverName]++
@@ -362,9 +367,9 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 	return nil
 }
 
+// checkCSIDriverOnNode 检查 CSI 驱动是否已安装到节点上。
+// 只有注册为 CSI 的驱动才受此限制约束；找不到对应 CSIDriver 时假定它不是 CSI 驱动，放行调度。
 func (pl *CSILimits) checkCSIDriverOnNode(pluginName string, csiNode *storagev1.CSINode) (bool, error) {
-	// the registered driver must be a CSI driver to enforce this limit, if we can't find the driver,
-	// we assume the driver may not be a CSI driver and allow the pod to be scheduled.
 	csiDriver, err := pl.csiDriverLister.Get(pluginName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -391,9 +396,8 @@ func (pl *CSILimits) checkCSIDriverOnNode(pluginName string, csiNode *storagev1.
 	return false, nil
 }
 
-// filterAttachableVolumes filters the attachable volumes from the pod and adds them to the result map.
-// The result map is a map of volumeUniqueName to driver name. The volumeUniqueName is a unique name for
-// the volume in the format of "driverName/volumeHandle". And driver name is the CSI driver name.
+// filterAttachableVolumes 找出 Pod 中可挂载的卷并加入 result。
+// result 的键是格式为 "driverName/volumeHandle" 的卷唯一名，值是对应的 CSI 驱动名。
 func (pl *CSILimits) filterAttachableVolumes(
 	logger klog.Logger, pod *v1.Pod, csiNode *storagev1.CSINode, newPod bool, result map[string]string) error {
 	for _, vol := range pod.Spec.Volumes {
@@ -401,21 +405,17 @@ func (pl *CSILimits) filterAttachableVolumes(
 		isEphemeral := false
 		switch {
 		case vol.PersistentVolumeClaim != nil:
-			// Normal CSI volume can only be used through PVC
+			// 普通 CSI 卷只能通过 PVC 使用。
 			pvcName = vol.PersistentVolumeClaim.ClaimName
 		case vol.Ephemeral != nil:
-			// Generic ephemeral inline volumes also use a PVC,
-			// just with a computed name and certain ownership.
-			// That is checked below once the pvc object is
-			// retrieved.
+			// 通用临时内联卷也使用 PVC，只是名称由 Pod 计算得出且归属特定 Pod，
+			// 取到 PVC 对象后再校验归属关系。
 			pvcName = ephemeral.VolumeClaimName(pod, &vol)
 			isEphemeral = true
 		default:
-			// Inline Volume does not have PVC.
-			// Need to check if CSI migration is enabled for this inline volume.
-			// - If the volume is migratable and CSI migration is enabled, need to count it
-			// as well.
-			// - If the volume is not migratable, it will be count in non_csi filter.
+			// 内联卷没有 PVC，需检查其 CSI 迁移是否开启：
+			// - 可迁移且迁移已开启时，同样计入配额；
+			// - 不可迁移的卷由 non_csi 过滤器负责统计。
 			if err := pl.checkAttachableInlineVolume(logger, &vol, csiNode, pod, result); err != nil {
 				return err
 			}
@@ -431,18 +431,15 @@ func (pl *CSILimits) filterAttachableVolumes(
 
 		if err != nil {
 			if newPod {
-				// The PVC is required to proceed with
-				// scheduling of a new pod because it cannot
-				// run without it. Bail out immediately.
+				// 新 Pod 必须依赖该 PVC 才能运行，查不到就无法继续调度。
 				return fmt.Errorf("looking up PVC %s/%s: %w", pod.Namespace, pvcName, err)
 			}
-			// If the PVC is invalid, we don't count the volume because
-			// there's no guarantee that it belongs to the running predicate.
+			// 现有 Pod 的 PVC 无效时不计数，无法确认它是否真的占用了节点配额。
 			logger.V(5).Info("Unable to look up PVC info", "pod", klog.KObj(pod), "PVC", klog.KRef(pod.Namespace, pvcName))
 			continue
 		}
 
-		// The PVC for an ephemeral volume must be owned by the pod.
+		// 临时卷的 PVC 必须归属于当前 Pod，防止误计其他 Pod 的卷。
 		if isEphemeral {
 			if err := ephemeral.VolumeIsForPod(pod, pvc); err != nil {
 				return err
@@ -461,14 +458,14 @@ func (pl *CSILimits) filterAttachableVolumes(
 	return nil
 }
 
-// checkAttachableInlineVolume takes an inline volume and add to the result map if the
-// volume is migratable and CSI migration for this plugin has been enabled.
+// checkAttachableInlineVolume 在内联卷可迁移且对应插件的 CSI 迁移已开启时，
+// 将其转换后加入 result 供配额统计。
 func (pl *CSILimits) checkAttachableInlineVolume(logger klog.Logger, vol *v1.Volume, csiNode *storagev1.CSINode,
 	pod *v1.Pod, result map[string]string) error {
 	if !pl.translator.IsInlineMigratable(vol) {
 		return nil
 	}
-	// Check if the intree provisioner CSI migration has been enabled.
+	// 先拿到 in-tree provisioner 名，再检查它的 CSI 迁移是否已开启。
 	inTreeProvisionerName, err := pl.translator.GetInTreePluginNameFromSpec(nil, vol)
 	if err != nil {
 		return fmt.Errorf("looking up provisioner name for volume %s: %w", vol.Name, err)
@@ -482,7 +479,7 @@ func (pl *CSILimits) checkAttachableInlineVolume(logger klog.Logger, vol *v1.Vol
 			"pod", klog.KObj(pod), "csiNode", csiNodeName)
 		return nil
 	}
-	// Do translation for the in-tree volume.
+	// 迁移已开启，转换为 CSI 卷以取得驱动名和卷句柄。
 	translatedPV, err := pl.translator.TranslateInTreeInlineVolumeToCSI(logger, vol, pod.Namespace)
 	if err != nil || translatedPV == nil {
 		return fmt.Errorf("converting volume(%s) from inline to csi: %w", vol.Name, err)
@@ -491,8 +488,7 @@ func (pl *CSILimits) checkAttachableInlineVolume(logger klog.Logger, vol *v1.Vol
 	if err != nil {
 		return fmt.Errorf("looking up CSI driver name for provisioner %s: %w", inTreeProvisionerName, err)
 	}
-	// TranslateInTreeInlineVolumeToCSI should translate inline volume to CSI. If it is not set,
-	// the volume does not support inline. Skip the count.
+	// 转换结果没有 CSI 源，说明该卷不支持内联，跳过计数。
 	if translatedPV.Spec.PersistentVolumeSource.CSI == nil {
 		return nil
 	}
@@ -501,9 +497,8 @@ func (pl *CSILimits) checkAttachableInlineVolume(logger klog.Logger, vol *v1.Vol
 	return nil
 }
 
-// getCSIDriverInfo returns the CSI driver name and volume ID of a given PVC.
-// If the PVC is from a migrated in-tree plugin, this function will return
-// the information of the CSI driver that the plugin has been migrated to.
+// getCSIDriverInfo 返回 PVC 对应的 CSI 驱动名和卷 ID。
+// 若 PVC 来自已迁移的 in-tree 插件，则返回其迁移到的 CSI 驱动信息。
 func (pl *CSILimits) getCSIDriverInfo(logger klog.Logger, csiNode *storagev1.CSINode, pvc *v1.PersistentVolumeClaim) (string, string) {
 	pvName := pvc.Spec.VolumeName
 
@@ -515,15 +510,14 @@ func (pl *CSILimits) getCSIDriverInfo(logger klog.Logger, csiNode *storagev1.CSI
 	pv, err := pl.pvLister.Get(pvName)
 	if err != nil {
 		logger.V(5).Info("Unable to look up PV info for PVC and PV", "PVC", klog.KObj(pvc), "PV", klog.KRef("", pvName))
-		// If we can't fetch PV associated with PVC, may be it got deleted
-		// or PVC was prebound to a PVC that hasn't been created yet.
-		// fallback to using StorageClass for volume counting
+		// PV 可能已被删除，或 PVC 预绑定到尚未创建的 PV；
+		// 此时退而使用 StorageClass 推算驱动信息用于计数。
 		return pl.getCSIDriverInfoFromSC(logger, csiNode, pvc)
 	}
 
 	csiSource := pv.Spec.PersistentVolumeSource.CSI
 	if csiSource == nil {
-		// We make a fast path for non-CSI volumes that aren't migratable
+		// 不可迁移的非 CSI 卷直接跳过，无需后续转换。
 		if !pl.translator.IsPVMigratable(pv) {
 			return "", ""
 		}
@@ -556,14 +550,15 @@ func (pl *CSILimits) getCSIDriverInfo(logger klog.Logger, csiNode *storagev1.CSI
 	return csiSource.Driver, csiSource.VolumeHandle
 }
 
-// getCSIDriverInfoFromSC returns the CSI driver name and a random volume ID of a given PVC's StorageClass.
+// getCSIDriverInfoFromSC 根据 PVC 的 StorageClass 推算 CSI 驱动名，
+// 并生成一个随机卷 ID 供去重计数使用。
 func (pl *CSILimits) getCSIDriverInfoFromSC(logger klog.Logger, csiNode *storagev1.CSINode, pvc *v1.PersistentVolumeClaim) (string, string) {
 	namespace := pvc.Namespace
 	pvcName := pvc.Name
 	scName := storagehelpers.GetPersistentVolumeClaimClass(pvc)
 
-	// If StorageClass is not set or not found, then PVC must be using immediate binding mode
-	// and hence it must be bound before scheduling. So it is safe to not count it.
+	// 没有 StorageClass 意味着 PVC 使用立即绑定，调度前必然已绑定 PV，
+	// 前面走 PV 路径即可，这里不计数是安全的。
 	if scName == "" {
 		logger.V(5).Info("PVC has no StorageClass", "PVC", klog.KObj(pvc))
 		return "", ""
@@ -575,9 +570,8 @@ func (pl *CSILimits) getCSIDriverInfoFromSC(logger klog.Logger, csiNode *storage
 		return "", ""
 	}
 
-	// We use random prefix to avoid conflict with volume IDs. If PVC is bound during the execution of the
-	// predicate and there is another pod on the same node that uses same volume, then we will overcount
-	// the volume and consider both volumes as different.
+	// 随机前缀避免与真实卷 ID 冲突：若 PVC 在过滤过程中完成绑定，
+	// 且同节点另一个 Pod 也用它，随机 ID 可防止把两个路径统计成同一个卷而漏计。
 	volumeHandle := fmt.Sprintf("%s-%s/%s", pl.randomVolumeIDPrefix, namespace, pvcName)
 
 	provisioner := storageClass.Provisioner
@@ -598,6 +592,7 @@ func (pl *CSILimits) getCSIDriverInfoFromSC(logger klog.Logger, csiNode *storage
 	return provisioner, volumeHandle
 }
 
+// volumeAttachmentIndexer 按 VolumeAttachment 所属节点名建立索引键。
 func volumeAttachmentIndexer(obj interface{}) ([]string, error) {
 	va, ok := obj.(*storagev1.VolumeAttachment)
 	if !ok {
@@ -606,7 +601,7 @@ func volumeAttachmentIndexer(obj interface{}) ([]string, error) {
 	return []string{va.Spec.NodeName}, nil
 }
 
-// NewCSI initializes a new plugin and returns it.
+// NewCSI 初始化并返回一个 CSILimits 插件实例。
 func NewCSI(_ context.Context, _ runtime.Object, handle fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	informerFactory := handle.SharedInformerFactory()
 	pvLister := informerFactory.Core().V1().PersistentVolumes().Lister()
@@ -622,8 +617,7 @@ func NewCSI(_ context.Context, _ runtime.Object, handle fwk.Handle, fts feature.
 	}
 	csiTranslator := csitrans.New()
 
-	// The blank lines around the long field keep gofmt output the same
-	// on all architectures, see issue #141074.
+	// 长字段前后的空行是为了让各架构下 gofmt 输出保持一致，见 issue #141074。
 	return &CSILimits{
 		csiManager:               handle.SharedCSIManager(),
 		pvLister:                 pvLister,
@@ -641,9 +635,8 @@ func NewCSI(_ context.Context, _ runtime.Object, handle fwk.Handle, fts feature.
 	}, nil
 }
 
-// getVolumeLimits reads the volume limits from CSINode object and returns a map of volume limits.
-// The key is the driver name and the value is the maximum number of volumes that can be attached to the node.
-// If a key is not found in the map, it means there is no limit for the driver on the node.
+// getVolumeLimits 从 CSINode 读取卷上限，返回以驱动名为键、最大可挂载卷数为值的映射。
+// 映射中查不到的驱动表示节点对其没有数量限制。
 func getVolumeLimits(csiNode *storagev1.CSINode) map[string]int64 {
 	nodeVolumeLimits := make(map[string]int64)
 	if csiNode == nil {
@@ -657,9 +650,10 @@ func getVolumeLimits(csiNode *storagev1.CSINode) map[string]int64 {
 	return nodeVolumeLimits
 }
 
+// vaIndexKey 是卷附件 informer 按节点名建立索引时使用的键名。
 const vaIndexKey = "va.spec.nodename"
 
-// getNodeVolumeAttachmentInfo returns a map of volumeID to driver name for the given node.
+// getNodeVolumeAttachmentInfo 返回指定节点上卷 ID 到驱动名的映射。
 func (pl *CSILimits) getNodeVolumeAttachmentInfo(logger klog.Logger, nodeName string) (map[string]string, error) {
 	volumeAttachments := make(map[string]string)
 	vas, err := pl.vaIndexer.ByIndex(vaIndexKey, nodeName)
@@ -698,11 +692,12 @@ func (pl *CSILimits) getNodeVolumeAttachmentInfo(logger klog.Logger, nodeName st
 	return volumeAttachments, nil
 }
 
+// getVolumeUniqueName 用驱动名和卷句柄拼出卷的唯一标识。
 func getVolumeUniqueName(driverName, volumeHandle string) string {
 	return fmt.Sprintf("%s/%s", driverName, volumeHandle)
 }
 
-// Feasibility and scoring based on the non-synthetic volume sources.
+// SignPod 基于非合成卷来源生成签名片段，供过滤和打分使用。
 func (pl *CSILimits) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	return []fwk.SignFragment{
 		{Key: fwk.VolumesSignerName, Value: fwk.VolumesSigner(pod)},

@@ -24,6 +24,7 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
+// TestDefaultNormalizeScore 覆盖默认归一化逻辑的正序、逆序及边界输入场景。
 func TestDefaultNormalizeScore(t *testing.T) {
 	tests := []struct {
 		reverse        bool

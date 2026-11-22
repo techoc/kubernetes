@@ -45,7 +45,7 @@ import (
 
 var podTopologySpreadFunc = frameworkruntime.FactoryAdapter(feature.Features{}, New)
 
-// TestPreScoreSkip tests the cases that TopologySpread#PreScore returns the Skip status.
+// TestPreScoreSkip 测试 TopologySpread#PreScore 返回 Skip 状态的场景。
 func TestPreScoreSkip(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -251,7 +251,7 @@ func TestPreScoreStateEmptyNodes(t *testing.T) {
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node-a").Label(v1.LabelHostname, "node-a").Label(v1.LabelTopologyZone, "mars").Obj(),
 				st.MakeNode().Name("node-b").Label(v1.LabelHostname, "node-b").Label(v1.LabelTopologyZone, "mars").Obj(),
-				// Nodes with no zone are not excluded. They are considered a separate zone.
+				// 没有 zone 标签的节点不会被排除，而是视为独立的 zone。
 				st.MakeNode().Name("node-c").Label(v1.LabelHostname, "node-c").Obj(),
 				st.MakeNode().Name("node-d").Label(v1.LabelHostname, "node-d").Obj(),
 			},
@@ -632,12 +632,10 @@ func TestPodTopologySpreadScore(t *testing.T) {
 		enableNodeInclusionPolicy bool
 		enableMatchLabelKeys      bool
 	}{
-		// Explanation on the Legend:
-		// a) X/Y means there are X matching pods on node1 and Y on node2, both nodes are candidates
-		//   (i.e. they have passed all predicates)
-		// b) X/~Y~ means there are X matching pods on node1 and Y on node2, but node Y is NOT a candidate
-		// c) X/?Y? means there are X matching pods on node1 and Y on node2, both nodes are candidates
-		//    but node2 doesn't have all required topologyKeys present.
+		// 图例说明：
+		//   a) X/Y 表示 node1 上有 X 个匹配 Pod、node2 上有 Y 个，两节点都是候选（已通过所有过滤）
+		//   b) X/~Y~ 表示 node2 不是候选节点
+		//   c) X/?Y? 表示两节点都是候选，但 node2 缺少必需的 topologyKey
 		{
 			name: "one constraint on node, no existing pods",
 			pod: st.MakePod().Name("p").Label("foo", "").
@@ -653,7 +651,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// if there is only one candidate node, it should be scored to 100
+			// 只有一个候选节点时得分应为 100
 			name: "one constraint on node, only one node is candidate",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -692,7 +690,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// matching pods spread as 2/1/0/3.
+			// 匹配 Pod 分布为 2/1/0/3。
 			name: "one constraint on node, all 4 nodes are candidates",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -750,7 +748,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(2, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
 				Obj(),
-			// matching pods spread as 2/1/0/3.
+			// 匹配 Pod 分布为 2/1/0/3。
 			existingPods: []*v1.Pod{
 				st.MakePod().Name("p-a1").Node("node-a").Label("foo", "").Obj(),
 				st.MakePod().Name("p-a2").Node("node-a").Label("foo", "").Obj(),
@@ -779,7 +777,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 				SpreadConstraint(3, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
 				Obj(),
 			existingPods: []*v1.Pod{
-				// matching pods spread as 4/3/2/1.
+				// 匹配 Pod 分布为 4/3/2/1。
 				st.MakePod().Name("p-a1").Node("node-a").Label("foo", "").Obj(),
 				st.MakePod().Name("p-a2").Node("node-a").Label("foo", "").Obj(),
 				st.MakePod().Name("p-a3").Node("node-a").Label("foo", "").Obj(),
@@ -809,7 +807,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			name: "system defaulting, nodes don't have zone, pods match service",
 			pod:  st.MakePod().Name("p").Label("foo", "").Obj(),
 			existingPods: []*v1.Pod{
-				// matching pods spread as 4/3/2/1.
+				// 匹配 Pod 分布为 4/3/2/1。
 				st.MakePod().Name("p-a1").Node("node-a").Label("foo", "").Obj(),
 				st.MakePod().Name("p-a2").Node("node-a").Label("foo", "").Obj(),
 				st.MakePod().Name("p-a3").Node("node-a").Label("foo", "").Obj(),
@@ -832,7 +830,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 				&v1.Service{Spec: v1.ServiceSpec{Selector: map[string]string{"foo": ""}}},
 			},
 			want: []fwk.NodeScore{
-				// Same scores as if we were using one spreading constraint.
+				// 与只使用一个分布约束时得分相同。
 				{Name: "node-a", Score: 44},
 				{Name: "node-b", Score: 66},
 				{Name: "node-c", Score: 77},
@@ -840,7 +838,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// matching pods spread as 4/2/1/~3~ (node4 is not a candidate)
+			// 匹配 Pod 分布为 4/2/1/~3~（node4 不是候选）
 			name: "one constraint on node, 3 out of 4 nodes are candidates",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -872,7 +870,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// matching pods spread as 4/?2?/1/~3~, total = 4+?+1 = 5 (as node2 is problematic)
+			// 匹配 Pod 分布为 4/?2?/1/~3~，总数为 4+?+1=5（node2 有问题）
 			name: "one constraint on node, 3 out of 4 nodes are candidates, one node doesn't match topology key",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, v1.LabelHostname, v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -904,7 +902,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// matching pods spread as 4/2/1/~3~
+			// 匹配 Pod 分布为 4/2/1/~3~
 			name: "one constraint on zone, 3 out of 4 nodes are candidates",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -936,7 +934,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// matching pods spread as 2/~1~/2/~4~.
+			// 匹配 Pod 分布为 2/~1~/2/~4~。
 			name: "two Constraints on zone and node, 2 out of 4 nodes are candidates",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -994,7 +992,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// If Constraints hold different labelSelectors, it's a little complex.
+			// 当不同约束使用不同 labelSelector 时情况稍复杂：
 			// +----------------------+------------------------+
 			// |         zone1        |          zone2         |
 			// +----------------------+------------------------+
@@ -1002,8 +1000,8 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			// +--------+-------------+--------+---------------+
 			// | P{foo} | P{foo, bar} |        | P{foo} P{bar} |
 			// +--------+-------------+--------+---------------+
-			// For the first constraint (zone): the matching pods spread as 2/2/1/1
-			// For the second constraint (node): the matching pods spread as 0/1/0/1
+			// 第一个约束（zone）：匹配 Pod 分布为 2/2/1/1
+			// 第二个约束（node）：匹配 Pod 分布为 0/1/0/1
 			name: "two Constraints on zone and node, with different labelSelectors",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -1030,8 +1028,8 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// For the first constraint (zone): the matching pods spread as 0/0/2/2
-			// For the second constraint (node): the matching pods spread as 0/1/0/1
+			// 第一个约束（zone）：匹配 Pod 分布为 0/0/2/2
+			// 第二个约束（node）：匹配 Pod 分布为 0/1/0/1
 			name: "two Constraints on zone and node, with different labelSelectors, some nodes have 0 pods",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -1057,8 +1055,8 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// For the first constraint (zone): the matching pods spread as 2/2/1/~1~
-			// For the second constraint (node): the matching pods spread as 0/1/0/~1~
+			// 第一个约束（zone）：匹配 Pod 分布为 2/2/1/~1~
+			// 第二个约束（node）：匹配 Pod 分布为 0/1/0/~1~
 			name: "two Constraints on zone and node, with different labelSelectors, 3 out of 4 nodes are candidates",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.ScheduleAnyway, fooSelector, nil, nil, nil, nil).
@@ -1123,8 +1121,8 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 		},
 		{
-			// This test is artificial. In the real world, API Server would fail a pod's creation
-			// when non-default minDomains is specified along with SchedulingAnyway.
+			// 该用例是人为构造的：现实中 API Server 会拒绝同时指定非默认 minDomains
+			// 与 ScheduleAnyway 的 Pod 创建请求。
 			name: "minDomains has no effect when ScheduleAnyway",
 			pod: st.MakePod().Name("p").Label("foo", "").SpreadConstraint(
 				2,

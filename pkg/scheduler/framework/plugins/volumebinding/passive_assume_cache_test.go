@@ -27,22 +27,25 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
-// sufficient for one assume cache.
+// testInformer 是一个最小化的 informer 替身，足够支撑一个 assume cache 的测试。
 type testInformer struct {
 	handler cache.ResourceEventHandler
 	indexer cache.Indexer
 	t       *testing.T
 }
 
+// AddEventHandler 记录测试要触发的事件处理器。
 func (i *testInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
 	i.handler = handler
 	return nil, nil
 }
 
+// GetIndexer 返回底层索引器，供测试直接预置对象。
 func (i *testInformer) GetIndexer() cache.Indexer {
 	return i.indexer
 }
 
+// add 模拟 informer 的新增事件，先更新索引再通知处理器。
 func (i *testInformer) add(obj interface{}) {
 	if err := i.indexer.Add(obj); err != nil {
 		i.t.Fatalf("failed to add object into indexer: %v", err)
@@ -50,6 +53,7 @@ func (i *testInformer) add(obj interface{}) {
 	i.handler.OnAdd(obj, false)
 }
 
+// update 模拟 informer 的更新事件。
 func (i *testInformer) update(oldObj, obj interface{}) {
 	if err := i.indexer.Update(obj); err != nil {
 		i.t.Fatalf("failed to update object to indexer: %v", err)
@@ -57,6 +61,7 @@ func (i *testInformer) update(oldObj, obj interface{}) {
 	i.handler.OnUpdate(oldObj, obj)
 }
 
+// delete 模拟 informer 的删除事件。
 func (i *testInformer) delete(obj interface{}) {
 	if err := i.indexer.Delete(obj); err != nil {
 		i.t.Fatalf("failed to delete object from indexer: %v", err)
@@ -64,6 +69,7 @@ func (i *testInformer) delete(obj interface{}) {
 	i.handler.OnDelete(obj)
 }
 
+// verifyList 校验按指定索引值查询到的对象集合与预期一致。
 func verifyList(t *testing.T, cache testCache, expected map[string]*testObj, indexedValue string) {
 	t.Helper()
 	got, err := cache.ByIndex(testIndex, indexedValue)
@@ -84,10 +90,11 @@ func verifyList(t *testing.T, cache testCache, expected map[string]*testObj, ind
 	}
 }
 
+// TestBasicCache 验证 assume cache 的基本增删改查。
 func TestBasicCache(t *testing.T) {
 	informer, cache := newTestCache(t)
 
-	// Get object that doesn't exist
+	// 查询不存在的对象应返回错误且对象为 nil。
 	obj, err := cache.Get("nothere")
 	if err == nil {
 		t.Errorf("Get() returned unexpected success")
@@ -96,7 +103,7 @@ func TestBasicCache(t *testing.T) {
 		t.Errorf("Get() returned unexpected PV %q", obj.Name)
 	}
 
-	// Add a bunch of objects
+	// 批量新增对象。
 	objects := map[string]*testObj{}
 	for i := range 10 {
 		obj := makeObj(fmt.Sprintf("test-%v", i), "1", "")
@@ -104,10 +111,10 @@ func TestBasicCache(t *testing.T) {
 		informer.add(obj)
 	}
 
-	// List them
+	// 校验列表。
 	verifyList(t, cache, objects, "")
 
-	// Update an object
+	// 更新一个对象。
 	updated := makeObj("test-3", "1", "")
 	informer.update(objects["test-3"], updated)
 	objects[updated.Name] = updated
@@ -115,7 +122,7 @@ func TestBasicCache(t *testing.T) {
 	// List them
 	verifyList(t, cache, objects, "")
 
-	// Delete an object
+	// 删除一个对象。
 	deleted := objects["test-7"]
 	delete(objects, deleted.Name)
 	informer.delete(deleted)
@@ -124,10 +131,11 @@ func TestBasicCache(t *testing.T) {
 	verifyList(t, cache, objects, "")
 }
 
+// TestPVCacheWithIndex 验证带索引查询在增改删之后仍返回正确的对象分组。
 func TestPVCacheWithIndex(t *testing.T) {
 	informer, cache := newTestCache(t)
 
-	// Add a bunch of objects
+	// 批量新增对象。
 	objects1 := map[string]*testObj{}
 	for i := range 10 {
 		obj := makeObj(fmt.Sprintf("test-%v", i), "1", "")
@@ -136,7 +144,7 @@ func TestPVCacheWithIndex(t *testing.T) {
 		informer.add(obj)
 	}
 
-	// Add a bunch of objects
+	// 再新增一组不同索引值的对象。
 	objects2 := map[string]*testObj{}
 	for i := range 10 {
 		obj := makeObj(fmt.Sprintf("test2-%v", i), "1", "")
@@ -149,7 +157,7 @@ func TestPVCacheWithIndex(t *testing.T) {
 	verifyList(t, cache, objects1, "test1")
 	verifyList(t, cache, objects2, "test2")
 
-	// Update an object
+	// 更新一个对象。
 	updated := makeObj("test-3", "2", "")
 	updated.Annotations["test"] = "test1"
 	informer.update(objects1[updated.Name], updated)
@@ -160,6 +168,7 @@ func TestPVCacheWithIndex(t *testing.T) {
 	verifyList(t, cache, objects2, "test2")
 
 	// Delete an object
+	// 删除一个对象。
 	deletedPV := objects1["test-7"]
 	delete(objects1, deletedPV.Name)
 	informer.delete(deletedPV)
@@ -169,8 +178,10 @@ func TestPVCacheWithIndex(t *testing.T) {
 	verifyList(t, cache, objects2, "test2")
 }
 
+// testObj 是 assume cache 测试中使用的轻量对象类型。
 type testObj = metav1.ObjectMeta
 
+// makeObj 构造一个带名字、资源版本和命名空间的测试对象。
 func makeObj(name, version, namespace string) *testObj {
 	return &testObj{
 		Name:            name,
@@ -180,8 +191,10 @@ func makeObj(name, version, namespace string) *testObj {
 	}
 }
 
+// testCache 是测试中使用的 assume cache 别名。
 type testCache = *passiveAssumeCache[*testObj]
 
+// verifyObj 校验按 key 查询到的对象指针与预期完全相同。
 func verifyObj(cache testCache, key string, expected *testObj) error {
 	obj, err := cache.Get(key)
 	if err != nil {
@@ -193,8 +206,10 @@ func verifyObj(cache testCache, key string, expected *testObj) error {
 	return nil
 }
 
+// testIndex 是测试中使用的索引名。
 const testIndex = "testIndex"
 
+// newTestCache 创建一个带 name->对象 索引的测试用 assume cache。
 func newTestCache(t *testing.T) (*testInformer, testCache) {
 	logger, _ := ktesting.NewTestContext(t)
 	informer := &testInformer{
@@ -212,6 +227,7 @@ func newTestCache(t *testing.T) (*testInformer, testCache) {
 	return informer, cache
 }
 
+// TestAssume 覆盖 Assume 在版本相同或更新时的成功/失败场景。
 func TestAssume(t *testing.T) {
 	scenarios := map[string]struct {
 		old           *testObj
@@ -254,13 +270,13 @@ func TestAssume(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			informer, cache := newTestCache(t)
 
-			// Add old to cache
+			// 先把旧版本加入缓存。
 			informer.add(scenario.old)
 			if err := verifyObj(cache, keyOf(scenario.old), scenario.old); err != nil {
 				t.Fatalf("Failed to Get() after initial update: %v", err)
 			}
 
-			// Assume new
+			// 尝试假定新版本。
 			err := cache.Assume(scenario.new)
 			if scenario.shouldSucceed && err != nil {
 				t.Errorf("Test %q failed: Assume() returned error %v", name, err)
@@ -269,7 +285,7 @@ func TestAssume(t *testing.T) {
 				t.Errorf("Test %q failed: Assume() returned success but expected error", name)
 			}
 
-			// Check that Get returns correct version
+			// 校验缓存中保留的是正确版本。
 			expectedPV := scenario.new
 			if !scenario.shouldSucceed {
 				expectedPV = scenario.old
@@ -281,28 +297,29 @@ func TestAssume(t *testing.T) {
 	}
 }
 
+// TestRestore 验证 Restore 能把假定对象还原为 informer 中的版本。
 func TestRestore(t *testing.T) {
 	informer, cache := newTestCache(t)
 
 	old := makeObj("pvc1", "5", "ns1")
 	new := makeObj("pvc1", "5", "ns1")
 
-	// Restore object that doesn't exist
+	// 还原一个不存在的对象不应产生副作用。
 	cache.Restore(&testObj{})
 
-	// Add old to cache
+	// 把旧版本加入缓存。
 	informer.add(old)
 	if err := verifyObj(cache, keyOf(old), old); err != nil {
 		t.Fatalf("Failed to Get() after initial update: %v", err)
 	}
 
-	// Restore
+	// 还原尚未被假定的对象。
 	cache.Restore(old)
 	if err := verifyObj(cache, keyOf(old), old); err != nil {
 		t.Fatalf("Failed to Get() after initial restore: %v", err)
 	}
 
-	// Assume new
+	// 假定新版本。
 	if err := cache.Assume(new); err != nil {
 		t.Fatalf("Assume() returned error %v", err)
 	}
@@ -310,22 +327,23 @@ func TestRestore(t *testing.T) {
 		t.Fatalf("Failed to Get() after Assume: %v", err)
 	}
 
-	// Restore
+	// 还原被假定的对象，应回到 informer 中的旧版本。
 	cache.Restore(new)
 	if err := verifyObj(cache, keyOf(old), old); err != nil {
 		t.Fatalf("Failed to Get() after restore: %v", err)
 	}
 }
 
+// TestConcurrentAssume 验证旧假定对象被还原后不会覆盖新的假定版本。
 func TestConcurrentAssume(t *testing.T) {
 	informer, cache := newTestCache(t)
 
 	obj1 := makeObj("pvc1", "5", "ns1")
 	obj1Update := makeObj("pvc1", "5", "ns1")
-	// Add object to cache
+	// 把对象加入缓存。
 	informer.add(obj1)
 
-	// Update obj 1
+	// 假定对象 1。
 	if err := cache.Assume(obj1Update); err != nil {
 		t.Fatalf("Assume() returned error %v", err)
 	}
@@ -335,32 +353,33 @@ func TestConcurrentAssume(t *testing.T) {
 
 	obj2 := makeObj("pvc1", "7", "ns1")
 	obj2Update := makeObj("pvc1", "7", "ns1")
-	// obj updated externally
+	// 模拟对象被外部更新。
 	informer.add(obj2)
 
-	// Update obj 2
+	// 假定对象 2。
 	if err := cache.Assume(obj2Update); err != nil {
 		t.Fatalf("Assume() returned error %v", err)
 	}
-	// obj 1 failed with conflict
+	// 对象 1 因冲突被还原。
 	cache.Restore(obj1Update)
-	// Should still have obj 2 in cache
+	// 缓存中仍应保留对象 2 的新版本。
 	if err := verifyObj(cache, keyOf(obj2Update), obj2Update); err != nil {
 		t.Fatalf("Failed to Get() after restore: %v", err)
 	}
 }
 
+// TestAssumeUpdateCache 验证 Assume 会更新缓存，且随后到达的旧版本事件不会覆盖它。
 func TestAssumeUpdateCache(t *testing.T) {
 	informer, cache := newTestCache(t)
 
-	// Add a object
+	// 加入一个对象。
 	obj := makeObj("test-pvc0", "1", "test-ns")
 	informer.add(obj)
 	if err := verifyObj(cache, keyOf(obj), obj); err != nil {
 		t.Fatalf("failed to get: %v", err)
 	}
 
-	// Assume
+	// 假定带已选节点注解的新版本。
 	newObj := obj.DeepCopy()
 	newObj.Annotations[volume.AnnSelectedNode] = "test-node"
 	if err := cache.Assume(newObj); err != nil {
@@ -370,19 +389,20 @@ func TestAssumeUpdateCache(t *testing.T) {
 		t.Fatalf("failed to get after assume: %v", err)
 	}
 
-	// Add old
+	// 旧版本事件迟到，不应覆盖假定版本。
 	informer.add(obj)
 	if err := verifyObj(cache, keyOf(obj), newObj); err != nil {
 		t.Fatalf("failed to get after old added: %v", err)
 	}
 }
 
+// TestDelayedInformerEvent 验证 informer 延迟事件不会覆盖缓存中的假定版本。
 func TestDelayedInformerEvent(t *testing.T) {
 	informer, cache := newTestCache(t)
 
 	obj1 := makeObj("test-pvc0", "1", "test-ns")
 	obj2 := makeObj("test-pvc0", "2", "test-ns")
-	// Only add indexer, simulating delayed informer event
+	// 只更新索引器，模拟 informer 事件尚未到达。
 	if err := informer.indexer.Add(obj2); err != nil {
 		t.Fatalf("failed to add: %v", err)
 	}
@@ -393,11 +413,11 @@ func TestDelayedInformerEvent(t *testing.T) {
 		t.Fatalf("failed to assume: %v", err)
 	}
 
-	// Send the delayed event
+	// 发送延迟到达的增删事件。
 	informer.handler.OnAdd(obj1, false)
 	informer.handler.OnDelete(obj1)
 	informer.handler.OnAdd(obj2, false)
-	// Expect assumed version not overwritten
+	// 假定版本不应被延迟事件覆盖。
 	if err := verifyObj(cache, keyOf(newObj), newObj); err != nil {
 		t.Fatalf("failed to get after assume: %v", err)
 	}

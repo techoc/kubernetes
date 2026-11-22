@@ -39,11 +39,17 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// createPodWithVolume 构造一个在默认命名空间中引用指定 PVC 的 Pod，
+// 供各测试用例复用，避免重复拼接 Pod 对象。
 func createPodWithVolume(pod, pvc string) *v1.Pod {
 	return st.MakePod().Name(pod).Namespace(metav1.NamespaceDefault).PVC(pvc).Obj()
 }
 
+// TestSingleZone 验证卷与节点位于单个可用区时的过滤行为：
+// 覆盖 beta/GA 两种拓扑标签、zone/region 两个维度以及标签匹配与冲突的情形。
 func TestSingleZone(t *testing.T) {
+	// 同时准备 beta 与 GA 标签的 PV：GA 标签用 "Vol_Stable_*" 命名，
+	// 用于验证插件对两套标签键的兼容处理。
 	pvLister := tf.PersistentVolumeLister{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "Vol_1", Labels: map[string]string{v1.LabelFailureDomainBetaZone: "us-west1-a"}},
@@ -65,6 +71,7 @@ func TestSingleZone(t *testing.T) {
 		},
 	}
 
+	// PVC_4 引用一个不存在的 PV，用于覆盖"卷对象缺失"的容错路径。
 	pvcLister := tf.PersistentVolumeClaimLister{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "PVC_1", Namespace: "default"},
@@ -96,6 +103,8 @@ func TestSingleZone(t *testing.T) {
 		},
 	}
 
+	// 每行声明 Pod、候选节点以及两个阶段的预期状态：
+	// 无卷时 PreFilter 返回 Skip，拓扑冲突时 Filter 返回 UnschedulableAndUnresolvable。
 	tests := []struct {
 		name                string
 		Pod                 *v1.Pod
@@ -263,17 +272,22 @@ func TestSingleZone(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
+			// Filter 依赖 ctx 传递日志与取消信号，用 defer 保证退出时释放。
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
+			// Filter 读取的节点信息由 CycleState 之外的 NodeInfo 提供，
+			// 这里按用例构造最小化的 NodeInfo。
 			state := framework.NewCycleState()
 			node := &framework.NodeInfo{}
 			node.SetNode(test.Node)
 			p := &VolumeZone{
 				pvLister:  pvLister,
 				pvcLister: pvcLister,
-				scLister:  nil,
+				// 当前用例只用已绑定 PVC，无需 StorageClass lister。
+				scLister: nil,
 			}
+			// 先跑 PreFilter 再跑 Filter，模拟真实调度周期内两个阶段共享 state 的调用顺序。
 			_, preFilterStatus := p.PreFilter(ctx, state, test.Pod, nil)
 			if diff := cmp.Diff(preFilterStatus, test.wantPreFilterStatus); diff != "" {
 				t.Errorf("PreFilter: status does not match (-want,+got):\n%s", diff)
@@ -286,6 +300,8 @@ func TestSingleZone(t *testing.T) {
 	}
 }
 
+// TestMultiZone 验证卷标签含多个可用区（以 "__" 分隔）时的匹配语义：
+// 节点区域落在任一候选区内即通过，否则冲突。
 func TestMultiZone(t *testing.T) {
 	pvLister := tf.PersistentVolumeLister{
 		{
@@ -305,6 +321,7 @@ func TestMultiZone(t *testing.T) {
 		},
 	}
 
+	// PVC_3 指向带多区域标签的卷；"__" 是插件约定的多值分隔符。
 	pvcLister := tf.PersistentVolumeClaimLister{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "PVC_1", Namespace: "default"},
@@ -332,6 +349,7 @@ func TestMultiZone(t *testing.T) {
 		},
 	}
 
+	// 各用例覆盖：节点无标签、节点区域命中多值标签之一、以及区域不在候选集合内。
 	tests := []struct {
 		name                string
 		Pod                 *v1.Pod
@@ -406,6 +424,7 @@ func TestMultiZone(t *testing.T) {
 				pvcLister: pvcLister,
 				scLister:  nil,
 			}
+			// 两个阶段共享同一 state，确保 PreFilter 写入的拓扑信息能被 Filter 复用。
 			_, preFilterStatus := p.PreFilter(ctx, state, test.Pod, nil)
 			if diff := cmp.Diff(preFilterStatus, test.wantPreFilterStatus); diff != "" {
 				t.Errorf("PreFilter: status does not match (-want,+got):\n%s", diff)
@@ -418,8 +437,12 @@ func TestMultiZone(t *testing.T) {
 	}
 }
 
+// TestWithBinding 验证未绑定 PVC 根据 StorageClass 绑定模式的处理：
+// 空 SC / 不存在的 SC / Immediate 模式均报错，WaitForFirstConsumer 模式则跳过检查。
 func TestWithBinding(t *testing.T) {
 	var (
+		// 只有 WaitForFirstConsumer 模式会让插件跳过卷拓扑检查，
+		// 因为该模式下卷在 Pod 调度后才创建，拓扑尚不确定。
 		modeWait = storagev1.VolumeBindingWaitForFirstConsumer
 
 		class0         = "Class_0"
@@ -427,6 +450,7 @@ func TestWithBinding(t *testing.T) {
 		classImmediate = "Class_Immediate"
 	)
 
+	// classImmediate 故意不设置 VolumeBindingMode，用于验证未设置模式时的报错路径。
 	scLister := tf.StorageClassLister{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: classImmediate},
@@ -465,6 +489,7 @@ func TestWithBinding(t *testing.T) {
 		},
 	}
 
+	// 所有未绑定用例复用同一个节点，拓扑已匹配，便于隔离 StorageClass 相关行为。
 	testNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "host1",
@@ -472,6 +497,8 @@ func TestWithBinding(t *testing.T) {
 		},
 	}
 
+	// 未绑定卷的错误在 PreFilter 与 Filter 两阶段都会复现，故多数用例同时断言两个状态；
+	// WaitForFirstConsumer 仅在 PreFilter 返回 Skip，Filter 无状态可直接放行。
 	tests := []struct {
 		name                string
 		Pod                 *v1.Pod
@@ -531,6 +558,7 @@ func TestWithBinding(t *testing.T) {
 				pvcLister: pvcLister,
 				scLister:  scLister,
 			}
+			// 两个阶段的预期状态按用例声明：错误类用例会在 Filter 中复现 PreFilter 的状态。
 			_, preFilterStatus := p.PreFilter(ctx, state, test.Pod, nil)
 			if diff := cmp.Diff(preFilterStatus, test.wantPreFilterStatus); diff != "" {
 				t.Errorf("PreFilter: status does not match (-want,+got):\n%s", diff)
@@ -543,7 +571,10 @@ func TestWithBinding(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterPersistentVolumeClaimAdded 验证 PVC 增删事件的重入队提示：
+// 只有当变更对象与 Pod 引用的是同名同命名空间 PVC 时才重新入队，否则跳过。
 func TestIsSchedulableAfterPersistentVolumeClaimAdded(t *testing.T) {
+	// expectedHint 为 Queue 表示事件可能让失败 Pod 变为可调度；QueueSkip 表示无关事件。
 	testcases := map[string]struct {
 		pod            *v1.Pod
 		oldObj, newObj interface{}
@@ -617,6 +648,7 @@ func TestIsSchedulableAfterPersistentVolumeClaimAdded(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
+			// 事件处理函数只比较对象身份和引用的 PVC，不依赖 lister，故用空插件实例。
 			p := &VolumeZone{}
 
 			got, err := p.isSchedulableAfterPersistentVolumeClaimChange(logger, tc.pod, tc.oldObj, tc.newObj)
@@ -630,6 +662,8 @@ func TestIsSchedulableAfterPersistentVolumeClaimAdded(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterStorageClassAdded 验证 StorageClass 新增事件的重入队提示：
+// 只有新增的 SC 采用 WaitForFirstConsumer 绑定模式时，才可能让失败 Pod 变为可调度。
 func TestIsSchedulableAfterStorageClassAdded(t *testing.T) {
 	var modeWait = storagev1.VolumeBindingWaitForFirstConsumer
 
@@ -665,6 +699,7 @@ func TestIsSchedulableAfterStorageClassAdded(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
+			// 提示计算只看传入的事件对象，无需初始化 lister。
 			p := &VolumeZone{}
 
 			got, err := p.isSchedulableAfterStorageClassAdded(logger, tc.pod, tc.oldObj, tc.newObj)
@@ -678,6 +713,8 @@ func TestIsSchedulableAfterStorageClassAdded(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterPersistentVolumeChange 验证 PV 变更事件的重入队提示：
+// PV 拓扑标签发生变化（新增或修改）会影响卷区域约束，需重新入队；无关变化则跳过。
 func TestIsSchedulableAfterPersistentVolumeChange(t *testing.T) {
 	testcases := map[string]struct {
 		pod            *v1.Pod
@@ -764,6 +801,7 @@ func TestIsSchedulableAfterPersistentVolumeChange(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
+			// 提示计算只比较新旧 PV 的拓扑标签，无需 lister。
 			p := &VolumeZone{}
 
 			got, err := p.isSchedulableAfterPersistentVolumeChange(logger, tc.pod, tc.oldObj, tc.newObj)
@@ -777,7 +815,10 @@ func TestIsSchedulableAfterPersistentVolumeChange(t *testing.T) {
 	}
 }
 
+// BenchmarkVolumeZone 测量插件在 1000 个 PV/PVC/节点规模下的过滤开销，
+// 并对比启用与禁用 PreFilter 缓存两种路径。
 func BenchmarkVolumeZone(b *testing.B) {
+	// PreFilter 为 true 时先执行预处理，用于量化状态缓存对 Filter 开销的影响。
 	tests := []struct {
 		Name      string
 		Pod       *v1.Pod
@@ -820,9 +861,11 @@ func BenchmarkVolumeZone(b *testing.B) {
 			p := pl.(*VolumeZone)
 			state := framework.NewCycleState()
 
+			// 预热和构造不在计时范围内，只测量 PreFilter/Filter 的调用开销。
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
+				// 每轮重新执行 PreFilter，模拟每个调度周期的状态初始化。
 				if tt.PreFilter {
 					_, _ = p.PreFilter(ctx, state, tt.Pod, nil)
 				}
@@ -834,9 +877,12 @@ func BenchmarkVolumeZone(b *testing.B) {
 	}
 }
 
+// newPluginWithListers 构造一个装配了 informer/lister 的 VolumeZone 插件实例，
+// 让基准测试使用与真实调度一致的插件初始化路径。
 func newPluginWithListers(ctx context.Context, tb testing.TB, pods []*v1.Pod, nodes []*v1.Node, pvcs []*v1.PersistentVolumeClaim, pvs []*v1.PersistentVolume) fwk.Plugin {
 	snapshot := cache.NewSnapshot(pods, nodes)
 
+	// SetupPluginWithInformers 需要统一的 runtime.Object 列表，PVC 与 PV 都作为 informer 初始对象。
 	objects := make([]runtime.Object, 0, len(pvcs))
 	for _, pvc := range pvcs {
 		objects = append(objects, pvc)
@@ -847,6 +893,7 @@ func newPluginWithListers(ctx context.Context, tb testing.TB, pods []*v1.Pod, no
 	return plugintesting.SetupPluginWithInformers(ctx, tb, schedruntime.FactoryAdapter(feature.Features{}, New), &config.InterPodAffinityArgs{}, snapshot, objects)
 }
 
+// makePVsWithZoneLabel 生成 num 个带 GA zone 标签的 PV，每个 PV 使用不同的区域。
 func makePVsWithZoneLabel(num int) []*v1.PersistentVolume {
 	pvList := make([]*v1.PersistentVolume, num)
 	for i := 0; i < len(pvList); i++ {
@@ -859,6 +906,7 @@ func makePVsWithZoneLabel(num int) []*v1.PersistentVolume {
 	return pvList
 }
 
+// makePVCsWithPV 生成 num 个已绑定的 PVC，第 i 个 PVC 指向 makePVsWithZoneLabel 生成的第 i 个 PV。
 func makePVCsWithPV(num int) []*v1.PersistentVolumeClaim {
 	pvcList := make([]*v1.PersistentVolumeClaim, num)
 	for i := 0; i < len(pvcList); i++ {
@@ -872,6 +920,8 @@ func makePVCsWithPV(num int) []*v1.PersistentVolumeClaim {
 	return pvcList
 }
 
+// makeNodesWithTopologyZone 生成 num 个节点，全部位于区域 us-west-0，
+// 与 Pod 引用的第 0 个 PV 区域一致，保证基准测试中 Filter 走匹配路径。
 func makeNodesWithTopologyZone(num int) []*v1.Node {
 	nodeList := make([]*v1.Node, num)
 	for i := 0; i < len(nodeList); i++ {
@@ -887,14 +937,19 @@ func makeNodesWithTopologyZone(num int) []*v1.Node {
 	return nodeList
 }
 
+// TestVolumeZone_DeferredResizeSkipped 验证特性开关开启时，处于延迟扩容（Deferred）状态的 Pod
+// 在 PreFilter 与 Filter 阶段都被直接跳过，避免阻止其调度。
 func TestVolumeZone_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
+	// Pod 处于 ResizePending 且原因为 Deferred，是触发跳过逻辑的必要条件。
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()
 	nodeInfo := framework.NewNodeInfo()
 	nodeInfo.SetNode(st.MakeNode().Name("node1").Obj())
 
+	// 只有开启原地垂直扩缩容调度抢占特性，跳过逻辑才生效。
 	pl := &VolumeZone{enableInPlacePodVerticalScalingSchedulerPreemption: true}
 
+	// 无需检查卷拓扑，因此可直接传入 nil state。
 	if preRes, preStatus := pl.PreFilter(ctx, nil, pod, nil); preStatus.Code() != fwk.Skip || preRes != nil {
 		t.Errorf("PreFilter: got (res: %v, status: %v), want (nil, Skip)", preRes, preStatus.Code())
 	}

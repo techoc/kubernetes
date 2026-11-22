@@ -22,4 +22,6 @@ limitations under the License.
 // +k8s:validation-gen=false
 // +groupName=kubescheduler.config.k8s.io
 
+// Package v1 定义调度器外部配置 API 的 v1 版本（kubescheduler.config.k8s.io/v1）。
+// 该包主要由代码生成器使用；实际类型定义见 k8s.io/kube-scheduler/config/v1。
 package v1

@@ -47,6 +47,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试中使用的扩展资源名、DRA 设备类及其关联关系。
 var (
 	extendedResourceA                 = v1.ResourceName("example.com/aaa")
 	extendedResourceB                 = v1.ResourceName("example.com/bbb")
@@ -66,10 +67,12 @@ var (
 	}
 )
 
+// clusterEventCmpOpts 让 cmp 能比较包含不可比较字段的 ClusterEvent。
 var clusterEventCmpOpts = []cmp.Option{
 	cmpopts.EquateComparable(fwk.ClusterEvent{}),
 }
 
+// makeResources 构造测试用的节点容量资源列表。
 func makeResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) v1.ResourceList {
 	return v1.ResourceList{
 		v1.ResourceCPU:              *resource.NewMilliQuantity(milliCPU, resource.DecimalSI),
@@ -81,6 +84,7 @@ func makeResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) 
 	}
 }
 
+// makeAllocatableResources 构造测试用的节点可分配资源列表。
 func makeAllocatableResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) v1.ResourceList {
 	return v1.ResourceList{
 		v1.ResourceCPU:              *resource.NewMilliQuantity(milliCPU, resource.DecimalSI),
@@ -92,6 +96,7 @@ func makeAllocatableResources(milliCPU, memory, pods, extendedA, storage, hugePa
 	}
 }
 
+// newResourcePod 按给定的资源用量创建每个容器一个的 Pod，用于构造节点上的已有负载。
 func newResourcePod(usage ...framework.Resource) *v1.Pod {
 	var containers []v1.Container
 	for _, req := range usage {
@@ -119,20 +124,24 @@ func newResourcePod(usage ...framework.Resource) *v1.Pod {
 	}
 }
 
+// newResourceInitPod 给 Pod 添加指定用量的 init 容器。
 func newResourceInitPod(pod *v1.Pod, usage ...framework.Resource) *v1.Pod {
 	pod.Spec.InitContainers = newResourcePod(usage...).Spec.Containers
 	return pod
 }
 
+// newResourceOverheadPod 给 Pod 设置额外开销。
 func newResourceOverheadPod(pod *v1.Pod, overhead v1.ResourceList) *v1.Pod {
 	pod.Spec.Overhead = overhead
 	return pod
 }
 
+// getErrReason 返回资源不足时的期望错误原因文本。
 func getErrReason(rn v1.ResourceName) string {
 	return fmt.Sprintf("Insufficient %v", rn)
 }
 
+// defaultScoringStrategy 是打分测试使用的默认策略（最少分配、CPU 与内存等权）。
 var defaultScoringStrategy = &config.ScoringStrategy{
 	Type: config.LeastAllocated,
 	Resources: []config.ResourceSpec{
@@ -141,12 +150,16 @@ var defaultScoringStrategy = &config.ScoringStrategy{
 	},
 }
 
+// newPodLevelResourcesPod 给 Pod 设置 Pod 级别资源请求。
 func newPodLevelResourcesPod(pod *v1.Pod, podResources v1.ResourceRequirements) *v1.Pod {
 	pod.Spec.Resources = &podResources
 	return pod
 }
 
+// TestEnoughRequests 对应测试入口。
 func TestEnoughRequests(t *testing.T) { testEnoughRequests(ktesting.Init(t)) }
+
+// testEnoughRequests 校验资源请求是否足够，覆盖 DRA 委托、Pod 级资源等场景。
 func testEnoughRequests(tCtx ktesting.TContext) {
 	enoughPodsTests := []struct {
 		pod                        *v1.Pod
@@ -636,8 +649,7 @@ func testEnoughRequests(tCtx ktesting.TContext) {
 				framework.Resource{MilliCPU: 1, Memory: 1, ScalarResources: map[v1.ResourceName]int64{extendedResourceDRA: 1}}),
 			nodeInfo: framework.NewNodeInfo(newResourcePod(framework.Resource{MilliCPU: 0, Memory: 0})),
 			name:     "extended resource backed by DRA",
-			// When DRAExtendedResource is enabled and there's a matching DeviceClass,
-			// the noderesources plugin delegates to DRA instead of reporting insufficient resources.
+			// 启用 DRAExtendedResource 且存在匹配的 DeviceClass 时，noderesources 应交由 DRA 处理，而非直接报告资源不足。
 			wantInsufficientResources: []InsufficientResource{},
 		},
 		{
@@ -647,8 +659,7 @@ func testEnoughRequests(tCtx ktesting.TContext) {
 				framework.Resource{MilliCPU: 1, Memory: 1, ScalarResources: map[v1.ResourceName]int64{extendedResourceA: 1}}),
 			nodeInfo: framework.NewNodeInfo(newResourcePod(framework.Resource{MilliCPU: 0, Memory: 0})),
 			name:     "extended resource backed by DRA, nil draManager",
-			// When DRAExtendedResource is enabled but draManager is nil (e.g., kubelet path),
-			// the noderesources plugin must not delegate to DRA and process the request itself.
+			// 启用 DRAExtendedResource 但 draManager 为 nil（如 kubelet 路径）时，noderesources 不能委托 DRA，需自行处理请求。
 			wantInsufficientResources: []InsufficientResource{},
 		},
 		{
@@ -748,7 +759,10 @@ func testEnoughRequests(tCtx ktesting.TContext) {
 	}
 }
 
+// TestPreFilterDisabled 对应测试入口。
 func TestPreFilterDisabled(t *testing.T) { testPreFilterDisabled(ktesting.Init(t)) }
+
+// testPreFilterDisabled 校验 PreFilter 扩展被禁用时的行为。
 func testPreFilterDisabled(tCtx ktesting.TContext) {
 	pod := &v1.Pod{}
 	nodeInfo := framework.NewNodeInfo()
@@ -764,7 +778,10 @@ func testPreFilterDisabled(tCtx ktesting.TContext) {
 	}
 }
 
+// TestNotEnoughRequests 对应测试入口。
 func TestNotEnoughRequests(t *testing.T) { testNotEnoughRequests(ktesting.Init(t)) }
+
+// testNotEnoughRequests 校验资源请求超过节点容量时被判为不可调度。
 func testNotEnoughRequests(tCtx ktesting.TContext) {
 	notEnoughPodsTests := []struct {
 		pod        *v1.Pod
@@ -820,7 +837,10 @@ func testNotEnoughRequests(tCtx ktesting.TContext) {
 
 }
 
+// TestStorageRequests 对应测试入口。
 func TestStorageRequests(t *testing.T) { testStorageRequests(ktesting.Init(t)) }
+
+// testStorageRequests 校验临时存储请求的资源适配判断。
 func testStorageRequests(tCtx ktesting.TContext) {
 	storagePodsTests := []struct {
 		pod        *v1.Pod
@@ -877,7 +897,10 @@ func testStorageRequests(tCtx ktesting.TContext) {
 
 }
 
+// TestRestartableInitContainers 对应测试入口。
 func TestRestartableInitContainers(t *testing.T) { testRestartableInitContainers(ktesting.Init(t)) }
+
+// testRestartableInitContainers 校验可重启 init 容器的资源计算。
 func testRestartableInitContainers(tCtx ktesting.TContext) {
 	newPod := func() *v1.Pod {
 		return &v1.Pod{
@@ -972,9 +995,12 @@ func testRestartableInitContainers(tCtx ktesting.TContext) {
 
 }
 
+// TestFitScore 校验 NodeResourcesFit 的打分结果。
 func TestFitScore(t *testing.T) {
 	testFitScore(ktesting.Init(t))
 }
+
+// testFitScore 校验 NodeResourcesFit 的打分结果。
 func testFitScore(tCtx ktesting.TContext) {
 	tests := []struct {
 		name                 string
@@ -1316,6 +1342,7 @@ var benchmarkResourceSet = []config.ResourceSpec{
 	{Name: string(hugePageResourceA), Weight: 1},
 }
 
+// BenchmarkTestFitScore 基准测试 NodeResourcesFit 的打分性能。
 func BenchmarkTestFitScore(b *testing.B) {
 	tests := []struct {
 		name                 string
@@ -1420,6 +1447,7 @@ func BenchmarkTestFitScore(b *testing.B) {
 	}
 }
 
+// TestEventsToRegister 校验插件注册的事件列表。
 func TestEventsToRegister(t *testing.T) {
 	tests := []struct {
 		name                            string
@@ -1473,6 +1501,7 @@ func TestEventsToRegister(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterAssignedPodDelete 校验已分配 Pod 删除后可重新调度的判断。
 func Test_isSchedulableAfterAssignedPodDelete(t *testing.T) {
 	testcases := map[string]struct {
 		pod          *v1.Pod
@@ -1539,6 +1568,7 @@ func Test_isSchedulableAfterAssignedPodDelete(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterTargetPodScaleDown 校验目标 Pod 缩容后可重新调度的判断。
 func Test_isSchedulableAfterTargetPodScaleDown(t *testing.T) {
 	testcases := map[string]struct {
 		pod          *v1.Pod
@@ -1574,6 +1604,7 @@ func Test_isSchedulableAfterTargetPodScaleDown(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterAssignedPodScaleDown 校验已分配 Pod 缩容后可重新调度的判断。
 func Test_isSchedulableAfterAssignedPodScaleDown(t *testing.T) {
 	testcases := map[string]struct {
 		pod            *v1.Pod
@@ -1664,6 +1695,7 @@ func Test_isSchedulableAfterAssignedPodScaleDown(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterNodeChange 校验节点变更后 Pod 是否重新可调度。
 func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	testcases := map[string]struct {
 		pod            *v1.Pod
@@ -1798,6 +1830,7 @@ func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterDeviceClassChange 校验 DeviceClass 变更后 Pod 是否重新可调度。
 func Test_isSchedulableAfterDeviceClassChange(t *testing.T) {
 	ern := "example.com/gpu"
 	testcases := map[string]struct {
@@ -1953,6 +1986,7 @@ func Test_isSchedulableAfterDeviceClassChange(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterTargetPodScaleUp 校验目标 Pod 扩容后是否不可调度。
 func Test_isSchedulableAfterTargetPodScaleUp(t *testing.T) {
 	testcases := map[string]struct {
 		enablePreemptionGate bool
@@ -1991,6 +2025,7 @@ func Test_isSchedulableAfterTargetPodScaleUp(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterAssignedPodScaleUp 校验已分配 Pod 扩容后是否不可调度。
 func Test_isSchedulableAfterAssignedPodScaleUp(t *testing.T) {
 	testcases := map[string]struct {
 		enablePreemptionGate bool
@@ -2062,6 +2097,7 @@ func Test_isSchedulableAfterAssignedPodScaleUp(t *testing.T) {
 	}
 }
 
+// TestIsFit 校验 Pod 与节点资源适配性的综合判断。
 func TestIsFit(t *testing.T) {
 	testCases := map[string]struct {
 		pod                      *v1.Pod
@@ -2126,9 +2162,12 @@ func TestIsFit(t *testing.T) {
 	}
 }
 
+// TestHaveAnyRequestedResourcesIncreased 对应测试入口。
 func TestHaveAnyRequestedResourcesIncreased(t *testing.T) {
 	testHaveAnyRequestedResourcesIncreased(ktesting.Init(t))
 }
+
+// testHaveAnyRequestedResourcesIncreased 校验资源请求增加的检测逻辑。
 func testHaveAnyRequestedResourcesIncreased(tCtx ktesting.TContext) {
 	testCases := map[string]struct {
 		pod                        *v1.Pod
@@ -2345,9 +2384,12 @@ func testHaveAnyRequestedResourcesIncreased(tCtx ktesting.TContext) {
 	}
 }
 
+// TestFitSignPod 对应测试入口。
 func TestFitSignPod(t *testing.T) {
 	testFitSignPod(ktesting.Init(t))
 }
+
+// testFitSignPod 校验 Pod 签名包含正确的资源请求。
 func testFitSignPod(tCtx ktesting.TContext) {
 	tests := map[string]struct {
 		name                       string
@@ -2466,27 +2508,33 @@ func testFitSignPod(tCtx ktesting.TContext) {
 	}
 }
 
+// podAssignment 实现测试用的 Pod 放置接口。
 type podAssignment struct {
 	podInfo  *framework.PodInfo
 	nodeName string
 }
 
+// GetPod 返回被放置的 Pod。
 func (pa *podAssignment) GetPod() *v1.Pod {
 	return pa.podInfo.GetPod()
 }
 
+// GetNodeName 返回放置目标节点名。
 func (pa *podAssignment) GetNodeName() string {
 	return pa.nodeName
 }
 
+// GetCycleState 返回调度周期状态；测试中不使用，返回 nil。
 func (pa *podAssignment) GetCycleState() fwk.CycleState {
 	return nil
 }
 
+// GetPodInfo 返回 Pod 信息。
 func (pa *podAssignment) GetPodInfo() fwk.PodInfo {
 	return pa.podInfo
 }
 
+// TestScorePlacement_Resources 校验放置打分时的资源计算。
 func TestScorePlacement_Resources(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.GenericWorkload:                 true,
@@ -2522,9 +2570,9 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "cpu", Weight: 1},
 				{Name: "memory", Weight: 1},
 			},
-			// CPU: (1000m + 2000m) / (5000m + 5000m) = 0.3
-			// Memory: (0 + 2000) / (5000 + 5000) = 0.2
-			// Score: MaxScore * (0.3 + 0.2) / 2 = 25
+			// CPU：(1000m + 2000m) / (5000m + 5000m) = 0.3
+			// 内存：(0 + 2000) / (5000 + 5000) = 0.2
+			// 得分：MaxScore * (0.3 + 0.2) / 2 = 25
 			expectedScore: 25,
 		},
 		{
@@ -2546,9 +2594,9 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "cpu", Weight: 4},
 				{Name: "memory", Weight: 1},
 			},
-			// CPU: (1000m + 2000m) / (5000m + 5000m) = 0.3
-			// Memory: (0 + 2000) / (5000 + 5000) = 0.2
-			// Score: MaxScore * (4 * 0.3 + 0.2) / 5 = 28
+			// CPU：(1000m + 2000m) / (5000m + 5000m) = 0.3
+			// 内存：(0 + 2000) / (5000 + 5000) = 0.2
+			// 得分：MaxScore * (4 * 0.3 + 0.2) / 5 = 28
 			expectedScore: 28,
 		},
 		{
@@ -2570,9 +2618,9 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "cpu", Weight: 4},
 				{Name: "memory", Weight: 1},
 			},
-			// CPU: (1000m + 2000m) / (5000m + 5000m) = 0.3
-			// Memory: (0 + 2000) / (5000 + 5000) = 0.2
-			// Score: MaxScore * (4 * 0.3 + 0.2) / 5 = 28
+			// CPU：(1000m + 2000m) / (5000m + 5000m) = 0.3
+			// 内存：(0 + 2000) / (5000 + 5000) = 0.2
+			// 得分：MaxScore * (4 * 0.3 + 0.2) / 5 = 28
 			expectedScore: 28,
 		},
 		{
@@ -2619,9 +2667,9 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "cpu", Weight: 1},
 				{Name: "memory", Weight: 1},
 			},
-			// CPU: (1000m + 2000m + 1000m) / (5000m + 5000m) = 0.4
-			// Memory: (0 + 2000 + 0) / (5000 + 5000) = 0.2
-			// Score: MaxScore * (0.3 + 0.2) / 2 = 30
+			// CPU：(1000m + 2000m + 1000m) / (5000m + 5000m) = 0.4
+			// 内存：(0 + 2000 + 0) / (5000 + 5000) = 0.2
+			// 得分：MaxScore * (0.3 + 0.2) / 2 = 30
 			expectedScore: 30,
 		},
 		{
@@ -2647,10 +2695,10 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "memory", Weight: 1},
 				{Name: "nvidia.com/gpu", Weight: 1},
 			},
-			// CPU: (1000m + 1000m + 1000m) / (5000m + 5000m) = 0.3
-			// Memory: (0 + 2000 + 0) / (5000 + 5000) = 0.2
-			// GPU: (0 + 1 + 0) / (5 + 5) = 0.1
-			// Score: MaxScore * (0.3 + 0.2 + 0.1) / 3 = 20
+			// CPU：(1000m + 1000m + 1000m) / (5000m + 5000m) = 0.3
+			// 内存：(0 + 2000 + 0) / (5000 + 5000) = 0.2
+			// GPU：(0 + 1 + 0) / (5 + 5) = 0.1
+			// 得分：MaxScore * (0.3 + 0.2 + 0.1) / 3 = 20
 			expectedScore: 20,
 		},
 		{
@@ -2676,10 +2724,10 @@ func TestScorePlacement_Resources(t *testing.T) {
 				{Name: "memory", Weight: 1},
 				{Name: "nvidia.com/gpu", Weight: 1},
 			},
-			// CPU: (1000m + 1000m + 1000m) / (5000m + 5000m) = 0.3
-			// Memory: (0 + 2000 + 0) / (5000 + 5000) = 0.2
-			// GPU: not included as it isn't requested by the pods
-			// Score: MaxScore * (0.3 + 0.2) / 2 = 25
+			// CPU：(1000m + 1000m + 1000m) / (5000m + 5000m) = 0.3
+			// 内存：(0 + 2000 + 0) / (5000 + 5000) = 0.2
+			// GPU 未被 Pod 请求，不计入打分。
+			// 得分：MaxScore * (0.3 + 0.2) / 2 = 25
 			expectedScore: 25,
 		},
 	}
@@ -2739,9 +2787,12 @@ func TestScorePlacement_Resources(t *testing.T) {
 	}
 }
 
+// TestComputePodResourceRequestWithNodeAllocatableDRA 对应测试入口。
 func TestComputePodResourceRequestWithNodeAllocatableDRA(t *testing.T) {
 	testComputePodResourceRequestWithNodeAllocatableDRA(ktesting.Init(t))
 }
+
+// testComputePodResourceRequestWithNodeAllocatableDRA 校验启用 DRA 时按节点可分配资源计算 Pod 请求。
 func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext) {
 	tests := []struct {
 		name                              string
@@ -2792,7 +2843,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 			},
 			expected: &preFilterState{
 				Resource: framework.Resource{
-					MilliCPU: 150, // NodeAllocatableResourceClaimStatus + standard request
+					MilliCPU: 150, // NodeAllocatableResourceClaimStatus 加标准请求
 					Memory:   1024 * 1024 * 1024,
 				},
 			},
@@ -2840,7 +2891,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 			},
 			expected: &preFilterState{
 				Resource: framework.Resource{
-					MilliCPU: 100, // only standard request
+					MilliCPU: 100, // 仅标准请求
 					Memory:   1024 * 1024 * 1024,
 				},
 			},
@@ -2889,7 +2940,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 			},
 			expected: &preFilterState{
 				Resource: framework.Resource{
-					MilliCPU: 200, // 100m (c1) + 50m (PerPod) + 50m (PerContainer * 1 container) = 200m
+					MilliCPU: 200, // 100m（c1）+ 50m（PerPod）+ 50m（PerContainer * 1 容器）= 200m
 					Memory:   1024 * 1024 * 1024,
 				},
 			},
@@ -2942,7 +2993,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 			},
 			expected: &preFilterState{
 				Resource: framework.Resource{
-					MilliCPU: 250, // 100m (c1) + 50m (mapping) + 50m (PerPod) + 50m (PerContainer * 1 container) = 250m
+					MilliCPU: 250, // 100m（c1）+ 50m（映射）+ 50m（PerPod）+ 50m（PerContainer * 1 容器）= 250m
 					Memory:   1024 * 1024 * 1024,
 				},
 			},
@@ -2963,6 +3014,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 	}
 }
 
+// TestDeferredResizeFit 校验延迟扩容场景下的资源适配判断。
 func TestDeferredResizeFit(t *testing.T) {
 	testCtx := ktesting.Init(t)
 
@@ -3030,8 +3082,7 @@ func TestDeferredResizeFit(t *testing.T) {
 			wantStatus:              nil,
 		},
 		{
-			// Exactly the same as the previous test case, but the flag is disabled.
-			// In this case, we will have double counting (diff between old and target) and it will fail to fit.
+			// 与上一用例完全相同，但关闭了特性开关；此时旧值与新值会被重复计入，导致适配失败。
 			name: "feature gate is false - double counting causes fit failure",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

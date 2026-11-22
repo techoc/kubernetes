@@ -25,34 +25,34 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// podsInPreBindMap is a thread-safe map of pods currently in the preBind phase.
+// podsInPreBindMap 保存正处于 preBind 阶段的 Pod，线程安全。
 type podsInPreBindMap struct {
 	pods map[types.UID]*podInPreBind
 	mu   sync.RWMutex
 }
 
-// NewPodsInPreBindMap creates an empty podsInPreBindMap.
+// NewPodsInPreBindMap 创建一个空的 podsInPreBindMap。
 func NewPodsInPreBindMap() *podsInPreBindMap {
 	return &podsInPreBindMap{
 		pods: make(map[types.UID]*podInPreBind),
 	}
 }
 
-// get returns a pod from the map if it exists.
+// get 返回指定 UID 对应的 Pod，不存在时返回 nil。
 func (pbm *podsInPreBindMap) get(uid types.UID) *podInPreBind {
 	pbm.mu.RLock()
 	defer pbm.mu.RUnlock()
 	return pbm.pods[uid]
 }
 
-// add adds a pod to map, overwriting existing one.
+// add 将 Pod 加入 map，若已存在则覆盖。
 func (pbm *podsInPreBindMap) add(uid types.UID, cancel context.CancelCauseFunc) {
 	pbm.mu.Lock()
 	defer pbm.mu.Unlock()
 	pbm.pods[uid] = &podInPreBind{cancel: cancel}
 }
 
-// remove removes a pod from the map.
+// remove 从 map 中移除指定 UID 的 Pod。
 func (pbm *podsInPreBindMap) remove(uid types.UID) {
 	pbm.mu.Lock()
 	defer pbm.mu.Unlock()
@@ -61,7 +61,7 @@ func (pbm *podsInPreBindMap) remove(uid types.UID) {
 
 var _ fwk.PodInPreBind = &podInPreBind{}
 
-// podInPreBind describes a pod in the preBind phase, before the bind was called for a pod.
+// podInPreBind 描述一个处于 preBind 阶段、尚未真正发起 Bind 调用的 Pod。
 type podInPreBind struct {
 	finished bool
 	canceled bool
@@ -69,8 +69,8 @@ type podInPreBind struct {
 	mu       sync.Mutex
 }
 
-// CancelPod cancels the context running the preBind phase
-// for a given pod.
+// CancelPod 取消指定 Pod 运行 preBind 阶段所使用的 context。
+// 一旦 preBind 完成（MarkPrebound）便无法再取消。
 func (bp *podInPreBind) CancelPod(message string) bool {
 	bp.mu.Lock()
 	defer bp.mu.Unlock()
@@ -84,9 +84,8 @@ func (bp *podInPreBind) CancelPod(message string) bool {
 	return true
 }
 
-// MarkPrebound marks the pod as finished with preBind phase
-// of binding cycle, making it impossible to cancel
-// the binding cycle for it.
+// MarkPrebound 标记 Pod 已完成绑定周期的 preBind 阶段，
+// 此后该绑定周期无法再被取消。
 func (bp *podInPreBind) MarkPrebound() bool {
 	bp.mu.Lock()
 	defer bp.mu.Unlock()

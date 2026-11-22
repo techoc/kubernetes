@@ -36,11 +36,11 @@ import (
 )
 
 const (
-	// DefaultExtenderTimeout defines the default extender timeout in second.
+	// DefaultExtenderTimeout 定义 extender 的默认超时时间（秒）。
 	DefaultExtenderTimeout = 5 * time.Second
 )
 
-// HTTPExtender implements the Extender interface.
+// HTTPExtender 是 Extender 接口的 HTTP 实现，通过调用外部服务参与过滤、打分、抢占与绑定。
 type HTTPExtender struct {
 	extenderURL      string
 	preemptVerb      string
@@ -54,6 +54,7 @@ type HTTPExtender struct {
 	ignorable        bool
 }
 
+// makeTransport 根据 extender 配置构造 HTTP 传输层，必要时附带 TLS 设置。
 func makeTransport(config *schedulerapi.Extender) (http.RoundTripper, error) {
 	var cfg restclient.Config
 	if config.TLSConfig != nil {
@@ -68,6 +69,7 @@ func makeTransport(config *schedulerapi.Extender) (http.RoundTripper, error) {
 	}
 	if config.EnableHTTPS {
 		hasCA := len(cfg.CAFile) > 0 || len(cfg.CAData) > 0
+		// 未配置 CA 时若强制校验证书将无法建立 HTTPS 连接，此处退化为不校验。
 		if !hasCA {
 			cfg.Insecure = true
 		}
@@ -84,8 +86,9 @@ func makeTransport(config *schedulerapi.Extender) (http.RoundTripper, error) {
 	return utilnet.SetTransportDefaults(&http.Transport{}), nil
 }
 
-// NewHTTPExtender creates an HTTPExtender object.
+// NewHTTPExtender 根据配置创建一个 HTTPExtender。
 func NewHTTPExtender(config *schedulerapi.Extender) (fwk.Extender, error) {
+	// 未配置超时时补上默认值，避免请求无限期挂起。
 	if config.HTTPTimeout.Duration.Nanoseconds() == 0 {
 		config.HTTPTimeout.Duration = time.Duration(DefaultExtenderTimeout)
 	}
@@ -116,24 +119,23 @@ func NewHTTPExtender(config *schedulerapi.Extender) (fwk.Extender, error) {
 	}, nil
 }
 
-// Name returns extenderURL to identify the extender.
+// Name 返回 extenderURL，作为该 extender 的标识。
 func (h *HTTPExtender) Name() string {
 	return h.extenderURL
 }
 
-// IsIgnorable returns true indicates scheduling should not fail when this extender
-// is unavailable
+// IsIgnorable 返回 true 表示此 extender 不可用时不应导致调度失败。
 func (h *HTTPExtender) IsIgnorable() bool {
 	return h.ignorable
 }
 
-// SupportsPreemption returns true if an extender supports preemption.
-// An extender should have preempt verb defined and enabled its own node cache.
+// SupportsPreemption 返回 extender 是否支持抢占。
+// extender 应定义 preempt verb 并启用自身的节点缓存。
 func (h *HTTPExtender) SupportsPreemption() bool {
 	return len(h.preemptVerb) > 0
 }
 
-// ProcessPreemption returns filtered candidate nodes and victims after running preemption logic in extender.
+// ProcessPreemption 调用 extender 的抢占逻辑，返回筛选后的候选节点及对应的牺牲者。
 func (h *HTTPExtender) ProcessPreemption(
 	pod *v1.Pod,
 	nodeNameToVictims map[string]*extenderv1.Victims,
@@ -149,7 +151,7 @@ func (h *HTTPExtender) ProcessPreemption(
 	}
 
 	if h.nodeCacheCapable {
-		// If extender has cached node info, pass NodeNameToMetaVictims in args.
+		// extender 自带节点缓存时只传 UID 等精简信息，避免传输完整 Pod 对象。
 		nodeNameToMetaVictims := convertToMetaVictims(nodeNameToVictims)
 		args = &extenderv1.ExtenderPreemptionArgs{
 			Pod:                   pod,
@@ -166,18 +168,16 @@ func (h *HTTPExtender) ProcessPreemption(
 		return nil, err
 	}
 
-	// Extender will always return NodeNameToMetaVictims.
-	// So let's convert it to NodeNameToVictims by using <nodeInfos>.
+	// extender 总是返回 NodeNameToMetaVictims，需用 nodeInfos 还原成 NodeNameToVictims。
 	newNodeNameToVictims, err := h.convertToVictims(result.NodeNameToMetaVictims, nodeInfos)
 	if err != nil {
 		return nil, err
 	}
-	// Do not override <nodeNameToVictims>.
+	// 返回新结果，不修改入参 nodeNameToVictims。
 	return newNodeNameToVictims, nil
 }
 
-// convertToVictims converts "nodeNameToMetaVictims" from object identifiers,
-// such as UIDs and names, to object pointers.
+// convertToVictims 把 nodeNameToMetaVictims 中的 UID 等对象标识还原为对象指针。
 func (h *HTTPExtender) convertToVictims(
 	nodeNameToMetaVictims map[string]*extenderv1.MetaVictims,
 	nodeInfos fwk.NodeInfoLister,
@@ -204,10 +204,8 @@ func (h *HTTPExtender) convertToVictims(
 	return nodeNameToVictims, nil
 }
 
-// convertPodUIDToPod returns v1.Pod object for given MetaPod and node info.
-// The v1.Pod object is restored by nodeInfo.Pods().
-// It returns an error if there's cache inconsistency between default scheduler
-// and extender, i.e. when the pod is not found in nodeInfo.Pods.
+// convertPodUIDToPod 根据 MetaPod 与节点信息从 nodeInfo.GetPods() 中还原出 Pod 对象。
+// 若默认调度器与 extender 缓存不一致（在节点上找不到该 Pod），则返回错误。
 func (h *HTTPExtender) convertPodUIDToPod(
 	metaPod *extenderv1.MetaPod,
 	nodeInfo fwk.NodeInfo) (*v1.Pod, error) {
@@ -220,7 +218,7 @@ func (h *HTTPExtender) convertPodUIDToPod(
 		h.extenderURL, metaPod, nodeInfo.Node().Name)
 }
 
-// convertToMetaVictims converts from struct type to meta types.
+// convertToMetaVictims 把 Victims 转换为只含 UID 的 MetaVictims，便于轻量传输。
 func convertToMetaVictims(
 	nodeNameToVictims map[string]*extenderv1.Victims,
 ) map[string]*extenderv1.MetaVictims {
@@ -241,11 +239,9 @@ func convertToMetaVictims(
 	return nodeNameToMetaVictims
 }
 
-// Filter based on extender implemented predicate functions. The filtered list is
-// expected to be a subset of the supplied list; otherwise the function returns an error.
-// The failedNodes and failedAndUnresolvableNodes optionally contains the list
-// of failed nodes and failure reasons, except nodes in the latter are
-// unresolvable.
+// Filter 调用 extender 的过滤逻辑。返回的节点列表应为输入列表的子集，否则报错。
+// failedNodes 与 failedAndUnresolvableNodes 分别携带失败节点及原因，
+// 后者中的节点被判定为不可恢复。
 func (h *HTTPExtender) Filter(
 	pod *v1.Pod,
 	nodes []fwk.NodeInfo,
@@ -257,6 +253,7 @@ func (h *HTTPExtender) Filter(
 		nodeResult []fwk.NodeInfo
 		args       *extenderv1.ExtenderArgs
 	)
+	// 建立名称到节点信息的索引，便于把 extender 返回的节点名还原为 NodeInfo。
 	fromNodeName := make(map[string]fwk.NodeInfo)
 	for _, n := range nodes {
 		fromNodeName[n.Node().Name] = n
@@ -298,6 +295,7 @@ func (h *HTTPExtender) Filter(
 			if n, ok := fromNodeName[nodeName]; ok {
 				nodeResult[i] = n
 			} else {
+				// extender 返回了输入中不存在的节点，说明缓存不一致，视为致命错误。
 				return nil, nil, nil, fmt.Errorf(
 					"extender %q claims a filtered node %q which is not found in the input node list",
 					h.extenderURL, nodeName)
@@ -314,9 +312,9 @@ func (h *HTTPExtender) Filter(
 	return nodeResult, result.FailedNodes, result.FailedAndUnresolvableNodes, nil
 }
 
-// Prioritize based on extender implemented priority functions. Weight*priority is added
-// up for each such priority function. The returned score is added to the score computed
-// by Kubernetes scheduler. The total score is used to do the host selection.
+// Prioritize 调用 extender 的优先级函数，返回各节点得分及其权重。
+// 每项得分为 priority*weight，会累加到 Kubernetes 调度器算出的分数上，
+// 最终以总分决定主机选择。
 func (h *HTTPExtender) Prioritize(pod *v1.Pod, nodes []fwk.NodeInfo) (*extenderv1.HostPriorityList, int64, error) {
 	var (
 		result    extenderv1.HostPriorityList
@@ -358,11 +356,11 @@ func (h *HTTPExtender) Prioritize(pod *v1.Pod, nodes []fwk.NodeInfo) (*extenderv
 	return &result, h.weight, nil
 }
 
-// Bind delegates the action of binding a pod to a node to the extender.
+// Bind 把 Pod 与节点的绑定动作委托给 extender 执行。
 func (h *HTTPExtender) Bind(binding *v1.Binding) error {
 	var result extenderv1.ExtenderBindingResult
 	if !h.IsBinder() {
-		// This shouldn't happen as this extender wouldn't have become a Binder.
+		// 未配置 bindVerb 的 extender 不会被选作 Binder，正常路径不会走到这里。
 		return fmt.Errorf("unexpected empty bindVerb in extender")
 	}
 	req := &extenderv1.ExtenderBindingArgs{
@@ -380,22 +378,22 @@ func (h *HTTPExtender) Bind(binding *v1.Binding) error {
 	return nil
 }
 
-// IsBinder returns whether this extender is configured for the Bind method.
+// IsBinder 返回此 extender 是否配置了 Bind 动作。
 func (h *HTTPExtender) IsBinder() bool {
 	return h.bindVerb != ""
 }
 
-// IsPrioritizer returns whether this extender is configured for the Prioritize method.
+// IsPrioritizer 返回此 extender 是否配置了 Prioritize 动作。
 func (h *HTTPExtender) IsPrioritizer() bool {
 	return h.prioritizeVerb != ""
 }
 
-// IsFilter returns whether this extender is configured for the Filter method.
+// IsFilter 返回此 extender 是否配置了 Filter 动作。
 func (h *HTTPExtender) IsFilter() bool {
 	return h.filterVerb != ""
 }
 
-// Helper function to send messages to the extender
+// send 向 extender 发送 POST 请求，并把响应 JSON 解码到 result。
 func (h *HTTPExtender) send(action string, args interface{}, result interface{}) error {
 	out, err := json.Marshal(args)
 	if err != nil {
@@ -424,8 +422,8 @@ func (h *HTTPExtender) send(action string, args interface{}, result interface{})
 	return json.NewDecoder(resp.Body).Decode(result)
 }
 
-// IsInterested returns true if at least one extended resource requested by
-// this pod is managed by this extender.
+// IsInterested 返回 Pod 请求的资源中是否至少有一种由该 extender 管理。
+// 未配置托管资源时默认对所有 Pod 感兴趣。
 func (h *HTTPExtender) IsInterested(pod *v1.Pod) bool {
 	if h.managedResources.Len() == 0 {
 		return true
@@ -439,6 +437,7 @@ func (h *HTTPExtender) IsInterested(pod *v1.Pod) bool {
 	return false
 }
 
+// hasManagedResources 检查容器 requests/limits 中是否出现 extender 托管的资源。
 func (h *HTTPExtender) hasManagedResources(containers []v1.Container) bool {
 	for i := range containers {
 		container := &containers[i]

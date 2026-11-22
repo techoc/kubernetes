@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供构造调度器插件及其 framework handle 的测试辅助函数。
 package testing
 
 import (
@@ -29,10 +30,9 @@ import (
 	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
-// SetupPluginWithInformers creates a plugin using a framework handle that includes
-// the provided sharedLister and a SharedInformerFactory with the provided objects.
-// The function also creates an empty namespace (since most tests creates pods with
-// empty namespace), and start informer factory.
+// SetupPluginWithInformers 用包含给定 sharedLister 和 SharedInformerFactory 的 framework handle 创建插件，
+// informer factory 中预置了给定的对象。
+// 函数还会创建一个空名 namespace（多数测试创建的 Pod 都使用空 namespace），并启动 informer factory。
 func SetupPluginWithInformers(
 	ctx context.Context,
 	tb testing.TB,
@@ -41,6 +41,7 @@ func SetupPluginWithInformers(
 	sharedLister fwk.SharedLister,
 	objs []runtime.Object,
 ) fwk.Plugin {
+	// 多数测试用空 namespace 构造 Pod，先建对应对象以免缓存查不到 namespace。
 	objs = append([]runtime.Object{&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ""}}}, objs...)
 	informerFactory := informers.NewSharedInformerFactory(fake.NewClientset(objs...), 0)
 	fh, err := frameworkruntime.NewFramework(ctx, nil, nil,
@@ -49,17 +50,18 @@ func SetupPluginWithInformers(
 	if err != nil {
 		tb.Fatalf("Failed creating framework runtime: %v", err)
 	}
+	// 用上一步构造的 handle 实例化插件，配置错误直接让测试失败。
 	p, err := pf(ctx, config, fh)
 	if err != nil {
 		tb.Fatal(err)
 	}
 	informerFactory.Start(ctx.Done())
+	// 等待初始列表同步完成，避免插件刚拿到 handle 时缓存还是空的。
 	informerFactory.WaitForCacheSync(ctx.Done())
 	return p
 }
 
-// SetupPlugin creates a plugin using a framework handle that includes
-// the provided sharedLister.
+// SetupPlugin 用仅包含给定 sharedLister 的 framework handle 创建插件。
 func SetupPlugin(
 	ctx context.Context,
 	tb testing.TB,

@@ -57,6 +57,7 @@ type mockFilterPlugin struct {
 	nodeCapacities []nodeCapacity
 }
 
+// getCapacity 从 Pod 的 "size" 标签读取大小，未设置或解析失败时按 1 计。
 func getCapacity(pod *v1.Pod) int {
 	if v, ok := pod.Labels["size"]; ok {
 		if i, err := strconv.Atoi(v); err == nil {
@@ -66,10 +67,8 @@ func getCapacity(pod *v1.Pod) int {
 	return 1
 }
 
-// Filter check whether the pod fits into the node based on the capacity
-// Node capacity is taken from hard coded capacities in plugin
-// Pod size is taken from pod label "size". If the label is not present the
-// size defaults to 1.
+// Filter 按模拟容量判断 Pod 能否放到节点上。
+// 节点容量取自插件中写死的 nodeCapacities，Pod 大小取自 "size" 标签（缺省为 1）。
 func (m *mockFilterPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	newPodCapacity := getCapacity(pod)
 	nodeCapacity := 0
@@ -89,10 +88,12 @@ func (m *mockFilterPlugin) Filter(ctx context.Context, state fwk.CycleState, pod
 	return fwk.NewStatus(fwk.Success)
 }
 
+// Name 返回模拟过滤插件的名字。
 func (m *mockFilterPlugin) Name() string {
 	return "mockFilterPlugin"
 }
 
+// nodeCapacity 定义一个模拟节点的总容量。
 type nodeCapacity struct {
 	nodeName string
 	capacity int
@@ -100,10 +101,12 @@ type nodeCapacity struct {
 
 var _ fwk.FilterPlugin = &mockFilterPlugin{}
 
+// mockPodGroupLister 是测试用的 PodGroupLister，从预置 map 中按名字查找。
 type mockPodGroupLister struct {
 	podGroups map[string]*schedulingv1beta1.PodGroup
 }
 
+// Get 按名字返回预置的 PodGroup，找不到时报错。
 func (m *mockPodGroupLister) Get(namespace, name string) (*schedulingv1beta1.PodGroup, error) {
 	if pg, ok := m.podGroups[name]; ok {
 		return pg, nil
@@ -111,10 +114,12 @@ func (m *mockPodGroupLister) Get(namespace, name string) (*schedulingv1beta1.Pod
 	return nil, fmt.Errorf("pod group %s not found", name)
 }
 
+// mockCompositePodGroupLister 是测试用的 CompositePodGroupLister，从预置 map 中按名字查找。
 type mockCompositePodGroupLister struct {
 	compositePodGroups map[string]*schedulingv1alpha3.CompositePodGroup
 }
 
+// Get 按名字返回预置的 CompositePodGroup，找不到时报错。
 func (m *mockCompositePodGroupLister) Get(namespace, name string) (*schedulingv1alpha3.CompositePodGroup, error) {
 	if cpg, ok := m.compositePodGroups[name]; ok {
 		return cpg, nil
@@ -122,10 +127,13 @@ func (m *mockCompositePodGroupLister) Get(namespace, name string) (*schedulingv1
 	return nil, fmt.Errorf("composite pod group %s not found", name)
 }
 
+// makePodGroupPreemptor 用默认 PreemptLowerPriority 策略构造测试用抢占者。
 func makePodGroupPreemptor(pg *schedulingv1beta1.PodGroup, pods []*v1.Pod) *podGroupPreemptor {
 	return makePodGroupPreemptorWithPreemptionPolicy(pg, pods, schedulingv1beta1.PreemptLowerPriority)
 }
 
+// makePodGroupPreemptorWithPreemptionPolicy 用给定策略构造测试用抢占者，
+// 优先级直接取自 PodGroup。
 func makePodGroupPreemptorWithPreemptionPolicy(pg *schedulingv1beta1.PodGroup, pods []*v1.Pod, policy schedulingv1beta1.PreemptionPolicy) *podGroupPreemptor {
 	return &podGroupPreemptor{
 		priority:         util.PodGroupPriority(pg),
@@ -135,6 +143,8 @@ func makePodGroupPreemptorWithPreemptionPolicy(pg *schedulingv1beta1.PodGroup, p
 	}
 }
 
+// TestPodGroupEvaluator_SelectVictimsOnDomain 表驱动校验 SelectVictimsOnDomain：
+// 在单个域内按优先级、PDB 和 gang 约束选出应被驱逐的受害者。
 func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 	tests := []struct {
 		name                           string
@@ -690,7 +700,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 				st.MakePodGroup().Name("preemptor-pg").Priority(highPriority).Obj(),
 				[]*v1.Pod{st.MakePod().Name("p").UID("p").Priority(highPriority).Obj()},
 			),
-			// preemptor will be assigned to p1.
+			// 抢占者会被分配到 p1 原先占用的位置。
 			nodeCapacities: []nodeCapacity{
 				{
 					nodeName: "node1",
@@ -722,7 +732,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 				st.MakePodGroup().Name("preemptor-pg").Priority(highPriority).Obj(),
 				[]*v1.Pod{st.MakePod().Name("p").UID("p").Priority(highPriority).Obj()},
 			),
-			// node 1 can fit preemptor + pg1 or preemptor + p1
+			// node1 的容量只够容纳「抢占者 + pg1」或「抢占者 + p1」之一。
 			nodeCapacities: []nodeCapacity{
 				{
 					nodeName: "node1",
@@ -749,7 +759,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 				st.MakePodGroup().Name("preemptor-pg").Priority(highPriority).Obj(),
 				[]*v1.Pod{st.MakePod().Name("p").UID("p").Priority(highPriority).Obj()},
 			),
-			// node 1 can fit preemptor + pg1 or preemptor + p1
+			// node1 的容量只够容纳「抢占者 + pg1」或「抢占者 + p1」之一。
 			nodeCapacities: []nodeCapacity{
 				{
 					nodeName: "node1",
@@ -783,7 +793,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 				st.MakePodGroup().Name("preemptor-pg").Priority(highPriority).Obj(),
 				[]*v1.Pod{st.MakePod().Name("p").UID("p").Priority(highPriority).Obj()},
 			),
-			// node 1 can fit preemptor + pg1 or preemptor + p1
+			// node1 的容量只够容纳「抢占者 + pg1」或「抢占者 + p1」之一。
 			nodeCapacities: []nodeCapacity{
 				{
 					nodeName: "node1",
@@ -845,8 +855,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 				st.MakePodGroup().Name("preemptor-pg").Priority(midPriority).Obj(),
 				[]*v1.Pod{st.MakePod().Name("p").UID("p").Priority(midPriority).Obj()},
 			),
-			// This test paths that aborts the preemption if there are no victims.
-			// even if there is enough space on nodes
+			// 该用例验证即使节点空间充足，没有可抢占受害者时也要中止抢占。
 			nodeCapacities: []nodeCapacity{
 				{
 					nodeName: "node1",
@@ -958,7 +967,8 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 					capacity: 1,
 				},
 			},
-			// Preemptor has 3 pods and minCount of 1, but maxScheduledCount will be 2, because there are higher priority pods p3, p4.
+			// 抢占者有 3 个 Pod、minCount 为 1，但由于 p3、p4 优先级更高无法被抢占，
+			// maxScheduledCount 只会是 2。
 			expectedVictims: []string{"p1", "p2"},
 			expectedStatus:  fwk.NewStatus(fwk.Success),
 		},
@@ -1231,12 +1241,10 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 			informerFactory.Start(ctx.Done())
 			informerFactory.WaitForCacheSync(ctx.Done())
 
-			// mockSchedulingFunc is used to simulate the scheduling of the preemptor pod group.
-			// For each of the Pod it goes through each node and if there is enough capacity it assigns the pod to the node.
-			// After assigning a pod, the next pod starts from the next node (round-robin).
-			// If the number of assigned pods is less than the minCount, it returns Unschedulable
-			// Node capacities are taken from the nodeCapacities slice.
-			// Pod sizes are taken from the "size" label on a pod, defaulting to 1 if the label is not set.
+			// mockSchedulingFunc 模拟抢占者 PodGroup 的调度过程。
+			// 逐个 Pod 轮询节点，容量够就分配上去；每分配一个 Pod，下一个从下一个节点开始（轮转）。
+			// 若成功分配的 Pod 数不足 minCount，则返回 Unschedulable。
+			// 节点容量取自 nodeCapacities，Pod 大小取自 "size" 标签（缺省为 1）。
 			var mockSchedulingFunc fwk.PodGroupSchedulingFunc = func(ctx context.Context) (*fwk.PodGroupAssignments, *fwk.Status) {
 				minCount := 1
 				if tt.preemptor.podGroup != nil {
@@ -1341,6 +1349,8 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 	}
 }
 
+// TestPodGroupEvaluator_SelectVictimsOnDomain_NominatedNodes 校验选择受害者时会考虑
+// 已提名的节点，避免抢占者落到已被其他 Pod 提名占用的位置。
 func TestPodGroupEvaluator_SelectVictimsOnDomain_NominatedNodes(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	logger, ctx := ktesting.NewTestContext(t)
@@ -1359,7 +1369,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain_NominatedNodes(t *testing.T) {
 	}
 	domainNodes[0].SetNode(node1)
 
-	// Add a low priority pod as a potential victim to satisfy the check
+	// 放一个低优先级 Pod 作为潜在受害者，满足后续检查的前置条件。
 	p3 := st.MakePod().Name("p3").UID("p3").Node("node1").Priority(lowPriority).Obj()
 	podInfo, _ := framework.NewPodInfo(p3)
 	domainNodes[0].AddPodInfo(podInfo)
@@ -1432,6 +1442,8 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain_NominatedNodes(t *testing.T) {
 	}
 }
 
+// TestPodGroupEvaluator_Preempt 端到端校验 PodGroup 抢占流程：
+// 选出受害者后驱逐，并验证抢占者最终能按 gang 约束落地。
 func TestPodGroupEvaluator_Preempt(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -1634,23 +1646,28 @@ type mockProposedAssignment struct {
 	cycleState fwk.CycleState
 }
 
+// GetNodeName 返回模拟提议分配的目标节点名。
 func (pa *mockProposedAssignment) GetNodeName() string {
 	return pa.nodeName
 }
 
+// GetPod 返回模拟提议分配对应的 Pod。
 func (pa *mockProposedAssignment) GetPod() *v1.Pod {
 	return pa.pod
 }
 
+// GetPodInfo 返回模拟提议分配的 PodInfo。
 func (pa *mockProposedAssignment) GetPodInfo() fwk.PodInfo {
 	podInfo, _ := framework.NewPodInfo(pa.pod)
 	return podInfo
 }
 
+// GetCycleState 返回模拟提议分配的 CycleState。
 func (pa *mockProposedAssignment) GetCycleState() fwk.CycleState {
 	return pa.cycleState
 }
 
+// TestPodGroupPreemptionEvaluationDurationMetric 校验抢占评估耗时指标按结果标签记录。
 func TestPodGroupPreemptionEvaluationDurationMetric(t *testing.T) {
 	nodeName := "node1"
 	preemptorPod := st.MakePod().Name("p1").UID("p1").Obj()

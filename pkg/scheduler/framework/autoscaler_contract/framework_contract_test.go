@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file helps to detect whether we changed the interface of Framework.
-// This is important for projects under `github.com/kubernetes*` orgs
-// who import the Framework to not breaking their codes, e.g. cluster-autoscaler.
+// 本文件用于检测 Framework 接口是否发生变化。
+// 这对于 `github.com/kubernetes*` 组织下导入 Framework 的项目很重要，
+// 例如 cluster-autoscaler，避免其代码被破坏。
 
 package contract
 
@@ -34,18 +34,22 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 )
 
+// frameworkContract 固定了下游项目依赖的 Framework 方法签名；
+// 若这些方法发生变化，下面的赋值将无法编译，从而及时暴露破坏性改动。
 type frameworkContract interface {
 	RunPreFilterPlugins(ctx context.Context, state fwk.CycleState, pod *v1.Pod) (*fwk.PreFilterResult, *fwk.Status, sets.Set[string])
 	RunFilterPlugins(context.Context, fwk.CycleState, *v1.Pod, fwk.NodeInfo) *fwk.Status
 	RunReservePluginsReserve(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) *fwk.Status
 }
 
+// TestFrameworkContract 通过编译期赋值检测 Framework 接口方法是否被改动。
 func TestFrameworkContract(t *testing.T) {
 	var f framework.Framework
 	var c frameworkContract = f
 	assert.Nil(t, c)
 }
 
+// TestNewFramework 检测 NewFramework 返回的实例仍满足 framework.Framework 接口。
 func TestNewFramework(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var f interface{}
@@ -55,6 +59,7 @@ func TestNewFramework(t *testing.T) {
 	}
 }
 
+// TestNewCycleState 检测 NewCycleState 返回的实例仍满足 *framework.CycleState 类型。
 func TestNewCycleState(t *testing.T) {
 	var state interface{} = framework.NewCycleState()
 	_, ok := state.(*framework.CycleState)

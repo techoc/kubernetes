@@ -24,6 +24,7 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
+// TestSortedScoredNodes_Pop 验证 Pop 按总分降序、Randomizer 降序依次弹出节点。
 func TestSortedScoredNodes_Pop(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -101,6 +102,7 @@ func TestSortedScoredNodes_Pop(t *testing.T) {
 	}
 }
 
+// TestSortedScoredNodes_Len 验证每次 Pop 后剩余节点数正确递减。
 func TestSortedScoredNodes_Len(t *testing.T) {
 	nodes := []fwk.NodePluginScores{
 		{Name: "node1", TotalScore: 10},
@@ -119,6 +121,7 @@ func TestSortedScoredNodes_Len(t *testing.T) {
 	}
 }
 
+// TestSortedScoredNodes_List 验证 UnorderedList 返回尚未弹出的节点。
 func TestSortedScoredNodes_List(t *testing.T) {
 	sortByName := cmpopts.SortSlices(func(a, b fwk.NodePluginScores) bool {
 		return a.Name < b.Name

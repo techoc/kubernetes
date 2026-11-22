@@ -27,13 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// NewTestQueue creates a priority queue with an empty informer factory.
+// NewTestQueue 创建一个使用空 informer factory 的优先级队列。
 func NewTestQueue(ctx context.Context, lessFn fwk.LessFunc, opts ...Option) *PriorityQueue {
 	return NewTestQueueWithObjects(ctx, lessFn, nil, opts...)
 }
 
-// NewTestQueueWithObjects creates a priority queue with an informer factory
-// populated with the provided objects.
+// NewTestQueueWithObjects 创建一个优先级队列，其 informer factory 预先填充了给定对象。
 func NewTestQueueWithObjects(
 	ctx context.Context,
 	lessFn fwk.LessFunc,
@@ -42,15 +41,17 @@ func NewTestQueueWithObjects(
 ) *PriorityQueue {
 	informerFactory := informers.NewSharedInformerFactory(fake.NewClientset(objs...), 0)
 
-	// Because some major functions (e.g., Pop) requires the metric recorder to be set,
-	// we always set a metric recorder here.
+	// Pop 等主要函数依赖 metric recorder，因此这里总是先设置一个，
+	// 避免调用方忘记注入导致空指针。
 	recorder := metrics.NewMetricsAsyncRecorder(10, 20*time.Microsecond, ctx.Done())
-	// We set it before the options that users provide, so that users can override it.
+	// 放在用户 options 之前，这样用户仍可通过自己的 option 覆盖它。
 	opts = append([]Option{WithMetricsRecorder(recorder)}, opts...)
 	pq := NewTestQueueWithInformerFactory(ctx, lessFn, informerFactory, opts...)
 	return pq
 }
 
+// NewTestQueueWithInformerFactory 基于给定的 informer factory 创建优先级队列，
+// 并启动 factory、等待缓存同步完成后返回。
 func NewTestQueueWithInformerFactory(
 	ctx context.Context,
 	lessFn fwk.LessFunc,

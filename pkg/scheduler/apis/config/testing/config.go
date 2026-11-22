@@ -25,7 +25,9 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 )
 
-// V1ToInternalWithDefaults creates a v1 default configuration.
+// V1ToInternalWithDefaults 将 v1 外部配置转换为内部配置。
+// 先补齐 debugging 配置的默认值，再走 scheme 的默认化与转换流程，
+// 保证结果与 API server 接收配置时的处理一致。
 func V1ToInternalWithDefaults(t *testing.T, versionedCfg v1.KubeSchedulerConfiguration) *config.KubeSchedulerConfiguration {
 	versionedCfg.DebuggingConfiguration = *v1alpha1.NewRecommendedDebuggingConfiguration()
 

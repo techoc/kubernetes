@@ -74,17 +74,25 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// init 注册调度器指标，避免各测试用例各自重复注册。
 func init() {
 	metrics.Register()
 }
 
+// TestSchedulerCreation 验证 New 在不同选项组合下的行为：
+// 覆盖合法/冲突的 out-of-tree 插件注册表、多 profile、重复 profile、
+// extender 注入以及自定义 nodeInfoSnapshot。
+// 同时确认构造失败时返回的错误信息可被调用方识别。
 func TestSchedulerCreation(t *testing.T) {
+	// invalidRegistry 复用了内置插件名 DefaultBinder，用于触发注册表冲突。
 	invalidRegistry := map[string]frameworkruntime.PluginFactory{
 		defaultbinder.Name: defaultbinder.New,
 	}
+	// validRegistry 使用全新插件名，用于验证 out-of-tree 插件可正常注册。
 	validRegistry := map[string]frameworkruntime.PluginFactory{
 		"Foo": defaultbinder.New,
 	}
+	// customSnapshot 用于验证 WithNodeInfoSnapshot 能把快照注入到调度器。
 	customSnapshot := internalcache.NewEmptySnapshot()
 	cases := []struct {
 		name                 string
@@ -224,7 +232,7 @@ func TestSchedulerCreation(t *testing.T) {
 				tc.opts...,
 			)
 
-			// Errors
+			// 错误分支：期望 New 失败，且错误信息包含 wantErr。
 			if len(tc.wantErr) != 0 {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("got error %q, want %q", err, tc.wantErr)
@@ -235,7 +243,7 @@ func TestSchedulerCreation(t *testing.T) {
 				t.Fatalf("Failed to create scheduler: %v", err)
 			}
 
-			// Profiles
+			// 校验 profile 名称集合；map 遍历无序，需先排序再比较。
 			profiles := make([]string, 0, len(s.Profiles))
 			for name := range s.Profiles {
 				profiles = append(profiles, name)
@@ -245,9 +253,9 @@ func TestSchedulerCreation(t *testing.T) {
 				t.Errorf("unexpected profiles (-want, +got):\n%s", diff)
 			}
 
-			// Extenders
+			// 校验 extender：调度器本身与每个 profile 的 framework 都必须持有相同的 extender。
 			if len(tc.wantExtenders) != 0 {
-				// Scheduler.Extenders
+				// Scheduler.Extenders 上的 extender。
 				extenders := make([]string, 0, len(s.Extenders))
 				for _, e := range s.Extenders {
 					extenders = append(extenders, e.Name())
@@ -256,7 +264,7 @@ func TestSchedulerCreation(t *testing.T) {
 					t.Errorf("unexpected extenders (-want, +got):\n%s", diff)
 				}
 
-				// fwk.Handle.Extenders()
+				// fwk.Handle.Extenders() 上的 extender，确认注入也传播到了框架层。
 				for _, p := range s.Profiles {
 					extenders := make([]string, 0, len(p.Extenders()))
 					for _, e := range p.Extenders() {
@@ -268,7 +276,7 @@ func TestSchedulerCreation(t *testing.T) {
 				}
 			}
 
-			// nodeInfoSnapshot
+			// 校验自定义快照是否被原样注入（比较指针，要求同一实例）。
 			if tc.wantNodeInfoSnapshot != nil && s.nodeInfoSnapshot != tc.wantNodeInfoSnapshot {
 				t.Errorf("unexpected nodeInfoSnapshot: got %p, want %p", s.nodeInfoSnapshot, tc.wantNodeInfoSnapshot)
 			}
@@ -276,16 +284,20 @@ func TestSchedulerCreation(t *testing.T) {
 	}
 }
 
+// TestFailureHandler 验证失败处理：调度周期内发生 pod 更新/删除时，
+// FailureHandler 应把队列里的 pod 恢复成最新状态（更新后的 pod），或删除已不存在的 pod。
+// 同时覆盖同步与异步 API 调用两种模式（后者经 APIDispatcher 处理）。
 func TestFailureHandler(t *testing.T) {
 	metrics.Register()
+	// testPodUpdated 模拟调度周期内 pod 被加上标签更新。
 	testPod := st.MakePod().Name("test-pod").Namespace(v1.NamespaceDefault).Obj()
 	testPodUpdated := testPod.DeepCopy()
 	testPodUpdated.Labels = map[string]string{"foo": ""}
 
 	tests := []struct {
 		name                       string
-		podUpdatedDuringScheduling bool // pod is updated during a scheduling cycle
-		podDeletedDuringScheduling bool // pod is deleted during a scheduling cycle
+		podUpdatedDuringScheduling bool // 调度周期内 pod 被更新
+		podDeletedDuringScheduling bool // 调度周期内 pod 被删除
 		expect                     *v1.Pod
 	}{
 		{
@@ -314,7 +326,8 @@ func TestFailureHandler(t *testing.T) {
 				client := fake.NewClientset(&v1.PodList{Items: []v1.Pod{*testPod}})
 				informerFactory := informers.NewSharedInformerFactory(client, 0)
 				podInformer := informerFactory.Core().V1().Pods()
-				// Need to add/update/delete testPod to the store.
+				// FailureHandler 通过 informer store 读取 pod 最新状态，
+				// 因此必须先手动把 testPod 放进 store。
 				if err := podInformer.Informer().GetStore().Add(testPod); err != nil {
 					t.Fatal(err)
 				}
@@ -376,6 +389,8 @@ func TestFailureHandler(t *testing.T) {
 	}
 }
 
+// TestFailureHandler_PodAlreadyBound 验证当 pod 已经绑定到节点（NodeName 非空）时，
+// FailureHandler 不应把它重新放回优先级队列，避免对已调度的 pod 重复调度。
 func TestFailureHandler_PodAlreadyBound(t *testing.T) {
 	for _, asyncAPICallsEnabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Async API calls enabled: %v", asyncAPICallsEnabled), func(t *testing.T) {
@@ -389,7 +404,7 @@ func TestFailureHandler_PodAlreadyBound(t *testing.T) {
 			client := fake.NewClientset(&v1.PodList{Items: []v1.Pod{*testPod}}, &v1.NodeList{Items: []v1.Node{nodeFoo}})
 			informerFactory := informers.NewSharedInformerFactory(client, 0)
 			podInformer := informerFactory.Core().V1().Pods()
-			// Need to add testPod to the store.
+			// 先手动把 testPod 放进 store，供 FailureHandler 读取其最新状态。
 			if err := podInformer.Informer().GetStore().Add(testPod); err != nil {
 				t.Fatal(err)
 			}
@@ -404,7 +419,8 @@ func TestFailureHandler_PodAlreadyBound(t *testing.T) {
 			queue := internalqueue.NewPriorityQueue(nil, informerFactory, internalqueue.WithClock(testingclock.NewFakeClock(time.Now())), internalqueue.WithAPIDispatcher(apiDispatcher))
 			schedulerCache := internalcache.New(ctx, apiDispatcher, false, false)
 
-			// Add node to schedulerCache no matter it's deleted in API server or not.
+			// 无论该节点在 API server 中是否被删除，都把它加入调度器缓存，
+			// 让 FailureHandler 在判断 pod 状态时能找到对应节点。
 			schedulerCache.AddNode(logger, &nodeFoo)
 
 			s, schedFramework, err := initScheduler(ctx, schedulerCache, queue, apiDispatcher, client, informerFactory)
@@ -423,7 +439,8 @@ func TestFailureHandler_PodAlreadyBound(t *testing.T) {
 	}
 }
 
-// TestWithPercentageOfNodesToScore tests scheduler's PercentageOfNodesToScore is set correctly.
+// TestWithPercentageOfNodesToScore 验证 WithPercentageOfNodesToScore 选项：
+// 未配置时应回退到默认值 DefaultPercentageOfNodesToScore，显式配置时按配置值生效。
 func TestWithPercentageOfNodesToScore(t *testing.T) {
 	tests := []struct {
 		name                           string
@@ -468,8 +485,8 @@ func TestWithPercentageOfNodesToScore(t *testing.T) {
 	}
 }
 
-// getPodFromPriorityQueue is the function used in the TestDefaultErrorFunc test to get
-// the specific pod from the given priority queue. It returns the found pod in the priority queue.
+// getPodFromPriorityQueue 从优先级队列的 pending pods 中按 namespace/name 查找指定 pod。
+// 用 MetaNamespaceKeyFunc 生成 key 比较，避免指针比较；找不到返回 nil。
 func getPodFromPriorityQueue(queue *internalqueue.PriorityQueue, pod *v1.Pod) *v1.Pod {
 	podList, _ := queue.PendingPods()
 	if len(podList) == 0 {
@@ -495,6 +512,9 @@ func getPodFromPriorityQueue(queue *internalqueue.PriorityQueue, pod *v1.Pod) *v
 	return nil
 }
 
+// initScheduler 构造一个测试用 Scheduler 及其 Framework：
+// 注册 no-op 的 QueueSort/Bind 插件，按需接入 APIDispatcher 与 APICacher，
+// 并调用 applyDefaultHandlers 装上默认事件处理器，方便测试直接调用 FailureHandler 等方法。
 func initScheduler(ctx context.Context, cache internalcache.Cache, queue internalqueue.SchedulingQueue, apiDispatcher *apidispatcher.APIDispatcher,
 	client kubernetes.Interface, informerFactory informers.SharedInformerFactory) (*Scheduler, framework.Framework, error) {
 	logger := klog.FromContext(ctx)
@@ -534,10 +554,12 @@ func initScheduler(ctx context.Context, cache internalcache.Cache, queue interna
 	return s, fwk, nil
 }
 
+// TestInitPluginsWithIndexers 验证框架初始化时对 informer indexer 冲突的处理：
+// 同名 indexer 注册两次会报错，不同名字的 indexer 即使实现相同也不冲突。
 func TestInitPluginsWithIndexers(t *testing.T) {
 	tests := []struct {
 		name string
-		// the plugin registration ordering must not matter, being map traversal random
+		// 用 map 存储插件工厂，使注册顺序随机，借此验证结果与顺序无关。
 		entrypoints map[string]frameworkruntime.PluginFactory
 		wantErr     string
 	}{
@@ -555,7 +577,7 @@ func TestInitPluginsWithIndexers(t *testing.T) {
 		},
 		{
 			name: "register the same indexer name multiple times, conflict",
-			// order of registration doesn't matter
+			// 顺序无关：无论哪个工厂先执行，同名 "nodeName" 的 indexer 必然冲突。
 			entrypoints: map[string]frameworkruntime.PluginFactory{
 				"AddIndexer1": func(ctx context.Context, obj runtime.Object, handle fwk.Handle) (fwk.Plugin, error) {
 					podInformer := handle.SharedInformerFactory().Core().V1().Pods()
@@ -576,7 +598,7 @@ func TestInitPluginsWithIndexers(t *testing.T) {
 		},
 		{
 			name: "register the same indexer body with different names, no conflicts",
-			// order of registration doesn't matter
+			// 顺序无关：indexer 名不同（"nodeName1"/"nodeName2"），实现相同也不冲突。
 			entrypoints: map[string]frameworkruntime.PluginFactory{
 				"AddIndexer1": func(ctx context.Context, obj runtime.Object, handle fwk.Handle) (fwk.Plugin, error) {
 					podInformer := handle.SharedInformerFactory().Core().V1().Pods()
@@ -603,11 +625,11 @@ func TestInitPluginsWithIndexers(t *testing.T) {
 			var registerPluginFuncs []tf.RegisterPluginFunc
 			for name, entrypoint := range tt.entrypoints {
 				registerPluginFuncs = append(registerPluginFuncs,
-					// anything supported by TestPlugin is fine
+					// 这里只关心 indexer 注册，用哪个扩展点注册插件都行。
 					tf.RegisterFilterPlugin(name, entrypoint),
 				)
 			}
-			// we always need this
+			// 框架初始化必须有 QueueSort 和 Bind 插件，否则无法建框架。
 			registerPluginFuncs = append(registerPluginFuncs,
 				tf.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				tf.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
@@ -630,6 +652,8 @@ func TestInitPluginsWithIndexers(t *testing.T) {
 	}
 }
 
+// indexByPodSpecNodeName 按 pod.Spec.NodeName 建索引，供已分配 pod 相关查询使用；
+// 非 Pod 对象或 NodeName 为空时返回空索引。
 func indexByPodSpecNodeName(obj interface{}) ([]string, error) {
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
@@ -641,6 +665,8 @@ func indexByPodSpecNodeName(obj interface{}) ([]string, error) {
 	return []string{pod.Spec.NodeName}, nil
 }
 
+// indexByPodAnnotationNodeName 按 pod 的 "node-name" 注解建索引；
+// 非 Pod、无注解或无该注解时返回空索引。
 func indexByPodAnnotationNodeName(obj interface{}) ([]string, error) {
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
@@ -656,6 +682,7 @@ func indexByPodAnnotationNodeName(obj interface{}) ([]string, error) {
 	return []string{nodeName}, nil
 }
 
+// 以下常量是各 mock 插件的名字，既作为注册表 key，也出现在断言的期望值里。
 const (
 	filterWithoutEnqueueExtensions = "filterWithoutEnqueueExtensions"
 	fakeNode                       = "fakeNode"
@@ -669,6 +696,10 @@ const (
 	fakeAssignedPod                = "fakeAssignedPodPlugin"
 )
 
+// Test_buildQueueingHintMap 验证 buildQueueingHintMap 把各插件 EnqueueExtensions
+// 聚合为 cluster event 到 QueueingHintFunction 的映射：
+// 未实现 EnqueueExtensions 的插件为所有事件注册默认 hint；
+// 同名事件多次注册时 hint 函数按插件名排序追加；EventsToRegister 返回错误时向上传播。
 func Test_buildQueueingHintMap(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -738,7 +769,8 @@ func Test_buildQueueingHintMap(t *testing.T) {
 					{PluginName: fakeNode, QueueingHintFn: fakeNodePluginQueueingFn},
 				},
 				{Resource: fwk.Node, ActionType: fwk.UpdateNodeTaint}: {
-					{PluginName: fakeNode, QueueingHintFn: defaultQueueingHintFn}, // When Node/Add is registered, Node/UpdateNodeTaint is automatically registered.
+					// 注册 Node/Add 时框架会自动补上 Node/UpdateNodeTaint。
+					{PluginName: fakeNode, QueueingHintFn: defaultQueueingHintFn},
 				},
 			},
 		},
@@ -764,7 +796,8 @@ func Test_buildQueueingHintMap(t *testing.T) {
 					{PluginName: fakeNode, QueueingHintFn: fakeNodePluginQueueingFn},
 				},
 				{Resource: fwk.Node, ActionType: fwk.UpdateNodeTaint}: {
-					{PluginName: fakeNode, QueueingHintFn: defaultQueueingHintFn}, // When Node/Add is registered, Node/UpdateNodeTaint is automatically registered.
+					// 注册 Node/Add 时框架会自动补上 Node/UpdateNodeTaint。
+					{PluginName: fakeNode, QueueingHintFn: defaultQueueingHintFn},
 				},
 			},
 		},
@@ -809,7 +842,7 @@ func Test_buildQueueingHintMap(t *testing.T) {
 			}
 
 			exts := fwk.EnqueueExtensions()
-			// need to sort to make the test result stable.
+			// hint 函数按插件名顺序追加，先排序保证断言结果稳定。
 			sort.Slice(exts, func(i, j int) bool {
 				return exts[i].Name() < exts[j].Name()
 			})
@@ -852,8 +885,9 @@ func Test_buildQueueingHintMap(t *testing.T) {
 	}
 }
 
-// Test_UnionedGVKs tests UnionedGVKs worked with buildQueueingHintMap.
-// It verifies that a given set of plugins is correctly registered for a specific set of cluster events.
+// Test_UnionedGVKs 验证 buildQueueingHintMap 与 UnionedGVKs 的联动：
+// 给定一组已启用的插件（含默认 profile 与不同 feature gate 组合），
+// 检查最终聚合出的 cluster event 到 ActionType 的映射是否正确。
 func Test_UnionedGVKs(t *testing.T) {
 	tests := []struct {
 		name                            string
@@ -871,7 +905,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.AssignedPod:           fwk.All,
@@ -896,7 +930,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.AssignedPod:           fwk.All,
@@ -925,7 +959,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.Node: fwk.Add,
@@ -939,7 +973,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.AssignedPod:    fwk.Add,
@@ -956,7 +990,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.AssignedPod:    fwk.Add,
@@ -973,7 +1007,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{},
 		},
@@ -1018,10 +1052,10 @@ func Test_UnionedGVKs(t *testing.T) {
 			name:    "plugins with default profile",
 			plugins: defaults.PluginsV1.MultiPoint,
 			want: map[fwk.EventResource]fwk.ActionType{
-				// NodeDeclaredFeatures adds fwk.Update
+				// NodeDeclaredFeatures 插件额外注册了 fwk.Update。
 				fwk.AssignedPod: fwk.Add | fwk.UpdatePodLabel | fwk.UpdatePodScaleDown | fwk.Delete,
 				fwk.TargetPod:   fwk.UpdatePodGeneratedResourceClaim | fwk.UpdatePodToleration | fwk.UpdatePodSchedulingGatesEliminated | fwk.Update,
-				// NodeDeclaredFeatures adds fwk.UpdateNodeDeclaredFeature
+				// NodeDeclaredFeatures 插件额外注册了 fwk.UpdateNodeDeclaredFeature。
 				fwk.Node:                  fwk.Add | fwk.UpdateNodeAllocatable | fwk.UpdateNodeLabel | fwk.UpdateNodeTaint | fwk.Delete | fwk.UpdateNodeDeclaredFeature,
 				fwk.CSINode:               fwk.All - fwk.Delete,
 				fwk.CSIDriver:             fwk.Update,
@@ -1045,7 +1079,7 @@ func Test_UnionedGVKs(t *testing.T) {
 					{Name: queueSort},
 					{Name: fakeBind},
 				},
-				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // disable default plugins
+				Disabled: []schedulerapi.Plugin{{Name: "*"}}, // 禁用默认插件，只保留 Enabled 中列出的 mock 插件
 			},
 			want: map[fwk.EventResource]fwk.ActionType{
 				fwk.AssignedPod: fwk.Update,
@@ -1081,11 +1115,11 @@ func Test_UnionedGVKs(t *testing.T) {
 			pluginConfig := defaults.PluginConfigsV1
 
 			if !tt.enableDynamicResourceAllocation {
-				// Set emulated version before setting other feature gates, since it can impact feature dependencies.
+				// 必须先设置模拟版本再设置其他 feature gate，因为它会影响 gate 之间的依赖关系校验。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, version.MustParse("1.33"))
-				// StorageCapacityScoring is alpha in 1.33 (disabled by default).
-				// Strip Shape from VolumeBinding args to avoid validation failure.
-				// BindTimeoutSeconds: 600 is the default value of VolumeBindingArgs when StorageCapacityScoring is disabled.
+				// 1.33 中 StorageCapacityScoring 为 alpha（默认关闭）。
+				// 去掉 VolumeBinding 参数里的 Shape，避免校验失败。
+				// StorageCapacityScoring 关闭时 VolumeBindingArgs 的 BindTimeoutSeconds 默认值为 600。
 				pluginConfig = slices.Clone(pluginConfig)
 				for i := range pluginConfig {
 					if pluginConfig[i].Name == "VolumeBinding" {
@@ -1094,13 +1128,13 @@ func Test_UnionedGVKs(t *testing.T) {
 					}
 				}
 			} else if !tt.enableInPlacePodVerticalScaling {
-				// In place pod resize GA'd in 1.35. Set emulation version to 1.34 for tests that do not have the flag set
+				// 原地 pod 扩缩容在 1.35 GA；未显式开启该 flag 的用例把模拟版本设为 1.34。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, version.MustParse("1.34"))
-				// DRADeviceBindingConditions is alpha in 1.34 (disabled by default).
-				// Strip BindingTimeout from DynamicResources args to avoid validation failure.
-				// StorageCapacityScoring is alpha in 1.34 (disabled by default).
-				// Strip Shape from VolumeBinding args to avoid validation failure.
-				// BindTimeoutSeconds: 600 is the default value of VolumeBindingArgs when StorageCapacityScoring is disabled.
+				// 1.34 中 DRADeviceBindingConditions 为 alpha（默认关闭）。
+				// 去掉 DynamicResources 参数里的 BindingTimeout，避免校验失败。
+				// 1.34 中 StorageCapacityScoring 为 alpha（默认关闭）。
+				// 去掉 VolumeBinding 参数里的 Shape，避免校验失败。
+				// StorageCapacityScoring 关闭时 VolumeBindingArgs 的 BindTimeoutSeconds 默认值为 600。
 				pluginConfig = slices.Clone(pluginConfig)
 				for i := range pluginConfig {
 					switch pluginConfig[i].Name {
@@ -1156,17 +1190,23 @@ func Test_UnionedGVKs(t *testing.T) {
 	}
 }
 
+// newFramework 用给定的插件注册表与 profile 构造 Framework，
+// 注入空快照、informer factory 和 PodGroupManager，供队列提示相关测试复用。
 func newFramework(ctx context.Context, r frameworkruntime.Registry, profile schedulerapi.KubeSchedulerProfile) (framework.Framework, error) {
 	snapshot := internalcache.NewSnapshot(nil, nil)
 	return frameworkruntime.NewFramework(ctx, r, &profile,
 		frameworkruntime.WithSnapshotSharedLister(snapshot),
 		frameworkruntime.WithMutableSnapshotLister(snapshot),
 		frameworkruntime.WithInformerFactory(informers.NewSharedInformerFactory(fake.NewClientset(), 0)),
-		frameworkruntime.WithPodGroupManager(internalcache.New(ctx, nil, false, false /* CompositePodGroup */)),
+		frameworkruntime.WithPodGroupManager(internalcache.New(ctx, nil, false, false /* 不启用 CompositePodGroup */)),
 	)
 }
 
+// TestFrameworkHandler_IterateOverWaitingPods 验证 IterateOverWaitingPods：
+// 无论等待中的 pod 属于同一个 profile 还是分布在多个 profile，
+// 遍历各 profile 的 framework 都能拿到全部 waiting pods。
 func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
+	// 三个 profile 名，分别对应不同 schedulerName 的 pod。
 	const (
 		testSchedulerProfile1 = "test-scheduler-profile-1"
 		testSchedulerProfile2 = "test-scheduler-profile-2"
@@ -1244,7 +1284,8 @@ func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set up scheduler for the 3 nodes.
+			// 为 3 个节点准备调度器：额外放一个空 Namespace，
+			// 避免 store 中缺少默认命名空间导致事件记录失败。
 			objs := append([]runtime.Object{&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ""}}}, nodes...)
 			fakeClient := fake.NewClientset(objs...)
 			informerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
@@ -1276,6 +1317,8 @@ func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
 			var wg sync.WaitGroup
 			waitSchedulingPodNumber := len(tc.waitSchedulingPods)
 			wg.Add(waitSchedulingPodNumber)
+			// 用 fakePermitPlugin 发出的 "podWaiting" 事件作为同步点：
+			// 收到每个 pod 的事件即表示它已进入 permit 阶段。
 			stopFn, err := eventBroadcaster.StartEventWatcher(func(obj runtime.Object) {
 				e, ok := obj.(*eventsv1.Event)
 				if !ok || (e.Reason != podWaitingReason) {
@@ -1288,12 +1331,12 @@ func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
 			}
 			defer stopFn()
 
-			// Run scheduler.
+			// 启动 informer 并等待缓存同步后运行调度器，确保创建 pod 时事件能被及时观察。
 			informerFactory.Start(tCtx.Done())
 			informerFactory.WaitForCacheSync(tCtx.Done())
 			go scheduler.Run(tCtx)
 
-			// Send pods to be scheduled.
+			// 创建待调度的 pod，触发调度周期。
 			for _, p := range tc.waitSchedulingPods {
 				_, err = fakeClient.CoreV1().Pods("").Create(tCtx, p, metav1.CreateOptions{})
 				if err != nil {
@@ -1301,11 +1344,11 @@ func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
 				}
 			}
 
-			// Wait all pods in waitSchedulingPods to be scheduled.
+			// 等到所有 pod 都进入 permit 阶段并发出等待事件。
 			wg.Wait()
 
 			tCtx.Eventually(func(utiltesting.TContext) sets.Set[string] {
-				// Ensure that all waitingPods in scheduler can be obtained from any profiles.
+				// 跨所有 profile 遍历 waiting pods，确认无论 pod 归属哪个 profile 都不会漏。
 				actualPodNamesInWaitingPods := sets.New[string]()
 				for _, schedFramework := range scheduler.Profiles {
 					schedFramework.IterateOverWaitingPods(func(pod fwk.WaitingPod) {
@@ -1318,146 +1361,186 @@ func TestFrameworkHandler_IterateOverWaitingPods(t *testing.T) {
 	}
 }
 
+// 编译期断言：确保 fakeQueueSortPlugin 满足 QueueSortPlugin 接口。
 var _ fwk.QueueSortPlugin = &fakeQueueSortPlugin{}
 
-// fakeQueueSortPlugin is a no-op implementation for QueueSort extension point.
+// fakeQueueSortPlugin 是 QueueSort 扩展点的空实现，仅用于让框架能构造成功。
 type fakeQueueSortPlugin struct{}
 
+// Name 返回插件名 queueSort。
 func (pl *fakeQueueSortPlugin) Name() string {
 	return queueSort
 }
 
+// Less 恒为 false，测试不关心队列顺序。
 func (pl *fakeQueueSortPlugin) Less(_, _ fwk.QueuedEntityInfo) bool {
 	return false
 }
 
+// 编译期断言：确保 fakebindPlugin 满足 BindPlugin 接口。
 var _ fwk.BindPlugin = &fakebindPlugin{}
 
-// fakebindPlugin is a no-op implementation for Bind extension point.
+// fakebindPlugin 是 Bind 扩展点的空实现，避免测试真的去绑定节点。
 type fakebindPlugin struct{}
 
+// Name 返回插件名 fakeBind。
 func (t *fakebindPlugin) Name() string {
 	return fakeBind
 }
 
+// Bind 空实现，直接返回 nil 表示成功。
 func (t *fakebindPlugin) Bind(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) *fwk.Status {
 	return nil
 }
 
-// filterWithoutEnqueueExtensionsPlugin implements Filter, but doesn't implement EnqueueExtensions.
+// filterWithoutEnqueueExtensionsPlugin 实现了 Filter，但未实现 EnqueueExtensions，
+// 用于测试 buildQueueingHintMap 对这类插件回退到默认提示的行为。
 type filterWithoutEnqueueExtensionsPlugin struct{}
 
+// Name 返回插件名 filterWithoutEnqueueExtensions。
 func (*filterWithoutEnqueueExtensionsPlugin) Name() string { return filterWithoutEnqueueExtensions }
 
+// Filter 空实现，恒返回 nil。
 func (*filterWithoutEnqueueExtensionsPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// 各 fake 插件返回不同的 hint 值，便于在断言中区分是哪一个插件的函数被调用。
 var hintFromFakeNode = fwk.QueueingHint(100)
 
+// fakeNodePlugin 注册 Node/Add 事件，用于验证按资源类型聚合提示。
 type fakeNodePlugin struct{}
 
+// fakeNodePluginQueueingFn 返回固定的 hintFromFakeNode。
 var fakeNodePluginQueueingFn = func(_ klog.Logger, _ *v1.Pod, _, _ interface{}) (fwk.QueueingHint, error) {
 	return hintFromFakeNode, nil
 }
 
+// Name 返回插件名 fakeNode。
 func (*fakeNodePlugin) Name() string { return fakeNode }
 
+// Filter 空实现，恒返回 nil。
 func (*fakeNodePlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 注册 Node/Add 事件及其提示函数。
 func (pl *fakeNodePlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add}, QueueingHintFn: fakeNodePluginQueueingFn},
 	}, nil
 }
 
+// hintFromFakePod 是 fakePodPlugin 返回的固定提示值。
 var hintFromFakePod = fwk.QueueingHint(101)
 
+// fakePodPlugin 注册 Pod/Add 事件，用于验证 pod 相关事件的聚合。
 type fakePodPlugin struct{}
 
+// fakePodPluginQueueingFn 返回固定的 hintFromFakePod。
 var fakePodPluginQueueingFn = func(_ klog.Logger, _ *v1.Pod, _, _ interface{}) (fwk.QueueingHint, error) {
 	return hintFromFakePod, nil
 }
 
+// Name 返回插件名 fakePod。
 func (*fakePodPlugin) Name() string { return fakePod }
 
+// Filter 空实现，恒返回 nil。
 func (*fakePodPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 注册 Pod/Add 事件及其提示函数。
 func (pl *fakePodPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: fwk.Pod, ActionType: fwk.Add}, QueueingHintFn: fakePodPluginQueueingFn},
 	}, nil
 }
 
+// hintFromFakeAssignedPod 是 fakeAssignedPodPlugin 返回的固定提示值。
 var hintFromFakeAssignedPod = fwk.QueueingHint(102)
 
+// fakeAssignedPodPlugin 只注册 AssignedPod/Update 事件，
+// 用于验证插件可精确注册到某一种 pod 资源。
 type fakeAssignedPodPlugin struct{}
 
+// fakeAssignedPodPluginQueueingFn 返回固定的 hintFromFakeAssignedPod。
 var fakeAssignedPodPluginQueueingFn = func(_ klog.Logger, _ *v1.Pod, _, _ interface{}) (fwk.QueueingHint, error) {
 	return hintFromFakeAssignedPod, nil
 }
 
+// Name 返回插件名 fakeAssignedPod。
 func (*fakeAssignedPodPlugin) Name() string { return fakeAssignedPod }
 
+// Filter 空实现，恒返回 nil。
 func (*fakeAssignedPodPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 注册 AssignedPod/Update 事件及其提示函数。
 func (pl *fakeAssignedPodPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: fwk.AssignedPod, ActionType: fwk.Update}, QueueingHintFn: fakeAssignedPodPluginQueueingFn},
 	}, nil
 }
 
+// emptyEventPlugin 实现了 EnqueueExtensions，但不注册任何事件，用于验证空注册场景。
 type emptyEventPlugin struct{}
 
+// Name 返回插件名 emptyEventExtensions。
 func (*emptyEventPlugin) Name() string { return emptyEventExtensions }
 
+// Filter 空实现，恒返回 nil。
 func (*emptyEventPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 返回 nil，表示不注册任何事件。
 func (pl *emptyEventPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return nil, nil
 }
 
-// errorEventsToRegisterPlugin is a mock plugin that returns an error for EventsToRegister method
+// errorEventsToRegisterPlugin 在 EventsToRegister 中返回错误，
+// 用于验证错误会沿 buildQueueingHintMap 向上传播。
 type errorEventsToRegisterPlugin struct{}
 
+// Name 返回插件名 errorEventsToRegister。
 func (*errorEventsToRegisterPlugin) Name() string { return errorEventsToRegister }
 
+// Filter 空实现，恒返回 nil。
 func (*errorEventsToRegisterPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 返回 "mock error"，模拟插件注册事件失败。
 func (*errorEventsToRegisterPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return nil, errors.New("mock error")
 }
 
-// emptyEventsToRegisterPlugin implement interface fwk.EnqueueExtensions, but returns nil from EventsToRegister.
-// This can simulate a plugin registered at scheduler setup, but does nothing
-// due to some disabled feature gate.
+// emptyEventsToRegisterPlugin 实现了 fwk.EnqueueExtensions，但 EventsToRegister 返回 nil，
+// 用于模拟插件虽在调度器启动时注册、却因某个 feature gate 关闭而不做任何事的情形。
 type emptyEventsToRegisterPlugin struct{}
 
+// Name 返回插件名 emptyEventsToRegister。
 func (*emptyEventsToRegisterPlugin) Name() string { return emptyEventsToRegister }
 
+// Filter 空实现，恒返回 nil。
 func (*emptyEventsToRegisterPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ fwk.NodeInfo) *fwk.Status {
 	return nil
 }
 
+// EventsToRegister 返回 nil，表示不注册任何事件。
 func (*emptyEventsToRegisterPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return nil, nil
 }
 
-// fakePermitPlugin only implements PermitPlugin interface.
+// fakePermitPlugin 只实现 PermitPlugin 接口：让 pod 在 permit 阶段等待，
+// 并发出事件通知测试同步。
 type fakePermitPlugin struct {
 	eventRecorder events.EventRecorderLogger
 }
 
+// newFakePermitPlugin 返回插件工厂，把事件记录器注入 fakePermitPlugin。
 func newFakePermitPlugin(eventRecorder events.EventRecorderLogger) frameworkruntime.PluginFactory {
 	return func(ctx context.Context, configuration runtime.Object, f fwk.Handle) (fwk.Plugin, error) {
 		pl := &fakePermitPlugin{
@@ -1467,29 +1550,37 @@ func newFakePermitPlugin(eventRecorder events.EventRecorderLogger) frameworkrunt
 	}
 }
 
+// Name 返回插件名 fakePermit。
 func (f fakePermitPlugin) Name() string {
 	return fakePermit
 }
 
+// 事件原因与等待超时常量；测试用事件作为 pod 进入 permit 阶段的同步信号。
 const (
 	podWaitingReason = "podWaiting"
 	permitTimeout    = 10 * time.Second
 )
 
+// Permit 让所有 pod 等待 permitTimeout，并在返回前发出 "podWaiting" 事件，
+// 告知测试该 pod 已进入 permit 阶段。
 func (f fakePermitPlugin) Permit(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	defer func() {
-		// Send event with podWaiting reason to broadcast this pod is already waiting in the permit stage.
+		// 发出 podWaiting 事件，广播该 pod 正在 permit 阶段等待。
 		f.eventRecorder.WithLogger(klog.FromContext(ctx)).Eventf(p, nil, v1.EventTypeWarning, podWaitingReason, "", "")
 	}()
 
 	return fwk.NewStatus(fwk.Wait), permitTimeout
 }
 
+// 编译期断言：确保 fakePermitPlugin 满足 PermitPlugin 接口。
 var _ fwk.PermitPlugin = &fakePermitPlugin{}
 
+// TestNewInformerFactoryTrim 验证 NewInformerFactory 注册的 transform：
+// 从 API 读取 pod 时会裁掉 managedFields，减少调度器内存占用。
 func TestNewInformerFactoryTrim(t *testing.T) {
 	cs := fake.NewClientset()
 
+	// 构造一个带 managedFields 的 pod，供 transform 裁剪。
 	pd := &v1.Pod{ObjectMeta: metav1.ObjectMeta{
 		Name:      "test",
 		Namespace: "default",
@@ -1516,7 +1607,10 @@ func TestNewInformerFactoryTrim(t *testing.T) {
 	require.Empty(t, p.GetManagedFields(), "expected managedFields to be trimmed by the transform")
 }
 
+// TestNewInformerFactoryMetrics 验证 informer 工厂把身份标识（kube-scheduler）
+// 传递给各 informer，使队列指标带上正确的 name 标签。
 func TestNewInformerFactoryMetrics(t *testing.T) {
+	// 重置 informer 名称注册表，避免测试间相互干扰。
 	cache.ResetInformerNamesForTesting()
 	fifometrics.Register()
 
@@ -1526,8 +1620,8 @@ func TestNewInformerFactoryMetrics(t *testing.T) {
 
 	cs := fake.NewClientset()
 	informerFactory := NewInformerFactory(cs, 0, informerName)
-	// The pod informer is built by the scheduler itself rather than by the factory,
-	// so make sure it carries the identity too.
+	// pod informer 由调度器自身创建，而非工厂默认创建，
+	// 这里显式构建它，确认同样带有身份标识。
 	informerFactory.Core().V1().Pods().Informer()
 	informerFactory.Core().V1().Nodes().Informer()
 

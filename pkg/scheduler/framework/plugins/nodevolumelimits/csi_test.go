@@ -70,11 +70,12 @@ var statusCmpOpts = []cmp.Option{
 	}),
 }
 
+// TestCSILimits 验证 CSI 卷数量限制过滤器在各类卷与迁移场景下的判定。
 func TestCSILimits(t *testing.T) {
 	runningPod := st.MakePod().PVC("csi-ebs.csi.aws.com-3").Obj()
 	pendingVolumePod := st.MakePod().PVC("csi-4").Obj()
 
-	// Different pod than pendingVolumePod, but using the same unbound PVC
+	// 与 pendingVolumePod 是不同的 Pod，但使用同一个未绑定的 PVC。
 	unboundPVCPod2 := st.MakePod().PVC("csi-4").Obj()
 
 	missingPVPod := st.MakePod().PVC("csi-6").Obj()
@@ -82,11 +83,11 @@ func TestCSILimits(t *testing.T) {
 
 	gceTwoVolPod := st.MakePod().PVC("csi-pd.csi.storage.gke.io-1").PVC("csi-pd.csi.storage.gke.io-2").Obj()
 
-	// In-tree volumes
+	// in-tree 卷
 	inTreeOneVolPod := st.MakePod().PVC("csi-kubernetes.io/aws-ebs-0").Obj()
 	inTreeTwoVolPod := st.MakePod().PVC("csi-kubernetes.io/aws-ebs-1").PVC("csi-kubernetes.io/aws-ebs-2").Obj()
 
-	// pods with matching csi driver names
+	// 使用匹配 CSI 驱动名的 Pod。
 	csiEBSOneVolPod := st.MakePod().PVC("csi-ebs.csi.aws.com-0").Obj()
 	csiEBSTwoVolPod := st.MakePod().PVC("csi-ebs.csi.aws.com-1").PVC("csi-ebs.csi.aws.com-2").Obj()
 
@@ -343,7 +344,7 @@ func TestCSILimits(t *testing.T) {
 			test:         "should when driver does not support volume limits",
 			limitSource:  "csinode-with-no-limit",
 		},
-		// should count pending PVCs
+		// 待绑定的 PVC 也应计入卷数量。
 		{
 			newPod:       csiEBSOneVolPod,
 			existingPods: []*v1.Pod{pendingVolumePod, csiEBSTwoVolPod},
@@ -354,7 +355,7 @@ func TestCSILimits(t *testing.T) {
 			limitSource:  "csinode",
 			wantStatus:   fwk.NewStatus(fwk.Unschedulable, ErrReasonMaxVolumeCountExceeded),
 		},
-		// two same pending PVCs should be counted as 1
+		// 两个相同的待绑定 PVC 只应计为 1 个。
 		{
 			newPod:       csiEBSOneVolPod,
 			existingPods: []*v1.Pod{pendingVolumePod, unboundPVCPod2, csiEBSTwoVolPod},
@@ -364,7 +365,7 @@ func TestCSILimits(t *testing.T) {
 			test:         "count multiple pending pvcs towards volume limit >= pods CSI volume",
 			limitSource:  "csinode",
 		},
-		// should count PVCs with invalid PV name but valid SC
+		// PV 名无效但 StorageClass 有效的 PVC 也应计入。
 		{
 			newPod:       csiEBSOneVolPod,
 			existingPods: []*v1.Pod{missingPVPod, csiEBSTwoVolPod},
@@ -375,7 +376,7 @@ func TestCSILimits(t *testing.T) {
 			limitSource:  "csinode",
 			wantStatus:   fwk.NewStatus(fwk.Unschedulable, ErrReasonMaxVolumeCountExceeded),
 		},
-		// don't count a volume which has storageclass missing
+		// 缺少 StorageClass 的卷不应计入。
 		{
 			newPod:       csiEBSOneVolPod,
 			existingPods: []*v1.Pod{runningPod, noSCPVCPod},
@@ -385,7 +386,7 @@ func TestCSILimits(t *testing.T) {
 			test:         "don't count pvcs with missing SC towards volume limit",
 			limitSource:  "csinode",
 		},
-		// don't count multiple volume types
+		// 不同驱动类型的卷不应混合计数。
 		{
 			newPod:       csiEBSOneVolPod,
 			existingPods: []*v1.Pod{gceTwoVolPod, csiEBSTwoVolPod},
@@ -405,7 +406,7 @@ func TestCSILimits(t *testing.T) {
 			test:         "don't count pvcs with different type towards volume limit",
 			limitSource:  "csinode",
 		},
-		// Tests for in-tree volume migration
+		// in-tree 卷迁移场景。
 		{
 			newPod:           inTreeOneVolPod,
 			existingPods:     []*v1.Pod{inTreeTwoVolPod},
@@ -467,7 +468,7 @@ func TestCSILimits(t *testing.T) {
 			test:             "should count in-tree inline volumes if migration is enabled",
 			wantStatus:       fwk.NewStatus(fwk.Unschedulable, ErrReasonMaxVolumeCountExceeded),
 		},
-		// mixed volumes
+		// 混合卷类型场景。
 		{
 			newPod:           inTreeOneVolPod,
 			existingPods:     []*v1.Pod{csiEBSTwoVolPod},
@@ -511,7 +512,7 @@ func TestCSILimits(t *testing.T) {
 			test:             "should count in-tree and csi volumes if migration is enabled (when scheduling csi volumes)",
 			wantStatus:       fwk.NewStatus(fwk.Unschedulable, ErrReasonMaxVolumeCountExceeded),
 		},
-		// ephemeral volumes
+		// 临时卷（ephemeral volume）场景。
 		{
 			newPod:           ephemeralVolumePod,
 			filterName:       "csi",
@@ -638,7 +639,7 @@ func TestCSILimits(t *testing.T) {
 		},
 	}
 
-	// running attachable predicate tests with feature gate and limit present on nodes
+	// 在特性门控与节点卷上限都生效的前提下运行各用例。
 	for _, test := range tests {
 		t.Run(test.test, func(t *testing.T) {
 			node, csiNode := getNodeWithPodAndVolumeLimits(test.limitSource, test.existingPods, test.maxVols, test.driverNames...)
@@ -677,6 +678,7 @@ func TestCSILimits(t *testing.T) {
 	}
 }
 
+// TestCSILimitsQHint 验证 VolumeAttachment 变化时的入队提示判断。
 func TestCSILimitsQHint(t *testing.T) {
 	podEbs := st.MakePod().PVC("csi-ebs.csi.aws.com-2")
 
@@ -742,6 +744,7 @@ func TestCSILimitsQHint(t *testing.T) {
 	}
 }
 
+// TestCSILimitsAddedPVCQHint 验证新增 PVC 时的入队提示判断。
 func TestCSILimitsAddedPVCQHint(t *testing.T) {
 	tests := []struct {
 		test      string
@@ -819,6 +822,7 @@ func TestCSILimitsAddedPVCQHint(t *testing.T) {
 	}
 }
 
+// TestCSILimitsDeletedVolumeAttachmentQHint 验证删除 VolumeAttachment 时的入队提示判断。
 func TestCSILimitsDeletedVolumeAttachmentQHint(t *testing.T) {
 	tests := []struct {
 		test        string
@@ -992,6 +996,7 @@ func TestCSILimitsDeletedVolumeAttachmentQHint(t *testing.T) {
 	}
 }
 
+// TestCSILimitsAfterCSINodeUpdatedQHint 验证 CSINode 更新后的入队提示判断。
 func TestCSILimitsAfterCSINodeUpdatedQHint(t *testing.T) {
 	p := &CSILimits{}
 	testPod := st.MakePod().Name("test-pod").Namespace("ns1").
@@ -1086,6 +1091,7 @@ func TestCSILimitsAfterCSINodeUpdatedQHint(t *testing.T) {
 	}
 }
 
+// buildFakeClientWithVALister 创建带 count 个 VolumeAttachment 的假客户端。
 func buildFakeClientWithVALister(count int, driverNames ...string) *fake.Clientset {
 	vas := []runtime.Object{}
 	for _, driver := range driverNames {
@@ -1110,6 +1116,7 @@ func buildFakeClientWithVALister(count int, driverNames ...string) *fake.Clients
 	return fakeCli
 }
 
+// getFakeCSIPVLister 创建返回指定 CSI 驱动的假 PV lister。
 func getFakeCSIPVLister(volumeName string, driverNames ...string) tf.PersistentVolumeLister {
 	pvLister := tf.PersistentVolumeLister{}
 	for _, driver := range driverNames {
@@ -1155,6 +1162,7 @@ func getFakeCSIPVLister(volumeName string, driverNames ...string) tf.PersistentV
 	return pvLister
 }
 
+// getFakeCSIPVCLister 创建假 PVC lister，覆盖已绑定、待绑定、缺失 PV 等多种 PVC。
 func getFakeCSIPVCLister(volumeName, scName string, driverNames ...string) tf.PersistentVolumeClaimLister {
 	pvcLister := tf.PersistentVolumeClaimLister{}
 	for _, driver := range driverNames {
@@ -1176,7 +1184,7 @@ func getFakeCSIPVCLister(volumeName, scName string, driverNames ...string) tf.Pe
 		ObjectMeta: metav1.ObjectMeta{Name: volumeName + "-5"},
 		Spec:       v1.PersistentVolumeClaimSpec{},
 	})
-	// a pvc with missing PV but available storageclass.
+	// PV 缺失但有可用 StorageClass 的 PVC。
 	pvcLister = append(pvcLister, v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: volumeName + "-6"},
 		Spec:       v1.PersistentVolumeClaimSpec{StorageClassName: &scName, VolumeName: "missing-in-action"},
@@ -1184,6 +1192,7 @@ func getFakeCSIPVCLister(volumeName, scName string, driverNames ...string) tf.Pe
 	return pvcLister
 }
 
+// enableMigrationOnNode 在 CSINode 上标记指定 in-tree 插件已迁移到 CSI。
 func enableMigrationOnNode(csiNode *storagev1.CSINode, pluginName string) {
 	nodeInfoAnnotations := csiNode.GetAnnotations()
 	if nodeInfoAnnotations == nil {
@@ -1198,6 +1207,7 @@ func enableMigrationOnNode(csiNode *storagev1.CSINode, pluginName string) {
 	csiNode.Annotations = nodeInfoAnnotations
 }
 
+// getFakeCSIStorageClassLister 创建返回指定 provisioner 的假 StorageClass lister。
 func getFakeCSIStorageClassLister(scName, provisionerName string) tf.StorageClassLister {
 	return tf.StorageClassLister{
 		{
@@ -1207,6 +1217,7 @@ func getFakeCSIStorageClassLister(scName, provisionerName string) tf.StorageClas
 	}
 }
 
+// getFakeCSINodeLister 创建返回指定 CSINode 的假 lister。
 func getFakeCSINodeLister(csiNode *storagev1.CSINode) tf.CSINodeLister {
 	csiNodeLister := tf.CSINodeLister{}
 	if csiNode != nil {
@@ -1215,6 +1226,7 @@ func getFakeCSINodeLister(csiNode *storagev1.CSINode) tf.CSINodeLister {
 	return csiNodeLister
 }
 
+// getNodeWithPodAndVolumeLimits 构造带 Pod 与卷上限注解的节点信息。
 func getNodeWithPodAndVolumeLimits(limitSource string, pods []*v1.Pod, limit int32, driverNames ...string) (fwk.NodeInfo, *storagev1.CSINode) {
 	nodeInfo := framework.NewNodeInfo(pods...)
 	node := &v1.Node{
@@ -1258,14 +1270,14 @@ func getNodeWithPodAndVolumeLimits(limitSource string, pods []*v1.Pod, limit int
 	case "no-csi-driver":
 		initCSINode()
 	default:
-		// Do nothing.
+		// 无需处理。
 	}
 
 	nodeInfo.SetNode(node)
 	return nodeInfo, csiNode
 }
 
-// fakeCSIDriverLister is a minimal lister for CSIDriver used in tests.
+// fakeCSIDriverLister 是测试用的最小 CSIDriver lister 实现。
 type fakeCSIDriverLister []storagev1.CSIDriver
 
 func (l fakeCSIDriverLister) Get(name string) (*storagev1.CSIDriver, error) {
@@ -1281,6 +1293,7 @@ func (l fakeCSIDriverLister) List(selector labels.Selector) ([]*storagev1.CSIDri
 	return nil, fmt.Errorf("not implemented")
 }
 
+// getFakeCSIDriverLister 创建包含指定驱动的假 CSIDriver lister。
 func getFakeCSIDriverLister(driverNames ...string) fakeCSIDriverLister {
 	var list fakeCSIDriverLister
 	for _, name := range driverNames {
@@ -1289,6 +1302,7 @@ func getFakeCSIDriverLister(driverNames ...string) fakeCSIDriverLister {
 	return list
 }
 
+// 与 getFakeCSIDriverLister 类似，但驱动设置了 PreventPodSchedulingIfMissing。
 func getFakeCSIDriverListerWithPreventPodSchedulingIfMissing(driverNames ...string) fakeCSIDriverLister {
 	var list fakeCSIDriverLister
 	for _, name := range driverNames {
@@ -1302,8 +1316,9 @@ func getFakeCSIDriverListerWithPreventPodSchedulingIfMissing(driverNames ...stri
 	return list
 }
 
+// TestVolumeLimitScalingGate 验证特性门控对卷上限插件的影响。
 func TestVolumeLimitScalingGate(t *testing.T) {
-	// Pod uses a PVC that resolves to the EBS CSI driver via PV
+	// Pod 使用的 PVC 经 PV 解析为 EBS CSI 驱动。
 	newPod := st.MakePod().PVC("csi-ebs.csi.aws.com-0").Obj()
 
 	cases := []struct {
@@ -1396,7 +1411,7 @@ func TestVolumeLimitScalingGate(t *testing.T) {
 				translator:               csiTranslator,
 			}
 
-			// Ensure PreFilter doesn't skip
+			// 确保此场景 PreFilter 没有跳过。
 			_, preStatus := p.PreFilter(ctx, nil, newPod, nil)
 			if preStatus.Code() == fwk.Skip {
 				t.Fatalf("unexpected PreFilter Skip")
@@ -1410,6 +1425,7 @@ func TestVolumeLimitScalingGate(t *testing.T) {
 	}
 }
 
+// TestCSILimits_DeferredResizeSkipped 验证延迟调整大小的 Pod 会跳过 CSI 限制插件。
 func TestCSILimits_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

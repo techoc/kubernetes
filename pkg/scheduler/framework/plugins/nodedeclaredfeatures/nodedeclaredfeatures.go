@@ -35,26 +35,26 @@ import (
 )
 
 const (
-	// Name is the name of the plugin used in the plugin registry and configurations.
+	// Name 是该插件在插件注册表和配置文件中使用的名称。
 	Name = names.NodeDeclaredFeatures
-	// preFilterStateKey is the key in CycleState used to store the pod's feature requirements.
+	// preFilterStateKey 是 CycleState 中存放 Pod 所需特性的键。
 	preFilterStateKey fwk.StateKey = "PreFilter" + Name
-	// errReasonUnsatisfiedRequirements is the status reason given when a node's declared features
-	// doesn't meet the pod's required features.
+	// errReasonUnsatisfiedRequirements 是节点声明的特性不满足 Pod 所需特性时的状态原因。
 	errReasonUnsatisfiedRequirements = "node(s) didn't match Pod's required features"
 )
 
-// preFilterState computed at PreFilter and used at Filter.
+// preFilterState 在 PreFilter 阶段计算，在 Filter 阶段使用。
 type preFilterState struct {
 	reqs ndf.FeatureSet
 }
 
-// Clone implements StateData.
+// Clone 实现 StateData 接口。
+// 状态不可变，直接共享即可。
 func (s *preFilterState) Clone() fwk.StateData {
 	return s
 }
 
-// NodeDeclaredFeatures is a plugin that checks if a node has all the features required by a pod.
+// NodeDeclaredFeatures 检查节点是否具备 Pod 所需的全部特性。
 type NodeDeclaredFeatures struct {
 	ndfFramework                                       *ndf.Framework
 	version                                            *versionutil.Version
@@ -67,15 +67,15 @@ var _ fwk.FilterPlugin = &NodeDeclaredFeatures{}
 var _ fwk.EnqueueExtensions = &NodeDeclaredFeatures{}
 var _ fwk.SignPlugin = &NodeDeclaredFeatures{}
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *NodeDeclaredFeatures) Name() string {
 	return Name
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回一个 NodeDeclaredFeatures 插件实例。
 func New(ctx context.Context, plArgs runtime.Object, fh fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	if !fts.EnableNodeDeclaredFeatures {
-		// Disabled, won't do anything.
+		// 特性未开启时返回空实例，各扩展点会直接 Skip。
 		return &NodeDeclaredFeatures{}, nil
 	}
 	ndfFramework := ndf.DefaultFramework
@@ -86,15 +86,16 @@ func New(ctx context.Context, plArgs runtime.Object, fh fwk.Handle, fts feature.
 	return &NodeDeclaredFeatures{ndfFramework: ndfFramework, version: ver, enabled: true, enableInPlacePodVerticalScalingSchedulerPreemption: fts.EnableInPlacePodVerticalScalingSchedulerPreemption}, nil
 }
 
-// PreFilter checks if the pod has any feature requirements.
+// PreFilter 推断 Pod 所需特性并写入 CycleState，无需求时跳过。
 func (pl *NodeDeclaredFeatures) PreFilter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
+	// 延迟扩容的 Pod 由抢占流程单独处理，这里直接跳过。
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
 	}
 	if !pl.enabled {
 		return nil, fwk.NewStatus(fwk.Skip)
 	}
-	// Pod status is not updated yet, we just pass the spec to node declared features library
+	// 此时 Pod status 尚未更新，只需把 spec 传给特性推断库。
 	podInfo := &ndf.PodInfo{Spec: &pod.Spec}
 	reqs, err := pl.ndfFramework.InferForPodScheduling(podInfo, pl.version)
 	if err != nil {
@@ -107,12 +108,12 @@ func (pl *NodeDeclaredFeatures) PreFilter(ctx context.Context, cycleState fwk.Cy
 	return nil, nil
 }
 
-// PreFilterExtensions returns pre-filter extensions, pod add and remove.
+// PreFilterExtensions 返回预过滤扩展；本插件不需要逐节点增减状态的钩子。
 func (pl *NodeDeclaredFeatures) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// Filter checks if the node has the required features.
+// Filter 检查节点声明的特性是否覆盖 Pod 所需的特性。
 func (pl *NodeDeclaredFeatures) Filter(ctx context.Context, cycleState fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if pl.enableInPlacePodVerticalScalingSchedulerPreemption && resource.IsPodResizeDeferred(pod) {
 		return nil
@@ -124,7 +125,7 @@ func (pl *NodeDeclaredFeatures) Filter(ctx context.Context, cycleState fwk.Cycle
 	if err != nil {
 		return fwk.AsStatus(err)
 	}
-	// Don't use ndf.MatchNodeFeatureSet(...) here since we don't want to pay the cost of computing the feature diff.
+	// 这里只需判断是否为子集，避免 ndf.MatchNodeFeatureSet 计算完整特性差异的开销。
 	isMatch, err := s.reqs.IsSubset(nodeInfo.GetNodeDeclaredFeatures())
 	if err != nil {
 		return fwk.AsStatus(err)
@@ -135,6 +136,7 @@ func (pl *NodeDeclaredFeatures) Filter(ctx context.Context, cycleState fwk.Cycle
 	return nil
 }
 
+// SignPod 为 Pod 生成其所需特性的签名片段。
 func (pl *NodeDeclaredFeatures) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	podInfo := &ndf.PodInfo{Spec: &pod.Spec}
 	fs, err := pl.ndfFramework.InferForPodScheduling(podInfo, pl.version)
@@ -146,7 +148,7 @@ func (pl *NodeDeclaredFeatures) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk
 	}, nil
 }
 
-// EventsToRegister returns events that may make a pod schedulable. It is required for the EnqueueExtensions interface.
+// EventsToRegister 返回可能让 Pod 变得可调度的事件，EnqueueExtensions 接口要求实现此方法。
 func (pl *NodeDeclaredFeatures) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	if !pl.enabled {
 		return nil, nil
@@ -163,6 +165,7 @@ func (pl *NodeDeclaredFeatures) EventsToRegister(_ context.Context) ([]fwk.Clust
 	}, nil
 }
 
+// getPreFilterState 从 CycleState 中读取并校验 PreFilter 阶段保存的特性需求。
 func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	c, err := cycleState.Read(preFilterStateKey)
 	if err != nil {
@@ -175,6 +178,8 @@ func getPreFilterState(cycleState fwk.CycleState) (*preFilterState, error) {
 	return s, nil
 }
 
+// isSchedulableAfterTargetPodUpdate 判断目标 Pod 更新后其特性需求是否变化，
+// 仅在需求变化时才有必要重新入队。
 func (pl *NodeDeclaredFeatures) isSchedulableAfterTargetPodUpdate(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	oldPod, newPod, err := util.As[*v1.Pod](oldObj, newObj)
 	if err != nil {
@@ -201,6 +206,8 @@ func (pl *NodeDeclaredFeatures) isSchedulableAfterTargetPodUpdate(logger klog.Lo
 	return fwk.Queue, nil
 }
 
+// isSchedulableAfterNodeChange 判断节点声明特性变化后是否值得重新入队；
+// 特性未变时（如新增节点），跳过入队以减少无谓调度。
 func (pl *NodeDeclaredFeatures) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	oldNode, newNode, err := util.As[*v1.Node](oldObj, newObj)
 	if err != nil {

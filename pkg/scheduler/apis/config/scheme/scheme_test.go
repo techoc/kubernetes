@@ -33,17 +33,20 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// TestCodecsDecodePluginConfig tests that embedded plugin args get decoded
-// into their appropriate internal types and defaults are applied.
+// TestCodecsDecodePluginConfig 验证嵌套的插件参数会被解码为正确的内部类型，并应用默认值。
 func TestCodecsDecodePluginConfig(t *testing.T) {
+	// 每条用例要么给出期望的配置文件，要么给出解码失败的精确错误文本。
 	testCases := []struct {
 		name         string
 		data         []byte
 		wantErr      string
 		wantProfiles []config.KubeSchedulerProfile
 	}{
-		// v1 tests
+		// v1 用例
 		{
+			// 各类内嵌插件参数都应解码为内部类型，并补齐缺失/为零的默认值。
+			// YAML 中注释的含义：cpu/scalar1 未指定 weight 时取默认值 1；
+			// memory/scalar2 的 weight 为 0 时会被替换为 1。
 			name: "v1 all plugin args in default profile",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -186,6 +189,7 @@ profiles:
 			},
 		},
 		{
+			// 全局值只留在顶层，不注入 profile；这里期望 profile 内该字段仍为 nil。
 			name: "v1 with non-default global percentageOfNodesToScore",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -202,6 +206,7 @@ percentageOfNodesToScore: 10
 			},
 		},
 		{
+			// profile 级设置应优先于全局值，解码后只保留 profile 级的值。
 			name: "v1 with non-default global and profile percentageOfNodesToScore",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -220,6 +225,7 @@ profiles:
 			},
 		},
 		{
+			// args 中显式携带的 apiVersion/kind 应被识别，不影响解码与默认值补全。
 			name: "v1 plugins can include version and kind",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -297,6 +303,7 @@ profiles:
 			},
 		},
 		{
+			// args 的 kind 与插件期望的类型不一致时必须报错。
 			name: "plugin group and kind should match the type",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -311,6 +318,7 @@ profiles:
 			wantErr: `decoding .profiles[0].pluginConfig[0]: args for plugin DefaultPreemption were not of type DefaultPreemptionArgs.kubescheduler.config.k8s.io, got InterPodAffinityArgs.kubescheduler.config.k8s.io`,
 		},
 		{
+			// 严格解码下，shape 中大写开头的字段名不被接受。
 			name: "v1 NodResourcesFitArgs shape encoding is strict",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -328,6 +336,7 @@ profiles:
 			wantErr: `strict decoding error: decoding .profiles[0].pluginConfig[0]: strict decoding error: decoding args for plugin NodeResourcesFit: strict decoding error: unknown field "scoringStrategy.requestedToCapacityRatio.shape[0].Score", unknown field "scoringStrategy.requestedToCapacityRatio.shape[0].Utilization"`,
 		},
 		{
+			// 严格解码下，resources 中大写开头的字段名不被接受。
 			name: "v1 NodeResourcesFitArgs resources encoding is strict",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -344,6 +353,7 @@ profiles:
 			wantErr: `strict decoding error: decoding .profiles[0].pluginConfig[0]: strict decoding error: decoding args for plugin NodeResourcesFit: strict decoding error: unknown field "scoringStrategy.resources[0].Name", unknown field "scoringStrategy.resources[0].Weight"`,
 		},
 		{
+			// 树外插件参数无法解析为已知类型，应原样保留为 runtime.Unknown。
 			name: "out-of-tree plugin args",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -371,6 +381,7 @@ profiles:
 			},
 		},
 		{
+			// args 为空或缺失时应为插件补齐默认参数；树外插件没有默认参数则保持 nil。
 			name: "empty and no plugin args",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -458,6 +469,7 @@ profiles:
 			},
 		},
 		{
+			// 布尔型参数显式设为 true 时不应被默认值覆盖。
 			name: "ignorePreferredTermsOfExistingPods is enabled",
 			data: []byte(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -534,9 +546,12 @@ profiles:
 			},
 		},
 	}
+	// 使用通用解码器，由请求中的 apiVersion 决定具体解码路径。
 	decoder := Codecs.UniversalDecoder()
+	// 逐一验证：要么得到预期的精确错误，要么得到预期的内部配置。
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			// 期望失败的场景：错误文本必须逐字匹配，防止错误信息退化。
 			obj, gvk, err := decoder.Decode(tt.data, nil, nil)
 			if err != nil {
 				if tt.wantErr != err.Error() {
@@ -544,13 +559,16 @@ profiles:
 				}
 				return
 			}
+			// 期望成功的场景却报错，直接失败。
 			if len(tt.wantErr) != 0 {
 				t.Fatalf("no error produced, wanted %v", tt.wantErr)
 			}
+			// 校验解码结果确实是内部类型，而非某个外部版本类型。
 			got, ok := obj.(*config.KubeSchedulerConfiguration)
 			if !ok {
 				t.Fatalf("decoded into %s, want %s", gvk, config.SchemeGroupVersion.WithKind("KubeSchedulerConfiguration"))
 			}
+			// 只比较 Profiles：其余字段不参与本测试关注的参数解码行为。
 			if diff := cmp.Diff(tt.wantProfiles, got.Profiles); diff != "" {
 				t.Errorf("unexpected configuration (-want,+got):\n%s", diff)
 			}
@@ -558,6 +576,7 @@ profiles:
 	}
 }
 
+// TestCodecsEncodePluginConfig 验证内部及版本化的插件参数均可编码为 v1，且 YAML 与 JSON 两条路径输出一致。
 func TestCodecsEncodePluginConfig(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -565,8 +584,9 @@ func TestCodecsEncodePluginConfig(t *testing.T) {
 		version schema.GroupVersion
 		want    string
 	}{
-		//v1 tests
+		// v1 用例
 		{
+			// 版本化对象：树内参数带类型信息，树外参数保留原始 JSON。
 			name:    "v1 in-tree and out-of-tree plugins",
 			version: v1.SchemeGroupVersion,
 			obj: &v1.KubeSchedulerConfiguration{
@@ -690,6 +710,7 @@ profiles:
 `,
 		},
 		{
+			// 内部对象走同一编码器：转换后应输出相同的 v1 结构。
 			name:    "v1 in-tree and out-of-tree plugins from internal",
 			version: v1.SchemeGroupVersion,
 			obj: &config.KubeSchedulerConfiguration{
@@ -788,6 +809,7 @@ profiles:
 `,
 		},
 		{
+			// true 值必须被序列化出来，不能被默认值 false 覆盖。
 			name:    "v1 ignorePreferredTermsOfExistingPods is enabled",
 			version: v1.SchemeGroupVersion,
 			obj: &config.KubeSchedulerConfiguration{
@@ -841,14 +863,17 @@ profiles:
 `,
 		},
 	}
+	// YAML 期望结果是手写常量，先确认 YAML 编码器确实可用。
 	yamlInfo, ok := runtime.SerializerInfoForMediaType(Codecs.SupportedMediaTypes(), runtime.ContentTypeYAML)
 	if !ok {
 		t.Fatalf("unable to locate encoder -- %q is not a supported media type", runtime.ContentTypeYAML)
 	}
+	// JSON 路径可复用同一期望值（JSON 是 YAML 的子集），同样先确认编码器可用。
 	jsonInfo, ok := runtime.SerializerInfoForMediaType(Codecs.SupportedMediaTypes(), runtime.ContentTypeJSON)
 	if !ok {
 		t.Fatalf("unable to locate encoder -- %q is not a supported media type", runtime.ContentTypeJSON)
 	}
+	// 每条用例都经 YAML 和 JSON 两种序列化路径，结果必须与期望逐字一致。
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			encoder := Codecs.EncoderForVersion(yamlInfo.Serializer, tt.version)
@@ -856,14 +881,17 @@ profiles:
 			if err := encoder.Encode(tt.obj, &buf); err != nil {
 				t.Fatal(err)
 			}
+			// YAML 编码器输出直接比对。
 			if diff := cmp.Diff(tt.want, buf.String()); diff != "" {
 				t.Errorf("unexpected encoded configuration:\n%s", diff)
 			}
+			// 复用 buf 前清空，避免两次编码结果拼接。
 			encoder = Codecs.EncoderForVersion(jsonInfo.Serializer, tt.version)
 			buf = bytes.Buffer{}
 			if err := encoder.Encode(tt.obj, &buf); err != nil {
 				t.Fatal(err)
 			}
+			// JSON 先转成 YAML，才能与同一份期望值比较，顺带验证两条路径等价。
 			out, err := yaml.JSONToYAML(buf.Bytes())
 			if err != nil {
 				t.Fatal(err)

@@ -33,14 +33,15 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/feature"
 )
 
-// supportedScoringStrategyTypes has to be a set of strings for use with field.Unsupported
+// supportedScoringStrategyTypes 必须是字符串集合，以便直接传给 field.NotSupported。
 var supportedScoringStrategyTypes = sets.New(
 	string(config.LeastAllocated),
 	string(config.MostAllocated),
 	string(config.RequestedToCapacityRatio),
 )
 
-// ValidateDefaultPreemptionArgs validates that DefaultPreemptionArgs are correct.
+// ValidateDefaultPreemptionArgs 校验 DefaultPreemptionArgs 是否合法。
+// 除取值范围外，两个最小候选节点阈值不允许同时为 0。
 func ValidateDefaultPreemptionArgs(path *field.Path, args *config.DefaultPreemptionArgs) error {
 	var allErrs field.ErrorList
 	percentagePath := path.Child("minCandidateNodesPercentage")
@@ -51,6 +52,7 @@ func ValidateDefaultPreemptionArgs(path *field.Path, args *config.DefaultPreempt
 	if err := validateMinCandidateNodesAbsolute(args.MinCandidateNodesAbsolute, absolutePath); err != nil {
 		allErrs = append(allErrs, err)
 	}
+	// 两个阈值都为 0 会让默认抢占失去候选下限，必须报错。
 	if args.MinCandidateNodesPercentage == 0 && args.MinCandidateNodesAbsolute == 0 {
 		allErrs = append(allErrs,
 			field.Invalid(percentagePath, args.MinCandidateNodesPercentage, "cannot be zero at the same time as minCandidateNodesAbsolute"),
@@ -59,8 +61,7 @@ func ValidateDefaultPreemptionArgs(path *field.Path, args *config.DefaultPreempt
 	return allErrs.ToAggregate()
 }
 
-// validateMinCandidateNodesPercentage validates that
-// minCandidateNodesPercentage is within the allowed range.
+// validateMinCandidateNodesPercentage 校验 minCandidateNodesPercentage 在允许范围 [0, 100] 内。
 func validateMinCandidateNodesPercentage(minCandidateNodesPercentage int32, p *field.Path) *field.Error {
 	if minCandidateNodesPercentage < 0 || minCandidateNodesPercentage > 100 {
 		return field.Invalid(p, minCandidateNodesPercentage, "not in valid range [0, 100]")
@@ -68,8 +69,7 @@ func validateMinCandidateNodesPercentage(minCandidateNodesPercentage int32, p *f
 	return nil
 }
 
-// validateMinCandidateNodesAbsolute validates that minCandidateNodesAbsolute
-// is within the allowed range.
+// validateMinCandidateNodesAbsolute 校验 minCandidateNodesAbsolute 非负。
 func validateMinCandidateNodesAbsolute(minCandidateNodesAbsolute int32, p *field.Path) *field.Error {
 	if minCandidateNodesAbsolute < 0 {
 		return field.Invalid(p, minCandidateNodesAbsolute, "not in valid range [0, inf)")
@@ -77,12 +77,12 @@ func validateMinCandidateNodesAbsolute(minCandidateNodesAbsolute int32, p *field
 	return nil
 }
 
-// ValidateInterPodAffinityArgs validates that InterPodAffinityArgs are correct.
+// ValidateInterPodAffinityArgs 校验 InterPodAffinityArgs 是否合法。
 func ValidateInterPodAffinityArgs(path *field.Path, args *config.InterPodAffinityArgs) error {
 	return validateHardPodAffinityWeight(path.Child("hardPodAffinityWeight"), args.HardPodAffinityWeight)
 }
 
-// validateHardPodAffinityWeight validates that weight is within allowed range.
+// validateHardPodAffinityWeight 校验硬亲和权重在允许范围 [0, 100] 内。
 func validateHardPodAffinityWeight(path *field.Path, w int32) error {
 	const (
 		minHardPodAffinityWeight = 0
@@ -96,9 +96,9 @@ func validateHardPodAffinityWeight(path *field.Path, w int32) error {
 	return nil
 }
 
-// ValidatePodTopologySpreadArgs validates that PodTopologySpreadArgs are correct.
-// It replicates the validation from pkg/apis/core/validation.validateTopologySpreadConstraints
-// with an additional check for .labelSelector to be nil.
+// ValidatePodTopologySpreadArgs 校验 PodTopologySpreadArgs 是否合法。
+// 规则复制自 pkg/apis/core/validation.validateTopologySpreadConstraints，
+// 额外要求默认约束的 .labelSelector 必须为 nil。
 func ValidatePodTopologySpreadArgs(path *field.Path, args *config.PodTopologySpreadArgs) error {
 	var allErrs field.ErrorList
 	if err := validateDefaultingType(path.Child("defaultingType"), args.DefaultingType, args.DefaultConstraints); err != nil {
@@ -116,6 +116,7 @@ func ValidatePodTopologySpreadArgs(path *field.Path, args *config.PodTopologySpr
 		if err := validateWhenUnsatisfiable(p.Child("whenUnsatisfiable"), c.WhenUnsatisfiable); err != nil {
 			allErrs = append(allErrs, err)
 		}
+		// 默认约束的 selector 会按每个 Pod 推导，配置里不允许显式指定。
 		if c.LabelSelector != nil {
 			f := field.Forbidden(p.Child("labelSelector"), "constraint must not define a selector, as they deduced for each pod")
 			allErrs = append(allErrs, f)
@@ -130,6 +131,7 @@ func ValidatePodTopologySpreadArgs(path *field.Path, args *config.PodTopologySpr
 	return allErrs.ToAggregate()
 }
 
+// validateDefaultingType 校验 defaultingType 取值合法，且 SystemDefaulting 不能与显式约束共存。
 func validateDefaultingType(p *field.Path, v config.PodTopologySpreadConstraintsDefaulting, constraints []v1.TopologySpreadConstraint) *field.Error {
 	if v != config.SystemDefaulting && v != config.ListDefaulting {
 		return field.NotSupported(p, v, []string{string(config.SystemDefaulting), string(config.ListDefaulting)})
@@ -140,6 +142,7 @@ func validateDefaultingType(p *field.Path, v config.PodTopologySpreadConstraints
 	return nil
 }
 
+// validateTopologyKey 校验拓扑键非空且符合标签名规范。
 func validateTopologyKey(p *field.Path, v string) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(v) == 0 {
@@ -150,6 +153,7 @@ func validateTopologyKey(p *field.Path, v string) field.ErrorList {
 	return allErrs
 }
 
+// validateWhenUnsatisfiable 校验 whenUnsatisfiable 是 DoNotSchedule 或 ScheduleAnyway。
 func validateWhenUnsatisfiable(p *field.Path, v v1.UnsatisfiableConstraintAction) *field.Error {
 	supportedScheduleActions := sets.New(string(v1.DoNotSchedule), string(v1.ScheduleAnyway))
 
@@ -162,6 +166,8 @@ func validateWhenUnsatisfiable(p *field.Path, v v1.UnsatisfiableConstraintAction
 	return nil
 }
 
+// validateConstraintNotRepeat 校验第 idx 个约束不与前面的约束重复。
+// 拓扑键和 whenUnsatisfiable 都相同的约束视为重复。
 func validateConstraintNotRepeat(path *field.Path, constraints []v1.TopologySpreadConstraint, idx int) *field.Error {
 	c := &constraints[idx]
 	for i := range constraints[:idx] {
@@ -173,6 +179,8 @@ func validateConstraintNotRepeat(path *field.Path, constraints []v1.TopologySpre
 	return nil
 }
 
+// validateFunctionShape 校验自定义评分函数形状：至少一个点、利用率递增、
+// 利用率在 [0, 100]、分数在 [0, MaxCustomPriorityScore]。
 func validateFunctionShape(shape []config.UtilizationShapePoint, path *field.Path) field.ErrorList {
 	const (
 		minUtilization = 0
@@ -188,6 +196,7 @@ func validateFunctionShape(shape []config.UtilizationShapePoint, path *field.Pat
 		return allErrs
 	}
 
+	// 利用率必须严格递增，否则折线函数无法唯一定义。
 	for i := 1; i < len(shape); i++ {
 		if shape[i-1].Utilization >= shape[i].Utilization {
 			allErrs = append(allErrs, field.Invalid(path.Index(i).Child("utilization"), shape[i].Utilization, "values must be sorted in increasing order"))
@@ -210,6 +219,7 @@ func validateFunctionShape(shape []config.UtilizationShapePoint, path *field.Pat
 	return allErrs
 }
 
+// validateResources 校验资源权重在 (0, 100] 范围内。
 func validateResources(resources []config.ResourceSpec, p *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for i, resource := range resources {
@@ -221,7 +231,8 @@ func validateResources(resources []config.ResourceSpec, p *field.Path) field.Err
 	return allErrs
 }
 
-// ValidateNodeResourcesBalancedAllocationArgs validates that NodeResourcesBalancedAllocationArgs are set correctly.
+// ValidateNodeResourcesBalancedAllocationArgs 校验 NodeResourcesBalancedAllocationArgs 配置正确：
+// 资源名不能重复，且权重必须为 1（该插件暂不支持自定义权重）。
 func ValidateNodeResourcesBalancedAllocationArgs(path *field.Path, args *config.NodeResourcesBalancedAllocationArgs) error {
 	var allErrs field.ErrorList
 	seenResources := sets.New[string]()
@@ -238,7 +249,7 @@ func ValidateNodeResourcesBalancedAllocationArgs(path *field.Path, args *config.
 	return allErrs.ToAggregate()
 }
 
-// ValidateNodeAffinityArgs validates that NodeAffinityArgs are correct.
+// ValidateNodeAffinityArgs 校验 AddedAffinity 中的 required/preferred 调度项是否合法。
 func ValidateNodeAffinityArgs(path *field.Path, args *config.NodeAffinityArgs) error {
 	if args.AddedAffinity == nil {
 		return nil
@@ -252,6 +263,7 @@ func ValidateNodeAffinityArgs(path *field.Path, args *config.NodeAffinityArgs) e
 		}
 	}
 	// TODO: Add validation for requiredDuringSchedulingRequiredDuringExecution when it gets added to the API.
+	// 待该字段进入 API 后补充校验。
 	if terms := affinity.PreferredDuringSchedulingIgnoredDuringExecution; len(terms) != 0 {
 		_, err := nodeaffinity.NewPreferredSchedulingTerms(terms, field.WithPath(path.Child("addedAffinity", "preferredDuringSchedulingIgnoredDuringExecution")))
 		if err != nil {
@@ -261,19 +273,21 @@ func ValidateNodeAffinityArgs(path *field.Path, args *config.NodeAffinityArgs) e
 	return errors.Flatten(errors.NewAggregate(errs))
 }
 
-// VolumeBindingArgsValidationOptions contains the different settings for validation.
+// VolumeBindingArgsValidationOptions 保存 VolumeBindingArgs 校验时依赖的可选设置，
+// 主要用于注入 feature gate 状态，便于测试。
 type VolumeBindingArgsValidationOptions struct {
 	AllowStorageCapacityScoring bool
 }
 
-// ValidateVolumeBindingArgs validates that VolumeBindingArgs are set correctly.
+// ValidateVolumeBindingArgs 使用当前 feature gate 状态校验 VolumeBindingArgs 配置正确。
 func ValidateVolumeBindingArgs(path *field.Path, args *config.VolumeBindingArgs) error {
 	return ValidateVolumeBindingArgsWithOptions(path, args, VolumeBindingArgsValidationOptions{
 		AllowStorageCapacityScoring: utilfeature.DefaultFeatureGate.Enabled(features.StorageCapacityScoring),
 	})
 }
 
-// ValidateVolumeBindingArgsWithOptions validates that VolumeBindingArgs and VolumeBindingArgsValidationOptions with scheduler features.
+// ValidateVolumeBindingArgsWithOptions 结合给定的校验选项校验 VolumeBindingArgs。
+// BindTimeoutSeconds 不能为负；StorageCapacityScoring 关闭时 shape 字段必须为空。
 func ValidateVolumeBindingArgsWithOptions(path *field.Path, args *config.VolumeBindingArgs, opts VolumeBindingArgsValidationOptions) error {
 	var allErrs field.ErrorList
 
@@ -284,14 +298,15 @@ func ValidateVolumeBindingArgsWithOptions(path *field.Path, args *config.VolumeB
 	if opts.AllowStorageCapacityScoring {
 		allErrs = append(allErrs, validateFunctionShape(args.Shape, path.Child("shape"))...)
 	} else if args.Shape != nil {
-		// When the feature is off, return an error if the config is not nil.
-		// This prevents unexpected configuration from taking effect when the
-		// feature turns on in the future.
+		// 特性关闭时若配置了 shape 就报错，防止将来开启该特性后
+		// 这份休眠配置意外生效。
 		allErrs = append(allErrs, field.Invalid(path.Child("shape"), args.Shape, "unexpected field `shape`, remove it or turn on the feature gate StorageCapacityScoring"))
 	}
 	return allErrs.ToAggregate()
 }
 
+// ValidateNodeResourcesFitArgs 校验 NodeResourcesFitArgs：忽略的资源名/组名格式、
+// 评分策略类型及其资源权重、RequestedToCapacityRatio 的自定义函数形状。
 func ValidateNodeResourcesFitArgs(path *field.Path, args *config.NodeResourcesFitArgs) error {
 	var allErrs field.ErrorList
 	resPath := path.Child("ignoredResources")
@@ -305,6 +320,7 @@ func ValidateNodeResourcesFitArgs(path *field.Path, args *config.NodeResourcesFi
 	groupPath := path.Child("ignoredResourceGroups")
 	for i, group := range args.IgnoredResourceGroups {
 		path := groupPath.Index(i)
+		// 资源组名是标签名，不允许包含斜杠（斜杠属于资源名的前缀分隔）。
 		if strings.Contains(group, "/") {
 			allErrs = append(allErrs, field.Invalid(path, group, "resource group name can't contain '/'"))
 		}
@@ -319,6 +335,7 @@ func ValidateNodeResourcesFitArgs(path *field.Path, args *config.NodeResourcesFi
 			allErrs = append(allErrs, field.NotSupported(strategyPath.Child("type"), args.ScoringStrategy.Type, sets.List(supportedScoringStrategyTypes)))
 		}
 		allErrs = append(allErrs, validateResources(args.ScoringStrategy.Resources, strategyPath.Child("resources"))...)
+		// 只有 RequestedToCapacityRatio 类型才允许配置自定义函数形状。
 		if args.ScoringStrategy.Type == config.RequestedToCapacityRatio {
 			if args.ScoringStrategy.RequestedToCapacityRatio == nil {
 				allErrs = append(allErrs, field.Required(strategyPath.Child("requestedToCapacityRatio"), "must be specified when type is RequestedToCapacityRatio"))
@@ -338,11 +355,11 @@ func ValidateNodeResourcesFitArgs(path *field.Path, args *config.NodeResourcesFi
 	return allErrs.ToAggregate()
 }
 
-// ValidateDynamicResourcesArgs validates that DynamicResourcesArgs are correct.
-// In contrast to the REST API, setting fields that have no effect because
-// the corresponding feature is disabled is considered an error.
+// ValidateDynamicResourcesArgs 校验 DynamicResourcesArgs 是否合法。
+// 与 REST API 不同：因对应 feature gate 关闭而失效的字段一旦被设置，这里视为错误。
 func ValidateDynamicResourcesArgs(path *field.Path, args *config.DynamicResourcesArgs, fts feature.Features) error {
 	var allErrs field.ErrorList
+	// 特性开启时才允许配置超时时间，并校验其非负。
 	if fts.EnableDRASchedulerFilterTimeout {
 		if args.FilterTimeout != nil && args.FilterTimeout.Duration < 0 {
 			allErrs = append(allErrs, field.Invalid(path.Child("filterTimeout"), args.FilterTimeout, "must be zero or positive"))
@@ -353,6 +370,7 @@ func ValidateDynamicResourcesArgs(path *field.Path, args *config.DynamicResource
 		}
 	}
 
+	// 绑定超时依赖两个特性同时开启，且最短为 1 秒。
 	if fts.EnableDRADeviceBindingConditions && fts.EnableDRAResourceClaimDeviceStatus {
 		if args.BindingTimeout != nil && args.BindingTimeout.Duration < 1*time.Second {
 			allErrs = append(allErrs, field.Invalid(

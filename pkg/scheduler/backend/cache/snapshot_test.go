@@ -43,6 +43,7 @@ import (
 
 const mb int64 = 1024 * 1024
 
+// TestGetNodeImageStates 验证 getNodeImageStates 只汇总节点自身上报的镜像，并正确统计镜像大小与节点数。
 func TestGetNodeImageStates(t *testing.T) {
 	tests := []struct {
 		node              *v1.Node
@@ -107,6 +108,7 @@ func TestGetNodeImageStates(t *testing.T) {
 	}
 }
 
+// TestCreateImageExistenceMap 验证 createImageExistenceMap 能从各节点的 Images 状态构建镜像到节点集合的映射。
 func TestCreateImageExistenceMap(t *testing.T) {
 	tests := []struct {
 		nodes    []*v1.Node
@@ -195,6 +197,7 @@ func TestCreateImageExistenceMap(t *testing.T) {
 	}
 }
 
+// TestNewSnapshot 覆盖 NewSnapshot 对 NodeInfo、亲和性/反亲和性列表以及 PVC 引用计数的初始化，并在两种 fast path 开关下验证。
 func TestNewSnapshot(t *testing.T) {
 	podWithAnnotations := st.MakePod().Name("foo").Namespace("ns").Node("node-1").Annotations(map[string]string{"custom": "annotation"}).Obj()
 	podWithPort := st.MakePod().Name("foo").Namespace("foo").Node("node-0").ContainerPort([]v1.ContainerPort{{HostPort: 8080}}).Obj()
@@ -446,6 +449,7 @@ func TestNewSnapshot(t *testing.T) {
 					features.InterPodAffinityHostnameFastPath: fastPathEnabled,
 				})
 
+				// fast path 两种取值都要覆盖：关闭时非主机域反亲和性列表恒为空。
 				snapshot := NewSnapshot(test.pods, test.nodes)
 
 				if test.expectedNumNodes != snapshot.NumNodesInPlacement() {
@@ -508,6 +512,7 @@ func TestNewSnapshot(t *testing.T) {
 	}
 }
 
+// TestSnapshot_AssumeForget 验证 AssumePod、ForgetPod 与 forgetAllAssumedPods 对节点 Pod 列表的增删改。
 func TestSnapshot_AssumeForget(t *testing.T) {
 	node1 := st.MakeNode().Name("node-1").Obj()
 	node2 := st.MakeNode().Name("node-2").Obj()
@@ -636,7 +641,7 @@ func TestSnapshot_AssumeForget(t *testing.T) {
 						t.Errorf("Unexpected pod %q on node %q", podName, nodeName)
 					}
 				}
-				// Safety check that nodeInfoList's pods were also updated.
+				// 顺带确认 nodeInfoList 里的 pods 也同步更新了。
 				for _, nInfo := range nodeInfos {
 					if nInfo.Node().Name == nodeInfo.Node().Name {
 						if diff := cmp.Diff(nodeInfo.GetPods(), nInfo.GetPods(), cmpopts.IgnoreUnexported(framework.PodInfo{})); diff != "" {
@@ -649,6 +654,7 @@ func TestSnapshot_AssumeForget(t *testing.T) {
 	}
 }
 
+// TestSnapshot_AssumeForgetAffinityAndPVC 验证 assume/forget 对亲和性、反亲和性与 PVC 索引的增量维护及回滚。
 func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 	node1 := st.MakeNode().Name("node-1").Obj()
 	node2 := st.MakeNode().Name("node-2").Obj()
@@ -670,27 +676,23 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 		PodAntiAffinity(v1.LabelHostname, &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}}, st.PodAntiAffinityWithRequiredReq).
 		PodAntiAffinity("zone", &metav1.LabelSelector{MatchLabels: map[string]string{"baz": "qux"}}, st.PodAntiAffinityWithRequiredReq).Obj()
 	pvcPod := st.MakePod().Name("pvc-pod").UID("pvc-pod").Namespace("ns").Node("node-1").PVC("my-pvc").Obj()
-	// pvcPod2 references the same PVC as pvcPod on the same node, to exercise the
-	// shared-PVC reference-counting path.
+	// pvcPod2 与 pvcPod 在同一节点上引用同一个 PVC，用来覆盖共享 PVC 的引用计数路径。
 	pvcPod2 := st.MakePod().Name("pvc-pod-2").UID("pvc-pod-2").Namespace("ns").Node("node-1").PVC("my-pvc").Obj()
 	mixedVolumePod := st.MakePod().Name("mixed-pod").UID("mixed-pod").Namespace("ns").Node("node-1").
 		PVC("tracked-pvc").
 		Volume(v1.Volume{Name: "empty", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}}).
 		Volume(v1.Volume{Name: "cm", VolumeSource: v1.VolumeSource{ConfigMap: &v1.ConfigMapVolumeSource{}}}).Obj()
 
-	// Pods that are already part of the snapshot (passed to NewSnapshot, not
-	// assumed). ForgetPod must never revert the indexes they contributed.
+	// 这些 Pod 从一开始就在快照里（传给 NewSnapshot，而非 assumed），ForgetPod 不应回滚它们建立的索引。
 	preexistingAffinityPod := st.MakePod().Name("pre-affinity-pod").UID("pre-affinity-pod").Node("node-2").
 		PodAffinity("zone", &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}}, st.PodAffinityWithRequiredReq).Obj()
 	preexistingAntiAffinityPod := st.MakePod().Name("pre-anti-pod").UID("pre-anti-pod").Node("node-2").
 		PodAntiAffinity("zone", &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}}, st.PodAntiAffinityWithRequiredReq).Obj()
 	preexistingPVCPod := st.MakePod().Name("pre-pvc-pod").UID("pre-pvc-pod").Namespace("ns").Node("node-2").PVC("pre-pvc").Obj()
-	// affinityPodNode2 is assumed onto node-2, which already hosts a pod with
-	// affinity terms, to exercise the "no double-append" path.
+	// affinityPodNode2 被 assume 到已有亲和性 Pod 的 node-2，用来覆盖“不重复追加”的路径。
 	affinityPodNode2 := st.MakePod().Name("affinity-pod-n2").UID("affinity-pod-n2").Node("node-2").
 		PodAffinity("zone", &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}}, st.PodAffinityWithRequiredReq).Obj()
-	// sharedPVCPod is assumed onto node-1 but references the same PVC as the
-	// pre-existing preexistingPVCPod.
+	// sharedPVCPod 被 assume 到 node-1，但引用的是既有 Pod preexistingPVCPod 的同一个 PVC。
 	sharedPVCPod := st.MakePod().Name("shared-pvc-pod").UID("shared-pvc-pod").Namespace("ns").Node("node-1").PVC("pre-pvc").Obj()
 
 	mustPodInfo := func(pod *v1.Pod) *framework.PodInfo {
@@ -703,13 +705,11 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 
 	tests := []struct {
 		name string
-		// initialPods are part of the snapshot from the start (passed to
-		// NewSnapshot). They are not assumed and must survive ForgetPod.
+		// initialPods 从一开始就属于快照（传给 NewSnapshot），不是 assumed 的，ForgetPod 不应影响它们。
 		initialPods  []*v1.Pod
 		podsToAssume []*v1.Pod
 		podsToForget []*v1.Pod
-		// forgetAll calls forgetAllAssumedPods instead of forgetting podsToForget
-		// one by one. It exercises the LIFO revert of all leftover assumed pods.
+		// forgetAll 走 forgetAllAssumedPods，而不是逐个 ForgetPod，用来覆盖一次性按 LIFO 回滚所有剩余 assumed Pod 的路径。
 		forgetAll                         bool
 		expectedAffinity                  sets.Set[string]
 		expectedAntiAffinity              sets.Set[string]
@@ -724,7 +724,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 		{
 			name:         "assume pod with required anti-affinity",
 			podsToAssume: []*v1.Pod{antiAffinityPod},
-			// A pod declaring anti-affinity also counts as having affinity terms.
+			// 声明了反亲和性的 Pod 同时也算作有亲和性项。
 			expectedAffinity:                  sets.New("node-1"),
 			expectedAntiAffinity:              sets.New("node-1"),
 			expectedNonHostScopedAntiAffinity: sets.New("node-1"),
@@ -750,25 +750,20 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			podsToForget: []*v1.Pod{pvcPod},
 		},
 		{
-			// AssumePod/ForgetPod are documented as LIFO, so we forget the
-			// pod assumed last; node-1 must remain in the list because the
-			// first pod still has affinity terms.
+			// AssumePod/ForgetPod 约定为 LIFO，所以先忘记最后 assume 的那个；第一个 Pod 仍带亲和性项，node-1 应留在列表中。
 			name:             "two pods with affinity on the same node, forget the last assumed",
 			podsToAssume:     []*v1.Pod{affinityPod, affinityPod2},
 			podsToForget:     []*v1.Pod{affinityPod2},
 			expectedAffinity: sets.New("node-1"),
 		},
 		{
-			// Forgetting both assumed pods (in reverse order) must return the
-			// affinity list to its empty baseline.
+			// 按逆序忘掉两个 assumed Pod 后，亲和性列表应回到初始的空状态。
 			name:         "two pods with affinity on the same node, forget both returns to baseline",
 			podsToAssume: []*v1.Pod{affinityPod, affinityPod2},
 			podsToForget: []*v1.Pod{affinityPod2, affinityPod},
 		},
 		{
-			// Same as the affinity case above, but for required anti-affinity:
-			// node-1 must remain in both lists because the first pod still has
-			// (anti-)affinity terms.
+			// 与上面的亲和性用例同理，只是针对 required 反亲和性：第一个 Pod 仍有（反）亲和性项，node-1 应同时留在两个列表里。
 			name:                              "two pods with anti-affinity on the same node, forget the last assumed",
 			podsToAssume:                      []*v1.Pod{antiAffinityPod, antiAffinityPod2},
 			podsToForget:                      []*v1.Pod{antiAffinityPod2},
@@ -782,9 +777,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			podsToForget: []*v1.Pod{antiAffinityPod2, antiAffinityPod},
 		},
 		{
-			// Same as above, but for a PVC shared by two pods on the same node:
-			// the key must remain tracked until the last referencing pod is
-			// forgotten.
+			// 与上面同理，只是针对同节点两个 Pod 共享的 PVC：直到最后一个引用它的 Pod 被忘记之前，该 key 都应保持被追踪。
 			name:                     "two pods sharing a PVC on the same node, forget the last assumed",
 			podsToAssume:             []*v1.Pod{pvcPod, pvcPod2},
 			podsToForget:             []*v1.Pod{pvcPod2},
@@ -796,10 +789,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			podsToForget: []*v1.Pod{pvcPod2, pvcPod},
 		},
 		{
-			// forgetAllAssumedPods must revert every leftover assumed pod in
-			// reverse assume order. Several pods are assumed across two nodes with
-			// affinity, anti-affinity and a shared PVC; after forgetting them all
-			// the snapshot must return to its empty baseline.
+			// forgetAllAssumedPods 应按 assume 的逆序回滚所有剩余的 assumed Pod。这里跨两个节点 assume 了带亲和性、反亲和性以及共享 PVC 的多个 Pod，全部回滚后快照应恢复到空基线。
 			name:         "forget all assumed pods returns to baseline",
 			podsToAssume: []*v1.Pod{affinityPod, bothPod, pvcPod, pvcPod2},
 			forgetAll:    true,
@@ -840,16 +830,14 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			expectedUsedPVCRefCounts: map[string]int{"ns/tracked-pvc": 1},
 		},
 		{
-			// node-2 already hosts a pod with affinity terms, so assuming
-			// another one must not append node-2 to the list a second time.
+			// node-2 上已有带亲和性项的 Pod，再 assume 一个不应把 node-2 重复追加进列表。
 			name:             "assume affinity pod on a node that already has affinity pods",
 			initialPods:      []*v1.Pod{preexistingAffinityPod},
 			podsToAssume:     []*v1.Pod{affinityPodNode2},
 			expectedAffinity: sets.New("node-2"),
 		},
 		{
-			// Forgetting the assumed pod must keep node-2 in the list because
-			// the pre-existing pod still declares affinity terms.
+			// 忘掉 assumed 的 Pod 后，既有 Pod 仍声明了亲和性项，node-2 应保留在列表中。
 			name:             "forget assumed pod keeps the pre-existing affinity entry",
 			initialPods:      []*v1.Pod{preexistingAffinityPod},
 			podsToAssume:     []*v1.Pod{affinityPodNode2},
@@ -857,8 +845,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			expectedAffinity: sets.New("node-2"),
 		},
 		{
-			// The assumed pod shares a PVC with a pre-existing pod, so the key
-			// is already tracked; ForgetPod must not drop it.
+			// assumed 的 Pod 与既有 Pod 共享同一个 PVC，key 已被追踪，ForgetPod 不应把它丢掉。
 			name:                     "forget assumed pod keeps a PVC shared with a pre-existing pod",
 			initialPods:              []*v1.Pod{preexistingPVCPod},
 			podsToAssume:             []*v1.Pod{sharedPVCPod},
@@ -866,10 +853,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 			expectedUsedPVCRefCounts: map[string]int{"ns/pre-pvc": 1},
 		},
 		{
-			// Pre-existing affinity, anti-affinity and PVC state on node-2,
-			// plus several pods assumed onto node-1 and partially forgotten in
-			// reverse order. node-1 must appear in the affinity list exactly
-			// once even though two assumed pods declare affinity terms there.
+			// node-2 上预先存在亲和性、反亲和性和 PVC 状态，node-1 上又 assume 了多个 Pod 并按逆序部分忘记。尽管 node-1 上有两个 assumed Pod 声明了亲和性项，它仍只能在亲和性列表中出现一次。
 			name:                              "pre-existing state with multiple assume and partial forget",
 			initialPods:                       []*v1.Pod{preexistingAffinityPod, preexistingAntiAffinityPod, preexistingPVCPod},
 			podsToAssume:                      []*v1.Pod{affinityPod, pvcPod, antiAffinityPod},
@@ -971,6 +955,7 @@ func TestSnapshot_AssumeForgetAffinityAndPVC(t *testing.T) {
 	}
 }
 
+// TestSnapshot_Placement 验证 placement 的设置与清除、它对 List/Get 无影响，以及 AssumePod 的结果对 placement 内节点可见。
 func TestSnapshot_Placement(t *testing.T) {
 	tt := []struct {
 		name           string
@@ -981,9 +966,9 @@ func TestSnapshot_Placement(t *testing.T) {
 		{
 			name:           "When placement is not set, nodes in placement are same as nodes in snapshot",
 			initialNodes:   []string{"n1", "n2", "n3"},
-			placementNodes: []string{}, // unused
+			placementNodes: []string{}, // 本用例用不到
 			testFn: func(t *testing.T, snapshot *Snapshot, placement *fwk.Placement) {
-				// We intentionally don't use snapshot.AssumePlacement here
+				// 这里刻意不调用 snapshot.AssumePlacement，用于验证未设置 placement 时的默认行为。
 				numNodes := snapshot.NumNodesInPlacement()
 				if numNodes != 3 {
 					t.Errorf("unexpected number of nodes from NumNodesInPlacement, want: %v, got: %v", 3, numNodes)
@@ -1047,6 +1032,7 @@ func TestSnapshot_Placement(t *testing.T) {
 				if len(nodes) != 3 {
 					t.Errorf("unexpected number of nodes from ListNodesInPlacement, want: %v, got: %v", 3, len(nodes))
 				}
+				// 设置 placement 后，List/Get 仍应看到全部快照节点。
 				_, err = snapshot.Get("n1")
 				if err != nil {
 					t.Errorf("expected Get to find node but instead got unexpected error %v", err)
@@ -1085,12 +1071,13 @@ func TestSnapshot_Placement(t *testing.T) {
 			initialNodes:   []string{"n1", "n2", "n3"},
 			placementNodes: []string{"n2"},
 			testFn: func(t *testing.T, snapshot *Snapshot, placement *fwk.Placement) {
+				// 换成另一个 Snapshot 的节点实例，模拟 placement 与快照不匹配的场景。
 				placement.Nodes[0] = placement.Nodes[0].Snapshot()
 				err := snapshot.AssumePlacement(placement)
 				if err == nil {
 					t.Fatalf("expected AssumePlacement to return error due to no match between placement and snapshot node instance but got nil")
 				}
-				// ensure the placement is cleared
+				// 确认失败路径没有留下半设置的 placement。
 				numNodes := snapshot.NumNodesInPlacement()
 				if numNodes != 3 {
 					t.Errorf("unexpected number of nodes from NumNodesInPlacement, want: %v, got: %v", 3, numNodes)
@@ -1137,6 +1124,7 @@ func TestSnapshot_Placement(t *testing.T) {
 				if err != nil {
 					t.Fatalf("expected GetNodeInPlacement to find node but instead got unexpected error %v", err)
 				}
+				// 确认 ListNodesInPlacement 与 GetNodeInPlacement 返回同一实例，而非值相等的副本。
 				if nodes[0] != node {
 					t.Errorf("node from ListNodesInPlacement is not the same instance as from GetNodeInPlacement")
 				}
@@ -1182,6 +1170,7 @@ func TestSnapshot_Placement(t *testing.T) {
 	}
 }
 
+// TestSnapshot_Mutations 验证 StartMutations/EndMutations 能把被直接修改的各类状态完整回滚。
 func TestSnapshot_Mutations(t *testing.T) {
 	podWithAffinity := st.MakePod().Name("p-aff").Namespace("ns").UID("p-aff").PodAffinity("key", &metav1.LabelSelector{MatchLabels: map[string]string{"key": "value"}}, st.PodAffinityWithRequiredReq).Node("node-1").Obj()
 	podWithAntiAffinity := st.MakePod().Name("p-anti").Namespace("ns").UID("p-anti").PodAntiAffinity("key", &metav1.LabelSelector{MatchLabels: map[string]string{"key": "value"}}, st.PodAntiAffinityWithRequiredReq).Node("node-1").Obj()
@@ -1253,7 +1242,7 @@ func TestSnapshot_Mutations(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "node-2"}},
 			},
 			modifySnapshot: func(_ klog.Logger, s *Snapshot) {
-				// Reverse the list
+				// 反转列表，验证恢复时能还原顺序。
 				s.nodeInfoList[0], s.nodeInfoList[1] = s.nodeInfoList[1], s.nodeInfoList[0]
 			},
 		},
@@ -1291,7 +1280,7 @@ func TestSnapshot_Mutations(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, interPodAffinityHostnameFastPathEnabled)
 				s := NewSnapshot(tt.initialPods, tt.initialNodes)
 
-				// Store original state for deep verification
+				// 记录原始状态，便于恢复后逐项比对。
 				origNodeInfoMap, origNodeInfoList, origAffinityList, origAntiAffinityList, origUsedPVCRefCounts, origPGStates, origNonHostScopedAntiAffinityList := simplifySnapshot(s)
 
 				err := s.StartMutations()
@@ -1304,7 +1293,7 @@ func TestSnapshot_Mutations(t *testing.T) {
 					t.Fatalf("failed to restore a backup")
 				}
 
-				// Get state after for verification
+				// 取回恢复后的状态用于比对。
 				postRestoreNodeInfoMap, postRestoreNodeInfoList, postRestoreAffinityList, postRestoreAntiAffinityList, postRestoreUsedPVCRefCounts, postRestorePGStates, postRestoreNonHostScopedAntiAffinityList := simplifySnapshot(s)
 
 				if diff := cmp.Diff(origNodeInfoMap, postRestoreNodeInfoMap); diff != "" {
@@ -1333,7 +1322,7 @@ func TestSnapshot_Mutations(t *testing.T) {
 	}
 }
 
-// simplifySnapshot for comparison in unit tests
+// simplifySnapshot 把快照的关键状态压成可比较的简单结构，供单元测试做恢复前后比对。
 func simplifySnapshot(s *Snapshot) (map[string][]string, []string, []string, []string, map[string]int, map[string][]string, []string) {
 	nodeInfoMap := make(map[string][]string)
 	var nodeInfoList []string
@@ -1375,6 +1364,7 @@ func simplifySnapshot(s *Snapshot) (map[string][]string, []string, []string, []s
 	return nodeInfoMap, nodeInfoList, affinityList, antiAffinityList, usedPVCRefCounts, pgStates, nonHostScopedAntiAffinityList
 }
 
+// TestSnapshot_MultipleMutations 验证 mutations 不能叠加，以及结束后可以重新开始。
 func TestSnapshot_MultipleMutations(t *testing.T) {
 	s := NewSnapshot(nil, nil)
 
@@ -1393,7 +1383,7 @@ func TestSnapshot_MultipleMutations(t *testing.T) {
 		t.Errorf("expected error %q, got %q", expectedErr, err.Error())
 	}
 
-	// End the previous mutations, and now it should work again
+	// 结束上一次的 mutations 后，应能重新开始。
 	err = s.EndMutations()
 	if err != nil {
 		t.Fatalf("failed to end mutations: %v", err)
@@ -1405,6 +1395,7 @@ func TestSnapshot_MultipleMutations(t *testing.T) {
 	}
 }
 
+// TestSnapshot_EndMutationsWithoutStartMutations 验证未开始 mutations 时调用 EndMutations 会报错。
 func TestSnapshot_EndMutationsWithoutStartMutations(t *testing.T) {
 	s := NewSnapshot(nil, nil)
 
@@ -1419,6 +1410,7 @@ func TestSnapshot_EndMutationsWithoutStartMutations(t *testing.T) {
 	}
 }
 
+// TestSnapshot_CreateUsedPVCRefCounts 验证 createUsedPVCRefCounts 能跨节点累加同一个 PVC 的引用数。
 func TestSnapshot_CreateUsedPVCRefCounts(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -1519,6 +1511,7 @@ func TestSnapshot_CreateUsedPVCRefCounts(t *testing.T) {
 	}
 }
 
+// TestSnapshot_AddRemovePodWithoutMutations 验证未开启 mutation 会话时 AddPod/RemovePod 一律拒绝。
 func TestSnapshot_AddRemovePodWithoutMutations(t *testing.T) {
 	node := st.MakeNode().Name("node-1").Obj()
 	pod := st.MakePod().Name("p1").Node("node-1").Obj()
@@ -1557,6 +1550,7 @@ func TestSnapshot_AddRemovePodWithoutMutations(t *testing.T) {
 	}
 }
 
+// TestSnapshot_AddRemovePod 覆盖 AddPod/RemovePod 在 mutation 会话中的状态更新与最终回滚。
 func TestSnapshot_AddRemovePod(t *testing.T) {
 	podWithAffinity := st.MakePod().Name("p-aff").Namespace("ns").UID("p-aff").PodAffinity("key", &metav1.LabelSelector{MatchLabels: map[string]string{"key": "value"}}, st.PodAffinityWithRequiredReq).Node("node-1").Obj()
 	podWithAntiAffinity := st.MakePod().Name("p-anti").Namespace("ns").UID("p-anti").PodAntiAffinity("key", &metav1.LabelSelector{MatchLabels: map[string]string{"key": "value"}}, st.PodAntiAffinityWithRequiredReq).Node("node-1").Obj()
@@ -1564,9 +1558,9 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 	podWithPVC := st.MakePod().Name("p-pvc").Namespace("ns").UID("p-pvc").PVC("pvc-1").Node("node-1").Obj()
 
 	type operation struct {
-		opType    string // "add" or "remove"
+		opType    string // "add" 或 "remove"
 		pod       *v1.Pod
-		nodeName  string // optional, defaults to pod.Spec.NodeName if empty
+		nodeName  string // 可选，为空时取 pod.Spec.NodeName
 		expectErr bool
 	}
 
@@ -1799,12 +1793,13 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/fastPath=%v", tt.name, fastPathEnabled), func(t *testing.T) {
 				logger, _ := ktesting.NewTestContext(t)
 				featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
+					// 打开 GenericWorkload 以覆盖 PodGroup 状态的更新与恢复。
 					features.GenericWorkload:                  true,
 					features.InterPodAffinityHostnameFastPath: fastPathEnabled,
 				})
 				s := NewTestSnapshotWithPodGroups(tt.initialPods, tt.initialNodes, tt.initialPodGroups)
 
-				// Store original state for deep verification
+				// 记录原始状态，便于恢复后逐项比对。
 				origNodeInfoMap, origNodeInfoList, origAffinityList, origAntiAffinityList, origUsedPVCRefCounts, origPGStates, origNonHostScopedAntiAffinityList := simplifySnapshot(s)
 
 				err := s.StartMutations()
@@ -1851,7 +1846,7 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 					}
 				}
 
-				// Verify state during mutation
+				// 验证 mutations 进行中的状态确实可见。
 				affNodes, _ := s.HavePodsWithAffinityList()
 				gotAffinityNames := sets.New[string]()
 				for _, n := range affNodes {
@@ -1904,7 +1899,7 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 					}
 				}
 
-				// Verify visibility in Get()
+				// 验证 mutation 期间通过 Get() 能看到更新后的 Pod。
 				if tt.expectedPodsOnNode != nil {
 					for nodeName, expectedPods := range tt.expectedPodsOnNode {
 						nodeInfo, err := s.Get(nodeName)
@@ -1928,7 +1923,7 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 					t.Fatalf("failed to end mutation: %v", err)
 				}
 
-				// Verify state is reverted
+				// 验证 EndMutations 后状态已回滚。
 				postRestoreNodeInfoMap, postRestoreNodeInfoList, postRestoreAffinityList, postRestoreAntiAffinityList, postRestoreUsedPVCRefCounts, postRestorePGStates, postRestoreNonHostScopedAntiAffinityList := simplifySnapshot(s)
 
 				if diff := cmp.Diff(origNodeInfoMap, postRestoreNodeInfoMap); diff != "" {
@@ -1957,6 +1952,7 @@ func TestSnapshot_AddRemovePod(t *testing.T) {
 	}
 }
 
+// TestSnapshot_BuildHierarchySnapshotFromPod 验证默认实现直接返回快照自身。
 func TestSnapshot_BuildHierarchySnapshotFromPod(t *testing.T) {
 	snapshot := NewEmptySnapshot()
 	pod := st.MakePod().Name("p1").Namespace("ns1").UID("p1").PodGroupName("pg1").Obj()
@@ -1970,12 +1966,14 @@ func TestSnapshot_BuildHierarchySnapshotFromPod(t *testing.T) {
 	}
 }
 
+// TestSnapshot_GetRootKeyForGroup 验证分组根 key 的查找，覆盖开关组合、缺失父节点、循环和不支持的 key 类型。
 func TestSnapshot_GetRootKeyForGroup(t *testing.T) {
 	setupSnapshotForRootKeyTest := func(genericWorkloadEnabled, compositePodGroupEnabled bool) *Snapshot {
 		s := NewEmptySnapshot()
 		s.genericWorkloadEnabled = genericWorkloadEnabled
 		s.compositePodGroupEnabled = compositePodGroupEnabled
 
+		// 构造正常父子链、循环链和缺失父节点三种分组，覆盖查找的边界情况。
 		pg1 := st.MakePodGroup().Name("pg1").Namespace("ns1").ParentCompositePodGroup("cpg1").Obj()
 		cpg1 := st.MakeCompositePodGroup().Name("cpg1").Namespace("ns1").ParentCompositePodGroup("cpg2").Obj()
 		cpg2 := st.MakeCompositePodGroup().Name("cpg2").Namespace("ns1").Obj()
@@ -2039,7 +2037,7 @@ func TestSnapshot_GetRootKeyForGroup(t *testing.T) {
 			genericWorkloadEnabled:   true,
 			compositePodGroupEnabled: false,
 			key:                      fwk.CompositePodGroupKey("ns1", "cpg1"),
-			want:                     fwk.CompositePodGroupKey("ns1", "cpg2"), // It processes CPG keys normally
+			want:                     fwk.CompositePodGroupKey("ns1", "cpg2"), // 即使 CPG 开关关闭，CPG key 仍照常处理
 			wantOk:                   true,
 		},
 		{
@@ -2084,6 +2082,7 @@ func TestSnapshot_GetRootKeyForGroup(t *testing.T) {
 	}
 }
 
+// TestSnapshot_HavePodsWithRequiredNonHostScopedAntiAffinityList 验证非主机域反亲和性列表只在 fast path 开启时统计节点。
 func TestSnapshot_HavePodsWithRequiredNonHostScopedAntiAffinityList(t *testing.T) {
 	podWithNonHostScopedAntiAffinity := st.MakePod().Name("pod-1").UID("pod-1").Namespace("ns").
 		PodAntiAffinityExists("label", "zone", st.PodAntiAffinityWithRequiredReq).Node("node-1").Obj()
@@ -2133,6 +2132,7 @@ func TestSnapshot_HavePodsWithRequiredNonHostScopedAntiAffinityList(t *testing.T
 					t.Fatalf("HavePodsWithRequiredNonHostScopedAntiAffinityList failed: %v", err)
 				}
 
+				// fast path 关闭时接口返回空列表，开启时才按反亲和性拓扑域统计。
 				expectedNodes := tc.expectedNodesWithHostnameFastpathDisabled
 				if interPodAffinityHostnameFastPathEnabled {
 					expectedNodes = tc.expectedNodesWithHostnameFastpathEnabled

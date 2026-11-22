@@ -21,7 +21,9 @@ import (
 	"time"
 )
 
+// TestGoroutinesLimiter 验证并发额度限制的获取、阻塞与关闭行为。
 func TestGoroutinesLimiter(t *testing.T) {
+	// 额度充足时，连续的 acquire 都应成功。
 	t.Run("Two goroutines are correctly acquired", func(t *testing.T) {
 		limiter := newGoroutinesLimiter(2)
 
@@ -35,6 +37,7 @@ func TestGoroutinesLimiter(t *testing.T) {
 		}
 	})
 
+	// 额度耗尽后 acquire 应阻塞，直到 release 归还额度。
 	t.Run("Goroutine is acquired after releasing", func(t *testing.T) {
 		limiter := newGoroutinesLimiter(1)
 
@@ -43,6 +46,7 @@ func TestGoroutinesLimiter(t *testing.T) {
 			t.Errorf("Expected the goroutine to be acquired, but it's not")
 		}
 
+		// 放到后台 goroutine 里调用，主线程用 select 判断它是否按预期阻塞。
 		acquiredCh := make(chan bool)
 		go func() {
 			acquiredCh <- limiter.acquire()
@@ -65,6 +69,7 @@ func TestGoroutinesLimiter(t *testing.T) {
 		}
 	})
 
+	// 关闭 limiter 应唤醒并终止所有等待中的 acquire。
 	t.Run("Acquiring terminates when limiter is closed", func(t *testing.T) {
 		limiter := newGoroutinesLimiter(1)
 
@@ -73,6 +78,7 @@ func TestGoroutinesLimiter(t *testing.T) {
 			t.Errorf("Expected the goroutine to be acquired, but it's not")
 		}
 
+		// 同样先确认 acquire 已阻塞，再验证 close 能将其唤醒。
 		acquiredCh := make(chan bool)
 		go func() {
 			acquiredCh <- limiter.acquire()

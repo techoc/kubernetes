@@ -38,6 +38,7 @@ import (
 	tf "k8s.io/kubernetes/pkg/scheduler/testing/framework"
 )
 
+// TestNodeAffinity 验证 Filter 与 PreFilter 对 Pod 必需节点亲和性（含 nodeSelector）的判定。
 // TODO: Add test case for RequiredDuringSchedulingRequiredDuringExecution after it's implemented.
 func TestNodeAffinity(t *testing.T) {
 	tests := []struct {
@@ -144,7 +145,7 @@ func TestNodeAffinity(t *testing.T) {
 				},
 			},
 			labels: map[string]string{
-				// We use two digit to denote major version and two digit for minor version.
+				// 主、次版本号各占两位，以便按字符串做字典序比较。
 				"kernel-version": "0206",
 			},
 			runPreFilter: true,
@@ -917,6 +918,7 @@ func TestNodeAffinity(t *testing.T) {
 
 			state := framework.NewCycleState()
 			var gotStatus *fwk.Status
+			// 部分用例刻意不调用 PreFilter，用于验证 Filter 独立读取 Pod 约束也能得出正确结果。
 			if test.runPreFilter {
 				gotPreFilterResult, gotStatus := p.(fwk.PreFilterPlugin).PreFilter(ctx, state, test.pod, nil)
 				if diff := cmp.Diff(test.wantPreFilterStatus, gotStatus); diff != "" {
@@ -934,6 +936,7 @@ func TestNodeAffinity(t *testing.T) {
 	}
 }
 
+// TestNodeAffinityPriority 验证 Score 依据 Pod 软亲和性（含 AddedAffinity）为节点打分与归一化的结果。
 func TestNodeAffinityPriority(t *testing.T) {
 	label1 := map[string]string{"foo": "bar"}
 	label2 := map[string]string{"key": "value"}
@@ -1033,7 +1036,7 @@ func TestNodeAffinityPriority(t *testing.T) {
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 0}, {Name: "node2", Score: 0}, {Name: "node3", Score: 0}},
 		},
 		{
-			// PreScore returns Skip.
+			// 无软亲和性时 PreScore 直接 Skip，避免做无意义的预处理。
 			name: "Skip is returned in PreScore when NodeAffinity is nil",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1208,7 +1211,7 @@ func TestNodeAffinityPriority(t *testing.T) {
 					t.Errorf("unexpected status message from PreScore: want: %v got: %v", test.wantPreScoreStatus.Message(), status.Message())
 				}
 				if !status.IsSuccess() {
-					// no need to proceed.
+					// PreScore 失败时后续打分无意义，直接结束该子测试。
 					return
 				}
 			}
@@ -1235,6 +1238,8 @@ func TestNodeAffinityPriority(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterNodeChange 验证节点变更事件对应的队列提示（Queue/QueueSkip）判定，
+// 含对象类型错误时返回错误的分支。
 func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	podWithNodeAffinity := st.MakePod().NodeAffinityIn("foo", []string{"bar"}, st.NodeSelectorTypeMatchExpressions)
 	testcases := map[string]struct {
@@ -1371,12 +1376,15 @@ func Test_isSchedulableAfterNodeChange(t *testing.T) {
 	}
 }
 
+// TestNodeAffinity_DeferredResizeSkipped 验证启用原地扩容抢占时，
+// 处于 Deferred 扩容等待状态的 Pod 会在 PreFilter 与 Filter 中被跳过亲和性检查。
 func TestNodeAffinity_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()
 	nodeInfo := framework.NewNodeInfo()
 	nodeInfo.SetNode(st.MakeNode().Name("node1").Obj())
 
+	// 直接构造插件，因为切换该特性的开关不通过公开构造函数暴露。
 	pl := &NodeAffinity{enableInPlacePodVerticalScalingSchedulerPreemption: true}
 
 	if preRes, preStatus := pl.PreFilter(ctx, nil, pod, nil); preStatus.Code() != fwk.Skip || preRes != nil {

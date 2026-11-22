@@ -23,15 +23,17 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// podGroupMemberPods stores member pods of pod groups.
-// This structure is not thread-safe and should be accessed only under the lock of the PriorityQueue.
+// podGroupMemberPods 记录各 PodGroup 的成员 Pod。
+// 该结构不是线程安全的，只能在持有 PriorityQueue 锁的情况下访问。
 type podGroupMemberPods struct {
-	// podGroupToPodInfos stores QueuedPodInfos keyed by their pod group key (pg-type/namespace/pg-name),
-	// and then by pod key (namespace/pg-name).
+	// podGroupToPodInfos 先按 PodGroup key（pg-type/namespace/pg-name）索引 QueuedPodInfo，
+	// 再按 Pod key（namespace/pg-name）索引。
 	podGroupToPodInfos map[fwk.EntityKey]map[fwk.EntityKey]*framework.QueuedPodInfo
-	podsRecorder       metrics.GaugeMetric
+	// podsRecorder 记录当前成员 Pod 总数的 gauge 指标。
+	podsRecorder metrics.GaugeMetric
 }
 
+// newPodGroupMemberPods 创建空的成员 Pod 记录，并绑定 gauge 指标记录器。
 func newPodGroupMemberPods(podsRecorder metrics.GaugeMetric) *podGroupMemberPods {
 	return &podGroupMemberPods{
 		podGroupToPodInfos: make(map[fwk.EntityKey]map[fwk.EntityKey]*framework.QueuedPodInfo),
@@ -39,8 +41,8 @@ func newPodGroupMemberPods(podsRecorder metrics.GaugeMetric) *podGroupMemberPods
 	}
 }
 
-// add adds a pod info.
-// It also increments the metric counter.
+// add 记录一个 Pod 信息。
+// 同时递增 gauge 指标。
 func (p *podGroupMemberPods) add(pInfo *framework.QueuedPodInfo) {
 	pgKey, pKey := podGroupKeyForPod(pInfo.Pod), podKey(pInfo.Pod)
 	if p.podGroupToPodInfos[pgKey] == nil {
@@ -50,13 +52,13 @@ func (p *podGroupMemberPods) add(pInfo *framework.QueuedPodInfo) {
 	p.podsRecorder.Inc()
 }
 
-// has checks if the pod is tracked.
+// has 判断给定 Pod 是否已被记录。
 func (p *podGroupMemberPods) has(podLookup *v1.Pod) bool {
 	pgKey, pKey := podGroupKeyForPod(podLookup), podKey(podLookup)
 	return p.podGroupToPodInfos[pgKey][pKey] != nil
 }
 
-// len returns the total number of pods.
+// len 返回被记录的所有 Pod 的总数。
 func (p *podGroupMemberPods) len() int {
 	l := 0
 	for _, pods := range p.podGroupToPodInfos {
@@ -65,13 +67,13 @@ func (p *podGroupMemberPods) len() int {
 	return l
 }
 
-// get returns the queued pod info for the given pod.
+// get 返回给定 Pod 对应的排队信息。
 func (p *podGroupMemberPods) get(podLookup *v1.Pod) *framework.QueuedPodInfo {
 	pgKey, pKey := podGroupKeyForPod(podLookup), podKey(podLookup)
 	return p.podGroupToPodInfos[pgKey][pKey]
 }
 
-// update refreshes the pod object and returns the updated pod info if found.
+// update 用新 Pod 对象刷新已有记录；找到则刷新后的排队信息，否则返回 nil。
 func (p *podGroupMemberPods) update(newPod *v1.Pod) *framework.QueuedPodInfo {
 	pgKey, pKey := podGroupKeyForPod(newPod), podKey(newPod)
 	if pInfo, ok := p.podGroupToPodInfos[pgKey][pKey]; ok {
@@ -81,8 +83,8 @@ func (p *podGroupMemberPods) update(newPod *v1.Pod) *framework.QueuedPodInfo {
 	return nil
 }
 
-// delete removes a specific pod and returns its pod info if found.
-// It also decrements the metric counter.
+// delete 删除指定 Pod；找到则返回其排队信息，否则返回 nil。
+// 同时递减 gauge 指标；组内没有成员后一并清理该组的映射，避免留下空 map。
 func (p *podGroupMemberPods) delete(podLookup *v1.Pod) *framework.QueuedPodInfo {
 	pgKey, pKey := podGroupKeyForPod(podLookup), podKey(podLookup)
 	if pInfo, ok := p.podGroupToPodInfos[pgKey][pKey]; ok {
@@ -96,7 +98,7 @@ func (p *podGroupMemberPods) delete(podLookup *v1.Pod) *framework.QueuedPodInfo 
 	return nil
 }
 
-// list returns all tracked pods.
+// list 返回所有被记录的 Pod。
 func (p *podGroupMemberPods) list() []*v1.Pod {
 	var pods []*v1.Pod
 	for _, pgPods := range p.podGroupToPodInfos {
@@ -107,8 +109,8 @@ func (p *podGroupMemberPods) list() []*v1.Pod {
 	return pods
 }
 
-// clear removes and returns all pod infos for a specific pod group namespace and name.
-// It also decrements the metric counter for all cleared pods.
+// clear 删除并返回指定 PodGroup（按 namespace 和 name 定位）的全部排队信息。
+// 同时为被清理的每个 Pod 递减 gauge 指标。
 func (p *podGroupMemberPods) clear(namespace, name string) []*framework.QueuedPodInfo {
 	pgKey := fwk.PodGroupKey(namespace, name)
 	if pInfos, ok := p.podGroupToPodInfos[pgKey]; ok {

@@ -24,29 +24,28 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// Name is the name of the plugin used in the plugin registry and configurations.
+// Name 是该插件在插件注册表和配置文件中使用的名称。
 const Name = names.PrioritySort
 
-// PrioritySort is a plugin that implements Priority based sorting.
+// PrioritySort 实现按优先级排序的队列排序插件。
 type PrioritySort struct{}
 
 var _ fwk.QueueSortPlugin = &PrioritySort{}
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pl *PrioritySort) Name() string {
 	return Name
 }
 
-// Less is the function used by the activeQ heap algorithm to sort entities.
-// It sorts entities based on their priority. When priorities are equal, it uses
-// the entity timestamp.
+// Less 供 activeQ 堆算法比较实体使用：高优先级排前面，
+// 优先级相同则先入队的实体排前面，以保证队列内的公平性。
 func (pl *PrioritySort) Less(entity1, entity2 fwk.QueuedEntityInfo) bool {
 	p1 := entity1.GetPriority()
 	p2 := entity2.GetPriority()
 	return (p1 > p2) || (p1 == p2 && entity1.GetTimestamp().Before(entity2.GetTimestamp()))
 }
 
-// New initializes a new plugin and returns it.
+// New 创建并返回一个 PrioritySort 插件实例。
 func New(_ context.Context, _ runtime.Object, handle fwk.Handle) (fwk.Plugin, error) {
 	return &PrioritySort{}, nil
 }

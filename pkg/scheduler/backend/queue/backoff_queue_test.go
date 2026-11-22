@@ -31,6 +31,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestBackoffQueue_getBackoffTime 验证退避到期时间的计算：
+// 缓存中的到期时间优先，其次是失败次数或连续错误次数，并考虑禁用退避的情形。
 func TestBackoffQueue_getBackoffTime(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -112,6 +114,8 @@ func TestBackoffQueue_getBackoffTime(t *testing.T) {
 	}
 }
 
+// TestBackoffQueue_calculateBackoffDuration 验证指数退避的时长计算，
+// 包括封顶到最大退避时长、位移溢出以及大实体的放宽上限逻辑。
 func TestBackoffQueue_calculateBackoffDuration(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -188,6 +192,8 @@ func TestBackoffQueue_calculateBackoffDuration(t *testing.T) {
 	}
 }
 
+// TestBackoffQueue_popAllBackoffCompleted 验证从普通退避队列与错误退避队列中
+// 弹出已完成退避的 Pod，并覆盖特性开关两种取值。
 func TestBackoffQueue_popAllBackoffCompleted(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	podInfos := map[string]*framework.QueuedPodInfo{
@@ -267,6 +273,7 @@ func TestBackoffQueue_popAllBackoffCompleted(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		// 同一组输入对特性开关的两种取值都应成立，避免排序逻辑影响弹出的数量。
 		for _, popFromBackoffQEnabled := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s popFromBackoffQEnabled(%v)", tt.name, popFromBackoffQEnabled), func(t *testing.T) {
 				logger, _ := ktesting.NewTestContext(t)
@@ -282,6 +289,7 @@ func TestBackoffQueue_popAllBackoffCompleted(t *testing.T) {
 				if diff := cmp.Diff(tt.wantPods, gotPods); diff != "" {
 					t.Errorf("Unexpected pods moved (-want, +got):\n%s", diff)
 				}
+				// 弹出数量等于入队数减去期望移出的数量，以此校验未到期 Pod 仍留在退避队列中。
 				podsToStayInBackoff := len(tt.podsInBackoff) - len(tt.wantPods)
 				if bq.len() != podsToStayInBackoff {
 					t.Errorf("Expected %v pods to stay in backoffQ, but got: %v", podsToStayInBackoff, bq.len())
@@ -291,8 +299,10 @@ func TestBackoffQueue_popAllBackoffCompleted(t *testing.T) {
 	}
 }
 
+// TestBackoffQueueOrdering 验证同一排序窗口内的 Pod 排布：
+// 开启 PopFromBackoffQ 时按优先级排序，关闭时只按退避时间排序。
 func TestBackoffQueueOrdering(t *testing.T) {
-	// Align the fake clock with ordering window.
+	// 让假时钟与排序窗口边界对齐，避免退避到期时间落在窗口中间影响排序断言。
 	fakeClock := testingclock.NewFakeClock(time.Now().Truncate(backoffQOrderingWindowDuration))
 	podInfos := []*framework.QueuedPodInfo{
 		{

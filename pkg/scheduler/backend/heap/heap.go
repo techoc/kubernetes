@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Below is the implementation of a generic heap. It does not perform
-// synchronization. It leaves synchronization to the SchedulingQueue.
+// 以下是泛型堆的实现。堆本身不做同步，同步职责交给调用方 SchedulingQueue，
+// 这样堆操作保持简单，也避免在热点路径上重复加锁。
 
+// Package heap 实现调度队列使用的泛型堆：按 LessFunc 排序，并按 KeyFunc 维护键到位置的索引以支持 O(1) 查找与删除。
 package heap
 
 import (
@@ -27,81 +28,80 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 )
 
-// Item is an interface that should be implemented by all items in the heap.
+// Item 是堆中元素必须实现的接口，提供指标采集所需的信息。
 type Item interface {
-	// Size returns the size of the item, used for metrics.
+	// Size 返回元素大小（如 Pod 数），用于指标统计。
 	Size() int
-	// Type returns the type of the item, used for metrics. Refers to the scheduling entity, which is either 'pod' or 'podgroup'.
+	// Type 返回元素类型（pod 或 podgroup），用于区分指标维度。
 	Type() fwk.EntityKeyType
 }
 
-// KeyFunc is a function type to get the key from an object.
+// KeyFunc 从对象提取唯一键，用于元素的身份识别与查找。
 type KeyFunc[T Item] func(obj T) string
 
+// heapItem 是堆内部存储条目，同时保存对象和它的键。
 type heapItem[T Item] struct {
-	// obj is the object which is stored in the heap.
+	// obj 是实际存储的对象。
 	obj T
-	// key is the key of the object for identity/lookup.
+	// key 是对象的唯一键，用于查找与删除。
 	key string
 }
 
-// data is an internal struct that implements the standard heap interface
-// and keeps the data stored in the heap.
+// data 实现标准库 heap.Interface，并维护键到队列下标的索引，保证查找/删除为 O(1)。
 type data[T Item] struct {
-	// queue is a heap-ordered slice of item pointers.
+	// queue 是按堆序排列的元素指针切片。
 	queue []*heapItem[T]
-	// keyIndex maps object keys to their index in queue for O(1) lookups.
+	// keyIndex 记录每个键在 queue 中的下标，避免按值线性查找。
 	keyIndex map[string]int
 
-	// keyFunc is used to make the key used for queued item insertion and retrieval, and
-	// should be deterministic.
+	// keyFunc 生成入队/出队使用的键，必须确定性：同一对象每次都应得到相同键，
+	// 否则索引会与队列内容失配。
 	keyFunc KeyFunc[T]
-	// lessFunc is used to compare two objects in the heap.
+	// lessFunc 定义堆中两个对象的优先级比较。
 	lessFunc LessFunc[T]
 }
 
 var (
-	_ = heap.Interface(&data[Item]{}) // heapData is a standard heap
+	_ = heap.Interface(&data[Item]{}) // 编译时断言 data 实现了标准 heap 接口
 )
 
-// Less compares two objects and returns true if the first one should go
-// in front of the second one in the heap.
+// Less 比较下标 i、j 处的对象，第一个应排在前面时返回 true。
 func (h *data[T]) Less(i, j int) bool {
 	return h.lessFunc(h.queue[i].obj, h.queue[j].obj)
 }
 
-// Len returns the number of items in the Heap.
+// Len 返回堆中元素数量。
 func (h *data[T]) Len() int { return len(h.queue) }
 
-// Swap implements swapping of two elements in the heap. This is a part of standard
-// heap interface and should never be called directly.
+// Swap 交换两个元素，属于标准 heap 接口的一部分，不应直接调用。
+// 交换后同步更新 keyIndex，否则后续查找会拿到错误下标。
 func (h *data[T]) Swap(i, j int) {
 	h.queue[i], h.queue[j] = h.queue[j], h.queue[i]
 	h.keyIndex[h.queue[i].key] = i
 	h.keyIndex[h.queue[j].key] = j
 }
 
-// Push is supposed to be called by container/heap.Push only.
+// Push 向堆尾追加元素，只应由 container/heap.Push 调用。
 func (h *data[T]) Push(x interface{}) {
 	item := x.(*heapItem[T])
 	h.keyIndex[item.key] = len(h.queue)
 	h.queue = append(h.queue, item)
 }
 
-// Pop is supposed to be called by container/heap.Pop only.
+// Pop 移除堆尾元素，只应由 container/heap.Pop 调用。
 func (h *data[T]) Pop() interface{} {
 	n := len(h.queue)
 	if n == 0 {
 		return nil
 	}
 	item := h.queue[n-1]
-	h.queue[n-1] = nil // avoid memory leak
+	h.queue[n-1] = nil // 切断引用，避免被移除的对象因切片底层数组而滞留内存。
 	h.queue = h.queue[:n-1]
 	delete(h.keyIndex, item.key)
 	return item.obj
 }
 
-// Peek returns the head of the heap without removing it.
+// Peek 返回堆顶元素但不移除；堆为空时返回零值和 false。
 func (h *data[T]) Peek() (T, bool) {
 	if len(h.queue) > 0 {
 		return h.queue[0].obj, true
@@ -109,24 +109,20 @@ func (h *data[T]) Peek() (T, bool) {
 	return *new(T), false
 }
 
-// Heap is a producer/consumer queue that implements a heap data structure.
-// It can be used to implement priority queues and similar data structures.
+// Heap 是基于堆结构的生产者/消费者队列，可用于实现优先队列等数据结构。
 type Heap[T Item] struct {
-	// data stores objects and has a queue that keeps their ordering according
-	// to the heap invariant.
+	// data 保存对象，并以堆序维护它们的顺序。
 	data *data[T]
-	// metricRecorder updates the counter when elements of a heap get added or
-	// removed, and it does nothing if it's nil
+	// metricRecorder 在元素增删时更新计数；为 nil 时不记录指标。
 	metricRecorder metrics.MetricRecorder
 }
 
-// AddOrUpdate inserts an item, and puts it in the queue. The item is updated if it
-// already exists.
+// AddOrUpdate 插入对象；若相同键的对象已存在则更新它并按新的优先级重新调整堆。
 func (h *Heap[T]) AddOrUpdate(obj T) {
 	key := h.data.keyFunc(obj)
 	if idx, exists := h.data.keyIndex[key]; exists {
 		if h.metricRecorder != nil {
-			// The new object might have a different size than the stored one.
+			// 新对象大小可能变化，需要用旧对象与新对象的差值更新指标。
 			h.metricRecorder.Update(h.data.queue[idx].obj, obj)
 		}
 		h.data.queue[idx].obj = obj
@@ -139,14 +135,13 @@ func (h *Heap[T]) AddOrUpdate(obj T) {
 	}
 }
 
-// Delete removes an item and returns the deleted obj.
+// Delete 删除与 obj 同键的元素并返回被删除的对象；不存在时返回零值。
 func (h *Heap[T]) Delete(obj T) T {
 	key := h.data.keyFunc(obj)
 	if idx, ok := h.data.keyIndex[key]; ok {
 		removed := heap.Remove(h.data, idx).(T)
 		if h.metricRecorder != nil {
-			// Use the removed object, because the passed obj might be
-			// a lookup object whose size doesn't match the stored one.
+			// 用堆中实际被删的对象记录指标，传入的 obj 可能只是查找用的壳，大小不准。
 			h.metricRecorder.Remove(removed)
 		}
 		return removed
@@ -155,12 +150,12 @@ func (h *Heap[T]) Delete(obj T) T {
 	return zero
 }
 
-// Peek returns the head of the heap without removing it.
+// Peek 返回堆顶元素但不移除；堆为空时返回零值和 false。
 func (h *Heap[T]) Peek() (T, bool) {
 	return h.data.Peek()
 }
 
-// Pop returns the head of the heap and removes it.
+// Pop 返回并移除堆顶元素；堆为空时返回错误。
 func (h *Heap[T]) Pop() (T, error) {
 	if h.data.Len() == 0 {
 		return *new(T), fmt.Errorf("heap is empty")
@@ -173,13 +168,13 @@ func (h *Heap[T]) Pop() (T, error) {
 	return typedObj, nil
 }
 
-// Get returns the requested item, or sets exists=false.
+// Get 按键查找对象；未找到时返回零值和 false。
 func (h *Heap[T]) Get(obj T) (T, bool) {
 	key := h.data.keyFunc(obj)
 	return h.GetByKey(key)
 }
 
-// GetByKey returns the requested item, or sets exists=false.
+// GetByKey 按键直接查找对象；未找到时返回零值和 false。
 func (h *Heap[T]) GetByKey(key string) (T, bool) {
 	idx, exists := h.data.keyIndex[key]
 	if !exists {
@@ -188,13 +183,14 @@ func (h *Heap[T]) GetByKey(key string) (T, bool) {
 	return h.data.queue[idx].obj, true
 }
 
+// Has 判断给定键的对象是否在堆中。
 func (h *Heap[T]) Has(obj T) bool {
 	key := h.data.keyFunc(obj)
 	_, ok := h.data.keyIndex[key]
 	return ok
 }
 
-// List returns a list of all the items.
+// List 返回堆中所有元素的快照，顺序为堆内部顺序，并非有序序列。
 func (h *Heap[T]) List() []T {
 	list := make([]T, 0, len(h.data.queue))
 	for _, item := range h.data.queue {
@@ -203,17 +199,17 @@ func (h *Heap[T]) List() []T {
 	return list
 }
 
-// Len returns the number of items in the heap.
+// Len 返回堆中元素数量。
 func (h *Heap[T]) Len() int {
 	return len(h.data.queue)
 }
 
-// New returns a Heap which can be used to queue up items to process.
+// New 创建一个不记录指标的堆，用于按优先级排队处理元素。
 func New[T Item](keyFn KeyFunc[T], lessFn LessFunc[T]) *Heap[T] {
 	return NewWithRecorder(keyFn, lessFn, nil)
 }
 
-// NewWithRecorder wraps an optional metricRecorder to compose a Heap object.
+// NewWithRecorder 创建一个带指标记录器的堆；metricRecorder 为 nil 时不记录。
 func NewWithRecorder[T Item](keyFn KeyFunc[T], lessFn LessFunc[T], metricRecorder metrics.MetricRecorder) *Heap[T] {
 	return &Heap[T]{
 		data: &data[T]{
@@ -226,6 +222,5 @@ func NewWithRecorder[T Item](keyFn KeyFunc[T], lessFn LessFunc[T], metricRecorde
 	}
 }
 
-// LessFunc is a function that receives two items and returns true if the first
-// item should be placed before the second one when the list is sorted.
+// LessFunc 比较两个元素，排序时第一个应排在第二个前面则返回 true。
 type LessFunc[T Item] func(item1, item2 T) bool

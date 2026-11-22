@@ -25,6 +25,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// TestLess 验证 PrioritySort 按优先级、再按入队时间排列 Pod。
 func TestLess(t *testing.T) {
 	prioritySort := &PrioritySort{}
 	var lowPriority, highPriority = int32(10), int32(100)
@@ -44,7 +45,7 @@ func TestLess(t *testing.T) {
 			p2: &framework.QueuedPodInfo{
 				PodInfo: mustNewPodInfo(t, st.MakePod().Priority(highPriority).Obj()),
 			},
-			expected: false, // p2 should be ahead of p1 in the queue
+			expected: false, // p2 优先级更高，应排在 p1 前面
 		},
 		{
 			name: "p1.priority greater than p2.priority",
@@ -54,7 +55,7 @@ func TestLess(t *testing.T) {
 			p2: &framework.QueuedPodInfo{
 				PodInfo: mustNewPodInfo(t, st.MakePod().Priority(lowPriority).Obj()),
 			},
-			expected: true, // p1 should be ahead of p2 in the queue
+			expected: true, // p1 优先级更高，应排在 p2 前面
 		},
 		{
 			name: "equal priority. p1 is added to schedulingQ earlier than p2",
@@ -70,7 +71,7 @@ func TestLess(t *testing.T) {
 					Timestamp: t2,
 				},
 			},
-			expected: true, // p1 should be ahead of p2 in the queue
+			expected: true, // p1 优先级更高，应排在 p2 前面
 		},
 		{
 			name: "equal priority. p2 is added to schedulingQ earlier than p1",
@@ -86,7 +87,7 @@ func TestLess(t *testing.T) {
 					Timestamp: t1,
 				},
 			},
-			expected: false, // p2 should be ahead of p1 in the queue
+			expected: false, // p2 优先级更高，应排在 p1 前面
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,6 +98,7 @@ func TestLess(t *testing.T) {
 	}
 }
 
+// mustNewPodInfo 构造 PodInfo，构造失败时直接终止测试。
 func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	podInfo, err := framework.NewPodInfo(pod)
 	if err != nil {

@@ -25,7 +25,8 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// MatchingSchedulingGroup returns true if two pods belong to the same scheduling group.
+// MatchingSchedulingGroup 判断两个 Pod 是否属于同一个调度组。
+// 要求命名空间相同，且双方都设置了 SchedulingGroup 并且组名一致。
 func MatchingSchedulingGroup(pod1, pod2 *v1.Pod) bool {
 	return pod1.Namespace == pod2.Namespace &&
 		pod1.Spec.SchedulingGroup != nil &&
@@ -33,9 +34,10 @@ func MatchingSchedulingGroup(pod1, pod2 *v1.Pod) bool {
 		*pod1.Spec.SchedulingGroup.PodGroupName == *pod2.Spec.SchedulingGroup.PodGroupName
 }
 
-// GetPodGroupStates returns an iterator sequence over all leaf PodGroupStates for the given rootEntityKey.
-// If rootEntityKey is a CompositePodGroupKeyType, it recursively traverses its children.
-// If rootEntityKey is a PodGroupKeyType, it yields its PodGroupState.
+// GetPodGroupStates 返回一个迭代器序列，遍历给定 rootEntityKey 下所有叶子 PodGroupState。
+// 若 rootEntityKey 是 CompositePodGroupKeyType，则递归遍历其子实体；
+// 若是 PodGroupKeyType，则直接产出对应的 PodGroupState。
+// 遍历深度受 WorkloadMaxTreeDepth 限制，防止组合组形成环时无限递归。
 func GetPodGroupStates(sharedLister fwk.SharedLister, rootEntityKey fwk.EntityKey) iter.Seq2[fwk.PodGroupState, error] {
 	return func(yield func(fwk.PodGroupState, error) bool) {
 		var walk func(entityKey fwk.EntityKey, depth int) bool

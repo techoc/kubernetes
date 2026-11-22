@@ -51,6 +51,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util/assumecache"
 )
 
+// addNodeToCache 处理 Node 新增事件：更新缓存，并唤醒可能因该节点而变得可调度的 Pod。
 func (sched *Scheduler) addNodeToCache(obj interface{}) {
 	evt := fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -84,10 +85,11 @@ func (sched *Scheduler) updateNodeInCache(oldObj, newObj interface{}) {
 	sched.Cache.UpdateNode(logger, oldNode, newNode)
 	events := framework.NodeSchedulingPropertiesChange(newNode, oldNode)
 
-	// Save the time it takes to update the node in the cache.
+	// 分别记录更新缓存与移动队列的耗时，两者相加即为本次事件的处理延迟。
 	updatingDuration := metrics.SinceInSeconds(start)
 
-	// Only requeue unschedulable pods if the node became more schedulable.
+	// NodeSchedulingPropertiesChange 只返回让节点"更适合调度"的变化事件，
+	// 因此只有这些事件才值得唤醒不可调度 Pod。
 	for _, evt := range events {
 		startMoving := time.Now()
 		sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, oldNode, newNode, nil)
@@ -97,6 +99,7 @@ func (sched *Scheduler) updateNodeInCache(oldObj, newObj interface{}) {
 	}
 }
 
+// deleteNodeFromCache 处理 Node 删除事件：先通知队列再清理缓存。
 func (sched *Scheduler) deleteNodeFromCache(obj interface{}) {
 	evt := fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Delete}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -126,6 +129,7 @@ func (sched *Scheduler) deleteNodeFromCache(obj interface{}) {
 	}
 }
 
+// addPod 处理 Pod 新增事件：未分配的 Pod 入调度队列，已分配的 Pod 进缓存。
 func (sched *Scheduler) addPod(obj interface{}) {
 	logger := sched.logger
 	pod, ok := obj.(*v1.Pod)
@@ -162,31 +166,27 @@ func (sched *Scheduler) updatePod(oldObj, newObj interface{}) {
 			newDeferred := resource.IsPodResizeDeferred(newPod)
 
 			if !oldDeferred && newDeferred {
-				// When an assigned pod transitions to a deferred resize,
-				// we must add it to the scheduling queue so the scheduler can evaluate feasibility and run preemption on the assigned node.
+				// 已分配 Pod 转为延迟扩缩容后，需要重新入队，
+				// 让调度器评估其在已分配节点上的可行性并可能触发抢占。
 				logger.V(3).Info("Assigned pod transitioned to deferred resize, adding to scheduling queue", "pod", klog.KObj(newPod))
 				sched.addPodToSchedulingQueue(newPod)
 			} else if oldDeferred && !newDeferred {
-				// When an assigned pod is no longer deferred,
-				// remove it from the scheduling queue so the scheduler stops evaluating preemption for it.
+				// 不再延迟时出队，停止为它评估抢占。
 				logger.V(3).Info("Assigned pod is no longer deferred, removing from scheduling queue", "pod", klog.KObj(newPod))
 				sched.deletePodFromSchedulingQueue(newPod, false)
 			} else if oldDeferred && newDeferred {
-				// If the pod's spec mutates while queued for a deferred resize (e.g., resource requests updated), update its queue representation.
+				// 仍处于延迟状态但 spec 变化（例如资源请求更新）时，需同步队列中的副本。
 				logger.V(3).Info("Assigned pod spec changed while deferred, updating scheduling queue", "pod", klog.KObj(newPod))
 				sched.SchedulingQueue.Update(klog.NewContext(context.Background(), logger), oldPod, newPod)
 			}
 		}
 		sched.updateAssignedPodInCache(oldPod, newPod)
 	} else if assignedPod(newPod) {
-		// This update means binding operation. We can treat it as adding the pod to a cache
-		// (addition to the cache will handle this binding appropriately).
+		// 从"未分配"变为"已分配"意味着绑定完成，按新增已分配 Pod 处理即可。
 		sched.addAssignedPodToCache(newPod)
 		if responsibleForPod(oldPod, sched.Profiles) {
-			// Pod shouldn't be in the scheduling queue, but in unlikely event that the pod has been bound
-			// by another component, it should be removed from scheduling queue for correctness.
-			// Passing "true" means that removal from the scheduling queue is caused by a binding event,
-			// not by removal of the pod from the cluster.
+			// 正常情况下该 Pod 不应还在调度队列；但若它被其他组件绑定，
+			// 为保证正确性仍需将其移出队列。参数 true 表示这是绑定事件而非 Pod 从集群删除。
 			sched.deletePodFromSchedulingQueue(oldPod, true)
 		}
 	} else if responsibleForPod(oldPod, sched.Profiles) {
@@ -194,6 +194,7 @@ func (sched *Scheduler) updatePod(oldObj, newObj interface{}) {
 	}
 }
 
+// deletePod 处理 Pod 删除事件，区分已分配与未分配两种状态分别清理。
 func (sched *Scheduler) deletePod(obj interface{}) {
 	logger := sched.logger
 	var pod *v1.Pod
@@ -203,13 +204,12 @@ func (sched *Scheduler) deletePod(obj interface{}) {
 		if assignedPod(pod) {
 			sched.deleteAssignedPodFromCache(pod)
 			if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScalingSchedulerPreemption) && resource.IsPodResizeDeferred(pod) && responsibleForPod(pod, sched.Profiles) {
-				// Assigned pods are normally not tracked by the scheduling queue, but if an assigned pod with a deferred resize
-				// is deleted from the cluster, we must explicitly remove it from the scheduling queue.
+				// 已分配 Pod 通常不在调度队列中，但延迟扩缩容的 Pod 会被临时入队，
+				// 从集群删除时必须显式清理。
 				sched.deletePodFromSchedulingQueue(pod, false)
 			}
 		} else if responsibleForPod(pod, sched.Profiles) {
-			// Passing "false" means that removal from the scheduling queue is caused by
-			// removal of the pod from the cluster, not by a binding event.
+			// 参数 false 表示这是 Pod 从集群删除，而非绑定事件。
 			sched.deletePodFromSchedulingQueue(pod, false)
 		}
 		return
@@ -220,12 +220,11 @@ func (sched *Scheduler) deletePod(obj interface{}) {
 			utilruntime.HandleErrorWithLogger(logger, nil, "Cannot convert to *v1.Pod", "obj", t.Obj)
 			return
 		}
-		// The carried object may be stale, so we don't use it to check if
-		// it's assigned or not. Attempting to cleanup anyways.
+		// DeletedFinalStateUnknown 携带的对象可能已过期，不能用它判断是否已分配，
+		// 这里两种清理都尝试执行。
 		sched.deleteAssignedPodFromCache(pod)
 		if responsibleForPod(pod, sched.Profiles) {
-			// Passing "false" means that removal from the scheduling queue is caused by
-			// removal of the pod from the cluster, not by a binding event.
+			// 参数 false 表示这是 Pod 从集群删除，而非绑定事件。
 			sched.deletePodFromSchedulingQueue(pod, false)
 		}
 		return
@@ -235,6 +234,7 @@ func (sched *Scheduler) deletePod(obj interface{}) {
 	}
 }
 
+// addPodToSchedulingQueue 把未分配的 Pod 加入调度队列，并记录对应事件延迟。
 func (sched *Scheduler) addPodToSchedulingQueue(pod *v1.Pod) {
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), framework.EventUnscheduledPodAdd.Label())()
 
@@ -247,6 +247,7 @@ func (sched *Scheduler) addPodToSchedulingQueue(pod *v1.Pod) {
 	}
 }
 
+// syncPodWithDispatcher 通过 API dispatcher 同步 Pod 信息；同步失败时退回原始 Pod。
 func (sched *Scheduler) syncPodWithDispatcher(pod *v1.Pod) *v1.Pod {
 	enrichedObj, err := sched.APIDispatcher.SyncObject(pod)
 	if err != nil {
@@ -261,18 +262,15 @@ func (sched *Scheduler) syncPodWithDispatcher(pod *v1.Pod) *v1.Pod {
 	return enrichedPod
 }
 
-// handleAssumedPodDeletion is an event handler that deals with the deletion of an assumed pod.
-// We must remove it from the scheduler's cache immediately to prevent it from blocking resources for other pending pods,
-// causing unnecessary preemption attempts. Note that PreBinding/Binding will continue, but is eventually expected to fail
-// as the pod does not exist in the kube-apiserver anymore and so in the scheduler cache.
+// handleAssumedPodDeletion 处理 assumed Pod（已假定绑定但流程未完成）的删除事件。
+// 必须立即从缓存中清除它，否则会一直占用资源、导致其他 Pod 被无谓抢占。
+// PreBind/Bind 流程仍会继续，但由于 Pod 已不在 apiserver 和缓存中，最终会失败。
 func (sched *Scheduler) handleAssumedPodDeletion(pod *v1.Pod) {
 	logger := sched.logger
-	// We must operate on the pod from the scheduler's cache, not the one from the event.
-	// The cached version has the assigned NodeName and represents the resources being consumed.
+	// 必须使用缓存中的 Pod 副本：它带有已分配的 NodeName，代表真正被占用的资源。
 	assumedPod, err := sched.Cache.GetPod(pod)
 	if err != nil {
-		// This is not an error. The pod may have already completed its binding cycle and been
-		// removed from the cache. Nothing more to do.
+		// 不算错误：Pod 可能已完成绑定周期并被移出缓存，无需再处理。
 		logger.V(5).Info("Assumed pod was already forgotten", "pod", klog.KObj(pod))
 		return
 	}
@@ -280,41 +278,38 @@ func (sched *Scheduler) handleAssumedPodDeletion(pod *v1.Pod) {
 
 	fwk, err := sched.frameworkForPod(pod)
 	if err != nil {
-		// This shouldn't happen, because we only accept for scheduling the pods
-		// which specify a scheduler name that matches one of the profiles.
+		// 理论上不会发生：本调度器只接收指定了匹配 Profile 名字的 Pod。
 		utilruntime.HandleErrorWithLogger(logger, err, "Unable to get profile for pod", "pod", klog.KObj(pod))
 		return
 	}
 
-	// The pod might be in one of two states:
-	// 1. If the pod is waiting on WaitOnPermit, we reject it. This causes the pod's scheduling
-	//    cycle to quickly fail gracefully, and it will clean itself up via `handleBindingCycleError`.
+	// Pod 可能处于两种状态之一：
+	// 1. 正在等待 WaitOnPermit：直接拒绝，让调度周期快速优雅失败，
+	//    并由 handleBindingCycleError 完成清理。
 	if !fwk.RejectWaitingPod(pod.UID) {
-		// 2. If the pod is no longer waiting (e.g., it's in PreBind or Bind), we can't quickly reject it.
-		//    We must explicitly remove it from the cache here to free up its assumed resources.
+		// 2. 已不在等待状态（如 PreBind 或 Bind）：无法快速拒绝，
+		//    必须在这里显式移除缓存项以释放假定占用的资源。
 		if err := sched.Cache.RemoveAssumedPod(logger, pod); err != nil {
 			utilruntime.HandleErrorWithLogger(logger, err, "Scheduler cache RemoveAssumedPod failed", "pod", klog.KObj(pod))
 		}
 	}
 
-	// The removal of this assumed pod may have freed up resources. We trigger the AssignedPodDelete event
-	// to move other unscheduled pods, giving them a chance to be scheduled.
-	// If the forgotten pod reserved some resources in memory,
-	// it will wake up the pods again after freeing up the resources in `handleBindingCycleError`.
+	// 移除 assumed Pod 可能释放了资源，触发 AssignedPodDelete 事件让其他 Pod 有机会被调度。
+	// 若被遗忘的 Pod 仍在内存中预留资源，handleBindingCycleError 释放资源后会再次唤醒它们。
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodDelete, pod, nil, nil)
 }
 
+// updatePodInSchedulingQueue 处理未分配 Pod 的更新事件，并同步缓存与队列状态。
 func (sched *Scheduler) updatePodInSchedulingQueue(oldPod, newPod *v1.Pod) {
 	start := time.Now()
 	logger := sched.logger
-	// Bypass update event that carries identical objects; otherwise, a duplicated
-	// Pod may go through scheduling and cause unexpected behavior (see #96071).
+	// ResourceVersion 相同说明对象未变，直接跳过；否则重复的 Pod 可能进入调度导致异常（见 #96071）。
 	if oldPod.ResourceVersion == newPod.ResourceVersion {
 		return
 	}
 
 	defer metrics.EventHandlingLatency.ObserveSince(start, framework.EventUnscheduledPodUpdate.Label())()
-	// Target pod is not being updated here (target pod gets updated through sched.SchedulingQueue.Update call), hence isTargetPod is set to false.
+	// 此处不是被抢占目标 Pod 的更新（目标 Pod 通过 SchedulingQueue.Update 更新），故 isTargetPod 传 false。
 	for _, evt := range framework.PodSchedulingPropertiesChange(newPod, oldPod, false) {
 		if evt.Label() != framework.EventUnscheduledPodUpdate.Label() {
 			defer metrics.EventHandlingLatency.ObserveSince(start, evt.Label())()
@@ -322,8 +317,7 @@ func (sched *Scheduler) updatePodInSchedulingQueue(oldPod, newPod *v1.Pod) {
 	}
 
 	if sched.APIDispatcher != nil {
-		// If the API dispatcher is available, sync the new pod with the details.
-		// However, at the moment the updated newPod is discarded and this logic will be handled in the future releases.
+		// 有 API dispatcher 时同步最新 Pod 信息；目前更新后的副本会被丢弃，留待后续版本处理。
 		_ = sched.syncPodWithDispatcher(newPod)
 	}
 
@@ -335,8 +329,7 @@ func (sched *Scheduler) updatePodInSchedulingQueue(oldPod, newPod *v1.Pod) {
 	}
 	if isAssumed {
 		if newPod.DeletionTimestamp != nil && oldPod.DeletionTimestamp == nil {
-			// Assumed pod deletion has started. We should handle that differently,
-			// because we can't update such pod in any structure directly.
+			// assumed Pod 已开始删除，需要特殊处理，因为无法直接更新它在各个结构中的状态。
 			sched.handleAssumedPodDeletion(newPod)
 		}
 		return
@@ -345,17 +338,18 @@ func (sched *Scheduler) updatePodInSchedulingQueue(oldPod, newPod *v1.Pod) {
 	logger.V(4).Info("Update event for unscheduled pod", "pod", klog.KObj(newPod))
 	sched.SchedulingQueue.Update(klog.NewContext(context.Background(), logger), oldPod, newPod)
 	if hasNominatedNodeNameChanged(oldPod, newPod) {
-		// Nominated node changed in pod, so we need to treat it as if the pod was deleted from the old nominated node,
-		// because the scheduler treats such a pod as if it was already assigned when scheduling lower or equal priority pods.
+		// 提名节点发生变化时，需视作 Pod 从旧提名节点被删除：
+		// 调度低优先级或同优先级 Pod 时，这类 Pod 被视为已分配。
 		sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodDelete, oldPod, nil, getLEPriorityPreCheck(corev1helpers.PodPriority(oldPod)))
 	}
 }
 
-// hasNominatedNodeNameChanged returns true when nominated node name has existed but changed.
+// hasNominatedNodeNameChanged 判断 Pod 原本已有提名节点且该提名发生了变化。
 func hasNominatedNodeNameChanged(oldPod, newPod *v1.Pod) bool {
 	return len(oldPod.Status.NominatedNodeName) > 0 && oldPod.Status.NominatedNodeName != newPod.Status.NominatedNodeName
 }
 
+// deletePodFromSchedulingQueue 从调度队列移除 Pod；inBinding 表示移除是否由绑定事件引起。
 func (sched *Scheduler) deletePodFromSchedulingQueue(pod *v1.Pod, inBinding bool) {
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), framework.EventUnscheduledPodDelete.Label())()
 
@@ -364,10 +358,9 @@ func (sched *Scheduler) deletePodFromSchedulingQueue(pod *v1.Pod, inBinding bool
 	logger.V(3).Info("Delete event for unscheduled pod", "pod", klog.KObj(pod))
 	sched.SchedulingQueue.Delete(logger, pod)
 	if inBinding {
-		// In the case of a binding, the rest can be skipped because it is not really a pod removal operation, but a binding.
-		// Any necessary notifications will be sent by the binding process, unless it was an unlikely external binding.
-		// In that case, we need to notify about the release of resources that were held by different assume/nomination
-		// once the https://github.com/kubernetes/kubernetes/issues/134859 is fixed.
+		// 绑定并非真正的 Pod 删除，后续步骤可跳过：必要的通知由绑定流程负责。
+		// 除非是罕见的外部绑定，那种情况下还需通知 assume/nomination 占用的资源已释放，
+		// 待 https://github.com/kubernetes/kubernetes/issues/134859 修复后再处理。
 		return
 	}
 	isAssumed, err := sched.Cache.IsAssumedPod(pod)
@@ -375,29 +368,28 @@ func (sched *Scheduler) deletePodFromSchedulingQueue(pod *v1.Pod, inBinding bool
 		utilruntime.HandleErrorWithLogger(logger, err, "Failed to check whether pod is assumed", "pod", klog.KObj(pod))
 	}
 	if isAssumed {
-		// Assumed pod is deleted. We should handle that differently,
-		// because we can't delete such pod from any structure directly.
+		// assumed Pod 被删除，需要特殊处理，因为无法直接从各结构中删除它。
 		sched.handleAssumedPodDeletion(pod)
 		return
 	}
-	// If the pod is not assumed, we must clean pod group state explicitly here.
+	// 非 assumed Pod 需在此显式清理其 PodGroup 成员状态。
 	sched.Cache.RemovePodGroupMember(pod)
 	if pod.Status.NominatedNodeName != "" {
-		// When a pod that had nominated node is deleted, it can unblock scheduling of other pods,
-		// because the lower or equal priority pods treat such a pod as if it was assigned.
-		// Note that a nominated pod can fall into `handleAssumedPodDeletion` case as well,
-		// but in that case the `MoveAllToActiveOrBackoffQueue` already covered lower priority pods.
+		// 带提名节点的 Pod 被删除可能解除对其他 Pod 的阻塞：
+		// 调度优先级更低或相等的 Pod 时，它被视为已分配。
+		// 注意被提名的 Pod 也可能走 handleAssumedPodDeletion 分支，但那条路径已经唤醒了低优先级 Pod。
 		sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodDelete, pod, nil, getLEPriorityPreCheck(corev1helpers.PodPriority(pod)))
 	}
 }
 
-// getLEPriorityPreCheck is a PreEnqueueCheck function that selects only lower or equal priority pods.
+// getLEPriorityPreCheck 返回一个 PreEnqueueCheck，只选中优先级低于或等于给定值的 Pod。
 func getLEPriorityPreCheck(priority int32) queue.PreEnqueueCheck {
 	return func(pod *v1.Pod) bool {
 		return corev1helpers.PodPriority(pod) <= priority
 	}
 }
 
+// addAssignedPodToCache 把已分配 Pod 加入缓存，并唤醒可能受影响的待调度 Pod。
 func (sched *Scheduler) addAssignedPodToCache(pod *v1.Pod) {
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), framework.EventAssignedPodAdd.Label())()
 
@@ -411,6 +403,7 @@ func (sched *Scheduler) addAssignedPodToCache(pod *v1.Pod) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodAdd, nil, pod, nil)
 }
 
+// updateAssignedPodInCache 更新缓存中的已分配 Pod，并触发调度属性变化对应的事件。
 func (sched *Scheduler) updateAssignedPodInCache(oldPod, newPod *v1.Pod) {
 	start := time.Now()
 	defer metrics.EventHandlingLatency.ObserveSince(start, framework.EventAssignedPodUpdate.Label())()
@@ -418,8 +411,7 @@ func (sched *Scheduler) updateAssignedPodInCache(oldPod, newPod *v1.Pod) {
 	logger := sched.logger
 
 	if sched.APIDispatcher != nil {
-		// If the API dispatcher is available, sync the new pod with the details.
-		// However, at the moment the updated newPod is discarded and this logic will be handled in the future releases.
+		// 有 API dispatcher 时同步最新 Pod 信息；目前更新后的副本会被丢弃，留待后续版本处理。
 		_ = sched.syncPodWithDispatcher(newPod)
 	}
 
@@ -428,10 +420,10 @@ func (sched *Scheduler) updateAssignedPodInCache(oldPod, newPod *v1.Pod) {
 		utilruntime.HandleErrorWithLogger(logger, err, "Scheduler cache UpdatePod failed", "pod", klog.KObj(oldPod))
 	}
 
-	// This pod is assigned, so it cannot be a target pod.
+	// 已分配 Pod 不可能是被抢占目标，故 isTargetPod 传 false。
 	events := framework.PodSchedulingPropertiesChange(newPod, oldPod, false)
 
-	// Save the time it takes to update the pod in the cache.
+	// 记录缓存更新耗时，与队列移动耗时相加作为事件处理延迟。
 	updatingDuration := metrics.SinceInSeconds(start)
 
 	for _, evt := range events {
@@ -442,6 +434,7 @@ func (sched *Scheduler) updateAssignedPodInCache(oldPod, newPod *v1.Pod) {
 	}
 }
 
+// deleteAssignedPodFromCache 从缓存移除已分配 Pod，并唤醒可能因此受益的待调度 Pod。
 func (sched *Scheduler) deleteAssignedPodFromCache(pod *v1.Pod) {
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), framework.EventAssignedPodDelete.Label())()
 
@@ -455,16 +448,17 @@ func (sched *Scheduler) deleteAssignedPodFromCache(pod *v1.Pod) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, framework.EventAssignedPodDelete, pod, nil, nil)
 }
 
-// assignedPod selects pods that are assigned (scheduled and running).
+// assignedPod 判断 Pod 是否已分配到节点（已调度并运行）。
 func assignedPod(pod *v1.Pod) bool {
 	return len(pod.Spec.NodeName) != 0
 }
 
-// responsibleForPod returns true if the pod has asked to be scheduled by the given scheduler.
+// responsibleForPod 判断 Pod 是否指定了由给定调度器集合中的某个 Profile 来调度。
 func responsibleForPod(pod *v1.Pod, profiles profile.Map) bool {
 	return profiles.HandlesSchedulerName(pod.Spec.SchedulerName)
 }
 
+// addPodGroup 处理 PodGroup 新增事件，更新缓存与队列并唤醒相关 Pod。
 func (sched *Scheduler) addPodGroup(obj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.PodGroup, ActionType: fwk.Add}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -481,6 +475,7 @@ func (sched *Scheduler) addPodGroup(obj any) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, nil, pg, nil)
 }
 
+// updatePodGroup 处理 PodGroup 更新事件；ResourceVersion 未变则忽略。
 func (sched *Scheduler) updatePodGroup(oldObj, newObj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.PodGroup, ActionType: fwk.Update}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -506,6 +501,7 @@ func (sched *Scheduler) updatePodGroup(oldObj, newObj any) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, oldPG, newPG, nil)
 }
 
+// deletePodGroup 处理 PodGroup 删除事件，兼容 DeletedFinalStateUnknown 的情况。
 func (sched *Scheduler) deletePodGroup(obj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.PodGroup, ActionType: fwk.Delete}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -533,6 +529,7 @@ func (sched *Scheduler) deletePodGroup(obj any) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, pg, nil, nil)
 }
 
+// addCompositePodGroup 处理 CompositePodGroup 新增事件。
 func (sched *Scheduler) addCompositePodGroup(obj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.CompositePodGroup, ActionType: fwk.Add}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -549,6 +546,7 @@ func (sched *Scheduler) addCompositePodGroup(obj any) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, nil, cpg, nil)
 }
 
+// updateCompositePodGroup 处理 CompositePodGroup 更新事件；ResourceVersion 未变则忽略。
 func (sched *Scheduler) updateCompositePodGroup(oldObj, newObj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.CompositePodGroup, ActionType: fwk.Update}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -574,6 +572,7 @@ func (sched *Scheduler) updateCompositePodGroup(oldObj, newObj any) {
 	sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, oldCPG, newCPG, nil)
 }
 
+// deleteCompositePodGroup 处理 CompositePodGroup 删除事件。
 func (sched *Scheduler) deleteCompositePodGroup(obj any) {
 	evt := fwk.ClusterEvent{Resource: fwk.CompositePodGroup, ActionType: fwk.Delete}
 	defer metrics.EventHandlingLatency.ObserveSince(time.Now(), evt.Label())()
@@ -602,12 +601,12 @@ func (sched *Scheduler) deleteCompositePodGroup(obj any) {
 }
 
 const (
-	// syncedPollPeriod controls how often you look at the status of your sync funcs
+	// syncedPollPeriod 是轮询各事件处理器同步状态的间隔。
 	syncedPollPeriod = 100 * time.Millisecond
 )
 
-// WaitForHandlersSync waits for EventHandlers to sync.
-// It returns true if it was successful, false if the controller should shut down
+// WaitForHandlersSync 等待所有事件处理器完成初始同步。
+// 同步成功返回 nil；ctx 取消时返回错误，调用方应据此关闭控制器。
 func (sched *Scheduler) WaitForHandlersSync(ctx context.Context) error {
 	return wait.PollUntilContextCancel(ctx, syncedPollPeriod, true, func(ctx context.Context) (done bool, err error) {
 		for _, handler := range sched.registeredHandlers {
@@ -619,8 +618,7 @@ func (sched *Scheduler) WaitForHandlersSync(ctx context.Context) error {
 	})
 }
 
-// addAllEventHandlers is a helper function used in tests and in Scheduler
-// to add event handlers for various informers.
+// addAllEventHandlers 为调度器所需的各类 informer 注册事件处理器，测试与正式代码共用。
 func addAllEventHandlers(
 	sched *Scheduler,
 	informerFactory informers.SharedInformerFactory,
@@ -680,6 +678,8 @@ func addAllEventHandlers(
 		handlers = append(handlers, handlerRegistration)
 	}
 
+	// buildEvtResHandler 按注册的动作类型生成只处理相应事件的处理器，
+	// 其唯一动作是把集群变化通知给调度队列。
 	buildEvtResHandler := func(at fwk.ActionType, resource fwk.EventResource) cache.ResourceEventHandlerFuncs {
 		funcs := cache.ResourceEventHandlerFuncs{}
 		if at&fwk.Add != 0 {
@@ -711,11 +711,10 @@ func addAllEventHandlers(
 	for gvk, at := range gvkMap {
 		switch gvk {
 		case fwk.Node:
-			// Node informer is already registered above.
+			// Node informer 已在上方注册。
 		case fwk.Pod, fwk.AssignedPod, fwk.UnscheduledPod, fwk.TargetPod:
-			// Pod informer is already registered above. AssignedPod,
-			// UnscheduledPod, and TargetPod are logical Pod event resources
-			// emitted from the Pod add/update/delete handlers.
+			// Pod informer 已在上方注册；AssignedPod、UnscheduledPod 与 TargetPod
+			// 是由 Pod 增删改处理器发出的逻辑事件资源，无需单独注册。
 		case fwk.CSINode:
 			if handlerRegistration, err = informerFactory.Storage().V1().CSINodes().Informer().AddEventHandler(
 				buildEvtResHandler(at, fwk.CSINode),
@@ -738,19 +737,15 @@ func addAllEventHandlers(
 			}
 			handlers = append(handlers, handlerRegistration)
 		case fwk.PersistentVolume:
-			// MaxPDVolumeCountPredicate: since it relies on the counts of PV.
+			// MaxPDVolumeCountPredicate 依赖 PV 数量，因此需要监听 PV 变化。
 			//
-			// PvAdd: Pods created when there are no PVs available will be stuck in
-			// unschedulable queue. But unbound PVs created for static provisioning and
-			// delay binding storage class are skipped in PV controller dynamic
-			// provisioning and binding process, will not trigger events to schedule pod
-			// again. So we need to move pods to active queue on PV add for this
-			// scenario.
+			// PV 新增：没有可用 PV 时创建的 Pod 会卡在不可调度队列；而静态供给和延迟绑定
+			// 存储类创建的未绑定 PV 不会经过 PV 控制器的动态供给与绑定流程，
+			// 也就不会触发重新调度事件，所以必须在 PV 新增时主动唤醒 Pod。
 			//
-			// PvUpdate: Scheduler.bindVolumesWorker may fail to update assumed pod volume
-			// bindings due to conflicts if PVs are updated by PV controller or other
-			// parties, then scheduler will add pod back to unschedulable queue. We
-			// need to move pods to active queue on PV update for this scenario.
+			// PV 更新：PV 被控制器或其他组件更新后，bindVolumesWorker 可能因冲突
+			// 无法更新 assumed Pod 的卷绑定，从而把 Pod 移回不可调度队列，
+			// 因此 PV 更新时也需要唤醒。
 			if handlerRegistration, err = informerFactory.Core().V1().PersistentVolumes().Informer().AddEventHandler(
 				buildEvtResHandler(at, fwk.PersistentVolume),
 			); err != nil {
@@ -758,7 +753,7 @@ func addAllEventHandlers(
 			}
 			handlers = append(handlers, handlerRegistration)
 		case fwk.PersistentVolumeClaim:
-			// MaxPDVolumeCountPredicate: add/update PVC will affect counts of PV when it is bound.
+			// PVC 绑定后会影响 MaxPDVolumeCountPredicate 依赖的 PV 数量。
 			if handlerRegistration, err = informerFactory.Core().V1().PersistentVolumeClaims().Informer().AddEventHandler(
 				buildEvtResHandler(at, fwk.PersistentVolumeClaim),
 			); err != nil {
@@ -785,12 +780,10 @@ func addAllEventHandlers(
 			if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 				handler := cache.ResourceEventHandler(buildEvtResHandler(at, fwk.DeviceClass))
 				if utilfeature.DefaultFeatureGate.Enabled(features.DRAExtendedResource) {
-					// Inject updating of the cache before the scheduler event handlers ("chaining")
-					// to ensure that the cache gets updated before the scheduler kicks off
-					// pod scheduling based on a DeviceClass event.
+					// 把缓存更新处理链接在调度器事件处理器之前，
+					// 确保调度器因 DeviceClass 事件开始调度前，扩展资源缓存已更新。
 					//
-					// We know that this is a DefaultDRAManager and we know that it
-					// uses an ExtendedResourceCache, so no need for type checks.
+					// 这里确定是 DefaultDRAManager 且内部使用 ExtendedResourceCache，无需再做类型检查。
 					erCache := draManager.DeviceClassResolver().(*extendedresourcecache.ExtendedResourceCache)
 					erCache.AddEventHandler(handler)
 					handler = erCache
@@ -817,25 +810,20 @@ func addAllEventHandlers(
 			}
 			handlers = append(handlers, handlerRegistration)
 		case fwk.PodGroup, fwk.CompositePodGroup:
-			// Do nothing. Registered explicitly.
+			// 已在上方显式注册。
 		default:
-			// Tests may not instantiate dynInformerFactory.
+			// 测试中可能不创建 dynInformerFactory。
 			if dynInformerFactory == nil {
 				continue
 			}
-			// GVK is expected to be at least 3-folded, separated by dots.
-			// <kind in plural>.<version>.<group>
-			// Valid examples:
-			// - foos.v1.example.com
-			// - bars.v1beta1.a.b.c
-			// Invalid examples:
-			// - foos.v1 (2 sections)
-			// - foo.v1.example.com (the first section should be plural)
+			// 动态资源的 GVK 至少要由点分隔的三段组成：<复数 kind>.<版本>.<组>。
+			// 合法示例：foos.v1.example.com、bars.v1beta1.a.b.c。
+			// 非法示例：foos.v1（只有两段）、foo.v1.example.com（首段应为复数）。
 			if strings.Count(string(gvk), ".") < 2 {
 				utilruntime.HandleErrorWithLogger(logger, nil, "Incorrect event registration", "gvk", gvk)
 				continue
 			}
-			// Fall back to try dynamic informers.
+			// 无法识别的资源退回动态 informer 处理。
 			gvr, _ := schema.ParseResourceArg(string(gvk))
 			dynInformer := dynInformerFactory.ForResource(*gvr).Informer()
 			if handlerRegistration, err = dynInformer.AddEventHandler(
@@ -850,10 +838,9 @@ func addAllEventHandlers(
 	return nil
 }
 
-// AdmissionCheck calls the filtering logic of noderesources/nodeport/nodeAffinity/nodename
-// and returns the failure reasons. It's used in kubelet(pkg/kubelet/lifecycle/predicate.go) and scheduler.
-// It returns the first failure if `includeAllFailures` is set to false; otherwise
-// returns all failures.
+// AdmissionCheck 调用 noderesources/nodeports/nodeAffinity/nodename 的过滤逻辑并返回失败原因。
+// kubelet（pkg/kubelet/lifecycle/predicate.go）与调度器都会使用它。
+// includeAllFailures 为 false 时只返回第一个失败原因，否则返回全部。
 func AdmissionCheck(pod *v1.Pod, nodeInfo *framework.NodeInfo, includeAllFailures bool) []AdmissionResult {
 	var admissionResults []AdmissionResult
 	insufficientResources := noderesources.Fits(pod, nodeInfo, nil, noderesources.ResourceRequestsOptions{
@@ -891,10 +878,13 @@ func AdmissionCheck(pod *v1.Pod, nodeInfo *framework.NodeInfo, includeAllFailure
 	return admissionResults
 }
 
-// AdmissionResult describes the reason why Scheduler can't admit the pod.
-// If the reason is a resource fit one, then AdmissionResult.InsufficientResource includes the details.
+// AdmissionResult 描述调度器无法接纳 Pod 的原因。
+// 若原因是资源不足，InsufficientResource 字段会给出具体细节。
 type AdmissionResult struct {
-	Name                 string
-	Reason               string
+	// Name 是导致失败的插件名（资源不足时为空）。
+	Name string
+	// Reason 是失败原因。
+	Reason string
+	// InsufficientResource 描述资源不足的详情，仅在资源类失败时非空。
 	InsufficientResource *noderesources.InsufficientResource
 }

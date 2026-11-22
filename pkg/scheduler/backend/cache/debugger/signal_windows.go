@@ -18,6 +18,6 @@ package debugger
 
 import "os"
 
-// compareSignal is the signal to trigger cache compare. For windows,
-// it's SIGINT.
+// compareSignal 是触发缓存比对的信号。
+// Windows 下没有 SIGUSR1，故选用 SIGINT（Ctrl+C）作为替代。
 var compareSignal = os.Interrupt

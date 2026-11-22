@@ -30,6 +30,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
+// DeferredPodScheduling 处理“延迟扩容”Pod 的调度插件：这类 Pod 扩容后暂时放不下时，
+// 允许它留在 unschedulable 队列中等待 Kubelet 实际执行扩容，再由抢占机制腾出空间。
 type DeferredPodScheduling struct {
 	enableInPlacePodVerticalScalingSchedulerPreemption bool
 }
@@ -40,16 +42,18 @@ var _ fwk.EnqueueExtensions = &DeferredPodScheduling{}
 var _ fwk.PermitPlugin = &DeferredPodScheduling{}
 
 const (
-	Name                                  = names.DeferredPodScheduling
+	// Name 是本插件在调度器框架中的注册名。
+	Name = names.DeferredPodScheduling
+	// ErrReasonNodeDisablesResizePreemption 是节点禁用扩容抢占时的过滤失败原因。
 	ErrReasonNodeDisablesResizePreemption = "node had resize preemption disabled"
 )
 
+// Name 返回插件名。
 func (pl *DeferredPodScheduling) Name() string {
 	return Name
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能让本插件判定为不可调度的 Pod 重新变为可调度的集群事件。
 func (pl *DeferredPodScheduling) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{
@@ -63,6 +67,7 @@ func (pl *DeferredPodScheduling) EventsToRegister(_ context.Context) ([]fwk.Clus
 	}, nil
 }
 
+// isSchedulableAfterNodeChange 判断节点抢占策略变化后，Pod 是否可能变得可调度。
 func (pl *DeferredPodScheduling) isSchedulableAfterNodeChange(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	if !pl.enableInPlacePodVerticalScalingSchedulerPreemption || !resource.IsPodResizeDeferred(pod) {
 		return fwk.QueueSkip, nil
@@ -83,7 +88,7 @@ func (pl *DeferredPodScheduling) isSchedulableAfterNodeChange(logger klog.Logger
 	oldNodeDisabled := oldNode.Spec.PodPreemptionPolicy != nil && len(oldNode.Spec.PodPreemptionPolicy.DisableResizePreemption) > 0
 	newNodeDisabled := newNode.Spec.PodPreemptionPolicy != nil && len(newNode.Spec.PodPreemptionPolicy.DisableResizePreemption) > 0
 
-	// If resize preemption was disabled and is now enabled, the pod may be schedulable.
+	// 抢占策略从禁用变为启用后，Pod 可能重新变得可调度，值得重新入队。
 	if oldNodeDisabled && !newNodeDisabled {
 		logger.V(5).Info("Node preemption policy changed from disabled to enabled, queueing pod", "pod", klog.KObj(pod), "node", newNode.Name)
 		return fwk.Queue, nil
@@ -92,6 +97,7 @@ func (pl *DeferredPodScheduling) isSchedulableAfterNodeChange(logger klog.Logger
 	return fwk.QueueSkip, nil
 }
 
+// isSchedulableAfterNodeAdd 判断新增节点后，Pod 是否可能变得可调度。
 func (pl *DeferredPodScheduling) isSchedulableAfterNodeAdd(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 	if !pl.enableInPlacePodVerticalScalingSchedulerPreemption || !resource.IsPodResizeDeferred(pod) {
 		return fwk.QueueSkip, nil
@@ -105,7 +111,7 @@ func (pl *DeferredPodScheduling) isSchedulableAfterNodeAdd(logger klog.Logger, p
 		return fwk.QueueSkip, nil
 	}
 
-	// If the added node has preemption enabled, the pod may be schedulable.
+	// 新增节点若启用了扩容抢占，Pod 可能重新变得可调度。
 	if node.Spec.PodPreemptionPolicy == nil || len(node.Spec.PodPreemptionPolicy.DisableResizePreemption) == 0 {
 		logger.V(5).Info("Node added with preemption enabled, queueing pod", "pod", klog.KObj(pod), "node", node.Name)
 		return fwk.Queue, nil
@@ -114,6 +120,7 @@ func (pl *DeferredPodScheduling) isSchedulableAfterNodeAdd(logger klog.Logger, p
 	return fwk.QueueSkip, nil
 }
 
+// PreFilter 在非延迟扩容 Pod 上跳过本插件，避免对普通 Pod 产生开销。
 func (pl *DeferredPodScheduling) PreFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	if !pl.enableInPlacePodVerticalScalingSchedulerPreemption || !resource.IsPodResizeDeferred(pod) {
 		return nil, fwk.NewStatus(fwk.Skip)
@@ -121,10 +128,12 @@ func (pl *DeferredPodScheduling) PreFilter(ctx context.Context, state fwk.CycleS
 	return nil, nil
 }
 
+// PreFilterExtensions 返回 nil，本插件不使用 PreFilter 的扩展点。
 func (pl *DeferredPodScheduling) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
+// Filter 过滤掉禁用了扩容抢占的节点，以及 Pod 已绑定到其他节点的候选节点。
 func (pl *DeferredPodScheduling) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	if !pl.enableInPlacePodVerticalScalingSchedulerPreemption || !resource.IsPodResizeDeferred(pod) {
 		return nil
@@ -145,9 +154,9 @@ func (pl *DeferredPodScheduling) Filter(ctx context.Context, _ fwk.CycleState, p
 	return nil
 }
 
-// Permit invoked at the permit extension point.
-// It rejects deferred resize pods that successfully fit in order to keep them in the Unschedulable queue until
-// Kubelet can successfully actuate the resize.
+// Permit 在 permit 扩展点被调用。
+// 即使延迟扩容的 Pod 已经能放进节点，也拒绝放行，让它继续留在 Unschedulable 队列中，
+// 直到 Kubelet 真正完成扩容动作后再重新调度。
 func (pl *DeferredPodScheduling) Permit(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	if !pl.enableInPlacePodVerticalScalingSchedulerPreemption || !resource.IsPodResizeDeferred(p) {
 		return nil, 0
@@ -155,6 +164,7 @@ func (pl *DeferredPodScheduling) Permit(ctx context.Context, state fwk.CycleStat
 	return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "pod resize fits, waiting for Kubelet actuation"), 0
 }
 
+// New 根据启用的特性创建 DeferredPodScheduling 插件实例。
 func New(_ context.Context, _ runtime.Object, _ fwk.Handle, fts feature.Features) (fwk.Plugin, error) {
 	return &DeferredPodScheduling{
 		enableInPlacePodVerticalScalingSchedulerPreemption: fts.EnableInPlacePodVerticalScalingSchedulerPreemption,

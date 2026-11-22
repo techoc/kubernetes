@@ -37,7 +37,8 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
-// createMockFeature is a helper function to create and configure a MockFeature.
+// createMockFeature 创建并配置一个 MockFeature：设置名称、
+// 调度推导结果（infer）及最大版本（为空则不设上限）。
 func createMockFeature(t *testing.T, name string, infer bool, maxVersionStr string) *ndftesting.MockFeature {
 	m := ndftesting.NewMockFeature(t)
 	m.SetName(name)
@@ -50,6 +51,8 @@ func createMockFeature(t *testing.T, name string, infer bool, maxVersionStr stri
 	return m
 }
 
+// TestPreFilter 验证 PreFilter 计算 Pod 所需特性集合并写入 cycleState：
+// 插件关闭、无需求或需求版本超过上限时跳过；否则返回 Success 并记录需求。
 func TestPreFilter(t *testing.T) {
 	const (
 		feature1 = "TestFeature1"
@@ -169,6 +172,8 @@ func TestPreFilter(t *testing.T) {
 	}
 }
 
+// TestFilter 验证 Filter 仅在节点声明了 Pod 所需的全部特性时才通过，
+// 缺失任一特性返回 UnschedulableAndUnresolvable；缺少 preFilterState 时返回错误。
 func TestFilter(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	const (
@@ -242,7 +247,7 @@ func TestFilter(t *testing.T) {
 			pluginEnabled:  true,
 			pod:            st.MakePod().Name("test-pod").Obj(),
 			node:           st.MakeNode().Name("node-1").Obj(),
-			preFilterReqs:  nil, // This will cause getPreFilterState to fail
+			preFilterReqs:  nil, // 未写入 preFilterState，使 getPreFilterState 失败
 			expectedStatus: fwk.AsStatus(fmt.Errorf("error reading %q from cycle-state: %w", preFilterStateKey, fwk.ErrNotFound)),
 		},
 	}
@@ -281,6 +286,8 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+// TestEnqueueExtensionsNodeUpdate 验证节点新增特性时给出 Queue 提示，
+// 特性未变时给出 QueueSkip，避免无谓的重排。
 func TestEnqueueExtensionsNodeUpdate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	targetPodName := "test-pod"
@@ -332,6 +339,8 @@ func TestEnqueueExtensionsNodeUpdate(t *testing.T) {
 	}
 }
 
+// TestIsSchedulableAfterTargetPodUpdate 验证目标 Pod 更新特性需求时给出 Queue 提示；
+// 需求不变则 QueueSkip；推导出错时保守地重新入队。
 func TestIsSchedulableAfterTargetPodUpdate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -418,7 +427,7 @@ func TestIsSchedulableAfterTargetPodUpdate(t *testing.T) {
 				m.SetName("TestFeature")
 				m.SetMaxVersion(nil)
 			},
-			expectedHint: fwk.Queue, // Queued again in case of error
+			expectedHint: fwk.Queue, // 出错时保守地重新入队
 			expectedErr:  "target version cannot be nil",
 		},
 	}
@@ -452,6 +461,7 @@ func TestIsSchedulableAfterTargetPodUpdate(t *testing.T) {
 	}
 }
 
+// TestEventsToRegister 验证插件关闭时不注册事件，开启时注册两个事件。
 func TestEventsToRegister(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -488,6 +498,8 @@ func TestEventsToRegister(t *testing.T) {
 	}
 }
 
+// TestNodeDeclaredFeatures_DeferredResizeSkipped 验证延迟扩容的 Pod 跳过 PreFilter，
+// 且 Filter 直接成功，不因节点特性声明受阻。
 func TestNodeDeclaredFeatures_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

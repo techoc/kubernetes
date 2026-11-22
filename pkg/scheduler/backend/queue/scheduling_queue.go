@@ -14,15 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file contains structures that implement scheduling queue types.
-// Scheduling queues hold entities (which can be pods or pod groups) waiting to be scheduled. This file implements a
-// priority queue which has two sub queues and a additional data structure,
-// namely: activeQ, backoffQ and unschedulableEntities.
-// - activeQ holds entities that are being considered for scheduling.
-// - backoffQ holds entities that moved from unschedulableEntities and will move to
-//   activeQ when their backoff periods complete.
-// - unschedulableEntities holds entities that were already attempted for scheduling and
-//   are currently determined to be unschedulable.
+// 本文件包含实现调度队列的结构体。
+// 调度队列存放等待调度的实体（可以是 Pod 或 PodGroup）。这里实现的是一个优先级队列，
+// 由两个子队列和一个额外的数据结构组成：activeQ、backoffQ 和 unschedulableEntities。
+// - activeQ 存放正在被考虑调度的实体。
+// - backoffQ 存放从 unschedulableEntities 移出的实体，退避期结束后再移入 activeQ。
+// - unschedulableEntities 存放已尝试过调度、但当前被判定为不可调度的实体。
 
 package queue
 
@@ -57,13 +54,11 @@ import (
 )
 
 const (
-	// DefaultPodMaxInUnschedulablePodsDuration is the default value for the maximum
-	// time a pod can stay in unschedulableEntities. If a pod stays in unschedulableEntities
-	// for longer than this value, the pod will be moved from unschedulableEntities to
-	// backoffQ or activeQ. If this value is empty, the default value (5min)
-	// will be used.
+	// DefaultPodMaxInUnschedulablePodsDuration 是 Pod 可在 unschedulableEntities 中停留的最长时间默认值。
+	// 超过该时间后，Pod 会从 unschedulableEntities 移入 backoffQ 或 activeQ。
+	// 若该值为空，则使用默认值（5min）。
 	DefaultPodMaxInUnschedulablePodsDuration time.Duration = 5 * time.Minute
-	// Scheduling queue names
+	// 调度队列名称
 	activeQ        = "Active"
 	backoffQ       = "Backoff"
 	unschedulableQ = "Unschedulable"
@@ -72,110 +67,99 @@ const (
 )
 
 const (
-	// DefaultPodInitialBackoffDuration is the default value for the initial backoff duration
-	// for unschedulable pods. To change the default podInitialBackoffDurationSeconds used by the
-	// scheduler, update the ComponentConfig value in defaults.go
+	// DefaultPodInitialBackoffDuration 是不可调度 Pod 的初始退避时长默认值。
+	// 要修改调度器使用的默认 podInitialBackoffDurationSeconds，请更新 defaults.go 中的 ComponentConfig 值。
 	DefaultPodInitialBackoffDuration time.Duration = 1 * time.Second
-	// DefaultPodMaxBackoffDuration is the default value for the max backoff duration
-	// for unschedulable pods. To change the default podMaxBackoffDurationSeconds used by the
-	// scheduler, update the ComponentConfig value in defaults.go
+	// DefaultPodMaxBackoffDuration 是不可调度 Pod 的最大退避时长默认值。
+	// 要修改调度器使用的默认 podMaxBackoffDurationSeconds，请更新 defaults.go 中的 ComponentConfig 值。
 	DefaultPodMaxBackoffDuration time.Duration = 10 * time.Second
 )
 
-// PreEnqueueCheck is a function type. It's used to build functions that
-// run against a Pod and the caller can choose to enqueue or skip the Pod
-// by the checking result.
+// PreEnqueueCheck 是一个函数类型，用于构造对 Pod 进行检查的函数，
+// 调用方根据检查结果决定将该 Pod 入队还是跳过。
 type PreEnqueueCheck func(pod *v1.Pod) bool
 
-// PodSigner creates a scheduling signature for a pod that represents its scheduling requirements.
-// The signature is used by the opportunistic batching feature (KEP-5598) to reuse scheduling decisions.
-// Returns nil if the pod is "unsignable" (some plugins cannot create a stable signature for it).
+// PodSigner 为 Pod 创建代表其调度需求的调度签名。
+// 该签名被机会批处理特性（KEP-5598）用于复用调度决策。
+// 若 Pod "不可签名"（某些插件无法为其生成稳定签名），返回 nil。
 type PodSigner func(ctx context.Context, pod *v1.Pod) fwk.PodSignature
 
-// SchedulingQueue is an interface for a queue to store pods waiting to be scheduled.
-// The interface follows a pattern similar to cache.FIFO and cache.Heap and
-// makes it easy to use those data structures as a SchedulingQueue.
+// SchedulingQueue 是存放待调度 Pod 的队列接口。
+// 该接口借鉴了 cache.FIFO 和 cache.Heap 的模式，便于用这些数据结构实现 SchedulingQueue。
 type SchedulingQueue interface {
 	fwk.PodNominator
+	// Add 将新建的 Pod 加入调度队列。
 	Add(ctx context.Context, pod *v1.Pod)
-	// Activate moves the given pods to activeQ.
-	// If a pod isn't found in unschedulableEntities or backoffQ and it's in-flight,
-	// the wildcard event is registered so that the pod will be requeued when it comes back.
-	// But, if a pod isn't found in unschedulableEntities or backoffQ and it's not in-flight (i.e., completely unknown pod),
-	// Activate would ignore the pod.
+	// Activate 将给定的 Pod 移入 activeQ。
+	// 若 Pod 不在 unschedulableEntities 或 backoffQ 中且处于 in-flight 状态，
+	// 则注册通配事件，待其返回队列时重新入队。
+	// 若 Pod 不在上述两处且不处于 in-flight 状态（即完全未知的 Pod），Activate 会忽略它。
 	Activate(logger klog.Logger, pods map[string]*v1.Pod)
-	// AddUnschedulablePodIfNotPresent adds an unschedulable pod back to scheduling queue.
-	// The podSchedulingCycle represents the current scheduling cycle number which can be
-	// returned by calling SchedulingCycle().
+	// AddUnschedulablePodIfNotPresent 将不可调度的 Pod 加回调度队列（若尚未在队列中）。
+	// podSchedulingCycle 表示当前调度周期号，可通过 SchedulingCycle() 获取。
 	AddUnschedulablePodIfNotPresent(logger klog.Logger, pInfo *framework.QueuedPodInfo, podSchedulingCycle int64) error
-	// AddAttemptedPodGroupIfNeeded adds an attempted pod group back to scheduling queue.
-	// If there are no pending pods, it will not add the pod group back to the queue.
-	// Should be called synchronously to the pod group scheduling cycle.
-	// If the pod group scheduling succeeded, the remaining pods of the pod group will be
-	// requeued directly to the active queue instead of backoff.
-	// If there were unschedulable pods remaining, the pod group will preserve its timestamp,
-	// to trigger preemption immediately after the current cycle, unless a higher priority
-	// pod or pod group comes in between.
+	// AddAttemptedPodGroupIfNeeded 将已尝试调度的 PodGroup 加回调度队列。
+	// 若没有待处理 Pod，则不会把该 PodGroup 加回队列。
+	// 应与 PodGroup 调度周期同步调用。
+	// 若 PodGroup 调度成功，其余 Pod 将直接重新入 activeQ，而不是走退避。
+	// 若仍有不可调度的 Pod，PodGroup 会保留其时间戳，以便在当前周期后立即触发抢占，
+	// 除非期间来了更高优先级的 Pod 或 PodGroup。
 	AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo *framework.QueuedPodGroupInfo, schedulingCycle int64, status *fwk.Status) error
-	// SchedulingCycle returns the current number of scheduling cycle which is
-	// cached by scheduling queue. Normally, incrementing this number whenever
-	// a pod is popped (e.g. called Pop()) is enough.
+	// SchedulingCycle 返回调度队列缓存的当前调度周期号。
+	// 通常每次 Pop 出一个 Pod 时递增该值即可。
 	SchedulingCycle() int64
-	// Pop removes the head of the queue and returns it. It blocks if the
-	// queue is empty and waits until a new item is added to the queue.
+	// Pop 移除并返回队首实体。队列为空时阻塞，直到有新实体入队。
 	Pop(logger klog.Logger) (framework.QueuedEntityInfo, error)
-	// Done must be called for pod returned by Pop. This allows the queue to
-	// keep track of which pods are currently being processed.
+	// 对 Pop 返回的 Pod 必须调用 Done，以便队列跟踪当前正在处理的 Pod。
 	Done(types.UID)
+	// Update 更新队列中的 Pod；若 Pod 不在任何队列中，则将其加入 activeQ。
 	Update(ctx context.Context, oldPod, newPod *v1.Pod)
+	// Delete 从队列中删除 Pod。
 	Delete(logger klog.Logger, pod *v1.Pod)
-	// Important Note: preCheck shouldn't include anything that depends on the in-tree plugins' logic.
-	// (e.g., filter Pods based on added/updated Node's capacity, etc.)
+	// 重要提示：preCheck 不应包含任何依赖 in-tree 插件逻辑的内容
+	// （例如根据新增/更新 Node 的容量过滤 Pod）。
 	MoveAllToActiveOrBackoffQueue(logger klog.Logger, event fwk.ClusterEvent, oldObj, newObj interface{}, preCheck PreEnqueueCheck)
-	// AddPodGroup adds a new PodGroup object to the queue,
-	// requeuing all pods associated with the pod group.
+	// AddPodGroup 向队列新增一个 PodGroup 对象，
+	// 并将与该 PodGroup 关联的所有 Pod 重新入队。
 	AddPodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup)
-	// UpdatePodGroup updates an existing PodGroup object in the queue.
+	// UpdatePodGroup 更新队列中已有的 PodGroup 对象。
 	UpdatePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup)
-	// DeletePodGroup removes a PodGroup object from the queue,
-	// moving all pods associated with the pod group to the incompletePodGroupPods.
+	// DeletePodGroup 从队列移除一个 PodGroup 对象，
+	// 并将与该 PodGroup 关联的所有 Pod 移入 incompletePodGroupPods。
 	DeletePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup)
 
-	// Close closes the SchedulingQueue so that the goroutine which is
-	// waiting to pop items can exit gracefully.
+	// Close 关闭 SchedulingQueue，使等待 Pop 的 goroutine 能正常退出。
 	Close()
-	// Run starts the goroutines managing the queue.
+	// Run 启动管理队列的 goroutine。
 	Run(logger klog.Logger)
 
-	// PatchPodStatus handles the pod status update by sending an update API call through API dispatcher.
-	// This method should be used only if the SchedulerAsyncAPICalls feature gate is enabled.
+	// PatchPodStatus 通过 API dispatcher 发送更新 API 调用来处理 Pod 状态更新。
+	// 仅在 SchedulerAsyncAPICalls feature gate 启用时才应使用该方法。
 	PatchPodStatus(pod *v1.Pod, conditions []*v1.PodCondition, nominatingInfo *fwk.NominatingInfo) (<-chan error, error)
 
-	// The following functions are supposed to be used only for testing or debugging.
+	// 以下函数仅用于测试或调试。
 	GetPodGroup(name, namespace string, entityKeyType fwk.EntityKeyType) (*framework.QueuedPodGroupInfo, bool)
 	GetPod(name, namespace string, schedulingGroup *v1.PodSchedulingGroup) (*framework.QueuedPodInfo, bool)
 	PendingPods() ([]*v1.Pod, string)
 	InFlightPods() []*v1.Pod
 	PodsInActiveQ() []*v1.Pod
-	// PodsInBackoffQ returns all the Pods in the backoffQ.
+	// PodsInBackoffQ 返回 backoffQ 中的所有 Pod。
 	PodsInBackoffQ() []*v1.Pod
 	UnschedulablePods() []*v1.Pod
-	// pendingPodGroupPods stores all pending pods
-	// that wait for their corresponding pod group to be requeued.
+	// pendingPodGroupPods 存放所有等待其所属 PodGroup 重新入队的待处理 Pod。
 	PendingPodGroupPods() []*v1.Pod
-	// IncompletePodGroupPodsPods returns all the pods belonging to pod groups
-	// waiting for their API objects (PodGroups) to be observed.
+	// IncompletePodGroupPodsPods 返回所有属于 PodGroup、但仍在等待其 API 对象（PodGroup）被观察到的 Pod。
 	IncompletePodGroupPodsPods() []*v1.Pod
 
-	// AddCompositePodGroup adds a composite pod group to the queue.
+	// AddCompositePodGroup 向队列新增一个组合 PodGroup。
 	AddCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup)
-	// UpdateCompositePodGroup updates a composite pod group in the queue.
+	// UpdateCompositePodGroup 更新队列中的组合 PodGroup。
 	UpdateCompositePodGroup(logger klog.Logger, newCPG *schedulingv1alpha3.CompositePodGroup)
-	// DeleteCompositePodGroup removes a composite pod group from the queue.
+	// DeleteCompositePodGroup 从队列移除一个组合 PodGroup。
 	DeleteCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup)
 }
 
-// NewSchedulingQueue initializes a priority queue as a new scheduling queue.
+// NewSchedulingQueue 初始化一个优先级队列作为新的调度队列。
 func NewSchedulingQueue(
 	lessFn fwk.LessFunc,
 	informerFactory informers.SharedInformerFactory,
@@ -183,106 +167,103 @@ func NewSchedulingQueue(
 	return NewPriorityQueue(lessFn, informerFactory, opts...)
 }
 
-// PriorityQueue implements a scheduling queue.
-// The head of PriorityQueue is the highest priority pending entity (pod or pod group). This structure
-// has two sub queues and an additional data structure, namely: activeQ,
-// backoffQ and unschedulableEntities.
-//   - activeQ holds pods or pod groups that are being considered for scheduling.
-//   - backoffQ holds pods or pod groups that moved from unschedulableEntities and will move to
-//     activeQ when their backoff periods complete.
-//   - unschedulableEntities holds pods or pod groups that were already attempted for scheduling and
-//     are currently determined to be unschedulable.
+// PriorityQueue 实现了调度队列。
+// 队首是优先级最高的待调度实体（Pod 或 PodGroup）。该结构包含两个子队列和一个额外的数据结构：
+// activeQ、backoffQ 和 unschedulableEntities。
+//   - activeQ 存放正在被考虑调度的 Pod 或 PodGroup。
+//   - backoffQ 存放从 unschedulableEntities 移出的 Pod 或 PodGroup，退避期结束后再移入 activeQ。
+//   - unschedulableEntities 存放已尝试过调度、但当前被判定为不可调度的 Pod 或 PodGroup。
 //
-// For handling PodGroups, the PriorityQueue is extended with following structures:
-//   - incompletePodGroupPods: stores pod infos that wait for their corresponding PodGroup object to be observed.
-//   - pendingPodGroupPods: stores all pending pods that wait for their corresponding in-flight pod group to be requeued.
-//   - workloadForest: workloadForest maintains a consistent view of observed PodGroup objects.
+// 为处理 PodGroup，PriorityQueue 还扩展了以下结构：
+//   - incompletePodGroupPods：存放等待对应 PodGroup 对象被观察到的 Pod 信息。
+//   - pendingPodGroupPods：存放所有等待其所属 in-flight PodGroup 重新入队的待处理 Pod。
+//   - workloadForest：维护已观察到的 PodGroup 对象的一致视图。
 //
-// These additional structures ensure the following lifecycle invariants for a Pod and its corresponding PodGroup are met:
-//  1. Incomplete: A Pod is placed in `incompletePodGroupPods` iff its root PodGroup is NOT present in the `workloadForest`.
-//  2. Queued: Otherwise, if the PodGroup is not currently in-flight, the Pod is encapsulated within a QueuedPodGroupInfo,
-//     residing in `activeQ`, `backoffQ`, or `unschedulableEntities`.
-//  3. In-flight: If the PodGroup is currently in-flight (popped from the queue and being evaluated),
-//     newly arriving Pods are placed in `pendingPodGroupPods` to wait for the PodGroup to be requeued.
+// 这些额外结构确保 Pod 及其所属 PodGroup 满足以下生命周期不变式：
+//  1. 未完成（Incomplete）：当且仅当 Pod 的根 PodGroup 不在 `workloadForest` 中时，
+//     Pod 被放入 `incompletePodGroupPods`。
+//  2. 已入队（Queued）：否则，若 PodGroup 当前不在 in-flight 状态，Pod 会被封装进 QueuedPodGroupInfo，
+//     存放于 `activeQ`、`backoffQ` 或 `unschedulableEntities` 中。
+//  3. 处理中（In-flight）：若 PodGroup 当前处于 in-flight 状态（已从队列弹出并正在评估），
+//     新到达的 Pod 会被放入 `pendingPodGroupPods`，等待该 PodGroup 重新入队。
 type PriorityQueue struct {
 	*nominator
 
 	stop  chan struct{}
 	clock clock.WithTicker
 
-	// lock takes precedence and should be taken first,
-	// before any other locks in the queue (activeQueue.lock or backoffQueue.lock or nominator.nLock).
-	// Correct locking order is: lock > activeQueue.lock > backoffQueue.lock > nominator.nLock.
+	// lock 优先级最高，必须先于队列中任何其他锁获取
+	// （activeQueue.lock、backoffQueue.lock 或 nominator.nLock）。
+	// 正确的加锁顺序为：lock > activeQueue.lock > backoffQueue.lock > nominator.nLock。
 	lock sync.RWMutex
 
-	// the maximum time a pod can stay in the unschedulableEntities.
+	// Pod 可在 unschedulableEntities 中停留的最长时间。
 	podMaxInUnschedulablePodsDuration time.Duration
 
 	activeQ  activeQueuer
 	backoffQ backoffQueuer
-	// unschedulableEntities holds pods and pod groups that have been tried and determined unschedulable.
+	// unschedulableEntities 存放已尝试过调度、但被判定为不可调度的 Pod 和 PodGroup。
 	unschedulableEntities *unschedulableEntities
-	// pendingPodGroupPods stores all pending pods that wait for their corresponding pod group to be requeued.
-	// It should be only used when GenericWorkload feature is enabled.
+	// pendingPodGroupPods 存放所有等待其所属 PodGroup 重新入队的待处理 Pod。
+	// 仅在 GenericWorkload feature 启用时使用。
 	pendingPodGroupPods *podGroupMemberPods
-	// incompletePodGroupPods stores pod infos that wait for their corresponding PodGroup object to be observed.
-	// It should be only used when GenericWorkload feature is enabled.
+	// incompletePodGroupPods 存放等待对应 PodGroup 对象被观察到的 Pod 信息。
+	// 仅在 GenericWorkload feature 启用时使用。
 	incompletePodGroupPods *podGroupMemberPods
 
-	// workloadForest maintains a consistent view of observed PodGroup objects.
-	// It ensures that scheduling queue invariants are preserved, independent of
-	// asynchronous updates happening in the scheduler cache.
-	// Outside of the scheduling queue, cache should be used as the source of truth.
-	// It should be only used when GenericWorkload feature is enabled.
+	// workloadForest 维护已观察到的 PodGroup 对象的一致视图。
+	// 它确保调度队列的不变式不受 scheduler cache 异步更新的影响。
+	// 调度队列之外应以 cache 为准。
+	// 仅在 GenericWorkload feature 启用时使用。
 	workloadForest *workloadForest
 
-	// preEnqueuePluginMap is keyed with profile and plugin name, valued with registered preEnqueue plugins.
+	// preEnqueuePluginMap 以 profile 名和插件名为键，值为已注册的 preEnqueue 插件。
 	preEnqueuePluginMap map[string]map[string]fwk.PreEnqueuePlugin
-	// queueingHintMap is keyed with profile name, valued with registered queueing hint functions.
+	// queueingHintMap 以 profile 名为键，值为已注册的 queueing hint 函数。
 	queueingHintMap QueueingHintMapPerProfile
-	// pluginToEventsMap shows which plugin is interested in which events.
+	// pluginToEventsMap 记录各插件感兴趣的事件。
 	pluginToEventsMap map[string][]fwk.ClusterEvent
 
 	nsLister listersv1.NamespaceLister
 
 	metricsRecorder *metrics.MetricAsyncRecorder
-	// pluginMetricsSamplePercent is the percentage of plugin metrics to be sampled.
+	// pluginMetricsSamplePercent 是插件指标采样的百分比。
 	pluginMetricsSamplePercent int
 
-	// apiDispatcher is used for the methods that are expected to send API calls.
-	// It's non-nil only if the SchedulerAsyncAPICalls feature gate is enabled.
+	// apiDispatcher 用于需要发送 API 调用的方法。
+	// 仅当 SchedulerAsyncAPICalls feature gate 启用时非 nil。
 	apiDispatcher fwk.APIDispatcher
 
-	// podSigners maps a profile name to a signing function for that profile.
+	// podSigners 将 profile 名映射到该 profile 的签名函数。
 	podSigners map[string]PodSigner
 
-	// isPopFromBackoffQEnabled indicates whether the feature gate SchedulerPopFromBackoffQ is enabled.
+	// isPopFromBackoffQEnabled 表示 SchedulerPopFromBackoffQ feature gate 是否启用。
 	isPopFromBackoffQEnabled bool
-	// isGenericWorkloadEnabled indicates whether the feature gate GenericWorkload is enabled.
+	// isGenericWorkloadEnabled 表示 GenericWorkload feature gate 是否启用。
 	isGenericWorkloadEnabled bool
-	// isOpportunisticBatchingEnabled indicates whether the OpportunisticBatching feature gate is enabled.
+	// isOpportunisticBatchingEnabled 表示 OpportunisticBatching feature gate 是否启用。
 	isOpportunisticBatchingEnabled bool
-	// isCompositePodGroupEnabled indicates whether the feature gate for CompositePodGroup is enabled.
+	// isCompositePodGroupEnabled 表示 CompositePodGroup 的 feature gate 是否启用。
 	isCompositePodGroupEnabled bool
-	// isInPlacePodVerticalScalingSchedulerPreemptionEnabled indicates whether the feature gate InPlacePodVerticalScalingSchedulerPreemption is enabled.
+	// isInPlacePodVerticalScalingSchedulerPreemptionEnabled 表示 InPlacePodVerticalScalingSchedulerPreemption feature gate 是否启用。
 	isInPlacePodVerticalScalingSchedulerPreemptionEnabled bool
-	// isPreQueueingHintsEnabled indicates whether the SchedulerPreQueueingHints feature gate is enabled.
+	// isPreQueueingHintsEnabled 表示 SchedulerPreQueueingHints feature gate 是否启用。
 	isPreQueueingHintsEnabled bool
 }
 
-// QueueingHintFunction is the wrapper of QueueingHintFn that has PluginName.
+// QueueingHintFunction 是对 QueueingHintFn 的包装，附带 PluginName。
 type QueueingHintFunction struct {
 	PluginName        string
 	QueueingHintFn    fwk.QueueingHintFn
 	PreQueueingHintFn fwk.PreQueueingHintFn
 }
 
-// clusterEvent has the event and involved objects.
+// clusterEvent 包含事件及涉及的对象。
 type clusterEvent struct {
 	event fwk.ClusterEvent
-	// oldObj is the object that involved this event.
+	// oldObj 是涉及该事件的旧对象。
 	oldObj interface{}
-	// newObj is the object that involved this event.
+	// newObj 是涉及该事件的新对象。
 	newObj interface{}
 }
 
@@ -300,89 +281,88 @@ type priorityQueueOptions struct {
 	podSigners                        map[string]PodSigner
 }
 
-// Option configures a PriorityQueue
+// Option 用于配置 PriorityQueue。
 type Option func(*priorityQueueOptions)
 
-// WithClock sets clock for PriorityQueue, the default clock is clock.RealClock.
+// WithClock 为 PriorityQueue 设置时钟，默认使用 clock.RealClock。
 func WithClock(clock clock.WithTicker) Option {
 	return func(o *priorityQueueOptions) {
 		o.clock = clock
 	}
 }
 
-// WithPodInitialBackoffDuration sets pod initial backoff duration for PriorityQueue.
+// WithPodInitialBackoffDuration 设置 PriorityQueue 中 Pod 的初始退避时长。
 func WithPodInitialBackoffDuration(duration time.Duration) Option {
 	return func(o *priorityQueueOptions) {
 		o.podInitialBackoffDuration = duration
 	}
 }
 
-// WithPodMaxBackoffDuration sets pod max backoff duration for PriorityQueue.
+// WithPodMaxBackoffDuration 设置 PriorityQueue 中 Pod 的最大退避时长。
 func WithPodMaxBackoffDuration(duration time.Duration) Option {
 	return func(o *priorityQueueOptions) {
 		o.podMaxBackoffDuration = duration
 	}
 }
 
-// WithPodLister sets pod lister for PriorityQueue.
+// WithPodLister 为 PriorityQueue 设置 Pod lister。
 func WithPodLister(pl listersv1.PodLister) Option {
 	return func(o *priorityQueueOptions) {
 		o.podLister = pl
 	}
 }
 
-// WithPodMaxInUnschedulablePodsDuration sets podMaxInUnschedulablePodsDuration for PriorityQueue.
+// WithPodMaxInUnschedulablePodsDuration 设置 PriorityQueue 的 podMaxInUnschedulablePodsDuration。
 func WithPodMaxInUnschedulablePodsDuration(duration time.Duration) Option {
 	return func(o *priorityQueueOptions) {
 		o.podMaxInUnschedulablePodsDuration = duration
 	}
 }
 
-// QueueingHintMapPerProfile is keyed with profile name, valued with queueing hint map registered for the profile.
+// QueueingHintMapPerProfile 以 profile 名为键，值为该 profile 注册的 queueing hint map。
 type QueueingHintMapPerProfile map[string]QueueingHintMap
 
-// QueueingHintMap is keyed with ClusterEvent, valued with queueing hint functions registered for the event.
+// QueueingHintMap 以 ClusterEvent 为键，值为该事件注册的 queueing hint 函数。
 type QueueingHintMap map[fwk.ClusterEvent][]*QueueingHintFunction
 
-// WithQueueingHintMapPerProfile sets queueingHintMap for PriorityQueue.
+// WithQueueingHintMapPerProfile 为 PriorityQueue 设置 queueingHintMap。
 func WithQueueingHintMapPerProfile(m QueueingHintMapPerProfile) Option {
 	return func(o *priorityQueueOptions) {
 		o.queueingHintMap = m
 	}
 }
 
-// WithPreEnqueuePluginMap sets preEnqueuePluginMap for PriorityQueue.
+// WithPreEnqueuePluginMap 为 PriorityQueue 设置 preEnqueuePluginMap。
 func WithPreEnqueuePluginMap(m map[string]map[string]fwk.PreEnqueuePlugin) Option {
 	return func(o *priorityQueueOptions) {
 		o.preEnqueuePluginMap = m
 	}
 }
 
-// WithMetricsRecorder sets metrics recorder.
+// WithMetricsRecorder 设置指标记录器。
 func WithMetricsRecorder(recorder *metrics.MetricAsyncRecorder) Option {
 	return func(o *priorityQueueOptions) {
 		o.metricsRecorder = recorder
 	}
 }
 
-// WithPluginMetricsSamplePercent sets the percentage of plugin metrics to be sampled.
+// WithPluginMetricsSamplePercent 设置插件指标的采样百分比。
 func WithPluginMetricsSamplePercent(percent int) Option {
 	return func(o *priorityQueueOptions) {
 		o.pluginMetricsSamplePercent = percent
 	}
 }
 
-// WithAPIDispatcher sets the API dispatcher.
+// WithAPIDispatcher 设置 API dispatcher。
 func WithAPIDispatcher(apiDispatcher fwk.APIDispatcher) Option {
 	return func(o *priorityQueueOptions) {
 		o.apiDispatcher = apiDispatcher
 	}
 }
 
-// WithPodSigners sets the pod signing functions per scheduler profile.
-// Each profile can have its own signing function for computing pod signatures.
-// Pod signatures enable opportunistic batching (KEP-5598) by allowing the scheduler
-// to cache and reuse filtering/scoring results for identical pods.
+// WithPodSigners 按调度器 profile 设置 Pod 签名函数。
+// 每个 profile 可以有自己的签名函数来计算 Pod 签名。
+// Pod 签名让调度器能够缓存并复用相同 Pod 的过滤/打分结果，从而实现机会批处理（KEP-5598）。
 func WithPodSigners(signers map[string]PodSigner) Option {
 	return func(o *priorityQueueOptions) {
 		o.podSigners = signers
@@ -396,13 +376,13 @@ var defaultPriorityQueueOptions = priorityQueueOptions{
 	podMaxInUnschedulablePodsDuration: DefaultPodMaxInUnschedulablePodsDuration,
 }
 
-// Making sure that PriorityQueue implements SchedulingQueue.
+// 确保 PriorityQueue 实现了 SchedulingQueue。
 var _ SchedulingQueue = &PriorityQueue{}
 
-// newQueuedPodInfoForLookup builds a QueuedPodInfo object for a lookup in the queue.
+// newQueuedPodInfoForLookup 构造一个仅用于在队列中查找的 QueuedPodInfo 对象。
 func newQueuedPodInfoForLookup(pod *v1.Pod, plugins ...string) *framework.QueuedPodInfo {
-	// Since this is only used for a lookup in the queue, we only need to set the Pod,
-	// and so we avoid creating a full PodInfo, which is expensive to instantiate frequently.
+	// 仅用于队列查找，只需设置 Pod，避免构造开销较大的完整 PodInfo（此处会被频繁调用）。
+
 	return &framework.QueuedPodInfo{
 		PodInfo: &framework.PodInfo{Pod: pod},
 		QueueingParams: framework.QueueingParams{
@@ -411,13 +391,12 @@ func newQueuedPodInfoForLookup(pod *v1.Pod, plugins ...string) *framework.Queued
 	}
 }
 
-// newQueuedPodGroupInfoFromRootLookup builds a QueuedPodGroupInfo object for lookup.
-// It assumes that the given rootLookup actually refers to a root in the workload forest
-// and therefore never returns nil.
+// newQueuedPodGroupInfoFromRootLookup 构造一个用于查找的 QueuedPodGroupInfo 对象。
+// 假定给定的 rootLookup 确实是 workloadForest 中的一个根，因此理论上不会返回 nil。
 func (p *PriorityQueue) newQueuedPodGroupInfoFromRootLookup(logger klog.Logger, pInfo *framework.QueuedPodInfo, rootLookup *framework.QueuedPodGroupInfo) *framework.QueuedPodGroupInfo {
 	rootInfo := p.workloadForest.buildQueuedPodGroupInfo(logger, rootLookup)
 	if rootInfo == nil {
-		// This should never happen as rootLookup is guaranteed to be a root in the workload forest.
+		// rootLookup 保证是 workloadForest 中的根，理论上不应走到这里。
 		return nil
 	}
 	rootInfo.AddPod(pInfo)
@@ -426,7 +405,7 @@ func (p *PriorityQueue) newQueuedPodGroupInfoFromRootLookup(logger klog.Logger, 
 	return rootInfo
 }
 
-// NewPriorityQueue creates a PriorityQueue object.
+// NewPriorityQueue 创建一个 PriorityQueue 对象。
 func NewPriorityQueue(
 	lessFn fwk.LessFunc,
 	informerFactory informers.SharedInformerFactory,
@@ -483,7 +462,7 @@ func NewPriorityQueue(
 	return pq
 }
 
-// ConvertLessFn wraps fwk.LessFunc and converts it to take framework.QueuedEntityInfo as arguments.
+// convertLessFn 包装 fwk.LessFunc，将其转换为接受 framework.QueuedEntityInfo 作为参数的函数。
 func convertLessFn(lessFn fwk.LessFunc) func(entity1, entity2 framework.QueuedEntityInfo) bool {
 	return func(entity1, entity2 framework.QueuedEntityInfo) bool {
 		return lessFn(entity1.(fwk.QueuedEntityInfo), entity2.(fwk.QueuedEntityInfo))
@@ -504,7 +483,7 @@ func buildEventMap(qHintMap QueueingHintMapPerProfile) map[string][]fwk.ClusterE
 	return eventMap
 }
 
-// Run starts the goroutine to pump from backoffQ to activeQ
+// Run 启动将实体从 backoffQ 搬运到 activeQ 的 goroutine。
 func (p *PriorityQueue) Run(logger klog.Logger) {
 	go p.backoffQ.waitUntilAlignedWithOrderingWindow(func() {
 		p.flushBackoffQCompleted(logger)
@@ -514,29 +493,29 @@ func (p *PriorityQueue) Run(logger klog.Logger) {
 	}, 30*time.Second, p.stop)
 }
 
-// queueingStrategy indicates how the scheduling queue should enqueue the Pod from unschedulable pod pool.
+// queueingStrategy 表示调度队列应如何将 Pod 从不可调度池中重新入队。
 type queueingStrategy int
 
 const (
-	// queueSkip indicates that the scheduling queue should skip requeuing the Pod to activeQ/backoffQ.
+	// queueSkip 表示调度队列应跳过将该 Pod 重新入 activeQ/backoffQ。
 	queueSkip queueingStrategy = iota
-	// queueAfterBackoff indicates that the scheduling queue should requeue the Pod after backoff is completed.
+	// queueAfterBackoff 表示调度队列应在退避完成后再重新入队该 Pod。
 	queueAfterBackoff
-	// queueImmediately indicates that the scheduling queue should skip backoff and requeue the Pod immediately to activeQ.
+	// queueImmediately 表示调度队列应跳过退避，立即将该 Pod 重新入 activeQ。
 	queueImmediately
 )
 
-// isEventOfInterest returns true if the event is of interest by some plugins.
+// isEventOfInterest 若该事件被某些插件关注则返回 true。
 func (p *PriorityQueue) isEventOfInterest(logger klog.Logger, event fwk.ClusterEvent) bool {
 	if framework.ClusterEventIsWildCard(event) {
-		// Wildcard event moves Pods that failed with any plugins.
+		// 通配事件可移动被任意插件拒绝的 Pod。
 		return true
 	}
 
 	for _, hintMap := range p.queueingHintMap {
 		for eventToMatch := range hintMap {
 			if framework.MatchClusterEvents(eventToMatch, event) {
-				// This event is interested by some plugins.
+				// 该事件被某些插件关注。
 				return true
 			}
 		}
@@ -547,12 +526,12 @@ func (p *PriorityQueue) isEventOfInterest(logger klog.Logger, event fwk.ClusterE
 	return false
 }
 
-// isPodGroupMember returns true if the pod is a member of a pod group.
+// isPodGroupMember 判断 Pod 是否属于某个 PodGroup。
 func (p *PriorityQueue) isPodGroupMember(pod *v1.Pod) bool {
 	if p.isInPlacePodVerticalScalingSchedulerPreemptionEnabled {
-		// Deferred resize pods must be queued and evaluated individually rather than as a pod group because they are
-		// already running on assigned nodes and undergo atomic individual resource adjustments rather than group gang-scheduling.
-		// TODO: This implementation will be reevaluated in beta.
+		// 延迟调整大小的 Pod 已在已分配的节点上运行，做的是原子的个体资源调整而非成组调度，
+		// 因此必须单独入队和评估，不能作为 PodGroup 处理。
+		// TODO: 当前实现将在 Beta 阶段重新评估。
 		if resource.IsPodResizeDeferred(pod) {
 			return false
 		}
@@ -560,10 +539,9 @@ func (p *PriorityQueue) isPodGroupMember(pod *v1.Pod) bool {
 	return p.isGenericWorkloadEnabled && pod.Spec.SchedulingGroup != nil
 }
 
-// isEntityWorthRequeuing calls isPodWorthRequeuing for all pods belonging to the entity and returns the highest queueing strategy.
+// isEntityWorthRequeuing 对实体中的所有 Pod 调用 isPodWorthRequeuing，并返回最高优先级的排队策略。
 func (p *PriorityQueue) isEntityWorthRequeuing(logger klog.Logger, entity framework.QueuedEntityInfo, event fwk.ClusterEvent, oldObj, newObj interface{}, hintKeys *preQueueingHintPodKeys) queueingStrategy {
-	// For pod groups, if any pod is worth requeuing, the whole group is worth it.
-	// But we should prioritize higher strategies.
+	// 对 PodGroup 而言，只要有一个 Pod 值得重新入队，整个组就值得；但应优先采用更高级别的策略。
 	bestStrategy := queueSkip
 	entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 		strategy := p.isPodWorthRequeuing(logger, pInfo, event, oldObj, newObj, hintKeys)
@@ -578,12 +556,10 @@ func (p *PriorityQueue) isEntityWorthRequeuing(logger klog.Logger, entity framew
 	return bestStrategy
 }
 
-// isPodWorthRequeuing calls QueueingHintFn of only plugins registered in pInfo.unschedulablePlugins and pInfo.PendingPlugins.
+// isPodWorthRequeuing 仅调用 pInfo.UnschedulablePlugins 和 pInfo.PendingPlugins 中注册插件的 QueueingHintFn。
 //
-// If any of pInfo.PendingPlugins return Queue,
-// the scheduling queue is supposed to enqueue this Pod to activeQ, skipping backoffQ.
-// If any of pInfo.unschedulablePlugins return Queue,
-// the scheduling queue is supposed to enqueue this Pod to activeQ/backoffQ depending on the remaining backoff time of the Pod.
+// 若任意 pInfo.PendingPlugins 返回 Queue，调度队列应跳过 backoffQ，直接将该 Pod 入 activeQ。
+// 若任意 pInfo.UnschedulablePlugins 返回 Queue，调度队列应根据该 Pod 剩余退避时间将其入 activeQ/backoffQ。
 func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework.QueuedPodInfo, event fwk.ClusterEvent, oldObj, newObj interface{}, hintKeys *preQueueingHintPodKeys) queueingStrategy {
 	rejectorPlugins := pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins)
 	if rejectorPlugins.Len() == 0 {
@@ -592,12 +568,11 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 	}
 
 	if framework.ClusterEventIsWildCard(event) {
-		// If the wildcard event has a Pod in newObj,
-		// that indicates that the event wants to be effective for the Pod only.
-		// Specifically, EventForceActivate could have a target Pod in newObj.
+		// 若通配事件的 newObj 中带有 Pod，说明该事件仅针对该 Pod 生效。
+		// 具体来说，EventForceActivate 可能会在 newObj 中携带目标 Pod。
 		if newObj != nil {
 			if pod, ok := newObj.(*v1.Pod); !ok || pod.UID != pInfo.Pod.UID {
-				// This wildcard event is not for this Pod.
+				// 该通配事件不是针对此 Pod 的。
 				if ok {
 					logger.V(6).Info("Not worth requeuing because the event is wildcard, but for another pod", "pod", klog.KObj(pInfo.Pod), "event", event.Label(), "newObj", klog.KObj(pod))
 				}
@@ -605,15 +580,15 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 			}
 		}
 
-		// If the wildcard event is special one as someone wants to force all Pods to move to activeQ/backoffQ.
-		// We return queueAfterBackoff in this case, while resetting all blocked plugins.
+		// 这是调用方希望强制所有 Pod 移入 activeQ/backoffQ 的特殊通配事件。
+		// 此时返回 queueAfterBackoff，同时清空所有阻塞插件。
 		logger.V(6).Info("Worth requeuing because the event is wildcard", "pod", klog.KObj(pInfo.Pod), "event", event.Label())
 		return queueAfterBackoff
 	}
 
 	hintMap, ok := p.queueingHintMap[pInfo.Pod.Spec.SchedulerName]
 	if !ok {
-		// shouldn't reach here unless bug.
+		// 除非有 bug，否则不应走到这里。
 		utilruntime.HandleErrorWithLogger(logger, nil, "No QueueingHintMap is registered for this profile", "profile", pInfo.Pod.Spec.SchedulerName, "pod", klog.KObj(pInfo.Pod))
 		return queueAfterBackoff
 	}
@@ -628,11 +603,11 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 
 		for _, hintfn := range hintfns {
 			if !rejectorPlugins.Has(hintfn.PluginName) {
-				// skip if it's not hintfn from rejectorPlugins.
+				// 非拒绝插件的 hintfn 直接跳过。
 				continue
 			}
-			// Per-plugin PreQueueingHint narrowing: skip this plugin's QueueingHintFn
-			// if the pod wasn't identified by this plugin's PreQueueingHintFn.
+			// 按插件粒度的 PreQueueingHint 收窄：若该 Pod 未被此插件的 PreQueueingHintFn 选中，
+			// 则跳过该插件的 QueueingHintFn。
 			if hintKeys != nil {
 				if pluginPods, ok := hintKeys.perPlugin[hintfn.PluginName]; ok {
 					if !pluginPods.Has(podNN) {
@@ -644,8 +619,7 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 			start := time.Now()
 			hint, err := hintfn.QueueingHintFn(logger, pod, oldObj, newObj)
 			if err != nil {
-				// If the QueueingHintFn returned an error, we should treat the event as Queue so that we can prevent
-				// the Pod from being stuck in the unschedulable pod pool.
+				// QueueingHintFn 报错时按 Queue 处理，避免 Pod 一直卡在不可调度池中。
 				oldObjMeta, newObjMeta, asErr := util.As[klog.KMetadata](oldObj, newObj)
 				if asErr != nil {
 					utilruntime.HandleErrorWithLogger(logger, err, "QueueingHintFn returns error", "event", event, "plugin", hintfn.PluginName, "pod", klog.KObj(pod))
@@ -661,21 +635,19 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 			}
 
 			if pInfo.PendingPlugins.Has(hintfn.PluginName) {
-				// interprets Queue from the Pending plugin as queueImmediately.
-				// We can return immediately because queueImmediately is the highest priority.
+				// Pending 插件的 Queue 视为 queueImmediately；它是最高优先级，可直接返回。
 				return queueImmediately
 			}
 
-			// interprets Queue from the unschedulable plugin as queueAfterBackoff.
+			// Unschedulable 插件的 Queue 视为 queueAfterBackoff。
 
 			if pInfo.PendingPlugins.Len() == 0 {
-				// We can return immediately because no Pending plugins, which only can make queueImmediately, registered in this Pod,
-				// and queueAfterBackoff is the second highest priority.
+				// 该 Pod 没有 Pending 插件（它们才能产生 queueImmediately），而 queueAfterBackoff 是次高优先级，可直接返回。
 				return queueAfterBackoff
 			}
 
-			// We can't return immediately because there are some Pending plugins registered in this Pod.
-			// We need to check if those plugins return Queue or not and if they do, we return queueImmediately.
+			// 该 Pod 注册了 Pending 插件，不能直接返回；
+			// 需继续检查它们是否返回 Queue，若是则返回 queueImmediately。
 			queueStrategy = queueAfterBackoff
 		}
 	}
@@ -683,7 +655,7 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 	return queueStrategy
 }
 
-// queueingHintToLabel converts a hint and an error from QHint to a label string.
+// queueingHintToLabel 将 QHint 的提示和错误转换为指标标签字符串。
 func queueingHintToLabel(hint fwk.QueueingHint, err error) string {
 	if err != nil {
 		return metrics.QueueingHintResultError
@@ -696,32 +668,28 @@ func queueingHintToLabel(hint fwk.QueueingHint, err error) string {
 		return metrics.QueueingHintResultQueueSkip
 	}
 
-	// Shouldn't reach here.
+	// 不应走到这里。
 	return ""
 }
 
-// runPreEnqueuePlugins iterates PreEnqueue function in each registered PreEnqueuePlugin,
-// and updates entity.GatingPlugin and entity.UnschedulablePlugins.
-// Note: we need to associate the failed plugin to `entity`, so that the entity can be moved back
-// to activeQ by related cluster event.
+// runPreEnqueuePlugins 遍历每个已注册 PreEnqueuePlugin 的 PreEnqueue 函数，
+// 并更新 entity.GatingPlugin 和 entity.UnschedulablePlugins。
+// 注意：需要把失败的插件记录到 `entity` 上，这样相关集群事件才能把该实体移回 activeQ。
 func (p *PriorityQueue) runPreEnqueuePlugins(ctx context.Context, entity framework.QueuedEntityInfo) {
 	var anyGatedPodInfo *framework.QueuedPodInfo
-	// Run PreEnqueue plugins for each pod, even if it could stop after the first being gated,
-	// as we need to populate any per-pod metrics.
+	// 即使首个 Pod 已被 gating 就可以停止，也仍需为每个 Pod 运行插件，以填充各 Pod 的指标。
 	entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 		p.runPreEnqueuePluginsForPod(ctx, pInfo)
 		if pInfo.Gated() {
-			// If any pod is gated, the whole entity is gated.
-			// Otherwise, such gated pod would have to be put in a separate entity object
-			// and tracked individually, complicating the flow.
+			// 只要有一个 Pod 被 gating，整个实体就算被 gating；
+			// 否则该 Pod 就得拆成单独的实体对象单独跟踪，会让流程变复杂。
 			anyGatedPodInfo = pInfo
 		}
 		return true
 	})
 	if anyGatedPodInfo != nil {
-		// Copying the gating plugin info only from a single pod is sufficient,
-		// because if the entity is a pod group, all pods should be ungated before the entire pod group can be ungated,
-		// including this pod.
+		// 只从单个 Pod 复制 gating 插件信息即可，因为若实体是 PodGroup，
+		// 整个组解除 gating 前，包括该 Pod 在内的所有 Pod 都必须先解除 gating。
 		entity.SetGatingPlugin(anyGatedPodInfo.QueueingParams.GatingPlugin, anyGatedPodInfo.QueueingParams.GatingPluginEvents)
 	} else {
 		entity.SetGatingPlugin("", nil)
@@ -739,30 +707,30 @@ func (p *PriorityQueue) runPreEnqueuePluginsForPod(ctx context.Context, pInfo *f
 	shouldRecordMetric := rand.Intn(100) < p.pluginMetricsSamplePercent
 	gatingPlugin := pInfo.GatingPlugin
 	if gatingPlugin != "" {
-		// Run the gating plugin first
+		// 优先运行上一次 gating 的插件，它可能仍然拒绝该 Pod。
 		s := p.runPreEnqueuePlugin(ctx, p.preEnqueuePluginMap[pod.Spec.SchedulerName][gatingPlugin], pInfo, shouldRecordMetric)
 		if !s.IsSuccess() {
-			// No need to iterate other plugins
+			// 已被 gating，无需再遍历其他插件。
 			return
 		}
 	}
 
 	for _, pl := range p.preEnqueuePluginMap[pod.Spec.SchedulerName] {
 		if gatingPlugin != "" && pl.Name() == gatingPlugin {
-			// should be run already above.
+			// 上面已经运行过。
 			continue
 		}
 		s := p.runPreEnqueuePlugin(ctx, pl, pInfo, shouldRecordMetric)
 		if !s.IsSuccess() {
-			// No need to iterate other plugins
+			// 已被 gating，无需再遍历其他插件。
 			return
 		}
 	}
-	// all plugins passed
+	// 所有插件均通过。
 	pInfo.GatingPlugin = ""
 }
 
-// runPreEnqueuePlugin runs the PreEnqueue plugin and update pInfo's fields accordingly if needed.
+// runPreEnqueuePlugin 运行 PreEnqueue 插件，并按需更新 pInfo 的字段。
 func (p *PriorityQueue) runPreEnqueuePlugin(ctx context.Context, pl fwk.PreEnqueuePlugin, pInfo *framework.QueuedPodInfo, shouldRecordMetric bool) *fwk.Status {
 	pod := pInfo.Pod
 	startTime := p.clock.Now()
@@ -771,10 +739,10 @@ func (p *PriorityQueue) runPreEnqueuePlugin(ctx context.Context, pl fwk.PreEnque
 		p.metricsRecorder.ObservePluginDurationAsync(preEnqueue, pl.Name(), s.Code().String(), p.clock.Since(startTime).Seconds())
 	}
 	if s.IsSuccess() {
-		// No need to change GatingPlugin; it's overwritten by the next PreEnqueue plugin if they gate this pod, or it's overwritten with an empty string if all PreEnqueue plugins pass.
+		// 无需修改 GatingPlugin：若后续插件 gating 该 Pod 会被覆盖，全部通过时也会被清空。
 		return s
 	}
-	// Only increment metric and insert if not already incremented for this plugin
+	// 该插件的指标未增加过时再增加并记录，避免重复计数。
 	if !pInfo.UnschedulablePlugins.Has(pl.Name()) && !pInfo.PendingPlugins.Has(pl.Name()) {
 		metrics.UnschedulableReason(pl.Name(), pod.Spec.SchedulerName).Inc()
 	}
@@ -790,29 +758,26 @@ func (p *PriorityQueue) runPreEnqueuePlugin(ctx context.Context, pl fwk.PreEnque
 	return s
 }
 
-// AddNominatedPod adds the given pod to the nominator.
-// It locks the PriorityQueue to make sure it won't race with any other method.
+// AddNominatedPod 将给定的 Pod 加入 nominator。
+// 它会锁住 PriorityQueue，避免与其他方法发生竞态。
 func (p *PriorityQueue) AddNominatedPod(logger klog.Logger, pi fwk.PodInfo, nominatingInfo *fwk.NominatingInfo) {
 	p.lock.Lock()
 	p.nominator.addNominatedPod(logger, pi, nominatingInfo)
 	p.lock.Unlock()
 }
 
-// moveToActiveQ tries to add the entity to the active queue.
-// If the entity doesn't pass PreEnqueue plugins, it gets added to unschedulableEntities instead.
-// movesFromBackoffQ should be set to true, if the entity directly moves from the backoffQ, so the PreEnqueue call can be skipped.
-// strategy is the previous queuing strategy of the entity. Having a nil strategy indicates that the entity is newly added to
-// scheduler queue, and causes incoming entity metrics to be incremented unconditionally.
-// Otherwise the strategy allows metric recording to check if the entity actually moved between queues or not, to avoid double-counting in metrics.
-// It returns a boolean flag to indicate whether the entity is added successfully.
-// Entity should be removed from the backoffQ before calling moveToActiveQ.
-// Note: it does not signal the Pop() method to wake up,
-// so the caller is responsible for calling activeQ.broadcast() after executing this method.
+// moveToActiveQ 尝试将实体加入 activeQ。
+// 若实体未通过 PreEnqueue 插件，则改为加入 unschedulableEntities。
+// 若实体是直接从 backoffQ 移来的，movesFromBackoffQ 应为 true，以便跳过 PreEnqueue 调用。
+// strategy 是实体此前的排队策略。strategy 为 nil 表示实体是新增到调度队列的，
+// 此时无条件增加入队实体指标；否则根据 strategy 判断实体是否真的跨队列移动，避免指标重复计数。
+// 返回值表示实体是否成功入队。
+// 调用 moveToActiveQ 前必须先将实体从 backoffQ 中删除。
+// 注意：本方法不会唤醒 Pop()，调用方需在调用后执行 activeQ.broadcast()。
 func (p *PriorityQueue) moveToActiveQ(logger klog.Logger, entity framework.QueuedEntityInfo, event string, movesFromBackoffQ bool, strategy *queueingStrategy) bool {
 	gatedBefore := entity.Gated()
-	// If SchedulerPopFromBackoffQ feature gate is enabled,
-	// PreEnqueue plugins were called when the entity was added to the backoffQ.
-	// Don't need to repeat it here when the entity is directly moved from the backoffQ.
+	// SchedulerPopFromBackoffQ 启用时，实体入 backoffQ 时已运行过 PreEnqueue 插件，
+	// 从 backoffQ 直接移入 activeQ 无需重复执行。
 	skipPreEnqueue := p.isPopFromBackoffQEnabled && movesFromBackoffQ
 	if !skipPreEnqueue {
 		p.runPreEnqueuePlugins(context.Background(), entity)
@@ -822,11 +787,11 @@ func (p *PriorityQueue) moveToActiveQ(logger klog.Logger, entity framework.Queue
 		if p.unschedulableEntities.get(entity) == nil {
 			logger.V(5).Info("Entity moved to an internal scheduling queue, because it is gated", "type", entity.Type(), "entity", klog.KObj(entity), "event", event, "queue", unschedulableQ)
 		}
-		// Clearing WasFlushedFromUnschedulable is typically done on scheduling failure, but in case the flushed pod was gated, it never attempts scheduling.
-		// We clear it here to ensure it's not set the next time the pod is woken up by a non-flush event.
+		// 该标志通常在调度失败时清除；但被 flush 的 Pod 若被 gating 就不会尝试调度，
+		// 因此在这里清除，确保下次被非 flush 事件唤醒时不带该标志。
 		entity.SetWasFlushedFromUnschedulable(false)
 		p.unschedulableEntities.addOrUpdate(entity, gatedBefore, event, strategy)
-		// Entity not moved to activeQ.
+		// 实体未进入 activeQ。
 		return false
 	}
 	now := p.clock.Now()
@@ -834,29 +799,27 @@ func (p *PriorityQueue) moveToActiveQ(logger klog.Logger, entity framework.Queue
 	p.unschedulableEntities.delete(entity, gatedBefore)
 
 	p.activeQ.add(logger, entity, event, strategy)
-	// Pod successfully moved to activeQ.
+	// 实体成功进入 activeQ。
 	return true
 }
 
-// moveToBackoffQ tries to add the entity to the backoff queue.
-// If SchedulerPopFromBackoffQ feature gate is enabled and the entity doesn't pass PreEnqueue plugins, it gets added to unschedulableEntities instead.
-// strategy is the previous queuing strategy of the entity. Having a nil strategy indicates that the entity is newly added to
-// scheduler queue, and causes incoming entity metrics to be incremented unconditionally.
-// Otherwise the strategy allows metric recording to check if the entity actually moved between queues or not, to avoid double-counting in metrics.
-// It returns a boolean flag to indicate whether the entity is added successfully.
+// moveToBackoffQ 尝试将实体加入退避队列。
+// 若 SchedulerPopFromBackoffQ feature gate 启用且实体未通过 PreEnqueue 插件，则改为加入 unschedulableEntities。
+// strategy 是实体此前的排队策略。strategy 为 nil 表示实体是新增到调度队列的，
+// 此时无条件增加入队实体指标；否则根据 strategy 判断实体是否真的跨队列移动，避免指标重复计数。
+// 返回值表示实体是否成功入队。
 func (p *PriorityQueue) moveToBackoffQ(logger klog.Logger, entity framework.QueuedEntityInfo, event string, strategy *queueingStrategy) bool {
 	gatedBefore := entity.Gated()
-	// If SchedulerPopFromBackoffQ feature gate is enabled,
-	// PreEnqueue plugins are called on inserting entities to the backoffQ,
-	// not to call them again on popping out.
+	// SchedulerPopFromBackoffQ 启用时，PreEnqueue 插件在入 backoffQ 时执行，
+	// 弹出时不再重复调用。
 	if p.isPopFromBackoffQEnabled {
 		p.runPreEnqueuePlugins(context.Background(), entity)
 		if entity.Gated() {
 			if uInfo := p.unschedulableEntities.get(entity); uInfo == nil {
 				logger.V(5).Info("Entity moved to an internal scheduling queue, because it is gated", "type", entity.Type(), "entity", klog.KObj(entity), "event", event, "queue", unschedulableQ)
 			}
-			// Clearing WasFlushedFromUnschedulable is typically done on scheduling failure, but in case the flushed pod was gated, it never attempts scheduling.
-			// We clear it here to ensure it's not set the next time the pod is woken up by a non-flush event.
+			// 该标志通常在调度失败时清除；但被 flush 的 Pod 若被 gating 就不会尝试调度，
+			// 因此在这里清除，确保下次被非 flush 事件唤醒时不带该标志。
 			entity.SetWasFlushedFromUnschedulable(false)
 			p.unschedulableEntities.addOrUpdate(entity, gatedBefore, event, strategy)
 			return false
@@ -868,8 +831,8 @@ func (p *PriorityQueue) moveToBackoffQ(logger klog.Logger, entity framework.Queu
 	return true
 }
 
-// Add adds a pod to the active queue. It should be called only when a new pod
-// is added so there is no chance the pod is already in active/unschedulable/backoff queues
+// Add 将新建的 Pod 加入 activeQ。
+// 仅在新增 Pod 时调用，此时它不可能已存在于 active/unschedulable/backoff 队列中。
 func (p *PriorityQueue) Add(ctx context.Context, pod *v1.Pod) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -877,15 +840,12 @@ func (p *PriorityQueue) Add(ctx context.Context, pod *v1.Pod) {
 	p.addPod(ctx, pod)
 }
 
-// addPod adds a pod to the active queue, unless it's a pod group member,
-// in which case it's added to its queued pod group.
+// addPod 将 Pod 加入 activeQ；若它是 PodGroup 成员，则加入其所属的已入队 PodGroup。
 func (p *PriorityQueue) addPod(ctx context.Context, pod *v1.Pod) {
 	logger := klog.FromContext(ctx)
 	pInfo := p.newQueuedPodInfo(ctx, pod)
-	// addNominatedPod is called here unconditionally to ensure that the nomination of the added pod
-	// (even if gated, and thus not entering activeQ) is properly recorded in the nominator.
-	// Furthermore, this must be called before moveToActiveQ to prevent a potential data race,
-	// where an active scheduler loop could pop and process the pod before its nomination is recorded.
+	// 无条件调用 addNominatedPod，确保新增 Pod 的提名信息被记录（即使它被 gating 而未进入 activeQ）。
+	// 且必须在 moveToActiveQ 之前调用：否则调度循环可能在提名记录前就弹出并处理该 Pod，造成数据竞态。
 	p.nominator.addNominatedPod(logger, pInfo.PodInfo, nil)
 	if p.isPodGroupMember(pod) {
 		p.addPodGroupMember(logger, pInfo)
@@ -896,12 +856,12 @@ func (p *PriorityQueue) addPod(ctx context.Context, pod *v1.Pod) {
 	}
 }
 
-// addPodGroupMember adds pInfo as a member of its pod group into the scheduling queue.
+// addPodGroupMember 将 pInfo 作为其所属 PodGroup 的成员加入调度队列。
 func (p *PriorityQueue) addPodGroupMember(logger klog.Logger, pInfo *framework.QueuedPodInfo) {
 	rootInfoLookup, hasRoot := p.workloadForest.getRootLookupInfoForPod(pInfo.Pod)
 	if !hasRoot {
-		// If the PodGroup object cannot be fetched, the pod cannot be scheduled.
-		// It should be put into incompletePodGroupPods waiting for the pod group to be observed.
+		// 找不到 PodGroup 对象就无法调度该 Pod，
+		// 放入 incompletePodGroupPods 等待 PodGroup 被观察到。
 		p.incompletePodGroupPods.add(pInfo)
 		logger.V(5).Info("Pod with pod group added to incompletePodGroupPods, waiting for one or more parent pod group objects to be observed", "podGroup", pInfo.Pod.Spec.SchedulingGroup.PodGroupName, "pod", klog.KObj(pInfo))
 		return
@@ -912,14 +872,14 @@ func (p *PriorityQueue) addPodGroupMember(logger klog.Logger, pInfo *framework.Q
 	}
 
 	if p.activeQ.isLastPoppedEntity(rootInfoLookup) {
-		// If the last popped entity is the matching pod group, add the pod to the pending pod group pods,
-		// so it will be added to the pod group when it's requeued.
+		// 若刚弹出的正是对应的 PodGroup，就把 Pod 放入 pendingPodGroupPods，
+		// 待该 PodGroup 重新入队时再合并进去。
 		p.pendingPodGroupPods.add(pInfo)
 		logger.V(5).Info("Pod added to pending pod group pods, waiting for its root group to be requeued", "rootType", rootInfoLookup.Type(), "root", klog.KObj(rootInfoLookup), "pod", klog.KObj(pInfo))
 		return
 	}
 
-	// Create a new group as it's the first member pod in the queue.
+	// 队列中没有该组，当前 Pod 是首个成员，需新建一个组实体。
 	rootInfo := p.newQueuedPodGroupInfoFromRootLookup(logger, pInfo, rootInfoLookup)
 	if added := p.moveToActiveQ(logger, rootInfo, framework.EventUnscheduledPodAdd.Label(), false, nil); added {
 		p.activeQ.broadcast()
@@ -927,9 +887,9 @@ func (p *PriorityQueue) addPodGroupMember(logger klog.Logger, pInfo *framework.Q
 	logger.V(5).Info("Pod was added to root group as the first member pod", "rootType", rootInfo.Type(), "root", klog.KObj(rootInfo), "pod", klog.KObj(pInfo))
 }
 
-// deleteFromAnyQueue deletes an entity from any queue it may be in and returns
-// the entity and the queueing strategy (matching the queue where the entity was found).
-// If the entity is not found, it returns nil entity.
+// deleteFromAnyQueue 从实体可能所在的任意队列中删除该实体，
+// 并返回实体本身及其所在队列对应的排队策略。
+// 若未找到该实体，则返回 nil。
 func (p *PriorityQueue) deleteFromAnyQueue(entityLookup framework.QueuedEntityInfo) (framework.QueuedEntityInfo, queueingStrategy) {
 	if entity := p.activeQ.delete(entityLookup); entity != nil {
 		return entity, queueImmediately
@@ -944,8 +904,8 @@ func (p *PriorityQueue) deleteFromAnyQueue(entityLookup framework.QueuedEntityIn
 	return nil, queueSkip
 }
 
-// addToPodGroupIfExists tries to add pInfo as a member of its pod group into the scheduling queue.
-// It returns true if pInfo was added to an existing pod group.
+// addToPodGroupIfExists 尝试将 pInfo 作为其所属 PodGroup 的成员加入调度队列中已有的组。
+// 若成功加入已有 PodGroup，则返回 true。
 func (p *PriorityQueue) addToPodGroupIfExists(logger klog.Logger, pInfo *framework.QueuedPodInfo, rootInfoLookup framework.QueuedEntityInfo) bool {
 	entity, strategy := p.deleteFromAnyQueue(rootInfoLookup)
 	if entity == nil {
@@ -961,12 +921,11 @@ func (p *PriorityQueue) addToPodGroupIfExists(logger klog.Logger, pInfo *framewo
 	return true
 }
 
-// Activate moves the given pods to activeQ.
-// If a pod isn't found in unschedulableEntities or backoffQ and it's in-flight,
-// the wildcard event is registered so that the pod will be requeued when it comes back.
-// But, if a pod isn't found in unschedulableEntities or backoffQ and it's not in-flight (i.e., completely unknown pod),
-// Activate would ignore the pod.
-// If activating a pod that is a member of a pod group, the whole root pod group or composite pod group is activated.
+// Activate 将给定的 Pod 移入 activeQ。
+// 若 Pod 不在 unschedulableEntities 或 backoffQ 中且处于 in-flight 状态，
+// 则注册通配事件，待其返回队列时重新入队。
+// 若 Pod 不在上述两处且不处于 in-flight 状态（即完全未知的 Pod），Activate 会忽略它。
+// 若激活的 Pod 属于某个 PodGroup，则激活整个根 PodGroup 或组合 PodGroup。
 func (p *PriorityQueue) Activate(logger klog.Logger, pods map[string]*v1.Pod) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -988,9 +947,8 @@ func (p *PriorityQueue) Activate(logger klog.Logger, pods map[string]*v1.Pod) {
 			continue
 		}
 
-		// If this pod is in-flight, register the activation event so that the pod will be requeued when it comes back.
-		// Specifically in the in-tree plugins, this is for the scenario with the preemption plugin
-		// where the async preemption API calls are all done or fail at some point before the Pod comes back to the queue.
+		// 若 Pod 处于 in-flight 状态，注册激活事件，待其返回时重新入队。
+		// 对 in-tree 插件而言，这覆盖了抢占插件的场景：异步抢占 API 调用在 Pod 返回队列前已完成或已失败。
 		p.activeQ.addEventsIfPodInFlight(nil, pod, []fwk.ClusterEvent{framework.EventForceActivate})
 	}
 
@@ -1002,19 +960,19 @@ func (p *PriorityQueue) Activate(logger klog.Logger, pods map[string]*v1.Pod) {
 func (p *PriorityQueue) activate(logger klog.Logger, entityLookup framework.QueuedEntityInfo) bool {
 	var entity framework.QueuedEntityInfo
 	var movesFromBackoffQ bool
-	// Verify if the entity is present in unschedulableEntities or backoffQ.
+	// 检查实体是否在 unschedulableEntities 或 backoffQ 中。
 	if entity = p.unschedulableEntities.get(entityLookup); entity == nil {
-		// Entity may be present in the backoffQ. Try to delete the entity from the backoffQ now
-		// to make sure it won't be popped from the backoffQ just before moving it to the activeQ.
+		// 实体可能在 backoffQ 中。这里直接尝试删除，
+		// 避免它刚被移入 activeQ 前又从 backoffQ 弹出。
 		if entity = p.backoffQ.delete(entityLookup); entity == nil {
-			// Entity is not present in the backoffQ. Don't activate it.
+			// backoffQ 中也没有，不激活。
 			return false
 		}
 		movesFromBackoffQ = true
 	}
 
 	if entity == nil {
-		// Redundant safe check. We shouldn't reach here.
+		// 冗余的安全检查，不应走到这里。
 		utilruntime.HandleErrorWithLogger(logger, nil, "Internal error: cannot obtain entity")
 		return false
 	}
@@ -1022,18 +980,17 @@ func (p *PriorityQueue) activate(logger klog.Logger, entityLookup framework.Queu
 	return p.moveToActiveQ(logger, entity, framework.ForceActivate, movesFromBackoffQ, nil)
 }
 
-// SchedulingCycle returns current scheduling cycle.
+// SchedulingCycle 返回当前调度周期号。
 func (p *PriorityQueue) SchedulingCycle() int64 {
 	return p.activeQ.schedulingCycle()
 }
 
-// determineSchedulingHintForInFlightPod looks at the unschedulable plugins of the given Pod
-// and determines the scheduling hint for this Pod while checking the events that happened during in-flight.
+// determineSchedulingHintForInFlightPod 根据 Pod 的不可调度插件，
+// 并结合 in-flight 期间发生的事件，确定该 Pod 的排队提示。
 func (p *PriorityQueue) determineSchedulingHintForInFlightPod(logger klog.Logger, pInfo *framework.QueuedPodInfo) queueingStrategy {
 	if len(pInfo.UnschedulablePlugins) == 0 && len(pInfo.PendingPlugins) == 0 {
-		// No failed plugins are associated with this Pod.
-		// Meaning something unusual (a temporal failure on kube-apiserver, etc) happened and this Pod gets moved back to the queue.
-		// In this case, we should retry scheduling it because this Pod may not be retried until the next flush.
+		// 该 Pod 没有关联的失败插件，说明是 kube-apiserver 临时故障等异常情况导致其返回队列。
+		// 此时应重试调度，否则它可能要等到下次 flush 才会被处理。
 		return queueAfterBackoff
 	}
 
@@ -1043,7 +1000,7 @@ func (p *PriorityQueue) determineSchedulingHintForInFlightPod(logger klog.Logger
 		return queueAfterBackoff
 	}
 
-	// check if there is an event that makes this Pod schedulable based on pInfo.UnschedulablePlugins.
+	// 检查是否存在能让该 Pod 重新变为可调度的事件。
 	queueingStrategy := queueSkip
 	for _, e := range events {
 		logger.V(5).Info("Checking event for in-flight pod", "pod", klog.KObj(pInfo.Pod), "event", e.event.Label())
@@ -1052,15 +1009,13 @@ func (p *PriorityQueue) determineSchedulingHintForInFlightPod(logger klog.Logger
 		case queueSkip:
 			continue
 		case queueImmediately:
-			// queueImmediately is the highest priority.
-			// No need to go through the rest of the events.
+			// queueImmediately 优先级最高，无需继续检查其余事件。
 			return queueImmediately
 		case queueAfterBackoff:
-			// replace schedulingHint with queueAfterBackoff
+			// 记录 queueAfterBackoff 提示。
 			queueingStrategy = queueAfterBackoff
 			if pInfo.PendingPlugins.Len() == 0 {
-				// We can return immediately because no Pending plugins, which only can make queueImmediately, registered in this Pod,
-				// and queueAfterBackoff is the second highest priority.
+				// 该 Pod 没有 Pending 插件（它们才能产生 queueImmediately），而 queueAfterBackoff 是次高优先级，可直接返回。
 				return queueAfterBackoff
 			}
 		}
@@ -1068,13 +1023,12 @@ func (p *PriorityQueue) determineSchedulingHintForInFlightPod(logger klog.Logger
 	return queueingStrategy
 }
 
-// AddUnschedulablePodIfNotPresent inserts a pod that cannot be scheduled into
-// the queue, unless it is already in the queue.
+// AddUnschedulablePodIfNotPresent 将不可调度的 Pod 插回队列，若它已在队列中则跳过。
 func (p *PriorityQueue) AddUnschedulablePodIfNotPresent(logger klog.Logger, pInfo *framework.QueuedPodInfo, podSchedulingCycle int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	// In any case, this Pod will be moved back to the queue and we should call Done.
+	// 无论如何该 Pod 都会回到队列，必须调用 Done 解除 in-flight 标记。
 	calledDone := false
 	defer func() {
 		if !calledDone {
@@ -1095,30 +1049,28 @@ func (p *PriorityQueue) AddUnschedulablePodIfNotPresent(logger klog.Logger, pInf
 	}
 
 	if len(pInfo.UnschedulablePlugins) == 0 && len(pInfo.PendingPlugins) == 0 {
-		// This Pod came back because of some unexpected errors (e.g., a network issue).
+		// 没有插件拒绝，说明是网络异常等意外错误导致 Pod 返回。
 		pInfo.ConsecutiveErrorsCount++
 	} else {
-		// This Pod is rejected by some plugins, not coming back due to unexpected errors (e.g., a network issue)
+		// 是被插件拒绝而非意外错误导致返回。
 		pInfo.UnschedulableCount++
-		// We should reset the error count because the error is gone.
+		// 错误已消失，重置连续错误计数。
 		pInfo.ConsecutiveErrorsCount = 0
 	}
-	// Refresh the timestamp since the pod is re-added.
+	// Pod 重新入队，刷新时间戳。
 	pInfo.Timestamp = p.clock.Now()
-	// We changed ConsecutiveErrorsCount or UnschedulableCount plus Timestamp, and now the calculated backoff time should be different,
-	// removing the cached backoff time.
+	// 计数和时间戳都变了，缓存的退避到期时间已失效，需要清除。
 	pInfo.BackoffExpiration = time.Time{}
-	// Clear the flush flag since the pod is returning to the queue after a scheduling attempt.
+	// Pod 是经过一次调度尝试后返回队列的，清除 flush 标志。
 	pInfo.WasFlushedFromUnschedulable = false
 	pInfo.FlushTimestamp = time.Time{}
 
 	if p.isPodGroupMember(pod) {
-		// Done has to be called before adding the unschedulable pod group member.
-		// Otherwise, a race can happen when the pod is added to an active pod group,
-		// and the Pop sees the pod being not Done'd.
+		// 必须在加入不可调度的 PodGroup 成员前调用 Done。
+		// 否则 Pod 加入 active PodGroup 后，Pop 可能看到它仍处于未 Done 状态，产生竞态。
 		p.Done(pInfo.Pod.UID)
 		calledDone = true
-		// When the pod is a pod group member, process it in that context.
+		// Pod 属于 PodGroup 时，按组的上下文处理。
 		p.addUnschedulablePodGroupMember(logger, pInfo)
 		return nil
 	}
@@ -1129,40 +1081,38 @@ func (p *PriorityQueue) AddUnschedulablePodIfNotPresent(logger klog.Logger, pInf
 		metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Inc()
 	}
 
-	// We check whether this Pod may change its scheduling result by any of events that happened during scheduling.
+	// 检查调度期间发生的事件是否可能改变该 Pod 的调度结果。
 	schedulingHint := p.determineSchedulingHintForInFlightPod(logger, pInfo)
 
-	// In this case, we try to requeue this Pod to activeQ/backoffQ.
+	// 根据上述提示尝试将该 Pod 重新入 activeQ/backoffQ。
 	queue := p.requeueEntityWithQueueingStrategy(logger, pInfo, schedulingHint, framework.ScheduleAttemptFailure)
 	logger.V(3).Info("Pod moved to an internal scheduling queue", "pod", klog.KObj(pod), "event", framework.ScheduleAttemptFailure, "queue", queue, "schedulingCycle", podSchedulingCycle, "hint", schedulingHint, "unschedulable plugins", rejectorPlugins)
 	if queue == activeQ || (p.isPopFromBackoffQEnabled && queue == backoffQ) {
-		// When the Pod is moved to activeQ, need to let p.cond know so that the Pod will be pop()ed out.
+		// Pod 进入 activeQ（或可弹出的 backoffQ）后需唤醒 Pop。
 		p.activeQ.broadcast()
 	}
 
 	return nil
 }
 
-// addUnschedulablePodGroupMember adds pInfo as a member of its pod group into the scheduling queue.
+// addUnschedulablePodGroupMember 将 pInfo 作为其所属 PodGroup 的成员加入调度队列。
 func (p *PriorityQueue) addUnschedulablePodGroupMember(logger klog.Logger, pInfo *framework.QueuedPodInfo) {
 	rejectorPlugins := pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins)
 	for plugin := range rejectorPlugins {
 		metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Inc()
 	}
 
-	// Pod should be just re-added to the scheduling queue, because the queued pod group
-	// can be in any state. addPodGroupMember handles all possible cases.
+	// Pod 只需重新加入调度队列即可：已入队的 PodGroup 可能处于任意状态，
+	// addPodGroupMember 会处理所有情况。
 	p.addPodGroupMember(logger, pInfo)
 }
 
-// AddAttemptedPodGroupIfNeeded adds an attempted pod group back to scheduling queue.
-// If there are no pending pods, it will not add the pod group back to the queue.
-// Should be called synchronously to the pod group scheduling cycle.
-// If the pod group scheduling succeeded, the remaining pods of the pod group will be
-// requeued directly to the active queue instead of backoff.
-// If there were unschedulable pods remaining, the pod group will preserve its timestamp,
-// to trigger preemption immediately after the current cycle, unless a higher priority
-// pod or pod group comes in between.
+// AddAttemptedPodGroupIfNeeded 将已尝试调度的 PodGroup 加回调度队列。
+// 若没有待处理 Pod，则不会把该 PodGroup 加回队列。
+// 应与 PodGroup 调度周期同步调用。
+// 若 PodGroup 调度成功，其余 Pod 将直接重新入 activeQ，而不是走退避。
+// 若仍有不可调度的 Pod，PodGroup 会保留其时间戳，以便在当前周期后立即触发抢占，
+// 除非期间来了更高优先级的 Pod 或 PodGroup。
 func (p *PriorityQueue) AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo *framework.QueuedPodGroupInfo, schedulingCycle int64, status *fwk.Status) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1179,23 +1129,23 @@ func (p *PriorityQueue) AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo 
 	}
 
 	p.activeQ.clearPoppedEntity()
-	// Get the pending pods and put them into the pod group.
+	// 取出所有 pending Pod，准备放回 PodGroup。
 	var pendingPods []*framework.QueuedPodInfo
 	for _, leafPodGroup := range p.workloadForest.getLeafPodGroups(logger, pgInfo) {
 		pods := p.pendingPodGroupPods.clear(leafPodGroup.Namespace, leafPodGroup.Name)
 		pendingPods = append(pendingPods, pods...)
 	}
 	if len(pendingPods) == 0 {
-		// No pending pods, nothing to requeue.
+		// 没有 pending Pod，无需重入队。
 		return nil
 	}
-	// hadUnschedulableOrErrorPods is true if at least one pod of the pod group in this scheduling cycle was unschedulable or had an error.
+	// 本调度周期中是否至少有一个 Pod 不可调度或出错。
 	hadUnschedulableOrErrorPods := hasIntersection(pgInfo.QueuedPodInfos, pendingPods)
 
 	rootInfo := p.workloadForest.buildQueuedPodGroupInfo(logger, pgInfo)
 	if rootInfo == nil {
-		// This case shouldn't happen, because if the pod group was removed,
-		// pods should be put in the incompletePodGroupPods first, making pendingPods empty.
+		// 不应发生：若 PodGroup 被删除，其 Pod 会先进入 incompletePodGroupPods，
+		// 此时 pendingPods 应为空。
 		for _, pInfo := range pendingPods {
 			p.incompletePodGroupPods.add(pInfo)
 		}
@@ -1213,27 +1163,24 @@ func (p *PriorityQueue) AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo 
 	preserveTimestamp := false
 
 	if status.IsSuccess() {
-		// If the scheduling attempt of the pod group succeeded, requeue remaining pods directly to active queue.
+		// PodGroup 调度成功，其余 Pod 直接重新入 activeQ，不走退避。
 		requeueWithoutBackoff = true
-		// If there are remaining unschedulable or error pods, preserve timestamp, so that subsequent
-		// scheduling attempt triggers preemption immediately for the podgroup.
+		// 若仍有不可调度或出错的 Pod，保留时间戳，让下一次调度尝试立即为 PodGroup 触发抢占。
 		preserveTimestamp = hadUnschedulableOrErrorPods
-		// We should reset the error and unschedulable count, because the scheduling was successful.
+		// 调度已成功，重置错误与不可调度计数。
 		pgInfo.ConsecutiveErrorsCount = 0
 		pgInfo.UnschedulableCount = 0
 	} else if status.IsRejected() {
-		// This Pod group is rejected by some plugins, not coming back due to unexpected errors (e.g., a network issue).
+		// 是被插件拒绝，而非网络等意外错误导致返回。
 		pgInfo.UnschedulableCount++
-		// We should reset the error count because the error is gone.
+		// 错误已消失，重置连续错误计数。
 		pgInfo.ConsecutiveErrorsCount = 0
-		// We changed ConsecutiveErrorsCount or UnschedulableCount plus Timestamp, and now
-		// the calculated backoff time should be different, removing the cached backoff time.
+		// 计数和时间戳变了，缓存的退避到期时间已失效。
 		pgInfo.BackoffExpiration = time.Time{}
 	} else {
-		// This Pod group came back because of some unexpected errors (e.g., a network issue).
+		// 是网络异常等意外错误导致返回。
 		pgInfo.ConsecutiveErrorsCount++
-		// We changed ConsecutiveErrorsCount or UnschedulableCount plus Timestamp, and now
-		// the calculated backoff time should be different, removing the cached backoff time.
+		// 计数和时间戳变了，缓存的退避到期时间已失效。
 		pgInfo.BackoffExpiration = time.Time{}
 	}
 
@@ -1241,14 +1188,14 @@ func (p *PriorityQueue) AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo 
 		pgInfo.Timestamp = p.clock.Now()
 	}
 
-	// Clear the flush flag since the pod is returning to the queue after a scheduling attempt.
+	// PodGroup 经过一次调度尝试后返回队列，清除 flush 标志。
 	pgInfo.WasFlushedFromUnschedulable = false
 	pgInfo.FlushTimestamp = time.Time{}
 
 	rejectorPlugins := pgInfo.UnschedulablePlugins.Union(pgInfo.PendingPlugins)
 
-	// Try to requeue this pod group to activeQ or backoffQ.
-	// If the PreEnqueue fails for this pod group, it will be moved to the unschedulableEntities.
+	// 尝试将 PodGroup 重新入 activeQ 或 backoffQ。
+	// 若 PreEnqueue 未通过，则移入 unschedulableEntities。
 	queue := unschedulableQ
 	if !requeueWithoutBackoff && p.backoffQ.isEntityBackingoff(pgInfo) {
 		if added := p.moveToBackoffQ(logger, pgInfo, framework.ScheduleAttemptFailure, nil); added {
@@ -1261,14 +1208,14 @@ func (p *PriorityQueue) AddAttemptedPodGroupIfNeeded(logger klog.Logger, pgInfo 
 	}
 	logger.V(3).Info("Pod group moved to an internal scheduling queue", "podGroup", klog.KObj(pgInfo), "event", framework.ScheduleAttemptFailure, "queue", queue, "schedulingCycle", schedulingCycle, "unschedulable plugins", rejectorPlugins)
 	if queue == activeQ || (p.isPopFromBackoffQEnabled && queue == backoffQ) {
-		// When the Pod group is moved to activeQ, need to let p.cond know so that the Pod will be pop()ed out.
+		// PodGroup 进入 activeQ（或可弹出的 backoffQ）后需唤醒 Pop。
 		p.activeQ.broadcast()
 	}
 
 	return nil
 }
 
-// hasIntersection returns true if any pod in slice is present in the map.
+// hasIntersection 若 slice 中有任意 Pod 出现在 map 中则返回 true。
 func hasIntersection(m map[fwk.EntityKey][]*framework.QueuedPodInfo, slice []*framework.QueuedPodInfo) bool {
 	uids := sets.New[types.UID]()
 	for _, pInfos := range m {
@@ -1285,7 +1232,7 @@ func hasIntersection(m map[fwk.EntityKey][]*framework.QueuedPodInfo, slice []*fr
 	return false
 }
 
-// flushBackoffQCompleted Moves all pods from backoffQ which have completed backoff in to activeQ
+// flushBackoffQCompleted 将 backoffQ 中已完成退避的所有 Pod 移入 activeQ。
 func (p *PriorityQueue) flushBackoffQCompleted(logger klog.Logger) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1301,8 +1248,8 @@ func (p *PriorityQueue) flushBackoffQCompleted(logger klog.Logger) {
 	}
 }
 
-// flushUnschedulableEntitiesLeftover moves entities which stay in unschedulableEntities
-// longer than podMaxInUnschedulablePodsDuration to backoffQ or activeQ.
+// flushUnschedulableEntitiesLeftover 将停留在 unschedulableEntities 中超过
+// podMaxInUnschedulablePodsDuration 的实体移入 backoffQ 或 activeQ。
 func (p *PriorityQueue) flushUnschedulableEntitiesLeftover(logger klog.Logger) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1314,7 +1261,7 @@ func (p *PriorityQueue) flushUnschedulableEntitiesLeftover(logger klog.Logger) {
 		if flushTime := entity.GetFlushTimestamp(); flushTime.After(lastScheduleTime) {
 			lastScheduleTime = flushTime
 		}
-		// TODO(macsko): Once the PodGroups support queueing hints, we may want to extend the max duration for PodGroups.
+		// TODO(macsko): 待 PodGroup 支持 queueing hints 后，可能需要为其设置更长的最大停留时间。
 		if currentTime.Sub(lastScheduleTime) > p.podMaxInUnschedulablePodsDuration {
 			entity.SetWasFlushedFromUnschedulable(true)
 			entity.SetFlushTimestamp(currentTime)
@@ -1327,35 +1274,32 @@ func (p *PriorityQueue) flushUnschedulableEntitiesLeftover(logger klog.Logger) {
 	}
 }
 
-// Pop removes the head of the active queue and returns it. It blocks if the
-// activeQ is empty and waits until a new item is added to the queue. It
-// increments scheduling cycle when a pod is popped.
-// Note: This method should NOT be locked by the p.lock at any moment,
-// as it would lead to scheduling throughput degradation.
+// Pop 移除并返回 activeQ 的队首实体。activeQ 为空时阻塞，直到有新实体入队。
+// 每当弹出一个 Pod 时，调度周期号递增。
+// 注意：本方法任何时刻都不应持有 p.lock，否则会降低调度吞吐量。
 func (p *PriorityQueue) Pop(logger klog.Logger) (framework.QueuedEntityInfo, error) {
 	return p.activeQ.pop(logger)
 }
 
-// Done must be called for pod returned by Pop. This allows the queue to
-// keep track of which pods are currently being processed.
+// Done 必须对 Pop 返回的 Pod 调用，以便队列跟踪当前正在处理的 Pod。
 func (p *PriorityQueue) Done(pod types.UID) {
 	p.activeQ.done(pod)
 }
 
+// InFlightPods 返回当前处于 in-flight 状态的 Pod。
 func (p *PriorityQueue) InFlightPods() []*v1.Pod {
 	return p.activeQ.listInFlightPods()
 }
 
-// Update updates a pod in the active or backoff queue if present. Otherwise, it removes
-// the entity from the unschedulable queue if pod is updated in a way that it may
-// become schedulable and adds the updated one to the active queue.
-// If pod is not present in any of the queues, it is added to the active queue.
+// Update 更新 activeQ 或 backoffQ 中的 Pod（若存在）。
+// 否则，若 Pod 的更新可能使其变得可调度，则将其从不可调度队列移除并加入 activeQ。
+// 若 Pod 不在任何队列中，则将其加入 activeQ。
 func (p *PriorityQueue) Update(ctx context.Context, oldPod, newPod *v1.Pod) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	logger := klog.FromContext(ctx)
 
-	// Because the pod itself is being updated here, events are associated with the resource TargetPod.
+	// 这里被更新的是 Pod 本身，因此事件关联的资源是 TargetPod。
 	events := framework.PodSchedulingPropertiesChange(newPod, oldPod, true)
 
 	var entityLookup framework.QueuedEntityInfo
@@ -1374,22 +1318,20 @@ func (p *PriorityQueue) Update(ctx context.Context, oldPod, newPod *v1.Pod) {
 	}
 
 	updated := false
-	// Run the following code under the activeQ lock to make sure that in the meantime entity is not popped from either activeQ or backoffQ.
-	// This way, the event will be registered or the entity will be updated consistently.
-	// Locking only the part of Update method is sufficient, because in the other part the entity is in the unschedulableEntities,
-	// which is protected by p.lock anyway.
+	// 以下代码在 activeQ 锁内执行，确保期间实体不会从 activeQ 或 backoffQ 被弹出，
+	// 从而保证事件注册与实体更新是一致的。
+	// 只锁 Update 的这一段即可：其余部分实体在 unschedulableEntities 中，已受 p.lock 保护。
 	p.activeQ.underLock(func(unlockedActiveQ unlockedActiveQueuer) {
-		// The inflight pod will be requeued using the latest version from the informer cache, which matches what the event delivers.
-		// Record this Pod update because
-		// this update may make the Pod schedulable in case it gets rejected and comes back to the queue.
-		// We can clean it up once we change updatePodInSchedulingQueue to call MoveAllToActiveOrBackoffQueue.
-		// See https://github.com/kubernetes/kubernetes/pull/125578#discussion_r1648338033 for more context.
+		// in-flight Pod 回队时会使用 informer 缓存中的最新版本，这与事件携带的内容一致。
+		// 记录这次 Pod 更新，因为若它被拒绝后返回队列，该更新可能使其变为可调度。
+		// 待 updatePodInSchedulingQueue 改为调用 MoveAllToActiveOrBackoffQueue 后可清理此处逻辑。
+		// 背景见 https://github.com/kubernetes/kubernetes/pull/125578#discussion_r1648338033 。
 		if exists := unlockedActiveQ.addEventsIfPodInFlight(oldPod, newPod, events); exists {
 			logger.V(6).Info("The pod doesn't need to be queued for now because it's being scheduled and will be queued back if necessary", "pod", klog.KObj(newPod))
 			updated = true
 			return
 		}
-		// If the entity is already in the active queue, just update the pod there.
+		// 实体已在 activeQ 中，直接原地更新 Pod。
 		if pInfo := unlockedActiveQ.update(newPod, entityLookup); pInfo != nil {
 			p.UpdateNominatedPod(logger, oldPod, pInfo.PodInfo)
 			pInfo.PodSignature = p.signPod(ctx, newPod)
@@ -1397,7 +1339,7 @@ func (p *PriorityQueue) Update(ctx context.Context, oldPod, newPod *v1.Pod) {
 			return
 		}
 
-		// If the entity is in the backoff queue, update the pod there.
+		// 实体在 backoffQ 中，直接原地更新 Pod。
 		if pInfo := p.backoffQ.update(newPod, entityLookup); pInfo != nil {
 			p.UpdateNominatedPod(logger, oldPod, pInfo.PodInfo)
 			pInfo.PodSignature = p.signPod(ctx, newPod)
@@ -1410,26 +1352,24 @@ func (p *PriorityQueue) Update(ctx context.Context, oldPod, newPod *v1.Pod) {
 		return
 	}
 
-	// If the pod is in the unschedulable queue, updating it may make it schedulable.
+	// Pod 在不可调度队列中，更新可能使其变为可调度。
 	if entity := p.unschedulableEntities.get(entityLookup); entity != nil {
 		pInfo, err := entity.Update(newPod)
 		if err != nil {
 			logger.Error(err, "Failed to update pod in an entity", "type", entity.Type(), "entity", klog.KObj(entity), "pod", klog.KObj(newPod))
-			// Handle this case gracefully by adding the newPod to the queue.
+			// 优雅降级：实体更新失败时直接把 newPod 加入队列。
 			p.addPod(ctx, newPod)
 			return
 		}
 		p.UpdateNominatedPod(logger, oldPod, pInfo.PodInfo)
 		pInfo.PodSignature = p.signPod(ctx, newPod)
 
-		// When unscheduled Pods are updated, we check with QueueingHint
-		// whether the update may make the entities schedulable.
-		// Plugins have to implement a QueueingHint for Pod/Update event
-		// if the rejection from them could be resolved by updating unscheduled Pods itself.
+		// 不可调度 Pod 更新时，通过 QueueingHint 判断更新是否让实体变为可调度。
+		// 若插件的拒绝可通过 Pod 自身更新解除，它就必须实现 Pod/Update 事件的 QueueingHint。
 		for _, evt := range events {
-			// Here, the entityRef is captured for logging, to prevent a data race that can occur in the logger below,
-			// where a pod re-queued to activeQ in requeueEntityWithQueueingStrategy is popped and processed quickly enough,
-			// so the write in its failure handler overwrites the pod object in PodInfo, which is accessed for logging.
+			// 这里先捕获 entityRef 用于日志，避免后续日志中的数据竞态：
+			// requeueEntityWithQueueingStrategy 重新入 activeQ 的 Pod 可能很快被弹出处理，
+			// 其失败处理逻辑会覆写 PodInfo 中的 Pod 对象，而日志正要访问它。
 			entityRef := klog.KObj(entity)
 			hint := p.isEntityWorthRequeuing(logger, entity, evt, oldPod, newPod, nil)
 			queue := p.requeueEntityWithQueueingStrategy(logger, entity, hint, evt.Label())
@@ -1451,12 +1391,11 @@ func (p *PriorityQueue) Update(ctx context.Context, oldPod, newPod *v1.Pod) {
 			return
 		}
 	}
-	// If the entity is not in any of the queues, we add it.
+	// 实体不在任何队列中，直接加入。
 	p.addPod(ctx, newPod)
 }
 
-// decreaseUnschedulableReasonMetric decreases the metrics for the rejector plugins
-// which are both UnschedulablePlugins and PendingPlugins.
+// decreaseUnschedulableReasonMetric 减少 UnschedulablePlugins 和 PendingPlugins 中拒绝插件的指标。
 func decreaseUnschedulableReasonMetric(entity framework.QueuedEntityInfo) {
 	entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 		for plugin := range pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins) {
@@ -1466,8 +1405,8 @@ func decreaseUnschedulableReasonMetric(entity framework.QueuedEntityInfo) {
 	})
 }
 
-// Delete deletes the entity from activeQ, backoffQ or unschedulableEntities.
-// It assumes the pod is only in one structure.
+// Delete 从 activeQ、backoffQ 或 unschedulableEntities 中删除实体。
+// 假定 Pod 只存在于其中一处。
 func (p *PriorityQueue) Delete(logger klog.Logger, pod *v1.Pod) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1480,8 +1419,8 @@ func (p *PriorityQueue) Delete(logger klog.Logger, pod *v1.Pod) {
 	}
 }
 
-// deletePodGroupMember removes a pod from its pod group in the queue.
-// If the pod group is empty after removal, the pod group is removed from the queue.
+// deletePodGroupMember 从队列中的 PodGroup 移除一个 Pod。
+// 若移除后 PodGroup 为空，则将整个 PodGroup 从队列移除。
 func (p *PriorityQueue) deletePodGroupMember(logger klog.Logger, pod *v1.Pod) {
 	rootInfoLookup, hasRoot := p.workloadForest.getRootLookupInfoForPod(pod)
 	if !hasRoot {
@@ -1489,7 +1428,7 @@ func (p *PriorityQueue) deletePodGroupMember(logger klog.Logger, pod *v1.Pod) {
 		if pInfo == nil {
 			return
 		}
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		for plugin := range pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins) {
 			metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Dec()
 		}
@@ -1505,7 +1444,7 @@ func (p *PriorityQueue) deletePodGroupMember(logger klog.Logger, pod *v1.Pod) {
 		}
 
 		logger.V(5).Info("Pod belonging to a root group got deleted from pending pod group info", "rootType", rootInfoLookup.Type(), "root", klog.KObj(rootInfoLookup), "pod", klog.KObj(pInfo))
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		for plugin := range pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins) {
 			metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Dec()
 		}
@@ -1515,14 +1454,14 @@ func (p *PriorityQueue) deletePodGroupMember(logger klog.Logger, pod *v1.Pod) {
 
 	pInfo := pgInfo.RemovePod(pod)
 	if pInfo != nil {
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		for plugin := range pInfo.UnschedulablePlugins.Union(pInfo.PendingPlugins) {
 			metrics.UnschedulableReason(plugin, pInfo.Pod.Spec.SchedulerName).Dec()
 		}
 		logger.V(5).Info("Pod deleted from existing root group info", "rootType", pgInfo.Type(), "root", klog.KObj(pgInfo), "pod", klog.KObj(pInfo))
 	}
 	if !pgInfo.HasQueuedPodInfos() {
-		// The pod group is empty, so don't add it back to any queue.
+		// PodGroup 已空，无需加回任何队列。
 		return
 	}
 
@@ -1532,34 +1471,32 @@ func (p *PriorityQueue) deletePodGroupMember(logger klog.Logger, pod *v1.Pod) {
 	}
 }
 
-// deletePod removes an individual pod from the queue.
+// deletePod 从队列中删除单个 Pod。
 func (p *PriorityQueue) deletePod(pod *v1.Pod) {
 	pInfoLookup := newQueuedPodInfoForLookup(pod)
 
-	// Check activeQ
+	// 依次在各队列中查找并删除 Pod。
 	if entity := p.activeQ.delete(pInfoLookup); entity != nil {
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		decreaseUnschedulableReasonMetric(entity)
 		return
 	}
 
-	// Check backoffQ
 	if entity := p.backoffQ.delete(pInfoLookup); entity != nil {
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		decreaseUnschedulableReasonMetric(entity)
 		return
 	}
 
-	// Check unschedulableEntities
 	if entity := p.unschedulableEntities.get(pInfoLookup); entity != nil {
 		p.unschedulableEntities.delete(pInfoLookup, entity.Gated())
-		// Drop metric for deleted pod.
+		// 删除 Pod 时同步扣减相关指标。
 		decreaseUnschedulableReasonMetric(entity)
 	}
 }
 
-// AddPodGroup adds a new PodGroup object to the queue,
-// requeuing all pods associated with the pod group.
+// AddPodGroup 向队列新增一个 PodGroup 对象，
+// 并将与该 PodGroup 关联的所有 Pod 重新入队。
 func (p *PriorityQueue) AddPodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1568,7 +1505,7 @@ func (p *PriorityQueue) AddPodGroup(logger klog.Logger, podGroup *schedulingv1be
 
 	rootInfoLookup, hasRoot := p.workloadForest.getRootLookupInfoForPodGroup(podGroup)
 	if !hasRoot {
-		// If the root does not exist, then pods should stay in the incompletePodGroupPods.
+		// 根节点不存在，Pod 应继续留在 incompletePodGroupPods 等待。
 		return
 	}
 
@@ -1590,14 +1527,13 @@ func (p *PriorityQueue) AddPodGroup(logger klog.Logger, podGroup *schedulingv1be
 	}
 
 	for _, pInfo := range pInfos {
-		// To handle all cases reliably, pods removed from incompletePodGroupPods are added to the queue
-		// through the addPodGroupMember method.
+		// 统一走 addPodGroupMember 处理，可靠覆盖所有情况。
 		p.addPodGroupMember(logger, pInfo)
 	}
 	logger.V(5).Info("Pod Group was added to the root group and its pods were attempted to be moved from incompletePodGroupPods to the queue", "rootType", rootInfoLookup.Type(), "root", klog.KObj(rootInfoLookup), "podGroup", klog.KObj(podGroup), "podsLen", len(pInfos))
 }
 
-// UpdatePodGroup updates an existing PodGroup object in the queue.
+// UpdatePodGroup 更新队列中已有的 PodGroup 对象。
 func (p *PriorityQueue) UpdatePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1619,8 +1555,8 @@ func (p *PriorityQueue) UpdatePodGroup(logger klog.Logger, podGroup *schedulingv
 	})
 }
 
-// DeletePodGroup removes a PodGroup object from the queue,
-// moving all pods associated with the pod group to the incompletePodGroupPods.
+// DeletePodGroup 从队列移除一个 PodGroup 对象，
+// 并将与该 PodGroup 关联的所有 Pod 移入 incompletePodGroupPods。
 func (p *PriorityQueue) DeletePodGroup(logger klog.Logger, podGroup *schedulingv1beta1.PodGroup) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -1634,15 +1570,14 @@ func (p *PriorityQueue) DeletePodGroup(logger klog.Logger, podGroup *schedulingv
 	entity, strategy := p.deleteFromAnyQueue(rootInfoLookup)
 	if entity == nil {
 		if !p.activeQ.isLastPoppedEntity(rootInfoLookup) {
-			// Root PodGroup/CompositePodGroup isn't pending or enqueued.
-			// No pods are tracked for that group in the queue,
-			// because in such case they are either scheduled or the group has no pods left.
+			// 根 PodGroup/CompositePodGroup 既不 pending 也未入队，
+			// 队列中无需跟踪其 Pod：它们要么已调度，要么该组已无 Pod。
 			return
 		}
-		// Get the pending pods and move them to incompletePodGroupPods.
+		// 取出 pending Pod 并移入 incompletePodGroupPods。
 		pendingPods := p.pendingPodGroupPods.clear(podGroup.Namespace, podGroup.Name)
 		if len(pendingPods) == 0 {
-			// No pending pods, nothing to move.
+			// 没有 pending Pod，无需搬移。
 			return
 		}
 		for _, pInfo := range pendingPods {
@@ -1670,8 +1605,8 @@ func (p *PriorityQueue) DeletePodGroup(logger klog.Logger, podGroup *schedulingv
 	logger.V(5).Info("Pod group deleted from root group, decomposed and enqueued pods to incompletePodGroupPods", "rootType", rootInfo.Type(), "root", klog.KObj(rootInfo), "podGroup", klog.KObj(podGroup), "pods", len(removedPods))
 }
 
-// AddCompositePodGroup adds a new CompositePodGroup object to the queue.
-// It requeues all pods associated with the composite pod group.
+// AddCompositePodGroup 向队列新增一个 CompositePodGroup 对象。
+// 它会将与该组合 PodGroup 关联的所有 Pod 重新入队。
 func (p *PriorityQueue) AddCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup) {
 	if !p.isCompositePodGroupEnabled {
 		return
@@ -1682,7 +1617,7 @@ func (p *PriorityQueue) AddCompositePodGroup(logger klog.Logger, cpg *scheduling
 	p.workloadForest.addCompositePodGroup(cpg)
 	rootInfoLookup, hasRoot := p.workloadForest.getRootLookupInfoForCPG(cpg)
 	if !hasRoot {
-		// If the root does not exist, then pods should stay in the incompletePodGroupPods.
+		// 根节点不存在，Pod 应继续留在 incompletePodGroupPods 等待。
 		return
 	}
 
@@ -1705,14 +1640,13 @@ func (p *PriorityQueue) AddCompositePodGroup(logger klog.Logger, cpg *scheduling
 	}
 
 	for _, pInfo := range pInfos {
-		// To handle all cases reliably, pods removed from incompletePodGroupPods are added to the queue
-		// through the addPodGroupMember method.
+		// 统一走 addPodGroupMember 处理，可靠覆盖所有情况。
 		p.addPodGroupMember(logger, pInfo)
 	}
 	logger.V(5).Info("Composite Pod Group was added to the root group and its pods were attempted to be moved from incompletePodGroupPods to the queue", "rootType", rootInfoLookup.Type(), "root", klog.KObj(rootInfoLookup), "compositePodGroup", klog.KObj(cpg), "podsLen", len(pInfos))
 }
 
-// UpdateCompositePodGroup updates an existing CompositePodGroup object in the queue.
+// UpdateCompositePodGroup 更新队列中已有的 CompositePodGroup 对象。
 func (p *PriorityQueue) UpdateCompositePodGroup(logger klog.Logger, newCPG *schedulingv1alpha3.CompositePodGroup) {
 	if !p.isCompositePodGroupEnabled {
 		return
@@ -1737,8 +1671,8 @@ func (p *PriorityQueue) UpdateCompositePodGroup(logger klog.Logger, newCPG *sche
 	})
 }
 
-// DeleteCompositePodGroup removes a CompositePodGroup object from the queue.
-// It moves all pods in the hierarchy of the composite pod group to the incompletePodGroupPods.
+// DeleteCompositePodGroup 从队列移除一个 CompositePodGroup 对象。
+// 它会将该组合 PodGroup 层级下的所有 Pod 移入 incompletePodGroupPods。
 func (p *PriorityQueue) DeleteCompositePodGroup(logger klog.Logger, cpg *schedulingv1alpha3.CompositePodGroup) {
 	if !p.isCompositePodGroupEnabled {
 		return
@@ -1757,18 +1691,17 @@ func (p *PriorityQueue) DeleteCompositePodGroup(logger klog.Logger, cpg *schedul
 	entity, strategy := p.deleteFromAnyQueue(rootInfoLookup)
 	if entity == nil {
 		if !p.activeQ.isLastPoppedEntity(rootInfoLookup) {
-			// Root PodGroup/CompositePodGroup isn't pending or enqueued.
-			// No pods are tracked for that group in the queue,
-			// because in such case they are either scheduled or the group has no pods left.
+			// 根 PodGroup/CompositePodGroup 既不 pending 也未入队，
+			// 队列中无需跟踪其 Pod：它们要么已调度，要么该组已无 Pod。
 			return
 		}
-		// Get the pending pods and move them to incompletePodGroupPods.
+		// 取出 pending Pod 并移入 incompletePodGroupPods。
 		var pendingPods []*framework.QueuedPodInfo
 		for _, pg := range leafPGs {
 			pendingPods = append(pendingPods, p.pendingPodGroupPods.clear(pg.Namespace, pg.Name)...)
 		}
 		if len(pendingPods) == 0 {
-			// No pending pods, nothing to move.
+			// 没有 pending Pod，无需搬移。
 			return
 		}
 		for _, pInfo := range pendingPods {
@@ -1800,15 +1733,12 @@ func (p *PriorityQueue) DeleteCompositePodGroup(logger klog.Logger, cpg *schedul
 	}
 }
 
-// NOTE: this function assumes a lock has been acquired in the caller.
-// moveAllToActiveOrBackoffQueue moves all pods from unschedulableEntities to activeQ or backoffQ.
-// This function adds all pods and then signals the condition variable to ensure that
-// if Pop() is waiting for an entity, it receives the signal after all the pods are in the
-// queue and the head is the highest priority pod.
+// 注意：调用方必须已持有锁。
+// moveAllToActiveOrBackoffQueue 将 unschedulableEntities 中的所有 Pod 移入 activeQ 或 backoffQ。
+// 先批量入队再发信号，确保等待中的 Pop() 在所有 Pod 入队完毕、队首为最高优先级时才被唤醒。
 func (p *PriorityQueue) moveAllToActiveOrBackoffQueue(logger klog.Logger, event fwk.ClusterEvent, oldObj, newObj interface{}, preCheck PreEnqueueCheck) {
 	if !p.isEventOfInterest(logger, event) {
-		// No plugin is interested in this event.
-		// Return early before iterating all entities in unschedulableEntities for preCheck.
+		// 无插件关注该事件，提前返回，避免遍历所有实体执行 preCheck。
 		return
 	}
 
@@ -1816,20 +1746,19 @@ func (p *PriorityQueue) moveAllToActiveOrBackoffQueue(logger klog.Logger, event 
 	p.moveEntitiesToActiveOrBackoffQueue(logger, entities, event, oldObj, newObj, hintKeys)
 }
 
-// collectEntitiesToEvaluate determines which unschedulable entities should be evaluated
-// for requeueing based on the event. If PreQueueingHintFns narrow the set, only targeted
-// entities are returned; otherwise all entities passing preCheck are returned.
+// collectEntitiesToEvaluate 根据事件确定哪些不可调度实体需要评估是否重新入队。
+// 若 PreQueueingHintFns 收窄了范围，只返回目标实体；否则返回所有通过 preCheck 的实体。
 //
-// NOTE: this function assumes lock has been acquired in caller
+// 注意：调用方必须已持有锁。
 func (p *PriorityQueue) collectEntitiesToEvaluate(logger klog.Logger, event fwk.ClusterEvent, oldObj, newObj interface{}, preCheck PreEnqueueCheck) ([]framework.QueuedEntityInfo, *preQueueingHintPodKeys) {
-	// Run PreQueueingHintFns to narrow the pod set.
+	// 运行 PreQueueingHintFns 收窄 Pod 范围。
 	hintKeys := p.runPreQueueingHintPlugins(logger, event, oldObj, newObj)
 
-	// TODO: Add PreQueueingHint support for CompositePodGroup entities.
-	// Until then, skip narrowing when CPG is enabled to avoid missing CPG entities.
+	// TODO: 为 CompositePodGroup 实体增加 PreQueueingHint 支持。
+	// 在此之前，启用 CPG 时跳过收窄，避免漏掉 CPG 实体。
 	if !p.isCompositePodGroupEnabled && hintKeys != nil {
 		logger.V(5).Info("PreQueueingHint narrowed pod set", "candidates", hintKeys.candidatePods.Len(), "total", len(p.unschedulableEntities.entityInfoMap))
-		// Directly look up entities for pods identified by PreQueueingHint.
+		// 直接按 PreQueueingHint 给出的 Pod 查找对应实体。
 		entities := make([]framework.QueuedEntityInfo, 0, hintKeys.candidatePods.Len())
 		seen := make(map[string]bool)
 		for nn := range hintKeys.candidatePods {
@@ -1840,9 +1769,8 @@ func (p *PriorityQueue) collectEntitiesToEvaluate(logger klog.Logger, event fwk.
 				}
 				continue
 			}
-			// If not found as standalone pod, check if it belongs to a pod group
-			// via the pod's schedulingGroup field.
-			// TODO: Add support for CompositePodGroup (CPG) lookup.
+			// 作为独立 Pod 未找到时，尝试通过 schedulingGroup 字段查找其所属 PodGroup。
+			// TODO: 增加对 CompositePodGroup (CPG) 查找的支持。
 			if p.isGenericWorkloadEnabled {
 				pod, err := p.podLister.Pods(nn.Namespace).Get(nn.Name)
 				if err != nil {
@@ -1851,8 +1779,7 @@ func (p *PriorityQueue) collectEntitiesToEvaluate(logger klog.Logger, event fwk.
 					entityKey = fwk.PodGroupKey(nn.Namespace, *pod.Spec.SchedulingGroup.PodGroupName).String()
 					if entity, exists := p.unschedulableEntities.entityInfoMap[entityKey]; exists && !seen[entityKey] {
 						seen[entityKey] = true
-						// Only preCheck the specific pod identified by PreQueueingHint,
-						// not all members of the PodGroup.
+						// 只对 PreQueueingHint 命中的那个 Pod 做 preCheck，而非整个 PodGroup 的所有成员。
 						if preCheck == nil || preCheck(pod) {
 							entities = append(entities, entity)
 						}
@@ -1863,7 +1790,7 @@ func (p *PriorityQueue) collectEntitiesToEvaluate(logger klog.Logger, event fwk.
 		return entities, hintKeys
 	}
 
-	// No narrowing — evaluate all unschedulable entities.
+	// 未收窄范围，评估所有不可调度实体。
 	entities := make([]framework.QueuedEntityInfo, 0, len(p.unschedulableEntities.entityInfoMap))
 	for _, entity := range p.unschedulableEntities.entityInfoMap {
 		entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
@@ -1877,29 +1804,26 @@ func (p *PriorityQueue) collectEntitiesToEvaluate(logger klog.Logger, event fwk.
 	return entities, nil
 }
 
-// MoveAllToActiveOrBackoffQueue moves all pods from unschedulableEntities to activeQ or backoffQ.
-// This function adds all pods and then signals the condition variable to ensure that
-// if Pop() is waiting for an item, it receives the signal after all the pods are in the
-// queue and the head is the highest priority pod.
+// MoveAllToActiveOrBackoffQueue 将 unschedulableEntities 中的所有 Pod 移入 activeQ 或 backoffQ。
+// 先批量入队再发信号，确保等待中的 Pop() 在所有 Pod 入队完毕、队首为最高优先级时才被唤醒。
 func (p *PriorityQueue) MoveAllToActiveOrBackoffQueue(logger klog.Logger, event fwk.ClusterEvent, oldObj, newObj interface{}, preCheck PreEnqueueCheck) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.moveAllToActiveOrBackoffQueue(logger, event, oldObj, newObj, preCheck)
 }
 
-// requeueEntityWithQueueingStrategy tries to requeue entity to activeQ, backoffQ or unschedulable pod pool based on schedulingHint.
-// It returns the queue name entity goes.
+// requeueEntityWithQueueingStrategy 根据调度提示尝试将实体重入 activeQ、backoffQ 或不可调度池。
+// 返回值是实体最终进入的队列名。
 //
-// NOTE: this function assumes lock has been acquired in caller
+// 注意：调用方必须已持有锁。
 func (p *PriorityQueue) requeueEntityWithQueueingStrategy(logger klog.Logger, entity framework.QueuedEntityInfo, strategy queueingStrategy, event string) string {
 	if strategy == queueSkip {
-		// Current Gate status is required for already exisiting entities. For new entities, this parameter is ignored/unused by addPod/addPodGroup.
+		// 已存在的实体需要传入当前 gating 状态；新实体会被 addPod/addPodGroup 忽略该参数。
 		p.unschedulableEntities.addOrUpdate(entity, entity.Gated(), event, &strategy)
 		return unschedulableQ
 	}
 
-	// Entity might have completed its backoff time while being in unschedulableEntities,
-	// so we should check isEntityBackingoff before moving the entity to backoffQ.
+	// 实体停留在 unschedulableEntities 期间退避可能已结束，移入 backoffQ 前需再检查一次。
 	if strategy == queueAfterBackoff && p.backoffQ.isEntityBackingoff(entity) {
 		if added := p.moveToBackoffQ(logger, entity, event, &strategy); added {
 			return backoffQ
@@ -1907,35 +1831,33 @@ func (p *PriorityQueue) requeueEntityWithQueueingStrategy(logger klog.Logger, en
 		return unschedulableQ
 	}
 
-	// Reach here if schedulingHint is QueueImmediately, or schedulingHint is Queue but the entity is not backing off.
+	// 走到这里说明提示为 queueImmediately，或提示为 queueAfterBackoff 但退避已结束。
 	if added := p.moveToActiveQ(logger, entity, event, false, &strategy); added {
 		return activeQ
 	}
-	// Entity is gated. We don't have to push it back to unschedulable queue, because moveToActiveQ should already have done that.
+	// 实体被 gating。moveToActiveQ 已将其放回不可调度队列，无需重复操作。
 	return unschedulableQ
 }
 
-// NOTE: this function assumes lock has been acquired in caller
+// 注意：调用方必须已持有锁。
 func (p *PriorityQueue) moveEntitiesToActiveOrBackoffQueue(logger klog.Logger, entityInfoList []framework.QueuedEntityInfo, event fwk.ClusterEvent, oldObj, newObj interface{}, hintKeys *preQueueingHintPodKeys) {
 	if !p.isEventOfInterest(logger, event) {
-		// No plugin is interested in this event.
+		// 无插件关注该事件。
 		return
 	}
 
 	activated := false
 	for _, entity := range entityInfoList {
-		// As an optimization, we avoid re-evaluating gated entities for events unrelated to their gating plugin.
-		// However, wildcard events (e.g., periodic flushes) always trigger re-evaluation to entities pods don't
-		// get stuck due to incomplete or incorrect queueing hints.
+		// 优化：对与 gating 插件无关的事件，跳过被 gating 实体的重新评估。
+		// 但通配事件（如定期 flush）始终触发重新评估，避免队列提示不完整或不准确时 Pod 被卡住。
 		if entity.Gated() && !framework.ClusterEventIsWildCard(event) && !framework.MatchAnyClusterEvent(event, entity.GetGatingPluginEvents()) {
-			// This event doesn't interest the gating plugin of this Pod,
-			// which means this event never moves this Pod to activeQ.
+			// 该事件与该 Pod 的 gating 插件无关，不可能把它移入 activeQ。
 			continue
 		}
 
 		schedulingHint := p.isEntityWorthRequeuing(logger, entity, event, oldObj, newObj, hintKeys)
 		if schedulingHint == queueSkip {
-			// QueueingHintFn determined that this entity isn't worth putting to activeQ or backoffQ by this event.
+			// QueueingHintFn 判定该事件不值得把实体放入 activeQ 或 backoffQ。
 			logger.V(5).Info("Event is not making entity schedulable", "type", entity.Type(), "entity", entity, "event", event.Label())
 			continue
 		}
@@ -1947,9 +1869,8 @@ func (p *PriorityQueue) moveEntitiesToActiveOrBackoffQueue(logger klog.Logger, e
 		}
 	}
 
-	// AddUnschedulablePodIfNotPresent might get called for in-flight Pods later, and in
-	// AddUnschedulablePodIfNotPresent we need to know whether events were
-	// observed while scheduling them.
+	// 之后 in-flight Pod 可能调用 AddUnschedulablePodIfNotPresent，
+	// 它需要知道调度期间是否观察到过事件。
 	if added := p.activeQ.addEventIfAnyInFlight(oldObj, newObj, event); added {
 		logger.V(5).Info("Event received while entities are in flight", "event", event.Label())
 	}
@@ -1959,17 +1880,17 @@ func (p *PriorityQueue) moveEntitiesToActiveOrBackoffQueue(logger klog.Logger, e
 	}
 }
 
-// PodsInActiveQ returns all the Pods in the activeQ.
+// PodsInActiveQ 返回 activeQ 中的所有 Pod。
 func (p *PriorityQueue) PodsInActiveQ() []*v1.Pod {
 	return p.activeQ.list()
 }
 
-// PodsInBackoffQ returns all the Pods in the backoffQ.
+// PodsInBackoffQ 返回 backoffQ 中的所有 Pod。
 func (p *PriorityQueue) PodsInBackoffQ() []*v1.Pod {
 	return p.backoffQ.list()
 }
 
-// UnschedulablePods returns all the pods in unschedulable state.
+// UnschedulablePods 返回所有处于不可调度状态的 Pod。
 func (p *PriorityQueue) UnschedulablePods() []*v1.Pod {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -1983,22 +1904,22 @@ func (p *PriorityQueue) UnschedulablePods() []*v1.Pod {
 	return result
 }
 
-// PendingPodGroupPods returns all the pending pods waiting for their pod groups.
+// PendingPodGroupPods 返回所有等待其所属 PodGroup 的 pending Pod。
 func (p *PriorityQueue) PendingPodGroupPods() []*v1.Pod {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.pendingPodGroupPods.list()
 }
 
-// IncompletePodGroupPodsPods returns all the pending pods in incompletePodGroupPods.
-// It should be used only in the tests.
+// IncompletePodGroupPodsPods 返回 incompletePodGroupPods 中的所有 pending Pod。
+// 仅用于测试。
 func (p *PriorityQueue) IncompletePodGroupPodsPods() []*v1.Pod {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.incompletePodGroupPods.list()
 }
 
-// GetPod searches for a pod in the activeQ, backoffQ, and unschedulableEntities.
+// GetPod 在 activeQ、backoffQ 和 unschedulableEntities 中查找 Pod。
 func (p *PriorityQueue) GetPod(name, namespace string, schedulingGroup *v1.PodSchedulingGroup) (*framework.QueuedPodInfo, bool) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -2019,8 +1940,8 @@ func (p *PriorityQueue) GetPod(name, namespace string, schedulingGroup *v1.PodSc
 	return pInfo, pInfo != nil
 }
 
-// GetPodGroup searches for a pod group in the activeQ, backoffQ, and unschedulableEntities.
-// This function is only used for testing.
+// GetPodGroup 在 activeQ、backoffQ 和 unschedulableEntities 中查找 PodGroup。
+// 该函数仅用于测试。
 func (p *PriorityQueue) GetPodGroup(name, namespace string, entityKeyType fwk.EntityKeyType) (*framework.QueuedPodGroupInfo, bool) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -2077,9 +1998,9 @@ func (p *PriorityQueue) getPod(podLookup *v1.Pod, unlockedActiveQ unlockedActive
 var pendingPodsSummary = "activeQ:%v; backoffQ:%v; unschedulableEntities:%v"
 var pendingPodsExtendedSummary = "activeQ:%v; backoffQ:%v; unschedulableEntities:%v; pendingPodGroupMemberPods:%v; incompletePodGroupPods:%v"
 
-// PendingPods returns all the pending pods in the queue; accompanied by a debugging string
-// recording showing the number of pods in each queue respectively.
-// This function is used for debugging purposes in the scheduler cache dumper and comparer.
+// PendingPods 返回队列中所有 pending Pod，并附带一个调试字符串，
+// 记录各队列中的 Pod 数量。
+// 该函数用于 scheduler cache dumper 和 comparer 的调试。
 func (p *PriorityQueue) PendingPods() ([]*v1.Pod, string) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -2106,10 +2027,10 @@ func (p *PriorityQueue) PendingPods() ([]*v1.Pod, string) {
 	return result, fmt.Sprintf(pendingPodsExtendedSummary, activeQLen, backoffQLen, unschedulablePodsLen, pendingPodGroupPodsLen, incompletePodGroupPodsPodsLen)
 }
 
-// PatchPodStatus handles the pod status update by sending an update API call through API dispatcher.
-// This method should be used only if the SchedulerAsyncAPICalls feature gate is enabled.
+// PatchPodStatus 通过 API dispatcher 发送更新 API 调用来处理 Pod 状态更新。
+// 仅在 SchedulerAsyncAPICalls feature gate 启用时才应使用该方法。
 func (p *PriorityQueue) PatchPodStatus(pod *v1.Pod, conditions []*v1.PodCondition, nominatingInfo *fwk.NominatingInfo) (<-chan error, error) {
-	// Don't store anything in the cache. This might be extended in the next releases.
+	// 不在缓存中保存任何内容，后续版本可能扩展此处行为。
 	onFinish := make(chan error, 1)
 	err := p.apiDispatcher.Add(apicalls.Implementations.PodStatusPatch(pod, conditions, nominatingInfo), fwk.APICallOptions{
 		OnFinish: onFinish,
@@ -2120,7 +2041,7 @@ func (p *PriorityQueue) PatchPodStatus(pod *v1.Pod, conditions []*v1.PodConditio
 	return onFinish, nil
 }
 
-// Note: this function assumes the caller locks both p.lock.RLock and p.activeQ.getLock().RLock.
+// 注意：调用方必须同时持有 p.lock.RLock 和 p.activeQ.getLock().RLock。
 func (p *PriorityQueue) nominatedPodToInfo(np podRef, unlockedActiveQ unlockedActiveQueueReader) *framework.PodInfo {
 	pod := np.toPod()
 	pInfo := p.getPod(pod, unlockedActiveQ)
@@ -2130,10 +2051,9 @@ func (p *PriorityQueue) nominatedPodToInfo(np podRef, unlockedActiveQ unlockedAc
 	return &framework.PodInfo{Pod: pod}
 }
 
-// getEntityFromAnyQueue returns an entity from the activeQ, backoffQ, or unschedulableEntities.
-// Returns nil if the entity is not found in any queue.
-// The appropriate metric for the entity is also returned.
-// Note: In case the caller modifies the size of the entity, it should update the queue metric itself to match the new size.
+// getEntityFromAnyQueue 从 activeQ、backoffQ 或 unschedulableEntities 中返回实体。
+// 若任何队列中都没有该实体，则返回 nil。
+// 注意：若调用方修改了实体的大小，应自行同步更新队列指标以匹配新大小。
 func (p *PriorityQueue) getEntityFromAnyQueue(unlockedActiveQ unlockedActiveQueueReader, entityLookup framework.QueuedEntityInfo) framework.QueuedEntityInfo {
 	existing, ok := unlockedActiveQ.get(entityLookup)
 	if ok {
@@ -2152,7 +2072,7 @@ func (p *PriorityQueue) getEntityFromAnyQueue(unlockedActiveQ unlockedActiveQueu
 	return nil
 }
 
-// Close closes the priority queue.
+// Close 关闭优先级队列。
 func (p *PriorityQueue) Close() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -2161,9 +2081,8 @@ func (p *PriorityQueue) Close() {
 	p.activeQ.broadcast()
 }
 
-// NominatedPodsForNode returns a copy of pods that are nominated to run on the given node,
-// but they are waiting for other pods to be removed from the node.
-// CAUTION: Make sure you don't call this function while taking any queue's lock in any scenario.
+// NominatedPodsForNode 返回被提名在给定节点上运行、但仍在等待其他 Pod 从该节点移除的 Pod 副本。
+// 注意：任何情况下都不要在持有队列锁时调用该函数。
 func (p *PriorityQueue) NominatedPodsForNode(nodeName string) []fwk.PodInfo {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -2180,8 +2099,8 @@ func (p *PriorityQueue) NominatedPodsForNode(nodeName string) []fwk.PodInfo {
 	return pods
 }
 
-// signPod computes the scheduling signature for the given pod when OpportunisticBatching is enabled.
-// The signature is used to cache and reuse scheduling results for identical pods.
+// signPod 在 OpportunisticBatching 启用时为给定 Pod 计算调度签名。
+// 该签名用于缓存和复用相同 Pod 的调度结果。
 func (p *PriorityQueue) signPod(ctx context.Context, pod *v1.Pod) fwk.PodSignature {
 	if !p.isOpportunisticBatchingEnabled {
 		return nil
@@ -2200,11 +2119,10 @@ func (p *PriorityQueue) signPod(ctx context.Context, pod *v1.Pod) fwk.PodSignatu
 	return signer(ctx, pod)
 }
 
-// newQueuedPodInfo builds a QueuedPodInfo object.
+// newQueuedPodInfo 构造一个 QueuedPodInfo 对象。
 func (p *PriorityQueue) newQueuedPodInfo(ctx context.Context, pod *v1.Pod, plugins ...string) *framework.QueuedPodInfo {
 	now := p.clock.Now()
-	// ignore this err since apiserver doesn't properly validate affinity terms
-	// and we can't fix the validation for backwards compatibility.
+	// 忽略该错误：apiserver 未正确校验亲和性条款，且出于向后兼容无法修复校验逻辑。
 	podInfo, _ := framework.NewPodInfo(pod)
 	return &framework.QueuedPodInfo{
 		PodInfo: podInfo,
@@ -2217,12 +2135,10 @@ func (p *PriorityQueue) newQueuedPodInfo(ctx context.Context, pod *v1.Pod, plugi
 	}
 }
 
-// recordIncomingEntitiesMetrics records incoming queue metrics for pod-level and entity-level (individual pod or podgroup).
-// 'strategy' is the previous queuing strategy, helps determine if the entity moved into a different
-// queue or newly added to correctly maintain incoming entities metrics.
-// If strategy is 'nil' it means that entity is newly added.
-// If queue label defined by previous strategy is different from next queue label, it means that entity moved into a different queue.
-// In both cases, we increment the incoming entities metric for the new queue.
+// recordIncomingEntitiesMetrics 记录 Pod 级别和实体级别（单个 Pod 或 PodGroup）的入队指标。
+// strategy 是此前的排队策略，用于判断实体是跨队列移动还是新增，以正确维护入队指标。
+// strategy 为 nil 表示实体是新增的；若此前策略对应的队列标签与目标队列标签不同，则说明实体发生了跨队列移动。
+// 这两种情况都要为目标队列增加入队实体指标。
 func recordIncomingEntitiesMetrics(targetQueueLabel string, entity framework.QueuedEntityInfo, event string, strategy *queueingStrategy) {
 	metrics.SchedulerQueueIncomingPods.WithLabelValues(targetQueueLabel, event).Add(float64(entity.Size()))
 
@@ -2233,7 +2149,7 @@ func recordIncomingEntitiesMetrics(targetQueueLabel string, entity framework.Que
 	}
 }
 
-// strategyToQueueLabel maps previous queueingStrategy to the queue label (used for metrics) where an entity was present.
+// strategyToQueueLabel 将此前的 queueingStrategy 映射到实体当时所在队列的指标标签。
 func strategyToQueueLabel(strategy queueingStrategy) string {
 	switch strategy {
 	case queueImmediately:
@@ -2245,38 +2161,42 @@ func strategyToQueueLabel(strategy queueingStrategy) string {
 	}
 }
 
-// queuedEntityKeyFunc returns a unique key for a queued entity based on its type, namespace, and name.
+// queuedEntityKeyFunc 根据实体的类型、命名空间和名称生成唯一键。
 func queuedEntityKeyFunc(obj framework.QueuedEntityInfo) string {
 	return fmt.Sprintf("%s/%s/%s", obj.Type(), obj.GetNamespace(), obj.GetName())
 }
 
+// podKey 返回 Pod 对应的实体键。
 func podKey(pod *v1.Pod) fwk.EntityKey {
 	return fwk.PodKey(pod.Namespace, pod.Name)
 }
 
+// podGroupKeyForPod 返回 Pod 所属 PodGroup 的实体键。
 func podGroupKeyForPod(pod *v1.Pod) fwk.EntityKey {
 	return fwk.PodGroupKey(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 }
 
+// podGroupKey 返回 PodGroup 对应的实体键。
 func podGroupKey(podGroup *schedulingv1beta1.PodGroup) fwk.EntityKey {
 	return fwk.PodGroupKey(podGroup.Namespace, podGroup.Name)
 }
 
+// compositePodGroupKey 返回 CompositePodGroup 对应的实体键。
 func compositePodGroupKey(cpg *schedulingv1alpha3.CompositePodGroup) fwk.EntityKey {
 	return fwk.CompositePodGroupKey(cpg.Namespace, cpg.Name)
 }
 
-// preQueueingHintPodKeys holds the result of running PreQueueingHintFns for an event.
-// candidatePods is the union of all pods that any plugin wants to re-evaluate.
+// preQueueingHintPodKeys 保存针对某事件运行 PreQueueingHintFns 的结果。
+// candidatePods 是所有插件希望重新评估的 Pod 的并集。
 type preQueueingHintPodKeys struct {
 	candidatePods sets.Set[types.NamespacedName]
 	perPlugin     map[string]sets.Set[types.NamespacedName]
 }
 
-// runPreQueueingHintPlugins runs all registered PreQueueingHintFns for the given event
-// and returns a narrowed set of pod keys to evaluate, or nil if all pods should be evaluated.
+// runPreQueueingHintPlugins 针对给定事件运行所有已注册的 PreQueueingHintFn，
+// 返回收窄后的待评估 Pod 键集合；若应评估所有 Pod，则返回 nil。
 //
-// NOTE: this function assumes lock has been acquired in caller
+// 注意：调用方必须已持有锁。
 func (p *PriorityQueue) runPreQueueingHintPlugins(logger klog.Logger, event fwk.ClusterEvent, oldObj, newObj interface{}) *preQueueingHintPodKeys {
 	if !p.isPreQueueingHintsEnabled {
 		return nil
@@ -2305,7 +2225,7 @@ func (p *PriorityQueue) runPreQueueingHintPlugins(logger klog.Logger, event fwk.
 					return nil
 				}
 				if hintResult.AllPods {
-					// This plugin wants all pods evaluated; we cannot narrow.
+					// 该插件要求评估所有 Pod，无法收窄范围。
 					p.metricsRecorder.ObserveCounterAsync(metrics.PreQueueingHintEvaluations, 1, hintfn.PluginName, "all_pods")
 					return nil
 				}

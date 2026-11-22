@@ -229,10 +229,10 @@ func (f *fakePodActivator) Activate(logger klog.Logger, pods map[string]*v1.Pod)
 }
 
 type fakePodNominator struct {
-	// embed it so that we can only override NominatedPodsForNode
+	// 通过嵌入只覆盖 NominatedPodsForNode 方法
 	internalqueue.SchedulingQueue
 
-	// fakePodNominator doesn't respond to NominatedPodsForNode() until the channel is closed.
+	// 通道关闭前 fakePodNominator 不会响应 NominatedPodsForNode()。
 	requestStopper chan struct{}
 }
 
@@ -323,16 +323,15 @@ func TestPrepareCandidate(t *testing.T) {
 		preemptorPodGroup          *schedulingv1beta1.PodGroup
 		preemptorCompositePodGroup *schedulingv1alpha3.CompositePodGroup
 		testPods                   []*v1.Pod
-		// expectedDeletedPod is the pod name that is expected to be deleted.
+		// expectedDeletedPod 是预期被删除的 Pod 名称。
 		//
-		// You can set multiple pod name if there're multiple possibilities.
-		// Both empty and "" means no pod is expected to be deleted.
+		// 存在多种可能时可填写多个名字；空值与 "" 均表示不预期删除任何 Pod。
 		expectedDeletedPod    []string
 		expectedDeletionError bool
 		expectedPatchError    bool
-		// Only compared when async preemption is disabled.
+		// 仅在异步抢占关闭时比较。
 		expectedStatus *fwk.Status
-		// Only compared when async preemption is enabled.
+		// 仅在异步抢占开启时比较。
 		expectedPreemptingMap sets.Set[types.UID]
 		expectedActivatedPods map[string]*v1.Pod
 	}{
@@ -579,8 +578,7 @@ func TestPrepareCandidate(t *testing.T) {
 			expectedPatchError: true,
 			expectedDeletedPod: []string{
 				"victim2",
-				// The first victim could fail before the deletion of the second victim happens,
-				// which results in the second victim not being deleted.
+				// 第一个受害者可能在第二个被删除前就失败，导致第二个受害者未被删除。
 				"",
 			},
 			expectedStatus:        fwk.AsStatus(errPatchStatusFailed),
@@ -693,9 +691,9 @@ func TestPrepareCandidate(t *testing.T) {
 							deletionFailure = true
 							return true, nil, errDeletePodFailed
 						}
-						// fake clientset does not return an error for not-found pods, so we simulate it here.
+						// fake clientset 对不存在的 Pod 不返回错误，这里手动模拟。
 						if name == "not-found-victim" {
-							// Simulate a not-found error.
+							// 模拟 not-found 错误。
 							return true, nil, apierrors.NewNotFound(v1.Resource("pods"), name)
 						}
 
@@ -710,7 +708,7 @@ func TestPrepareCandidate(t *testing.T) {
 							patchFailure = true
 							return true, nil, errPatchStatusFailed
 						}
-						// fake clientset does not return an error for not-found pods, so we simulate it here.
+						// fake clientset 对不存在的 Pod 不返回错误，这里手动模拟。
 						if action.(clienttesting.PatchAction).GetName() == "not-found-victim" {
 							return true, nil, apierrors.NewNotFound(v1.Resource("pods"), "not-found-victim")
 						}
@@ -721,9 +719,9 @@ func TestPrepareCandidate(t *testing.T) {
 					eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: cs.EventsV1()})
 					fakeActivator := &fakePodActivator{activatedPods: make(map[string]*v1.Pod), mu: mu}
 
-					// Note: NominatedPodsForNode is called at the beginning of the goroutine in any case.
-					// fakePodNominator can delay the response of NominatedPodsForNode until the channel is closed,
-					// which allows us to test the preempting map before the goroutine does nothing yet.
+					// NominatedPodsForNode 总在 goroutine 开始时调用。
+					// fakePodNominator 可延迟该调用直到通道关闭，
+					// 便于在 goroutine 尚未推进时检查 preempting map。
 					requestStopper := make(chan struct{})
 					nominator := &fakePodNominator{
 						SchedulingQueue: internalqueue.NewSchedulingQueue(nil, informerFactory),
@@ -778,8 +776,7 @@ func TestPrepareCandidate(t *testing.T) {
 
 						expectedMap := tt.expectedPreemptingMap
 
-						// The preempting map should be registered synchronously
-						// so we don't need wait.Poll.
+						// preempting map 是同步注册的，无需 wait.Poll 等待。
 						if !expectedMap.Equal(executor.preempting) {
 							t.Errorf("expected preempting map %v, got %v", expectedMap, executor.preempting)
 							close(requestStopper)
@@ -787,7 +784,7 @@ func TestPrepareCandidate(t *testing.T) {
 							return
 						}
 						executor.mu.Unlock()
-						// make the requests complete
+						// 让请求完成
 						close(requestStopper)
 					} else {
 						close(requestStopper) // no need to stop requests
@@ -811,7 +808,7 @@ func TestPrepareCandidate(t *testing.T) {
 						executor.mu.Lock()
 						defer executor.mu.Unlock()
 						if len(executor.preempting) != 0 {
-							// The preempting map should be empty after the goroutine in all test cases.
+							// 所有用例中 goroutine 结束后 preempting map 都应为空。
 							lastErrMsg = fmt.Sprintf("expected no preempting pods, got %v", executor.preempting)
 							return false, nil
 						}
@@ -837,24 +834,24 @@ func TestPrepareCandidate(t *testing.T) {
 						}
 
 						if deletedPods.Len() > 1 {
-							// For now, we only expect at most one pod to be deleted in all test cases.
-							// If we need to test multiple pods deletion, we need to update the test table definition.
+							// 目前所有用例最多只预期删除一个 Pod；
+							// 若要测试多 Pod 删除，需更新测试表定义。
 							return false, fmt.Errorf("expected at most one pod to be deleted, got %v", deletedPods.UnsortedList())
 						}
 
 						if len(tt.expectedDeletedPod) == 0 {
 							if deletedPods.Len() != 0 {
-								// When tt.expectedDeletedPod is empty, we expect no pod to be deleted.
+								// tt.expectedDeletedPod 为空表示不预期删除 Pod。
 								return false, fmt.Errorf("expected no pod to be deleted, got %v", deletedPods.UnsortedList())
 							}
-							// nothing further to check.
+							// 无需更多检查。
 							return true, nil
 						}
 
 						found := false
 						for _, podName := range tt.expectedDeletedPod {
 							if deletedPods.Has(podName) ||
-								// If podName is empty, we expect no pod to be deleted.
+								// podName 为空表示不预期删除 Pod。
 								(deletedPods.Len() == 0 && podName == "") {
 								found = true
 							}
@@ -1015,11 +1012,11 @@ func TestPrepareCandidateAsyncSetsPreemptingSets(t *testing.T) {
 					case "compositepodgroup":
 						expectedPreemptorUID = preemptorCompositePodGroup.UID
 					}
-					// preemptPodCallsCounter helps verify if the last victim pod gets preempted after other victims.
+					// preemptPodCallsCounter 用于验证最后一个受害者是否在其他受害者之后被抢占。
 					preemptPodCallsCounter := 0
 					preemptFunc := executor.PreemptPod
 					executor.PreemptPod = func(ctx context.Context, c Candidate, preemptor ExecutorPreemptor, victim *v1.Pod, pluginName string) (bool, error) {
-						// Verify contents of the sets: preempting and lastVictimsPendingPreemption before preemption of subsequent pods.
+						// 在抢占后续 Pod 前校验 preempting 与 lastVictimsPendingPreemption 两个集合。
 						executor.mu.RLock()
 						preemptPodCallsCounter++
 
@@ -1069,11 +1066,11 @@ func TestPrepareCandidateAsyncSetsPreemptingSets(t *testing.T) {
 					}
 					executor.prepareCandidateAsync(tt.candidate, preemptor, "test-plugin")
 
-					// Perform the checks when there are no victims left to preempt.
+					// 在没有剩余受害者可抢占时执行检查。
 					t.Log("Waiting for async preemption goroutine to finish cleanup...")
 
 					err = wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 2*time.Second, false, func(ctx context.Context) (bool, error) {
-						// Check if the preemptor is removed from the ev.preempting set.
+						// 检查抢占者是否已从 ev.preempting 集合中移除。
 						executor.mu.RLock()
 						defer executor.mu.RUnlock()
 						return !executor.preempting.Has(expectedPreemptorUID), nil
@@ -1228,7 +1225,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 				},
 			}
 
-			// Set up the fake clientset.
+			// 准备 fake clientset。
 			preemptionAttemptedPods := sets.New[string]()
 			deletedPods := sets.New[string]()
 			mu := &sync.RWMutex{}
@@ -1253,7 +1250,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 				return true, nil, nil
 			})
 
-			// Set up the framework.
+			// 准备框架。
 			informerFactory := informers.NewSharedInformerFactory(cs, 0)
 			eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: cs.EventsV1()})
 			fakeActivator := &fakePodActivator{activatedPods: make(map[string]*v1.Pod), mu: mu}
@@ -1285,7 +1282,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 
 			executor := NewExecutor(fwk, feature.Features{EnableAsyncPreemption: true})
 
-			// Run the actual preemption.
+			// 执行实际抢占。
 			if tt.preemptorCompositePodGroup != nil {
 				executor.prepareCandidateAsync(candidate, &compositePodGroupExecutorPreemptor{cpg: tt.preemptorCompositePodGroup, pods: tt.preemptorPods}, "test-plugin")
 			} else if tt.preemptorPodGroup != nil {
@@ -1294,9 +1291,9 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 				executor.prepareCandidateAsync(candidate, &podExecutorPreemptor{Pod: preemptor}, "test-plugin")
 			}
 
-			// Wait for the async preemption to finish.
+			// 等待异步抢占完成。
 			err = wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 5*time.Second, false, func(ctx context.Context) (bool, error) {
-				// Check if the preemptor is removed from the executor.preempting set.
+				// 检查抢占者是否已从 executor.preempting 集合中移除。
 				executor.mu.RLock()
 				defer executor.mu.RUnlock()
 				return len(executor.preempting) == 0, nil
@@ -1312,8 +1309,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 			if tt.expectPreemptionAttemptForLastVictim != preemptionAttemptedPods.Has(lastVictimName) {
 				t.Errorf("Last victim's preemption attempted - wanted: %v, got: %v", tt.expectPreemptionAttemptForLastVictim, preemptionAttemptedPods.Has(lastVictimName))
 			}
-			// Verify that the preemption of the last victim is attempted if and only if
-			// the preemption of all of the preceding victims succeeds.
+			// 验证仅当所有前置受害者抢占成功时，才会尝试抢占最后一个受害者。
 			precedingVictimsPreempted := true
 			for _, victim := range tt.victims[:len(tt.victims)-1] {
 				if !preemptionAttemptedPods.Has(victim.Name) || !deletedPods.Has(victim.Name) {
@@ -1324,7 +1320,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 				t.Errorf("Last victim's preemption attempted - wanted: %v, got: %v", precedingVictimsPreempted, preemptionAttemptedPods.Has(lastVictimName))
 			}
 
-			// Verify that the preemptor is activated if and only if the async preemption fails.
+			// 验证仅当异步抢占失败时抢占者才会被激活。
 			if tt.preemptorPodGroup != nil || tt.preemptorCompositePodGroup != nil {
 				if len(fakeActivator.activatedPods) != len(tt.preemptorPods) {
 					t.Errorf("Expected %d pods to be activated, but got %v", len(tt.preemptorPods), fakeActivator.activatedPods)
@@ -1340,7 +1336,7 @@ func TestAsyncPreemptionFailure(t *testing.T) {
 				}
 			}
 
-			// Verify if the last victim got deleted as expected.
+			// 验证最后一个受害者是否按预期被删除。
 			if tt.expectSuccessfulPreemption != deletedPods.Has(lastVictimName) {
 				t.Errorf("Last victim deleted - wanted: %v, got: %v", tt.expectSuccessfulPreemption, deletedPods.Has(lastVictimName))
 			}
@@ -1381,8 +1377,8 @@ func TestRemoveNominatedNodeName(t *testing.T) {
 					patch := action.(clienttesting.PatchAction)
 					actualPatchData = string(patch.GetPatch())
 					patchCalled <- struct{}{}
-					// For this test, we don't care about the result of the patched pod, just that we got the expected
-					// patch request, so just returning &v1.Pod{} here is OK because scheduler doesn't use the response.
+					// 本测试只关心是否发出了预期的 patch 请求，不关心 patch 后的 Pod 内容，
+					// 因此直接返回 &v1.Pod{} 即可，调度器不会使用响应。
 					return true, &v1.Pod{}, nil
 				})
 
@@ -1543,7 +1539,7 @@ func TestPreemptPod(t *testing.T) {
 					}
 				}
 
-				// check if the API call was made
+				// 检查是否发起了 API 调用
 				actions := cs.Actions()
 				if len(actions) != len(tt.expectedActions) {
 					t.Errorf("Expected %d actions, but got %d", len(tt.expectedActions), len(actions))
@@ -1775,7 +1771,7 @@ func TestPrepareCandidateAsyncActivatesPreemptorAfterLastVictimInMemoryPreemptio
 	}
 }
 
-// waitingPermitPlugin is a PermitPlugin that always returns Wait.
+// waitingPermitPlugin 是始终返回 Wait 的 PermitPlugin。
 type waitingPermitPlugin struct{}
 
 var _ fwk.PermitPlugin = &waitingPermitPlugin{}
@@ -2094,13 +2090,13 @@ func TestPreemptionExecutionDurationMetric(t *testing.T) {
 					},
 				}
 
-				// Capture metrics before
+				// 记录操作前的指标
 				preemptorType := podPreemptor.Type()
 				stateBefore := captureExecutionDurationMetric(testRegistry, preemptorType, tt.expectedResult)
 
 				if async {
 					executor.prepareCandidateAsync(candidate, podPreemptor, "test-plugin")
-					// Wait for async preemption to complete
+					// 等待异步抢占完成
 					err := wait.PollUntilContextTimeout(ctx, time.Millisecond*50, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 						executor.mu.Lock()
 						defer executor.mu.Unlock()
@@ -2113,7 +2109,7 @@ func TestPreemptionExecutionDurationMetric(t *testing.T) {
 					executor.prepareCandidate(ctx, candidate, podPreemptor, "test-plugin")
 				}
 
-				// Capture metrics after
+				// 记录操作后的指标
 				stateAfter := captureExecutionDurationMetric(testRegistry, preemptorType, tt.expectedResult)
 
 				diff := stateAfter.count - stateBefore.count

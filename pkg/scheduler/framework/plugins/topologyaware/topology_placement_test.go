@@ -42,7 +42,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+// TestGeneratePlacements 验证按拓扑域生成 placement 的行为，
+// 覆盖无约束、按 key 切分、已有 Pod 落位以及各类冲突报错场景。
 func TestGeneratePlacements(t *testing.T) {
+	// pathToRoot 记录已调度 Pod 从所属 PodGroup 到根组的层级路径。
 	type scheduledPod struct {
 		pathToRoot   []string
 		assignedNode string
@@ -356,8 +359,10 @@ func TestGeneratePlacements(t *testing.T) {
 		},
 	}
 
+	// 同一批用例在 CompositePodGroup 特性关闭和开启下各跑一遍。
 	for _, cpgEnabled := range []bool{false, true} {
 		for name, tt := range tests {
+			// 特性关闭时跳过只适用于 CPG 的用例。
 			if !cpgEnabled && tt.podGroupInfo.GetCompositePodGroup() != nil {
 				continue
 			}
@@ -382,6 +387,7 @@ func TestGeneratePlacements(t *testing.T) {
 
 				for i, scheduledPod := range tt.scheduledPodGroupPods {
 					parent := tt.podGroupInfo.GetName()
+					// 从路径末端往回逐层补齐 PodGroup/CompositePodGroup 对象。
 					for j, entityName := range slices.Backward(scheduledPod.pathToRoot) {
 						if !alreadyAdded.Has(entityName) {
 							if j == 0 {
@@ -465,6 +471,7 @@ func TestGeneratePlacements(t *testing.T) {
 						}
 					}
 
+					// EquateEmpty 让 nil 与空 map 视为等价，避免初始化方式差异干扰比较。
 					if diff := cmp.Diff(tt.wantPlacementNodes, gotPlacementNodes, cmpopts.EquateEmpty()); diff != "" {
 						t.Errorf("Unexpected placements (-want,+got):\n%s", diff)
 					}
@@ -474,6 +481,7 @@ func TestGeneratePlacements(t *testing.T) {
 	}
 }
 
+// makePodGroupInfoFromPG 把 PodGroup 包装成测试用的 PodGroupInfo。
 func makePodGroupInfoFromPG(pg *schedulingapi.PodGroup) fwk.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:      pg.Name,
@@ -483,6 +491,7 @@ func makePodGroupInfoFromPG(pg *schedulingapi.PodGroup) fwk.PodGroupInfo {
 	}
 }
 
+// makePodGroupInfoFromCPG 把 CompositePodGroup 包装成测试用的 PodGroupInfo。
 func makePodGroupInfoFromCPG(cpg *schedulingv1alphav3.CompositePodGroup) fwk.PodGroupInfo {
 	return &framework.PodGroupInfo{
 		Name:              cpg.Name,
@@ -492,10 +501,12 @@ func makePodGroupInfoFromCPG(cpg *schedulingv1alphav3.CompositePodGroup) fwk.Pod
 	}
 }
 
+// makePodGroup 构造一个带指定拓扑 key 的根 PodGroup。
 func makePodGroup(topologyKey string) fwk.PodGroupInfo {
 	return makePodGroupInfoFromPG(st.MakePodGroup().Name("root").Namespace("default").TopologyKey(topologyKey).Obj())
 }
 
+// makeCompositePodGroup 构造一个带指定拓扑 key 的根 CompositePodGroup。
 func makeCompositePodGroup(topologyKey string) fwk.PodGroupInfo {
 	return makePodGroupInfoFromCPG(st.MakeCompositePodGroup().Name("root").Namespace("default").TopologyKey(topologyKey).Obj())
 }

@@ -25,17 +25,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// nodeTree is a tree-like data structure that holds node names in each zone. Zone names are
-// keys to "NodeTree.tree" and values of "NodeTree.tree" are arrays of node names.
-// NodeTree is NOT thread-safe, any concurrent updates/reads from it must be synchronized by the caller.
-// It is used only by schedulerCache, and should stay as such.
+// nodeTree 是树形数据结构，按 zone 保存节点名称。zone 名是 "NodeTree.tree" 的键，
+// "NodeTree.tree" 的值是节点名称数组。
+// nodeTree 不是线程安全的，任何并发读写都必须由调用方同步。
+// 它只被 schedulerCache 使用，也应继续保持如此。
 type nodeTree struct {
-	tree     map[string][]string // a map from zone (region-zone) to an array of nodes in the zone.
-	zones    []string            // a list of all the zones in the tree (keys)
+	tree     map[string][]string // 从 zone（region-zone）到该 zone 内节点数组的映射。
+	zones    []string            // 树中所有 zone（键）的列表。
 	numNodes int
 }
 
-// newNodeTree creates a NodeTree from nodes.
+// newNodeTree 根据节点列表创建 NodeTree。
 func newNodeTree(logger klog.Logger, nodes []*v1.Node) *nodeTree {
 	nt := &nodeTree{
 		tree: make(map[string][]string, len(nodes)),
@@ -46,8 +46,7 @@ func newNodeTree(logger klog.Logger, nodes []*v1.Node) *nodeTree {
 	return nt
 }
 
-// addNode adds a node and its corresponding zone to the tree. If the zone already exists, the node
-// is added to the array of nodes in that zone.
+// addNode 把节点及其所属 zone 加入树。若 zone 已存在，则把节点追加到该 zone 的节点数组中。
 func (nt *nodeTree) addNode(logger klog.Logger, n *v1.Node) {
 	zone := utilnode.GetZoneKey(n)
 	if na, ok := nt.tree[zone]; ok {
@@ -66,13 +65,14 @@ func (nt *nodeTree) addNode(logger klog.Logger, n *v1.Node) {
 	nt.numNodes++
 }
 
-// removeNode removes a node from the NodeTree.
+// removeNode 从 NodeTree 中删除节点。
 func (nt *nodeTree) removeNode(logger klog.Logger, n *v1.Node) error {
 	zone := utilnode.GetZoneKey(n)
 	if na, ok := nt.tree[zone]; ok {
 		for i, nodeName := range na {
 			if nodeName == n.Name {
 				nt.tree[zone] = append(na[:i], na[i+1:]...)
+				// zone 已空，必须同步清理，否则 list 会碰到空列表。
 				if len(nt.tree[zone]) == 0 {
 					nt.removeZone(zone)
 				}
@@ -86,8 +86,8 @@ func (nt *nodeTree) removeNode(logger klog.Logger, n *v1.Node) error {
 	return fmt.Errorf("node %q in group %q was not found", n.Name, zone)
 }
 
-// removeZone removes a zone from tree.
-// This function must be called while writer locks are hold.
+// removeZone 从树中删除 zone。
+// 调用本函数时必须持有写锁。
 func (nt *nodeTree) removeZone(zone string) {
 	delete(nt.tree, zone)
 	for i, z := range nt.zones {
@@ -98,24 +98,23 @@ func (nt *nodeTree) removeZone(zone string) {
 	}
 }
 
-// updateNode updates a node in the NodeTree.
+// updateNode 更新 NodeTree 中的节点。
 func (nt *nodeTree) updateNode(logger klog.Logger, old, new *v1.Node) {
 	var oldZone string
 	if old != nil {
 		oldZone = utilnode.GetZoneKey(old)
 	}
 	newZone := utilnode.GetZoneKey(new)
-	// If the zone ID of the node has not changed, we don't need to do anything. Name of the node
-	// cannot be changed in an update.
+	// zone 未变则无需操作；节点名在更新中不会改变。
 	if oldZone == newZone {
 		return
 	}
-	nt.removeNode(logger, old) // No error checking. We ignore whether the old node exists or not.
+	nt.removeNode(logger, old) // 不检查错误，旧节点是否存在都无妨。
 	nt.addNode(logger, new)
 }
 
-// list returns the list of names of the node. NodeTree iterates over zones and in each zone iterates
-// over nodes in a round robin fashion.
+// list 返回节点名称列表。NodeTree 遍历各个 zone，并在每个 zone 内以轮询方式遍历节点，
+// 避免相邻节点总是集中在同一个 zone。
 func (nt *nodeTree) list() ([]string, error) {
 	if len(nt.zones) == 0 {
 		return nil, nil
@@ -124,13 +123,13 @@ func (nt *nodeTree) list() ([]string, error) {
 	numExhaustedZones := 0
 	nodeIndex := 0
 	for len(nodesList) < nt.numNodes {
-		if numExhaustedZones >= len(nt.zones) { // all zones are exhausted.
+		if numExhaustedZones >= len(nt.zones) { // 所有 zone 都遍历完了。
 			return nodesList, errors.New("all zones exhausted before reaching count of nodes expected")
 		}
 		for zoneIndex := 0; zoneIndex < len(nt.zones); zoneIndex++ {
 			na := nt.tree[nt.zones[zoneIndex]]
-			if nodeIndex >= len(na) { // If the zone is exhausted, continue
-				if nodeIndex == len(na) { // If it is the first time the zone is exhausted
+			if nodeIndex >= len(na) { // 该 zone 已遍历完，跳过。
+				if nodeIndex == len(na) { // 第一次遍历完时计数一次。
 					numExhaustedZones++
 				}
 				continue

@@ -27,15 +27,15 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
 )
 
-// The two thresholds are used as bounds for the image score range. They correspond to a reasonable size range for
-// container images compressed and stored in registries; 90%ile of images on dockerhub drops into this range.
+// 两个阈值界定镜像打分的范围。它们对应镜像仓库中压缩存储容器的常见大小区间，
+// dockerhub 上约 90% 的镜像落在此范围内。
 const (
 	mb                    int64 = 1024 * 1024
 	minThreshold          int64 = 23 * mb
 	maxContainerThreshold int64 = 1000 * mb
 )
 
-// ImageLocality is a score plugin that favors nodes that already have requested pod container's images.
+// ImageLocality 是一个打分插件，倾向选择已经缓存了 Pod 所需容器镜像的节点。
 type ImageLocality struct {
 	handle fwk.Handle
 }
@@ -43,18 +43,19 @@ type ImageLocality struct {
 var _ fwk.ScorePlugin = &ImageLocality{}
 var _ fwk.SignPlugin = &ImageLocality{}
 
-// Name is the name of the plugin used in the plugin registry and configurations.
+// Name 是该插件在插件注册表和配置文件中使用的名称。
 const Name = names.ImageLocality
 
-// Name returns name of the plugin. It is used in logs, etc.
+// Name 返回插件名称，用于日志等场景。
 func (pl *ImageLocality) Name() string {
 	return Name
 }
 
-// Filtering and scoring based on container image names.
+// SignPod 基于容器镜像名称生成签名片段。
 func (pl *ImageLocality) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	nameSet := sets.New[string]()
 
+	// 普通容器和 init 容器的镜像都要计入，去重后再签名。
 	containers := []v1.Container{}
 	containers = append(containers, pod.Spec.Containers...)
 	containers = append(containers, pod.Spec.InitContainers...)
@@ -62,12 +63,14 @@ func (pl *ImageLocality) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFr
 	for _, container := range containers {
 		nameSet.Insert(normalizedImageName(container.Image))
 	}
+	// sets.List 会排序，保证签名结果稳定。
 	names := sets.List(nameSet)
 	return []fwk.SignFragment{{Key: fwk.ImageNamesSignerName, Value: names}}, nil
 }
 
-// Score invoked at the score extension point.
+// Score 在 Score 扩展点调用，按节点上已有镜像的情况打分。
 func (pl *ImageLocality) Score(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
+	// 节点总数是镜像分布度的分母，每次从快照获取以反映最新集群规模。
 	nodeInfos, err := pl.handle.SnapshotSharedLister().NodeInfos().List()
 	if err != nil {
 		return 0, fwk.AsStatus(err)
@@ -80,19 +83,18 @@ func (pl *ImageLocality) Score(ctx context.Context, state fwk.CycleState, pod *v
 	return score, nil
 }
 
-// ScoreExtensions of the Score plugin.
+// ScoreExtensions 返回打分插件的扩展；本插件不需要归一化等后处理。
 func (pl *ImageLocality) ScoreExtensions() fwk.ScoreExtensions {
 	return nil
 }
 
-// New initializes a new plugin and returns it.
+// New 初始化并返回一个 ImageLocality 插件实例。
 func New(_ context.Context, _ runtime.Object, h fwk.Handle) (fwk.Plugin, error) {
 	return &ImageLocality{handle: h}, nil
 }
 
-// calculatePriority returns the priority of a node. Given the sumScores of requested
-// images on the node and the Pod's image count, the node's priority is obtained by
-// scaling the maximum priority value with a ratio derived from the clamped sumScores.
+// calculatePriority 根据节点上已有镜像的得分总和与 Pod 镜像数计算节点得分。
+// 先把得分截断到阈值区间，再按比例映射到最大分值，避免个别超大镜像主导结果。
 func calculatePriority(sumScores int64, imageCount int) int64 {
 	maxThreshold := maxContainerThreshold * int64(imageCount)
 	if sumScores < minThreshold {
@@ -104,10 +106,9 @@ func calculatePriority(sumScores int64, imageCount int) int64 {
 	return fwk.MaxScore * (sumScores - minThreshold) / (maxThreshold - minThreshold)
 }
 
-// sumImageScores returns the total image score and the number of image sources in the Pod spec,
-// including regular containers, init containers, and image volumes. Images that already exist on the node
-// receive a raw score of their size, scaled by scaledImageScore.
-// The raw score and image count are later used to calculate the final score.
+// sumImageScores 返回 Pod spec 中所有镜像来源（普通容器、init 容器和镜像卷）的得分总和与数量。
+// 节点上已存在的镜像按其大小计原始分，再经 scaledImageScore 按分布度缩放。
+// 原始分和镜像数量随后用于计算最终得分。
 func sumImageScores(nodeInfo fwk.NodeInfo, pod *v1.Pod, totalNumNodes int) (int64, int) {
 	var sum int64
 
@@ -137,16 +138,15 @@ func sumImageScores(nodeInfo fwk.NodeInfo, pod *v1.Pod, totalNumNodes int) (int6
 	return sum, imageCount
 }
 
-// scaledImageScore returns an adaptively scaled score for the given state of an image.
-// The size of the image is used as the base score, scaled by a factor which considers how much nodes the image has "spread" to.
-// This heuristic aims to mitigate the undesirable "node heating problem", i.e., pods get assigned to the same or
-// a few nodes due to image locality.
+// scaledImageScore 按镜像分布度自适应地缩放镜像得分。
+// 以镜像大小为基准分，再乘以镜像“扩散”到的节点比例。
+// 这样可缓解镜像亲和性导致的“热点节点”问题：Pod 都涌向缓存了镜像的少数节点。
 func scaledImageScore(imageState *fwk.ImageStateSummary, totalNumNodes int) int64 {
 	spread := float64(imageState.NumNodes) / float64(totalNumNodes)
 	return int64(float64(imageState.Size) * spread)
 }
 
-// normalizedImageName returns the CRI compliant name for a given image.
+// normalizedImageName 返回符合 CRI 规范的镜像名（缺少 tag 时补 :latest）。
 // TODO: cover the corner cases of missed matches, e.g,
 // 1. Using Docker as runtime and docker.io/library/test:tag in pod spec, but only test:tag will present in node status
 // 2. Using the implicit registry, i.e., test:tag or library/test:tag in pod spec but only docker.io/library/test:tag

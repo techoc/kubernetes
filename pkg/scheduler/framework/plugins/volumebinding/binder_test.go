@@ -48,14 +48,14 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/feature"
 )
 
-// Allow informer caches to observe API updates on slower CI nodes.
+// 给 informer 缓存留出时间观察 API 更新，适配较慢的 CI 节点。
 const cacheUpdateTimeout = 10 * time.Second
 
 var (
 	provisioner = "test-provisioner"
 
-	// PVCs for manual binding
-	// TODO: clean up all of these
+	// 用于手动绑定的 PVC
+	// TODO: 清理这些数据
 	unboundPVC          = makeTestPVC("unbound-pvc", "1G", "", pvcUnbound, "", "1", &waitClass)
 	unboundPVC2         = makeTestPVC("unbound-pvc2", "5G", "", pvcUnbound, "", "1", &waitClass)
 	preboundPVC         = makeTestPVC("prebound-pvc", "1G", "", pvcPrebound, "pv-node1a", "1", &waitClass)
@@ -65,7 +65,7 @@ var (
 	immediateUnboundPVC = makeTestPVC("immediate-unbound-pvc", "1G", "", pvcUnbound, "", "1", &immediateClass)
 	immediateBoundPVC   = makeTestPVC("immediate-bound-pvc", "1G", "", pvcBound, "pv-bound-immediate", "1", &immediateClass)
 
-	// PVCs for dynamic provisioning
+	// 用于动态制备的 PVC
 	provisionedPVC              = makeTestPVC("provisioned-pvc", "1Gi", "", pvcUnbound, "", "1", &waitClassWithProvisioner)
 	provisionedPVC2             = makeTestPVC("provisioned-pvc2", "1Gi", "", pvcUnbound, "", "1", &waitClassWithProvisioner)
 	provisionedPVCHigherVersion = makeTestPVC("provisioned-pvc2", "1Gi", "", pvcUnbound, "", "2", &waitClassWithProvisioner)
@@ -75,16 +75,16 @@ var (
 
 	selectedNodePVC = makeTestPVC("provisioned-pvc", "1Gi", nodeLabelValue, pvcSelectedNode, "", "1", &waitClassWithProvisioner)
 
-	// PVCs for CSI migration
+	// 用于 CSI 迁移的 PVC
 	boundMigrationPVC     = makeTestPVC("pvc-migration-bound", "1G", "", pvcBound, "pv-migration-bound", "1", &waitClass)
 	provMigrationPVCBound = makeTestPVC("pvc-migration-provisioned", "1Gi", "", pvcBound, "pv-migration-bound", "1", &waitClassWithProvisioner)
 
-	// PVCs and PV for GenericEphemeralVolume
+	// 用于 GenericEphemeralVolume 的 PVC 与 PV
 	conflictingGenericPVC = makeGenericEphemeralPVC("test-volume", false /* not owned*/)
 	correctGenericPVC     = makeGenericEphemeralPVC("test-volume", true /* owned */)
 	pvBoundGeneric        = makeTestPV("pv-bound", "node1", "1G", "1", correctGenericPVC, waitClass)
 
-	// PVs for manual binding
+	// 用于手动绑定的 PV
 	pvNode1a                   = makeTestPV("pv-node1a", "node1", "5G", "1", nil, waitClass)
 	pvNode1b                   = makeTestPV("pv-node1b", "node1", "10G", "1", nil, waitClass)
 	pvNode1c                   = makeTestPV("pv-node1b", "node1", "5G", "1", nil, waitClass)
@@ -96,36 +96,36 @@ var (
 	pvBoundImmediate           = makeTestPV("pv-bound-immediate", "node1", "1G", "1", immediateBoundPVC, immediateClass)
 	pvBoundImmediateNode2      = makeTestPV("pv-bound-immediate", "node2", "1G", "1", immediateBoundPVC, immediateClass)
 
-	// PVs for CSI migration
+	// 用于 CSI 迁移的 PV
 	migrationPVBound             = makeTestPVForCSIMigration(zone1Labels, boundMigrationPVC, true)
 	migrationPVBoundToUnbound    = makeTestPVForCSIMigration(zone1Labels, unboundPVC, true)
 	nonmigrationPVBoundToUnbound = makeTestPVForCSIMigration(zone1Labels, unboundPVC, false)
 
-	// storage class names
+	// StorageClass 名称
 	waitClass                = "waitClass"
 	immediateClass           = "immediateClass"
 	waitClassWithProvisioner = "waitClassWithProvisioner"
 	topoMismatchClass        = "topoMismatchClass"
 
-	// nodes objects
+	// Node 对象
 	node1         = makeNode("node1").withLabel(nodeLabelKey, "node1").Node
 	node2         = makeNode("node2").withLabel(nodeLabelKey, "node2").Node
 	node1NoLabels = makeNode("node1").Node
 	node1Zone1    = makeNode("node1").withLabel("topology.gke.io/zone", "us-east-1").Node
 	node1Zone2    = makeNode("node1").withLabel("topology.gke.io/zone", "us-east-2").Node
 
-	// csiNode objects
+	// CSINode 对象
 	csiNode1Migrated    = makeCSINode("node1", "kubernetes.io/gce-pd")
 	csiNode1NotMigrated = makeCSINode("node1", "")
 
-	// node topology
+	// 节点拓扑
 	nodeLabelKey   = "nodeKey"
 	nodeLabelValue = "node1"
 
-	// node topology for CSI migration
+	// 节点拓扑 for CSI migration
 	zone1Labels = map[string]string{v1.LabelFailureDomainBetaZone: "us-east-1", v1.LabelFailureDomainBetaRegion: "us-east-1a"}
 
-	// csiCapacity objects
+	// CSIStorageCapacity 对象
 	networkAttachedCapacity = makeCapacity("net", waitClassWithProvisioner, nil, "1Gi", "")
 	node1Capacity           = makeCapacity("net", waitClassWithProvisioner, node1, "1Gi", "")
 	node2Capacity           = makeCapacity("net", waitClassWithProvisioner, node2, "1Gi", "")
@@ -140,7 +140,7 @@ type testEnv struct {
 	internalNodeInformer    coreinformers.NodeInformer
 	internalCSINodeInformer storageinformers.CSINodeInformer
 
-	// For CSIStorageCapacity feature testing:
+	// 用于 CSIStorageCapacity 特性测试：
 	internalCSIDriverInformer          storageinformers.CSIDriverInformer
 	internalCSIStorageCapacityInformer storageinformers.CSIStorageCapacityInformer
 }
@@ -149,7 +149,7 @@ func newTestBinder(t *testing.T, ctx context.Context) *testEnv {
 	client := &fake.Clientset{}
 	logger := klog.FromContext(ctx)
 	reactor := pvtesting.NewVolumeReactor(ctx, client, nil, nil, nil)
-	// TODO refactor all tests to use real watch mechanism, see #72327
+	// TODO 重构所有测试使用真实的 watch 机制，见 #72327
 	client.AddWatchReactor("*", func(action k8stesting.Action) (handled bool, ret watch.Interface, err error) {
 		gvr := action.GetResource()
 		ns := action.GetNamespace()
@@ -188,7 +188,7 @@ func newTestBinder(t *testing.T, ctx context.Context) *testEnv {
 		t.Fatalf("Failed to create VolumeBinder: %v", err)
 	}
 
-	// Wait for informers cache sync
+	// 等待 informer 缓存同步
 	informerFactory.Start(ctx.Done())
 	for v, synced := range informerFactory.WaitForCacheSync(ctx.Done()) {
 		if !synced {
@@ -197,7 +197,7 @@ func newTestBinder(t *testing.T, ctx context.Context) *testEnv {
 		}
 	}
 
-	// Add storageclasses
+	// 添加 StorageClass
 	waitMode := storagev1.VolumeBindingWaitForFirstConsumer
 	immediateMode := storagev1.VolumeBindingImmediate
 	classes := []*storagev1.StorageClass{
@@ -255,7 +255,7 @@ func newTestBinder(t *testing.T, ctx context.Context) *testEnv {
 		}
 	}
 
-	// Get internal types
+	// 获取内部类型
 	internalBinder, ok := binder.(*volumeBinder)
 	if !ok {
 		t.Fatalf("Failed to convert to internal binder")
@@ -417,19 +417,19 @@ func (env *testEnv) validatePodCache(t *testing.T, node string, pod *v1.Pod, pod
 	if aLen, eLen := len(bindings), len(expectedBindings); aLen != eLen {
 		t.Errorf("expected %v bindings, got %v", eLen, aLen)
 	} else if expectedBindings == nil && bindings != nil {
-		// nil and empty are different
+		// nil 与空集合语义不同
 		t.Error("expected nil bindings, got empty")
 	} else if expectedBindings != nil && bindings == nil {
-		// nil and empty are different
+		// nil 与空集合语义不同
 		t.Error("expected empty bindings, got nil")
 	} else {
 		for i := 0; i < aLen; i++ {
-			// Validate PV
+			// 校验 PV
 			if diff := cmp.Diff(expectedBindings[i].pv, bindings[i].pv); diff != "" {
 				t.Errorf("binding.pv doesn't match (-want, +got):\n%s", diff)
 			}
 
-			// Validate PVC
+			// 校验 PVC
 			if diff := cmp.Diff(expectedBindings[i].pvc, bindings[i].pvc); diff != "" {
 				t.Errorf("binding.pvc doesn't match (-want, +got):\n%s", diff)
 			}
@@ -439,10 +439,10 @@ func (env *testEnv) validatePodCache(t *testing.T, node string, pod *v1.Pod, pod
 	if aLen, eLen := len(dynamicProvisions), len(expectedProvisionings); aLen != eLen {
 		t.Errorf("expected %v provisioned claims, got %v", eLen, aLen)
 	} else if expectedProvisionings == nil && dynamicProvisions != nil {
-		// nil and empty are different
+		// nil 与空集合语义不同
 		t.Error("expected nil provisionings, got empty")
 	} else if expectedProvisionings != nil && dynamicProvisions == nil {
-		// nil and empty are different
+		// nil 与空集合语义不同
 		t.Error("expected empty provisionings, got nil")
 	} else {
 		for i := 0; i < aLen; i++ {
@@ -454,7 +454,7 @@ func (env *testEnv) validatePodCache(t *testing.T, node string, pod *v1.Pod, pod
 }
 
 func (env *testEnv) validateAssume(t *testing.T, pod *v1.Pod, bindings []*BindingInfo, provisionings []*v1.PersistentVolumeClaim) {
-	// Check pv cache
+	// 检查 PV 缓存
 	pvCache := env.internalBinder.pvCache
 	for _, b := range bindings {
 		pv, err := pvCache.Get(b.pv.Name)
@@ -474,7 +474,7 @@ func (env *testEnv) validateAssume(t *testing.T, pod *v1.Pod, bindings []*Bindin
 		}
 	}
 
-	// Check pvc cache
+	// 检查 PVC 缓存
 	pvcCache := env.internalBinder.pvcCache
 	for _, p := range provisionings {
 		pvcKey := getPVCName(p)
@@ -490,18 +490,18 @@ func (env *testEnv) validateAssume(t *testing.T, pod *v1.Pod, bindings []*Bindin
 }
 
 func (env *testEnv) validateCacheRestored(t *testing.T, pod *v1.Pod, bindings []*BindingInfo, provisionings []*v1.PersistentVolumeClaim) {
-	// All PVs have been unmodified in cache
+	// 所有 PV 在缓存中都未被修改
 	pvCache := env.internalBinder.pvCache
 	for _, b := range bindings {
 		pv, _ := pvCache.Get(b.pv.Name)
 		apiPV, _ := pvCache.GetAPIObj(b.pv.Name)
-		// PV could be nil if it's missing from cache
+		// 缓存中缺失的 PV 可能为 nil
 		if pv != nil && pv != apiPV {
 			t.Errorf("PV %q was modified in cache", b.pv.Name)
 		}
 	}
 
-	// Check pvc cache
+	// 检查 PVC 缓存
 	pvcCache := env.internalBinder.pvcCache
 	for _, p := range provisionings {
 		pvcKey := getPVCName(p)
@@ -522,14 +522,14 @@ func (env *testEnv) validateBind(
 	expectedPVs []*v1.PersistentVolume,
 	expectedAPIPVs []*v1.PersistentVolume) {
 
-	// Check pv cache
+	// 检查 PV 缓存
 	pvCache := env.internalBinder.pvCache
 	for _, pv := range expectedPVs {
 		cachedPV, err := pvCache.Get(pv.Name)
 		if err != nil {
 			t.Errorf("Get PV %q returned error: %v", pv.Name, err)
 		}
-		// Cache may be overridden by API object with higher version, compare but ignore resource version.
+		// 缓存可能被更高版本的 API 对象覆盖，比较时忽略 resourceVersion。
 		newCachedPV := cachedPV.DeepCopy()
 		newCachedPV.ResourceVersion = pv.ResourceVersion
 		if diff := cmp.Diff(pv, newCachedPV); diff != "" {
@@ -537,7 +537,7 @@ func (env *testEnv) validateBind(
 		}
 	}
 
-	// Check reactor for API updates
+	// 检查 API 更新对应的 reactor
 	if err := env.reactor.CheckVolumes(expectedAPIPVs); err != nil {
 		t.Errorf("API reactor validation failed: %v", err)
 	}
@@ -549,14 +549,14 @@ func (env *testEnv) validateProvision(
 	expectedPVCs []*v1.PersistentVolumeClaim,
 	expectedAPIPVCs []*v1.PersistentVolumeClaim) {
 
-	// Check pvc cache
+	// 检查 PVC 缓存
 	pvcCache := env.internalBinder.pvcCache
 	for _, pvc := range expectedPVCs {
 		cachedPVC, err := pvcCache.Get(getPVCName(pvc))
 		if err != nil {
 			t.Errorf("Get PVC %q returned error: %v", getPVCName(pvc), err)
 		}
-		// Cache may be overridden by API object with higher version, compare but ignore resource version.
+		// 缓存可能被更高版本的 API 对象覆盖，比较时忽略 resourceVersion。
 		newCachedPVC := cachedPVC.DeepCopy()
 		newCachedPVC.ResourceVersion = pvc.ResourceVersion
 		if diff := cmp.Diff(pvc, newCachedPVC); diff != "" {
@@ -564,7 +564,7 @@ func (env *testEnv) validateProvision(
 		}
 	}
 
-	// Check reactor for API updates
+	// 检查 API 更新对应的 reactor
 	if err := env.reactor.CheckClaims(expectedAPIPVCs); err != nil {
 		t.Errorf("API reactor validation failed: %v", err)
 	}
@@ -624,7 +624,7 @@ func makeTestPVC(name, size, node string, pvcBoundState int, pvName, resourceVer
 	switch pvcBoundState {
 	case pvcSelectedNode:
 		metav1.SetMetaDataAnnotation(&pvc.ObjectMeta, volume.AnnSelectedNode, node)
-		// don't fallthrough
+		// 不应继续执行后续分支
 	case pvcBound:
 		metav1.SetMetaDataAnnotation(&pvc.ObjectMeta, volume.AnnBindCompleted, "yes")
 		fallthrough
@@ -689,10 +689,9 @@ func makeTestPVForCSIMigration(labels map[string]string, pvc *v1.PersistentVolum
 	pv := makeTestPV("pv-migration-bound", "node1", "1G", "1", pvc, waitClass)
 	pv.Spec.NodeAffinity = nil // Will be written by the CSI translation lib
 	pv.ObjectMeta.Labels = labels
-	// GCEPersistentDisk is used when migration is enabled, as its featuregate is locked to GA.
-	// RBD is used for the nonmigrated case, as its featuregate is still alpha. When RBD migration goes GA,
-	// a different nonmigrated plugin should be used instead. If there are no other plugins, then the
-	// nonmigrated test case is no longer relevant and can be removed.
+	// 迁移开启时用 GCEPersistentDisk，其特性门控已锁定为 GA；
+	// 未迁移场景用 RBD，其门控仍是 alpha。RBD 迁移进入 GA 后应换用其他未迁移插件；
+	// 若没有其他插件可用，该未迁移用例便失去意义，可删除。
 	if migrationEnabled {
 		pv.Spec.PersistentVolumeSource = v1.PersistentVolumeSource{
 			GCEPersistentDisk: &v1.GCEPersistentDiskVolumeSource{
@@ -780,15 +779,14 @@ func makeBinding(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) *Bindin
 
 func addProvisionAnn(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	res := pvc.DeepCopy()
-	// Add provision related annotations
+	// 添加与制备相关的注解
 	metav1.SetMetaDataAnnotation(&res.ObjectMeta, volume.AnnSelectedNode, nodeLabelValue)
 
 	return res
 }
 
-// reasonNames pretty-prints a list of reasons with variable names in
-// case of a test failure because that is easier to read than the full
-// strings.
+// reasonNames 在测试失败时用变量名打印原因列表，
+// 比输出完整字符串更易阅读。
 func reasonNames(reasons ConflictReasons) string {
 	var varNames []string
 	for _, reason := range reasons {
@@ -823,7 +821,7 @@ func checkReasons(t *testing.T, actual, expected ConflictReasons) {
 	}
 }
 
-// findPodVolumes gets and finds volumes for given pod and node
+// findPodVolumes 为给定 Pod 与节点获取并查找卷。
 func findPodVolumes(logger klog.Logger, binder SchedulerVolumeBinder, pod *v1.Pod, node *v1.Node) (*PodVolumes, ConflictReasons, error) {
 	podVolumeClaims, err := binder.GetPodVolumeClaims(logger, pod)
 	if err != nil {
@@ -839,18 +837,18 @@ func TestFindPodVolumesWithoutProvisioning(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		pvs     []*v1.PersistentVolume
 		podPVCs []*v1.PersistentVolumeClaim
-		// If nil, use pod PVCs
+		// 为 nil 时使用 Pod 的 PVC
 		cachePVCs []*v1.PersistentVolumeClaim
-		// If nil, makePod with podPVCs
+		// 为 nil 时用 podPVCs 构造 Pod
 		pod *v1.Pod
 
-		// Expected podBindingCache fields
+		// podBindingCache 的预期字段
 		expectedBindings []*BindingInfo
 
-		// Expected return values
+		// 预期返回值
 		reasons    ConflictReasons
 		shouldFail bool
 	}
@@ -988,20 +986,20 @@ func TestFindPodVolumesWithoutProvisioning(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		testEnv := newTestBinder(t, ctx)
 		testEnv.initVolumes(t, scenario.pvs, scenario.pvs)
 		if csiDriver != nil {
 			testEnv.addCSIDriver(csiDriver)
 		}
 
-		// a. Init pvc cache
+		// a. 初始化 PVC 缓存
 		if scenario.cachePVCs == nil {
 			scenario.cachePVCs = scenario.podPVCs
 		}
 		testEnv.initClaims(t, scenario.cachePVCs, scenario.cachePVCs)
 
-		// b. Generate pod with given claims
+		// b. 按给定 claim 生成 Pod
 		if scenario.pod == nil {
 			scenario.pod = makePod("test-pod").
 				withNamespace("testns").
@@ -1009,10 +1007,10 @@ func TestFindPodVolumesWithoutProvisioning(t *testing.T) {
 				withPVCSVolume(scenario.podPVCs).Pod
 		}
 
-		// Execute
+		// 执行
 		podVolumes, reasons, err := findPodVolumes(logger, testEnv.binder, scenario.pod, testNode)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1040,19 +1038,19 @@ func TestFindPodVolumesWithProvisioning(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		pvs     []*v1.PersistentVolume
 		podPVCs []*v1.PersistentVolumeClaim
-		// If nil, use pod PVCs
+		// 为 nil 时使用 Pod 的 PVC
 		cachePVCs []*v1.PersistentVolumeClaim
-		// If nil, makePod with podPVCs
+		// 为 nil 时用 podPVCs 构造 Pod
 		pod *v1.Pod
 
-		// Expected podBindingCache fields
+		// podBindingCache 的预期字段
 		expectedBindings   []*BindingInfo
 		expectedProvisions []*DynamicProvision
 
-		// Expected return values
+		// 预期返回值
 		reasons       ConflictReasons
 		shouldFail    bool
 		needsCapacity bool
@@ -1116,20 +1114,20 @@ func TestFindPodVolumesWithProvisioning(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		testEnv := newTestBinder(t, ctx)
 		testEnv.initVolumes(t, scenario.pvs, scenario.pvs)
 		if csiDriver != nil {
 			testEnv.addCSIDriver(csiDriver)
 		}
 
-		// a. Init pvc cache
+		// a. 初始化 PVC 缓存
 		if scenario.cachePVCs == nil {
 			scenario.cachePVCs = scenario.podPVCs
 		}
 		testEnv.initClaims(t, scenario.cachePVCs, scenario.cachePVCs)
 
-		// b. Generate pod with given claims
+		// b. 按给定 claim 生成 Pod
 		if scenario.pod == nil {
 			scenario.pod = makePod("test-pod").
 				withNamespace("testns").
@@ -1137,10 +1135,10 @@ func TestFindPodVolumesWithProvisioning(t *testing.T) {
 				withPVCSVolume(scenario.podPVCs).Pod
 		}
 
-		// Execute
+		// 执行
 		podVolumes, reasons, err := findPodVolumes(logger, testEnv.binder, scenario.pod, testNode)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1151,7 +1149,7 @@ func TestFindPodVolumesWithProvisioning(t *testing.T) {
 		expectedProvisions := scenario.expectedProvisions
 		if scenario.needsCapacity &&
 			csiDriver != nil && csiDriver.Spec.StorageCapacity != nil && *csiDriver.Spec.StorageCapacity {
-			// Without CSIStorageCapacity objects, provisioning is blocked.
+			// 没有 CSIStorageCapacity 对象时，制备会被阻塞。
 			expectedReasons = append(expectedReasons, ErrReasonNotEnoughSpace)
 			expectedProvisions = nil
 		}
@@ -1172,23 +1170,23 @@ func TestFindPodVolumesWithProvisioning(t *testing.T) {
 	}
 }
 
-// TestFindPodVolumesWithCSIMigration aims to test the node affinity check procedure that's
-// done in FindPodVolumes. In order to reach this code path, the given PVCs must be bound to a PV.
+// TestFindPodVolumesWithCSIMigration 测试 FindPodVolumes 中的节点亲和性检查流程。
+// 为进入该代码路径，给定的 PVC 必须已绑定到 PV。
 func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		pvs     []*v1.PersistentVolume
 		podPVCs []*v1.PersistentVolumeClaim
-		// If nil, use pod PVCs
+		// 为 nil 时使用 Pod 的 PVC
 		cachePVCs []*v1.PersistentVolumeClaim
-		// If nil, makePod with podPVCs
+		// 为 nil 时用 podPVCs 构造 Pod
 		pod *v1.Pod
 
-		// Setup
+		// 准备
 		initNodes    []*v1.Node
 		initCSINodes []*storagev1.CSINode
 
-		// Expected return values
+		// 预期返回值
 		reasons    ConflictReasons
 		shouldFail bool
 	}
@@ -1224,7 +1222,7 @@ func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		testEnv := newTestBinder(t, ctx)
 		testEnv.initVolumes(t, scenario.pvs, scenario.pvs)
 
@@ -1240,13 +1238,13 @@ func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 			testEnv.initCSINodes(scenario.initCSINodes)
 		}
 
-		// a. Init pvc cache
+		// a. 初始化 PVC 缓存
 		if scenario.cachePVCs == nil {
 			scenario.cachePVCs = scenario.podPVCs
 		}
 		testEnv.initClaims(t, scenario.cachePVCs, scenario.cachePVCs)
 
-		// b. Generate pod with given claims
+		// b. 按给定 claim 生成 Pod
 		if scenario.pod == nil {
 			scenario.pod = makePod("test-pod").
 				withNamespace("testns").
@@ -1254,10 +1252,10 @@ func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 				withPVCSVolume(scenario.podPVCs).Pod
 		}
 
-		// Execute
+		// 执行
 		_, reasons, err := findPodVolumes(logger, testEnv.binder, scenario.pod, node)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1274,13 +1272,13 @@ func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 
 func TestAssumePodVolumes(t *testing.T) {
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		podPVCs           []*v1.PersistentVolumeClaim
 		pvs               []*v1.PersistentVolume
 		bindings          []*BindingInfo
 		dynamicProvisions []*DynamicProvision
 
-		// Expected return values
+		// 预期返回值
 		shouldFail       bool
 		expectedAllBound bool
 
@@ -1342,7 +1340,7 @@ func TestAssumePodVolumes(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		testEnv := newTestBinder(t, ctx)
 		testEnv.initClaims(t, scenario.podPVCs, scenario.podPVCs)
 		pod := makePod("test-pod").
@@ -1355,10 +1353,10 @@ func TestAssumePodVolumes(t *testing.T) {
 		}
 		testEnv.initVolumes(t, scenario.pvs, scenario.pvs)
 
-		// Execute
+		// 执行
 		allBound, err := testEnv.binder.AssumePodVolumes(logger, pod, "node1", podVolumes)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1401,7 +1399,7 @@ func TestRevertAssumedPodVolumes(t *testing.T) {
 	expectedBindings := []*BindingInfo{makeBinding(unboundPVC, pvNode1aBound)}
 	expectedProvisionings := []*v1.PersistentVolumeClaim{selectedNodePVC}
 
-	// Setup
+	// 准备
 	testEnv := newTestBinder(t, ctx)
 	testEnv.initClaims(t, podPVCs, podPVCs)
 	pod := makePod("test-pod").
@@ -1427,25 +1425,25 @@ func TestRevertAssumedPodVolumes(t *testing.T) {
 
 func TestBindAPIUpdate(t *testing.T) {
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		bindings  []*BindingInfo
 		cachedPVs []*v1.PersistentVolume
-		// if nil, use cachedPVs
+		// 为 nil 时使用 cachedPVs
 		apiPVs []*v1.PersistentVolume
 
 		provisionedPVCs []*v1.PersistentVolumeClaim
 		cachedPVCs      []*v1.PersistentVolumeClaim
-		// if nil, use cachedPVCs
+		// 为 nil 时使用 cachedPVCs
 		apiPVCs []*v1.PersistentVolumeClaim
 
-		// Expected return values
+		// 预期返回值
 		shouldFail  bool
 		expectedPVs []*v1.PersistentVolume
-		// if nil, use expectedPVs
+		// 为 nil 时使用 expectedPVs
 		expectedAPIPVs []*v1.PersistentVolume
 
 		expectedPVCs []*v1.PersistentVolumeClaim
-		// if nil, use expectedPVCs
+		// 为 nil 时使用 expectedPVCs
 		expectedAPIPVCs []*v1.PersistentVolumeClaim
 	}
 	scenarios := map[string]scenarioType{
@@ -1524,7 +1522,7 @@ func TestBindAPIUpdate(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		testEnv := newTestBinder(t, ctx)
 		pod := makePod("test-pod").
 			withNamespace("testns").
@@ -1539,10 +1537,10 @@ func TestBindAPIUpdate(t *testing.T) {
 		testEnv.initClaims(t, scenario.cachedPVCs, scenario.apiPVCs)
 		testEnv.assumeVolumes(t, "node1", pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Execute
+		// 执行
 		err := testEnv.internalBinder.bindAPIUpdate(ctx, pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1568,22 +1566,22 @@ func TestCheckBindings(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		initPVs  []*v1.PersistentVolume
 		initPVCs []*v1.PersistentVolumeClaim
 
 		bindings        []*BindingInfo
 		provisionedPVCs []*v1.PersistentVolumeClaim
 
-		// api updates before checking
+		// 检查前先更新 API 对象
 		apiPVs  []*v1.PersistentVolume
 		apiPVCs []*v1.PersistentVolumeClaim
 
-		// delete objects before checking
+		// 检查前先删除对象
 		deletePVs  bool
 		deletePVCs bool
 
-		// Expected return values
+		// 预期返回值
 		shouldFail    bool
 		expectedBound bool
 	}
@@ -1722,7 +1720,7 @@ func TestCheckBindings(t *testing.T) {
 		logger, ctx := ktesting.NewTestContext(t)
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		// Setup
+		// 准备
 		pod := makePod("test-pod").
 			withNamespace("testns").
 			withNodeName("node1").Pod
@@ -1733,7 +1731,7 @@ func TestCheckBindings(t *testing.T) {
 		testEnv.initClaims(t, scenario.initPVCs, nil)
 		testEnv.assumeVolumes(t, "node1", pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Before execute
+		// 执行前
 		if scenario.deletePVs {
 			testEnv.deleteVolumes(t, scenario.initPVs)
 		} else {
@@ -1749,10 +1747,10 @@ func TestCheckBindings(t *testing.T) {
 			}
 		}
 
-		// Execute
+		// 执行
 		allBound, err := testEnv.internalBinder.checkBindings(logger, pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1773,7 +1771,7 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		initPVs      []*v1.PersistentVolume
 		initPVCs     []*v1.PersistentVolumeClaim
 		initNodes    []*v1.Node
@@ -1782,11 +1780,11 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 		bindings        []*BindingInfo
 		provisionedPVCs []*v1.PersistentVolumeClaim
 
-		// API updates before checking
+		// 检查前先更新 API 对象
 		apiPVs  []*v1.PersistentVolume
 		apiPVCs []*v1.PersistentVolumeClaim
 
-		// Expected return values
+		// 预期返回值
 		shouldFail    bool
 		expectedBound bool
 	}
@@ -1849,7 +1847,7 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup
+		// 准备
 		pod := makePod("test-pod").
 			withNamespace("testns").
 			withNodeName("node1").Pod
@@ -1861,7 +1859,7 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 		testEnv.initClaims(t, scenario.initPVCs, nil)
 		testEnv.assumeVolumes(t, "node1", pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Before execute
+		// 执行前
 		if err := testEnv.updateVolumes(ctx, scenario.apiPVs); err != nil {
 			t.Errorf("Failed to update PVs: %v", err)
 		}
@@ -1869,10 +1867,10 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 			t.Errorf("Failed to update PVCs: %v", err)
 		}
 
-		// Execute
+		// 执行
 		allBound, err := testEnv.internalBinder.checkBindings(logger, pod, scenario.bindings, scenario.provisionedPVCs)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -1893,27 +1891,27 @@ func TestBindPodVolumes(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		bindingsNil bool // Pass in nil bindings slice
 
 		nodes []*v1.Node
 
-		// before assume
+		// assume 之前
 		initPVs  []*v1.PersistentVolume
 		initPVCs []*v1.PersistentVolumeClaim
 
-		// assume PV & PVC with these binding results
+		// 用这些绑定结果 assume PV 与 PVC
 		binding          *BindingInfo
 		claimToProvision *v1.PersistentVolumeClaim
 
-		// API updates after assume before bind
+		// assume 之后、bind 之前更新 API 对象
 		apiPV  *v1.PersistentVolume
 		apiPVC *v1.PersistentVolumeClaim
 
-		// This function runs with a delay of 5 seconds
+		// 该函数延迟 5 秒执行
 		delayFunc func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim)
 
-		// Expected return values
+		// 预期返回值
 		shouldFail bool
 	}
 	scenarios := map[string]scenarioType{
@@ -1935,7 +1933,7 @@ func TestBindPodVolumes(t *testing.T) {
 			delayFunc: func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim) {
 				pvc := pvcs[0]
 				pv := pvs[0]
-				// Update PVC to be fully bound to PV
+				// 更新 PVC 使其完全绑定到 PV
 				newPVC := pvc.DeepCopy()
 				newPVC.Spec.VolumeName = pv.Name
 				metav1.SetMetaDataAnnotation(&newPVC.ObjectMeta, volume.AnnBindCompleted, "yes")
@@ -1949,7 +1947,7 @@ func TestBindPodVolumes(t *testing.T) {
 			initPVCs:         []*v1.PersistentVolumeClaim{provisionedPVC},
 			delayFunc: func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim) {
 				pvc := pvcs[0]
-				// Update PVC to be fully bound to PV
+				// 更新 PVC 使其完全绑定到 PV
 				newPVC, err := testEnv.client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
 				if err != nil {
 					t.Errorf("failed to get PVC %q: %v", pvc.Name, err)
@@ -2003,7 +2001,7 @@ func TestBindPodVolumes(t *testing.T) {
 			initPVCs: []*v1.PersistentVolumeClaim{unboundPVC},
 			delayFunc: func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim) {
 				pvc := pvcs[0]
-				// Delete PVC will fail check
+				// 删除 PVC 后检查应失败
 				if err := testEnv.client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(ctx, pvc.Name, metav1.DeleteOptions{}); err != nil {
 					t.Errorf("failed to delete PVC %q: %v", pvc.Name, err)
 				}
@@ -2023,7 +2021,7 @@ func TestBindPodVolumes(t *testing.T) {
 			claimToProvision: selectedNodePVC,
 			nodes:            []*v1.Node{node1, node2},
 			delayFunc: func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim) {
-				// Update PVC to be fully bound to a PV with a different node
+				// 更新 PVC 绑定到节点不同的 PV
 				newPVC := pvcs[0].DeepCopy()
 				newPVC.Spec.VolumeName = pvNode2.Name
 				metav1.SetMetaDataAnnotation(&newPVC.ObjectMeta, volume.AnnBindCompleted, "yes")
@@ -2039,7 +2037,7 @@ func TestBindPodVolumes(t *testing.T) {
 		logger, ctx := ktesting.NewTestContext(t)
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		// Setup
+		// 准备
 		pod := makePod("test-pod").
 			withNamespace("testns").
 			withNodeName("node1").Pod
@@ -2063,7 +2061,7 @@ func TestBindPodVolumes(t *testing.T) {
 			testEnv.assumeVolumes(t, "node1", pod, bindings, claimsToProvision)
 		}
 
-		// Before Execute
+		// 执行前
 		if scenario.apiPV != nil {
 			_, err := testEnv.client.CoreV1().PersistentVolumes().Update(ctx, scenario.apiPV, metav1.UpdateOptions{})
 			if err != nil {
@@ -2080,13 +2078,13 @@ func TestBindPodVolumes(t *testing.T) {
 		if scenario.delayFunc != nil {
 			go func(scenario scenarioType) {
 				time.Sleep(5 * time.Second)
-				// Sleep a while to run after bindAPIUpdate in BindPodVolumes
+				// 等待片刻，确保在 BindPodVolumes 的 bindAPIUpdate 之后运行
 				logger.V(5).Info("Running delay function")
 				scenario.delayFunc(t, ctx, testEnv, pod, scenario.initPVs, scenario.initPVCs)
 			}(scenario)
 		}
 
-		// Execute
+		// 执行
 		dynamicProvisions := []*DynamicProvision{}
 		for _, claim := range claimsToProvision {
 			dynamicProvisions = append(dynamicProvisions, &DynamicProvision{PVC: claim})
@@ -2097,7 +2095,7 @@ func TestBindPodVolumes(t *testing.T) {
 		}
 		err := testEnv.binder.BindPodVolumes(ctx, pod, podVolumes)
 
-		// Validate
+		// 校验
 		if !scenario.shouldFail && err != nil {
 			t.Errorf("returned error: %v", err)
 		}
@@ -2115,11 +2113,11 @@ func TestBindPodVolumes(t *testing.T) {
 }
 
 func TestFindAssumeVolumes(t *testing.T) {
-	// Test case
+	// 测试用例
 	podPVCs := []*v1.PersistentVolumeClaim{unboundPVC}
 	pvs := []*v1.PersistentVolume{pvNode2, pvNode1a, pvNode1c}
 
-	// Setup
+	// 准备
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -2140,8 +2138,8 @@ func TestFindAssumeVolumes(t *testing.T) {
 		},
 	}
 
-	// Execute
-	// 1. Find matching PVs
+	// 执行
+	// 1. 查找匹配的 PV
 	podVolumes, reasons, err := findPodVolumes(logger, testEnv.binder, pod, testNode)
 	if err != nil {
 		t.Fatalf("Test failed: FindPodVolumes returned error: %v", err)
@@ -2151,7 +2149,7 @@ func TestFindAssumeVolumes(t *testing.T) {
 	}
 	expectedBindings := podVolumes.StaticBindings
 
-	// 2. Assume matches
+	// 2. assume 匹配结果
 	allBound, err := testEnv.binder.AssumePodVolumes(logger, pod, testNode.Name, podVolumes)
 	if err != nil {
 		t.Fatalf("Test failed: AssumePodVolumes returned error: %v", err)
@@ -2161,12 +2159,12 @@ func TestFindAssumeVolumes(t *testing.T) {
 	}
 	testEnv.validateAssume(t, pod, expectedBindings, nil)
 
-	// After assume, claimref should be set on pv
+	// assume 之后 PV 上应设置 claimRef
 	expectedBindings = podVolumes.StaticBindings
 
-	// 3. Find matching PVs again
-	// This should always return the original chosen pv
-	// Run this many times in case sorting returns different orders for the two PVs.
+	// 3. 再次查找匹配的 PV
+	// 应始终返回最初选中的 PV
+	// 多次运行，以防两个 PV 的排序结果不稳定。
 	for i := 0; i < 50; i++ {
 		podVolumes, reasons, err := findPodVolumes(logger, testEnv.binder, pod, testNode)
 		if err != nil {
@@ -2179,15 +2177,15 @@ func TestFindAssumeVolumes(t *testing.T) {
 	}
 }
 
-// TestCapacity covers different scenarios involving CSIStorageCapacity objects.
-// Scenarios without those are covered by TestFindPodVolumesWithProvisioning.
+// TestCapacity 覆盖涉及 CSIStorageCapacity 对象的各类场景。
+// 不涉及该对象的场景由 TestFindPodVolumesWithProvisioning 覆盖。
 func TestCapacity(t *testing.T) {
 	type scenarioType struct {
-		// Inputs
+		// 输入
 		pvcs       []*v1.PersistentVolumeClaim
 		capacities []*storagev1.CSIStorageCapacity
 
-		// Expected return values
+		// 预期返回值
 		expectedProvisions []*DynamicProvision
 		reasons            ConflictReasons
 		shouldFail         bool
@@ -2294,24 +2292,24 @@ func TestCapacity(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Setup: the driver has the feature enabled, but the scheduler might not.
+		// 准备：驱动已启用该特性，但调度器未必启用。
 		testEnv := newTestBinder(t, ctx)
 		testEnv.addCSIDriver(makeCSIDriver(provisioner, optIn))
 		testEnv.addCSIStorageCapacities(scenario.capacities)
 
-		// a. Init pvc cache
+		// a. 初始化 PVC 缓存
 		testEnv.initClaims(t, scenario.pvcs, scenario.pvcs)
 
-		// b. Generate pod with given claims
+		// b. 按给定 claim 生成 Pod
 		pod := makePod("test-pod").
 			withNamespace("testns").
 			withNodeName("node1").
 			withPVCSVolume(scenario.pvcs).Pod
 
-		// Execute
+		// 执行
 		podVolumes, reasons, err := findPodVolumes(logger, testEnv.binder, pod, testNode)
 
-		// Validate
+		// 校验
 		shouldFail := scenario.shouldFail
 		expectedReasons := scenario.reasons
 		if !optIn {

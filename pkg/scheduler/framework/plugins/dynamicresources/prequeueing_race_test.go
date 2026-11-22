@@ -26,11 +26,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestPreQueueingHint_PodNotYetIndexed 复现模板化 claim 的预入队竞态：
+// Pod 已进索引，但 status 尚未记录模板生成的 claim 名字，
+// 此时 claim 事件无法按名字反查到该 Pod。
 func TestPreQueueingHint_PodNotYetIndexed(t *testing.T) {
 	logger := klog.Background()
+	// 用测试专用索引名，避免与 informer 注册的索引相互干扰。
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{podResourceClaimIndexPrefix + "-test": podResourceClaimIndexFunc})
 
-	// Pod with template-based claim, status NOT yet updated
+	// Pod 引用模板化 claim，但 status 还没有回填生成的 claim 名字。
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-pod", Namespace: "ns1"},
 		Spec: v1.PodSpec{
@@ -39,13 +43,15 @@ func TestPreQueueingHint_PodNotYetIndexed(t *testing.T) {
 			},
 		},
 	}
+	// 竞态窗口始于此处：Pod 已进索引，但 podResourceClaimIndexFunc
+	// 要靠 status 解析模板名，此刻还算不出可查询的 claim 键。
 	if err := indexer.Add(pod); err != nil {
 		t.Fatal(err)
 	}
 
 	pl := &DynamicResources{podIndexer: indexer, podResourceClaimIndex: podResourceClaimIndexPrefix + "-test"}
 
-	// Claim allocation event - indexer cannot find pod by this claim name
+	// claim 分配事件落在窗口内：按 claim 名字反查索引，预期查不到 Pod。
 	got, err := pl.preQueueingHint(logger, nil, &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-pod-gpu-xyz", Namespace: "ns1"},
 		Status: resourceapi.ResourceClaimStatus{
@@ -56,8 +62,8 @@ func TestPreQueueingHint_PodNotYetIndexed(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Known limitation: when pod's ResourceClaimStatuses isn't populated yet,
-	// the indexer cannot find the pod. The periodic flush rescues such pods.
+	// 已知限制：Pod 的 ResourceClaimStatuses 未回填时索引查不到它，
+	// 只能靠周期性 flush 重新入队兜底；两种结果都接受，仅记录走了哪条路。
 	if got.AllPods {
 		t.Logf("AllPods=true (safe fallback)")
 	} else if len(got.Pods) == 0 {
@@ -65,10 +71,12 @@ func TestPreQueueingHint_PodNotYetIndexed(t *testing.T) {
 	}
 }
 
+// TestPreQueueingHint_DeleteEventWithPodInIndexer 验证已分配 claim 被删除时，
+// 即使索引能命中引用它的 Pod，也返回 AllPods：删除释放的资源可能对任意 Pod 可用。
 func TestPreQueueingHint_DeleteEventWithPodInIndexer(t *testing.T) {
-	// When an allocated claim is deleted and a pod referencing it exists
-	// in the indexer, AllPods is returned (deletion frees resources).
+	// 删除事件走专门的保守分支，不依赖索引命中，因此不受上述竞态窗口影响。
 	logger := klog.Background()
+	// 用测试专用索引名，避免与 informer 注册的索引相互干扰。
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{podResourceClaimIndexPrefix + "-test": podResourceClaimIndexFunc})
 
 	pod := &v1.Pod{
@@ -79,13 +87,14 @@ func TestPreQueueingHint_DeleteEventWithPodInIndexer(t *testing.T) {
 			},
 		},
 	}
+	// 直接引用 claim 名，索引无需等待 status 回填即可命中。
 	if err := indexer.Add(pod); err != nil {
 		t.Fatal(err)
 	}
 
 	pl := &DynamicResources{podIndexer: indexer, podResourceClaimIndex: podResourceClaimIndexPrefix + "-test"}
 
-	// Delete event for an allocated claim
+	// oldObj 非空、newObj 为空表示删除；带 allocation 的旧 claim 才触发 AllPods。
 	got, err := pl.preQueueingHint(logger, &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "deleted-claim", Namespace: "ns1"},
 		Status: resourceapi.ResourceClaimStatus{

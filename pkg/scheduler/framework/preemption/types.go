@@ -33,6 +33,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
+// podGroupPreemptor 把 PodGroup（或 CompositePodGroup）当作一个整体抢占者，
+// 记录其优先级、未调度 Pod 列表以及解析后的抢占策略。
 type podGroupPreemptor struct {
 	priority          int32
 	pods              []*v1.Pod
@@ -41,10 +43,13 @@ type podGroupPreemptor struct {
 	preemptionPolicy  schedulingv1beta1.PreemptionPolicy
 }
 
+// newPodGroupPreemptor 根据 PodGroup 快照信息构造抢占者。
+// 优先级与抢占策略取决于该组是普通 PodGroup 还是 CompositePodGroup。
 func newPodGroupPreemptor(pgInfo fwk.PodGroupInfo, enablePodGroupPreemptionPolicy bool) *podGroupPreemptor {
 	p := &podGroupPreemptor{
 		pods: pgInfo.GetUnscheduledPods(),
 	}
+	// 组合组与普通组互斥，按实际类型解析优先级和抢占策略。
 	if pgInfo.GetCompositePodGroup() != nil {
 		cpg := pgInfo.GetCompositePodGroup()
 		p.compositePodGroup = cpg
@@ -59,6 +64,7 @@ func newPodGroupPreemptor(pgInfo fwk.PodGroupInfo, enablePodGroupPreemptionPolic
 	return p
 }
 
+// getType 返回抢占者的实体类型字符串（普通组或组合组）。
 func (p *podGroupPreemptor) getType() string {
 	if p.compositePodGroup != nil {
 		return string(fwk.CompositePodGroupKeyType)
@@ -66,6 +72,7 @@ func (p *podGroupPreemptor) getType() string {
 	return string(fwk.PodGroupKeyType)
 }
 
+// getObj 返回抢占者对应的组对象，供日志等场景使用。
 func (p *podGroupPreemptor) getObj() klog.KMetadata {
 	if p.compositePodGroup != nil {
 		return p.compositePodGroup
@@ -73,10 +80,11 @@ func (p *podGroupPreemptor) getObj() klog.KMetadata {
 	return p.podGroup
 }
 
+// resolvePreemptionPolicy 解析 PodGroup 的抢占策略。
+// 开启 PodGroupPreemptionPolicy 时优先用组上的字段；否则退回根据成员 Pod 的 PreemptNever 判断。
 func resolvePreemptionPolicy(pg *schedulingv1beta1.PodGroup, pods []*v1.Pod, enablePodGroupPreemptionPolicy bool) schedulingv1beta1.PreemptionPolicy {
 	if enablePodGroupPreemptionPolicy {
-		// If the PodGroup was created with PodGroupPreemptionPolicy feature disabled, the PreemptionPolicy field will be nil.
-		// In this case the default policy value should be returned.
+		// 特性关闭时创建的 PodGroup 其 PreemptionPolicy 字段为空，此时返回默认策略。
 		if pg.Spec.PreemptionPolicy != nil {
 			return *pg.Spec.PreemptionPolicy
 		}
@@ -90,6 +98,9 @@ func resolvePreemptionPolicy(pg *schedulingv1beta1.PodGroup, pods []*v1.Pod, ena
 	return schedulingv1beta1.PreemptLowerPriority
 }
 
+// resolveCompositePreemptionPolicy 解析 CompositePodGroup 的抢占策略。
+// 组合组的策略只有 LowerPriority / Never 两种，开启特性时直接取组上的字段，
+// 否则退回按成员 Pod 是否声明 PreemptNever 判断。
 func resolveCompositePreemptionPolicy(cpg *schedulingv1alpha3.CompositePodGroup, pods []*v1.Pod, enablePodGroupPreemptionPolicy bool) schedulingv1beta1.PreemptionPolicy {
 	if enablePodGroupPreemptionPolicy {
 		if cpg.Spec.PreemptionPolicy != nil {
@@ -108,61 +119,59 @@ func resolveCompositePreemptionPolicy(cpg *schedulingv1alpha3.CompositePodGroup,
 	return schedulingv1beta1.PreemptLowerPriority
 }
 
-// Priority returns the scheduling priority of the preemptor.
-// This value is used to identify potential victims (which must have lower priority).
+// Priority 返回抢占者的调度优先级。
+// 抢占者只能抢占优先级严格更低的受害者，因此该值用于筛选候选受害者。
 func (p *podGroupPreemptor) Priority() int32 {
 	return p.priority
 }
 
-// Members returns the list of Pods that belong to this preemptor.
+// Members 返回属于该抢占者的 Pod 列表（即组内未调度的 Pod）。
 func (p *podGroupPreemptor) Members() []*v1.Pod {
 	return p.pods
 }
 
-// PodGroup returns a pod group connected with this preemptor.
+// PodGroup 返回与该抢占者关联的 PodGroup；组合组抢占者返回 nil。
 func (p *podGroupPreemptor) PodGroup() *schedulingv1beta1.PodGroup {
 	return p.podGroup
 }
 
-// CompositePodGroup returns a composite pod group connected with this preemptor.
+// CompositePodGroup 返回与该抢占者关联的 CompositePodGroup；普通组抢占者返回 nil。
 func (p *podGroupPreemptor) CompositePodGroup() *schedulingv1alpha3.CompositePodGroup {
 	return p.compositePodGroup
 }
 
-// PreemptionPolicy returns a preemption policy of this preemptor.
+// PreemptionPolicy 返回该抢占者的抢占策略。
 func (p *podGroupPreemptor) PreemptionPolicy() schedulingv1beta1.PreemptionPolicy {
 	return p.preemptionPolicy
 }
 
-// domain represents the boundary or scope within which the preemption logic is evaluated.
-// It abstracts the scheduling domain, which can range from a single Node (for standard Pod preemption)
-// to a group of Nodes or the entire Cluster (for PodGroup preemption).
+// domain 表示执行抢占评估的边界或范围。
+// 它抽象了调度域：普通 Pod 抢占时是单个节点，PodGroup 抢占时则可能是
+// 一组节点甚至整个集群。
 type domain struct {
 	nodes              map[string]fwk.NodeInfo
 	name               string
 	allPossibleVictims []*DomainVictim
 }
 
-// Nodes returns a map of NodeInfo objects by node name that belong to this domain.
-// The preemption logic uses this to check feasibility and resource availability
-// within the specific scope.
+// Nodes 返回该域内的 NodeInfo，以节点名为键。
+// 抢占逻辑据此在特定范围内检查可行性与可用资源。
 func (d *domain) Nodes() map[string]fwk.NodeInfo {
 	return d.nodes
 }
 
-// GetAllPossibleVictims returns all potential victims running within this domain (individual Pods or PodGroups).
+// GetAllPossibleVictims 返回该域内所有潜在受害者（单个 Pod 或 PodGroup）。
 func (d *domain) GetAllPossibleVictims() []*DomainVictim {
 	return d.allPossibleVictims
 }
 
-// GetName returns a unique identifier for the domain.
-// This is primarily used for logging and debugging purposes.
+// GetName 返回域的唯一标识，主要用于日志与调试。
 func (d *domain) GetName() string {
 	return d.name
 }
 
-// getHighestAllAncestor returns the key of the highest ancestor in the hierarchy that has disruption mode All.
-// It returns (key, true) if found, or (empty, false) if not found.
+// getHighestAllAncestor 返回组层级中 disruption mode 为 All 的最高层祖先的键。
+// 找到时返回 (key, true)，否则返回 (空键, false)。
 // TODO: log/return an error if there is a gap in the hierarchy.
 func getHighestAllAncestor(pod *v1.Pod, pgLister fwk.PodGroupLister, cpgLister fwk.CompositePodGroupLister) (fwk.EntityKey, bool) {
 	if pod.Spec.SchedulingGroup == nil || pgLister == nil {
@@ -201,9 +210,8 @@ func getHighestAllAncestor(pod *v1.Pod, pgLister fwk.PodGroupLister, cpgLister f
 	return highestAllKey, hasAll
 }
 
-// createDomainVictims converts deduplicated Victim entries into DomainVictim objects
-// by enriching them with node blast-radius metadata from the snapshot, allowing the preemption
-// evaluator to assess the cluster-wide impact of evicting each candidate.
+// createDomainVictims 把去重后的 Victim 转成 DomainVictim：
+// 从快照补充各受害者所影响节点的元数据，让抢占评估器能衡量驱逐的影响范围。
 func createDomainVictims(snapshot fwk.SharedLister, victims []Victim) ([]*DomainVictim, error) {
 	var allPossibleVictims []*DomainVictim
 	for _, vi := range victims {
@@ -216,12 +224,9 @@ func createDomainVictims(snapshot fwk.SharedLister, victims []Victim) ([]*Domain
 	return allPossibleVictims, nil
 }
 
-// newDomainForWorkloadPreemption creates a new domain for workload preemption.
-// The domain is the whole cluster and it contains victims that are computed based
-// on the pods and their scheduling groups.
-// Pods that are part of a pod group or composite pod group with disruption mode All are grouped
-// together into a single victim. Otherwise, they are treated as individual victims.
-// In both cases, the priority of the victim is determined by the pod group or composite pod group priority.
+// newDomainForWorkloadPreemption 为工作负载抢占创建一个覆盖整个集群的域。
+// 受害者根据 Pod 及其调度组计算：disruption mode 为 All 的组的所有 Pod 合并成一个受害者，
+// 其余 Pod 各自作为单独受害者；两种情况下受害者优先级都取自对应的组优先级。
 func newDomainForWorkloadPreemption(logger klog.Logger, snapshot fwk.SharedLister, podGroupSnapshot fwk.PodGroupLister, compositePodGroupSnapshot fwk.CompositePodGroupLister, name string) (*domain, error) {
 	nodes, err := snapshot.NodeInfos().List()
 	if err != nil {
@@ -247,10 +252,9 @@ func newDomainForWorkloadPreemption(logger klog.Logger, snapshot fwk.SharedListe
 	}, nil
 }
 
-// getCrossNodesVictims aggregates pods across the provided nodes into cluster-wide preemption candidates.
-// When a pod belongs to a group hierarchy where any ancestor has disruption mode All, it groups all scheduled pods of that hierarchy
-// across the cluster into a single victim so that preemption evaluates the total cluster-wide cost
-// and blast radius of evicting the entire group.
+// getCrossNodesVictims 把给定节点上的 Pod 汇总成集群级抢占候选。
+// 当 Pod 所属组层级中存在 disruption mode 为 All 的祖先时，把该层级在全集群的
+// 已调度 Pod 合并为单个受害者，以便评估驱逐整个组的总代价和影响范围。
 func getCrossNodesVictims(logger klog.Logger, snapshot fwk.SharedLister, podGroupSnapshot fwk.PodGroupLister, compositePodGroupSnapshot fwk.CompositePodGroupLister, nodes []fwk.NodeInfo) ([]*DomainVictim, error) {
 	existing := sets.New[fwk.EntityKey]()
 	var victims []Victim
@@ -278,9 +282,8 @@ func getCrossNodesVictims(logger klog.Logger, snapshot fwk.SharedLister, podGrou
 	return createDomainVictims(snapshot, victims)
 }
 
-// searchCrossNodesVictimPods searches and collects all scheduled pods belonging to the leaf pod groups
-// of the hierarchy starting from pgKey, and aggregates them into a single Victim.
-// If no scheduled pods are found in the leaf pod groups, it falls back to creating a PodVictim for the given podInfo.
+// searchCrossNodesVictimPods 收集以 pgKey 为根的层级中各叶子 PodGroup 的已调度 Pod，
+// 合并成一个 Victim。若叶子组里找不到已调度 Pod，则退回为给定 podInfo 创建单个 Pod 的受害者。
 func searchCrossNodesVictimPods(
 	logger klog.Logger,
 	pgKey fwk.EntityKey,
@@ -293,8 +296,7 @@ func searchCrossNodesVictimPods(
 	if compositePodGroupSnapshot == nil {
 		pgState, err := snapshot.PodGroupStates().Get(podInfo.GetPod().GetNamespace(), pgKey.Name)
 		if err != nil {
-			// Assuming this is guaranteed to succeed if feature is on and pods exist.
-			// If it fails, we keep the local pods only.
+			// 特性开启且 Pod 存在时理论上应成功；失败则保守地只按当前 Pod 构造受害者。
 			return NewPodVictim(podInfo, podGroupSnapshot, compositePodGroupSnapshot)
 		}
 		allPods = append(allPods, pgState.ScheduledPods()...)
@@ -311,51 +313,47 @@ func searchCrossNodesVictimPods(
 	}
 
 	if len(allPods) == 0 {
-		// This should never happen since podInfo is sourced from a node in the snapshot and
-		// should be present in ScheduledPods() of its leaf PodGroup. If leaf traversal or
-		// PodGroupState snapshot lookups fail, treat the pod as an individual victim.
+		// podInfo 来自快照中的节点，本应出现在叶子 PodGroup 的 ScheduledPods() 中。
+		// 若叶子遍历或状态查询失败，按单个 Pod 处理以免漏掉受害者。
 		return NewPodVictim(podInfo, podGroupSnapshot, compositePodGroupSnapshot)
 	}
 
 	podInfos := make([]fwk.PodInfo, len(allPods))
 	for i, p := range allPods {
-		// pods from ScheduledPods() already passed Filter/Reserve, and cannot error here.
+		// ScheduledPods() 中的 Pod 已通过 Filter/Reserve，构造 PodInfo 不会失败。
 		podInfos[i], _ = framework.NewPodInfo(p)
 	}
 
 	priority := GetPodPriority(podInfo.GetPod(), podGroupSnapshot, compositePodGroupSnapshot)
-	// It can only return an error for empty podInfos, which is guaranteed not to be empty here.
+	// NewVictim 只在 podInfos 为空时报错，这里保证非空，故忽略错误。
 	victim, _ := NewVictim(podInfos, priority, pgKey.Type)
 	return victim
 }
 
-// Victim represents an atomic entity that can be preempted (a victim).
-// It abstracts individual Pods and PodGroup, ensuring that
-// atomic entities are treated as a single unit during eviction.
+// Victim 表示可被抢占的最小原子单位。
+// 它把单个 Pod 与 PodGroup 统一抽象，确保驱逐时整个原子单位被当作一体处理。
 type Victim interface {
-	// Priority returns the priority of the preemption unit.
-	// For a single Pod, this is the Pod's priority.
-	// For a PodGroup, this is the priority of the PodGroup.
+	// Priority 返回抢占单位的优先级。
+	// 单个 Pod 时是 Pod 的优先级，PodGroup 时是组的优先级。
 	Priority() int32
 
-	// Pods returns the list of all Pods that belong to this preemption unit.
-	// Evicting this unit implies evicting all Pods in this list.
+	// Pods 返回该抢占单位包含的所有 Pod。
+	// 驱逐该单位意味着驱逐列表中的所有 Pod。
 	Pods() []fwk.PodInfo
 
-	// EarliestStartTime returns the earliest start time of all Pods in this preemption unit.
+	// EarliestStartTime 返回该抢占单位中所有 Pod 的最早启动时间。
 	EarliestStartTime() *metav1.Time
 
-	// IsGroup returns true if the preemption unit represents a PodGroup or a CompositePodGroup.
-	// This function should be executed only when GenericWorkload feature is enabled.
+	// IsGroup 在抢占单位代表 PodGroup 或 CompositePodGroup 时返回 true。
+	// 该方法只应在 GenericWorkload 特性开启时调用。
 	IsGroup() bool
 
-	// Type returns the type of the preemption unit.
+	// Type 返回抢占单位的实体类型。
 	Type() fwk.EntityKeyType
 }
 
-// victim is the concrete implementation of the Victim interface, bundling pods with their
-// collective priority and earliest start time so individual pods and gang pod groups can be
-// evaluated and sorted uniformly during preemption candidate selection.
+// victim 是 Victim 接口的具体实现：把一组 Pod 连同其整体优先级和最早启动时间打包，
+// 使单个 Pod 与 gang 式 PodGroup 在抢占候选排序时能统一评估和比较。
 type victim struct {
 	pods              []fwk.PodInfo
 	priority          int32
@@ -365,49 +363,44 @@ type victim struct {
 
 var _ Victim = &victim{}
 
-// Pods returns the list of all Pods that belong to this preemption unit.
-// Evicting this unit implies evicting all Pods in this list.
+// Pods 返回该抢占单位包含的所有 Pod。
 func (v *victim) Pods() []fwk.PodInfo {
 	return v.pods
 }
 
-// Priority returns the priority of the preemption unit.
-// For a single Pod, this is the Pod's priority.
-// For a PodGroup, this is the priority of the PodGroup.
+// Priority 返回抢占单位的优先级：单个 Pod 取 Pod 优先级，PodGroup 取组优先级。
 func (v *victim) Priority() int32 {
 	return v.priority
 }
 
-// EarliestStartTime returns the earliest start time of all Pods in this victim.
+// EarliestStartTime 返回该受害者中所有 Pod 的最早启动时间。
 func (v *victim) EarliestStartTime() *metav1.Time {
 	return v.earliestStartTime
 }
 
-// IsGroup returns true if the preemption unit represents a PodGroup or a CompositePodGroup.
-// This function should be executed only when GenericWorkload feature is enabled.
+// IsGroup 在抢占单位代表 PodGroup 或 CompositePodGroup 时返回 true。
+// 该方法只应在 GenericWorkload 特性开启时调用。
 func (v *victim) IsGroup() bool {
 	return v.keyType == fwk.PodGroupKeyType || v.keyType == fwk.CompositePodGroupKeyType
 }
 
-// Type returns the type of the preemption unit.
+// Type 返回抢占单位的实体类型。
 func (v *victim) Type() fwk.EntityKeyType {
 	return v.keyType
 }
 
-// NewPodVictim creates a new Victim representing a single Pod.
-// It calculates the priority of the pod, taking into account its scheduling group if applicable.
-// It ignores the error from NewVictim internally as it is guaranteed to succeed for a single valid pod.
+// NewPodVictim 创建一个代表单个 Pod 的 Victim。
+// 计算 Pod 优先级时会考虑其所属调度组；对单个合法 Pod，NewVictim 必然成功，故忽略其错误。
 // TODO: what we do below is not ideal:
-//   - From the victim's importance POV, individual Pods should always have the PodKeyType.
-//   - On the other hand, we need to store the information that the Pod victim belongs to the "single"
-//     disruption mode PodGroup due to WAP-related metrics bookkeeping.
-//   - Ideally, we should store another bit of information denoting the type of top-level group the victim
-//     Pod belongs to.
+//   - 从受害者重要性角度看，单个 Pod 本应始终使用 PodKeyType。
+//   - 但出于 WAP 相关指标统计，又需要记录该 Pod 属于 single 模式的 PodGroup。
+//   - 更合理的做法是额外保存一个字段，标记受害者 Pod 所属顶层组的类型。
 //
-// We should fix this on the occasion of adding support for CompositePodGroup WAP-related metrics.
+// 后续为 CompositePodGroup 增加 WAP 指标支持时一并修正。
 func NewPodVictim(podInfo fwk.PodInfo, pgLister fwk.PodGroupLister, cpgLister fwk.CompositePodGroupLister) Victim {
 	priority := GetPodPriority(podInfo.GetPod(), pgLister, cpgLister)
 	keyType := fwk.PodKeyType
+	// 属于调度组的 Pod 用组类型标记，便于 WAP 指标按组维度统计。
 	if podInfo.GetPod().Spec.SchedulingGroup != nil && pgLister != nil {
 		keyType = fwk.PodGroupKeyType
 	}
@@ -415,8 +408,8 @@ func NewPodVictim(podInfo fwk.PodInfo, pgLister fwk.PodGroupLister, cpgLister fw
 	return vi
 }
 
-// NewVictim creates a new Victim representing a set of Pods (or a PodGroup) that can be preempted together.
-// It calculates the earliest start time among all provided Pods
+// NewVictim 创建一个代表一组可一起被抢占的 Pod（或 PodGroup）的 Victim。
+// 同时计算所有 Pod 中最早的启动时间；pods 为空或 keyType 为空时返回错误。
 func NewVictim(pods []fwk.PodInfo, priority int32, keyType fwk.EntityKeyType) (Victim, error) {
 	if len(pods) == 0 {
 		return nil, fmt.Errorf("no pods provided")
@@ -441,29 +434,28 @@ func NewVictim(pods []fwk.PodInfo, priority int32, keyType fwk.EntityKeyType) (V
 	}, nil
 }
 
-// DomainVictim extends Victim to include information about the nodes affected by its eviction.
-// It represents a preemption unit within a specific scheduling domain and allows
-// the preemption logic to understand the blast radius of the eviction across multiple nodes.
+// DomainVictim 在 Victim 基础上补充驱逐所影响节点的信息。
+// 它表示特定调度域内的一个抢占单位，让抢占逻辑能评估跨节点的影响范围。
 type DomainVictim struct {
 	Victim
-	// affectedNodes tracks every node hosting at least one pod belonging to this victim,
-	// enabling the scheduler to assess node-specific impacts across the entire eviction blast radius.
+	// affectedNodes 记录承载该受害者至少一个 Pod 的所有节点，
+	// 便于调度器评估整个驱逐 blast radius 内各节点受到的影响。
 	affectedNodes map[string]fwk.NodeInfo
 }
 
-// AffectedNodes returns a map of all nodes currently hosting Pods that belong to this victim.
+// AffectedNodes 返回当前承载该受害者 Pod 的所有节点，以节点名为键。
 func (dv *DomainVictim) AffectedNodes() map[string]fwk.NodeInfo {
 	return dv.affectedNodes
 }
 
-// newDomainVictim creates a DomainVictim from the given pods and priority.
-// It retrieves the NodeInfo for each pod from the snapshot and stores
-// in the affectedNodes map to represent the nodes affected by evicting these pods.
+// newDomainVictim 根据给定 Pod、优先级和类型创建 DomainVictim。
+// 它从快照取每个 Pod 所在节点的 NodeInfo，存入 affectedNodes 以表示驱逐的影响范围。
 func newDomainVictim(snapshot fwk.SharedLister, pods []fwk.PodInfo, priority int32, keyType fwk.EntityKeyType) (*DomainVictim, error) {
 	nodeSnapshot := snapshot.NodeInfos()
 	nodes := make(map[string]fwk.NodeInfo)
 	for _, pInfo := range pods {
 		nodeName := pInfo.GetPod().Spec.NodeName
+		// 同一节点上可能有多个受害者 Pod，只需查一次快照。
 		if _, ok := nodes[nodeName]; ok {
 			continue
 		}
@@ -486,74 +478,74 @@ func newDomainVictim(snapshot fwk.SharedLister, pods []fwk.PodInfo, priority int
 	}, nil
 }
 
-// Candidate represents a nominated node on which the preemptor can be scheduled,
-// along with the list of victims that should be evicted for the preemptor to fit the node.
+// Candidate 表示一个候选调度位置（抢占者可落地的节点或域），
+// 以及为了让抢占者放得下而需要驱逐的受害者列表。
 type Candidate interface {
-	// Victims wraps a list of to-be-preempted Pods and the number of PDB violation.
+	// Victims 返回待抢占 Pod 列表及违反 PDB 的数量。
 	Victims() *extenderv1.Victims
-	// Name returns the target domain(for pod group)/node name where the preemptor gets nominated to run.
+	// Name 返回抢占者被提名运行的目标域（PodGroup 场景）或节点名。
 	Name() string
-	// NumPodGroupDisruptions returns the number of preemption units that affect pod groups.
-	// A single preemption unit can be all pods in a pod group (for DisruptionMode=all) or a single pod (for DisruptionMode=single).
+	// NumPodGroupDisruptions 返回影响 PodGroup 的抢占单位数量。
+	// 一个抢占单位可能是整组 Pod（DisruptionMode=all）或单个 Pod（DisruptionMode=single）。
 	NumPodGroupDisruptions() int
 }
 
+// candidate 是 Candidate 接口的具体实现。
 type candidate struct {
 	victims                *extenderv1.Victims
 	numPodGroupDisruptions int
 	name                   string
 }
 
-// Victims returns s.victims.
+// Victims 返回该候选的受害者信息。
 func (s *candidate) Victims() *extenderv1.Victims {
 	return s.victims
 }
 
-// Name returns s.name.
+// Name 返回该候选的目标域或节点名。
 func (s *candidate) Name() string {
 	return s.name
 }
 
-// NumPodGroupDisruptions returns s.numPodGroupDisruptions.
+// NumPodGroupDisruptions 返回该候选造成的 PodGroup 中断数量。
 func (s *candidate) NumPodGroupDisruptions() int {
 	return s.numPodGroupDisruptions
 }
 
+// candidateList 是固定容量的并发安全候选列表：多个 goroutine 可同时 add，
+// 超出容量的候选会被静默丢弃。
 type candidateList struct {
 	idx   int32
 	items []Candidate
 }
 
-// newCandidateList creates a new candidate list with the given capacity.
+// newCandidateList 创建一个容量为 capacity 的空候选列表。
 func newCandidateList(capacity int32) *candidateList {
 	return &candidateList{idx: -1, items: make([]Candidate, capacity)}
 }
 
-// add adds a new candidate to the internal array atomically.
-// Note: in case the list has reached its capacity, the candidate is disregarded
-// and not added to the internal array.
+// add 以原子方式把候选加入内部数组。
+// 注意：列表已满时该候选会被直接丢弃，不会写入数组。
 func (cl *candidateList) add(c *candidate) {
 	if idx := atomic.AddInt32(&cl.idx, 1); idx < int32(len(cl.items)) {
 		cl.items[idx] = c
 	}
 }
 
-// size returns the number of candidate stored. Note that some add() operations
-// might still be executing when this is called, so care must be taken to
-// ensure that all add() operations complete before accessing the elements of
-// the list.
+// size 返回已存储的候选数量。
+// 调用时可能仍有 add() 在执行，访问元素前必须确保所有 add() 已经结束。
 func (cl *candidateList) size() int32 {
 	return min(atomic.LoadInt32(&cl.idx)+1, int32(len(cl.items)))
 }
 
-// get returns the internal candidate array. This function is NOT atomic and
-// assumes that all add() operations have been completed.
+// get 返回内部的候选切片。该方法不是原子的，
+// 调用前必须确保所有 add() 已完成。
 func (cl *candidateList) get() []Candidate {
 	return cl.items[:cl.size()]
 }
 
-// ViolatingVictim represents a victim whose preemption would violate one or more PodDisruptionBudgets.
-// It tracks the victim itself and the number of pods within it that would cause PDB violations on eviction.
+// ViolatingVictim 表示抢占它会违反一个或多个 PodDisruptionBudget 的受害者。
+// 记录受害者本身以及其中会导致 PDB 违规的 Pod 数量。
 type ViolatingVictim[T Victim] struct {
 	Victim       T
 	ViolateCount int

@@ -33,6 +33,7 @@ import (
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
+// newPod 用 "协议/IP/端口" 形式的描述串构造带 hostPort 的测试 Pod。
 func newPod(host string, hostPortInfos ...string) *v1.Pod {
 	networkPorts := []v1.ContainerPort{}
 	for _, portInfo := range hostPortInfos {
@@ -48,10 +49,14 @@ func newPod(host string, hostPortInfos ...string) *v1.Pod {
 	return st.MakePod().Node(host).ContainerPort(networkPorts).Obj()
 }
 
+// newNodeInfo 构造一个 NodeInfo，所含 Pod 携带指定的 hostPort。
 func newNodeInfo(hostPortInfos ...string) fwk.NodeInfo {
 	return framework.NewNodeInfo(newPod("p1", hostPortInfos...))
 }
 
+// TestNodePorts 覆盖 NodePorts 插件的 PreFilter 与 Filter 行为：
+// 无 hostPort 时跳过；同协议同 IP（含 0.0.0.0 通配）同端口冲突；
+// 非 sidecar initContainer 的 hostPort 忽略，sidecar 的仍参与冲突检测。
 func TestNodePorts(t *testing.T) {
 	tests := []struct {
 		pod                 *v1.Pod
@@ -202,6 +207,8 @@ func TestNodePorts(t *testing.T) {
 	}
 }
 
+// TestPreFilterDisabled 验证未经过 PreFilter 直接调用 Filter 时返回 ErrNotFound：
+// 端口信息由 PreFilter 写入 cycleState，缺失则无法判断。
 func TestPreFilterDisabled(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	pod := &v1.Pod{}
@@ -220,6 +227,8 @@ func TestPreFilterDisabled(t *testing.T) {
 	}
 }
 
+// Test_isSchedulableAfterAssignedPodDeleted 验证已分配 Pod 删除事件带来的队列提示：
+// 仅当被删 Pod 确实占用了本 Pod 需要的 hostPort 时才提示 Queue。
 func Test_isSchedulableAfterAssignedPodDeleted(t *testing.T) {
 	podWithHostPort := st.MakePod().HostPort(8080)
 
@@ -281,9 +290,9 @@ func Test_isSchedulableAfterAssignedPodDeleted(t *testing.T) {
 	}
 }
 
-// This test is similar to TestHostPortInfo_Check in k8s.io/kube-scheduler/framework/types_test.go,
-// but it tests a smaller set of cases. We could consider using a fake HostPortInfo to verify the logic
-// of Fits, instead of the logic of CheckConflict.
+// TestFits 与 k8s.io/kube-scheduler/framework/types_test.go 中的
+// TestHostPortInfo_Check 类似，但只覆盖较少的用例。
+// 后续可考虑用假的 HostPortInfo 直接验证 Fits 的逻辑，而非 CheckConflict 的逻辑。
 func TestFits(t *testing.T) {
 	tests := []struct {
 		desc     string
@@ -345,6 +354,8 @@ func TestFits(t *testing.T) {
 	}
 }
 
+// TestNodePorts_DeferredResizeSkipped 验证处于延迟扩容（Deferred resize）状态的 Pod
+// 跳过 PreFilter 且 Filter 直接成功：扩容调度抢占路径不应被端口检查拦住。
 func TestNodePorts_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

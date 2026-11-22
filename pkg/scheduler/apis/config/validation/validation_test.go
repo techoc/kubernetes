@@ -29,6 +29,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateKubeSchedulerConfigurationV1 表驱动校验各类合法/非法配置，
+// 断言 ValidateKubeSchedulerConfiguration 给出的错误类型与字段路径符合预期。
 func TestValidateKubeSchedulerConfigurationV1(t *testing.T) {
 	podInitialBackoffSeconds := int64(1)
 	podMaxBackoffSeconds := int64(1)

@@ -21,9 +21,8 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// Features carries feature gate values used by various plugins.
-// This struct allows us to break the dependency of the plugins on
-// the internal k8s features pkg.
+// Features 承载各插件使用的 feature gate 取值。
+// 用这个结构体集中传递，可以让插件不直接依赖内部的 k8s features 包。
 type Features struct {
 	EnableDRAExtendedResource                          bool
 	EnableDRAPrioritizedList                           bool
@@ -61,7 +60,8 @@ type Features struct {
 	EnableCompositePodGroup                            bool
 }
 
-// NewSchedulerFeaturesFromGates copies the current state of the feature gates into the struct.
+// NewSchedulerFeaturesFromGates 把当前 feature gate 的状态快照到 Features 中。
+// 这样插件在整个调度周期内看到的是同一份取值，不受 gate 中途变化影响。
 func NewSchedulerFeaturesFromGates(featureGate featuregate.FeatureGate) Features {
 	return Features{
 		EnableDRAExtendedResource:                          featureGate.Enabled(features.DRAExtendedResource),

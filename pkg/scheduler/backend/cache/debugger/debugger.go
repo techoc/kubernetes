@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package debugger 提供调度器缓存的调试工具，可在运行时对比并导出缓存内容。
 package debugger
 
 import (
@@ -27,13 +28,13 @@ import (
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/backend/queue"
 )
 
-// CacheDebugger provides ways to check and write cache information for debugging.
+// CacheDebugger 聚合缓存对比器与导出器，用于排查调度器缓存与集群实际状态的不一致。
 type CacheDebugger struct {
 	Comparer CacheComparer
 	Dumper   CacheDumper
 }
 
-// New creates a CacheDebugger.
+// New 创建一个 CacheDebugger，用 informer lister、调度缓存和调度队列初始化对比器与导出器。
 func New(
 	nodeLister corelisters.NodeLister,
 	podLister corelisters.PodLister,
@@ -54,8 +55,8 @@ func New(
 	}
 }
 
-// ListenForSignal starts a goroutine that will trigger the CacheDebugger's
-// behavior when the process receives SIGINT (Windows) or SIGUSER2 (non-Windows).
+// ListenForSignal 启动一个 goroutine，当进程收到 SIGINT（Windows）或 SIGUSR2（非 Windows）时，
+// 触发缓存对比与导出。用单独 goroutine 监听，避免阻塞调用方；ctx 结束时自动退出。
 func (d *CacheDebugger) ListenForSignal(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	stopCh := ctx.Done()

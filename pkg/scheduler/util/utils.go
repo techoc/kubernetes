@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package util 提供调度器使用的一组通用工具函数。
 package util
 
 import (
@@ -41,28 +42,25 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
 
-// GetPodFullName returns a name that uniquely identifies a pod.
+// GetPodFullName 返回唯一标识一个 Pod 的名称。
 func GetPodFullName(pod *v1.Pod) string {
-	// Use underscore as the delimiter because it is not allowed in pod name
-	// (DNS subdomain format).
+	// 用下划线作分隔符：Pod 名称是 DNS 子域格式，不允许出现下划线，因而不会与名称本身混淆。
 	return pod.Name + "_" + pod.Namespace
 }
 
-// GetPodStartTime returns start time of the given pod or current timestamp
-// if it hasn't started yet.
+// GetPodStartTime 返回给定 Pod 的启动时间；尚未启动时返回当前时间戳。
 func GetPodStartTime(pod *v1.Pod) *metav1.Time {
 	if pod.Status.StartTime != nil {
 		return pod.Status.StartTime
 	}
-	// Assumed pods and bound pods that haven't started don't have a StartTime yet.
+	// 已被假定（assumed）或已绑定但尚未启动的 Pod 还没有 StartTime。
 	return &metav1.Time{Time: time.Now()}
 }
 
-// GetEarliestPodStartTime returns the earliest start time of all pods that
-// have the highest priority among all victims.
+// GetEarliestPodStartTime 返回所有受害者中优先级最高的那些 Pod 里最早的启动时间。
 func GetEarliestPodStartTime(victims *extenderv1.Victims) *metav1.Time {
 	if len(victims.Pods) == 0 {
-		// should not reach here.
+		// 理论上不会走到这里。
 		klog.Background().Error(nil, "victims.Pods is empty. Should not reach here")
 		return nil
 	}
@@ -71,6 +69,7 @@ func GetEarliestPodStartTime(victims *extenderv1.Victims) *metav1.Time {
 	maxPriority := corev1helpers.PodPriority(victims.Pods[0])
 
 	for _, pod := range victims.Pods {
+		// 遇到更高优先级的 Pod 时，之前记录的启动时间不再有意义，直接以它重置。
 		if podPriority := corev1helpers.PodPriority(pod); podPriority == maxPriority {
 			if podStartTime := GetPodStartTime(pod); podStartTime.Before(earliestPodStartTime) {
 				earliestPodStartTime = podStartTime
@@ -84,9 +83,8 @@ func GetEarliestPodStartTime(victims *extenderv1.Victims) *metav1.Time {
 	return earliestPodStartTime
 }
 
-// MoreImportantPod return true when priority of the first pod is higher than
-// the second one. If two pods' priorities are equal, compare their StartTime,
-// treating the older pod as more important.
+// MoreImportantPod 在第一个 Pod 优先级更高时返回 true。
+// 优先级相同时比较启动时间，更早启动的 Pod 视为更重要。
 func MoreImportantPod(pod1, pod2 *v1.Pod) bool {
 	p1 := corev1helpers.PodPriority(pod1)
 	p2 := corev1helpers.PodPriority(pod2)
@@ -96,18 +94,18 @@ func MoreImportantPod(pod1, pod2 *v1.Pod) bool {
 	return GetPodStartTime(pod1).Before(GetPodStartTime(pod2))
 }
 
-// Retriable defines the retriable errors during a scheduling cycle.
+// Retriable 判断错误是否为调度周期内可重试的错误。
 func Retriable(err error) bool {
 	return apierrors.IsInternalError(err) || apierrors.IsServiceUnavailable(err) ||
 		net.IsConnectionRefused(err)
 }
 
-// RetriableWithConflict defines the retriable errors during a scheduling cycle, including conflicts.
+// RetriableWithConflict 判断错误是否为调度周期内可重试的错误（包括冲突）。
 func RetriableWithConflict(err error) bool {
 	return Retriable(err) || apierrors.IsConflict(err)
 }
 
-// BindPod binds a pod to a node with retry.
+// BindPod 带重试地将 Pod 绑定到节点。
 func BindPod(ctx context.Context, cs kubernetes.Interface, binding *v1.Binding) error {
 	bindFn := func() error {
 		return cs.CoreV1().Pods(binding.Namespace).Bind(ctx, binding, metav1.CreateOptions{})
@@ -116,8 +114,8 @@ func BindPod(ctx context.Context, cs kubernetes.Interface, binding *v1.Binding) 
 	return retry.OnError(retry.DefaultBackoff, Retriable, bindFn)
 }
 
-// PatchPodStatus calculates the delta bytes change from <old.Status> to <newStatus>,
-// and then submit a request to API server to patch the pod changes.
+// PatchPodStatus 计算从 old.Status 到 newStatus 的差异字节，
+// 然后向 API server 提交请求以 patch Pod 的变更。
 func PatchPodStatus(ctx context.Context, cs kubernetes.Interface, name string, namespace string, oldStatus *v1.PodStatus, newStatus *v1.PodStatus) error {
 	if newStatus == nil {
 		return nil
@@ -141,11 +139,13 @@ func PatchPodStatus(ctx context.Context, cs kubernetes.Interface, name string, n
 		return fmt.Errorf("failed to create merge patch for pod %q/%q: %w", namespace, name, err)
 	}
 
+	// 差异为空时不发起无意义的 API 请求。
 	if "{}" == string(patchBytes) {
 		return nil
 	}
 
 	patchFn := func() error {
+		// 只 patch status 子资源，避免覆盖 Pod 的其他字段。
 		_, err := cs.CoreV1().Pods(namespace).Patch(ctx, name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 		return err
 	}
@@ -153,8 +153,8 @@ func PatchPodStatus(ctx context.Context, cs kubernetes.Interface, name string, n
 	return retry.OnError(retry.DefaultBackoff, RetriableWithConflict, patchFn)
 }
 
-// PatchPodGroupStatus calculates the delta bytes change from <old.Status> to <newStatus>,
-// and then submits a request to API server to patch the PodGroup status changes.
+// PatchPodGroupStatus 计算从 old.Status 到 newStatus 的差异字节，
+// 然后向 API server 提交请求以 patch PodGroup 状态的变更。
 func PatchPodGroupStatus(ctx context.Context, cs kubernetes.Interface, name string,
 	namespace string, oldStatus *schedulingv1beta1.PodGroupStatus,
 	newStatus *schedulingv1beta1.PodGroupStatus) error {
@@ -180,11 +180,13 @@ func PatchPodGroupStatus(ctx context.Context, cs kubernetes.Interface, name stri
 		return fmt.Errorf("failed to create merge patch for podgroup %q/%q: %w", namespace, name, err)
 	}
 
+	// 差异为空时不发起无意义的 API 请求。
 	if string(patchBytes) == "{}" {
 		return nil
 	}
 
 	patchFn := func() error {
+		// 只 patch status 子资源，避免覆盖 PodGroup 的其他字段。
 		_, err := cs.SchedulingV1beta1().PodGroups(namespace).Patch(ctx, name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 		return err
 	}
@@ -192,28 +194,27 @@ func PatchPodGroupStatus(ctx context.Context, cs kubernetes.Interface, name stri
 	return retry.OnError(retry.DefaultBackoff, RetriableWithConflict, patchFn)
 }
 
-// DeletePod deletes the given <pod> from API server
+// DeletePod 从 API server 删除给定的 Pod。
 func DeletePod(ctx context.Context, cs kubernetes.Interface, pod *v1.Pod) error {
 	return cs.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 }
 
-// IsScalarResourceName validates the resource for Extended, Hugepages, Native and AttachableVolume resources
+// IsScalarResourceName 校验资源是否为扩展资源、大页、原生或可挂载卷资源。
 func IsScalarResourceName(name v1.ResourceName) bool {
 	return v1helper.IsExtendedResourceName(name) || v1helper.IsHugePageResourceName(name) ||
 		v1helper.IsPrefixedNativeResource(name) || v1helper.IsAttachableVolumeResourceName(name)
 }
 
-// IsDRAExtendedResourceName returns true when name is an extended resource name, or an implicit extended resource name
-// derived from device class name with the format of deviceclass.resource.kubernetes.io/<device class name>
+// IsDRAExtendedResourceName 在名称是扩展资源名，或是由设备类名派生的隐式扩展资源名
+// （格式为 deviceclass.resource.kubernetes.io/<device class name>）时返回 true。
 func IsDRAExtendedResourceName(name v1.ResourceName) bool {
 	return v1helper.IsExtendedResourceName(name) || strings.HasPrefix(string(name), resourceapi.ResourceDeviceClassPrefix)
 }
 
-// As converts two objects to the given type.
-// Both objects must be of the same type. If not, an error is returned.
-// nil objects are allowed and will be converted to nil.
-// For oldObj, cache.DeletedFinalStateUnknown is handled and the
-// object stored in it will be converted instead.
+// As 把两个对象转换为给定类型。
+// 两个对象必须是同一类型，否则返回错误。
+// 允许传入 nil，转换结果仍为 nil。
+// 对 oldObj 会特殊处理 cache.DeletedFinalStateUnknown，转换其中保存的对象。
 func As[T any](oldObj, newobj interface{}) (T, T, error) {
 	var oldTyped T
 	var newTyped T
@@ -226,6 +227,7 @@ func As[T any](oldObj, newobj interface{}) (T, T, error) {
 	}
 
 	if oldObj != nil {
+		// informer 的删除事件可能带上 DeletedFinalStateUnknown 包装，需要拆出真实对象再转换。
 		if realOldObj, ok := oldObj.(cache.DeletedFinalStateUnknown); ok {
 			oldObj = realOldObj.Obj
 		}
@@ -237,8 +239,7 @@ func As[T any](oldObj, newobj interface{}) (T, T, error) {
 	return oldTyped, newTyped, nil
 }
 
-// GetHostPorts returns the used host ports of pod containers and
-// initContainers with restartPolicy: Always.
+// GetHostPorts 返回 Pod 的容器以及 restartPolicy: Always 的 initContainer 占用的主机端口。
 func GetHostPorts(pod *v1.Pod) []v1.ContainerPort {
 	var ports []v1.ContainerPort
 	if pod == nil {
@@ -250,8 +251,7 @@ func GetHostPorts(pod *v1.Pod) []v1.ContainerPort {
 	}
 
 	for _, c := range pod.Spec.InitContainers {
-		// Only consider initContainers that will be running the entire
-		// duration of the Pod.
+		// 只考虑会在 Pod 整个生命周期内持续运行的 initContainer。
 		if c.RestartPolicy == nil || *c.RestartPolicy != v1.ContainerRestartPolicyAlways {
 			continue
 		}
@@ -273,25 +273,22 @@ func GetHostPorts(pod *v1.Pod) []v1.ContainerPort {
 	return ports
 }
 
-// PodGroupPriority returns priority of a given pod group.
+// PodGroupPriority 返回给定 PodGroup 的优先级。
 func PodGroupPriority(pg *schedulingv1beta1.PodGroup) int32 {
 	if pg.Spec.Priority != nil {
 		return *pg.Spec.Priority
 	}
-	// When priority of a pod group is nil, it means it was created at a time
-	// that there was no global default priority class and the priority class
-	// name of the pod group was empty. So, we resolve to the static default priority.
+	// priority 为 nil 说明该 PodGroup 创建时尚无全局默认 PriorityClass，
+	// 且 priorityClassName 为空，因此回退到静态默认优先级 0。
 	return 0
 }
 
-// CompositePodGroupPriority returns priority of a given composite pod group.
+// CompositePodGroupPriority 返回给定 CompositePodGroup 的优先级。
 func CompositePodGroupPriority(cpg *schedulingv1alpha3.CompositePodGroup) int32 {
 	if cpg.Spec.Priority != nil {
 		return *cpg.Spec.Priority
 	}
-	// When priority of a composite pod group is nil, it means it was created
-	// at a time that there was no global default priority class and the priority
-	// class name of the composite pod group was empty. So, we resolve to the
-	// static default priority.
+	// priority 为 nil 说明该 CompositePodGroup 创建时尚无全局默认 PriorityClass，
+	// 且 priorityClassName 为空，因此回退到静态默认优先级 0。
 	return 0
 }

@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestApplyFeatureGates 验证特性门控对默认插件集的增删效果。
 func TestApplyFeatureGates(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -63,7 +64,7 @@ func TestApplyFeatureGates(t *testing.T) {
 						{Name: names.NodeResourcesBalancedAllocation, Weight: ptr.To[int32](1)},
 						{Name: names.ImageLocality, Weight: ptr.To[int32](1)},
 						{Name: names.DefaultBinder},
-						// NodeDeclaredFeatures not added as we set emmulation version in the test to 1.34 when DRA is disabled.
+						// DRA 关闭时测试把模拟版本设为 1.34，因此不会加入 NodeDeclaredFeatures。
 					},
 				},
 			},
@@ -251,6 +252,7 @@ func TestApplyFeatureGates(t *testing.T) {
 	}
 }
 
+// TestMergePlugins 验证插件列表合并时按名称覆盖、追加的行为。
 func TestMergePlugins(t *testing.T) {
 	tests := []struct {
 		name            string

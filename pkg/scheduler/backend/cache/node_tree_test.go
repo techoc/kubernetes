@@ -26,14 +26,16 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// allNodes 是一组覆盖各种 region/zone 标签组合的节点，供拓扑树测试复用：
+// 含无标签、仅 region、仅 zone、正常 zone、旧标签以及跨 region 的节点。
 var allNodes = []*v1.Node{
-	// Node 0: a node without any region-zone label
+	// 节点 0：没有任何 region/zone 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-0",
 		},
 	},
-	// Node 1: a node with region label only
+	// 节点 1：仅有 region 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-1",
@@ -42,7 +44,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 2: a node with zone label only
+	// 节点 2：仅有 zone 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-2",
@@ -51,7 +53,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 3: a node with proper region and zone labels
+	// 节点 3：同时带有正常的 region 与 zone 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-3",
@@ -61,7 +63,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 4: a node with proper region and zone labels
+	// 节点 4：与节点 3 同 region/zone，用于测试同 zone 多节点
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-4",
@@ -71,7 +73,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 5: a node with proper region and zone labels in a different zone, same region as above
+	// 节点 5：与上面同 region、但不同 zone
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-5",
@@ -81,7 +83,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 6: a node with proper region and zone labels in a new region and zone
+	// 节点 6：全新的 region 与 zone
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-6",
@@ -91,7 +93,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 7: a node with proper region and zone labels in a region and zone as node-6
+	// 节点 7：与节点 6 同 region/zone
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-7",
@@ -101,7 +103,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 8: a node with proper region and zone labels in a region and zone as node-6
+	// 节点 8：与节点 6 同 region/zone
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-8",
@@ -111,7 +113,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 9: a node with zone + region label and the deprecated zone + region label
+	// 节点 9：同时带有新旧两套 region/zone 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-9",
@@ -123,7 +125,7 @@ var allNodes = []*v1.Node{
 			},
 		},
 	},
-	// Node 10: a node with only the deprecated zone + region labels
+	// 节点 10：仅带有已废弃的 region/zone 标签
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-10",
@@ -135,6 +137,8 @@ var allNodes = []*v1.Node{
 	},
 }
 
+// verifyNodeTree 统一校验树的三个维度：节点总数、zone 到节点列表的映射以及 zones 集合。
+// 避免每个测试重复编写断言，也保证 numNodes 与 tree 内容不会各自独立出错。
 func verifyNodeTree(t *testing.T, nt *nodeTree, expectedTree map[string][]string) {
 	expectedNumNodes := int(0)
 	for _, na := range expectedTree {
@@ -156,6 +160,8 @@ func verifyNodeTree(t *testing.T, nt *nodeTree, expectedTree map[string][]string
 	}
 }
 
+// TestNodeTree_AddNode 验证 addNode 按 region/zone 标签把节点放入正确的 zone 桶，
+// 覆盖无标签、重复添加、标签残缺及旧标签节点。
 func TestNodeTree_AddNode(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -216,6 +222,7 @@ func TestNodeTree_AddNode(t *testing.T) {
 	}
 }
 
+// TestNodeTree_RemoveNode 验证 removeNode 从对应 zone 移除节点，并在节点不存在时返回错误。
 func TestNodeTree_RemoveNode(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -277,6 +284,8 @@ func TestNodeTree_RemoveNode(t *testing.T) {
 	}
 }
 
+// TestNodeTree_UpdateNode 验证 updateNode 在节点标签变化后将其迁移到新 zone，
+// 并覆盖更新不存在节点（等同新增）的情形。
 func TestNodeTree_UpdateNode(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -359,6 +368,7 @@ func TestNodeTree_UpdateNode(t *testing.T) {
 	}
 }
 
+// TestNodeTree_List 验证 list 返回所有节点，且顺序由随机数源决定的轮转遍历给出。
 func TestNodeTree_List(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -403,9 +413,12 @@ func TestNodeTree_List(t *testing.T) {
 	}
 }
 
+// TestNodeTree_List_Exhausted 验证当记录的节点数超出实际数量时，
+// list 能检测到 zone 耗尽并报错，避免死循环。
 func TestNodeTree_List_Exhausted(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	nt := newNodeTree(logger, allNodes[:9])
+	// 人为制造计数不一致，触发耗尽检测。
 	nt.numNodes++
 	_, err := nt.list()
 	if err == nil {
@@ -413,6 +426,8 @@ func TestNodeTree_List_Exhausted(t *testing.T) {
 	}
 }
 
+// TestNodeTreeMultiOperations 验证增删混合操作序列后的最终节点集合，
+// 包括 zone 耗尽后继续添加以及删除整个 zone 再重建。
 func TestNodeTreeMultiOperations(t *testing.T) {
 	tests := []struct {
 		name           string

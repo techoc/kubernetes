@@ -18,10 +18,11 @@ package framework
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"strings"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
@@ -44,10 +45,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting/initoption"
 )
 
+// nodeInfoCmpOpts 允许 cmp 比较 NodeInfo/PodInfo 中的未导出字段，
+// 这些字段（如 cachedResource）是聚合结果正确性的关键。
 var nodeInfoCmpOpts = []cmp.Option{
 	cmp.AllowUnexported(NodeInfo{}, PodInfo{}, fwk.PodResource{}),
 }
 
+// TestNewResource 验证 NewResource 能把 ResourceList 正确换算成 Resource 的各字段，
+// 包括 CPU 的毫核转换和标量/ hugepages 资源的归类。
 func TestNewResource(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -89,16 +94,19 @@ func TestNewResource(t *testing.T) {
 	}
 }
 
+// 排序测试用的优先级常量，highPriority 高于 midPriority。
 var (
 	midPriority  = int32(100)
 	highPriority = int32(1000)
 )
 
+// TestPodGroupMemberPodsOrderingFunc 验证成员 Pod 的排序规则：
+// 优先级降序 → 尝试次数降序 → 时间戳升序 → 名称升序。
 func TestPodGroupMemberPodsOrderingFunc(t *testing.T) {
 	timestamp := time.Now()
 	timestampNewer := timestamp.Add(time.Second)
 
-	// Desired order: pod3 > pod5 > pod1 > pod4 > pod2.
+	// 期望顺序：pod3 > pod5 > pod1 > pod4 > pod2。
 	pInfo1 := &QueuedPodInfo{
 		PodInfo: &PodInfo{Pod: st.MakePod().Name("pod1").UID("uid1").Priority(midPriority).Obj()},
 		QueueingParams: QueueingParams{
@@ -201,6 +209,8 @@ func TestPodGroupMemberPodsOrderingFunc(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfoOrdering 验证 QueuedPodInfos 中成员 Pod 的插入顺序，
+// 以及新 Pod 加入后 UnscheduledPods 列表能同步保持有序。
 func TestQueuedPodGroupInfoOrdering(t *testing.T) {
 	timestamp := time.Now()
 	timestampNewer := timestamp.Add(time.Minute)
@@ -209,7 +219,7 @@ func TestQueuedPodGroupInfoOrdering(t *testing.T) {
 		cmp.AllowUnexported(QueuedPodInfo{}, PodInfo{}, fwk.PodResource{}),
 	}
 
-	// Desired order: pod3 > pod5 > pod1 > pod4 > pod2.
+	// 期望顺序：pod3 > pod5 > pod1 > pod4 > pod2。
 	pInfo1 := &QueuedPodInfo{
 		PodInfo: &PodInfo{Pod: st.MakePod().Namespace("default").Name("pod1").UID("uid1").Priority(midPriority).PodGroupName("pg1").Obj()},
 		QueueingParams: QueueingParams{
@@ -355,6 +365,7 @@ func TestQueuedPodGroupInfoOrdering(t *testing.T) {
 	}
 }
 
+// TestResourceClone 验证 Clone 返回的是独立副本：修改原对象不会影响克隆结果。
 func TestResourceClone(t *testing.T) {
 	tests := []struct {
 		resource *Resource
@@ -385,7 +396,7 @@ func TestResourceClone(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
 			r := test.resource.Clone()
-			// Modify the field to check if the result is a clone of the origin one.
+			// 修改原对象字段，确认返回结果确实是独立副本。
 			test.resource.MilliCPU += 1000
 			if diff := cmp.Diff(test.expected, r); diff != "" {
 				t.Errorf("Unexpected resource (-want, +got):\n%s", diff)
@@ -394,6 +405,7 @@ func TestResourceClone(t *testing.T) {
 	}
 }
 
+// TestResourceAddScalar 验证 AddScalar 对标量资源的累加与懒初始化行为。
 func TestResourceAddScalar(t *testing.T) {
 	tests := []struct {
 		resource       *Resource
@@ -439,6 +451,7 @@ func TestResourceAddScalar(t *testing.T) {
 	}
 }
 
+// TestSetMaxResource 验证 SetMaxResource 对 CPU、内存及标量资源逐项取最大值。
 func TestSetMaxResource(t *testing.T) {
 	tests := []struct {
 		resource     *Resource
@@ -491,6 +504,8 @@ func TestSetMaxResource(t *testing.T) {
 	}
 }
 
+// TestNewNodeInfo 验证 NewNodeInfo 构造的节点信息：
+// 传入 Pod 的资源请求、HostPort 会被聚合，Generation 也会递增。
 func TestNewNodeInfo(t *testing.T) {
 	nodeName := "test-node"
 	pods := []*v1.Pod{
@@ -631,6 +646,7 @@ func TestNewNodeInfo(t *testing.T) {
 	}
 }
 
+// TestNodeInfoClone 验证 Snapshot 生成独立副本，且 generation 按规则继承或递增。
 func TestNodeInfoClone(t *testing.T) {
 	nodeName := "test-node"
 	declaredFeatureSet := ndf.NewFeatureMapper([]string{"A", "B", "C"}).MustMapSorted([]string{"A", "C"})
@@ -870,7 +886,7 @@ func TestNodeInfoClone(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
 			ni := test.nodeInfo.Snapshot()
-			// Modify the field to check if the result is a clone of the origin one.
+			// 修改原对象字段，确认返回结果确实是独立副本。
 			test.nodeInfo.Generation += 10
 			test.nodeInfo.UsedPorts.Remove("127.0.0.1", "TCP", 80)
 			if diff := cmp.Diff(test.expected, ni, nodeInfoCmpOpts...); diff != "" {
@@ -880,6 +896,7 @@ func TestNodeInfoClone(t *testing.T) {
 	}
 }
 
+// TestNodeInfoAddPod 验证 AddPod 会正确聚合资源请求、端口、PVC 引用计数及亲和性子集。
 func TestNodeInfoAddPod(t *testing.T) {
 	nodeName := "test-node"
 	pods := []*v1.Pod{
@@ -1019,14 +1036,14 @@ func TestNodeInfoAddPod(t *testing.T) {
 		},
 		Requested: &Resource{
 			MilliCPU:         2300,
-			Memory:           209716700, //1500 + 200MB in initContainers
+			Memory:           209716700, // 1500 + init 容器 200MB
 			EphemeralStorage: 0,
 			AllowedPodNumber: 0,
 			ScalarResources:  map[v1.ResourceName]int64(nil),
 		},
 		NonZeroRequested: &Resource{
 			MilliCPU:         2300,
-			Memory:           419431900, //200MB(initContainers) + 200MB(default memory value) + 1500 specified in requests/overhead
+			Memory:           419431900, // init 容器 200MB + 默认内存 200MB + 请求/开销中的 1500
 			EphemeralStorage: 0,
 			AllowedPodNumber: 0,
 			ScalarResources:  map[v1.ResourceName]int64(nil),
@@ -1041,7 +1058,7 @@ func TestNodeInfoAddPod(t *testing.T) {
 		},
 		ImageStates:      map[string]*fwk.ImageStateSummary{},
 		PVCRefCounts:     map[string]int{"node_info_cache_test/pvc-1": 2, "node_info_cache_test/pvc-2": 1},
-		DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // Empty FeatureSet.
+		DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // 空的 FeatureSet。
 		Pods: []fwk.PodInfo{
 			&PodInfo{
 				Pod: &v1.Pod{
@@ -1219,6 +1236,8 @@ func TestNodeInfoAddPod(t *testing.T) {
 	}
 }
 
+// TestNodeInfoRemovePod 验证 RemovePod 能完整撤销 AddPod 的聚合效果，
+// 且移除不存在的 Pod 时返回错误。
 func TestNodeInfoRemovePod(t *testing.T) {
 	nodeName := "test-node"
 	pods := []*v1.Pod{
@@ -1246,7 +1265,7 @@ func TestNodeInfoRemovePod(t *testing.T) {
 			Obj(),
 	}
 
-	// add pod Overhead
+	// 带 Pod 级开销的用例，验证开销会计入资源请求。
 	for _, pod := range pods {
 		pod.Spec.Overhead = v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("500m"),
@@ -1292,7 +1311,7 @@ func TestNodeInfoRemovePod(t *testing.T) {
 				},
 				ImageStates:      map[string]*fwk.ImageStateSummary{},
 				PVCRefCounts:     map[string]int{"node_info_cache_test/pvc-1": 1},
-				DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // Empty FeatureSet.
+				DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // 空的 FeatureSet。
 				Pods: []fwk.PodInfo{
 					&PodInfo{
 						Pod: &v1.Pod{
@@ -1459,7 +1478,7 @@ func TestNodeInfoRemovePod(t *testing.T) {
 				},
 				ImageStates:      map[string]*fwk.ImageStateSummary{},
 				PVCRefCounts:     map[string]int{},
-				DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // Empty FeatureSet.
+				DeclaredFeatures: ndf.DefaultFramework.NewFeatureSet(), // 空的 FeatureSet。
 				Pods: []fwk.PodInfo{
 					&PodInfo{
 						Pod: &v1.Pod{
@@ -1537,6 +1556,8 @@ func TestNodeInfoRemovePod(t *testing.T) {
 	}
 }
 
+// TestSetNodeDeclaredFeatures 验证 SetNode 对节点声明特性的处理：
+// 特性门控关闭时不记录；开启时只保留已知特性，忽略未知特性。
 func TestSetNodeDeclaredFeatures(t *testing.T) {
 	ndfFramework, _ := ndftesting.NewMockFramework(t, "FeatureA", "FeatureB")
 	ndftesting.SetFrameworkDuringTest(t, ndfFramework)
@@ -1623,6 +1644,7 @@ func TestSetNodeDeclaredFeatures(t *testing.T) {
 	}
 }
 
+// fakeNodeInfo 构造带测试节点名的 NodeInfo，主要用于 FitError 相关测试。
 func fakeNodeInfo(pods ...*v1.Pod) *NodeInfo {
 	ni := NewNodeInfo(pods...)
 	ni.SetNode(&v1.Node{
@@ -1633,6 +1655,8 @@ func fakeNodeInfo(pods ...*v1.Pod) *NodeInfo {
 	return ni
 }
 
+// TestFitError_Error 验证 FitError 错误消息的组合逻辑：
+// PreFilter 消息优先，成功后统计 Filter 原因，PostFilter 消息始终附加。
 func TestFitError_Error(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1647,8 +1671,7 @@ func TestFitError_Error(t *testing.T) {
 			diagnosis: Diagnosis{
 				PreFilterMsg: "Node(s) failed PreFilter plugin FalsePreFilter",
 				NodeToStatus: NewNodeToStatus(map[string]*fwk.Status{
-					// They're inserted by the framework.
-					// We don't include them in the reason message because they'd be just duplicates.
+					// 这些状态由框架插入，不在原因消息中重复展示。
 					"node1": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
 					"node2": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
 					"node3": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
@@ -1662,13 +1685,12 @@ func TestFitError_Error(t *testing.T) {
 			diagnosis: Diagnosis{
 				PreFilterMsg: "Node(s) failed PreFilter plugin FalsePreFilter",
 				NodeToStatus: NewNodeToStatus(map[string]*fwk.Status{
-					// They're inserted by the framework.
-					// We don't include them in the reason message because they'd be just duplicates.
+					// 这些状态由框架插入，不在原因消息中重复展示。
 					"node1": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
 					"node2": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
 					"node3": fwk.NewStatus(fwk.Unschedulable, "Node(s) failed PreFilter plugin FalsePreFilter"),
 				}, fwk.NewStatus(fwk.UnschedulableAndUnresolvable)),
-				// PostFilterMsg will be included.
+				// 该用例同时验证 PostFilterMsg 会被附加到消息中。
 				PostFilterMsg: "Error running PostFilter plugin FailedPostFilter",
 			},
 			wantReasonMsg: "0/3 nodes are available: Node(s) failed PreFilter plugin FalsePreFilter. Error running PostFilter plugin FailedPostFilter",
@@ -1732,7 +1754,7 @@ func TestFitError_Error(t *testing.T) {
 			numAllNodes: 1,
 			diagnosis: Diagnosis{
 				NodeToStatus: NewNodeToStatus(map[string]*fwk.Status{
-					// There should be only one node here.
+					// Permit/Reserve 阶段的失败只记录实际被拒绝的节点。
 					"node1": fwk.NewStatus(fwk.Unschedulable, "Node failed Permit plugin Permit-1"),
 				}, fwk.NewStatus(fwk.UnschedulableAndUnresolvable)),
 			},
@@ -1743,7 +1765,7 @@ func TestFitError_Error(t *testing.T) {
 			numAllNodes: 1,
 			diagnosis: Diagnosis{
 				NodeToStatus: NewNodeToStatus(map[string]*fwk.Status{
-					// There should be only one node here.
+					// Permit/Reserve 阶段的失败只记录实际被拒绝的节点。
 					"node1": fwk.NewStatus(fwk.Unschedulable, "Node failed Reserve plugin Reserve-1"),
 				}, fwk.NewStatus(fwk.UnschedulableAndUnresolvable)),
 			},
@@ -1764,6 +1786,7 @@ func TestFitError_Error(t *testing.T) {
 	}
 }
 
+// 资源计算测试用的 Quantity 常量，覆盖不同大小与单位的 CPU/内存请求。
 var (
 	cpu100m       = resource.MustParse("100m")
 	mem200M       = resource.MustParse("200Mi")
@@ -1777,6 +1800,8 @@ var (
 	restartAlways = v1.ContainerRestartPolicyAlways
 )
 
+// TestPodInfoCalculateResources 覆盖 CalculateResource 在各种请求组合下的行为：
+// 容器级/Pod 级请求、init 容器、DRA 声明资源与 Pod 开销，以及非零默认值。
 func TestPodInfoCalculateResources(t *testing.T) {
 	testCases := []struct {
 		name                                 string
@@ -2022,8 +2047,7 @@ func TestPodInfoCalculateResources(t *testing.T) {
 							v1.ResourceCPU:    cpu500m,
 							v1.ResourceMemory: mem500M,
 						},
-						// We do not set Pod.Spec.ResourceClaims in this test.
-						// We assume the name maps to Pod.Spec.ResourceClaims[].ResourceClaimName.
+						// 本用例不设置 Pod.Spec.ResourceClaims，直接假设该名称映射到 Pod 声明的资源声明项。
 						Claims: []v1.ResourceClaim{
 							{
 								Name: "node-allocatable-claim",
@@ -2174,7 +2198,7 @@ func TestPodInfoCalculateResources(t *testing.T) {
 				{
 					Resources: v1.ResourceRequirements{
 						Requests: v1.ResourceList{
-							v1.ResourceCPU:    cpu1200m, // Higher than app container
+							v1.ResourceCPU:    cpu1200m, // 高于应用容器，init 容器取最大值
 							v1.ResourceMemory: mem500M,
 						},
 						Claims: []v1.ResourceClaim{
@@ -2190,7 +2214,7 @@ func TestPodInfoCalculateResources(t *testing.T) {
 					Resources: v1.ResourceRequirements{
 						Requests: v1.ResourceList{
 							v1.ResourceCPU:    cpu500m,
-							v1.ResourceMemory: mem1200M, // Higher than init container
+							v1.ResourceMemory: mem1200M, // 高于 init 容器，应用容器取最大值
 						},
 						Claims: []v1.ResourceClaim{
 							{
@@ -2254,8 +2278,8 @@ func TestPodInfoCalculateResources(t *testing.T) {
 			},
 			expectedResource: fwk.PodResource{
 				Resource: &Resource{
-					MilliCPU: cpu700m.MilliValue(), // pod level requests determines the overall footprint
-					Memory:   mem800M.Value(),      // pod level requests determines the overall footprint
+					MilliCPU: cpu700m.MilliValue(), // Pod 级请求决定整体资源占用
+					Memory:   mem800M.Value(),      // Pod 级请求决定整体资源占用
 				},
 				Non0CPU: cpu700m.MilliValue(),
 				Non0Mem: mem800M.Value(),
@@ -2288,15 +2312,15 @@ func TestPodInfoCalculateResources(t *testing.T) {
 					},
 				},
 			},
-			// Pod Overhead
+			// Pod 级开销单独计入请求量
 			overhead: &v1.ResourceList{
 				v1.ResourceCPU:    cpu100m,
 				v1.ResourceMemory: mem200M,
 			},
 			expectedResource: fwk.PodResource{
 				Resource: &Resource{
-					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // container + dra + overhead
-					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value(),                // container + dra + overhead
+					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // 容器请求 + DRA + 开销
+					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value(),                // 容器请求 + DRA + 开销
 				},
 				Non0CPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(),
 				Non0Mem: mem500M.Value() + mem200M.Value() + mem200M.Value(),
@@ -2341,8 +2365,8 @@ func TestPodInfoCalculateResources(t *testing.T) {
 			},
 			expectedResource: fwk.PodResource{
 				Resource: &Resource{
-					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // container (500m) + DRA flat pod overhead (100m) + DRA container overhead (100m) = 700m
-					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value(),                // container (500M) + DRA flat pod overhead (200M) + DRA container overhead (200M) = 900M
+					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // 容器 500m + DRA Pod 级开销 100m + DRA 容器级开销 100m = 700m
+					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value(),                // 容器 500M + DRA Pod 级开销 200M + DRA 容器级开销 200M = 900M
 				},
 				Non0CPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(),
 				Non0Mem: mem500M.Value() + mem200M.Value() + mem200M.Value(),
@@ -2397,8 +2421,8 @@ func TestPodInfoCalculateResources(t *testing.T) {
 			},
 			expectedResource: fwk.PodResource{
 				Resource: &Resource{
-					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // spec (500) + mapping (100) + perPod (100) + perContainer (100) = 800m
-					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value() + mem200M.Value(),                     // spec (500) + mapping (200) + perPod (200) + perContainer (200) = 1100M
+					MilliCPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(), // 规格 500 + 映射 100 + Pod 级 100 + 容器级 100 = 800m
+					Memory:   mem500M.Value() + mem200M.Value() + mem200M.Value() + mem200M.Value(),                     // 规格 500 + 映射 200 + Pod 级 200 + 容器级 200 = 1100M
 				},
 				Non0CPU: cpu500m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue() + cpu100m.MilliValue(),
 				Non0Mem: mem500M.Value() + mem200M.Value() + mem200M.Value() + mem200M.Value(),
@@ -2435,6 +2459,8 @@ func TestPodInfoCalculateResources(t *testing.T) {
 	}
 }
 
+// TestCalculatePodResourcesWithResize 验证原地垂直扩缩容开启后，CalculateResource
+// 会优先使用 Pod Status 中的实际资源值，并正确处理容器级与 Pod 级资源的扩缩。
 func TestCalculatePodResourcesWithResize(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScaling, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeDeclaredFeatures, true)
@@ -2727,6 +2753,8 @@ func TestCalculatePodResourcesWithResize(t *testing.T) {
 	}
 }
 
+// TestClusterEventMatching 覆盖 MatchClusterEvents 的通配符、资源包含关系
+// 以及动作类型具体程度的匹配规则。
 func TestClusterEventMatching(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -2860,6 +2888,7 @@ func TestClusterEventMatching(t *testing.T) {
 	}
 }
 
+// TestUnrollPodEvent 验证 Pod 事件会被拆成三种 Pod 子类型事件，且动作类型保持不变。
 func TestUnrollPodEvent(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -2898,6 +2927,8 @@ func TestUnrollPodEvent(t *testing.T) {
 	}
 }
 
+// TestNodeInfoKMetadata 验证 NodeInfo 实现 klog.KMetadata 后，
+// klog.KObjSlice 对 nil 节点和空节点都能输出可读的名称。
 func TestNodeInfoKMetadata(t *testing.T) {
 	tCtx := ktesting.Init(t, initoption.BufferLogs(true))
 	logger := tCtx.Logger()
@@ -2905,13 +2936,14 @@ func TestNodeInfoKMetadata(t *testing.T) {
 
 	output := logger.GetSink().(ktesting.Underlier).GetBuffer().String()
 
-	// The initial nil entry gets turned into empty ObjectRef by klog,
-	// which becomes an empty string during output formatting.
+	// klog 会把 nil 项转成空的 ObjectRef，格式化输出时即为空字符串。
 	if !strings.Contains(output, `Some NodeInfo slice nodes=["","<no node>","","worker"]`) {
 		tCtx.Fatalf("unexpected output:\n%s", output)
 	}
 }
 
+// TestUpdateUsedPorts_PodAdd 验证添加 Pod 时 HostPort 会被登记，
+// 包括 sidecar 容器端口以及指定/未指定 HostIP 的场景。
 func TestUpdateUsedPorts_PodAdd(t *testing.T) {
 	testCases := []struct {
 		ports fwk.HostPortInfo
@@ -3083,6 +3115,8 @@ func TestUpdateUsedPorts_PodAdd(t *testing.T) {
 	}
 }
 
+// TestUpdateUsedPorts_PodRemove 验证移除 Pod 时只释放对应的 HostPort，
+// 不影响其他宿主机地址或协议上的端口。
 func TestUpdateUsedPorts_PodRemove(t *testing.T) {
 	testCases := []struct {
 		ports fwk.HostPortInfo
@@ -3262,6 +3296,8 @@ func TestUpdateUsedPorts_PodRemove(t *testing.T) {
 	}
 }
 
+// TestQueuedPodInfo_UpdateInvalidatesSignature 验证 Pod 更新后缓存的 PodSignature
+// 会被清除，因为新版本的 Pod 可能不再匹配旧签名。
 func TestQueuedPodInfo_UpdateInvalidatesSignature(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Label("version", "1").Obj()
 	pod2 := pod1.DeepCopy()
@@ -3283,6 +3319,7 @@ func TestQueuedPodInfo_UpdateInvalidatesSignature(t *testing.T) {
 	}
 }
 
+// TestPodInfo_Update 验证 PodInfo.Update 的 UID 校验、缓存清理以及各类错误分支。
 func TestPodInfo_Update(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").UID("uid1").Obj()
 	pod2 := pod1.DeepCopy()
@@ -3359,6 +3396,8 @@ func TestPodInfo_Update(t *testing.T) {
 	}
 }
 
+// TestNewPodInfo 验证 NewPodInfo 在特性门控开关下都能解析亲和性条款，
+// 并对非法拓扑键返回聚合错误。
 func TestNewPodInfo(t *testing.T) {
 	for _, interPodAffinityHostnameFastPathEnabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("InterPodAffinityHostnameFastPath=%v", interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
@@ -3432,6 +3471,8 @@ func TestNewPodInfo(t *testing.T) {
 	}
 }
 
+// TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity 验证非主机作用域反亲和性
+// Pod 列表的维护：仅在 FastPath 开启时填充，且快照与移除操作都能正确同步。
 func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 	podNonHost1 := st.MakePod().Name("pod-nh-1").UID("uid-nh-1").PodAntiAffinityExists("label", "zone", st.PodAntiAffinityWithRequiredReq).Obj()
 	podNonHost2 := st.MakePod().Name("pod-nh-2").UID("uid-nh-2").PodAntiAffinityExists("label", "zone", st.PodAntiAffinityWithRequiredReq).Obj()
@@ -3440,7 +3481,7 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 
 	tests := []struct {
 		name                                string
-		podsToAdd                           []*v1.Pod // Pods to add consecutively
+		podsToAdd                           []*v1.Pod // 依次加入的 Pod
 		expectedPodNamesWithFastPathEnabled sets.Set[string]
 	}{
 		{
@@ -3475,12 +3516,12 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					ni.AddPod(pod)
 				}
 
-				expected := sets.New[string]() // always empty if FastPath is disabled
+				expected := sets.New[string]() // FastPath 关闭时预期始终为空
 				if interPodAffinityHostnameFastPathEnabled {
 					expected = tt.expectedPodNamesWithFastPathEnabled
 				}
 
-				// Verify AddPod correctly populates the list
+				// 验证 AddPod 正确填充了列表
 				actual := sets.New[string]()
 				for _, p := range ni.PodsWithRequiredNonHostScopedAntiAffinity {
 					actual.Insert(p.GetPod().Name)
@@ -3489,7 +3530,7 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					t.Errorf("AddPod expected %v, got %v", expected, actual)
 				}
 
-				// Verify SnapshotConcrete explicitly copies the slice
+				// 验证 SnapshotConcrete 会显式复制切片
 				clone := ni.SnapshotConcrete()
 				cloneActual := sets.New[string]()
 				for _, p := range clone.PodsWithRequiredNonHostScopedAntiAffinity {
@@ -3499,7 +3540,7 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					t.Errorf("SnapshotConcrete expected %v, got %v", expected, cloneActual)
 				}
 
-				// Modify the cloned NodeInfo's slice to ensure SnapshotConcrete deep-copied the slice
+				// 修改克隆对象的切片，确认 SnapshotConcrete 做了深拷贝
 				if len(clone.PodsWithRequiredNonHostScopedAntiAffinity) > 0 {
 					originalFirst := clone.PodsWithRequiredNonHostScopedAntiAffinity[0]
 					dummyPod, _ := NewPodInfo(st.MakePod().Name("dummy").UID("dummy").Obj())
@@ -3507,11 +3548,11 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 					if ni.PodsWithRequiredNonHostScopedAntiAffinity[0] == dummyPod {
 						t.Errorf("SnapshotConcrete did not safely copy PodsWithRequiredNonHostScopedAntiAffinity slice, mutation affected original")
 					}
-					// Restore it just in case
+					// 复原，避免影响后续断言
 					clone.PodsWithRequiredNonHostScopedAntiAffinity[0] = originalFirst
 				}
 
-				// Verify RemovePod
+				// 验证 RemovePod 能同步清理列表
 				logger, _ := ktesting.NewTestContext(t)
 				for _, pod := range tt.podsToAdd {
 					err := ni.RemovePod(logger, pod)
@@ -3532,6 +3573,8 @@ func TestNodeInfo_PodsWithRequiredNonHostScopedAntiAffinity(t *testing.T) {
 	}
 }
 
+// TestPodGroupInfoGetChildrenSorting 验证 GetChildGroups 按创建时间排序，
+// 时间相同时按名称裁决，保证顺序确定。
 func TestPodGroupInfoGetChildrenSorting(t *testing.T) {
 	now := time.Now()
 	pgInfo := func(name, namespace string, creationTime time.Time) *PodGroupInfo {
@@ -3551,8 +3594,8 @@ func TestPodGroupInfoGetChildrenSorting(t *testing.T) {
 	pgInfo1 := pgInfo("pg1", "default", now)
 	pgInfo2 := pgInfo("pg2", "default", now.Add(time.Minute))
 	pgInfo3 := pgInfo("pg3", "default", now.Add(-time.Minute))
-	// pgInfo4 has same timestamp as pgInfo1 but is listed as the last one.
-	// We verify sorting stability by checking that pg1 is still before pg4.
+	// pgInfo4 与 pgInfo1 时间戳相同但排在最后，
+	// 通过 pg1 仍在 pg4 之前来验证排序稳定性。
 	pgInfo4 := pgInfo("pg4", "default", now)
 
 	pgi := &PodGroupInfo{
@@ -3570,6 +3613,8 @@ func TestPodGroupInfoGetChildrenSorting(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_AddCompositePodGroup 验证 CompositePodGroup 子树的添加逻辑，
+// 包括无父节点、重复添加等无效操作应静默跳过。
 func TestQueuedPodGroupInfo_AddCompositePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -3697,6 +3742,8 @@ func TestQueuedPodGroupInfo_AddCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_UpdateCompositePodGroup 验证层级结构中 CompositePodGroup
+// 对象的更新，不存在的目标应静默跳过。
 func TestQueuedPodGroupInfo_UpdateCompositePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -3735,7 +3782,7 @@ func TestQueuedPodGroupInfo_UpdateCompositePodGroup(t *testing.T) {
 			updateCPG:  st.MakeCompositePodGroup().Name("non-existent").Namespace("ns1").Obj(),
 			setup:      func(qpgi *QueuedPodGroupInfo) {},
 			verify: func(t *testing.T, qpgi *QueuedPodGroupInfo) {
-				// No panic or errors expected, should just be a no-op
+				// 目标不存在时应静默跳过，不应 panic 或报错
 				if len(qpgi.PodGroupInfo.Children) != 0 {
 					t.Errorf("Non-existent CPG update should not alter hierarchy")
 				}
@@ -3762,6 +3809,8 @@ func TestQueuedPodGroupInfo_UpdateCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_RemoveCompositePodGroup 验证移除 CompositePodGroup 时
+// 会从父节点摘除子树，并返回子树中所有排队 Pod。
 func TestQueuedPodGroupInfo_RemoveCompositePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -3889,6 +3938,8 @@ func TestQueuedPodGroupInfo_RemoveCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_AddPodGroup 验证 PodGroup 会被挂到父 CompositePodGroup 下，
+// 根节点与重复项不会再次加入。
 func TestQueuedPodGroupInfo_AddPodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -3958,6 +4009,8 @@ func TestQueuedPodGroupInfo_AddPodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_UpdatePodGroup 验证层级中 PodGroup 对象的更新，
+// 目标不存在时不应改动结构。
 func TestQueuedPodGroupInfo_UpdatePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -4041,6 +4094,8 @@ func TestQueuedPodGroupInfo_UpdatePodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_RemovePodGroup 验证移除 PodGroup 时会清理层级关系
+// 并返回其子树中的全部排队 Pod。
 func TestQueuedPodGroupInfo_RemovePodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TopologyAwareWorkloadScheduling, true)
@@ -4097,8 +4152,7 @@ func TestQueuedPodGroupInfo_RemovePodGroup(t *testing.T) {
 				qpgi.QueuedPodInfos[podKeyStandalone] = []*QueuedPodInfo{{PodInfo: &PodInfo{Pod: pod}}}
 			},
 			verify: func(t *testing.T, qpgi *QueuedPodGroupInfo, removed []*QueuedPodInfo) {
-				// For standalone PG, removing the root essentially clears the QueuedPodInfos because
-				// deleteSubtreePods will match the root node.
+				// 独立 PodGroup 的根节点就是自身，删除根节点会清空其 QueuedPodInfos。
 				if len(removed) != 1 || removed[0].Pod.Name != "pod2" {
 					t.Errorf("Standalone pods not correctly removed and returned")
 				}
@@ -4121,6 +4175,8 @@ func TestQueuedPodGroupInfo_RemovePodGroup(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_AddPod 验证只有属于该 PodGroup 的 Pod 才会入队，
+// 层级结构下会定位到对应叶子 PodGroup 并维护有序列表。
 func TestQueuedPodGroupInfo_AddPod(t *testing.T) {
 	cpgRoot := st.MakeCompositePodGroup().Name("cpg-root").Namespace("ns1").Obj()
 	pgChild := st.MakePodGroup().Name("pg-child").Namespace("ns1").ParentCompositePodGroup("cpg-root").Obj()
@@ -4221,6 +4277,8 @@ func TestQueuedPodGroupInfo_AddPod(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_UpdateAndRemovePod 验证成员 Pod 的更新与移除，
+// 会同步维护 QueuedPodInfos 与叶子 PodGroup 的 UnscheduledPods。
 func TestQueuedPodGroupInfo_UpdateAndRemovePod(t *testing.T) {
 	pgStandalone := st.MakePodGroup().Name("pg-standalone").Namespace("ns1").Obj()
 	podKeyStandalone := fwk.PodGroupKey("ns1", "pg-standalone")
@@ -4298,6 +4356,8 @@ func TestQueuedPodGroupInfo_UpdateAndRemovePod(t *testing.T) {
 	}
 }
 
+// TestQueuedPodGroupInfo_ForEachPodInfo 验证遍历所有排队成员，
+// 且回调返回 false 时能提前退出。
 func TestQueuedPodGroupInfo_ForEachPodInfo(t *testing.T) {
 	qpgi := &QueuedPodGroupInfo{
 		QueuedPodInfos: make(map[fwk.EntityKey][]*QueuedPodInfo),
@@ -4324,7 +4384,7 @@ func TestQueuedPodGroupInfo_ForEachPodInfo(t *testing.T) {
 		t.Errorf("Expected 3 pods, got %d", count)
 	}
 
-	// Test early exit
+	// 验证回调返回 false 时能提前退出遍历
 	count = 0
 	qpgi.ForEachPodInfo(func(pInfo *QueuedPodInfo) bool {
 		count++
@@ -4336,6 +4396,8 @@ func TestQueuedPodGroupInfo_ForEachPodInfo(t *testing.T) {
 	}
 }
 
+// TestPodGroupInfo_GetUnscheduledPods 验证普通 PodGroup 直接返回自身未调度 Pod，
+// CompositePodGroup 则递归聚合所有叶子 PodGroup 的 Pod。
 func TestPodGroupInfo_GetUnscheduledPods(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").Obj()

@@ -25,9 +25,11 @@ import (
 )
 
 const (
+	// testPodUID 是各测试用例使用的固定 Pod UID，便于对照断言。
 	testPodUID = types.UID("pod-1")
 )
 
+// TestPodsInBindingMap 验证 podsInPreBindMap 的增删查，以及取消/标记预绑定之间的互斥语义。
 func TestPodsInBindingMap(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -59,7 +61,7 @@ func TestPodsInBindingMap(t *testing.T) {
 				m.add(testPodUID, cancel)
 				pod := m.get(testPodUID)
 
-				// First cancel should succeed
+				// 首次取消应成功，因为 Pod 尚未进入预绑定完成状态。
 				if !pod.CancelPod("test cancel") {
 					t.Errorf("First CancelPod should return true")
 				}
@@ -67,7 +69,7 @@ func TestPodsInBindingMap(t *testing.T) {
 					t.Errorf("Context should be cancelled")
 				}
 
-				// Second cancel should also return true
+				// context.CancelCauseFunc 可重复调用，第二次取消仍应成功。
 				if !pod.CancelPod("test cancel") {
 					t.Errorf("Second CancelPod should return true")
 				}
@@ -86,7 +88,7 @@ func TestPodsInBindingMap(t *testing.T) {
 					t.Errorf("finished should be true")
 				}
 
-				// Try to cancel after binding
+				// 预绑定成功后 Pod 已"定局"，再取消应被拒绝，避免影响已提交的绑定。
 				if pod.CancelPod("test cancel") {
 					t.Errorf("CancelPod should return false after MarkBound")
 				}

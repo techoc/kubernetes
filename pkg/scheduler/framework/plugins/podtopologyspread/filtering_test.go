@@ -40,14 +40,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// stateCmpOpts 提供比较 criticalPaths 的 cmp 选项：MatchNum 相同时 TopologyValue 按字母序排列。
 var stateCmpOpts = []cmp.Option{
 	cmp.Comparer(func(p1, p2 criticalPaths) bool {
-		// Before comparing p1 and p2 we need to make sure that TopologyValues
-		// paired with the same MatchNum values are sorted alphabetically.
-		// It's not possible to substitute this sorting with calling cmpopts.SortSlices()
-		// instead, because the lessFn in SortSlices would not modify the actual
-		// criticalPaths objects, and the default comparer function would still
-		// operate on "unsorted" TopologyValue fields.
+		// 比较前必须让 MatchNum 相同的 TopologyValue 按字母序排列。
+		// 不能用 cmpopts.SortSlices() 代替：它的 lessFn 不会修改 criticalPaths 本身，
+		// 默认比较器看到的仍是未排序的 TopologyValue 字段。
 		p1.sort()
 		p2.sort()
 		return p1[0] == p2[0] && p1[1] == p2[1]
@@ -68,13 +66,15 @@ func init() {
 	metrics.Register()
 }
 
+// sort 在 MatchNum 相同时按字母序排列两个 TopologyValue，使比较结果稳定。
 func (p *criticalPaths) sort() {
 	if p[0].MatchNum == p[1].MatchNum && p[0].TopologyValue > p[1].TopologyValue {
-		// Swap TopologyValue to make them sorted alphabetically.
+		// 交换 TopologyValue 使二者按字母序排列。
 		p[0].TopologyValue, p[1].TopologyValue = p[1].TopologyValue, p[0].TopologyValue
 	}
 }
 
+// TestPreFilterState 验证 PreFilter 计算出的 preFilterState：约束解析、关键路径和拓扑域计数。
 func TestPreFilterState(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -478,7 +478,7 @@ func TestPreFilterState(t *testing.T) {
 		{
 			name: "two spreadConstraints, and with podAffinity",
 			pod: st.MakePod().Name("p").Label("foo", "").
-				NodeAffinityNotIn("node", []string{"node-x"}). // exclude node-x
+				NodeAffinityNotIn("node", []string{"node-x"}). // 排除 node-x
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
 				Obj(),
@@ -1520,6 +1520,7 @@ func TestPreFilterState(t *testing.T) {
 	}
 }
 
+// TestPreFilterStateAddPod 验证 AddPod 增量更新 preFilterState：仅当新增 Pod 影响关键域时才重算最小匹配数。
 func TestPreFilterStateAddPod(t *testing.T) {
 	nodeConstraint := topologySpreadConstraint{
 		MaxSkew:            1,
@@ -1536,7 +1537,7 @@ func TestPreFilterStateAddPod(t *testing.T) {
 		preemptor                 *v1.Pod
 		addedPod                  *v1.Pod
 		existingPods              []*v1.Pod
-		nodeIdx                   int // denotes which node 'addedPod' belongs to
+		nodeIdx                   int // 表示 'addedPod' 所属节点的下标
 		nodes                     []*v1.Node
 		want                      *preFilterState
 		enableNodeInclusionPolicy bool
@@ -1547,7 +1548,7 @@ func TestPreFilterStateAddPod(t *testing.T) {
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
 				Obj(),
 			addedPod:     st.MakePod().Name("p-a1").Node("node-a").Label("foo", "").Obj(),
-			existingPods: nil, // it's an empty cluster
+			existingPods: nil, // 空集群
 			nodeIdx:      0,
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node-a").Label("zone", "zone1").Label("node", "node-a").Obj(),
@@ -1638,7 +1639,7 @@ func TestPreFilterStateAddPod(t *testing.T) {
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
 				Obj(),
 			addedPod:     st.MakePod().Name("p-a1").Node("node-a").Label("foo", "").Obj(),
-			existingPods: nil, // it's an empty cluster
+			existingPods: nil, // 空集群
 			nodeIdx:      0,
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node-a").Label("zone", "zone1").Label("node", "node-a").Obj(),
@@ -2019,6 +2020,7 @@ func TestPreFilterStateAddPod(t *testing.T) {
 	}
 }
 
+// TestPreFilterStateRemovePod 验证 RemovePod 增量更新 preFilterState，包括抢占场景下的状态回退。
 func TestPreFilterStateRemovePod(t *testing.T) {
 	nodeConstraint := topologySpreadConstraint{
 		MaxSkew:            1,
@@ -2032,18 +2034,17 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 	zoneConstraint.TopologyKey = "zone"
 	tests := []struct {
 		name                      string
-		preemptor                 *v1.Pod // preemptor pod
+		preemptor                 *v1.Pod // 发起抢占的 Pod
 		nodes                     []*v1.Node
 		existingPods              []*v1.Pod
-		deletedPodIdx             int     // need to reuse *Pod of existingPods[i]
-		deletedPod                *v1.Pod // this field is used only when deletedPodIdx is -1
-		nodeIdx                   int     // denotes which node "deletedPod" belongs to
+		deletedPodIdx             int     // 复用 existingPods[i] 中的 *Pod
+		deletedPod                *v1.Pod // 仅当 deletedPodIdx 为 -1 时使用
+		nodeIdx                   int     // 表示 "deletedPod" 所属节点的下标
 		want                      *preFilterState
 		enableNodeInclusionPolicy bool
 	}{
 		{
-			// A high priority pod may not be scheduled due to node taints or resource shortage.
-			// So preemption is triggered.
+			// 高优先级 Pod 可能因节点污点或资源不足无法调度，从而触发抢占。
 			name: "one spreadConstraint on zone, topologyKeyToMinPodsMap unchanged",
 			preemptor: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -2058,8 +2059,8 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 				st.MakePod().Name("p-b1").Node("node-b").Label("foo", "").Obj(),
 				st.MakePod().Name("p-x1").Node("node-x").Label("foo", "").Obj(),
 			},
-			deletedPodIdx: 0, // remove pod "p-a1"
-			nodeIdx:       0, // node-a
+			deletedPodIdx: 0, // 删除 Pod "p-a1"
+			nodeIdx:       0, // 对应 node-a
 			want: &preFilterState{
 				Constraints:   []topologySpreadConstraint{zoneConstraint},
 				CriticalPaths: []*criticalPaths{{{"zone1", 1}, {"zone2", 1}}},
@@ -2086,8 +2087,8 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 				st.MakePod().Name("p-x1").Node("node-x").Label("foo", "").Obj(),
 				st.MakePod().Name("p-y1").Node("node-y").Label("foo", "").Obj(),
 			},
-			deletedPodIdx: 0, // remove pod "p-a1"
-			nodeIdx:       0, // node-a
+			deletedPodIdx: 0, // 删除 Pod "p-a1"
+			nodeIdx:       0, // 对应 node-a
 			want: &preFilterState{
 				Constraints:   []topologySpreadConstraint{zoneConstraint},
 				CriticalPaths: []*criticalPaths{{{"zone1", 1}, {"zone2", 2}}},
@@ -2115,8 +2116,8 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 				st.MakePod().Name("p-x1").Node("node-x").Label("foo", "").Obj(),
 				st.MakePod().Name("p-y1").Node("node-y").Label("foo", "").Obj(),
 			},
-			deletedPodIdx: 0, // remove pod "p-a0"
-			nodeIdx:       0, // node-a
+			deletedPodIdx: 0, // 删除 Pod "p-a0"
+			nodeIdx:       0, // 对应 node-a
 			want: &preFilterState{
 				Constraints:   []topologySpreadConstraint{zoneConstraint},
 				CriticalPaths: []*criticalPaths{{{"zone1", 2}, {"zone2", 2}}},
@@ -2145,7 +2146,7 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 			},
 			deletedPodIdx: -1,
 			deletedPod:    st.MakePod().Name("p-a0").Node("node-a").Label("bar", "").Obj(),
-			nodeIdx:       0, // node-a
+			nodeIdx:       0, // 对应 node-a
 			want: &preFilterState{
 				Constraints:   []topologySpreadConstraint{zoneConstraint},
 				CriticalPaths: []*criticalPaths{{{"zone1", 2}, {"zone2", 2}}},
@@ -2173,8 +2174,8 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 				st.MakePod().Name("p-x1").Node("node-x").Label("foo", "").Obj(),
 				st.MakePod().Name("p-x2").Node("node-x").Label("foo", "").Obj(),
 			},
-			deletedPodIdx: 3, // remove pod "p-x1"
-			nodeIdx:       2, // node-x
+			deletedPodIdx: 3, // 删除 Pod "p-x1"
+			nodeIdx:       2, // 对应 node-x
 			want: &preFilterState{
 				Constraints:   []topologySpreadConstraint{zoneConstraint, nodeConstraint},
 				CriticalPaths: []*criticalPaths{{{"zone2", 1}, {"zone1", 3}}, {{"node-b", 1}, {"node-x", 1}}},
@@ -2331,6 +2332,7 @@ func TestPreFilterStateRemovePod(t *testing.T) {
 	}
 }
 
+// BenchmarkFilter 测量大规模集群下 PreFilter/Filter 的耗时以及 CycleState.Clone 的开销。
 func BenchmarkFilter(b *testing.B) {
 	tests := []struct {
 		name             string
@@ -2400,6 +2402,7 @@ func BenchmarkFilter(b *testing.B) {
 	}
 }
 
+// mustConvertLabelSelectorAsSelector 转换 LabelSelector，失败时直接终止测试。
 func mustConvertLabelSelectorAsSelector(t *testing.T, ls *metav1.LabelSelector) labels.Selector {
 	t.Helper()
 	s, err := metav1.LabelSelectorAsSelector(ls)
@@ -2409,6 +2412,7 @@ func mustConvertLabelSelectorAsSelector(t *testing.T, ls *metav1.LabelSelector) 
 	return s
 }
 
+// TestSingleConstraint 验证单条拓扑分布约束下 Filter 的判定：节点域归属、命名空间、节点包含策略及 minDomains。
 func TestSingleConstraint(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -2527,8 +2531,7 @@ func TestSingleConstraint(t *testing.T) {
 			},
 		},
 		{
-			// TODO(Huang-Wei): maybe document this to remind users that typos on node labels
-			// can cause unexpected behavior
+			// TODO(Huang-Wei): 补充说明节点标签拼写错误会导致非预期行为，提醒用户注意
 			name: "pods spread across zones as 1/2 due to absence of label 'zone' on node-b",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -2619,10 +2622,9 @@ func TestSingleConstraint(t *testing.T) {
 			},
 		},
 		{
-			// not a desired case, but it can happen
-			// TODO(Huang-Wei): document this "pod-not-match-itself" case
-			// in this case, placement of the new pod doesn't change pod distribution of the cluster
-			// as the incoming pod doesn't have label "foo"
+			// 非理想情况，但确实可能发生
+			// TODO(Huang-Wei): 记录这种 "pod-not-match-itself" 场景
+			// 此时新 Pod 不匹配自身标签（没有 "foo"），放置它不会改变集群中 Pod 的分布
 			name: "pods spread across nodes as 2/1/0/3, but pod doesn't match itself",
 			pod: st.MakePod().Name("p").Label("bar", "").
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -2649,11 +2651,10 @@ func TestSingleConstraint(t *testing.T) {
 			},
 		},
 		{
-			// only node-a and node-y are considered, so pods spread as 2/~1~/~0~/3
-			// ps: '~num~' is a markdown symbol to denote a crossline through 'num'
-			// but in this unit test, we don't run NodeAffinity/TaintToleration Predicate, so node-b and node-x are
-			// still expected to be fits;
-			// the fact that node-a fits can prove the underlying logic works
+			// 只考虑 node-a 和 node-y，分布为 2/~1~/~0~/3
+			// 注：'~num~' 是 markdown 删除线写法，表示不参与计算
+			// 但本单测不运行 NodeAffinity/TaintToleration 断言，所以 node-b、node-x 仍被视为可调度；
+			// node-a 可调度足以证明底层逻辑正确
 			name: "incoming pod has nodeAffinity, pods spread as 2/~1~/~0~/3, hence node-a fits",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeAffinityIn("node", []string{"node-a", "node-y"}, st.NodeSelectorTypeMatchExpressions).
@@ -2675,8 +2676,8 @@ func TestSingleConstraint(t *testing.T) {
 			},
 			wantStatusCode: map[string]fwk.Code{
 				"node-a": fwk.Success,
-				"node-b": fwk.Success, // in real case, it's false
-				"node-x": fwk.Success, // in real case, it's false
+				"node-b": fwk.Success, // 真实场景中应为不可调度
+				"node-x": fwk.Success, // 真实场景中应为不可调度
 				"node-y": fwk.Unschedulable,
 			},
 		},
@@ -2699,7 +2700,7 @@ func TestSingleConstraint(t *testing.T) {
 			},
 		},
 		{
-			// In this unit test, NodeAffinity plugin is not involved, so node-b still fits
+			// 本单测不涉及 NodeAffinity 插件，所以 node-b 仍被视为可调度
 			name: "incoming pod has nodeAffinity, pods spread as 0/~2~/0/1, hence node-a fits",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeAffinityNotIn("node", []string{"node-b"}).
@@ -2718,7 +2719,7 @@ func TestSingleConstraint(t *testing.T) {
 			},
 			wantStatusCode: map[string]fwk.Code{
 				"node-a": fwk.Success,
-				"node-b": fwk.Success, // in real case, it's Unschedulable
+				"node-b": fwk.Success, // 真实场景中应为 Unschedulable
 				"node-x": fwk.Unschedulable,
 				"node-y": fwk.Unschedulable,
 			},
@@ -2730,7 +2731,7 @@ func TestSingleConstraint(t *testing.T) {
 				"node",
 				v1.DoNotSchedule,
 				fooSelector,
-				ptr.To[int32](4), // larger than the number of domains(3)
+				ptr.To[int32](4), // 大于域数量（3）
 				nil,
 				nil,
 				nil,
@@ -2760,7 +2761,7 @@ func TestSingleConstraint(t *testing.T) {
 				"node",
 				v1.DoNotSchedule,
 				fooSelector,
-				ptr.To[int32](2), // smaller than the number of domains(3)
+				ptr.To[int32](2), // 小于域数量（3）
 				nil,
 				nil,
 				nil,
@@ -2790,7 +2791,7 @@ func TestSingleConstraint(t *testing.T) {
 				"zone",
 				v1.DoNotSchedule,
 				fooSelector,
-				ptr.To[int32](3), // larger than the number of domains(2)
+				ptr.To[int32](3), // 大于域数量（2）
 				nil,
 				nil,
 				nil,
@@ -2820,7 +2821,7 @@ func TestSingleConstraint(t *testing.T) {
 				"zone",
 				v1.DoNotSchedule,
 				fooSelector,
-				ptr.To[int32](1), // smaller than the number of domains(2)
+				ptr.To[int32](1), // 小于域数量（2）
 				nil,
 				nil,
 				nil,
@@ -2844,7 +2845,7 @@ func TestSingleConstraint(t *testing.T) {
 			},
 		},
 		{
-			// pods spread across node as 1/1/0/~0~
+			// 各节点 Pod 分布为 1/1/0/~0~
 			name: "NodeAffinityPolicy honored with labelSelectors",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeSelector(map[string]string{"foo": ""}).
@@ -2865,12 +2866,12 @@ func TestSingleConstraint(t *testing.T) {
 				"node-a": fwk.Unschedulable,
 				"node-b": fwk.Unschedulable,
 				"node-x": fwk.Success,
-				"node-y": fwk.Success, // in real case, when we disable NodeAffinity Plugin, node-y will be success.
+				"node-y": fwk.Success, // 真实场景中禁用 NodeAffinity 插件时 node-y 才可通过
 			},
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// pods spread across node as 1/1/0/~1~
+			// 各节点 Pod 分布为 1/1/0/~1~
 			name: "NodeAffinityPolicy ignored with labelSelectors",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeSelector(map[string]string{"foo": ""}).
@@ -2896,7 +2897,7 @@ func TestSingleConstraint(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// pods spread across node as 1/1/0/~0~
+			// 各节点 Pod 分布为 1/1/0/~0~
 			name: "NodeAffinityPolicy honored with nodeAffinity",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeAffinityIn("foo", []string{""}, st.NodeSelectorTypeMatchExpressions).
@@ -2917,12 +2918,12 @@ func TestSingleConstraint(t *testing.T) {
 				"node-a": fwk.Unschedulable,
 				"node-b": fwk.Unschedulable,
 				"node-x": fwk.Success,
-				"node-y": fwk.Success, // in real case, when we disable NodeAffinity Plugin, node-y will be success.
+				"node-y": fwk.Success, // 真实场景中禁用 NodeAffinity 插件时 node-y 才可通过
 			},
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// pods spread across node as 1/1/0/~1~
+			// 各节点 Pod 分布为 1/1/0/~1~
 			name: "NodeAffinityPolicy ignored with labelSelectors",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeAffinityIn("foo", []string{""}, st.NodeSelectorTypeMatchExpressions).
@@ -2948,7 +2949,7 @@ func TestSingleConstraint(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// pods spread across node as 1/1/0/~0~
+			// 各节点 Pod 分布为 1/1/0/~0~
 			name: "NodeTaintsPolicy honored",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, &honorPolicy, nil).
@@ -2968,12 +2969,12 @@ func TestSingleConstraint(t *testing.T) {
 				"node-a": fwk.Unschedulable,
 				"node-b": fwk.Unschedulable,
 				"node-x": fwk.Success,
-				"node-y": fwk.Success, // in real case, when we disable TaintToleration Plugin, node-y will be success.
+				"node-y": fwk.Success, // 真实场景中禁用 TaintToleration 插件时 node-y 才可通过
 			},
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// pods spread across node as 1/1/0/~1~
+			// 各节点 Pod 分布为 1/1/0/~1~
 			name: "NodeTaintsPolicy ignored",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "node", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3025,6 +3026,7 @@ func TestSingleConstraint(t *testing.T) {
 	}
 }
 
+// TestMultipleConstraints 验证多条约束交叉过滤：每个节点必须同时满足所有约束。
 func TestMultipleConstraints(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -3035,9 +3037,9 @@ func TestMultipleConstraints(t *testing.T) {
 		enableNodeInclusionPolicy bool
 	}{
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on any zone (hence any node)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-x
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：可放在任意 zone（即任意节点）
+			// 2. 满足 "node" 约束：只能放在 node-x
+			// 两者取交集，得到 node-x
 			name: "two Constraints on zone and node, spreads = [3/3, 2/1/0/3]",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3065,9 +3067,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on zone1 (node-a or node-b)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-x
-			// intersection of (1) and (2) returns no node
+			// 1. 满足 "zone" 约束：只能放在 zone1（node-a 或 node-b）
+			// 2. 满足 "node" 约束：只能放在 node-x
+			// 两者无交集，没有节点可用
 			name: "two Constraints on zone and node, spreads = [3/4, 2/1/0/4]",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3096,9 +3098,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on zone2 (node-x or node-y)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-a, node-b or node-x
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：只能放在 zone2（node-x 或 node-y）
+			// 2. 满足 "node" 约束：可放在 node-a、node-b 或 node-x
+			// 两者取交集，得到 node-x
 			name: "Constraints hold different labelSelectors, spreads = [1/0, 1/0/0/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3122,9 +3124,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on zone2 (node-x or node-y)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-a or node-b
-			// intersection of (1) and (2) returns no node
+			// 1. 满足 "zone" 约束：只能放在 zone2（node-x 或 node-y）
+			// 2. 满足 "node" 约束：只能放在 node-a 或 node-b
+			// 两者无交集，没有节点可用
 			name: "Constraints hold different labelSelectors, spreads = [1/0, 0/0/1/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3149,9 +3151,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on zone1 (node-a or node-b)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-b or node-x
-			// intersection of (1) and (2) returns node-b
+			// 1. 满足 "zone" 约束：只能放在 zone1（node-a 或 node-b）
+			// 2. 满足 "node" 约束：可放在 node-b 或 node-x
+			// 两者取交集，得到 node-b
 			name: "Constraints hold different labelSelectors, spreads = [2/3, 1/0/0/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3178,9 +3180,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. pod doesn't match itself on "zone" constraint, so it can be put onto any zone
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-a or node-b
-			// intersection of (1) and (2) returns node-a and node-b
+			// 1. Pod 在 "zone" 约束下不匹配自身，因此可放在任意 zone
+			// 2. 满足 "node" 约束：只能放在 node-a 或 node-b
+			// 两者取交集，得到 node-a 和 node-b
 			name: "Constraints hold different labelSelectors but pod doesn't match itself on 'zone' constraint",
 			pod: st.MakePod().Name("p").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3205,9 +3207,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, incoming pod can be placed on any zone (hence any node)
-			// 2. to fulfil "node" constraint, incoming pod can be placed on node-b (node-x doesn't have the required label)
-			// intersection of (1) and (2) returns node-b
+			// 1. 满足 "zone" 约束：可放在任意 zone（即任意节点）
+			// 2. 满足 "node" 约束：只能放在 node-b（node-x 缺少所需标签）
+			// 两者取交集，得到 node-b
 			name: "two Constraints on zone and node, absence of label 'node' on node-x, spreads = [1/1, 1/0/0/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, nil, nil).
@@ -3231,9 +3233,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 2/~0~
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/1/0/~1~
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：zone 间分布为 2/~0~
+			// 2. 满足 "node" 约束：节点间分布为 1/1/0/~1~
+			// 两者取交集，得到 node-x
 			name: "two node inclusion Constraints, zone: honor/ignore, node: ignore/ignore",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeSelector(map[string]string{"foo": ""}).
@@ -3260,9 +3262,9 @@ func TestMultipleConstraints(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 2/0
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/1/0/~1~
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：zone 间分布为 2/0
+			// 2. 满足 "node" 约束：节点间分布为 1/1/0/~1~
+			// 两者取交集，得到 node-x
 			name: "two node inclusion Constraints, zone: honor/honor, node: honor/ignore",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, fooSelector, nil, nil, &honorPolicy, nil).
@@ -3288,9 +3290,9 @@ func TestMultipleConstraints(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 1/~1~
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/0/0/~1~
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：zone 间分布为 1/~1~
+			// 2. 满足 "node" 约束：节点间分布为 1/0/0/~1~
+			// 两者取交集，得到 node-x
 			name: "two node inclusion Constraints, zone: honor/ignore, node: honor/ignore",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeSelector(map[string]string{"foo": ""}).
@@ -3317,9 +3319,9 @@ func TestMultipleConstraints(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 1/0
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/~1~/0/~1~
-			// intersection of (1) and (2) returns node-x
+			// 1. 满足 "zone" 约束：zone 间分布为 1/0
+			// 2. 满足 "node" 约束：节点间分布为 1/~1~/0/~1~
+			// 两者取交集，得到 node-x
 			name: "two node inclusion Constraints, zone: honor/honor, node: ignore/ignore",
 			pod: st.MakePod().Name("p").Label("foo", "").
 				NodeSelector(map[string]string{"foo": ""}).
@@ -3346,9 +3348,9 @@ func TestMultipleConstraints(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil first "zone" constraint, incoming pod can be placed on zone2 (node-x or node-y)
-			// 2. to fulfil second "zone" constraint, incoming pod can be placed on any zone
-			// intersection of (1) and (2) returns node-x and node-y
+			// 1. 满足第一条 "zone" 约束：只能放在 zone2（node-x 或 node-y）
+			// 2. 满足第二条 "zone" 约束：可放在任意 zone
+			// 两者取交集，得到 node-x 和 node-y
 			name: "two Constraints on zone, spreads = [3/3, 2/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, barSelector, nil, nil, nil, nil).
@@ -3376,9 +3378,9 @@ func TestMultipleConstraints(t *testing.T) {
 			},
 		},
 		{
-			// 1. to fulfil first "zone" constraint, incoming pod can be placed on zone2 (node-x or node-y)
-			// 2. to fulfil second "zone" constraint, incoming pod can be placed on zone1 (node-a or node-b)
-			// intersection of (1) and (2) returns no node
+			// 1. 满足第一条 "zone" 约束：只能放在 zone2（node-x 或 node-y）
+			// 2. 满足第二条 "zone" 约束：只能放在 zone1（node-a 或 node-b）
+			// 两者无交集，没有节点可用
 			name: "two Constraints on zone, spreads = [3/4, 2/1]",
 			pod: st.MakePod().Name("p").Label("foo", "").Label("bar", "").
 				SpreadConstraint(1, "zone", v1.DoNotSchedule, barSelector, nil, nil, nil, nil).
@@ -3434,6 +3436,7 @@ func TestMultipleConstraints(t *testing.T) {
 	}
 }
 
+// TestPreFilterDisabled 验证 Pod 未声明拓扑分布约束且无默认约束时 PreFilter 返回 Skip。
 func TestPreFilterDisabled(t *testing.T) {
 	pod := &v1.Pod{}
 	nodeInfo := framework.NewNodeInfo()
@@ -3449,6 +3452,7 @@ func TestPreFilterDisabled(t *testing.T) {
 	}
 }
 
+// mustNewPodInfo 由 Pod 构造 PodInfo，失败时直接终止测试。
 func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	podInfo, err := framework.NewPodInfo(pod)
 	if err != nil {
@@ -3457,6 +3461,7 @@ func mustNewPodInfo(t *testing.T, pod *v1.Pod) *framework.PodInfo {
 	return podInfo
 }
 
+// TestPodTopoSignatures 验证 SignPod 在有无约束、有无默认约束时的签名片段与可调度性。
 func TestPodTopoSignatures(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -3532,6 +3537,7 @@ func TestPodTopoSignatures(t *testing.T) {
 	}
 }
 
+// TestPodTopologySpread_DeferredResizeSkipped 验证 PreFilter 在 Pod 包含 deferred resize 请求时直接跳过。
 func TestPodTopologySpread_DeferredResizeSkipped(t *testing.T) {
 	ctx := context.Background()
 	pod := st.MakePod().Name("p").UID("p").Condition(v1.PodResizePending, v1.ConditionTrue, v1.PodReasonDeferred).Obj()

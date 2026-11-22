@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPVAssumeCache 验证 PV AssumeCache 的基本读写，以及多个消费者共享同一 informer 时的行为。
 func TestPVAssumeCache(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	informer := &testInformer{
@@ -46,7 +47,7 @@ func TestPVAssumeCache(t *testing.T) {
 	}
 	verifyPVs(cache)
 
-	// Shared informer
+	// 同一个 informer 上再建一个缓存，验证多消费者共享场景下读到的内容一致。
 	cache2, err := NewPVAssumeCache(logger, informer)
 	if err != nil {
 		t.Fatalf("Failed to create PV cache2: %v", err)

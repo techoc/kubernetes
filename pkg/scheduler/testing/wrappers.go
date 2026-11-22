@@ -38,24 +38,26 @@ import (
 
 var zero int64
 
-// NodeSelectorWrapper wraps a NodeSelector inside.
+// NodeSelectorWrapper 包装一个 NodeSelector。
 type NodeSelectorWrapper struct{ v1.NodeSelector }
 
-// MakeNodeSelector creates a NodeSelector wrapper.
+// MakeNodeSelector 创建 NodeSelector 包装器。
 func MakeNodeSelector() *NodeSelectorWrapper {
 	return &NodeSelectorWrapper{v1.NodeSelector{}}
 }
 
+// NodeSelectorType 指定匹配表达式写入 MatchExpressions 还是 MatchFields。
 type NodeSelectorType int
 
 const (
+	// NodeSelectorTypeMatchExpressions 表示将匹配表达式写入 MatchExpressions。
 	NodeSelectorTypeMatchExpressions NodeSelectorType = iota
+	// NodeSelectorTypeMatchFields 表示将匹配表达式写入 MatchFields。
 	NodeSelectorTypeMatchFields
 )
 
-// In injects a matchExpression (with an operator IN) as a selectorTerm
-// to the inner nodeSelector.
-// NOTE: appended selectorTerms are ORed.
+// In 向内部 nodeSelector 追加一个使用 IN 操作符的 selectorTerm。
+// NOTE: 追加的 selectorTerm 之间是“或”关系。
 func (s *NodeSelectorWrapper) In(key string, vals []string, t NodeSelectorType) *NodeSelectorWrapper {
 	expression := v1.NodeSelectorRequirement{
 		Key:      key,
@@ -72,8 +74,7 @@ func (s *NodeSelectorWrapper) In(key string, vals []string, t NodeSelectorType) 
 	return s
 }
 
-// NotIn injects a matchExpression (with an operator NotIn) as a selectorTerm
-// to the inner nodeSelector.
+// NotIn 向内部 nodeSelector 追加一个使用 NotIn 操作符的 selectorTerm。
 func (s *NodeSelectorWrapper) NotIn(key string, vals []string) *NodeSelectorWrapper {
 	expression := v1.NodeSelectorRequirement{
 		Key:      key,
@@ -86,20 +87,20 @@ func (s *NodeSelectorWrapper) NotIn(key string, vals []string) *NodeSelectorWrap
 	return s
 }
 
-// Obj returns the inner NodeSelector.
+// Obj 返回内部的 NodeSelector。
 func (s *NodeSelectorWrapper) Obj() *v1.NodeSelector {
 	return &s.NodeSelector
 }
 
-// LabelSelectorWrapper wraps a LabelSelector inside.
+// LabelSelectorWrapper 包装一个 LabelSelector。
 type LabelSelectorWrapper struct{ metav1.LabelSelector }
 
-// MakeLabelSelector creates a LabelSelector wrapper.
+// MakeLabelSelector 创建 LabelSelector 包装器。
 func MakeLabelSelector() *LabelSelectorWrapper {
 	return &LabelSelectorWrapper{metav1.LabelSelector{}}
 }
 
-// Label applies a {k,v} pair to the inner LabelSelector.
+// Label 向内部 LabelSelector 添加一个 {k,v} 标签对。
 func (s *LabelSelectorWrapper) Label(k, v string) *LabelSelectorWrapper {
 	if s.MatchLabels == nil {
 		s.MatchLabels = make(map[string]string)
@@ -108,7 +109,7 @@ func (s *LabelSelectorWrapper) Label(k, v string) *LabelSelectorWrapper {
 	return s
 }
 
-// In injects a matchExpression (with an operator In) to the inner labelSelector.
+// In 向内部 labelSelector 追加一个使用 In 操作符的 matchExpression。
 func (s *LabelSelectorWrapper) In(key string, vals []string) *LabelSelectorWrapper {
 	expression := metav1.LabelSelectorRequirement{
 		Key:      key,
@@ -119,7 +120,7 @@ func (s *LabelSelectorWrapper) In(key string, vals []string) *LabelSelectorWrapp
 	return s
 }
 
-// NotIn injects a matchExpression (with an operator NotIn) to the inner labelSelector.
+// NotIn 向内部 labelSelector 追加一个使用 NotIn 操作符的 matchExpression。
 func (s *LabelSelectorWrapper) NotIn(key string, vals []string) *LabelSelectorWrapper {
 	expression := metav1.LabelSelectorRequirement{
 		Key:      key,
@@ -130,7 +131,7 @@ func (s *LabelSelectorWrapper) NotIn(key string, vals []string) *LabelSelectorWr
 	return s
 }
 
-// Exists injects a matchExpression (with an operator Exists) to the inner labelSelector.
+// Exists 向内部 labelSelector 追加一个使用 Exists 操作符的 matchExpression。
 func (s *LabelSelectorWrapper) Exists(k string) *LabelSelectorWrapper {
 	expression := metav1.LabelSelectorRequirement{
 		Key:      k,
@@ -140,7 +141,7 @@ func (s *LabelSelectorWrapper) Exists(k string) *LabelSelectorWrapper {
 	return s
 }
 
-// NotExist injects a matchExpression (with an operator NotExist) to the inner labelSelector.
+// NotExist 向内部 labelSelector 追加一个使用 DoesNotExist 操作符的 matchExpression。
 func (s *LabelSelectorWrapper) NotExist(k string) *LabelSelectorWrapper {
 	expression := metav1.LabelSelectorRequirement{
 		Key:      k,
@@ -150,49 +151,49 @@ func (s *LabelSelectorWrapper) NotExist(k string) *LabelSelectorWrapper {
 	return s
 }
 
-// Obj returns the inner LabelSelector.
+// Obj 返回内部的 LabelSelector。
 func (s *LabelSelectorWrapper) Obj() *metav1.LabelSelector {
 	return &s.LabelSelector
 }
 
-// ContainerWrapper wraps a Container inside.
+// ContainerWrapper 包装一个 Container。
 type ContainerWrapper struct{ v1.Container }
 
-// MakeContainer creates a Container wrapper.
+// MakeContainer 创建 Container 包装器。
 func MakeContainer() *ContainerWrapper {
 	return &ContainerWrapper{v1.Container{}}
 }
 
-// Obj returns the inner Container.
+// Obj 返回内部的 Container。
 func (c *ContainerWrapper) Obj() v1.Container {
 	return c.Container
 }
 
-// Name sets `n` as the name of the inner Container.
+// Name 将内部 Container 的名称设为 n。
 func (c *ContainerWrapper) Name(n string) *ContainerWrapper {
 	c.Container.Name = n
 	return c
 }
 
-// Image sets `image` as the image of the inner Container.
+// Image 将内部 Container 的镜像设为 image。
 func (c *ContainerWrapper) Image(image string) *ContainerWrapper {
 	c.Container.Image = image
 	return c
 }
 
-// HostPort sets `hostPort` as the host port of the inner Container.
+// HostPort 将内部 Container 的主机端口设为 hostPort。
 func (c *ContainerWrapper) HostPort(hostPort int32) *ContainerWrapper {
 	c.Container.Ports = []v1.ContainerPort{{HostPort: hostPort}}
 	return c
 }
 
-// ContainerPort sets `ports` as the ports of the inner Container.
+// ContainerPort 将内部 Container 的端口列表设为 ports。
 func (c *ContainerWrapper) ContainerPort(ports []v1.ContainerPort) *ContainerWrapper {
 	c.Container.Ports = ports
 	return c
 }
 
-// Resources sets the container resources to the given resource map.
+// Resources 将容器的 requests 和 limits 都设为给定的资源表。
 func (c *ContainerWrapper) Resources(resMap map[v1.ResourceName]string) *ContainerWrapper {
 	res := v1.ResourceList{}
 	for k, v := range resMap {
@@ -205,7 +206,7 @@ func (c *ContainerWrapper) Resources(resMap map[v1.ResourceName]string) *Contain
 	return c
 }
 
-// ResourceRequests sets the container resources requests to the given resource map of requests.
+// ResourceRequests 将容器的 requests 设为给定的资源表。
 func (c *ContainerWrapper) ResourceRequests(reqMap map[v1.ResourceName]string) *ContainerWrapper {
 	res := v1.ResourceList{}
 	for k, v := range reqMap {
@@ -217,7 +218,7 @@ func (c *ContainerWrapper) ResourceRequests(reqMap map[v1.ResourceName]string) *
 	return c
 }
 
-// ResourceLimits sets the container resource limits to the given resource map.
+// ResourceLimits 将容器的 limits 设为给定的资源表。
 func (c *ContainerWrapper) ResourceLimits(limMap map[v1.ResourceName]string) *ContainerWrapper {
 	res := v1.ResourceList{}
 	for k, v := range limMap {
@@ -229,40 +230,40 @@ func (c *ContainerWrapper) ResourceLimits(limMap map[v1.ResourceName]string) *Co
 	return c
 }
 
-// RestartPolicy sets the container's restartPolicy to the given restartPolicy.
+// RestartPolicy 将容器的 restartPolicy 设为给定的策略。
 func (c *ContainerWrapper) RestartPolicy(restartPolicy v1.ContainerRestartPolicy) *ContainerWrapper {
 	c.Container.RestartPolicy = &restartPolicy
 	return c
 }
 
-// PodDisruptionBudgetWrapper wraps a PodDisruptionBudget inside.
+// PodDisruptionBudgetWrapper 包装一个 PodDisruptionBudget。
 type PodDisruptionBudgetWrapper struct {
 	policy.PodDisruptionBudget
 }
 
-// MakePDB creates a PodDisruptionBudget wrapper.
+// MakePDB 创建 PodDisruptionBudget 包装器。
 func MakePDB() *PodDisruptionBudgetWrapper {
 	return &PodDisruptionBudgetWrapper{policy.PodDisruptionBudget{}}
 }
 
-// Obj returns the inner PodDisruptionBudget.
+// Obj 返回内部的 PodDisruptionBudget。
 func (p *PodDisruptionBudgetWrapper) Obj() *policy.PodDisruptionBudget {
 	return &p.PodDisruptionBudget
 }
 
-// Name sets `name` as the name of the inner PodDisruptionBudget.
+// Name 将内部 PodDisruptionBudget 的名称设为 name。
 func (p *PodDisruptionBudgetWrapper) Name(name string) *PodDisruptionBudgetWrapper {
 	p.SetName(name)
 	return p
 }
 
-// Namespace sets `namespace` as the namespace of the inner PodDisruptionBudget.
+// Namespace 将内部 PodDisruptionBudget 的命名空间设为 namespace。
 func (p *PodDisruptionBudgetWrapper) Namespace(namespace string) *PodDisruptionBudgetWrapper {
 	p.SetNamespace(namespace)
 	return p
 }
 
-// MinAvailable sets `minAvailable` to the inner PodDisruptionBudget.Spec.MinAvailable.
+// MinAvailable 将内部 PodDisruptionBudget.Spec.MinAvailable 设为 minAvailable。
 func (p *PodDisruptionBudgetWrapper) MinAvailable(minAvailable string) *PodDisruptionBudgetWrapper {
 	p.Spec.MinAvailable = &intstr.IntOrString{
 		Type:   intstr.String,
@@ -271,7 +272,7 @@ func (p *PodDisruptionBudgetWrapper) MinAvailable(minAvailable string) *PodDisru
 	return p
 }
 
-// MatchLabel adds a {key,value} to the inner PodDisruptionBudget.Spec.Selector.MatchLabels.
+// MatchLabel 向内部 PodDisruptionBudget.Spec.Selector.MatchLabels 添加一个 {key,value}。
 func (p *PodDisruptionBudgetWrapper) MatchLabel(key, value string) *PodDisruptionBudgetWrapper {
 	selector := p.Spec.Selector
 	if selector == nil {
@@ -287,61 +288,63 @@ func (p *PodDisruptionBudgetWrapper) MatchLabel(key, value string) *PodDisruptio
 	return p
 }
 
-// DisruptionsAllowed sets `disruptionsAllowed` to the inner PodDisruptionBudget.Status.DisruptionsAllowed.
+// DisruptionsAllowed 将内部 PodDisruptionBudget.Status.DisruptionsAllowed 设为 disruptionsAllowed。
 func (p *PodDisruptionBudgetWrapper) DisruptionsAllowed(disruptionsAllowed int32) *PodDisruptionBudgetWrapper {
 	p.Status.DisruptionsAllowed = disruptionsAllowed
 	return p
 }
 
-// PodWrapper wraps a Pod inside.
+// PodWrapper 包装一个 Pod。
 type PodWrapper struct{ v1.Pod }
 
-// MakePod creates a Pod wrapper.
+// MakePod 创建 Pod 包装器。
 func MakePod() *PodWrapper {
 	return &PodWrapper{v1.Pod{}}
 }
 
-// Obj returns the inner Pod.
+// Obj 返回内部的 Pod。
 func (p *PodWrapper) Obj() *v1.Pod {
 	return &p.Pod
 }
 
-// Name sets `s` as the name of the inner pod.
+// Name 将内部 pod 的名称设为 s。
 func (p *PodWrapper) Name(s string) *PodWrapper {
 	p.SetName(s)
 	return p
 }
 
-// Name sets `s` as the name of the inner pod.
+// GenerateName 将内部 pod 的 generateName 设为 s。
 func (p *PodWrapper) GenerateName(s string) *PodWrapper {
 	p.SetGenerateName(s)
 	return p
 }
 
-// UID sets `s` as the UID of the inner pod.
+// UID 将内部 pod 的 UID 设为 s。
 func (p *PodWrapper) UID(s string) *PodWrapper {
 	p.SetUID(types.UID(s))
 	return p
 }
 
-// SchedulerName sets `s` as the scheduler name of the inner pod.
+// SchedulerName 将内部 pod 的调度器名称设为 s。
 func (p *PodWrapper) SchedulerName(s string) *PodWrapper {
 	p.Spec.SchedulerName = s
 	return p
 }
 
-// Namespace sets `s` as the namespace of the inner pod.
+// Namespace 将内部 pod 的命名空间设为 s。
 func (p *PodWrapper) Namespace(s string) *PodWrapper {
 	p.SetNamespace(s)
 	return p
 }
 
-// Resources sets requests and limits at pod-level.
+// Resources 在 pod 级别设置 requests 和 limits。
 func (p *PodWrapper) Resources(resources v1.ResourceRequirements) *PodWrapper {
 	p.Spec.Resources = &resources
 	return p
 }
 
+// NodeAffinity 将内部 pod 的 nodeAffinity 设为 nodeAffinity。
+// Affinity 为 nil 时先初始化，避免调用方自行构造整条嵌套路径。
 func (p *PodWrapper) NodeAffinity(nodeAffinity *v1.NodeAffinity) *PodWrapper {
 	if p.Spec.Affinity == nil {
 		p.Spec.Affinity = &v1.Affinity{}
@@ -350,7 +353,7 @@ func (p *PodWrapper) NodeAffinity(nodeAffinity *v1.NodeAffinity) *PodWrapper {
 	return p
 }
 
-// OwnerReference updates the owning controller of the pod.
+// OwnerReference 更新 pod 的属主控制器。
 func (p *PodWrapper) OwnerReference(name string, gvk schema.GroupVersionKind) *PodWrapper {
 	p.OwnerReferences = []metav1.OwnerReference{
 		{
@@ -363,88 +366,87 @@ func (p *PodWrapper) OwnerReference(name string, gvk schema.GroupVersionKind) *P
 	return p
 }
 
-// Container appends a container into PodSpec of the inner pod.
+// Container 向内部 pod 的 PodSpec 追加一个容器，镜像为 s，名称按序号生成。
 func (p *PodWrapper) Container(s string) *PodWrapper {
 	name := fmt.Sprintf("con%d", len(p.Spec.Containers))
 	p.Spec.Containers = append(p.Spec.Containers, MakeContainer().Name(name).Image(s).Obj())
 	return p
 }
 
-// Containers sets `containers` to the PodSpec of the inner pod.
+// Containers 将内部 pod 的 PodSpec 中的容器列表设为 containers。
 func (p *PodWrapper) Containers(containers []v1.Container) *PodWrapper {
 	p.Spec.Containers = containers
 	return p
 }
 
-// PodResourceClaims appends PodResourceClaims into PodSpec of the inner pod.
+// PodResourceClaims 向内部 pod 的 PodSpec 追加 PodResourceClaims。
 func (p *PodWrapper) PodResourceClaims(podResourceClaims ...v1.PodResourceClaim) *PodWrapper {
 	p.Spec.ResourceClaims = append(p.Spec.ResourceClaims, podResourceClaims...)
 	return p
 }
 
-// ResourceClaimStatuses appends claim statuses into PodStatus of the inner pod.
+// ResourceClaimStatuses 向内部 pod 的 PodStatus 追加 claim 状态。
 func (p *PodWrapper) ResourceClaimStatuses(resourceClaimStatuses ...v1.PodResourceClaimStatus) *PodWrapper {
 	p.Status.ResourceClaimStatuses = append(p.Status.ResourceClaimStatuses, resourceClaimStatuses...)
 	return p
 }
 
-// ExendedResourceClaimStatus sets ExtendedResourceClaimStatus in PodStatus of the inner pod.
+// ExendedResourceClaimStatus 设置内部 pod 的 PodStatus 中的 ExtendedResourceClaimStatus。
 func (p *PodWrapper) ExtendedResourceClaimStatus(extendedResourceClaimStatus *v1.PodExtendedResourceClaimStatus) *PodWrapper {
 	p.Status.ExtendedResourceClaimStatus = extendedResourceClaimStatus
 	return p
 }
 
-// Priority sets a priority value into PodSpec of the inner pod.
+// Priority 将内部 pod 的 PodSpec 中的优先级设为 val。
 func (p *PodWrapper) Priority(val int32) *PodWrapper {
 	p.Spec.Priority = &val
 	return p
 }
 
-// CreationTimestamp sets the inner pod's CreationTimestamp.
+// CreationTimestamp 设置内部 pod 的 CreationTimestamp。
 func (p *PodWrapper) CreationTimestamp(t metav1.Time) *PodWrapper {
 	p.ObjectMeta.CreationTimestamp = t
 	return p
 }
 
-// Terminating sets the inner pod's deletionTimestamp to current timestamp.
+// Terminating 将内部 pod 的 deletionTimestamp 设为当前时间。
 func (p *PodWrapper) Terminating() *PodWrapper {
 	now := metav1.Now()
 	p.DeletionTimestamp = &now
 	return p
 }
 
-// ZeroTerminationGracePeriod sets the TerminationGracePeriodSeconds of the inner pod to zero.
+// ZeroTerminationGracePeriod 将内部 pod 的 TerminationGracePeriodSeconds 设为 0。
 func (p *PodWrapper) ZeroTerminationGracePeriod() *PodWrapper {
 	p.Spec.TerminationGracePeriodSeconds = &zero
 	return p
 }
 
-// TerminationGracePeriodSeconds sets the TerminationGracePeriodSeconds of the inner pod.
+// TerminationGracePeriodSeconds 设置内部 pod 的 TerminationGracePeriodSeconds。
 func (p *PodWrapper) TerminationGracePeriodSeconds(s int64) *PodWrapper {
 	p.Spec.TerminationGracePeriodSeconds = &s
 	return p
 }
 
-// Node sets `s` as the nodeName of the inner pod.
+// Node 将内部 pod 的 nodeName 设为 s。
 func (p *PodWrapper) Node(s string) *PodWrapper {
 	p.Spec.NodeName = s
 	return p
 }
 
-// Tolerations sets `tolerations` as the tolerations of the inner pod.
+// Tolerations 将内部 pod 的 tolerations 设为 tolerations。
 func (p *PodWrapper) Tolerations(tolerations []v1.Toleration) *PodWrapper {
 	p.Spec.Tolerations = tolerations
 	return p
 }
 
-// NodeSelector sets `m` as the nodeSelector of the inner pod.
+// NodeSelector 将内部 pod 的 nodeSelector 设为 m。
 func (p *PodWrapper) NodeSelector(m map[string]string) *PodWrapper {
 	p.Spec.NodeSelector = m
 	return p
 }
 
-// NodeAffinityIn creates a HARD node affinity (with the operator In)
-// and injects into the inner pod.
+// NodeAffinityIn 创建一个 HARD 类型的 node affinity（操作符 In）并注入内部 pod。
 func (p *PodWrapper) NodeAffinityIn(key string, vals []string, t NodeSelectorType) *PodWrapper {
 	if p.Spec.Affinity == nil {
 		p.Spec.Affinity = &v1.Affinity{}
@@ -457,8 +459,7 @@ func (p *PodWrapper) NodeAffinityIn(key string, vals []string, t NodeSelectorTyp
 	return p
 }
 
-// NodeAffinityNotIn creates a HARD node affinity (with MatchExpressions and the operator NotIn)
-// and injects into the inner pod.
+// NodeAffinityNotIn 创建一个 HARD 类型的 node affinity（使用 MatchExpressions 和 NotIn 操作符）并注入内部 pod。
 func (p *PodWrapper) NodeAffinityNotIn(key string, vals []string) *PodWrapper {
 	if p.Spec.Affinity == nil {
 		p.Spec.Affinity = &v1.Affinity{}
@@ -471,38 +472,37 @@ func (p *PodWrapper) NodeAffinityNotIn(key string, vals []string) *PodWrapper {
 	return p
 }
 
-// StartTime sets `t` as .status.startTime for the inner pod.
+// StartTime 将内部 pod 的 .status.startTime 设为 t。
 func (p *PodWrapper) StartTime(t metav1.Time) *PodWrapper {
 	p.Status.StartTime = &t
 	return p
 }
 
-// NominatedNodeName sets `n` as the .Status.NominatedNodeName of the inner pod.
+// NominatedNodeName 将内部 pod 的 .Status.NominatedNodeName 设为 n。
 func (p *PodWrapper) NominatedNodeName(n string) *PodWrapper {
 	p.Status.NominatedNodeName = n
 	return p
 }
 
-// Phase sets `phase` as .status.Phase of the inner pod.
+// Phase 将内部 pod 的 .status.Phase 设为 phase。
 func (p *PodWrapper) Phase(phase v1.PodPhase) *PodWrapper {
 	p.Status.Phase = phase
 	return p
 }
 
-// Condition adds a `condition(Type, Status, Reason)` to .Status.Conditions.
+// Condition 向 .Status.Conditions 追加一个 condition(Type, Status, Reason)。
 func (p *PodWrapper) Condition(t v1.PodConditionType, s v1.ConditionStatus, r string) *PodWrapper {
 	p.Status.Conditions = append(p.Status.Conditions, v1.PodCondition{Type: t, Status: s, Reason: r})
 	return p
 }
 
-// Conditions sets `conditions` as .status.Conditions of the inner pod.
+// Conditions 将内部 pod 的 .status.Conditions 设为 conditions。
 func (p *PodWrapper) Conditions(conditions []v1.PodCondition) *PodWrapper {
 	p.Status.Conditions = append(p.Status.Conditions, conditions...)
 	return p
 }
 
-// Toleration creates a toleration (with the operator Exists)
-// and injects into the inner pod.
+// Toleration 创建一个 toleration（操作符 Exists）并注入内部 pod。
 func (p *PodWrapper) Toleration(key string) *PodWrapper {
 	p.Spec.Tolerations = append(p.Spec.Tolerations, v1.Toleration{
 		Key:      key,
@@ -511,22 +511,19 @@ func (p *PodWrapper) Toleration(key string) *PodWrapper {
 	return p
 }
 
-// HostPort creates a container with a hostPort valued `hostPort`,
-// and injects into the inner pod.
+// HostPort 创建一个带 hostPort 的容器并注入内部 pod。
 func (p *PodWrapper) HostPort(port int32) *PodWrapper {
 	p.Spec.Containers = append(p.Spec.Containers, MakeContainer().Name("container").Image("pause").HostPort(port).Obj())
 	return p
 }
 
-// ContainerPort creates a container with ports valued `ports`,
-// and injects into the inner pod.
+// ContainerPort 创建一个带指定端口的容器并注入内部 pod。
 func (p *PodWrapper) ContainerPort(ports []v1.ContainerPort) *PodWrapper {
 	p.Spec.Containers = append(p.Spec.Containers, MakeContainer().Name("container").Image("pause").ContainerPort(ports).Obj())
 	return p
 }
 
-// InitContainerPort creates an initContainer with ports valued `ports`,
-// and injects into the inner pod.
+// InitContainerPort 创建一个带指定端口的 initContainer 并注入内部 pod；sidecar 为真时将其设为常驻容器。
 func (p *PodWrapper) InitContainerPort(sidecar bool, ports []v1.ContainerPort) *PodWrapper {
 	c := MakeContainer().
 		Name("init-container").
@@ -539,7 +536,7 @@ func (p *PodWrapper) InitContainerPort(sidecar bool, ports []v1.ContainerPort) *
 	return p
 }
 
-// PVC creates a Volume with a PVC and injects into the inner pod.
+// PVC 创建一个使用 PVC 的 Volume 并注入内部 pod。
 func (p *PodWrapper) PVC(name string) *PodWrapper {
 	p.Spec.Volumes = append(p.Spec.Volumes, v1.Volume{
 		Name: name,
@@ -550,19 +547,19 @@ func (p *PodWrapper) PVC(name string) *PodWrapper {
 	return p
 }
 
-// Volume creates volume and injects into the inner pod.
+// Volume 创建一个 volume 并注入内部 pod。
 func (p *PodWrapper) Volume(volume v1.Volume) *PodWrapper {
 	p.Spec.Volumes = append(p.Spec.Volumes, volume)
 	return p
 }
 
-// Volumes set the volumes and inject into the inner pod.
+// Volumes 将内部 pod 的 volume 列表设为 volumes。
 func (p *PodWrapper) Volumes(volumes []v1.Volume) *PodWrapper {
 	p.Spec.Volumes = volumes
 	return p
 }
 
-// SchedulingGates sets `gates` as additional SchedulerGates of the inner pod.
+// SchedulingGates 向内部 pod 追加调度门禁。
 func (p *PodWrapper) SchedulingGates(gates []string) *PodWrapper {
 	for _, gate := range gates {
 		p.Spec.SchedulingGates = append(p.Spec.SchedulingGates, v1.PodSchedulingGate{Name: gate})
@@ -570,34 +567,33 @@ func (p *PodWrapper) SchedulingGates(gates []string) *PodWrapper {
 	return p
 }
 
-// ResourceVersion sets the inner pod's ResurceVersion.
+// ResourceVersion 设置内部 pod 的 ResourceVersion。
 func (p *PodWrapper) ResourceVersion(version string) *PodWrapper {
 	p.ObjectMeta.ResourceVersion = version
 	return p
 }
 
-// PodAffinityKind represents different kinds of PodAffinity.
+// PodAffinityKind 表示 PodAffinity 的不同类型。
 type PodAffinityKind int
 
 const (
-	// NilPodAffinity is a no-op which doesn't apply any PodAffinity.
+	// NilPodAffinity 是空操作，不应用任何 PodAffinity。
 	NilPodAffinity PodAffinityKind = iota
-	// PodAffinityWithRequiredReq applies a HARD requirement to pod.spec.affinity.PodAffinity.
+	// PodAffinityWithRequiredReq 向 pod.spec.affinity.PodAffinity 应用 HARD 约束。
 	PodAffinityWithRequiredReq
-	// PodAffinityWithPreferredReq applies a SOFT requirement to pod.spec.affinity.PodAffinity.
+	// PodAffinityWithPreferredReq 向 pod.spec.affinity.PodAffinity 应用 SOFT 约束。
 	PodAffinityWithPreferredReq
-	// PodAffinityWithRequiredPreferredReq applies HARD and SOFT requirements to pod.spec.affinity.PodAffinity.
+	// PodAffinityWithRequiredPreferredReq 向 pod.spec.affinity.PodAffinity 同时应用 HARD 和 SOFT 约束。
 	PodAffinityWithRequiredPreferredReq
-	// PodAntiAffinityWithRequiredReq applies a HARD requirement to pod.spec.affinity.PodAntiAffinity.
+	// PodAntiAffinityWithRequiredReq 向 pod.spec.affinity.PodAntiAffinity 应用 HARD 约束。
 	PodAntiAffinityWithRequiredReq
-	// PodAntiAffinityWithPreferredReq applies a SOFT requirement to pod.spec.affinity.PodAntiAffinity.
+	// PodAntiAffinityWithPreferredReq 向 pod.spec.affinity.PodAntiAffinity 应用 SOFT 约束。
 	PodAntiAffinityWithPreferredReq
-	// PodAntiAffinityWithRequiredPreferredReq applies HARD and SOFT requirements to pod.spec.affinity.PodAntiAffinity.
+	// PodAntiAffinityWithRequiredPreferredReq 向 pod.spec.affinity.PodAntiAffinity 同时应用 HARD 和 SOFT 约束。
 	PodAntiAffinityWithRequiredPreferredReq
 )
 
-// PodAffinity creates a PodAffinity with topology key and label selector
-// and injects into the inner pod.
+// PodAffinity 用拓扑键和标签选择器创建 PodAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAffinity(topologyKey string, labelSelector *metav1.LabelSelector, kind PodAffinityKind) *PodWrapper {
 	if kind == NilPodAffinity {
 		return p
@@ -634,8 +630,7 @@ func (p *PodWrapper) PodAffinity(topologyKey string, labelSelector *metav1.Label
 	return p
 }
 
-// PodAntiAffinity creates a PodAntiAffinity with topology key and label selector
-// and injects into the inner pod.
+// PodAntiAffinity 用拓扑键和标签选择器创建 PodAntiAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAntiAffinity(topologyKey string, labelSelector *metav1.LabelSelector, kind PodAffinityKind) *PodWrapper {
 	if kind == NilPodAffinity {
 		return p
@@ -672,72 +667,63 @@ func (p *PodWrapper) PodAntiAffinity(topologyKey string, labelSelector *metav1.L
 	return p
 }
 
-// PodAffinityExists creates a PodAffinity with the operator "Exists"
-// and injects into the inner pod.
+// PodAffinityExists 创建操作符为 Exists 的 PodAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAffinityExists(labelKey, topologyKey string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().Exists(labelKey).Obj()
 	p.PodAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAntiAffinityExists creates a PodAntiAffinity with the operator "Exists"
-// and injects into the inner pod.
+// PodAntiAffinityExists 创建操作符为 Exists 的 PodAntiAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAntiAffinityExists(labelKey, topologyKey string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().Exists(labelKey).Obj()
 	p.PodAntiAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAffinityNotExists creates a PodAffinity with the operator "NotExists"
-// and injects into the inner pod.
+// PodAffinityNotExists 创建操作符为 NotExists 的 PodAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAffinityNotExists(labelKey, topologyKey string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().NotExist(labelKey).Obj()
 	p.PodAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAntiAffinityNotExists creates a PodAntiAffinity with the operator "NotExists"
-// and injects into the inner pod.
+// PodAntiAffinityNotExists 创建操作符为 NotExists 的 PodAntiAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAntiAffinityNotExists(labelKey, topologyKey string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().NotExist(labelKey).Obj()
 	p.PodAntiAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAffinityIn creates a PodAffinity with the operator "In"
-// and injects into the inner pod.
+// PodAffinityIn 创建操作符为 In 的 PodAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAffinityIn(labelKey, topologyKey string, vals []string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().In(labelKey, vals).Obj()
 	p.PodAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAntiAffinityIn creates a PodAntiAffinity with the operator "In"
-// and injects into the inner pod.
+// PodAntiAffinityIn 创建操作符为 In 的 PodAntiAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAntiAffinityIn(labelKey, topologyKey string, vals []string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().In(labelKey, vals).Obj()
 	p.PodAntiAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAffinityNotIn creates a PodAffinity with the operator "NotIn"
-// and injects into the inner pod.
+// PodAffinityNotIn 创建操作符为 NotIn 的 PodAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAffinityNotIn(labelKey, topologyKey string, vals []string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().NotIn(labelKey, vals).Obj()
 	p.PodAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// PodAntiAffinityNotIn creates a PodAntiAffinity with the operator "NotIn"
-// and injects into the inner pod.
+// PodAntiAffinityNotIn 创建操作符为 NotIn 的 PodAntiAffinity 并注入内部 pod。
 func (p *PodWrapper) PodAntiAffinityNotIn(labelKey, topologyKey string, vals []string, kind PodAffinityKind) *PodWrapper {
 	labelSelector := MakeLabelSelector().NotIn(labelKey, vals).Obj()
 	p.PodAntiAffinity(topologyKey, labelSelector, kind)
 	return p
 }
 
-// SpreadConstraint constructs a TopologySpreadConstraint object and injects
-// into the inner pod.
+// SpreadConstraint 构造一个 TopologySpreadConstraint 并注入内部 pod。
 func (p *PodWrapper) SpreadConstraint(maxSkew int, tpKey string, mode v1.UnsatisfiableConstraintAction, selector *metav1.LabelSelector, minDomains *int32, nodeAffinityPolicy, nodeTaintsPolicy *v1.NodeInclusionPolicy, matchLabelKeys []string) *PodWrapper {
 	c := v1.TopologySpreadConstraint{
 		MaxSkew:            int32(maxSkew),
@@ -753,7 +739,7 @@ func (p *PodWrapper) SpreadConstraint(maxSkew int, tpKey string, mode v1.Unsatis
 	return p
 }
 
-// Label sets a {k,v} pair to the inner pod label.
+// Label 向内部 pod 的标签添加一个 {k,v} 对。
 func (p *PodWrapper) Label(k, v string) *PodWrapper {
 	if p.ObjectMeta.Labels == nil {
 		p.ObjectMeta.Labels = make(map[string]string)
@@ -762,7 +748,7 @@ func (p *PodWrapper) Label(k, v string) *PodWrapper {
 	return p
 }
 
-// Labels sets all {k,v} pair provided by `labels` to the inner pod labels.
+// Labels 将 labels 中的所有 {k,v} 对添加到内部 pod 的标签。
 func (p *PodWrapper) Labels(labels map[string]string) *PodWrapper {
 	for k, v := range labels {
 		p.Label(k, v)
@@ -770,13 +756,13 @@ func (p *PodWrapper) Labels(labels map[string]string) *PodWrapper {
 	return p
 }
 
-// Annotation sets a {k,v} pair to the inner pod annotation.
+// Annotation 向内部 pod 的注解添加一个 {k,v} 对。
 func (p *PodWrapper) Annotation(key, value string) *PodWrapper {
 	metav1.SetMetaDataAnnotation(&p.ObjectMeta, key, value)
 	return p
 }
 
-// Annotations sets all {k,v} pair provided by `annotations` to the inner pod annotations.
+// Annotations 将 annotations 中的所有 {k,v} 对添加到内部 pod 的注解。
 func (p *PodWrapper) Annotations(annotations map[string]string) *PodWrapper {
 	for k, v := range annotations {
 		p.Annotation(k, v)
@@ -784,7 +770,7 @@ func (p *PodWrapper) Annotations(annotations map[string]string) *PodWrapper {
 	return p
 }
 
-// Res adds a new container to the inner pod with given resource map.
+// Res 用给定的资源表向内部 pod 添加一个新容器。
 func (p *PodWrapper) Res(resMap map[v1.ResourceName]string) *PodWrapper {
 	if len(resMap) == 0 {
 		return p
@@ -795,7 +781,7 @@ func (p *PodWrapper) Res(resMap map[v1.ResourceName]string) *PodWrapper {
 	return p
 }
 
-// Resources sets requests and limits at pod-level.
+// Resources 在 pod 级别设置 requests。
 func (p *PodWrapper) PodLevelResourceRequests(reqMap map[v1.ResourceName]string) *PodWrapper {
 	if len(reqMap) == 0 {
 		return p
@@ -811,7 +797,7 @@ func (p *PodWrapper) PodLevelResourceRequests(reqMap map[v1.ResourceName]string)
 	return p
 }
 
-// Req adds a new container to the inner pod with given resource map of requests.
+// Req 用给定的 requests 资源表向内部 pod 添加一个新容器。
 func (p *PodWrapper) Req(reqMap map[v1.ResourceName]string) *PodWrapper {
 	if len(reqMap) == 0 {
 		return p
@@ -822,7 +808,7 @@ func (p *PodWrapper) Req(reqMap map[v1.ResourceName]string) *PodWrapper {
 	return p
 }
 
-// Lim adds a new container to the inner pod with given resource map of limits.
+// Lim 用给定的 limits 资源表向内部 pod 添加一个新容器。
 func (p *PodWrapper) Lim(limMap map[v1.ResourceName]string) *PodWrapper {
 	if len(limMap) == 0 {
 		return p
@@ -833,7 +819,7 @@ func (p *PodWrapper) Lim(limMap map[v1.ResourceName]string) *PodWrapper {
 	return p
 }
 
-// InitReq adds a new init container to the inner pod with given resource map.
+// InitReq 用给定的资源表向内部 pod 添加一个新的 init container。
 func (p *PodWrapper) InitReq(resMap map[v1.ResourceName]string) *PodWrapper {
 	if len(resMap) == 0 {
 		return p
@@ -844,7 +830,7 @@ func (p *PodWrapper) InitReq(resMap map[v1.ResourceName]string) *PodWrapper {
 	return p
 }
 
-// SidecarReq adds a new sidecar container to the inner pod with given resource map.
+// SidecarReq 用给定的资源表向内部 pod 添加一个新的 sidecar container。
 func (p *PodWrapper) SidecarReq(resMap map[v1.ResourceName]string) *PodWrapper {
 	if len(resMap) == 0 {
 		return p
@@ -855,19 +841,19 @@ func (p *PodWrapper) SidecarReq(resMap map[v1.ResourceName]string) *PodWrapper {
 	return p
 }
 
-// PreemptionPolicy sets the give preemption policy to the inner pod.
+// PreemptionPolicy 将内部 pod 的抢占策略设为给定值。
 func (p *PodWrapper) PreemptionPolicy(policy v1.PreemptionPolicy) *PodWrapper {
 	p.Spec.PreemptionPolicy = &policy
 	return p
 }
 
-// Overhead sets the give ResourceList to the inner pod
+// Overhead 将内部 pod 的 Overhead 设为给定的 ResourceList。
 func (p *PodWrapper) Overhead(rl v1.ResourceList) *PodWrapper {
 	p.Spec.Overhead = rl
 	return p
 }
 
-// PodGroupName sets `name` as the PodGroupName of the inner pod.
+// PodGroupName 将内部 pod 的 PodGroupName 设为 name。
 func (p *PodWrapper) PodGroupName(name string) *PodWrapper {
 	p.Spec.SchedulingGroup = &v1.PodSchedulingGroup{
 		PodGroupName: new(name),
@@ -875,33 +861,33 @@ func (p *PodWrapper) PodGroupName(name string) *PodWrapper {
 	return p
 }
 
-// NodeWrapper wraps a Node inside.
+// NodeWrapper 包装一个 Node。
 type NodeWrapper struct{ v1.Node }
 
-// MakeNode creates a Node wrapper.
+// MakeNode 创建 Node 包装器。
 func MakeNode() *NodeWrapper {
 	w := &NodeWrapper{v1.Node{}}
 	return w.Capacity(nil)
 }
 
-// Obj returns the inner Node.
+// Obj 返回内部的 Node。
 func (n *NodeWrapper) Obj() *v1.Node {
 	return &n.Node
 }
 
-// Name sets `s` as the name of the inner pod.
+// Name 将内部 node 的名称设为 s。
 func (n *NodeWrapper) Name(s string) *NodeWrapper {
 	n.SetName(s)
 	return n
 }
 
-// UID sets `s` as the UID of the inner pod.
+// UID 将内部 node 的 UID 设为 s。
 func (n *NodeWrapper) UID(s string) *NodeWrapper {
 	n.SetUID(types.UID(s))
 	return n
 }
 
-// Label applies a {k,v} label pair to the inner node.
+// Label 向内部 node 添加一个 {k,v} 标签对。
 func (n *NodeWrapper) Label(k, v string) *NodeWrapper {
 	if n.Labels == nil {
 		n.Labels = make(map[string]string)
@@ -910,7 +896,7 @@ func (n *NodeWrapper) Label(k, v string) *NodeWrapper {
 	return n
 }
 
-// Annotation applies a {k,v} annotation pair to the inner node.
+// Annotation 向内部 node 添加一个 {k,v} 注解对。
 func (n *NodeWrapper) Annotation(k, v string) *NodeWrapper {
 	if n.Annotations == nil {
 		n.Annotations = make(map[string]string)
@@ -919,9 +905,9 @@ func (n *NodeWrapper) Annotation(k, v string) *NodeWrapper {
 	return n
 }
 
-// Capacity sets the capacity and the allocatable resources of the inner node.
-// Each entry in `resources` corresponds to a resource name and its quantity.
-// By default, the capacity and allocatable number of pods are set to 32.
+// Capacity 设置内部 node 的 capacity 和 allocatable 资源。
+// resources 中每项对应一个资源名称及其数量。
+// 默认情况下 pod 的容量和可分配数量均为 32。
 func (n *NodeWrapper) Capacity(resources map[v1.ResourceName]string) *NodeWrapper {
 	res := v1.ResourceList{
 		v1.ResourcePods: resource.MustParse("32"),
@@ -933,8 +919,7 @@ func (n *NodeWrapper) Capacity(resources map[v1.ResourceName]string) *NodeWrappe
 	return n
 }
 
-// Images sets the images of the inner node. Each entry in `images` corresponds
-// to an image name and its size in bytes.
+// Images 设置内部 node 的镜像列表；images 中每项对应镜像名及其字节大小。
 func (n *NodeWrapper) Images(images map[string]int64) *NodeWrapper {
 	var containerImages []v1.ContainerImage
 	for name, size := range images {
@@ -944,25 +929,25 @@ func (n *NodeWrapper) Images(images map[string]int64) *NodeWrapper {
 	return n
 }
 
-// Taints applies taints to the inner node.
+// Taints 将内部 node 的污点设为 taints。
 func (n *NodeWrapper) Taints(taints []v1.Taint) *NodeWrapper {
 	n.Spec.Taints = taints
 	return n
 }
 
-// Unschedulable applies the unschedulable field.
+// Unschedulable 设置内部 node 的 unschedulable 字段。
 func (n *NodeWrapper) Unschedulable(unschedulable bool) *NodeWrapper {
 	n.Spec.Unschedulable = unschedulable
 	return n
 }
 
-// DeclaredFeatures applies the declared features in node status.
+// DeclaredFeatures 设置 node status 中声明的特性。
 func (n *NodeWrapper) DeclaredFeatures(declaredFeatures []string) *NodeWrapper {
 	n.Status.DeclaredFeatures = declaredFeatures
 	return n
 }
 
-// Condition applies the node condition.
+// Condition 设置 node 的 condition，并刷新心跳与状态变更时间。
 func (n *NodeWrapper) Condition(typ v1.NodeConditionType, status v1.ConditionStatus, message, reason string) *NodeWrapper {
 	n.Status.Conditions = []v1.NodeCondition{
 		{
@@ -977,112 +962,105 @@ func (n *NodeWrapper) Condition(typ v1.NodeConditionType, status v1.ConditionSta
 	return n
 }
 
-// PersistentVolumeClaimWrapper wraps a PersistentVolumeClaim inside.
+// PersistentVolumeClaimWrapper 包装一个 PersistentVolumeClaim。
 type PersistentVolumeClaimWrapper struct{ v1.PersistentVolumeClaim }
 
-// MakePersistentVolumeClaim creates a PersistentVolumeClaim wrapper.
+// MakePersistentVolumeClaim 创建 PersistentVolumeClaim 包装器。
 func MakePersistentVolumeClaim() *PersistentVolumeClaimWrapper {
 	return &PersistentVolumeClaimWrapper{}
 }
 
-// Obj returns the inner PersistentVolumeClaim.
+// Obj 返回内部的 PersistentVolumeClaim。
 func (p *PersistentVolumeClaimWrapper) Obj() *v1.PersistentVolumeClaim {
 	return &p.PersistentVolumeClaim
 }
 
-// Name sets `s` as the name of the inner PersistentVolumeClaim.
+// Name 将内部 PersistentVolumeClaim 的名称设为 s。
 func (p *PersistentVolumeClaimWrapper) Name(s string) *PersistentVolumeClaimWrapper {
 	p.SetName(s)
 	return p
 }
 
-// Namespace sets `s` as the namespace of the inner PersistentVolumeClaim.
+// Namespace 将内部 PersistentVolumeClaim 的命名空间设为 s。
 func (p *PersistentVolumeClaimWrapper) Namespace(s string) *PersistentVolumeClaimWrapper {
 	p.SetNamespace(s)
 	return p
 }
 
-// Annotation sets a {k,v} pair to the inner PersistentVolumeClaim.
+// Annotation 向内部 PersistentVolumeClaim 添加一个 {k,v} 对。
 func (p *PersistentVolumeClaimWrapper) Annotation(key, value string) *PersistentVolumeClaimWrapper {
 	metav1.SetMetaDataAnnotation(&p.ObjectMeta, key, value)
 	return p
 }
 
-// VolumeName sets `name` as the volume name of the inner
-// PersistentVolumeClaim.
+// VolumeName 将内部 PersistentVolumeClaim 的 volume name 设为 name。
 func (p *PersistentVolumeClaimWrapper) VolumeName(name string) *PersistentVolumeClaimWrapper {
 	p.PersistentVolumeClaim.Spec.VolumeName = name
 	return p
 }
 
-// AccessModes sets `accessModes` as the access modes of the inner
-// PersistentVolumeClaim.
+// AccessModes 将内部 PersistentVolumeClaim 的访问模式设为 accessModes。
 func (p *PersistentVolumeClaimWrapper) AccessModes(accessModes []v1.PersistentVolumeAccessMode) *PersistentVolumeClaimWrapper {
 	p.PersistentVolumeClaim.Spec.AccessModes = accessModes
 	return p
 }
 
-// Resources sets `resources` as the resource requirements of the inner
-// PersistentVolumeClaim.
+// Resources 将内部 PersistentVolumeClaim 的资源需求设为 resources。
 func (p *PersistentVolumeClaimWrapper) Resources(resources v1.VolumeResourceRequirements) *PersistentVolumeClaimWrapper {
 	p.PersistentVolumeClaim.Spec.Resources = resources
 	return p
 }
 
-// StorageClassName sets `StorageClassName` as the StorageClassName of the inner
-// PersistentVolumeClaim.
+// StorageClassName 将内部 PersistentVolumeClaim 的 StorageClassName 设为 name。
 func (p *PersistentVolumeClaimWrapper) StorageClassName(name *string) *PersistentVolumeClaimWrapper {
 	p.PersistentVolumeClaim.Spec.StorageClassName = name
 	return p
 }
 
-// PersistentVolumeWrapper wraps a PersistentVolume inside.
+// PersistentVolumeWrapper 包装一个 PersistentVolume。
 type PersistentVolumeWrapper struct{ v1.PersistentVolume }
 
-// MakePersistentVolume creates a PersistentVolume wrapper.
+// MakePersistentVolume 创建 PersistentVolume 包装器。
 func MakePersistentVolume() *PersistentVolumeWrapper {
 	return &PersistentVolumeWrapper{}
 }
 
-// Obj returns the inner PersistentVolume.
+// Obj 返回内部的 PersistentVolume。
 func (p *PersistentVolumeWrapper) Obj() *v1.PersistentVolume {
 	return &p.PersistentVolume
 }
 
-// Name sets `s` as the name of the inner PersistentVolume.
+// Name 将内部 PersistentVolume 的名称设为 s。
 func (p *PersistentVolumeWrapper) Name(s string) *PersistentVolumeWrapper {
 	p.SetName(s)
 	return p
 }
 
-// AccessModes sets `accessModes` as the access modes of the inner
-// PersistentVolume.
+// AccessModes 将内部 PersistentVolume 的访问模式设为 accessModes。
 func (p *PersistentVolumeWrapper) AccessModes(accessModes []v1.PersistentVolumeAccessMode) *PersistentVolumeWrapper {
 	p.PersistentVolume.Spec.AccessModes = accessModes
 	return p
 }
 
-// Capacity sets `capacity` as the resource list of the inner PersistentVolume.
+// Capacity 将内部 PersistentVolume 的资源列表设为 capacity。
 func (p *PersistentVolumeWrapper) Capacity(capacity v1.ResourceList) *PersistentVolumeWrapper {
 	p.PersistentVolume.Spec.Capacity = capacity
 	return p
 }
 
-// HostPathVolumeSource sets `src` as the host path volume source of the inner
-// PersistentVolume.
+// HostPathVolumeSource 将内部 PersistentVolume 的 hostPath 卷源设为 src。
 func (p *PersistentVolumeWrapper) HostPathVolumeSource(src *v1.HostPathVolumeSource) *PersistentVolumeWrapper {
 	p.PersistentVolume.Spec.HostPath = src
 	return p
 }
 
-// PersistentVolumeSource sets `src` as the pv source of the inner
+// PersistentVolumeSource 将内部 PersistentVolume 的卷源设为 src。
 func (p *PersistentVolumeWrapper) PersistentVolumeSource(src v1.PersistentVolumeSource) *PersistentVolumeWrapper {
 	p.PersistentVolume.Spec.PersistentVolumeSource = src
 	return p
 }
 
-// NodeAffinityIn creates a HARD node affinity (with MatchExpressions and the operator In)
-// and injects into the pv.
+// NodeAffinityIn 创建一个 HARD 类型的 node affinity（MatchExpressions + In 操作符）并注入 pv。
 func (p *PersistentVolumeWrapper) NodeAffinityIn(key string, vals []string) *PersistentVolumeWrapper {
 	if p.Spec.NodeAffinity == nil {
 		p.Spec.NodeAffinity = &v1.VolumeNodeAffinity{}
@@ -1095,7 +1073,7 @@ func (p *PersistentVolumeWrapper) NodeAffinityIn(key string, vals []string) *Per
 	return p
 }
 
-// Labels sets all {k,v} pair provided by `labels` to the pv.
+// Labels 将 labels 中的所有 {k,v} 对添加到 pv 的标签。
 func (p *PersistentVolumeWrapper) Labels(labels map[string]string) *PersistentVolumeWrapper {
 	for k, v := range labels {
 		p.Label(k, v)
@@ -1103,7 +1081,7 @@ func (p *PersistentVolumeWrapper) Labels(labels map[string]string) *PersistentVo
 	return p
 }
 
-// Label sets a {k,v} pair to the pv.
+// Label 向 pv 添加一个 {k,v} 标签对。
 func (p *PersistentVolumeWrapper) Label(k, v string) *PersistentVolumeWrapper {
 	if p.PersistentVolume.ObjectMeta.Labels == nil {
 		p.PersistentVolume.ObjectMeta.Labels = make(map[string]string)
@@ -1112,61 +1090,61 @@ func (p *PersistentVolumeWrapper) Label(k, v string) *PersistentVolumeWrapper {
 	return p
 }
 
-// StorageClassName sets `StorageClassName` of the inner PersistentVolume.
+// StorageClassName 设置内部 PersistentVolume 的 StorageClassName。
 func (p *PersistentVolumeWrapper) StorageClassName(name string) *PersistentVolumeWrapper {
 	p.PersistentVolume.Spec.StorageClassName = name
 	return p
 }
 
-// ResourceClaimWrapper wraps a ResourceClaim inside.
+// ResourceClaimWrapper 包装一个 ResourceClaim。
 type ResourceClaimWrapper struct{ resourceapi.ResourceClaim }
 
-// MakeResourceClaim creates a ResourceClaim wrapper.
+// MakeResourceClaim 创建 ResourceClaim 包装器。
 func MakeResourceClaim() *ResourceClaimWrapper {
 	return &ResourceClaimWrapper{}
 }
 
-// FromResourceClaim creates a ResourceClaim wrapper from some existing object.
+// FromResourceClaim 从已有对象创建 ResourceClaim 包装器，内部对象为深拷贝。
 func FromResourceClaim(other *resourceapi.ResourceClaim) *ResourceClaimWrapper {
 	return &ResourceClaimWrapper{*other.DeepCopy()}
 }
 
-// Obj returns the inner ResourceClaim.
+// Obj 返回内部的 ResourceClaim。
 func (wrapper *ResourceClaimWrapper) Obj() *resourceapi.ResourceClaim {
 	return &wrapper.ResourceClaim
 }
 
-// Name sets `s` as the name of the inner object.
+// Name 将内部对象的名称设为 s。
 func (wrapper *ResourceClaimWrapper) Name(s string) *ResourceClaimWrapper {
 	wrapper.SetName(s)
 	return wrapper
 }
 
-// GenerateName sets `s` as the GenerateName of the inner object.
+// GenerateName 将内部对象的 GenerateName 设为 s。
 func (wrapper *ResourceClaimWrapper) GenerateName(s string) *ResourceClaimWrapper {
 	wrapper.SetGenerateName(s)
 	return wrapper
 }
 
-// Annotations sets `s` as the annotations of the inner object.
+// Annotations 将内部对象的注解设为 s。
 func (wrapper *ResourceClaimWrapper) Annotations(s map[string]string) *ResourceClaimWrapper {
 	wrapper.SetAnnotations(s)
 	return wrapper
 }
 
-// UID sets `s` as the UID of the inner object.
+// UID 将内部对象的 UID 设为 s。
 func (wrapper *ResourceClaimWrapper) UID(s string) *ResourceClaimWrapper {
 	wrapper.SetUID(types.UID(s))
 	return wrapper
 }
 
-// Namespace sets `s` as the namespace of the inner object.
+// Namespace 将内部对象的命名空间设为 s。
 func (wrapper *ResourceClaimWrapper) Namespace(s string) *ResourceClaimWrapper {
 	wrapper.SetNamespace(s)
 	return wrapper
 }
 
-// OwnerReference updates the owning controller of the object.
+// OwnerReference 更新对象的属主控制器。
 func (wrapper *ResourceClaimWrapper) OwnerReference(name, uid string, gvk schema.GroupVersionKind) *ResourceClaimWrapper {
 	wrapper.OwnerReferences = []metav1.OwnerReference{
 		{
@@ -1180,19 +1158,19 @@ func (wrapper *ResourceClaimWrapper) OwnerReference(name, uid string, gvk schema
 	return wrapper
 }
 
-// OwnerRef sets `ref` as the owner reference of the object.
+// OwnerRef 将对象的属主引用设为 ref。
 func (wrapper *ResourceClaimWrapper) OwnerRef(ref metav1.OwnerReference) *ResourceClaimWrapper {
 	wrapper.OwnerReferences = []metav1.OwnerReference{ref}
 	return wrapper
 }
 
-// Request adds one device request for the given device class.
+// Request 为给定的设备类添加一个设备请求。
 func (wrapper *ResourceClaimWrapper) Request(deviceClassName string) *ResourceClaimWrapper {
 	wrapper.Spec.Devices.Requests = append(wrapper.Spec.Devices.Requests,
 		resourceapi.DeviceRequest{
 			Name: fmt.Sprintf("req-%d", len(wrapper.Spec.Devices.Requests)+1),
 			Exactly: &resourceapi.ExactDeviceRequest{
-				// Cannot rely on defaulting here, this is used in unit tests.
+				// 单元测试直接使用此对象，不能依赖默认值填充。
 				AllocationMode:  resourceapi.DeviceAllocationModeExactCount,
 				Count:           1,
 				DeviceClassName: deviceClassName,
@@ -1202,13 +1180,13 @@ func (wrapper *ResourceClaimWrapper) Request(deviceClassName string) *ResourceCl
 	return wrapper
 }
 
-// RequestWithName adds one device request for the given device class with given request name.
+// RequestWithName 为给定设备类添加一个指定名称的设备请求。
 func (wrapper *ResourceClaimWrapper) RequestWithName(name, deviceClassName string) *ResourceClaimWrapper {
 	wrapper.Spec.Devices.Requests = append(wrapper.Spec.Devices.Requests,
 		resourceapi.DeviceRequest{
 			Name: name,
 			Exactly: &resourceapi.ExactDeviceRequest{
-				// Cannot rely on defaulting here, this is used in unit tests.
+				// 单元测试直接使用此对象，不能依赖默认值填充。
 				AllocationMode:  resourceapi.DeviceAllocationModeExactCount,
 				Count:           1,
 				DeviceClassName: deviceClassName,
@@ -1217,13 +1195,13 @@ func (wrapper *ResourceClaimWrapper) RequestWithName(name, deviceClassName strin
 	return wrapper
 }
 
-// RequestWithNameCount adds one device request for the given device class with given request name and count.
+// RequestWithNameCount 为给定设备类添加一个指定名称和数量的设备请求。
 func (wrapper *ResourceClaimWrapper) RequestWithNameCount(name, deviceClassName string, count int64) *ResourceClaimWrapper {
 	wrapper.Spec.Devices.Requests = append(wrapper.Spec.Devices.Requests,
 		resourceapi.DeviceRequest{
 			Name: name,
 			Exactly: &resourceapi.ExactDeviceRequest{
-				// Cannot rely on defaulting here, this is used in unit tests.
+				// 单元测试直接使用此对象，不能依赖默认值填充。
 				AllocationMode:  resourceapi.DeviceAllocationModeExactCount,
 				Count:           count,
 				DeviceClassName: deviceClassName,
@@ -1232,8 +1210,7 @@ func (wrapper *ResourceClaimWrapper) RequestWithNameCount(name, deviceClassName 
 	return wrapper
 }
 
-// RequestWithPrioritizedList adds one device request with one subrequest
-// per provided deviceClassName.
+// RequestWithPrioritizedListFromDeviceClasses 添加一个设备请求，每个设备类对应一个子请求。
 func (wrapper *ResourceClaimWrapper) RequestWithPrioritizedListFromDeviceClasses(deviceClassNames ...string) *ResourceClaimWrapper {
 	var prioritizedList []resourceapi.DeviceSubRequest
 	for i, deviceClassName := range deviceClassNames {
@@ -1254,10 +1231,12 @@ func (wrapper *ResourceClaimWrapper) RequestWithPrioritizedListFromDeviceClasses
 	return wrapper
 }
 
+// RequestWithPrioritizedList 添加一个带优先级列表的设备请求，名称自动生成。
 func (wrapper *ResourceClaimWrapper) RequestWithPrioritizedList(subRequests ...resourceapi.DeviceSubRequest) *ResourceClaimWrapper {
 	return wrapper.NamedRequestWithPrioritizedList(fmt.Sprintf("req-%d", len(wrapper.Spec.Devices.Requests)+1), subRequests...)
 }
 
+// NamedRequestWithPrioritizedList 添加一个带优先级列表且指定名称的设备请求。
 func (wrapper *ResourceClaimWrapper) NamedRequestWithPrioritizedList(name string, subRequests ...resourceapi.DeviceSubRequest) *ResourceClaimWrapper {
 	wrapper.Spec.Devices.Requests = append(wrapper.Spec.Devices.Requests,
 		resourceapi.DeviceRequest{
@@ -1268,6 +1247,7 @@ func (wrapper *ResourceClaimWrapper) NamedRequestWithPrioritizedList(name string
 	return wrapper
 }
 
+// SubRequest 构造一个指定名称、设备类和数量的子请求。
 func SubRequest(name, deviceClassName string, count int64) resourceapi.DeviceSubRequest {
 	return resourceapi.DeviceSubRequest{
 		Name:            name,
@@ -1277,6 +1257,7 @@ func SubRequest(name, deviceClassName string, count int64) resourceapi.DeviceSub
 	}
 }
 
+// SubRequestWithSelector 构造一个带 CEL 选择器的子请求。
 func SubRequestWithSelector(name, deviceClassName, selector string) resourceapi.DeviceSubRequest {
 	return resourceapi.DeviceSubRequest{
 		Name:            name,
@@ -1293,7 +1274,7 @@ func SubRequestWithSelector(name, deviceClassName, selector string) resourceapi.
 	}
 }
 
-// Allocation sets the allocation of the inner object.
+// Allocation 设置内部对象的分配结果，并补上所需的 finalizer。
 func (wrapper *ResourceClaimWrapper) Allocation(allocation *resourceapi.AllocationResult) *ResourceClaimWrapper {
 	if !slices.Contains(wrapper.ResourceClaim.Finalizers, resourceapi.Finalizer) {
 		wrapper.ResourceClaim.Finalizers = append(wrapper.ResourceClaim.Finalizers, resourceapi.Finalizer)
@@ -1302,38 +1283,40 @@ func (wrapper *ResourceClaimWrapper) Allocation(allocation *resourceapi.Allocati
 	return wrapper
 }
 
-// AllocatedDeviceStatuses sets the AllocatedDeviceStatuses of the inner object.
+// AllocatedDeviceStatuses 设置内部对象的已分配设备状态。
 func (wrapper *ResourceClaimWrapper) AllocatedDeviceStatuses(ads []resourceapi.AllocatedDeviceStatus) *ResourceClaimWrapper {
 	wrapper.Status.Devices = ads
 	return wrapper
 }
 
-// Deleting sets the deletion timestamp of the inner object.
+// Deleting 设置内部对象的删除时间戳。
 func (wrapper *ResourceClaimWrapper) Deleting(time metav1.Time) *ResourceClaimWrapper {
 	wrapper.ResourceClaim.DeletionTimestamp = &time
 	return wrapper
 }
 
-// ReservedFor sets that field of the inner object.
+// ReservedFor 设置内部对象的 ReservedFor 字段。
 func (wrapper *ResourceClaimWrapper) ReservedFor(consumers ...resourceapi.ResourceClaimConsumerReference) *ResourceClaimWrapper {
 	wrapper.ResourceClaim.Status.ReservedFor = consumers
 	return wrapper
 }
 
-// ReservedForPod sets that field of the inner object given information about one pod.
+// ReservedForPod 根据一个 pod 的信息设置内部对象的 ReservedFor 字段。
 func (wrapper *ResourceClaimWrapper) ReservedForPod(podName string, podUID types.UID) *ResourceClaimWrapper {
 	return wrapper.ReservedFor(resourceapi.ResourceClaimConsumerReference{Resource: "pods", Name: podName, UID: podUID})
 }
 
-// ReservedForPodGroup sets that field of the inner object given information about one podgroup.
+// ReservedForPodGroup 根据一个 podgroup 的信息设置内部对象的 ReservedFor 字段。
 func (wrapper *ResourceClaimWrapper) ReservedForPodGroup(podGroupName string, podGroupUID types.UID) *ResourceClaimWrapper {
 	return wrapper.ReservedFor(resourceapi.ResourceClaimConsumerReference{APIGroup: schedulingv1beta1.GroupName, Resource: "podgroups", Name: podGroupName, UID: podGroupUID})
 }
 
+// ResourceSliceWrapper 包装一个 ResourceSlice。
 type ResourceSliceWrapper struct {
 	resourceapi.ResourceSlice
 }
 
+// MakeResourceSlice 为指定节点和驱动创建 ResourceSlice 包装器。
 func MakeResourceSlice(nodeName, driverName string) *ResourceSliceWrapper {
 	wrapper := new(ResourceSliceWrapper)
 	wrapper.Name = nodeName + "-" + driverName
@@ -1344,6 +1327,7 @@ func MakeResourceSlice(nodeName, driverName string) *ResourceSliceWrapper {
 	return wrapper
 }
 
+// MakeResourceSliceWithPerDeviceNodeSelection 创建启用逐设备节点选择的 ResourceSlice 包装器。
 func MakeResourceSliceWithPerDeviceNodeSelection(namePrefix, driverName string) *ResourceSliceWrapper {
 	wrapper := new(ResourceSliceWrapper)
 	wrapper.Name = namePrefix + "-" + driverName
@@ -1354,6 +1338,7 @@ func MakeResourceSliceWithPerDeviceNodeSelection(namePrefix, driverName string) 
 	return wrapper
 }
 
+// MakeResourceSliceWithAllNodes 创建覆盖所有节点的 ResourceSlice 包装器。
 func MakeResourceSliceWithAllNodes(namePrefix, driverName string) *ResourceSliceWrapper {
 	wrapper := new(ResourceSliceWrapper)
 	wrapper.Name = namePrefix + "-" + driverName
@@ -1364,16 +1349,17 @@ func MakeResourceSliceWithAllNodes(namePrefix, driverName string) *ResourceSlice
 	return wrapper
 }
 
-// FromResourceSlice creates a ResourceSlice wrapper from some existing object.
+// FromResourceSlice 从已有对象创建 ResourceSlice 包装器，内部对象为深拷贝。
 func FromResourceSlice(other *resourceapi.ResourceSlice) *ResourceSliceWrapper {
 	return &ResourceSliceWrapper{*other.DeepCopy()}
 }
 
+// Obj 返回内部的 ResourceSlice。
 func (wrapper *ResourceSliceWrapper) Obj() *resourceapi.ResourceSlice {
 	return &wrapper.ResourceSlice
 }
 
-// Devices sets the devices field of the inner object.
+// Devices 按名字设置内部对象的 devices 字段。
 func (wrapper *ResourceSliceWrapper) Devices(names ...string) *ResourceSliceWrapper {
 	for _, name := range names {
 		wrapper.Spec.Devices = append(wrapper.Spec.Devices, resourceapi.Device{Name: name})
@@ -1381,10 +1367,11 @@ func (wrapper *ResourceSliceWrapper) Devices(names ...string) *ResourceSliceWrap
 	return wrapper
 }
 
+// NodeName 用于 Device 中按节点名填充设备的 NodeName 字段。
 type NodeName string
 
-// Device extends the devices field of the inner object.
-// The device must have a name and may have arbitrary additional fields.
+// Device 向内部对象的 devices 字段追加一个设备。
+// 设备必须有名称，并可附带任意其他字段。
 func (wrapper *ResourceSliceWrapper) Device(name string, otherFields ...any) *ResourceSliceWrapper {
 	device := resourceapi.Device{Name: name}
 	for _, field := range otherFields {
@@ -1407,54 +1394,56 @@ func (wrapper *ResourceSliceWrapper) Device(name string, otherFields ...any) *Re
 	return wrapper
 }
 
+// ResourceSliceCount 设置资源池的 ResourceSliceCount。
 func (wrapper *ResourceSliceWrapper) ResourceSliceCount(count int) *ResourceSliceWrapper {
 	wrapper.Spec.Pool.ResourceSliceCount = int64(count)
 	return wrapper
 }
 
+// SkipNodeOperations 设置要跳过的节点操作列表。
 func (wrapper *ResourceSliceWrapper) SkipNodeOperations(skip ...resourceapi.SkipNodeOperation) *ResourceSliceWrapper {
 	wrapper.Spec.SkipNodeOperations = skip
 	return wrapper
 }
 
-// StorageClassWrapper wraps a StorageClass inside.
+// StorageClassWrapper 包装一个 StorageClass。
 type StorageClassWrapper struct{ storagev1.StorageClass }
 
-// MakeStorageClass creates a StorageClass wrapper.
+// MakeStorageClass 创建 StorageClass 包装器。
 func MakeStorageClass() *StorageClassWrapper {
 	return &StorageClassWrapper{}
 }
 
-// Obj returns the inner StorageClass.
+// Obj 返回内部的 StorageClass。
 func (s *StorageClassWrapper) Obj() *storagev1.StorageClass {
 	return &s.StorageClass
 }
 
-// Name sets `n` as the name of the inner StorageClass.
+// Name 将内部 StorageClass 的名称设为 n。
 func (s *StorageClassWrapper) Name(n string) *StorageClassWrapper {
 	s.SetName(n)
 	return s
 }
 
-// VolumeBindingMode sets mode as the mode of the inner StorageClass.
+// VolumeBindingMode 将内部 StorageClass 的卷绑定模式设为 mode。
 func (s *StorageClassWrapper) VolumeBindingMode(mode storagev1.VolumeBindingMode) *StorageClassWrapper {
 	s.StorageClass.VolumeBindingMode = &mode
 	return s
 }
 
-// Provisoner sets p as the provisioner of the inner StorageClass.
+// Provisoner 将内部 StorageClass 的 provisioner 设为 p。
 func (s *StorageClassWrapper) Provisioner(p string) *StorageClassWrapper {
 	s.StorageClass.Provisioner = p
 	return s
 }
 
-// AllowedTopologies sets `AllowedTopologies` of the inner StorageClass.
+// AllowedTopologies 设置内部 StorageClass 的 AllowedTopologies。
 func (s *StorageClassWrapper) AllowedTopologies(topologies []v1.TopologySelectorTerm) *StorageClassWrapper {
 	s.StorageClass.AllowedTopologies = topologies
 	return s
 }
 
-// Label sets a {k,v} pair to the inner StorageClass label.
+// Label 向内部 StorageClass 的标签添加一个 {k,v} 对。
 func (s *StorageClassWrapper) Label(k, v string) *StorageClassWrapper {
 	if s.ObjectMeta.Labels == nil {
 		s.ObjectMeta.Labels = make(map[string]string)
@@ -1463,164 +1452,168 @@ func (s *StorageClassWrapper) Label(k, v string) *StorageClassWrapper {
 	return s
 }
 
-// CSINodeWrapper wraps a CSINode inside.
+// CSINodeWrapper 包装一个 CSINode。
 type CSINodeWrapper struct{ storagev1.CSINode }
 
-// MakeCSINode creates a CSINode wrapper.
+// MakeCSINode 创建 CSINode 包装器。
 func MakeCSINode() *CSINodeWrapper {
 	return &CSINodeWrapper{}
 }
 
-// Obj returns the inner CSINode.
+// Obj 返回内部的 CSINode。
 func (c *CSINodeWrapper) Obj() *storagev1.CSINode {
 	return &c.CSINode
 }
 
-// Name sets `n` as the name of the inner CSINode.
+// Name 将内部 CSINode 的名称设为 n。
 func (c *CSINodeWrapper) Name(n string) *CSINodeWrapper {
 	c.SetName(n)
 	return c
 }
 
-// Annotation sets a {k,v} pair to the inner CSINode annotation.
+// Annotation 向内部 CSINode 的注解添加一个 {k,v} 对。
 func (c *CSINodeWrapper) Annotation(key, value string) *CSINodeWrapper {
 	metav1.SetMetaDataAnnotation(&c.ObjectMeta, key, value)
 	return c
 }
 
-// Driver adds a driver to the inner CSINode.
+// Driver 向内部 CSINode 添加一个驱动。
 func (c *CSINodeWrapper) Driver(driver storagev1.CSINodeDriver) *CSINodeWrapper {
 	c.Spec.Drivers = append(c.Spec.Drivers, driver)
 	return c
 }
 
-// CSIDriverWrapper wraps a CSIDriver inside.
+// CSIDriverWrapper 包装一个 CSIDriver。
 type CSIDriverWrapper struct{ storagev1.CSIDriver }
 
-// MakeCSIDriver creates a CSIDriver wrapper.
+// MakeCSIDriver 创建 CSIDriver 包装器。
 func MakeCSIDriver() *CSIDriverWrapper {
 	return &CSIDriverWrapper{}
 }
 
-// Obj returns the inner CSIDriver.
+// Obj 返回内部的 CSIDriver。
 func (c *CSIDriverWrapper) Obj() *storagev1.CSIDriver {
 	return &c.CSIDriver
 }
 
-// Name sets `n` as the name of the inner CSIDriver.
+// Name 将内部 CSIDriver 的名称设为 n。
 func (c *CSIDriverWrapper) Name(n string) *CSIDriverWrapper {
 	c.SetName(n)
 	return c
 }
 
-// StorageCapacity sets the `StorageCapacity` of the inner CSIDriver.
+// StorageCapacity 设置内部 CSIDriver 的 StorageCapacity。
 func (c *CSIDriverWrapper) StorageCapacity(storageCapacity *bool) *CSIDriverWrapper {
 	c.Spec.StorageCapacity = storageCapacity
 	return c
 }
 
-// CSIStorageCapacityWrapper wraps a CSIStorageCapacity inside.
+// CSIStorageCapacityWrapper 包装一个 CSIStorageCapacity。
 type CSIStorageCapacityWrapper struct{ storagev1.CSIStorageCapacity }
 
-// MakeCSIStorageCapacity creates a CSIStorageCapacity wrapper.
+// MakeCSIStorageCapacity 创建 CSIStorageCapacity 包装器。
 func MakeCSIStorageCapacity() *CSIStorageCapacityWrapper {
 	return &CSIStorageCapacityWrapper{}
 }
 
-// Obj returns the inner CSIStorageCapacity.
+// Obj 返回内部的 CSIStorageCapacity。
 func (c *CSIStorageCapacityWrapper) Obj() *storagev1.CSIStorageCapacity {
 	return &c.CSIStorageCapacity
 }
 
-// Name sets `n` as the name of the inner CSIStorageCapacity.
+// Name 将内部 CSIStorageCapacity 的名称设为 n。
 func (c *CSIStorageCapacityWrapper) Name(n string) *CSIStorageCapacityWrapper {
 	c.SetName(n)
 	return c
 }
 
-// StorageClassName sets the `StorageClassName` of the inner CSIStorageCapacity.
+// StorageClassName 设置内部 CSIStorageCapacity 的 StorageClassName。
 func (c *CSIStorageCapacityWrapper) StorageClassName(name string) *CSIStorageCapacityWrapper {
 	c.CSIStorageCapacity.StorageClassName = name
 	return c
 }
 
-// Capacity sets the `Capacity` of the inner CSIStorageCapacity.
+// Capacity 设置内部 CSIStorageCapacity 的 Capacity。
 func (c *CSIStorageCapacityWrapper) Capacity(capacity *resource.Quantity) *CSIStorageCapacityWrapper {
 	c.CSIStorageCapacity.Capacity = capacity
 	return c
 }
 
-// VolumeAttachmentWrapper wraps a VolumeAttachment inside.
+// VolumeAttachmentWrapper 包装一个 VolumeAttachment。
 type VolumeAttachmentWrapper struct{ storagev1.VolumeAttachment }
 
-// MakeVolumeAttachment creates a VolumeAttachment wrapper.
+// MakeVolumeAttachment 创建 VolumeAttachment 包装器。
 func MakeVolumeAttachment() *VolumeAttachmentWrapper {
 	return &VolumeAttachmentWrapper{}
 }
 
-// Obj returns the inner VolumeAttachment.
+// Obj 返回内部的 VolumeAttachment。
 func (c *VolumeAttachmentWrapper) Obj() *storagev1.VolumeAttachment {
 	return &c.VolumeAttachment
 }
 
-// Name sets `n` as the name of the inner VolumeAttachment.
+// Name 将内部 VolumeAttachment 的名称设为 n。
 func (c *VolumeAttachmentWrapper) Name(n string) *VolumeAttachmentWrapper {
 	c.SetName(n)
 	return c
 }
 
+// Attacher 设置卷附加器名称。
 func (c *VolumeAttachmentWrapper) Attacher(attacher string) *VolumeAttachmentWrapper {
 	c.Spec.Attacher = attacher
 	return c
 }
 
+// NodeName 设置卷要附加到的节点名称。
 func (c *VolumeAttachmentWrapper) NodeName(nodeName string) *VolumeAttachmentWrapper {
 	c.Spec.NodeName = nodeName
 	return c
 }
 
+// Source 设置卷的来源。
 func (c *VolumeAttachmentWrapper) Source(source storagev1.VolumeAttachmentSource) *VolumeAttachmentWrapper {
 	c.Spec.Source = source
 	return c
 }
 
+// Attached 设置卷的附加状态。
 func (c *VolumeAttachmentWrapper) Attached(attached bool) *VolumeAttachmentWrapper {
 	c.Status.Attached = attached
 	return c
 }
 
-// PodGroupWrapper wraps a PodGroup inside.
+// PodGroupWrapper 包装一个 PodGroup。
 type PodGroupWrapper struct{ schedulingv1beta1.PodGroup }
 
-// MakePodGroup creates a PodGroup wrapper.
+// MakePodGroup 创建 PodGroup 包装器。
 func MakePodGroup() *PodGroupWrapper {
 	return &PodGroupWrapper{}
 }
 
-// Name sets `name` as the name of the inner PodGroup.
+// Name 将内部 PodGroup 的名称设为 name。
 func (wrapper *PodGroupWrapper) Name(name string) *PodGroupWrapper {
 	wrapper.PodGroup.Name = name
 	return wrapper
 }
 
-// Namespace sets `namespace` as the namespace of the inner PodGroup.
+// Namespace 将内部 PodGroup 的命名空间设为 namespace。
 func (wrapper *PodGroupWrapper) Namespace(namespace string) *PodGroupWrapper {
 	wrapper.PodGroup.Namespace = namespace
 	return wrapper
 }
 
-// UID sets `uid` as the UID of the inner PodGroup.
+// UID 将内部 PodGroup 的 UID 设为 uid。
 func (wrapper *PodGroupWrapper) UID(uid types.UID) *PodGroupWrapper {
 	wrapper.PodGroup.UID = uid
 	return wrapper
 }
 
-// Obj returns the inner PodGroup.
+// Obj 返回内部的 PodGroup。
 func (wrapper *PodGroupWrapper) Obj() *schedulingv1beta1.PodGroup {
 	return &wrapper.PodGroup
 }
 
-// MinCount sets the MinCount for the Gang scheduling policy.
+// MinCount 设置 Gang 调度策略的 MinCount。
 func (wrapper *PodGroupWrapper) MinCount(count int32) *PodGroupWrapper {
 	if wrapper.PodGroup.Spec.SchedulingPolicy.Gang == nil {
 		wrapper.PodGroup.Spec.SchedulingPolicy.Gang = &schedulingv1beta1.GangSchedulingPolicy{}
@@ -1629,13 +1622,13 @@ func (wrapper *PodGroupWrapper) MinCount(count int32) *PodGroupWrapper {
 	return wrapper
 }
 
-// BasicPolicy sets the PodGroup policy to Basic.
+// BasicPolicy 将 PodGroup 的调度策略设为 Basic。
 func (wrapper *PodGroupWrapper) BasicPolicy() *PodGroupWrapper {
 	wrapper.PodGroup.Spec.SchedulingPolicy.Basic = &schedulingv1beta1.BasicSchedulingPolicy{}
 	return wrapper
 }
 
-// WorkloadRef sets appropriate WorkloadRef field of the inner PodGroup.
+// WorkloadRef 设置内部 PodGroup 的 WorkloadRef 字段。
 func (wrapper *PodGroupWrapper) WorkloadRef(templateName, workloadName string) *PodGroupWrapper {
 	wrapper.PodGroup.Spec.WorkloadRef = &schedulingv1beta1.WorkloadReference{
 		TemplateName: templateName,
@@ -1644,7 +1637,7 @@ func (wrapper *PodGroupWrapper) WorkloadRef(templateName, workloadName string) *
 	return wrapper
 }
 
-// TopologyKey sets appropriate TopologyKey field in the SchedulingConstraints of the inner PodGroup.
+// TopologyKey 设置内部 PodGroup 的 SchedulingConstraints 中的拓扑键。
 func (wrapper *PodGroupWrapper) TopologyKey(topologyKey string) *PodGroupWrapper {
 	wrapper.PodGroup.Spec.SchedulingConstraints = &schedulingv1beta1.PodGroupSchedulingConstraints{
 		Topology: []schedulingv1beta1.TopologyConstraint{
@@ -1656,107 +1649,107 @@ func (wrapper *PodGroupWrapper) TopologyKey(topologyKey string) *PodGroupWrapper
 	return wrapper
 }
 
-// ResourceClaims adds resource claims to the inner PodGroup.
+// ResourceClaims 向内部 PodGroup 追加资源声明。
 func (wrapper *PodGroupWrapper) ResourceClaims(claims ...schedulingv1beta1.PodGroupResourceClaim) *PodGroupWrapper {
 	wrapper.Spec.ResourceClaims = append(wrapper.Spec.ResourceClaims, claims...)
 	return wrapper
 }
 
-// ResourceClaimStatuses adds resource claim statuses to the inner PodGroup.
+// ResourceClaimStatuses 向内部 PodGroup 追加资源声明状态。
 func (wrapper *PodGroupWrapper) ResourceClaimStatuses(statuses ...schedulingv1beta1.PodGroupResourceClaimStatus) *PodGroupWrapper {
 	wrapper.Status.ResourceClaimStatuses = append(wrapper.Status.ResourceClaimStatuses, statuses...)
 	return wrapper
 }
 
-// DisruptionModeAll sets the disruption mode of the inner PodGroup to All.
+// DisruptionModeAll 将内部 PodGroup 的中断模式设为 All。
 func (wrapper *PodGroupWrapper) DisruptionModeAll() *PodGroupWrapper {
 	wrapper.PodGroup.Spec.DisruptionMode = &schedulingv1beta1.DisruptionMode{All: &schedulingv1beta1.AllDisruptionMode{}}
 	return wrapper
 }
 
-// DisruptionModeSingle sets the disruption mode of the inner PodGroup to Single.
+// DisruptionModeSingle 将内部 PodGroup 的中断模式设为 Single。
 func (wrapper *PodGroupWrapper) DisruptionModeSingle() *PodGroupWrapper {
 	wrapper.PodGroup.Spec.DisruptionMode = &schedulingv1beta1.DisruptionMode{Single: &schedulingv1beta1.SingleDisruptionMode{}}
 	return wrapper
 }
 
-// Priority sets the priority of the inner PodGroup.
+// Priority 设置内部 PodGroup 的优先级。
 func (wrapper *PodGroupWrapper) Priority(priority int32) *PodGroupWrapper {
 	wrapper.PodGroup.Spec.Priority = &priority
 	return wrapper
 }
 
-// PreemptionPolicy sets the preemption policy of the inner PodGroup.
+// PreemptionPolicy 设置内部 PodGroup 的抢占策略。
 func (wrapper *PodGroupWrapper) PreemptionPolicy(policy schedulingv1beta1.PreemptionPolicy) *PodGroupWrapper {
 	wrapper.PodGroup.Spec.PreemptionPolicy = &policy
 	return wrapper
 }
 
-// ParentCompositePodGroup sets the parent composite pod group name of the inner PodGroup.
+// ParentCompositePodGroup 设置内部 PodGroup 的父组合 pod group 名称。
 func (wrapper *PodGroupWrapper) ParentCompositePodGroup(parent string) *PodGroupWrapper {
 	wrapper.PodGroup.Spec.ParentCompositePodGroupName = &parent
 	return wrapper
 }
 
-// WorkloadWrapper wraps a Workload inside.
+// WorkloadWrapper 包装一个 Workload。
 type WorkloadWrapper struct{ schedulingv1beta1.Workload }
 
-// MakeWorkload creates a Workload wrapper.
+// MakeWorkload 创建 Workload 包装器。
 func MakeWorkload() *WorkloadWrapper {
 	return &WorkloadWrapper{}
 }
 
-// Obj returns the inner Workload.
+// Obj 返回内部的 Workload。
 func (wrapper *WorkloadWrapper) Obj() *schedulingv1beta1.Workload {
 	return &wrapper.Workload
 }
 
-// Name sets `name` as the name of the inner Workload.
+// Name 将内部 Workload 的名称设为 name。
 func (wrapper *WorkloadWrapper) Name(name string) *WorkloadWrapper {
 	wrapper.Workload.Name = name
 	return wrapper
 }
 
-// Namespace sets `namespace` as the namespace of the inner Workload.
+// Namespace 将内部 Workload 的命名空间设为 namespace。
 func (wrapper *WorkloadWrapper) Namespace(namespace string) *WorkloadWrapper {
 	wrapper.Workload.Namespace = namespace
 	return wrapper
 }
 
-// PodGroupTemplate appends the given PodGroupTemplate to the Workload spec.
+// PodGroupTemplate 向 Workload spec 追加一个 PodGroupTemplate。
 func (wrapper *WorkloadWrapper) PodGroupTemplate(t schedulingv1beta1.PodGroupTemplate) *WorkloadWrapper {
 	wrapper.Workload.Spec.PodGroupTemplates = append(wrapper.Workload.Spec.PodGroupTemplates, t)
 	return wrapper
 }
 
-// PodGroupTemplateWrapper wraps a PodGroupTemplate inside.
+// PodGroupTemplateWrapper 包装一个 PodGroupTemplate。
 type PodGroupTemplateWrapper struct {
 	schedulingv1beta1.PodGroupTemplate
 }
 
-// MakePodGroupTemplate creates a PodGroupTemplate wrapper.
+// MakePodGroupTemplate 创建 PodGroupTemplate 包装器。
 func MakePodGroupTemplate() *PodGroupTemplateWrapper {
 	return &PodGroupTemplateWrapper{}
 }
 
-// Obj returns the inner PodGroupTemplate.
+// Obj 返回内部的 PodGroupTemplate。
 func (wrapper *PodGroupTemplateWrapper) Obj() schedulingv1beta1.PodGroupTemplate {
 	return wrapper.PodGroupTemplate
 }
 
-// Name sets `name` as the name of the inner PodGroupTemplate.
+// Name 将内部 PodGroupTemplate 的名称设为 name。
 func (wrapper *PodGroupTemplateWrapper) Name(name string) *PodGroupTemplateWrapper {
 	wrapper.PodGroupTemplate.Name = name
 	return wrapper
 }
 
-// Priority sets the priority of the inner PodGroupTemplate.
+// Priority 设置内部 PodGroupTemplate 的优先级。
 func (wrapper *PodGroupTemplateWrapper) Priority(priority int32) *PodGroupTemplateWrapper {
 	wrapper.PodGroupTemplate.Priority = &priority
 	return wrapper
 }
 
-// MinCount sets the MinCount for the Gang scheduling policy.
+// MinCount 设置 Gang 调度策略的 MinCount。
 func (wrapper *PodGroupTemplateWrapper) MinCount(count int32) *PodGroupTemplateWrapper {
 	if wrapper.SchedulingPolicy.Gang == nil {
 		wrapper.SchedulingPolicy.Gang = &schedulingv1beta1.GangSchedulingPolicy{}
@@ -1765,32 +1758,32 @@ func (wrapper *PodGroupTemplateWrapper) MinCount(count int32) *PodGroupTemplateW
 	return wrapper
 }
 
-// BasicPolicy sets the PodGroup policy to Basic.
+// BasicPolicy 将 PodGroup 的调度策略设为 Basic。
 func (wrapper *PodGroupTemplateWrapper) BasicPolicy() *PodGroupTemplateWrapper {
 	wrapper.SchedulingPolicy.Basic = &schedulingv1beta1.BasicSchedulingPolicy{}
 	return wrapper
 }
 
-// DisruptionModeAll sets the disruption mode of the inner PodGroupTemplate to All.
+// DisruptionModeAll 将内部 PodGroupTemplate 的中断模式设为 All。
 func (wrapper *PodGroupTemplateWrapper) DisruptionModeAll() *PodGroupTemplateWrapper {
 	wrapper.PodGroupTemplate.DisruptionMode = &schedulingv1beta1.DisruptionMode{All: &schedulingv1beta1.AllDisruptionMode{}}
 	return wrapper
 }
 
-// DisruptionModeSingle sets the disruption mode of the inner PodGroupTemplate to Single.
+// DisruptionModeSingle 将内部 PodGroupTemplate 的中断模式设为 Single。
 func (wrapper *PodGroupTemplateWrapper) DisruptionModeSingle() *PodGroupTemplateWrapper {
 	wrapper.PodGroupTemplate.DisruptionMode = &schedulingv1beta1.DisruptionMode{Single: &schedulingv1beta1.SingleDisruptionMode{}}
 	return wrapper
 }
 
-// CompositePodGroupTemplate appends the given CompositePodGroupTemplate to the Workload spec.
+// CompositePodGroupTemplate 向 Workload spec 追加一个 CompositePodGroupTemplate。
 func (wrapper *WorkloadWrapper) CompositePodGroupTemplate(t schedulingv1beta1.CompositePodGroupTemplate) *WorkloadWrapper {
 	wrapper.Workload.Spec.CompositePodGroupTemplates = append(wrapper.Workload.Spec.CompositePodGroupTemplates, t)
 	return wrapper
 }
 
-// Children adds children to the Workload.
-// It accepts *PodGroupTemplateWrapper and *CompositePodGroupTemplateWrapper.
+// Children 向 Workload 添加子模板。
+// 接受 *PodGroupTemplateWrapper 和 *CompositePodGroupTemplateWrapper 两种类型。
 func (wrapper *WorkloadWrapper) Children(children ...any) *WorkloadWrapper {
 	for _, child := range children {
 		switch c := child.(type) {
@@ -1805,35 +1798,35 @@ func (wrapper *WorkloadWrapper) Children(children ...any) *WorkloadWrapper {
 	return wrapper
 }
 
-// CompositePodGroupTemplateWrapper wraps a CompositePodGroupTemplate inside.
+// CompositePodGroupTemplateWrapper 包装一个 CompositePodGroupTemplate。
 type CompositePodGroupTemplateWrapper struct {
 	schedulingv1beta1.CompositePodGroupTemplate
 }
 
-// MakeCompositePodGroupTemplate creates a CompositePodGroupTemplate wrapper.
+// MakeCompositePodGroupTemplate 创建 CompositePodGroupTemplate 包装器。
 func MakeCompositePodGroupTemplate() *CompositePodGroupTemplateWrapper {
 	return &CompositePodGroupTemplateWrapper{}
 }
 
-// Obj returns the inner CompositePodGroupTemplate.
+// Obj 返回内部的 CompositePodGroupTemplate。
 func (wrapper *CompositePodGroupTemplateWrapper) Obj() schedulingv1beta1.CompositePodGroupTemplate {
 	return wrapper.CompositePodGroupTemplate
 }
 
-// Name sets `name` as the name of the inner CompositePodGroupTemplate.
+// Name 将内部 CompositePodGroupTemplate 的名称设为 name。
 func (wrapper *CompositePodGroupTemplateWrapper) Name(name string) *CompositePodGroupTemplateWrapper {
 	wrapper.CompositePodGroupTemplate.Name = name
 	return wrapper
 }
 
-// Priority sets the priority of the inner CompositePodGroupTemplate.
+// Priority 设置内部 CompositePodGroupTemplate 的优先级。
 func (wrapper *CompositePodGroupTemplateWrapper) Priority(priority int32) *CompositePodGroupTemplateWrapper {
 	wrapper.CompositePodGroupTemplate.Priority = &priority
 	return wrapper
 }
 
-// Children adds children to the CompositePodGroupTemplate.
-// It accepts *PodGroupTemplateWrapper and *CompositePodGroupTemplateWrapper.
+// Children 向 CompositePodGroupTemplate 添加子模板。
+// 接受 *PodGroupTemplateWrapper 和 *CompositePodGroupTemplateWrapper 两种类型。
 func (wrapper *CompositePodGroupTemplateWrapper) Children(children ...any) *CompositePodGroupTemplateWrapper {
 	for _, child := range children {
 		switch c := child.(type) {
@@ -1848,94 +1841,94 @@ func (wrapper *CompositePodGroupTemplateWrapper) Children(children ...any) *Comp
 	return wrapper
 }
 
-// MinGroupCount sets the policy to Gang with the given minGroupCount.
+// MinGroupCount 将调度策略设为 Gang，并指定 minGroupCount。
 func (wrapper *CompositePodGroupTemplateWrapper) MinGroupCount(minGroupCount int32) *CompositePodGroupTemplateWrapper {
 	wrapper.SchedulingPolicy.Gang = &schedulingv1beta1.CompositeGangSchedulingPolicy{MinGroupCount: minGroupCount}
 	return wrapper
 }
 
-// BasicPolicy sets the policy to Basic.
+// BasicPolicy 将调度策略设为 Basic。
 func (wrapper *CompositePodGroupTemplateWrapper) BasicPolicy() *CompositePodGroupTemplateWrapper {
 	wrapper.SchedulingPolicy.Basic = &schedulingv1beta1.CompositeBasicSchedulingPolicy{}
 	return wrapper
 }
 
-// CompositePodGroupWrapper wraps a CompositePodGroup inside.
+// CompositePodGroupWrapper 包装一个 CompositePodGroup。
 type CompositePodGroupWrapper struct {
 	schedulingv1alpha3.CompositePodGroup
 }
 
-// MakeCompositePodGroup creates a CompositePodGroup wrapper.
+// MakeCompositePodGroup 创建 CompositePodGroup 包装器。
 func MakeCompositePodGroup() *CompositePodGroupWrapper {
 	return &CompositePodGroupWrapper{}
 }
 
-// Obj returns the inner CompositePodGroup.
+// Obj 返回内部的 CompositePodGroup。
 func (wrapper *CompositePodGroupWrapper) Obj() *schedulingv1alpha3.CompositePodGroup {
 	return &wrapper.CompositePodGroup
 }
 
-// Name sets `name` as the name of the inner CompositePodGroup.
+// Name 将内部 CompositePodGroup 的名称设为 name。
 func (wrapper *CompositePodGroupWrapper) Name(name string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Name = name
 	return wrapper
 }
 
-// Priority sets the priority of the inner CompositePodGroup.
+// Priority 设置内部 CompositePodGroup 的优先级。
 func (wrapper *CompositePodGroupWrapper) Priority(priority int32) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.Priority = &priority
 	return wrapper
 }
 
-// PreemptionPolicy sets the preemption policy of the inner CompositePodGroup.
+// PreemptionPolicy 设置内部 CompositePodGroup 的抢占策略。
 func (wrapper *CompositePodGroupWrapper) PreemptionPolicy(policy schedulingv1alpha3.PreemptionPolicy) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.PreemptionPolicy = &policy
 	return wrapper
 }
 
-// Namespace sets `namespace` as the namespace of the inner CompositePodGroup.
+// Namespace 将内部 CompositePodGroup 的命名空间设为 namespace。
 func (wrapper *CompositePodGroupWrapper) Namespace(namespace string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Namespace = namespace
 	return wrapper
 }
 
-// UID sets the UID of the inner CompositePodGroup.
+// UID 设置内部 CompositePodGroup 的 UID。
 func (wrapper *CompositePodGroupWrapper) UID(uid string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.UID = types.UID(uid)
 	return wrapper
 }
 
-// ParentCompositePodGroup sets the parent CompositePodGroup.
+// ParentCompositePodGroup 设置父 CompositePodGroup 的名称。
 func (wrapper *CompositePodGroupWrapper) ParentCompositePodGroup(parent string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.ParentCompositePodGroupName = new(parent)
 	return wrapper
 }
 
-// MinGroupCount sets the policy to Gang with the given minGroupCount.
+// MinGroupCount 将调度策略设为 Gang，并指定 minGroupCount。
 func (wrapper *CompositePodGroupWrapper) MinGroupCount(minGroupCount int32) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.SchedulingPolicy.Gang = &schedulingv1alpha3.CompositeGangSchedulingPolicy{MinGroupCount: minGroupCount}
 	return wrapper
 }
 
-// BasicPolicy sets the policy to Basic.
+// BasicPolicy 将调度策略设为 Basic。
 func (wrapper *CompositePodGroupWrapper) BasicPolicy() *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.SchedulingPolicy.Basic = &schedulingv1alpha3.CompositeBasicSchedulingPolicy{}
 	return wrapper
 }
 
-// DisruptionModeAll sets the disruption mode of the inner CompositePodGroup to All.
+// DisruptionModeAll 将内部 CompositePodGroup 的中断模式设为 All。
 func (wrapper *CompositePodGroupWrapper) DisruptionModeAll() *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.DisruptionMode = &schedulingv1alpha3.CompositeDisruptionMode{All: &schedulingv1alpha3.AllCompositeDisruptionMode{}}
 	return wrapper
 }
 
-// DisruptionModeSingle sets the disruption mode of the inner CompositePodGroup to Single.
+// DisruptionModeSingle 将内部 CompositePodGroup 的中断模式设为 Single。
 func (wrapper *CompositePodGroupWrapper) DisruptionModeSingle() *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.DisruptionMode = &schedulingv1alpha3.CompositeDisruptionMode{Single: &schedulingv1alpha3.SingleCompositeDisruptionMode{}}
 	return wrapper
 }
 
-// WorkloadRef sets the WorkloadReference for the CompositePodGroup.
+// WorkloadRef 设置 CompositePodGroup 的 WorkloadReference。
 func (wrapper *CompositePodGroupWrapper) WorkloadRef(workloadName, templateName string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.WorkloadRef = &schedulingv1alpha3.WorkloadReference{
 		WorkloadName: workloadName,
@@ -1944,7 +1937,7 @@ func (wrapper *CompositePodGroupWrapper) WorkloadRef(workloadName, templateName 
 	return wrapper
 }
 
-// TopologyKey sets appropriate TopologyKey field in the SchedulingConstraints of the inner CompositePodGroup.
+// TopologyKey 设置内部 CompositePodGroup 的 SchedulingConstraints 中的拓扑键。
 func (wrapper *CompositePodGroupWrapper) TopologyKey(topologyKey string) *CompositePodGroupWrapper {
 	wrapper.CompositePodGroup.Spec.SchedulingConstraints = &schedulingv1alpha3.CompositePodGroupSchedulingConstraints{
 		Topology: []schedulingv1alpha3.TopologyConstraint{

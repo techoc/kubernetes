@@ -22,6 +22,7 @@ import (
 	"testing"
 )
 
+// checkLatency 断言测量到的延迟为正值，用于避免把无效采样当成性能结果。
 func checkLatency(t *testing.T, value float64) {
 	if value <= 0 {
 		t.Errorf("Expect latency to be greater than 0, got: %v", value)

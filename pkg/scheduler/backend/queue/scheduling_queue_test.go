@@ -71,15 +71,15 @@ const queuedEntitiesMetricMetadata = `
 `
 
 var (
-	// nodeAdd is the event when a new node is added to the cluster.
+	// nodeAdd 是集群中新增节点的事件。
 	nodeAdd = fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.Add}
-	// pvAdd is the event when a persistent volume is added in the cluster.
+	// pvAdd 是集群中新增持久卷的事件。
 	pvAdd = fwk.ClusterEvent{Resource: fwk.PersistentVolume, ActionType: fwk.Add}
-	// pvUpdate is the event when a persistent volume is updated in the cluster.
+	// pvUpdate 是集群中持久卷更新的事件。
 	pvUpdate = fwk.ClusterEvent{Resource: fwk.PersistentVolume, ActionType: fwk.Update}
-	// pvcAdd is the event when a persistent volume claim is added in the cluster.
+	// pvcAdd 是集群中新增持久卷声明的事件。
 	pvcAdd = fwk.ClusterEvent{Resource: fwk.PersistentVolumeClaim, ActionType: fwk.Add}
-	// csiNodeUpdate is the event when a CSI node is updated in the cluster.
+	// csiNodeUpdate 是集群中 CSI 节点更新的事件。
 	csiNodeUpdate = fwk.ClusterEvent{Resource: fwk.CSINode, ActionType: fwk.Update}
 
 	lowPriority, midPriority, highPriority = int32(0), int32(100), int32(1000)
@@ -123,7 +123,7 @@ func init() {
 
 func setQueuedPodInfoGated(queuedPodInfo *framework.QueuedPodInfo, gatingPlugin string, gatingPluginEvents []fwk.ClusterEvent) *framework.QueuedPodInfo {
 	queuedPodInfo.GatingPlugin = gatingPlugin
-	// GatingPlugin should also be registered in UnschedulablePlugins.
+	// GatingPlugin 也应注册到 UnschedulablePlugins。
 	queuedPodInfo.UnschedulablePlugins = sets.New(gatingPlugin)
 	queuedPodInfo.GatingPluginEvents = gatingPluginEvents
 	return queuedPodInfo
@@ -137,7 +137,7 @@ func getUnschedulablePod(p *PriorityQueue, pod *v1.Pod) *v1.Pod {
 	return nil
 }
 
-// makeEmptyQueueingHintMapPerProfile initializes an empty QueueingHintMapPerProfile for "" profile name.
+// makeEmptyQueueingHintMapPerProfile 为 "" profile 名初始化一个空的 QueueingHintMapPerProfile。
 func makeEmptyQueueingHintMapPerProfile() QueueingHintMapPerProfile {
 	m := make(QueueingHintMapPerProfile)
 	m[""] = make(QueueingHintMap)
@@ -175,6 +175,7 @@ func makeQueuedPodInfo(t *testing.T, name, ns string, params framework.QueueingP
 	}
 }
 
+// TestPriorityQueue_Add 验证 PriorityQueue.Add 把不同状态的 Pod 放入正确的队列。
 func TestPriorityQueue_Add(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -274,6 +275,7 @@ func TestPriorityQueue_Add(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_AddNominatedGatedPod 验证 Add 对带 gate 的 nominated Pod 的处理。
 func TestPriorityQueue_AddNominatedGatedPod(t *testing.T) {
 	gatedPod := st.MakePod().Name("pod-gated").Namespace("ns1").UID("pod-gated").NominatedNodeName("node1").Obj()
 	objs := []runtime.Object{gatedPod}
@@ -290,13 +292,13 @@ func TestPriorityQueue_AddNominatedGatedPod(t *testing.T) {
 	q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), objs, WithPreEnqueuePluginMap(m))
 	q.Add(ctx, gatedPod)
 
-	// Verify the pod is gated
+	// 验证 Pod 已被 gate
 	pInfo := q.unschedulableEntities.get(newQueuedPodInfoForLookup(gatedPod))
 	if pInfo == nil || !pInfo.Gated() {
 		t.Fatalf("Expected pod to be gated in unschedulableEntities")
 	}
 
-	// Verify the pod is added to nominator
+	// 验证 Pod 已加入 nominator
 	if len(q.nominator.nominatedPods["node1"]) != 1 {
 		t.Errorf("Expected pod-gated in nominatedPods")
 	}
@@ -310,6 +312,7 @@ func newDefaultQueueSort() fwk.LessFunc {
 	return sort.Less
 }
 
+// TestPriorityQueue_AddWithReversePriorityLessFunc 验证使用反向优先级 Less 函数时 Add 与 Pop 的顺序。
 func TestPriorityQueue_AddWithReversePriorityLessFunc(t *testing.T) {
 	objs := []runtime.Object{medPriorityPodInfo.Pod, highPriorityPodInfo.Pod}
 	logger, ctx := ktesting.NewTestContext(t)
@@ -330,6 +333,7 @@ func TestPriorityQueue_AddWithReversePriorityLessFunc(t *testing.T) {
 	}
 }
 
+// Test_InFlightPods 验证调度期间 in-flight Pod 的事件处理与重新入队行为。
 func Test_InFlightPods(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	pod1 := st.MakePod().Name("targetpod").UID("pod1").Obj()
@@ -344,16 +348,16 @@ func Test_InFlightPods(t *testing.T) {
 	var poppedPod, poppedPod2 *framework.QueuedPodInfo
 
 	type action struct {
-		// ONLY ONE of the following should be set.
+		// 以下字段只能设置其中一个。
 		eventHappens *fwk.ClusterEvent
 		podPopped    *v1.Pod
-		// podCreated is the Pod that is created and inserted into the activeQ.
+		// podCreated 是创建后插入 activeQ 的 Pod。
 		podCreated *v1.Pod
-		// podEnqueued is the Pod that is enqueued back to activeQ.
+		// podEnqueued 是重新入队到 activeQ 的 Pod。
 		podEnqueued *framework.QueuedPodInfo
-		// podGroupAttempted is the PodGroup that was attempted to schedule.
+		// podGroupAttempted 是被尝试调度的 PodGroup。
 		podGroupAttempted *framework.QueuedPodGroupInfo
-		// podGroupAdded is the PodGroup that is added/updated in the queue.
+		// podGroupAdded 是在队列中添加/更新的 PodGroup。
 		podGroupAdded *schedulingv1beta1.PodGroup
 		callback      func(t *testing.T, q *PriorityQueue)
 	}
@@ -361,7 +365,7 @@ func Test_InFlightPods(t *testing.T) {
 	tests := []struct {
 		name            string
 		queueingHintMap QueueingHintMapPerProfile
-		// initialPods is the initial Pods in the activeQ.
+		// initialPods 是 activeQ 中的初始 Pod。
 		initialPods                []*v1.Pod
 		actions                    []action
 		genericWorkloadEnabled     []bool
@@ -375,12 +379,12 @@ func Test_InFlightPods(t *testing.T) {
 			name:        "Pod and interested events are registered in inFlightPods/inFlightEvents",
 			initialPods: []*v1.Pod{pod1},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
 				{podPopped: pod1},
-				// This gets added for the pod.
+				// 这个事件会因该 Pod 被加入。
 				{eventHappens: &pvAdd},
-				// This doesn't get added because no plugin is interested in PvUpdate.
+				// 没有插件关注 PvUpdate，因此不会被加入。
 				{eventHappens: &pvUpdate},
 			},
 			wantInFlightPods:   []*v1.Pod{pod1},
@@ -400,14 +404,14 @@ func Test_InFlightPods(t *testing.T) {
 			name:        "Pod, registered in inFlightPods, is enqueued back to backoffQ",
 			initialPods: []*v1.Pod{pod1, pod2},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
 				{podPopped: pod1},
 				{eventHappens: &pvAdd},
 				{podPopped: pod2},
 				{eventHappens: &nodeAdd},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod1)},
 			},
 			wantBackoffQPodNames: []string{"targetpod"},
@@ -440,18 +444,18 @@ func Test_InFlightPods(t *testing.T) {
 			name:        "All Pods registered in inFlightPods are enqueued back to activeQ",
 			initialPods: []*v1.Pod{pod1, pod2},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
 				{podPopped: pod1},
 				{eventHappens: &pvAdd},
 				{podPopped: pod2},
 				{eventHappens: &nodeAdd},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod1)},
 				{eventHappens: &csiNodeUpdate},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod2)},
 			},
 			wantBackoffQPodNames: []string{"targetpod", "targetpod2"},
@@ -489,17 +493,17 @@ func Test_InFlightPods(t *testing.T) {
 			name:        "One intermediate Pod registered in inFlightPods is enqueued back to activeQ",
 			initialPods: []*v1.Pod{pod1, pod2, pod3},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
 				{podPopped: pod1},
 				{eventHappens: &pvAdd},
 				{podPopped: pod2},
 				{eventHappens: &nodeAdd},
-				// This Pod won't be requeued again.
+				// 该 Pod 不会再被重新入队。
 				{podPopped: pod3},
 				{eventHappens: &framework.EventAssignedPodAdd},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod2)},
 			},
 			wantBackoffQPodNames: []string{"targetpod2"},
@@ -535,7 +539,7 @@ func Test_InFlightPods(t *testing.T) {
 				{eventHappens: &framework.EventUnschedulableTimeout},
 				{podPopped: pod1},
 				{eventHappens: &framework.EventAssignedPodAdd},
-				// This Pod won't be requeued to activeQ/backoffQ because fooPlugin1 returns QueueSkip.
+				// fooPlugin1 返回 QueueSkip，该 Pod 不会重新进入 activeQ/backoffQ。
 				{podEnqueued: newQueuedPodInfoForLookup(pod1, "fooPlugin1")},
 			},
 			wantUnschedPodPoolPodNames: []string{"targetpod"},
@@ -543,8 +547,8 @@ func Test_InFlightPods(t *testing.T) {
 			wantInFlightEvents:         nil,
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
-					// fooPlugin1 has a queueing hint function for framework.AssignedPodAdd,
-					// but hint fn tells that this event doesn't make a Pod scheudlable.
+					// fooPlugin1 为 framework.AssignedPodAdd 注册了 queueing hint 函数，
+					// 但 hint 函数认为此事件不会使 Pod 可调度。
 					framework.EventAssignedPodAdd: {
 						{
 							PluginName:     "fooPlugin1",
@@ -560,8 +564,8 @@ func Test_InFlightPods(t *testing.T) {
 			actions: []action{
 				{podPopped: pod1},
 				{eventHappens: &framework.EventAssignedPodAdd},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod1)},
 			},
 			wantBackoffQPodNames: []string{"targetpod"},
@@ -569,7 +573,7 @@ func Test_InFlightPods(t *testing.T) {
 			wantInFlightEvents:   nil,
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
-					// It will be ignored because no failed plugin.
+					// 没有失败插件，因此它会被忽略。
 					framework.EventAssignedPodAdd: {
 						{
 							PluginName:     "fooPlugin1",
@@ -592,10 +596,10 @@ func Test_InFlightPods(t *testing.T) {
 			wantInFlightEvents:         nil,
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
-					// fooPlugin1 has no queueing hint function for NodeAdd.
+					// fooPlugin1 没有为 NodeAdd 注册 queueing hint 函数。
 					framework.EventAssignedPodAdd: {
 						{
-							// It will be ignored because the event is not NodeAdd.
+							// 事件不是 NodeAdd，因此它会被忽略。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -616,8 +620,8 @@ func Test_InFlightPods(t *testing.T) {
 			wantInFlightEvents:         nil,
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
-					// fooPlugin1 has a queueing hint function for framework.AssignedPodAdd,
-					// but hint fn tells that this event doesn't make a Pod scheudlable.
+					// fooPlugin1 为 framework.AssignedPodAdd 注册了 queueing hint 函数，
+					// 但 hint 函数认为此事件不会使 Pod 可调度。
 					framework.EventAssignedPodAdd: {
 						{
 							PluginName:     "fooPlugin1",
@@ -656,7 +660,7 @@ func Test_InFlightPods(t *testing.T) {
 							QueueingHintFn: queueHintReturnQueue,
 						},
 						{
-							// The hint fn tells that this event makes a Pod scheudlable immediately.
+							// hint 函数认为此事件立即使 Pod 可调度。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -679,12 +683,12 @@ func Test_InFlightPods(t *testing.T) {
 				"": {
 					framework.EventAssignedPodAdd: {
 						{
-							// it will be ignored because the hint fn returns Skip that is weaker than queueHintReturnQueue from fooPlugin1.
+							// 它会被忽略：hint 函数返回 Skip，弱于 fooPlugin1 的 queueHintReturnQueue。
 							PluginName:     "fooPlugin2",
 							QueueingHintFn: queueHintReturnSkip,
 						},
 						{
-							// The hint fn tells that this event makes a Pod schedulable.
+							// hint 函数认为此事件使 Pod 可调度。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -702,8 +706,8 @@ func Test_InFlightPods(t *testing.T) {
 				{eventHappens: &framework.EventAssignedPodAdd},
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					logger, _ := ktesting.NewTestContext(t)
-					// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-					// which means the pod encountered an unexpected error (e.g., a network error).
+					// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+					// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 					err := q.AddUnschedulablePodIfNotPresent(logger, poppedPod, q.SchedulingCycle())
 					if err != nil {
 						t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
@@ -727,18 +731,18 @@ func Test_InFlightPods(t *testing.T) {
 				"": {
 					framework.EventAssignedPodAdd: {
 						{
-							// it will be ignored because the hint fn returns QueueSkip that is weaker than queueHintReturnQueueImmediately from fooPlugin1.
+							// 它会被忽略：hint 函数返回 QueueSkip，弱于 fooPlugin1 的 queueHintReturnQueueImmediately。
 							PluginName:     "fooPlugin3",
 							QueueingHintFn: queueHintReturnSkip,
 						},
 						{
-							// it will be ignored because the fooPlugin2 is registered in UnschedulablePlugins and it's interpret as Queue that is weaker than QueueImmediately from fooPlugin1.
+							// 它会被忽略：fooPlugin2 注册在 UnschedulablePlugins 中，其 Queue 弱于 fooPlugin1 的 QueueImmediately。
 							PluginName:     "fooPlugin2",
 							QueueingHintFn: queueHintReturnQueue,
 						},
 						{
-							// The hint fn tells that this event makes a Pod scheudlable.
-							// Given fooPlugin1 is registered as Pendings, we interpret Queue as queueImmediately.
+							// hint 函数认为此事件使 Pod 可调度。
+							// 由于 fooPlugin1 注册在 Pendings 中，Queue 被解释为 queueImmediately。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -753,7 +757,7 @@ func Test_InFlightPods(t *testing.T) {
 				{callback: func(t *testing.T, q *PriorityQueue) { poppedPod = popPod(t, logger, q, pod1) }},
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					logger, _ := ktesting.NewTestContext(t)
-					// Unschedulable due to PendingPlugins.
+					// 因 PendingPlugins 而不可调度。
 					poppedPod.PendingPlugins = sets.New("fooPlugin1")
 					poppedPod.UnschedulablePlugins = sets.New("fooPlugin2")
 					if err := q.AddUnschedulablePodIfNotPresent(logger, poppedPod, q.SchedulingCycle()); err != nil {
@@ -763,18 +767,18 @@ func Test_InFlightPods(t *testing.T) {
 				{eventHappens: &pvAdd}, // Active again.
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					poppedPod = popPod(t, logger, q, pod1)
-					// UnschedulablePlugins should be preserved for logging/debugging
+					// 应保留 UnschedulablePlugins 以便记录日志/调试
 					if !poppedPod.GetUnschedulablePlugins().Equal(sets.New("fooPlugin2")) {
 						t.Errorf("QueuedPodInfo from Pop should preserve UnschedulablePlugins, expected fooPlugin2, got: %+v", poppedPod.GetUnschedulablePlugins())
 					}
-					// PendingPlugins are preserved after Pop() for logging
+					// Pop() 后保留 PendingPlugins 以便记录日志
 					if !poppedPod.PendingPlugins.Equal(sets.New("fooPlugin1")) {
 						t.Errorf("QueuedPodInfo from Pop should preserve PendingPlugins, expected fooPlugin1, got: %+v", poppedPod.PendingPlugins)
 					}
 				}},
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					logger, _ := ktesting.NewTestContext(t)
-					// Failed (i.e. no UnschedulablePlugins). Should go to backoff.
+					// 失败（即没有 UnschedulablePlugins），应进入 backoff。
 					if err := q.AddUnschedulablePodIfNotPresent(logger, poppedPod, q.SchedulingCycle()); err != nil {
 						t.Errorf("Unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 					}
@@ -784,7 +788,7 @@ func Test_InFlightPods(t *testing.T) {
 				"": {
 					pvAdd: {
 						{
-							// The hint fn tells that this event makes a Pod scheudlable immediately.
+							// hint 函数认为此事件立即使 Pod 可调度。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -793,43 +797,43 @@ func Test_InFlightPods(t *testing.T) {
 			},
 		},
 		{
-			// This scenario shouldn't happen unless we make the similar bug like https://github.com/kubernetes/kubernetes/issues/118226.
-			// But, given the bug could make a serious memory leak and likely would be hard to detect,
-			// we should have a safe guard from the same bug so that, at least, we can prevent the memory leak.
+			// 除非引入类似 https://github.com/kubernetes/kubernetes/issues/118226 的 bug，否则不应出现该场景。
+			// 但该 bug 可能造成严重且难以发现的内存泄漏，
+			// 应对同一 bug 加一道防护，至少可以避免内存泄漏。
 			name:        "Pop is made twice for the same Pod, but the cleanup still happen correctly",
 			initialPods: []*v1.Pod{pod1, pod2},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
 				{podPopped: pod1},
 				{eventHappens: &pvAdd},
 				{podPopped: pod2},
-				// Simulate a bug, putting pod into activeQ, while pod is being scheduled.
+				// 模拟一个 bug：Pod 正在调度时又被放进 activeQ。
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					q.activeQ.add(logger, newQueuedPodInfoForLookup(pod1), framework.EventUnscheduledPodAdd.Label(), nil)
 				}},
-				// At this point, in the activeQ, we have pod1 and pod3 in this order.
+				// 此时 activeQ 中依次是 pod1 和 pod3。
 				{podCreated: pod3},
-				// pod3 is poped, not pod1.
-				// In detail, this Pop() first tries to pop pod1, but it's already being scheduled and hence discarded.
-				// Then, it pops the next pod, pod3.
+				// 弹出的是 pod3，不是 pod1。
+				// 具体来说，本次 Pop() 先尝试弹出 pod1，但它正在调度中，因此被丢弃。
+				// 然后弹出下一个 Pod，即 pod3。
 				{podPopped: pod3},
 				{callback: func(t *testing.T, q *PriorityQueue) {
-					// Make sure that pod1 is discarded and hence no pod in activeQ.
+					// 确认 pod1 被丢弃，activeQ 中已无 Pod。
 					if len(q.activeQ.list()) != 0 {
 						t.Fatalf("activeQ should be empty, but got: %v", q.activeQ.list())
 					}
 				}},
 				{eventHappens: &nodeAdd},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod1)},
 				{eventHappens: &csiNodeUpdate},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod2)},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod3)},
 			},
 			wantBackoffQPodNames: []string{"targetpod", "targetpod2", "targetpod3"},
@@ -889,37 +893,37 @@ func Test_InFlightPods(t *testing.T) {
 			genericWorkloadEnabled: []bool{true},
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
-				// Pop group, so pgPod1 and pgPod2 are inFlight.
+				// 弹出 PodGroup，因此 pgPod1 和 pgPod2 处于 in-flight。
 				{podPopped: pgPod1},
 				{eventHappens: &pvAdd},
 				{podGroupAttempted: newQueuedPodGroupInfoForLookup(pgPod1.Namespace, pgName, fwk.PodGroupKeyType)},
-				// Simulate a bug: add pgPod1 and pgPod2 back to activeQ while pod group is in-flight.
+				// 模拟一个 bug：PodGroup 处于 in-flight 时把 pgPod1、pgPod2 加回 activeQ。
 				{podCreated: pgPod1},
 				{podCreated: pgPod2},
 				{podGroupAdded: pgTest},
-				// At this point, in the activeQ, we have pod group (with pgPod1 and pgPod2) and pod3 in this order.
+				// 此时 activeQ 中依次是 PodGroup（含 pgPod1、pgPod2）和 pod3。
 				{podCreated: pod3},
-				// pod3 is poped, not pgPod1.
-				// In detail, this Pop() first tries to pop pod group with pgPod1 and pgPod2, but it's already being scheduled and hence discarded.
-				// Then, it pops the next pod, pod3.
+				// 弹出的是 pod3，不是 pgPod1。
+				// 具体来说，本次 Pop() 先尝试弹出含 pgPod1、pgPod2 的 PodGroup，但它正在调度中，因此被丢弃。
+				// 然后弹出下一个 Pod，即 pod3。
 				{podPopped: pod3},
 				{callback: func(t *testing.T, q *PriorityQueue) {
-					// Make sure that pod group is discarded and hence no entity in activeQ.
+					// 确认 PodGroup 被丢弃，activeQ 中已无实体。
 					if len(q.activeQ.list()) != 0 {
 						t.Fatalf("activeQ should be empty, but got: %v", q.activeQ.list())
 					}
 				}},
 				{eventHappens: &nodeAdd},
-				// This pod will be requeued to activeQ because it's a pod group member and the queued pod group itself is missing.
+				// 该 Pod 是 PodGroup 成员，而队列中的 PodGroup 本身已丢失，因此会被重新入队到 activeQ。
 				{podEnqueued: newQueuedPodInfoForLookup(pgPod1)},
 				{eventHappens: &csiNodeUpdate},
-				// This pod will be requeued to activeQ because it's a pod group member and the queued pod group itself is missing.
+				// 该 Pod 是 PodGroup 成员，而队列中的 PodGroup 本身已丢失，因此会被重新入队到 activeQ。
 				{podEnqueued: newQueuedPodInfoForLookup(pgPod2)},
 				{podGroupAdded: pgTest},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod3)},
 			},
 			wantActiveQPodNames:  []string{"pgpod1", "pgpod2"},
@@ -959,38 +963,38 @@ func Test_InFlightPods(t *testing.T) {
 			genericWorkloadEnabled: []bool{true},
 			initialPods:            []*v1.Pod{pgPod1},
 			actions: []action{
-				// This won't be added to inFlightEvents because no inFlightPods at this point.
+				// 此时还没有 in-flight Pod，因此不会加入 inFlightEvents。
 				{eventHappens: &pvcAdd},
-				// Pop group, so pgPod1 is inFlight.
+				// 弹出 PodGroup，因此 pgPod1 处于 in-flight。
 				{podPopped: pgPod1},
 				{eventHappens: &pvAdd},
 				{podGroupAttempted: newQueuedPodGroupInfoForLookup(pgPod1.Namespace, pgName, fwk.PodGroupKeyType)},
-				// Simulate a bug: add pgPod1 back to activeQ while pod group is in-flight.
+				// 模拟一个 bug：PodGroup 处于 in-flight 时把 pgPod1 加回 activeQ。
 				{podCreated: pgPod1},
-				// Add a new, pgPod2 to activeQ.
+				// 向 activeQ 加入新的 pgPod2。
 				{podCreated: pgPod2},
 				{podGroupAdded: pgTest},
-				// At this point, in the activeQ, we have pod group (with pgPod1 and pgPod2) and pod3 in this order.
+				// 此时 activeQ 中依次是 PodGroup（含 pgPod1、pgPod2）和 pod3。
 				{podCreated: pod3},
-				// pgPod2 is popped, while pgPod1 is discarded.
+				// pgPod2 被弹出，pgPod1 被丢弃。
 				{podPopped: pgPod2},
-				// pod3 is poped.
+				// 弹出的是 pod3。
 				{podPopped: pod3},
 				{callback: func(t *testing.T, q *PriorityQueue) {
-					// Make sure that pgPod1 was discarded and hence no entity in activeQ.
+					// 确认 pgPod1 被丢弃，activeQ 中已无实体。
 					if len(q.activeQ.list()) != 0 {
 						t.Fatalf("activeQ should be empty, but got: %v", q.activeQ.list())
 					}
 				}},
 				{eventHappens: &nodeAdd},
-				// This pod will be requeued to activeQ because it's a pod group member and the queued pod group itself is missing.
+				// 该 Pod 是 PodGroup 成员，而队列中的 PodGroup 本身已丢失，因此会被重新入队到 activeQ。
 				{podEnqueued: newQueuedPodInfoForLookup(pgPod1)},
 				{eventHappens: &csiNodeUpdate},
-				// This pod will be requeued to activeQ because it's a pod group member and the queued pod group itself is missing.
+				// 该 Pod 是 PodGroup 成员，而队列中的 PodGroup 本身已丢失，因此会被重新入队到 activeQ。
 				{podEnqueued: newQueuedPodInfoForLookup(pgPod2)},
 				{podGroupAdded: pgTest},
-				// This pod will be requeued to backoffQ immediately because no plugin is registered as unschedulable plugin,
-				// which means the pod encountered an unexpected error (e.g., a network error).
+				// 没有插件注册为 unschedulable 插件，该 Pod 会立即重新入队到 backoffQ，
+				// 这意味着 Pod 遇到了意外错误（例如网络错误）。
 				{podEnqueued: newQueuedPodInfoForLookup(pod3)},
 			},
 			wantActiveQPodNames: []string{"pgpod1", "pgpod2"},
@@ -1030,7 +1034,7 @@ func Test_InFlightPods(t *testing.T) {
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
 				{podPopped: pgPod1}, // Pops group, so pgPod1 and pgPod2 are inFlight
-				// Requeue them sequentially with no plugins (unexpected errors)
+				// 不带插件依次重新入队（意外错误）
 				{podEnqueued: &framework.QueuedPodInfo{
 					PodInfo: mustNewPodInfo(pgPod1),
 				}},
@@ -1047,7 +1051,7 @@ func Test_InFlightPods(t *testing.T) {
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
 				{podPopped: pgPod1}, // Pops group, so pgPod1 and pgPod2 are inFlight
-				// Requeue them sequentially with failed plugins
+				// 带失败插件依次重新入队
 				{podEnqueued: &framework.QueuedPodInfo{
 					PodInfo: mustNewPodInfo(pgPod1),
 					QueueingParams: framework.QueueingParams{
@@ -1108,14 +1112,14 @@ func Test_InFlightPods(t *testing.T) {
 					}
 				}
 
-				// When a Pod is added to the queue, the QueuedPodInfo will have a new timestamp.
-				// On Windows, time.Now() is not as precise, 2 consecutive calls may return the same timestamp.
-				// Thus, all the QueuedPodInfos can have the same timestamps, which can be an issue
-				// when we're expecting them to be popped in a certain order (the Less function
-				// sorts them by Timestamps if they have the same Pod Priority).
-				// Using a fake clock for the queue and incrementing it after each added Pod will
-				// solve this issue on Windows unit test runs.
-				// For more details on the Windows clock resolution issue, see: https://github.com/golang/go/issues/8687
+				// Pod 加入队列时，QueuedPodInfo 会获得新时间戳。
+				// Windows 上 time.Now() 精度较低，连续两次调用可能得到相同时间戳。
+				// 因此所有 QueuedPodInfo 可能时间戳相同，这会带来问题：
+				// 而我们期望它们按特定顺序弹出（Less 函数
+				// 相同 Pod 优先级时会按时间戳排序）。
+				// 给队列使用假时钟，并在每次加入 Pod 后递增，可以
+				// 解决 Windows 单元测试中的这一问题。
+				// Windows 时钟精度问题的详情见：https://github.com/golang/go/issues/8687
 				for _, p := range test.initialPods {
 					q.Add(ctx, p)
 					fakeClock.Step(time.Second)
@@ -1245,13 +1249,14 @@ func popPod(t *testing.T, logger klog.Logger, q *PriorityQueue, pod *v1.Pod) *fr
 	return pInfo
 }
 
+// TestPop 验证 Pop 在队列为空、重复弹出等场景下的行为。
 func TestPop(t *testing.T) {
 	pod := st.MakePod().Name("targetpod").UID("pod1").Obj()
 	queueingHintMap := QueueingHintMapPerProfile{
 		"": {
 			pvAdd: {
 				{
-					// The hint fn tells that this event makes a Pod scheudlable.
+					// hint 函数认为此事件使 Pod 可调度。
 					PluginName:     "fooPlugin1",
 					QueueingHintFn: queueHintReturnQueue,
 				},
@@ -1264,34 +1269,35 @@ func TestPop(t *testing.T) {
 	q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), []runtime.Object{pod}, WithQueueingHintMapPerProfile(queueingHintMap))
 	q.Add(ctx, pod)
 
-	// Simulate failed attempt that makes the pod unschedulable.
+	// 模拟使 Pod 变为不可调度的失败尝试。
 	poppedPod := popPod(t, logger, q, pod)
-	// We put register the plugin to PendingPlugins so that it's interpreted as queueImmediately and skip backoff.
+	// 把插件注册到 PendingPlugins，这样会被解释为 queueImmediately 并跳过退避。
 	poppedPod.PendingPlugins = sets.New("fooPlugin1")
 	if err := q.AddUnschedulablePodIfNotPresent(logger, poppedPod, q.SchedulingCycle()); err != nil {
 		t.Errorf("Unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 
-	// Activate it again.
+	// 再次激活它。
 	q.MoveAllToActiveOrBackoffQueue(logger, pvAdd, nil, nil, nil)
 
-	// Now check result of Pop.
+	// 现在检查 Pop 的结果。
 	poppedPod = popPod(t, logger, q, pod)
-	// PendingPlugins are preserved after Pop() so they can be logged if scheduling
-	// succeeds, or cleared in handleSchedulingFailure() if it fails.
+	// Pop() 后保留 PendingPlugins，这样调度成功时可记录日志，
+	// 调度成功时可记录日志，失败时在 handleSchedulingFailure() 中清除。
 	if !poppedPod.PendingPlugins.Equal(sets.New("fooPlugin1")) {
 		t.Errorf("QueuedPodInfo from Pop should preserve PendingPlugins, expected fooPlugin1, got instead: %+v", poppedPod)
 	}
 }
 
+// TestPriorityQueue_AddUnschedulablePodIfNotPresent 验证 AddUnschedulablePodIfNotPresent 对 in-flight Pod 事件的处理。
 func TestPriorityQueue_AddUnschedulablePodIfNotPresent(t *testing.T) {
 	objs := []runtime.Object{highPriNominatedPodInfo.Pod, unschedulablePodInfo.Pod}
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), objs)
-	// insert unschedulablePodInfo and pop right after that
-	// because the scheduling queue records unschedulablePod as in-flight Pod.
+	// 插入 unschedulablePodInfo 后立刻弹出
+	// 因为调度队列把 unschedulablePod 记录为 in-flight Pod。
 	q.Add(ctx, unschedulablePodInfo.Pod)
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
@@ -1312,16 +1318,16 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent(t *testing.T) {
 	if len(q.nominator.nominatedPods) != 1 {
 		t.Errorf("Expected nominatedPods to have one element: %v", q.nominator)
 	}
-	// unschedulablePodInfo is inserted to unschedulable pod pool because no events happened during scheduling.
+	// 调度期间没有事件发生，unschedulablePodInfo 被插入不可调度 Pod 池。
 	if diff := cmp.Diff(unschedulablePodInfo.Pod, getUnschedulablePod(q, unschedulablePodInfo.Pod)); diff != "" {
 		t.Errorf("Unexpected pod in unschedulableEntities (-want, +got):\n%s", diff)
 	}
 }
 
-// TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff tests the scenarios when
-// AddUnschedulablePodIfNotPresent is called asynchronously.
-// Pods in and before current scheduling cycle will be put back to activeQueue
-// if we were trying to schedule them when we received move request.
+// TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff 测试以下场景：
+// AddUnschedulablePodIfNotPresent 被异步调用。
+// 当前及更早调度周期的 Pod 会被放回 activeQueue
+// 如果收到 move 请求时正在尝试调度它们。
 func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1333,11 +1339,11 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 		priority := int32(i)
 		p := st.MakePod().Name(fmt.Sprintf("pod%d", i)).Namespace(fmt.Sprintf("ns%d", i)).UID(fmt.Sprintf("upns%d", i)).Priority(priority).Obj()
 		expectedPods = append(expectedPods, *p)
-		// priority is to make pods ordered in the PriorityQueue
+		// 设置优先级使 Pod 在 PriorityQueue 中有序
 		q.Add(ctx, p)
 	}
 
-	// Pop all pods except for the first one
+	// 弹出除第一个外的所有 Pod
 	for i := totalNum - 1; i > 0; i-- {
 		p, _ := q.Pop(logger)
 		if diff := cmp.Diff(&expectedPods[i], p.(*framework.QueuedPodInfo).Pod); diff != "" {
@@ -1345,7 +1351,7 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 		}
 	}
 
-	// move all pods to active queue when we were trying to schedule them
+	// 在尝试调度它们时把所有 Pod 移到 active queue
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 	oldCycle := q.SchedulingCycle()
 
@@ -1355,7 +1361,7 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 		t.Errorf("Unexpected pod (-want, +got):\n%s", diff)
 	}
 
-	// mark pods[1] ~ pods[totalNum-1] as unschedulable and add them back
+	// 把 pods[1] ~ pods[totalNum-1] 标记为不可调度并加回队列
 	for i := 1; i < totalNum; i++ {
 		unschedulablePod := expectedPods[i].DeepCopy()
 		unschedulablePod.Status = v1.PodStatus{
@@ -1374,8 +1380,8 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 		}
 	}
 
-	// Since there was a move request at the same cycle as "oldCycle", these pods
-	// should be in the backoff queue.
+	// 由于收到 move 请求时正处于 "oldCycle" 周期，这些 Pod
+	// 应位于 backoff 队列。
 	for i := 1; i < totalNum; i++ {
 		if !q.backoffQ.has(newQueuedPodInfoForLookup(&expectedPods[i])) {
 			t.Errorf("Expected %v to be added to backoffQ.", expectedPods[i].Name)
@@ -1383,8 +1389,8 @@ func TestPriorityQueue_AddUnschedulablePodIfNotPresent_Backoff(t *testing.T) {
 	}
 }
 
-// tryPop tries to pop one entity from the queue and returns it.
-// It waits 5 seconds before timing out, assuming the queue is then empty.
+// tryPop 尝试从队列中弹出一个实体并返回。
+// 最多等待 5 秒后超时，假定此时队列为空。
 func tryPop(t *testing.T, logger klog.Logger, q *PriorityQueue) framework.QueuedEntityInfo {
 	t.Helper()
 
@@ -1411,6 +1417,7 @@ func tryPop(t *testing.T, logger klog.Logger, q *PriorityQueue) framework.Queued
 	return gotEntity
 }
 
+// TestPriorityQueue_Pop 验证 PriorityQueue.Pop 按优先级和退避状态弹出实体。
 func TestPriorityQueue_Pop(t *testing.T) {
 	highPriorityPodInfo2 := mustNewPodInfo(
 		st.MakePod().Name("hpp2").Namespace("ns1").UID("hpp2ns1").Priority(highPriority).Obj(),
@@ -1504,13 +1511,13 @@ func TestPriorityQueue_Pop(t *testing.T) {
 				unschedEntity = q.newQueuedPodInfo(ctx, unschedPod, "plugin")
 			}
 
-			// Add medium priority entity to the activeQ
+			// 把中优先级实体加入 activeQ
 			q.activeQ.add(logger, medEntity, framework.EventUnscheduledPodAdd.Label(), nil)
-			// Add high priority entity to the backoffQ
+			// 把高优先级实体加入 backoffQ
 			q.backoffQ.add(logger, backoffEntity, framework.EventUnscheduledPodAdd.Label(), nil)
-			// Add high priority entity to the errorBackoffQ
+			// 把高优先级实体加入 errorBackoffQ
 			q.backoffQ.add(logger, errorBackoffEntity, framework.EventUnscheduledPodAdd.Label(), nil)
-			// Add entity to the unschedulableEntities
+			// 把实体加入 unschedulableEntities
 			q.unschedulableEntities.addOrUpdate(unschedEntity, false, framework.EventUnscheduledPodAdd.Label(), nil)
 
 			var gotPods []string
@@ -1535,6 +1542,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_Update 验证 Update 对队列中及 in-flight Pod 的处理。
 func TestPriorityQueue_Update(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 
@@ -1565,11 +1573,11 @@ func TestPriorityQueue_Update(t *testing.T) {
 	tests := []struct {
 		name  string
 		wantQ string
-		// wantAddedToNominated is whether a Pod from the test case should be registered as a nominated Pod in the nominator.
+		// wantAddedToNominated 表示测试用例中的 Pod 是否应注册为 nominator 中的 nominated Pod。
 		wantAddedToNominated bool
-		// prepareFunc is the function called to prepare pods in the queue before the test case calls Update().
-		// This function returns three values;
-		// - oldPod/newPod: each test will call Update() with these oldPod and newPod.
+		// prepareFunc 在测试用例调用 Update() 前准备队列中的 Pod。
+		// 该函数返回三个值；
+		// - oldPod/newPod：各测试用例会以它们调用 Update()。
 		prepareFunc func(tCtx ktesting.TContext, q *PriorityQueue) (oldPod, newPod *v1.Pod)
 	}{
 		{
@@ -1628,7 +1636,7 @@ func TestPriorityQueue_Update(t *testing.T) {
 			wantQ: backoffQ,
 			prepareFunc: func(tCtx ktesting.TContext, q *PriorityQueue) (oldPod, newPod *v1.Pod) {
 				pInfo := q.newQueuedPodInfo(tCtx, medPriorityPodInfo.Pod, queuePlugin)
-				// needs to increment to make the pod backing off
+				// 需要递增才能使 Pod 进入退避
 				pInfo.UnschedulableCount++
 				q.unschedulableEntities.addOrUpdate(pInfo, false, framework.EventUnscheduledPodAdd.Label(), nil)
 				updatedPod := medPriorityPodInfo.Pod.DeepCopy()
@@ -1641,13 +1649,13 @@ func TestPriorityQueue_Update(t *testing.T) {
 			wantQ: activeQ,
 			prepareFunc: func(tCtx ktesting.TContext, q *PriorityQueue) (oldPod, newPod *v1.Pod) {
 				pInfo := q.newQueuedPodInfo(tCtx, medPriorityPodInfo.Pod, queuePlugin)
-				// needs to increment to make the pod backing off
+				// 需要递增才能使 Pod 进入退避
 				pInfo.UnschedulableCount++
 				q.unschedulableEntities.addOrUpdate(pInfo, false, framework.EventUnscheduledPodAdd.Label(), nil)
 				updatedPod := medPriorityPodInfo.Pod.DeepCopy()
 				updatedPod.Annotations["foo"] = "test1"
-				// Move clock by podMaxBackoffDuration, so that pods in the unschedulableEntities would pass the backing off,
-				// and the pods will be moved into activeQ.
+				// 把时钟推进 podMaxBackoffDuration，使 unschedulableEntities 中的 Pod 完成退避，
+				// Pod 会被移入 activeQ。
 				c.Step(q.backoffQ.podMaxBackoffDuration())
 				return medPriorityPodInfo.Pod, updatedPod
 			},
@@ -1666,7 +1674,7 @@ func TestPriorityQueue_Update(t *testing.T) {
 			name:  "when updating a pod which is in flightPods, the pod will not be added to any queue",
 			wantQ: notInAnyQueue,
 			prepareFunc: func(tCtx ktesting.TContext, q *PriorityQueue) (oldPod, newPod *v1.Pod) {
-				// We need to once add this Pod to activeQ and Pop() it so that this Pod is registered correctly in inFlightPods.
+				// 需要先把该 Pod 加入 activeQ 并 Pop 一次，才能正确注册到 inFlightPods。
 				q.Add(tCtx, medPriorityPodInfo.Pod)
 				if p, err := q.Pop(klog.FromContext(tCtx)); err != nil {
 					t.Errorf("Pop failed: %v", err)
@@ -1698,7 +1706,7 @@ func TestPriorityQueue_Update(t *testing.T) {
 
 			var pInfo *framework.QueuedPodInfo
 
-			// validate expected queue
+			// 校验期望队列
 			if pInfoFromBackoff, exists := q.backoffQ.get(newQueuedPodInfoForLookup(newPod)); exists {
 				if tt.wantQ != backoffQ {
 					t.Errorf("expected pod %s not to be queued to backoffQ, but it was", newPod.Name)
@@ -1721,7 +1729,7 @@ func TestPriorityQueue_Update(t *testing.T) {
 			}
 
 			if tt.wantQ == notInAnyQueue {
-				// skip the rest of the test if pod is not expected to be in any of the queues.
+				// 如果预期 Pod 不在任何队列中，跳过后续测试。
 				return
 			}
 
@@ -1737,16 +1745,16 @@ func TestPriorityQueue_Update(t *testing.T) {
 	}
 }
 
-// TestPriorityQueue_UpdateWhenInflight ensures to requeue a Pod back to activeQ/backoffQ
-// if it actually got an update that may make it schedulable while being scheduled.
-// See https://github.com/kubernetes/kubernetes/pull/125578#discussion_r1648338033 for more context.
+// TestPriorityQueue_UpdateWhenInflight 确保 Pod 在调度期间
+// 如果它在调度期间确实收到了可能使其可调度的更新。
+// 更多背景见 https://github.com/kubernetes/kubernetes/pull/125578#discussion_r1648338033。
 func TestPriorityQueue_UpdateWhenInflight(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	m := makeEmptyQueueingHintMapPerProfile()
-	// fakePlugin could change its scheduling result by any updates in Pods.
+	// fakePlugin 会随 Pod 的任意更新改变调度结果。
 	m[""][framework.EventTargetPodUpdate] = []*QueueingHintFunction{
 		{
 			PluginName:     "fakePlugin",
@@ -1756,7 +1764,7 @@ func TestPriorityQueue_UpdateWhenInflight(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithQueueingHintMapPerProfile(m), WithClock(c))
 
-	// test-pod is created and popped out from the queue
+	// test-pod 被创建并从队列中弹出
 	testPod := st.MakePod().Name("test-pod").Namespace("test-ns").UID("test-uid").Obj()
 	q.Add(ctx, testPod)
 	if p, err := q.Pop(logger); err != nil {
@@ -1765,7 +1773,7 @@ func TestPriorityQueue_UpdateWhenInflight(t *testing.T) {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 
-	// testPod is updated while being scheduled.
+	// testPod 在调度期间被更新。
 	updatedPod := testPod.DeepCopy()
 	updatedPod.Spec.Tolerations = []v1.Toleration{
 		{
@@ -1775,9 +1783,9 @@ func TestPriorityQueue_UpdateWhenInflight(t *testing.T) {
 	}
 
 	q.Update(ctx, testPod, updatedPod)
-	// test-pod got rejected by fakePlugin,
-	// but the update event that it just got may change this scheduling result,
-	// and hence we should put this pod to activeQ/backoffQ.
+	// test-pod 被 fakePlugin 拒绝，
+	// 但刚收到的更新事件可能改变这一调度结果，
+	// 因此应把这个 Pod 放回 activeQ/backoffQ。
 	err := q.AddUnschedulablePodIfNotPresent(logger, newQueuedPodInfoForLookup(updatedPod, "fakePlugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
@@ -1793,6 +1801,7 @@ func TestPriorityQueue_UpdateWhenInflight(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_Delete 验证 Delete 对队列中及 nominated Pod 的处理。
 func TestPriorityQueue_Delete(t *testing.T) {
 	metrics.Register()
 	timestamp := time.Now()
@@ -1908,20 +1917,20 @@ func TestPriorityQueue_Delete(t *testing.T) {
 			tCtx := ktesting.Init(t)
 			q := NewTestQueue(tCtx, newDefaultQueueSort(), WithClock(testingclock.NewFakeClock(timestamp)))
 
-			// Reset metrics for plugins used in the test
+			// 重置测试中用到的插件指标
 			allPlugins := sets.New("fakePlugin", "fakePendingPlugin", "fakePlugin2")
 			for plugin := range allPlugins {
 				metrics.UnschedulableReason(plugin, pod1.Spec.SchedulerName).Set(0)
 			}
 
-			// Execute operations
+			// 执行操作
 			for i, op := range tt.operations {
 				op(tCtx, q, tt.operands[i])
 			}
 
 			q.Delete(tCtx.Logger(), tt.podToDelete)
 
-			// Verification
+			// 验证
 			for _, pod := range tt.expectedAbsentPods {
 				pInfoLookup := newQueuedPodInfoForLookup(pod)
 				if q.activeQ.has(pInfoLookup) || q.backoffQ.has(pInfoLookup) || q.unschedulableEntities.get(pInfoLookup) != nil {
@@ -1950,6 +1959,7 @@ func TestPriorityQueue_Delete(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_Activate 验证 Activate 把指定 Pod 从不可调度状态激活。
 func TestPriorityQueue_Activate(t *testing.T) {
 	metrics.Register()
 	tests := []struct {
@@ -2010,7 +2020,7 @@ func TestPriorityQueue_Activate(t *testing.T) {
 			q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), objs)
 
 			if tt.qPodInInFlightPod != nil {
-				// Put -> Pop the Pod to make it registered in inFlightPods.
+				// 先 Put 再 Pop，使 Pod 注册进 inFlightPods。
 				q.activeQ.add(logger, newQueuedPodInfoForLookup(tt.qPodInInFlightPod), framework.EventUnscheduledPodAdd.Label(), nil)
 				p, err := q.activeQ.pop(logger)
 				if err != nil {
@@ -2024,7 +2034,7 @@ func TestPriorityQueue_Activate(t *testing.T) {
 				}
 			}
 
-			// Prepare activeQ/unschedulableEntities/backoffQ according to the table
+			// 按表格准备 activeQ/unschedulableEntities/backoffQ
 			for _, qPod := range tt.qPodInActiveQ {
 				q.Add(ctx, qPod)
 			}
@@ -2037,10 +2047,10 @@ func TestPriorityQueue_Activate(t *testing.T) {
 				q.backoffQ.add(logger, qPodInfo, framework.EventUnscheduledPodAdd.Label(), nil)
 			}
 
-			// Activate specific pod according to the table
+			// 按表格激活指定 Pod
 			q.Activate(logger, map[string]*v1.Pod{"test_pod": tt.qPodInfoToActivate.PodInfo.Pod})
 
-			// Check the result after activation by the length of activeQ
+			// 通过 activeQ 长度检查激活后的结果
 			if wantLen := len(tt.want); q.activeQ.len() != wantLen {
 				t.Fatalf("length compare: want %v, got %v", wantLen, q.activeQ.len())
 			}
@@ -2067,7 +2077,7 @@ func TestPriorityQueue_Activate(t *testing.T) {
 				}
 			}
 
-			// Check if the specific pod exists in activeQ
+			// 检查指定 Pod 是否在 activeQ 中
 			for _, want := range tt.want {
 				if !q.activeQ.has(newQueuedPodInfoForLookup(want.PodInfo.Pod)) {
 					t.Errorf("podInfo not exist in activeQ: want %v", want.PodInfo.Pod.Name)
@@ -2119,6 +2129,7 @@ func (pl *denyingPreEnqueuePlugin) PreEnqueue(ctx context.Context, p *v1.Pod) *f
 	return nil
 }
 
+// TestPriorityQueue_moveToActiveQ 验证 moveToActiveQ 把实体移入 activeQ。
 func TestPriorityQueue_moveToActiveQ(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -2169,8 +2180,8 @@ func TestPriorityQueue_moveToActiveQ(t *testing.T) {
 			wantSuccess:            false,
 		},
 		{
-			// With SchedulerPopFromBackoffQ enabled, the queue assumes the pod has already passed PreEnqueue,
-			// and it doesn't run PreEnqueue again, always puts the pod to activeQ.
+			// 启用 SchedulerPopFromBackoffQ 后，队列假定 Pod 已通过 PreEnqueue，
+			// 也不会再次运行 PreEnqueue，总是把 Pod 放入 activeQ。
 			name: "preEnqueue plugin registered, pod would fail one preEnqueue plugin, but it is moved from backoffQ after completing backoff, so preEnqueue is not executed",
 			plugins: []fwk.PreEnqueuePlugin{
 				&preEnqueuePlugin{allowlists: []string{"foo", "bar"}},
@@ -2247,11 +2258,11 @@ func TestPriorityQueue_moveToActiveQ(t *testing.T) {
 					t.Errorf("Unexpected unschedulableEntities: want %v, but got %v", tt.wantUnschedulablePods, len(q.unschedulableEntities.entityInfoMap))
 				}
 
-				// Simulate an update event.
+				// 模拟一次更新事件。
 				clone := tt.pod.DeepCopy()
 				metav1.SetMetaDataAnnotation(&clone.ObjectMeta, "foo", "")
 				q.Update(ctx, tt.pod, clone)
-				// Ensure the pod is still located in unschedulableEntities.
+				// 确认 Pod 仍在 unschedulableEntities 中。
 				if tt.wantUnschedulablePods != len(q.unschedulableEntities.entityInfoMap) {
 					t.Errorf("Unexpected unschedulableEntities: want %v, but got %v", tt.wantUnschedulablePods, len(q.unschedulableEntities.entityInfoMap))
 				}
@@ -2260,6 +2271,7 @@ func TestPriorityQueue_moveToActiveQ(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_moveToBackoffQ 验证 moveToBackoffQ 把实体移入 backoffQ。
 func TestPriorityQueue_moveToBackoffQ(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -2360,6 +2372,7 @@ func TestPriorityQueue_moveToBackoffQ(t *testing.T) {
 	}
 }
 
+// BenchmarkMoveAllToActiveOrBackoffQueue 基准测试 MoveAllToActiveOrBackoffQueue 在不同插件规模下的性能。
 func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 	tests := []struct {
 		name      string
@@ -2375,7 +2388,7 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 		},
 		{
 			name: "random",
-			// leave "moveEvent" unspecified
+			// 不指定 "moveEvent"
 		},
 	}
 
@@ -2407,7 +2420,7 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 
 	pluginNum := 20
 	var plugins []string
-	// Mimic that we have 20 plugins loaded in runtime.
+	// 模拟运行时加载了 20 个插件。
 	for i := 0; i < pluginNum; i++ {
 		plugins = append(plugins, fmt.Sprintf("fake-plugin-%v", i))
 	}
@@ -2421,9 +2434,9 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 					c := testingclock.NewFakeClock(time.Now())
 
 					m := makeEmptyQueueingHintMapPerProfile()
-					// - All plugins registered for events[0], which is NodeAdd.
-					// - 1/2 of plugins registered for events[1]
-					// - 1/3 of plugins registered for events[2]
+					// - events[0]（即 NodeAdd）注册全部插件。
+					// - events[1] 注册一半插件
+					// - events[2] 注册三分之一插件
 					// - ...
 					for j := 0; j < len(events); j++ {
 						for k := 0; k < len(plugins); k++ {
@@ -2440,27 +2453,27 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 					defer cancel()
 					q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c), WithQueueingHintMapPerProfile(m))
 
-					// Init pods in unschedulableEntities.
+					// 初始化 unschedulableEntities 中的 Pod。
 					for j := 0; j < podsInUnschedulablePods; j++ {
 						p := podTemplates[j%len(podTemplates)].DeepCopy()
 						p.Name, p.UID = fmt.Sprintf("%v-%v", p.Name, j), types.UID(fmt.Sprintf("%v-%v", p.UID, j))
 						var podInfo *framework.QueuedPodInfo
-						// The ultimate goal of composing each PodInfo is to cover the path that intersects
-						// (unschedulable) plugin names with the plugins that register the moveEvent,
-						// here the rational is:
-						// - in baseline case, don't inject unschedulable plugin names, so podMatchesEvent()
-						//   never gets executed.
-						// - in worst case, make both ends (of the intersection) a big number,i.e.,
-						//   M intersected with N instead of M with 1 (or 1 with N)
-						// - in random case, each pod failed by a random plugin, and also the moveEvent
-						//   is randomized.
+						// 构造各 PodInfo 的终极目标是覆盖以下交集路径：
+						// （unschedulable）插件名与注册了 moveEvent 的插件的交集，
+						// 理由如下：
+						// - baseline 场景不注入 unschedulable 插件名，podMatchesEvent()
+						//   永远不会执行。
+						// - worst 场景让交集两端都很大，即，
+						//   M 与 N 相交，而非 M 与 1（或 1 与 N）相交
+						// - random 场景每个 Pod 由随机插件判失败，moveEvent 也
+						//   是随机的。
 						if tt.name == "baseline" {
 							podInfo = q.newQueuedPodInfo(ctx, p)
 						} else if tt.name == "worst" {
-							// Each pod failed by all plugins.
+							// 每个 Pod 都被所有插件判失败。
 							podInfo = q.newQueuedPodInfo(ctx, p, plugins...)
 						} else {
-							// Random case.
+							// 随机场景。
 							podInfo = q.newQueuedPodInfo(ctx, p, plugins[j%len(plugins)])
 						}
 						err := q.AddUnschedulablePodIfNotPresent(logger, podInfo, q.SchedulingCycle())
@@ -2473,7 +2486,7 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 					if tt.moveEvent.Resource != "" {
 						q.MoveAllToActiveOrBackoffQueue(logger, tt.moveEvent, nil, nil, nil)
 					} else {
-						// Random case.
+						// 随机场景。
 						q.MoveAllToActiveOrBackoffQueue(logger, events[i%len(events)], nil, nil, nil)
 					}
 				}
@@ -2482,6 +2495,7 @@ func BenchmarkMoveAllToActiveOrBackoffQueue(b *testing.B) {
 	}
 }
 
+// TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint 验证 MoveAllToActiveOrBackoffQueue 结合 QueueingHint 的实体筛选与状态转换。
 func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.T) {
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	p := st.MakePod().Name("pod1").Namespace("ns1").UID("1").Label("foo", "bar").Obj()
@@ -2490,16 +2504,16 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 		name    string
 		podInfo *framework.QueuedPodInfo
 		hint    fwk.QueueingHintFn
-		// duration is the duration that the Pod has been in the unschedulable queue.
+		// duration 是 Pod 在不可调度队列中停留的时长。
 		duration time.Duration
-		// triggerEvent is the event to trigger the move. If unset, defaults to nodeAdd.
+		// triggerEvent 是触发移动的事件。未设置时默认为 nodeAdd。
 		triggerEvent *fwk.ClusterEvent
-		// expectedQ is the queue name (activeQ, backoffQ, or unschedulableEntities) that this Pod should be queued to.
+		// expectedQ 是该 Pod 应进入的队列名（activeQ、backoffQ 或 unschedulableEntities）。
 		expectedQ string
 	}{
 		{
 			name: "Queue queues pod to activeQ",
-			// This pod has PendingPlugins and hence will be pushed directly to activeQ
+			// 该 Pod 带有 PendingPlugins，因此会被直接推入 activeQ
 			podInfo: &framework.QueuedPodInfo{
 				PodInfo: mustNewPodInfo(p),
 				QueueingParams: framework.QueueingParams{
@@ -2511,7 +2525,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 		},
 		{
 			name: "Queue queues pod to backoffQ if Pod is backing off",
-			// needs UnschedulableCount to make it backing off.
+			// 需要 UnschedulableCount 才会进入退避。
 			podInfo: &framework.QueuedPodInfo{
 				PodInfo: mustNewPodInfo(p),
 				QueueingParams: framework.QueueingParams{
@@ -2530,9 +2544,9 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 				},
 			},
 			hint: queueHintReturnQueue,
-			// The pod is assumed to failed the scheduling cycle once, which would get DefaultPodInitialBackoffDuration as the penalty.
-			// To finish the backoff, waiting for DefaultPodInitialBackoffDuration isn't enough, need to wait for +1
-			// because the pod is determined to be still backing off if `{backoff expiration time} == trancate({current time})`
+			// 假设 Pod 已调度失败一次，惩罚为 DefaultPodInitialBackoffDuration。
+			// 要完成退避，仅等待 DefaultPodInitialBackoffDuration 不够，需再等 +1，
+			// 因为当 `{退避到期时间} == trancate({当前时间})` 时，Pod 仍被视为处于退避中
 			duration:  DefaultPodInitialBackoffDuration + time.Second,
 			expectedQ: activeQ,
 		},
@@ -2582,9 +2596,9 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 		{
 			name:    "QueueHintFunction is not called when Pod is gated by the plugin that isn't interested in the event",
 			podInfo: setQueuedPodInfoGated(&framework.QueuedPodInfo{PodInfo: mustNewPodInfo(p)}, names.SchedulingGates, []fwk.ClusterEvent{framework.EventUnscheduledPodUpdate}),
-			// The hintFn should not be called as the pod is gated by SchedulingGates plugin,
-			// the scheduling gate isn't interested in the node add event,
-			// and the queue should keep this Pod in the unschedQ without calling the hintFn.
+			// Pod 被 SchedulingGates 插件加了 gate，不应调用 hintFn，
+			// 调度 gate 不关注 node add 事件，
+			// 队列应把这个 Pod 留在 unschedQ，不调用 hintFn。
 			hint: func(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (fwk.QueueingHint, error) {
 				return fwk.Queue, fmt.Errorf("QueueingHintFn should not be called as pod is gated")
 			},
@@ -2593,9 +2607,9 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 		{
 			name:    "QueueHintFunction is called when Pod is gated by the plugin that is interested in the event",
 			podInfo: setQueuedPodInfoGated(&framework.QueuedPodInfo{PodInfo: mustNewPodInfo(p)}, "foo", []fwk.ClusterEvent{nodeAdd}),
-			// In this case, the hintFn should be called as the pod is gated by foo plugin that is interested in the NodeAdd event.
+			// 此时应调用 hintFn，因为 Pod 被关注 NodeAdd 事件的 foo 插件加了 gate。
 			hint: queueHintReturnQueue,
-			// and, as a result, this pod should be queued to backoffQ.
+			// 因此，该 Pod 应被排入 backoffQ。
 			expectedQ: backoffQ,
 		},
 	}
@@ -2630,14 +2644,14 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 				} else if diff := cmp.Diff(test.podInfo.Pod, p.(*framework.QueuedPodInfo).Pod); diff != "" {
 					t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 				}
-				// add to unsched pod pool
+				// 加入不可调度 Pod 池
 				err := q.AddUnschedulablePodIfNotPresent(logger, test.podInfo, q.SchedulingCycle())
 				if err != nil {
 					t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 				}
 			} else {
-				// The pod was already moved to unschedulableEntities because it's gated.
-				// Update it with the test's configured podInfo to ensure custom test fields are set.
+				// Pod 因带 gate 已被移入 unschedulableEntities。
+				// 用测试配置的 podInfo 更新它，确保自定义字段生效。
 				q.unschedulableEntities.addOrUpdate(test.podInfo, test.podInfo.Gated(), "test-setup", nil)
 			}
 			cl.Step(test.duration)
@@ -2663,6 +2677,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueueWithQueueingHint(t *testing.
 	}
 }
 
+// TestPriorityQueue_MoveAllToActiveOrBackoffQueue 验证 MoveAllToActiveOrBackoffQueue 在不同队列状态下的行为。
 func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	logger, ctx := ktesting.NewTestContext(t)
@@ -2677,7 +2692,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 		},
 	}
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c), WithQueueingHintMapPerProfile(m))
-	// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent()s below.
+	// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent 之前先从 activeQ 弹出该 Pod。
 	q.Add(ctx, unschedulablePodInfo.Pod)
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
@@ -2701,7 +2716,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 	expectInFlightPods(t, q)
-	// Construct a Pod, but don't associate its scheduler failure to any plugin
+	// 构造一个 Pod，但不把调度失败关联到任何插件
 	hpp1 := clonePod(highPriorityPodInfo.Pod, "hpp1")
 	q.Add(ctx, hpp1)
 	if p, err := q.Pop(logger); err != nil {
@@ -2710,7 +2725,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 	expectInFlightPods(t, q, hpp1.UID)
-	// This Pod will go to backoffQ because no failure plugin is associated with it.
+	// 没有关联失败插件，该 Pod 会进入 backoffQ。
 	hpp1PodInfo := q.newQueuedPodInfo(ctx, hpp1)
 	hpp1PodInfo.UnschedulableCount++
 	err = q.AddUnschedulablePodIfNotPresent(logger, hpp1PodInfo, q.SchedulingCycle())
@@ -2718,7 +2733,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 	expectInFlightPods(t, q)
-	// Construct another Pod, and associate its scheduler failure to plugin "barPlugin".
+	// 构造另一个 Pod，把调度失败关联到插件 "barPlugin"。
 	hpp2 := clonePod(highPriorityPodInfo.Pod, "hpp2")
 	q.Add(ctx, hpp2)
 	if p, err := q.Pop(logger); err != nil {
@@ -2727,33 +2742,33 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 	expectInFlightPods(t, q, hpp2.UID)
-	// This Pod will go to the unschedulable Pod pool.
+	// 该 Pod 会进入不可调度 Pod 池。
 	err = q.AddUnschedulablePodIfNotPresent(logger, q.newQueuedPodInfo(ctx, hpp2, "barPlugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 	expectInFlightPods(t, q)
-	// This NodeAdd event moves unschedulablePodInfo and highPriorityPodInfo to the backoffQ,
-	// because of the queueing hint function registered for NodeAdd/fooPlugin.
+	// 这个 NodeAdd 事件把 unschedulablePodInfo 和 highPriorityPodInfo 移到 backoffQ，
+	// 因为为 NodeAdd/fooPlugin 注册了 queueing hint 函数。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, nil, nil)
 	q.Add(ctx, medPriorityPodInfo.Pod)
 	if q.activeQ.len() != 1 {
 		t.Errorf("Expected 1 item to be in activeQ, but got: %v", q.activeQ.len())
 	}
-	// Pop out the medPriorityPodInfo in activeQ.
+	// 从 activeQ 中弹出 medPriorityPodInfo。
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
 	} else if diff := cmp.Diff(medPriorityPodInfo.Pod, p.(*framework.QueuedPodInfo).Pod); diff != "" {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 	expectInFlightPods(t, q, medPriorityPodInfo.Pod.UID)
-	// hpp2 won't be moved.
+	// hpp2 不会被移动。
 	if q.backoffQ.len() != 3 {
 		t.Fatalf("Expected 3 items to be in backoffQ, but got: %v", q.backoffQ.len())
 	}
 
-	// pop out the pods in the backoffQ.
-	// This doesn't make them in-flight pods.
+	// 弹出 backoffQ 中的 Pod。
+	// 这不会使它们成为 in-flight Pod。
 	c.Step(q.backoffQ.podMaxBackoffDuration())
 	_ = q.backoffQ.popAllBackoffCompleted(logger)
 	expectInFlightPods(t, q, medPriorityPodInfo.Pod.UID)
@@ -2798,8 +2813,8 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 	}
 	expectInFlightPods(t, q, medPriorityPodInfo.Pod.UID)
 	q.Add(ctx, medPriorityPodInfo.Pod)
-	// hpp1 will go to backoffQ because no failure plugin is associated with it.
-	// All plugins other than hpp1 are enqueued to the unschedulable Pod pool.
+	// hpp1 没有关联失败插件，会进入 backoffQ。
+	// 除 hpp1 外的所有插件都被记入不可调度 Pod 池。
 	for _, pod := range []*v1.Pod{unschedulablePodInfo.Pod, highPriorityPodInfo.Pod, hpp2} {
 		if q.unschedulableEntities.get(newQueuedPodInfoForLookup(pod)) == nil {
 			t.Errorf("Expected %v in the unschedulableEntities", pod.Name)
@@ -2808,13 +2823,13 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 	if !q.backoffQ.has(hpp1QueuedPodInfo) {
 		t.Errorf("Expected %v in the backoffQ", hpp1.Name)
 	}
-	// all the remaining Pods should be in activeQ.
+	// 其余所有 Pod 都应位于 activeQ。
 	if q.activeQ.len() != 1 {
 		t.Errorf("Expected %v in the activeQ", medPriorityPodInfo.Pod.Name)
 	}
 
-	// Move clock by podMaxBackoffDuration, so that pods in the unschedulableEntities would pass the backing off,
-	// and the pods will be moved into activeQ.
+	// 把时钟推进 podMaxBackoffDuration，使 unschedulableEntities 中的 Pod 完成退避，
+	// Pod 会被移入 activeQ。
 	c.Step(q.backoffQ.podMaxBackoffDuration())
 	q.flushBackoffQCompleted(logger) // flush the completed backoffQ to move hpp1 to activeQ.
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, nil, nil)
@@ -2826,7 +2841,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 	}
 	expectInFlightPods(t, q, medPriorityPodInfo.Pod.UID)
 	if len(q.unschedulableEntities.entityInfoMap) != 1 {
-		// hpp2 won't be moved regardless of its backoff timer.
+		// 无论退避计时器如何，hpp2 都不会被移动。
 		t.Errorf("Expected 1 item to be in unschedulableEntities, but got: %v", len(q.unschedulableEntities.entityInfoMap))
 	}
 }
@@ -2860,6 +2875,7 @@ func expectInFlightPods(t *testing.T, q *PriorityQueue, uids ...types.UID) {
 	}
 }
 
+// TestPriorityQueue_NominatedPodsForNode 验证 NominatedPodsForNode 返回节点上的 nominated Pod。
 func TestPriorityQueue_NominatedPodsForNode(t *testing.T) {
 	objs := []runtime.Object{medPriorityPodInfo.Pod, unschedulablePodInfo.Pod, highPriorityPodInfo.Pod}
 	logger, ctx := ktesting.NewTestContext(t)
@@ -2888,6 +2904,7 @@ func TestPriorityQueue_NominatedPodsForNode(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_NominatedPodDeleted 验证 nominated Pod 被删除后的提名信息清理。
 func TestPriorityQueue_NominatedPodDeleted(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -2920,7 +2937,7 @@ func TestPriorityQueue_NominatedPodDeleted(t *testing.T) {
 			informerFactory := informers.NewSharedInformerFactory(cs, 0)
 			podLister := informerFactory.Core().V1().Pods().Lister()
 
-			// Build a PriorityQueue.
+			// 构造一个 PriorityQueue。
 			q := NewPriorityQueue(newDefaultQueueSort(), informerFactory, WithPodLister(podLister))
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -2928,7 +2945,7 @@ func TestPriorityQueue_NominatedPodDeleted(t *testing.T) {
 			informerFactory.WaitForCacheSync(ctx.Done())
 
 			if tt.deletePod {
-				// Simulate that the test pod gets deleted physically.
+				// 模拟测试 Pod 被物理删除。
 				informerFactory.Core().V1().Pods().Informer().GetStore().Delete(tt.podInfo.Pod)
 			}
 
@@ -2941,8 +2958,8 @@ func TestPriorityQueue_NominatedPodDeleted(t *testing.T) {
 	}
 }
 
-// TestPriorityQueue_NominatedNodeNameEmptyNodeKey ensures an empty NominatedNodeName does not
-// store pods under nominatedPods[""] (#138267), including ModeNoop behavior.
+// TestPriorityQueue_NominatedNodeNameEmptyNodeKey 确保空的 NominatedNodeName 不会
+// 把 Pod 存到 nominatedPods[""] 下（#138267），包括 ModeNoop 行为。
 func TestPriorityQueue_NominatedNodeNameEmptyNodeKey(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -3044,6 +3061,7 @@ func TestPriorityQueue_NominatedNodeNameEmptyNodeKey(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_PendingPods 验证 pending Pod 的添加与激活行为。
 func TestPriorityQueue_PendingPods(t *testing.T) {
 	makeSet := func(pods []*v1.Pod) map[*v1.Pod]struct{} {
 		pendingSet := map[*v1.Pod]struct{}{}
@@ -3057,7 +3075,7 @@ func TestPriorityQueue_PendingPods(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	q := NewTestQueue(ctx, newDefaultQueueSort())
-	// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent()s below.
+	// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent 之前先从 activeQ 弹出该 Pod。
 	q.Add(ctx, unschedulablePodInfo.Pod)
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
@@ -3088,7 +3106,7 @@ func TestPriorityQueue_PendingPods(t *testing.T) {
 	if wantSummary := fmt.Sprintf(pendingPodsSummary, 1, 0, 2); wantSummary != gotSummary {
 		t.Errorf("Unexpected pending pods summary: want %v, but got %v.", wantSummary, gotSummary)
 	}
-	// Move all to active queue. We should still see the same set of pods.
+	// 把所有 Pod 移到 active queue。看到的 Pod 集合应不变。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 	gotPods, gotSummary = q.PendingPods()
 	if diff := cmp.Diff(expectedSet, makeSet(gotPods)); diff != "" {
@@ -3099,6 +3117,7 @@ func TestPriorityQueue_PendingPods(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_UpdateNominatedPodForNode 验证 UpdateNominatedPodForNode 对提名信息的更新。
 func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -3106,11 +3125,11 @@ func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 	objs := []runtime.Object{medPriorityPodInfo.Pod, unschedulablePodInfo.Pod, highPriorityPodInfo.Pod, scheduledPodInfo.Pod}
 	q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), objs)
 	q.Add(ctx, medPriorityPodInfo.Pod)
-	// Update unschedulablePodInfo on a different node than specified in the pod.
+	// 更新 unschedulablePodInfo，使用与 Pod 中不同的节点。
 	q.AddNominatedPod(logger, mustNewTestPodInfo(t, unschedulablePodInfo.Pod),
 		&fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node5"})
 
-	// Update nominated node name of a pod on a node that is not specified in the pod object.
+	// 更新一个 Pod 的 nominated node name，指定 Pod 对象中未写明的节点。
 	q.AddNominatedPod(logger, mustNewTestPodInfo(t, highPriorityPodInfo.Pod),
 		&fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node2"})
 	expectedNominatedPods := &nominator{
@@ -3133,12 +3152,12 @@ func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 	} else if diff := cmp.Diff(medPriorityPodInfo.Pod, p.(*framework.QueuedPodInfo).Pod); diff != "" {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
-	// List of nominated pods shouldn't change after popping them from the queue.
+	// 从队列弹出后，nominated Pod 列表不应变化。
 	if diff := cmp.Diff(q.nominator, expectedNominatedPods, nominatorCmpOpts...); diff != "" {
 		t.Errorf("Unexpected diff after popping pods (-want, +got):\n%s", diff)
 	}
-	// Update one of the nominated pods that doesn't have nominatedNodeName in the
-	// pod object. It should be updated correctly.
+	// 更新其中一个 nominated Pod，它在 Pod 对象中没有 nominatedNodeName，
+	// Pod 对象，它应被正确更新。
 	q.AddNominatedPod(logger, highPriorityPodInfo, &fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node4"})
 	expectedNominatedPods = &nominator{
 		nominatedPodToNode: map[types.UID]string{
@@ -3156,14 +3175,14 @@ func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 		t.Errorf("Unexpected diff after updating pods (-want, +got):\n%s", diff)
 	}
 
-	// Attempt to nominate a pod that was deleted from the informer cache.
-	// Nothing should change.
+	// 尝试提名一个已从 informer 缓存中删除的 Pod。
+	// 不应有任何变化。
 	q.AddNominatedPod(logger, nonExistentPodInfo, &fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node1"})
 	if diff := cmp.Diff(q.nominator, expectedNominatedPods, nominatorCmpOpts...); diff != "" {
 		t.Errorf("Unexpected diff after nominating a deleted pod (-want, +got):\n%s", diff)
 	}
-	// Attempt to nominate a pod that was already scheduled in the informer cache.
-	// Nothing should change.
+	// 尝试提名一个在 informer 缓存中已处于已调度状态的 Pod。
+	// 不应有任何变化。
 	scheduledPodCopy := scheduledPodInfo.Pod.DeepCopy()
 	scheduledPodInfo.Pod.Spec.NodeName = ""
 	q.AddNominatedPod(logger, mustNewTestPodInfo(t, scheduledPodCopy), &fwk.NominatingInfo{NominatingMode: fwk.ModeOverride, NominatedNodeName: "node1"})
@@ -3171,8 +3190,8 @@ func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 		t.Errorf("Unexpected diff after nominating a scheduled pod (-want, +got):\n%s", diff)
 	}
 
-	// Delete a nominated pod that doesn't have nominatedNodeName in the pod
-	// object. It should be deleted.
+	// 删除一个 Pod 中没有 nominatedNodeName 的 nominated Pod
+	// 对象，它应被删除。
 	q.DeleteNominatedPodIfExists(highPriorityPodInfo.Pod)
 	expectedNominatedPods = &nominator{
 		nominatedPodToNode: map[types.UID]string{
@@ -3189,6 +3208,7 @@ func TestPriorityQueue_UpdateNominatedPodForNode(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_NewWithOptions 验证 NewWithOptions 用自定义参数构造队列。
 func TestPriorityQueue_NewWithOptions(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -3208,6 +3228,7 @@ func TestPriorityQueue_NewWithOptions(t *testing.T) {
 	}
 }
 
+// TestSchedulingQueue_Close 验证 Close 能安全关闭队列并中断阻塞的 Pop。
 func TestSchedulingQueue_Close(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -3229,30 +3250,30 @@ func TestSchedulingQueue_Close(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRecentlyTriedPodsGoBack tests that pods which are recently tried and are
-// unschedulable go behind other pods with the same priority. This behavior
-// ensures that an unschedulable pod does not block head of the queue when there
-// are frequent events that move pods to the active queue.
+// TestRecentlyTriedPodsGoBack 验证最近尝试过且不可调度的 Pod
+// 不可调度的 Pod 会排在同优先级其他 Pod 之后。这一行为
+// 保证在频繁有事件把 Pod 移入 active queue 时，
+// 频繁有事件把 Pod 移入 active queue。
 func TestRecentlyTriedPodsGoBack(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c))
-	// Add a few pods to priority queue.
+	// 向优先级队列加入几个 Pod。
 	for i := 0; i < 5; i++ {
 		p := st.MakePod().Name(fmt.Sprintf("test-pod-%v", i)).Namespace("ns1").UID(fmt.Sprintf("tp00%v", i)).Priority(highPriority).Node("node1").NominatedNodeName("node1").Obj()
 		q.Add(ctx, p)
 	}
 	c.Step(time.Microsecond)
-	// Simulate a pod being popped by the scheduler, determined unschedulable, and
-	// then moved back to the active queue.
+	// 模拟 Pod 被调度器弹出、判定为不可调度，然后
+	// 随后被移回 active queue。
 	entity, err := q.Pop(logger)
 	if err != nil {
 		t.Errorf("Error while popping the head of the queue: %v", err)
 	}
 	p1 := entity.(*framework.QueuedPodInfo)
-	// Update pod condition to unschedulable.
+	// 更新 Pod 条件为 unschedulable。
 	podutil.UpdatePodCondition(&p1.PodInfo.Pod.Status, &v1.PodCondition{
 		Type:          v1.PodScheduled,
 		Status:        v1.ConditionFalse,
@@ -3261,16 +3282,16 @@ func TestRecentlyTriedPodsGoBack(t *testing.T) {
 		LastProbeTime: metav1.Now(),
 	})
 	p1.UnschedulablePlugins = sets.New("plugin")
-	// Put in the unschedulable queue.
+	// 放入不可调度队列。
 	err = q.AddUnschedulablePodIfNotPresent(logger, p1, q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 	c.Step(q.backoffQ.podMaxBackoffDuration())
-	// Move all unschedulable pods to the active queue.
+	// 把所有不可调度 Pod 移到 active queue。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
-	// Simulation is over. Now let's pop all pods. The pod popped first should be
-	// the last one we pop here.
+	// 模拟结束。现在弹出所有 Pod，最先弹出的应当是
+	// 这里最后弹出的那个。
 	for i := 0; i < 5; i++ {
 		entity, err := q.Pop(logger)
 		if err != nil {
@@ -3283,10 +3304,10 @@ func TestRecentlyTriedPodsGoBack(t *testing.T) {
 	}
 }
 
-// TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod tests
-// that a pod determined as unschedulable multiple times doesn't block any newer pod.
-// This behavior ensures that an unschedulable pod does not block head of the queue when there
-// are frequent events that move pods to the active queue.
+// TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod 验证
+// 多次被判定为不可调度的 Pod 不会阻塞任何更新的 Pod。
+// 这一行为保证在频繁有事件把 Pod 移入 active queue 时，
+// 频繁有事件把 Pod 移入 active queue。
 func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	logger, ctx := ktesting.NewTestContext(t)
@@ -3294,12 +3315,12 @@ func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 	defer cancel()
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c))
 
-	// Add an unschedulable pod to a priority queue.
-	// This makes a situation that the pod was tried to schedule
-	// and had been determined unschedulable so far
+	// 向优先级队列加入一个不可调度 Pod。
+	// 这样就构造出 Pod 曾被尝试调度、
+	// 且到目前为止已被判定为不可调度
 	unschedulablePod := st.MakePod().Name("test-pod-unscheduled").Namespace("ns1").UID("tp001").Priority(highPriority).NominatedNodeName("node1").Obj()
 
-	// Update pod condition to unschedulable.
+	// 更新 Pod 条件为 unschedulable。
 	podutil.UpdatePodCondition(&unschedulablePod.Status, &v1.PodCondition{
 		Type:    v1.PodScheduled,
 		Status:  v1.ConditionFalse,
@@ -3307,25 +3328,25 @@ func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 		Message: "fake scheduling failure",
 	})
 
-	// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent() below.
+	// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent() 之前先从 activeQ 弹出该 Pod。
 	q.Add(ctx, unschedulablePod)
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
 	} else if diff := cmp.Diff(unschedulablePod, p.(*framework.QueuedPodInfo).Pod); diff != "" {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
-	// Put in the unschedulable queue
+	// 放入不可调度队列
 	err := q.AddUnschedulablePodIfNotPresent(logger, newQueuedPodInfoForLookup(unschedulablePod, "plugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
-	// Move clock to make the unschedulable pods complete backoff.
+	// 推进时钟，让不可调度 Pod 完成退避。
 	c.Step(DefaultPodInitialBackoffDuration + time.Second)
-	// Move all unschedulable pods to the active queue.
+	// 把所有不可调度 Pod 移到 active queue。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 
-	// Simulate a pod being popped by the scheduler,
-	// At this time, unschedulable pod should be popped.
+	// 模拟 Pod 被调度器弹出、
+	// 此时应弹出不可调度 Pod。
 	entity, err := q.Pop(logger)
 	if err != nil {
 		t.Errorf("Error while popping the head of the queue: %v", err)
@@ -3335,12 +3356,12 @@ func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 
-	// Assume newer pod was added just after unschedulable pod
-	// being popped and before being pushed back to the queue.
+	// 假设在不可调度 Pod 之后立刻加入了新 Pod
+	// 从队列弹出后、重新入队前
 	newerPod := st.MakePod().Name("test-newer-pod").Namespace("ns1").UID("tp002").CreationTimestamp(metav1.Now()).Priority(highPriority).NominatedNodeName("node1").Obj()
 	q.Add(ctx, newerPod)
 
-	// And then unschedulablePodInfo was determined as unschedulable AGAIN.
+	// 随后 unschedulablePodInfo 又被判定为不可调度。
 	podutil.UpdatePodCondition(&unschedulablePod.Status, &v1.PodCondition{
 		Type:    v1.PodScheduled,
 		Status:  v1.ConditionFalse,
@@ -3348,18 +3369,18 @@ func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 		Message: "fake scheduling failure",
 	})
 
-	// And then, put unschedulable pod to the unschedulable queue
+	// 然后，把不可调度 Pod 放入不可调度队列
 	err = q.AddUnschedulablePodIfNotPresent(logger, newQueuedPodInfoForLookup(unschedulablePod, "plugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
-	// Move clock to make the unschedulable pods complete backoff.
+	// 推进时钟，让不可调度 Pod 完成退避。
 	c.Step(DefaultPodInitialBackoffDuration + time.Second)
-	// Move all unschedulable pods to the active queue.
+	// 把所有不可调度 Pod 移到 active queue。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 
-	// At this time, newerPod should be popped
-	// because it is the oldest tried pod.
+	// 此时应弹出 newerPod
+	// 因为它是最早尝试过的 Pod。
 	item2, err2 := q.Pop(logger)
 	if err2 != nil {
 		t.Errorf("Error while popping the head of the queue: %v", err2)
@@ -3371,8 +3392,8 @@ func TestPodFailedSchedulingMultipleTimesDoesNotBlockNewerPod(t *testing.T) {
 	}
 }
 
-// TestHighPriorityBackoff tests that a high priority pod does not block
-// other pods if it is unschedulable
+// TestHighPriorityBackoff 验证高优先级 Pod 不可调度时
+// 其他 Pod（如果它不可调度）
 func TestHighPriorityBackoff(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -3383,8 +3404,8 @@ func TestHighPriorityBackoff(t *testing.T) {
 	highPod := st.MakePod().Name("test-highpod").Namespace("ns1").UID("tp-high").Priority(highPriority).NominatedNodeName("node1").Obj()
 	q.Add(ctx, midPod)
 	q.Add(ctx, highPod)
-	// Simulate a pod being popped by the scheduler, determined unschedulable, and
-	// then moved back to the active queue.
+	// 模拟 Pod 被调度器弹出、判定为不可调度，然后
+	// 随后被移回 active queue。
 	entity, err := q.Pop(logger)
 	if err != nil {
 		t.Errorf("Error while popping the head of the queue: %v", err)
@@ -3393,19 +3414,19 @@ func TestHighPriorityBackoff(t *testing.T) {
 	if diff := cmp.Diff(highPod, p.Pod); diff != "" {
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
-	// Update pod condition to unschedulable.
+	// 更新 Pod 条件为 unschedulable。
 	podutil.UpdatePodCondition(&p.Pod.Status, &v1.PodCondition{
 		Type:    v1.PodScheduled,
 		Status:  v1.ConditionFalse,
 		Reason:  v1.PodReasonUnschedulable,
 		Message: "fake scheduling failure",
 	})
-	// Put in the unschedulable queue.
+	// 放入不可调度队列。
 	err = q.AddUnschedulablePodIfNotPresent(logger, newQueuedPodInfoForLookup(p.Pod, "fooPlugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
-	// Move all unschedulable pods to the active/backoff queue.
+	// 把所有不可调度 Pod 移到 activeQ/backoffQ。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 
 	entity, err = q.Pop(logger)
@@ -3413,13 +3434,13 @@ func TestHighPriorityBackoff(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error while popping the head of the queue: %v", err)
 	} else if diff := cmp.Diff(midPod, p.Pod); diff != "" {
-		// high pod should be in backoffQ
+		// 高优先级 Pod 应在 backoffQ 中
 		t.Errorf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 	}
 }
 
-// TestHighPriorityFlushUnschedulableEntitiesLeftover tests that entities will be moved to
-// activeQ after one minutes if it is in unschedulableEntities.
+// TestHighPriorityFlushUnschedulableEntitiesLeftover 验证实体在 unschedulableEntities 中
+// 一分钟后移入 activeQ（如果它位于 unschedulableEntities）。
 func TestHighPriorityFlushUnschedulableEntitiesLeftover(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	m := makeEmptyQueueingHintMapPerProfile()
@@ -3436,7 +3457,7 @@ func TestHighPriorityFlushUnschedulableEntitiesLeftover(t *testing.T) {
 	midPod := st.MakePod().Name("test-midpod").Namespace("ns1").UID("tp-mid").Priority(midPriority).NominatedNodeName("node1").Obj()
 	highPod := st.MakePod().Name("test-highpod").Namespace("ns1").UID("tp-high").Priority(highPriority).NominatedNodeName("node1").Obj()
 
-	// Update pod condition to highPod.
+	// 更新 highPod 的 Pod 条件。
 	podutil.UpdatePodCondition(&highPod.Status, &v1.PodCondition{
 		Type:    v1.PodScheduled,
 		Status:  v1.ConditionFalse,
@@ -3444,7 +3465,7 @@ func TestHighPriorityFlushUnschedulableEntitiesLeftover(t *testing.T) {
 		Message: "fake scheduling failure",
 	})
 
-	// Update pod condition to midPod.
+	// 更新 midPod 的 Pod 条件。
 	podutil.UpdatePodCondition(&midPod.Status, &v1.PodCondition{
 		Type:    v1.PodScheduled,
 		Status:  v1.ConditionFalse,
@@ -3452,7 +3473,7 @@ func TestHighPriorityFlushUnschedulableEntitiesLeftover(t *testing.T) {
 		Message: "fake scheduling failure",
 	})
 
-	// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent()s below.
+	// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent 之前先从 activeQ 弹出该 Pod。
 	q.Add(ctx, highPod)
 	if p, err := q.Pop(logger); err != nil {
 		t.Errorf("Pop failed: %v", err)
@@ -3488,8 +3509,8 @@ func TestHighPriorityFlushUnschedulableEntitiesLeftover(t *testing.T) {
 	}
 }
 
-// TestFlushUnschedulableEntitiesLeftoverSetsFlag verifies that the WasFlushedFromUnschedulable
-// flag is correctly set when entities are flushed and cleared when they return to the queue.
+// TestFlushUnschedulableEntitiesLeftoverSetsFlag 验证 WasFlushedFromUnschedulable
+// 实体被 flush 时标志正确置位，回到队列时正确清除。
 func TestFlushUnschedulableEntitiesLeftoverSetsFlag(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	m := makeEmptyQueueingHintMapPerProfile()
@@ -3500,7 +3521,7 @@ func TestFlushUnschedulableEntitiesLeftoverSetsFlag(t *testing.T) {
 
 	pod := st.MakePod().Name("test-pod").Namespace("ns1").UID("tp-1").Priority(midPriority).NominatedNodeName("node1").Obj()
 
-	// Add pod to activeQ and pop it to simulate a scheduling attempt
+	// 把 Pod 加入 activeQ 再 Pop，模拟一次调度尝试
 	q.Add(ctx, pod)
 	entity, err := q.Pop(logger)
 	if err != nil {
@@ -3508,22 +3529,22 @@ func TestFlushUnschedulableEntitiesLeftoverSetsFlag(t *testing.T) {
 	}
 	pInfo := entity.(*framework.QueuedPodInfo)
 
-	// Verify flag is initially false
+	// 验证标志初始为 false
 	if pInfo.WasFlushedFromUnschedulable {
 		t.Errorf("Expected WasFlushedFromUnschedulable to be false initially, but got true")
 	}
 
-	// Add pod to unschedulableEntities (simulating failed scheduling)
+	// 把 Pod 加入 unschedulableEntities（模拟调度失败）
 	err = q.AddUnschedulablePodIfNotPresent(logger, q.newQueuedPodInfo(ctx, pod, "fakePlugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("Unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 
-	// Advance time past the flush duration and flush
+	// 把时间推进超过 flush 周期并触发 flush
 	c.Step(DefaultPodMaxInUnschedulablePodsDuration + time.Second)
 	q.flushUnschedulableEntitiesLeftover(logger)
 
-	// Pop the pod and verify flag is now true
+	// 弹出 Pod 并验证标志现在为 true
 	entity, err = q.Pop(logger)
 	pInfo = entity.(*framework.QueuedPodInfo)
 	if err != nil {
@@ -3533,13 +3554,13 @@ func TestFlushUnschedulableEntitiesLeftoverSetsFlag(t *testing.T) {
 		t.Errorf("Expected WasFlushedFromUnschedulable to be true after flush, but got false")
 	}
 
-	// Simulate pod failing to schedule again and returning to queue
+	// 模拟 Pod 再次调度失败并返回队列
 	err = q.AddUnschedulablePodIfNotPresent(logger, q.newQueuedPodInfo(ctx, pInfo.Pod, "fakePlugin"), q.SchedulingCycle())
 	if err != nil {
 		t.Fatalf("Unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 	}
 
-	// Verify flag is cleared when pod returns to queue
+	// 验证 Pod 回到队列后标志被清除
 	internalPInfo := q.unschedulableEntities.get(newQueuedPodInfoForLookup(pod))
 	if internalPInfo == nil {
 		t.Fatalf("pod should be in unschedulableEntities")
@@ -3549,6 +3570,7 @@ func TestFlushUnschedulableEntitiesLeftoverSetsFlag(t *testing.T) {
 	}
 }
 
+// TestFlushUnschedulablePodsLeftoverSetsFlag_GatedPod 验证带 gate 的 Pod 被 flush 后标志正确置位与清除。
 func TestFlushUnschedulablePodsLeftoverSetsFlag_GatedPod(t *testing.T) {
 	tests := []struct {
 		name                            string
@@ -3656,7 +3678,7 @@ func TestFlushUnschedulablePodsLeftoverSetsFlag_GatedPod(t *testing.T) {
 				t.Fatalf("Failed to add pod to unschedulable: %v", err)
 			}
 
-			// Advance time past the flush duration and flush
+			// 把时间推进超过 flush 周期并触发 flush
 			c.Step(DefaultPodMaxInUnschedulablePodsDuration + time.Second)
 			q.flushUnschedulableEntitiesLeftover(logger)
 
@@ -3680,8 +3702,8 @@ func TestFlushUnschedulablePodsLeftoverSetsFlag_GatedPod(t *testing.T) {
 	}
 }
 
-// TestGatedPodFlushFrequency verifies that a gated pod is only flushed once every
-// podMaxInUnschedulablePodsDuration, and not on every periodic flush execution.
+// TestGatedPodFlushFrequency 验证带 gate 的 Pod 仅每隔
+// podMaxInUnschedulablePodsDuration，而不是每次周期性 flush 都执行。
 func TestGatedPodFlushFrequency(t *testing.T) {
 	gatedPod := mustNewPodInfo(st.MakePod().Name("pod1").Namespace("ns1").UID("1").Obj())
 
@@ -3721,7 +3743,7 @@ func TestGatedPodFlushFrequency(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Use a user-defined 5-minute duration for clarity
+			// 为清晰起见，使用用户自定义的 5 分钟时长
 			flushDuration := 5 * time.Minute
 			q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c), WithQueueingHintMapPerProfile(m), WithPreEnqueuePluginMap(preEnqM),
 				WithPodMaxInUnschedulablePodsDuration(flushDuration))
@@ -3737,40 +3759,40 @@ func TestGatedPodFlushFrequency(t *testing.T) {
 				return entity
 			}
 
-			// Add gated pod directly to unschedulableEntities
+			// 直接把带 gate 的 Pod 加入 unschedulableEntities
 			q.unschedulableEntities.addOrUpdate(tt.entityInfo, false, "test-setup", nil)
 
-			// Step clock past the flush duration and trigger flush
+			// 推进时钟超过 flush 周期并触发 flush
 			// T=5:01
 			c.Step(flushDuration + time.Second)
 
 			q.flushUnschedulableEntitiesLeftover(logger)
 
 			actualEntity := getEntityFromAnyQueue()
-			// Verify that flush happened
+			// 验证发生了 flush
 			firstFlushTime := actualEntity.GetFlushTimestamp()
 			if firstFlushTime.IsZero() {
 				t.Errorf("Expected FlushTimestamp to be set after the first leftover flush")
 			}
 
-			// Step clock by less than the flush duration and trigger flush
+			// 推进时钟不足 flush 周期并触发 flush
 			// T=9:01
 			c.Step(4 * time.Minute)
 			q.flushUnschedulableEntitiesLeftover(logger)
 
 			actualEntity = getEntityFromAnyQueue()
-			// Verify that flush didn't happen
+			// 验证没有发生 flush
 			if actualEntity.GetFlushTimestamp() != firstFlushTime {
 				t.Errorf("Expected FlushTimestamp to remain %v, but was updated to %v (pod was flushed prematurely)", firstFlushTime, actualEntity.GetFlushTimestamp())
 			}
 
-			// Step clock past the duration since the last flush
+			// 推进时钟超过距上次 flush 的时长
 			// T=10:02
 			c.Step(time.Minute + time.Second)
 			q.flushUnschedulableEntitiesLeftover(logger)
 
 			actualEntity = getEntityFromAnyQueue()
-			// Verify that flush happened
+			// 验证发生了 flush
 			if !actualEntity.GetFlushTimestamp().After(firstFlushTime) {
 				t.Errorf("Expected FlushTimestamp to be updated to a newer time after 5 minutes elapsed, but remained %v", actualEntity.GetFlushTimestamp())
 			}
@@ -3778,8 +3800,8 @@ func TestGatedPodFlushFrequency(t *testing.T) {
 	}
 }
 
-// TestAddAttemptedPodGroupIfNeeded verifies that AddAttemptedPodGroupIfNeeded
-// correctly handles pod groups with or without failed plugins.
+// TestAddAttemptedPodGroupIfNeeded 验证 AddAttemptedPodGroupIfNeeded
+// 能正确处理带或不带失败插件的 PodGroup。
 func TestAddAttemptedPodGroupIfNeeded(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
@@ -3806,7 +3828,7 @@ func TestAddAttemptedPodGroupIfNeeded(t *testing.T) {
 		{
 			name: "No pending pods, pod group is not enqueued",
 			setup: func(tCtx ktesting.TContext, q *PriorityQueue, pgInfo *framework.QueuedPodGroupInfo) {
-				// No setup needed, pendingPodGroupPods is empty
+				// 无需准备，pendingPodGroupPods 为空
 			},
 			expectedPodsInGroup: 1,
 		},
@@ -3994,6 +4016,7 @@ func TestAddAttemptedPodGroupIfNeeded(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_initPodMaxInUnschedulablePodsDuration 验证 initPodMaxInUnschedulablePodsDuration 按配置初始化时长。
 func TestPriorityQueue_initPodMaxInUnschedulablePodsDuration(t *testing.T) {
 	pod1 := st.MakePod().Name("test-pod-1").Namespace("ns1").UID("tp-1").NominatedNodeName("node1").Obj()
 	pod2 := st.MakePod().Name("test-pod-2").Namespace("ns2").UID("tp-2").NominatedNodeName("node2").Obj()
@@ -4076,7 +4099,7 @@ func TestPriorityQueue_initPodMaxInUnschedulablePodsDuration(t *testing.T) {
 				} else {
 					pInfo := entity.(*framework.QueuedPodInfo)
 					podInfoList = append(podInfoList, pInfo)
-					// Cleanup attempts counter incremented in activeQ.pop()
+					// 清理 activeQ.pop() 中递增的尝试计数
 					pInfo.Attempts = 0
 				}
 			}
@@ -4101,8 +4124,8 @@ var (
 		}
 	}
 	popAndRequeueAsUnschedulable = func(tCtx ktesting.TContext, queue *PriorityQueue, pInfo *framework.QueuedPodInfo) {
-		// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent() below.
-		// UnschedulablePlugins and PendingPlugins will get cleared by Pop, so make a copy first.
+		// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent() 之前先从 activeQ 弹出该 Pod。
+		// Pop 会清空 UnschedulablePlugins 和 PendingPlugins，所以先复制一份。
 		logger := klog.FromContext(tCtx)
 		unschedulablePlugins := pInfo.UnschedulablePlugins.Clone()
 		pendingPlugins := pInfo.PendingPlugins.Clone()
@@ -4114,7 +4137,7 @@ var (
 		} else if diff := cmp.Diff(pInfo.Pod, p.Pod); diff != "" {
 			tCtx.Fatalf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 		}
-		// Simulate plugins that are waiting for some events.
+		// 模拟等待某些事件的插件。
 		p.UnschedulablePlugins = unschedulablePlugins
 		p.PendingPlugins = pendingPlugins
 		if err := queue.AddUnschedulablePodIfNotPresent(logger, p, 1); err != nil {
@@ -4122,7 +4145,7 @@ var (
 		}
 	}
 	popAndRequeueAsBackoff = func(tCtx ktesting.TContext, queue *PriorityQueue, pInfo *framework.QueuedPodInfo) {
-		// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent() below.
+		// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent() 之前先从 activeQ 弹出该 Pod。
 		logger := klog.FromContext(tCtx)
 		queue.Add(tCtx, pInfo.Pod)
 		entity, err := queue.Pop(logger)
@@ -4132,9 +4155,9 @@ var (
 		} else if diff := cmp.Diff(pInfo.Pod, p.Pod); diff != "" {
 			tCtx.Fatalf("Unexpected pod after Pop (-want, +got):\n%s", diff)
 		}
-		// needs to increment it to make it backoff
+		// 需要递增它才能进入退避
 		p.UnschedulableCount++
-		// When there is no known unschedulable plugin, pods always go to the backoff queue.
+		// 没有已知的 unschedulable 插件时，Pod 总是进入 backoff 队列。
 		if err := queue.AddUnschedulablePodIfNotPresent(logger, p, 1); err != nil {
 			tCtx.Fatalf("Unexpected error during AddUnschedulablePodIfNotPresent: %v", err)
 		}
@@ -4147,14 +4170,14 @@ var (
 	}
 	addPodUnschedulablePods = func(tCtx ktesting.TContext, queue *PriorityQueue, pInfo *framework.QueuedPodInfo) {
 		if !pInfo.Gated() {
-			// Update pod condition to unschedulable.
+			// 更新 Pod 条件为 unschedulable。
 			podutil.UpdatePodCondition(&pInfo.Pod.Status, &v1.PodCondition{
 				Type:    v1.PodScheduled,
 				Status:  v1.ConditionFalse,
 				Reason:  v1.PodReasonUnschedulable,
 				Message: "fake scheduling failure",
 			})
-			// needs to increment it to make it backoff
+			// 需要递增它才能进入退避
 			pInfo.UnschedulableCount++
 		}
 		queue.unschedulableEntities.addOrUpdate(pInfo, false, framework.EventUnscheduledPodAdd.Label(), nil)
@@ -4197,7 +4220,7 @@ var (
 	}
 )
 
-// TestPodTimestamp tests the operations related to QueuedPodInfo.
+// TestPodTimestamp 测试与 QueuedPodInfo 相关的操作。
 func TestPodTimestamp(t *testing.T) {
 	pod1 := st.MakePod().Name("test-pod-1").Namespace("ns1").UID("tp-1").NominatedNodeName("node1").Obj()
 	pod2 := st.MakePod().Name("test-pod-2").Namespace("ns2").UID("tp-2").NominatedNodeName("node2").Obj()
@@ -4225,7 +4248,7 @@ func TestPodTimestamp(t *testing.T) {
 		{
 			name: "add two pod to activeQ and sort them by the timestamp",
 			operations: []operation{
-				// Need to add the pods directly to the activeQ to override the timestamps.
+				// 需要直接把 Pod 加入 activeQ 以覆盖时间戳。
 				addPodActiveQDirectly,
 				addPodActiveQDirectly,
 			},
@@ -4246,7 +4269,7 @@ func TestPodTimestamp(t *testing.T) {
 		{
 			name: "add one pod to BackoffQ and move it to activeQ",
 			operations: []operation{
-				// Need to add the pods directly to activeQ to override the timestamps.
+				// 需要直接把 Pod 加入 activeQ 以覆盖时间戳。
 				addPodActiveQDirectly,
 				addPodBackoffQ,
 				flushBackoffQ,
@@ -4280,7 +4303,7 @@ func TestPodTimestamp(t *testing.T) {
 				} else {
 					pInfo := entity.(*framework.QueuedPodInfo)
 					podInfoList = append(podInfoList, pInfo)
-					// Cleanup attempts counter incremented in activeQ.pop()
+					// 清理 activeQ.pop() 中递增的尝试计数
 					pInfo.Attempts = 0
 				}
 			}
@@ -4292,7 +4315,7 @@ func TestPodTimestamp(t *testing.T) {
 	}
 }
 
-// TestSchedulerPodsMetric tests Prometheus metrics
+// TestSchedulerPodsMetric 测试 Prometheus 指标
 func TestSchedulerPodsMetric(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	timestamp := time.Now()
@@ -4301,11 +4324,11 @@ func TestSchedulerPodsMetric(t *testing.T) {
 	total := 60
 	queueableNum := 50
 	queueable, failme := "queueable", "failme"
-	// First 50 Pods are queueable.
+	// 前 50 个 Pod 可入队。
 	pInfos := makeQueuedPodInfos(queueableNum, "x", queueable, timestamp)
-	// The last 10 Pods are not queueable.
+	// 最后 10 个 Pod 不可入队。
 	gated := makeQueuedPodInfos(total-queueableNum, "y", failme, timestamp)
-	// Manually mark them as gated=true.
+	// 手动把它们标记为 gated=true。
 	for _, pInfo := range gated {
 		setQueuedPodInfoGated(pInfo, preenqueuePluginName, []fwk.ClusterEvent{framework.EventUnscheduledPodUpdate})
 	}
@@ -4318,7 +4341,7 @@ func TestSchedulerPodsMetric(t *testing.T) {
 	pInfoWithPgIncomplete := makeQueuedPodInfo(t, "pod3", "ns1", framework.QueueingParams{}, withPodLabel("queueable", ""), withPodGroup("pg-incomplete"))
 
 	resetPodInfos := func() {
-		// reset PodInfo's Attempts because they influence the backoff time calculation.
+		// 重置 PodInfo 的 Attempts，因为它们影响退避时间计算。
 		for i := range pInfos {
 			pInfos[i].Attempts = 0
 			pInfos[i].UnschedulableCount = 0
@@ -4827,8 +4850,8 @@ scheduler_pending_pods{queue="unschedulable"} 0
 	}
 }
 
-// TestPerPodSchedulingMetrics makes sure pod schedule attempts is updated correctly while
-// initialAttemptTimestamp stays the same during multiple add/pop operations.
+// TestPerPodSchedulingMetrics 确保多次 Add/Pop 时 Pod 调度尝试次数正确更新，
+// 多次 Add/Pop 期间 initialAttemptTimestamp 保持不变。
 func TestPerPodSchedulingMetrics(t *testing.T) {
 	timestamp := time.Now()
 
@@ -4843,7 +4866,7 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 		wantInitialAttemptTs            time.Time
 	}{
 		{
-			// The queue operations are Add -> Pop.
+			// 队列操作依次为 Add -> Pop。
 			name: "pod is created and scheduled after 1 attempt",
 			perPodSchedulingMetricsScenario: func(c *testingclock.FakeClock, queue *PriorityQueue, pod *v1.Pod) {
 				queue.Add(ctx, pod)
@@ -4852,7 +4875,7 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 			wantInitialAttemptTs: timestamp,
 		},
 		{
-			// The queue operations are Add -> Pop -> AddUnschedulablePodIfNotPresent -> flushUnschedulableEntitiesLeftover -> Pop.
+			// 队列操作依次为 Add -> Pop -> AddUnschedulablePodIfNotPresent -> flushUnschedulableEntitiesLeftover -> Pop。
 			name: "pod is created and scheduled after 2 attempts",
 			perPodSchedulingMetricsScenario: func(c *testingclock.FakeClock, queue *PriorityQueue, pod *v1.Pod) {
 				queue.Add(ctx, pod)
@@ -4867,8 +4890,8 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to add unschedulable pod %v", err)
 				}
-				// Override clock to exceed the DefaultPodMaxInUnschedulablePodsDuration so that unschedulable pods
-				// will be moved to activeQ
+				// 把时钟推进超过 DefaultPodMaxInUnschedulablePodsDuration，使不可调度 Pod
+				// 将被移入 activeQ
 				c.SetTime(timestamp.Add(DefaultPodMaxInUnschedulablePodsDuration + 1))
 				queue.flushUnschedulableEntitiesLeftover(logger)
 			},
@@ -4876,7 +4899,7 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 			wantInitialAttemptTs: timestamp,
 		},
 		{
-			// The queue operations are Add -> Pop -> AddUnschedulablePodIfNotPresent -> flushUnschedulableEntitiesLeftover -> Update -> Pop.
+			// 队列操作依次为 Add -> Pop -> AddUnschedulablePodIfNotPresent -> flushUnschedulableEntitiesLeftover -> Update -> Pop。
 			name: "pod is created and scheduled after 2 attempts but before the second pop, call update",
 			perPodSchedulingMetricsScenario: func(c *testingclock.FakeClock, queue *PriorityQueue, pod *v1.Pod) {
 				queue.Add(ctx, pod)
@@ -4891,8 +4914,8 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to add unschedulable pod %v", err)
 				}
-				// Override clock to exceed the DefaultPodMaxInUnschedulablePodsDuration so that unschedulable pods
-				// will be moved to activeQ
+				// 把时钟推进超过 DefaultPodMaxInUnschedulablePodsDuration，使不可调度 Pod
+				// 将被移入 activeQ
 				updatedTimestamp := timestamp
 				c.SetTime(updatedTimestamp.Add(DefaultPodMaxInUnschedulablePodsDuration + 1))
 				queue.flushUnschedulableEntitiesLeftover(logger)
@@ -4904,21 +4927,21 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 			wantInitialAttemptTs: timestamp,
 		},
 		{
-			// The queue operations are Add gated pod -> check unschedulableEntities -> lift gate & update pod -> Pop.
+			// 队列操作依次为 Add 带 gate 的 Pod -> 检查 unschedulableEntities -> 解除 gate 并更新 Pod -> Pop。
 			name: "A gated pod is created and scheduled after lifting gate",
 			perPodSchedulingMetricsScenario: func(c *testingclock.FakeClock, queue *PriorityQueue, pod *v1.Pod) {
-				// Create a queue with PreEnqueuePlugin
+				// 创建一个带 PreEnqueuePlugin 的队列
 				queue.preEnqueuePluginMap = map[string]map[string]fwk.PreEnqueuePlugin{"": {(&preEnqueuePlugin{}).Name(): &preEnqueuePlugin{allowlists: []string{"foo"}}}}
 				queue.pluginMetricsSamplePercent = 0
 				queue.Add(ctx, pod)
-				// Check pod is added to the unschedulableEntities queue.
+				// 检查 Pod 是否已加入 unschedulableEntities 队列。
 				if diff := cmp.Diff(pod, getUnschedulablePod(queue, pod)); diff != "" {
 					t.Errorf("Unexpected pod in unschedulableEntities (-want, +got):\n%s", diff)
 				}
-				// Override clock to get different InitialAttemptTimestamp
+				// 覆盖时钟以获得不同的 InitialAttemptTimestamp
 				c.Step(1 * time.Minute)
 
-				// Update pod with the required label to get it out of unschedulableEntities queue.
+				// 用所需的标签更新 Pod，使其离开 unschedulableEntities 队列。
 				updateGatedPod := pod.DeepCopy()
 				updateGatedPod.Labels = map[string]string{"foo": ""}
 				queue.Update(ctx, pod, updateGatedPod)
@@ -4949,6 +4972,7 @@ func TestPerPodSchedulingMetrics(t *testing.T) {
 	}
 }
 
+// TestIncomingPodsMetrics 验证新到达 Pod 相关的 Prometheus 指标。
 func TestIncomingPodsMetrics(t *testing.T) {
 	timestamp := time.Now()
 	unschedulablePlg := "unschedulable_plugin"
@@ -5044,6 +5068,7 @@ func TestIncomingPodsMetrics(t *testing.T) {
 	}
 }
 
+// TestIncomingEntitiesMetrics 验证新到达实体相关的 Prometheus 指标。
 func TestIncomingEntitiesMetrics(t *testing.T) {
 	logger := klog.Background()
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
@@ -5137,6 +5162,7 @@ func TestIncomingEntitiesMetrics(t *testing.T) {
 	}
 }
 
+// TestQueuedEntitiesMetrics 验证各队列中实体数量的 Prometheus 指标。
 func TestQueuedEntitiesMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 	timestamp := time.Now()
@@ -5304,6 +5330,7 @@ func TestQueuedEntitiesMetrics(t *testing.T) {
 	}
 }
 
+// TestBackOffFlow 验证 Pod 在 backoff 队列中的退避与移动流程。
 func TestBackOffFlow(t *testing.T) {
 	cl := testingclock.NewFakeClock(time.Now())
 	logger, ctx := ktesting.NewTestContext(t)
@@ -5335,7 +5362,7 @@ func TestBackOffFlow(t *testing.T) {
 		for i, step := range steps {
 			t.Run(fmt.Sprintf("step %d popFromBackoffQEnabled(%v)", i, popFromBackoffQEnabled), func(t *testing.T) {
 				timestamp := cl.Now()
-				// Simulate schedule attempt.
+				// 模拟一次调度尝试。
 				entity, err := q.Pop(logger)
 				if err != nil {
 					t.Fatal(err)
@@ -5350,32 +5377,32 @@ func TestBackOffFlow(t *testing.T) {
 					t.Fatalf("unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 				}
 
-				// An event happens.
+				// 事件发生。
 				q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 
 				if !q.backoffQ.has(podInfo) {
 					t.Errorf("pod %v is not in the backoff queue", podID)
 				}
 
-				// Check backoff duration.
+				// 检查退避时长。
 				deadline := podInfo.BackoffExpiration
 				backoff := deadline.Sub(timestamp)
 				if popFromBackoffQEnabled {
-					// If popFromBackoffQEnabled, the actual backoff can be calculated by rounding up to the ordering window duration.
+					// 启用 popFromBackoffQ 时，实际退避时间按排序窗口时长向上取整计算。
 					backoff = backoff.Truncate(backoffQOrderingWindowDuration) + backoffQOrderingWindowDuration
 				}
 				if backoff != step.wantBackoff {
 					t.Errorf("got backoff %s, want %s", backoff, step.wantBackoff)
 				}
 
-				// Simulate routine that continuously flushes the backoff queue.
+				// 模拟持续 flush backoff 队列的例程。
 				cl.Step(backoffQOrderingWindowDuration)
 				q.flushBackoffQCompleted(logger)
-				// Still in backoff queue after an early flush.
+				// 提前 flush 后仍在 backoff 队列中。
 				if !q.backoffQ.has(podInfo) {
 					t.Errorf("pod %v is not in the backoff queue", podID)
 				}
-				// Moved out of the backoff queue after timeout.
+				// 超时后已移出 backoff 队列。
 				cl.Step(backoff)
 				q.flushBackoffQCompleted(logger)
 				if q.backoffQ.has(podInfo) {
@@ -5386,6 +5413,7 @@ func TestBackOffFlow(t *testing.T) {
 	}
 }
 
+// TestMoveAllToActiveOrBackoffQueue_PreEnqueueChecks 验证 MoveAllToActiveOrBackoffQueue 中 PreEnqueue 检查的行为。
 func TestMoveAllToActiveOrBackoffQueue_PreEnqueueChecks(t *testing.T) {
 	var podInfos []*framework.QueuedPodInfo
 	for i := 0; i < 5; i++ {
@@ -5450,7 +5478,7 @@ func TestMoveAllToActiveOrBackoffQueue_PreEnqueueChecks(t *testing.T) {
 			defer cancel()
 			q := NewTestQueue(ctx, newDefaultQueueSort(), WithClock(c))
 			for _, podInfo := range tt.podInfos {
-				// To simulate the pod is failed in scheduling in the real world, Pop() the pod from activeQ before AddUnschedulablePodIfNotPresent() below.
+				// 为模拟真实世界中 Pod 调度失败，在下面的 AddUnschedulablePodIfNotPresent() 之前先从 activeQ 弹出该 Pod。
 				q.Add(ctx, podInfo.Pod)
 				if p, err := q.Pop(logger); err != nil {
 					t.Errorf("Pop failed: %v", err)
@@ -5509,7 +5537,7 @@ func mustNewPodInfo(pod *v1.Pod) *framework.PodInfo {
 	return podInfo
 }
 
-// Test_isPodWorthRequeuing tests isPodWorthRequeuing function.
+// Test_isPodWorthRequeuing 测试 isPodWorthRequeuing 函数。
 func Test_isPodWorthRequeuing(t *testing.T) {
 	metrics.Register()
 	count := 0
@@ -5551,10 +5579,10 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 			expectedExecutionCount: 0,
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
-					// no queueing hint function for NodeAdd.
+					// 没有为 NodeAdd 注册 queueing hint 函数。
 					framework.EventAssignedPodAdd: {
 						{
-							// It will be ignored because the event is not NodeAdd.
+							// 事件不是 NodeAdd，因此它会被忽略。
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -5650,14 +5678,14 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 					nodeAdd: {
 						{
 							PluginName: "fooPlugin1",
-							// It returns Queue and it's interpreted as queueAfterBackoff.
-							// But, the function continues to run other hints because the Pod has PendingPlugins, which can result in queueImmediately.
+							// 它返回 Queue，被解释为 queueAfterBackoff。
+							// 但因为 Pod 有 PendingPlugins，函数会继续执行其他 hint，可能得到 queueImmediately。
 							QueueingHintFn: queueHintReturnQueue,
 						},
 						{
 							PluginName: "fooPlugin2",
-							// It's interpreted as queueImmediately.
-							// The function doesn't run other hints because queueImmediately is the highest priority.
+							// 它被解释为 queueImmediately。
+							// queueImmediately 优先级最高，因此不会再运行其他 hint。
 							QueueingHintFn: queueHintReturnQueue,
 						},
 						{
@@ -5689,12 +5717,12 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 				"": {
 					nodeAdd: {
 						{
-							// Skip will be ignored
+							// Skip 会被忽略
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnSkip,
 						},
 						{
-							// Skip will be ignored
+							// Skip 会被忽略
 							PluginName:     "fooPlugin2",
 							QueueingHintFn: queueHintReturnQueue,
 						},
@@ -5752,8 +5780,8 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 					fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.UpdateNodeLabel}: {
 						{
 							PluginName: "fooPlugin1",
-							// It's only executed and interpreted as queueAfterBackoff.
-							// The function doesn't run other hints because this Pod doesn't have PendingPlugins.
+							// 它只会被执行并解释为 queueAfterBackoff。
+							// 该 Pod 没有 PendingPlugins，因此不会再运行其他 hint。
 							QueueingHintFn: queueHintReturnQueue,
 						},
 						{
@@ -5842,6 +5870,7 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 	}
 }
 
+// Test_queuedPodInfo_gatedSetUponCreationAndUnsetUponUpdate 验证 queuedPodInfo 的 gate 标志在创建时置位、更新时清除。
 func Test_queuedPodInfo_gatedSetUponCreationAndUnsetUponUpdate(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	plugin, _ := schedulinggates.New(ctx, nil, nil, plfeature.Features{})
@@ -5865,6 +5894,7 @@ func Test_queuedPodInfo_gatedSetUponCreationAndUnsetUponUpdate(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_GetPod 验证 GetPod 能从各队列中按名称取回 Pod。
 func TestPriorityQueue_GetPod(t *testing.T) {
 	activeQPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5949,6 +5979,7 @@ func TestPriorityQueue_GetPod(t *testing.T) {
 	}
 }
 
+// TestUnschedulablePodsMetric 验证不可调度 Pod 数量的 Prometheus 指标。
 func TestUnschedulablePodsMetric(t *testing.T) {
 	type step func(tCtx ktesting.TContext, q *PriorityQueue)
 
@@ -6135,6 +6166,7 @@ func TestUnschedulablePodsMetric(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_signPod 验证 signPod 生成的签名稳定且覆盖相关字段。
 func TestPriorityQueue_signPod(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -6208,6 +6240,7 @@ func TestPriorityQueue_signPod(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_AddComputesSignature 验证 Add 会计算并保存 Pod 签名。
 func TestPriorityQueue_AddComputesSignature(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.OpportunisticBatching, true)
 
@@ -6235,6 +6268,7 @@ func TestPriorityQueue_AddComputesSignature(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_UpdateRecomputesSignature 验证 Update 会重新计算 Pod 签名。
 func TestPriorityQueue_UpdateRecomputesSignature(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.OpportunisticBatching, true)
 
@@ -6290,10 +6324,10 @@ func TestPriorityQueue_UpdateRecomputesSignature(t *testing.T) {
 				tt.prepareFunc(tCtx, q)
 			}
 
-			// Update pod with different label
+			// 用不同的标签更新 Pod
 			q.Update(tCtx, pod1, pod2)
 
-			// Check signature was recomputed
+			// 检查签名是否被重新计算
 			pInfo, exists := q.GetPod(pod2.Name, pod2.Namespace, nil)
 			if !exists {
 				t.Fatal("Pod not found in queue after update")
@@ -6305,6 +6339,7 @@ func TestPriorityQueue_UpdateRecomputesSignature(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_MultipleProfiles 验证多 profile 场景下队列按 profile 隔离状态。
 func TestPriorityQueue_MultipleProfiles(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.OpportunisticBatching, true)
 
@@ -6345,13 +6380,14 @@ func TestPriorityQueue_MultipleProfiles(t *testing.T) {
 
 }
 
+// TestConcurrentUpdateAndPop 验证并发 Update 与 Pop 不会死锁或丢失 Pod。
 func TestConcurrentUpdateAndPop(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
 	q := NewTestQueue(ctx, newDefaultQueueSort())
 
 	podName := "test-pod"
-	// Create a pod with high priority to ensure it's at the front
+	// 创建一个高优先级 Pod，确保它排在队首
 	pod := st.MakePod().Name(podName).Namespace("default").UID("uid-1").Priority(100).Obj()
 	q.Add(ctx, pod)
 
@@ -6359,10 +6395,10 @@ func TestConcurrentUpdateAndPop(t *testing.T) {
 	start := time.Now()
 	testDuration := 3 * time.Second
 
-	// Goroutine 1: Continuously Pop and re-Add
+	// Goroutine 1：不断 Pop 并重新 Add
 	wg.Go(func() {
 		for time.Since(start) < testDuration {
-			// Pop blocks if empty, but we verify we don't block forever or panic
+			// 队列为空时 Pop 会阻塞，这里验证它不会永久阻塞或 panic
 			entity, err := q.Pop(logger)
 			if err != nil {
 				t.Errorf("Unexpected error during Pop: %v", err)
@@ -6376,15 +6412,15 @@ func TestConcurrentUpdateAndPop(t *testing.T) {
 			if pInfo.Pod.UID != pod.UID {
 				t.Errorf("Expected pod UID %v, got %v", pod.UID, pInfo.Pod.UID)
 			}
-			// Simulate some work to widen the race window
+			// 模拟一些工作以放大竞态窗口
 			time.Sleep(100 * time.Microsecond)
 			q.Done(pInfo.Pod.UID)
-			// Re-add to queue to keep the cycle going
+			// 重新加入队列以维持循环
 			q.Add(ctx, pInfo.Pod)
 		}
 	})
 
-	// Goroutine 2: Continuously Update the pod
+	// Goroutine 2：不断 Update Pod
 	wg.Go(func() {
 		iter := 0
 		currentPod := pod
@@ -6392,7 +6428,7 @@ func TestConcurrentUpdateAndPop(t *testing.T) {
 			iter++
 			newPod := currentPod.DeepCopy()
 			newPod.Annotations = map[string]string{"ver": fmt.Sprintf("%d", iter)}
-			// Update is atomic
+			// 更新是原子的
 			q.Update(ctx, currentPod, newPod)
 			currentPod = newPod
 			time.Sleep(50 * time.Microsecond)
@@ -6465,6 +6501,7 @@ func setupInitialPodGroupState(t *testing.T, ctx context.Context, q *PriorityQue
 	}
 }
 
+// TestAddPodGroupMember 验证添加 PodGroup 成员时实体在队列中的组织方式。
 func TestAddPodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -6598,7 +6635,7 @@ func TestAddPodGroupMember(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Configure a PreEnqueue plugin that allows pods with label "allow", but gates others.
+			// 配置一个 PreEnqueue 插件，只放行带 "allow" 标签的 Pod，其余都加 gate。
 			preEnqueueMap := map[string]map[string]fwk.PreEnqueuePlugin{
 				"": {
 					"preEnqueuePlugin": &preEnqueuePlugin{allowlists: []string{"allow"}},
@@ -6614,10 +6651,10 @@ func TestAddPodGroupMember(t *testing.T) {
 			}
 			setupInitialPodGroupState(t, ctx, q, initialPods, tt.initialState, podGroup)
 
-			// Add incoming pod
+			// 加入新到达的 Pod
 			q.Add(ctx, tt.incomingPod)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -6652,7 +6689,7 @@ func TestAddPodGroupMember(t *testing.T) {
 					t.Errorf("Expected pod group to be of size: %d, got %d", tt.expectedGroupSize, size)
 				}
 
-				// Verify effective addition of the incoming pod
+				// 验证新到达 Pod 确实被加入
 				foundMember := false
 				entity.(*framework.QueuedPodGroupInfo).ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 					if pInfo.Pod.Name == tt.incomingPod.Name {
@@ -6683,6 +6720,7 @@ func TestAddPodGroupMember(t *testing.T) {
 	}
 }
 
+// TestDeletePodGroupMember 验证删除 PodGroup 成员时实体在队列中的清理方式。
 func TestDeletePodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -6828,15 +6866,15 @@ func TestDeletePodGroupMember(t *testing.T) {
 			podGroup := st.MakePodGroup().Name(pgName).Namespace("ns1").Obj()
 
 			setupInitialPodGroupState(t, ctx, q, tt.initialPods, tt.initialState, podGroup)
-			// Add pending pods
+			// 加入 pending Pod
 			for _, pod := range tt.pendingPods {
 				q.Add(ctx, pod)
 			}
 
-			// Delete the target pod
+			// 删除目标 Pod
 			q.Delete(logger, tt.podToDelete)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -6868,7 +6906,7 @@ func TestDeletePodGroupMember(t *testing.T) {
 					t.Errorf("Expected pod group to be of size: %d, got %d", tt.expectedGroupSize, size)
 				}
 
-				// Verify effective removal of the deleted pod
+				// 验证被删除 Pod 确实被移除
 				entity.(*framework.QueuedPodGroupInfo).ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 					if pInfo.Pod.Name == tt.podToDelete.Name {
 						t.Errorf("Deleted pod %s is still present in the pod group members", tt.podToDelete.Name)
@@ -6896,6 +6934,7 @@ func TestDeletePodGroupMember(t *testing.T) {
 	}
 }
 
+// TestUpdatePodGroupMember 验证更新 PodGroup 成员时实体在队列中的变化。
 func TestUpdatePodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7078,15 +7117,15 @@ func TestUpdatePodGroupMember(t *testing.T) {
 			podGroup := st.MakePodGroup().Name(pgName).Namespace("ns1").Obj()
 
 			setupInitialPodGroupState(t, ctx, q, tt.initialPods, tt.initialState, podGroup)
-			// Add pending pods
+			// 加入 pending Pod
 			for _, pod := range tt.pendingPods {
 				q.Add(ctx, pod)
 			}
 
-			// Perform the update
+			// 执行更新
 			q.Update(ctx, tt.oldPod, tt.newPod)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7121,7 +7160,7 @@ func TestUpdatePodGroupMember(t *testing.T) {
 					t.Errorf("Expected pod group to be of size: %d, got %d", tt.expectedGroupSize, size)
 				}
 
-				// Verify effective update of the updated pod
+				// 验证被更新 Pod 确实被更新
 				foundUpdated := false
 				entity.(*framework.QueuedPodGroupInfo).ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 					if pInfo.Pod.Name == tt.newPod.Name {
@@ -7164,6 +7203,7 @@ func TestUpdatePodGroupMember(t *testing.T) {
 	}
 }
 
+// TestActivatePodGroupMember 验证激活 PodGroup 成员及整组实体的行为。
 func TestActivatePodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7255,15 +7295,15 @@ func TestActivatePodGroupMember(t *testing.T) {
 			podGroup := st.MakePodGroup().Name(pgName).Namespace("ns1").Obj()
 
 			setupInitialPodGroupState(t, ctx, q, tt.initialPods, tt.initialState, podGroup)
-			// Add pending pods
+			// 加入 pending Pod
 			for _, pod := range tt.pendingPods {
 				q.Add(ctx, pod)
 			}
 
-			// Activate the pod
+			// 激活 Pod
 			q.Activate(logger, map[string]*v1.Pod{string(tt.podToActivate.UID): tt.podToActivate})
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7329,6 +7369,7 @@ func TestActivatePodGroupMember(t *testing.T) {
 	}
 }
 
+// TestMoveAllToActiveOrBackoffQueuePodGroupMember 验证 move 事件下 PodGroup 成员实体在各队列间的移动。
 func TestMoveAllToActiveOrBackoffQueuePodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7440,10 +7481,10 @@ func TestMoveAllToActiveOrBackoffQueuePodGroupMember(t *testing.T) {
 
 			setupInitialPodGroupState(t, ctx, q, tt.initialPods, tt.initialState, podGroup)
 
-			// MoveAllToActiveOrBackoffQueue with the given event
+			// 用给定事件调用 MoveAllToActiveOrBackoffQueue
 			q.MoveAllToActiveOrBackoffQueue(logger, tt.event, nil, nil, tt.preCheck)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7511,6 +7552,7 @@ func TestMoveAllToActiveOrBackoffQueuePodGroupMember(t *testing.T) {
 	}
 }
 
+// TestFlushBackoffQCompletedPodGroupMember 验证 flush backoffQ 对 PodGroup 成员的影响。
 func TestFlushBackoffQCompletedPodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7569,10 +7611,10 @@ func TestFlushBackoffQCompletedPodGroupMember(t *testing.T) {
 				fakeClock.Step(tt.advanceClock)
 			}
 
-			// Flush the backoff queue
+			// flush backoff 队列
 			q.flushBackoffQCompleted(logger)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7603,6 +7645,7 @@ func TestFlushBackoffQCompletedPodGroupMember(t *testing.T) {
 	}
 }
 
+// TestFlushUnschedulableEntitiesLeftoverPodGroupMember 验证 flush unschedulable 对 PodGroup 成员的影响。
 func TestFlushUnschedulableEntitiesLeftoverPodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7672,10 +7715,10 @@ func TestFlushUnschedulableEntitiesLeftoverPodGroupMember(t *testing.T) {
 				fakeClock.Step(tt.advanceClock)
 			}
 
-			// Flush unschedulable entities
+			// flush unschedulable 实体
 			q.flushUnschedulableEntitiesLeftover(logger)
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7711,6 +7754,7 @@ func TestFlushUnschedulableEntitiesLeftoverPodGroupMember(t *testing.T) {
 	}
 }
 
+// TestAddUnschedulablePodIfNotPresentPodGroupMember 验证 AddUnschedulablePodIfNotPresent 对 PodGroup 成员的处理。
 func TestAddUnschedulablePodIfNotPresentPodGroupMember(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7868,7 +7912,7 @@ func TestAddUnschedulablePodIfNotPresentPodGroupMember(t *testing.T) {
 				q.DeletePodGroup(logger, podGroup)
 			}
 
-			// Add unschedulable pods
+			// 加入不可调度 Pod
 			for _, pInfo := range tt.podsToAdd {
 				pInfoCloned := pInfo.DeepCopy()
 				if err := q.AddUnschedulablePodIfNotPresent(logger, pInfoCloned, q.SchedulingCycle()); err != nil {
@@ -7876,7 +7920,7 @@ func TestAddUnschedulablePodIfNotPresentPodGroupMember(t *testing.T) {
 				}
 			}
 
-			// Verify conditions
+			// 验证条件
 			pgLookup := newQueuedPodGroupInfoForLookup(podGroup.Namespace, podGroup.Name, fwk.PodGroupKeyType)
 
 			if inActive := q.activeQ.has(pgLookup); inActive != tt.expectedInActiveQ {
@@ -7928,6 +7972,7 @@ func TestAddUnschedulablePodIfNotPresentPodGroupMember(t *testing.T) {
 	}
 }
 
+// TestAddPodGroup 验证添加 PodGroup 实体时队列的状态维护。
 func TestAddPodGroup(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -7976,7 +8021,7 @@ func TestAddPodGroup(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Configure a PreEnqueue plugin that allows pods with label "allow", but gates others.
+			// 配置一个 PreEnqueue 插件，只放行带 "allow" 标签的 Pod，其余都加 gate。
 			preEnqueueMap := map[string]map[string]fwk.PreEnqueuePlugin{
 				"": {
 					"preEnqueuePlugin": &preEnqueuePlugin{allowlists: []string{"allow"}},
@@ -8042,6 +8087,7 @@ func TestAddPodGroup(t *testing.T) {
 	}
 }
 
+// TestUpdatePodGroup 验证更新 PodGroup 实体时队列的状态维护。
 func TestUpdatePodGroup(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -8170,6 +8216,7 @@ func TestUpdatePodGroup(t *testing.T) {
 	}
 }
 
+// TestDeletePodGroup 验证删除 PodGroup 实体时队列的状态维护。
 func TestDeletePodGroup(t *testing.T) {
 	pgName := "pg-test"
 	p1 := st.MakePod().Name("pod1").Namespace("ns1").UID("pod1").Label("allow", "").PodGroupName(pgName).Obj()
@@ -8286,6 +8333,7 @@ func TestDeletePodGroup(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_AddCompositePodGroup 验证 Add 对 CompositePodGroup（CPG）实体的处理。
 func TestPriorityQueue_AddCompositePodGroup(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -8498,6 +8546,7 @@ func TestPriorityQueue_AddCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_UpdateCompositePodGroup 验证 Update 对 CompositePodGroup（CPG）实体的处理。
 func TestPriorityQueue_UpdateCompositePodGroup(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -8601,6 +8650,7 @@ func TestPriorityQueue_UpdateCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_DeleteCompositePodGroup 验证 Delete 对 CompositePodGroup（CPG）实体的处理。
 func TestPriorityQueue_DeleteCompositePodGroup(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -8825,6 +8875,7 @@ func TestPriorityQueue_DeleteCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_AddPodGroup_Hierarchical 验证 Add 对层级 PodGroup 的处理。
 func TestPriorityQueue_AddPodGroup_Hierarchical(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -9051,6 +9102,7 @@ func TestPriorityQueue_AddPodGroup_Hierarchical(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_UpdatePodGroup_Hierarchical 验证 Update 对层级 PodGroup 的处理。
 func TestPriorityQueue_UpdatePodGroup_Hierarchical(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -9165,6 +9217,7 @@ func TestPriorityQueue_UpdatePodGroup_Hierarchical(t *testing.T) {
 	}
 }
 
+// TestPriorityQueue_DeletePodGroup_Hierarchical 验证 Delete 对层级 PodGroup 的处理。
 func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -9366,7 +9419,7 @@ func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 	}
 }
 
-// getActivePodGroupInfos returns all root QueuedPodGroupInfo objects currently inside activeQ.
+// getActivePodGroupInfos 返回当前 activeQ 中的所有根 QueuedPodGroupInfo 对象。
 func getActivePodGroupInfos(q *PriorityQueue) []*framework.QueuedPodGroupInfo {
 	var result []*framework.QueuedPodGroupInfo
 	aq, ok := q.activeQ.(*activeQueue)
@@ -9383,7 +9436,7 @@ func getActivePodGroupInfos(q *PriorityQueue) []*framework.QueuedPodGroupInfo {
 	return result
 }
 
-// getActivePodGroups returns a map of entity key (type/name) to slice of pod names inside activeQ.
+// getActivePodGroups 返回从实体键（type/name）到 activeQ 内 Pod 名称切片的映射。
 func getActivePodGroups(q *PriorityQueue) map[string][]string {
 	result := make(map[string][]string)
 	for _, pgInfo := range getActivePodGroupInfos(q) {
@@ -9398,7 +9451,7 @@ func getActivePodGroups(q *PriorityQueue) map[string][]string {
 	return result
 }
 
-// findPodGroupInfoInActiveQ traverses the root hierarchies inside activeQ to find a PodGroupInfo matching namespace, name, and type.
+// findPodGroupInfoInActiveQ 遍历 activeQ 中的根层级，查找 namespace、name 和类型匹配的 PodGroupInfo。
 func findPodGroupInfoInActiveQ(q *PriorityQueue, namespace, name string, entityType fwk.EntityKeyType) *framework.PodGroupInfo {
 	var search func(pgi *framework.PodGroupInfo) *framework.PodGroupInfo
 	search = func(pgi *framework.PodGroupInfo) *framework.PodGroupInfo {
@@ -9425,10 +9478,10 @@ func findPodGroupInfoInActiveQ(q *PriorityQueue, namespace, name string, entityT
 	return nil
 }
 
-// newQueuedPodGroupInfoForLookup builds a QueuedPodGroupInfo object for a lookup in the queue.
+// newQueuedPodGroupInfoForLookup 构造一个仅用于队列查找的 QueuedPodGroupInfo 对象。
 func newQueuedPodGroupInfoForLookup(namespace, name string, entityType fwk.EntityKeyType) *framework.QueuedPodGroupInfo {
-	// Since this is only used for a lookup in the queue, we only need to set the PodGroupInfo namespace and name,
-	// and so we avoid creating a full QueuedPodGroupInfo, which is expensive to instantiate frequently.
+	// 这里只用于队列查找，因此只需设置 PodGroupInfo 的 namespace 和 name，
+	// 这样避免创建完整的 QueuedPodGroupInfo，频繁实例化它开销较大。
 	return &framework.QueuedPodGroupInfo{
 		PodGroupInfo: &framework.PodGroupInfo{
 			Namespace: namespace,
@@ -9457,6 +9510,7 @@ func newSingleLevelPodGroupInfo(podInfo *framework.QueuedPodInfo, podGroup *sche
 	}
 }
 
+// TestPriorityQueue_DeferredPodGroupCompatibility 验证延迟构造的 PodGroup 信息在队列查找中的兼容性。
 func TestPriorityQueue_DeferredPodGroupCompatibility(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -9495,14 +9549,14 @@ func TestPriorityQueue_DeferredPodGroupCompatibility(t *testing.T) {
 
 			q.Add(ctx, tt.pod)
 
-			// Verify if the pod group was created/joined
+			// 验证 PodGroup 是否被创建/加入
 			pgLookup := newQueuedPodGroupInfoForLookup(tt.pod.Namespace, *tt.pod.Spec.SchedulingGroup.PodGroupName, fwk.PodGroupKeyType)
 			hasGroup := q.activeQ.has(pgLookup)
 			if hasGroup != tt.expectIsGroupMember {
 				t.Errorf("Unexpected group enqueuing: got hasGroup=%v, want=%v", hasGroup, tt.expectIsGroupMember)
 			}
 
-			// Verify if the pod was enqueued individually
+			// 验证 Pod 是否被单独入队
 			pInfo, _ := framework.NewPodInfo(tt.pod)
 			podLookup := &framework.QueuedPodInfo{PodInfo: pInfo}
 			hasIndividual := q.activeQ.has(podLookup)
@@ -9510,13 +9564,15 @@ func TestPriorityQueue_DeferredPodGroupCompatibility(t *testing.T) {
 				t.Errorf("Unexpected individual enqueuing: got hasIndividual=%v, want=%v", hasIndividual, !tt.expectIsGroupMember)
 			}
 
-			// Verify it is not tracked in pending pod group pods
+			// 验证它未被记录在 pending pod group pods 中
 			if q.pendingPodGroupPods.has(tt.pod) {
 				t.Errorf("Expected pod to not be in pendingPodGroupPods")
 			}
 		})
 	}
 }
+
+// TestPriorityQueue_PreQueueingHint 验证 PreQueueingHint 在各类事件下的收窄与回退行为。
 func TestPriorityQueue_PreQueueingHint(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -9768,16 +9824,16 @@ func TestPriorityQueue_PreQueueingHint(t *testing.T) {
 	}
 }
 
-// TestPreQueueingHint_FlushRescue verifies that pods missed by a buggy PreQueueingHintFn
-// (not included in the narrowed set) are eventually rescued by periodic flush
-// after podMaxInUnschedulablePodsDuration expires.
+// TestPreQueueingHint_FlushRescue 验证被有问题的 PreQueueingHintFn 漏掉的 Pod
+// （未纳入收窄集合）最终会被周期性 flush 救回
+// 在 podMaxInUnschedulablePodsDuration 到期后被救回。
 func TestPreQueueingHint_FlushRescue(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerPreQueueingHints, true)
 	logger, ctx := ktesting.NewTestContext(t)
 
 	c := testingclock.NewFakeClock(time.Now())
 
-	// PreQueueingHintFn that only returns pod1 - pod2 will be "missed"
+	// 只返回 pod1 的 PreQueueingHintFn —— pod2 会被“漏掉”
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
 		return fwk.PreQueueingHintResult{Pods: []types.NamespacedName{{Name: "pod1", Namespace: "ns1"}}}, nil
 	}
@@ -9796,7 +9852,7 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("2").Obj()
 
-	// Add both pods to unschedulable (simulating failed scheduling)
+	// 把两个 Pod 都加入 unschedulable（模拟调度失败）
 	for _, pod := range []*v1.Pod{pod1, pod2} {
 		q.Add(ctx, pod)
 		entity, err := q.Pop(logger)
@@ -9810,10 +9866,10 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 		}
 	}
 
-	// Trigger event - PreQueueingHint only identifies pod1
+	// 触发事件 —— PreQueueingHint 只识别出 pod1
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// Verify pod1 was moved but pod2 remains unschedulable
+	// 验证 pod1 已被移动，pod2 仍不可调度
 	unschedPods := q.UnschedulablePods()
 	pod2Found := false
 	for _, p := range unschedPods {
@@ -9828,7 +9884,7 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 		t.Fatalf("pod2 should still be in unschedulable after event (missed by PreQueueingHint)")
 	}
 
-	// Pop pod1 from activeQ to confirm it was requeued
+	// 从 activeQ 弹出 pod1，确认它已被重新入队
 	entity, err := q.Pop(logger)
 	if err != nil {
 		t.Fatalf("Pop failed after event: %v", err)
@@ -9838,11 +9894,11 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 		t.Errorf("expected pod1 to be popped, got %s", pInfo.Pod.Name)
 	}
 
-	// Advance clock past flush duration - pod2 should be rescued
+	// 把时钟推进超过 flush 周期 —— pod2 应被救回
 	c.Step(DefaultPodMaxInUnschedulablePodsDuration + time.Second)
 	q.flushUnschedulableEntitiesLeftover(logger)
 
-	// Verify pod2 is now in activeQ (rescued by flush)
+	// 验证 pod2 现在位于 activeQ（被 flush 救回）
 	unschedPods = q.UnschedulablePods()
 	for _, p := range unschedPods {
 		if p.Name == "pod2" && p.Namespace == "ns1" {
@@ -9850,7 +9906,7 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 		}
 	}
 
-	// Pop pod2 and verify it was rescued
+	// 弹出 pod2 并验证它已被救回
 	entity, err = q.Pop(logger)
 	if err != nil {
 		t.Fatalf("Pop failed after flush: %v", err)
@@ -9864,8 +9920,8 @@ func TestPreQueueingHint_FlushRescue(t *testing.T) {
 	}
 }
 
-// TestPreQueueingHint_Metrics verifies that the PreQueueingHintEvaluations metric
-// is incremented with the correct labels when PreQueueingHintFn is invoked.
+// TestPreQueueingHint_Metrics 验证调用 PreQueueingHintFn 时
+// 调用 PreQueueingHintFn 时指标以正确的标签递增。
 func TestPreQueueingHint_Metrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerPreQueueingHints, true)
 	logger, ctx := ktesting.NewTestContext(t)
@@ -9873,7 +9929,7 @@ func TestPreQueueingHint_Metrics(t *testing.T) {
 	metrics.Register()
 	metrics.PreQueueingHintEvaluations.Reset()
 
-	// Plugin that narrows to one pod
+	// 把范围收窄到一个 Pod 的插件
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
 		return fwk.PreQueueingHintResult{Pods: []types.NamespacedName{{Name: "pod1", Namespace: "ns1"}}}, nil
 	}
@@ -9902,13 +9958,13 @@ func TestPreQueueingHint_Metrics(t *testing.T) {
 
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// Stop the background flush goroutine and wait for it to exit before
-	// calling FlushMetrics, so there is no concurrent drain of the channels.
+	// 停止后台 flush goroutine 并等待其退出，然后
+	// 调用 FlushMetrics，因此不会出现并发排空 channel 的情况。
 	stopRecorder()
 	<-recorder.IsStoppedCh
 	recorder.FlushMetrics()
 
-	// Verify metric was incremented with "narrowed" label
+	// 验证指标以 "narrowed" 标签递增
 	narrowedCount, err := testutil.GetCounterMetricValue(metrics.PreQueueingHintEvaluations.WithLabelValues("testPlugin", "narrowed"))
 	if err != nil {
 		t.Fatalf("Failed to get metric: %v", err)
@@ -9918,9 +9974,10 @@ func TestPreQueueingHint_Metrics(t *testing.T) {
 	}
 }
 
+// TestPreQueueingHint_PodGroupLookup 验证 PreQueueingHint 中 PodGroup 成员的 O(1) 实体查找。
 func TestPreQueueingHint_PodGroupLookup(t *testing.T) {
-	// Verify that PreQueueingHint O(1) lookup correctly resolves a pod's
-	// entity key via schedulingGroup when the pod belongs to a PodGroup.
+	// 验证 PreQueueingHint 的 O(1) 查找能正确解析 Pod 的
+	// Pod 属于 PodGroup 时，通过 schedulingGroup 取实体键。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
 		features.GenericWorkload:           true,
@@ -9930,11 +9987,11 @@ func TestPreQueueingHint_PodGroupLookup(t *testing.T) {
 	pgName := "test-pg"
 	pod1 := st.MakePod().Name("pgpod1").Namespace("ns1").UID("pgpod1").Label("allow", "").PodGroupName(pgName).Obj()
 	pod2 := st.MakePod().Name("pgpod2").Namespace("ns1").UID("pgpod2").Label("allow", "").PodGroupName(pgName).Obj()
-	// A standalone pod not in the group.
+	// 不属于该组的独立 Pod。
 	pod3 := st.MakePod().Name("standalone").Namespace("ns1").UID("standalone").Label("allow", "").Obj()
 
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
-		// Hint returns pgpod1 (a pod group member).
+		// hint 返回 pgpod1（PodGroup 成员）。
 		return fwk.PreQueueingHintResult{
 			Pods: []types.NamespacedName{{Name: "pgpod1", Namespace: "ns1"}},
 		}, nil
@@ -9951,14 +10008,14 @@ func TestPreQueueingHint_PodGroupLookup(t *testing.T) {
 
 	podGroup := st.MakePodGroup().Name(pgName).Namespace("ns1").Obj()
 
-	// Create queue with pod objects in the informer so podLister.Get works.
+	// 在 informer 中放入 Pod 对象再建队列，这样 podLister.Get 才能取到。
 	q := NewTestQueueWithObjects(ctx, newDefaultQueueSort(), []runtime.Object{pod1, pod2, pod3},
 		WithQueueingHintMapPerProfile(m))
 
-	// Set up pod group in unschedulable state.
+	// 准备一个处于 unschedulable 状态的 PodGroup。
 	setupInitialPodGroupState(t, ctx, q, []*v1.Pod{pod1, pod2}, stateUnschedulable, podGroup)
 
-	// Also mark UnschedulablePlugins on the entity so QueueingHint can move it.
+	// 同时在实体上标记 UnschedulablePlugins，好让 QueueingHint 能移动它。
 	pgLookup := newQueuedPodGroupInfoForLookup("ns1", "test-pg", fwk.PodGroupKeyType)
 	entity := q.unschedulableEntities.get(pgLookup)
 	if entity == nil {
@@ -9966,7 +10023,7 @@ func TestPreQueueingHint_PodGroupLookup(t *testing.T) {
 	}
 	entity.(*framework.QueuedPodGroupInfo).UnschedulablePlugins = sets.New[string]("testPlugin")
 
-	// Add standalone pod to unschedulable queue.
+	// 把独立 Pod 加入不可调度队列。
 	q.Add(ctx, pod3)
 	standaloneEntity := q.activeQ.delete(newQueuedPodInfoForLookup(pod3))
 	if standaloneEntity == nil {
@@ -9975,35 +10032,36 @@ func TestPreQueueingHint_PodGroupLookup(t *testing.T) {
 	standaloneEntity.(*framework.QueuedPodInfo).UnschedulablePlugins = sets.New[string]("testPlugin")
 	q.unschedulableEntities.addOrUpdate(standaloneEntity, false, framework.EventUnscheduledPodAdd.Label(), nil)
 
-	// Fire event — hint returns only pgpod1. The O(1) lookup should:
-	// 1. Not find "pod/ns1/pgpod1" (it's stored as a pod group)
-	// 2. Look up pod via podLister, find schedulingGroup
-	// 3. Construct "podgroup/ns1/test-pg" and find the entity
+	// 触发事件 —— hint 只返回 pgpod1。O(1) 查找应当：
+	// 1. 找不到 "pod/ns1/pgpod1"（它以 PodGroup 形式存储）
+	// 2. 通过 podLister 查找 Pod，找到 schedulingGroup
+	// 3. 构造 "podgroup/ns1/test-pg" 并找到实体
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// The pod group should have been moved out of unschedulable.
+	// PodGroup 应已移出 unschedulable。
 	unschedEntity := q.unschedulableEntities.get(pgLookup)
 	if unschedEntity != nil {
 		t.Errorf("pod group should have been moved out of unschedulable queue")
 	}
 
-	// Standalone pod should still be in unschedulable (hint didn't include it).
+	// 独立 Pod 应仍在 unschedulable 中（hint 没包含它）。
 	standaloneLookup := newQueuedPodInfoForLookup(pod3)
 	if q.unschedulableEntities.get(standaloneLookup) == nil {
 		t.Errorf("standalone pod should remain in unschedulable queue")
 	}
 }
 
+// TestPreQueueingHint_NilObjects 验证 PreQueueingHint 对 nil 新旧对象的处理。
 func TestPreQueueingHint_NilObjects(t *testing.T) {
-	// Verify that getPreQueueingHintPodKeys returns nil when both oldObj and newObj are nil,
-	// since PreQueueingHintFn cannot narrow without an object to inspect.
+	// 验证 oldObj、newObj 都为 nil 时 getPreQueueingHintPodKeys 返回 nil，
+	// 因为没有对象可供检查，PreQueueingHintFn 无法收窄。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
 	})
 	logger, ctx := ktesting.NewTestContext(t)
 
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
-		// Should never be called when both objects are nil.
+		// 两个对象都为 nil 时绝不应调用它。
 		t.Fatal("PreQueueingHintFn should not be called with nil objects")
 		return fwk.PreQueueingHintResult{}, nil
 	}
@@ -10019,13 +10077,14 @@ func TestPreQueueingHint_NilObjects(t *testing.T) {
 
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithQueueingHintMapPerProfile(m))
 
-	// Call with both nil — should return nil without calling PreQueueingHintFn.
+	// 两个参数都传 nil —— 应直接返回 nil，不调用 PreQueueingHintFn。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, nil, nil)
 }
 
+// TestPreQueueingHint_ErrorFallback 验证 PreQueueingHint 返回错误时回退到评估所有 Pod。
 func TestPreQueueingHint_ErrorFallback(t *testing.T) {
-	// Verify that when PreQueueingHintFn returns an error, all pods are evaluated
-	// (fallback to AllPods behavior).
+	// 验证 PreQueueingHintFn 返回错误时会评估所有 Pod
+	// （回退到 AllPods 行为）。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
 	})
@@ -10049,7 +10108,7 @@ func TestPreQueueingHint_ErrorFallback(t *testing.T) {
 	pod1 := st.MakePod().Name("pod1").Namespace("ns1").UID("1").Obj()
 	pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("2").Obj()
 
-	// Add both pods to unschedulable.
+	// 把两个 Pod 都加入 unschedulable。
 	for _, pod := range []*v1.Pod{pod1, pod2} {
 		q.Add(ctx, pod)
 		entity, err := q.Pop(logger)
@@ -10063,19 +10122,20 @@ func TestPreQueueingHint_ErrorFallback(t *testing.T) {
 		}
 	}
 
-	// Trigger event - PreQueueingHint returns error, so all pods should be evaluated.
+	// 触发事件 —— PreQueueingHint 返回错误，因此应评估所有 Pod。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// Both pods should be moved out of unschedulable (fallback to AllPods).
+	// 两个 Pod 都应移出 unschedulable（回退到 AllPods）。
 	unschedPods := q.UnschedulablePods()
 	if len(unschedPods) != 0 {
 		t.Errorf("expected 0 pods in unschedulable after error fallback (all should be moved), got %d", len(unschedPods))
 	}
 }
 
+// TestPreQueueingHint_PodGroupPreCheck 验证收窄路径下 preCheck 对 PodGroup 实体的作用。
 func TestPreQueueingHint_PodGroupPreCheck(t *testing.T) {
-	// Verify that preCheck is applied to PodGroup entities in the narrowed path.
-	// When preCheck rejects all member pods, the PodGroup entity should not be moved.
+	// 验证收窄路径下 preCheck 也作用于 PodGroup 实体。
+	// preCheck 拒绝所有成员 Pod 时，PodGroup 实体不应被移动。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
 		features.GenericWorkload:           true,
@@ -10107,7 +10167,7 @@ func TestPreQueueingHint_PodGroupPreCheck(t *testing.T) {
 
 	q := NewTestQueue(ctx, newDefaultQueueSort(), WithQueueingHintMapPerProfile(m))
 
-	// Set up pod group in unschedulable state.
+	// 准备一个处于 unschedulable 状态的 PodGroup。
 	setupInitialPodGroupState(t, ctx, q, []*v1.Pod{pod1, pod2}, stateUnschedulable, podGroup)
 
 	pgLookup := newQueuedPodGroupInfoForLookup("ns1", pgName, fwk.PodGroupKeyType)
@@ -10117,24 +10177,25 @@ func TestPreQueueingHint_PodGroupPreCheck(t *testing.T) {
 	}
 	entity.(*framework.QueuedPodGroupInfo).UnschedulablePlugins = sets.New[string]("testPlugin")
 
-	// preCheck rejects pods with label "block"
+	// preCheck 拒绝带 "block" 标签的 Pod
 	preCheck := func(pod *v1.Pod) bool {
 		_, hasBlock := pod.Labels["block"]
 		return !hasBlock
 	}
 
-	// Trigger event with preCheck that blocks all PodGroup member pods.
+	// 触发事件，preCheck 阻塞所有 PodGroup 成员 Pod。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), preCheck)
 
-	// PodGroup should remain in unschedulable because preCheck rejected all members.
+	// preCheck 拒绝了所有成员，PodGroup 应继续留在 unschedulable。
 	if q.unschedulableEntities.get(pgLookup) == nil {
 		t.Errorf("pod group should remain in unschedulable when preCheck rejects all members")
 	}
 }
 
+// TestPreQueueingHint_CPGDisablesNarrowing 验证启用 CPG 时 PreQueueingHint 不做收窄。
 func TestPreQueueingHint_CPGDisablesNarrowing(t *testing.T) {
-	// When CompositePodGroup feature gate is enabled, PreQueueingHint
-	// narrowing is disabled to avoid missing CPG entities.
+	// 启用 CompositePodGroup 特性开关时，PreQueueingHint
+	// 禁用收窄以免漏掉 CPG 实体。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints:       true,
 		features.GenericWorkload:                 true,
@@ -10144,8 +10205,8 @@ func TestPreQueueingHint_CPGDisablesNarrowing(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
-		// This should NOT be called when CPG is enabled.
-		// With CPG guard at collectEntitiesToEvaluate, hint fn is called but result ignored.
+		// 启用 CPG 时不应调用它。
+		// collectEntitiesToEvaluate 中有 CPG 保护：hint 函数会被调用，但结果被忽略。
 		return fwk.PreQueueingHintResult{Pods: []types.NamespacedName{{Name: "pod1", Namespace: "ns1"}}}, nil
 	}
 
@@ -10176,26 +10237,27 @@ func TestPreQueueingHint_CPGDisablesNarrowing(t *testing.T) {
 		}
 	}
 
-	// Trigger event — with CPG enabled, all pods should be evaluated (no narrowing).
+	// 触发事件 —— 启用 CPG 后应评估所有 Pod（不收窄）。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// Both pods should be moved (narrowing disabled).
+	// 两个 Pod 都应被移动（未启用收窄）。
 	unschedPods := q.UnschedulablePods()
 	if len(unschedPods) != 0 {
 		t.Errorf("expected 0 pods in unschedulable (all should be moved), got %d", len(unschedPods))
 	}
 }
 
+// TestPreQueueingHint_WildcardSkipsNarrowing 验证通配事件下 PreQueueingHint 跳过收窄。
 func TestPreQueueingHint_WildcardSkipsNarrowing(t *testing.T) {
-	// When a wildcard event fires, PreQueueingHint narrowing is skipped
-	// and all pods are evaluated.
+	// 通配事件触发时，跳过 PreQueueingHint 收窄
+	// 并评估所有 Pod。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
 	})
 	logger, ctx := ktesting.NewTestContext(t)
 
 	preQueueingHintFn := func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
-		// Should NOT be called for wildcard events.
+		// 通配事件不应调用它。
 		t.Fatal("PreQueueingHintFn should not be called for wildcard events")
 		return fwk.PreQueueingHintResult{}, nil
 	}
@@ -10227,15 +10289,17 @@ func TestPreQueueingHint_WildcardSkipsNarrowing(t *testing.T) {
 		}
 	}
 
-	// Fire wildcard event — narrowing should be skipped, all pods evaluated.
+	// 触发通配事件 —— 应跳过收窄，评估所有 Pod。
 	q.MoveAllToActiveOrBackoffQueue(logger, framework.EventUnschedulableTimeout, nil, nil, nil)
 
-	// Both pods should be moved.
+	// 两个 Pod 都应被移动。
 	unschedPods := q.UnschedulablePods()
 	if len(unschedPods) != 0 {
 		t.Errorf("expected 0 pods in unschedulable after wildcard event, got %d", len(unschedPods))
 	}
 }
+
+// TestPreQueueingHint_PerPluginNarrowing 验证按插件收窄时只有对应插件的 hint 被调用。
 func TestPreQueueingHint_PerPluginNarrowing(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.SchedulerPreQueueingHints: true,
@@ -10289,7 +10353,7 @@ func TestPreQueueingHint_PerPluginNarrowing(t *testing.T) {
 
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, st.MakeNode().Name("node1").Obj(), nil)
 
-	// pluginA's QueueingHintFn should only be called for pod1.
+	// pluginA 的 QueueingHintFn 只应针对 pod1 调用。
 	if slices.Contains(pluginAQueueingHintCalled, "pod2") {
 		t.Errorf("pluginA QueueingHintFn should NOT be called for pod2, called for: %v", pluginAQueueingHintCalled)
 	}
@@ -10297,7 +10361,7 @@ func TestPreQueueingHint_PerPluginNarrowing(t *testing.T) {
 		t.Errorf("pluginA QueueingHintFn should be called for pod1, called for: %v", pluginAQueueingHintCalled)
 	}
 
-	// pluginB's QueueingHintFn should only be called for pod2.
+	// pluginB 的 QueueingHintFn 只应针对 pod2 调用。
 	if slices.Contains(pluginBQueueingHintCalled, "pod1") {
 		t.Errorf("pluginB QueueingHintFn should NOT be called for pod1, called for: %v", pluginBQueueingHintCalled)
 	}
