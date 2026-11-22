@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package status 维护 CRD 的 NamesAccepted 与 Established 条件。
 package status
 
 import (
@@ -30,11 +31,14 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// crdBuilder 以链式调用构造测试用 CRD。
 type crdBuilder struct {
 	curr apiextensionsv1.CustomResourceDefinition
 }
 
+// newCRD 按 "<plural>.<group>" 形式的名称创建 crdBuilder。
 func newCRD(name string) *crdBuilder {
+	// 只按第一个 "." 切分，group 中允许继续含有点号。
 	tokens := strings.SplitN(name, ".", 2)
 	return &crdBuilder{
 		curr: apiextensionsv1.CustomResourceDefinition{
@@ -49,6 +53,7 @@ func newCRD(name string) *crdBuilder {
 	}
 }
 
+// SpecNames 设置 spec 中期望的各名称。
 func (b *crdBuilder) SpecNames(plural, singular, kind, listKind string, shortNames ...string) *crdBuilder {
 	b.curr.Spec.Names.Plural = plural
 	b.curr.Spec.Names.Singular = singular
@@ -59,6 +64,7 @@ func (b *crdBuilder) SpecNames(plural, singular, kind, listKind string, shortNam
 	return b
 }
 
+// StatusNames 设置 status 中已接受的各名称，用于模拟已存在的 CRD。
 func (b *crdBuilder) StatusNames(plural, singular, kind, listKind string, shortNames ...string) *crdBuilder {
 	b.curr.Status.AcceptedNames.Plural = plural
 	b.curr.Status.AcceptedNames.Singular = singular
@@ -69,12 +75,14 @@ func (b *crdBuilder) StatusNames(plural, singular, kind, listKind string, shortN
 	return b
 }
 
+// Condition 向 CRD 追加一个状态条件。
 func (b *crdBuilder) Condition(c apiextensionsv1.CustomResourceDefinitionCondition) *crdBuilder {
 	b.curr.Status.Conditions = append(b.curr.Status.Conditions, c)
 
 	return b
 }
 
+// names 构造一个完整的 CustomResourceDefinitionNames。
 func names(plural, singular, kind, listKind string, shortNames ...string) apiextensionsv1.CustomResourceDefinitionNames {
 	ret := apiextensionsv1.CustomResourceDefinitionNames{
 		Plural:     plural,
@@ -86,10 +94,12 @@ func names(plural, singular, kind, listKind string, shortNames ...string) apiext
 	return ret
 }
 
+// NewOrDie 返回构建出的 CRD 指针。
 func (b *crdBuilder) NewOrDie() *apiextensionsv1.CustomResourceDefinition {
 	return &b.curr
 }
 
+// acceptedCondition 表示名称校验通过且无冲突。
 var acceptedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Type:    apiextensionsv1.NamesAccepted,
 	Status:  apiextensionsv1.ConditionTrue,
@@ -97,6 +107,7 @@ var acceptedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Message: "no conflicts found",
 }
 
+// notAcceptedCondition 表示名称未全部被接受。
 var notAcceptedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Type:    apiextensionsv1.NamesAccepted,
 	Status:  apiextensionsv1.ConditionFalse,
@@ -104,6 +115,7 @@ var notAcceptedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Message: "not all names are accepted",
 }
 
+// installingCondition 表示 CRD 已接受初始名称、正在安装。
 var installingCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Type:    apiextensionsv1.Established,
 	Status:  apiextensionsv1.ConditionFalse,
@@ -111,6 +123,7 @@ var installingCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Message: "the initial names have been accepted",
 }
 
+// notEstablishedCondition 表示因名称冲突等原因尚未建立。
 var notEstablishedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Type:    apiextensionsv1.Established,
 	Status:  apiextensionsv1.ConditionFalse,
@@ -118,6 +131,7 @@ var notEstablishedCondition = apiextensionsv1.CustomResourceDefinitionCondition{
 	Message: "not all names are accepted",
 }
 
+// nameConflictCondition 构造指定 reason 与 message 的名称冲突条件。
 func nameConflictCondition(reason, message string) apiextensionsv1.CustomResourceDefinitionCondition {
 	return apiextensionsv1.CustomResourceDefinitionCondition{
 		Type:    apiextensionsv1.NamesAccepted,
@@ -127,6 +141,7 @@ func nameConflictCondition(reason, message string) apiextensionsv1.CustomResourc
 	}
 }
 
+// TestSync 以表驱动方式验证名称冲突计算与 Established 条件的判定。
 func TestSync(t *testing.T) {
 	tests := []struct {
 		name string
@@ -331,6 +346,7 @@ func TestSync(t *testing.T) {
 				}
 			}
 
+			// 用索引器模拟集群中已存在的 CRD；mutation cache 用于避免读写竞争。
 			c := NamingConditionController{
 				crdLister:        listers.NewCustomResourceDefinitionLister(crdIndexer),
 				crdMutationCache: cache.NewIntegerResourceVersionMutationCache(logger, crdIndexer, crdIndexer, 60*time.Second, false),

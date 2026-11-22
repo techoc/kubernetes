@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package integration_test 包含 apiextensions-apiserver 的集成测试，
+// 覆盖 CRD 校验 ratcheting：绕过针对未改动字段的校验，只拦截新引入的非法值。
 package integration_test
 
 import (
@@ -58,10 +60,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// stringSchema 只约束类型为 string，供测试用例复用。
 var stringSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSchemaProps{
 	Type: "string",
 }
 
+// stringMapSchema 是值为 string 的 map schema。
 var stringMapSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSchemaProps{
 	Type: "object",
 	AdditionalProperties: &apiextensionsv1.JSONSchemaPropsOrBool{
@@ -69,10 +73,12 @@ var stringMapSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSche
 	},
 }
 
+// numberSchema 只约束类型为 integer。
 var numberSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSchemaProps{
 	Type: "integer",
 }
 
+// numbersMapSchema 是值为 integer 的 map schema。
 var numbersMapSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSchemaProps{
 	Type: "object",
 	AdditionalProperties: &apiextensionsv1.JSONSchemaPropsOrBool{
@@ -80,6 +86,8 @@ var numbersMapSchema *apiextensionsv1.JSONSchemaProps = &apiextensionsv1.JSONSch
 	},
 }
 
+// ratchetingTestContext 为一个测试操作提供客户端与运行模式；
+// StatusSubresource 为 true 时，操作走 status 子资源路径。
 type ratchetingTestContext struct {
 	*testing.T
 	DynamicClient       dynamic.Interface
@@ -87,15 +95,18 @@ type ratchetingTestContext struct {
 	StatusSubresource   bool
 }
 
+// ratchetingTestOperation 是可组合的测试步骤，Do 负责执行，Description 用于日志。
 type ratchetingTestOperation interface {
 	Do(ctx *ratchetingTestContext) error
 	Description() string
 }
 
+// expectError 包装一个操作，要求其返回错误；操作成功反而算失败。
 type expectError struct {
 	op ratchetingTestOperation
 }
 
+// Do 执行被包装的操作，并反转对错误的期望。
 func (e expectError) Do(ctx *ratchetingTestContext) error {
 	err := e.op.Do(ctx)
 	if err != nil {
@@ -104,27 +115,26 @@ func (e expectError) Do(ctx *ratchetingTestContext) error {
 	return errors.New("expected error")
 }
 
+// Description 在被包装操作的描述前加前缀，便于定位期望失败的步骤。
 func (e expectError) Description() string {
 	return fmt.Sprintf("Expect Error: %v", e.op.Description())
 }
 
-// apiextensions-apiserver has discovery disabled, so hardcode this mapping
+// apiextensions-apiserver 关闭了 discovery，因此这里硬编码 GVR 到 Kind 的映射
 var fakeRESTMapper map[schema.GroupVersionResource]string = map[schema.GroupVersionResource]string{
 	myCRDV1Beta1: "MyCoolCRD",
 }
 
-// FixTabsOrDie counts the number of tab characters preceding the first
-// line in the given yaml object. It removes that many tabs from every
-// line. It panics (it's a test function) if some line has fewer tabs
-// than the first line.
+// FixTabsOrDie 统计给定 yaml 对象第一行前导 tab 的数量，并从每一行移除同样数量的 tab。
+// 若某行的 tab 少于此数量则 panic（这是测试辅助函数）。
 //
-// The purpose of this is to make it easier to read tests.
+// 目的是让测试代码中的内联 yaml 更易读。
 func FixTabsOrDie(in string) string {
 	lines := bytes.Split([]byte(in), []byte{'\n'})
 	if len(lines[0]) == 0 && len(lines) > 1 {
 		lines = lines[1:]
 	}
-	// Create prefix made of tabs that we want to remove.
+	// 构造需要移除的 tab 前缀。
 	var prefix []byte
 	for _, c := range lines[0] {
 		if c != '\t' {
@@ -132,10 +142,10 @@ func FixTabsOrDie(in string) string {
 		}
 		prefix = append(prefix, byte('\t'))
 	}
-	// Remove prefix from all tabs, fail otherwise.
+	// 从所有行移除该前缀，否则失败。
 	for i := range lines {
 		line := lines[i]
-		// It's OK for the last line to be blank (trailing \n)
+		// 最后一行可以为空（末尾 \n 所致）
 		if i == len(lines)-1 && len(line) <= len(prefix) && bytes.TrimSpace(line) == nil {
 			lines[i] = []byte{}
 			break
@@ -147,11 +157,12 @@ func FixTabsOrDie(in string) string {
 	}
 	joined := string(bytes.Join(lines, []byte{'\n'}))
 
-	// Convert rest of tabs to spaces since yaml doesnt like yabs
-	// (assuming 2 space alignment)
+	// 其余 tab 换成空格，因为 yaml 不接受 tab
+	// （假设按 2 空格对齐）
 	return strings.ReplaceAll(joined, "\t", "  ")
 }
 
+// applyPatchOperation 通过 server-side apply 对 CR 打补丁；patch 可以是 map 或 yaml 字符串。
 type applyPatchOperation struct {
 	description string
 	gvr         schema.GroupVersionResource
@@ -159,8 +170,9 @@ type applyPatchOperation struct {
 	patch       interface{}
 }
 
+// Do 构造 patch 对象并执行 apply；status 模式下改为 apply 到 status 子资源。
 func (a applyPatchOperation) Do(ctx *ratchetingTestContext) error {
-	// Lookup GVK from discovery
+	// 从 discovery 查找 GVK
 	kind, ok := fakeRESTMapper[a.gvr]
 	if !ok {
 		return fmt.Errorf("no mapping found for Gvr %v, add entry to fakeRESTMapper", a.gvr)
@@ -190,8 +202,7 @@ func (a applyPatchOperation) Do(ctx *ratchetingTestContext) error {
 	c := ctx.DynamicClient.Resource(a.gvr).Namespace(patch.GetNamespace())
 	if ctx.StatusSubresource {
 		if _, err := c.Get(context.TODO(), patch.GetName(), metav1.GetOptions{}); apierrors.IsNotFound(err) {
-			// ApplyStatus will not automatically create an object, we must make sure it exists before we can
-			// apply the status to it.
+			// ApplyStatus 不会自动创建对象，必须先确保对象存在才能对其 apply status。
 			_, err := c.Create(context.TODO(), patch, metav1.CreateOptions{})
 			if err != nil {
 				return err
@@ -205,15 +216,17 @@ func (a applyPatchOperation) Do(ctx *ratchetingTestContext) error {
 	return err
 }
 
+// Description 返回该步骤在测试日志中的描述。
 func (a applyPatchOperation) Description() string {
 	return a.description
 }
 
-// Replaces schema used for v1beta1 of crd
+// updateMyCRDV1Beta1Schema 替换 CRD v1beta1 版本的 schema。
 type updateMyCRDV1Beta1Schema struct {
 	newSchema *apiextensionsv1.JSONSchemaProps
 }
 
+// Do 通过重试直到观察到新 schema 生效；用带随机 UUID 的哨兵字段探测生效时点。
 func (u updateMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 	var myCRD *apiextensionsv1.CustomResourceDefinition
 	var err error = apierrors.NewConflict(schema.GroupResource{}, "", nil)
@@ -223,8 +236,7 @@ func (u updateMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 			return err
 		}
 
-		// Insert a sentinel property that we can probe to detect when the
-		// schema takes effect
+		// 插入一个哨兵属性，用于探测 schema 何时生效
 		sch := u.newSchema.DeepCopy()
 		if sch.Properties == nil {
 			sch.Properties = map[string]apiextensionsv1.JSONSchemaProps{}
@@ -263,8 +275,7 @@ func (u updateMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 			return err
 		}
 
-		// Keep trying to create an invalid instance of the CRD until we
-		// get an error containing the message we are looking for
+		// 持续创建非法 CR 实例，直到返回的错误里出现目标信息为止。
 		//
 		counter := 0
 		return wait.PollUntilContextCancel(context.TODO(), 100*time.Millisecond, true, func(_ context.Context) (done bool, err error) {
@@ -280,9 +291,7 @@ func (u updateMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 				return false, errors.New("expected error when creating sentinel resource")
 			}
 
-			// Check to see if the returned error message contains our
-			// unique string. UUID should be unique enough to just check
-			// simple existence in the error.
+			// 检查返回错误是否包含我们的唯一字符串。UUID 足够唯一，只需判断是否存在。
 			if strings.Contains(err.Error(), uuidString) {
 				return true, nil
 			}
@@ -293,15 +302,18 @@ func (u updateMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 	return err
 }
 
+// Description 返回该步骤在测试日志中的描述。
 func (u updateMyCRDV1Beta1Schema) Description() string {
 	return "Update CRD schema"
 }
 
+// patchMyCRDV1Beta1Schema 对现有 schema 做 JSON merge patch，再交给 updateMyCRDV1Beta1Schema。
 type patchMyCRDV1Beta1Schema struct {
 	description string
 	patch       map[string]interface{}
 }
 
+// Do 取回当前 schema，merge patch 后走完整替换流程。
 func (p patchMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 	patch := p.patch
 	if ctx.StatusSubresource {
@@ -349,17 +361,19 @@ func (p patchMyCRDV1Beta1Schema) Do(ctx *ratchetingTestContext) error {
 			T:                   ctx.T,
 			DynamicClient:       ctx.DynamicClient,
 			APIExtensionsClient: ctx.APIExtensionsClient,
-			StatusSubresource:   false, // We have already handled the status subresource.
+			StatusSubresource:   false, // status 子资源已在上面处理过了。
 		})
 	}
 
 	return fmt.Errorf("could not find version %v in CRD %v", myCRDV1Beta1.Version, myCRD.Name)
 }
 
+// Description 返回该步骤在测试日志中的描述。
 func (p patchMyCRDV1Beta1Schema) Description() string {
 	return p.description
 }
 
+// ratchetingTestCase 是可复用的测试用例；同一组操作会分别在普通更新与 status 更新下运行。
 type ratchetingTestCase struct {
 	Name       string
 	Disabled   bool
@@ -367,6 +381,8 @@ type ratchetingTestCase struct {
 	SkipStatus bool
 }
 
+// runTests 启动一次测试服务器，建立 CRD，然后逐个执行用例；
+// 每个用例额外跑一遍 status 子资源变体，除非 SkipStatus。
 func runTests(t *testing.T, cases []ratchetingTestCase) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -443,7 +459,7 @@ func runTests(t *testing.T, cases []ratchetingTestCase) {
 				}
 			}
 
-			// Reset resources
+			// 重置资源，避免用例之间互相影响。
 			err := ctx.DynamicClient.Resource(myCRDV1Beta1).Namespace("default").DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -458,6 +474,7 @@ func runTests(t *testing.T, cases []ratchetingTestCase) {
 			})
 		})
 
+		// 同一组操作再在 status 子资源下跑一遍，确保 ratcheting 对两条写入路径一致。
 		if !c.SkipStatus {
 			t.Run("Status: "+c.Name, func(t *testing.T) {
 				run(t, &ratchetingTestContext{
@@ -471,14 +488,17 @@ func runTests(t *testing.T, cases []ratchetingTestCase) {
 	}
 }
 
+// myCRDV1Beta1 是所有用例共享的 CRD 的 GVR。
 var myCRDV1Beta1 schema.GroupVersionResource = schema.GroupVersionResource{
 	Group:    "mygroup.example.com",
 	Version:  "v1beta1",
 	Resource: "mycrds",
 }
 
+// myCRDInstanceName 是各用例里被反复 patch 的 CR 名称。
 var myCRDInstanceName string = "mycrdinstance"
 
+// TestRatchetingFunctionality 覆盖各类 schema 约束在 ratcheting 下的接受/拒绝行为。
 func TestRatchetingFunctionality(t *testing.T) {
 	cases := []ratchetingTestCase{
 		{
@@ -558,7 +578,7 @@ func TestRatchetingFunctionality(t *testing.T) {
 		{
 			Name: "Enum",
 			Operations: []ratchetingTestOperation{
-				// Create schema with some enum element
+				// 创建带若干 enum 取值的 schema
 				updateMyCRDV1Beta1Schema{&apiextensionsv1.JSONSchemaProps{
 					Type: "object",
 					Properties: map[string]apiextensionsv1.JSONSchemaProps{
@@ -1349,7 +1369,7 @@ func TestRatchetingFunctionality(t *testing.T) {
 						},
 						"otherField": "hello world",
 					}},
-				// (This test shows an array cannpt be correlated by index with its old value)
+				// （本用例说明：由于其 list 是 atomic 的，数组无法按索引与旧值建立对应关系）
 				expectError{applyPatchOperation{
 					"add new, valid fields to elements of the array, failing to ratchet unchanged old fields within the array elements by correlating by index due to atomic list",
 					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
@@ -1385,7 +1405,7 @@ func TestRatchetingFunctionality(t *testing.T) {
 		},
 		{
 			Name:       "CEL Optional OldSelf",
-			SkipStatus: true, // oldSelf can never be null for a status update.
+			SkipStatus: true, // status 更新时 oldSelf 永远不会为 null。
 			Operations: []ratchetingTestOperation{
 				updateMyCRDV1Beta1Schema{&apiextensionsv1.JSONSchemaProps{
 					Type: "object",
@@ -1428,7 +1448,7 @@ func TestRatchetingFunctionality(t *testing.T) {
 				},
 			},
 		},
-		// Features that should not ratchet
+		// 以下特性不应参与 ratcheting
 		{
 			Name: "AllOf_should_not_ratchet",
 		},
@@ -1488,7 +1508,7 @@ func TestRatchetingFunctionality(t *testing.T) {
 				},
 			},
 		},
-		// Future Functionality, disabled tests
+		// 未来功能，暂时禁用的用例
 		{
 			Name: "CEL Add Change Rule",
 			Operations: []ratchetingTestOperation{
@@ -1625,11 +1645,11 @@ func TestRatchetingFunctionality(t *testing.T) {
 					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
 						"field": map[string]interface{}{
 							"object1": map[string]interface{}{
-								"stringField": "a string", // invalid. even number length, no k8s prefix
+								"stringField": "a string", // 非法：长度为偶数且无 k8s 前缀
 								"intField":    int64(1000),
 							},
 							"object4": map[string]interface{}{
-								"stringField": "k8s third string", // invalid. even number length. ratcheted
+								"stringField": "k8s third string", // 非法：长度为偶数，但已被 ratchet
 								"intField":    int64(7000),
 							},
 						},
@@ -1666,15 +1686,12 @@ func TestRatchetingFunctionality(t *testing.T) {
 			},
 		},
 		{
-			// Changing a list to a set should allow you to keep the items the
-			// same, but if you modify any one item the set must be uniqued
+			// 把 list 改为 set 时应允许保留原有元素，但只要改动其中任一元素，set 就必须去重。
 			//
-			// Possibly a future area of improvement. As it stands now,
-			// SSA implementation is incompatible with ratcheting this field:
+			// 这可能是未来可改进的点。目前 SSA 实现与该字段的 ratcheting 不兼容：
 			// https://github.com/kubernetes/kubernetes/blob/ec9a8ffb237e391ce9ccc58de93ba4ecc2fabf42/staging/src/k8s.io/apimachinery/pkg/util/managedfields/internal/structuredmerge.go#L146-L149
 			//
-			// Throws error trying to interpret an invalid existing `liveObj`
-			// as a set.
+			// 会把已存在的非法 `liveObj` 当作 set 解释并报错。
 			Name:     "Change list to set",
 			Disabled: true,
 			Operations: []ratchetingTestOperation{
@@ -1728,9 +1745,8 @@ func TestRatchetingFunctionality(t *testing.T) {
 							"dups2": []interface{}{int64(1), int64(2), int64(2), int64(3), int64(1000), int64(2000)},
 						},
 					}}},
-				// Can add a valid sibling field
-				//! Remove this ExpectError if/when we add support for ratcheting
-				// the type of a list
+				// 可以新增合法的同级字段
+				// ! 等我们支持对 list 类型做 ratcheting 后，移除此 ExpectError
 				applyPatchOperation{
 					"add a valid sibling field",
 					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
@@ -1739,10 +1755,9 @@ func TestRatchetingFunctionality(t *testing.T) {
 							"otherField": []interface{}{int64(1), int64(2), int64(3)},
 						},
 					}},
-				// Can remove dups to make valid
-				//! Normally this woud be valid, but SSA is unable to interpret
-				// the `liveObj` in the new schema, so fails. Changing
-				// x-kubernetes-list-type from anything to a set is unsupported by SSA.
+				// 可以去掉重复项使 list 合法
+				// ! 正常情况下这应当合法，但 SSA 无法用新 schema 解释 `liveObj`，因此失败。
+				// 把 x-kubernetes-list-type 从任意值改为 set 不受 SSA 支持。
 				applyPatchOperation{
 					"remove dups to make list valid",
 					myCRDV1Beta1,
@@ -1760,13 +1775,15 @@ func TestRatchetingFunctionality(t *testing.T) {
 	runTests(t, cases)
 }
 
+// validator 对一个 update 做校验；不关心结果，只用于 benchmark 制造负载。
 type validator func(new, old *unstructured.Unstructured)
 
+// newValidator 按 customResourceStrategy 的方式构造只用于校验的 strategy。
 func newValidator(customResourceValidation *apiextensionsinternal.JSONSchemaProps, kind schema.GroupVersionKind, namespaceScoped bool) (validator, error) {
-	// Replicate customResourceStrategy validation
+	// 复刻 customResourceStrategy 的校验逻辑
 	openapiSchema := &spec.Schema{}
 	if customResourceValidation != nil {
-		// TODO: replace with NewStructural(...).ToGoOpenAPI
+		// TODO: 替换为 NewStructural(...).ToGoOpenAPI
 		formatPostProcessor := apiservervalidation.StripUnsupportedFormatsPostProcessorForVersion(environment.DefaultCompatibilityVersion())
 		if err := apiservervalidation.ConvertJSONSchemaPropsWithPostProcess(customResourceValidation, openapiSchema, formatPostProcessor); err != nil {
 			return nil, err
@@ -1784,15 +1801,15 @@ func newValidator(customResourceValidation *apiextensionsinternal.JSONSchemaProp
 	}
 
 	strategy := customresource.NewStrategy(
-		nil, // No need for typer, since only using validation
+		nil, // 不需要 typer，只做校验
 		namespaceScoped,
 		kind,
 		schemaValidator,
-		nil, // No status schema validator
+		nil, // 不需要 status schema validator
 		sts,
-		nil, // No need for status
-		nil, // No need for scale
-		nil, // No need for selectable fields
+		nil, // 不需要 status
+		nil, // 不需要 scale
+		nil, // 不需要 selectable fields
 	)
 
 	return func(new, old *unstructured.Unstructured) {
@@ -1800,9 +1817,8 @@ func newValidator(customResourceValidation *apiextensionsinternal.JSONSchemaProp
 	}, nil
 }
 
-// Recursively walks the provided directory and parses the YAML files into
-// unstructured objects. If there are more than one object in a single file,
-// they are all added to the returned slice.
+// loadObjects 递归遍历目录，把 YAML 文件解析为 unstructured 对象。
+// 单个文件包含多个对象时，全部加入返回的切片。
 func loadObjects(dir string) []*unstructured.Unstructured {
 	result := []*unstructured.Unstructured{}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -1813,7 +1829,7 @@ func loadObjects(dir string) []*unstructured.Unstructured {
 		} else if filepath.Ext(d.Name()) != ".yaml" {
 			return nil
 		}
-		// Read the file in as []byte
+		// 读取文件内容为 []byte
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -1821,7 +1837,7 @@ func loadObjects(dir string) []*unstructured.Unstructured {
 
 		decoder := utilyaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
 
-		// Split the data by YAML drame
+		// 按 YAML 文档分隔符拆分数据
 		for {
 			parsed := &unstructured.Unstructured{}
 			if err := decoder.Decode(parsed); err != nil {
@@ -1842,14 +1858,15 @@ func loadObjects(dir string) []*unstructured.Unstructured {
 	return result
 }
 
+// BenchmarkRatcheting 用文件里的 CRD 与合法/非法对象两两组合，压测 ratcheting 校验路径。
 func BenchmarkRatcheting(b *testing.B) {
-	// Walk directory with CRDs, for each file parse YAML with multiple CRDs in it.
-	// Keep track in a map a validator for each unique gvk
+	// 遍历存放 CRD 的目录；每个文件可能包含多个 CRD 的 YAML。
+	// 用 map 记录每个唯一 GVK 对应的 validator。
 	crdObjects := loadObjects("ratcheting_test_cases/crds")
 	invalidFiles := loadObjects("ratcheting_test_cases/invalid")
 	validFiles := loadObjects("ratcheting_test_cases/valid")
 
-	// Create a validator for each GVK.
+	// 为每个 GVK 建一个 validator。
 	validators := map[schema.GroupVersionKind]validator{}
 	for _, crd := range crdObjects {
 		parsed := apiextensionsv1.CustomResourceDefinition{}
@@ -1865,7 +1882,7 @@ func BenchmarkRatcheting(b *testing.B) {
 				Kind:    parsed.Spec.Names.Kind,
 			}
 
-			// Create structural schema from v.Schema.OpenAPIV3Schema
+			// 从 v.Schema.OpenAPIV3Schema 构造 structural schema
 			internalValidation := &apiextensionsinternal.CustomResourceValidation{}
 			if err := apiextensionsv1.Convert_v1_CustomResourceValidation_To_apiextensions_CustomResourceValidation(v.Schema, internalValidation, nil); err != nil {
 				b.Fatal(fmt.Errorf("failed converting CRD validation to internal version: %v", err))
@@ -1882,7 +1899,7 @@ func BenchmarkRatcheting(b *testing.B) {
 
 	}
 
-	// Organize all the files by GVK.
+	// 按 GVK 归类所有文件。
 	gvksToValidFiles := map[schema.GroupVersionKind][]*unstructured.Unstructured{}
 	gvksToInvalidFiles := map[schema.GroupVersionKind][]*unstructured.Unstructured{}
 
@@ -1896,7 +1913,7 @@ func BenchmarkRatcheting(b *testing.B) {
 		gvksToInvalidFiles[gvk] = append(gvksToInvalidFiles[gvk], invalid)
 	}
 
-	// Remove any GVKs for which we dont have both valid and invalid files.
+	// 删掉缺少合法或非法任一侧文件的 GVK。
 	for gvk := range gvksToValidFiles {
 		if _, ok := gvksToInvalidFiles[gvk]; !ok {
 			delete(gvksToValidFiles, gvk)
@@ -1914,7 +1931,7 @@ func BenchmarkRatcheting(b *testing.B) {
 		new *unstructured.Unstructured
 	}
 
-	// For each valid file, match it with every invalid file of the same GVK
+	// 对每个合法文件，与同 GVK 的每个非法文件配对
 	validXValidPairs := []pair{}
 	validXInvalidPairs := []pair{}
 	invalidXInvalidPairs := []pair{}
@@ -1935,8 +1952,7 @@ func BenchmarkRatcheting(b *testing.B) {
 		}
 	}
 
-	// For each invalid file, add pair with every other invalid file of the same
-	// GVK including itself
+	// 对每个非法文件，与同 GVK 的每个其他非法文件配对（包括自身）
 	for gvk, invalids := range gvksToInvalidFiles {
 		for _, invalid := range invalids {
 			for _, invalid2 := range gvksToInvalidFiles[gvk] {
@@ -1945,7 +1961,7 @@ func BenchmarkRatcheting(b *testing.B) {
 		}
 	}
 
-	// For each pair, run the ratcheting algorithm on the update.
+	// 对每对对象，在 update 上执行 ratcheting 算法。
 	//
 	for _, ratchetingEnabled := range []bool{true, false} {
 		name := "RatchetingEnabled"
@@ -1958,15 +1974,15 @@ func BenchmarkRatcheting(b *testing.B) {
 
 			do := func(pairs []pair) {
 				for _, pair := range pairs {
-					// Create a validator for the GVK of the valid object.
+					// 为合法对象所属 GVK 取 validator。
 					validator, ok := validators[pair.old.GroupVersionKind()]
 					if !ok {
 						b.Log("No validator for GVK", pair.old.GroupVersionKind())
 						continue
 					}
 
-					// Run the ratcheting algorithm on the update.
-					// Don't care about result for benchmark
+					// 在 update 上执行 ratcheting 算法。
+					// benchmark 不关心结果
 					validator(pair.old, pair.new)
 				}
 			}
@@ -1992,9 +2008,11 @@ func BenchmarkRatcheting(b *testing.B) {
 	}
 }
 
+// TestRatchetingDropFields 验证 feature gate 关闭时会丢弃 OptionalOldSelf 字段，
+// 从而让基于 oldSelf 的转换规则不会在关闭 ratcheting 时生效。
 func TestRatchetingDropFields(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
-	// Field dropping only takes effect when feature is disabled
+	// 只有 feature 关闭时才会丢弃该字段
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CRDValidationRatcheting, false)
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -2026,7 +2044,7 @@ func TestRatchetingDropFields(t *testing.T) {
 										Type: "string",
 										XValidations: []apiextensionsv1.ValidationRule{
 											{
-												// Results in error if field wasn't dropped
+												// 如果字段未被丢弃，这里会报错
 												Rule:            "self == oldSelf",
 												OptionalOldSelf: ptr.To(true),
 											},

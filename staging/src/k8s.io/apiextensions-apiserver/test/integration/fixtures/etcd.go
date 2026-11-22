@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fixtures 提供集成测试所需的服务器启动、CRD 与实例构造辅助函数。
 package fixtures
 
 import (
@@ -30,9 +31,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// CreateCRDUsingRemovedAPI creates a CRD directly using etcd.  This is must *ONLY* be used for checks of compatibility
-// with removed data.  Do not use this just because you don't want to update your test to use v1.  Only use this
-// when it actually matters.
+// CreateCRDUsingRemovedAPI 直接通过 etcd 创建 CRD。只能用于验证与已移除数据的兼容性。
+// 不要仅仅因为不想把测试改用 v1 就用它；只有在确实必要时才使用。
 func CreateCRDUsingRemovedAPI(etcdClient *clientv3.Client, etcdStoragePrefix string, betaCRD *apiextensionsv1beta1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, dynamicClientSet dynamic.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
 	crd, err := CreateCRDUsingRemovedAPIWatchUnsafe(etcdClient, etcdStoragePrefix, betaCRD, apiExtensionsClient)
 	if err != nil {
@@ -41,16 +41,17 @@ func CreateCRDUsingRemovedAPI(etcdClient *clientv3.Client, etcdStoragePrefix str
 	return waitForCRDReady(crd, apiExtensionsClient, dynamicClientSet)
 }
 
-// CreateCRDUsingRemovedAPIWatchUnsafe creates a CRD directly using etcd.  This is must *ONLY* be used for checks of compatibility
-// with removed data.  Do not use this just because you don't want to update your test to use v1.  Only use this
-// when it actually matters.
+// CreateCRDUsingRemovedAPIWatchUnsafe 直接通过 etcd 创建 CRD，且不等待其就绪。只能用于验证
+// 与已移除数据的兼容性。不要仅仅因为不想把测试改用 v1 就用它；只有在确实必要时才使用。
 func CreateCRDUsingRemovedAPIWatchUnsafe(etcdClient *clientv3.Client, etcdStoragePrefix string, betaCRD *apiextensionsv1beta1.CustomResourceDefinition, apiExtensionsClient clientset.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
-	// attempt defaulting, best effort
+	// 尽力做一次默认值填充。
 	apiextensionsv1beta1.SetDefaults_CustomResourceDefinition(betaCRD)
+	// 写回 v1beta1 的 TypeMeta，模拟旧版本 API 直接落盘的数据。
 	betaCRD.Kind = "CustomResourceDefinition"
 	betaCRD.APIVersion = apiextensionsv1beta1.SchemeGroupVersion.Group + "/" + apiextensionsv1beta1.SchemeGroupVersion.Version
 
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceNone)
+	// 键布局必须与 apiextensions-apiserver 的实际存储路径保持一致。
 	key := path.Join("/", etcdStoragePrefix, "apiextensions.k8s.io", "customresourcedefinitions", betaCRD.Name)
 	val, _ := json.Marshal(betaCRD)
 	if _, err := etcdClient.Put(ctx, key, string(val)); err != nil {

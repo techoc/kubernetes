@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cel 提供 CEL 表达式求值与校验所需的类型适配与辅助实现。
 package cel
 
 import (
@@ -24,9 +25,10 @@ import (
 	celopenapi "k8s.io/apiserver/pkg/cel/common"
 )
 
-// UnstructuredToVal converts a Kubernetes unstructured data element to a CEL Val.
-// The root schema of custom resource schema is expected contain type meta and object meta schemas.
-// If Embedded resources do not contain type meta and object meta schemas, they will be added automatically.
+// UnstructuredToVal 将 Kubernetes 非结构化数据元素转换为 CEL 的 Val。
+// 自定义资源 schema 的根 schema 预期包含 type meta 与 object meta 的 schema；
+// 若内嵌资源缺少这两部分 schema，会被自动补全。
 func UnstructuredToVal(unstructured interface{}, schema *structuralschema.Structural) ref.Val {
+	// 包装为 model.Structural，供 CEL 按声明的类型做字段解析。
 	return celopenapi.UnstructuredToVal(unstructured, &model.Structural{Structural: schema})
 }

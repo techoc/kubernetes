@@ -24,6 +24,8 @@ import (
 	"k8s.io/kube-openapi/pkg/util"
 )
 
+// TestOpenAPIDefinitionNames 校验每个公开 GVK 的 OpenAPI 模型名与反射得到的 REST 友好名一致，
+// 以免前后端对同一类型使用不同的模型名。
 func TestOpenAPIDefinitionNames(t *testing.T) {
 	scheme := runtime.NewScheme()
 	for _, builder := range groups {

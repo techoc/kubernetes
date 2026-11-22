@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cr 注册示例 CustomResource 所使用的 API 组。
 package cr
 
 const (
+	// GroupName 是示例 CRD 的 API 组名。
 	GroupName = "cr.example.apiextensions.k8s.io"
 )

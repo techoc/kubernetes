@@ -25,6 +25,8 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
+// TestTypes_RuleTypesFieldMapping 校验由 schema 构建的类型提供者能正确映射嵌套字段，
+// 并确认其 CEL 环境可以把原生值转换为 CEL 值。
 func TestTypes_RuleTypesFieldMapping(t *testing.T) {
 	stdEnv, _ := cel.NewEnv()
 	rt := apiservercel.NewDeclTypeProvider(SchemaDeclType(testSchema(), true).MaybeAssignTypeName("CustomObject"))
@@ -57,7 +59,7 @@ func TestTypes_RuleTypesFieldMapping(t *testing.T) {
 		t.Errorf("got field type %v, wanted bool", flagFieldType.Type)
 	}
 
-	// Manually constructed instance of the schema.
+	// 手工构造 schema 的实例。
 	name := apiservercel.NewField(1, "name")
 	name.Ref = testValue(t, 2, "test-instance")
 	nestedVal := apiservercel.NewMapValue()
@@ -102,6 +104,7 @@ func TestTypes_RuleTypesFieldMapping(t *testing.T) {
 	}
 }
 
+// testValue 构造带 id 的 DynValue，构造失败时直接终止测试。
 func testValue(t *testing.T, id int64, val interface{}) *apiservercel.DynValue {
 	t.Helper()
 	dv, err := apiservercel.NewDynValue(id, val)

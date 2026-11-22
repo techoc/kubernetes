@@ -35,27 +35,26 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
+// statusStrategy 实现 status 子资源的更新策略，只允许修改 status。
 type statusStrategy struct {
 	customResourceStrategy
 }
 
+// NewStatusStrategy 基于通用策略构造 status 子资源策略。
 func NewStatusStrategy(strategy customResourceStrategy) statusStrategy {
 	return statusStrategy{strategy}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回会被该策略重置、因而用户不应修改的字段集合。
 func (a statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		fieldpath.APIVersion(a.customResourceStrategy.kind.GroupVersion().String()): fieldpath.NewSet(
-			// Note that if there are other top level fields unique to CRDs,
-			// those will also get removed by the apiserver prior to persisting,
-			// but won't be added to the resetFields set.
+			// 注意：若还有其他 CRD 独有的顶层字段，它们在 apiserver 持久化前
+			// 同样会被移除，但不会加入 resetFields 集合。
 
-			// This isn't an issue now, but if it becomes an issue in the future
-			// we might need a mechanism that is the inverse of resetFields where
-			// you specify only the fields to be kept rather than the fields to be wiped
-			// that way you could wipe everything but the status in this case.
+			// 目前这不成问题；如果将来成为问题，可能需要一个与 resetFields
+			// 相反的机制：只指定要保留的字段而非要清除的字段，
+			// 那样就可以在这种场景下清除除 status 之外的一切。
 			fieldpath.MakePathOrDie("metadata"),
 			fieldpath.MakePathOrDie("spec"),
 		),
@@ -64,23 +63,24 @@ func (a statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set
 	return fields
 }
 
+// PrepareForUpdate 用旧对象覆盖新对象，只保留新对象中的 status。
 func (a statusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
-	// update is only allowed to set status
+	// update 只允许设置 status
 	newCustomResourceObject := obj.(*unstructured.Unstructured)
 	newCustomResource := newCustomResourceObject.UnstructuredContent()
 	status, ok := newCustomResource["status"]
 
-	// managedFields must be preserved since it's been modified to
-	// track changed fields in the status update.
+	// managedFields 必须保留：它在 status 更新过程中已被修改，
+	// 用于跟踪变更字段。
 	managedFields := newCustomResourceObject.GetManagedFields()
 
-	// copy old object into new object
+	// 把旧对象复制到新对象
 	oldCustomResourceObject := old.(*unstructured.Unstructured)
-	// overridding the resourceVersion in metadata is safe here, we have already checked that
-	// new object and old object have the same resourceVersion.
+	// 在此覆盖 metadata 中的 resourceVersion 是安全的：
+	// 前面已确认新旧对象的 resourceVersion 相同。
 	*newCustomResourceObject = *oldCustomResourceObject.DeepCopy()
 
-	// set status
+	// 设置 status
 	newCustomResourceObject.SetManagedFields(managedFields)
 	newCustomResource = newCustomResourceObject.UnstructuredContent()
 	if ok {
@@ -90,7 +90,7 @@ func (a statusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.O
 	}
 }
 
-// ValidateUpdate is the default update validation for an end user updating status.
+// ValidateUpdate 是终端用户更新 status 时的默认更新校验。
 func (a statusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	uNew, ok := obj.(*unstructured.Unstructured)
 	if !ok {
@@ -115,14 +115,14 @@ func (a statusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Obj
 	var errs field.ErrorList
 	errs = append(errs, a.customResourceStrategy.validator.ValidateStatusUpdate(ctx, uNew, uOld, a.scale, options...)...)
 
-	// ratcheting validation of x-kubernetes-list-type value map and set
+	// x-kubernetes-list-type 的 map 与 set 值采用 ratcheting 校验
 	if newErrs := structurallisttype.ValidateListSetsAndMaps(nil, a.structuralSchema, uNew.Object); len(newErrs) > 0 {
 		if oldErrs := structurallisttype.ValidateListSetsAndMaps(nil, a.structuralSchema, uOld.Object); len(oldErrs) == 0 {
 			errs = append(errs, newErrs...)
 		}
 	}
 
-	// validate x-kubernetes-validations rules
+	// 校验 x-kubernetes-validations 规则
 	if celValidator := a.customResourceStrategy.celValidator; celValidator != nil {
 		if has, err := hasBlockingErr(errs); has {
 			errs = append(errs, err)
@@ -132,14 +132,14 @@ func (a statusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Obj
 		}
 	}
 
-	// No-op if not attached to context
+	// 未挂载到 context 时为空操作
 	if utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) {
 		validation.Metrics.ObserveRatchetingTime(*correlatedObject.Duration)
 	}
 	return errs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回给定更新对应的警告。
 func (statusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

@@ -35,6 +35,8 @@ import (
 	"k8s.io/apiextensions-apiserver/test/integration/fixtures"
 )
 
+// TestYAML 验证 discovery、创建、获取、列表、更新、删除等接口接受并返回 YAML，
+// 以及 watch 和 patch 拒绝 YAML 的行为。
 func TestYAML(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -63,7 +65,7 @@ func TestYAML(t *testing.T) {
 
 	rest := apiExtensionClient.Discovery().RESTClient()
 
-	// Discovery
+	// 发现接口
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -84,7 +86,7 @@ func TestYAML(t *testing.T) {
 		}
 	}
 
-	// Error
+	// 错误响应
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -108,7 +110,7 @@ func TestYAML(t *testing.T) {
 	uid := types.UID("")
 	resourceVersion := ""
 
-	// Create
+	// 创建
 	{
 		yamlBody := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -155,7 +157,7 @@ values:
 		resourceVersion = obj.GetResourceVersion()
 	}
 
-	// Get
+	// 获取
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -188,7 +190,7 @@ values:
 		}
 	}
 
-	// List
+	// 列表
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -232,7 +234,7 @@ values:
 		}
 	}
 
-	// Watch rejects yaml (no streaming support)
+	// watch 拒绝 YAML（不支持流式输出）
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -257,7 +259,7 @@ values:
 		}
 	}
 
-	// Update
+	// 更新
 	{
 		yamlBody := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -306,7 +308,7 @@ values:
 		}
 	}
 
-	// Patch rejects yaml requests (only JSON mime types are allowed)
+	// patch 拒绝 YAML 请求（只允许 JSON mime 类型）
 	{
 		yamlBody := []byte(fmt.Sprintf(`
 values:
@@ -332,7 +334,7 @@ values:
 		}
 	}
 
-	// Delete
+	// 删除
 	{
 		result, err := rest.Delete().
 			SetHeader("Accept", "application/yaml").
@@ -354,6 +356,7 @@ values:
 	}
 }
 
+// TestYAMLSubresource 验证 status 和 scale 子资源接口对 YAML 的支持。
 func TestYAMLSubresource(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -384,7 +387,7 @@ func TestYAMLSubresource(t *testing.T) {
 	uid := types.UID("")
 	resourceVersion := ""
 
-	// Create
+	// 创建
 	{
 		yamlBody := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -423,7 +426,7 @@ spec:
 		resourceVersion = obj.GetResourceVersion()
 	}
 
-	// Get at /status
+	// 获取 /status
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -450,7 +453,7 @@ spec:
 		}
 	}
 
-	// Update at /status
+	// 更新 /status
 	{
 		yamlBody := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -496,7 +499,7 @@ status:
 		}
 	}
 
-	// Get at /scale
+	// 获取 /scale
 	{
 		result, err := rest.Get().
 			SetHeader("Accept", "application/yaml").
@@ -527,13 +530,14 @@ status:
 	}
 }
 
+// decodeYAML 解析响应体，并断言它不是 JSON 而是合法 YAML。
 func decodeYAML(data []byte) (*unstructured.Unstructured, error) {
 	retval := &unstructured.Unstructured{Object: map[string]interface{}{}}
-	// ensure this isn't JSON
+	// 确认这不是 JSON
 	if json.Unmarshal(data, &retval.Object) == nil {
 		return nil, fmt.Errorf("data is JSON, not YAML: %s", string(data))
 	}
-	// ensure it is YAML
+	// 确认它是 YAML
 	retval.Object = map[string]interface{}{}
 	if err := yaml.Unmarshal(data, &retval.Object); err != nil {
 		return nil, fmt.Errorf("error decoding YAML: %v\noriginal YAML: %s", err, string(data))

@@ -22,6 +22,7 @@ import (
 )
 
 var (
+	// regenerationCounter 记录 OpenAPI v2 规范重新生成的次数，按触发重建的 CRD 名称和原因拆分。
 	regenerationCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Name:           "apiextensions_openapi_v2_regeneration_count",

@@ -42,22 +42,23 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// strategy implements behavior for CustomResources.
+// strategy 实现 CustomResourceDefinition 的 REST 行为。
 type strategy struct {
 	runtime.ObjectTyper
 	names.NameGenerator
 }
 
+// NewStrategy 返回 CRD 的策略，名称生成沿用通用实现。
 func NewStrategy(typer runtime.ObjectTyper) strategy {
 	return strategy{typer, names.SimpleNameGenerator}
 }
 
+// NamespaceScoped 返回 false：CRD 是集群级资源。
 func (strategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回服务端会重置、用户不应修改的字段集合。
 func (strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apiextensions.k8s.io/v1": fieldpath.NewSet(
@@ -71,12 +72,13 @@ func (strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// PrepareForCreate clears the status of a CustomResourceDefinition before creation.
+// PrepareForCreate 在创建前清空 status；generation 从 1 开始。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	crd := obj.(*apiextensions.CustomResourceDefinition)
 	crd.Status = apiextensions.CustomResourceDefinitionStatus{}
 	crd.Generation = 1
 
+	// 创建时即记录存储版本，避免首次写入后 status 与存储状态不一致。
 	for _, v := range crd.Spec.Versions {
 		if v.Storage {
 			if !apiextensions.IsStoredVersion(crd, v.Name) {
@@ -88,24 +90,21 @@ func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	dropDisabledFields(crd, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 在更新前丢弃用户不可设置的字段（status）。
 func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCRD := obj.(*apiextensions.CustomResourceDefinition)
 	oldCRD := old.(*apiextensions.CustomResourceDefinition)
 	newCRD.Status = oldCRD.Status
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object. We push
-	// the burden of managing the status onto the clients because we can't (in general)
-	// know here what version of spec the writer of the status has seen. It may seem like
-	// we can at first -- since obj contains spec -- but in the future we will probably make
-	// status its own object, and even if we don't, writes may be the result of a
-	// read-update-write loop, so the contents of spec may not actually be the spec that
-	// the controller has *seen*.
+	// spec 的任何变化都递增 generation；status 变化应反映对应的 generation。
+	// 状态管理交给客户端：服务端无法知道写 status 的一方看到的是哪一版 spec。
+	// 看起来 obj 里就带着 spec，但写操作可能来自 read-update-write 循环，
+	// 其中的 spec 未必是控制器“看到”的那份；将来 status 也可能拆成独立对象。
 	if !apiequality.Semantic.DeepEqual(oldCRD.Spec, newCRD.Spec) {
 		newCRD.Generation = oldCRD.Generation + 1
 	}
 
+	// 切换存储版本时，把新版本追加进 StoredVersions 以便后续迁移。
 	for _, v := range newCRD.Spec.Versions {
 		if v.Storage {
 			if !apiextensions.IsStoredVersion(newCRD, v.Name) {
@@ -117,24 +116,24 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	dropDisabledFields(newCRD, oldCRD)
 }
 
-// Validate validates a new CustomResourceDefinition.
+// Validate 校验新建的 CustomResourceDefinition。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	return validation.ValidateCustomResourceDefinition(ctx, obj.(*apiextensions.CustomResourceDefinition))
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 CRD 时给用户的警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newCRD := obj.(*apiextensions.CustomResourceDefinition)
 
 	var warnings []string
 
-	// Use the system's default compatibility version for format checking
+	// 用系统的默认兼容版本判断 format 是否被识别。
 	compatibilityVersion := environment.DefaultCompatibilityVersion()
 
-	// Get unrecognized formats from the new CRD
+	// 收集新 CRD 中无法识别的 format。
 	unrecognizedFormats := getUnrecognizedFormatsInCRD(&newCRD.Spec, compatibilityVersion)
 
-	// Create warnings for unrecognized formats
+	// 为每个无法识别的 format 生成警告。
 	for _, format := range unrecognizedFormats {
 		warnings = append(warnings, fmt.Sprintf("unrecognized format %q", format))
 	}
@@ -144,41 +143,40 @@ func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []stri
 	return warnings
 }
 
-// AllowCreateOnUpdate is false for CustomResourceDefinition; this means a POST is
-// needed to create one.
+// AllowCreateOnUpdate 返回 false：CRD 只能通过 POST 创建，不允许 update 时隐式创建。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// AllowUnconditionalUpdate is the default update policy for CustomResourceDefinition objects.
+// AllowUnconditionalUpdate 返回 false：更新必须携带 resourceVersion。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；CRD 无可规范化的内容。
 func (strategy) Canonicalize(obj runtime.Object) {
 }
 
-// ValidateUpdate is the default update validation for an end user updating status.
+// ValidateUpdate 是更新 CRD 时的默认校验。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateCustomResourceDefinitionUpdate(ctx, obj.(*apiextensions.CustomResourceDefinition), old.(*apiextensions.CustomResourceDefinition))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 CRD 时给用户的警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newCRD := obj.(*apiextensions.CustomResourceDefinition)
 	oldCRD := old.(*apiextensions.CustomResourceDefinition)
 
 	var warnings []string
 
-	// Use the system's default compatibility version for format checking
+	// 用系统的默认兼容版本判断 format 是否被识别。
 	compatibilityVersion := environment.DefaultCompatibilityVersion()
 
-	// Get unrecognized formats from both old and new CRDs
+	// 同时收集新旧 CRD 中无法识别的 format。
 	oldUnrecognizedFormats := getUnrecognizedFormatsInCRD(&oldCRD.Spec, compatibilityVersion)
 	newUnrecognizedFormats := getUnrecognizedFormatsInCRD(&newCRD.Spec, compatibilityVersion)
 
-	// Find newly introduced unrecognized formats (ratcheting)
+	// 只对本次更新新引入的 format 告警（ratcheting），旧告警不重复。
 	oldFormatsSet := make(map[string]bool)
 	for _, format := range oldUnrecognizedFormats {
 		oldFormatsSet[format] = true
@@ -191,11 +189,12 @@ func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) [
 		}
 	}
 
-	// Create warnings for newly introduced unrecognized formats
+	// 为新引入的无法识别 format 生成警告。
 	for _, format := range newlyIntroducedFormats {
 		warnings = append(warnings, fmt.Sprintf("unrecognized format %q", format))
 	}
 
+	// 同样只报告新出现的 list-type: set 警告。
 	seen := sets.New[string]()
 	seen.Insert(getNonScalarListTypeSetWarnings(&oldCRD.Spec)...)
 	for _, w := range getNonScalarListTypeSetWarnings(&newCRD.Spec) {
@@ -207,16 +206,16 @@ func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) [
 	return warnings
 }
 
-// getUnrecognizedFormatsInCRD returns a list of unrecognized formats found in the CRD schema.
+// getUnrecognizedFormatsInCRD 返回 CRD schema 中所有无法识别的 format。
 func getUnrecognizedFormatsInCRD(spec *apiextensions.CustomResourceDefinitionSpec, compatibilityVersion *version.Version) []string {
 	var unrecognizedFormats []string
 
-	// Check top-level validation schema (deprecated in v1, but still supported for backward compatibility)
+	// 检查顶层校验 schema（v1 已废弃，但为向后兼容仍支持）。
 	if spec.Validation != nil && spec.Validation.OpenAPIV3Schema != nil {
 		unrecognizedFormats = append(unrecognizedFormats, getUnrecognizedFormatsInSchema(spec.Validation.OpenAPIV3Schema, compatibilityVersion)...)
 	}
 
-	// Check per-version schemas
+	// 检查每个版本的 schema。
 	for _, v := range spec.Versions {
 		if v.Schema != nil && v.Schema.OpenAPIV3Schema != nil {
 			unrecognizedFormats = append(unrecognizedFormats, getUnrecognizedFormatsInSchema(v.Schema.OpenAPIV3Schema, compatibilityVersion)...)
@@ -226,19 +225,19 @@ func getUnrecognizedFormatsInCRD(spec *apiextensions.CustomResourceDefinitionSpe
 	return unrecognizedFormats
 }
 
-// getNonScalarListTypeSetWarnings returns warning messages for schema fields
-// declaring x-kubernetes-list-type: set with non-scalar items anywhere in the
-// CRD's schemas. The output is sorted to ensure warnings are displayed in a stable order.
+// getNonScalarListTypeSetWarnings 返回 CRD schema 中所有
+// x-kubernetes-list-type: set 搭配非标量元素时的警告；输出排序保证稳定。
 func getNonScalarListTypeSetWarnings(spec *apiextensions.CustomResourceDefinitionSpec) []string {
 	seen := sets.New[string]()
 	check := func(s *apiextensions.JSONSchemaProps) bool {
 		if s.XListType != nil && *s.XListType == "set" && s.Items != nil && s.Items.Schema != nil {
 			switch s.Items.Schema.Type {
 			case "object", "array":
+				// SSA 与 CEL 校验规则无法正确处理对象/数组元素的 set 语义。
 				seen.Insert(fmt.Sprintf("x-kubernetes-list-type: set for items of type %q is not supported by server-side apply or CEL validation rules", s.Items.Schema.Type))
 			}
 		}
-		return false // continue traversing
+		return false // 继续遍历
 	}
 	if spec.Validation != nil && spec.Validation.OpenAPIV3Schema != nil {
 		validation.SchemaHas(spec.Validation.OpenAPIV3Schema, check)
@@ -251,51 +250,53 @@ func getNonScalarListTypeSetWarnings(spec *apiextensions.CustomResourceDefinitio
 	return sets.List(seen)
 }
 
-// getUnrecognizedFormatsInSchema recursively traverses the schema and collects unrecognized formats.
+// getUnrecognizedFormatsInSchema 递归遍历 schema，收集无法识别的 format。
 func getUnrecognizedFormatsInSchema(schema *apiextensions.JSONSchemaProps, compatibilityVersion *version.Version) []string {
 	var unrecognizedFormats []string
 
-	// Use the existing SchemaHas function to traverse the schema
+	// 复用 SchemaHas 遍历整棵 schema 树。
 	validation.SchemaHas(schema, func(s *apiextensions.JSONSchemaProps) bool {
 		if len(s.Format) > 0 {
-			// Convert to spec.Schema for format validation
+			// 转成 spec.Schema 才能调用 format 校验。
 			specSchema := &spec.Schema{SchemaProps: spec.SchemaProps{Format: s.Format, Type: []string{s.Type}}}
 			if formats := apiservervalidation.GetUnrecognizedFormats(specSchema, compatibilityVersion); len(formats) > 0 {
 				unrecognizedFormats = append(unrecognizedFormats, formats...)
 			}
 		}
-		return false // Continue traversing
+		return false // 继续遍历
 	})
 
 	return unrecognizedFormats
 }
 
+// statusStrategy 实现 CRD status 子资源的 REST 行为。
 type statusStrategy struct {
 	runtime.ObjectTyper
 	names.NameGenerator
 }
 
+// NewStatusStrategy 返回 CRD status 子资源的策略。
 func NewStatusStrategy(typer runtime.ObjectTyper) statusStrategy {
 	return statusStrategy{typer, names.SimpleNameGenerator}
 }
 
+// NamespaceScoped 返回 false：CRD 是集群级资源。
 func (statusStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回服务端会重置、用户不应修改的字段集合。
 func (statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apiextensions.k8s.io/v1": fieldpath.NewSet(
-			// Disabled to match PrepareForUpdate, which do not wipe metadata
+			// 与 PrepareForUpdate 保持一致，不重置 metadata
 			// https://github.com/kubernetes/kubernetes/issues/137681
 			// fieldpath.MakePathOrDie("metadata"),
 
 			fieldpath.MakePathOrDie("spec"),
 		),
 		"apiextensions.k8s.io/v1beta1": fieldpath.NewSet(
-			// Disabled to match PrepareForUpdate, which do not wipe metadata
+			// 与 PrepareForUpdate 保持一致，不重置 metadata
 			// https://github.com/kubernetes/kubernetes/issues/137681
 			// fieldpath.MakePathOrDie("metadata"),
 
@@ -306,36 +307,41 @@ func (statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
+// PrepareForUpdate 丢弃对 spec 的修改，只允许更新 status。
 func (statusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newObj := obj.(*apiextensions.CustomResourceDefinition)
 	oldObj := old.(*apiextensions.CustomResourceDefinition)
 	newObj.Spec = oldObj.Spec
 
-	// Status updates are for only for updating status, not objectmeta.
+	// status 子资源的更新只针对 status，不允许借机修改 objectmeta。
 	metav1.ResetObjectMetaForStatus(&newObj.ObjectMeta, &newObj.ObjectMeta)
 }
 
+// AllowCreateOnUpdate 返回 false：status 更新不能隐式创建对象。
 func (statusStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// AllowUnconditionalUpdate 返回 false：更新必须携带 resourceVersion。
 func (statusStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
+// Canonicalize 在校验后规范化对象；status 无可规范化的内容。
 func (statusStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// ValidateUpdate 是更新 CRD status 时的默认校验。
 func (statusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateUpdateCustomResourceDefinitionStatus(ctx, obj.(*apiextensions.CustomResourceDefinition), old.(*apiextensions.CustomResourceDefinition))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 CRD status 时的警告；status 更新不产生警告。
 func (statusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 返回对象的 labels 与 fields，供过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	apiserver, ok := obj.(*apiextensions.CustomResourceDefinition)
 	if !ok {
@@ -344,8 +350,8 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(apiserver.ObjectMeta.Labels), CustomResourceDefinitionToSelectableFields(apiserver), nil
 }
 
-// MatchCustomResourceDefinition is the filter used by the generic etcd backend to watch events
-// from etcd to clients of the apiserver only interested in specific labels/fields.
+// MatchCustomResourceDefinition 返回 etcd 后端使用的过滤谓词，
+// 只把匹配 label/field 选择器的事件推送给 apiserver 客户端。
 func MatchCustomResourceDefinition(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,
@@ -354,13 +360,13 @@ func MatchCustomResourceDefinition(label labels.Selector, field fields.Selector)
 	}
 }
 
-// CustomResourceDefinitionToSelectableFields returns a field set that represents the object.
+// CustomResourceDefinitionToSelectableFields 返回对象可被字段选择器匹配的字段集合。
 func CustomResourceDefinitionToSelectableFields(obj *apiextensions.CustomResourceDefinition) fields.Set {
 	return generic.ObjectMetaFieldsSet(&obj.ObjectMeta, true)
 }
 
-// dropDisabledFields drops disabled fields that are not used if their associated feature gates
-// are not enabled.
+// dropDisabledFields 丢弃 feature gate 未开启的字段。
+// 如果旧对象已经在使用这些字段，则保留——否则关闭 feature gate 会抹掉已有数据。
 func dropDisabledFields(newCRD *apiextensions.CustomResourceDefinition, oldCRD *apiextensions.CustomResourceDefinition) {
 	if !utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) && (oldCRD == nil || !specHasOptionalOldSelf(&oldCRD.Spec)) {
 		if newCRD.Spec.Validation != nil {
@@ -381,7 +387,7 @@ func dropDisabledFields(newCRD *apiextensions.CustomResourceDefinition, oldCRD *
 	}
 }
 
-// dropOptionalOldSelfField drops field optionalOldSelf from CRD schema
+// dropOptionalOldSelfField 从 CRD schema 中清除 optionalOldSelf 字段。
 func dropOptionalOldSelfField(schema *apiextensions.JSONSchemaProps) {
 	if schema == nil {
 		return
@@ -390,6 +396,7 @@ func dropOptionalOldSelfField(schema *apiextensions.JSONSchemaProps) {
 		schema.XValidations[i].OptionalOldSelf = nil
 	}
 
+	// 递归处理嵌套 schema；map 元素需写回，slice 元素可直接取址。
 	if schema.AdditionalProperties != nil {
 		dropOptionalOldSelfField(schema.AdditionalProperties.Schema)
 	}
@@ -406,10 +413,12 @@ func dropOptionalOldSelfField(schema *apiextensions.JSONSchemaProps) {
 	}
 }
 
+// specHasOptionalOldSelf 判断 CRD spec 的 schema 是否使用了 optionalOldSelf。
 func specHasOptionalOldSelf(spec *apiextensions.CustomResourceDefinitionSpec) bool {
 	return validation.HasSchemaWith(spec, schemaHasOptionalOldSelf)
 }
 
+// schemaHasOptionalOldSelf 判断单个 schema 是否使用了 optionalOldSelf。
 func schemaHasOptionalOldSelf(s *apiextensions.JSONSchemaProps) bool {
 	return validation.SchemaHas(s, func(s *apiextensions.JSONSchemaProps) bool {
 		for _, v := range s.XValidations {
@@ -422,6 +431,7 @@ func schemaHasOptionalOldSelf(s *apiextensions.JSONSchemaProps) bool {
 	})
 }
 
+// dropSelectableFields 清除顶层和各版本上的 selectableFields。
 func dropSelectableFields(spec *apiextensions.CustomResourceDefinitionSpec) {
 	spec.SelectableFields = nil
 	for i := range spec.Versions {
@@ -429,6 +439,7 @@ func dropSelectableFields(spec *apiextensions.CustomResourceDefinitionSpec) {
 	}
 }
 
+// dropObservedGeneration 清除 status 与 conditions 中的 observedGeneration。
 func dropObservedGeneration(status *apiextensions.CustomResourceDefinitionStatus) {
 	status.ObservedGeneration = 0
 	for i := range status.Conditions {
@@ -436,6 +447,7 @@ func dropObservedGeneration(status *apiextensions.CustomResourceDefinitionStatus
 	}
 }
 
+// observedGenerationTrackingInUse 判断 status 是否已经在记录 observedGeneration。
 func observedGenerationTrackingInUse(status *apiextensions.CustomResourceDefinitionStatus) bool {
 	if status.ObservedGeneration != 0 {
 		return true
@@ -448,6 +460,7 @@ func observedGenerationTrackingInUse(status *apiextensions.CustomResourceDefinit
 	return false
 }
 
+// specHasSelectableFields 判断顶层或任一版本是否配置了 selectableFields。
 func specHasSelectableFields(spec *apiextensions.CustomResourceDefinitionSpec) bool {
 	if spec.SelectableFields != nil {
 		return true

@@ -23,7 +23,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestCalculateCondition 表驱动地验证受保护组（sigs.k8s.io）的审批注解解析：
+// 缺少、非法、已批准与未批准注解分别产生预期的条件。
 func TestCalculateCondition(t *testing.T) {
+	// noConditionFn 断言没有产生任何条件。
 	noConditionFn := func(t *testing.T, condition *apiextensionsv1.CustomResourceDefinitionCondition) {
 		t.Helper()
 		if condition != nil {

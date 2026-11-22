@@ -28,11 +28,11 @@ import (
 const metadataGV = "io.k8s.apimachinery.pkg.apis.meta.v1"
 const autoscalingGV = "io.k8s.api.autoscaling.v1"
 
-// MergeSpecs aggregates all OpenAPI specs, reusing the metadata of the first, static spec as the basis.
-// The static spec has the highest priority, and its paths and definitions won't get overlapped by
-// user-defined CRDs. None of the input is mutated, but input and output share data structures.
+// MergeSpecs 聚合所有 OpenAPI spec，复用第一个静态 spec 的元数据作为基础。
+// 静态 spec 优先级最高，其路径和定义不会被用户自定义的 CRD 覆盖。
+// 输入均不会被修改，但输入与输出共享底层数据结构。
 func MergeSpecs(staticSpec *spec.Swagger, crdSpecs ...*spec.Swagger) (*spec.Swagger, error) {
-	// create shallow copy of staticSpec, but replace paths and definitions because we modify them.
+	// 对 staticSpec 做浅拷贝，但替换 paths 和 definitions，因为后续会修改它们。
 	specToReturn := *staticSpec
 	if staticSpec.Definitions != nil {
 		specToReturn.Definitions = make(spec.Definitions, len(staticSpec.Definitions))
@@ -57,21 +57,19 @@ func MergeSpecs(staticSpec *spec.Swagger, crdSpecs ...*spec.Swagger) (*spec.Swag
 
 	crdSpec := &spec.Swagger{}
 	for _, s := range crdSpecs {
-		// merge specs without checking conflicts, since the naming controller prevents
-		// conflicts between user-defined CRDs
+		// 合并不检查冲突，因为命名控制器已阻止用户自定义 CRD 之间的冲突。
 		mergeSpec(crdSpec, s)
 	}
 
-	// The static spec has the highest priority. Resolve conflicts to prevent user-defined
-	// CRDs potentially overlapping the built-in apiextensions API
+	// 静态 spec 优先级最高。解析冲突，避免用户自定义 CRD 可能覆盖内建的 apiextensions API。
 	if err := aggregator.MergeSpecsIgnorePathConflictRenamingDefinitionsAndParameters(&specToReturn, crdSpec); err != nil {
 		return nil, err
 	}
 	return &specToReturn, nil
 }
 
-// mergeSpec copies paths, parameters and definitions from source to dest, mutating dest, but not source.
-// We assume that conflicts do not matter.
+// mergeSpec 把 source 的 paths、parameters 和 definitions 复制到 dest，
+// 只修改 dest，不修改 source。这里假定冲突无关紧要。
 func mergeSpec(dest, source *spec.Swagger) {
 	if source == nil || source.Paths == nil {
 		return
@@ -99,9 +97,9 @@ func mergeSpec(dest, source *spec.Swagger) {
 	}
 }
 
-// MergeSpecsV3 merges OpenAPI v3 specs for CRDs
-// Conflicts belonging to the meta.v1 or autoscaling.v1 group versions are skipped as all CRDs reference those types
-// Other conflicts will result in an error
+// MergeSpecsV3 合并 CRD 的 OpenAPI v3 spec。
+// 属于 meta.v1 或 autoscaling.v1 组版本的冲突会被跳过，因为所有 CRD 都引用这些类型；
+// 其他冲突则返回错误。
 func MergeSpecsV3(crdSpecs ...*spec3.OpenAPI) (*spec3.OpenAPI, error) {
 	crdSpec := &spec3.OpenAPI{}
 	if len(crdSpecs) > 0 {
@@ -117,9 +115,10 @@ func MergeSpecsV3(crdSpecs ...*spec3.OpenAPI) (*spec3.OpenAPI, error) {
 	return crdSpec, nil
 }
 
-// mergeSpecV3 copies paths and definitions from source to dest, mutating dest, but not source.
-// Conflicts belonging to the meta.v1 or autoscaling.v1 group versions are skipped as all CRDs reference those types
-// Other conflicts will result in an error
+// mergeSpecV3 把 source 的 paths 和 definitions 复制到 dest，
+// 只修改 dest，不修改 source。
+// 属于 meta.v1 或 autoscaling.v1 组版本的冲突会被跳过，因为所有 CRD 都引用这些类型；
+// 其他冲突会返回错误。
 func mergeSpecV3(dest, source *spec3.OpenAPI) error {
 	if source == nil || source.Paths == nil {
 		return nil
@@ -136,6 +135,7 @@ func mergeSpecV3(dest, source *spec3.OpenAPI) error {
 			dest.Components.Schemas = map[string]*spec.Schema{}
 		}
 		if _, exists := dest.Components.Schemas[k]; exists {
+			// 这些组版本被所有 CRD 共享，重复出现属于正常现象。
 			if strings.HasPrefix(k, metadataGV) || strings.HasPrefix(k, autoscalingGV) {
 				continue
 			}

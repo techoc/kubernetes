@@ -40,25 +40,25 @@ import (
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
-// ConditionController is maintaining the NonStructuralSchema condition.
+// ConditionController 维护 NonStructuralSchema condition。
 type ConditionController struct {
 	crdClient client.CustomResourceDefinitionsGetter
 
 	crdLister listers.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 允许测试注入。
 	syncFn func(ctx context.Context, key string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// last generation this controller updated the condition per CRD name (to avoid two
-	// different version of the apiextensions-apiservers in HA to fight for the right message)
+	// lastSeenGeneration 按 CRD 名称记录本控制器上次更新 condition 的 generation。
+	// 这样在 HA 部署下，多个 apiextensions-apiserver 不会为同一个消息反复互抢。
 	lastSeenGenerationLock sync.Mutex
 	lastSeenGeneration     map[string]int64
 }
 
-// NewConditionController constructs a non-structural schema condition controller.
+// NewConditionController 构造 non-structural schema condition 控制器。
 func NewConditionController(
 	crdInformer informers.CustomResourceDefinitionInformer,
 	crdClient client.CustomResourceDefinitionsGetter,
@@ -85,6 +85,8 @@ func NewConditionController(
 	return c
 }
 
+// calculateCondition 计算某个 CRD 的 NonStructuralSchema condition。
+// 返回 nil 表示没有违规，应移除该 condition。
 func calculateCondition(in *apiextensionsv1.CustomResourceDefinition) *apiextensionsv1.CustomResourceDefinitionCondition {
 	cond := &apiextensionsv1.CustomResourceDefinitionCondition{
 		Type:   apiextensionsv1.NonStructuralSchema,
@@ -100,6 +102,7 @@ func calculateCondition(in *apiextensionsv1.CustomResourceDefinition) *apiextens
 	}
 
 	for i, v := range in.Spec.Versions {
+		// 没有 schema 的版本不参与结构性判断。
 		if v.Schema == nil || v.Schema.OpenAPIV3Schema == nil {
 			continue
 		}
@@ -132,6 +135,7 @@ func calculateCondition(in *apiextensionsv1.CustomResourceDefinition) *apiextens
 	return cond
 }
 
+// sync 处理队列中的一个 CRD，按需更新其 NonStructuralSchema condition。
 func (c *ConditionController) sync(ctx context.Context, key string) error {
 	inCustomResourceDefinition, err := c.crdLister.Get(key)
 	if apierrors.IsNotFound(err) {
@@ -141,7 +145,7 @@ func (c *ConditionController) sync(ctx context.Context, key string) error {
 		return err
 	}
 
-	// avoid repeated calculation for the same generation
+	// 同一 generation 不重复计算
 	c.lastSeenGenerationLock.Lock()
 	lastSeen, seenBefore := c.lastSeenGeneration[inCustomResourceDefinition.Name]
 	c.lastSeenGenerationLock.Unlock()
@@ -149,7 +153,7 @@ func (c *ConditionController) sync(ctx context.Context, key string) error {
 		return nil
 	}
 
-	// check old condition
+	// 检查旧 condition
 	cond := calculateCondition(inCustomResourceDefinition)
 	old := apiextensionshelpers.FindCRDCondition(inCustomResourceDefinition, apiextensionsv1.NonStructuralSchema)
 
@@ -160,7 +164,7 @@ func (c *ConditionController) sync(ctx context.Context, key string) error {
 		return nil
 	}
 
-	// update condition
+	// 更新 condition
 	crd := inCustomResourceDefinition.DeepCopy()
 	if cond == nil {
 		apiextensionshelpers.RemoveCRDCondition(crd, apiextensionsv1.NonStructuralSchema)
@@ -171,15 +175,15 @@ func (c *ConditionController) sync(ctx context.Context, key string) error {
 
 	_, err = c.crdClient.CustomResourceDefinitions().UpdateStatus(ctx, crd, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-		// deleted or changed in the meantime, we'll get called again
+		// 删除或期间被修改，会再次触发，这里静默返回
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	// store generation in order to avoid repeated updates for the same generation (and potential
-	// fights of API server in HA environments).
+	// 记录 generation，避免同一 generation 反复更新（以及 HA 环境下多个
+	// apiserver 之间的互抢）。
 	c.lastSeenGenerationLock.Lock()
 	defer c.lastSeenGenerationLock.Unlock()
 	c.lastSeenGeneration[crd.Name] = crd.Generation
@@ -187,14 +191,14 @@ func (c *ConditionController) sync(ctx context.Context, key string) error {
 	return nil
 }
 
-// Run starts the controller.
+// Run 启动控制器。
 //
-//logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应改用 RunWithContext 而不是 Run。
 func (c *ConditionController) Run(workers int, stopCh <-chan struct{}) {
 	c.RunWithContext(workers, wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext is a context-aware version of Run.
+// RunWithContext 是 Run 的上下文感知版本。
 func (c *ConditionController) RunWithContext(workers int, ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -213,12 +217,13 @@ func (c *ConditionController) RunWithContext(workers int, ctx context.Context) {
 	<-ctx.Done()
 }
 
+// runWorker 是单个 worker 的循环，持续处理队列直到队列关闭。
 func (c *ConditionController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key。到了退出时间时返回 false。
 func (c *ConditionController) processNextWorkItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -238,6 +243,7 @@ func (c *ConditionController) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// enqueue 把对象对应的 key 加入队列。
 func (c *ConditionController) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -248,21 +254,25 @@ func (c *ConditionController) enqueue(obj *apiextensionsv1.CustomResourceDefinit
 	c.queue.Add(key)
 }
 
+// addCustomResourceDefinition 是 informer 的 Add 回调。
 func (c *ConditionController) addCustomResourceDefinition(obj interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Adding %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// updateCustomResourceDefinition 是 informer 的 Update 回调；旧对象不参与处理。
 func (c *ConditionController) updateCustomResourceDefinition(obj, _ interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Updating %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// deleteCustomResourceDefinition 是 informer 的 Delete 回调，负责清理 generation 记录。
 func (c *ConditionController) deleteCustomResourceDefinition(obj interface{}) {
 	castObj, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
+		// 删除事件可能以 tombstone 形式送达，需要再解一层。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("Couldn't get object from tombstone %#v", obj)

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// intOrStringAnyOf 是 int-or-string 这种例外结构中 anyOf/allOf 允许的两种类型。
 var intOrStringAnyOf = []NestedValueValidation{
 	{ForbiddenGenerics: Generic{
 		Type: "integer",
@@ -34,67 +35,87 @@ var intOrStringAnyOf = []NestedValueValidation{
 	}},
 }
 
+// level 标识结构化 schema 校验所处的位置层级。
 type level int
 
 const (
+	// rootLevel 表示 schema 的根节点。
 	rootLevel level = iota
+	// itemLevel 表示数组元素的 schema。
 	itemLevel
+	// fieldLevel 表示对象字段或 additionalProperties 的 schema。
 	fieldLevel
 )
 
+// ValidationOptions 控制结构性校验的放宽开关，
+// 用于在全量校验与特性化校验之间切换。
 type ValidationOptions struct {
-	// AllowNestedAdditionalProperties allows additionalProperties to be specified in
-	// nested contexts (allOf, anyOf, oneOf, not).
+	// AllowNestedAdditionalProperties 允许在嵌套上下文
+	// （allOf、anyOf、oneOf、not）中指定 additionalProperties。
 	AllowNestedAdditionalProperties bool
 
-	// AllowNestedXValidations allows x-kubernetes-validations to be specified in
-	// nested contexts (allOf, anyOf, oneOf, not).
+	// AllowNestedXValidations 允许在嵌套上下文
+	// （allOf、anyOf、oneOf、not）中指定 x-kubernetes-validations。
 	AllowNestedXValidations bool
 
-	// AllowValidationPropertiesWithAdditionalProperties allows
-	// value validations on specific properties that are structually
-	// defined by additionalProperties. i.e. additionalProperties in main structural
-	// schema, but properties within an allOf.
+	// AllowValidationPropertiesWithAdditionalProperties 允许在由
+	// additionalProperties 结构定义的属性上指定取值校验，
+	// 例如主结构 schema 的 additionalProperties 在 allOf 内的属性。
 	AllowValidationPropertiesWithAdditionalProperties bool
 }
 
-// ValidateStructural checks that s is a structural schema with the invariants:
+// ValidateStructural 校验 s 是否为一个满足下列不变性的结构化 schema：
 //
-// * structurality: both `ForbiddenGenerics` and `ForbiddenExtensions` only have zero values, with the two exceptions for IntOrString.
-// * RawExtension: for every schema with `x-kubernetes-embedded-resource: true`, `x-kubernetes-preserve-unknown-fields: true` and `type: object` are set
-// * IntOrString: for `x-kubernetes-int-or-string: true` either `type` is empty under `anyOf` and `allOf` or the schema structure is one of these:
+//   - 结构性：ForbiddenGenerics 和 ForbiddenExtensions 只能为零值，
+//     但 IntOrString 有两种例外。
 //
-//  1. anyOf:
-//     - type: integer
-//     - type: string
-//  2. allOf:
-//     - anyOf:
-//     - type: integer
-//     - type: string
-//     - ... zero or more
+//   - RawExtension：凡设置了 `x-kubernetes-embedded-resource: true` 的 schema，
+//     必须同时设置 `x-kubernetes-preserve-unknown-fields: true` 且 `type: object`。
 //
-// * every specified field or array in s is also specified outside of value validation.
-// * metadata at the root can only restrict the name and generateName, and not be specified at all in nested contexts.
-// * additionalProperties at the root is not allowed.
+//   - IntOrString：对于 `x-kubernetes-int-or-string: true`，anyOf/allOf 下的 `type`
+//     必须为空，或其结构为下列之一：
+//
+//     1. anyOf:
+//
+//   - type: integer
+//
+//   - type: string
+//     2. allOf:
+//
+//   - anyOf:
+//
+//   - type: integer
+//
+//   - type: string
+//
+//   - ... 可再有零个或多个
+//
+//   - s 中指定的每个字段或数组，也必须在取值校验之外被指定。
+//
+//   - 根处的 metadata 只能约束 name 和 generateName，
+//     且在嵌套上下文中完全不允许指定。
+//
+//   - 根处不允许 additionalProperties。
 func ValidateStructural(fldPath *field.Path, s *Structural) field.ErrorList {
 	return ValidateStructuralWithOptions(fldPath, s, ValidationOptions{
-		// This would widen the schema for CRD if set to true, so first few releases will still
-		// not admit any. But it can still be used by libraries and
-		// declarative validation for native types
+		// 置为 true 会放宽 CRD 的 schema，因此最初几个版本仍不接受任何放宽；
+		// 但本地库和声明式校验原生类型时仍可使用。
 		AllowNestedAdditionalProperties:                   false,
 		AllowNestedXValidations:                           false,
 		AllowValidationPropertiesWithAdditionalProperties: false,
 	})
 }
 
+// ValidateStructuralWithOptions 在给定选项下校验结构化 schema，
+// 返回全部错误。
 func ValidateStructuralWithOptions(fldPath *field.Path, s *Structural, opts ValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
 	allErrs = append(allErrs, validateStructuralInvariants(s, rootLevel, fldPath, opts)...)
 	allErrs = append(allErrs, validateStructuralCompleteness(s, fldPath, opts)...)
 
-	// sort error messages. Otherwise, the errors slice will change every time due to
-	// maps in the types and randomized iteration.
+	// 对错误消息排序，否则由于类型中的 map 以及随机迭代顺序，
+	// 每次返回的切片都会不同。
 	sort.Slice(allErrs, func(i, j int) bool {
 		return allErrs[i].Error() < allErrs[j].Error()
 	})
@@ -102,7 +123,7 @@ func ValidateStructuralWithOptions(fldPath *field.Path, s *Structural, opts Vali
 	return allErrs
 }
 
-// validateStructuralInvariants checks the invariants of a structural schema.
+// validateStructuralInvariants 校验结构化 schema 的不变性。
 func validateStructuralInvariants(s *Structural, lvl level, fldPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if s == nil {
 		return nil
@@ -131,7 +152,7 @@ func validateStructuralInvariants(s *Structural, lvl level, fldPath *field.Path,
 	allErrs = append(allErrs, validateGeneric(&s.Generic, lvl, fldPath)...)
 	allErrs = append(allErrs, validateExtensions(&s.Extensions, fldPath)...)
 
-	// detect the two IntOrString exceptions:
+	// 识别两种 IntOrString 例外结构：
 	// 1) anyOf:
 	//    - type: integer
 	//    - type: string
@@ -139,7 +160,7 @@ func validateStructuralInvariants(s *Structural, lvl level, fldPath *field.Path,
 	//    - anyOf:
 	//      - type: integer
 	//      - type: string
-	//    - ... zero or more
+	//    - ... 可再有零个或多个
 	skipAnyOf := isIntOrStringAnyOfPattern(s)
 	skipFirstAllOfAnyOf := isIntOrStringAllOfPattern(s)
 
@@ -171,7 +192,7 @@ func validateStructuralInvariants(s *Structural, lvl level, fldPath *field.Path,
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("type"), s.Type, "must be object at the root"))
 	}
 
-	// restrict metadata schemas to name and generateName only
+	// 仅把 metadata schema 限制在 name 和 generateName 上。
 	if kind, found := s.Properties["kind"]; found && checkMetadata {
 		if kind.Type != "string" {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("properties").Key("kind").Child("type"), kind.Type, "must be string"))
@@ -194,6 +215,8 @@ func validateStructuralInvariants(s *Structural, lvl level, fldPath *field.Path,
 	return allErrs
 }
 
+// validateStructuralMetadataInvariants 校验 metadata 字段的结构性约束，
+// 并就地修正根处的 metadata（仅保留 name/generateName）。
 func validateStructuralMetadataInvariants(s *Structural, checkMetadata bool, lvl level, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -202,7 +225,7 @@ func validateStructuralMetadataInvariants(s *Structural, checkMetadata bool, lvl
 	}
 
 	if lvl == rootLevel {
-		// metadata is a shallow copy. We can mutate it.
+		// metadata 是浅拷贝，可以直接就地修改。
 		_, foundName := s.Properties["name"]
 		_, foundGenerateName := s.Properties["generateName"]
 		if foundName && foundGenerateName && len(s.Properties) == 2 {
@@ -211,12 +234,12 @@ func validateStructuralMetadataInvariants(s *Structural, checkMetadata bool, lvl
 			s.Properties = nil
 		}
 		s.Type = ""
-		s.Default.Object = nil // this is checked in API validation (and also tested)
+		s.Default.Object = nil // 该默认值在 API 校验中处理（且已有测试覆盖）
 		if s.ValueValidation == nil {
 			s.ValueValidation = &ValueValidation{}
 		}
 		if !reflect.DeepEqual(*s, Structural{ValueValidation: &ValueValidation{}}) {
-			// TODO: this is actually a field.Invalid error, but we cannot do JSON serialization of metadata here to get a proper message
+			// TODO: 这实际上是一个 field.Invalid 错误，但此处无法对 metadata 做 JSON 序列化以获得恰当消息
 			allErrs = append(allErrs, field.Forbidden(fldPath, "must not specify anything other than name and generateName, but metadata is implicitly specified"))
 		}
 	}
@@ -224,6 +247,7 @@ func validateStructuralMetadataInvariants(s *Structural, checkMetadata bool, lvl
 	return allErrs
 }
 
+// isIntOrStringAnyOfPattern 判断 schema 的 anyOf 是否为 integer/string 的 IntOrString 结构。
 func isIntOrStringAnyOfPattern(s *Structural) bool {
 	if s == nil || s.ValueValidation == nil {
 		return false
@@ -231,6 +255,7 @@ func isIntOrStringAnyOfPattern(s *Structural) bool {
 	return len(s.ValueValidation.AnyOf) == 2 && reflect.DeepEqual(s.ValueValidation.AnyOf, intOrStringAnyOf)
 }
 
+// isIntOrStringAllOfPattern 判断 schema 的 allOf[0].anyOf 是否为 integer/string 的 IntOrString 结构。
 func isIntOrStringAllOfPattern(s *Structural) bool {
 	if s == nil || s.ValueValidation == nil {
 		return false
@@ -238,7 +263,7 @@ func isIntOrStringAllOfPattern(s *Structural) bool {
 	return len(s.ValueValidation.AllOf) >= 1 && len(s.ValueValidation.AllOf[0].AnyOf) == 2 && reflect.DeepEqual(s.ValueValidation.AllOf[0].AnyOf, intOrStringAnyOf)
 }
 
-// validateGeneric checks the generic fields of a structural schema.
+// validateGeneric 校验结构化 schema 的通用字段。
 func validateGeneric(g *Generic, lvl level, fldPath *field.Path) field.ErrorList {
 	if g == nil {
 		return nil
@@ -247,7 +272,7 @@ func validateGeneric(g *Generic, lvl level, fldPath *field.Path) field.ErrorList
 	return nil
 }
 
-// validateExtensions checks Kubernetes vendor extensions of a structural schema.
+// validateExtensions 校验结构化 schema 的 Kubernetes 扩展字段。
 func validateExtensions(x *Extensions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -261,7 +286,7 @@ func validateExtensions(x *Extensions, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// validateValueValidation checks the value validation in a structural schema.
+// validateValueValidation 校验结构化 schema 中的取值校验。
 func validateValueValidation(v *ValueValidation, skipAnyOf, skipFirstAllOfAnyOf bool, lvl level, fldPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if v == nil {
 		return nil
@@ -269,10 +294,8 @@ func validateValueValidation(v *ValueValidation, skipAnyOf, skipFirstAllOfAnyOf 
 
 	allErrs := field.ErrorList{}
 
-	// We still unconditionally forbid XValidations in quantifiers, the only
-	// quantifier that is allowed to have right now is AllOf. This is due to
-	// implementation constraints - the SchemaValidator would need to become
-	// aware of CEL to properly implement the other quantifiers.
+	// 仍无条件禁止在量词中使用 XValidations；当前唯一允许的量词是 AllOf。
+	// 这是实现层面的约束——SchemaValidator 需要感知 CEL 才能正确实现其他量词。
 	optsWithCELDisabled := opts
 	optsWithCELDisabled.AllowNestedXValidations = false
 
@@ -305,7 +328,7 @@ func validateValueValidation(v *ValueValidation, skipAnyOf, skipFirstAllOfAnyOf 
 	return allErrs
 }
 
-// validateNestedValueValidation checks the nested value validation under a logic junctor in a structural schema.
+// validateNestedValueValidation 校验结构化 schema 中逻辑连接词下嵌套的取值校验。
 func validateNestedValueValidation(v *NestedValueValidation, skipAnyOf, skipAllOfAnyOf bool, lvl level, fldPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if v == nil {
 		return nil
@@ -363,7 +386,8 @@ func validateNestedValueValidation(v *NestedValueValidation, skipAnyOf, skipAllO
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("x-kubernetes-validations"), "must be empty to be structural"))
 	}
 
-	// forbid reasoning about metadata because it can lead to metadata restriction we don't want
+	// 禁止在嵌套上下文中对 metadata 做推理，
+	// 否则会引入我们不希望的 metadata 限制。
 	if _, found := v.Properties["metadata"]; found {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("properties").Key("metadata"), "must not be specified in a nested context"))
 	}

@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
+// Test_cellForJSONValue 验证不同列类型下，原始 JSON 值被转换成 Table cell 的规则。
 func Test_cellForJSONValue(t *testing.T) {
 	tests := []struct {
 		headerType string
@@ -75,6 +76,8 @@ func Test_cellForJSONValue(t *testing.T) {
 	}
 }
 
+// Test_convertor_ConvertToTable 验证对象和列表转 Table 的行为，包括 TableOptions、
+// 额外 JSONPath 列以及多值列的渲染。
 func Test_convertor_ConvertToTable(t *testing.T) {
 	type fields struct {
 		headers           []metav1.TableColumnDefinition
@@ -252,7 +255,7 @@ func Test_convertor_ConvertToTable(t *testing.T) {
 							"foo",
 							`["foo"]`,
 							`["bar","baz"]`,
-							`["foo"]`, // TODO: TableConverter should be changed so that the response is this: `["foo"] ["bar","baz"]`,
+							`["foo"]`, // TODO: 应修改 TableConverter，使响应为：`["foo"] ["bar","baz"]`,
 						},
 						Object: runtime.RawExtension{
 							Object: &unstructured.Unstructured{
@@ -325,7 +328,7 @@ func Test_convertor_ConvertToTable(t *testing.T) {
 							"1",
 							"[1]",
 							"[2,3]",
-							"[1]", // TODO: TableConverter should be changed so that the response is this: `[1] [2,3]`,
+							"[1]", // TODO: 应修改 TableConverter，使响应为：`[1] [2,3]`,
 						},
 						Object: runtime.RawExtension{
 							Object: &unstructured.Unstructured{
@@ -396,9 +399,9 @@ func Test_convertor_ConvertToTable(t *testing.T) {
 						Cells: []interface{}{
 							"blah",
 							int64(1),
-							nil, // TODO: Seems like this should either return some data or return an error, not just be nil
-							nil, // TODO: Seems like this should either return some data or return an error, not just be nil
-							nil, // TODO: Seems like this should either return some data or return an error, not just be nil
+							nil, // TODO: 这里似乎要么返回数据、要么返回错误，不应只是 nil
+							nil, // TODO: 这里似乎要么返回数据、要么返回错误，不应只是 nil
+							nil, // TODO: 这里似乎要么返回数据、要么返回错误，不应只是 nil
 						},
 						Object: runtime.RawExtension{
 							Object: &unstructured.Unstructured{
@@ -440,6 +443,8 @@ func Test_convertor_ConvertToTable(t *testing.T) {
 	}
 }
 
+// newJSONPath 构造一个命名 JSONPath 列打印机；解析错误在这里被忽略，
+// 由 ConvertToTable 使用时的行为暴露。
 func newJSONPath(name string, jsonPathExpression string) columnPrinter {
 	jp := jsonpath.New(name)
 	_ = jp.Parse(jsonPathExpression)

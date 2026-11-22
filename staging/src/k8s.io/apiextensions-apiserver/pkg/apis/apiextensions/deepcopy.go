@@ -18,7 +18,10 @@ package apiextensions
 
 import "k8s.io/apimachinery/pkg/runtime"
 
-// TODO: Update this after a tag is created for interface fields in DeepCopy
+// DeepCopy 返回 JSONSchemaProps 的深拷贝。
+// 这是手写的深拷贝：Default/Example 等 JSON 字段可能是 map 或 slice，
+// 直接赋值只会共享引用，必须经 runtime.DeepCopyJSONValue 复制。
+// TODO: 为 DeepCopy 中的 interface 字段创建 tag 之后更新此处。
 func (in *JSONSchemaProps) DeepCopy() *JSONSchemaProps {
 	if in == nil {
 		return nil
@@ -27,6 +30,7 @@ func (in *JSONSchemaProps) DeepCopy() *JSONSchemaProps {
 
 	*out = *in
 
+	// Default 与 Example 是任意 JSON 值，需要递归复制。
 	if in.Default != nil {
 		defaultJSON := JSON(runtime.DeepCopyJSONValue(*(in.Default)))
 		out.Default = &(defaultJSON)

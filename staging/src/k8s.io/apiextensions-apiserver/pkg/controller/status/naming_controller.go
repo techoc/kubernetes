@@ -43,24 +43,25 @@ import (
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
-// This controller is reserving names. To avoid conflicts, be sure to run only one instance of the worker at a time.
-// This could eventually be lifted, but starting simple.
+// 本控制器为 CRD 名称做“占位”协调。为避免冲突，同一时刻只能运行一个 worker 实例。
+// 将来可以放开该限制，先从简单方案开始。
 type NamingConditionController struct {
 	crdClient client.CustomResourceDefinitionsGetter
 
 	crdLister listers.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
-	// crdMutationCache backs our lister and keeps track of committed updates to avoid racy
-	// write/lookup cycles.  It's got 100 slots by default, so it unlikely to overrun
-	// TODO to revisit this if naming conflicts are found to occur in the wild
+	// crdMutationCache 位于 lister 之后，记录已提交的更新，避免写入/查询之间的竞态。
+	// 默认有 100 个槽位，一般不会溢出
+	// TODO: 若在真实环境中发现命名冲突，需重新审视该方案
 	crdMutationCache cache.MutationCache
 
-	// To allow injection for testing.
+	// 便于测试时注入自定义实现。
 	syncFn func(ctx context.Context, key string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
+// NewNamingConditionController 创建名称条件控制器，并注册 CRD informer 事件处理。
 func NewNamingConditionController(
 	logger klog.Logger,
 	crdInformer informers.CustomResourceDefinitionInformer,
@@ -77,6 +78,7 @@ func NewNamingConditionController(
 	}
 
 	informerIndexer := crdInformer.Informer().GetIndexer()
+	// 变更缓存以 informer 索引器为后备存储，使刚更新的对象立即可见
 	c.crdMutationCache = cache.NewIntegerResourceVersionMutationCache(logger, informerIndexer, informerIndexer, 60*time.Second, false)
 
 	crdInformer.Informer().AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
@@ -94,6 +96,7 @@ func NewNamingConditionController(
 	return c
 }
 
+// getAcceptedNamesForGroup 收集同一 group 下所有 CRD 已接受的资源名与 Kind，用于冲突检测。
 func (c *NamingConditionController) getAcceptedNamesForGroup(group string) (allResources sets.String, allKinds sets.String) {
 	allResources = sets.String{}
 	allKinds = sets.String{}
@@ -108,9 +111,8 @@ func (c *NamingConditionController) getAcceptedNamesForGroup(group string) (allR
 			continue
 		}
 
-		// for each item here, see if we have a mutation cache entry that is more recent
-		// this makes sure that if we tight loop on update and run, our mutation cache will show
-		// us the version of the objects we just updated to.
+		// 对每个条目检查变更缓存中是否有更新版本。
+		// 这样在更新后紧接重跑时，能读到刚写入的最新对象。
 		item := curr
 		obj, exists, err := c.crdMutationCache.GetByKey(curr.Name)
 		if exists && err == nil {
@@ -128,8 +130,9 @@ func (c *NamingConditionController) getAcceptedNamesForGroup(group string) (allR
 	return allResources, allKinds
 }
 
+// calculateNamesAndConditions 根据同 group 已占用的名称计算可接受的名称与相关条件。
 func (c *NamingConditionController) calculateNamesAndConditions(in *apiextensionsv1.CustomResourceDefinition) (apiextensionsv1.CustomResourceDefinitionNames, apiextensionsv1.CustomResourceDefinitionCondition, apiextensionsv1.CustomResourceDefinitionCondition) {
-	// Get the names that have already been claimed
+	// 获取已被占用的名称
 	allResources, allKinds := c.getAcceptedNamesForGroup(in.Spec.Group)
 
 	namesAcceptedCondition := apiextensionsv1.CustomResourceDefinitionCondition{
@@ -141,8 +144,8 @@ func (c *NamingConditionController) calculateNamesAndConditions(in *apiextension
 	acceptedNames := in.Status.AcceptedNames
 	newNames := in.Status.AcceptedNames
 
-	// Check each name for mismatches.  If there's a mismatch between spec and status, then try to deconflict.
-	// Continue on errors so that the status is the best match possible
+	// 逐项检查名称是否冲突。若 spec 与 status 不一致，则尝试消解冲突。
+	// 出错后继续检查，以便 status 尽可能完整。
 	if err := equalToAcceptedOrFresh(requestedNames.Plural, acceptedNames.Plural, allResources); err != nil {
 		namesAcceptedCondition.Status = apiextensionsv1.ConditionFalse
 		namesAcceptedCondition.Reason = "PluralConflict"
@@ -161,7 +164,7 @@ func (c *NamingConditionController) calculateNamesAndConditions(in *apiextension
 		errs := []error{}
 		existingShortNames := sets.NewString(acceptedNames.ShortNames...)
 		for _, shortName := range requestedNames.ShortNames {
-			// if the shortname is already ours, then we're fine
+			// 若短名本来就属于自己，则无需检查
 			if existingShortNames.Has(shortName) {
 				continue
 			}
@@ -196,17 +199,16 @@ func (c *NamingConditionController) calculateNamesAndConditions(in *apiextension
 
 	newNames.Categories = requestedNames.Categories
 
-	// if we haven't changed the condition, then our names must be good.
+	// 条件未发生变化，说明名称可用。
 	if namesAcceptedCondition.Status == apiextensionsv1.ConditionUnknown {
 		namesAcceptedCondition.Status = apiextensionsv1.ConditionTrue
 		namesAcceptedCondition.Reason = "NoConflicts"
 		namesAcceptedCondition.Message = "no conflicts found"
 	}
 
-	// set EstablishedCondition initially to false, then set it to true in establishing controller.
-	// The Establishing Controller will see the NamesAccepted condition when it arrives through the shared informer.
-	// At that time the API endpoint handler will serve the endpoint, avoiding a race
-	// which we had if we set Established to true here.
+	// 先将 Established 条件置为 false，由 establishing 控制器稍后置为 true。
+	// establishing 控制器会在共享 informer 中看到 NamesAccepted 条件；
+	// 届时 API 端点处理器才开始提供该端点，从而避免在这里直接置 true 所导致的竞态。
 	establishedCondition := apiextensionsv1.CustomResourceDefinitionCondition{
 		Type:    apiextensionsv1.Established,
 		Status:  apiextensionsv1.ConditionFalse,
@@ -228,6 +230,7 @@ func (c *NamingConditionController) calculateNamesAndConditions(in *apiextension
 	return newNames, namesAcceptedCondition, establishedCondition
 }
 
+// equalToAcceptedOrFresh 判断请求的名称是否可接受（与已接受名称相同或尚未被占用）。
 func equalToAcceptedOrFresh(requestedName, acceptedName string, usedNames sets.String) error {
 	if requestedName == acceptedName {
 		return nil
@@ -239,11 +242,11 @@ func equalToAcceptedOrFresh(requestedName, acceptedName string, usedNames sets.S
 	return fmt.Errorf("%q is already in use", requestedName)
 }
 
+// sync 协调单个 CRD：计算名称与条件，必要时更新 status。
 func (c *NamingConditionController) sync(ctx context.Context, key string) error {
 	inCustomResourceDefinition, err := c.crdLister.Get(key)
 	if apierrors.IsNotFound(err) {
-		// CRD was deleted and has freed its names.
-		// Reconsider all other CRDs in the same group.
+		// CRD 已删除并释放了占用的名称，需要重新检查同 group 的其他 CRD。
 		if err := c.requeueAllOtherGroupCRDs(key); err != nil {
 			return err
 		}
@@ -253,14 +256,14 @@ func (c *NamingConditionController) sync(ctx context.Context, key string) error 
 		return err
 	}
 
-	// Skip checking names if Spec and Status names are same.
+	// 若 spec 与 status 中的名称相同，则跳过检查。
 	if equality.Semantic.DeepEqual(inCustomResourceDefinition.Spec.Names, inCustomResourceDefinition.Status.AcceptedNames) {
 		return nil
 	}
 
 	acceptedNames, namingCondition, establishedCondition := c.calculateNamesAndConditions(inCustomResourceDefinition)
 
-	// nothing to do if accepted names and NamesAccepted condition didn't change
+	// 若已接受名称与 NamesAccepted 条件均未变化，则无需处理。
 	if reflect.DeepEqual(inCustomResourceDefinition.Status.AcceptedNames, acceptedNames) &&
 		apiextensionshelpers.IsCRDConditionEquivalent(&namingCondition, apiextensionshelpers.FindCRDCondition(inCustomResourceDefinition, apiextensionsv1.NamesAccepted)) {
 		return nil
@@ -273,18 +276,18 @@ func (c *NamingConditionController) sync(ctx context.Context, key string) error 
 
 	updatedObj, err := c.crdClient.CustomResourceDefinitions().UpdateStatus(ctx, crd, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-		// deleted or changed in the meantime, we'll get called again
+		// 对象已被删除或在此期间被修改，后续会再次被调度
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	// if the update was successful, go ahead and add the entry to the mutation cache
+	// 更新成功后，把结果写入变更缓存
 	c.crdMutationCache.Mutation(updatedObj)
 
-	// we updated our status, so we may be releasing a name.  When this happens, we need to rekick everything in our group
-	// if we fail to rekick, just return as normal.  We'll get everything on a resync
+	// status 更新可能释放了某个名称，需要重新调度同 group 的所有 CRD。
+	// 若重新调度失败则直接返回，等待 resync 兜底。
 	if err := c.requeueAllOtherGroupCRDs(key); err != nil {
 		return err
 	}
@@ -292,12 +295,12 @@ func (c *NamingConditionController) sync(ctx context.Context, key string) error 
 	return nil
 }
 
-//logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应改用 RunWithContext 而不是 Run。
 func (c *NamingConditionController) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext is a context-aware version of Run.
+// RunWithContext 是 Run 的上下文感知版本。
 func (c *NamingConditionController) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -309,18 +312,19 @@ func (c *NamingConditionController) RunWithContext(ctx context.Context) {
 		return
 	}
 
-	// only start one worker thread since its a slow moving API and the naming conflict resolution bits aren't thread-safe
+	// 只启动一个 worker：该 API 变更不频繁，且命名冲突消解逻辑并非线程安全
 	go wait.UntilWithContext(ctx, c.runWorker, time.Second)
 
 	<-ctx.Done()
 }
 
+// runWorker 持续处理队列中的工作项，直到队列关闭。
 func (c *NamingConditionController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 func (c *NamingConditionController) processNextWorkItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -340,6 +344,7 @@ func (c *NamingConditionController) processNextWorkItem(ctx context.Context) boo
 	return true
 }
 
+// enqueue 将对象对应的 key 加入工作队列。
 func (c *NamingConditionController) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -350,21 +355,25 @@ func (c *NamingConditionController) enqueue(obj *apiextensionsv1.CustomResourceD
 	c.queue.Add(key)
 }
 
+// addCustomResourceDefinition 处理 CRD 新增事件。
 func (c *NamingConditionController) addCustomResourceDefinition(obj interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Adding %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// updateCustomResourceDefinition 处理 CRD 更新事件，仅关心新对象。
 func (c *NamingConditionController) updateCustomResourceDefinition(obj, _ interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Updating %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// deleteCustomResourceDefinition 处理 CRD 删除事件，并兼容 tombstone 对象。
 func (c *NamingConditionController) deleteCustomResourceDefinition(obj interface{}) {
 	castObj, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
+		// 删除事件可能携带 DeletedFinalStateUnknown tombstone
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("Couldn't get object from tombstone %#v", obj)
@@ -380,6 +389,7 @@ func (c *NamingConditionController) deleteCustomResourceDefinition(obj interface
 	c.enqueue(castObj)
 }
 
+// requeueAllOtherGroupCRDs 重新调度同一 group 下除当前 CRD 之外的所有 CRD。
 func (c *NamingConditionController) requeueAllOtherGroupCRDs(name string) error {
 	pluralGroup := strings.SplitN(name, ".", 2)
 	list, err := c.crdLister.List(labels.Everything())
@@ -387,6 +397,7 @@ func (c *NamingConditionController) requeueAllOtherGroupCRDs(name string) error 
 		return err
 	}
 	for _, curr := range list {
+		// 名称作为 key，形如 <plural>.<group>，第二段即 group
 		if curr.Spec.Group == pluralGroup[1] && curr.Name != name {
 			c.queue.Add(curr.Name)
 		}

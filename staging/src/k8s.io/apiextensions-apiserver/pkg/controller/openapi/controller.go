@@ -43,12 +43,12 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/controller/openapi/builder"
 )
 
-// Controller watches CustomResourceDefinitions and publishes validation schema
+// Controller 监听 CustomResourceDefinition 并发布其校验 schema。
 type Controller struct {
 	crdLister  listers.CustomResourceDefinitionLister
 	crdsSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 便于测试时注入自定义实现。
 	syncFn func(string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
@@ -57,33 +57,34 @@ type Controller struct {
 
 	openAPIService *handler.OpenAPIService
 
-	// specs by name. The specs are lazily constructed on request.
-	// The lock is for the map only.
+	// 按名称索引的 spec；spec 在请求时惰性构建。
+	// 此处的锁只保护 map。
 	lock        sync.Mutex
 	specsByName map[string]*specCache
 }
 
-// specCache holds the merged version spec for a CRD as well as the CRD object.
-// The spec is created lazily from the CRD object on request.
-// The mergedVersionSpec is only created on instantiation and is never
-// changed. crdCache is a cached.Replaceable and updates are thread
-// safe. Thus, no lock is needed to protect this struct.
+// specCache 保存某个 CRD 的合并版本 spec 及 CRD 对象。
+// spec 在请求时由 CRD 对象惰性生成。
+// mergedVersionSpec 仅在实例化时创建且不再变更；crdCache 是 cached.Replaceable，
+// 更新是线程安全的。因此该结构无需加锁。
 type specCache struct {
 	crdCache          cached.LastSuccess[*apiextensionsv1.CustomResourceDefinition]
 	mergedVersionSpec cached.Value[*spec.Swagger]
 }
 
+// update 用新的 CRD 对象（附哈希）替换缓存内容。
 func (s *specCache) update(crd *apiextensionsv1.CustomResourceDefinition) {
 	s.crdCache.Store(cached.Static(crd, generateCRDHash(crd)))
 }
 
+// createSpecCache 为 CRD 创建惰性合并 spec 缓存。
 func createSpecCache(crd *apiextensionsv1.CustomResourceDefinition) *specCache {
 	s := specCache{}
 	s.update(crd)
 
 	s.mergedVersionSpec = cached.Transform[*apiextensionsv1.CustomResourceDefinition](func(crd *apiextensionsv1.CustomResourceDefinition, etag string, err error) (*spec.Swagger, string, error) {
 		if err != nil {
-			// This should never happen, but return the err if it does.
+			// 理论上不会发生，但真发生时原样返回错误。
 			return nil, "", err
 		}
 		mergeSpec := &spec.Swagger{}
@@ -95,8 +96,7 @@ func createSpecCache(crd *apiextensionsv1.CustomResourceDefinition) *specCache {
 				V2:                      true,
 				IncludeSelectableFields: utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CustomResourceFieldSelectors),
 			})
-			// Defaults must be pruned here for CRDs to cleanly merge with the static
-			// spec that already has defaults pruned
+			// 必须在此裁剪默认值，才能与已裁剪默认值的静态 spec 干净合并
 			if err != nil {
 				return nil, "", err
 			}
@@ -111,7 +111,7 @@ func createSpecCache(crd *apiextensionsv1.CustomResourceDefinition) *specCache {
 	return &s
 }
 
-// NewController creates a new Controller with input CustomResourceDefinition informer
+// NewController 使用给定的 CustomResourceDefinition informer 创建 Controller。
 func NewController(crdInformer informers.CustomResourceDefinitionInformer) *Controller {
 	c := &Controller{
 		crdLister:  crdInformer.Lister(),
@@ -133,7 +133,7 @@ func NewController(crdInformer informers.CustomResourceDefinitionInformer) *Cont
 	return c
 }
 
-// Run sets openAPIAggregationManager and starts workers
+// Run 设置 openAPIAggregationManager 并启动 worker。
 func (c *Controller) Run(staticSpec *spec.Swagger, openAPIService *handler.OpenAPIService, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -149,13 +149,14 @@ func (c *Controller) Run(staticSpec *spec.Swagger, openAPIService *handler.OpenA
 		return
 	}
 
-	// create initial spec to avoid merging once per CRD on startup
+	// 预先创建初始 spec，避免启动时为每个 CRD 各合并一次
 	crds, err := c.crdLister.List(labels.Everything())
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to initially list all CRDs: %v", err))
 		return
 	}
 	for _, crd := range crds {
+		// 只有已 Established 的 CRD 才对外提供 API
 		if !apiextensionshelpers.IsCRDConditionTrue(crd, apiextensionsv1.Established) {
 			continue
 		}
@@ -163,17 +164,19 @@ func (c *Controller) Run(staticSpec *spec.Swagger, openAPIService *handler.OpenA
 	}
 	c.updateSpecLocked()
 
-	// only start one worker thread since its a slow moving API
+	// 该 API 变更不频繁，只启动一个 worker
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
 }
 
+// runWorker 持续处理队列中的工作项，直到队列关闭。
 func (c *Controller) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 func (c *Controller) processNextWorkItem() bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -181,7 +184,7 @@ func (c *Controller) processNextWorkItem() bool {
 	}
 	defer c.queue.Done(key)
 
-	// log slow aggregations
+	// 记录耗时过长的聚合操作
 	start := time.Now()
 	defer func() {
 		elapsed := time.Since(start)
@@ -201,6 +204,7 @@ func (c *Controller) processNextWorkItem() bool {
 	return true
 }
 
+// sync 协调单个 CRD 对应的 OpenAPI spec 缓存。
 func (c *Controller) sync(name string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -210,7 +214,7 @@ func (c *Controller) sync(name string) error {
 		return err
 	}
 
-	// do we have to remove all specs of this CRD?
+	// 是否需要移除该 CRD 的所有 spec？
 	if errors.IsNotFound(err) || !apiextensionshelpers.IsCRDConditionTrue(crd, apiextensionsv1.Established) {
 		if _, found := c.specsByName[name]; !found {
 			return nil
@@ -222,9 +226,8 @@ func (c *Controller) sync(name string) error {
 		return nil
 	}
 
-	// If CRD spec already exists, update the CRD.
-	// specCache.update() includes the ETag so an update on a spec
-	// resulting in the same ETag will be a noop.
+	// 若已存在该 CRD 的 spec，则更新它。
+	// specCache.update() 附带 ETag，更新后 ETag 不变则被视为 noop。
 	s, exists := c.specsByName[crd.Name]
 	if exists {
 		s.update(crd)
@@ -240,7 +243,7 @@ func (c *Controller) sync(name string) error {
 	return nil
 }
 
-// updateSpecLocked updates the cached spec graph.
+// updateSpecLocked 更新缓存的 spec 图。
 func (c *Controller) updateSpecLocked() {
 	specList := make([]cached.Value[*spec.Swagger], 0, len(c.specsByName))
 	for crd := range c.specsByName {
@@ -258,30 +261,32 @@ func (c *Controller) updateSpecLocked() {
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to merge specs: %v", err)
 		}
-		// A UUID is returned for the etag because we will only
-		// create a new merger when a CRD has changed. A hash based
-		// etag is more expensive because the CRDs are not
-		// premarshalled.
+		// 返回 UUID 作为 etag，是因为只有 CRD 发生变化时才会重建 merger。
+		// 基于哈希的 etag 开销更大，因为 CRD 尚未预先序列化。
 		return mergedSpec, uuid.New().String(), nil
 	}, specList)
 	c.openAPIService.UpdateSpecLazy(cache)
 }
 
+// addCustomResourceDefinition 处理 CRD 新增事件。
 func (c *Controller) addCustomResourceDefinition(obj interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Adding customresourcedefinition %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// updateCustomResourceDefinition 处理 CRD 更新事件，仅关心新对象。
 func (c *Controller) updateCustomResourceDefinition(oldObj, newObj interface{}) {
 	castNewObj := newObj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Updating customresourcedefinition %s", castNewObj.Name)
 	c.enqueue(castNewObj)
 }
 
+// deleteCustomResourceDefinition 处理 CRD 删除事件，并兼容 tombstone 对象。
 func (c *Controller) deleteCustomResourceDefinition(obj interface{}) {
 	castObj, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
+		// 删除事件可能携带 DeletedFinalStateUnknown tombstone
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("Couldn't get object from tombstone %#v", obj)
@@ -297,10 +302,12 @@ func (c *Controller) deleteCustomResourceDefinition(obj interface{}) {
 	c.enqueue(castObj)
 }
 
+// enqueue 将 CRD 名称加入工作队列。
 func (c *Controller) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
 	c.queue.Add(obj.Name)
 }
 
+// generateCRDHash 生成由 UID 与 Generation 组成的缓存键，任一变化即视为新版本。
 func generateCRDHash(crd *apiextensionsv1.CustomResourceDefinition) string {
 	return fmt.Sprintf("%s,%d", crd.UID, crd.Generation)
 }

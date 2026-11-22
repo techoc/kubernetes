@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package openapiv3 负责为 CRD 生成并维护 OpenAPI v3 规范。
 package openapiv3
 
 import (
@@ -21,6 +22,8 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// regenerationCounter 统计 OpenAPI v3 规范的重建次数，按 group、version、
+// 触发重建的 CRD 与原因拆分，用于定位频繁重建的来源。
 var (
 	regenerationCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -33,5 +36,6 @@ var (
 )
 
 func init() {
+	// 注册到 legacy registry，随 apiserver 统一的 metrics 端点暴露。
 	legacyregistry.MustRegister(regenerationCounter)
 }

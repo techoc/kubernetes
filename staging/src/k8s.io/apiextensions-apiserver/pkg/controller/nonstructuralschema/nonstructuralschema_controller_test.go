@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Test_calculateCondition 验证 NonStructuralSchema 条件只在
+// preserveUnknownFields 为 true 时生成，且原因和消息符合预期。
 func Test_calculateCondition(t *testing.T) {
 	tests := []struct {
 		name string

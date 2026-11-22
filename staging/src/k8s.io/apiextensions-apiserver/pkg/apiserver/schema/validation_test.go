@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestValidateStructuralMetadataInvariants 用反射与 fuzz 覆盖 metadata 的不变量：
+// 其类型必须是 object，且除 name、generateName 外不允许任何字段。
 func TestValidateStructuralMetadataInvariants(t *testing.T) {
 	fuzzer := randfill.New()
 	fuzzer.Funcs(
@@ -63,7 +65,7 @@ func TestValidateStructuralMetadataInvariants(t *testing.T) {
 	)
 	fuzzer.NilChance(0)
 
-	// check that type must be object
+	// 检查 type 必须为 object
 	typeNames := []string{"object", "array", "number", "integer", "boolean", "string"}
 	for _, typeName := range typeNames {
 		s := Structural{
@@ -84,7 +86,7 @@ func TestValidateStructuralMetadataInvariants(t *testing.T) {
 		}
 	}
 
-	// check that anything other than name and generateName of ObjectMeta in metadata properties is forbidden
+	// 检查 metadata 属性中除 name 和 generateName 之外的 ObjectMeta 字段都被禁止
 	tt := reflect.TypeOf(metav1.ObjectMeta{})
 	for i := 0; i < tt.NumField(); i++ {
 		property := tt.Field(i).Name
@@ -109,7 +111,7 @@ func TestValidateStructuralMetadataInvariants(t *testing.T) {
 		}
 	}
 
-	// check that anything other than type and properties in metadata is forbidden
+	// 检查 metadata 中除 type 和 properties 之外的字段都被禁止
 	tt = reflect.TypeOf(Structural{})
 	for i := 0; i < tt.NumField(); i++ {
 		s := Structural{}
@@ -120,7 +122,7 @@ func TestValidateStructuralMetadataInvariants(t *testing.T) {
 			"name":         {},
 			"generateName": {},
 		}
-		s.Default.Object = nil // this is checked in API validation, we don't need to test it here
+		s.Default.Object = nil // 该字段已在 API 校验中检查，此处无需重复测试
 
 		valid := reflect.DeepEqual(s, Structural{
 			Generic: Generic{
@@ -148,6 +150,8 @@ func TestValidateStructuralMetadataInvariants(t *testing.T) {
 	}
 }
 
+// TestValidateStructuralCompleteness 验证结构完整性与 value validation 中
+// 属性/数组项定义的一致性校验，包括对应选项允许或拒绝的情形。
 func TestValidateStructuralCompleteness(t *testing.T) {
 
 	type tct struct {
@@ -383,6 +387,8 @@ func TestValidateStructuralCompleteness(t *testing.T) {
 
 }
 
+// TestValidateNestedValueValidationComplete 用反射确认 NestedValueValidation
+// 中每个被禁止的通用字段与扩展字段都会被校验逻辑覆盖。
 func TestValidateNestedValueValidationComplete(t *testing.T) {
 	fuzzer := randfill.New()
 	fuzzer.Funcs(
@@ -399,11 +405,11 @@ func TestValidateNestedValueValidationComplete(t *testing.T) {
 	)
 	fuzzer.NilChance(0)
 
-	// check that we didn't forget to check any forbidden generic field
+	// 检查是否有遗漏的禁止通用字段
 	tt := reflect.TypeOf(Generic{})
 	for i := 0; i < tt.NumField(); i++ {
 		if name := tt.Field(i).Name; name == "ExternalDocs" || name == "Example" {
-			continue // allowed in nested value validations
+			continue // 在嵌套 value validation 中允许使用
 		}
 		vv := &NestedValueValidation{}
 		x := reflect.ValueOf(&vv.ForbiddenGenerics).Elem()
@@ -415,7 +421,7 @@ func TestValidateNestedValueValidationComplete(t *testing.T) {
 		}
 	}
 
-	// check that we didn't forget to check any forbidden extension field
+	// 检查是否有遗漏的禁止扩展字段
 	tt = reflect.TypeOf(Extensions{})
 	for i := 0; i < tt.NumField(); i++ {
 		vv := &NestedValueValidation{}

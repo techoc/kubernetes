@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package integration 包含 apiextensions-apiserver 的集成测试，
+// 覆盖 CRD 与自定义资源的 CRUD、子资源、校验与剪枝等行为。
 package integration
 
 import (
@@ -29,15 +31,18 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	_ "k8s.io/component-base/logs/testinit" // enable logging flags
+	_ "k8s.io/component-base/logs/testinit" // 注册日志相关命令行参数
 )
 
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
+// instantiateCustomResource 按 CRD 的第一个版本创建 CR，并校验返回对象的基本元数据。
 func instantiateCustomResource(t *testing.T, instanceToCreate *unstructured.Unstructured, client dynamic.ResourceInterface, definition *apiextensionsv1.CustomResourceDefinition) (*unstructured.Unstructured, error) {
 	return instantiateVersionedCustomResource(t, instanceToCreate, client, definition, definition.Spec.Versions[0].Name)
 }
 
+// instantiateVersionedCustomResource 用指定版本创建 CR，并断言 server 返回了
+// UID、apiVersion 与 kind——这些由存储在服务端补齐，便于调用方直接依赖。
 func instantiateVersionedCustomResource(t *testing.T, instanceToCreate *unstructured.Unstructured, client dynamic.ResourceInterface, definition *apiextensionsv1.CustomResourceDefinition, version string) (*unstructured.Unstructured, error) {
 	createdInstance, err := client.Create(context.TODO(), instanceToCreate, metav1.CreateOptions{})
 	if err != nil {
@@ -48,7 +53,7 @@ func instantiateVersionedCustomResource(t *testing.T, instanceToCreate *unstruct
 	if err != nil {
 		t.Fatal(err)
 	}
-	// it should have a UUID
+	// 每个对象都应有 UID
 	if len(createdObjectMeta.GetUID()) == 0 {
 		t.Errorf("missing uuid: %#v", createdInstance)
 	}
@@ -65,6 +70,8 @@ func instantiateVersionedCustomResource(t *testing.T, instanceToCreate *unstruct
 	return createdInstance, nil
 }
 
+// newNamespacedCustomResourceVersionedClient 为 CRD 的指定版本构造命名空间限定的动态客户端。
+// 集群级资源忽略 ns，返回集群级客户端。
 func newNamespacedCustomResourceVersionedClient(ns string, client dynamic.Interface, crd *apiextensionsv1.CustomResourceDefinition, version string) dynamic.ResourceInterface {
 	gvr := schema.GroupVersionResource{Group: crd.Spec.Group, Version: version, Resource: crd.Spec.Names.Plural}
 
@@ -74,11 +81,13 @@ func newNamespacedCustomResourceVersionedClient(ns string, client dynamic.Interf
 	return client.Resource(gvr)
 }
 
+// newNamespacedCustomResourceClient 用 CRD 的第一个版本构造命名空间限定的动态客户端。
 func newNamespacedCustomResourceClient(ns string, client dynamic.Interface, crd *apiextensionsv1.CustomResourceDefinition) dynamic.ResourceInterface {
 	return newNamespacedCustomResourceVersionedClient(ns, client, crd, crd.Spec.Versions[0].Name)
 }
 
-// UpdateCustomResourceDefinitionWithRetry updates a CRD, retrying up to 5 times on version conflict errors.
+// UpdateCustomResourceDefinitionWithRetry 更新 CRD，遇到版本冲突时最多重试 5 次。
+// 冲突说明对象已被其他 writer 修改，重新读取后再应用变更。
 func UpdateCustomResourceDefinitionWithRetry(client clientset.Interface, name string, update func(*apiextensionsv1.CustomResourceDefinition)) (*apiextensionsv1.CustomResourceDefinition, error) {
 	for i := 0; i < 5; i++ {
 		crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), name, metav1.GetOptions{})
@@ -97,7 +106,7 @@ func UpdateCustomResourceDefinitionWithRetry(client clientset.Interface, name st
 	return nil, fmt.Errorf("too many retries after conflicts updating CustomResourceDefinition %q", name)
 }
 
-// UpdateV1CustomResourceDefinitionWithRetry updates a CRD, retrying up to 5 times on version conflict errors.
+// UpdateV1CustomResourceDefinitionWithRetry 更新 CRD，遇到版本冲突时最多重试 5 次。
 func UpdateV1CustomResourceDefinitionWithRetry(client clientset.Interface, name string, update func(*apiextensionsv1.CustomResourceDefinition)) (*apiextensionsv1.CustomResourceDefinition, error) {
 	for i := 0; i < 5; i++ {
 		crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), name, metav1.GetOptions{})
@@ -116,7 +125,7 @@ func UpdateV1CustomResourceDefinitionWithRetry(client clientset.Interface, name 
 	return nil, fmt.Errorf("too many retries after conflicts updating CustomResourceDefinition %q", name)
 }
 
-// getSchemaForVersion returns the validation schema for given version in given CRD.
+// getSchemaForVersion 返回 CRD 中指定版本的校验 schema。
 func getSchemaForVersion(crd *apiextensionsv1.CustomResourceDefinition, version string) (*apiextensionsv1.CustomResourceValidation, error) {
 	for _, v := range crd.Spec.Versions {
 		if version == v.Name {
@@ -126,7 +135,7 @@ func getSchemaForVersion(crd *apiextensionsv1.CustomResourceDefinition, version 
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// getSubresourcesForVersion returns the subresources for given version in given CRD.
+// getSubresourcesForVersion 返回 CRD 中指定版本的子资源配置。
 func getSubresourcesForVersion(crd *apiextensionsv1.CustomResourceDefinition, version string) (*apiextensionsv1.CustomResourceSubresources, error) {
 	for _, v := range crd.Spec.Versions {
 		if version == v.Name {
@@ -136,10 +145,9 @@ func getSubresourcesForVersion(crd *apiextensionsv1.CustomResourceDefinition, ve
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// getColumnsForVersion returns the columns for given version in given CRD.
-// NOTE: the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// getColumnsForVersion 返回 CRD 中指定版本的打印列；未配置时返回逻辑默认列。
+// 注意：逻辑默认列不指向原 CRD 对象，修改它不会写回 CRD；
+// 需要变更时请遍历原 CRD 对象。
 func getColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, version string) ([]apiextensionsv1.CustomResourceColumnDefinition, error) {
 	for _, v := range crd.Spec.Versions {
 		if version == v.Name {
@@ -149,10 +157,9 @@ func getColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, version
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// serveDefaultColumnsIfEmpty applies logically defaulting to columns, if the input columns is empty.
-// NOTE: in this way, the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// serveDefaultColumnsIfEmpty 在未配置列时应用逻辑默认值（Age 列）。
+// 注意：返回的逻辑默认列不指向原 CRD 对象，修改它不会写回 CRD；
+// 需要变更时请遍历原 CRD 对象。
 func serveDefaultColumnsIfEmpty(columns []apiextensionsv1.CustomResourceColumnDefinition) []apiextensionsv1.CustomResourceColumnDefinition {
 	if len(columns) > 0 {
 		return columns

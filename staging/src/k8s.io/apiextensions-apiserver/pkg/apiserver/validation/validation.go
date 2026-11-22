@@ -34,34 +34,37 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/validate"
 )
 
+// SchemaValidator 在创建校验之外还支持带旧值的更新校验。
 type SchemaValidator interface {
 	SchemaCreateValidator
 	ValidateUpdate(new, old interface{}, options ...ValidationOption) *validate.Result
 }
 
+// SchemaCreateValidator 校验新建对象，并接受可选的校验选项。
 type SchemaCreateValidator interface {
 	Validate(value interface{}, options ...ValidationOption) *validate.Result
 }
 
+// ValidationOptions 汇总一次校验调用的可选行为。
 type ValidationOptions struct {
-	// Whether errors from unchanged portions of the schema should be ratcheted
-	// This field is ignored for Validate
+	// Ratcheting 表示对 schema 中未变更部分产生的错误是否执行 ratcheting（沿用旧值放行）。
+	// Validate 会忽略该字段。
 	Ratcheting bool
 
-	// Correlation between old and new arguments.
-	// If set, this is expected to be the correlation between the `new` and
-	// `old` arguments to ValidateUpdate, and values for `new` and `old` will
-	// be taken from the correlation.
+	// CorrelatedObject 表示新旧参数之间的对应关系。
+	// 若设置，它应当是 ValidateUpdate 的 `new` 与 `old` 参数之间的对应关系，
+	// 并且 `new`、`old` 的取值将从该对应关系中获取。
 	//
-	// This field is ignored for Validate
+	// Validate 会忽略该字段。
 	//
-	// Used for ratcheting, but left as a separate field since it may be used
-	// for other purposes in the future.
+	// 目前用于 ratcheting，但单独保留字段以便将来复用于其他目的。
 	CorrelatedObject *common.CorrelatedObject
 }
 
+// ValidationOption 修改 ValidationOptions。
 type ValidationOption func(*ValidationOptions)
 
+// NewValidationOptions 依次应用选项并返回最终配置。
 func NewValidationOptions(opts ...ValidationOption) ValidationOptions {
 	options := ValidationOptions{}
 	for _, opt := range opts {
@@ -70,6 +73,7 @@ func NewValidationOptions(opts ...ValidationOption) ValidationOptions {
 	return options
 }
 
+// WithRatcheting 开启 ratcheting 并设置新旧对象对应关系。
 func WithRatcheting(correlation *common.CorrelatedObject) ValidationOption {
 	return func(options *ValidationOptions) {
 		options.Ratcheting = true
@@ -77,38 +81,39 @@ func WithRatcheting(correlation *common.CorrelatedObject) ValidationOption {
 	}
 }
 
-// basicSchemaValidator wraps a kube-openapi SchemaCreateValidator to
-// support ValidateUpdate. It implements ValidateUpdate by simply validating
-// the new value via kube-openapi, ignoring the old value
+// basicSchemaValidator 包装 kube-openapi 的 SchemaCreateValidator 以支持 ValidateUpdate。
+// 它通过 kube-openapi 校验新值来实现 ValidateUpdate，忽略旧值。
 type basicSchemaValidator struct {
 	*validate.SchemaValidator
 }
 
+// Validate 用 kube-openapi 校验给定值。
 func (s basicSchemaValidator) Validate(new interface{}, options ...ValidationOption) *validate.Result {
 	return s.SchemaValidator.Validate(new)
 }
 
+// ValidateUpdate 忽略旧值，等价于校验新值。
 func (s basicSchemaValidator) ValidateUpdate(new, old interface{}, options ...ValidationOption) *validate.Result {
 	return s.Validate(new, options...)
 }
 
-// NewSchemaValidator creates an openapi schema validator for the given CRD validation using environment.DefaultCompatibilityVersion().
+// NewSchemaValidator 使用 environment.DefaultCompatibilityVersion() 为给定 CRD 校验构造 openapi schema 校验器。
 func NewSchemaValidator(customResourceValidation *apiextensions.JSONSchemaProps) (SchemaValidator, *spec.Schema, error) {
 	return NewSchemaValidatorForVersion(customResourceValidation, environment.DefaultCompatibilityVersion())
 }
 
-// NewSchemaValidatorForVersion creates an openapi schema validator for the given CRD validation and compatibilityVersion.
+// NewSchemaValidatorForVersion 为给定 CRD 校验和兼容版本构造 openapi schema 校验器。
 //
-// If feature `CRDValidationRatcheting` is disabled, this returns a validator which
-// validates all `Update`s and `Create`s as a `Create` - without considering old value.
+// 若 `CRDValidationRatcheting` 特性关闭，返回的校验器把所有 `Update` 和 `Create`
+// 都当作 `Create` 校验，不参考旧值。
 //
-// If feature `CRDValidationRatcheting` is enabled - the validator returned
-// will support ratcheting unchanged correlatable fields across an update.
+// 若 `CRDValidationRatcheting` 特性开启，返回的校验器支持在更新时对未变更的、
+// 可关联字段执行 ratcheting。
 func NewSchemaValidatorForVersion(customResourceValidation *apiextensions.JSONSchemaProps, compatibilityVersion *version.Version) (SchemaValidator, *spec.Schema, error) {
-	// Convert CRD schema to openapi schema
+	// 把 CRD schema 转换为 openapi schema
 	openapiSchema := &spec.Schema{}
 	if customResourceValidation != nil {
-		// TODO: replace with NewStructural(...).ToGoOpenAPI
+		// TODO: 改用 NewStructural(...).ToGoOpenAPI 替换
 		formatPostProcessor := StripUnsupportedFormatsPostProcessorForVersion(compatibilityVersion)
 		if err := ConvertJSONSchemaPropsWithPostProcess(customResourceValidation, openapiSchema, formatPostProcessor); err != nil {
 			return nil, nil, err
@@ -117,6 +122,7 @@ func NewSchemaValidatorForVersion(customResourceValidation *apiextensions.JSONSc
 	return NewSchemaValidatorFromOpenAPI(openapiSchema), openapiSchema, nil
 }
 
+// NewSchemaValidatorFromOpenAPI 根据是否启用 ratcheting 特性，从 openapi schema 构造对应校验器。
 func NewSchemaValidatorFromOpenAPI(openapiSchema *spec.Schema) SchemaValidator {
 	if utilfeature.DefaultFeatureGate.Enabled(features.CRDValidationRatcheting) {
 		return NewRatchetingSchemaValidator(openapiSchema, nil, "", strfmt.Default)
@@ -125,14 +131,12 @@ func NewSchemaValidatorFromOpenAPI(openapiSchema *spec.Schema) SchemaValidator {
 
 }
 
-// ValidateCustomResourceUpdate validates the transition of Custom Resource from
-// `old` to `new` against the schema in the CustomResourceDefinition.
-// Both customResource and old represent a JSON data structures.
+// ValidateCustomResourceUpdate 校验自定义资源从 `old` 到 `new` 的转换是否满足
+// CustomResourceDefinition 中的 schema。customResource 和 old 都表示 JSON 数据结构。
 //
-// If feature `CRDValidationRatcheting` is disabled, this behaves identically to
-// ValidateCustomResource(customResource).
+// 若 `CRDValidationRatcheting` 特性关闭，行为与 ValidateCustomResource(customResource) 完全相同。
 func ValidateCustomResourceUpdate(fldPath *field.Path, customResource, old interface{}, validator SchemaValidator, options ...ValidationOption) field.ErrorList {
-	// Additional feature gate check for sanity
+	// 额外的特性开关检查，仅作防御
 	if !utilfeature.DefaultFeatureGate.Enabled(features.CRDValidationRatcheting) {
 		return ValidateCustomResource(nil, customResource, validator)
 	} else if validator == nil {
@@ -147,8 +151,8 @@ func ValidateCustomResourceUpdate(fldPath *field.Path, customResource, old inter
 	return kubeOpenAPIResultToFieldErrors(fldPath, result)
 }
 
-// ValidateCustomResource validates the Custom Resource against the schema in the CustomResourceDefinition.
-// CustomResource is a JSON data structure.
+// ValidateCustomResource 依据 CustomResourceDefinition 中的 schema 校验自定义资源。
+// customResource 是 JSON 数据结构。
 func ValidateCustomResource(fldPath *field.Path, customResource interface{}, validator SchemaCreateValidator, options ...ValidationOption) field.ErrorList {
 	if validator == nil {
 		return nil
@@ -162,6 +166,7 @@ func ValidateCustomResource(fldPath *field.Path, customResource interface{}, val
 	return kubeOpenAPIResultToFieldErrors(fldPath, result)
 }
 
+// kubeOpenAPIResultToFieldErrors 把 kube-openapi 的校验结果转换为 field.ErrorList。
 func kubeOpenAPIResultToFieldErrors(fldPath *field.Path, result *validate.Result) field.ErrorList {
 	var allErrs field.ErrorList
 	for _, err := range result.Errors {
@@ -194,7 +199,7 @@ func kubeOpenAPIResultToFieldErrors(fldPath *field.Path, result *validate.Result
 				if i, ok := err.Valid.(int64); ok {
 					max = i
 				}
-				allErrs = append(allErrs, field.TooLong(errPath, "" /*unused*/, int(max)))
+				allErrs = append(allErrs, field.TooLong(errPath, "" /*未使用*/, int(max)))
 
 			case openapierrors.MaxItemsFailCode:
 				actual := int64(-1)
@@ -240,16 +245,17 @@ func kubeOpenAPIResultToFieldErrors(fldPath *field.Path, result *validate.Result
 	return allErrs
 }
 
-// ConvertJSONSchemaProps converts the schema from apiextensions.JSONSchemaPropos to go-openapi/spec.Schema.
+// ConvertJSONSchemaProps 把 apiextensions.JSONSchemaProps 转换为 go-openapi/spec.Schema。
 func ConvertJSONSchemaProps(in *apiextensions.JSONSchemaProps, out *spec.Schema) error {
 	return ConvertJSONSchemaPropsWithPostProcess(in, out, nil)
 }
 
-// PostProcessFunc post-processes one node of a spec.Schema.
+// PostProcessFunc 对 spec.Schema 的一个节点做后处理。
 type PostProcessFunc func(*spec.Schema) error
 
-// ConvertJSONSchemaPropsWithPostProcess converts the schema from apiextensions.JSONSchemaPropos to go-openapi/spec.Schema
-// and run a post process step on each JSONSchemaProps node. postProcess is never called for nil schemas.
+// ConvertJSONSchemaPropsWithPostProcess 把 apiextensions.JSONSchemaProps 转换为
+// go-openapi/spec.Schema，并对每个 JSONSchemaProps 节点执行后处理步骤。
+// nil schema 不会调用 postProcess。
 func ConvertJSONSchemaPropsWithPostProcess(in *apiextensions.JSONSchemaProps, out *spec.Schema, postProcess PostProcessFunc) error {
 	if in == nil {
 		return nil
@@ -411,6 +417,7 @@ func ConvertJSONSchemaPropsWithPostProcess(in *apiextensions.JSONSchemaProps, ou
 	return nil
 }
 
+// convertSliceToInterfaceSlice 把泛型切片转为 []interface{}。
 func convertSliceToInterfaceSlice[T any](in []T) []interface{} {
 	var res []interface{}
 	for _, v := range in {
@@ -419,6 +426,7 @@ func convertSliceToInterfaceSlice[T any](in []T) []interface{} {
 	return res
 }
 
+// convertSliceOfJSONSchemaProps 转换 JSONSchemaProps 切片，并对每个元素执行后处理。
 func convertSliceOfJSONSchemaProps(in *[]apiextensions.JSONSchemaProps, out *[]spec.Schema, postProcess PostProcessFunc) error {
 	if in != nil {
 		for _, jsonSchemaProps := range *in {
@@ -432,6 +440,7 @@ func convertSliceOfJSONSchemaProps(in *[]apiextensions.JSONSchemaProps, out *[]s
 	return nil
 }
 
+// convertMapOfJSONSchemaProps 转换 JSONSchemaProps 映射，并对每个值执行后处理。
 func convertMapOfJSONSchemaProps(in map[string]apiextensions.JSONSchemaProps, postProcess PostProcessFunc) (map[string]spec.Schema, error) {
 	if in == nil {
 		return nil, nil
@@ -448,6 +457,7 @@ func convertMapOfJSONSchemaProps(in map[string]apiextensions.JSONSchemaProps, po
 	return out, nil
 }
 
+// convertJSONSchemaPropsOrArray 转换 schema 或 schema 数组。
 func convertJSONSchemaPropsOrArray(in *apiextensions.JSONSchemaPropsOrArray, out *spec.SchemaOrArray, postProcess PostProcessFunc) error {
 	if in.Schema != nil {
 		in, out := &in.Schema, &out.Schema
@@ -468,6 +478,7 @@ func convertJSONSchemaPropsOrArray(in *apiextensions.JSONSchemaPropsOrArray, out
 	return nil
 }
 
+// convertJSONSchemaPropsorBool 转换 schema 或布尔值。
 func convertJSONSchemaPropsorBool(in *apiextensions.JSONSchemaPropsOrBool, out *spec.SchemaOrBool, postProcess PostProcessFunc) error {
 	out.Allows = in.Allows
 	if in.Schema != nil {
@@ -480,6 +491,7 @@ func convertJSONSchemaPropsorBool(in *apiextensions.JSONSchemaPropsOrBool, out *
 	return nil
 }
 
+// convertJSONSchemaPropsOrStringArray 转换 schema 或字符串数组。
 func convertJSONSchemaPropsOrStringArray(in *apiextensions.JSONSchemaPropsOrStringArray, out *spec.SchemaOrStringArray, postProcess PostProcessFunc) error {
 	out.Property = in.Property
 	if in.Schema != nil {

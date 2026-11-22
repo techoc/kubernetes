@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
+// TestDefault 测试结构化 schema 的默认值填充。
 func TestDefault(t *testing.T) {
 	tests := []struct {
 		name     string

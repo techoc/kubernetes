@@ -17,5 +17,12 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=apiextensions.k8s.io
 
-// Package apiextensions is the internal version of the API.
+// Package apiextensions 定义 CRD API 的内部版本类型。
+// 内部版本是 API Server 内部使用的"真实"表示，不直接暴露给外部 API。
+// 所有外部版本（v1、v1beta1）在接收到请求后，会转换为内部版本进行处理。
+//
+// 主要类型：
+//   - CustomResourceDefinition：CRD 的核心类型，定义 CR 的组、版本、种类和 schema
+//   - JSONSchemaProps：OpenAPI v3.0 schema 的 Go 表示，用于 CR 的验证
+//   - CustomResourceColumnDefinition：kubectl get 的打印列定义
 package apiextensions

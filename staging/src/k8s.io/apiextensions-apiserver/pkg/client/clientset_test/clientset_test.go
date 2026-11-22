@@ -27,9 +27,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestManagedFieldClientsetSupportsCustomResourceDefinitions 验证 fake clientset
+// 的 Create 能处理带 managedFields 的 CustomResourceDefinition。
 func TestManagedFieldClientsetSupportsCustomResourceDefinitions(t *testing.T) {
 	client := fake.NewClientset()
 
+	// 构造一个最小但合法的 CRD，确保 Create 路径上的默认化与校验都能走通。
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com"},
 		Spec: apiextensionsv1.CustomResourceDefinitionSpec{

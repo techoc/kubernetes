@@ -38,6 +38,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_ConvertJSONSchemaPropsToOpenAPIv2Schema 验证结构化 schema 能转换为包含 spec 与 status 的 OpenAPI v2 schema。
 func Test_ConvertJSONSchemaPropsToOpenAPIv2Schema(t *testing.T) {
 	var spec = []byte(`description: Foo CRD for Testing
 type: object
@@ -112,6 +113,7 @@ properties:
 	}
 }
 
+// Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType 逐字段验证 OpenAPI v2 的转换结果。
 func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 	testStr := "test"
 	testStr2 := "test2"
@@ -131,21 +133,21 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 			in: &apiextensions.JSONSchemaProps{
 				ID: testStr,
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "$schema",
 			in: &apiextensions.JSONSchemaProps{
 				Schema: "test",
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "$ref",
 			in: &apiextensions.JSONSchemaProps{
 				Ref: &testStr,
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "description",
@@ -378,7 +380,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "allOf",
@@ -389,7 +391,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 				},
 			},
 			expected: new(spec.Schema),
-			// intentionally not exported in v2
+			// v2 中有意不导出
 			// expected: new(spec.Schema).
 			//   WithAllOf(*spec.BooleanProperty(), *spec.StringProperty()),
 		},
@@ -402,7 +404,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 				},
 			},
 			expected: new(spec.Schema),
-			// not supported by openapi v2
+			// openapi v2 不支持
 			// expected: &spec.Schema{
 			// 	SchemaProps: spec.SchemaProps{
 			// 		OneOf: []spec.Schema{
@@ -421,7 +423,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 				},
 			},
 			expected: new(spec.Schema),
-			// not supported by openapi v2
+			// openapi v2 不支持
 			// expected: &spec.Schema{
 			// 	SchemaProps: spec.SchemaProps{
 			// 		AnyOf: []spec.Schema{
@@ -439,7 +441,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 				},
 			},
 			expected: new(spec.Schema),
-			// not supported by openapi v2
+			// openapi v2 不支持
 			// expected: &spec.Schema{
 			// 	SchemaProps: spec.SchemaProps{
 			// 		Not: spec.BooleanProperty(),
@@ -524,7 +526,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 				},
 			},
 			expected: new(spec.Schema),
-			// not supported by OpenAPI v2 + allOf intentionally not exported
+			// OpenAPI v2 不支持，且 allOf 有意不导出
 			// expected: new(spec.Schema).
 			//	WithAllOf(spec.Schema{}, spec.Schema{}, spec.Schema{}, *spec.StringProperty()),
 		},
@@ -579,7 +581,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					testStr: {Type: "boolean"},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "dependencies schema",
@@ -590,7 +592,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "dependencies string array",
@@ -601,7 +603,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "additionalItems",
@@ -611,7 +613,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					Schema: &apiextensions.JSONSchemaProps{Type: "boolean"},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "definitions",
@@ -620,7 +622,7 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 					testStr: apiextensions.JSONSchemaProps{Type: "boolean"},
 				},
 			},
-			expectError: true, // rejected by kube validation and NewStructural
+			expectError: true, // 被 kube 校验和 NewStructural 拒绝
 		},
 		{
 			name: "externalDocs",
@@ -688,19 +690,21 @@ func Test_ConvertJSONSchemaPropsToOpenAPIv2SchemaByType(t *testing.T) {
 	}
 }
 
+// withVendorExtensions 给 schema 添加一个 vendor 扩展并返回它。
 func withVendorExtensions(s *spec.Schema, key string, value interface{}) *spec.Schema {
 	s.VendorExtensible.AddExtension(key, value)
 	return s
 }
 
+// refEqual 按引用字符串比较两个 spec.Ref，供 cmp 使用。
 func refEqual(x spec.Ref, y spec.Ref) bool {
 	return x.String() == y.String()
 }
 
-// TestKubeOpenapiRejectionFiltering tests that the CRD openapi schema filtering leads to a spec that the
-// kube-openapi/pkg/util/proto model code support in version used in Kubernetes 1.13.
+// TestKubeOpenapiRejectionFiltering 验证 CRD openapi schema 过滤后的结果能被
+// Kubernetes 1.13 所用版本的 kube-openapi/pkg/util/proto 模型代码处理。
 func TestKubeOpenapiRejectionFiltering(t *testing.T) {
-	// 1000 iterations runs for ~2 seconds with race detection enabled
+	// 开启 race 检测时，1000 次迭代约运行 2 秒
 	for i := 0; i < 1000; i++ {
 		f := randfill.New()
 		seed := time.Now().UnixNano()
@@ -722,11 +726,11 @@ func TestKubeOpenapiRejectionFiltering(t *testing.T) {
 			*ref = r
 		})
 
-		// create go-openapi object and fuzz it (we start here because we have the powerful fuzzer already
+		// 创建 go-openapi 对象并填充（从这里开始，因为已有现成的 fuzzer）
 		s := &spec.Schema{}
 		f.Fill(s)
 
-		// convert to apiextensions v1beta1
+		// 转换为 apiextensions v1beta1
 		bs, err := json.Marshal(s)
 		if err != nil {
 			t.Fatal(err)
@@ -738,20 +742,20 @@ func TestKubeOpenapiRejectionFiltering(t *testing.T) {
 			t.Fatalf("failed to unmarshal JSON into apiextensions/v1beta1: %v", err)
 		}
 
-		// convert to internal
+		// 转换为内部类型
 		internalSchema := &apiextensions.JSONSchemaProps{}
 		if err := apiextensionsv1beta1.Convert_v1beta1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(schema, internalSchema, nil); err != nil {
 			t.Fatalf("failed to convert from apiextensions/v1beta1 to internal: %v", err)
 		}
 
-		// apply the filter
+		// 应用过滤器
 		ss, err := structuralschema.NewStructural(internalSchema)
 		if err != nil {
 			t.Fatal(err)
 		}
 		filtered := ToStructuralOpenAPIV2(ss).ToKubeOpenAPI()
 
-		// create a doc out of it
+		// 构造文档
 		filteredSwagger := &spec.Swagger{
 			SwaggerProps: spec.SwaggerProps{
 				Definitions: spec.Definitions{
@@ -768,28 +772,28 @@ func TestKubeOpenapiRejectionFiltering(t *testing.T) {
 			},
 		}
 
-		// convert to JSON
+		// 转换为 JSON
 		bs, err = json.Marshal(filteredSwagger)
 		if err != nil {
 			t.Fatalf("failed to encode filtered to JSON: %v", err)
 		}
 
-		// create gnostic doc
+		// 创建 gnostic 文档
 		doc, err := openapi_v2.ParseDocument(bs)
 		if err != nil {
 			t.Fatalf("failed to create gnostic doc: %v", err)
 		}
 
-		// load with kube-openapi/pkg/util/proto
+		// 用 kube-openapi/pkg/util/proto 加载
 		if _, err := proto.NewOpenAPIData(doc); err != nil {
 			t.Fatalf("failed to convert to kube-openapi/pkg/util/proto model: %v", err)
 		}
 	}
 }
 
-// fuzzFuncs is copied from kube-openapi/pkg/aggregator. It fuzzes go-openapi/spec schemata.
+// fuzzFuncs 复制自 kube-openapi/pkg/aggregator，用于填充 go-openapi/spec schema。
 func fuzzFuncs(f *randfill.Filler, refFunc func(ref *spec.Ref, c randfill.Continue, visible bool)) {
-	invisible := 0 // == 0 means visible, > 0 means invisible
+	invisible := 0 // == 0 表示可见，> 0 表示不可见
 	depth := 0
 	maxDepth := 3
 	nilChance := func(depth int) float64 {
@@ -838,10 +842,10 @@ func fuzzFuncs(f *randfill.Filler, refFunc func(ref *spec.Ref, c randfill.Contin
 			enter(s, false, c)
 			defer leave(false)
 
-			// and nothing with invisible==false
+			// 不生成 invisible==false 的内容
 		},
 		func(p *spec.SimpleSchema, c randfill.Continue) {
-			// randfill is broken and calls this even for *SimpleSchema fields, ignoring NilChance, leading to infinite recursion
+			// randfill 有缺陷：对 *SimpleSchema 字段也会调用此函数并忽略 NilChance，导致无限递归
 			if c.Float64() > nilChance(depth) {
 				return
 			}
@@ -851,18 +855,18 @@ func fuzzFuncs(f *randfill.Filler, refFunc func(ref *spec.Ref, c randfill.Contin
 
 			c.FillNoCustom(p)
 
-			// reset JSON fields to some correct JSON
+			// 把 JSON 字段重置为合法 JSON
 			if p.Default != nil {
 				p.Default = "42"
 			}
 			p.Example = nil
 		},
 		func(s *spec.SwaggerSchemaProps, c randfill.Continue) {
-			// nothing allowed
+			// 不允许任何内容
 			*s = spec.SwaggerSchemaProps{}
 		},
 		func(s *spec.SchemaProps, c randfill.Continue) {
-			// randfill is broken and calls this even for *SchemaProps fields, ignoring NilChance, leading to infinite recursion
+			// randfill 有缺陷：对 *SchemaProps 字段也会调用此函数并忽略 NilChance，导致无限递归
 			if c.Float64() > nilChance(depth) {
 				return
 			}
@@ -894,7 +898,7 @@ func fuzzFuncs(f *randfill.Filler, refFunc func(ref *spec.Ref, c randfill.Contin
 				s.Items = nil
 			}
 
-			// reset JSON fields to some correct JSON
+			// 把 JSON 字段重置为合法 JSON
 			if s.Default != nil {
 				s.Default = "42"
 			}
@@ -903,11 +907,12 @@ func fuzzFuncs(f *randfill.Filler, refFunc func(ref *spec.Ref, c randfill.Contin
 			}
 		},
 		func(i *interface{}, c randfill.Continue) {
-			// do nothing for examples and defaults. These are free form JSON fields.
+			// 对 examples 和 defaults 不做处理。它们是自由格式的 JSON 字段。
 		},
 	)
 }
 
+// TestFilterOut 验证 filterOut 对切片元素的过滤和变更标记。
 func TestFilterOut(t *testing.T) {
 	type Test struct {
 		name            string

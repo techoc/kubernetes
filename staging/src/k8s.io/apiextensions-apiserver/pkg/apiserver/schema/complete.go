@@ -22,15 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// validateStructuralCompleteness checks that all value validations in s have
-// a structural counterpart so that every value validation applies to a value
-// with a known schema:
-// - validations for specific properties must have that property (or additionalProperties under an option) structurally defined
-// - additionalProperties validations must have additionalProperties defined in the structural portion of the schema corresponding to that node
-// - Items validations must have also have a corresponding items structurally
+// validateStructuralCompleteness 检查 s 中的每个值校验是否都有对应的结构位置，
+// 从而保证每个值校验都作用于 schema 已知的值：
+//   - 针对特定属性的校验必须具有该属性（或某个选项下的 additionalProperties）的结构定义
+//   - additionalProperties 校验必须在对应节点的 schema 结构部分中定义了 additionalProperties
+//   - items 校验也必须具有对应的结构 items
 //
-// The "structural" portion of the schema refers to all nodes in the
-// schema traversible without following any NestedValueValidations.
+// schema 的“结构”部分指不经过任何 NestedValueValidations 即可遍历到的所有节点。
 func validateStructuralCompleteness(s *Structural, fldPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if s == nil {
 		return nil
@@ -39,6 +37,7 @@ func validateStructuralCompleteness(s *Structural, fldPath *field.Path, opts Val
 	return validateValueValidationCompleteness(s.ValueValidation, s, fldPath, fldPath, opts)
 }
 
+// validateValueValidationCompleteness 校验自身以及所有嵌套的 ValueValidation 是否完整。
 func validateValueValidationCompleteness(v *ValueValidation, s *Structural, sPath, vPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if v == nil {
 		return nil
@@ -63,6 +62,8 @@ func validateValueValidationCompleteness(v *ValueValidation, s *Structural, sPat
 	return allErrs
 }
 
+// validateNestedValueValidationCompleteness 递归校验嵌套值校验所引用的结构路径都存在，
+// 对缺失的结构位置给出 Required 错误。
 func validateNestedValueValidationCompleteness(v *NestedValueValidation, s *Structural, sPath, vPath *field.Path, opts ValidationOptions) field.ErrorList {
 	if v == nil {
 		return nil
@@ -86,11 +87,10 @@ func validateNestedValueValidationCompleteness(v *NestedValueValidation, s *Stru
 			if sAdditionalPropertiesSchema == nil || !opts.AllowValidationPropertiesWithAdditionalProperties {
 				allErrs = append(allErrs, field.Required(sPath.Child("properties").Key(k), fmt.Sprintf("because it is defined in %s", vPath.Child("properties").Key(k))))
 			} else {
-				// Allow validations on specific properties if there exists an
-				// additionalProperties structural schema specified instead of
-				// direct properties
-				// NOTE: This does not allow `additionalProperties: true` structural
-				// schema to be combined with specific property validations.
+				// 若结构 schema 中指定的是 additionalProperties（而非直接 properties），
+				// 则允许对具体属性添加校验。
+				// 注意：这不允许把 `additionalProperties: true` 的结构 schema
+				// 与具体属性校验组合使用。
 				allErrs = append(allErrs, validateNestedValueValidationCompleteness(&vFld, sAdditionalPropertiesSchema, sPath.Child("additionalProperties"), vPath.Child("properties").Key(k), opts)...)
 			}
 		} else {

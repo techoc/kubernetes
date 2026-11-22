@@ -37,8 +37,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// StartConversionWebhookServer starts an http server with the provided handler and returns the WebhookClientConfig
-// needed to configure a CRD to use this conversion webhook as its converter.
+// StartConversionWebhookServer 使用提供的 handler 启动一个 http 服务器，
+// 并返回用于把 CRD 配置为使用该转换 webhook 所需的 WebhookClientConfig。
 func StartConversionWebhookServer(handler http.Handler) (func(), *apiextensionsv1.WebhookClientConfig, error) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -63,9 +63,9 @@ func StartConversionWebhookServer(handler http.Handler) (func(), *apiextensionsv
 		URL:      &endpoint,
 	}
 
-	// StartTLS returns immediately, there is a small chance of a race to avoid.
+	// StartTLS 会立即返回，存在一个小概率的竞态需要规避。
 	if err := wait.PollUntilContextTimeout(context.Background(), time.Millisecond*100, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
-		_, getErr := webhookServer.Client().Get(webhookServer.URL) // even a 404 is fine
+		_, getErr := webhookServer.Client().Get(webhookServer.URL) // 即使返回 404 也可以
 		return getErr == nil, nil
 	}); err != nil {
 		webhookServer.Close()
@@ -75,13 +75,13 @@ func StartConversionWebhookServer(handler http.Handler) (func(), *apiextensionsv
 	return webhookServer.Close, webhookConfig, nil
 }
 
-// V1Beta1ReviewConverterFunc converts an entire ConversionReview.
+// V1Beta1ReviewConverterFunc 转换整个 ConversionReview。
 type V1Beta1ReviewConverterFunc func(review *apiextensionsv1beta1.ConversionReview) (*apiextensionsv1beta1.ConversionReview, error)
 
-// V1ReviewConverterFunc converts an entire ConversionReview.
+// V1ReviewConverterFunc 转换整个 ConversionReview。
 type V1ReviewConverterFunc func(review *apiextensionsv1.ConversionReview) (*apiextensionsv1.ConversionReview, error)
 
-// NewReviewWebhookHandler creates a handler that delegates the review conversion to the provided ReviewConverterFunc.
+// NewReviewWebhookHandler 创建把 review 转换委托给给定 ReviewConverterFunc 的 handler。
 func NewReviewWebhookHandler(t *testing.T, v1beta1ConverterFunc V1Beta1ReviewConverterFunc, v1ConverterFunc V1ReviewConverterFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -157,10 +157,10 @@ func NewReviewWebhookHandler(t *testing.T, v1beta1ConverterFunc V1Beta1ReviewCon
 	})
 }
 
-// ObjectConverterFunc converts a single custom resource to the desiredAPIVersion and returns it or returns an error.
+// ObjectConverterFunc 把单个自定义资源转换为 desiredAPIVersion 并返回，或返回错误。
 type ObjectConverterFunc func(desiredAPIVersion string, customResource runtime.RawExtension) (runtime.RawExtension, error)
 
-// NewObjectConverterWebhookHandler creates a handler that delegates custom resource conversion to the provided ConverterFunc.
+// NewObjectConverterWebhookHandler 创建把单个自定义资源转换委托给给定 ObjectConverterFunc 的 handler。
 func NewObjectConverterWebhookHandler(t *testing.T, converterFunc ObjectConverterFunc) http.Handler {
 	return NewReviewWebhookHandler(t, func(review *apiextensionsv1beta1.ConversionReview) (*apiextensionsv1beta1.ConversionReview, error) {
 		converted := []runtime.RawExtension{}
@@ -209,7 +209,7 @@ func NewObjectConverterWebhookHandler(t *testing.T, converterFunc ObjectConverte
 	})
 }
 
-// localhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// localhostCert 由 crypto/tls/generate_cert.go 通过以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -232,7 +232,7 @@ F4nkUthwlKx4yEJHZBRuFPnO7Z81jNKuwL276+mczRH7piI6z9uyMV/JbEsOIxyL
 W6CzB7pZ9Nj1YLpgzc1r6oONHLokMJJIz/IvkQ==
 -----END CERTIFICATE-----`)
 
-// localhostKey is the private key for localhostCert.
+// localhostKey 是 localhostCert 对应的私钥。
 var localhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA1Z5/aTwqY706M34tn60l8ZHkanWDl8mM1pYf4Q7qg3zA9XqW
 LX6S4rTYDYCb4stEasC72lQnbEWHbthiQE76zubP8WOFHdvGR3mjAvHWz4FxvLOT

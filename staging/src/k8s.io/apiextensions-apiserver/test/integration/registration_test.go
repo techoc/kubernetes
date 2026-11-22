@@ -39,6 +39,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestMultipleResourceInstances 验证同一 CRD 下多个实例的创建、列举、删除及 watch 事件。
 func TestMultipleResourceInstances(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -63,6 +64,7 @@ func TestMultipleResourceInstances(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 从当前 resourceVersion 开始 watch，避免错过已发生的创建事件
 	noxuNamespacedWatch, err := noxuNamespacedResourceClient.Watch(context.TODO(), metav1.ListOptions{ResourceVersion: noxuListListMeta.GetResourceVersion()})
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +165,7 @@ func TestMultipleResourceInstances(t *testing.T) {
 	}
 }
 
+// TestMultipleRegistration 验证同名实例可以分别存在于两个不同 CRD 的资源下。
 func TestMultipleRegistration(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -209,7 +212,7 @@ func TestMultipleRegistration(t *testing.T) {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// now re-GET noxu
+	// 现在重新 GET noxu
 	gottenNoxuInstance2, err := noxuNamespacedResourceClient.Get(context.TODO(), sameInstanceName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -219,6 +222,8 @@ func TestMultipleRegistration(t *testing.T) {
 	}
 }
 
+// TestDeRegistrationAndReRegistration 验证注销 CRD 后资源访问变为 NotFound，
+// 重新注册后实例数据为空且可重新创建。
 func TestDeRegistrationAndReRegistration(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -308,6 +313,7 @@ func TestDeRegistrationAndReRegistration(t *testing.T) {
 	}()
 }
 
+// TestEtcdStorage 验证 CRD 及其实例存放在 etcd 中的路径与键内容。
 func TestEtcdStorage(t *testing.T) {
 	tearDown, clientConfig, s, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -423,8 +429,9 @@ func TestEtcdStorage(t *testing.T) {
 	}
 }
 
+// getFromEtcd 按存储前缀与逻辑路径读取并解析一个对象。
 func getFromEtcd(keys clientv3.KV, prefix, localPath string) (*metaObject, error) {
-	internalPath := path.Join("/", prefix, localPath) // TODO: Double check, should we concatenate two prefixes?
+	internalPath := path.Join("/", prefix, localPath) // TODO: 再次确认，两个前缀是否应直接拼接？
 	response, err := keys.Get(context.Background(), internalPath)
 	if err != nil {
 		return nil, err
@@ -439,12 +446,14 @@ func getFromEtcd(keys clientv3.KV, prefix, localPath string) (*metaObject, error
 	return obj, nil
 }
 
+// metaObject 是从 etcd 中读取对象时使用的最小元数据视图。
 type metaObject struct {
 	Kind       string `json:"kind,omitempty" protobuf:"bytes,1,opt,name=kind"`
 	APIVersion string `json:"apiVersion,omitempty" protobuf:"bytes,2,opt,name=apiVersion"`
 	Metadata   `json:"metadata,omitempty" protobuf:"bytes,3,opt,name=metadata"`
 }
 
+// Metadata 保存 etcd 校验所需的对象名称与命名空间。
 type Metadata struct {
 	Name      string `json:"name,omitempty" protobuf:"bytes,1,opt,name=name"`
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,2,opt,name=namespace"`

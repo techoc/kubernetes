@@ -28,7 +28,7 @@ import (
 	"k8s.io/apiextensions-apiserver/test/integration/fixtures"
 )
 
-// exampleCert was generated from crypto/tls/generate_cert.go with the following command:
+// exampleCert 由 crypto/tls/generate_cert.go 以如下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var exampleCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -51,9 +51,10 @@ UU4dq6G4kCwMSxWE4cM3HlZ4u1dyIt47VbkP0rtvkBCXx36y+NXYA5lzntchNFZP
 uvEQdw==
 -----END CERTIFICATE-----`)
 
+// invalidCert 是内容为 "Cg==" 的非法 PEM，用于验证无效 CA 证书的处理。
 var invalidCert = []byte("Cg==")
 
-// Invalid CABundle should prevent new CRD from being set to Established
+// TestInvalidCABundle 验证非法 CA 证书会阻止新 CRD 进入 Established 状态。
 func TestInvalidCABundle(t *testing.T) {
 	ctx := context.Background()
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t)
@@ -80,7 +81,7 @@ func TestInvalidCABundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Ensure that Established is false with reason InvalidCABundle
+	// 轮询直到 Established 条件变为 False 且原因为 InvalidCABundle。
 	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		localCrd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name, metav1.GetOptions{})
 		if err != nil {
@@ -100,7 +101,7 @@ func TestInvalidCABundle(t *testing.T) {
 	}
 }
 
-// Valid CABundle should set CRD to Established.
+// TestValidCABundle 验证合法 CA 证书会让 CRD 进入 Established 状态。
 func TestValidCABundle(t *testing.T) {
 	ctx := context.Background()
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t)
@@ -128,7 +129,7 @@ func TestValidCABundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait until the CRD is established
+	// 轮询直到 CRD 进入 Established 状态。
 	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		localCrd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name, metav1.GetOptions{})
 		if err != nil {
@@ -149,7 +150,7 @@ func TestValidCABundle(t *testing.T) {
 
 }
 
-// No CABundle should set CRD to Established.
+// TestMissingCABundle 验证未配置 conversion 时 CRD 也能进入 Established 状态。
 func TestMissingCABundle(t *testing.T) {
 	ctx := context.Background()
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t)

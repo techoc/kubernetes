@@ -44,6 +44,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// TestCBORStorageEnablement 验证 CBOR 存储特性开关的启用/禁用切换：
+// 禁用时写入 JSON，启用后写入 CBOR，且两种格式的数据都能被读取。
 func TestCBORStorageEnablement(t *testing.T) {
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "bars.mygroup.example.com"},
@@ -139,10 +141,8 @@ func TestCBORStorageEnablement(t *testing.T) {
 			t.Fatalf("expected 1 kv, got %d", n)
 		}
 		if !bytes.HasPrefix(response.Kvs[0].Value, []byte{0xd9, 0xd9, 0xf7}) {
-			// Check for the encoding of the "self-described CBOR" tag which acts as a
-			// "magic number" for distinguishing CBOR from JSON. Valid CBOR data items
-			// do not require this prefix, but the Kubernetes CBOR serializer guarantees
-			// it.
+			// 检查“自描述 CBOR”标签的编码；它充当区分 CBOR 与 JSON 的“魔数”。
+			// 合法的 CBOR 数据项并不要求该前缀，但 Kubernetes CBOR 序列化器保证携带它。
 			t.Fatalf(`stored custom resource lacks required "self-described CBOR" tag (prefix 0x%x)`, response.Kvs[0].Value[:3])
 		}
 		if err := cbor.Unmarshal(response.Kvs[0].Value, new(interface{})); err != nil {
@@ -176,6 +176,8 @@ func TestCBORStorageEnablement(t *testing.T) {
 
 }
 
+// TestCBORServingEnablement 验证特性开关对 CBOR 请求/响应的支持：
+// 启用时接受 application/cbor，禁用时返回 406/415。
 func TestCBORServingEnablement(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -253,6 +255,7 @@ func TestCBORServingEnablement(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 绕开动态客户端，直接构造 REST client 以控制 Accept/Content-Type
 			config = rest.CopyConfig(config)
 			config.NegotiatedSerializer = serializer.NewCodecFactory(runtime.NewScheme()).WithoutConversion()
 			config.APIPath = "/apis"
@@ -271,9 +274,9 @@ func TestCBORServingEnablement(t *testing.T) {
 					Do(context.TODO()).Error()
 				switch {
 				case tc.enabled && err == nil:
-					// ok
+					// ok 表示结果符合预期
 				case !tc.enabled && errors.IsNotAcceptable(err):
-					// ok
+					// ok 表示结果符合预期
 				default:
 					t.Errorf("unexpected error on read (subresource %q): %v", subresource, err)
 				}
@@ -302,9 +305,9 @@ func TestCBORServingEnablement(t *testing.T) {
 				Do(context.TODO()).Error()
 			switch {
 			case tc.enabled && err == nil:
-				// ok
+				// ok 表示结果符合预期
 			case !tc.enabled && errors.IsUnsupportedMediaType(err):
-				// ok
+				// ok 表示结果符合预期
 			default:
 				t.Errorf("unexpected error on write: %v", err)
 			}
@@ -334,13 +337,14 @@ func TestCBORServingEnablement(t *testing.T) {
 				Do(context.TODO()).Error()
 			switch {
 			case tc.enabled && err == nil:
-				// ok
+				// ok 表示结果符合预期
 			case !tc.enabled && errors.IsUnsupportedMediaType(err):
-				// ok
+				// ok 表示结果符合预期
 			default:
 				t.Errorf("unexpected error on scale write: %v", err)
 			}
 
+			// status 子资源需要最新的 resourceVersion，冲突时重试
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				latest, err := dynamicClient.Resource(schema.GroupVersionResource{Group: "mygroup.example.com", Version: "v1beta1", Resource: "foos"}).Get(context.TODO(), cr.GetName(), metav1.GetOptions{})
 				if err != nil {
@@ -362,9 +366,9 @@ func TestCBORServingEnablement(t *testing.T) {
 			})
 			switch {
 			case tc.enabled && err == nil:
-				// ok
+				// ok 表示结果符合预期
 			case !tc.enabled && errors.IsUnsupportedMediaType(err):
-				// ok
+				// ok 表示结果符合预期
 			default:
 				t.Fatalf("unexpected error on status write: %v", err)
 			}

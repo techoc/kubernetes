@@ -21,16 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// isNonNullalbeNull returns true if the item is nil AND it's nullable
+// isNonNullableNull 在 item 为 nil 且不可为 null 时返回 true。
 func isNonNullableNull(x interface{}, s *structuralschema.Structural) bool {
 	return x == nil && s != nil && s.Generic.Nullable == false
 }
 
-// Default does defaulting of x depending on default values in s.
-// Default values from s are deep-copied.
+// Default 依据 s 中的默认值对 x 做默认值填充。
+// s 中的默认值会被深拷贝。
 //
-// PruneNonNullableNullsWithoutDefaults has left the non-nullable nulls
-// that have a default here.
+// PruneNonNullableNullsWithoutDefaults 会把带有默认值的不可空 null 保留下来，
+// 交给这里处理。
 func Default(x interface{}, s *structuralschema.Structural) {
 	if s == nil {
 		return
@@ -64,6 +64,6 @@ func Default(x interface{}, s *structuralschema.Structural) {
 			Default(x[i], s.Items)
 		}
 	default:
-		// scalars, do nothing
+		// 标量，无需处理
 	}
 }

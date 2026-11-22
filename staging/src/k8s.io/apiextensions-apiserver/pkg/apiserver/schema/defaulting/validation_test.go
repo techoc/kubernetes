@@ -32,11 +32,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// jsonPtr 把任意值包装为 *apiextensions.JSON，便于在 schema 字面量中书写默认值。
 func jsonPtr(x interface{}) *apiextensions.JSON {
 	ret := apiextensions.JSON(x)
 	return &ret
 }
 
+// TestDefaultValidationWithCostBudget 验证默认值校验受 CEL 成本预算约束：
+// 预算耗尽时会在对应规则处停止并报告成本超限错误。
 func TestDefaultValidationWithCostBudget(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -73,9 +76,8 @@ func TestDefaultValidationWithCostBudget(t *testing.T) {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
 								{
-									// The estimated cost depends on the length of this
-									// substring. It was chosen just long enough to trigger
-									// an error.
+									// 估算成本取决于该子串的长度。这里特意取得足够长，
+									// 以便触发成本超限错误。
 									Rule: "self.startsWith('kube-everyt')",
 								},
 							},
@@ -119,7 +121,7 @@ func TestDefaultValidationWithCostBudget(t *testing.T) {
 
 			f := NewRootObjectFunc().WithTypeMeta(metav1.TypeMeta{APIVersion: "validation/v1", Kind: "Validation"})
 
-			// cost budget is large enough to pass all validation rules
+			// 成本预算足够大，所有校验规则都应通过
 			allErrs, err, _ := validate(ctx, field.NewPath("test"), ss, ss, f, false, false, 10)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -129,7 +131,7 @@ func TestDefaultValidationWithCostBudget(t *testing.T) {
 				t.Errorf("unexpected error: %v", valErr)
 			}
 
-			// cost budget exceeded for the first validation rule
+			// 预算不足以执行第一条校验规则
 			allErrs, err, _ = validate(ctx, field.NewPath("test"), ss, ss, f, false, false, 0)
 			meet := 0
 			for _, er := range allErrs {
@@ -144,7 +146,7 @@ func TestDefaultValidationWithCostBudget(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// cost budget exceeded for the last validation rule
+			// 预算恰好在最后一条校验规则处耗尽
 			allErrs, err, _ = validate(ctx, field.NewPath("test"), ss, ss, f, false, false, 9)
 			meet = 0
 			for _, er := range allErrs {
@@ -162,6 +164,8 @@ func TestDefaultValidationWithCostBudget(t *testing.T) {
 	}
 }
 
+// TestDefaultValidationWithOptionalOldSelf 验证启用 OptionalOldSelf 后，
+// 默认值在缺少旧对象时仍能通过（或按规则失败）ratcheting 校验。
 func TestDefaultValidationWithOptionalOldSelf(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -226,7 +230,7 @@ func TestDefaultValidationWithOptionalOldSelf(t *testing.T) {
 
 			f := NewRootObjectFunc().WithTypeMeta(metav1.TypeMeta{APIVersion: "validation/v1", Kind: "Validation"})
 
-			// cost budget is large enough to pass all validation rules
+			// 成本预算足够大，所有校验规则都应通过
 			allErrs, err, _ := validate(ctx, field.NewPath("test"), ss, ss, f, false, false, 10)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)

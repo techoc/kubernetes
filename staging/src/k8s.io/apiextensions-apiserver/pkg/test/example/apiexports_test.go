@@ -25,6 +25,7 @@ import (
 	apitest "k8s.io/apiextensions-apiserver/pkg/test"
 )
 
+// TestAPIExportPermissionClaimCELValidation 校验 permissionClaims 的 all/resourceSelector 互斥 CEL 规则。
 func TestAPIExportPermissionClaimCELValidation(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -153,6 +154,7 @@ func TestAPIExportPermissionClaimCELValidation(t *testing.T) {
 	}
 }
 
+// TestResourceSelectorCELValidation 校验 resourceSelector 至少设置一个字段的 CEL 规则。
 func TestResourceSelectorCELValidation(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -218,6 +220,7 @@ func TestResourceSelectorCELValidation(t *testing.T) {
 	}
 }
 
+// TestAPIExportPermissionClaimPattern 校验 permission claim 名称的 pattern 约束。
 func TestAPIExportPermissionClaimPattern(t *testing.T) {
 	testCases := []struct {
 		name      string

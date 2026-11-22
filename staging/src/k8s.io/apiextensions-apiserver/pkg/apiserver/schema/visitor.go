@@ -16,25 +16,24 @@ limitations under the License.
 
 package schema
 
-// Visitor recursively walks through a structural schema.
+// Visitor 递归遍历结构化 schema。
 type Visitor struct {
-	// Structural is called on each Structural node in the schema, before recursing into
-	// the subtrees. It is allowed to mutate s. Return true if something has been changed.
+	// Structural 在每个 Structural 节点上、递归进入子树之前调用。
+	// 允许修改 s。若发生了修改则返回 true。
 	// +optional
 	Structural func(s *Structural) bool
-	// NestedValueValidation is called on each NestedValueValidation node in the schema,
-	// before recursing into subtrees. It is allowed to mutate vv. Return true if something
-	// has been changed.
+	// NestedValueValidation 在每个 NestedValueValidation 节点上、递归进入子树之前调用。
+	// 允许修改 vv。若发生了修改则返回 true。
 	// +optional
 	NestedValueValidation func(vv *NestedValueValidation) bool
 }
 
-// Visit recursively walks through the structural schema and calls the given callbacks
-// at each node of those types.
+// Visit 递归遍历结构化 schema，并在对应类型的每个节点上调用给定回调。
 func (m *Visitor) Visit(s *Structural) {
 	m.visitStructural(s)
 }
 
+// visitStructural 访问一个 Structural 节点及其子树，返回是否有修改。
 func (m *Visitor) visitStructural(s *Structural) bool {
 	ret := false
 	if m.Structural != nil {
@@ -45,6 +44,7 @@ func (m *Visitor) visitStructural(s *Structural) bool {
 		m.visitStructural(s.Items)
 	}
 	for k, v := range s.Properties {
+		// 回调可能就地修改值，需写回 map
 		if changed := m.visitStructural(&v); changed {
 			ret = true
 			s.Properties[k] = v
@@ -71,6 +71,7 @@ func (m *Visitor) visitStructural(s *Structural) bool {
 	return ret
 }
 
+// visitNestedValueValidation 访问一个 NestedValueValidation 节点及其子树，返回是否有修改。
 func (m *Visitor) visitNestedValueValidation(vv *NestedValueValidation) bool {
 	ret := false
 	if m.NestedValueValidation != nil {
@@ -81,6 +82,7 @@ func (m *Visitor) visitNestedValueValidation(vv *NestedValueValidation) bool {
 		m.visitNestedValueValidation(vv.Items)
 	}
 	for k, v := range vv.Properties {
+		// 回调可能就地修改值，需写回 map
 		if changed := m.visitNestedValueValidation(&v); changed {
 			ret = true
 			vv.Properties[k] = v

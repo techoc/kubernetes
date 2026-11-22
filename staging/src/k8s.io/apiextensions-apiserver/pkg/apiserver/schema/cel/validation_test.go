@@ -48,7 +48,7 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
-// TestValidationExpressions tests CEL integration with custom resource values and OpenAPIv3.
+// TestValidationExpressions 测试 CEL 与自定义资源值及 OpenAPIv3 的集成。
 func TestValidationExpressions(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -57,16 +57,16 @@ func TestValidationExpressions(t *testing.T) {
 		obj           interface{}
 		oldObj        interface{}
 		valid         []string
-		errors        map[string]string // rule -> string that error message must contain
+		errors        map[string]string // rule -> 错误信息必须包含的字符串
 		costBudget    int64
 		isRoot        bool
 		expectSkipped bool
 		expectedCost  int64
 	}{
-		// tests where val1 and val2 are equal but val3 is different
-		// equality, comparisons and type specific functions
+		// val1 与 val2 相等但 val3 不同的测试用例
+		// 相等、比较以及类型相关函数
 		{name: "integers",
-			// 1st obj and schema args are for "self.val1" field, 2nd for "self.val2" and so on.
+			// 第 1 个 obj 和 schema 参数对应 "self.val1" 字段，第 2 个对应 "self.val2"，依此类推。
 			obj: objs(int64(math.MaxInt64), int64(math.MaxInt64), int32(math.MaxInt32), int32(math.MaxInt32),
 				int64(math.MaxInt64), int64(math.MaxInt64)),
 			schema: schemas(integerType, integerType, int32Type, int32Type, int64Type, int64Type),
@@ -74,9 +74,9 @@ func TestValidationExpressions(t *testing.T) {
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%d", int64(math.MaxInt64))),
 				ValsEqualThemselvesAndDataLiteral("self.val3", "self.val4", fmt.Sprintf("%d", math.MaxInt32)),
 				ValsEqualThemselvesAndDataLiteral("self.val5", "self.val6", fmt.Sprintf("%d", int64(math.MaxInt64))),
-				"self.val1 == self.val6", // integer with no format is the same as int64
+				"self.val1 == self.val6", // 未指定 format 的 integer 等同于 int64
 				"type(self.val1) == int",
-				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32), // CEL integers are 64 bit
+				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32), // CEL 的整数是 64 位
 				"type(self.val3) == int",
 				"type(self.val5) == int",
 			},
@@ -94,35 +94,35 @@ func TestValidationExpressions(t *testing.T) {
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%f", math.MaxFloat64)),
 				ValsEqualThemselvesAndDataLiteral("self.val3", "self.val4", fmt.Sprintf("%f", math.MaxFloat32)),
 				ValsEqualThemselvesAndDataLiteral("self.val5", "self.val6", fmt.Sprintf("%f", math.MaxFloat64)),
-				"self.val1 == self.val6", // number with no format is the same as float64
+				"self.val1 == self.val6", // 未指定 format 的 number 等同于 float64
 				"type(self.val1) == double",
 				"type(self.val3) == double",
 				"type(self.val5) == double",
 
-				// Use a int64 value with a number openAPI schema type since float representations of whole numbers
-				// (e.g. 1.0, 0.0) can convert to int representations (e.g. 1, 0) in yaml to json translation, and
-				// then get parsed as int64s.
+				// 对 number 类型的 OpenAPI schema 使用 int64 值，因为整数的浮点表示
+				// （如 1.0、0.0）在 yaml 转 json 时可能变成整数表示（如 1、0），
+				// 随后被解析为 int64。
 				"type(self.val7) == double",
 				"self.val7 == 1.0",
 			},
 		},
 		{name: "numeric comparisons",
 			obj: objs(
-				int64(5),      // val1, integer type, integer value
-				int64(10),     // val2, integer type, integer value
-				int64(15),     // val3, integer type, integer value
-				float64(10.0), // val4, number type, parsed from decimal literal
-				float64(10.0), // val5, float type, parsed from decimal literal
-				float64(10.0), // val6, double type, parsed from decimal literal
-				int64(10),     // val7, number type, parsed from integer literal
-				int64(10),     // val8, float type, parsed from integer literal
-				int64(10),     // val9, double type, parsed from integer literal
+				int64(5),      // val1，integer 类型，整数值
+				int64(10),     // val2，integer 类型，整数值
+				int64(15),     // val3，integer 类型，整数值
+				float64(10.0), // val4，number 类型，由小数面量解析
+				float64(10.0), // val5，float 类型，由小数面量解析
+				float64(10.0), // val6，double 类型，由小数面量解析
+				int64(10),     // val7，number 类型，由整数面量解析
+				int64(10),     // val8，float 类型，由整数面量解析
+				int64(10),     // val9，double 类型，由整数面量解析
 			),
 			schema: schemas(integerType, integerType, integerType, numberType, floatType, doubleType, numberType, floatType, doubleType),
 			valid: []string{
-				// xref: https://github.com/google/cel-spec/wiki/proposal-210
+				// 参考：https://github.com/google/cel-spec/wiki/proposal-210
 
-				// compare integers with all float types
+				// 整数与所有浮点类型比较
 				"double(self.val1) < self.val4",
 				"double(self.val1) <= self.val4",
 				"double(self.val2) <= self.val4",
@@ -151,8 +151,8 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val2 == int(self.val6)",
 				"self.val3 > int(self.val6)",
 
-				// Also compare with float types backed by integer values,
-				// which is how integer literals are parsed from JSON for custom resources.
+				// 也与由整数值表示的浮点类型比较，
+				// 这是自定义资源从 JSON 解析整数字面量的形式。
 				"double(self.val1) < self.val7",
 				"double(self.val2) == self.val7",
 				"double(self.val3) > self.val7",
@@ -177,7 +177,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val2 == int(self.val9)",
 				"self.val3 > int(self.val9)",
 
-				// compare literal integers and floats
+				// 比较整数字面量与浮点字面量
 				"double(5) < 10.0",
 				"double(10) == 10.0",
 				"double(15) > 10.0",
@@ -186,12 +186,12 @@ func TestValidationExpressions(t *testing.T) {
 				"10 == int(10.0)",
 				"15 > int(10.0)",
 
-				// compare integers with literal floats
+				// 整数与浮点字面量比较
 				"double(self.val1) < 10.0",
 				"double(self.val2) == 10.0",
 				"double(self.val3) > 10.0",
 
-				// Cross Type Numeric Comparisons: integers with all float types
+				// 跨类型数值比较：整数与所有浮点类型
 				"self.val1 < self.val4",
 				"self.val1 <= self.val4",
 				"self.val2 <= self.val4",
@@ -214,8 +214,8 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val1 < self.val6",
 				"self.val3 > self.val6",
 
-				// Cross Type Numeric Comparisons: float types backed by integer values,
-				// which is how integer literals are parsed from JSON for custom resources.
+				// 跨类型数值比较：由整数值表示的浮点类型，
+				// 这是自定义资源从 JSON 解析整数字面量的形式。
 				"self.val1 < self.val7",
 				"self.val3 > self.val7",
 
@@ -234,14 +234,14 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val1 < self.val9",
 				"self.val3 > self.val9",
 
-				// Cross Type Numeric Comparisons: literal integers and floats
+				// 跨类型数值比较：整数字面量与浮点字面量
 				"5 < 10.0",
 				"15 > 10.0",
 
 				"5 < 10.0",
 				"15 > 10.0",
 
-				// Cross Type Numeric Comparisons: integers with literal floats
+				// 跨类型数值比较：整数与浮点字面量
 				"self.val1 < 10.0",
 				"self.val3 > 10.0",
 			},
@@ -262,7 +262,7 @@ func TestValidationExpressions(t *testing.T) {
 				"type(self.val1) == string",
 				"size(self.val1) == 12",
 
-				// string functions (https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go)
+				// 字符串函数（https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go）
 				"self.val1.charAt(3) == 'k'",
 				"self.val1.indexOf('o') == 1",
 				"self.val1.indexOf('o', 2) == 2",
@@ -282,7 +282,7 @@ func TestValidationExpressions(t *testing.T) {
 				"'%b %b %b'.format([7, 8, 9]) == '111 1000 1001'",
 			},
 			errors: map[string]string{
-				// Invalid regex with a string constant regex pattern is compile time error
+				// 字符串常量正则模式的非法正则会成为编译期错误
 				"self.val1.matches(')')": "compile error: compilation failed: ERROR: <input>:1:19: invalid matches argument",
 			},
 		},
@@ -340,7 +340,7 @@ func TestValidationExpressions(t *testing.T) {
 			valid: []string{
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", "timestamp('1997-07-16T00:00:00.000Z')"),
 				"self.val1.getDate() == 16",
-				"self.val1.getMonth() == 06", // zero based indexing
+				"self.val1.getMonth() == 06", // 索引从 0 开始
 				"self.val1.getFullYear() == 1997",
 				"type(self.val1) == google.protobuf.Timestamp",
 			},
@@ -352,13 +352,13 @@ func TestValidationExpressions(t *testing.T) {
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", "timestamp('2011-08-18T19:03:37.010+01:00')"),
 				"self.val1 == timestamp('2011-08-18T00:00:00.000+01:00') + duration('19h3m37s10ms')",
 				"self.val1.getDate('01:00') == 18",
-				"self.val1.getMonth('01:00') == 7", // zero based indexing
+				"self.val1.getMonth('01:00') == 7", // 索引从 0 开始
 				"self.val1.getFullYear('01:00') == 2011",
 				"self.val1.getHours('01:00') == 19",
 				"self.val1.getMinutes('01:00') == 03",
 				"self.val1.getSeconds('01:00') == 37",
 				"self.val1.getMilliseconds('01:00') == 10",
-				"self.val1.getHours('UTC') == 18", // TZ in string is 1hr off of UTC
+				"self.val1.getHours('UTC') == 18", // 字符串中的时区比 UTC 早 1 小时
 				"type(self.val1) == google.protobuf.Timestamp",
 			},
 			errors: map[string]string{
@@ -425,7 +425,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val1 + [4, 5] == [1, 2, 3, 4, 5]",
 			},
 			errors: map[string]string{
-				// Mixed type lists are not allowed since we have HomogeneousAggregateLiterals enabled
+				// 由于启用了 HomogeneousAggregateLiterals，不允许混合类型列表
 				"[1, 'a', false].filter(x, string(x) == 'a')": "compilation failed: ERROR: <input>:1:5: expected type 'int' but found 'string'",
 			},
 		},
@@ -479,7 +479,7 @@ func TestValidationExpressions(t *testing.T) {
 			obj:    objs([]interface{}{"a", "b", "c"}),
 			schema: schemas(listType(&stringType)),
 			valid: []string{
-				// Join function
+				// join 函数
 				"self.val1.join('-') == 'a-b-c'",
 				"['a', 'b', 'c'].join('-') == 'a-b-c'",
 				"self.val1.join() == 'abc'",
@@ -490,7 +490,7 @@ func TestValidationExpressions(t *testing.T) {
 			obj:    objs([]interface{}{"a", "b", "c"}, []interface{}{"a", "c", "b"}),
 			schema: schemas(listSetType(&stringType), listSetType(&stringType)),
 			valid: []string{
-				// equal even though order is different
+				// 顺序不同但相等
 				"self.val1 == ['c', 'b', 'a']",
 				"self.val1 == self.val2",
 				"'a' in self.val1",
@@ -499,13 +499,13 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val1 + self.val2 == ['a', 'b', 'c']",
 				"self.val1 + ['c', 'd'] == ['a', 'b', 'c', 'd']",
 
-				// Join function
+				// join 函数
 				"self.val1.join('-') == 'a-b-c'",
 				"['a', 'b', 'c'].join('-') == 'a-b-c'",
 				"self.val1.join() == 'abc'",
 				"['a', 'b', 'c'].join() == 'abc'",
 
-				// CEL sets functions
+				// CEL 集合函数
 				"sets.contains(['a', 'b'], [])",
 				"sets.contains(['a', 'b'], ['b'])",
 				"!sets.contains(['a', 'b'], ['c'])",
@@ -569,31 +569,31 @@ func TestValidationExpressions(t *testing.T) {
 				}))),
 			}),
 			valid: []string{
-				"self.objs[0] == self.objs[1]",                // equal even though order is different
-				"self.objs[0] + self.objs[2] == self.objs[2]", // rhs overwrites lhs values
+				"self.objs[0] == self.objs[1]",                // 顺序不同但相等
+				"self.objs[0] + self.objs[2] == self.objs[2]", // 右侧覆盖左侧的值
 				"self.objs[2] + self.objs[0] == self.objs[0]",
 
-				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]", // equal against a declared list
+				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]", // 与声明的列表相等
 				"self.objs[0] == [self.objs[0][1], self.objs[0][0]]",
 
-				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]", // concat against a declared list
+				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]", // 与声明的列表拼接
 				"size(self.objs[0] + [self.objs[3][0]]) == 3",
 			},
 			errors: map[string]string{
-				"self.objs[0] == {'k': 'a', 'v': '1'}": "no matching overload for '_==_'", // objects cannot be compared against a data literal map
+				"self.objs[0] == {'k': 'a', 'v': '1'}": "no matching overload for '_==_'", // 对象不能与数据字面量 map 比较
 			},
 		},
 		{name: "maps",
 			obj:    objs(map[string]interface{}{"k1": "a", "k2": "b"}, map[string]interface{}{"k2": "b", "k1": "a"}),
 			schema: schemas(mapType(&stringType), mapType(&stringType)),
 			valid: []string{
-				"self.val1 == self.val2", // equal even though order is different
+				"self.val1 == self.val2", // 顺序不同但相等
 				"'k1' in self.val1",
 				"!('k3' in self.val1)",
 				"self.val1 == {'k1': 'a', 'k2': 'b'}",
 			},
 			errors: map[string]string{
-				// Mixed type maps are not allowed since we have HomogeneousAggregateLiterals enabled
+				// 由于启用了 HomogeneousAggregateLiterals，不允许混合类型 map
 				"{'k1': 'a', 'k2': 1, 'k2': false}": "expected type 'string' but found 'int'",
 			},
 		},
@@ -614,7 +614,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.objs[0] == self.objs[1]",
 			},
 			errors: map[string]string{
-				"self.objs[0] == {'f1': 'a', 'f2': 'b'}": "found no matching overload for '_==_'", // objects cannot be compared against a data literal map
+				"self.objs[0] == {'f1': 'a', 'f2': 'b'}": "found no matching overload for '_==_'", // 对象不能与数据字面量 map 比较
 			},
 		},
 		{name: "object access",
@@ -645,19 +645,19 @@ func TestValidationExpressions(t *testing.T) {
 					}),
 				}),
 			}),
-			// https://github.com/google/cel-spec/blob/master/doc/langdef.md#field-selection
+			// 参考：https://github.com/google/cel-spec/blob/master/doc/langdef.md#field-selection
 			valid: []string{
 				"has(self.a.b)",
 				"!has(self.a.c)",
-				"!has(self.a.d)", // We treat null value fields the same as absent fields in CEL
+				"!has(self.a.d)", // 在 CEL 中，null 值字段与缺失字段同等对待
 				"has(self.a1.b1.c1)",
-				"!(has(self.a1.d2) && has(self.a1.d2.e2))", // must check intermediate optional fields (see below no such key error for d2)
+				"!(has(self.a1.d2) && has(self.a1.d2.e2))", // 必须检查中间的可选字段（见下文 d2 的 no such key 错误）
 				"!has(self.a1.d2)",
 			},
 			errors: map[string]string{
-				"has(self.a.z)":      "undefined field 'z'",             // may not reference undefined fields, not even with has
-				"self.a['b'] == 1":   "no matching overload for '_[_]'", // only allowed on maps, not objects
-				"has(self.a1.d2.e2)": "no such key: d2",                 // has only checks last element in path, when d2 is absent in value, this is an error
+				"has(self.a.z)":      "undefined field 'z'",             // 不能引用未定义字段，即使通过 has 也不行
+				"self.a['b'] == 1":   "no matching overload for '_[_]'", // 仅允许用于 map，不允许用于 object
+				"has(self.a1.d2.e2)": "no such key: d2",                 // has 只检查路径最后一段，值中缺少 d2 时会报错
 			},
 		},
 		{name: "map access",
@@ -671,12 +671,12 @@ func TestValidationExpressions(t *testing.T) {
 				"val": mapType(&integerType),
 			}),
 			valid: []string{
-				// idiomatic map access
+				// 惯用的 map 访问方式
 				"!('a' in self.val)",
 				"'b' in self.val",
 				"!('c' in self.val)",
 				"'d' in self.val",
-				// field selection also possible if map key is a valid CEL identifier
+				// 若 map 键是合法的 CEL 标识符，也可用字段选择访问
 				"!has(self.val.a)",
 				"has(self.val.b)",
 				"!has(self.val.c)",
@@ -690,7 +690,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.val.map(k, self.val[k]).exists(v, v == 1)",
 				"size(self.val.filter(k, self.val[k] > 1)) == 1",
 
-				// two variable comprehensions
+				// 双变量推导式
 				"self.val.all(k, v, v > 0)",
 				"self.val.exists(k, v, v == 2)",
 				"self.val.existsOne(k, v, v == 2)",
@@ -731,23 +731,23 @@ func TestValidationExpressions(t *testing.T) {
 				"self.listMap.exists(m, m.k == 'a1' && m.v == 'b1')",
 				"self.listMap.map(m, m.v).exists(v, v == 'b1')",
 
-				// test comprehensions where the field used in predicates is unset on all but one of the elements:
-				// - with has checks:
+				// 测试谓词中使用的字段在除一个元素外均未设置时的推导式：
+				// - 使用 has 检查：
 
 				"self.listMap.exists(m, has(m.v2) && m.v2 == 'z')",
 				"!self.listMap.all(m, has(m.v2) && m.v2 != 'z')",
 				"self.listMap.exists_one(m, has(m.v2) && m.v2 == 'z')",
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').size() == 1",
-				// undocumented overload of map that takes a filter argument. This is the same as .filter().map()
+				// map 的未文档化重载，接受过滤参数，等同于 .filter().map()
 				"self.listMap.map(m, has(m.v2) && m.v2 == 'z', m.v2).size() == 1",
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').map(m, m.v2).size() == 1",
-				// - without has checks:
+				// - 不使用 has 检查：
 
-				// all() and exists() macros ignore errors from predicates so long as the condition holds for at least one element
+				// 只要条件至少对一个元素成立，all() 与 exists() 宏会忽略谓词产生的错误
 				"self.listMap.exists(m, m.v2 == 'z')",
 				"!self.listMap.all(m, m.v2 != 'z')",
 
-				// two variable comprehensions
+				// 双变量推导式
 				"!self.listMap.all(i, m, has(m.v2) && m.v2 != 'z')",
 				"self.listMap.exists(i, m, has(m.v2) && m.v2 == 'z')",
 				"self.listMap.existsOne(i, m, has(m.v2) && m.v2 == 'z')",
@@ -755,18 +755,18 @@ func TestValidationExpressions(t *testing.T) {
 				"self.listMap.transformList(i, m, m.v).size() == 3",
 			},
 			errors: map[string]string{
-				// test comprehensions where the field used in predicates is unset on all but one of the elements: (error cases)
-				// - without has checks:
+				// 测试谓词字段在除一个元素外均未设置时的推导式：（错误用例）
+				// - 不使用 has 检查：
 
-				// if all() predicate evaluates to false or error for all elements, any error encountered is raised
+				// 若 all() 谓词对所有元素都为 false 或出错，则抛出遇到的错误
 				"self.listMap.all(m, m.v2 == 'z')": "no such key: v2",
-				// exists one() is stricter than map() or exists(), it requires exactly one predicate evaluate to true and the rest
-				// evaluate to false, any error encountered is raised
+				// exists_one() 比 map() 或 exists() 更严格：它要求恰好一个谓词为 true、其余为 false，
+				// 遇到任何错误都会抛出
 				"self.listMap.exists_one(m, m.v2 == 'z')": "no such key: v2",
-				// filter and map raise any error encountered
+				// filter 与 map 会抛出遇到的任何错误
 				"self.listMap.filter(m, m.v2 == 'z').size() == 1": "no such key: v2",
 				"self.listMap.map(m, m.v2).size() == 1":           "no such key: v2",
-				// undocumented overload of map that takes a filter argument. This is the same as .filter().map()
+				// map 的未文档化重载，接受过滤参数，等同于 .filter().map()
 				"self.listMap.map(m, m.v2 == 'z', m.v2).size() == 1": "no such key: v2",
 			},
 		},
@@ -790,7 +790,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.array.map(e, e * 20).filter(e, e > 50).exists(e, e == 60)",
 				"size(self.array) == 8",
 
-				// two variable comprehensions
+				// 双变量推导式
 				"self.array.all(i, e, e > 0)",
 				"self.array.exists(i, e, e > 2)",
 				"self.array.existsOne(i, e, e > 4)",
@@ -881,7 +881,7 @@ func TestValidationExpressions(t *testing.T) {
 			},
 		},
 
-		// Kubernetes special types
+		// Kubernetes 特殊类型
 		{name: "embedded object",
 			obj: map[string]interface{}{
 				"embedded": map[string]interface{}{
@@ -906,14 +906,14 @@ func TestValidationExpressions(t *testing.T) {
 				},
 			}),
 			valid: []string{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 始终可访问，
+				// 即使未在 schema 中声明。
 				"self.embedded.kind == 'Pod'",
 				"self.embedded.apiVersion == 'v1'",
 				"self.embedded.metadata.name == 'foo'",
 				"self.embedded.metadata.generateName == 'pickItForMe'",
 			},
-			// only field declared in the schema can be field selected in CEL expressions
+			// 只有 schema 中声明的字段才能在 CEL 表达式中被字段选择
 			errors: map[string]string{
 				"has(self.embedded.metadata.namespace)": "undefined field 'namespace'",
 				"has(self.embedded.spec)":               "undefined field 'spec'",
@@ -954,17 +954,17 @@ func TestValidationExpressions(t *testing.T) {
 				},
 			}),
 			valid: []string{
-				// in this case 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are specified in the
-				// schema, but they would be accessible even if they were not
+				// 此例中 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 已在 schema 中声明，
+				// 但即使未声明它们也可访问
 				"self.embedded.kind == 'Pod'",
 				"self.embedded.apiVersion == 'v1'",
 				"self.embedded.metadata.name == 'foo'",
 				"self.embedded.metadata.generateName == 'pickItForMe'",
-				// the specified embedded fields are accessible
+				// 已声明的内嵌字段可访问
 				"self.embedded.spec.field1 == 'a'",
 			},
 			errors: map[string]string{
-				// only name and generateName are accessible on metadata
+				// metadata 上只有 name 与 generateName 可访问
 				"has(self.embedded.metadata.namespace)": "undefined field 'namespace'",
 			},
 		},
@@ -1035,18 +1035,18 @@ func TestValidationExpressions(t *testing.T) {
 				},
 			}),
 			valid: []string{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema, regardless of if x-kubernetes-preserve-unknown-fields is set.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 始终可访问，
+				// 即使未在 schema 中声明，也与是否设置 x-kubernetes-preserve-unknown-fields 无关。
 				"self.embedded.kind == 'Pod'",
 				"self.embedded.apiVersion == 'v1'",
 				"self.embedded.metadata.name == 'foo'",
 				"self.embedded.metadata.generateName == 'pickItForMe'",
 
-				// the object exists
+				// 对象存在
 				"has(self.embedded)",
 			},
-			// only field declared in the schema can be field selected in CEL expressions, regardless of if
-			// x-kubernetes-preserve-unknown-fields is set.
+			// 只有 schema 中声明的字段才能在 CEL 表达式中被字段选择，
+			// 与是否设置 x-kubernetes-preserve-unknown-fields 无关。
 			errors: map[string]string{
 				"has(self.embedded.spec)": "undefined field 'spec'",
 			},
@@ -1059,20 +1059,20 @@ func TestValidationExpressions(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			valid: []string{
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// 在 Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地编写如下校验规则：
 				"self.something == '25%'",
 				"self.something != 1",
 				"self.something == 1 || self.something == '25%'",
 				"self.something == '25%' || self.something == 1",
 
-				// In Kubernetes 1.23 and earlier, all int-or-string access must be guarded by a type check to prevent
-				// a runtime error attempting an equality check between string and int types.
+				// 在 Kubernetes 1.23 及以前，所有 int-or-string 访问都必须先用类型检查保护，
+				// 以避免字符串与整数类型做相等比较时出现运行时错误。
 				"type(self.something) == string && self.something == '25%'",
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'",
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 由于该类型是动态的，没有类型检查，与其他类型比较时
+				// 在运行时求值为 false。
 				"self.something != ['anything']",
 			},
 		},
@@ -1084,20 +1084,20 @@ func TestValidationExpressions(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			valid: []string{
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// 在 Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地编写如下校验规则：
 				"self.something == 1",
 				"self.something != 'some string'",
 				"self.something == 1 || self.something == '25%'",
 				"self.something == '25%' || self.something == 1",
 
-				// In Kubernetes 1.23 and earlier, all int-or-string access must be guarded by a type check to prevent
-				// a runtime error attempting an equality check between string and int types.
+				// 在 Kubernetes 1.23 及以前，所有 int-or-string 访问都必须先用类型检查保护，
+				// 以避免字符串与整数类型做相等比较时出现运行时错误。
 				"type(self.something) == int && self.something == 1",
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'",
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 由于该类型是动态的，没有类型检查，与其他类型比较时
+				// 在运行时求值为 false。
 				"self.something != ['anything']",
 			},
 		},
@@ -1127,9 +1127,9 @@ func TestValidationExpressions(t *testing.T) {
 				"available": integerType,
 			}),
 			valid: []string{
-				// validate that if 'min' is a string that it is a percentage
+				// 校验 'min' 为字符串时必须是百分比
 				`type(self.min) == string && self.min.matches(r'(\d+(\.\d+)?%)')`,
-				// validate that 'min' can be either a exact value minimum, or a minimum as a percentage of 'available'
+				// 校验 'min' 可以是最小精确值，也可以是 'available' 的百分比最小值
 				"type(self.min) == int ? self.current <= self.min : double(self.current) / double(self.available) >= double(self.min.replace('%', '')) / 100.0",
 			},
 		},
@@ -1218,20 +1218,20 @@ func TestValidationExpressions(t *testing.T) {
 			valid: []string{
 				"has(self.withUnknown)",
 				"self.withUnknownList.size() == 5",
-				// fields that are unknown because they were not specified on the object schema are included in equality checks
+				// 因未在对象 schema 中声明而未知的字段也会参与相等性检查
 				"self.withUnknownList[0] != self.withUnknownList[1]",
 				"self.withUnknownList[1] == self.withUnknownList[2]",
 				"self.withUnknownList[3] == self.withUnknownList[4]",
 
-				// fields specified on the object schema that are unknown because the field's schema is unknown are also included equality checks
+				// 对象 schema 中已声明、但字段 schema 未知的字段同样参与相等性检查
 				"self.withUnknownFieldList[0] != self.withUnknownFieldList[1]",
 				"self.withUnknownFieldList[1] == self.withUnknownFieldList[2]",
 			},
 			errors: map[string]string{
-				// unknown fields cannot be field selected
+				// 未知字段不能被字段选择
 				"has(self.withUnknown.field1)": "undefined field 'field1'",
-				// if items type of a list, or additionalProperties type of a map, is unknown we treat entire list or map as unknown
-				// If the type of a property is unknown it is not accessible in CEL
+				// 若列表的 items 类型或 map 的 additionalProperties 类型未知，则整个列表或 map 视为未知
+				// 若某属性类型未知，则它在 CEL 中不可访问
 				"has(self.anyvalList)":   "undefined field 'anyvalList'",
 				"has(self.anyvalMap)":    "undefined field 'anyvalMap'",
 				"has(self.anyvalField1)": "undefined field 'anyvalField1'",
@@ -1296,19 +1296,19 @@ func TestValidationExpressions(t *testing.T) {
 			valid: []string{
 				"self.withUnknown.known == 1",
 				"self.withUnknownList[0] != self.withUnknownList[1]",
-				// if the unknown fields are the same, they are equal
+				// 若未知字段相同，则相等
 				"self.withUnknownList[1] == self.withUnknownList[2]",
 
-				// if unknown fields are different, they are not equal
+				// 若未知字段不同，则不相等
 				"self.withUnknownList[0] != self.withUnknownList[1]",
 				"self.withUnknownList[0] != self.withUnknownList[3]",
 				"self.withUnknownList[0] != self.withUnknownList[5]",
 
-				// if all fields are known, equality works as usual
+				// 若所有字段已知，相等性与常规一致
 				"self.withUnknownList[3] == self.withUnknownList[4]",
 				"self.withUnknownList[4] != self.withUnknownList[5]",
 			},
-			// only field declared in the schema can be field selected in CEL expressions
+			// 只有 schema 中声明的字段才能在 CEL 表达式中被字段选择
 			errors: map[string]string{
 				"has(self.withUnknown.unknown)": "undefined field 'unknown'",
 			},
@@ -1320,8 +1320,8 @@ func TestValidationExpressions(t *testing.T) {
 				"setNullableStr":       "v3",
 				"setToNullNullableStr": nil,
 
-				// we don't run the defaulter in this test suite (depending on it would introduce a cycle)
-				// so we fake it :(
+				// 本测试套件不运行默认值填充（依赖它会引入循环），
+				// 所以这里伪造一下 :(
 				"unsetDefaultedStr": "default value",
 			},
 			schema: objectTypePtr(map[string]schema.Structural{
@@ -1342,16 +1342,16 @@ func TestValidationExpressions(t *testing.T) {
 				"has(self.setPlainStr) && self.setPlainStr == 'v1'",
 				"has(self.setDefaultedStr) && self.setDefaultedStr == 'v2'",
 				"has(self.setNullableStr) && self.setNullableStr == 'v3'",
-				// We treat null fields as absent fields, not as null valued fields.
-				// Note that this is different than how we treat nullable list items or map values.
+				// 我们将 null 字段视为缺失字段，而非 null 值字段。
+				// 注意这与可空列表项或 map 值的处理方式不同。
 				"type(self.setNullableStr) != null_type",
 
-				// a field that is set to null is treated the same as an absent field in validation rules
+				// 在校验规则中，设为 null 的字段与缺失字段同等对待
 				"!has(self.setToNullNullableStr)",
 			},
 			errors: map[string]string{
-				// the types used in validation rules don't integrate with CEL's Null type, so
-				// all attempts to compare values with null are caught by the type checker at compilation time
+				// 校验规则使用的类型不与 CEL 的 Null 类型集成，因此
+				// 所有与 null 比较的尝试都会在编译期被类型检查捕获
 				"self.unsetPlainStr == null":     "no matching overload for '_==_' applied to '(string, null)",
 				"self.unsetDefaultedStr != null": "no matching overload for '_!=_' applied to '(string, null)",
 				"self.unsetNullableStr == null":  "no matching overload for '_==_' applied to '(string, null)",
@@ -1381,7 +1381,7 @@ func TestValidationExpressions(t *testing.T) {
 			valid: []string{
 				"self.m.size() == 2",
 				"'a' in self.m",
-				"type(self.m['a']) == null_type", // null check using runtime type checking
+				"type(self.m['a']) == null_type", // 使用运行时类型检查判断 null
 				//"self.m['a'] == null",
 
 				"self.l.size() == 2",
@@ -1393,10 +1393,10 @@ func TestValidationExpressions(t *testing.T) {
 				//"self.s[0] == null",
 			},
 			errors: map[string]string{
-				// TODO(jpbetz): Type checker does not support unions of (<type>, Null).
-				// This will be available when "heterogeneous type" supported is added to cel-go.
-				// In the meantime, the only other option would be to use dynamic types for nullable types, which
-				// would disable type checking. We plan to wait for "heterogeneous type" support.
+				// TODO(jpbetz): 类型检查器不支持 (<type>, Null) 的联合类型。
+				// 待 cel-go 支持 "heterogeneous type" 后即可实现。
+				// 在此之前，另一种选择是对可空类型使用动态类型，但这会
+				// 禁用类型检查。我们计划等待 "heterogeneous type" 支持。
 				//"self.m['a'] == null": "found no matching overload for '_==_' applied to '(string, null)",
 				//"self.l[0] == null": "found no matching overload for '_==_' applied to '(string, null)",
 				//"self.s[0] == null": "found no matching overload for '_==_' applied to '(string, null)",
@@ -1404,29 +1404,29 @@ func TestValidationExpressions(t *testing.T) {
 		},
 		{name: "escaping",
 			obj: map[string]interface{}{
-				// RESERVED symbols defined in the CEL lexer
+				// CEL 词法分析器定义的 RESERVED 符号
 				"true": 1, "false": 2, "null": 3, "in": 4, "as": 5,
 				"break": 6, "const": 7, "continue": 8, "else": 9,
 				"for": 10, "function": 11, "if": 12, "import": 13,
 				"let": 14, "loop": 15, "package": 16, "namespace": 17,
 				"return": 18, "var": 19, "void": 20, "while": 21,
-				// identifiers that are part of the CEL language
+				// CEL 语言自身的标识符
 				"int": 101, "uint": 102, "double": 103, "bool": 104,
 				"string": 105, "bytes": 106, "list": 107, "map": 108,
 				"null_type": 109, "type": 110,
-				// validation expression reserved identifiers
+				// 校验表达式的保留标识符
 				"self": 201,
-				// identifiers of CEL builtin function and macro names
+				// CEL 内建函数与宏名称的标识符
 				"getDate": 202,
 				"all":     203,
 				"size":    "204",
-				// identifiers that have _s
+				// 含 _s 的标识符
 				"_true": 301,
-				// identifiers that have the characters we escape
+				// 含需转义字符的标识符
 				"dot.dot":                            401,
 				"dash-dash":                          402,
 				"slash/slash":                        403,
-				"underscore_underscore":              404, // ok, this is not so weird, but it's one we'd like a test case for
+				"underscore_underscore":              404, // 好吧，这不算太奇怪，但我们希望有一个测试用例覆盖它
 				"doubleunderscore__doubleunderscore": 405,
 			},
 			schema: objectTypePtr(map[string]schema.Structural{
@@ -1451,32 +1451,32 @@ func TestValidationExpressions(t *testing.T) {
 				"dot.dot":                            integerType,
 				"dash-dash":                          integerType,
 				"slash/slash":                        integerType,
-				"underscore_underscore":              integerType, // ok, this is not so weird, but it's one we'd like a test case for
+				"underscore_underscore":              integerType, // 好吧，这不算太奇怪，但我们希望有一个测试用例覆盖它
 				"doubleunderscore__doubleunderscore": integerType,
 			}),
 			valid: []string{
-				// CEL lexer RESERVED keywords must be escaped
+				// CEL 词法分析器的 RESERVED 关键字必须转义
 				"self.__true__ == 1", "self.__false__ == 2", "self.__null__ == 3", "self.__in__ == 4", "self.__as__ == 5",
 				"self.__break__ == 6", "self.__const__ == 7", "self.__continue__ == 8", "self.__else__ == 9",
 				"self.__for__ == 10", "self.__function__ == 11", "self.__if__ == 12", "self.__import__ == 13",
 				"self.__let__ == 14", "self.__loop__ == 15", "self.__package__ == 16", "self.__namespace__ == 17",
 				"self.__return__ == 18", "self.__var__ == 19", "self.__void__ == 20", "self.__while__ == 21", "self.__true__ == 1",
 
-				// CEL language identifiers do not need to be escaped, but would collide with builtin language identifier if bound as
-				// root variable names, so are only field selectable as a field of 'self'.
+				// CEL 语言标识符无需转义，但若作为根变量名绑定会与内建语言标识符冲突，
+				// 因此只能作为 'self' 的字段被选择。
 				"self.int == 101", "self.uint == 102", "self.double == 103", "self.bool == 104",
 				"self.string == 105", "self.bytes == 106", "self.list == 107", "self.map == 108",
 				"self.null_type == 109", "self.type == 110",
 
-				// if a property name is 'self', it can be field selected as 'self.self' (but not as just 'self' because we bind that
-				// variable name to the locally scoped expression value.
+				// 若属性名为 'self'，可通过 'self.self' 字段选择访问（但不能只写 'self'，
+				// 因为该变量名绑定到局部作用域的表达式值）。
 				"self.self == 201",
-				// CEL macro and function names do not need to be escaped because the parser can disambiguate them from the function and
-				// macro identifiers.
+				// CEL 宏与函数名无需转义，因为解析器能将它们与函数及宏标识符区分开。
+				// 以及宏标识符。
 				"self.getDate == 202",
 				"self.all == 203",
 				"self.size == '204'",
-				// _ is not escaped
+				// _ 不转义
 				"self._true == 301",
 				"self.__true__ != 301",
 
@@ -1487,12 +1487,12 @@ func TestValidationExpressions(t *testing.T) {
 				"self.doubleunderscore__underscores__doubleunderscore == 405",
 			},
 			errors: map[string]string{
-				// 'true' is a boolean literal, not a field name
+				// 'true' 是布尔字面量，不是字段名
 				"self.true == 1": "mismatched input 'true' expecting IDENTIFIER",
-				// 'self' is the locally scoped expression value
+				// 'self' 是局部作用域的表达式值
 				"self == 201": "found no matching overload for '_==_'",
-				// attempts to use identifiers that are not escapable are caught by the compiler since
-				// we don't register declarations for them
+				// 使用不可转义标识符的尝试会被编译器捕获，因为我们
+				// 没有为它们注册声明
 				"self.__illegal__ == 301": "undefined field '__illegal__'",
 			},
 		},
@@ -1543,18 +1543,18 @@ func TestValidationExpressions(t *testing.T) {
 				})),
 			}),
 			valid: []string{
-				// we do not expose a stable type for the self variable, even when it is an object that CEL
-				// considers a named type. The only operation developers should be able to perform on the type is
-				// equality checking.
+				// 我们不暴露 self 变量的稳定类型，即使它是 CEL
+				// 认为的命名类型。开发者唯一应能对该类型执行的操作是
+				// 相等性检查。
 				"type(self) == type(self)",
 				"type(self.nestedInMap['k1']) == type(self.nestedInMap['k2'])",
 				"type(self.nestedInList[0]) == type(self.nestedInList[1])",
 			},
 			errors: map[string]string{
-				// Note that errors, like the below, do print the type name, but it changes each time a CRD is updated.
-				// Type name printed in the below error will be of the form "<uuid>.nestedInList.@idx".
+				// 注意：如下错误确实会打印类型名，但每次更新 CRD 时类型名都会变化。
+				// 下面错误中打印的类型名形如 "<uuid>.nestedInList.@idx"。
 
-				// Developers may not cast the type of variables as a string:
+				// 开发者不能将变量的类型转换为字符串：
 				"string(type(self.nestedInList[0])).endsWith('.nestedInList.@idx')": "found no matching overload for 'string' applied to '(type",
 			},
 		},
@@ -1586,13 +1586,13 @@ func TestValidationExpressions(t *testing.T) {
 				}))),
 			}),
 			valid: []string{
-				"self.objs[0] == self.objs[1]",    // equal even though order is different
-				"self.objs[0][0].k__dot__ == '1'", // '.' is a supported character in identifiers, but it is escaped
-				"self.objs[0] != self.objs[2]",    // not equal even though difference is in unsupported char
-				"self.objs[0] != self.objs[3]",    // not equal even though difference is in escaped char
+				"self.objs[0] == self.objs[1]",    // 顺序不同但相等
+				"self.objs[0][0].k__dot__ == '1'", // '.' 是标识符支持的字符，但会被转义
+				"self.objs[0] != self.objs[2]",    // 即使差异在不受支持的字符上，也不相等
+				"self.objs[0] != self.objs[3]",    // 即使差异在已转义字符上，也不相等
 			},
 			errors: map[string]string{
-				// '!' is not a supported character in identifiers, there is no way to access the field
+				// '!' 不是标识符支持的字符，无法访问该字段
 				"self.objs[0][0].k! == '1'": "Syntax error: mismatched input '!' expecting",
 			},
 		},
@@ -1711,7 +1711,7 @@ func TestValidationExpressions(t *testing.T) {
 				"nullable":    listType(&stringType),
 			}),
 			errors: map[string]string{
-				// data is validated before CEL evaluation, so these errors should not be surfaced to end users
+				// 数据在 CEL 求值前已校验，因此这些错误不应暴露给最终用户
 				"has(self.o)":             "invalid data, expected a map for the provided schema with type=object",
 				"has(self.m)":             "invalid data, expected a map for the provided schema with type=object",
 				"has(self.l)":             "invalid data, expected an array for the provided schema with type=array",
@@ -1719,7 +1719,7 @@ func TestValidationExpressions(t *testing.T) {
 				"has(self.lm)":            "invalid data, expected an array for the provided schema with type=array",
 				"has(self.intorstring)":   "invalid data, expected XIntOrString value to be either a string or integer",
 				"self.nullable[0] == 'x'": "invalid data, got null for schema with nullable=false",
-				// TODO: also find a way to test the errors returned for: array with no items, object with no properties or additionalProperties, invalid listType and invalid type.
+				// TODO: 还需要找到方法来测试以下情况返回的错误：无 items 的数组、无 properties 或 additionalProperties 的对象、非法的 listType 以及非法 type。
 			},
 		},
 		{name: "stdlib list functions",
@@ -1854,24 +1854,24 @@ func TestValidationExpressions(t *testing.T) {
 				"self.dates.indexOf(timestamp('2005-02-01T00:00:00.000Z')) == -1",
 				"self.dates.lastIndexOf(timestamp('2005-02-01T00:00:00.000Z')) == -1",
 
-				// array, map and object types use structural equality (aka "deep equals")
+				// array、map 与 object 类型使用结构相等（即“深度相等”）
 				"[[1], [2]].indexOf([1]) == 0",
 				"[{'a': 1}, {'b': 2}].lastIndexOf({'b': 2}) == 1",
 				"self.objs.indexOf(self.objs[1]) == 1",
 				"self.objs.lastIndexOf(self.objs[1]) == 2",
 
-				// avoiding empty list error with min and max by appending an acceptable default minimum value
+				// 通过追加可接受的默认最小值，避免 min 和 max 对空列表报错
 				"([0] + self.emptyInts).min() == 0",
 
-				// handle CEL's dynamic dispatch appropriately (special cases to handle an empty list)
+				// 正确处理 CEL 的动态分派（对空列表做特殊处理）
 				"dyn([]).sum() == 0",
 				"dyn([1, 2]).sum() == 3",
 				"dyn([1.0, 2.0]).sum() == 3.0",
 
-				"[].sum() == 0", // An empty list returns an 0 int
+				"[].sum() == 0", // 空列表返回整数 0
 			},
 			errors: map[string]string{
-				// return an error for min/max on empty list
+				// 对空列表调用 min/max 返回错误
 				"self.emptyInts.min() == 1":      "min called on empty list",
 				"self.emptyInts.max() == 3":      "max called on empty list",
 				"self.emptyDoubles.min() == 1.0": "min called on empty list",
@@ -1879,12 +1879,12 @@ func TestValidationExpressions(t *testing.T) {
 				"self.emptyStrings.min() == 'a'": "min called on empty list",
 				"self.emptyStrings.max() == 'c'": "max called on empty list",
 
-				// only allow sum on numeric types and duration
-				"['a', 'b'].sum() == 'c'": "found no matching overload for 'sum' applied to 'list(string).()", // compiler type checking error
+				// 仅允许对数值类型和 duration 求和
+				"['a', 'b'].sum() == 'c'": "found no matching overload for 'sum' applied to 'list(string).()", // 编译器类型检查错误
 
-				// only allow min/max/indexOf/lastIndexOf on comparable types
-				"[[1], [2]].min() == [1]":                "found no matching overload for 'min' applied to 'list(list(int)).()",        // compiler type checking error
-				"[{'a': 1}, {'b': 2}].max() == {'b': 2}": "found no matching overload for 'max' applied to 'list(map(string, int)).()", // compiler type checking error
+				// 仅允许对可比较类型使用 min/max/indexOf/lastIndexOf
+				"[[1], [2]].min() == [1]":                "found no matching overload for 'min' applied to 'list(list(int)).()",        // 编译器类型检查错误
+				"[{'a': 1}, {'b': 2}].max() == {'b': 2}": "found no matching overload for 'max' applied to 'list(map(string, int)).()", // 编译器类型检查错误
 			},
 		},
 		{name: "stdlib regex functions",
@@ -1909,7 +1909,7 @@ func TestValidationExpressions(t *testing.T) {
 				"self.str.findAll('xyz', 1) == []",
 			},
 			errors: map[string]string{
-				// Invalid regex with a string constant regex pattern is compile time error
+				// 字符串常量正则模式的非法正则会成为编译期错误
 				"self.str.find(')') == ''":       "compile error: program instantiation failed: error parsing regexp: unexpected ): `)`",
 				"self.str.findAll(')') == []":    "compile error: program instantiation failed: error parsing regexp: unexpected ): `)`",
 				"self.str.findAll(')', 1) == []": "compile error: program instantiation failed: error parsing regexp: unexpected ): `)`",
@@ -1946,7 +1946,7 @@ func TestValidationExpressions(t *testing.T) {
 				"url('https://example.com/path?').getQuery() == {}",
 				"url('https://example.com/path').getQuery() == {}",
 
-				// test with string input
+				// 使用字符串输入测试
 				"url(self.url).getScheme() == 'https'",
 				"url(self.url).getHost() == 'kubernetes.io:80'",
 				"url(self.url).getHostname() == 'kubernetes.io'",
@@ -2021,7 +2021,7 @@ func TestValidationExpressions(t *testing.T) {
 				"authorizer.path('/healthz').check('get').allowed()": "undeclared reference to 'authorizer'",
 			},
 		},
-		{name: "optionals", // https://github.com/google/cel-spec/wiki/proposal-246
+		{name: "optionals", // 参考：https://github.com/google/cel-spec/wiki/proposal-246
 			obj: map[string]interface{}{
 				"presentObj": map[string]interface{}{
 					"presentStr": "value",
@@ -2100,7 +2100,7 @@ func TestValidationExpressions(t *testing.T) {
 				"['a', ?optional.of('v'), 'c'] == ['a', 'v', 'c']",
 			},
 			errors: map[string]string{
-				"self.absentObj.?absentStr == optional.none()": "no such key: absentObj", // missing ?. operator on first deref is an error
+				"self.absentObj.?absentStr == optional.none()": "no such key: absentObj", // 首次解引用缺少 ?. 运算符会报错
 			},
 		},
 		{name: "quantity",
@@ -2228,7 +2228,7 @@ func TestValidationExpressions(t *testing.T) {
 						return
 					}
 					if tt.expectSkipped {
-						// Skipped validations should have no cost. The only possible false positive here would be the CEL expression 'true'.
+						// 跳过的校验不应产生开销。这里唯一可能的误报是 CEL 表达式 'true'。
 						if remainingBudget != tt.costBudget {
 							t.Errorf("expected no cost expended for skipped validation, but got %d remaining from %d budget", remainingBudget, tt.costBudget)
 						}
@@ -2262,15 +2262,15 @@ func TestValidationExpressions(t *testing.T) {
 	}
 }
 
-// TestValidationExpressionsInSchema tests CEL integration with custom resource values and OpenAPIv3 for cases
-// where the validation rules are defined at any level within the schema.
+// TestValidationExpressionsInSchema 测试 CEL 与自定义资源值及 OpenAPIv3 的集成，
+// 其中校验规则可定义在 schema 的任意层级。
 func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 	tests := []struct {
 		name   string
 		schema *schema.Structural
 		obj    interface{}
 		oldObj interface{}
-		errors []string // strings that error message must contain
+		errors []string // 错误信息必须包含的字符串
 	}{
 		{name: "invalid rule under array items",
 			obj: map[string]interface{}{
@@ -2330,7 +2330,7 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 			}), "1 == 1"),
 			errors: []string{"found no matching overload for '_==_' applied to '(int, string)"},
 		},
-		// check that escaped field names do not impact CEL rule validation
+		// 检查转义字段名不影响 CEL 规则校验
 		{name: "invalid rule under escaped field name",
 			obj: map[string]interface{}{
 				"f/2": map[string]interface{}{
@@ -2364,7 +2364,7 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 			}),
 			errors: []string{"Invalid value: failed rule: self.m == 2"},
 		},
-		// unescapable field names that are not accessed by the CEL rule are allowed and should not impact CEL rule validation
+		// CEL 规则未访问的不可转义字段名是允许的，且不应影响 CEL 规则校验
 		{name: "invalid rule under unescapable field name",
 			obj: map[string]interface{}{
 				"a@b": map[string]interface{}{
@@ -2495,10 +2495,10 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 			},
 		},
 		{
-			// anyOf is not suppored due to the fact that to properly implement it
-			// the SchemaValidator would need to call out to CEL. This test
-			// shows that a rule that would otherwise be an error has those
-			// fields ignored (CRD validation shoulds will throw error in this case)
+			// anyOf 未实现，因为正确实现需要
+			// SchemaValidator 调用 CEL。本测试
+			// 表明一条本应报错的规则会忽略这些
+			// 字段（此时 CRD 校验会报错）
 			name: "anyOf rule ignored",
 			obj: map[string]interface{}{
 				"key":  "value",
@@ -2546,10 +2546,10 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 			},
 		},
 		{
-			// OneOf is not suppored due to the fact that to properly implement it
-			// the SchemaValidator would need to call out to CEL. This test
-			// shows that a rule that would otherwise be an error has those
-			// fields ignored (CRD validation shoulds will throw error in this case)
+			// OneOf 未实现，因为正确实现需要
+			// SchemaValidator 调用 CEL。本测试
+			// 表明一条本应报错的规则会忽略这些
+			// 字段（此时 CRD 校验会报错）
 			name: "oneOf rule ignored",
 			obj: map[string]interface{}{
 				"key":  "value",
@@ -2597,10 +2597,10 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 			},
 		},
 		{
-			// Not is not suppored due to the fact that to properly implement it
-			// the SchemaValidator would need to call out to CEL. This test
-			// shows that a rule that would otherwise be an error has those
-			// fields ignored (CRD validation shoulds will throw error in this case)
+			// Not 未实现，因为正确实现需要
+			// SchemaValidator 调用 CEL。本测试
+			// 表明一条本应报错的规则会忽略这些
+			// 字段（此时 CRD 校验会报错）
 			name: "not rule ignored",
 			obj: map[string]interface{}{
 				"key":  "value",
@@ -2702,8 +2702,8 @@ func TestValidationExpressionsAtSchemaLevels(t *testing.T) {
 				Generic: schema.Generic{
 					Type: "object",
 				},
-				// need to put all tests in Properties due to WithTypeAndObjectMeta
-				// enforcing structs for all top level schemas
+				// 由于 WithTypeAndObjectMeta 强制所有顶层 schema 为结构体，
+				// 需要把所有测试放进 Properties
 				Properties: map[string]schema.Structural{
 					"myProperty": {
 						Generic: schema.Generic{
@@ -2964,6 +2964,7 @@ func genMatchSelectorSchema(rule string) *schema.Structural {
 	return &s
 }
 
+// TestCELValidationLimit 测试 CEL 校验的成本预算与单次调用限制。
 func TestCELValidationLimit(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -2989,7 +2990,7 @@ func TestCELValidationLimit(t *testing.T) {
 					s := withRule(*tt.schema, validRule)
 					celValidator := validator(&s, &s, false, model.SchemaDeclType(&s, false), celconfig.PerCallLimit)
 
-					// test with cost budget exceeded
+					// 测试超出成本预算
 					errs, _ := celValidator.Validate(ctx, field.NewPath("root"), &s, tt.obj, nil, 0)
 					var found bool
 					for _, err := range errs {
@@ -3006,7 +3007,7 @@ func TestCELValidationLimit(t *testing.T) {
 						t.Errorf("expect to only return cost budget exceed err once but got: %v", len(errs))
 					}
 
-					// test with PerCallLimit exceeded
+					// 测试超出 PerCallLimit
 					found = false
 					celValidator = NewValidator(&s, true, 0)
 					if celValidator == nil {
@@ -3029,6 +3030,7 @@ func TestCELValidationLimit(t *testing.T) {
 
 }
 
+// TestCELValidationContextCancellation 测试上下文取消时 CEL 校验的中断行为。
 func TestCELValidationContextCancellation(t *testing.T) {
 	items := make([]interface{}, 1000)
 	for i := int64(0); i < 1000; i++ {
@@ -3064,7 +3066,7 @@ func TestCELValidationContextCancellation(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// test context cancellation
+			// 测试上下文取消
 			found := false
 			evalCtx, cancel := context.WithTimeout(ctx, time.Microsecond)
 			cancel()
@@ -3082,11 +3084,11 @@ func TestCELValidationContextCancellation(t *testing.T) {
 	}
 }
 
-// This is the most recursive operations we expect to be able to include in an expression.
-// This number could get larger with more improvements in the grammar or ANTLR stack, but should *never* decrease or previously valid expressions could be treated as invalid.
+// 这是表达式可容纳的递归操作数的上限。
+// 随着语法或 ANTLR 栈的改进，该数值可能增大，但绝不应减小，否则原本合法的表达式会被视为非法。
 const maxValidDepth = 250
 
-// TestCELMaxRecursionDepth tests CEL setting for maxRecursionDepth.
+// TestCELMaxRecursionDepth 测试 CEL 的 maxRecursionDepth 设置。
 func TestCELMaxRecursionDepth(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -3094,7 +3096,7 @@ func TestCELMaxRecursionDepth(t *testing.T) {
 		obj           interface{}
 		oldObj        interface{}
 		valid         []string
-		errors        map[string]string // rule -> string that error message must contain
+		errors        map[string]string // rule -> 错误信息必须包含的字符串
 		costBudget    int64
 		isRoot        bool
 		expectSkipped bool
@@ -3130,7 +3132,7 @@ func TestCELMaxRecursionDepth(t *testing.T) {
 						t.Errorf("unexpected error: %v", err)
 					}
 					if tt.expectSkipped {
-						// Skipped validations should have no cost. The only possible false positive here would be the CEL expression 'true'.
+						// 跳过的校验不应产生开销。这里唯一可能的误报是 CEL 表达式 'true'。
 						if remainingBudget != tt.costBudget {
 							t.Errorf("expected no cost expended for skipped validation, but got %d remaining from %d budget", remainingBudget, tt.costBudget)
 						}
@@ -3164,6 +3166,7 @@ func TestCELMaxRecursionDepth(t *testing.T) {
 	}
 }
 
+// TestMessageExpression 测试 CEL 校验规则中 messageExpression 的求值。
 func TestMessageExpression(t *testing.T) {
 	klog.LogToStderr(false)
 	klog.InitFlags(nil)
@@ -3328,6 +3331,7 @@ func TestMessageExpression(t *testing.T) {
 	}
 }
 
+// TestReasonAndFldPath 测试 CEL 校验失败时的 reason 与 fieldPath 输出。
 func TestReasonAndFldPath(t *testing.T) {
 	forbiddenReason := func() *apiextensions.FieldValueErrorReason {
 		r := apiextensions.FieldValueForbidden
@@ -3449,7 +3453,7 @@ func TestReasonAndFldPath(t *testing.T) {
 			errs, _ := celValidator.Validate(ctx, field.NewPath("root"), tt.schema, tt.obj, nil, celconfig.RuntimeCELCostBudget)
 
 			for i := range errs {
-				// Ignore unchecked fields for this test
+				// 本测试忽略未检查的字段
 				errs[i].Detail = ""
 				errs[i].BadValue = nil
 			}
@@ -3459,6 +3463,7 @@ func TestReasonAndFldPath(t *testing.T) {
 	}
 }
 
+// TestValidateFieldPath 测试 CEL 校验规则中 fieldPath 的校验。
 func TestValidateFieldPath(t *testing.T) {
 	sts := schema.Structural{
 		Generic: schema.Generic{
@@ -3795,18 +3800,17 @@ func TestValidateFieldPath(t *testing.T) {
 	}
 }
 
-// FixTabsOrDie counts the number of tab characters preceding the first
-// line in the given yaml object. It removes that many tabs from every
-// line. It panics (it's a test funvion) if some line has fewer tabs
-// than the first line.
+// FixTabsOrDie 统计给定 yaml 对象首行之前的制表符数量，
+// 并从每一行移除相同数量的制表符。
+// 若某行的制表符少于首行则 panic（这是测试函数）。
 //
-// The purpose of this is to make it easier to read tests.
+// 目的是让测试更易读。
 func FixTabsOrDie(in string) string {
 	lines := bytes.Split([]byte(in), []byte{'\n'})
 	if len(lines[0]) == 0 && len(lines) > 1 {
 		lines = lines[1:]
 	}
-	// Create prefix made of tabs that we want to remove.
+	// 构造要移除的制表符前缀。
 	var prefix []byte
 	for _, c := range lines[0] {
 		if c != '\t' {
@@ -3814,10 +3818,10 @@ func FixTabsOrDie(in string) string {
 		}
 		prefix = append(prefix, byte('\t'))
 	}
-	// Remove prefix from all tabs, fail otherwise.
+	// 从所有行移除该前缀，否则失败。
 	for i := range lines {
 		line := lines[i]
-		// It's OK for the last line to be blank (trailing \n)
+		// 最后一行可以为空（尾部 \n）
 		if i == len(lines)-1 && len(line) <= len(prefix) && bytes.TrimSpace(line) == nil {
 			lines[i] = []byte{}
 			break
@@ -3838,12 +3842,12 @@ func FixTabsOrDie(in string) string {
 
 	joined := string(bytes.Join(lines, []byte{'\n'}))
 
-	// Convert rest of tabs to spaces since yaml doesnt like yabs
-	// (assuming 2 space alignment)
+	// 把剩余的制表符转换为空格，因为 yaml 不喜欢制表符
+	// （假设按 2 空格对齐）
 	return strings.ReplaceAll(joined, "\t", "  ")
 }
 
-// Creates a *spec.Schema Schema by decoding the given YAML. Panics on error
+// 通过解码给定 YAML 创建 *spec.Schema，出错则 panic
 func mustSchema(source string) *schema.Structural {
 	source = FixTabsOrDie(source)
 	d := yaml.NewYAMLOrJSONDecoder(strings.NewReader(source), 4096)
@@ -3863,7 +3867,7 @@ func mustSchema(source string) *schema.Structural {
 	return res
 }
 
-// Creates an *unstructured by decoding the given YAML. Panics on error
+// 通过解码给定 YAML 创建 *unstructured，出错则 panic
 func mustUnstructured(source string) interface{} {
 	source = FixTabsOrDie(source)
 	d := yaml.NewYAMLOrJSONDecoder(strings.NewReader(source), 4096)
@@ -3879,7 +3883,7 @@ type warningRecorder struct {
 	warnings []string
 }
 
-// AddWarning adds a warning to recorder.
+// AddWarning 向 recorder 添加一条警告。
 func (r *warningRecorder) AddWarning(agent, text string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -3895,6 +3899,7 @@ func (r *warningRecorder) Warnings() []string {
 	return warnings
 }
 
+// TestRatcheting 测试 CEL 校验错误的 ratcheting（棘轮）行为。
 func TestRatcheting(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -3902,13 +3907,11 @@ func TestRatcheting(t *testing.T) {
 		oldObj interface{}
 		newObj interface{}
 
-		// Errors that should occur when evaluating this operation with
-		// ratcheting feature enabled
+		// 启用 ratcheting 特性时求值该操作应出现的错误
 		errors []string
 
-		// Errors that should occur when evaluating this operation with
-		// ratcheting feature disabled
-		// These errors should be raised as warnings when ratcheting is enabled
+		// 禁用 ratcheting 特性时求值该操作应出现的错误
+		// 启用 ratcheting 时，这些错误应作为警告抛出
 		warnings []string
 
 		runtimeCostBudget int64
@@ -3948,9 +3951,9 @@ func TestRatcheting(t *testing.T) {
 							- rule: self == "baz"
 							  message: "gotta be baz"
 				`),
-			// CEL error comes from uncorrelatable portion of the schema,
-			// but it should be ratcheted anyway because it is the descendent
-			// of an unchanged correlatable node
+			// CEL 错误来自 schema 的不可关联部分，
+			// 但由于它是未变更的可关联节点的后代，
+			// 仍应被 ratchet
 			oldObj: mustUnstructured(`
 				- bar: bar
 			`),
@@ -3972,9 +3975,9 @@ func TestRatcheting(t *testing.T) {
 					- rule: int(self) % 2 == 1
 					  message: "gotta be odd"
 				`),
-			// CEL error comes from uncorrelatable portion of the schema,
-			// but it should be ratcheted anyway because it is the descendent
-			// of an unchanged correlatable node
+			// CEL 错误来自 schema 的不可关联部分，
+			// 但由于它是未变更的可关联节点的后代，
+			// 仍应被 ratchet
 			oldObj: mustUnstructured(`
 				- 1
 				- 2
@@ -4179,11 +4182,11 @@ func TestRatcheting(t *testing.T) {
 						otherBar: otherBaz
 			`),
 			errors: []string{
-				// Didn't get ratcheted because we changed its value from baz to notbaz
+				// 未 ratchet，因为值从 baz 改成了 notbaz
 				`root.mapField.foo: Invalid value: "notbaz": gotta be baz`,
 			},
 			warnings: []string{
-				// Ratcheted because its value remained the same, even though it is invalid
+				// 已 ratchet，因为值未变，尽管它无效
 				`root.mapField.mapField.bar: Invalid value: "notbaz": gotta be baz`,
 			},
 		},
@@ -4234,9 +4237,9 @@ func TestRatcheting(t *testing.T) {
 							- rule: self == "baz"
 							  message: "gotta be baz"
 			`),
-			// CEL error comes from uncorrelatable portion of the schema,
-			// but it should be ratcheted anyway because it is the descendent
-			// or an unchanged correlatable node
+			// CEL 错误来自 schema 的不可关联部分，
+			// 但由于它是未变更的可关联节点的后代，
+			// 或未变更的可关联节点的后代
 			oldObj: mustUnstructured(`
 				- bar: bar
 			`),
@@ -4286,8 +4289,8 @@ func TestRatcheting(t *testing.T) {
 			oldObj: mustUnstructured(`
 				foo: bar
 			`),
-			// Fieldpath is on unchanged field `foo`, but since rule is on the
-			// changed parent object we still get an error
+			// 字段路径位于未变更字段 `foo` 上，但由于规则位于
+			// 已变更的父对象，仍会报错
 			newObj: mustUnstructured(`
 				foo: bar
 				bar: invalid
@@ -4451,7 +4454,7 @@ func TestRatcheting(t *testing.T) {
 			require.Len(t, errs, len(c.errors), "must have expected number of errors")
 			require.Len(t, recorder.Warnings(), len(c.warnings), "must have expected number of warnings")
 
-			// Check that the expected errors were raised
+			// 检查已抛出预期错误
 			for _, expectedErr := range c.errors {
 				found := false
 				for _, err := range errs {
@@ -4464,7 +4467,7 @@ func TestRatcheting(t *testing.T) {
 				assert.True(t, found, "expected error %q not found", expectedErr)
 			}
 
-			// Check that the ratcheting disabled errors were raised as warnings
+			// 检查禁用 ratcheting 时的错误已作为警告抛出
 			for _, expectedWarning := range c.warnings {
 				found := false
 				for _, warning := range recorder.Warnings() {
@@ -4480,7 +4483,7 @@ func TestRatcheting(t *testing.T) {
 	}
 }
 
-// Runs transition rule cases with OptionalOldSelf set to true on the schema
+// 在 schema 上设置 OptionalOldSelf 为 true 运行转换规则用例。
 func TestOptionalOldSelf(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)
 
@@ -4489,7 +4492,7 @@ func TestOptionalOldSelf(t *testing.T) {
 		schema *schema.Structural
 		obj    interface{}
 		oldObj interface{}
-		errors []string // strings that error message must contain
+		errors []string // 错误信息必须包含的字符串
 	}{
 		{
 			name: "allow new value if old value is null",
@@ -4558,8 +4561,8 @@ func TestOptionalOldSelf(t *testing.T) {
 		{
 			name: "block create: new min or allow higher than oldValue",
 			obj:  9,
-			// Can't use != null because type is integer and no overload
-			// workaround by comparing type, but kinda hacky
+			// 因为类型是 integer 且没有重载，不能用 != null
+			// 改为比较类型，但有点取巧
 			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 			errors: []string{"failed rule"},
 		},
@@ -4633,8 +4636,8 @@ func TestOptionalOldSelf(t *testing.T) {
 	}
 }
 
-// Shows that type(oldSelf) == null_type works for all supported OpenAPI types
-// both when oldSelf is null and when it is not null
+// 表明 type(oldSelf) == null_type 对所有受支持的 OpenAPI 类型都有效，
+// 无论 oldSelf 为 null 还是非 null
 func TestOptionalOldSelfCheckForNull(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)
 
@@ -4775,7 +4778,7 @@ func TestOptionalOldSelfCheckForNull(t *testing.T) {
 	}
 }
 
-// Show that we cant just use oldSelf as if it was unwrapped
+// 表明不能把 oldSelf 当作已解包的值直接使用
 func TestOptionalOldSelfIsOptionalType(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)
 
@@ -4889,6 +4892,7 @@ func setDefaultVerbosity(v int) {
 	_ = f.Value.Set(fmt.Sprintf("%d", v))
 }
 
+// BenchmarkCELValidationWithContext 测量带上下文的 CEL 校验开销。
 func BenchmarkCELValidationWithContext(b *testing.B) {
 	items := make([]interface{}, 1000)
 	for i := int64(0); i < 1000; i++ {
@@ -4929,6 +4933,7 @@ func BenchmarkCELValidationWithContext(b *testing.B) {
 	}
 }
 
+// BenchmarkCELValidationWithCancelledContext 测量上下文已取消时 CEL 校验的开销。
 func BenchmarkCELValidationWithCancelledContext(b *testing.B) {
 	items := make([]interface{}, 1000)
 	for i := int64(0); i < 1000; i++ {
@@ -4978,8 +4983,8 @@ func BenchmarkCELValidationWithCancelledContext(b *testing.B) {
 	}
 }
 
-// BenchmarkCELValidationWithAndWithoutOldSelfReference measures the additional cost of evaluating
-// validation rules that reference "oldSelf".
+// BenchmarkCELValidationWithAndWithoutOldSelfReference 衡量求值
+// 引用 "oldSelf" 的校验规则带来的额外开销。
 func BenchmarkCELValidationWithAndWithoutOldSelfReference(b *testing.B) {
 	for _, rule := range []string{
 		"self.getMonth() >= 0",
@@ -5097,6 +5102,7 @@ func arrayType(listType string, keys []string, items *schema.Structural) schema.
 	return result
 }
 
+// ValsEqualThemselvesAndDataLiteral 返回断言两个字段彼此相等且等于给定数据字面量的 CEL 表达式。
 func ValsEqualThemselvesAndDataLiteral(val1, val2 string, dataLiteral string) string {
 	return fmt.Sprintf("%s == %s && %s == %s && %s == %s", val1, dataLiteral, dataLiteral, val1, val1, val2)
 }

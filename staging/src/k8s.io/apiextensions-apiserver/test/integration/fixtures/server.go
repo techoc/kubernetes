@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// StartDefaultServer starts a test server.
+// StartDefaultServer 启动一个测试服务器。
 func StartDefaultServer(t servertesting.Logger, flags ...string) (func(), *rest.Config, *serveroptions.CustomResourceDefinitionsServerOptions, error) {
 	tearDownFn, s, err := startDefaultServer(t, flags...)
 	if err != nil {
@@ -45,6 +45,7 @@ func StartDefaultServer(t servertesting.Logger, flags ...string) (func(), *rest.
 	return tearDownFn, s.ClientConfig, s.ServerOpts, nil
 }
 
+// StartDefaultServerWithConfigAccess 启动测试服务器，并返回其完整配置。
 func StartDefaultServerWithConfigAccess(t servertesting.Logger, flags ...string) (func(), *rest.Config, apiserver.CompletedConfig, error) {
 	tearDownFn, s, err := startDefaultServer(t, flags...)
 	if err != nil {
@@ -54,7 +55,7 @@ func StartDefaultServerWithConfigAccess(t servertesting.Logger, flags ...string)
 }
 
 func startDefaultServer(t servertesting.Logger, flags ...string) (func(), servertesting.TestServer, error) {
-	// create kubeconfig which will not actually be used. But authz/authn needs it to startup.
+	// 创建一个实际不会使用的 kubeconfig，但 authz/authn 启动时需要它。
 	fakeKubeConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
 		return nil, servertesting.TestServer{}, err
@@ -87,7 +88,7 @@ users:
 		"--authentication-kubeconfig", fakeKubeConfig.Name(),
 		"--authorization-kubeconfig", fakeKubeConfig.Name(),
 		"--kubeconfig", fakeKubeConfig.Name(),
-		// disable admission and filters that require talking to kube-apiserver
+		// 关闭需要与 kube-apiserver 通信的 admission 和过滤器
 		"--enable-priority-and-fairness=false",
 		"--disable-admission-plugins", "NamespaceLifecycle,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ValidatingAdmissionPolicy,MutatingAdmissionPolicy"},
 		flags...,
@@ -105,7 +106,7 @@ users:
 	return tearDownFn, s, nil
 }
 
-// StartDefaultServerWithClients starts a test server and returns clients for it.
+// StartDefaultServerWithClients 启动测试服务器并返回对应的客户端。
 func StartDefaultServerWithClients(t servertesting.Logger, extraFlags ...string) (func(), clientset.Interface, dynamic.Interface, error) {
 	tearDown, config, _, err := StartDefaultServer(t, extraFlags...)
 	if err != nil {
@@ -127,7 +128,7 @@ func StartDefaultServerWithClients(t servertesting.Logger, extraFlags ...string)
 	return tearDown, apiExtensionsClient, dynamicClient, nil
 }
 
-// StartDefaultServerWithClientsAndEtcd starts a test server and returns clients for it.
+// StartDefaultServerWithClientsAndEtcd 启动测试服务器，并返回客户端及 etcd 客户端。
 func StartDefaultServerWithClientsAndEtcd(t servertesting.Logger, extraFlags ...string) (func(), clientset.Interface, dynamic.Interface, *clientv3.Client, string, error) {
 	tearDown, config, options, err := StartDefaultServer(t, extraFlags...)
 	if err != nil {
@@ -148,7 +149,7 @@ func StartDefaultServerWithClientsAndEtcd(t servertesting.Logger, extraFlags ...
 
 	var resourceTransformers storagevalue.ResourceTransformers
 	if len(options.RecommendedOptions.Etcd.EncryptionProviderConfigFilepath) != 0 {
-		// be clever in tests to reconstruct the transformers, for encryption integration tests
+		// 测试中做个小技巧来重建 transformers，用于加密集成测试
 		config := genericapiserver.Config{}
 		options.RecommendedOptions.Etcd.ApplyTo(&config)
 		resourceTransformers = config.ResourceTransformers
@@ -181,7 +182,7 @@ func StartDefaultServerWithClientsAndEtcd(t servertesting.Logger, extraFlags ...
 	return tearDown, apiExtensionsClient, dynamicClient, etcdclient, restOptions.StorageConfig.Prefix, nil
 }
 
-// IntegrationEtcdServers returns etcd server URLs.
+// IntegrationEtcdServers 返回 etcd 服务器 URL。
 func IntegrationEtcdServers() []string {
 	if etcdURL, ok := os.LookupEnv("KUBE_INTEGRATION_ETCD_URL"); ok {
 		return []string{etcdURL}

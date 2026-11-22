@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/apitesting/roundtrip"
 )
 
+// TestRoundTrip 校验 API 组在内部与外部版本之间的 JSON 及 protobuf 往返一致性。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, Install, apiextensionsfuzzer.Funcs)
 	roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, apiextensionsfuzzer.Funcs)

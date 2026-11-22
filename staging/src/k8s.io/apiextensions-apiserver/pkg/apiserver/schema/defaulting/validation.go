@@ -34,12 +34,13 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
-// ValidateDefaults checks that default values validate and are properly pruned.
-// context is passed for supporting context cancellation during cel validation
+// ValidateDefaults 检查默认值是否通过校验且被正确 prune。
+// 传入 context 是为了在 CEL 校验期间支持取消。
 func ValidateDefaults(ctx context.Context, pth *field.Path, s *structuralschema.Structural, isResourceRoot, requirePrunedDefaults bool) (field.ErrorList, error) {
 	f := NewRootObjectFunc().WithTypeMeta(metav1.TypeMeta{APIVersion: "validation/v1", Kind: "Validation"})
 
 	if isResourceRoot {
+		// 资源根节点始终按内嵌资源处理，以便 metadata/apiVersion/kind 走元数据校验路径。
 		if s == nil {
 			s = &structuralschema.Structural{}
 		}
@@ -54,10 +55,9 @@ func ValidateDefaults(ctx context.Context, pth *field.Path, s *structuralschema.
 	return allErr, error
 }
 
-// validate is the recursive step func for the validation. insideMeta is true if s specifies
-// TypeMeta or ObjectMeta. The SurroundingObjectFunc f is used to validate defaults of
-// TypeMeta or ObjectMeta fields.
-// context is passed for supporting context cancellation during cel validation
+// validate 是校验的递归步骤。insideMeta 为 true 表示 s 描述的是 TypeMeta 或 ObjectMeta。
+// SurroundingObjectFunc f 用于校验 TypeMeta 或 ObjectMeta 字段的默认值。
+// 传入 context 是为了在 CEL 校验期间支持取消。
 func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structural, rootSchema *structuralschema.Structural, f SurroundingObjectFunc, insideMeta, requirePrunedDefaults bool, costBudget int64) (allErrs field.ErrorList, error error, remainingCost int64) {
 	remainingCost = costBudget
 	if s == nil {
@@ -65,6 +65,7 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 	}
 
 	if s.XEmbeddedResource {
+		// 进入内嵌资源后元数据上下文重置，默认值在资源根上校验。
 		insideMeta = false
 		f = NewRootObjectFunc().WithTypeMeta(metav1.TypeMeta{APIVersion: "validation/v1", Kind: "Validation"})
 		rootSchema = s
@@ -78,13 +79,12 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 		if insideMeta {
 			obj, _, err := f(runtime.DeepCopyJSONValue(s.Default.Object))
 			if err != nil {
-				// this should never happen. f(s.Default.Object) only gives an error if f is the
-				// root object func, but the default value is not a map. But then we wouldn't be
-				// in this case.
+				// 理论上不会发生：f(s.Default.Object) 只有在其为根对象函数且默认值
+				// 不是 map 时才报错，而那种情况不会进入这里。
 				return nil, fmt.Errorf("failed to validate default value inside metadata: %v", err), remainingCost
 			}
 
-			// check ObjectMeta/TypeMeta and everything else
+			// 校验 ObjectMeta/TypeMeta 及其余内容
 			if err := schemaobjectmeta.Coerce(nil, obj, rootSchema, true, false); err != nil {
 				allErrs = append(allErrs, field.Invalid(pth.Child("default"), s.Default.Object, fmt.Sprintf("must result in valid metadata: %v", err)))
 			} else if errs := schemaobjectmeta.Validate(ctx, nil, obj, rootSchema, true); len(errs) > 0 {
@@ -96,18 +96,15 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 				allErrs = append(allErrs, celErrs...)
 
 				if len(celErrs) == 0 && utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) {
-					// If ratcheting is enabled some CEL rules may use optionalOldSelf
-					// For such rules the above validation is not sufficient for
-					// determining if the default value is a valid value to introduce
-					// via create or uncorrelated update.
+					// 启用 ratcheting 时，某些 CEL 规则可能使用 optionalOldSelf。
+					// 对这种规则，上面的校验不足以判断默认值是否能通过 create
+					// 或无关联 update 引入。
 					//
-					// Validate an update from nil to the default value to ensure
-					// that the default value pass
+					// 因此再从 nil 到默认值模拟一次 update，确保默认值能通过。
 					celErrs, rmCostWithoutOldObject := celValidator.Validate(ctx, pth.Child("default"), s, s.Default.Object, nil, remainingCost)
 					allErrs = append(allErrs, celErrs...)
 
-					// capture the cost of both types of runs and take whichever
-					// leaves less remaining cost
+					// 取两次运行中剩余预算较小的那个
 					if rmCostWithoutOldObject < rmCost {
 						rmCost = rmCostWithoutOldObject
 					}
@@ -119,7 +116,7 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 				}
 			}
 		} else {
-			// check whether default is pruned
+			// 检查默认值是否被 prune
 			if requirePrunedDefaults {
 				pruned := runtime.DeepCopyJSONValue(s.Default.Object)
 				pruning.Prune(pruned, s, s.XEmbeddedResource)
@@ -128,7 +125,7 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 				}
 			}
 
-			// check ObjectMeta/TypeMeta and everything else
+			// 校验 ObjectMeta/TypeMeta 及其余内容
 			if err := schemaobjectmeta.Coerce(pth.Child("default"), s.Default.Object, s, s.XEmbeddedResource, false); err != nil {
 				allErrs = append(allErrs, err)
 			} else if errs := schemaobjectmeta.Validate(ctx, pth.Child("default"), s.Default.Object, s, s.XEmbeddedResource); len(errs) > 0 {
@@ -140,18 +137,15 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 				allErrs = append(allErrs, celErrs...)
 
 				if len(celErrs) == 0 && utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) {
-					// If ratcheting is enabled some CEL rules may use optionalOldSelf
-					// For such rules the above validation is not sufficient for
-					// determining if the default value is a valid value to introduce
-					// via create or uncorrelated update.
+					// 启用 ratcheting 时，某些 CEL 规则可能使用 optionalOldSelf。
+					// 对这种规则，上面的校验不足以判断默认值是否能通过 create
+					// 或无关联 update 引入。
 					//
-					// Validate an update from nil to the default value to ensure
-					// that the default value pass
+					// 因此再从 nil 到默认值模拟一次 update，确保默认值能通过。
 					celErrs, rmCostWithoutOldObject := celValidator.Validate(ctx, pth.Child("default"), s, s.Default.Object, nil, remainingCost)
 					allErrs = append(allErrs, celErrs...)
 
-					// capture the cost of both types of runs and take whichever
-					// leaves less remaining cost
+					// 取两次运行中剩余预算较小的那个
 					if rmCostWithoutOldObject < rmCost {
 						rmCost = rmCostWithoutOldObject
 					}
@@ -165,7 +159,7 @@ func validate(ctx context.Context, pth *field.Path, s *structuralschema.Structur
 		}
 	}
 
-	// do not follow additionalProperties because defaults are forbidden there
+	// 不递归 additionalProperties，因为那里禁止默认值
 
 	if s.Items != nil {
 		errs, err, rCost := validate(ctx, pth.Child("items"), s.Items, rootSchema, f.Index(), insideMeta, requirePrunedDefaults, remainingCost)

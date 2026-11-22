@@ -27,6 +27,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_CustomResourceDefinition 为 CustomResourceDefinition 设置默认值。
 func SetDefaults_CustomResourceDefinition(obj *CustomResourceDefinition) {
 	SetDefaults_CustomResourceDefinitionSpec(&obj.Spec)
 	if len(obj.Status.StoredVersions) == 0 {
@@ -39,6 +40,7 @@ func SetDefaults_CustomResourceDefinition(obj *CustomResourceDefinition) {
 	}
 }
 
+// SetDefaults_CustomResourceDefinitionSpec 为 CustomResourceDefinitionSpec 设置默认值。
 func SetDefaults_CustomResourceDefinitionSpec(obj *CustomResourceDefinitionSpec) {
 	if len(obj.Scope) == 0 {
 		obj.Scope = NamespaceScoped
@@ -49,7 +51,7 @@ func SetDefaults_CustomResourceDefinitionSpec(obj *CustomResourceDefinitionSpec)
 	if len(obj.Names.ListKind) == 0 && len(obj.Names.Kind) > 0 {
 		obj.Names.ListKind = obj.Names.Kind + "List"
 	}
-	// If there is no list of versions, create on using deprecated Version field.
+	// 若没有 versions 列表，则使用已废弃的 Version 字段创建一个。
 	if len(obj.Versions) == 0 && len(obj.Version) != 0 {
 		obj.Versions = []CustomResourceDefinitionVersion{{
 			Name:    obj.Version,
@@ -57,7 +59,7 @@ func SetDefaults_CustomResourceDefinitionSpec(obj *CustomResourceDefinitionSpec)
 			Served:  true,
 		}}
 	}
-	// For backward compatibility set the version field to the first item in versions list.
+	// 为向后兼容，将 version 字段设为 versions 列表的第一项。
 	if len(obj.Version) == 0 && len(obj.Versions) != 0 {
 		obj.Version = obj.Versions[0].Name
 	}
@@ -74,7 +76,7 @@ func SetDefaults_CustomResourceDefinitionSpec(obj *CustomResourceDefinitionSpec)
 	}
 }
 
-// SetDefaults_ServiceReference sets defaults for Webhook's ServiceReference
+// SetDefaults_ServiceReference 为 Webhook 的 ServiceReference 设置默认值。
 func SetDefaults_ServiceReference(obj *ServiceReference) {
 	if obj.Port == nil {
 		obj.Port = ptr.To[int32](443)

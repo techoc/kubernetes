@@ -20,8 +20,8 @@ import (
 	"testing"
 )
 
-// TestStructuralUnfoldNilValueValidation tests that Unfold() does not crash
-// on a IntOrString pattern with nil ValueValidation.
+// TestStructuralUnfoldIntOrString 验证 Unfold() 在 IntOrString 且
+// ValueValidation 为 nil 时不会崩溃。
 func TestStructuralUnfoldIntOrString(t *testing.T) {
 	schema := Structural{
 		Extensions: Extensions{

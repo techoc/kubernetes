@@ -48,59 +48,54 @@ import (
 )
 
 func init() {
-	// If instantiated more than once or together with other servers, the
-	// servers would try to modify the global logging state. This must get
-	// ignored during testing.
+	// 同一测试进程内可能多次实例化测试服务器，或与其他服务器并存；它们都会试图修改
+	// 全局日志状态，测试期间必须忽略这类重复应用。
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 }
 
-// TearDownFunc is to be called to tear down a test server.
+// TearDownFunc 用于关闭测试服务器。
 type TearDownFunc func()
 
-// TestServerInstanceOptions Instance options the TestServer
+// TestServerInstanceOptions 是启动测试服务器时的实例选项。
 type TestServerInstanceOptions struct {
 }
 
-// TestServer return values supplied by kube-test-ApiServer
+// TestServer 是 kube-test-ApiServer 提供给调用方的启动结果。
 type TestServer struct {
-	ClientConfig    *restclient.Config                              // Rest client config
-	ServerOpts      *options.CustomResourceDefinitionsServerOptions // ServerOpts
-	TearDownFn      TearDownFunc                                    // TearDown function
-	TmpDir          string                                          // Temp Dir used, by the apiserver
+	ClientConfig    *restclient.Config                              // REST 客户端配置
+	ServerOpts      *options.CustomResourceDefinitionsServerOptions // 服务器选项
+	TearDownFn      TearDownFunc                                    // 关闭函数
+	TmpDir          string                                          // apiserver 使用的临时目录
 	CompletedConfig extensionsapiserver.CompletedConfig
 }
 
-// Logger allows t.Testing and b.Testing to be passed to StartTestServer and StartTestServerOrDie
+// Logger 允许把 t.Testing 和 b.Testing 传给 StartTestServer 和 StartTestServerOrDie。
 type Logger interface {
 	Errorf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Logf(format string, args ...interface{})
 }
 
-// NewDefaultTestServerOptions Default options for TestServer instances
+// NewDefaultTestServerOptions 返回 TestServer 实例的默认选项。
 func NewDefaultTestServerOptions() *TestServerInstanceOptions {
 	return &TestServerInstanceOptions{}
 }
 
-// StartTestServer starts a apiextensions-apiserver. A rest client config and a tear-down func,
-// and location of the tmpdir are returned.
+// StartTestServer 启动一个 apiextensions-apiserver，返回 REST 客户端配置、
+// 关闭函数以及临时目录的位置。
 //
-// Note: we return a tear-down func instead of a stop channel because the later will leak temporary
-// files that because Golang testing's call to os.Exit will not give a stop channel go routine
-// enough time to remove temporary files.
+// 注意：返回关闭函数而非停止通道，因为 Golang testing 的 os.Exit 不会给停止通道的
+// goroutine 留出足够时间清理临时文件，直接返回通道会导致临时文件泄漏。
 func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []string, storageConfig *storagebackend.Config) (result TestServer, err error) {
-	// TODO: this is a candidate for using what is now test/utils/ktesting,
-	// should that become a staging repo.
+	// TODO: 如果 test/utils/ktesting 未来进入 staging 仓库，这里可以改用它。
 	ctx, cancel := context.WithCancelCause(context.Background())
 	var errCh chan error
 	tearDown := func() {
-		// Cancel is stopping apiextensions apiserver and its
-		// delegates, which itself is cleaning up after itself,
-		// including shutting down its storage layer.
+		// cancel 会停止 apiextensions apiserver 及其委托对象，
+		// 后者自身会完成清理，包括关闭存储层。
 		cancel(errors.New("tearing down"))
 
-		// If the apiextensions apiserver was started, let's wait for
-		// it to shutdown clearly.
+		// 如果 apiextensions apiserver 已经启动，等待它清晰退出。
 		if errCh != nil {
 			err, ok := <-errCh
 			if ok && err != nil {
@@ -127,7 +122,7 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 
 	s := options.NewCustomResourceDefinitionsServerOptions(os.Stdout, os.Stderr)
 
-	// set up new instance of ComponentGlobalsRegistry instead of using the DefaultComponentGlobalsRegistry to avoid contention in parallel tests.
+	// 为并行测试新建独立的 ComponentGlobalsRegistry，避免与默认实例争用。
 	featureGate := utilfeature.DefaultMutableFeatureGate.DeepCopy()
 	effectiveVersion := compatibility.DefaultKubeEffectiveVersionForTest()
 	effectiveVersion.SetEmulationVersion(featureGate.EmulationVersion())
@@ -161,12 +156,14 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 	if err := componentGlobalsRegistry.Set(); err != nil {
 		return result, fmt.Errorf("%w\nIf you are using SetFeatureGate*DuringTest, try using --emulated-version and --feature-gates flags instead", err)
 	}
-	// If the local ComponentGlobalsRegistry is changed by the flags,
-	// we need to copy the new feature values back to the DefaultFeatureGate because most feature checks still use the DefaultFeatureGate.
+	// 若本地 ComponentGlobalsRegistry 被命令行标志改动，需要把新的特性值回写到
+	// DefaultFeatureGate，因为多数特性检查仍然使用默认的 DefaultFeatureGate。
 	if !featureGate.EmulationVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.EmulationVersion()) || !featureGate.MinCompatibilityVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.MinCompatibilityVersion()) {
 		featuregatetesting.SetFeatureGateVersionsDuringTest(t.(featuregatetesting.TB), utilfeature.DefaultMutableFeatureGate, effectiveVersion.EmulationVersion(), effectiveVersion.MinCompatibilityVersion())
 	}
 	featureOverrides := map[featuregate.Feature]bool{}
+	// 找出本地 registry 与默认 gate 之间的差异，逐一通过测试钩子同步，
+	// 保证测试期间全局特性状态与启动配置一致。
 	for f := range utilfeature.DefaultMutableFeatureGate.GetAll() {
 		if featureGate.Enabled(f) != utilfeature.DefaultFeatureGate.Enabled(f) {
 			featureOverrides[f] = featureGate.Enabled(f)
@@ -202,6 +199,7 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 	}
 
 	errCh = make(chan error)
+	// 在独立 goroutine 中运行服务器，把启动或运行错误回传给等待方。
 	go func() {
 		defer close(errCh)
 
@@ -212,6 +210,7 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 
 	t.Logf("Waiting for /healthz to be ok...")
 
+	// 用回环客户端等待健康检查通过，确保服务器已具备服务能力后再返回。
 	client, err := kubernetes.NewForConfig(server.GenericAPIServer.LoopbackClientConfig)
 	if err != nil {
 		return result, fmt.Errorf("failed to create a client: %v", err)
@@ -235,7 +234,7 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 		return result, fmt.Errorf("failed to wait for /healthz to return ok: %v", err)
 	}
 
-	// from here the caller must call tearDown
+	// 从这里开始，调用方必须调用 tearDown。
 	result.ClientConfig = server.GenericAPIServer.LoopbackClientConfig
 	result.ServerOpts = s
 	result.TearDownFn = tearDown
@@ -244,7 +243,7 @@ func StartTestServer(t Logger, _ *TestServerInstanceOptions, customFlags []strin
 	return result, nil
 }
 
-// StartTestServerOrDie calls StartTestServer t.Fatal if it does not succeed.
+// StartTestServerOrDie 调用 StartTestServer，失败时通过 t.Fatal 终止测试。
 func StartTestServerOrDie(t Logger, instanceOptions *TestServerInstanceOptions, flags []string, storageConfig *storagebackend.Config) *TestServer {
 	result, err := StartTestServer(t, instanceOptions, flags, storageConfig)
 	if err == nil {
@@ -255,13 +254,14 @@ func StartTestServerOrDie(t Logger, instanceOptions *TestServerInstanceOptions, 
 	return nil
 }
 
+// createLocalhostListenerOnFreePort 在 127.0.0.1 上监听一个随机空闲端口。
 func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// get port
+	// 取实际监听端口
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()
@@ -271,13 +271,10 @@ func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	return ln, tcpAddr.Port, nil
 }
 
-// pkgPath returns the absolute file path to this package's directory. With go
-// test, we can just look at the runtime call stack. However, bazel compiles go
-// binaries with the -trimpath option so the simple approach fails however we
-// can consult environment variables to derive the path.
+// pkgPath 返回本包目录的绝对路径。使用 go test 时可以直接查看运行时调用栈；
+// 但 bazel 以 -trimpath 编译 Go 二进制，简单方式会失效，因此需要借助环境变量推导路径。
 //
-// The approach taken here works for both go test and bazel on the assumption
-// that if and only if trimpath is passed, we are running under bazel.
+// 这里的做法在 go test 和 bazel 下都成立，前提是：仅当传入 trimpath 时才处于 bazel 环境。
 func pkgPath(t Logger) (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -286,15 +283,13 @@ func pkgPath(t Logger) (string, error) {
 
 	pkgPath := filepath.Dir(thisFile)
 
-	// If we find bazel env variables, then -trimpath was passed so we need to
-	// construct the path from the environment.
+	// 若存在 bazel 环境变量，说明传入了 -trimpath，需要从环境变量构造路径。
 	if testSrcdir, testWorkspace := os.Getenv("TEST_SRCDIR"), os.Getenv("TEST_WORKSPACE"); testSrcdir != "" && testWorkspace != "" {
 		t.Logf("Detected bazel env varaiables: TEST_SRCDIR=%q TEST_WORKSPACE=%q", testSrcdir, testWorkspace)
 		pkgPath = filepath.Join(testSrcdir, testWorkspace, pkgPath)
 	}
 
-	// If the path is still not absolute, something other than bazel compiled
-	// with -trimpath.
+	// 路径仍非绝对路径，说明并非 bazel 以 -trimpath 编译的情况。
 	if !filepath.IsAbs(pkgPath) {
 		return "", fmt.Errorf("can't construct an absolute path from %q", pkgPath)
 	}

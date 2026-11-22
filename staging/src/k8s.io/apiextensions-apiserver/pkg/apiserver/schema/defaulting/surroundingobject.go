@@ -22,27 +22,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// AccessorFunc returns a node x in obj on a fixed (implicitly encoded) JSON path
-// if that path exists in obj (found==true). If it does not exist, found is false.
-// If on the path the type of a field is wrong, an error is returned.
+// AccessorFunc 在 obj 上按固定的（隐式编码的）JSON 路径取出节点 x；
+// 路径存在时 found 为 true，否则为 false。路径上某字段类型不对时返回错误。
 type AccessorFunc func(obj map[string]interface{}) (x interface{}, found bool, err error)
 
-// SurroundingObjectFunc is a surrounding object builder with a given x at a leaf.
-// Which leave is determined by the series of Index() and Child(k) calls.
-// It also returns the inverse of the builder, namely the accessor that extracts x
-// from the test object.
+// SurroundingObjectFunc 是一个“外层对象”构造器：把 x 放在某个叶子节点上，
+// 具体位置由一系列 Index() 和 Child(k) 调用决定。
+// 它同时返回逆操作，即从测试对象中取出 x 的 accessor。
 //
-// With obj, acc, _ := someSurroundingObjectFunc(x) we get:
+// 对 obj, acc, _ := someSurroundingObjectFunc(x) 有：
 //
 //	acc(obj) == x
 //	reflect.DeepEqual(acc(DeepCopy(obj), x) == x
 //
-// where x is the original instance for slices and maps.
+// 其中对切片和 map 而言 x 是原始实例。
 //
-// If after computation of acc the node holding x in obj is mutated (e.g. pruned),
-// the accessor will return that mutated node value (e.g. the pruned x).
+// 如果 acc 计算完成后 obj 中持有 x 的节点被修改（例如被 prune），
+// accessor 会返回修改后的节点值（例如被 prune 后的 x）。
 //
-// Example (ignoring the last two return values):
+// 示例（忽略最后两个返回值）：
 //
 //	NewRootObjectFunc()(x) == x
 //	NewRootObjectFunc().Index()(x) == [x]
@@ -50,7 +48,7 @@ type AccessorFunc func(obj map[string]interface{}) (x interface{}, found bool, e
 //	NewRootObjectFunc().Index().Child("foo").Child("bar") == [{"foo": {"bar":x}}]
 //	NewRootObjectFunc().Index().Child("foo").Child("bar").Index() == [{"foo": {"bar":[x]}}]
 //
-// and:
+// 以及：
 //
 //	NewRootObjectFunc(), then acc(x) == x
 //	NewRootObjectFunc().Index(), then acc([x]) == x
@@ -59,8 +57,7 @@ type AccessorFunc func(obj map[string]interface{}) (x interface{}, found bool, e
 //	NewRootObjectFunc().Index().Child("foo").Child("bar").Index(), then acc([{"foo": {"bar":[x]}}]) == x
 type SurroundingObjectFunc func(focus interface{}) (map[string]interface{}, AccessorFunc, error)
 
-// NewRootObjectFunc returns the identity function. The passed focus value
-// must be an object.
+// NewRootObjectFunc 返回恒等函数。传入的 focus 值必须是对象。
 func NewRootObjectFunc() SurroundingObjectFunc {
 	return func(x interface{}) (map[string]interface{}, AccessorFunc, error) {
 		obj, ok := x.(map[string]interface{})
@@ -73,8 +70,8 @@ func NewRootObjectFunc() SurroundingObjectFunc {
 	}
 }
 
-// WithTypeMeta returns a closure with the TypeMeta fields set if they are defined.
-// This mutates f(x).
+// WithTypeMeta 返回一个闭包：若 TypeMeta 字段未定义则补上。
+// 该操作会修改 f(x) 的结果。
 func (f SurroundingObjectFunc) WithTypeMeta(meta metav1.TypeMeta) SurroundingObjectFunc {
 	return func(x interface{}) (map[string]interface{}, AccessorFunc, error) {
 		obj, acc, err := f(x)
@@ -84,6 +81,7 @@ func (f SurroundingObjectFunc) WithTypeMeta(meta metav1.TypeMeta) SurroundingObj
 		if obj == nil {
 			obj = map[string]interface{}{}
 		}
+		// 只在缺失时填充，避免覆盖调用方已有的值。
 		if _, found := obj["kind"]; !found {
 			obj["kind"] = meta.Kind
 		}
@@ -94,7 +92,7 @@ func (f SurroundingObjectFunc) WithTypeMeta(meta metav1.TypeMeta) SurroundingObj
 	}
 }
 
-// Child returns a function x => f({k: x}) and the corresponding accessor.
+// Child 返回函数 x => f({k: x}) 及其对应的 accessor。
 func (f SurroundingObjectFunc) Child(k string) SurroundingObjectFunc {
 	return func(x interface{}) (map[string]interface{}, AccessorFunc, error) {
 		obj, acc, err := f(map[string]interface{}{k: x})
@@ -120,7 +118,7 @@ func (f SurroundingObjectFunc) Child(k string) SurroundingObjectFunc {
 	}
 }
 
-// Index returns a function x => f([x]) and the corresponding accessor.
+// Index 返回函数 x => f([x]) 及其对应的 accessor。
 func (f SurroundingObjectFunc) Index() SurroundingObjectFunc {
 	return func(focus interface{}) (map[string]interface{}, AccessorFunc, error) {
 		obj, acc, err := f([]interface{}{focus})

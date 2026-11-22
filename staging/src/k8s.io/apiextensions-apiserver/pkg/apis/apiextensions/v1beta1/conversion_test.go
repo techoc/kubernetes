@@ -26,6 +26,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 )
 
+// TestJSONConversion 验证内部 JSONSchemaProps 的 Default 转换到 v1beta1 后的原始 JSON。
 func TestJSONConversion(t *testing.T) {
 	nilJSON := apiextensions.JSON(nil)
 	nullJSON := apiextensions.JSON("null")
@@ -93,7 +94,7 @@ func TestJSONConversion(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 
-	// add internal and external types
+	// 注册内部与外部类型，以便 scheme 执行转换
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +114,7 @@ func TestJSONConversion(t *testing.T) {
 	}
 }
 
+// TestJSONRoundTrip 验证含 null 的 JSON 在 v1beta1 → 内部 → v1beta1 往返后与预期一致。
 func TestJSONRoundTrip(t *testing.T) {
 	testcases := []struct {
 		name string
@@ -132,7 +134,7 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	// add internal and external types
+	// 注册内部与外部类型，以便 scheme 执行转换
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}

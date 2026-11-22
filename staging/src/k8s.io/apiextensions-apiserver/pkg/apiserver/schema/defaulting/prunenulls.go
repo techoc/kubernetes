@@ -36,11 +36,11 @@ func getSchemaForField(field string, s *structuralschema.Structural) *structural
 	return nil
 }
 
-// PruneNonNullableNullsWithoutDefaults removes non-nullable
-// non-defaultable null values from object.
+// PruneNonNullableNullsWithoutDefaults 从对象中删除不可为空
+// 且不可默认化的 null 值。
 //
-// Non-nullable nulls that have a default are left alone here and will
-// be defaulted later.
+// 可默认化的不可为空 null 值在此保留，
+// 稍后会被默认化。
 func PruneNonNullableNullsWithoutDefaults(x interface{}, s *structuralschema.Structural) {
 	switch x := x.(type) {
 	case map[string]interface{}:
@@ -61,6 +61,6 @@ func PruneNonNullableNullsWithoutDefaults(x interface{}, s *structuralschema.Str
 			PruneNonNullableNullsWithoutDefaults(x[i], schema)
 		}
 	default:
-		// scalars, do nothing
+		// 标量，不处理
 	}
 }

@@ -36,6 +36,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
+// TestRoundtripObjectMeta 校验 ObjectMeta 经 SetObjectMeta/GetObjectMeta 往返后语义不变。
 func TestRoundtripObjectMeta(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -62,27 +63,26 @@ func TestRoundtripObjectMeta(t *testing.T) {
 	}
 }
 
-// TestMalformedObjectMetaFields sets a number of different random values and types for all
-// metadata fields. If json.Unmarshal accepts them, compare that getObjectMeta
-// gives the same result. Otherwise, drop malformed fields.
+// TestMalformedObjectMetaFields 为所有 metadata 字段设置各种随机值和类型。
+// 如果 json.Unmarshal 能接受它们，就比较 GetObjectMeta 的结果是否一致；否则应丢弃畸形字段。
 func TestMalformedObjectMetaFields(t *testing.T) {
 	fuzzer := fuzzer.FuzzerFor(metafuzzer.Funcs, rand.NewSource(rand.Int63()), serializer.NewCodecFactory(runtime.NewScheme()))
 	spuriousValues := func() []interface{} {
 		return []interface{}{
-			// primitives
+			// 基本类型
 			nil,
 			int64(1),
 			float64(1.5),
 			true,
 			"a",
-			// well-formed complex values
+			// 格式正确的复杂值
 			[]interface{}{"a", "b"},
 			map[string]interface{}{"a": "1", "b": "2"},
 			[]interface{}{int64(1), int64(2)},
 			[]interface{}{float64(1.5), float64(2.5)},
-			// known things json decoding tolerates
+			// json 解码可以容忍的已知值
 			map[string]interface{}{"a": "1", "b": nil},
-			// malformed things
+			// 畸形值
 			map[string]interface{}{"a": "1", "b": []interface{}{"nested"}},
 			[]interface{}{"a", int64(1), float64(1.5), true, []interface{}{"nested"}},
 		}
@@ -97,7 +97,7 @@ func TestMalformedObjectMetaFields(t *testing.T) {
 		}
 		for _, pth := range jsonPaths(nil, goodMetaMap) {
 			for _, v := range spuriousValues() {
-				// skip values of same type, because they can only cause decoding errors further insides
+				// 跳过同类型的值，因为它们只会在更深层引发解码错误
 				orig, err := JSONPathValue(goodMetaMap, pth, 0)
 				if err != nil {
 					t.Fatalf("unexpected to not find something at %v: %v", pth, err)
@@ -106,7 +106,7 @@ func TestMalformedObjectMetaFields(t *testing.T) {
 					continue
 				}
 
-				// make a spurious map
+				// 构造替换后的 map
 				spuriousMetaMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(fuzzedObjectMeta.DeepCopy())
 				if err != nil {
 					t.Fatal(err)
@@ -115,23 +115,23 @@ func TestMalformedObjectMetaFields(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// See if it can unmarshal to object meta
+				// 看看能否反序列化为 ObjectMeta
 				spuriousJSON, err := utiljson.Marshal(spuriousMetaMap)
 				if err != nil {
 					t.Fatalf("error on %v=%#v: %v", pth, v, err)
 				}
 				expectedObjectMeta := &metav1.ObjectMeta{}
 				if err := utiljson.Unmarshal(spuriousJSON, expectedObjectMeta); err != nil {
-					// if standard json unmarshal would fail decoding this field, drop the field entirely
+					// 如果标准 json 反序列化无法解码该字段，则整个丢弃该字段
 					truncatedMetaMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(fuzzedObjectMeta.DeepCopy())
 					if err != nil {
 						t.Fatal(err)
 					}
 
-					// we expect this logic for the different fields:
+					// 不同字段的处理逻辑如下：
 					switch {
 					default:
-						// delete complete top-level field by default
+						// 默认删除整个顶层字段
 						DeleteJSONPath(truncatedMetaMap, pth[:1], 0)
 					}
 
@@ -145,7 +145,7 @@ func TestMalformedObjectMetaFields(t *testing.T) {
 					}
 				}
 
-				// make sure dropInvalidTypedFields+getObjectMeta matches what we expect
+				// 确认 dropInvalidTypedFields+getObjectMeta 的结果与预期一致
 				u := &unstructured.Unstructured{Object: map[string]interface{}{"metadata": spuriousMetaMap}}
 				actualObjectMeta, _, err := GetObjectMeta(u.Object, true)
 				if err != nil {
@@ -162,6 +162,7 @@ func TestMalformedObjectMetaFields(t *testing.T) {
 	}
 }
 
+// TestGetObjectMetaWithOptions 覆盖丢弃畸形字段和返回未知字段路径两类选项的组合。
 func TestGetObjectMetaWithOptions(t *testing.T) {
 	unknownAndMalformed := map[string]interface{}{
 		"kind":       "Pod",
@@ -350,6 +351,7 @@ func TestGetObjectMetaWithOptions(t *testing.T) {
 	}
 }
 
+// TestGetObjectMetaNils 校验 null 的 metadata 字段被读成零值，且与 kube JSON 解码结果一致。
 func TestGetObjectMetaNils(t *testing.T) {
 	u := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -379,7 +381,7 @@ func TestGetObjectMetaNils(t *testing.T) {
 		t.Errorf("unexpected labels, expected=%#v, got=%#v", expected, got)
 	}
 
-	// double check this what the kube JSON decode is doing
+	// 顺便确认 kube JSON 解码的行为确实如此
 	bs, _ := utiljson.Marshal(u.UnstructuredContent())
 	kubeObj, _, err := clientgoscheme.Codecs.UniversalDecoder(corev1.SchemeGroupVersion).Decode(bs, nil, nil)
 	if err != nil {
@@ -400,6 +402,7 @@ func TestGetObjectMetaNils(t *testing.T) {
 	}
 }
 
+// TestGetObjectMeta 校验大小写不同的字段名中只有正确拼写被采纳。
 func TestGetObjectMeta(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		u := &unstructured.Unstructured{Object: map[string]interface{}{

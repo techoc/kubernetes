@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package schema 定义结构化 schema 模型，并实现剪枝、默认值填充与校验等能力。
 package schema
 
 import (
@@ -21,44 +22,44 @@ import (
 	"strings"
 )
 
-// UnknownFieldPathOptions allow for tracking paths to unknown fields.
+// UnknownFieldPathOptions 用于在遍历过程中记录未知字段的路径。
 type UnknownFieldPathOptions struct {
-	// TrackUnknownFieldPaths determines whether or not unknown field
-	// paths should be stored or not.
+	// TrackUnknownFieldPaths 决定是否记录未知字段路径。
 	TrackUnknownFieldPaths bool
-	// ParentPath builds the path to unknown fields as the object
-	// is recursively traversed.
+	// ParentPath 在递归遍历对象时逐步构建出通往未知字段的路径。
 	ParentPath []string
-	// UnknownFieldPaths is the list of all unknown fields identified.
+	// UnknownFieldPaths 保存所有已识别出的未知字段路径。
 	UnknownFieldPaths []string
 }
 
-// RecordUnknownFields adds a path to an unknown field to the
-// record of UnknownFieldPaths, if TrackUnknownFieldPaths is true
+// RecordUnknownField 在 TrackUnknownFieldPaths 为 true 时，
+// 将某个未知字段的路径追加到 UnknownFieldPaths。
 func (o *UnknownFieldPathOptions) RecordUnknownField(field string) {
 	if !o.TrackUnknownFieldPaths {
 		return
 	}
+	// 先把字段拼进当前路径，记录完整路径后再回退，保持父路径不变。
 	l := len(o.ParentPath)
 	o.AppendKey(field)
 	o.UnknownFieldPaths = append(o.UnknownFieldPaths, strings.Join(o.ParentPath, ""))
 	o.ParentPath = o.ParentPath[:l]
 }
 
-// AppendKey adds a key (i.e. field) to the current parent
-// path, if TrackUnknownFieldPaths is true.
+// AppendKey 在 TrackUnknownFieldPaths 为 true 时，将键（即字段名）
+// 追加到当前父路径末尾。
 func (o *UnknownFieldPathOptions) AppendKey(key string) {
 	if !o.TrackUnknownFieldPaths {
 		return
 	}
+	// 非首层字段前补 "."，拼接出 obj.field 形式的路径。
 	if len(o.ParentPath) > 0 {
 		o.ParentPath = append(o.ParentPath, ".")
 	}
 	o.ParentPath = append(o.ParentPath, key)
 }
 
-// AppendIndex adds an index to the most recent field of
-// the current parent path, if TrackUnknownFieldPaths is true.
+// AppendIndex 在 TrackUnknownFieldPaths 为 true 时，为当前父路径中
+// 最近的一个字段追加数组下标。
 func (o *UnknownFieldPathOptions) AppendIndex(index int) {
 	if !o.TrackUnknownFieldPaths {
 		return

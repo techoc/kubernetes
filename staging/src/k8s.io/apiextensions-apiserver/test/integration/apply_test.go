@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestApplyBasic 覆盖服务端 apply 的基本流程：apply、merge patch，再次 apply 产生冲突，强制 apply 成功。
 func TestApplyBasic(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -87,7 +88,7 @@ values:
 		t.Fatal(err, string(result))
 	}
 
-	// Re-apply the same object, we should get conflicts now.
+	// 重新 apply 同一对象，此时应产生字段归属冲突。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name("mytest").
@@ -105,7 +106,7 @@ values:
 		t.Fatalf("Expecting to get at least one conflict when applying object, got: %v", status.Status().Details.Causes)
 	}
 
-	// Re-apply with force, should work fine.
+	// 加 force 重新 apply，应能成功。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name("mytest").
@@ -119,8 +120,8 @@ values:
 
 }
 
-// TestApplyNullToObject ensures that when maps and slices are set to null using
-// SSA, that the resulting field state is correct.
+// TestApplyNullToObject 验证使用 SSA 将 map 与 slice 置为 null 时，
+// 最终字段状态是否符合预期。
 func TestApplyNullToObject(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -146,14 +147,14 @@ func TestApplyNullToObject(t *testing.T) {
 		wantNull bool
 		wantErr  string
 	}{
-		// This behavior is fussy, so we test a wide range of combinations.
+		// 该行为比较微妙，因此覆盖多种组合。
 		{name: "nullable and optional field with optional subfield", nullable: true, wantNull: true},
 		{name: "nullable and required field with optional subfield", nullable: true, required: true, wantNull: true},
 		{name: "nullable and optional field with required subfield", nullable: true, subfieldRequired: true, wantNull: true},
 		{name: "nullable and required field with required subfield", nullable: true, subfieldRequired: true, required: true, wantNull: true},
 
-		// Applying null to a non-nullable field is rejected by validation. To clear
-		// a non-nullable field, it must be omitted from the apply request instead.
+		// 对不可空字段 apply null 会被校验拒绝；要清空不可空字段，
+		// 应改为在 apply 请求中省略该字段。
 		{name: "non-nullable and optional field with optional subfield", wantErr: "must be of type object"},
 		{name: "non-nullable and required field with optional subfield", required: true, wantErr: "must be of type object"},
 		{name: "non-nullable and optional field with required subfield", subfieldRequired: true, wantErr: "must be of type object"},
@@ -164,7 +165,7 @@ func TestApplyNullToObject(t *testing.T) {
 	apiVersion := group + "/" + version
 	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: plural}
 
-	// Way more efficient to test if we build a single CRD to handle all the test cases.
+	// 用单个 CRD 承载所有用例，比逐用例建 CRD 高效得多。
 	fieldName := func(i int) string { return fmt.Sprintf("field%d", i) }
 	specProps := map[string]apiextensionsv1.JSONSchemaProps{}
 	for i, tc := range testCases {
@@ -246,6 +247,7 @@ func TestApplyNullToObject(t *testing.T) {
 	}
 }
 
+// mkObjectSchema 构造带 nullable 与可选子字段设置的 object schema。
 func mkObjectSchema(nullable, subfieldRequired bool) apiextensionsv1.JSONSchemaProps {
 	s := apiextensionsv1.JSONSchemaProps{
 		Type:     "object",

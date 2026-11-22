@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apiextensions helpers 提供内部版本 CRD 的辅助函数。
+// 与 apihelpers 包不同，这里操作的是内部版本类型（非 v1 版本），
+// 支持 per-version schema、subresources 和 columns 的获取逻辑。
 package apiextensions
 
 import (
@@ -23,9 +26,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// swaggerMetadataDescriptions 缓存 ObjectMeta 的 Swagger 文档描述，
+// 用于默认打印列（如 Age 列）的描述文本。
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
-// SetCRDCondition sets the status condition. It either overwrites the existing one or creates a new one.
+// SetCRDCondition 设置内部版本 CRD 的状态条件。如果条件已存在则更新，否则创建新条件。
+// LastTransitionTime 仅在条件状态发生变化或之前未设置时更新。
 func SetCRDCondition(crd *CustomResourceDefinition, newCondition CustomResourceDefinitionCondition) {
 	newCondition.LastTransitionTime = metav1.NewTime(time.Now())
 
@@ -44,7 +50,7 @@ func SetCRDCondition(crd *CustomResourceDefinition, newCondition CustomResourceD
 	existingCondition.Message = newCondition.Message
 }
 
-// RemoveCRDCondition removes the status condition.
+// RemoveCRDCondition 从内部版本 CRD 的 status.conditions 中移除指定类型的条件。
 func RemoveCRDCondition(crd *CustomResourceDefinition, conditionType CustomResourceDefinitionConditionType) {
 	newConditions := []CustomResourceDefinitionCondition{}
 	for _, condition := range crd.Status.Conditions {
@@ -55,7 +61,7 @@ func RemoveCRDCondition(crd *CustomResourceDefinition, conditionType CustomResou
 	crd.Status.Conditions = newConditions
 }
 
-// FindCRDCondition returns the condition you're looking for or nil.
+// FindCRDCondition 在内部版本 CRD 的 status.conditions 中查找指定类型的条件，找不到返回 nil。
 func FindCRDCondition(crd *CustomResourceDefinition, conditionType CustomResourceDefinitionConditionType) *CustomResourceDefinitionCondition {
 	for i := range crd.Status.Conditions {
 		if crd.Status.Conditions[i].Type == conditionType {
@@ -66,17 +72,17 @@ func FindCRDCondition(crd *CustomResourceDefinition, conditionType CustomResourc
 	return nil
 }
 
-// IsCRDConditionTrue indicates if the condition is present and strictly true.
+// IsCRDConditionTrue 检查内部版本 CRD 的指定条件是否存在且为 True。
 func IsCRDConditionTrue(crd *CustomResourceDefinition, conditionType CustomResourceDefinitionConditionType) bool {
 	return IsCRDConditionPresentAndEqual(crd, conditionType, ConditionTrue)
 }
 
-// IsCRDConditionFalse indicates if the condition is present and false.
+// IsCRDConditionFalse 检查内部版本 CRD 的指定条件是否存在且为 False。
 func IsCRDConditionFalse(crd *CustomResourceDefinition, conditionType CustomResourceDefinitionConditionType) bool {
 	return IsCRDConditionPresentAndEqual(crd, conditionType, ConditionFalse)
 }
 
-// IsCRDConditionPresentAndEqual indicates if the condition is present and equal to the given status.
+// IsCRDConditionPresentAndEqual 检查内部版本 CRD 的指定条件是否存在且状态等于给定值。
 func IsCRDConditionPresentAndEqual(crd *CustomResourceDefinition, conditionType CustomResourceDefinitionConditionType, status ConditionStatus) bool {
 	for _, condition := range crd.Status.Conditions {
 		if condition.Type == conditionType {
@@ -86,7 +92,7 @@ func IsCRDConditionPresentAndEqual(crd *CustomResourceDefinition, conditionType 
 	return false
 }
 
-// IsCRDConditionEquivalent returns true if the lhs and rhs are equivalent except for times.
+// IsCRDConditionEquivalent 比较两个内部版本条件是否等价（忽略时间字段）。
 func IsCRDConditionEquivalent(lhs, rhs *CustomResourceDefinitionCondition) bool {
 	if lhs == nil && rhs == nil {
 		return true
@@ -98,7 +104,7 @@ func IsCRDConditionEquivalent(lhs, rhs *CustomResourceDefinitionCondition) bool 
 	return lhs.Message == rhs.Message && lhs.Reason == rhs.Reason && lhs.Status == rhs.Status && lhs.Type == rhs.Type
 }
 
-// CRDHasFinalizer returns true if the finalizer is in the list.
+// CRDHasFinalizer 检查内部版本 CRD 是否包含指定的 finalizer。
 func CRDHasFinalizer(crd *CustomResourceDefinition, needle string) bool {
 	for _, finalizer := range crd.Finalizers {
 		if finalizer == needle {
@@ -109,7 +115,7 @@ func CRDHasFinalizer(crd *CustomResourceDefinition, needle string) bool {
 	return false
 }
 
-// CRDRemoveFinalizer removes the finalizer if present.
+// CRDRemoveFinalizer 从内部版本 CRD 中移除指定的 finalizer（如果存在）。
 func CRDRemoveFinalizer(crd *CustomResourceDefinition, needle string) {
 	newFinalizers := []string{}
 	for _, finalizer := range crd.Finalizers {
@@ -120,7 +126,7 @@ func CRDRemoveFinalizer(crd *CustomResourceDefinition, needle string) {
 	crd.Finalizers = newFinalizers
 }
 
-// HasServedCRDVersion returns true if the given version is in the list of CRD's versions and the Served flag is set.
+// HasServedCRDVersion 检查给定版本是否在内部版本 CRD 中且 Served 标志为 true。
 func HasServedCRDVersion(crd *CustomResourceDefinition, version string) bool {
 	for _, v := range crd.Spec.Versions {
 		if v.Name == version {
@@ -130,7 +136,7 @@ func HasServedCRDVersion(crd *CustomResourceDefinition, version string) bool {
 	return false
 }
 
-// GetCRDStorageVersion returns the storage version for given CRD.
+// GetCRDStorageVersion 返回内部版本 CRD 的存储版本。
 func GetCRDStorageVersion(crd *CustomResourceDefinition) (string, error) {
 	for _, v := range crd.Spec.Versions {
 		if v.Storage {
@@ -141,7 +147,7 @@ func GetCRDStorageVersion(crd *CustomResourceDefinition) (string, error) {
 	return "", fmt.Errorf("invalid CustomResourceDefinition, no storage version")
 }
 
-// IsStoredVersion returns whether the given version is the storage version of the CRD.
+// IsStoredVersion 检查给定版本是否是内部版本 CRD 的已存储版本。
 func IsStoredVersion(crd *CustomResourceDefinition, version string) bool {
 	for _, v := range crd.Status.StoredVersions {
 		if version == v {
@@ -151,7 +157,9 @@ func IsStoredVersion(crd *CustomResourceDefinition, version string) bool {
 	return false
 }
 
-// GetSchemaForVersion returns the validation schema for the given version or nil.
+// GetSchemaForVersion 返回指定版本的验证 schema。
+// 如果 CRD 使用 per-version schema，返回该版本的独立 schema；
+// 否则返回顶层共享 schema。顶层和 per-version schema 不能同时存在。
 func GetSchemaForVersion(crd *CustomResourceDefinition, version string) (*CustomResourceValidation, error) {
 	if !HasPerVersionSchema(crd.Spec.Versions) {
 		return crd.Spec.Validation, nil
@@ -167,7 +175,8 @@ func GetSchemaForVersion(crd *CustomResourceDefinition, version string) (*Custom
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// GetSubresourcesForVersion returns the subresources for given version or nil.
+// GetSubresourcesForVersion 返回指定版本的子资源配置（如 status、scale）。
+// 顶层和 per-version subresources 不能同时存在。
 func GetSubresourcesForVersion(crd *CustomResourceDefinition, version string) (*CustomResourceSubresources, error) {
 	if !HasPerVersionSubresources(crd.Spec.Versions) {
 		return crd.Spec.Subresources, nil
@@ -183,10 +192,9 @@ func GetSubresourcesForVersion(crd *CustomResourceDefinition, version string) (*
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// GetColumnsForVersion returns the columns for given version or nil.
-// NOTE: the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// GetColumnsForVersion 返回指定版本的打印列（AdditionalPrinterColumns）。
+// 如果 CRD 未定义打印列，返回默认的 Age 列（显示资源创建时间）。
+// 注意：返回的默认列不是原始 CRD 对象的引用，不能通过它修改原始 CRD。
 func GetColumnsForVersion(crd *CustomResourceDefinition, version string) ([]CustomResourceColumnDefinition, error) {
 	if !HasPerVersionColumns(crd.Spec.Versions) {
 		return serveDefaultColumnsIfEmpty(crd.Spec.AdditionalPrinterColumns), nil
@@ -202,7 +210,7 @@ func GetColumnsForVersion(crd *CustomResourceDefinition, version string) ([]Cust
 	return nil, fmt.Errorf("version %s not found in CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// HasPerVersionSchema returns true if a CRD uses per-version schema.
+// HasPerVersionSchema 检查内部版本 CRD 是否使用了每个版本独立的 schema。
 func HasPerVersionSchema(versions []CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if v.Schema != nil {
@@ -212,7 +220,7 @@ func HasPerVersionSchema(versions []CustomResourceDefinitionVersion) bool {
 	return false
 }
 
-// HasPerVersionSubresources returns true if a CRD uses per-version subresources.
+// HasPerVersionSubresources 检查内部版本 CRD 是否使用了每个版本独立的子资源配置。
 func HasPerVersionSubresources(versions []CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if v.Subresources != nil {
@@ -222,7 +230,7 @@ func HasPerVersionSubresources(versions []CustomResourceDefinitionVersion) bool 
 	return false
 }
 
-// HasPerVersionColumns returns true if a CRD uses per-version columns.
+// HasPerVersionColumns 检查内部版本 CRD 是否使用了每个版本独立的打印列。
 func HasPerVersionColumns(versions []CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if len(v.AdditionalPrinterColumns) > 0 {
@@ -232,10 +240,9 @@ func HasPerVersionColumns(versions []CustomResourceDefinitionVersion) bool {
 	return false
 }
 
-// serveDefaultColumnsIfEmpty applies logically defaulting to columns, if the input columns is empty.
-// NOTE: in this way, the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// serveDefaultColumnsIfEmpty 如果输入列为空，返回默认的 Age 列。
+// 默认列显示资源的创建时间，对应 kubectl get 的 AGE 列。
+// 返回新切片，不修改原始 CRD 对象。
 func serveDefaultColumnsIfEmpty(columns []CustomResourceColumnDefinition) []CustomResourceColumnDefinition {
 	if len(columns) > 0 {
 		return columns
@@ -245,7 +252,7 @@ func serveDefaultColumnsIfEmpty(columns []CustomResourceColumnDefinition) []Cust
 	}
 }
 
-// HasVersionServed returns true if given CRD has given version served.
+// HasVersionServed 检查内部版本 CRD 是否服务（served）给定版本。
 func HasVersionServed(crd *CustomResourceDefinition, version string) bool {
 	for _, v := range crd.Spec.Versions {
 		if !v.Served || v.Name != version {

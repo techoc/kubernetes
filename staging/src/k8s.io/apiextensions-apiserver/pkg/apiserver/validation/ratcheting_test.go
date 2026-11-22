@@ -58,6 +58,7 @@ var largeIntSchema *spec.Schema = &spec.Schema{
 	},
 }
 
+// TestScalarRatcheting 验证标量字段的 ratcheting：值未变时即使不满足约束也放行。
 func TestScalarRatcheting(t *testing.T) {
 	validator := validation.NewRatchetingSchemaValidator(mediumIntSchema, nil, "", strfmt.Default)
 	require.True(t, validator.ValidateUpdate(1, 1, validation.WithRatcheting(nil)).IsValid())
@@ -85,7 +86,7 @@ var objectObjectSchema *spec.Schema = &spec.Schema{
 	},
 }
 
-// Shows scalar fields of objects can be ratcheted
+// 展示对象中的标量字段可以进行 ratcheting
 func TestObjectScalarFieldsRatcheting(t *testing.T) {
 	validator := validation.NewRatchetingSchemaValidator(objectSchema, nil, "", strfmt.Default)
 	assert.True(t, validator.ValidateUpdate(map[string]interface{}{
@@ -106,7 +107,7 @@ func TestObjectScalarFieldsRatcheting(t *testing.T) {
 	}, validation.WithRatcheting(nil)).IsValid())
 }
 
-// Shows schemas with object fields which themselves are ratcheted can be ratcheted
+// 展示本身可被 ratcheting 的对象字段（嵌套对象）也可以进行 ratcheting
 func TestObjectObjectFieldsRatcheting(t *testing.T) {
 	validator := validation.NewRatchetingSchemaValidator(objectObjectSchema, nil, "", strfmt.Default)
 	assert.True(t, validator.ValidateUpdate(map[string]interface{}{
@@ -152,17 +153,18 @@ var numericFormatSchema *spec.Schema = &spec.Schema{
 	},
 }
 
+// TestNumericFormatRatcheting 验证数值 format（如 int32）越界值在未变更时可被 ratcheting 放行。
 func TestNumericFormatRatcheting(t *testing.T) {
 	validator := validation.NewRatchetingSchemaValidator(numericFormatSchema, nil, "", strfmt.Default)
 
-	// Ratcheting should allow existing invalid value if unchanged
+	// 值未变更时，ratcheting 应放行已有的非法值
 	assert.True(t, validator.ValidateUpdate(map[string]interface{}{
 		"intThirtyTwo": int64(math.MaxInt32 + 1),
 	}, map[string]interface{}{
 		"intThirtyTwo": int64(math.MaxInt32 + 1),
 	}, validation.WithRatcheting(nil)).IsValid())
 
-	// Ratcheting should allow existing invalid value if other fields change
+	// 其他字段变化时，ratcheting 仍应放行已有的非法值
 	assert.True(t, validator.ValidateUpdate(map[string]interface{}{
 		"intThirtyTwo": int64(math.MaxInt32 + 1),
 		"unrelated":    "changed",
@@ -171,7 +173,7 @@ func TestNumericFormatRatcheting(t *testing.T) {
 		"unrelated":    "original",
 	}, validation.WithRatcheting(nil)).IsValid())
 
-	// Should fail if value changes to another invalid value
+	// 值变为另一个非法值时应失败
 	assert.False(t, validator.ValidateUpdate(map[string]interface{}{
 		"intThirtyTwo": int64(math.MaxInt32 + 2),
 	}, map[string]interface{}{

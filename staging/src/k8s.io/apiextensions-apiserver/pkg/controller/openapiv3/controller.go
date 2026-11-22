@@ -42,24 +42,24 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/controller/openapi/builder"
 )
 
-// Controller watches CustomResourceDefinitions and publishes OpenAPI v3
+// Controller 监听 CustomResourceDefinitions 并发布 OpenAPI v3
 type Controller struct {
 	crdLister  listers.CustomResourceDefinitionLister
 	crdsSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 便于在测试中注入。
 	syncFn func(string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
 
 	openAPIV3Service *handler3.OpenAPIService
 
-	// specs per version and per CRD name
+	// 按版本与 CRD 名称索引的 spec
 	lock             sync.Mutex
 	specsByGVandName map[schema.GroupVersion]map[string]*spec3.OpenAPI
 }
 
-// NewController creates a new Controller with input CustomResourceDefinition informer
+// NewController 使用给定的 CustomResourceDefinition informer 创建新的 Controller
 func NewController(crdInformer informers.CustomResourceDefinitionInformer) *Controller {
 	c := &Controller{
 		crdLister:  crdInformer.Lister(),
@@ -81,7 +81,7 @@ func NewController(crdInformer informers.CustomResourceDefinitionInformer) *Cont
 	return c
 }
 
-// Run sets openAPIAggregationManager and starts workers
+// Run 设置 openAPIAggregationManager 并启动 worker
 func (c *Controller) Run(openAPIV3Service *handler3.OpenAPIService, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -113,7 +113,7 @@ func (c *Controller) Run(openAPIV3Service *handler3.OpenAPIService, stopCh <-cha
 		}
 	}
 
-	// only start one worker thread since its a slow moving API
+	// 该 API 变化缓慢，因此只启动一个 worker 线程
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
@@ -131,7 +131,7 @@ func (c *Controller) processNextWorkItem() bool {
 	}
 	defer c.queue.Done(key)
 
-	// log slow aggregations
+	// 记录缓慢的聚合
 	start := time.Now()
 	defer func() {
 		elapsed := time.Since(start)
@@ -225,7 +225,7 @@ func (c *Controller) updateCRDSpec(crd *apiextensionsv1.CustomResourceDefinition
 	oldSpec, ok := c.specsByGVandName[gv][name]
 	if ok {
 		if reflect.DeepEqual(oldSpec, v3) {
-			// no changes to CRD
+			// CRD 无变化
 			return nil
 		}
 	}

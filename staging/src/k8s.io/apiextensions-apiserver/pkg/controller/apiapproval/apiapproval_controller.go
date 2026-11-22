@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apiapproval 维护受保护 API group 的 KubernetesAPIApprovalPolicyConformant 条件。
 package apiapproval
 
 import (
@@ -36,25 +37,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// KubernetesAPIApprovalPolicyConformantConditionController is maintaining the KubernetesAPIApprovalPolicyConformant condition.
+// KubernetesAPIApprovalPolicyConformantConditionController 维护 KubernetesAPIApprovalPolicyConformant 条件。
 type KubernetesAPIApprovalPolicyConformantConditionController struct {
 	crdClient client.CustomResourceDefinitionsGetter
 
 	crdLister listers.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 便于测试时注入自定义实现。
 	syncFn func(ctx context.Context, key string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// last protectedAnnotation value this controller updated the condition per CRD name (to avoid two
-	// different version of the apiextensions-apiservers in HA to fight for the right message)
+	// lastSeenProtectedAnnotation 记录控制器上次更新条件时看到的受保护注解值（按 CRD 名）。
+	// 避免 HA 中不同版本的 apiextensions-apiserver 为写入正确的 message 而互相争抢。
 	lastSeenProtectedAnnotationLock sync.Mutex
 	lastSeenProtectedAnnotation     map[string]string
 }
 
-// NewKubernetesAPIApprovalPolicyConformantConditionController constructs a KubernetesAPIApprovalPolicyConformant schema condition controller.
+// NewKubernetesAPIApprovalPolicyConformantConditionController 构造 KubernetesAPIApprovalPolicyConformant schema 条件控制器。
 func NewKubernetesAPIApprovalPolicyConformantConditionController(
 	crdInformer informers.CustomResourceDefinitionInformer,
 	crdClient client.CustomResourceDefinitionsGetter,
@@ -81,8 +82,9 @@ func NewKubernetesAPIApprovalPolicyConformantConditionController(
 	return c
 }
 
-// calculateCondition determines the new KubernetesAPIApprovalPolicyConformant condition
+// calculateCondition 计算新的 KubernetesAPIApprovalPolicyConformant 条件。
 func calculateCondition(crd *apiextensionsv1.CustomResourceDefinition) *apiextensionsv1.CustomResourceDefinitionCondition {
+	// 只有受保护社区 group 才需要 API 审批
 	if !apihelpers.IsProtectedCommunityGroup(crd.Spec.Group) {
 		return nil
 	}
@@ -127,6 +129,7 @@ func calculateCondition(crd *apiextensionsv1.CustomResourceDefinition) *apiexten
 	}
 }
 
+// sync 协调单个 CRD 的 API 审批条件。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) sync(ctx context.Context, key string) error {
 	inCustomResourceDefinition, err := c.crdLister.Get(key)
 	if apierrors.IsNotFound(err) {
@@ -136,7 +139,7 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) sync(ctx cont
 		return err
 	}
 
-	// avoid repeated calculation for the same annotation
+	// 同一注解值避免重复计算
 	protectionAnnotationValue := inCustomResourceDefinition.Annotations[apiextensionsv1.KubeAPIApprovedAnnotation]
 	c.lastSeenProtectedAnnotationLock.Lock()
 	lastSeen, seenBefore := c.lastSeenProtectedAnnotation[inCustomResourceDefinition.Name]
@@ -145,35 +148,34 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) sync(ctx cont
 		return nil
 	}
 
-	// check old condition
+	// 检查旧条件
 	cond := calculateCondition(inCustomResourceDefinition)
 	if cond == nil {
-		// because group is immutable, if we have no condition now, we have no need to remove a condition.
+		// group 不可变；若当前无需条件，也就不必移除已有条件。
 		return nil
 	}
 	old := apihelpers.FindCRDCondition(inCustomResourceDefinition, apiextensionsv1.KubernetesAPIApprovalPolicyConformant)
 
-	// don't attempt a write if all the condition details are the same
+	// 若条件各项完全一致，则不必写入
 	if old != nil && old.Status == cond.Status && old.Reason == cond.Reason && old.Message == cond.Message {
-		// no need to update annotation because we took no action.
+		// 未采取动作，无需更新注解记录。
 		return nil
 	}
 
-	// update condition
+	// 更新条件
 	crd := inCustomResourceDefinition.DeepCopy()
 	apihelpers.SetCRDCondition(crd, *cond)
 
 	_, err = c.crdClient.CustomResourceDefinitions().UpdateStatus(ctx, crd, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-		// deleted or changed in the meantime, we'll get called again
+		// 对象已被删除或在此期间被修改，后续会再次被调度
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	// store annotation in order to avoid repeated updates for the same annotation (and potential
-	// fights of API server in HA environments).
+	// 记录注解值，避免对同一注解重复更新（以及 HA 环境下 API server 之间的争抢）。
 	c.lastSeenProtectedAnnotationLock.Lock()
 	defer c.lastSeenProtectedAnnotationLock.Unlock()
 	c.lastSeenProtectedAnnotation[crd.Name] = protectionAnnotationValue
@@ -181,14 +183,14 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) sync(ctx cont
 	return nil
 }
 
-// Run starts the controller.
+// Run 启动控制器。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) Run(workers int, stopCh <-chan struct{}) {
 	c.RunWithContext(workers, wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts the controller with a context.
+// RunWithContext 以上下文方式启动控制器。
 //
-//logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应改用 RunWithContext 而不是 Run。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) RunWithContext(workers int, ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -207,12 +209,13 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) RunWithContex
 	<-ctx.Done()
 }
 
+// runWorker 持续处理队列中的工作项，直到队列关闭。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) processNextWorkItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -232,6 +235,7 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) processNextWo
 	return true
 }
 
+// enqueue 将对象对应的 key 加入工作队列。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -242,21 +246,25 @@ func (c *KubernetesAPIApprovalPolicyConformantConditionController) enqueue(obj *
 	c.queue.Add(key)
 }
 
+// addCustomResourceDefinition 处理 CRD 新增事件。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) addCustomResourceDefinition(obj interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Adding %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// updateCustomResourceDefinition 处理 CRD 更新事件，仅关心新对象。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) updateCustomResourceDefinition(obj, _ interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Updating %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// deleteCustomResourceDefinition 处理 CRD 删除事件，并清理记录的注解值。
 func (c *KubernetesAPIApprovalPolicyConformantConditionController) deleteCustomResourceDefinition(obj interface{}) {
 	castObj, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
+		// 删除事件可能携带 DeletedFinalStateUnknown tombstone
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("Couldn't get object from tombstone %#v", obj)

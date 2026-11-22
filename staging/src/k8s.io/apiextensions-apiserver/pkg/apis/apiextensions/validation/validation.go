@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validation 提供 CRD 的静态验证逻辑。
+// 在 CRD 创建和更新时，验证 CRD 的 spec 是否合法，包括：
+//   - 名称和组名的 DNS 子域名格式
+//   - 版本配置（必须有且仅有一个 storage 版本）
+//   - OpenAPI v3.0 schema 的合法性
+//   - CEL 表达式的语法和成本限制
+//   - 打印列、子资源、conversion webhook 等配置
+//   - API 审批 annotation（受保护的组需要审批）
 package validation
 
 import (
@@ -52,17 +60,24 @@ import (
 )
 
 var (
-	printerColumnDatatypes                = sets.NewString("integer", "number", "string", "boolean", "date")
+	// printerColumnDatatypes 是打印列支持的数据类型。
+	printerColumnDatatypes = sets.NewString("integer", "number", "string", "boolean", "date")
+	// customResourceColumnDefinitionFormats 是打印列支持的格式（OpenAPI format 子集）。
 	customResourceColumnDefinitionFormats = sets.NewString("int32", "int64", "float", "double", "byte", "date", "date-time", "password")
-	openapiV3Types                        = sets.NewString("string", "number", "integer", "boolean", "array", "object")
+	// openapiV3Types 是 OpenAPI v3.0 支持的基本类型。
+	openapiV3Types = sets.NewString("string", "number", "integer", "boolean", "array", "object")
 )
 
 const (
-	// StaticEstimatedCostLimit represents the largest-allowed static CEL cost on a per-expression basis.
+	// StaticEstimatedCostLimit 是单个 CEL 表达式的最大静态成本估算值。
+	// 超过此值的表达式会被拒绝，防止 CEL 表达式消耗过多计算资源。
 	StaticEstimatedCostLimit = 10000000
-	// StaticEstimatedCRDCostLimit represents the largest-allowed total cost for the x-kubernetes-validations rules of a CRD.
+	// StaticEstimatedCRDCostLimit 是整个 CRD 的所有 CEL 验证规则的总成本上限。
+	// 限制单个 CRD 的 CEL 表达式总成本，防止大量复杂表达式影响 API Server 性能。
 	StaticEstimatedCRDCostLimit = 100000000
 
+	// MaxSelectableFields 是 CRD 允许的最大字段选择器数量。
+	// 限制字段选择器数量，避免索引过多导致性能问题。
 	MaxSelectableFields = 8
 )
 
@@ -73,7 +88,9 @@ var supportedValidationReason = sets.NewString(
 	string(apiextensions.FieldValueDuplicate),
 )
 
-// ValidateCustomResourceDefinition statically validates
+// ValidateCustomResourceDefinition 对新建的 CRD 进行完整的静态验证。
+// 包括 metadata、spec、status 和 API 审批 annotation 的验证。
+// 这是 CRD 创建时的入口验证函数。
 func ValidateCustomResourceDefinition(ctx context.Context, obj *apiextensions.CustomResourceDefinition) field.ErrorList {
 	nameValidationFn := func(name string, prefix bool) []string {
 		ret := genericvalidation.NameIsDNSSubdomain(name, prefix)
@@ -227,7 +244,9 @@ func suppressExpressionCostForUnchangedSchema(opts validationOptions, version st
 	return opts
 }
 
-// ValidateCustomResourceDefinitionUpdate statically validates
+// ValidateCustomResourceDefinitionUpdate 对更新的 CRD 进行静态验证。
+// 与 ValidateCustomResourceDefinition 不同，更新验证需要比较新旧对象，
+// 检查不可变字段是否被修改、版本迁移是否合法等。
 // context is passed for supporting context cancellation during cel validation when validating defaults
 func ValidateCustomResourceDefinitionUpdate(ctx context.Context, obj, oldObj *apiextensions.CustomResourceDefinition) field.ErrorList {
 	opts := validationOptions{
@@ -351,6 +370,8 @@ func validateDeprecationWarning(deprecated bool, deprecationWarning *string) []s
 	return errors
 }
 
+// validateCustomResourceDefinitionSpec 验证 CRD 的 spec 部分。
+// 包括组名、版本、名称、schema、打印列、子资源、conversion webhook 等。
 // context is passed for supporting context cancellation during cel validation when validating defaults
 func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensions.CustomResourceDefinitionSpec, opts validationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
@@ -646,7 +667,8 @@ func validateCustomResourceConversion(conversion *apiextensions.CustomResourceCo
 	return allErrs
 }
 
-// validateCustomResourceDefinitionSpecUpdate statically validates
+// validateCustomResourceDefinitionSpecUpdate 验证 CRD spec 的更新。
+// 先执行完整 spec 验证，然后额外检查不可变字段和版本变更的合法性。
 // context is passed for supporting context cancellation during cel validation when validating defaults
 func validateCustomResourceDefinitionSpecUpdate(ctx context.Context, spec, oldSpec *apiextensions.CustomResourceDefinitionSpec, opts validationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := validateCustomResourceDefinitionSpec(ctx, spec, opts, fldPath)
@@ -776,7 +798,8 @@ func hasIdenticalPerVersionColumns(versions []apiextensions.CustomResourceDefini
 	return true
 }
 
-// ValidateCustomResourceDefinitionStatus statically validates
+// ValidateCustomResourceDefinitionStatus 验证 CRD 的 status 部分。
+// 主要检查 AcceptedNames 的格式和 conditions 的合法性。
 func ValidateCustomResourceDefinitionStatus(status *apiextensions.CustomResourceDefinitionStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateCustomResourceDefinitionNames(&status.AcceptedNames, fldPath.Child("acceptedNames"))...)

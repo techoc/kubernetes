@@ -44,6 +44,8 @@ import (
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
+// DiscoveryController 依据 CRD 的变化，把自定义资源的发现信息
+// 同步到传统 discovery 和聚合 discovery 的处理器。
 type DiscoveryController struct {
 	versionHandler  *versionDiscoveryHandler
 	groupHandler    *groupDiscoveryHandler
@@ -52,12 +54,13 @@ type DiscoveryController struct {
 	crdLister  listers.CustomResourceDefinitionLister
 	crdsSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 允许测试时注入，替换为真实的同步函数。
 	syncFn func(version schema.GroupVersion) error
 
 	queue workqueue.TypedRateLimitingInterface[schema.GroupVersion]
 }
 
+// NewDiscoveryController 创建发现控制器，并注册 CRD 的增删改事件处理。
 func NewDiscoveryController(
 	crdInformer informers.CustomResourceDefinitionInformer,
 	versionHandler *versionDiscoveryHandler,
@@ -88,6 +91,7 @@ func NewDiscoveryController(
 	return c
 }
 
+// sync 针对指定的组版本，根据当前所有 CRD 重新计算并设置发现信息。
 func (c *DiscoveryController) sync(version schema.GroupVersion) error {
 
 	apiVersionsForDiscovery := []metav1.GroupVersionForDiscovery{}
@@ -116,7 +120,7 @@ func (c *DiscoveryController) sync(version schema.GroupVersion) error {
 			if !v.Served {
 				continue
 			}
-			// If there is any Served version, that means the group should show up in discovery
+			// 只要有任一 Served 版本，就说明该组应出现在 discovery 中。
 			foundGroup = true
 
 			gv := metav1.GroupVersion{Group: crd.Spec.Group, Version: v.Name}
@@ -141,7 +145,7 @@ func (c *DiscoveryController) sync(version schema.GroupVersion) error {
 		foundVersion = true
 
 		verbs := metav1.Verbs([]string{"delete", "deletecollection", "get", "list", "patch", "create", "update", "watch"})
-		// if we're terminating we don't allow some verbs
+		// 若 CRD 处于终止中，则不允许部分动词（写操作已关闭）。
 		if apiextensionshelpers.IsCRDConditionTrue(crd, apiextensionsv1.Terminating) {
 			verbs = metav1.Verbs([]string{"delete", "deletecollection", "get", "list", "watch"})
 		}
@@ -244,8 +248,7 @@ func (c *DiscoveryController) sync(version schema.GroupVersion) error {
 	apiGroup := metav1.APIGroup{
 		Name:     version.Group,
 		Versions: apiVersionsForDiscovery,
-		// the preferred versions for a group is the first item in
-		// apiVersionsForDiscovery after it put in the right ordered
+		// 排序后列表的首项即为该组的偏好版本。
 		PreferredVersion: apiVersionsForDiscovery[0],
 	}
 	c.groupHandler.setDiscovery(version.Group, discovery.NewAPIGroupHandler(Codecs, apiGroup))
@@ -274,18 +277,20 @@ func (c *DiscoveryController) sync(version schema.GroupVersion) error {
 			Version:   version.Version,
 			Resources: aggregatedAPIResourcesForDiscovery,
 		})
-		// Default priority for CRDs
+		// CRD 的默认优先级。
 		c.resourceManager.SetGroupVersionPriority(metav1.GroupVersion(version), 1000, 100)
 	}
 	return nil
 }
 
+// sortGroupDiscoveryByKubeAwareVersion 按 Kubernetes 版本感知的规则对版本列表降序排序。
 func sortGroupDiscoveryByKubeAwareVersion(gd []metav1.GroupVersionForDiscovery) {
 	sort.Slice(gd, func(i, j int) bool {
 		return version.CompareKubeAwareVersionStrings(gd[i].Version, gd[j].Version) > 0
 	})
 }
 
+// Run 启动控制器：先完成初始全量同步，再进入单工作协程的处理循环，直至 stopCh 关闭。
 func (c *DiscoveryController) Run(stopCh <-chan struct{}, synchedCh chan<- struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -298,7 +303,7 @@ func (c *DiscoveryController) Run(stopCh <-chan struct{}, synchedCh chan<- struc
 		return
 	}
 
-	// initially sync all group versions to make sure we serve complete discovery
+	// 先做一次全量同步，确保初始时能提供完整的 discovery 结果。
 	if err := wait.PollUntilContextCancel(context.Background(), time.Second, true, func(ctx context.Context) (bool, error) {
 		crds, err := c.crdLister.List(labels.Everything())
 		if err != nil {
@@ -325,18 +330,19 @@ func (c *DiscoveryController) Run(stopCh <-chan struct{}, synchedCh chan<- struc
 	}
 	close(synchedCh)
 
-	// only start one worker thread since its a slow moving API
+	// 该 API 变化缓慢，只启动一个工作协程即可，避免不必要的并发。
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
 }
 
+// runWorker 不断从队列取出并处理工作项，直到队列关闭。
 func (c *DiscoveryController) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个键；到退出时机时返回 false。
 func (c *DiscoveryController) processNextWorkItem() bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -356,28 +362,32 @@ func (c *DiscoveryController) processNextWorkItem() bool {
 	return true
 }
 
+// enqueue 把 CRD 的每个版本作为独立的同步键加入队列。
 func (c *DiscoveryController) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
 	for _, v := range obj.Spec.Versions {
 		c.queue.Add(schema.GroupVersion{Group: obj.Spec.Group, Version: v.Name})
 	}
 }
 
+// addCustomResourceDefinition 处理 CRD 新增事件。
 func (c *DiscoveryController) addCustomResourceDefinition(obj interface{}) {
 	castObj := obj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Adding customresourcedefinition %s", castObj.Name)
 	c.enqueue(castObj)
 }
 
+// updateCustomResourceDefinition 处理 CRD 更新事件。
 func (c *DiscoveryController) updateCustomResourceDefinition(oldObj, newObj interface{}) {
 	castNewObj := newObj.(*apiextensionsv1.CustomResourceDefinition)
 	castOldObj := oldObj.(*apiextensionsv1.CustomResourceDefinition)
 	klog.V(4).Infof("Updating customresourcedefinition %s", castOldObj.Name)
-	// Enqueue both old and new object to make sure we remove and add appropriate Versions.
-	// The working queue will resolve any duplicates and only changes will stay in the queue.
+	// 同时入队新旧对象，确保相关版本能被正确移除和添加。
+	// 工作队列会消除重复项，只保留实际发生变化的条目。
 	c.enqueue(castNewObj)
 	c.enqueue(castOldObj)
 }
 
+// deleteCustomResourceDefinition 处理 CRD 删除事件，并兼容 tombstone 对象。
 func (c *DiscoveryController) deleteCustomResourceDefinition(obj interface{}) {
 	castObj, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {

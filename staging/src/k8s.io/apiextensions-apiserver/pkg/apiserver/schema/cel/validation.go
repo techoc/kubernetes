@@ -48,8 +48,8 @@ import (
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 )
 
-// Validator parallels the structure of schema.Structural and includes the compiled CEL programs
-// for the x-kubernetes-validations of each schema node.
+// Validator 与 schema.Structural 的结构平行，并为每个 schema 节点的
+// x-kubernetes-validations 保存已编译的 CEL 程序。
 type Validator struct {
 	Items                *Validator
 	Properties           map[string]Validator
@@ -61,26 +61,24 @@ type Validator struct {
 	uncompiledRules []apiextensions.ValidationRule
 	compiledRules   []CompilationResult
 
-	// Program compilation is pre-checked at CRD creation/update time, so we don't expect compilation to fail
-	// they are recompiled and added to this type, and it does, it is an internal bug.
-	// But if somehow we get any compilation errors, we track them and then surface them as validation errors.
+	// 程序的编译在 CRD 创建/更新时已预检，按理不会失败；若此处重新编译后仍然失败，
+	// 说明存在内部 bug。但真遇到编译错误时，记录下来并作为校验错误上报。
 	compilationErr error
 
-	// isResourceRoot is true if this validator node is for the root of a resource. Either the root of the
-	// custom resource being validated, or the root of an XEmbeddedResource object.
+	// 当该校验节点对应资源根时 isResourceRoot 为 true。资源根要么是正在被校验的
+	// 自定义资源的根，要么是某个 XEmbeddedResource 对象的根。
 	isResourceRoot bool
 
-	// celActivationFactory produces a Activations, which resolve identifiers
-	// (e.g. self and oldSelf) to CEL values. One activation must be produced
-	// for each of the cases when oldSelf is optional and non-optional.
+	// celActivationFactory 生成 Activations，把标识符（例如 self 和 oldSelf）
+	// 解析为 CEL 值。oldSelf 可选与不可选两种情况各需生成一个 activation。
 	celActivationFactory func(sts *schema.Structural, obj, oldObj interface{}) (activation interpreter.Activation, optionalOldSelfActivation interpreter.Activation)
 }
 
-// NewValidator returns compiles all the CEL programs defined in x-kubernetes-validations extensions
-// of the Structural schema and returns a custom resource validator that contains nested
-// validators for all items, properties and additionalProperties that transitively contain validator rules.
-// Returns nil if there are no validator rules in the Structural schema. May return a validator containing only errors.
-// Adding perCallLimit as input arg for testing purpose only. Callers should always use const PerCallLimit from k8s.io/apiserver/pkg/apis/cel/config.go as input
+// NewValidator 编译 Structural schema 的 x-kubernetes-validations 扩展中定义的
+// 全部 CEL 程序，返回一个自定义资源校验器；其内部为所有传递性包含校验规则的
+// items、properties 和 additionalProperties 保存嵌套校验器。
+// 若 Structural schema 中没有校验规则则返回 nil。可能返回一个只含错误的校验器。
+// perCallLimit 仅作为测试输入参数。调用方应始终传入 k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 PerCallLimit。
 func NewValidator(s *schema.Structural, isResourceRoot bool, perCallLimit uint64) *Validator {
 	if !hasXValidations(s) {
 		return nil
@@ -88,10 +86,10 @@ func NewValidator(s *schema.Structural, isResourceRoot bool, perCallLimit uint64
 	return validator(s, s, isResourceRoot, model.SchemaDeclType(s, isResourceRoot), perCallLimit)
 }
 
-// validator creates a Validator for all x-kubernetes-validations at the level of the provided schema and lower and
-// returns the Validator if any x-kubernetes-validations exist in the schema, or nil if no x-kubernetes-validations
-// exist. declType is expected to be a CEL DeclType corresponding to the structural schema.
-// perCallLimit was added for testing purpose only. Callers should always use const PerCallLimit from k8s.io/apiserver/pkg/apis/cel/config.go as input.
+// validator 为给定 schema 及其下层所有 x-kubernetes-validations 创建 Validator；
+// 若 schema 中存在 x-kubernetes-validations 则返回 Validator，否则返回 nil。
+// declType 应是对应结构 schema 的 CEL DeclType。
+// perCallLimit 仅供测试使用。调用方应始终传入 k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 PerCallLimit。
 func validator(validationSchema, nodeSchema *schema.Structural, isResourceRoot bool, declType *cel.DeclType, perCallLimit uint64) *Validator {
 	compilationSchema := *nodeSchema
 	compilationSchema.XValidations = validationSchema.XValidations
@@ -116,8 +114,7 @@ func validator(validationSchema, nodeSchema *schema.Structural, isResourceRoot b
 		for k, validationProperty := range validationSchema.Properties {
 			nodeProperty, ok := nodeSchema.Properties[k]
 			if !ok {
-				// Can only add value validations for fields that are on the
-				// structural spine of the schema.
+				// 只能为位于 schema 结构主干的字段添加值校验。
 				continue
 			}
 
@@ -129,12 +126,11 @@ func validator(validationSchema, nodeSchema *schema.Structural, isResourceRoot b
 				if f, ok := declType.Fields[escapedPropName]; ok {
 					fieldType = f.Type
 				} else {
-					// fields with unknown types are omitted from CEL validation entirely
+					// 未知类型的字段直接跳过 CEL 校验
 					continue
 				}
 			} else {
-				// field may be absent from declType if the property name is unescapable, in which case we should convert
-				// the field value type to a DeclType.
+				// 属性名无法转义时，declType 中可能没有该字段，此时应把字段值类型转换为 DeclType。
 				fieldType = model.SchemaDeclType(&nodeProperty, nodeProperty.XEmbeddedResource)
 				if fieldType == nil {
 					continue
@@ -186,22 +182,26 @@ func validator(validationSchema, nodeSchema *schema.Structural, isResourceRoot b
 	return nil
 }
 
+// options 保存单次校验的可选行为。
 type options struct {
 	ratchetingOptions
 }
 
+// Option 是校验的可选配置。
 type Option func(*options)
 
+// WithRatcheting 启用 ratcheting，并传入当前的 old/new 关联对象。
 func WithRatcheting(correlation *common.CorrelatedObject) Option {
 	return func(o *options) {
 		o.currentCorrelation = correlation
 	}
 }
 
-// Validate validates all x-kubernetes-validations rules in Validator against obj and returns any errors.
-// If the validation rules exceed the costBudget, subsequent evaluations will be skipped, the list of errs returned will not be empty, and a negative remainingBudget will be returned.
-// Most callers can ignore the returned remainingBudget value unless another validate call is going to be made
-// context is passed for supporting context cancellation during cel validation
+// Validate 用 Validator 中的全部 x-kubernetes-validations 规则校验 obj，返回错误。
+// 若校验规则超出 costBudget，后续求值会被跳过，返回的 errs 非空，且返回的
+// remainingBudget 为负。
+// 除非还要再调用一次 validate，大多数调用方可以忽略返回的 remainingBudget。
+// 传入 context 是为了在 CEL 校验期间支持取消。
 func (s *Validator) Validate(ctx context.Context, fldPath *field.Path, _ *schema.Structural, obj, oldObj interface{}, costBudget int64, opts ...Option) (errs field.ErrorList, remainingBudget int64) {
 	opt := options{}
 	for _, o := range opts {
@@ -211,29 +211,23 @@ func (s *Validator) Validate(ctx context.Context, fldPath *field.Path, _ *schema
 	return s.validate(ctx, fldPath, obj, oldObj, opt.ratchetingOptions, costBudget)
 }
 
-// ratchetingOptions stores the current correlation object and the nearest
-// parent which was correlatable. The parent is stored so that we can check at
-// the point an error is thrown whether it should be ratcheted using simple
-// logic
-// Key and Index should be used as normally to traverse to the next node.
+// ratchetingOptions 保存当前关联对象以及最近的可关联父节点。
+// 保存父节点是为了在抛出错误的位置用简单逻辑判断是否应 ratchet。
+// 仍按常规方式用 Key 和 Index 下探到下一个节点。
 type ratchetingOptions struct {
-	// Current correlation object. If nil, then this node is from an uncorrelatable
-	// part of the schema
+	// 当前关联对象。为 nil 表示该节点位于 schema 中不可关联的部分。
 	currentCorrelation *common.CorrelatedObject
 
-	// If currentCorrelation is nil, this is the nearest parent to this node
-	// which was correlatable. If the parent is deepequal to its old value,
-	// then errors thrown by this node are ratcheted
+	// currentCorrelation 为 nil 时，这是离该节点最近的、可关联的父节点。
+	// 若父节点与旧值 deepequal，则该节点抛出的错误会被 ratchet。
 	nearestParentCorrelation *common.CorrelatedObject
 }
 
-// shouldRatchetError returns true if the errors raised by the current node
-// should be ratcheted.
+// shouldRatchetError 返回当前节点产生的错误是否应被 ratchet。
 //
-// Errors for the current node should be ratcheted if one of the following is true:
-//  1. The current node is correlatable, and it is equal to its old value
-//  2. The current node has a correlatable ancestor, and the ancestor is equal
-//     to its old value.
+// 满足以下任一条件时，当前节点的错误应被 ratchet：
+//  1. 当前节点可关联，且与旧值相等
+//  2. 当前节点有可关联的祖先，且该祖先与旧值相等
 func (r ratchetingOptions) shouldRatchetError() bool {
 	if r.currentCorrelation != nil {
 		return r.currentCorrelation.CachedDeepEqual()
@@ -242,28 +236,25 @@ func (r ratchetingOptions) shouldRatchetError() bool {
 	return r.nearestParentCorrelation.CachedDeepEqual()
 }
 
-// Finds the next node following the field in the tree and returns options using
-// that node. If none could be found, then retains a reference to the last
-// correlatable ancestor for ratcheting purposes
+// 沿树按字段名找到下一个节点并返回对应 options。找不到时保留最近可关联祖先的引用，
+// 供 ratchet 使用。
 func (r ratchetingOptions) key(field string) ratchetingOptions {
 	if r.currentCorrelation == nil {
 		return r
 	} else if r.nearestParentCorrelation == nil && (field == "apiVersion" || field == "kind") {
-		// We cannot ratchet changes to the APIVersion and kind fields field since
-		// they aren't visible. (both old and new are converted to the same type)
+		// apiVersion 和 kind 字段的变化无法 ratchet，因为它们不可见
+		// （新旧值都被转换成同一类型）。
 		//
 		return ratchetingOptions{}
 	}
 
-	// nearestParentCorrelation is always non-nil except for the root node.
-	// The below line ensures that the next nearestParentCorrelation is set
-	// to a non-nil r.currentCorrelation
+	// 除根节点外 nearestParentCorrelation 始终非 nil。
+	// 下面这行保证下一个 nearestParentCorrelation 被设为非 nil 的 r.currentCorrelation。
 	return ratchetingOptions{currentCorrelation: r.currentCorrelation.Key(field), nearestParentCorrelation: r.currentCorrelation}
 }
 
-// Finds the next node following the index in the tree and returns options using
-// that node. If none could be found, then retains a reference to the last
-// correlatable ancestor for ratcheting purposes
+// 沿树按下标找到下一个节点并返回对应 options。找不到时保留最近可关联祖先的引用，
+// 供 ratchet 使用。
 func (r ratchetingOptions) index(idx int) ratchetingOptions {
 	if r.currentCorrelation == nil {
 		return r
@@ -272,6 +263,8 @@ func (r ratchetingOptions) index(idx int) ratchetingOptions {
 	return ratchetingOptions{currentCorrelation: r.currentCorrelation.Index(idx), nearestParentCorrelation: r.currentCorrelation}
 }
 
+// nestedToStructural 把 NestedValueValidation 转换为对应的 Structural，
+// 用于处理 allOf 中的校验规则。
 func nestedToStructural(nested *schema.NestedValueValidation) *schema.Structural {
 	if nested == nil {
 		return nil
@@ -301,6 +294,7 @@ func nestedToStructural(nested *schema.NestedValueValidation) *schema.Structural
 	return structuralConversion
 }
 
+// validate 在节点上执行表达式校验，并按对象类型递归到数组/map 子节点。
 func (s *Validator) validate(ctx context.Context, fldPath *field.Path, obj, oldObj interface{}, correlation ratchetingOptions, costBudget int64) (errs field.ErrorList, remainingBudget int64) {
 	t := time.Now()
 	defer func() {
@@ -317,13 +311,11 @@ func (s *Validator) validate(ctx context.Context, fldPath *field.Path, obj, oldO
 		return errs, remainingBudget
 	}
 
-	// If the schema has allOf, recurse through those elements to see if there
-	// are any validation rules that need to be evaluated.
+	// 若 schema 有 allOf，则递归进去检查是否有需要执行的校验规则。
 	for _, allOfValidator := range s.AllOfValidators {
 		var allOfErrs field.ErrorList
-		// Pass options with nil currentCorrelation to mirror schema ratcheting
-		// behavior which does not ratchet allOf errors. This may change in the
-		// future for allOf.
+		// 传入 currentCorrelation 为 nil 的 options，以镜像 schema ratcheting 的行为：
+		// allOf 中的错误不做 ratchet。将来可能会调整 allOf 的该行为。
 		allOfErrs, remainingBudget = allOfValidator.validate(ctx, fldPath, obj, oldObj, ratchetingOptions{nearestParentCorrelation: correlation.nearestParentCorrelation}, remainingBudget)
 		errs = append(errs, allOfErrs...)
 		if remainingBudget < 0 {
@@ -349,10 +341,11 @@ func (s *Validator) validate(ctx context.Context, fldPath *field.Path, obj, oldO
 	return errs, remainingBudget
 }
 
+// validateExpressions 只执行当前节点自身的 CEL 规则，不递归。
 func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path, obj, oldObj interface{}, correlation ratchetingOptions, costBudget int64) (errs field.ErrorList, remainingBudget int64) {
 	sts := s.Schema
 
-	// guard against oldObj being a non-nil interface with a nil value
+	// 防止 oldObj 是“非 nil 接口、nil 值”的情况。
 	if oldObj != nil {
 		v := reflect.ValueOf(oldObj)
 		switch v.Kind() {
@@ -365,9 +358,9 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 
 	remainingBudget = costBudget
 	if obj == nil {
-		// We only validate non-null values. Rules that need to check for the state of a nullable value or the presence of an optional
-		// field must do so from the surrounding schema. E.g. if an array has nullable string items, a rule on the array
-		// schema can check if items are null, but a rule on the nullable string schema only validates the non-null strings.
+		// 只校验非 null 值。需要检查可空值状态或可选字段是否存在的规则，必须在
+		// 其外层 schema 上表达。例如数组的 items 是可空字符串时，数组 schema 上的规则
+		// 可以检查 items 是否为 null，但可空字符串 schema 上的规则只会校验非 null 的字符串。
 		return nil, remainingBudget
 	}
 	if s.compilationErr != nil {
@@ -375,7 +368,7 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 		return errs, remainingBudget
 	}
 	if len(s.compiledRules) == 0 {
-		return nil, remainingBudget // nothing to do
+		return nil, remainingBudget // 没有需要执行的内容
 	}
 	if remainingBudget <= 0 {
 		errs = append(errs, field.Invalid(fldPath, sts.Type, fmt.Sprintf("validation failed due to running out of cost budget, no further validation rules will be run")))
@@ -392,17 +385,15 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 			continue
 		}
 		if compiled.Program == nil {
-			// rule is empty
+			// 规则为空
 			continue
 		}
 
-		// If ratcheting is enabled, allow rule with oldSelf to evaluate
-		// when `optionalOldSelf` is set to true
+		// 启用 ratcheting 时，即使 optionalOldSelf 为 true，也允许带 oldSelf 的规则求值。
 		optionalOldSelfRule := ptr.Deref(rule.OptionalOldSelf, false)
 		if compiled.UsesOldSelf && oldObj == nil {
-			// transition rules are evaluated only if there is a comparable existing value
-			// But if the rule uses optional oldSelf and gate is enabled we allow
-			// the rule to be evaluated
+			// 转换类规则只在存在可比较的旧值时才求值；
+			// 但若规则使用 optional oldSelf 且该特性门控已启用，则允许求值。
 			if !utilfeature.DefaultFeatureGate.Enabled(features.CRDValidationRatcheting) {
 				continue
 			}
@@ -435,18 +426,18 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 			}
 		}
 		if err != nil {
-			// see types.Err for list of well defined error types
+			// 参见 types.Err 中定义的错误类型列表
 			if strings.HasPrefix(err.Error(), "no such overload") {
-				// Most overload errors are caught by the compiler, which provides details on where exactly in the rule
-				// error was found. Here, an overload error has occurred at runtime no details are provided, so we
-				// append a more descriptive error message. This error can only occur when static type checking has
-				// been bypassed. int-or-string is typed as dynamic and so bypasses compiler type checking.
+				// 大多数 overload 错误会被编译器捕获，并给出规则中出错的具体位置。
+				// 这里是在运行时出现 overload 错误、没有任何细节，因此追加更明确的
+				// 错误消息。只有绕过静态类型检查时才会出现这种情况。int-or-string
+				// 被标记为 dynamic，因此绕过了编译器的类型检查。
 				errs = append(errs, field.Invalid(fldPath, sts.Type, fmt.Sprintf("'%v': call arguments did not match a supported operator, function or macro signature for rule: %v", err, ruleErrorString(rule))))
 			} else if strings.HasPrefix(err.Error(), "operation cancelled: actual cost limit exceeded") {
 				errs = append(errs, field.Invalid(fldPath, sts.Type, fmt.Sprintf("'%v': no further validation rules will be run due to call cost exceeds limit for rule: %v", err, ruleErrorString(rule))))
 				return errs, -1
 			} else {
-				// no such key: {key}, index out of bounds: {index}, integer overflow, division by zero, ...
+				// 例如：no such key: {key}、index out of bounds: {index}、整数溢出、除以零等
 				errs = append(errs, field.Invalid(fldPath, sts.Type, fmt.Sprintf("%v evaluating rule: %v", err, ruleErrorString(rule))))
 			}
 			continue
@@ -456,8 +447,8 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 			continue
 		}
 
-		// Prepare a field error describing why the expression evaluated to False.
-		// Its detail may come from another expression that might fail to evaluate or exceed the budget.
+		// 准备一个 field error，说明表达式为何求值为 False。
+		// 其 detail 可能来自另一个可能求值失败或超预算的表达式。
 
 		currentFldPath := fldPath
 		if len(compiled.NormalizedRuleFieldPath) > 0 {
@@ -505,6 +496,7 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 
 var unescapeMatcher = regexp.MustCompile(`\\.`)
 
+// unescapeSingleQuote 处理字符串字面量中的反斜杠转义。
 func unescapeSingleQuote(s string) (string, error) {
 	var err error
 	unescaped := unescapeMatcher.ReplaceAllStringFunc(s, func(matchStr string) string {
@@ -536,24 +528,25 @@ func unescapeSingleQuote(s string) (string, error) {
 	return unescaped, err
 }
 
+// validFieldPathOptions 控制 ValidFieldPath 的解析行为。
 type validFieldPathOptions struct {
 	allowArrayNotation bool
 }
 
-// ValidFieldPathOption provides vararg options for ValidFieldPath.
+// ValidFieldPathOption 为 ValidFieldPath 提供可变参数选项。
 type ValidFieldPathOption func(*validFieldPathOptions)
 
-// WithFieldPathAllowArrayNotation sets of array annotation ('[<index or map key>]') is allowed
-// in field paths.
-// Defaults to true
+// WithFieldPathAllowArrayNotation 设置字段路径中是否允许数组记法
+// （'[<index or map key>]'）。
+// 默认允许。
 func WithFieldPathAllowArrayNotation(allow bool) ValidFieldPathOption {
 	return func(options *validFieldPathOptions) {
 		options.allowArrayNotation = allow
 	}
 }
 
-// ValidFieldPath validates that jsonPath is a valid JSON Path containing only field and map accessors
-// that are valid for the given schema, and returns a field.Path representation of the validated jsonPath or an error.
+// ValidFieldPath 校验 jsonPath 是合法的 JSON Path，且只包含对给定 schema 有效的
+// 字段和 map 访问器；返回校验后 jsonPath 的 field.Path 表示或错误。
 func ValidFieldPath(jsonPath string, schema *schema.Structural, options ...ValidFieldPathOption) (validFieldPath *field.Path, foundSchema *schema.Structural, err error) {
 	opts := &validFieldPathOptions{allowArrayNotation: true}
 	for _, opt := range options {
@@ -579,35 +572,35 @@ func ValidFieldPath(jsonPath string, schema *schema.Structural, options ...Valid
 
 	scanner := bufio.NewScanner(strings.NewReader(jsonPath))
 
-	// configure the scanner to split the string into tokens.
-	// The three delimiters ('.', '[', ']') will be returned as single char tokens.
-	// All other text between delimiters is returned as string tokens.
+	// 配置扫描器把字符串切成 token。
+	// 三个分隔符（'.'、'['、']'）作为单字符 token 返回。
+	// 分隔符之间的其他文本作为字符串 token 返回。
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if len(data) > 0 {
 			for i := 0; i < len(data); i++ {
-				// If in a single quoted string, look for the end of string
-				// ignoring delimiters.
+				// 若处于单引号字符串中，寻找字符串结尾，
+				// 期间忽略分隔符。
 				if data[0] == '\'' {
 					if i > 0 && data[i] == '\'' && data[i-1] != '\\' {
-						// Return quoted string
+						// 返回带引号的字符串
 						return i + 1, data[:i+1], nil
 					}
 					continue
 				}
 				switch data[i] {
-				case '.', '[', ']': // delimiters
+				case '.', '[', ']': // 分隔符
 					if i == 0 {
-						// Return the delimiter.
+						// 返回该分隔符。
 						return 1, data[:1], nil
 					} else {
-						// Return identifier leading up to the delimiter.
-						// The next call to split will return the delimiter.
+						// 返回分隔符之前的标识符。
+						// 下一次 split 调用会返回该分隔符。
 						return i, data[:i], nil
 					}
 				}
 			}
 			if atEOF {
-				// Return the string.
+				// 返回字符串。
 				return len(data), data, nil
 			}
 		}
@@ -675,6 +668,7 @@ func ValidFieldPath(jsonPath string, schema *schema.Structural, options ...Valid
 	return validFieldPath, schema, nil
 }
 
+// fieldErrorForReason 按规则声明的 reason 构造对应类型的 field error。
 func fieldErrorForReason(fldPath *field.Path, value interface{}, detail string, reason *apiextensions.FieldValueErrorReason) *field.Error {
 	if reason == nil {
 		return field.Invalid(fldPath, value, detail)
@@ -691,8 +685,8 @@ func fieldErrorForReason(fldPath *field.Path, value interface{}, detail string, 
 	}
 }
 
-// evalMessageExpression evaluates the given message expression and returns the evaluated string form and the remaining budget, or an error if one
-// occurred during evaluation.
+// evalMessageExpression 对给定的 message expression 求值，返回求值后的字符串形式
+// 和剩余预算；求值过程中出错则返回错误。
 func evalMessageExpression(ctx context.Context, expr celgo.Program, exprSrc string, activation interpreter.Activation, remainingBudget int64) (string, int64, *cel.Error) {
 	evalResult, evalDetails, err := expr.ContextEval(ctx, activation)
 	if evalDetails == nil {
@@ -749,10 +743,12 @@ func evalMessageExpression(ctx context.Context, expr celgo.Program, exprSrc stri
 
 var newlineMatcher = regexp.MustCompile(`[\n]+`)
 
+// hasNewlines 判断字符串是否包含换行。
 func hasNewlines(s string) bool {
 	return newlineMatcher.MatchString(s)
 }
 
+// ruleMessageOrDefault 返回规则的自定义消息，没有时生成默认的失败消息。
 func ruleMessageOrDefault(rule apiextensions.ValidationRule) string {
 	if len(rule.Message) == 0 {
 		return fmt.Sprintf("failed rule: %s", ruleErrorString(rule))
@@ -761,6 +757,7 @@ func ruleMessageOrDefault(rule apiextensions.ValidationRule) string {
 	}
 }
 
+// ruleErrorString 返回用于错误消息的规则描述：优先使用 message，否则使用规则本身。
 func ruleErrorString(rule apiextensions.ValidationRule) string {
 	if len(rule.Message) > 0 {
 		return strings.TrimSpace(rule.Message)
@@ -768,18 +765,21 @@ func ruleErrorString(rule apiextensions.ValidationRule) string {
 	return strings.TrimSpace(rule.Rule)
 }
 
+// validationActivation 把 self/oldSelf 解析为 CEL 值。
 type validationActivation struct {
 	self, oldSelf ref.Val
 	hasOldSelf    bool
 }
 
+// validationActivationWithOldSelf 生成根据 new/old 对象绑定 self 和 oldSelf 的
+// activation，同时生成 oldSelf 为 optional 的版本。
 func validationActivationWithOldSelf(sts *schema.Structural, obj, oldObj interface{}) (activation interpreter.Activation, optionalOldSelfActivation interpreter.Activation) {
 	va := &validationActivation{
 		self: UnstructuredToVal(obj, sts),
 	}
 	optionalVA := &validationActivation{
 		self:       va.self,
-		hasOldSelf: true, // this means the oldSelf variable is defined for CEL to reference, not that it has a value
+		hasOldSelf: true, // 表示 oldSelf 变量对 CEL 可见，并不表示它已有值
 		oldSelf:    types.OptionalNone,
 	}
 
@@ -793,6 +793,8 @@ func validationActivationWithOldSelf(sts *schema.Structural, obj, oldObj interfa
 	return va, optionalVA
 }
 
+// validationActivationWithoutOldSelf 生成仅绑定 self 的 activation；optional 版本
+// 与之相同，因为该场景下 oldSelf 永远不会被引用。
 func validationActivationWithoutOldSelf(sts *schema.Structural, obj, _ interface{}) (interpreter.Activation, interpreter.Activation) {
 	res := &validationActivation{
 		self: UnstructuredToVal(obj, sts),
@@ -800,6 +802,7 @@ func validationActivationWithoutOldSelf(sts *schema.Structural, obj, _ interface
 	return res, res
 }
 
+// ResolveName 把 CEL 标识符解析为对应的值。
 func (a *validationActivation) ResolveName(name string) (interface{}, bool) {
 	switch name {
 	case ScopedVarName:
@@ -811,10 +814,12 @@ func (a *validationActivation) ResolveName(name string) (interface{}, bool) {
 	}
 }
 
+// Parent 返回父 activation，这里没有父级。
 func (a *validationActivation) Parent() interpreter.Activation {
 	return nil
 }
 
+// validateMap 递归校验 map 的 additionalProperties 和 properties。
 func (s *Validator) validateMap(ctx context.Context, fldPath *field.Path, obj, oldObj map[string]interface{}, correlation ratchetingOptions, costBudget int64) (errs field.ErrorList, remainingBudget int64) {
 	remainingBudget = costBudget
 	if remainingBudget < 0 {
@@ -863,6 +868,7 @@ func (s *Validator) validateMap(ctx context.Context, fldPath *field.Path, obj, o
 	return errs, remainingBudget
 }
 
+// validateArray 递归校验数组的元素。
 func (s *Validator) validateArray(ctx context.Context, fldPath *field.Path, obj, oldObj []interface{}, correlation ratchetingOptions, costBudget int64) (errs field.ErrorList, remainingBudget int64) {
 	remainingBudget = costBudget
 	if remainingBudget < 0 {
@@ -870,8 +876,8 @@ func (s *Validator) validateArray(ctx context.Context, fldPath *field.Path, obj,
 	}
 
 	if s.Items != nil {
-		// only map-type lists support self-oldSelf correlation for cel rules. if this isn't a
-		// map-type list, then makeMapList returns an implementation that always returns nil
+		// 只有 map 类型的 list 支持 CEL 规则的 self-oldSelf 关联。若不是 map 类型 list，
+		// makeMapList 返回的实现总是返回 nil。
 		correlatableOldItems := makeMapList(s.Schema, oldObj)
 		for i := range obj {
 			var err field.ErrorList
@@ -886,13 +892,14 @@ func (s *Validator) validateArray(ctx context.Context, fldPath *field.Path, obj,
 	return errs, remainingBudget
 }
 
-// MapIsCorrelatable returns true if the mapType can be used to correlate the data elements of a map after an update
-// with the data elements of the map from before the updated.
+// MapIsCorrelatable 返回 mapType 是否可用于在 update 后把 map 的数据元素与更新前的
+// 数据元素关联起来。
 func MapIsCorrelatable(mapType *string) bool {
-	// if a third map type is introduced, assume it's not correlatable. granular is the default if unspecified.
+	// 若将来引入第三种 map 类型，默认视为不可关联。未指定时默认是 granular。
 	return mapType == nil || *mapType == "granular" || *mapType == "atomic"
 }
 
+// hasXValidations 递归判断 schema 及其子节点中是否存在 x-kubernetes-validations。
 func hasXValidations(s *schema.Structural) bool {
 	if s == nil {
 		return false

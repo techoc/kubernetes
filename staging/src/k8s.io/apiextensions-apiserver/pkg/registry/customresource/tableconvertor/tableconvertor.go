@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package tableconvertor 将自定义资源转换为 kubectl 表格输出。
 package tableconvertor
 
 import (
@@ -34,10 +35,11 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
+// swaggerMetadataDescriptions 提供 metav1 的 swagger 描述，供 Name 列使用。
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
-// New creates a new table convertor for the provided CRD column definition. If the printer definition cannot be parsed,
-// error will be returned along with a default table convertor.
+// New 根据给定的 CRD 列定义创建表格转换器。若打印器定义无法解析，
+// 会同时返回错误与一个默认的表格转换器。
 func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.TableConvertor, error) {
 	headers := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: swaggerMetadataDescriptions["name"]},
@@ -71,19 +73,23 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 	return c, nil
 }
 
+// columnPrinter 抽象一列 JSONPath 的取值与渲染逻辑，便于测试替换。
 type columnPrinter interface {
 	FindResults(data interface{}) ([][]reflect.Value, error)
 	PrintResults(w io.Writer, results []reflect.Value) error
 }
 
+// convertor 实现 rest.TableConvertor，负责把 CRD 对象转换为表格。
 type convertor struct {
 	headers           []metav1.TableColumnDefinition
 	additionalColumns []columnPrinter
 }
 
+// ConvertToTable 将对象或列表转换为 metav1.Table。
 func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	table := &metav1.Table{}
 	opt, ok := tableOptions.(*metav1.TableOptions)
+	// 调用方可以要求不返回列定义
 	noHeaders := ok && opt != nil && opt.NoHeaders
 	if !noHeaders {
 		table.ColumnDefinitions = c.headers
@@ -107,6 +113,7 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 		customHeaders := c.headers[1:]
 		us, ok := obj.(runtime.Unstructured)
 		if !ok {
+			// 非结构化转换失败时无法计算额外列，直接返回错误
 			m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 			if err != nil {
 				return nil, err
@@ -120,7 +127,7 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 				continue
 			}
 
-			// as we only support simple JSON path, we can assume to have only one result (or none, filtered out above)
+			// 仅支持简单 JSONPath，因此可以假定至多一个结果（无结果的情况上面已过滤）
 			value := results[0][0].Interface()
 			if customHeaders[i].Type == "string" {
 				if err := column.PrintResults(buf, []reflect.Value{reflect.ValueOf(value)}); err == nil {
@@ -138,6 +145,7 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 	return table, err
 }
 
+// cellForJSONValue 按列类型将 JSON 值转换为表格单元格值；类型不匹配时返回 nil。
 func cellForJSONValue(headerType string, value interface{}) interface{} {
 	if value == nil {
 		return nil

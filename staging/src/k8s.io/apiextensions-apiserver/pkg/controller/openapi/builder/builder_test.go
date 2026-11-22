@@ -35,6 +35,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestNewBuilder 验证内部构建器为 CRD 生成的 schema 与 list schema。
 func TestNewBuilder(t *testing.T) {
 	tests := []struct {
 		name string
@@ -44,8 +45,8 @@ func TestNewBuilder(t *testing.T) {
 		wantedSchema      string
 		wantedItemsSchema string
 
-		v2                bool // produce OpenAPIv2
-		includeSelectable bool // include selectable fields
+		v2                bool // 是否生成 OpenAPIv2
+		includeSelectable bool // 是否包含可选字段
 		version           string
 	}{
 		{
@@ -213,6 +214,7 @@ func TestNewBuilder(t *testing.T) {
 				if errs := structuralschema.ValidateStructural(nil, schema); len(errs) > 0 {
 					t.Fatalf("structural schema validation error: %v", errs.ToAggregate())
 				}
+				// 展开复用定义，否则构建器看到的仍是未折叠结构
 				schema = schema.Unfold()
 			}
 
@@ -248,7 +250,7 @@ func TestNewBuilder(t *testing.T) {
 				t.Fatalf("unexpected properties, got: %s, expected: %s", gotProperties.List(), wantedProperties.List())
 			}
 
-			// wipe out TypeMeta/ObjectMeta content, with those many lines of descriptions. We trust that they match here.
+			// 抹掉 TypeMeta/ObjectMeta 的内容及其大段描述，这里信任这些字段一致。
 			for _, metaField := range []string{"kind", "apiVersion", "metadata"} {
 				if _, found := got.schema.Properties["kind"]; found {
 					prop := got.schema.Properties[metaField]
@@ -285,6 +287,7 @@ func TestNewBuilder(t *testing.T) {
 	}
 }
 
+// TestCRDRouteParameterBuilder 验证命名空间/集群作用域的 CRD 路由参数与受支持动作。
 func TestCRDRouteParameterBuilder(t *testing.T) {
 	testCRDKind := "Foo"
 	testCRDGroup := "foo-group"
@@ -392,6 +395,7 @@ func TestCRDRouteParameterBuilder(t *testing.T) {
 	}
 }
 
+// properties 返回 schema 属性名的集合，用于比较属性键而忽略值。
 func properties(p map[string]spec.Schema) sets.String {
 	ret := sets.NewString()
 	for k := range p {
@@ -400,11 +404,13 @@ func properties(p map[string]spec.Schema) sets.String {
 	return ret
 }
 
+// schemaDiff 比较两个 schema 并返回差异。
 func schemaDiff(a, b *spec.Schema) string {
-	// This option construct allows diffing all fields, even unexported ones.
+	// 该选项允许比较所有字段，包括未导出字段。
 	return cmp.Diff(a, b, cmp.Exporter(func(reflect.Type) bool { return true }))
 }
 
+// TestBuildOpenAPIV2 验证 BuildOpenAPIV2 的 schema 生成及 selectable fields 行为。
 func TestBuildOpenAPIV2(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -481,7 +487,7 @@ func TestBuildOpenAPIV2(t *testing.T) {
 				validation.OpenAPIV3Schema.XPreserveUnknownFields = ptr.To(true)
 			}
 
-			// TODO: mostly copied from the test above. reuse code to cleanup
+			// TODO: 大部分复制自上一个测试，重构以消除重复
 			got, err := BuildOpenAPIV2(&apiextensionsv1.CustomResourceDefinition{
 				Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 					Group: "bar.k8s.io",
@@ -517,7 +523,7 @@ func TestBuildOpenAPIV2(t *testing.T) {
 				t.Fatalf("unexpected properties, got: %s, expected: %s", gotProperties.List(), wantedProperties.List())
 			}
 
-			// wipe out TypeMeta/ObjectMeta content, with those many lines of descriptions. We trust that they match here.
+			// 抹掉 TypeMeta/ObjectMeta 的内容及其大段描述，这里信任这些字段一致。
 			for _, metaField := range []string{"kind", "apiVersion", "metadata"} {
 				if _, found := gotSchema.Properties["kind"]; found {
 					prop := gotSchema.Properties[metaField]
@@ -533,6 +539,7 @@ func TestBuildOpenAPIV2(t *testing.T) {
 	}
 }
 
+// TestBuildOpenAPIV3 验证 BuildOpenAPIV3 的 schema 生成、nullable/default 及引用前缀。
 func TestBuildOpenAPIV3(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -630,7 +637,7 @@ func TestBuildOpenAPIV3(t *testing.T) {
 				t.Fatalf("unexpected properties, got: %s, expected: %s", gotProperties.List(), wantedProperties.List())
 			}
 
-			// wipe out TypeMeta/ObjectMeta content, with those many lines of descriptions. We trust that they match here.
+			// 抹掉 TypeMeta/ObjectMeta 的内容及其大段描述，这里信任这些字段一致。
 			for _, metaField := range []string{"kind", "apiVersion", "metadata"} {
 				if _, found := gotSchema.Properties["kind"]; found {
 					prop := gotSchema.Properties[metaField]
@@ -646,16 +653,13 @@ func TestBuildOpenAPIV3(t *testing.T) {
 	}
 }
 
-// Tests that getDefinition's ref building function respects the v2 flag for v2
-// vs v3 operations
-// This bug did not surface since we only so far look up types which do not make
-// use of refs
+// TestGetDefinitionRefPrefix 测试 getDefinition 的引用构造在 v2 与 v3 操作下是否正确使用对应前缀。
+// 此前未暴露该 bug，是因为至今只查询不使用引用的类型。
 func TestGetDefinitionRefPrefix(t *testing.T) {
-	// A bug was triggered by generating the cached definition map for one version,
-	// but then performing a looking on another. The map is generated upon
-	// the first call to getDefinition
+	// 该 bug 在为某一版本生成缓存定义映射后，又在另一版本上查找时触发；
+	// 映射在首次调用 getDefinition 时生成。
 
-	// ManagedFieldsEntry's Time field is known to use arefs
+	// ManagedFieldsEntry 的 Time 字段已知会使用引用
 	managedFieldsTypePath := "io.k8s.apimachinery.pkg.apis.meta.v1.ManagedFieldsEntry"
 
 	v2Ref := getDefinition(managedFieldsTypePath, true).SchemaProps.Properties["time"].SchemaProps.Ref

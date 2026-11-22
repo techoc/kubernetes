@@ -16,7 +16,9 @@ limitations under the License.
 
 package v1beta1
 
-// TODO: Update this after a tag is created for interface fields in DeepCopy
+// TODO: 当接口字段的 DeepCopy 标签创建后更新此实现
+// DeepCopy 返回 JSONSchemaProps 的深拷贝；为 nil 时返回 nil。
+// 该文件是手写实现，用于覆盖早期生成器无法处理的接口字段。
 func (in *JSONSchemaProps) DeepCopy() *JSONSchemaProps {
 	if in == nil {
 		return nil

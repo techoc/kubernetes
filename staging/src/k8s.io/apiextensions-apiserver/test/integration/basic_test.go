@@ -38,6 +38,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestServerUp 验证默认配置的 apiserver 能正常启动并关闭。
 func TestServerUp(t *testing.T) {
 	tearDown, _, _, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -46,6 +47,7 @@ func TestServerUp(t *testing.T) {
 	defer tearDown()
 }
 
+// TestNamespaceScopedCRUD 对命名空间级 CR 执行 CRUD 与字段选择器测试。
 func TestNamespaceScopedCRUD(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -65,6 +67,7 @@ func TestNamespaceScopedCRUD(t *testing.T) {
 	testFieldSelector(t, ns, noxuDefinition, dynamicClient)
 }
 
+// TestClusterScopedCRUD 对集群级 CR 执行 CRUD 与字段选择器测试。
 func TestClusterScopedCRUD(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -83,6 +86,8 @@ func TestClusterScopedCRUD(t *testing.T) {
 	testFieldSelector(t, ns, noxuDefinition, dynamicClient)
 }
 
+// testSimpleCRUD 逐个版本验证 CR 的创建、读取、列表、更新、删除与 watch 事件。
+// 未 served 的版本应以 NotFound 失败。
 func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.CustomResourceDefinition, dynamicClient dynamic.Interface) {
 	noxuResourceClients := map[string]dynamic.ResourceInterface{}
 	noxuWatchs := map[string]watch.Interface{}
@@ -136,7 +141,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 				if err != nil {
 					t.Fatal(err)
 				}
-				// it should have a UUID
+				// 每个对象都应有 UID
 				if len(createdObjectMeta.GetUID()) == 0 {
 					t.Errorf("missing uuid: %#v", watchEvent.Object)
 				}
@@ -158,9 +163,9 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 			}
 		}
 
-		// Check get for all versions
+		// 对所有版本执行 GET
 		for version2, noxuResourceClient2 := range noxuResourceClients {
-			// Get test
+			// GET 测试
 			gottenNoxuInstance, err := noxuResourceClient2.Get(context.TODO(), "foo", metav1.GetOptions{})
 
 			if disabledVersions[version2] {
@@ -178,7 +183,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 				}
 			}
 
-			// List test
+			// LIST 测试
 			listWithItem, err := noxuResourceClient2.List(context.TODO(), metav1.ListOptions{})
 			if disabledVersions[version2] {
 				if !errors.IsNotFound(err) {
@@ -201,7 +206,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 			}
 		}
 
-		// Update test
+		// UPDATE 测试
 		for version2, noxuResourceClient2 := range noxuResourceClients {
 			var gottenNoxuInstance *unstructured.Unstructured
 			if disabledVersions[version2] {
@@ -252,7 +257,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 							break
 						}
 
-						// it should have a UUID
+						// 每个对象都应有 UID
 						createdMetadata, err := meta.Accessor(createdNoxuInstance)
 						if err != nil {
 							t.Fatal(err)
@@ -268,7 +273,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 			}
 		}
 
-		// Delete test
+		// DELETE 测试
 		if err := noxuResourceClient.Delete(context.TODO(), "foo", *metav1.NewDeleteOptions(0)); err != nil {
 			t.Fatal(err)
 		}
@@ -298,7 +303,7 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 					break
 				}
 
-				// it should have a UUID
+				// 每个对象都应有 UID
 				createdMetadata, err := meta.Accessor(createdNoxuInstance)
 				if err != nil {
 					t.Fatal(err)
@@ -312,13 +317,14 @@ func testSimpleCRUD(t *testing.T, ns string, noxuDefinition *apiextensionsv1.Cus
 			}
 		}
 
-		// Delete test
+		// DELETE 测试
 		if err := noxuResourceClient.DeleteCollection(context.TODO(), *metav1.NewDeleteOptions(0), metav1.ListOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
+// TestInvalidCRUD 验证空对象与缺少 body 的对象创建时分别返回 BadRequest 与 Invalid。
 func TestInvalidCRUD(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -360,12 +366,12 @@ func TestInvalidCRUD(t *testing.T) {
 	}()
 
 	for version, noxuResourceClient := range noxuResourceClients {
-		// Case when typeless Unstructured object is passed
+		// 传入没有类型信息的 Unstructured 对象
 		typelessInstance := &unstructured.Unstructured{}
 		if _, err := noxuResourceClient.Create(context.TODO(), typelessInstance, metav1.CreateOptions{}); !errors.IsBadRequest(err) {
 			t.Errorf("expected badrequest for submitting empty object, got %#v", err)
 		}
-		// Case when apiVersion and Kind would be set up from GVK, but no other objects are present
+		// 仅根据 GVK 填充 apiVersion/kind，对象中没有任何其他内容
 		typedNoBodyInstance := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "mygroup.example.com/" + version,
@@ -378,6 +384,7 @@ func TestInvalidCRUD(t *testing.T) {
 	}
 }
 
+// testFieldSelector 验证 metadata.name 字段选择器同时作用于 list 与 watch。
 func testFieldSelector(t *testing.T, ns string, noxuDefinition *apiextensionsv1.CustomResourceDefinition, dynamicClient dynamic.Interface) {
 	noxuResourceClient := newNamespacedCustomResourceClient(ns, dynamicClient, noxuDefinition)
 	initialList, err := noxuResourceClient.List(context.TODO(), metav1.ListOptions{})
@@ -433,7 +440,7 @@ func testFieldSelector(t *testing.T, ns string, noxuDefinition *apiextensionsv1.
 		if err != nil {
 			t.Fatal(err)
 		}
-		// it should have a UUID
+		// 每个对象都应有 UID
 		if len(createdObjectMeta.GetUID()) == 0 {
 			t.Errorf("missing uuid: %#v", watchEvent.Object)
 		}
@@ -502,7 +509,7 @@ func testFieldSelector(t *testing.T, ns string, noxuDefinition *apiextensionsv1.
 		if err != nil {
 			t.Fatal(err)
 		}
-		// it should have a UUID
+		// 每个对象都应有 UID
 		createdObjectMeta, err := meta.Accessor(createdNoxuInstanceFoo)
 		if err != nil {
 			t.Fatal(err)
@@ -522,6 +529,7 @@ func testFieldSelector(t *testing.T, ns string, noxuDefinition *apiextensionsv1.
 	}
 }
 
+// TestDiscovery 验证 CRD 在 discovery 中的资源名、kind、shortNames、verbs 与分类。
 func TestDiscovery(t *testing.T) {
 	group := "mygroup.example.com"
 	version := "v1beta1"
@@ -538,7 +546,7 @@ func TestDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// check whether it shows up in discovery properly
+	// 确认它正确出现在 discovery 中
 	resources, err := apiExtensionClient.Discovery().ServerResourcesForGroupVersion(group + "/" + version)
 	if err != nil {
 		t.Fatal(err)
@@ -572,6 +580,7 @@ func TestDiscovery(t *testing.T) {
 	}
 }
 
+// TestNoNamespaceReject 验证命名空间级 CR 在未指定 namespace 时创建失败。
 func TestNoNamespaceReject(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -611,6 +620,7 @@ func TestNoNamespaceReject(t *testing.T) {
 	}
 }
 
+// TestSameNameDiffNamespace 验证不同命名空间可以存在同名 CR，互不影响。
 func TestSameNameDiffNamespace(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -631,6 +641,7 @@ func TestSameNameDiffNamespace(t *testing.T) {
 
 }
 
+// TestPreserveInt 验证编码/解码往返后 int64 不会被转成 float64。
 func TestPreserveInt(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -663,7 +674,7 @@ func TestPreserveInt(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check if int is preserved.
+	// 确认 int 未被转换成 float。
 	unstructuredObj := gottenNoxuInstance.(*unstructured.Unstructured).Object
 	num := unstructuredObj["num"].(map[string]interface{})
 	num1 := num["num1"].(int64)
@@ -673,6 +684,7 @@ func TestPreserveInt(t *testing.T) {
 	}
 }
 
+// TestPatch 验证 merge patch 的更新语义，以及 no-op/空 patch 不递增 resourceVersion。
 func TestPatch(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -711,23 +723,23 @@ func TestPatch(t *testing.T) {
 		t.Fatalf("metadata.resourceVersion not found")
 	}
 
-	// a patch with no change
+	// 内容不变的 patch
 	t.Logf("Patching .num.num2 again to 999")
 	patchedNoxuInstance, err = noxuNamespacedResourceClient.Patch(context.TODO(), "foo", types.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// make sure no-op patch does not increment resourceVersion
+	// 确认 no-op patch 不会递增 resourceVersion
 	expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "num", "num2")
 	expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
 
-	// an empty patch
+	// 空 patch
 	t.Logf("Applying empty patch")
 	patchedNoxuInstance, err = noxuNamespacedResourceClient.Patch(context.TODO(), "foo", types.MergePatchType, []byte(`{}`), metav1.PatchOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// an empty patch is a no-op patch. make sure it does not increment resourceVersion
+	// 空 patch 等同于 no-op patch，确认它不会递增 resourceVersion
 	expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "num", "num2")
 	expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
 
@@ -741,7 +753,7 @@ func TestPatch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check if int is preserved.
+	// 确认 int 未被转换成 float。
 	unstructuredObj := gottenNoxuInstance.(*unstructured.Unstructured).Object
 	num := unstructuredObj["num"].(map[string]interface{})
 	num1 := num["num1"].(int64)
@@ -751,6 +763,8 @@ func TestPatch(t *testing.T) {
 	}
 }
 
+// TestCrossNamespaceListWatch 验证集群范围 list/watch 能跨命名空间看到所有 CR，
+// 而命名空间级 watch 只看得到本命名空间的事件。
 func TestCrossNamespaceListWatch(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -857,6 +871,7 @@ func TestCrossNamespaceListWatch(t *testing.T) {
 	checkNamespacesWatchHelper(t, ns2, noxuNamespacesWatch2)
 }
 
+// createInstanceWithNamespaceHelper 在指定命名空间创建 noxu 实例，失败即终止测试。
 func createInstanceWithNamespaceHelper(t *testing.T, ns string, name string, noxuNamespacedResourceClient dynamic.ResourceInterface, noxuDefinition *apiextensionsv1.CustomResourceDefinition) *unstructured.Unstructured {
 	createdInstance, err := instantiateCustomResource(t, fixtures.NewNoxuInstance(ns, name), noxuNamespacedResourceClient, noxuDefinition)
 	if err != nil {
@@ -865,12 +880,13 @@ func createInstanceWithNamespaceHelper(t *testing.T, ns string, name string, nox
 	return createdInstance
 }
 
+// checkNamespacesWatchHelper 验证命名空间级 watch 只收到本命名空间的一条 Added 事件。
 func checkNamespacesWatchHelper(t *testing.T, ns string, namespacedwatch watch.Interface) {
 	namespacedAddEvent := 0
 	for namespacedAddEvent < 2 {
 		select {
 		case watchEvent := <-namespacedwatch.ResultChan():
-			// Check that the namespaced watch only has one result
+			// 命名空间级 watch 只应收到本命名空间的结果
 			if namespacedAddEvent > 0 {
 				t.Fatalf("extra watch event")
 			}
@@ -893,6 +909,8 @@ func checkNamespacesWatchHelper(t *testing.T, ns string, namespacedwatch watch.I
 	}
 }
 
+// TestNameConflict 验证同一 group 内 shortNames 冲突时 CRD 报 NameConflict，
+// 删除冲突方后名称被接受。
 func TestNameConflict(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -912,7 +930,7 @@ func TestNameConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A NameConflict occurs
+	// 出现 NameConflict
 	err = wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), noxu2Definition.Name, metav1.GetOptions{})
 		if err != nil {
@@ -935,7 +953,7 @@ func TestNameConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Names are now accepted
+	// 现在名称被接受
 	err = wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), noxu2Definition.Name, metav1.GetOptions{})
 		if err != nil {
@@ -954,6 +972,7 @@ func TestNameConflict(t *testing.T) {
 	}
 }
 
+// TestStatusGetAndPatch 验证 CRD/status 子资源支持 GET 与 PATCH，而不是返回 405。
 func TestStatusGetAndPatch(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -967,7 +986,7 @@ func TestStatusGetAndPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// make sure we don't get 405 Method Not Allowed from Getting CRD/status subresource
+	// 确认 GET CRD/status 子资源不会返回 405 Method Not Allowed
 	result := &apiextensionsv1.CustomResourceDefinition{}
 	err = apiExtensionClient.ApiextensionsV1().RESTClient().Get().
 		Resource("customresourcedefinitions").
@@ -979,7 +998,7 @@ func TestStatusGetAndPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// make sure we don't get 405 Method Not Allowed from Patching CRD/status subresource
+	// 确认 PATCH CRD/status 子资源不会返回 405 Method Not Allowed
 	_, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().
 		Patch(context.TODO(), noxuDefinition.Name, types.StrategicMergePatchType,
 			[]byte(fmt.Sprintf(`{"labels":{"test-label":"dummy"}}`)), metav1.PatchOptions{},
@@ -989,6 +1008,7 @@ func TestStatusGetAndPatch(t *testing.T) {
 	}
 }
 
+// expectInt64 断言路径 pth 处的值为 int64。
 func expectInt64(t *testing.T, obj map[string]interface{}, value int64, pth ...string) {
 	if v, found, err := unstructured.NestedInt64(obj, pth...); err != nil {
 		t.Fatalf("failed to access .%s: %v", strings.Join(pth, "."), err)
@@ -998,6 +1018,8 @@ func expectInt64(t *testing.T, obj map[string]interface{}, value int64, pth ...s
 		t.Fatalf("wanted %d at .%s, got %d", value, strings.Join(pth, "."), v)
 	}
 }
+
+// expectString 断言路径 pth 处的值为指定字符串。
 func expectString(t *testing.T, obj map[string]interface{}, value string, pth ...string) {
 	if v, found, err := unstructured.NestedString(obj, pth...); err != nil {
 		t.Fatalf("failed to access .%s: %v", strings.Join(pth, "."), err)

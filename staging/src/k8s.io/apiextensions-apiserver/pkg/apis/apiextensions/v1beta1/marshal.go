@@ -27,9 +27,10 @@ import (
 var jsTrue = []byte("true")
 var jsFalse = []byte("false")
 
-// The CBOR parsing related constants and functions below are not exported so they can be
-// easily removed at a future date when the CBOR library provides equivalent functionality.
+// 以下与 CBOR 解析相关的常量和函数不导出，
+// 以便将来 CBOR 库提供等价功能时能方便地移除。
 
+// cborMajorType 是 CBOR 数据项的主类型（高 3 位）。
 type cborMajorType int
 
 const (
@@ -50,10 +51,12 @@ const (
 	cborNullValue  = 0xf6
 )
 
+// cborType 从首字节提取 CBOR 主类型。
 func cborType(b byte) cborMajorType {
 	return cborMajorType(b >> 5)
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrBool 序列化为内联 schema 或布尔值。
 func (s JSONSchemaPropsOrBool) MarshalJSON() ([]byte, error) {
 	if s.Schema != nil {
 		return json.Marshal(s.Schema)
@@ -65,6 +68,7 @@ func (s JSONSchemaPropsOrBool) MarshalJSON() ([]byte, error) {
 	return jsTrue, nil
 }
 
+// UnmarshalJSON 根据 JSON 对象的形态解析出 schema 或布尔值。
 func (s *JSONSchemaPropsOrBool) UnmarshalJSON(data []byte) error {
 	var nw JSONSchemaPropsOrBool
 	switch {
@@ -87,6 +91,7 @@ func (s *JSONSchemaPropsOrBool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrBool 序列化为内联 schema 或布尔值。
 func (s JSONSchemaPropsOrBool) MarshalCBOR() ([]byte, error) {
 	if s.Schema != nil {
 		return cbor.Marshal(s.Schema)
@@ -94,10 +99,11 @@ func (s JSONSchemaPropsOrBool) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(s.Allows)
 }
 
+// UnmarshalCBOR 根据 CBOR 数据项的形态解析出 schema 或布尔值。
 func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 	switch {
 	case len(data) == 0:
-		// ideally we would avoid modifying *s here, but we are matching the behavior of UnmarshalJSON
+		// 这里本可以避免修改 *s，但为与 UnmarshalJSON 的行为保持一致而为之。
 		*s = JSONSchemaPropsOrBool{}
 		return nil
 	case cborType(data[0]) == cborMap:
@@ -114,12 +120,13 @@ func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrBool{Allows: false}
 		return nil
 	default:
-		// ideally, this case would not also capture a null input value,
-		// but we are matching the behavior of the UnmarshalJSON
+		// 理想情况下此分支不应同时匹配 null 输入，
+		// 但这里为与 UnmarshalJSON 的行为保持一致。
 		return errors.New("boolean or JSON schema expected")
 	}
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrStringArray 序列化为属性名列表或内联 schema。
 func (s JSONSchemaPropsOrStringArray) MarshalJSON() ([]byte, error) {
 	if len(s.Property) > 0 {
 		return json.Marshal(s.Property)
@@ -130,6 +137,7 @@ func (s JSONSchemaPropsOrStringArray) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
+// UnmarshalJSON 根据 JSON 对象的形态解析出属性名列表或 schema。
 func (s *JSONSchemaPropsOrStringArray) UnmarshalJSON(data []byte) error {
 	var first byte
 	if len(data) > 1 {
@@ -152,6 +160,7 @@ func (s *JSONSchemaPropsOrStringArray) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrStringArray 序列化为属性名列表或内联 schema。
 func (s JSONSchemaPropsOrStringArray) MarshalCBOR() ([]byte, error) {
 	if len(s.Property) > 0 {
 		return cbor.Marshal(s.Property)
@@ -162,6 +171,7 @@ func (s JSONSchemaPropsOrStringArray) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(nil)
 }
 
+// UnmarshalCBOR 根据 CBOR 数据项的形态解析出属性名列表或 schema。
 func (s *JSONSchemaPropsOrStringArray) UnmarshalCBOR(data []byte) error {
 	if len(data) > 0 && cborType(data[0]) == cborArray {
 		var a []string
@@ -179,13 +189,13 @@ func (s *JSONSchemaPropsOrStringArray) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrStringArray{Schema: &p}
 		return nil
 	}
-	// At this point we either have: empty data, a null value, or an
-	// unexpected type. In order to match the behavior of the existing
-	// UnmarshalJSON, no error is returned and *s is overwritten here.
+	// 此时数据要么为空、要么是 null、要么是意外类型。为了与既有
+	// UnmarshalJSON 的行为保持一致，不返回错误，而是直接覆盖 *s。
 	*s = JSONSchemaPropsOrStringArray{}
 	return nil
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrArray 序列化为 schema 列表或单个内联 schema。
 func (s JSONSchemaPropsOrArray) MarshalJSON() ([]byte, error) {
 	if len(s.JSONSchemas) > 0 {
 		return json.Marshal(s.JSONSchemas)
@@ -193,6 +203,7 @@ func (s JSONSchemaPropsOrArray) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Schema)
 }
 
+// UnmarshalJSON 根据 JSON 对象的形态解析出 schema 列表或单个 schema。
 func (s *JSONSchemaPropsOrArray) UnmarshalJSON(data []byte) error {
 	var nw JSONSchemaPropsOrArray
 	var first byte
@@ -215,6 +226,7 @@ func (s *JSONSchemaPropsOrArray) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrArray 序列化为 schema 列表或单个内联 schema。
 func (s JSONSchemaPropsOrArray) MarshalCBOR() ([]byte, error) {
 	if len(s.JSONSchemas) > 0 {
 		return cbor.Marshal(s.JSONSchemas)
@@ -222,6 +234,7 @@ func (s JSONSchemaPropsOrArray) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(s.Schema)
 }
 
+// UnmarshalCBOR 根据 CBOR 数据项的形态解析出 schema 列表或单个 schema。
 func (s *JSONSchemaPropsOrArray) UnmarshalCBOR(data []byte) error {
 	if len(data) > 0 && cborType(data[0]) == cborMap {
 		var p JSONSchemaProps
@@ -239,13 +252,13 @@ func (s *JSONSchemaPropsOrArray) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrArray{JSONSchemas: a}
 		return nil
 	}
-	// At this point we either have: empty data, a null value, or an
-	// unexpected type. In order to match the behavior of the existing
-	// UnmarshalJSON, no error is returned and *s is overwritten here.
+	// 此时数据要么为空、要么是 null、要么是意外类型。为了与既有
+	// UnmarshalJSON 的行为保持一致，不返回错误，而是直接覆盖 *s。
 	*s = JSONSchemaPropsOrArray{}
 	return nil
 }
 
+// MarshalJSON 返回原始 JSON 字节，空值序列化为 null。
 func (s JSON) MarshalJSON() ([]byte, error) {
 	if len(s.Raw) > 0 {
 		return s.Raw, nil
@@ -254,6 +267,7 @@ func (s JSON) MarshalJSON() ([]byte, error) {
 
 }
 
+// UnmarshalJSON 保存原始 JSON 字节；复用底层数组以避免额外分配。
 func (s *JSON) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && !bytes.Equal(data, nullLiteral) {
 		s.Raw = append(s.Raw[0:0], data...)
@@ -261,11 +275,12 @@ func (s *JSON) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将原始 JSON 转码为 CBOR。
 func (s JSON) MarshalCBOR() ([]byte, error) {
-	// Note that non-semantic whitespace is lost during the transcoding performed here.
-	// We do not forsee this to be a problem given the current known uses of this type.
-	// Other limitations that arise when roundtripping JSON via dynamic clients also apply
-	// here, for example: insignificant whitespace handling, number handling, and map key ordering.
+	// 注意：此处转码会丢失非语义的空白字符。
+	// 鉴于该类型目前已知的用途，我们不认为这会成为问题。
+	// 通过 dynamic client 往返 JSON 时的其他限制在这里同样适用，
+	// 例如：无意义空白处理、数字处理以及 map key 排序。
 	if len(s.Raw) == 0 {
 		return []byte{cborNullValue}, nil
 	}
@@ -276,6 +291,7 @@ func (s JSON) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(u)
 }
 
+// UnmarshalCBOR 将 CBOR 转码为原始 JSON 字节。
 func (s *JSON) UnmarshalCBOR(data []byte) error {
 	if len(data) == 0 || data[0] == cborNullValue {
 		return nil

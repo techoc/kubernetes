@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package listtype 校验 x-kubernetes-list-type 为 map/set 的数组是否满足唯一性约束。
 package listtype
 
 import (
@@ -23,8 +24,8 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 )
 
-// ValidateListSetsAndMaps validates that arrays with x-kubernetes-list-type "map" and "set" fulfill the uniqueness
-// invariants for the keys (maps) and whole elements (sets).
+// ValidateListSetsAndMaps 校验 x-kubernetes-list-type 为 "map" 与 "set" 的数组
+// 是否满足唯一性不变量：map 按 key 唯一，set 按整体元素唯一。
 func ValidateListSetsAndMaps(fldPath *field.Path, s *schema.Structural, obj map[string]interface{}) field.ErrorList {
 	if s == nil || obj == nil {
 		return nil
@@ -48,6 +49,7 @@ func ValidateListSetsAndMaps(fldPath *field.Path, s *schema.Structural, obj map[
 	return errs
 }
 
+// validationListSetAndMaps 按值的实际类型分派：数组走数组校验，对象则递归。
 func validationListSetAndMaps(fldPath *field.Path, s *schema.Structural, obj interface{}) field.ErrorList {
 	switch obj := obj.(type) {
 	case []interface{}:
@@ -58,6 +60,7 @@ func validationListSetAndMaps(fldPath *field.Path, s *schema.Structural, obj int
 	return nil
 }
 
+// validateListSetsAndMapsArray 校验数组自身的 list-type 约束，并递归校验各元素。
 func validateListSetsAndMapsArray(fldPath *field.Path, s *schema.Structural, obj []interface{}) field.ErrorList {
 	var errs field.ErrorList
 
@@ -75,7 +78,7 @@ func validateListSetsAndMapsArray(fldPath *field.Path, s *schema.Structural, obj
 		case "map":
 			errs = append(errs, validateListMap(fldPath, s, obj)...)
 		}
-		// if a case is ever added here then one should also be added to pkg/apiserver/schema/cel/values.go
+		// 若将来在此新增分支，需同步修改 pkg/apiserver/schema/cel/values.go
 	}
 
 	if s.Items != nil {
@@ -87,11 +90,10 @@ func validateListSetsAndMapsArray(fldPath *field.Path, s *schema.Structural, obj
 	return errs
 }
 
-// validateListSet validated uniqueness of unstructured objects (scalar and compound) and
-// returns the first non-unique appearance of items.
+// validateListSet 校验非结构化对象（标量与复合类型）的唯一性，返回所有重复项的下标。
 //
-// As a special case to distinguish undefined key and null values, we allow unspecifiedKeyValue and nullObjectValue
-// which are both handled like scalars with correct comparison by Golang.
+// 特殊处理：为区分“键未定义”与“值为 null”，允许 unspecifiedKeyValue 与 nullObjectValue，
+// 两者都会被 Golang 当作标量做正确的比较。
 func validateListSet(fldPath *field.Path, obj []interface{}) ([]int, *field.Error) {
 	if len(obj) <= 1 {
 		return nil, nil
@@ -103,6 +105,7 @@ func validateListSet(fldPath *field.Path, obj []interface{}) ([]int, *field.Erro
 	for i, x := range obj {
 		switch x.(type) {
 		case map[string]interface{}, []interface{}:
+			// 复合类型按 JSON 序列化结果判等，避免依赖 map 不可比较的语义。
 			bs, err := json.Marshal(x)
 			if err != nil {
 				return nil, field.Invalid(fldPath.Index(i), x, "internal error")
@@ -117,6 +120,7 @@ func validateListSet(fldPath *field.Path, obj []interface{}) ([]int, *field.Erro
 				}
 			}
 		default:
+			// 标量可直接作为 map 键判等。
 			if times, seen := seenScalars[x]; !seen {
 				seenScalars[x] = 1
 			} else {
@@ -131,8 +135,9 @@ func validateListSet(fldPath *field.Path, obj []interface{}) ([]int, *field.Erro
 	return nonUniqueIndices, nil
 }
 
+// validateListMap 校验 list-type 为 map 的数组：所有键字段组合必须唯一。
 func validateListMap(fldPath *field.Path, s *schema.Structural, obj []interface{}) field.ErrorList {
-	// only allow nil and objects
+	// 仅允许 nil 或对象
 	for i, x := range obj {
 		if _, ok := x.(map[string]interface{}); x != nil && !ok {
 			return field.ErrorList{field.Invalid(fldPath.Index(i), x, "must be an object for an array of list-type map")}
@@ -143,7 +148,7 @@ func validateListMap(fldPath *field.Path, s *schema.Structural, obj []interface{
 		return nil
 	}
 
-	// optimize simple case of one key
+	// 单 key 是常见情形，单独优化。
 	if len(s.XListMapKeys) == 1 {
 		type unspecifiedKeyValue struct{}
 
@@ -151,13 +156,13 @@ func validateListMap(fldPath *field.Path, s *schema.Structural, obj []interface{
 		keys := make([]interface{}, 0, len(obj))
 		for _, x := range obj {
 			if x == nil {
-				keys = append(keys, unspecifiedKeyValue{}) // nil object means unspecified key
+				keys = append(keys, unspecifiedKeyValue{}) // nil 对象意味着 key 未指定
 				continue
 			}
 
 			x := x.(map[string]interface{})
 
-			// undefined key?
+			// key 未定义？
 			key, ok := x[keyField]
 			if !ok {
 				keys = append(keys, unspecifiedKeyValue{})
@@ -185,7 +190,7 @@ func validateListMap(fldPath *field.Path, s *schema.Structural, obj []interface{
 		return errs
 	}
 
-	// multiple key fields
+	// 多 key 字段：把每个元素的 key 组合收集为一个对象再判重。
 	keys := make([]interface{}, 0, len(obj))
 	for _, x := range obj {
 		key := map[string]interface{}{}

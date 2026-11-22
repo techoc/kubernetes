@@ -25,8 +25,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Wide 是测试中使用的宽表输出选项值。
 const Wide metav1.IncludeObjectPolicy = "wide"
 
+// TestPrintCRD 验证 CRD 表格转换的输出列。
 func TestPrintCRD(t *testing.T) {
 	tests := []struct {
 		name   string

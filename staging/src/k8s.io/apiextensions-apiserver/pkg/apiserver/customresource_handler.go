@@ -86,8 +86,12 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// crdHandler serves the `/apis` endpoint.
-// This is registered as a filter so that it never collides with any explicitly registered endpoints
+// crdHandler 是 /apis 端点的核心请求处理器。
+// 作为 HTTP filter 注册，拦截所有 /apis 请求，动态路由到已注册的 CR 端点。
+// 当 CRD 创建/更新/删除时，自动安装/更新/卸载对应的 CR HTTP 路由。
+//
+// 使用 atomic.Value 存储 customStorage，因为读取远多于写入，
+// atomic.Value 的读取性能优于 sync.RWMutex。
 type crdHandler struct {
 	versionDiscoveryHandler *versionDiscoveryHandler
 	groupDiscoveryHandler   *groupDiscoveryHandler
@@ -164,8 +168,11 @@ type crdInfo struct {
 }
 
 // crdStorageMap goes from customresourcedefinition to its storage
+// crdStorageMap 映射 CRD 的 UID 到其存储信息（REST Storage、schema 等）。
 type crdStorageMap map[types.UID]*crdInfo
 
+// NewCustomResourceDefinitionHandler 创建 CRD 请求处理器。
+// 处理器监听 CRD 的增删改事件，动态安装/卸载 CR 的 HTTP 路由。
 func NewCustomResourceDefinitionHandler(
 	versionDiscoveryHandler *versionDiscoveryHandler,
 	groupDiscoveryHandler *groupDiscoveryHandler,

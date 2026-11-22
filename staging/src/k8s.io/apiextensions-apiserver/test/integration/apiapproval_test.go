@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestAPIApproval 验证受保护 group（sigs.k8s.io）的 CRD 会获得
+// KubernetesAPIApprovalPolicyConformant 条件，且未审批的普通 group 不会获得该条件。
 func TestAPIApproval(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -66,12 +68,13 @@ func TestAPIApproval(t *testing.T) {
 			},
 		}
 	}
-	// the unit tests cover all variations. We just need to be sure that we see the code being called
+	// 单元测试已覆盖各种变化；这里只需确认相应代码路径确实被调用
 	approvedKubeAPI := newSigKubeAPIFn("approved", "https://github.com/kubernetes/kubernetes/pull/79724")
 	approvedKubeAPI, err = fixtures.CreateNewV1CustomResourceDefinition(approvedKubeAPI, apiExtensionClient, dynamicClient)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 条件由控制器异步写入，需轮询等待其变为 True
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		approvedKubeAPI, getErr := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, approvedKubeAPI.Name, metav1.GetOptions{})
 		if getErr != nil {

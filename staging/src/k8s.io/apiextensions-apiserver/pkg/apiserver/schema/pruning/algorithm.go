@@ -22,10 +22,10 @@ import (
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 )
 
-// PruneWithOptions removes object fields in obj which are not specified in s. It skips TypeMeta
-// and ObjectMeta fields if XEmbeddedResource is set to true, or for the root if isResourceRoot=true,
-// i.e. it does not prune unknown metadata fields.
-// It returns the set of fields that it prunes if opts.TrackUnknownFieldPaths is true
+// PruneWithOptions 删除 obj 中未在 s 里声明的对象字段。若 XEmbeddedResource 为 true，
+// 或是 isResourceRoot=true 的根节点，则跳过 TypeMeta 和 ObjectMeta 字段，
+// 即不裁剪未知的 metadata 字段。
+// 当 opts.TrackUnknownFieldPaths 为 true 时，返回被裁剪字段的路径集合。
 func PruneWithOptions(obj interface{}, s *structuralschema.Structural, isResourceRoot bool, opts structuralschema.UnknownFieldPathOptions) []string {
 	if isResourceRoot {
 		if s == nil {
@@ -42,18 +42,20 @@ func PruneWithOptions(obj interface{}, s *structuralschema.Structural, isResourc
 	return opts.UnknownFieldPaths
 }
 
-// Prune is equivalent to
+// Prune 等价于
 // PruneWithOptions(obj, s, isResourceRoot, structuralschema.UnknownFieldPathOptions{})
 func Prune(obj interface{}, s *structuralschema.Structural, isResourceRoot bool) {
 	PruneWithOptions(obj, s, isResourceRoot, structuralschema.UnknownFieldPathOptions{})
 }
 
+// metaFields 是内嵌资源必须保留的 TypeMeta/ObjectMeta 字段。
 var metaFields = map[string]bool{
 	"apiVersion": true,
 	"kind":       true,
 	"metadata":   true,
 }
 
+// prune 递归裁剪 x，并在进入子节点时维护 ParentPath 以便记录未知字段路径。
 func prune(x interface{}, s *structuralschema.Structural, opts *structuralschema.UnknownFieldPathOptions) {
 	if s != nil && s.XPreserveUnknownFields {
 		skipPrune(x, s, opts)
@@ -62,6 +64,7 @@ func prune(x interface{}, s *structuralschema.Structural, opts *structuralschema
 
 	origPathLen := len(opts.ParentPath)
 	defer func() {
+		// 递归返回时恢复路径长度，兄弟字段才不会继承错误的前缀。
 		opts.ParentPath = opts.ParentPath[:origPathLen]
 	}()
 	switch x := x.(type) {
@@ -87,6 +90,7 @@ func prune(x interface{}, s *structuralschema.Structural, opts *structuralschema
 				prune(v, s.AdditionalProperties.Structural, opts)
 				opts.ParentPath = opts.ParentPath[:origPathLen]
 			} else {
+				// 根路径下的 metadata 由 API 服务器统一处理，不视为未知字段。
 				if !metaFields[k] || len(opts.ParentPath) > 0 {
 					opts.RecordUnknownField(k)
 				}
@@ -108,16 +112,19 @@ func prune(x interface{}, s *structuralschema.Structural, opts *structuralschema
 			opts.ParentPath = opts.ParentPath[:origPathLen]
 		}
 	default:
-		// scalars, do nothing
+		// 标量无需处理
 	}
 }
 
+// skipPrune 在允许保留未知字段时递归下探：只对 schema 中已知的属性继续裁剪，
+// 未知字段原样保留。
 func skipPrune(x interface{}, s *structuralschema.Structural, opts *structuralschema.UnknownFieldPathOptions) {
 	if s == nil {
 		return
 	}
 	origPathLen := len(opts.ParentPath)
 	defer func() {
+		// 递归返回时恢复路径长度，兄弟字段才不会继承错误的前缀。
 		opts.ParentPath = opts.ParentPath[:origPathLen]
 	}()
 
@@ -144,6 +151,6 @@ func skipPrune(x interface{}, s *structuralschema.Structural, opts *structuralsc
 			opts.ParentPath = opts.ParentPath[:origPathLen]
 		}
 	default:
-		// scalars, do nothing
+		// 标量无需处理
 	}
 }

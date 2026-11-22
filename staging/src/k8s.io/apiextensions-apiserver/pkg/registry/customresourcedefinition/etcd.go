@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package customresourcedefinition 实现 CRD 的 REST Storage。
+// 负责 CRD 的 CRUD 操作、删除时的 finalizer 添加、
+// 以及 Table 转换（kubectl get 的输出格式）。
 package customresourcedefinition
 
 import (
@@ -34,12 +37,12 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// rest implements a RESTStorage for API services against etcd
+// REST 是 CRD 的 etcd 存储实现，封装了通用 registry store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against API services.
+// NewREST 创建 CRD 的 REST Storage，配置策略、存储和表转换器。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	strategy := NewStrategy(scheme)
 
@@ -80,7 +83,10 @@ func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }
 
-// Delete adds the CRD finalizer to the list
+// Delete 覆盖默认删除行为，在删除 CRD 时：
+// 1. 确保 UID 前置条件（防止误删）
+// 2. 添加 finalizer 触发级联删除 CR 实例
+// 3. 调用底层存储删除
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	obj, err := r.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {

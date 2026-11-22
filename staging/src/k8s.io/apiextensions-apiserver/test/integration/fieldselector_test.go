@@ -52,6 +52,8 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 )
 
+// selectableFieldFixture 是带多个 selectableFields 的两版本 CRD；
+// v1beta1 把 v1 的 color 重命名为 hue，用于覆盖跨版本的字段选择。
 var selectableFieldFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "shirts.tests.example.com"},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -109,7 +111,7 @@ var selectableFieldFixture = &apiextensionsv1.CustomResourceDefinition{
 							"spec": {
 								Type: "object",
 								Properties: map[string]apiextensionsv1.JSONSchemaProps{
-									"hue": { // color is renamed as "hue" in this version
+									"hue": { // 该版本中 color 被重命名为 hue
 										Type: "string",
 									},
 									"quantity": {
@@ -186,6 +188,8 @@ spec:
   branded: false
 `
 
+// selectableFieldTestCase 描述一个字段选择器用例：期望命中的对象，
+// 以及在删除/更新后应观察到移除的对象。
 type selectableFieldTestCase struct {
 	version              string
 	fieldSelector        string
@@ -194,12 +198,15 @@ type selectableFieldTestCase struct {
 	expectError          string
 }
 
+// Name 返回用例名称，格式为 version/fieldSelector。
 func (sf selectableFieldTestCase) Name() string {
 	return fmt.Sprintf("%s/%s", sf.version, sf.fieldSelector)
 }
 
+// TestSelectableFields 验证 selectableFields 在 watch、list、deleteCollection 中的过滤行为，
+// 覆盖多个版本以及转换 webhook 的交互。
 func TestSelectableFields(t *testing.T) {
-	// start a conversion webhook
+	// 启动转换 webhook
 	handler := conversion.NewObjectConverterWebhookHandler(t, crdConverter)
 	upCh, handler := closeOnCall(handler)
 	whTearDown, webhookClientConfig, err := conversion.StartConversionWebhookServer(handler)
@@ -227,13 +234,13 @@ func TestSelectableFields(t *testing.T) {
 		}
 	}
 
-	// create the CRD
+	// 创建 CRD
 	crd, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// use the v1 client to create a resource, stored at v1
+	// 用 v1 客户端创建资源，存储版本为 v1
 	shirtv1Client := dynamicClient.Resource(schema.GroupVersionResource{Group: crd.Spec.Group, Version: crd.Spec.Versions[0].Name, Resource: crd.Spec.Names.Plural})
 	for _, instance := range []string{shirtInstance1} {
 		shirt := &unstructured.Unstructured{}
@@ -249,8 +256,8 @@ func TestSelectableFields(t *testing.T) {
 
 	shirtv1beta1Client := dynamicClient.Resource(schema.GroupVersionResource{Group: crd.Spec.Group, Version: crd.Spec.Versions[0].Name, Resource: crd.Spec.Names.Plural})
 
-	// read CRs with the v1beta1 client and
-	// wait until conversion webhook is called the first time
+	// 用 v1beta1 客户端读取 CR，
+	// 并等待转换 webhook 第一次被调用
 	if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*100, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		_, err := shirtv1beta1Client.Get(ctx, shirtInstance1, metav1.GetOptions{})
 		select {
@@ -279,13 +286,13 @@ func TestSelectableFields(t *testing.T) {
 				version:              version,
 				fieldSelector:        fmt.Sprintf("%s=blue", colorSelector),
 				expectedByName:       sets.New("shirt1", "shirt2"),
-				expectObserveRemoval: sets.New("shirt1", "shirt2"), // shirt 1 is deleted, shirt 2 is updated to not match the selector
+				expectObserveRemoval: sets.New("shirt1", "shirt2"), // shirt1 被删除，shirt2 更新后不再匹配选择器
 			},
 			{
 				version:              version,
 				fieldSelector:        "spec.quantity=2",
 				expectedByName:       sets.New("shirt1", "shirt3"),
-				expectObserveRemoval: sets.New("shirt1"), // shirt 1 is deleted
+				expectObserveRemoval: sets.New("shirt1"), // shirt1 被删除
 			},
 			{
 				version:        version,
@@ -301,13 +308,13 @@ func TestSelectableFields(t *testing.T) {
 				version:              version,
 				fieldSelector:        fmt.Sprintf("%s=blue,spec.quantity=2", colorSelector),
 				expectedByName:       sets.New("shirt1"),
-				expectObserveRemoval: sets.New("shirt1"), // shirt 1 is deleted
+				expectObserveRemoval: sets.New("shirt1"), // shirt1 被删除
 			},
 			{
 				version:              version,
 				fieldSelector:        fmt.Sprintf("%s=blue,spec.branded=false", colorSelector),
 				expectedByName:       sets.New("shirt2"),
-				expectObserveRemoval: sets.New("shirt2"), // shirt 2 is updated to not match the selector
+				expectObserveRemoval: sets.New("shirt2"), // shirt2 更新后不再匹配选择器
 			},
 			{
 				version:        version,
@@ -329,6 +336,8 @@ func TestSelectableFields(t *testing.T) {
 	})
 }
 
+// testWatch 验证字段选择器 watch：只收到匹配对象的 Added 事件；
+// 对象被删除或更新为不再匹配时，表现为 Deleted 事件。
 func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase, dynamicClient dynamic.Interface) {
 	clients := map[string]dynamic.NamespaceableResourceInterface{}
 	for _, version := range []string{"v1", "v1beta1"} {
@@ -360,7 +369,7 @@ func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase,
 
 	createTestResources(ctx, t, dynamicClient)
 
-	// after creating resources, delete one to make sure deletions can be observed
+	// 创建资源后删除一个，确认删除事件可被观察到
 	toDelete := "shirt1"
 	var gracePeriod int64 = 0
 	err := clients["v1"].Delete(ctx, toDelete, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
@@ -368,7 +377,7 @@ func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase,
 		t.Fatal(err)
 	}
 
-	// after creating resources, update the color of one CR to longer appear in a field selected watch.
+	// 创建资源后修改一个 CR 的颜色，使其不再命中按字段选择的 watch。
 	toUpdate := "shirt2"
 	u, err := clients["v1"].Get(ctx, toUpdate, metav1.GetOptions{})
 	if err != nil {
@@ -385,14 +394,13 @@ func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase,
 			added := sets.New[string]()
 			deleted := sets.New[string]()
 			if len(tc.expectError) > 0 {
-				return // No watch events to check for error cases. The failure happens at watch creation.
+				return // 错误用例没有 watch 事件可检查：失败发生在创建 watch 时。
 			}
 			w := watches[tc.Name()]
 			for {
 				select {
 				case <-time.After(100 * time.Millisecond):
-					// Check after a wait to ensure we don't eagerly assume
-					// the right watch events were received.
+					// 等待后再检查，避免过早认定已收到正确的 watch 事件。
 					if added.Equal(tc.expectedByName) && deleted.Equal(tc.expectObserveRemoval) {
 						return
 					} else {
@@ -409,7 +417,7 @@ func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase,
 					case watch.Deleted:
 						deleted.Insert(obj.GetName())
 					default:
-						// ignore everything else
+						// 其余事件忽略
 					}
 				}
 			}
@@ -417,6 +425,7 @@ func testWatch(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase,
 	}
 }
 
+// testList 验证 list 只返回匹配字段选择器的对象。
 func testList(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase, dynamicClient dynamic.Interface) {
 	clients := map[string]dynamic.NamespaceableResourceInterface{}
 	for _, version := range []string{"v1", "v1beta1"} {
@@ -453,6 +462,7 @@ func testList(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase, 
 	}
 }
 
+// testDeleteCollection 验证 deleteCollection 只删除匹配字段选择器的对象。
 func testDeleteCollection(ctx context.Context, t *testing.T, tcs []selectableFieldTestCase, dynamicClient dynamic.Interface) {
 	clients := map[string]dynamic.NamespaceableResourceInterface{}
 	for _, version := range []string{"v1", "v1beta1"} {
@@ -484,7 +494,7 @@ func testDeleteCollection(ctx context.Context, t *testing.T, tcs []selectableFie
 			}
 			removed := sets.New[string]("shirt1", "shirt2", "shirt3")
 			for _, i := range list.Items {
-				removed.Delete(i.GetName()) // drop remaining CRs from removed set
+				removed.Delete(i.GetName()) // 从已删除集合中移除仍然存在的 CR
 			}
 			if !removed.Equal(tc.expectedByName) {
 				t.Errorf("Expected %v but got %v", tc.expectedByName, removed)
@@ -493,6 +503,7 @@ func testDeleteCollection(ctx context.Context, t *testing.T, tcs []selectableFie
 	}
 }
 
+// TestFieldSelectorOpenAPI 验证 selectableFields 同时发布到 OpenAPI v3 与 v2。
 func TestFieldSelectorOpenAPI(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
@@ -520,7 +531,7 @@ func TestFieldSelectorOpenAPI(t *testing.T) {
 	t.Run("OpenAPIv3", func(t *testing.T) {
 		var spec *spec3.OpenAPI
 		err = wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
-			// wait for the CRD to be published.
+			// 等待 CRD 发布完成。
 			root := openapi3.NewRoot(discoveryClient.OpenAPIV3())
 			spec, err = root.GVSpec(schema.GroupVersion{Group: crd.Spec.Group, Version: "v1"})
 			return err == nil, nil
@@ -590,6 +601,8 @@ func TestFieldSelectorOpenAPI(t *testing.T) {
 	})
 }
 
+// TestFieldSelectorDropFields 验证 feature gate 关闭时，CRD 的 selectableFields
+// 在创建和更新时都会被丢弃。
 func TestFieldSelectorDropFields(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t, "--emulated-version=1.31", "--feature-gates=CustomResourceFieldSelectors=false")
@@ -671,6 +684,8 @@ func TestFieldSelectorDropFields(t *testing.T) {
 	}
 }
 
+// TestFieldSelectorDisablement 验证 feature gate 关闭后，
+// 已有 selectableFields 不再生效：请求被拒绝，OpenAPI 中也不再发布该扩展。
 func TestFieldSelectorDisablement(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tearDown, config, _, err := fixtures.StartDefaultServer(t, "--emulated-version=1.31")
@@ -695,7 +710,7 @@ func TestFieldSelectorDisablement(t *testing.T) {
 	}
 
 	crd := selectableFieldFixture.DeepCopy()
-	// Write a field that uses the feature while the feature gate is enabled
+	// 在 feature gate 开启时写入使用该特性的字段
 	t.Run("CustomResourceFieldSelectors", func(t *testing.T) {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CustomResourceFieldSelectors, true)
 		crd, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
@@ -705,7 +720,7 @@ func TestFieldSelectorDisablement(t *testing.T) {
 	})
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CustomResourceFieldSelectors, false)
 
-	// Now that the feature gate is disabled again, update the CRD to trigger an openAPI update
+	// feature gate 已再次关闭，更新 CRD 以触发一次 OpenAPI 更新
 	crd, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name, metav1.GetOptions{})
 	crd.Spec.Versions[0].SelectableFields = []apiextensionsv1.SelectableField{
 		{JSONPath: ".spec.color"},
@@ -774,7 +789,7 @@ func TestFieldSelectorDisablement(t *testing.T) {
 	t.Run("OpenAPIv3", func(t *testing.T) {
 		var spec *spec3.OpenAPI
 		err = wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
-			// wait for the CRD to be published.
+			// 等待 CRD 发布完成。
 			root := openapi3.NewRoot(discoveryClient.OpenAPIV3())
 			spec, err = root.GVSpec(schema.GroupVersion{Group: crd.Spec.Group, Version: "v1"})
 			if err != nil {
@@ -785,7 +800,7 @@ func TestFieldSelectorDisablement(t *testing.T) {
 				return false, nil
 			}
 			_, found := shirtSchema.VendorExtensible.Extensions["x-kubernetes-selectable-fields"]
-			return !found, nil // the feature gate is disabled, so selectable fields should be absent
+			return !found, nil // feature gate 已关闭，selectable fields 应不存在
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -818,6 +833,7 @@ func TestFieldSelectorDisablement(t *testing.T) {
 	})
 }
 
+// createTestResources 用 v1 客户端创建三个 shirt 实例。
 func createTestResources(ctx context.Context, t *testing.T, dynamicClient dynamic.Interface) {
 	v1Client := dynamicClient.Resource(schema.GroupVersionResource{Group: "tests.example.com", Version: "v1", Resource: "shirts"})
 	for _, instance := range []string{shirtInstance1, shirtInstance2, shirtInstance3} {
@@ -833,6 +849,7 @@ func createTestResources(ctx context.Context, t *testing.T, dynamicClient dynami
 	}
 }
 
+// deleteTestResources 删除所有 shirt 实例（grace period 为 0，立即删除）。
 func deleteTestResources(ctx context.Context, t *testing.T, dynamicClient dynamic.Interface) {
 	v1Client := dynamicClient.Resource(schema.GroupVersionResource{Group: "tests.example.com", Version: "v1", Resource: "shirts"})
 
@@ -843,6 +860,8 @@ func deleteTestResources(ctx context.Context, t *testing.T, dynamicClient dynami
 	}
 }
 
+// closeOnCall 包装 handler，并在第一次被调用时关闭返回的 channel，
+// 以便测试等待 webhook 真正生效。
 func closeOnCall(h http.Handler) (chan struct{}, http.Handler) {
 	ch := make(chan struct{})
 	once := sync.Once{}
@@ -854,6 +873,7 @@ func closeOnCall(h http.Handler) (chan struct{}, http.Handler) {
 	})
 }
 
+// crdConverter 是测试用转换 webhook：在 v1 与 v1beta1 之间把 spec.color 与 spec.hue 互转。
 func crdConverter(desiredAPIVersion string, obj runtime.RawExtension) (runtime.RawExtension, error) {
 	u := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := json.Unmarshal(obj.Raw, u); err != nil {

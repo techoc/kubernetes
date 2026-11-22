@@ -26,6 +26,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestConversionWebhookMetrics_ObserveConversionWebhookSuccess 验证成功路径会
+// 同时递增 webhook 请求计数器与耗时直方图，且标签为 success。
 func TestConversionWebhookMetrics_ObserveConversionWebhookSuccess(t *testing.T) {
 	type fields struct {
 		conversionWebhookRequest *metrics.CounterVec
@@ -84,6 +86,8 @@ func TestConversionWebhookMetrics_ObserveConversionWebhookSuccess(t *testing.T) 
 	}
 }
 
+// TestConversionWebhookMetrics_ObserveConversionWebhookFailure 验证各类失败
+// 会按 failure_type 标签分别记录，并累计到同一个耗时直方图。
 func TestConversionWebhookMetrics_ObserveConversionWebhookFailure(t *testing.T) {
 	type fields struct {
 		conversionWebhookRequest *metrics.CounterVec

@@ -26,7 +26,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// Outputs openAPI schema JSON containing the schema definitions in zz_generated.openapi.go.
+// main 把 zz_generated.openapi.go 中的 schema 定义序列化为 OpenAPI v2 JSON 写到 stdout。
+// 生成物供下游工具消费，失败时以非零码退出。
 func main() {
 	err := output()
 	if err != nil {
@@ -35,6 +36,7 @@ func main() {
 	}
 }
 
+// output 构造仅含 definitions 的 Swagger 2.0 文档并输出。
 func output() error {
 	refFunc := func(name string) spec.Ref {
 		return spec.MustCreateRef(fmt.Sprintf("#/definitions/%s", name))
@@ -42,11 +44,9 @@ func output() error {
 	defs := openapi.GetOpenAPIDefinitions(refFunc)
 	schemaDefs := make(map[string]spec.Schema, len(defs))
 	for k, v := range defs {
-		// Replace top-level schema with v2 if a v2 schema is embedded
-		// so that the output of this program is always in OpenAPI v2.
-		// This is done by looking up an extension that marks the embedded v2
-		// schema, and, if the v2 schema is found, make it the resulting schema for
-		// the type.
+		// 若 schema 内嵌了 v2 版本，则用内嵌版本替换顶层 schema，
+		// 保证本程序输出始终是 OpenAPI v2。做法是查找标记内嵌 v2 schema 的扩展；
+		// 找到后把该 v2 schema 作为此类型的最终 schema。
 		if schema, ok := v.Schema.Extensions[common.ExtensionV2Schema]; ok {
 			if v2Schema, isOpenAPISchema := schema.(spec.Schema); isOpenAPISchema {
 				schemaDefs[k] = v2Schema

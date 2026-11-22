@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 本包导入构建脚本所需的东西，迫使 `go mod` 把它们视为依赖。
 package tools
 
 import _ "k8s.io/code-generator"

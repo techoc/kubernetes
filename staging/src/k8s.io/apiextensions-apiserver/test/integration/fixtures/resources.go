@@ -39,10 +39,11 @@ import (
 )
 
 const (
+	// noxuInstanceNum 是用于测试 int64 边界的最大值。
 	noxuInstanceNum int64 = 9223372036854775807
 )
 
-// AllowAllSchema doesn't enforce any schema restrictions
+// AllowAllSchema 返回不施加任何 schema 限制的校验配置。
 func AllowAllSchema() *apiextensionsv1.CustomResourceValidation {
 	return &apiextensionsv1.CustomResourceValidation{
 		OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
@@ -52,9 +53,9 @@ func AllowAllSchema() *apiextensionsv1.CustomResourceValidation {
 	}
 }
 
-// NewRandomNameV1CustomResourceDefinition generates a CRD with random name to avoid name conflict in e2e tests
+// NewRandomNameV1CustomResourceDefinition 生成随机名称的 CRD，避免 e2e 测试中的名称冲突。
 func NewRandomNameV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
-	// ensure the singular doesn't end in an s for now
+	// 目前需要保证 singular 不以 s 结尾
 	gName := names.SimpleNameGenerator.GenerateName("foo") + "a"
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: gName + "s.mygroup.example.com"},
@@ -79,9 +80,9 @@ func NewRandomNameV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope
 	}
 }
 
-// NewRandomNameMultipleCustomResourceDefinition generates a multi version CRD with random name to avoid name conflict in e2e tests
+// NewRandomNameMultipleVersionCustomResourceDefinition 生成随机名称的多版本 CRD，避免 e2e 测试中的名称冲突。
 func NewRandomNameMultipleVersionCustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
-	// ensure the singular doesn't end in an s for now
+	// 目前需要保证 singular 不以 s 结尾
 	gName := names.SimpleNameGenerator.GenerateName("foo") + "a"
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: gName + "s.mygroup.example.com"},
@@ -118,7 +119,7 @@ func NewRandomNameMultipleVersionCustomResourceDefinition(scope apiextensionsv1.
 	}
 }
 
-// NewRandomNameV1CustomResourceDefinitionWithSchema generates a CRD with random name and the provided OpenAPIv3 schema to avoid name conflict in e2e tests
+// NewRandomNameV1CustomResourceDefinitionWithSchema 生成随机名称、使用给定 OpenAPIv3 schema 的 CRD，避免 e2e 测试中的名称冲突。
 func NewRandomNameV1CustomResourceDefinitionWithSchema(scope apiextensionsv1.ResourceScope, openAPIV3Schema *apiextensionsv1.JSONSchemaProps, enableStatus bool) *apiextensionsv1.CustomResourceDefinition {
 	crd := NewRandomNameV1CustomResourceDefinition(scope)
 	for i := range crd.Spec.Versions {
@@ -132,7 +133,7 @@ func NewRandomNameV1CustomResourceDefinitionWithSchema(scope apiextensionsv1.Res
 	return crd
 }
 
-// GetGroupVersionResourcesOfCustomResource gets all GroupVersionResources for custom resources of the CustomResourceDefinition.
+// GetGroupVersionResourcesOfCustomResource 获取该 CustomResourceDefinition 的自定义资源对应的全部 GroupVersionResource。
 func GetGroupVersionResourcesOfCustomResource(crd *apiextensionsv1.CustomResourceDefinition) []schema.GroupVersionResource {
 	var result []schema.GroupVersionResource
 	for _, v := range crd.Spec.Versions {
@@ -145,7 +146,7 @@ func GetGroupVersionResourcesOfCustomResource(crd *apiextensionsv1.CustomResourc
 	return result
 }
 
-// NewNoxuV1CustomResourceDefinition returns a WishIHadChosenNoxu CRD.
+// NewNoxuV1CustomResourceDefinition 返回一个 WishIHadChosenNoxu CRD。
 func NewNoxuV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "noxus.mygroup.example.com"},
@@ -170,7 +171,7 @@ func NewNoxuV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *api
 	}
 }
 
-// NewVersionedNoxuInstance returns a WishIHadChosenNoxu instance for a given version
+// NewVersionedNoxuInstance 返回指定版本的 WishIHadChosenNoxu 实例。
 func NewVersionedNoxuInstance(namespace, name, version string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -191,12 +192,12 @@ func NewVersionedNoxuInstance(namespace, name, version string) *unstructured.Uns
 	}
 }
 
-// NewNoxuInstance returns a WishIHadChosenNoxu instance for v1beta1.
+// NewNoxuInstance 返回 v1beta1 版本的 WishIHadChosenNoxu 实例。
 func NewNoxuInstance(namespace, name string) *unstructured.Unstructured {
 	return NewVersionedNoxuInstance(namespace, name, "v1beta1")
 }
 
-// NewMultipleVersionNoxuCRD returns a WishIHadChosenNoxu with multiple versions.
+// NewMultipleVersionNoxuCRD 返回多版本的 WishIHadChosenNoxu CRD。
 func NewMultipleVersionNoxuCRD(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "noxus.mygroup.example.com"},
@@ -244,7 +245,7 @@ func NewMultipleVersionNoxuCRD(scope apiextensionsv1.ResourceScope) *apiextensio
 	}
 }
 
-// NewNoxu2CustomResourceDefinition returns a WishIHadChosenNoxu2 CRD.
+// NewNoxu2CustomResourceDefinition 返回一个 WishIHadChosenNoxu2 CRD。
 func NewNoxu2CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "noxus2.mygroup.example.com"},
@@ -268,7 +269,7 @@ func NewNoxu2CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apie
 	}
 }
 
-// NewCurletV1CustomResourceDefinition returns a Curlet CRD.
+// NewCurletV1CustomResourceDefinition 返回一个 Curlet CRD。
 func NewCurletV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "curlets.mygroup.example.com"},
@@ -293,7 +294,7 @@ func NewCurletV1CustomResourceDefinition(scope apiextensionsv1.ResourceScope) *a
 	}
 }
 
-// NewCurletInstance returns a Curlet instance.
+// NewCurletInstance 返回一个 Curlet 实例。
 func NewCurletInstance(namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -310,6 +311,7 @@ func NewCurletInstance(namespace, name string) *unstructured.Unstructured {
 	}
 }
 
+// servedV1Versions 返回 CRD 中标记为 served 的版本名列表。
 func servedV1Versions(crd *apiextensionsv1.CustomResourceDefinition) []string {
 	if len(crd.Spec.Versions) == 0 {
 		return []string{}
@@ -323,6 +325,7 @@ func servedV1Versions(crd *apiextensionsv1.CustomResourceDefinition) []string {
 	return versions
 }
 
+// existsInDiscoveryV1 报告指定版本的 CRD 资源是否已出现在 discovery 中。
 func existsInDiscoveryV1(crd *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, version string) (bool, error) {
 	groupResource, err := apiExtensionsClient.Discovery().ServerResourcesForGroupVersion(crd.Spec.Group + "/" + version)
 	if err != nil {
@@ -339,12 +342,10 @@ func existsInDiscoveryV1(crd *apiextensionsv1.CustomResourceDefinition, apiExten
 	return false, nil
 }
 
-// waitForCRDReadyWatchUnsafe creates the CRD and makes sure
-// the apiextension apiserver has installed the CRD. But it's not safe to watch
-// the created CR. Please call CreateCRDUsingRemovedAPI if you need to
-// watch the CR.
+// waitForCRDReadyWatchUnsafe 创建 CRD 并确认 apiextension apiserver 已安装该 CRD。
+// 但此时 watch 该 CR 并不安全。需要 watch CR 时请调用 CreateCRDUsingRemovedAPI。
 func waitForCRDReadyWatchUnsafe(crd *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
-	// wait until all resources appears in discovery
+	// 等待所有资源出现在 discovery 中
 	for _, version := range servedV1Versions(crd) {
 		err := wait.PollUntilContextTimeout(context.Background(), 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			return existsInDiscoveryV1(crd, apiExtensionsClient, version)
@@ -357,23 +358,22 @@ func waitForCRDReadyWatchUnsafe(crd *apiextensionsv1.CustomResourceDefinition, a
 	return crd, nil
 }
 
-// waitForCRDReady creates the given CRD and makes sure its watch cache is primed on the server.
+// waitForCRDReady 创建给定 CRD，并确保服务端 watch cache 已就绪。
 func waitForCRDReady(crd *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, dynamicClientSet dynamic.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
 	v1CRD, err := waitForCRDReadyWatchUnsafe(crd, apiExtensionsClient)
 	if err != nil {
 		return nil, err
 	}
 
-	// This is only for a test.  We need the watch cache to have a resource version that works for the test.
-	// When new REST storage is created, the storage cacher for the CR starts asynchronously.
-	// REST API operations return like list use the RV of etcd, but the storage cacher's reflector's list
-	// can get a different RV because etcd can be touched in between the initial list operation (if that's what you're doing first)
-	// and the storage cache reflector starting.
-	// Later, you can issue a watch with the REST apis list.RV and end up earlier than the storage cacher.
-	// The general working model is that if you get a "resourceVersion too old" message, you re-list and rewatch.
-	// For this test, we'll actually cycle, "list/watch/create/delete" until we get an RV from list that observes the create and not an error.
-	// This way all the tests that are checking for watches don't have to worry about RV too old problems because crazy things *could* happen
-	// before like the created RV could be too old to watch.
+	// 以下逻辑仅用于测试。需要 watch cache 拥有对测试可用的 resource version。
+	// 新建 REST storage 时，CR 的 storage cacher 会异步启动。
+	// REST API 操作（如 list）返回的是 etcd 的 RV，但 storage cacher 的 reflector
+	// 可能拿到不同的 RV，因为初始 list 操作与 storage cache reflector 启动之间 etcd 可能被改动。
+	// 之后用 REST api list.RV 发起 watch，可能早于 storage cacher。
+	// 通常的处理模型是：若收到 "resourceVersion too old"，就重新 list 和 watch。
+	// 本测试中会循环执行 "list/watch/create/delete"，直到从 list 得到的 RV 能观察到 create 且不报错。
+	// 这样所有检查 watch 的测试都不必担心 RV too old 问题，因为此前可能发生过各种意外，
+	// 例如创建得到的 RV 可能太旧而无法 watch。
 	err = wait.PollUntilContextTimeout(context.Background(), 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		return isWatchCachePrimed(v1CRD, dynamicClientSet)
 	})
@@ -383,17 +383,16 @@ func waitForCRDReady(crd *apiextensionsv1.CustomResourceDefinition, apiExtension
 	return v1CRD, nil
 }
 
-// CreateNewV1CustomResourceDefinitionWatchUnsafe creates the CRD and makes sure
-// the apiextension apiserver has installed the CRD. But it's not safe to watch
-// the created CR. Please call CreateNewV1CustomResourceDefinition if you need to
-// watch the CR.
+// CreateNewV1CustomResourceDefinitionWatchUnsafe 创建 CRD 并确认 apiextension apiserver
+// 已安装该 CRD。但此时 watch 该 CR 并不安全。需要 watch CR 时请调用
+// CreateNewV1CustomResourceDefinition。
 func CreateNewV1CustomResourceDefinitionWatchUnsafe(v1CRD *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
 	v1CRD, err := apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.TODO(), v1CRD, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	// wait until all resources appears in discovery
+	// 等待所有资源出现在 discovery 中
 	for _, version := range servedV1Versions(v1CRD) {
 		err := wait.PollUntilContextTimeout(context.Background(), 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			return existsInDiscoveryV1(v1CRD, apiExtensionsClient, version)
@@ -406,23 +405,22 @@ func CreateNewV1CustomResourceDefinitionWatchUnsafe(v1CRD *apiextensionsv1.Custo
 	return v1CRD, nil
 }
 
-// CreateNewV1CustomResourceDefinition creates the given CRD and makes sure its watch cache is primed on the server.
+// CreateNewV1CustomResourceDefinition 创建给定 CRD，并确保服务端 watch cache 已就绪。
 func CreateNewV1CustomResourceDefinition(v1CRD *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, dynamicClientSet dynamic.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
 	v1CRD, err := CreateNewV1CustomResourceDefinitionWatchUnsafe(v1CRD, apiExtensionsClient)
 	if err != nil {
 		return nil, err
 	}
 
-	// This is only for a test.  We need the watch cache to have a resource version that works for the test.
-	// When new REST storage is created, the storage cacher for the CR starts asynchronously.
-	// REST API operations return like list use the RV of etcd, but the storage cacher's reflector's list
-	// can get a different RV because etcd can be touched in between the initial list operation (if that's what you're doing first)
-	// and the storage cache reflector starting.
-	// Later, you can issue a watch with the REST apis list.RV and end up earlier than the storage cacher.
-	// The general working model is that if you get a "resourceVersion too old" message, you re-list and rewatch.
-	// For this test, we'll actually cycle, "list/watch/create/delete" until we get an RV from list that observes the create and not an error.
-	// This way all the tests that are checking for watches don't have to worry about RV too old problems because crazy things *could* happen
-	// before like the created RV could be too old to watch.
+	// 以下逻辑仅用于测试。需要 watch cache 拥有对测试可用的 resource version。
+	// 新建 REST storage 时，CR 的 storage cacher 会异步启动。
+	// REST API 操作（如 list）返回的是 etcd 的 RV，但 storage cacher 的 reflector
+	// 可能拿到不同的 RV，因为初始 list 操作与 storage cache reflector 启动之间 etcd 可能被改动。
+	// 之后用 REST api list.RV 发起 watch，可能早于 storage cacher。
+	// 通常的处理模型是：若收到 "resourceVersion too old"，就重新 list 和 watch。
+	// 本测试中会循环执行 "list/watch/create/delete"，直到从 list 得到的 RV 能观察到 create 且不报错。
+	// 这样所有检查 watch 的测试都不必担心 RV too old 问题，因为此前可能发生过各种意外，
+	// 例如创建得到的 RV 可能太旧而无法 watch。
 	err = wait.PollUntilContextTimeout(context.Background(), 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		return isWatchCachePrimed(v1CRD, dynamicClientSet)
 	})
@@ -432,6 +430,7 @@ func CreateNewV1CustomResourceDefinition(v1CRD *apiextensionsv1.CustomResourceDe
 	return v1CRD, nil
 }
 
+// resourceClientForVersion 返回指定版本的 dynamic 资源客户端，并根据作用域选择是否带命名空间。
 func resourceClientForVersion(crd *apiextensionsv1.CustomResourceDefinition, dynamicClientSet dynamic.Interface, namespace, version string) dynamic.ResourceInterface {
 	gvr := schema.GroupVersionResource{Group: crd.Spec.Group, Version: version, Resource: crd.Spec.Names.Plural}
 	if crd.Spec.Scope != apiextensionsv1.ClusterScoped {
@@ -440,7 +439,7 @@ func resourceClientForVersion(crd *apiextensionsv1.CustomResourceDefinition, dyn
 	return dynamicClientSet.Resource(gvr)
 }
 
-// isWatchCachePrimed returns true if the watch is primed for an specified version of CRD watch
+// isWatchCachePrimed 报告 CRD 指定版本的 watch 是否已就绪。
 func isWatchCachePrimed(crd *apiextensionsv1.CustomResourceDefinition, dynamicClientSet dynamic.Interface) (bool, error) {
 	ns := ""
 	if crd.Spec.Scope != apiextensionsv1.ClusterScoped {
@@ -479,13 +478,12 @@ func isWatchCachePrimed(crd *apiextensionsv1.CustomResourceDefinition, dynamicCl
 		return false, err
 	}
 
-	// Wait for all versions of watch cache to be primed and also make sure we consumed the DELETE event for all
-	// versions so that any new watch with ResourceVersion=0 does not get those events. This is source of some flaky tests.
-	// When a client creates a watch with resourceVersion=0, it will get an ADD event for any existing objects
-	// but because they specified resourceVersion=0, there is no starting point in the cache buffer to return existing events
-	// from, thus the server will return anything from current head of the cache to the end. By accessing the delete
-	// events for all versions here, we make sure that the head of the cache is passed those events and they will not being
-	// delivered to any future watch with resourceVersion=0.
+	// 等待所有版本的 watch cache 就绪，并确保已消费所有版本的 DELETE 事件，
+	// 这样任何 ResourceVersion=0 的新 watch 都不会收到这些事件。这是部分测试不稳定的来源。
+	// 客户端以 resourceVersion=0 创建 watch 时，会收到所有已存在对象的 ADD 事件；
+	// 但由于指定了 resourceVersion=0，cache 缓冲区中没有可返回已存在事件的起点，
+	// 服务端会从 cache 当前头部返回到末尾。在这里消费所有版本的 delete 事件，
+	// 可以确保 cache 头部已越过这些事件，之后的 ResourceVersion=0 watch 不会再收到它们。
 	for _, v := range versions {
 		noxuWatch, err := resourceClientForVersion(crd, dynamicClientSet, ns, v).Watch(
 			context.TODO(),
@@ -511,7 +509,7 @@ func isWatchCachePrimed(crd *apiextensionsv1.CustomResourceDefinition, dynamicCl
 	return true, nil
 }
 
-// DeleteV1CustomResourceDefinition deletes a CRD and waits until it disappears from discovery.
+// DeleteV1CustomResourceDefinition 删除 CRD，并等待其从 discovery 中消失。
 func DeleteV1CustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition, apiExtensionsClient clientset.Interface) error {
 	if err := apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Delete(context.TODO(), crd.Name, metav1.DeleteOptions{}); err != nil {
 		return err
@@ -528,7 +526,7 @@ func DeleteV1CustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinit
 	return nil
 }
 
-// DeleteV1CustomResourceDefinitions deletes all CRD matching the provided deleteListOpts and waits until all the CRDs disappear from discovery.
+// DeleteV1CustomResourceDefinitions 删除所有匹配 deleteListOpts 的 CRD，并等待它们全部从 discovery 中消失。
 func DeleteV1CustomResourceDefinitions(deleteListOpts metav1.ListOptions, apiExtensionsClient clientset.Interface) error {
 	list, err := apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(context.TODO(), deleteListOpts)
 	if err != nil {
@@ -551,7 +549,7 @@ func DeleteV1CustomResourceDefinitions(deleteListOpts metav1.ListOptions, apiExt
 	return nil
 }
 
-// CreateNewVersionedScaleClient returns a scale client.
+// CreateNewVersionedScaleClient 返回指定版本的 scale 客户端。
 func CreateNewVersionedScaleClient(crd *apiextensionsv1.CustomResourceDefinition, config *rest.Config, version string) (scale.ScalesGetter, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {

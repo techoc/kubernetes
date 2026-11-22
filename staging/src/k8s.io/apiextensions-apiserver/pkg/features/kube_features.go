@@ -23,6 +23,9 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+// 本文件定义 apiextensions-apiserver 的功能门控（Feature Gates）。
+// 每个功能门控控制一个 CRD 相关特性的开关状态（Alpha/Beta/GA）。
+//
 // Every feature gate should have an entry here following this template:
 //
 // // owner: @username
@@ -36,30 +39,33 @@ const (
 	// owner: @michaelasp
 	// kep: https://kep.k8s.io/4192
 	//
-	// Enables the tracking of observed generation in CRD status and conditions.
+	// 在 CRD 的 status 和 conditions 中跟踪 observedGeneration。
+	// 使控制器能够判断当前 status 是否反映了最新的 spec。
 	CRDObservedGenerationTracking featuregate.Feature = "CRDObservedGenerationTracking"
 
 	// owner: @alexzielenski
 	//
-	// Ignores errors raised on unchanged fields of Custom Resources
-	// across UPDATE/PATCH requests.
+	// 在 UPDATE/PATCH 请求中，忽略未修改字段的验证错误。
+	// 当 CRD 的验证规则升级后，旧资源中未变更的字段即使不满足新规则也不会报错。
+	// 这避免了批量更新所有资源的需求。
 	CRDValidationRatcheting featuregate.Feature = "CRDValidationRatcheting"
 
 	// owner: @jpbetz
 	//
-	// CustomResourceDefinitions may include SelectableFields to declare which fields
-	// may be used as field selectors.
+	// 允许 CRD 通过 SelectableFields 声明哪些字段可用于字段选择器（field selector）。
+	// 使 CR 支持类似 "status.phase=Running" 的查询过滤。
 	CustomResourceFieldSelectors featuregate.Feature = "CustomResourceFieldSelectors"
 )
 
+// init 将所有功能门控注册到全局 DefaultMutableFeatureGate。
+// 这样 apiextensions-apiserver 和 kube-apiserver 都可以使用这些功能门控。
 func init() {
 	runtime.Must(utilfeature.DefaultMutableFeatureGate.AddVersioned(defaultVersionedKubernetesFeatureGates))
 }
 
-// defaultVersionedKubernetesFeatureGates consists of all known Kubernetes-specific feature keys with VersionedSpecs.
-// To add a new feature, define a key for it above and add it below. The features will be
-// available throughout Kubernetes binaries.
-// To support n-3 compatibility version, features may only be removed 3 releases after graduation.
+// defaultVersionedKubernetesFeatureGates 定义了所有 CRD 功能门控的版本化配置。
+// 每个功能门控记录了从 Alpha → Beta → GA 的演进历程，包括默认值和锁定状态。
+// 为了支持 n-3 兼容性，功能门控在 GA 后至少保留 3 个版本才能移除。
 //
 // Entries are alphabetized.
 var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{

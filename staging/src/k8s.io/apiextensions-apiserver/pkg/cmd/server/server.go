@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package server 提供 apiextensions-apiserver 的命令行入口和启动逻辑。
+// NewServerCommand 创建 cobra 命令，Run 执行完整的启动流程：
+// 解析配置 → 创建 API Server → 启动服务和控制器。
 package server
 
 import (
@@ -26,6 +29,8 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 )
 
+// NewServerCommand 创建 apiextensions-apiserver 的 cobra 命令。
+// 命令流程：Complete → Validate → Run，符合 Kubernetes 标准 API Server 启动模式。
 func NewServerCommand(ctx context.Context, out, errOut io.Writer) *cobra.Command {
 	o := options.NewCustomResourceDefinitionsServerOptions(out, errOut)
 
@@ -55,6 +60,10 @@ func NewServerCommand(ctx context.Context, out, errOut io.Writer) *cobra.Command
 	return cmd
 }
 
+// Run 执行 apiextensions-apiserver 的完整启动流程：
+// 1. 从选项生成 Config
+// 2. 创建 API Server 实例（注册 CRD Storage、启动控制器）
+// 3. 准备并运行服务器（监听端口、启动 HTTP 服务）
 func Run(ctx context.Context, o *options.CustomResourceDefinitionsServerOptions) error {
 	config, err := o.Config()
 	if err != nil {

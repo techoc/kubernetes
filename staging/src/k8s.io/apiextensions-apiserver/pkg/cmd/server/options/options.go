@@ -53,7 +53,7 @@ import (
 
 const defaultEtcdPathPrefix = "/registry/apiextensions.kubernetes.io"
 
-// CustomResourceDefinitionsServerOptions describes the runtime options of an apiextensions-apiserver.
+// CustomResourceDefinitionsServerOptions 描述 apiextensions-apiserver 的运行时选项。
 type CustomResourceDefinitionsServerOptions struct {
 	ServerRunOptions   *genericoptions.ServerRunOptions
 	RecommendedOptions *genericoptions.RecommendedOptions
@@ -63,7 +63,7 @@ type CustomResourceDefinitionsServerOptions struct {
 	StdErr io.Writer
 }
 
-// NewCustomResourceDefinitionsServerOptions creates default options of an apiextensions-apiserver.
+// NewCustomResourceDefinitionsServerOptions 创建 apiextensions-apiserver 的默认选项。
 func NewCustomResourceDefinitionsServerOptions(out, errOut io.Writer) *CustomResourceDefinitionsServerOptions {
 	o := &CustomResourceDefinitionsServerOptions{
 		ServerRunOptions: genericoptions.NewServerRunOptions(),
@@ -80,14 +80,14 @@ func NewCustomResourceDefinitionsServerOptions(out, errOut io.Writer) *CustomRes
 	return o
 }
 
-// AddFlags adds the apiextensions-apiserver flags to the flagset.
+// AddFlags 将 apiextensions-apiserver 的标志添加到 flagset。
 func (o CustomResourceDefinitionsServerOptions) AddFlags(fs *pflag.FlagSet) {
 	o.ServerRunOptions.AddUniversalFlags(fs)
 	o.RecommendedOptions.AddFlags(fs)
 	o.APIEnablement.AddFlags(fs)
 }
 
-// Validate validates the apiextensions-apiserver options.
+// Validate 校验 apiextensions-apiserver 选项。
 func (o CustomResourceDefinitionsServerOptions) Validate() error {
 	errors := []error{}
 	errors = append(errors, o.ServerRunOptions.Validate()...)
@@ -96,14 +96,14 @@ func (o CustomResourceDefinitionsServerOptions) Validate() error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// Complete fills in missing options.
+// Complete 补全缺失的选项。
 func (o *CustomResourceDefinitionsServerOptions) Complete() error {
 	return o.ServerRunOptions.Complete()
 }
 
-// Config returns an apiextensions-apiserver configuration.
+// Config 返回 apiextensions-apiserver 配置。
 func (o CustomResourceDefinitionsServerOptions) Config() (*apiserver.Config, error) {
-	// TODO have a "real" external address
+	// TODO 使用“真实”的外部地址
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{netutils.ParseIPSloppy("127.0.0.1")}); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
@@ -131,10 +131,10 @@ func (o CustomResourceDefinitionsServerOptions) Config() (*apiserver.Config, err
 	return config, nil
 }
 
-// NewCRDRESTOptionsGetter create a RESTOptionsGetter for CustomResources.
+// NewCRDRESTOptionsGetter 为自定义资源创建 RESTOptionsGetter。
 //
-// Avoid messing with anything outside of changes to StorageConfig as that
-// may lead to unexpected behavior when the options are applied.
+// 除 StorageConfig 外不要改动其他内容，否则
+// 应用选项时可能出现意外行为。
 func NewCRDRESTOptionsGetter(etcdOptions genericoptions.EtcdOptions, resourceTransformers storagevalue.ResourceTransformers, tracker flowcontrolrequest.StorageObjectCountTracker) genericregistry.RESTOptionsGetter {
 	ucbor := cbor.NewSerializer(unstructuredscheme.NewUnstructuredCreator(), unstructuredscheme.NewUnstructuredObjectTyper())
 
@@ -146,15 +146,15 @@ func NewCRDRESTOptionsGetter(etcdOptions genericoptions.EtcdOptions, resourceTra
 	etcdOptionsCopy := etcdOptions
 	etcdOptionsCopy.StorageConfig.Codec = runtime.NewCodec(
 		encoder,
-		// Whether the feature gate is enabled or disabled, the decoder must be able to
-		// recognize any resources stored using the CBOR encoder.
+		// 无论特性门控是否启用，解码器都必须能
+		// 识别任何使用 CBOR 编码器存储的资源。
 		recognizer.NewDecoder(
 			ucbor,
 			unstructured.UnstructuredJSONScheme,
 		),
 	)
 	etcdOptionsCopy.StorageConfig.StorageObjectCountTracker = tracker
-	etcdOptionsCopy.WatchCacheSizes = nil // this control is not provided for custom resources
+	etcdOptionsCopy.WatchCacheSizes = nil // 自定义资源不提供此控制项
 
 	return etcdOptions.CreateRESTOptionsGetter(&genericoptions.SimpleStorageFactory{StorageConfig: etcdOptionsCopy.StorageConfig}, resourceTransformers)
 }
@@ -163,6 +163,7 @@ type serviceResolver struct {
 	services corev1.ServiceLister
 }
 
+// ResolveEndpoint 解析 webhook 服务对应的端点 URL。
 func (r *serviceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	return proxy.ResolveCluster(r.services, namespace, name, port)
 }

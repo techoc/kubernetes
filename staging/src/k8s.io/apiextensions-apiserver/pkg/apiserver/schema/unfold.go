@@ -16,8 +16,8 @@ limitations under the License.
 
 package schema
 
-// Unfold expands vendor extensions of a structural schema.
-// It mutates the receiver.
+// Unfold 把 x-kubernetes-int-or-string 展开为显式的 integer/string anyOf。
+// 下游消费者（校验器、OpenAPI 转换）因此不必单独理解该扩展；该方法会就地修改接收者。
 func (s *Structural) Unfold() *Structural {
 	if s == nil {
 		return nil
@@ -29,6 +29,7 @@ func (s *Structural) Unfold() *Structural {
 				return false
 			}
 
+			// 已经展开过的节点不再处理，避免重复叠加 anyOf。
 			skipAnyOf := isIntOrStringAnyOfPattern(s)
 			skipFirstAllOfAnyOf := isIntOrStringAllOfPattern(s)
 			if skipAnyOf || skipFirstAllOfAnyOf {
@@ -44,6 +45,8 @@ func (s *Structural) Unfold() *Structural {
 					{ForbiddenGenerics: Generic{Type: "string"}},
 				}
 			} else {
+				// 已有 anyOf 时不能覆盖，改为在最前面追加一个 allOf 分支，
+				// 既保留原有约束，又强制 int-or-string 语义。
 				s.ValueValidation.AllOf = append([]NestedValueValidation{
 					{
 						ValueValidation: ValueValidation{
@@ -58,7 +61,7 @@ func (s *Structural) Unfold() *Structural {
 
 			return true
 		},
-		NestedValueValidation: nil, // x-kubernetes-int-or-string cannot be set in nested value validation
+		NestedValueValidation: nil, // x-kubernetes-int-or-string 不会出现在嵌套值校验中
 	}
 	mapper.Visit(s)
 

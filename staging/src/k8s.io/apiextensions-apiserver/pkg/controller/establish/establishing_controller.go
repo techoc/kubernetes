@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package establish 实现 CRD 建立（Establishing）控制器。
+// 当 CRD 的 NamesAccepted 条件为 True 时，设置 Established 条件为 True。
+// Established 条件表示 CRD 的 HTTP 路由已安装，CR 可以通过 API 访问。
+// 在 HA 模式下，控制器会延迟处理，避免多个 API Server 竞争。
 package establish
 
 import (
@@ -38,7 +42,8 @@ import (
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
-// EstablishingController controls how and when CRD is established.
+// EstablishingController 控制 CRD 何时进入 Established 状态。
+// Established 表示 CRD 的 HTTP 路由已安装，CR 可以通过 API 访问。
 type EstablishingController struct {
 	crdClient client.CustomResourceDefinitionsGetter
 	crdLister listers.CustomResourceDefinitionLister
@@ -50,7 +55,7 @@ type EstablishingController struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewEstablishingController creates new EstablishingController.
+// NewEstablishingController 创建 CRD 建立控制器。
 func NewEstablishingController(crdInformer informers.CustomResourceDefinitionInformer,
 	crdClient client.CustomResourceDefinitionsGetter) *EstablishingController {
 	ec := &EstablishingController{
@@ -68,7 +73,7 @@ func NewEstablishingController(crdInformer informers.CustomResourceDefinitionInf
 	return ec
 }
 
-// QueueCRD adds CRD into the establishing queue.
+// QueueCRD 将 CRD 加入建立队列，支持延迟添加（用于 HA 模式下的竞争避免）。
 func (ec *EstablishingController) QueueCRD(key string, timeout time.Duration) {
 	ec.queue.AddAfter(key, timeout)
 }
@@ -123,7 +128,9 @@ func (ec *EstablishingController) processNextWorkItem(ctx context.Context) bool 
 	return true
 }
 
-// sync is used to turn CRDs into the Established state.
+// sync 将 CRD 设置为 Established 状态。
+// 如果 NamesAccepted 为 True 且 Established 尚未设置，则设置 Established 条件。
+// 如果 Conversion Webhook 的 CABundle 无效，设置 Established=False 并说明原因。
 func (ec *EstablishingController) sync(ctx context.Context, key string) error {
 	cachedCRD, err := ec.crdLister.Get(key)
 	if apierrors.IsNotFound(err) {

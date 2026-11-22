@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package conversion 实现 CRD 自定义资源的版本转换，支持 None 与 webhook 两种策略。
 package conversion
 
 import (
@@ -32,18 +33,17 @@ import (
 	typedscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
-// CRConverterFactory is the factory for all CR converters.
+// CRConverterFactory 是所有 CR 转换器的工厂。
 type CRConverterFactory struct {
-	// webhookConverterFactory is the factory for webhook converters.
-	// This field should not be used if CustomResourceWebhookConversion feature is disabled.
+	// webhookConverterFactory 是 webhook 转换器的工厂。
+	// 若 CustomResourceWebhookConversion 特性门控关闭，不应使用该字段。
 	webhookConverterFactory *webhookConverterFactory
 }
 
-// converterMetricFactorySingleton protects us from reregistration of metrics on repeated
-// apiextensions-apiserver runs.
+// converterMetricFactorySingleton 防止 apiextensions-apiserver 多次运行时指标被重复注册。
 var converterMetricFactorySingleton = newConverterMetricFactory()
 
-// NewCRConverterFactory creates a new CRConverterFactory
+// NewCRConverterFactory 创建新的 CRConverterFactory。
 func NewCRConverterFactory(serviceResolver webhook.ServiceResolver, authResolverWrapper webhook.AuthenticationInfoResolverWrapper) (*CRConverterFactory, error) {
 	converterFactory := &CRConverterFactory{}
 	webhookConverterFactory, err := newWebhookConverterFactory(serviceResolver, authResolverWrapper)
@@ -54,7 +54,8 @@ func NewCRConverterFactory(serviceResolver webhook.ServiceResolver, authResolver
 	return converterFactory, nil
 }
 
-// NewConverter returns a new CR converter based on the conversion settings in crd object.
+// NewConverter 根据 CRD 对象中的转换配置返回新的 CR 转换器。
+// 返回 safe 与 unsafe 两个转换器：前者在转换前深拷贝输入，后者会原地修改入参。
 func (m *CRConverterFactory) NewConverter(crd *apiextensionsv1.CustomResourceDefinition) (safe, unsafe runtime.ObjectConvertor, err error) {
 	validVersions := map[schema.GroupVersion]bool{}
 	for _, version := range crd.Spec.Versions {
@@ -78,17 +79,19 @@ func (m *CRConverterFactory) NewConverter(crd *apiextensionsv1.CustomResourceDef
 		return nil, nil, fmt.Errorf("unknown conversion strategy %q for CRD %s", crd.Spec.Conversion.Strategy, crd.Name)
 	}
 
-	// Determine whether we should expect to be asked to "convert" autoscaling/v1 Scale types
+	// 判断是否需要处理 autoscaling/v1 Scale 类型的“转换”请求
 	convertScale := false
 	selectableFields := map[schema.GroupVersion]sets.Set[string]{}
 	for _, version := range crd.Spec.Versions {
 		gv := schema.GroupVersion{Group: crd.Spec.Group, Version: version.Name}
+		// 任一版本提供 scale 子资源，就需要支持 Scale 类型的转换。
 		if version.Subresources != nil && version.Subresources.Scale != nil {
 			convertScale = true
 		}
 		if utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CustomResourceFieldSelectors) {
 			fieldPaths := sets.New[string]()
 			for _, sf := range version.SelectableFields {
+				// JSONPath 以 "." 开头，去掉后与字段标签名对齐。
 				fieldPaths.Insert(strings.TrimPrefix(sf.JSONPath, "."))
 			}
 			selectableFields[gv] = fieldPaths
@@ -105,16 +108,15 @@ func (m *CRConverterFactory) NewConverter(crd *apiextensionsv1.CustomResourceDef
 	return &safeConverterWrapper{unsafe}, unsafe, nil
 }
 
-// crConverterInterface is the interface all cr converters must implement
+// crConverterInterface 是所有 CR 转换器必须实现的接口。
 type crConverterInterface interface {
-	// Convert converts in object to the given gvk and returns the converted object.
-	// Note that the function may mutate in object and return it. A safe wrapper will make sure
-	// a safe converter will be returned.
+	// Convert 将 in 对象转换为目标 gvk 并返回结果。
+	// 注意：该函数可能修改 in 并返回它；safe 包装器会保证对调用方返回安全的结果。
 	Convert(in runtime.Object, targetGVK schema.GroupVersion) (runtime.Object, error)
 }
 
-// crConverter extends the delegate converter with generic CR conversion behaviour. The delegate will implement the
-// user defined conversion strategy given in the CustomResourceDefinition.
+// crConverter 在 delegate 转换器之上叠加通用 CR 转换行为；
+// delegate 实现 CustomResourceDefinition 中用户配置的转换策略。
 type crConverter struct {
 	convertScale     bool
 	converter        crConverterInterface
@@ -123,6 +125,7 @@ type crConverter struct {
 	selectableFields map[schema.GroupVersion]sets.Set[string]
 }
 
+// ConvertFieldLabel 校验字段标签是否可用于该资源，返回转换后的标签与值。
 func (c *crConverter) ConvertFieldLabel(gvk schema.GroupVersionKind, label, value string) (string, string, error) {
 	switch {
 	case label == "metadata.name":
@@ -140,8 +143,9 @@ func (c *crConverter) ConvertFieldLabel(gvk schema.GroupVersionKind, label, valu
 	}
 }
 
+// Convert 将 in 转换为 out，是 runtime.ObjectConvertor 的实现。
 func (c *crConverter) Convert(in, out, context interface{}) error {
-	// Special-case typed scale conversion if this custom resource supports a scale endpoint
+	// 若该自定义资源支持 scale 端点，Scale 类型走类型化转换。
 	if c.convertScale {
 		_, isInScale := in.(*autoscalingv1.Scale)
 		_, isOutScale := out.(*autoscalingv1.Scale)
@@ -167,25 +171,24 @@ func (c *crConverter) Convert(in, out, context interface{}) error {
 	}
 	unstructuredConverted, ok := converted.(runtime.Unstructured)
 	if !ok {
-		// this should not happened
+		// 不应发生
 		return fmt.Errorf("CR conversion failed")
 	}
 	unstructOut.SetUnstructuredContent(unstructuredConverted.UnstructuredContent())
 	return nil
 }
 
-// ConvertToVersion converts in object to the given gvk in place and returns the same `in` object.
-// The in object can be a single object or a UnstructuredList. CRD storage implementation creates an
-// UnstructuredList with the request's GV, populates it from storage, then calls conversion to convert
-// the individual items. This function assumes it never gets a v1.List.
+// ConvertToVersion 将 in 对象原地转换为目标 gvk 并返回同一个 `in` 对象。
+// in 可以是单个对象或 UnstructuredList。CRD 存储实现会先用请求的 GV 创建
+// UnstructuredList、从存储填充，再对每个条目调用转换。该函数假定不会收到 v1.List。
 func (c *crConverter) ConvertToVersion(in runtime.Object, target runtime.GroupVersioner) (runtime.Object, error) {
 	fromGVK := in.GetObjectKind().GroupVersionKind()
 	toGVK, ok := target.KindForGroupVersionKinds([]schema.GroupVersionKind{fromGVK})
 	if !ok {
-		// TODO: should this be a typed error?
+		// TODO: 是否应改为类型化错误？
 		return nil, fmt.Errorf("%v is unstructured and is not suitable for converting to %q", fromGVK.String(), target)
 	}
-	// Special-case typed scale conversion if this custom resource supports a scale endpoint
+	// 若该自定义资源支持 scale 端点，Scale 类型走类型化转换。
 	if c.convertScale {
 		if _, isInScale := in.(*autoscalingv1.Scale); isInScale {
 			return typedscheme.Scheme.ConvertToVersion(in, target)
@@ -195,13 +198,12 @@ func (c *crConverter) ConvertToVersion(in runtime.Object, target runtime.GroupVe
 	if !c.validVersions[toGVK.GroupVersion()] {
 		return nil, fmt.Errorf("request to convert CR to an invalid group/version: %s", toGVK.GroupVersion().String())
 	}
-	// Note that even if the request is for a list, the GV of the request UnstructuredList is what
-	// is expected to convert to. As mentioned in the function's document, it is not expected to
-	// get a v1.List.
+	// 注意：即使请求的是列表，需要转换的也是请求中 UnstructuredList 的 GV。
+	// 如函数文档所述，这里预期不会收到 v1.List。
 	if !c.validVersions[fromGVK.GroupVersion()] {
 		return nil, fmt.Errorf("request to convert CR from an invalid group/version: %s", fromGVK.GroupVersion().String())
 	}
-	// Check list item's apiVersion
+	// 列表转换要求每个条目自身的 apiVersion 也合法，否则合并后的列表会混入无效版本。
 	if list, ok := in.(*unstructured.UnstructuredList); ok {
 		for i := range list.Items {
 			expectedGV := list.Items[i].GroupVersionKind().GroupVersion()
@@ -213,19 +215,19 @@ func (c *crConverter) ConvertToVersion(in runtime.Object, target runtime.GroupVe
 	return c.converter.Convert(in, toGVK.GroupVersion())
 }
 
-// safeConverterWrapper is a wrapper over an unsafe object converter that makes copy of the input and then delegate to the unsafe converter.
+// safeConverterWrapper 包装不安全的对象转换器：先拷贝输入，再委托给不安全转换器。
 type safeConverterWrapper struct {
 	unsafe runtime.ObjectConvertor
 }
 
 var _ runtime.ObjectConvertor = &safeConverterWrapper{}
 
-// ConvertFieldLabel delegate the call to the unsafe converter.
+// ConvertFieldLabel 将调用委托给不安全转换器。
 func (c *safeConverterWrapper) ConvertFieldLabel(gvk schema.GroupVersionKind, label, value string) (string, string, error) {
 	return c.unsafe.ConvertFieldLabel(gvk, label, value)
 }
 
-// Convert makes a copy of in object and then delegate the call to the unsafe converter.
+// Convert 先拷贝 in 对象，再将调用委托给不安全转换器。
 func (c *safeConverterWrapper) Convert(in, out, context interface{}) error {
 	inObject, ok := in.(runtime.Object)
 	if !ok {
@@ -234,7 +236,7 @@ func (c *safeConverterWrapper) Convert(in, out, context interface{}) error {
 	return c.unsafe.Convert(inObject.DeepCopyObject(), out, context)
 }
 
-// ConvertToVersion makes a copy of in object and then delegate the call to the unsafe converter.
+// ConvertToVersion 先拷贝 in 对象，再将调用委托给不安全转换器。
 func (c *safeConverterWrapper) ConvertToVersion(in runtime.Object, target runtime.GroupVersioner) (runtime.Object, error) {
 	return c.unsafe.ConvertToVersion(in.DeepCopyObject(), target)
 }

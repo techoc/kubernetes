@@ -33,6 +33,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestChangeCRD 在后台反复修改 CRD 的同时，持续创建、读取自定义资源并维持多个 watch，
+// 验证 CRD 变更不会导致 watch 或请求永久挂起。
 func TestChangeCRD(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -79,13 +81,11 @@ func TestChangeCRD(t *testing.T) {
 		}
 	}
 
-	// Set up 10 watchers for custom resource.
-	// We can't exercise them in a loop the same way as get requests, as watchcache
-	// can reject them with 429 and Retry-After: 1 if it is uninitialized and even
-	// though 429 is automatically retried, with frequent watchcache terminations and
-	// reinitializations they could either end-up being rejected N times and fail or
-	// or not initialize until the last watchcache reinitialization and then not be
-	// terminated. Thus we exercise their termination explicitly at the beginning.
+	// 为自定义资源配置 10 个 watcher。
+	// 不能像 get 请求那样在循环里反复演练：watchcache 未初始化时会以 429 和
+	// Retry-After: 1 拒绝，虽然 429 会自动重试，但频繁的 watchcache 终止与重建
+	// 可能让它们被拒绝 N 次后失败，或直到最后一次重建才初始化、从而始终收不到终止。
+	// 因此一开始就显式演练它们的终止流程。
 	wg := &sync.WaitGroup{}
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -100,7 +100,7 @@ func TestChangeCRD(t *testing.T) {
 			for event := range w.ResultChan() {
 				switch event.Type {
 				case watch.Added, watch.Modified, watch.Deleted:
-					// all expected
+					// 均为预期事件。
 				default:
 					t.Errorf("unexpected watch event: %#v", event)
 				}
@@ -108,10 +108,10 @@ func TestChangeCRD(t *testing.T) {
 		}(i)
 	}
 
-	// Let all the established watches soak request loops soak
+	// 让已建立的 watch 与请求循环预热一段时间。
 	time.Sleep(5 * time.Second)
 
-	// Update CRD and ensure that all watches are gracefully terminated.
+	// 更新 CRD，确认所有 watch 都被正常终止。
 	updateCRD()
 
 	drained := make(chan struct{})
@@ -128,7 +128,7 @@ func TestChangeCRD(t *testing.T) {
 
 	stopChan := make(chan struct{})
 
-	// Set up loop to modify CRD in the background
+	// 启动后台循环，持续修改 CRD
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -145,7 +145,7 @@ func TestChangeCRD(t *testing.T) {
 		}
 	}()
 
-	// Set up 10 loops creating and reading custom resources
+	// 启动 10 个循环，持续创建并读取自定义资源
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -170,13 +170,13 @@ func TestChangeCRD(t *testing.T) {
 		}(i)
 	}
 
-	// Let all the established get request loops soak
+	// 让已建立的 get 请求循环预热一段时间
 	time.Sleep(5 * time.Second)
 
-	// Tear down
+	// 收尾
 	close(stopChan)
 
-	// Let loops drain
+	// 等待循环退出
 	drained = make(chan struct{})
 	go func() {
 		defer close(drained)

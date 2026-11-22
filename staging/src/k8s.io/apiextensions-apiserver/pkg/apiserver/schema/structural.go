@@ -23,7 +23,7 @@ import (
 
 // +k8s:deepcopy-gen=true
 
-// Structural represents a structural schema.
+// Structural 表示结构化 schema。
 type Structural struct {
 	Items                *Structural
 	Properties           map[string]Structural
@@ -38,7 +38,7 @@ type Structural struct {
 
 // +k8s:deepcopy-gen=true
 
-// StructuralOrBool is either a structural schema or a boolean.
+// StructuralOrBool 要么是结构化 schema，要么是布尔值。
 type StructuralOrBool struct {
 	Structural *Structural
 	Bool       bool
@@ -46,7 +46,7 @@ type StructuralOrBool struct {
 
 // +k8s:deepcopy-gen=true
 
-// ExternalDocumentation allows referencing an external resource for extended documentation.
+// ExternalDocumentation 允许引用外部资源以提供扩展文档。
 type ExternalDocumentation struct {
 	Description string
 	URL         string
@@ -54,13 +54,13 @@ type ExternalDocumentation struct {
 
 // +k8s:deepcopy-gen=true
 
-// Generic contains the generic schema fields not allowed in value validation.
+// Generic 包含不允许出现在 value validation 中的通用 schema 字段。
 type Generic struct {
 	Description string
-	// type specifies the type of a value.
-	// It can be object, array, number, integer, boolean, string.
-	// It is optional only if x-kubernetes-preserve-unknown-fields
-	// or x-kubernetes-int-or-string is true.
+	// type 指定值的类型。
+	// 可以是 object、array、number、integer、boolean、string。
+	// 仅当 x-kubernetes-preserve-unknown-fields
+	// 或 x-kubernetes-int-or-string 为 true 时才可省略。
 	Type         string
 	Title        string
 	Default      JSON
@@ -71,29 +71,26 @@ type Generic struct {
 
 // +k8s:deepcopy-gen=true
 
-// Extensions contains the Kubernetes OpenAPI v3 vendor extensions.
+// Extensions 包含 Kubernetes OpenAPI v3 的 vendor 扩展。
 type Extensions struct {
-	// x-kubernetes-preserve-unknown-fields stops the API server
-	// decoding step from pruning fields which are not specified
-	// in the validation schema. This affects fields recursively,
-	// but switches back to normal pruning behaviour if nested
-	// properties or additionalProperties are specified in the schema.
-	// False means that the pruning behaviour is inherited from the parent.
-	// False does not mean to activate pruning.
+	// x-kubernetes-preserve-unknown-fields 阻止 API server
+	// 在解码阶段裁剪校验 schema 中未声明的字段。该行为
+	// 递归生效，但若 schema 中指定了嵌套的 properties 或
+	// additionalProperties，则恢复为常规裁剪行为。
+	// 为 false 表示裁剪行为继承自父级；
+	// false 并不意味着启用裁剪。
 	XPreserveUnknownFields bool
 
-	// x-kubernetes-embedded-resource defines that the value is an
-	// embedded Kubernetes runtime.Object, with TypeMeta and
-	// ObjectMeta. The type must be object. It is allowed to further
-	// restrict the embedded object. Both ObjectMeta and TypeMeta
-	// are validated automatically. x-kubernetes-preserve-unknown-fields
-	// must be true.
+	// x-kubernetes-embedded-resource 表示该值是一个内嵌的
+	// Kubernetes runtime.Object，带有 TypeMeta 与 ObjectMeta。
+	// 其类型必须为 object，且允许进一步限制内嵌对象。
+	// ObjectMeta 与 TypeMeta 会自动校验。
+	// x-kubernetes-preserve-unknown-fields 必须为 true。
 	XEmbeddedResource bool
 
-	// x-kubernetes-int-or-string specifies that this value is
-	// either an integer or a string. If this is true, an empty
-	// type is allowed and type as child of anyOf is permitted
-	// if following one of the following patterns:
+	// x-kubernetes-int-or-string 表示该值要么是整数，要么是字符串。
+	// 若为 true，则允许空 type，并且允许 anyOf 下的 type，
+	// 只要符合以下模式之一：
 	//
 	// 1) anyOf:
 	//    - type: integer
@@ -102,58 +99,56 @@ type Extensions struct {
 	//    - anyOf:
 	//      - type: integer
 	//      - type: string
-	//    - ... zero or more
+	//    - ... 零个或多个
 	XIntOrString bool
 
-	// x-kubernetes-list-map-keys annotates lists with the x-kubernetes-list-type `map` by specifying the keys used
-	// as the index of the map.
+	// x-kubernetes-list-map-keys 通过指定用作 map 索引的键，
+	// 为 x-kubernetes-list-type 为 `map` 的列表添加注解。
 	//
-	// This tag MUST only be used on lists that have the "x-kubernetes-list-type"
-	// extension set to "map". Also, the values specified for this attribute must
-	// be a scalar typed field of the child structure (no nesting is supported).
+	// 该标签只能用于设置了 "x-kubernetes-list-type" 为 "map"
+	// 的列表。此外，为此属性指定的值必须是子结构中的
+	// 标量类型字段（不支持嵌套）。
 	XListMapKeys []string
 
-	// x-kubernetes-list-type annotates a list to further describe its topology.
-	// This extension must only be used on lists and may have 3 possible values:
+	// x-kubernetes-list-type 为列表添加注解，以进一步描述其拓扑结构。
+	// 该扩展只能用于列表，且可能有 3 种取值：
 	//
-	// 1) `atomic`: the list is treated as a single entity, like a scalar.
-	//      Atomic lists will be entirely replaced when updated. This extension
-	//      may be used on any type of list (struct, scalar, ...).
-	// 2) `set`:
-	//      Sets are lists that must not have multiple items with the same value. Each
-	//      value must be a scalar (or another atomic type).
-	// 3) `map`:
-	//      These lists are like maps in that their elements have a non-index key
-	//      used to identify them. Order is preserved upon merge. The map tag
-	//      must only be used on a list with elements of type object.
+	// 1) `atomic`：列表被当作单一实体，类似标量。
+	//     原子列表在更新时会被整体替换。该扩展可用于
+	//     任意类型的列表（struct、scalar 等）。
+	// 2) `set`：
+	//     集合是不允许出现重复值的列表。每个值必须是
+	//     标量（或其他原子类型）。
+	// 3) `map`：
+	//     这类列表类似 map，其元素带有用于标识的非索引键。
+	//     合并时保持顺序。map 标签只能用于元素类型为 object
+	//     的列表。
 	XListType *string
 
-	// x-kubernetes-map-type annotates an object to further describe its topology.
-	// This extension must only be used when type is object and may have 2 possible values:
+	// x-kubernetes-map-type 为对象添加注解，以进一步描述其拓扑结构。
+	// 该扩展只能用于 type 为 object 的情况，且可能有 2 种取值：
 	//
-	// 1) `granular`:
-	//      These maps are actual maps (key-value pairs) and each fields are independent
-	//      from each other (they can each be manipulated by separate actors). This is
-	//      the default behaviour for all maps.
-	// 2) `atomic`: the list is treated as a single entity, like a scalar.
-	//      Atomic maps will be entirely replaced when updated.
+	// 1) `granular`：
+	//     这些 map 是真正的 map（键值对），各字段相互独立
+	//     （可由不同的操作者分别修改）。这是所有 map 的默认行为。
+	// 2) `atomic`：该列表被当作单一实体，类似标量。
+	//     原子 map 在更新时会被整体替换。
 	// +optional
 	XMapType *string
 }
 
 // +k8s:deepcopy-gen=true
 
-// ValidationExtensions contains the Kubernetes OpenAPI v3 extensions that are
-// used for validation rather than structure.
+// ValidationExtensions 包含用于校验而非结构的 Kubernetes OpenAPI v3 扩展。
 type ValidationExtensions struct {
-	// x-kubernetes-validations describes a list of validation rules for expression validation.
-	// Use the v1 struct since this gets serialized as an extension.
+	// x-kubernetes-validations 描述用于表达式校验的校验规则列表。
+	// 使用 v1 结构体，因为它会被序列化为扩展。
 	XValidations apiextensionsv1.ValidationRules
 }
 
 // +k8s:deepcopy-gen=true
 
-// ValueValidation contains all schema fields not contributing to the structure of the schema.
+// ValueValidation 包含不参与 schema 结构的所有 schema 字段。
 type ValueValidation struct {
 	Format           string
 	Maximum          *float64
@@ -179,8 +174,8 @@ type ValueValidation struct {
 
 // +k8s:deepcopy-gen=true
 
-// NestedValueValidation contains value validations, items and properties usable when nested
-// under a logical junctor, and catch all structs for generic and vendor extensions schema fields.
+// NestedValueValidation 包含可在逻辑连接词下嵌套使用的 value validation、items 与 properties，
+// 以及通用与 vendor 扩展 schema 字段的兜底结构。
 type NestedValueValidation struct {
 	ValueValidation
 	ValidationExtensions
@@ -189,9 +184,9 @@ type NestedValueValidation struct {
 	Properties           map[string]NestedValueValidation
 	AdditionalProperties *NestedValueValidation
 
-	// Anything set in the following will make the scheme
-	// non-structural, with the exception of these two patterns if
-	// x-kubernetes-int-or-string is true:
+	// 以下任一字段被设置都会使 schema
+	// 变为非结构化，但当 x-kubernetes-int-or-string 为 true 时，
+	// 以下两种模式除外：
 	//
 	// 1) anyOf:
 	//    - type: integer
@@ -200,22 +195,22 @@ type NestedValueValidation struct {
 	//    - anyOf:
 	//      - type: integer
 	//      - type: string
-	//    - ... zero or more
+	//    - ... 零个或多个
 	ForbiddenGenerics   Generic
 	ForbiddenExtensions Extensions
 }
 
-// JSON wraps an arbitrary JSON value to be able to implement deepcopy.
+// JSON 包装任意 JSON 值，以便实现 deepcopy。
 type JSON struct {
 	Object interface{}
 }
 
-// DeepCopy creates a deep copy of the wrapped JSON value.
+// DeepCopy 创建被包装 JSON 值的深拷贝。
 func (j JSON) DeepCopy() JSON {
 	return JSON{runtime.DeepCopyJSONValue(j.Object)}
 }
 
-// DeepCopyInto creates a deep copy of the wrapped JSON value and stores it in into.
+// DeepCopyInto 创建被包装 JSON 值的深拷贝并写入 into。
 func (j JSON) DeepCopyInto(into *JSON) {
 	into.Object = runtime.DeepCopyJSONValue(j.Object)
 }

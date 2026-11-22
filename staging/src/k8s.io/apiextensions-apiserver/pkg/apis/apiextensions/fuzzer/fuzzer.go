@@ -30,13 +30,13 @@ import (
 
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
-// Funcs returns the fuzzer functions for the apiextensions apis.
+// Funcs 返回 apiextensions API 的 fuzzer 函数。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(obj *apiextensions.CustomResourceDefinitionSpec, c randfill.Continue) {
 			c.FillNoCustom(obj)
 
-			// match our defaulter
+			// 与 defaulter 保持一致
 			if len(obj.Scope) == 0 {
 				obj.Scope = apiextensions.NamespaceScoped
 			}
@@ -47,7 +47,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 				obj.Names.ListKind = obj.Names.Kind + "List"
 			}
 			if len(obj.Versions) == 0 && len(obj.Version) == 0 {
-				// internal object must have a version to roundtrip all fields
+				// 内部对象必须有版本，才能让所有字段完成往返转换
 				obj.Version = "v1"
 			}
 			if len(obj.Versions) == 0 && len(obj.Version) != 0 {
@@ -79,8 +79,8 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 				obj.PreserveUnknownFields = ptr.To(true)
 			}
 
-			// Move per-version schema, subresources, additionalPrinterColumns, selectableFields to the top-level.
-			// This is required by validation in v1beta1, and by round-tripping in v1.
+			// 将各版本的 schema、subresources、additionalPrinterColumns、selectableFields 移到顶层。
+			// v1beta1 的校验要求如此，v1 的往返转换也要求如此。
 			if len(obj.Versions) == 1 {
 				if obj.Versions[0].Schema != nil {
 					obj.Validation = obj.Versions[0].Schema
@@ -112,7 +112,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(obj *apiextensions.JSONSchemaProps, c randfill.Continue) {
-			// we cannot use c.FuzzNoCustom because of the interface{} fields. So let's loop with reflection.
+			// 由于存在 interface{} 字段，无法使用 c.FuzzNoCustom，因此改用反射循环。
 			vobj := reflect.ValueOf(obj).Elem()
 			tobj := reflect.TypeOf(obj).Elem()
 			for i := 0; i < tobj.NumField(); i++ {
@@ -147,7 +147,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 				obj.Ref = &validRef
 			}
 			if len(obj.Type) == 0 {
-				obj.Nullable = false // because this does not roundtrip through go-openapi
+				obj.Nullable = false // 因为 go-openapi 无法完成往返转换
 			}
 			if obj.XIntOrString {
 				obj.Type = ""
@@ -163,7 +163,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(obj *apiextensions.JSONSchemaPropsOrArray, c randfill.Continue) {
-			// disallow both Schema and JSONSchemas to be nil.
+			// 不允许 Schema 和 JSONSchemas 同时为 nil。
 			if c.Bool() {
 				obj.Schema = &apiextensions.JSONSchemaProps{}
 				c.Fill(obj.Schema)
@@ -183,7 +183,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(obj *int64, c randfill.Continue) {
-			// JSON only supports 53 bits because everything is a float
+			// JSON 中一切都是浮点数，因此只支持 53 位
 			*obj = int64(c.Uint64()) & ((int64(1) << 53) - 1)
 		},
 		func(obj *apiextensions.ValidationRule, c randfill.Continue) {

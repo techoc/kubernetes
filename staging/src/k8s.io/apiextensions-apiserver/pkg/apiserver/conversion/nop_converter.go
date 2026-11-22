@@ -22,15 +22,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// nopConverter is a converter that only sets the apiVersion fields, but does not real conversion.
+// nopConverter 是一个转换器，只设置 apiVersion 字段，不做真正的转换。
 type nopConverter struct {
 }
 
 var _ crConverterInterface = &nopConverter{}
 
-// ConvertToVersion converts in object to the given gv in place and returns the same `in` object.
+// ConvertToVersion 将 in 对象原地转换到给定的 gv，并返回同一个 `in` 对象。
 func (c *nopConverter) Convert(in runtime.Object, targetGV schema.GroupVersion) (runtime.Object, error) {
-	// Run the converter on the list items instead of list itself
+	// 对列表项而非列表本身执行转换
 	if list, ok := in.(*unstructured.UnstructuredList); ok {
 		for i := range list.Items {
 			list.Items[i].SetGroupVersionKind(targetGV.WithKind(list.Items[i].GroupVersionKind().Kind))

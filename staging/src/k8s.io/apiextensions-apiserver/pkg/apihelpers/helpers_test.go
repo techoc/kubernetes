@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestIsProtectedCommunityGroup 验证受保护社区组的识别，包括 k8s.io / kubernetes.io 及其子域。
 func TestIsProtectedCommunityGroup(t *testing.T) {
 	tests := []struct {
 		name string
@@ -70,6 +71,7 @@ func TestIsProtectedCommunityGroup(t *testing.T) {
 	}
 }
 
+// TestGetAPIApprovalState 验证从注解解析 API 审批状态，覆盖 unapproved、空值与 URL 等形式。
 func TestGetAPIApprovalState(t *testing.T) {
 	tests := []struct {
 		name string
@@ -140,6 +142,7 @@ func TestGetAPIApprovalState(t *testing.T) {
 	}
 }
 
+// TestCRDHasFinalizer 验证 finalizer 存在性判断。
 func TestCRDHasFinalizer(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -173,6 +176,7 @@ func TestCRDHasFinalizer(t *testing.T) {
 	}
 }
 
+// TestCRDRemoveFinalizer 验证移除 finalizer 后保留其他 finalizer。
 func TestCRDRemoveFinalizer(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -206,6 +210,7 @@ func TestCRDRemoveFinalizer(t *testing.T) {
 	}
 }
 
+// TestSetCRDCondition 验证设置条件时的替换、追加与 LastTransitionTime 处理。
 func TestSetCRDCondition(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -397,6 +402,7 @@ func TestSetCRDCondition(t *testing.T) {
 	}
 }
 
+// TestRemoveCRDCondition 验证按类型移除条件。
 func TestRemoveCRDCondition(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -484,6 +490,7 @@ func TestRemoveCRDCondition(t *testing.T) {
 	}
 }
 
+// TestIsCRDConditionPresentAndEqual 验证条件存在性与状态相等性判断。
 func TestIsCRDConditionPresentAndEqual(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -568,6 +575,7 @@ func TestIsCRDConditionPresentAndEqual(t *testing.T) {
 	}
 }
 
+// generateCRDwithCondition 构造带指定状态条件的测试 CRD。
 func generateCRDwithCondition(conditions []apiextensionsv1.CustomResourceDefinitionCondition) *apiextensionsv1.CustomResourceDefinition {
 	testCRDObjectMeta := metav1.ObjectMeta{
 		Name:            "plural.group.com",

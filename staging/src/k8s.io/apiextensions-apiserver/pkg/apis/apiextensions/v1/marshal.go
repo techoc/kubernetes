@@ -14,6 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件定义 CRD v1 版本中特殊类型的 JSON/CBOR 序列化/反序列化逻辑。
+// CRD 的 schema 包含联合类型（如 JSONSchemaPropsOrBool），
+// 标准 Go 序列化无法正确处理，需要自定义 Marshal/Unmarshal 方法。
+//
+// 支持的联合类型：
+//   - JSONSchemaPropsOrBool：schema 对象或布尔值（用于 x-kubernetes-preserve-unknown-fields）
+//   - JSONSchemaPropsOrStringArray：schema 对象或字符串数组（用于 x-kubernetes-list-map-keys）
+//   - JSONSchemaPropsOrArray：schema 对象或 schema 数组（用于 oneOf）
+//   - JSON：原始 JSON 值（用于 default 和 example 字段）
 package v1
 
 import (
@@ -27,8 +36,9 @@ import (
 var jsTrue = []byte("true")
 var jsFalse = []byte("false")
 
-// The CBOR parsing related constants and functions below are not exported so they can be
-// easily removed at a future date when the CBOR library provides equivalent functionality.
+// CBOR 解析相关常量和函数是内部使用的，
+// 用于区分 CBOR 数据的类型（Map、Array、Boolean 等）。
+// 当 CBOR 库提供等效功能时可以移除。
 
 type cborMajorType int
 
@@ -52,10 +62,13 @@ const (
 	cborNullValue  = 0xf6
 )
 
+// cborType 从 CBOR 数据的第一个字节提取主类型（高 3 位）。
 func cborType(b byte) cborMajorType {
 	return cborMajorType(b >> 5)
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrBool 序列化为 JSON。
+// 如果有 schema 对象，序列化 schema；否则序列化布尔值（true/false）。
 func (s JSONSchemaPropsOrBool) MarshalJSON() ([]byte, error) {
 	if s.Schema != nil {
 		return json.Marshal(s.Schema)
@@ -67,6 +80,8 @@ func (s JSONSchemaPropsOrBool) MarshalJSON() ([]byte, error) {
 	return jsTrue, nil
 }
 
+// UnmarshalJSON 将 JSON 数据反序列化为 JSONSchemaPropsOrBool。
+// 根据第一个字节判断类型：'{' 表示 schema 对象，"true" 和 "false" 表示布尔值。
 func (s *JSONSchemaPropsOrBool) UnmarshalJSON(data []byte) error {
 	var nw JSONSchemaPropsOrBool
 	switch {
@@ -89,6 +104,7 @@ func (s *JSONSchemaPropsOrBool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrBool 序列化为 CBOR 格式。
 func (s JSONSchemaPropsOrBool) MarshalCBOR() ([]byte, error) {
 	if s.Schema != nil {
 		return cbor.Marshal(s.Schema)
@@ -96,6 +112,8 @@ func (s JSONSchemaPropsOrBool) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(s.Allows)
 }
 
+// UnmarshalCBOR 将 CBOR 数据反序列化为 JSONSchemaPropsOrBool。
+// 通过检查第一个字节的主类型来区分 Map（schema）和 Boolean（true/false）。
 func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 	switch {
 	case len(data) == 0:
@@ -122,6 +140,8 @@ func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 	}
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrStringArray 序列化为 JSON。
+// 优先级：字符串数组 > schema 对象 > null。
 func (s JSONSchemaPropsOrStringArray) MarshalJSON() ([]byte, error) {
 	if len(s.Property) > 0 {
 		return json.Marshal(s.Property)
@@ -132,6 +152,8 @@ func (s JSONSchemaPropsOrStringArray) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
+// UnmarshalJSON 将 JSON 数据反序列化为 JSONSchemaPropsOrStringArray。
+// '{' 表示 schema 对象，'[' 表示字符串数组。
 func (s *JSONSchemaPropsOrStringArray) UnmarshalJSON(data []byte) error {
 	var first byte
 	if len(data) > 1 {
@@ -154,6 +176,7 @@ func (s *JSONSchemaPropsOrStringArray) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrStringArray 序列化为 CBOR 格式。
 func (s JSONSchemaPropsOrStringArray) MarshalCBOR() ([]byte, error) {
 	if len(s.Property) > 0 {
 		return cbor.Marshal(s.Property)
@@ -164,6 +187,7 @@ func (s JSONSchemaPropsOrStringArray) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(nil)
 }
 
+// UnmarshalCBOR 将 CBOR 数据反序列化为 JSONSchemaPropsOrStringArray。
 func (s *JSONSchemaPropsOrStringArray) UnmarshalCBOR(data []byte) error {
 	if len(data) > 0 && cborType(data[0]) == cborArray {
 		var a []string
@@ -188,6 +212,8 @@ func (s *JSONSchemaPropsOrStringArray) UnmarshalCBOR(data []byte) error {
 	return nil
 }
 
+// MarshalJSON 将 JSONSchemaPropsOrArray 序列化为 JSON。
+// 如果有 schema 数组，序列化数组；否则序列化单个 schema 对象。
 func (s JSONSchemaPropsOrArray) MarshalJSON() ([]byte, error) {
 	if len(s.JSONSchemas) > 0 {
 		return json.Marshal(s.JSONSchemas)
@@ -195,6 +221,8 @@ func (s JSONSchemaPropsOrArray) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Schema)
 }
 
+// UnmarshalJSON 将 JSON 数据反序列化为 JSONSchemaPropsOrArray。
+// '{' 表示单个 schema 对象，'[' 表示 schema 数组。
 func (s *JSONSchemaPropsOrArray) UnmarshalJSON(data []byte) error {
 	var nw JSONSchemaPropsOrArray
 	var first byte
@@ -217,6 +245,7 @@ func (s *JSONSchemaPropsOrArray) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSONSchemaPropsOrArray 序列化为 CBOR 格式。
 func (s JSONSchemaPropsOrArray) MarshalCBOR() ([]byte, error) {
 	if len(s.JSONSchemas) > 0 {
 		return cbor.Marshal(s.JSONSchemas)
@@ -224,6 +253,7 @@ func (s JSONSchemaPropsOrArray) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(s.Schema)
 }
 
+// UnmarshalCBOR 将 CBOR 数据反序列化为 JSONSchemaPropsOrArray。
 func (s *JSONSchemaPropsOrArray) UnmarshalCBOR(data []byte) error {
 	if len(data) > 0 && cborType(data[0]) == cborMap {
 		var p JSONSchemaProps
@@ -248,6 +278,8 @@ func (s *JSONSchemaPropsOrArray) UnmarshalCBOR(data []byte) error {
 	return nil
 }
 
+// MarshalJSON 将 JSON 类型（原始字节）序列化为 JSON。
+// 空字节返回 null，否则直接返回原始字节（避免二次编码）。
 func (s JSON) MarshalJSON() ([]byte, error) {
 	if len(s.Raw) > 0 {
 		return s.Raw, nil
@@ -256,6 +288,8 @@ func (s JSON) MarshalJSON() ([]byte, error) {
 
 }
 
+// UnmarshalJSON 将 JSON 数据保存为原始字节。
+// 字面量 null 不保存，保持 Raw 为空。
 func (s *JSON) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && !bytes.Equal(data, nullLiteral) {
 		s.Raw = append(s.Raw[0:0], data...)
@@ -263,11 +297,10 @@ func (s *JSON) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalCBOR 将 JSON 原始字节转换为 CBOR 格式。
+// 先将 JSON 字节反序列化为 Go 值，再序列化为 CBOR。
+// 注意：此过程会丢失非语义空白字符，但对当前使用场景没有影响。
 func (s JSON) MarshalCBOR() ([]byte, error) {
-	// Note that non-semantic whitespace is lost during the transcoding performed here.
-	// We do not forsee this to be a problem given the current known uses of this type.
-	// Other limitations that arise when roundtripping JSON via dynamic clients also apply
-	// here, for example: insignificant whitespace handling, number handling, and map key ordering.
 	if len(s.Raw) == 0 {
 		return []byte{cborNullValue}, nil
 	}
@@ -278,6 +311,8 @@ func (s JSON) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(u)
 }
 
+// UnmarshalCBOR 将 CBOR 数据转换为 JSON 原始字节。
+// 先将 CBOR 反序列化为 Go 值，再序列化为 JSON 字节。
 func (s *JSON) UnmarshalCBOR(data []byte) error {
 	if len(data) == 0 || data[0] == cborNullValue {
 		return nil

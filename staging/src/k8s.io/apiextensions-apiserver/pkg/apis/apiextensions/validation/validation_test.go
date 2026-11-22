@@ -46,50 +46,72 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// validationMatch 描述一条期望的校验错误：字段路径、错误类型，以及错误消息中应包含的片段。
 type validationMatch struct {
 	path           *field.Path
 	errorType      field.ErrorType
 	containsString string
 }
 
+// required 返回期望为必填错误的匹配器。
 func required(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeRequired}
 }
+
+// invalid 返回期望为非法值错误的匹配器。
 func invalid(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeInvalid}
 }
+
+// invalidtypecode 返回期望为类型非法错误的匹配器。
 func invalidtypecode(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeTypeInvalid}
 }
+
+// invalidIndex 返回带数组下标的非法值错误匹配器。
 func invalidIndex(index int, path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...).Index(index), errorType: field.ErrorTypeInvalid}
 }
+
+// unsupported 返回期望为不支持值错误的匹配器。
 func unsupported(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeNotSupported}
 }
+
+// immutable 返回期望为不可变错误字段的匹配器（错误类型同为 Invalid）。
 func immutable(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeInvalid}
 }
+
+// forbidden 返回期望为禁止操作错误的匹配器。
 func forbidden(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeForbidden}
 }
+
+// duplicate 返回期望为重复值错误的匹配器。
 func duplicate(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeDuplicate}
 }
+
+// tooMany 返回期望为数量超限错误的匹配器。
 func tooMany(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeTooMany}
 }
 
+// matches 判断实际错误是否与期望的路径、类型和消息片段一致。
 func (v validationMatch) matches(err *field.Error) bool {
+	// 路径和类型必须精确匹配；错误消息只按子串匹配。
 	return err.Type == v.errorType && err.Field == v.path.String() && strings.Contains(err.Error(), v.containsString)
 }
 
+// contains 设置错误消息中必须出现的片段，返回副本以支持链式调用。
 func (v validationMatch) contains(s string) validationMatch {
 	v.containsString = s
+	// 返回修改后的副本，便于构造期望错误时链式调用。
 	return v
 }
 
-// exampleCert was generated from crypto/tls/generate_cert.go with the following command:
+// exampleCert 由 crypto/tls/generate_cert.go 通过以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var exampleCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -112,6 +134,7 @@ UU4dq6G4kCwMSxWE4cM3HlZ4u1dyIt47VbkP0rtvkBCXx36y+NXYA5lzntchNFZP
 uvEQdw==
 -----END CERTIFICATE-----`)
 
+// TestValidateCustomResourceDefinition 校验创建 CRD 时的各种合法与非法输入。
 func TestValidateCustomResourceDefinition(t *testing.T) {
 	singleVersionList := []apiextensions.CustomResourceDefinitionVersion{
 		{
@@ -1245,13 +1268,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 				invalid("spec", "names", "plural"),
 				invalid("spec", "names", "singular"),
 				invalid("spec", "names", "kind"),
-				invalid("spec", "names", "listKind"), // invalid format
-				invalid("spec", "names", "listKind"), // kind == listKind
+				invalid("spec", "names", "listKind"), // 格式无效
+				invalid("spec", "names", "listKind"), // kind 与 listKind 相同
 				invalid("status", "acceptedNames", "plural"),
 				invalid("status", "acceptedNames", "singular"),
 				invalid("status", "acceptedNames", "kind"),
-				invalid("status", "acceptedNames", "listKind"), // invalid format
-				invalid("status", "acceptedNames", "listKind"), // kind == listKind
+				invalid("status", "acceptedNames", "listKind"), // 格式无效
+				invalid("status", "acceptedNames", "listKind"), // kind 与 listKind 相同
 				invalid("spec", "versions"),
 				invalid("spec", "version"),
 			},
@@ -1425,8 +1448,8 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 				},
 			},
 			errors: []validationMatch{
-				// Per-version schema/subresources/columns may not all be set to identical values.
-				// Note that the test will fail if we de-duplicate the expected errors below.
+				// 每个版本各自的 schema/subresources/columns 不能全部设为相同的值。
+				// 注意：若把下面重复的期望错误去重，测试就会失败。
 				invalid("spec", "versions"),
 				invalid("spec", "versions"),
 				invalid("spec", "versions"),
@@ -1703,7 +1726,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 					Version: "version0",
 					Versions: []apiextensions.CustomResourceDefinitionVersion{
 						{
-							// null labelSelectorPath
+							// labelSelectorPath 为 null
 							Name:    "version0",
 							Served:  true,
 							Storage: true,
@@ -1715,7 +1738,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 							},
 						},
 						{
-							// labelSelectorPath under .status
+							// labelSelectorPath 位于 .status 下
 							Name:    "version1",
 							Served:  true,
 							Storage: false,
@@ -1728,7 +1751,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 							},
 						},
 						{
-							// labelSelectorPath under .spec
+							// labelSelectorPath 位于 .spec 下
 							Name:    "version2",
 							Served:  true,
 							Storage: false,
@@ -1741,7 +1764,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 							},
 						},
 						{
-							// labelSelectorPath outside of .spec and .status
+							// labelSelectorPath 位于 .spec 与 .status 之外
 							Name:    "version3",
 							Served:  true,
 							Storage: false,
@@ -2161,7 +2184,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Type: "object",
 											Default: jsonPtr(map[string]interface{}{
 												"foo": "abc",
-												// this is under x-kubernetes-preserve-unknown-fields
+												// 该字段处于 x-kubernetes-preserve-unknown-fields 覆盖范围内
 												"bar": int64(42.0),
 											}),
 										},
@@ -2180,7 +2203,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									XPreserveUnknownFields: ptr.To(true),
 								},
-								// x-kubernetes-embedded-resource: true
+								// x-kubernetes-embedded-resource: true 的用例
 								"embedded-fine": {
 									Type:              "object",
 									XEmbeddedResource: true,
@@ -2232,7 +2255,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"kind":       "v1",
 										"metadata": map[string]interface{}{
 											"name": "foo",
-											// allow: unknown fields under metadata are not rejected during CRD validation, but only pruned in storage creation
+											// 允许：metadata 下的未知字段在 CRD 校验阶段不会被拒绝，只在创建存储对象时被裁剪
 											"unspecified": "bar",
 										},
 										"bar": int64(42),
@@ -2251,8 +2274,8 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 				invalid("spec", "validation", "openAPIV3Schema", "properties[a]", "default"),
 				invalidtypecode("spec", "validation", "openAPIV3Schema", "properties[c]", "default", "foo"),
 				invalid("spec", "validation", "openAPIV3Schema", "properties[d]", "default", "bad"),
-				// we also expected unpruned and valid defaults under x-kubernetes-preserve-unknown-fields. We could be more
-				// strict here, but want to encourage proper specifications by forbidding other defaults.
+				// 同时也期望 x-kubernetes-preserve-unknown-fields 下的默认值未经裁剪且合法。这里本可以更严格，
+				// 但为了鼓励规范写法，选择禁止其他默认值。
 				invalid("spec", "validation", "openAPIV3Schema", "properties[e]", "properties[preserveUnknownFields]", "default"),
 				invalid("spec", "validation", "openAPIV3Schema", "properties[e]", "properties[nestedProperties]", "default"),
 			},
@@ -2307,7 +2330,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 			},
 		},
 		{
-			// TODO: remove in a follow-up. This blocks is here for easy review.
+			// TODO: 后续删除。这一块单独保留，便于审查。
 			name: "v1.15 era tests for metadata defaults",
 			resource: &apiextensions.CustomResourceDefinition{
 				ObjectMeta: metav1.ObjectMeta{Name: "plural.group.com"},
@@ -2325,7 +2348,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"metadata": {
 											Type: "object",
-											// forbidden: no default for top-level metadata
+											// 禁止：顶层 metadata 不能有默认值
 											Default: jsonPtr(map[string]interface{}{
 												"name": "foo",
 											}),
@@ -2338,7 +2361,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													Type: "object",
 													Default: jsonPtr(map[string]interface{}{
 														"name": "foo",
-														// allow: unknown fields under metadata are not rejected during CRD validation, but only pruned in storage creation
+														// 允许：metadata 下的未知字段在 CRD 校验阶段不会被拒绝，只在创建存储对象时被裁剪
 														"unknown": int64(42),
 													}),
 												},
@@ -2361,7 +2384,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Properties: map[string]apiextensions.JSONSchemaProps{
 												"name": {
 													Type: "string",
-													// forbidden: no default in top-level metadata
+													// 禁止：顶层 metadata 内不能有默认值
 													Default: jsonPtr("foo"),
 												},
 											},
@@ -2411,14 +2434,14 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 												},
 												"kind": {
 													Type: "string",
-													// invalid: non-validating value in TypeMeta
+													// 无效：TypeMeta 中的取值无法通过校验
 													Default: jsonPtr("%"),
 												},
 												"metadata": {
 													Type: "object",
 													Default: jsonPtr(map[string]interface{}{
 														"labels": map[string]interface{}{
-															// invalid: non-validating nested field in ObjectMeta
+															// 无效：ObjectMeta 中嵌套字段的取值无法通过校验
 															"bar": "x y",
 														},
 													}),
@@ -2446,7 +2469,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													Properties: map[string]apiextensions.JSONSchemaProps{
 														"name": {
 															Type: "string",
-															// invalid: wrongly typed nested fields in ObjectMeta
+															// 无效：ObjectMeta 中嵌套字段类型错误
 															Default: jsonPtr(int64(42)),
 														},
 														"labels": {
@@ -2454,7 +2477,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 															Properties: map[string]apiextensions.JSONSchemaProps{
 																"bar": {
 																	Type: "string",
-																	// invalid: wrong typed nested fields in ObjectMeta
+																	// 无效：ObjectMeta 中嵌套字段类型错误
 																	Default: jsonPtr(int64(42)),
 																},
 															},
@@ -2482,20 +2505,20 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 				},
 			},
 			errors: []validationMatch{
-				// Forbidden: must not be set in top-level metadata
+				// Forbidden：不能在顶层 metadata 中设置
 				forbidden("spec", "versions[0]", "schema", "openAPIV3Schema", "properties[metadata]", "default"),
 
-				// Forbidden: must not be set in top-level metadata
+				// Forbidden：不能在顶层 metadata 中设置
 				forbidden("spec", "versions[1]", "schema", "openAPIV3Schema", "properties[metadata]", "properties[name]", "default"),
 
-				// Invalid value: "x y"
+				// 非法值："x y"
 				invalid("spec", "versions[2]", "schema", "openAPIV3Schema", "properties[embedded]", "properties[metadata]", "default"),
-				// Invalid value: "%": kind: Invalid value: "%"
+				// 非法值："%"（kind）
 				invalid("spec", "versions[2]", "schema", "openAPIV3Schema", "properties[embedded]", "properties[kind]", "default"),
 
-				// Invalid value: wrongly typed
+				// 非法值：类型错误
 				invalid("spec", "versions[3]", "schema", "openAPIV3Schema", "properties[embedded]", "properties[metadata]", "properties[labels]", "properties[bar]", "default"),
-				// Invalid value: wrongly typed
+				// 非法值：类型错误
 				invalid("spec", "versions[3]", "schema", "openAPIV3Schema", "properties[embedded]", "properties[metadata]", "properties[name]", "default"),
 			},
 		},
@@ -2529,7 +2552,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
 														Schema: &apiextensions.JSONSchemaProps{
 															Type: "string",
-															// forbidden: no default under additionalProperties inside of metadata
+															// 禁止：metadata 内的 additionalProperties 下不能有默认值
 															Default: jsonPtr("abc"),
 														},
 													},
@@ -2555,7 +2578,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 				},
 			},
 			errors: []validationMatch{
-				// Forbidden: must not be set inside additionalProperties applying to object metadata
+				// Forbidden：不能在作用于 object metadata 的 additionalProperties 内设置
 				forbidden("spec", "validation", "openAPIV3Schema", "properties[embedded]", "properties[metadata]", "properties[annotations]", "additionalProperties", "default"),
 			},
 		},
@@ -2579,7 +2602,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"metadata": {
 									Type: "object",
-									// forbidden: no default for top-level metadata
+									// 禁止：顶层 metadata 不能有默认值
 									Default: jsonPtr(map[string]interface{}{
 										"name": "foo",
 									}),
@@ -2655,7 +2678,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													Default: jsonPtr("foo"),
 												},
 											},
-											// allowed: unknown fields outside metadata
+											// 允许：metadata 之外的未知字段
 											Default: jsonPtr(map[string]interface{}{
 												"unknown": int64(42),
 											}),
@@ -2717,10 +2740,10 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"kind":       "Pod",
 										"metadata": map[string]interface{}{
 											"name": "foo",
-											// allowed: unspecified field in ObjectMeta
+											// 允许：ObjectMeta 中未声明的字段
 											"unknown": int64(42),
 										},
-										// forbidden: unspecified field
+										// 禁止：未声明的字段
 										"unknown": int64(42),
 									}),
 								},
@@ -2743,13 +2766,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											"kind":       "Pod",
 											"metadata": map[string]interface{}{
 												"name": "foo",
-												// allowed: unspecified field in ObjectMeta
+												// 允许：ObjectMeta 中未声明的字段
 												"unknown": int64(42),
 											},
-											// forbidden: unspecified field
+											// 禁止：未声明的字段
 											"unknown": int64(42),
 										},
-										// forbidden: unspecified field
+										// 禁止：未声明的字段
 										"unknown": int64(42),
 									}),
 								},
@@ -2764,10 +2787,10 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"kind":       "Pod",
 										"metadata": map[string]interface{}{
 											"name": "foo",
-											// allowed: unspecified field in ObjectMeta
+											// 允许：ObjectMeta 中未声明的字段
 											"unknown": int64(42),
 										},
-										// allowed: because x-kubernetes-preserve-unknown-fields: true
+										// 允许：因为设置了 x-kubernetes-preserve-unknown-fields: true
 										"unknown": int64(42),
 									}),
 								},
@@ -2787,10 +2810,10 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											"kind":       "Pod",
 											"metadata": map[string]interface{}{
 												"name": "foo",
-												// allowed: unspecified field in ObjectMeta
+												// 允许：ObjectMeta 中未声明的字段
 												"unknown": int64(42),
 											},
-											// allowed: because x-kubernetes-preserve-unknown-fields: true
+											// 允许：因为设置了 x-kubernetes-preserve-unknown-fields: true
 											"unknown": int64(42),
 										},
 									}),
@@ -2811,13 +2834,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											"kind":       "Pod",
 											"metadata": map[string]interface{}{
 												"name": "foo",
-												// allowed: unspecified field in ObjectMeta
+												// 允许：ObjectMeta 中未声明的字段
 												"unknown": int64(42),
 											},
-											// allowed: because x-kubernetes-preserve-unknown-fields: true
+											// 允许：因为设置了 x-kubernetes-preserve-unknown-fields: true
 											"unknown": int64(42),
 										},
-										// forbidden: unspecified field
+										// 禁止：未声明的字段
 										"unknown": int64(42),
 									}),
 								},
@@ -2828,12 +2851,12 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"apiVersion": {
 											Type: "string",
-											// invalid: wrong type
+											// 无效：类型错误
 											Default: jsonPtr(int64(42)),
 										},
 										"kind": {
 											Type: "string",
-											// invalid: wrong type
+											// 无效：类型错误
 											Default: jsonPtr(int64(42)),
 										},
 										"metadata": {
@@ -2841,7 +2864,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Properties: map[string]apiextensions.JSONSchemaProps{
 												"name": {
 													Type: "string",
-													// invalid: wrong type
+													// 无效：类型错误
 													Default: jsonPtr(int64(42)),
 												},
 												"annotations": {
@@ -2851,7 +2874,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 															Type: "string",
 														},
 													},
-													// invalid: wrong type
+													// 无效：类型错误
 													Default: jsonPtr(int64(42)),
 												},
 											},
@@ -2867,7 +2890,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										},
 									},
 									Default: jsonPtr(map[string]interface{}{
-										// invalid: wrong type
+										// 无效：类型错误
 										"apiVersion": int64(42),
 									}),
 								},
@@ -2880,7 +2903,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										},
 									},
 									Default: jsonPtr(map[string]interface{}{
-										// invalid: wrong type
+										// 无效：类型错误
 										"kind": int64(42),
 									}),
 								},
@@ -2894,7 +2917,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									Default: jsonPtr(map[string]interface{}{
 										"metadata": map[string]interface{}{
-											// invalid: wrong type
+											// 无效：类型错误
 											"name": int64(42),
 										},
 									}),
@@ -2910,7 +2933,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Default: jsonPtr(map[string]interface{}{
 										"metadata": map[string]interface{}{
 											"labels": map[string]interface{}{
-												// invalid: wrong type
+												// 无效：类型错误
 												"foo": int64(42),
 											},
 										},
@@ -2926,7 +2949,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									Default: jsonPtr(map[string]interface{}{
 										"metadata": map[string]interface{}{
-											// invalid: wrong type
+											// 无效：类型错误
 											"annotations": int64(42),
 										},
 									}),
@@ -2940,7 +2963,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										},
 									},
 									Default: jsonPtr(map[string]interface{}{
-										// invalid: wrong type
+										// 无效：类型错误
 										"metadata": int64(42),
 									}),
 								},
@@ -2960,7 +2983,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
-											// invalid: wrong type
+											// 无效：类型错误
 											"apiVersion": int64(42),
 										},
 									}),
@@ -2980,7 +3003,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
-											// invalid: wrong type
+											// 无效：类型错误
 											"kind": int64(42),
 										},
 									}),
@@ -3023,7 +3046,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"embedded": map[string]interface{}{
 											"metadata": map[string]interface{}{
 												"labels": map[string]interface{}{
-													// invalid: wrong type
+													// 无效：类型错误
 													"foo": int64(42),
 												},
 											},
@@ -3046,7 +3069,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"metadata": map[string]interface{}{
-												// invalid: wrong type
+												// 无效：类型错误
 												"annotations": int64(42),
 											},
 										},
@@ -3078,7 +3101,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"kind": {
 											Type: "string",
-											// invalid
+											// 无效
 											Default: jsonPtr("%"),
 										},
 										"metadata": {
@@ -3086,7 +3109,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Properties: map[string]apiextensions.JSONSchemaProps{
 												"name": {
 													Type: "string",
-													// invalid
+													// 无效
 													Default: jsonPtr("%"),
 												},
 												"labels": {
@@ -3096,7 +3119,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 															Type: "string",
 														},
 													},
-													// invalid
+													// 无效
 													Default: jsonPtr(map[string]interface{}{
 														"foo": "x y",
 													}),
@@ -3115,7 +3138,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									},
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "foo/v1",
-										// invalid: wrongly typed
+										// 无效：类型错误
 										"kind": "%",
 									}),
 								},
@@ -3131,7 +3154,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"apiVersion": "foo/v1",
 										"kind":       "Foo",
 										"metadata": map[string]interface{}{
-											// invalid: wrongly typed
+											// 无效：类型错误
 											"name": "%",
 										},
 									}),
@@ -3149,7 +3172,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"kind":       "Foo",
 										"metadata": map[string]interface{}{
 											"labels": map[string]interface{}{
-												// invalid: wrongly typed
+												// 无效：类型错误
 												"foo": "x y",
 											},
 										},
@@ -3171,7 +3194,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "foo/v1",
-											// invalid: wrongly typed
+											// 无效：类型错误
 											"kind": "%",
 										},
 									}),
@@ -3194,7 +3217,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											"apiVersion": "foo/v1",
 											"kind":       "Foo",
 											"metadata": map[string]interface{}{
-												// invalid: wrongly typed
+												// 无效：类型错误
 												"name": "%",
 											},
 										},
@@ -3219,7 +3242,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											"kind":       "Foo",
 											"metadata": map[string]interface{}{
 												"labels": map[string]interface{}{
-													// invalid: wrongly typed
+													// 无效：类型错误
 													"foo": "x y",
 												},
 											},
@@ -3233,13 +3256,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"apiVersion": {
 											Type: "string",
-											// valid
+											// 合法
 											Default: jsonPtr("foo/v1"),
 											Enum:    jsonSlice("foo/v1"),
 										},
 										"kind": {
 											Type: "string",
-											// valid
+											// 合法
 											Default: jsonPtr("Foo"),
 											Enum:    jsonSlice("Foo"),
 										},
@@ -3248,7 +3271,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Properties: map[string]apiextensions.JSONSchemaProps{
 												"name": {
 													Type: "string",
-													// valid
+													// 合法
 													Default: jsonPtr("foo"),
 													Enum:    jsonSlice("foo"),
 												},
@@ -3260,7 +3283,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 															Enum: jsonSlice("foo"),
 														},
 													},
-													// valid
+													// 合法
 													Default: jsonPtr(map[string]interface{}{
 														"foo": "foo",
 													}),
@@ -3290,7 +3313,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													},
 												},
 											},
-											// valid
+											// 合法
 											Default: jsonPtr(map[string]interface{}{
 												"name": "foo",
 												"labels": map[string]interface{}{
@@ -3331,7 +3354,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// valid
+									// 合法
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "foo/v1",
 										"kind":       "Foo",
@@ -3379,7 +3402,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// valid
+									// 合法
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "foo/v1",
@@ -3401,13 +3424,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 										"apiVersion": {
 											Type:        "string",
 											Description: "BREAK",
-											// invalid
+											// 无效
 											Default: jsonPtr("bar/v1"),
 											Enum:    jsonSlice("foo/v1"),
 										},
 										"kind": {
 											Type: "string",
-											// invalid
+											// 无效
 											Default: jsonPtr("Bar"),
 											Enum:    jsonSlice("Foo"),
 										},
@@ -3416,7 +3439,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Properties: map[string]apiextensions.JSONSchemaProps{
 												"name": {
 													Type: "string",
-													// invalid
+													// 无效
 													Default: jsonPtr("bar"),
 													Enum:    jsonSlice("foo"),
 												},
@@ -3428,7 +3451,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 															Enum: jsonSlice("foo"),
 														},
 													},
-													// invalid
+													// 无效
 													Default: jsonPtr(map[string]interface{}{
 														"foo": "bar",
 													}),
@@ -3458,7 +3481,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													},
 												},
 											},
-											// invalid name
+											// name 非法
 											Default: jsonPtr(map[string]interface{}{
 												"name": "bar",
 											}),
@@ -3486,7 +3509,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 													},
 												},
 											},
-											// invalid labels
+											// labels 非法
 											Default: jsonPtr(map[string]interface{}{
 												"name": "foo",
 												"labels": map[string]interface{}{
@@ -3527,7 +3550,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "foo/v1",
 										"kind":       "Foo",
@@ -3567,7 +3590,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "foo/v1",
 										"kind":       "Foo",
@@ -3610,7 +3633,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "bar/v1",
 										"kind":       "Foo",
@@ -3650,7 +3673,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"apiVersion": "foo/v1",
 										"kind":       "Bar",
@@ -3695,7 +3718,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "foo/v1",
@@ -3745,7 +3768,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "foo/v1",
@@ -3795,7 +3818,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "bar/v1",
@@ -3845,7 +3868,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid
+									// 无效
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"apiVersion": "foo/v1",
@@ -3873,7 +3896,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											Enum: jsonSlice("Foo"),
 										},
 									},
-									// invalid: kind and apiVersion are missing
+									// 无效：缺少 kind 和 apiVersion
 									Default: jsonPtr(map[string]interface{}{
 										"metadata": map[string]interface{}{
 											"name": "bar",
@@ -3898,7 +3921,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 											},
 										},
 									},
-									// invalid: kind and apiVersion are missing
+									// 无效：缺少 kind 和 apiVersion
 									Default: jsonPtr(map[string]interface{}{
 										"embedded": map[string]interface{}{
 											"metadata": map[string]interface{}{
@@ -4041,7 +4064,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 												},
 												"generation": {
 													Type:    "integer",
-													Minimum: ptr.To[float64](42.0), // does not make sense, but is allowed for nested ObjectMeta
+													Minimum: ptr.To[float64](42.0), // 对嵌套的 ObjectMeta 没有实际意义，但允许这样写
 												},
 											},
 										},
@@ -4066,7 +4089,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 												},
 												"generation": {
 													Type:    "integer",
-													Minimum: ptr.To[float64](42.0), // does not make sense, but is allowed for nested ObjectMeta
+													Minimum: ptr.To[float64](42.0), // 对嵌套的 ObjectMeta 没有实际意义，但允许这样写
 												},
 											},
 										},
@@ -4095,7 +4118,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 														},
 														"generation": {
 															Type:    "integer",
-															Minimum: ptr.To[float64](42.0), // does not make sense, but is allowed for nested ObjectMeta
+															Minimum: ptr.To[float64](42.0), // 对嵌套的 ObjectMeta 没有实际意义，但允许这样写
 														},
 													},
 												},
@@ -4509,12 +4532,13 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 
-			// duplicate defaulting behaviour
+			// 复现 API server 的默认值填充行为
 			if tc.resource.Spec.Conversion != nil && tc.resource.Spec.Conversion.Strategy == apiextensions.WebhookConverter && len(tc.resource.Spec.Conversion.ConversionReviewVersions) == 0 {
 				tc.resource.Spec.Conversion.ConversionReviewVersions = []string{"v1beta1"}
 			}
 			ctx := context.TODO()
 			errs := ValidateCustomResourceDefinition(ctx, tc.resource)
+			// 记录已匹配的错误，避免同一条实际错误被多个期望项重复消费。
 			seenErrs := make([]bool, len(errs))
 
 			for _, expectedError := range tc.errors {
@@ -4541,6 +4565,7 @@ func TestValidateCustomResourceDefinition(t *testing.T) {
 	}
 }
 
+// TestSelectableFields 校验 selectableFields 必须指向 schema 中存在的字段。
 func TestSelectableFields(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CustomResourceFieldSelectors, true)
 	singleVersionList := []apiextensions.CustomResourceDefinitionVersion{
@@ -4797,7 +4822,7 @@ func TestSelectableFields(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 
-			// duplicate defaulting behaviour
+			// 复现 API server 的默认值填充行为
 			if tc.resource.Spec.Conversion != nil && tc.resource.Spec.Conversion.Strategy == apiextensions.WebhookConverter && len(tc.resource.Spec.Conversion.ConversionReviewVersions) == 0 {
 				tc.resource.Spec.Conversion.ConversionReviewVersions = []string{"v1beta1"}
 			}
@@ -4829,6 +4854,7 @@ func TestSelectableFields(t *testing.T) {
 	}
 }
 
+// TestValidateFieldPath 校验字段路径解析对合法与非法写法的处理。
 func TestValidateFieldPath(t *testing.T) {
 	schema := apiextensions.JSONSchemaProps{
 		Type: "object",
@@ -5051,6 +5077,7 @@ func TestValidateFieldPath(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 字段路径检查基于结构化 schema，先完成转换。
 			ss, err := structuralschema.NewStructural(tc.schema)
 			if err != nil {
 				t.Fatalf("error when converting schema to structural schema: %v", err)
@@ -5069,6 +5096,7 @@ func TestValidateFieldPath(t *testing.T) {
 	}
 }
 
+// TestValidateCustomResourceDefinitionUpdate 校验更新 CRD 时的不可变性与兼容性规则。
 func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 	singleVersionList := []apiextensions.CustomResourceDefinitionVersion{
 		{
@@ -5210,7 +5238,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 								XListType: ptr.To("set"),
 								Items: &apiextensions.JSONSchemaPropsOrArray{
 									Schema: &apiextensions.JSONSchemaProps{
-										Type:       "object", // non-atomic
+										Type:       "object", // 非原子类型
 										Properties: map[string]apiextensions.JSONSchemaProps{},
 									},
 								},
@@ -5243,7 +5271,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 								XListType: ptr.To("set"),
 								Items: &apiextensions.JSONSchemaPropsOrArray{
 									Schema: &apiextensions.JSONSchemaProps{
-										Type:       "object", // non-atomic
+										Type:       "object", // 非原子类型
 										Properties: map[string]apiextensions.JSONSchemaProps{},
 									},
 								},
@@ -5303,7 +5331,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 								XListType: ptr.To("set"),
 								Items: &apiextensions.JSONSchemaPropsOrArray{
 									Schema: &apiextensions.JSONSchemaProps{
-										Type:       "object", // non-atomic
+										Type:       "object", // 非原子类型
 										Properties: map[string]apiextensions.JSONSchemaProps{},
 									},
 								},
@@ -5351,7 +5379,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 					Validation: &apiextensions.CustomResourceValidation{
 						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 							Type:       "object",
-							Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // untyped object
+							Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // 未标注类型的 object
 						},
 					},
 					PreserveUnknownFields: ptr.To(true),
@@ -5390,7 +5418,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 					Validation: &apiextensions.CustomResourceValidation{
 						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 							Type:       "object",
-							Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // untyped object
+							Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // 未标注类型的 object
 						},
 					},
 					PreserveUnknownFields: ptr.To(true),
@@ -5415,13 +5443,13 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 						{Name: "version", Served: true, Storage: true, Schema: &apiextensions.CustomResourceValidation{
 							OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 								Type:       "object",
-								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // untyped object, non-structural
+								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {}}, // 未标注类型的 object，非结构化
 							},
 						}},
 						{Name: "version2", Served: true, Storage: false, Schema: &apiextensions.CustomResourceValidation{
 							OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 								Type:       "object",
-								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Type: "number"}}, // structural
+								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Type: "number"}}, // 结构化
 							},
 						}},
 					},
@@ -5441,13 +5469,13 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 						{Name: "version", Served: true, Storage: true, Schema: &apiextensions.CustomResourceValidation{
 							OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 								Type:       "object",
-								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Description: "b"}}, // untyped object, non-structural
+								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Description: "b"}}, // 未标注类型的 object，非结构化
 							},
 						}},
 						{Name: "version2", Served: true, Storage: false, Schema: &apiextensions.CustomResourceValidation{
 							OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 								Type:       "object",
-								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Description: "a"}}, // untyped object, non-structural
+								Properties: map[string]apiextensions.JSONSchemaProps{"foo": {Description: "a"}}, // 未标注类型的 object，非结构化
 							},
 						}},
 					},
@@ -7600,7 +7628,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 					Names: apiextensions.CustomResourceDefinitionNames{Plural: "plural", Singular: "singular", Kind: "Plural", ListKind: "PluralList"},
 					Versions: []apiextensions.CustomResourceDefinitionVersion{
 						{
-							Name:    "v1", // unchanged
+							Name:    "v1", // 未改动
 							Served:  true,
 							Storage: true,
 							Schema: &apiextensions.CustomResourceValidation{
@@ -7626,7 +7654,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 							},
 						},
 						{
-							Name: "v2", // touched
+							Name: "v2", // 有改动
 							Schema: &apiextensions.CustomResourceValidation{
 								OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 									Type: "object",
@@ -7650,7 +7678,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 							},
 						},
 						{
-							Name: "v3", // new
+							Name: "v3", // 新增
 							Schema: &apiextensions.CustomResourceValidation{
 								OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 									Type: "object",
@@ -7678,7 +7706,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 				Status: apiextensions.CustomResourceDefinitionStatus{StoredVersions: []string{"v1"}},
 			},
 			errors: []validationMatch{
-				// versions[0] is exempted because it existed in oldObject
+				// versions[0] 因在 oldObject 中已存在而获得豁免
 				forbidden("spec", "versions[1]", "schema", "openAPIV3Schema", "properties[f]", "x-kubernetes-validations[0]", "messageExpression"),
 				forbidden("spec", "versions[2]", "schema", "openAPIV3Schema", "properties[f]", "x-kubernetes-validations[0]", "messageExpression"),
 			},
@@ -7724,7 +7752,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 					Names: apiextensions.CustomResourceDefinitionNames{Plural: "plural", Singular: "singular", Kind: "Plural", ListKind: "PluralList"},
 					Versions: []apiextensions.CustomResourceDefinitionVersion{
 						{
-							Name:    "v1", // unchanged, was top-level
+							Name:    "v1", // 未改动，原先是顶层字段
 							Served:  true,
 							Storage: true,
 							Schema: &apiextensions.CustomResourceValidation{
@@ -7750,7 +7778,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 							},
 						},
 						{
-							Name: "v2", // new
+							Name: "v2", // 新增
 							Schema: &apiextensions.CustomResourceValidation{
 								OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 									Type: "object",
@@ -7778,7 +7806,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 				Status: apiextensions.CustomResourceDefinitionStatus{StoredVersions: []string{"v1"}},
 			},
 			errors: []validationMatch{
-				// versions[0] is exempted because it existed in oldObject as top-level schema.
+				// versions[0] 原先是顶层 schema，在 oldObject 中已存在，因此获得豁免。
 				forbidden("spec", "versions[1]", "schema", "openAPIV3Schema", "properties[f]", "x-kubernetes-validations[0]", "messageExpression"),
 			},
 		},
@@ -8158,6 +8186,7 @@ func TestValidateCustomResourceDefinitionUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateCustomResourceDefinitionValidationRuleCompatibility 校验更新时 CEL 规则所用函数是否与已存储的表达式一致。
 func TestValidateCustomResourceDefinitionValidationRuleCompatibility(t *testing.T) {
 	allRuleValidationsErrors := []validationMatch{
 		invalid("spec", "validation", "openAPIV3Schema", "properties[x]", "x-kubernetes-validations[0]", "rule"),
@@ -8196,7 +8225,7 @@ func TestValidateCustomResourceDefinitionValidationRuleCompatibility(t *testing.
 		{
 			name:                     "functions declared for storage mode not allowed if rule expression is changed",
 			storedRule:               "test() == false",
-			updatedRule:              "test() == true", // rule was changed
+			updatedRule:              "test() == true", // rule 发生了变更
 			storedMessageExpression:  "'test: %s'.format([test()])",
 			updatedMessageExpression: "'test: %s'.format([test()])",
 			errors:                   allRuleValidationsErrors,
@@ -8206,12 +8235,12 @@ func TestValidateCustomResourceDefinitionValidationRuleCompatibility(t *testing.
 			storedRule:               "test() == true",
 			updatedRule:              "test() == true",
 			storedMessageExpression:  "'test: %s'.format([test()])",
-			updatedMessageExpression: "'test - updated: %s'.format([test()])", // messageExpression was changed
+			updatedMessageExpression: "'test - updated: %s'.format([test()])", // messageExpression 发生了变更
 			errors:                   allMessageExpressionValidationsErrors,
 		},
 	}
 
-	// Include the test library, which includes the test() function in the storage environment during test
+	// 在测试的存储环境中引入 test 库，以提供 test() 函数
 	base := environment.MustBaseEnvSet(version.MajorMinor(1, 998))
 	envSet, err := base.Extend(environment.VersionedOptions{
 		IntroducedVersion: version.MajorMinor(1, 999),
@@ -8283,6 +8312,7 @@ func TestValidateCustomResourceDefinitionValidationRuleCompatibility(t *testing.
 				Status: apiextensions.CustomResourceDefinitionStatus{StoredVersions: []string{"version"}},
 			}
 		}
+		// 用相同结构分别构造旧对象与新对象，只改变 rule 和 messageExpression。
 		old := fn(tc.storedRule, tc.storedMessageExpression)
 		resource := fn(tc.updatedRule, tc.updatedMessageExpression)
 
@@ -8318,6 +8348,7 @@ func TestValidateCustomResourceDefinitionValidationRuleCompatibility(t *testing.
 	}
 }
 
+// TestValidateCustomResourceDefinitionValidation 校验 CRD 的 OpenAPI v3 schema 以及 CEL 校验规则。
 func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -8483,11 +8514,11 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 			},
 			opts: validationOptions{requireValidPropertyType: true, requireStructuralSchema: true},
 			expectedErrors: []validationMatch{
-				// Invalid value: "null": must be object at the root
+				// 非法值 "null"：根 schema 必须是 object
 				unsupported("spec.validation.openAPIV3Schema.type"),
-				// Forbidden: type cannot be set to null, use nullable as an alternative
+				// Forbidden：type 不能设为 null，应改用 nullable
 				forbidden("spec.validation.openAPIV3Schema.type"),
-				// Unsupported value: "null": supported values: "array", "boolean", "integer", "number", "object", "string"
+				// 不支持的值 "null"：支持值为 "array"、"boolean"、"integer"、"number"、"object"、"string"
 				invalid("spec.validation.openAPIV3Schema.type"),
 			},
 		},
@@ -9661,7 +9692,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						{
 							Rule: "self.int > 0",
 						},
-						// reserved keywords `true`, `false`, `null` and `in` are not supported
+						// 不支持保留关键字 `true`、`false`、`null` 和 `in`
 						{
 							Rule: "self.true > 0",
 						},
@@ -9974,11 +10005,11 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// message must be specified if rule contains line breaks
+				// 规则包含换行时，必须指定 message
 				required("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[0].message"),
-				// message must not contain line breaks
+				// message 不能包含换行
 				invalid("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[1].message"),
-				// message must be non-empty if specified
+				// 指定了 message 就不能为空
 				invalid("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[2].message"),
 			},
 		},
@@ -10374,10 +10405,10 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// exceeds per-rule limit and contributes to total limit being exceeded (1 error for each)
+				// 超过单条规则上限，同时导致总量超限（每条规则各产生一个错误）
 				forbidden("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[0].rule"),
 				forbidden("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[0].rule"),
-				// total limit is exceeded
+				// 总量上限被突破
 				forbidden("spec.validation.openAPIV3Schema"),
 			},
 		},
@@ -10412,10 +10443,10 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// exceeds per-rule limit and contributes to total limit being exceeded (1 error for each)
+				// 超过单条规则上限，同时导致总量超限（每条规则各产生一个错误）
 				forbidden("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[0].rule"),
 				forbidden("spec.validation.openAPIV3Schema.properties[value].x-kubernetes-validations[0].rule"),
-				// total limit is exceeded
+				// 总量上限被突破
 				forbidden("spec.validation.openAPIV3Schema"),
 			},
 		},
@@ -10538,7 +10569,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 								},
 							},
 						},
-						"field": { // include a validation rule that does not contribute to total limit being exceeded (i.e. it is less than 1% of the limit)
+						"field": { // 加入一条不会导致总量超限的校验规则（其开销低于上限的 1%）
 							Type: "integer",
 							XValidations: apiextensions.ValidationRules{
 								{Rule: "self > 50 && self < 100"},
@@ -10548,12 +10579,12 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// exceeds per-rule limit and contributes to total limit being exceeded (1 error for each)
+				// 超过单条规则上限，同时导致总量超限（每条规则各产生一个错误）
 				forbidden("spec.validation.openAPIV3Schema.properties[list].items.x-kubernetes-validations[0].rule"),
 				forbidden("spec.validation.openAPIV3Schema.properties[list].items.x-kubernetes-validations[0].rule"),
-				// contributes to total limit being exceeded, but does not exceed per-rule limit
+				// 导致总量超限，但未超过单条规则上限
 				forbidden("spec.validation.openAPIV3Schema.properties[map].additionalProperties.x-kubernetes-validations[0].rule"),
-				// total limit is exceeded
+				// 总量上限被突破
 				forbidden("spec.validation.openAPIV3Schema"),
 			},
 		},
@@ -10563,7 +10594,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 			input: apiextensions.CustomResourceValidation{
 				OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 					Type: "object",
-					// illegal to have both Properties and AdditionalProperties
+					// Properties 与 AdditionalProperties 不能同时设置
 					Properties: map[string]apiextensions.JSONSchemaProps{
 						"field": {
 							Type: "integer",
@@ -10575,14 +10606,14 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						},
 					},
 					XValidations: apiextensions.ValidationRules{
-						{Rule: "self.invalidFieldName > 50"}, // invalid CEL rule
+						{Rule: "self.invalidFieldName > 50"}, // 无效的 CEL 规则
 					},
 				},
 			},
 			expectedErrors: []validationMatch{
-				forbidden("spec.validation.openAPIV3Schema.additionalProperties"), // illegal to have both properties and additional properties
-				forbidden("spec.validation.openAPIV3Schema.additionalProperties"), // structural schema rule: illegal to have additional properties at root
-				// Error for invalid CEL rule is NOT expected here because CEL rules are not checked when the schema is invalid
+				forbidden("spec.validation.openAPIV3Schema.additionalProperties"), // Properties 与 AdditionalProperties 不能同时设置
+				forbidden("spec.validation.openAPIV3Schema.additionalProperties"), // 结构化 schema 规则：根节点不能有 additionalProperties
+				// 这里不期望出现无效 CEL 规则的错误，因为 schema 本身无效时不会检查 CEL 规则
 			},
 		},
 		{
@@ -10594,7 +10625,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 					Properties: map[string]apiextensions.JSONSchemaProps{
 						"field": {
 							Type: "object",
-							// illegal to have both Properties and AdditionalProperties
+							// Properties 与 AdditionalProperties 不能同时设置
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"field": {
 									Type: "integer",
@@ -10617,7 +10648,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 			},
 		},
 		{
-			// So long at the schema information accessible to the CEL expression is valid, the expression should be validated.
+			// 只要 CEL 表达式可访问的 schema 信息合法，就应当校验该表达式。
 			name: "do not skip when OpenAPIv3 schema is an invalid structural schema in a separate part of the schema tree",
 			opts: validationOptions{requireStructuralSchema: true},
 			input: apiextensions.CustomResourceValidation{
@@ -10626,7 +10657,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 					Properties: map[string]apiextensions.JSONSchemaProps{
 						"a": {
 							Type: "object",
-							// illegal to have both Properties and AdditionalProperties
+							// Properties 与 AdditionalProperties 不能同时设置
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"field": {
 									Type: "integer",
@@ -10658,7 +10689,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 			},
 		},
 		{
-			// So long at the schema information accessible to the CEL expression is valid, the expression should be validated.
+			// 只要 CEL 表达式可访问的 schema 信息合法，就应当校验该表达式。
 			name: "do not skip CEL expression validation when OpenAPIv3 schema is an invalid structural schema at level above",
 			opts: validationOptions{requireStructuralSchema: true},
 			input: apiextensions.CustomResourceValidation{
@@ -10667,7 +10698,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 					Properties: map[string]apiextensions.JSONSchemaProps{
 						"a": {
 							Type: "object",
-							// illegal to have both Properties and AdditionalProperties
+							// Properties 与 AdditionalProperties 不能同时设置
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"b": {
 									Type: "integer",
@@ -10702,7 +10733,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						},
 					},
 					XValidations: apiextensions.ValidationRules{
-						{Rule: "self.f__slash__2 == 1"}, // invalid comparison of string and int
+						{Rule: "self.f__slash__2 == 1"}, // 字符串与整数比较，非法
 					},
 				},
 			},
@@ -10723,7 +10754,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 								Schema: &apiextensions.JSONSchemaProps{
 									Type: "string",
 									XValidations: apiextensions.ValidationRules{
-										{Rule: "self == 1"}, // invalid comparison of string and int
+										{Rule: "self == 1"}, // 字符串与整数比较，非法
 									},
 								},
 							},
@@ -10747,7 +10778,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 								Schema: &apiextensions.JSONSchemaProps{
 									Type: "string",
 									XValidations: apiextensions.ValidationRules{
-										{Rule: "self == 1"}, // invalid comparison of string and int
+										{Rule: "self == 1"}, // 字符串与整数比较，非法
 									},
 								},
 							},
@@ -10775,7 +10806,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 								Schema: &apiextensions.JSONSchemaProps{
 									Type: "string",
 									XValidations: apiextensions.ValidationRules{
-										{Rule: "self == 1"}, // invalid comparison of string and int
+										{Rule: "self == 1"}, // 字符串与整数比较，非法
 									},
 								},
 							},
@@ -10800,7 +10831,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 								Schema: &apiextensions.JSONSchemaProps{
 									Type: "string",
 									XValidations: apiextensions.ValidationRules{
-										{Rule: "self == 1"}, // invalid comparison of string and int
+										{Rule: "self == 1"}, // 字符串与整数比较，非法
 									},
 								},
 							},
@@ -10825,7 +10856,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -10845,7 +10876,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -10868,7 +10899,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f/2": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -10888,7 +10919,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f/2": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -10911,7 +10942,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f@2": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -10931,7 +10962,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 						"f@2": {
 							Type: "string",
 							XValidations: apiextensions.ValidationRules{
-								{Rule: "self == 1"}, // invalid comparison of string and int
+								{Rule: "self == 1"}, // 字符串与整数比较，非法
 							},
 						},
 					},
@@ -11058,7 +11089,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// forbidden due to messageExpression exceeding per-expression cost limit
+				// forbidden：messageExpression 超出单表达式开销上限
 				forbidden("spec.validation.openAPIV3Schema.properties[f].x-kubernetes-validations[0].messageExpression"),
 			},
 		},
@@ -11089,8 +11120,8 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 			},
 		},
 		{
-			// Validate that metadata.name and metadata.generateName are estimated against the cost limit of a 253 length string.
-			// This will fail with a cost limit exceeded error if either length is incorrectly assumed to be unbounded.
+			// 验证 metadata.name 与 metadata.generateName 按 253 字符长度的字符串估算开销。
+			// 如果任一长度被错误地视为无界，就会因开销超限而失败。
 			name: "x-kubernetes-validations rule referencing metadata.name and generateName is within estimated cost limit",
 			opts: validationOptions{requireStructuralSchema: true},
 			input: apiextensions.CustomResourceValidation{
@@ -11129,11 +11160,11 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 				},
 			},
 			expectedErrors: []validationMatch{
-				// forbidden due to per-CRD cost limit being exceeded
+				// forbidden：超出单个 CRD 的总开销上限
 				forbidden("spec.validation.openAPIV3Schema"),
-				// forbidden due to messageExpression exceeding per-expression cost limit
+				// forbidden：messageExpression 超出单表达式开销上限
 				forbidden("spec.validation.openAPIV3Schema.properties[f].x-kubernetes-validations[0].messageExpression"),
-				// additional message indicated messageExpression's contribution to exceeding the per-CRD cost limit
+				// 附加错误信息说明 messageExpression 对突破单个 CRD 开销上限的贡献
 				forbidden("spec.validation.openAPIV3Schema.properties[f].x-kubernetes-validations[0].messageExpression"),
 			},
 		},
@@ -11315,6 +11346,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.TODO()
+			// 未显式提供 CEL 环境时使用默认兼容版本。
 			if tt.opts.celEnvironmentSet == nil {
 				tt.opts.celEnvironmentSet = environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
 			}
@@ -11346,6 +11378,7 @@ func TestValidateCustomResourceDefinitionValidation(t *testing.T) {
 	}
 }
 
+// TestSchemaHasDefaults 用模糊测试对比 schemaHasDefaults 与 JSON 序列化结果，确认二者一致。
 func TestSchemaHasDefaults(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -11359,7 +11392,7 @@ func TestSchemaHasDefaults(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzerFuncs, rand.NewSource(seed), codecs)
 
 	for i := 0; i < 10000; i++ {
-		// fuzz internal types
+		// 对内部类型做模糊生成
 		schema := &apiextensions.JSONSchemaProps{}
 		f.Fill(schema)
 
@@ -11373,6 +11406,7 @@ func TestSchemaHasDefaults(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// 用序列化结果作为独立判断依据；显式的 "default":null 等同于未设置。
 		expected := strings.Contains(strings.Replace(string(bs), `"default":null`, `"deleted":null`, -1), `"default":`)
 		if got := schemaHasDefaults(schema); got != expected {
 			t.Errorf("expected %v, got %v for: %s", expected, got, string(bs))
@@ -11380,6 +11414,7 @@ func TestSchemaHasDefaults(t *testing.T) {
 	}
 }
 
+// TestValidateCustomResourceDefinitionStoredVersions 校验 status.storedVersions 与 spec.versions 的一致性。
 func TestValidateCustomResourceDefinitionStoredVersions(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -11439,6 +11474,7 @@ func TestValidateCustomResourceDefinitionStoredVersions(t *testing.T) {
 			},
 			Status: apiextensions.CustomResourceDefinitionStatus{StoredVersions: tc.storedVersions},
 		}
+		// 根据用例的版本列表构造 spec.versions，仅把指定版本标记为 storage。
 		for _, version := range tc.versions {
 			v := apiextensions.CustomResourceDefinitionVersion{Name: version}
 			if tc.storageVersion == version {
@@ -11474,6 +11510,7 @@ func TestValidateCustomResourceDefinitionStoredVersions(t *testing.T) {
 	}
 }
 
+// BenchmarkSchemaHas 测量 SchemaHas 遍历模糊生成的 schema 的开销。
 func BenchmarkSchemaHas(b *testing.B) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -11481,9 +11518,10 @@ func BenchmarkSchemaHas(b *testing.B) {
 		b.Fatal(err)
 	}
 	fuzzerFuncs := fuzzer.MergeFuzzerFuncs(apiextensionsfuzzer.Funcs)
+	// 固定种子，保证 benchmark 输入稳定可比。
 	seed := int64(5577006791947779410)
 	f := fuzzer.FuzzerFor(fuzzerFuncs, rand.NewSource(seed), codecs)
-	// fuzz internal types
+	// 对内部类型做模糊生成
 	schema := &apiextensions.JSONSchemaProps{}
 	f.NilChance(0).NumElements(10, 10).MaxDepth(10).Fill(schema)
 
@@ -11498,8 +11536,10 @@ func BenchmarkSchemaHas(b *testing.B) {
 	}
 }
 
+// example 是多个测试共用的 JSON 示例值。
 var example = apiextensions.JSON(`"This is an example"`)
 
+// validValidationSchema 是结构化且合法的 schema，供其他测试复用。
 var validValidationSchema = &apiextensions.JSONSchemaProps{
 	Description:      "This is a description",
 	Type:             "object",
@@ -11536,6 +11576,7 @@ var validValidationSchema = &apiextensions.JSONSchemaProps{
 	Example: &example,
 }
 
+// validUnstructuralValidationSchema 合法但非结构化，用于覆盖非结构化场景。
 var validUnstructuralValidationSchema = &apiextensions.JSONSchemaProps{
 	Description:      "This is a description",
 	Type:             "object",
@@ -11567,11 +11608,13 @@ var validUnstructuralValidationSchema = &apiextensions.JSONSchemaProps{
 	Example: &example,
 }
 
+// jsonPtr 返回任意值的 apiextensions.JSON 指针。
 func jsonPtr(x interface{}) *apiextensions.JSON {
 	ret := apiextensions.JSON(x)
 	return &ret
 }
 
+// jsonSlice 把参数转换为 JSON 切片；无参数时返回 nil。
 func jsonSlice(l ...interface{}) []apiextensions.JSON {
 	if len(l) == 0 {
 		return nil
@@ -11583,6 +11626,7 @@ func jsonSlice(l ...interface{}) []apiextensions.JSON {
 	return ret
 }
 
+// Test_validateDeprecationWarning 校验版本废弃警告的格式约束。
 func Test_validateDeprecationWarning(t *testing.T) {
 	tests := []struct {
 		name string
@@ -11665,6 +11709,7 @@ func Test_validateDeprecationWarning(t *testing.T) {
 	}
 }
 
+// genMapSchema 生成 map[string]string 形式的 schema。
 func genMapSchema() *apiextensions.JSONSchemaProps {
 	return &apiextensions.JSONSchemaProps{
 		Type: "object",
@@ -11676,28 +11721,33 @@ func genMapSchema() *apiextensions.JSONSchemaProps {
 	}
 }
 
+// withMaxProperties 设置 map schema 的 MaxProperties 并返回它。
 func withMaxProperties(mapSchema *apiextensions.JSONSchemaProps, maxProps *int64) *apiextensions.JSONSchemaProps {
 	mapSchema.MaxProperties = maxProps
 	return mapSchema
 }
 
+// genArraySchema 生成数组 schema。
 func genArraySchema() *apiextensions.JSONSchemaProps {
 	return &apiextensions.JSONSchemaProps{
 		Type: "array",
 	}
 }
 
+// withMaxItems 设置数组 schema 的 MaxItems 并返回它。
 func withMaxItems(arraySchema *apiextensions.JSONSchemaProps, maxItems *int64) *apiextensions.JSONSchemaProps {
 	arraySchema.MaxItems = maxItems
 	return arraySchema
 }
 
+// genObjectSchema 生成 object schema。
 func genObjectSchema() *apiextensions.JSONSchemaProps {
 	return &apiextensions.JSONSchemaProps{
 		Type: "object",
 	}
 }
 
+// TestCostInfo 校验嵌套 schema 的最大基数计算。
 func TestCostInfo(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -11779,14 +11829,14 @@ func TestCostInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// simulate the recursive validation calls
-			schemas := append(tt.schema, &apiextensions.JSONSchemaProps{Type: "string"}) // append a leaf type
+			// 模拟递归校验时的逐层调用
+			schemas := append(tt.schema, &apiextensions.JSONSchemaProps{Type: "string"}) // 追加一个叶子类型
 			curCostInfo := RootCELContext(schemas[0])
 			for i := 1; i < len(schemas); i++ {
 				curCostInfo = curCostInfo.childContext(schemas[i], nil)
 			}
 			if tt.expectedMaxCardinality == nil && curCostInfo.MaxCardinality == nil {
-				// unbounded cardinality case, test ran correctly
+				// 无界基数场景，结果符合预期
 			} else if tt.expectedMaxCardinality == nil && curCostInfo.MaxCardinality != nil {
 				t.Errorf("expected unbounded cardinality (got %d)", *curCostInfo.MaxCardinality)
 			} else if tt.expectedMaxCardinality != nil && curCostInfo.MaxCardinality == nil {
@@ -11798,6 +11848,7 @@ func TestCostInfo(t *testing.T) {
 	}
 }
 
+// TestCelContext 确认 CEL 上下文在整个 schema 遍历中只转换一次 schema。
 func TestCelContext(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -11830,7 +11881,8 @@ func TestCelContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// simulate the recursive validation calls
+			// 模拟递归校验时的逐层调用
+			// 包装转换器，统计 schema 实际被转换的次数。
 			conversionCount := 0
 			converter := func(schema *apiextensions.JSONSchemaProps, isRoot bool) (*CELTypeInfo, error) {
 				conversionCount++
@@ -11857,6 +11909,7 @@ func TestCelContext(t *testing.T) {
 	}
 }
 
+// TestPerCRDEstimatedCost 校验单个 CRD 的总开销统计与最高开销记录。
 func TestPerCRDEstimatedCost(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -11877,7 +11930,7 @@ func TestPerCRDEstimatedCost(t *testing.T) {
 			expectedTotal:     uint64(1000000),
 		},
 		{
-			name:              "one cost, ignored", // costs < 1% of the per-CRD cost limit are not considered expensive
+			name:              "one cost, ignored", // 开销低于单个 CRD 上限 1% 的不视为过高
 			costs:             []uint64{900000},
 			expectedExpensive: []uint64{},
 			expectedTotal:     uint64(900000),
@@ -11901,7 +11954,7 @@ func TestPerCRDEstimatedCost(t *testing.T) {
 			expectedTotal:     uint64(150000000),
 		},
 		{
-			name:              "5 costs, one trimmed, one ignored", // only the top 4 most expensive are tracked
+			name:              "5 costs, one trimmed, one ignored", // 只跟踪开销最高的 4 条
 			costs:             []uint64{16000000, 50000000, 900000, 34000000, 50000000, 50000001},
 			expectedExpensive: []uint64{50000001, 50000000, 50000000, 34000000},
 			expectedTotal:     uint64(200900001),
@@ -11915,6 +11968,7 @@ func TestPerCRDEstimatedCost(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 逐条上报表达式开销，检验 Top-N 与总量统计。
 			crdCost := TotalCost{}
 			for _, cost := range tt.costs {
 				crdCost.ObserveExpressionCost(nil, cost)

@@ -24,7 +24,11 @@ import (
 	"k8s.io/component-base/cli"
 )
 
+// main 是 apiextensions-apiserver 的入口点。
+// 作为一个独立进程运行，提供 CRD（Custom Resource Definition）API。
+// Kubernetes 主 API Server 通过 --enable-aggregator-routing 或 --api-audiences 与之集成。
 func main() {
+	// SetupSignalContext 创建响应 SIGTERM/SIGINT 的 context，用于优雅关闭
 	ctx := genericapiserver.SetupSignalContext()
 	cmd := server.NewServerCommand(ctx, os.Stdout, os.Stderr)
 	code := cli.Run(cmd)

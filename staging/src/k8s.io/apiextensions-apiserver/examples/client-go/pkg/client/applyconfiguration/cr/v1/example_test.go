@@ -20,4 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 编译期断言：以空参数构造的 Example 必须实现 runtime.ApplyConfiguration，
+// 这样 client-go 的 apply 路径才能在类型层面接受它。
 var _ runtime.ApplyConfiguration = Example("", "")

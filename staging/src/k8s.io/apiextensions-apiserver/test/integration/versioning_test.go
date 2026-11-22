@@ -35,6 +35,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestInternalVersionIsHandlerVersion 验证校验时使用请求经过的 handler 版本
+// （而非存储版本），因此非存储版本可通过校验，存储版本反而会因 apiVersion 模式不匹配而失败。
 func TestInternalVersionIsHandlerVersion(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -55,7 +57,7 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 
 	ns := "not-the-default"
 
-	noxuNamespacedResourceClientV1beta1 := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, "v1beta1") // use the non-storage version v1beta1
+	noxuNamespacedResourceClientV1beta1 := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, "v1beta1") // 使用非存储版本 v1beta1
 
 	t.Logf("Creating foo")
 	noxuInstanceToCreate := fixtures.NewNoxuInstance(ns, "foo")
@@ -64,7 +66,7 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// update validation via update because the cache priming in CreateCRDUsingRemovedAPI will fail otherwise
+	// 通过 update 来更新校验规则，否则 CreateCRDUsingRemovedAPI 中的缓存预热会失败
 	t.Logf("Updating CRD to validate apiVersion")
 	noxuDefinition, err = UpdateCustomResourceDefinitionWithRetry(apiExtensionClient, noxuDefinition.Name, func(crd *apiextensionsv1.CustomResourceDefinition) {
 		for i := range crd.Spec.Versions {
@@ -73,7 +75,7 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 					Type: "object",
 					Properties: map[string]apiextensionsv1.JSONSchemaProps{
 						"apiVersion": {
-							Pattern: "^mygroup.example.com/v1beta1$", // this means we can only patch via the v1beta1 handler version
+							Pattern: "^mygroup.example.com/v1beta1$", // 这意味着只能通过 v1beta1 handler 版本进行 patch
 							Type:    "string",
 						},
 					},
@@ -86,7 +88,7 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	// patches via handler version v1beta1 should succeed (validation allows that API version)
+	// 通过 handler 版本 v1beta1 进行 patch 应当成功（校验允许该 API 版本）
 	{
 		t.Logf("patch of handler version v1beta1 (non-storage version) should succeed")
 		i := 0
@@ -96,8 +98,8 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 
 			_, patchErr := noxuNamespacedResourceClientV1beta1.Patch(ctx, "foo", types.MergePatchType, patch, metav1.PatchOptions{})
 			if patchErr != nil {
-				// work around "grpc: the client connection is closing" error
-				// TODO: fix the grpc error
+				// 规避 "grpc: the client connection is closing" 错误
+				// TODO: 修复该 grpc 错误
 				var statusErr *errors.StatusError
 				if stderrors.As(patchErr, &statusErr) && statusErr.Status().Code == http.StatusInternalServerError {
 					return false, nil
@@ -109,11 +111,11 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	// patches via handler version matching storage version should fail (validation does not allow that API version)
+	// 通过 handler 版本匹配存储版本进行 patch 应当失败（校验不允许该 API 版本）
 	{
 		t.Logf("patch of handler version v1beta2 (storage version) should fail")
 		i := 0
-		noxuNamespacedResourceClientV1beta2 := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, "v1beta2") // use the storage version v1beta2
+		noxuNamespacedResourceClientV1beta2 := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, "v1beta2") // 使用存储版本 v1beta2
 		err = wait.PollUntilContextTimeout(context.Background(), time.Millisecond*100, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 			patch := []byte(fmt.Sprintf(`{"i": %d}`, i))
 			i++
@@ -121,8 +123,8 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 			_, patchErr := noxuNamespacedResourceClientV1beta2.Patch(ctx, "foo", types.MergePatchType, patch, metav1.PatchOptions{})
 			require.Error(t, patchErr)
 
-			// work around "grpc: the client connection is closing" error
-			// TODO: fix the grpc error
+			// 规避 "grpc: the client connection is closing" 错误
+			// TODO: 修复该 grpc 错误
 			var statusErr *errors.StatusError
 			if stderrors.As(patchErr, &statusErr) && statusErr.Status().Code == http.StatusInternalServerError {
 				return false, nil
@@ -135,6 +137,7 @@ func TestInternalVersionIsHandlerVersion(t *testing.T) {
 	}
 }
 
+// TestVersionedNamespacedScopedCRD 验证命名空间作用域的多版本 CRD 上的基础 CRUD。
 func TestVersionedNamespacedScopedCRD(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -152,6 +155,7 @@ func TestVersionedNamespacedScopedCRD(t *testing.T) {
 	testSimpleCRUD(t, ns, noxuDefinition, dynamicClient)
 }
 
+// TestVersionedClusterScopedCRD 验证集群作用域的多版本 CRD 上的基础 CRUD。
 func TestVersionedClusterScopedCRD(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -169,18 +173,22 @@ func TestVersionedClusterScopedCRD(t *testing.T) {
 	testSimpleCRUD(t, ns, noxuDefinition, dynamicClient)
 }
 
+// TestStoragedVersionInNamespacedCRDStatus 验证命名空间作用域 CRD 的 status.storedVersions。
 func TestStoragedVersionInNamespacedCRDStatus(t *testing.T) {
 	noxuDefinition := fixtures.NewMultipleVersionNoxuCRD(apiextensionsv1.NamespaceScoped)
 	ns := "not-the-default"
 	testStoragedVersionInCRDStatus(t, ns, noxuDefinition)
 }
 
+// TestStoragedVersionInClusterScopedCRDStatus 验证集群作用域 CRD 的 status.storedVersions。
 func TestStoragedVersionInClusterScopedCRDStatus(t *testing.T) {
 	noxuDefinition := fixtures.NewMultipleVersionNoxuCRD(apiextensionsv1.ClusterScoped)
 	ns := ""
 	testStoragedVersionInCRDStatus(t, ns, noxuDefinition)
 }
 
+// testStoragedVersionInCRDStatus 是作用域无关的共享实现：切换存储版本后，
+// storedVersions 应包含历史存储版本，且变更立即生效。
 func testStoragedVersionInCRDStatus(t *testing.T, ns string, noxuDefinition *apiextensionsv1.CustomResourceDefinition) {
 	versionsV1Beta1Storage := []apiextensionsv1.CustomResourceDefinitionVersion{
 		{
@@ -222,7 +230,7 @@ func testStoragedVersionInCRDStatus(t *testing.T, ns string, noxuDefinition *api
 		t.Fatal(err)
 	}
 
-	// The storage version list should be initialized to storage version
+	// 存储版本列表应初始化为当前存储版本
 	crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), noxuDefinition.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -231,7 +239,7 @@ func testStoragedVersionInCRDStatus(t *testing.T, ns string, noxuDefinition *api
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// Changing CRD storage version should be reflected immediately
+	// 切换 CRD 的存储版本后应立即反映到 status
 	crd.Spec.Versions = versionsV1Beta2Storage
 	_, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), crd, metav1.UpdateOptions{})
 	if err != nil {

@@ -56,7 +56,7 @@ var listTypeResourceFixture = &apiextensionsv1.CustomResourceDefinition{
 }
 
 const (
-	// structural schema because x-kubernetes-list-type is only allowed for those
+	// 必须是 structural schema，因为 x-kubernetes-list-type 只允许用于这类 schema
 	listTypeResourceSchema = `
 type: object
 properties:
@@ -119,6 +119,8 @@ var (
 	invalidListTypeFields = []string{"invalid-map", "invalid-set"}
 )
 
+// TestListTypes 验证 x-kubernetes-list-type 为 map/set 时的唯一性校验：
+// 创建与更新会拒绝重复项，schema 收紧后更新按 ratcheting 逻辑处理。
 func TestListTypes(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -215,7 +217,7 @@ func TestListTypes(t *testing.T) {
 			return true, nil
 		}
 		if errors.IsInvalid(updateErr) {
-			// wait until modifiedInstance becomes valid again
+			// 等待 modifiedInstance 重新变为合法
 			return false, nil
 		}
 		return false, updateErr

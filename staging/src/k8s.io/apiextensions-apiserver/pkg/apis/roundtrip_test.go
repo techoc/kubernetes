@@ -41,6 +41,7 @@ var groups = []runtime.SchemeBuilder{
 	apiextensionsv1beta1.SchemeBuilder,
 }
 
+// TestCompatibility 校验各 API 版本之间的数据兼容性。
 func TestCompatibility(t *testing.T) {
 	scheme := runtime.NewScheme()
 	for _, builder := range groups {
@@ -49,7 +50,7 @@ func TestCompatibility(t *testing.T) {
 
 	opts := roundtrip.NewCompatibilityTestOptions(scheme)
 
-	// Fill unstructured JSON field types
+	// 填充非结构化 JSON 字段类型
 	opts.FillFuncs = map[reflect.Type]roundtrip.FillFunc{
 		reflect.TypeOf(&apiextensionsv1.JSON{}): func(s string, i int, obj interface{}) {
 			obj.(*apiextensionsv1.JSON).Raw = []byte(strconv.Quote(s + "Value"))
@@ -61,7 +62,7 @@ func TestCompatibility(t *testing.T) {
 
 	opts.Complete(t)
 
-	// limit to types in apiextensions.k8s.io
+	// 仅保留 apiextensions.k8s.io 组中的类型
 	filteredKinds := []schema.GroupVersionKind{}
 	for _, gvk := range opts.Kinds {
 		if gvk.Group == apiextensionsv1.SchemeGroupVersion.Group {
@@ -73,6 +74,7 @@ func TestCompatibility(t *testing.T) {
 	opts.Run(t)
 }
 
+// TestRoundtripToUnstructured 校验对象与 unstructured 之间的编解码往返一致性。
 func TestRoundtripToUnstructured(t *testing.T) {
 	scheme := runtime.NewScheme()
 	install.Install(scheme)
@@ -110,7 +112,7 @@ func TestRoundtripToUnstructured(t *testing.T) {
 				}
 			},
 		),
-		// skip types that are never serialized in the body of a request/response.
+		// 跳过从不在请求/响应正文中序列化的类型。
 		sets.New(
 			apiextensionsv1.SchemeGroupVersion.WithKind("CreateOptions"),
 			apiextensionsv1.SchemeGroupVersion.WithKind("PatchOptions"),
@@ -119,9 +121,8 @@ func TestRoundtripToUnstructured(t *testing.T) {
 			apiextensionsv1beta1.SchemeGroupVersion.WithKind("PatchOptions"),
 			apiextensionsv1beta1.SchemeGroupVersion.WithKind("UpdateOptions"),
 		),
-		// the following types do not have an "internal" go type, so we fuzz the
-		// versioned type directly instead of converting to/from the "internal" version
-		// during the round-tripping.
+		// 以下类型没有对应的 “internal” Go 类型，因此直接对版本化类型做模糊测试，
+		// 而不是在往返过程中与 “internal” 版本相互转换。
 		sets.New(
 			apiextensionsv1.SchemeGroupVersion.WithKind("ConversionReview"),
 			apiextensionsv1beta1.SchemeGroupVersion.WithKind("ConversionReview"),

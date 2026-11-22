@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package test 提供 CEL 校验相关的测试辅助函数。
 package test
 
 import (
@@ -33,7 +34,7 @@ import (
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 )
 
-// MustLoadManifest loads a CRD from a file and panics on error.
+// MustLoadManifest 从文件加载 CRD，出错时 panic。
 func MustLoadManifest[T any](t *testing.T, pth string) *T {
 	data, err := os.ReadFile(pth)
 	require.NoError(t, err)
@@ -45,11 +46,12 @@ func MustLoadManifest[T any](t *testing.T, pth string) *T {
 	return &crd
 }
 
-// FieldValidators extracts the CEL validators by version and JSONPath from a CRD and returns
-// a validator func for testing against samples.
+// FieldValidators 从 CRD 中按版本与 JSONPath 提取 CEL 校验器，
+// 返回可用于对样本对象做校验的函数。
 func FieldValidators(t *testing.T, crd *apiextensionsv1.CustomResourceDefinition) (validatorsByVersionByJSONPath map[string]map[string]CELValidateFunc) {
 	ret := map[string]map[string]CELValidateFunc{}
 	for _, v := range crd.Spec.Versions {
+		// 先转为内部类型，再构造结构化 schema
 		var internalSchema apiextensions.JSONSchemaProps
 		err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(v.Schema.OpenAPIV3Schema, &internalSchema, nil)
 		require.NoError(t, err, "failed to convert JSONSchemaProps for version %s: %v", v.Name, err)
@@ -64,8 +66,8 @@ func FieldValidators(t *testing.T, crd *apiextensionsv1.CustomResourceDefinition
 	return ret
 }
 
-// VersionValidatorsFromFile extracts the CEL validators by version from a CRD file and returns
-// a validator func for testing against samples.
+// VersionValidatorsFromFile 从 CRD 文件中按版本提取 CEL 校验器，
+// 返回可用于对样本对象做校验的函数。
 func VersionValidatorsFromFile(t *testing.T, crdFilePath string) map[string]CELValidateFunc {
 	data, err := os.ReadFile(crdFilePath)
 	require.NoError(t, err)
@@ -81,6 +83,7 @@ func VersionValidatorsFromFile(t *testing.T, crdFilePath string) map[string]CELV
 		require.NoError(t, err, "failed to convert JSONSchemaProps for version %s: %v", v.Name, err)
 		structuralSchema, err := schema.NewStructural(&internalSchema)
 		require.NoError(t, err, "failed to create StructuralSchema for version %s: %v", v.Name, err)
+		// 以结构化的新旧对象运行 CEL 校验，忽略返回的成本值
 		ret[v.Name] = func(obj, old interface{}) field.ErrorList {
 			errs, _ := cel.NewValidator(structuralSchema, true, celconfig.RuntimeCELCostBudget).Validate(context.TODO(), nil, structuralSchema, obj, old, celconfig.PerCallLimit)
 			return errs
@@ -90,23 +93,26 @@ func VersionValidatorsFromFile(t *testing.T, crdFilePath string) map[string]CELV
 	return ret
 }
 
-// VersionValidatorFromFile extracts the CEL validators for a given version from a CRD file and returns
-// a validator func for testing against samples.
+// VersionValidatorFromFile 从 CRD 文件中提取指定版本的 CEL 校验器，
+// 返回可用于对样本对象做校验的函数。
 func VersionValidatorFromFile(t *testing.T, crdFilePath string, version string) (CELValidateFunc, error) {
 	vals := VersionValidatorsFromFile(t, crdFilePath)
+	// 找不到指定版本时显式报错，避免调用方拿到 nil 校验器
 	if val, ok := vals[version]; ok {
 		return val, nil
 	}
 	return nil, fmt.Errorf("version %s not found", version)
 }
 
-// CELValidateFunc tests a sample object against a CEL validator.
+// CELValidateFunc 用 CEL 校验器校验样本对象（可带旧对象）。
 type CELValidateFunc func(obj, old interface{}) field.ErrorList
 
+// findCEL 递归遍历结构化 schema，收集所有带 XValidations 的节点路径及其校验器。
 func findCEL(t *testing.T, s *schema.Structural, root bool, pth *field.Path) (map[string]CELValidateFunc, error) {
 	ret := map[string]CELValidateFunc{}
 
 	if len(s.XValidations) > 0 {
+		// 复制一份，避免闭包捕获循环变量或调用方后续修改
 		s := *s
 		pth := *pth
 		ret[pth.String()] = func(obj, old interface{}) field.ErrorList {

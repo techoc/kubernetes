@@ -22,9 +22,9 @@ import (
 	"k8s.io/apiserver/pkg/cel/common"
 )
 
-// makeMapList returns a queryable interface over the provided x-kubernetes-list-type=map
-// keyedItems. If the provided schema is _not_ an array with x-kubernetes-list-type=map, returns an
-// empty mapList.
+// makeMapList 在给定 items 上返回一个可查询接口，对应 x-kubernetes-list-type=map 的
+// keyedItems。若提供的 schema _不是_ 带有 x-kubernetes-list-type=map 的数组，
+// 则返回空的 mapList。
 func makeMapList(sts *schema.Structural, items []interface{}) (rv common.MapList) {
 	return common.MakeMapList(&model.Structural{Structural: sts}, items)
 }

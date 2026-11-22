@@ -49,13 +49,13 @@ import (
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 )
 
-// TestRoundTrip checks the conversion to go-openapi types.
-// internal -> go-openapi -> JSON -> external -> internal
+// TestRoundTrip 检查到 go-openapi 类型的转换：
+// 内部 -> go-openapi -> JSON -> 外部 -> 内部。
 func TestRoundTrip(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
 
-	// add internal and external types to scheme
+	// 将内部与外部类型注册到 scheme
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +64,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	seed := int64(time.Now().Nanosecond())
+	// 可用 TEST_RAND_SEED 复现某次随机失败
 	if override := os.Getenv("TEST_RAND_SEED"); len(override) > 0 {
 		overrideSeed, err := strconv.Atoi(override)
 		if err != nil {
@@ -78,23 +79,23 @@ func TestRoundTrip(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzerFuncs, rand.NewSource(seed), codecs)
 
 	for i := 0; i < 50; i++ {
-		// fuzz internal types
+		// 对内部类型做模糊填充
 		internal := &apiextensions.JSONSchemaProps{}
 		f.Fill(internal)
 
-		// internal -> go-openapi
+		// 内部 -> go-openapi
 		openAPITypes := &kubeopenapispec.Schema{}
 		if err := ConvertJSONSchemaProps(internal, openAPITypes); err != nil {
 			t.Fatal(err)
 		}
 
-		// go-openapi -> JSON
+		// go-openapi -> JSON 序列化
 		openAPIJSON, err := json.Marshal(openAPITypes)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// JSON -> in-memory JSON => convertNullTypeToNullable => JSON
+		// JSON -> 内存中的 JSON => convertNullTypeToNullable => JSON
 		var j interface{}
 		if strictErrs, err := kjson.UnmarshalStrict(openAPIJSON, &j); err != nil {
 			t.Fatal(err)
@@ -107,7 +108,7 @@ func TestRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// JSON -> external
+		// JSON -> 外部
 		external := &apiextensionsv1.JSONSchemaProps{}
 		if strictErrs, err := kjson.UnmarshalStrict(openAPIJSON, external); err != nil {
 			t.Fatal(err)
@@ -115,7 +116,7 @@ func TestRoundTrip(t *testing.T) {
 			t.Fatal(strictErrs)
 		}
 
-		// external -> internal
+		// 外部 -> 内部
 		internalRoundTripped := &apiextensions.JSONSchemaProps{}
 		if err := scheme.Convert(external, internalRoundTripped, nil); err != nil {
 			t.Fatal(err)
@@ -128,6 +129,8 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// stripIntOrStringType 移除 XIntOrString 字段上多余的 "type": ["integer","string"]，
+// 使序列化后的 JSON 与内部表示的预期形式一致。
 func stripIntOrStringType(x interface{}) interface{} {
 	switch x := x.(type) {
 	case map[string]interface{}:
@@ -153,12 +156,15 @@ func stripIntOrStringType(x interface{}) interface{} {
 	}
 }
 
+// failingObject 描述一个预期校验失败的对象及其期望错误信息。
 type failingObject struct {
 	object     interface{}
 	oldObject  interface{}
 	expectErrs []string
 }
 
+// TestValidateCustomResource 覆盖结构校验与 CEL 校验在可空、int-or-string、
+// 必填、枚举、过渡规则等场景下的行为。
 func TestValidateCustomResource(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -471,7 +477,7 @@ func TestValidateCustomResource(t *testing.T) {
 			},
 		},
 		{name: "correlatable transition rule",
-			// Ensures a transition rule under a "listMap" is supported.
+			// 确保 "listMap" 下的过渡规则得到支持。
 			schema: apiextensions.JSONSchemaProps{
 				Type: "object",
 				Properties: map[string]apiextensions.JSONSchemaProps{
@@ -519,10 +525,9 @@ func TestValidateCustomResource(t *testing.T) {
 			},
 		},
 		{name: "validation rule under non-correlatable field",
-			// The array makes the rule on the nested string non-correlatable
-			// for transition rule purposes. This test ensures that a rule that
-			// does NOT use oldSelf (is not a transition rule), still behaves
-			// as expected under a non-correlatable field.
+			// 数组使嵌套字符串上的规则无法用于过渡规则关联。
+			// 本测试确保一条不使用 oldSelf（不是过渡规则）的规则，
+			// 在不可关联字段下仍按预期工作。
 			schema: apiextensions.JSONSchemaProps{
 				Type: "object",
 				Properties: map[string]apiextensions.JSONSchemaProps{
@@ -693,7 +698,7 @@ func TestValidateCustomResource(t *testing.T) {
 						`<nil>: Invalid value: "": Checked value must be of type integer with format int32 in intThirtyTwo`,
 					},
 				},
-				// int64 overflow is not possible with int64 input, but we can test it with float64
+				// int64 输入本身不会溢出，但可以用 float64 触发该路径
 				{
 					object: map[string]interface{}{"intSixtyFour": float64(math.MaxInt64) * 1.1},
 					expectErrs: []string{
@@ -720,16 +725,17 @@ func TestValidateCustomResource(t *testing.T) {
 						`<nil>: Invalid value: "": Checked value must be of type number with format float in floatThreeTwo`,
 					},
 				},
-				// double overflow (float64) is handled by JSON parsing, but we can try to pass a value that might trigger it if not parsed as such.
-				// However, standard JSON unmarshalling usually caps at float64 limits or errors out.
-				// The validator itself checks ranges. Since Go's float64 matches double, true overflow is hard to represent without a custom numeric type.
-				// We will skip explicit double overflow tests here as they often result in +Inf/-Inf which might be handled differently or parse errors.
+				// double（float64）溢出由 JSON 解析处理，但可以尝试传入可能触发它的值。
+				// 不过标准 JSON 反序列化通常会在 float64 上限处截断或报错。
+				// 校验器本身会检查范围；由于 Go 的 float64 与 double 等宽，不借助自定义数值类型很难表示真正的溢出。
+				// 这里跳过显式的 double 溢出测试：它们往往产生 +Inf/-Inf，可能被不同地处理或直接解析失败。
 			},
 		},
 	}
 	for _, tt := range tests {
 		compatVersion := tt.compatVersion
 		if compatVersion == nil {
+			// 未显式指定时使用默认兼容版本
 			compatVersion = environment.DefaultCompatibilityVersion()
 		}
 
@@ -745,6 +751,7 @@ func TestValidateCustomResource(t *testing.T) {
 			celValidator := cel.NewValidator(structural, false, celconfig.PerCallLimit)
 			for i, obj := range tt.objects {
 				var oldObject interface{}
+				// 仅当新旧对象列表长度一致时才逐项配对，避免越界
 				if len(tt.oldObjects) == len(tt.objects) {
 					oldObject = tt.oldObjects[i]
 				}
@@ -763,6 +770,7 @@ func TestValidateCustomResource(t *testing.T) {
 				if len(errs) == 0 {
 					t.Errorf("missing error for %v", failingObject.object)
 				} else {
+					// 用集合比较实际错误与期望错误，可同时报告多余和缺失项
 					sawErrors := sets.NewString()
 					for _, err := range errs {
 						sawErrors.Insert(err.Error())
@@ -780,6 +788,7 @@ func TestValidateCustomResource(t *testing.T) {
 	}
 }
 
+// TestItemsProperty 验证名为 "items" 的普通属性不会被误当作数组的 items 关键字。
 func TestItemsProperty(t *testing.T) {
 	type args struct {
 		schema apiextensions.JSONSchemaProps
@@ -837,4 +846,5 @@ func TestItemsProperty(t *testing.T) {
 	}
 }
 
+// listMapType 供测试使用的 x-kubernetes-list-type 取值。
 var listMapType = "map"

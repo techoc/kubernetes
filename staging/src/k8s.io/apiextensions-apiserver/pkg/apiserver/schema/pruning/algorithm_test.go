@@ -30,6 +30,8 @@ import (
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 )
 
+// TestPrune 校验按 structural schema 剪枝未知字段的结果，
+// 并覆盖记录被剪枝字段路径的行为。
 func TestPrune(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -142,7 +144,7 @@ func TestPrune(t *testing.T) {
 					},
 				},
 				"preservingAdditionalPropertiesNotInheritingXPreserveUnknownFields": {
-					// this x-kubernetes-preserve-unknown-fields is not inherited by the schema inside of additionalProperties
+					// 该 x-kubernetes-preserve-unknown-fields 不会被 additionalProperties 内部的 schema 继承
 					Extensions: structuralschema.Extensions{XPreserveUnknownFields: true},
 					Generic: structuralschema.Generic{
 						Type: "object",
@@ -590,7 +592,7 @@ func TestPrune(t *testing.T) {
 				t.Errorf("expected pruned:\n\t%v\ngot:\n\t%v\n", strings.Join(tt.expectedPruned, "\n\t"), strings.Join(pruned, "\n\t"))
 			}
 
-			// now check that pruned is empty when TrackUnknownFieldPaths is false
+			// 再确认 TrackUnknownFieldPaths 为 false 时剪枝结果为空
 			emptyPruned := PruneWithOptions(in, tt.schema, tt.isResourceRoot, structuralschema.UnknownFieldPathOptions{})
 			if !reflect.DeepEqual(in, expectedObject) {
 				var buf bytes.Buffer
@@ -628,6 +630,7 @@ const smallInstance = `
 }
 `
 
+// BenchmarkPrune 度量剪枝单个对象的耗时和内存分配。
 func BenchmarkPrune(b *testing.B) {
 	b.StopTimer()
 	b.ReportAllocs()
@@ -683,6 +686,7 @@ func BenchmarkPrune(b *testing.B) {
 	}
 }
 
+// BenchmarkDeepCopy 度量 DeepCopyJSON 的耗时和内存分配，作为剪枝的对照基线。
 func BenchmarkDeepCopy(b *testing.B) {
 	b.StopTimer()
 	b.ReportAllocs()
@@ -702,6 +706,7 @@ func BenchmarkDeepCopy(b *testing.B) {
 	}
 }
 
+// BenchmarkUnmarshal 度量 JSON 反序列化的耗时和内存分配，作为剪枝的对照基线。
 func BenchmarkUnmarshal(b *testing.B) {
 	b.StopTimer()
 	b.ReportAllocs()

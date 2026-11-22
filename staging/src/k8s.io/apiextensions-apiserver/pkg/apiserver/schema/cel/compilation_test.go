@@ -40,20 +40,25 @@ import (
 )
 
 const (
+	// costLimit 用于断言估算成本已超过预算上限的阈值。
 	costLimit = 100000000
 )
 
+// validationMatcher 判断单条规则的编译结果是否符合预期，并给出可读描述。
 type validationMatcher interface {
 	matches(cr CompilationResult) bool
 	String() string
 }
 
+// allMatcher 要求其中的所有匹配器同时成立。
 type allMatcher []validationMatcher
 
+// matchesAll 将多个匹配器组合为“全部满足”的匹配器。
 func matchesAll(matchers ...validationMatcher) validationMatcher {
 	return allMatcher(matchers)
 }
 
+// matches 逐个检查，任一失败即短路返回。
 func (m allMatcher) matches(cr CompilationResult) bool {
 	for _, each := range m {
 		if !each.matches(cr) {
@@ -63,6 +68,7 @@ func (m allMatcher) matches(cr CompilationResult) bool {
 	return true
 }
 
+// String 将各匹配器的描述用 "and" 连接，便于失败时定位。
 func (m allMatcher) String() string {
 	if len(m) == 0 {
 		return "any result"
@@ -77,76 +83,95 @@ func (m allMatcher) String() string {
 	return b.String()
 }
 
+// fnMatcher 用任意谓词函数匹配编译结果。
 type fnMatcher struct {
 	fn  func(CompilationResult) bool
 	msg string
 }
 
+// matches 调用谓词函数。
 func (m fnMatcher) matches(cr CompilationResult) bool {
 	return m.fn(cr)
 }
 
+// String 返回预设的描述文本。
 func (m fnMatcher) String() string {
 	return m.msg
 }
 
+// errorMatcher 要求编译结果携带指定类型且信息包含指定子串的错误。
 type errorMatcher struct {
 	errorType cel.ErrorType
 	contains  string
 }
 
+// invalidError 构造匹配 invalid 类型错误的匹配器。
 func invalidError(contains string) validationMatcher {
 	return errorMatcher{errorType: cel.ErrorTypeInvalid, contains: contains}
 }
 
+// matches 同时校验错误类型与错误信息内容。
 func (v errorMatcher) matches(cr CompilationResult) bool {
 	return cr.Error != nil && cr.Error.Type == v.errorType && strings.Contains(cr.Error.Error(), v.contains)
 }
 
+// String 描述期望的错误。
 func (v errorMatcher) String() string {
 	return fmt.Sprintf("has error of type %q containing string %q", v.errorType, v.contains)
 }
 
+// messageExpressionErrorMatcher 要求 messageExpression 编译产生指定错误。
 type messageExpressionErrorMatcher struct {
 	contains string
 }
 
+// messageExpressionError 构造 messageExpression 错误匹配器。
 func messageExpressionError(contains string) validationMatcher {
 	return messageExpressionErrorMatcher{contains: contains}
 }
 
+// matches 校验 messageExpression 错误类型与内容。
 func (m messageExpressionErrorMatcher) matches(cr CompilationResult) bool {
 	return cr.MessageExpressionError != nil && cr.MessageExpressionError.Type == cel.ErrorTypeInvalid && strings.Contains(cr.MessageExpressionError.Error(), m.contains)
 }
 
+// String 描述期望的 messageExpression 错误。
 func (m messageExpressionErrorMatcher) String() string {
 	return fmt.Sprintf("has messageExpression error containing string %q", m.contains)
 }
 
+// noErrorMatcher 要求编译没有错误。
 type noErrorMatcher struct{}
 
+// noError 构造“无错误”匹配器。
 func noError() validationMatcher {
 	return noErrorMatcher{}
 }
 
+// matches 检查是否未产生错误。
 func (noErrorMatcher) matches(cr CompilationResult) bool {
 	return cr.Error == nil
 }
 
+// String 返回固定描述。
 func (noErrorMatcher) String() string {
 	return "no error"
 }
 
+// transitionRuleMatcher 校验结果是否被识别为过渡规则（使用 oldSelf）。
 type transitionRuleMatcher bool
 
+// transitionRule 构造过渡规则匹配器。
 func transitionRule(t bool) validationMatcher {
 	return transitionRuleMatcher(t)
 }
 
+// matches 比较 UsesOldSelf 与期望值。
 func (v transitionRuleMatcher) matches(cr CompilationResult) bool {
 	return cr.UsesOldSelf == bool(v)
 }
 
+// String 描述期望的是否为过渡规则。
 func (v transitionRuleMatcher) String() string {
 	if v {
 		return "is a transition rule"
@@ -154,6 +179,8 @@ func (v transitionRuleMatcher) String() string {
 	return "is not a transition rule"
 }
 
+// TestCelCompilation 验证 CEL 规则编译在类型检查、转义、messageExpression
+// 和过渡规则识别等方面的行为。
 func TestCelCompilation(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)
 	cases := []struct {
@@ -693,7 +720,7 @@ func TestCelCompilation(t *testing.T) {
 				},
 			},
 			expectedResults: []validationMatcher{
-				// starting 1.32, the preserved keyword as field name would be supported.
+				// 从 1.32 起，作为字段名的保留关键字得到支持。
 				noError(),
 				noError(),
 				invalidError("found no matching overload"),
@@ -851,6 +878,7 @@ func TestCelCompilation(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			// 将伪造库注入未来版本环境，用以区分“未修改表达式”与“修改后表达式”可用的环境特性。
 			env, err := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).Extend(
 				environment.VersionedOptions{
 					IntroducedVersion: version.MajorMinor(1, 999),
@@ -861,6 +889,7 @@ func TestCelCompilation(t *testing.T) {
 			}
 			loader := NewExpressionsEnvLoader()
 			if tt.unmodified {
+				// 未修改的已存储表达式保留写入时的环境，因此可以引用尚未正式发布的特性。
 				loader = StoredExpressionsEnvLoader()
 			}
 			compilationResults, err := Compile(&tt.input, model.SchemaDeclType(&tt.input, false), celconfig.PerCallLimit, env, loader)
@@ -868,6 +897,7 @@ func TestCelCompilation(t *testing.T) {
 				t.Fatalf("Expected no error, but got: %v", err)
 			}
 
+			// 编译结果必须与规则一一对应，否则后续按索引断言会错位。
 			if len(compilationResults) != len(tt.input.XValidations) {
 				t.Fatalf("compilation did not produce one result per rule")
 			}
@@ -885,8 +915,7 @@ func TestCelCompilation(t *testing.T) {
 	}
 }
 
-// take a single rule type in (string/number/map/etc.) and return appropriate values for
-// Type, Format, and XIntOrString
+// parseRuleType 接收单个规则类型（string/number/map 等），返回对应的 Type、Format 和 XIntOrString 取值。
 func parseRuleType(ruleType string) (string, string, bool) {
 	if ruleType == "duration" || ruleType == "date" || ruleType == "date-time" {
 		return "string", ruleType, false
@@ -897,6 +926,7 @@ func parseRuleType(ruleType string) (string, string, bool) {
 	return ruleType, "", false
 }
 
+// genArrayWithRule 生成带单条规则的原子类型数组 schema 构造函数。
 func genArrayWithRule(arrayType, rule string) func(maxItems *int64) *schema.Structural {
 	passedType, passedFormat, xIntString := parseRuleType(arrayType)
 	return func(maxItems *int64) *schema.Structural {
@@ -929,6 +959,7 @@ func genArrayWithRule(arrayType, rule string) func(maxItems *int64) *schema.Stru
 	}
 }
 
+// genArrayOfArraysWithRule 生成“数组的数组”schema 构造函数。
 func genArrayOfArraysWithRule(arrayType, rule string) func(maxItems *int64) *schema.Structural {
 	return func(maxItems *int64) *schema.Structural {
 		return &schema.Structural{
@@ -959,6 +990,7 @@ func genArrayOfArraysWithRule(arrayType, rule string) func(maxItems *int64) *sch
 	}
 }
 
+// genObjectArrayWithRule 生成带必填字段的对象数组 schema 构造函数。
 func genObjectArrayWithRule(rule string) func(maxItems *int64) *schema.Structural {
 	return func(maxItems *int64) *schema.Structural {
 		return &schema.Structural{
@@ -999,6 +1031,7 @@ func genObjectArrayWithRule(rule string) func(maxItems *int64) *schema.Structura
 	}
 }
 
+// getMapArrayWithRule 生成元素为 map 的数组 schema 构造函数。
 func getMapArrayWithRule(mapType, rule string) func(maxItems *int64) *schema.Structural {
 	return func(maxItems *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1029,6 +1062,7 @@ func getMapArrayWithRule(mapType, rule string) func(maxItems *int64) *schema.Str
 	}
 }
 
+// genMapWithRule 生成值类型为 mapType 的 map schema 构造函数。
 func genMapWithRule(mapType, rule string) func(maxProperties *int64) *schema.Structural {
 	passedType, passedFormat, xIntString := parseRuleType(mapType)
 	return func(maxProperties *int64) *schema.Structural {
@@ -1061,6 +1095,7 @@ func genMapWithRule(mapType, rule string) func(maxProperties *int64) *schema.Str
 	}
 }
 
+// genStringWithRule 生成带单条规则的字符串 schema 构造函数。
 func genStringWithRule(rule string) func(maxLength *int64) *schema.Structural {
 	return func(maxLength *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1081,10 +1116,8 @@ func genStringWithRule(rule string) func(maxLength *int64) *schema.Structural {
 	}
 }
 
-// genEnumWithRuleAndValues creates a function that accepts an optional maxLength
-// with given validation rule and a set of enum values, following the convention of existing tests.
-// The test has two checks, first with maxLength unset to check if maxLength can be concluded from enums,
-// second with maxLength set to ensure it takes precedence.
+// genEnumWithRuleAndValues 创建一个接受可选 maxLength 的函数，并附带给定规则与枚举值，遵循既有测试约定。
+// 测试包含两项检查：先不设置 maxLength 以验证可从枚举推导出上界，再设置 maxLength 以确保其优先。
 func genEnumWithRuleAndValues(rule string, values ...string) func(maxLength *int64) *schema.Structural {
 	enums := make([]schema.JSON, 0, len(values))
 	for _, v := range values {
@@ -1110,6 +1143,7 @@ func genEnumWithRuleAndValues(rule string, values ...string) func(maxLength *int
 	}
 }
 
+// genBytesWithRule 生成 format 为 byte 的字符串 schema 构造函数。
 func genBytesWithRule(rule string) func(maxLength *int64) *schema.Structural {
 	return func(maxLength *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1131,6 +1165,7 @@ func genBytesWithRule(rule string) func(maxLength *int64) *schema.Structural {
 	}
 }
 
+// genNestedSpecWithRule 生成“字符串 map 的 map”schema 构造函数。
 func genNestedSpecWithRule(rule string) func(maxLength *int64) *schema.Structural {
 	return func(maxLength *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1159,6 +1194,7 @@ func genNestedSpecWithRule(rule string) func(maxLength *int64) *schema.Structura
 	}
 }
 
+// genAllMaxNestedSpecWithRootRule 生成嵌套层级全部设置 max 限制的 schema 构造函数。
 func genAllMaxNestedSpecWithRootRule(rule string) func(maxLength *int64) *schema.Structural {
 	return func(maxLength *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1208,6 +1244,7 @@ func genAllMaxNestedSpecWithRootRule(rule string) func(maxLength *int64) *schema
 	}
 }
 
+// genOneMaxNestedSpecWithRootRule 生成仅有一层设置 max 限制的 schema 构造函数。
 func genOneMaxNestedSpecWithRootRule(rule string) func(maxLength *int64) *schema.Structural {
 	return func(maxLength *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1253,6 +1290,7 @@ func genOneMaxNestedSpecWithRootRule(rule string) func(maxLength *int64) *schema
 	}
 }
 
+// genObjectForMap 返回用作 map 元素的对象 schema。
 func genObjectForMap() *schema.Structural {
 	return &schema.Structural{
 		Generic: schema.Generic{
@@ -1276,6 +1314,7 @@ func genObjectForMap() *schema.Structural {
 	}
 }
 
+// genArrayForMap 返回用作 map 元素的数字数组 schema。
 func genArrayForMap() *schema.Structural {
 	return &schema.Structural{
 		Generic: schema.Generic{
@@ -1289,6 +1328,7 @@ func genArrayForMap() *schema.Structural {
 	}
 }
 
+// genMapForMap 返回用作 map 元素的数字 map schema。
 func genMapForMap() *schema.Structural {
 	return &schema.Structural{
 		Generic: schema.Generic{
@@ -1302,6 +1342,7 @@ func genMapForMap() *schema.Structural {
 	}
 }
 
+// genMapWithCustomItemRule 生成使用自定义元素 schema 与单条规则的 map 构造函数。
 func genMapWithCustomItemRule(item *schema.Structural, rule string) func(maxProperties *int64) *schema.Structural {
 	return func(maxProperties *int64) *schema.Structural {
 		return &schema.Structural{
@@ -1323,9 +1364,9 @@ func genMapWithCustomItemRule(item *schema.Structural, rule string) func(maxProp
 	}
 }
 
-// schemaChecker checks the cost of the validation rule declared in the provided schema (it requires there be exactly one rule)
-// and checks that the resulting equals the expectedCost if expectedCost is non-zero, and that the resulting cost is >= expectedCostExceedsLimit
-// if expectedCostExceedsLimit is non-zero. Typically, only expectedCost or expectedCostExceedsLimit is non-zero, not both.
+// schemaChecker 检查给定 schema 中声明的验证规则（要求恰好一条）的成本，并在
+// expectedCost 非零时校验实际成本等于该值，在 expectedCostExceedsLimit 非零时校验
+// 实际成本不低于该值。通常两者只有其一非零。
 func schemaChecker(schema *schema.Structural, expectedCost uint64, expectedCostExceedsLimit uint64, t *testing.T) func(t *testing.T) {
 	return func(t *testing.T) {
 		compilationResults, err := Compile(schema, model.SchemaDeclType(schema, false), celconfig.PerCallLimit, environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()), NewExpressionsEnvLoader())
@@ -1352,17 +1393,18 @@ func schemaChecker(schema *schema.Structural, expectedCost uint64, expectedCostE
 	}
 }
 
+// TestCostEstimation 验证 CEL 规则的成本估算，覆盖有/无 max 限制以及各类扩展库函数。
 func TestCostEstimation(t *testing.T) {
 	cases := []struct {
 		name            string
 		schemaGenerator func(maxLength *int64) *schema.Structural
 		setMaxElements  int64
 
-		// calc costs expectations are checked against the generated schema without any max element limits set
+		// calc 成本期望针对未设置任何 max 元素限制的 schema 进行检查
 		expectedCalcCost           uint64
 		expectCalcCostExceedsLimit uint64
 
-		// calc costs expectations are checked against the generated schema with max element limits set
+		// set 成本期望针对设置了 max 元素限制的 schema 进行检查
 		expectedSetCost             uint64
 		expectedSetCostExceedsLimit uint64
 	}{
@@ -1387,9 +1429,9 @@ func TestCostEstimation(t *testing.T) {
 			setMaxElements:   5,
 			expectedSetCost:  17,
 		},
-		// all array-of-array tests should have the same expected cost along the same expression,
-		// since arrays-of-arrays are serialized the same in minimized form regardless of item type
-		// of the subarray ([[], [], ...])
+		// 所有“数组的数组”测试在相同表达式下应具有相同的期望成本，
+		// 因为无论子数组元素类型如何，数组的数组在最小化形式下的序列化结果相同
+		// （[[], [], ...]）
 		{
 			name:             "array of number arrays with all",
 			schemaGenerator:  genArrayOfArraysWithRule("number", "self.all(x, true)"),
@@ -1768,7 +1810,7 @@ func TestCostEstimation(t *testing.T) {
 			setMaxElements:   490,
 			expectedSetCost:  0,
 		},
-		// Ensure library functions are integrated with size estimates by testing the interesting cases.
+		// 确认库函数与规模估算结合正常，覆盖有代表性的用例。
 		{
 			name:             "extended library regex find",
 			schemaGenerator:  genStringWithRule("self.find('[0-9]+') == ''"),
@@ -1814,7 +1856,7 @@ func TestCostEstimation(t *testing.T) {
 				objType = withRule(objType, "self.str.replace(self.before, self.after) == 'does not matter'")
 				return &objType
 			},
-			expectedCalcCost: 629154, // cost is based on the result size of the replace() call
+			expectedCalcCost: 629154, // 成本取决于 replace() 调用结果的规模
 			setMaxElements:   4,
 			expectedSetCost:  12,
 		},
@@ -1887,18 +1929,19 @@ func TestCostEstimation(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// dynamic maxLength case
+			// 动态 maxLength 场景：不设上界，验证估算结果
 			schema := testCase.schemaGenerator(nil)
 			t.Run("calc maxLength", schemaChecker(schema, testCase.expectedCalcCost, testCase.expectCalcCostExceedsLimit, t))
-			// static maxLength case
+			// 静态 maxLength 场景：设置上界，验证估算结果
 			setSchema := testCase.schemaGenerator(&testCase.setMaxElements)
 			t.Run("set maxLength", schemaChecker(setSchema, testCase.expectedSetCost, testCase.expectedSetCostExceedsLimit, t))
 		})
 	}
 }
 
+// BenchmarkCompile 基准测试单条规则的编译开销。
 func BenchmarkCompile(b *testing.B) {
-	env := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()) // prepare the environment
+	env := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()) // 预先准备编译环境
 	s := genArrayWithRule("number", "true")(nil)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -1910,14 +1953,17 @@ func BenchmarkCompile(b *testing.B) {
 	}
 }
 
+// fakeLib 是测试用的 CEL 库，注册虚拟函数 fakeFunction。
 type fakeLib struct{}
 
+// testLibraryDecls 保存伪造库的函数声明。
 var testLibraryDecls = map[string][]celgo.FunctionOpt{
 	"fakeFunction": {
 		celgo.Overload("fakeFunction", []*celgo.Type{celgo.StringType}, celgo.StringType,
 			celgo.UnaryBinding(fakeFunction))},
 }
 
+// CompileOptions 返回注册伪造函数的 CEL 环境选项。
 func (*fakeLib) CompileOptions() []celgo.EnvOption {
 	options := make([]celgo.EnvOption, 0, len(testLibraryDecls))
 	for name, overloads := range testLibraryDecls {
@@ -1926,10 +1972,12 @@ func (*fakeLib) CompileOptions() []celgo.EnvOption {
 	return options
 }
 
+// ProgramOptions 返回空的程序选项，测试不需要额外运行时配置。
 func (*fakeLib) ProgramOptions() []celgo.ProgramOption {
 	return []celgo.ProgramOption{}
 }
 
+// fakeFunction 将字符串参数转为大写；非字符串输入返回无匹配重载错误。
 func fakeFunction(arg1 ref.Val) ref.Val {
 	arg, ok := arg1.Value().(string)
 	if !ok {
@@ -1939,9 +1987,8 @@ func fakeFunction(arg1 ref.Val) ref.Val {
 	return types.String(strings.ToUpper(arg))
 }
 
-// TestMetadataNameCostIsBounded verifies that CEL rules referencing
-// self.metadata.name are cost-estimated using the bounded object-name length
-// rather than the full request size.
+// TestMetadataNameCostIsBounded 验证引用 self.metadata.name 的 CEL 规则按
+// 有界的对象名长度估算成本，而不是按整个请求规模估算。
 func TestMetadataNameCostIsBounded(t *testing.T) {
 	const boundedCeiling = 10000
 	cases := []struct {

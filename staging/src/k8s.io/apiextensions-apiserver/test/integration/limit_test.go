@@ -30,6 +30,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestLimits 验证请求体大小限制：超过 3MB 的 YAML/JSON 创建请求以及接近上限的
+// 嵌套/非嵌套文档与各类 patch 请求的响应。
 func TestLimits(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -57,7 +59,7 @@ func TestLimits(t *testing.T) {
 
 	rest := apiExtensionClient.Discovery().RESTClient()
 
-	// Create YAML over 3MB limit
+	// 创建超过 3MB 限制的 YAML
 	t.Run("create YAML over limit", func(t *testing.T) {
 		yamlBody := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -77,7 +79,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create YAML just under 3MB limit, nested
+	// 创建略低于 3MB 限制的嵌套 YAML 文档
 	t.Run("create YAML doc under limit, nested", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -100,7 +102,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create YAML just under 3MB limit, not nested
+	// 创建略低于 3MB 限制的非嵌套 YAML 文档
 	t.Run("create YAML doc under limit, not nested", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -123,7 +125,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create JSON over 3MB limit
+	// 创建超过 3MB 限制的 JSON
 	t.Run("create JSON over limit", func(t *testing.T) {
 		jsonBody := []byte(fmt.Sprintf(`{
 	"apiVersion": %q,
@@ -144,7 +146,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create JSON just under 3MB limit, nested
+	// 创建略低于 3MB 限制的嵌套 JSON 文档
 	t.Run("create JSON doc under limit, nested", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -168,7 +170,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create JSON just under 3MB limit, not nested
+	// 创建略低于 3MB 限制的非嵌套 JSON 文档
 	t.Run("create JSON doc under limit, not nested", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -192,7 +194,7 @@ values: `+strings.Repeat("[", 3*1024*1024), apiVersion, kind))
 		}
 	})
 
-	// Create instance to allow patching
+	// 先创建一个实例，供后续 patch 使用
 	{
 		jsonBody := []byte(fmt.Sprintf(`{"apiVersion": %q, "kind": %q, "metadata": {"name": "test"}}`, apiVersion, kind))
 		_, err := rest.Post().AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).Body(jsonBody).DoRaw(context.TODO())

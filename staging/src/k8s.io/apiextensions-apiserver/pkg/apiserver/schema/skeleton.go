@@ -16,7 +16,8 @@ limitations under the License.
 
 package schema
 
-// StripValueValidations returns a copy without value validations.
+// StripValueValidations 返回一份去掉了值校验的副本。
+// OpenAPI 输出等下游消费者不需要校验规则，剥离可减小文档体积；副本保证不改动原 schema。
 func (s *Structural) StripValueValidations() *Structural {
 	s = s.DeepCopy()
 	v := Visitor{
@@ -33,7 +34,8 @@ func (s *Structural) StripValueValidations() *Structural {
 	return s
 }
 
-// StripNullable returns a copy without nullable.
+// StripNullable 返回一份去掉了 nullable 标记的副本。
+// OpenAPI v2 不支持 nullable，需要在其输出前剥离；副本保证不改动原 schema。
 func (s *Structural) StripNullable() *Structural {
 	s = s.DeepCopy()
 	v := Visitor{

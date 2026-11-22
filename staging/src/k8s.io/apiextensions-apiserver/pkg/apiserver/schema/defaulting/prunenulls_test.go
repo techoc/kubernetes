@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
+// TestPruneNonNullableNullsWithoutDefaults 验证：没有默认值且不可为空的字段，
+// 其显式 null 会被删除；可为空或有默认值的字段则保留。
 func TestPruneNonNullableNullsWithoutDefaults(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -67,6 +69,7 @@ func TestPruneNonNullableNullsWithoutDefaults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 输入输出都走 JSON 往返，保证比较的是反序列化后的等价对象而非字符串。
 			var in interface{}
 			if err := json.Unmarshal([]byte(tt.json), &in); err != nil {
 				t.Fatal(err)
@@ -79,6 +82,7 @@ func TestPruneNonNullableNullsWithoutDefaults(t *testing.T) {
 
 			PruneNonNullableNullsWithoutDefaults(in, tt.schema)
 			if !reflect.DeepEqual(in, expected) {
+				// 仅在失败时做一次带缩进的序列化，方便定位差异。
 				var buf bytes.Buffer
 				enc := json.NewEncoder(&buf)
 				enc.SetIndent("", "  ")

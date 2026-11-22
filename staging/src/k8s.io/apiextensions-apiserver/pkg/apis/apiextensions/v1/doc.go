@@ -24,5 +24,16 @@ limitations under the License.
 
 // +groupName=apiextensions.k8s.io
 
-// Package v1 is the v1 version of the API.
+// Package v1 定义 CRD API 的 v1 版本（2019 年成为稳定版本）。
+// v1 版本是 CRD 的主要版本，取代了已废弃的 v1beta1。
+//
+// 与内部版本的关系：
+//   - 客户端发送 v1 版本的 CRD 请求 → API Server 转换为内部版本 → 存储到 etcd
+//   - 从 etcd 读取内部版本 → 转换为客户端请求的版本 → 返回响应
+//
+// 主要类型：
+//   - CustomResourceDefinition：CRD 的 v1 表示
+//   - JSONSchemaProps：OpenAPI v3.0 schema 的 Go 表示
+//   - CustomResourceValidation：验证配置，包括 OpenAPI schema 和 CEL 表达式
+//   - CustomResourceSubresources：子资源（status、scale）配置
 package v1

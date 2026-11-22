@@ -24,13 +24,16 @@ import (
 )
 
 type (
+	// jsonPathNode 是 JSONPath 中的一段：要么是对象字段名，要么是数组下标。
 	jsonPathNode struct {
 		index *int
 		field string
 	}
+	// JSONPath 表示 JSON 结构中的一条路径，由字段名和数组下标组成。
 	JSONPath []jsonPathNode
 )
 
+// String 以 `.field` 和 `[i]` 的形式渲染路径。
 func (p JSONPath) String() string {
 	var buf bytes.Buffer
 	for _, n := range p {
@@ -43,6 +46,7 @@ func (p JSONPath) String() string {
 	return buf.String()
 }
 
+// jsonPaths 枚举 j 中的所有路径，包含中间节点和叶子节点。
 func jsonPaths(base JSONPath, j map[string]interface{}) []JSONPath {
 	res := make([]JSONPath, 0, len(j))
 	for k, old := range j {
@@ -59,9 +63,11 @@ func jsonPaths(base JSONPath, j map[string]interface{}) []JSONPath {
 	return res
 }
 
+// jsonIterSlice 枚举数组 j 中的所有路径。
 func jsonIterSlice(base JSONPath, j []interface{}) []JSONPath {
 	res := make([]JSONPath, 0, len(j))
 	for i, old := range j {
+		// 复制下标值：&i 会随循环变化，不可直接取地址。
 		index := i
 		iPth := append(append([]jsonPathNode(nil), base...), jsonPathNode{index: &index})
 		res = append(res, iPth)
@@ -76,6 +82,7 @@ func jsonIterSlice(base JSONPath, j []interface{}) []JSONPath {
 	return res
 }
 
+// JSONPathValue 返回 j 中路径 pth 处的值，从下标 base 开始解析。
 func JSONPathValue(j map[string]interface{}, pth JSONPath, base int) (interface{}, error) {
 	if len(pth) == base {
 		return nil, fmt.Errorf("empty json path is invalid for object")
@@ -100,6 +107,7 @@ func JSONPathValue(j map[string]interface{}, pth JSONPath, base int) (interface{
 	}
 }
 
+// jsonPathValueSlice 返回数组 j 中路径 pth 处的值，从下标 base 开始解析。
 func jsonPathValueSlice(j []interface{}, pth JSONPath, base int) (interface{}, error) {
 	if len(pth) == base {
 		return nil, fmt.Errorf("empty json path %q is invalid for object", pth)
@@ -123,6 +131,7 @@ func jsonPathValueSlice(j []interface{}, pth JSONPath, base int) (interface{}, e
 	}
 }
 
+// SetJSONPath 把 value 写入 j 中路径 pth 处，从下标 base 开始解析。
 func SetJSONPath(j map[string]interface{}, pth JSONPath, base int, value interface{}) error {
 	if len(pth) == base {
 		return fmt.Errorf("empty json path is invalid for object")
@@ -148,6 +157,7 @@ func SetJSONPath(j map[string]interface{}, pth JSONPath, base int, value interfa
 	}
 }
 
+// setJSONPathSlice 把 value 写入数组 j 中路径 pth 处，从下标 base 开始解析。
 func setJSONPathSlice(j []interface{}, pth JSONPath, base int, value interface{}) error {
 	if len(pth) == base {
 		return fmt.Errorf("empty json path %q is invalid for object", pth)
@@ -172,6 +182,7 @@ func setJSONPathSlice(j []interface{}, pth JSONPath, base int, value interface{}
 	}
 }
 
+// DeleteJSONPath 删除 j 中路径 pth 处的键/元素，从下标 base 开始解析。
 func DeleteJSONPath(j map[string]interface{}, pth JSONPath, base int) error {
 	if len(pth) == base {
 		return fmt.Errorf("empty json path is invalid for object")
@@ -204,6 +215,7 @@ func DeleteJSONPath(j map[string]interface{}, pth JSONPath, base int) error {
 	}
 }
 
+// deleteJSONPathSlice 删除数组 j 中路径 pth 处的元素，从下标 base 开始解析。
 func deleteJSONPathSlice(j []interface{}, pth JSONPath, base int) error {
 	if len(pth) == base {
 		return fmt.Errorf("empty json path %q is invalid for object", pth)

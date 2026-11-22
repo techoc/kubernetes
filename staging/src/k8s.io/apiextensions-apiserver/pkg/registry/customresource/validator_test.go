@@ -31,18 +31,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// TestValidateCustomResourceName verifies that:
-//   - the DNS1123 subdomain name validation applies to every custom resource regardless
-//     of the schema an author declares for metadata.name (it cannot be relaxed),
-//   - an author-declared constraint on metadata.name is enforced in addition, and
-//   - the maxLength that WithTypeAndObjectMeta sets on metadata.name/generateName for CEL
-//     cost estimation is never enforced as a value constraint (a 253-char generateName,
-//     which exceeds the 252 cost bound, is still accepted).
+// TestValidateCustomResourceName 验证以下几点：
+//   - DNS1123 子域名校验对每个自定义资源都生效，与作者为 metadata.name 声明的 schema 无关（不能放宽）；
+//   - 作者声明的 metadata.name 约束会在此之外额外生效；
+//   - WithTypeAndObjectMeta 为 CEL 成本估算在 metadata.name/generateName 上设置的 maxLength
+//     不会被当作值约束强制执行（253 字符的 generateName 超过 252 成本上限，仍应被接受）。
 func TestValidateCustomResourceName(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Foo"}
 
-	// metadata.name uses a pattern that permits uppercase letters - more permissive than
-	// DNS1123 in that dimension - so we can show the DNS1123 baseline still applies.
+	// metadata.name 的 pattern 允许大写字母，比 DNS1123 在该维度更宽松，
+	// 以此证明 DNS1123 基线仍然生效。
 	props := &apiextensions.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
@@ -58,7 +56,7 @@ func TestValidateCustomResourceName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Cluster-scoped so the test can focus on name validation without a namespace.
+	// 用集群级资源，聚焦名称校验，避免命名空间干扰。
 	validator := customResourceValidator{namespaceScoped: false, kind: gvk, schemaValidator: schemaValidator}
 
 	newCR := func(meta map[string]interface{}) *unstructured.Unstructured {
@@ -72,26 +70,26 @@ func TestValidateCustomResourceName(t *testing.T) {
 	cases := []struct {
 		name        string
 		meta        map[string]interface{}
-		errContains string // "" means the resource is expected to validate
+		errContains string // 为空表示期望资源通过校验
 	}{
 		{
 			name: "valid lowercase name accepted",
 			meta: map[string]interface{}{"name": "foo"},
 		},
 		{
-			// The author's pattern permits "Foo", but the DNS1123 baseline rejects uppercase.
+			// 作者 pattern 允许 "Foo"，但 DNS1123 基线会拒绝大写。
 			name:        "uppercase name rejected by DNS1123 despite a permissive pattern",
 			meta:        map[string]interface{}{"name": "Foo"},
 			errContains: "RFC 1123 subdomain",
 		},
 		{
-			// DNS1123 permits "foo123", but the author's pattern rejects digits.
+			// DNS1123 允许 "foo123"，但作者 pattern 拒绝数字。
 			name:        "name rejected by the author's pattern",
 			meta:        map[string]interface{}{"name": "foo123"},
 			errContains: "should match",
 		},
 		{
-			// generateName up to 253 is valid per DNS1123; the 252 CEL cost bound must not reject it.
+			// 253 字符的 generateName 符合 DNS1123；252 的 CEL 成本上限不应拒绝它。
 			name: "253-char generateName accepted; CEL cost bound is not enforced",
 			meta: map[string]interface{}{"name": "foo", "generateName": strings.Repeat("a", 253)},
 		},
@@ -116,6 +114,7 @@ func TestValidateCustomResourceName(t *testing.T) {
 	}
 }
 
+// TestGetObjectMeta 验证从 unstructured 对象解析 ObjectMeta 的各种边界情况。
 func TestGetObjectMeta(t *testing.T) {
 	cases := []struct {
 		name         string

@@ -36,6 +36,7 @@ const (
 	testFinalizer = "noxu.example.com/finalizer"
 )
 
+// TestFinalization 验证 finalizer 会阻止 CR 被删除，移除后才能完成删除。
 func TestFinalization(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	require.NoError(t, err)
@@ -62,14 +63,14 @@ func TestFinalization(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Deleting something with a finalizer sets deletion timestamp to a not-nil value but does not
-	// remove the object from the API server. Here we read it to confirm this.
+	// 带 finalizer 的删除只会设置非空 deletionTimestamp，并不会把对象从 apiserver 移除。
+	// 这里读回来确认这一点。
 	gottenNoxuInstance, err := noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 	require.NoError(t, err)
 
 	require.NotNil(t, gottenNoxuInstance.GetDeletionTimestamp())
 
-	// Trying to delete it again to confirm it will not remove the object because finalizer is still there.
+	// 再次删除，确认 finalizer 仍在时对象不会被移除。
 	err = noxuResourceClient.Delete(context.TODO(), name, metav1.DeleteOptions{
 		Preconditions: &metav1.Preconditions{
 			UID: &uid,
@@ -77,9 +78,8 @@ func TestFinalization(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Removing the finalizers to allow the following delete remove the object.
-	// This step will fail if previous delete wrongly removed the object. The
-	// object will be deleted as part of the finalizer update.
+	// 移除 finalizer，让随后的删除得以完成。
+	// 如果之前的删除错误地移除了对象，这一步会失败。对象会在 finalizer 更新时被删除。
 	for {
 		gottenNoxuInstance.SetFinalizers(nil)
 		_, err = noxuResourceClient.Update(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
@@ -87,29 +87,31 @@ func TestFinalization(t *testing.T) {
 			break
 		}
 		if !errors.IsConflict(err) {
-			require.NoError(t, err) // Fail on unexpected error
+			require.NoError(t, err) // 非冲突错误直接失败
 		}
 		gottenNoxuInstance, err = noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 		require.NoError(t, err)
 	}
 
-	// Check that the object is actually gone.
+	// 确认对象确实已消失。
 	_, err = noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 	require.Error(t, err)
 	require.True(t, errors.IsNotFound(err), "%#v", err)
 }
 
+// TestFinalizationAndDeletion 验证删除 CRD 时，仍带 finalizer 的 CR 不会被自动清理；
+// 移除 finalizer 后 CR 与 CRD 才会最终消失。
 func TestFinalizationAndDeletion(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	require.NoError(t, err)
 	defer tearDown()
 
-	// Create a CRD.
+	// 创建 CRD。
 	noxuDefinition := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 	noxuDefinition, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
 	require.NoError(t, err)
 
-	// Create a CR with a finalizer.
+	// 创建带 finalizer 的 CR。
 	ns := testNamespace
 	name := "foo123"
 	noxuResourceClient := newNamespacedCustomResourceClient(ns, dynamicClient, noxuDefinition)
@@ -119,7 +121,7 @@ func TestFinalizationAndDeletion(t *testing.T) {
 	createdNoxuInstance, err := instantiateCustomResource(t, instance, noxuResourceClient, noxuDefinition)
 	require.NoError(t, err)
 
-	// Delete a CR. Because there's a finalizer, it will not get deleted now.
+	// 删除 CR。因为有 finalizer，此刻不会被真正删除。
 	uid := createdNoxuInstance.GetUID()
 	err = noxuResourceClient.Delete(context.TODO(), name, metav1.DeleteOptions{
 		Preconditions: &metav1.Preconditions{
@@ -128,19 +130,19 @@ func TestFinalizationAndDeletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Check is the CR scheduled for deletion.
+	// 确认 CR 已进入待删除状态。
 	gottenNoxuInstance, err := noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, gottenNoxuInstance.GetDeletionTimestamp())
 
-	// Delete the CRD.
+	// 删除 CRD。
 	fixtures.DeleteV1CustomResourceDefinition(noxuDefinition, apiExtensionClient)
 
-	// Check is CR still there after the CRD deletion.
+	// 确认 CRD 删除后 CR 仍然存在。
 	gottenNoxuInstance, err = noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 	require.NoError(t, err)
 
-	// Update the CR to remove the finalizer.
+	// 更新 CR 以移除 finalizer。
 	for {
 		gottenNoxuInstance.SetFinalizers(nil)
 		_, err = noxuResourceClient.Update(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
@@ -148,14 +150,13 @@ func TestFinalizationAndDeletion(t *testing.T) {
 			break
 		}
 		if !errors.IsConflict(err) {
-			require.NoError(t, err) // Fail on unexpected error
+			require.NoError(t, err) // 非冲突错误直接失败
 		}
 		gottenNoxuInstance, err = noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 		require.NoError(t, err)
 	}
 
-	// Verify the CR is gone.
-	// It should return the NonFound error.
+	// 确认 CR 已消失，应返回 NotFound。
 	_, err = noxuResourceClient.Get(context.TODO(), name, metav1.GetOptions{})
 	if !errors.IsNotFound(err) {
 		t.Fatalf("unable to delete cr: %v", err)
@@ -170,26 +171,26 @@ func TestFinalizationAndDeletion(t *testing.T) {
 	}
 }
 
+// TestApplyCRDuringCRDFinalization 验证 CRD 处于 Terminating 时，SSA 创建 CR 会被拒绝。
 func TestApplyCRDuringCRDFinalization(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	require.NoError(t, err)
 	defer tearDown()
 
-	// Create a CRD with a finalizer which will stall deletion
+	// 创建带 finalizer 的 CRD，让删除流程停住。
 	noxuDefinition := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 	noxuDefinition.SetFinalizers([]string{testFinalizer})
 	noxuDefinition, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
 	require.NoError(t, err)
 
-	// Delete the CRD. Since it has a finalizer it will be stuck in terminating state
+	// 删除 CRD。由于存在 finalizer，它会卡在 terminating 状态。
 	err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Delete(t.Context(), noxuDefinition.Name, metav1.DeleteOptions{})
 	require.NoError(t, err)
 
-	// Wait for the CRD to have the Terminating condition set to True.
-	// The handler checks IsCRDConditionTrue(crd, apiextensionsv1.Terminating) to block
-	// CR creation, and this condition is set asynchronously by the CRD finalizer controller
-	// after it observes the DeletionTimestamp. Without this wait, the Apply could succeed
-	// if it races ahead of the controller setting the condition.
+	// 等待 CRD 的 Terminating condition 变为 True。
+	// handler 通过 IsCRDConditionTrue(crd, apiextensionsv1.Terminating) 阻止创建 CR，
+	// 而该 condition 是 CRD finalizer 控制器观察到 DeletionTimestamp 后异步设置的。
+	// 不等待的话，Apply 可能抢在控制器设置 condition 之前成功。
 	err = wait.PollUntilContextTimeout(t.Context(), 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, noxuDefinition.Name, metav1.GetOptions{})
 		if err != nil {
@@ -199,7 +200,7 @@ func TestApplyCRDuringCRDFinalization(t *testing.T) {
 	})
 	require.NoError(t, err, "timed out waiting for CRD Terminating condition to be set")
 
-	// Try to create a CR using SSA. This should fail due to the CRD validation
+	// 尝试用 SSA 创建 CR，应因 CRD 正在删除而失败。
 	ns := testNamespace
 	name := "foo123"
 	noxuResourceClient := newNamespacedCustomResourceClient(ns, dynamicClient, noxuDefinition)
@@ -207,9 +208,9 @@ func TestApplyCRDuringCRDFinalization(t *testing.T) {
 	wantErr := `create not allowed while custom resource definition is terminating`
 	var applyErr error
 	instance := fixtures.NewNoxuInstance(ns, name)
-	// The CRD handler uses its informer cache to decide whether creates are blocked.
-	// The CRD GET above can observe deletion before that cache does, so wait
-	// through the same dry-run apply path that this test is validating.
+	// CRD handler 用 informer 缓存判断是否阻止创建。
+	// 上面的 CRD GET 可能先于缓存观察到删除，因此通过本测试要验证的 dry-run apply 路径重试，
+	// 直到缓存也反映删除。
 	err = wait.PollUntilContextTimeout(t.Context(), 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		_, applyErr = noxuResourceClient.Apply(ctx, name, instance, metav1.ApplyOptions{DryRun: []string{"All"}, FieldManager: "manager"})
 		if applyErr == nil {

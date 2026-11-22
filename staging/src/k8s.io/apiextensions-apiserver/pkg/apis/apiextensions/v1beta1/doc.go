@@ -24,5 +24,12 @@ limitations under the License.
 
 // +groupName=apiextensions.k8s.io
 
-// Package v1beta1 is the v1beta1 version of the API.
+// Package v1beta1 定义 CRD API 的 v1beta1 版本（已废弃）。
+// v1beta1 在 1.16 版本后被 v1 取代，但仍保留以支持向后兼容。
+// 新创建的 CRD 应使用 v1 版本。
+//
+// 与 v1 的主要差异：
+//   - v1beta1 不支持 per-version schema、subresources 和 printer columns
+//   - v1beta1 使用顶层 spec.validation 而不是 per-version schema
+//   - v1beta1 的 conversion webhook 结构与 v1 不同
 package v1beta1

@@ -28,6 +28,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCelCostStability 验证 CEL 规则在各类型数据上的运行时开销保持稳定，
+// 防止实现变化导致成本漂移。
 func TestCelCostStability(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -36,15 +38,15 @@ func TestCelCostStability(t *testing.T) {
 		expectCost map[string]int64
 	}{
 		{name: "integers",
-			// 1st obj and schema args are for "self.val1" field, 2nd for "self.val2" and so on.
+			// obj 与 schema 参数中，第 1 个对应 "self.val1" 字段，第 2 个对应 "self.val2"，依此类推。
 			obj: objs(int64(math.MaxInt64), int64(math.MaxInt64), int32(math.MaxInt32), int32(math.MaxInt32),
 				int64(math.MaxInt64), int64(math.MaxInt64)),
 			schema: schemas(integerType, integerType, int32Type, int32Type, int64Type, int64Type),
 			expectCost: map[string]int64{
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%d", int64(math.MaxInt64))): 11,
-				"self.val1 == self.val6":                              5, // integer with no format is the same as int64
+				"self.val1 == self.val6":                              5, // 未指定 format 的 integer 等价于 int64
 				"type(self.val1) == int":                              4,
-				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32): 5, // CEL integers are 64 bit
+				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32): 5, // CEL 的整数为 64 位
 			},
 		},
 		{name: "numbers",
@@ -53,31 +55,30 @@ func TestCelCostStability(t *testing.T) {
 			schema: schemas(numberType, numberType, floatType, floatType, doubleType, doubleType, doubleType),
 			expectCost: map[string]int64{
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%f", math.MaxFloat64)): 11,
-				"self.val1 == self.val6":    5, // number with no format is the same as float64
+				"self.val1 == self.val6":    5, // 未指定 format 的 number 等价于 float64
 				"type(self.val1) == double": 4,
 
-				// Use a int64 value with a number openAPI schema type since float representations of whole numbers
-				// (e.g. 1.0, 0.0) can convert to int representations (e.g. 1, 0) in yaml to json translation, and
-				// then get parsed as int64s.
+				// 这里用 int64 值配 number 的 OpenAPI schema 类型：整数的浮点表示（如 1.0、0.0）
+				// 在 yaml 转 json 时可能变成整数表示（如 1、0），随后被解析为 int64。
 				"type(self.val7) == double": 4,
 				"self.val7 == 1.0":          3,
 			},
 		},
 		{name: "numeric comparisons",
 			obj: objs(
-				int64(5),      // val1, integer type, integer value
-				float64(10.0), // val4, number type, parsed from decimal literal
-				float64(10.0), // val5, float type, parsed from decimal literal
-				float64(10.0), // val6, double type, parsed from decimal literal
-				int64(10),     // val7, number type, parsed from integer literal
-				int64(10),     // val8, float type, parsed from integer literal
-				int64(10),     // val9, double type, parsed from integer literal
+				int64(5),      // val1，integer 类型，整数值
+				float64(10.0), // val4，number 类型，由十进制字面量解析
+				float64(10.0), // val5，float 类型，由十进制字面量解析
+				float64(10.0), // val6，double 类型，由十进制字面量解析
+				int64(10),     // val7，number 类型，由整数字面量解析
+				int64(10),     // val8，float 类型，由整数字面量解析
+				int64(10),     // val9，double 类型，由整数字面量解析
 			),
 			schema: schemas(integerType, numberType, floatType, doubleType, numberType, floatType, doubleType),
 			expectCost: map[string]int64{
-				// xref: https://github.com/google/cel-spec/wiki/proposal-210
+				// 参考：https://github.com/google/cel-spec/wiki/proposal-210
 
-				// compare integers with all float types
+				// 整数与所有浮点类型比较
 				"double(self.val1) < self.val4": 6,
 				"self.val1 < int(self.val4)":    6,
 				"double(self.val1) < self.val5": 6,
@@ -85,11 +86,11 @@ func TestCelCostStability(t *testing.T) {
 				"double(self.val1) < self.val6": 6,
 				"self.val1 < int(self.val6)":    6,
 
-				// compare literal integers and floats
+				// 字面量整数与浮点数比较
 				"double(5) < 10.0": 1,
 				"5 < int(10.0)":    1,
 
-				// compare integers with literal floats
+				// 整数与字面量浮点数比较
 				"double(self.val1) < 10.0": 4,
 			},
 		},
@@ -105,7 +106,7 @@ func TestCelCostStability(t *testing.T) {
 				"type(self.val1) == string":       4,
 				"size(self.val1) == 12":           4,
 
-				// string functions (https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go)
+				// 字符串函数（https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go）
 				"self.val1.charAt(3) == 'k'":                       4,
 				"self.val1.indexOf('o') == 1":                      4,
 				"self.val1.indexOf('o', 2) == 2":                   4,
@@ -119,7 +120,7 @@ func TestCelCostStability(t *testing.T) {
 				"self.val1.upperAscii() == 'ROOK TAKES 👑'":         6,
 				"self.val1.lowerAscii() == 'rook takes 👑'":         6,
 				"self.val1.lowerAscii() == self.val1.lowerAscii()": 10,
-				// strings version 2
+				// 字符串函数第 2 版
 				"'%d %s %f %s %s'.format([1, 'abc', 1.0, duration('1m'), timestamp('2000-01-01T00:00:00.000Z')]) == '1 abc 1.000000 60s 2000-01-01T00:00:00Z'": 6,
 				"'%e'.format([3.14]) == '3.140000×10⁰⁰'":          3,
 				"'%o %o %o'.format([7, 8, 9]) == '7 10 11'":       2,
@@ -238,7 +239,7 @@ func TestCelCostStability(t *testing.T) {
 			obj:    objs([]interface{}{"a", "b", "c"}, []interface{}{"a", "c", "b"}, buildLargeArray(1000)),
 			schema: schemas(listSetType(&stringType), listSetType(&stringType), listSetType(&integerType)),
 			expectCost: map[string]int64{
-				// equal even though order is different
+				// 顺序不同仍相等
 				"self.val1 == ['c', 'b', 'a']":                   3,
 				"self.val1 == self.val2":                         5,
 				"'a' in self.val1":                               5,
@@ -281,14 +282,14 @@ func TestCelCostStability(t *testing.T) {
 				}))),
 			}),
 			expectCost: map[string]int64{
-				"self.objs[0] == self.objs[1]":                7,  // equal even though order is different
-				"self.objs[0] + self.objs[2] == self.objs[2]": 11, // rhs overwrites lhs values
+				"self.objs[0] == self.objs[1]":                7,  // 顺序不同仍相等
+				"self.objs[0] + self.objs[2] == self.objs[2]": 11, // 右侧覆盖左侧的值
 				"self.objs[2] + self.objs[0] == self.objs[0]": 11,
 
-				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]": 22, // equal against a declared list
+				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]": 22, // 与声明的列表比较相等
 				"self.objs[0] == [self.objs[0][1], self.objs[0][0]]": 22,
 
-				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]": 26, // concat against a declared list
+				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]": 26, // 与声明的列表拼接
 				"size(self.objs[0] + [self.objs[3][0]]) == 3":                       20,
 			},
 		},
@@ -296,7 +297,7 @@ func TestCelCostStability(t *testing.T) {
 			obj:    objs(map[string]interface{}{"k1": "a", "k2": "b"}, map[string]interface{}{"k2": "b", "k1": "a"}),
 			schema: schemas(mapType(&stringType), mapType(&stringType)),
 			expectCost: map[string]int64{
-				"self.val1 == self.val2":              5, // equal even though order is different
+				"self.val1 == self.val2":              5, // 顺序不同仍相等
 				"'k1' in self.val1":                   3,
 				"!('k3' in self.val1)":                4,
 				"self.val1 == {'k1': 'a', 'k2': 'b'}": 3,
@@ -351,7 +352,7 @@ func TestCelCostStability(t *testing.T) {
 			expectCost: map[string]int64{
 				"has(self.a.b)":                            2,
 				"has(self.a1.b1.c1)":                       3,
-				"!(has(self.a1.d2) && has(self.a1.d2.e2))": 3, // must check intermediate optional fields (see below no such key error for d2)
+				"!(has(self.a1.d2) && has(self.a1.d2.e2))": 3, // 必须检查中间的可选字段（见下文 d2 的 no such key 错误）
 				"!has(self.a1.d2)":                         3,
 			},
 		},
@@ -366,29 +367,27 @@ func TestCelCostStability(t *testing.T) {
 				"val": mapType(&integerType),
 			}),
 			expectCost: map[string]int64{
-				// idiomatic map access
+				// 惯用的 map 访问方式
 				"!('a' in self.val)": 4,
 				"'b' in self.val":    3,
 				"!('c' in self.val)": 4,
 				"'d' in self.val":    3,
-				// field selection also possible if map key is a valid CEL identifier
+				// 若 map key 是合法的 CEL 标识符，也可用字段选择
 				"!has(self.val.a)":                 3,
 				"has(self.val.b)":                  2,
 				"!has(self.val.c)":                 3,
 				"has(self.val.d)":                  2,
 				"self.val.all(k, self.val[k] > 0)": 17,
-				// It is important that the condition does not match in this exists test
-				// since the map iteration order is non-deterministic, and exists short circuits when it matches.
+				// 该 exists 测试刻意让条件不命中：map 迭代顺序不确定，exists 一旦命中就会短路。
 				"!self.val.exists(k, self.val[k] == 3)":          20,
 				"self.val.exists_one(k, self.val[k] == 2)":       14,
 				"!self.val.exists_one(k, self.val[k] > 0)":       17,
 				"size(self.val) == 2":                            4,
 				"size(self.val.filter(k, self.val[k] > 1)) == 1": 26,
 
-				// two variable comprehensions
+				// 双变量推导式
 				"self.val.all(k, v, v > 0)": 13,
-				// It is important that the condition does not match in this exists test
-				// since the map iteration order is non-deterministic, and exists short circuits when it matches.
+				// 该 exists 测试刻意让条件不命中：map 迭代顺序不确定，exists 一旦命中就会短路。
 				"!self.val.exists(k, v, v == 3)":                                        16,
 				"self.val.existsOne(k, v, v == 2)":                                      10,
 				"self.val.transformMap(k, v, v > 1, v + 1).size() == 1":                 14,
@@ -425,23 +424,23 @@ func TestCelCostStability(t *testing.T) {
 				"self.listMap.exists(m, m.k == 'a1' && m.v == 'b1')": 16,
 				"self.listMap.map(m, m.v).exists(v, v == 'b1')":      55,
 
-				// test comprehensions where the field used in predicates is unset on all but one of the elements:
-				// - with has checks:
+				// 测试谓词所用字段只在部分元素上设置的推导式：
+				// - 带 has 检查：
 
 				"self.listMap.exists(m, has(m.v2) && m.v2 == 'z')":             21,
 				"!self.listMap.all(m, has(m.v2) && m.v2 != 'z')":               10,
 				"self.listMap.exists_one(m, has(m.v2) && m.v2 == 'z')":         12,
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').size() == 1": 24,
-				// undocumented overload of map that takes a filter argument. This is the same as .filter().map()
+				// map 的未文档化重载，接收一个过滤参数，等价于 .filter().map()
 				"self.listMap.map(m, has(m.v2) && m.v2 == 'z', m.v2).size() == 1":           25,
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').map(m, m.v2).size() == 1": 39,
-				// - without has checks:
+				// - 不带 has 检查：
 
-				// all() and exists() macros ignore errors from predicates so long as the condition holds for at least one element
+				// all() 与 exists() 宏会忽略谓词错误，只要条件至少在一个元素上成立
 				"self.listMap.exists(m, m.v2 == 'z')": 24,
 				"!self.listMap.all(m, m.v2 != 'z')":   22,
 
-				// two variable comprehensions
+				// 双变量推导式
 				"!self.listMap.all(i, m, has(m.v2) && m.v2 != 'z')":                            10,
 				"self.listMap.exists(i, m, has(m.v2) && m.v2 == 'z')":                          21,
 				"self.listMap.existsOne(i, m, has(m.v2) && m.v2 == 'z')":                       12,
@@ -469,7 +468,7 @@ func TestCelCostStability(t *testing.T) {
 				"self.array.map(e, e * 20).filter(e, e > 50).exists(e, e == 60)": 194,
 				"size(self.array) == 8":                                          4,
 
-				// two variable comprehensions
+				// 双变量推导式
 				"self.array.all(i, e, e > 0)":                             43,
 				"self.array.exists(i, e, e > 2)":                          36,
 				"self.array.existsOne(i, e, e > 4)":                       22,
@@ -550,7 +549,7 @@ func TestCelCostStability(t *testing.T) {
 			},
 		},
 
-		// Kubernetes special types
+		// Kubernetes 特殊类型
 		{name: "embedded object",
 			obj: map[string]interface{}{
 				"embedded": map[string]interface{}{
@@ -575,8 +574,7 @@ func TestCelCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]int64{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 即使未在 schema 中声明也始终可访问。
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
@@ -618,13 +616,13 @@ func TestCelCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]int64{
-				// in this case 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are specified in the
-				// schema, but they would be accessible even if they were not
+				// 本例中 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 已在 schema 中声明，
+				// 但即使未声明也可访问
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
 				"self.embedded.metadata.generateName == 'pickItForMe'": 6,
-				// the specified embedded fields are accessible
+				// 已声明的内嵌字段可访问
 				"self.embedded.spec.field1 == 'a'": 5,
 			},
 		},
@@ -653,14 +651,14 @@ func TestCelCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]int64{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema, regardless of if x-kubernetes-preserve-unknown-fields is set.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 始终可访问，
+				// 无论是否设置 x-kubernetes-preserve-unknown-fields。
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
 				"self.embedded.metadata.generateName == 'pickItForMe'": 6,
 
-				// the object exists
+				// 对象存在
 				"has(self.embedded)": 1,
 			},
 		},
@@ -672,20 +670,19 @@ func TestCelCostStability(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			expectCost: map[string]int64{
-				// typical int-or-string usage would be to check both types
+				// int-or-string 的典型用法是同时检查两种类型
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'": 7,
-				// to require the value be a particular type, guard it with a runtime type check
+				// 若要限定值的具体类型，用运行时类型检查做保护
 				"type(self.something) == string && self.something == '25%'": 7,
 
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地写如下校验规则：
 				"self.something == '25%'":                        3,
 				"self.something != 1":                            3,
 				"self.something == 1 || self.something == '25%'": 6,
 				"self.something == '25%' || self.something == 1": 3,
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 该类型是动态的，不做类型检查；与其他类型在运行时比较时结果为 false。
 				"self.something != ['anything']": 3,
 			},
 		},
@@ -697,20 +694,19 @@ func TestCelCostStability(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			expectCost: map[string]int64{
-				// typical int-or-string usage would be to check both types
+				// int-or-string 的典型用法是同时检查两种类型
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'": 7,
-				// to require the value be a particular type, guard it with a runtime type check
+				// 若要限定值的具体类型，用运行时类型检查做保护
 				"type(self.something) == int && self.something == 1": 7,
 
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地写如下校验规则：
 				"self.something == 1":                            3,
 				"self.something != 'some string'":                3,
 				"self.something == 1 || self.something == '25%'": 3,
 				"self.something == '25%' || self.something == 1": 6,
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 该类型是动态的，不做类型检查；与其他类型在运行时比较时结果为 false。
 				"self.something != ['anything']": 3,
 			},
 		},
@@ -737,9 +733,9 @@ func TestCelCostStability(t *testing.T) {
 				"available": integerType,
 			}),
 			expectCost: map[string]int64{
-				// validate that if 'min' is a string that it is a percentage
+				// 校验 'min' 为字符串时必须是百分比
 				`type(self.min) == string && self.min.matches(r'(\d+(\.\d+)?%)')`: 10,
-				// validate that 'min' can be either a exact value minimum, or a minimum as a percentage of 'available'
+				// 校验 'min' 既可以是精确值，也可以是 'available' 的百分比
 				"type(self.min) == int ? self.current <= self.min : double(self.current) / double(self.available) >= double(self.min.replace('%', '')) / 100.0": 17,
 			},
 		},
@@ -828,12 +824,12 @@ func TestCelCostStability(t *testing.T) {
 			expectCost: map[string]int64{
 				"has(self.withUnknown)":            1,
 				"self.withUnknownList.size() == 5": 4,
-				// fields that are unknown because they were not specified on the object schema are included in equality checks
+				// 因未在对象 schema 中声明而未知的字段也会参与相等比较
 				"self.withUnknownList[0] != self.withUnknownList[1]": 7,
 				"self.withUnknownList[1] == self.withUnknownList[2]": 7,
 				"self.withUnknownList[3] == self.withUnknownList[4]": 6,
 
-				// fields specified on the object schema that are unknown because the field's schema is unknown are also included equality checks
+				// 在对象 schema 中声明、但字段 schema 未知的字段同样参与相等比较
 				"self.withUnknownFieldList[0] != self.withUnknownFieldList[1]": 7,
 				"self.withUnknownFieldList[1] == self.withUnknownFieldList[2]": 7,
 			},
@@ -895,15 +891,15 @@ func TestCelCostStability(t *testing.T) {
 			},
 			expectCost: map[string]int64{
 				"self.withUnknown.known == 1": 4,
-				// if the unknown fields are the same, they are equal
+				// 未知字段相同则相等
 				"self.withUnknownList[1] == self.withUnknownList[2]": 7,
 
-				// if unknown fields are different, they are not equal
+				// 未知字段不同则不等
 				"self.withUnknownList[0] != self.withUnknownList[1]": 7,
 				"self.withUnknownList[0] != self.withUnknownList[3]": 7,
 				"self.withUnknownList[0] != self.withUnknownList[5]": 7,
 
-				// if all fields are known, equality works as usual
+				// 所有字段都已知时，相等判断按常规进行
 				"self.withUnknownList[3] == self.withUnknownList[4]": 7,
 				"self.withUnknownList[4] != self.withUnknownList[5]": 7,
 			},
@@ -915,8 +911,7 @@ func TestCelCostStability(t *testing.T) {
 				"setNullableStr":       "v3",
 				"setToNullNullableStr": nil,
 
-				// we don't run the defaulter in this test suite (depending on it would introduce a cycle)
-				// so we fake it :(
+				// 本测试套件不运行默认值填充器（依赖它会引入循环），因此手工模拟
 				"unsetDefaultedStr": "default value",
 			},
 			schema: objectTypePtr(map[string]schema.Structural{
@@ -937,11 +932,11 @@ func TestCelCostStability(t *testing.T) {
 				"has(self.setPlainStr) && self.setPlainStr == 'v1'":         4,
 				"has(self.setDefaultedStr) && self.setDefaultedStr == 'v2'": 4,
 				"has(self.setNullableStr) && self.setNullableStr == 'v3'":   4,
-				// We treat null fields as absent fields, not as null valued fields.
-				// Note that this is different than how we treat nullable list items or map values.
+				// null 字段按不存在处理，而不是当作 null 值。
+				// 这与可空列表项、map 值的处理方式不同。
 				"type(self.setNullableStr) != null_type": 4,
 
-				// a field that is set to null is treated the same as an absent field in validation rules
+				// 在校验规则中，置为 null 的字段与不存在的字段同等对待
 				"!has(self.setToNullNullableStr)": 2,
 			},
 		},
@@ -966,7 +961,7 @@ func TestCelCostStability(t *testing.T) {
 			expectCost: map[string]int64{
 				"self.m.size() == 2":             4,
 				"'a' in self.m":                  3,
-				"type(self.m['a']) == null_type": 5, // null check using runtime type checking
+				"type(self.m['a']) == null_type": 5, // 通过运行时类型检查判断 null
 				//"self.m['a'] == null",
 			},
 		},
@@ -998,9 +993,8 @@ func TestCelCostStability(t *testing.T) {
 				})),
 			}),
 			expectCost: map[string]int64{
-				// we do not expose a stable type for the self variable, even when it is an object that CEL
-				// considers a named type. The only operation developers should be able to perform on the type is
-				// equality checking.
+				// 不为 self 变量暴露稳定类型，即使它是 CEL 认为的命名类型对象。
+				// 开发者对该类型唯一可执行的操作是相等判断。
 				"type(self) == type(self)":                                     5,
 				"type(self.nestedInMap['k1']) == type(self.nestedInMap['k2'])": 9,
 			},
@@ -1033,8 +1027,8 @@ func TestCelCostStability(t *testing.T) {
 				}))),
 			}),
 			expectCost: map[string]int64{
-				"self.objs[0] == self.objs[1]":    7, // equal even though order is different
-				"self.objs[0][0].k__dot__ == '1'": 6, // '.' is a supported character in identifiers, but it is escaped
+				"self.objs[0] == self.objs[1]":    7, // 顺序不同仍相等
+				"self.objs[0][0].k__dot__ == '1'": 6, // '.' 是标识符支持的字符，但需要转义
 			},
 		},
 		{name: "container type composition",
@@ -1125,14 +1119,14 @@ func TestCelCostStability(t *testing.T) {
 				"self.listOfObj[0].field3 == 'h'":                             5,
 				"self.listOfListMap[0].exists(e, e.k3 == '3' && e.v3 == 'i')": 14,
 
-				// chained comprehensions
+				// 链式推导式
 				"self.mapOfMap.map(k, k).map(k, k).size() == 1":      32,
 				"self.mapOfListMap.map(k, k).map(k, k).size() == 1":  32,
 				"self.mapOfList.map(k, k).map(k, k).size() == 1":     32,
 				"self.listOfMap.map(e, e).map(e, e).size() == 1":     32,
 				"self.listOfListMap.map(e, e).map(e, e).size() == 1": 32,
 
-				// nested comprehensions
+				// 嵌套推导式
 				"self.mapOfMap.map(k, self.mapOfMap[k].map(m, m)).size() == 1":         34,
 				"self.mapOfListMap.map(k, self.mapOfListMap[k].map(m, m)).size() == 1": 34,
 				"self.mapOfList.map(k, self.mapOfList[k].map(l, l)).size() == 1":       34,
@@ -1164,7 +1158,7 @@ func TestCelCostStability(t *testing.T) {
 				"optional.of('a') != optional.of('b')":                3,
 				"optional.of('a') != optional.none()":                 3,
 				"optional.of('a').hasValue()":                         2,
-				"optional.of('a').or(optional.of('a')).hasValue()":    2, // or() is short-circuited
+				"optional.of('a').or(optional.of('a')).hasValue()":    2, // or() 会短路
 				"optional.none().or(optional.of('a')).hasValue()":     3,
 				"optional.of('a').optMap(v, v == 'value').hasValue()": 8,
 				"self.obj.?field == optional.of('a')":                 5,
@@ -1264,6 +1258,7 @@ func TestCelCostStability(t *testing.T) {
 	}
 }
 
+// buildLargeArray 生成包含 0..size-1 的数组，用于测试大列表的成本。
 func buildLargeArray(size int) []interface{} {
 	lArray := make([]interface{}, size)
 	for i := 0; i < len(lArray); i++ {
@@ -1272,6 +1267,8 @@ func buildLargeArray(size int) []interface{} {
 	return lArray
 }
 
+// TestCelEstimatedCostStability 验证 CEL 规则的静态估算成本保持稳定；
+// 估算值参与准入预算判断，漂移会影响可接受的规则规模。
 func TestCelEstimatedCostStability(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -1279,25 +1276,24 @@ func TestCelEstimatedCostStability(t *testing.T) {
 		expectCost map[string]uint64
 	}{
 		{name: "integers",
-			// 1st obj and schema args are for "self.val1" field, 2nd for "self.val2" and so on.
+			// obj 与 schema 参数中，第 1 个对应 "self.val1" 字段，第 2 个对应 "self.val2"，依此类推。
 			schema: schemas(integerType, integerType, int32Type, int32Type, int64Type, int64Type),
 			expectCost: map[string]uint64{
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%d", int64(math.MaxInt64))): 8,
-				"self.val1 == self.val6":                              4, // integer with no format is the same as int64
+				"self.val1 == self.val6":                              4, // 未指定 format 的 integer 等价于 int64
 				"type(self.val1) == int":                              4,
-				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32): 5, // CEL integers are 64 bit
+				fmt.Sprintf("self.val3 + 1 == %d + 1", math.MaxInt32): 5, // CEL 的整数为 64 位
 			},
 		},
 		{name: "numbers",
 			schema: schemas(numberType, numberType, floatType, floatType, doubleType, doubleType, doubleType),
 			expectCost: map[string]uint64{
 				ValsEqualThemselvesAndDataLiteral("self.val1", "self.val2", fmt.Sprintf("%f", math.MaxFloat64)): 8,
-				"self.val1 == self.val6":    4, // number with no format is the same as float64
+				"self.val1 == self.val6":    4, // 未指定 format 的 number 等价于 float64
 				"type(self.val1) == double": 4,
 
-				// Use a int64 value with a number openAPI schema type since float representations of whole numbers
-				// (e.g. 1.0, 0.0) can convert to int representations (e.g. 1, 0) in yaml to json translation, and
-				// then get parsed as int64s.
+				// 这里用 int64 值配 number 的 OpenAPI schema 类型：整数的浮点表示（如 1.0、0.0）
+				// 在 yaml 转 json 时可能变成整数表示（如 1、0），随后被解析为 int64。
 				"type(self.val7) == double": 4,
 				"self.val7 == 1.0":          2,
 			},
@@ -1305,9 +1301,9 @@ func TestCelEstimatedCostStability(t *testing.T) {
 		{name: "numeric comparisons",
 			schema: schemas(integerType, numberType, floatType, doubleType, numberType, floatType, doubleType),
 			expectCost: map[string]uint64{
-				// xref: https://github.com/google/cel-spec/wiki/proposal-210
+				// 参考：https://github.com/google/cel-spec/wiki/proposal-210
 
-				// compare integers with all float types
+				// 整数与所有浮点类型比较
 				"double(self.val1) < self.val4": 6,
 				"self.val1 < int(self.val4)":    6,
 				"double(self.val1) < self.val5": 6,
@@ -1315,11 +1311,11 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"double(self.val1) < self.val6": 6,
 				"self.val1 < int(self.val6)":    6,
 
-				// compare literal integers and floats
+				// 字面量整数与浮点数比较
 				"double(5) < 10.0": 2,
 				"5 < int(10.0)":    2,
 
-				// compare integers with literal floats
+				// 整数与字面量浮点数比较
 				"double(self.val1) < 10.0": 4,
 			},
 		},
@@ -1334,7 +1330,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"type(self.val1) == string":       4,
 				"size(self.val1) == 12":           4,
 
-				// string functions (https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go)
+				// 字符串函数（https://github.com/google/cel-go/blob/v0.9.0/ext/strings.go）
 				"self.val1.charAt(3) == 'k'":                       4,
 				"self.val1.indexOf('o') == 1":                      314576,
 				"self.val1.indexOf('o', 2) == 2":                   314576,
@@ -1458,7 +1454,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 		{name: "listSets",
 			schema: schemas(listSetType(&stringType), listSetType(&stringType)),
 			expectCost: map[string]uint64{
-				// equal even though order is different
+				// 顺序不同仍相等
 				"self.val1 == ['c', 'b', 'a']":                        13,
 				"self.val1 == self.val2":                              104862,
 				"'a' in self.val1":                                    1048577,
@@ -1484,14 +1480,14 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				}))),
 			}),
 			expectCost: map[string]uint64{
-				"self.objs[0] == self.objs[1]":                104864, // equal even though order is different
-				"self.objs[0] + self.objs[2] == self.objs[2]": 104868, // rhs overwrites lhs values
+				"self.objs[0] == self.objs[1]":                104864, // 顺序不同仍相等
+				"self.objs[0] + self.objs[2] == self.objs[2]": 104868, // 右侧覆盖左侧的值
 				"self.objs[2] + self.objs[0] == self.objs[0]": 104868,
 
-				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]": 22, // equal against a declared list
+				"self.objs[0] == [self.objs[0][0], self.objs[0][1]]": 22, // 与声明的列表比较相等
 				"self.objs[0] == [self.objs[0][1], self.objs[0][0]]": 22,
 
-				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]": 104883, // concat against a declared list
+				"self.objs[2] + [self.objs[0][0], self.objs[0][1]] == self.objs[0]": 104883, // 与声明的列表拼接
 				"size(self.objs[0] + [self.objs[3][0]]) == 3":                       20,
 				"has(self.objs)":                                            1,
 				"has(self.objs) && has(self.objs)":                          2,
@@ -1506,7 +1502,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 		{name: "maps",
 			schema: schemas(mapType(&stringType), mapType(&stringType)),
 			expectCost: map[string]uint64{
-				"self.val1 == self.val2":                              39326, // equal even though order is different
+				"self.val1 == self.val2":                              39326, // 顺序不同仍相等
 				"'k1' in self.val1":                                   3,
 				"!('k3' in self.val1)":                                4,
 				"self.val1 == {'k1': 'a', 'k2': 'b'}":                 33,
@@ -1551,7 +1547,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 			expectCost: map[string]uint64{
 				"has(self.a.b)":                            2,
 				"has(self.a1.b1.c1)":                       3,
-				"!(has(self.a1.d2) && has(self.a1.d2.e2))": 6, // must check intermediate optional fields (see below no such key error for d2)
+				"!(has(self.a1.d2) && has(self.a1.d2.e2))": 6, // 必须检查中间的可选字段（见下文 d2 的 no such key 错误）
 				"!has(self.a1.d2)":                         3,
 				"has(self.a)":                              1,
 				"has(self.a) && has(self.a1)":              2,
@@ -1563,12 +1559,12 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"val": mapType(&integerType),
 			}),
 			expectCost: map[string]uint64{
-				// idiomatic map access
+				// 惯用的 map 访问方式
 				"!('a' in self.val)": 4,
 				"'b' in self.val":    3,
 				"!('c' in self.val)": 4,
 				"'d' in self.val":    3,
-				// field selection also possible if map key is a valid CEL identifier
+				// 若 map key 是合法的 CEL 标识符，也可用字段选择
 				"!has(self.val.a)":                               3,
 				"has(self.val.b)":                                2,
 				"!has(self.val.c)":                               3,
@@ -1601,19 +1597,19 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"self.listMap.exists(m, m.k == 'a1' && m.v == 'b1')": 10485753,
 				"self.listMap.map(m, m.v).exists(v, v == 'b1')":      uint64(19922939),
 
-				// test comprehensions where the field used in predicates is unset on all but one of the elements:
-				// - with has checks:
+				// 测试谓词所用字段只在部分元素上设置的推导式：
+				// - 带 has 检查：
 
 				"self.listMap.exists(m, has(m.v2) && m.v2 == 'z')":             8388603,
 				"!self.listMap.all(m, has(m.v2) && m.v2 != 'z')":               7340029,
 				"self.listMap.exists_one(m, has(m.v2) && m.v2 == 'z')":         6291454,
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').size() == 1": 17825790,
-				// undocumented overload of map that takes a filter argument. This is the same as .filter().map()
+				// map 的未文档化重载，接收一个过滤参数，等价于 .filter().map()
 				"self.listMap.map(m, has(m.v2) && m.v2 == 'z', m.v2).size() == 1":           18874365,
 				"self.listMap.filter(m, has(m.v2) && m.v2 == 'z').map(m, m.v2).size() == 1": uint64(32505851),
-				// - without has checks:
+				// - 不带 has 检查：
 
-				// all() and exists() macros ignore errors from predicates so long as the condition holds for at least one element
+				// all() 与 exists() 宏会忽略谓词错误，只要条件至少在一个元素上成立
 				"self.listMap.exists(m, m.v2 == 'z')": 7340028,
 				"!self.listMap.all(m, m.v2 != 'z')":   6291454,
 			},
@@ -1671,7 +1667,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 			},
 		},
 
-		// Kubernetes special types
+		// Kubernetes 特殊类型
 		{name: "embedded object",
 			schema: objectTypePtr(map[string]schema.Structural{
 				"embedded": {
@@ -1682,8 +1678,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]uint64{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 即使未在 schema 中声明也始终可访问。
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
@@ -1711,13 +1706,13 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]uint64{
-				// in this case 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are specified in the
-				// schema, but they would be accessible even if they were not
+				// 本例中 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 已在 schema 中声明，
+				// 但即使未声明也可访问
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
 				"self.embedded.metadata.generateName == 'pickItForMe'": 6,
-				// the specified embedded fields are accessible
+				// 已声明的内嵌字段可访问
 				"self.embedded.spec.field1 == 'a'": 5,
 			},
 		},
@@ -1732,14 +1727,14 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				},
 			}),
 			expectCost: map[string]uint64{
-				// 'kind', 'apiVersion', 'metadata.name' and 'metadata.generateName' are always accessible
-				// even if not specified in the schema, regardless of if x-kubernetes-preserve-unknown-fields is set.
+				// 'kind'、'apiVersion'、'metadata.name' 与 'metadata.generateName' 始终可访问，
+				// 无论是否设置 x-kubernetes-preserve-unknown-fields。
 				"self.embedded.kind == 'Pod'":                          4,
 				"self.embedded.apiVersion == 'v1'":                     4,
 				"self.embedded.metadata.name == 'foo'":                 5,
 				"self.embedded.metadata.generateName == 'pickItForMe'": 6,
 
-				// the object exists
+				// 对象存在
 				"has(self.embedded)": 1,
 			},
 		},
@@ -1748,20 +1743,19 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			expectCost: map[string]uint64{
-				// typical int-or-string usage would be to check both types
+				// int-or-string 的典型用法是同时检查两种类型
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'": 7,
-				// to require the value be a particular type, guard it with a runtime type check
+				// 若要限定值的具体类型，用运行时类型检查做保护
 				"type(self.something) == string && self.something == '25%'": 7,
 
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地写如下校验规则：
 				"self.something == '25%'":                        3,
 				"self.something != 1":                            3,
 				"self.something == 1 || self.something == '25%'": 6,
 				"self.something == '25%' || self.something == 1": 6,
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 该类型是动态的，不做类型检查；与其他类型在运行时比较时结果为 false。
 				"self.something != ['anything']": 13,
 			},
 		},
@@ -1770,20 +1764,19 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"something": intOrStringType(),
 			}),
 			expectCost: map[string]uint64{
-				// typical int-or-string usage would be to check both types
+				// int-or-string 的典型用法是同时检查两种类型
 				"type(self.something) == int ? self.something == 1 : self.something == '25%'": 7,
-				// to require the value be a particular type, guard it with a runtime type check
+				// 若要限定值的具体类型，用运行时类型检查做保护
 				"type(self.something) == int && self.something == 1": 7,
 
-				// In Kubernetes 1.24 and later, the CEL type returns false for an int-or-string comparison against the
-				// other type, making it safe to write validation rules like:
+				// Kubernetes 1.24 及以后，int-or-string 与其他类型比较时 CEL 类型返回 false，
+				// 因此可以安全地写如下校验规则：
 				"self.something == 1":                            3,
 				"self.something != 'some string'":                4,
 				"self.something == 1 || self.something == '25%'": 6,
 				"self.something == '25%' || self.something == 1": 6,
 
-				// Because the type is dynamic it receives no type checking, and evaluates to false when compared to
-				// other types at runtime.
+				// 该类型是动态的，不做类型检查；与其他类型在运行时比较时结果为 false。
 				"self.something != ['anything']": 13,
 			},
 		},
@@ -1802,9 +1795,9 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"available": integerType,
 			}),
 			expectCost: map[string]uint64{
-				// validate that if 'min' is a string that it is a percentage
+				// 校验 'min' 为字符串时必须是百分比
 				`type(self.min) == string && self.min.matches(r'(\d+(\.\d+)?%)')`: 1258298,
-				// validate that 'min' can be either a exact value minimum, or a minimum as a percentage of 'available'
+				// 校验 'min' 既可以是精确值，也可以是 'available' 的百分比
 				"type(self.min) == int ? self.current <= self.min : double(self.current) / double(self.available) >= double(self.min.replace('%', '')) / 100.0": 629162,
 			},
 		},
@@ -1856,12 +1849,12 @@ func TestCelEstimatedCostStability(t *testing.T) {
 			expectCost: map[string]uint64{
 				"has(self.withUnknown)":            1,
 				"self.withUnknownList.size() == 5": 4,
-				// fields that are unknown because they were not specified on the object schema are included in equality checks
+				// 因未在对象 schema 中声明而未知的字段也会参与相等比较
 				"self.withUnknownList[0] != self.withUnknownList[1]": 6,
 				"self.withUnknownList[1] == self.withUnknownList[2]": 6,
 				"self.withUnknownList[3] == self.withUnknownList[4]": 6,
 
-				// fields specified on the object schema that are unknown because the field's schema is unknown are also included equality checks
+				// 在对象 schema 中声明、但字段 schema 未知的字段同样参与相等比较
 				"self.withUnknownFieldList[0] != self.withUnknownFieldList[1]": 6,
 				"self.withUnknownFieldList[1] == self.withUnknownFieldList[2]": 6,
 			},
@@ -1894,15 +1887,15 @@ func TestCelEstimatedCostStability(t *testing.T) {
 			},
 			expectCost: map[string]uint64{
 				"self.withUnknown.known == 1": 3,
-				// if the unknown fields are the same, they are equal
+				// 未知字段相同则相等
 				"self.withUnknownList[1] == self.withUnknownList[2]": 6,
 
-				// if unknown fields are different, they are not equal
+				// 未知字段不同则不等
 				"self.withUnknownList[0] != self.withUnknownList[1]": 6,
 				"self.withUnknownList[0] != self.withUnknownList[3]": 6,
 				"self.withUnknownList[0] != self.withUnknownList[5]": 6,
 
-				// if all fields are known, equality works as usual
+				// 所有字段都已知时，相等判断按常规进行
 				"self.withUnknownList[3] == self.withUnknownList[4]": 6,
 				"self.withUnknownList[4] != self.withUnknownList[5]": 6,
 			},
@@ -1926,11 +1919,11 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"has(self.setPlainStr) && self.setPlainStr == 'v1'":         4,
 				"has(self.setDefaultedStr) && self.setDefaultedStr == 'v2'": 4,
 				"has(self.setNullableStr) && self.setNullableStr == 'v3'":   4,
-				// We treat null fields as absent fields, not as null valued fields.
-				// Note that this is different than how we treat nullable list items or map values.
+				// null 字段按不存在处理，而不是当作 null 值。
+				// 这与可空列表项、map 值的处理方式不同。
 				"type(self.setNullableStr) != null_type": 4,
 
-				// a field that is set to null is treated the same as an absent field in validation rules
+				// 在校验规则中，置为 null 的字段与不存在的字段同等对待
 				"!has(self.setToNullNullableStr)": 2,
 			},
 		},
@@ -1943,7 +1936,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 			expectCost: map[string]uint64{
 				"self.m.size() == 2":             4,
 				"'a' in self.m":                  3,
-				"type(self.m['a']) == null_type": 5, // null check using runtime type checking
+				"type(self.m['a']) == null_type": 5, // 通过运行时类型检查判断 null
 			},
 		},
 		{name: "object types are not accessible",
@@ -1956,9 +1949,8 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				})),
 			}),
 			expectCost: map[string]uint64{
-				// we do not expose a stable type for the self variable, even when it is an object that CEL
-				// considers a named type. The only operation developers should be able to perform on the type is
-				// equality checking.
+				// 不为 self 变量暴露稳定类型，即使它是 CEL 认为的命名类型对象。
+				// 开发者对该类型唯一可执行的操作是相等判断。
 				"type(self) == type(self)":                                     uint64(1844674407370955268),
 				"type(self.nestedInMap['k1']) == type(self.nestedInMap['k2'])": uint64(1844674407370955272),
 			},
@@ -1971,8 +1963,8 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				}))),
 			}),
 			expectCost: map[string]uint64{
-				"self.objs[0] == self.objs[1]":    104864, // equal even though order is different
-				"self.objs[0][0].k__dot__ == '1'": 6,      // '.' is a supported character in identifiers, but it is escaped
+				"self.objs[0] == self.objs[1]":    104864, // 顺序不同仍相等
+				"self.objs[0][0].k__dot__ == '1'": 6,      // '.' 是标识符支持的字符，但需要转义
 			},
 		},
 		{name: "container type composition",
@@ -2026,14 +2018,14 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"self.listOfObj[0].field3 == 'h'":                             5,
 				"self.listOfListMap[0].exists(e, e.k3 == '3' && e.v3 == 'i')": 104,
 
-				// chained comprehensions
+				// 链式推导式
 				"self.mapOfMap.map(k, k).map(k, k).size() == 1":      286,
 				"self.mapOfListMap.map(k, k).map(k, k).size() == 1":  286,
 				"self.mapOfList.map(k, k).map(k, k).size() == 1":     286,
 				"self.listOfMap.map(e, e).map(e, e).size() == 1":     286,
 				"self.listOfListMap.map(e, e).map(e, e).size() == 1": 286,
 
-				// nested comprehensions
+				// 嵌套推导式
 				"self.mapOfMap.map(k, self.mapOfMap[k].map(m, m)).size() == 1":         1585,
 				"self.mapOfListMap.map(k, self.mapOfListMap[k].map(m, m)).size() == 1": 1585,
 				"self.mapOfList.map(k, self.mapOfList[k].map(l, l)).size() == 1":       1585,
@@ -2054,7 +2046,7 @@ func TestCelEstimatedCostStability(t *testing.T) {
 				"optional.of('a') != optional.of('b')":                         uint64(1844674407370955266),
 				"optional.of('a') != optional.none()":                          uint64(1844674407370955266),
 				"optional.of('a').hasValue()":                                  2,
-				"optional.of('a').or(optional.of('a')).hasValue()":             4, // or() is short-circuited
+				"optional.of('a').or(optional.of('a')).hasValue()":             4, // or() 会短路
 				"optional.none().or(optional.of('a')).hasValue()":              4,
 				"optional.of('a').optMap(v, v == 'value').hasValue()":          18,
 				"self.obj.?field == optional.of('a')":                          uint64(1844674407370955268),

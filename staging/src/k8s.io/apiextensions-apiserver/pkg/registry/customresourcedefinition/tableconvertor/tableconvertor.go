@@ -31,11 +31,12 @@ import (
 
 var metaDocs = metav1.ObjectMeta{}.SwaggerDoc()
 
+// New 创建一个用于 CRD 的 TableConvertor。
 func New() rest.TableConvertor { return &crdConvertor{} }
 
 type crdConvertor struct{}
 
-// ConvertToTable satisfies rest.TableConvertor.
+// ConvertToTable 实现 rest.TableConvertor 接口。
 func (c *crdConvertor) ConvertToTable(ctx context.Context, obj runtime.Object, tableOpts runtime.Object) (*metav1.Table, error) {
 	table := &metav1.Table{}
 
@@ -53,7 +54,7 @@ func (c *crdConvertor) ConvertToTable(ctx context.Context, obj runtime.Object, t
 	}
 
 	addRow := func(cr *apiextensions.CustomResourceDefinition) {
-		// versions: only served=true
+		// versions：仅包含 served=true 的版本
 		var versions []string
 		for _, v := range cr.Spec.Versions {
 			if v.Served {
@@ -108,7 +109,7 @@ func (c *crdConvertor) ConvertToTable(ctx context.Context, obj runtime.Object, t
 	return table, nil
 }
 
-// isEstablished returns true if the CRD has the Established condition with Status=True.
+// isEstablished 在 CRD 具有 Status=True 的 Established 条件时返回 true。
 func isEstablished(crd *apiextensions.CustomResourceDefinition) bool {
 	for _, cond := range crd.Status.Conditions {
 		if cond.Type == apiextensions.Established && cond.Status == apiextensions.ConditionTrue {

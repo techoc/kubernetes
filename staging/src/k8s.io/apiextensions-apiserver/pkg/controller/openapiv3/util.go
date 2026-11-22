@@ -20,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// groupVersionToOpenAPIV3Path 把 group/version 映射为 OpenAPI v3 文档中的路径前缀，
+// 供 openAPIV3Service 按 group/version 增删和更新规范。
 func groupVersionToOpenAPIV3Path(gv schema.GroupVersion) string {
 	return "apis/" + gv.Group + "/" + gv.Version
 }

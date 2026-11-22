@@ -28,6 +28,8 @@ import (
 	"k8s.io/apiserver/pkg/util/webhook"
 )
 
+// TestConversion 验证 None 转换策略下对象和列表的版本改写，
+// 以及无效 group/version 的错误处理。
 func TestConversion(t *testing.T) {
 	tests := []struct {
 		Name            string
@@ -159,6 +161,7 @@ func TestConversion(t *testing.T) {
 		t.Fatalf("Cannot create conversion factory: %v", err)
 	}
 	for _, test := range tests {
+		// None 策略只改写 apiVersion，不涉及 webhook。
 		testCRD := apiextensionsv1.CustomResourceDefinition{
 			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 				Conversion: &apiextensionsv1.CustomResourceConversion{
@@ -175,6 +178,7 @@ func TestConversion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Cannot create converter: %v", err)
 		}
+		// 深拷贝源对象，避免转换过程污染测试用例数据。
 		o := test.SourceObject.DeepCopyObject()
 		toVersion, _ := schema.ParseGroupVersion(test.ToVersion)
 		toVersions := schema.GroupVersions{toVersion}

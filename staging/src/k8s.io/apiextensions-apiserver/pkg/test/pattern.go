@@ -29,8 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// PatternValidators extracts the pattern validators by version and JSONPath from a CRD and returns
-// a validator func for testing against samples.
+// PatternValidators 从 CRD 中按版本和 JSONPath 提取 pattern 校验器，
+// 返回可用于对样本做测试的校验函数。
 func PatternValidators(t *testing.T, crd *apiextensionsv1.CustomResourceDefinition) (validatorsByVersionByJSONPath map[string]map[string]PatternValidateFunc) {
 	ret := map[string]map[string]PatternValidateFunc{}
 	for _, v := range crd.Spec.Versions {
@@ -48,8 +48,11 @@ func PatternValidators(t *testing.T, crd *apiextensionsv1.CustomResourceDefiniti
 	return ret
 }
 
+// PatternValidateFunc 针对单个对象校验 pattern，失败时返回错误。
 type PatternValidateFunc func(obj interface{}) error
 
+// findPattern 递归遍历结构化 schema，收集其中所有非空 pattern 及其路径。
+// 返回的 map 以 JSONPath 字符串为键，便于测试按字段定位。
 func findPattern(t *testing.T, s *schema.Structural, pth *field.Path) (map[string]PatternValidateFunc, error) {
 	ret := map[string]PatternValidateFunc{}
 
@@ -57,6 +60,7 @@ func findPattern(t *testing.T, s *schema.Structural, pth *field.Path) (map[strin
 		s := *s
 		pth := *pth
 		ret[pth.String()] = func(obj interface{}) error {
+			// 在闭包内编译，避免把编译结果暴露给调用方，也保证错误能就地返回。
 			p, err := regexp.Compile(s.ValueValidation.Pattern)
 			if err != nil {
 				return err

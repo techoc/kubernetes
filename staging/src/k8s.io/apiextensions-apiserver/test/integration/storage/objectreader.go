@@ -31,22 +31,22 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
-// EtcdObjectReader provides direct access to custom resource objects stored in etcd.
+// EtcdObjectReader 提供对 etcd 中存储的自定义资源对象的直接访问。
 type EtcdObjectReader struct {
 	etcdClient    *clientv3.Client
 	storagePrefix string
 	crd           *apiextensionsv1.CustomResourceDefinition
 }
 
-// NewEtcdObjectReader creates a reader for accessing custom resource objects directly from etcd.
+// NewEtcdObjectReader 创建直接从 etcd 读取自定义资源对象的读取器。
 func NewEtcdObjectReader(etcdClient *clientv3.Client, restOptions *generic.RESTOptions, crd *apiextensionsv1.CustomResourceDefinition) *EtcdObjectReader {
 	return &EtcdObjectReader{etcdClient, restOptions.StorageConfig.Prefix, crd}
 }
 
-// WaitForStorageVersion calls the updateObjFn periodically and waits for the version of the custom resource stored in etcd to be set to the provided version.
-// Typically updateObjFn should perform a noop update to the object so that when stored version of a CRD changes, the object is written at the updated storage version.
-// If the timeout is exceeded a error is returned.
-// This is useful when updating the stored version of an existing CRD because the update does not take effect immediately.
+// WaitForStorageVersion 周期性地调用 updateObjFn，等待 etcd 中存储的自定义资源版本被设置为给定版本。
+// updateObjFn 通常应对对象执行一次 noop 更新，这样当 CRD 的存储版本变更后，对象会以新的存储版本写入。
+// 超时则返回错误。
+// 在更新已有 CRD 的存储版本时很有用，因为该更新不会立即生效。
 func (s *EtcdObjectReader) WaitForStorageVersion(version string, ns, name string, timeout time.Duration, updateObjFn func()) error {
 	waitCh := time.After(timeout)
 	for {
@@ -66,7 +66,7 @@ func (s *EtcdObjectReader) WaitForStorageVersion(version string, ns, name string
 	}
 }
 
-// GetStoredCustomResource gets the storage representation of a custom resource from etcd.
+// GetStoredCustomResource 从 etcd 获取自定义资源的存储形式。
 func (s *EtcdObjectReader) GetStoredCustomResource(ns, name string) (*unstructured.Unstructured, error) {
 	key := path.Join("/", s.storagePrefix, s.crd.Spec.Group, s.crd.Spec.Names.Plural, ns, name)
 	resp, err := s.etcdClient.KV.Get(context.Background(), key)
@@ -84,7 +84,7 @@ func (s *EtcdObjectReader) GetStoredCustomResource(ns, name string) (*unstructur
 	return u, nil
 }
 
-// SetStoredCustomResource writes the storage representation of a custom resource to etcd.
+// SetStoredCustomResource 将自定义资源的存储形式写入 etcd。
 func (s *EtcdObjectReader) SetStoredCustomResource(ns, name string, obj *unstructured.Unstructured) error {
 	bs, err := obj.MarshalJSON()
 	if err != nil {
@@ -98,7 +98,7 @@ func (s *EtcdObjectReader) SetStoredCustomResource(ns, name string, obj *unstruc
 	return nil
 }
 
-// GetEtcdClients returns an initialized  clientv3.Client and clientv3.KV.
+// GetEtcdClients 返回已初始化的 clientv3.Client 和 clientv3.KV。
 func GetEtcdClients(config storagebackend.TransportConfig) (*clientv3.Client, clientv3.KV, error) {
 	tlsInfo := transport.TLSInfo{
 		CertFile:      config.CertFile,
@@ -125,7 +125,7 @@ func GetEtcdClients(config storagebackend.TransportConfig) (*clientv3.Client, cl
 	return c, clientv3.NewKV(c), nil
 }
 
-// SetStoredCustomResourceDefinition writes the storage representation of a CRD to etcd.
+// SetStoredCustomResourceDefinition 将 CRD 的存储形式写入 etcd。
 func (s *EtcdObjectReader) SetStoredCustomResourceDefinition(name string, crd *apiextensionsv1.CustomResourceDefinition) error {
 	bs, err := json.Marshal(crd)
 	if err != nil {

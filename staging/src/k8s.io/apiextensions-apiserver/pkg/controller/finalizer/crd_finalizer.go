@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package finalizer 实现 CRD 删除时的 finalizer 控制器。
+// 当 CRD 被删除时，控制器负责删除该 CRD 的所有 CR 实例，
+// 然后移除 finalizer，允许 CRD 真正从 etcd 中删除。
+// 避免遗留的 CR 数据在 CRD 删除后成为孤儿。
 package finalizer
 
 import (
@@ -45,9 +49,9 @@ import (
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
-// OverlappingBuiltInResources returns the set of built-in group/resources that are persisted
-// in storage paths that overlap with CRD storage paths, and should not be deleted
-// by this controller if an associated CRD is deleted.
+// OverlappingBuiltInResources 返回与 CRD 存储路径重叠的内置资源。
+// 这些内置资源（如 APIService、CRD 本身）不应被 CRD finalizer 删除，
+// 即使它们的存储路径与某个 CRD 的 CR 路径重叠。
 func OverlappingBuiltInResources() map[schema.GroupResource]bool {
 	return map[schema.GroupResource]bool{
 		{Group: "apiregistration.k8s.io", Resource: "apiservices"}:             true,
@@ -55,7 +59,8 @@ func OverlappingBuiltInResources() map[schema.GroupResource]bool {
 	}
 }
 
-// CRDFinalizer is a controller that finalizes the CRD by deleting all the CRs associated with it.
+// CRDFinalizer 在 CRD 删除时，负责删除该 CRD 的所有 CR 实例。
+// 流程：CRD 标记删除 → 列出所有 CR → 批量删除 → 移除 finalizer → CRD 真正删除
 type CRDFinalizer struct {
 	crdClient      client.CustomResourceDefinitionsGetter
 	crClientGetter CRClientGetter
@@ -69,20 +74,20 @@ type CRDFinalizer struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// ListerCollectionDeleter combines rest.Lister and rest.CollectionDeleter.
+// ListerCollectionDeleter 组合了列出和批量删除 CR 的能力。
 type ListerCollectionDeleter interface {
 	rest.Lister
 	rest.CollectionDeleter
 }
 
-// CRClientGetter knows how to get a ListerCollectionDeleter for a given CRD UID.
+// CRClientGetter 根据 CRD 获取对应的 CR 列表和删除接口。
 type CRClientGetter interface {
 	// GetCustomResourceListerCollectionDeleter gets the ListerCollectionDeleter for the given CRD
 	// UID.
 	GetCustomResourceListerCollectionDeleter(crd *apiextensionsv1.CustomResourceDefinition) (ListerCollectionDeleter, error)
 }
 
-// NewCRDFinalizer creates a new CRDFinalizer.
+// NewCRDFinalizer 创建 CRD finalizer 控制器。
 func NewCRDFinalizer(
 	crdInformer informers.CustomResourceDefinitionInformer,
 	crdClient client.CustomResourceDefinitionsGetter,

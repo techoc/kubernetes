@@ -23,18 +23,18 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-// NewStructural converts an OpenAPI v3 schema into a structural schema. A pre-validated JSONSchemaProps will
-// not fail on NewStructural. This means that we require that:
+// NewStructural 将 OpenAPI v3 schema 转换为 structural schema。经过预校验的 JSONSchemaProps
+// 不会在 NewStructural 上失败。这意味着我们要求：
 //
-// - items is not an array of schemas
-// - the following fields are not set:
+// - items 不能是 schema 数组
+// - 以下字段不能设置：
 //   - id
 //   - schema
 //   - $ref
 //   - patternProperties
 //   - dependencies
 //   - additionalItems
-//   - definitions.
+//   - definitions。
 func NewStructural(s *apiextensions.JSONSchemaProps) (*Structural, error) {
 	if s == nil {
 		return nil, nil
@@ -73,7 +73,7 @@ func NewStructural(s *apiextensions.JSONSchemaProps) (*Structural, error) {
 
 	if s.Items != nil {
 		if len(s.Items.JSONSchemas) > 0 {
-			// we validate that it is not an array
+			// 我们在此校验它不是数组
 			return nil, fmt.Errorf("OpenAPIV3Schema 'items' must be a schema, but is an array")
 		}
 		item, err := NewStructural(s.Items.Schema)
@@ -109,6 +109,7 @@ func NewStructural(s *apiextensions.JSONSchemaProps) (*Structural, error) {
 	return ss, nil
 }
 
+// newGenerics 从 JSONSchemaProps 中提取通用字段（类型、描述、标题、默认值等）。
 func newGenerics(s *apiextensions.JSONSchemaProps) (*Generic, error) {
 	if s == nil {
 		return nil, nil
@@ -135,6 +136,7 @@ func newGenerics(s *apiextensions.JSONSchemaProps) (*Generic, error) {
 	return g, nil
 }
 
+// newValueValidation 从 JSONSchemaProps 中构造取值校验规则。
 func newValueValidation(s *apiextensions.JSONSchemaProps) (*ValueValidation, error) {
 	if s == nil {
 		return nil, nil
@@ -193,6 +195,7 @@ func newValueValidation(s *apiextensions.JSONSchemaProps) (*ValueValidation, err
 	return v, nil
 }
 
+// newNestedValueValidation 构造嵌套校验规则，同时保留通用字段和扩展字段作为禁止项。
 func newNestedValueValidation(s *apiextensions.JSONSchemaProps) (*NestedValueValidation, error) {
 	if s == nil {
 		return nil, nil
@@ -231,7 +234,7 @@ func newNestedValueValidation(s *apiextensions.JSONSchemaProps) (*NestedValueVal
 
 	if s.Items != nil {
 		if len(s.Items.JSONSchemas) > 0 {
-			// we validate that it is not an array
+			// 我们在此校验它不是数组
 			return nil, fmt.Errorf("OpenAPIV3Schema 'items' must be a schema, but is an array")
 		}
 		nvv, err := newNestedValueValidation(s.Items.Schema)
@@ -266,6 +269,7 @@ func newNestedValueValidation(s *apiextensions.JSONSchemaProps) (*NestedValueVal
 	return v, nil
 }
 
+// newExtensions 从 JSONSchemaProps 中提取 x-kubernetes-* 扩展字段。
 func newExtensions(s *apiextensions.JSONSchemaProps) (*Extensions, error) {
 	if s == nil {
 		return nil, nil
@@ -289,6 +293,7 @@ func newExtensions(s *apiextensions.JSONSchemaProps) (*Extensions, error) {
 	return ret, nil
 }
 
+// newValidationExtensions 提取并转换 CEL 校验规则扩展。
 func newValidationExtensions(s *apiextensions.JSONSchemaProps) (*ValidationExtensions, error) {
 	if s == nil {
 		return nil, nil
@@ -302,7 +307,7 @@ func newValidationExtensions(s *apiextensions.JSONSchemaProps) (*ValidationExten
 	return ret, nil
 }
 
-// validateUnsupportedFields checks that those fields rejected by validation are actually unset.
+// validateUnsupportedFields 检查那些已被校验拒绝的字段确实未设置。
 func validateUnsupportedFields(s *apiextensions.JSONSchemaProps) error {
 	if len(s.ID) > 0 {
 		return fmt.Errorf("OpenAPIV3Schema 'id' is not supported")

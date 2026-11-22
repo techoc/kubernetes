@@ -22,28 +22,31 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// GroupName 是该 API 组的名称。
 const GroupName = "apiextensions.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Kind takes an unqualified kind and returns back a Group qualified GroupKind
+// Kind 接收不带组前缀的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns back a Group qualified GroupResource
+// Resource 接收不带组前缀的 resource，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
+	// SchemeBuilder 收集本包注册到 scheme 的函数。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes, addDefaultingFuncs)
 	localSchemeBuilder = &SchemeBuilder
-	AddToScheme        = localSchemeBuilder.AddToScheme
+	// AddToScheme 把本包的已知类型和默认值函数加入给定 scheme。
+	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 把已知类型列表加入给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CustomResourceDefinition{},
@@ -55,8 +58,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 }
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数；生成函数的注册放在生成文件中。
+	// 这种分离使得即使生成文件缺失，代码也能编译通过。
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }

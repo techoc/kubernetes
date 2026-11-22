@@ -36,8 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// mkCRD helps construct CustomResourceDefinition objects for testing more
-// legibly and tersely than a Go struct definition.
+// mkCRD 用一系列 tweak 函数构造 CustomResourceDefinition，让测试代码比直接写
+// Go 结构体更易读、更简洁。
 func mkCRD(tweaks ...func(*apiextensions.CustomResourceDefinitionSpec)) *apiextensions.CustomResourceDefinition {
 	crd := &apiextensions.CustomResourceDefinition{
 		Spec: apiextensions.CustomResourceDefinitionSpec{
@@ -52,9 +52,9 @@ func mkCRD(tweaks ...func(*apiextensions.CustomResourceDefinitionSpec)) *apiexte
 	return crd
 }
 
-// withListTypeSetItems appends a version whose openAPIV3Schema has one
-// top-level property (fieldName) of type array with x-kubernetes-list-type: set
-// and items of the given itemType. Reused across create/update warning tests.
+// withListTypeSetItems 追加一个版本，其 openAPIV3Schema 含一个顶层属性 fieldName，
+// 类型为 array、x-kubernetes-list-type: set，items 为给定 itemType。
+// 供创建/更新告警测试复用。
 func withListTypeSetItems(itemType, fieldName string) func(*apiextensions.CustomResourceDefinitionSpec) {
 	return func(spec *apiextensions.CustomResourceDefinitionSpec) {
 		setType := "set"
@@ -81,6 +81,8 @@ func withListTypeSetItems(itemType, fieldName string) func(*apiextensions.Custom
 	}
 }
 
+// TestValidateAPIApproval 验证受保护组（sigs.k8s.io 等）对
+// api-approved.kubernetes.io 注解的校验，以及更新时对既有非法值的容忍。
 func TestValidateAPIApproval(t *testing.T) {
 	okFn := func(t *testing.T, errors field.ErrorList) {
 		t.Helper()
@@ -239,7 +241,7 @@ func TestValidateAPIApproval(t *testing.T) {
 	}
 }
 
-// TestDropDisabledFields tests if the drop functionality is working fine or not with feature gate switch
+// TestDropDisabledFields 验证特性门控开关下，drop 逻辑是否正确工作。
 func TestDropDisabledFields(t *testing.T) {
 	testCases := []struct {
 		name                     string
@@ -740,7 +742,7 @@ func TestDropDisabledFields(t *testing.T) {
 				},
 			},
 		},
-		// SelectableFields
+		// SelectableFields 相关用例
 		{
 			name:                   "SelectableFields, For create, FG disabled, SelectableFields in update, dropped",
 			enableSelectableFields: false,
@@ -1443,7 +1445,7 @@ func TestDropDisabledFields(t *testing.T) {
 
 			dropDisabledFields(tc.crd, tc.oldCRD)
 
-			// old crd should never be changed
+			// 旧 CRD 永远不应被修改
 			if diff := cmp.Diff(tc.oldCRD, old); diff != "" {
 				t.Fatalf("old crd changed from %v to %v\n%v", tc.oldCRD, old, diff)
 			}
@@ -1455,6 +1457,7 @@ func TestDropDisabledFields(t *testing.T) {
 	}
 }
 
+// TestWarningsOnCreate 验证创建 CRD 时针对未识别 format 等产生的告警。
 func TestWarningsOnCreate(t *testing.T) {
 	ctx := context.Background()
 	strategy := NewStrategy(nil)
@@ -1683,7 +1686,7 @@ func TestWarningsOnCreate(t *testing.T) {
 				return
 			}
 
-			// Sort gotWarnings to match expected order
+			// 对 gotWarnings 排序，以匹配期望顺序
 			sort.Strings(gotWarnings)
 
 			for i, expectedMessage := range tc.wantWarningMessages {
@@ -1695,6 +1698,7 @@ func TestWarningsOnCreate(t *testing.T) {
 	}
 }
 
+// TestWarningsOnUpdate 验证更新 CRD 时产生的告警，包括可选项新增时的场景。
 func TestWarningsOnUpdate(t *testing.T) {
 	ctx := context.Background()
 	strategy := NewStrategy(nil)
@@ -1891,7 +1895,7 @@ func TestWarningsOnUpdate(t *testing.T) {
 				return
 			}
 
-			// Sort gotWarnings to match expected order
+			// 对 gotWarnings 排序，以匹配期望顺序
 			sort.Strings(gotWarnings)
 
 			for i, expectedMessage := range tc.wantWarningMessages {

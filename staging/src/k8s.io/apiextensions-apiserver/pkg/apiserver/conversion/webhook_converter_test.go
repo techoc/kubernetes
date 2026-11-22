@@ -32,6 +32,8 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 )
 
+// TestRestoreObjectMeta 验证转换后的对象恢复到原始 metadata：仅保留原对象的非
+// label/annotation 字段，label 与 annotation 采用转换器的结果，并校验其合法性。
 func TestRestoreObjectMeta(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -206,6 +208,8 @@ func TestRestoreObjectMeta(t *testing.T) {
 	}
 }
 
+// TestGetObjectsToConvert 验证仅挑出与目标版本不同的对象送入 webhook；
+// 列表整体版本与目标一致，但内部条目可能混有旧版本。
 func TestGetObjectsToConvert(t *testing.T) {
 	v1Object := &unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": "foo/v1", "kind": "Widget", "metadata": map[string]interface{}{"name": "myv1"}}}
 	v2Object := &unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": "foo/v2", "kind": "Widget", "metadata": map[string]interface{}{"name": "myv2"}}}
@@ -278,6 +282,7 @@ func TestGetObjectsToConvert(t *testing.T) {
 	}
 }
 
+// TestCreateConversionReviewObjects 验证按 webhook 支持的最高版本构造 ConversionReview 请求与响应。
 func TestCreateConversionReviewObjects(t *testing.T) {
 	objects := []runtime.RawExtension{
 		{Object: &unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": "foo/v2", "Kind": "Widget"}}},
@@ -338,6 +343,8 @@ func TestCreateConversionReviewObjects(t *testing.T) {
 	}
 }
 
+// TestGetConvertedObjectsFromResponse 验证从 webhook 响应中解析转换结果，并检查
+// v1 的严格校验与 v1beta1 的向后兼容行为。
 func TestGetConvertedObjectsFromResponse(t *testing.T) {
 	v1Object := &unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": "foo/v1", "kind": "Widget", "metadata": map[string]interface{}{"name": "myv1"}}}
 
@@ -362,9 +369,9 @@ func TestGetConvertedObjectsFromResponse(t *testing.T) {
 		{
 			Name: "minimal valid v1beta1",
 			Response: &v1beta1.ConversionReview{
-				// apiVersion/kind were not validated originally, preserve backward compatibility
+				// 早期未校验 apiVersion/kind，为保持向后兼容不改
 				Response: &v1beta1.ConversionResponse{
-					// uid was not validated originally, preserve backward compatibility
+					// 早期未校验 uid，为保持向后兼容不改
 					Result: metav1.Status{Status: metav1.StatusSuccess},
 				},
 			},
@@ -373,9 +380,9 @@ func TestGetConvertedObjectsFromResponse(t *testing.T) {
 		{
 			Name: "valid v1beta1 with objects",
 			Response: &v1beta1.ConversionReview{
-				// apiVersion/kind were not validated originally, preserve backward compatibility
+				// 早期未校验 apiVersion/kind，为保持向后兼容不改
 				Response: &v1beta1.ConversionResponse{
-					// uid was not validated originally, preserve backward compatibility
+					// 早期未校验 uid，为保持向后兼容不改
 					Result:           metav1.Status{Status: metav1.StatusSuccess},
 					ConvertedObjects: []runtime.RawExtension{{Object: v1Object}},
 				},

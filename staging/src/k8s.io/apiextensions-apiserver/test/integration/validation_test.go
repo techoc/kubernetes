@@ -39,6 +39,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestForProperValidationErrors 验证创建时 apiVersion/kind 不匹配会返回包含
+// 期望 kind 与版本的错误信息。
 func TestForProperValidationErrors(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -85,7 +87,7 @@ func TestForProperValidationErrors(t *testing.T) {
 			t.Errorf("%v: expected %v", tc.name, tc.expectedError)
 			continue
 		}
-		// this only works when status errors contain the expect kind and version, so this effectively tests serializations too
+		// 这些错误只在 status 错误包含期望的 kind 和 version 时才能匹配，因此也顺带测试了序列化。
 		if !strings.Contains(err.Error(), tc.expectedError) {
 			t.Errorf("%v: expected %v, got %v", tc.name, tc.expectedError, err)
 			continue
@@ -93,6 +95,8 @@ func TestForProperValidationErrors(t *testing.T) {
 	}
 }
 
+// newNoxuValidationCRDs 返回带 alpha/beta/gamma 校验 schema 的 noxu CRD
+// 定义（含带描述和不带描述两种变体）。
 func newNoxuValidationCRDs() []*apiextensionsv1.CustomResourceDefinition {
 	validationSchema := &apiextensionsv1.JSONSchemaProps{
 		Type:     "object",
@@ -195,6 +199,7 @@ func newNoxuValidationCRDs() []*apiextensionsv1.CustomResourceDefinition {
 	}
 }
 
+// newNoxuValidationInstance 构造一个能通过 noxu schema 校验的实例。
 func newNoxuValidationInstance(namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -212,6 +217,7 @@ func newNoxuValidationInstance(namespace, name string) *unstructured.Unstructure
 	}
 }
 
+// TestCustomResourceValidation 验证在每个已服务版本上创建合法自定义资源都能成功。
 func TestCustomResourceValidation(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -243,6 +249,8 @@ func TestCustomResourceValidation(t *testing.T) {
 	}
 }
 
+// TestCustomResourceItemsValidation 验证对未声明类型的 items 数组仍会执行
+// items 层面的 schema 校验。
 func TestCustomResourceItemsValidation(t *testing.T) {
 	tearDown, apiExtensionClient, client, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -250,20 +258,20 @@ func TestCustomResourceItemsValidation(t *testing.T) {
 	}
 	defer tearDown()
 
-	// decode CRD manifest
+	// 解码 CRD manifest
 	obj, _, err := clientschema.Codecs.UniversalDeserializer().Decode([]byte(fixtureItemsAndType), nil, nil)
 	if err != nil {
 		t.Fatalf("failed decoding of: %v\n\n%s", err, fixtureItemsAndType)
 	}
 	crd := obj.(*apiextensionsv1.CustomResourceDefinition)
 
-	// create CRDs
+	// 创建 CRD
 	t.Logf("Creating CRD %s", crd.Name)
 	if _, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, client); err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
 
-	// create CR
+	// 创建 CR
 	gvr := schema.GroupVersionResource{
 		Group:    crd.Spec.Group,
 		Version:  crd.Spec.Versions[0].Name,
@@ -417,6 +425,8 @@ spec:
                           type: array
 `
 
+// TestCustomResourceUpdateValidation 验证更新时同样执行 schema 校验：
+// 缺少必填字段的更新会被拒绝。
 func TestCustomResourceUpdateValidation(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -446,7 +456,7 @@ func TestCustomResourceUpdateValidation(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// invalidate the instance
+			// 使实例变为非法
 			gottenNoxuInstance.Object = map[string]interface{}{
 				"apiVersion": "mygroup.example.com/v1beta1",
 				"kind":       "WishIHadChosenNoxu",
@@ -470,6 +480,8 @@ func TestCustomResourceUpdateValidation(t *testing.T) {
 	}
 }
 
+// TestZeroValueValidation 验证零值（空字符串、null、空数组/对象等）在
+// nullable、默认值以及类型转换语义下的校验与存储结果。
 func TestZeroValueValidation(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -568,7 +580,7 @@ spec:
                 type: string
 `
 
-	// decode CRD crdManifest
+	// 解码 CRD crdManifest
 	crdObj, _, err := clientschema.Codecs.UniversalDeserializer().Decode([]byte(crdManifest), nil, nil)
 	if err != nil {
 		t.Fatalf("failed decoding of: %v\n\n%s", err, crdManifest)
@@ -638,6 +650,7 @@ spec:
 	}
 }
 
+// TestCustomResourceValidationErrors 表驱动验证各类非法实例会返回对应的校验错误。
 func TestCustomResourceValidationErrors(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -716,7 +729,7 @@ func TestCustomResourceValidationErrors(t *testing.T) {
 					t.Errorf("%v: expected %v", tc.name, tc.expectedErrors)
 					continue
 				}
-				// this only works when status errors contain the expect kind and version, so this effectively tests serializations too
+				// 这些错误只在 status 错误包含期望的 kind 和 version 时才能匹配，因此也顺带测试了序列化。
 				for _, expectedError := range tc.expectedErrors {
 					if !strings.Contains(err.Error(), expectedError) {
 						t.Errorf("%v: expected %v, got %v", tc.name, expectedError, err)
@@ -730,6 +743,8 @@ func TestCustomResourceValidationErrors(t *testing.T) {
 	}
 }
 
+// TestCRValidationOnCRDUpdate 验证收紧 CRD schema 后不合规的 CR 会被拒绝，
+// 而放宽 schema 后同一 CR 可被接受。
 func TestCRValidationOnCRDUpdate(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -740,14 +755,14 @@ func TestCRValidationOnCRDUpdate(t *testing.T) {
 	noxuDefinitions := newNoxuValidationCRDs()
 	for i, noxuDefinition := range noxuDefinitions {
 		for _, v := range noxuDefinition.Spec.Versions {
-			// Re-define the CRD to make sure we start with a clean CRD
+			// 重新定义 CRD，确保从干净的 CRD 开始
 			noxuDefinition := newNoxuValidationCRDs()[i]
 			validationSchema, err := getSchemaForVersion(noxuDefinition, v.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// set stricter schema
+			// 设置更严格的 schema
 			validationSchema.OpenAPIV3Schema.Required = []string{"alpha", "beta", "gamma"}
 
 			noxuDefinition, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
@@ -760,13 +775,13 @@ func TestCRValidationOnCRDUpdate(t *testing.T) {
 			unstructured.RemoveNestedField(instanceToCreate.Object, "gamma")
 			instanceToCreate.Object["apiVersion"] = fmt.Sprintf("%s/%s", noxuDefinition.Spec.Group, v.Name)
 
-			// CR is rejected
+			// CR 被拒绝
 			_, err = instantiateVersionedCustomResource(t, instanceToCreate, noxuResourceClient, noxuDefinition, v.Name)
 			if err == nil {
 				t.Fatalf("unexpected non-error: CR should be rejected")
 			}
 
-			// update the CRD to a less stricter schema
+			// 将 CRD 更新为更宽松的 schema
 			_, err = UpdateCustomResourceDefinitionWithRetry(apiExtensionClient, "noxus.mygroup.example.com", func(crd *apiextensionsv1.CustomResourceDefinition) {
 				validationSchema, err := getSchemaForVersion(crd, v.Name)
 				if err != nil {
@@ -778,7 +793,7 @@ func TestCRValidationOnCRDUpdate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// CR is now accepted
+			// CR 现在被接受
 			err = wait.PollUntilContextTimeout(context.Background(), 500*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 				_, createErr := noxuResourceClient.Create(ctx, instanceToCreate, metav1.CreateOptions{})
 				var statusErr *apierrors.StatusError
@@ -803,6 +818,8 @@ func TestCRValidationOnCRDUpdate(t *testing.T) {
 	}
 }
 
+// TestForbiddenFieldsInSchema 验证无法通过 API 创建包含禁用字段的 schema：
+// additionalProperties=false、uniqueItems=true、非空 $ref 都会被拒绝。
 func TestForbiddenFieldsInSchema(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -813,7 +830,7 @@ func TestForbiddenFieldsInSchema(t *testing.T) {
 	noxuDefinitions := newNoxuValidationCRDs()
 	for i, noxuDefinition := range noxuDefinitions {
 		for _, v := range noxuDefinition.Spec.Versions {
-			// Re-define the CRD to make sure we start with a clean CRD
+			// 重新定义 CRD，确保从干净的 CRD 开始
 			noxuDefinition := newNoxuValidationCRDs()[i]
 			validationSchema, err := getSchemaForVersion(noxuDefinition, v.Name)
 			if err != nil {
@@ -826,7 +843,7 @@ func TestForbiddenFieldsInSchema(t *testing.T) {
 			if err == nil {
 				t.Fatalf("unexpected non-error: additionalProperties cannot be set to false")
 			}
-			// reset
+			// 重置
 			validationSchema.OpenAPIV3Schema.Properties = existingProperties
 			validationSchema.OpenAPIV3Schema.AdditionalProperties = nil
 
@@ -869,6 +886,9 @@ func TestForbiddenFieldsInSchema(t *testing.T) {
 	}
 }
 
+// TestNonStructuralSchemaConditionUpdate 验证非 structural 的 beta CRD 会被加上
+// NonStructuralSchema 条件，修复 schema 后该条件消失，且不能再重新引入
+// preserveUnknownFields=true。
 func TestNonStructuralSchemaConditionUpdate(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, etcdclient, etcdStoragePrefix, err := fixtures.StartDefaultServerWithClientsAndEtcd(t)
 	if err != nil {
@@ -901,7 +921,7 @@ spec:
     storage: true
 `
 
-	// decode CRD manifest
+	// 解码 CRD manifest
 	obj, _, err := clientschema.Codecs.UniversalDeserializer().Decode([]byte(manifest), nil, nil)
 	if err != nil {
 		t.Fatalf("failed decoding of: %v\n\n%s", err, manifest)
@@ -909,7 +929,7 @@ spec:
 	betaCRD := obj.(*apiextensionsv1beta1.CustomResourceDefinition)
 	name := betaCRD.Name
 
-	// save schema for later
+	// 保存 schema 以备后用
 	origSchema := &apiextensionsv1.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensionsv1.JSONSchemaProps{
@@ -919,13 +939,13 @@ spec:
 		},
 	}
 
-	// create CRDs.  We cannot create these in v1, but they can exist in upgraded clusters
+	// 创建 CRD。无法在 v1 中直接创建它们，但升级后的集群中可能存在。
 	t.Logf("Creating CRD %s", betaCRD.Name)
 	if _, err := fixtures.CreateCRDUsingRemovedAPI(etcdclient, etcdStoragePrefix, betaCRD, apiExtensionClient, dynamicClient); err != nil {
 		t.Fatal(err)
 	}
 
-	// wait for condition with violations
+	// 等待出现带违规信息的条件
 	t.Log("Waiting for NonStructuralSchema condition")
 	var cond *apiextensionsv1.CustomResourceDefinitionCondition
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (done bool, err error) {
@@ -964,7 +984,7 @@ spec:
 		break
 	}
 
-	// wait for condition to go away
+	// 等待条件消失
 	t.Log("Wait for condition to disappear")
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		obj, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
@@ -978,7 +998,7 @@ spec:
 		t.Fatalf("unexpected error waiting for NonStructuralSchema condition: %v", cond)
 	}
 
-	// re-add schema
+	// 重新添加 schema
 	t.Log("Re-add schema")
 	for retry := 0; retry < 5; retry++ {
 		crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), name, metav1.GetOptions{})
@@ -1000,6 +1020,8 @@ spec:
 	}
 }
 
+// TestNonStructuralSchemaConditionForCRDV1Beta1MigratedData 验证升级集群中经
+// v1beta1 迁移而来、可能非法的 CRD 数据对 NonStructuralSchema 条件的影响。
 func TestNonStructuralSchemaConditionForCRDV1Beta1MigratedData(t *testing.T) {
 	tearDown, apiExtensionClient, _, etcdClient, etcdPrefix, err := fixtures.StartDefaultServerWithClientsAndEtcd(t)
 	if err != nil {
@@ -1506,7 +1528,7 @@ properties:
 	for i := range tests {
 		tst := tests[i]
 		t.Run(tst.desc, func(t *testing.T) {
-			// plug in schemas
+			// 填充 schema
 			manifest := strings.NewReplacer(
 				"GLOBAL_SCHEMA", toValidationJSON(tst.globalSchema),
 				"V1BETA1_SCHEMA", toValidationJSON(tst.v1beta1Schema),
@@ -1514,7 +1536,7 @@ properties:
 				"PRESERVE_UNKNOWN_FIELDS", tst.preserveUnknownFields,
 			).Replace(tmpl)
 
-			// decode CRD manifest
+			// 解码 CRD manifest
 			obj, _, err := clientschema.Codecs.UniversalDeserializer().Decode([]byte(manifest), nil, nil)
 			if err != nil {
 				t.Fatalf("failed decoding of: %v\n\n%s", err, manifest)
@@ -1523,14 +1545,14 @@ properties:
 			betaCRD.Spec.Group = fmt.Sprintf("tests-%d.apiextension.k8s.io", i)
 			betaCRD.Name = fmt.Sprintf("foos.%s", betaCRD.Spec.Group)
 
-			// create CRDs.  We cannot create these in v1, but they can exist in upgraded clusters
+			// 创建 CRD。无法在 v1 中直接创建它们，但升级后的集群中可能存在。
 			t.Logf("Creating CRD %s", betaCRD.Name)
 			if _, err := fixtures.CreateCRDUsingRemovedAPIWatchUnsafe(etcdClient, etcdPrefix, betaCRD, apiExtensionClient); err != nil {
 				t.Fatal(err)
 			}
 
 			if len(tst.expectedViolations) == 0 {
-				// wait for condition to not appear
+				// 等待条件不出现
 				var cond *apiextensionsv1.CustomResourceDefinitionCondition
 				err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (done bool, err error) {
 					obj, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, betaCRD.Name, metav1.GetOptions{})
@@ -1549,7 +1571,7 @@ properties:
 				return
 			}
 
-			// wait for condition to appear with the given violations
+			// 等待出现带指定违规信息的条件
 			var cond *apiextensionsv1.CustomResourceDefinitionCondition
 			err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 				obj, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, betaCRD.Name, metav1.GetOptions{})
@@ -1566,7 +1588,7 @@ properties:
 				t.Fatalf("unexpected error waiting for violations in NonStructuralSchema condition: %v", err)
 			}
 
-			// check that the condition looks good
+			// 检查条件内容是否符合预期
 			if cond.Reason != "Violations" {
 				t.Errorf("expected reason Violations, got: %v", cond.Reason)
 			}
@@ -1574,7 +1596,7 @@ properties:
 				t.Errorf("expected reason True, got: %v", cond.Status)
 			}
 
-			// check that we got all violations
+			// 检查是否拿到了所有违规信息
 			t.Logf("Got violations: %q", cond.Message)
 			for _, v := range tst.expectedViolations {
 				if strings.Index(cond.Message, v) == -1 {
@@ -1590,7 +1612,7 @@ properties:
 	}
 }
 
-// findCRDCondition returns the condition you're looking for or nil.
+// findCRDCondition 返回指定类型的条件，找不到则返回 nil。
 func findCRDCondition(crd *apiextensionsv1.CustomResourceDefinition, conditionType apiextensionsv1.CustomResourceDefinitionConditionType) *apiextensionsv1.CustomResourceDefinitionCondition {
 	for i := range crd.Status.Conditions {
 		if crd.Status.Conditions[i].Type == conditionType {
@@ -1601,6 +1623,7 @@ func findCRDCondition(crd *apiextensionsv1.CustomResourceDefinition, conditionTy
 	return nil
 }
 
+// toValidationJSON 把 YAML schema 转为 openAPIV3Schema JSON 片段；空输入返回 "null"。
 func toValidationJSON(yml string) string {
 	if len(yml) == 0 {
 		return "null"
@@ -1612,6 +1635,8 @@ func toValidationJSON(yml string) string {
 	return fmt.Sprintf("{\"openAPIV3Schema\": %s}", string(bs))
 }
 
+// TestNonStructuralSchemaConditionForCRDV1 表驱动验证 v1beta1 CRD 迁移到 v1 后的
+// NonStructuralSchema 条件及违规信息是否符合预期。
 func TestNonStructuralSchemaConditionForCRDV1(t *testing.T) {
 	tearDown, apiExtensionClient, _, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -2028,7 +2053,7 @@ properties:
 	for i := range tests {
 		tst := tests[i]
 		t.Run(tst.desc, func(t *testing.T) {
-			// plug in schemas
+			// 填充 schema
 			manifest := strings.NewReplacer(
 				"GLOBAL_SCHEMA", toValidationJSON(tst.globalSchema),
 				"V1BETA1_SCHEMA", toValidationJSON(tst.v1beta1Schema),
@@ -2036,7 +2061,7 @@ properties:
 				"PRESERVE_UNKNOWN_FIELDS", "false",
 			).Replace(tmpl)
 
-			// decode CRD manifest
+			// 解码 CRD manifest
 			obj, _, err := clientschema.Codecs.UniversalDeserializer().Decode([]byte(manifest), nil, nil)
 			if err != nil {
 				t.Fatalf("failed decoding of: %v\n\n%s", err, manifest)
@@ -2057,7 +2082,7 @@ properties:
 				t.Fatal(err)
 			}
 
-			// create CRDs
+			// 创建 CRD
 			_, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.TODO(), crd, metav1.CreateOptions{})
 			if len(tst.expectedCreateErrors) > 0 && err == nil {
 				t.Fatalf("expected create errors, got none")

@@ -30,10 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-// isJSONEmptyForOmitempty returns true if the JSON value would be dropped by the
-// kube-openapi v2 JSON encoder's omitempty tag. Unlike omitzero (used for Default),
-// the Example field uses omitempty which considers empty strings, empty slices,
-// and empty maps as empty.
+// isJSONEmptyForOmitempty 判断 JSON 值是否会被 kube-openapi v2 JSON 编码器的
+// omitempty 标签丢弃。与 Default 使用的 omitzero 不同，Example 字段使用 omitempty，
+// 因此空字符串、空切片和空 map 都算作“空”。
 func isJSONEmptyForOmitempty(j JSON) bool {
 	switch v := j.Object.(type) {
 	case string:
@@ -47,12 +46,15 @@ func isJSONEmptyForOmitempty(j JSON) bool {
 	}
 }
 
+// TestStructuralKubeOpenAPIRoundtrip 用随机数据验证 Structural 经 kube-openapi
+// 序列化再反序列化后保持不变，防止 JSON 标签或转换逻辑悄悄丢失字段。
 func TestStructuralKubeOpenAPIRoundtrip(t *testing.T) {
 	f := randfill.New()
 	seed := time.Now().UnixNano()
 	t.Logf("seed = %v", seed)
 	//seed = int64(1549012506261785182)
 	f.RandSource(rand.New(rand.NewSource(seed)))
+	// 显式覆盖 JSON 值，确保空字符串、空切片、空 map 等边界值都参与测试。
 	f.Funcs(
 		func(s *JSON, c randfill.Continue) {
 			switch c.Intn(7) {
@@ -80,10 +82,10 @@ func TestStructuralKubeOpenAPIRoundtrip(t *testing.T) {
 		orig := &Structural{}
 		f.Fill(orig)
 
-		// normalize Structural.ValueValidation to zero values if it was nil before
-		// and normalize Example values that are considered empty by omitempty
-		// (the kube-openapi Example field uses omitempty, not omitzero, so
-		// empty strings/slices/maps get dropped during JSON roundtrip)
+		// 把原本为 nil 的 ValueValidation 规范化为零值，
+		// 并规范化会被 omitempty 视为空的 Example 值：
+		// kube-openapi 的 Example 使用 omitempty 而非 omitzero，
+		// JSON 往返时空字符串/切片/map 会被丢弃。
 		normalizer := Visitor{
 			Structural: func(s *Structural) bool {
 				changed := false

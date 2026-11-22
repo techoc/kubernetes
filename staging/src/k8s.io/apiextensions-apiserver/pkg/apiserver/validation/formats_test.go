@@ -25,6 +25,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/strfmt"
 )
 
+// TestRegistryFormats 验证所有支持的带版本 format 都存在于 strfmt 默认注册表中。
 func TestRegistryFormats(t *testing.T) {
 	for _, sf := range supportedVersionedFormats {
 		for f := range sf.formats {
@@ -35,6 +36,7 @@ func TestRegistryFormats(t *testing.T) {
 	}
 }
 
+// TestSupportedFormats 验证按版本累计支持的 format 集合，以及按版本剥离不支持 format 的后处理器。
 func TestSupportedFormats(t *testing.T) {
 	vf := []versionedFormats{
 		{
@@ -50,7 +52,7 @@ func TestSupportedFormats(t *testing.T) {
 				"C",
 			),
 		},
-		// Version 1.2 has no new supported formats
+		// 1.2 版本没有新增支持的 format
 		{
 			introducedVersion: version.MajorMinor(1, 3),
 			formats: sets.New(
@@ -58,7 +60,7 @@ func TestSupportedFormats(t *testing.T) {
 			),
 		},
 		{
-			introducedVersion: version.MajorMinor(1, 3), // same version as previous entry
+			introducedVersion: version.MajorMinor(1, 3), // 与上一项版本相同
 			formats: sets.New(
 				"E",
 			),
@@ -139,6 +141,7 @@ func TestSupportedFormats(t *testing.T) {
 	}
 }
 
+// TestGetUnrecognizedFormats 验证在不同兼容版本下识别不出的 format 判定。
 func TestGetUnrecognizedFormats(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -229,7 +232,7 @@ func TestGetUnrecognizedFormats(t *testing.T) {
 				return
 			}
 
-			// Convert to sets for comparison to handle order differences
+			// 转为集合比较，避免顺序差异
 			gotSet := sets.New(got...)
 			expectedSet := sets.New(tc.expectedFormats...)
 

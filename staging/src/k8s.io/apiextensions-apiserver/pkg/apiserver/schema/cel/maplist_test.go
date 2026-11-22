@@ -23,6 +23,8 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 )
 
+// TestMapList 验证 map 类型 list 的键匹配语义：只接受 map 查询、
+// 键值须为标量、重复键保留首项、忽略非法条目。
 func TestMapList(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -322,6 +324,7 @@ func TestMapList(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mapList := makeMapList(&tc.sts, tc.items)
+			// 预热查询用于覆盖索引缓存分支，确保后续结果仍然正确。
 			for _, warmUp := range tc.warmUpQueries {
 				mapList.Get(warmUp)
 			}

@@ -43,9 +43,10 @@ import (
 var labelSelectorPath = ".status.labelSelector"
 var anotherLabelSelectorPath = ".status.anotherLabelSelector"
 
+// NewNoxuSubresourcesCRDs 返回带 status/scale 子资源的测试 CRD 集合。
 func NewNoxuSubresourcesCRDs(scope apiextensionsv1.ResourceScope) []*apiextensionsv1.CustomResourceDefinition {
 	return []*apiextensionsv1.CustomResourceDefinition{
-		// CRD that uses per-version subresources
+		// 使用按版本配置子资源的 CRD
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "noxus.mygroup.example.com"},
 			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -93,6 +94,7 @@ func NewNoxuSubresourcesCRDs(scope apiextensionsv1.ResourceScope) []*apiextensio
 	}
 }
 
+// NewNoxuSubresourceInstance 构造一个用于子资源测试的 noxu 实例。
 func NewNoxuSubresourceInstance(namespace, name, version string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -113,6 +115,7 @@ func NewNoxuSubresourceInstance(namespace, name, version string) *unstructured.U
 	}
 }
 
+// NewNoxuSubresourceInstanceWithReplicas 构造副本数字段名可定制的 noxu 实例。
 func NewNoxuSubresourceInstanceWithReplicas(namespace, name, version, replicasField string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -133,6 +136,7 @@ func NewNoxuSubresourceInstanceWithReplicas(namespace, name, version, replicasFi
 	}
 }
 
+// TestStatusSubresource 校验 status 子资源：UpdateStatus 不修改 spec，普通 Update 不修改 status。
 func TestStatusSubresource(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -158,25 +162,25 @@ func TestStatusSubresource(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// status should not be set after creation
+			// 创建时不应设置 status
 			if val, ok := gottenNoxuInstance.Object["status"]; ok {
 				t.Fatalf("status should not be set after creation, got %v", val)
 			}
 
-			// .status.num = 20
+			// 设置 .status.num = 20
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(20), "status", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// .spec.num = 20
+			// 设置 .spec.num = 20
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(20), "spec", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// UpdateStatus should not update spec.
-			// Check that .spec.num = 10 and .status.num = 20
+			// UpdateStatus 不应更新 spec。
+			// 确认 .spec.num = 10 且 .status.num = 20
 			updatedStatusInstance, err := noxuResourceClient.UpdateStatus(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatalf("unable to update status: %v", err)
@@ -203,20 +207,20 @@ func TestStatusSubresource(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// .status.num = 40
+			// 设置 .status.num = 40
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(40), "status", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// .spec.num = 40
+			// 设置 .spec.num = 40
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(40), "spec", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Update should not update status.
-			// Check that .spec.num = 40 and .status.num = 20
+			// Update 不应更新 status。
+			// 确认 .spec.num = 40 且 .status.num = 20
 			updatedInstance, err := noxuResourceClient.Update(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatalf("unable to update instance: %v", err)
@@ -245,6 +249,7 @@ func TestStatusSubresource(t *testing.T) {
 	}
 }
 
+// TestScaleSubresource 校验 scale 子资源的读写语义及 specReplicasPath 的校验。
 func TestScaleSubresource(t *testing.T) {
 	groupResource := schema.GroupResource{
 		Group:    "mygroup.example.com",
@@ -269,14 +274,14 @@ func TestScaleSubresource(t *testing.T) {
 	noxuDefinitions := NewNoxuSubresourcesCRDs(apiextensionsv1.NamespaceScoped)
 	for _, noxuDefinition := range noxuDefinitions {
 		for _, v := range noxuDefinition.Spec.Versions {
-			// Start with a new CRD, so that the object doesn't have resourceVersion
+			// 从新的 CRD 开始，使对象不带 resourceVersion
 			noxuDefinition := noxuDefinition.DeepCopy()
 
 			subresources, err := getSubresourcesForVersion(noxuDefinition, v.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
-			// set invalid json path for specReplicasPath
+			// 为 specReplicasPath 设置非法的 json path
 			subresources.Scale.SpecReplicasPath = "foo,bar"
 			_, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
 			if err == nil {
@@ -301,7 +306,7 @@ func TestScaleSubresource(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// set .status.labelSelector = bar
+			// 设置 .status.labelSelector = bar
 			gottenNoxuInstance, err := noxuResourceClient.Get(context.TODO(), "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -315,7 +320,7 @@ func TestScaleSubresource(t *testing.T) {
 				t.Fatalf("unable to update status: %v", err)
 			}
 
-			// get the scale object
+			// 获取 scale 对象
 			gottenScale, err := scaleClient.Scales("not-the-default").Get(context.TODO(), groupResource, "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -327,8 +332,8 @@ func TestScaleSubresource(t *testing.T) {
 				t.Fatalf("Scale.Status.Selector: expected: %v, got: %v", "bar", gottenScale.Status.Selector)
 			}
 
-			// update the scale object
-			// check that spec is updated, but status is not
+			// 更新 scale 对象
+			// 确认 spec 被更新，而 status 未被更新
 			gottenScale.Spec.Replicas = 5
 			gottenScale.Status.Selector = "baz"
 			updatedScale, err := scaleClient.Scales("not-the-default").Update(context.TODO(), groupResource, gottenScale, metav1.UpdateOptions{})
@@ -342,7 +347,7 @@ func TestScaleSubresource(t *testing.T) {
 				t.Fatalf("scale should not update status: expected %v, got: %v", "bar", updatedScale.Status.Selector)
 			}
 
-			// check that .spec.replicas = 5, but status is not updated
+			// 确认 .spec.replicas = 5，而 status 未被更新
 			updatedNoxuInstance, err := noxuResourceClient.Get(context.TODO(), "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -362,8 +367,8 @@ func TestScaleSubresource(t *testing.T) {
 				t.Fatalf("scale should not update status: expected %v, got: %v", "bar", statusLabelSelector)
 			}
 
-			// validate maximum value
-			// set .spec.replicas = math.MaxInt64
+			// 校验上限值
+			// 设置 .spec.replicas = math.MaxInt64
 			gottenNoxuInstance, err = noxuResourceClient.Get(context.TODO(), "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -384,6 +389,7 @@ func TestScaleSubresource(t *testing.T) {
 	}
 }
 
+// TestApplyScaleSubresource 校验对 scale 子资源做 apply 时 managedFields 的归属。
 func TestApplyScaleSubresource(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -411,7 +417,7 @@ func TestApplyScaleSubresource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a client for it.
+	// 为其创建客户端。
 	ns := "not-the-default"
 	noxuResourceClient := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, "v1beta1")
 
@@ -444,7 +450,7 @@ func TestApplyScaleSubresource(t *testing.T) {
 		t.Fatalf("Failed to Get CustomResource: %v", err)
 	}
 
-	// Managed fields should have 3 entries: one for scale, one for spec, and one for the rest of the fields
+	// managed fields 应有 3 条：分别属于 scale、spec 和其余字段
 	managedFields := obj.GetManagedFields()
 	if len(managedFields) != 3 {
 		t.Fatalf("Expected 3 managed fields, got %v: %v", len(managedFields), obj.GetManagedFields())
@@ -463,6 +469,7 @@ func TestApplyScaleSubresource(t *testing.T) {
 	}
 }
 
+// TestValidationSchemaWithStatus 校验带 status 的校验 schema 不会把子 schema 的字段限制在 properties 内。
 func TestValidationSchemaWithStatus(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -481,7 +488,7 @@ func TestValidationSchemaWithStatus(t *testing.T) {
 
 	noxuDefinition := newNoxuValidationCRDs()[0]
 
-	// make sure we are not restricting fields to properties even in subschemas
+	// 确保即便在子 schema 中也不会把字段限制在 properties 内
 	noxuDefinition.Spec.Versions[0].Schema.OpenAPIV3Schema = &apiextensionsv1.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensionsv1.JSONSchemaProps{
@@ -506,6 +513,7 @@ func TestValidationSchemaWithStatus(t *testing.T) {
 	}
 }
 
+// TestValidateOnlyStatus 校验 UpdateStatus 只校验 status，不校验非法的 spec。
 func TestValidateOnlyStatus(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -513,13 +521,13 @@ func TestValidateOnlyStatus(t *testing.T) {
 	}
 	defer tearDown()
 
-	// UpdateStatus should validate only status
-	// 1. create a crd with max value of .spec.num = 10 and .status.num = 10
-	// 2. create a cr with .spec.num = 10 and .status.num = 10 (valid)
-	// 3. update the spec of the cr with .spec.num = 15 (spec is invalid), expect no error
-	// 4. update the spec of the cr with .spec.num = 15 (spec is invalid), expect error
+	// UpdateStatus 应只校验 status
+	// 1. 创建 CRD，.spec.num 与 .status.num 的最大值均为 10
+	// 2. 创建 CR，.spec.num = 10 且 .status.num = 10（合法）
+	// 3. 把 CR 的 spec 更新为 .spec.num = 15（spec 非法），预期无错误
+	// 4. 把 CR 的 spec 更新为 .spec.num = 15（spec 非法），预期报错
 
-	// max value of spec.num = 10 and status.num = 10
+	// spec.num 与 status.num 的最大值为 10
 	schema := &apiextensionsv1.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensionsv1.JSONSchemaProps{
@@ -561,7 +569,7 @@ func TestValidateOnlyStatus(t *testing.T) {
 		for _, v := range noxuDefinition.Spec.Versions {
 			noxuResourceClient := newNamespacedCustomResourceVersionedClient(ns, dynamicClient, noxuDefinition, v.Name)
 
-			// set .spec.num = 10 and .status.num = 10
+			// 设置 .spec.num = 10 且 .status.num = 10
 			noxuInstance := NewNoxuSubresourceInstance(ns, "foo", v.Name)
 			err = unstructured.SetNestedField(noxuInstance.Object, int64(10), "status", "num")
 			if err != nil {
@@ -573,7 +581,7 @@ func TestValidateOnlyStatus(t *testing.T) {
 				t.Fatalf("unable to create noxu instance: %v", err)
 			}
 
-			// update the spec with .spec.num = 15, expecting no error
+			// 把 spec 更新为 .spec.num = 15，预期无错误
 			err = unstructured.SetNestedField(createdNoxuInstance.Object, int64(15), "spec", "num")
 			if err != nil {
 				t.Fatalf("unexpected error setting .spec.num: %v", err)
@@ -583,7 +591,7 @@ func TestValidateOnlyStatus(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// update with .status.num = 15, expecting an error
+			// 把 .status.num 更新为 15，预期报错
 			err = unstructured.SetNestedField(createdNoxuInstance.Object, int64(15), "status", "num")
 			if err != nil {
 				t.Fatalf("unexpected error setting .status.num: %v", err)
@@ -608,6 +616,7 @@ func TestValidateOnlyStatus(t *testing.T) {
 	}
 }
 
+// TestSubresourcesDiscovery 校验 discovery 中暴露的 status 和 scale 子资源信息。
 func TestSubresourcesDiscovery(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -644,7 +653,7 @@ func TestSubresourcesDiscovery(t *testing.T) {
 				t.Fatalf("Expected exactly the resources \"noxus\", \"noxus/status\" and \"noxus/scale\" in group version %v/%v via discovery, got: %v", group, version, resources.APIResources)
 			}
 
-			// check discovery info for status
+			// 检查 status 的 discovery 信息
 			status := resources.APIResources[1]
 
 			if status.Name != "noxus/status" {
@@ -665,7 +674,7 @@ func TestSubresourcesDiscovery(t *testing.T) {
 				t.Fatalf("incorrect status via discovery: expected: %v, got: %v", expectedVerbs, status.Verbs)
 			}
 
-			// check discovery info for scale
+			// 检查 scale 的 discovery 信息
 			scale := resources.APIResources[2]
 
 			if scale.Group != autoscaling.GroupName {
@@ -699,6 +708,7 @@ func TestSubresourcesDiscovery(t *testing.T) {
 	}
 }
 
+// TestGeneration 校验 metadata.generation 仅在 spec 变化时递增，更新 status 不递增。
 func TestGeneration(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -721,7 +731,7 @@ func TestGeneration(t *testing.T) {
 				t.Fatalf("unable to create noxu instance: %v", err)
 			}
 
-			// .metadata.generation = 1
+			// 设置 .metadata.generation = 1
 			gottenNoxuInstance, err := noxuResourceClient.Get(context.TODO(), "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -730,13 +740,13 @@ func TestGeneration(t *testing.T) {
 				t.Fatalf(".metadata.generation should be 1 after creation")
 			}
 
-			// .status.num = 20
+			// 设置 .status.num = 20
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(20), "status", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// UpdateStatus does not increment generation
+			// UpdateStatus 不递增 generation
 			updatedStatusInstance, err := noxuResourceClient.UpdateStatus(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatalf("unable to update status: %v", err)
@@ -750,13 +760,13 @@ func TestGeneration(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// .spec.num = 20
+			// 设置 .spec.num = 20
 			err = unstructured.SetNestedField(gottenNoxuInstance.Object, int64(20), "spec", "num")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Update increments generation
+			// Update 递增 generation
 			updatedInstance, err := noxuResourceClient.Update(context.TODO(), gottenNoxuInstance, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatalf("unable to update instance: %v", err)
@@ -772,6 +782,7 @@ func TestGeneration(t *testing.T) {
 	}
 }
 
+// TestSubresourcePatch 校验对 status/scale 子资源的 patch 只作用于对应子资源，且 no-op patch 不递增 resourceVersion。
 func TestSubresourcePatch(t *testing.T) {
 	groupResource := schema.GroupResource{
 		Group:    "mygroup.example.com",
@@ -822,13 +833,13 @@ func TestSubresourcePatch(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "status", "num") // .status.num should be 999
-			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 10, "spec", "num")    // .spec.num should remain 10
+			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "status", "num") // .status.num 应为 999
+			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 10, "spec", "num")    // .spec.num 应保持 10
 
-			// server-side-apply increments resouceVersion if the resource is unchanged for 1 second after the previous write,
-			// and by waiting a second we ensure that resourceVersion will be updated if the no-op patch increments resourceVersion
+			// 若资源在上次写入后一秒内未变，server-side-apply 会递增 resourceVersion；
+			// 等待一秒可确保当 no-op patch 会递增 resourceVersion 时能被观测到
 			time.Sleep(time.Second)
-			// no-op patch
+			// 空操作 patch
 			rv := patchedNoxuInstance.GetResourceVersion()
 			found := false
 			t.Logf("Patching .status.num again to 999")
@@ -836,19 +847,19 @@ func TestSubresourcePatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// make sure no-op patch does not increment resourceVersion
+			// 确认 no-op patch 不递增 resourceVersion
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "status", "num")
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 10, "spec", "num")
 			expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
 
-			// empty patch
+			// 空 patch
 			t.Logf("Applying empty patch")
 			patchedNoxuInstance, err = noxuResourceClient.Patch(context.TODO(), "foo", types.MergePatchType, []byte(`{}`), metav1.PatchOptions{}, "status")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// an empty patch is a no-op patch. make sure it does not increment resourceVersion
+			// 空 patch 属于 no-op patch。确认它不递增 resourceVersion
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 999, "status", "num")
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 10, "spec", "num")
 			expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
@@ -861,7 +872,7 @@ func TestSubresourcePatch(t *testing.T) {
 			}
 
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 7, "spec", "replicas")
-			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 0, "status", "replicas") // .status.replicas should remain 0
+			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 0, "status", "replicas") // .status.replicas 应保持 0
 			rv, found, err = unstructured.NestedString(patchedNoxuInstance.UnstructuredContent(), "metadata", "resourceVersion")
 			if err != nil {
 				t.Fatal(err)
@@ -870,7 +881,7 @@ func TestSubresourcePatch(t *testing.T) {
 				t.Fatalf("metadata.resourceVersion not found")
 			}
 
-			// Scale.Spec.Replicas = 7 but Scale.Status.Replicas should remain 0
+			// Scale.Spec.Replicas = 7，但 Scale.Status.Replicas 应保持 0
 			gottenScale, err := scaleClient.Scales("not-the-default").Get(context.TODO(), groupResource, "foo", metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -882,29 +893,29 @@ func TestSubresourcePatch(t *testing.T) {
 				t.Fatalf("Scale.Status.Replicas: expected: %v, got: %v", 0, gottenScale.Spec.Replicas)
 			}
 
-			// no-op patch
+			// 空操作 patch
 			t.Logf("Patching .spec.replicas again to 7")
 			patchedNoxuInstance, err = noxuResourceClient.Patch(context.TODO(), "foo", types.MergePatchType, patch, metav1.PatchOptions{}, "scale")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// make sure no-op patch does not increment resourceVersion
+			// 确认 no-op patch 不递增 resourceVersion
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 7, "spec", "replicas")
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 0, "status", "replicas")
 			expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
 
-			// empty patch
+			// 空 patch
 			t.Logf("Applying empty patch")
 			patchedNoxuInstance, err = noxuResourceClient.Patch(context.TODO(), "foo", types.MergePatchType, []byte(`{}`), metav1.PatchOptions{}, "scale")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// an empty patch is a no-op patch. make sure it does not increment resourceVersion
+			// 空 patch 属于 no-op patch。确认它不递增 resourceVersion
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 7, "spec", "replicas")
 			expectInt64(t, patchedNoxuInstance.UnstructuredContent(), 0, "status", "replicas")
 			expectString(t, patchedNoxuInstance.UnstructuredContent(), rv, "metadata", "resourceVersion")
 
-			// make sure strategic merge patch is not supported for both status and scale
+			// 确认 status 和 scale 都不支持 strategic merge patch
 			_, err = noxuResourceClient.Patch(context.TODO(), "foo", types.StrategicMergePatchType, patch, metav1.PatchOptions{}, "status")
 			if err == nil {
 				t.Fatalf("unexpected non-error: strategic merge patch is not supported for custom resources")

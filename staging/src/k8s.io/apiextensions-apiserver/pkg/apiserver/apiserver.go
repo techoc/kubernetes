@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apiserver 实现 CRD API Server 的核心逻辑。
+// 负责：
+//   - 注册 CRD 的 REST Storage 和 API 组
+//   - 创建 CRD 请求处理器（动态安装/卸载 CR 的 HTTP 路由）
+//   - 启动所有控制器（establishing、status、finalizer、OpenAPI 等）
+//   - 管理 discovery 信息（/apis 端点动态反映已注册的 CR）
 package apiserver
 
 import (
@@ -53,12 +59,15 @@ import (
 )
 
 var (
+	// Scheme 包含 CRD 的所有版本类型，用于序列化和反序列化。
 	Scheme = runtime.NewScheme()
+	// Codecs 提供基于 Scheme 的编解码器工厂。
 	Codecs = serializer.NewCodecFactory(Scheme)
 
 	// if you modify this, make sure you update the crEncoder
 	unversionedVersion = schema.GroupVersion{Group: "", Version: "v1"}
-	unversionedTypes   = []runtime.Object{
+	// unversionedTypes 是无版本类型，用于 Watch 事件、错误状态等跨版本场景。
+	unversionedTypes = []runtime.Object{
 		&metav1.Status{},
 		&metav1.WatchEvent{},
 		&metav1.APIVersions{},
@@ -68,28 +77,33 @@ var (
 	}
 )
 
+// init 初始化 Scheme，注册 CRD 的所有版本类型和无版本类型。
 func init() {
 	install.Install(Scheme)
 
-	// we need to add the options to empty v1
+	// 将 metav1 类型添加到空组 v1，用于错误响应等场景
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Group: "", Version: "v1"})
 
 	Scheme.AddUnversionedTypes(unversionedVersion, unversionedTypes...)
 }
 
+// ExtraConfig 包含 CRD API Server 特有的配置项。
 type ExtraConfig struct {
+	// CRDRESTOptionsGetter 提供 CR 的存储选项（etcd 前缀、编解码器等）。
 	CRDRESTOptionsGetter genericregistry.RESTOptionsGetter
 
-	// MasterCount is used to detect whether cluster is HA, and if it is
-	// the CRD Establishing will be hold by 5 seconds.
+	// MasterCount 用于检测集群是否为 HA 模式。
+	// 在 HA 模式下，CRD 的建立（Establishing）会延迟 5 秒，
+	// 避免多个 API Server 实例同时注册同一 CRD 导致竞争。
 	MasterCount int
 
-	// ServiceResolver is used in CR webhook converters to resolve webhook's service names
+	// ServiceResolver 用于 CR 的 conversion webhook 解析 Service 名称为实际地址。
 	ServiceResolver webhook.ServiceResolver
-	// AuthResolverWrapper is used in CR webhook converters
+	// AuthResolverWrapper 用于 CR 的 webhook 认证信息解析。
 	AuthResolverWrapper webhook.AuthenticationInfoResolverWrapper
 }
 
+// Config 是 CRD API Server 的完整配置，包含通用配置和 CRD 特有配置。
 type Config struct {
 	GenericConfig *genericapiserver.RecommendedConfig
 	ExtraConfig   ExtraConfig
@@ -105,6 +119,8 @@ type CompletedConfig struct {
 	*completedConfig
 }
 
+// CustomResourceDefinitions 是 CRD API Server 的主结构体。
+// 封装了通用 API Server、CRD informer 和所有控制器。
 type CustomResourceDefinitions struct {
 	GenericAPIServer *genericapiserver.GenericAPIServer
 
@@ -112,7 +128,7 @@ type CustomResourceDefinitions struct {
 	Informers externalinformers.SharedInformerFactory
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 完成配置，禁用内置 discovery（使用自定义 discovery 控制器）。
 func (cfg *Config) Complete() CompletedConfig {
 	c := completedConfig{
 		cfg.GenericConfig.Complete(),
@@ -124,7 +140,13 @@ func (cfg *Config) Complete() CompletedConfig {
 	return CompletedConfig{&c}
 }
 
-// New returns a new instance of CustomResourceDefinitions from the given config.
+// New 从配置创建 CRD API Server 实例。
+// 核心流程：
+// 1. 创建通用 API Server
+// 2. 注册 CRD 的 REST Storage（/apis/apiextensions.k8s.io/v1/customresourcedefinitions）
+// 3. 创建 CRD 请求处理器（动态安装/卸载 CR 的 HTTP 路由）
+// 4. 启动所有控制器（establishing、status、finalizer、OpenAPI、discovery 等）
+// 5. 等待 CRD informer 同步完成后才报告健康
 func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*CustomResourceDefinitions, error) {
 	validation.RegisterMetrics()
 	genericServer, err := c.GenericConfig.New("apiextensions-apiserver", delegationTarget)
@@ -275,6 +297,8 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	return s, nil
 }
 
+// DefaultAPIResourceConfigSource 返回默认启用的 API 资源配置。
+// v1 和 v1beta1 版本的 CRD API 默认启用。
 func DefaultAPIResourceConfigSource() *serverstorage.ResourceConfig {
 	ret := serverstorage.NewResourceConfig()
 	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha versions in the list.

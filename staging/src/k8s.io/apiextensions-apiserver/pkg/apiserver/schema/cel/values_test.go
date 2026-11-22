@@ -28,6 +28,7 @@ import (
 )
 
 var (
+	// 测试用的共享 schema 定义，避免各用例重复构造。
 	listTypeSet  = "set"
 	listTypeMap  = "map"
 	stringSchema = schema.Structural{
@@ -108,6 +109,8 @@ var (
 	}
 )
 
+// TestEquality 验证 UnstructuredToVal 产出的值在不同 list/map 类型下的相等语义：
+// map/set list 与对象、map 忽略顺序，atomic list 则对顺序敏感。
 func TestEquality(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -392,7 +395,7 @@ func TestEquality(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Compare types with schema against themselves
+			// 带 schema 的值与自身比较
 			if tc.lhs.Equal(tc.rhs) != types.Bool(tc.equal) {
 				t.Errorf("expected Equals to return %v", tc.equal)
 			}
@@ -400,8 +403,8 @@ func TestEquality(t *testing.T) {
 				t.Errorf("expected Equals to return %v", tc.equal)
 			}
 
-			// Compare types with schema against native types. This is slightly different than how
-			// CEL performs equality against data literals, but is a good sanity check.
+			// 带 schema 的值与原生类型比较。这与 CEL 对数据字面量的相等比较略有不同，
+			// 但作为健全性检查仍然有用。
 			if tc.lhs.Equal(types.DefaultTypeAdapter.NativeToValue(tc.rhs.Value())) != types.Bool(tc.equal) {
 				t.Errorf("expected unstructuredVal.Equals(<native type>) to return %v", tc.equal)
 			}
@@ -412,6 +415,7 @@ func TestEquality(t *testing.T) {
 	}
 }
 
+// TestLister 验证 CEL traits.Lister 的 Size/Get/Iterator/Contains/Add 语义。
 func TestLister(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -547,6 +551,7 @@ func TestLister(t *testing.T) {
 	}
 }
 
+// TestMapper 验证 CEL traits.Mapper 的 Size/Get/Iterator/Contains 语义。
 func TestMapper(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -629,6 +634,7 @@ func TestMapper(t *testing.T) {
 	}
 }
 
+// BenchmarkUnstructuredToVal 度量普通 map list 转 CEL 值的开销。
 func BenchmarkUnstructuredToVal(b *testing.B) {
 	u := []interface{}{
 		map[string]interface{}{
@@ -655,6 +661,7 @@ func BenchmarkUnstructuredToVal(b *testing.B) {
 	}
 }
 
+// BenchmarkUnstructuredToValWithEscape 度量含需转义字符时转换的开销。
 func BenchmarkUnstructuredToValWithEscape(b *testing.B) {
 	u := []interface{}{
 		map[string]interface{}{

@@ -42,6 +42,7 @@ import (
 	"k8s.io/apiextensions-apiserver/test/integration/storage"
 )
 
+// defaultingFixture 是 defaulting 测试共用的双版本 CRD 定义。
 var defaultingFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "foos.tests.example.com"},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -184,14 +185,17 @@ metadata:
   name: foo
 `
 
+// TestCustomResourceDefaultingWithWatchCache 在启用 watch cache 时验证默认值填充。
 func TestCustomResourceDefaultingWithWatchCache(t *testing.T) {
 	testDefaulting(t, true)
 }
 
+// TestCustomResourceDefaultingWithoutWatchCache 在关闭 watch cache 时验证默认值填充。
 func TestCustomResourceDefaultingWithoutWatchCache(t *testing.T) {
 	testDefaulting(t, false)
 }
 
+// testDefaulting 验证不同版本 schema 的默认值在创建、读取、缓存读取与 watch 中的表现。
 func testDefaulting(t *testing.T, watchCache bool) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t, fmt.Sprintf("--watch-cache=%v", watchCache))
 	if err != nil {
@@ -214,6 +218,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 		t.Fatal(err)
 	}
 
+	// mustExist 断言给定的嵌套路径都存在。
 	mustExist := func(obj map[string]interface{}, pths [][]string) {
 		t.Helper()
 		for _, pth := range pths {
@@ -222,6 +227,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 			}
 		}
 	}
+	// mustNotExist 断言给定的嵌套路径都不存在。
 	mustNotExist := func(obj map[string]interface{}, pths [][]string) {
 		t.Helper()
 		for _, pth := range pths {
@@ -230,6 +236,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 			}
 		}
 	}
+	// updateCRD 以乐观并发方式更新 CRD；冲突时重新读取并重试。
 	updateCRD := func(update func(*apiextensionsv1.CustomResourceDefinition)) {
 		t.Helper()
 		var err error
@@ -253,6 +260,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 			t.Fatal(err)
 		}
 	}
+	// addDefault 同时为指定版本的 spec 与 status 根下的字段添加默认值。
 	addDefault := func(version string, key string, value interface{}) {
 		t.Helper()
 		updateCRD(func(obj *apiextensionsv1.CustomResourceDefinition) {
@@ -269,6 +277,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 			}
 		})
 	}
+	// removeDefault 同时移除指定版本 spec 与 status 根下字段的默认值。
 	removeDefault := func(version string, key string) {
 		t.Helper()
 		updateCRD(func(obj *apiextensionsv1.CustomResourceDefinition) {
@@ -299,9 +308,9 @@ func testDefaulting(t *testing.T, watchCache bool) {
 	}
 	initialResourceVersion := foo.GetResourceVersion()
 	t.Logf("CR created: %#v", foo.UnstructuredContent())
-	// spec.a and spec.b are defaulted in both versions
-	// spec.v1beta1 is defaulted when reading the incoming request
-	// spec.v1beta2 is defaulted when reading the storage response
+	// spec.a 与 spec.b 在两个版本中都会填默认值；
+	// spec.v1beta1 在读取入站请求时填充；
+	// spec.v1beta2 在读取存储返回时填充。
 	mustExist(foo.Object, [][]string{{"spec", "a"}, {"spec", "b"}, {"spec", "v1beta1"}, {"spec", "v1beta2"}, {"spec", "replicas"}})
 	mustNotExist(foo.Object, [][]string{{"status"}})
 
@@ -367,9 +376,9 @@ func testDefaulting(t *testing.T, watchCache bool) {
 		mustExist(foo.Object, [][]string{{"spec", "a"}, {"spec", "b"}, {"spec", "c"}, {"status", "a"}, {"status", "b"}, {"status", "c"}})
 	}
 
-	// Omit this test when using the watch cache because changing the CRD resets the watch cache's minimum available resource version.
-	// The watch cache is populated by list and watch, which are both tested by this test.
-	// The contents of the watch cache are seen by list with rv=0, which is tested by this test.
+	// 使用 watch cache 时跳过该测试：修改 CRD 会重置 watch cache 的最小可用 resourceVersion。
+	// watch cache 由 list 与 watch 填充，二者本测试都已覆盖；
+	// 其内容可通过 rv=0 的 list 读取，本测试也已覆盖。
 	if !watchCache {
 		t.Logf("verify WATCH sees 'c' in both status and spec")
 		w, err := fooClient.Watch(context.TODO(), metav1.ListOptions{ResourceVersion: initialResourceVersion})
@@ -379,11 +388,8 @@ func testDefaulting(t *testing.T, watchCache bool) {
 		defer w.Stop()
 		select {
 		case event := <-w.ResultChan():
-			// since the RV we watch from can be compacted
-			// during the execution of the test,
-			// tolerate the expiration error.
-			//
-			// see: https://github.com/kubernetes/kubernetes/issues/125760
+			// 测试执行期间起始 RV 可能已被压缩，因此容忍过期错误。
+			// 参见：https://github.com/kubernetes/kubernetes/issues/125760
 			if event.Type == watch.Error {
 				if !apierrors.IsResourceExpired(apierrors.FromObject(event.Object)) {
 					t.Fatalf("unexpected watch event: %v, %#v", event.Type, event.Object)
@@ -449,6 +455,7 @@ func testDefaulting(t *testing.T, watchCache bool) {
 	mustNotExist(foo.Object, [][]string{{"spec", "c"}})
 }
 
+// metaDefaultingFixture 是验证内嵌资源 metadata 默认值行为的 CRD 定义。
 var metaDefaultingFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "foos.tests.example.com"},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -608,6 +615,8 @@ metadata:
   name: foo
 `
 
+// TestCustomResourceDefaultingOfMetaFields 验证内嵌资源的 apiVersion/kind/metadata
+// 默认值填充，以及未知 metadata 字段的剪除。
 func TestCustomResourceDefaultingOfMetaFields(t *testing.T) {
 	tearDown, config, options, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -670,7 +679,7 @@ func TestCustomResourceDefaultingOfMetaFields(t *testing.T) {
 	}
 	t.Logf("CR created: %#v", returnedFoo.UnstructuredContent())
 
-	// get persisted object
+	// 读取持久化后的对象，确认落盘内容同样经过默认值填充与剪枝
 	RESTOptionsGetter := serveroptions.NewCRDRESTOptionsGetter(*options.RecommendedOptions.Etcd, nil, nil)
 	restOptions, err := RESTOptionsGetter.GetRESTOptions(schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}, nil)
 	if err != nil {
@@ -688,7 +697,7 @@ func TestCustomResourceDefaultingOfMetaFields(t *testing.T) {
 		t.Fatalf("Unable read CR from stored: %v", err)
 	}
 
-	// check that the returned and persisted object is pruned
+	// 返回对象与持久化对象都应已剪枝
 	for _, tst := range tests {
 		for _, foo := range []*unstructured.Unstructured{returnedFoo, persistedFoo} {
 			source := "request"
@@ -716,6 +725,7 @@ func TestCustomResourceDefaultingOfMetaFields(t *testing.T) {
 	}
 }
 
+// jsonPtr 将任意值序列化为 JSON 并包装为 apiextensionsv1.JSON 指针。
 func jsonPtr(x interface{}) *apiextensionsv1.JSON {
 	bs, err := json.Marshal(x)
 	if err != nil {

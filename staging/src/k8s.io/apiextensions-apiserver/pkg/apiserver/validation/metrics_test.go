@@ -35,17 +35,21 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// fakeMetrics 包装真实的 ValidationMetrics，把观测到的时长固定下来，
+// 同时记录真实总时长以供断言。
 type fakeMetrics struct {
 	original validation.ValidationMetrics
 	realSum  time.Duration
 }
 
+// ObserveRatchetingTime 记录真实时长，但向上报固定 1ns，使所有直方图分桶都可预测。
 func (f *fakeMetrics) ObserveRatchetingTime(d time.Duration) {
-	// Hardcode 1 ns duration for testing to exercise all buckets
+	// 测试中固定 1ns，覆盖所有分桶
 	f.original.ObserveRatchetingTime(1 * time.Nanosecond)
 	f.realSum += d
 }
 
+// Reset 清空累计值并返回可注册的指标列表。
 func (f *fakeMetrics) Reset() []metrics.Registerable {
 	f.realSum = 0
 	originalResettable, ok := f.original.(resettable)
@@ -55,14 +59,17 @@ func (f *fakeMetrics) Reset() []metrics.Registerable {
 	return originalResettable.Reset()
 }
 
+// resettable 是可以清空自身并返回指标的接口。
 type resettable interface {
 	Reset() []metrics.Registerable
 }
 
+// TestMetrics 验证 CRDValidationRatcheting 的直方图只在发生 ratchet 的
+// update 路径上被观测，且次数符合预期。
 func TestMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)
 
-	// Wrap metric to keep time constant
+	// 包装指标，使观测时长保持恒定
 	testMetrics := &fakeMetrics{original: validation.Metrics}
 	validation.Metrics = testMetrics
 	defer func() {
@@ -78,7 +85,7 @@ func TestMetrics(t *testing.T) {
 		obj    *unstructured.Unstructured
 		old    *unstructured.Unstructured
 		schema apiextensions.JSONSchemaProps
-		iters  int // how many times to validate the same update before checking metric
+		iters  int // 检查指标前重复校验同一 update 的次数
 		want   string
 	}{
 		{
@@ -250,6 +257,7 @@ func TestMetrics(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
+			// 每个用例用独立 registry，避免上一个用例的指标污染断言。
 			testRegistry := metrics.NewKubeRegistry()
 			ms := testMetrics.Reset()
 			testRegistry.MustRegister(ms...)
@@ -290,7 +298,7 @@ func TestMetrics(t *testing.T) {
 				t.Errorf("unexpected collecting result:\n%s", err)
 			}
 
-			// Ensure that the real durations is > 0 for all tests
+			// 确保所有用例的真实时长都 > 0
 			if testMetrics.realSum <= 0 {
 				t.Errorf("realSum = %v, want > 0", testMetrics.realSum)
 			}

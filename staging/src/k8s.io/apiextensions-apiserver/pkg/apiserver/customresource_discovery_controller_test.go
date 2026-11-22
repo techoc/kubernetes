@@ -33,6 +33,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/discovery/aggregated"
 )
 
+// coolFooCRD 是带 status 子资源的测试 CRD。
 var coolFooCRD = &v1.CustomResourceDefinition{
 	TypeMeta: metav1.TypeMeta{
 		APIVersion: "apiextensions.k8s.io/v1",
@@ -59,11 +60,11 @@ var coolFooCRD = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Subresources: &v1.CustomResourceSubresources{
-					// This CRD has a /status subresource
+					// 该 CRD 带有 /status 子资源
 					Status: &v1.CustomResourceSubresourceStatus{},
 				},
 				Schema: &v1.CustomResourceValidation{
-					// Unused by discovery
+					// discovery 不使用该字段
 					OpenAPIV3Schema: &v1.JSONSchemaProps{},
 				},
 			},
@@ -81,6 +82,7 @@ var coolFooCRD = &v1.CustomResourceDefinition{
 	},
 }
 
+// coolBarCRD 是不带子资源的测试 CRD。
 var coolBarCRD = &v1.CustomResourceDefinition{
 	TypeMeta: metav1.TypeMeta{
 		APIVersion: "apiextensions.k8s.io/v1",
@@ -107,7 +109,7 @@ var coolBarCRD = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Schema: &v1.CustomResourceValidation{
-					// Unused by discovery
+					// discovery 不使用该字段
 					OpenAPIV3Schema: &v1.JSONSchemaProps{},
 				},
 			},
@@ -125,6 +127,7 @@ var coolBarCRD = &v1.CustomResourceDefinition{
 	},
 }
 
+// coolFooDiscovery 是 coolFoo CRD 对应的预期发现信息。
 var coolFooDiscovery apidiscoveryv2.APIVersionDiscovery = apidiscoveryv2.APIVersionDiscovery{
 	Version:   "v1",
 	Freshness: apidiscoveryv2.DiscoveryFreshnessCurrent,
@@ -145,7 +148,7 @@ var coolFooDiscovery apidiscoveryv2.APIVersionDiscovery = apidiscoveryv2.APIVers
 				{
 					Subresource:   "status",
 					Verbs:         []string{"get", "patch", "update"},
-					AcceptedTypes: nil, // is this correct?
+					AcceptedTypes: nil, // 这样是否正确？
 					ResponseKind: &metav1.GroupVersionKind{
 						Group:   "stable.example.com",
 						Version: "v1",
@@ -189,7 +192,7 @@ var mergedDiscovery apidiscoveryv2.APIVersionDiscovery = apidiscoveryv2.APIVersi
 				{
 					Subresource:   "status",
 					Verbs:         []string{"get", "patch", "update"},
-					AcceptedTypes: nil, // is this correct?
+					AcceptedTypes: nil, // 这样是否正确？
 					ResponseKind: &metav1.GroupVersionKind{
 						Group:   "stable.example.com",
 						Version: "v1",
@@ -202,22 +205,23 @@ var mergedDiscovery apidiscoveryv2.APIVersionDiscovery = apidiscoveryv2.APIVersi
 }
 
 func init() {
-	// Not testing against an apiserver, so just assume names are accepted
+	// 并非针对真实 apiserver 测试，因此直接假设名称被接受
 	coolFooCRD.Status.AcceptedNames = coolFooCRD.Spec.Names
 	coolBarCRD.Status.AcceptedNames = coolBarCRD.Spec.Names
 }
 
-// Provides an apiextensions-apiserver client
+// testEnvironment 提供 apiextensions-apiserver 客户端以及 discovery 测试所需的组件。
 type testEnvironment struct {
 	clientset.Interface
 
-	// Discovery test details
+	// Discovery 测试相关组件
 	versionDiscoveryHandler
 	groupDiscoveryHandler
 
 	aggregated.FakeResourceManager
 }
 
+// Start 启动 informer 工厂和 discovery controller，并等待其完成同步。
 func (env *testEnvironment) Start(ctx context.Context) {
 	discoverySyncedCh := make(chan struct{})
 
@@ -242,6 +246,7 @@ func (env *testEnvironment) Start(ctx context.Context) {
 	}
 }
 
+// setup 构造一个使用 fake clientset 和 fake ResourceManager 的测试环境。
 func setup() *testEnvironment {
 	env := &testEnvironment{
 		Interface:           fake.NewSimpleClientset(),
@@ -257,6 +262,7 @@ func setup() *testEnvironment {
 	return env
 }
 
+// TestResourceManagerExistingCRD 验证 controller 启动前已存在的 CRD 会被加入 discovery。
 func TestResourceManagerExistingCRD(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -294,8 +300,7 @@ func TestResourceManagerExistingCRD(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Tests that if a CRD is added a runtime, the discovery controller will
-// put its information in the discovery document
+// 验证运行时新增的 CRD 会被 discovery controller 写入 discovery 文档。
 func TestResourceManagerAddedCRD(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -310,7 +315,7 @@ func TestResourceManagerAddedCRD(t *testing.T) {
 
 	env.Start(ctx)
 
-	// Create CRD after the controller has already started
+	// 在 controller 已启动之后再创建 CRD
 	_, err := env.Interface.
 		ApiextensionsV1().
 		CustomResourceDefinitions().
@@ -328,8 +333,7 @@ func TestResourceManagerAddedCRD(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Test that having multiple CRDs in the same version will add both
-// versions to discovery.
+// TestMultipleCRDSameVersion 验证同一版本下存在多个 CRD 时，两者都会加入 discovery。
 func TestMultipleCRDSameVersion(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -378,8 +382,7 @@ func TestMultipleCRDSameVersion(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Tests that if a CRD is deleted at runtime, the discovery controller will
-// remove its information from its ResourceManager
+// 验证运行时删除 CRD 后，discovery controller 会从 ResourceManager 中移除其信息。
 func TestDiscoveryControllerResourceManagerRemovedCRD(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -387,7 +390,7 @@ func TestDiscoveryControllerResourceManagerRemovedCRD(t *testing.T) {
 	env := setup()
 	env.Start(ctx)
 
-	// Create CRD after the controller has already started
+	// 在 controller 已启动之后再创建 CRD
 	_, err := env.Interface.
 		ApiextensionsV1().
 		CustomResourceDefinitions().
@@ -399,8 +402,7 @@ func TestDiscoveryControllerResourceManagerRemovedCRD(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Wait for the Controller to pick up the Create event and add it to the
-	// Resource Manager
+	// 等待 controller 接收到 Create 事件并将其加入 ResourceManager
 	env.FakeResourceManager.Expect().
 		AddGroupVersion(coolFooCRD.Spec.Group, coolFooDiscovery)
 	for _, versionEntry := range coolFooCRD.Spec.Versions {
@@ -416,8 +418,7 @@ func TestDiscoveryControllerResourceManagerRemovedCRD(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Wait for the Controller to detect there are no more CRDs of this group
-	// and remove the entire group
+	// 等待 controller 发现该组已无 CRD 并移除整个组
 	env.FakeResourceManager.Expect().RemoveGroup(coolFooCRD.Spec.Group)
 
 	err = env.FakeResourceManager.WaitForActions(ctx, 1*time.Second)

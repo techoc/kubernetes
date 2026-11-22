@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaults 验证 CRD 默认值填充（conversion、端口、存储版本等）。
 func TestDefaults(t *testing.T) {
 	scheme := runtime.NewScheme()
 	AddToScheme(scheme)
@@ -130,6 +131,7 @@ func TestDefaults(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			original := test.original
 			expected := test.expected
+			// scheme.Default 会就地填充默认值
 			scheme.Default(original)
 			if !apiequality.Semantic.DeepEqual(original, expected) {
 				t.Errorf("expected vs got:\n%s", cmp.Diff(test.expected, original))

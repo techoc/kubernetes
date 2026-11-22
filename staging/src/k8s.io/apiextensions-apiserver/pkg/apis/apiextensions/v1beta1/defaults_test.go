@@ -26,9 +26,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaults 校验 v1beta1 的默认值填充行为，包括 scope、conversion 和版本字段。
 func TestDefaults(t *testing.T) {
 	scheme := runtime.NewScheme()
 	AddToScheme(scheme)
+	// 每个用例只描述输入与期望，默认值逻辑由 scheme.Default 统一驱动。
 	tests := []struct {
 		name     string
 		original *CustomResourceDefinition
@@ -135,6 +137,7 @@ func TestDefaults(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			original := test.original
 			expected := test.expected
+			// 原地填充默认值，再与期望对象做语义比较。
 			scheme.Default(original)
 			if !apiequality.Semantic.DeepEqual(original, expected) {
 				t.Errorf("expected vs got:\n%s", cmp.Diff(test.expected, original))

@@ -33,6 +33,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// TestHandlerScope 验证 CR 只能通过与其作用域匹配的客户端访问，
+// 作用域不匹配的 CRUD 与子资源请求返回 NotFound。
 func TestHandlerScope(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {

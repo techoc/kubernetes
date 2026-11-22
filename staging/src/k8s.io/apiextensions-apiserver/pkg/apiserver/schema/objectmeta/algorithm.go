@@ -24,32 +24,29 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// CoerceOptions gives the ability to ReturnUnknownFieldPaths for fields
-// unrecognized by the schema or DropInvalidFields for fields that are a part
-// of the schema, but are malformed.
+// CoerceOptions 提供两种能力：为 schema 不认识的字段返回其路径
+// （ReturnUnknownFieldPaths），或丢弃属于 schema 但格式错误的字段（DropInvalidFields）。
 type CoerceOptions struct {
-	// DropInvalidFields discards malformed serialized metadata fields that
-	// cannot be successfully decoded to the corresponding ObjectMeta field.
-	// This only applies to fields that are recognized as part of the schema,
-	// but of an invalid type (i.e. cause an error when unmarshaling, rather
-	// than being dropped or causing a strictErr).
+	// DropInvalidFields 会丢弃无法成功解码到对应 ObjectMeta 字段的
+	// 畸形序列化元数据。它只适用于 schema 认可、但类型非法的字段
+	// （即反序列化时报错，而不是被丢弃或触发 strictErr 的情况）。
 	DropInvalidFields bool
-	// ReturnUnknownFieldPaths will return the paths to fields that are not
-	// recognized as part of the schema.
+	// ReturnUnknownFieldPaths 会返回 schema 不认识的字段路径。
 	ReturnUnknownFieldPaths bool
 }
 
-// Coerce checks types of embedded ObjectMeta and TypeMeta and prunes unknown fields inside the former.
-// It does coerce ObjectMeta and TypeMeta at the root if isResourceRoot is true.
-// If opts.ReturnUnknownFieldPaths is true, it will return the paths of any fields that are not a part of the
-// schema that are dropped when unmarshaling.
-// If opts.DropInvalidFields is true, fields of wrong type will be dropped.
+// Coerce 检查内嵌 ObjectMeta 和 TypeMeta 的类型，并裁剪前者内部的未知字段。
+// 当 isResourceRoot 为 true 时，会强制转换根部的 ObjectMeta 和 TypeMeta。
+// 若 opts.ReturnUnknownFieldPaths 为 true，会返回反序列化时被丢弃、
+// 且不属于 schema 的字段路径。
+// 若 opts.DropInvalidFields 为 true，类型错误的字段会被丢弃。
 func CoerceWithOptions(pth *field.Path, obj interface{}, s *structuralschema.Structural, isResourceRoot bool, opts CoerceOptions) (*field.Error, []string) {
 	if isResourceRoot {
 		if s == nil {
 			s = &structuralschema.Structural{}
 		}
 		if !s.XEmbeddedResource {
+			// 根资源隐含内嵌了 ObjectMeta/TypeMeta；复制一份，避免修改共享 schema。
 			clone := *s
 			clone.XEmbeddedResource = true
 			s = &clone
@@ -64,7 +61,7 @@ func CoerceWithOptions(pth *field.Path, obj interface{}, s *structuralschema.Str
 	return fieldErr, schemaOpts.UnknownFieldPaths
 }
 
-// Coerce calls CoerceWithOptions without returning unknown field paths.
+// Coerce 调用 CoerceWithOptions，但不返回未知字段路径。
 func Coerce(pth *field.Path, obj interface{}, s *structuralschema.Structural, isResourceRoot, dropInvalidFields bool) *field.Error {
 	fieldErr, _ := CoerceWithOptions(pth, obj, s, isResourceRoot, CoerceOptions{DropInvalidFields: dropInvalidFields})
 	return fieldErr
@@ -75,11 +72,13 @@ type coercer struct {
 	ReturnUnknownFieldPaths bool
 }
 
+// coerce 递归遍历对象，按 schema 校正内嵌资源元数据并记录未知字段路径。
 func (c *coercer) coerce(pth *field.Path, x interface{}, s *structuralschema.Structural, opts *structuralschema.UnknownFieldPathOptions) *field.Error {
 	if s == nil {
 		return nil
 	}
 	origPathLen := len(opts.ParentPath)
+	// 递归返回时把路径栈恢复到进入时的长度，避免兄弟字段相互污染。
 	defer func() {
 		opts.ParentPath = opts.ParentPath[:origPathLen]
 	}()
@@ -105,11 +104,13 @@ func (c *coercer) coerce(pth *field.Path, x interface{}, s *structuralschema.Str
 						if !c.DropInvalidFields {
 							return field.Invalid(pth.Child("metadata"), v, err.Error())
 						}
-						// pass through on error if DropInvalidFields is true
+						// DropInvalidFields 为 true 时忽略错误，继续后续处理。
 					} else if found {
 						if err := SetObjectMeta(x, meta); err != nil {
 							return field.Invalid(pth.Child("metadata"), v, err.Error())
 						}
+						// 解码/重建后的 ObjectMeta 会带上零值 creationTimestamp；
+						// 零值不应出现在序列化结果中，需显式删除。
 						if meta.CreationTimestamp.IsZero() {
 							unstructured.RemoveNestedField(x, "metadata", "creationTimestamp")
 						}
@@ -140,7 +141,7 @@ func (c *coercer) coerce(pth *field.Path, x interface{}, s *structuralschema.Str
 			opts.ParentPath = opts.ParentPath[:origPathLen]
 		}
 	default:
-		// scalars, do nothing
+		// 标量无需处理。
 	}
 
 	return nil

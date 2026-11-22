@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestValidateEmbeddedResource 覆盖内嵌资源对 apiVersion、kind 以及 metadata 校验的各类场景。
 func TestValidateEmbeddedResource(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -74,15 +75,16 @@ func TestValidateEmbeddedResource(t *testing.T) {
 		}, errors: []validationMatch{
 			invalid("metadata", "name"),
 			invalid("metadata", "namespace"),
-			invalid("metadata", "labels"),      // key
-			invalid("metadata", "labels"),      // value
-			invalid("metadata", "annotations"), // key
+			invalid("metadata", "labels"),      // 键
+			invalid("metadata", "labels"),      // 值
+			invalid("metadata", "annotations"), // 键
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			schema := &structuralschema.Structural{Extensions: structuralschema.Extensions{XEmbeddedResource: true}}
 			errs := validateEmbeddedResource(t.Context(), nil, tt.object, schema)
+			// 逐条标记匹配到的错误，最后确认没有多余错误，避免只做子集断言。
 			seenErrs := make([]bool, len(errs))
 
 			for _, expectedError := range tt.errors {
@@ -109,6 +111,7 @@ func TestValidateEmbeddedResource(t *testing.T) {
 	}
 }
 
+// TestValidate 覆盖根节点、嵌套属性、数组元素和 additionalProperties 中的内嵌资源校验。
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -181,6 +184,7 @@ func TestValidate(t *testing.T) {
 			}
 
 			var obj map[string]interface{}
+			// 用 JSON 反序列化构造对象，保持与真实 API 请求一致的数值/结构类型。
 			if err := json.Unmarshal([]byte(tt.object), &obj); err != nil {
 				t.Fatal(err)
 			}
@@ -212,18 +216,23 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// validationMatch 描述一个期望错误：字段路径与错误类型。
 type validationMatch struct {
 	path      *field.Path
 	errorType field.ErrorType
 }
 
+// required 构造一个必填字段缺失的期望错误。
 func required(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeRequired}
 }
+
+// invalid 构造一个字段值非法的期望错误。
 func invalid(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeInvalid}
 }
 
+// matches 判断实际错误是否与期望的路径和类型一致。
 func (v validationMatch) matches(err *field.Error) bool {
 	return err.Type == v.errorType && err.Field == v.path.String()
 }

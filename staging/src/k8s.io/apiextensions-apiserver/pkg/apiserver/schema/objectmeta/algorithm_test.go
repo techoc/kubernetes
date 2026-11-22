@@ -29,6 +29,8 @@ import (
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 )
 
+// TestCoerce 表驱动验证内嵌资源的 ObjectMeta/TypeMeta 强制转换：
+// 未知字段裁剪、includeRoot 影响、dropInvalidFields 与未知字段路径上报。
 func TestCoerce(t *testing.T) {
 	tests := []struct {
 		name                  string

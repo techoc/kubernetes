@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件定义 v1 版本与内部版本之间的自定义转换逻辑。
+// 大部分字段转换由代码生成（zz_generated.conversion.go），
+// 但以下字段需要特殊处理：
+//   - JSON 类型：内部版本使用 interface{}，v1 使用 raw JSON 字节
+//   - Spec 的 per-version 字段：内部版本使用顶层字段，v1 支持 per-version
+//   - Conversion webhook：内部版本和 v1 的结构不同
 package v1
 
 import (
@@ -26,6 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
+// Convert_apiextensions_JSONSchemaProps_To_v1_JSONSchemaProps 处理 JSONSchemaProps 的 Default 和 Example 字段。
+// 内部版本中，nil 默认值可能表示为 *JSON{(*interface{})(nil)}，需要转换为 v1 中的 nil。
 func Convert_apiextensions_JSONSchemaProps_To_v1_JSONSchemaProps(in *apiextensions.JSONSchemaProps, out *JSONSchemaProps, s conversion.Scope) error {
 	if err := autoConvert_apiextensions_JSONSchemaProps_To_v1_JSONSchemaProps(in, out, s); err != nil {
 		return err
@@ -41,6 +49,8 @@ func Convert_apiextensions_JSONSchemaProps_To_v1_JSONSchemaProps(in *apiextensio
 
 var nullLiteral = []byte(`null`)
 
+// Convert_apiextensions_JSON_To_v1_JSON 将内部版本的 JSON（interface{}）序列化为 v1 的 raw JSON 字节。
+// 内部版本使用 interface{} 存储任意 JSON 值，v1 使用 []byte 存储原始 JSON。
 func Convert_apiextensions_JSON_To_v1_JSON(in *apiextensions.JSON, out *JSON, s conversion.Scope) error {
 	raw, err := json.Marshal(*in)
 	if err != nil {
@@ -55,6 +65,8 @@ func Convert_apiextensions_JSON_To_v1_JSON(in *apiextensions.JSON, out *JSON, s 
 	return nil
 }
 
+// Convert_v1_JSON_To_apiextensions_JSON 将 v1 的 raw JSON 字节反序列化为内部版本的 interface{}。
+// 空字节或字面量 null 转换为 nil interface{}。
 func Convert_v1_JSON_To_apiextensions_JSON(in *JSON, out *apiextensions.JSON, s conversion.Scope) error {
 	if in != nil {
 		var i interface{}
@@ -70,17 +82,22 @@ func Convert_v1_JSON_To_apiextensions_JSON(in *JSON, out *apiextensions.JSON, s 
 	return nil
 }
 
+// Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec
+// 将内部版本的 Spec 转换为 v1 版本。
+// 内部版本使用顶层字段（Version、Subresources、Validation 等），
+// v1 版本使用 per-version 结构。转换时将顶层字段复制到所有版本。
 func Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec(in *apiextensions.CustomResourceDefinitionSpec, out *CustomResourceDefinitionSpec, s conversion.Scope) error {
 	if err := autoConvert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec(in, out, s); err != nil {
 		return err
 	}
 
+	// 兼容旧版本：如果内部版本有 Version 字段但没有 Versions，创建一个单元素 Versions
 	if len(out.Versions) == 0 && len(in.Version) > 0 {
-		// no versions were specified, and a version name was specified
 		out.Versions = []CustomResourceDefinitionVersion{{Name: in.Version, Served: true, Storage: true}}
 	}
 
-	// If spec.{subresources,validation,additionalPrinterColumns,selectableFields} exists, move to versions
+	// 将顶层的 subresources、validation、additionalPrinterColumns、selectableFields
+	// 复制到每个版本中，因为 v1 API 使用 per-version 结构
 	if in.Subresources != nil {
 		subresources := &CustomResourceSubresources{}
 		if err := Convert_apiextensions_CustomResourceSubresources_To_v1_CustomResourceSubresources(in.Subresources, subresources, s); err != nil {
@@ -124,6 +141,10 @@ func Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefi
 	return nil
 }
 
+// Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec
+// 将 v1 版本的 Spec 转换为内部版本。
+// 如果所有版本的 per-version 字段相同，提取到顶层字段以节省存储空间。
+// 如果各版本不同，保留 per-version 结构。
 func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec(in *CustomResourceDefinitionSpec, out *apiextensions.CustomResourceDefinitionSpec, s conversion.Scope) error {
 	if err := autoConvert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec(in, out, s); err != nil {
 		return err
@@ -133,10 +154,11 @@ func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefi
 		return nil
 	}
 
-	// Copy versions[0] to version
+	// 内部版本的 Version 字段对应 v1 的第一个版本名称
 	out.Version = out.Versions[0].Name
 
-	// If versions[*].{subresources,schema,additionalPrinterColumns,selectableFields} are identical, move to spec
+	// 检查所有版本的 per-version 字段是否相同。
+	// 如果相同，提取到顶层字段（节省存储空间）；如果不同，保留 per-version 结构
 	subresources := out.Versions[0].Subresources
 	subresourcesIdentical := true
 	validation := out.Versions[0].Schema
@@ -146,7 +168,7 @@ func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefi
 	selectableFields := out.Versions[0].SelectableFields
 	selectableFieldsIdentical := true
 
-	// Detect if per-version fields are identical
+	// 遍历所有版本，检测 per-version 字段是否完全相同
 	for _, v := range out.Versions {
 		if subresourcesIdentical && !apiequality.Semantic.DeepEqual(v.Subresources, subresources) {
 			subresourcesIdentical = false
@@ -162,7 +184,7 @@ func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefi
 		}
 	}
 
-	// If they are, set the top-level fields and clear the per-version fields
+	// 如果所有版本的某个字段相同，提取到顶层并清空 per-version 字段
 	if subresourcesIdentical {
 		out.Subresources = subresources
 	}
@@ -193,6 +215,9 @@ func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefi
 	return nil
 }
 
+// Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion
+// v1 版本的 Conversion 结构将 Webhook 配置嵌套在 Webhook 子对象中，
+// 内部版本将其展平为顶层字段。此函数处理结构差异。
 func Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion(in *CustomResourceConversion, out *apiextensions.CustomResourceConversion, s conversion.Scope) error {
 	if err := autoConvert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion(in, out, s); err != nil {
 		return err
@@ -212,6 +237,8 @@ func Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversi
 	return nil
 }
 
+// Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion
+// 将内部版本的扁平化 webhook 配置重新嵌套到 v1 的 Webhook 子对象中。
 func Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion(in *apiextensions.CustomResourceConversion, out *CustomResourceConversion, s conversion.Scope) error {
 	if err := autoConvert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion(in, out, s); err != nil {
 		return err
@@ -231,6 +258,9 @@ func Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversi
 	return nil
 }
 
+// Convert_apiextensions_ValidationRules_To_v1_ValidationRules
+// 使用 unsafe.Pointer 直接复制切片，因为两个版本的 ValidationRules 类型完全相同。
+// 这是一种性能优化，避免逐个元素复制。
 func Convert_apiextensions_ValidationRules_To_v1_ValidationRules(in *apiextensions.ValidationRules, out *ValidationRules, s conversion.Scope) error {
 	*out = *(*ValidationRules)(unsafe.Pointer(in))
 	return nil

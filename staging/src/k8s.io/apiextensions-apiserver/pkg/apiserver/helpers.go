@@ -25,10 +25,9 @@ import (
 
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
-// getColumnsForVersion returns the columns for given version or nil.
-// NOTE: the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// getColumnsForVersion 返回指定版本的列，若版本不存在则返回 nil。
+// 注意：逻辑默认化后的列并不指向原始 CRD 对象。
+// 不能通过逻辑默认化后的列修改原始 CRD 的列，应改为遍历原始 CRD 对象。
 func getColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, version string) ([]apiextensionsv1.CustomResourceColumnDefinition, error) {
 	for _, v := range crd.Spec.Versions {
 		if version == v.Name {
@@ -38,7 +37,7 @@ func getColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, version
 	return nil, fmt.Errorf("version %s not found in apiextensionsv1.CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// getScaleColumnsForVersion returns 2 columns for the desired and actual number of replicas.
+// getScaleColumnsForVersion 返回期望副本数和实际副本数两列。
 func getScaleColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, version string) ([]apiextensionsv1.CustomResourceColumnDefinition, error) {
 	for _, v := range crd.Spec.Versions {
 		if version != v.Name {
@@ -74,10 +73,9 @@ func getScaleColumnsForVersion(crd *apiextensionsv1.CustomResourceDefinition, ve
 	return nil, fmt.Errorf("version %s not found in apiextensionsv1.CustomResourceDefinition: %v", version, crd.Name)
 }
 
-// serveDefaultColumnsIfEmpty applies logically defaulting to columns, if the input columns is empty.
-// NOTE: in this way, the newly logically-defaulted columns is not pointing to the original CRD object.
-// One cannot mutate the original CRD columns using the logically-defaulted columns. Please iterate through
-// the original CRD object instead.
+// serveDefaultColumnsIfEmpty 在输入列为空时对列做逻辑默认化。
+// 注意：这样得到的列并不指向原始 CRD 对象。
+// 不能通过逻辑默认化后的列修改原始 CRD 的列，应改为遍历原始 CRD 对象。
 func serveDefaultColumnsIfEmpty(columns []apiextensionsv1.CustomResourceColumnDefinition) []apiextensionsv1.CustomResourceColumnDefinition {
 	if len(columns) > 0 {
 		return columns

@@ -41,6 +41,7 @@ import (
 	"k8s.io/component-base/tracing"
 )
 
+// webhookConverterFactory 创建调用外部 webhook 的 CR 转换器。
 type webhookConverterFactory struct {
 	clientManager webhook.ClientManager
 }
@@ -58,14 +59,14 @@ func newWebhookConverterFactory(serviceResolver webhook.ServiceResolver, authRes
 	if err != nil {
 		return nil, err
 	}
-	// Set defaults which may be overridden later.
+	// 设置默认值，调用方之后可以覆盖。
 	clientManager.SetAuthenticationInfoResolver(authInfoResolver)
 	clientManager.SetAuthenticationInfoResolverWrapper(authResolverWrapper)
 	clientManager.SetServiceResolver(serviceResolver)
 	return &webhookConverterFactory{clientManager}, nil
 }
 
-// webhookConverter is a converter that calls an external webhook to do the CR conversion.
+// webhookConverter 是调用外部 webhook 完成 CR 转换的转换器。
 type webhookConverter struct {
 	clientManager webhook.ClientManager
 	restClient    *rest.RESTClient
@@ -75,11 +76,12 @@ type webhookConverter struct {
 	conversionReviewVersions []string
 }
 
+// webhookClientConfigForCRD 由 CRD 的 webhook 配置构造通用 webhook 客户端配置。
 func webhookClientConfigForCRD(crd *v1.CustomResourceDefinition) *webhook.ClientConfig {
 	apiConfig := crd.Spec.Conversion.Webhook.ClientConfig
 	caBundle := apiConfig.CABundle
 	if len(caBundle) > 0 && len(bytes.TrimSpace(caBundle)) == 0 {
-		// treat whitespace-only caBundle as empty
+		// 将仅含空白的 caBundle 视为空
 		caBundle = nil
 	}
 	ret := webhook.ClientConfig{
@@ -104,6 +106,7 @@ func webhookClientConfigForCRD(crd *v1.CustomResourceDefinition) *webhook.Client
 
 var _ crConverterInterface = &webhookConverter{}
 
+// NewWebhookConverter 为指定 CRD 创建 webhook 转换器。
 func (f *webhookConverterFactory) NewWebhookConverter(crd *v1.CustomResourceDefinition) (*webhookConverter, error) {
 	restClient, err := f.clientManager.HookClient(*webhookClientConfigForCRD(crd))
 	if err != nil {
@@ -119,16 +122,16 @@ func (f *webhookConverterFactory) NewWebhookConverter(crd *v1.CustomResourceDefi
 	}, nil
 }
 
-// getObjectsToConvert returns a list of objects requiring conversion.
-// if obj is a list, getObjectsToConvert returns a (potentially empty) list of the items that are not already in the desired version.
-// if obj is not a list, and is already in the desired version, getObjectsToConvert returns an empty list.
-// if obj is not a list, and is not already in the desired version, getObjectsToConvert returns a list containing only obj.
+// getObjectsToConvert 返回需要转换的对象列表。
+// 若 obj 是列表，返回尚未处于目标版本的对象组成的列表（可能为空）。
+// 若 obj 不是列表且已处于目标版本，返回空列表。
+// 若 obj 不是列表且尚未处于目标版本，返回仅包含 obj 的列表。
 func getObjectsToConvert(obj runtime.Object, apiVersion string) []runtime.RawExtension {
 	listObj, isList := obj.(*unstructured.UnstructuredList)
 	var objects []runtime.RawExtension
 	if isList {
 		for i := range listObj.Items {
-			// Only sent item for conversion, if the apiVersion is different
+			// 仅当 apiVersion 不同时才发送该项进行转换
 			if listObj.Items[i].GetAPIVersion() != apiVersion {
 				objects = append(objects, runtime.RawExtension{Object: &listObj.Items[i]})
 			}
@@ -141,7 +144,8 @@ func getObjectsToConvert(obj runtime.Object, apiVersion string) []runtime.RawExt
 	return objects
 }
 
-// createConversionReviewObjects returns ConversionReview request and response objects for the first supported version found in conversionReviewVersions.
+// createConversionReviewObjects 使用 conversionReviewVersions 中第一个受支持的版本，
+// 构造 ConversionReview 的请求和响应对象。
 func createConversionReviewObjects(conversionReviewVersions []string, objects []runtime.RawExtension, apiVersion string, requestUID types.UID) (request, response runtime.Object, err error) {
 	for _, version := range conversionReviewVersions {
 		switch version {
@@ -168,6 +172,7 @@ func createConversionReviewObjects(conversionReviewVersions []string, objects []
 	return nil, nil, fmt.Errorf("no supported conversion review versions")
 }
 
+// getRawExtensionObject 从 RawExtension 中取出对象，Raw 字段则按 unstructured 解析。
 func getRawExtensionObject(rx runtime.RawExtension) (runtime.Object, error) {
 	if rx.Object != nil {
 		return rx.Object, nil
@@ -180,13 +185,13 @@ func getRawExtensionObject(rx runtime.RawExtension) (runtime.Object, error) {
 	return &u, nil
 }
 
-// getConvertedObjectsFromResponse validates the response, and returns the converted objects.
-// if the response is malformed, an error is returned instead.
-// if the response does not indicate success, the error message is returned instead.
+// getConvertedObjectsFromResponse 校验响应并返回转换后的对象。
+// 若响应格式错误，则返回错误。
+// 若响应未表示成功，则返回其中的错误信息。
 func getConvertedObjectsFromResponse(expectedUID types.UID, response runtime.Object) (convertedObjects []runtime.RawExtension, err error) {
 	switch response := response.(type) {
 	case *v1.ConversionReview:
-		// Verify GVK to make sure we decoded what we intended to
+		// 校验 GVK，确认解码出的确实是我们期望的类型
 		v1GVK := v1.SchemeGroupVersion.WithKind("ConversionReview")
 		if response.GroupVersionKind() != v1GVK {
 			return nil, fmt.Errorf("expected webhook response of %v, got %v", v1GVK.String(), response.GroupVersionKind().String())
@@ -196,13 +201,13 @@ func getConvertedObjectsFromResponse(expectedUID types.UID, response runtime.Obj
 			return nil, fmt.Errorf("no response provided")
 		}
 
-		// Verify UID to make sure this response was actually meant for the request we sent
+		// 校验 UID，确认该响应确实是针对我们发送的请求
 		if response.Response.UID != expectedUID {
 			return nil, fmt.Errorf("expected response.uid=%q, got %q", expectedUID, response.Response.UID)
 		}
 
 		if response.Response.Result.Status != metav1.StatusSuccess {
-			// TODO: Return a webhook specific error to be able to convert it to meta.Status
+			// TODO: 返回 webhook 专用错误，以便转换为 meta.Status
 			if len(response.Response.Result.Message) > 0 {
 				return nil, errors.New(response.Response.Result.Message)
 			}
@@ -212,14 +217,14 @@ func getConvertedObjectsFromResponse(expectedUID types.UID, response runtime.Obj
 		return response.Response.ConvertedObjects, nil
 
 	case *v1beta1.ConversionReview:
-		// v1beta1 processing did not verify GVK or UID, so skip those for compatibility
+		// v1beta1 的处理不校验 GVK 和 UID，为保持兼容性此处跳过
 
 		if response.Response == nil {
 			return nil, fmt.Errorf("no response provided")
 		}
 
 		if response.Response.Result.Status != metav1.StatusSuccess {
-			// TODO: Return a webhook specific error to be able to convert it to meta.Status
+			// TODO: 返回 webhook 专用错误，以便转换为 meta.Status
 			if len(response.Response.Result.Message) > 0 {
 				return nil, errors.New(response.Response.Result.Message)
 			}
@@ -233,12 +238,13 @@ func getConvertedObjectsFromResponse(expectedUID types.UID, response runtime.Obj
 	}
 }
 
+// Convert 调用外部 webhook 将对象转换到目标版本。
 func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) (runtime.Object, error) {
 	ctx := context.TODO()
-	// In general, the webhook should not do any defaulting or validation. A special case of that is an empty object
-	// conversion that must result an empty object and practically is the same as nopConverter.
-	// A smoke test in API machinery calls the converter on empty objects. As this case happens consistently
-	// it special cased here not to call webhook converter. The test initiated here:
+	// 一般而言，webhook 不应做任何默认化或校验。一个特例是空对象转换，
+	// 它必须返回空对象，实际上等同 nopConverter。
+	// API machinery 中的冒烟测试会用空对象调用转换器。由于该情形总是出现，
+	// 这里特判为不调用 webhook 转换器。该测试见：
 	// https://github.com/kubernetes/kubernetes/blob/dbb448bbdcb9e440eee57024ffa5f1698956a054/staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go#L201
 	if isEmptyUnstructuredObject(in) {
 		return c.nopConverter.Convert(in, toGV)
@@ -257,12 +263,12 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 	objCount := len(objectsToConvert)
 	if objCount == 0 {
 		Metrics.ObserveConversionWebhookSuccess(ctx, time.Since(t))
-		// no objects needed conversion
+		// 没有需要转换的对象
 		if !isList {
-			// for a single item, return as-is
+			// 单个对象直接原样返回
 			return in, nil
 		}
-		// for a list, set the version of the top-level list object (all individual objects are already in the correct version)
+		// 列表则只需设置顶层列表对象的版本（各个对象已处于正确版本）
 		out := listObj.DeepCopy()
 		out.SetAPIVersion(toGV.String())
 		return out, nil
@@ -273,15 +279,15 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 		attribute.String("desired-api-version", desiredAPIVersion),
 		attribute.Int("object-count", objCount),
 		attribute.String("UID", string(requestUID)))
-	// Only log conversion webhook traces that exceed a 8ms per object limit plus a 50ms request overhead allowance.
-	// The per object limit uses the SLO for conversion webhooks (~4ms per object) plus time to serialize/deserialize
-	// the conversion request on the apiserver side (~4ms per object).
+	// 只记录超过每对象 8ms 限制加 50ms 请求开销允许值的转换 webhook trace。
+	// 每对象限制采用转换 webhook 的 SLO（约 4ms/对象），加上 apiserver 侧
+	// 序列化/反序列化转换请求的时间（约 4ms/对象）。
 	defer span.End(time.Duration(50+8*objCount) * time.Millisecond)
 
-	// TODO: Figure out if adding one second timeout make sense here.
+	// TODO: 考虑在此处加一秒超时是否合理。
 	r := c.restClient.Post().Body(request).Do(ctx)
 	if err := r.Into(response); err != nil {
-		// TODO: Return a webhook specific error to be able to convert it to meta.Status
+		// TODO: 返回 webhook 专用错误，以便转换为 meta.Status
 		Metrics.ObserveConversionWebhookFailure(ctx, time.Since(t), ConversionWebhookCallFailure)
 		return nil, fmt.Errorf("conversion webhook for %v failed: %v", in.GetObjectKind().GroupVersionKind(), err)
 	}
@@ -299,15 +305,15 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 	}
 
 	if isList {
-		// start a deepcopy of the input and fill in the converted objects from the response at the right spots.
-		// The response list might be sparse because objects had the right version already.
+		// 对输入做深拷贝，并把响应中的转换结果填到对应位置。
+		// 响应列表可能是不完整的，因为部分对象本来就已是目标版本。
 		convertedList := listObj.DeepCopy()
 		convertedIndex := 0
 		for i := range convertedList.Items {
 			original := &convertedList.Items[i]
 			if original.GetAPIVersion() == toGV.String() {
-				// This item has not been sent for conversion, and therefore does not show up in the response.
-				// convertedList has the right item already.
+				// 该项未发送去转换，因此不会出现在响应中。
+				// convertedList 中已经是正确的对象。
 				continue
 			}
 			converted, err := getRawExtensionObject(convertedObjects[convertedIndex])
@@ -325,7 +331,7 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 			}
 			unstructConverted, ok := converted.(*unstructured.Unstructured)
 			if !ok {
-				// this should not happened
+				// 这不应该发生
 				Metrics.ObserveConversionWebhookFailure(ctx, time.Since(t), ConversionWebhookInvalidConvertedObjectFailure)
 				return nil, fmt.Errorf("conversion webhook for %v returned invalid converted object at index %v: invalid type, expected=Unstructured, got=%T", in.GetObjectKind().GroupVersionKind(), convertedIndex, converted)
 			}
@@ -346,7 +352,7 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 	}
 
 	if len(convertedObjects) != 1 {
-		// This should not happened
+		// 这不应该发生
 		Metrics.ObserveConversionWebhookFailure(ctx, time.Since(t), ConversionWebhookNoObjectsReturnedFailure)
 		return nil, fmt.Errorf("conversion webhook for %v failed, no objects returned", in.GetObjectKind())
 	}
@@ -365,13 +371,13 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 	}
 	unstructConverted, ok := converted.(*unstructured.Unstructured)
 	if !ok {
-		// this should not happened
+		// 这不应该发生
 		Metrics.ObserveConversionWebhookFailure(ctx, time.Since(t), ConversionWebhookInvalidConvertedObjectFailure)
 		return nil, fmt.Errorf("conversion webhook for %v failed, unexpected type %T at index 0", in.GetObjectKind().GroupVersionKind(), converted)
 	}
 	unstructIn, ok := in.(*unstructured.Unstructured)
 	if !ok {
-		// this should not happened
+		// 这不应该发生
 		Metrics.ObserveConversionWebhookFailure(ctx, time.Since(t), ConversionWebhookInvalidConvertedObjectFailure)
 		return nil, fmt.Errorf("conversion webhook for %v failed unexpected input type %T", in.GetObjectKind().GroupVersionKind(), in)
 	}
@@ -387,8 +393,7 @@ func (c *webhookConverter) Convert(in runtime.Object, toGV schema.GroupVersion) 
 	return converted, nil
 }
 
-// validateConvertedObject checks that ObjectMeta fields match, with the exception of
-// labels and annotations.
+// validateConvertedObject 校验 ObjectMeta 字段一致，但 labels 和 annotations 除外。
 func validateConvertedObject(in, out *unstructured.Unstructured) error {
 	if e, a := in.GetKind(), out.GetKind(); e != a {
 		return fmt.Errorf("must have the same kind: %v != %v", e, a)
@@ -405,7 +410,7 @@ func validateConvertedObject(in, out *unstructured.Unstructured) error {
 	return nil
 }
 
-// restoreObjectMeta deep-copies metadata from original into converted, while preserving labels and annotations from converted.
+// restoreObjectMeta 将原始对象的 metadata 深拷贝到转换结果中，同时保留转换结果中的 labels 和 annotations。
 func restoreObjectMeta(original, converted *unstructured.Unstructured) error {
 	obj, found := converted.Object["metadata"]
 	if !found {
@@ -417,8 +422,8 @@ func restoreObjectMeta(original, converted *unstructured.Unstructured) error {
 	}
 
 	if _, ok := original.Object["metadata"]; !ok {
-		// the original will always have metadata. But just to be safe, let's clear in converted
-		// with an empty object instead of nil, to be able to add labels and annotations below.
+		// 原始对象总会有 metadata。但为稳妥起见，这里用空对象而非 nil 清空转换结果中的 metadata，
+		// 以便下面添加 labels 和 annotations。
 		converted.Object["metadata"] = map[string]interface{}{}
 	} else {
 		converted.Object["metadata"] = runtime.DeepCopyJSONValue(original.Object["metadata"])
@@ -478,8 +483,8 @@ func restoreObjectMeta(original, converted *unstructured.Unstructured) error {
 	return nil
 }
 
-// isEmptyUnstructuredObject returns true if in is an empty unstructured object, i.e. an unstructured object that does
-// not have any field except apiVersion and kind.
+// isEmptyUnstructuredObject 判断 in 是否为空 unstructured 对象，
+// 即除 apiVersion 和 kind 外不含任何字段。
 func isEmptyUnstructuredObject(in runtime.Object) bool {
 	u, ok := in.(*unstructured.Unstructured)
 	if !ok {

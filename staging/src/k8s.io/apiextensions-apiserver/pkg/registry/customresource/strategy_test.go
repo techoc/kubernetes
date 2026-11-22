@@ -31,18 +31,23 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
+// generation1 返回仅含 generation=1 的 metadata 片段，供测试用例复用。
 func generation1() map[string]interface{} {
 	return map[string]interface{}{
 		"generation": int64(1),
 	}
 }
 
+// generation2 返回仅含 generation=2 的 metadata 片段，表示期望递增后的状态。
 func generation2() map[string]interface{} {
 	return map[string]interface{}{
 		"generation": int64(2),
 	}
 }
 
+// TestStrategyPrepareForUpdate 验证 PrepareForUpdate 对 generation 的递增规则：
+// 启用 /status 子资源时只有 spec 变化才递增；未启用时除 metadata 外的顶层变化都会递增，
+// 且 status 不会经由主资源更新被修改。
 func TestStrategyPrepareForUpdate(t *testing.T) {
 	strategy := customResourceStrategy{}
 	tcs := []struct {
@@ -250,6 +255,7 @@ func TestStrategyPrepareForUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
+		// 每个用例按需切换 /status 子资源，策略会在 PrepareForUpdate 中读取它。
 		if tc.statusEnabled {
 			strategy.status = &apiextensions.CustomResourceSubresourceStatus{}
 		} else {
@@ -262,6 +268,8 @@ func TestStrategyPrepareForUpdate(t *testing.T) {
 	}
 }
 
+// TestSelectableFields 验证 GetAttrs 按 selectableFields 提取字段；
+// 路径缺失时字段值为空串，且 metadata.name 始终可选。
 func TestSelectableFields(t *testing.T) {
 	tcs := []struct {
 		name             string
@@ -308,6 +316,7 @@ func TestSelectableFields(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
+		// 该特性从 1.31 起可用，需先模拟对应版本，再开启 feature gate。
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.31"))
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CustomResourceFieldSelectors, true)
 		t.Run(tc.name, func(t *testing.T) {

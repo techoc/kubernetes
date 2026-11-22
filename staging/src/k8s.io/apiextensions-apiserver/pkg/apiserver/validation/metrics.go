@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validation 实现 CRD 自定义资源的结构化与 OpenAPI schema 校验。
 package validation
 
 import (
@@ -29,11 +30,13 @@ const (
 	subsystem = "validation"
 )
 
-// Interface to stub for tests
+// ValidationMetrics 抽象校验相关指标，便于测试中打桩替换。
 type ValidationMetrics interface {
+	// ObserveRatchetingTime 记录一次棘轮校验（ratcheting）耗时。
 	ObserveRatchetingTime(d time.Duration)
 }
 
+// Metrics 是供 handler 链使用的全局校验指标实现。
 var Metrics ValidationMetrics = &validationMetrics{
 	RatchetingTime: metrics.NewHistogram(&metrics.HistogramOpts{
 		Namespace:      namespace,
@@ -41,16 +44,16 @@ var Metrics ValidationMetrics = &validationMetrics{
 		Name:           "ratcheting_seconds",
 		Help:           "Time for comparison of old to new for the purposes of CRDValidationRatcheting during an UPDATE in seconds.",
 		StabilityLevel: metrics.ALPHA,
-		// Start 0.01ms with the last bucket being [~2.5s, +Inf)
+		// 从 0.01ms 开始，最后一个桶为 [~2.5s, +Inf)
 		Buckets: metrics.ExponentialBuckets(0.00001, 4, 10),
 	}),
 }
 
 var registerMetricsOnce sync.Once
 
-// RegisterMetrics registers the validation metrics with the legacy registry. It is invoked when the validation
-// metrics are installed into the handler chain (rather than from an init() function), so that metric feature gates
-// such as NativeHistograms have been applied before these histogram metrics are created.
+// RegisterMetrics 将校验指标注册到 legacy registry。
+// 它由 handler 链安装校验指标时调用，而非在 init() 中调用，
+// 以确保 NativeHistograms 等指标 feature gate 在这些直方图创建前已经生效。
 func RegisterMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(Metrics.(*validationMetrics).RatchetingTime)
@@ -61,13 +64,13 @@ type validationMetrics struct {
 	RatchetingTime *metrics.Histogram
 }
 
-// ObserveRatchetingTime records the time spent on ratcheting
+// ObserveRatchetingTime 记录棘轮校验所花费的时间。
 func (m *validationMetrics) ObserveRatchetingTime(d time.Duration) {
 	m.RatchetingTime.Observe(d.Seconds())
 }
 
-// Reset resets the metrics. This is meant to be used for testing. Panics
-// if the metrics cannot be re-registered. Returns all the reset metrics
+// Reset 重置指标，仅供测试使用。若指标无法重新注册则 panic。
+// 返回所有被重置的指标。
 func (m *validationMetrics) Reset() []metrics.Registerable {
 	m.RatchetingTime = metrics.NewHistogram(m.RatchetingTime.HistogramOpts)
 	return []metrics.Registerable{m.RatchetingTime}

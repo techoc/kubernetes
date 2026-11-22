@@ -27,7 +27,7 @@ import (
 	kjson "sigs.k8s.io/json"
 )
 
-// GetObjectMeta calls GetObjectMetaWithOptions without returning unknown field paths.
+// GetObjectMeta 调用 GetObjectMetaWithOptions，但不返回未知字段路径。
 func GetObjectMeta(obj map[string]interface{}, dropMalformedFields bool) (*metav1.ObjectMeta, bool, error) {
 	meta, found, _, err := GetObjectMetaWithOptions(obj, ObjectMetaOptions{
 		DropMalformedFields: dropMalformedFields,
@@ -35,35 +35,32 @@ func GetObjectMeta(obj map[string]interface{}, dropMalformedFields bool) (*metav
 	return meta, found, err
 }
 
-// ObjectMetaOptions provides the options for how GetObjectMeta should retrieve the object meta.
+// ObjectMetaOptions 控制 GetObjectMeta 如何提取对象元数据。
 type ObjectMetaOptions struct {
-	// DropMalformedFields discards malformed serialized metadata fields that
-	// cannot be successfully decoded to the corresponding ObjectMeta field.
-	// This only applies to fields that are recognized as part of the schema,
-	// but of an invalid type (i.e. cause an error when unmarshaling, rather
-	// than being dropped or causing a strictErr).
+	// DropMalformedFields 丢弃无法成功解码到对应 ObjectMeta 字段的畸形元数据。
+	// 仅适用于 schema 中已识别、但类型非法的字段（即反序列化会报错，
+	// 而不是被丢弃或触发 strictErr 的字段）。
 	DropMalformedFields bool
-	// ReturnUnknownFieldPaths will return the paths to fields that are not
-	// recognized as part of the schema.
+	// ReturnUnknownFieldPaths 返回 schema 未识别字段的路径。
 	ReturnUnknownFieldPaths bool
-	// ParentPath provides the current path up to the given ObjectMeta.
-	// If nil, the metadata is assumed to be at the root of the object.
+	// ParentPath 提供到当前 ObjectMeta 为止的路径。
+	// 为 nil 时假定元数据位于对象根节点。
 	ParentPath *field.Path
 }
 
-// GetObjectMetaWithOptions  does conversion of JSON to ObjectMeta.
-// It first tries json.Unmarshal into a metav1.ObjectMeta
-// type. If that does not work and opts.DropMalformedFields is true, it does field-by-field best-effort conversion
-// throwing away fields which lead to errors.
-// If opts.ReturnedUnknownFields is true, it will UnmarshalStrict instead, returning the paths of any unknown fields
-// it encounters (i.e. paths returned as strict errs from UnmarshalStrict)
+// GetObjectMetaWithOptions 把 JSON 转成 ObjectMeta。
+// 先尝试用 json.Unmarshal 解码为 metav1.ObjectMeta 类型；
+// 失败且 opts.DropMalformedFields 为 true 时，退化为逐字段尽力转换，
+// 丢弃导致错误的字段。
+// 若 opts.ReturnedUnknownFields 为 true，则改用 UnmarshalStrict，
+// 并返回遇到的未知字段路径（即 UnmarshalStrict 返回的 strict err 路径）。
 func GetObjectMetaWithOptions(obj map[string]interface{}, opts ObjectMetaOptions) (*metav1.ObjectMeta, bool, []string, error) {
 	metadata, found := obj["metadata"]
 	if !found {
 		return nil, false, nil, nil
 	}
 
-	// round-trip through JSON first, hoping that unmarshalling just works
+	// 先走一遍 JSON 往返，期待反序列化直接成功。
 	objectMeta := &metav1.ObjectMeta{}
 	metadataBytes, err := utiljson.Marshal(metadata)
 	if err != nil {
@@ -88,12 +85,12 @@ func GetObjectMetaWithOptions(obj map[string]interface{}, opts ObjectMetaOptions
 		}
 	} else {
 		if unmarshalErr = utiljson.Unmarshal(metadataBytes, objectMeta); unmarshalErr == nil {
-			// if successful, return
+			// 成功则直接返回
 			return objectMeta, true, nil, nil
 		}
 	}
 	if !opts.DropMalformedFields {
-		// if we're not trying to drop malformed fields, return the error
+		// 不丢弃畸形字段时，直接把错误抛出去
 		return nil, true, nil, unmarshalErr
 	}
 
@@ -102,18 +99,18 @@ func GetObjectMetaWithOptions(obj map[string]interface{}, opts ObjectMetaOptions
 		return nil, false, nil, fmt.Errorf("invalid metadata: expected object, got %T", metadata)
 	}
 
-	// Go field by field accumulating into the metadata object.
-	// This takes advantage of the fact that you can repeatedly unmarshal individual fields into a single struct,
-	// each iteration preserving the old key-values.
+	// 逐字段累积到 metadata 对象中。
+	// 这利用了这样一个事实：可以把单个字段反复反序列化进同一个结构体，
+	// 每次迭代都会保留已有的键值。
 	accumulatedObjectMeta := &metav1.ObjectMeta{}
 	testObjectMeta := &metav1.ObjectMeta{}
 	var unknownFields []string
 	for k, v := range metadataMap {
-		// serialize a single field
+		// 序列化单个字段
 		if singleFieldBytes, err := utiljson.Marshal(map[string]interface{}{k: v}); err == nil {
-			// do a test unmarshal
+			// 先试一次反序列化
 			if utiljson.Unmarshal(singleFieldBytes, testObjectMeta) == nil {
-				// if that succeeds, unmarshal for real
+				// 成功才真正写入
 				if opts.ReturnUnknownFieldPaths {
 					strictErrs, _ := kjson.UnmarshalStrict(singleFieldBytes, accumulatedObjectMeta)
 					if len(strictErrs) > 0 {
@@ -134,9 +131,10 @@ func GetObjectMetaWithOptions(obj map[string]interface{}, opts ObjectMetaOptions
 	return accumulatedObjectMeta, true, unknownFields, nil
 }
 
-// SetObjectMeta writes back ObjectMeta into a JSON data structure.
+// SetObjectMeta 把 ObjectMeta 写回 JSON 数据结构。
 func SetObjectMeta(obj map[string]interface{}, objectMeta *metav1.ObjectMeta) error {
 	if objectMeta == nil {
+		// nil 元数据等价于删除 metadata 字段。
 		unstructured.RemoveNestedField(obj, "metadata")
 		return nil
 	}

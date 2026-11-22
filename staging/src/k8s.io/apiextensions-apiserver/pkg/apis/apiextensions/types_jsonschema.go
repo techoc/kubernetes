@@ -16,27 +16,26 @@ limitations under the License.
 
 package apiextensions
 
-// FieldValueErrorReason is a machine-readable value providing more detail about why a field failed the validation.
+// FieldValueErrorReason 是机器可读的值，用于说明字段未通过校验的具体原因。
 // +enum
 type FieldValueErrorReason string
 
 const (
-	// FieldValueRequired is used to report required values that are not
-	// provided (e.g. empty strings, null values, or empty arrays).
+	// FieldValueRequired 用于上报必填值缺失的情形
+	// （例如空字符串、null 值或空数组）。
 	FieldValueRequired FieldValueErrorReason = "FieldValueRequired"
-	// FieldValueDuplicate is used to report collisions of values that must be
-	// unique (e.g. unique IDs).
+	// FieldValueDuplicate 用于上报本应唯一但发生冲突的值
+	// （例如唯一 ID 重复）。
 	FieldValueDuplicate FieldValueErrorReason = "FieldValueDuplicate"
-	// FieldValueInvalid is used to report malformed values (e.g. failed regex
-	// match, too long, out of bounds).
+	// FieldValueInvalid 用于上报格式不正确的值
+	// （例如正则不匹配、过长、越界）。
 	FieldValueInvalid FieldValueErrorReason = "FieldValueInvalid"
-	// FieldValueForbidden is used to report valid (as per formatting rules)
-	// values which would be accepted under some conditions, but which are not
-	// permitted by the current conditions (such as security policy).
+	// FieldValueForbidden 用于上报格式正确、在某些条件下可接受，
+	// 但被当前条件（如安全策略）禁止的值。
 	FieldValueForbidden FieldValueErrorReason = "FieldValueForbidden"
 )
 
-// JSONSchemaProps is a JSON-Schema following Specification Draft 4 (http://json-schema.org/).
+// JSONSchemaProps 是遵循 JSON Schema Draft 4 规范（http://json-schema.org/）的 schema。
 type JSONSchemaProps struct {
 	ID                   string
 	Schema               JSONSchemaURL
@@ -76,26 +75,21 @@ type JSONSchemaProps struct {
 	ExternalDocs         *ExternalDocumentation
 	Example              *JSON
 
-	// x-kubernetes-preserve-unknown-fields stops the API server
-	// decoding step from pruning fields which are not specified
-	// in the validation schema. This affects fields recursively,
-	// but switches back to normal pruning behaviour if nested
-	// properties or additionalProperties are specified in the schema.
-	// This can either be true or undefined. False is forbidden.
+	// x-kubernetes-preserve-unknown-fields 阻止 API server
+	// 在解码阶段剪除校验 schema 中未声明的字段。该设置会递归生效，
+	// 但若 schema 中嵌套声明了 properties 或 additionalProperties，
+	// 则回到正常的剪枝行为。只能为 true 或不设置；false 不被允许。
 	XPreserveUnknownFields *bool
 
-	// x-kubernetes-embedded-resource defines that the value is an
-	// embedded Kubernetes runtime.Object, with TypeMeta and
-	// ObjectMeta. The type must be object. It is allowed to further
-	// restrict the embedded object. Both ObjectMeta and TypeMeta
-	// are validated automatically. x-kubernetes-preserve-unknown-fields
-	// must be true.
+	// x-kubernetes-embedded-resource 表示该值是内嵌的 Kubernetes
+	// runtime.Object，带有 TypeMeta 与 ObjectMeta。类型必须为 object，
+	// 允许对内嵌对象进一步限制。ObjectMeta 与 TypeMeta 会被自动校验。
+	// 此时 x-kubernetes-preserve-unknown-fields 必须为 true。
 	XEmbeddedResource bool
 
-	// x-kubernetes-int-or-string specifies that this value is
-	// either an integer or a string. If this is true, an empty
-	// type is allowed and type as child of anyOf is permitted
-	// if following one of the following patterns:
+	// x-kubernetes-int-or-string 表示该值可以是整数或字符串。
+	// 为 true 时允许类型为空，并且当满足以下任一模式时，
+	// 允许在 anyOf 下使用 type：
 	//
 	// 1) anyOf:
 	//    - type: integer
@@ -104,46 +98,41 @@ type JSONSchemaProps struct {
 	//    - anyOf:
 	//      - type: integer
 	//      - type: string
-	//    - ... zero or more
+	//    - ... 零个或多个
 	XIntOrString bool
 
-	// x-kubernetes-list-map-keys annotates an array with the x-kubernetes-list-type `map` by specifying the keys used
-	// as the index of the map.
+	// x-kubernetes-list-map-keys 为 x-kubernetes-list-type 为 `map` 的数组
+	// 标注用作 map 索引的键。
 	//
-	// This tag MUST only be used on lists that have the "x-kubernetes-list-type"
-	// extension set to "map". Also, the values specified for this attribute must
-	// be a scalar typed field of the child structure (no nesting is supported).
+	// 该标记只能用于 x-kubernetes-list-type 扩展为 "map" 的列表；
+	// 且所指定的值必须是子结构中的标量类型字段（不支持嵌套）。
 	XListMapKeys []string
 
-	// x-kubernetes-list-type annotates an array to further describe its topology.
-	// This extension must only be used on lists and may have 3 possible values:
+	// x-kubernetes-list-type 为数组标注更细的拓扑结构。
+	// 该扩展只能用于列表，可取 3 个值：
 	//
-	// 1) `atomic`: the list is treated as a single entity, like a scalar.
-	//      Atomic lists will be entirely replaced when updated. This extension
-	//      may be used on any type of list (struct, scalar, ...).
-	// 2) `set`:
-	//      Sets are lists that must not have multiple items with the same value. Each
-	//      value must be a scalar, an object with x-kubernetes-map-type `atomic` or an
-	//      array with x-kubernetes-list-type `atomic`.
-	// 3) `map`:
-	//      These lists are like maps in that their elements have a non-index key
-	//      used to identify them. Order is preserved upon merge. The map tag
-	//      must only be used on a list with elements of type object.
+	// 1) `atomic`：列表被当作单个实体，类似标量。
+	//      原子列表在更新时会被整体替换。可用于任意类型的列表（结构体、标量等）。
+	// 2) `set`：
+	//      set 是任意两个元素值都不得重复的列表。每个值必须是标量、
+	//      带 x-kubernetes-map-type `atomic` 的对象，或带 x-kubernetes-list-type `atomic` 的数组。
+	// 3) `map`：
+	//      这类列表类似 map，元素带有用于标识自身的非索引键。
+	//      合并时保持顺序。map 标记只能用于元素类型为 object 的列表。
 	XListType *string
 
-	// x-kubernetes-map-type annotates an object to further describe its topology.
-	// This extension must only be used when type is object and may have 2 possible values:
+	// x-kubernetes-map-type 为对象标注更细的拓扑结构。
+	// 该扩展只能用于 type 为 object 时，可取 2 个值：
 	//
-	// 1) `granular`:
-	//      These maps are actual maps (key-value pairs) and each fields are independent
-	//      from each other (they can each be manipulated by separate actors). This is
-	//      the default behaviour for all maps.
-	// 2) `atomic`: the list is treated as a single entity, like a scalar.
-	//      Atomic maps will be entirely replaced when updated.
+	// 1) `granular`：
+	//      这类 map 是真正的 map（键值对），各字段相互独立
+	//      （可由不同主体分别操作）。这是所有 map 的默认行为。
+	// 2) `atomic`：列表被当作单个实体，类似标量。
+	//      原子 map 在更新时会被整体替换。
 	// +optional
 	XMapType *string
 
-	// x-kubernetes-validations -kubernetes-validations describes a list of validation rules written in the CEL expression language.
+	// x-kubernetes-validations -kubernetes-validations 描述一组用 CEL 表达式语言编写的校验规则。
 	// +patchMergeKey=rule
 	// +patchStrategy=merge
 	// +listType=map
@@ -151,167 +140,165 @@ type JSONSchemaProps struct {
 	XValidations ValidationRules
 }
 
-// ValidationRules describes a list of validation rules written in the CEL expression language.
+// ValidationRules 描述一组用 CEL 表达式语言编写的校验规则。
 type ValidationRules []ValidationRule
 
-// ValidationRule describes a validation rule written in the CEL expression language.
+// ValidationRule 描述一条用 CEL 表达式语言编写的校验规则。
 type ValidationRule struct {
-	// Rule represents the expression which will be evaluated by CEL.
+	// Rule 表示由 CEL 求值的表达式。
 	// ref: https://github.com/google/cel-spec
-	// The Rule is scoped to the location of the x-kubernetes-validations extension in the schema.
-	// The `self` variable in the CEL expression is bound to the scoped value.
-	// Example:
-	// - Rule scoped to the root of a resource with a status subresource: {"rule": "self.status.actual <= self.spec.maxDesired"}
+	// Rule 的作用域为 schema 中 x-kubernetes-validations 扩展所在的位置，
+	// CEL 表达式中的 `self` 变量绑定到该作用域的值。
+	// 示例：
+	// - 规则作用于带 status 子资源的资源根：{"rule": "self.status.actual <= self.spec.maxDesired"}
 	//
-	// If the Rule is scoped to an object with properties, the accessible properties of the object are field selectable
-	// via `self.field` and field presence can be checked via `has(self.field)`. Null valued fields are treated as
-	// absent fields in CEL expressions.
-	// If the Rule is scoped to an object with additionalProperties (i.e. a map) the value of the map
-	// are accessible via `self[mapKey]`, map containment can be checked via `mapKey in self` and all entries of the map
-	// are accessible via CEL macros and functions such as `self.all(...)`.
-	// If the Rule is scoped to an array, the elements of the array are accessible via `self[i]` and also by macros and
-	// functions.
-	// If the Rule is scoped to a scalar, `self` is bound to the scalar value.
-	// Examples:
-	// - Rule scoped to a map of objects: {"rule": "self.components['Widget'].priority < 10"}
-	// - Rule scoped to a list of integers: {"rule": "self.values.all(value, value >= 0 && value < 100)"}
-	// - Rule scoped to a string value: {"rule": "self.startsWith('kube')"}
+	// 若规则作用于带 properties 的对象，可通过 `self.field` 访问字段，
+	// 并通过 `has(self.field)` 检查字段是否存在。在 CEL 表达式中，
+	// 值为 null 的字段视为不存在。
+	// 若规则作用于带 additionalProperties（即 map）的对象，可通过 `self[mapKey]`
+	// 访问 map 的值，通过 `mapKey in self` 检查包含关系，并可借助
+	// `self.all(...)` 等 CEL 宏与函数访问所有条目。
+	// 若规则作用于数组，可通过 `self[i]` 以及宏和函数访问数组元素。
+	// 若规则作用于标量，`self` 绑定到该标量值。
+	// 示例：
+	// - 规则作用于对象 map：{"rule": "self.components['Widget'].priority < 10"}
+	// - 规则作用于整数列表：{"rule": "self.values.all(value, value >= 0 && value < 100)"}
+	// - 规则作用于字符串：{"rule": "self.startsWith('kube')"}
 	//
-	// The `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the
-	// object and from any x-kubernetes-embedded-resource annotated objects. No other metadata properties are accessible.
+	// `apiVersion`、`kind`、`metadata.name` 与 `metadata.generateName` 始终可从
+	// 对象根以及任何带 x-kubernetes-embedded-resource 标注的对象访问，其他
+	// metadata 属性不可访问。
 	//
-	// Unknown data preserved in custom resources via x-kubernetes-preserve-unknown-fields is not accessible in CEL
-	// expressions. This includes:
-	// - Unknown field values that are preserved by object schemas with x-kubernetes-preserve-unknown-fields.
-	// - Object properties where the property schema is of an "unknown type". An "unknown type" is recursively defined as:
-	//   - A schema with no type and x-kubernetes-preserve-unknown-fields set to true
-	//   - An array where the items schema is of an "unknown type"
-	//   - An object where the additionalProperties schema is of an "unknown type"
+	// 通过 x-kubernetes-preserve-unknown-fields 保留在自定义资源中的未知数据
+	// 在 CEL 表达式中不可访问，包括：
+	// - 由带 x-kubernetes-preserve-unknown-fields 的对象 schema 保留的未知字段值。
+	// - 属性 schema 为“未知类型”的对象属性。“未知类型”递归定义如下：
+	//   - 无 type 且 x-kubernetes-preserve-unknown-fields 为 true 的 schema
+	//   - items schema 为“未知类型”的数组
+	//   - additionalProperties schema 为“未知类型”的对象
 	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Accessible property names are escaped according to the following rules when accessed in the expression:
-	// - '__' escapes to '__underscores__'
-	// - '.' escapes to '__dot__'
-	// - '-' escapes to '__dash__'
-	// - '/' escapes to '__slash__'
-	// - Property names that exactly match a CEL RESERVED keyword escape to '__{keyword}__'. The keywords are:
+	// 仅形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名可访问。
+	// 在表达式中访问时，可访问的属性名按以下规则转义：
+	// - '__' 转义为 '__underscores__'
+	// - '.' 转义为 '__dot__'
+	// - '-' 转义为 '__dash__'
+	// - '/' 转义为 '__slash__'
+	// - 与 CEL 保留关键字完全同名的属性名转义为 '__{keyword}__'。关键字包括：
 	//	  "true", "false", "null", "in", "as", "break", "const", "continue", "else", "for", "function", "if",
 	//	  "import", "let", "loop", "package", "namespace", "return".
-	// Examples:
-	//   - Rule accessing a property named "namespace": {"rule": "self.__namespace__ > 0"}
-	//   - Rule accessing a property named "x-prop": {"rule": "self.x__dash__prop > 0"}
-	//   - Rule accessing a property named "redact__d": {"rule": "self.redact__underscores__d > 0"}
+	// 示例：
+	//   - 访问名为 "namespace" 的属性：{"rule": "self.__namespace__ > 0"}
+	//   - 访问名为 "x-prop" 的属性：{"rule": "self.x__dash__prop > 0"}
+	//   - 访问名为 "redact__d" 的属性：{"rule": "self.redact__underscores__d > 0"}
 	//
-	// Equality on arrays with x-kubernetes-list-type of 'set' or 'map' ignores element order, i.e. [1, 2] == [2, 1].
-	// Concatenation on arrays with x-kubernetes-list-type use the semantics of the list type:
-	//   - 'set': `X + Y` performs a union where the array positions of all elements in `X` are preserved and
-	//     non-intersecting elements in `Y` are appended, retaining their partial order.
-	//   - 'map': `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values
-	//     are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with
-	//     non-intersecting keys are appended, retaining their partial order.
+	// 对 x-kubernetes-list-type 为 'set' 或 'map' 的数组做相等比较时忽略元素顺序，
+	// 即 [1, 2] == [2, 1]。
+	// 对带 x-kubernetes-list-type 的数组做拼接时遵循列表类型语义：
+	//   - 'set'：`X + Y` 执行并集，保留 `X` 中所有元素的数组位置，
+	//     并将 `Y` 中不相交的元素按原有相对顺序追加。
+	//   - 'map'：`X + Y` 执行合并，保留 `X` 中所有键的数组位置，
+	//     但当 `X` 与 `Y` 的键集合相交时，值以 `Y` 为准覆盖。`Y` 中
+	//     键不相交的元素按原有相对顺序追加。
 	//
-	// If `rule` makes use of the `oldSelf` variable it is implicitly a
-	// `transition rule`.
+	// 若 `rule` 使用了 `oldSelf` 变量，则它隐式成为一条
+	// `transition rule`（转换规则）。
 	//
-	// By default, the `oldSelf` variable is the same type as `self`.
-	// When `optionalOldSelf` is true, the `oldSelf` variable is a CEL optional
-	//  variable whose value() is the same type as `self`.
-	// See the documentation for the `optionalOldSelf` field for details.
+	// 默认情况下 `oldSelf` 与 `self` 类型相同。
+	// 当 `optionalOldSelf` 为 true 时，`oldSelf` 是 CEL optional
+	//  变量，其 value() 与 `self` 类型相同。
+	// 详见 `optionalOldSelf` 字段的文档。
 	//
-	// Transition rules by default are applied only on UPDATE requests and are
-	// skipped if an old value could not be found. You can opt a transition
-	// rule into unconditional evaluation by setting `optionalOldSelf` to true.
+	// 转换规则默认仅作用于 UPDATE 请求，且在找不到旧值时跳过。
+	// 可通过将 `optionalOldSelf` 设为 true，使转换规则无条件求值。
 	//
 	Rule string
-	// Message represents the message displayed when validation fails. The message is required if the Rule contains
-	// line breaks. The message must not contain line breaks.
-	// If unset, the message is "failed rule: {Rule}".
-	// e.g. "must be a URL with the host matching spec.host"
+	// Message 表示校验失败时展示的消息。若 Rule 含换行则 Message 必填。
+	// Message 本身不得包含换行。
+	// 未设置时消息为 "failed rule: {Rule}"。
+	// 例如 "must be a URL with the host matching spec.host"
 	Message string
-	// MessageExpression declares a CEL expression that evaluates to the validation failure message that is returned when this rule fails.
-	// Since messageExpression is used as a failure message, it must evaluate to a string.
-	// If both message and messageExpression are present on a rule, then messageExpression will be used if validation
-	// fails. If messageExpression results in a runtime error, the runtime error is logged, and the validation failure message is produced
-	// as if the messageExpression field were unset. If messageExpression evaluates to an empty string, a string with only spaces, or a string
-	// that contains line breaks, then the validation failure message will also be produced as if the messageExpression field were unset, and
-	// the fact that messageExpression produced an empty string/string with only spaces/string with line breaks will be logged.
-	// messageExpression has access to all the same variables as the rule; the only difference is the return type.
-	// Example:
+	// MessageExpression 声明一个 CEL 表达式，用于在本条规则失败时求值出校验失败消息。
+	// 由于 messageExpression 用作失败消息，它必须求值为字符串。
+	// 若规则同时设置了 message 与 messageExpression，则校验失败时优先使用 messageExpression。
+	// 若 messageExpression 运行时报错，会记录该错误，并按 messageExpression 未设置的情形
+	// 生成失败消息。若 messageExpression 求值为空串、仅含空格的串或含换行的串，
+	// 同样按 messageExpression 未设置的情形生成失败消息，并记录该结果。
+	// messageExpression 可访问与 rule 相同的全部变量，唯一区别是返回类型。
+	// 示例：
 	// "x must be less than max ("+string(self.max)+")"
 	// +optional
 	MessageExpression string
-	// reason provides a machine-readable validation failure reason that is returned to the caller when a request fails this validation rule.
-	// The HTTP status code returned to the caller will match the reason of the reason of the first failed validation rule.
-	// The currently supported reasons are: "FieldValueInvalid", "FieldValueForbidden", "FieldValueRequired", "FieldValueDuplicate".
-	// If not set, default to use "FieldValueInvalid".
-	// All future added reasons must be accepted by clients when reading this value and unknown reasons should be treated as FieldValueInvalid.
+	// reason 提供机器可读的校验失败原因，在请求未通过本规则时返回给调用方。
+	// 返回给调用方的 HTTP 状态码与第一条失败规则的 reason 一致。
+	// 目前支持的原因有："FieldValueInvalid"、"FieldValueForbidden"、"FieldValueRequired"、"FieldValueDuplicate"。
+	// 未设置时默认使用 "FieldValueInvalid"。
+	// 后续新增的原因在客户端读取时必须被接受，未知原因应按 FieldValueInvalid 处理。
 	// +optional
 	Reason *FieldValueErrorReason
-	// fieldPath represents the field path returned when the validation fails.
-	// It must be a relative JSON path (i.e. with array notation) scoped to the location of this x-kubernetes-validations extension in the schema and refer to an existing field.
-	// e.g. when validation checks if a specific attribute `foo` under a map `testMap`, the fieldPath could be set to `.testMap.foo`
-	// If the validation checks two lists must have unique attributes, the fieldPath could be set to either of the list: e.g. `.testList`
-	// It does not support list numeric index.
-	// It supports child operation to refer to an existing field currently. Refer to [JSONPath support in Kubernetes](https://kubernetes.io/docs/reference/kubectl/jsonpath/) for more info.
-	// Numeric index of array is not supported.
-	// For field name which contains special characters, use `['specialName']` to refer the field name.
-	// e.g. for attribute `foo.34$` appears in a list `testList`, the fieldPath could be set to `.testList['foo.34$']`
+	// fieldPath 表示校验失败时返回的字段路径。
+	// 它必须是相对于 schema 中该 x-kubernetes-validations 扩展所在位置的 JSON 路径
+	// （即使用数组记法），并指向一个已存在的字段。
+	// 例如当校验检查 map `testMap` 下的属性 `foo` 时，fieldPath 可设为 `.testMap.foo`
+	// 若校验要求两个列表的属性唯一，fieldPath 可设为其中任一列表，例如 `.testList`
+	// 它不支持列表的数字索引。
+	// 目前支持子操作来引用已存在字段，详见 [JSONPath support in Kubernetes](https://kubernetes.io/docs/reference/kubectl/jsonpath/)。
+	// 不支持数组的数字索引。
+	// 对于含特殊字符的字段名，使用 `['specialName']` 引用。
+	// 例如属性 `foo.34$` 出现在列表 `testList` 中时，fieldPath 可设为 `.testList['foo.34$']`
 	// +optional
 	FieldPath string
 
-	// optionalOldSelf is used to opt a transition rule into evaluation
-	// even when the object is first created, or if the old object is
-	// missing the value.
+	// optionalOldSelf 用于让转换规则在对象首次创建、或旧对象缺少该值时
+	// 也参与求值。
 	//
-	// When enabled `oldSelf` will be a CEL optional whose value will be
-	// `None` if there is no old value, or when the object is initially created.
+	// 启用后 `oldSelf` 将成为 CEL optional：当没有旧值或对象初次创建时，
+	// 其值为 `None`。
 	//
-	// You may check for presence of oldSelf using `oldSelf.hasValue()` and
-	// unwrap it after checking using `oldSelf.value()`. Check the CEL
-	// documentation for Optional types for more information:
+	// 可用 `oldSelf.hasValue()` 检查 oldSelf 是否存在，检查后再用
+	// `oldSelf.value()` 解包。Optional 类型的更多信息见 CEL 文档：
 	// https://pkg.go.dev/github.com/google/cel-go/cel#OptionalTypes
 	//
-	// May not be set unless `oldSelf` is used in `rule`.
+	// 除非 `rule` 中使用了 `oldSelf`，否则不得设置。
 	//
 	// +featureGate=CRDValidationRatcheting
 	// +optional
 	OptionalOldSelf *bool
 }
 
-// JSON represents any valid JSON value.
-// These types are supported: bool, int64, float64, string, []interface{}, map[string]interface{} and nil.
+// JSON 表示任意合法的 JSON 值。
+// 支持的类型：bool、int64、float64、string、[]interface{}、map[string]interface{} 和 nil。
 type JSON interface{}
 
-// JSONSchemaURL represents a schema url.
+// JSONSchemaURL 表示 schema 的 URL。
 type JSONSchemaURL string
 
-// JSONSchemaPropsOrArray represents a value that can either be a JSONSchemaProps
-// or an array of JSONSchemaProps. Mainly here for serialization purposes.
+// JSONSchemaPropsOrArray 表示取值可以是单个 JSONSchemaProps，
+// 也可以是 JSONSchemaProps 数组。主要用于序列化。
 type JSONSchemaPropsOrArray struct {
 	Schema      *JSONSchemaProps
 	JSONSchemas []JSONSchemaProps
 }
 
-// JSONSchemaPropsOrBool represents JSONSchemaProps or a boolean value.
-// Defaults to true for the boolean property.
+// JSONSchemaPropsOrBool 表示取值为 JSONSchemaProps 或布尔值。
+// 布尔属性缺省为 true。
 type JSONSchemaPropsOrBool struct {
 	Allows bool
 	Schema *JSONSchemaProps
 }
 
-// JSONSchemaDependencies represent a dependencies property.
+// JSONSchemaDependencies 表示 dependencies 属性。
 type JSONSchemaDependencies map[string]JSONSchemaPropsOrStringArray
 
-// JSONSchemaPropsOrStringArray represents a JSONSchemaProps or a string array.
+// JSONSchemaPropsOrStringArray 表示取值为 JSONSchemaProps 或字符串数组。
 type JSONSchemaPropsOrStringArray struct {
 	Schema   *JSONSchemaProps
 	Property []string
 }
 
-// JSONSchemaDefinitions contains the models explicitly defined in this spec.
+// JSONSchemaDefinitions 保存本 spec 中显式定义的模型。
 type JSONSchemaDefinitions map[string]JSONSchemaProps
 
-// ExternalDocumentation allows referencing an external resource for extended documentation.
+// ExternalDocumentation 允许引用外部资源以提供扩展文档。
 type ExternalDocumentation struct {
 	Description string
 	URL         string

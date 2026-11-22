@@ -191,6 +191,8 @@ metadata:
 `
 )
 
+// TestPruningCreate 验证创建 CR 时，schema 未声明的字段会被剪枝，
+// 已声明的字段与 metadata 中的合法字段保留。
 func TestPruningCreate(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -243,6 +245,7 @@ func TestPruningCreate(t *testing.T) {
 	}
 }
 
+// TestPruningStatus 验证通过 status 子资源更新时同样会执行剪枝。
 func TestPruningStatus(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -297,6 +300,7 @@ func TestPruningStatus(t *testing.T) {
 	}
 }
 
+// TestPruningFromStorage 验证直接写入 etcd 的脏数据在读取路径上也会被剪枝。
 func TestPruningFromStorage(t *testing.T) {
 	tearDown, config, completedConfig, err := fixtures.StartDefaultServerWithConfigAccess(t)
 	if err != nil {
@@ -359,8 +363,8 @@ func TestPruningFromStorage(t *testing.T) {
 	unstructured.SetNestedField(original.Object, float64(42), "beta")
 	unstructured.SetNestedField(original.Object, "bar", "metadata", "labels", "foo")
 
-	// Note: we don't add metadata.unspecified as in the other tests. ObjectMeta pruning is independent of the generic pruning
-	//       and we do not guarantee that we prune ObjectMeta on read from etcd.
+	// 注意：与其他测试不同，这里不添加 metadata.unspecified。ObjectMeta 剪枝独立于通用剪枝，
+	//       我们不保证从 etcd 读取时剪掉 ObjectMeta 中的未知字段。
 
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceDefault)
 	key := path.Join("/", restOptions.StorageConfig.Prefix, crd.Spec.Group, "foos/foo")
@@ -386,14 +390,15 @@ func TestPruningFromStorage(t *testing.T) {
 		t.Errorf("Expected specified 'beta' field to stay, but it was pruned")
 	}
 
-	// Note: we don't check metadata.foo as in the other tests. ObjectMeta pruning is independent of the generic pruning
-	//       and we do not guarantee that we prune ObjectMeta on read from etcd.
+	// 注意：与其他测试不同，这里不检查 metadata.foo。ObjectMeta 剪枝独立于通用剪枝，
+	//       我们不保证从 etcd 读取时剪掉 ObjectMeta 中的未知字段。
 
 	if _, found, _ := unstructured.NestedFieldNoCopy(foo.Object, "metadata", "labels", "foo"); !found {
 		t.Errorf("Expected specified 'metadata.labels[foo]' field to stay, but it was pruned")
 	}
 }
 
+// TestPruningPatch 验证 PATCH 合并后的对象同样会按 schema 剪枝。
 func TestPruningPatch(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -422,7 +427,7 @@ func TestPruningPatch(t *testing.T) {
 	}
 	t.Logf("CR created: %#v", foo.UnstructuredContent())
 
-	// a patch with a change
+	// 带变更的 patch
 	patch := []byte(`{"alpha": "abc", "beta": 42.0, "unspecified": "bar", "metadata": {"unspecified": "bar", "labels":{"foo":"bar"}}}`)
 	if foo, err = fooClient.Patch(context.TODO(), "foo", types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -445,6 +450,8 @@ func TestPruningPatch(t *testing.T) {
 	}
 }
 
+// TestPruningCreatePreservingUnknownFields 验证 preserve-unknown-fields 子树保留未知字段，
+// 其外部仍按 schema 剪枝。
 func TestPruningCreatePreservingUnknownFields(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -530,6 +537,8 @@ func TestPruningCreatePreservingUnknownFields(t *testing.T) {
 	}
 }
 
+// TestPruningEmbeddedResources 验证 x-kubernetes-embedded-resource 的剪枝行为：
+// 内嵌资源中 schema 未声明的字段会被剪掉，声明了 preserve-unknown-fields 的子树除外。
 func TestPruningEmbeddedResources(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {

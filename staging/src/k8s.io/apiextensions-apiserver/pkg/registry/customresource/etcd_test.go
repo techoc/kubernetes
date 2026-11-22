@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package customresource_test 通过 REST 存储层验证自定义资源的增删改查、子资源与表格输出行为。
 package customresource_test
 
 import (
@@ -49,19 +50,24 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/registry/customresource/tableconvertor"
 )
 
+// newStorage 启动进程内的 etcd 测试服务，并组装出带 scale/status 子资源与表格列的
+// CustomResourceStorage。调用方负责终止返回的 server。
 func newStorage(t *testing.T) (customresource.CustomResourceStorage, *etcd3testing.EtcdTestServer) {
 	server, etcdStorage := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
+	// 自定义资源以非结构化方式保存，因此编解码器使用 UnstructuredJSONScheme。
 	etcdStorage.Codec = unstructured.UnstructuredJSONScheme
 	groupResource := schema.GroupResource{Group: "mygroup.example.com", Resource: "noxus"}
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage.ForResource(groupResource), Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "noxus"}
 
 	parameterScheme := runtime.NewScheme()
+	// List/Get/Delete 的元数据选项必须注册为非版本化类型，否则请求参数无法解码。
 	parameterScheme.AddUnversionedTypes(schema.GroupVersion{Group: "mygroup.example.com", Version: "v1beta1"},
 		&metav1.ListOptions{},
 		&metav1.GetOptions{},
 		&metav1.DeleteOptions{},
 	)
 
+	// 元数据选项委托给 parameterScheme，其余对象交给非结构化 typer 推断类型。
 	typer := apiserver.UnstructuredObjectTyper{
 		Delegate:          parameterScheme,
 		UnstructuredTyper: crdserverscheme.NewUnstructuredObjectTyper(),
@@ -78,6 +84,8 @@ func newStorage(t *testing.T) (customresource.CustomResourceStorage, *etcd3testi
 
 	status := &apiextensionsinternal.CustomResourceSubresourceStatus{}
 
+	// 这些列刻意混入缺失路径、类型不匹配以及需要字符串化的数值/布尔值，
+	// 用来覆盖 tableconvertor 的边界处理。
 	headers := []apiextensionsv1.CustomResourceColumnDefinition{
 		{Name: "Age", Type: "date", JSONPath: ".metadata.creationTimestamp"},
 		{Name: "Replicas", Type: "integer", JSONPath: ".spec.replicas"},
@@ -90,6 +98,7 @@ func newStorage(t *testing.T) (customresource.CustomResourceStorage, *etcd3testi
 		{Name: "Float64", Type: "number", JSONPath: ".spec.float64"},
 		{Name: "Bool", Type: "boolean", JSONPath: ".spec.bool"},
 	}
+	// 表头固定有效，构建失败在测试里没有单独处理的必要。
 	table, _ := tableconvertor.New(headers)
 
 	storage, err := customresource.NewStorage(
@@ -120,8 +129,9 @@ func newStorage(t *testing.T) (customresource.CustomResourceStorage, *etcd3testi
 	return storage, server
 }
 
-// createCustomResource is a helper function that returns a CustomResource with the updated resource version.
+// createCustomResource 是辅助函数，创建 CustomResource 并返回带最新 resourceVersion 的对象。
 func createCustomResource(storage *customresource.REST, cr unstructured.Unstructured, t *testing.T) (unstructured.Unstructured, error) {
+	// 命名空间放进请求上下文，存储层据此拼出 etcd 键。
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), cr.GetNamespace())
 	obj, err := storage.Create(ctx, &cr, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
@@ -131,14 +141,16 @@ func createCustomResource(storage *customresource.REST, cr unstructured.Unstruct
 	return *newCR, nil
 }
 
+// validNewCustomResource 返回一个字段类型齐全、可供各测试复用的最小自定义资源。
 func validNewCustomResource() *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "mygroup.example.com/v1beta1",
 			"kind":       "Noxu",
 			"metadata": map[string]interface{}{
-				"namespace":         "default",
-				"name":              "foo",
+				"namespace": "default",
+				"name":      "foo",
+				// 固定为 12h30m 之前，TestColumns 才能稳定断言 Age 列输出 "12h"。
 				"creationTimestamp": time.Now().Add(-time.Hour*12 - 30*time.Minute).UTC().Format(time.RFC3339),
 			},
 			"spec": map[string]interface{}{
@@ -154,20 +166,24 @@ func validNewCustomResource() *unstructured.Unstructured {
 	}
 }
 
+// validCustomResource 是共享的只读基准对象；需要修改的测试必须先 DeepCopy。
 var validCustomResource = *validNewCustomResource()
 
+// TestCreate 验证通用存储的创建路径。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
 	defer storage.CustomResource.Store.DestroyFunc()
 	test := registrytest.New(t, storage.CustomResource.Store)
 	cr := validNewCustomResource()
+	// 通用注册表测试按无命名空间对象执行。
 	cr.SetNamespace("")
 	test.TestCreate(
 		cr,
 	)
 }
 
+// TestGet 验证按名称读取自定义资源。
 func TestGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -176,6 +192,7 @@ func TestGet(t *testing.T) {
 	test.TestGet(validNewCustomResource())
 }
 
+// TestList 验证列表读取。
 func TestList(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -184,6 +201,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewCustomResource())
 }
 
+// TestDelete 验证删除语义。
 func TestDelete(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -192,6 +210,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(validNewCustomResource())
 }
 
+// TestGenerationNumber 验证 generation 初始化为 1，且只有 spec 变更才会递增。
 func TestGenerationNumber(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -209,12 +228,12 @@ func TestGenerationNumber(t *testing.T) {
 	}
 	storedCR, _ := etcdCR.(*unstructured.Unstructured)
 
-	// Generation initialization
+	// 创建时服务端会忽略客户端上报的 generation，并初始化为 1。
 	if storedCR.GetGeneration() != 1 {
 		t.Fatalf("Unexpected generation number %v", storedCR.GetGeneration())
 	}
 
-	// Updates to spec should increment the generation number
+	// spec 变更应递增 generation。
 	setSpecReplicas(storedCR, getSpecReplicas(storedCR)+1)
 	if _, _, err := storage.CustomResource.Update(ctx, storedCR.GetName(), rest.DefaultUpdatedObjectInfo(storedCR), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -228,7 +247,7 @@ func TestGenerationNumber(t *testing.T) {
 		t.Fatalf("Unexpected generation, spec: %v", storedCR.GetGeneration())
 	}
 
-	// Updates to status should not increment the generation number
+	// status 变更不应递增 generation。
 	setStatusReplicas(storedCR, getStatusReplicas(storedCR)+1)
 	if _, _, err := storage.CustomResource.Update(ctx, storedCR.GetName(), rest.DefaultUpdatedObjectInfo(storedCR), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -244,6 +263,7 @@ func TestGenerationNumber(t *testing.T) {
 
 }
 
+// TestCategories 验证存储对外暴露的类别为 "all"。
 func TestCategories(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -257,6 +277,7 @@ func TestCategories(t *testing.T) {
 	}
 }
 
+// TestColumns 验证表格转换后的列定义与单元值，包括缺失、类型不匹配和字符串化等边界。
 func TestColumns(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -265,6 +286,7 @@ func TestColumns(t *testing.T) {
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceDefault)
 	key := "/noxus/" + metav1.NamespaceDefault + "/foo"
 	validCustomResource := validNewCustomResource()
+	// 直接写入底层存储，绕过 REST 层以精确控制对象内容。
 	if err := storage.CustomResource.Storage.Create(ctx, key, validCustomResource, nil, 0, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -279,6 +301,7 @@ func TestColumns(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// Name 列由列表机制自动补上，其余列来自 CRD 的 additionalPrinterColumns。
 	expectedColumns := []struct {
 		Name, Type string
 	}{
@@ -306,6 +329,7 @@ func TestColumns(t *testing.T) {
 		}
 	}
 
+	// 缺失路径得到 nil；string 类型列会把数值/布尔值格式化为字符串。
 	expectedRows := [][]interface{}{
 		{
 			"foo",
@@ -328,6 +352,7 @@ func TestColumns(t *testing.T) {
 	}
 }
 
+// TestStatusUpdate 验证 status 子资源只修改 status，不影响 spec。
 func TestStatusUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -376,6 +401,7 @@ func TestStatusUpdate(t *testing.T) {
 	}
 }
 
+// TestScaleGet 验证 scale 子资源把 .spec.replicas 映射为 Scale.Spec.Replicas，并保留对象元数据。
 func TestScaleGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -383,6 +409,7 @@ func TestScaleGet(t *testing.T) {
 
 	name := "foo"
 
+	// Create 会把存储层生成的对象（含 UID/resourceVersion）回填到 cr。
 	var cr unstructured.Unstructured
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceDefault)
 	key := "/noxus/" + metav1.NamespaceDefault + "/" + name
@@ -418,6 +445,7 @@ func TestScaleGet(t *testing.T) {
 	}
 }
 
+// TestScaleGetWithoutSpecReplicas 验证缺少 .spec.replicas 时 scale 读取会返回明确错误。
 func TestScaleGetWithoutSpecReplicas(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -429,6 +457,7 @@ func TestScaleGetWithoutSpecReplicas(t *testing.T) {
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceDefault)
 	key := "/noxus/" + metav1.NamespaceDefault + "/" + name
 	withoutSpecReplicas := validCustomResource.DeepCopy()
+	// 移除字段后，scale 无法推导出副本数。
 	unstructured.RemoveNestedField(withoutSpecReplicas.Object, "spec", "replicas")
 	if err := storage.CustomResource.Storage.Create(ctx, key, withoutSpecReplicas, &cr, 0, false); err != nil {
 		t.Fatalf("error setting new custom resource (key: %s) %v: %v", key, withoutSpecReplicas, err)
@@ -443,6 +472,7 @@ func TestScaleGetWithoutSpecReplicas(t *testing.T) {
 	}
 }
 
+// TestScaleUpdate 验证通过 scale 子资源更新 .spec.replicas，以及并发更新时的冲突处理。
 func TestScaleUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -490,11 +520,13 @@ func TestScaleUpdate(t *testing.T) {
 	update.ResourceVersion = scale.ResourceVersion
 	update.Spec.Replicas = 15
 
+	// 再次更新可能因 resourceVersion 竞争而冲突；冲突属于可接受结果。
 	if _, _, err = storage.Scale.Update(ctx, update.Name, rest.DefaultUpdatedObjectInfo(&update), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil && !errors.IsConflict(err) {
 		t.Fatalf("unexpected error, expecting an update conflict but got %v", err)
 	}
 }
 
+// TestScaleUpdateWithoutSpecReplicas 验证 spec 中原本没有 replicas 时，scale 更新会创建该字段。
 func TestScaleUpdateWithoutSpecReplicas(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -536,6 +568,7 @@ func TestScaleUpdateWithoutSpecReplicas(t *testing.T) {
 	}
 }
 
+// TestScaleUpdateWithoutResourceVersion 验证省略 resourceVersion 的 scale 更新会被接受。
 func TestScaleUpdateWithoutResourceVersion(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -551,6 +584,7 @@ func TestScaleUpdateWithoutResourceVersion(t *testing.T) {
 	}
 
 	replicas := int32(8)
+	// 不设置 resourceVersion，表示跳过乐观并发校验。
 	update := autoscalingv1.Scale{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -574,6 +608,8 @@ func TestScaleUpdateWithoutResourceVersion(t *testing.T) {
 	}
 }
 
+// TestScaleUpdateWithoutResourceVersionWithConflicts 验证不带 resourceVersion 的并发标签更新与
+// scale 更新都不会互相覆盖。
 func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -588,6 +624,7 @@ func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 		t.Fatalf("error setting new custom resource (key: %s) %v: %v", key, validCustomResource, err)
 	}
 
+	// fetchObject 读取最新的自定义资源，供并发标签更新使用。
 	fetchObject := func(name string) (*unstructured.Unstructured, error) {
 		gotObj, err := storage.CustomResource.Get(ctx, name, &metav1.GetOptions{})
 		if err != nil {
@@ -596,6 +633,7 @@ func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 		return gotObj.(*unstructured.Unstructured), nil
 	}
 
+	// applyPatch 基于存储中的当前对象打标签，避免用读取时的旧快照覆盖并发写入。
 	applyPatch := func(labelName, labelValue string) rest.TransformFunc {
 		return func(_ context.Context, _, currentObject runtime.Object) (objToUpdate runtime.Object, patchErr error) {
 			o := currentObject.(metav1.Object)
@@ -609,7 +647,7 @@ func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 	errs := make(chan error, 1)
 	rounds := 100
 	go func() {
-		// continuously submits a patch that updates a label and verifies the label update was effective
+		// 持续提交一个更新标签的 patch，并校验标签更新确实生效。
 		labelName := "timestamp"
 		for i := 0; i < rounds; i++ {
 			expectedLabelValue := fmt.Sprint(i)
@@ -648,8 +686,7 @@ func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 			Name: name,
 		},
 	}
-	// continuously submits a scale update without a resourceVersion for a monotonically increasing replica value
-	// and verifies the scale update was effective
+	// 持续提交不带 resourceVersion 的 scale 更新，副本数单调递增，并校验更新生效。
 	for i := 0; i < rounds; i++ {
 		select {
 		case err := <-errs:
@@ -673,6 +710,7 @@ func TestScaleUpdateWithoutResourceVersionWithConflicts(t *testing.T) {
 	}
 }
 
+// TestScaleUpdateWithResourceVersionWithConflicts 验证携带过期 resourceVersion 的 scale 更新会返回冲突。
 func TestScaleUpdateWithResourceVersionWithConflicts(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -703,6 +741,7 @@ func TestScaleUpdateWithResourceVersionWithConflicts(t *testing.T) {
 			Replicas: replicas,
 		},
 	}
+	// 伪造一个与存储不一致的 resourceVersion，强制触发冲突。
 	update.ResourceVersion = "1"
 
 	_, _, err = storage.Scale.Update(ctx, update.Name, rest.DefaultUpdatedObjectInfo(&update), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
@@ -714,10 +753,12 @@ func TestScaleUpdateWithResourceVersionWithConflicts(t *testing.T) {
 	}
 }
 
+// setSpecReplicas 设置 .spec.replicas。
 func setSpecReplicas(u *unstructured.Unstructured, replicas int64) {
 	setNestedField(u, replicas, "spec", "replicas")
 }
 
+// getSpecReplicas 读取 .spec.replicas；字段缺失或类型错误时按 0 处理。
 func getSpecReplicas(u *unstructured.Unstructured) int64 {
 	val, found, err := unstructured.NestedInt64(u.Object, "spec", "replicas")
 	if !found || err != nil {
@@ -726,10 +767,12 @@ func getSpecReplicas(u *unstructured.Unstructured) int64 {
 	return val
 }
 
+// setStatusReplicas 设置 .status.replicas。
 func setStatusReplicas(u *unstructured.Unstructured, replicas int64) {
 	setNestedField(u, replicas, "status", "replicas")
 }
 
+// getStatusReplicas 读取 .status.replicas；字段缺失或类型错误时按 0 处理。
 func getStatusReplicas(u *unstructured.Unstructured) int64 {
 	val, found, err := unstructured.NestedInt64(u.Object, "status", "replicas")
 	if !found || err != nil {
@@ -738,6 +781,7 @@ func getStatusReplicas(u *unstructured.Unstructured) int64 {
 	return val
 }
 
+// setNestedField 确保 Object 非 nil 后写入嵌套字段。
 func setNestedField(u *unstructured.Unstructured, value interface{}, fields ...string) {
 	if u.Object == nil {
 		u.Object = make(map[string]interface{})

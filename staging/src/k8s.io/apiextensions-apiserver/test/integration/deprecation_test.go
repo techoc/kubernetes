@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// deprecationFixture 是用于测试废弃版本警告的 CRD。
 var deprecationFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "deps.tests.example.com"},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -75,6 +76,7 @@ var deprecationFixture = &apiextensionsv1.CustomResourceDefinition{
 	},
 }
 
+// TestCustomResourceDeprecation 验证不同废弃配置的版本返回的警告文本。
 func TestCustomResourceDeprecation(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -140,10 +142,12 @@ func TestCustomResourceDeprecation(t *testing.T) {
 	}
 }
 
+// warningHandler 收集客户端收到的 Warning 头文本。
 type warningHandler struct {
 	warnings []string
 }
 
+// HandleWarningHeader 实现 rest.WarningHandler，记录警告文本。
 func (w *warningHandler) HandleWarningHeader(code int, agent string, text string) {
 	w.warnings = append(w.warnings, text)
 }

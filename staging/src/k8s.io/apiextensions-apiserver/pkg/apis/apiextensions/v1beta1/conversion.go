@@ -25,10 +25,13 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 )
 
+// Convert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps 将内部 JSONSchemaProps 转换为 v1beta1 类型，
+// 并保留 nil 默认值/示例与无值的区别。
 func Convert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps(in *apiextensions.JSONSchemaProps, out *JSONSchemaProps, s conversion.Scope) error {
 	if err := autoConvert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps(in, out, s); err != nil {
 		return err
 	}
+	// v1beta1 无法区分“未设置”和“显式 null”，此处将显式 null 还原为未设置
 	if in.Default != nil && *(in.Default) == nil {
 		out.Default = nil
 	}
@@ -38,15 +41,17 @@ func Convert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps(in *apiext
 	return nil
 }
 
+// nullLiteral 是 JSON 的 null 字面量。
 var nullLiteral = []byte(`null`)
 
+// Convert_apiextensions_JSON_To_v1beta1_JSON 将内部 JSON 值序列化后写入 v1beta1 JSON.Raw。
 func Convert_apiextensions_JSON_To_v1beta1_JSON(in *apiextensions.JSON, out *JSON, s conversion.Scope) error {
 	raw, err := json.Marshal(*in)
 	if err != nil {
 		return err
 	}
 	if len(raw) == 0 || bytes.Equal(raw, nullLiteral) {
-		// match JSON#UnmarshalJSON treatment of literal nulls
+		// 与 JSON#UnmarshalJSON 对字面 null 的处理保持一致
 		out.Raw = nil
 	} else {
 		out.Raw = raw
@@ -54,9 +59,11 @@ func Convert_apiextensions_JSON_To_v1beta1_JSON(in *apiextensions.JSON, out *JSO
 	return nil
 }
 
+// Convert_v1beta1_JSON_To_apiextensions_JSON 将 v1beta1 JSON.Raw 反序列化为内部 JSON 值。
 func Convert_v1beta1_JSON_To_apiextensions_JSON(in *JSON, out *apiextensions.JSON, s conversion.Scope) error {
 	if in != nil {
 		var i interface{}
+		// null 与空 Raw 都视为无值，避免把字面 null 当作真实值
 		if len(in.Raw) > 0 && !bytes.Equal(in.Raw, nullLiteral) {
 			if err := json.Unmarshal(in.Raw, &i); err != nil {
 				return err

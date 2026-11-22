@@ -66,6 +66,7 @@ type roundTripTestCase struct {
 	wantDecoded roundTripTestable
 }
 
+// TestJSONSchemaPropsOrBool 覆盖 JSONSchemaPropsOrBool 的 JSON/CBOR 序列化、反序列化和往返转换。
 func TestJSONSchemaPropsOrBool(t *testing.T) {
 	nan := math.NaN()
 
@@ -163,6 +164,7 @@ func TestJSONSchemaPropsOrBool(t *testing.T) {
 	})
 }
 
+// TestJSONSchemaPropsOrArray 覆盖 JSONSchemaPropsOrArray 的 JSON/CBOR 序列化、反序列化和往返转换。
 func TestJSONSchemaPropsOrArray(t *testing.T) {
 	nan := math.NaN()
 
@@ -250,6 +252,7 @@ func TestJSONSchemaPropsOrArray(t *testing.T) {
 	})
 }
 
+// TestJSONSchemaPropsOrStringArray 覆盖 JSONSchemaPropsOrStringArray 的 JSON/CBOR 序列化、反序列化和往返转换。
 func TestJSONSchemaPropsOrStringArray(t *testing.T) {
 	nan := math.NaN()
 	t.Run("Marshal", func(t *testing.T) {
@@ -353,6 +356,7 @@ func TestJSONSchemaPropsOrStringArray(t *testing.T) {
 
 }
 
+// TestJSON 覆盖 JSON 类型在各类原始值上的 JSON/CBOR 往返转换。
 func TestJSON(t *testing.T) {
 	t.Run("RoundTrip", func(t *testing.T) {
 		testCases := []roundTripTestCase{
@@ -422,6 +426,7 @@ func TestJSON(t *testing.T) {
 	})
 }
 
+// marshalJSONTest 返回校验 JSON 序列化结果的子测试。
 func marshalJSONTest(input marshalTestable, wantErr bool, expected []byte) func(t *testing.T) {
 	return func(t *testing.T) {
 		actual, err := input.MarshalJSON()
@@ -440,6 +445,7 @@ func marshalJSONTest(input marshalTestable, wantErr bool, expected []byte) func(
 	}
 }
 
+// marshalCBORTest 返回校验 CBOR 序列化结果的子测试。
 func marshalCBORTest(input marshalTestable, wantErr bool, expected []byte) func(t *testing.T) {
 	return func(t *testing.T) {
 		actual, err := input.MarshalCBOR()
@@ -458,6 +464,7 @@ func marshalCBORTest(input marshalTestable, wantErr bool, expected []byte) func(
 	}
 }
 
+// unmarshalJSONTest 返回校验 JSON 反序列化结果的子测试。
 func unmarshalJSONTest(input []byte, wantErr bool, expectedDecoded unmarshalTestable, actualDecoded unmarshalTestable) func(t *testing.T) {
 	return func(t *testing.T) {
 		err := actualDecoded.UnmarshalJSON(input)
@@ -477,6 +484,7 @@ func unmarshalJSONTest(input []byte, wantErr bool, expectedDecoded unmarshalTest
 	}
 }
 
+// unmarshalCBORTest 返回校验 CBOR 反序列化结果的子测试。
 func unmarshalCBORTest(input []byte, wantErr bool, expectedDecoded unmarshalTestable, actualDecoded unmarshalTestable) func(t *testing.T) {
 	return func(t *testing.T) {
 		err := actualDecoded.UnmarshalCBOR(input)
@@ -496,6 +504,7 @@ func unmarshalCBORTest(input []byte, wantErr bool, expectedDecoded unmarshalTest
 	}
 }
 
+// roundTripJSONTest 返回 JSON 编解码往返一致性的子测试。
 func roundTripJSONTest(input roundTripTestable, expectedEncoded []byte, expectedDecoded roundTripTestable, actualDecoded roundTripTestable) func(t *testing.T) {
 	return func(t *testing.T) {
 		actualEncoded, err := input.MarshalJSON()
@@ -517,6 +526,7 @@ func roundTripJSONTest(input roundTripTestable, expectedEncoded []byte, expected
 	}
 }
 
+// roundTripCBORTest 返回 CBOR 编解码往返一致性的子测试。
 func roundTripCBORTest(input roundTripTestable, expectedEncoded []byte, expectedDecoded roundTripTestable, actualDecoded roundTripTestable) func(t *testing.T) {
 	return func(t *testing.T) {
 		actualEncoded, err := input.MarshalCBOR()
@@ -538,6 +548,8 @@ func roundTripCBORTest(input roundTripTestable, expectedEncoded []byte, expected
 	}
 }
 
+// TestJSONUnderlyingArrayReuse 校验 UnmarshalJSON 复用了输入字节的底层数组，
+// 因而调用方修改输入后，已解析的 JSON 值也会随之改变。
 func TestJSONUnderlyingArrayReuse(t *testing.T) {
 	const want = `{"foo":"bar"}`
 
@@ -548,12 +560,11 @@ func TestJSONUnderlyingArrayReuse(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Underlying array is modified.
+	// 修改底层数组。
 	copy(b[2:5], "bar")
 	copy(b[8:11], "foo")
 
-	// If UnmarshalJSON copied the bytes of its argument, then it should not have been affected
-	// by the mutation.
+	// 如果 UnmarshalJSON 拷贝了参数中的字节，那么它不应受这次修改影响。
 	if got := string(s.Raw); got != want {
 		t.Errorf("unexpected mutation, got %s want %s", got, want)
 	}

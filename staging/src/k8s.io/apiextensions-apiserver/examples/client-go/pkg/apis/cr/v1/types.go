@@ -24,7 +24,7 @@ import (
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Example is a specification for an Example resource
+// Example 是 Example 资源的结构定义。
 type Example struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`
@@ -33,28 +33,32 @@ type Example struct {
 	Status ExampleStatus `json:"status,omitempty"`
 }
 
-// ExampleSpec is the spec for an Example resource
+// ExampleSpec 是 Example 资源的 spec 部分。
 type ExampleSpec struct {
 	Foo string `json:"foo"`
 	Bar bool   `json:"bar"`
 }
 
-// ExampleStatus is the status for an Example resource
+// ExampleStatus 是 Example 资源的 status 部分。
 type ExampleStatus struct {
 	State   ExampleState `json:"state,omitempty"`
 	Message string       `json:"message,omitempty"`
 }
 
+// ExampleState 表示 Example 资源所处的状态。
 type ExampleState string
 
+// Example 资源可能处于的状态。
 const (
-	ExampleStateCreated   ExampleState = "Created"
+	// ExampleStateCreated 表示 Example 已创建。
+	ExampleStateCreated ExampleState = "Created"
+	// ExampleStateProcessed 表示 Example 已处理完成。
 	ExampleStateProcessed ExampleState = "Processed"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ExampleList is a list of Example resources
+// ExampleList 是 Example 资源的列表。
 type ExampleList struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata"`

@@ -37,6 +37,7 @@ import (
 	"k8s.io/apiextensions-apiserver/test/integration/fixtures"
 )
 
+// newTableCRD 构造用于表格输出的 Table 类型 CRD，含 v1beta1 与 v1 两个版本。
 func newTableCRD() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "tables.mygroup.example.com"},
@@ -82,6 +83,7 @@ func newTableCRD() *apiextensionsv1.CustomResourceDefinition {
 	}
 }
 
+// newTableInstance 构造一个含各列测试字段的 Table 实例。
 func newTableInstance(name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -102,6 +104,7 @@ func newTableInstance(name string) *unstructured.Unstructured {
 	}
 }
 
+// TestTableGet 验证 metav1beta1 与 metav1 两种 Table 输出中的列定义与单元格值。
 func TestTableGet(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -142,6 +145,7 @@ func TestTableGet(t *testing.T) {
 		gv := schema.GroupVersion{Group: crd.Spec.Group, Version: v.Name}
 		gvk := gv.WithKind(crd.Spec.Names.Kind)
 
+		// 为每个 CRD 版本单独构造 REST client，以便以该版本的 GroupVersion 发起请求
 		scheme := runtime.NewScheme()
 		codecs := serializer.NewCodecFactory(scheme)
 		parameterCodec := runtime.NewParameterCodec(scheme)
@@ -160,7 +164,7 @@ func TestTableGet(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// metav1beta1 table
+		// metav1beta1 表格
 		{
 			ret, err := crRestClient.Get().
 				Resource(crd.Spec.Names.Plural).
@@ -211,7 +215,7 @@ func TestTableGet(t *testing.T) {
 					t.Errorf("expected column definition %#v, got %#v", expected, got)
 				}
 
-				// Validate extra column for v1
+				// 校验 v1 额外增加的列
 				if i == 1 {
 					zeta := metav1beta1.TableColumnDefinition{Name: "Zeta", Type: "integer", Format: "int64", Description: "the zeta field", Priority: 42}
 					if got, expected := tbl.ColumnDefinitions[6], zeta; got != expected {
@@ -249,7 +253,7 @@ func TestTableGet(t *testing.T) {
 				if got, expected := tbl.Rows[0].Cells[5], "[1,2,3]"; got != expected {
 					t.Errorf("expected cell[5] to equal %q, got %q", expected, got)
 				}
-				// Validate extra column for v1
+				// 校验 v1 额外增加的列
 				if i == 1 {
 					if got, expected := tbl.Rows[0].Cells[6], int64(5); got != expected {
 						t.Errorf("expected cell[6] to equal %v, got %v", expected, got)
@@ -258,7 +262,7 @@ func TestTableGet(t *testing.T) {
 			}
 		}
 
-		// metav1 table
+		// metav1 表格
 		{
 			ret, err := crRestClient.Get().
 				Resource(crd.Spec.Names.Plural).
@@ -309,7 +313,7 @@ func TestTableGet(t *testing.T) {
 					t.Errorf("expected column definition %#v, got %#v", expected, got)
 				}
 
-				// Validate extra column for v1
+				// 校验 v1 额外增加的列
 				if i == 1 {
 					zeta := metav1.TableColumnDefinition{Name: "Zeta", Type: "integer", Format: "int64", Description: "the zeta field", Priority: 42}
 					if got, expected := tbl.ColumnDefinitions[6], zeta; got != expected {
@@ -347,7 +351,7 @@ func TestTableGet(t *testing.T) {
 				if got, expected := tbl.Rows[0].Cells[5], "[1,2,3]"; got != expected {
 					t.Errorf("expected cell[5] to equal %q, got %q", expected, got)
 				}
-				// Validate extra column for v1
+				// 校验 v1 额外增加的列
 				if i == 1 {
 					if got, expected := tbl.Rows[0].Cells[6], int64(5); got != expected {
 						t.Errorf("expected cell[6] to equal %v, got %v", expected, got)
@@ -358,8 +362,8 @@ func TestTableGet(t *testing.T) {
 	}
 }
 
-// TestColumnsPatch tests the case that a CRD was created with no top-level or
-// per-version columns. One should be able to PATCH the CRD setting per-version columns.
+// TestColumnsPatch 测试创建时既无顶层列也无按版本列的 CRD，
+// 之后应能通过 PATCH 设置按版本列。
 func TestColumnsPatch(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -377,16 +381,15 @@ func TestColumnsPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// CRD with no top-level and per-version columns should be created successfully
+	// 创建无顶层列、无按版本列的 CRD 应成功
 	crd := NewNoxuSubresourcesCRDs(apiextensionsv1.NamespaceScoped)[0]
 	crd, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// One should be able to patch the CRD to use per-version columns. The top-level columns
-	// should not be defaulted during creation, and apiserver should not return validation
-	// error about top-level and per-version columns being mutual exclusive.
+	// 应能通过 PATCH 设置按版本列。创建时顶层列不应被默认填充，
+	// apiserver 也不应因顶层列与按版本列互斥而返回校验错误。
 	patch := []byte(`{
   "spec": {
     "versions": [
@@ -437,9 +440,8 @@ func TestColumnsPatch(t *testing.T) {
 	t.Logf("columns crd patched: %#v", crd)
 }
 
-// TestPatchCleanTopLevelColumns tests the case that a CRD was created with top-level columns.
-// One should be able to PATCH the CRD cleaning the top-level columns and setting per-version
-// columns.
+// TestPatchCleanTopLevelColumns 测试创建时带有顶层列的 CRD，
+// 之后应能通过 PATCH 清空顶层列并设置按版本列。
 func TestPatchCleanTopLevelColumns(t *testing.T) {
 	tearDown, config, _, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -467,8 +469,7 @@ func TestPatchCleanTopLevelColumns(t *testing.T) {
 	}
 	t.Logf("columns crd created: %#v", crd)
 
-	// One should be able to patch the CRD to use per-version columns by cleaning
-	// the top-level columns.
+	// 应能通过清空顶层列，改用按版本列对 CRD 打补丁。
 	patch := []byte(`{
   "spec": {
     "additionalPrinterColumns": null,
@@ -520,6 +521,7 @@ func TestPatchCleanTopLevelColumns(t *testing.T) {
 	t.Logf("columns crd patched: %#v", crd)
 }
 
+// abs 返回 float64 的绝对值。
 func abs(x float64) float64 {
 	if x < 0 {
 		return -x

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package openapi 维护 CRD 对应的 OpenAPI v2 文档，并在 CRD 增删改时增量更新。
 package openapi
 
 import (
@@ -36,6 +37,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestBasicAddRemove 验证 CRD 创建后对应路径出现在 OpenAPI 中，删除后消失。
 func TestBasicAddRemove(t *testing.T) {
 	env, ctx := setup(t)
 	env.runFunc()
@@ -54,6 +56,7 @@ func TestBasicAddRemove(t *testing.T) {
 	env.expectNoPath(s, "/apis/stable.example.com/v1/coolfoos")
 }
 
+// TestTwoCRDsSameGroup 验证同一 group 下的多个 CRD 在 OpenAPI 中各有独立路径。
 func TestTwoCRDsSameGroup(t *testing.T) {
 	env, ctx := setup(t)
 	env.runFunc()
@@ -69,6 +72,7 @@ func TestTwoCRDsSameGroup(t *testing.T) {
 	env.expectPath(s, "/apis/apiextensions.k8s.io/v1")
 }
 
+// TestCRDMultiVersion 验证多版本 CRD 的每个 served 版本都出现在 OpenAPI 中。
 func TestCRDMultiVersion(t *testing.T) {
 	env, ctx := setup(t)
 	env.runFunc()
@@ -83,6 +87,7 @@ func TestCRDMultiVersion(t *testing.T) {
 	env.expectPath(s, "/apis/apiextensions.k8s.io/v1")
 }
 
+// TestCRDMultiVersionUpdate 验证从多版本 CRD 中移除一个版本后，OpenAPI 中对应路径被删除。
 func TestCRDMultiVersionUpdate(t *testing.T) {
 	env, ctx := setup(t)
 	env.runFunc()
@@ -99,7 +104,7 @@ func TestCRDMultiVersionUpdate(t *testing.T) {
 	t.Log("Removing version v1beta1")
 	crd.Spec.Versions = crd.Spec.Versions[1:]
 	crd.Generation += 1
-	// Generation is updated before storage to etcd. Since we don't have that in the fake client, manually increase it.
+	// generation 是在写入 etcd 前更新的；fake client 没有这一步，手动递增以模拟真实行为。
 	env.Interface.ApiextensionsV1().CustomResourceDefinitions().Update(ctx, crd, metav1.UpdateOptions{})
 	env.pollForPathNotExists("/apis/stable.example.com/v1beta1/coolbars")
 	s = env.fetchOpenAPIOrDie()
@@ -108,6 +113,7 @@ func TestCRDMultiVersionUpdate(t *testing.T) {
 	env.expectPath(s, "/apis/apiextensions.k8s.io/v1")
 }
 
+// TestExistingCRDBeforeAPIServerStart 验证控制器启动前已存在的 CRD 也会被收录。
 func TestExistingCRDBeforeAPIServerStart(t *testing.T) {
 	env, ctx := setup(t)
 	defer env.cleanFunc()
@@ -121,6 +127,7 @@ func TestExistingCRDBeforeAPIServerStart(t *testing.T) {
 	env.expectPath(s, "/apis/apiextensions.k8s.io/v1")
 }
 
+// TestUpdate 验证修改 CRD schema 后，OpenAPI definition 随之更新。
 func TestUpdate(t *testing.T) {
 	env, ctx := setup(t)
 	env.runFunc()
@@ -135,7 +142,7 @@ func TestUpdate(t *testing.T) {
 	t.Log("Updating CRD CoolFoo")
 	crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["num"] = v1.JSONSchemaProps{Type: "integer", Description: "updated description"}
 	crd.Generation += 1
-	// Generation is updated before storage to etcd. Since we don't have that in the fake client, manually increase it.
+	// generation 是在写入 etcd 前更新的；fake client 没有这一步，手动递增以模拟真实行为。
 
 	env.Interface.ApiextensionsV1().CustomResourceDefinitions().Update(ctx, crd, metav1.UpdateOptions{})
 	env.pollForCondition(func(s *spec.Swagger) bool {
@@ -143,7 +150,7 @@ func TestUpdate(t *testing.T) {
 	})
 	s = env.fetchOpenAPIOrDie()
 
-	// Ensure that description is updated
+	// 确认 description 已更新。
 	if s.Definitions["com.example.stable.v1.CoolFoo"].Properties["num"].Description != crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["num"].Description {
 		t.Error("Error: Description not updated")
 	}
@@ -175,7 +182,7 @@ var coolFooCRD = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Subresources: &v1.CustomResourceSubresources{
-					// This CRD has a /status subresource
+					// 该 CRD 声明了 /status 子资源
 					Status: &v1.CustomResourceSubresourceStatus{},
 				},
 				Schema: &v1.CustomResourceValidation{
@@ -223,7 +230,7 @@ var coolBarCRD = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Subresources: &v1.CustomResourceSubresources{
-					// This CRD has a /status subresource
+					// 该 CRD 声明了 /status 子资源
 					Status: &v1.CustomResourceSubresourceStatus{},
 				},
 				Schema: &v1.CustomResourceValidation{
@@ -271,7 +278,7 @@ var coolMultiVersion = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Subresources: &v1.CustomResourceSubresources{
-					// This CRD has a /status subresource
+					// 该 CRD 声明了 /status 子资源
 					Status: &v1.CustomResourceSubresourceStatus{},
 				},
 				Schema: &v1.CustomResourceValidation{
@@ -288,7 +295,7 @@ var coolMultiVersion = &v1.CustomResourceDefinition{
 				Storage:    true,
 				Deprecated: false,
 				Subresources: &v1.CustomResourceSubresources{
-					// This CRD has a /status subresource
+					// 该 CRD 声明了 /status 子资源
 					Status: &v1.CustomResourceSubresourceStatus{},
 				},
 				Schema: &v1.CustomResourceValidation{
@@ -311,6 +318,7 @@ var coolMultiVersion = &v1.CustomResourceDefinition{
 	},
 }
 
+// testEnv 是测试环境：fake clientset、OpenAPI handler 以及控制器启停函数。
 type testEnv struct {
 	t *testing.T
 	clientset.Interface
@@ -319,6 +327,8 @@ type testEnv struct {
 	runFunc   func()
 }
 
+// setup 搭建测试环境：fake clientset、shared informer、OpenAPI 控制器与 handler。
+// 返回的 context 用于停止 informer。
 func setup(t *testing.T) (*testEnv, context.Context) {
 	env := &testEnv{
 		Interface: fake.NewSimpleClientset(),
@@ -331,6 +341,7 @@ func setup(t *testing.T) (*testEnv, context.Context) {
 	c := NewController(factory.Apiextensions().V1().CustomResourceDefinitions())
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// 先启动 informer 并等待缓存同步，避免控制器读到空缓存。
 	factory.Start(ctx.Done())
 	factory.WaitForCacheSync(ctx.Done())
 
@@ -359,6 +370,7 @@ func setup(t *testing.T) (*testEnv, context.Context) {
 	return env, ctx
 }
 
+// pollForCondition 轮询抓取的 OpenAPI 文档，直到条件满足或超时。
 func (t *testEnv) pollForCondition(conditionFunc func(*spec.Swagger) bool) {
 	wait.Poll(time.Second*1, wait.ForeverTestTimeout, func() (bool, error) {
 		openapi := t.fetchOpenAPIOrDie()
@@ -369,6 +381,7 @@ func (t *testEnv) pollForCondition(conditionFunc func(*spec.Swagger) bool) {
 	})
 }
 
+// pollForPathExists 轮询直到指定路径出现在 OpenAPI 中。
 func (t *testEnv) pollForPathExists(path string) {
 	wait.Poll(time.Second*1, wait.ForeverTestTimeout, func() (bool, error) {
 		openapi := t.fetchOpenAPIOrDie()
@@ -379,6 +392,7 @@ func (t *testEnv) pollForPathExists(path string) {
 	})
 }
 
+// pollForPathNotExists 轮询直到指定路径从 OpenAPI 中消失。
 func (t *testEnv) pollForPathNotExists(path string) {
 	wait.Poll(time.Second*1, wait.ForeverTestTimeout, func() (bool, error) {
 		openapi := t.fetchOpenAPIOrDie()
@@ -389,6 +403,7 @@ func (t *testEnv) pollForPathNotExists(path string) {
 	})
 }
 
+// fetchOpenAPIOrDie 通过 httptest 抓取 /openapi/v2 并解析成 Swagger；出错时直接标记测试失败。
 func (t *testEnv) fetchOpenAPIOrDie() *spec.Swagger {
 	server := httptest.NewServer(t.mux)
 	defer server.Close()
@@ -413,6 +428,7 @@ func (t *testEnv) fetchOpenAPIOrDie() *spec.Swagger {
 	return swagger
 }
 
+// expectPath 断言指定路径存在于 OpenAPI 中。
 func (t *testEnv) expectPath(swagger *spec.Swagger, path string) {
 	t.t.Helper()
 	if _, ok := swagger.Paths.Paths[path]; !ok {
@@ -420,6 +436,7 @@ func (t *testEnv) expectPath(swagger *spec.Swagger, path string) {
 	}
 }
 
+// expectNoPath 断言指定路径不存在于 OpenAPI 中。
 func (t *testEnv) expectNoPath(swagger *spec.Swagger, path string) {
 	t.t.Helper()
 	if _, ok := swagger.Paths.Paths[path]; ok {

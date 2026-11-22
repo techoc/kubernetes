@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// TestPrepareForUpdate 校验 status 子资源更新时只保留 status，忽略对 spec 及其他字段的修改。
 func TestPrepareForUpdate(t *testing.T) {
 	strategy := statusStrategy{}
 	tcs := []struct {
@@ -38,7 +39,7 @@ func TestPrepareForUpdate(t *testing.T) {
 		expected *unstructured.Unstructured
 	}{
 		{
-			// changes to spec are ignored
+			// 对 spec 的修改被忽略
 			old: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": "old",
@@ -56,7 +57,7 @@ func TestPrepareForUpdate(t *testing.T) {
 			},
 		},
 		{
-			// changes to other places are also ignored
+			// 对其他位置的修改同样被忽略
 			old: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": "old",
@@ -74,7 +75,7 @@ func TestPrepareForUpdate(t *testing.T) {
 			},
 		},
 		{
-			// delete status
+			// 删除 status
 			old: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec":   "old",
@@ -93,7 +94,7 @@ func TestPrepareForUpdate(t *testing.T) {
 			},
 		},
 		{
-			// update status
+			// 更新 status
 			old: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec":   "old",
@@ -113,7 +114,7 @@ func TestPrepareForUpdate(t *testing.T) {
 			},
 		},
 		{
-			// update status and other parts
+			// 同时更新 status 和其他部分
 			old: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec":   "old",
@@ -178,6 +179,8 @@ spec:
             type: array
 `
 
+// TestStatusStrategyValidateUpdate 校验 status 更新时，允许在变更后仍合法的集合类字段通过校验，
+// 而把变更后不再合法的修改拦下。
 func TestStatusStrategyValidateUpdate(t *testing.T) {
 	crdV1 := &apiextensionsv1.CustomResourceDefinition{}
 	err := yaml.Unmarshal([]byte(listTypeResourceSchema), &crdV1)
@@ -296,7 +299,7 @@ spec:
       status: {}
 `
 
-// TestStatusStrategyValidateUpdateForLegacyV1beta1 legacy test the crd with subresource and without .Schema.OpenAPIV3Schema,
+// TestStatusStrategyValidateUpdateForLegacyV1beta1 针对旧版 v1beta1 CRD（带子资源、且可能没有 .Schema.OpenAPIV3Schema）做校验测试。
 func TestStatusStrategyValidateUpdateForLegacyV1beta1(t *testing.T) {
 	crdV1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
 	err := yaml.Unmarshal([]byte(listTypeResourceSchemaForLegacyV1beta1), &crdV1beta1)

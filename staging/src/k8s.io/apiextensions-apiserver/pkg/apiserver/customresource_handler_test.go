@@ -65,6 +65,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestConvertFieldLabel 验证按作用域转换字段标签的行为。
 func TestConvertFieldLabel(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -150,19 +151,20 @@ func TestConvertFieldLabel(t *testing.T) {
 	}
 }
 
+// TestRouting 验证 crdHandler 在不同路径、不同 Accept 头和同步状态下的路由与响应编码。
 func TestRouting(t *testing.T) {
 	hasSynced := false
 
 	crdIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	crdLister := listers.NewCustomResourceDefinitionLister(crdIndexer)
 
-	// note that in production we delegate to the special handler that is attached at the end of the delegation chain that checks if the server has installed all known HTTP paths before replying to the client.
-	// it returns 503 if not all registered signals have been ready (closed) otherwise it simply replies with 404.
-	// the apiextentionserver is considered to be initialized once hasCRDInformerSyncedSignal is closed.
+	// 注意：生产环境中会委托给位于委托链末端的特殊 handler，
+	// 它会在回复客户端之前检查服务器是否已安装所有已知 HTTP 路径。
+	// 若所有已注册的信号尚未就绪（关闭），返回 503；否则直接返回 404。
+	// 一旦 hasCRDInformerSyncedSignal 关闭，apiextensionserver 即视为已初始化。
 	//
-	// here, in this test the delegate represent the special handler and hasSync represents the signal.
-	// primarily we just want to make sure that the delegate has been called.
-	// the behaviour of the real delegate is tested elsewhere.
+	// 在本测试中，delegate 代表该特殊 handler，hasSynced 代表该信号。
+	// 主要目的是确认 delegate 被调用。真实 delegate 的行为在别处测试。
 	delegateCalled := false
 	delegate := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		delegateCalled = true
@@ -382,7 +384,7 @@ func TestRouting(t *testing.T) {
 						req.Header.Set("Accept", "application/vnd.kubernetes.protobuf, application/json")
 					case "unknown":
 						req.Header.Set("Accept", "application/vnd.kubernetes.unknown")
-						// rather than success, we'll get a not supported error
+						// 不会成功，而是得到不支持的媒体类型错误
 						if expectStatus == 200 {
 							expectStatus = 406
 						}
@@ -414,12 +416,12 @@ func TestRouting(t *testing.T) {
 						tc.ExpectResponse(t, result, content)
 					}
 
-					// Make sure error responses come back with status objects in all encodings, including unknown encodings
+					// 确保错误响应在所有编码（包括未知编码）下都以 Status 对象返回
 					if !delegateCalled && expectStatus >= 300 {
 						status := &metav1.Status{}
 
 						switch contentType {
-						// unknown accept headers fall back to json errors
+						// 未知 Accept 头回退为 JSON 错误
 						case "json", "unknown":
 							if e, a := "application/json", result.Header.Get("Content-Type"); e != a {
 								t.Errorf("expected Content-Type %v, got %v", e, a)
@@ -458,14 +460,18 @@ func TestRouting(t *testing.T) {
 	}
 }
 
+// TestHandlerConversionWithWatchCache 在启用 watch cache 时验证各版本的转换行为。
 func TestHandlerConversionWithWatchCache(t *testing.T) {
 	testHandlerConversion(t, true)
 }
 
+// TestHandlerConversionWithoutWatchCache 在禁用 watch cache 时验证各版本的转换行为。
 func TestHandlerConversionWithoutWatchCache(t *testing.T) {
 	testHandlerConversion(t, false)
 }
 
+// testHandlerConversion 针对每个版本执行创建、更新、获取、列表和 watch，
+// 并断言返回对象的 GVK 与请求版本一致。
 func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 	cl := fake.NewSimpleClientset()
 	informers := informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 0)
@@ -475,8 +481,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 	defer server.Terminate(t)
 
 	crd := multiVersionFixture.DeepCopy()
-	// Create a context with metav1.NamespaceNone as the namespace since multiVersionFixture
-	// is a cluster scoped CRD.
+	// 由于 multiVersionFixture 是集群作用域 CRD，这里以 metav1.NamespaceNone 作为命名空间创建 context。
 	ctx := apirequest.WithNamespace(apirequest.NewContext(), metav1.NamespaceNone)
 	if _, err := cl.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
@@ -529,11 +534,11 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 	startResourceVersion := ""
 
 	if enableWatchCache {
-		// Let watch cache establish initial list
+		// 等待 watch cache 完成初始 list
 		time.Sleep(time.Second)
 	}
 
-	// Create and delete a marker object to get a starting resource version
+	// 创建并删除一个标记对象，以获得起始 resource version
 	{
 		u := &unstructured.Unstructured{Object: map[string]interface{}{}}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "stable.example.com", Version: "v1beta1", Kind: "MultiVersion"})
@@ -548,7 +553,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		}
 	}
 
-	// Create and get every version, expect returned result to match creation GVK
+	// 创建并获取每个版本，期望返回结果与创建时的 GVK 一致
 	for _, version := range crd.Spec.Versions {
 		expectGVK := schema.GroupVersionKind{Group: "stable.example.com", Version: version.Name, Kind: "MultiVersion"}
 		u := &unstructured.Unstructured{Object: map[string]interface{}{}}
@@ -556,7 +561,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		u.SetName("my-" + version.Name)
 		unstructured.SetNestedField(u.Object, int64(1), "spec", "num")
 
-		// Create
+		// 创建
 		if item, err := crdInfo.storages[version.Name].CustomResource.Create(ctx, u, validateFunc, &metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
 		} else if item.GetObjectKind().GroupVersionKind() != expectGVK {
@@ -565,7 +570,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 			u = item.(*unstructured.Unstructured)
 		}
 
-		// Update
+		// 更新
 		u.SetAnnotations(map[string]string{"updated": "true"})
 		if item, _, err := crdInfo.storages[version.Name].CustomResource.Update(ctx, u.GetName(), rest.DefaultUpdatedObjectInfo(u), validateFunc, updateValidateFunc, false, &metav1.UpdateOptions{}); err != nil {
 			t.Fatal(err)
@@ -573,7 +578,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 			t.Errorf("expected update result to be %#v, got %#v", expectGVK, item.GetObjectKind().GroupVersionKind())
 		}
 
-		// Get
+		// 获取
 		if item, err := crdInfo.storages[version.Name].CustomResource.Get(ctx, u.GetName(), &metav1.GetOptions{}); err != nil {
 			t.Fatal(err)
 		} else if item.GetObjectKind().GroupVersionKind() != expectGVK {
@@ -581,9 +586,9 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		}
 
 		if enableWatchCache {
-			// Allow time to propagate the create into the cache
+			// 留出时间让创建操作传播到 cache
 			time.Sleep(time.Second)
-			// Get cached
+			// 从缓存获取
 			if item, err := crdInfo.storages[version.Name].CustomResource.Get(ctx, u.GetName(), &metav1.GetOptions{ResourceVersion: "0"}); err != nil {
 				t.Fatal(err)
 			} else if item.GetObjectKind().GroupVersionKind() != expectGVK {
@@ -592,7 +597,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		}
 	}
 
-	// List every version, expect all returned items to match request GVK
+	// 列出每个版本，期望所有返回项与请求 GVK 一致
 	for _, version := range crd.Spec.Versions {
 		expectGVK := schema.GroupVersionKind{Group: "stable.example.com", Version: version.Name, Kind: "MultiVersion"}
 
@@ -607,7 +612,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		}
 
 		if enableWatchCache {
-			// List from watch cache
+			// 从 watch cache 列出
 			if list, err := crdInfo.storages[version.Name].CustomResource.List(ctx, &metainternalversion.ListOptions{ResourceVersion: "0"}); err != nil {
 				t.Fatal(err)
 			} else {
@@ -623,7 +628,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// 5 events: delete marker, create v1alpha1, create v1beta1, update v1alpha1, update v1beta1
+		// 共 5 个事件：删除 marker、创建 v1alpha1、创建 v1beta1、更新 v1alpha1、更新 v1beta1
 		for i := 0; i < 5; i++ {
 			select {
 			case event, ok := <-watch.ResultChan():
@@ -641,7 +646,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 				t.Errorf("timed out waiting for watch event")
 			}
 		}
-		// Expect no more watch events
+		// 期望不再有 watch 事件
 		select {
 		case event := <-watch.ResultChan():
 			t.Errorf("unexpected event: %#v", event)
@@ -650,6 +655,7 @@ func testHandlerConversion(t *testing.T, enableWatchCache bool) {
 	}
 }
 
+// TestDecoder 验证 schemaCoercingDecoder 在严格/非严格解码以及是否保留未知字段时的行为。
 func TestDecoder(t *testing.T) {
 	multiVersionJSON := `
 	{
@@ -839,22 +845,29 @@ unknown: foo`
 
 }
 
+// dummyAdmissionImpl 是不处理任何操作的准入实现。
 type dummyAdmissionImpl struct{}
 
+// Handles 报告是否处理给定准入操作，恒为 false。
 func (dummyAdmissionImpl) Handles(operation admission.Operation) bool { return false }
 
+// dummyAuthorizerImpl 是恒定放行的鉴权器实现。
 type dummyAuthorizerImpl struct{}
 
+// Authorize 恒返回允许。
 func (dummyAuthorizerImpl) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionAllow, "", nil
 }
 
+// dummyServiceResolverImpl 是用于解析 webhook 服务地址的简单实现。
 type dummyServiceResolverImpl struct{}
 
+// ResolveEndpoint 按 Kubernetes service DNS 规则构造 https 端点。
 func (dummyServiceResolverImpl) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	return &url.URL{Scheme: "https", Host: net.JoinHostPort(name+"."+namespace+".svc", strconv.Itoa(int(port)))}, nil
 }
 
+// multiVersionFixture 是包含两个版本、无转换策略的多版本 CRD 测试数据。
 var multiVersionFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "multiversion.stable.example.com", UID: types.UID("12345")},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -867,7 +880,7 @@ var multiVersionFixture = &apiextensionsv1.CustomResourceDefinition{
 		PreserveUnknownFields: false,
 		Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
 			{
-				// storage version, same schema as v1alpha1
+				// 存储版本，schema 与 v1alpha1 相同
 				Name: "v1beta1", Served: true, Storage: true,
 				Subresources: &apiextensionsv1.CustomResourceSubresources{Status: &apiextensionsv1.CustomResourceSubresourceStatus{}},
 				Schema: &apiextensionsv1.CustomResourceValidation{
@@ -878,7 +891,7 @@ var multiVersionFixture = &apiextensionsv1.CustomResourceDefinition{
 				},
 			},
 			{
-				// same schema as v1beta1
+				// schema 与 v1beta1 相同
 				Name: "v1alpha1", Served: true, Storage: false,
 				Subresources: &apiextensionsv1.CustomResourceSubresources{Status: &apiextensionsv1.CustomResourceSubresourceStatus{}},
 				Schema: &apiextensionsv1.CustomResourceValidation{
@@ -897,6 +910,7 @@ var multiVersionFixture = &apiextensionsv1.CustomResourceDefinition{
 	},
 }
 
+// Test_defaultDeprecationWarning 验证默认废弃警告文本以及替换版本的选取。
 func Test_defaultDeprecationWarning(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -970,8 +984,9 @@ func Test_defaultDeprecationWarning(t *testing.T) {
 	}
 }
 
+// TestBuildOpenAPIModelsForApply 验证给定的合法 schema 都能成功构建 apply 所需的 OpenAPI 模型。
 func TestBuildOpenAPIModelsForApply(t *testing.T) {
-	// This is a list of validation that we expect to work.
+	// 这是期望能够正常工作的一组校验配置。
 	tests := []apiextensionsv1.CustomResourceValidation{
 		{
 			OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
@@ -1053,6 +1068,7 @@ func TestBuildOpenAPIModelsForApply(t *testing.T) {
 	}
 }
 
+// getOpenAPISpecFromFile 从 testdata/swagger.json 读取并解析 OpenAPI 规范。
 func getOpenAPISpecFromFile() (*spec.Swagger, error) {
 	path := filepath.Join("testdata", "swagger.json")
 	_, err := os.Stat(path)

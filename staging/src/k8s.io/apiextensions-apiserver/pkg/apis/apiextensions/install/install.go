@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package install 将 apiextensions API 类型注册到运行时 scheme。
 package install
 
 import (
@@ -24,10 +25,11 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API group 并将各版本类型加入 scheme。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))
+	// v1 优先于 v1beta1 作为首选的序列化版本
 	utilruntime.Must(scheme.SetVersionPriority(v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion))
 }

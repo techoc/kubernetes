@@ -24,25 +24,27 @@ import (
 	cr "k8s.io/apiextensions-apiserver/examples/client-go/pkg/apis/cr"
 )
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组/版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: cr.GroupName, Version: "v1"}
 
-// Kind takes an unqualified kind and returns back a Group qualified GroupKind
+// Kind 接收不带组前缀的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组前缀的 resource，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
+	// SchemeBuilder 收集向 Scheme 注册本组类型的方法。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 是 SchemeBuilder.AddToScheme 的快捷入口。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to Scheme.
+// 将已知类型列表添加到 Scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Example{},

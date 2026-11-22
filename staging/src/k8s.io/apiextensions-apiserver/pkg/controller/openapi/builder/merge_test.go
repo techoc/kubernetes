@@ -24,6 +24,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestMergeSpecV3 验证多个 OpenAPI v3 规范合并后的路径与 schema 组件。
 func TestMergeSpecV3(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -161,6 +162,7 @@ func TestMergeSpecV3(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+			// 合并结果必须与期望完全一致：同名 schema 只保留一份，路径全量并集。
 			if !reflect.DeepEqual(merged, tt.expected) {
 				t.Error("Merged spec is different from expected spec")
 			}

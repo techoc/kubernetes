@@ -20,7 +20,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// ToKubeOpenAPI converts a structural schema to go-openapi schema. It is faithful and roundtrippable.
+// ToKubeOpenAPI 将结构化 schema 转换为 go-openapi schema，保真且可往返。
 func (s *Structural) ToKubeOpenAPI() *spec.Schema {
 	if s == nil {
 		return nil
@@ -162,7 +162,7 @@ func (vv *NestedValueValidation) toKubeOpenAPI() *spec.Schema {
 			ret.Properties[k] = *v.toKubeOpenAPI()
 		}
 	}
-	vv.ForbiddenGenerics.toKubeOpenAPI(ret)   // normally empty. Exception: int-or-string
-	vv.ForbiddenExtensions.toKubeOpenAPI(ret) // shouldn't do anything
+	vv.ForbiddenGenerics.toKubeOpenAPI(ret)   // 通常为空。例外：int-or-string
+	vv.ForbiddenExtensions.toKubeOpenAPI(ret) // 不应产生任何效果
 	return ret
 }

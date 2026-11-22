@@ -25,6 +25,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateListSetsAndMaps 覆盖 set/map 列表的重复项校验：
+// 校验按路径给出 duplicate/invalid 错误，并覆盖嵌套数组、additionalProperties 等结构。
 func TestValidateListSetsAndMaps(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -922,18 +924,23 @@ func TestValidateListSetsAndMaps(t *testing.T) {
 	}
 }
 
+// validationMatch 描述期望的校验错误：字段路径与错误类型。
 type validationMatch struct {
 	path      *field.Path
 	errorType field.ErrorType
 }
 
+// matches 判断实际错误是否与期望的路径和类型一致。
 func (v validationMatch) matches(err *field.Error) bool {
 	return err.Type == v.errorType && err.Field == v.path.String()
 }
 
+// duplicate 构造“重复元素”类型的期望错误。
 func duplicate(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeDuplicate}
 }
+
+// invalid 构造“值非法”类型的期望错误。
 func invalid(path ...string) validationMatch {
 	return validationMatch{path: field.NewPath(path[0], path[1:]...), errorType: field.ErrorTypeInvalid}
 }

@@ -51,8 +51,7 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
-// customResourceStrategy implements behavior for CustomResources for a single
-// version
+// customResourceStrategy 实现单个版本的 CustomResource 的存储策略行为。
 type customResourceStrategy struct {
 	runtime.ObjectTyper
 	names.NameGenerator
@@ -67,15 +66,17 @@ type customResourceStrategy struct {
 	selectableFieldSet []selectableField
 }
 
+// selectableField 是已解析（或解析失败）的 selectableField 配置项。
 type selectableField struct {
 	name      string
 	fieldPath *jsonpath.JSONPath
 	err       error
 }
 
+// NewStrategy 创建 CustomResource 的存储策略。
 func NewStrategy(typer runtime.ObjectTyper, namespaceScoped bool, kind schema.GroupVersionKind, schemaValidator, statusSchemaValidator validation.SchemaValidator, structuralSchema *structuralschema.Structural, status *apiextensions.CustomResourceSubresourceStatus, scale *apiextensions.CustomResourceSubresourceScale, selectableFields []v1.SelectableField) customResourceStrategy {
 	var celValidator *cel.Validator
-	celValidator = cel.NewValidator(structuralSchema, true, celconfig.PerCallLimit) // CEL programs are compiled and cached here
+	celValidator = cel.NewValidator(structuralSchema, true, celconfig.PerCallLimit) // CEL 程序在这里编译并缓存
 
 	strategy := customResourceStrategy{
 		ObjectTyper:     typer,
@@ -99,12 +100,14 @@ func NewStrategy(typer runtime.ObjectTyper, namespaceScoped bool, kind schema.Gr
 	return strategy
 }
 
+// prepareSelectableFields 预解析 selectable field 的 JSONPath，避免每次取属性时重新解析。
 func prepareSelectableFields(selectableFields []v1.SelectableField) []selectableField {
 	result := make([]selectableField, len(selectableFields))
 	for i, sf := range selectableFields {
 		name := strings.TrimPrefix(sf.JSONPath, ".")
 
 		parser := jsonpath.New("selectableField")
+		// 缺失字段应视为空值而不是错误。
 		parser.AllowMissingKeys(true)
 		err := parser.Parse("{" + sf.JSONPath + "}")
 		if err == nil {
@@ -123,12 +126,12 @@ func prepareSelectableFields(selectableFields []v1.SelectableField) []selectable
 	return result
 }
 
+// NamespaceScoped 返回资源是否为命名空间级别。
 func (a customResourceStrategy) NamespaceScoped() bool {
 	return a.namespaceScoped
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回被策略重置、用户不应修改的字段集合。
 func (a customResourceStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{}
 
@@ -141,13 +144,13 @@ func (a customResourceStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
-// PrepareForCreate clears the status of a CustomResource before creation.
+// PrepareForCreate 在创建前清空 CustomResource 的 status。
 func (a customResourceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	if a.status != nil {
 		customResourceObject := obj.(*unstructured.Unstructured)
 		customResource := customResourceObject.UnstructuredContent()
 
-		// create cannot set status
+		// 创建时不允许设置 status
 		delete(customResource, "status")
 	}
 
@@ -155,7 +158,7 @@ func (a customResourceStrategy) PrepareForCreate(ctx context.Context, obj runtim
 	accessor.SetGeneration(1)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清除终端用户更新时不允许设置的字段。
 func (a customResourceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCustomResourceObject := obj.(*unstructured.Unstructured)
 	oldCustomResourceObject := old.(*unstructured.Unstructured)
@@ -163,20 +166,21 @@ func (a customResourceStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	newCustomResource := newCustomResourceObject.UnstructuredContent()
 	oldCustomResource := oldCustomResourceObject.UnstructuredContent()
 
-	// If the /status subresource endpoint is installed, update is not allowed to set status.
+	// 安装了 /status 子资源端点时，普通 update 不允许改 status。
 	if a.status != nil {
 		_, ok1 := newCustomResource["status"]
 		_, ok2 := oldCustomResource["status"]
 		switch {
 		case ok2:
+			// 旧对象有 status：无条件沿用旧值。
 			newCustomResource["status"] = oldCustomResource["status"]
 		case ok1:
+			// 旧对象没有 status：丢弃新对象里擅自添加的值。
 			delete(newCustomResource, "status")
 		}
 	}
 
-	// except for the changes to `metadata`, any other changes
-	// cause the generation to increment.
+	// 除 `metadata` 外的任何变化都会让 generation 递增。
 	newCopyContent := copyNonMetadata(newCustomResource)
 	oldCopyContent := copyNonMetadata(oldCustomResource)
 	if !apiequality.Semantic.DeepEqual(newCopyContent, oldCopyContent) {
@@ -186,6 +190,7 @@ func (a customResourceStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	}
 }
 
+// copyNonMetadata 复制对象内容，但跳过 metadata 字段。
 func copyNonMetadata(original map[string]interface{}) map[string]interface{} {
 	ret := make(map[string]interface{})
 	for key, val := range original {
@@ -197,7 +202,7 @@ func copyNonMetadata(original map[string]interface{}) map[string]interface{} {
 	return ret
 }
 
-// Validate validates a new CustomResource.
+// Validate 校验新建的 CustomResource。
 func (a customResourceStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
@@ -207,14 +212,15 @@ func (a customResourceStrategy) Validate(ctx context.Context, obj runtime.Object
 	var errs field.ErrorList
 	errs = append(errs, a.validator.Validate(ctx, u, a.scale)...)
 
-	// validate embedded resources
+	// 校验内嵌资源
 	errs = append(errs, schemaobjectmeta.Validate(ctx, nil, u.Object, a.structuralSchema, false)...)
 
-	// validate x-kubernetes-list-type "map" and "set" invariant
+	// 校验 x-kubernetes-list-type 的 "map" 和 "set" 不变式
 	errs = append(errs, structurallisttype.ValidateListSetsAndMaps(nil, a.structuralSchema, u.Object)...)
 
-	// validate x-kubernetes-validations rules
+	// 校验 x-kubernetes-validations 规则
 	if celValidator := a.celValidator; celValidator != nil {
+		// 基础校验已失败时不再跑 CEL，否则错误会淹没根因。
 		if has, err := hasBlockingErr(errs); has {
 			errs = append(errs, err)
 		} else {
@@ -226,11 +232,12 @@ func (a customResourceStrategy) Validate(ctx context.Context, obj runtime.Object
 	return errs
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建对象时的警告。
 func (a customResourceStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return generateWarningsFromObj(obj, nil)
 }
 
+// generateWarningsFromObj 针对新出现的 finalizer 生成警告；old 为 nil 时视为新建。
 func generateWarningsFromObj(obj, old runtime.Object) []string {
 	var allWarnings []string
 	fldPath := field.NewPath("metadata", "finalizers")
@@ -239,6 +246,7 @@ func generateWarningsFromObj(obj, old runtime.Object) []string {
 		return allWarnings
 	}
 
+	// 只对本次新增的 finalizer 生成警告，避免更新时重复告警。
 	newAdded := sets.NewString(newObjAccessor.GetFinalizers()...)
 	if old != nil {
 		oldObjAccessor, err := meta.Accessor(old)
@@ -255,22 +263,21 @@ func generateWarningsFromObj(obj, old runtime.Object) []string {
 	return allWarnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象。CustomResource 无需额外规范化。
 func (customResourceStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for CustomResources; this means a POST is
-// needed to create one.
+// AllowCreateOnUpdate 对 CustomResource 为 false，即必须通过 POST 创建。
 func (customResourceStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// AllowUnconditionalUpdate is the default update policy for CustomResource objects.
+// AllowUnconditionalUpdate 是 CustomResource 的默认更新策略。
 func (customResourceStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user updating status.
+// ValidateUpdate 是终端用户更新 status 时的默认更新校验。
 func (a customResourceStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	uNew, ok := obj.(*unstructured.Unstructured)
 	if !ok {
@@ -285,6 +292,7 @@ func (a customResourceStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	var celOptions []cel.Option
 	var correlatedObject *common.CorrelatedObject
 	if utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) {
+		// old/new 配对后，校验器可对既有非法值放行。
 		correlatedObject = common.NewCorrelatedObject(uNew.Object, uOld.Object, &model.Structural{Structural: a.structuralSchema})
 		options = append(options, validation.WithRatcheting(correlatedObject))
 		celOptions = append(celOptions, cel.WithRatcheting(correlatedObject))
@@ -293,15 +301,16 @@ func (a customResourceStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	var errs field.ErrorList
 	errs = append(errs, a.validator.ValidateUpdate(ctx, uNew, uOld, a.scale, options...)...)
 
-	// Checks the embedded objects. We don't make a difference between update and create for those.
+	// 检查内嵌对象；这里不区分 update 与 create。
 	errs = append(errs, schemaobjectmeta.Validate(ctx, nil, uNew.Object, a.structuralSchema, false)...)
 
-	// ratcheting validation of x-kubernetes-list-type value map and set
+	// x-kubernetes-list-type map/set 的 ratcheting 校验：
+	// 旧对象本身已违规时跳过，避免用户被卡住无法修复。
 	if oldErrs := structurallisttype.ValidateListSetsAndMaps(nil, a.structuralSchema, uOld.Object); len(oldErrs) == 0 {
 		errs = append(errs, structurallisttype.ValidateListSetsAndMaps(nil, a.structuralSchema, uNew.Object)...)
 	}
 
-	// validate x-kubernetes-validations rules
+	// 校验 x-kubernetes-validations 规则
 	if celValidator := a.celValidator; celValidator != nil {
 		if has, err := hasBlockingErr(errs); has {
 			errs = append(errs, err)
@@ -311,19 +320,19 @@ func (a customResourceStrategy) ValidateUpdate(ctx context.Context, obj, old run
 		}
 	}
 
-	// No-op if not attached to context
+	// 未挂到 context 上时为空操作
 	if utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CRDValidationRatcheting) {
 		validation.Metrics.ObserveRatchetingTime(*correlatedObject.Duration)
 	}
 	return errs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新对象时的警告。
 func (a customResourceStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return generateWarningsFromObj(obj, old)
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 返回对象的标签和字段，用于过滤。
 func (a customResourceStrategy) GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -336,8 +345,8 @@ func (a customResourceStrategy) GetAttrs(obj runtime.Object) (labels.Set, fields
 	return accessor.GetLabels(), sFields, nil
 }
 
-// selectableFields returns a field set that can be used for filter selection.
-// This includes metadata.name, metadata.namespace and all custom selectable fields.
+// selectableFields 返回可用于过滤选择的字段集合。
+// 包含 metadata.name、metadata.namespace 以及所有自定义可选字段。
 func (a customResourceStrategy) selectableFields(obj runtime.Object, objectMeta metav1.Object) (fields.Set, error) {
 	objectMetaFields := objectMetaFieldsSet(objectMeta, a.namespaceScoped)
 	var selectableFieldsSet fields.Set
@@ -361,12 +370,14 @@ func (a customResourceStrategy) selectableFields(obj runtime.Object, objectMeta 
 			var value any
 
 			if len(results) > 0 && len(results[0]) > 0 {
+				// 每个字段配置只允许定位到唯一值，否则视为配置错误。
 				if len(results) > 1 || len(results[0]) > 1 {
 					return nil, fmt.Errorf("unexpectedly received more than one JSON path result")
 				}
 				value = results[0][0].Interface()
 			}
 
+			// 字段缺失或为 null 时当作空串参与选择，保证 set 中键齐全。
 			if value != nil {
 				selectableFieldsSet[sf.name] = fmt.Sprint(value)
 			} else {
@@ -377,7 +388,7 @@ func (a customResourceStrategy) selectableFields(obj runtime.Object, objectMeta 
 	return generic.MergeFieldsSets(objectMetaFields, selectableFieldsSet), nil
 }
 
-// objectMetaFieldsSet returns a fields that represent the ObjectMeta.
+// objectMetaFieldsSet 返回表示 ObjectMeta 的字段集合。
 func objectMetaFieldsSet(objectMeta metav1.Object, namespaceScoped bool) fields.Set {
 	if namespaceScoped {
 		return fields.Set{
@@ -390,9 +401,8 @@ func objectMetaFieldsSet(objectMeta metav1.Object, namespaceScoped bool) fields.
 	}
 }
 
-// MatchCustomResourceDefinitionStorage is the filter used by the generic etcd backend to route
-// watch events from etcd to clients of the apiserver only interested in specific
-// labels/fields.
+// MatchCustomResourceDefinitionStorage 是通用 etcd 后端使用的过滤器，用于把 etcd 的
+// watch 事件路由给只关心特定 labels/fields 的 apiserver 客户端。
 func (a customResourceStrategy) MatchCustomResourceDefinitionStorage(label labels.Selector, field fields.Selector) apiserverstorage.SelectionPredicate {
 	return apiserverstorage.SelectionPredicate{
 		Label:    label,
@@ -401,7 +411,8 @@ func (a customResourceStrategy) MatchCustomResourceDefinitionStorage(label label
 	}
 }
 
-// OpenAPIv3 type/maxLength/maxItems/MaxProperties/required/enum violation/wrong type field validation failures are viewed as blocking err for CEL validation
+// OpenAPIv3 的 type/maxLength/maxItems/MaxProperties/required/enum 违规以及类型错误
+// 都会被视为阻塞 CEL 校验的错误。
 func hasBlockingErr(errs field.ErrorList) (bool, *field.Error) {
 	for _, err := range errs {
 		if err.Type == field.ErrorTypeNotSupported || err.Type == field.ErrorTypeRequired || err.Type == field.ErrorTypeTooLong || err.Type == field.ErrorTypeTooMany || err.Type == field.ErrorTypeTypeInvalid {

@@ -40,6 +40,7 @@ import (
 	apiextensionsvalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 )
 
+// customResourceValidator 对自定义资源执行类型元数据、metadata、schema 以及 scale 子资源校验。
 type customResourceValidator struct {
 	namespaceScoped       bool
 	kind                  schema.GroupVersionKind
@@ -47,6 +48,7 @@ type customResourceValidator struct {
 	statusSchemaValidator apiextensionsvalidation.SchemaValidator
 }
 
+// Validate 校验创建或全量更新时的自定义资源。
 func (a customResourceValidator) Validate(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
 	if errs := a.ValidateTypeMeta(ctx, obj); len(errs) > 0 {
 		return errs
@@ -62,6 +64,7 @@ func (a customResourceValidator) Validate(ctx context.Context, obj *unstructured
 	return allErrs
 }
 
+// ValidateUpdate 校验对自定义资源的更新。
 func (a customResourceValidator) ValidateUpdate(ctx context.Context, obj, old *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale, options ...apiextensionsvalidation.ValidationOption) field.ErrorList {
 	if errs := a.ValidateTypeMeta(ctx, obj); len(errs) > 0 {
 		return errs
@@ -77,17 +80,20 @@ func (a customResourceValidator) ValidateUpdate(ctx context.Context, obj, old *u
 	return allErrs
 }
 
+// standardFinalizers 是允许的无域名限定 finalizer 名称白名单。
 var standardFinalizers = sets.NewString(
 	metav1.FinalizerOrphanDependents,
 	metav1.FinalizerDeleteDependents,
 	string(corev1.FinalizerKubernetes),
 )
 
+// validateKubeFinalizerName 校验 finalizer 名称，并针对未使用域名限定的名称给出警告。
 func validateKubeFinalizerName(stringValue string, fldPath *field.Path) []string {
 	var allWarnings []string
 	for _, msg := range apimachineryvalidation.IsQualifiedName(stringValue) {
 		allWarnings = append(allWarnings, fmt.Sprintf("%s: %q: %s", fldPath.String(), stringValue, msg))
 	}
+	// 名称不含 / 时，只有白名单内的名称可以免于警告
 	if len(strings.Split(stringValue, "/")) == 1 {
 		if !standardFinalizers.Has(stringValue) {
 			if strings.Contains(stringValue, ".") {
@@ -100,6 +106,7 @@ func validateKubeFinalizerName(stringValue string, fldPath *field.Path) []string
 	return allWarnings
 }
 
+// ValidateStatusUpdate 校验 status 子资源的更新，只校验 status 部分。
 func (a customResourceValidator) ValidateStatusUpdate(ctx context.Context, obj, old *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale, options ...apiextensionsvalidation.ValidationOption) field.ErrorList {
 	if errs := a.ValidateTypeMeta(ctx, obj); len(errs) > 0 {
 		return errs
@@ -116,6 +123,7 @@ func (a customResourceValidator) ValidateStatusUpdate(ctx context.Context, obj, 
 	return allErrs
 }
 
+// ValidateTypeMeta 校验对象的 kind 和 apiVersion 是否与 CRD 定义一致。
 func (a customResourceValidator) ValidateTypeMeta(ctx context.Context, obj *unstructured.Unstructured) field.ErrorList {
 	typeAccessor, err := meta.TypeAccessor(obj)
 	if err != nil {
@@ -132,6 +140,7 @@ func (a customResourceValidator) ValidateTypeMeta(ctx context.Context, obj *unst
 	return allErrs
 }
 
+// ValidateScaleSpec 校验 scale 子资源的 specReplicas 路径。
 func (a customResourceValidator) ValidateScaleSpec(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
 	if scale == nil {
 		return nil
@@ -139,8 +148,8 @@ func (a customResourceValidator) ValidateScaleSpec(ctx context.Context, obj *uns
 
 	var allErrs field.ErrorList
 
-	// validate specReplicas
-	specReplicasPath := strings.TrimPrefix(scale.SpecReplicasPath, ".") // ignore leading period
+	// 校验 specReplicas
+	specReplicasPath := strings.TrimPrefix(scale.SpecReplicasPath, ".") // 忽略前导的句点
 	specReplicas, _, err := unstructured.NestedInt64(obj.UnstructuredContent(), strings.Split(specReplicasPath, ".")...)
 	if err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(scale.SpecReplicasPath), specReplicas, err.Error()))
@@ -153,6 +162,7 @@ func (a customResourceValidator) ValidateScaleSpec(ctx context.Context, obj *uns
 	return allErrs
 }
 
+// ValidateScaleStatus 校验 scale 子资源的 statusReplicas 和 labelSelector 路径。
 func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
 	if scale == nil {
 		return nil
@@ -160,8 +170,8 @@ func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *u
 
 	var allErrs field.ErrorList
 
-	// validate statusReplicas
-	statusReplicasPath := strings.TrimPrefix(scale.StatusReplicasPath, ".") // ignore leading period
+	// 校验 statusReplicas
+	statusReplicasPath := strings.TrimPrefix(scale.StatusReplicasPath, ".") // 忽略前导的句点
 	statusReplicas, _, err := unstructured.NestedInt64(obj.UnstructuredContent(), strings.Split(statusReplicasPath, ".")...)
 	if err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(scale.StatusReplicasPath), statusReplicas, err.Error()))
@@ -171,9 +181,9 @@ func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *u
 		allErrs = append(allErrs, field.Invalid(field.NewPath(scale.StatusReplicasPath), statusReplicas, fmt.Sprintf("should be less than or equal to %v", math.MaxInt32)))
 	}
 
-	// validate labelSelector
+	// 校验 labelSelector
 	if scale.LabelSelectorPath != nil {
-		labelSelectorPath := strings.TrimPrefix(*scale.LabelSelectorPath, ".") // ignore leading period
+		labelSelectorPath := strings.TrimPrefix(*scale.LabelSelectorPath, ".") // 忽略前导的句点
 		labelSelector, _, err := unstructured.NestedString(obj.UnstructuredContent(), strings.Split(labelSelectorPath, ".")...)
 		if err != nil {
 			allErrs = append(allErrs, field.Invalid(field.NewPath(*scale.LabelSelectorPath), labelSelector, err.Error()))
@@ -183,6 +193,7 @@ func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *u
 	return allErrs
 }
 
+// validateObjectMetaDeclaratively 对对象 metadata 执行声明式创建校验。
 func (a customResourceValidator) validateObjectMetaDeclaratively(ctx context.Context, obj *unstructured.Unstructured) field.ErrorList {
 	metadata, errs := getObjectMeta(obj)
 	if len(errs) > 0 {
@@ -191,6 +202,7 @@ func (a customResourceValidator) validateObjectMetaDeclaratively(ctx context.Con
 	return validation.ValidateObjectMetaDeclaratively(ctx, operation.Create, metadata, nil, a.namespaceScoped, validation.NameIsDNSSubdomain, field.NewPath("metadata"), utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 }
 
+// validateObjectMetaUpdateDeclaratively 对对象 metadata 执行声明式更新校验。
 func (a customResourceValidator) validateObjectMetaUpdateDeclaratively(ctx context.Context, obj, old *unstructured.Unstructured) field.ErrorList {
 	metadata, errs := getObjectMeta(obj)
 	if len(errs) > 0 {
@@ -203,6 +215,7 @@ func (a customResourceValidator) validateObjectMetaUpdateDeclaratively(ctx conte
 	return validation.ValidateObjectMetaDeclaratively(ctx, operation.Update, metadata, oldMetadata, a.namespaceScoped, nil, field.NewPath("metadata"), utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 }
 
+// getObjectMeta 从非结构化对象的 metadata 字段反序列化为 ObjectMeta。
 func getObjectMeta(obj *unstructured.Unstructured) (*metav1.ObjectMeta, field.ErrorList) {
 	if obj == nil || obj.UnstructuredContent() == nil {
 		return &metav1.ObjectMeta{}, nil

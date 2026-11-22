@@ -44,6 +44,8 @@ import (
 	"k8s.io/apiextensions-apiserver/test/integration/fixtures"
 )
 
+// TestPostInvalidObjectMeta 验证 POST 时非法 ObjectMeta 会被拒绝，合法请求中的未知字段会被裁剪，
+// generation 会被归一化为 1。
 func TestPostInvalidObjectMeta(t *testing.T) {
 	tearDown, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -60,6 +62,7 @@ func TestPostInvalidObjectMeta(t *testing.T) {
 	noxuResourceClient := newNamespacedCustomResourceClient("default", dynamicClient, noxuDefinition)
 
 	obj := fixtures.NewNoxuInstance("default", "foo")
+	// labels 的值必须是字符串；混入 int64 会让 ObjectMeta 整体解码失败。
 	unstructured.SetNestedField(obj.UnstructuredContent(), int64(42), "metadata", "unknown")
 	unstructured.SetNestedField(obj.UnstructuredContent(), nil, "metadata", "generation")
 	unstructured.SetNestedField(obj.UnstructuredContent(), map[string]interface{}{"foo": int64(42), "bar": "abc"}, "metadata", "labels")
@@ -75,6 +78,7 @@ func TestPostInvalidObjectMeta(t *testing.T) {
 		t.Fatalf("expected 'cannot be handled' error message, got: %v", status.Status().Message)
 	}
 
+	// 修正 labels 后应能创建成功；未知字段被裁剪，generation 由服务端补为 1。
 	unstructured.SetNestedField(obj.UnstructuredContent(), map[string]interface{}{"bar": "abc"}, "metadata", "labels")
 	obj, err = instantiateCustomResource(t, obj, noxuResourceClient, noxuDefinition)
 	if err != nil {
@@ -96,6 +100,8 @@ func TestPostInvalidObjectMeta(t *testing.T) {
 	}
 }
 
+// TestInvalidObjectMetaInStorage 直接向 etcd 写入非法对象，验证读取时的裁剪与降级行为，
+// 以及后续更新时仍会按当前规则校验。
 func TestInvalidObjectMetaInStorage(t *testing.T) {
 	tearDown, config, options, err := fixtures.StartDefaultServer(t)
 	if err != nil {
@@ -114,6 +120,7 @@ func TestInvalidObjectMetaInStorage(t *testing.T) {
 	}
 
 	noxuDefinition := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.NamespaceScoped)
+	// 声明 embedded 为内嵌资源，用于覆盖 embedded.metadata 的裁剪逻辑。
 	noxuDefinition.Spec.Versions[0].Schema = &apiextensionsv1.CustomResourceValidation{
 		OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
 			Type: "object",
@@ -131,6 +138,7 @@ func TestInvalidObjectMetaInStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 复用默认服务器所使用的 etcd 配置，绕过 API 直接构造客户端。
 	RESTOptionsGetter := serveroptions.NewCRDRESTOptionsGetter(*options.RecommendedOptions.Etcd, nil, nil)
 	restOptions, err := RESTOptionsGetter.GetRESTOptions(schema.GroupResource{Group: noxuDefinition.Spec.Group, Resource: noxuDefinition.Spec.Names.Plural}, nil)
 	if err != nil {
@@ -157,6 +165,7 @@ func TestInvalidObjectMetaInStorage(t *testing.T) {
 
 	t.Logf("Creating object with wrongly typed annotations and non-validating labels manually in etcd")
 
+	// 构造类型错误的 annotations、非法的 labels，以及 unknown、generation=nil 等历史脏数据。
 	original := fixtures.NewNoxuInstance("default", "foo")
 	unstructured.SetNestedField(original.UnstructuredContent(), int64(42), "metadata", "unknown")
 	unstructured.SetNestedField(original.UnstructuredContent(), nil, "metadata", "generation")
@@ -171,6 +180,7 @@ func TestInvalidObjectMetaInStorage(t *testing.T) {
 
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceDefault)
 	key := path.Join("/", restOptions.StorageConfig.Prefix, noxuDefinition.Spec.Group, "noxus/default/foo")
+	// 以裸 JSON 写入 etcd，模拟被绕过校验写入的历史数据。
 	val, _ := json.Marshal(original.UnstructuredContent())
 	if _, err := etcdclient.Put(ctx, key, string(val)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -275,6 +285,7 @@ func TestInvalidObjectMetaInStorage(t *testing.T) {
 	}
 }
 
+// embeddedResourceFixture 是用于测试内嵌资源（x-kubernetes-embedded-resource）裁剪行为的 CRD 模板。
 var embeddedResourceFixture = &apiextensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{Name: "foos.tests.example.com"},
 	Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -301,6 +312,7 @@ var embeddedResourceFixture = &apiextensionsv1.CustomResourceDefinition{
 }
 
 const (
+	// embeddedResourceSchema 同时覆盖内嵌资源、普通保留未知字段对象、嵌套内嵌资源和默认值。
 	embeddedResourceSchema = `
 type: object
 properties:
@@ -331,6 +343,7 @@ properties:
         foo: bar
 `
 
+	// embeddedResourceInstance 是包含应被裁剪的 metadata.unspecified 字段的合法实例。
 	embeddedResourceInstance = `
 kind: Foo
 apiVersion: tests.example.com/v1beta1
@@ -360,6 +373,7 @@ embeddedNested:
       unspecified: bar
 `
 
+	// expectedEmbeddedResourceInstance 是裁剪并补齐默认值之后期望得到的对象。
 	expectedEmbeddedResourceInstance = `
 kind: Foo
 apiVersion: tests.example.com/v1beta1
@@ -391,6 +405,7 @@ defaults:
     foo: bar
 `
 
+	// wronglyTypedEmbeddedResourceInstance 的 embedded.metadata.namespace 不是字符串，应被拒绝。
 	wronglyTypedEmbeddedResourceInstance = `
 kind: Foo
 apiVersion: tests.example.com/v1beta1
@@ -402,6 +417,7 @@ embedded:
     namespace: 42
 `
 
+	// invalidEmbeddedResourceInstance 覆盖非法标签、非法 kind 与非法 name 的组合。
 	invalidEmbeddedResourceInstance = `
 kind: Foo
 apiVersion: tests.example.com/v1beta1
@@ -424,6 +440,7 @@ invalidDefaults: {}
 `
 )
 
+// TestEmbeddedResources 验证内嵌资源的 ObjectMeta 裁剪、默认值填充以及非法值的校验错误。
 func TestEmbeddedResources(t *testing.T) {
 	tearDownFn, apiExtensionClient, dynamicClient, err := fixtures.StartDefaultServerWithClients(t)
 	if err != nil {
@@ -456,6 +473,7 @@ func TestEmbeddedResources(t *testing.T) {
 	t.Logf("CR created: %#v", foo.UnstructuredContent())
 
 	t.Logf("Checking that everything unknown inside ObjectMeta is gone")
+	// 顶层 metadata 由服务端生成，比较裁剪结果前先去掉。
 	delete(foo.Object, "metadata")
 	var expected map[string]interface{}
 	if err := yaml.Unmarshal([]byte(expectedEmbeddedResourceInstance), &expected); err != nil {
@@ -523,6 +541,8 @@ func TestEmbeddedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create CR: %v", err)
 	}
+	// 把非法对象的字段拷贝到一个合法对象上，验证更新路径同样会拒绝这些值；
+	// metadata 保留原值，避免名称冲突干扰断言。
 	for k, v := range invalid.Object {
 		if k == "metadata" {
 			continue

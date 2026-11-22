@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestConversion 验证内部类型与 v1 之间的字段迁移和合并逻辑。
 func TestConversion(t *testing.T) {
 	testcases := []struct {
 		Name      string
@@ -38,7 +39,7 @@ func TestConversion(t *testing.T) {
 		ExpectOut runtime.Object
 		ExpectErr string
 	}{
-		// Versions
+		// 版本
 		{
 			Name:      "internal to v1, no versions",
 			In:        &apiextensions.CustomResourceDefinition{},
@@ -127,7 +128,7 @@ func TestConversion(t *testing.T) {
 				},
 			},
 		},
-		// Validation
+		// 校验
 		{
 			Name: "internal to v1, top-level validation moves to per-version",
 			In: &apiextensions.CustomResourceDefinition{
@@ -210,7 +211,7 @@ func TestConversion(t *testing.T) {
 				},
 			},
 		},
-		// Subresources
+		// 子资源
 		{
 			Name: "internal to v1, top-level subresources moves to per-version",
 			In: &apiextensions.CustomResourceDefinition{
@@ -293,7 +294,7 @@ func TestConversion(t *testing.T) {
 				},
 			},
 		},
-		// Additional Printer Columns
+		// 附加打印列
 		{
 			Name: "internal to v1, top-level printer columns moves to per-version",
 			In: &apiextensions.CustomResourceDefinition{
@@ -376,7 +377,7 @@ func TestConversion(t *testing.T) {
 				},
 			},
 		},
-		// SelectableFields
+		// 可选字段
 		{
 			Name: "internal to v1, top-level selectable fields moves to per-version",
 			In: &apiextensions.CustomResourceDefinition{
@@ -483,7 +484,7 @@ func TestConversion(t *testing.T) {
 				},
 			},
 		},
-		// webhook conversion config
+		// webhook 转换配置
 		{
 			Name: "internal to v1, no webhook client config",
 			In: &apiextensions.CustomResourceDefinition{
@@ -598,7 +599,7 @@ func TestConversion(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	// add internal and external types
+	// 注册内部与外部类型
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -628,6 +629,7 @@ func TestConversion(t *testing.T) {
 	}
 }
 
+// TestJSONConversion 验证 JSON 默认值在转换为外部类型时的序列化结果。
 func TestJSONConversion(t *testing.T) {
 	nilJSON := apiextensions.JSON(nil)
 	nullJSON := apiextensions.JSON("null")
@@ -695,7 +697,7 @@ func TestJSONConversion(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 
-	// add internal and external types
+	// 注册内部与外部类型
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -715,6 +717,7 @@ func TestJSONConversion(t *testing.T) {
 	}
 }
 
+// TestJSONRoundTrip 验证 JSON schema 经过内部类型往返后保留 null 相关语义。
 func TestJSONRoundTrip(t *testing.T) {
 	testcases := []struct {
 		name string
@@ -734,7 +737,7 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	// add internal and external types
+	// 注册内部与外部类型
 	if err := apiextensions.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -769,6 +772,7 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 }
 
+// TestMemoryEqual 校验内部与外部类型的反射结构在内存布局上一致。
 func TestMemoryEqual(t *testing.T) {
 	testcases := []struct {
 		a interface{}
@@ -786,6 +790,7 @@ func TestMemoryEqual(t *testing.T) {
 	}
 }
 
+// assertEqualTypes 递归比较两个反射类型，确保字段名、偏移、匿名性和索引一致。
 func assertEqualTypes(t *testing.T, path []string, a, b reflect.Type) {
 	if a == b {
 		return
@@ -827,13 +832,14 @@ func assertEqualTypes(t *testing.T, path []string, a, b reflect.Type) {
 		bElemType := b.Elem()
 		assertEqualTypes(t, path, aElemType, bElemType)
 	case reflect.String:
-		// string types are equal
+		// 字符串类型相等
 
 	default:
 		fatalTypeError(t, path, a, b, "unhandled kind")
 	}
 }
 
+// fatalTypeError 报告类型不匹配的致命错误。
 func fatalTypeError(t *testing.T, path []string, a, b reflect.Type, message string) {
 	t.Helper()
 	t.Fatalf("%s: %s: %s %s", strings.Join(path, "."), message, a, b)
