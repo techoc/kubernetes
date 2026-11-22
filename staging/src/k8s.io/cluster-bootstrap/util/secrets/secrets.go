@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package secrets 提供从 bootstrap token Secret 中读取、校验数据的小工具。
+//
+// 这里刻意不包含任何写操作：控制器负责 Secret 生命周期，认证插件只读。
+// 所有时间相关的判断都接收显式 currentTime，便于测试并避免依赖调用时刻。
 package secrets
 
 import (
@@ -29,12 +33,16 @@ import (
 )
 
 var (
+	// 匹配 `bootstrap-token-<6 位 ID>`，用 QuoteMeta 保护前缀中的元字符；
+	// 锚定首尾，防止名称中夹带额外片段。
 	secretNameRe = regexp.MustCompile(`^` + regexp.QuoteMeta(api.BootstrapTokenSecretPrefix) + `([a-z0-9]{6})$`)
 )
 
 // GetData returns the string value for the given key in the specified Secret
 // If there is an error or if the key doesn't exist, an empty string is returned.
 func GetData(secret *v1.Secret, key string) string {
+	// Data 为 nil 等价于所有键都不存在；返回空串让调用方无需区分
+	// “缺少键”和“缺少 Data”。
 	if secret.Data == nil {
 		return ""
 	}
@@ -56,6 +64,9 @@ func HasExpired(secret *v1.Secret, currentTime time.Time) bool {
 // timeRemaining indicates how long until it does expire.
 // if the secret has no expiration timestamp, returns 0, false.
 // if there is an error parsing the secret's expiration timestamp, returns 0, true.
+//
+// 时间解析失败按过期处理（fail-closed），避免畸形的时间戳意外延长 token 的
+// 可用期。
 func GetExpiration(secret *v1.Secret, currentTime time.Time) (timeRemaining time.Duration, isExpired bool) {
 	expiration := GetData(secret, api.BootstrapTokenExpirationKey)
 	if len(expiration) == 0 {
@@ -68,6 +79,7 @@ func GetExpiration(secret *v1.Secret, currentTime time.Time) (timeRemaining time
 		return 0, true
 	}
 
+	// 只有严格大于 0 才算未过期；等于 0 的边界视为已过期。
 	timeRemaining = expTime.Sub(currentTime)
 	if timeRemaining <= 0 {
 		klog.V(3).Infof("Expired bootstrap token in %s/%s Secret: %v",
@@ -78,6 +90,9 @@ func GetExpiration(secret *v1.Secret, currentTime time.Time) (timeRemaining time
 }
 
 // ParseName parses the name of the secret to extract the secret ID.
+//
+// 名称形如 `bootstrap-token-<id>`；正则的捕获组保证返回的是纯 ID，
+// 名称不合法时 ok 为 false 而不是返回空串加 nil 错误。
 func ParseName(name string) (secretID string, ok bool) {
 	r := secretNameRe.FindStringSubmatch(name)
 	if r == nil {
@@ -89,6 +104,9 @@ func ParseName(name string) (secretID string, ok bool) {
 // GetGroups loads and validates the bootstrapapi.BootstrapTokenExtraGroupsKey
 // key from the bootstrap token secret, returning a list of group names or an
 // error if any of the group names are invalid.
+//
+// 结果始终包含默认组 system:bootstrappers；附加组逐个校验，任一非法则
+// 整体返回错误（不静默丢弃），以免配置错误被掩盖成权限缺失或越权。
 func GetGroups(secret *v1.Secret) ([]string, error) {
 	// always include the default group
 	groups := sets.NewString(api.BootstrapDefaultGroup)

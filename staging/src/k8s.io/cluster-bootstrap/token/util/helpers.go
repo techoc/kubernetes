@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package util 提供 bootstrap token 的生成、格式校验与名称转换工具。
+//
+// 这里同时保留较旧的辅助函数（token 字符串层面）和更细分的子包
+// (util/secrets、util/tokens)。代码中特意区分公开的 token ID 与保密的
+// token Secret：对 ID 可以用正则匹配，对 Secret 则采用常量时间比较，
+// 以减少侧信道泄露。
 package util
 
 import (
@@ -34,6 +40,9 @@ const validBootstrapTokenChars = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 var (
 	// BootstrapTokenRegexp is a compiled regular expression of TokenRegexpString
+	//
+	// 仅用于匹配公开的完整 token 结构；涉及 Secret 的校验应改用
+	// IsValidBootstrapToken 的常量时间实现。
 	BootstrapTokenRegexp = regexp.MustCompile(api.BootstrapTokenPattern)
 	// BootstrapTokenIDRegexp is a compiled regular expression of TokenIDRegexpString
 	BootstrapTokenIDRegexp = regexp.MustCompile(api.BootstrapTokenIDPattern)
@@ -42,6 +51,9 @@ var (
 )
 
 // GenerateBootstrapToken generates a new, random Bootstrap Token.
+//
+// 返回 "<id>.<secret>" 形式。ID 与 Secret 分开用 crypto/rand 生成，
+// 因此即使 ID 被公开，也无法推导出 Secret。
 func GenerateBootstrapToken() (string, error) {
 	tokenID, err := randBytes(api.BootstrapTokenIDBytes)
 	if err != nil {
@@ -58,6 +70,9 @@ func GenerateBootstrapToken() (string, error) {
 
 // randBytes returns a random string consisting of the characters in
 // validBootstrapTokenChars, with the length customized by the parameter
+//
+// 逐个字符从 crypto/rand 取随机整数并映射到合法字符集；使用常量时间的
+// 位运算完成映射，避免基于时间差异的分支泄露随机值。
 func randBytes(length int) (string, error) {
 	var (
 		token = make([]byte, length)
@@ -87,6 +102,9 @@ func TokenFromIDAndSecret(id, secret string) string {
 // IsValidBootstrapToken returns whether the given string is valid as a Bootstrap Token.
 // Avoid using BootstrapTokenRegexp.MatchString(token) and instead perform constant-time
 // comparisons on the secret.
+//
+// 对 Secret 部分不使用正则：正则引擎的比较可能因不匹配位置不同而耗时不同，
+// 逐字符常量时间校验可降低通过时间侧信道探测 Secret 的风险。
 func IsValidBootstrapToken(token string) bool {
 	// Must be exactly two strings separated by "."
 	t := strings.Split(token, ".")
@@ -124,6 +142,8 @@ func IsValidBootstrapTokenID(tokenID string) bool {
 
 // BootstrapTokenSecretName returns the expected name for the Secret storing the
 // Bootstrap Token in the Kubernetes API.
+//
+// 名称只包含公开的 ID，所以可以安全地用于对象路径和日志。
 func BootstrapTokenSecretName(tokenID string) string {
 	return fmt.Sprintf("%s%s", api.BootstrapTokenSecretPrefix, tokenID)
 }
@@ -139,6 +159,9 @@ func ValidateBootstrapGroupName(name string) error {
 }
 
 // ValidateUsages validates that the passed in string are valid usage strings for bootstrap tokens.
+//
+// 未知用途被收集后一次性报错，错误信息会列出所有非法值，便于调用方
+// 直接修正配置而非逐个试错。
 func ValidateUsages(usages []string) error {
 	validUsages := sets.NewString(api.KnownTokenUsages...)
 	invalidUsages := sets.NewString()

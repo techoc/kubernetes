@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package tokens 负责把 "<id>.<secret>" 形式的字符串拆解为 token 的两部分。
+//
+// 这是面向调用方的轻量解析入口（较 token/util 更细分）；它只做格式匹配，
+// 不访问集群，也不验证 token 是否真实存在或未过期。
 package tokens
 
 import (
@@ -29,6 +33,8 @@ var (
 
 // ParseToken tries and parse a valid token from a string.
 // A token ID and token secret are returned in case of success, an error otherwise.
+//
+// 使用锚定整串的正则捕获两组；len 检查同时兜住格式错误，避免越界访问。
 func ParseToken(s string) (tokenID, tokenSecret string, err error) {
 	split := bootstrapTokenRe.FindStringSubmatch(s)
 	if len(split) != 3 {

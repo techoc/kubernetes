@@ -25,6 +25,8 @@ import (
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
 )
 
+// TestGetSecretString 覆盖键存在、键缺失以及 Data 为 nil 三种情况，
+// 确认调用方总能得到安全可用的空串。
 func TestGetSecretString(t *testing.T) {
 	var tests = []struct {
 		name        string
@@ -77,6 +79,8 @@ func TestGetSecretString(t *testing.T) {
 	}
 }
 
+// TestParseSecretName 逐项验证前缀、ID 长度、字符集都必须严格符合，
+// 防止把任意 Secret 误认成 bootstrap token。
 func TestParseSecretName(t *testing.T) {
 	tokenID, ok := ParseName("bootstrap-token-abc123")
 	if !ok {
@@ -117,6 +121,8 @@ func TestParseSecretName(t *testing.T) {
 	}
 }
 
+// TestGetGroups 验证默认组始终存在、空值等同未设置、非法前缀报错，
+// 并对合法附加组去重和排序。
 func TestGetGroups(t *testing.T) {
 	tests := []struct {
 		name         string

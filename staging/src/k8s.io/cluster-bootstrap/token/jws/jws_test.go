@@ -22,12 +22,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// 固定输入与预期签名，用于锁定 HS256 输出的字节级兼容性；一旦签名格式
+// 变化，已有节点将无法验证 cluster-info，因此这里采用精确值断言。
 const (
 	content = "Hello from the other side. I must have called a thousand times."
 	secret  = "my voice is my passcode"
 	id      = "joshua"
 )
 
+// TestComputeDetachedSignature 覆盖普通内容、空内容以及空 Secret 三种
+// 输入，确保签名器在这些边界情况下仍产生稳定的 detached JWS。
 func TestComputeDetachedSignature(t *testing.T) {
 	sig, err := ComputeDetachedSignature(content, id, secret)
 	assert.NoError(t, err, "Error when computing signature: %v", err)
@@ -56,6 +60,8 @@ func TestComputeDetachedSignature(t *testing.T) {
 		"Wrong signature. Got: %v", sig)
 }
 
+// TestDetachedTokenIsValid 确认正确签名通过、被追加字符的签名失败，
+// 后者防止宽松比较把伪造签名误判为有效。
 func TestDetachedTokenIsValid(t *testing.T) {
 	// Valid detached JWS token and valid inputs should succeed
 	sig := "eyJhbGciOiJIUzI1NiIsImtpZCI6Impvc2h1YSJ9..VShe2taLd-YTrmWuRkcL_8QTNDHYxQIEBsAYYiIj1_8"

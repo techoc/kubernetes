@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestGenerateBootstrapToken 验证生成结果能通过格式校验，确保 ID/Secret
+// 长度与字符集始终一致。
 func TestGenerateBootstrapToken(t *testing.T) {
 	token, err := GenerateBootstrapToken()
 	if err != nil {
@@ -31,6 +33,7 @@ func TestGenerateBootstrapToken(t *testing.T) {
 	}
 }
 
+// TestRandBytes 覆盖 0 长度及常见长度，确认返回串长度严格等于请求值。
 func TestRandBytes(t *testing.T) {
 	var randTest = []int{
 		0,
@@ -51,6 +54,7 @@ func TestRandBytes(t *testing.T) {
 	}
 }
 
+// TestTokenFromIDAndSecret 检查拼接逻辑不校验输入内容，只负责加小数点。
 func TestTokenFromIDAndSecret(t *testing.T) {
 	var tests = []struct {
 		id       string
@@ -73,6 +77,8 @@ func TestTokenFromIDAndSecret(t *testing.T) {
 	}
 }
 
+// TestIsValidBootstrapToken 用表驱动覆盖分段数量、长度、字符集等失败模式，
+// 以及合法 token 的通过路径。
 func TestIsValidBootstrapToken(t *testing.T) {
 	var tests = []struct {
 		token    string
@@ -109,6 +115,7 @@ func TestIsValidBootstrapToken(t *testing.T) {
 	}
 }
 
+// TestIsValidBootstrapTokenID 确认 ID 校验严格要求 6 位小写字母或数字。
 func TestIsValidBootstrapTokenID(t *testing.T) {
 	var tests = []struct {
 		tokenID  string
@@ -136,6 +143,8 @@ func TestIsValidBootstrapTokenID(t *testing.T) {
 	}
 }
 
+// TestBootstrapTokenSecretName 验证前缀拼接，空 ID 也会得到仅前缀的名称
+// （是否可用由上层的 ID 校验负责）。
 func TestBootstrapTokenSecretName(t *testing.T) {
 	var tests = []struct {
 		tokenID  string
@@ -158,6 +167,8 @@ func TestBootstrapTokenSecretName(t *testing.T) {
 	}
 }
 
+// TestValidateBootstrapGroupName 覆盖合法嵌套组以及各类越权/畸形输入，
+// 关键点是阻止注入特权组或特殊字符。
 func TestValidateBootstrapGroupName(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -188,6 +199,8 @@ func TestValidateBootstrapGroupName(t *testing.T) {
 	}
 }
 
+// TestValidateUsages 确保只有白名单中的 signing/authentication 被接受，
+// 且任一非法值都会导致整体失败。
 func TestValidateUsages(t *testing.T) {
 	tests := []struct {
 		name  string
