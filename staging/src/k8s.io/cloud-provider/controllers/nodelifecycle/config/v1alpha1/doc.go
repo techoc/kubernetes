@@ -20,4 +20,6 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.cloud-provider.controllers.nodelifecycle.config.v1alpha1
 
+// Package v1alpha1 定义 NodeLifecycleController 的外部（版本化）组件配置。
+// 该版本仅用于配置文件读写，内部逻辑统一使用 config 包中的规范类型。
 package v1alpha1

@@ -24,10 +24,13 @@ import (
 )
 
 const (
+	// 指标名统一挂在 node_controller 子系统下，便于按控制器聚合。
 	metricsSubsystem = "node_controller"
 )
 
 var (
+	// 记录从节点创建到移除 cloud-provider taint 的延迟，用于衡量节点初始化速度；
+	// 指数桶覆盖 1s 到约 17m，兼顾快速与慢速云环境。
 	removeCloudProviderTaintDelay = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      metricsSubsystem,
@@ -37,6 +40,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
+	// 记录节点首次同步完成所需时间，反映云 API 与节点注册的整体时延。
 	initialNodeSyncDelay = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      metricsSubsystem,
@@ -51,6 +55,7 @@ var (
 var metricRegistration sync.Once
 
 // registerMetrics registers the metrics that are to be monitored.
+// 使用 sync.Once 保证重复创建控制器时不会因重复注册而 panic。
 func registerMetrics() {
 	metricRegistration.Do(func() {
 		legacyregistry.MustRegister(removeCloudProviderTaintDelay)

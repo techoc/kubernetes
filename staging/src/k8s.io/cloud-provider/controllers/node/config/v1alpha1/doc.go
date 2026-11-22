@@ -20,4 +20,7 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.cloud-provider.controllers.node.config.v1alpha1
 
+// Package v1alpha1 定义 cloud-node-controller 配置的外部 v1alpha1 版本。
+// 该配置通常作为 CCM 组件配置的一部分出现，转换目标为
+// k8s.io/cloud-provider/controllers/node/config。
 package v1alpha1

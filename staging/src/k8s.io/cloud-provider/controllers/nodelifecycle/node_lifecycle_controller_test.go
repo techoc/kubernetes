@@ -41,6 +41,9 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// Test_NodesDeleted 覆盖 NotReady 节点的清理逻辑：只有云侧确认实例不存在时才删除
+// Node；云 API 出错、实例仍存在、Ready=True 时都必须保留。用例同时覆盖 Instances
+// 与 InstancesV2 两套接口，确保两条实现路径行为一致。
 func Test_NodesDeleted(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -520,6 +523,7 @@ func Test_NodesDeleted(t *testing.T) {
 			informer := informers.NewSharedInformerFactory(clientset, time.Second)
 			nodeInformer := informer.Core().V1().Nodes()
 
+			// 绕过 informer 的异步启动，直接把 API 中的节点灌入缓存，保证 MonitorNodes 看到确定输入。
 			if err := syncNodeStore(ctx, nodeInformer, clientset); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -538,6 +542,7 @@ func Test_NodesDeleted(t *testing.T) {
 			defer w.Stop()
 			cloudNodeLifecycleController.MonitorNodes(ctx)
 
+			// 用 IsNotFound 判断删除结果，同时校验剩余节点的内容未被意外修改。
 			updatedNode, err := clientset.CoreV1().Nodes().Get(ctx, testcase.existingNode.Name, metav1.GetOptions{})
 			if testcase.expectedDeleted != apierrors.IsNotFound(err) {
 				t.Fatalf("unexpected error happens when getting the node: %v", err)
@@ -551,6 +556,8 @@ func Test_NodesDeleted(t *testing.T) {
 	}
 }
 
+// Test_NodesShutdown 覆盖关机污点的添加/移除，以及各种“无法判断”场景下的保守行为：
+// 实例不存在、providerID 查询报错、云厂商未实现关机检测等。
 func Test_NodesShutdown(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -912,6 +919,8 @@ func Test_NodesShutdown(t *testing.T) {
 				concurrentNodeLifecycleSyncs: 1,
 			}
 
+			// 事件 watcher 既输出事件内容，也顺带校验 involvedObject 的 API 版本存在，
+			// 防止 recorder 因对象引用不完整而丢弃事件。
 			e := eventBroadcaster.StartEventWatcher(func(e *v1.Event) {
 				loggerV := klog.FromContext(t.Context()).V(0)
 				loggerV.Info("Event occurred", "object", klog.KRef(e.InvolvedObject.Namespace, e.InvolvedObject.Name), "fieldPath", e.InvolvedObject.FieldPath, "kind", e.InvolvedObject.Kind, "apiVersion", e.InvolvedObject.APIVersion, "type", e.Type, "reason", e.Reason, "message", e.Message)
@@ -935,6 +944,8 @@ func Test_NodesShutdown(t *testing.T) {
 	}
 }
 
+// Test_GetProviderID 覆盖 ProviderID 的取值来源：Node.spec 已有值、InstancesV2
+// 返回、Instances 按节点名解析，以及实例不存在/未知错误的错误传播。
 func Test_GetProviderID(t *testing.T) {
 	testcases := []struct {
 		name               string
@@ -1089,6 +1100,8 @@ func Test_GetProviderID(t *testing.T) {
 	}
 }
 
+// syncNodeStore 用 fake clientset 中的节点直接替换 informer 缓存内容。
+// 中文说明：测试不启动 informer 的 Run 循环，必须手动填充 store，否则 Lister 为空。
 func syncNodeStore(ctx context.Context, nodeinformer coreinformers.NodeInformer, f *fake.Clientset) error {
 	nodes, err := f.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -1096,11 +1109,13 @@ func syncNodeStore(ctx context.Context, nodeinformer coreinformers.NodeInformer,
 	}
 	newElems := make([]interface{}, 0, len(nodes.Items))
 	for i := range nodes.Items {
+		// 取切片元素地址而不是循环变量，避免所有项指向同一个变量。
 		newElems = append(newElems, &nodes.Items[i])
 	}
 	return nodeinformer.Informer().GetStore().Replace(newElems, "newRV")
 }
 
+// TestNewCloudNodeLifecycleController 校验构造期的参数校验：并发度必须为正数。
 func TestNewCloudNodeLifecycleController(t *testing.T) {
 	_, _ = ktesting.NewTestContext(t)
 	clientset := fake.NewSimpleClientset()
@@ -1157,6 +1172,8 @@ func TestNewCloudNodeLifecycleController(t *testing.T) {
 	}
 }
 
+// TestMonitorNodesMetrics 验证一轮 MonitorNodes 后云 API 调用指标被正确计数：
+// 两个 Ready 节点不触发云调用，唯一的 NotReady 节点各产生一次 exists 与 shutdown 查询。
 func TestMonitorNodesMetrics(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	clientset := fake.NewSimpleClientset()

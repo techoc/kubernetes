@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// Test_RoundUpToGiB 验证以 GiB（2^30 字节）为单位的向上取整：
+// 十进制单位与二进制单位混用时结果不同，并覆盖 int64 溢出边界。
 func Test_RoundUpToGiB(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -70,7 +72,7 @@ func Test_RoundUpToGiB(t *testing.T) {
 			roundedVal: int64(8588886016),
 		},
 		{
-			name:        "round quantity to GiB that would lead to an int64 overflow",
+			name:        "round quantity to GiB that would lead to an int64 overflow", // 溢出时必须返回错误且结果为 0，调用方不得使用该结果。
 			resource:    resource.MustParse("8192Pi"),
 			roundedVal:  int64(0),
 			expectError: true,
@@ -97,6 +99,7 @@ func Test_RoundUpToGiB(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToMB 验证以 MB（10^6 字节）为单位的向上取整及溢出检测。
 func Test_RoundUpToMB(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -172,6 +175,7 @@ func Test_RoundUpToMB(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToMiB 验证以 MiB（2^20 字节）为单位的向上取整及溢出检测。
 func Test_RoundUpToMiB(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -247,6 +251,7 @@ func Test_RoundUpToMiB(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToKB 验证以 KB（10^3 字节）为单位的向上取整及溢出检测。
 func Test_RoundUpToKB(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -322,6 +327,7 @@ func Test_RoundUpToKB(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToKiB 验证以 KiB（2^10 字节）为单位的向上取整及溢出检测。
 func Test_RoundUpToKiB(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -397,6 +403,8 @@ func Test_RoundUpToKiB(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToGiBInt32 验证 int32 返回值版本的 GiB 向上取整：
+// 溢出阈值更低（2048Pi），调用方必须把错误当作不可忽略的失败。
 func Test_RoundUpToGiBInt32(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -472,6 +480,7 @@ func Test_RoundUpToGiBInt32(t *testing.T) {
 	}
 }
 
+// Test_RoundUpToB 验证以字节为单位的向上取整，包括小于 1 字节的 m 单位输入。
 func Test_RoundUpToB(t *testing.T) {
 	testcases := []struct {
 		name        string

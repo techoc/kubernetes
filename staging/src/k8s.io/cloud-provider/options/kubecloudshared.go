@@ -24,6 +24,8 @@ import (
 
 // KubeCloudSharedOptions holds the options shared between kube-controller-manager
 // and cloud-controller-manager.
+// 嵌入内部配置以保证两个组件读写同一结构；CloudProvider 单独持有，
+// 因为其 flag 解析需要额外校验（如配置文件与 flag 互斥）。
 type KubeCloudSharedOptions struct {
 	*cpconfig.KubeCloudSharedConfiguration
 	CloudProvider *CloudProviderOptions
@@ -32,6 +34,7 @@ type KubeCloudSharedOptions struct {
 // NewKubeCloudSharedOptions returns common/default configuration values for both
 // the kube-controller-manager and the cloud-contoller-manager. Any common changes should
 // be made here. Any individual changes should be made in that controller.
+// 这里不复制配置，而是持有传入指针；调用方负责传入已默认化的配置。
 func NewKubeCloudSharedOptions(cfg *cpconfig.KubeCloudSharedConfiguration) *KubeCloudSharedOptions {
 	o := &KubeCloudSharedOptions{
 		KubeCloudSharedConfiguration: cfg,
@@ -44,6 +47,7 @@ func NewKubeCloudSharedOptions(cfg *cpconfig.KubeCloudSharedConfiguration) *Kube
 }
 
 // AddFlags adds flags related to shared variable for controller manager to the specified FlagSet.
+// 已弃用的 flag 仍会注册并标记 Deprecated，保证旧启动脚本不因未知 flag 直接失败。
 func (o *KubeCloudSharedOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -68,6 +72,7 @@ func (o *KubeCloudSharedOptions) AddFlags(fs *pflag.FlagSet) {
 }
 
 // ApplyTo fills up KubeCloudShared config with options.
+// 先应用 CloudProvider 子选项，再逐字段复制；任何子选项错误都会中止，避免部分生效。
 func (o *KubeCloudSharedOptions) ApplyTo(cfg *cpconfig.KubeCloudSharedConfiguration) error {
 	if o == nil {
 		return nil
@@ -92,6 +97,7 @@ func (o *KubeCloudSharedOptions) ApplyTo(cfg *cpconfig.KubeCloudSharedConfigurat
 }
 
 // Validate checks validation of KubeCloudSharedOptions.
+// 校验委托给 CloudProvider：云提供商名称、配置文件与外部插件等约束都在那里检查。
 func (o *KubeCloudSharedOptions) Validate() []error {
 	if o == nil {
 		return nil

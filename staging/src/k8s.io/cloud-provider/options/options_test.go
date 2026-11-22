@@ -45,6 +45,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDefaultFlags 锁定 NewCloudControllerManagerOptions 的默认值：
+// 默认端口、选主参数、各控制器并发度以及 webhook 默认配置都必须保持稳定，
+// 任何默认值变化都会影响用户升级后的行为。
 func TestDefaultFlags(t *testing.T) {
 	s, err := NewCloudControllerManagerOptions()
 	if err != nil {
@@ -165,6 +168,8 @@ func TestDefaultFlags(t *testing.T) {
 	}
 }
 
+// TestAddFlags 验证 flag 解析能覆盖全部可配置字段。
+// 其中 --authorization-always-allow-paths= 用空值证明默认列表可以被清空。
 func TestAddFlags(t *testing.T) {
 	fs := pflag.NewFlagSet("addflagstest", pflag.ContinueOnError)
 
@@ -180,6 +185,7 @@ func TestAddFlags(t *testing.T) {
 	args := []string{
 		"--allocate-node-cidrs=true",
 		"--authorization-always-allow-paths=", // this proves that we can clear the default
+		// 空的 always-allow-paths 必须覆盖掉默认的 /healthz 等路径，而不是被默认值忽略。
 		"--bind-address=192.168.4.21",
 		"--cert-dir=/a/b/c",
 		"--cloud-config=/cloud-config",
@@ -343,6 +349,8 @@ func TestAddFlags(t *testing.T) {
 	}
 }
 
+// TestCreateConfig 从一组完整 flag 构造运行时 Config，验证选项到组件配置的映射，
+// 特别是 ConcurrentNodeStatusUpdates 仅在创建配置阶段回退到 ConcurrentNodeSyncs。
 func TestCreateConfig(t *testing.T) {
 	fs := pflag.NewFlagSet("addflagstest", pflag.ContinueOnError)
 
@@ -467,6 +475,8 @@ func TestCreateConfig(t *testing.T) {
 	}
 
 	// Don't check
+	// 这些字段持有监听器、客户端、informer 等运行时对象，无法用 DeepEqual 比较，
+	// 在比较前置空；WebhookSecureServing 单独断言存在后也置空。
 	c.SecureServing = nil
 	assert.NotNil(t, c.WebhookSecureServing, "webhook secureserving shouldn't be nil")
 	c.WebhookSecureServing = nil
@@ -486,6 +496,8 @@ func TestCreateConfig(t *testing.T) {
 	}
 }
 
+// TestCreateConfigWithoutWebHooks 验证未启用任何 webhook 时配置仍能成功构建，
+// 且 --concurrent-node-status-updates 显式值不会被默认值覆盖。
 func TestCreateConfigWithoutWebHooks(t *testing.T) {
 	fs := pflag.NewFlagSet("addflagstest", pflag.ContinueOnError)
 
@@ -630,6 +642,9 @@ func TestCreateConfigWithoutWebHooks(t *testing.T) {
 	}
 }
 
+// TestCloudControllerManagerAliases 验证 --controllers 中的历史别名
+// （service、route、cloud-node-lifecycle）会被解析为规范控制器名，
+// 且禁用前缀 - 也作用在别名上。
 func TestCloudControllerManagerAliases(t *testing.T) {
 	opts, err := NewCloudControllerManagerOptions()
 	if err != nil {

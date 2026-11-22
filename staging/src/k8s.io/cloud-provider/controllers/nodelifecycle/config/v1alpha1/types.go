@@ -19,9 +19,12 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // NodeLifecycleControllerConfiguration contains elements describing CloudNodeLifecycleController.
+// v1alpha1 外部表示；字段集合与内部 config 包严格一致，新增字段需同步两侧与转换函数。
 type NodeLifecycleControllerConfiguration struct {
 	// NodeMonitorPeriod is the period for syncing NodeStatus in CloudNodeLifecycleController.
+	// 巡检周期；为空时由上层默认化逻辑填充推荐值。
 	NodeMonitorPeriod metav1.Duration
 	// ConcurrentNodeLifecycleSyncs is the number of workers for syncing NodeStatus in CloudNodeLifecycleController.
+	// 并发 worker 数；0 表示未设置，由 Recommended 默认化函数补为 1。
 	ConcurrentNodeLifecycleSyncs int32
 }

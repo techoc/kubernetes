@@ -25,10 +25,13 @@ import (
 	"k8s.io/cloud-provider/names"
 )
 
+// TestCloudControllerNamesConsistency 校验所有注册控制器的名称都符合
+// “小写字母/连字符、-controller 后缀” 的命名约定，避免名称漂移破坏 flag 与别名解析。
 func TestCloudControllerNamesConsistency(t *testing.T) {
 	controllerNameRegexp := regexp.MustCompile("^[a-z]([-a-z]*[a-z])?$")
 
 	for name := range DefaultInitFuncConstructors {
+		// 名称会出现在命令行 flag 和事件中，必须先满足正则约束。
 		if !controllerNameRegexp.MatchString(name) {
 			t.Errorf("name consistency check failed: controller %q must consist of lower case alphabetic characters or '-', and must start and end with an alphabetic character", name)
 		}
@@ -38,6 +41,8 @@ func TestCloudControllerNamesConsistency(t *testing.T) {
 	}
 }
 
+// TestCloudControllerNamesDeclaration 确保每个注册的控制器名称都在 names 包中
+// 声明为常量；新增控制器时若忘记更新 controller_names.go，该测试会失败。
 func TestCloudControllerNamesDeclaration(t *testing.T) {
 	declaredControllers := sets.New(
 		names.CloudNodeController,

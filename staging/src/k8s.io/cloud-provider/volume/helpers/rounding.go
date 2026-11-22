@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package helpers 提供云提供商卷插件共用的容量换算与可用区选择工具。
+//
+// 中文说明：容量按云厂商的分配单位向上取整，可用区按卷名稳定散列选择；
+// 两者都要求可重复计算，以保证同一 PVC 的重试得到相同结果。
 package helpers
 
 import (
@@ -33,6 +37,10 @@ while Portworx expects bytes for example. On AWS, if you want a volume of
 This file contains functions that help rounding a storage request based on a
 Cloud Provider's allocation unit.
 */
+
+// 中文说明：下面这组 RoundUpTo* 均返回“需要多少个分配单位”。必须向上取整——
+// 少算单位会让实际磁盘小于 PVC 申请值，Pod 写满后即失败；各变体只是分配单位
+// 与返回类型不同（int64 / int / int32），语义完全一致。
 
 const (
 	// GB - GigaByte size
@@ -130,6 +138,8 @@ func roundUpSizeInt(size resource.Quantity, allocationUnitBytes int64) (int, err
 
 // roundUpSizeInt32 calculates how many allocation units are needed to accommodate
 // a volume of a given size. It returns an int32 and an error if there's overflow
+//
+// 中文说明：先按 int64 计算再检查上限，避免在 32 位平台上发生截断。
 func roundUpSizeInt32(size resource.Quantity, allocationUnitBytes int64) (int32, error) {
 	roundedUpInt32, err := roundUpSizeInt64(size, allocationUnitBytes)
 	if err != nil {
@@ -152,11 +162,14 @@ func roundUpSizeInt64(size resource.Quantity, allocationUnitBytes int64) (int64,
 	// only implemented for int64 scaled numbers (int64Amount).
 
 	// CmpInt64() actually returns 0 when comparing an amount bigger than MaxInt64.
+	// 中文说明：>= 0 同时覆盖“等于 MaxInt64”与“溢出”两种情况；此时 Value()
+	// 的结果不可信，必须报错而不是返回截断后的单位数。
 	if size.CmpInt64(math.MaxInt64) >= 0 {
 		return 0, fmt.Errorf("quantity %s is too great, overflows int64", size.String())
 	}
 	volumeSizeBytes := size.Value()
 
+	// 整除后只要有余数就进位，即向上取整。
 	roundedUp := volumeSizeBytes / allocationUnitBytes
 	if volumeSizeBytes%allocationUnitBytes > 0 {
 		roundedUp++

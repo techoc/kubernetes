@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package install 把 cloud-controller-manager 的内部与 v1alpha1 外部配置类型
+// 注册进 runtime.Scheme，供组件配置的解析、默认化与转换使用。
 package install
 
 import (
@@ -26,6 +28,7 @@ import (
 
 var (
 	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 只包含 CCM 自身的配置类型；组件配置读写都经由它完成。
 	Scheme = runtime.NewScheme()
 	// Codecs provides methods for retrieving codecs and serializers for specific
 	// versions and content types.
@@ -33,10 +36,13 @@ var (
 )
 
 func init() {
+	// 包初始化即注册，保证导入本包即可使用 Scheme/Codecs。
 	Install(Scheme)
 }
 
 // Install adds the types of this group into the given scheme.
+// 同时注册内部版本与 v1alpha1，并把 v1alpha1 设为序列化首选版本，
+// 这样外部配置文件与 /configz 输出默认使用 v1alpha1。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(config.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))

@@ -26,6 +26,8 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// TestWebhookEnableDisable 覆盖 --webhooks 的启用/禁用语义：
+// 显式枚举、前缀 - 禁用、以及 * 通配启用，验证最终挂载的 handler 集合。
 func TestWebhookEnableDisable(t *testing.T) {
 	var (
 		cloud                = &fake.Cloud{}
@@ -112,6 +114,7 @@ func TestWebhookEnableDisable(t *testing.T) {
 	}
 }
 
+// newConfig 构造一个仅填充 webhook 配置的 CompletedConfig，供过滤逻辑读取。
 func newConfig(webhookConfig cpconfig.WebhookConfiguration) *config.CompletedConfig {
 	cfg := &config.Config{
 		ComponentConfig: cpconfig.CloudControllerManagerConfiguration{
@@ -121,6 +124,8 @@ func newConfig(webhookConfig cpconfig.WebhookConfiguration) *config.CompletedCon
 	return cfg.Complete()
 }
 
+// webhookHandlersEqual 只比较 handler 名称集合；handler 内部持有配置与云接口，
+// 逐字段比较没有意义，测试关注的是启用了哪些 webhook。
 func webhookHandlersEqual(actual, expected map[string]WebhookHandler) bool {
 	if len(actual) != len(expected) {
 		return false

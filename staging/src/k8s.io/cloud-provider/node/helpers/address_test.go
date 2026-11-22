@@ -28,6 +28,8 @@ const (
 	testKubeletHostname = "hostname"
 )
 
+// TestAddToNodeAddresses 验证追加节点地址时的去重语义：
+// 相同 Type+Address 只保留一份，已有条目顺序保持不变。
 func TestAddToNodeAddresses(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -92,6 +94,9 @@ func TestAddToNodeAddresses(t *testing.T) {
 	}
 }
 
+// TestGetNodeAddressesFromNodeIP 验证 --node-ip 过滤节点地址的规则：
+// 保留与指定 IP 匹配的 Internal/ExternalIP 及全部 DNS/HostName，丢弃同类型多余地址；
+// 单栈集群收到双栈 --node-ip、或 --node-ip 与任何地址都不匹配时报错。
 func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 	cases := []struct {
 		name              string
@@ -247,7 +252,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			name:   "Dual-stack cloud, dual-stack request, multiple IPs",
+			name:   "Dual-stack cloud, dual-stack request, multiple IPs", // 每个地址族只保留与 --node-ip 匹配的一个地址，其余同族地址被丢弃。
 			nodeIP: "10.1.1.1,fc01:1234::5678",
 			nodeAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "10.1.1.1"},
@@ -307,7 +312,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			name:   "Dual-stack cloud, dual-stack request, mixed InternalIP/ExternalIP match",
+			name:   "Dual-stack cloud, dual-stack request, mixed InternalIP/ExternalIP match", // 某地址族的 --node-ip 匹配到 Internal/ExternalIP 后，另一类型的同族地址会被过滤。
 			nodeIP: "55.55.55.55,fc01:1234::5678",
 			nodeAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "10.1.1.1"},

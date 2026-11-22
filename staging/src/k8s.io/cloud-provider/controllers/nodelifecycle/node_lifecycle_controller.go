@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package nodelifecycle 实现 cloud-node-lifecycle-controller：周期性比对 Kubernetes
+// 节点与云侧实例，删除云侧已不存在的节点，并给已关机实例加上 shutdown 污点。
 package nodelifecycle
 
 import (
@@ -44,14 +46,19 @@ import (
 )
 
 const (
+	// 事件 reason 名称是外部可观测契约的一部分，不要重命名，否则会破坏现有告警与审计。
 	deleteNodeEvent       = "DeletingNode"
 	deleteNodeFailedEvent = "DeletingNodeFailed"
 
+	// 指标标签值，用于区分云 API 调用类型；保持稳定以便 Prometheus 查询。
 	instanceExistsOp   = "instance_exists"
 	instanceShutdownOp = "instance_shutdown"
 	instanceMetadataOp = "instance_metadata"
 )
 
+// ShutdownTaint 是加在已关机实例对应 Node 上的污点。
+// 中文说明：使用 NoSchedule 而非 NoExecute，避免驱逐已有 Pod——实例可能只是短暂
+// 关机，保留工作负载有利于恢复后快速重新调度。
 var ShutdownTaint = &v1.Taint{
 	Key:    cloudproviderapi.TaintNodeShutdown,
 	Effect: v1.TaintEffectNoSchedule,
@@ -59,6 +66,9 @@ var ShutdownTaint = &v1.Taint{
 
 // CloudNodeLifecycleController is responsible for deleting/updating kubernetes
 // nodes that have been deleted/shutdown on the cloud provider
+//
+// 中文说明：仅处理 NotReady 的节点。Ready 节点只确保移除 shutdown 污点，
+// 从而把云 API 调用集中在真正需要判断的节点上。
 type CloudNodeLifecycleController struct {
 	kubeClient clientset.Interface
 	nodeLister v1lister.NodeLister
@@ -71,12 +81,19 @@ type CloudNodeLifecycleController struct {
 	// Value controlling NodeController monitoring period, i.e. how often does NodeController
 	// check node status posted from kubelet. This value should be lower than nodeMonitorGracePeriod
 	// set in controller-manager
+	//
+	// 中文说明：必须小于 controller-manager 的 nodeMonitorGracePeriod，否则节点可能在
+	// 被判定为 NotReady 之前就发生了云侧状态变化，导致清理延迟。
 	nodeMonitorPeriod time.Duration
 
 	// Value controlling NodeController monitoring loop worker number.
 	concurrentNodeLifecycleSyncs int
 }
 
+// NewCloudNodeLifecycleController 构造控制器并注册指标。
+//
+// 中文说明：构造期校验依赖与参数，把配置错误暴露在启动阶段而不是运行期；
+// 云厂商必须实现 Instances 或 InstancesV2，否则无法判断实例是否存在/关机。
 func NewCloudNodeLifecycleController(
 	nodeInformer coreinformers.NodeInformer,
 	kubeClient clientset.Interface,
@@ -100,6 +117,7 @@ func NewCloudNodeLifecycleController(
 		return nil, errors.New("cloud provider does not support instances")
 	}
 
+	// 并发度为 0 会让 ParallelizeUntil 不执行任何节点巡检，必须显式拒绝。
 	if concurrentNodeLifecycleSyncs < 1 {
 		return nil, fmt.Errorf("concurrentNodeLifecycleSyncs must be >= 1, got %d", concurrentNodeLifecycleSyncs)
 	}
@@ -134,6 +152,9 @@ func (c *CloudNodeLifecycleController) Run(ctx context.Context, controllerManage
 	// The following loops run communicate with the APIServer with a worst case complexity
 	// of O(num_nodes) per cycle. These functions are justified here because these events fire
 	// very infrequently. DO NOT MODIFY this to perform frequent operations.
+	//
+	// 中文说明：这是全量扫描而非事件驱动——Node 删除、实例关机这类事件本身很稀疏，
+	// 全量比对比维护增量状态更简单可靠；但不要在此加入高频操作。
 
 	// Start a loop to periodically check if any nodes have been
 	// deleted or shutdown from the cloudprovider
@@ -155,6 +176,8 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 	processNode := func(piece int) {
 		node := nodes[piece].DeepCopy()
 		// Default NodeReady status to v1.ConditionUnknown
+		// 中文说明：缺少 Ready condition 时按 Unknown 处理，保守地走云侧检查流程，
+		// 避免节点状态缺失导致实例泄漏。
 		status := v1.ConditionUnknown
 		if _, c := nodeutil.GetNodeCondition(&node.Status, v1.NodeReady); c != nil {
 			status = c.Status
@@ -162,6 +185,8 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 
 		if status == v1.ConditionTrue {
 			// if taint exist remove taint
+			// 中文说明：节点恢复后移除 shutdown 污点；即使污点不存在，RemoveTaintOffNode
+			// 也会安全地 no-op。
 			if err := cloudnodeutil.RemoveTaintOffNode(c.kubeClient, node.Name, node, ShutdownTaint); err != nil {
 				klog.Errorf("error patching node taints: %v", err)
 			}
@@ -172,6 +197,7 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 		// from the cloud provider. If node cannot be found in cloudprovider, then delete the node
 		exists, err := c.ensureNodeExistsByProviderID(ctx, node)
 		if err != nil {
+			// 云 API 失败时保持现状：无法确认实例不存在，就不能删除 Node。
 			klog.Errorf("error checking if node %s exists: %v", node.Name, err)
 			return
 		}
@@ -201,6 +227,8 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 			// Node exists. We need to check this to get taint working in similar in all cloudproviders
 			// current problem is that shutdown nodes are not working in similar way ie. all cloudproviders
 			// does not delete node from kubernetes cluster when instance it is shutdown see issue #46442
+			// 中文说明：部分云厂商关机后仍保留实例，因此不能依赖“实例不存在”来推断关机；
+			// 只有显式报告 shutdown 时才打污点（见 #46442）。
 			shutdown, err := c.shutdownInCloudProvider(ctx, node)
 			if err != nil {
 				klog.Errorf("error checking if node %s is shutdown: %v", node.Name, err)
@@ -210,6 +238,7 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 			if shutdown {
 				// if node is shutdown add shutdown taint
 				if err := cloudnodeutil.AddOrUpdateTaintOnNode(c.kubeClient, node.Name, ShutdownTaint); err != nil {
+					// 节点可能已被其他流程删除，属于可接受的竞态。
 					klog.Errorf("failed to apply shutdown taint to node %s, it may have been deleted.", node.Name)
 				}
 			}
@@ -224,6 +253,9 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 
 // getProviderID returns the provider ID for the node. If Node CR has no provider ID,
 // it will be the one from the cloud provider.
+//
+// 中文说明：优先使用 Node 上已固化的 ProviderID，避免不必要的云 API 调用；
+// 只有未初始化节点才回查云厂商。
 func (c *CloudNodeLifecycleController) getProviderID(ctx context.Context, node *v1.Node) (string, error) {
 	if node.Spec.ProviderID != "" {
 		return node.Spec.ProviderID, nil
@@ -247,6 +279,9 @@ func (c *CloudNodeLifecycleController) getProviderID(ctx context.Context, node *
 }
 
 // shutdownInCloudProvider returns true if the node is shutdown on the cloud provider
+//
+// 中文说明：InstancesV2 直接提供 InstanceShutdown；旧版 Instances 接口通过
+// providerID 查询，NotImplemented 视为“不支持关机检测”，按未关机处理以免误删。
 func (c *CloudNodeLifecycleController) shutdownInCloudProvider(ctx context.Context, node *v1.Node) (bool, error) {
 	if instanceV2, ok := c.cloud.InstancesV2(); ok {
 		shutdown, err := instanceV2.InstanceShutdown(ctx, node)
@@ -261,6 +296,7 @@ func (c *CloudNodeLifecycleController) shutdownInCloudProvider(ctx context.Conte
 
 	providerID, err := c.getProviderID(ctx, node)
 	if err != nil {
+		// 实例已不存在时无需再判断关机，交给删除路径处理。
 		if errors.Is(err, cloudprovider.InstanceNotFound) {
 			return false, nil
 		}
@@ -281,6 +317,7 @@ func (c *CloudNodeLifecycleController) ensureNodeExistsByProviderID(ctx context.
 	if instanceV2, ok := c.cloud.InstancesV2(); ok {
 		exists, err := instanceV2.InstanceExists(ctx, node)
 		if err == nil && !exists {
+			// 把“不存在”也记为一次实例查询结果，便于在指标上与云 API 错误区分。
 			observeInstanceOp(instanceExistsOp, cloudprovider.InstanceNotFound)
 		} else {
 			observeInstanceOp(instanceExistsOp, err)
@@ -295,6 +332,7 @@ func (c *CloudNodeLifecycleController) ensureNodeExistsByProviderID(ctx context.
 
 	providerID, err := c.getProviderID(ctx, node)
 	if err != nil {
+		// InstanceNotFound 说明实例确实不存在，返回 false 让调用方删除 Node。
 		if errors.Is(err, cloudprovider.InstanceNotFound) {
 			return false, nil
 		}
@@ -310,6 +348,9 @@ func (c *CloudNodeLifecycleController) ensureNodeExistsByProviderID(ctx context.
 	return exists, err
 }
 
+// observeInstanceOp 按错误类型给云 API 调用结果打标签并计数。
+// 中文说明：把 NotImplemented / InstanceNotFound / 取消 / 其他错误分开统计，
+// 便于判断故障是云厂商能力缺失还是临时性故障。
 func observeInstanceOp(operation string, err error) {
 	result := "success"
 	switch {

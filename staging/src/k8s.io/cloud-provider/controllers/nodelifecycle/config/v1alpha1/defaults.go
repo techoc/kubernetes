@@ -23,11 +23,14 @@ import (
 )
 
 // RecommendedDefaultNodeLifecycleControllerConfiguration sets default values for NodeLifecycleControllerConfiguration.
+// 只对零值字段填充默认值，显式配置（包括显式的 0）不会被覆盖。
 func RecommendedDefaultNodeLifecycleControllerConfiguration(obj *NodeLifecycleControllerConfiguration) {
 	zero := metav1.Duration{}
+	// 默认每 5s 扫描一次节点，兼顾及时性与 API 负载。
 	if obj.NodeMonitorPeriod == zero {
 		obj.NodeMonitorPeriod = metav1.Duration{Duration: 5 * time.Second}
 	}
+	// 单 worker 足够处理节点生命周期事件，也避免并发删除节点带来的竞争。
 	if obj.ConcurrentNodeLifecycleSyncs == 0 {
 		obj.ConcurrentNodeLifecycleSyncs = 1
 	}

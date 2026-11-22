@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义 ServiceController 的内部组件配置类型；外部版本位于
+// config/v1alpha1，二者通过生成的转换函数互通。
 package config

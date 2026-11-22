@@ -29,8 +29,10 @@ const (
 	subSystemName = "cloud_provider_webhook"
 )
 
+// registerables 只是 Registerable 的切片别名，用于统一批量注册。
 type registerables []metrics.Registerable
 
+// registerMetricsOnce 保证注册只执行一次；重复注册会触发 legacyregistry panic。
 var registerMetricsOnce sync.Once
 
 // RegisterMetrics registers the cloud-provider webhook metrics with the legacy
@@ -46,6 +48,8 @@ func RegisterMetrics() {
 }
 
 var (
+	// requestTotal 按状态码与 webhook 名称统计请求数。标签取值有限，
+	// 不会随请求内容增长，因而适合做长期指标。
 	requestTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Name:           "request_total",
@@ -56,6 +60,8 @@ var (
 		[]string{"code", "webhook"},
 	)
 
+	// requestLatency 的桶针对 webhook 调用的典型耗时分布设计，
+	// 便于区分本地快速失败与真实的云侧慢调用。
 	requestLatency = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Name:           "request_duration_seconds",
@@ -67,17 +73,21 @@ var (
 		[]string{"code", "webhook"},
 	)
 
+	// toRegister 是延迟注册的指标集合，顺序无关紧要。
 	toRegister = registerables{
 		requestTotal,
 		requestLatency,
 	}
 )
 
+// recordRequestTotal 记录一次 webhook 请求。使用 ctx 以便在请求取消时仍能正确归属到当前上下文。
 // RecordRequestTotal increments the total number of requests for the webhook.
 func recordRequestTotal(ctx context.Context, code string, webhookName string) {
 	requestTotal.WithContext(ctx).With(map[string]string{"code": code, "webhook": webhookName}).Add(1)
 }
 
+// recordRequestLatency 记录一次 webhook 请求耗时；code 用于区分成功与各类失败路径。
+// 指标只做观测，调用方不应因记录失败而改变请求处理结果。
 // RecordRequestLatency measures request latency in seconds for the delegated authorization. Broken down by status code.
 func recordRequestLatency(ctx context.Context, code string, webhookName string, latency float64) {
 	requestLatency.WithContext(ctx).With(map[string]string{"code": code, "webhook": webhookName}).Observe(latency)

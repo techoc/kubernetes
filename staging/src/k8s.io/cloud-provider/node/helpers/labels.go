@@ -33,6 +33,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// updateLabelBackoff 控制标签更新的冲突重试。100ms 起步并带抖动，
+// 避免多个控制器同时打标签时形成同步重试风暴。
 var updateLabelBackoff = wait.Backoff{
 	Steps:    5,
 	Duration: 100 * time.Millisecond,
@@ -41,6 +43,7 @@ var updateLabelBackoff = wait.Backoff{
 
 // AddOrUpdateLabelsOnNode updates the labels on the node and returns true on
 // success and false on failure.
+// 失败只记录错误并返回 false，调用方（如节点注册）可继续完成其余初始化步骤。
 func AddOrUpdateLabelsOnNode(kubeClient clientset.Interface, labelsToUpdate map[string]string, node *v1.Node) bool {
 	err := addOrUpdateLabelsOnNode(kubeClient, node.Name, labelsToUpdate)
 	if err != nil {
@@ -57,6 +60,8 @@ func AddOrUpdateLabelsOnNode(kubeClient clientset.Interface, labelsToUpdate map[
 	return true
 }
 
+// addOrUpdateLabelsOnNode 以“读取-计算补丁-提交”的方式更新标签，
+// 冲突时重试以合并并发写入，而不是整体覆盖 Node 对象导致丢失他处修改。
 func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, labelsToUpdate map[string]string) error {
 	firstTry := true
 	return clientretry.RetryOnConflict(updateLabelBackoff, func() error {
@@ -64,6 +69,7 @@ func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 		var node *v1.Node
 		// First we try getting node from the API server cache, as it's cheaper. If it fails
 		// we get it from etcd to be sure to have fresh data.
+		// ResourceVersion="0" 允许从缓存读；重试时改为强一致读，避免基于陈旧版本生成补丁。
 		if firstTry {
 			node, err = kubeClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{ResourceVersion: "0"})
 			firstTry = false
@@ -75,6 +81,7 @@ func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 		}
 
 		// Make a copy of the node and update the labels.
+		// 只在副本上修改，确保用于生成 diff 的原始对象保持不变。
 		newNode := node.DeepCopy()
 		if newNode.Labels == nil {
 			newNode.Labels = make(map[string]string)
@@ -83,6 +90,7 @@ func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 			newNode.Labels[key] = value
 		}
 
+		// 生成 strategic merge patch 而非 Update，缩小写入范围并降低冲突概率。
 		oldData, err := json.Marshal(node)
 		if err != nil {
 			return fmt.Errorf("failed to marshal the existing node %#v: %v", node, err)

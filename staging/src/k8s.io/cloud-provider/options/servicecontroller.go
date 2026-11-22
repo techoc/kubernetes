@@ -47,6 +47,8 @@ func (o *ServiceControllerOptions) ApplyTo(cfg *serviceconfig.ServiceControllerC
 }
 
 // Validate checks validation of ServiceControllerOptions.
+//
+// 中文说明：当前没有额外约束；并发度由默认值保证为正数。
 func (o *ServiceControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

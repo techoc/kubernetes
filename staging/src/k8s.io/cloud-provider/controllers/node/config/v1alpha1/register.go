@@ -20,12 +20,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 本文件把该版本的默认化与转换初始化函数注册进 scheme，供组件配置加载时使用。
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
 	// defaulting and conversion init funcs are registered as well.
+	// 使用指针是为了让生成的 defaults.go 把 AddToScheme 注册到同一个 builder 上。
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	// 调用方通过 AddToScheme 一次性完成类型、默认值和转换函数的注册。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

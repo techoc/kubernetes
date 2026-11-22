@@ -55,6 +55,9 @@ import (
 const (
 	// Maximal number of concurrent route operation API calls.
 	// TODO: This should be per-provider.
+	//
+	// 中文说明：并发上限用于保护云 API 配额；不同云厂商的限流差异很大，
+	// 因此这里取一个保守的全局值，后续应改为按 provider 配置。
 	maxConcurrentRouteOperations int = 200
 	// In the scenarios with a burst of node events, we don't want to be worse
 	// than a 10s interval.
@@ -65,16 +68,24 @@ const (
 	// routesSyncKey and routeCorrectionsKey are workqueue keys that both trigger a
 	// full-cluster route reconcile. They identify the trigger reason so we can
 	// attribute the outcome.
+	//
+	// 中文说明：两个 key 都代表“全量对账”，分开只是为了让指标能区分触发来源：
+	// node_change（节点事件）与 periodic（周期性清理）。
 	routesSyncKey       = "node_change"
 	routeCorrectionsKey = "periodic"
 )
 
+// updateNetworkConditionBackoff 是更新 NodeNetworkUnavailable condition 时的冲突重试策略。
 var updateNetworkConditionBackoff = wait.Backoff{
 	Steps:    5, // Maximum number of retries.
 	Duration: 100 * time.Millisecond,
 	Jitter:   1.0,
 }
 
+// RouteController 同步节点 PodCIDR 与云侧路由。
+//
+// 中文说明：reconcile 以整个集群为单位，因此不需要按节点分片的 worker；
+// 开启 watch-based 功能时由 workqueue 接收节点事件，否则按固定周期触发。
 type RouteController struct {
 	routes           cloudprovider.Routes
 	kubeClient       clientset.Interface
@@ -88,6 +99,8 @@ type RouteController struct {
 	workqueue        workqueue.TypedRateLimitingInterface[string]
 }
 
+// New 构造 RouteController，并在启用 CloudControllerManagerWatchBasedRoutesReconciliation
+// 特性门控时注册节点事件处理器。
 func New(
 	routes cloudprovider.Routes,
 	kubeClient clientset.Interface,
@@ -98,6 +111,7 @@ func New(
 	registerMetrics()
 
 	if len(clusterCIDRs) == 0 {
+		// 没有 clusterCIDR 就无法判断哪些路由归本集群，继续运行只会误删他人路由。
 		klog.Fatal("RouteController: Must specify clusterCIDR.")
 	}
 
@@ -116,6 +130,9 @@ func New(
 		// Without this cap, the bucket rate limiter would keep accumulating delay for each node event.
 		// With the cap, even under a constant stream of node events, reconciles happen at most every
 		// 10 seconds — either triggered immediately or queued for another run if one is already in progress.
+		//
+		// 中文说明：桶限流器会让连续事件不断累加延迟；套一层 MaxWait 后，无论事件多密集，
+		// 对账间隔都不会超过 10 秒，避免新节点长时间得不到路由。
 		bucketRateLimiter := &workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Every(minRouteResyncInterval), 1)}
 		rc.workqueue = workqueue.NewTypedRateLimitingQueueWithConfig(
 			workqueue.NewTypedWithMaxWaitRateLimiter[string](bucketRateLimiter, minRouteResyncInterval),
@@ -147,11 +164,13 @@ func (rc *RouteController) enqueueClusterReconcile(_ interface{}) {
 	rc.workqueue.AddRateLimited(routesSyncKey)
 }
 
+// handleNodeUpdate 只在节点地址或 PodCIDR 变化时入队，过滤掉高频的状态更新事件。
 func (rc *RouteController) handleNodeUpdate(oldObj, newObj interface{}) {
 	oldNode, oldOk := oldObj.(*v1.Node)
 	newNode, newOk := newObj.(*v1.Node)
 
 	if !oldOk || !newOk {
+		// 类型断言失败通常意味着 informer 配置有误，忽略即可。
 		return
 	}
 
@@ -169,11 +188,16 @@ func (rc *RouteController) handleNodeUpdate(oldObj, newObj interface{}) {
 	// We use a separate key to measure the amount of route reconciles due to a
 	// periodic reconcile. This is tracked in the metric
 	// `route_controller_route_sync_total` via the `trigger="periodic"` label.
+	//
+	// 中文说明：resync 事件的新旧对象完全相同，借此充当周期性清理的触发器，
+	// 从而在没有独立定时器的情况下仍能回收孤儿路由。
 	if oldNode.GetResourceVersion() == newNode.GetResourceVersion() {
 		rc.workqueue.AddRateLimited(routeCorrectionsKey)
 	}
 }
 
+// Run 启动 route controller。启用 watch-based 特性时消费 workqueue，否则依靠
+// syncPeriod 定时全量对账。
 func (rc *RouteController) Run(ctx context.Context, syncPeriod time.Duration, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
 	defer utilruntime.HandleCrash()
 
@@ -242,6 +266,9 @@ func (rc *RouteController) processNextWorkItem(ctx context.Context) bool {
 	// 2. the event for a new node is enqueued, but it is not considered in the running reconcile
 	// 3. we finish the reconcile and "forget" the event from our queue
 	// => The new node is never reconciled
+	//
+	// 中文说明：必须在开始对账前 Forget，否则对账期间入队的新节点事件会在结束时被
+	// 一并清除，导致该节点永远得不到路由。
 	rc.workqueue.Forget(obj)
 
 	// We wrap this block in a func so we can defer rc.workqueue.Done.
@@ -268,6 +295,7 @@ func (rc *RouteController) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// reconcileNodeRoutes 拉取云侧路由与节点列表，执行一次全量对账。
 func (rc *RouteController) reconcileNodeRoutes(ctx context.Context) (bool, error) {
 	routeList, err := rc.routes.ListRoutes(ctx, rc.clusterName)
 	if err != nil {
@@ -280,6 +308,7 @@ func (rc *RouteController) reconcileNodeRoutes(ctx context.Context) (bool, error
 	return rc.reconcile(ctx, nodes, routeList)
 }
 
+// routeAction 表示对某条 (node, podCIDR) 路由应采取的动作。
 type routeAction string
 
 var (
@@ -289,6 +318,7 @@ var (
 	update routeAction = "update"
 )
 
+// routeNode 汇总单个节点在本次对账中的已知地址、现有路由与待执行动作。
 type routeNode struct {
 	name            types.NodeName
 	addrs           []v1.NodeAddress
@@ -296,6 +326,11 @@ type routeNode struct {
 	cidrWithActions *map[string]routeAction
 }
 
+// reconcile 是最核心的对账函数：先算出每个 (node, cidr) 的动作，再并发删除/创建
+// 路由，最后回写 NodeNetworkUnavailable condition。
+//
+// 中文说明：删除与创建分两个阶段，且当云厂商支持 EnableNodeAddresses 时先等删除
+// 全部完成——否则 action=update 的路由可能被自己在同一轮里重复创建（#98359）。
 func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, routes []*cloudprovider.Route) (bool, error) {
 	var l sync.Mutex
 	// routeMap includes info about a target Node and its addresses, routes and a map between Pod CIDRs and actions.
@@ -308,6 +343,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 	// Put current routes into routeMap.
 	for _, route := range routes {
 		if route.TargetNode == "" {
+			// 没有目标节点的路由（例如外部管理的路由）不归本控制器处理。
 			continue
 		}
 		rn, ok := routeMap[route.TargetNode]
@@ -326,6 +362,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 	}
 
 	wg := sync.WaitGroup{}
+	// rateLimiter 用带缓冲 channel 实现信号量，限制同时进行的云 API 调用数。
 	rateLimiter := make(chan struct{}, maxConcurrentRouteOperations)
 	// searches existing routes by node for a matching route
 
@@ -370,6 +407,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 
 		cidrWithActions := routeMap[nodeName].cidrWithActions
 		if cidrWithActions == nil {
+			// 节点已不在集群中，其路由全部视为孤儿。
 			return true
 		}
 		action, exist := (*cidrWithActions)[cidr]
@@ -383,6 +421,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 	// remove routes that are not in use or need to be updated.
 	for _, route := range routes {
 		if !rc.isResponsibleForRoute(route) {
+			// 不属于本集群 CIDR 的路由交给其他集群/系统管理。
 			continue
 		}
 		// Check if this route is a blackhole, or applies to a node we know about & CIDR status is created.
@@ -395,6 +434,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 				rateLimiter <- struct{}{}
 				klog.Infof("Deleting route %s %s", route.Name, route.DestinationCIDR)
 				if err := rc.routes.DeleteRoute(ctx, rc.clusterName, route); err != nil {
+					// 删除失败只记录：下一轮对账会再次尝试，避免阻塞其他路由。
 					klog.Errorf("Could not delete route %s %s after %v: %v", route.Name, route.DestinationCIDR, time.Since(startTime), err)
 				} else {
 					routesChanged.Store(true)
@@ -438,6 +478,8 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 			// - depend on nameHint
 			// - trying to support dual stack
 			// will have to carefully generate new route names that allow node->(multi cidr)
+			// 中文说明：用 Node UID 作为 nameHint 的稳定来源；双栈时同一节点有多条路由，
+			// 云厂商需在 nameHint 基础上自行区分，不能假设一节点一路由。
 			nameHint := string(node.UID)
 			wg.Add(1)
 			go func(nodeName types.NodeName, nameHint string, route *cloudprovider.Route) {
@@ -470,12 +512,15 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 					routesChanged.Store(true)
 					l.Lock()
 					// Mark the route action as done (keep)
+					// 中文说明：创建成功后把动作改为 keep，后续汇总 NodeNetworkUnavailable 时
+					// 才能判断该 CIDR 已就绪。
 					(*routeMap[nodeName].cidrWithActions)[route.DestinationCIDR] = keep
 					l.Unlock()
 					klog.Infof("Created route for node %s %s with hint %s after %v", nodeName, route.DestinationCIDR, nameHint, time.Since(startTime))
 					return nil
 				}
 
+				// 云厂商更新路由时可能返回冲突（例如并发修改同一路由表），有限重试。
 				err := clientretry.RetryOnConflict(updateNetworkConditionBackoff, createRouteFunc)
 				if err != nil {
 					klog.Errorf("Could not create route %s %s for node %s: %v", nameHint, route.DestinationCIDR, nodeName, err)
@@ -495,6 +540,7 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 
 		wg.Add(1)
 		if len(*actions) == 0 {
+			// 没有任何 PodCIDR 的节点视为路由未就绪。
 			go func(n *v1.Node) {
 				defer wg.Done()
 				klog.Infof("node %v has no routes assigned to it. NodeNetworkUnavailable will be set to true", n.Name)
@@ -525,8 +571,10 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 	return routesChanged.Load(), nil
 }
 
+// updateNetworkingCondition 幂等地维护 Node 的 NodeNetworkUnavailable condition。
 func (rc *RouteController) updateNetworkingCondition(node *v1.Node, routesCreated bool) error {
 	_, condition := nodeutil.GetNodeCondition(&node.Status, v1.NodeNetworkUnavailable)
+	// 已是目标状态时不重复写，减少 apiserver 压力。
 	if routesCreated && condition != nil && condition.Status == v1.ConditionFalse && condition.Reason == "RouteCreated" {
 		klog.V(2).Infof("set node %v with NodeNetworkUnavailable=false was canceled because it is already set", node.Name)
 		return nil
@@ -575,13 +623,19 @@ func (rc *RouteController) updateNetworkingCondition(node *v1.Node, routesCreate
 	return err
 }
 
+// isResponsibleForRoute 判断路由的目标 CIDR 是否落在本集群的 clusterCIDR 内。
+// 中文说明：云侧路由表中可能同时存在多个集群的路由，只有与本集群 CIDR 有交集的
+// 才允许删除/修改，防止误删其他集群的条目。
 func (rc *RouteController) isResponsibleForRoute(route *cloudprovider.Route) bool {
 	_, cidr, err := netutils.ParseCIDRSloppy(route.DestinationCIDR)
 	if err != nil {
+		// 无法解析的 CIDR 不可能是我们自己创建的，直接跳过。
 		klog.Errorf("Ignoring route %s, unparsable CIDR: %v", route.Name, err)
 		return false
 	}
 	// Not responsible if this route's CIDR is not within our clusterCIDR
+	// lastIP 是子网的广播地址；判断首尾任一地址是否落在 clusterCIDR 内即可覆盖
+	// 路由 CIDR 与 clusterCIDR 部分重叠的情况。
 	lastIP := make([]byte, len(cidr.IP))
 	for i := range lastIP {
 		lastIP[i] = cidr.IP[i] | ^cidr.Mask[i]
@@ -597,6 +651,9 @@ func (rc *RouteController) isResponsibleForRoute(route *cloudprovider.Route) boo
 }
 
 // getRouteAction returns an action according to if there's a route matches a specific cidr and target Node addresses.
+//
+// 中文说明：destination 相同即视为同一条路由；只有当云厂商支持节点地址（EnableNodeAddresses）
+// 且地址发生变化时才需要 update，否则地址变化无法反映到云侧，保持 keep。
 func getRouteAction(routes []*cloudprovider.Route, cidr string, nodeName types.NodeName, realNodeAddrs []v1.NodeAddress) routeAction {
 	for _, route := range routes {
 		if route.DestinationCIDR == cidr {
@@ -610,6 +667,8 @@ func getRouteAction(routes []*cloudprovider.Route, cidr string, nodeName types.N
 	return add
 }
 
+// equalNodeAddrs 忽略顺序比较两组节点地址是否等价。
+// 中文说明：云厂商返回地址顺序不稳定，按集合语义比较可避免每轮误判为 update。
 func equalNodeAddrs(addrs0 []v1.NodeAddress, addrs1 []v1.NodeAddress) bool {
 	if len(addrs0) != len(addrs1) {
 		return false

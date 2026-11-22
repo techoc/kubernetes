@@ -20,12 +20,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 该文件注册 ServiceController 配置 v1alpha1 的类型、默认化与转换初始化函数。
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
 	// defaulting and conversion init funcs are registered as well.
+	// 生成的 defaults.go 会向该 builder 追加初始化函数，因此必须使用指针。
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	// 调用方用它把该版本接入组件配置 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

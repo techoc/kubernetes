@@ -37,6 +37,8 @@ import (
 )
 
 var (
+	// runtimeScheme/codecs/deserializer/encoder 构成 webhook 的编解码管线：
+	// 反序列化准入请求、序列化准入响应，媒体类型统一为 JSON。
 	runtimeScheme = runtime.NewScheme()
 	codecs        = serializer.NewCodecFactory(runtimeScheme)
 	deserializer  = codecs.UniversalDeserializer()
@@ -44,20 +46,26 @@ var (
 )
 
 func init() {
+	// 只注册 webhook 真正需要的类型，缩小 scheme，避免无关类型的转换开销。
 	_ = corev1.AddToScheme(runtimeScheme)
 	_ = admissionv1.AddToScheme(runtimeScheme)
+	// 规范中 webhook 必须使用 JSON，因此固定选择 JSON serializer。
 	serializerInfo, _ := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), runtime.ContentTypeJSON)
 	encoder = serializerInfo.Serializer
 }
 
 // WebhooksDisabledByDefault is the webhooks disabled default when starting cloud-controller managers.
+// 记录默认关闭的 webhook 名称；由 --webhooks 的 * / -name 语法覆盖。
 var WebhooksDisabledByDefault = sets.NewString()
 
+// WebhookConfig 描述一个 webhook 的注册信息：HTTP 路径与准入处理函数。
 type WebhookConfig struct {
 	Path             string
 	AdmissionHandler func(*admissionv1.AdmissionRequest) (*admissionv1.AdmissionResponse, error)
 }
 
+// WebhookHandler 是可挂载到 mux 上的准入 handler，同时携带云提供商与配置，
+// 便于处理函数按需访问集群与云资源。
 type WebhookHandler struct {
 	Name string
 	Path string
@@ -67,10 +75,12 @@ type WebhookHandler struct {
 	Cloud            cloudprovider.Interface
 }
 
+// NewWebhookHandlers 按 --webhooks 的选择结果过滤并实例化 webhook handler。
 func NewWebhookHandlers(webhookConfigs map[string]WebhookConfig, completedConfig *config.CompletedConfig, cloud cloudprovider.Interface) map[string]WebhookHandler {
 	RegisterMetrics()
 	webhookHandlers := make(map[string]WebhookHandler)
 	for name, config := range webhookConfigs {
+		// 复用控制器的启用/禁用语法（*、name、-name），保持命令行体验一致。
 		if !genericcontrollermanager.IsControllerEnabled(name, WebhooksDisabledByDefault, completedConfig.ComponentConfig.Webhook.Webhooks) {
 			klog.Warningf("Webhook %q is disabled", name)
 			continue
@@ -87,22 +97,28 @@ func NewWebhookHandlers(webhookConfigs map[string]WebhookConfig, completedConfig
 	return webhookHandlers
 }
 
+// WebhookNames 返回按字典序排序的 webhook 名称，保证生成的帮助信息与日志稳定。
 func WebhookNames(webhooks map[string]WebhookConfig) []string {
 	ret := sets.StringKeySet(webhooks)
 	return ret.List()
 }
 
+// newHandler 把所有 webhook 挂到独立的 PathRecorderMux 上，便于与主服务端点隔离。
 func newHandler(webhooks map[string]WebhookHandler) *mux.PathRecorderMux {
 	mux := mux.NewPathRecorderMux("controller-manager-webhook")
 
 	for _, handler := range webhooks {
+		// 路径由各 webhook 自行声明，需确保不重复，否则后注册者会覆盖前者。
 		mux.Handle(handler.Path, handler)
 	}
 
 	return mux
 }
 
+// ServeHTTP 实现标准的 AdmissionReview HTTP 协议：解析请求、调用业务 handler，
+// 并原样回填请求 UID 后以 JSON 返回。
 func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 此处没有请求级可用的上下文，使用 Background 仅用于指标标签。
 	ctx := context.Background()
 	klog.Infof("Received validation request: %q", r.RequestURI)
 
@@ -113,6 +129,7 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		in                *admissionv1.AdmissionReview
 		admissionResponse *admissionv1.AdmissionResponse
 	)
+	// 延迟记录请求指标：优先按显式状态码分类，否则归为错误。
 	defer func() {
 		latency := time.Since(start)
 
@@ -128,6 +145,7 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// 请求格式错误属于客户端问题，返回 400 而不是 500。
 	in, err = parseRequest(r)
 	if err != nil {
 		klog.Error(err)
@@ -136,6 +154,7 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 业务 handler 的错误或空响应都视为服务端故障，返回 500 让 API Server 重试。
 	admissionResponse, err = h.AdmissionHandler(in.Request)
 	if err != nil {
 		e := fmt.Sprintf("error generating admission response: %v", err)
@@ -154,9 +173,11 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	admissionReview := &admissionv1.AdmissionReview{
 		Response: admissionResponse,
 	}
+	// UID 必须与请求一致，API Server 依赖它匹配异步的准入结果。
 	admissionReview.Response.UID = in.Request.UID
 	w.Header().Set("Content-Type", "application/json")
 
+	// 按 admission.k8s.io/v1 版本编码，确保返回体可被 API Server 直接消费。
 	codec := codecs.EncoderForVersion(encoder, admissionv1.SchemeGroupVersion)
 	out, err := runtime.Encode(codec, admissionReview)
 	if err != nil {
@@ -172,10 +193,13 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseRequest extracts an AdmissionReview from an http.Request if possible
+// parseRequest 对请求做严格校验：必须是 application/json、非空 body、可解码的
+// AdmissionReview，且包含 Request 字段，任何一项不满足都拒绝处理。
 func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 
 	review := &admissionv1.AdmissionReview{}
 
+	// 不接受带 charset 等参数的 Content-Type，保持与 API Server 调用约定一致。
 	if r.Header.Get("Content-Type") != "application/json" {
 		return nil, fmt.Errorf("Content-Type: %q should be %q",
 			r.Header.Get("Content-Type"), "application/json")
@@ -193,6 +217,7 @@ func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 		return nil, fmt.Errorf("could not deserialize incoming admission review: %v", err)
 	}
 
+	// 没有 Request 的 Review 无法用于准入决策，必须报错。
 	if review.Request == nil {
 		return nil, fmt.Errorf("admission review can't be used: Request field is nil")
 	}

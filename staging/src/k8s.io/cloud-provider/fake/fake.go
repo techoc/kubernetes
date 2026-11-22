@@ -29,9 +29,11 @@ import (
 	cloudprovider "k8s.io/cloud-provider"
 )
 
+// defaultProviderName 是未显式设置 Provider 时 ProviderName 的返回值。
 const defaultProviderName = "fake"
 
 // Balancer is a fake storage of balancer information
+// 记录一次 EnsureLoadBalancer 写入的负载均衡器规格，供测试断言。
 type Balancer struct {
 	Name           string
 	Region         string
@@ -41,11 +43,14 @@ type Balancer struct {
 }
 
 // UpdateBalancerCall represents a fake call to update load balancers
+// 同时用于 Ensure 与 Update 的调用记录，二者参数形状相同。
 type UpdateBalancerCall struct {
 	Service *v1.Service
 	Hosts   []*v1.Node
 }
 
+// 编译期断言：Cloud 必须实现下面所有云提供者接口。
+// 接口演进时这里会先编译失败，而不是等到控制器运行期才发现不兼容。
 var _ cloudprovider.Interface = (*Cloud)(nil)
 var _ cloudprovider.Instances = (*Cloud)(nil)
 var _ cloudprovider.LoadBalancer = (*Cloud)(nil)
@@ -56,16 +61,21 @@ var _ cloudprovider.Clusters = (*Cloud)(nil)
 var _ cloudprovider.InstancesV2 = (*Cloud)(nil)
 
 // Cloud is a test-double implementation of Interface, LoadBalancer, Instances, and Routes. It is useful for testing.
+// 字段分为三类：行为开关（Disable*/Enable*）、返回值（Err*/Exists* 等）与观测记录
+// （Calls/UpdateCalls/EnsureCalls/Balancers/RouteMap）。测试通过组合它们构造场景。
 type Cloud struct {
+	// Disable* 让对应接口返回“不支持”，用于测试控制器在缺少能力时的降级路径。
 	DisableInstances     bool
 	DisableRoutes        bool
 	DisableLoadBalancers bool
 	DisableZones         bool
 	DisableClusters      bool
 
+	// Exists/Err 是多数查询方法的通用返回值，便于统一控制成功与失败分支。
 	Exists bool
 	Err    error
 
+	// EnableInstancesV2 切换到 InstancesV2 路径；一旦启用，控制器不再调用 Zones。
 	EnableInstancesV2       bool
 	ExistsByProviderID      bool
 	ErrByProviderID         error
@@ -73,6 +83,7 @@ type Cloud struct {
 	ErrShutdownByProviderID error
 	MetadataErr             error
 
+	// Calls 记录被调用方法名（如 "create"、"get-zone"），用于断言调用序列。
 	Calls          []string
 	Addresses      []v1.NodeAddress
 	addressesMux   sync.Mutex
@@ -90,28 +101,35 @@ type Cloud struct {
 	UpdateCalls    []UpdateBalancerCall
 	ensureCallLock sync.Mutex
 	EnsureCalls    []UpdateBalancerCall
-	EnsureCallCb   func(UpdateBalancerCall)
-	UpdateCallCb   func(UpdateBalancerCall)
-	RouteMap       map[string]*Route
-	Lock           sync.Mutex
-	Provider       string
-	ProviderID     map[types.NodeName]string
-	addCallLock    sync.Mutex
+	// EnsureCallCb/UpdateCallCb 允许测试在调用发生的瞬间执行断言或阻塞。
+	EnsureCallCb func(UpdateBalancerCall)
+	UpdateCallCb func(UpdateBalancerCall)
+	RouteMap     map[string]*Route
+	// Lock 保护 RouteMap，路由接口可能在多个 worker 中并发调用。
+	Lock        sync.Mutex
+	Provider    string
+	ProviderID  map[types.NodeName]string
+	addCallLock sync.Mutex
 	cloudprovider.Zone
 	VolumeLabelMap   map[string]map[string]string
 	AdditionalLabels map[string]string
 
+	// OverrideInstanceMetadata 若非空，完全接管 InstanceMetadata 的返回值，
+	// 用于构造任意元数据或错误，而不必依赖结构体字段组合。
 	OverrideInstanceMetadata func(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error)
 
+	// RequestDelay 模拟云 API 延迟，用于测试并发同步的吞吐与超时行为。
 	RequestDelay time.Duration
 }
 
 // Route is a representation of an advanced routing rule.
+// 在 cloudprovider.Route 之外附带集群名，便于按集群过滤。
 type Route struct {
 	ClusterName string
 	Route       cloudprovider.Route
 }
 
+// addCall 记录一次方法调用；加锁是因为多个控制器 worker 会并发访问 Calls。
 func (f *Cloud) addCall(desc string) {
 	time.Sleep(f.RequestDelay)
 
@@ -222,6 +240,7 @@ func (f *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, serv
 	}
 	region := zone.Region
 
+	// 以 GetLoadBalancerName 的结果为键保存，模拟云侧按名称幂等覆盖。
 	f.Balancers[name] = Balancer{name, region, spec.LoadBalancerIP, spec.Ports, nodes}
 
 	status := &v1.LoadBalancerStatus{}
@@ -238,6 +257,7 @@ func (f *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, serv
 	return status, f.Err
 }
 
+// markUpdateCall 记录一次 UpdateLoadBalancer 调用；在锁内回调可让测试同步感知调用发生。
 func (f *Cloud) markUpdateCall(service *v1.Service, nodes []*v1.Node) {
 	f.updateCallLock.Lock()
 	defer f.updateCallLock.Unlock()
@@ -248,6 +268,8 @@ func (f *Cloud) markUpdateCall(service *v1.Service, nodes []*v1.Node) {
 	}
 }
 
+// markEnsureCall 记录一次 EnsureLoadBalancer 调用；由单独的 ensureCallLock 保护，
+// 这样 Ensure 与 Update 的记录互不阻塞。
 func (f *Cloud) markEnsureCall(service *v1.Service, nodes []*v1.Node) {
 	f.ensureCallLock.Lock()
 	defer f.ensureCallLock.Unlock()
@@ -368,14 +390,19 @@ func (f *Cloud) InstanceShutdown(ctx context.Context, node *v1.Node) (bool, erro
 }
 
 // InstanceMetadata returns metadata of the specified instance.
+// 优先走 OverrideInstanceMetadata；否则从各字段拼装，模拟 InstancesV2 的一次调用
+// 同时返回地址、类型、拓扑与附加标签，以减少对云 API 的往返。
 func (f *Cloud) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error) {
 	if f.OverrideInstanceMetadata != nil {
 		return f.OverrideInstanceMetadata(ctx, node)
 	}
 	f.addCall("instance-metadata-by-provider-id")
+	// Addresses/ProviderID 可能被并发读取，故复用 addressesMux 保护。
 	f.addressesMux.Lock()
 	defer f.addressesMux.Unlock()
 
+	// 优先返回 Cloud.ProviderID 中显式记录的 providerID；缺省时返回空串，
+	// 调用方据此判断节点尚未初始化并重试。
 	providerID := ""
 	id, ok := f.ProviderID[types.NodeName(node.Name)]
 	if ok {
@@ -394,6 +421,7 @@ func (f *Cloud) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprov
 
 // List is a test-spy implementation of Instances.List.
 // It adds an entry "list" into the internal method call record.
+// filter 作为正则表达式匹配机器名；无效正则按不匹配处理。
 func (f *Cloud) List(filter string) ([]types.NodeName, error) {
 	f.addCall("list")
 	result := []types.NodeName{}
@@ -431,6 +459,7 @@ func (f *Cloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) 
 }
 
 // ListRoutes lists all managed routes that belong to the specified clusterName
+// 只返回 ClusterName 精确匹配的路由；返回副本，避免调用方修改内部状态。
 func (f *Cloud) ListRoutes(ctx context.Context, clusterName string) ([]*cloudprovider.Route, error) {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -448,6 +477,8 @@ func (f *Cloud) ListRoutes(ctx context.Context, clusterName string) ([]*cloudpro
 // CreateRoute creates the described managed route
 // route.Name will be ignored, although the cloud-provider may use nameHint
 // to create a more user-meaningful name.
+// 假实现用 cluster-targetNode-CIDR 生成唯一键，重复创建会返回错误，
+// 以便测试覆盖“路由已存在”这一云侧冲突场景。
 func (f *Cloud) CreateRoute(ctx context.Context, clusterName string, nameHint string, route *cloudprovider.Route) error {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -467,6 +498,8 @@ func (f *Cloud) CreateRoute(ctx context.Context, clusterName string, nameHint st
 
 // DeleteRoute deletes the specified managed route
 // Route should be as returned by ListRoutes
+// 通过 CIDR、目标节点与集群名三要素定位，而不是依赖 Name，
+// 因为真实云侧返回的名称不一定与创建时一致。
 func (f *Cloud) DeleteRoute(ctx context.Context, clusterName string, route *cloudprovider.Route) error {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()

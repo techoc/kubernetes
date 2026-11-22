@@ -59,6 +59,8 @@ const region = "us-central"
 
 type serviceTweak func(s *v1.Service)
 
+// newService 构造测试用 Service：默认 namespace=default、TCP 端口 80，
+// 再通过 tweaks 叠加每个用例关心的字段。
 func newService(name string, serviceType v1.ServiceType, tweaks ...serviceTweak) *v1.Service {
 	s := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -76,6 +78,7 @@ func newService(name string, serviceType v1.ServiceType, tweaks ...serviceTweak)
 	return s
 }
 
+// copyService 深拷贝后再应用 tweaks，模拟“仅少数字段变化”的更新事件。
 func copyService(oldSvc *v1.Service, tweaks ...serviceTweak) *v1.Service {
 	newSvc := oldSvc.DeepCopy()
 	for _, tw := range tweaks {
@@ -141,6 +144,7 @@ func tweakSetIPFamilies(families ...v1.IPFamily) serviceTweak {
 }
 
 // Wrap newService so that you don't have to call default arguments again and again.
+// 返回一个最常见的 LoadBalancer 类型 Service。
 func defaultExternalService() *v1.Service {
 	return newService("external-balancer", v1.ServiceTypeLoadBalancer)
 }
@@ -150,6 +154,7 @@ func defaultExternalService() *v1.Service {
 // node/service informers and reacting to resource events. Callers can also
 // specify `objects` which represent the initial state of objects, used to
 // populate the client set / informer cache at start-up.
+// 测试控制器不调用 New()，而是手工装配字段，以便替换 lister/queue 等组件。
 func newController(ctx context.Context, objects ...runtime.Object) (*Controller, *fakecloud.Cloud, *fake.Clientset) {
 	stopCh := ctx.Done()
 	cloud := &fakecloud.Cloud{}
@@ -185,6 +190,7 @@ func newController(ctx context.Context, objects ...runtime.Object) (*Controller,
 		lastSyncedNodes: make(map[string][]*v1.Node),
 	}
 
+	// 先启动并等待 informer 同步，保证 lister 反映初始对象。
 	informerFactory.Start(stopCh)
 	informerFactory.WaitForCacheSync(stopCh)
 
@@ -196,6 +202,7 @@ func newController(ctx context.Context, objects ...runtime.Object) (*Controller,
 		}
 	}
 
+	// 用初始 Service 填充 cache，模拟控制器重启后已知的资源状态。
 	controller.cache = &serviceCache{serviceMap: serviceMap}
 
 	balancer, _ := cloud.LoadBalancer()
@@ -211,6 +218,9 @@ func newController(ctx context.Context, objects ...runtime.Object) (*Controller,
 
 // TODO(@MrHohn): Verify the end state when below issue is resolved:
 // https://github.com/kubernetes/client-go/issues/607
+// TestSyncLoadBalancerIfNeeded 覆盖 syncLoadBalancerIfNeeded 的三类结果：
+// 需要确保 LB（可能新建）、需要删除 LB、以及无操作（如 LoadBalancerClass 非空）。
+// 同时断言 finalizer 与 status patch 的次数，确保资源与状态写入成对出现。
 func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 	testCases := []struct {
 		desc                 string
@@ -222,6 +232,7 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 		expectPatchStatus    bool
 		expectPatchFinalizer bool
 	}{{
+		// 非 LoadBalancer 类型：应走删除分支，但无 LB 可删时不得产生 patch。
 		desc:              "service doesn't want LB",
 		service:           newService("no-external-balancer", v1.ServiceTypeClusterIP),
 		expectOp:          deleteLoadBalancer,
@@ -256,6 +267,7 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 		expectPatchFinalizer: false,
 	}, {
 		// Finalizer test cases below.
+		// 以下用例区分“带 finalizer 但已不需要 LB”“正在删除”“带 finalizer 且仍需要 LB”。
 		desc:                 "service with finalizer that no longer wants LB",
 		service:              newService("no-external-balancer", v1.ServiceTypeClusterIP, tweakAddLBIngress("8.8.8.8"), tweakAddFinalizers(servicehelper.LoadBalancerCleanupFinalizer)),
 		lbExists:             true,
@@ -379,6 +391,9 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 }
 
 // TODO: Finish converting and update comments
+// TestUpdateNodesInExternalLoadBalancer 验证给定节点集合时，
+// 每个 LoadBalancer 类型 Service 恰好产生一次 UpdateLoadBalancer 调用，
+// 非 LB 类型与 nil Service 被忽略，且 workers 数量不影响调用集合。
 func TestUpdateNodesInExternalLoadBalancer(t *testing.T) {
 	nodes := []*v1.Node{
 		makeNode(tweakName("node1")),
@@ -479,6 +494,9 @@ func TestUpdateNodesInExternalLoadBalancer(t *testing.T) {
 	}
 }
 
+// TestNodeChangesForStableNodeSetEnabled 验证稳定节点集合语义：
+// 只有新增/删除、被排除、带缩容 taint、标记删除等变化才触发 LB 更新；
+// 仅 Ready 状态或无关 taint 变化不触发，避免连接被无谓中断。
 func TestNodeChangesForStableNodeSetEnabled(t *testing.T) {
 	node1 := makeNode(tweakName("node1"), tweakSetCondition(v1.NodeReady, v1.ConditionTrue))
 	node2 := makeNode(tweakName("node2"), tweakSetCondition(v1.NodeReady, v1.ConditionTrue))
@@ -528,6 +546,7 @@ func TestNodeChangesForStableNodeSetEnabled(t *testing.T) {
 			{Service: service3, Hosts: []*v1.Node{node1, node2, node3}},
 		},
 	}, {
+		// 第一次同步失败时，该 Service 应被放入重试集合；下一次同步成功后不再重复。
 		desc:         "1 new node gets added - with retries",
 		initialState: []*v1.Node{node1, node2},
 		stateChanges: []stateChanges{
@@ -656,6 +675,8 @@ func TestNodeChangesForStableNodeSetEnabled(t *testing.T) {
 	}
 }
 
+// TestNodeChangesInExternalLoadBalancer 覆盖 syncNodes 在成功与节点 List 失败时的行为：
+// 失败时所有额度 Service 都必须进入重试集合，成功时每个 LB 更新一次。
 func TestNodeChangesInExternalLoadBalancer(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -751,6 +772,7 @@ func TestNodeChangesInExternalLoadBalancer(t *testing.T) {
 }
 
 // compareUpdateCalls compares if the same update calls were made in both left and right inputs despite the order.
+// 并发 worker 导致调用顺序不确定，因此按内容集合比较而不是顺序比较。
 func compareUpdateCalls(t *testing.T, left, right []fakecloud.UpdateBalancerCall) {
 	if len(left) != len(right) {
 		t.Errorf("expect len(left) == len(right), but got %v != %v", len(left), len(right))
@@ -775,6 +797,7 @@ func compareUpdateCalls(t *testing.T, left, right []fakecloud.UpdateBalancerCall
 }
 
 // compareHostSets compares if the nodes in left are in right, despite the order.
+// 节点集合来自 map/list，顺序不稳定，只能按集合语义比较。
 func compareHostSets(t *testing.T, left, right []*v1.Node) bool {
 	if len(left) != len(right) {
 		return false
@@ -794,6 +817,8 @@ func compareHostSets(t *testing.T, left, right []*v1.Node) bool {
 	return true
 }
 
+// TestNodesNotEqual 验证 nodesSufficientlyEqual 的判定：providerID 变化或节点
+// 集合变化会触发更新，完全一致则不调用云 API。
 func TestNodesNotEqual(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -863,6 +888,8 @@ func TestNodesNotEqual(t *testing.T) {
 	}
 }
 
+// TestProcessServiceCreateOrUpdate 验证创建/更新路径会刷新 cache 中的对象状态，
+// 以便后续删除事件（非 finalizer 路径）能拿到最新 Service。
 func TestProcessServiceCreateOrUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -958,6 +985,7 @@ func TestProcessServiceCreateOrUpdate(t *testing.T) {
 
 // TestProcessServiceCreateOrUpdateK8sError tests processServiceCreateOrUpdate
 // with various kubernetes errors when patching status.
+// Conflict 应返回错误并发出告警事件；NotFound 应被忽略（Service 已消失）。
 func TestProcessServiceCreateOrUpdateK8sError(t *testing.T) {
 	svcName := "svc-k8s-err"
 	conflictErr := apierrors.NewConflict(schema.GroupResource{}, svcName, errors.New("object conflict"))
@@ -1015,6 +1043,8 @@ func TestProcessServiceCreateOrUpdateK8sError(t *testing.T) {
 
 }
 
+// TestSyncService 验证 syncService 对非法 key 返回错误、对正常 key 完成同步，
+// 且处理后 cache 不应残留该条目。
 func TestSyncService(t *testing.T) {
 
 	var controller *Controller
@@ -1099,6 +1129,8 @@ func TestSyncService(t *testing.T) {
 	}
 }
 
+// TestProcessServiceDeletion 验证删除路径：缓存中无记录时幂等返回，
+// 云删除失败时保留缓存以便重试，成功后移除缓存。
 func TestProcessServiceDeletion(t *testing.T) {
 
 	var controller *Controller
@@ -1190,6 +1222,9 @@ func TestProcessServiceDeletion(t *testing.T) {
 //	5         1           0            1     |   false
 //	6         1           1            0     |   true    (Service is deleted, needs clean up)
 //	7         1           1            1     |   true    (Ignored as same with case 6)
+//
+// TestNeedsCleanup 按 finalizer、deletionTimestamp、Service 类型三者组合
+// 验证清理判定；只有带 finalizer 且（待删除或不再需要 LB）才需要清理。
 func TestNeedsCleanup(t *testing.T) {
 	testCases := []struct {
 		desc               string
@@ -1244,6 +1279,9 @@ func TestNeedsCleanup(t *testing.T) {
 
 }
 
+// TestSlowNodeSync 模拟节点同步进行中同时发生 Service 更新的竞态：
+// 慢速节点同步不能用过期的节点集合覆盖 Service 同步写入的新后端。
+//
 // This tests a service update while a slow node sync is happening. If we have multiple
 // services to process from a node sync: each service will experience a sync delta.
 // If a new Node is added and a service is synced while this happens: we want to
@@ -1344,6 +1382,8 @@ func TestSlowNodeSync(t *testing.T) {
 	}
 }
 
+// TestNeedsUpdate 逐项验证影响 LB 的字段：类型、端口、ExternalIPs、UID、
+// 流量策略、健康检查端口、IPFamily、AppProtocol 等变化必须触发更新。
 func TestNeedsUpdate(t *testing.T) {
 	testCases := []struct {
 		testName            string                            //Name of the test case
@@ -1519,6 +1559,8 @@ func TestNeedsUpdate(t *testing.T) {
 // as tc1 (addCache would add elements to the cache)
 // and tc2 (delCache would remove element from the cache without it adding automatically)
 // Please keep this in mind while adding new test cases.
+// TestServiceCache 顺序覆盖 serviceCache 的 getOrCreate/delete/set/get/ListKeys/
+// GetByKey/allServices；用例之间共享同一缓存，不能随意调整顺序。
 func TestServiceCache(t *testing.T) {
 
 	//ServiceCache a common service cache for all the test cases
@@ -1620,6 +1662,7 @@ func TestServiceCache(t *testing.T) {
 
 // TODO(@MrHohn): Verify the end state when below issue is resolved:
 // https://github.com/kubernetes/client-go/issues/607
+// TestAddFinalizer 验证仅在缺少 finalizer 时才 patch，已有 finalizer 时为 no-op。
 func TestAddFinalizer(t *testing.T) {
 	testCases := []struct {
 		desc        string
@@ -1674,6 +1717,7 @@ func TestAddFinalizer(t *testing.T) {
 
 // TODO(@MrHohn): Verify the end state when below issue is resolved:
 // https://github.com/kubernetes/client-go/issues/607
+// TestRemoveFinalizer 验证仅在存在 finalizer 时才 patch。
 func TestRemoveFinalizer(t *testing.T) {
 	testCases := []struct {
 		desc        string
@@ -1728,6 +1772,7 @@ func TestRemoveFinalizer(t *testing.T) {
 
 // TODO(@MrHohn): Verify the end state when below issue is resolved:
 // https://github.com/kubernetes/client-go/issues/607
+// TestPatchStatus 验证状态相同时不写 API、不同时才 patch，覆盖新增与清空两种变化。
 func TestPatchStatus(t *testing.T) {
 	testCases := []struct {
 		desc        string
@@ -1824,6 +1869,8 @@ func TestPatchStatus(t *testing.T) {
 	}
 }
 
+// Test_respectsPredicates 验证 allNodePredicates 的组合效果：
+// 无 Ready 条件、排除标签解析失败、带缩容 taint 的节点都应被拒绝。
 func Test_respectsPredicates(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1853,6 +1900,8 @@ func Test_respectsPredicates(t *testing.T) {
 	}
 }
 
+// TestListWithPredicate 验证从 informer lister 全量列出后按谓词过滤，
+// 覆盖 Running、Pending 与不存在的 Terminated 阶段。
 func TestListWithPredicate(t *testing.T) {
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 	var nodes []*v1.Node
@@ -1915,9 +1964,11 @@ func TestListWithPredicate(t *testing.T) {
 
 var providerID = "providerID"
 
+// nodeTweak 在 makeNode 默认节点上叠加单个字段变化，让用例只表达差异。
 type nodeTweak func(n *v1.Node)
 
 // TODO: use this pattern in all the tests above.
+// makeNode 构造默认 Ready、有 providerID 的节点，再应用 tweaks。
 func makeNode(tweaks ...nodeTweak) *v1.Node {
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2020,6 +2071,8 @@ func tweakProviderID(id string) nodeTweak {
 	}
 }
 
+// Test_shouldSyncUpdatedNode_individualPredicates 逐个验证单谓词变化：
+// 排除标签与 providerID 变化必须同步；无关 taint/标签、Ready 变化不得同步。
 func Test_shouldSyncUpdatedNode_individualPredicates(t *testing.T) {
 	testcases := []struct {
 		name       string
@@ -2142,6 +2195,8 @@ func Test_shouldSyncUpdatedNode_individualPredicates(t *testing.T) {
 	}
 }
 
+// Test_shouldSyncUpdatedNode_compoundedPredicates 验证多谓词同时变化时取并集：
+// 只要排除谓词或 providerID 发生变化就同步，其他组合变化仍保持不同步。
 func Test_shouldSyncUpdatedNode_compoundedPredicates(t *testing.T) {
 	type testCase struct {
 		name       string
@@ -2298,6 +2353,8 @@ func Test_shouldSyncUpdatedNode_compoundedPredicates(t *testing.T) {
 	}
 }
 
+// TestServiceQueueDelay 验证错误分类：普通错误进入指数退避，RetryError 使用
+// 云提供商指定的延迟且不计入 requeue 计数，成功则完全 Forget。
 func TestServiceQueueDelay(t *testing.T) {
 	const ns = metav1.NamespaceDefault
 
@@ -2384,11 +2441,13 @@ func TestServiceQueueDelay(t *testing.T) {
 	}
 }
 
+// fakeNodeLister 是可控的 NodeLister：既能固定返回错误，也能直接提供节点集合。
 type fakeNodeLister struct {
 	cache []*v1.Node
 	err   error
 }
 
+// newFakeNodeLister 构造返回固定错误/固定节点列表的 lister。
 func newFakeNodeLister(err error, nodes ...*v1.Node) *fakeNodeLister {
 	ret := &fakeNodeLister{}
 	ret.cache = nodes
@@ -2415,12 +2474,14 @@ func (l *fakeNodeLister) Get(name string) (*v1.Node, error) {
 
 // spyWorkQueue implements a work queue and adds the ability to inspect processed
 // items for testing purposes.
+// 包装真实队列并记录 AddAfter 的 key 与延迟，用于断言 RetryError 的精确重试时间。
 type spyWorkQueue struct {
 	workqueue.TypedRateLimitingInterface[string]
 	items []spyQueueItem
 }
 
 // spyQueueItem represents an item that was being processed.
+// spyQueueItem 记录一次 AddAfter 调用。
 type spyQueueItem struct {
 	Key string
 	// Delay represents the delayed duration if and only if AddAfter was invoked.
@@ -2429,6 +2490,7 @@ type spyQueueItem struct {
 
 // AddAfter is like workqueue.RateLimitingInterface.AddAfter but records the
 // added key and delay internally.
+// AddAfter 先记录再委托真实队列，保证观测不影响队列行为。
 func (f *spyWorkQueue) AddAfter(key string, delay time.Duration) {
 	f.items = append(f.items, spyQueueItem{
 		Key:   key,
@@ -2439,6 +2501,7 @@ func (f *spyWorkQueue) AddAfter(key string, delay time.Duration) {
 }
 
 // getItems returns all items that were recorded.
+// getItems 返回已记录的 AddAfter 条目。
 func (f *spyWorkQueue) getItems() []spyQueueItem {
 	return f.items
 }

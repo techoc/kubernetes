@@ -45,8 +45,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// alwaysReady 让测试绕过 informer 缓存同步等待，避免在未启动 informer 时阻塞。
 func alwaysReady() bool { return true }
 
+// TestIsResponsibleForRoute 验证“路由是否归本集群管理”的判定：
+// 只有同时满足命名前缀与 DestinationCIDR 落在 --cluster-cidr 内才负责。
+// 该判定决定控制器是否有权删除路由，误判会破坏其他集群的路由。
 func TestIsResponsibleForRoute(t *testing.T) {
 	myClusterName := "my-awesome-cluster"
 	myClusterRoute := "my-awesome-cluster-12345678-90ab-cdef-1234-567890abcdef"
@@ -57,6 +61,7 @@ func TestIsResponsibleForRoute(t *testing.T) {
 		expectedResponsible bool
 	}{
 		// Routes that belong to this cluster
+		// 命名匹配且 CIDR 落在集群网段内，包括 IPv6 与更宽的前缀。
 		{"10.244.0.0/16", myClusterRoute, "10.244.0.0/24", true},
 		{"10.244.0.0/16", myClusterRoute, "10.244.10.0/24", true},
 		{"10.244.0.0/16", myClusterRoute, "10.244.255.0/24", true},
@@ -64,6 +69,7 @@ func TestIsResponsibleForRoute(t *testing.T) {
 		{"10.244.0.0/14", myClusterRoute, "10.247.255.0/24", true},
 		{"a00:100::/10", myClusterRoute, "a00:100::/24", true},
 		// Routes that match our naming/tagging scheme, but are outside our cidr
+		// 命名相同但网段不在集群 CIDR 内，必须判定为不负责，防止误删。
 		{"10.244.0.0/16", myClusterRoute, "10.224.0.0/24", false},
 		{"10.244.0.0/16", myClusterRoute, "10.0.10.0/24", false},
 		{"10.244.0.0/16", myClusterRoute, "10.255.255.0/24", false},
@@ -92,17 +98,25 @@ func TestIsResponsibleForRoute(t *testing.T) {
 	}
 }
 
+// TestReconcile 覆盖路由对账的核心矩阵：单/双栈、缺少路由、多余路由、
+// 目标地址变化、黑洞路由与重复 PodCIDR。期望结果同时校验云侧最终路由集合
+// 与节点 NodeNetworkUnavailable 条件，确保“路由可用性”反馈给调度器。
 func TestReconcile(t *testing.T) {
 	cluster := "my-k8s"
+	// node1/node2 为单栈节点；node3/node4 同时带 IPv4 与 IPv6 PodCIDR，用于双栈场景。
 	node1 := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: "01"}, Spec: v1.NodeSpec{PodCIDR: "10.120.0.0/24", PodCIDRs: []string{"10.120.0.0/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.1.1"}}}}
 	// node1NoAddr := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: "01"}, Spec: v1.NodeSpec{PodCIDR: "10.120.0.0/24", PodCIDRs: []string{"10.120.0.0/24"}}}
 	node2 := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-2", UID: "02"}, Spec: v1.NodeSpec{PodCIDR: "10.120.1.0/24", PodCIDRs: []string{"10.120.1.0/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.2.1"}}}}
+	// nodeNoCidr 尚未分配 PodCIDR，不应生成路由，也不应被标记 NetworkUnavailable。
 	nodeNoCidr := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-2", UID: "02"}, Spec: v1.NodeSpec{PodCIDR: ""}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.5.1"}}}}
 
 	node3 := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-3", UID: "03"}, Spec: v1.NodeSpec{PodCIDR: "10.120.0.0/24", PodCIDRs: []string{"10.120.0.0/24", "a00:100::/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.3.1"}}}}
 	node4 := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-4", UID: "04"}, Spec: v1.NodeSpec{PodCIDR: "10.120.1.0/24", PodCIDRs: []string{"10.120.1.0/24", "a00:200::/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.4.1"}}}}
+	// 重复 CIDR 属于不可自动修复的配置错误，对账应返回错误而不是反复创建。
 	nodeDuplicateCIDR := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-4", UID: "04"}, Spec: v1.NodeSpec{PodCIDR: "10.120.1.0/24", PodCIDRs: []string{"10.120.1.0/24", "10.120.1.0/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.4.1"}}}}
 
+	// expectedNetworkUnavailable 与 nodes 一一对应：true 表示该节点最终应为
+	// NetworkUnavailable=False（即路由已就绪）。
 	testCases := []struct {
 		description                string
 		nodes                      []*v1.Node
@@ -114,6 +128,7 @@ func TestReconcile(t *testing.T) {
 		expectError                bool
 	}{
 		{
+			// 云侧路由尚未携带节点地址时，应按节点现状补全 TargetNodeAddresses。
 			description: "routes have no TargetNodeAddresses at the beginning",
 			dualStack:   true,
 			nodes: []*v1.Node{
@@ -138,6 +153,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 节点 IP 变更后，路由需要重建以指向新地址。
 			description: "routes' TargetNodeAddresses changed",
 			dualStack:   true,
 			nodes: []*v1.Node{
@@ -204,6 +220,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 目标节点与 CIDR 互换属于“错误路由”，应删除后重建。
 			description: "multicidr 2 nodes and few wrong routes",
 			dualStack:   true,
 			nodes: []*v1.Node{
@@ -249,6 +266,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 目标不属于任何现存节点的多余路由必须被清理。
 			description: "multicidr 2 nodes and too many routes",
 			dualStack:   true,
 			nodes: []*v1.Node{
@@ -292,6 +310,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 单栈场景下节点内网 IP 变化，应仅更新对应路由。
 			description: "single cidr node ips changed so routes should be updated",
 			nodes: []*v1.Node{
 				&node1,
@@ -388,6 +407,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, nodeNoCidr}}),
 		},
 		{
+			// 落在受管网段内的黑洞路由会被删除，避免黑洞吞掉 Pod 流量。
 			description: "single cidr 2 nodes and an extra blackhole route in our range",
 			nodes: []*v1.Node{
 				&node1,
@@ -406,6 +426,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 受管网段之外的黑洞路由不归本集群管理，必须原样保留。
 			description: "single cidr 2 nodes and an extra blackhole route not in our range",
 			nodes: []*v1.Node{
 				&node1,
@@ -425,6 +446,7 @@ func TestReconcile(t *testing.T) {
 			clientset:                  fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{node1, node2}}),
 		},
 		{
+			// 同一节点出现重复 PodCIDR 时无法确定唯一路由，期望返回错误。
 			description: "duplicate pod cidr",
 			nodes: []*v1.Node{
 				&nodeDuplicateCIDR,
@@ -441,6 +463,7 @@ func TestReconcile(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
+			// 用 fake cloud 充当 Routes 实现，初始路由直接灌入 RouteMap 模拟云端现状。
 			cloud := &fakecloud.Cloud{RouteMap: make(map[string]*fakecloud.Route)}
 			for _, route := range testCase.initialRoutes {
 				fakeRoute := &fakecloud.Route{}
@@ -453,6 +476,7 @@ func TestReconcile(t *testing.T) {
 			cidrs := make([]*net.IPNet, 0)
 			_, cidr, _ := netutils.ParseCIDRSloppy("10.120.0.0/16")
 			cidrs = append(cidrs, cidr)
+			// 双栈用例再追加一个 IPv6 受管网段。
 			if testCase.dualStack {
 				_, cidrv6, _ := netutils.ParseCIDRSloppy("ace:cab:deca::/8")
 				cidrs = append(cidrs, cidrv6)
@@ -463,6 +487,7 @@ func TestReconcile(t *testing.T) {
 			rc, err := New(routes, testCase.clientset, informerFactory.Core().V1().Nodes(), cluster, cidrs)
 			require.NoError(t, err)
 
+			// 事件监听器顺带断言事件对象必须带 apiVersion，否则 API server 会拒绝记录。
 			recorder := record.NewBroadcaster(record.WithContext(ctx))
 			rc.recorder = recorder.NewRecorder(scheme.Scheme, v1.EventSource{Component: "route_controller"})
 			e := recorder.StartEventWatcher(func(e *v1.Event) {
@@ -475,6 +500,7 @@ func TestReconcile(t *testing.T) {
 			rc.nodeListerSynced = alwaysReady
 			_, err = rc.reconcile(ctx, testCase.nodes, testCase.initialRoutes)
 			require.NoError(t, err, "failed to reconcile")
+			// 检查 reconcile 是否按预期更新了 NodeNetworkUnavailable 条件。
 			for _, action := range testCase.clientset.Actions() {
 				if action.GetVerb() == "update" && action.GetResource().Resource == "nodes" {
 					node := action.(core.UpdateAction).GetObject().(*v1.Node)
@@ -497,6 +523,7 @@ func TestReconcile(t *testing.T) {
 						node.Name, testCase.expectedNetworkUnavailable[index], (condition.Status == v1.ConditionFalse))
 				}
 			}
+			// 路由写入是异步的；轮询直到结果匹配或超时，避免依赖固定 sleep。
 			var finalRoutes []*cloudprovider.Route
 			timeoutChan := time.After(200 * time.Millisecond)
 			tick := time.NewTicker(10 * time.Millisecond)
@@ -521,6 +548,8 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
+// TestHandleNodeUpdate 验证基于 watch 的路由对账触发条件：
+// 只有节点 PodCIDR 或地址变化才需要入队，镜像等无关更新不应触发全量对账。
 func TestHandleNodeUpdate(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CloudControllerManagerWatchBasedRoutesReconciliation, true)
 
@@ -534,12 +563,14 @@ func TestHandleNodeUpdate(t *testing.T) {
 		expectedWorkqueueItem string
 	}{
 		{
+			// 内网 IP 变化会影响路由下一跳，必须入队。
 			description:           "internal IP updated",
 			clientset:             fake.NewClientset(&v1.NodeList{Items: []v1.Node{node}}),
 			updatedNode:           v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: "01"}, Spec: v1.NodeSpec{PodCIDR: "10.120.0.0/24", PodCIDRs: []string{"10.120.0.0/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.1.2"}}}},
 			expectedWorkqueueItem: routesSyncKey,
 		},
 		{
+			// PodCIDR 变化意味着需要新增/删除路由，必须入队。
 			description:           "pod CIDR updated",
 			clientset:             fake.NewClientset(&v1.NodeList{Items: []v1.Node{node}}),
 			updatedNode:           v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: "01"}, Spec: v1.NodeSpec{PodCIDR: "10.121.0.0/24", PodCIDRs: []string{"10.121.0.0/24"}}, Status: v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.0.1.1"}}}},
@@ -607,6 +638,8 @@ func TestHandleNodeUpdate(t *testing.T) {
 	}
 }
 
+// routeListEqual 忽略顺序与 Name，按 (TargetNode, DestinationCIDR, addresses) 比较，
+// 因为云侧返回顺序不稳定且名称由云实现决定。
 func routeListEqual(list1, list2 []*cloudprovider.Route) bool {
 	if len(list1) != len(list2) {
 		return false
@@ -630,6 +663,7 @@ func routeListEqual(list1, list2 []*cloudprovider.Route) bool {
 	return false
 }
 
+// flatten 把指针切片转为值切片，仅用于失败时打印可读的 diff。
 func flatten(list []*cloudprovider.Route) []cloudprovider.Route {
 	var structList []cloudprovider.Route
 	for _, route := range list {
@@ -638,6 +672,8 @@ func flatten(list []*cloudprovider.Route) []cloudprovider.Route {
 	return structList
 }
 
+// TestUpdateNetworkingCondition 验证 NodeNetworkUnavailable 条件的幂等更新：
+// 状态/原因一致时不发 patch；reason 不同的第三方写入（如 Calico）应被覆盖为本控制器的结论。
 func TestUpdateNetworkingCondition(t *testing.T) {
 	cluster := "test-cluster"
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy("10.244.0.0/16")
@@ -815,6 +851,9 @@ func TestUpdateNetworkingCondition(t *testing.T) {
 	}
 }
 
+// TestUpdateNetworkingConditionWithCalicoScenario 复现特定 bug：
+// Calico 先写入 NetworkUnavailable=False/CalicoIsUp，RouteController 仍应能将其
+// 改写为自己的 reason，否则节点会一直显示错误的原因与消息。
 func TestUpdateNetworkingConditionWithCalicoScenario(t *testing.T) {
 	// This test specifically covers the bug where Calico sets NetworkUnavailable=False
 	// and RouteController should still be able to update it with its own reason

@@ -16,8 +16,12 @@ limitations under the License.
 
 package v1alpha1
 
+// RecommendedDefaultNodeControllerConfiguration 为节点控制器填入推荐默认值。
+// 它刻意不作为 SetDefaults_ 注册到 scheme：该结构会被嵌入上层配置，
+// 由上层在自己的默认化函数中显式调用，避免强制所有使用方接受这里的默认值。
 func RecommendedDefaultNodeControllerConfiguration(obj *NodeControllerConfiguration) {
 	if obj.ConcurrentNodeSyncs == 0 {
+		// 0 表示未设置；默认为 1 个 worker，便于保持云 API 调用可控。
 		obj.ConcurrentNodeSyncs = 1
 	}
 }

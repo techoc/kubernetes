@@ -20,4 +20,7 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.cloud-provider.controllers.service.config.v1alpha1
 
+// Package v1alpha1 定义 ServiceController 配置的外部 v1alpha1 版本，
+// 用于 CCM 组件配置文件的序列化；转换目标为
+// k8s.io/cloud-provider/controllers/service/config。
 package v1alpha1

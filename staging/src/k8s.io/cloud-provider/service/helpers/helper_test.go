@@ -34,6 +34,8 @@ This file is duplicated from "k8s.io/kubernetes/pkg/api/v1/service/util_test.go"
 in order for in-tree cloud providers to not depend on internal packages.
 */
 
+// TestGetLoadBalancerSourceRanges 覆盖来源地址解析：注解与 spec 两条来源、去重、
+// 空白容忍，以及非法输入必须报错。空配置默认等价于 allow-all。
 func TestGetLoadBalancerSourceRanges(t *testing.T) {
 	checkError := func(v string) {
 		annotations := make(map[string]string)
@@ -120,6 +122,8 @@ func TestGetLoadBalancerSourceRanges(t *testing.T) {
 	}
 }
 
+// TestAllowAll 验证 IsAllowAll 只把覆盖全部地址的 CIDR（0.0.0.0/0 等）视为 allow-all，
+// 单个或少量具体地址不算。
 func TestAllowAll(t *testing.T) {
 	checkAllowAll := func(allowAll bool, cidrs ...string) {
 		ipnets, err := utilnet.ParseIPNets(cidrs...)
@@ -139,6 +143,8 @@ func TestAllowAll(t *testing.T) {
 	checkAllowAll(true, "192.168.0.1/32", "0.0.0.0/0")
 }
 
+// TestRequestsOnlyLocalTraffic 验证只有 NodePort/LoadBalancer 且
+// externalTrafficPolicy=Local 时才要求仅本地流量。
 func TestRequestsOnlyLocalTraffic(t *testing.T) {
 	checkRequestsOnlyLocalTraffic := func(requestsOnlyLocalTraffic bool, service *v1.Service) {
 		res := RequestsOnlyLocalTraffic(service)
@@ -185,6 +191,7 @@ func TestRequestsOnlyLocalTraffic(t *testing.T) {
 	})
 }
 
+// TestNeedsHealthCheck 验证只有 LoadBalancer + Local 流量策略才需要为后端配置健康检查。
 func TestNeedsHealthCheck(t *testing.T) {
 	checkNeedsHealthCheck := func(needsHealthCheck bool, service *v1.Service) {
 		res := NeedsHealthCheck(service)
@@ -225,6 +232,8 @@ func TestNeedsHealthCheck(t *testing.T) {
 	})
 }
 
+// TestHasLBFinalizer 验证 finalizer 检测只认 LoadBalancerCleanupFinalizer，
+// 混入其他 finalizer 不影响结果。
 func TestHasLBFinalizer(t *testing.T) {
 	testCases := []struct {
 		desc         string
@@ -274,6 +283,8 @@ func TestHasLBFinalizer(t *testing.T) {
 	}
 }
 
+// TestPatchService 验证 PatchService 只提交 spec/status 中真正变化的字段：
+// 先做一次独立更新，再基于旧对象 patch，结果应保留他人写入的注解且不改动 spec。
 func TestPatchService(t *testing.T) {
 	svcOrigin := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -321,6 +332,8 @@ func TestPatchService(t *testing.T) {
 	}
 }
 
+// Test_getPatchBytes 固定 JSON merge patch 的字节输出，防止序列化细节变化
+// 导致 patch 语义改变（例如 finalizer 顺序字段）。
 func Test_getPatchBytes(t *testing.T) {
 	origin := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -345,10 +358,13 @@ func Test_getPatchBytes(t *testing.T) {
 	}
 }
 
+// addAnnotations 是测试辅助：写入一个固定注解，用于验证 patch 不会把它抹掉。
 func addAnnotations(svc *v1.Service) {
 	svc.Annotations["foo"] = "bar"
 }
 
+// TestLoadBalancerStatusEqual 覆盖负载均衡状态比较：IP、IPMode、端口及厂商扩展字段
+// 任一不同即视为状态变化，避免控制器漏掉需要回写的更新。
 func TestLoadBalancerStatusEqual(t *testing.T) {
 	tests := []struct {
 		name string

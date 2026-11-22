@@ -30,16 +30,19 @@ import (
 )
 
 // LabelZonesToSet converts a PV label value from string containing a delimited list of zones to set
+// PV 多可用区标签使用 cloudvolume.LabelMultiZoneDelimiter 分隔，而不是逗号。
 func LabelZonesToSet(labelZonesValue string) (sets.String, error) {
 	return stringToSet(labelZonesValue, cloudvolume.LabelMultiZoneDelimiter)
 }
 
 // ZonesSetToLabelValue converts zones set to label value
+// 顺序不重要（集合语义），因此使用 UnsortedList 避免额外排序开销。
 func ZonesSetToLabelValue(strSet sets.String) string {
 	return strings.Join(strSet.UnsortedList(), cloudvolume.LabelMultiZoneDelimiter)
 }
 
 // ZonesToSet converts a string containing a comma separated list of zones to set
+// 用于 StorageClass 的 zones 参数解析；与 PV 标签使用不同的分隔符。
 func ZonesToSet(zonesString string) (sets.String, error) {
 	zones, err := stringToSet(zonesString, ",")
 	if err != nil {
@@ -49,6 +52,7 @@ func ZonesToSet(zonesString string) (sets.String, error) {
 }
 
 // StringToSet converts a string containing list separated by specified delimiter to a set
+// 去空白后不允许空项：空 zone 会使后续拓扑选择无法收敛。
 func stringToSet(str, delimiter string) (sets.String, error) {
 	zonesSlice := strings.Split(str, delimiter)
 	zonesSet := make(sets.String)
@@ -66,11 +70,13 @@ func stringToSet(str, delimiter string) (sets.String, error) {
 }
 
 // LabelZonesToList converts a PV label value from string containing a delimited list of zones to list
+// 与 LabelZonesToSet 不同，这里保留输入顺序（例如主 zone 在前），供需要确定顺序的调用方使用。
 func LabelZonesToList(labelZonesValue string) ([]string, error) {
 	return stringToList(labelZonesValue, cloudvolume.LabelMultiZoneDelimiter)
 }
 
 // StringToList converts a string containing list separated by specified delimiter to a list
+// 与 stringToSet 一样拒绝空项，但保留顺序与重复项。
 func stringToList(str, delimiter string) ([]string, error) {
 	zonesSlice := make([]string, 0)
 	for _, zone := range strings.Split(str, delimiter) {
@@ -88,6 +94,7 @@ func stringToList(str, delimiter string) ([]string, error) {
 
 // SelectZoneForVolume is a wrapper around SelectZonesForVolume
 // to select a single zone for a volume based on parameters
+// 单副本场景的便捷入口；PopAny 对单元素集合等价于取唯一值。
 func SelectZoneForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneParameter string, zonesParameter, zonesWithNodes sets.String, node *v1.Node, allowedTopologies []v1.TopologySelectorTerm, pvcName string) (string, error) {
 	zones, err := SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent, zoneParameter, zonesParameter, zonesWithNodes, node, allowedTopologies, pvcName, 1)
 	if err != nil {
@@ -103,6 +110,8 @@ func SelectZoneForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneP
 // SelectZonesForVolume selects zones for a volume based on several factors:
 // node.zone, allowedTopologies, zone/zones parameters from storageclass,
 // zones with active nodes from the cluster. The number of zones = replicas.
+// 优先级：node 的 zone（WaitForFirstConsumer 场景）> allowedTopologies > zone/zones 参数
+// > 集群中有节点的 zone。zone 与 zones 参数互斥，同时出现直接报错。
 func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneParameter string, zonesParameter, zonesWithNodes sets.String, node *v1.Node, allowedTopologies []v1.TopologySelectorTerm, pvcName string, numReplicas uint32) (sets.String, error) {
 	if zoneParameterPresent && zonesParameterPresent {
 		return nil, fmt.Errorf("both zone and zones StorageClass parameters must not be used at the same time")
@@ -112,11 +121,13 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 	// pick one zone from node if present
 	if node != nil {
 		// VolumeScheduling implicit since node is not nil
+		// 有 node 说明处于 WaitForFirstConsumer：StorageClass 中再指定 zone 会与调度结果冲突。
 		if zoneParameterPresent || zonesParameterPresent {
 			return nil, fmt.Errorf("zone[s] cannot be specified in StorageClass if VolumeBindingMode is set to WaitForFirstConsumer. Please specify allowedTopologies in StorageClass for constraining zones")
 		}
 
 		// pick node's zone for one of the replicas
+		// 优先新标签，回退到已弃用的 failure-domain 标签，兼容未升级的节点。
 		var ok bool
 		zoneFromNode, ok = node.ObjectMeta.Labels[v1.LabelTopologyZone]
 		if !ok {
@@ -126,6 +137,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 			}
 		}
 		// if single replica volume and node with zone found, return immediately
+		// 单副本必须与 Pod 同 zone，无需再考虑其他候选。
 		if numReplicas == 1 {
 			return sets.NewString(zoneFromNode), nil
 		}
@@ -137,6 +149,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 		return nil, err
 	}
 
+	// 指定了 allowedTopologies 却没有 zone 项，说明用户配置有误，不能静默忽略约束。
 	if (len(allowedTopologies) > 0) && (allowedZones.Len() == 0) {
 		return nil, fmt.Errorf("no matchLabelExpressions with %s key found in allowedTopologies. Please specify matchLabelExpressions with %s key", v1.LabelTopologyZone, v1.LabelTopologyZone)
 	}
@@ -157,6 +170,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 
 	// pick zone from parameters if present
 	if zoneParameterPresent {
+		// 单 zone 无法满足多副本，要求用户改用 zones 或 allowedTopologies。
 		if numReplicas > 1 {
 			return nil, fmt.Errorf("zone cannot be specified if desired number of replicas for pv is greather than 1. Please specify zones or allowedTopologies to specify desired zones")
 		}
@@ -184,6 +198,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 }
 
 // ZonesFromAllowedTopologies returns a list of zones specified in allowedTopologies
+// 只接受 zone 相关 key；出现其他 topology key 时报错，避免误把 region 等约束当作 zone。
 func ZonesFromAllowedTopologies(allowedTopologies []v1.TopologySelectorTerm) (sets.String, error) {
 	zones := make(sets.String)
 	for _, term := range allowedTopologies {
@@ -203,6 +218,7 @@ func ZonesFromAllowedTopologies(allowedTopologies []v1.TopologySelectorTerm) (se
 // chooseZonesForVolumeIncludingZone is a wrapper around ChooseZonesForVolume that ensures zoneToInclude is chosen
 // zoneToInclude can either be empty in which case it is ignored. If non-empty, zoneToInclude is expected to be member of zones.
 // numReplicas is expected to be > 0 and <= zones.Len()
+// 先扣除必选 zone 再补选剩余副本，保证结果仍由 PVC 名称的哈希决定（可重现）。
 func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude string, numReplicas uint32) (sets.String, error) {
 	if numReplicas == 0 {
 		return nil, fmt.Errorf("invalid number of replicas passed")
@@ -213,10 +229,12 @@ func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude
 	if zoneToInclude != "" && !zones.Has(zoneToInclude) {
 		return nil, fmt.Errorf("zone to be included: %s needs to be member of set: %v", zoneToInclude, zones)
 	}
+	// 候选数与副本数相等时无需选择，直接全取，避免对集合做可变删除。
 	if uint32(zones.Len()) == numReplicas {
 		return zones, nil
 	}
 	if zoneToInclude != "" {
+		// 删除会修改调用方的集合，因此仅在此分支（已确认不直接返回 zones）执行。
 		zones.Delete(zoneToInclude)
 		numReplicas = numReplicas - 1
 	}
@@ -228,6 +246,8 @@ func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude
 }
 
 // ChooseZonesForVolume is identical to ChooseZoneForVolume, but selects a multiple zones, for multi-zone disks.
+// 选择结果只取决于 pvcName 与 zone 列表：同一 PVC 会稳定落在相同 zone，
+// 使 StatefulSet 的卷分布在集群 zone 集合不变时保持可预测。
 func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) sets.String {
 	// No zones available, return empty set.
 	replicaZones := sets.NewString()
@@ -247,6 +267,7 @@ func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) se
 	// Hopefully we can address this problem if/when we do full scheduler integration of
 	// PVC placement (which could also e.g. avoid putting volumes in overloaded or
 	// unhealthy zones)
+	// 排序保证哈希取模结果跨进程稳定；zone 集合变化会改变映射，这是已知限制。
 	zoneSlice := zones.List()
 
 	startingIndex := index * numZones
@@ -260,6 +281,9 @@ func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) se
 	return replicaZones
 }
 
+// getPVCNameHashAndIndexOffset 解析 PVC 名称中的 StatefulSet 序号，
+// 返回用于散列的字符串哈希与起始偏移。序号让同一 StatefulSet 的不同副本
+// 在 zone 间轮转，而哈希前缀让同一 Pod 的多个 claim 落在同一 zone。
 func getPVCNameHashAndIndexOffset(pvcName string) (hash uint32, index uint32) {
 	if pvcName == "" {
 		// We should always be called with a name; this shouldn't happen

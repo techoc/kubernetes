@@ -31,4 +31,7 @@ limitations under the License.
 
 // +groupName=cloudcontrollermanager.config.k8s.io
 
+// Package v1alpha1 定义 cloud-controller-manager 组件配置的 v1alpha1 外部 API 类型，
+// 用于 --config 文件与 /configz 的序列化；内部表示位于 k8s.io/cloud-provider/config。
+// 外部版本只做结构承载，实际运行逻辑始终基于转换后的内部类型。
 package v1alpha1

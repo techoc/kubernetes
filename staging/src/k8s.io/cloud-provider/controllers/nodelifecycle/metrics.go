@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	// 指标子系统名与控制器名称保持一致，便于在 Prometheus 中定位。
 	metricsSubsystem = "cloud_node_lifecycle_controller"
 )
 
@@ -55,6 +56,7 @@ var (
 var metricRegistration sync.Once
 
 // registerMetrics registers the metrics that are to be monitored.
+// 通过 sync.Once 保证全局注册只执行一次，重复调用是安全的。
 func registerMetrics() {
 	metricRegistration.Do(func() {
 		legacyregistry.MustRegister(monitorNodesDuration)

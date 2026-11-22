@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestZonesToSet 覆盖 zone 列表字符串解析：空串、多余逗号、首尾空格都必须报错，
+// 合法输入应得到去空格后的集合。
 func TestZonesToSet(t *testing.T) {
 	functionUnderTest := "ZonesToSet"
 	// First part: want an error
@@ -58,6 +60,12 @@ func TestZonesToSet(t *testing.T) {
 	}
 }
 
+// TestChooseZonesForVolume 验证按卷名散列选择 zone 的确定性：
+//   - 同名卷总是选中同一组 zone；
+//   - 带 StatefulSet 序号时，序号参与偏移，使副本分散到不同 zone；
+//   - 卷名以 '-' 结尾或缺省序号时回退到整体散列。
+//
+// 用例中的注释记录了期望值背后的散列推导，便于人工核对偏移规则。
 func TestChooseZonesForVolume(t *testing.T) {
 	checkFnv32(t, "henley", 1180403676)
 	// 1180403676 mod 3 == 0, so the offset from "henley" is 0, which makes it easier to verify this by inspection
@@ -414,6 +422,9 @@ func TestChooseZonesForVolume(t *testing.T) {
 	}
 }
 
+// TestSelectZoneForVolume 覆盖单副本 PVC 的 zone 选择优先级与互斥校验：
+// node 上的 zone 标签优先，其次 zone/zones 参数、AllowedTopologies、活跃 zone 集合；
+// 同时给出 zone 与 zones、或给 node 又给 zone 参数等冲突组合必须拒绝。
 func TestSelectZoneForVolume(t *testing.T) {
 
 	nodeWithGATopologyLabels := &v1.Node{}
@@ -804,6 +815,9 @@ func TestSelectZoneForVolume(t *testing.T) {
 	}
 }
 
+// TestSelectZonesForVolume 覆盖多副本（如 StatefulSet 的 volumeClaimTemplates）
+// 的 zone 选择：返回的 zone 数量必须等于 ReplicaCount，且尽量分散；
+// 同时校验 zone/zones、node 标签与 AllowedTopologies 之间的互斥规则。
 func TestSelectZonesForVolume(t *testing.T) {
 
 	nodeWithZoneLabels := &v1.Node{}
@@ -1478,6 +1492,9 @@ func TestSelectZonesForVolume(t *testing.T) {
 	}
 }
 
+// TestChooseZonesForVolumeIncludingZone 验证“必须包含指定 zone”时的选择逻辑：
+// ZoneToInclude 必须在候选集合内，副本数为 0 或候选 zone 不足都报错；
+// 选中结果必须包含该 zone，其余 zone 仍按散列挑选。
 func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 	tests := []struct {
 		// Parameters passed by test to chooseZonesForVolumeIncludingZone
@@ -1664,6 +1681,8 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 	}
 }
 
+// checkFnv32 固定 FNV-32 散列值。用例依赖该散列来推导 zone 偏移，
+// 若散列实现或输入编码改变，这里会第一时间失败。
 func checkFnv32(t *testing.T, s string, expected uint32) {
 	h := fnv.New32()
 	h.Write([]byte(s))

@@ -17,4 +17,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=cloudcontrollermanager.config.k8s.io
 
+// Package config 定义 cloud-controller-manager 的内部组件配置类型。
+// 该包是组件配置的规范版本（hub），外部 v1alpha1 通过自动生成的转换函数
+// 与之互转，业务代码只依赖这里的内部类型。
 package config

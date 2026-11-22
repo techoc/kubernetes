@@ -21,5 +21,8 @@ type ServiceControllerConfiguration struct {
 	// concurrentServiceSyncs is the number of services that are
 	// allowed to sync concurrently. Larger number = more responsive service
 	// management, but more CPU (and network) load.
+	//
+	// 中文说明：每个 worker 会调用云厂商 LoadBalancer 接口，数值应受云 API
+	// 限流配额约束；过大会把限流错误放大成大量重试。
 	ConcurrentServiceSyncs int32
 }

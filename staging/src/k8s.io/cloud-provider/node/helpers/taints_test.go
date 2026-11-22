@@ -23,6 +23,7 @@ import (
 	"k8s.io/api/core/v1"
 )
 
+// TestTaintExists 覆盖污点匹配语义：Key、Value、Effect 全部一致才算存在。
 func TestTaintExists(t *testing.T) {
 	testingTaints := []v1.Taint{
 		{
@@ -69,6 +70,8 @@ func TestTaintExists(t *testing.T) {
 	}
 }
 
+// TestRemoveTaint 覆盖 removeTaint 的返回值语义：只有真正移除了污点才返回 true，
+// 并保证未匹配时 Node 对象保持不变。
 func TestRemoveTaint(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -147,6 +150,8 @@ func TestRemoveTaint(t *testing.T) {
 	}
 }
 
+// TestDeleteTaint 覆盖 deleteTaint 对“删除一个不存在污点”的幂等处理：
+// 不匹配时返回 false 且原切片不变，便于调用方据此决定是否需要 patch Node。
 func TestDeleteTaint(t *testing.T) {
 	cases := []struct {
 		name           string

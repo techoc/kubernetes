@@ -25,6 +25,8 @@ package v1alpha1
 // as defaulting in the scheme is done as part of the conversion, and there would
 // be no easy way to opt-out. Instead, if you want to use this defaulting method
 // run it in your wrapper struct of this type in its `SetDefaults_` method.
+// 换句话说，这里提供“推荐值”而非强制契约：嵌入方可以自行决定采用、覆盖或忽略。
+// 默认 1 个 worker 是为了让 service 对账串行化，避免并发创建同一 LB 资源。
 func RecommendedDefaultServiceControllerConfiguration(obj *ServiceControllerConfiguration) {
 	if obj.ConcurrentServiceSyncs == 0 {
 		obj.ConcurrentServiceSyncs = 1

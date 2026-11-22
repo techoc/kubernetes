@@ -14,9 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package names 定义 cloud-controller-manager 各控制器的规范名称常量与历史别名。
+// 控制器名会出现在命令行 flag、事件与日志中，属于对外契约，必须保持稳定。
 package names
 
 // Canonical controller names
+// 规范控制器名。命名约束、变更策略与使用场景见下方说明；名称一旦发布即视为 ID，
+// 只能新增别名，不能删除旧别名。
 //
 // NAMING CONVENTIONS
 // 1. naming should be consistent across the controllers
@@ -47,10 +51,10 @@ package names
 //  4. defining a new service account for a new controller (old controllers may have inconsistent service accounts to stay backwards compatible)
 //  5. anywhere these controllers are used outside of this module (kube-controller-manager, cloud-provider sample)
 const (
-	CloudNodeController          = "cloud-node-controller"
-	ServiceLBController          = "service-lb-controller"
-	NodeRouteController          = "node-route-controller"
-	CloudNodeLifecycleController = "cloud-node-lifecycle-controller"
+	CloudNodeController          = "cloud-node-controller"           // 负责节点初始化，并补充云厂商相关的标签与地址。
+	ServiceLBController          = "service-lb-controller"           // 负责为 LoadBalancer 类型 Service 创建/更新/删除云负载均衡。
+	NodeRouteController          = "node-route-controller"           // 负责在云上同步节点路由（如 VPC 路由表）。
+	CloudNodeLifecycleController = "cloud-node-lifecycle-controller" // 负责节点生命周期监控，如节点失联后的删除。
 )
 
 // CCMControllerAliases returns a mapping of aliases to canonical controller names
@@ -59,6 +63,7 @@ const (
 // Only addition of new aliases is allowed, and only when a canonical name is changed (please see CHANGE POLICY of controller names)
 func CCMControllerAliases() map[string]string {
 	// return a new reference to achieve immutability of the mapping
+	// 每次返回新的 map，防止调用方修改后影响其他使用方。
 	return map[string]string{
 		"cloud-node":           CloudNodeController,
 		"service":              ServiceLBController,

@@ -45,7 +45,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Test_syncNode 是 syncNode 的主表驱动测试，覆盖节点注册/初始化的完整语义：
+// 从云侧获取 ProviderID、地址、类型与拓扑标签，移除 external-cloud-provider taint，
+// 并验证云实现返回错误或元数据缺失时的行为。前半部分用例走 Instances，
+// 后半部分以 "[instanceV2]" 前缀的用例走 InstancesV2。
 func Test_syncNode(t *testing.T) {
+	// 每个用例给出 fakeCloud 的返回、初始 Node 与期望的最终 Node；比较整个对象，
+	// 因而同时约束字段、标签与 taint 的最终状态。
 	tests := []struct {
 		name         string
 		fakeCloud    *fakecloud.Cloud
@@ -54,6 +60,7 @@ func Test_syncNode(t *testing.T) {
 		expectedErr  bool
 	}{
 		{
+			// 经典路径：按节点名取到实例，写入 ProviderID 与三类地址。
 			name: "node initialized with hostname",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -270,6 +277,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 没有 external-cloud-provider taint 的节点不归 CCM 初始化，syncNode 应直接返回。
 			name: "node ignored",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -310,6 +318,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 同时写入新旧两套 topology 标签；旧标签用于兼容未升级的组件。
 			name: "zone/region topology labels added",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -504,6 +513,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// InstancesV2 返回 (nil, nil) 表示元数据暂未就绪，节点应保持原样等待重试。
 			name: "nil instanceMetadata provided by InstanceV2",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -594,6 +604,8 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 用户通过注解指定节点 IP 时，地址应包含该 IP；后续三个用例覆盖
+			// 地址非法、地址不在云返回列表中、以及地址缺失的错误分支。
 			name: "provided node IP address",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -893,6 +905,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 已有 providerID 时不应被云返回值覆盖，只补齐地址等缺失信息。
 			name: "provider ID already set",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -989,6 +1002,7 @@ func Test_syncNode(t *testing.T) {
 		},
 		{ // for backward compatibility the cloud providers that does not implement
 			// providerID does not block the node initialization
+			// 云实现不支持 providerID 时，不能伪造 ProviderID，应保留节点现有信息并成功返回。
 			name:        "provider ID not implemented",
 			expectedErr: false,
 			fakeCloud: &fakecloud.Cloud{
@@ -1047,6 +1061,8 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 以下为 InstancesV2 用例：元数据由一次 InstanceMetadata 调用返回，
+			// 期望结果与对应 Instances 用例保持一致，同时验证附加标签的合并逻辑。
 			name: "[instanceV2] node initialized with provider ID",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -1457,6 +1473,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 云厂商通过 AdditionalLabels 补充自定义标签，应全部写入节点。
 			name: "[instanceV2] provided additional labels",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -1574,6 +1591,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// 节点上不存在（或值为空）的附加标签不应产生无意义的空值写入。
 			name: "[instanceV2] provided additional labels with labels to discard",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -1866,6 +1884,7 @@ func Test_syncNode(t *testing.T) {
 			},
 		},
 		{
+			// InstanceMetadata 出错时应向上返回错误，且不产生部分更新。
 			name:        "[instanceV2] error getting InstanceMetadata",
 			expectedErr: true,
 			fakeCloud: &fakecloud.Cloud{
@@ -1931,6 +1950,7 @@ func Test_syncNode(t *testing.T) {
 		},
 	}
 
+	// 每个用例独立创建 fake clientset 与 informer，避免用例间共享状态。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
@@ -1941,6 +1961,7 @@ func Test_syncNode(t *testing.T) {
 			factory := informers.NewSharedInformerFactory(clientset, 0)
 
 			eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
+			// 直接构造控制器（而非 startCloudNodeController），以便精确控制依赖并避免启动 goroutine。
 			cloudNodeController := &CloudNodeController{
 				kubeClient:                clientset,
 				nodeInformer:              factory.Core().V1().Nodes(),
@@ -1969,6 +1990,7 @@ func Test_syncNode(t *testing.T) {
 				t.Fatalf("error getting updated nodes: %v", err)
 			}
 
+			// 整体比较能同时捕捉多余/缺失的标签、taint 与地址。
 			if !cmp.Equal(updatedNode, test.updatedNode) {
 				t.Errorf("unexpected node %s", cmp.Diff(updatedNode, test.updatedNode))
 			}
@@ -1976,6 +1998,8 @@ func Test_syncNode(t *testing.T) {
 	}
 }
 
+// Test_reconcileNodeLabels 验证旧 topology/instance-type 标签会被补齐或纠正为稳定标签，
+// 包括“缺失”“已一致”“新旧标签值冲突”三种情况。
 func Test_reconcileNodeLabels(t *testing.T) {
 	testcases := []struct {
 		name           string
@@ -1984,6 +2008,7 @@ func Test_reconcileNodeLabels(t *testing.T) {
 		expectedErr    error
 	}{
 		{
+			// 仅有旧标签时，应补齐对应的新标签，旧标签保留。
 			name: "requires reconcile",
 			labels: map[string]string{
 				v1.LabelFailureDomainBetaZone:   "foo",
@@ -2021,6 +2046,7 @@ func Test_reconcileNodeLabels(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
+			// 新旧标签冲突时以旧标签（源数据）为准覆盖新标签，保证标签最终一致。
 			name: "require reconcile -- secondary labels are different from primary",
 			labels: map[string]string{
 				v1.LabelFailureDomainBetaZone:   "foo",
@@ -2092,6 +2118,9 @@ func Test_reconcileNodeLabels(t *testing.T) {
 }
 
 // Tests that node address changes are detected correctly
+// 校验 nodeAddressesChangeDetected 的比较语义：集合语义（顺序无关）、
+// 类型与值都参与比较，以及仅增删 Hostname 也算变化。
+// 错误地判定“无变化”会导致节点地址长期过期。
 func TestNodeAddressesChangeDetected(t *testing.T) {
 	addressSet1 := []v1.NodeAddress{
 		{
@@ -2223,6 +2252,8 @@ func TestNodeAddressesChangeDetected(t *testing.T) {
 }
 
 // Test updateNodeAddress with instanceV2, same test case with TestNodeAddressesNotUpdate.
+// 云侧报告实例不存在（ExistsByProviderID=false）时，即使能返回元数据也不应更新地址，
+// 否则会为已删除的实例保留陈旧网络信息。
 func TestNodeAddressesNotUpdateV2(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -2303,6 +2334,7 @@ func TestNodeAddressesNotUpdateV2(t *testing.T) {
 
 // This test checks that a node with the external cloud provider taint is cloudprovider initialized and
 // and node addresses will not be updated when node isn't present according to the cloudprovider
+// 与 V2 用例对应，覆盖传统 Instances 路径；两条路径必须保持相同的保护逻辑。
 func TestNodeAddressesNotUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -2381,6 +2413,9 @@ func TestNodeAddressesNotUpdate(t *testing.T) {
 	}
 }
 
+// TestGetInstanceMetadata 验证 getInstanceMetadata 在 Instances 与 InstancesV2 之间
+// 统一出相同形状的 InstanceMetadata：传统 Instances 需要拼装 ProviderID/地址/类型，
+// InstancesV2 直接返回元数据；providerID 未实现时不得报错。
 func TestGetInstanceMetadata(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -2390,6 +2425,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 		expectErr        bool
 	}{
 		{
+			// 传统 Instances：由 InstanceID 与 ProviderName 拼出 fake://12345。
 			name: "cloud implemented with Instances and provider ID",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -2444,6 +2480,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 			},
 		},
 		{
+			// InstanceID 返回 NotImplemented 时只跳过 ProviderID，地址仍需返回。
 			name: "cloud implemented with Instances (providerID not implemented)",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -2485,6 +2522,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 			},
 		},
 		{
+			// 云不支持 InstanceID 但节点已有 providerID 时，应沿用节点上的值。
 			name: "cloud implemented with Instances (providerID not implemented) and node with providerID",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: false,
@@ -2530,6 +2568,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 			},
 		},
 		{
+			// InstancesV2 且元数据带 providerID 时直接采用。
 			name: "cloud implemented with InstancesV2 (with providerID)",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -2584,6 +2623,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 			},
 		},
 		{ // it will be requeueud later
+			// InstancesV2 无法给出 providerID 时返回错误，让节点重新入队等待下一次元数据就绪。
 			name:      "cloud implemented with InstancesV2 (without providerID)",
 			expectErr: true,
 			fakeCloud: &fakecloud.Cloud{
@@ -2635,6 +2675,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 			},
 		},
 		{
+			// 节点自带 providerID 时，即使元数据未给出也能补齐类型等其余信息。
 			name: "cloud implemented with InstancesV2 (without providerID) and node with providerID",
 			fakeCloud: &fakecloud.Cloud{
 				EnableInstancesV2: true,
@@ -2682,6 +2723,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 		},
 	}
 
+	// 只依赖 cloud 字段，无需 informer/clientset，因此直接构造最小控制器。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
@@ -2702,10 +2744,14 @@ func TestGetInstanceMetadata(t *testing.T) {
 	}
 }
 
+// TestUpdateNodeStatus 验证节点状态回写的并发模型：不同 worker 数下都应处理完所有节点，
+// 且对云提供的调用次数与节点数一致（每个节点只查一次地址）。
 func TestUpdateNodeStatus(t *testing.T) {
 	// emaulate the latency of the cloud API calls
+	// 人为加入延迟以放大并发差异，使 worker 数对总耗时的影响可观察。
 	const cloudLatency = 10 * time.Millisecond
 
+	// generateNodes 批量生成最小 Node，只需名称即可驱动状态回写路径。
 	generateNodes := func(n int) []runtime.Object {
 		result := []runtime.Object{}
 		for i := 0; i < n; i++ {
@@ -2771,6 +2817,7 @@ func TestUpdateNodeStatus(t *testing.T) {
 			}
 
 			clientset := fake.NewSimpleClientset()
+			// 拦截 patch 请求直接返回成功，避免 fake clientset 对不存在的更新对象做深拷贝校验。
 			clientset.PrependReactor("patch", "nodes", func(action clienttesting.Action) (bool, runtime.Object, error) {
 				return true, &v1.Node{}, nil
 			})
@@ -2806,6 +2853,7 @@ func TestUpdateNodeStatus(t *testing.T) {
 				t.Fatalf("error updating node status: %v", err)
 			}
 			t.Logf("%d workers: processed %d nodes int %v ", test.workers, test.nodes, time.Since(start))
+			// 每个节点恰好一次云调用：多调用意味着重复同步，少调用意味着遗漏节点。
 			if len(fakeCloud.Calls) != test.nodes {
 				t.Errorf("expected %d cloud-provider calls, got %d", test.nodes, len(fakeCloud.Calls))
 			}

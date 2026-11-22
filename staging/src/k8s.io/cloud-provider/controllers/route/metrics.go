@@ -28,13 +28,17 @@ const (
 	subsystem = "route_controller"
 
 	// outcome label values for route_sync_total.
+	// 取值固定为三态，便于计算变更率（changed）与失败率（error）。
 	outcomeChanged = "changed"
 	outcomeNoop    = "noop"
 	outcomeError   = "error"
 )
 
+// registration 保证指标只注册一次。
 var registration sync.Once
 
+// routeSyncCount 记录每次路由对账的结果。trigger 区分周期触发与节点变更触发，
+// 便于判断某类云 API 错误是否只出现在特定触发路径。
 var routeSyncCount = metrics.NewCounterVec(&metrics.CounterOpts{
 	Name:           "route_sync_total",
 	Subsystem:      subsystem,
@@ -42,6 +46,7 @@ var routeSyncCount = metrics.NewCounterVec(&metrics.CounterOpts{
 	StabilityLevel: metrics.ALPHA,
 }, []string{"outcome", "trigger"})
 
+// registerMetrics 幂等注册；由控制器启动路径调用，避免 init 阶段过早创建指标。
 func registerMetrics() {
 	registration.Do(func() {
 		legacyregistry.MustRegister(routeSyncCount)
@@ -51,6 +56,7 @@ func registerMetrics() {
 // recordRouteSync increments route_sync_total for a completed reconcile,
 // deriving the outcome label from the reconcile error and whether any route
 // was created or deleted.
+// 错误优先于变更：一次部分成功的对账仍计为 error，避免掩盖失败。
 func recordRouteSync(routesChanged bool, err error, trigger string) {
 	outcome := outcomeNoop
 	switch {

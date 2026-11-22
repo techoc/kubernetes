@@ -23,6 +23,7 @@ import (
 	nodeconfig "k8s.io/cloud-provider/controllers/node/config"
 )
 
+// errSliceEq 逐条比较错误消息，避免依赖 error 接口的指针相等。
 func errSliceEq(a []error, b []error) bool {
 	if len(a) != len(b) {
 		return false
@@ -35,6 +36,9 @@ func errSliceEq(a []error, b []error) bool {
 	return true
 }
 
+// TestNodeControllerValidation 覆盖 NodeControllerOptions.Validate 的边界条件：
+// ConcurrentNodeSyncs 必须为正；ConcurrentNodeStatusUpdates 允许为 0（表示回退到
+// ConcurrentNodeSyncs），但不能为负。
 func TestNodeControllerValidation(t *testing.T) {
 	testCases := []struct {
 		desc   string

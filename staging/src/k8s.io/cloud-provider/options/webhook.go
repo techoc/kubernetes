@@ -34,19 +34,27 @@ import (
 )
 
 const (
+	// CloudControllerManagerWebhookPort 是 CCM webhook 服务的默认监听端口。
+	// 中文说明：与 CCM 主指标端口区分开，避免端口冲突；ProviderDefaults 未指定时使用。
 	CloudControllerManagerWebhookPort = 10260
 )
 
+// WebhookOptions 保存 webhook 的启用/禁用列表。
 type WebhookOptions struct {
 	// Webhooks is the list of webhook names that should be enabled or disabled
 	Webhooks []string
 }
 
+// NewWebhookOptions 返回空的 webhook 选项。
 func NewWebhookOptions() *WebhookOptions {
 	o := &WebhookOptions{}
 	return o
 }
 
+// AddFlags 注册 --webhooks 参数。
+//
+// 中文说明：帮助文本里带上全部已知 webhook 与默认禁用列表，用户无需翻代码
+// 就能构造合法取值。
 func (o *WebhookOptions) AddFlags(fs *pflag.FlagSet, allWebhooks, disabledByDefaultWebhooks []string) {
 	fs.StringSliceVar(&o.Webhooks, "webhooks", o.Webhooks, fmt.Sprintf(""+
 		"A list of webhooks to enable. '*' enables all on-by-default webhooks, 'foo' enables the webhook "+
@@ -54,6 +62,10 @@ func (o *WebhookOptions) AddFlags(fs *pflag.FlagSet, allWebhooks, disabledByDefa
 		strings.Join(allWebhooks, ", "), strings.Join(disabledByDefaultWebhooks, ", ")))
 }
 
+// Validate 检查用户指定的 webhook 名称是否都存在。
+//
+// 中文说明：默认禁用列表同样参与校验，因为它们最终也会被启用；'*' 是通配符，
+// 不需要对应具体 webhook。
 func (o *WebhookOptions) Validate(allWebhooks, disabledByDefaultWebhooks []string) []error {
 	allErrors := []error{}
 
@@ -64,6 +76,7 @@ func (o *WebhookOptions) Validate(allWebhooks, disabledByDefaultWebhooks []strin
 		if webhook == "*" {
 			continue
 		}
+		// '-' 前缀只表示禁用，校验时去掉前缀再比对名称。
 		webhook = strings.TrimPrefix(webhook, "-")
 		if !allWebhooksSet.Has(webhook) {
 			allErrors = append(allErrors, fmt.Errorf("%q is not in the list of known webhooks", webhook))
@@ -73,6 +86,7 @@ func (o *WebhookOptions) Validate(allWebhooks, disabledByDefaultWebhooks []strin
 	return allErrors
 }
 
+// ApplyTo 把 webhook 选项写入组件配置。
 func (o *WebhookOptions) ApplyTo(cfg *config.WebhookConfiguration) error {
 	if o == nil {
 		return nil
@@ -83,10 +97,15 @@ func (o *WebhookOptions) ApplyTo(cfg *config.WebhookConfiguration) error {
 	return nil
 }
 
+// WebhookServingOptions 封装 webhook HTTPS 服务的监听与证书配置。
 type WebhookServingOptions struct {
 	*apiserveroptions.SecureServingOptions
 }
 
+// NewWebhookServingOptions 依据云厂商默认值构造 webhook 服务选项。
+//
+// 中文说明：未提供默认值时回退到 0.0.0.0:10260；证书目录留空表示由
+// --webhook-tls-cert-file/--webhook-tls-private-key-file 或自签名生成决定。
 func NewWebhookServingOptions(defaults ProviderDefaults) *WebhookServingOptions {
 	var (
 		bindAddress net.IP
@@ -117,6 +136,7 @@ func NewWebhookServingOptions(defaults ProviderDefaults) *WebhookServingOptions 
 	}
 }
 
+// AddFlags 注册 webhook 服务相关的 TLS 与监听参数。
 func (o *WebhookServingOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IPVar(&o.BindAddress, "webhook-bind-address", o.BindAddress, ""+
 		"The IP address on which to listen for the --webhook-secure-port port. The "+
@@ -175,12 +195,15 @@ func (o *WebhookServingOptions) AddFlags(fs *pflag.FlagSet) {
 		"Examples: \"example.crt,example.key\" or \"foo.crt,foo.key:*.foo.com,foo.com\".")
 }
 
+// Validate 校验 webhook 监听端口与证书配置的互斥关系。
 func (o *WebhookServingOptions) Validate() []error {
 	allErrors := []error{}
+	// 0 表示关闭 webhook 服务，因此是合法值。
 	if o.BindPort < 0 || o.BindPort > 65535 {
 		allErrors = append(allErrors, fmt.Errorf("--webhook-secure-port %v must be between 0 and 65535, inclusive. A value of 0 disables the webhook endpoint entirely.", o.BindPort))
 	}
 
+	// 文件证书与内存中生成的证书只能二选一，否则 TLS 配置来源不明确。
 	if (len(o.ServerCert.CertKey.CertFile) != 0 || len(o.ServerCert.CertKey.KeyFile) != 0) && o.ServerCert.GeneratedCert != nil {
 		allErrors = append(allErrors, fmt.Errorf("cert/key file and in-memory certificate cannot both be set"))
 	}
@@ -188,6 +211,10 @@ func (o *WebhookServingOptions) Validate() []error {
 	return allErrors
 }
 
+// ApplyTo 创建 webhook 监听并组装 SecureServingInfo。
+//
+// 中文说明：端口为 0 或没有任何启用的 webhook 时不监听——避免仅为占位而
+// 打开一个无人使用的端口。
 func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookCfg config.WebhookConfiguration) error {
 	if o == nil {
 		return nil
@@ -207,6 +234,7 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 
 	l := net.ListenConfig{}
 
+	// 端口可能配置为 0（由内核分配），需把实际端口回写到 o.BindPort。
 	listener, o.BindPort, err = createListener(addr, l)
 	if err != nil {
 		return fmt.Errorf("failed to create listener: %v", err)
@@ -221,6 +249,7 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 	serverCertFile, serverKeyFile := o.ServerCert.CertKey.CertFile, o.ServerCert.CertKey.KeyFile
 	if len(serverCertFile) != 0 || len(serverKeyFile) != 0 {
 		var err error
+		// 使用动态证书加载器，文件轮换后无需重启即可生效。
 		c.Cert, err = dynamiccertificates.NewDynamicServingContentFromFiles("serving-cert", serverCertFile, serverKeyFile)
 		if err != nil {
 			return fmt.Errorf("failed to load serving cert: %w", err)
@@ -264,6 +293,9 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 	return nil
 }
 
+// createListener 在 addr 上监听并返回实际绑定的端口。
+// 中文说明：当传入端口为 0 时，内核会分配临时端口，调用方必须使用返回的端口
+// 对外通告，否则客户端无法连接。
 func createListener(addr string, config net.ListenConfig) (net.Listener, int, error) {
 	ln, err := config.Listen(context.TODO(), "tcp", addr)
 	if err != nil {
@@ -273,6 +305,7 @@ func createListener(addr string, config net.ListenConfig) (net.Listener, int, er
 	// get port
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
+		// 非 TCP 地址说明配置异常，关闭已建立的监听避免泄漏。
 		ln.Close()
 		return nil, 0, fmt.Errorf("invalid listen address: %q", ln.Addr().String())
 	}

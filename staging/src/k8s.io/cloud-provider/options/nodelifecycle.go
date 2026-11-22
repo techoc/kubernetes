@@ -61,6 +61,7 @@ func (o *NodeLifecycleControllerOptions) Validate() []error {
 	}
 	var errs []error
 
+	// 并发度必须至少为 1，否则巡检循环不会处理任何节点。
 	if o.ConcurrentNodeLifecycleSyncs < 1 {
 		errs = append(errs, fmt.Errorf("concurrent-node-lifecycle-syncs must be at least 1, but got %d", o.ConcurrentNodeLifecycleSyncs))
 	}

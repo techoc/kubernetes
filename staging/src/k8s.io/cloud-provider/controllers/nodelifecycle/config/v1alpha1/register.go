@@ -22,10 +22,14 @@ import (
 
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// 中文说明：默认为空，由本包生成的 zz_generated.*.go 中的 init 向其中注册
+	// AddToScheme 与转换/默认值函数。
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
 	// defaulting and conversion init funcs are registered as well.
+	// 中文说明：指向 SchemeBuilder 的指针，生成的代码通过它注册外部类型的默认值函数。
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	// 中文说明：把本版本的类型注册进 runtime.Scheme，供 config 解码与转换使用。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

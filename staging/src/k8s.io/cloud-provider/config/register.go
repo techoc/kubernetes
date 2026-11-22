@@ -22,10 +22,12 @@ import (
 )
 
 // GroupName is the group name used in this package
+// 该组名同时用作 /configz 的注册名，变更会破坏外部配置的兼容性。
 const GroupName = "cloudcontrollermanager.config.k8s.io"
 
 var (
 	// SchemeGroupVersion is group version used to register these objects
+	// 内部版本使用 runtime.APIVersionInternal，只用于进程内传递，不对外序列化。
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
@@ -34,6 +36,7 @@ var (
 )
 
 // addKnownTypes registers known types to the given scheme
+// 内部类型与外部类型必须一一对应，否则 v1alpha1 转换会失败。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CloudControllerManagerConfiguration{},

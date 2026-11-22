@@ -17,9 +17,11 @@ limitations under the License.
 package config
 
 // ServiceControllerConfiguration contains elements describing ServiceController.
+// ServiceControllerConfiguration 控制负载均衡 Service 同步的并发度。
 type ServiceControllerConfiguration struct {
 	// concurrentServiceSyncs is the number of services that are
 	// allowed to sync concurrently. Larger number = more responsive service
 	// management, but more CPU (and network) load.
+	// 并发度越高，Service 变更生效越快，但会给云厂商 API 与网络带来更大压力。
 	ConcurrentServiceSyncs int32
 }

@@ -17,6 +17,8 @@ limitations under the License.
 // This file should be written by each cloud provider.
 // For an minimal working example, please refer to k8s.io/cloud-provider/sample/basic_main.go
 // For more details, please refer to k8s.io/kubernetes/cmd/cloud-controller-manager/main.go
+// 中文说明：每个外部云提供商只需要提供这样一个 main：注册 Factory、构造选项、
+// 启动命令。控制器本身由 cloud-provider 模块提供，无需重复实现。
 
 package main
 
@@ -39,6 +41,7 @@ import (
 	// e.g. _"k8s.io/legacy-cloud-providers/<provider>"
 )
 
+// main 是外部 cloud-controller-manager 的最小启动模板。
 func main() {
 	ccmOptions, err := options.NewCloudControllerManagerOptions()
 	if err != nil {
@@ -46,6 +49,7 @@ func main() {
 	}
 
 	fss := cliflag.NamedFlagSets{}
+	// wait.NeverStop 表示进程生命周期由信号处理控制，命令不会因 stopCh 关闭而退出。
 	command := app.NewCloudControllerManagerCommand(ccmOptions, cloudInitializer, controllerInitializers(), names.CCMControllerAliases(), fss, wait.NeverStop)
 	code := cli.Run(command)
 	os.Exit(code)
@@ -54,6 +58,8 @@ func main() {
 // If custom ClientNames are used, as below, then the controller will not use
 // the API server bootstrapped RBAC, and instead will require it to be installed
 // separately.
+// 自定义 ClientName 会改变派生客户端的身份，因此集群必须预先安装对应的 RBAC，
+// 否则控制器会因权限不足而无法工作。
 func controllerInitializers() map[string]app.ControllerInitFuncConstructor {
 	controllerInitializers := app.DefaultInitFuncConstructors
 	if constructor, ok := controllerInitializers[names.CloudNodeController]; ok {
@@ -75,10 +81,12 @@ func controllerInitializers() map[string]app.ControllerInitFuncConstructor {
 	return controllerInitializers
 }
 
+// cloudInitializer 根据组件配置实例化云提供商，并强制校验集群 ID。
 func cloudInitializer(config *config.CompletedConfig) cloudprovider.Interface {
 	cloudConfig := config.ComponentConfig.KubeCloudShared.CloudProvider
 
 	// initialize cloud provider with the cloud provider name and config file provided
+	// 初始化失败属于不可恢复的配置错误，直接 Fatal。
 	cloud, err := cloudprovider.InitCloudProvider(cloudConfig.Name, cloudConfig.CloudConfigFile)
 	if err != nil {
 		klog.Fatalf("Cloud provider could not be initialized: %v", err)
@@ -87,6 +95,8 @@ func cloudInitializer(config *config.CompletedConfig) cloudprovider.Interface {
 		klog.Fatalf("Cloud provider is nil")
 	}
 
+	// ClusterID 用于在多集群环境中区分资源；缺失时默认拒绝启动，
+	// 只有显式允许 untagged cloud 才降级为警告。
 	if !cloud.HasClusterID() {
 		if config.ComponentConfig.KubeCloudShared.AllowUntaggedCloud {
 			klog.Warning("detected a cluster without a ClusterID.  A ClusterID will be required in the future.  Please tag your cluster to avoid any future issues")

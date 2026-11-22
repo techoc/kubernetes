@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package fake is a test-double implementation of cloudprovider
 // Interface, LoadBalancer and Instances. It is useful for testing.
+// 它用可配置字段模拟云行为，并记录方法调用，便于断言控制器的交互顺序与参数。
 package fake
