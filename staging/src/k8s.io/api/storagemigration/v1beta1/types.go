@@ -27,45 +27,44 @@ import (
 // +k8s:prerelease-lifecycle-gen:deprecated=1.37
 // +k8s:prerelease-lifecycle-gen:replacement=storagemigration.k8s.io,v1,StorageVersionMigration
 
-// StorageVersionMigration represents a migration of stored data to the latest
-// storage version.
+// StorageVersionMigration 表示将存量数据迁移到最新存储版本的任务。
 // +k8s:supportsSubresource="/status"
 type StorageVersionMigration struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// Specification of the migration.
+	// 迁移任务的具体规格。
 	// +optional
 	Spec StorageVersionMigrationSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// Status of the migration.
+	// 迁移任务的当前状态。
 	// +optional
 	Status StorageVersionMigrationStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// Spec of the storage version migration.
+// StorageVersionMigrationSpec 描述存储版本迁移任务的规格。
 type StorageVersionMigrationSpec struct {
-	// The resource that is being migrated. The migrator sends requests to
-	// the endpoint serving the resource.
-	// Immutable.
+	// 待迁移的资源。迁移器向服务该资源的 endpoint 发送请求。
+	// 该字段不可变。
 	Resource metav1.GroupResource `json:"resource" protobuf:"bytes,1,opt,name=resource"`
 }
 
+// MigrationConditionType 表示迁移任务所处的状态类别。
 type MigrationConditionType string
 
 const (
-	// Indicates that the migration is running.
+	// 迁移正在执行。
 	MigrationRunning MigrationConditionType = "Running"
-	// Indicates that the migration has completed successfully.
+	// 迁移已成功完成。
 	MigrationSucceeded MigrationConditionType = "Succeeded"
-	// Indicates that the migration has failed.
+	// 迁移失败。
 	MigrationFailed MigrationConditionType = "Failed"
 )
 
-// Status of the storage version migration.
+// StorageVersionMigrationStatus 记录存储版本迁移的状态。
 type StorageVersionMigrationStatus struct {
-	// The latest available observations of the migration's current state.
+	// 迁移当前状态的最新观测结果。
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -75,9 +74,9 @@ type StorageVersionMigrationStatus struct {
 	// +k8s:alpha(since: "1.37")=+k8s:listType=map
 	// +k8s:alpha(since: "1.37")=+k8s:listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// ResourceVersion to compare with the GC cache for performing the migration.
-	// This is the current resource version of given group, version and resource when
-	// kube-controller-manager first observes this StorageVersionMigration resource.
+	// 与 GC 缓存比对以决定是否执行迁移的 resourceVersion。
+	// 取自 kube-controller-manager 首次观测到该 StorageVersionMigration 时，
+	// 对应 group/version/resource 的当前版本。
 	ResourceVersion string `json:"resourceVersion,omitempty" protobuf:"bytes,2,opt,name=resourceVersion"`
 }
 
@@ -86,14 +85,14 @@ type StorageVersionMigrationStatus struct {
 // +k8s:prerelease-lifecycle-gen:deprecated=1.37
 // +k8s:prerelease-lifecycle-gen:replacement=storagemigration.k8s.io,v1,StorageVersionMigrationList
 
-// StorageVersionMigrationList is a collection of storage version migrations.
+// StorageVersionMigrationList 是存储版本迁移任务的集合。
 type StorageVersionMigrationList struct {
 	metav1.TypeMeta `json:""`
 
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// Items is the list of StorageVersionMigration
+	// Items 为 StorageVersionMigration 列表。
 	Items []StorageVersionMigration `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

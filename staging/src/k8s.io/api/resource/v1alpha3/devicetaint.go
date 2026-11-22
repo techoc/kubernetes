@@ -20,8 +20,10 @@ import "fmt"
 
 var _ fmt.Stringer = DeviceTaint{}
 
-// String converts to a string in the format '<key>=<value>:<effect>', '<key>=<value>:', '<key>:<effect>', or '<key>'.
+// String 按 '<key>=<value>:<effect>'、'<key>=<value>:'、'<key>:<effect>' 或 '<key>' 格式输出字符串；
+// 缺省的字段连同其分隔符一并省略。
 func (t DeviceTaint) String() string {
+	// 从后往前省略为空的字段，保证输出不会出现悬空的分隔符。
 	if len(t.Effect) == 0 {
 		if len(t.Value) == 0 {
 			return fmt.Sprintf("%v", t.Key)

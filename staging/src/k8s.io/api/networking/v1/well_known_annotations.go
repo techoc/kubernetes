@@ -17,9 +17,8 @@ limitations under the License.
 package v1
 
 const (
-	// AnnotationIsDefaultIngressClass can be used to indicate that an
-	// IngressClass should be considered default. When a single IngressClass
-	// resource has this annotation set to true, new Ingress resources without a
-	// class specified will be assigned this default class.
+	// AnnotationIsDefaultIngressClass 可用于表示某个 IngressClass 应被视为默认类。
+	// 当且仅当一个 IngressClass 资源将此注解设置为 true 时，未指定 class 的新 Ingress
+	// 资源将被分配此默认类。
 	AnnotationIsDefaultIngressClass = "ingressclass.kubernetes.io/is-default-class"
 )

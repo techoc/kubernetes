@@ -22,24 +22,27 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名。
 const GroupName = "autoscaling"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v2"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
+	// SchemeBuilder 是用于注册本包类型的 scheme builder。
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+	// localSchemeBuilder 指向 SchemeBuilder，供生成代码使用。
 	localSchemeBuilder = &SchemeBuilder
-	AddToScheme        = localSchemeBuilder.AddToScheme
+	// AddToScheme 将打包的类型注册到 scheme。
+	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 将已知类型列表添加到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&HorizontalPodAutoscaler{},

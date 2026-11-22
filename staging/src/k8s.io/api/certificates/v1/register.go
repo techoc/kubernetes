@@ -22,33 +22,34 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "certificates.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册本包对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受一个未限定的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受一个未限定的 resource，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 汇集本 API 包需要在 scheme 上执行的初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 
+	// localSchemeBuilder 是 SchemeBuilder 的内部别名，避免外部直接改动。
 	localSchemeBuilder = &SchemeBuilder
 
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把本 API 组和版本注册到 scheme 的全局函数。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 把本组的已知类型列表加入给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CertificateSigningRequest{},
@@ -59,7 +60,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&PodCertificateRequestList{},
 	)
 
-	// Add the watch version that applies
+	// watch 事件也要能按此组版本编解码，故补注册元类型。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

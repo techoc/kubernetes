@@ -23,19 +23,18 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Workload allows for expressing scheduling constraints that should be used
-// when managing the lifecycle of workloads from the scheduling perspective,
-// including scheduling, preemption, eviction and other phases.
-// Workload API enablement is toggled by the GenericWorkload feature gate.
+// Workload 用于表达从调度视角管理负载生命周期（包括调度、抢占、驱逐等阶段）时
+// 应遵循的调度约束。
+// Workload API 的启用由 GenericWorkload 特性门控控制。
 type Workload struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec defines the desired behavior of a Workload.
+	// spec 定义 Workload 的期望行为。
 	//
 	// +required
 	Spec WorkloadSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
@@ -43,41 +42,38 @@ type Workload struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WorkloadList contains a list of Workload resources.
+// WorkloadList 包含一组 Workload 资源。
 type WorkloadList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of Workloads.
+	// Items 是 Workload 列表。
 	Items []Workload `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
 const (
-	// WorkloadMaxPodGroupTemplates is the maximum number of pod group templates per Workload.
+	// WorkloadMaxPodGroupTemplates 是每个 Workload 允许的最大 PodGroup 模板数。
 	WorkloadMaxPodGroupTemplates = 8
-	// WorkloadMaxTreeDepth is the maximum allowed depth for a tree of (composite) pod group templates in a Workload.
+	// WorkloadMaxTreeDepth 是 Workload 中（复合）PodGroup 模板树允许的最大深度。
 	WorkloadMaxTreeDepth = 4
 )
 
-// WorkloadSpec defines the desired state of a Workload.
+// WorkloadSpec 定义 Workload 的期望状态。
 type WorkloadSpec struct {
-	// controllerRef is an optional reference to the controlling object, such as a
-	// Deployment or Job. This field is intended for use by tools like CLIs
-	// to provide a link back to the original workload definition.
-	// This field is immutable.
+	// controllerRef 是指向控制对象（如 Deployment 或 Job）的可选引用，
+	// 供 CLI 等工具回溯原始负载定义。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	ControllerRef *TypedLocalObjectReference `json:"controllerRef,omitempty" protobuf:"bytes,1,opt,name=controllerRef"`
 
-	// podGroupTemplates is the list of templates that make up the Workload.
-	// The maximum number of templates is 8. Templates cannot be added or removed after the workload is created.
-	// Existing templates may still be updated where their individual fields allow it.
-	// Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.
+	// podGroupTemplates 是构成 Workload 的模板列表。
+	// 模板数量上限为 8，Workload 创建后不能增删模板；已有模板在各字段允许时仍可更新。
+	// CompositePodGroupTemplates 与 PodGroupTemplates 必须且只能设置其一。
 	//
 	// +optional
 	// +listType=map
@@ -91,11 +87,11 @@ type WorkloadSpec struct {
 	// +k8s:update=NoRemoveItem
 	PodGroupTemplates []PodGroupTemplate `json:"podGroupTemplates" protobuf:"bytes,2,rep,name=podGroupTemplates"`
 
-	// compositePodGroupTemplates is the list of CompositePodGroup templates that make up the Workload.
-	// The maximum number of templates is 8. This field is immutable.
-	// Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.
+	// compositePodGroupTemplates 是构成 Workload 的 CompositePodGroup 模板列表。
+	// 模板数量上限为 8，此字段不可变。
+	// CompositePodGroupTemplates 与 PodGroupTemplates 必须且只能设置其一。
 	//
-	// This field is used only when the CompositePodGroup feature gate is enabled.
+	// 仅当 CompositePodGroup 特性门控启用时使用此字段。
 	//
 	// +featureGate=CompositePodGroup
 	// +optional
@@ -112,26 +108,23 @@ type WorkloadSpec struct {
 	CompositePodGroupTemplates []CompositePodGroupTemplate `json:"compositePodGroupTemplates,omitempty" protobuf:"bytes,3,rep,name=compositePodGroupTemplates"`
 }
 
-// TypedLocalObjectReference allows to reference typed object inside the same namespace.
+// TypedLocalObjectReference 用于引用同一命名空间内的类型化对象。
 type TypedLocalObjectReference struct {
-	// apiGroup is the group for the resource being referenced.
-	// If APIGroup is empty, the specified Kind must be in the core API group.
-	// For any other third-party types, setting APIGroup is required.
-	// It must be a DNS subdomain.
+	// apiGroup 是被引用资源所属的组。
+	// APIGroup 为空时，Kind 必须属于核心 API 组；其他第三方类型必须设置 APIGroup。
+	// APIGroup 必须是 DNS 子域名。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:format=k8s-long-name
 	APIGroup string `json:"apiGroup,omitempty" protobuf:"bytes,1,opt,name=apiGroup"`
-	// kind is the type of resource being referenced.
-	// It must be a path segment name.
+	// kind 是被引用资源的类型，必须是路径片段名（path segment name）。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-path-segment-name
 	Kind string `json:"kind" protobuf:"bytes,2,opt,name=kind"`
-	// name is the name of resource being referenced.
-	// It must be a path segment name.
+	// name 是被引用资源的名称，必须是路径片段名。
 	//
 	// +required
 	// +k8s:required
@@ -139,28 +132,26 @@ type TypedLocalObjectReference struct {
 	Name string `json:"name" protobuf:"bytes,3,opt,name=name"`
 }
 
-// MaxPodGroupResourceClaims is the maximum number of resource claims for a
-// PodGroup or a Workload's PodGroupTemplate.
+// MaxPodGroupResourceClaims 是 PodGroup 或 Workload 的 PodGroupTemplate
+// 允许的最大资源申领数。
 const MaxPodGroupResourceClaims = 4
 
-// PodGroupTemplate represents a template for a set of pods with a scheduling policy.
+// PodGroupTemplate 表示一组带调度策略的 Pod 的模板。
 type PodGroupTemplate struct {
-	// name is a unique identifier for the PodGroupTemplate within the Workload.
-	// It must be a DNS label. This field is immutable.
+	// name 是 PodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，且不可变。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-short-name
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// schedulingPolicy defines the scheduling policy for this PodGroupTemplate.
+	// schedulingPolicy 定义此 PodGroupTemplate 的调度策略。
 	//
 	// +required
 	SchedulingPolicy PodGroupSchedulingPolicy `json:"schedulingPolicy" protobuf:"bytes,2,opt,name=schedulingPolicy"`
 
-	// schedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroupTemplate.
-	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
-	// This field is immutable.
+	// schedulingConstraints 定义此 PodGroupTemplate 的可选调度约束（如拓扑）。
+	// 仅当 TopologyAwareWorkloadScheduling 特性门控启用时可用，且不可变。
 	//
 	// +featureGate=TopologyAwareWorkloadScheduling
 	// +optional
@@ -169,16 +160,13 @@ type PodGroupTemplate struct {
 	// +k8s:immutable
 	SchedulingConstraints *PodGroupSchedulingConstraints `json:"schedulingConstraints" protobuf:"bytes,3,opt,name=schedulingConstraints"`
 
-	// resourceClaims defines which ResourceClaims may be shared among Pods in
-	// the group. Pods consume the devices allocated to a PodGroup's claim by
-	// defining a claim in its own Spec.ResourceClaims that matches the
-	// PodGroup's claim exactly. The claim must have the same name and refer to
-	// the same ResourceClaim or ResourceClaimTemplate.
+	// resourceClaims 定义组内 Pod 可共享的 ResourceClaim。Pod 在自己
+	// Spec.ResourceClaims 中定义与 PodGroup 的申领名称、所指向的 ResourceClaim 或
+	// ResourceClaimTemplate 完全一致的申领，即可消费分配给该 PodGroup 的设备。
 	//
-	// This is a beta-level field and requires that the
-	// DRAWorkloadResourceClaims feature gate is enabled.
+	// 这是 beta 级字段，需要启用 DRAWorkloadResourceClaims 特性门控。
 	//
-	// This field is immutable.
+	// 此字段不可变。
 	//
 	// +optional
 	// +patchMergeKey=name
@@ -193,18 +181,16 @@ type PodGroupTemplate struct {
 	// +k8s:immutable
 	ResourceClaims []PodGroupResourceClaim `json:"resourceClaims,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,4,rep,name=resourceClaims"`
 
-	// disruptionMode defines the mode in which a given PodGroup can be disrupted.
-	// One of Single, All.
-	// This field is immutable.
+	// disruptionMode 定义 PodGroup 可被中断的方式，取值为 Single 或 All。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	DisruptionMode *DisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,5,opt,name=disruptionMode"`
 
-	// priorityClassName indicates the priority that should be considered when scheduling
-	// a pod group created from this template.
-	// This field is immutable.
+	// priorityClassName 表示由此模板创建的 PodGroup 调度时应考虑的优先级类名。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -212,10 +198,8 @@ type PodGroupTemplate struct {
 	// +k8s:immutable
 	PriorityClassName string `json:"priorityClassName,omitempty" protobuf:"bytes,6,opt,name=priorityClassName"`
 
-	// priority is the value of priority of pod groups created from this template. Various
-	// system components use this field to find the priority of the pod group.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// priority 是自此模板创建的 PodGroup 的优先级值，各系统组件据此判断其优先级。
+	// 值越大优先级越高。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -223,10 +207,8 @@ type PodGroupTemplate struct {
 	// +k8s:immutable
 	Priority *int32 `json:"priority,omitempty" protobuf:"varint,7,opt,name=priority"`
 
-	// preemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// preemptionPolicy 是抢占低优先级 Pod/PodGroup 的策略，取值为 Never 或 PreemptLowerPriority。
+	// 此字段不可变，且仅当 PodGroupPreemptionPolicy 特性门控启用时可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -236,44 +218,39 @@ type PodGroupTemplate struct {
 	PreemptionPolicy *PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,8,opt,name=preemptionPolicy"`
 }
 
-// CompositePodGroupTemplate represents a template for a CompositePodGroup with a scheduling policy.
+// CompositePodGroupTemplate 表示带调度策略的 CompositePodGroup 模板。
 type CompositePodGroupTemplate struct {
-	// name is a unique identifier for the CompositePodGroupTemplate within the Workload.
-	// It must be a DNS label. This field is required.
+	// name 是 CompositePodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，且为必填项。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-short-name
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// schedulingPolicy defines the scheduling policy for this template.
+	// schedulingPolicy 定义此模板的调度策略。
 	//
 	// +required
 	SchedulingPolicy CompositePodGroupSchedulingPolicy `json:"schedulingPolicy" protobuf:"bytes,2,opt,name=schedulingPolicy"`
 
-	// schedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroupTemplate.
-	// This field is immutable.
+	// schedulingConstraints 定义此 CompositePodGroupTemplate 的可选调度约束（如拓扑）。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,3,opt,name=schedulingConstraints"`
 
-	// disruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
-	// One of Single, All.
-	// This field is immutable.
+	// disruptionMode 定义 CompositePodGroup 可被中断的方式，取值为 Single 或 All。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	DisruptionMode *CompositeDisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,4,opt,name=disruptionMode"`
 
-	// priorityClassName indicates the priority that should be considered when scheduling
-	// a composite pod group created from this template. If no priority class is specified,
-	// admission control can set this to the global default priority class if it exists.
-	// Otherwise, composite pod groups created from this template will have the priority set
-	// to zero.
-	// This field is immutable.
+	// priorityClassName 表示由此模板创建的复合 PodGroup 调度时应考虑的优先级类名。
+	// 若未指定，准入控制可将其设为全局默认优先级类（如存在）；否则优先级为零。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -281,12 +258,9 @@ type CompositePodGroupTemplate struct {
 	// +k8s:immutable
 	PriorityClassName string `json:"priorityClassName,omitempty" protobuf:"bytes,5,opt,name=priorityClassName"`
 
-	// priority is the value of priority of composite pod groups created from this template.
-	// Various system components use this field to find the priority of the composite pod group.
-	// When Priority Admission Controller is enabled, it prevents users from setting this field.
-	// The admission controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// priority 是自此模板创建的复合 PodGroup 的优先级值，各系统组件据此判断其优先级。
+	// 启用 Priority 准入控制器时用户不可设置此字段，其值由控制器根据 PriorityClassName 填充。
+	// 值越大优先级越高。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -294,10 +268,8 @@ type CompositePodGroupTemplate struct {
 	// +k8s:immutable
 	Priority *int32 `json:"priority,omitempty" protobuf:"varint,6,opt,name=priority"`
 
-	// preemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// preemptionPolicy 是抢占低优先级 Pod/PodGroup 的策略，取值为 Never 或 PreemptLowerPriority。
+	// 此字段不可变，且仅当 PodGroupPreemptionPolicy 特性门控启用时可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -306,9 +278,8 @@ type CompositePodGroupTemplate struct {
 	// +k8s:ifEnabled("PodGroupPreemptionPolicy")=+k8s:optional
 	PreemptionPolicy *PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,7,opt,name=preemptionPolicy"`
 
-	// podGroupTemplates is the list of templates for children PodGroups.
-	// The maximum number of templates is 8. At least one entry in CompositePodGroupTemplates
-	// or PodGroupTemplates must be set.
+	// podGroupTemplates 是子 PodGroup 的模板列表，数量上限为 8。
+	// CompositePodGroupTemplates 或 PodGroupTemplates 至少要设置一项。
 	//
 	// +optional
 	// +listType=map
@@ -321,9 +292,8 @@ type CompositePodGroupTemplate struct {
 	// +k8s:update=NoRemoveItem
 	PodGroupTemplates []PodGroupTemplate `json:"podGroupTemplates,omitempty" protobuf:"bytes,8,rep,name=podGroupTemplates"`
 
-	// compositePodGroupTemplates is the list of templates for children CompositePodGroups.
-	// The maximum number of templates is 8. At least one entry in CompositePodGroupTemplates
-	// or PodGroupTemplates must be set.
+	// compositePodGroupTemplates 是子 CompositePodGroup 的模板列表，数量上限为 8。
+	// CompositePodGroupTemplates 或 PodGroupTemplates 至少要设置一项。
 	//
 	// +optional
 	// +listType=map
@@ -337,16 +307,15 @@ type CompositePodGroupTemplate struct {
 	CompositePodGroupTemplates []CompositePodGroupTemplate `json:"compositePodGroupTemplates,omitempty" protobuf:"bytes,9,rep,name=compositePodGroupTemplates"`
 }
 
-// PodGroupSchedulingPolicy defines the scheduling configuration for a PodGroup.
-// Exactly one policy must be set. The policy is chosen at creation time by setting either the
-// Basic or Gang field. The PodGroup may not change policy after creation.
-// Fields within chosen policy may be updated after creation when their individual fields allow it.
+// PodGroupSchedulingPolicy 定义 PodGroup 的调度配置。
+// 必须且只能设置一种策略。在创建时通过设置 Basic 或 Gang 字段选定策略，
+// 创建后不可更改；所选策略内部的字段在各字段允许时可更新。
 //
+
 // +union
 type PodGroupSchedulingPolicy struct {
-	// basic specifies that the pods in this group should be scheduled using
-	// standard Kubernetes scheduling behavior. Setting this field at group creation time
-	// opts this group to basic scheduling; this field cannot be changed afterward.
+	// basic 指定组内 Pod 使用标准 Kubernetes 调度行为。创建时设置此字段即选择
+	// 基础调度，此后不可更改。
 	//
 	// +optional
 	// +k8s:optional
@@ -354,10 +323,8 @@ type PodGroupSchedulingPolicy struct {
 	// +k8s:immutable
 	Basic *BasicSchedulingPolicy `json:"basic,omitempty" protobuf:"bytes,1,opt,name=basic"`
 
-	// gang specifies that the pods in this group should be scheduled using
-	// all-or-nothing semantics. Setting this field at group creation time
-	// opts this group to gang scheduling; this field cannot be set or unset afterward.
-	// The minCount field within Gang scheduling policy remains mutable after group creation.
+	// gang 指定组内 Pod 使用全有或全无（all-or-nothing）语义调度。创建时设置此字段
+	// 即选择 gang 调度，此后不可设置或取消；Gang 策略内的 minCount 在创建后仍可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -367,28 +334,20 @@ type PodGroupSchedulingPolicy struct {
 	Gang *GangSchedulingPolicy `json:"gang,omitempty" protobuf:"bytes,2,opt,name=gang"`
 }
 
-// BasicSchedulingPolicy indicates that standard Kubernetes
-// scheduling behavior should be used.
+// BasicSchedulingPolicy 表示应使用标准 Kubernetes 调度行为。
 type BasicSchedulingPolicy struct {
-	// This is intentionally empty. Its presence indicates that the basic
-	// scheduling policy should be applied. In the future, new fields may appear,
-	// describing such constraints on a pod group level without "all or nothing"
-	// (gang) scheduling.
+	// 此结构故意留空。它的存在表示应应用基础调度策略。将来可能新增字段，
+	// 用于描述 PodGroup 级别、不涉及“全有或全无”（gang）调度的约束。
 }
 
-// GangSchedulingPolicy defines the parameters for gang scheduling.
+// GangSchedulingPolicy 定义 gang 调度的参数。
 type GangSchedulingPolicy struct {
-	// minCount is the minimum number of pods that must be schedulable or scheduled
-	// at the same time for the scheduler to admit the entire group.
-	// It must be a positive integer. This field is mutable to support workload scaling.
+	// minCount 是调度器接纳整个 PodGroup 前，必须可调度或已同时调度的 Pod 最小数量。
+	// 必须为正整数；此字段可变，以支持负载扩缩容。
 	//
-	// Note that the scheduler operates on an eventually consistent model. Updates
-	// to minCount may not be immediately reflected in scheduling decisions due to
-	// propagation delays. If minCount is updated while a scheduling cycle is in
-	// progress for that group, the new value may not take effect until the next
-	// cycle. Moreover, minCount is only enforced during scheduling, meaning that
-	// modifications to this field do not affect already-scheduled pods, applying
-	// only to those evaluated in future cycles.
+	// 注意调度器基于最终一致模型运行：受传播延迟影响，minCount 的更新可能不会立即反映在
+	// 调度决策中；若更新发生在针对该组的调度周期进行中，新值可能要到下一个周期才生效。
+	// 此外 minCount 仅在调度时生效，修改它不会影响已调度的 Pod，只作用于后续周期中待评估的 Pod。
 	//
 	// +required
 	// +k8s:required
@@ -396,29 +355,24 @@ type GangSchedulingPolicy struct {
 	MinCount int32 `json:"minCount" protobuf:"varint,1,opt,name=minCount"`
 }
 
-// PodGroupResourceClaim references exactly one ResourceClaim, either directly
-// or by naming a ResourceClaimTemplate which is then turned into a ResourceClaim
-// for the PodGroup.
+// PodGroupResourceClaim 直接引用一个 ResourceClaim，或通过指定一个 ResourceClaimTemplate
+// 为 PodGroup 生成 ResourceClaim。
 //
-// It adds a name to it that uniquely identifies the ResourceClaim inside the PodGroup.
-// Pods that need access to the ResourceClaim define a matching reference in its
-// own Spec.ResourceClaims. The Pod's claim must match all fields of the
-// PodGroup's claim exactly.
+// 它为申领附加一个在 PodGroup 内唯一标识该 ResourceClaim 的名称。需要访问该 ResourceClaim
+// 的 Pod 须在自己的 Spec.ResourceClaims 中定义匹配的引用，且各字段与 PodGroup 的申领完全一致。
+
 type PodGroupResourceClaim struct {
-	// name uniquely identifies this resource claim inside the PodGroup.
-	// This must be a DNS_LABEL.
+	// name 在 PodGroup 内唯一标识此资源申领，必须是 DNS_LABEL。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-short-name
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// resourceClaimName is the name of a ResourceClaim object in the same
-	// namespace as this PodGroup. The ResourceClaim will be reserved for the
-	// PodGroup instead of its individual pods.
+	// resourceClaimName 是与 PodGroup 同命名空间中 ResourceClaim 对象的名称。
+	// 该 ResourceClaim 将为 PodGroup（而非其各个 Pod）预留。
 	//
-	// Exactly one of ResourceClaimName and ResourceClaimTemplateName must
-	// be set.
+	// ResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其一。
 	//
 	// +optional
 	// +k8s:optional
@@ -426,21 +380,15 @@ type PodGroupResourceClaim struct {
 	// +k8s:format=k8s-long-name
 	ResourceClaimName *string `json:"resourceClaimName,omitempty" protobuf:"bytes,2,opt,name=resourceClaimName"`
 
-	// resourceClaimTemplateName is the name of a ResourceClaimTemplate
-	// object in the same namespace as this PodGroup.
+	// resourceClaimTemplateName 是与 PodGroup 同命名空间中 ResourceClaimTemplate 对象的名称。
 	//
-	// The template will be used to create a new ResourceClaim, which will
-	// be bound to this PodGroup. When this PodGroup is deleted, the ResourceClaim
-	// will also be deleted. The PodGroup name and resource name, along with a
-	// generated component, will be used to form a unique name for the
-	// ResourceClaim, which will be recorded in podgroup.status.resourceClaimStatuses.
+	// 模板将用于创建绑定到该 PodGroup 的新 ResourceClaim。PodGroup 删除时，该 ResourceClaim
+	// 也会被删除。其唯一名称由 PodGroup 名称、资源名和一个生成后缀拼接而成，记录在
+	// podgroup.status.resourceClaimStatuses 中。
 	//
-	// This field is immutable and no changes will be made to the
-	// corresponding ResourceClaim by the control plane after creating the
-	// ResourceClaim.
+	// 此字段不可变，控制面创建 ResourceClaim 后不会再修改它。
 	//
-	// Exactly one of ResourceClaimName and ResourceClaimTemplateName must
-	// be set.
+	// ResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其一。
 	//
 	// +optional
 	// +k8s:optional
@@ -449,19 +397,19 @@ type PodGroupResourceClaim struct {
 	ResourceClaimTemplateName *string `json:"resourceClaimTemplateName,omitempty" protobuf:"bytes,3,opt,name=resourceClaimTemplateName"`
 }
 
-// DisruptionMode defines how individual entities within a group can be disrupted.
-// Exactly one mode can be set.
+// DisruptionMode 定义组内各实体可被中断的方式，且只能设置一种模式。
 //
+
 // +union
 type DisruptionMode struct {
-	// single specifies that children can be disrupted independently from each other.
+	// single 指定各子对象可彼此独立地被中断。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Single *SingleDisruptionMode `json:"single,omitempty" protobuf:"bytes,1,opt,name=single"`
 
-	// all specifies that all children can only be disrupted together.
+	// all 指定所有子对象只能作为一个整体被中断。
 	//
 	// +optional
 	// +k8s:optional
@@ -469,25 +417,25 @@ type DisruptionMode struct {
 	All *AllDisruptionMode `json:"all,omitempty" protobuf:"bytes,2,opt,name=all"`
 }
 
-// SingleDisruptionMode specifies that children can be disrupted independently.
+// SingleDisruptionMode 指定各子对象可被独立中断。
 type SingleDisruptionMode struct {
-	// Intentionally empty now.
+	// 当前故意留空。
 }
 
-// AllDisruptionMode specifies that children can only be disrupted together.
+// AllDisruptionMode 指定各子对象只能作为一个整体被中断。
 type AllDisruptionMode struct {
-	// Intentionally empty now.
+	// 当前故意留空。
 }
 
-// PreemptionPolicy describes a policy for if/when to preempt a pod.
+// PreemptionPolicy 描述是否以及何时抢占 Pod 的策略。
 // +enum
 // +k8s:enum
 type PreemptionPolicy string
 
 const (
-	// PreemptLowerPriority means that pod can preempt other pods with lower priority.
+	// PreemptLowerPriority 表示 Pod 可抢占优先级更低的 Pod。
 	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
-	// PreemptNever means that pod never preempts other pods with lower priority.
+	// PreemptNever 表示 Pod 从不抢占其他 Pod。
 	PreemptNever PreemptionPolicy = "Never"
 )
 
@@ -495,24 +443,23 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:supportsSubresource="/status"
 
-// PodGroup represents a runtime instance of pods grouped together.
-// PodGroups are created by workload controllers (Job, LWS, JobSet, etc...) from
-// Workload.podGroupTemplates.
-// PodGroup API enablement is toggled by the GenericWorkload feature gate.
+// PodGroup 表示一组 Pod 的运行时实例。
+// PodGroup 由负载控制器（Job、LWS、JobSet 等）根据 Workload.podGroupTemplates 创建。
+// PodGroup API 的启用由 GenericWorkload 特性门控控制。
 type PodGroup struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec defines the desired state of the PodGroup.
+	// spec 定义 PodGroup 的期望状态。
 	//
 	// +required
 	Spec PodGroupSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status represents the current observed state of the PodGroup.
+	// status 表示 PodGroup 当前观测到的状态。
 	//
 	// +optional
 	Status PodGroupStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
@@ -520,25 +467,23 @@ type PodGroup struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodGroupList contains a list of PodGroup resources.
+// PodGroupList 包含一组 PodGroup 资源。
 type PodGroupList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of PodGroups.
+	// Items 是 PodGroup 列表。
 	Items []PodGroup `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// PodGroupSpec defines the desired state of a PodGroup.
+// PodGroupSpec 定义 PodGroup 的期望状态。
 type PodGroupSpec struct {
-	// parentCompositePodGroupName contains the name of the parent composite pod group
-	// within the same namespace as this pod group.
-	// If it's nil, then this pod group is a root of a workload's hierarchy.
-	// This field is used only when the CompositePodGroup feature gate is enabled.
-	// This field is immutable.
+	// parentCompositePodGroupName 是同一命名空间中父复合 PodGroup 的名称。
+	// 为 nil 时，此 PodGroup 是负载层级结构的根。
+	// 仅当 CompositePodGroup 特性门控启用时使用此字段，且不可变。
 	//
 	// +featureGate=CompositePodGroup
 	// +optional
@@ -549,25 +494,23 @@ type PodGroupSpec struct {
 	// +k8s:alpha(since: "1.37")=+k8s:dependentRequired("workloadRef")
 	ParentCompositePodGroupName *string `json:"parentCompositePodGroupName,omitempty" protobuf:"bytes,1,opt,name=parentCompositePodGroupName"`
 
-	// workloadRef references an optional PodGroup template within the Workload
-	// object that was used to create the PodGroup.
-	// This field is immutable.
+	// workloadRef 引用创建此 PodGroup 时所用 Workload 对象中的 PodGroup 模板。
+	// 此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	WorkloadRef *WorkloadReference `json:"workloadRef,omitempty" protobuf:"bytes,2,opt,name=workloadRef"`
 
-	// schedulingPolicy defines the scheduling policy for this instance of the PodGroup.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
+	// schedulingPolicy 定义该 PodGroup 实例的调度策略。
+	// 控制器应从 PodGroupTemplate 复制此字段。
 	//
 	// +required
 	SchedulingPolicy PodGroupSchedulingPolicy `json:"schedulingPolicy" protobuf:"bytes,3,opt,name=schedulingPolicy"`
 
-	// schedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroup.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
-	// This field is immutable.
-	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
+	// schedulingConstraints 定义此 PodGroup 的可选调度约束（如拓扑）。
+	// 控制器应从 PodGroupTemplate 复制此字段，且不可变。
+	// 仅当 TopologyAwareWorkloadScheduling 特性门控启用时可用。
 	//
 	// +featureGate=TopologyAwareWorkloadScheduling
 	// +optional
@@ -576,16 +519,13 @@ type PodGroupSpec struct {
 	// +k8s:ifEnabled(TopologyAwareWorkloadScheduling)=+k8s:immutable
 	SchedulingConstraints *PodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,4,opt,name=schedulingConstraints"`
 
-	// resourceClaims defines which ResourceClaims may be shared among Pods in
-	// the group. Pods consume the devices allocated to a PodGroup's claim by
-	// defining a claim in its own Spec.ResourceClaims that matches the
-	// PodGroup's claim exactly. The claim must have the same name and refer to
-	// the same ResourceClaim or ResourceClaimTemplate.
+	// resourceClaims 定义组内 Pod 可共享的 ResourceClaim。Pod 在自己
+	// Spec.ResourceClaims 中定义与 PodGroup 的申领名称、所指向的 ResourceClaim 或
+	// ResourceClaimTemplate 完全一致的申领，即可消费分配给该 PodGroup 的设备。
 	//
-	// This is a beta-level field and requires that the
-	// DRAWorkloadResourceClaims feature gate is enabled.
+	// 这是 beta 级字段，需要启用 DRAWorkloadResourceClaims 特性门控。
 	//
-	// This field is immutable.
+	// 此字段不可变。
 	//
 	// +optional
 	// +patchMergeKey=name
@@ -600,10 +540,8 @@ type PodGroupSpec struct {
 	// +featureGate=DRAWorkloadResourceClaims
 	ResourceClaims []PodGroupResourceClaim `json:"resourceClaims,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,5,rep,name=resourceClaims"`
 
-	// disruptionMode defines the mode in which a given PodGroup can be disrupted.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
-	// One of Single, All. Defaults to Single if unset.
-	// This field is immutable.
+	// disruptionMode 定义 PodGroup 可被中断的方式。控制器应从 PodGroupTemplate 复制此字段。
+	// 取值为 Single 或 All，未设置时默认为 Single。此字段不可变。
 	//
 	// +default={"single": {}}
 	// +optional
@@ -611,12 +549,10 @@ type PodGroupSpec struct {
 	// +k8s:immutable
 	DisruptionMode *DisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,6,opt,name=disruptionMode"`
 
-	// priorityClassName defines the priority that should be considered when scheduling this pod group.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
-	// Otherwise, it is validated and resolved similarly to the PriorityClassName on PodGroupTemplate
-	// (i.e. if no priority class is specified, admission control can set this to the global default
-	// priority class if it exists. Otherwise, the pod group's priority will be zero).
-	// This field is immutable.
+	// priorityClassName 定义调度此 PodGroup 时应考虑的优先级类名。控制器应从
+	// PodGroupTemplate 复制此字段；否则其校验和解析方式与 PodGroupTemplate 上的
+	// PriorityClassName 相同（即未指定优先级类时，准入控制可设为全局默认优先级类（如存在），
+	// 否则 PodGroup 的优先级为零）。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -624,12 +560,9 @@ type PodGroupSpec struct {
 	// +k8s:format=k8s-long-name
 	PriorityClassName string `json:"priorityClassName,omitempty" protobuf:"bytes,7,opt,name=priorityClassName"`
 
-	// priority is the value of priority of this pod group. Various system components
-	// use this field to find the priority of the pod group. When Priority Admission
-	// Controller is enabled, it prevents users from setting this field. The admission
-	// controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// priority 是此 PodGroup 的优先级值，各系统组件据此判断其优先级。启用 Priority
+	// 准入控制器时用户不可设置此字段，其值由控制器根据 PriorityClassName 填充。
+	// 值越大优先级越高。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -637,12 +570,10 @@ type PodGroupSpec struct {
 	// +k8s:maximum=1000000000 # HighestUserDefinablePriority
 	Priority *int32 `json:"priority,omitempty" protobuf:"varint,8,opt,name=priority"`
 
-	// preemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
-	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
-	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// preemptionPolicy 是抢占低优先级 Pod/PodGroup 的策略，取值为 Never 或
+	// PreemptLowerPriority，未设置时默认为 PreemptLowerPriority。启用 Priority 准入控制器时，
+	// 其值由控制器根据 PriorityClassName 填充；PriorityClass 中未设置时亦默认为 PreemptLowerPriority。
+	// 此字段不可变，且仅当 PodGroupPreemptionPolicy 特性门控启用时可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -652,27 +583,23 @@ type PodGroupSpec struct {
 	PreemptionPolicy *PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,9,opt,name=preemptionPolicy"`
 }
 
-// PodGroupStatus represents information about the status of a pod group.
+// PodGroupStatus 表示 PodGroup 的状态信息。
 type PodGroupStatus struct {
-	// conditions represent the latest observations of the PodGroup's state.
+	// conditions 是对 PodGroup 状态的最新观测。
 	//
-	// Known condition types:
-	// - "PodGroupInitiallyScheduled": Indicates whether the scheduling requirement has been satisfied.
-	// Once this condition transitions to True, it serves as a terminal state and will never revert to False,
-	// even if pods are subsequently evicted and group constraints are no longer met.
-	// - "DisruptionTarget": Indicates whether the PodGroup is about to be terminated
-	//   due to disruption such as preemption.
+	// 已知条件类型：
+	// - "PodGroupInitiallyScheduled"：表示调度要求是否已满足。一旦转为 True 即为终态，
+	//   即使随后 Pod 被驱逐、组约束不再满足，也不会回退为 False。
+	// - "DisruptionTarget"：表示 PodGroup 即将因抢占等中断而终止。
 	//
-	// Known reasons for the PodGroupInitiallyScheduled condition:
-	// - "Unschedulable": The PodGroup cannot be scheduled due to resource constraints,
-	//   affinity/anti-affinity rules, or insufficient capacity for the gang.
-	// - "SchedulerError": The PodGroup cannot be scheduled due to some internal error
-	//   that happened during scheduling, for example due to nodeAffinity parsing errors.
+	// PodGroupInitiallyScheduled 条件的已知原因：
+	// - "Unschedulable"：因资源限制、亲和/反亲和规则或 gang 容量不足而无法调度。
+	// - "SchedulerError"：因调度过程中的内部错误（如 nodeAffinity 解析错误）而无法调度。
 	//
-	// Known reasons for the DisruptionTarget condition:
-	// - "PreemptionByScheduler": The PodGroup was preempted by the scheduler to make room for
-	//   higher-priority PodGroups or Pods.
+	// DisruptionTarget 条件的已知原因：
+	// - "PreemptionByScheduler"：PodGroup 被调度器抢占，为更高优先级的 PodGroup 或 Pod 腾出空间。
 	//
+
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -683,7 +610,7 @@ type PodGroupStatus struct {
 	// +k8s:alpha(since: "1.37")=+k8s:listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 
-	// resourceClaimStatuses is status of resource claims.
+	// resourceClaimStatuses 是资源申领的状态。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge,retainKeys
@@ -697,43 +624,38 @@ type PodGroupStatus struct {
 	ResourceClaimStatuses []PodGroupResourceClaimStatus `json:"resourceClaimStatuses,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,2,rep,name=resourceClaimStatuses"`
 }
 
-// Well-known condition types for PodGroups.
+// PodGroup 的已知条件类型。
 const (
-	// PodGroupInitiallyScheduled represents status of the scheduling process for this PodGroup till first success.
+	// PodGroupInitiallyScheduled 表示此 PodGroup 首次成功前的调度过程状态。
 	PodGroupInitiallyScheduled string = "PodGroupInitiallyScheduled"
-	// DisruptionTarget indicates the PodGroup is about to be terminated due to disruption
-	// such as preemption.
+	// DisruptionTarget 表示 PodGroup 即将因抢占等中断而终止。
 	DisruptionTarget string = "DisruptionTarget"
 )
 
-// Well-known condition reasons for PodGroups.
+// PodGroup 的已知条件原因。
 const (
-	// Unschedulable reason in the PodGroupInitiallyScheduled condition indicates that the PodGroup cannot be scheduled
-	// due to resource constraints, affinity/anti-affinity rules, or insufficient capacity for the PodGroup.
+	// PodGroupInitiallyScheduled 条件中的 Unschedulable 原因表示 PodGroup 因资源限制、
+	// 亲和/反亲和规则或容量不足而无法调度。
 	PodGroupReasonUnschedulable string = "Unschedulable"
-	// SchedulerError reason in the PodGroupInitiallyScheduled condition means that some internal error happens
-	// during scheduling, for example due to nodeAffinity parsing errors.
+	// PodGroupInitiallyScheduled 条件中的 SchedulerError 原因表示调度过程中发生了
+	// 内部错误，例如 nodeAffinity 解析错误。
 	PodGroupReasonSchedulerError string = "SchedulerError"
-	// PreemptionByScheduler reason in the DisruptionTarget condition indicates the PodGroup was preempted
-	// to make room for higher-priority PodGroups or Pods.
+	// DisruptionTarget 条件中的 PreemptionByScheduler 原因表示 PodGroup 被抢占，
+	// 以便为更高优先级的 PodGroup 或 Pod 腾出空间。
 	PodGroupReasonPreemptionByScheduler string = "PreemptionByScheduler"
 )
 
-// PodGroupResourceClaimStatus is stored in the PodGroupStatus for each
-// PodGroupResourceClaim which references a ResourceClaimTemplate. It stores the
-// generated name for the corresponding ResourceClaim.
+// PodGroupResourceClaimStatus 针对每个引用 ResourceClaimTemplate 的 PodGroupResourceClaim
+// 存放在 PodGroupStatus 中，记录对应 ResourceClaim 生成后的名称。
 type PodGroupResourceClaimStatus struct {
-	// name uniquely identifies this resource claim inside the PodGroup. This
-	// must match the name of an entry in podgroup.spec.resourceClaims, which
-	// implies that the string must be a DNS_LABEL.
+	// name 在 PodGroup 内唯一标识此资源申领，必须与 podgroup.spec.resourceClaims 中
+	// 某条目的名称一致，因此该字符串必须是 DNS_LABEL。
 	//
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// resourceClaimName is the name of the ResourceClaim that was generated for
-	// the PodGroup in the namespace of the PodGroup. If this is unset, then
-	// generating a ResourceClaim was not necessary. The
-	// podgroup.spec.resourceClaims entry can be ignored in this case.
+	// resourceClaimName 是为 PodGroup 在其命名空间中生成的 ResourceClaim 的名称。
+	// 未设置时表示无需生成 ResourceClaim，此时可忽略 podgroup.spec.resourceClaims 对应条目。
 	//
 	// +optional
 	// +k8s:optional
@@ -741,22 +663,16 @@ type PodGroupResourceClaimStatus struct {
 	ResourceClaimName *string `json:"resourceClaimName,omitempty" protobuf:"bytes,2,opt,name=resourceClaimName"`
 }
 
-// WorkloadReference references the Workload object together with the template
-// that was used to create a particular PodGroup.
+// WorkloadReference 引用 Workload 对象以及创建特定 PodGroup 时所用的模板。
 type WorkloadReference struct {
-	// workloadName is the name of the Workload object that contains a template
-	// that was used when creating a pod group. It must
-	// be a DNS name.
-	// This field is required.
+	// workloadName 是包含创建 PodGroup 所用模板的 Workload 对象名称，必须是 DNS 名称，为必填项。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-long-name
 	WorkloadName string `json:"workloadName" protobuf:"bytes,1,opt,name=workloadName"`
 
-	// templateName is the name of a template within the Workload object that
-	// was used to create a pod group. It must be a DNS label.
-	// This field is required.
+	// templateName 是 Workload 对象中用于创建 PodGroup 的模板名称，必须是 DNS 标签，为必填项。
 	//
 	// +required
 	// +k8s:required
@@ -764,10 +680,9 @@ type WorkloadReference struct {
 	TemplateName string `json:"templateName" protobuf:"bytes,2,opt,name=templateName"`
 }
 
-// PodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a PodGroup.
+// PodGroupSchedulingConstraints 定义 PodGroup 的调度约束（如拓扑）。
 type PodGroupSchedulingConstraints struct {
-	// topology defines the topology constraints for the pod group.
-	// Currently only a single topology constraint can be specified. This may change in the future.
+	// topology 定义 PodGroup 的拓扑约束，目前只能指定一条，将来可能改变。
 	//
 	// +optional
 	// +k8s:optional
@@ -777,12 +692,11 @@ type PodGroupSchedulingConstraints struct {
 	Topology []TopologyConstraint `json:"topology,omitempty" protobuf:"bytes,1,rep,name=topology"`
 }
 
-// TopologyConstraint defines a topology constraint for a PodGroup.
+// TopologyConstraint 定义 PodGroup 的拓扑约束。
 type TopologyConstraint struct {
-	// key specifies the key of the node label representing the topology domain.
-	// All pods within the PodGroup must be colocated within the same domain instance.
-	// Different PodGroups can land on different domain instances even if they derive from the same PodGroupTemplate.
-	// Examples: "topology.kubernetes.io/rack"
+	// key 指定表示拓扑域的节点标签的键。PodGroup 中所有 Pod 必须位于同一域实例内。
+	// 不同 PodGroup 即使源自同一 PodGroupTemplate，也可落在不同域实例上。
+	// 例如 "topology.kubernetes.io/rack"。
 	//
 	// +required
 	// +k8s:required
@@ -790,46 +704,42 @@ type TopologyConstraint struct {
 	Key string `json:"key" protobuf:"bytes,1,opt,name=key"`
 }
 
-// WorkloadPodGroupSchedulingPolicy defines the scheduling policy for a
-// group of pods managed by a workload controller.
-// Exactly one policy must be set.
+// WorkloadPodGroupSchedulingPolicy 定义由负载控制器管理的 Pod 组的调度策略。
+// 必须且只能设置一种策略。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a controller's own
-// API, next to its other scheduling fields (for example, in a Job's
-// spec.scheduling). It's recommended to block changing the policy
-// after creation, while still allowing gang.minCount to change. DV cannot
-// express that only gang.minCount is mutable while the basic/gang variant is
-// frozen, so the embedder must enforce variant immutability with hand-written
-// validation. For example,
+// 这是一个可复用的构建块，用于嵌入控制器自己的 API，与其他调度字段（例如 Job 的
+// spec.scheduling）并列。建议禁止创建后修改策略，但仍允许 gang.minCount 变更。DV 无法表达
+// “只有 gang.minCount 可变而 basic/gang 变体冻结”，因此嵌入方必须用手写校验强制变体不可变。
+// 例如：
 //
 //	type JobSchedulingConfiguration struct {
-//		// SchedulingPolicy defines the scheduling policy for this Job.
-//		// Exactly one of Basic or Gang must be set.
-//		// This field is immutable after creation: the policy may not be added or
-//		// removed. The policy variant (basic/gang) is frozen by the controller's
-//		// hand-written validation; only schedulingPolicy.gang.minCount may be changed.
+//		// SchedulingPolicy 定义此 Job 的调度策略。
+//		// Basic 或 Gang 必须且只能设置其一。
+//		// 创建后此字段不可变：不可增删策略。策略变体（basic/gang）由控制器的
+//		// 手写校验冻结；只有 schedulingPolicy.gang.minCount 允许修改。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:update=NoSet
 //		// +k8s:update=NoUnset
 //		SchedulingPolicy *schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy `json:"schedulingPolicy,omitempty" protobuf:"bytes,N,opt,name=schedulingPolicy"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
 //
+
 // +union
 type WorkloadPodGroupSchedulingPolicy struct {
-	// basic specifies that standard, pod-by-pod Kubernetes scheduling
-	// behavior should be used.
+	// basic 指定使用标准的、逐 Pod 的 Kubernetes 调度行为。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Basic *WorkloadPodGroupBasicSchedulingPolicy `json:"basic,omitempty" protobuf:"bytes,1,opt,name=basic"`
 
-	// gang specifies all-or-nothing scheduling semantics.
+	// gang 指定全有或全无的调度语义。
 	//
 	// +optional
 	// +k8s:optional
@@ -837,21 +747,16 @@ type WorkloadPodGroupSchedulingPolicy struct {
 	Gang *WorkloadPodGroupGangSchedulingPolicy `json:"gang,omitempty" protobuf:"bytes,2,opt,name=gang"`
 }
 
-// WorkloadPodGroupBasicSchedulingPolicy indicates standard Kubernetes
-// scheduling behavior.
+// WorkloadPodGroupBasicSchedulingPolicy 表示标准的 Kubernetes 调度行为。
 type WorkloadPodGroupBasicSchedulingPolicy struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
-// WorkloadPodGroupGangSchedulingPolicy defines the parameters for gang
-// (all-or-nothing) scheduling.
+// WorkloadPodGroupGangSchedulingPolicy 定义 gang（全有或全无）调度的参数。
 type WorkloadPodGroupGangSchedulingPolicy struct {
-	// minCount is the minimum number of pods that must be scheduled
-	// at the same time for the scheduler to admit the entire group.
-	// This field is optional. If it is not specified, the controller
-	// should inject a context-specific sane default (e.g.,
-	// parallelism for a Job).
-	// If set, it must be a positive integer.
+	// minCount 是调度器接纳整个 PodGroup 前必须同时调度的 Pod 最小数量。
+	// 此字段可选；未指定时控制器应注入符合上下文的合理默认值（如 Job 的 parallelism）。
+	// 若设置，必须为正整数。
 	//
 	// +optional
 	// +k8s:optional
@@ -859,32 +764,29 @@ type WorkloadPodGroupGangSchedulingPolicy struct {
 	MinCount *int32 `json:"minCount,omitempty" protobuf:"varint,1,opt,name=minCount"`
 }
 
-// WorkloadPodGroupSchedulingConstraints defines leaf-level scheduling
-// constraints, such as topology.
+// WorkloadPodGroupSchedulingConstraints 定义叶子级别的调度约束（如拓扑）。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a controller's own
-// API, next to its other scheduling fields (for example, in a Job's
-// spec.scheduling). It's recommended to freeze the field after creation
-// (+k8s:immutable), since constraints are immutable in the compiled Workload.
-// For example,
+// 这是一个可复用的构建块，用于嵌入控制器自己的 API，与其他调度字段（例如 Job 的
+// spec.scheduling）并列。建议创建后冻结此字段（+k8s:immutable），因为编译后的 Workload 中
+// 约束是不可变的。例如：
 //
 //	type JobSchedulingConfiguration struct {
-//		// SchedulingConstraints defines scheduling constraints (e.g. topology)
-//		// for the Job's pods.
-//		// This field is immutable after creation.
+//		// SchedulingConstraints 定义 Job 的 Pod 的调度约束（如拓扑）。
+//		// 创建后此字段不可变。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:immutable
 //		SchedulingConstraints *schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,N,opt,name=schedulingConstraints"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
+
 type WorkloadPodGroupSchedulingConstraints struct {
-	// topology specifies desired topological placements for all pods
-	// within the pod group.
-	// If unset, no topology placement is requested.
+	// topology 指定 PodGroup 中所有 Pod 期望的拓扑放置位置。
+	// 未设置时不请求任何拓扑放置。
 	//
 	// +optional
 	// +k8s:optional
@@ -894,22 +796,19 @@ type WorkloadPodGroupSchedulingConstraints struct {
 	Topology []TopologyConstraint `json:"topology,omitempty" protobuf:"bytes,1,rep,name=topology"`
 }
 
-// WorkloadPodGroupResourceClaim references a dynamic resource claim
-// that is shared across pods in the group.
+// WorkloadPodGroupResourceClaim 引用组内 Pod 共享的动态资源申领。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a controller's own
-// API as a list, next to its other scheduling fields (for example, in a Job's
-// spec.scheduling). It's recommended to freeze the whole list after creation
-// (+k8s:immutable), since the list is immutable in the compiled Workload. For
-// example,
+// 这是一个可复用的构建块，作为列表嵌入控制器自己的 API，与其他调度字段（例如 Job 的
+// spec.scheduling）并列。建议创建后冻结整个列表（+k8s:immutable），因为编译后的 Workload 中
+// 该列表不可变。例如：
 //
 //	type JobSchedulingConfiguration struct {
-//		// ResourceClaims lists the ResourceClaims shared among the group's pods.
-//		// At most 4 claims may be set, matching the limit on the resulting PodGroup.
-//		// This list is immutable after creation: entries may neither be added,
-//		// removed, nor modified.
+//		// ResourceClaims 列出组内 Pod 共享的 ResourceClaim。
+//		// 最多可设置 4 项，与最终 PodGroup 的限制一致。
+//		// 创建后此列表不可变：条目不可增删、修改。
 //		// +optional
 //		// +patchMergeKey=name
 //		// +patchStrategy=merge
@@ -922,21 +821,19 @@ type WorkloadPodGroupSchedulingConstraints struct {
 //		// +k8s:immutable
 //		ResourceClaims []schedulingv1alpha3.WorkloadPodGroupResourceClaim `json:"resourceClaims,omitempty" protobuf:"bytes,N,rep,name=resourceClaims"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
+
 type WorkloadPodGroupResourceClaim struct {
-	// name uniquely identifies this resource claim inside the group.
-	// This field is required. It must be a DNS_LABEL.
+	// name 在组内唯一标识此资源申领，为必填项，必须是 DNS_LABEL。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-short-name
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// resourceClaimName is the name of a ResourceClaim object in the same
-	// namespace.
-	// This field is optional. If it is not specified, no resource claim
-	// is used. If set, it must be a DNS subdomain.
+	// resourceClaimName 是同一命名空间中 ResourceClaim 对象的名称。
+	// 此字段可选；未指定时不使用资源申领。若设置，必须是 DNS 子域名。
 	//
 	// +optional
 	// +k8s:optional
@@ -944,10 +841,8 @@ type WorkloadPodGroupResourceClaim struct {
 	// +k8s:format=k8s-long-name
 	ResourceClaimName *string `json:"resourceClaimName,omitempty" protobuf:"bytes,2,opt,name=resourceClaimName"`
 
-	// resourceClaimTemplateName is the name of a ResourceClaimTemplate
-	// object in the same namespace.
-	// This field is optional. If it is not specified, no resource claim
-	// template is used. If set, it must be a DNS subdomain.
+	// resourceClaimTemplateName 是同一命名空间中 ResourceClaimTemplate 对象的名称。
+	// 此字段可选；未指定时不使用资源申领模板。若设置，必须是 DNS 子域名。
 	//
 	// +optional
 	// +k8s:optional
@@ -956,40 +851,39 @@ type WorkloadPodGroupResourceClaim struct {
 	ResourceClaimTemplateName *string `json:"resourceClaimTemplateName,omitempty" protobuf:"bytes,3,opt,name=resourceClaimTemplateName"`
 }
 
-// WorkloadPodGroupDisruptionMode defines how individual pods within a
-// group can be disrupted. Exactly one mode must be set.
+// WorkloadPodGroupDisruptionMode 定义组内各 Pod 可被中断的方式。
+// 必须且只能设置一种模式。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a controller's own
-// API, next to its other scheduling fields (for example, in a Job's
-// spec.scheduling). It's recommended to freeze the field after creation
-// (+k8s:immutable), since the selected mode is immutable in the compiled
-// Workload. For example,
+// 这是一个可复用的构建块，用于嵌入控制器自己的 API，与其他调度字段（例如 Job 的
+// spec.scheduling）并列。建议创建后冻结此字段（+k8s:immutable），因为编译后的 Workload 中
+// 所选模式不可变。例如：
 //
 //	type JobSchedulingConfiguration struct {
-//		// DisruptionMode defines the mode in which the Job's pods can be disrupted.
-//		// One of Single, All.
-//		// This field is immutable after creation: it may not be added or removed,
-//		// and the selected mode may not be changed.
+//		// DisruptionMode 定义 Job 的 Pod 可被中断的方式。
+//		// 取值为 Single 或 All。
+//		// 创建后此字段不可变：不可增删，所选模式也不可修改。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:immutable
 //		DisruptionMode *schedulingv1alpha3.WorkloadPodGroupDisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,N,opt,name=disruptionMode"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
 //
+
 // +union
 type WorkloadPodGroupDisruptionMode struct {
-	// single specifies that pods can be disrupted independently from each other.
+	// single 指定各 Pod 可彼此独立地被中断。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Single *WorkloadPodGroupSingleDisruptionMode `json:"single,omitempty" protobuf:"bytes,1,opt,name=single"`
 
-	// all specifies that all pods in the group must be disrupted together.
+	// all 指定组内所有 Pod 必须作为一个整体被中断。
 	//
 	// +optional
 	// +k8s:optional
@@ -997,54 +891,49 @@ type WorkloadPodGroupDisruptionMode struct {
 	All *WorkloadPodGroupAllDisruptionMode `json:"all,omitempty" protobuf:"bytes,2,opt,name=all"`
 }
 
-// WorkloadPodGroupSingleDisruptionMode indicates that individual pods
-// can be disrupted independently.
+// WorkloadPodGroupSingleDisruptionMode 表示各 Pod 可被独立中断。
 type WorkloadPodGroupSingleDisruptionMode struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
-// WorkloadPodGroupAllDisruptionMode indicates that all pods in the
-// group must be disrupted together.
+// WorkloadPodGroupAllDisruptionMode 表示组内所有 Pod 必须作为一个整体被中断。
 type WorkloadPodGroupAllDisruptionMode struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
-// WorkloadCompositePodGroupSchedulingPolicy defines the scheduling policy for a
-// CompositePodGroup (a group of groups) managed by a workload controller.
-// Exactly one policy must be set.
+// WorkloadCompositePodGroupSchedulingPolicy 定义由负载控制器管理的 CompositePodGroup
+// （组的组）的调度策略。必须且只能设置一种策略。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a composite
-// controller's own API, next to its other scheduling fields. It is the
-// group-of-groups analogue of WorkloadPodGroupSchedulingPolicy. The composite
-// scheduling policy is immutable, so it's recommended to freeze the whole
-// field after creation (+k8s:immutable). For example,
+// 这是一个可复用的构建块，用于嵌入复合控制器自己的 API，与其他调度字段并列。
+// 它是 WorkloadPodGroupSchedulingPolicy 在“组的组”层面的对应物。复合调度策略不可变，
+// 建议创建后冻结整个字段（+k8s:immutable）。例如：
 //
 //	type JobSetSchedulingConfiguration struct {
-//		// SchedulingPolicy defines the scheduling policy for this JobSet.
-//		// Exactly one of Basic or Gang must be set.
-//		// This field is immutable after creation.
+//		// SchedulingPolicy 定义此 JobSet 的调度策略。
+//		// Basic 或 Gang 必须且只能设置其一。
+//		// 创建后此字段不可变。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:immutable
 //		SchedulingPolicy *schedulingv1alpha3.WorkloadCompositePodGroupSchedulingPolicy `json:"schedulingPolicy,omitempty" protobuf:"bytes,N,opt,name=schedulingPolicy"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
 //
+
 // +union
 type WorkloadCompositePodGroupSchedulingPolicy struct {
-	// basic specifies that the child groups of this composite group should be
-	// scheduled independently.
+	// basic 指定此复合组的子组应被独立调度。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Basic *WorkloadCompositePodGroupBasicSchedulingPolicy `json:"basic,omitempty" protobuf:"bytes,1,opt,name=basic"`
 
-	// gang specifies that the child groups of this composite group should be
-	// scheduled using all-or-nothing semantics.
+	// gang 指定此复合组的子组应使用全有或全无语义调度。
 	//
 	// +optional
 	// +k8s:optional
@@ -1052,22 +941,16 @@ type WorkloadCompositePodGroupSchedulingPolicy struct {
 	Gang *WorkloadCompositePodGroupGangSchedulingPolicy `json:"gang,omitempty" protobuf:"bytes,2,opt,name=gang"`
 }
 
-// WorkloadCompositePodGroupBasicSchedulingPolicy indicates that the child groups
-// of a composite group should be scheduled independently.
+// WorkloadCompositePodGroupBasicSchedulingPolicy 表示复合组的子组应被独立调度。
 type WorkloadCompositePodGroupBasicSchedulingPolicy struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
-// WorkloadCompositePodGroupGangSchedulingPolicy defines the parameters for gang
-// scheduling of a composite group's child groups.
+// WorkloadCompositePodGroupGangSchedulingPolicy 定义复合组子组 gang 调度的参数。
 type WorkloadCompositePodGroupGangSchedulingPolicy struct {
-	// minGroupCount is the minimum number of child groups that must be
-	// schedulable at the same time for the scheduler to admit the entire
-	// composite group.
-	// This field is optional. If it is not specified, the controller
-	// should inject a context-specific sane default (e.g., the number of
-	// child groups).
-	// If set, it must be a positive integer.
+	// minGroupCount 是调度器接纳整个复合组前，必须可同时调度的子组最小数量。
+	// 此字段可选；未指定时控制器应注入符合上下文的合理默认值（如子组数量）。
+	// 若设置，必须为正整数。
 	//
 	// +optional
 	// +k8s:optional
@@ -1075,33 +958,30 @@ type WorkloadCompositePodGroupGangSchedulingPolicy struct {
 	MinGroupCount *int32 `json:"minGroupCount,omitempty" protobuf:"varint,1,opt,name=minGroupCount"`
 }
 
-// WorkloadCompositePodGroupSchedulingConstraints defines composite-level
-// scheduling constraints, such as topology, for a CompositePodGroup (a group of
-// groups) managed by a workload controller.
+// WorkloadCompositePodGroupSchedulingConstraints 定义由负载控制器管理的 CompositePodGroup
+// （组的组）的复合级调度约束（如拓扑）。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a composite
-// controller's own API, next to its other scheduling fields. It is the
-// group-of-groups analogue of WorkloadPodGroupSchedulingConstraints. It's
-// recommended to freeze the field after creation (+k8s:immutable), since
-// constraints are immutable in the compiled Workload. For example,
+// 这是一个可复用的构建块，用于嵌入复合控制器自己的 API，与其他调度字段并列。
+// 它是 WorkloadPodGroupSchedulingConstraints 在“组的组”层面的对应物。建议创建后冻结此字段
+// （+k8s:immutable），因为编译后的 Workload 中约束不可变。例如：
 //
 //	type JobSetSchedulingConfiguration struct {
-//		// SchedulingConstraints defines scheduling constraints (e.g. topology)
-//		// for this JobSet.
-//		// This field is immutable after creation.
+//		// SchedulingConstraints 定义此 JobSet 的调度约束（如拓扑）。
+//		// 创建后此字段不可变。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:immutable
 //		SchedulingConstraints *schedulingv1alpha3.WorkloadCompositePodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,N,opt,name=schedulingConstraints"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
+
 type WorkloadCompositePodGroupSchedulingConstraints struct {
-	// topology specifies desired topological placements for all child groups
-	// within the composite group.
-	// If unset, no topology placement is requested.
+	// topology 指定复合组内所有子组期望的拓扑放置位置。
+	// 未设置时不请求任何拓扑放置。
 	//
 	// +optional
 	// +k8s:optional
@@ -1111,42 +991,39 @@ type WorkloadCompositePodGroupSchedulingConstraints struct {
 	Topology []TopologyConstraint `json:"topology,omitempty" protobuf:"bytes,1,rep,name=topology"`
 }
 
-// WorkloadCompositePodGroupDisruptionMode defines how the child groups of a
-// composite group can be disrupted. Exactly one mode must be set.
+// WorkloadCompositePodGroupDisruptionMode 定义复合组的子组可被中断的方式。
+// 必须且只能设置一种模式。
 //
+
 // ---
 //
-// This is a reusable building block meant to be embedded in a composite
-// controller's own API, next to its other scheduling fields. It is the
-// group-of-groups analogue of WorkloadPodGroupDisruptionMode. It's recommended
-// to freeze the field after creation (+k8s:immutable), since the selected mode
-// is immutable in the compiled Workload. For example,
+// 这是一个可复用的构建块，用于嵌入复合控制器自己的 API，与其他调度字段并列。
+// 它是 WorkloadPodGroupDisruptionMode 在“组的组”层面的对应物。建议创建后冻结此字段
+// （+k8s:immutable），因为编译后的 Workload 中所选模式不可变。例如：
 //
 //	type JobSetSchedulingConfiguration struct {
-//		// DisruptionMode defines the mode in which this JobSet's child groups
-//		// can be disrupted.
-//		// One of Single, All.
-//		// This field is immutable after creation: it may not be added or removed,
-//		// and the selected mode may not be changed.
+//		// DisruptionMode 定义此 JobSet 的子组可被中断的方式。
+//		// 取值为 Single 或 All。
+//		// 创建后此字段不可变：不可增删，所选模式也不可修改。
 //		// +optional
 //		// +k8s:optional
 //		// +k8s:immutable
 //		DisruptionMode *schedulingv1alpha3.WorkloadCompositePodGroupDisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,N,opt,name=disruptionMode"`
 //
-//		// other scheduling fields
+//		// 其他调度字段
 //	}
 //
+
 // +union
 type WorkloadCompositePodGroupDisruptionMode struct {
-	// single specifies that child groups can be disrupted independently from
-	// each other.
+	// single 指定各子组可彼此独立地被中断。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Single *WorkloadCompositePodGroupSingleDisruptionMode `json:"single,omitempty" protobuf:"bytes,1,opt,name=single"`
 
-	// all specifies that all child groups must be disrupted together.
+	// all 指定所有子组必须作为一个整体被中断。
 	//
 	// +optional
 	// +k8s:optional
@@ -1154,41 +1031,38 @@ type WorkloadCompositePodGroupDisruptionMode struct {
 	All *WorkloadCompositePodGroupAllDisruptionMode `json:"all,omitempty" protobuf:"bytes,2,opt,name=all"`
 }
 
-// WorkloadCompositePodGroupSingleDisruptionMode indicates that child groups
-// can be disrupted independently.
+// WorkloadCompositePodGroupSingleDisruptionMode 表示各子组可被独立中断。
 type WorkloadCompositePodGroupSingleDisruptionMode struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
-// WorkloadCompositePodGroupAllDisruptionMode indicates that all child groups
-// must be disrupted together.
+// WorkloadCompositePodGroupAllDisruptionMode 表示所有子组必须作为一个整体被中断。
 type WorkloadCompositePodGroupAllDisruptionMode struct {
-	// Intentionally empty for now.
+	// 当前故意留空。
 }
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:supportsSubresource="/status"
 
-// CompositePodGroup represents a runtime instance of pod groups grouped together.
-// CompositePodGroups are created by workload controllers (LWS, JobSet, etc...) from
-// Workload.compositePodGroupTemplates.
-// CompositePodGroup API enablement is toggled by the CompositePodGroup feature gate.
+// CompositePodGroup 表示多个 PodGroup 组合在一起后的运行时实例。
+// CompositePodGroup 由负载控制器（LWS、JobSet 等）根据 Workload.compositePodGroupTemplates 创建。
+// CompositePodGroup API 的启用由 CompositePodGroup 特性门控控制。
 type CompositePodGroup struct {
 	metav1.TypeMeta `json:""`
 
-	// metadata is the standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec defines the desired state of the CompositePodGroup.
+	// spec 定义 CompositePodGroup 的期望状态。
 	//
 	// +required
 	Spec CompositePodGroupSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status represents the current observed state of the CompositePodGroup.
+	// status 表示 CompositePodGroup 当前观测到的状态。
 	//
 	// +optional
 	Status CompositePodGroupStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
@@ -1196,24 +1070,22 @@ type CompositePodGroup struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CompositePodGroupList contains a list of CompositePodGroup resources.
+// CompositePodGroupList 包含一组 CompositePodGroup 资源。
 type CompositePodGroupList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of CompositePodGroups.
+	// Items 是 CompositePodGroup 列表。
 	Items []CompositePodGroup `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// CompositePodGroupSpec defines the desired state of CompositePodGroup.
+// CompositePodGroupSpec 定义 CompositePodGroup 的期望状态。
 type CompositePodGroupSpec struct {
-	// parentCompositePodGroupName contains the name of the parent composite pod group
-	// within the same namespace as this composite pod group. It must be a DNS name.
-	// If it's nil, then this composite pod group is a root of a workload's hierarchy.
-	// This field is immutable.
+	// parentCompositePodGroupName 是同一命名空间中父复合 PodGroup 的名称，必须是 DNS 名称。
+	// 为 nil 时，此复合 PodGroup 是负载层级结构的根。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -1221,37 +1093,32 @@ type CompositePodGroupSpec struct {
 	// +k8s:format=k8s-long-name
 	ParentCompositePodGroupName *string `json:"parentCompositePodGroupName,omitempty" protobuf:"bytes,1,opt,name=parentCompositePodGroupName"`
 
-	// workloadRef references an optional CompositePodGroup template within the
-	// Workload object that was used to create the CompositePodGroup.
-	// This field is required.
-	// This field is immutable.
+	// workloadRef 引用创建 CompositePodGroup 时所用 Workload 对象中的 CompositePodGroup 模板。
+	// 此字段为必填且不可变。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:immutable
 	WorkloadRef *WorkloadReference `json:"workloadRef" protobuf:"bytes,2,opt,name=workloadRef"`
 
-	// schedulingPolicy defines the scheduling policy for this instance of the CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// This field is immutable.
+	// schedulingPolicy 定义该 CompositePodGroup 实例的调度策略。
+	// 控制器应从 CompositePodGroupTemplate 复制此字段，且不可变。
 	//
 	// +required
 	// +k8s:immutable
 	SchedulingPolicy CompositePodGroupSchedulingPolicy `json:"schedulingPolicy" protobuf:"bytes,3,opt,name=schedulingPolicy"`
 
-	// schedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// This field is immutable.
+	// schedulingConstraints 定义此 CompositePodGroup 的可选调度约束（如拓扑）。
+	// 控制器应从 CompositePodGroupTemplate 复制此字段，且不可变。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:immutable
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,4,opt,name=schedulingConstraints"`
 
-	// disruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// One of Single, All. Defaults to Single if unset.
-	// This field is immutable.
+	// disruptionMode 定义 CompositePodGroup 可被中断的方式。控制器应从
+	// CompositePodGroupTemplate 复制此字段。取值为 Single 或 All，未设置时默认为 Single。
+	// 此字段不可变。
 	//
 	// +default={"single": {}}
 	// +optional
@@ -1259,12 +1126,10 @@ type CompositePodGroupSpec struct {
 	// +k8s:immutable
 	DisruptionMode *CompositeDisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,5,opt,name=disruptionMode"`
 
-	// priorityClassName defines the priority that should be considered when scheduling this CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// If left unspecified, it is validated and resolved similarly to the PriorityClassName field in Pods
-	// (i.e. if no priority class is specified, admission control can set this to the global default
-	// priority class if it exists. Otherwise, the composite pod group's priority will be zero).
-	// This field is immutable.
+	// priorityClassName 定义调度此 CompositePodGroup 时应考虑的优先级类名。控制器应从
+	// CompositePodGroupTemplate 复制此字段。若未指定，其校验和解析方式与 Pod 的 PriorityClassName
+	// 相同（即未指定优先级类时，准入控制可设为全局默认优先级类（如存在），否则复合 PodGroup
+	// 的优先级为零）。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -1272,12 +1137,9 @@ type CompositePodGroupSpec struct {
 	// +k8s:immutable
 	PriorityClassName string `json:"priorityClassName,omitempty" protobuf:"bytes,6,opt,name=priorityClassName"`
 
-	// priority is the value of priority of this composite pod group. Various system components
-	// use this field to find the priority of the composite pod group. When Priority Admission
-	// Controller is enabled, it prevents users from setting this field. The admission
-	// controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// priority 是此复合 PodGroup 的优先级值，各系统组件据此判断其优先级。启用 Priority
+	// 准入控制器时用户不可设置此字段，其值由控制器根据 PriorityClassName 填充。
+	// 值越大优先级越高。此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -1285,12 +1147,10 @@ type CompositePodGroupSpec struct {
 	// +k8s:maximum=1000000000 # HighestUserDefinablePriority
 	Priority *int32 `json:"priority,omitempty" protobuf:"varint,7,opt,name=priority"`
 
-	// preemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
-	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
-	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// preemptionPolicy 是抢占低优先级 Pod/PodGroup 的策略，取值为 Never 或
+	// PreemptLowerPriority，未设置时默认为 PreemptLowerPriority。启用 Priority 准入控制器时，
+	// 其值由控制器根据 PriorityClassName 填充；PriorityClass 中未设置时亦默认为 PreemptLowerPriority。
+	// 此字段不可变，且仅当 PodGroupPreemptionPolicy 特性门控启用时可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -1300,13 +1160,13 @@ type CompositePodGroupSpec struct {
 	PreemptionPolicy *PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,8,opt,name=preemptionPolicy"`
 }
 
-// CompositePodGroupSchedulingPolicy defines the scheduling configuration for a CompositePodGroup.
-// Exactly one policy must be set.
+// CompositePodGroupSchedulingPolicy 定义 CompositePodGroup 的调度配置。
+// 必须且只能设置一种策略。
 //
+
 // +union
 type CompositePodGroupSchedulingPolicy struct {
-	// basic specifies that the groups of this composite group should be scheduled independently.
-	// This field is immutable.
+	// basic 指定此复合组的各子组应被独立调度，此字段不可变。
 	//
 	// +optional
 	// +k8s:optional
@@ -1314,8 +1174,7 @@ type CompositePodGroupSchedulingPolicy struct {
 	// +k8s:unionMember
 	Basic *CompositeBasicSchedulingPolicy `json:"basic,omitempty" protobuf:"bytes,1,opt,name=basic"`
 
-	// gang specifies that the groups of this composite group should be scheduled using
-	// all-or-nothing semantics.
+	// gang 指定此复合组的各子组应使用全有或全无语义调度。
 	//
 	// +optional
 	// +k8s:optional
@@ -1325,21 +1184,16 @@ type CompositePodGroupSchedulingPolicy struct {
 	Gang *CompositeGangSchedulingPolicy `json:"gang,omitempty" protobuf:"bytes,2,opt,name=gang"`
 }
 
-// CompositeBasicSchedulingPolicy indicates that the groups belonging to the composite group
-// should be scheduled independently.
+// CompositeBasicSchedulingPolicy 表示复合组中的各子组应被独立调度。
 type CompositeBasicSchedulingPolicy struct {
-	// This is intentionally empty. Its presence indicates that the basic group
-	// scheduling policy should be applied. In the future, new fields may appear,
-	// describing such constraints on a composite pod group level without "all or
-	// nothing" (gang) scheduling.
+	// 此结构故意留空。它的存在表示应应用基础子组调度策略。将来可能新增字段，
+	// 用于描述复合 PodGroup 级别、不涉及“全有或全无”（gang）调度的约束。
 }
 
-// CompositeGangSchedulingPolicy indicates that the groups belonging to the composite group
-// should be scheduled using all-or-nothing semantics.
+// CompositeGangSchedulingPolicy 表示复合组中的各子组应使用全有或全无语义调度。
 type CompositeGangSchedulingPolicy struct {
-	// minGroupCount is the minimum number of child groups that must be schedulable
-	// or scheduled at the same time for the scheduler to admit the entire group.
-	// It must be a positive integer.
+	// minGroupCount 是调度器接纳整个组前，必须可同时调度或已调度的子组最小数量。
+	// 必须为正整数。
 	//
 	// +required
 	// +k8s:required
@@ -1347,19 +1201,20 @@ type CompositeGangSchedulingPolicy struct {
 	MinGroupCount int32 `json:"minGroupCount" protobuf:"varint,1,req,name=minGroupCount"`
 }
 
-// CompositeDisruptionMode defines how individual entities within a composite pod group can be disrupted.
-// Exactly one mode must be set.
+// CompositeDisruptionMode 定义复合 PodGroup 中各实体可被中断的方式。
+// 必须且只能设置一种模式。
 //
+
 // +union
 type CompositeDisruptionMode struct {
-	// single specifies that children groups can be disrupted independently from each other.
+	// single 指定各子组可彼此独立地被中断。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	Single *SingleCompositeDisruptionMode `json:"single,omitempty" protobuf:"bytes,1,opt,name=single"`
 
-	// all specifies that all children groups can only be disrupted together.
+	// all 指定所有子组只能作为一个整体被中断。
 	//
 	// +optional
 	// +k8s:optional
@@ -1367,43 +1222,35 @@ type CompositeDisruptionMode struct {
 	All *AllCompositeDisruptionMode `json:"all,omitempty" protobuf:"bytes,2,opt,name=all"`
 }
 
-// SingleCompositeDisruptionMode means that individual children of a CompositePodGroup
-// can be disrupted or preempted independently.
+// SingleCompositeDisruptionMode 表示 CompositePodGroup 的各子对象可被独立中断或抢占。
 type SingleCompositeDisruptionMode struct {
-	// This is intentionally empty.
+	// 此结构故意留空。
 }
 
-// AllCompositeDisruptionMode means that children of a CompositePodGroup can only be
-// disrupted or preempted together.
+// AllCompositeDisruptionMode 表示 CompositePodGroup 的各子对象只能作为一个整体被中断或抢占。
 type AllCompositeDisruptionMode struct {
-	// This is intentionally empty.
+	// 此结构故意留空。
 }
 
-// CompositePodGroupStatus represents information about the status of a composite pod group.
+// CompositePodGroupStatus 表示复合 PodGroup 的状态信息。
 type CompositePodGroupStatus struct {
-	// conditions represent the latest observations of the CompositePodGroup's state.
+	// conditions 是对 CompositePodGroup 状态的最新观测。
 	//
-	// Known condition types:
-	// - "CompositePodGroupInitiallyScheduled": Indicates whether the overall scheduling requirement
-	//   for the subtree under this CompositePodGroup has been satisfied. Once this condition
-	//   transitions to True, it serves as a terminal state and will never revert to False,
-	//   even if pods are subsequently deleted and group constraints are no longer met.
-	// - "DisruptionTarget": Indicates whether the CompositePodGroup is about to be terminated
-	//   due to disruption such as preemption.
+	// 已知条件类型：
+	// - "CompositePodGroupInitiallyScheduled"：表示此 CompositePodGroup 下整棵子树的调度要求
+	//   是否已满足。一旦转为 True 即为终态，即使随后 Pod 被删除、组约束不再满足，也不会回退为 False。
+	// - "DisruptionTarget"：表示 CompositePodGroup 即将因抢占等中断而终止。
 	//
-	// Known reasons for the CompositePodGroupInitiallyScheduled condition:
-	// - "Unschedulable": The CompositePodGroup's subtree could not be placed due to resource constraints,
-	//   affinity/anti-affinity, or topological constraints.
-	// - "SchedulerError": The CompositePodGroup cannot be scheduled due to some internal error
-	//   that occurred during scheduling.
-	// - "Invalid": Set to True when kube-scheduler detects an invalid group layout during
-	//   runtime validation. The `message` field details the specific layout violation (such as
-	//   a detected cycle, exceeding the maximum depth of 4, or referencing multiple distinct Workloads).
+	// CompositePodGroupInitiallyScheduled 条件的已知原因：
+	// - "Unschedulable"：因资源限制、亲和/反亲和或拓扑约束而无法放置子树。
+	// - "SchedulerError"：因调度过程中发生的内部错误而无法调度。
+	// - "Invalid"：kube-scheduler 在运行时校验中检测到无效组布局时置为 True。
+	//   `message` 字段详述具体的布局违规（如检测到环、深度超过 4、引用多个不同 Workload）。
 	//
-	// Known reasons for the DisruptionTarget condition:
-	// - "PreemptionByScheduler": The CompositePodGroup was targeted by the scheduler's preemption loop
-	//   to free up capacity for higher-priority preemptors.
+	// DisruptionTarget 条件的已知原因：
+	// - "PreemptionByScheduler"：CompositePodGroup 被调度器抢占循环选中，为更高优先级的抢占者腾出容量。
 	//
+
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -1415,10 +1262,9 @@ type CompositePodGroupStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// CompositePodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a CompositePodGroup.
+// CompositePodGroupSchedulingConstraints 定义 CompositePodGroup 的调度约束（如拓扑）。
 type CompositePodGroupSchedulingConstraints struct {
-	// topology defines the topology constraints for the composite pod group.
-	// Currently only a single topology constraint can be specified. This may change in the future.
+	// topology 定义复合 PodGroup 的拓扑约束，目前只能指定一条，将来可能改变。
 	//
 	// +optional
 	// +k8s:optional

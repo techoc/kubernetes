@@ -22,26 +22,26 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名（核心组为空字符串）。
 const GroupName = ""
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册本包对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数，生成函数的注册放在生成文件中。
+	// 这样即使生成文件缺失，代码也能编译。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 将本组类型注册到给定的 scheme。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 将已知类型列表添加到给定的 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Pod{},
@@ -89,10 +89,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ConfigMapList{},
 	)
 
-	// Add common types
+	// 注册各版本通用的类型。
 	scheme.AddKnownTypes(SchemeGroupVersion, &metav1.Status{})
 
-	// Add the watch version that applies
+	// 注册适用于该组版本的 watch 事件类型（WatchEvent、ListOptions 等）。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

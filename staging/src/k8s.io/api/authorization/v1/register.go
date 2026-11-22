@@ -22,26 +22,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名
 const GroupName = "authorization.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受一个不带组名的资源名，返回带组限定的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// SchemeBuilder 收集本组类型的注册函数。
+	// localSchemeBuilder 是 SchemeBuilder 的本地别名。
+	// AddToScheme 将本组类型注册到给定 scheme。
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一并迁移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 仍留在 k8s.io/kubernetes。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 向给定 scheme 注册本组的所有已知类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&SelfSubjectRulesReview{},

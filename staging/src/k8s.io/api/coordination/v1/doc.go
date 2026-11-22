@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=coordination.k8s.io
 
+// Package v1 是 coordination.k8s.io API 组的 v1 版本，包含 Lease 等协调相关类型。
 package v1

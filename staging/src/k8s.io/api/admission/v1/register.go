@@ -22,28 +22,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name for this API.
+// GroupName 是本 API 的组名。
 const GroupName = "admission.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一并移到 k8s.io/api。
+// localSchemeBuilder 和 AddToScheme 留在 k8s.io/kubernetes。
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
-	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
+	// SchemeBuilder 指向添加到 Scheme 的注册函数列表；延迟注册，由调用方决定目标 scheme。
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+	// localSchemeBuilder 指向 SchemeBuilder，供本包内部复用。
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme.
+	// AddToScheme 把本组版本的键与类型映射到给定 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 将已知类型列表注册到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&AdmissionReview{},

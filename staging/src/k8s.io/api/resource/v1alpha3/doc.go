@@ -22,5 +22,5 @@ limitations under the License.
 
 // +groupName=resource.k8s.io
 
-// Package v1alpha3 is the v1alpha3 version of the resource API.
+// Package v1alpha3 是 resource API 的 v1alpha3 版本。
 package v1alpha3

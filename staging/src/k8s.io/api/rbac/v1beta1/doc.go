@@ -22,4 +22,6 @@ limitations under the License.
 
 // +groupName=rbac.authorization.k8s.io
 
+// Package v1beta1 持有 API 组 "rbac.authorization.k8s.io" 的 v1beta1 版本类型，
+// 即基于角色的访问控制（RBAC）的 beta 版本定义。
 package v1beta1

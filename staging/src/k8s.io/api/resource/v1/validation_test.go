@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestValidateDeviceAttribute 验证 DeviceAttribute 的校验逻辑：
+// 合法值、缺失值以及多值冲突。
 func TestValidateDeviceAttribute(t *testing.T) {
 	testcases := map[string]struct {
 		attribute *resourceapi.DeviceAttribute
@@ -75,6 +77,8 @@ func TestValidateDeviceAttribute(t *testing.T) {
 	}
 }
 
+// TestValidateNetworkDeviceData 验证 NetworkDeviceData 的校验逻辑：
+// 接口名长度、IP 数量与重复、硬件地址长度。
 func TestValidateNetworkDeviceData(t *testing.T) {
 	tooManyIPs := make([]string, 17)
 	for i := range tooManyIPs {

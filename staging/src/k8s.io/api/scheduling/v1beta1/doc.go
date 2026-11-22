@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=scheduling.k8s.io
 
+// Package scheduling 包含 scheduling API 组的类型定义。
 package v1beta1

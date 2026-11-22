@@ -17,58 +17,61 @@ limitations under the License.
 package v1
 
 const (
+	// LabelHostname 是节点的主机名标签。
 	LabelHostname = "kubernetes.io/hostname"
 
-	// Label value is the network location of kube-apiserver stored as <ip:port>
-	// Stored in APIServer Identity lease objects to view what address is used for peer proxy
+	// 标签值是以 <ip:port> 格式保存的 kube-apiserver 网络位置。
+	// 存于 APIServer Identity lease 对象中，用于查看 peer proxy 使用的地址。
 	AnnotationPeerAdvertiseAddress = "kubernetes.io/peer-advertise-address"
 
-	LabelTopologyZone   = "topology.kubernetes.io/zone"
+	// LabelTopologyZone 是节点所在的拓扑区域标签。
+	LabelTopologyZone = "topology.kubernetes.io/zone"
+	// LabelTopologyRegion 是节点所在的拓扑地域标签。
 	LabelTopologyRegion = "topology.kubernetes.io/region"
 
-	// These label have been deprecated since 1.17, but will be supported for
-	// the foreseeable future, to accommodate things like long-lived PVs that
-	// use them.  New users should prefer the "topology.kubernetes.io/*"
-	// equivalents.
-	LabelFailureDomainBetaZone   = "failure-domain.beta.kubernetes.io/zone"   // deprecated
-	LabelFailureDomainBetaRegion = "failure-domain.beta.kubernetes.io/region" // deprecated
+	// 这些标签自 1.17 起已废弃，但在可预见的未来仍会支持，
+	// 以兼容使用它们的长生命周期 PV 等对象。新用户应使用
+	// "topology.kubernetes.io/*" 等价标签。
+	LabelFailureDomainBetaZone   = "failure-domain.beta.kubernetes.io/zone"   // 已废弃
+	LabelFailureDomainBetaRegion = "failure-domain.beta.kubernetes.io/region" // 已废弃
 
-	// Retained for compat when vendored.  Do not use these consts in new code.
-	LabelZoneFailureDomain       = LabelFailureDomainBetaZone   // deprecated
-	LabelZoneRegion              = LabelFailureDomainBetaRegion // deprecated
-	LabelZoneFailureDomainStable = LabelTopologyZone            // deprecated
-	LabelZoneRegionStable        = LabelTopologyRegion          // deprecated
+	// 为 vendor 兼容而保留。新代码不要使用这些常量。
+	LabelZoneFailureDomain       = LabelFailureDomainBetaZone   // 已废弃
+	LabelZoneRegion              = LabelFailureDomainBetaRegion // 已废弃
+	LabelZoneFailureDomainStable = LabelTopologyZone            // 已废弃
+	LabelZoneRegionStable        = LabelTopologyRegion          // 已废弃
 
-	LabelInstanceType       = "beta.kubernetes.io/instance-type"
+	// LabelInstanceType 是 beta 版的节点实例类型标签。
+	LabelInstanceType = "beta.kubernetes.io/instance-type"
+	// LabelInstanceTypeStable 是稳定的节点实例类型标签。
 	LabelInstanceTypeStable = "node.kubernetes.io/instance-type"
 
-	LabelOSStable   = "kubernetes.io/os"
+	// LabelOSStable 是稳定的节点操作系统标签。
+	LabelOSStable = "kubernetes.io/os"
+	// LabelArchStable 是稳定的节点架构标签。
 	LabelArchStable = "kubernetes.io/arch"
 
-	// LabelWindowsBuild is used on Windows nodes to specify the Windows build number starting with v1.17.0.
-	// It's in the format MajorVersion.MinorVersion.BuildNumber (for ex: 10.0.17763)
+	// LabelWindowsBuild 自 v1.17.0 起用于 Windows 节点，指定 Windows 构建号。
+	// 格式为 MajorVersion.MinorVersion.BuildNumber（例如 10.0.17763）。
 	LabelWindowsBuild = "node.kubernetes.io/windows-build"
 
-	// LabelNamespaceSuffixKubelet is an allowed label namespace suffix kubelets can self-set ([*.]kubelet.kubernetes.io/*)
+	// LabelNamespaceSuffixKubelet 是 kubelet 可自行设置的标签命名空间后缀（[*.]kubelet.kubernetes.io/*）。
 	LabelNamespaceSuffixKubelet = "kubelet.kubernetes.io"
-	// LabelNamespaceSuffixNode is an allowed label namespace suffix kubelets can self-set ([*.]node.kubernetes.io/*)
+	// LabelNamespaceSuffixNode 是 kubelet 可自行设置的标签命名空间后缀（[*.]node.kubernetes.io/*）。
 	LabelNamespaceSuffixNode = "node.kubernetes.io"
 
-	// LabelNamespaceNodeRestriction is a forbidden label namespace that kubelets may not self-set when the NodeRestriction admission plugin is enabled
+	// LabelNamespaceNodeRestriction 是启用 NodeRestriction 准入插件时 kubelet 不得自行设置的禁用标签命名空间。
 	LabelNamespaceNodeRestriction = "node-restriction.kubernetes.io"
 
-	// IsHeadlessService is added by Controller to an Endpoint denoting if its parent
-	// Service is Headless. The existence of this label can be used further by other
-	// controllers and kube-proxy to check if the Endpoint objects should be replicated when
-	// using Headless Services
+	// IsHeadlessService 由 Controller 添加到 Endpoint，表示其父 Service 是否为 Headless。
+	// 其他控制器和 kube-proxy 可据此判断使用 Headless Service 时是否应复制 Endpoint 对象。
 	IsHeadlessService = "service.kubernetes.io/headless"
 
-	// LabelNodeExcludeBalancers specifies that the node should not be considered as a target
-	// for external load-balancers which use nodes as a second hop (e.g. many cloud LBs which only
-	// understand nodes). For services that use externalTrafficPolicy=Local, this may mean that
-	// any backends on excluded nodes are not reachable by those external load-balancers.
-	// Implementations of this exclusion may vary based on provider.
+	// LabelNodeExcludeBalancers 指定该节点不应作为以节点为第二跳的外部负载均衡器的目标
+	// （例如许多只识别节点的云 LB）。对外服务若使用 externalTrafficPolicy=Local，
+	// 这可能意味着被排除节点上的后端对这些外部负载均衡器不可达。
+	// 具体排除实现因云厂商而异。
 	LabelNodeExcludeBalancers = "node.kubernetes.io/exclude-from-external-load-balancers"
-	// LabelMetadataName is the label name which, in-tree, is used to automatically label namespaces, so they can be selected easily by tools which require definitive labels
+	// LabelMetadataName 是 tree 内用于自动标注命名空间标签名，便于需要确定性标签的工具选择命名空间。
 	LabelMetadataName = "kubernetes.io/metadata.name"
 )

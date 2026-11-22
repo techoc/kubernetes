@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=apidiscovery.k8s.io
 
+// Package v2beta1 是 v2beta1 版本的 API 定义。
 package v2beta1

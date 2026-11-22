@@ -21,4 +21,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.authentication.v1beta1
 
+// Package v1beta1 是 authentication API 的 v1beta1 版本。
 package v1beta1

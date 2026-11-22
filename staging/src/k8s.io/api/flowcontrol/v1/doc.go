@@ -22,5 +22,5 @@ limitations under the License.
 
 // +groupName=flowcontrol.apiserver.k8s.io
 
-// Package v1 holds api types of version v1 for group "flowcontrol.apiserver.k8s.io".
+// Package v1 包含 API 组 "flowcontrol.apiserver.k8s.io" 的 v1 版本类型。
 package v1

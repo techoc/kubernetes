@@ -21,4 +21,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.storage.v1
 
+// Package v1 是 storage API 的 v1 版本。
 package v1

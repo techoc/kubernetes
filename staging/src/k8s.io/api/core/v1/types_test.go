@@ -22,9 +22,8 @@ import (
 	"testing"
 )
 
-// Test_ServiceSpecRemovedFieldProtobufNumberReservation tests that the reserved protobuf field numbers
-// for removed fields are not re-used. DO NOT remove this test for any reason, this ensures that tombstoned
-// protobuf field numbers are not accidentally reused by other fields.
+// Test_ServiceSpecRemovedFieldProtobufNumberReservation 校验已移除字段预留的 protobuf 字段号没有被复用。
+// 无论如何都不要删除本测试：它确保墓碑化的 protobuf 字段号不会被其他字段意外占用。
 func Test_ServiceSpecRemovedFieldProtobufNumberReservation(t *testing.T) {
 	obj := reflect.ValueOf(ServiceSpec{}).Type()
 	for i := 0; i < obj.NumField(); i++ {
@@ -40,7 +39,7 @@ func Test_ServiceSpecRemovedFieldProtobufNumberReservation(t *testing.T) {
 	}
 }
 
-// TestEphemeralContainer ensures that the tags of Container and EphemeralContainerCommon are kept in sync.
+// TestEphemeralContainer 确保 Container 与 EphemeralContainerCommon 的字段标签保持同步。
 func TestEphemeralContainer(t *testing.T) {
 	ephemeralType := reflect.TypeOf(EphemeralContainerCommon{})
 	containerType := reflect.TypeOf(Container{})
@@ -59,6 +58,8 @@ func TestEphemeralContainer(t *testing.T) {
 	}
 }
 
+// TestNoBindingDeprecation 确保 Binding 类型未被标记为 deprecated：
+// binding 子资源仍在使用，并未弃用。
 func TestNoBindingDeprecation(t *testing.T) {
 	var binding any = new(Binding)
 	if _, ok := binding.(interface {

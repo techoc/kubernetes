@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=scheduling.k8s.io
 
+// Package v1 定义 scheduling.k8s.io API 组的 v1 版本类型。
 package v1

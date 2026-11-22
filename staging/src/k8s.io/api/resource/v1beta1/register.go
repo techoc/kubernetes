@@ -22,26 +22,26 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名
 const GroupName = "resource.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受无组限定的资源名，返回带组限定的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数。生成函数的注册
+	// 在生成文件中完成。这种分离保证
+	// 即使生成文件缺失，代码也能编译
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表注册到给定的 scheme
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&DeviceClass{},
@@ -54,7 +54,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ResourceSliceList{},
 	)
 
-	// Add the watch version that applies
+	// 注册适用的 watch 版本
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

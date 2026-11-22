@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.autoscaling.v1
 
+// Package v1 是 autoscaling API 组的 v1 版本，包含 HorizontalPodAutoscaler 等自动扩缩容类型。
 package v1

@@ -22,5 +22,5 @@ limitations under the License.
 
 // +groupName=
 
-// Package v1 is the v1 version of the core API.
+// Package v1 是核心 API 的 v1 版本。
 package v1

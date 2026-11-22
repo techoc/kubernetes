@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=authorization.k8s.io
 
+// Package v1 是 authorization API 的 v1 版本。
 package v1

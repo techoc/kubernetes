@@ -22,29 +22,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "networking.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册本包对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder holds functions that add things to a scheme
+	// SchemeBuilder 保存向 scheme 添加内容的函数。
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// localSchemeBuilder 和 AddToScheme 会保留在 k8s.io/kubernetes 中。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
 
-	// AddToScheme adds the types of this group into the given scheme.
+	// AddToScheme 将本组的类型添加到给定的 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 将已知类型列表添加到给定的 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Ingress{},
@@ -56,7 +56,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ServiceCIDR{},
 		&ServiceCIDRList{},
 	)
-	// Add the watch version that applies
+	// 注册适用于该组版本的 watch 事件类型。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// TestOpenAPIDefinitionNames 验证反射生成的 OpenAPI 模型名与查找时使用的名字一致
 func TestOpenAPIDefinitionNames(t *testing.T) {
 	scheme := runtime.NewScheme()
 	for _, builder := range groups {
@@ -59,13 +60,15 @@ func TestOpenAPIDefinitionNames(t *testing.T) {
 	}
 }
 
+// OpenAPIModelNamer 定义获取 OpenAPI 模型名的接口
 type OpenAPIModelNamer interface {
 	OpenAPIModelName() string
 }
 
+// ToRESTFriendlyName 将包名转换为 OpenAPI 使用的 REST 友好名称
 func ToRESTFriendlyName(name string) string {
 	nameParts := strings.Split(name, "/")
-	// Reverse first part. e.g., io.k8s... instead of k8s.io...
+	// 反转第一段，例如得到 io.k8s... 而非 k8s.io...
 	if len(nameParts) > 0 && strings.Contains(nameParts[0], ".") {
 		parts := strings.Split(nameParts[0], ".")
 		for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {

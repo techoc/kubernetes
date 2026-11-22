@@ -22,40 +22,40 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名。
 const GroupName = "certificates.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受一个非限定 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受一个非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是 scheme builder，包含本 API 包要运行的 scheme 初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 
 	localSchemeBuilder = &SchemeBuilder
 
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是全局函数，将此 API 组和版本注册到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 将已知类型列表添加到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ClusterTrustBundle{},
 		&ClusterTrustBundleList{},
 	)
 
-	// Add the watch version that applies
+	// 注册适用的 watch 版本，使该组版本支持监听。
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

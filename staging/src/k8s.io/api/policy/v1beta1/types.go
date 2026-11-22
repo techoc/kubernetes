@@ -21,126 +21,94 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// PodDisruptionBudgetSpec is a description of a PodDisruptionBudget.
+// PodDisruptionBudgetSpec 描述 PodDisruptionBudget 的期望行为。
 type PodDisruptionBudgetSpec struct {
-	// minAvailable indicates that an eviction is allowed if at least "minAvailable" pods selected by
-	// "selector" will still be available after the eviction, i.e. even in the
-	// absence of the evicted pod.  So for example you can prevent all voluntary
-	// evictions by specifying "100%".
+	// 仅当驱逐后 selector 选中的 pod 中仍至少有 minAvailable 个可用时，才允许驱逐。
+	// 例如设为 "100%" 可以阻止所有主动驱逐。
 	// +optional
 	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty" protobuf:"bytes,1,opt,name=minAvailable"`
 
-	// selector is a label query over pods whose evictions are managed by the disruption
-	// budget.
-	// A null selector selects no pods.
-	// An empty selector ({}) also selects no pods, which differs from standard behavior of selecting all pods.
-	// In policy/v1, an empty selector will select all pods in the namespace.
+	// 用于筛选受该 PDB 管理的 pod 的标签查询。
+	// nil selector 不选中任何 pod。
+	// 空 selector ({}) 同样不选中任何 pod，这与通常选中全部 pod 的语义不同。
+	// policy/v1 中空 selector 会选中命名空间内所有 pod。
 	// +optional
 	Selector *metav1.LabelSelector `json:"selector,omitempty" protobuf:"bytes,2,opt,name=selector"`
 
-	// maxUnavailable indicates that an eviction is allowed if at most "maxUnavailable" pods selected by
-	// "selector" are unavailable after the eviction, i.e. even in absence of
-	// the evicted pod. For example, one can prevent all voluntary evictions
-	// by specifying 0. This is a mutually exclusive setting with "minAvailable".
+	// 仅当驱逐后 selector 选中的 pod 中不可用的数量不超过 maxUnavailable 时，才允许驱逐。
+	// 例如设为 0 可阻止所有主动驱逐。与 minAvailable 互斥。
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,3,opt,name=maxUnavailable"`
 
-	// unhealthyPodEvictionPolicy defines the criteria for when unhealthy pods
-	// should be considered for eviction. Current implementation considers healthy pods,
-	// as pods that have status.conditions item with type="Ready",status="True".
+	// 定义不健康 pod 是否可被驱逐的判定标准。当前实现将具备
+	// status.conditions 中 type="Ready"、status="True" 的 pod 视为健康。
 	//
-	// Valid policies are IfHealthyBudget and AlwaysAllow.
-	// If no policy is specified, the default behavior will be used,
-	// which corresponds to the IfHealthyBudget policy.
+	// 合法取值为 IfHealthyBudget 和 AlwaysAllow；未指定时默认 IfHealthyBudget。
 	//
-	// IfHealthyBudget policy means that running pods (status.phase="Running"),
-	// but not yet healthy can be evicted only if the guarded application is not
-	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
-	// Healthy pods will be subject to the PDB for eviction.
+	// IfHealthyBudget：运行中的 pod（status.phase="Running"）若尚未健康，
+	// 仅当受保护应用未中断（currentHealthy >= desiredHealthy）时才可驱逐。
+	// 健康 pod 始终受 PDB 约束。
 	//
-	// AlwaysAllow policy means that all running pods (status.phase="Running"),
-	// but not yet healthy are considered disrupted and can be evicted regardless
-	// of whether the criteria in a PDB is met. This means perspective running
-	// pods of a disrupted application might not get a chance to become healthy.
-	// Healthy pods will be subject to the PDB for eviction.
+	// AlwaysAllow：所有运行中但尚未健康的 pod 均被视为已中断，
+	// 即使不满足 PDB 条件也可驱逐。这可能导致已中断应用的 pod 没有机会恢复健康。
+	// 健康 pod 始终受 PDB 约束。
 	//
-	// Additional policies may be added in the future.
-	// Clients making eviction decisions should disallow eviction of unhealthy pods
-	// if they encounter an unrecognized policy in this field.
+	// 后续可能新增策略。客户端遇到无法识别的取值时，应禁止驱逐不健康 pod。
 	// +optional
 	UnhealthyPodEvictionPolicy *UnhealthyPodEvictionPolicyType `json:"unhealthyPodEvictionPolicy,omitempty" protobuf:"bytes,4,opt,name=unhealthyPodEvictionPolicy"`
 }
 
-// UnhealthyPodEvictionPolicyType defines the criteria for when unhealthy pods
-// should be considered for eviction.
+// UnhealthyPodEvictionPolicyType 定义不健康 pod 是否可被驱逐的判定标准。
 // +enum
 type UnhealthyPodEvictionPolicyType string
 
 const (
-	// IfHealthyBudget policy means that running pods (status.phase="Running"),
-	// but not yet healthy can be evicted only if the guarded application is not
-	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
-	// Healthy pods will be subject to the PDB for eviction.
+	// 运行中的 pod 若尚未健康，仅当受保护应用未中断时才可驱逐，
+	// 即 currentHealthy >= desiredHealthy；健康 pod 始终受 PDB 约束。
 	IfHealthyBudget UnhealthyPodEvictionPolicyType = "IfHealthyBudget"
 
-	// AlwaysAllow policy means that all running pods (status.phase="Running"),
-	// but not yet healthy are considered disrupted and can be evicted regardless
-	// of whether the criteria in a PDB is met. This means perspective running
-	// pods of a disrupted application might not get a chance to become healthy.
-	// Healthy pods will be subject to the PDB for eviction.
+	// 所有运行中但尚未健康的 pod 均被视为已中断，即使不满足 PDB 条件也可驱逐。
+	// 这可能导致已中断应用的 pod 没有机会恢复健康；健康 pod 始终受 PDB 约束。
 	AlwaysAllow UnhealthyPodEvictionPolicyType = "AlwaysAllow"
 )
 
-// PodDisruptionBudgetStatus represents information about the status of a
-// PodDisruptionBudget. Status may trail the actual state of a system.
+// PodDisruptionBudgetStatus 记录 PodDisruptionBudget 的状态，可能滞后于系统实际状态。
 type PodDisruptionBudgetStatus struct {
-	// Most recent generation observed when updating this PDB status. DisruptionsAllowed and other
-	// status information is valid only if observedGeneration equals to PDB's object generation.
+	// 更新本状态时观测到的最新 generation。
+	// 仅在 observedGeneration 等于 PDB 对象 generation 时，状态信息才有效。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
 
-	// DisruptedPods contains information about pods whose eviction was
-	// processed by the API server eviction subresource handler but has not
-	// yet been observed by the PodDisruptionBudget controller.
-	// A pod will be in this map from the time when the API server processed the
-	// eviction request to the time when the pod is seen by PDB controller
-	// as having been marked for deletion (or after a timeout). The key in the map is the name of the pod
-	// and the value is the time when the API server processed the eviction request. If
-	// the deletion didn't occur and a pod is still there it will be removed from
-	// the list automatically by PodDisruptionBudget controller after some time.
-	// If everything goes smooth this map should be empty for the most of the time.
-	// Large number of entries in the map may indicate problems with pod deletions.
+	// 记录已被 API server eviction 子资源处理、但 PDB 控制器尚未观测到的 pod。
+	// 条目从 API server 处理驱逐请求起保留，直到控制器看到该 pod 被标记删除（或超时）。
+	// key 为 pod 名，value 为处理驱逐请求的时间。若 pod 未被删除，
+	// PDB 控制器会在一段时间后自动清除该条目。
+	// 正常情况下该 map 基本为空；条目过多通常意味着 pod 删除存在问题。
 	// +optional
 	DisruptedPods map[string]metav1.Time `json:"disruptedPods,omitempty" protobuf:"bytes,2,rep,name=disruptedPods"`
 
-	// Number of pod disruptions that are currently allowed.
+	// 当前允许的驱逐数量。
 	// +optional
 	DisruptionsAllowed int32 `json:"disruptionsAllowed" protobuf:"varint,3,opt,name=disruptionsAllowed"`
 
-	// current number of healthy pods
+	// 当前健康 pod 数量。
 	// +optional
 	CurrentHealthy int32 `json:"currentHealthy" protobuf:"varint,4,opt,name=currentHealthy"`
 
-	// minimum desired number of healthy pods
+	// 期望的最小健康 pod 数量。
 	// +optional
 	DesiredHealthy int32 `json:"desiredHealthy" protobuf:"varint,5,opt,name=desiredHealthy"`
 
-	// total number of pods counted by this disruption budget
+	// 本 PDB 统计的 pod 总数。
 	// +optional
 	ExpectedPods int32 `json:"expectedPods" protobuf:"varint,6,opt,name=expectedPods"`
 
-	// Conditions contain conditions for PDB. The disruption controller sets the
-	// DisruptionAllowed condition. The following are known values for the reason field
-	// (additional reasons could be added in the future):
-	// - SyncFailed: The controller encountered an error and wasn't able to compute
-	//               the number of allowed disruptions. Therefore no disruptions are
-	//               allowed and the status of the condition will be False.
-	// - InsufficientPods: The number of pods are either at or below the number
-	//                     required by the PodDisruptionBudget. No disruptions are
-	//                     allowed and the status of the condition will be False.
-	// - SufficientPods: There are more pods than required by the PodDisruptionBudget.
-	//                   The condition will be True, and the number of allowed
-	//                   disruptions are provided by the disruptionsAllowed property.
+	// PDB 的条件列表，由 disruption 控制器设置 DisruptionAllowed 条件。
+	// reason 字段已知取值如下（后续可能新增）：
+	// - SyncFailed：控制器出错，无法计算允许的驱逐数，条件状态为 False。
+	// - InsufficientPods：pod 数量达到或低于 PDB 要求，不允许驱逐，条件状态为 False。
+	// - SufficientPods：pod 数量超过 PDB 要求，条件状态为 True，
+	//                   允许的驱逐数见 disruptionsAllowed。
 	//
 	// +optional
 	// +patchMergeKey=type
@@ -154,18 +122,14 @@ type PodDisruptionBudgetStatus struct {
 }
 
 const (
-	// DisruptionAllowedCondition is a condition set by the disruption controller
-	// that signal whether any of the pods covered by the PDB can be disrupted.
+	// disruption 控制器设置的条件，表示 PDB 覆盖的 pod 是否可被驱逐。
 	DisruptionAllowedCondition = "DisruptionAllowed"
 
-	// SyncFailedReason is set on the DisruptionAllowed condition if reconcile
-	// of the PDB failed and therefore disruption of pods are not allowed.
+	// PDB 协调失败、因而不允许驱逐时设置的 reason。
 	SyncFailedReason = "SyncFailed"
-	// SufficientPodsReason is set on the DisruptionAllowed condition if there are
-	// more pods covered by the PDB than required and at least one can be disrupted.
+	// pod 数量超过 PDB 要求、至少有一个可驱逐时设置的 reason。
 	SufficientPodsReason = "SufficientPods"
-	// InsufficientPodsReason is set on the DisruptionAllowed condition if the number
-	// of pods are equal to or fewer than required by the PDB.
+	// pod 数量达到或低于 PDB 要求时设置的 reason。
 	InsufficientPodsReason = "InsufficientPods"
 )
 
@@ -176,20 +140,20 @@ const (
 // +k8s:prerelease-lifecycle-gen:removed=1.25
 // +k8s:prerelease-lifecycle-gen:replacement=policy,v1,PodDisruptionBudget
 
-// PodDisruptionBudget is an object to define the max disruption that can be caused to a collection of pods
+// PodDisruptionBudget 定义一组 pod 允许承受的最大中断程度。
 // +k8s:supportsSubresource="/status"
 type PodDisruptionBudget struct {
 	metav1.TypeMeta `json:""`
 
-	// metadata is the standard object's metadata.
+	// 标准对象元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec is the specification of the desired behavior of the PodDisruptionBudget.
+	// PodDisruptionBudget 期望行为的规格。
 	// +optional
 	Spec PodDisruptionBudgetSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// status is the most recently observed status of the PodDisruptionBudget.
+	// PodDisruptionBudget 最近一次观测到的状态。
 	// +optional
 	Status PodDisruptionBudgetStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -200,15 +164,15 @@ type PodDisruptionBudget struct {
 // +k8s:prerelease-lifecycle-gen:removed=1.25
 // +k8s:prerelease-lifecycle-gen:replacement=policy,v1,PodDisruptionBudgetList
 
-// PodDisruptionBudgetList is a collection of PodDisruptionBudgets.
+// PodDisruptionBudgetList 是 PodDisruptionBudget 的集合。
 type PodDisruptionBudgetList struct {
 	metav1.TypeMeta `json:""`
 
-	// Standard object's metadata.
+	// 标准对象元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// items list individual PodDisruptionBudget objects
+	// items 为各个 PodDisruptionBudget 对象。
 	Items []PodDisruptionBudget `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -218,18 +182,17 @@ type PodDisruptionBudgetList struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.5
 // +k8s:prerelease-lifecycle-gen:deprecated=1.22
 
-// Eviction evicts a pod from its node subject to certain policies and safety constraints.
-// This is a subresource of Pod.  A request to cause such an eviction is
-// created by POSTing to .../pods/<pod name>/evictions.
+// Eviction 在满足特定策略和安全约束的前提下将 pod 从其节点驱逐。
+// 它是 Pod 的子资源，通过 POST .../pods/<pod name>/evictions 发起驱逐请求。
 type Eviction struct {
 	metav1.TypeMeta `json:""`
 
-	// metadata describes the pod that is being evicted.
+	// 描述待驱逐 pod 的元数据。
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// deleteOptions may be provided
+	// 可选的删除参数。
 	// +optional
 	DeleteOptions *metav1.DeleteOptions `json:"deleteOptions,omitempty" protobuf:"bytes,2,opt,name=deleteOptions"`
 }

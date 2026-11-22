@@ -24,12 +24,18 @@ import (
 )
 
 const (
+	// ControllerRevisionHashLabelKey 是存储 ControllerRevision 哈希的 label key。
 	ControllerRevisionHashLabelKey = "controller-revision-hash"
-	StatefulSetRevisionLabel       = ControllerRevisionHashLabelKey
-	DeprecatedRollbackTo           = "deprecated.deployment.rollback.to"
-	DeprecatedTemplateGeneration   = "deprecated.daemonset.template.generation"
-	StatefulSetPodNameLabel        = "statefulset.kubernetes.io/pod-name"
-	PodIndexLabel                  = "apps.kubernetes.io/pod-index"
+	// StatefulSetRevisionLabel 是 StatefulSet 修订版本的 label，与 ControllerRevisionHashLabelKey 相同。
+	StatefulSetRevisionLabel = ControllerRevisionHashLabelKey
+	// DeprecatedRollbackTo 是已弃用的回滚目标注解 key。
+	DeprecatedRollbackTo = "deprecated.deployment.rollback.to"
+	// DeprecatedTemplateGeneration 是已弃用的 DaemonSet 模板 generation 注解 key。
+	DeprecatedTemplateGeneration = "deprecated.daemonset.template.generation"
+	// StatefulSetPodNameLabel 是记录 StatefulSet 所属 Pod 名称的 label key。
+	StatefulSetPodNameLabel = "statefulset.kubernetes.io/pod-name"
+	// PodIndexLabel 是记录 Pod 在 StatefulSet 中序号的 label key。
+	PodIndexLabel = "apps.kubernetes.io/pod-index"
 )
 
 // +genclient
@@ -39,198 +45,178 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// StatefulSet represents a set of pods with consistent identities.
-// Identities are defined as:
-//   - Network: A single stable DNS and hostname.
-//   - Storage: As many VolumeClaims as requested.
+// StatefulSet 表示一组具有一致身份的 Pod。
+// 身份定义为：
+//   - 网络：单一稳定的 DNS 和主机名。
+//   - 存储：按需提供任意数量的 VolumeClaim。
 //
-// The StatefulSet guarantees that a given network identity will always
-// map to the same storage identity.
+// StatefulSet 保证给定的网络身份始终映射到相同的存储身份。
 // +k8s:supportsSubresource="/scale"
 // +k8s:supportsSubresource="/status"
 type StatefulSet struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec defines the desired identities of pods in this set.
+	// Spec 定义该集合中 Pod 的期望身份。
 	// +required
 	Spec StatefulSetSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Status is the current status of Pods in this StatefulSet. This data
-	// may be out of date by some window of time.
+	// Status 是该 StatefulSet 中 Pod 的当前状态。这些数据
+	// 可能存在一定时间窗口的滞后。
 	// +optional
 	Status StatefulSetStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// PodManagementPolicyType defines the policy for creating pods under a stateful set.
+// PodManagementPolicyType 定义 StatefulSet 下创建 Pod 的策略。
 // +enum
 type PodManagementPolicyType string
 
 const (
-	// OrderedReadyPodManagement will create pods in strictly increasing order on
-	// scale up and strictly decreasing order on scale down, progressing only when
-	// the previous pod is ready or terminated. At most one pod will be changed
-	// at any time.
+	// OrderedReadyPodManagement 在扩容时按严格递增顺序创建 Pod，
+	// 在缩容时按严格递减顺序删除 Pod，且仅当上一个 Pod 就绪或终止后才继续。
+	// 任何时刻最多只会变更一个 Pod。
 	OrderedReadyPodManagement PodManagementPolicyType = "OrderedReady"
-	// ParallelPodManagement will create and delete pods as soon as the stateful set
-	// replica count is changed, and will not wait for pods to be ready or complete
-	// termination.
+	// ParallelPodManagement 在 StatefulSet 副本数变化后立即创建和删除 Pod，
+	// 不会等待 Pod 就绪或终止完成。
 	ParallelPodManagement PodManagementPolicyType = "Parallel"
 )
 
-// StatefulSetUpdateStrategy indicates the strategy that the StatefulSet
-// controller will use to perform updates. It includes any additional parameters
-// necessary to perform the update for the indicated strategy.
+// StatefulSetUpdateStrategy 表示 StatefulSet 控制器执行更新时使用的策略，
+// 包含按指定策略执行更新所需的其他参数。
 type StatefulSetUpdateStrategy struct {
-	// Type indicates the type of the StatefulSetUpdateStrategy.
-	// Default is RollingUpdate.
+	// Type 表示 StatefulSetUpdateStrategy 的类型。
+	// 默认为 RollingUpdate。
 	// +optional
 	Type StatefulSetUpdateStrategyType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type,casttype=StatefulSetStrategyType"`
-	// RollingUpdate is used to communicate parameters when Type is RollingUpdateStatefulSetStrategyType.
+	// 当 Type 为 RollingUpdateStatefulSetStrategyType 时，RollingUpdate 用于传递参数。
 	// +optional
 	RollingUpdate *RollingUpdateStatefulSetStrategy `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
-// StatefulSetUpdateStrategyType is a string enumeration type that enumerates
-// all possible update strategies for the StatefulSet controller.
+// StatefulSetUpdateStrategyType 是字符串枚举类型，枚举
+// StatefulSet 控制器所有可能的更新策略。
 // +enum
 type StatefulSetUpdateStrategyType string
 
 const (
-	// RollingUpdateStatefulSetStrategyType indicates that update will be
-	// applied to all Pods in the StatefulSet with respect to the StatefulSet
-	// ordering constraints. When a scale operation is performed with this
-	// strategy, new Pods will be created from the specification version indicated
-	// by the StatefulSet's updateRevision.
+	// RollingUpdateStatefulSetStrategyType 表示更新会按照 StatefulSet 的
+	// 顺序约束应用到 StatefulSet 中的所有 Pod。使用该策略执行扩容时，
+	// 新 Pod 会依据 StatefulSet 的 updateRevision 所指的 spec 版本创建。
 	RollingUpdateStatefulSetStrategyType StatefulSetUpdateStrategyType = "RollingUpdate"
-	// OnDeleteStatefulSetStrategyType disables ordered rolling restarts. Version
-	// tracking is done on a best-effort basis - the controller will try to
-	// eventually converge StatefulSet's currentRevision with updateRevision.
-	// Pods are recreated from the StatefulSetSpec when they are manually deleted.
-	// When a scale operation is performed with this strategy, new Pods will be
-	// created from the specification version indicated by the StatefulSet's updateRevision.
+	// OnDeleteStatefulSetStrategyType 禁用有序的滚动重启。版本
+	// 跟踪尽力而为——控制器会尝试最终使 StatefulSet 的 currentRevision 与 updateRevision 收敛。
+	// Pod 在被手动删除时根据 StatefulSetSpec 重建。
+	// 使用该策略执行扩容时，新 Pod 会依据 StatefulSet 的 updateRevision 所指的 spec 版本创建。
 	OnDeleteStatefulSetStrategyType StatefulSetUpdateStrategyType = "OnDelete"
-	// RecreateStatefulSetStrategyType indicates that all existing pods will be
-	// deleted and fully terminated before any new-revision pods are created.
-	// This ensures that old and new revision Pods never run at the same time.
-	// This is an alpha type and requires enabling StatefulSetRecreateStrategy feature gate.
-	// Switching to the Recreate strategy is allowed when the feature gate is enabled,
-	// and switching away from it to a different update strategy is also allowed.
+	// RecreateStatefulSetStrategyType 表示在创建任何新版本 Pod 之前，
+	// 先删除所有现有 Pod 并等待其完全终止。
+	// 这确保旧版本和新版本的 Pod 不会同时运行。
+	// 这是 alpha 类型，需要启用 StatefulSetRecreateStrategy feature gate。
+	// 启用该 feature gate 时允许切换到 Recreate 策略，也允许从该策略切换到其他更新策略。
 	//
 	// +featureGate=StatefulSetRecreateStrategy
 	RecreateStatefulSetStrategyType StatefulSetUpdateStrategyType = "Recreate"
 )
 
-// RollingUpdateStatefulSetStrategy is used to communicate parameter for RollingUpdateStatefulSetStrategyType.
+// RollingUpdateStatefulSetStrategy 用于传递 RollingUpdateStatefulSetStrategyType 的参数。
 type RollingUpdateStatefulSetStrategy struct {
-	// Partition indicates the ordinal at which the StatefulSet should be partitioned
-	// for updates. During a rolling update, all pods from ordinal Replicas-1 to
-	// Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched.
-	// This is helpful in being able to do a canary based deployment. The default value is 0.
+	// Partition 表示 StatefulSet 更新时的分区序号。滚动更新期间，
+	// 从序号 Replicas-1 到 Partition 的所有 Pod 都会被更新，
+	// 从序号 Partition-1 到 0 的所有 Pod 保持不变。
+	// 这有助于执行基于 canary 的发布。默认值为 0。
 	// +optional
 	Partition *int32 `json:"partition,omitempty" protobuf:"varint,1,opt,name=partition"`
-	// The maximum number of pods that can be unavailable during the update.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
-	// Absolute number is calculated from percentage by rounding up. This can not be 0.
-	// Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to
-	// Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it
-	// will be counted towards MaxUnavailable.
-	// This setting might not be effective for the OrderedReady podManagementPolicy. That policy ensures pods are created and become ready one at a time.
+	// 更新期间最多不可用的 Pod 数。
+	// 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。
+	// 绝对数由百分比向上取整得到，不能为 0。
+	// 默认为 1。该字段为 beta 级别，默认启用。该字段适用于 0 到
+	// Replicas-1 范围内的所有 Pod。也就是说，如果 0 到 Replicas-1 范围内存在
+	// 任何不可用的 Pod，都会计入 MaxUnavailable。
+	// 对于 OrderedReady podManagementPolicy，该设置可能不生效；该策略确保
+	// Pod 逐个创建并就绪。
 	//
 	// +featureGate=MaxUnavailableStatefulSet
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"varint,2,opt,name=maxUnavailable"`
 }
 
-// PersistentVolumeClaimRetentionPolicyType is a string enumeration of the policies that will determine
-// when volumes from the VolumeClaimTemplates will be deleted when the controlling StatefulSet is
-// deleted or scaled down.
+// PersistentVolumeClaimRetentionPolicyType 是字符串枚举，用于确定
+// 当控制它的 StatefulSet 被删除或缩容时，VolumeClaimTemplates 产生的卷何时被删除。
 type PersistentVolumeClaimRetentionPolicyType string
 
 const (
-	// RetainPersistentVolumeClaimRetentionPolicyType is the default
-	// PersistentVolumeClaimRetentionPolicy and specifies that
-	// PersistentVolumeClaims associated with StatefulSet VolumeClaimTemplates
-	// will not be deleted.
+	// RetainPersistentVolumeClaimRetentionPolicyType 是默认的
+	// PersistentVolumeClaimRetentionPolicy，指定与 StatefulSet VolumeClaimTemplates
+	// 关联的 PersistentVolumeClaims 不会被删除。
 	RetainPersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Retain"
-	// DeletePersistentVolumeClaimRetentionPolicyType specifies that
-	// PersistentVolumeClaims associated with StatefulSet VolumeClaimTemplates
-	// will be deleted in the scenario specified in
-	// StatefulSetPersistentVolumeClaimRetentionPolicy.
+	// DeletePersistentVolumeClaimRetentionPolicyType 指定
+	// 与 StatefulSet VolumeClaimTemplates 关联的 PersistentVolumeClaims
+	// 会在 StatefulSetPersistentVolumeClaimRetentionPolicy 指定的场景下被删除。
 	DeletePersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Delete"
 )
 
-// StatefulSetPersistentVolumeClaimRetentionPolicy describes the policy used for PVCs
-// created from the StatefulSet VolumeClaimTemplates.
+// StatefulSetPersistentVolumeClaimRetentionPolicy 描述对由
+// StatefulSet VolumeClaimTemplates 创建的 PVC 使用的保留策略。
 type StatefulSetPersistentVolumeClaimRetentionPolicy struct {
-	// WhenDeleted specifies what happens to PVCs created from StatefulSet
-	// VolumeClaimTemplates when the StatefulSet is deleted. The default policy
-	// of `Retain` causes PVCs to not be affected by StatefulSet deletion. The
-	// `Delete` policy causes those PVCs to be deleted.
+	// WhenDeleted 指定 StatefulSet 被删除时，由 StatefulSet VolumeClaimTemplates
+	// 创建的 PVC 会发生什么。默认策略 `Retain` 使 PVC 不受 StatefulSet 删除影响，
+	// `Delete` 策略则会删除这些 PVC。
 	// +optional
 	WhenDeleted PersistentVolumeClaimRetentionPolicyType `json:"whenDeleted,omitempty" protobuf:"bytes,1,opt,name=whenDeleted,casttype=PersistentVolumeClaimRetentionPolicyType"`
-	// WhenScaled specifies what happens to PVCs created from StatefulSet
-	// VolumeClaimTemplates when the StatefulSet is scaled down. The default
-	// policy of `Retain` causes PVCs to not be affected by a scaledown. The
-	// `Delete` policy causes the associated PVCs for any excess pods above
-	// the replica count to be deleted.
+	// WhenScaled 指定 StatefulSet 缩容时，由 StatefulSet VolumeClaimTemplates
+	// 创建的 PVC 会发生什么。默认策略 `Retain` 使 PVC 不受缩容影响，
+	// `Delete` 策略则会删除副本数之外多余 Pod 对应的 PVC。
 	// +optional
 	WhenScaled PersistentVolumeClaimRetentionPolicyType `json:"whenScaled,omitempty" protobuf:"bytes,2,opt,name=whenScaled,casttype=PersistentVolumeClaimRetentionPolicyType"`
 }
 
-// StatefulSetOrdinals describes the policy used for replica ordinal assignment
-// in this StatefulSet.
+// StatefulSetOrdinals 描述该 StatefulSet 中副本序号的分配策略。
 type StatefulSetOrdinals struct {
-	// start is the number representing the first replica's index. It may be used
-	// to number replicas from an alternate index (eg: 1-indexed) over the default
-	// 0-indexed names, or to orchestrate progressive movement of replicas from
-	// one StatefulSet to another.
-	// If set, replica indices will be in the range:
-	//   [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas).
-	// If unset, defaults to 0. Replica indices will be in the range:
-	//   [0, .spec.replicas).
+	// start 是表示首个副本索引的数字。可用它从备用索引（例如从 1 开始）
+	// 为副本编号，而非默认的从 0 开始；也可用于协调副本从一个
+	// StatefulSet 逐步迁移到另一个。
+	// 如果设置，副本索引范围为：
+	//   [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas)。
+	// 如果未设置，默认为 0，副本索引范围为：
+	//   [0, .spec.replicas)。
 	// +optional
 	Start int32 `json:"start" protobuf:"varint,1,opt,name=start"`
 }
 
-// A StatefulSetSpec is the specification of a StatefulSet.
+// StatefulSetSpec 是 StatefulSet 的 spec。
 type StatefulSetSpec struct {
-	// replicas is the desired number of replicas of the given Template.
-	// These are replicas in the sense that they are instantiations of the
-	// same Template, but individual replicas also have a consistent identity.
-	// If unspecified, defaults to 1.
-	// TODO: Consider a rename of this field.
+	// replicas 是给定 Template 的期望副本数。
+	// 这里的副本是指同一 Template 的实例，但每个副本也具有一致的身份。
+	// 如果未指定，默认为 1。
+	// TODO: 考虑重命名该字段。
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
 
-	// selector is a label query over pods that should match the replica count.
-	// It must match the pod template's labels.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// selector 是对应匹配副本数的 Pod 的 label 查询。
+	// 它必须匹配 Pod 模板的 label。
+	// 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +required
 	// +k8s:alpha(since: "1.37")=+k8s:required
 	// +k8s:alpha(since: "1.37")=+k8s:immutable
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,2,opt,name=selector"`
 
-	// template is the object that describes the pod that will be created if
-	// insufficient replicas are detected. Each pod stamped out by the StatefulSet
-	// will fulfill this Template, but have a unique identity from the rest
-	// of the StatefulSet. Each pod will be named with the format
-	// <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named
-	// "web" with index number "3" would be named "web-3".
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// template 是描述副本不足时将要创建的 Pod 的对象。
+	// StatefulSet 创建的每个 Pod 都符合该 Template，但各自具有
+	// 区别于其他 Pod 的唯一身份。每个 Pod 的命名格式为
+	// <statefulsetname>-<podindex>。例如，名为 "web" 的 StatefulSet 中
+	// 索引为 "3" 的 Pod 会被命名为 "web-3"。
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// +required
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
 
-	// volumeClaimTemplates is a list of claims that pods are allowed to reference.
-	// The StatefulSet controller is responsible for mapping network identities to
-	// claims in a way that maintains the identity of a pod. Every claim in
-	// this list must have at least one matching (by name) volumeMount in one
-	// container in the template. A claim in this list takes precedence over
-	// any volumes in the template, with the same name.
-	// TODO: Define the behavior if a claim already exists with the same name.
+	// volumeClaimTemplates 是允许 Pod 引用的 PVC 列表。
+	// StatefulSet 控制器负责以维护 Pod 身份的方式，将网络身份映射到
+	// 这些 PVC。列表中的每个 PVC 必须在模板的某个容器中至少有一个
+	// 名称匹配的 volumeMount。列表中同名的 PVC 优先于模板中的任何 volume。
+	// TODO: 定义当同名 PVC 已存在时的行为。
 	// +optional
 	// +k8s:alpha(since: "1.37")=+k8s:immutable
 	// +k8s:alpha(since: "1.37")=+k8s:optional
@@ -238,100 +224,91 @@ type StatefulSetSpec struct {
 	// +listType=atomic
 	VolumeClaimTemplates []v1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty" protobuf:"bytes,4,rep,name=volumeClaimTemplates"`
 
-	// serviceName is the name of the service that governs this StatefulSet.
-	// This service must exist before the StatefulSet, and is responsible for
-	// the network identity of the set. Pods get DNS/hostnames that follow the
-	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
-	// where "pod-specific-string" is managed by the StatefulSet controller.
+	// serviceName 是管理该 StatefulSet 的 Service 名称。
+	// 该 Service 必须在 StatefulSet 之前存在，并负责该集合的网络身份。
+	// Pod 获得的 DNS/主机名遵循以下模式：
+	// pod-specific-string.serviceName.default.svc.cluster.local
+	// 其中 "pod-specific-string" 由 StatefulSet 控制器管理。
 	// +optional
 	// +k8s:alpha(since: "1.37")=+k8s:immutable
 	// +k8s:alpha(since: "1.37")=+k8s:optional
 	ServiceName string `json:"serviceName" protobuf:"bytes,5,opt,name=serviceName"`
 
-	// podManagementPolicy controls how pods are created during initial scale up,
-	// when replacing pods on nodes, or when scaling down. The default policy is
-	// `OrderedReady`, where pods are created in increasing order (pod-0, then
-	// pod-1, etc) and the controller will wait until each pod is ready before
-	// continuing. When scaling down, the pods are removed in the opposite order.
-	// The alternative policy is `Parallel` which will create pods in parallel
-	// to match the desired scale without waiting, and on scale down will delete
-	// all pods at once.
+	// podManagementPolicy 控制初始扩容、替换节点上的 Pod 以及缩容时
+	// 如何创建 Pod。默认策略为 `OrderedReady`：Pod 按递增顺序创建
+	// （pod-0、pod-1 等），控制器会等待每个 Pod 就绪后再继续。
+	// 缩容时按相反顺序删除 Pod。
+	// 另一策略 `Parallel` 会并行创建 Pod 以快速达到期望规模而不等待，
+	// 缩容时会一次性删除所有 Pod。
 	// +optional
 	// +k8s:alpha(since: "1.37")=+k8s:immutable
 	// +k8s:alpha(since: "1.37")=+k8s:optional
 	PodManagementPolicy PodManagementPolicyType `json:"podManagementPolicy,omitempty" protobuf:"bytes,6,opt,name=podManagementPolicy,casttype=PodManagementPolicyType"`
 
-	// updateStrategy indicates the StatefulSetUpdateStrategy that will be
-	// employed to update Pods in the StatefulSet when a revision is made to
-	// Template.
+	// updateStrategy 表示当 Template 发生变更时，用于更新
+	// StatefulSet 中 Pod 的 StatefulSetUpdateStrategy。
 	// +optional
 	UpdateStrategy StatefulSetUpdateStrategy `json:"updateStrategy,omitempty" protobuf:"bytes,7,opt,name=updateStrategy"`
 
-	// revisionHistoryLimit is the maximum number of revisions that will
-	// be maintained in the StatefulSet's revision history. The revision history
-	// consists of all revisions not represented by a currently applied
-	// StatefulSetSpec version. The default value is 10.
+	// revisionHistoryLimit 是 StatefulSet 修订历史中保留的最大修订数。
+	// 修订历史由所有未被当前应用的 StatefulSetSpec 版本表示的修订组成。
+	// 默认值为 10。
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty" protobuf:"varint,8,opt,name=revisionHistoryLimit"`
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。
+	// 默认为 0（Pod 就绪后即被视为可用）。
 	// +optional
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty" protobuf:"varint,9,opt,name=minReadySeconds"`
 
-	// persistentVolumeClaimRetentionPolicy describes the lifecycle of persistent
-	// volume claims created from volumeClaimTemplates. By default, all persistent
-	// volume claims are created as needed and retained until manually deleted. This
-	// policy allows the lifecycle to be altered, for example by deleting persistent
-	// volume claims when their stateful set is deleted, or when their pod is scaled
-	// down.
+	// persistentVolumeClaimRetentionPolicy 描述由 volumeClaimTemplates 创建的
+	// PVC 的生命周期。默认情况下，所有 PVC 按需创建并保留，直到被手动删除。
+	// 该策略允许改变生命周期，例如在其 StatefulSet 被删除或其 Pod 缩容时
+	// 删除 PVC。
 	// +optional
 	PersistentVolumeClaimRetentionPolicy *StatefulSetPersistentVolumeClaimRetentionPolicy `json:"persistentVolumeClaimRetentionPolicy,omitempty" protobuf:"bytes,10,opt,name=persistentVolumeClaimRetentionPolicy"`
 
-	// ordinals controls the numbering of replica indices in a StatefulSet. The
-	// default ordinals behavior assigns a "0" index to the first replica and
-	// increments the index by one for each additional replica requested.
+	// ordinals 控制 StatefulSet 中副本索引的编号方式。
+	// 默认行为是首个副本索引为 "0"，之后每增加一个副本索引加一。
 	// +optional
 	Ordinals *StatefulSetOrdinals `json:"ordinals,omitempty" protobuf:"bytes,11,opt,name=ordinals"`
 }
 
-// StatefulSetStatus represents the current state of a StatefulSet.
+// StatefulSetStatus 表示 StatefulSet 的当前状态。
 type StatefulSetStatus struct {
-	// observedGeneration is the most recent generation observed for this StatefulSet. It corresponds to the
-	// StatefulSet's generation, which is updated on mutation by the API Server.
+	// observedGeneration 是该 StatefulSet 最近一次观察到的 generation，对应
+	// StatefulSet 的 generation，在发生变更时由 API Server 更新。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
 
-	// replicas is the number of Pods created by the StatefulSet controller.
+	// replicas 是 StatefulSet 控制器创建的 Pod 数。
 	Replicas int32 `json:"replicas" protobuf:"varint,2,opt,name=replicas"`
 
-	// readyReplicas is the number of pods created for this StatefulSet with a Ready Condition.
+	// readyReplicas 是为该 StatefulSet 创建的、处于 Ready Condition 的 Pod 数。
 	ReadyReplicas int32 `json:"readyReplicas,omitempty" protobuf:"varint,3,opt,name=readyReplicas"`
 
-	// currentReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version
-	// indicated by currentRevision.
+	// currentReplicas 是 StatefulSet 控制器依据 currentRevision 所指版本
+	// 创建的 Pod 数。
 	CurrentReplicas int32 `json:"currentReplicas,omitempty" protobuf:"varint,4,opt,name=currentReplicas"`
 
-	// updatedReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version
-	// indicated by updateRevision.
+	// updatedReplicas 是 StatefulSet 控制器依据 updateRevision 所指版本
+	// 创建的 Pod 数。
 	UpdatedReplicas int32 `json:"updatedReplicas,omitempty" protobuf:"varint,5,opt,name=updatedReplicas"`
 
-	// currentRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the
-	// sequence [0,currentReplicas).
+	// currentRevision 如果非空，表示用于生成序列 [0,currentReplicas) 中
+	// Pod 的 StatefulSet 版本。
 	CurrentRevision string `json:"currentRevision,omitempty" protobuf:"bytes,6,opt,name=currentRevision"`
 
-	// updateRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the sequence
-	// [replicas-updatedReplicas,replicas)
+	// updateRevision 如果非空，表示用于生成序列
+	// [replicas-updatedReplicas,replicas) 中 Pod 的 StatefulSet 版本。
 	UpdateRevision string `json:"updateRevision,omitempty" protobuf:"bytes,7,opt,name=updateRevision"`
 
-	// collisionCount is the count of hash collisions for the StatefulSet. The StatefulSet controller
-	// uses this field as a collision avoidance mechanism when it needs to create the name for the
-	// newest ControllerRevision.
+	// collisionCount 是 StatefulSet 的哈希冲突计数。当控制器需要为最新的
+	// ControllerRevision 生成名称时，将该字段用作避免冲突的机制。
 	// +optional
 	CollisionCount *int32 `json:"collisionCount,omitempty" protobuf:"varint,9,opt,name=collisionCount"`
 
-	// Represents the latest available observations of a statefulset's current state.
+	// 表示对 statefulset 当前状态的最新可用观测。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -339,34 +316,35 @@ type StatefulSetStatus struct {
 	// +listMapKey=type
 	Conditions []StatefulSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,10,rep,name=conditions"`
 
-	// Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.
+	// 该 statefulset 所针对的可用 Pod 总数（至少就绪 minReadySeconds）。
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas" protobuf:"varint,11,opt,name=availableReplicas"`
 }
 
+// StatefulSetConditionType 表示 StatefulSet 的条件类型。
 type StatefulSetConditionType string
 
 const (
-	// StatefulSetProgressing means the StatefulSet is progressing through an update.
-	// This condition is an alpha type and requires enabling StatefulSetRecreateStrategy feature gate.
+	// StatefulSetProgressing 表示 StatefulSet 正在更新中。
+	// 该条件为 alpha 类型，需要启用 StatefulSetRecreateStrategy feature gate。
 	StatefulSetProgressing StatefulSetConditionType = "Progressing"
 )
 
-// StatefulSetCondition describes the state of a statefulset at a certain point.
+// StatefulSetCondition 描述某个时刻 statefulset 的状态。
 type StatefulSetCondition struct {
-	// Type of statefulset condition.
+	// statefulset 条件的类型。
 	// +optional
 	Type StatefulSetConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=StatefulSetConditionType"`
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False、Unknown 之一。
 	// +optional
 	Status v1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
-	// Last time the condition transitioned from one status to another.
+	// 条件上一次从一种状态转换为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// The reason for the condition's last transition.
+	// 条件上一次转换的原因。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// A human readable message indicating details about the transition.
+	// 人类可读的消息，说明该次转换的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -374,15 +352,15 @@ type StatefulSetCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// StatefulSetList is a collection of StatefulSets.
+// StatefulSetList 是 StatefulSet 的集合。
 type StatefulSetList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of stateful sets.
+	// Items 是 stateful set 的列表。
 	Items []StatefulSet `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -393,220 +371,213 @@ type StatefulSetList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// Deployment enables declarative updates for Pods and ReplicaSets.
+// Deployment 支持对 Pod 和 ReplicaSet 的声明式更新。
 // +k8s:supportsSubresource="/scale"
 // +k8s:supportsSubresource="/status"
 type Deployment struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Specification of the desired behavior of the Deployment.
+	// 该 Deployment 期望行为的 spec。
 	// +required
 	Spec DeploymentSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Most recently observed status of the Deployment.
+	// 最近观察到的 Deployment 状态。
 	// +optional
 	Status DeploymentStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// DeploymentSpec is the specification of the desired behavior of the Deployment.
+// DeploymentSpec 是 Deployment 期望行为的 spec。
 type DeploymentSpec struct {
-	// Number of desired pods. This is a pointer to distinguish between explicit
-	// zero and not specified. Defaults to 1.
+	// 期望的 Pod 数。使用指针以区分显式零值和未指定。默认为 1。
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
 
-	// Label selector for pods. Existing ReplicaSets whose pods are
-	// selected by this will be the ones affected by this deployment.
-	// It must match the pod template's labels.
+	// Pod 的 label selector。其 Pod 被选中的现有 ReplicaSet 会受该
+	// deployment 影响。它必须匹配 Pod 模板的 label。
 	// +required
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,2,opt,name=selector"`
 
-	// Template describes the pods that will be created.
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// Template 描述将要创建的 Pod。
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// +required
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
 
-	// The deployment strategy to use to replace existing pods with new ones.
+	// 用新 Pod 替换现有 Pod 时使用的 deployment 策略。
 	// +optional
 	// +patchStrategy=retainKeys
 	Strategy DeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing, for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。
+	// 默认为 0（Pod 就绪后即被视为可用）。
 	// +optional
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty" protobuf:"varint,5,opt,name=minReadySeconds"`
 
-	// The number of old ReplicaSets to retain to allow rollback.
-	// This is a pointer to distinguish between explicit zero and not specified.
-	// Defaults to 10.
+	// 为支持回滚而保留的旧 ReplicaSet 数量。
+	// 使用指针以区分显式零值和未指定。默认为 10。
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty" protobuf:"varint,6,opt,name=revisionHistoryLimit"`
 
-	// Indicates that the deployment is paused.
+	// 表示该 deployment 已暂停。
 	// +optional
 	Paused bool `json:"paused,omitempty" protobuf:"varint,7,opt,name=paused"`
 
-	// The maximum time in seconds for a deployment to make progress before it
-	// is considered to be failed. The deployment controller will continue to
-	// process failed deployments and a condition with a ProgressDeadlineExceeded
-	// reason will be surfaced in the deployment status. Note that progress will
-	// not be estimated during the time a deployment is paused. Defaults to 600s.
+	// deployment 在被视为失败前取得进展的最长时间（秒）。deployment 控制器
+	// 会继续处理失败的 deployment，并在 deployment 状态中显示原因为
+	// ProgressDeadlineExceeded 的条件。注意，deployment 暂停期间不会估算进展。
+	// 默认为 600 秒。
 	// +optional
 	ProgressDeadlineSeconds *int32 `json:"progressDeadlineSeconds,omitempty" protobuf:"varint,9,opt,name=progressDeadlineSeconds"`
 }
 
 const (
-	// DefaultDeploymentUniqueLabelKey is the default key of the selector that is added
-	// to existing ReplicaSets (and label key that is added to its pods) to prevent the existing ReplicaSets
-	// to select new pods (and old pods being select by new ReplicaSet).
+	// DefaultDeploymentUniqueLabelKey 是添加到现有 ReplicaSet 的 selector 的默认 key
+	// （也是添加到其 Pod 的 label key），用于防止现有 ReplicaSet
+	// 选中新 Pod（以及新 ReplicaSet 选中旧 Pod）。
 	DefaultDeploymentUniqueLabelKey string = "pod-template-hash"
 )
 
-// DeploymentStrategy describes how to replace existing pods with new ones.
+// DeploymentStrategy 描述如何用新 Pod 替换现有 Pod。
 type DeploymentStrategy struct {
-	// Type of deployment. Can be "Recreate" or "RollingUpdate". Default is RollingUpdate.
+	// deployment 的类型。可以是 "Recreate" 或 "RollingUpdate"，默认为 RollingUpdate。
 	// +optional
 	Type DeploymentStrategyType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type,casttype=DeploymentStrategyType"`
 
-	// Rolling update config params. Present only if DeploymentStrategyType =
-	// RollingUpdate.
+	// 滚动更新配置参数。仅当 DeploymentStrategyType 为
+	// RollingUpdate 时存在。
 	//---
-	// TODO: Update this to follow our convention for oneOf, whatever we decide it
-	// to be.
+	// TODO: 按我们约定的 oneOf 方式更新，无论最终约定是什么。
 	// +optional
 	RollingUpdate *RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
+// DeploymentStrategyType 表示 deployment 的更新策略类型。
 // +enum
 type DeploymentStrategyType string
 
 const (
-	// Kill all existing pods before creating new ones.
+	// RecreateDeploymentStrategyType 在创建新 Pod 前杀掉所有现有 Pod。
 	RecreateDeploymentStrategyType DeploymentStrategyType = "Recreate"
 
-	// Replace the old ReplicaSets by new one using rolling update i.e gradually scale down the old ReplicaSets and scale up the new one.
+	// RollingUpdateDeploymentStrategyType 通过滚动更新用新 ReplicaSet 替换旧 ReplicaSet，
+	// 即逐步缩减旧 ReplicaSet 并扩容新 ReplicaSet。
 	RollingUpdateDeploymentStrategyType DeploymentStrategyType = "RollingUpdate"
 )
 
-// Spec to control the desired behavior of rolling update.
+// RollingUpdateDeployment 用于指定滚动更新的期望行为。
 type RollingUpdateDeployment struct {
-	// The maximum number of pods that can be unavailable during the update.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
-	// Absolute number is calculated from percentage by rounding down.
-	// This can not be 0 if MaxSurge is 0.
-	// Defaults to 25%.
-	// Example: when this is set to 30%, the old ReplicaSet can be scaled down to 70% of desired pods
-	// immediately when the rolling update starts. Once new pods are ready, old ReplicaSet
-	// can be scaled down further, followed by scaling up the new ReplicaSet, ensuring
-	// that the total number of pods available at all times during the update is at
-	// least 70% of desired pods.
+	// 更新期间最多不可用的 Pod 数。
+	// 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。
+	// 绝对数由百分比向下取整得到。
+	// 如果 MaxSurge 为 0，则该值不能为 0。
+	// 默认为 25%。
+	// 示例：当该值设为 30% 时，滚动更新开始时旧 ReplicaSet 可立即
+	// 缩减到期望 Pod 数的 70%。新 Pod 就绪后，可进一步缩减旧 ReplicaSet，
+	// 随后扩容新 ReplicaSet，确保更新期间可用 Pod 总数始终不少于
+	// 期望 Pod 数的 70%。
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,1,opt,name=maxUnavailable"`
 
-	// The maximum number of pods that can be scheduled above the desired number of
-	// pods.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
-	// This can not be 0 if MaxUnavailable is 0.
-	// Absolute number is calculated from percentage by rounding up.
-	// Defaults to 25%.
-	// Example: when this is set to 30%, the new ReplicaSet can be scaled up immediately when
-	// the rolling update starts, such that the total number of old and new pods do not exceed
-	// 130% of desired pods. Once old pods have been killed,
-	// new ReplicaSet can be scaled up further, ensuring that total number of pods running
-	// at any time during the update is at most 130% of desired pods.
+	// 可超出期望 Pod 数调度的最大 Pod 数。
+	// 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。
+	// 如果 MaxUnavailable 为 0，则该值不能为 0。
+	// 绝对数由百分比向上取整得到。
+	// 默认为 25%。
+	// 示例：当该值设为 30% 时，滚动更新开始时新 ReplicaSet 可立即扩容，
+	// 使新旧 Pod 总数不超过期望 Pod 数的 130%。旧 Pod 被杀掉后，
+	// 可进一步扩容新 ReplicaSet，确保更新期间运行的 Pod 总数
+	// 始终不超过期望 Pod 数的 130%。
 	// +optional
 	MaxSurge *intstr.IntOrString `json:"maxSurge,omitempty" protobuf:"bytes,2,opt,name=maxSurge"`
 }
 
-// DeploymentStatus is the most recently observed status of the Deployment.
+// DeploymentStatus 是最近观察到的 Deployment 状态。
 type DeploymentStatus struct {
-	// The generation observed by the deployment controller.
+	// deployment 控制器观察到的 generation。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
 
-	// Total number of non-terminating pods targeted by this deployment (their labels match the selector).
+	// 该 deployment 所针对的非终止中 Pod 总数（其 label 匹配 selector）。
 	// +optional
 	Replicas int32 `json:"replicas,omitempty" protobuf:"varint,2,opt,name=replicas"`
 
-	// Total number of non-terminating pods targeted by this deployment that have the desired template spec.
+	// 该 deployment 所针对的、具有期望模板 spec 的非终止中 Pod 总数。
 	// +optional
 	UpdatedReplicas int32 `json:"updatedReplicas,omitempty" protobuf:"varint,3,opt,name=updatedReplicas"`
 
-	// Total number of non-terminating pods targeted by this Deployment with a Ready Condition.
+	// 该 Deployment 所针对的、处于 Ready Condition 的非终止中 Pod 总数。
 	// +optional
 	ReadyReplicas int32 `json:"readyReplicas,omitempty" protobuf:"varint,7,opt,name=readyReplicas"`
 
-	// Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment.
+	// 该 deployment 所针对的可用非终止中 Pod 总数（至少就绪 minReadySeconds）。
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas,omitempty" protobuf:"varint,4,opt,name=availableReplicas"`
 
-	// Total number of unavailable pods targeted by this deployment. This is the total number of
-	// pods that are still required for the deployment to have 100% available capacity. They may
-	// either be pods that are running but not yet available or pods that still have not been created.
+	// 该 deployment 所针对的不可用 Pod 总数。这是该 deployment 达到 100%
+	// 可用容量仍需要的 Pod 总数。这些 Pod 可能是正在运行但尚未可用的 Pod，
+	// 也可能是尚未创建的 Pod。
 	// +optional
 	UnavailableReplicas int32 `json:"unavailableReplicas,omitempty" protobuf:"varint,5,opt,name=unavailableReplicas"`
 
-	// Total number of terminating pods targeted by this deployment. Terminating pods have a non-null
-	// .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
+	// 该 deployment 所针对的终止中 Pod 总数。终止中的 Pod 具有非空的
+	// .metadata.deletionTimestamp，且尚未进入 Failed 或 Succeeded 的 .status.phase。
 	//
-	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
+	// 这是 beta 字段，需要启用 DeploymentReplicaSetTerminatingReplicas feature（默认启用）。
 	// +optional
 	TerminatingReplicas *int32 `json:"terminatingReplicas,omitempty" protobuf:"varint,9,opt,name=terminatingReplicas"`
 
-	// Represents the latest available observations of a deployment's current state.
+	// 表示对 deployment 当前状态的最新可用观测。
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
 	Conditions []DeploymentCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,6,rep,name=conditions"`
 
-	// Count of hash collisions for the Deployment. The Deployment controller uses this
-	// field as a collision avoidance mechanism when it needs to create the name for the
-	// newest ReplicaSet.
+	// Deployment 的哈希冲突计数。当控制器需要为最新的
+	// ReplicaSet 生成名称时，将该字段用作避免冲突的机制。
 	// +optional
 	CollisionCount *int32 `json:"collisionCount,omitempty" protobuf:"varint,8,opt,name=collisionCount"`
 }
 
+// DeploymentConditionType 表示 deployment 的条件类型。
 type DeploymentConditionType string
 
-// These are valid conditions of a deployment.
+// 以下是 deployment 的有效条件。
 const (
-	// Available means the deployment is available, ie. at least the minimum available
-	// replicas required are up and running for at least minReadySeconds.
+	// DeploymentAvailable 表示 deployment 可用，即满足最低可用性要求的副本
+	// 至少已运行 minReadySeconds。条件值为 "Available"。
 	DeploymentAvailable DeploymentConditionType = "Available"
-	// Progressing means the deployment is progressing. Progress for a deployment is
-	// considered when a new replica set is created or adopted, and when new pods scale
-	// up or old pods scale down. Progress is not estimated for paused deployments or
-	// when progressDeadlineSeconds is not specified.
+	// DeploymentProgressing 表示 deployment 正在推进。当创建或接纳新的 replica set，
+	// 以及新 Pod 扩容或旧 Pod 缩容时，视为 deployment 有进展。
+	// 对于已暂停或未指定 progressDeadlineSeconds 的 deployment，不估算进展。
+	// 条件值为 "Progressing"。
 	DeploymentProgressing DeploymentConditionType = "Progressing"
-	// ReplicaFailure is added in a deployment when one of its pods fails to be created
-	// or deleted.
+	// DeploymentReplicaFailure 在 deployment 的某个 Pod 创建或删除失败时添加。
+	// 条件值为 "ReplicaFailure"。
 	DeploymentReplicaFailure DeploymentConditionType = "ReplicaFailure"
 )
 
-// DeploymentCondition describes the state of a deployment at a certain point.
+// DeploymentCondition 描述某个时刻 deployment 的状态。
 type DeploymentCondition struct {
-	// Type of deployment condition.
+	// deployment 条件的类型。
 	// +optional
 	Type DeploymentConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=DeploymentConditionType"`
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False、Unknown 之一。
 	// +optional
 	Status v1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
-	// The last time this condition was updated.
+	// 该条件最后一次更新的时间。
 	// +optional
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty" protobuf:"bytes,6,opt,name=lastUpdateTime"`
-	// Last time the condition transitioned from one status to another.
+	// 条件上一次从一种状态转换为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,7,opt,name=lastTransitionTime"`
-	// The reason for the condition's last transition.
+	// 条件上一次转换的原因。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// A human readable message indicating details about the transition.
+	// 人类可读的消息，说明该次转换的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -614,168 +585,149 @@ type DeploymentCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// DeploymentList is a list of Deployments.
+// DeploymentList 是 Deployment 的列表。
 type DeploymentList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of Deployments.
+	// Items 是 Deployment 的列表。
 	Items []Deployment `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// DaemonSetUpdateStrategy is a struct used to control the update strategy for a DaemonSet.
+// DaemonSetUpdateStrategy 用于控制 DaemonSet 更新策略的结构体。
 type DaemonSetUpdateStrategy struct {
-	// Type of daemon set update. Can be "RollingUpdate" or "OnDelete". Default is RollingUpdate.
+	// daemon set 更新的类型。可以是 "RollingUpdate" 或 "OnDelete"，默认为 RollingUpdate。
 	// +optional
 	Type DaemonSetUpdateStrategyType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type"`
 
-	// Rolling update config params. Present only if type = "RollingUpdate".
+	// 滚动更新配置参数。仅当 type 为 "RollingUpdate" 时存在。
 	//---
-	// TODO: Update this to follow our convention for oneOf, whatever we decide it
-	// to be. Same as Deployment `strategy.rollingUpdate`.
-	// See https://github.com/kubernetes/kubernetes/issues/35345
+	// TODO: 按我们约定的 oneOf 方式更新，无论最终约定是什么。
+	// 与 Deployment 的 `strategy.rollingUpdate` 相同。
+	// 参见 https://github.com/kubernetes/kubernetes/issues/35345
 	// +optional
 	RollingUpdate *RollingUpdateDaemonSet `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
+// DaemonSetUpdateStrategyType 表示 DaemonSet 的更新策略类型。
 // +enum
 type DaemonSetUpdateStrategyType string
 
 const (
-	// Replace the old daemons by new ones using rolling update i.e replace them on each node one after the other.
+	// RollingUpdateDaemonSetStrategyType 通过滚动更新用新 daemon 替换旧 daemon，
+	// 即在每个节点上逐个替换。
 	RollingUpdateDaemonSetStrategyType DaemonSetUpdateStrategyType = "RollingUpdate"
 
-	// Replace the old daemons only when it's killed
+	// OnDeleteDaemonSetStrategyType 仅在旧 daemon 被杀掉后才替换它。
 	OnDeleteDaemonSetStrategyType DaemonSetUpdateStrategyType = "OnDelete"
 )
 
-// Spec to control the desired behavior of daemon set rolling update.
+// RollingUpdateDaemonSet 用于指定 daemon set 滚动更新的期望行为。
 type RollingUpdateDaemonSet struct {
-	// The maximum number of DaemonSet pods that can be unavailable during the
-	// update. Value can be an absolute number (ex: 5) or a percentage of total
-	// number of DaemonSet pods at the start of the update (ex: 10%). Absolute
-	// number is calculated from percentage by rounding up.
-	// This cannot be 0 if MaxSurge is 0
-	// Default value is 1.
-	// Example: when this is set to 30%, at most 30% of the total number of nodes
-	// that should be running the daemon pod (i.e. status.desiredNumberScheduled)
-	// can have their pods stopped for an update at any given time. The update
-	// starts by stopping at most 30% of those DaemonSet pods and then brings
-	// up new DaemonSet pods in their place. Once the new pods are available,
-	// it then proceeds onto other DaemonSet pods, thus ensuring that at least
-	// 70% of original number of DaemonSet pods are available at all times during
-	// the update.
+	// 更新期间最多不可用的 DaemonSet Pod 数。值可以是绝对数（例如 5），
+	// 也可以是更新开始时 DaemonSet Pod 总数的百分比（例如 10%）。
+	// 绝对数由百分比向上取整得到。
+	// 如果 MaxSurge 为 0，则该值不能为 0。
+	// 默认值为 1。
+	// 示例：当该值设为 30% 时，任意时刻最多 30% 的、本应运行 daemon Pod 的
+	// 节点（即 status.desiredNumberScheduled）可以因更新而停止其 Pod。
+	// 更新开始时最多停止 30% 的 DaemonSet Pod，然后在原位置启动新的
+	// DaemonSet Pod。新 Pod 可用后，继续更新其他 DaemonSet Pod，
+	// 从而确保更新期间原始 DaemonSet Pod 中至少有 70% 始终可用。
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,1,opt,name=maxUnavailable"`
 
-	// The maximum number of nodes with an existing available DaemonSet pod that
-	// can have an updated DaemonSet pod during during an update.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
-	// This can not be 0 if MaxUnavailable is 0.
-	// Absolute number is calculated from percentage by rounding up to a minimum of 1.
-	// Default value is 0.
-	// Example: when this is set to 30%, at most 30% of the total number of nodes
-	// that should be running the daemon pod (i.e. status.desiredNumberScheduled)
-	// can have their a new pod created before the old pod is marked as deleted.
-	// The update starts by launching new pods on 30% of nodes. Once an updated
-	// pod is available (Ready for at least minReadySeconds) the old DaemonSet pod
-	// on that node is marked deleted. If the old pod becomes unavailable for any
-	// reason (Ready transitions to false, is evicted, or is drained) an updated
-	// pod is immediately created on that node without considering surge limits.
-	// Allowing surge implies the possibility that the resources consumed by the
-	// daemonset on any given node can double if the readiness check fails, and
-	// so resource intensive daemonsets should take into account that they may
-	// cause evictions during disruption.
+	// 更新期间允许在已有可用 DaemonSet Pod 的节点上创建更新后 DaemonSet Pod
+	// 的最大节点数。值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比
+	// （例如 10%）。如果 MaxUnavailable 为 0，则该值不能为 0。
+	// 绝对数由百分比向上取整得到，最小为 1。默认值为 0。
+	// 示例：当该值设为 30% 时，最多 30% 的、本应运行 daemon Pod 的节点
+	// （即 status.desiredNumberScheduled）可以在旧 Pod 标记为删除之前
+	// 创建新 Pod。更新开始时先在 30% 的节点上启动新 Pod。一旦更新后的
+	// Pod 可用（至少就绪 minReadySeconds），该节点上的旧 DaemonSet Pod
+	// 就会被标记为删除。如果旧 Pod 因任何原因变为不可用（Ready 转为 false、
+	// 被驱逐或被排空），则会立即在该节点上创建更新后的 Pod，而不考虑 surge 限制。
+	// 允许 surge 意味着，如果就绪检查失败，daemonset 在任意节点上消耗的
+	// 资源可能翻倍，因此资源密集型 daemonset 应考虑中断期间可能引发的驱逐。
 	// +optional
 	MaxSurge *intstr.IntOrString `json:"maxSurge,omitempty" protobuf:"bytes,2,opt,name=maxSurge"`
 }
 
-// DaemonSetSpec is the specification of a daemon set.
+// DaemonSetSpec 是 daemon set 的 spec。
 type DaemonSetSpec struct {
-	// A label query over pods that are managed by the daemon set.
-	// Must match in order to be controlled.
-	// It must match the pod template's labels.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// 对由 daemon set 管理的 Pod 的 label 查询。
+	// 必须匹配才能被控制。它必须匹配 Pod 模板的 label。
+	// 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +required
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,1,opt,name=selector"`
 
-	// An object that describes the pod that will be created.
-	// The DaemonSet will create exactly one copy of this pod on every node
-	// that matches the template's node selector (or on every node if no node
-	// selector is specified).
-	// The only allowed template.spec.restartPolicy value is "Always".
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
+	// 描述将要创建的 Pod 的对象。
+	// DaemonSet 会在每个匹配模板 node selector 的节点上（若未指定 node
+	// selector 则在每个节点上）恰好创建一个该 Pod 的副本。
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
 	// +required
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,2,opt,name=template"`
 
-	// An update strategy to replace existing DaemonSet pods with new pods.
+	// 用新 Pod 替换现有 DaemonSet Pod 的更新策略。
 	// +optional
 	UpdateStrategy DaemonSetUpdateStrategy `json:"updateStrategy,omitempty" protobuf:"bytes,3,opt,name=updateStrategy"`
 
-	// The minimum number of seconds for which a newly created DaemonSet pod should
-	// be ready without any of its container crashing, for it to be considered
-	// available. Defaults to 0 (pod will be considered available as soon as it
-	// is ready).
+	// 新建 DaemonSet Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的
+	// 最少秒数。默认为 0（Pod 就绪后即被视为可用）。
 	// +optional
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty" protobuf:"varint,4,opt,name=minReadySeconds"`
 
-	// The number of old history to retain to allow rollback.
-	// This is a pointer to distinguish between explicit zero and not specified.
-	// Defaults to 10.
+	// 为支持回滚而保留的旧历史数量。
+	// 使用指针以区分显式零值和未指定。默认为 10。
 	// +optional
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty" protobuf:"varint,6,opt,name=revisionHistoryLimit"`
 }
 
-// DaemonSetStatus represents the current status of a daemon set.
+// DaemonSetStatus 表示 daemon set 的当前状态。
 type DaemonSetStatus struct {
-	// The number of nodes that are running at least 1
-	// daemon pod and are supposed to run the daemon pod.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+	// 运行至少 1 个 daemon Pod 且本应运行该 daemon Pod 的节点数。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
 	CurrentNumberScheduled int32 `json:"currentNumberScheduled" protobuf:"varint,1,opt,name=currentNumberScheduled"`
 
-	// The number of nodes that are running the daemon pod, but are
-	// not supposed to run the daemon pod.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+	// 正在运行 daemon Pod 但本不应运行该 daemon Pod 的节点数。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
 	NumberMisscheduled int32 `json:"numberMisscheduled" protobuf:"varint,2,opt,name=numberMisscheduled"`
 
-	// The total number of nodes that should be running the daemon
-	// pod (including nodes correctly running the daemon pod).
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+	// 本应运行 daemon Pod 的节点总数（包括正确运行 daemon Pod 的节点）。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
 	DesiredNumberScheduled int32 `json:"desiredNumberScheduled" protobuf:"varint,3,opt,name=desiredNumberScheduled"`
 
-	// numberReady is the number of nodes that should be running the daemon pod and have one
-	// or more of the daemon pod running with a Ready Condition.
+	// numberReady 是本应运行 daemon Pod 且至少有一个 daemon Pod
+	// 处于 Ready Condition 的节点数。
 	NumberReady int32 `json:"numberReady" protobuf:"varint,4,opt,name=numberReady"`
 
-	// The most recent generation observed by the daemon set controller.
+	// daemon set 控制器最近观察到的 generation。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,5,opt,name=observedGeneration"`
 
-	// The total number of nodes that are running updated daemon pod
+	// 正在运行更新后 daemon Pod 的节点总数。
 	// +optional
 	UpdatedNumberScheduled int32 `json:"updatedNumberScheduled,omitempty" protobuf:"varint,6,opt,name=updatedNumberScheduled"`
 
-	// The number of nodes that should be running the
-	// daemon pod and have one or more of the daemon pod running and
-	// available (ready for at least spec.minReadySeconds)
+	// 本应运行 daemon Pod 且至少有一个 daemon Pod 正在运行并可用
+	// （至少就绪 spec.minReadySeconds）的节点数。
 	// +optional
 	NumberAvailable int32 `json:"numberAvailable,omitempty" protobuf:"varint,7,opt,name=numberAvailable"`
 
-	// The number of nodes that should be running the
-	// daemon pod and have none of the daemon pod running and available
-	// (ready for at least spec.minReadySeconds)
+	// 本应运行 daemon Pod 但没有一个 daemon Pod 正在运行且可用
+	// （至少就绪 spec.minReadySeconds）的节点数。
 	// +optional
 	NumberUnavailable int32 `json:"numberUnavailable,omitempty" protobuf:"varint,8,opt,name=numberUnavailable"`
 
-	// Count of hash collisions for the DaemonSet. The DaemonSet controller
-	// uses this field as a collision avoidance mechanism when it needs to
-	// create the name for the newest ControllerRevision.
+	// DaemonSet 的哈希冲突计数。当控制器需要为最新的
+	// ControllerRevision 生成名称时，将该字段用作避免冲突的机制。
 	// +optional
 	CollisionCount *int32 `json:"collisionCount,omitempty" protobuf:"varint,9,opt,name=collisionCount"`
 
-	// Represents the latest available observations of a DaemonSet's current state.
+	// 表示对 DaemonSet 当前状态的最新可用观测。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -784,25 +736,26 @@ type DaemonSetStatus struct {
 	Conditions []DaemonSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,10,rep,name=conditions"`
 }
 
+// DaemonSetConditionType 表示 DaemonSet 的条件类型。
 type DaemonSetConditionType string
 
-// TODO: Add valid condition types of a DaemonSet.
+// TODO: 补充 DaemonSet 的有效条件类型。
 
-// DaemonSetCondition describes the state of a DaemonSet at a certain point.
+// DaemonSetCondition 描述某个时刻 DaemonSet 的状态。
 type DaemonSetCondition struct {
-	// Type of DaemonSet condition.
+	// DaemonSet 条件的类型。
 	// +optional
 	Type DaemonSetConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=DaemonSetConditionType"`
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False、Unknown 之一。
 	// +optional
 	Status v1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
-	// Last time the condition transitioned from one status to another.
+	// 条件上一次从一种状态转换为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// The reason for the condition's last transition.
+	// 条件上一次转换的原因。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// A human readable message indicating details about the transition.
+	// 人类可读的消息，说明该次转换的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -811,48 +764,46 @@ type DaemonSetCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// DaemonSet represents the configuration of a daemon set.
+// DaemonSet 表示 daemon set 的配置。
 // +k8s:supportsSubresource="/status"
 type DaemonSet struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// The desired behavior of this daemon set.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 该 daemon set 的期望行为。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec DaemonSetSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// The current status of this daemon set. This data may be
-	// out of date by some window of time.
-	// Populated by the system.
-	// Read-only.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 该 daemon set 的当前状态。这些数据可能存在一定时间窗口的滞后。
+	// 由系统填充。
+	// 只读。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status DaemonSetStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
 const (
-	// DefaultDaemonSetUniqueLabelKey is the default label key that is added
-	// to existing DaemonSet pods to distinguish between old and new
-	// DaemonSet pods during DaemonSet template updates.
+	// DefaultDaemonSetUniqueLabelKey 是添加到现有 DaemonSet Pod 的默认 label key，
+	// 用于在 DaemonSet 模板更新期间区分新旧 DaemonSet Pod。
 	DefaultDaemonSetUniqueLabelKey = ControllerRevisionHashLabelKey
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// DaemonSetList is a collection of daemon sets.
+// DaemonSetList 是 daemon set 的集合。
 type DaemonSetList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// A list of daemon sets.
+	// daemon set 的列表。
 	Items []DaemonSet `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -863,29 +814,28 @@ type DaemonSetList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// ReplicaSet ensures that a specified number of pod replicas are running at any given time.
+// ReplicaSet 确保任意时刻都有指定数量的 Pod 副本在运行。
 // +k8s:supportsSubresource="/scale"
 // +k8s:supportsSubresource="/status"
 type ReplicaSet struct {
 	metav1.TypeMeta `json:""`
 
-	// If the Labels of a ReplicaSet are empty, they are defaulted to
-	// be the same as the Pod(s) that the ReplicaSet manages.
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 如果 ReplicaSet 的 Labels 为空，则默认与其管理的 Pod 相同。
+	// 标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec defines the specification of the desired behavior of the ReplicaSet.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Spec 定义 ReplicaSet 期望行为的 spec。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec ReplicaSetSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Status is the most recently observed status of the ReplicaSet.
-	// This data may be out of date by some window of time.
-	// Populated by the system.
-	// Read-only.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Status 是最近观察到的 ReplicaSet 状态。
+	// 这些数据可能存在一定时间窗口的滞后。
+	// 由系统填充。
+	// 只读。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status ReplicaSetStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -893,78 +843,75 @@ type ReplicaSet struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// ReplicaSetList is a collection of ReplicaSets.
+// ReplicaSetList 是 ReplicaSet 的集合。
 type ReplicaSetList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// List of ReplicaSets.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
+	// ReplicaSet 的列表。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	Items []ReplicaSet `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ReplicaSetSpec is the specification of a ReplicaSet.
+// ReplicaSetSpec 是 ReplicaSet 的 spec。
 type ReplicaSetSpec struct {
-	// Replicas is the number of desired pods.
-	// This is a pointer to distinguish between explicit zero and unspecified.
-	// Defaults to 1.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
+	// Replicas 是期望的 Pod 数。
+	// 使用指针以区分显式零值和未指定。默认为 1。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing, for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。
+	// 默认为 0（Pod 就绪后即被视为可用）。
 	// +optional
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty" protobuf:"varint,4,opt,name=minReadySeconds"`
 
-	// Selector is a label query over pods that should match the replica count.
-	// Label keys and values that must match in order to be controlled by this replica set.
-	// It must match the pod template's labels.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// Selector 是对应匹配副本数的 Pod 的 label 查询。
+	// 要被该 replica set 控制，label 的 key 和 value 必须匹配。
+	// 它必须匹配 Pod 模板的 label。
+	// 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +required
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,2,opt,name=selector"`
 
-	// Template is the object that describes the pod that will be created if
-	// insufficient replicas are detected.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template
+	// Template 是描述副本不足时将要创建的 Pod 的对象。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template
 	// +optional
 	Template v1.PodTemplateSpec `json:"template,omitempty" protobuf:"bytes,3,opt,name=template"`
 }
 
-// ReplicaSetStatus represents the current status of a ReplicaSet.
+// ReplicaSetStatus 表示 ReplicaSet 的当前状态。
 type ReplicaSetStatus struct {
-	// Replicas is the most recently observed number of non-terminating pods.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
+	// Replicas 是最近观察到的非终止中 Pod 数。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	Replicas int32 `json:"replicas" protobuf:"varint,1,opt,name=replicas"`
 
-	// The number of non-terminating pods that have labels matching the labels of the pod template of the replicaset.
+	// label 匹配该 replicaset Pod 模板 label 的非终止中 Pod 数。
 	// +optional
 	FullyLabeledReplicas int32 `json:"fullyLabeledReplicas,omitempty" protobuf:"varint,2,opt,name=fullyLabeledReplicas"`
 
-	// The number of non-terminating pods targeted by this ReplicaSet with a Ready Condition.
+	// 该 ReplicaSet 所针对的、处于 Ready Condition 的非终止中 Pod 数。
 	// +optional
 	ReadyReplicas int32 `json:"readyReplicas,omitempty" protobuf:"varint,4,opt,name=readyReplicas"`
 
-	// The number of available non-terminating pods (ready for at least minReadySeconds) for this replica set.
+	// 该 replica set 的可用非终止中 Pod 数（至少就绪 minReadySeconds）。
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas,omitempty" protobuf:"varint,5,opt,name=availableReplicas"`
 
-	// The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp
-	// and have not yet reached the Failed or Succeeded .status.phase.
+	// 该 replica set 的终止中 Pod 数。终止中的 Pod 具有非空的
+	// .metadata.deletionTimestamp，且尚未进入 Failed 或 Succeeded 的 .status.phase。
 	//
-	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
+	// 这是 beta 字段，需要启用 DeploymentReplicaSetTerminatingReplicas feature（默认启用）。
 	// +optional
 	TerminatingReplicas *int32 `json:"terminatingReplicas,omitempty" protobuf:"varint,7,opt,name=terminatingReplicas"`
 
-	// ObservedGeneration reflects the generation of the most recently observed ReplicaSet.
+	// ObservedGeneration 反映最近观察到的 ReplicaSet 的 generation。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,3,opt,name=observedGeneration"`
 
-	// Represents the latest available observations of a replica set's current state.
+	// 表示对 replica set 当前状态的最新可用观测。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -973,31 +920,32 @@ type ReplicaSetStatus struct {
 	Conditions []ReplicaSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,6,rep,name=conditions"`
 }
 
+// ReplicaSetConditionType 表示 replica set 的条件类型。
 type ReplicaSetConditionType string
 
-// These are valid conditions of a replica set.
+// 以下是 replica set 的有效条件。
 const (
-	// ReplicaSetReplicaFailure is added in a replica set when one of its pods fails to be created
-	// due to insufficient quota, limit ranges, pod security policy, node selectors, etc. or deleted
-	// due to kubelet being down or finalizers are failing.
+	// ReplicaSetReplicaFailure 在 replica set 的某个 Pod 因配额不足、limit range、
+	// pod security policy、node selector 等原因无法创建，或因 kubelet 宕机、
+	// finalizer 失败而无法删除时添加。
 	ReplicaSetReplicaFailure ReplicaSetConditionType = "ReplicaFailure"
 )
 
-// ReplicaSetCondition describes the state of a replica set at a certain point.
+// ReplicaSetCondition 描述某个时刻 replica set 的状态。
 type ReplicaSetCondition struct {
-	// Type of replica set condition.
+	// replica set 条件的类型。
 	// +optional
 	Type ReplicaSetConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=ReplicaSetConditionType"`
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False、Unknown 之一。
 	// +optional
 	Status v1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
-	// The last time the condition transitioned from one status to another.
+	// 条件上一次从一种状态转换为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// The reason for the condition's last transition.
+	// 条件上一次转换的原因。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// A human readable message indicating details about the transition.
+	// 人类可读的消息，说明该次转换的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -1006,27 +954,25 @@ type ReplicaSetCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// ControllerRevision implements an immutable snapshot of state data. Clients
-// are responsible for serializing and deserializing the objects that contain
-// their internal state.
-// Once a ControllerRevision has been successfully created, it can not be updated.
-// The API Server will fail validation of all requests that attempt to mutate
-// the Data field. ControllerRevisions may, however, be deleted. Note that, due to its use by both
-// the DaemonSet and StatefulSet controllers for update and rollback, this object is beta. However,
-// it may be subject to name and representation changes in future releases, and clients should not
-// depend on its stability. It is primarily for internal use by controllers.
+// ControllerRevision 实现状态数据的不可变快照。客户端
+// 负责序列化和反序列化包含其内部状态的对象。
+// ControllerRevision 一旦成功创建，就无法更新。
+// API Server 会拒绝所有试图修改 Data 字段的请求。不过 ControllerRevision
+// 可以被删除。注意，由于 DaemonSet 和 StatefulSet 控制器都使用它进行更新和回滚，
+// 该对象属于 beta 级别。但是在未来版本中，其名称和表示形式可能会发生变化，
+// 客户端不应依赖其稳定性。它主要供控制器内部使用。
 type ControllerRevision struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Data is the serialized representation of the state.
+	// Data 是状态的序列化表示。
 	// +required
 	Data runtime.RawExtension `json:"data" protobuf:"bytes,2,opt,name=data"`
 
-	// Revision indicates the revision of the state represented by Data.
+	// Revision 表示 Data 所代表状态的修订版本。
 	// +optional
 	Revision int64 `json:"revision" protobuf:"varint,3,opt,name=revision"`
 }
@@ -1034,14 +980,14 @@ type ControllerRevision struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 
-// ControllerRevisionList is a resource containing a list of ControllerRevision objects.
+// ControllerRevisionList 是包含 ControllerRevision 对象列表的资源。
 type ControllerRevisionList struct {
 	metav1.TypeMeta `json:""`
 
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of ControllerRevisions
+	// Items 是 ControllerRevision 的列表。
 	Items []ControllerRevision `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

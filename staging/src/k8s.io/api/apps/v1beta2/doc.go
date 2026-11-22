@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.apps.v1beta2
 
+// Package v1beta2 是 apps API 的 v1beta2 版本。
 package v1beta2

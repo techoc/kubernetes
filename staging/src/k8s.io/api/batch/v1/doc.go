@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.batch.v1
 
+// Package v1 是 batch API 组的 v1 版本，定义 Job 与 CronJob 等批处理类型。
 package v1

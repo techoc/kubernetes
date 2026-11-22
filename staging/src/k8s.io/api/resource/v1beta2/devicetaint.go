@@ -20,7 +20,8 @@ import "fmt"
 
 var _ fmt.Stringer = DeviceTaint{}
 
-// String converts to a string in the format '<key>=<value>:<effect>', '<key>=<value>:', '<key>:<effect>', or '<key>'.
+// String 按 '<key>=<value>:<effect>'、'<key>=<value>:'、'<key>:<effect>' 或 '<key>' 格式输出字符串。
+// 缺省的 Value/Effect 直接省略，避免输出空段造成解析歧义。
 func (t DeviceTaint) String() string {
 	if len(t.Effect) == 0 {
 		if len(t.Value) == 0 {

@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package api 提供 Kubernetes API 对象类型。
 package api

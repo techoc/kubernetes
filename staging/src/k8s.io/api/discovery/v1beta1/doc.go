@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=discovery.k8s.io
 
+// Package v1beta1 定义 discovery.k8s.io API 组的 v1beta1 版本类型。
 package v1beta1

@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=authorization.k8s.io
 
+// Package authorization 包含 authorization API 组的类型定义。
 package v1beta1

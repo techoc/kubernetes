@@ -24,47 +24,36 @@ import (
 )
 
 const (
-	// ImpersonateUserHeader is used to impersonate a particular user during an API server request
+	// ImpersonateUserHeader 用于在 API 服务器请求期间模拟指定用户。
 	ImpersonateUserHeader = "Impersonate-User"
 
-	// ImpersonateGroupHeader is used to impersonate a particular group during an API server request.
-	// It can be repeated multiplied times for multiple groups.
+	// ImpersonateGroupHeader 用于在 API 服务器请求期间模拟指定用户组。
+	// 多个组可重复多次该请求头。
 	ImpersonateGroupHeader = "Impersonate-Group"
 
-	// ImpersonateUIDHeader is used to impersonate a particular UID during an API server request
+	// ImpersonateUIDHeader 用于在 API 服务器请求期间模拟指定 UID。
 	ImpersonateUIDHeader = "Impersonate-Uid"
 
-	// ImpersonateUserExtraHeaderPrefix is a prefix for any header used to impersonate an entry in the
-	// extra map[string][]string for user.Info.  The key will be every after the prefix.
-	// It can be repeated multiplied times for multiple map keys and the same key can be repeated multiple
-	// times to have multiple elements in the slice under a single key
+	// ImpersonateUserExtraHeaderPrefix 是用于模拟 user.Info 中 extra map[string][]string
+	// 条目的请求头前缀，前缀之后的全部内容即为键名。
+	// 多个 map 键可重复多次该请求头；同一个键也可重复多次，以为该键下的切片提供多个元素。
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 
-	// AttestationAdmissionReviewAPIGroups is the map key for the
-	// admissionReviewAPIGroups claim. It represents the APIGroup that a token
-	// authorizes its bearer to query admission webhooks about. The value
-	// corresponding to this key must be a slice of length 1, and the first and
-	// only element of this slice must match the APIGroup of the AdmissionReview
-	// request being made of the webhook. The empty string is invalid as the
-	// first and only element of the value slice. The special value "*" means
-	// "all api groups", and requires matching permissions (described below).
+	// AttestationAdmissionReviewAPIGroups 是 admissionReviewAPIGroups 声明的 map 键。
+	// 它表示令牌授权其持有者查询准入 webhook 的 APIGroup。该键对应的值必须是长度为 1 的切片，
+	// 且这唯一的元素必须与向 webhook 发出的 AdmissionReview 请求的 APIGroup 相符。
+	// 值切片中唯一元素不能为空字符串。特殊值 "*" 表示"所有 API 组"，并要求具备相应权限（见下文）。
 	//
-	// For this claim to be considered valid, the TokenRequest must meet two
-	// conditions. First, the BoundObjectRef must be one of
-	// ValidatingWebhookConfiguration or MutatingWebhookConfiguration; the
-	// Webhook Configuration in question must have a Rule governing a resource
-	// under the APIGroup named in the value to this key. Second, the requested
-	// audience must match one of the following patterns:
-	//   1. When the webhook is configured with a URL, the audience must match
-	//      the URL field exactly.
-	//   2. When the webhook is configured with a service, the audience must
-	//      match the pattern `https://$name.$namespace.svc:$port[/$path]`, where
-	//      `/$path` is optional.
+	// 该声明要被视为有效，TokenRequest 必须满足两个条件。第一，BoundObjectRef 必须是
+	// ValidatingWebhookConfiguration 或 MutatingWebhookConfiguration 之一；对应的 Webhook
+	// Configuration 必须有一条 Rule 管辖该键值所指 APIGroup 下的某个资源。第二，请求的 audience
+	// 必须匹配以下模式之一：
+	//   1. webhook 配置了 URL 时，audience 必须与 URL 字段完全匹配。
+	//   2. webhook 配置了 service 时，audience 必须匹配 `https://$name.$namespace.svc:$port[/$path]` 模式，
+	//      其中 `/$path` 可选。
 	//
-	// The service account for which the TokenRequest is being made must have
-	// "attest" permissions on group "authentication.k8s.io", resource
-	// "admissionReviewAPIGroups", and a resource name matching exactly either
-	// "*", or the API group named in the value to this key.
+	// 发起 TokenRequest 的 ServiceAccount 必须对组 "authentication.k8s.io"、资源
+	// "admissionReviewAPIGroups" 拥有 "attest" 权限，且资源名恰好为 "*" 或该键值所指的 API 组。
 	AttestationAdmissionReviewAPIGroups = "admissionReviewAPIGroups"
 )
 
@@ -74,101 +63,95 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.6
 
-// TokenReview attempts to authenticate a token to a known user.
-// Note: TokenReview requests may be cached by the webhook token authenticator
-// plugin in the kube-apiserver.
+// TokenReview 尝试将令牌认证为已知用户。
+// 注意：kube-apiserver 中的 webhook 令牌认证插件可能会缓存 TokenReview 请求。
 // +k8s:supportsSubresource="/status"
 type TokenReview struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec holds information about the request being evaluated
+	// spec 保存待评估请求的相关信息
 	// +required
 	Spec TokenReviewSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status is filled in by the server and indicates whether the request can be authenticated.
+	// status 由服务器填写，指示该请求能否通过认证。
 	// +optional
 	Status TokenReviewStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// TokenReviewSpec is a description of the token authentication request.
+// TokenReviewSpec 描述令牌认证请求。
 type TokenReviewSpec struct {
-	// token is the opaque bearer token.
+	// token 是不透明的持有者令牌。
 	// +required
 	Token string `json:"token,omitempty" protobuf:"bytes,1,opt,name=token"`
-	// audiences is a list of the identifiers that the resource server presented
-	// with the token identifies as. Audience-aware token authenticators will
-	// verify that the token was intended for at least one of the audiences in
-	// this list. If no audiences are provided, the audience will default to the
-	// audience of the Kubernetes apiserver.
+	// audiences 是资源服务器随令牌提供的标识符列表。支持 audience 的令牌认证器会验证
+	// 令牌的预期 audience 是否至少与列表中的一个匹配。若未提供 audience，则默认为
+	// Kubernetes apiserver 的 audience。
 	// +optional
 	// +listType=atomic
 	Audiences []string `json:"audiences,omitempty" protobuf:"bytes,2,rep,name=audiences"`
 }
 
-// TokenReviewStatus is the result of the token authentication request.
+// TokenReviewStatus 是令牌认证请求的结果。
 type TokenReviewStatus struct {
-	// authenticated indicates that the token was associated with a known user.
+	// authenticated 表示令牌与某个已知用户相关联。
 	// +optional
 	Authenticated bool `json:"authenticated,omitempty" protobuf:"varint,1,opt,name=authenticated"`
-	// user is the UserInfo associated with the provided token.
+	// user 是与所提供令牌关联的 UserInfo。
 	// +optional
 	User UserInfo `json:"user,omitempty" protobuf:"bytes,2,opt,name=user"`
-	// audiences are audience identifiers chosen by the authenticator that are
-	// compatible with both the TokenReview and token. An identifier is any
-	// identifier in the intersection of the TokenReviewSpec audiences and the
-	// token's audiences. A client of the TokenReview API that sets the
-	// spec.audiences field should validate that a compatible audience identifier
-	// is returned in the status.audiences field to ensure that the TokenReview
-	// server is audience aware. If a TokenReview returns an empty
-	// status.audience field where status.authenticated is "true", the token is
-	// valid against the audience of the Kubernetes API server.
+	// audiences 是认证器选出的、同时与 TokenReview 和令牌兼容的 audience 标识符。
+	// 标识符取自 TokenReviewSpec 的 audiences 与令牌 audiences 的交集。
+	// 设置了 spec.audiences 的 TokenReview API 客户端应校验 status.audiences 中返回了
+	// 兼容的 audience 标识符，以确认 TokenReview 服务器支持 audience 感知。
+	// 若 TokenReview 在 status.authenticated 为 "true" 时返回空的 status.audience 字段，
+	// 则说明该令牌对 Kubernetes API 服务器的 audience 有效。
 	// +optional
 	// +listType=atomic
 	Audiences []string `json:"audiences,omitempty" protobuf:"bytes,4,rep,name=audiences"`
-	// error indicates that the token couldn't be checked
+	// error 表示无法校验令牌
 	// +optional
 	Error string `json:"error,omitempty" protobuf:"bytes,3,opt,name=error"`
 }
 
-// UserInfo holds the information about the user needed to implement the
-// user.Info interface.
+// UserInfo 保存实现 user.Info 接口所需的用户信息。
 type UserInfo struct {
-	// username is the name that uniquely identifies this user among all active users.
+	// username 是在所有活跃用户中唯一标识该用户的名称。
 	// +optional
 	Username string `json:"username,omitempty" protobuf:"bytes,1,opt,name=username"`
-	// uid is a unique value that identifies this user across time. If this user is
-	// deleted and another user by the same name is added, they will have
-	// different UIDs.
+	// uid 是跨时间唯一标识该用户的值。若该用户被删除后又添加了同名用户，
+	// 两者的 UID 会不同。
 	// +optional
 	UID string `json:"uid,omitempty" protobuf:"bytes,2,opt,name=uid"`
-	// groups is the names of groups this user is a part of.
+	// groups 是该用户所属组的名称列表。
 	// +optional
 	// +listType=atomic
 	Groups []string `json:"groups,omitempty" protobuf:"bytes,3,rep,name=groups"`
-	// extra is any additional information provided by the authenticator.
+	// extra 是认证器提供的任何附加信息。
 	// +optional
 	Extra map[string]ExtraValue `json:"extra,omitempty" protobuf:"bytes,4,rep,name=extra"`
 }
 
-// ExtraValue masks the value so protobuf can generate
+// ExtraValue 对值做包装，以便 protobuf 生成代码。
 // +protobuf.nullable=true
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type ExtraValue []string
 
+// String 返回 ExtraValue 的切片格式化字符串。
 func (t ExtraValue) String() string {
 	return fmt.Sprintf("%v", []string(t))
 }
 
-// AttestationValue masks the value so protobuf can generate
+// AttestationValue 对值做包装，以便 protobuf 生成代码。
 // +protobuf.nullable=true
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type AttestationValue []string
 
+// String 返回 AttestationValue 的切片格式化字符串。
 func (a AttestationValue) String() string {
 	return fmt.Sprintf("%v", []string(a))
 }
@@ -176,83 +159,75 @@ func (a AttestationValue) String() string {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.10
 
-// TokenRequest requests a token for a given service account.
+// TokenRequest 为指定的 ServiceAccount 请求令牌。
 type TokenRequest struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec holds information about the request being evaluated
+	// spec 保存待评估请求的相关信息
 	// +optional
 	Spec TokenRequestSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status is filled in by the server and indicates whether the token can be authenticated.
+	// status 由服务器填写，指示该令牌能否通过认证。
 	// +optional
 	Status TokenRequestStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// TokenRequestSpec contains client provided parameters of a token request.
+// TokenRequestSpec 包含客户端提供的令牌请求参数。
 type TokenRequestSpec struct {
-	// audiences are the intendend audiences of the token. A recipient of a
-	// token must identify themself with an identifier in the list of
-	// audiences of the token, and otherwise should reject the token. A
-	// token issued for multiple audiences may be used to authenticate
-	// against any of the audiences listed but implies a high degree of
-	// trust between the target audiences.
+	// audiences 是令牌的预期 audience。令牌接收方必须用令牌 audience 列表中的某个标识符
+	// 表明自己的身份，否则应拒绝该令牌。为多个 audience 签发的令牌可用于向其中任意一个
+	// audience 认证，但这意味着目标 audience 之间存在高度信任。
 	// +optional
 	// +listType=atomic
 	Audiences []string `json:"audiences" protobuf:"bytes,1,rep,name=audiences"`
 
-	// expirationSeconds is the requested duration of validity of the request. The
-	// token issuer may return a token with a different validity duration so a
-	// client needs to check the 'expiration' field in a response.
+	// expirationSeconds 是请求的有效期时长。令牌签发方可能返回有效期不同的令牌，
+	// 因此客户端需要检查响应中的 'expiration' 字段。
 	// +optional
 	ExpirationSeconds *int64 `json:"expirationSeconds" protobuf:"varint,4,opt,name=expirationSeconds"`
 
-	// boundObjectRef is a reference to an object that the token will be bound to.
-	// The token will only be valid for as long as the bound object exists.
-	// NOTE: The API server's TokenReview endpoint will validate the
-	// BoundObjectRef, but other audiences may not. Keep ExpirationSeconds
-	// small if you want prompt revocation.
+	// boundObjectRef 指向令牌将要绑定的对象。令牌仅在绑定对象存在期间有效。
+	// 注意：API 服务器的 TokenReview 端点会校验 BoundObjectRef，但其他 audience 未必会。
+	// 若希望及时吊销令牌，请将 ExpirationSeconds 设小一些。
 	// +optional
 	BoundObjectRef *BoundObjectReference `json:"boundObjectRef" protobuf:"bytes,3,opt,name=boundObjectRef"`
 
-	// attestations is a map of well-known keys to string-slice values.
-	// The values for each key have a specific semantic meaning, which is
-	// documented on the key definition. Requesters of tokens may ask
-	// the Kubernetes API Server to attest to certain claims. The API Server
-	// may perform authorization checks depending on the key of this map.
+	// attestations 是已知键到字符串切片值的映射。
+	// 每个键的值都有特定语义，文档见对应键的定义。令牌请求者可请求 Kubernetes API 服务器
+	// 对某些声明作出证明。API 服务器可能会根据该 map 的键执行授权检查。
 	// +optional
 	Attestations map[string]AttestationValue `json:"attestations,omitempty" protobuf:"bytes,5,rep,name=attestations"`
 }
 
-// TokenRequestStatus is the result of a token request.
+// TokenRequestStatus 是令牌请求的结果。
 type TokenRequestStatus struct {
-	// token is the opaque bearer token.
+	// token 是不透明的持有者令牌。
 	// +optional
 	Token string `json:"token" protobuf:"bytes,1,opt,name=token"`
-	// expirationTimestamp is the time of expiration of the returned token.
+	// expirationTimestamp 是所返回令牌的过期时间。
 	// +optional
 	ExpirationTimestamp metav1.Time `json:"expirationTimestamp" protobuf:"bytes,2,opt,name=expirationTimestamp"`
 }
 
-// BoundObjectReference is a reference to an object that a token is bound to.
+// BoundObjectReference 指向令牌所绑定的对象。
 type BoundObjectReference struct {
-	// kind of the referent. Valid kinds are 'Pod', 'Secret', 'Node',
-	// 'ValidatingWebhookConfiguration', and 'MutatingWebhookConfiguration'.
+	// 被引用对象的 kind。有效值包括 'Pod'、'Secret'、'Node'、
+	// 'ValidatingWebhookConfiguration' 和 'MutatingWebhookConfiguration'。
 	// +optional
 	Kind string `json:"kind,omitempty" protobuf:"bytes,1,opt,name=kind"`
-	// apiVersion is API version of the referent.
+	// apiVersion 是被引用对象的 API 版本。
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty" protobuf:"bytes,2,opt,name=apiVersion"`
 
-	// name of the referent.
+	// 被引用对象的 name。
 	// +optional
 	Name string `json:"name,omitempty" protobuf:"bytes,3,opt,name=name"`
-	// uid of the referent.
+	// 被引用对象的 uid。
 	// +optional
 	UID types.UID `json:"uid,omitempty" protobuf:"bytes,4,opt,name=uID,casttype=k8s.io/apimachinery/pkg/types.UID"`
 }
@@ -263,25 +238,25 @@ type BoundObjectReference struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.28
 
-// SelfSubjectReview contains the user information that the kube-apiserver has about the user making this request.
-// When using impersonation, users will receive the user info of the user being impersonated.  If impersonation or
-// request header authentication is used, any extra keys will have their case ignored and returned as lowercase.
+// SelfSubjectReview 包含 kube-apiserver 关于发起请求用户的用户信息。
+// 使用模拟时，用户会收到被模拟用户的用户信息。若使用模拟或请求头认证，
+// 所有 extra 键将忽略大小写并以小写形式返回。
 // +k8s:supportsSubresource="/status"
 type SelfSubjectReview struct {
 	metav1.TypeMeta `json:""`
-	// metadata is standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// status is filled in by the server with the user attributes.
+	// status 由服务器填写，包含用户属性。
 	// +optional
 	Status SelfSubjectReviewStatus `json:"status,omitempty" protobuf:"bytes,2,opt,name=status"`
 }
 
-// SelfSubjectReviewStatus is filled by the kube-apiserver and sent back to a user.
+// SelfSubjectReviewStatus 由 kube-apiserver 填写并返回给用户。
 type SelfSubjectReviewStatus struct {
-	// userInfo is a set of attributes belonging to the user making this request.
+	// userInfo 是发起请求用户的一组属性。
 	// +optional
 	UserInfo UserInfo `json:"userInfo,omitempty" protobuf:"bytes,1,opt,name=userInfo"`
 }

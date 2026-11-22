@@ -21,133 +21,104 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DeviceSelector must have exactly one field set.
+// DeviceSelector 必须且只能设置一个字段。
 type DeviceSelector struct {
-	// CEL contains a CEL expression for selecting a device.
+	// CEL 包含用于选择设备的 CEL 表达式。
 	//
 	// +optional
 	// +oneOf=SelectorType
 	CEL *CELDeviceSelector `json:"cel,omitempty" protobuf:"bytes,1,opt,name=cel"`
 }
 
-// CELDeviceSelector contains a CEL expression for selecting a device.
+// CELDeviceSelector 包含用于选择设备的 CEL 表达式。
 type CELDeviceSelector struct {
-	// Expression is a CEL expression which evaluates a single device. It
-	// must evaluate to true when the device under consideration satisfies
-	// the desired criteria, and false when it does not. Any other result
-	// is an error and causes allocation of devices to abort.
+	// Expression 是针对单个设备求值的 CEL 表达式。当待考察设备满足条件时必须求值为 true，
+	// 否则为 false；任何其他结果都是错误，会导致设备分配中止。
 	//
-	// The expression's input is an object named "device", which carries
-	// the following properties:
-	//  - driver (string): the name of the driver which defines this device.
-	//  - attributes (map[string]object): the device's attributes, grouped by prefix
-	//    (e.g. device.attributes["dra.example.com"] evaluates to an object with all
-	//    of the attributes which were prefixed by "dra.example.com").
-	//  - capacity (map[string]object): the device's capacities, grouped by prefix.
+	// 表达式的输入是名为 "device" 的对象，具有以下属性：
+	//  - driver (string)：定义此设备的驱动名称。
+	//  - attributes (map[string]object)：设备的属性，按前缀分组
+	//    （例如 device.attributes["dra.example.com"] 求值得到包含所有以
+	//    "dra.example.com" 为前缀的属性的对象）。
+	//  - capacity (map[string]object)：设备的容量，按前缀分组。
 	//
-	// Example: Consider a device with driver="dra.example.com", which exposes
-	// two attributes named "model" and "ext.example.com/family" and which
-	// exposes one capacity named "modules". This input to this expression
-	// would have the following fields:
+	// 示例：某设备 driver="dra.example.com"，暴露两个属性 "model" 和
+	// "ext.example.com/family"，以及一个容量 "modules"。该表达式的输入具有以下字段：
 	//
 	//     device.driver
 	//     device.attributes["dra.example.com"].model
 	//     device.attributes["ext.example.com"].family
 	//     device.capacity["dra.example.com"].modules
 	//
-	// The device.driver field can be used to check for a specific driver,
-	// either as a high-level precondition (i.e. you only want to consider
-	// devices from this driver) or as part of a multi-clause expression
-	// that is meant to consider devices from different drivers.
+	// device.driver 字段可用于检查特定驱动：既可作为高层前置条件（即只考虑该驱动的设备），
+	// 也可作为多子句表达式的一部分，用于同时考虑来自不同驱动的设备。
 	//
-	// The value type of each attribute is defined by the device
-	// definition, and users who write these expressions must consult the
-	// documentation for their specific drivers. The value type of each
-	// capacity is Quantity.
+	// 每个属性的值类型由设备定义决定，编写表达式的用户必须查阅具体驱动的文档。
+	// 每个容量的值类型为 Quantity。
 	//
-	// If an unknown prefix is used as a lookup in either device.attributes
-	// or device.capacity, an empty map will be returned. Any reference to
-	// an unknown field will cause an evaluation error and allocation to
-	// abort.
+	// 若在 device.attributes 或 device.capacity 中以前缀查不到内容，将返回空 map；
+	// 引用未知字段则会导致求值错误并中止分配。
 	//
-	// A robust expression should check for the existence of attributes
-	// before referencing them.
+	// 健壮的表达式应在引用属性前检查其是否存在。
 	//
-	// Common errors:
-	// - "no such key": Use optional chaining (.? followed by orValue())
-	//   or guarding the check with has() for optional fields.
-	//   See CEL Optional Types for details:
+	// 常见错误：
+	// - "no such key"：使用可选链（.? 后接 orValue()），或用 has() 对可选字段做保护。
+	//   详见 CEL Optional Types：
 	//   https://pkg.go.dev/github.com/google/cel-go@v0.17.4/cel#OptionalTypes
 	//
-	// For more CEL expression syntax and examples, see:
+	// 更多 CEL 表达式语法和示例参见：
 	// https://kubernetes.io/docs/reference/using-api/cel/
 	//
-	// For ease of use, the cel.bind() function is enabled, and can be used
-	// to simplify expressions that access multiple attributes with the
-	// same domain. For example:
+	// 为方便使用，已启用 cel.bind() 函数，可简化访问同一域下多个属性的表达式。例如：
 	//
 	//     cel.bind(dra, device.attributes["dra.example.com"], dra.someBool && dra.anotherBool)
 	//
-	// The length of the expression must be smaller or equal to 10 Ki. The
-	// cost of evaluating it is also limited based on the estimated number
-	// of logical steps.
+	// 表达式长度不得超过 10 Ki，求值代价也受限于估算的逻辑步数。
 	//
 	// +required
 	Expression string `json:"expression" protobuf:"bytes,1,name=expression"`
 }
 
-// CELSelectorExpressionMaxCost specifies the cost limit for a single CEL selector
-// evaluation.
+// CELSelectorExpressionMaxCost 指定单次 CEL 选择器求值的代价上限。
 //
-// There is no overall budget for selecting a device, so the actual time
-// required for that is proportional to the number of CEL selectors and how
-// often they need to be evaluated, which can vary depending on several factors
-// (number of devices, cluster utilization, additional constraints).
+// 选择设备没有总预算，因此实际耗时与 CEL 选择器的数量及其求值频率成正比，
+// 而后者取决于设备数量、集群利用率、附加约束等多个因素。
 //
-// Validation against this limit and [CELSelectorExpressionMaxLength] happens
-// only when setting an expression for the first time or when changing it. If
-// the limits are changed in a future Kubernetes release, existing users are
-// guaranteed that existing expressions will continue to be valid.
+// 对该上限和 [CELSelectorExpressionMaxLength] 的校验仅在首次设置表达式或修改表达式时进行。
+// 若未来 Kubernetes 版本调整了这些上限，现有用户可确保其已有表达式仍然有效。
 //
-// However, the kube-scheduler also applies this cost limit at runtime, so it
-// could happen that a valid expression fails at runtime after an up- or
-// downgrade. This can also happen without version skew when the cost estimate
-// underestimated the actual cost. That this might happen is the reason why
-// kube-scheduler enforces the runtime limit instead of relying on validation.
+// 但 kube-scheduler 在运行时也会施加此代价上限，因此升级或降级后，一个原本有效的表达式
+// 可能在运行时失败。即使没有版本差异，当代价估算低估了实际代价时也可能发生这种情况。
+// 正是由于这种可能性，kube-scheduler 选择强制执行运行时上限，而不是仅依赖校验。
 //
-// According to
-// https://github.com/kubernetes/kubernetes/blob/4aeaf1e99e82da8334c0d6dddd848a194cd44b4f/staging/src/k8s.io/apiserver/pkg/apis/cel/config.go#L20-L22,
-// this gives roughly 0.1 second for each expression evaluation.
-// However, this depends on how fast the machine is.
+// 依据
+// https://github.com/kubernetes/kubernetes/blob/4aeaf1e99e82da8334c0d6dddd848a194cd44b4f/staging/src/k8s.io/apiserver/pkg/apis/cel/config.go#L20-L22，
+// 每次表达式求值大约为 0.1 秒，具体取决于机器性能。
 const CELSelectorExpressionMaxCost = 1000000
 
-// CELSelectorExpressionMaxLength is the maximum length of a CEL selector expression string.
+// CELSelectorExpressionMaxLength 是 CEL 选择器表达式字符串的最大长度。
 const CELSelectorExpressionMaxLength = 10 * 1024
 
-// The device this taint is attached to has the "effect" on
-// any claim which does not tolerate the taint and, through the claim,
-// to pods using the claim.
+// 附加该污点的设备会对任何不容忍该污点的 ResourceClaim 产生“effect”影响，
+// 并经由该申领影响使用它的 Pod。
 //
+
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type DeviceTaint struct {
-	// The taint key to be applied to a device.
-	// Must be a label name.
+	// 要施加到设备上的污点键，必须是标签名（label name）。
 	//
 	// +required
 	Key string `json:"key" protobuf:"bytes,1,name=key"`
 
-	// The taint value corresponding to the taint key.
-	// Must be a label value.
+	// 与污点键对应的污点值，必须是标签值（label value）。
 	//
 	// +optional
 	Value string `json:"value,omitempty" protobuf:"bytes,2,opt,name=value"`
 
-	// The effect of the taint on claims that do not tolerate the taint
-	// and through such claims on the pods using them.
+	// 污点对不容忍它的申领、并经由此类申领对使用它们的 Pod 产生的影响。
 	//
-	// Valid effects are None, NoSchedule and NoExecute. PreferNoSchedule as used for
-	// nodes is not valid here. More effects may get added in the future.
-	// Consumers must treat unknown effects like None.
+	// 有效影响为 None、NoSchedule 和 NoExecute。节点污点使用的 PreferNoSchedule 在此无效。
+	// 将来可能增加更多影响。使用方必须将未知影响按 None 处理。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
@@ -155,53 +126,45 @@ type DeviceTaint struct {
 
 	// ^^^^
 	//
-	// Implementing PreferNoSchedule would depend on a scoring solution for DRA.
-	// It might get added as part of that.
+	// 实现 PreferNoSchedule 需要依赖 DRA 的打分机制，可能会作为该机制的一部分加入。
 	//
-	// A possible future new effect is NoExecuteWithPodDisruptionBudget:
-	// honor the pod disruption budget instead of simply deleting pods.
-	// This is currently undecided, it could also be a separate field.
+	// 未来可能新增影响 NoExecuteWithPodDisruptionBudget：遵循 Pod 中断预算，而非直接删除 Pod。
+	// 目前尚未决定，也可能作为一个独立字段。
 	//
-	// Validation must be prepared to allow unknown enums in stored objects,
-	// which will enable adding new enums within a single release without
-	// ratcheting.
+	// 校验必须允许已存储对象中出现未知枚举值，以便在不使用 ratcheting 的情况下
+	// 在单个版本内新增枚举。
 
-	// TimeAdded represents the time at which the taint was added or
-	// (only in a DeviceTaintRule) the effect was modified.
-	// Added automatically during create or update if not set.
+	// TimeAdded 表示添加污点的时间；在 DeviceTaintRule 中也表示 effect 被修改的时间。
+	// 未设置时会在创建或更新时自动添加。
 	//
-	// In addition, in a DeviceTaintRule a value provided during
-	// an update gets replaced with the current time if the provided
-	// value is the same as the old one and the new effect is different.
-	// Changing the key and/or value while keeping the effect unchanged
-	// is possible and does not update the time stamp because the eviction
-	// which uses it is either already started (NoExecute) or
-	// not started yet (NoEffect, NoSchedule).
+	// 此外，在 DeviceTaintRule 中，如果更新时提供的值与旧值相同而新 effect 不同，
+	// 则该值会被替换为当前时间。仅修改键和/或值而保持 effect 不变是允许的，且不会更新时间戳，
+	// 因为使用时间戳的驱逐要么已经启动（NoExecute），要么尚未启动（NoEffect、NoSchedule）。
 	//
 	// +optional
 	TimeAdded *metav1.Time `json:"timeAdded,omitempty" protobuf:"bytes,4,opt,name=timeAdded"`
 
 	// ^^^
 	//
-	// This field was defined as "It is only written for NoExecute taints." for node taints.
-	// But in practice, Kubernetes never did anything with it (no validation, no defaulting,
-	// ignored during pod eviction in pkg/controller/tainteviction).
+	// 节点污点的对应字段定义为“仅对 NoExecute 污点写入”。但实际上 Kubernetes 从未使用它
+	// （无校验、无默认值设定，pkg/controller/tainteviction 中的 Pod 驱逐也忽略它）。
 }
 
 // +enum
 // +k8s:beta(since: "1.37")=+k8s:enum
+
+// DeviceTaintEffect 描述设备污点的影响类型。
 type DeviceTaintEffect string
 
 const (
-	// No effect, the taint is purely informational.
+	// 无影响，该污点纯粹是提示性的。
 	DeviceTaintEffectNone DeviceTaintEffect = "None"
 
-	// Do not allow new pods to schedule which use a tainted device unless they tolerate the taint,
-	// but allow all pods submitted to Kubelet without going through the scheduler
-	// to start, and allow all already-running pods to continue running.
+	// 不允许新的 Pod 调度到使用带污点设备的节点，除非它们容忍该污点；但允许所有
+	// 未经调度器、直接提交给 Kubelet 的 Pod 启动，也允许所有已在运行的 Pod 继续运行。
 	DeviceTaintEffectNoSchedule DeviceTaintEffect = "NoSchedule"
 
-	// Evict any already-running pods that do not tolerate the device taint.
+	// 驱逐所有不容忍该设备污点的、已在运行的 Pod。
 	DeviceTaintEffectNoExecute DeviceTaintEffect = "NoExecute"
 )
 
@@ -210,123 +173,105 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.33
 
-// DeviceTaintRule adds one taint to all devices which match the selector.
-// This has the same effect as if the taint was specified directly
-// in the ResourceSlice by the DRA driver.
+// DeviceTaintRule 为所有匹配选择器的设备添加一条污点。
+// 其效果等同于 DRA 驱动直接在 ResourceSlice 中指定该污点。
 // +k8s:supportsSubresource="/status"
 type DeviceTaintRule struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec specifies the selector and one taint.
+	// Spec 指定选择器和一条污点。
 	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// 修改 spec 会自动递增 metadata.generation。
 	// +required
 	Spec DeviceTaintRuleSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 
-	// Status provides information about what was requested in the spec.
+	// Status 提供 spec 中所请求内容的相关信息。
 	//
 	// +optional
 	Status DeviceTaintRuleStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// DeviceTaintRuleSpec specifies the selector and one taint.
+// DeviceTaintRuleSpec 指定选择器和一条污点。
 type DeviceTaintRuleSpec struct {
-	// DeviceSelector defines which device(s) the taint is applied to.
-	// All selector criteria must be satisfied for a device to
-	// match. The empty selector matches all devices. Without
-	// a selector, no devices are matches.
+	// DeviceSelector 定义污点施加到哪些设备上。设备必须满足所有选择条件才算匹配。
+	// 空选择器匹配所有设备；没有选择器时不匹配任何设备。
 	//
 	// +optional
 	DeviceSelector *DeviceTaintSelector `json:"deviceSelector,omitempty" protobuf:"bytes,1,opt,name=deviceSelector"`
 
-	// The taint that gets applied to matching devices.
+	// 施加到匹配设备上的污点。
 	//
 	// +required
 	Taint DeviceTaint `json:"taint,omitempty" protobuf:"bytes,2,rep,name=taint"`
 }
 
-// DeviceTaintSelector defines which device(s) a DeviceTaintRule applies to.
-// The empty selector matches all devices. Without a selector, no devices
-// are matched.
+// DeviceTaintSelector 定义 DeviceTaintRule 施加到哪些设备上。
+// 空选择器匹配所有设备；没有选择器时不匹配任何设备。
 type DeviceTaintSelector struct {
-	// If DeviceClassName is set, the selectors defined there must be
-	// satisfied by a device to be selected. This field corresponds
-	// to class.metadata.name.
+	// 若设置了 DeviceClassName，设备必须满足其中定义的选择器才会被选中。
+	// 此字段对应 class.metadata.name。
 	//
 	// +optional
 	//
-	// Tombstoned since 1.35 because it turned out that supporting this in all cases
-	// would depend on copying the device attributes into the ResourceClaim allocation
-	// result. Without that the eviction controller cannot evaluate these CEL expressions.
+	// 自 1.35 起废弃（tombstoned）：事实证明，要在所有情况下支持它，需要将设备属性
+	// 复制到 ResourceClaim 分配结果中，否则驱逐控制器无法求值这些 CEL 表达式。
 	//
 	// DeviceClassName *string `json:"deviceClassName,omitempty" protobuf:"bytes,1,opt,name=deviceClassName"`
 
-	// If driver is set, only devices from that driver are selected.
-	// This fields corresponds to slice.spec.driver.
+	// 若设置了 driver，则只选择该驱动的设备。
+	// 此字段对应 slice.spec.driver。
 	//
 	// +optional
 	Driver *string `json:"driver,omitempty" protobuf:"bytes,2,opt,name=driver"`
 
-	// If pool is set, only devices in that pool are selected.
+	// 若设置了 pool，则只选择该池中的设备。
 	//
-	// Also setting the driver name may be useful to avoid
-	// ambiguity when different drivers use the same pool name,
-	// but this is not required because selecting pools from
-	// different drivers may also be useful, for example when
-	// drivers with node-local devices use the node name as
-	// their pool name.
+	// 同时设置驱动名有助于避免不同驱动使用相同池名时的歧义，但并非必须，
+	// 因为选择来自不同驱动的池有时也很有用，例如使用节点名作为池名的
+	// 节点本地设备驱动。
 	//
 	// +optional
 	Pool *string `json:"pool,omitempty" protobuf:"bytes,3,opt,name=pool"`
 
-	// If device is set, only devices with that name are selected.
-	// This field corresponds to slice.spec.devices[].name.
+	// 若设置了 device，则只选择具有该名称的设备。
+	// 此字段对应 slice.spec.devices[].name。
 	//
-	// Setting also driver and pool may be required to avoid ambiguity,
-	// but is not required.
+	// 为避免歧义可能需要同时设置 driver 和 pool，但并非强制要求。
 	//
 	// +optional
 	Device *string `json:"device,omitempty" protobuf:"bytes,4,opt,name=device"`
 
-	// Selectors contains the same selection criteria as a ResourceClaim.
-	// Currently, CEL expressions are supported. All of these selectors
-	// must be satisfied.
+	// Selectors 包含与 ResourceClaim 相同的选择条件，目前支持 CEL 表达式。
+	// 所有选择器都必须满足。
 	//
 	// +optional
 	// +listType=atomic
 	//
-	// Tombstoned since 1.35 because it turned out that supporting this in all cases
-	// would depend on copying the device attributes into the ResourceClaim allocation
-	// result. Without that the eviction controller cannot evaluate these CEL expressions.
+	// 自 1.35 起废弃（tombstoned）：事实证明，要在所有情况下支持它，需要将设备属性
+	// 复制到 ResourceClaim 分配结果中，否则驱逐控制器无法求值这些 CEL 表达式。
 	//
 	// Selectors []DeviceSelector `json:"selectors,omitempty" protobuf:"bytes,5,rep,name=selectors"`
+
 }
 
-// DeviceTaintRuleStatus provides information about an on-going pod eviction.
+// DeviceTaintRuleStatus 提供正在进行的 Pod 驱逐的相关信息。
 type DeviceTaintRuleStatus struct {
-	// Conditions provide information about the state of the DeviceTaintRule
-	// and the cluster at some point in time,
-	// in a machine-readable and human-readable format.
+	// Conditions 以机器可读和人类可读的格式，提供某时刻 DeviceTaintRule 和集群的状态信息。
 	//
-	// The following condition is currently defined as part of this API, more may
-	// get added:
+	// 当前此 API 定义了以下条件，将来可能增加：
 	// - Type: EvictionInProgress
-	// - Status: True if there are currently pods which need to be evicted, False otherwise
-	//   (includes the effects which don't cause eviction).
-	// - Reason: not specified, may change
-	// - Message: includes information about number of pending pods and already evicted pods
-	//   in a human-readable format, updated periodically, may change
+	// - Status: 当前存在需要驱逐的 Pod 时为 True，否则为 False（包括不会导致驱逐的 effect）。
+	// - Reason: 未指定，可能变化
+	// - Message: 以人类可读格式包含待驱逐和已驱逐 Pod 的数量，定期更新，可能变化
 	//
-	// For `effect: None`, the condition above gets set once for each change to
-	// the spec, with the message containing information about what would happen
-	// if the effect was `NoExecute`. This feedback can be used to decide whether
-	// changing the effect to `NoExecute` will work as intended. It only gets
-	// set once to avoid having to constantly update the status.
+	// 对于 `effect: None`，每次修改 spec 后上述条件会被设置一次，消息说明若 effect 为
+	// `NoExecute` 会发生什么。此反馈可用于判断将 effect 改为 `NoExecute` 是否能达到预期。
+	// 该条件只设置一次，以避免持续更新状态。
 	//
-	// Must have 8 or fewer entries.
+	// 条目数不得超过 8。
 	//
 	// +optional
 	// +listType=map
@@ -339,23 +284,23 @@ type DeviceTaintRuleStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// DeviceTaintRuleStatusMaxConditions is the maximum number of conditions in DeviceTaintRuleStatus.
+// DeviceTaintRuleStatusMaxConditions 是 DeviceTaintRuleStatus 中条件数的最大值。
 const DeviceTaintRuleStatusMaxConditions = 8
 
-// DeviceTaintConditionEvictionInProgress is the publicly documented condition type for the DeviceTaintRuleStatus.
+// DeviceTaintConditionEvictionInProgress 是 DeviceTaintRuleStatus 对外公开的条件类型。
 const DeviceTaintConditionEvictionInProgress = "EvictionInProgress"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.33
 
-// DeviceTaintRuleList is a collection of DeviceTaintRules.
+// DeviceTaintRuleList 是 DeviceTaintRule 的集合。
 type DeviceTaintRuleList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of DeviceTaintRules.
+	// Items 是 DeviceTaintRule 列表。
 	Items []DeviceTaintRule `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -365,59 +310,50 @@ type DeviceTaintRuleList struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 // +k8s:supportsSubresource="/status"
 
-// ResourcePoolStatusRequest triggers a one-time calculation of resource pool status
-// based on the provided filters. Once status is set, the request is considered complete and will not be reprocessed.
-// Users should delete and recreate requests to get updated information.
+// ResourcePoolStatusRequest 根据给定的过滤器触发一次资源池状态计算。状态一旦设置，请求即视为
+// 完成，不会重新处理。用户需要删除并重建请求以获取更新后的信息。
 type ResourcePoolStatusRequest struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +required
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec defines the filters for which pools to include in the status.
-	// The spec is immutable once created.
+	// Spec 定义要在状态中包含哪些池的过滤条件。spec 创建后不可变。
 	//
 	// +required
 	// +k8s:immutable
 	Spec ResourcePoolStatusRequestSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 
-	// Status is populated by the controller with the calculated pool status.
-	// When status is non-nil, the request is considered complete and the
-	// entire object becomes immutable.
+	// Status 由控制器填充计算出的池状态。status 非 nil 时请求视为完成，
+	// 整个对象变为不可变。
 	//
 	// +optional
 	// +k8s:optional
 	Status *ResourcePoolStatusRequestStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// ResourcePoolStatusRequestSpec defines the filters for the pool status request.
+// ResourcePoolStatusRequestSpec 定义池状态请求的过滤条件。
 type ResourcePoolStatusRequestSpec struct {
-	// Driver specifies the DRA driver name to filter pools.
-	// Only pools from ResourceSlices with this driver will be included.
-	// Must be a DNS subdomain (e.g., "gpu.example.com").
+	// Driver 指定用于过滤池的 DRA 驱动名称，只包含具有该驱动的 ResourceSlice 中的池。
+	// 必须是 DNS 子域名（例如 "gpu.example.com"）。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-long-name-caseless
 	Driver string `json:"driver" protobuf:"bytes,1,name=driver"`
 
-	// PoolName optionally filters to a specific pool name.
-	// If not specified, all pools from the specified driver are included.
-	// When specified, must be a non-empty valid resource pool name
-	// (DNS subdomains separated by "/").
+	// PoolName 可选，用于过滤特定池名称。未指定时包含指定驱动的所有池。
+	// 指定时必须是非空的有效资源池名称（以 "/" 分隔的 DNS 子域名）。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:format=k8s-resource-pool-name
 	PoolName *string `json:"poolName,omitempty" protobuf:"bytes,2,opt,name=poolName"`
 
-	// Limit optionally specifies the maximum number of pools to return in the status.
-	// If more pools match the filter criteria, the response will be truncated
-	// (i.e., len(status.pools) < status.poolCount).
+	// Limit 可选，指定状态中返回池数量的上限。若匹配的池更多，响应会被截断
+	// （即 len(status.pools) < status.poolCount）。
 	//
-	// Default: 100
-	// Minimum: 1
-	// Maximum: 1000
+	// 默认值：100；最小值：1；最大值：1000。
 	//
 	// +optional
 	// +k8s:optional
@@ -426,18 +362,14 @@ type ResourcePoolStatusRequestSpec struct {
 	// +k8s:maximum=1000
 	Limit *int32 `json:"limit,omitempty" protobuf:"varint,3,opt,name=limit"`
 
-	// DefaultPartitionTypeAttribute optionally names a device attribute (by its
-	// fully qualified name, e.g. "gpu.example.com/profile") to use as the default
-	// grouping attribute for partitionable devices whose slice has not declared
-	// one themselves.
+	// DefaultPartitionTypeAttribute 可选，通过完全限定名（例如 "gpu.example.com/profile"）
+	// 指定一个设备属性，作为未自行声明属性的可分区设备的默认分组属性。
 	//
-	// A slice's own PartitionTypeAttribute always takes precedence. This default
-	// applies only to devices whose slice does not declare one, so that a request
-	// can still get an accurate partitionSummary from a driver that has not
-	// been updated to declare it. When neither the slice nor this default names
-	// an attribute, a partitionable pool reports no partitionSummary.
+	// ResourceSlice 自身声明的 PartitionTypeAttribute 始终优先。此默认值仅适用于其 slice
+	// 未声明属性的设备，使请求仍能从尚未更新以声明该属性的驱动获得准确的 partitionSummary。
+	// 当 slice 和此默认值都未指定属性时，可分区池不报告 partitionSummary。
 	//
-	// Must include the domain qualifier.
+	// 必须包含域限定符。
 	//
 	// +optional
 	// +featureGate=DRAPartitionableDevicesType
@@ -447,27 +379,24 @@ type ResourcePoolStatusRequestSpec struct {
 	DefaultPartitionTypeAttribute *string `json:"defaultPartitionTypeAttribute,omitempty" protobuf:"bytes,4,opt,name=defaultPartitionTypeAttribute"`
 }
 
-// ResourcePoolStatusRequestLimitDefault is the default value for spec.limit.
+// ResourcePoolStatusRequestLimitDefault 是 spec.limit 的默认值。
 const ResourcePoolStatusRequestLimitDefault int32 = 100
 
-// ResourcePoolStatusRequestLimitMax is the maximum allowed value for spec.limit.
+// ResourcePoolStatusRequestLimitMax 是 spec.limit 允许的最大值。
 const ResourcePoolStatusRequestLimitMax int32 = 1000
 
-// ResourcePoolStatusRequestStatus contains the calculated pool status information.
+// ResourcePoolStatusRequestStatus 包含计算得到的池状态信息。
 type ResourcePoolStatusRequestStatus struct {
-	// PoolCount is the total number of pools that matched the filter criteria,
-	// regardless of truncation. This helps users understand how many pools exist
-	// even when the response is truncated. A value of 0 means no pools matched
-	// the filter criteria.
+	// PoolCount 是匹配过滤条件的池总数，不受截断影响。即使响应被截断，用户也能据此
+	// 了解池的总数。值为 0 表示没有池匹配过滤条件。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:minimum=0
 	PoolCount *int32 `json:"poolCount,omitempty" protobuf:"varint,6,opt,name=poolCount"`
 
-	// Pools contains the first `spec.limit` matching pools, sorted by driver
-	// then pool name. If `len(pools) < poolCount`, the list was truncated.
-	// When omitted, no pools matched the request filters.
+	// Pools 包含前 `spec.limit` 个匹配的池，按驱动名再按池名排序。若
+	// `len(pools) < poolCount`，说明列表已被截断。省略时表示没有池匹配请求过滤条件。
 	//
 	// +optional
 	// +k8s:optional
@@ -476,14 +405,14 @@ type ResourcePoolStatusRequestStatus struct {
 	// +k8s:maxItems=1000
 	Pools []PoolStatus `json:"pools,omitempty" protobuf:"bytes,2,rep,name=pools"`
 
-	// Conditions provide information about the state of the request.
-	// A condition with type=Complete or type=Failed will always be set
-	// when the status is populated.
+	// Conditions 提供请求状态的有关信息。填充状态时始终会设置 type=Complete 或
+	// type=Failed 的条件。
 	//
-	// Known condition types:
-	// - "Complete": True when the request has been processed successfully
-	// - "Failed": True when the request could not be processed
+	// 已知条件类型：
+	// - "Complete"：请求已成功处理时为 True
+	// - "Failed"：请求无法处理时为 True
 	//
+
 	// +optional
 	// +k8s:optional
 	// +listType=map
@@ -496,106 +425,90 @@ type ResourcePoolStatusRequestStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,3,rep,name=conditions"`
 }
 
-// PoolStatus contains status information for a single resource pool.
+// PoolStatus 包含单个资源池的状态信息。
 type PoolStatus struct {
-	// Driver is the DRA driver name for this pool.
-	// Must be a DNS subdomain (e.g., "gpu.example.com").
+	// Driver 是此池的 DRA 驱动名称，必须是 DNS 子域名（例如 "gpu.example.com"）。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-long-name-caseless
 	Driver string `json:"driver,omitempty" protobuf:"bytes,1,name=driver"`
 
-	// PoolName is the name of the pool.
-	// Must be a valid resource pool name (DNS subdomains separated by "/").
+	// PoolName 是池的名称，必须是有效的资源池名称（以 "/" 分隔的 DNS 子域名）。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-resource-pool-name
 	PoolName string `json:"poolName,omitempty" protobuf:"bytes,2,name=poolName"`
 
-	// Generation is the pool generation observed across all ResourceSlices
-	// in this pool. Only the latest generation is reported. During a generation
-	// rollout, if not all slices at the latest generation have been published,
-	// the pool is included with a validationError and device counts unset.
+	// Generation 是在此池所有 ResourceSlice 上观测到的池版本，只报告最新版本。
+	// 在版本滚动升级过程中，若最新版本的所有 slice 尚未全部发布，则会带上 validationError
+	// 并返回此池，但设备计数不设置。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:minimum=0
 	Generation int64 `json:"generation" protobuf:"varint,9,opt,name=generation"`
 
-	// ResourceSliceCount is the number of ResourceSlices that make up this pool.
-	// May be unset when validationError is set.
+	// ResourceSliceCount 是组成此池的 ResourceSlice 数量。设置 validationError 时可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:minimum=1
 	ResourceSliceCount *int32 `json:"resourceSliceCount,omitempty" protobuf:"varint,8,opt,name=resourceSliceCount"`
 
-	// TotalDevices is the total number of devices in the pool across all slices.
-	// A value of 0 means the pool has no devices.
-	// May be unset when validationError is set.
+	// TotalDevices 是池中所有 slice 的设备总数。值为 0 表示池中没有设备。
+	// 设置 validationError 时可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:minimum=0
 	TotalDevices *int32 `json:"totalDevices,omitempty" protobuf:"varint,4,opt,name=totalDevices"`
 
-	// AllocatedDevices is the number of devices currently allocated to claims.
-	// A value of 0 means no devices are allocated.
-	// May be unset when validationError is set.
+	// AllocatedDevices 是当前已分配给申领的设备数。值为 0 表示没有设备被分配。
+	// 设置 validationError 时可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:minimum=0
 	AllocatedDevices *int32 `json:"allocatedDevices,omitempty" protobuf:"varint,5,opt,name=allocatedDevices"`
 
-	// AvailableDevices is the number of devices available for allocation.
-	// This equals TotalDevices - AllocatedDevices - UnavailableDevices.
-	// A value of 0 means no devices are currently available.
-	// May be unset when validationError is set.
+	// AvailableDevices 是可分配的设备数，等于 TotalDevices - AllocatedDevices - UnavailableDevices。
+	// 值为 0 表示当前没有可用设备。设置 validationError 时可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:minimum=0
 	AvailableDevices *int32 `json:"availableDevices,omitempty" protobuf:"varint,6,opt,name=availableDevices"`
 
-	// UnavailableDevices is the number of devices that are not available
-	// due to taints or other conditions, but are not allocated.
-	// A value of 0 means all unallocated devices are available.
-	// May be unset when validationError is set.
+	// UnavailableDevices 是因污点或其他条件而不可用、但尚未分配的设备数。
+	// 值为 0 表示所有未分配的设备均可用。设置 validationError 时可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:minimum=0
 	UnavailableDevices *int32 `json:"unavailableDevices,omitempty" protobuf:"varint,7,opt,name=unavailableDevices"`
 
-	// NodeName is the node this pool is associated with.
-	// When omitted, the pool is not associated with a specific node.
-	// Must be a valid DNS subdomain name (RFC1123).
+	// NodeName 是此池关联的节点。省略时表示池不关联特定节点。
+	// 必须是有效的 DNS 子域名（RFC1123）。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:format=k8s-long-name
 	NodeName *string `json:"nodeName,omitempty" protobuf:"bytes,3,opt,name=nodeName"`
 
-	// ValidationError is set when the pool's data could not be fully
-	// validated (e.g., incomplete slice publication). When set, device
-	// count fields and ResourceSliceCount may be unset.
+	// ValidationError 在池数据无法完全校验（如 slice 发布不完整）时设置。设置后，
+	// 设备计数字段和 ResourceSliceCount 可能未设置。
 	//
 	// +optional
 	// +k8s:optional
 	// +k8s:maxBytes=256
 	ValidationError *string `json:"validationError,omitempty" protobuf:"bytes,10,opt,name=validationError"`
 
-	// PartitionSummary reports allocatability per (attribute, partition type)
-	// for a partitionable pool that publishes SharedCounters. Each entry names
-	// the grouping attribute it was resolved from: the PartitionTypeAttribute
-	// declared by a device's own slice, or for devices whose slice declares
-	// none, the default named in the request. A pool that mixes partitions
-	// declared under different attributes reports each independently. When no
-	// slice declares an attribute and the request names no default, the pool
-	// reports no partition summary.
+	// PartitionSummary 针对发布 SharedCounters 的可分区池，按（属性，分区类型）报告可分配情况。
+	// 每个条目注明解析所用的分组属性：设备自身 slice 声明的 PartitionTypeAttribute，
+	// 或 slice 未声明属性时请求中指定的默认值。若池中混合了在不同属性下声明的分区，
+	// 则分别报告；若没有 slice 声明属性且请求也未指定默认值，则池不报告分区摘要。
 	//
 	// +optional
 	// +k8s:optional
@@ -607,42 +520,37 @@ type PoolStatus struct {
 	// +k8s:maxItems=32
 	PartitionSummary []PartitionTypeStatus `json:"partitionSummary,omitempty" protobuf:"bytes,11,rep,name=partitionSummary"`
 
-	// ShareableSummary reports aggregate capacity for a pool that contains
-	// devices with AllowMultipleAllocations. It is populated only when at
-	// least one device in the pool is shareable.
+	// ShareableSummary 报告包含 AllowMultipleAllocations 设备的池的聚合容量。
+	// 仅当池中至少有一个可共享设备时才填充。
 	//
 	// +optional
 	// +k8s:optional
 	ShareableSummary *ShareableSummaryStatus `json:"shareableSummary,omitempty" protobuf:"bytes,13,opt,name=shareableSummary"`
 }
 
-// PartitionTypeStatus reports allocatability for a single partition type,
-// identified by the value of a grouping attribute.
+// PartitionTypeStatus 报告单个分区类型的可分配情况，由分组属性的值标识。
 type PartitionTypeStatus struct {
-	// Attribute is the fully qualified name of the device attribute whose value
-	// groups this entry. It is the PartitionTypeAttribute declared by the
-	// devices' own slice, or the default named in the request when their slice
-	// declares none.
+	// Attribute 是对该条目进行分组的设备属性的完全限定名。它取自设备自身 slice 声明的
+	// PartitionTypeAttribute；若 slice 未声明，则取自请求中指定的默认值。
 	//
 	// +required
 	// +k8s:required
 	Attribute string `json:"attribute,omitempty" protobuf:"bytes,4,name=attribute"`
 
-	// Type is the partition type value (e.g. "Full" or "Half").
+	// Type 是分区类型的值（例如 "Full" 或 "Half"）。
 	//
 	// +required
 	// +k8s:required
 	Type string `json:"type,omitempty" protobuf:"bytes,1,name=type"`
 
-	// Total is the number of devices of this partition type in the pool.
+	// Total 是池中此分区类型的设备数量。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:minimum=0
 	Total *int32 `json:"total,omitempty" protobuf:"varint,2,opt,name=total"`
 
-	// Allocatable is the number of additional devices of this partition type
-	// that could still be allocated given current shared-counter consumption.
+	// Allocatable 是在当前共享计数器消耗下，仍可分配的此分区类型的额外设备数。
 	//
 	// +required
 	// +k8s:required
@@ -650,27 +558,23 @@ type PartitionTypeStatus struct {
 	Allocatable *int32 `json:"allocatable,omitempty" protobuf:"varint,3,opt,name=allocatable"`
 }
 
-// ShareableSummaryStatus reports aggregate capacity for a pool that contains
-// devices with AllowMultipleAllocations.
+// ShareableSummaryStatus 报告包含 AllowMultipleAllocations 设备的池的聚合容量。
 type ShareableSummaryStatus struct {
-	// FullyAvailableDevices is the number of shareable devices with no
-	// capacity consumed.
+	// FullyAvailableDevices 是尚未消耗任何容量的可共享设备数量。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:minimum=0
 	FullyAvailableDevices *int32 `json:"fullyAvailableDevices,omitempty" protobuf:"varint,1,opt,name=fullyAvailableDevices"`
 
-	// PartiallyAvailableDevices is the number of shareable devices with some
-	// but not all capacity consumed.
+	// PartiallyAvailableDevices 是已消耗部分但未耗尽容量的可共享设备数量。
 	//
 	// +required
 	// +k8s:required
 	// +k8s:minimum=0
 	PartiallyAvailableDevices *int32 `json:"partiallyAvailableDevices,omitempty" protobuf:"varint,2,opt,name=partiallyAvailableDevices"`
 
-	// Capacity reports aggregate total, consumed, and available amounts per
-	// shareable capacity key across the pool.
+	// Capacity 按可共享容量键报告整个池的聚合总量、已消耗量和可用量。
 	//
 	// +optional
 	// +k8s:optional
@@ -679,50 +583,49 @@ type ShareableSummaryStatus struct {
 	Capacity []ShareableCapacityStatus `json:"capacity,omitempty" protobuf:"bytes,3,rep,name=capacity"`
 }
 
-// ShareableCapacityStatus reports aggregate amounts for a single shareable
-// capacity key.
+// ShareableCapacityStatus 报告单个可共享容量键的聚合数值。
 type ShareableCapacityStatus struct {
-	// Name is the capacity name.
+	// Name 是容量名称。
 	//
 	// +required
 	// +k8s:required
 	Name string `json:"name,omitempty" protobuf:"bytes,1,name=name"`
 
-	// Total is the sum of this capacity across shareable devices in the pool.
+	// Total 是池中所有可共享设备上该容量的总和。
 	//
 	// +required
 	// +k8s:required
 	Total *resource.Quantity `json:"total,omitempty" protobuf:"bytes,2,opt,name=total"`
 
-	// Consumed is the amount drawn by current allocations.
+	// Consumed 是当前分配已占用的量。
 	//
 	// +required
 	// +k8s:required
 	Consumed *resource.Quantity `json:"consumed,omitempty" protobuf:"bytes,3,opt,name=consumed"`
 
-	// Available is Total minus Consumed, never negative.
+	// Available 等于 Total 减去 Consumed，永不为负。
 	//
 	// +required
 	// +k8s:required
 	Available *resource.Quantity `json:"available,omitempty" protobuf:"bytes,4,opt,name=available"`
 }
 
-// ResourcePoolStatusRequestConditionComplete is the condition type for completed requests.
+// ResourcePoolStatusRequestConditionComplete 是已完成请求的条件类型。
 const ResourcePoolStatusRequestConditionComplete = "Complete"
 
-// ResourcePoolStatusRequestConditionFailed is the condition type for failed requests.
+// ResourcePoolStatusRequestConditionFailed 是失败请求的条件类型。
 const ResourcePoolStatusRequestConditionFailed = "Failed"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 
-// ResourcePoolStatusRequestList is a collection of ResourcePoolStatusRequests.
+// ResourcePoolStatusRequestList 是 ResourcePoolStatusRequest 的集合。
 type ResourcePoolStatusRequestList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of ResourcePoolStatusRequests.
+	// Items 是 ResourcePoolStatusRequest 列表。
 	Items []ResourcePoolStatusRequest `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

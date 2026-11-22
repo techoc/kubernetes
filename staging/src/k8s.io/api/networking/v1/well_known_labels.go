@@ -20,14 +20,11 @@ const (
 
 	// TODO: Use IPFamily as field with a field selector,And the value is set based on
 	// the name at create time and immutable.
-	// LabelIPAddressFamily is used to indicate the IP family of a Kubernetes IPAddress.
-	// This label simplify dual-stack client operations allowing to obtain the list of
-	// IP addresses filtered by family.
+	// LabelIPAddressFamily 用于标识 Kubernetes IPAddress 的 IP 地址族。
+	// 该标签简化双栈客户端操作，允许按地址族过滤获取 IP 地址列表。
 	LabelIPAddressFamily = "ipaddress.kubernetes.io/ip-family"
-	// LabelManagedBy is used to indicate the controller or entity that manages
-	// an IPAddress. This label aims to enable different IPAddress
-	// objects to be managed by different controllers or entities within the
-	// same cluster. It is highly recommended to configure this label for all
-	// IPAddress objects.
+	// LabelManagedBy 用于标识管理某个 IPAddress 的控制器或实体。
+	// 该标签旨在让同一集群内的不同 IPAddress 对象由不同的控制器或实体管理。
+	// 强烈建议为所有 IPAddress 对象配置此标签。
 	LabelManagedBy = "ipaddress.kubernetes.io/managed-by"
 )

@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=node.k8s.io
 
+// Package v1 是 node.k8s.io API 组的 v1 版本，包含 RuntimeClass 等节点运行时相关类型。
 package v1

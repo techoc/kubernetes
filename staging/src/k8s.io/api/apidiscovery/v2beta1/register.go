@@ -22,30 +22,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name for this API.
+// GroupName 是此 API 的组名。
 const GroupName = "apidiscovery.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v2beta1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受非限定 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder installs the api group to a scheme
+	// SchemeBuilder 将 api 组安装到 scheme 中。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme adds api to a scheme
+	// AddToScheme 将 api 添加到 scheme 中。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表添加到给定的 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&APIGroupDiscoveryList{},

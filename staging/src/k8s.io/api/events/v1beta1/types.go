@@ -26,89 +26,83 @@ import (
 // +k8s:prerelease-lifecycle-gen:introduced=1.8
 // +k8s:prerelease-lifecycle-gen:deprecated=1.22
 
-// Event is a report of an event somewhere in the cluster. It generally denotes some state change in the system.
-// Events have a limited retention time and triggers and messages may evolve
-// with time.  Event consumers should not rely on the timing of an event
-// with a given Reason reflecting a consistent underlying trigger, or the
-// continued existence of events with that Reason.  Events should be
-// treated as informative, best-effort, supplemental data.
+// Event 是集群中某处发生事件的报告，通常表示系统中的某种状态变化。
+// 事件保留时间有限，其触发条件和消息可能随时间变化。事件消费者不应依赖
+// 具有给定 Reason 的事件时机来反映一致的底层触发条件，也不应依赖该类事件
+// 持续存在。事件应被视为仅供参考、尽力而为的补充数据。
 type Event struct {
 	metav1.TypeMeta `json:""`
 
-	// metadata is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata" protobuf:"bytes,1,opt,name=metadata"`
 
-	// eventTime is the time when this Event was first observed. It is required.
+	// eventTime 是首次观察到该事件的时间，必填。
 	EventTime metav1.MicroTime `json:"eventTime" protobuf:"bytes,2,opt,name=eventTime"`
 
-	// series is data about the Event series this event represents or nil if it's a singleton Event.
+	// series 是该事件所属事件序列的数据；若为单次事件则为 nil。
 	// +optional
 	Series *EventSeries `json:"series,omitempty" protobuf:"bytes,3,opt,name=series"`
 
-	// reportingController is the name of the controller that emitted this Event, e.g. `kubernetes.io/kubelet`.
-	// This field cannot be empty for new Events.
+	// reportingController 是发出该事件的控制器名称，例如 `kubernetes.io/kubelet`。
+	// 新事件中此字段不能为空。
 	// +optional
 	ReportingController string `json:"reportingController,omitempty" protobuf:"bytes,4,opt,name=reportingController"`
 
-	// reportingInstance is the ID of the controller instance, e.g. `kubelet-xyzf`.
-	// This field cannot be empty for new Events and it can have at most 128 characters.
+	// reportingInstance 是控制器实例的 ID，例如 `kubelet-xyzf`。
+	// 新事件中此字段不能为空，且最多 128 个字符。
 	// +optional
 	ReportingInstance string `json:"reportingInstance,omitempty" protobuf:"bytes,5,opt,name=reportingInstance"`
 
-	// action is what action was taken/failed regarding to the regarding object. It is machine-readable.
-	// This field can have at most 128 characters.
+	// action 是对相关对象执行（或尝试执行失败）的动作，机器可读。
+	// 最多 128 个字符。
 	// +optional
 	Action string `json:"action,omitempty" protobuf:"bytes,6,name=action"`
 
-	// reason is why the action was taken. It is human-readable.
-	// This field can have at most 128 characters.
+	// reason 是采取该动作的原因，人类可读。
+	// 最多 128 个字符。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,7,name=reason"`
 
-	// regarding contains the object this Event is about. In most cases it's an Object reporting controller
-	// implements, e.g. ReplicaSetController implements ReplicaSets and this event is emitted because
-	// it acts on some changes in a ReplicaSet object.
+	// regarding 包含该事件所涉及的对象。多数情况下是报告控制器所操作的对象，
+	// 例如 ReplicaSetController 操作 ReplicaSet，事件因 ReplicaSet 对象的变化而发出。
 	// +optional
 	Regarding corev1.ObjectReference `json:"regarding,omitempty" protobuf:"bytes,8,opt,name=regarding"`
 
-	// related is the optional secondary object for more complex actions. E.g. when regarding object triggers
-	// a creation or deletion of related object.
+	// related 是更复杂动作的可选次要对象，例如 regarding 对象触发了 related 对象的创建或删除。
 	// +optional
 	Related *corev1.ObjectReference `json:"related,omitempty" protobuf:"bytes,9,opt,name=related"`
 
-	// note is a human-readable description of the status of this operation.
-	// Maximal length of the note is 1kB, but libraries should be prepared to
-	// handle values up to 64kB.
+	// note 是对该操作状态的人类可读描述。
+	// note 最大长度为 1kB，但库应能处理最大 64kB 的值。
 	// +optional
 	Note string `json:"note,omitempty" protobuf:"bytes,10,opt,name=note"`
 
-	// type is the type of this event (Normal, Warning), new types could be added in the future.
-	// It is machine-readable.
+	// type 是事件类型（Normal、Warning），将来可能新增类型。
+	// 机器可读。
 	// +optional
 	Type string `json:"type,omitempty" protobuf:"bytes,11,opt,name=type"`
 
-	// deprecatedSource is the deprecated field assuring backward compatibility with core.v1 Event type.
+	// deprecatedSource 是为兼容 core.v1 Event 类型而保留的废弃字段。
 	// +optional
 	DeprecatedSource corev1.EventSource `json:"deprecatedSource,omitempty" protobuf:"bytes,12,opt,name=deprecatedSource"`
-	// deprecatedFirstTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type.
+	// deprecatedFirstTimestamp 是为兼容 core.v1 Event 类型而保留的废弃字段。
 	// +optional
 	DeprecatedFirstTimestamp metav1.Time `json:"deprecatedFirstTimestamp,omitempty" protobuf:"bytes,13,opt,name=deprecatedFirstTimestamp"`
-	// deprecatedLastTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type.
+	// deprecatedLastTimestamp 是为兼容 core.v1 Event 类型而保留的废弃字段。
 	// +optional
 	DeprecatedLastTimestamp metav1.Time `json:"deprecatedLastTimestamp,omitempty" protobuf:"bytes,14,opt,name=deprecatedLastTimestamp"`
-	// deprecatedCount is the deprecated field assuring backward compatibility with core.v1 Event type.
+	// deprecatedCount 是为兼容 core.v1 Event 类型而保留的废弃字段。
 	// +optional
 	DeprecatedCount int32 `json:"deprecatedCount,omitempty" protobuf:"varint,15,opt,name=deprecatedCount"`
 }
 
-// EventSeries contain information on series of events, i.e. thing that was/is happening
-// continuously for some time.
+// EventSeries 包含事件序列的信息，即某段时间内持续发生的事情。
 type EventSeries struct {
-	// count is the number of occurrences in this series up to the last heartbeat time.
+	// count 是截至上次心跳时该序列中事件发生的次数。
 	Count int32 `json:"count" protobuf:"varint,1,opt,name=count"`
-	// lastObservedTime is the time when last Event from the series was seen before last heartbeat.
+	// lastObservedTime 是上次心跳前最后一次观察到该序列中事件的时间。
 	LastObservedTime metav1.MicroTime `json:"lastObservedTime" protobuf:"bytes,2,opt,name=lastObservedTime"`
 
 	// +k8s:deprecated=state,protobuf=3
@@ -118,14 +112,14 @@ type EventSeries struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.8
 // +k8s:prerelease-lifecycle-gen:deprecated=1.22
 
-// EventList is a list of Event objects.
+// EventList 是 Event 对象的列表。
 type EventList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准的列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// items is a list of schema objects.
+	// items 是 schema 对象的列表。
 	Items []Event `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

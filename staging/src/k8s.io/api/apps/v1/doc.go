@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.apps.v1
 
+// Package v1 定义 apps group API 组的类型。
 package v1

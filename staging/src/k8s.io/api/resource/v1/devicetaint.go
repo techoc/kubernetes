@@ -18,14 +18,17 @@ package v1
 
 import "fmt"
 
+// 编译期断言 DeviceTaint 实现 fmt.Stringer。
 var _ fmt.Stringer = DeviceTaint{}
 
-// String converts to a string in the format '<key>=<value>:<effect>', '<key>=<value>:', '<key>:<effect>', or '<key>'.
+// String 按 '<key>=<value>:<effect>'、'<key>=<value>:'、'<key>:<effect>' 或 '<key>' 格式返回字符串。
+// 省略尾部缺失的段，避免输出悬空的冒号或等号。
 func (t DeviceTaint) String() string {
 	if len(t.Effect) == 0 {
 		if len(t.Value) == 0 {
 			return fmt.Sprintf("%v", t.Key)
 		}
+		// effect 为空但 value 非空时保留尾随冒号，以便与只有 key 的形式区分。
 		return fmt.Sprintf("%v=%v:", t.Key, t.Value)
 	}
 	if len(t.Value) == 0 {

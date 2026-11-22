@@ -25,63 +25,60 @@ import (
 // +genclient:noVerbs
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ImageReview checks if the set of images in a pod are allowed.
+// ImageReview 检查 Pod 中的镜像集合是否被允许使用。
 // +k8s:supportsSubresource="/status"
 type ImageReview struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object's metadata.
+	// metadata 为标准对象元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec holds information about the pod being evaluated
+	// spec 包含待评估 Pod 的信息。
 	// +optional
 	Spec ImageReviewSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status is filled in by the backend and indicates whether the pod should be allowed.
+	// status 由后端填充，指示是否允许该 Pod 运行。
 	// +optional
 	Status ImageReviewStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// ImageReviewSpec is a description of the pod creation request.
+// ImageReviewSpec 描述 Pod 创建请求。
 type ImageReviewSpec struct {
-	// containers is a list of a subset of the information in each container of the Pod being created.
+	// containers 为待创建 Pod 中各容器信息的子集列表。
 	// +optional
 	// +listType=atomic
 	Containers []ImageReviewContainerSpec `json:"containers,omitempty" protobuf:"bytes,1,rep,name=containers"`
-	// annotations is a list of key-value pairs extracted from the Pod's annotations.
-	// It only includes keys which match the pattern `*.image-policy.k8s.io/*`.
-	// It is up to each webhook backend to determine how to interpret these annotations, if at all.
+	// annotations 为从 Pod 注解中提取的键值对列表。
+	// 仅包含匹配 `*.image-policy.k8s.io/*` 模式的键。
+	// 是否解释及如何解释这些注解由各 webhook 后端自行决定。
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,2,rep,name=annotations"`
-	// namespace is the namespace the pod is being created in.
+	// namespace 为 Pod 将要创建于其中的命名空间。
 	// +optional
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,3,opt,name=namespace"`
 }
 
-// ImageReviewContainerSpec is a description of a container within the pod creation request.
+// ImageReviewContainerSpec 描述 Pod 创建请求中的一个容器。
 type ImageReviewContainerSpec struct {
-	// image can be in the form image:tag or image@SHA:012345679abcdef.
+	// image 可采用 image:tag 或 image@SHA:012345679abcdef 形式。
 	// +optional
 	Image string `json:"image,omitempty" protobuf:"bytes,1,opt,name=image"`
-	// In future, we may add command line overrides, exec health check command lines, and so on.
+	// 未来可能加入命令行覆盖、exec 健康检查命令等内容。
 }
 
-// ImageReviewStatus is the result of the review for the pod creation request.
+// ImageReviewStatus 为 Pod 创建请求的审查结果。
 type ImageReviewStatus struct {
-	// allowed indicates that all images were allowed to be run.
+	// allowed 表示所有镜像均被允许运行。
 	// +optional
 	Allowed bool `json:"allowed" protobuf:"varint,1,opt,name=allowed"`
-	// reason should be empty unless Allowed is false in which case it
-	// may contain a short description of what is wrong.  Kubernetes
-	// may truncate excessively long errors when displaying to the user.
+	// reason 通常为空，除非 Allowed 为 false，此时可简要说明问题所在。
+	// Kubernetes 向用户展示时可能截断过长的错误信息。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,2,opt,name=reason"`
-	// auditAnnotations will be added to the attributes object of the
-	// admission controller request using 'AddAnnotation'.  The keys should
-	// be prefix-less (i.e., the admission controller will add an
-	// appropriate prefix).
+	// auditAnnotations 将通过 'AddAnnotation' 添加到准入控制器请求的属性对象中。
+	// 键不应带前缀（准入控制器会添加适当的前缀）。
 	// +optional
 	AuditAnnotations map[string]string `json:"auditAnnotations,omitempty" protobuf:"bytes,3,rep,name=auditAnnotations"`
 }

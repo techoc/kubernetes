@@ -27,25 +27,25 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.26
 
-// SelfSubjectReview contains the user information that the kube-apiserver has about the user making this request.
-// When using impersonation, users will receive the user info of the user being impersonated.  If impersonation or
-// request header authentication is used, any extra keys will have their case ignored and returned as lowercase.
+// SelfSubjectReview 包含 kube-apiserver 所掌握的关于发起请求的用户的信息。
+// 使用身份冒充时，用户将收到被冒充用户的信息。如果使用身份冒充或请求头认证，
+// 任何额外键都会忽略大小写并以小写形式返回。
 // +k8s:supportsSubresource="/status"
 type SelfSubjectReview struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// metadata 是标准对象的元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// status is filled in by the server with the user attributes.
+	// status 由服务端填入用户属性。
 	// +optional
 	Status SelfSubjectReviewStatus `json:"status,omitempty" protobuf:"bytes,2,opt,name=status"`
 }
 
-// SelfSubjectReviewStatus is filled by the kube-apiserver and sent back to a user.
+// SelfSubjectReviewStatus 由 kube-apiserver 填入并返回给用户。
 type SelfSubjectReviewStatus struct {
-	// userInfo is a set of attributes belonging to the user making this request.
+	// userInfo 是发起请求的用户的属性集合。
 	// +optional
 	UserInfo v1.UserInfo `json:"userInfo,omitempty" protobuf:"bytes,1,opt,name=userInfo"`
 }

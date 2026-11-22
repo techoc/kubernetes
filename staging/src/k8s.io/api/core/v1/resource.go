@@ -20,40 +20,41 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-// Returns string version of ResourceName.
+// String 返回 ResourceName 的字符串形式。
 func (rn ResourceName) String() string {
 	return string(rn)
 }
 
-// Cpu returns the Cpu limit if specified.
+// Cpu 返回 CPU 数量（如果已指定）。
 func (rl *ResourceList) Cpu() *resource.Quantity {
 	return rl.Name(ResourceCPU, resource.DecimalSI)
 }
 
-// Memory returns the Memory limit if specified.
+// Memory 返回内存数量（如果已指定）。
 func (rl *ResourceList) Memory() *resource.Quantity {
 	return rl.Name(ResourceMemory, resource.BinarySI)
 }
 
-// Storage returns the Storage limit if specified.
+// Storage 返回存储数量（如果已指定）。
 func (rl *ResourceList) Storage() *resource.Quantity {
 	return rl.Name(ResourceStorage, resource.BinarySI)
 }
 
-// Pods returns the list of pods
+// Pods 返回 Pod 数量（如果已指定）。
 func (rl *ResourceList) Pods() *resource.Quantity {
 	return rl.Name(ResourcePods, resource.DecimalSI)
 }
 
-// StorageEphemeral returns the list of ephemeral storage volumes, if any
+// StorageEphemeral 返回临时存储数量（如果已指定）。
 func (rl *ResourceList) StorageEphemeral() *resource.Quantity {
 	return rl.Name(ResourceEphemeralStorage, resource.BinarySI)
 }
 
-// Name returns the resource with name if specified, otherwise it returns a nil quantity with default format.
+// Name 返回指定名称的资源数量；若未指定，返回默认格式的零值 Quantity。
 func (rl *ResourceList) Name(name ResourceName, defaultFormat resource.Format) *resource.Quantity {
 	if val, ok := (*rl)[name]; ok {
 		return &val
 	}
+	// 不同资源默认单位不同（CPU 十进制、内存/存储二进制），零值也要带上正确格式，避免调用方拿到格式错误的 Quantity。
 	return &resource.Quantity{Format: defaultFormat}
 }

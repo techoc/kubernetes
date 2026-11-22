@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package api 提供 Kubernetes API 对象跨组的往返序列化与兼容性测试。
 package api
 
 import (
@@ -87,6 +88,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
+// groups 汇总所有 API 组的 SchemeBuilder，供序列化测试统一注册。
 var groups = []runtime.SchemeBuilder{
 	admissionv1beta1.SchemeBuilder,
 	admissionv1.SchemeBuilder,
@@ -149,6 +151,7 @@ var groups = []runtime.SchemeBuilder{
 	svmv1.SchemeBuilder,
 }
 
+// TestRoundTripExternalTypes 验证外部类型经序列化再反序列化后保持一致。
 func TestRoundTripExternalTypes(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -158,13 +161,14 @@ func TestRoundTripExternalTypes(t *testing.T) {
 		}
 	}
 	seed := rand.Int63()
-	// I'm only using the generic fuzzer funcs, but at some point in time we might need to
-	// switch to specialized. For now we're happy with the current serialization test.
+	// 这里只用通用 fuzzer 函数，将来可能需要换成 specialized fuzzer。
+	// 目前对现有的序列化测试效果满意。
 	fuzzer := fuzzer.FuzzerFor(genericfuzzer.Funcs, rand.NewSource(seed), codecs)
 
 	roundtrip.RoundTripExternalTypes(t, scheme, codecs, fuzzer, nil)
 }
 
+// TestCompatibility 验证 API 版本间对象的兼容性。
 func TestCompatibility(t *testing.T) {
 	scheme := runtime.NewScheme()
 	for _, builder := range groups {

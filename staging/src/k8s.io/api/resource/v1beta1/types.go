@@ -26,25 +26,19 @@ import (
 )
 
 const (
-	// Finalizer is the finalizer that gets set for claims
-	// which were allocated through a builtin controller.
-	// Reserved for use by Kubernetes, DRA driver controllers must
-	// use their own finalizer.
+	// Finalizer 是给通过内置控制器分配的声明设置的终结器。
+	// 该值保留给 Kubernetes 使用，DRA 驱动控制器必须使用自己的终结器。
 	Finalizer = "resource.kubernetes.io/delete-protection"
-	// ExtendedResourceClaimAnnotation is the annotation applied on the generated
-	// special ResourceClaim. Its single valid value is "true".
-	// This is used only inside the scheduler.
+	// ExtendedResourceClaimAnnotation 是加在生成的特殊 ResourceClaim 上的注解。
+	// 其唯一合法值为 "true"，且仅在调度器内部使用。
 	ExtendedResourceClaimAnnotation = "resource.kubernetes.io/extended-resource-claim"
-	// PodResourceClaimAnnotation is the annotation set on template-generated
-	// ResourceClaims by the ResourceClaim controller. Its value is the
-	// pod.spec.resourceClaims[].name for which the claim was generated.
+	// PodResourceClaimAnnotation 是 ResourceClaim 控制器在模板生成的 ResourceClaim 上
+	// 设置的注解，值为生成该声明的 pod.spec.resourceClaims[].name。
 	PodResourceClaimAnnotation = "resource.kubernetes.io/pod-claim-name"
-	// Resource device class prefix is for generating implicit extended resource
-	// name for a device class when its ExtendedResourceName field is not
-	// specified. The generated name is this prefix + the device class name.
-	// The generated name may not be a valid extended resource name for use
-	// in pod.Spec.Resources.Requests, in that case, a valid name has to be specified
-	// explicitly in device class.
+	// ResourceDeviceClassPrefix 是设备类前缀，当设备类未指定 ExtendedResourceName 字段时，
+	// 用于生成隐式的扩展资源名。生成的名称为：本前缀 + 设备类名。
+	// 生成的名称可能不是 pod.Spec.Resources.Requests 中合法的扩展资源名；
+	// 这种情况下必须在设备类中显式指定合法名称。
 	ResourceDeviceClassPrefix string = "deviceclass.resource.kubernetes.io/"
 )
 
@@ -53,113 +47,101 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// ResourceSlice represents one or more resources in a pool of similar resources,
-// managed by a common driver. A pool may span more than one ResourceSlice, and exactly how many
-// ResourceSlices comprise a pool is determined by the driver.
+// ResourceSlice 表示由同一个驱动管理的、同类资源池中的一项或多项资源。
+// 一个池可以横跨多个 ResourceSlice，具体由多少个 ResourceSlice 构成一个池由驱动决定。
 //
-// At the moment, the only supported resources are devices with attributes and capacities.
-// Each device in a given pool, regardless of how many ResourceSlices, must have a unique name.
-// The ResourceSlice in which a device gets published may change over time. The unique identifier
-// for a device is the tuple <driver name>, <pool name>, <device name>.
+// 目前仅支持带属性与容量的设备。同一池中的每个设备，无论分布在多少个 ResourceSlice 中，
+// 名称都必须唯一。设备被发布在哪个 ResourceSlice 中可能随时间变化，
+// 设备的唯一标识是 <驱动名>、<池名>、<设备名> 三元组。
 //
-// Whenever a driver needs to update a pool, it increments the pool.Spec.Pool.Generation number
-// and updates all ResourceSlices with that new number and new resource definitions. A consumer
-// must only use ResourceSlices with the highest generation number and ignore all others.
+// 驱动每次需要更新池时，都会递增 pool.Spec.Pool.Generation，并用新的编号与资源定义
+// 更新所有 ResourceSlice。消费者只能使用 generation 最大的 ResourceSlice，忽略其余的。
 //
-// When allocating all resources in a pool matching certain criteria or when
-// looking for the best solution among several different alternatives, a
-// consumer should check the number of ResourceSlices in a pool (included in
-// each ResourceSlice) to determine whether its view of a pool is complete and
-// if not, should wait until the driver has completed updating the pool.
+// 在分配池中符合特定条件的全部资源，或在多个备选方案中寻找最佳方案时，
+// 消费者应检查池中的 ResourceSlice 数量（每个 ResourceSlice 中都包含该数值），
+// 以判断自己对池的视图是否完整；如果不完整，应等待驱动完成池的更新。
 //
-// For resources that are not local to a node, the node name is not set. Instead,
-// the driver may use a node selector to specify where the devices are available.
+// 对于非节点本地的资源，不会设置节点名；驱动可以通过节点选择器指明设备在哪些节点可用。
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要启用 DynamicResourceAllocation 特性门控。
 type ResourceSlice struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Contains the information published by the driver.
+	// 包含驱动发布的资源信息。
 	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// 修改 spec 会自动递增 metadata.generation。
 	// +required
 	Spec ResourceSliceSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 }
 
 const (
-	// ResourceSliceSelectorNodeName can be used in a [metav1.ListOptions]
-	// field selector to filter based on [ResourceSliceSpec.NodeName].
+	// ResourceSliceSelectorNodeName 可用于 [metav1.ListOptions] 的字段选择器，
+	// 按 [ResourceSliceSpec.NodeName] 过滤。
 	ResourceSliceSelectorNodeName = "spec.nodeName"
-	// ResourceSliceSelectorDriver can be used in a [metav1.ListOptions]
-	// field selector to filter based on [ResourceSliceSpec.Driver].
+	// ResourceSliceSelectorDriver 可用于 [metav1.ListOptions] 的字段选择器，
+	// 按 [ResourceSliceSpec.Driver] 过滤。
 	ResourceSliceSelectorDriver = "spec.driver"
-	// ResourceSliceSelectorPoolName can be used in a [metav1.ListOptions]
-	// field selector to filter based on [ResourceSliceSpec.Pool.Name].
+	// ResourceSliceSelectorPoolName 可用于 [metav1.ListOptions] 的字段选择器，
+	// 按 [ResourceSliceSpec.Pool.Name] 过滤。
 	ResourceSliceSelectorPoolName = "spec.pool.name"
 )
 
-// ResourceSliceSpec contains the information published by the driver in one ResourceSlice.
+// ResourceSliceSpec 包含驱动在某个 ResourceSlice 中发布的资源信息。
 type ResourceSliceSpec struct {
-	// Driver identifies the DRA driver providing the capacity information.
-	// A field selector can be used to list only ResourceSlice
-	// objects with a certain driver name.
+	// Driver 标识提供容量信息的 DRA 驱动。
+	// 可以使用字段选择器只列出具有特定驱动名的 ResourceSlice 对象。
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver. It should use only lower case characters.
-	// This field is immutable.
+	// 必须是 DNS 子域，并且最好以驱动供应商拥有的 DNS 域结尾，
+	// 只应使用小写字符。本字段不可变。
 	//
 	// +required
 	Driver string `json:"driver" protobuf:"bytes,1,name=driver"`
 
-	// Pool describes the pool that this ResourceSlice belongs to.
+	// Pool 描述本 ResourceSlice 所属的池。
 	//
 	// +required
 	Pool ResourcePool `json:"pool" protobuf:"bytes,2,name=pool"`
 
-	// NodeName identifies the node which provides the resources in this pool.
-	// A field selector can be used to list only ResourceSlice
-	// objects belonging to a certain node.
+	// NodeName 标识在本池中提供资源的节点。
+	// 可以使用字段选择器只列出属于某个节点的 ResourceSlice 对象。
 	//
-	// This field can be used to limit access from nodes to ResourceSlices with
-	// the same node name. It also indicates to autoscalers that adding
-	// new nodes of the same type as some old node might also make new
-	// resources available.
+	// 该字段可用于限制节点只能访问节点名相同的 ResourceSlice，
+	// 同时也向自动扩缩容组件表明：增加与某个旧节点同类型的新节点，
+	// 可能也会带来新的资源。
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
-	// This field is immutable.
+	// NodeName、NodeSelector、AllNodes 与 PerDeviceNodeSelection 必须恰好设置一个。
+	// 本字段不可变。
 	//
 	// +optional
 	// +oneOf=NodeSelection
 	NodeName string `json:"nodeName,omitempty" protobuf:"bytes,3,opt,name=nodeName"`
 
-	// NodeSelector defines which nodes have access to the resources in the pool,
-	// when that pool is not limited to a single node.
+	// NodeSelector 定义当池不限于单个节点时，哪些节点可以访问池中的资源。
 	//
-	// Must use exactly one term.
+	// 必须恰好使用一个 term。
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 与 PerDeviceNodeSelection 必须恰好设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
 	NodeSelector *v1.NodeSelector `json:"nodeSelector,omitempty" protobuf:"bytes,4,opt,name=nodeSelector"`
 
-	// AllNodes indicates that all nodes have access to the resources in the pool.
+	// AllNodes 表示所有节点都可以访问池中的资源。
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 与 PerDeviceNodeSelection 必须恰好设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
 	AllNodes bool `json:"allNodes,omitempty" protobuf:"bytes,5,opt,name=allNodes"`
 
-	// Devices lists some or all of the devices in this pool.
+	// Devices 列出本池中的部分或全部设备。
 	//
-	// Must not have more than 128 entries. If any device uses taints or consumes counters the limit is 64.
+	// 条目不得超过 128 个；如果任一设备使用污点或消耗计数器，上限为 64。
 	//
-	// Only one of Devices and SharedCounters can be set in a ResourceSlice.
+	// 在同一个 ResourceSlice 中，Devices 与 SharedCounters 只能设置其中一个。
 	//
 	// +optional
 	// +listType=atomic
@@ -167,26 +149,24 @@ type ResourceSliceSpec struct {
 	// +zeroOrOneOf=ResourceSliceType
 	Devices []Device `json:"devices,omitempty" protobuf:"bytes,6,name=devices"`
 
-	// PerDeviceNodeSelection defines whether the access from nodes to
-	// resources in the pool is set on the ResourceSlice level or on each
-	// device. If it is set to true, every device defined the ResourceSlice
-	// must specify this individually.
+	// PerDeviceNodeSelection 定义节点对池中资源的访问是在 ResourceSlice 层级设置，
+	// 还是在每个设备上单独设置。设为 true 时，ResourceSlice 中定义的每个设备
+	// 都必须单独指定该设置。
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 与 PerDeviceNodeSelection 必须恰好设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
 	// +featureGate=DRAPartitionableDevices
 	PerDeviceNodeSelection *bool `json:"perDeviceNodeSelection,omitempty" protobuf:"bytes,7,name=perDeviceNodeSelection"`
 
-	// SharedCounters defines a list of counter sets, each of which
-	// has a name and a list of counters available.
+	// SharedCounters 定义计数器集合的列表，每个集合都有名称及可用的计数器列表。
 	//
-	// The names of the counter sets must be unique in the ResourcePool.
+	// 计数器集合的名称在 ResourcePool 内必须唯一。
 	//
-	// Only one of Devices and SharedCounters can be set in a ResourceSlice.
+	// 在同一个 ResourceSlice 中，Devices 与 SharedCounters 只能设置其中一个。
 	//
-	// The maximum number of counter sets is 8.
+	// 计数器集合的最大数量为 8。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -199,13 +179,12 @@ type ResourceSliceSpec struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=8
 	SharedCounters []CounterSet `json:"sharedCounters,omitempty" protobuf:"bytes,8,name=sharedCounters"`
 
-	// PartitionTypeAttribute names a string device attribute (by fully
-	// qualified name, e.g. "gpu.example.com/profile") whose value labels
-	// each device with its partition type, such as "Full" or "Half" for a
-	// MIG-style GPU.
+	// PartitionTypeAttribute 指定一个字符串类型的设备属性（使用全限定名，
+	// 例如 "gpu.example.com/profile"），其值用于标记每台设备的分区类型，
+	// 例如 MIG 风格 GPU 的 "Full" 或 "Half"。
 	//
-	// When set, every partitionable device in the slice must carry the attribute
-	// and devices sharing a value must share the same ConsumesCounters cost.
+	// 设置后，分片中每个可分区设备都必须带有该属性，且共享同一属性值的设备
+	// 必须共享相同的 ConsumesCounters 开销。
 	//
 	// +optional
 	// +featureGate=DRAPartitionableDevicesType
@@ -214,19 +193,16 @@ type ResourceSliceSpec struct {
 	// +k8s:ifEnabled(DRAPartitionableDevicesType)=+k8s:format=k8s-resource-fully-qualified-name
 	PartitionTypeAttribute *FullyQualifiedName `json:"partitionTypeAttribute,omitempty" protobuf:"bytes,9,opt,name=partitionTypeAttribute"`
 
-	// SkipNodeOperations lists node-local resource operations (gRPC calls)
-	// that will be skipped for the devices in this slice when determining whether
-	// operations are necessary on the node. If all allocated devices for a driver in
-	// a claim skip an operation, that gRPC call will be skipped. Valid values are:
+	// SkipNodeOperations 列出在判断节点上是否需要执行操作时，本分片中设备将跳过的
+	// 节点本地资源操作（gRPC 调用）。如果某驱动在声明中的所有已分配设备都跳过某操作，
+	// 该 gRPC 调用就会被跳过。合法取值为：
 	//
-	// - "NodePrepareResources": NodePrepareResources gRPC calls are skipped. This
-	//   value cannot be specified unless "NodeUnprepareResources" is also listed
-	//   (or "*" is specified).
-	// - "NodeUnprepareResources": NodeUnprepareResources gRPC calls are skipped.
-	// - "*": All node-local resource operations are skipped.
+	// - "NodePrepareResources"：跳过 NodePrepareResources gRPC 调用。除非同时列出
+	//   "NodeUnprepareResources"（或指定 "*"），否则不能指定该值。
+	// - "NodeUnprepareResources"：跳过 NodeUnprepareResources gRPC 调用。
+	// - "*"：跳过所有节点本地资源操作。
 	//
-	// Other values may be added in the future. The kubelet must ignore unknown
-	// values.
+	// 未来可能增加其他取值，kubelet 必须忽略未知取值。
 	//
 	// +optional
 	// +listType=set
@@ -238,40 +214,36 @@ type ResourceSliceSpec struct {
 
 // +enum
 // +k8s:enum
+// SkipNodeOperation 表示节点本地资源操作的类型。
 type SkipNodeOperation string
 
 const (
-	// SkipNodeOperationNodePrepareResources indicates that NodePrepareResources gRPC calls are skipped.
+	// SkipNodeOperationNodePrepareResources 表示跳过 NodePrepareResources gRPC 调用。
 	SkipNodeOperationNodePrepareResources SkipNodeOperation = "NodePrepareResources"
 
-	// SkipNodeOperationNodeUnprepareResources indicates that NodeUnprepareResources gRPC calls are skipped.
+	// SkipNodeOperationNodeUnprepareResources 表示跳过 NodeUnprepareResources gRPC 调用。
 	SkipNodeOperationNodeUnprepareResources SkipNodeOperation = "NodeUnprepareResources"
 
-	// SkipNodeOperationAll indicates that all node-local resource operations are skipped.
+	// SkipNodeOperationAll 表示跳过所有节点本地资源操作。
 	SkipNodeOperationAll SkipNodeOperation = "*"
 )
 
-// CounterSet defines a named set of counters
-// that are available to be used by devices defined in the
-// ResourcePool.
+// CounterSet 定义一个具名的计数器集合，可供 ResourcePool 中定义的设备使用。
 //
-// The counters are not allocatable by themselves, but
-// can be referenced by devices. When a device is allocated,
-// the portion of counters it uses will no longer be available for use
-// by other devices.
+// 计数器本身不可分配，但可以被设备引用。设备被分配后，它所使用的那部分计数器
+// 将不再可供其他设备使用。
 type CounterSet struct {
-	// Name defines the name of the counter set.
-	// It must be a DNS label.
+	// Name 定义计数器集合的名称，必须是 DNS 标签。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-short-name
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// Counters defines the set of counters for this CounterSet
-	// The name of each counter must be unique in that set and must be a DNS label.
+	// Counters 定义本 CounterSet 的计数器集合。
+	// 每个计数器的名称在集合内必须唯一，且必须是 DNS 标签。
 	//
-	// The maximum number of counters is 32.
+	// 计数器最大数量为 32。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
@@ -279,102 +251,92 @@ type CounterSet struct {
 	Counters map[string]Counter `json:"counters,omitempty" protobuf:"bytes,2,name=counters"`
 }
 
-// Counter describes a quantity associated with a device.
+// Counter 描述与设备关联的一个数量值。
 type Counter struct {
-	// Value defines how much of a certain device counter is available.
+	// Value 定义某设备计数器可用数量。
 	//
 	// +required
 	Value resource.Quantity `json:"value" protobuf:"bytes,1,rep,name=value"`
 }
 
-// DriverNameMaxLength is the maximum valid length of a driver name in the
-// ResourceSliceSpec and other places. It's the same as for CSI driver names.
+// DriverNameMaxLength 是 ResourceSliceSpec 等位置中驱动名的最大合法长度。
+// 与 CSI 驱动名的长度限制相同。
 const DriverNameMaxLength = 63
 
-// ResourcePool describes the pool that ResourceSlices belong to.
+// ResourcePool 描述 ResourceSlice 所属的池。
 type ResourcePool struct {
-	// Name is used to identify the pool. For node-local devices, this
-	// is often the node name, but this is not required.
-	// A field selector can be used to list only ResourceSlice objects
-	// belonging to a certain pool.
+	// Name 用于标识池。对于节点本地设备，这通常是节点名，但不是必须的。
+	// 可以使用字段选择器只列出属于某个池的 ResourceSlice 对象。
 	//
-	// It must not be longer than 253 characters and must consist of one or more DNS sub-domains
-	// separated by slashes. This field is immutable.
+	// 长度不得超过 253 个字符，且必须由一个或多个用斜杠分隔的 DNS 子域组成。
+	// 本字段不可变。
 	//
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// Generation tracks the change in a pool over time. Whenever a driver
-	// changes something about one or more of the resources in a pool, it
-	// must change the generation in all ResourceSlices which are part of
-	// that pool. Consumers of ResourceSlices should only consider
-	// resources from the pool with the highest generation number. The
-	// generation may be reset by drivers, which should be fine for
-	// consumers, assuming that all ResourceSlices in a pool are updated to
-	// match or deleted.
+	// Generation 跟踪池随时间发生的变化。驱动每次改动池中一项或多项资源时，
+	// 都必须更新该池所有 ResourceSlice 中的 generation。ResourceSlice 的消费者
+	// 只能考虑 generation 最大的池中的资源。驱动可以重置 generation，
+	// 只要池中所有 ResourceSlice 都被更新或删除，这对消费者来说没有问题。
 	//
-	// Combined with ResourceSliceCount, this mechanism enables consumers to
-	// detect pools which are comprised of multiple ResourceSlices and are
-	// in an incomplete state.
+	// 与 ResourceSliceCount 配合，该机制使消费者能够检测由多个 ResourceSlice 组成、
+	// 但当前处于不完整状态的池。
 	//
 	// +required
 	Generation int64 `json:"generation" protobuf:"bytes,2,name=generation"`
 
-	// ResourceSliceCount is the total number of ResourceSlices in the pool at this
-	// generation number. Must be greater than zero.
+	// ResourceSliceCount 是本 generation 下池中 ResourceSlice 的总数，必须大于零。
 	//
-	// Consumers can use this to check whether they have seen all ResourceSlices
-	// belonging to the same pool.
+	// 消费者可以用它检查是否已看到同一池的所有 ResourceSlice。
 	//
 	// +required
 	ResourceSliceCount int64 `json:"resourceSliceCount" protobuf:"bytes,3,name=resourceSliceCount"`
 }
 
+// ResourceSliceMaxSharedCapacity 是 ResourceSlice 可上报的最大共享容量。
 const ResourceSliceMaxSharedCapacity = 128
+
+// ResourceSliceMaxDevices 是 ResourceSlice 中设备的最大数量。
 const ResourceSliceMaxDevices = 128
 
-// ResourceSliceMaxDevicesWithAdvancedFeatures defines the maximum number of devices in a ResourceSlice
-// if any of those devices uses advanced features:
-// - device taints (DRADeviceTaints feature gate)
-// - consuming counters (DRAPartitionableDevices feature gate)
-// - list attributes (DRAListTypeAttributes feature gate)
+// ResourceSliceMaxDevicesWithAdvancedFeatures 定义当任意设备使用高级特性时，
+// 一个 ResourceSlice 中设备的最大数量。高级特性包括：
+// - 设备污点（DRADeviceTaints 特性门控）
+// - 消耗计数器（DRAPartitionableDevices 特性门控）
+// - 列表类型属性（DRAListTypeAttributes 特性门控）
 const ResourceSliceMaxDevicesWithAdvancedFeatures = 64
 
-const PoolNameMaxLength = validation.DNS1123SubdomainMaxLength // Same as for a single node name.
+// PoolNameMaxLength 是资源池名称的最大长度，与单个节点名相同。
+const PoolNameMaxLength = validation.DNS1123SubdomainMaxLength // 与单个节点名相同。
+// BindingConditionsMaxSize 是绑定条件的最大数量。
 const BindingConditionsMaxSize = 4
+
+// BindingFailureConditionsMaxSize 是绑定失败条件的最大数量。
 const BindingFailureConditionsMaxSize = 4
 
-// Defines the maximum number of counter sets (through the
-// SharedCounters field) that can be defined in a ResourceSlice.
+// 定义在 ResourceSlice 中通过 SharedCounters 字段可定义的计数器集合的最大数量。
 const ResourceSliceMaxCounterSets = 8
 
-// Defines the maximum number of counters that can be defined
-// in a counter set.
+// 定义在一个计数器集合中可定义的计数器的最大数量。
 const ResourceSliceMaxCountersPerCounterSet = 32
 
-// Defines the maximum number of device counter consumptions
-// (through the ConsumesCounters field) that can be defined per
-// device.
+// 定义每台设备通过 ConsumesCounters 字段可定义的计数器消耗的最大数量。
 const ResourceSliceMaxDeviceCounterConsumptionsPerDevice = 2
 
-// Defines the maximum number of counters that can be defined
-// per device counter consumption.
+// 定义每次设备计数器消耗中可定义的计数器的最大数量。
 const ResourceSliceMaxCountersPerDeviceCounterConsumption = 32
 
-// Defines the maximum number of compatibility groups that can be
-// declared per device counter consumption.
+// 定义每次设备计数器消耗中可声明的兼容性组的最大数量。
 const DeviceCompatibilityGroupsMaxSize = 2
 
-// Device represents one individual hardware instance that can be selected based
-// on its attributes. Besides the name, exactly one field must be set.
+// Device 表示一个可以根据属性选择的独立硬件实例。除名称外，必须恰好设置一个字段。
 type Device struct {
-	// Name is unique identifier among all devices managed by
-	// the driver in the pool. It must be a DNS label.
+	// Name 是驱动在池中管理的所有设备中的唯一标识，必须是 DNS 标签。
 	//
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// Basic defines one device instance.
+	// Basic 定义一个设备实例。
 	//
 	// +optional
 	// +oneOf=deviceType
@@ -382,33 +344,29 @@ type Device struct {
 	Basic *BasicDevice `json:"basic,omitempty" protobuf:"bytes,2,opt,name=basic"`
 }
 
-// BasicDevice defines one device instance.
+// BasicDevice 定义一个设备实例。
 type BasicDevice struct {
-	// Attributes defines the set of attributes for this device.
-	// The name of each attribute must be unique in that set.
+	// Attributes 定义本设备的属性集合，每个属性名在集合内必须唯一。
 	//
-	// The maximum number of attributes and capacities combined is 32.
+	// 属性与容量的总数不得超过 32。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Attributes map[QualifiedName]DeviceAttribute `json:"attributes,omitempty" protobuf:"bytes,1,rep,name=attributes"`
 
-	// Capacity defines the set of capacities for this device.
-	// The name of each capacity must be unique in that set.
+	// Capacity 定义本设备的容量集合，每个容量名在集合内必须唯一。
 	//
-	// The maximum number of attributes and capacities combined is 32.
+	// 属性与容量的总数不得超过 32。
 	//
 	// +optional
 	Capacity map[QualifiedName]DeviceCapacity `json:"capacity,omitempty" protobuf:"bytes,2,rep,name=capacity"`
 
-	// ConsumesCounters defines a list of references to sharedCounters
-	// and the set of counters that the device will
-	// consume from those counter sets.
+	// ConsumesCounters 定义一组对 sharedCounters 的引用，以及设备将从这些计数器集合
+	// 中消耗的计数器。
 	//
-	// There can only be a single entry per counterSet.
+	// 每个 counterSet 只能有一条记录。
 	//
-	// The maximum number of device counter consumptions per
-	// device is 2.
+	// 每台设备的计数器消耗记录最多 2 条。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -420,45 +378,43 @@ type BasicDevice struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=2
 	ConsumesCounters []DeviceCounterConsumption `json:"consumesCounters,omitempty" protobuf:"bytes,3,rep,name=consumesCounters"`
 
-	// NodeName identifies the node where the device is available.
+	// NodeName 标识设备可用的节点。
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 设为 true 时才能设置。
+	// NodeName、NodeSelector 与 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
 	// +featureGate=DRAPartitionableDevices
 	NodeName *string `json:"nodeName,omitempty" protobuf:"bytes,4,opt,name=nodeName"`
 
-	// NodeSelector defines the nodes where the device is available.
+	// NodeSelector 定义设备可用的节点。
 	//
-	// Must use exactly one term.
+	// 必须恰好使用一个 term。
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 设为 true 时才能设置。
+	// NodeName、NodeSelector 与 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
 	NodeSelector *v1.NodeSelector `json:"nodeSelector,omitempty" protobuf:"bytes,5,opt,name=nodeSelector"`
 
-	// AllNodes indicates that all nodes have access to the device.
+	// AllNodes 表示所有节点都可以访问该设备。
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 设为 true 时才能设置。
+	// NodeName、NodeSelector 与 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
 	// +featureGate=DRAPartitionableDevices
 	AllNodes *bool `json:"allNodes,omitempty" protobuf:"bytes,6,opt,name=allNodes"`
 
-	// If specified, these are the driver-defined taints.
+	// 若指定，这些是驱动定义的污点。
 	//
-	// The maximum number of taints is 16. If taints are set for
-	// any device in a ResourceSlice, then the maximum number of
-	// allowed devices per ResourceSlice is 64 instead of 128.
+	// 污点最多 16 个。如果 ResourceSlice 中任一设备设置了污点，
+	// 每个 ResourceSlice 允许的设备数上限会从 128 降为 64。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要启用 DRADeviceTaints 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -466,29 +422,24 @@ type BasicDevice struct {
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Taints []DeviceTaint `json:"taints,omitempty" protobuf:"bytes,7,rep,name=taints"`
 
-	// BindsToNode indicates if the usage of an allocation involving this device
-	// has to be limited to exactly the node that was chosen when allocating the claim.
-	// If set to true, the scheduler will set the ResourceClaim.Status.Allocation.NodeSelector
-	// to match the node where the allocation was made.
+	// BindsToNode 表示涉及本设备的分配的使用是否必须限定在分配声明时选中的那个节点。
+	// 设为 true 时，调度器会将 ResourceClaim.Status.Allocation.NodeSelector 设置为匹配
+	// 执行分配的节点。
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus
+	// 特性门控。
 	//
 	// +optional
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
 	BindsToNode *bool `json:"bindsToNode,omitempty" protobuf:"varint,8,opt,name=bindsToNode"`
 
-	// BindingConditions defines the conditions for proceeding with binding.
-	// All of these conditions must be set in the per-device status
-	// conditions with a value of True to proceed with binding the pod to the node
-	// while scheduling the pod.
+	// BindingConditions 定义继续绑定的条件。调度 Pod 时，只有当逐设备状态条件中
+	// 所有这些条件都为 True，才能把 Pod 绑定到节点。
 	//
-	// The maximum number of binding conditions is 4.
+	// 绑定条件最多 4 个，且必须是合法的 condition 类型字符串。
 	//
-	// The conditions must be a valid condition type string.
-	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus
+	// 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -497,16 +448,13 @@ type BasicDevice struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=4
 	BindingConditions []string `json:"bindingConditions,omitempty" protobuf:"bytes,9,rep,name=bindingConditions"`
 
-	// BindingFailureConditions defines the conditions for binding failure.
-	// They may be set in the per-device status conditions.
-	// If any is true, a binding failure occurred.
+	// BindingFailureConditions 定义绑定失败的条件，可设置在逐设备状态条件中。
+	// 其中任一条件为 true 即表示发生了绑定失败。
 	//
-	// The maximum number of binding failure conditions is 4.
+	// 绑定失败条件最多 4 个，且必须是合法的 condition 类型字符串。
 	//
-	// The conditions must be a valid condition type string.
-	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus
+	// 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -515,169 +463,147 @@ type BasicDevice struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=4
 	BindingFailureConditions []string `json:"bindingFailureConditions,omitempty" protobuf:"bytes,10,rep,name=bindingFailureConditions"`
 
-	// AllowMultipleAllocations marks whether the device is allowed to be allocated to multiple DeviceRequests.
+	// AllowMultipleAllocations 标记本设备是否允许被分配到多个 DeviceRequest。
 	//
-	// If AllowMultipleAllocations is set to true, the device can be allocated more than once,
-	// and all of its capacity is consumable, regardless of whether the requestPolicy is defined or not.
+	// 设为 true 时，设备可以被多次分配，并且无论是否定义 requestPolicy，
+	// 其全部容量都可以被消耗。
 	//
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	AllowMultipleAllocations *bool `json:"allowMultipleAllocations,omitempty" protobuf:"bytes,11,opt,name=allowMultipleAllocations"`
 
-	// NodeAllocatableResourceMappings is tombstoned as it got replaced with NodeAllocatableResources.
-	// NodeAllocatableResourceMappings map[v1.ResourceName]NodeAllocatableResourceMapping `json:"nodeAllocatableResourceMappings,omitempty" protobuf:"bytes,12,opt,name=nodeAllocatableResourceMappings"`
+	// NodeAllocatableResourceMappings 已被替换为 NodeAllocatableResources，此处保留墓碑。
 
-	// NodeAllocatableResources defines the mapping of node resources
-	// that are managed by the DRA driver exposing this device. This includes resources currently
-	// reported in v1.Node `status.allocatable` that are not extended resources
-	// (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources).
-	// Examples include "cpu", "memory", "ephemeral-storage", and hugepages.
-	// In addition to standard requests made through the Pod `spec`, these resources
-	// can also be requested through claims and allocated by the DRA driver.
-	// For example, a CPU DRA driver might allocate exclusive CPUs or auxiliary node memory
-	// dependencies of an accelerator device.
-	// The keys of this map are the node-allocatable resource names (e.g., "cpu", "memory").
-	// Extended resource names are not permitted as keys.
+	// NodeAllocatableResources 定义由暴露本设备的 DRA 驱动管理的节点资源映射。
+	// 包括当前在 v1.Node `status.allocatable` 中上报的、非扩展资源
+	// （参见 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources）
+	// 在内的资源，例如 "cpu"、"memory"、"ephemeral-storage" 以及大页内存。
+	// 除了通过 Pod `spec` 发出的标准请求外，这些资源也可以通过声明请求，
+	// 并由 DRA 驱动分配。例如，CPU DRA 驱动可以分配独占 CPU，
+	// 或者分配加速器设备所依赖的辅助节点内存。
+	// 该 map 的键是节点可分配资源名（如 "cpu"、"memory"），不允许使用扩展资源名。
 	// +optional
 	// +k8s:optional
 	// +featureGate=DRANodeAllocatableResources
 	NodeAllocatableResources map[v1.ResourceName]NodeAllocatableResource `json:"nodeAllocatableResources,omitempty" protobuf:"bytes,14,opt,name=nodeAllocatableResources"`
 }
 
-// NodeAllocatableResource defines the translation between the DRA device/capacity
-// units requested to the corresponding quantity of the node allocatable resource.
-// At least one of Mapping or Overhead must be specified. Not specifying either is an invalid configuration.
+// NodeAllocatableResource 定义请求的 DRA 设备/容量单位与对应节点可分配资源数量之间的换算。
+// Mapping 与 Overhead 必须至少指定一个，两者都不指定是非法配置。
 type NodeAllocatableResource struct {
-	// Mapping is used when the device directly models a node allocatable resource like standard CPU or memory
-	// (e.g., with a CPU DRA driver). The calculated quantity is accounted for exactly once per claim instance
-	// on the node. To prevent node cgroup isolation friction, the scheduler explicitly
-	// blocks sharing mapped device claims across multiple pods.
+	// 当设备直接建模节点可分配资源（如标准 CPU 或内存，例如 CPU DRA 驱动）时使用 Mapping。
+	// 计算得到的数量在节点上按声明实例只计入一次。为避免节点 cgroup 隔离冲突，
+	// 调度器明确禁止将映射设备声明在多个 Pod 之间共享。
 	// +optional
 	// +k8s:optional
 	Mapping *NodeAllocatableMapping `json:"mapping,omitempty" protobuf:"bytes,3,opt,name=mapping"`
 
-	// Overhead contains fields for modeling auxiliary overhead incurred on node allocatable resources
-	// when allocating devices that are not themselves modeling a node allocatable resource (e.g., host memory overhead for GPUs).
-	// Sharing overhead-mapped claims across multiple pods is allowed. The node allocatable overhead is accounted
-	// for individually for each pod referencing the claim.
-	// Overhead is always subtracted from the node's allocatable capacity for the resource, even when mapping
-	// is specified for the same resource.
-	// Eg: If a device models memory capacity per socket as a consumable capacity pool via Mapping (with CapacityKey),
-	// any overhead specified for the same resource will be subtracted from the node's general allocatable capacity
-	// and not from the per-socket capacity pool in Mapping.
+	// Overhead 包含用于建模辅助开销的字段：当分配的设备本身并不建模节点可分配资源时
+	// （例如 GPU 的主机内存开销），这些开销会作用在节点可分配资源上。
+	// 允许在多个 Pod 之间共享开销映射的声明，节点可分配开销会针对每个引用该声明的 Pod
+	// 分别计入。即使同一资源同时指定了 Mapping，Overhead 也始终从该资源的节点可分配容量中扣除。
+	// 例如：若某设备通过 Mapping（配合 CapacityKey）将每个 socket 的内存容量建模为可消耗容量池，
+	// 同一资源上指定的任何开销都会从节点通用可分配容量中扣除，而不是从 Mapping 的每 socket 容量池中扣除。
 	// +optional
 	// +k8s:optional
 	Overhead *NodeAllocatableOverhead `json:"overhead,omitempty" protobuf:"bytes,4,opt,name=overhead"`
 }
 
-// NodeAllocatableMapping defines how a DRA allocation directly translates into a node allocatable resource quantity.
-// The mapping can be derived from either the count of allocated devices or the specific capacity consumed. These options are mutually exclusive.
-// Kubelet adds this mapped resource quantity from claim to both requests and limits at the pod-level cgroup, and to limits at the container-level cgroup for each container referencing the claim.
+// NodeAllocatableMapping 定义 DRA 分配如何直接换算为节点可分配资源数量。
+// 换算可以基于已分配设备数量，也可以基于消耗的具体容量，两者互斥。
+// Kubelet 会把该映射数量从声明加到引用它的 Pod 级 cgroup 的 requests 与 limits，
+// 以及每个引用该声明的容器级 cgroup 的 limits 中。
 type NodeAllocatableMapping struct {
-	// CapacityKey references a capacity name defined as a key in the
-	// `spec.devices[*].capacity` map. When this field is set, the value associated with
-	// this key in the `status.allocation.devices.results[*].consumedCapacity` map
-	// (for a specific claim allocation) determines the base quantity for
-	// the node allocatable resource. `capacityMultiplier` must also be set and is
-	// multiplied with the base quantity.
-	// For example, if `spec.devices[*].capacity` has an entry "dra.example.com/memory": "128Gi",
-	// and this field is set to "dra.example.com/memory", then for a claim allocation
-	// that consumes { "dra.example.com/memory": "4Gi" } the base quantity for the
-	// node allocatable resource mapping will be "4Gi".
-	// The final node allocatable resource amount is `consumedCapacity[capacityKey]` * `capacityMultiplier`.
+	// CapacityKey 引用 `spec.devices[*].capacity` map 中定义的容量名。设置该字段后，
+	// 对应声明分配在 `status.allocation.devices.results[*].consumedCapacity` map 中
+	// 该键的值将作为节点可分配资源的基础数量，同时还必须设置 capacityMultiplier，
+	// 最终数量为基础数量乘以 capacityMultiplier。
+	// 例如 `spec.devices[*].capacity` 中有条目 "dra.example.com/memory": "128Gi"，
+	// 且本字段设为 "dra.example.com/memory"，那么对于消耗 { "dra.example.com/memory": "4Gi" }
+	// 的声明分配，节点可分配资源映射的基础数量为 "4Gi"。
+	// 最终节点可分配资源量为 `consumedCapacity[capacityKey]` * `capacityMultiplier`。
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	// +k8s:alpha(since: "1.37")=+k8s:dependentRequired("capacityMultiplier")
 	CapacityKey *QualifiedName `json:"capacityKey,omitempty" protobuf:"bytes,1,opt,name=capacityKey"`
 
-	// CapacityMultiplier is used as a multiplier for the allocated capacity consumed.
-	// It is only valid if `capacityKey` is set.
-	// The final node allocatable resource amount is `consumedCapacity[capacityKey]` * `capacityMultiplier`.
-	// For example, if a Device's capacity "dra.example.com/cores" is consumed,
-	// and each "core" provides 2 "cpu"s, the mapping would be:
-	// {ResourceName: "cpu", capacityKey: "dra.example.com/cores", capacityMultiplier: "2"}.
-	// If a claim consumes 8 "dra.example.com/cores", the CPU footprint is 8 * 2 = 16.
+	// CapacityMultiplier 用作已分配且被消耗容量的乘数，仅在设置了 `capacityKey` 时有效。
+	// 最终节点可分配资源量为 `consumedCapacity[capacityKey]` * `capacityMultiplier`。
+	// 例如，若消耗了某设备的容量 "dra.example.com/cores"，且每个 "core" 提供 2 个 "cpu"，
+	// 映射为：{ResourceName: "cpu", capacityKey: "dra.example.com/cores", capacityMultiplier: "2"}。
+	// 若声明消耗 8 个 "dra.example.com/cores"，则 CPU 占用为 8 * 2 = 16。
 	// +optional
 	// +k8s:optional
 	// +k8s:alpha(since: "1.37")=+k8s:dependentRequired("capacityKey")
 	CapacityMultiplier *resource.Quantity `json:"capacityMultiplier,omitempty" protobuf:"bytes,2,opt,name=capacityMultiplier"`
 
-	// DeviceMultiplier is used as a multiplier for the allocated device count in the claim.
-	// The final node allocatable resource amount is `deviceCount` * `deviceMultiplier`.
-	// For example, a DRA driver representing each cache complex (CCX) as a device would have
-	// {ResourceName: "cpu", deviceMultiplier: "8"} in its `nodeAllocatableResources`.
-	// If 2 devices (CCX) are allocated to the claim, 2 * 8 = 16 CPUs would be considered as allocated.
-	// It is only valid when `capacityKey` and `capacityMultiplier` are not set.
+	// DeviceMultiplier 用作声明中已分配设备数量的乘数。
+	// 最终节点可分配资源量为 `deviceCount` * `deviceMultiplier`。
+	// 例如，将每个缓存复合体（CCX）建模为设备的 DRA 驱动，其 `nodeAllocatableResources`
+	// 中会有 {ResourceName: "cpu", deviceMultiplier: "8"}。若声明分配了 2 个设备（CCX），
+	// 则视为分配了 2 * 8 = 16 个 CPU。
+	// 仅在未设置 `capacityKey` 与 `capacityMultiplier` 时有效。
 	// +optional
 	// +k8s:optional
 	// +k8s:unionMember
 	DeviceMultiplier *resource.Quantity `json:"deviceMultiplier,omitempty" protobuf:"bytes,3,opt,name=deviceMultiplier"`
 }
 
-// NodeAllocatableOverhead defines auxiliary resource overheads incurred when allocating a device.
-// Overheads can be specified as a fixed cost per pod referencing the claim, a variable cost per container reference, or both.
-// Kubelet accounts for this overhead by adding it to both the pod-level and container-level cgroups of referencing containers.
+// NodeAllocatableOverhead 定义分配设备时产生的辅助资源开销。
+// 开销可以指定为每个引用该声明的 Pod 的固定成本、每个容器引用的可变成本，或两者兼有。
+// Kubelet 会将该开销加入引用容器的 Pod 级与容器级 cgroup 中进行核算。
 type NodeAllocatableOverhead struct {
-	// PerPod is overhead applied once per pod referencing the claim on this node.
-	// This is a flat overhead incurred for every pod referencing the claim.
+	// PerPod 是引用本节点上该声明的每个 Pod 各应用一次的开销。
+	// 这是每个引用该声明的 Pod 都会产生的固定开销。
 	// +optional
 	// +k8s:optional
 	PerPod *resource.Quantity `json:"perPod,omitempty" protobuf:"bytes,1,opt,name=perPod"`
 
-	// PerContainer is applied per container reference to the claim.
-	// This models overhead scaling linearly with the number of containers actively using the device.
-	// When both PerPod and PerContainer are specified, the total overhead allocated for each pod referencing
-	// the claim is computed as:
+	// PerContainer 按容器对该声明的每次引用应用。
+	// 它建模随实际使用该设备的容器数量线性增长的开销。
+	// 当同时指定 PerPod 与 PerContainer 时，每个引用该声明的 Pod 分配的总开销计算为：
 	// Quantity = PerPod + (PerContainer * NumReferences)
-	// Kubelet accounts for this overhead in cgroups:
-	// - Pod-level cgroup (requests and limits): Kubelet adds PerPod + (PerContainer * NumReferences).
-	// - Container-level cgroup (limits only): Kubelet adds PerPod + PerContainer for each referencing container.
-	// This allows any single container to access the pod-level overhead, while the parent cgroup caps the total usage to account for PerPod exactly once.
+	// Kubelet 在 cgroup 中核算该开销：
+	// - Pod 级 cgroup（requests 与 limits）：加入 PerPod + (PerContainer * NumReferences)。
+	// - 容器级 cgroup（仅 limits）：每个引用容器加入 PerPod + PerContainer。
+	// 这样任何单个容器都可以访问 Pod 级开销，同时父 cgroup 将总用量限制为
+	// 恰好计入一次 PerPod。
 	// +optional
 	// +k8s:optional
 	PerContainer *resource.Quantity `json:"perContainer,omitempty" protobuf:"bytes,2,opt,name=perContainer"`
 }
 
-// DeviceCounterConsumption defines a set of counters that
-// a device will consume from a CounterSet.
+// DeviceCounterConsumption 定义设备将从某个 CounterSet 中消耗的一组计数器。
 type DeviceCounterConsumption struct {
-	// CounterSet is the name of the set from which the
-	// counters defined will be consumed.
+	// CounterSet 是要消耗的计数器所属集合的名称。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-short-name
 	CounterSet string `json:"counterSet" protobuf:"bytes,1,opt,name=counterSet"`
 
-	// Counters defines the counters that will be consumed by the device.
+	// Counters 定义设备将消耗的计数器。
 	//
-	// The maximum number of counters is 32.
+	// 计数器最大数量为 32。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:eachKey=+k8s:format=k8s-short-name
 	Counters map[string]Counter `json:"counters,omitempty" protobuf:"bytes,2,opt,name=counters"`
 
-	// CompatibilityGroups is a list of opaque group names for
-	// this counter set consumption.
+	// CompatibilityGroups 是本次计数器消耗的不透明组名列表。
 	//
-	// Devices that consume counters from the same counter set may only be
-	// allocated at the same time ("co-allocated") if they all share at least
-	// one common group: the intersection of the CompatibilityGroups of all
-	// co-allocated devices on that counter set must be non-empty. Devices
-	// that consume from different counter sets are never compared via this
-	// field.
+	// 从同一计数器集合消耗计数的设备，只有当它们至少共享一个公共组时才能同时分配
+	// （即“共同分配”）：所有共同分配设备在该计数器集合上的 CompatibilityGroups 交集必须非空。
+	// 从不同计数器集合消耗计数的设备之间不会通过该字段比较。
 	//
-	// An unset field, an explicit nil, and an empty list are equivalent and
-	// mean "no groups": such a device is only co-allocatable with sibling
-	// devices on the same counter set that also have no groups, and is never
-	// co-allocatable with a device that declares one or more groups.
+	// 未设置、显式 nil 与空列表等价，都表示“无组”：这样的设备只能与同一计数器集合上
+	// 同样没有组的同级设备共同分配，且永远不能与声明了一个或多个组的设备共同分配。
 	//
-	// Group names are opaque and meaningful only within the
-	// publishing driver's pool.
+	// 组名是不透明的，仅在发布驱动的池内有意义。
 	//
-	// The maximum number of groups is 2, and the names must be unique.
+	// 组的最大数量为 2，且名称必须唯一。
 	//
 	// +optional
 	// +listType=atomic
@@ -690,194 +616,164 @@ type DeviceCounterConsumption struct {
 	CompatibilityGroups []string `json:"compatibilityGroups,omitempty" protobuf:"bytes,3,rep,name=compatibilityGroups"`
 }
 
-// DeviceCapacity describes a quantity associated with a device.
+// DeviceCapacity 描述与设备关联的数量。
 type DeviceCapacity struct {
-	// Value defines how much of a certain capacity that device has.
+	// Value 定义设备拥有多少某种容量。
 	//
-	// This field reflects the fixed total capacity and does not change.
-	// The consumed amount is tracked separately by scheduler
-	// and does not affect this value.
+	// 该字段反映固定的总容量，不会变化。
+	// 已消耗的数量由调度器单独跟踪，不影响该值。
 	//
 	// +required
 	Value resource.Quantity `json:"value" protobuf:"bytes,1,rep,name=value"`
 
-	// RequestPolicy defines how this DeviceCapacity must be consumed
-	// when the device is allowed to be shared by multiple allocations.
+	// RequestPolicy 定义当设备允许被多个分配共享时，本 DeviceCapacity 应如何被消耗。
 	//
-	// The Device must have allowMultipleAllocations set to true in order to set a requestPolicy.
+	// 要设置 requestPolicy，设备必须将 allowMultipleAllocations 设为 true。
 	//
-	// If unset, capacity requests are unconstrained:
-	// requests can consume any amount of capacity, as long as the total consumed
-	// across all allocations does not exceed the device's defined capacity.
-	// If request is also unset, default is the full capacity value.
+	// 未设置时，容量请求没有约束：请求可以消耗任意数量的容量，
+	// 只要所有分配消耗的总量不超过设备定义的容量即可。若请求也未设置，默认值为全部容量。
 	//
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	RequestPolicy *CapacityRequestPolicy `json:"requestPolicy,omitempty" protobuf:"bytes,2,opt,name=requestPolicy"`
 }
 
-// CapacityRequestPolicy defines how requests consume device capacity.
+// CapacityRequestPolicy 定义请求如何消耗设备容量。
 //
-// Must not set more than one ValidRequestValues.
+// 最多只能设置一个 ValidRequestValues。
 type CapacityRequestPolicy struct {
-	// Default specifies how much of this capacity is consumed by a request
-	// that does not contain an entry for it in DeviceRequest's Capacity.
+	// Default 指定当请求在 DeviceRequest 的 Capacity 中不含该容量条目时，
+	// 该请求消耗的容量。
 	//
 	// +optional
 	Default *resource.Quantity `json:"default" protobuf:"bytes,1,opt,name=default"`
 
-	// ValidValues defines a set of acceptable quantity values in consuming requests.
+	// ValidValues 定义请求中可接受的数量值集合。
 	//
-	// Must not contain more than 10 entries.
-	// Must be sorted in ascending order.
+	// 不得超过 10 个条目，且必须按升序排列。
 	//
-	// If this field is set,
-	// Default must be defined and it must be included in ValidValues list.
+	// 设置该字段时，必须定义 Default 且 Default 必须包含在 ValidValues 列表中。
 	//
-	// If the requested amount does not match any valid value but smaller than some valid values,
-	// the scheduler calculates the smallest valid value that is greater than or equal to the request.
-	// That is: min(ceil(requestedValue) ∈ validValues), where requestedValue ≤ max(validValues).
+	// 如果请求量不匹配任何有效值但小于某些有效值，调度器会计算出大于等于请求量的最小有效值。
+	// 即：min(ceil(requestedValue) ∈ validValues)，其中 requestedValue ≤ max(validValues)。
 	//
-	// If the requested amount exceeds all valid values, the request violates the policy,
-	// and this device cannot be allocated.
+	// 如果请求量超过所有有效值，则该请求违反策略，设备不可被分配。
 	//
 	// +optional
 	// +listType=atomic
 	// +oneOf=ValidRequestValues
 	ValidValues []resource.Quantity `json:"validValues,omitempty" protobuf:"bytes,3,opt,name=validValues"`
 
-	// ValidRange defines an acceptable quantity value range in consuming requests.
+	// ValidRange 定义请求中可接受的数量范围。
 	//
-	// If this field is set,
-	// Default must be defined and it must fall within the defined ValidRange.
+	// 设置该字段时，必须定义 Default 且 Default 必须落在 ValidRange 范围内。
 	//
-	// If the requested amount does not fall within the defined range, the request violates the policy,
-	// and this device cannot be allocated.
+	// 如果请求量不在定义的范围内，则该请求违反策略，设备不可被分配。
 	//
-	// If the request doesn't contain this capacity entry, Default value is used.
+	// 如果请求不含该容量条目，则使用 Default 值。
 	//
 	// +optional
 	// +oneOf=ValidRequestValues
 	ValidRange *CapacityRequestPolicyRange `json:"validRange,omitempty" protobuf:"bytes,4,opt,name=validRange"`
 }
 
-// CapacityRequestPolicyRange defines a valid range for consumable capacity values.
+// CapacityRequestPolicyRange 定义可消耗容量值的合法范围。
 //
-// If the DRAFractionalCapacityRange feature gate is
-// enabled and at least one of Min, Max, or Step is a fractional quantity (i.e.
-// its value is not an integer), milli-unit arithmetic is used instead,
-// supporting values with up to 3 decimal places (e.g. 100m = 0.1).
-// The largest supported value then is 1000 times smaller compared to using 64-bit integers.
-// Otherwise, all comparisons use 64-bit integer arithmetic via resource.Quantity.Value().
-//
-//   - If the requested amount is less than Min, it is rounded up to the Min value.
-//   - If Step is set and the requested amount is between Min and Max but not aligned with Step,
-//     it will be rounded up to the next value equal to Min + (n * Step).
-//   - If Step is not set, the requested amount is used as-is if it falls within the range Min to Max (if set).
-//   - If the requested or rounded amount exceeds Max (if set), the request does not satisfy the policy,
-//     and the device cannot be allocated.
+// 如果启用了 DRAFractionalCapacityRange 特性门控，且 Min、Max 或 Step 中至少有一个是小数数量
+// （即其值不是整数），则改用毫单位算术，支持最多 3 位小数的值（例如 100m = 0.1）。
+// 此时支持的最大值比使用 64 位整数时小 1000 倍。
+// 否则，所有比较都通过 resource.Quantity.Value() 使用 64 位整数算术。
 type CapacityRequestPolicyRange struct {
-	// Min specifies the minimum capacity allowed for a consumption request.
+	// Min 指定消耗请求允许的最小容量。
 	//
-	// Min must be greater than or equal to zero,
-	// and less than or equal to the capacity value.
-	// requestPolicy.default must be more than or equal to the minimum.
+	// Min 必须大于等于零，且小于等于容量值。
+	// requestPolicy.default 必须不小于最小值。
 	//
 	// +required
 	Min *resource.Quantity `json:"min,omitempty" protobuf:"bytes,1,opt,name=min"`
 
-	// Max defines the upper limit for capacity that can be requested.
+	// Max 定义可请求容量的上限。
 	//
-	// Max must be less than or equal to the capacity value.
-	// Min and requestPolicy.default must be less than or equal to the maximum.
+	// Max 必须小于等于容量值，且 Min 与 requestPolicy.default 都必须小于等于最大值。
 	//
 	// +optional
 	Max *resource.Quantity `json:"max,omitempty" protobuf:"bytes,2,opt,name=max"`
 
-	// Step defines the step size between valid capacity amounts within the range.
+	// Step 定义范围内合法容量值之间的步长。
 	//
-	// Max (if set) and requestPolicy.default must be a multiple of Step.
-	// Min + Step must be less than or equal to the capacity value.
+	// Max（若设置）与 requestPolicy.default 必须是 Step 的整数倍。
+	// Min + Step 必须小于等于容量值。
 	//
 	// +optional
 	Step *resource.Quantity `json:"step,omitempty" protobuf:"bytes,3,opt,name=step"`
 }
 
-// Limit for the sum of the number of entries in both attributes and capacity.
+// attributes 与 capacity 两个 map 条目数量之和的上限。
 const ResourceSliceMaxAttributesAndCapacitiesPerDevice = 32
 
-// Limit per device for the total number of string, version, bool or int values
-// in list and non-list attributes.
+// 每台设备中，列表与非列表属性里字符串、版本、布尔或整数值的总数上限。
 const ResourceSliceMaxAttributeValuesPerDevice = 48
 
-// QualifiedName is the name of a device attribute or capacity.
+// QualifiedName 是设备属性或容量的名称。
 //
-// Attributes and capacities are defined either by the owner of the specific
-// driver (usually the vendor) or by some 3rd party (e.g. the Kubernetes
-// project). Because they are sometimes compared across devices, a given name
-// is expected to mean the same thing and have the same type on all devices.
+// 属性和容量由特定驱动的拥有者（通常是供应商）或第三方（例如 Kubernetes 项目）定义。
+// 由于有时会在不同设备之间比较，给定名称在所有设备上应当含义相同、类型一致。
 //
-// Names must be either a C identifier (e.g. "theName") or a DNS subdomain
-// followed by a slash ("/") followed by a C identifier
-// (e.g. "dra.example.com/theName"). Names which do not include the
-// domain prefix are assumed to be part of the driver's domain. Attributes
-// or capacities defined by 3rd parties must include the domain prefix.
+// 名称要么是 C 标识符（如 "theName"），要么是 DNS 子域后跟斜杠（"/"）再跟 C 标识符
+// （如 "dra.example.com/theName"）。不含域前缀的名称被视为属于驱动的域。
+// 第三方定义的属性或容量必须包含域前缀。
 //
-// The maximum length for the DNS subdomain is 63 characters (same as
-// for driver names) and the maximum length of the C identifier
-// is 32.
+// DNS 子域的最大长度为 63 个字符（与驱动名相同），C 标识符的最大长度为 32。
 type QualifiedName string
 
-// FullyQualifiedName is a QualifiedName where the domain is set.
-// Format validation cannot be added to this type because one of its usages,
-// DistinctAttribute, is validated conditionally. This conditional validation
-// cannot be expressed declaratively.
+// FullyQualifiedName 是设置了域的 QualifiedName。
+// 无法为该类型添加格式校验，因为它的用途之一 DistinctAttribute 是条件校验，
+// 而这种条件校验无法用声明式方式表达。
 type FullyQualifiedName string
 
-// DeviceMaxDomainLength is the maximum length of the domain prefix in a fully-qualified name.
+// DeviceMaxDomainLength 是全限定名称中域前缀的最大长度。
 const DeviceMaxDomainLength = 63
 
-// DeviceMaxIDLength is the maximum length of the identifier in a device attribute or capacity name (`<domain>/<ID>`).
+// DeviceMaxIDLength 是设备属性或容量名（`<domain>/<ID>`）中标识符的最大长度。
 const DeviceMaxIDLength = 32
 
-// DeviceAttribute must have exactly one field set.
+// DeviceAttribute 必须恰好设置一个字段。
 type DeviceAttribute struct {
-	// The Go field names below have a Value suffix to avoid a conflict between the
-	// field "String" and the corresponding method. That method is required.
-	// The Kubernetes API is defined without that suffix to keep it more natural.
+	// 下面的 Go 字段名带有 Value 后缀，是为了避免字段 "String" 与对应方法重名，
+	// 而该方法是必需的。Kubernetes API 中的定义不带这个后缀，以保持自然。
+	//
 
-	// IntValue is a number.
+	// IntValue 是一个数值。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:unionMember
 	IntValue *int64 `json:"int,omitempty" protobuf:"varint,2,opt,name=int"`
 
-	// BoolValue is a true/false value.
+	// BoolValue 是 true/false 值。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:unionMember
 	BoolValue *bool `json:"bool,omitempty" protobuf:"varint,3,opt,name=bool"`
 
-	// StringValue is a string. Must not be longer than 64 characters.
+	// StringValue 是字符串，长度不得超过 64 个字符。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:unionMember
 	StringValue *string `json:"string,omitempty" protobuf:"bytes,4,opt,name=string"`
 
-	// VersionValue is a semantic version according to semver.org spec 2.0.0.
-	// Must not be longer than 64 characters.
+	// VersionValue 是符合 semver.org 2.0.0 规范的语义版本，长度不得超过 64 个字符。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:unionMember
 	VersionValue *string `json:"version,omitempty" protobuf:"bytes,5,opt,name=version"`
 
-	// IntValues is a non-empty list of numbers.
+	// IntValues 是非空的数值列表。
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -886,7 +782,7 @@ type DeviceAttribute struct {
 	// +featureGate=DRAListTypeAttributes
 	IntValues []int64 `json:"ints,omitempty" protobuf:"varint,6,opt,name=ints"`
 
-	// BoolValues is a non-empty list of true/false values.
+	// BoolValues 是非空的 true/false 值列表。
 	//
 	// +optional
 	// +listType=atomic
@@ -895,10 +791,9 @@ type DeviceAttribute struct {
 	// +featureGate=DRAListTypeAttributes
 	BoolValues []bool `json:"bools,omitempty" protobuf:"varint,7,opt,name=bools"`
 
-	// StringValues is a non-empty list of strings.
-	// Each string must not be longer than 64 characters.
+	// StringValues 是非空的字符串列表，每个字符串长度不得超过 64 个字符。
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -908,10 +803,10 @@ type DeviceAttribute struct {
 	// +featureGate=DRAListTypeAttributes
 	StringValues []string `json:"strings,omitempty" protobuf:"bytes,8,opt,name=strings"`
 
-	// VersionValues is a non-empty list of semantic versions according to semver.org spec 2.0.0.
-	// Each version string must not be longer than 64 characters.
+	// VersionValues 是非空的语义版本列表，版本需符合 semver.org 2.0.0 规范，
+	// 每个版本字符串长度不得超过 64 个字符。
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -921,36 +816,31 @@ type DeviceAttribute struct {
 	VersionValues []string `json:"versions,omitempty" protobuf:"bytes,9,opt,name=versions"`
 }
 
-// DeviceAttributeMaxValueLength is the maximum length of a string or version attribute value.
+// DeviceAttributeMaxValueLength 是字符串或版本属性值的最大长度。
 const DeviceAttributeMaxValueLength = 64
 
-// DeviceTaintsMaxLength is the maximum number of taints per Device.
+// DeviceTaintsMaxLength 是每台 Device 的污点最大数量。
 const DeviceTaintsMaxLength = 16
 
-// The device this taint is attached to has the "effect" on
-// any claim which does not tolerate the taint and, through the claim,
-// to pods using the claim.
+// 污点所附着的设备会对任何不容忍该污点的声明产生 "effect" 影响，
+// 并通过该声明影响到使用该声明的 Pod。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type DeviceTaint struct {
-	// The taint key to be applied to a device.
-	// Must be a label name.
+	// 要施加到设备上的污点键，必须是标签名。
 	//
 	// +required
 	Key string `json:"key" protobuf:"bytes,1,name=key"`
 
-	// The taint value corresponding to the taint key.
-	// Must be a label value.
+	// 与污点键对应的污点值，必须是标签值。
 	//
 	// +optional
 	Value string `json:"value,omitempty" protobuf:"bytes,2,opt,name=value"`
 
-	// The effect of the taint on claims that do not tolerate the taint
-	// and through such claims on the pods using them.
+	// 该污点对所有不容忍它的声明、以及通过这些声明对使用它们的 Pod 的影响。
 	//
-	// Valid effects are None, NoSchedule and NoExecute. PreferNoSchedule as used for
-	// nodes is not valid here. More effects may get added in the future.
-	// Consumers must treat unknown effects like None.
+	// 合法 effect 为 None、NoSchedule 和 NoExecute。节点使用的 PreferNoSchedule 在这里无效。
+	// 未来可能增加更多 effect，消费者必须把未知 effect 当作 None 处理。
 	//
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
@@ -958,67 +848,61 @@ type DeviceTaint struct {
 
 	// ^^^^
 	//
-	// Implementing PreferNoSchedule would depend on a scoring solution for DRA.
-	// It might get added as part of that.
+	// 实现 PreferNoSchedule 取决于 DRA 的打分方案，可能会随该方案一起加入。
 	//
-	// A possible future new effect is NoExecuteWithPodDisruptionBudget:
-	// honor the pod disruption budget instead of simply deleting pods.
-	// This is currently undecided, it could also be a separate field.
+	// 未来可能新增的 effect 是 NoExecuteWithPodDisruptionBudget：
+	// 遵循 Pod 中断预算，而不是直接删除 Pod。目前尚未决定，也可能做成一个单独的字段。
 	//
-	// Validation must be prepared to allow unknown enums in stored objects,
-	// which will enable adding new enums within a single release without
-	// ratcheting.
+	// 校验必须允许存储对象中出现未知枚举值，这样才能在单个发布版本内新增枚举，
+	// 而无需 ratcheting 机制。
+	//
 
-	// TimeAdded represents the time at which the taint was added or
-	// (only in a DeviceTaintRule) the effect was modified.
-	// Added automatically during create or update if not set.
+	// TimeAdded 表示污点被添加的时间，或者（仅在 DeviceTaintRule 中）effect 被修改的时间。
+	// 如果未设置，会在创建或更新时自动添加。
 	//
-	// In addition, in a DeviceTaintRule a value provided during
-	// an update gets replaced with the current time if the provided
-	// value is the same as the old one and the new effect is different.
-	// Changing the key and/or value while keeping the effect unchanged
-	// is possible and does not update the time stamp because the eviction
-	// which uses it is either already started (NoExecute) or
-	// not started yet (NoEffect, NoSchedule).
+	// 此外，在 DeviceTaintRule 中，如果更新时提供的值与旧值相同而 effect 不同，
+	// 提供的值会被替换为当前时间。保持 effect 不变而只修改 key 和/或 value 是允许的，
+	// 且不会更新时间戳，因为使用它的驱逐要么已经开始（NoExecute），要么尚未开始
 	//
 	// +optional
 	TimeAdded *metav1.Time `json:"timeAdded,omitempty" protobuf:"bytes,4,opt,name=timeAdded"`
 
 	// ^^^
 	//
-	// This field was defined as "It is only written for NoExecute taints." for node taints.
-	// But in practice, Kubernetes never did anything with it (no validation, no defaulting,
-	// ignored during pod eviction in pkg/controller/tainteviction).
+	// 对于节点污点，该字段原先的定义是“只对 NoExecute 污点写入”。
+	// 但实际上 Kubernetes 从未对它做过任何处理（无校验、无默认值，
+	// 在 pkg/controller/tainteviction 的 Pod 驱逐中被忽略）。
 }
 
 // +enum
 // +k8s:beta(since: "1.37")=+k8s:enum
+// DeviceTaintEffect 描述设备污点对不容忍它的声明的效果。
 type DeviceTaintEffect string
 
 const (
-	// No effect, the taint is purely informational.
+	// 无影响，污点纯粹是信息性的。
 	DeviceTaintEffectNone DeviceTaintEffect = "None"
 
-	// Do not allow new pods to schedule which use a tainted device unless they tolerate the taint,
-	// but allow all pods submitted to Kubelet without going through the scheduler
-	// to start, and allow all already-running pods to continue running.
+	// 不允许新的 Pod 调度到使用被污染设备的节点上，除非它们容忍该污点；
+	// 但允许所有未经调度器、直接提交给 Kubelet 的 Pod 启动，
+	// 也允许所有已经在运行的 Pod 继续运行。
 	DeviceTaintEffectNoSchedule DeviceTaintEffect = "NoSchedule"
 
-	// Evict any already-running pods that do not tolerate the device taint.
+	// 驱逐所有不容忍该设备污点的、已经在运行的 Pod。
 	DeviceTaintEffectNoExecute DeviceTaintEffect = "NoExecute"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// ResourceSliceList is a collection of ResourceSlices.
+// ResourceSliceList 是 ResourceSlice 的集合。
 type ResourceSliceList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of resource ResourceSlices.
+	// Items 是 ResourceSlice 的列表。
 	Items []ResourceSlice `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -1027,48 +911,42 @@ type ResourceSliceList struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 // +k8s:supportsSubresource="/status"
 
-// ResourceClaim describes a request for access to resources in the cluster,
-// for use by workloads. For example, if a workload needs an accelerator device
-// with specific properties, this is how that request is expressed. The status
-// stanza tracks whether this claim has been satisfied and what specific
-// resources have been allocated.
+// ResourceClaim 描述工作负载对集群资源的访问请求。
+// 例如，如果某个工作负载需要具有特定属性的加速卡设备，就用它来表达该请求。
+// status 部分记录该声明是否已满足，以及分配到了哪些具体资源。
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要启用 DynamicResourceAllocation 特性门控。
 type ResourceClaim struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec describes what is being requested and how to configure it.
-	// The spec is immutable.
+	// Spec 描述请求的内容及配置方式，spec 不可变。
 	// +k8s:beta(since: "1.37")=+k8s:immutable
 	// +optional
 	Spec ResourceClaimSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 
-	// Status describes whether the claim is ready to use and what has been allocated.
+	// Status 描述声明是否可用以及已分配的内容。
 	// +optional
 	Status ResourceClaimStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// ResourceClaimSpec defines what is being requested in a ResourceClaim and how to configure it.
+// ResourceClaimSpec 定义 ResourceClaim 中请求什么以及如何配置。
 type ResourceClaimSpec struct {
-	// Devices defines how to request devices.
+	// Devices 定义如何请求设备。
 	//
 	// +optional
 	Devices DeviceClaim `json:"devices" protobuf:"bytes,1,name=devices"`
 
-	// Controller is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
-	// Controller string `json:"controller,omitempty" protobuf:"bytes,2,opt,name=controller"`
+	// Controller 自 Kubernetes 1.32 起已被移除，此处保留墓碑。
+	// 当不再需要解码 v1alpha3 时，可以复用该名称。
 }
 
-// DeviceClaim defines how to request devices with a ResourceClaim.
+// DeviceClaim 定义如何用 ResourceClaim 请求设备。
 type DeviceClaim struct {
-	// Requests represent individual requests for distinct devices which
-	// must all be satisfied. If empty, nothing needs to be allocated.
+	// Requests 表示对互不相同的设备的单独请求，所有请求都必须被满足。
+	// 若为空，则无需分配任何资源。
 	//
 	// +optional
 	// +listType=atomic
@@ -1079,8 +957,7 @@ type DeviceClaim struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Requests []DeviceRequest `json:"requests" protobuf:"bytes,1,name=requests"`
 
-	// These constraints must be satisfied by the set of devices that get
-	// allocated for the claim.
+	// 为本声明分配的设备集合必须满足这些约束。
 	//
 	// +optional
 	// +listType=atomic
@@ -1088,9 +965,8 @@ type DeviceClaim struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Constraints []DeviceConstraint `json:"constraints,omitempty" protobuf:"bytes,2,opt,name=constraints"`
 
-	// This field holds configuration for multiple potential drivers which
-	// could satisfy requests in this claim. It is ignored while allocating
-	// the claim.
+	// 本字段保存多个潜在驱动的配置，这些驱动都可能满足本声明中的请求。
+	// 分配声明时会忽略这些配置。
 	//
 	// +optional
 	// +listType=atomic
@@ -1098,9 +974,8 @@ type DeviceClaim struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Config []DeviceClaimConfiguration `json:"config,omitempty" protobuf:"bytes,3,opt,name=config"`
 
-	// Potential future extension, ignored by older schedulers. This is
-	// fine because scoring allows users to define a preference, without
-	// making it a hard requirement.
+	// 潜在的未来扩展，旧调度器会忽略。这是可行的，因为打分只让用户表达偏好，
+	// 而不会使其成为硬性要求。
 	//
 	// Score *SomeScoringStruct
 }
@@ -1111,54 +986,38 @@ const (
 	DeviceConfigMaxSize      = 32
 )
 
-// DRAAdminNamespaceLabelKey is a label key used to grant administrative access
-// to certain resource.k8s.io API types within a namespace. When this label is
-// set on a namespace with the value "true" (case-sensitive), it allows the use
-// of adminAccess: true in any namespaced resource.k8s.io API types. Currently,
-// this permission applies to ResourceClaim and ResourceClaimTemplate objects.
+// DRAAdminNamespaceLabelKey 是一个标签键，用于在命名空间内授予对某些 resource.k8s.io API 类型的管理访问权限。
+// 当命名空间上该标签的值设为 "true"（区分大小写）时，允许在任何命名空间级的 resource.k8s.io API 类型中
+// 使用 adminAccess: true。目前该权限适用于 ResourceClaim 与 ResourceClaimTemplate 对象。
 const (
 	DRAAdminNamespaceLabelKey = "resource.kubernetes.io/admin-access"
 )
 
-// DeviceRequest is a request for devices required for a claim.
-// This is typically a request for a single resource like a device, but can
-// also ask for several identical devices.
+// DeviceRequest 是声明对所需设备的请求。
+// 通常是请求单个资源（如一个设备），但也可以请求多个相同的设备。
 type DeviceRequest struct {
-	// Name can be used to reference this request in a pod.spec.containers[].resources.claims
-	// entry and in a constraint of the claim.
+	// Name 可用于在 pod.spec.containers[].resources.claims 条目以及声明的约束中引用本请求。
 	//
-	// Must be a DNS label and unique among all DeviceRequests in a
-	// ResourceClaim.
+	// 必须是 DNS 标签，且在 ResourceClaim 的所有 DeviceRequest 中唯一。
 	//
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// DeviceClassName references a specific DeviceClass, which can define
-	// additional configuration and selectors to be inherited by this
-	// request.
+	// DeviceClassName 引用特定的 DeviceClass，后者可以定义供本请求继承的附加配置与选择器。
 	//
-	// A class is required if no subrequests are specified in the
-	// firstAvailable list and no class can be set if subrequests
-	// are specified in the firstAvailable list.
-	// Which classes are available depends on the cluster.
+	// 如果 firstAvailable 列表中未指定子请求，则必须指定类；如果 firstAvailable 列表中指定了子请求，
+	// 则不能设置类。哪些类可用取决于集群。
 	//
-	// Administrators may use this to restrict which devices may get
-	// requested by only installing classes with selectors for permitted
-	// devices. If users are free to request anything without restrictions,
-	// then administrators can create an empty DeviceClass for users
-	// to reference.
+	// 管理员可以只安装带有允许设备选择器的类，以此限制用户可以请求哪些设备。
+	// 若允许用户不受限制地请求任何设备，管理员可以创建一个空的 DeviceClass 供用户引用。
 	//
 	// +optional
 	// +oneOf=deviceRequestType
 	DeviceClassName string `json:"deviceClassName" protobuf:"bytes,2,name=deviceClassName"`
 
-	// Selectors define criteria which must be satisfied by a specific
-	// device in order for that device to be considered for this
-	// request. All selectors must be satisfied for a device to be
-	// considered.
+	// Selectors 定义某设备被本请求考虑所必须满足的条件，设备必须满足所有选择器。
 	//
-	// This field can only be set when deviceClassName is set and no subrequests
-	// are specified in the firstAvailable list.
+	// 只有当 deviceClassName 已设置且 firstAvailable 列表中未指定子请求时，才能设置该字段。
 	//
 	// +optional
 	// +listType=atomic
@@ -1166,74 +1025,54 @@ type DeviceRequest struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Selectors []DeviceSelector `json:"selectors,omitempty" protobuf:"bytes,3,name=selectors"`
 
-	// AllocationMode and its related fields define how devices are allocated
-	// to satisfy this request. Supported values are:
+	// AllocationMode 及其相关字段定义如何分配设备以满足本请求，支持的取值为：
 	//
-	// - ExactCount: This request is for a specific number of devices.
-	//   This is the default. The exact number is provided in the
-	//   count field.
+	// - ExactCount：请求指定数量的设备，这是默认值，具体数量在 count 字段中给出。
 	//
-	// - All: This request is for all of the matching devices in a pool.
-	//   At least one device must exist on the node for the allocation to succeed.
-	//   Allocation will fail if some devices are already allocated,
-	//   unless adminAccess is requested.
+	// - All：请求池中全部匹配的设备。分配成功要求节点上至少存在一台设备。
+	//   如果部分设备已被分配，分配会失败，除非请求了 adminAccess。
 	//
-	// If AllocationMode is not specified, the default mode is ExactCount. If
-	// the mode is ExactCount and count is not specified, the default count is
-	// one. Any other requests must specify this field.
+	// 未指定 AllocationMode 时默认使用 ExactCount；模式为 ExactCount 且未指定 count 时默认数量为 1。
+	// 其他请求必须显式指定该字段。
 	//
-	// This field can only be set when deviceClassName is set and no subrequests
-	// are specified in the firstAvailable list.
+	// 只有当 deviceClassName 已设置且 firstAvailable 列表中未指定子请求时，才能设置该字段。
 	//
-	// More modes may get added in the future. Clients must refuse to handle
-	// requests with unknown modes.
+	// 未来可能增加更多模式，客户端必须拒绝处理未知模式的请求。
 	//
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	AllocationMode DeviceAllocationMode `json:"allocationMode,omitempty" protobuf:"bytes,4,opt,name=allocationMode"`
 
-	// Count is used only when the count mode is "ExactCount". Must be greater than zero.
-	// If AllocationMode is ExactCount and this field is not specified, the default is one.
+	// Count 仅在计数模式为 "ExactCount" 时使用，必须大于零。
+	// 如果 AllocationMode 为 ExactCount 且未指定该字段，默认值为 1。
 	//
-	// This field can only be set when deviceClassName is set and no subrequests
-	// are specified in the firstAvailable list.
+	// 只有当 deviceClassName 已设置且 firstAvailable 列表中未指定子请求时，才能设置该字段。
 	//
 	// +optional
 	// +oneOf=AllocationMode
 	Count int64 `json:"count,omitempty" protobuf:"bytes,5,opt,name=count"`
 
-	// AdminAccess indicates that this is a claim for administrative access
-	// to the device(s). Claims with AdminAccess are expected to be used for
-	// monitoring or other management services for a device.  They ignore
-	// all ordinary claims to the device with respect to access modes and
-	// any resource allocations.
+	// AdminAccess 表示本声明是对设备的管理访问的声明。
+	// 带 AdminAccess 的声明预期用于设备的监控或其他管理服务，在访问模式和资源分配方面
+	// 会忽略设备上所有普通声明。
 	//
-	// This field can only be set when deviceClassName is set and no subrequests
-	// are specified in the firstAvailable list.
+	// 只有当 deviceClassName 已设置且 firstAvailable 列表中未指定子请求时，才能设置该字段。
 	//
-	// This is an alpha field and requires enabling the DRAAdminAccess
-	// feature gate. Admin access is disabled if this field is unset or
-	// set to false, otherwise it is enabled.
+	// 这是 alpha 字段，需要启用 DRAAdminAccess 特性门控。未设置或设为 false 时禁用管理访问，
+	// 否则启用。
 	//
 	// +optional
 	// +featureGate=DRAAdminAccess
 	AdminAccess *bool `json:"adminAccess,omitempty" protobuf:"bytes,6,opt,name=adminAccess"`
 
-	// FirstAvailable contains subrequests, of which exactly one will be
-	// satisfied by the scheduler to satisfy this request. It tries to
-	// satisfy them in the order in which they are listed here. So if
-	// there are two entries in the list, the scheduler will only check
-	// the second one if it determines that the first one cannot be used.
+	// FirstAvailable 包含多个子请求，调度器会恰好满足其中一个。它按此处列出的顺序尝试满足，
+	// 因此如果列表中有两条记录，调度器只有在确定第一条不可用时才会检查第二条。
 	//
-	// This field may only be set in the entries of DeviceClaim.Requests.
+	// 该字段只能在 DeviceClaim.Requests 的条目中设置。
 	//
-	// DRA does not yet implement scoring, so the scheduler will
-	// select the first set of devices that satisfies all the
-	// requests in the claim. And if the requirements can
-	// be satisfied on more than one node, other scheduling features
-	// will determine which node is chosen. This means that the set of
-	// devices allocated to a claim might not be the optimal set
-	// available to the cluster. Scoring will be implemented later.
+	// DRA 目前尚未实现打分，因此调度器会选择第一组能满足声明中所有请求的设备。
+	// 如果需求可以在多个节点上满足，则由其他调度特性决定选择哪个节点。这意味着分配给声明的
+	// 设备集合可能不是集群中的最优解，打分功能会在以后实现。
 	//
 	// +optional
 	// +oneOf=deviceRequestType
@@ -1246,26 +1085,19 @@ type DeviceRequest struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=8
 	FirstAvailable []DeviceSubRequest `json:"firstAvailable,omitempty" protobuf:"bytes,7,name=firstAvailable"`
 
-	// If specified, the request's tolerations.
+	// 若指定，这是请求的容忍列表。
 	//
-	// Tolerations for NoSchedule are required to allocate a
-	// device which has a taint with that effect. The same applies
-	// to NoExecute.
+	// 要分配带 NoSchedule 效果污点的设备，必须有对应的 NoSchedule 容忍，NoExecute 同理。
 	//
-	// In addition, should any of the allocated devices get tainted
-	// with NoExecute after allocation and that effect is not tolerated,
-	// then all pods consuming the ResourceClaim get deleted to evict
-	// them. The scheduler will not let new pods reserve the claim while
-	// it has these tainted devices. Once all pods are evicted, the
-	// claim will get deallocated.
+	// 此外，如果任何已分配设备在分配后被加上 NoExecute 污点且该效果未被容忍，
+	// 所有使用该 ResourceClaim 的 Pod 都会被删除以进行驱逐。在设备带这些污点期间，
+	// 调度器不会让新 Pod 预留该声明。所有 Pod 被驱逐后，声明会被解除分配。
 	//
-	// The maximum number of tolerations is 16.
+	// 容忍的最大数量为 16。
 	//
-	// This field can only be set when deviceClassName is set and no subrequests
-	// are specified in the firstAvailable list.
+	// 只有当 deviceClassName 已设置且 firstAvailable 列表中未指定子请求时，才能设置该字段。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要启用 DRADeviceTaints 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -1273,43 +1105,33 @@ type DeviceRequest struct {
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Tolerations []DeviceToleration `json:"tolerations,omitempty" protobuf:"bytes,8,opt,name=tolerations"`
 
-	// Capacity define resource requirements against each capacity.
+	// Capacity 定义针对每种容量的资源需求。
 	//
-	// If this field is unset and the device supports multiple allocations,
-	// the default value will be applied to each capacity according to requestPolicy.
-	// For the capacity that has no requestPolicy, default is the full capacity value.
+	// 如果未设置该字段且设备支持多次分配，则按 requestPolicy 为每种容量应用默认值；
+	// 没有 requestPolicy 的容量默认取全部容量值。
 	//
-	// Applies to each device allocation.
-	// If Count > 1,
-	// the request fails if there aren't enough devices that meet the requirements.
-	// If AllocationMode is set to All,
-	// the request fails if there are devices that otherwise match the request,
-	// and have this capacity, with a value >= the requested amount, but which cannot be allocated to this request.
+	// 适用于每次设备分配。如果 Count > 1，但没有足够满足需求的设备，请求会失败。
+	// 如果 AllocationMode 设为 All，且存在其他都匹配该请求、拥有该容量且容量值 >= 请求量、
+	// 但无法分配给本请求的设备，请求也会失败。
 	//
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	Capacity *CapacityRequirements `json:"capacity,omitempty" protobuf:"bytes,9,opt,name=capacity"`
 
-	// DerivedAttributes defines a set of virtual attributes computed via CEL expressions
-	// for each candidate device. These virtual attributes can be referenced in
-	// `.devices.constraints` to align and match different devices (e.g., co-allocating
-	// a GPU and a NIC on the same NUMA node) even if their drivers publish different
-	// attributes. Derived attributes are not available via `device.attributes`
-	// in the CEL environment when evaluating selector expressions.
+	// DerivedAttributes 定义一组通过 CEL 表达式为每个候选设备计算出的虚拟属性。
+	// 这些虚拟属性可在 `.devices.constraints` 中引用，用于对齐和匹配不同设备（例如在同一 NUMA 节点上
+	// 共同分配 GPU 与 NIC），即使它们的驱动发布的是不同属性。在计算选择器表达式时，
+	// 派生属性在 CEL 环境中无法通过 `device.attributes` 访问。
 	//
-	// Derived attributes allow you to extract, transform, or normalize topology
-	// information (such as extracting a NUMA index from a complex topology string or
-	// renaming a vendor-specific attribute) into a common virtual attribute name at
-	// scheduling time. The scheduler then evaluates these virtual attributes exactly
-	// like static attributes when matching constraints.
+	// 派生属性允许在调度时提取、转换或规范化拓扑信息（例如从复杂的拓扑字符串中抽取 NUMA 索引，
+	// 或重命名供应商特有属性）为统一的虚拟属性名。随后调度器会像匹配静态属性一样匹配这些虚拟属性。
 	//
-	// Every derived attribute defined in this list must be referenced by at least one
-	// MatchAttribute or DistinctAttribute constraint in the `.devices.constraints` list.
+	// 列表中定义的每个派生属性都必须被 `.devices.constraints` 列表中的至少一个
+	// MatchAttribute 或 DistinctAttribute 约束引用。
 	//
-	// The maximum number of derived attributes is 32.
+	// 派生属性的最大数量为 32。
 	//
-	// This is an alpha field and requires enabling the DRADerivedAttributes
-	// feature gate.
+	// 这是 alpha 字段，需要启用 DRADerivedAttributes 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -1319,46 +1141,28 @@ type DeviceRequest struct {
 	DerivedAttributes []DeviceDerivedAttribute `json:"derivedAttributes,omitempty" protobuf:"bytes,10,rep,name=derivedAttributes"`
 }
 
-// DeviceSubRequest describes a request for device provided in the
-// claim.spec.devices.requests[].firstAvailable array. Each
-// is typically a request for a single resource like a device, but can
-// also ask for several identical devices.
+// DeviceSubRequest 描述 claim.spec.devices.requests[].firstAvailable 数组中提供的设备请求。
+// 每个请求通常是请求单个资源（如一个设备），但也可以请求多个相同的设备。
 //
-// DeviceSubRequest is similar to Request, but doesn't expose the AdminAccess
-// or FirstAvailable fields, as those can only be set on the top-level request.
-// AdminAccess is not supported for requests with a prioritized list, and
-// recursive FirstAvailable fields are not supported.
+// DeviceSubRequest 与 Request 类似，但不暴露 AdminAccess 与 FirstAvailable 字段，
+// 因为它们只能在顶层请求中设置。优先级列表不支持管理访问，也不支持递归的 FirstAvailable 字段。
 type DeviceSubRequest struct {
-	// Name can be used to reference this subrequest in the list of constraints
-	// or the list of configurations for the claim. References must use the
-	// format <main request>/<subrequest>.
+	// Name 可用于在声明的约束列表或配置列表中引用本子请求，引用格式为 <main request>/<subrequest>。
 	//
-	// Must be a DNS label.
+	// 必须是 DNS 标签。
 	//
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,name=name"`
 
-	// DeviceClassName references a specific DeviceClass, which can define
-	// additional configuration and selectors to be inherited by this
-	// subrequest.
+	// DeviceClassName 引用特定的 DeviceClass，后者可以定义供本子请求继承的附加配置与选择器。
 	//
-	// A class is required. Which classes are available depends on the cluster.
-	//
-	// Administrators may use this to restrict which devices may get
-	// requested by only installing classes with selectors for permitted
-	// devices. If users are free to request anything without restrictions,
-	// then administrators can create an empty DeviceClass for users
-	// to reference.
-	//
+	// 必须指定类，哪些类可用取决于集群。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-long-name
 	DeviceClassName string `json:"deviceClassName" protobuf:"bytes,2,name=deviceClassName"`
 
-	// Selectors define criteria which must be satisfied by a specific
-	// device in order for that device to be considered for this
-	// subrequest. All selectors must be satisfied for a device to be
-	// considered.
+	// Selectors 定义某设备被本子请求考虑所必须满足的条件，设备必须满足所有选择器。
 	//
 	// +optional
 	// +listType=atomic
@@ -1366,52 +1170,33 @@ type DeviceSubRequest struct {
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Selectors []DeviceSelector `json:"selectors,omitempty" protobuf:"bytes,3,name=selectors"`
 
-	// AllocationMode and its related fields define how devices are allocated
-	// to satisfy this subrequest. Supported values are:
+	// AllocationMode 及其相关字段定义如何分配设备以满足本子请求，支持的取值为：
 	//
-	// - ExactCount: This request is for a specific number of devices.
-	//   This is the default. The exact number is provided in the
-	//   count field.
+	// - ExactCount：请求指定数量的设备，这是默认值，具体数量在 count 字段中给出。
 	//
-	// - All: This subrequest is for all of the matching devices in a pool.
-	//   Allocation will fail if some devices are already allocated,
-	//   unless adminAccess is requested.
-	//
-	// If AllocationMode is not specified, the default mode is ExactCount. If
-	// the mode is ExactCount and count is not specified, the default count is
-	// one. Any other subrequests must specify this field.
-	//
-	// More modes may get added in the future. Clients must refuse to handle
-	// requests with unknown modes.
-	//
+	// - All：请求池中全部匹配的设备。如果部分设备已被分配，分配会失败，除非请求了 adminAccess。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	AllocationMode DeviceAllocationMode `json:"allocationMode,omitempty" protobuf:"bytes,4,opt,name=allocationMode"`
 
-	// Count is used only when the count mode is "ExactCount". Must be greater than zero.
-	// If AllocationMode is ExactCount and this field is not specified, the default is one.
+	// Count 仅在计数模式为 "ExactCount" 时使用，必须大于零。
+	// 如果 AllocationMode 为 ExactCount 且未指定该字段，默认值为 1。
 	//
 	// +optional
 	// +oneOf=AllocationMode
 	Count int64 `json:"count,omitempty" protobuf:"bytes,5,opt,name=count"`
 
-	// If specified, the request's tolerations.
+	// 若指定，这是请求的容忍列表。
 	//
-	// Tolerations for NoSchedule are required to allocate a
-	// device which has a taint with that effect. The same applies
-	// to NoExecute.
+	// 要分配带 NoSchedule 效果污点的设备，必须有对应的 NoSchedule 容忍，NoExecute 同理。
 	//
-	// In addition, should any of the allocated devices get tainted
-	// with NoExecute after allocation and that effect is not tolerated,
-	// then all pods consuming the ResourceClaim get deleted to evict
-	// them. The scheduler will not let new pods reserve the claim while
-	// it has these tainted devices. Once all pods are evicted, the
-	// claim will get deallocated.
+	// 此外，如果任何已分配设备在分配后被加上 NoExecute 污点且该效果未被容忍，
+	// 所有使用该 ResourceClaim 的 Pod 都会被删除以进行驱逐。在设备带这些污点期间，
+	// 调度器不会让新 Pod 预留该声明。所有 Pod 被驱逐后，声明会被解除分配。
 	//
-	// The maximum number of tolerations is 16.
+	// 容忍的最大数量为 16。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要启用 DRADeviceTaints 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -1419,43 +1204,33 @@ type DeviceSubRequest struct {
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Tolerations []DeviceToleration `json:"tolerations,omitempty" protobuf:"bytes,7,opt,name=tolerations"`
 
-	// Capacity define resource requirements against each capacity.
+	// Capacity 定义针对每种容量的资源需求。
 	//
-	// If this field is unset and the device supports multiple allocations,
-	// the default value will be applied to each capacity according to requestPolicy.
-	// For the capacity that has no requestPolicy, default is the full capacity value.
+	// 如果未设置该字段且设备支持多次分配，则按 requestPolicy 为每种容量应用默认值；
+	// 没有 requestPolicy 的容量默认取全部容量值。
 	//
-	// Applies to each device allocation.
-	// If Count > 1,
-	// the request fails if there aren't enough devices that meet the requirements.
-	// If AllocationMode is set to All,
-	// the request fails if there are devices that otherwise match the request,
-	// and have this capacity, with a value >= the requested amount, but which cannot be allocated to this request.
+	// 适用于每次设备分配。如果 Count > 1，但没有足够满足需求的设备，请求会失败。
+	// 如果 AllocationMode 设为 All，且存在其他都匹配该请求、拥有该容量且容量值 >= 请求量、
+	// 但无法分配给本请求的设备，请求也会失败。
 	//
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	Capacity *CapacityRequirements `json:"capacity,omitempty" protobuf:"bytes,8,opt,name=capacity"`
 
-	// DerivedAttributes defines a set of virtual attributes computed via CEL expressions
-	// for each candidate device. These virtual attributes can be referenced in
-	// `.devices.constraints` to align and match different devices (e.g., co-allocating
-	// a GPU and a NIC on the same NUMA node) even if their drivers publish different
-	// attributes. Derived attributes are not available via `device.attributes`
-	// in the CEL environment when evaluating selector expressions.
+	// DerivedAttributes 定义一组通过 CEL 表达式为每个候选设备计算出的虚拟属性。
+	// 这些虚拟属性可在 `.devices.constraints` 中引用，用于对齐和匹配不同设备（例如在同一 NUMA 节点上
+	// 共同分配 GPU 与 NIC），即使它们的驱动发布的是不同属性。在计算选择器表达式时，
+	// 派生属性在 CEL 环境中无法通过 `device.attributes` 访问。
 	//
-	// Derived attributes allow you to extract, transform, or normalize topology
-	// information (such as extracting a NUMA index from a complex topology string or
-	// renaming a vendor-specific attribute) into a common virtual attribute name at
-	// scheduling time. The scheduler then evaluates these virtual attributes exactly
-	// like static attributes when matching constraints.
+	// 派生属性允许在调度时提取、转换或规范化拓扑信息（例如从复杂的拓扑字符串中抽取 NUMA 索引，
+	// 或重命名供应商特有属性）为统一的虚拟属性名。随后调度器会像匹配静态属性一样匹配这些虚拟属性。
 	//
-	// Every derived attribute defined in this list must be referenced by at least one
-	// MatchAttribute or DistinctAttribute constraint in the `.devices.constraints` list.
+	// 列表中定义的每个派生属性都必须被 `.devices.constraints` 列表中的至少一个
+	// MatchAttribute 或 DistinctAttribute 约束引用。
 	//
-	// The maximum number of derived attributes is 32.
+	// 派生属性的最大数量为 32。
 	//
-	// This is an alpha field and requires enabling the DRADerivedAttributes
-	// feature gate.
+	// 这是 alpha 字段，需要启用 DRADerivedAttributes 特性门控。
 	//
 	// +optional
 	// +listType=atomic
@@ -1465,85 +1240,24 @@ type DeviceSubRequest struct {
 	DerivedAttributes []DeviceDerivedAttribute `json:"derivedAttributes,omitempty" protobuf:"bytes,9,rep,name=derivedAttributes"`
 }
 
-// CapacityRequirements defines the capacity requirements for a specific device request.
+// CapacityRequirements 定义特定设备请求的容量需求。
 type CapacityRequirements struct {
-	// Requests represent individual device resource requests for distinct resources,
-	// all of which must be provided by the device.
-	//
-	// This value is used as an additional filtering condition against the available capacity on the device.
-	// This is semantically equivalent to a CEL selector with
-	// `device.capacity[<domain>].<name>.compareTo(quantity(<request quantity>)) >= 0`.
-	// For example, device.capacity['test-driver.cdi.k8s.io'].counters.compareTo(quantity('2')) >= 0.
-	//
-	// When a requestPolicy is defined, the requested amount is adjusted upward
-	// to the nearest valid value based on the policy.
-	// If the requested amount cannot be adjusted to a valid value—because it exceeds what the requestPolicy allows—
-	// the device is considered ineligible for allocation.
-	//
-	// For any capacity that is not explicitly requested:
-	// - If no requestPolicy is set, the default consumed capacity is equal to the full device capacity
-	//   (i.e., the whole device is claimed).
-	// - If a requestPolicy is set, the default consumed capacity is determined according to that policy.
-	//
-	// If the device allows multiple allocation,
-	// the aggregated amount across all requests must not exceed the capacity value.
-	// The consumed capacity, which may be adjusted based on the requestPolicy if defined,
-	// is recorded in the resource claim’s status.devices[*].consumedCapacity field.
-	//
+	// Requests 表示对不同资源的单独设备资源请求，设备必须提供所有这些资源。
 	// +optional
 	Requests map[QualifiedName]resource.Quantity `json:"requests,omitempty" protobuf:"bytes,1,rep,name=requests,castkey=QualifiedName"`
 }
 
-// DeviceDerivedAttribute defines a derived attribute computed via CEL.
+// DeviceDerivedAttribute 定义通过 CEL 计算出的派生属性。
 type DeviceDerivedAttribute struct {
-	// Name is the identifier for this derived attribute, used in constraints.
-	//
-	// It must be a DNS subdomain followed by a slash ("/") followed by a C identifier
-	// (e.g. "example.com/numaNode" or "derived/numaNode").
-	//
-	// If the chosen name matches an existing physical attribute from a driver,
-	// the derived attribute's expression will shadow the physical attribute,
-	// and its evaluated value will be used in constraints instead. When the goal
-	// is to define a derived attribute that is only used within the ResourceClaim
-	// and not meant to shadow an existing attribute, use a domain prefix that
-	// no DRA driver should be using (e.g. "derived/myAttribute").
-	//
-	// It is not valid to define a derived attribute that isn't used in at least
-	// one constraint.
-	//
+	// Name 是本次派生属性的标识符，用于约束中。
 	// +required
 	// +k8s:required
 	// +k8s:format=k8s-resource-fully-qualified-name
 	Name FullyQualifiedName `json:"name" protobuf:"bytes,1,name=name"`
 
-	// Expression is a CEL expression evaluated against each candidate device.
-	// The expression must evaluate to a primitive scalar (string, integer,
-	// boolean, or semver) or a list of these scalars ([]string, []int64,
-	// []bool, []semver) to act as a virtual grouping key. Any other return type
-	// is an error and causes CEL evaluation for the device to fail.
-	//
-	// The expression's input is an object named "device", which carries the
-	// same properties as in a CELDeviceSelector.
-	//
-	// When pod scheduling encounters CEL runtime errors (such as looking
-	// up an attribute that isn't defined) for some devices, it will abort
-	// allocation and fail scheduling for the Pod. Surfacing evaluation
-	// errors immediately prevents silent topology matching failures that are
-	// extremely hard to detect. A robust expression should, for example, check
-	// for the existence of attributes before referencing them to avoid
-	// runtime evaluation errors.
-	//
-	// The expression gets evaluated after a device has passed the other
-	// selector expressions for the request in which this expression is used.
-	// This allows writing expressions that are tailored towards the specific
-	// devices being requested (for example, by assuming the device is from a
-	// certain vendor and skipping those checks).
-	//
-	// The length of the expression must be smaller or equal to 10 Ki. The
-	// cost of evaluating it is also limited based on the estimated number
-	// of logical steps; the combined cost of all derived attributes in a
-	// claim is capped by a shared CEL cost budget.
-	//
+	// Expression 是针对每个候选设备求值的 CEL 表达式，必须求值为基本标量（字符串、整数、
+	// 布尔或 semver）或这些标量的列表（[]string、[]int64、[]bool、[]semver），以作为虚拟分组键。
+	// 任何其他返回类型都是错误，会导致该设备的 CEL 求值失败。
 	// +required
 	// +k8s:required
 	Expression string `json:"expression" protobuf:"bytes,2,name=expression"`
@@ -1558,158 +1272,45 @@ const (
 
 // +enum
 // +k8s:beta(since: "1.37")=+k8s:enum
+// DeviceAllocationMode 定义设备的分配模式。
 type DeviceAllocationMode string
 
-// Valid [DeviceRequest.CountMode] values.
+// [DeviceRequest.CountMode] 的合法取值。
 const (
 	DeviceAllocationModeExactCount = DeviceAllocationMode("ExactCount")
 	DeviceAllocationModeAll        = DeviceAllocationMode("All")
 )
 
-// DeviceSelector must have exactly one field set.
+// DeviceSelector 必须恰好设置一个字段。
 type DeviceSelector struct {
-	// CEL contains a CEL expression for selecting a device.
-	//
+	// CEL 包含用于选择设备的 CEL 表达式。
 	// +optional
 	// +oneOf=SelectorType
 	CEL *CELDeviceSelector `json:"cel,omitempty" protobuf:"bytes,1,opt,name=cel"`
 }
 
-// CELDeviceSelector contains a CEL expression for selecting a device.
+// CELDeviceSelector 包含用于选择设备的 CEL 表达式。
 type CELDeviceSelector struct {
-	// Expression is a CEL expression which evaluates a single device. It
-	// must evaluate to true when the device under consideration satisfies
-	// the desired criteria, and false when it does not. Any other result
-	// is an error and causes allocation of devices to abort.
-	//
-	// The expression's input is an object named "device", which carries
-	// the following properties:
-	//  - driver (string): the name of the driver which defines this device.
-	//  - attributes (map[string]object): the device's attributes, grouped by prefix
-	//    (e.g. device.attributes["dra.example.com"] evaluates to an object with all
-	//    of the attributes which were prefixed by "dra.example.com").
-	//  - capacity (map[string]object): the device's capacities, grouped by prefix.
-	//  - allowMultipleAllocations (bool): the allowMultipleAllocations property of the device
-	//    (v1.34+ with the DRAConsumableCapacity feature enabled).
-	//
-	// Example: Consider a device with driver="dra.example.com", which exposes
-	// two attributes named "model" and "ext.example.com/family" and which
-	// exposes one capacity named "modules". This input to this expression
-	// would have the following fields:
-	//
-	//     device.driver
-	//     device.attributes["dra.example.com"].model
-	//     device.attributes["ext.example.com"].family
-	//     device.capacity["dra.example.com"].modules
-	//
-	// The device.driver field can be used to check for a specific driver,
-	// either as a high-level precondition (i.e. you only want to consider
-	// devices from this driver) or as part of a multi-clause expression
-	// that is meant to consider devices from different drivers.
-	//
-	// The value type of each attribute is defined by the device
-	// definition, and users who write these expressions must consult the
-	// documentation for their specific drivers. The value type of each
-	// capacity is Quantity.
-	//
-	// If an unknown prefix is used as a lookup in either device.attributes
-	// or device.capacity, an empty map will be returned. Any reference to
-	// an unknown field will cause an evaluation error and allocation to
-	// abort.
-	//
-	// A robust expression should check for the existence of attributes
-	// before referencing them.
-	//
-	// Common errors:
-	// - "no such key": Use optional chaining (.? followed by orValue())
-	//   or guarding the check with has() for optional fields.
-	//   See CEL Optional Types for details:
-	//   https://pkg.go.dev/github.com/google/cel-go@v0.17.4/cel#OptionalTypes
-	//
-	// For more CEL expression syntax and examples, see:
-	// https://kubernetes.io/docs/reference/using-api/cel/
-	//
-	// For ease of use, the cel.bind() function is enabled, and can be used
-	// to simplify expressions that access multiple attributes with the
-	// same domain. For example:
-	//
-	//     cel.bind(dra, device.attributes["dra.example.com"], dra.someBool && dra.anotherBool)
-	//
-	// When the DRAListTypeAttributes feature gate is enabled,
-	// the includes() helper is available and it can work for both scalar
-	// and list-type attributes. It was introduced to support smooth migration
-	// from scalar attributes to list-type attributes while keeping
-	// CEL expressions simple. For example:
-	//
-	//     device.attributes["dra.example.com"].models.includes("some-model")
-	//
-	// The length of the expression must be smaller or equal to 10 Ki. The
-	// cost of evaluating it is also limited based on the estimated number
-	// of logical steps.
-	//
+	// Expression 是对单台设备求值的 CEL 表达式：当被测设备满足期望条件时必须求值为 true，
+	// 否则为 false。任何其他结果都是错误，会导致设备分配中止。
 	// +required
 	Expression string `json:"expression" protobuf:"bytes,1,name=expression"`
 }
 
-// CELSelectorExpressionMaxCost specifies the cost limit for a single CEL selector
-// evaluation.
-//
-// There is no overall budget for selecting a device, so the actual time
-// required for that is proportional to the number of CEL selectors and how
-// often they need to be evaluated, which can vary depending on several factors
-// (number of devices, cluster utilization, additional constraints).
-//
-// Validation against this limit and [CELSelectorExpressionMaxLength] happens
-// only when setting an expression for the first time or when changing it. If
-// the limits are changed in a future Kubernetes release, existing users are
-// guaranteed that existing expressions will continue to be valid.
-//
-// However, the kube-scheduler also applies this cost limit at runtime, so it
-// could happen that a valid expression fails at runtime after an up- or
-// downgrade. This can also happen without version skew when the cost estimate
-// underestimated the actual cost. That this might happen is the reason why
-// kube-scheduler enforces the runtime limit instead of relying on validation.
-//
-// According to
-// https://github.com/kubernetes/kubernetes/blob/4aeaf1e99e82da8334c0d6dddd848a194cd44b4f/staging/src/k8s.io/apiserver/pkg/apis/cel/config.go#L20-L22,
-// this gives roughly 0.1 second for each expression evaluation.
-// However, this depends on how fast the machine is.
+// CELSelectorExpressionMaxCost 指定单个 CEL 选择器求值的开销上限。
 const CELSelectorExpressionMaxCost = 1000000
 
-// DeviceClaimDerivedAttributeCELMaxCost is the maximum combined execution cost
-// allowed for all derived attribute CEL expressions within a single DeviceClaim.
-//
-// During validation, the API server computes the estimated execution cost of each
-// derived attribute expression. The sum of these costs across all requests in the
-// claim must not exceed this budget. If it does, the claim is rejected.
-//
-// To stay within the budget, consumers should simplify their CEL expressions,
-// avoid computationally expensive operations like deep nesting or iterations
-// (such as `.all()` or `.exists()`), and minimize the total number of derived
-// attributes in a claim.
-//
-// This shared budget prevents excessively complex claims from degrading the
-// performance of the kube-scheduler. The limit is set to 1,000,000 instruction
-// executions (roughly 0.1 seconds of evaluation time), tying the collective
-// cost of all derived attributes to the maximum cost allowed for a single
-// CEL selector.
+// DeviceClaimDerivedAttributeCELMaxCost 是单个 DeviceClaim 中所有派生属性 CEL 表达式允许的最大总执行开销。
 const DeviceClaimDerivedAttributeCELMaxCost = 1000000
 
-// CELSelectorExpressionMaxLength is the maximum length of a CEL selector expression string.
+// CELSelectorExpressionMaxLength 是 CEL 选择器表达式字符串的最大长度。
 const CELSelectorExpressionMaxLength = 10 * 1024
 
-// DeviceConstraint must have exactly one field set besides Requests.
+// DeviceConstraint 除 Requests 外必须恰好设置一个字段。
 type DeviceConstraint struct {
-	// Requests is a list of the one or more requests in this claim which
-	// must co-satisfy this constraint. If a request is fulfilled by
-	// multiple devices, then all of the devices must satisfy the
-	// constraint. If this is not specified, this constraint applies to all
-	// requests in this claim.
-	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
-	// the main request is given, the constraint applies to all subrequests.
-	//
+	// Requests 列出本声明中必须共同满足该约束的一个或多个请求。
+	// 如果一个请求由多台设备满足，则所有设备都必须满足该约束。
+	// 未指定时，约束适用于本声明中的所有请求。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -1718,56 +1319,16 @@ type DeviceConstraint struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Requests []string `json:"requests,omitempty" protobuf:"bytes,1,opt,name=requests"`
 
-	// MatchAttribute requires that all devices in question have this
-	// attribute and that its type and value are the same across those
-	// devices.
-	//
-	// For example, if you specified "dra.example.com/numa" (a hypothetical example!),
-	// then only devices in the same NUMA node will be chosen. A device which
-	// does not have that attribute will not be chosen. All devices should
-	// use a value of the same type for this attribute because that is part of
-	// its specification, but if one device doesn't, then it also will not be
-	// chosen.
-	//
-	// When the DRAListTypeAttributes feature gate is enabled, comparison uses
-	// set semantics(i.e., element order and duplicates are ignored): list-valued attributes
-	// match when the intersection across all devices is non-empty.
-	// Scalar values are treated as singleton sets for backward compatibility.
-	//
-	// Must include the domain qualifier.
-	//
+	// MatchAttribute 要求所有相关设备都具有该属性，且各设备上该属性的类型与值相同。
 	// +optional
 	// +oneOf=ConstraintType
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-resource-fully-qualified-name
 	MatchAttribute *FullyQualifiedName `json:"matchAttribute,omitempty" protobuf:"bytes,2,opt,name=matchAttribute"`
 
-	// Potential future extension, not part of the current design:
-	// A CEL expression which compares different devices and returns
-	// true if they match.
-	//
-	// Because it would be part of a one-of, old schedulers will not
-	// accidentally ignore this additional, for them unknown match
-	// criteria.
-	//
-	// MatchExpression string
+	// 潜在的未来扩展，不属于当前设计：一个比较不同设备、匹配时返回 true 的 CEL 表达式。
 
-	// DistinctAttribute requires that all devices in question have this
-	// attribute and that its type and value are unique across those devices.
-	//
-	// When the DRAListTypeAttributes feature gate is enabled, comparison uses
-	// set semantics (i.e., element order and duplicates are ignored):
-	// list-valued attributes must be pairwise disjoint across devices.
-	// Scalar values are treated as singleton sets for backward compatibility.
-	//
-	// This acts as the inverse of MatchAttribute.
-	//
-	// This constraint is used to avoid allocating multiple requests to the same device
-	// by ensuring attribute-level differentiation.
-	//
-	// This is useful for scenarios where resource requests must be fulfilled by separate physical devices.
-	// For example, a container requests two network interfaces that must be allocated from two different physical NICs.
-	//
+	// DistinctAttribute 要求所有相关设备都具有该属性，且各设备上该属性的类型与值互不相同。
 	// +optional
 	// +oneOf=ConstraintType
 	// +featureGate=DRAConsumableCapacity
@@ -1776,15 +1337,9 @@ type DeviceConstraint struct {
 	DistinctAttribute *FullyQualifiedName `json:"distinctAttribute,omitempty" protobuf:"bytes,3,opt,name=distinctAttribute"`
 }
 
-// DeviceClaimConfiguration is used for configuration parameters in DeviceClaim.
+// DeviceClaimConfiguration 用于 DeviceClaim 中的配置参数。
 type DeviceClaimConfiguration struct {
-	// Requests lists the names of requests where the configuration applies.
-	// If empty, it applies to all requests.
-	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
-	// the main request is given, the configuration applies to all subrequests.
-	//
+	// Requests 列出配置适用的请求名称；为空时适用于所有请求。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -1796,100 +1351,70 @@ type DeviceClaimConfiguration struct {
 	DeviceConfiguration `json:"" protobuf:"bytes,2,name=deviceConfiguration"`
 }
 
-// DeviceConfiguration must have exactly one field set. It gets embedded
-// inline in some other structs which have other fields, so field names must
-// not conflict with those.
+// DeviceConfiguration 必须恰好设置一个字段。它会被内联嵌入到其他含字段的结构体中，
+// 因此字段名不能与这些字段冲突。
 type DeviceConfiguration struct {
-	// Opaque provides driver-specific configuration parameters.
-	//
+	// Opaque 提供驱动特有的配置参数。
 	// +optional
 	// +oneOf=ConfigurationType
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Opaque *OpaqueDeviceConfiguration `json:"opaque,omitempty" protobuf:"bytes,1,opt,name=opaque"`
 }
 
-// OpaqueDeviceConfiguration contains configuration parameters for a driver
-// in a format defined by the driver vendor.
+// OpaqueDeviceConfiguration 包含由驱动供应商定义格式的驱动配置参数。
 type OpaqueDeviceConfiguration struct {
-	// Driver is used to determine which kubelet plugin needs
-	// to be passed these configuration parameters.
-	//
-	// An admission policy provided by the driver developer could use this
-	// to decide whether it needs to validate them.
-	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver. It should use only lower case characters.
-	//
+	// Driver 用于确定需要把配置参数传给哪个 kubelet 插件。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:maxLength=63
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-long-name-caseless
 	Driver string `json:"driver" protobuf:"bytes,1,name=driver"`
 
-	// Parameters can contain arbitrary data. It is the responsibility of
-	// the driver developer to handle validation and versioning. Typically this
-	// includes self-identification and a version ("kind" + "apiVersion" for
-	// Kubernetes types), with conversion between different versions.
-	//
-	// The length of the raw data must be smaller or equal to 10 Ki.
-	//
+	// Parameters 可以包含任意数据，校验与版本管理由驱动开发者负责。通常包括自标识与版本
+	// （Kubernetes 类型中为 "kind" + "apiVersion"），以及不同版本之间的转换。
 	// +required
 	Parameters runtime.RawExtension `json:"parameters" protobuf:"bytes,2,name=parameters"`
 }
 
-// OpaqueParametersMaxLength is the maximum length of the raw data in an
-// [OpaqueDeviceConfiguration.Parameters] field.
+// OpaqueParametersMaxLength 是 [OpaqueDeviceConfiguration.Parameters] 字段中原始数据的最大长度。
 const OpaqueParametersMaxLength = 10 * 1024
 
-// The ResourceClaim this DeviceToleration is attached to tolerates any taint that matches
-// the triple <key,value,effect> using the matching operator <operator>.
+// 附着本 DeviceToleration 的 ResourceClaim 会容忍所有按 <key,value,effect> 三元组及
+// <operator> 匹配运算符匹配成功的污点。
 type DeviceToleration struct {
-	// Key is the taint key that the toleration applies to. Empty means match all taint keys.
-	// If the key is empty, operator must be Exists; this combination means to match all values and all keys.
-	// Must be a label name.
-	//
+	// Key 是容忍适用的污点键，为空表示匹配所有污点键。
+	// 如果键为空，operator 必须为 Exists，该组合表示匹配所有值与所有键。必须是标签名。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-label-key
 	Key string `json:"key,omitempty" protobuf:"bytes,1,opt,name=key"`
 
-	// Operator represents a key's relationship to the value.
-	// Valid operators are Exists and Equal. Defaults to Equal.
-	// Exists is equivalent to wildcard for value, so that a ResourceClaim can
-	// tolerate all taints of a particular category.
-	//
+	// Operator 表示键与值的关系。合法运算符为 Exists 与 Equal，默认为 Equal。
+	// Exists 等价于值的通配符，使 ResourceClaim 能容忍某一类别的所有污点。
 	// +optional
 	// +default="Equal"
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Operator DeviceTolerationOperator `json:"operator,omitempty" protobuf:"bytes,2,opt,name=operator,casttype=DeviceTolerationOperator"`
 
-	// Value is the taint value the toleration matches to.
-	// If the operator is Exists, the value must be empty, otherwise just a regular string.
-	// Must be a label value.
-	//
+	// Value 是容忍匹配的污点值。operator 为 Exists 时该值必须为空，否则为普通字符串。
+	// 必须是标签值。
 	// +optional
 	Value string `json:"value,omitempty" protobuf:"bytes,3,opt,name=value"`
 
-	// Effect indicates the taint effect to match. Empty means match all taint effects.
-	// When specified, allowed values are NoSchedule and NoExecute.
-	//
+	// Effect 表示要匹配的污点效果，为空表示匹配所有效果。
+	// 指定时合法取值为 NoSchedule 与 NoExecute。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Effect DeviceTaintEffect `json:"effect,omitempty" protobuf:"bytes,4,opt,name=effect,casttype=DeviceTaintEffect"`
 
-	// TolerationSeconds represents the period of time the toleration (which must be
-	// of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
-	// it is not set, which means tolerate the taint forever (do not evict). Zero and
-	// negative values will be treated as 0 (evict immediately) by the system.
-	// If larger than zero, the time when the pod needs to be evicted is calculated as <time when
-	// taint was adedd> + <toleration seconds>.
-	//
+	// TolerationSeconds 表示容忍（必须是 NoExecute 效果，否则忽略该字段）容忍污点的时长。
+	// 默认未设置，表示永久容忍（不驱逐）。零值与负值会被系统按 0 处理（立即驱逐）。
+	// 若大于零，Pod 需要被驱逐的时间计算为 <污点添加时间> + <容忍秒数>。
 	// +optional
 	TolerationSeconds *int64 `json:"tolerationSeconds,omitempty" protobuf:"varint,5,opt,name=tolerationSeconds"`
 }
 
-// A toleration operator is the set of operators that can be used in a toleration.
-//
+// DeviceTolerationOperator 是容忍中可以使用的运算符集合。
 // +enum
 // +k8s:beta(since: "1.37")=+k8s:enum
 type DeviceTolerationOperator string
@@ -1899,36 +1424,16 @@ const (
 	DeviceTolerationOpEqual  DeviceTolerationOperator = "Equal"
 )
 
-// ResourceClaimStatus tracks whether the resource has been allocated and what
-// the result of that was.
+// ResourceClaimStatus 记录资源是否已分配以及分配结果。
 type ResourceClaimStatus struct {
-	// Allocation is set once the claim has been allocated successfully.
-	//
+	// 声明成功分配后会设置 Allocation。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:update=NoModify
 	Allocation *AllocationResult `json:"allocation,omitempty" protobuf:"bytes,1,opt,name=allocation"`
 
-	// ReservedFor indicates which entities are currently allowed to use
-	// the claim. A Pod which references a ResourceClaim which is not
-	// reserved for that Pod will not be started. A claim that is in
-	// use or might be in use because it has been reserved must not get
-	// deallocated.
-	//
-	// In a cluster with multiple scheduler instances, two pods might get
-	// scheduled concurrently by different schedulers. When they reference
-	// the same ResourceClaim which already has reached its maximum number
-	// of consumers, only one pod can be scheduled.
-	//
-	// Both schedulers try to add their pod to the claim.status.reservedFor
-	// field, but only the update that reaches the API server first gets
-	// stored. The other one fails with an error and the scheduler
-	// which issued it knows that it must put the pod back into the queue,
-	// waiting for the ResourceClaim to become usable again.
-	//
-	// There can be at most 256 such reservations. This may get increased in
-	// the future, but not reduced.
-	//
+	// ReservedFor 指明当前允许哪些实体使用该声明。引用了未为其预留的 ResourceClaim 的 Pod 不会启动。
+	// 正在使用或因被预留而可能正在使用的声明不得被解除分配。
 	// +optional
 	// +listType=map
 	// +listMapKey=uid
@@ -1940,15 +1445,11 @@ type ResourceClaimStatus struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=256
 	ReservedFor []ResourceClaimConsumerReference `json:"reservedFor,omitempty" protobuf:"bytes,2,opt,name=reservedFor" patchStrategy:"merge" patchMergeKey:"uid"`
 
-	// DeallocationRequested is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
-	// DeallocationRequested bool `json:"deallocationRequested,omitempty" protobuf:"bytes,3,opt,name=deallocationRequested"`
+	// DeallocationRequested 自 Kubernetes 1.32 起已被移除，此处保留墓碑。
+	// 当不再需要解码 v1alpha3 时，可以复用该名称。
 
-	// Devices contains the status of each device allocated for this
-	// claim, as reported by the driver. This can include driver-specific
-	// information. Entries are owned by their respective drivers.
-	//
+	// Devices 包含驱动上报的、为本声明分配的每个设备的状态。其中可能包含驱动特有的信息，
+	// 各条目由相应驱动负责维护。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +listType=map
@@ -1965,77 +1466,57 @@ type ResourceClaimStatus struct {
 	Devices []AllocatedDeviceStatus `json:"devices,omitempty" protobuf:"bytes,4,opt,name=devices"`
 }
 
-// ResourceClaimReservedForMaxSize is the maximum number of entries in
-// claim.status.reservedFor.
+// ResourceClaimReservedForMaxSize 是 claim.status.reservedFor 的最大条目数。
 const ResourceClaimReservedForMaxSize = 256
 
-// ResourceClaimConsumerReference contains enough information to let you
-// locate the consumer of a ResourceClaim. The user must be a resource in the same
-// namespace as the ResourceClaim.
+// ResourceClaimConsumerReference 包含定位 ResourceClaim 消费者所需的足够信息。
+// 该使用者必须是与 ResourceClaim 同一命名空间下的资源。
 type ResourceClaimConsumerReference struct {
-	// APIGroup is the group for the resource being referenced. It is
-	// empty for the core API. This matches the group in the APIVersion
-	// that is used when creating the resources.
+	// APIGroup 是被引用资源所属的组；核心 API 下为空。
+	// 它与创建资源时使用的 APIVersion 中的组名一致。
 	// +optional
 	APIGroup string `json:"apiGroup,omitempty" protobuf:"bytes,1,opt,name=apiGroup"`
-	// Resource is the type of resource being referenced, for example "pods".
+	// Resource 是被引用资源的类型，例如 "pods"。
 	// +required
 	Resource string `json:"resource" protobuf:"bytes,3,name=resource"`
-	// Name is the name of resource being referenced.
+	// Name 是被引用资源的名称。
 	// +required
 	Name string `json:"name" protobuf:"bytes,4,name=name"`
-	// UID identifies exactly one incarnation of the resource.
+	// UID 精确标识资源的某一次实例。
 	// +required
 	UID types.UID `json:"uid" protobuf:"bytes,5,name=uid"`
 }
 
-// AllocationResult contains attributes of an allocated resource.
+// AllocationResult 包含已分配资源的属性。
 type AllocationResult struct {
-	// Devices is the result of allocating devices.
-	//
+	// Devices 是设备分配的结果。
 	// +optional
 	Devices DeviceAllocationResult `json:"devices,omitempty" protobuf:"bytes,1,opt,name=devices"`
 
-	// NodeSelector defines where the allocated resources are available. If
-	// unset, they are available everywhere.
-	//
+	// NodeSelector 定义已分配资源在哪些节点上可用；未设置时处处可用。
 	// +optional
 	NodeSelector *v1.NodeSelector `json:"nodeSelector,omitempty" protobuf:"bytes,3,opt,name=nodeSelector"`
 
-	// Controller is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
+	// Controller 自 Kubernetes 1.32 起已被移除，此处保留墓碑。
+	// 当不再需要解码 v1alpha3 时，可以复用该名称。
 	// Controller string `json:"controller,omitempty" protobuf:"bytes,4,opt,name=controller"`
 
-	// AllocationTimestamp stores the time when the resources were allocated.
-	// This field is not guaranteed to be set, in which case that time is unknown.
-	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gate.
-	//
+	// AllocationTimestamp 保存资源分配发生的时间。该字段不保证一定被设置，未设置时该时间未知。
 	// +optional
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
 	AllocationTimestamp *metav1.Time `json:"allocationTimestamp,omitempty" protobuf:"bytes,5,opt,name=allocationTimestamp"`
 }
 
-// DeviceAllocationResult is the result of allocating devices.
+// DeviceAllocationResult 是设备分配的结果。
 type DeviceAllocationResult struct {
-	// Results lists all allocated devices.
-	//
+	// Results 列出所有已分配的设备。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Results []DeviceRequestAllocationResult `json:"results,omitempty" protobuf:"bytes,1,opt,name=results"`
 
-	// This field is a combination of all the claim and class configuration parameters.
-	// Drivers can distinguish between those based on a flag.
-	//
-	// This includes configuration parameters for drivers which have no allocated
-	// devices in the result because it is up to the drivers which configuration
-	// parameters they support. They can silently ignore unknown configuration
-	// parameters.
-	//
+	// 本字段是声明与类所有配置参数的合并结果。驱动可以根据标志区分二者的来源。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -2043,85 +1524,46 @@ type DeviceAllocationResult struct {
 	Config []DeviceAllocationConfiguration `json:"config,omitempty" protobuf:"bytes,2,opt,name=config"`
 }
 
-// AllocationResultsMaxSize represents the maximum number of
-// entries in allocation.devices.results.
+// AllocationResultsMaxSize 表示 allocation.devices.results 中的最大条目数。
 const AllocationResultsMaxSize = 32
 
-// DeviceRequestAllocationResult contains the allocation result for one request.
+// DeviceRequestAllocationResult 包含单个请求对应的分配结果。
 type DeviceRequestAllocationResult struct {
-	// Request is the name of the request in the claim which caused this
-	// device to be allocated. If it references a subrequest in the
-	// firstAvailable list on a DeviceRequest, this field must
-	// include both the name of the main request and the subrequest
-	// using the format <main request>/<subrequest>.
-	//
-	// Multiple devices may have been allocated per request.
-	//
+	// Request 是声明中导致本设备被分配的请求名称。如果它引用 DeviceRequest.firstAvailable 中的子请求，
+	// 本字段必须使用 <main request>/<subrequest> 格式同时给出主请求与子请求名。
 	// +required
 	Request string `json:"request" protobuf:"bytes,1,name=request"`
 
-	// Driver specifies the name of the DRA driver whose kubelet
-	// plugin should be invoked to process the allocation once the claim is
-	// needed on a node.
-	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver. It should use only lower case characters.
-	//
+	// Driver 指定 DRA 驱动的名称；当声明需要在某节点上使用时，会调用该驱动的 kubelet 插件来处理分配。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-long-name-caseless
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:maxLength=63
 	Driver string `json:"driver" protobuf:"bytes,2,name=driver"`
 
-	// This name together with the driver name and the device name field
-	// identify which device was allocated (`<driver name>/<pool name>/<device name>`).
-	//
-	// Must not be longer than 253 characters and may contain one or more
-	// DNS sub-domains separated by slashes.
-	//
+	// 该名称与驱动名、设备名共同标识分配的是哪个设备（`<driver name>/<pool name>/<device name>`）。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-resource-pool-name
 	Pool string `json:"pool" protobuf:"bytes,3,name=pool"`
 
-	// Device references one device instance via its name in the driver's
-	// resource pool. It must be a DNS label.
-	//
+	// Device 通过设备在驱动资源池中的名称引用某一个设备实例，必须是 DNS 标签。
 	// +required
 	Device string `json:"device" protobuf:"bytes,4,name=device"`
 
-	// AdminAccess indicates that this device was allocated for
-	// administrative access. See the corresponding request field
-	// for a definition of mode.
-	//
-	// This is an alpha field and requires enabling the DRAAdminAccess
-	// feature gate. Admin access is disabled if this field is unset or
-	// set to false, otherwise it is enabled.
-	//
+	// AdminAccess 表示本设备是为管理访问而分配的，模式定义见请求中对应字段。
 	// +optional
 	// +featureGate=DRAAdminAccess
 	AdminAccess *bool `json:"adminAccess,omitempty" protobuf:"bytes,5,opt,name=adminAccess"`
 
-	// A copy of all tolerations specified in the request at the time
-	// when the device got allocated.
-	//
-	// The maximum number of tolerations is 16.
-	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
-	//
+	// 这是设备分配时请求中所有容忍的副本。
 	// +optional
 	// +listType=atomic
 	// +featureGate=DRADeviceTaints
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	Tolerations []DeviceToleration `json:"tolerations,omitempty" protobuf:"bytes,6,opt,name=tolerations"`
 
-	// BindingConditions contains a copy of the BindingConditions
-	// from the corresponding ResourceSlice at the time of allocation.
-	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
-	//
+	// BindingConditions 是分配时对应 ResourceSlice 中 BindingConditions 的副本。
 	// +optional
 	// +listType=atomic
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
@@ -2129,12 +1571,7 @@ type DeviceRequestAllocationResult struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=4
 	BindingConditions []string `json:"bindingConditions,omitempty" protobuf:"bytes,7,rep,name=bindingConditions"`
 
-	// BindingFailureConditions contains a copy of the BindingFailureConditions
-	// from the corresponding ResourceSlice at the time of allocation.
-	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
-	//
+	// BindingFailureConditions 是分配时对应 ResourceSlice 中 BindingFailureConditions 的副本。
 	// +optional
 	// +listType=atomic
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
@@ -2142,35 +1579,24 @@ type DeviceRequestAllocationResult struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=4
 	BindingFailureConditions []string `json:"bindingFailureConditions,omitempty" protobuf:"bytes,8,rep,name=bindingFailureConditions"`
 
-	// ShareID uniquely identifies an individual allocation share of the device,
-	// used when the device supports multiple simultaneous allocations.
-	// It serves as an additional map key to differentiate concurrent shares
-	// of the same device.
-	//
+	// ShareID 唯一标识设备的某一次独立分配份额，用于设备支持并发多次分配的场景。
+	// 它作为附加的 map 键，用于区分同一设备的不同并发份额。
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-uuid
 	ShareID *types.UID `json:"shareID,omitempty" protobuf:"bytes,9,opt,name=shareID"`
 
-	// ConsumedCapacity tracks the amount of capacity consumed per device as part of the claim request.
-	// The consumed amount may differ from the requested amount: it is rounded up to the nearest valid
-	// value based on the device’s requestPolicy if applicable (i.e., may not be less than the requested amount).
-	//
-	// The total consumed capacity for each device must not exceed the DeviceCapacity's Value.
-	//
-	// This field is populated only for devices that allow multiple allocations.
-	// All capacity entries are included, even if the consumed amount is zero.
-	//
+	// ConsumedCapacity 记录本次声明请求中每个设备实际消耗的容量。
+	// 实际消耗量可能与请求量不同：若设备定义了 requestPolicy，会向上取整到最近的有效值
+	// （即不会小于请求量）。
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	ConsumedCapacity map[QualifiedName]resource.Quantity `json:"consumedCapacity,omitempty" protobuf:"bytes,10,rep,name=consumedCapacity"`
 
-	// SkipNodeOperations lists node-local resource operations (gRPC calls)
-	// that will be skipped for this allocated device when determining whether
-	// operations are necessary on the node. If all allocated devices for a driver in
-	// a claim skip an operation, that gRPC call will be skipped. It is a copy of
-	// the ResourceSlice.spec.skipNodeOperations value at the time when the device was allocated.
+	// SkipNodeOperations 列出在判断节点上是否需要执行操作时，本已分配设备将跳过的节点本地资源操作
+	// （gRPC 调用）。如果某驱动在声明中的所有已分配设备都跳过某操作，该 gRPC 调用就会被跳过。
+	// 它是分配时 ResourceSlice.spec.skipNodeOperations 的副本。
 	//
 	// +optional
 	// +listType=set
@@ -2180,22 +1606,17 @@ type DeviceRequestAllocationResult struct {
 	SkipNodeOperations []SkipNodeOperation `json:"skipNodeOperations,omitempty" protobuf:"bytes,11,rep,name=skipNodeOperations,casttype=SkipNodeOperation"`
 }
 
-// DeviceAllocationConfiguration gets embedded in an AllocationResult.
+// DeviceAllocationConfiguration 会被嵌入到 AllocationResult 中。
 type DeviceAllocationConfiguration struct {
-	// Source records whether the configuration comes from a class and thus
-	// is not something that a normal user would have been able to set
-	// or from a claim.
-	//
+	// Source 记录配置是来自类（因此普通用户无法设置）还是来自声明。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	Source AllocationConfigSource `json:"source" protobuf:"bytes,1,name=source"`
 
-	// Requests lists the names of requests where the configuration applies.
-	// If empty, its applies to all requests.
+	// Requests 列出配置适用的请求名称；为空时适用于所有请求。
 	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
-	// the main request is given, the configuration applies to all subrequests.
+	// 引用子请求时必须包含主请求名，并可使用 <main request>[/<subrequest>] 格式附带子请求名。
+	// 若只给出主请求名，则配置适用于其所有子请求。
 	//
 	// +optional
 	// +listType=atomic
@@ -2210,9 +1631,10 @@ type DeviceAllocationConfiguration struct {
 
 // +enum
 // +k8s:beta(since: "1.37")=+k8s:enum
+// AllocationConfigSource 表示分配配置的来源。
 type AllocationConfigSource string
 
-// Valid [DeviceAllocationConfiguration.Source] values.
+// [DeviceAllocationConfiguration.Source] 的合法取值。
 const (
 	AllocationConfigSourceClass AllocationConfigSource = "FromClass"
 	AllocationConfigSourceClaim AllocationConfigSource = "FromClaim"
@@ -2221,14 +1643,14 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// ResourceClaimList is a collection of claims.
+// ResourceClaimList 是声明的集合。
 type ResourceClaimList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of resource claims.
+	// Items 是资源声明的列表。
 	Items []ResourceClaim `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -2237,70 +1659,45 @@ type ResourceClaimList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// DeviceClass is a vendor- or admin-provided resource that contains
-// device configuration and selectors. It can be referenced in
-// the device requests of a claim to apply these presets.
-// Cluster scoped.
-//
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// DeviceClass 是由供应商或管理员提供的资源，包含设备配置与选择器。
+// 声明的设备请求中可以引用它来套用这些预置设置。集群作用域。
 type DeviceClass struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:subfield(name)=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:subfield(name)=+k8s:format=k8s-long-name
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec defines what can be allocated and how to configure it.
-	//
-	// This is mutable. Consumers have to be prepared for classes changing
-	// at any time, either because they get updated or replaced. Claim
-	// allocations are done once based on whatever was set in classes at
-	// the time of allocation.
-	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// Spec 定义可以分配什么以及如何配置。
 	// +optional
 	Spec DeviceClassSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 }
 
-// DeviceClassSpec is used in a [DeviceClass] to define what can be allocated
-// and how to configure it.
+// DeviceClassSpec 用于 [DeviceClass] 中定义可以分配什么以及如何配置。
 type DeviceClassSpec struct {
-	// Each selector must be satisfied by a device which is claimed via this class.
-	//
+	// 通过本类申领设备的请求必须满足每一个选择器。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Selectors []DeviceSelector `json:"selectors,omitempty" protobuf:"bytes,1,opt,name=selectors"`
 
-	// Config defines configuration parameters that apply to each device that is claimed via this class.
-	// Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor
-	// configuration applies to exactly one driver.
-	//
-	// They are passed to the driver, but are not considered while allocating the claim.
-	//
+	// Config 定义适用于通过本类申领的每台设备的配置参数，
+	// 这些参数会传递给驱动，但在分配声明时不予考虑。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=32
 	Config []DeviceClassConfiguration `json:"config,omitempty" protobuf:"bytes,2,opt,name=config"`
 
-	// SuitableNodes is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
-	// SuitableNodes *v1.NodeSelector `json:"suitableNodes,omitempty" protobuf:"bytes,3,opt,name=suitableNodes"`
+	// SuitableNodes 自 Kubernetes 1.32 起已被移除，此处保留墓碑。
+	// 当不再需要解码 v1alpha3 时，可以复用该名称。
 
-	// ExtendedResourceName is the extended resource name for the devices of this class.
-	// The devices of this class can be used to satisfy a pod's extended resource requests.
-	// It has the same format as the name of a pod's extended resource.
-	// It should be unique among all the device classes in a cluster.
-	// If two device classes have the same name, then the class created later
-	// is picked to satisfy a pod's extended resource requests.
-	// If two classes are created at the same time, then the name of the class
-	// lexicographically sorted first is picked.
-	//
+	// ExtendedResourceName 是本类设备的扩展资源名称。本类的设备可用于满足 Pod 的扩展资源请求。
+	// 其格式与 Pod 扩展资源名称相同，在集群内所有设备类中应当保持唯一。
+	// 若两个设备类同名，则后创建的类会被选中用于满足 Pod 的扩展资源请求；
+	// 若两个类同时创建，则按名称字典序靠前的那个被选中。
 	// +optional
 	// +featureGate=DRAExtendedResource
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -2308,7 +1705,7 @@ type DeviceClassSpec struct {
 	ExtendedResourceName *string `json:"extendedResourceName,omitempty" protobuf:"bytes,4,opt,name=extendedResourceName"`
 }
 
-// DeviceClassConfiguration is used in DeviceClass.
+// DeviceClassConfiguration 用于 DeviceClass。
 type DeviceClassConfiguration struct {
 	DeviceConfiguration `json:"" protobuf:"bytes,1,opt,name=deviceConfiguration"`
 }
@@ -2316,14 +1713,14 @@ type DeviceClassConfiguration struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// DeviceClassList is a collection of classes.
+// DeviceClassList 是类的集合。
 type DeviceClassList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of resource classes.
+	// Items 是资源类的列表。
 	Items []DeviceClass `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -2331,37 +1728,28 @@ type DeviceClassList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// ResourceClaimTemplate is used to produce ResourceClaim objects.
-//
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// ResourceClaimTemplate 用于生成 ResourceClaim 对象。
 type ResourceClaimTemplate struct {
 	metav1.TypeMeta `json:""`
-	// Standard object metadata
+	// 标准对象元数据
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Describes the ResourceClaim that is to be generated.
-	//
-	// This field is immutable. A ResourceClaim will get created by the
-	// control plane for a Pod when needed and then not get updated
-	// anymore.
+	// 描述将要生成的 ResourceClaim。
 	// +optional
 	Spec ResourceClaimTemplateSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 }
 
-// ResourceClaimTemplateSpec contains the metadata and fields for a ResourceClaim.
+// ResourceClaimTemplateSpec 包含 ResourceClaim 的元数据与字段。
 type ResourceClaimTemplateSpec struct {
-	// ObjectMeta may contain labels and annotations that will be copied into the ResourceClaim
-	// when creating it. No other fields are allowed and will be rejected during
-	// validation.
+	// ObjectMeta 可以包含在创建时复制到 ResourceClaim 的标签与注解。
+	// 不允许使用其他字段，校验时会拒绝。
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec for the ResourceClaim. The entire content is copied unchanged
-	// into the ResourceClaim that gets created from this template. The
-	// same fields as in a ResourceClaim are also valid here.
+	// ResourceClaim 的 Spec，全部内容原样复制到由本模板创建的 ResourceClaim 中。
+	// ResourceClaim 中有效的字段在这里同样有效。
 	// +optional
 	Spec ResourceClaimSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 }
@@ -2369,80 +1757,60 @@ type ResourceClaimTemplateSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// ResourceClaimTemplateList is a collection of claim templates.
+// ResourceClaimTemplateList 是声明模板的集合。
 type ResourceClaimTemplateList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of resource claim templates.
+	// Items 是资源声明模板的列表。
 	Items []ResourceClaimTemplate `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
 const (
-	// AllocatedDeviceStatusMaxConditions represents the maximum number of
-	// conditions in a device status.
+	// AllocatedDeviceStatusMaxConditions 表示设备状态中条件的最大数量。
 	AllocatedDeviceStatusMaxConditions int = 8
-	// AllocatedDeviceStatusDataMaxLength represents the maximum length of the
-	// raw data in the Data field in a device status.
+	// AllocatedDeviceStatusDataMaxLength 表示设备状态中 Data 字段原始数据的最大长度。
 	AllocatedDeviceStatusDataMaxLength int = 10 * 1024
-	// NetworkDeviceDataMaxIPs represents the maximum number of IPs in the networkData
-	// field in a device status.
+	// NetworkDeviceDataMaxIPs 表示设备状态中 networkData 字段的最大 IP 数量。
 	NetworkDeviceDataMaxIPs int = 16
-	// NetworkDeviceDataInterfaceNameMaxLength represents the maximum number of characters
-	// for the networkData.interfaceName field in a device status.
+	// NetworkDeviceDataInterfaceNameMaxLength 表示设备状态中 networkData.interfaceName 字段的最大字符数。
 	NetworkDeviceDataInterfaceNameMaxLength int = 256
-	// NetworkDeviceDataHardwareAddressMaxLength represents the maximum number of characters
-	// for the networkData.hardwareAddress field in a device status.
+	// NetworkDeviceDataHardwareAddressMaxLength 表示设备状态中 networkData.hardwareAddress 字段的最大字符数。
 	NetworkDeviceDataHardwareAddressMaxLength int = 128
 )
 
-// AllocatedDeviceStatus contains the status of an allocated device, if the
-// driver chooses to report it. This may include driver-specific information.
-//
-// The combination of Driver, Pool, Device, and ShareID must match the corresponding key
-// in Status.Allocation.Devices.
+// AllocatedDeviceStatus 包含已分配设备的状态（如果驱动选择上报），其中可能包含驱动特有的信息。
 type AllocatedDeviceStatus struct {
-	// Driver specifies the name of the DRA driver whose kubelet
-	// plugin should be invoked to process the allocation once the claim is
-	// needed on a node.
+	// Driver 指定 DRA 驱动的名称；当声明需要在某节点上使用时，会调用该驱动的 kubelet 插件来处理分配。
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver. It should use only lower case characters.
+	// 必须是 DNS 子域，并且最好以驱动供应商拥有的 DNS 域结尾，只应使用小写字符。
 	//
 	// +required
 	Driver string `json:"driver" protobuf:"bytes,1,rep,name=driver"`
 
-	// This name together with the driver name and the device name field
-	// identify which device was allocated (`<driver name>/<pool name>/<device name>`).
+	// 该名称与驱动名、设备名共同标识分配的是哪个设备（`<driver name>/<pool name>/<device name>`）。
 	//
-	// Must not be longer than 253 characters and may contain one or more
-	// DNS sub-domains separated by slashes.
+	// 长度不得超过 253 个字符，可以包含多个由斜杠分隔的 DNS 子域。
 	//
 	// +required
 	Pool string `json:"pool" protobuf:"bytes,2,rep,name=pool"`
 
-	// Device references one device instance via its name in the driver's
-	// resource pool. It must be a DNS label.
+	// Device 通过设备在驱动资源池中的名称引用某一个设备实例，必须是 DNS 标签。
 	//
 	// +required
 	Device string `json:"device" protobuf:"bytes,3,rep,name=device"`
 
-	// ShareID uniquely identifies an individual allocation share of the device.
-	//
+	// ShareID 唯一标识设备的某一次独立分配份额。
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:format=k8s-uuid
 	ShareID *string `json:"shareID,omitempty" protobuf:"bytes,7,opt,name=shareID"`
 
-	// Conditions contains the latest observation of the device's state.
-	// If the device has been configured according to the class and claim
-	// config references, the `Ready` condition should be True.
-	//
-	// Must not contain more than 8 entries.
-	//
+	// Conditions 包含对设备状态的最新观测。如果设备已按类与声明的配置引用完成配置，
+	// 则 `Ready` 条件应为 True。
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -2451,43 +1819,29 @@ type AllocatedDeviceStatus struct {
 	// +k8s:alpha(since: "1.37")=+k8s:listMapKey=type
 	Conditions []metav1.Condition `json:"conditions" protobuf:"bytes,4,opt,name=conditions"`
 
-	// Data contains arbitrary driver-specific data.
-	//
-	// The length of the raw data must be smaller or equal to 10 Ki.
-	//
+	// Data 包含任意驱动特有的数据。
 	// +optional
 	Data *runtime.RawExtension `json:"data,omitempty" protobuf:"bytes,5,opt,name=data"`
 
-	// NetworkData contains network-related information specific to the device.
-	//
+	// NetworkData 包含与设备相关的网络信息。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	NetworkData *NetworkDeviceData `json:"networkData,omitempty" protobuf:"bytes,6,opt,name=networkData"`
 }
 
-// NetworkDeviceData provides network-related details for the allocated device.
-// This information may be filled by drivers or other components to configure
-// or identify the device within a network context.
+// NetworkDeviceData 为已分配设备提供网络相关的详细信息。
+// 驱动或其他组件可以填写这些信息，用于在网络环境中配置或识别该设备。
 type NetworkDeviceData struct {
-	// InterfaceName specifies the name of the network interface associated with
-	// the allocated device. This might be the name of a physical or virtual
-	// network interface being configured in the pod.
-	//
-	// Must not be longer than 256 bytes.
-	//
+	// InterfaceName 指定与已分配设备关联的网络接口名称。
+	// 它可能是正在 Pod 中配置的物理或虚拟网络接口的名称。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:maxBytes=256
 	InterfaceName string `json:"interfaceName,omitempty" protobuf:"bytes,1,opt,name=interfaceName"`
 
-	// IPs lists the network addresses assigned to the device's network interface.
-	// This can include both IPv4 and IPv6 addresses.
-	// The IPs are in the CIDR notation, which includes both the address and the
-	// associated subnet mask.
-	// e.g.: "192.0.2.5/24" for IPv4 and "2001:db8::5/64" for IPv6.
-	//
-	// Must not contain more than 16 entries.
-	//
+	// IPs 列出分配给设备网络接口的网络地址，可同时包含 IPv4 与 IPv6 地址。
+	// 地址采用 CIDR 表示法，同时包含地址本身与相应的子网掩码，
+	// 例如 IPv4 的 "192.0.2.5/24" 和 IPv6 的 "2001:db8::5/64"。
 	// +optional
 	// +listType=atomic
 	// +k8s:beta(since: "1.37")=+k8s:optional
@@ -2496,10 +1850,7 @@ type NetworkDeviceData struct {
 	// +k8s:beta(since: "1.37")=+k8s:maxItems=16
 	IPs []string `json:"ips,omitempty" protobuf:"bytes,2,opt,name=ips"`
 
-	// HardwareAddress represents the hardware address (e.g. MAC Address) of the device's network interface.
-	//
-	// Must not be longer than 128 bytes.
-	//
+	// HardwareAddress 表示设备网络接口的硬件地址（例如 MAC 地址）。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:maxBytes=128

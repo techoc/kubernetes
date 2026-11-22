@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.autoscaling.v2
 
+// Package v2 包含 autoscaling 组的 v2 版本 API 类型。
 package v2

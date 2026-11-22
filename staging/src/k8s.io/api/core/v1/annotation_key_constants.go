@@ -14,146 +14,124 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file should be consistent with pkg/apis/core/annotation_key_constants.go.
+// 此文件应与 pkg/apis/core/annotation_key_constants.go 保持一致。
 
 package v1
 
 const (
-	// ImagePolicyFailedOpenKey is added to pods created by failing open when the image policy
-	// webhook backend fails.
+	// ImagePolicyFailedOpenKey 在镜像策略 webhook 后端失败而“失败放行”时，
+	// 添加到所创建的 Pod 上。
 	ImagePolicyFailedOpenKey string = "alpha.image-policy.k8s.io/failed-open"
 
-	// MirrorPodAnnotationKey represents the annotation key set by kubelets when creating mirror pods
+	// MirrorPodAnnotationKey 表示 kubelet 创建静态 Pod 时设置的注解键。
 	MirrorPodAnnotationKey string = "kubernetes.io/config.mirror"
 
-	// TolerationsAnnotationKey represents the key of tolerations data (json serialized)
-	// in the Annotations of a Pod.
+	// TolerationsAnnotationKey 表示 Pod 注解中 tolerations 数据（JSON 序列化）的键。
 	TolerationsAnnotationKey string = "scheduler.alpha.kubernetes.io/tolerations"
 
-	// TaintsAnnotationKey represents the key of taints data (json serialized)
-	// in the Annotations of a Node.
+	// TaintsAnnotationKey 表示 Node 注解中 taints 数据（JSON 序列化）的键。
 	TaintsAnnotationKey string = "scheduler.alpha.kubernetes.io/taints"
 
-	// SeccompPodAnnotationKey represents the key of a seccomp profile applied
-	// to all containers of a pod.
-	// Deprecated: set a pod security context `seccompProfile` field.
+	// SeccompPodAnnotationKey 表示应用于 Pod 中所有容器的 seccomp profile 的键。
+	// 已废弃：请设置 Pod 安全上下文的 `seccompProfile` 字段。
 	SeccompPodAnnotationKey string = "seccomp.security.alpha.kubernetes.io/pod"
 
-	// SeccompContainerAnnotationKeyPrefix represents the key of a seccomp profile applied
-	// to one container of a pod.
-	// Deprecated: set a container security context `seccompProfile` field.
+	// SeccompContainerAnnotationKeyPrefix 表示应用于 Pod 中某个容器的 seccomp profile 的键。
+	// 已废弃：请设置容器安全上下文的 `seccompProfile` 字段。
 	SeccompContainerAnnotationKeyPrefix string = "container.seccomp.security.alpha.kubernetes.io/"
 
-	// SeccompProfileRuntimeDefault represents the default seccomp profile used by container runtime.
-	// Deprecated: set a pod or container security context `seccompProfile` of type "RuntimeDefault" instead.
+	// SeccompProfileRuntimeDefault 表示容器运行时使用的默认 seccomp profile。
+	// 已废弃：请设置 Pod 或容器安全上下文中类型为 "RuntimeDefault" 的 `seccompProfile`。
 	SeccompProfileRuntimeDefault string = "runtime/default"
 
-	// SeccompProfileNameUnconfined is the unconfined seccomp profile.
+	// SeccompProfileNameUnconfined 表示不受限（unconfined）的 seccomp profile。
 	SeccompProfileNameUnconfined string = "unconfined"
 
-	// SeccompLocalhostProfileNamePrefix is the prefix for specifying profiles loaded from the node's disk.
+	// SeccompLocalhostProfileNamePrefix 是从节点磁盘加载 profile 的前缀。
 	SeccompLocalhostProfileNamePrefix = "localhost/"
 
-	// DeprecatedAppArmorBetaContainerAnnotationKeyPrefix is the prefix to an annotation key specifying a container's apparmor profile.
-	// Deprecated: use a pod or container security context `appArmorProfile` field instead.
+	// DeprecatedAppArmorBetaContainerAnnotationKeyPrefix 是指定容器 apparmor profile 的注解键前缀。
+	// 已废弃：请设置 Pod 或容器安全上下文的 `appArmorProfile` 字段。
 	DeprecatedAppArmorBetaContainerAnnotationKeyPrefix = "container.apparmor.security.beta.kubernetes.io/"
 
-	// DeprecatedAppArmorBetaProfileRuntimeDefault is the profile specifying the runtime default.
+	// DeprecatedAppArmorBetaProfileRuntimeDefault 是指定运行时默认 profile 的 profile。
 	DeprecatedAppArmorBetaProfileRuntimeDefault = "runtime/default"
 
-	// DeprecatedAppArmorBetaProfileNamePrefix is the prefix for specifying profiles loaded on the node.
+	// DeprecatedAppArmorBetaProfileNamePrefix 是从节点加载 profile 的前缀。
 	DeprecatedAppArmorBetaProfileNamePrefix = "localhost/"
 
-	// DeprecatedAppArmorBetaProfileNameUnconfined is the Unconfined AppArmor profile
+	// DeprecatedAppArmorBetaProfileNameUnconfined 是不受限的 AppArmor profile。
 	DeprecatedAppArmorBetaProfileNameUnconfined = "unconfined"
 
-	// DeprecatedSeccompProfileDockerDefault represents the default seccomp profile used by docker.
-	// Deprecated: set a pod or container security context `seccompProfile` of type "RuntimeDefault" instead.
+	// DeprecatedSeccompProfileDockerDefault 表示 docker 使用的默认 seccomp profile。
+	// 已废弃：请设置 Pod 或容器安全上下文中类型为 "RuntimeDefault" 的 `seccompProfile`。
 	DeprecatedSeccompProfileDockerDefault string = "docker/default"
 
-	// PreferAvoidPodsAnnotationKey represents the key of preferAvoidPods data (json serialized)
-	// in the Annotations of a Node.
+	// PreferAvoidPodsAnnotationKey 表示 Node 注解中 preferAvoidPods 数据（JSON 序列化）的键。
 	PreferAvoidPodsAnnotationKey string = "scheduler.alpha.kubernetes.io/preferAvoidPods"
 
-	// ObjectTTLAnnotationKey represents a suggestion for kubelet for how long it can cache
-	// an object (e.g. secret, config map) before fetching it again from apiserver.
-	// This annotation can be attached to node.
+	// ObjectTTLAnnotationKey 是给 kubelet 的建议：在从 apiserver 重新获取某个对象
+	// （如 secret、config map）之前，可以缓存多长时间。此注解可附加到节点上。
 	ObjectTTLAnnotationKey string = "node.alpha.kubernetes.io/ttl"
 
-	// NonConvertibleAnnotationPrefix is the annotation key prefix used to identify non-convertible json paths.
+	// NonConvertibleAnnotationPrefix 是用于标识不可转换 JSON 路径的注解键前缀。
 	NonConvertibleAnnotationPrefix = "non-convertible.kubernetes.io"
 
 	kubectlPrefix = "kubectl.kubernetes.io/"
 
-	// LastAppliedConfigAnnotation is the annotation used to store the previous
-	// configuration of a resource for use in a three way diff by UpdateApplyAnnotation.
+	// LastAppliedConfigAnnotation 用于存储资源的上一版配置，供 UpdateApplyAnnotation
+	// 进行三方 diff 时使用。
 	LastAppliedConfigAnnotation = kubectlPrefix + "last-applied-configuration"
 
-	// AnnotationLoadBalancerSourceRangesKey is the key of the annotation on a service to set allowed ingress ranges on their LoadBalancers
+	// AnnotationLoadBalancerSourceRangesKey 是 Service 上的注解键，用于设置其 LoadBalancer
+	// 允许的入站范围。
 	//
-	// It should be a comma-separated list of CIDRs, e.g. `0.0.0.0/0` to
-	// allow full access (the default) or `18.0.0.0/8,56.0.0.0/8` to allow
-	// access only from the CIDRs currently allocated to MIT & the USPS.
+	// 其值应为以逗号分隔的 CIDR 列表，例如 `0.0.0.0/0` 表示允许全部访问（默认），
+	// `18.0.0.0/8,56.0.0.0/8` 表示只允许来自当前分配给 MIT 与 USPS 的 CIDR 的访问。
 	//
-	// Not all cloud providers support this annotation, though AWS & GCE do.
+	// 并非所有云提供商都支持此注解，AWS 和 GCE 支持。
 	AnnotationLoadBalancerSourceRangesKey = "service.beta.kubernetes.io/load-balancer-source-ranges"
 
-	// EndpointsLastChangeTriggerTime is the annotation key, set for endpoints objects, that
-	// represents the timestamp (stored as RFC 3339 date-time string, e.g. '2018-10-22T19:32:52.1Z')
-	// of the last change, of some Pod or Service object, that triggered the endpoints object change.
-	// In other words, if a Pod / Service changed at time T0, that change was observed by endpoints
-	// controller at T1, and the Endpoints object was changed at T2, the
-	// EndpointsLastChangeTriggerTime would be set to T0.
+	// EndpointsLastChangeTriggerTime 是为 Endpoints 对象设置的注解键，表示触发该 Endpoints
+	// 对象变更的某个 Pod 或 Service 对象最后一次变更的时间戳（以 RFC 3339 日期时间字符串存储，
+	// 例如 '2018-10-22T19:32:52.1Z'）。换言之，若 Pod/Service 在 T0 时间发生变更，
+	// Endpoints 控制器在 T1 观察到该变更，Endpoints 对象在 T2 被修改，则
+	// EndpointsLastChangeTriggerTime 会设为 T0。
 	//
-	// The "endpoints change trigger" here means any Pod or Service change that resulted in the
-	// Endpoints object change.
+	// 这里的“端点变更触发”指任何导致 Endpoints 对象变更的 Pod 或 Service 变更。
 	//
-	// Given the definition of the "endpoints change trigger", please note that this annotation will
-	// be set ONLY for endpoints object changes triggered by either Pod or Service change. If the
-	// Endpoints object changes due to other reasons, this annotation won't be set (or updated if it's
-	// already set).
+	// 根据“端点变更触发”的定义，请注意此注解仅在由 Pod 或 Service 变更引发的 Endpoints
+	// 对象变更时设置；若 Endpoints 对象因其他原因变更，则不会设置（若已设置也不会更新）此注解。
 	//
-	// This annotation will be used to compute the in-cluster network programming latency SLI, see
+	// 此注解将用于计算集群内网络编程延迟 SLI，参见
 	// https://github.com/kubernetes/community/blob/master/sig-scalability/slos/network_programming_latency.md
 	EndpointsLastChangeTriggerTime = "endpoints.kubernetes.io/last-change-trigger-time"
 
-	// EndpointsOverCapacity will be set on an Endpoints resource when it
-	// exceeds the maximum capacity of 1000 addresses. Initially the Endpoints
-	// controller will set this annotation with a value of "warning". In a
-	// future release, the controller may set this annotation with a value of
-	// "truncated" to indicate that any addresses exceeding the limit of 1000
-	// have been truncated from the Endpoints resource.
+	// 当 Endpoints 资源超过 1000 个地址的最大容量时，会在其上设置 EndpointsOverCapacity。
+	// 最初 Endpoints 控制器会将该注解的值设为 "warning"；未来版本中控制器可能将其设为
+	// "truncated"，以表明超过 1000 限制的地址已被从 Endpoints 资源中截断。
 	EndpointsOverCapacity = "endpoints.kubernetes.io/over-capacity"
 
-	// MigratedPluginsAnnotationKey is the annotation key, set for CSINode objects, that is a comma-separated
-	// list of in-tree plugins that will be serviced by the CSI backend on the Node represented by CSINode.
-	// This annotation is used by the Attach Detach Controller to determine whether to use the in-tree or
-	// CSI Backend for a volume plugin on a specific node.
+	// MigratedPluginsAnnotationKey 是为 CSINode 对象设置的注解键，其值是以逗号分隔的
+	// in-tree 插件列表，这些插件将由 CSINode 所代表节点上的 CSI 后端提供服务。
+	// 挂载/卸载控制器使用此注解来判断特定节点上的卷插件应使用 in-tree 还是 CSI 后端。
 	MigratedPluginsAnnotationKey = "storage.alpha.kubernetes.io/migrated-plugins"
 
-	// PodDeletionCost can be used to set to an int32 that represent the cost of deleting
-	// a pod compared to other pods belonging to the same ReplicaSet. Pods with lower
-	// deletion cost are preferred to be deleted before pods with higher deletion cost.
-	// Note that this is honored on a best-effort basis, and so it does not offer guarantees on
-	// pod deletion order.
-	// The implicit deletion cost for pods that don't set the annotation is 0, negative values are permitted.
+	// PodDeletionCost 可设置为 int32，表示删除某个 Pod 相对于同一 ReplicaSet 中其他 Pod 的代价。
+	// 删除时代价较低的 Pod 会被优先删除。注意这只是尽力而为，并不保证 Pod 的删除顺序。
+	// 未设置此注解的 Pod 其隐含删除代价为 0，允许使用负值。
 	//
-	// This annotation is beta-level and is only honored when PodDeletionCost feature is enabled.
+	// 此注解为 beta 级别，仅在 PodDeletionCost 特性启用时生效。
 	PodDeletionCost = "controller.kubernetes.io/pod-deletion-cost"
 
-	// DeprecatedAnnotationTopologyAwareHints can be used to enable or disable
-	// Topology Aware Hints for a Service. This may be set to "Auto" or
-	// "Disabled". Any other value is treated as "Disabled". This annotation has
-	// been deprecated in favor of the "service.kubernetes.io/topology-mode"
-	// annotation.
+	// DeprecatedAnnotationTopologyAwareHints 可用于为 Service 启用或禁用拓扑感知提示，
+	// 可设置为 "Auto" 或 "Disabled"，其他任何值均按 "Disabled" 处理。
+	// 此注解已废弃，推荐使用 "service.kubernetes.io/topology-mode" 注解。
 	DeprecatedAnnotationTopologyAwareHints = "service.kubernetes.io/topology-aware-hints"
 
-	// AnnotationTopologyMode can be used to enable or disable Topology Aware
-	// Routing for a Service. Well known values are "Auto" and "Disabled".
-	// Implementations may choose to develop new topology approaches, exposing
-	// them with domain-prefixed values. For example, "example.com/lowest-rtt"
-	// could be a valid implementation-specific value for this annotation. These
-	// heuristics will often populate topology hints on EndpointSlices, but that
-	// is not a requirement.
+	// AnnotationTopologyMode 可用于为 Service 启用或禁用拓扑感知路由。已知值为 "Auto"
+	// 和 "Disabled"。实现方可以自行开发新的拓扑方式，并通过带域名前缀的值暴露，例如
+	// "example.com/lowest-rtt" 就是一个有效的实现自定义值。这些启发式方法通常会在
+	// EndpointSlice 上填充拓扑提示，但这并非强制要求。
 	AnnotationTopologyMode = "service.kubernetes.io/topology-mode"
 )

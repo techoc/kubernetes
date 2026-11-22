@@ -20,14 +20,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SetGroupVersionKind allows clients to preemptively get a reference to an API object and pass it to places that
-// intend only to get a reference to that object. This simplifies the event recording interface.
+// SetGroupVersionKind 允许客户端预先获取 API 对象的引用，并将其传给只需要对象引用的地方。
+// 这样简化了事件记录接口。
 func (obj *ObjectReference) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
+// GroupVersionKind 从 APIVersion 和 Kind 还原出 GroupVersionKind。
 func (obj *ObjectReference) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
+// GetObjectKind 返回对象自身，使其满足 schema.ObjectKind 接口。
 func (obj *ObjectReference) GetObjectKind() schema.ObjectKind { return obj }

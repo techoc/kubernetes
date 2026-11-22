@@ -20,42 +20,42 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// APILifecycleIntroduced returns the release in which the API struct was introduced as int versions of major and minor for comparison.
+// APILifecycleIntroduced 返回该 API 结构引入的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *ComponentStatus) APILifecycleIntroduced() (major, minor int) {
 	return 1, 0
 }
 
-// APILifecycleDeprecated returns the release in which the API struct was or will be deprecated as int versions of major and minor for comparison.
+// APILifecycleDeprecated 返回该 API 结构已废弃或将要废弃的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *ComponentStatus) APILifecycleDeprecated() (major, minor int) {
 	return 1, 19
 }
 
-// APILifecycleIntroduced returns the release in which the API struct was introduced as int versions of major and minor for comparison.
+// APILifecycleIntroduced 返回该 API 结构引入的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *ComponentStatusList) APILifecycleIntroduced() (major, minor int) {
 	return 1, 0
 }
 
-// APILifecycleDeprecated returns the release in which the API struct was or will be deprecated as int versions of major and minor for comparison.
+// APILifecycleDeprecated 返回该 API 结构已废弃或将要废弃的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *ComponentStatusList) APILifecycleDeprecated() (major, minor int) {
 	return 1, 19
 }
 
-// APILifecycleDeprecated returns the release in which the API struct was or will be deprecated as int versions of major and minor for comparison.
+// APILifecycleDeprecated 返回该 API 结构已废弃或将要废弃的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *Endpoints) APILifecycleDeprecated() (major, minor int) {
 	return 1, 33
 }
 
-// APILifecycleReplacement returns the GVK of the replacement for the given API
+// APILifecycleReplacement 返回该 API 替代者的 GVK。
 func (in *Endpoints) APILifecycleReplacement() schema.GroupVersionKind {
 	return schema.GroupVersionKind{Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSlice"}
 }
 
-// APILifecycleDeprecated returns the release in which the API struct was or will be deprecated as int versions of major and minor for comparison.
+// APILifecycleDeprecated 返回该 API 结构已废弃或将要废弃的版本，以 major 和 minor 的整数形式表示，便于比较。
 func (in *EndpointsList) APILifecycleDeprecated() (major, minor int) {
 	return 1, 33
 }
 
-// APILifecycleReplacement returns the GVK of the replacement for the given API
+// APILifecycleReplacement 返回该 API 替代者的 GVK。
 func (in *EndpointsList) APILifecycleReplacement() schema.GroupVersionKind {
 	return schema.GroupVersionKind{Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSliceList"}
 }

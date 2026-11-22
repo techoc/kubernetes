@@ -24,123 +24,120 @@ import (
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Storage version of a specific resource.
+// StorageVersion 记录某个特定资源的存储版本信息。
 // +k8s:supportsSubresource="/status"
 type StorageVersion struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata.
-	// The name is <group>.<resource>.
+	// 标准对象元数据，name 形如 <group>.<resource>。
 	// +required
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// spec is an empty spec. It is here to comply with Kubernetes API style.
+	// spec 为空，仅为符合 Kubernetes API 规范而保留。
 	// +optional
 	Spec StorageVersionSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
-	// status on the version the API server instance can decode from and
-	// encode objects to when persisting objects in the backend.
+	// status 记录 API server 实例在持久化对象时可解码和存储编码的版本。
 	// +optional
 	Status StorageVersionStatus `json:"status" protobuf:"bytes,3,opt,name=status"`
 }
 
-// StorageVersionSpec is an empty spec.
+// StorageVersionSpec 是空规格。
 type StorageVersionSpec struct{}
 
-// API server instances report the versions they can decode and the version they
-// encode objects to when persisting objects in the backend.
+// StorageVersionStatus 汇总各 API server 实例上报的可解码版本和持久化编码版本。
 type StorageVersionStatus struct {
-	// storageVersions lists the reported versions per API server instance.
+	// storageVersions 列出各 API server 实例上报的版本信息。
 	// +optional
 	// +listType=map
 	// +listMapKey=apiServerID
 	StorageVersions []ServerStorageVersion `json:"storageVersions,omitempty" protobuf:"bytes,1,opt,name=storageVersions"`
-	// commonEncodingVersion is set to an encoding storage version if all API server
-	// instances share that same version. If they don't share one storage version, this
-	// field is left empty.
-	// API servers should finish updating its storageVersionStatus entry before
-	// serving write operations, so that this field will be in sync with the reality.
+	// 所有实例使用同一编码版本时记录该版本，否则留空。
+	// API server 应在处理写请求前更新自己的 storageVersionStatus，
+	// 以保证该字段与实际状态一致。
 	// +optional
 	CommonEncodingVersion *string `json:"commonEncodingVersion,omitempty" protobuf:"bytes,2,opt,name=commonEncodingVersion"`
 
-	// conditions lists the latest available observations of the storageVersion's state.
+	// conditions 记录 storageVersion 状态的最新观测结果。
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	Conditions []StorageVersionCondition `json:"conditions,omitempty" protobuf:"bytes,3,opt,name=conditions"`
 }
 
-// An API server instance reports the version it can decode and the version it
-// encodes objects to when persisting objects in the backend.
+// ServerStorageVersion 是单个 API server 实例上报的版本信息。
 type ServerStorageVersion struct {
-	// apiServerID is the ID of the reporting API server.
+	// apiServerID 为上报实例的 ID。
 	// +required
 	APIServerID string `json:"apiServerID,omitempty" protobuf:"bytes,1,opt,name=apiServerID"`
 
-	// encodingVersion the API server encodes the object to when persisting it in
-	// the backend (e.g., etcd).
+	// 该实例持久化对象（如写入 etcd）时使用的编码版本。
 	// +required
 	EncodingVersion string `json:"encodingVersion,omitempty" protobuf:"bytes,2,opt,name=encodingVersion"`
 
-	// decodableVersions are the encoding versions the API server can handle to decode.
-	// The API server can decode objects encoded in these versions.
-	// The encodingVersion must be included in the decodableVersions.
+	// 该实例可解码的编码版本列表。
+	// encodingVersion 必须包含在 decodableVersions 中。
 	// +listType=set
 	// +required
 	DecodableVersions []string `json:"decodableVersions,omitempty" protobuf:"bytes,3,opt,name=decodableVersions"`
 
-	// servedVersions lists all versions the API server can serve.
-	// DecodableVersions must include all ServedVersions.
+	// 该实例可对外服务的版本列表。
+	// decodableVersions 必须涵盖所有 servedVersions。
 	// +listType=set
 	// +optional
 	ServedVersions []string `json:"servedVersions,omitempty" protobuf:"bytes,4,opt,name=servedVersions"`
 }
 
+// StorageVersionConditionType 表示 storageVersion 条件类型。
 type StorageVersionConditionType string
 
 const (
-	// Indicates that encoding storage versions reported by all servers are equal.
+	// 所有实例上报的编码存储版本一致。
 	AllEncodingVersionsEqual StorageVersionConditionType = "AllEncodingVersionsEqual"
 )
 
+// ConditionStatus 表示条件的当前状态。
 type ConditionStatus string
 
 const (
-	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse   ConditionStatus = "False"
+	// 条件状态为 True。
+	ConditionTrue ConditionStatus = "True"
+	// 条件状态为 False。
+	ConditionFalse ConditionStatus = "False"
+	// 条件状态未知。
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// Describes the state of the storageVersion at a certain point.
+// StorageVersionCondition 描述某一时刻 storageVersion 的状态。
 type StorageVersionCondition struct {
-	// type of the condition.
+	// 条件类型。
 	// +required
 	Type StorageVersionConditionType `json:"type" protobuf:"bytes,1,opt,name=type"`
-	// status of the condition, one of True, False, Unknown.
+	// 条件状态，取值为 True、False 或 Unknown。
 	// +required
 	Status ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status"`
-	// observedGeneration represents the .metadata.generation that the condition was set based upon, if field is set.
+	// 设置该条件时所依据的 .metadata.generation（若设置）。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,3,opt,name=observedGeneration"`
-	// lastTransitionTime is the last time the condition transitioned from one status to another.
+	// condition 上次发生状态变更的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,4,opt,name=lastTransitionTime"`
-	// reason for the condition's last transition.
+	// 上次状态变更的原因。
 	// +required
 	Reason string `json:"reason" protobuf:"bytes,5,opt,name=reason"`
-	// message is a human readable string indicating details about the transition.
+	// 可读的变更详情。
 	// +required
 	Message string `json:"message,omitempty" protobuf:"bytes,6,opt,name=message"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// A list of StorageVersions.
+// StorageVersionList 是 StorageVersion 的列表。
 type StorageVersionList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// Items holds a list of StorageVersion
+	// Items 为 StorageVersion 列表。
 	Items []StorageVersion `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

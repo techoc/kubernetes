@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=coordination.k8s.io
 
+// Package v1alpha2 包含 coordination.k8s.io 组的 v1alpha2 版本 API 类型。
 package v1alpha2

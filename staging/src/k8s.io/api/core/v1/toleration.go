@@ -26,9 +26,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// MatchToleration checks if the toleration matches tolerationToMatch. Tolerations are unique by <key,effect,operator,value>,
-// if the two tolerations have same <key,effect,operator,value> combination, regard as they match.
-// TODO: uniqueness check for tolerations in api validations.
+// MatchToleration 判断本容忍是否与 tolerationToMatch 匹配。
+// 容忍以 <key,effect,operator,value> 四元组唯一标识，四者都相同即视为匹配。
+// TODO: 在 API 校验中加入容忍的唯一性检查。
 func (t *Toleration) MatchToleration(tolerationToMatch *Toleration) bool {
 	return t.Key == tolerationToMatch.Key &&
 		t.Effect == tolerationToMatch.Effect &&
@@ -36,19 +36,16 @@ func (t *Toleration) MatchToleration(tolerationToMatch *Toleration) bool {
 		t.Value == tolerationToMatch.Value
 }
 
-// ToleratesTaint checks if the toleration tolerates the taint.
-// The matching follows the rules below:
+// ToleratesTaint 判断本容忍是否容忍该污点，匹配规则如下：
 //
-//  1. Empty toleration.effect means to match all taint effects,
-//     otherwise taint effect must equal to toleration.effect.
-//  2. If toleration.operator is 'Exists', it means to match all taint values.
-//  3. Empty toleration.key means to match all taint keys.
-//     If toleration.key is empty, toleration.operator must be 'Exists';
-//     this combination means to match all taint values and all taint keys.
-//  4. If toleration.operator is 'Lt' or 'Gt', numeric comparison is performed
-//     between toleration.value and taint.value.
-//  5. If enableComparisonOperators is false and the toleration uses 'Lt' or 'Gt'
-//     operators, the toleration does not match (returns false).
+//  1. toleration.effect 为空时匹配所有污点 effect，否则要求两者 effect 相等。
+//  2. toleration.operator 为 'Exists' 时匹配所有污点 value。
+//  3. toleration.key 为空时匹配所有污点 key；此时 operator 必须为 'Exists'，
+//     两者组合表示匹配任意 key 与任意 value。
+//  4. toleration.operator 为 'Lt' 或 'Gt' 时，对 toleration.value 与 taint.value
+//     做数值比较。
+//  5. enableComparisonOperators 为 false 且容忍使用了 'Lt' 或 'Gt' 时，
+//     该容忍不匹配（返回 false）。
 func (t *Toleration) ToleratesTaint(logger klog.Logger, taint *Taint, enableComparisonOperators bool) bool {
 	if len(t.Effect) > 0 && t.Effect != taint.Effect {
 		return false
@@ -58,15 +55,15 @@ func (t *Toleration) ToleratesTaint(logger klog.Logger, taint *Taint, enableComp
 		return false
 	}
 
-	// TODO: Use proper defaulting when Toleration becomes a field of PodSpec
+	// TODO: 等 Toleration 成为 PodSpec 字段后再使用正规的默认值填充机制。
 	switch t.Operator {
-	// empty operator means Equal
+	// 空 operator 等价于 Equal。
 	case "", TolerationOpEqual:
 		return t.Value == taint.Value
 	case TolerationOpExists:
 		return true
 	case TolerationOpLt, TolerationOpGt:
-		// If comparison operators are disabled, this toleration doesn't match
+		// 比较运算符特性关闭时该容忍直接不匹配。
 		if !enableComparisonOperators {
 			return false
 		}
@@ -76,7 +73,8 @@ func (t *Toleration) ToleratesTaint(logger klog.Logger, taint *Taint, enableComp
 	}
 }
 
-// compareNumericValues performs numeric comparison between toleration and taint values
+// compareNumericValues 将容忍值与污点值按 int64 解析后做数值比较。
+// 任一值不是合法十进制整数时返回 false。
 func compareNumericValues(logger klog.Logger, tolerationVal, taintVal string, op TolerationOperator) bool {
 
 	errorMsgs := content.IsDecimalInteger(tolerationVal)

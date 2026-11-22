@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=apidiscovery.k8s.io
 
+// Package v2 定义 apidiscovery.k8s.io API 组的 v2 版本类型。
 package v2

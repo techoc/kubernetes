@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=storagemigration.k8s.io
 
+// Package v1 定义 storagemigration.k8s.io API 组的类型。
 package v1

@@ -21,4 +21,5 @@ limitations under the License.
 
 // +groupName=imagepolicy.k8s.io
 
+// Package imagepolicy 包含 imagepolicy API 组的类型定义。
 package v1alpha1

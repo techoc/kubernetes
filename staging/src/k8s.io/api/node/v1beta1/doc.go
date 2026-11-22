@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=node.k8s.io
 
+// Package v1beta1 包含 node.k8s.io 组的 v1beta1 版本 API 类型。
 package v1beta1

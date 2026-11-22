@@ -22,4 +22,6 @@ limitations under the License.
 
 // +groupName=discovery.k8s.io
 
+// Package v1 持有 API 组 "discovery.k8s.io" 的 v1 版本类型，
+// 包括 EndpointSlice 等服务发现对象。
 package v1

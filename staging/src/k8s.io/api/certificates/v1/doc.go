@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=certificates.k8s.io
 
+// Package v1 定义 certificates.k8s.io API 组的类型。
 package v1

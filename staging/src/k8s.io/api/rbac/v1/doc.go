@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=rbac.authorization.k8s.io
 
+// Package v1 是 rbac.authorization.k8s.io API 组的 v1 版本，定义 RBAC 授权相关类型。
 package v1

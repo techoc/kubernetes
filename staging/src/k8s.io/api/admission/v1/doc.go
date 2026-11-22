@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=admission.k8s.io
 
+// Package v1 是 admission.k8s.io API 组的 v1 版本，定义准入审查请求与响应类型。
 package v1

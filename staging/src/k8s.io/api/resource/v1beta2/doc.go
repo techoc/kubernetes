@@ -22,5 +22,5 @@ limitations under the License.
 
 // +groupName=resource.k8s.io
 
-// Package v1beta2 is the v1beta2 version of the resource API.
+// Package v1beta2 是 resource API 的 v1beta2 版本。
 package v1beta2

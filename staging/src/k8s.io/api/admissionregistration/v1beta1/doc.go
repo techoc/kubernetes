@@ -22,8 +22,7 @@ limitations under the License.
 
 // +groupName=admissionregistration.k8s.io
 
-// Package v1beta1 is the v1beta1 version of the API.
-// AdmissionConfiguration and AdmissionPluginConfiguration are legacy static admission plugin configuration
-// MutatingWebhookConfiguration and ValidatingWebhookConfiguration are for the
-// new dynamic admission controller configuration.
+// Package v1beta1 是 API 的 v1beta1 版本。
+// AdmissionConfiguration 和 AdmissionPluginConfiguration 是旧版的静态准入插件配置；
+// MutatingWebhookConfiguration 和 ValidatingWebhookConfiguration 则用于新的动态准入控制器配置。
 package v1beta1

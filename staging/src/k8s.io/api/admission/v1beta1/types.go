@@ -26,157 +26,161 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.9
 // +k8s:prerelease-lifecycle-gen:deprecated=1.19
-// This API is never server served.  It is used for outbound requests from apiservers.  This will ensure it never gets served accidentally
-// and having the generator against this group will protect future APIs which may be served.
+// 此 API 从不由服务端提供，仅用于 apiserver 发出的请求。这可确保它不会被意外提供。
+// 让生成器作用于该 group，也能保护将来可能对外提供的 API。
 // +k8s:prerelease-lifecycle-gen:replacement=admission.k8s.io,v1,AdmissionReview
 
-// AdmissionReview describes an admission review request/response.
+// AdmissionReview 描述一次 admission review 的请求/响应。
 type AdmissionReview struct {
 	metav1.TypeMeta `json:""`
-	// request describes the attributes for the admission request.
+	// request 描述 admission 请求的属性。
 	// +optional
 	Request *AdmissionRequest `json:"request,omitempty" protobuf:"bytes,1,opt,name=request"`
-	// response describes the attributes for the admission response.
+	// response 描述 admission 响应的属性。
 	// +optional
 	Response *AdmissionResponse `json:"response,omitempty" protobuf:"bytes,2,opt,name=response"`
 }
 
-// AdmissionRequest describes the admission.Attributes for the admission request.
+// AdmissionRequest 描述 admission 请求的 admission.Attributes。
 type AdmissionRequest struct {
-	// uid is an identifier for the individual request/response. It allows us to distinguish instances of requests which are
-	// otherwise identical (parallel requests, requests when earlier requests did not modify etc)
-	// The UID is meant to track the round trip (request/response) between the KAS and the WebHook, not the user request.
-	// It is suitable for correlating log entries between the webhook and apiserver, for either auditing or debugging.
+	// uid 是单次请求/响应的标识符，用于区分那些内容相同
+	// （并行请求、此前请求未做修改的请求等）的请求实例。
+	// UID 用于跟踪 KAS 与 WebHook 之间的一次往返（request/response），而非用户发起的请求。
+	// 适合用于在 webhook 与 apiserver 之间关联日志，以进行审计或调试。
 	// +optional
 	UID types.UID `json:"uid" protobuf:"bytes,1,opt,name=uid"`
-	// kind is the fully-qualified type of object being submitted (for example, v1.Pod or autoscaling.v1.Scale)
+	// kind 是所提交对象的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。
 	// +optional
 	Kind metav1.GroupVersionKind `json:"kind" protobuf:"bytes,2,opt,name=kind"`
-	// resource is the fully-qualified resource being requested (for example, v1.pods)
+	// resource 是所请求资源的完整限定名（例如 v1.pods）。
 	// +optional
 	Resource metav1.GroupVersionResource `json:"resource" protobuf:"bytes,3,opt,name=resource"`
-	// subResource is the subresource being requested, if any (for example, "status" or "scale")
+	// subResource 是所请求的子资源（如有）（例如 "status" 或 "scale"）。
 	// +optional
 	SubResource string `json:"subResource,omitempty" protobuf:"bytes,4,opt,name=subResource"`
 
-	// requestKind is the fully-qualified type of the original API request (for example, v1.Pod or autoscaling.v1.Scale).
-	// If this is specified and differs from the value in "kind", an equivalent match and conversion was performed.
+	// requestKind 是原始 API 请求的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。
+	// 若该字段有值且与 "kind" 的值不同，则说明执行了等价匹配与转换。
 	//
-	// For example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of
-	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` and `matchPolicy: Equivalent`,
-	// an API request to apps/v1beta1 deployments would be converted and sent to the webhook
-	// with `kind: {group:"apps", version:"v1", kind:"Deployment"}` (matching the rule the webhook registered for),
-	// and `requestKind: {group:"apps", version:"v1beta1", kind:"Deployment"}` (indicating the kind of the original API request).
+	// 例如，若可通过 apps/v1 和 apps/v1beta1 修改 deployments，且某个 webhook 注册了规则
+	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` 与 `matchPolicy: Equivalent`，
+	// 那么针对 apps/v1beta1 deployments 的 API 请求将被转换后发送给该 webhook，
+	// 其中的 `kind: {group:"apps", version:"v1", kind:"Deployment"}`（与该 webhook 注册的规则匹配），
+	// 以及 `requestKind: {group:"apps", version:"v1beta1", kind:"Deployment"}`（表示原始 API 请求的 kind）。
 	//
-	// See documentation for the "matchPolicy" field in the webhook configuration type for more details.
+	// 更多细节见 webhook configuration 类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestKind *metav1.GroupVersionKind `json:"requestKind,omitempty" protobuf:"bytes,13,opt,name=requestKind"`
-	// requestResource is the fully-qualified resource of the original API request (for example, v1.pods).
-	// If this is specified and differs from the value in "resource", an equivalent match and conversion was performed.
+	// requestResource 是原始 API 请求的完整限定资源（例如 v1.pods）。
+	// 若该字段有值且与 "resource" 的值不同，则说明执行了等价匹配与转换。
 	//
-	// For example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of
-	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` and `matchPolicy: Equivalent`,
-	// an API request to apps/v1beta1 deployments would be converted and sent to the webhook
-	// with `resource: {group:"apps", version:"v1", resource:"deployments"}` (matching the resource the webhook registered for),
-	// and `requestResource: {group:"apps", version:"v1beta1", resource:"deployments"}` (indicating the resource of the original API request).
+	// 例如，若可通过 apps/v1 和 apps/v1beta1 修改 deployments，且某个 webhook 注册了规则
+	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` 与 `matchPolicy: Equivalent`，
+	// 那么针对 apps/v1beta1 deployments 的 API 请求将被转换后发送给该 webhook，
+	// 其中的 `resource: {group:"apps", version:"v1", resource:"deployments"}`（与该 webhook 注册的资源匹配），
+	// 以及 `requestResource: {group:"apps", version:"v1beta1", resource:"deployments"}`（表示原始 API 请求的资源）。
 	//
-	// See documentation for the "matchPolicy" field in the webhook configuration type.
+	// 见 webhook configuration 类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestResource *metav1.GroupVersionResource `json:"requestResource,omitempty" protobuf:"bytes,14,opt,name=requestResource"`
-	// requestSubResource is the name of the subresource of the original API request, if any (for example, "status" or "scale")
-	// If this is specified and differs from the value in "subResource", an equivalent match and conversion was performed.
-	// See documentation for the "matchPolicy" field in the webhook configuration type.
+	// requestSubResource 是原始 API 请求中子资源的名称（如有）（例如 "status" 或 "scale"）。
+	// 若该字段有值且与 "subResource" 的值不同，则说明执行了等价匹配与转换。
+	// 见 webhook configuration 类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestSubResource string `json:"requestSubResource,omitempty" protobuf:"bytes,15,opt,name=requestSubResource"`
 
-	// name is the name of the object as presented in the request.  On a CREATE operation, the client may omit name and
-	// rely on the server to generate the name.  If that is the case, this field will contain an empty string.
+	// name 是请求中所呈现的对象名称。在 CREATE 操作中，客户端可省略 name，
+	// 由服务端生成名称；此时该字段为空字符串。
 	// +optional
 	Name string `json:"name,omitempty" protobuf:"bytes,5,opt,name=name"`
-	// namespace is the namespace associated with the request (if any).
+	// namespace 是与该请求关联的 namespace（如有）。
 	// +optional
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,6,opt,name=namespace"`
-	// operation is the operation being performed. This may be different than the operation
-	// requested. e.g. a patch can result in either a CREATE or UPDATE Operation.
+	// operation 是实际执行的操作，可能与请求的操作不同。
+	// 例如，patch 可能导致 CREATE 或 UPDATE 操作。
 	// +optional
 	Operation Operation `json:"operation" protobuf:"bytes,7,opt,name=operation"`
-	// userInfo is information about the requesting user
+	// userInfo 是发起请求的用户的信息。
 	// +optional
 	UserInfo authenticationv1.UserInfo `json:"userInfo" protobuf:"bytes,8,opt,name=userInfo"`
-	// object is the object from the incoming request.
+	// object 是传入请求中的对象。
 	// +optional
 	Object runtime.RawExtension `json:"object,omitempty" protobuf:"bytes,9,opt,name=object"`
-	// oldObject is the existing object. Only populated for DELETE and UPDATE requests.
+	// oldObject 是已存在的对象，仅对 DELETE 和 UPDATE 请求填充。
 	// +optional
 	OldObject runtime.RawExtension `json:"oldObject,omitempty" protobuf:"bytes,10,opt,name=oldObject"`
-	// dryRun indicates that modifications will definitely not be persisted for this request.
-	// Defaults to false.
+	// dryRun 表示对该请求的修改一定不会被持久化。
+	// 默认为 false。
 	// +optional
 	DryRun *bool `json:"dryRun,omitempty" protobuf:"varint,11,opt,name=dryRun"`
-	// options is the operation option structure of the operation being performed.
-	// e.g. `meta.k8s.io/v1.DeleteOptions` or `meta.k8s.io/v1.CreateOptions`. This may be
-	// different than the options the caller provided. e.g. for a patch request the performed
-	// Operation might be a CREATE, in which case the Options will a
-	// `meta.k8s.io/v1.CreateOptions` even though the caller provided `meta.k8s.io/v1.PatchOptions`.
+	// options 是实际执行操作的操作选项结构，
+	// 例如 `meta.k8s.io/v1.DeleteOptions` 或 `meta.k8s.io/v1.CreateOptions`。它可能与调用方提供的选项不同。
+	// 例如，对于 patch 请求，实际执行的操作可能是 CREATE，此时 Options 为
+	// `meta.k8s.io/v1.CreateOptions`，尽管调用方提供的是 `meta.k8s.io/v1.PatchOptions`。
 	// +optional
 	Options runtime.RawExtension `json:"options,omitempty" protobuf:"bytes,12,opt,name=options"`
 }
 
-// AdmissionResponse describes an admission response.
+// AdmissionResponse 描述一次 admission 响应。
 type AdmissionResponse struct {
-	// uid is an identifier for the individual request/response.
-	// This should be copied over from the corresponding AdmissionRequest.
+	// uid 是单次请求/响应的标识符。
+	// 应从对应的 AdmissionRequest 原样复制过来。
 	// +optional
 	UID types.UID `json:"uid" protobuf:"bytes,1,opt,name=uid"`
 
-	// allowed indicates whether or not the admission request was permitted.
+	// allowed 表示 admission 请求是否被允许。
 	// +optional
 	Allowed bool `json:"allowed" protobuf:"varint,2,opt,name=allowed"`
 
-	// status is the result contains extra details into why an admission request was denied.
-	// This field IS NOT consulted in any way if "Allowed" is "true".
+	// status 是结果，包含 admission 请求被拒绝原因的额外细节。
+	// 若 "Allowed" 为 "true"，该字段不会被任何方式参考。
 	// +optional
 	Result *metav1.Status `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 
-	// patch is the patch body. Currently we only support "JSONPatch" which implements RFC 6902.
+	// patch 是 patch 的内容。目前仅支持实现 RFC 6902 的 "JSONPatch"。
 	// +optional
 	Patch []byte `json:"patch,omitempty" protobuf:"bytes,4,opt,name=patch"`
 
-	// patchType is the type of Patch. Currently we only allow "JSONPatch".
+	// patchType 是 Patch 的类型。目前仅允许 "JSONPatch"。
 	// +optional
 	PatchType *PatchType `json:"patchType,omitempty" protobuf:"bytes,5,opt,name=patchType"`
 
-	// auditAnnotations is an unstructured key value map set by remote admission controller (e.g. error=image-blacklisted).
-	// MutatingAdmissionWebhook and ValidatingAdmissionWebhook admission controller will prefix the keys with
-	// admission webhook name (e.g. imagepolicy.example.com/error=image-blacklisted). AuditAnnotations will be provided by
-	// the admission webhook to add additional context to the audit log for this request.
+	// auditAnnotations 是由远端 admission controller 设置的非结构化键值映射（例如 error=image-blacklisted）。
+	// MutatingAdmissionWebhook 与 ValidatingAdmissionWebhook admission controller 会为键加上
+	// admission webhook 名称前缀（例如 imagepolicy.example.com/error=image-blacklisted）。
+	// AuditAnnotations 由 admission webhook 提供，用于为该请求的审计日志补充上下文。
 	// +optional
 	AuditAnnotations map[string]string `json:"auditAnnotations,omitempty" protobuf:"bytes,6,opt,name=auditAnnotations"`
 
-	// warnings is a list of warning messages to return to the requesting API client.
-	// Warning messages describe a problem the client making the API request should correct or be aware of.
-	// Limit warnings to 120 characters if possible.
-	// Warnings over 256 characters and large numbers of warnings may be truncated.
+	// warnings 是要返回给发起请求的 API 客户端的警告消息列表。
+	// 警告消息描述发起 API 请求的客户端应当修正或注意的问题。
+	// 警告尽量限制在 120 个字符以内。
+	// 超过 256 个字符的警告以及数量过多的警告可能会被截断。
 	// +optional
 	// +listType=atomic
 	Warnings []string `json:"warnings,omitempty" protobuf:"bytes,7,rep,name=warnings"`
 }
 
-// PatchType is the type of patch being used to represent the mutated object
+// PatchType 是用于表示被修改对象的 patch 类型。
 type PatchType string
 
-// PatchType constants.
+// PatchType 常量。
 const (
+	// PatchTypeJSONPatch 表示遵循 RFC 6902 的 JSONPatch 类型。
 	PatchTypeJSONPatch PatchType = "JSONPatch"
 )
 
-// Operation is the type of resource operation being checked for admission control
+// Operation 是接受 admission control 检查的资源操作类型。
 type Operation string
 
-// Operation constants
+// Operation 常量。
 const (
-	Create  Operation = "CREATE"
-	Update  Operation = "UPDATE"
-	Delete  Operation = "DELETE"
+	// Create 表示创建资源的 CREATE 操作。
+	Create Operation = "CREATE"
+	// Update 表示更新资源的 UPDATE 操作。
+	Update Operation = "UPDATE"
+	// Delete 表示删除资源的 DELETE 操作。
+	Delete Operation = "DELETE"
+	// Connect 表示连接资源的 CONNECT 操作。
 	Connect Operation = "CONNECT"
 )

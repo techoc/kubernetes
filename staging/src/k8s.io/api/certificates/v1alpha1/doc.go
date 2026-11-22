@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=certificates.k8s.io
 
+// Package v1alpha1 是 certificates API 的 v1alpha1 版本。
 package v1alpha1

@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=networking.k8s.io
 
+// Package v1 定义 networking.k8s.io API 组的类型。
 package v1

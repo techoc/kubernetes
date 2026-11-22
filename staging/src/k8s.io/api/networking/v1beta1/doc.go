@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=networking.k8s.io
 
+// Package v1beta1 是 networking API 的 v1beta1 版本。
 package v1beta1

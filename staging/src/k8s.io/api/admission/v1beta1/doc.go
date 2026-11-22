@@ -22,4 +22,6 @@ limitations under the License.
 
 // +groupName=admission.k8s.io
 
+// Package v1beta1 持有 API 组 "admission.k8s.io" 的 v1beta1 版本类型，
+// 即准入 Webhook 的请求与响应定义。
 package v1beta1

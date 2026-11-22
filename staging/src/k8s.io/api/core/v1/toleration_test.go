@@ -17,10 +17,13 @@ limitations under the License.
 package v1
 
 import (
-	"k8s.io/klog/v2/ktesting"
 	"testing"
+
+	"k8s.io/klog/v2/ktesting"
 )
 
+// TestTolerationToleratesTaint 验证 Toleration 在各类 key/effect/operator/value
+// 组合下（含比较运算符特性开闭）对污点的容忍判定。
 func TestTolerationToleratesTaint(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -254,6 +257,7 @@ func TestTolerationToleratesTaint(t *testing.T) {
 	}
 }
 
+// TestCompareNumericValues 覆盖 compareNumericValues 的合法数值、边界值与非法输入用例。
 func TestCompareNumericValues(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -263,7 +267,7 @@ func TestCompareNumericValues(t *testing.T) {
 		operator       TolerationOperator
 		expectedResult bool
 	}{
-		// Valid Gt operator cases
+		// Gt 运算符的合法用例
 		{
 			description:    "Gt operator - taint value greater than toleration value, expect true",
 			tolerationVal:  "100",
@@ -314,7 +318,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: true,
 		},
 
-		// Valid Lt operator cases
+		// Lt 运算符的合法用例
 		{
 			description:    "Lt operator - taint value less than toleration value, expect true",
 			tolerationVal:  "200",
@@ -358,7 +362,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: true,
 		},
 
-		// Invalid toleration values - should return false
+		// 非法的容忍值，应返回 false
 		{
 			description:    "Gt operator - invalid toleration value (non-numeric), expect false",
 			tolerationVal:  "abc",
@@ -402,7 +406,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: false,
 		},
 
-		// Invalid taint values - should return false
+		// 非法的污点值，应返回 false
 		{
 			description:    "Gt operator - invalid taint value (non-numeric), expect false",
 			tolerationVal:  "100",
@@ -439,7 +443,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: false,
 		},
 
-		// Invalid operator - should return false
+		// 不支持的运算符，应返回 false
 		{
 			description:    "Equal operator (unsupported for numeric comparison), expect false",
 			tolerationVal:  "100",
@@ -455,7 +459,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: false,
 		},
 
-		// Edge cases with zero
+		// 零值边界用例
 		{
 			description:    "Gt operator - both zero, expect false",
 			tolerationVal:  "0",
@@ -471,7 +475,7 @@ func TestCompareNumericValues(t *testing.T) {
 			expectedResult: false,
 		},
 
-		// Int64 boundary cases
+		// int64 边界用例
 		{
 			description:    "Gt operator - max int64 as taint, expect true",
 			tolerationVal:  "0",

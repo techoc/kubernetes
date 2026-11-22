@@ -25,13 +25,12 @@ limitations under the License.
 // +k8s:validation-gen-input=k8s.io/api/scheduling/v1alpha3
 // +k8s:validation-gen-scheme-registry=nil
 
-// A non-registering copy of the declarative validation is generated in this
-// package so out-of-tree consumers can run the same validation the
-// kube-apiserver enforces without importing k8s.io/kubernetes/pkg or mutating
-// a shared scheme on import. The registered copy lives in
-// k8s.io/kubernetes/pkg/apis/scheduling/v1alpha3.
-// The `*` selector generates validators for all types, including the
-// WorkloadPodGroup* building blocks that are not reachable from a TypeMeta
-// root.
+// Package v1alpha3 是 scheduling API 的 v1alpha3 版本。
+//
+// 本包中会生成一份不注册的声明式校验副本，使树外消费者无需导入 k8s.io/kubernetes/pkg
+// 也无需在导入时修改共享 scheme，即可运行与 kube-apiserver 相同的校验。已注册的副本位于
+// k8s.io/kubernetes/pkg/apis/scheduling/v1alpha3。
+// `*` 选择器会为所有类型生成校验器，包括无法从 TypeMeta 根类型到达的 WorkloadPodGroup*
+// 构建块。
 
 package v1alpha3

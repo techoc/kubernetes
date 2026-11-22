@@ -19,8 +19,8 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.extensions.v1beta1
-// extensions/v1beta1 is permanently unserved, so version-specific declarative
-// validation here is unreachable.
+// extensions/v1beta1 已永久停止提供服务，因此这里针对特定版本的声明式校验不可达。
 // +k8s:validation-gen=false
 
+// Package v1beta1 是 API 的 v1beta1 版本。
 package v1beta1

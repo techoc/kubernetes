@@ -22,16 +22,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// JobTemplateSpec describes the data a Job should have when created from a template
+// JobTemplateSpec 描述从模板创建 Job 时该 Job 应具备的数据。
 type JobTemplateSpec struct {
-	// Standard object's metadata of the jobs created from this template.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 从该模板创建的 Job 的标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Specification of the desired behavior of the job.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 期望的 Job 行为规格。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec batchv1.JobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
@@ -43,22 +43,22 @@ type JobTemplateSpec struct {
 // +k8s:prerelease-lifecycle-gen:removed=1.25
 // +k8s:prerelease-lifecycle-gen:replacement=batch,v1,CronJob
 
-// CronJob represents the configuration of a single cron job.
+// CronJob 表示单个定时 Job 的配置。
 // +k8s:supportsSubresource="/status"
 type CronJob struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Specification of the desired behavior of a cron job, including the schedule.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 定时 Job 的期望行为规格，包括调度计划。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec CronJobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Current status of a cron job.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 定时 Job 的当前状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status CronJobStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -69,104 +69,96 @@ type CronJob struct {
 // +k8s:prerelease-lifecycle-gen:removed=1.25
 // +k8s:prerelease-lifecycle-gen:replacement=batch,v1,CronJobList
 
-// CronJobList is a collection of cron jobs.
+// CronJobList 是定时 Job 的集合。
 type CronJobList struct {
 	metav1.TypeMeta `json:""`
 
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// items is the list of CronJobs.
+	// items 是 CronJob 列表。
 	Items []CronJob `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// CronJobSpec describes how the job execution will look like and when it will actually run.
+// CronJobSpec 描述 Job 的执行方式与实际运行时间。
 type CronJobSpec struct {
 
-	// The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+	// Cron 格式的调度计划，参见 https://en.wikipedia.org/wiki/Cron。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	Schedule string `json:"schedule" protobuf:"bytes,1,opt,name=schedule"`
 
-	// The time zone name for the given schedule, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones.
-	// If not specified, this will default to the time zone of the kube-controller-manager process.
-	// The set of valid time zone names and the time zone offset is loaded from the system-wide time zone
-	// database by the API server during CronJob validation and the controller manager during execution.
-	// If no system-wide time zone database can be found a bundled version of the database is used instead.
-	// If the time zone name becomes invalid during the lifetime of a CronJob or due to a change in host
-	// configuration, the controller will stop creating new new Jobs and will create a system event with the
-	// reason UnknownTimeZone.
-	// More information can be found in https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones
+	// 调度计划所使用的时区名称，参见 https://en.wikipedia.org/wiki/List_of_tz_database_time_zones。
+	// 未指定时默认为 kube-controller-manager 进程的时区。
+	// API 服务器在校验 CronJob、控制器管理器在执行期间，会从系统时区数据库加载有效时区名及偏移量集合。
+	// 找不到系统时区数据库时，会改用内置的数据库版本。
+	// 若时区名在 CronJob 生命周期内因主机配置变更而失效，控制器将停止创建新 Job，
+	// 并产生原因为 UnknownTimeZone 的系统事件。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones
 	// +optional
 	TimeZone *string `json:"timeZone,omitempty" protobuf:"bytes,8,opt,name=timeZone"`
 
-	// Optional deadline in seconds for starting the job if it misses scheduled
-	// time for any reason.  Missed jobs executions will be counted as failed ones.
+	// 可选的截止时长（秒）：因任何原因错过调度时间后，仍可启动 Job 的宽限时间。
+	// 错过的 Job 执行会被计为失败。
 	// +optional
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty" protobuf:"varint,2,opt,name=startingDeadlineSeconds"`
 
-	// Specifies how to treat concurrent executions of a Job.
-	// Valid values are:
+	// 指定如何处理 Job 的并发执行。
+	// 有效值为：
 	//
-	// - "Allow" (default): allows CronJobs to run concurrently;
-	// - "Forbid": forbids concurrent runs, skipping next run if previous run hasn't finished yet;
-	// - "Replace": cancels currently running job and replaces it with a new one
+	// - "Allow"（默认）：允许 CronJob 并发运行；
+	// - "Forbid": 禁止并发运行，若上一次运行尚未结束则跳过下一次；
+	// - "Replace": 取消当前正在运行的 Job 并用新 Job 替换。
 	// +optional
 	ConcurrencyPolicy ConcurrencyPolicy `json:"concurrencyPolicy,omitempty" protobuf:"bytes,3,opt,name=concurrencyPolicy,casttype=ConcurrencyPolicy"`
 
-	// This flag tells the controller to suspend subsequent executions, it does
-	// not apply to already started executions.  Defaults to false.
+	// 该标志告知控制器暂停后续执行，对已开始的执行无效。默认为 false。
 	// +optional
 	Suspend *bool `json:"suspend,omitempty" protobuf:"varint,4,opt,name=suspend"`
 
-	// Specifies the job that will be created when executing a CronJob.
+	// 指定执行 CronJob 时将创建的 Job。
 	JobTemplate JobTemplateSpec `json:"jobTemplate" protobuf:"bytes,5,opt,name=jobTemplate"`
 
-	// The number of successful finished jobs to retain.
-	// This is a pointer to distinguish between explicit zero and not specified.
-	// Defaults to 3.
+	// 保留的成功结束 Job 数量。
+	// 使用指针以区分显式设置为 0 和未指定。默认为 3。
 	// +optional
 	SuccessfulJobsHistoryLimit *int32 `json:"successfulJobsHistoryLimit,omitempty" protobuf:"varint,6,opt,name=successfulJobsHistoryLimit"`
 
-	// The number of failed finished jobs to retain.
-	// This is a pointer to distinguish between explicit zero and not specified.
-	// Defaults to 1.
+	// 保留的失败结束 Job 数量。
+	// 使用指针以区分显式设置为 0 和未指定。默认为 1。
 	// +optional
 	FailedJobsHistoryLimit *int32 `json:"failedJobsHistoryLimit,omitempty" protobuf:"varint,7,opt,name=failedJobsHistoryLimit"`
 }
 
-// ConcurrencyPolicy describes how the job will be handled.
-// Only one of the following concurrent policies may be specified.
-// If none of the following policies is specified, the default one
-// is AllowConcurrent.
+// ConcurrencyPolicy 描述 Job 的处理方式。
+// 只能指定以下并发策略之一。若未指定任何策略，默认为 AllowConcurrent。
 type ConcurrencyPolicy string
 
 const (
-	// AllowConcurrent allows CronJobs to run concurrently.
+	// AllowConcurrent 允许 CronJob 并发运行。
 	AllowConcurrent ConcurrencyPolicy = "Allow"
 
-	// ForbidConcurrent forbids concurrent runs, skipping next run if previous
-	// hasn't finished yet.
+	// ForbidConcurrent 禁止并发运行：若上一次运行尚未结束则跳过下一次。
 	ForbidConcurrent ConcurrencyPolicy = "Forbid"
 
-	// ReplaceConcurrent cancels currently running job and replaces it with a new one.
+	// ReplaceConcurrent 取消当前正在运行的 Job 并用新 Job 替换。
 	ReplaceConcurrent ConcurrencyPolicy = "Replace"
 )
 
-// CronJobStatus represents the current state of a cron job.
+// CronJobStatus 表示定时 Job 的当前状态。
 type CronJobStatus struct {
-	// A list of pointers to currently running jobs.
+	// 指向当前正在运行的 Job 的引用列表。
 	// +optional
 	// +listType=atomic
 	Active []v1.ObjectReference `json:"active,omitempty" protobuf:"bytes,1,rep,name=active"`
 
-	// Information when was the last time the job was successfully scheduled.
+	// 上一次成功调度 Job 的时间信息。
 	// +optional
 	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty" protobuf:"bytes,4,opt,name=lastScheduleTime"`
 
-	// Information when was the last time the job successfully completed.
+	// 上一次 Job 成功完成的时间信息。
 	// +optional
 	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty" protobuf:"bytes,5,opt,name=lastSuccessfulTime"`
 }

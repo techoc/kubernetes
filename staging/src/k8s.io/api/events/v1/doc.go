@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=events.k8s.io
 
+// Package v1 是 v1 版本的 API 定义。
 package v1

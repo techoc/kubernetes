@@ -23,36 +23,42 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名
 const GroupName = "storagemigration.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受一个不带组名的 kind，返回带组限定的 GroupKind
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受一个不带组名的资源名，返回带组限定的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
+	// SchemeBuilder 收集本组类型的注册函数。
+	// localSchemeBuilder 是 SchemeBuilder 的本地别名。
+	// AddToScheme 将本组类型注册到给定 scheme。
+	// SchemeBuilder 收集本组类型的注册函数。
+	// localSchemeBuilder 是 SchemeBuilder 的本地别名。
+	// AddToScheme 将本组类型注册到给定 scheme。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 向给定 scheme 注册本组的所有已知类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&StorageVersionMigration{},
 		&StorageVersionMigrationList{},
 	)
 
-	// Add the watch version that applies
+	// 注册对应的 watch 版本，供 watches 使用
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

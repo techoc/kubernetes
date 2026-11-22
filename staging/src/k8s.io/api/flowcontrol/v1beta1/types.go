@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// These are valid wildcards.
+// 以下是合法的通配符。
 const (
 	APIGroupAll    = "*"
 	ResourceAll    = "*"
@@ -28,10 +28,10 @@ const (
 	NonResourceAll = "*"
 	NameAll        = "*"
 
-	NamespaceEvery = "*" // matches every particular namespace
+	NamespaceEvery = "*" // 匹配每一个具体的命名空间
 )
 
-// System preset priority level names
+// 系统预设的优先级级别名称
 const (
 	PriorityLevelConfigurationNameExempt   = "exempt"
 	PriorityLevelConfigurationNameCatchAll = "catch-all"
@@ -39,67 +39,56 @@ const (
 	FlowSchemaNameCatchAll                 = "catch-all"
 )
 
-// Conditions
+// 条件
 const (
 	FlowSchemaConditionDangling = "Dangling"
 
 	PriorityLevelConfigurationConditionConcurrencyShared = "ConcurrencyShared"
 )
 
-// Constants used by api validation.
+// API 校验使用的常量。
 const (
 	FlowSchemaMaxMatchingPrecedence int32 = 10000
 )
 
-// Constants for apiserver response headers.
+// apiserver 响应头使用的常量。
 const (
 	ResponseHeaderMatchedPriorityLevelConfigurationUID = "X-Kubernetes-PF-PriorityLevel-UID"
 	ResponseHeaderMatchedFlowSchemaUID                 = "X-Kubernetes-PF-FlowSchema-UID"
 )
 
 const (
-	// AutoUpdateAnnotationKey is the name of an annotation that enables
-	// automatic update of the spec of the bootstrap configuration
-	// object(s), if set to 'true'.
+	// AutoUpdateAnnotationKey 是一个注解的名称，将其设为 'true' 时会启用
+	// 引导配置对象 spec 的自动更新。
 	//
-	// On a fresh install, all bootstrap configuration objects will have auto
-	// update enabled with the following annotation key:
+	// 全新安装时，所有引导配置对象都会带上以下注解键并启用自动更新：
 	//    apf.kubernetes.io/autoupdate-spec: 'true'
 	//
-	// The kube-apiserver periodically checks the bootstrap configuration
-	// objects on the cluster and applies updates if necessary.
+	// kube-apiserver 会定期检查集群中的引导配置对象，并在必要时应用更新。
 	//
-	// kube-apiserver enforces an 'always auto-update' policy for the
-	// mandatory configuration object(s). This implies:
-	// - the auto-update annotation key is added with a value of 'true'
-	//   if it is missing.
-	// - the auto-update annotation key is set to 'true' if its current value
-	//   is a boolean false or has an invalid boolean representation
-	//   (if the cluster operator sets it to 'false' it will be stomped)
-	// - any changes to the spec made by the cluster operator will be
-	//   stomped, except for changes to the `nominalConcurrencyShares`
-	//   and `lendablePercent` fields of the PriorityLevelConfiguration
-	//   named "exempt".
+	// kube-apiserver 对强制配置对象执行"始终自动更新"策略。这意味着：
+	// - 如果缺少自动更新注解键，则添加该键并将其值设为 'true'
+	// - 如果自动更新注解键的当前值为布尔 false 或非法的布尔表示，
+	//   则将其设为 'true'（若集群运维人员将其设为 'false'，会被覆盖）
+	// - 集群运维人员对 spec 所做的任何修改都会被覆盖，但名为 "exempt"
+	//   的 PriorityLevelConfiguration 的 `nominalConcurrencyShares`
+	//   和 `lendablePercent` 字段的修改除外。
 	//
-	// The kube-apiserver will apply updates on the suggested configuration if:
-	// - the cluster operator has enabled auto-update by setting the annotation
-	//   (apf.kubernetes.io/autoupdate-spec: 'true') or
-	// - the annotation key is missing but the generation is 1
+	// 对于建议配置，kube-apiserver 在以下情况应用更新：
+	// - 集群运维人员通过设置注解启用了自动更新
+	//   （apf.kubernetes.io/autoupdate-spec: 'true'），或
+	// - 注解键缺失但 generation 为 1
 	//
-	// If the suggested configuration object is missing the annotation key,
-	// kube-apiserver will update the annotation appropriately:
-	// - it is set to 'true' if generation of the object is '1' which usually
-	//   indicates that the spec of the object has not been changed.
-	// - it is set to 'false' if generation of the object is greater than 1.
+	// 如果建议配置对象缺少该注解键，kube-apiserver 会相应地更新注解：
+	// - 如果对象的 generation 为 '1'，则将其设为 'true'；这通常
+	//   表示对象的 spec 未被修改过。
+	// - 如果对象的 generation 大于 1，则将其设为 'false'。
 	//
-	// The goal is to enable the kube-apiserver to apply update on suggested
-	// configuration objects installed by previous releases but not overwrite
-	// changes made by the cluster operators.
-	// Note that this distinction is imperfectly detected: in the case where an
-	// operator deletes a suggested configuration object and later creates it
-	// but with a variant spec and then does no updates of the object
-	// (generation is 1), the technique outlined above will incorrectly
-	// determine that the object should be auto-updated.
+	// 目标是让 kube-apiserver 能对先前版本安装的建议配置对象应用更新，
+	// 但不覆盖集群运维人员所做的修改。
+	// 注意，这种区分的检测并不完美：如果运维人员删除了某个建议配置对象，
+	// 之后又用不同的 spec 重新创建它，并且此后没有再更新该对象
+	// （generation 为 1），上述方法会错误地判定该对象应当自动更新。
 	AutoUpdateAnnotationKey = "apf.kubernetes.io/autoupdate-spec"
 )
 
@@ -109,21 +98,21 @@ const (
 // +k8s:prerelease-lifecycle-gen:introduced=1.20
 // +k8s:prerelease-lifecycle-gen:replacement=flowcontrol.apiserver.k8s.io,v1beta3,FlowSchema
 
-// FlowSchema defines the schema of a group of flows. Note that a flow is made up of a set of inbound API requests with
-// similar attributes and is identified by a pair of strings: the name of the FlowSchema and a "flow distinguisher".
+// FlowSchema 定义了一组流的模式。流由一组具有相似属性的入站 API 请求构成，
+// 并通过一对字符串标识：FlowSchema 的名称和一个"流区分符"。
 // +k8s:supportsSubresource="/status"
 type FlowSchema struct {
 	metav1.TypeMeta `json:""`
-	// `metadata` is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// `metadata` 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// `spec` is the specification of the desired behavior of a FlowSchema.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// `spec` 描述 FlowSchema 期望行为的规格。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec FlowSchemaSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// `status` is the current status of a FlowSchema.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// `status` 是 FlowSchema 的当前状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status FlowSchemaStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -132,271 +121,260 @@ type FlowSchema struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.20
 // +k8s:prerelease-lifecycle-gen:replacement=flowcontrol.apiserver.k8s.io,v1beta3,FlowSchemaList
 
-// FlowSchemaList is a list of FlowSchema objects.
+// FlowSchemaList 是 FlowSchema 对象的列表。
 type FlowSchemaList struct {
 	metav1.TypeMeta `json:""`
-	// `metadata` is the standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// `metadata` 是标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// `items` is a list of FlowSchemas.
+	// `items` 是 FlowSchema 的列表。
 	Items []FlowSchema `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// FlowSchemaSpec describes how the FlowSchema's specification looks like.
+// FlowSchemaSpec 描述 FlowSchema 的规格。
 type FlowSchemaSpec struct {
-	// `priorityLevelConfiguration` should reference a PriorityLevelConfiguration in the cluster. If the reference cannot
-	// be resolved, the FlowSchema will be ignored and marked as invalid in its status.
-	// Required.
+	// `priorityLevelConfiguration` 应引用集群中的一个 PriorityLevelConfiguration。如果引用
+	// 无法解析，则该 FlowSchema 会被忽略，并在其 status 中标记为无效。
+	// 必填。
 	// +required
 	PriorityLevelConfiguration PriorityLevelConfigurationReference `json:"priorityLevelConfiguration" protobuf:"bytes,1,opt,name=priorityLevelConfiguration"`
-	// `matchingPrecedence` is used to choose among the FlowSchemas that match a given request. The chosen
-	// FlowSchema is among those with the numerically lowest (which we take to be logically highest)
-	// MatchingPrecedence.  Each MatchingPrecedence value must be ranged in [1,10000].
-	// Note that if the precedence is not specified, it will be set to 1000 as default.
+	// `matchingPrecedence` 用于在匹配给定请求的 FlowSchema 中进行选择。被选中的
+	// FlowSchema 是 MatchingPrecedence 数值最小（我们视其为逻辑上最高）的那个。
+	// 每个 MatchingPrecedence 值必须在 [1,10000] 范围内。
+	// 注意，如果未指定优先级，默认设为 1000。
 	// +optional
 	MatchingPrecedence int32 `json:"matchingPrecedence" protobuf:"varint,2,opt,name=matchingPrecedence"`
-	// `distinguisherMethod` defines how to compute the flow distinguisher for requests that match this schema.
-	// `nil` specifies that the distinguisher is disabled and thus will always be the empty string.
+	// `distinguisherMethod` 定义如何为匹配该模式的请求计算流区分符。
+	// `nil` 表示禁用区分符，此时区分符始终为空字符串。
 	// +optional
 	DistinguisherMethod *FlowDistinguisherMethod `json:"distinguisherMethod,omitempty" protobuf:"bytes,3,opt,name=distinguisherMethod"`
-	// `rules` describes which requests will match this flow schema. This FlowSchema matches a request if and only if
-	// at least one member of rules matches the request.
-	// if it is an empty slice, there will be no requests matching the FlowSchema.
+	// `rules` 描述哪些请求会匹配该流模式。当且仅当 rules 中至少有一个成员匹配该请求时，
+	// 该 FlowSchema 才匹配该请求。
+	// 如果切片为空，则没有任何请求会匹配该 FlowSchema。
 	// +listType=atomic
 	// +optional
 	Rules []PolicyRulesWithSubjects `json:"rules,omitempty" protobuf:"bytes,4,rep,name=rules"`
 }
 
-// FlowDistinguisherMethodType is the type of flow distinguisher method
+// FlowDistinguisherMethodType 是流区分符方法的类型。
 type FlowDistinguisherMethodType string
 
-// These are valid flow-distinguisher methods.
+// 以下是合法的流区分符方法。
 const (
-	// FlowDistinguisherMethodByUserType specifies that the flow distinguisher is the username in the request.
-	// This type is used to provide some insulation between users.
+	// FlowDistinguisherMethodByUserType 指定流区分符为请求中的用户名。
+	// 该类型用于在不同用户之间提供一定程度的隔离。
 	FlowDistinguisherMethodByUserType FlowDistinguisherMethodType = "ByUser"
 
-	// FlowDistinguisherMethodByNamespaceType specifies that the flow distinguisher is the namespace of the
-	// object that the request acts upon. If the object is not namespaced, or if the request is a non-resource
-	// request, then the distinguisher will be the empty string. An example usage of this type is to provide
-	// some insulation between tenants in a situation where there are multiple tenants and each namespace
-	// is dedicated to a tenant.
+	// FlowDistinguisherMethodByNamespaceType 指定流区分符为请求所操作对象的命名空间。
+	// 如果对象不是命名空间作用域的，或者请求是非资源请求，则区分符为空字符串。
+	// 该类型的一个示例用途是：在存在多个租户且每个命名空间专属于一个租户的场景下，
+	// 在租户之间提供一定程度的隔离。
 	FlowDistinguisherMethodByNamespaceType FlowDistinguisherMethodType = "ByNamespace"
 )
 
-// FlowDistinguisherMethod specifies the method of a flow distinguisher.
+// FlowDistinguisherMethod 指定流区分符的方法。
 type FlowDistinguisherMethod struct {
-	// `type` is the type of flow distinguisher method
-	// The supported types are "ByUser" and "ByNamespace".
-	// Required.
+	// `type` 是流区分符方法的类型。
+	// 支持的类型为 "ByUser" 和 "ByNamespace"。
+	// 必填。
 	// +required
 	Type FlowDistinguisherMethodType `json:"type" protobuf:"bytes,1,opt,name=type"`
 }
 
-// PriorityLevelConfigurationReference contains information that points to the "request-priority" being used.
+// PriorityLevelConfigurationReference 包含指向所使用 "request-priority" 的信息。
 type PriorityLevelConfigurationReference struct {
-	// `name` is the name of the priority level configuration being referenced
-	// Required.
+	// `name` 是被引用的优先级级别配置的名称。
+	// 必填。
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 }
 
-// PolicyRulesWithSubjects prescribes a test that applies to a request to an apiserver. The test considers the subject
-// making the request, the verb being requested, and the resource to be acted upon. This PolicyRulesWithSubjects matches
-// a request if and only if both (a) at least one member of subjects matches the request and (b) at least one member
-// of resourceRules or nonResourceRules matches the request.
+// PolicyRulesWithSubjects 规定了对发往 apiserver 的请求进行测试的规则。测试会考虑
+// 发起请求的主体、所请求的动词以及要操作的资源。当且仅当 (a) subjects 中至少一个
+// 成员匹配该请求，且 (b) resourceRules 或 nonResourceRules 中至少一个成员匹配该
+// 请求时，PolicyRulesWithSubjects 才匹配该请求。
 type PolicyRulesWithSubjects struct {
-	// subjects is the list of normal user, serviceaccount, or group that this rule cares about.
-	// There must be at least one member in this slice.
-	// A slice that includes both the system:authenticated and system:unauthenticated user groups matches every request.
+	// subjects 是该规则所关心的普通用户、ServiceAccount 或组的列表。
+	// 该切片中必须至少有一个成员。
+	// 同时包含 system:authenticated 和 system:unauthenticated 用户组的切片会匹配所有请求。
 	// +listType=atomic
-	// Required.
+	// 必填。
 	// +required
 	Subjects []Subject `json:"subjects" protobuf:"bytes,1,rep,name=subjects"`
-	// `resourceRules` is a slice of ResourcePolicyRules that identify matching requests according to their verb and the
-	// target resource.
-	// At least one of `resourceRules` and `nonResourceRules` has to be non-empty.
+	// `resourceRules` 是 ResourcePolicyRule 的切片，根据请求的动词和
+	// 目标资源识别匹配的请求。
+	// `resourceRules` 和 `nonResourceRules` 中至少有一个非空。
 	// +listType=atomic
 	// +optional
 	ResourceRules []ResourcePolicyRule `json:"resourceRules,omitempty" protobuf:"bytes,2,opt,name=resourceRules"`
-	// `nonResourceRules` is a list of NonResourcePolicyRules that identify matching requests according to their verb
-	// and the target non-resource URL.
+	// `nonResourceRules` 是 NonResourcePolicyRule 的列表，根据请求的动词和
+	// 目标非资源 URL 识别匹配的请求。
 	// +listType=atomic
 	// +optional
 	NonResourceRules []NonResourcePolicyRule `json:"nonResourceRules,omitempty" protobuf:"bytes,3,opt,name=nonResourceRules"`
 }
 
-// Subject matches the originator of a request, as identified by the request authentication system. There are three
-// ways of matching an originator; by user, group, or service account.
+// Subject 按请求认证系统识别出的结果匹配请求的发起者。匹配发起者有三种方式：
+// 按用户、按组或按服务账号。
 // +union
 type Subject struct {
-	// `kind` indicates which one of the other fields is non-empty.
-	// Required
+	// `kind` 表示其他字段中哪一个是非空的。
+	// 必填
 	// +required
 	// +unionDiscriminator
 	Kind SubjectKind `json:"kind" protobuf:"bytes,1,opt,name=kind"`
-	// `user` matches based on username.
+	// `user` 基于用户名匹配。
 	// +optional
 	User *UserSubject `json:"user,omitempty" protobuf:"bytes,2,opt,name=user"`
-	// `group` matches based on user group name.
+	// `group` 基于用户组名匹配。
 	// +optional
 	Group *GroupSubject `json:"group,omitempty" protobuf:"bytes,3,opt,name=group"`
-	// `serviceAccount` matches ServiceAccounts.
+	// `serviceAccount` 匹配 ServiceAccount。
 	// +optional
 	ServiceAccount *ServiceAccountSubject `json:"serviceAccount,omitempty" protobuf:"bytes,4,opt,name=serviceAccount"`
 }
 
-// SubjectKind is the kind of subject.
+// SubjectKind 是主体的种类。
 type SubjectKind string
 
-// Supported subject's kinds.
+// 支持的主体种类。
 const (
 	SubjectKindUser           SubjectKind = "User"
 	SubjectKindGroup          SubjectKind = "Group"
 	SubjectKindServiceAccount SubjectKind = "ServiceAccount"
 )
 
-// UserSubject holds detailed information for user-kind subject.
+// UserSubject 保存用户类型主体的详细信息。
 type UserSubject struct {
-	// `name` is the username that matches, or "*" to match all usernames.
-	// Required.
+	// `name` 是匹配的用户名，或用 "*" 匹配所有用户名。
+	// 必填。
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 }
 
-// GroupSubject holds detailed information for group-kind subject.
+// GroupSubject 保存组类型主体的详细信息。
 type GroupSubject struct {
-	// name is the user group that matches, or "*" to match all user groups.
-	// See https://github.com/kubernetes/apiserver/blob/master/pkg/authentication/user/user.go for some
-	// well-known group names.
-	// Required.
+	// name 是匹配的用户组，或用 "*" 匹配所有用户组。
+	// 一些知名的组名参见 https://github.com/kubernetes/apiserver/blob/master/pkg/authentication/user/user.go 。
+	// 必填。
 	// +required
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 }
 
-// ServiceAccountSubject holds detailed information for service-account-kind subject.
+// ServiceAccountSubject 保存服务账号类型主体的详细信息。
 type ServiceAccountSubject struct {
-	// `namespace` is the namespace of matching ServiceAccount objects.
-	// Required.
+	// `namespace` 是所匹配 ServiceAccount 对象的命名空间。
+	// 必填。
 	// +required
 	Namespace string `json:"namespace" protobuf:"bytes,1,opt,name=namespace"`
-	// `name` is the name of matching ServiceAccount objects, or "*" to match regardless of name.
-	// Required.
+	// `name` 是所匹配 ServiceAccount 对象的名称，或用 "*" 表示不限制名称。
+	// 必填。
 	// +required
 	Name string `json:"name" protobuf:"bytes,2,opt,name=name"`
 }
 
-// ResourcePolicyRule is a predicate that matches some resource
-// requests, testing the request's verb and the target resource. A
-// ResourcePolicyRule matches a resource request if and only if: (a)
-// at least one member of verbs matches the request, (b) at least one
-// member of apiGroups matches the request, (c) at least one member of
-// resources matches the request, and (d) either (d1) the request does
-// not specify a namespace (i.e., `Namespace==""`) and clusterScope is
-// true or (d2) the request specifies a namespace and least one member
-// of namespaces matches the request's namespace.
+// ResourcePolicyRule 是一个谓词，用于匹配部分资源请求，检查请求的动词和
+// 目标资源。当且仅当以下条件全部满足时，ResourcePolicyRule 才匹配一个资源请求：
+// (a) verbs 中至少一个成员匹配该请求，(b) apiGroups 中至少一个成员匹配该请求，
+// (c) resources 中至少一个成员匹配该请求，且 (d) 满足 (d1) 请求未指定命名空间
+// （即 `Namespace==""`）且 clusterScope 为 true，或 (d2) 请求指定了命名空间且
+// namespaces 中至少一个成员匹配该请求的命名空间。
 type ResourcePolicyRule struct {
-	// `verbs` is a list of matching verbs and may not be empty.
-	// "*" matches all verbs and, if present, must be the only entry.
+	// `verbs` 是可匹配的动词列表，不可为空。
+	// "*" 匹配所有动词；如果出现，则必须是唯一一项。
 	// +listType=set
-	// Required.
+	// 必填。
 	// +required
 	Verbs []string `json:"verbs" protobuf:"bytes,1,rep,name=verbs"`
 
-	// `apiGroups` is a list of matching API groups and may not be empty.
-	// "*" matches all API groups and, if present, must be the only entry.
+	// `apiGroups` 是可匹配的 API 组列表，不可为空。
+	// "*" 匹配所有 API 组；如果出现，则必须是唯一一项。
 	// +listType=set
-	// Required.
+	// 必填。
 	// +required
 	APIGroups []string `json:"apiGroups" protobuf:"bytes,2,rep,name=apiGroups"`
 
-	// `resources` is a list of matching resources (i.e., lowercase
-	// and plural) with, if desired, subresource.  For example, [
-	// "services", "nodes/status" ].  This list may not be empty.
-	// "*" matches all resources and, if present, must be the only entry.
-	// Required.
+	// `resources` 是可匹配的资源列表（即小写、复数形式），
+	// 如需要可包含子资源。例如 [ "services", "nodes/status" ]。该列表不可为空。
+	// "*" 匹配所有资源；如果出现，则必须是唯一一项。
+	// 必填。
 	// +listType=set
 	// +required
 	Resources []string `json:"resources" protobuf:"bytes,3,rep,name=resources"`
 
-	// `clusterScope` indicates whether to match requests that do not
-	// specify a namespace (which happens either because the resource
-	// is not namespaced or the request targets all namespaces).
-	// If this field is omitted or false then the `namespaces` field
-	// must contain a non-empty list.
+	// `clusterScope` 表示是否匹配未指定命名空间的请求
+	// （可能是资源本身不是命名空间作用域的，或者请求面向所有命名空间）。
+	// 如果省略该字段或设为 false，则 `namespaces` 字段必须包含非空列表。
 	// +optional
 	ClusterScope bool `json:"clusterScope,omitempty" protobuf:"varint,4,opt,name=clusterScope"`
 
-	// `namespaces` is a list of target namespaces that restricts
-	// matches.  A request that specifies a target namespace matches
-	// only if either (a) this list contains that target namespace or
-	// (b) this list contains "*".  Note that "*" matches any
-	// specified namespace but does not match a request that _does
-	// not specify_ a namespace (see the `clusterScope` field for
-	// that).
-	// This list may be empty, but only if `clusterScope` is true.
+	// `namespaces` 是目标命名空间的列表，用于限制匹配范围。指定了目标命名空间的请求
+	// 仅在以下情况下才匹配：(a) 该列表包含该目标命名空间，或
+	// (b) 该列表包含 "*"。注意 "*" 可匹配任何指定的命名空间，但不匹配_未指定_
+	// 命名空间的请求（关于这一点参见 `clusterScope` 字段）。
+	// 该列表可以为空，但前提是 `clusterScope` 为 true。
 	// +optional
 	// +listType=set
 	Namespaces []string `json:"namespaces" protobuf:"bytes,5,rep,name=namespaces"`
 }
 
-// NonResourcePolicyRule is a predicate that matches non-resource requests according to their verb and the
-// target non-resource URL. A NonResourcePolicyRule matches a request if and only if both (a) at least one member
-// of verbs matches the request and (b) at least one member of nonResourceURLs matches the request.
+// NonResourcePolicyRule 是一个谓词，根据请求的动词和目标非资源 URL 匹配非资源请求。
+// 当且仅当 (a) verbs 中至少一个成员匹配该请求，且 (b) nonResourceURLs 中至少一个
+// 成员匹配该请求时，NonResourcePolicyRule 才匹配该请求。
 type NonResourcePolicyRule struct {
-	// `verbs` is a list of matching verbs and may not be empty.
-	// "*" matches all verbs. If it is present, it must be the only entry.
+	// `verbs` 是可匹配的动词列表，不可为空。
+	// "*" 匹配所有动词。如果出现，则必须是唯一一项。
 	// +listType=set
-	// Required.
+	// 必填。
 	// +required
 	Verbs []string `json:"verbs" protobuf:"bytes,1,rep,name=verbs"`
-	// `nonResourceURLs` is a set of url prefixes that a user should have access to and may not be empty.
-	// For example:
-	//   - "/healthz" is legal
-	//   - "/hea*" is illegal
-	//   - "/hea" is legal but matches nothing
-	//   - "/hea/*" also matches nothing
-	//   - "/healthz/*" matches all per-component health checks.
-	// "*" matches all non-resource urls. if it is present, it must be the only entry.
+	// `nonResourceURLs` 是用户应可访问的 URL 前缀集合，不可为空。
+	// 例如：
+	//   - "/healthz" 合法
+	//   - "/hea*" 非法
+	//   - "/hea" 合法但不匹配任何内容
+	//   - "/hea/*" 也不匹配任何内容
+	//   - "/healthz/*" 匹配所有组件健康检查。
+	// "*" 匹配所有非资源 URL；如果出现，则必须是唯一一项。
 	// +listType=set
-	// Required.
+	// 必填。
 	// +required
 	NonResourceURLs []string `json:"nonResourceURLs" protobuf:"bytes,6,rep,name=nonResourceURLs"`
 }
 
-// FlowSchemaStatus represents the current state of a FlowSchema.
+// FlowSchemaStatus 表示 FlowSchema 的当前状态。
 type FlowSchemaStatus struct {
-	// `conditions` is a list of the current states of FlowSchema.
+	// `conditions` 是 FlowSchema 当前状态的列表。
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []FlowSchemaCondition `json:"conditions,omitempty" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// FlowSchemaCondition describes conditions for a FlowSchema.
+// FlowSchemaCondition 描述 FlowSchema 的条件。
 type FlowSchemaCondition struct {
-	// `type` is the type of the condition.
-	// Required.
+	// `type` 是条件的类型。
+	// 必填。
 	// +required
 	Type FlowSchemaConditionType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type"`
-	// `status` is the status of the condition.
-	// Should be specified and set to one of True, False, Unknown.
+	// `status` 是条件的状态。
+	// 应指定该字段并设为 True, False, Unknown 之一。
 	// +optional
 	Status ConditionStatus `json:"status,omitempty" protobuf:"bytes,2,opt,name=status"`
-	// `lastTransitionTime` is the last time the condition transitioned from one status to another.
+	// `lastTransitionTime` 是条件最后一次从一种状态转变为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// `reason` is a unique, one-word, CamelCase reason for the condition's last transition.
+	// `reason` 是条件最后一次转变的原因，要求唯一、单个单词、CamelCase 格式。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// `message` is a human-readable message indicating details about last transition.
+	// `message` 是可读的消息，说明最后一次转变的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
 
-// FlowSchemaConditionType is a valid value for FlowSchemaStatusCondition.Type
+// FlowSchemaConditionType 是 FlowSchemaStatusCondition.Type 的合法值。
 type FlowSchemaConditionType string
 
 // +genclient
@@ -405,20 +383,20 @@ type FlowSchemaConditionType string
 // +k8s:prerelease-lifecycle-gen:introduced=1.20
 // +k8s:prerelease-lifecycle-gen:replacement=flowcontrol.apiserver.k8s.io,v1beta3,PriorityLevelConfiguration
 
-// PriorityLevelConfiguration represents the configuration of a priority level.
+// PriorityLevelConfiguration 表示一个优先级级别的配置。
 // +k8s:supportsSubresource="/status"
 type PriorityLevelConfiguration struct {
 	metav1.TypeMeta `json:""`
-	// `metadata` is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// `metadata` 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// `spec` is the specification of the desired behavior of a "request-priority".
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// `spec` 描述 "request-priority" 期望行为的规格。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec PriorityLevelConfigurationSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// `status` is the current status of a "request-priority".
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// `status` 是 "request-priority" 的当前状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status PriorityLevelConfigurationStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -427,268 +405,236 @@ type PriorityLevelConfiguration struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.20
 // +k8s:prerelease-lifecycle-gen:replacement=flowcontrol.apiserver.k8s.io,v1beta3,PriorityLevelConfigurationList
 
-// PriorityLevelConfigurationList is a list of PriorityLevelConfiguration objects.
+// PriorityLevelConfigurationList 是 PriorityLevelConfiguration 对象的列表。
 type PriorityLevelConfigurationList struct {
 	metav1.TypeMeta `json:""`
-	// `metadata` is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// `metadata` 是标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// `items` is a list of request-priorities.
+	// `items` 是请求优先级的列表。
 	Items []PriorityLevelConfiguration `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// PriorityLevelConfigurationSpec specifies the configuration of a priority level.
+// PriorityLevelConfigurationSpec 指定优先级级别的配置。
 // +union
 type PriorityLevelConfigurationSpec struct {
-	// `type` indicates whether this priority level is subject to
-	// limitation on request execution.  A value of `"Exempt"` means
-	// that requests of this priority level are not subject to a limit
-	// (and thus are never queued) and do not detract from the
-	// capacity made available to other priority levels.  A value of
-	// `"Limited"` means that (a) requests of this priority level
-	// _are_ subject to limits and (b) some of the server's limited
-	// capacity is made available exclusively to this priority level.
-	// Required.
+	// `type` 表示该优先级级别是否受请求执行限制。值为 `"Exempt"`
+	// 表示该优先级级别的请求不受限制（因此永不排队），也不会占用
+	// 其他优先级级别可用的容量。值为 `"Limited"` 表示 (a) 该优先级
+	// 级别的请求_受_限制，且 (b) 服务器有限容量中的一部分专门留给
+	// 该优先级级别使用。
+	// 必填。
 	// +required
 	// +unionDiscriminator
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:modeDiscriminator
 	Type PriorityLevelEnablement `json:"type" protobuf:"bytes,1,opt,name=type"`
 
-	// `limited` specifies how requests are handled for a Limited priority level.
-	// This field must be non-empty if and only if `type` is `"Limited"`.
+	// `limited` 指定 Limited 优先级级别下请求的处理方式。
+	// 当且仅当 `type` 为 `"Limited"` 时该字段必须非空。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:ifMode("Limited")=+k8s:required
 	Limited *LimitedPriorityLevelConfiguration `json:"limited,omitempty" protobuf:"bytes,2,opt,name=limited"`
 
-	// `exempt` specifies how requests are handled for an exempt priority level.
-	// This field MUST be empty if `type` is `"Limited"`.
-	// This field MAY be non-empty if `type` is `"Exempt"`.
-	// If empty and `type` is `"Exempt"` then the default values
-	// for `ExemptPriorityLevelConfiguration` apply.
+	// `exempt` 指定 Exempt 优先级级别下请求的处理方式。
+	// 如果 `type` 为 `"Limited"`，该字段必须为空。
+	// 如果 `type` 为 `"Exempt"`，该字段可以非空。
+	// 如果该字段为空且 `type` 为 `"Exempt"`，则采用 `ExemptPriorityLevelConfiguration` 的默认值。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:ifMode("Exempt")=+k8s:optional
 	Exempt *ExemptPriorityLevelConfiguration `json:"exempt,omitempty" protobuf:"bytes,3,opt,name=exempt"`
 }
 
-// PriorityLevelEnablement indicates whether limits on execution are enabled for the priority level
+// PriorityLevelEnablement 表示该优先级级别是否启用执行限制。
 type PriorityLevelEnablement string
 
-// Supported priority level enablement values.
+// 支持的优先级级别启用值。
 const (
-	// PriorityLevelEnablementExempt means that requests are not subject to limits
+	// PriorityLevelEnablementExempt 表示请求不受限制。
 	PriorityLevelEnablementExempt PriorityLevelEnablement = "Exempt"
 
-	// PriorityLevelEnablementLimited means that requests are subject to limits
+	// PriorityLevelEnablementLimited 表示请求受限制。
 	PriorityLevelEnablementLimited PriorityLevelEnablement = "Limited"
 )
 
-// LimitedPriorityLevelConfiguration specifies how to handle requests that are subject to limits.
-// It addresses two issues:
-//   - How are requests for this priority level limited?
-//   - What should be done with requests that exceed the limit?
+// LimitedPriorityLevelConfiguration 指定如何处理受限制的请求。
+// 它解决两个问题：
+//   - 如何限制该优先级级别的请求？
+//   - 对超出限制的请求应如何处理？
 type LimitedPriorityLevelConfiguration struct {
-	// `assuredConcurrencyShares` (ACS) configures the execution
-	// limit, which is a limit on the number of requests of this
-	// priority level that may be executing at a given time.  ACS must
-	// be a positive number. The server's concurrency limit (SCL) is
-	// divided among the concurrency-controlled priority levels in
-	// proportion to their assured concurrency shares. This produces
-	// the assured concurrency value (ACV) --- the number of requests
-	// that may be executing at a time --- for each such priority
-	// level:
+	// `assuredConcurrencyShares`（ACS）用于配置执行限制，即在同一时刻
+	// 允许执行的该优先级级别请求数量的上限。ACS 必须是正数。
+	// 服务器的并发限制（SCL）按各并发受控优先级级别的保证并发份额比例
+	// 进行分配。这会为每个此类优先级级别产生保证并发值（ACV）——即
+	// 同一时刻可执行的请求数：
 	//
 	//             ACV(l) = ceil( SCL * ACS(l) / ( sum[priority levels k] ACS(k) ) )
 	//
-	// bigger numbers of ACS mean more reserved concurrent requests (at the
-	// expense of every other PL).
-	// This field has a default value of 30.
+	// ACS 越大，预留的并发请求越多（代价是其他所有优先级级别）。
+	// 该字段的默认值为 30。
 	// +optional
 	AssuredConcurrencyShares int32 `json:"assuredConcurrencyShares" protobuf:"varint,1,opt,name=assuredConcurrencyShares"`
 
-	// `limitResponse` indicates what to do with requests that can not be executed right now
+	// `limitResponse` 指明当前无法立即执行的请求应如何处理。
 	// +required
 	LimitResponse LimitResponse `json:"limitResponse,omitempty" protobuf:"bytes,2,opt,name=limitResponse"`
 
-	// `lendablePercent` prescribes the fraction of the level's NominalCL that
-	// can be borrowed by other priority levels. The value of this
-	// field must be between 0 and 100, inclusive, and it defaults to 0.
-	// The number of seats that other levels can borrow from this level, known
-	// as this level's LendableConcurrencyLimit (LendableCL), is defined as follows.
+	// `lendablePercent` 规定该级别的 NominalCL 中可被其他优先级级别借用的比例。
+	// 该字段的值必须在 0 到 100 之间（含两端），默认值为 0。
+	// 其他级别可从该级别借用的席位数称为该级别的 LendableConcurrencyLimit
+	// （LendableCL），定义如下。
 	//
 	// LendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )
 	//
 	// +optional
 	LendablePercent *int32 `json:"lendablePercent,omitempty" protobuf:"varint,3,opt,name=lendablePercent"`
 
-	// `borrowingLimitPercent`, if present, configures a limit on how many
-	// seats this priority level can borrow from other priority levels.
-	// The limit is known as this level's BorrowingConcurrencyLimit
-	// (BorrowingCL) and is a limit on the total number of seats that this
-	// level may borrow at any one time.
-	// This field holds the ratio of that limit to the level's nominal
-	// concurrency limit. When this field is non-nil, it must hold a
-	// non-negative integer and the limit is calculated as follows.
+	// `borrowingLimitPercent` 如果存在，则限制该优先级级别可从其他优先级级别借用的席位数。
+	// 该限制称为该级别的 BorrowingConcurrencyLimit（BorrowingCL），
+	// 即该级别在任意时刻可借用的席位总数上限。
+	// 该字段保存此限制与该级别名义并发限制之比。当该字段非 nil 时，
+	// 必须是非负整数，限制计算如下。
 	//
 	// BorrowingCL(i) = round( NominalCL(i) * borrowingLimitPercent(i)/100.0 )
 	//
-	// The value of this field can be more than 100, implying that this
-	// priority level can borrow a number of seats that is greater than
-	// its own nominal concurrency limit (NominalCL).
-	// When this field is left `nil`, the limit is effectively infinite.
+	// 该字段的值可以大于 100，表示该优先级级别可借用的席位数
+	// 大于其自身的名义并发限制（NominalCL）。
+	// 当该字段为 `nil` 时，限制实际上为无限大。
 	// +optional
 	BorrowingLimitPercent *int32 `json:"borrowingLimitPercent,omitempty" protobuf:"varint,4,opt,name=borrowingLimitPercent"`
 }
 
-// ExemptPriorityLevelConfiguration describes the configurable aspects
-// of the handling of exempt requests.
-// In the mandatory exempt configuration object the values in the fields
-// here can be modified by authorized users, unlike the rest of the `spec`.
+// ExemptPriorityLevelConfiguration 描述豁免请求处理中可配置的部分。
+// 在强制的 exempt 配置对象中，此处字段的值可由授权用户修改，
+// 而 `spec` 的其余部分不可修改。
 type ExemptPriorityLevelConfiguration struct {
-	// `nominalConcurrencyShares` (NCS) contributes to the computation of the
-	// NominalConcurrencyLimit (NominalCL) of this level.
-	// This is the number of execution seats nominally reserved for this priority level.
-	// This DOES NOT limit the dispatching from this priority level
-	// but affects the other priority levels through the borrowing mechanism.
-	// The server's concurrency limit (ServerCL) is divided among all the
-	// priority levels in proportion to their NCS values:
+	// `nominalConcurrencyShares`（NCS）参与计算该级别的
+	// NominalConcurrencyLimit（NominalCL）。
+	// 这是名义上为该优先级级别预留的执行席位数量。
+	// 它_不会_限制该优先级级别的分派，但会通过借用机制影响其他优先级级别。
+	// 服务器的并发限制（ServerCL）按各优先级级别的 NCS 值比例分配：
 	//
 	// NominalCL(i)  = ceil( ServerCL * NCS(i) / sum_ncs )
 	// sum_ncs = sum[priority level k] NCS(k)
 	//
-	// Bigger numbers mean a larger nominal concurrency limit,
-	// at the expense of every other priority level.
-	// This field has a default value of zero.
+	// 数值越大，名义并发限制越大，代价是其他所有优先级级别。
+	// 该字段的默认值为零。
 	// +optional
 	NominalConcurrencyShares *int32 `json:"nominalConcurrencyShares,omitempty" protobuf:"varint,1,opt,name=nominalConcurrencyShares"`
-	// `lendablePercent` prescribes the fraction of the level's NominalCL that
-	// can be borrowed by other priority levels.  This value of this
-	// field must be between 0 and 100, inclusive, and it defaults to 0.
-	// The number of seats that other levels can borrow from this level, known
-	// as this level's LendableConcurrencyLimit (LendableCL), is defined as follows.
+	// `lendablePercent` 规定该级别的 NominalCL 中可被其他优先级级别借用的比例。
+	// 该字段的值必须在 0 到 100 之间（含两端），默认值为 0。
+	// 其他级别可从该级别借用的席位数称为该级别的 LendableConcurrencyLimit
+	// （LendableCL），定义如下。
 	//
 	// LendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )
 	//
 	// +optional
 	LendablePercent *int32 `json:"lendablePercent,omitempty" protobuf:"varint,2,opt,name=lendablePercent"`
-	// The `BorrowingCL` of an Exempt priority level is implicitly `ServerCL`.
-	// In other words, an exempt priority level
-	// has no meaningful limit on how much it borrows.
-	// There is no explicit representation of that here.
+	// Exempt 优先级级别的 `BorrowingCL` 隐式等于 `ServerCL`。
+	// 换言之，豁免优先级级别对其借用量没有实际限制。
+	// 此处没有对应的显式表示。
 }
 
-// LimitResponse defines how to handle requests that can not be executed right now.
+// LimitResponse 定义如何处理当前无法立即执行的请求。
 // +union
 type LimitResponse struct {
-	// `type` is "Queue" or "Reject".
-	// "Queue" means that requests that can not be executed upon arrival
-	// are held in a queue until they can be executed or a queuing limit
-	// is reached.
-	// "Reject" means that requests that can not be executed upon arrival
-	// are rejected.
-	// Required.
+	// `type` 取值为 "Queue" 或 "Reject"。
+	// "Queue" 表示到达时无法立即执行的请求会在队列中等待，
+	// 直到可以执行或达到排队上限。
+	// "Reject" 表示到达时无法立即执行的请求会被拒绝。
+	// 必填。
 	// +required
 	// +unionDiscriminator
 	// +k8s:beta(since: "1.37")=+k8s:required
 	// +k8s:beta(since: "1.37")=+k8s:modeDiscriminator
 	Type LimitResponseType `json:"type" protobuf:"bytes,1,opt,name=type"`
 
-	// `queuing` holds the configuration parameters for queuing.
-	// This field may be non-empty only if `type` is `"Queue"`.
+	// `queuing` 保存排队的配置参数。
+	// 仅当 `type` 为 `"Queue"` 时该字段才可以非空。
 	// +optional
 	// +k8s:beta(since: "1.37")=+k8s:optional
 	// +k8s:beta(since: "1.37")=+k8s:ifMode("Queue")=+k8s:required
 	Queuing *QueuingConfiguration `json:"queuing,omitempty" protobuf:"bytes,2,opt,name=queuing"`
 }
 
-// LimitResponseType identifies how a Limited priority level handles a request that can not be executed right now
+// LimitResponseType 标识 Limited 优先级级别如何处理当前无法立即执行的请求。
 type LimitResponseType string
 
-// Supported limit responses.
+// 支持的限制响应。
 const (
-	// LimitResponseTypeQueue means that requests that can not be executed right now are queued until they can be executed or a queuing limit is hit
+	// LimitResponseTypeQueue 表示当前无法执行的请求会排队，直到可以执行或达到排队上限。
 	LimitResponseTypeQueue LimitResponseType = "Queue"
 
-	// LimitResponseTypeReject means that requests that can not be executed right now are rejected
+	// LimitResponseTypeReject 表示当前无法执行的请求会被拒绝。
 	LimitResponseTypeReject LimitResponseType = "Reject"
 )
 
-// QueuingConfiguration holds the configuration parameters for queuing
+// QueuingConfiguration 保存排队的配置参数。
 type QueuingConfiguration struct {
-	// `queues` is the number of queues for this priority level. The
-	// queues exist independently at each apiserver. The value must be
-	// positive.  Setting it to 1 effectively precludes
-	// shufflesharding and thus makes the distinguisher method of
-	// associated flow schemas irrelevant.  This field has a default
-	// value of 64.
+	// `queues` 是该优先级级别的队列数量。各 apiserver 上的队列相互独立。
+	// 该值必须为正数。设为 1 实际上排除了 shuffle sharding，
+	// 从而使关联流模式的区分符方法失去意义。该字段默认值为 64。
 	// +optional
 	Queues int32 `json:"queues" protobuf:"varint,1,opt,name=queues"`
 
-	// `handSize` is a small positive number that configures the
-	// shuffle sharding of requests into queues.  When enqueuing a request
-	// at this priority level the request's flow identifier (a string
-	// pair) is hashed and the hash value is used to shuffle the list
-	// of queues and deal a hand of the size specified here.  The
-	// request is put into one of the shortest queues in that hand.
-	// `handSize` must be no larger than `queues`, and should be
-	// significantly smaller (so that a few heavy flows do not
-	// saturate most of the queues).  See the user-facing
-	// documentation for more extensive guidance on setting this
-	// field.  This field has a default value of 8.
+	// `handSize` 是一个小的正数，用于配置请求入队的 shuffle sharding。
+	// 在该优先级级别入队时，请求的流标识符（一对字符串）会被哈希，
+	// 哈希值用于打乱队列列表并发出指定大小的一组队列。
+	// 请求会被放入该组中最短的队列之一。
+	// `handSize` 不得大于 `queues`，且应显著更小（以免少数重流
+	// 占满大部分队列）。有关设置该字段的更详细指南，请参阅面向用户的文档。
+	// 该字段默认值为 8。
 	// +optional
 	HandSize int32 `json:"handSize" protobuf:"varint,2,opt,name=handSize"`
 
-	// `queueLengthLimit` is the maximum number of requests allowed to
-	// be waiting in a given queue of this priority level at a time;
-	// excess requests are rejected.  This value must be positive.  If
-	// not specified, it will be defaulted to 50.
+	// `queueLengthLimit` 是该优先级级别单个队列中同时允许等待的请求数上限；
+	// 超出的请求会被拒绝。该值必须为正数。如未指定，默认值为 50。
 	// +optional
 	QueueLengthLimit int32 `json:"queueLengthLimit" protobuf:"varint,3,opt,name=queueLengthLimit"`
 }
 
-// PriorityLevelConfigurationConditionType is a valid value for PriorityLevelConfigurationStatusCondition.Type
+// PriorityLevelConfigurationConditionType 是 PriorityLevelConfigurationStatusCondition.Type 的合法值。
 type PriorityLevelConfigurationConditionType string
 
-// PriorityLevelConfigurationStatus represents the current state of a "request-priority".
+// PriorityLevelConfigurationStatus 表示 "request-priority" 的当前状态。
 type PriorityLevelConfigurationStatus struct {
-	// `conditions` is the current state of "request-priority".
+	// `conditions` 是 "request-priority" 的当前状态。
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []PriorityLevelConfigurationCondition `json:"conditions,omitempty" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// PriorityLevelConfigurationCondition defines the condition of priority level.
+// PriorityLevelConfigurationCondition 定义优先级级别的条件。
 type PriorityLevelConfigurationCondition struct {
-	// `type` is the type of the condition.
-	// Required.
+	// `type` 是条件的类型。
+	// 必填。
 	// +required
 	Type PriorityLevelConfigurationConditionType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type"`
-	// `status` is the status of the condition.
-	// Should be specified and set to one of True, False, Unknown.
+	// `status` 是条件的状态。
+	// 应指定该字段并设为 True, False, Unknown 之一。
 	// +optional
 	Status ConditionStatus `json:"status,omitempty" protobuf:"bytes,2,opt,name=status"`
-	// `lastTransitionTime` is the last time the condition transitioned from one status to another.
+	// `lastTransitionTime` 是条件最后一次从一种状态转变为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// `reason` is a unique, one-word, CamelCase reason for the condition's last transition.
+	// `reason` 是条件最后一次转变的原因，要求唯一、单个单词、CamelCase 格式。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// `message` is a human-readable message indicating details about last transition.
+	// `message` 是可读的消息，说明最后一次转变的详情。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
 
-// ConditionStatus is the status of the condition.
+// ConditionStatus 是条件的状态。
 type ConditionStatus string
 
-// These are valid condition statuses. "ConditionTrue" means a resource is in the condition.
-// "ConditionFalse" means a resource is not in the condition. "ConditionUnknown" means kubernetes
-// can't decide if a resource is in the condition or not. In the future, we could add other
-// intermediate conditions, e.g. ConditionDegraded.
+// 以下是合法的条件状态。"ConditionTrue" 表示资源处于该条件。
+// "ConditionFalse" 表示资源不处于该条件。"ConditionUnknown" 表示 kubernetes
+// 无法判断资源是否处于该条件。将来可能会增加其他中间状态，例如 ConditionDegraded。
 const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"

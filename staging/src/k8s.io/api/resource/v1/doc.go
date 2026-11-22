@@ -25,5 +25,5 @@ limitations under the License.
 // +k8s:validation-gen-input=k8s.io/api/resource/v1
 // +k8s:validation-gen-scheme-registry=nil
 
-// Package v1 is the v1 version of the resource API.
+// Package v1 是 resource API 的 v1 版本。
 package v1

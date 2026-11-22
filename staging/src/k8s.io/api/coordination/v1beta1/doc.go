@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=coordination.k8s.io
 
+// Package v1beta1 是 coordination.k8s.io API 组的 v1beta1 版本，定义 Lease 与 LeaseCandidate 等租约类型。
 package v1beta1

@@ -22,9 +22,8 @@ import (
 	"testing"
 )
 
-// Test_ServiceSpecRemovedFieldProtobufNumberReservation tests that the reserved protobuf field numbers
-// for removed fields are not re-used. DO NOT remove this test for any reason, this ensures that tombstoned
-// protobuf field numbers are not accidentally reused by other fields.
+// Test_NetworkPolicyRemovedFieldProtobufNumberReservation 验证已移除字段占用的 protobuf 字段号没有被重新使用。
+// 任何情况下都不要删除此测试：它确保已废止的 protobuf 字段号不会被其他字段意外复用。
 func Test_NetworkPolicyRemovedFieldProtobufNumberReservation(t *testing.T) {
 	obj := reflect.ValueOf(NetworkPolicy{}).Type()
 	for i := 0; i < obj.NumField(); i++ {

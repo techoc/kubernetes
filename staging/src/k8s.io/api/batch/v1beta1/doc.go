@@ -20,4 +20,6 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +k8s:openapi-model-package=io.k8s.api.batch.v1beta1
 
+// Package v1beta1 持有 API 组 "batch" 的 v1beta1 版本类型，
+// 即 CronJob 的 beta 版本定义。
 package v1beta1

@@ -21,6 +21,5 @@ limitations under the License.
 
 // +groupName=internal.apiserver.k8s.io
 
-// Package v1alpha1 contains the v1alpha1 version of the API used by the
-// apiservers themselves.
+// Package v1alpha1 包含 apiserver 自身使用的 API 的 v1alpha1 版本。
 package v1alpha1

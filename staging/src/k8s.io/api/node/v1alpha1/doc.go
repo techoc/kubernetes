@@ -21,4 +21,5 @@ limitations under the License.
 
 // +groupName=node.k8s.io
 
+// Package v1alpha1 定义 node.k8s.io API 组的类型。
 package v1alpha1

@@ -17,16 +17,13 @@ limitations under the License.
 package v1beta1
 
 const (
-	// LabelServiceName is used to indicate the name of a Kubernetes service.
+	// LabelServiceName 用于标注 EndpointSlice 所属的 Kubernetes Service 名称。
 	LabelServiceName = "kubernetes.io/service-name"
-	// LabelManagedBy is used to indicate the controller or entity that manages
-	// an EndpointSlice. This label aims to enable different EndpointSlice
-	// objects to be managed by different controllers or entities within the
-	// same cluster. It is highly recommended to configure this label for all
-	// EndpointSlices.
+	// LabelManagedBy 用于标注管理 EndpointSlice 的控制器或实体。
+	// 该标签让同一集群中的不同 EndpointSlice 可以由不同控制器或实体管理，
+	// 强烈建议为所有 EndpointSlice 设置。
 	LabelManagedBy = "endpointslice.kubernetes.io/managed-by"
-	// LabelSkipMirror can be set to true on an Endpoints resource to indicate
-	// that the EndpointSliceMirroring controller should not mirror this
-	// resource with EndpointSlices.
+	// LabelSkipMirror 在 Endpoints 资源上设为 true 时，
+	// 表示 EndpointSliceMirroring 控制器不应将该资源镜像为 EndpointSlice。
 	LabelSkipMirror = "endpointslice.kubernetes.io/skip-mirror"
 )

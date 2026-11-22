@@ -22,4 +22,5 @@ limitations under the License.
 
 // +groupName=lifecycle.k8s.io
 
+// Package lifecycle 包含 lifecycle API 组的类型定义。
 package v1alpha1

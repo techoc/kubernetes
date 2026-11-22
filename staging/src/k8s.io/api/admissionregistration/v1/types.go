@@ -20,115 +20,98 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Rule is a tuple of APIGroups, APIVersion, and Resources.It is recommended
-// to make sure that all the tuple expansions are valid.
+// Rule 是 APIGroups、APIVersion 与 Resources 的三元组。
+// 建议确保元组展开后的每一项都是合法值。
 type Rule struct {
-	// apiGroups is the API groups the resources belong to. '*' is all groups.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// 资源所属的 API 组，'*' 表示所有组。
+	// 出现 '*' 时切片长度必须为 1。必填。
 	// +listType=atomic
 	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
 
-	// apiVersions is the API versions the resources belong to. '*' is all versions.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// 资源所属的 API 版本，'*' 表示所有版本。
+	// 出现 '*' 时切片长度必须为 1。必填。
 	// +listType=atomic
 	APIVersions []string `json:"apiVersions,omitempty" protobuf:"bytes,2,rep,name=apiVersions"`
 
-	// resources is a list of resources this rule applies to.
+	// 本规则适用的资源列表。例如：
+	// 'pods' 表示 pods；'pods/log' 表示 pods 的 log 子资源；
+	// '*' 表示所有资源（不含子资源）；'pods/*' 表示 pods 的所有子资源；
+	// '*/scale' 表示所有 scale 子资源；'*/*' 表示所有资源及其子资源。
 	//
-	// For example:
-	// 'pods' means pods.
-	// 'pods/log' means the log subresource of pods.
-	// '*' means all resources, but not subresources.
-	// 'pods/*' means all subresources of pods.
-	// '*/scale' means all scale subresources.
-	// '*/*' means all resources and their subresources.
-	//
-	// If wildcard is present, the validation rule will ensure resources do not
-	// overlap with each other.
-	//
-	// Depending on the enclosing object, subresources might not be allowed.
-	// Required.
+	// 若使用了通配符，校验规则会确保资源之间不重叠；
+	// 根据外层对象的不同，子资源可能不被允许。必填。
 	// +listType=atomic
 	Resources []string `json:"resources,omitempty" protobuf:"bytes,3,rep,name=resources"`
 
-	// scope specifies the scope of this rule.
-	// Valid values are "Cluster", "Namespaced", and "*"
-	// "Cluster" means that only cluster-scoped resources will match this rule.
-	// Namespace API objects are cluster-scoped.
-	// "Namespaced" means that only namespaced resources will match this rule.
-	// "*" means that there are no scope restrictions.
-	// Subresources match the scope of their parent resource.
-	// Default is "*".
+	// 本规则的作用域，合法值为 "Cluster"、"Namespaced" 和 "*"。
+	// "Cluster" 仅匹配集群级资源（Namespace 对象属于集群级）；
+	// "Namespaced" 仅匹配命名空间级资源；"*" 不限制作用域。
+	// 子资源沿用其父资源的作用域。默认 "*"。
 	//
 	// +optional
 	Scope *ScopeType `json:"scope,omitempty" protobuf:"bytes,4,rep,name=scope"`
 }
 
-// ScopeType specifies a scope for a Rule.
+// ScopeType 指定 Rule 的作用域。
 // +enum
 type ScopeType string
 
 const (
-	// ClusterScope means that scope is limited to cluster-scoped objects.
-	// Namespace objects are cluster-scoped.
+	// 仅匹配集群级对象。Namespace 对象属于集群级。
 	ClusterScope ScopeType = "Cluster"
-	// NamespacedScope means that scope is limited to namespaced objects.
+	// 仅匹配命名空间级对象。
 	NamespacedScope ScopeType = "Namespaced"
-	// AllScopes means that all scopes are included.
+	// 包含所有作用域。
 	AllScopes ScopeType = "*"
 )
 
-// FailurePolicyType specifies a failure policy that defines how unrecognized errors from the admission endpoint are handled.
+// FailurePolicyType 定义无法识别的 admission endpoint 错误如何处理。
 // +enum
 type FailurePolicyType string
 
 const (
-	// Ignore means that an error calling the webhook is ignored.
+	// 忽略调用 webhook 时发生的错误。
 	Ignore FailurePolicyType = "Ignore"
-	// Fail means that an error calling the webhook causes the admission to fail.
+	// 调用 webhook 出错时准入失败。
 	Fail FailurePolicyType = "Fail"
 )
 
-// ParameterNotFoundActionType specifies a failure policy that defines how a binding
-// is evaluated when the param referred by its perNamespaceParamRef is not found.
+// ParameterNotFoundActionType 定义 binding 引用的参数对象不存在时
+// 如何判定该 binding。
 type ParameterNotFoundActionType string
 
 const (
-	// Allow means all requests will be admitted if no param resources
-	// could be found.
+	// 找不到参数资源时允许所有请求。
 	AllowAction ParameterNotFoundActionType = "Allow"
-	// Deny means all requests will be denied if no param resources are found.
+	// 找不到参数资源时拒绝所有请求。
 	DenyAction ParameterNotFoundActionType = "Deny"
 )
 
-// MatchPolicyType specifies the type of match policy.
+// MatchPolicyType 指定匹配策略类型。
 // +enum
 type MatchPolicyType string
 
 const (
-	// Exact means requests should only be sent to the webhook if they exactly match a given rule.
+	// 仅当请求与规则完全匹配时才发送给 webhook。
 	Exact MatchPolicyType = "Exact"
-	// Equivalent means requests should be sent to the webhook if they modify a resource listed in rules via another API group or version.
+	// 只要请求修改的是规则所列资源，即使通过其他 API 组或版本访问，也发送给 webhook。
 	Equivalent MatchPolicyType = "Equivalent"
 )
 
-// SideEffectClass specifies the types of side effects a webhook may have.
+// SideEffectClass 表示 webhook 可能产生的副作用类型。
 // +enum
 type SideEffectClass string
 
 const (
-	// SideEffectClassUnknown means that no information is known about the side effects of calling the webhook.
-	// If a request with the dry-run attribute would trigger a call to this webhook, the request will instead fail.
+	// 不清楚调用 webhook 会产生什么副作用。
+	// dry-run 请求若会触发该 webhook，则直接失败。
 	SideEffectClassUnknown SideEffectClass = "Unknown"
-	// SideEffectClassNone means that calling the webhook will have no side effects.
+	// 调用 webhook 没有任何副作用。
 	SideEffectClassNone SideEffectClass = "None"
-	// SideEffectClassSome means that calling the webhook will possibly have side effects.
-	// If a request with the dry-run attribute would trigger a call to this webhook, the request will instead fail.
+	// 调用 webhook 可能产生副作用。
+	// dry-run 请求若会触发该 webhook，则直接失败。
 	SideEffectClassSome SideEffectClass = "Some"
-	// SideEffectClassNoneOnDryRun means that calling the webhook will possibly have side effects, but if the
-	// request being reviewed has the dry-run attribute, the side effects will be suppressed.
+	// 调用 webhook 可能有副作用，但被审查的请求带 dry-run 属性时副作用会被抑制。
 	SideEffectClassNoneOnDryRun SideEffectClass = "NoneOnDryRun"
 )
 
@@ -138,33 +121,30 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// ValidatingAdmissionPolicy describes the definition of an admission validation policy that accepts or rejects an object without changing it.
+// ValidatingAdmissionPolicy 定义准入校验策略：接受或拒绝对象，但不修改对象。
 // +k8s:supportsSubresource="/status"
 type ValidatingAdmissionPolicy struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// spec defines the desired behavior of the ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 的期望行为。
 	Spec ValidatingAdmissionPolicySpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// status represents the current status of the ValidatingAdmissionPolicy, including warnings that are useful to determine if the policy
-	// behaves in the expected way.
-	// Populated by the system.
-	// Read-only.
+	// 当前状态，含用于判断策略是否按预期工作的告警信息。
+	// 由系统写入，只读。
 	// +optional
 	Status ValidatingAdmissionPolicyStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// ValidatingAdmissionPolicyStatus represents the status of an admission validation policy.
+// ValidatingAdmissionPolicyStatus 表示准入校验策略的状态。
 type ValidatingAdmissionPolicyStatus struct {
-	// observedGeneration is the generation observed by the controller.
+	// 控制器观测到的 generation。
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
-	// typeChecking contains the results of type checking for each expression.
-	// Presence of this field indicates the completion of the type checking.
+	// 每个表达式的类型检查结果；该字段出现即表示类型检查已完成。
 	// +optional
 	TypeChecking *TypeChecking `json:"typeChecking,omitempty" protobuf:"bytes,2,opt,name=typeChecking"`
-	// conditions represent the latest available observations of a policy's current state.
+	// 策略当前状态的最新观测结果。
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -174,105 +154,84 @@ type ValidatingAdmissionPolicyStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" protobuf:"bytes,3,rep,name=conditions"`
 }
 
-// ValidatingAdmissionPolicyConditionType is the condition type of admission validation policy.
+// ValidatingAdmissionPolicyConditionType 是准入校验策略的条件类型。
 type ValidatingAdmissionPolicyConditionType string
 
-// TypeChecking contains results of type checking the expressions in the
-// ValidatingAdmissionPolicy
+// TypeChecking 包含 ValidatingAdmissionPolicy 中表达式的类型检查结果。
 type TypeChecking struct {
-	// expressionWarnings contains the type checking warnings for each expression.
+	// 每个表达式的类型检查告警。
 	// +optional
 	// +listType=atomic
 	ExpressionWarnings []ExpressionWarning `json:"expressionWarnings,omitempty" protobuf:"bytes,1,rep,name=expressionWarnings"`
 }
 
-// ExpressionWarning is a warning information that targets a specific expression.
+// ExpressionWarning 是针对某个表达式的告警信息。
 type ExpressionWarning struct {
-	// fieldRef is the path to the field that refers to the expression.
-	// For example, the reference to the expression of the first item of
-	// validations is "spec.validations[0].expression"
+	// 指向该表达式的字段路径，例如 validations 第一项的表达式为
+	// "spec.validations[0].expression"。
 	FieldRef string `json:"fieldRef" protobuf:"bytes,2,opt,name=fieldRef"`
-	// warning contains the content of type checking information in a human-readable form.
-	// Each line of the warning contains the type that the expression is checked
-	// against, followed by the type check error from the compiler.
+	// 可读的类型检查信息；每行是表达式的检查类型及其对应的编译器报错。
 	Warning string `json:"warning" protobuf:"bytes,3,opt,name=warning"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// ValidatingAdmissionPolicyList is a list of ValidatingAdmissionPolicy.
+// ValidatingAdmissionPolicyList 是 ValidatingAdmissionPolicy 的列表。
 type ValidatingAdmissionPolicyList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 列表。
 	Items []ValidatingAdmissionPolicy `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ValidatingAdmissionPolicySpec is the specification of the desired behavior of the AdmissionPolicy.
+// ValidatingAdmissionPolicySpec 描述准入策略的期望行为。
 type ValidatingAdmissionPolicySpec struct {
-	// paramKind specifies the kind of resources used to parameterize this policy.
-	// If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions.
-	// If ParamKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied.
-	// If paramKind is specified but paramRef is unset in ValidatingAdmissionPolicyBinding, the params variable will be null.
+	// 用于为本策略提供参数的资源 kind。缺省时策略无参数，校验表达式中不会提供 params 变量。
+	// 若指向不存在的 kind，则视为配置错误并应用 FailurePolicy。
+	// 若指定了 paramKind 但 binding 未设置 paramRef，params 变量为 null。
 	// +optional
 	ParamKind *ParamKind `json:"paramKind,omitempty" protobuf:"bytes,1,rep,name=paramKind"`
 
-	// matchConstraints specifies what resources this policy is designed to validate.
-	// The AdmissionPolicy cares about a request if it matches _all_ Constraints.
-	// However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API
-	// ValidatingAdmissionPolicy cannot match ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding.
-	// Required.
+	// 本策略要校验哪些资源。请求需匹配所有约束才会被处理。
+	// 为防止集群进入无法通过 API 恢复的不稳定状态，本策略不能匹配
+	// ValidatingAdmissionPolicy 和 ValidatingAdmissionPolicyBinding。必填。
 	MatchConstraints *MatchResources `json:"matchConstraints,omitempty" protobuf:"bytes,2,rep,name=matchConstraints"`
 
-	// validations contain CEL expressions which is used to apply the validation.
-	// Validations and AuditAnnotations may not both be empty; a minimum of one Validations or AuditAnnotations is
-	// required.
+	// 执行校验的 CEL 表达式。validations 与 auditAnnotations 不能同时为空，至少其一。
 	// +listType=atomic
 	// +optional
 	Validations []Validation `json:"validations,omitempty" protobuf:"bytes,3,rep,name=validations"`
 
-	// failurePolicy defines how to handle failures for the admission policy. Failures can
-	// occur from CEL expression parse errors, type check errors, runtime errors and invalid
-	// or mis-configured policy definitions or bindings.
+	// 策略执行失败时的处理方式。失败原因包括 CEL 表达式解析错误、类型检查错误、
+	// 运行时错误，以及无效或配置错误的策略定义/binding。
 	//
-	// A policy is invalid if spec.paramKind refers to a non-existent Kind.
-	// A binding is invalid if spec.paramRef.name refers to a non-existent resource.
-	//
-	// failurePolicy does not define how validations that evaluate to false are handled.
-	//
-	// When failurePolicy is set to Fail, ValidatingAdmissionPolicyBinding validationActions
-	// define how failures are enforced.
-	//
-	// Allowed values are Ignore or Fail. Defaults to Fail.
+	// paramKind 指向不存在的 Kind 时策略无效；paramRef.name 指向不存在的资源时 binding 无效。
+	// 校验结果为 false 不属于此处定义的失败。
+	// failurePolicy 为 Fail 时，具体执行方式由 binding 的 validationActions 决定。
+	// 合法值为 Ignore 或 Fail，默认 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType `json:"failurePolicy,omitempty" protobuf:"bytes,4,opt,name=failurePolicy,casttype=FailurePolicyType"`
 
-	// auditAnnotations contains CEL expressions which are used to produce audit
-	// annotations for the audit event of the API request.
-	// validations and auditAnnotations may not both be empty; a least one of validations or auditAnnotations is
-	// required.
+	// 为 API 请求审计事件生成审计注解的 CEL 表达式。
+	// 与 validations 至少有一个非空。
 	// +listType=atomic
 	// +optional
 	AuditAnnotations []AuditAnnotation `json:"auditAnnotations,omitempty" protobuf:"bytes,5,rep,name=auditAnnotations"`
 
-	// matchConditions is a list of conditions that must be met for a request to be validated.
-	// Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// 请求被校验前必须满足的条件列表。它在 rules、namespaceSelector、
+	// objectSelector 之后进一步过滤；空列表匹配所有请求，最多允许 64 个。
+	// 若提供了参数对象，可像校验表达式一样通过 `params` 访问。
 	//
-	// If a parameter object is provided, it can be accessed via the `params` handle in the same
-	// manner as validation expressions.
-	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the policy is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the policy is skipped
+	// 匹配逻辑依次为：
+	//   1. 任一 matchCondition 为 FALSE，跳过该策略；
+	//   2. 全部为 TRUE，执行该策略；
+	//   3. 有条件出错（但无 FALSE）时：
+	//      - failurePolicy=Fail：拒绝请求；
+	//      - failurePolicy=Ignore：跳过该策略。
 	//
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -281,13 +240,10 @@ type ValidatingAdmissionPolicySpec struct {
 	// +optional
 	MatchConditions []MatchCondition `json:"matchConditions,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,6,rep,name=matchConditions"`
 
-	// variables contain definitions of variables that can be used in composition of other expressions.
-	// Each variable is defined as a named CEL expression.
-	// The variables defined here will be available under `variables` in other expressions of the policy
-	// except MatchConditions because MatchConditions are evaluated before the rest of the policy.
-	//
-	// The expression of a variable can refer to other variables defined earlier in the list but not those after.
-	// Thus, Variables must be sorted by the order of first appearance and acyclic.
+	// 可复用的变量定义，每个变量是一个具名 CEL 表达式。
+	// 变量可在策略其他表达式中通过 `variables` 访问，但 MatchConditions 除外：
+	// 它先于策略其余部分执行。
+	// 变量表达式只能引用列表中更早定义的变量，因此必须按首次出现顺序排列且无环。
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	// +listType=map
@@ -296,141 +252,88 @@ type ValidatingAdmissionPolicySpec struct {
 	Variables []Variable `json:"variables,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,7,rep,name=variables"`
 }
 
-// ParamKind is a tuple of Group Kind and Version.
+// ParamKind 是 Group、Kind 和 Version 组成的三元组。
 // +structType=atomic
 type ParamKind struct {
-	// apiVersion is the API group version the resources belong to.
-	// In format of "group/version".
-	// Required.
+	// 资源所属的 API 组版本，形如 "group/version"。必填。
 	APIVersion string `json:"apiVersion,omitempty" protobuf:"bytes,1,rep,name=apiVersion"`
 
-	// kind is the API kind the resources belong to.
-	// Required.
+	// 资源所属的 API kind。必填。
 	Kind string `json:"kind,omitempty" protobuf:"bytes,2,rep,name=kind"`
 }
 
-// Validation specifies the CEL expression which is used to apply the validation.
+// Validation 指定执行校验所用的 CEL 表达式。
 type Validation struct {
-	// expression represents the expression which will be evaluated by CEL.
-	// ref: https://github.com/google/cel-spec
-	// CEL expressions have access to the contents of the API request/response, organized into CEL variables as well as some other useful variables:
+	// 由 CEL 求值的表达式，语法见 https://github.com/google/cel-spec。
+	// 表达式可访问 API 请求/响应内容，组织成以下 CEL 变量：
 	//
-	// - 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// - 'oldObject' - The existing object. The value is null for CREATE requests.
-	// - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	// - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	// - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	// - 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be accessed as 'variables.foo'.
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
+	// - 'object'：传入请求中的对象；DELETE 请求为 null。
+	// - 'oldObject'：现存对象；CREATE 请求为 null。
+	// - 'request'：API 请求的属性（/pkg/apis/admission/types.go#AdmissionRequest）。
+	// - 'params'：binding 引用的参数资源；仅当策略定义了 ParamKind 时才有值。
+	// - 'namespaceObject'：对象所属的命名空间对象；集群级资源为 null。
+	// - 'variables'：组合变量到其惰性求值的映射，如 'variables.foo'。
+	// - 'authorizer'：CEL 授权器，可对请求主体（用户或服务账号）做权限检查，
+	//   见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz。
+	// - 'authorizer.requestResource'：由 authorizer 构造并绑定请求资源的 CEL ResourceCheck。
 	//
-	// The `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the
-	// object. No other metadata properties are accessible.
-	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Accessible property names are escaped according to the following rules when accessed in the expression:
-	// - '__' escapes to '__underscores__'
-	// - '.' escapes to '__dot__'
-	// - '-' escapes to '__dash__'
-	// - '/' escapes to '__slash__'
-	// - Property names that exactly match a CEL RESERVED keyword escape to '__{keyword}__'. The keywords are:
+	// 根对象始终可访问 apiVersion、kind、metadata.name 和 metadata.generateName，
+	// 其他元属性不可访问。只有形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名可访问，
+	// 在表达式中按如下规则转义：
+	// - '__' 转义为 '__underscores__'；'.' 为 '__dot__'；
+	// - '-' 为 '__dash__'；'/' 为 '__slash__'；
+	// - 与 CEL 保留字完全相同的属性名转义为 '__{keyword}__'，保留字包括：
 	//	  "true", "false", "null", "in", "as", "break", "const", "continue", "else", "for", "function", "if",
-	//	  "import", "let", "loop", "package", "namespace", "return".
-	// Examples:
-	//   - Expression accessing a property named "namespace": {"Expression": "object.__namespace__ > 0"}
-	//   - Expression accessing a property named "x-prop": {"Expression": "object.x__dash__prop > 0"}
-	//   - Expression accessing a property named "redact__d": {"Expression": "object.redact__underscores__d > 0"}
+	//	  "import", "let", "loop", "package", "namespace", "return"。
+	// 例如访问 "namespace" 属性写作 object.__namespace__，访问 "x-prop" 写作 object.x__dash__prop。
 	//
-	// Equality on arrays with list type of 'set' or 'map' ignores element order, i.e. [1, 2] == [2, 1].
-	// Concatenation on arrays with x-kubernetes-list-type use the semantics of the list type:
-	//   - 'set': `X + Y` performs a union where the array positions of all elements in `X` are preserved and
-	//     non-intersecting elements in `Y` are appended, retaining their partial order.
-	//   - 'map': `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values
-	//     are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with
-	//     non-intersecting keys are appended, retaining their partial order.
-	// Required.
+	// list 类型为 'set' 或 'map' 的数组比较相等时忽略元素顺序，即 [1, 2] == [2, 1]。
+	// 数组拼接遵循 x-kubernetes-list-type 的语义：
+	//   - 'set'：`X + Y` 取并集，保留 X 中元素的位置，Y 中不重合的元素按原相对顺序追加；
+	//   - 'map'：`X + Y` 按键合并，X 中键的位置保留，键重合处用 Y 的值覆盖，
+	//     Y 中不重合的键按原相对顺序追加。必填。
 	Expression string `json:"expression" protobuf:"bytes,1,opt,name=Expression"`
-	// message represents the message displayed when validation fails. The message is required if the Expression contains
-	// line breaks. The message must not contain line breaks.
-	// If unset, the message is "failed rule: {Rule}".
-	// e.g. "must be a URL with the host matching spec.host"
-	// If the Expression contains line breaks. Message is required.
-	// The message must not contain line breaks.
-	// If unset, the message is "failed Expression: {Expression}".
+	// 校验失败时显示的消息。表达式含换行时必须提供，且消息本身不能含换行。
+	// 未设置时使用 "failed Expression: {Expression}"。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,2,opt,name=message"`
-	// reason represents a machine-readable description of why this validation failed.
-	// If this is the first validation in the list to fail, this reason, as well as the
-	// corresponding HTTP response code, are used in the
-	// HTTP response to the client.
-	// The currently supported reasons are: "Unauthorized", "Forbidden", "Invalid", "RequestEntityTooLarge".
-	// If not set, StatusReasonInvalid is used in the response to the client.
+	// 机器可读的校验失败原因。若这是列表中首个失败的校验，该原因与对应 HTTP
+	// 状态码会用于返回给客户端。当前支持 "Unauthorized"、"Forbidden"、
+	// "Invalid"、"RequestEntityTooLarge"；未设置时默认 StatusReasonInvalid。
 	// +optional
 	Reason *metav1.StatusReason `json:"reason,omitempty" protobuf:"bytes,3,opt,name=reason"`
-	// messageExpression declares a CEL expression that evaluates to the validation failure message that is returned when this rule fails.
-	// Since messageExpression is used as a failure message, it must evaluate to a string.
-	// If both message and messageExpression are present on a validation, then messageExpression will be used if validation fails.
-	// If messageExpression results in a runtime error, the runtime error is logged, and the validation failure message is produced
-	// as if the messageExpression field were unset. If messageExpression evaluates to an empty string, a string with only spaces, or a string
-	// that contains line breaks, then the validation failure message will also be produced as if the messageExpression field were unset, and
-	// the fact that messageExpression produced an empty string/string with only spaces/string with line breaks will be logged.
-	// messageExpression has access to all the same variables as the `expression` except for 'authorizer' and 'authorizer.requestResource'.
-	// Example:
-	// "object.x must be less than max ("+string(params.max)+")"
+	// 求值为校验失败消息的 CEL 表达式，结果必须是字符串。
+	// 与 message 同时存在时优先使用本字段。
+	// 若表达式运行时出错，或结果为空串、全空格、含换行，则按未设置处理并记录日志。
+	// 可访问的变量与 expression 相同，但不含 authorizer 和 authorizer.requestResource。
+	// 示例："object.x must be less than max ("+string(params.max)+")"。
 	// +optional
 	MessageExpression string `json:"messageExpression,omitempty" protobuf:"bytes,4,opt,name=messageExpression"`
 }
 
-// Variable is the definition of a variable that is used for composition. A variable is defined as a named expression.
+// Variable 定义一个可复用的变量，即一个具名表达式。
 // +structType=atomic
 type Variable struct {
-	// name is the name of the variable. The name must be a valid CEL identifier and unique among all variables.
-	// The variable can be accessed in other expressions through `variables`
-	// For example, if name is "foo", the variable will be available as `variables.foo`
+	// 变量名，必须是合法 CEL 标识符且在变量间唯一。
+	// 可通过 `variables` 在其他表达式中访问，如 "foo" 对应 `variables.foo`。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=Name"`
 
-	// expression is the expression that will be evaluated as the value of the variable.
-	// The CEL expression has access to the same identifiers as the CEL expressions in Validation.
+	// 求值为变量值的表达式，可访问的标识符与 Validation 中的表达式相同。
 	Expression string `json:"expression" protobuf:"bytes,2,opt,name=Expression"`
 }
 
-// AuditAnnotation describes how to produce an audit annotation for an API request.
+// AuditAnnotation 描述如何为 API 请求生成审计注解。
 type AuditAnnotation struct {
-	// key specifies the audit annotation key. The audit annotation keys of
-	// a ValidatingAdmissionPolicy must be unique. The key must be a qualified
-	// name ([A-Za-z0-9][-A-Za-z0-9_.]*) no more than 63 bytes in length.
-	//
-	// The key is combined with the resource name of the
-	// ValidatingAdmissionPolicy to construct an audit annotation key:
-	// "{ValidatingAdmissionPolicy name}/{key}".
-	//
-	// If an admission webhook uses the same resource name as this ValidatingAdmissionPolicy
-	// and the same audit annotation key, the annotation key will be identical.
-	// In this case, the first annotation written with the key will be included
-	// in the audit event and all subsequent annotations with the same key
-	// will be discarded.
-	//
-	// Required.
+	// 审计注解的 key，在同一策略内必须唯一，须为不超过 63 字节的合法限定名。
+	// 最终注解 key 为 "{策略名}/{key}"。
+	// 若其他 admission webhook 使用同名策略和相同 key，注解 key 会冲突：
+	// 仅第一条写入的注解会保留在审计事件中，后续同名注解被丢弃。必填。
 	Key string `json:"key" protobuf:"bytes,1,opt,name=key"`
 
-	// valueExpression represents the expression which is evaluated by CEL to
-	// produce an audit annotation value. The expression must evaluate to either
-	// a string or null value. If the expression evaluates to a string, the
-	// audit annotation is included with the string value. If the expression
-	// evaluates to null or empty string the audit annotation will be omitted.
-	// The valueExpression may be no longer than 5kb in length.
-	// If the result of the valueExpression is more than 10kb in length, it
-	// will be truncated to 10kb.
-	//
-	// If multiple ValidatingAdmissionPolicyBinding resources match an
-	// API request, then the valueExpression will be evaluated for
-	// each binding. All unique values produced by the valueExpressions
-	// will be joined together in a comma-separated list.
-	//
-	// Required.
+	// 由 CEL 求值产生注解值的表达式，结果必须是字符串或 null。
+	// 字符串会写入注解；null 或空串则省略该注解。
+	// 表达式长度不超过 5kb，结果超过 10kb 会被截断。
+	// 多个 binding 匹配同一请求时，各 binding 的值会去重后以逗号连接。必填。
 	ValueExpression string `json:"valueExpression" protobuf:"bytes,2,opt,name=valueExpression"`
 }
 
@@ -439,23 +342,20 @@ type AuditAnnotation struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// ValidatingAdmissionPolicyBinding binds the ValidatingAdmissionPolicy with paramerized resources.
-// ValidatingAdmissionPolicyBinding and parameter CRDs together define how cluster administrators configure policies for clusters.
+// ValidatingAdmissionPolicyBinding 将策略与参数化资源绑定。
+// 它与参数 CRD 共同定义集群管理员如何配置策略。
 //
-// For a given admission request, each binding will cause its policy to be
-// evaluated N times, where N is 1 for policies/bindings that don't use
-// params, otherwise N is the number of parameters selected by the binding.
+// 对一次准入请求，每个 binding 会让其策略执行 N 次：不使用参数时 N=1，
+// 否则 N 为该 binding 选中的参数数量。
 //
-// The CEL expressions of a policy must have a computed CEL cost below the maximum
-// CEL budget. Each evaluation of the policy is given an independent CEL cost budget.
-// Adding/removing policies, bindings, or params can not affect whether a
-// given (policy, binding, param) combination is within its own CEL budget.
+// 策略中 CEL 表达式的计算开销必须低于 CEL 预算上限，每次求值独立计算预算；
+// 增删策略、binding 或参数不应影响某个（策略、binding、参数）组合是否在预算内。
 type ValidatingAdmissionPolicyBinding struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// spec defines the desired behavior of the ValidatingAdmissionPolicyBinding.
+	// binding 的期望行为。
 	// +required
 	Spec ValidatingAdmissionPolicyBindingSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
@@ -463,261 +363,146 @@ type ValidatingAdmissionPolicyBinding struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// ValidatingAdmissionPolicyBindingList is a list of ValidatingAdmissionPolicyBinding.
+// ValidatingAdmissionPolicyBindingList 是绑定对象的列表。
 type ValidatingAdmissionPolicyBindingList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of PolicyBinding.
+	// PolicyBinding 列表。
 	Items []ValidatingAdmissionPolicyBinding `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ValidatingAdmissionPolicyBindingSpec is the specification of the ValidatingAdmissionPolicyBinding.
+// ValidatingAdmissionPolicyBindingSpec 描述 binding 的规格。
 type ValidatingAdmissionPolicyBindingSpec struct {
-	// policyName references a ValidatingAdmissionPolicy name which the ValidatingAdmissionPolicyBinding binds to.
-	// If the referenced resource does not exist, this binding is considered invalid and will be ignored
-	// Required.
+	// 本 binding 所绑定的策略名。引用的资源不存在时 binding 无效并被忽略。必填。
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	PolicyName string `json:"policyName,omitempty" protobuf:"bytes,1,rep,name=policyName"`
 
-	// paramRef specifies the parameter resource used to configure the admission control policy.
-	// It should point to a resource of the type specified in ParamKind of the bound ValidatingAdmissionPolicy.
-	// If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the ValidatingAdmissionPolicy applied.
-	// If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.
+	// 用于配置策略的参数资源，类型应与所绑定策略的 paramKind 一致。
+	// 策略定义了 paramKind 但参数资源不存在时，binding 视为配置错误并应用策略的 FailurePolicy。
+	// 策略未定义 paramKind 时忽略该字段，规则在无参数情况下求值。
 	// +optional
 	ParamRef *ParamRef `json:"paramRef,omitempty" protobuf:"bytes,2,rep,name=paramRef"`
 
-	// matchResources declares what resources match this binding and will be validated by it.
-	// Note that this is intersected with the policy's matchConstraints, so only requests that are matched by the policy can be selected by this.
-	// If this is unset, all resources matched by the policy are validated by this binding
-	// When resourceRules is unset, it does not constrain resource matching. If a resource is matched by the other fields of this object, it will be validated.
-	// Note that this is differs from ValidatingAdmissionPolicy matchConstraints, where resourceRules are required.
+	// 声明本 binding 匹配并要校验的资源。它与策略的 matchConstraints 取交集，
+	// 因此只有被策略匹配到的请求才会被选中。未设置时校验策略匹配的所有资源。
+	// resourceRules 未设置时不限制资源匹配，其他字段匹配即校验；
+	// 这与策略的 matchConstraints 不同，后者要求 resourceRules 必填。
 	// +optional
 	MatchResources *MatchResources `json:"matchResources,omitempty" protobuf:"bytes,3,rep,name=matchResources"`
 
-	// validationActions declares how Validations of the referenced ValidatingAdmissionPolicy are enforced.
-	// If a validation evaluates to false it is always enforced according to these actions.
+	// 声明所绑定策略的校验结果如何执行。校验结果为 false 时始终按这些动作处理。
+	// 策略 FailurePolicy 定义的失败仅在取值为 Fail 时按这些动作执行，否则忽略，
+	// 包括编译错误、运行时错误和策略配置错误。
 	//
-	// Failures defined by the ValidatingAdmissionPolicy's FailurePolicy are enforced according
-	// to these actions only if the FailurePolicy is set to Fail, otherwise the failures are
-	// ignored. This includes compilation errors, runtime errors and misconfigurations of the policy.
+	// 这是动作值的集合，顺序无关，不允许重复。支持的动作：
+	// - "Deny"：校验失败导致请求被拒绝；
+	// - "Warn"：通过 HTTP Warning 头（code 299）向客户端报告，允许和拒绝的响应都可带告警；
+	// - "Audit"：将失败写入审计事件的
+	//   `validation.policy.admission.k8s.io/validation_failure` 注解，
+	//   值为 JSON 对象列表，字段包括 message、policy、binding、expressionIndex、
+	//   validationActions。
 	//
-	// validationActions is declared as a set of action values. Order does
-	// not matter. validationActions may not contain duplicates of the same action.
-	//
-	// The supported actions values are:
-	//
-	// "Deny" specifies that a validation failure results in a denied request.
-	//
-	// "Warn" specifies that a validation failure is reported to the request client
-	// in HTTP Warning headers, with a warning code of 299. Warnings can be sent
-	// both for allowed or denied admission responses.
-	//
-	// "Audit" specifies that a validation failure is included in the published
-	// audit event for the request. The audit event will contain a
-	// `validation.policy.admission.k8s.io/validation_failure` audit annotation
-	// with a value containing the details of the validation failures, formatted as
-	// a JSON list of objects, each with the following fields:
-	// - message: The validation failure message string
-	// - policy: The resource name of the ValidatingAdmissionPolicy
-	// - binding: The resource name of the ValidatingAdmissionPolicyBinding
-	// - expressionIndex: The index of the failed validations in the ValidatingAdmissionPolicy
-	// - validationActions: The enforcement actions enacted for the validation failure
-	// Example audit annotation:
-	// `"validation.policy.admission.k8s.io/validation_failure": "[{\"message\": \"Invalid value\", {\"policy\": \"policy.example.com\", {\"binding\": \"policybinding.example.com\", {\"expressionIndex\": \"1\", {\"validationActions\": [\"Audit\"]}]"`
-	//
-	// Clients should expect to handle additional values by ignoring
-	// any values not recognized.
-	//
-	// "Deny" and "Warn" may not be used together since this combination
-	// needlessly duplicates the validation failure both in the
-	// API response body and the HTTP warning headers.
-	//
-	// Required.
+	// 客户端应忽略无法识别的新动作。"Deny" 与 "Warn" 不能同时使用，
+	// 否则会在响应体和告警头中重复报告同一失败。必填。
 	// +listType=set
 	// +required
 	// +k8s:beta(since: "1.37")=+k8s:required
 	ValidationActions []ValidationAction `json:"validationActions,omitempty" protobuf:"bytes,4,rep,name=validationActions"`
 }
 
-// ParamRef describes how to locate the params to be used as input to
-// expressions of rules applied by a policy binding.
+// ParamRef 描述如何定位 binding 中规则表达式所需的参数对象。
 // +structType=atomic
 type ParamRef struct {
-	// name is the name of the resource being referenced.
-	//
-	// One of `name` or `selector` must be set, but `name` and `selector` are
-	// mutually exclusive properties. If one is set, the other must be unset.
-	//
-	// A single parameter used for all admission requests can be configured
-	// by setting the `name` field, leaving `selector` blank, and setting namespace
-	// if `paramKind` is namespace-scoped.
+	// 被引用资源的名字。name 与 selector 必须二选一且互斥。
+	// 若要用同一个参数处理所有请求，设置 name、留空 selector，
+	// 并在 paramKind 为命名空间级时指定 namespace。
 	//
 	Name string `json:"name,omitempty" protobuf:"bytes,1,rep,name=name"`
 
-	// namespace is the namespace of the referenced resource. Allows limiting
-	// the search for params to a specific namespace. Applies to both `name` and
-	// `selector` fields.
-	//
-	// A per-namespace parameter may be used by specifying a namespace-scoped
-	// `paramKind` in the policy and leaving this field empty.
-	//
-	// - If `paramKind` is cluster-scoped, this field MUST be unset. Setting this
-	// field results in a configuration error.
-	//
-	// - If `paramKind` is namespace-scoped, the namespace of the object being
-	// evaluated for admission will be used when this field is left unset. Take
-	// care that if this is left empty the binding must not match any cluster-scoped
-	// resources, which will result in an error.
+	// 被引用资源的命名空间，将参数搜索限制在特定命名空间，对 name 和 selector 都生效。
+	// 在策略中指定命名空间级 paramKind 并留空本字段，即可使用按命名空间区分的参数。
+	// paramKind 为集群级时本字段必须留空，否则配置错误；
+	// paramKind 为命名空间级时留空将使用被准入对象的命名空间，
+	// 此时 binding 不得匹配任何集群级资源，否则会报错。
 	//
 	// +optional
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,2,rep,name=namespace"`
 
-	// selector can be used to match multiple param objects based on their labels.
-	// Supply selector: {} to match all resources of the ParamKind.
-	//
-	// If multiple params are found, they are all evaluated with the policy expressions
-	// and the results are ANDed together.
-	//
-	// One of `name` or `selector` must be set, but `name` and `selector` are
-	// mutually exclusive properties. If one is set, the other must be unset.
+	// 按标签匹配多个参数对象；selector: {} 匹配该 ParamKind 的所有资源。
+	// 找到多个参数时各自求值，结果按逻辑与合并。
+	// name 与 selector 必须二选一且互斥。
 	//
 	// +optional
 	Selector *metav1.LabelSelector `json:"selector,omitempty" protobuf:"bytes,3,rep,name=selector"`
 
-	// parameterNotFoundAction controls the behavior of the binding when the resource
-	// exists, and name or selector is valid, but there are no parameters
-	// matched by the binding. If the value is set to `Allow`, then no
-	// matched parameters will be treated as successful validation by the binding.
-	// If set to `Deny`, then no matched parameters will be subject to the
-	// `failurePolicy` of the policy.
-	//
-	// Allowed values are `Allow` or `Deny`
-	//
-	// Required
+	// 资源存在、name/selector 合法但 binding 未匹配到任何参数时的行为。
+	// `Allow` 将无参数视为校验通过；`Deny` 则按策略的 failurePolicy 处理。必填，
+	// 合法值为 `Allow` 或 `Deny`。
 	ParameterNotFoundAction *ParameterNotFoundActionType `json:"parameterNotFoundAction,omitempty" protobuf:"bytes,4,rep,name=parameterNotFoundAction"`
 }
 
-// MatchResources decides whether to run the admission control policy on an object based
-// on whether it meets the match criteria.
-// The exclude rules take precedence over include rules (if a resource matches both, it is excluded)
+// MatchResources 根据对象是否满足匹配条件决定是否对其执行准入策略。
+// 排除规则优先于包含规则：同时匹配时以排除为准。
 // +structType=atomic
 type MatchResources struct {
-	// namespaceSelector decides whether to run the admission control policy on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the policy.
-	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "runlevel",
-	//       "operator": "NotIn",
-	//       "values": [
-	//         "0",
-	//         "1"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// If instead you want to only run the policy on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "environment",
-	//       "operator": "In",
-	//       "values": [
-	//         "prod",
-	//         "staging"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// See
-	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-	// for more examples of label selectors.
-	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 根据对象所属命名空间是否匹配选择器决定是否执行策略。
+	// 对象本身就是命名空间时，匹配其 metadata.labels；其他集群级资源从不跳过策略。
+	// 例如要排除 runlevel 为 "0" 或 "1" 的命名空间：
+	// "namespaceSelector": {"matchExpressions": [{"key": "runlevel", "operator": "NotIn", "values": ["0", "1"]}]}
+	// 只看 "environment" 为 "prod" 或 "staging" 的命名空间则用 In 操作符。
+	// 更多示例见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty" protobuf:"bytes,1,opt,name=namespaceSelector"`
-	// objectSelector decides whether to run the validation based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the cel validation, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// 根据对象标签决定是否执行校验。oldObject 和 newObject 分别匹配，任一命中即可。
+	// null 对象（create 时的 oldObject、delete 时的 newObject）及无标签能力的对象
+	// （如 DeploymentRollback、PodProxyOptions）视为不匹配。
+	// 仅当 webhook 是可选启用时才用对象选择器，因为终端用户可自行设置标签绕过。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector `json:"objectSelector,omitempty" protobuf:"bytes,2,opt,name=objectSelector"`
-	// resourceRules describes what operations on what resources/subresources the ValidatingAdmissionPolicy matches.
-	// The policy cares about an operation if it matches _any_ Rule.
+	// 策略匹配哪些资源/子资源上的哪些操作，命中任一 Rule 即处理。
 	// +listType=atomic
 	// +optional
 	ResourceRules []NamedRuleWithOperations `json:"resourceRules,omitempty" protobuf:"bytes,3,rep,name=resourceRules"`
-	// excludeResourceRules describes what operations on what resources/subresources the ValidatingAdmissionPolicy should not care about.
-	// The exclude rules take precedence over include rules (if a resource matches both, it is excluded)
+	// 策略不关心的资源/子资源操作。排除规则优先于包含规则。
 	// +listType=atomic
 	// +optional
 	ExcludeResourceRules []NamedRuleWithOperations `json:"excludeResourceRules,omitempty" protobuf:"bytes,4,rep,name=excludeResourceRules"`
-	// matchPolicy defines how the "MatchResources" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
-	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the ValidatingAdmissionPolicy.
-	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the ValidatingAdmissionPolicy.
-	//
-	// Defaults to "Equivalent"
+	// "MatchResources" 列表如何匹配传入请求，合法值为 "Exact" 或 "Equivalent"。
+	// Exact：仅完全匹配规则时才命中，例如规则只写了 apps/v1 的 deployments，
+	// 则 apps/v1beta1、extensions/v1beta1 的请求不会发送。
+	// Equivalent：通过其他 API 组或版本修改同一资源也算命中，上述请求会先转换为
+	// apps/v1 再发送。默认 "Equivalent"。
 	// +optional
 	MatchPolicy *MatchPolicyType `json:"matchPolicy,omitempty" protobuf:"bytes,7,opt,name=matchPolicy,casttype=MatchPolicyType"`
 }
 
-// ValidationAction specifies a policy enforcement action.
+// ValidationAction 指定策略的执行动作。
 // +enum
 type ValidationAction string
 
 const (
-	// Deny specifies that a validation failure results in a denied request.
+	// 校验失败导致请求被拒绝。
 	Deny ValidationAction = "Deny"
-	// Warn specifies that a validation failure is reported to the request client
-	// in HTTP Warning headers, with a warning code of 299. Warnings can be sent
-	// both for allowed or denied admission responses.
+	// 通过 HTTP Warning 头（code 299）报告失败，允许和拒绝的响应都可带告警。
 	Warn ValidationAction = "Warn"
-	// Audit specifies that a validation failure is included in the published
-	// audit event for the request. The audit event will contain a
-	// `validation.policy.admission.k8s.io/validation_failure` audit annotation
-	// with a value containing the details of the validation failure.
+	// 将失败写入审计事件的 validation.policy.admission.k8s.io/validation_failure 注解。
 	Audit ValidationAction = "Audit"
 )
 
-// NamedRuleWithOperations is a tuple of Operations and Resources with ResourceNames.
+// NamedRuleWithOperations 是 Operations、Resources 与 ResourceNames 组成的元组。
 // +structType=atomic
 type NamedRuleWithOperations struct {
-	// resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
+	// 规则适用的资源名白名单，空集表示不限制。
 	// +listType=atomic
 	// +optional
 	ResourceNames []string `json:"resourceNames,omitempty" protobuf:"bytes,1,rep,name=resourceNames"`
-	// RuleWithOperations is a tuple of Operations and Resources.
+	// RuleWithOperations 是 Operations 与 Resources 组成的元组。
 	RuleWithOperations `json:"" protobuf:"bytes,2,opt,name=ruleWithOperations"`
 }
 
@@ -726,13 +511,13 @@ type NamedRuleWithOperations struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.16
 
-// ValidatingWebhookConfiguration describes the configuration of and admission webhook that accept or reject and object without changing it.
+// ValidatingWebhookConfiguration 描述校验型准入 webhook 的配置：接受或拒绝对象，不修改对象。
 type ValidatingWebhookConfiguration struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// webhooks is a list of webhooks and the affected resources and operations.
+	// webhook 列表及其影响的资源和操作。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -744,14 +529,14 @@ type ValidatingWebhookConfiguration struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.16
 
-// ValidatingWebhookConfigurationList is a list of ValidatingWebhookConfiguration.
+// ValidatingWebhookConfigurationList 是配置对象的列表。
 type ValidatingWebhookConfigurationList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of ValidatingWebhookConfiguration.
+	// ValidatingWebhookConfiguration 列表。
 	Items []ValidatingWebhookConfiguration `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -760,13 +545,13 @@ type ValidatingWebhookConfigurationList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.16
 
-// MutatingWebhookConfiguration describes the configuration of and admission webhook that accept or reject and may change the object.
+// MutatingWebhookConfiguration 描述变更型准入 webhook 的配置：接受或拒绝对象，并可修改对象。
 type MutatingWebhookConfiguration struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// webhooks is a list of webhooks and the affected resources and operations.
+	// webhook 列表及其影响的资源和操作。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -778,158 +563,84 @@ type MutatingWebhookConfiguration struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.16
 
-// MutatingWebhookConfigurationList is a list of MutatingWebhookConfiguration.
+// MutatingWebhookConfigurationList 是配置对象的列表。
 type MutatingWebhookConfigurationList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of MutatingWebhookConfiguration.
+	// MutatingWebhookConfiguration 列表。
 	Items []MutatingWebhookConfiguration `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ValidatingWebhook describes an admission webhook and the resources and operations it applies to.
+// ValidatingWebhook 描述一个校验型 webhook 及其适用的资源和操作。
 type ValidatingWebhook struct {
-	// name is the name of the admission webhook.
-	// Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where
-	// "imagepolicy" is the name of the webhook, and kubernetes.io is the name
-	// of the organization.
-	// Required.
+	// webhook 名称，建议为全限定名，如 imagepolicy.kubernetes.io：
+	// "imagepolicy" 是 webhook 名，kubernetes.io 是组织名。必填。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// clientConfig defines how to communicate with the hook.
-	// Required
+	// 与 webhook 通信的配置。必填。
 	ClientConfig WebhookClientConfig `json:"clientConfig" protobuf:"bytes,2,opt,name=clientConfig"`
 
-	// rules describes what operations on what resources/subresources the webhook cares about.
-	// The webhook cares about an operation if it matches _any_ Rule.
-	// However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks
-	// from putting the cluster in a state which cannot be recovered from without completely
-	// disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called
-	// on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects.
+	// webhook 关心哪些资源/子资源上的哪些操作，命中任一 Rule 即处理。
+	// 为防止 webhook 把集群带入必须完全禁用插件才能恢复的状态，
+	// 对 webhook 配置对象本身的准入请求永远不会调用任何 webhook。
 	// +listType=atomic
 	Rules []RuleWithOperations `json:"rules,omitempty" protobuf:"bytes,3,rep,name=rules"`
 
-	// failurePolicy defines how unrecognized errors from the admission endpoint are handled -
-	// allowed values are Ignore or Fail. Defaults to Fail.
+	// 无法识别的 endpoint 错误如何处理，合法值为 Ignore 或 Fail，默认 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType `json:"failurePolicy,omitempty" protobuf:"bytes,4,opt,name=failurePolicy,casttype=FailurePolicyType"`
 
-	// matchPolicy defines how the "rules" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
-	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.
-	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.
-	//
-	// Defaults to "Equivalent"
+	// "rules" 列表如何匹配请求，合法值为 "Exact" 或 "Equivalent"。
+	// Exact 仅精确匹配；Equivalent 下通过其他组/版本修改同一资源也会先转换后发送。
+	// 默认 "Equivalent"。
 	// +optional
 	MatchPolicy *MatchPolicyType `json:"matchPolicy,omitempty" protobuf:"bytes,9,opt,name=matchPolicy,casttype=MatchPolicyType"`
 
-	// namespaceSelector decides whether to run the webhook on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the webhook.
-	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "runlevel",
-	//       "operator": "NotIn",
-	//       "values": [
-	//         "0",
-	//         "1"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// If instead you want to only run the webhook on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "environment",
-	//       "operator": "In",
-	//       "values": [
-	//         "prod",
-	//         "staging"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// See
-	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
-	// for more examples of label selectors.
-	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 按对象所属命名空间决定是否调用 webhook。对象本身是命名空间时匹配其
+	// metadata.labels；其他集群级资源从不跳过 webhook。
+	// 例如排除 runlevel 为 "0" 或 "1" 的命名空间：
+	// "namespaceSelector": {"matchExpressions": [{"key": "runlevel", "operator": "NotIn", "values": ["0", "1"]}]}
+	// 只处理 "environment" 为 "prod"/"staging" 则用 In 操作符。
+	// 详见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty" protobuf:"bytes,5,opt,name=namespaceSelector"`
 
-	// objectSelector decides whether to run the webhook based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the webhook, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// 按对象标签决定是否调用 webhook。oldObject 与 newObject 任一匹配即可；
+	// null 对象及无标签能力的对象（如 DeploymentRollback、PodProxyOptions）不算匹配。
+	// 仅对可选启用的 webhook 使用，因为用户可自行设置标签绕过。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector `json:"objectSelector,omitempty" protobuf:"bytes,10,opt,name=objectSelector"`
 
-	// sideEffects states whether this webhook has side effects.
-	// Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown).
-	// Webhooks with side effects MUST implement a reconciliation system, since a request may be
-	// rejected by a future step in the admission chain and the side effects therefore need to be undone.
-	// Requests with the dryRun attribute will be auto-rejected if they match a webhook with
-	// sideEffects == Unknown or Some.
+	// 声明 webhook 是否有副作用。合法值为 None、NoneOnDryRun
+	// （通过 v1beta1 创建的 webhook 还可为 Some 或 Unknown）。
+	// 有副作用的 webhook 必须实现回滚机制，因为后续准入步骤仍可能拒绝请求。
+	// dryRun 请求若命中 sideEffects 为 Unknown 或 Some 的 webhook 会被自动拒绝。
 	SideEffects *SideEffectClass `json:"sideEffects" protobuf:"bytes,6,opt,name=sideEffects,casttype=SideEffectClass"`
 
-	// timeoutSeconds specifies the timeout for this webhook. After the timeout passes,
-	// the webhook call will be ignored or the API call will fail based on the
-	// failure policy.
-	// The timeout value must be between 1 and 30 seconds.
-	// Default to 10 seconds.
+	// webhook 调用超时时间。超时后按 failurePolicy 决定忽略调用还是让 API 请求失败。
+	// 取值须在 1 到 30 秒之间，默认 10 秒。
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty" protobuf:"varint,7,opt,name=timeoutSeconds"`
 
-	// admissionReviewVersions is an ordered list of preferred `AdmissionReview`
-	// versions the Webhook expects. API server will try to use first version in
-	// the list which it supports. If none of the versions specified in this list
-	// supported by API server, validation will fail for this object.
-	// If a persisted webhook configuration specifies allowed versions and does not
-	// include any versions known to the API Server, calls to the webhook will fail
-	// and be subject to the failure policy.
+	// webhook 期望的 AdmissionReview 版本，按优先级排序。
+	// API server 使用列表中首个支持的版本；都不支持时该对象校验失败。
+	// 已持久化的配置若不含任何 API server 已知版本，调用会失败并按 failurePolicy 处理。
 	// +listType=atomic
 	AdmissionReviewVersions []string `json:"admissionReviewVersions" protobuf:"bytes,8,rep,name=admissionReviewVersions"`
 
-	// matchConditions is a list of conditions that must be met for a request to be sent to this
-	// webhook. Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// 请求发送给 webhook 前必须满足的条件，在 rules、namespaceSelector、
+	// objectSelector 之后进一步过滤。空列表匹配所有请求，最多 64 个。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the webhook is called.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the error is ignored and the webhook is skipped
+	// 匹配逻辑依次为：
+	//   1. 任一条件为 FALSE，跳过该 webhook；
+	//   2. 全部为 TRUE，调用该 webhook；
+	//   3. 有条件出错（但无 FALSE）时：failurePolicy=Fail 则拒绝请求；
+	//      failurePolicy=Ignore 则忽略错误并跳过该 webhook。
 	//
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -939,165 +650,83 @@ type ValidatingWebhook struct {
 	MatchConditions []MatchCondition `json:"matchConditions,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,11,opt,name=matchConditions"`
 }
 
-// MutatingWebhook describes an admission webhook and the resources and operations it applies to.
+// MutatingWebhook 描述一个变更型 webhook 及其适用的资源和操作。
 type MutatingWebhook struct {
-	// name is the name of the admission webhook.
-	// Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where
-	// "imagepolicy" is the name of the webhook, and kubernetes.io is the name
-	// of the organization.
-	// Required.
+	// webhook 名称，建议为全限定名，如 imagepolicy.kubernetes.io：
+	// "imagepolicy" 是 webhook 名，kubernetes.io 是组织名。必填。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// clientConfig defines how to communicate with the hook.
-	// Required
+	// 与 webhook 通信的配置。必填。
 	ClientConfig WebhookClientConfig `json:"clientConfig" protobuf:"bytes,2,opt,name=clientConfig"`
 
-	// rules describes what operations on what resources/subresources the webhook cares about.
-	// The webhook cares about an operation if it matches _any_ Rule.
-	// However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks
-	// from putting the cluster in a state which cannot be recovered from without completely
-	// disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called
-	// on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects.
+	// webhook 关心哪些资源/子资源上的哪些操作，命中任一 Rule 即处理。
+	// 为防止 webhook 把集群带入必须完全禁用插件才能恢复的状态，
+	// 对 webhook 配置对象本身的准入请求永远不会调用任何 webhook。
 	// +listType=atomic
 	Rules []RuleWithOperations `json:"rules,omitempty" protobuf:"bytes,3,rep,name=rules"`
 
-	// failurePolicy defines how unrecognized errors from the admission endpoint are handled -
-	// allowed values are Ignore or Fail. Defaults to Fail.
+	// 无法识别的 endpoint 错误如何处理，合法值为 Ignore 或 Fail，默认 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType `json:"failurePolicy,omitempty" protobuf:"bytes,4,opt,name=failurePolicy,casttype=FailurePolicyType"`
 
-	// matchPolicy defines how the "rules" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
-	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.
-	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.
-	//
-	// Defaults to "Equivalent"
+	// "rules" 列表如何匹配请求，合法值为 "Exact" 或 "Equivalent"。
+	// Exact 仅精确匹配；Equivalent 下通过其他组/版本修改同一资源也会先转换后发送。
+	// 默认 "Equivalent"。
 	// +optional
 	MatchPolicy *MatchPolicyType `json:"matchPolicy,omitempty" protobuf:"bytes,9,opt,name=matchPolicy,casttype=MatchPolicyType"`
 
-	// namespaceSelector decides whether to run the webhook on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the webhook.
-	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "runlevel",
-	//       "operator": "NotIn",
-	//       "values": [
-	//         "0",
-	//         "1"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// If instead you want to only run the webhook on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
-	// "namespaceSelector": {
-	//   "matchExpressions": [
-	//     {
-	//       "key": "environment",
-	//       "operator": "In",
-	//       "values": [
-	//         "prod",
-	//         "staging"
-	//       ]
-	//     }
-	//   ]
-	// }
-	//
-	// See
-	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-	// for more examples of label selectors.
-	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 按对象所属命名空间决定是否调用 webhook。对象本身是命名空间时匹配其
+	// metadata.labels；其他集群级资源从不跳过 webhook。
+	// 例如排除 runlevel 为 "0" 或 "1" 的命名空间：
+	// "namespaceSelector": {"matchExpressions": [{"key": "runlevel", "operator": "NotIn", "values": ["0", "1"]}]}
+	// 只处理 "environment" 为 "prod"/"staging" 则用 In 操作符。
+	// 详见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty" protobuf:"bytes,5,opt,name=namespaceSelector"`
 
-	// objectSelector decides whether to run the webhook based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the webhook, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// 按对象标签决定是否调用 webhook。oldObject 与 newObject 任一匹配即可；
+	// null 对象及无标签能力的对象（如 DeploymentRollback、PodProxyOptions）不算匹配。
+	// 仅对可选启用的 webhook 使用，因为用户可自行设置标签绕过。
+	// 默认空 LabelSelector，匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector `json:"objectSelector,omitempty" protobuf:"bytes,11,opt,name=objectSelector"`
 
-	// sideEffects states whether this webhook has side effects.
-	// Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown).
-	// Webhooks with side effects MUST implement a reconciliation system, since a request may be
-	// rejected by a future step in the admission chain and the side effects therefore need to be undone.
-	// Requests with the dryRun attribute will be auto-rejected if they match a webhook with
-	// sideEffects == Unknown or Some.
+	// 声明 webhook 是否有副作用。合法值为 None、NoneOnDryRun
+	// （通过 v1beta1 创建的 webhook 还可为 Some 或 Unknown）。
+	// 有副作用的 webhook 必须实现回滚机制，因为后续准入步骤仍可能拒绝请求。
+	// dryRun 请求若命中 sideEffects 为 Unknown 或 Some 的 webhook 会被自动拒绝。
 	SideEffects *SideEffectClass `json:"sideEffects" protobuf:"bytes,6,opt,name=sideEffects,casttype=SideEffectClass"`
 
-	// timeoutSeconds specifies the timeout for this webhook. After the timeout passes,
-	// the webhook call will be ignored or the API call will fail based on the
-	// failure policy.
-	// The timeout value must be between 1 and 30 seconds.
-	// Default to 10 seconds.
+	// webhook 调用超时时间。超时后按 failurePolicy 决定忽略调用还是让 API 请求失败。
+	// 取值须在 1 到 30 秒之间，默认 10 秒。
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty" protobuf:"varint,7,opt,name=timeoutSeconds"`
 
-	// admissionReviewVersions is an ordered list of preferred `AdmissionReview`
-	// versions the Webhook expects. API server will try to use first version in
-	// the list which it supports. If none of the versions specified in this list
-	// supported by API server, validation will fail for this object.
-	// If a persisted webhook configuration specifies allowed versions and does not
-	// include any versions known to the API Server, calls to the webhook will fail
-	// and be subject to the failure policy.
+	// webhook 期望的 AdmissionReview 版本，按优先级排序。
+	// API server 使用列表中首个支持的版本；都不支持时该对象校验失败。
+	// 已持久化的配置若不含任何 API server 已知版本，调用会失败并按 failurePolicy 处理。
 	// +listType=atomic
 	AdmissionReviewVersions []string `json:"admissionReviewVersions" protobuf:"bytes,8,rep,name=admissionReviewVersions"`
 
-	// reinvocationPolicy indicates whether this webhook should be called multiple times as part of a single admission evaluation.
-	// Allowed values are "Never" and "IfNeeded".
-	//
-	// Never: the webhook will not be called more than once in a single admission evaluation.
-	//
-	// IfNeeded: the webhook will be called at least one additional time as part of the admission evaluation
-	// if the object being admitted is modified by other admission plugins after the initial webhook call.
-	// Webhooks that specify this option *must* be idempotent, able to process objects they previously admitted.
-	// Note:
-	// * the number of additional invocations is not guaranteed to be exactly one.
-	// * if additional invocations result in further modifications to the object, webhooks are not guaranteed to be invoked again.
-	// * webhooks that use this option may be reordered to minimize the number of additional invocations.
-	// * to validate an object after all mutations are guaranteed complete, use a validating admission webhook instead.
-	//
-	// Defaults to "Never".
+	// 一次准入评估中是否可多次调用该 webhook，合法值为 "Never" 和 "IfNeeded"。
+	// Never：最多调用一次。
+	// IfNeeded：若首次调用后对象又被其他插件修改，则至少再调用一次。
+	// 选择 IfNeeded 的 webhook 必须幂等，能处理自己此前准入过的对象。
+	// 注意：额外调用次数不保证恰好一次；额外调用引发的新修改不保证再次触发调用；
+	// 使用此选项的 webhook 可能被重排以减少额外调用。若要确保所有变更完成后再校验，
+	// 应改用校验型 webhook。默认 "Never"。
 	// +optional
 	ReinvocationPolicy *ReinvocationPolicyType `json:"reinvocationPolicy,omitempty" protobuf:"bytes,10,opt,name=reinvocationPolicy,casttype=ReinvocationPolicyType"`
 
-	// matchConditions is a list of conditions that must be met for a request to be sent to this
-	// webhook. Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// 请求发送给 webhook 前必须满足的条件，在 rules、namespaceSelector、
+	// objectSelector 之后进一步过滤。空列表匹配所有请求，最多 64 个。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the webhook is called.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the error is ignored and the webhook is skipped
+	// 匹配逻辑依次为：
+	//   1. 任一条件为 FALSE，跳过该 webhook；
+	//   2. 全部为 TRUE，调用该 webhook；
+	//   3. 有条件出错（但无 FALSE）时：failurePolicy=Fail 则拒绝请求；
+	//      failurePolicy=Ignore 则忽略错误并跳过该 webhook。
 	//
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -1112,97 +741,75 @@ type MutatingWebhook struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 
-// MutatingAdmissionPolicy describes the definition of an admission mutation policy that mutates the object coming into admission chain.
+// MutatingAdmissionPolicy 定义准入变更策略，用于修改进入准入链的对象。
 type MutatingAdmissionPolicy struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// spec defines the desired behavior of the MutatingAdmissionPolicy.
+	// 策略的期望行为。
 	Spec MutatingAdmissionPolicySpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 
-// MutatingAdmissionPolicyList is a list of MutatingAdmissionPolicy.
+// MutatingAdmissionPolicyList 是策略对象的列表。
 type MutatingAdmissionPolicyList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 列表。
 	Items []MutatingAdmissionPolicy `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// MutatingAdmissionPolicySpec defines the desired behavior of the admission policy.
+// MutatingAdmissionPolicySpec 定义变更策略的期望行为。
 type MutatingAdmissionPolicySpec struct {
-	// paramKind specifies the kind of resources used to parameterize this policy.
-	// If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions.
-	// If paramKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied.
-	// If paramKind is specified but paramRef is unset in MutatingAdmissionPolicyBinding, the params variable will be null.
+	// 用于参数化本策略的资源 kind。缺省时无参数，表达式中不提供 params 变量。
+	// 指向不存在的 kind 时视为配置错误并应用 FailurePolicy；
+	// 指定 kind 但 binding 未设置 paramRef 时 params 为 null。
 	// +optional
 	ParamKind *ParamKind `json:"paramKind,omitempty" protobuf:"bytes,1,rep,name=paramKind"`
 
-	// matchConstraints specifies what resources this policy is designed to validate.
-	// The MutatingAdmissionPolicy cares about a request if it matches _all_ Constraints.
-	// However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API
-	// MutatingAdmissionPolicy cannot match MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding.
-	// The CREATE, UPDATE and CONNECT operations are allowed.  The DELETE operation may not be matched.
-	// '*' matches CREATE, UPDATE and CONNECT.
-	// Required.
+	// 本策略要处理哪些资源，请求需满足所有约束。
+	// 为防止集群进入无法通过 API 恢复的状态，不能匹配本策略及其 binding 对象。
+	// 仅允许 CREATE、UPDATE、CONNECT 操作，不能匹配 DELETE；'*' 表示这三者。必填。
 	MatchConstraints *MatchResources `json:"matchConstraints,omitempty" protobuf:"bytes,2,rep,name=matchConstraints"`
 
-	// variables contain definitions of variables that can be used in composition of other expressions.
-	// Each variable is defined as a named CEL expression.
-	// The variables defined here will be available under `variables` in other expressions of the policy
-	// except matchConditions because matchConditions are evaluated before the rest of the policy.
-	//
-	// The expression of a variable can refer to other variables defined earlier in the list but not those after.
-	// Thus, variables must be sorted by the order of first appearance and acyclic.
+	// 可复用的变量定义，每个变量是具名 CEL 表达式。
+	// 可在策略其他表达式中通过 `variables` 访问，但 matchConditions 除外，
+	// 因为它先于策略其余部分求值。
+	// 变量只能引用列表中更早定义的变量，因此须按首次出现顺序排列且无环。
 	// +listType=atomic
 	// +optional
 	Variables []Variable `json:"variables,omitempty" protobuf:"bytes,3,rep,name=variables"`
 
-	// mutations contain operations to perform on matching objects.
-	// mutations may not be empty; a minimum of one mutation is required.
-	// mutations are evaluated in order, and are reinvoked according to
-	// the reinvocationPolicy.
-	// The mutations of a policy are invoked for each binding of this policy
-	// and reinvocation of mutations occurs on a per binding basis.
+	// 对匹配对象执行的操作，至少一项。按顺序求值，并按 reinvocationPolicy 重新调用。
+	// 每个 binding 各自调用，重调用也按 binding 粒度进行。
 	//
 	// +listType=atomic
 	// +optional
 	Mutations []Mutation `json:"mutations,omitempty" protobuf:"bytes,4,rep,name=mutations"`
 
-	// failurePolicy defines how to handle failures for the admission policy. Failures can
-	// occur from CEL expression parse errors, type check errors, runtime errors and invalid
-	// or mis-configured policy definitions or bindings.
-	//
-	// A policy is invalid if paramKind refers to a non-existent Kind.
-	// A binding is invalid if paramRef.name refers to a non-existent resource.
-	//
-	// failurePolicy does not define how validations that evaluate to false are handled.
-	//
-	// Allowed values are Ignore or Fail. Defaults to Fail.
+	// 策略失败时的处理方式，失败包括 CEL 解析、类型检查、运行时错误以及无效的
+	// 策略定义或 binding。paramKind 指向不存在的 Kind 时策略无效，
+	// paramRef.name 指向不存在的资源时 binding 无效。
+	// 本字段不涉及校验结果为 false 的情况。合法值 Ignore 或 Fail，默认 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType `json:"failurePolicy,omitempty" protobuf:"bytes,5,opt,name=failurePolicy,casttype=FailurePolicyType"`
 
-	// matchConditions is a list of conditions that must be met for a request to be validated.
-	// Match conditions filter requests that have already been matched by the matchConstraints.
-	// An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// 请求被处理前必须满足的条件，在 matchConstraints 之后过滤。
+	// 空列表匹配所有请求，最多 64 个。
 	//
-	// If a parameter object is provided, it can be accessed via the `params` handle in the same
-	// manner as validation expressions.
+	// 若提供了参数对象，可像校验表达式一样通过 `params` 访问。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the policy is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the policy is skipped
+	// 匹配逻辑依次为：
+	//   1. 任一条件为 FALSE，跳过该策略；
+	//   2. 全部为 TRUE，执行该策略；
+	//   3. 有条件出错（但无 FALSE）时：failurePolicy=Fail 则拒绝请求；
+	//      failurePolicy=Ignore 则跳过该策略。
 	//
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -1211,162 +818,81 @@ type MutatingAdmissionPolicySpec struct {
 	// +optional
 	MatchConditions []MatchCondition `json:"matchConditions,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,6,rep,name=matchConditions"`
 
-	// reinvocationPolicy indicates whether mutations may be called multiple times per MutatingAdmissionPolicyBinding
-	// as part of a single admission evaluation.
-	// Allowed values are "Never" and "IfNeeded".
-	//
-	// Never: These mutations will not be called more than once per binding in a single admission evaluation.
-	//
-	// IfNeeded: These mutations may be invoked more than once per binding for a single admission request and there is no guarantee of
-	// order with respect to other admission plugins, admission webhooks, bindings of this policy and admission policies.  Mutations are only
-	// reinvoked when mutations change the object after this mutation is invoked.
-	// Required.
+	// 一次准入评估中每个 binding 是否可多次调用变更操作，合法值 "Never"、"IfNeeded"。
+	// Never：每个 binding 最多一次。
+	// IfNeeded：每个 binding 可多次调用，且与其他插件、webhook、binding、策略的
+	// 顺序不保证；只有在本操作之后对象又被变更时才会重新调用。必填。
 	ReinvocationPolicy ReinvocationPolicyType `json:"reinvocationPolicy,omitempty" protobuf:"bytes,7,opt,name=reinvocationPolicy,casttype=ReinvocationPolicyType"`
 }
 
-// Mutation specifies the CEL expression which is used to apply the Mutation.
+// Mutation 指定执行变更所用的 CEL 表达式。
 type Mutation struct {
-	// patchType indicates the patch strategy used.
-	// Allowed values are "ApplyConfiguration" and "JSONPatch".
-	// Required.
+	// 使用的补丁策略，合法值 "ApplyConfiguration" 和 "JSONPatch"。必填。
 	//
 	// +unionDiscriminator
 	PatchType PatchType `json:"patchType" protobuf:"bytes,2,opt,name=patchType,casttype=PatchType"`
 
-	// applyConfiguration defines the desired configuration values of an object.
-	// The configuration is applied to the admission object using
-	// [structured merge diff](https://github.com/kubernetes-sigs/structured-merge-diff).
-	// A CEL expression is used to create apply configuration.
+	// 对象期望的配置值，通过结构化合并差异应用到准入对象，
+	// 配置本身由 CEL 表达式生成。
 	ApplyConfiguration *ApplyConfiguration `json:"applyConfiguration,omitempty" protobuf:"bytes,3,opt,name=applyConfiguration"`
 
-	// jsonPatch defines a [JSON patch](https://jsonpatch.com/) operation to perform a mutation to the object.
-	// A CEL expression is used to create the JSON patch.
+	// 对对象执行变更的 JSON Patch，由 CEL 表达式生成。
 	JSONPatch *JSONPatch `json:"jsonPatch,omitempty" protobuf:"bytes,4,opt,name=jsonPatch"`
 }
 
-// PatchType specifies the type of patch operation for a mutation.
+// PatchType 指定变更所使用的补丁类型。
 // +enum
 type PatchType string
 
 const (
-	// ApplyConfiguration indicates that the mutation is using apply configuration to mutate the object.
+	// 使用 apply configuration 修改对象。
 	PatchTypeApplyConfiguration PatchType = "ApplyConfiguration"
-	// JSONPatch indicates that the object is mutated through JSON Patch.
+	// 通过 JSON Patch 修改对象。
 	PatchTypeJSONPatch PatchType = "JSONPatch"
 )
 
-// ApplyConfiguration defines the desired configuration values of an object.
+// ApplyConfiguration 定义对象期望的配置值。
 type ApplyConfiguration struct {
-	// expression will be evaluated by CEL to create an apply configuration.
-	// ref: https://github.com/google/cel-spec
+	// 由 CEL 求值生成 apply configuration，语法见 https://github.com/google/cel-spec。
+	// apply configuration 通过对象初始化声明，例如只设置一个字段：
+	//	Object{spec: Object.spec{serviceAccountName: "example"}}
+	// 不允许修改原子结构、map 或数组，以免误删未出现在配置中的值。
 	//
-	// Apply configurations are declared in CEL using object initialization. For example, this CEL expression
-	// returns an apply configuration to set a single field:
+	// 可用的类型：'Object'（资源对象）、'Object.<fieldName>'（字段）、
+	// 'Object.<fieldName1>.<fieldName2>...<fieldNameN>'（嵌套字段）。
+	// 可用的变量与 Validation 表达式相同：object、oldObject、request、params、
+	// namespaceObject、variables、authorizer、authorizer.requestResource 等。
 	//
-	//	Object{
-	//	  spec: Object.spec{
-	//	    serviceAccountName: "example"
-	//	  }
-	//	}
-	//
-	// Apply configurations may not modify atomic structs, maps or arrays due to the risk of accidental deletion of
-	// values not included in the apply configuration.
-	//
-	// CEL expressions have access to the object types needed to create apply configurations:
-	//
-	// - 'Object' - CEL type of the resource object.
-	// - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec')
-	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')
-	//
-	// CEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:
-	//
-	// - 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// - 'oldObject' - The existing object. The value is null for CREATE requests.
-	// - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	// - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	// - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	// - 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be accessed as 'variables.foo'.
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
-	//
-	// The `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the
-	// object. No other metadata properties are accessible.
-	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Required.
+	// 根对象始终可访问 apiVersion、kind、metadata.name 和 metadata.generateName，
+	// 其他元属性不可访问；属性名须形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*`。必填。
 	Expression string `json:"expression,omitempty" protobuf:"bytes,1,opt,name=expression"`
 }
 
-// JSONPatch defines a JSON Patch.
+// JSONPatch 定义一条 JSON Patch。
 type JSONPatch struct {
-	// expression will be evaluated by CEL to create a [JSON patch](https://jsonpatch.com/).
-	// ref: https://github.com/google/cel-spec
+	// 由 CEL 求值生成 JSON Patch（https://jsonpatch.com/），须返回 JSONPatch 值数组。
+	// 例如先 test 再 replace 修改一个值：
+	//	[JSONPatch{op: "test", path: "/spec/example", value: "Red"},
+	//	 JSONPatch{op: "replace", path: "/spec/example", value: "Green"}]
+	// patch 中的对象用 Object 类型构造；路径 key 含 '/' 或 '~' 时
+	// 须用 jsonpatch.escapeKey 转义。
 	//
-	// expression must return an array of JSONPatch values.
+	// 可用类型：'JSONPatch'（含 op、from、path、value；value 可为字符串、整数、
+	// 数组、map 或对象；path/from 须为 JSON pointer 字符串）、'Object'（资源对象）、
+	// 'Object.<fieldName>'（字段）及 'Object.<fieldName1>.<fieldName2>...<fieldNameN>'（嵌套字段）。
 	//
-	// For example, this CEL expression returns a JSON patch to conditionally modify a value:
+	// 可访问 API 请求内容，组织为 CEL 变量：object（传入对象，DELETE 时为 null）、
+	// oldObject（现存对象，CREATE 时为 null）、request（请求属性）、
+	// params（binding 引用的参数，仅定义了 ParamKind 时有值）、
+	// namespaceObject（所属命名空间，集群级资源为 null）、variables（组合变量映射）、
+	// authorizer（CEL 授权器）及 authorizer.requestResource。
 	//
-	//	  [
-	//	    JSONPatch{op: "test", path: "/spec/example", value: "Red"},
-	//	    JSONPatch{op: "replace", path: "/spec/example", value: "Green"}
-	//	  ]
-	//
-	// To define an object for the patch value, use Object types. For example:
-	//
-	//	  [
-	//	    JSONPatch{
-	//	      op: "add",
-	//	      path: "/spec/selector",
-	//	      value: Object.spec.selector{matchLabels: {"environment": "test"}}
-	//	    }
-	//	  ]
-	//
-	// To use strings containing '/' and '~' as JSONPatch path keys, use "jsonpatch.escapeKey". For example:
-	//
-	//	  [
-	//	    JSONPatch{
-	//	      op: "add",
-	//	      path: "/metadata/labels/" + jsonpatch.escapeKey("example.com/environment"),
-	//	      value: "test"
-	//	    },
-	//	  ]
-	//
-	// CEL expressions have access to the types needed to create JSON patches and objects:
-	//
-	// - 'JSONPatch' - CEL type of JSON Patch operations. JSONPatch has the fields 'op', 'from', 'path' and 'value'.
-	//   See [JSON patch](https://jsonpatch.com/) for more details. The 'value' field may be set to any of: string,
-	//   integer, array, map or object.  If set, the 'path' and 'from' fields must be set to a
-	//   [JSON pointer](https://datatracker.ietf.org/doc/html/rfc6901/) string, where the 'jsonpatch.escapeKey()' CEL
-	//   function may be used to escape path keys containing '/' and '~'.
-	// - 'Object' - CEL type of the resource object.
-	// - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec')
-	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')
-	//
-	// CEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:
-	//
-	// - 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// - 'oldObject' - The existing object. The value is null for CREATE requests.
-	// - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	// - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	// - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	// - 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be accessed as 'variables.foo'.
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
-	//
-	// CEL expressions have access to [Kubernetes CEL function libraries](https://kubernetes.io/docs/reference/using-api/cel/#cel-options-language-features-and-libraries)
-	// as well as:
-	//
-	// - 'jsonpatch.escapeKey' - Performs JSONPatch key escaping. '~' and  '/' are escaped as '~0' and `~1' respectively).
+	// 除 Kubernetes CEL 函数库外，还提供 'jsonpatch.escapeKey' 用于转义路径 key：
+	// '~' 转义为 '~0'，'/' 转义为 '~1'。
 	//
 	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Required.
+	// 只有形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名可访问。
+	// 必填。
 	Expression string `json:"expression,omitempty" protobuf:"bytes,1,opt,name=expression"`
 }
 
@@ -1375,101 +901,80 @@ type JSONPatch struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 
-// MutatingAdmissionPolicyBinding binds the MutatingAdmissionPolicy with parametrized resources.
-// MutatingAdmissionPolicyBinding and the optional parameter resource together define how cluster administrators
-// configure policies for clusters.
+// MutatingAdmissionPolicyBinding 将变更策略与参数化资源绑定。
+// 它与可选的参数资源共同定义集群管理员如何配置策略。
 //
-// For a given admission request, each binding will cause its policy to be
-// evaluated N times, where N is 1 for policies/bindings that don't use
-// params, otherwise N is the number of parameters selected by the binding.
-// Each evaluation is constrained by a [runtime cost budget](https://kubernetes.io/docs/reference/using-api/cel/#runtime-cost-budget).
-//
-// Adding/removing policies, bindings, or params can not affect whether a
-// given (policy, binding, param) combination is within its own CEL budget.
+// 对一次请求，每个 binding 让策略执行 N 次：无参数时 N=1，否则为参数数量。
+// 每次求值受运行时开销预算约束；增删策略、binding 或参数不应影响某个
+// （策略、binding、参数）组合是否在预算内。
 type MutatingAdmissionPolicyBinding struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// spec defines the desired behavior of the MutatingAdmissionPolicyBinding.
+	// binding 的期望行为。
 	Spec MutatingAdmissionPolicyBindingSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.36
 
-// MutatingAdmissionPolicyBindingList is a list of MutatingAdmissionPolicyBinding.
+// MutatingAdmissionPolicyBindingList 是绑定对象的列表。
 type MutatingAdmissionPolicyBindingList struct {
 	metav1.TypeMeta `json:""`
-	// metadata is the standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	// List of PolicyBinding.
+	// PolicyBinding 列表。
 	Items []MutatingAdmissionPolicyBinding `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// MutatingAdmissionPolicyBindingSpec defines the specification of the MutatingAdmissionPolicyBinding.
+// MutatingAdmissionPolicyBindingSpec 描述 binding 的规格。
 type MutatingAdmissionPolicyBindingSpec struct {
-	// policyName references a MutatingAdmissionPolicy name which the MutatingAdmissionPolicyBinding binds to.
-	// If the referenced resource does not exist, this binding is considered invalid and will be ignored
-	// Required.
+	// 本 binding 绑定的策略名。引用的资源不存在时 binding 无效并被忽略。必填。
 	PolicyName string `json:"policyName,omitempty" protobuf:"bytes,1,rep,name=policyName"`
 
-	// paramRef specifies the parameter resource used to configure the admission control policy.
-	// It should point to a resource of the type specified in spec.ParamKind of the bound MutatingAdmissionPolicy.
-	// If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the MutatingAdmissionPolicy applied.
-	// If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.
+	// 配置策略所用的参数资源，类型应与所绑定策略的 spec.paramKind 一致。
+	// 策略定义了 paramKind 但参数不存在时 binding 视为配置错误并应用策略的 FailurePolicy；
+	// 策略未定义 paramKind 时忽略该字段。
 	// +optional
 	ParamRef *ParamRef `json:"paramRef,omitempty" protobuf:"bytes,2,rep,name=paramRef"`
 
-	// matchResources limits what resources match this binding and may be mutated by it.
-	// Note that if matchResources matches a resource, the resource must also match a policy's matchConstraints and
-	// matchConditions before the resource may be mutated.
-	// When matchResources is unset, it does not constrain resource matching, and only the policy's matchConstraints
-	// and matchConditions must match for the resource to be mutated.
-	// Additionally, matchResources.resourceRules are optional and do not constraint matching when unset.
-	// Note that this is differs from MutatingAdmissionPolicy matchConstraints, where resourceRules are required.
-	// The CREATE, UPDATE and CONNECT operations are allowed.  The DELETE operation may not be matched.
-	// '*' matches CREATE, UPDATE and CONNECT.
+	// 限制本 binding 匹配并可变更的资源。即使命中，仍需满足策略的
+	// matchConstraints 和 matchConditions 才会被变更。未设置时不加限制。
+	// 其中 resourceRules 可选，留空不限制；这与策略的 matchConstraints 不同。
+	// 仅允许 CREATE、UPDATE、CONNECT，不能匹配 DELETE；'*' 表示这三者。
 	// +optional
 	MatchResources *MatchResources `json:"matchResources,omitempty" protobuf:"bytes,3,rep,name=matchResources"`
 }
 
-// ReinvocationPolicyType specifies what type of policy is used when other admission plugins also perform
-// modifications.
+// ReinvocationPolicyType 定义其他准入插件也修改对象时采用的策略。
 // +enum
 type ReinvocationPolicyType string
 
 const (
-	// NeverReinvocationPolicy indicates that the mutation must not be called more than once in a
-	// single admission evaluation.
+	// 单次准入评估中变更操作最多调用一次。
 	NeverReinvocationPolicy ReinvocationPolicyType = "Never"
-	// IfNeededReinvocationPolicy indicates that the mutation may be called at least one
-	// additional time as part of the admission evaluation if the object being admitted is
-	// modified by other admission plugins after the initial mutation call.
+	// 首次调用后对象又被其他插件修改时，变更操作至少再调用一次。
 	IfNeededReinvocationPolicy ReinvocationPolicyType = "IfNeeded"
 )
 
-// RuleWithOperations is a tuple of Operations and Resources. It is recommended to make
-// sure that all the tuple expansions are valid.
+// RuleWithOperations 是 Operations 与 Resources 组成的元组，建议确保展开后各项合法。
 type RuleWithOperations struct {
-	// operations is the operations the admission hook cares about - CREATE, UPDATE, DELETE, CONNECT or *
-	// for all of those operations and any future admission operations that are added.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// 准入 hook 关心的操作：CREATE、UPDATE、DELETE、CONNECT，或 '*' 表示以上全部及未来新增操作。
+	// 出现 '*' 时切片长度必须为 1。必填。
 	// +listType=atomic
 	Operations []OperationType `json:"operations,omitempty" protobuf:"bytes,1,rep,name=operations,casttype=OperationType"`
-	// Rule is embedded, it describes other criteria of the rule, like
-	// APIGroups, APIVersions, Resources, etc.
+	// 内嵌的 Rule，描述 APIGroups、APIVersions、Resources 等其他匹配条件。
 	Rule `json:"" protobuf:"bytes,2,opt,name=rule"`
 }
 
-// OperationType specifies an operation for a request.
+// OperationType 表示请求的操作类型。
 // +enum
 type OperationType string
 
-// The constants should be kept in sync with those defined in k8s.io/kubernetes/pkg/admission/interface.go.
+// 这些常量须与 k8s.io/kubernetes/pkg/admission/interface.go 中的定义保持一致。
 const (
 	OperationAll OperationType = "*"
 	Create       OperationType = "CREATE"
@@ -1478,98 +983,59 @@ const (
 	Connect      OperationType = "CONNECT"
 )
 
-// WebhookClientConfig contains the information to make a TLS
-// connection with the webhook
+// WebhookClientConfig 包含与 webhook 建立 TLS 连接所需的信息。
 type WebhookClientConfig struct {
-	// url gives the location of the webhook, in standard URL form
-	// (`scheme://host:port/path`). Exactly one of `url` or `service`
-	// must be specified.
-	//
-	// The `host` should not refer to a service running in the cluster; use
-	// the `service` field instead. The host might be resolved via external
-	// DNS in some apiservers (e.g., `kube-apiserver` cannot resolve
-	// in-cluster DNS as that would be a layering violation). `host` may
-	// also be an IP address.
-	//
-	// Please note that using `localhost` or `127.0.0.1` as a `host` is
-	// risky unless you take great care to run this webhook on all hosts
-	// which run an apiserver which might need to make calls to this
-	// webhook. Such installs are likely to be non-portable, i.e., not easy
-	// to turn up in a new cluster.
-	//
-	// The scheme must be "https"; the URL must begin with "https://".
-	//
-	// A path is optional, and if present may be any string permissible in
-	// a URL. You may use the path to pass an arbitrary string to the
-	// webhook, for example, a cluster identifier.
-	//
-	// Attempting to use a user or basic auth e.g. "user:password@" is not
-	// allowed. Fragments ("#...") and query parameters ("?...") are not
-	// allowed, either.
+	// webhook 地址，标准 URL 形式 `scheme://host:port/path`；url 与 service 必须二选一。
+	// host 不应指向集群内服务，那要改用 service：部分 apiserver 只能通过外部 DNS
+	// 解析 host（kube-apiserver 无法解析集群内 DNS，否则违反分层），host 也可以是 IP。
+	// 用 localhost 或 127.0.0.1 作 host 风险很高，除非确保所有可能调用该 webhook 的
+	// apiserver 主机上都运行着它，否则部署难以迁移。
+	// scheme 必须为 "https"，URL 必须以 "https://" 开头。path 可选，可携带任意字符串
+	// （如集群标识）。不允许 user:password@ 形式的用户名密码、片段（#...）及查询参数（?...）。
 	//
 	// +optional
 	URL *string `json:"url,omitempty" protobuf:"bytes,3,opt,name=url"`
 
-	// service is a reference to the service for this webhook. Either
-	// `service` or `url` must be specified.
-	//
-	// If the webhook is running within the cluster, then you should use `service`.
+	// webhook 对应的服务引用，与 url 二选一。webhook 在集群内运行时应使用 service。
 	//
 	// +optional
 	Service *ServiceReference `json:"service,omitempty" protobuf:"bytes,1,opt,name=service"`
 
-	// caBundle is a PEM encoded CA bundle which will be used to validate the webhook's server certificate.
-	// If unspecified, system trust roots on the apiserver are used.
+	// PEM 编码的 CA 证书包，用于校验 webhook 服务端证书。未指定时使用 apiserver 的系统信任根。
 	// +optional
 	CABundle []byte `json:"caBundle,omitempty" protobuf:"bytes,2,opt,name=caBundle"`
 }
 
-// ServiceReference holds a reference to Service.legacy.k8s.io
+// ServiceReference 持有对 Service.legacy.k8s.io 的引用。
 type ServiceReference struct {
-	// namespace is the namespace of the service.
-	// Required
+	// 服务所在命名空间。必填。
 	Namespace string `json:"namespace" protobuf:"bytes,1,opt,name=namespace"`
-	// name is the name of the service.
-	// Required
+	// 服务名称。必填。
 	Name string `json:"name" protobuf:"bytes,2,opt,name=name"`
 
-	// path is an optional URL path which will be sent in any request to
-	// this service.
+	// 请求该服务时附带的 URL 路径，可选。
 	// +optional
 	Path *string `json:"path,omitempty" protobuf:"bytes,3,opt,name=path"`
 
-	// port is the port on the service that hosts the webhook.
-	// Default to 443 for backward compatibility.
-	// `port` should be a valid port number (1-65535, inclusive).
+	// 承载 webhook 的服务端口。为兼容旧版本默认 443，合法范围 1-65535。
 	// +optional
 	Port *int32 `json:"port,omitempty" protobuf:"varint,4,opt,name=port"`
 }
 
-// MatchCondition represents a condition which must by fulfilled for a request to be sent to a webhook.
+// MatchCondition 表示请求发送给 webhook 前必须满足的条件。
 type MatchCondition struct {
-	// name is an identifier for this match condition, used for strategic merging of MatchConditions,
-	// as well as providing an identifier for logging purposes. A good name should be descriptive of
-	// the associated expression.
-	// Name must be a qualified name consisting of alphanumeric characters, '-', '_' or '.', and
-	// must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or
-	// '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an
-	// optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')
+	// 匹配条件的标识符，用于 MatchConditions 的合并及日志定位，应能概括对应表达式。
+	// 须为合法限定名：字母数字开头结尾，中间可为 '-'、'_'、'.'，
+	// 可带 DNS 子域前缀和 '/'（如 'example.com/MyName'）。
 	//
-	// Required.
+	// 必填。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	// expression represents the expression which will be evaluated by CEL. Must evaluate to bool.
-	// CEL expressions have access to the contents of the AdmissionRequest and Authorizer, organized into CEL variables:
+	// 由 CEL 求值且结果必须为 bool。可访问 AdmissionRequest 和 Authorizer 的内容，
+	// 变量有：object（DELETE 时为 null）、oldObject（CREATE 时为 null）、
+	// request（请求属性）、authorizer（CEL 授权器）、authorizer.requestResource。
+	// CEL 文档见 https://kubernetes.io/docs/reference/using-api/cel/。
 	//
-	// 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// 'oldObject' - The existing object. The value is null for CREATE requests.
-	// 'request' - Attributes of the admission request(/pkg/apis/admission/types.go#AdmissionRequest).
-	// 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
-	//
-	// Required.
+	// 必填。
 	Expression string `json:"expression" protobuf:"bytes,2,opt,name=expression"`
 }
