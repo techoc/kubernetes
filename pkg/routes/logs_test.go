@@ -23,22 +23,28 @@ import (
 	"testing"
 )
 
+// TestPreCheckLogFileNameLength 验证 logFileNameIsTooLong 函数能正确区分超长文件名和正常文件名。
+// 测试三种情况：
+//
+//  1. 超长文件名（32768字符）应返回 true
+//  2. 正常长度但不存在的文件名应返回 false（os.Stat 返回 ENOENT 而非 ENAMETOOLONG）
+//  3. 正常长度且存在的文件应返回 false
 func TestPreCheckLogFileNameLength(t *testing.T) {
-	// In windows, with long file name support enabled, file names can have up to 32,767 characters.
+	// Windows 启用长文件名支持后，文件名可达 32,767 字符，所以用 32768 字符确保超长
 	oversizeFileName := fmt.Sprintf("%032768s", "a")
 	normalFileName := fmt.Sprintf("%0255s", "a")
 
-	// check file with oversize name.
+	// 检查超长文件名应被识别
 	if !logFileNameIsTooLong(oversizeFileName) {
 		t.Error("failed to check oversize filename")
 	}
 
-	// check file with normal name which doesn't exist.
+	// 检查正常长度但不存在的文件名不应被识别为超长
 	if logFileNameIsTooLong(normalFileName) {
 		t.Error("failed to check normal filename")
 	}
 
-	// check file with normal name which does exist.
+	// 检查正常长度且实际存在的文件不应被识别为超长
 	dir, err := os.MkdirTemp("", "logs")
 	if err != nil {
 		t.Fatal("failed to create temp dir")

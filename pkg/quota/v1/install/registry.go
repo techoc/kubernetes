@@ -28,7 +28,9 @@ import (
 	"k8s.io/kubernetes/pkg/quota/v1/evaluator/core"
 )
 
-// NewQuotaConfigurationForAdmission returns a quota configuration for admission control.
+// NewQuotaConfigurationForAdmission 创建用于 Admission 控制的配额配置。
+// Admission 控制器在对象创建/更新时检查配额，不需要 lister 函数（传入 nil）。
+// apiResourceConfig 用于判断 API 资源是否启用。
 func NewQuotaConfigurationForAdmission(i informers.SharedInformerFactory, apiResourceConfig storage.APIResourceConfigSource) (quota.Configuration, error) {
 	var isEnabled func(schema.GroupVersionResource) bool
 	if apiResourceConfig != nil {
@@ -41,7 +43,8 @@ func NewQuotaConfigurationForAdmission(i informers.SharedInformerFactory, apiRes
 	return generic.NewConfiguration(evaluators, DefaultIgnoredResources()), nil
 }
 
-// NewQuotaConfigurationForControllers returns a quota configuration for controllers.
+// NewQuotaConfigurationForControllers 创建用于 Controllers 的配额配置。
+// Controllers 需要 lister 函数来列出当前资源，计算聚合使用量。
 func NewQuotaConfigurationForControllers(f quota.ListerForResourceFunc, i informers.SharedInformerFactory) (quota.Configuration, error) {
 	evaluators, err := core.NewEvaluators(f, i, nil)
 	if err != nil {
@@ -50,11 +53,12 @@ func NewQuotaConfigurationForControllers(f quota.ListerForResourceFunc, i inform
 	return generic.NewConfiguration(evaluators, DefaultIgnoredResources()), nil
 }
 
-// ignoredResources are ignored by quota by default
+// ignoredResources 是配额系统默认忽略的资源列表。
 var ignoredResources = map[schema.GroupResource]struct{}{
-	// virtual resources that aren't stored and shouldn't be quota-ed
-	{Group: "", Resource: "bindings"}:                                       {},
-	{Group: "", Resource: "componentstatuses"}:                              {},
+	// 虚拟资源，不存储在 etcd 中，不应计入配额
+	{Group: "", Resource: "bindings"}:          {},
+	{Group: "", Resource: "componentstatuses"}: {},
+	// 认证和授权资源，是请求型的，不存储
 	{Group: authentication.GroupName, Resource: "tokenreviews"}:             {},
 	{Group: authentication.GroupName, Resource: "selfsubjectreviews"}:       {},
 	{Group: authorization.GroupName, Resource: "subjectaccessreviews"}:      {},
@@ -62,13 +66,13 @@ var ignoredResources = map[schema.GroupResource]struct{}{
 	{Group: authorization.GroupName, Resource: "localsubjectaccessreviews"}: {},
 	{Group: authorization.GroupName, Resource: "selfsubjectrulesreviews"}:   {},
 
-	// events haven't been quota-ed before
+	// 事件资源，历史原因不计入配额
 	{Group: "", Resource: "events"}:                {},
 	{Group: eventv1.GroupName, Resource: "events"}: {},
 }
 
-// DefaultIgnoredResources returns the default set of resources that quota system
-// should ignore. This is exposed so downstream integrators can have access to them.
+// DefaultIgnoredResources 返回配额系统默认忽略的资源集合。
+// 导出此函数以便下游集成者可以访问和扩展忽略列表。
 func DefaultIgnoredResources() map[schema.GroupResource]struct{} {
 	return ignoredResources
 }

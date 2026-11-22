@@ -14,5 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package routes holds a collection of optional master http handlers.
+// Package routes 提供 API Server 的辅助 HTTP 路由处理器。
+//
+// 包含的主要路由：
+//
+//   - Logs：/logs 路径下的日志文件服务，用于访问节点上的 /var/log 目录
+//   - OpenIDMetadataServer：OpenID Connect 元数据和 JWKS（JSON Web Key Set）端点，
+//     支持 KSA（Kubernetes Service Account）Token 的验证
+//
+// 这些路由是可选的，由 API Server 按需安装到 restful.Container 中。
 package routes

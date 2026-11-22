@@ -18,6 +18,9 @@ package routes
 
 import "golang.org/x/sys/windows"
 
+// fileNameTooLong 对应 Windows 平台的文件名过长错误。
+// 与 const_other.go 中的定义功能相同，但使用 Windows API 的错误码。
+// Windows 对路径长度有限制（MAX_PATH = 260 字符），超过会返回 ERROR_FILENAME_EXCED_RANGE。
 const (
 	fileNameTooLong = windows.ERROR_FILENAME_EXCED_RANGE
 )

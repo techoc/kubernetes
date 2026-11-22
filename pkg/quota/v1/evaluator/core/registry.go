@@ -34,7 +34,8 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// legacyObjectCountAliases are what we used to do simple object counting quota with mapped to alias
+// legacyObjectCountAliases 是旧版对象计数配额的别名映射。
+// 这些资源类型使用简单的对象计数评估器，不需要特殊的配额逻辑。
 var legacyObjectCountAliases = map[schema.GroupVersionResource]corev1.ResourceName{
 	corev1.SchemeGroupVersion.WithResource("configmaps"):             corev1.ResourceConfigMaps,
 	corev1.SchemeGroupVersion.WithResource("resourcequotas"):         corev1.ResourceQuotas,
@@ -42,13 +43,19 @@ var legacyObjectCountAliases = map[schema.GroupVersionResource]corev1.ResourceNa
 	corev1.SchemeGroupVersion.WithResource("secrets"):                corev1.ResourceSecrets,
 }
 
-// NewEvaluators returns the list of static evaluators that manage more than counts
+// NewEvaluators 创建所有配额评估器的列表。
+// 根据启用的 API 资源创建对应的评估器：
+//   - Pod：特殊的资源计算和 scope 匹配逻辑
+//   - Service：NodePort 和 LoadBalancer 计数
+//   - PVC：存储配额，支持按 StorageClass 细分
+//   - ResourceClaim：DRA 设备配额（需启用 DynamicResourceAllocation）
+//   - ConfigMap/Secret/RC/ResourceQuota：简单的对象计数
 func NewEvaluators(f quota.ListerForResourceFunc, i informers.SharedInformerFactory, isEnabled func(schema.GroupVersionResource) bool) ([]quota.Evaluator, error) {
 	if isEnabled == nil {
 		isEnabled = func(schema.GroupVersionResource) bool { return true }
 	}
 
-	// these evaluators have special logic
+	// 具有特殊配额逻辑的评估器
 	result := []quota.Evaluator{}
 	if isEnabled(corev1.SchemeGroupVersion.WithResource("pods")) {
 		result = append(result, NewPodEvaluator(f, clock.RealClock{}))
@@ -59,10 +66,12 @@ func NewEvaluators(f quota.ListerForResourceFunc, i informers.SharedInformerFact
 	if isEnabled(corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims")) {
 		result = append(result, NewPersistentVolumeClaimEvaluator(f))
 	}
+	// ResourceClaim 评估器需要启用 DynamicResourceAllocation 特性
 	if isEnabled(resourcev1.SchemeGroupVersion.WithResource("resourceclaims")) && utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 		var claimGetter resourceClaimPodOwnerGetter
 		var podLister corev1listers.PodLister
 		var deviceClassMapping *extendedresourcecache.ExtendedResourceCache
+		// DRAExtendedResource 特性需要额外的设备类映射和 Pod 验证
 		if utilfeature.DefaultFeatureGate.Enabled(features.DRAExtendedResource) {
 			podLister = i.Core().V1().Pods().Lister()
 			logger := klog.FromContext(context.Background())
@@ -79,7 +88,7 @@ func NewEvaluators(f quota.ListerForResourceFunc, i informers.SharedInformerFact
 		result = append(result, NewResourceClaimEvaluator(f, deviceClassMapping, podLister, claimGetter))
 	}
 
-	// these evaluators require an alias for backwards compatibility
+	// 简单对象计数评估器，为向后兼容使用别名
 	for gvr, alias := range legacyObjectCountAliases {
 		result = append(result,
 			generic.NewObjectCountEvaluator(gvr.GroupResource(), generic.ListResourceUsingListerFunc(f, gvr), alias))

@@ -27,8 +27,10 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 )
 
+// TestTcpHealthChecker 验证 TCP 探针能正确检测端口可达性。
+// 使用 httptest 服务器提供可用的 TCP 端口，测试成功连接和无效端口两种情况。
 func TestTcpHealthChecker(t *testing.T) {
-	// Setup a test server that responds to probing correctly
+	// 启动一个测试服务器，提供可连接的 TCP 端口
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -49,9 +51,9 @@ func TestTcpHealthChecker(t *testing.T) {
 		expectedStatus probe.Result
 		expectedError  error
 	}{
-		// A connection is made and probing would succeed
+		// 有效端口：TCP 连接成功，探针返回 Success
 		{tHost, tPort, probe.Success, nil},
-		// No connection can be made and probing would fail
+		// 无效端口：TCP 连接失败，探针返回 Failure
 		{tHost, -1, probe.Failure, nil},
 	}
 

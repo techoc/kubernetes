@@ -26,6 +26,8 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 )
 
+// FakeCmd 模拟 CRI 的 Cmd 接口，用于测试 exec 探针而不实际执行命令。
+// 通过配置 out、stdout、err 字段来控制 Probe 的行为。
 type FakeCmd struct {
 	out    []byte
 	stdout []byte
@@ -79,6 +81,8 @@ func (f *FakeCmd) StderrPipe() (io.ReadCloser, error) {
 	return nil, nil
 }
 
+// fakeExitError 模拟进程退出错误，实现 Exited() 和 ExitStatus() 方法，
+// 用于测试 Probe 对退出码的判断逻辑（0=Success, 非0=Failure）。
 type fakeExitError struct {
 	exited     bool
 	statusCode int
@@ -100,6 +104,13 @@ func (f *fakeExitError) ExitStatus() int {
 	return f.statusCode
 }
 
+// TestExec 验证 exec 探针的各种场景：
+//
+//  1. 成功执行（无错误/退出码0）
+//  2. 输出截断（超过10KB 只返回前10KB）
+//  3. 执行错误（非退出错误，返回 Unknown）
+//  4. 非零退出码（返回 Failure）
+//  5. 命令超时（返回 Failure）
 func TestExec(t *testing.T) {
 	prober := New()
 
@@ -113,17 +124,17 @@ func TestExec(t *testing.T) {
 		output         string
 		err            error
 	}{
-		// Ok
+		// 成功：无错误
 		{probe.Success, false, "OK", "OK", nil},
-		// Ok
+		// 成功：退出码为 0
 		{probe.Success, false, "OK", "OK", &fakeExitError{true, 0}},
-		// Ok - truncated output
+		// 成功：输出超过10KB 被截断为10KB
 		{probe.Success, false, elevenKilobyte, tenKilobyte, nil},
-		// Run returns error
+		// 未知：非退出错误（如命令执行失败）
 		{probe.Unknown, true, "", "", fmt.Errorf("test error")},
-		// Unhealthy
+		// 失败：非零退出码
 		{probe.Failure, false, "Fail", "", &fakeExitError{true, 1}},
-		// Timeout
+		// 失败：命令超时
 		{probe.Failure, false, "", remote.ErrCommandTimedOut.Error() + ": command testcmd timed out", fmt.Errorf("%w: command testcmd timed out", remote.ErrCommandTimedOut)},
 	}
 

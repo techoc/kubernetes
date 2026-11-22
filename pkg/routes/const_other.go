@@ -20,6 +20,9 @@ package routes
 
 import "syscall"
 
+// fileNameTooLong 对应非 Windows 平台（Linux/macOS 等 Unix 系统）的文件名过长错误。
+// 用于 logFileNameIsTooLong() 函数中区分"文件名过长"和"真正的服务器内部错误"。
+// Unix 系统文件名限制通常为 255 字节（NAME_MAX），超过此限制会返回 ENAMETOOLONG。
 const (
 	fileNameTooLong = syscall.ENAMETOOLONG
 )

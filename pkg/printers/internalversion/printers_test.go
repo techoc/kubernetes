@@ -56,8 +56,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// containerRestartPolicyAlways 避免在测试中重复引用 api.ContainerRestartPolicyAlways，
+// 保持测试代码简洁。
 var containerRestartPolicyAlways = api.ContainerRestartPolicyAlways
 
+// TestFormatResourceName 验证 formatResourceName 函数正确格式化资源名称。
+// 测试空值、仅 Kind、Kind+Group 等组合，确保输出格式为 "kind/name" 或 "kind.group/name"。
 func TestFormatResourceName(t *testing.T) {
 	tests := []struct {
 		kind schema.GroupKind
@@ -77,6 +81,8 @@ func TestFormatResourceName(t *testing.T) {
 	}
 }
 
+// TestPrintHandler 是 printers.PrintHandler 的简易实现，仅记录 TableHandler 被调用的次数，
+// 用于验证 AddHandlers 是否正确注册了所有 handler。
 type TestPrintHandler struct {
 	numCalls int
 }
@@ -90,6 +96,8 @@ func (t *TestPrintHandler) getNumCalls() int {
 	return t.numCalls
 }
 
+// TestAllHandlers 验证 AddHandlers 函数确实向 handler 注册了至少一个 TableHandler。
+// 如果 numCalls 为 0，说明 AddHandlers 没有调用任何 handler，注册逻辑有问题。
 func TestAllHandlers(t *testing.T) {
 	h := &TestPrintHandler{numCalls: 0}
 	AddHandlers(h)

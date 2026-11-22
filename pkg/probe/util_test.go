@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// TestFindPortByName 验证 findPortByName 函数根据端口名称在 Container 的 Ports 列表中查找对应端口号。
+// 测试存在和不存在的端口名称两种情况。
 func TestFindPortByName(t *testing.T) {
 	t.Parallel()
 	type args struct {
@@ -98,6 +100,8 @@ func TestFindPortByName(t *testing.T) {
 	}
 }
 
+// TestResolveContainerPort 验证 ResolveContainerPort 函数正确处理 IntOrString 类型的端口参数。
+// 测试整数端口、非法端口范围、按名称查找、名称不存在、以及无效类型等边界情况。
 func TestResolveContainerPort(t *testing.T) {
 	t.Parallel()
 	type args struct {

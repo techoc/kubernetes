@@ -38,67 +38,70 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// the name used for object count quota
+// pvcObjectCountName 是 PVC 对象计数配额的资源名（count/persistentvolumeclaims）。
 var pvcObjectCountName = generic.ObjectCountQuotaResourceNameFor(corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims").GroupResource())
 
-// pvcResources are the set of static resources managed by quota associated with pvcs.
-// for each resource in this list, it may be refined dynamically based on storage class.
+// pvcResources 是 PVC 相关的静态配额资源列表。
+// 每个资源可以根据 StorageClass 动态细化（如 gold.storageclass.storage.k8s.io/requests.storage）。
 var pvcResources = []corev1.ResourceName{
 	corev1.ResourcePersistentVolumeClaims,
 	corev1.ResourceRequestsStorage,
 }
 
-// storageClassSuffix is the suffix to the qualified portion of storage class resource name.
-// For example, if you want to quota storage by storage class, you would have a declaration
-// that follows <storage-class>.storageclass.storage.k8s.io/<resource>.
-// For example:
-// * gold.storageclass.storage.k8s.io/: 500Gi
-// * bronze.storageclass.storage.k8s.io/requests.storage: 500Gi
+// storageClassSuffix 是按 StorageClass 细分的配额资源名后缀。
+// 格式：<storage-class>.storageclass.storage.k8s.io/<resource>
+// 例如：
+//   - gold.storageclass.storage.k8s.io/persistentvolumeclaims: 500Gi
+//   - bronze.storageclass.storage.k8s.io/requests.storage: 500Gi
 const storageClassSuffix string = ".storageclass.storage.k8s.io/"
 
 /* TODO: prune?
-// ResourceByStorageClass returns a quota resource name by storage class.
+// ResourceByStorageClass 根据 StorageClass 返回配额资源名。
 func ResourceByStorageClass(storageClass string, resourceName corev1.ResourceName) corev1.ResourceName {
 	return corev1.ResourceName(string(storageClass + storageClassSuffix + string(resourceName)))
 }
 */
 
-// V1ResourceByStorageClass returns a quota resource name by storage class.
+// V1ResourceByStorageClass 根据 StorageClass 返回配额资源名。
+// 用于按 StorageClass 细分存储配额。
 func V1ResourceByStorageClass(storageClass string, resourceName corev1.ResourceName) corev1.ResourceName {
 	return corev1.ResourceName(string(storageClass + storageClassSuffix + string(resourceName)))
 }
 
-// NewPersistentVolumeClaimEvaluator returns an evaluator that can evaluate persistent volume claims
+// NewPersistentVolumeClaimEvaluator 创建 PVC 配额评估器。
 func NewPersistentVolumeClaimEvaluator(f quota.ListerForResourceFunc) quota.Evaluator {
 	listFuncByNamespace := generic.ListResourceUsingListerFunc(f, corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims"))
 	pvcEvaluator := &pvcEvaluator{listFuncByNamespace: listFuncByNamespace}
 	return pvcEvaluator
 }
 
-// pvcEvaluator knows how to evaluate quota usage for persistent volume claims
+// pvcEvaluator 实现 PVC 配额使用量的计算。
 type pvcEvaluator struct {
-	// listFuncByNamespace knows how to list pvc claims
+	// listFuncByNamespace 按命名空间列出 PVC
 	listFuncByNamespace generic.ListFuncByNamespace
 }
 
-// Constraints verifies that all required resources are present on the item.
+// Constraints 验证 PVC 是否满足配额要求。
+// PVC 没有额外的约束检查，直接返回 nil。
 func (p *pvcEvaluator) Constraints(required []corev1.ResourceName, item runtime.Object) error {
-	// no-op for persistent volume claims
 	return nil
 }
 
-// GroupResource that this evaluator tracks
+// GroupResource 返回此评估器跟踪的 GroupResource（PVC）。
 func (p *pvcEvaluator) GroupResource() schema.GroupResource {
 	return corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims").GroupResource()
 }
 
-// Handles returns true if the evaluator should handle the specified operation.
+// Handles 判断评估器是否应该处理指定的 admission 操作。
+// 处理 Create 和 Update 操作，以及 status subresource 中需要配额补充的情况。
 func (p *pvcEvaluator) Handles(a admission.Attributes) bool {
 	op := a.GetOperation()
 	switch a.GetSubresource() {
 	case "":
 		return op == admission.Create || op == admission.Update
 	case "status":
+		// PVC 的 status 更新可能需要重新计算配额
+		// 例如存储扩容失败恢复时，AllocatedResources 可能变化
 		pvc, err1 := toExternalPersistentVolumeClaimOrError(a.GetObject())
 		oldPVC, err2 := toExternalPersistentVolumeClaimOrError(a.GetOldObject())
 		if err1 != nil || err2 != nil {
@@ -110,7 +113,8 @@ func (p *pvcEvaluator) Handles(a admission.Attributes) bool {
 	}
 }
 
-// Matches returns true if the evaluator matches the specified quota with the provided input item
+// Matches 判断给定的 ResourceQuota 是否与输入项（PVC）匹配。
+// 如果启用了 VolumeAttributesClass 特性，支持 scope 匹配。
 func (p *pvcEvaluator) Matches(resourceQuota *corev1.ResourceQuota, item runtime.Object) (bool, error) {
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.VolumeAttributesClass) {
 		return generic.Matches(resourceQuota, item, p.MatchingResources, pvcMatchesScopeFunc)
@@ -118,7 +122,8 @@ func (p *pvcEvaluator) Matches(resourceQuota *corev1.ResourceQuota, item runtime
 	return generic.Matches(resourceQuota, item, p.MatchingResources, generic.MatchesNoScopeFunc)
 }
 
-// MatchingScopes takes the input specified list of scopes and input object. Returns the set of scopes resource matches.
+// MatchingScopes 返回 PVC 匹配的 scope selector 列表。
+// 只有启用 VolumeAttributesClass 特性时才支持 scope 匹配。
 func (p *pvcEvaluator) MatchingScopes(item runtime.Object, scopeSelectors []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.VolumeAttributesClass) {
 		matchedScopes := []corev1.ScopedResourceSelectorRequirement{}
@@ -136,8 +141,7 @@ func (p *pvcEvaluator) MatchingScopes(item runtime.Object, scopeSelectors []core
 	return []corev1.ScopedResourceSelectorRequirement{}, nil
 }
 
-// UncoveredQuotaScopes takes the input matched scopes which are limited by configuration and the matched quota scopes.
-// It returns the scopes which are in limited scopes but don't have a corresponding covering quota scope
+// UncoveredQuotaScopes 返回有限制但没有对应配额覆盖的 scope 列表。
 func (p *pvcEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourceSelectorRequirement, matchedQuotaScopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.VolumeAttributesClass) {
 		uncoveredScopes := []corev1.ScopedResourceSelectorRequirement{}
@@ -159,21 +163,23 @@ func (p *pvcEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourc
 	return []corev1.ScopedResourceSelectorRequirement{}, nil
 }
 
-// MatchingResources takes the input specified list of resources and returns the set of resources it matches.
+// MatchingResources 从输入的资源列表中返回与 PVC 配额相关的资源子集。
+// 包括对象计数、PVC 数量、存储请求，以及按 StorageClass 细分的资源。
 func (p *pvcEvaluator) MatchingResources(items []corev1.ResourceName) []corev1.ResourceName {
 	result := []corev1.ResourceName{}
 	for _, item := range items {
-		// match object count quota fields
+		// 匹配对象计数配额（count/persistentvolumeclaims）
 		if quota.Contains([]corev1.ResourceName{pvcObjectCountName}, item) {
 			result = append(result, item)
 			continue
 		}
-		// match pvc resources
+		// 匹配 PVC 基础资源（persistentvolumeclaims, requests.storage）
 		if quota.Contains(pvcResources, item) {
 			result = append(result, item)
 			continue
 		}
-		// match pvc resources scoped by storage class (<storage-class-name>.storageclass.storage.k8s.io/<resource>)
+		// 匹配按 StorageClass 细分的 PVC 资源
+		// 格式：<storage-class-name>.storageclass.storage.k8s.io/<resource>
 		for _, resource := range pvcResources {
 			byStorageClass := storageClassSuffix + string(resource)
 			if strings.HasSuffix(string(item), byStorageClass) {
@@ -185,7 +191,8 @@ func (p *pvcEvaluator) MatchingResources(items []corev1.ResourceName) []corev1.R
 	return result
 }
 
-// Usage knows how to measure usage associated with item.
+// Usage 计算单个 PVC 的配额使用量。
+// 包括 PVC 计数、对象计数、存储请求，以及按 StorageClass 细分的计数。
 func (p *pvcEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 	result := corev1.ResourceList{}
 	pvc, err := toExternalPersistentVolumeClaimOrError(item)
@@ -193,10 +200,11 @@ func (p *pvcEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 		return result, err
 	}
 
-	// charge for claim
+	// 每个 PVC 计数为 1
 	result[corev1.ResourcePersistentVolumeClaims] = *(resource.NewQuantity(1, resource.DecimalSI))
 	result[pvcObjectCountName] = *(resource.NewQuantity(1, resource.DecimalSI))
 	storageClassRef := storagehelpers.GetPersistentVolumeClaimClass(pvc)
+	// 如果 PVC 指定了 StorageClass，同时计入该 StorageClass 的配额
 	if len(storageClassRef) > 0 {
 		storageClassClaim := corev1.ResourceName(storageClassRef + storageClassSuffix + string(corev1.ResourcePersistentVolumeClaims))
 		result[storageClassClaim] = *(resource.NewQuantity(1, resource.DecimalSI))
@@ -205,7 +213,7 @@ func (p *pvcEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 	requestedStorage := p.getStorageUsage(pvc)
 	if requestedStorage != nil {
 		result[corev1.ResourceRequestsStorage] = *requestedStorage
-		// charge usage to the storage class (if present)
+		// 如果 PVC 指定了 StorageClass，同时计入该 StorageClass 的存储配额
 		if len(storageClassRef) > 0 {
 			storageClassStorage := corev1.ResourceName(storageClassRef + storageClassSuffix + string(corev1.ResourceRequestsStorage))
 			result[storageClassStorage] = *requestedStorage
@@ -215,13 +223,16 @@ func (p *pvcEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 	return result, nil
 }
 
+// getStorageUsage 获取 PVC 的存储使用量。
+// 优先使用用户请求的存储大小，如果启用了 RecoverVolumeExpansionFailure 特性，
+// 且 AllocatedResources 大于用户请求，则使用 AllocatedResources。
 func (p *pvcEvaluator) getStorageUsage(pvc *corev1.PersistentVolumeClaim) *resource.Quantity {
 	var result *resource.Quantity
+	// roundUpFunc 确保存储请求是整字节值，通过 ResourceQuota 验证。
+	// 见 https://issue.k8s.io/94313
 	roundUpFunc := func(i *resource.Quantity) *resource.Quantity {
 		roundedRequest := i.DeepCopy()
 		if !roundedRequest.RoundUp(0) {
-			// Ensure storage requests are counted as whole byte values, to pass resourcequota validation.
-			// See https://issue.k8s.io/94313
 			return &roundedRequest
 		}
 		return i
@@ -231,12 +242,13 @@ func (p *pvcEvaluator) getStorageUsage(pvc *corev1.PersistentVolumeClaim) *resou
 		result = roundUpFunc(&userRequest)
 	}
 
+	// 如果启用了 RecoverVolumeExpansionFailure 特性，且 AllocatedResources 大于用户请求，
+	// 则使用 AllocatedResources（存储扩容失败恢复时，实际分配的可能大于用户请求）。
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.RecoverVolumeExpansionFailure) && result != nil {
 		if len(pvc.Status.AllocatedResources) == 0 {
 			return result
 		}
 
-		// if AllocatedResources is set and is greater than user request, we should use it.
 		if allocatedRequest, ok := pvc.Status.AllocatedResources[corev1.ResourceStorage]; ok {
 			if allocatedRequest.Cmp(*result) > 0 {
 				result = roundUpFunc(&allocatedRequest)
@@ -246,7 +258,7 @@ func (p *pvcEvaluator) getStorageUsage(pvc *corev1.PersistentVolumeClaim) *resou
 	return result
 }
 
-// UsageStats calculates aggregate usage for the object.
+// UsageStats 计算命名空间内所有 PVC 的聚合配额使用统计。
 func (p *pvcEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageStats, error) {
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.VolumeAttributesClass) {
 		return generic.CalculateUsageStats(options, p.listFuncByNamespace, pvcMatchesScopeFunc, p.Usage)
@@ -257,6 +269,7 @@ func (p *pvcEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageS
 // ensure we implement required interface
 var _ quota.Evaluator = &pvcEvaluator{}
 
+// toExternalPersistentVolumeClaimOrError 将 runtime.Object 转换为外部 PVC 对象。
 func toExternalPersistentVolumeClaimOrError(obj runtime.Object) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{}
 	switch t := obj.(type) {
@@ -272,13 +285,16 @@ func toExternalPersistentVolumeClaimOrError(obj runtime.Object) (*corev1.Persist
 	return pvc, nil
 }
 
-// RequiresQuotaReplenish enables quota monitoring for PVCs.
+// RequiresQuotaReplenish 判断 PVC 的 status 更新是否需要重新计算配额。
+// 当 AllocatedResources 变化或 VolumeAttributesClass 变化时需要补充配额。
 func RequiresQuotaReplenish(pvc, oldPVC *corev1.PersistentVolumeClaim) bool {
+	// 存储扩容失败恢复时，AllocatedResources 可能变化
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.RecoverVolumeExpansionFailure) {
 		if oldPVC.Status.AllocatedResources.Storage() != pvc.Status.AllocatedResources.Storage() {
 			return true
 		}
 	}
+	// VolumeAttributesClass 变化时，需要重新计算配额
 	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.VolumeAttributesClass) {
 		oldNames := getReferencedVolumeAttributesClassNames(oldPVC)
 		newNames := getReferencedVolumeAttributesClassNames(pvc)
@@ -289,7 +305,8 @@ func RequiresQuotaReplenish(pvc, oldPVC *corev1.PersistentVolumeClaim) bool {
 	return false
 }
 
-// pvcMatchesScopeFunc is a function that knows how to evaluate if a pvc matches a scope
+// pvcMatchesScopeFunc 判断 PVC 是否匹配给定的 scope selector。
+// 目前只支持 VolumeAttributesClass scope。
 func pvcMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, object runtime.Object) (bool, error) {
 	pvc, err := toExternalPersistentVolumeClaimOrError(object)
 	if err != nil {
@@ -297,6 +314,7 @@ func pvcMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	}
 
 	if selector.ScopeName == corev1.ResourceQuotaScopeVolumeAttributesClass {
+		// Exists 操作符只需检查 PVC 是否有 VolumeAttributesClass
 		if selector.Operator == corev1.ScopeSelectorOpExists {
 			// This is just checking for existence of a volumeAttributesClass on the pvc,
 			// no need to take the overhead of selector parsing/evaluation.
@@ -308,6 +326,7 @@ func pvcMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	return false, nil
 }
 
+// pvcMatchesSelector 检查 PVC 的 VolumeAttributesClass 是否匹配给定的 label selector。
 func pvcMatchesSelector(pvc *corev1.PersistentVolumeClaim, selector corev1.ScopedResourceSelectorRequirement) (bool, error) {
 	labelSelector, err := helper.ScopedResourceSelectorRequirementsAsSelector(selector)
 	if err != nil {
@@ -327,6 +346,8 @@ func pvcMatchesSelector(pvc *corev1.PersistentVolumeClaim, selector corev1.Scope
 	return false, nil
 }
 
+// getReferencedVolumeAttributesClassNames 获取 PVC 引用的所有 VolumeAttributesClass 名称。
+// 包括 Spec、Status 和 ModifyVolumeStatus 中的名称。
 func getReferencedVolumeAttributesClassNames(pvc *corev1.PersistentVolumeClaim) sets.Set[string] {
 	vacNames := sets.New[string]()
 	if len(ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")) != 0 {

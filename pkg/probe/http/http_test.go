@@ -37,8 +37,12 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 )
 
+// FailureCode 不是一个有效的 HTTP 状态码，用于测试 handleReq 中 WriteHeader(-1) 的行为，
+// 即不设置状态码直接写 body，导致探针失败。
 const FailureCode int = -1
 
+// unsetEnv 清除环境变量，并在测试结束后恢复原值。
+// 用于 HTTP 探针测试中确保代理环境变量不影响测试结果。
 func unsetEnv(t testing.TB, key string) {
 	if originalValue, ok := os.LookupEnv(key); ok {
 		t.Cleanup(func() { os.Setenv(key, originalValue) })
@@ -46,6 +50,8 @@ func unsetEnv(t testing.TB, key string) {
 	}
 }
 
+// TestHTTPProbeProxy 验证 HTTP 探针不使用系统代理环境变量（http_proxy/HTTP_PROXY）。
+// 即使设置了代理，探针也应直接连接目标，不经过代理。
 func TestHTTPProbeProxy(t *testing.T) {
 	res := "welcome to http probe proxy"
 
@@ -83,6 +89,15 @@ func TestHTTPProbeProxy(t *testing.T) {
 	}
 }
 
+// TestHTTPProbeChecker 全面验证 HTTP 探针的各种场景：
+//
+//  1. 正常响应（200 OK）
+//  2. 请求头处理（User-Agent、Accept、自定义头）
+//  3. 空值头处理（空 User-Agent/Accept 被省略）
+//  4. 错误状态码（500 等）
+//  5. 超时（服务器不响应）
+//  6. 重定向（301/302/307/308，成功和失败情况）
+//  7. 重定向带 body 的 Warning 状态
 func TestHTTPProbeChecker(t *testing.T) {
 	handleReq := func(s int, body string) func(w http.ResponseWriter, r *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -394,6 +409,12 @@ func TestHTTPProbeChecker(t *testing.T) {
 	}
 }
 
+// TestHTTPProbeChecker_NonLocalRedirects 验证 HTTP 探针对重定向的处理策略：
+//
+//	followNonLocalRedirects=false（默认）：只跟随同端口重定向，跨端口/跨主机返回 Warning
+//	followNonLocalRedirects=true：跟随所有重定向，包括跨主机
+//
+// 同时测试重定向循环检测。
 func TestHTTPProbeChecker_NonLocalRedirects(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -450,6 +471,8 @@ func TestHTTPProbeChecker_NonLocalRedirects(t *testing.T) {
 	}
 }
 
+// TestHTTPProbeChecker_HostHeaderPreservedAfterRedirect 验证 HTTP 探针在重定向后
+// 保持原始的 Host 请求头不变，确保后端服务能正确识别目标主机。
 func TestHTTPProbeChecker_HostHeaderPreservedAfterRedirect(t *testing.T) {
 	successHostHeader := "www.success.com"
 	failHostHeader := "www.fail.com"
@@ -504,6 +527,8 @@ func TestHTTPProbeChecker_HostHeaderPreservedAfterRedirect(t *testing.T) {
 	}
 }
 
+// TestHTTPProbeChecker_PayloadTruncated 验证当响应体超过 maxRespBodyLength（10KB）时，
+// 探针正确截断输出，不导致内存问题。
 func TestHTTPProbeChecker_PayloadTruncated(t *testing.T) {
 	successHostHeader := "www.success.com"
 	oversizePayload := bytes.Repeat([]byte("a"), maxRespBodyLength+1)
@@ -540,6 +565,7 @@ func TestHTTPProbeChecker_PayloadTruncated(t *testing.T) {
 	})
 }
 
+// TestHTTPProbeChecker_PayloadNormal 验证正常大小的响应体（小于10KB）完整返回，不被截断。
 func TestHTTPProbeChecker_PayloadNormal(t *testing.T) {
 	successHostHeader := "www.success.com"
 	normalPayload := bytes.Repeat([]byte("a"), maxRespBodyLength-1)
@@ -575,8 +601,9 @@ func TestHTTPProbeChecker_PayloadNormal(t *testing.T) {
 	})
 }
 
-// startH2CServer serves HTTP/2 in cleartext (h2c / prior knowledge) by accepting
-// raw TCP connections and handing them directly to http2.Server.ServeConn.
+// startH2CServer 启动 H2C（HTTP/2 Cleartext）服务器，用于测试 h2c 探针。
+// 通过直接接受 TCP 连接并交给 http2.Server.ServeConn，绕过 TLS 层实现明文 HTTP/2。
+// 返回服务器地址和清理函数。
 func startH2CServer(t *testing.T, handler http.Handler) (addr string, cleanup func()) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -598,6 +625,7 @@ func startH2CServer(t *testing.T, handler http.Handler) (addr string, cleanup fu
 	return l.Addr().String(), func() { _ = l.Close() }
 }
 
+// TestProbeH2C_H2C_Success 验证 H2C 探针成功连接到 H2C 服务器并返回正确响应。
 func TestProbeH2C_H2C_Success(t *testing.T) {
 	addr, cleanup := startH2CServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -618,6 +646,7 @@ func TestProbeH2C_H2C_Success(t *testing.T) {
 	assert.Equal(t, "h2c ok", body)
 }
 
+// TestProbeH2C_H2C_Failure 验证 H2C 探针在服务器返回 500 时正确返回 Failure。
 func TestProbeH2C_H2C_Failure(t *testing.T) {
 	addr, cleanup := startH2CServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -637,6 +666,7 @@ func TestProbeH2C_H2C_Failure(t *testing.T) {
 	assert.Equal(t, probe.Failure, result)
 }
 
+// TestProbeH2C_H2C_Timeout 验证 H2C 探针在服务器响应超时时正确返回 Failure。
 func TestProbeH2C_H2C_Timeout(t *testing.T) {
 	addr, cleanup := startH2CServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second)

@@ -43,11 +43,15 @@ import (
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// the name used for object count quota
+// podObjectCountName 是 Pod 对象计数配额的资源名（count/pods）。
+// 对象计数配额跟踪存储中的所有对象，与 Pod 生命周期无关。
 var podObjectCountName = generic.ObjectCountQuotaResourceNameFor(corev1.SchemeGroupVersion.WithResource("pods").GroupResource())
+
+// resourceRequestsDeviceClassPrefix 是隐式扩展资源的前缀，用于 DRA 设备类配额
 var resourceRequestsDeviceClassPrefix = corev1.DefaultResourceRequestsPrefix + resourceapi.ResourceDeviceClassPrefix
 
-// podResources are the set of resources managed by quota associated with pods.
+// podResources 是 Pod 相关的配额资源列表。
+// 包含对象计数、CPU/内存/存储的请求和限制、以及 Pod 数量。
 var podResources = []corev1.ResourceName{
 	podObjectCountName,
 	corev1.ResourceCPU,
@@ -62,27 +66,28 @@ var podResources = []corev1.ResourceName{
 	corev1.ResourcePods,
 }
 
-// podResourcePrefixes are the set of prefixes for resources (Hugepages, and other
-// potential extended resources with specific prefix) managed by quota associated with pods.
+// podResourcePrefixes 是 Pod 相关配额资源的前缀列表。
+// 用于匹配 HugePages 等具有特定前缀的扩展资源。
 var podResourcePrefixes = []string{
 	corev1.ResourceHugePagesPrefix,
 	corev1.ResourceRequestsHugePagesPrefix,
 }
 
-// requestedResourcePrefixes are the set of prefixes for resources
-// that might be declared in pod's Resources.Requests/Limits
+// requestedResourcePrefixes 是 Pod 的 Resources.Requests/Limits 中可能声明的资源前缀。
+// 用于识别需要在配额中特殊处理的资源类型（如 HugePages）。
 var requestedResourcePrefixes = []string{
 	corev1.ResourceHugePagesPrefix,
 }
 
-// maskResourceWithPrefix mask resource with certain prefix
-// e.g. hugepages-XXX -> requests.hugepages-XXX
+// maskResourceWithPrefix 为资源名添加前缀。
+// 例如：hugepages-XXX -> requests.hugepages-XXX
 func maskResourceWithPrefix(resource corev1.ResourceName, prefix string) corev1.ResourceName {
 	return corev1.ResourceName(fmt.Sprintf("%s%s", prefix, string(resource)))
 }
 
-// isExtendedResourceNameForQuota returns true if the extended resource name
-// has the quota related resource prefix.
+// isExtendedResourceNameForQuota 判断扩展资源名是否具有配额相关的前缀。
+// 扩展资源不支持超卖，因此只允许 "requests.resourceName" 格式的配额对象。
+// 同时也支持隐式扩展资源格式 "requests.deviceclass.resource.kubernetes.io/device-class-name"。
 func isExtendedResourceNameForQuota(name corev1.ResourceName) bool {
 	// As overcommit is not supported by extended resources for now,
 	// quota objects in format of "requests.resourceName" is allowed
@@ -96,10 +101,10 @@ func isExtendedResourceNameForQuota(name corev1.ResourceName) bool {
 	return (nonNative || implicitExtendedResource) && isQuotaRequest
 }
 
-// NOTE: it was a mistake, but if a quota tracks cpu or memory related resources,
-// the incoming pod is required to have those values set.  we should not repeat
-// this mistake for other future resources (gpus, ephemeral-storage,etc).
-// do not add more resources to this list!
+// validationSet 是配额验证时检查的资源集合。
+// 历史遗留问题：如果配额跟踪 CPU 或内存，则 Pod 必须显式设置这些值。
+// 这是一个设计缺陷，将资源验证与配额执行耦合在一起。
+// 不要向此列表添加更多资源！
 var validationSet = sets.NewString(
 	string(corev1.ResourceCPU),
 	string(corev1.ResourceMemory),
@@ -109,45 +114,44 @@ var validationSet = sets.NewString(
 	string(corev1.ResourceLimitsMemory),
 )
 
-// NewPodEvaluator returns an evaluator that can evaluate pods
+// NewPodEvaluator 创建 Pod 配额评估器。
+// clock 参数用于测试时注入模拟时钟。
 func NewPodEvaluator(f quota.ListerForResourceFunc, clock clock.Clock) quota.Evaluator {
 	listFuncByNamespace := generic.ListResourceUsingListerFunc(f, corev1.SchemeGroupVersion.WithResource("pods"))
 	podEvaluator := &podEvaluator{listFuncByNamespace: listFuncByNamespace, clock: clock}
 	return podEvaluator
 }
 
-// podEvaluator knows how to measure usage of pods.
+// podEvaluator 实现 Pod 配额使用量的计算。
 type podEvaluator struct {
-	// knows how to list pods
+	// listFuncByNamespace 按命名空间列出 Pod
 	listFuncByNamespace generic.ListFuncByNamespace
-	// used to track time
+	// clock 用于时间追踪，判断 Pod 是否超过删除宽限期
 	clock clock.Clock
 }
 
-// Constraints verifies that all required resources are present on the pod
-// In addition, it validates that the resources are valid (i.e. requests < limits)
+// Constraints 验证 Pod 是否设置了所有必需的资源。
+// 如果配额中配置了 CPU/内存，则每个容器必须显式声明对应的 requests。
+// 这是一个向后兼容要求，新资源不应重复此模式。
+// 此外还验证资源值的有效性（requests < limits）。
 func (p *podEvaluator) Constraints(required []corev1.ResourceName, item runtime.Object) error {
 	pod, err := toExternalPodOrError(item)
 	if err != nil {
 		return err
 	}
 
-	// As mentioned in the subsequent comment, the older versions required explicit
-	// resource requests for CPU & memory for each container if resource quotas were
-	// enabled for these resources. This was a design flaw as resource validation is
-	// coupled with quota enforcement. With pod-level resources
-	// feature, container-level resources are not mandatory. Hence the check for
-	// missing container requests, for CPU/memory resources that have quotas set,
-	// is skipped when pod-level resources feature is enabled and resources are set
-	// at pod level.
+	// 旧版本要求：如果配额启用了 CPU/内存，则每个容器必须显式声明 requests。
+	// 这是一个设计缺陷，将资源验证与配额执行耦合。启用 PodLevelResources 特性后，
+	// 容器级资源不再是必须的，因为可以在 Pod 级别设置资源。
+	// 此时跳过容器级请求缺失的检查。
 	if feature.DefaultFeatureGate.Enabled(features.PodLevelResources) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		return nil
 	}
 
-	// BACKWARD COMPATIBILITY REQUIREMENT: if we quota cpu or memory, then each container
-	// must make an explicit request for the resource.  this was a mistake.  it coupled
-	// validation with resource counting, but we did this before QoS was even defined.
-	// let's not make that mistake again with other resources now that QoS is defined.
+	// 向后兼容要求：如果配额了 CPU 或内存，每个容器必须显式请求该资源。
+	// 这是一个历史错误，在 QoS 定义之前就耦合了验证和资源计数。
+	// 现在 QoS 已定义，不再对其他资源重复此错误。
+	// 只检查 validationSet 中的资源（CPU/内存及其 requests/limits）。
 	requiredSet := quota.ToSet(required).Intersection(validationSet)
 	missingSetResourceToContainerNames := make(map[string]sets.String)
 	for i := range pod.Spec.Containers {
@@ -170,12 +174,14 @@ func (p *podEvaluator) Constraints(required []corev1.ResourceName, item runtime.
 	return fmt.Errorf("must specify %s", strings.Join(errorMessages, "; "))
 }
 
-// GroupResource that this evaluator tracks
+// GroupResource 返回此评估器跟踪的 GroupResource（Pod）。
 func (p *podEvaluator) GroupResource() schema.GroupResource {
 	return corev1.SchemeGroupVersion.WithResource("pods").GroupResource()
 }
 
-// Handles returns true if the evaluator should handle the specified attributes.
+// Handles 判断评估器是否应该处理指定的 admission 操作。
+// 处理 Create 操作、resize subresource 的 Update 操作，
+// 以及 Pod 的 terminating 状态发生变化时的 Update 操作。
 func (p *podEvaluator) Handles(a admission.Attributes) bool {
 	op := a.GetOperation()
 	switch a.GetSubresource() {
@@ -186,33 +192,37 @@ func (p *podEvaluator) Handles(a admission.Attributes) bool {
 			if err1 != nil || err2 != nil {
 				return false
 			}
-			// when scope changed
+			// 当 Pod 的 terminating 状态发生变化时，需要重新计算配额
+			// 因为 terminating 和非 terminating Pod 可能属于不同的配额 scope
 			if IsTerminating(oldPod) != IsTerminating(pod) {
 				return true
 			}
 		}
 		return op == admission.Create
 	case "resize":
+		// resize subresource 的 Update 操作会改变资源请求，需要重新评估配额
 		return op == admission.Update
 	default:
 		return false
 	}
 }
 
-// Matches returns true if the evaluator matches the specified quota with the provided input item
+// Matches 判断给定的 ResourceQuota 是否与输入项（Pod）匹配。
+// 检查资源匹配和 scope 匹配两个条件。
 func (p *podEvaluator) Matches(resourceQuota *corev1.ResourceQuota, item runtime.Object) (bool, error) {
 	return generic.Matches(resourceQuota, item, p.MatchingResources, podMatchesScopeFunc)
 }
 
-// MatchingResources takes the input specified list of resources and returns the set of resources it matches.
+// MatchingResources 从输入的资源列表中返回与 Pod 配额相关的资源子集。
+// 包括固定资源（podResources）、前缀匹配资源（如 HugePages）和扩展资源。
 func (p *podEvaluator) MatchingResources(input []corev1.ResourceName) []corev1.ResourceName {
 	result := quota.Intersection(input, podResources)
 	for _, resource := range input {
-		// for resources with certain prefix, e.g. hugepages
+		// 匹配具有特定前缀的资源，如 HugePages
 		if quota.ContainsPrefix(podResourcePrefixes, resource) {
 			result = append(result, resource)
 		}
-		// for extended resources
+		// 匹配扩展资源（如 DRA 设备）
 		if isExtendedResourceNameForQuota(resource) {
 			result = append(result, resource)
 		}
@@ -221,7 +231,8 @@ func (p *podEvaluator) MatchingResources(input []corev1.ResourceName) []corev1.R
 	return result
 }
 
-// MatchingScopes takes the input specified list of scopes and pod object. Returns the set of scope selectors pod matches.
+// MatchingScopes 返回 Pod 匹配的 scope selector 列表。
+// 用于确定 Pod 属于哪些配额 scope（如 BestEffort、Terminating 等）。
 func (p *podEvaluator) MatchingScopes(item runtime.Object, scopeSelectors []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	matchedScopes := []corev1.ScopedResourceSelectorRequirement{}
 	for _, selector := range scopeSelectors {
@@ -236,8 +247,8 @@ func (p *podEvaluator) MatchingScopes(item runtime.Object, scopeSelectors []core
 	return matchedScopes, nil
 }
 
-// UncoveredQuotaScopes takes the input matched scopes which are limited by configuration and the matched quota scopes.
-// It returns the scopes which are in limited scopes but don't have a corresponding covering quota scope
+// UncoveredQuotaScopes 返回有限制但没有对应配额覆盖的 scope 列表。
+// 用于检测配置了 scope 限制但没有对应 ResourceQuota 覆盖的情况。
 func (p *podEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourceSelectorRequirement, matchedQuotaScopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	uncoveredScopes := []corev1.ScopedResourceSelectorRequirement{}
 	for _, selector := range limitedScopes {
@@ -256,13 +267,15 @@ func (p *podEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourc
 	return uncoveredScopes, nil
 }
 
-// Usage knows how to measure usage associated with pods
+// Usage 计算单个 Pod 的配额使用量。
+// 委托给 PodUsageFunc 实现。
 func (p *podEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 	// delegate to normal usage
 	return PodUsageFunc(item, p.clock)
 }
 
-// UsageStats calculates aggregate usage for the object.
+// UsageStats 计算命名空间内所有 Pod 的聚合配额使用统计。
+// 包括硬限制、当前使用量和已使用用量。
 func (p *podEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageStats, error) {
 	return generic.CalculateUsageStats(options, p.listFuncByNamespace, podMatchesScopeFunc, p.Usage)
 }
@@ -270,8 +283,8 @@ func (p *podEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageS
 // verifies we implement the required interface.
 var _ quota.Evaluator = &podEvaluator{}
 
-// enforcePodContainerConstraints checks for required resources that are not set on this container and
-// adds them to missingSet.
+// enforcePodContainerConstraints 检查容器中未设置的必需资源，并添加到 missingSet。
+// 比较容器的 requests/limits 与 requiredSet，找出缺失的资源。
 func enforcePodContainerConstraints(container *corev1.Container, requiredSet sets.String, missingSetResourceToContainerNames map[string]sets.String) {
 	requests := container.Resources.Requests
 	limits := container.Resources.Limits
@@ -290,9 +303,11 @@ func enforcePodContainerConstraints(container *corev1.Container, requiredSet set
 	}
 }
 
-// podComputeUsageHelper can summarize the pod compute quota usage based on requests and limits
+// podComputeUsageHelper 根据 requests 和 limits 汇总 Pod 的计算资源配额使用量。
+// 为每种资源类型（CPU、内存、存储、HugePages、扩展资源）计算对应的配额计数。
 func podComputeUsageHelper(requests corev1.ResourceList, limits corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
+	// 每个 Pod 计数为 1
 	result[corev1.ResourcePods] = resource.MustParse("1")
 	if request, found := requests[corev1.ResourceCPU]; found {
 		result[corev1.ResourceCPU] = request
@@ -315,13 +330,14 @@ func podComputeUsageHelper(requests corev1.ResourceList, limits corev1.ResourceL
 	if limit, found := limits[corev1.ResourceEphemeralStorage]; found {
 		result[corev1.ResourceLimitsEphemeralStorage] = limit
 	}
+	// 遍历所有请求的资源，处理特殊前缀和扩展资源
 	for resource, request := range requests {
-		// for resources with certain prefix, e.g. hugepages
+		// 处理具有特定前缀的资源，如 HugePages
 		if quota.ContainsPrefix(requestedResourcePrefixes, resource) {
 			result[resource] = request
 			result[maskResourceWithPrefix(resource, corev1.DefaultResourceRequestsPrefix)] = request
 		}
-		// for extended resources
+		// 处理 DRA 扩展资源，只允许 "requests.resourceName" 格式
 		if schedutil.IsDRAExtendedResourceName(resource) {
 			// only quota objects in format of "requests.resourceName" is allowed for extended resource.
 			result[maskResourceWithPrefix(resource, corev1.DefaultResourceRequestsPrefix)] = request
@@ -331,6 +347,8 @@ func podComputeUsageHelper(requests corev1.ResourceList, limits corev1.ResourceL
 	return result
 }
 
+// toExternalPodOrError 将 runtime.Object 转换为外部 Pod 对象。
+// 支持内部 api.Pod 和外部 v1.Pod 两种类型。
 func toExternalPodOrError(obj runtime.Object) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 	switch t := obj.(type) {
@@ -346,7 +364,9 @@ func toExternalPodOrError(obj runtime.Object) (*corev1.Pod, error) {
 	return pod, nil
 }
 
-// podMatchesScopeFunc is a function that knows how to evaluate if a pod matches a scope
+// podMatchesScopeFunc 判断 Pod 是否匹配给定的 scope selector。
+// 支持的 scope 包括：Terminating、NotTerminating、BestEffort、NotBestEffort、
+// PriorityClass 和 CrossNamespacePodAffinity。
 func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, object runtime.Object) (bool, error) {
 	pod, err := toExternalPodOrError(object)
 	if err != nil {
@@ -362,6 +382,7 @@ func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	case corev1.ResourceQuotaScopeNotBestEffort:
 		return !isBestEffort(pod), nil
 	case corev1.ResourceQuotaScopePriorityClass:
+		// Exists 操作符只需检查 Pod 是否有 PriorityClassName，无需解析 selector
 		if selector.Operator == corev1.ScopeSelectorOpExists {
 			// This is just checking for existence of a priorityClass on the pod,
 			// no need to take the overhead of selector parsing/evaluation.
@@ -369,38 +390,44 @@ func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 		}
 		return podMatchesSelector(pod, selector)
 	case corev1.ResourceQuotaScopeCrossNamespacePodAffinity:
+		// 检查 Pod 是否使用了跨命名空间的 Pod 亲和性/反亲和性
 		return usesCrossNamespacePodAffinity(pod), nil
 	}
 	return false, nil
 }
 
-// PodUsageFunc returns the quota usage for a pod.
-// A pod is charged for quota if the following are not true.
-//   - pod has a terminal phase (failed or succeeded)
-//   - pod has been marked for deletion and grace period has expired
+// PodUsageFunc 计算 Pod 的配额使用量。
+// 只有当 Pod 满足以下条件时才会计入配额：
+//   - Pod 未处于终止状态（Failed 或 Succeeded）
+//   - Pod 未被标记删除或 grace period 未过期
+//
+// 对象计数配额（count/pods）始终计算，无论 Pod 状态如何。
+// 计算资源配额（如 CPU、内存）只跟踪活跃 Pod。
 func PodUsageFunc(obj runtime.Object, clock clock.Clock) (corev1.ResourceList, error) {
 	pod, err := toExternalPodOrError(obj)
 	if err != nil {
 		return corev1.ResourceList{}, err
 	}
 
-	// always quota the object count (even if the pod is end of life)
-	// object count quotas track all objects that are in storage.
-	// where "pods" tracks all pods that have not reached a terminal state,
-	// count/pods tracks all pods independent of state.
+	// 对象计数配额始终计算，即使 Pod 已到达生命周期终点。
+	// 因为对象计数配额跟踪存储中的所有对象。
+	// "pods" 资源只跟踪未到达终止状态的 Pod，
+	// 而 "count/pods" 跟踪所有状态的 Pod。
 	result := corev1.ResourceList{
 		podObjectCountName: *(resource.NewQuantity(1, resource.DecimalSI)),
 	}
 
-	// by convention, we do not quota compute resources that have reached end-of life
-	// note: the "pods" resource is considered a compute resource since it is tied to life-cycle.
+	// 按照惯例，不计算已到达生命周期终点的 Pod 的计算资源配额。
+	// "pods" 资源被视为计算资源，因为它与生命周期绑定。
 	if !QuotaV1Pod(pod, clock) {
 		return result, nil
 	}
 
+	// 配置 Pod 资源计算选项
 	opts := resourcehelper.PodResourcesOptions{
+		// 如果启用了原地垂直扩缩，使用 Status.Resources 而非 Spec.Resources
 		UseStatusResources: feature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling),
-		// SkipPodLevelResources is set to false when PodLevelResources feature is enabled.
+		// 启用 PodLevelResources 时，不跳过 Pod 级资源
 		SkipPodLevelResources: !feature.DefaultFeatureGate.Enabled(features.PodLevelResources),
 	}
 	requests := resourcehelper.PodRequests(pod, opts)
@@ -410,10 +437,14 @@ func PodUsageFunc(obj runtime.Object, clock clock.Clock) (corev1.ResourceList, e
 	return result, nil
 }
 
+// isBestEffort 判断 Pod 是否为 BestEffort QoS 级别。
+// BestEffort Pod 未设置任何资源请求或限制。
 func isBestEffort(pod *corev1.Pod) bool {
 	return qos.GetPodQOS(pod) == corev1.PodQOSBestEffort
 }
 
+// IsTerminating 判断 Pod 是否处于终止状态。
+// 设置了 ActiveDeadlineSeconds 的 Pod 被视为终止 Pod（如 Job 创建的 Pod）。
 func IsTerminating(pod *corev1.Pod) bool {
 	if pod.Spec.ActiveDeadlineSeconds != nil && *pod.Spec.ActiveDeadlineSeconds >= int64(0) {
 		return true
@@ -421,6 +452,7 @@ func IsTerminating(pod *corev1.Pod) bool {
 	return false
 }
 
+// podMatchesSelector 检查 Pod 的 PriorityClass 是否匹配给定的 label selector。
 func podMatchesSelector(pod *corev1.Pod, selector corev1.ScopedResourceSelectorRequirement) (bool, error) {
 	labelSelector, err := helper.ScopedResourceSelectorRequirementsAsSelector(selector)
 	if err != nil {
@@ -436,10 +468,13 @@ func podMatchesSelector(pod *corev1.Pod, selector corev1.ScopedResourceSelectorR
 	return false, nil
 }
 
+// crossNamespacePodAffinityTerm 判断亲和性项是否指定了跨命名空间的选择器。
+// 设置了 Namespaces 或 NamespaceSelector 表示跨命名空间。
 func crossNamespacePodAffinityTerm(term *corev1.PodAffinityTerm) bool {
 	return len(term.Namespaces) != 0 || term.NamespaceSelector != nil
 }
 
+// crossNamespacePodAffinityTerms 检查亲和性项列表中是否有跨命名空间的项。
 func crossNamespacePodAffinityTerms(terms []corev1.PodAffinityTerm) bool {
 	for _, t := range terms {
 		if crossNamespacePodAffinityTerm(&t) {
@@ -449,6 +484,7 @@ func crossNamespacePodAffinityTerms(terms []corev1.PodAffinityTerm) bool {
 	return false
 }
 
+// crossNamespaceWeightedPodAffinityTerms 检查加权亲和性项列表中是否有跨命名空间的项。
 func crossNamespaceWeightedPodAffinityTerms(terms []corev1.WeightedPodAffinityTerm) bool {
 	for _, t := range terms {
 		if crossNamespacePodAffinityTerm(&t.PodAffinityTerm) {
@@ -458,6 +494,8 @@ func crossNamespaceWeightedPodAffinityTerms(terms []corev1.WeightedPodAffinityTe
 	return false
 }
 
+// usesCrossNamespacePodAffinity 检查 Pod 是否使用了跨命名空间的亲和性或反亲和性。
+// 包括 Required 和 Preferred 两种类型。
 func usesCrossNamespacePodAffinity(pod *corev1.Pod) bool {
 	if pod == nil || pod.Spec.Affinity == nil {
 		return false
@@ -486,16 +524,19 @@ func usesCrossNamespacePodAffinity(pod *corev1.Pod) bool {
 	return false
 }
 
-// QuotaV1Pod returns true if the pod is eligible to track against a quota
-// if it's not in a terminal state according to its phase.
+// QuotaV1Pod 判断 Pod 是否应该计入配额跟踪。
+// 只有非终止状态且未超过删除宽限期的 Pod 才计入配额。
+//
+// 如果 Pod 卡住无法终止（如节点丢失），不将其计入配额，
+// 避免阻止用户创建新 Pod 来提供服务。
 func QuotaV1Pod(pod *corev1.Pod, clock clock.Clock) bool {
-	// if pod is terminal, ignore it for quota
+	// 终止状态的 Pod 不计入计算资源配额
 	if corev1.PodFailed == pod.Status.Phase || corev1.PodSucceeded == pod.Status.Phase {
 		return false
 	}
-	// if pods are stuck terminating (for example, a node is lost), we do not want
-	// to charge the user for that pod in quota because it could prevent them from
-	// scaling up new pods to service their application.
+	// 如果 Pod 卡住无法终止（如节点丢失），不将其计入配额。
+	// 否则用户可能因为配额耗尽而无法创建新 Pod 来提供服务。
+	// 检查是否超过了删除时间 + grace period
 	if pod.DeletionTimestamp != nil && pod.DeletionGracePeriodSeconds != nil {
 		now := clock.Now()
 		deletionTime := pod.DeletionTimestamp.Time

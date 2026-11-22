@@ -24,6 +24,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// TestFormatURL 验证 formatURL 函数正确拼接 scheme、host、port 和 path，
+// 生成完整的 URL 字符串。
 func TestFormatURL(t *testing.T) {
 	testCases := []struct {
 		scheme string
@@ -45,6 +47,8 @@ func TestFormatURL(t *testing.T) {
 	}
 }
 
+// Test_v1HeaderToHTTPHeader 验证 v1HeaderToHTTPHeader 将 v1.HTTPHeader 切片转换为 http.Header，
+// 测试非空输入、大小写不敏感（Host → Host, FOO-bAR → Foo-Bar）和空输入。
 func Test_v1HeaderToHTTPHeader(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -90,6 +94,8 @@ func Test_v1HeaderToHTTPHeader(t *testing.T) {
 	}
 }
 
+// TestHeaderConversion 额外验证 v1HeaderToHTTPHeader 对重复头名的处理，
+// 相同名称的不同大小写头应合并到一个 key 下（Accept 和 accept 合并）。
 func TestHeaderConversion(t *testing.T) {
 	testCases := []struct {
 		headers  []v1.HTTPHeader

@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestPrintType 是测试用的自定义类型，实现 runtime.Object 接口，
+// 用于验证 TableGenerator 支持自定义类型的 print handler 注册。
 type TestPrintType struct {
 	Data string
 }
@@ -40,14 +42,18 @@ func (obj *TestPrintType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// PrintCustomType 是成功的自定义 print handler，将 TestPrintType 的 Data 字段作为表格单元格返回。
 func PrintCustomType(obj *TestPrintType, options GenerateOptions) ([]metav1beta1.TableRow, error) {
 	return []metav1beta1.TableRow{{Cells: []interface{}{obj.Data}}}, nil
 }
 
+// ErrorPrintHandler 是始终返回错误的自定义 print handler，用于验证错误传播。
 func ErrorPrintHandler(obj *TestPrintType, options GenerateOptions) ([]metav1beta1.TableRow, error) {
 	return nil, fmt.Errorf("ErrorPrintHandler error")
 }
 
+// TestCustomTypePrinting 验证 TableGenerator 可以注册自定义类型的 print handler，
+// 并正确生成包含自定义数据的 Table 对象。
 func TestCustomTypePrinting(t *testing.T) {
 	columns := []metav1beta1.TableColumnDefinition{{Name: "Data"}}
 	generator := NewTableGenerator()
@@ -71,6 +77,8 @@ func TestCustomTypePrinting(t *testing.T) {
 	}
 }
 
+// TestPrintHandlerError 验证当自定义 print handler 返回错误时，
+// GenerateTable 正确传播该错误，而非静默失败。
 func TestPrintHandlerError(t *testing.T) {
 	columns := []metav1beta1.TableColumnDefinition{{Name: "Data"}}
 	generator := NewTableGenerator()

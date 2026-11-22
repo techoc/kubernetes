@@ -37,6 +37,7 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 )
 
+// TestNew 验证 New() 返回的对象实现了 Prober 接口。
 func TestNew(t *testing.T) {
 	t.Run("Should: implement Probe interface", func(t *testing.T) {
 		s := New()
@@ -44,8 +45,9 @@ func TestNew(t *testing.T) {
 	})
 }
 
-type successServerMock struct {
-}
+// successServerMock 模拟返回 SERVING 状态的 gRPC 健康检查服务器，
+// 用于测试探针成功场景。
+type successServerMock struct{}
 
 func (s successServerMock) List(ctx context.Context, request *grpchealth.HealthListRequest) (*grpchealth.HealthListResponse, error) {
 	return &grpchealth.HealthListResponse{
@@ -69,8 +71,9 @@ func (s successServerMock) Watch(_ *grpchealth.HealthCheckRequest, stream grpche
 	})
 }
 
-type errorTimeoutServerMock struct {
-}
+// errorTimeoutServerMock 模拟响应延迟 4 秒的 gRPC 健康检查服务器，
+// 用于测试探针超时场景（超时时间通常设为 2 秒）。
+type errorTimeoutServerMock struct{}
 
 func (e errorTimeoutServerMock) List(ctx context.Context, request *grpchealth.HealthListRequest) (*grpchealth.HealthListResponse, error) {
 	return &grpchealth.HealthListResponse{
@@ -96,8 +99,9 @@ func (e errorTimeoutServerMock) Watch(_ *grpchealth.HealthCheckRequest, stream g
 	})
 }
 
-type errorNotServeServerMock struct {
-}
+// errorNotServeServerMock 模拟返回 NOT_SERVING 状态的 gRPC 健康检查服务器，
+// 用于测试探针检测到服务不可用的场景。
+type errorNotServeServerMock struct{}
 
 func (e errorNotServeServerMock) List(ctx context.Context, request *grpchealth.HealthListRequest) (*grpchealth.HealthListResponse, error) {
 	return &grpchealth.HealthListResponse{
@@ -121,6 +125,13 @@ func (e errorNotServeServerMock) Watch(_ *grpchealth.HealthCheckRequest, stream 
 	})
 }
 
+// TestGrpcProber_Probe 验证 gRPC 探针在各种连接和响应场景下的行为：
+//
+//  1. 无法连接的目标端口（返回 Failure）
+//  2. HTTP 服务器而非 gRPC 服务器（返回 Failure）
+//  3. gRPC 服务器返回 NOT_SERVING（返回 Failure）
+//  4. gRPC 服务器响应超时（返回 Failure）
+//  5. gRPC 服务器返回 SERVING（返回 Success）
 func TestGrpcProber_Probe(t *testing.T) {
 	t.Run("Should: failed but return nil error because cant find host", func(t *testing.T) {
 		s := New()
@@ -140,7 +151,7 @@ func TestGrpcProber_Probe(t *testing.T) {
 		port, err := strconv.Atoi(u[2])
 		assert.NoError(t, err)
 
-		// take some time to wait server boot
+		// 等待 HTTP 服务器启动
 		time.Sleep(2 * time.Second)
 		p, _, err := s.Probe("127.0.0.1", "", port, time.Second, ProbeOptions{})
 		assert.Equal(t, probe.Failure, p)
@@ -156,7 +167,7 @@ func TestGrpcProber_Probe(t *testing.T) {
 		go func() {
 			_ = grpcServer.Serve(lis)
 		}()
-		// take some time to wait server boot
+		// 等待 gRPC 服务器启动
 		time.Sleep(2 * time.Second)
 		p, o, err := s.Probe("0.0.0.0", "", port, time.Second, ProbeOptions{})
 		assert.Equal(t, probe.Failure, p)
@@ -174,7 +185,7 @@ func TestGrpcProber_Probe(t *testing.T) {
 		go func() {
 			_ = grpcServer.Serve(lis)
 		}()
-		// take some time to wait server boot
+		// 等待 gRPC 服务器启动
 		time.Sleep(2 * time.Second)
 		p, o, err := s.Probe("0.0.0.0", "", port, time.Second*2, ProbeOptions{})
 		assert.Equal(t, probe.Failure, p)
@@ -193,7 +204,7 @@ func TestGrpcProber_Probe(t *testing.T) {
 		go func() {
 			_ = grpcServer.Serve(lis)
 		}()
-		// take some time to wait server boot
+		// 等待 gRPC 服务器启动
 		time.Sleep(2 * time.Second)
 		p, _, err := s.Probe("0.0.0.0", "", port, time.Second*2, ProbeOptions{})
 		assert.Equal(t, probe.Success, p)
@@ -210,7 +221,7 @@ func TestGrpcProber_Probe(t *testing.T) {
 		go func() {
 			_ = grpcServer.Serve(lis)
 		}()
-		// take some time to wait server boot
+		// 等待 gRPC 服务器启动
 		time.Sleep(2 * time.Second)
 		p, _, err := s.Probe("0.0.0.0", "", port, time.Second*2, ProbeOptions{})
 		assert.Equal(t, probe.Success, p)
@@ -218,6 +229,8 @@ func TestGrpcProber_Probe(t *testing.T) {
 	})
 }
 
+// tlsServerCert 生成用于测试的自签名 TLS 证书，绑定到 127.0.0.1。
+// gRPC TLS 探针测试需要有效的证书来建立加密连接。
 func tlsServerCert(t *testing.T) tls.Certificate {
 	t.Helper()
 	certPEM, keyPEM, err := cert.GenerateSelfSignedCertKey("127.0.0.1", nil, nil)
@@ -231,6 +244,11 @@ func tlsServerCert(t *testing.T) tls.Certificate {
 	return tlsCert
 }
 
+// TestGrpcProber_Probe_TLS 验证 gRPC 探针的 TLS 配置匹配：
+//
+//	TLS 客户端对 TLS 服务器 → 成功
+//	明文客户端对 TLS 服务器 → 失败
+//	TLS 客户端对明文服务器 → 失败
 func TestGrpcProber_Probe_TLS(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -30,10 +30,11 @@ import (
 	k8s_api_v1 "k8s.io/kubernetes/pkg/apis/core/v1"
 )
 
-// the name used for object count quota
+// serviceObjectCountName 是 Service 对象计数配额的资源名（count/services）。
 var serviceObjectCountName = generic.ObjectCountQuotaResourceNameFor(corev1.SchemeGroupVersion.WithResource("services").GroupResource())
 
-// serviceResources are the set of resources managed by quota associated with services.
+// serviceResources 是 Service 相关的配额资源列表。
+// 包括对象计数、Service 数量、NodePort 数量和 LoadBalancer 数量。
 var serviceResources = []corev1.ResourceName{
 	serviceObjectCountName,
 	corev1.ResourceServices,
@@ -41,62 +42,65 @@ var serviceResources = []corev1.ResourceName{
 	corev1.ResourceServicesLoadBalancers,
 }
 
-// NewServiceEvaluator returns an evaluator that can evaluate services.
+// NewServiceEvaluator 创建 Service 配额评估器。
 func NewServiceEvaluator(f quota.ListerForResourceFunc) quota.Evaluator {
 	listFuncByNamespace := generic.ListResourceUsingListerFunc(f, corev1.SchemeGroupVersion.WithResource("services"))
 	serviceEvaluator := &serviceEvaluator{listFuncByNamespace: listFuncByNamespace}
 	return serviceEvaluator
 }
 
-// serviceEvaluator knows how to measure usage for services.
+// serviceEvaluator 实现 Service 配额使用量的计算。
 type serviceEvaluator struct {
-	// knows how to list items by namespace
+	// listFuncByNamespace 按命名空间列出 Service
 	listFuncByNamespace generic.ListFuncByNamespace
 }
 
-// Constraints verifies that all required resources are present on the item
+// Constraints 验证 Service 是否满足配额要求。
+// Service 没有额外的约束检查，直接返回 nil。
 func (p *serviceEvaluator) Constraints(required []corev1.ResourceName, item runtime.Object) error {
-	// this is a no-op for services
 	return nil
 }
 
-// GroupResource that this evaluator tracks
+// GroupResource 返回此评估器跟踪的 GroupResource（Service）。
 func (p *serviceEvaluator) GroupResource() schema.GroupResource {
 	return corev1.SchemeGroupVersion.WithResource("services").GroupResource()
 }
 
-// Handles returns true of the evaluator should handle the specified operation.
+// Handles 判断评估器是否应该处理指定的 admission 操作。
+// 处理 Create 和 Update 操作，因为 Service 类型可能变化（如 ClusterIP -> NodePort）。
+// 不处理 subresource 操作。
 func (p *serviceEvaluator) Handles(a admission.Attributes) bool {
 	if a.GetSubresource() != "" {
 		return false
 	}
 	operation := a.GetOperation()
-	// We handle create and update because a service type can change.
 	return admission.Create == operation || admission.Update == operation
 }
 
-// Matches returns true if the evaluator matches the specified quota with the provided input item
+// Matches 判断给定的 ResourceQuota 是否与输入项（Service）匹配。
+// Service 不支持 scope 匹配。
 func (p *serviceEvaluator) Matches(resourceQuota *corev1.ResourceQuota, item runtime.Object) (bool, error) {
 	return generic.Matches(resourceQuota, item, p.MatchingResources, generic.MatchesNoScopeFunc)
 }
 
-// MatchingResources takes the input specified list of resources and returns the set of resources it matches.
+// MatchingResources 从输入的资源列表中返回与 Service 配额相关的资源子集。
 func (p *serviceEvaluator) MatchingResources(input []corev1.ResourceName) []corev1.ResourceName {
 	return quota.Intersection(input, serviceResources)
 }
 
-// MatchingScopes takes the input specified list of scopes and input object. Returns the set of scopes resource matches.
+// MatchingScopes 返回 Service 匹配的 scope selector 列表。
+// Service 不支持 scope，始终返回空列表。
 func (p *serviceEvaluator) MatchingScopes(item runtime.Object, scopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	return []corev1.ScopedResourceSelectorRequirement{}, nil
 }
 
-// UncoveredQuotaScopes takes the input matched scopes which are limited by configuration and the matched quota scopes.
-// It returns the scopes which are in limited scopes but don't have a corresponding covering quota scope
+// UncoveredQuotaScopes 返回有限制但没有对应配额覆盖的 scope 列表。
+// Service 不支持 scope，始终返回空列表。
 func (p *serviceEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourceSelectorRequirement, matchedQuotaScopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error) {
 	return []corev1.ScopedResourceSelectorRequirement{}, nil
 }
 
-// convert the input object to an internal service object or error.
+// toExternalServiceOrError 将 runtime.Object 转换为外部 Service 对象。
 func toExternalServiceOrError(obj runtime.Object) (*corev1.Service, error) {
 	svc := &corev1.Service{}
 	switch t := obj.(type) {
@@ -112,7 +116,11 @@ func toExternalServiceOrError(obj runtime.Object) (*corev1.Service, error) {
 	return svc, nil
 }
 
-// Usage knows how to measure usage associated with services
+// Usage 计算单个 Service 的配额使用量。
+// 根据 Service 类型计算不同的资源：
+//   - ClusterIP：只计数 Service 本身
+//   - NodePort：计数 Service 和 NodePort 数量
+//   - LoadBalancer：计数 Service、NodePort 数量和 LoadBalancer 数量
 func (p *serviceEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
 	result := corev1.ResourceList{}
 	svc, err := toExternalServiceOrError(item)
@@ -120,21 +128,20 @@ func (p *serviceEvaluator) Usage(item runtime.Object) (corev1.ResourceList, erro
 		return result, err
 	}
 	ports := len(svc.Spec.Ports)
-	// default service usage
+	// 默认 Service 使用量：对象计数和 Service 计数为 1，NodePort 和 LoadBalancer 为 0
 	result[serviceObjectCountName] = *(resource.NewQuantity(1, resource.DecimalSI))
 	result[corev1.ResourceServices] = *(resource.NewQuantity(1, resource.DecimalSI))
 	result[corev1.ResourceServicesLoadBalancers] = resource.Quantity{Format: resource.DecimalSI}
 	result[corev1.ResourceServicesNodePorts] = resource.Quantity{Format: resource.DecimalSI}
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeNodePort:
-		// node port services need to count node ports
+		// NodePort 类型的 Service 需要计数 NodePort 数量
 		value := resource.NewQuantity(int64(ports), resource.DecimalSI)
 		result[corev1.ResourceServicesNodePorts] = *value
 	case corev1.ServiceTypeLoadBalancer:
-		// load balancer services need to count node ports. If creation of node ports
-		// is suppressed only ports with explicit NodePort values are counted.
-		// nodeports won't be allocated yet, so we can't simply count the actual values.
-		// We need to look at the intent.
+		// LoadBalancer 类型需要计数 NodePort 和 LoadBalancer。
+		// 如果抑制了 NodePort 的自动分配（AllocateLoadBalancerNodePorts=false），
+		// 只计数显式设置了 NodePort 值的端口。
 		if svc.Spec.AllocateLoadBalancerNodePorts != nil &&
 			*svc.Spec.AllocateLoadBalancerNodePorts == false {
 			result[corev1.ResourceServicesNodePorts] = *portsWithNodePorts(svc)
@@ -147,6 +154,7 @@ func (p *serviceEvaluator) Usage(item runtime.Object) (corev1.ResourceList, erro
 	return result, nil
 }
 
+// portsWithNodePorts 计算 Service 中显式设置了 NodePort 值的端口数量。
 func portsWithNodePorts(svc *corev1.Service) *resource.Quantity {
 	count := 0
 	for _, p := range svc.Spec.Ports {
@@ -157,14 +165,15 @@ func portsWithNodePorts(svc *corev1.Service) *resource.Quantity {
 	return resource.NewQuantity(int64(count), resource.DecimalSI)
 }
 
-// UsageStats calculates aggregate usage for the object.
+// UsageStats 计算命名空间内所有 Service 的聚合配额使用统计。
 func (p *serviceEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageStats, error) {
 	return generic.CalculateUsageStats(options, p.listFuncByNamespace, generic.MatchesNoScopeFunc, p.Usage)
 }
 
 var _ quota.Evaluator = &serviceEvaluator{}
 
-// GetQuotaServiceType returns ServiceType if the service type is eligible to track against a quota, nor return ""
+// GetQuotaServiceType 返回需要跟踪配额的 Service 类型。
+// 只有 NodePort 和 LoadBalancer 类型需要配额跟踪，其他类型返回空字符串。
 func GetQuotaServiceType(service *corev1.Service) corev1.ServiceType {
 	switch service.Spec.Type {
 	case corev1.ServiceTypeNodePort:

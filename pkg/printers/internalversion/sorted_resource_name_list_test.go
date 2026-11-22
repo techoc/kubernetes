@@ -17,12 +17,15 @@ limitations under the License.
 package internalversion
 
 import (
-	api "k8s.io/kubernetes/pkg/apis/core"
 	"reflect"
 	"sort"
 	"testing"
+
+	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestSortableResourceNamesSorting 验证 SortableResourceNames 类型实现了 sort.Interface，
+// 能正确按字典序排序资源名称。空字符串排在最前，数字排在字母前。
 func TestSortableResourceNamesSorting(t *testing.T) {
 	want := SortableResourceNames{
 		api.ResourceName(""),
