@@ -32,19 +32,19 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 表示该准入插件的名称。
 const PluginName = "NamespaceAutoProvision"
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewProvision(), nil
 	})
 }
 
-// Provision is an implementation of admission.Interface.
-// It looks at all incoming requests in a namespace context, and if the namespace does not exist, it creates one.
-// It is useful in deployments that do not want to restrict creation of a namespace prior to its usage.
+// Provision 是 admission.Interface 的一个实现。
+// 它检查所有带有命名空间的请求，若该 Namespace 不存在则自动创建。
+// 适用于那些不希望在使用前显式限制 Namespace 创建的部署环境。
 type Provision struct {
 	*admission.Handler
 	client          kubernetes.Interface
@@ -55,20 +55,19 @@ var _ admission.MutationInterface = &Provision{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Provision{})
 var _ = genericadmissioninitializer.WantsExternalKubeClientSet(&Provision{})
 
-// Admit makes an admission decision based on the request attributes
+// Admit 根据请求属性作出准入决策：缺少 Namespace 时自动创建。
 func (p *Provision) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// Don't create a namespace if the request is for a dry-run.
+	// dry-run 不应产生任何副作用，故不创建 Namespace。
 	if a.IsDryRun() {
 		return nil
 	}
 
-	// if we're here, then we've already passed authentication, so we're allowed to do what we're trying to do
-	// if we're here, then the API server has found a route, which means that if we have a non-empty namespace
-	// its a namespaced resource.
+	// 走到这里说明请求已通过认证，且 API server 已找到路由；
+	// 因此非空命名空间代表的是 namespaced 资源。
 	if len(a.GetNamespace()) == 0 || a.GetKind().GroupKind() == api.Kind("Namespace") {
 		return nil
 	}
-	// we need to wait for our caches to warm
+	// 等待缓存同步，避免基于陈旧数据重复创建 Namespace。
 	if !p.WaitForReady() {
 		return admission.NewForbidden(a, fmt.Errorf("not yet ready to handle request"))
 	}
@@ -91,6 +90,7 @@ func (p *Provision) Admit(ctx context.Context, a admission.Attributes, o admissi
 	}
 
 	_, err = p.client.CoreV1().Namespaces().Create(context.TODO(), namespace, metav1.CreateOptions{})
+	// 并发请求可能已创建同名 Namespace，此时视为成功。
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return admission.NewForbidden(a, err)
 	}
@@ -98,26 +98,26 @@ func (p *Provision) Admit(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
-// NewProvision creates a new namespace provision admission control handler
+// NewProvision 创建一个新的 Namespace 自动供给准入处理器。
 func NewProvision() *Provision {
 	return &Provision{
 		Handler: admission.NewHandler(admission.Create),
 	}
 }
 
-// SetExternalKubeClientSet implements the WantsExternalKubeClientSet interface.
+// SetExternalKubeClientSet 实现 WantsExternalKubeClientSet 接口。
 func (p *Provision) SetExternalKubeClientSet(client kubernetes.Interface) {
 	p.client = client
 }
 
-// SetExternalKubeInformerFactory implements the WantsExternalKubeInformerFactory interface.
+// SetExternalKubeInformerFactory 实现 WantsExternalKubeInformerFactory 接口。
 func (p *Provision) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	p.namespaceLister = namespaceInformer.Lister()
 	p.SetReadyFunc(namespaceInformer.Informer().HasSynced)
 }
 
-// ValidateInitialization implements the InitializationValidator interface.
+// ValidateInitialization 实现 InitializationValidator 接口，检查依赖的 lister 和 client 均已注入。
 func (p *Provision) ValidateInitialization() error {
 	if p.namespaceLister == nil {
 		return fmt.Errorf("missing namespaceLister")

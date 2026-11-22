@@ -40,8 +40,10 @@ import (
 	controlplaneadmission "k8s.io/kubernetes/pkg/controlplane/apiserver/admission"
 )
 
+// fakeAuthorizer 按用户名模拟授权结果，覆盖测试中需要的授权场景。
 type fakeAuthorizer struct{}
 
+// Authorize 根据用户名和请求属性返回模拟的授权决定。
 func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	username := a.GetUser().GetName()
 
@@ -52,7 +54,7 @@ func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (a
 		if a.GetVerb() == "update" && a.GetSubresource() == "finalizers" {
 			return authorizer.DecisionNoOpinion, "", nil
 		}
-		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // this user does not have full rights
+		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // 该用户不具备全部权限
 			return authorizer.DecisionNoOpinion, "", nil
 		}
 		return authorizer.DecisionAllow, "", nil
@@ -65,7 +67,7 @@ func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (a
 		if a.GetVerb() == "update" && a.GetResource() == "pods" && a.GetSubresource() == "finalizers" {
 			return authorizer.DecisionNoOpinion, "", nil
 		}
-		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // this user does not have full rights
+		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // 该用户不具备全部权限
 			return authorizer.DecisionNoOpinion, "", nil
 		}
 		return authorizer.DecisionAllow, "", nil
@@ -78,7 +80,7 @@ func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (a
 		if a.GetVerb() == "update" && a.GetResource() == "replicationcontrollers" && a.GetSubresource() == "finalizers" {
 			return authorizer.DecisionNoOpinion, "", nil
 		}
-		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // this user does not have full rights
+		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // 该用户不具备全部权限
 			return authorizer.DecisionNoOpinion, "", nil
 		}
 		return authorizer.DecisionAllow, "", nil
@@ -91,7 +93,7 @@ func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (a
 		if a.GetVerb() == "update" && a.GetResource() == "nodes" && a.GetSubresource() == "finalizers" {
 			return authorizer.DecisionNoOpinion, "", nil
 		}
-		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // this user does not have full rights
+		if a.GetAPIGroup() == "*" && a.GetResource() == "*" { // 该用户不具备全部权限
 			return authorizer.DecisionNoOpinion, "", nil
 		}
 		return authorizer.DecisionAllow, "", nil
@@ -100,21 +102,20 @@ func (fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (a
 	return authorizer.DecisionAllow, "", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 本授权器不支持条件感知，仅转换 Authorize 的结果。
 func (f fakeAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(f.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 本授权器不支持条件求值。
 func (fakeAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
-// newGCPermissionsEnforcement returns the admission controller configured for testing.
+// newGCPermissionsEnforcement 返回一个为测试配置好的准入控制器。
 func newGCPermissionsEnforcement() (*gcPermissionsEnforcement, error) {
-	// the pods/status endpoint is ignored by this plugin since old kubelets
-	// corrupt them.  the pod status strategy ensures status updates cannot mutate
-	// ownerRef.
+	// 旧版 kubelet 会破坏 pods/status，因此该子资源被列入白名单；
+	// pod status 策略本身也能保证状态更新不会修改 ownerRef。
 	whiteList := []whiteListItem{
 		{
 			groupResource: schema.GroupResource{Resource: "pods"},
@@ -158,39 +159,54 @@ func newGCPermissionsEnforcement() (*gcPermissionsEnforcement, error) {
 	return gcAdmit, nil
 }
 
+// neverReturningRESTMapper 是永不返回结果的 RESTMapper，一旦被调用即说明测试路径异常。
 type neverReturningRESTMapper struct{}
 
 var _ meta.RESTMapper = &neverReturningRESTMapper{}
 
+// KindFor 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
 func (r *neverReturningRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*meta.RESTMapping, error) {
-	// this ok because if the test works, this method should never be called.
-	panic("test failed")
-}
-func (r *neverReturningRESTMapper) ResourceSingularizer(resource string) (singular string, err error) {
-	// this ok because if the test works, this method should never be called.
+	// 测试正常时该方法不应被调用，被调用即视为失败。
 	panic("test failed")
 }
 
+// KindsFor 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// ResourceFor 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// ResourcesFor 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// RESTMapping 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// RESTMappings 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*meta.RESTMapping, error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// ResourceSingularizer 一旦被调用即触发 panic，表明测试走到了不应到达的路径。
+func (r *neverReturningRESTMapper) ResourceSingularizer(resource string) (singular string, err error) {
+	// 测试正常时该方法不应被调用，被调用即视为失败。
+	panic("test failed")
+}
+
+// TestGCAdmission 验证垃圾回收权限准入插件的校验逻辑。
 func TestGCAdmission(t *testing.T) {
 	expectNoError := func(err error) bool {
 		return err == nil
@@ -376,6 +392,7 @@ func TestGCAdmission(t *testing.T) {
 	}
 }
 
+// TestBlockOwnerDeletionAdmission 验证 blockOwnerDeletion 权限的准入逻辑。
 func TestBlockOwnerDeletionAdmission(t *testing.T) {
 	podWithOwnerRefs := func(refs ...metav1.OwnerReference) *api.Pod {
 		var refSlice []metav1.OwnerReference
@@ -481,7 +498,7 @@ func TestBlockOwnerDeletionAdmission(t *testing.T) {
 
 		checkError func(error) bool
 	}{
-		// cases for create
+		// 创建操作相关用例
 		{
 			name:       "super-user, create, no ownerReferences",
 			username:   "super",
@@ -553,7 +570,7 @@ func TestBlockOwnerDeletionAdmission(t *testing.T) {
 			newObj:     podWithOwnerRefs(blockNode),
 			checkError: expectCantSetBlockOwnerDeletionError,
 		},
-		// cases are for update
+		// 更新操作相关用例
 		{
 			name:       "super-user, update, no ownerReferences change blockOwnerDeletion",
 			username:   "super",

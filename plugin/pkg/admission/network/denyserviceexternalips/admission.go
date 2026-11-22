@@ -28,11 +28,11 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin
+	// PluginName 是该准入控制器插件的名称。
 	PluginName = "DenyServiceExternalIPs"
 )
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		plugin := newPlugin()
@@ -40,7 +40,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// externalIPsDenierPlugin holds state for and implements the admission plugin.
+// externalIPsDenierPlugin 持有该准入插件的状态并实现其逻辑。
 type externalIPsDenierPlugin struct {
 	*admission.Handler
 }
@@ -48,15 +48,15 @@ type externalIPsDenierPlugin struct {
 var _ admission.Interface = &externalIPsDenierPlugin{}
 var _ admission.ValidationInterface = &externalIPsDenierPlugin{}
 
-// newPlugin creates a new admission plugin.
+// newPlugin 创建一个新的准入插件实例。
 func newPlugin() *externalIPsDenierPlugin {
 	return &externalIPsDenierPlugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 	}
 }
 
-// Admit ensures that modifications of the Service.Spec.ExternalIPs field are
-// denied
+// Validate 拒绝任何对 Service.Spec.ExternalIPs 的修改，
+// 即只允许该字段保持为空或沿用旧值。
 func (plug *externalIPsDenierPlugin) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	if attr.GetResource().GroupResource() != core.Resource("services") {
 		return nil
@@ -66,7 +66,7 @@ func (plug *externalIPsDenierPlugin) Validate(ctx context.Context, attr admissio
 		return nil
 	}
 
-	// if we can't convert then we don't handle this object so just return
+	// 类型转换失败说明不是本插件处理的对象，交由后续校验报错。
 	newSvc, ok := attr.GetObject().(*core.Service)
 	if !ok {
 		klog.V(3).Infof("Expected Service resource, got: %v", attr.GetKind())
@@ -91,12 +91,14 @@ func (plug *externalIPsDenierPlugin) Validate(ctx context.Context, attr admissio
 	return admission.NewForbidden(attr, fmt.Errorf("Use of external IPs is denied by admission control"))
 }
 
+// isSubset 判断新 Service 声明的 ExternalIPs 是否全部来自旧对象。
+// 只有新增 IP 才会被拒绝，删除或保持原样都允许。
 func isSubset(newSvc, oldSvc *core.Service) bool {
-	// If new has none, it's a subset.
+	// 新对象没有 ExternalIPs，自然不会引入新的 IP。
 	if len(newSvc.Spec.ExternalIPs) == 0 {
 		return true
 	}
-	// If we have some but it's not an update, it's not a subset.
+	// 有 ExternalIPs 却是创建操作，说明全是新增的。
 	if oldSvc == nil {
 		return false
 	}
@@ -104,7 +106,7 @@ func isSubset(newSvc, oldSvc *core.Service) bool {
 	for _, ip := range oldSvc.Spec.ExternalIPs {
 		oldIPs[ip] = true
 	}
-	// Every IP in newSvc must be in oldSvc
+	// 新对象中的每个 IP 都必须已在旧对象中存在。
 	for _, ip := range newSvc.Spec.ExternalIPs {
 		if oldIPs[ip] == false {
 			return false

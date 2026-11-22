@@ -14,17 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podtolerationrestriction is a plugin that first verifies
-// any conflict between a pod's tolerations and its namespace's
-// tolerations, and rejects the pod if there's a conflict.  If there's
-// no conflict, the pod's tolerations are merged with its namespace's
-// toleration. Resulting pod's tolerations are verified against its
-// namespace's whitelist of tolerations. If the verification is
-// successful, the pod is admitted otherwise rejected. If a namespace
-// does not have associated default or whitelist of tolerations, then
-// cluster level default or whitelist of tolerations are used instead
-// if specified. Tolerations to a namespace are assigned via
-// scheduler.alpha.kubernetes.io/defaultTolerations and
-// scheduler.alpha.kubernetes.io/tolerationsWhitelist annotations
-// keys.
+// Package podtolerationrestriction 实现 Pod 容忍限制插件：先检查 Pod 的容忍与命名空间的
+// 容忍是否冲突，冲突则拒绝；否则合并两者，再依据命名空间容忍白名单校验合并结果，通过才准入。
+// 命名空间未配置默认容忍或白名单时，退而使用集群级别的配置（如有）。命名空间的容忍通过
+// scheduler.alpha.kubernetes.io/defaultTolerations 和
+// scheduler.alpha.kubernetes.io/tolerationsWhitelist 注解设置。
 package podtolerationrestriction

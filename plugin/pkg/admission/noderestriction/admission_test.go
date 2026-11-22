@@ -60,6 +60,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// makeTestPod 构造内部与外部版本的测试 Pod；mirror 为 true 时同时设置镜像 Pod 注解和节点属主引用。
 func makeTestPod(namespace, name, node string, mirror bool) (*api.Pod, *corev1.Pod) {
 	corePod := &api.Pod{}
 	corePod.Namespace = namespace
@@ -75,7 +76,7 @@ func makeTestPod(namespace, name, node string, mirror bool) (*api.Pod, *corev1.P
 		corePod.Annotations = map[string]string{api.MirrorPodAnnotationKey: "true"}
 		v1Pod.Annotations = map[string]string{api.MirrorPodAnnotationKey: "true"}
 
-		// Insert a valid owner reference by default.
+		// 镜像 Pod 默认带有指向所在节点的有效属主引用。
 		controller := true
 		owner := metav1.OwnerReference{
 			APIVersion: "v1",
@@ -90,6 +91,7 @@ func makeTestPod(namespace, name, node string, mirror bool) (*api.Pod, *corev1.P
 	return corePod, v1Pod
 }
 
+// makeTestServiceAccount 构造带有指定命名空间、名称和 UID 的测试 ServiceAccount。
 func makeTestServiceAccount(namespace, name string, uid types.UID) *corev1.ServiceAccount {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,13 +104,14 @@ func makeTestServiceAccount(namespace, name string, uid types.UID) *corev1.Servi
 	return sa
 }
 
+// withLabels 返回 Pod 的副本，并将标签替换为给定的标签集合。
 func withLabels(pod *api.Pod, labels map[string]string) *api.Pod {
 	labeledPod := pod.DeepCopy()
 	if labels == nil {
 		labeledPod.Labels = nil
 		return labeledPod
 	}
-	// Clone.
+	// 深拷贝标签，避免修改调用方传入的 map。
 	labeledPod.Labels = map[string]string{}
 	for key, value := range labels {
 		labeledPod.Labels[key] = value
@@ -116,6 +119,7 @@ func withLabels(pod *api.Pod, labels map[string]string) *api.Pod {
 	return labeledPod
 }
 
+// makeTestPodEviction 构造驱逐指定名称 Pod 的测试 Eviction 对象。
 func makeTestPodEviction(name string) *policy.Eviction {
 	eviction := &policy.Eviction{}
 	eviction.Name = name
@@ -123,6 +127,7 @@ func makeTestPodEviction(name string) *policy.Eviction {
 	return eviction
 }
 
+// makeTokenRequest 构造测试用 TokenRequest；podname 非空时绑定对应的 Pod。
 func makeTokenRequest(podname string, poduid types.UID, audiences []string) *authenticationapi.TokenRequest {
 	tr := &authenticationapi.TokenRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -143,6 +148,7 @@ func makeTokenRequest(podname string, poduid types.UID, audiences []string) *aut
 	return tr
 }
 
+// setAllLabels 给节点设置所有允许和禁止的测试标签。
 func setAllLabels(node *api.Node, value string) *api.Node {
 	node = setAllowedCreateLabels(node, value)
 	node = setAllowedUpdateLabels(node, value)
@@ -151,11 +157,13 @@ func setAllLabels(node *api.Node, value string) *api.Node {
 	return node
 }
 
+// setAllowedCreateLabels 返回带所有创建时允许修改的标签的节点副本。
 func setAllowedCreateLabels(node *api.Node, value string) *api.Node {
 	node = setAllowedUpdateLabels(node, value)
 	return node
 }
 
+// setAllowedUpdateLabels 返回带所有更新时允许修改的标签的节点副本。
 func setAllowedUpdateLabels(node *api.Node, value string) *api.Node {
 	node = node.DeepCopy()
 	if node.Labels == nil {
@@ -164,11 +172,11 @@ func setAllowedUpdateLabels(node *api.Node, value string) *api.Node {
 	if value == "" {
 		value = "value"
 	}
-	// non-kube labels
+	// 非 Kubernetes 域的标签。
 	node.Labels["foo"] = value
 	node.Labels["example.com/foo"] = value
 
-	// kubelet labels
+	// kubelet 可设置的标签。
 	node.Labels["kubernetes.io/hostname"] = value
 	node.Labels["failure-domain.beta.kubernetes.io/zone"] = value
 	node.Labels["failure-domain.beta.kubernetes.io/region"] = value
@@ -181,13 +189,13 @@ func setAllowedUpdateLabels(node *api.Node, value string) *api.Node {
 	node.Labels["kubernetes.io/os"] = value
 	node.Labels["kubernetes.io/arch"] = value
 
-	// kubelet label prefixes
+	// kubelet 可使用的标签前缀。
 	node.Labels["kubelet.kubernetes.io/foo"] = value
 	node.Labels["foo.kubelet.kubernetes.io/foo"] = value
 	node.Labels["node.kubernetes.io/foo"] = value
 	node.Labels["foo.node.kubernetes.io/foo"] = value
 
-	// test all explicitly allowed labels and prefixes
+	// 覆盖所有显式允许的标签与前缀。
 	for _, key := range kubeletapis.KubeletLabels() {
 		node.Labels[key] = value
 	}
@@ -199,6 +207,7 @@ func setAllowedUpdateLabels(node *api.Node, value string) *api.Node {
 	return node
 }
 
+// setForbiddenCreateLabels 返回带创建时禁止修改的标签的节点副本。
 func setForbiddenCreateLabels(node *api.Node, value string) *api.Node {
 	node = node.DeepCopy()
 	if node.Labels == nil {
@@ -207,7 +216,7 @@ func setForbiddenCreateLabels(node *api.Node, value string) *api.Node {
 	if value == "" {
 		value = "value"
 	}
-	// node restriction labels are forbidden
+	// 节点限制类标签禁止由 kubelet 修改。
 	node.Labels["node-restriction.kubernetes.io/foo"] = value
 	node.Labels["foo.node-restriction.kubernetes.io/foo"] = value
 	node.Labels["other.kubernetes.io/foo"] = value
@@ -223,15 +232,16 @@ func setForbiddenUpdateLabels(node *api.Node, value string) *api.Node {
 	if value == "" {
 		value = "value"
 	}
-	// node restriction labels are forbidden
+	// 节点限制类标签禁止由 kubelet 修改。
 	node.Labels["node-restriction.kubernetes.io/foo"] = value
 	node.Labels["foo.node-restriction.kubernetes.io/foo"] = value
-	// arbitrary kubernetes labels are forbidden on update
+	// 更新操作时，任意 Kubernetes 域标签都禁止修改。
 	node.Labels["other.kubernetes.io/foo"] = value
 	node.Labels["other.k8s.io/foo"] = value
 	return node
 }
 
+// admitTestCase 描述一次节点限制准入测试的初始状态与预期结果。
 type admitTestCase struct {
 	name                 string
 	podsGetter           corev1lister.PodLister
@@ -247,8 +257,10 @@ type admitTestCase struct {
 	authz                authorizer.UnconditionalAuthorizer
 }
 
+// run 执行该测试用例并校验准入结果。
 func (a *admitTestCase) run(t *testing.T) {
 	t.Run(a.name, func(t *testing.T) {
+		// setupFunc 可在插件执行前准备特性开关等外部状态。
 		if a.setupFunc != nil {
 			a.setupFunc(t)
 		}
@@ -273,6 +285,7 @@ func (a *admitTestCase) run(t *testing.T) {
 		}
 
 		if fakeAuthz, ok := a.authz.(*fakeAuthorizer); ok {
+			// 显式声明期望鉴权的用例必须确认鉴权器确实被调用。
 			if !fakeAuthz.alreadyCalled {
 				t.Errorf("fake authorizer did not receive a call during the test case")
 			}
@@ -280,6 +293,7 @@ func (a *admitTestCase) run(t *testing.T) {
 	})
 }
 
+// Test_nodePlugin_Admit 覆盖节点限制插件的核心准入场景。
 func Test_nodePlugin_Admit(t *testing.T) {
 	var (
 		trueRef = true
@@ -529,7 +543,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 		noexistingPVLister = corev1lister.NewPersistentVolumeLister(noexistingPVIndex)
 	)
 
-	// create pods for validating the service account node audience restriction
+	// 构造用于校验 ServiceAccount 节点 audience 限制的 Pod。
 	projectedVolumeSourceEmptyAudience := &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: ""}}}}
 	projectedVolumeSource := &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: "foo"}}}}
 	csiDriverVolumeSource := &corev1.CSIVolumeSource{Driver: "com.example.csi.mydriver"}
@@ -700,7 +714,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 	checkNilError(t, pcrPodIndex.Add(v1PodWrongSignerPCRVolume))
 
 	tests := []admitTestCase{
-		// Mirror pods bound to us
+		// 绑定到本节点的镜像 Pod
 		{
 			name:       "allow creating a mirror pod bound to self",
 			podsGetter: noExistingPods,
@@ -762,7 +776,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "",
 		},
 
-		// Mirror pods bound to another node
+		// 绑定到其他节点的镜像 Pod
 		{
 			name:       "forbid creating a mirror pod bound to another",
 			podsGetter: noExistingPods,
@@ -824,7 +838,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "spec.nodeName set to itself",
 		},
 
-		// Mirror pods not bound to any node
+		// 未绑定到任何节点的镜像 Pod
 		{
 			name:       "forbid creating a mirror pod unbound",
 			podsGetter: noExistingPods,
@@ -886,7 +900,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "spec.nodeName set to itself",
 		},
 
-		// Normal pods bound to us
+		// 绑定到本节点的普通 Pod
 		{
 			name:       "forbid creating a normal pod bound to self",
 			podsGetter: noExistingPods,
@@ -966,7 +980,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "",
 		},
 
-		// Normal pods bound to another
+		// 绑定到其他节点的普通 Pod
 		{
 			name:       "forbid creating a normal pod bound to another",
 			podsGetter: noExistingPods,
@@ -1028,7 +1042,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "spec.nodeName set to itself",
 		},
 
-		// Normal pods not bound to any node
+		// 未绑定到任何节点的普通 Pod
 		{
 			name:       "forbid creating a normal pod unbound",
 			podsGetter: noExistingPods,
@@ -1090,7 +1104,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "spec.nodeName set to itself",
 		},
 
-		// Missing pod
+		// Pod 不存在
 		{
 			name:       "forbid delete of unknown pod",
 			podsGetter: noExistingPods,
@@ -1122,12 +1136,12 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "not found",
 		},
 
-		// Eviction for unnamed pod
+		// 针对未命名 Pod 的驱逐请求
 		{
 			name:       "allow create of eviction for unnamed pod",
 			podsGetter: existingPods,
 			attributes: admission.NewAttributesRecord(mypodEviction, nil, evictionKind, coreunnamedpod.Namespace, coreunnamedpod.Name, podResource, "eviction", admission.Create, &metav1.CreateOptions{}, false, mynode),
-			// use the submitted eviction resource name as the pod name
+			// 用提交的驱逐资源名作为 Pod 名称
 			err: "",
 		},
 		{
@@ -1149,7 +1163,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "could not determine pod from request data",
 		},
 
-		// Resource pods
+		// 资源类 Pod
 		{
 			name:       "forbid create of pod referencing service account",
 			podsGetter: noExistingPods,
@@ -1205,7 +1219,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "cannot update node allocatable resource claim statuses",
 		},
 
-		// My node object
+		// 本节点对象
 		{
 			name:       "allow create of my node",
 			podsGetter: noExistingPods,
@@ -1381,7 +1395,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "node \"mynode\" is not allowed to modify ownerReferences",
 		},
 
-		// Other node object
+		// 其他节点对象
 		{
 			name:       "forbid create of other node",
 			podsGetter: noExistingPods,
@@ -1413,7 +1427,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "is not allowed to modify node",
 		},
 
-		// Service accounts
+		// ServiceAccount 对象
 		{
 			name:       "forbid create of unbound token",
 			podsGetter: noExistingPods,
@@ -1443,7 +1457,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			podsGetter: existingPods,
 			attributes: admission.NewAttributesRecord(makeTokenRequest(coremypod.Name, coremypod.UID, []string{"foo"}), nil, tokenrequestKind, coremypod.Namespace, "mysa", svcacctResource, "token", admission.Create, &metav1.CreateOptions{}, false, mynode),
 		},
-		// Service accounts tests with token audience restrictions
+		// 带 token audience 限制的 ServiceAccount 用例
 		{
 			name:       "allow create of token when audience in PSAT volume and ServiceAccountNodeAudienceRestriction is enabled, empty audience",
 			podsGetter: existingPods,
@@ -1746,7 +1760,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err: `serviceaccounts "mysa" is forbidden: system:node:mynode is not authorized to request tokens for audience "foo"`,
 		},
 
-		// Unrelated objects
+		// 无关对象
 		{
 			name:       "allow create of unrelated object",
 			podsGetter: existingPods,
@@ -1766,7 +1780,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "",
 		},
 
-		// Unrelated user
+		// 无关用户
 		{
 			name:       "allow unrelated user creating a normal pod unbound",
 			podsGetter: noExistingPods,
@@ -1803,7 +1817,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			attributes: admission.NewAttributesRecord(nil, nil, podKind, coreunboundpod.Namespace, coreunboundpod.Name, podResource, "status", admission.Delete, &metav1.DeleteOptions{}, false, bob),
 			err:        "",
 		},
-		// Node leases
+		// NodeLease 对象
 		{
 			name:       "disallowed create lease in namespace other than kube-node-lease - feature enabled",
 			attributes: admission.NewAttributesRecord(leaseWrongNS, nil, leaseKind, leaseWrongNS.Namespace, leaseWrongNS.Name, leaseResource, "", admission.Create, &metav1.CreateOptions{}, false, mynode),
@@ -1849,7 +1863,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			attributes: admission.NewAttributesRecord(nil, nil, leaseKind, lease.Namespace, lease.Name, leaseResource, "", admission.Delete, &metav1.DeleteOptions{}, false, mynode),
 			err:        "",
 		},
-		// CSINode
+		// CSINode 对象
 		{
 			name:       "disallowed create another node's CSINode",
 			attributes: admission.NewAttributesRecord(nodeInfoWrongName, nil, csiNodeKind, nodeInfoWrongName.Namespace, nodeInfoWrongName.Name, csiNodeResource, "", admission.Create, &metav1.CreateOptions{}, false, mynode),
@@ -1962,7 +1976,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			},
 			err: "forbidden: ",
 		},
-		// CSR
+		// CSR 对象
 		{
 			name:       "allowed CSR create correct node serving",
 			attributes: createCSRAttributes("system:node:mynode", certificatesapi.KubeletServingSignerName, true, privKey, mynode),
@@ -1999,7 +2013,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 			err:        "unable to parse csr: asn1: syntax error: sequence truncated",
 		},
 
-		// PodCertificateRequest
+		// PodCertificateRequest 对象
 		{
 			name:                 "deny node1 create PCR when feature gate disabled",
 			podsGetter:           pcrPods,
@@ -2247,6 +2261,7 @@ func Test_nodePlugin_Admit(t *testing.T) {
 	}
 }
 
+// Test_nodePlugin_Admit_OwnerReference 校验镜像 Pod 属主引用的合法性检查。
 func Test_nodePlugin_Admit_OwnerReference(t *testing.T) {
 	expectedNodeIndex := cache.NewIndexer(cache.MetaNamespaceKeyFunc, nil)
 	expectedNodeIndex.Add(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "mynode", UID: "mynode-uid"}})
@@ -2365,6 +2380,7 @@ func Test_nodePlugin_Admit_OwnerReference(t *testing.T) {
 	}
 }
 
+// Test_getModifiedLabels 校验新增、删除和变更标签集合的计算。
 func Test_getModifiedLabels(t *testing.T) {
 	tests := []struct {
 		name string
@@ -2442,6 +2458,7 @@ func Test_getModifiedLabels(t *testing.T) {
 	}
 }
 
+// TestAdmitPVCStatus 校验 kubelet 对 PVC 状态更新的准入限制。
 func TestAdmitPVCStatus(t *testing.T) {
 	expectedNodeIndex := cache.NewIndexer(cache.MetaNamespaceKeyFunc, nil)
 	expectedNodeIndex.Add(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "mynode", UID: "mynode-uid"}})
@@ -2558,6 +2575,7 @@ func TestAdmitPVCStatus(t *testing.T) {
 	}
 }
 
+// makeTestPVC 构造带指定条件、容量和调整状态的测试 PVC。
 func makeTestPVC(
 	condition api.PersistentVolumeClaimConditionType,
 	allocatedResources string,
@@ -2600,12 +2618,14 @@ func makeTestPVC(
 	return pvc
 }
 
+// createPodAttributes 构造 Pod 创建请求的属性。
 func createPodAttributes(pod *api.Pod, user user.Info) admission.Attributes {
 	podResource := api.Resource("pods").WithVersion("v1")
 	podKind := api.Kind("Pod").WithVersion("v1")
 	return admission.NewAttributesRecord(pod, nil, podKind, pod.Namespace, pod.Name, podResource, "", admission.Create, &metav1.CreateOptions{}, false, user)
 }
 
+// createCSRAttributes 构造 CSR 创建请求的属性；validCsr 为 false 时使用占位 PEM。
 func createCSRAttributes(cn, signer string, validCsr bool, key any, user user.Info) admission.Attributes {
 	csrResource := certificatesapi.Resource("certificatesigningrequests").WithVersion("v1")
 	csrKind := certificatesapi.Kind("CertificateSigningRequest").WithVersion("v1")
@@ -2630,6 +2650,7 @@ func createCSRAttributes(cn, signer string, validCsr bool, key any, user user.In
 	return admission.NewAttributesRecord(csreq, nil, csrKind, "", "", csrResource, "", admission.Create, &metav1.CreateOptions{}, false, user)
 }
 
+// createPCRAttributes 构造 PodCertificateRequest 创建请求的属性。
 func createPCRAttributes(namespace string, podName string, podUID types.UID, serviceAccountName string, serviceAccountUID types.UID, nodeName string, nodeUID types.UID, user user.Info) admission.Attributes {
 	pcrResource := certificatesapi.Resource("podcertificaterequests").WithVersion("v1beta1")
 	pcrKind := certificatesapi.Kind("PodCertificateRequest").WithVersion("v1beta1")
@@ -2647,8 +2668,7 @@ func createPCRAttributes(namespace string, podName string, podUID types.UID, ser
 			ServiceAccountUID:  types.UID(serviceAccountUID),
 			NodeName:           types.NodeName(nodeName),
 			NodeUID:            types.UID(nodeUID),
-			// Leave PKIXPublicKey and ProofOfPossession nil, since we're not
-			// actually running validation.
+			// 此处不执行证书校验，故 PKIXPublicKey 和 ProofOfPossession 保持为空。
 		},
 	}
 
@@ -2667,6 +2687,7 @@ func createPCRAttributes(namespace string, podName string, podUID types.UID, ser
 	)
 }
 
+// TestAdmitResourceSlice 校验 ResourceSlice 创建请求在动态资源分配开关下的准入限制。
 func TestAdmitResourceSlice(t *testing.T) {
 	apiResource := resourceapi.SchemeGroupVersion.WithResource("resourceslices")
 	nodename := "mynode"
@@ -2834,6 +2855,7 @@ func TestAdmitResourceSlice(t *testing.T) {
 	}
 }
 
+// checkNilError 在 err 非空时立即终止测试。
 func checkNilError(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
@@ -2841,20 +2863,21 @@ func checkNilError(t *testing.T, err error) {
 	}
 }
 
-// An authorizer that fails the test if it is called.  Some flows through the
-// noderestriction admission plugin are expected not to make authorization
-// checks, use this implementation to enforce that.
+// uncallableAuthorizer 在被调用时直接令测试失败。
+// 某些准入流程不应触发鉴权，用它来强制保证这一点。
 type uncallableAuthorizer struct {
 	t *testing.T
 }
 
 var _ authorizer.UnconditionalAuthorizer = (*uncallableAuthorizer)(nil)
 
+// Authorize 实现鉴权器接口，任何调用都会导致测试失败。
 func (f *uncallableAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	f.t.Errorf("the admission logic called the authorizer when it was not supposed to")
 	return authorizer.DecisionNoOpinion, "", nil
 }
 
+// fakeAuthorizer 校验鉴权属性是否符合预期，并返回预设的决策。
 type fakeAuthorizer struct {
 	t        *testing.T
 	userName string
@@ -2877,6 +2900,7 @@ type fakeAuthorizer struct {
 
 var _ authorizer.UnconditionalAuthorizer = (*fakeAuthorizer)(nil)
 
+// Authorize 记录调用次数并比对鉴权属性。
 func (f *fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	if f.alreadyCalled {
 		f.t.Errorf("authorizer called more than once; the admission logic should call the authorizer at most once")
@@ -2907,6 +2931,7 @@ func (f *fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes)
 	return f.decision, "", nil
 }
 
+// saAuthorizerBuilder 构造用于 ServiceAccount audience 场景的 fakeAuthorizer。
 type saAuthorizerBuilder struct {
 	t                  *testing.T
 	serviceAccountName string
@@ -2916,6 +2941,7 @@ type saAuthorizerBuilder struct {
 	err                error
 }
 
+// build 按构建器中的期望值生成 fakeAuthorizer。
 func (s saAuthorizerBuilder) build() *fakeAuthorizer {
 	return &fakeAuthorizer{
 		t: s.t,

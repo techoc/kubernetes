@@ -16,4 +16,5 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package eventratelimit 定义事件速率限制准入插件的内部配置类型。
 package eventratelimit

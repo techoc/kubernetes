@@ -32,7 +32,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// TestPodAdmission verifies various scenarios involving pod/namespace/global node label selectors
+// TestPodAdmission 验证 Pod、命名空间与全局节点标签选择器的各种组合场景。
 func TestPodAdmission(t *testing.T) {
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -46,6 +46,7 @@ func TestPodAdmission(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error initializing handler: %v", err)
 	}
+	// 启动 informer 并等待其同步，否则准入检查会因缓存未就绪而拒绝请求。
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	informerFactory.Start(stopCh)
@@ -180,6 +181,7 @@ func TestPodAdmission(t *testing.T) {
 	}
 }
 
+// TestHandles 验证插件只处理 CREATE 操作。
 func TestHandles(t *testing.T) {
 	for op, shouldHandle := range map[admission.Operation]bool{
 		admission.Create:  true,
@@ -194,7 +196,7 @@ func TestHandles(t *testing.T) {
 	}
 }
 
-// newHandlerForTest returns the admission controller configured for testing.
+// newHandlerForTest 返回一个为测试配置好的准入控制器。
 func newHandlerForTest(c kubernetes.Interface) (*Plugin, informers.SharedInformerFactory, error) {
 	f := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	handler := NewPodNodeSelector(nil)

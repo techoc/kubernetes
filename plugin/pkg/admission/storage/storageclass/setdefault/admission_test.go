@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// TestAdmission 验证默认 StorageClass 的选择及 PVC 默认类填充逻辑。
 func TestAdmission(t *testing.T) {
 	empty := ""
 	foo := "foo"
@@ -61,7 +62,7 @@ func TestAdmission(t *testing.T) {
 		},
 		Provisioner: "default2",
 	}
-	// Class that has explicit default = false
+	// 显式标注 default = false 的 StorageClass。
 	classWithFalseDefault := &storagev1.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "StorageClass",
@@ -74,7 +75,7 @@ func TestAdmission(t *testing.T) {
 		},
 		Provisioner: "nondefault1",
 	}
-	// Class with missing default annotation (=non-default)
+	// 缺少 default 注解的 StorageClass，视为非默认类。
 	classWithNoDefault := &storagev1.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "StorageClass",
@@ -84,7 +85,7 @@ func TestAdmission(t *testing.T) {
 		},
 		Provisioner: "nondefault1",
 	}
-	// Class with empty default annotation (=non-default)
+	// default 注解为空的 StorageClass，同样视为非默认类。
 	classWithEmptyDefault := &storagev1.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "StorageClass",
@@ -224,7 +225,7 @@ func TestAdmission(t *testing.T) {
 	for _, test := range tests {
 		klog.V(4).Infof("starting test %q", test.name)
 
-		// clone the claim, it's going to be modified
+		// 准入过程会修改 claim，先克隆以免污染其他用例。
 		claim := test.claim.DeepCopy()
 
 		ctrl := newPlugin()

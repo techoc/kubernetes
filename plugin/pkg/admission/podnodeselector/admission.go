@@ -37,30 +37,29 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// NamespaceNodeSelectors is for assigning node selectors labels to
-// namespaces. Default value is the annotation key
-// scheduler.alpha.kubernetes.io/node-selector
+// NamespaceNodeSelectors 是用于给命名空间指定节点选择器标签的注解键，
+// 默认为 scheduler.alpha.kubernetes.io/node-selector。
 var NamespaceNodeSelectors = []string{"scheduler.alpha.kubernetes.io/node-selector"}
 
-// PluginName is a string with the name of the plugin
+// PluginName 是插件名称字符串。
 const PluginName = "PodNodeSelector"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
-		// TODO move this to a versioned configuration file format.
+		// TODO 改用带版本的配置文件格式。
 		pluginConfig := readConfig(config)
 		plugin := NewPodNodeSelector(pluginConfig.PodNodeSelectorPluginConfig)
 		return plugin, nil
 	})
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 是 admission.Interface 的实现。
 type Plugin struct {
 	*admission.Handler
 	client          kubernetes.Interface
 	namespaceLister corev1listers.NamespaceLister
-	// global default node selector and namespace whitelists in a cluster.
+	// 集群级的默认节点选择器与各命名空间的白名单。
 	clusterNodeSelectors map[string]string
 }
 
@@ -71,10 +70,9 @@ type pluginConfig struct {
 	PodNodeSelectorPluginConfig map[string]string
 }
 
-// readConfig reads default value of clusterDefaultNodeSelector
-// from the file provided with --admission-control-config-file
-// If the file is not supplied, it defaults to ""
-// The format in a file:
+// readConfig 从 --admission-control-config-file 指定的文件中读取 clusterDefaultNodeSelector 的默认值。
+// 未提供文件时使用空字符串。
+// 文件格式：
 // podNodeSelectorPluginConfig:
 //
 //	clusterDefaultNodeSelector: <node-selectors-labels>
@@ -97,7 +95,7 @@ func readConfig(config io.Reader) *pluginConfig {
 	return defaultConfig
 }
 
-// Admit enforces that pod and its namespace node label selectors matches at least a node in the cluster.
+// Admit 强制要求 Pod 与其命名空间的节点标签选择器至少能匹配集群中的一个节点。
 func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	if shouldIgnore(a) {
 		return nil
@@ -117,14 +115,13 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 		return errors.NewForbidden(resource, pod.Name, fmt.Errorf("pod node label selector conflicts with its namespace node label selector"))
 	}
 
-	// Merge pod node selector = namespace node selector + current pod node selector
-	// second selector wins
+	// 合并选择器：命名空间选择器 + Pod 自身选择器，后者优先（同名标签以 Pod 为准）。
 	podNodeSelectorLabels := labels.Merge(namespaceNodeSelector, pod.Spec.NodeSelector)
 	pod.Spec.NodeSelector = map[string]string(podNodeSelectorLabels)
 	return p.Validate(ctx, a, o)
 }
 
-// Validate ensures that the pod node selector is allowed
+// Validate 确保 Pod 的节点选择器是被允许的。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	if shouldIgnore(a) {
 		return nil
@@ -144,7 +141,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return errors.NewForbidden(resource, pod.Name, fmt.Errorf("pod node label selector conflicts with its namespace node label selector"))
 	}
 
-	// whitelist verification
+	// 校验命名空间白名单：Pod 的选择器必须是白名单的子集。
 	whitelist, err := labels.ConvertSelectorToLabelsMap(p.clusterNodeSelectors[a.GetNamespace()])
 	if err != nil {
 		return err
@@ -156,8 +153,10 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
+// getNamespaceNodeSelectorMap 获取命名空间对应的节点选择器，缓存未命中时回退到直接查询 API。
 func (p *Plugin) getNamespaceNodeSelectorMap(namespaceName string) (labels.Set, error) {
 	namespace, err := p.namespaceLister.Get(namespaceName)
+	// informer 缓存可能尚未同步该命名空间，直接查 API 兜底。
 	if errors.IsNotFound(err) {
 		namespace, err = p.defaultGetNamespace(namespaceName)
 		if err != nil {
@@ -173,13 +172,14 @@ func (p *Plugin) getNamespaceNodeSelectorMap(namespaceName string) (labels.Set, 
 	return p.getNodeSelectorMap(namespace)
 }
 
+// shouldIgnore 判断请求是否无需本插件处理：仅处理 Pod 本体，不处理子资源和其他类型。
 func shouldIgnore(a admission.Attributes) bool {
 	resource := a.GetResource().GroupResource()
 	if resource != api.Resource("pods") {
 		return true
 	}
 	if a.GetSubresource() != "" {
-		// only run the checks below on pods proper and not subresources
+		// 只对 Pod 本体做检查，子资源不受节点选择器约束。
 		return true
 	}
 
@@ -192,7 +192,7 @@ func shouldIgnore(a admission.Attributes) bool {
 	return false
 }
 
-// NewPodNodeSelector initializes a podNodeSelector
+// NewPodNodeSelector 初始化一个 podNodeSelector 插件。
 func NewPodNodeSelector(clusterNodeSelectors map[string]string) *Plugin {
 	return &Plugin{
 		Handler:              admission.NewHandler(admission.Create),
@@ -200,19 +200,19 @@ func NewPodNodeSelector(clusterNodeSelectors map[string]string) *Plugin {
 	}
 }
 
-// SetExternalKubeClientSet sets the plugin's client
+// SetExternalKubeClientSet 设置插件使用的客户端。
 func (p *Plugin) SetExternalKubeClientSet(client kubernetes.Interface) {
 	p.client = client
 }
 
-// SetExternalKubeInformerFactory configures the plugin's informer factory
+// SetExternalKubeInformerFactory 配置插件的 informer 工厂。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	p.namespaceLister = namespaceInformer.Lister()
 	p.SetReadyFunc(namespaceInformer.Informer().HasSynced)
 }
 
-// ValidateInitialization verifies the object has been properly initialized
+// ValidateInitialization 校验对象是否已正确初始化。
 func (p *Plugin) ValidateInitialization() error {
 	if p.namespaceLister == nil {
 		return fmt.Errorf("missing namespaceLister")
@@ -223,6 +223,7 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
+// defaultGetNamespace 直接从 API 查询命名空间，用于缓存未命中时兜底。
 func (p *Plugin) defaultGetNamespace(name string) (*corev1.Namespace, error) {
 	namespace, err := p.client.CoreV1().Namespaces().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
@@ -231,6 +232,7 @@ func (p *Plugin) defaultGetNamespace(name string) (*corev1.Namespace, error) {
 	return namespace, nil
 }
 
+// getNodeSelectorMap 从命名空间的注解中提取节点选择器；注解缺失时回退到集群默认选择器。
 func (p *Plugin) getNodeSelectorMap(namespace *corev1.Namespace) (labels.Set, error) {
 	selector := labels.Set{}
 	var err error
@@ -238,6 +240,7 @@ func (p *Plugin) getNodeSelectorMap(namespace *corev1.Namespace) (labels.Set, er
 	if len(namespace.ObjectMeta.Annotations) > 0 {
 		for _, annotation := range NamespaceNodeSelectors {
 			if ns, ok := namespace.ObjectMeta.Annotations[annotation]; ok {
+				// 多个注解的选择器不能互相冲突，否则无法确定最终节点约束。
 				labelsMap, err := labels.ConvertSelectorToLabelsMap(ns)
 				if err != nil {
 					return labels.Set{}, err
@@ -261,6 +264,7 @@ func (p *Plugin) getNodeSelectorMap(namespace *corev1.Namespace) (labels.Set, er
 	return selector, nil
 }
 
+// isSubset 判断 subSet 是否为 superSet 的子集；superSet 为空时视为放行。
 func isSubset(subSet, superSet labels.Set) bool {
 	if len(superSet) == 0 {
 		return true

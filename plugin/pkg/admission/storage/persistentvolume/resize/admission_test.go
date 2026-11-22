@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// getResourceList 根据存储容量字符串构造资源列表，空字符串表示不设置该资源。
 func getResourceList(storage string) api.ResourceList {
 	res := api.ResourceList{}
 	if storage != "" {
@@ -41,6 +42,7 @@ func getResourceList(storage string) api.ResourceList {
 	return res
 }
 
+// TestPVCResizeAdmission 验证 PVC 扩容校验：仅绑定且存储类支持扩展的动态供应卷可扩容。
 func TestPVCResizeAdmission(t *testing.T) {
 	goldClassName := "gold"
 	trueVal := true

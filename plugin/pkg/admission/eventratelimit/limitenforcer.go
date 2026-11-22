@@ -28,26 +28,28 @@ import (
 )
 
 const (
-	// cache size to use if the user did not specify a cache size
+	// 用户未指定缓存大小时使用的默认值。
 	defaultCacheSize = 4096
 )
 
-// limitEnforcer enforces a single type of event rate limit, such as server, namespace, or source+object
+// limitEnforcer 执行单一类型的事件限流，例如服务器、命名空间或来源+对象。
 type limitEnforcer struct {
-	// type of this limit
+	// 本执行器负责的限流类型。
 	limitType eventratelimitapi.LimitType
-	// cache for holding the rate limiters
+	// 存放各令牌桶的缓存。
 	cache cache
-	// a keyFunc which is responsible for computing a single key based on input
+	// keyFunc 根据请求属性计算令牌桶对应的键。
 	keyFunc func(admission.Attributes) string
 }
 
+// newLimitEnforcer 按配置创建限流执行器。
 func newLimitEnforcer(config eventratelimitapi.Limit, clock flowcontrol.Clock) (*limitEnforcer, error) {
 	rateLimiterFactory := func() flowcontrol.RateLimiter {
 		return flowcontrol.NewTokenBucketRateLimiterWithClock(float32(config.QPS), int(config.Burst), clock)
 	}
 
 	if config.Type == eventratelimitapi.ServerLimitType {
+		// 服务器级限流只有一个共享桶，无需 LRU 缓存。
 		return &limitEnforcer{
 			limitType: config.Type,
 			cache: &singleCache{
@@ -86,11 +88,12 @@ func newLimitEnforcer(config eventratelimitapi.Limit, clock flowcontrol.Clock) (
 	}, nil
 }
 
+// accept 判断当前请求在对应令牌桶中是否还有可用配额。
 func (enforcer *limitEnforcer) accept(attr admission.Attributes) error {
 	key := enforcer.keyFunc(attr)
 	rateLimiter := enforcer.cache.get(key)
 
-	// ensure we have available rate
+	// 尝试取一个令牌，配额不足即拒绝请求。
 	allow := rateLimiter.TryAccept()
 
 	if !allow {
@@ -100,31 +103,34 @@ func (enforcer *limitEnforcer) accept(attr admission.Attributes) error {
 	return nil
 }
 
+// getServerKey 返回服务器级限流的缓存键；所有请求共用同一个桶，故键恒为空。
 func getServerKey(attr admission.Attributes) string {
 	return ""
 }
 
-// getNamespaceKey returns a cache key that is based on the namespace of the event request
+// getNamespaceKey 根据事件请求所属命名空间返回缓存键。
 func getNamespaceKey(attr admission.Attributes) string {
 	return attr.GetNamespace()
 }
 
-// getUserKey returns a cache key that is based on the user of the event request
+// getUserKey 根据事件请求的用户返回缓存键。
 func getUserKey(attr admission.Attributes) string {
 	userInfo := attr.GetUserInfo()
+	// 无用户信息时归入默认桶，避免空指针。
 	if userInfo == nil {
 		return ""
 	}
 	return userInfo.GetName()
 }
 
-// getSourceAndObjectKey returns a cache key that is based on the source+object of the event
+// getSourceAndObjectKey 根据事件的来源与涉及对象返回缓存键。
 func getSourceAndObjectKey(attr admission.Attributes) string {
 	object := attr.GetObject()
 	if object == nil {
 		return ""
 	}
 	event, ok := object.(*api.Event)
+	// 非 Event 对象无法提取来源与涉及对象，归入默认桶。
 	if !ok {
 		return ""
 	}

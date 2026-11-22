@@ -32,6 +32,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// TestAdmit 验证特性开关、已有 finalizer 与资源类型对 finalizer 添加行为的影响。
 func TestAdmit(t *testing.T) {
 	pg := &schedulingapi.PodGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "PodGroup"},

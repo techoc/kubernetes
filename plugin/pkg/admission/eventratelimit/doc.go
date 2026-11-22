@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package eventratelimit contains an admission controller that enforces a rate limit on events
+// Package eventratelimit 包含一个对事件施加速率限制的准入控制器。
 package eventratelimit

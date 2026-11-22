@@ -37,7 +37,7 @@ import (
 	pluginapi "k8s.io/kubernetes/plugin/pkg/admission/podtolerationrestriction/apis/podtolerationrestriction"
 )
 
-// TestPodAdmission verifies various scenarios involving pod/namespace tolerations
+// TestPodAdmission 验证 pod 与 namespace toleration 在各种组合下的准入行为。
 func TestPodAdmission(t *testing.T) {
 
 	CPU1000m := resource.MustParse("1000m")
@@ -236,6 +236,7 @@ func TestPodAdmission(t *testing.T) {
 				},
 			}
 
+			// nil 表示未设置，空 slice 表示显式覆盖集群默认值；只有非 nil 才写入注解。
 			if test.namespaceTolerations != nil {
 				tolerationStr, err := json.Marshal(test.namespaceTolerations)
 				if err != nil {
@@ -244,6 +245,7 @@ func TestPodAdmission(t *testing.T) {
 				namespace.Annotations = map[string]string{NSDefaultTolerations: string(tolerationStr)}
 			}
 
+			// 同样区分未设置与显式空白名单，避免把 nil 当成覆盖。
 			if test.whitelist != nil {
 				tolerationStr, err := json.Marshal(test.whitelist)
 				if err != nil {
@@ -259,6 +261,7 @@ func TestPodAdmission(t *testing.T) {
 			}
 			stopCh := make(chan struct{})
 			defer close(stopCh)
+			// informer 启动后才能同步 namespace 数据，否则准入时读不到注解。
 			informerFactory.Start(stopCh)
 
 			handler.pluginConfig = &pluginapi.Configuration{Default: test.defaultClusterTolerations, Whitelist: test.clusterWhitelist}
@@ -279,6 +282,7 @@ func TestPodAdmission(t *testing.T) {
 	}
 }
 
+// TestHandles 校验插件只处理创建与更新操作，不处理连接与删除。
 func TestHandles(t *testing.T) {
 	for op, shouldHandle := range map[admission.Operation]bool{
 		admission.Create:  true,
@@ -288,7 +292,7 @@ func TestHandles(t *testing.T) {
 	} {
 
 		pluginConfig, err := loadConfiguration(nil)
-		// must not fail
+		// 默认配置加载失败属于测试环境错误，直接报出。
 		if err != nil {
 			t.Errorf("%v: error reading default configuration", op)
 		}
@@ -299,6 +303,7 @@ func TestHandles(t *testing.T) {
 	}
 }
 
+// TestIgnoreUpdatingInitializedPod 验证已初始化 pod 的更新会被跳过，避免与 namespace 配置冲突而误拒。
 func TestIgnoreUpdatingInitializedPod(t *testing.T) {
 	mockClient := &fake.Clientset{}
 	handler, informerFactory, err := newHandlerForTest(mockClient)
@@ -320,7 +325,7 @@ func TestIgnoreUpdatingInitializedPod(t *testing.T) {
 	}
 	pod.Spec.Tolerations = []api.Toleration{podToleration}
 
-	// this conflicts with pod's Tolerations
+	// 值与 pod 上的不同，构造出本应冲突的场景。
 	namespaceToleration := podToleration
 	namespaceToleration.Value = "testValue2"
 	namespaceTolerations := []api.Toleration{namespaceToleration}
@@ -340,18 +345,18 @@ func TestIgnoreUpdatingInitializedPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// if the update of initialized pod is not ignored, an error will be returned because the pod's Tolerations conflicts with namespace's Tolerations.
+	// 若不忽略已初始化 pod 的更新，上面构造的冲突会导致误拒。
 	err = admissiontesting.WithReinvocationTesting(t, handler).Admit(context.TODO(), admission.NewAttributesRecord(pod, pod, api.Kind("Pod").WithVersion("version"), "testNamespace", pod.ObjectMeta.Name, api.Resource("pods").WithVersion("version"), "", admission.Update, &metav1.CreateOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
-// newHandlerForTest returns the admission controller configured for testing.
+// newHandlerForTest 构造测试用的准入插件，并返回其依赖的 informer 工厂。
 func newHandlerForTest(c kubernetes.Interface) (*Plugin, informers.SharedInformerFactory, error) {
 	f := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	pluginConfig, err := loadConfiguration(nil)
-	// must not fail
+	// 默认配置加载失败属于测试环境错误，直接报出。
 	if err != nil {
 		return nil, nil, err
 	}

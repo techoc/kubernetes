@@ -34,6 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAdmission 验证默认 IngressClass 的选择与注入逻辑。
 func TestAdmission(t *testing.T) {
 	defaultClass1 := &networkingv1.IngressClass{
 		TypeMeta: metav1.TypeMeta{
@@ -54,7 +55,7 @@ func TestAdmission(t *testing.T) {
 			},
 		},
 	}
-	// Class that has explicit default = false
+	// 显式标记 default = false 的类别
 	classWithFalseDefault := &networkingv1.IngressClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngressClass",
@@ -66,7 +67,7 @@ func TestAdmission(t *testing.T) {
 			},
 		},
 	}
-	// Class with missing default annotation (=non-default)
+	// 缺少 default 注解的类别（视为非默认）
 	classWithNoDefault := &networkingv1.IngressClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngressClass",
@@ -75,7 +76,7 @@ func TestAdmission(t *testing.T) {
 			Name: "nondefault2",
 		},
 	}
-	// Class with empty default annotation (=non-default)
+	// default 注解为空的类别（视为非默认）
 	classWithEmptyDefault := &networkingv1.IngressClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngressClass",
@@ -205,17 +206,17 @@ func TestAdmission(t *testing.T) {
 			}
 
 			attrs := admission.NewAttributesRecord(
-				ingress, // new object
-				nil,     // old object
+				ingress, // 新对象
+				nil,     // 旧对象
 				api.Kind("Ingress").WithVersion("version"),
 				ingress.Namespace,
 				ingress.Name,
 				networkingv1.Resource("ingresses").WithVersion("version"),
-				"", // subresource
+				"", // 子资源
 				admission.Create,
 				&metav1.CreateOptions{},
-				false, // dryRun
-				nil,   // userInfo
+				false, // 非 dryRun
+				nil,   // 用户信息
 			)
 
 			err := admissiontesting.WithReinvocationTesting(t, ctrl).Admit(context.TODO(), attrs, nil)

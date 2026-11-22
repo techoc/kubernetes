@@ -46,10 +46,11 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// addPriorityClasses 把优先级类别写入插件的 informer 缓存，供测试直接读取。
 func addPriorityClasses(ctrl *Plugin, priorityClasses []*scheduling.PriorityClass) error {
 	informerFactory := informers.NewSharedInformerFactory(nil, controller.NoResyncPeriodFunc())
 	ctrl.SetExternalKubeInformerFactory(informerFactory)
-	// First add the existing classes to the cache.
+	// 先把已有的类别放进缓存，模拟真实集群状态。
 	for _, c := range priorityClasses {
 		s := &schedulingv1.PriorityClass{}
 		if err := v1.Convert_scheduling_PriorityClass_To_v1_PriorityClass(c, s, nil); err != nil {
@@ -137,6 +138,7 @@ var preemptionPolicyClass = &scheduling.PriorityClass{
 	PreemptionPolicy: &preemptLowerPriority,
 }
 
+// TestPriorityClassAdmission 验证优先级类别的创建、更新、删除准入规则。
 func TestPriorityClassAdmission(t *testing.T) {
 	var systemClass = &scheduling.PriorityClass{
 		TypeMeta: metav1.TypeMeta{
@@ -231,11 +233,10 @@ func TestPriorityClassAdmission(t *testing.T) {
 		klog.V(4).Infof("starting test %q", test.name)
 
 		ctrl := NewPlugin()
-		// Add existing priority classes.
+		// 预置已有类别，再对新增类别执行校验。
 		if err := addPriorityClasses(ctrl, test.existingClasses); err != nil {
 			t.Errorf("Test %q: unable to add object to informer: %v", test.name, err)
 		}
-		// Now add the new class.
 		attrs := admission.NewAttributesRecord(
 			test.newClass,
 			nil,
@@ -260,7 +261,7 @@ func TestPriorityClassAdmission(t *testing.T) {
 	}
 }
 
-// TestDefaultPriority tests that default priority is resolved correctly.
+// TestDefaultPriority 验证默认优先级的解析是否正确。
 func TestDefaultPriority(t *testing.T) {
 	pcResource := scheduling.Resource("priorityclasses").WithVersion("version")
 	pcKind := scheduling.Kind("PriorityClass").WithVersion("version")
@@ -368,11 +369,12 @@ func TestDefaultPriority(t *testing.T) {
 var zeroPriority = int32(0)
 var intPriority = int32(1000)
 
+// TestPodAdmission 验证 Pod 的优先级与抢占策略默认化及校验逻辑。
 func TestPodAdmission(t *testing.T) {
 	containerName := "container"
 
 	pods := []*api.Pod{
-		// pod[0]: Pod with a proper priority class.
+		// pod[0]: 指定了合法优先级类别的 Pod。
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-priorityclass",
@@ -387,7 +389,7 @@ func TestPodAdmission(t *testing.T) {
 				PriorityClassName: "default1",
 			},
 		},
-		// pod[1]: Pod with no priority class
+		// pod[1]: 未指定优先级类别的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-wo-priorityclass",
@@ -401,7 +403,7 @@ func TestPodAdmission(t *testing.T) {
 				},
 			},
 		},
-		// pod[2]: Pod with non-existing priority class
+		// pod[2]: 指定了不存在优先级类别的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-non-existing-priorityclass",
@@ -416,7 +418,7 @@ func TestPodAdmission(t *testing.T) {
 				PriorityClassName: "non-existing",
 			},
 		},
-		// pod[3]: Pod with integer value of priority
+		// pod[3]: 直接用整数指定优先级的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-integer-priority",
@@ -432,7 +434,7 @@ func TestPodAdmission(t *testing.T) {
 				Priority:          &intPriority,
 			},
 		},
-		// pod[4]: Pod with a system priority class name
+		// pod[4]: 使用系统优先级类别名称的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-system-priority",
@@ -447,7 +449,7 @@ func TestPodAdmission(t *testing.T) {
 				PriorityClassName: scheduling.SystemClusterCritical,
 			},
 		},
-		// pod[5]: mirror Pod with a system priority class name
+		// pod[5]: 使用系统优先级类别名称的镜像 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "mirror-pod-w-system-priority",
@@ -463,7 +465,7 @@ func TestPodAdmission(t *testing.T) {
 				PriorityClassName: "system-cluster-critical",
 			},
 		},
-		// pod[6]: mirror Pod with integer value of priority
+		// pod[6]: 用整数指定优先级的镜像 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "mirror-pod-w-integer-priority",
@@ -480,7 +482,7 @@ func TestPodAdmission(t *testing.T) {
 				Priority:          &intPriority,
 			},
 		},
-		// pod[7]: Pod with a system priority class name in non-system namespace
+		// pod[7]: 在非系统命名空间中使用系统优先级类别名称的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-system-priority-in-nonsystem-namespace",
@@ -495,7 +497,7 @@ func TestPodAdmission(t *testing.T) {
 				PriorityClassName: scheduling.SystemClusterCritical,
 			},
 		},
-		// pod[8]: Pod with a priority value that matches the resolved priority
+		// pod[8]: 显式 priority 值与解析出的优先级一致的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-zero-priority-in-nonsystem-namespace",
@@ -510,7 +512,7 @@ func TestPodAdmission(t *testing.T) {
 				Priority: &zeroPriority,
 			},
 		},
-		// pod[9]: Pod with a priority value that matches the resolved default priority
+		// pod[9]: 显式 priority 值与解析出的默认优先级一致的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-priority-matching-default-priority",
@@ -525,7 +527,7 @@ func TestPodAdmission(t *testing.T) {
 				Priority: &defaultClass2.Value,
 			},
 		},
-		// pod[10]: Pod with a priority value that matches the resolved priority
+		// pod[10]: 显式 priority 值与解析出的优先级一致的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-w-priority-matching-resolved-default-priority",
@@ -541,7 +543,7 @@ func TestPodAdmission(t *testing.T) {
 				Priority:          &systemClusterCritical.Value,
 			},
 		},
-		// pod[11]: Pod without a preemption policy that matches the resolved preemption policy
+		// pod[11]: 未指定抢占策略，但会使用解析出的抢占策略的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-never-preemption-policy-matching-resolved-preemption-policy",
@@ -558,7 +560,7 @@ func TestPodAdmission(t *testing.T) {
 				PreemptionPolicy:  nil,
 			},
 		},
-		// pod[12]: Pod with a preemption policy that matches the resolved preemption policy
+		// pod[12]: 显式抢占策略与解析出的策略一致的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-preemption-policy-matching-resolved-preemption-policy",
@@ -575,7 +577,7 @@ func TestPodAdmission(t *testing.T) {
 				PreemptionPolicy:  &preemptLowerPriority,
 			},
 		},
-		// pod[13]: Pod with a preemption policy that does't match the resolved preemption policy
+		// pod[13]: 显式抢占策略与解析出的策略冲突的 Pod
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod-preemption-policy-not-matching-resolved-preemption-policy",
@@ -597,8 +599,8 @@ func TestPodAdmission(t *testing.T) {
 	tests := []struct {
 		name            string
 		existingClasses []*scheduling.PriorityClass
-		// Admission controller changes pod spec. So, we take an api.Pod instead of
-		// *api.Pod to avoid interfering with other tests.
+		// 准入控制器会修改 Pod spec，因此这里用值拷贝而非指针，
+		// 避免污染其他测试用例共享的 pods 数据。
 		pod                    api.Pod
 		expectedPriority       int32
 		expectError            bool
@@ -738,12 +740,11 @@ func TestPodAdmission(t *testing.T) {
 	for _, test := range tests {
 		klog.V(4).Infof("starting test %q", test.name)
 		ctrl := NewPlugin()
-		// Add existing priority classes.
+		// 预置优先级类别后，再构造创建 Pod 的属性执行准入。
 		if err := addPriorityClasses(ctrl, test.existingClasses); err != nil {
 			t.Errorf("Test %q: unable to add object to informer: %v", test.name, err)
 		}
 
-		// Create pod.
 		attrs := admission.NewAttributesRecord(
 			&test.pod,
 			nil,
@@ -775,6 +776,7 @@ func TestPodAdmission(t *testing.T) {
 	}
 }
 
+// TestAdmitPodGroup 验证 PodGroup 准入逻辑，覆盖抢占策略的所有可能取值。
 func TestAdmitPodGroup(t *testing.T) {
 	podGroup := func(priorityClassName string) *scheduling.PodGroup {
 		return &scheduling.PodGroup{
@@ -840,7 +842,7 @@ func TestAdmitPodGroup(t *testing.T) {
 		{
 			name:                  "pod group with empty priorityClassName, accepted and set to global default",
 			priorityClasses:       []*scheduling.PriorityClass{defaultClass1, nondefaultClass1},
-			preparePodGroup:       podGroup("" /* empty priorityClassName */),
+			preparePodGroup:       podGroup("" /* 空的 priorityClassName */),
 			operation:             admission.Create,
 			expectedPriorityClass: "default1",
 			expectedPriority:      defaultClass1.Value,
@@ -872,7 +874,7 @@ func TestAdmitPodGroup(t *testing.T) {
 		{
 			name:                  "pod group with no priorityClassName and no global default, accepted and priority should be zero",
 			priorityClasses:       []*scheduling.PriorityClass{nondefaultClass1},
-			preparePodGroup:       podGroup("" /* empty priorityClassName */),
+			preparePodGroup:       podGroup("" /* 空的 priorityClassName */),
 			operation:             admission.Create,
 			expectedPriorityClass: "",
 			expectedPriority:      0,
@@ -984,14 +986,13 @@ func TestAdmitPodGroup(t *testing.T) {
 	}
 }
 
-// TestPreemptionPolicyValuesAreUnchanged verifies that the set of PreemptionPolicy values defined in api/core/v1 package remains
-// unchanged. If it is modified, an update is needed in admitPodGroup() to make sure it covers all possible values
-// of v1.PreemptionPolicy.
-// This test finds all const declarations in the api/core/v1 package, identifies the ones with type PreemptionPolicy, and compares
-// them against a hard-coded set of expected values.
+// TestPreemptionPolicyValuesAreUnchanged 校验 api/core/v1 中 PreemptionPolicy 的取值集合未发生变化。
+// 若取值有变，必须同步更新 admitPodGroup()，确保覆盖 v1.PreemptionPolicy 的所有取值。
+// 测试会扫描 api/core/v1 包中的常量声明，找出类型为 PreemptionPolicy 的常量，
+// 并与硬编码的预期集合比对。
 func TestPreemptionPolicyValuesAreUnchanged(t *testing.T) {
-	// Locate staging/src/k8s.io/api/core/v1 directory relative to the package directory.
-	// admission_test.go is in plugin/pkg/admission/priority, which is 4 levels deep from the workspace root.
+	// 从包目录定位 staging/src/k8s.io/api/core/v1；
+	// admission_test.go 位于 plugin/pkg/admission/priority，距仓库根目录 4 层。
 	dir := "../../../../staging/src/k8s.io/api/core/v1"
 
 	files, err := os.ReadDir(dir)
@@ -1002,7 +1003,7 @@ func TestPreemptionPolicyValuesAreUnchanged(t *testing.T) {
 	fileSet := token.NewFileSet()
 	var preemptionPolicyValuesFound []string
 	for _, file := range files {
-		// Only read *.go files within the api/core/v1 directory.
+		// 只解析非测试的 Go 源文件，测试文件里不会有正式的类型定义。
 		if file.IsDir() || !strings.HasSuffix(file.Name(), ".go") || strings.HasSuffix(file.Name(), "_test.go") {
 			continue
 		}
@@ -1013,21 +1014,20 @@ func TestPreemptionPolicyValuesAreUnchanged(t *testing.T) {
 			t.Fatalf("failed to parse file %q: %v", file.Name(), err)
 		}
 
-		// Read all declared entities within the file that is currently being parsed.
+		// 遍历当前文件中的所有声明。
 		for _, decl := range parsedFile.Decls {
-			// Look for declarations of const.
+			// 只关心常量声明。
 			genericDeclaration, ok := decl.(*ast.GenDecl)
 			if !ok || genericDeclaration.Tok != token.CONST {
 				continue
 			}
 
-			// A const declaration may consist of multiple ValueSpecs. Inside each ValueSpec find the type.
-			// If it's PreemptionPolicy, extract the constant identifier. Note that since constants can be
-			// defined in blocks, there is a chance that a constant spec won't have a type set - in that we
-			// assume that the type for this constant is the same as in the preceding constant. For example:
+			// 一个 const 声明可能包含多个 ValueSpec，需逐一判断类型。
+			// 类型为 PreemptionPolicy 时记录常量名。注意常量块中后续项可能省略类型，
+			// 此时沿用上一项的类型，例如：
 			// const (
 			// 	 P PreemptionPolicy = "P"
-			//   R                  = "R" // type is omitted here
+			//   R                  = "R" // 此处省略了类型
 			// )
 			var lastType string
 			for _, spec := range genericDeclaration.Specs {
@@ -1038,11 +1038,10 @@ func TestPreemptionPolicyValuesAreUnchanged(t *testing.T) {
 
 				if vspec.Type != nil {
 					if ident, ok := vspec.Type.(*ast.Ident); ok {
-						// If the Type is a simple named identifier, record the name.
+						// 简单命名类型，记录名称供后续项沿用。
 						lastType = ident.Name
 					} else {
-						// Otherwise the type may be a pointer, or package-qualified type name, or something else
-						// that we're not interested in.
+						// 指针、限定名等类型不是我们关心的，清空以免误判后续项。
 						lastType = ""
 					}
 				}
@@ -1073,6 +1072,7 @@ func TestPreemptionPolicyValuesAreUnchanged(t *testing.T) {
 	}
 }
 
+// TestAdmitCompositePodGroup 验证复合 PodGroup 的准入逻辑。
 func TestAdmitCompositePodGroup(t *testing.T) {
 	cpg := func(priorityClassName string) *scheduling.CompositePodGroup {
 		return &scheduling.CompositePodGroup{
@@ -1138,7 +1138,7 @@ func TestAdmitCompositePodGroup(t *testing.T) {
 		{
 			name:                    "composite pod group with empty priorityClassName, accepted and set to global default",
 			priorityClasses:         []*scheduling.PriorityClass{defaultClass1, nondefaultClass1},
-			prepareCpg:              cpg("" /* empty priorityClassName */),
+			prepareCpg:              cpg("" /* 空的 priorityClassName */),
 			operation:               admission.Create,
 			expectedPriorityClass:   "default1",
 			expectedPriority:        defaultClass1.Value,
@@ -1170,7 +1170,7 @@ func TestAdmitCompositePodGroup(t *testing.T) {
 		{
 			name:                    "composite pod group with no priorityClassName and no global default, accepted and priority should be zero",
 			priorityClasses:         []*scheduling.PriorityClass{nondefaultClass1},
-			prepareCpg:              cpg("" /* empty priorityClassName */),
+			prepareCpg:              cpg("" /* 空的 priorityClassName */),
 			operation:               admission.Create,
 			expectedPriorityClass:   "",
 			expectedPriority:        0,

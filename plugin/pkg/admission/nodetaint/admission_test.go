@@ -30,6 +30,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// Test_nodeTaints 验证节点创建时会自动加上 notReady:NoSchedule 污点且不重复添加。
 func Test_nodeTaints(t *testing.T) {
 	var (
 		mynode            = &user.DefaultInfo{Name: "system:node:mynode", Groups: []string{"system:nodes"}}

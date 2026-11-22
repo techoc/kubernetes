@@ -29,28 +29,28 @@ import (
 	"k8s.io/kubernetes/pkg/certauthorization"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是插件名称。
 const PluginName = "CertificateApproval"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(), nil
 	})
 }
 
-// Plugin holds state for and implements the admission plugin.
+// Plugin 保存运行状态并实现该准入插件。
 type Plugin struct {
 	*admission.Handler
 	authz authorizer.UnconditionalAuthorizer
 }
 
-// SetUnconditionalAuthorizer sets the authorizer.
+// SetUnconditionalAuthorizer 设置鉴权器。
 func (p *Plugin) SetUnconditionalAuthorizer(authz authorizer.UnconditionalAuthorizer) {
 	p.authz = authz
 }
 
-// ValidateInitialization ensures an authorizer is set.
+// ValidateInitialization 确保已注入鉴权器。
 func (p *Plugin) ValidateInitialization() error {
 	if p.authz == nil {
 		return fmt.Errorf("%s requires an authorizer", PluginName)
@@ -61,7 +61,7 @@ func (p *Plugin) ValidateInitialization() error {
 var _ admission.ValidationInterface = &Plugin{}
 var _ genericadmissioninit.WantsUnconditionalAuthorizer = &Plugin{}
 
-// NewPlugin creates a new CSR approval admission plugin
+// NewPlugin 创建一个新的 CSR 审批准入插件。
 func NewPlugin() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Update),
@@ -70,19 +70,15 @@ func NewPlugin() *Plugin {
 
 var csrGroupResource = api.Resource("certificatesigningrequests")
 
-// Validate verifies that the requesting user has permission to approve
-// CertificateSigningRequests for the specified signerName.
+// Validate 检查请求用户是否有权批准指定 signerName 的 CertificateSigningRequest。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, _ admission.ObjectInterfaces) error {
-	// Ignore all calls to anything other than 'certificatesigningrequests/approval'.
-	// Ignore all operations other than UPDATE.
+	// 只处理 certificatesigningrequests/approval 的 UPDATE 请求。
 	if a.GetSubresource() != "approval" ||
 		a.GetResource().GroupResource() != csrGroupResource {
 		return nil
 	}
 
-	// We check permissions against the *old* version of the resource, in case
-	// a user is attempting to update the SignerName when calling the approval
-	// endpoint (which is an invalid/not allowed operation)
+	// 针对资源的旧版本鉴权，防止用户借审批请求篡改 SignerName（该操作不被允许）。
 	csr, ok := a.GetOldObject().(*api.CertificateSigningRequest)
 	if !ok {
 		return admission.NewForbidden(a, fmt.Errorf("expected type CertificateSigningRequest, got: %T", a.GetOldObject()))

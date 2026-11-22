@@ -22,6 +22,7 @@ import (
 	"time"
 )
 
+// TestConfigNormalization 验证 Webhook 配置在各边界值下的归一化与报错行为。
 func TestConfigNormalization(t *testing.T) {
 	tests := []struct {
 		test             string

@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 提供 PodTolerationRestriction 配置的 v1alpha1 外部版本及默认值注册。
 package v1alpha1
 
 import "k8s.io/apimachinery/pkg/runtime"
 
+// addDefaultingFuncs 向 scheme 注册 v1alpha1 配置的默认值函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }

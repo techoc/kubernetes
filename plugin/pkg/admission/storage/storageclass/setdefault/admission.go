@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+
 	"k8s.io/kubernetes/pkg/volume/util"
 
 	"k8s.io/klog/v2"
@@ -33,11 +34,11 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin
+	// PluginName 是本准入控制器插件的名称。
 	PluginName = "DefaultStorageClass"
 )
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		plugin := newPlugin()
@@ -45,7 +46,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// claimDefaulterPlugin holds state for and implements the admission plugin.
+// claimDefaulterPlugin 保存状态并实现该准入插件。
 type claimDefaulterPlugin struct {
 	*admission.Handler
 
@@ -56,20 +57,21 @@ var _ admission.Interface = &claimDefaulterPlugin{}
 var _ admission.MutationInterface = &claimDefaulterPlugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&claimDefaulterPlugin{})
 
-// newPlugin creates a new admission plugin.
+// newPlugin 创建一个新的准入插件。
 func newPlugin() *claimDefaulterPlugin {
 	return &claimDefaulterPlugin{
 		Handler: admission.NewHandler(admission.Create),
 	}
 }
 
+// SetExternalKubeInformerFactory 注入 StorageClass informer，并等待其缓存同步完成。
 func (a *claimDefaulterPlugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	informer := f.Storage().V1().StorageClasses()
 	a.lister = informer.Lister()
 	a.SetReadyFunc(informer.Informer().HasSynced)
 }
 
-// ValidateInitialization ensures lister is set.
+// ValidateInitialization 确保 lister 已注入。
 func (a *claimDefaulterPlugin) ValidateInitialization() error {
 	if a.lister == nil {
 		return fmt.Errorf("missing lister")
@@ -77,12 +79,11 @@ func (a *claimDefaulterPlugin) ValidateInitialization() error {
 	return nil
 }
 
-// Admit sets the default value of a PersistentVolumeClaim's storage class, in case the user did
-// not provide a value.
+// Admit 在用户未指定 StorageClass 时为 PersistentVolumeClaim 设置默认值。
 //
-// 1.  Find available StorageClasses.
-// 2.  Figure which is the default
-// 3.  Write to the PVClaim
+// 1. 查找可用的 StorageClass。
+// 2. 找出默认的那一个。
+// 3. 写入 PVC。
 func (a *claimDefaulterPlugin) Admit(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	if attr.GetResource().GroupResource() != api.Resource("persistentvolumeclaims") {
 		return nil
@@ -93,13 +94,13 @@ func (a *claimDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 	}
 
 	pvc, ok := attr.GetObject().(*api.PersistentVolumeClaim)
-	// if we can't convert then we don't handle this object so just return
+	// 无法转换说明不是本插件处理的对象，直接放行。
 	if !ok {
 		return nil
 	}
 
 	if helper.PersistentVolumeClaimHasClass(pvc) {
-		// The user asked for a class.
+		// 用户已显式指定 StorageClass，尊重用户选择，不覆盖。
 		return nil
 	}
 
@@ -110,7 +111,7 @@ func (a *claimDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 		return admission.NewForbidden(attr, err)
 	}
 	if def == nil {
-		// No default class selected, do nothing about the PVC.
+		// 没有默认 StorageClass，保持 PVC 原样。
 		return nil
 	}
 

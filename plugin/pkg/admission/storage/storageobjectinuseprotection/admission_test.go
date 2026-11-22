@@ -35,6 +35,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// TestAdmit 验证 PVC、PV 和 VolumeAttributesClass 创建时会被加上对应的保护 finalizer。
 func TestAdmit(t *testing.T) {
 	claim := &api.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
@@ -158,13 +159,13 @@ func TestAdmit(t *testing.T) {
 
 			obj := test.object.DeepCopyObject()
 			attrs := admission.NewAttributesRecord(
-				obj,                  // new object
-				obj.DeepCopyObject(), // old object, copy to be sure it's not modified
+				obj,                  // 新对象
+				obj.DeepCopyObject(), // 旧对象，使用副本以确保不被修改
 				schema.GroupVersionKind{},
 				test.namespace,
 				"foo",
 				test.resource,
-				"", // subresource
+				"", // 子资源
 				admission.Create,
 				&metav1.CreateOptions{},
 				false, // dryRun

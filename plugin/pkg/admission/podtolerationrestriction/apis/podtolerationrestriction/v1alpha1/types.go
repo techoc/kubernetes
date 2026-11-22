@@ -23,13 +23,13 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Configuration provides configuration for the PodTolerationRestriction admission controller.
+// Configuration 为 PodTolerationRestriction 准入控制器提供配置。
 type Configuration struct {
 	metav1.TypeMeta `json:""`
 
-	// cluster level default tolerations
+	// 集群级别的默认容忍
 	Default []v1.Toleration `json:"default,omitempty"`
 
-	// cluster level whitelist of tolerations
+	// 集群级别的容忍白名单
 	Whitelist []v1.Toleration `json:"whitelist,omitempty"`
 }

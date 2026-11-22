@@ -29,7 +29,7 @@ var limitTypes = map[eventratelimitapi.LimitType]bool{
 	eventratelimitapi.SourceAndObjectLimitType: true,
 }
 
-// ValidateConfiguration validates the configuration.
+// ValidateConfiguration 校验事件速率限制配置的合法性。
 func ValidateConfiguration(config *eventratelimitapi.Configuration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	limitsPath := field.NewPath("limits")

@@ -37,18 +37,18 @@ import (
 )
 
 const (
-	// PluginName indicates name of admission plugin.
+	// PluginName 表示该准入插件的名称。
 	PluginName = "Priority"
 )
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(), nil
 	})
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 是 admission.Interface 的一个实现。
 type Plugin struct {
 	*admission.Handler
 	client kubernetes.Interface
@@ -60,14 +60,14 @@ var _ admission.ValidationInterface = &Plugin{}
 var _ = genericadmissioninitializers.WantsExternalKubeInformerFactory(&Plugin{})
 var _ = genericadmissioninitializers.WantsExternalKubeClientSet(&Plugin{})
 
-// NewPlugin creates a new priority admission plugin.
+// NewPlugin 创建一个新的优先级准入插件。
 func NewPlugin() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update, admission.Delete),
 	}
 }
 
-// ValidateInitialization implements the InitializationValidator interface.
+// ValidateInitialization 实现 InitializationValidator 接口，校验 client 与 lister 已注入。
 func (p *Plugin) ValidateInitialization() error {
 	if p.client == nil {
 		return fmt.Errorf("%s requires a client", PluginName)
@@ -78,12 +78,12 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// SetExternalKubeClientSet implements the WantsInternalKubeClientSet interface.
+// SetExternalKubeClientSet 实现 WantsExternalKubeClientSet 接口。
 func (p *Plugin) SetExternalKubeClientSet(client kubernetes.Interface) {
 	p.client = client
 }
 
-// SetExternalKubeInformerFactory implements the WantsInternalKubeInformerFactory interface.
+// SetExternalKubeInformerFactory 实现 WantsExternalKubeInformerFactory 接口。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	priorityInformer := f.Scheduling().V1().PriorityClasses()
 	p.lister = priorityInformer.Lister()
@@ -97,11 +97,11 @@ var (
 	priorityClassResource     = scheduling.Resource("priorityclasses")
 )
 
-// Admit checks Pods, PodGroups and CompositePodGroups and admits or rejects them.
-// It also resolves the priority of Pods, PodGroups and CompositePodGroups based on their PriorityClass.
+// Admit 检查 Pod、PodGroup 和 CompositePodGroup 并决定准入或拒绝，
+// 同时根据各自的 PriorityClass 解析出其优先级。
 func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	operation := a.GetOperation()
-	// Ignore all calls to subresources
+	// 子资源不携带优先级字段，无需处理。
 	if len(a.GetSubresource()) != 0 {
 		return nil
 	}
@@ -126,10 +126,10 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 	}
 }
 
-// Validate checks PriorityClasses and admits or rejects them.
+// Validate 检查 PriorityClass 并决定准入或拒绝。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	operation := a.GetOperation()
-	// Ignore all calls to subresources
+	// 子资源不携带优先级字段，无需处理。
 	if len(a.GetSubresource()) != 0 {
 		return nil
 	}
@@ -146,7 +146,8 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	}
 }
 
-// admitPod makes sure a new pod does not set spec.Priority field. It also makes sure that the PriorityClassName exists if it is provided and resolves the pod priority from the PriorityClassName.
+// admitPod 确保新 Pod 不自行设置 spec.Priority，校验指定的 PriorityClassName 存在，
+// 并据此解析 Pod 的优先级。
 func (p *Plugin) admitPod(a admission.Attributes) error {
 	operation := a.GetOperation()
 	pod, ok := a.GetObject().(*core.Pod)
@@ -160,9 +161,9 @@ func (p *Plugin) admitPod(a admission.Attributes) error {
 			return errors.NewBadRequest("resource was marked with kind Pod but was unable to be converted")
 		}
 
-		// This admission plugin set pod.Spec.Priority on create.
-		// Ensure the existing priority is preserved on update.
-		// API validation prevents mutations to Priority and PriorityClassName, so any other changes will fail update validation and not be persisted.
+		// 本插件在创建时写入了 Priority；更新时要保留这些值，
+		// 避免丢失。API 校验本身禁止修改 Priority 和 PriorityClassName，
+		// 其他改动会在更新校验阶段被拒绝，不会持久化。
 		if pod.Spec.Priority == nil && oldPod.Spec.Priority != nil {
 			pod.Spec.Priority = oldPod.Spec.Priority
 		}
@@ -180,7 +181,7 @@ func (p *Plugin) admitPod(a admission.Attributes) error {
 			return err
 		}
 		pod.Spec.PriorityClassName = pcName
-		// if the pod contained a priority that differs from the one computed from the priority class, error
+		// 用户提供的整数优先级必须与 PriorityClass 计算出的值一致，否则拒绝。
 		if pod.Spec.Priority != nil && *pod.Spec.Priority != priority {
 			return admission.NewForbidden(a, fmt.Errorf("the integer value of priority (%d) must not be provided in pod spec; priority admission controller computed %d from the given PriorityClass name", *pod.Spec.Priority, priority))
 		}
@@ -198,8 +199,8 @@ func (p *Plugin) admitPod(a admission.Attributes) error {
 	return nil
 }
 
-// admitPodGroup makes sure a new pod group does not set spec.Priority field. It also makes sure that
-// the PriorityClassName exists if it is provided and resolves the pod group priority from the PriorityClassName.
+// admitPodGroup 确保新 PodGroup 不自行设置 spec.Priority，校验指定的 PriorityClassName 存在，
+// 并据此解析 PodGroup 的优先级。
 func (p *Plugin) admitPodGroup(attributes admission.Attributes) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GenericWorkload) {
 		return nil
@@ -214,7 +215,7 @@ func (p *Plugin) admitPodGroup(attributes admission.Attributes) error {
 	if err != nil {
 		return err
 	}
-	// Reject if the pod group already contained a priority that differs from the one computed from the priority class.
+	// 用户提供的优先级必须与 PriorityClass 计算值一致，防止绕过管控。
 	if pg.Spec.Priority != nil && *pg.Spec.Priority != priority {
 		return admission.NewForbidden(attributes, fmt.Errorf("priority set in the pod group (%d) must match the priority computed (%d) based on the priority class set in the spec", *pg.Spec.Priority, priority))
 	}
@@ -239,9 +240,8 @@ func (p *Plugin) admitPodGroup(attributes admission.Attributes) error {
 	return nil
 }
 
-// admitCompositePodGroup makes sure a new composite pod group does not set spec.Priority field.
-// It also makes sure that the PriorityClassName exists if it is provided and resolves
-// the composite pod group priority from the PriorityClassName.
+// admitCompositePodGroup 确保新 CompositePodGroup 不自行设置 spec.Priority，
+// 校验指定的 PriorityClassName 存在，并据此解析其优先级。
 func (p *Plugin) admitCompositePodGroup(attributes admission.Attributes) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.CompositePodGroup) {
 		return nil
@@ -256,7 +256,7 @@ func (p *Plugin) admitCompositePodGroup(attributes admission.Attributes) error {
 	if err != nil {
 		return err
 	}
-	// Reject if the composite pod group already contained a priority that differs from the one computed from the priority class.
+	// 用户提供的优先级必须与 PriorityClass 计算值一致，防止绕过管控。
 	if cpg.Spec.Priority != nil && *cpg.Spec.Priority != priority {
 		return admission.NewForbidden(attributes, fmt.Errorf("priority set in the composite pod group (%d) must match the priority computed (%d) based on the priority class set in the spec", *cpg.Spec.Priority, priority))
 	}
@@ -281,21 +281,22 @@ func (p *Plugin) admitCompositePodGroup(attributes admission.Attributes) error {
 	return nil
 }
 
-// validatePriorityClass ensures that the value field is not larger than the highest user definable priority. If the GlobalDefault is set, it ensures that there is no other PriorityClass whose GlobalDefault is set.
+// validatePriorityClass 确保全局默认 PriorityClass 至多只有一个；
+// 若已有其他默认类，再次创建或将其设为默认都会被拒绝。
 func (p *Plugin) validatePriorityClass(a admission.Attributes) error {
 	operation := a.GetOperation()
 	pc, ok := a.GetObject().(*scheduling.PriorityClass)
 	if !ok {
 		return errors.NewBadRequest("resource was marked with kind PriorityClass but was unable to be converted")
 	}
-	// If the new PriorityClass tries to be the default priority, make sure that no other priority class is marked as default.
+	// 新类若声称是默认类，必须先确认没有别的默认类。
 	if pc.GlobalDefault {
 		dpc, err := p.getDefaultPriorityClass()
 		if err != nil {
 			return fmt.Errorf("failed to get default priority class: %v", err)
 		}
 		if dpc != nil {
-			// Throw an error if a second default priority class is being created, or an existing priority class is being marked as default, while another default already exists.
+			// 创建第二个默认类，或把另一个类改为默认类，都会破坏唯一性约束。
 			if operation == admission.Create || (operation == admission.Update && dpc.GetName() != pc.GetName()) {
 				return admission.NewForbidden(a, fmt.Errorf("PriorityClass %v is already marked as default. Only one default can exist", dpc.GetName()))
 			}
@@ -304,12 +305,8 @@ func (p *Plugin) validatePriorityClass(a admission.Attributes) error {
 	return nil
 }
 
-// establishPriority is an auxiliary method for calculating the priority-specific fields
-// based on the provided priority class name.
-// If the provided name is empty, we fall back to getting the default priority class and
-// returning information contained there.
-// If the provided name is not empty, we get the priority class with such name and return
-// the information contained in that class.
+// establishPriority 根据给定的 PriorityClass 名称计算优先级相关字段。
+// 名称为空时回退到默认 PriorityClass；名称非空时按名称解析对应类并返回其中的信息。
 func (p *Plugin) establishPriority(attributes admission.Attributes, priorityClassName *string) (string, int32, *apiv1.PreemptionPolicy, error) {
 	if priorityClassName == nil || *priorityClassName == "" {
 		pcName, priority, preemptionPolicy, err := p.getDefaultPriority()
@@ -318,7 +315,7 @@ func (p *Plugin) establishPriority(attributes admission.Attributes, priorityClas
 		}
 		return pcName, priority, preemptionPolicy, nil
 	}
-	// Try resolving the priority class name.
+	// 按名称解析 PriorityClass，找不到时由调用方转为拒绝。
 	pc, err := p.resolvePriorityClass(attributes, *priorityClassName)
 	if err != nil {
 		return "", 0, nil, err
@@ -326,13 +323,13 @@ func (p *Plugin) establishPriority(attributes admission.Attributes, priorityClas
 	return *priorityClassName, pc.Value, pc.PreemptionPolicy, nil
 }
 
+// getDefaultPriorityClass 从缓存中找出全局默认 PriorityClass。
 func (p *Plugin) getDefaultPriorityClass() (*schedulingv1.PriorityClass, error) {
 	list, err := p.lister.List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
-	// In case more than one global default priority class is added as a result of a race condition,
-	// we pick the one with the lowest priority value.
+	// 竞态可能产生多个默认类，此时取优先级值最小的一个，保证结果确定。
 	var defaultPC *schedulingv1.PriorityClass
 	for _, pci := range list {
 		if pci.GlobalDefault {
@@ -344,6 +341,8 @@ func (p *Plugin) getDefaultPriorityClass() (*schedulingv1.PriorityClass, error) 
 	return defaultPC, nil
 }
 
+// getDefaultPriority 返回默认类的名称、优先级和抢占策略；
+// 不存在默认类时回退到内置默认值。
 func (p *Plugin) getDefaultPriority() (string, int32, *apiv1.PreemptionPolicy, error) {
 	dpc, err := p.getDefaultPriorityClass()
 	if err != nil {
@@ -356,6 +355,7 @@ func (p *Plugin) getDefaultPriority() (string, int32, *apiv1.PreemptionPolicy, e
 	return "", int32(scheduling.DefaultPriorityWhenNoDefaultClassExists), &preemptLowerPriority, nil
 }
 
+// resolvePriorityClass 按名称查找 PriorityClass，不存在时返回拒绝错误。
 func (p *Plugin) resolvePriorityClass(attributes admission.Attributes, priorityClassName string) (*schedulingv1.PriorityClass, error) {
 	priorityClass, err := p.lister.Get(priorityClassName)
 	if err != nil {

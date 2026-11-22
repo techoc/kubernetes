@@ -42,25 +42,25 @@ import (
 )
 
 const (
-	// DefaultServiceAccountName is the name of the default service account to set on pods which do not specify a service account
+	// DefaultServiceAccountName 是未指定 ServiceAccount 的 Pod 所使用的默认服务账号名称。
 	DefaultServiceAccountName = "default"
 
-	// EnforceMountableSecretsAnnotation is a default annotation that indicates that a service account should enforce mountable secrets.
-	// The value must be true to have this annotation take effect
+	// EnforceMountableSecretsAnnotation 是表示服务账号应强制校验可挂载 Secret 的注解。
+	// 只有值为 true 时该注解才生效。
 	EnforceMountableSecretsAnnotation = "kubernetes.io/enforce-mountable-secrets"
 
-	// ServiceAccountVolumeName is the prefix name that will be added to volumes that mount ServiceAccount secrets
+	// ServiceAccountVolumeName 是挂载 ServiceAccount Secret 的卷名称前缀。
 	ServiceAccountVolumeName = "kube-api-access"
 
-	// DefaultAPITokenMountPath is the path that ServiceAccountToken secrets are automounted to.
-	// The token file would then be accessible at /var/run/secrets/kubernetes.io/serviceaccount
+	// DefaultAPITokenMountPath 是 ServiceAccountToken Secret 自动挂载的路径，
+	// 可通过 /var/run/secrets/kubernetes.io/serviceaccount 访问其中的 token 文件。
 	DefaultAPITokenMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 
-	// PluginName is the name of this admission plugin
+	// PluginName 是本准入插件的名称。
 	PluginName = "ServiceAccount"
 )
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		serviceAccountAdmission := NewServiceAccount()
@@ -70,13 +70,13 @@ func Register(plugins *admission.Plugins) {
 
 var _ = admission.Interface(&Plugin{})
 
-// Plugin contains the client used by the admission controller
+// Plugin 持有准入控制器使用的客户端及相关配置。
 type Plugin struct {
 	*admission.Handler
 
-	// LimitSecretReferences rejects pods that reference secrets their service accounts do not reference
+	// LimitSecretReferences 控制是否拒绝引用了服务账号未声明 Secret 的 Pod。
 	LimitSecretReferences bool
-	// MountServiceAccountToken creates Volume and VolumeMounts for the first referenced ServiceAccountToken for the pod's service account
+	// MountServiceAccountToken 控制是否为 Pod 服务账号的 ServiceAccountToken 创建卷和挂载点。
 	MountServiceAccountToken bool
 
 	client kubernetes.Interface
@@ -91,30 +91,30 @@ var _ admission.ValidationInterface = &Plugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeClientSet(&Plugin{})
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Plugin{})
 
-// NewServiceAccount returns an admission.Interface implementation which limits admission of Pod CREATE requests based on the pod's ServiceAccount:
-// 1. If the pod does not specify a ServiceAccount, it sets the pod's ServiceAccount to "default"
-// 2. It ensures the ServiceAccount referenced by the pod exists
-// 3. If LimitSecretReferences is true, it rejects the pod if the pod references Secret objects which the pod's ServiceAccount does not reference
-// 4. If the pod does not contain any ImagePullSecrets, the ImagePullSecrets of the service account are added.
-// 5. If MountServiceAccountToken is true, it adds a VolumeMount with the pod's ServiceAccount's api token secret to containers
+// NewServiceAccount 返回一个基于 Pod 的 ServiceAccount 限制 Pod CREATE 请求的 admission.Interface 实现：
+// 1. Pod 未指定 ServiceAccount 时，将其设为 "default"。
+// 2. 确保 Pod 引用的 ServiceAccount 存在。
+// 3. LimitSecretReferences 为 true 时，拒绝引用了 ServiceAccount 未声明 Secret 的 Pod。
+// 4. Pod 未声明任何 ImagePullSecrets 时，补上服务账号的 ImagePullSecrets。
+// 5. MountServiceAccountToken 为 true 时，为容器添加挂载服务账号 API token Secret 的 VolumeMount。
 func NewServiceAccount() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
-		// TODO: enable this once we've swept secret usage to account for adding secret references to service accounts
+		// TODO: 待梳理完 Secret 使用情况、补上服务账号的 Secret 引用后再启用
 		LimitSecretReferences: false,
-		// Auto mount service account API token secrets
+		// 自动挂载服务账号的 API token Secret。
 		MountServiceAccountToken: true,
 
 		generateName: names.SimpleNameGenerator.GenerateName,
 	}
 }
 
-// SetExternalKubeClientSet sets the client for the plugin
+// SetExternalKubeClientSet 设置插件使用的客户端。
 func (s *Plugin) SetExternalKubeClientSet(cl kubernetes.Interface) {
 	s.client = cl
 }
 
-// SetExternalKubeInformerFactory registers informers with the plugin
+// SetExternalKubeInformerFactory 向插件注册 informer。
 func (s *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	serviceAccountInformer := f.Core().V1().ServiceAccounts()
 	s.serviceAccountLister = serviceAccountInformer.Lister()
@@ -123,7 +123,7 @@ func (s *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactor
 	})
 }
 
-// ValidateInitialization ensures an authorizer is set.
+// ValidateInitialization 确保初始化所需的依赖都已注入。
 func (s *Plugin) ValidateInitialization() error {
 	if s.client == nil {
 		return fmt.Errorf("missing client")
@@ -134,26 +134,25 @@ func (s *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// Admit verifies if the pod should be admitted
+// Admit 校验 Pod 是否应被准入，并在创建时补齐服务账号相关字段。
 func (s *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if shouldIgnore(a) {
 		return nil
 	}
 	if a.GetOperation() != admission.Create {
-		// we only mutate pods during create requests
+		// 只在创建请求时修改 Pod，更新请求交给 Validate 处理。
 		return nil
 	}
 	pod := a.GetObject().(*api.Pod)
 
-	// Don't modify the spec of mirror pods.
-	// That makes the kubelet very angry and confused, and it immediately deletes the pod (because the spec doesn't match)
-	// That said, don't allow mirror pods to reference ServiceAccounts or SecretVolumeSources either
+	// 不能修改镜像 Pod 的 spec：kubelet 会发现本地 spec 与服务端不一致并删除该 Pod。
+	// 但镜像 Pod 也不允许引用 ServiceAccount 或 Secret 卷，因此转交 Validate 做校验。
 	if _, isMirrorPod := pod.Annotations[api.MirrorPodAnnotationKey]; isMirrorPod {
 		return s.Validate(ctx, a, o)
 	}
 
-	// Set the default service account if needed, keeping the deprecated alias
-	// in sync (see SetDefaults_PodSpec) so the result is defaulting-stable.
+	// 设置默认服务账号时同步已废弃的别名字段（见 SetDefaults_PodSpec），
+	// 保证默认值处理幂等、结果稳定。
 	if len(pod.Spec.ServiceAccountName) == 0 {
 		pod.Spec.ServiceAccountName = DefaultServiceAccountName
 		pod.Spec.DeprecatedServiceAccount = DefaultServiceAccountName //nolint:staticcheck // SA1019 DeprecatedServiceAccount must be set for backward compatibility
@@ -176,7 +175,7 @@ func (s *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 	return s.Validate(ctx, a, o)
 }
 
-// Validate the data we obtained
+// Validate 校验服务账号相关数据的合法性。
 func (s *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if shouldIgnore(a) {
 		return nil
@@ -189,11 +188,11 @@ func (s *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	}
 
 	if a.GetOperation() != admission.Create {
-		// we only validate pod specs during create requests
+		// 只在创建请求时校验完整的 Pod spec。
 		return nil
 	}
 
-	// Mirror pods have restrictions on what they can reference
+	// 镜像 Pod 对可引用的资源有额外限制。
 	if _, isMirrorPod := pod.Annotations[api.MirrorPodAnnotationKey]; isMirrorPod {
 		if len(pod.Spec.ServiceAccountName) != 0 {
 			return admission.NewForbidden(a, fmt.Errorf("a mirror pod may not reference service accounts"))
@@ -218,11 +217,11 @@ func (s *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return nil
 	}
 
-	// Require container pods to have service accounts
+	// 常规容器 Pod 必须指定服务账号。
 	if len(pod.Spec.ServiceAccountName) == 0 {
 		return admission.NewForbidden(a, fmt.Errorf("no service account specified for pod %s/%s", a.GetNamespace(), pod.Name))
 	}
-	// Ensure the referenced service account exists
+	// 确保引用的服务账号确实存在。
 	serviceAccount, err := s.getServiceAccount(a.GetNamespace(), pod.Spec.ServiceAccountName)
 	if err != nil {
 		return admission.NewForbidden(a, fmt.Errorf("error looking up service account %s/%s: %v", a.GetNamespace(), pod.Spec.ServiceAccountName, err))
@@ -237,6 +236,7 @@ func (s *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
+// shouldIgnore 判断请求是否无需本插件处理：仅处理 Pod 本体及 ephemeralcontainers 子资源。
 func shouldIgnore(a admission.Attributes) bool {
 	if a.GetResource().GroupResource() != api.Resource("pods") || (a.GetSubresource() != "" && a.GetSubresource() != "ephemeralcontainers") {
 		return true
@@ -253,21 +253,22 @@ func shouldIgnore(a admission.Attributes) bool {
 	return false
 }
 
+// shouldAutomount 决定是否自动挂载服务账号 token：Pod 的设置优先，其次是服务账号，默认开启。
 func shouldAutomount(sa *corev1.ServiceAccount, pod *api.Pod) bool {
-	// Pod's preference wins
+	// Pod 的显式设置优先级最高。
 	if pod.Spec.AutomountServiceAccountToken != nil {
 		return *pod.Spec.AutomountServiceAccountToken
 	}
-	// Then service account's
+	// 其次看服务账号的设置。
 	if sa.AutomountServiceAccountToken != nil {
 		return *sa.AutomountServiceAccountToken
 	}
-	// Default to true for backwards compatibility
+	// 为向后兼容，默认自动挂载。
 	return true
 }
 
-// enforceMountableSecrets indicates whether mountable secrets should be enforced for a particular service account
-// A global setting of true will override any flag set on the individual service account
+// enforceMountableSecrets 判断某个服务账号是否启用可挂载 Secret 校验；
+// 全局开启时会覆盖单个服务账号上的设置。
 func (s *Plugin) enforceMountableSecrets(serviceAccount *corev1.ServiceAccount) bool {
 	if s.LimitSecretReferences {
 		return true
@@ -281,7 +282,7 @@ func (s *Plugin) enforceMountableSecrets(serviceAccount *corev1.ServiceAccount) 
 	return false
 }
 
-// getServiceAccount returns the ServiceAccount for the given namespace and name if it exists
+// getServiceAccount 返回指定命名空间和名称的 ServiceAccount，缓存未命中时会直接查询 API。
 func (s *Plugin) getServiceAccount(namespace string, name string) (*corev1.ServiceAccount, error) {
 	serviceAccount, err := s.serviceAccountLister.ServiceAccounts(namespace).Get(name)
 	if err == nil {
@@ -291,10 +292,10 @@ func (s *Plugin) getServiceAccount(namespace string, name string) (*corev1.Servi
 		return nil, err
 	}
 
-	// Could not find in cache, attempt to look up directly
+	// 缓存里没有，直接查 API 兜底。
 	numAttempts := 1
 	if name == DefaultServiceAccountName {
-		// If this is the default serviceaccount, attempt more times, since it should be auto-created by the controller
+		// 默认服务账号由控制器自动创建，可能存在短暂延迟，多试几次。
 		numAttempts = 10
 	}
 	retryInterval := time.Duration(rand.Int63n(100)+int64(100)) * time.Millisecond
@@ -314,8 +315,9 @@ func (s *Plugin) getServiceAccount(namespace string, name string) (*corev1.Servi
 	return nil, errors.NewNotFound(api.Resource("serviceaccount"), name)
 }
 
+// limitSecretReferences 检查 Pod 引用的所有 Secret 是否被服务账号允许。
 func (s *Plugin) limitSecretReferences(serviceAccount *corev1.ServiceAccount, pod *api.Pod) error {
-	// Ensure all secrets the pod references are allowed by the service account
+	// 收集服务账号声明的可挂载 Secret 名称。
 	mountableSecrets := sets.NewString()
 	for _, s := range serviceAccount.Secrets {
 		mountableSecrets.Insert(s.Name)
@@ -365,7 +367,7 @@ func (s *Plugin) limitSecretReferences(serviceAccount *corev1.ServiceAccount, po
 		}
 	}
 
-	// limit pull secret references as well
+	// 拉取镜像用的 Secret 也在校验范围内。
 	pullSecrets := sets.NewString()
 	for _, s := range serviceAccount.ImagePullSecrets {
 		pullSecrets.Insert(s.Name)
@@ -378,12 +380,13 @@ func (s *Plugin) limitSecretReferences(serviceAccount *corev1.ServiceAccount, po
 	return nil
 }
 
+// limitEphemeralContainerSecretReferences 校验临时容器引用的 Secret 是否被服务账号允许。
 func (s *Plugin) limitEphemeralContainerSecretReferences(pod *api.Pod, a admission.Attributes) error {
-	// Require ephemeral container pods to have service accounts
+	// 含临时容器的 Pod 同样必须指定服务账号。
 	if len(pod.Spec.ServiceAccountName) == 0 {
 		return admission.NewForbidden(a, fmt.Errorf("no service account specified for pod %s/%s", a.GetNamespace(), pod.Name))
 	}
-	// Ensure the referenced service account exists
+	// 确保引用的服务账号存在。
 	serviceAccount, err := s.getServiceAccount(a.GetNamespace(), pod.Spec.ServiceAccountName)
 	if err != nil {
 		return admission.NewForbidden(a, fmt.Errorf("error looking up service account %s/%s: %w", a.GetNamespace(), pod.Spec.ServiceAccountName, err))
@@ -391,7 +394,7 @@ func (s *Plugin) limitEphemeralContainerSecretReferences(pod *api.Pod, a admissi
 	if !s.enforceMountableSecrets(serviceAccount) {
 		return nil
 	}
-	// Ensure all secrets the ephemeral containers reference are allowed by the service account
+	// 收集服务账号声明的可挂载 Secret，供临时容器逐一校验。
 	mountableSecrets := sets.NewString()
 	for _, s := range serviceAccount.Secrets {
 		mountableSecrets.Insert(s.Name)
@@ -415,8 +418,9 @@ func (s *Plugin) limitEphemeralContainerSecretReferences(pod *api.Pod, a admissi
 	return nil
 }
 
+// mountServiceAccountToken 为 Pod 的所有容器挂载服务账号 token 卷，必要时创建该卷。
 func (s *Plugin) mountServiceAccountToken(serviceAccount *corev1.ServiceAccount, pod *api.Pod) {
-	// Find the volume and volume name for the ServiceAccountTokenSecret if it already exists
+	// 若已有 token 卷则复用其名称，避免重复添加。
 	tokenVolumeName := ""
 	hasTokenVolume := false
 	allVolumeNames := sets.NewString()
@@ -429,24 +433,24 @@ func (s *Plugin) mountServiceAccountToken(serviceAccount *corev1.ServiceAccount,
 		}
 	}
 
-	// Determine a volume name for the ServiceAccountTokenSecret in case we need it
+	// 没有现成的 token 卷时，生成一个名称备用。
 	if len(tokenVolumeName) == 0 {
 		tokenVolumeName = s.generateName(ServiceAccountVolumeName + "-")
 	}
 
-	// Create the prototypical VolumeMount
+	// 构造标准的 VolumeMount 模板。
 	volumeMount := api.VolumeMount{
 		Name:      tokenVolumeName,
 		ReadOnly:  true,
 		MountPath: DefaultAPITokenMountPath,
 	}
 
-	// Ensure every container mounts the APISecret volume
+	// 所有容器都挂载 API token 卷；若确实添加了挂载，则需要保证卷存在。
 	needsTokenVolume := false
 	for i, container := range pod.Spec.InitContainers {
 		existingContainerMount := false
 		for _, volumeMount := range container.VolumeMounts {
-			// Existing mounts at the default mount path prevent mounting of the API token
+			// 容器已占用默认挂载路径时不能再挂载 token，跳过以免冲突。
 			if volumeMount.MountPath == DefaultAPITokenMountPath {
 				existingContainerMount = true
 				break
@@ -460,7 +464,7 @@ func (s *Plugin) mountServiceAccountToken(serviceAccount *corev1.ServiceAccount,
 	for i, container := range pod.Spec.Containers {
 		existingContainerMount := false
 		for _, volumeMount := range container.VolumeMounts {
-			// Existing mounts at the default mount path prevent mounting of the API token
+			// 容器已占用默认挂载路径时不能再挂载 token，跳过以免冲突。
 			if volumeMount.MountPath == DefaultAPITokenMountPath {
 				existingContainerMount = true
 				break
@@ -472,7 +476,7 @@ func (s *Plugin) mountServiceAccountToken(serviceAccount *corev1.ServiceAccount,
 		}
 	}
 
-	// Add the volume if a container needs it
+	// 没有现成卷且确有容器需要挂载时才创建，避免无谓地改动 Pod。
 	if !hasTokenVolume && needsTokenVolume {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, api.Volume{
 			Name: tokenVolumeName,
@@ -483,10 +487,10 @@ func (s *Plugin) mountServiceAccountToken(serviceAccount *corev1.ServiceAccount,
 	}
 }
 
-// TokenVolumeSource returns the projected volume source for service account token.
+// TokenVolumeSource 返回服务账号 token 的 projected 卷源。
 func TokenVolumeSource() *api.ProjectedVolumeSource {
 	return &api.ProjectedVolumeSource{
-		// explicitly set default value, see #104464
+		// 显式设置默认值，见 #104464
 		DefaultMode: ptr.To[int32](corev1.ProjectedVolumeSourceDefaultMode),
 		Sources: []api.VolumeProjection{
 			{

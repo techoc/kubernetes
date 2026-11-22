@@ -14,14 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package alwayspullimages contains an admission controller that modifies every new Pod to force
-// the image pull policy to Always. This is useful in a multitenant cluster so that users can be
-// assured that their private images can only be used by those who have the credentials to pull
-// them. Without this admission controller, once an image has been pulled to a node, any pod from
-// any user can use it simply by knowing the image's name (assuming the Pod is scheduled onto the
-// right node), without any authorization check against the image. With this admission controller
-// enabled, images are always pulled prior to starting containers, which means valid credentials are
-// required.
+// Package alwayspullimages 包含一个准入控制器，强制把每个新 Pod 的镜像拉取策略改为 Always。
+// 在多租户集群中，这能保证私有镜像只能被持有拉取凭证的用户使用。
+// 若没有该控制器，镜像一旦被拉到节点上，任何用户的 Pod 只要知道镜像名即可使用
+// （前提是 Pod 被调度到该节点），无需对镜像本身做任何鉴权。
+// 启用该控制器后，启动容器前总会重新拉取镜像，因此必须提供有效凭证。
 package alwayspullimages
 
 import (
@@ -38,18 +35,18 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/pods"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是准入插件的名称。
 const PluginName = "AlwaysPullImages"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewAlwaysPullImages(), nil
 	})
 }
 
-// AlwaysPullImages is an implementation of admission.Interface.
-// It looks at all new pods and overrides each container's image pull policy to Always.
+// AlwaysPullImages 实现 admission.Interface。
+// 它检查所有新 Pod，并把每个容器的镜像拉取策略覆盖为 Always。
 type AlwaysPullImages struct {
 	*admission.Handler
 }
@@ -57,9 +54,9 @@ type AlwaysPullImages struct {
 var _ admission.MutationInterface = &AlwaysPullImages{}
 var _ admission.ValidationInterface = &AlwaysPullImages{}
 
-// Admit makes an admission decision based on the request attributes
+// Admit 根据请求属性作出准入决策，强制镜像拉取策略为 Always。
 func (a *AlwaysPullImages) Admit(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// Ignore all calls to subresources or resources other than pods.
+	// 忽略子资源请求以及非 Pod 资源。
 	if shouldIgnore(attributes) {
 		return nil
 	}
@@ -73,7 +70,7 @@ func (a *AlwaysPullImages) Admit(ctx context.Context, attributes admission.Attri
 		return true
 	})
 
-	// See: https://kep.k8s.io/4639
+	// 镜像卷同样需要强制 Always，见 https://kep.k8s.io/4639。
 	for _, v := range pod.Spec.Volumes {
 		if v.Image != nil {
 			v.Image.PullPolicy = api.PullAlways
@@ -83,7 +80,7 @@ func (a *AlwaysPullImages) Admit(ctx context.Context, attributes admission.Attri
 	return nil
 }
 
-// Validate makes sure that all containers are set to always pull images
+// Validate 确保所有容器和镜像卷的拉取策略均为 Always。
 func (*AlwaysPullImages) Validate(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if shouldIgnore(attributes) {
 		return nil
@@ -104,7 +101,7 @@ func (*AlwaysPullImages) Validate(ctx context.Context, attributes admission.Attr
 		return true
 	})
 
-	// See: https://kep.k8s.io/4639
+	// 镜像卷的拉取策略也要校验，见 https://kep.k8s.io/4639。
 	for i, v := range pod.Spec.Volumes {
 		if v.Image != nil && v.Image.PullPolicy != api.PullAlways {
 			allErrs = append(allErrs, admission.NewForbidden(attributes,
@@ -124,7 +121,7 @@ func (*AlwaysPullImages) Validate(ctx context.Context, attributes admission.Attr
 	return nil
 }
 
-// check if it's update and it doesn't change the images referenced by the pod spec
+// isUpdateWithNoNewImages 判断本次更新是否未引入新镜像。
 func isUpdateWithNoNewImages(attributes admission.Attributes) bool {
 	if attributes.GetOperation() != admission.Update {
 		return false
@@ -142,6 +139,7 @@ func isUpdateWithNoNewImages(attributes admission.Attributes) bool {
 		return false
 	}
 
+	// 先收集旧 Pod 引用的镜像集合。
 	oldImages := sets.NewString()
 	pods.VisitContainersWithPath(&oldPod.Spec, field.NewPath("spec"), func(c *api.Container, _ *field.Path) bool {
 		oldImages.Insert(c.Image)
@@ -149,6 +147,7 @@ func isUpdateWithNoNewImages(attributes admission.Attributes) bool {
 	})
 
 	hasNewImage := false
+	// 一旦发现新镜像就停止遍历，回调返回 false 即可提前终止。
 	pods.VisitContainersWithPath(&pod.Spec, field.NewPath("spec"), func(c *api.Container, _ *field.Path) bool {
 		if !oldImages.Has(c.Image) {
 			hasNewImage = true
@@ -158,19 +157,21 @@ func isUpdateWithNoNewImages(attributes admission.Attributes) bool {
 	return !hasNewImage
 }
 
+// shouldIgnore 判断请求是否无需处理。
 func shouldIgnore(attributes admission.Attributes) bool {
-	// Ignore all calls to subresources or resources other than pods.
+	// 忽略子资源请求以及非 Pod 资源。
 	if len(attributes.GetSubresource()) != 0 || attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return true
 	}
 
+	// 未引入新镜像的更新无需强制拉取，避免干扰原地升级等场景。
 	if isUpdateWithNoNewImages(attributes) {
 		return true
 	}
 	return false
 }
 
-// NewAlwaysPullImages creates a new always pull images admission control handler
+// NewAlwaysPullImages 创建一个新的强制拉取镜像准入处理器。
 func NewAlwaysPullImages() *AlwaysPullImages {
 	return &AlwaysPullImages{
 		Handler: admission.NewHandler(admission.Create, admission.Update),

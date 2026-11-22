@@ -27,9 +27,9 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// ensures the hard PodAntiAffinity is denied if it defines TopologyKey other than kubernetes.io/hostname.
-// TODO: Add test case "invalid topologyKey in requiredDuringSchedulingRequiredDuringExecution then admission fails"
-// after RequiredDuringSchedulingRequiredDuringExecution is implemented.
+// 验证硬 PodAntiAffinity 使用 kubernetes.io/hostname 以外的 TopologyKey 时会被拒绝。
+// TODO: 待 RequiredDuringSchedulingRequiredDuringExecution 实现后，
+// 补充该场景下非法 topologyKey 导致准入失败的测试用例。
 func TestInterPodAffinityAdmission(t *testing.T) {
 	handler := NewInterPodAntiAffinity()
 	pod := api.Pod{
@@ -39,12 +39,12 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 		affinity      *api.Affinity
 		errorExpected bool
 	}{
-		// empty affinity its success.
+		// 空的 affinity 应当通过。
 		{
 			affinity:      &api.Affinity{},
 			errorExpected: false,
 		},
-		// what ever topologyKey in preferredDuringSchedulingIgnoredDuringExecution, the admission should success.
+		// 软反亲和的 topologyKey 不受限制，任意值都应通过。
 		{
 			affinity: &api.Affinity{
 				PodAntiAffinity: &api.PodAntiAffinity{
@@ -69,8 +69,7 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 			},
 			errorExpected: false,
 		},
-		// valid topologyKey in requiredDuringSchedulingIgnoredDuringExecution,
-		// plus any topologyKey in preferredDuringSchedulingIgnoredDuringExecution, then admission success.
+		// 硬反亲和的 topologyKey 合法，且软反亲和可带任意 topologyKey，整体应通过。
 		{
 			affinity: &api.Affinity{
 				PodAntiAffinity: &api.PodAntiAffinity{
@@ -109,7 +108,7 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 			},
 			errorExpected: false,
 		},
-		// valid topologyKey in requiredDuringSchedulingIgnoredDuringExecution then admission success.
+		// 仅有硬反亲和且 topologyKey 合法时应通过。
 		{
 			affinity: &api.Affinity{
 				PodAntiAffinity: &api.PodAntiAffinity{
@@ -131,7 +130,7 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 			},
 			errorExpected: false,
 		},
-		// invalid topologyKey in requiredDuringSchedulingIgnoredDuringExecution then admission fails.
+		// 硬反亲和的 topologyKey 非法时应拒绝。
 		{
 			affinity: &api.Affinity{
 				PodAntiAffinity: &api.PodAntiAffinity{
@@ -153,7 +152,7 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 			},
 			errorExpected: true,
 		},
-		// list of requiredDuringSchedulingIgnoredDuringExecution middle element topologyKey is not valid.
+		// 多个硬反亲和中夹杂一个非法 topologyKey，也应拒绝。
 		{
 			affinity: &api.Affinity{
 				PodAntiAffinity: &api.PodAntiAffinity{
@@ -211,6 +210,8 @@ func TestInterPodAffinityAdmission(t *testing.T) {
 		}
 	}
 }
+
+// TestHandles 验证插件只对创建和更新操作生效。
 func TestHandles(t *testing.T) {
 	handler := NewInterPodAntiAffinity()
 	tests := map[admission.Operation]bool{
@@ -227,8 +228,7 @@ func TestHandles(t *testing.T) {
 	}
 }
 
-// TestOtherResources ensures that this admission controller is a no-op for other resources,
-// subresources, and non-pods.
+// TestOtherResources 验证该准入控制器对其他资源、子资源以及非 Pod 对象不产生影响。
 func TestOtherResources(t *testing.T) {
 	namespace := "testnamespace"
 	name := "testname"

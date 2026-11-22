@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file was generated using openssl by the gencerts.sh script
-// and holds raw certificates for the imagepolicy webhook tests.
+// 本文件由 gencerts.sh 脚本调用 openssl 生成，
+// 保存 imagepolicy webhook 测试所用的原始证书。
 
 //lint:file-ignore U1000 Ignore all unused code, it's generated
 

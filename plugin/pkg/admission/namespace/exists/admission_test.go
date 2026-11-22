@@ -35,7 +35,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// newHandlerForTest returns the admission controller configured for testing.
+// newHandlerForTest 返回测试用的、已注入初始化器的准入插件。
 func newHandlerForTest(c kubernetes.Interface) (admission.ValidationInterface, informers.SharedInformerFactory, error) {
 	f := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	handler := NewExists()
@@ -45,7 +45,7 @@ func newHandlerForTest(c kubernetes.Interface) (admission.ValidationInterface, i
 	return handler, f, err
 }
 
-// newMockClientForTest creates a mock client that returns a client configured for the specified list of namespaces.
+// newMockClientForTest 创建模拟客户端，list 操作返回指定的命名空间列表。
 func newMockClientForTest(namespaces []string) *fake.Clientset {
 	mockClient := &fake.Clientset{}
 	mockClient.AddReactor("list", "namespaces", func(action core.Action) (bool, runtime.Object, error) {
@@ -67,7 +67,7 @@ func newMockClientForTest(namespaces []string) *fake.Clientset {
 	return mockClient
 }
 
-// newPod returns a new pod for the specified namespace
+// newPod 构造指定命名空间下的测试 Pod。
 func newPod(namespace string) api.Pod {
 	return api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: namespace},
@@ -78,7 +78,8 @@ func newPod(namespace string) api.Pod {
 	}
 }
 
-// TestAdmissionNamespaceExists verifies pod is admitted only if namespace exists.
+// TestAdmissionNamespaceExists 验证命名空间存在时 Pod 可以准入。
+// TestAdmissionNamespaceExists 验证命名空间存在时 Pod 可以准入。
 func TestAdmissionNamespaceExists(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{namespace})
@@ -95,7 +96,8 @@ func TestAdmissionNamespaceExists(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceDoesNotExist verifies pod is not admitted if namespace does not exist.
+// TestAdmissionNamespaceDoesNotExist 验证命名空间不存在时 Pod 准入被拒绝。
+// TestAdmissionNamespaceDoesNotExist 验证命名空间不存在时 Pod 准入被拒绝。
 func TestAdmissionNamespaceDoesNotExist(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{})

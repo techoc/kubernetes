@@ -23,6 +23,7 @@ import (
 	internalapi "k8s.io/kubernetes/plugin/pkg/admission/podtolerationrestriction/apis/podtolerationrestriction"
 )
 
+// TestValidateConfiguration 验证默认容忍和白名单配置的合法性检查。
 func TestValidateConfiguration(t *testing.T) {
 
 	tests := []struct {

@@ -22,16 +22,14 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
-// LimitRangerActions is an interface defining actions to be carried over ranges to identify and manipulate their limits
+// LimitRangerActions 定义了一组可插拔动作，用于遍历 LimitRange 并识别、处理其中的限制。
 type LimitRangerActions interface {
-	// MutateLimit is a pluggable function to set limits on the object.
+	// MutateLimit 是可插拔函数，用于为对象设置限制。
 	MutateLimit(limitRange *corev1.LimitRange, kind string, obj runtime.Object) error
-	// ValidateLimits is a pluggable function to enforce limits on the object.
+	// ValidateLimit 是可插拔函数，用于校验对象是否满足限制。
 	ValidateLimit(limitRange *corev1.LimitRange, kind string, obj runtime.Object) error
-	// SupportsAttributes is a pluggable function to allow overridding what resources the limitranger
-	// supports.
+	// SupportsAttributes 是可插拔函数，允许覆盖 limitranger 所支持的资源范围。
 	SupportsAttributes(attr admission.Attributes) bool
-	// SupportsLimit is a pluggable function to allow ignoring limits that should not be applied
-	// for any reason.
+	// SupportsLimit 是可插拔函数，允许基于任何原因忽略那些不应应用的限制。
 	SupportsLimit(limitRange *corev1.LimitRange) bool
 }

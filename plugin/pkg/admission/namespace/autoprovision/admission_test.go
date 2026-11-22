@@ -37,7 +37,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// newHandlerForTest returns the admission controller configured for testing.
+// newHandlerForTest 创建测试用的准入控制器，并完成初始化校验。
 func newHandlerForTest(c clientset.Interface) (admission.MutationInterface, informers.SharedInformerFactory, error) {
 	f := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	handler := NewProvision()
@@ -47,7 +47,7 @@ func newHandlerForTest(c clientset.Interface) (admission.MutationInterface, info
 	return handler, f, err
 }
 
-// newMockClientForTest creates a mock client that returns a client configured for the specified list of namespaces.
+// newMockClientForTest 创建 mock 客户端，其 namespace 列表由参数指定。
 func newMockClientForTest(namespaces []string) *fake.Clientset {
 	mockClient := &fake.Clientset{}
 	mockClient.AddReactor("list", "namespaces", func(action core.Action) (bool, runtime.Object, error) {
@@ -69,7 +69,7 @@ func newMockClientForTest(namespaces []string) *fake.Clientset {
 	return mockClient
 }
 
-// newPod returns a new pod for the specified namespace
+// newPod 创建指定命名空间下的测试 Pod。
 func newPod(namespace string) api.Pod {
 	return api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: namespace},
@@ -80,7 +80,7 @@ func newPod(namespace string) api.Pod {
 	}
 }
 
-// hasCreateNamespaceAction returns true if it has the create namespace action
+// hasCreateNamespaceAction 判断 mock 客户端是否收到创建命名空间的请求。
 func hasCreateNamespaceAction(mockClient *fake.Clientset) bool {
 	for _, action := range mockClient.Actions() {
 		if action.GetVerb() == "create" && action.GetResource().Resource == "namespaces" {
@@ -90,7 +90,7 @@ func hasCreateNamespaceAction(mockClient *fake.Clientset) bool {
 	return false
 }
 
-// TestAdmission verifies a namespace is created on create requests for namespace managed resources
+// TestAdmission 验证命名空间不存在时会触发创建。
 func TestAdmission(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{})
@@ -110,7 +110,7 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceExists verifies that no client call is made when a namespace already exists
+// TestAdmissionNamespaceExists 验证命名空间已存在时不会发起创建请求。
 func TestAdmissionNamespaceExists(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{namespace})
@@ -130,7 +130,7 @@ func TestAdmissionNamespaceExists(t *testing.T) {
 	}
 }
 
-// TestAdmissionDryRun verifies that no client call is made on a dry run request
+// TestAdmissionDryRun 验证 dry-run 请求不会真正创建命名空间。
 func TestAdmissionDryRun(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{})
@@ -150,7 +150,7 @@ func TestAdmissionDryRun(t *testing.T) {
 	}
 }
 
-// TestIgnoreAdmission validates that a request is ignored if its not a create
+// TestIgnoreAdmission 验证非创建请求会被忽略。
 func TestIgnoreAdmission(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{})
@@ -171,6 +171,7 @@ func TestIgnoreAdmission(t *testing.T) {
 	}
 }
 
+// TestAdmissionWithLatentCache 验证缓存滞后导致 AlreadyExists 时仍能正常完成准入。
 func TestAdmissionWithLatentCache(t *testing.T) {
 	namespace := "test"
 	mockClient := newMockClientForTest([]string{})

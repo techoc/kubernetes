@@ -27,34 +27,35 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是本插件的名称。
 const PluginName = "LimitPodHardAntiAffinityTopology"
 
-// Register registers a plugin
+// Register 向 apiserver 注册本插件的工厂函数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewInterPodAntiAffinity(), nil
 	})
 }
 
-// Plugin contains the client used by the admission controller
+// Plugin 是 LimitPodHardAntiAffinityTopology 准入控制器，持有准入处理所需的 handler。
 type Plugin struct {
 	*admission.Handler
 }
 
 var _ admission.ValidationInterface = &Plugin{}
 
-// NewInterPodAntiAffinity creates a new instance of the LimitPodHardAntiAffinityTopology admission controller
+// NewInterPodAntiAffinity 创建一个 LimitPodHardAntiAffinityTopology 准入控制器实例。
 func NewInterPodAntiAffinity() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 	}
 }
 
-// Validate will deny any pod that defines AntiAffinity topology key other than v1.LabelHostname i.e. "kubernetes.io/hostname"
-// in  requiredDuringSchedulingRequiredDuringExecution and requiredDuringSchedulingIgnoredDuringExecution.
+// Validate 拒绝在 requiredDuringSchedulingRequiredDuringExecution 或
+// requiredDuringSchedulingIgnoredDuringExecution 中使用 v1.LabelHostname（即 "kubernetes.io/hostname"）
+// 以外 topologyKey 的 Pod。
 func (p *Plugin) Validate(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// Ignore all calls to subresources or resources other than pods.
+	// 子资源请求和非 Pod 资源都不在本插件管辖范围内。
 	if len(attributes.GetSubresource()) != 0 || attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return nil
 	}
@@ -68,7 +69,7 @@ func (p *Plugin) Validate(ctx context.Context, attributes admission.Attributes, 
 		if len(affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
 			podAntiAffinityTerms = affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		}
-		// TODO: Uncomment this block when implement RequiredDuringSchedulingRequiredDuringExecution.
+		// TODO: 实现 RequiredDuringSchedulingRequiredDuringExecution 后再启用下面这段代码。
 		//if len(affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution) != 0 {
 		//        podAntiAffinityTerms = append(podAntiAffinityTerms, affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution...)
 		//}

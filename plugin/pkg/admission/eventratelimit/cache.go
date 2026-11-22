@@ -21,30 +21,32 @@ import (
 	"k8s.io/utils/lru"
 )
 
-// cache is an interface for caching the limits of a particular type
+// cache 是按特定类型缓存速率限制器的接口。
 type cache interface {
-	// get the rate limiter associated with the specified key
+	// get 返回与指定 key 关联的速率限制器。
 	get(key interface{}) flowcontrol.RateLimiter
 }
 
-// singleCache is a cache that only stores a single, constant item
+// singleCache 是只保存一个固定对象的缓存。
 type singleCache struct {
-	// the single rate limiter held by the cache
+	// 缓存持有的唯一速率限制器。
 	rateLimiter flowcontrol.RateLimiter
 }
 
+// get 返回缓存中唯一的速率限制器，与 key 无关。
 func (c *singleCache) get(key interface{}) flowcontrol.RateLimiter {
 	return c.rateLimiter
 }
 
-// lruCache is a least-recently-used cache
+// lruCache 是基于最近最少使用策略的缓存。
 type lruCache struct {
-	// factory to use to create new rate limiters
+	// 用于创建新速率限制器的工厂函数。
 	rateLimiterFactory func() flowcontrol.RateLimiter
-	// the actual LRU cache
+	// 底层 LRU 缓存。
 	cache *lru.Cache
 }
 
+// get 返回 key 对应的速率限制器；不存在时先创建再缓存，避免重复构造。
 func (c *lruCache) get(key interface{}) flowcontrol.RateLimiter {
 	value, found := c.cache.Get(key)
 	if !found {

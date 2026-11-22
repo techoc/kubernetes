@@ -56,18 +56,18 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是该插件的名称。
 const PluginName = "NodeRestriction"
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(nodeidentifier.NewDefaultNodeIdentifier()), nil
 	})
 }
 
-// NewPlugin creates a new NodeRestriction admission plugin.
-// This plugin identifies requests from nodes
+// NewPlugin 创建一个新的 NodeRestriction 准入插件，
+// 用于识别来自节点的请求。
 func NewPlugin(nodeIdentifier nodeidentifier.NodeIdentifier) *Plugin {
 	return &Plugin{
 		Handler:        admission.NewHandler(admission.Create, admission.Update, admission.Delete),
@@ -75,7 +75,7 @@ func NewPlugin(nodeIdentifier nodeidentifier.NodeIdentifier) *Plugin {
 	}
 }
 
-// Plugin holds state for and implements the admission plugin.
+// Plugin 持有该准入插件的状态并实现其逻辑。
 type Plugin struct {
 	*admission.Handler
 	nodeIdentifier       nodeidentifier.NodeIdentifier
@@ -105,7 +105,7 @@ var (
 	_ apiserveradmission.WantsUnconditionalAuthorizer     = &Plugin{}
 )
 
-// InspectFeatureGates allows setting bools without taking a dep on a global variable
+// InspectFeatureGates 从特性门控读取开关状态，避免在插件内直接依赖全局变量。
 func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	p.expansionRecoveryEnabled = featureGates.Enabled(features.RecoverVolumeExpansionFailure)
 	p.dynamicResourceAllocationEnabled = featureGates.Enabled(features.DynamicResourceAllocation)
@@ -116,7 +116,7 @@ func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	p.inspectedFeatureGates = true
 }
 
-// SetExternalKubeInformerFactory registers an informer factory into Plugin
+// SetExternalKubeInformerFactory 向插件注册 informer 工厂并设置所需的 lister。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	p.podsGetter = f.Core().V1().Pods().Lister()
 	p.nodesGetter = f.Core().V1().Nodes().Lister()
@@ -129,7 +129,7 @@ func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactor
 	p.serviceAccountGetter = f.Core().V1().ServiceAccounts().Lister()
 }
 
-// ValidateInitialization validates the Plugin was initialized properly
+// ValidateInitialization 校验插件是否已完成必要的初始化。
 func (p *Plugin) ValidateInitialization() error {
 	if p.nodeIdentifier == nil {
 		return fmt.Errorf("%s requires a node identifier", PluginName)
@@ -168,7 +168,7 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// SetUnconditionalAuthorizer sets the authorizer.
+// SetUnconditionalAuthorizer 设置鉴权器；仅相关特性启用时才需要。
 func (p *Plugin) SetUnconditionalAuthorizer(authz authorizer.UnconditionalAuthorizer) {
 	if p.serviceAccountNodeAudienceRestriction || p.podCertificateRequestsEnabled {
 		p.authz = authz
@@ -187,24 +187,23 @@ var (
 	podCertificateRequestResource = certapi.Resource("podcertificaterequests")
 )
 
-// Admit checks the admission policy and triggers corresponding actions
+// Admit 按资源类型分发请求，执行对应的节点限制策略。
 func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	nodeName, isNode := p.nodeIdentifier.NodeIdentity(a.GetUserInfo())
 
 	if !isNode {
-		// The calling user is not a node, so they should not be node-restricted.
+		// 非节点用户不受本插件约束。
 		return nil
 	}
 
 	if len(nodeName) == 0 {
-		// disallow requests we cannot match to a particular node
+		// 无法确定具体节点时一律拒绝，避免权限边界模糊。
 		return admission.NewForbidden(a, fmt.Errorf("could not determine node from user %q", a.GetUserInfo().GetName()))
 	}
 
-	// At this point, the caller has been affirmitively matched up to a node
-	// name.
+	// 走到这里，调用方已明确对应到某个节点名。
 
-	// TODO: if node doesn't exist and this isn't a create node request, then reject.
+	// TODO: 若节点不存在且请求不是创建 Node，则拒绝。
 
 	switch a.GetResource().GroupResource() {
 	case podResource:
@@ -255,15 +254,14 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 	}
 }
 
-// admitPod allows creating or deleting a pod if it is assigned to the
-// current node and fulfills related criteria.
+// admitPod 仅在 Pod 绑定到当前节点且满足附加条件时，才允许节点创建或删除该 Pod。
 func (p *Plugin) admitPod(nodeName string, a admission.Attributes) error {
 	switch a.GetOperation() {
 	case admission.Create:
 		return p.admitPodCreate(nodeName, a)
 
 	case admission.Delete:
-		// get the existing pod
+		// 读取现存 Pod 以确认其归属节点。
 		existingPod, err := p.podsGetter.Pods(a.GetNamespace()).Get(a.GetName())
 		if apierrors.IsNotFound(err) {
 			return err
@@ -271,7 +269,7 @@ func (p *Plugin) admitPod(nodeName string, a admission.Attributes) error {
 		if err != nil {
 			return admission.NewForbidden(a, err)
 		}
-		// only allow a node to delete a pod bound to itself
+		// 节点只能删除绑定到自己的 Pod，防止跨节点越权删除。
 		if existingPod.Spec.NodeName != nodeName {
 			return admission.NewForbidden(a, fmt.Errorf("node %q can only delete pods with spec.nodeName set to itself", nodeName))
 		}
@@ -282,19 +280,20 @@ func (p *Plugin) admitPod(nodeName string, a admission.Attributes) error {
 	}
 }
 
+// admitPodCreate 限制节点只能创建绑定到自身、且以自身为属主的静态 Pod。
 func (p *Plugin) admitPodCreate(nodeName string, a admission.Attributes) error {
-	// require a pod object
+	// 请求对象必须是 Pod。
 	pod, ok := a.GetObject().(*api.Pod)
 	if !ok {
 		return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 	}
 
-	// only allow nodes to create mirror pods
+	// 节点仅允许创建静态 Pod，其余 Pod 由控制面创建。
 	if _, isMirrorPod := pod.Annotations[api.MirrorPodAnnotationKey]; !isMirrorPod {
 		return admission.NewForbidden(a, fmt.Errorf("pod does not have %q annotation, node %q can only create mirror pods", api.MirrorPodAnnotationKey, nodeName))
 	}
 
-	// only allow nodes to create a pod bound to itself
+	// 节点只能创建调度到自己的 Pod。
 	if pod.Spec.NodeName != nodeName {
 		return admission.NewForbidden(a, fmt.Errorf("node %q can only create pods with spec.nodeName set to itself", nodeName))
 	}
@@ -318,7 +317,7 @@ func (p *Plugin) admitPodCreate(nodeName string, a admission.Attributes) error {
 			return admission.NewForbidden(a, fmt.Errorf("node %q must not set blockOwnerDeletion on an owner reference", nodeName))
 		}
 
-		// Verify the node UID.
+		// 校验 OwnerReference 中的 UID，防止节点冒用同名对象。
 		node, err := p.nodesGetter.Get(nodeName)
 		if apierrors.IsNotFound(err) {
 			return err
@@ -331,7 +330,7 @@ func (p *Plugin) admitPodCreate(nodeName string, a admission.Attributes) error {
 		}
 	}
 
-	// don't allow a node to create a pod that references any other API objects
+	// 禁止静态 Pod 引用其他 API 对象，避免借由引用读取或篡改其他资源。
 	isPodReferencingAPIObjects, resource, err := podutil.HasAPIObjectReference(pod)
 	if err != nil {
 		return admission.NewForbidden(a, fmt.Errorf("error checking mirror pod for API references: %w", err))
@@ -343,17 +342,17 @@ func (p *Plugin) admitPodCreate(nodeName string, a admission.Attributes) error {
 	return nil
 }
 
-// admitPodStatus allows to update the status of a pod if it is
-// assigned to the current node.
+// admitPodStatus 仅在 Pod 绑定到当前节点时允许更新其状态，
+// 并禁止借状态更新篡改标签或资源声明状态。
 func (p *Plugin) admitPodStatus(nodeName string, a admission.Attributes) error {
 	switch a.GetOperation() {
 	case admission.Update:
-		// require an existing pod
+		// 旧对象必须是 Pod。
 		oldPod, ok := a.GetOldObject().(*api.Pod)
 		if !ok {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetOldObject()))
 		}
-		// only allow a node to update status of a pod bound to itself
+		// 只能更新绑定到自身的 Pod 的状态。
 		if oldPod.Spec.NodeName != nodeName {
 			return admission.NewForbidden(a, fmt.Errorf("node %q can only update pod status for pods with spec.nodeName set to itself", nodeName))
 		}
@@ -380,13 +379,12 @@ func (p *Plugin) admitPodStatus(nodeName string, a admission.Attributes) error {
 	}
 }
 
+// resourceClaimStatusesEqual 比较两个资源声明状态切片是否一致。
 func resourceClaimStatusesEqual(statusA, statusB []api.PodResourceClaimStatus) bool {
 	if len(statusA) != len(statusB) {
 		return false
 	}
-	// In most cases, status entries only get added once and not modified.
-	// But this cannot be guaranteed, so for the sake of correctness in all
-	// cases this code here has to check.
+	// 状态条目通常只新增不修改，但这并非强保证，因此仍需逐项比较。
 	for i := range statusA {
 		if statusA[i].Name != statusB[i].Name {
 			return false
@@ -403,6 +401,7 @@ func resourceClaimStatusesEqual(statusA, statusB []api.PodResourceClaimStatus) b
 	return true
 }
 
+// extendedResourceClaimStatusEqual 比较扩展资源声明状态是否一致。
 func extendedResourceClaimStatusEqual(statusA, statusB *api.PodExtendedResourceClaimStatus) bool {
 	if statusA == nil && statusB == nil {
 		return true
@@ -413,19 +412,16 @@ func extendedResourceClaimStatusEqual(statusA, statusB *api.PodExtendedResourceC
 	if statusA.ResourceClaimName != statusB.ResourceClaimName {
 		return false
 	}
-	// In most cases, status entries only get added once and not modified.
-	// But this cannot be guaranteed, so for the sake of correctness in all
-	// cases this code here has to check.
+	// 状态条目通常只新增不修改，但这并非强保证，因此仍需逐项比较。
 	return slices.Equal(statusA.RequestMappings, statusB.RequestMappings)
 }
 
+// nodeAllocatableResourceClaimStatusesEqual 比较节点可分配资源声明状态切片是否一致。
 func nodeAllocatableResourceClaimStatusesEqual(statusA, statusB []api.NodeAllocatableResourceClaimStatus) bool {
 	if len(statusA) != len(statusB) {
 		return false
 	}
-	// In most cases, status entries only get added once and not modified.
-	// But this cannot be guaranteed, so for the sake of correctness in all
-	// cases this code here has to check.
+	// 状态条目通常只新增不修改，但这并非强保证，因此仍需逐项比较。
 	for i := range statusA {
 		if statusA[i].ResourceClaimName != statusB[i].ResourceClaimName {
 			return false
@@ -443,6 +439,7 @@ func nodeAllocatableResourceClaimStatusesEqual(statusA, statusB []api.NodeAlloca
 	return true
 }
 
+// nodeAllocatableMappedResourcesEqual 比较可分配资源映射列表的名称与数量是否一致。
 func nodeAllocatableMappedResourcesEqual(a, b []api.NodeAllocatableMappedResources) bool {
 	itemEqual := func(x, y api.NodeAllocatableMappedResources) bool {
 		return x.Name == y.Name && apiresource.QuantityPtrEqual(x.Quantity, y.Quantity)
@@ -450,6 +447,7 @@ func nodeAllocatableMappedResourcesEqual(a, b []api.NodeAllocatableMappedResourc
 	return slices.EqualFunc(a, b, itemEqual)
 }
 
+// nodeAllocatableOverheadResourcesEqual 比较可分配资源开销列表是否一致。
 func nodeAllocatableOverheadResourcesEqual(a, b []api.NodeAllocatableOverheadResources) bool {
 	itemEqual := func(x, y api.NodeAllocatableOverheadResources) bool {
 		return x.Name == y.Name && apiresource.QuantityPtrEqual(x.PerPod, y.PerPod) && apiresource.QuantityPtrEqual(x.PerContainer, y.PerContainer)
@@ -457,16 +455,16 @@ func nodeAllocatableOverheadResourcesEqual(a, b []api.NodeAllocatableOverheadRes
 	return slices.EqualFunc(a, b, itemEqual)
 }
 
-// admitPodEviction allows to evict a pod if it is assigned to the current node.
+// admitPodEviction 仅在 Pod 绑定到当前节点时允许节点发起驱逐。
 func (p *Plugin) admitPodEviction(nodeName string, a admission.Attributes) error {
 	switch a.GetOperation() {
 	case admission.Create:
-		// require eviction to an existing pod object
+		// 请求对象必须是 Eviction。
 		eviction, ok := a.GetObject().(*policy.Eviction)
 		if !ok {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 		}
-		// use pod name from the admission attributes, if set, rather than from the submitted Eviction object
+		// 优先使用请求 URL 中的 Pod 名，避免被请求体中的名字误导。
 		podName := a.GetName()
 		if len(podName) == 0 {
 			if len(eviction.Name) == 0 {
@@ -474,7 +472,7 @@ func (p *Plugin) admitPodEviction(nodeName string, a admission.Attributes) error
 			}
 			podName = eviction.Name
 		}
-		// get the existing pod
+		// 读取现存 Pod 以确认其归属节点。
 		existingPod, err := p.podsGetter.Pods(a.GetNamespace()).Get(podName)
 		if apierrors.IsNotFound(err) {
 			return err
@@ -482,7 +480,7 @@ func (p *Plugin) admitPodEviction(nodeName string, a admission.Attributes) error
 		if err != nil {
 			return admission.NewForbidden(a, err)
 		}
-		// only allow a node to evict a pod bound to itself
+		// 只能驱逐绑定到自身的 Pod。
 		if existingPod.Spec.NodeName != nodeName {
 			return admission.NewForbidden(a, fmt.Errorf("node %s can only evict pods with spec.nodeName set to itself", nodeName))
 		}
@@ -493,6 +491,7 @@ func (p *Plugin) admitPodEviction(nodeName string, a admission.Attributes) error
 	}
 }
 
+// admitPVCStatus 限制节点更新 PVC 时只能修改允许的 status 字段，不能改动元数据。
 func (p *Plugin) admitPVCStatus(nodeName string, a admission.Attributes) error {
 	switch a.GetOperation() {
 	case admission.Update:
@@ -506,12 +505,11 @@ func (p *Plugin) admitPVCStatus(nodeName string, a admission.Attributes) error {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 		}
 
-		// make copies for comparison
+		// 复制对象后再清零允许变动的字段。
 		oldPVC = oldPVC.DeepCopy()
 		newPVC = newPVC.DeepCopy()
 
-		// zero out resourceVersion to avoid comparing differences,
-		// since the new object could leave it empty to indicate an unconditional update
+		// 新对象可留空 resourceVersion 表示无条件更新，故不参与比较。
 		oldPVC.ObjectMeta.ResourceVersion = ""
 		newPVC.ObjectMeta.ResourceVersion = ""
 
@@ -529,13 +527,11 @@ func (p *Plugin) admitPVCStatus(nodeName string, a admission.Attributes) error {
 			newPVC.Status.AllocatedResources = nil
 		}
 
-		// TODO(apelisse): We don't have a good mechanism to
-		// verify that only the things that should have changed
-		// have changed. Ignore it for now.
+		// TODO(apelisse): 目前没有可靠的机制确认只有应变更的字段发生了变化，暂且忽略。
 		oldPVC.ObjectMeta.ManagedFields = nil
 		newPVC.ObjectMeta.ManagedFields = nil
 
-		// ensure no metadata changed. nodes should not be able to relabel, add finalizers/owners, etc
+		// 确保元数据未变，禁止节点重新打标、增加 finalizer 或属主等。
 		if !apiequality.Semantic.DeepEqual(oldPVC, newPVC) {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to update fields other than status.quantity and status.conditions: %v", nodeName, diff.Diff(oldPVC, newPVC)))
 		}
@@ -547,6 +543,7 @@ func (p *Plugin) admitPVCStatus(nodeName string, a admission.Attributes) error {
 	}
 }
 
+// admitNode 限制节点只能操作自身的 Node 对象，且不得改动敏感字段。
 func (p *Plugin) admitNode(nodeName string, a admission.Attributes) error {
 	requestedName := a.GetName()
 
@@ -560,14 +557,13 @@ func (p *Plugin) admitNode(nodeName string, a admission.Attributes) error {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 		}
 
-		// Don't allow a node to create its Node API object with the config source set.
-		// We scope node access to things listed in the Node.Spec, so allowing this would allow a view escalation.
+		// 禁止创建时设置 configSource：节点权限被限定在 Node.Spec 所列资源内，
+		// 允许设置会造成视图权限提升。
 		if node.Spec.ConfigSource != nil {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to create pods with a non-nil configSource", nodeName))
 		}
 
-		// Don't allow a node to register with labels outside the allowed set.
-		// This would allow a node to add or modify its labels in a way that would let it steer privileged workloads to itself.
+		// 注册时只允许设置白名单内的标签，防止节点通过标签吸引特权工作负载。
 		modifiedLabels := getModifiedLabels(node.Labels, nil)
 		if forbiddenLabels := p.getForbiddenLabels(modifiedLabels); len(forbiddenLabels) > 0 {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to set the following labels: %s", nodeName, strings.Join(forbiddenLabels.List(), ", ")))
@@ -584,26 +580,23 @@ func (p *Plugin) admitNode(nodeName string, a admission.Attributes) error {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 		}
 
-		// Don't allow a node to update the config source on its Node API object.
-		// We scope node access to things listed in the Node.Spec, so allowing this would allow a view escalation.
-		// We only do the check if the new node's configSource is non-nil; old kubelets might drop the field during a status update.
+		// 禁止更新 configSource，理由同创建阶段。
+		// 仅在新值非 nil 时比较：旧 kubelet 可能在 status 更新中丢掉该字段。
 		if node.Spec.ConfigSource != nil && !apiequality.Semantic.DeepEqual(node.Spec.ConfigSource, oldNode.Spec.ConfigSource) {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to update configSource to a new non-nil configSource", nodeName))
 		}
 
-		// Don't allow a node to update its own taints. This would allow a node to remove or modify its
-		// taints in a way that would let it steer disallowed workloads to itself.
+		// 禁止修改污点，否则节点可移除限制、吸引本不该调度过来的工作负载。
 		if !apiequality.Semantic.DeepEqual(node.Spec.Taints, oldNode.Spec.Taints) {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to modify taints", nodeName))
 		}
 
-		// Don't allow a node to update its own ownerReferences.
+		// 禁止修改属主引用，防止节点篡改自身归属。
 		if !apiequality.Semantic.DeepEqual(node.OwnerReferences, oldNode.OwnerReferences) {
 			return admission.NewForbidden(a, fmt.Errorf("node %q is not allowed to modify ownerReferences", nodeName))
 		}
 
-		// Don't allow a node to update labels outside the allowed set.
-		// This would allow a node to add or modify its labels in a way that would let it steer privileged workloads to itself.
+		// 更新标签同样受限，防止将特权工作负载引到自身。
 		modifiedLabels := getModifiedLabels(node.Labels, oldNode.Labels)
 		if forbiddenUpdateLabels := p.getForbiddenLabels(modifiedLabels); len(forbiddenUpdateLabels) > 0 {
 			return admission.NewForbidden(a, fmt.Errorf("is not allowed to modify labels: %s", strings.Join(forbiddenUpdateLabels.List(), ", ")))
@@ -613,7 +606,7 @@ func (p *Plugin) admitNode(nodeName string, a admission.Attributes) error {
 	return nil
 }
 
-// getModifiedLabels returns the set of label keys that are different between the two maps
+// getModifiedLabels 返回两个标签映射中值不同的键集合。
 func getModifiedLabels(a, b map[string]string) sets.String {
 	modified := sets.NewString()
 	for k, v1 := range a {
@@ -629,6 +622,7 @@ func getModifiedLabels(a, b map[string]string) sets.String {
 	return modified
 }
 
+// isKubernetesLabel 判断标签是否属于 Kubernetes 保留的命名空间。
 func isKubernetesLabel(key string) bool {
 	namespace := getLabelNamespace(key)
 	if namespace == "kubernetes.io" || strings.HasSuffix(namespace, ".kubernetes.io") {
@@ -640,6 +634,7 @@ func isKubernetesLabel(key string) bool {
 	return false
 }
 
+// getLabelNamespace 提取标签键的前缀部分，无前缀时返回空串。
 func getLabelNamespace(key string) string {
 	if parts := strings.SplitN(key, "/", 2); len(parts) == 2 {
 		return parts[0]
@@ -647,7 +642,7 @@ func getLabelNamespace(key string) string {
 	return ""
 }
 
-// getForbiddenLabels returns the set of labels that may not be added, removed, or modified by the node on create or update.
+// getForbiddenLabels 从变更的标签中筛出节点无权添加、删除或修改的部分。
 func (p *Plugin) getForbiddenLabels(modifiedLabels sets.String) sets.String {
 	if len(modifiedLabels) == 0 {
 		return nil
@@ -656,19 +651,20 @@ func (p *Plugin) getForbiddenLabels(modifiedLabels sets.String) sets.String {
 	forbiddenLabels := sets.NewString()
 	for label := range modifiedLabels {
 		namespace := getLabelNamespace(label)
-		// forbid kubelets from setting node-restriction labels
+		// node-restriction 命名空间下的标签由控制面管理，kubelet 不得设置。
 		if namespace == v1.LabelNamespaceNodeRestriction || strings.HasSuffix(namespace, "."+v1.LabelNamespaceNodeRestriction) {
 			forbiddenLabels.Insert(label)
 		}
-		// forbid kubelets from setting unknown kubernetes.io and k8s.io labels on update
+		// kubelet 也只能设置其已知的系统标签，不能随意写 kubernetes.io / k8s.io 标签。
 		if isKubernetesLabel(label) && !kubeletapis.IsKubeletLabel(label) {
-			// TODO: defer to label policy once available
+			// TODO: 待标签策略就绪后交由其判断。
 			forbiddenLabels.Insert(label)
 		}
 	}
 	return forbiddenLabels
 }
 
+// admitServiceAccount 校验节点请求 ServiceAccount 令牌时绑定的 Pod 是否运行在自身之上。
 func (p *Plugin) admitServiceAccount(ctx context.Context, nodeName string, a admission.Attributes) error {
 	if a.GetOperation() != admission.Create {
 		return nil
@@ -681,8 +677,7 @@ func (p *Plugin) admitServiceAccount(ctx context.Context, nodeName string, a adm
 		return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 	}
 
-	// TokenRequests from a node must have a pod binding. That pod must be
-	// scheduled on the node.
+	// 节点的令牌请求必须绑定 Pod，且该 Pod 必须调度在本节点上。
 	ref := tr.Spec.BoundObjectRef
 	if ref == nil ||
 		ref.APIVersion != "v1" ||
@@ -713,17 +708,16 @@ func (p *Plugin) admitServiceAccount(ctx context.Context, nodeName string, a adm
 		}
 	}
 
-	// Note: A token may only be bound to one object at a time. By requiring
-	// the Pod binding, noderestriction eliminates the opportunity to spoof
-	// a Node binding. Instead, kube-apiserver automatically infers and sets
-	// the Node binding when it receives a Pod binding. See:
+	// 注意：令牌同一时刻只能绑定一个对象。强制绑定 Pod 可杜绝伪造 Node 绑定；
+	// kube-apiserver 在收到 Pod 绑定后会自动推断并设置 Node 绑定。详见：
 	// https://github.com/kubernetes/kubernetes/issues/121723 for more info.
 
 	return nil
 }
 
+// validateNodeServiceAccountAudience 校验节点请求的 audience 已在 Pod 中声明，或节点具备相应授权。
 func (p *Plugin) validateNodeServiceAccountAudience(ctx context.Context, tr *authenticationapi.TokenRequest, pod *v1.Pod, a admission.Attributes) error {
-	// ensure all items in tr.Spec.Audiences are present in a volume mount in the pod
+	// 请求的 audience 必须能在 Pod 的卷挂载中找到，这里最多只允许一个。
 	requestedAudience := ""
 	switch len(tr.Spec.Audiences) {
 	case 0:
@@ -746,12 +740,12 @@ func (p *Plugin) validateNodeServiceAccountAudience(ctx context.Context, tr *aut
 		a,
 		"request-serviceaccounts-token-audience",
 		requestedAudience,
-		a.GetName(), // This API operation is on the service account, so this is the SA name.
+		a.GetName(), // 该 API 操作针对 ServiceAccount，故此名称为 SA 名。
 	)
 
 	authorized, _, err := p.authz.Authorize(ctx, attrs)
-	// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
-	// following the same pattern as withAuthorization (ref: https://github.com/kubernetes/kubernetes/blob/2b025e645975d6d51bf38c008f972c632cf49657/staging/src/k8s.io/apiserver/pkg/endpoints/filters/authorization.go#L71-L91)
+	// RBAC 等鉴权器可能在求值出错的情况下仍允许请求，因此先检查决策再看错误。
+	// 与 withAuthorization 保持同样顺序（ref: https://github.com/kubernetes/kubernetes/blob/2b025e645975d6d51bf38c008f972c632cf49657/staging/src/k8s.io/apiserver/pkg/endpoints/filters/authorization.go#L71-L91）
 	if authorized == authorizer.DecisionAllow {
 		return nil
 	}
@@ -762,6 +756,7 @@ func (p *Plugin) validateNodeServiceAccountAudience(ctx context.Context, tr *aut
 	return fmt.Errorf("%s is not authorized to request tokens for audience %q", a.GetUserInfo().GetName(), requestedAudience)
 }
 
+// podReferencesAudience 判断 Pod 的卷定义（含 CSI 链路）是否引用了指定 audience。
 func (p *Plugin) podReferencesAudience(ctx context.Context, pod *v1.Pod, audience string) (bool, error) {
 	var errs []error
 
@@ -774,7 +769,7 @@ func (p *Plugin) podReferencesAudience(ctx context.Context, pod *v1.Pod, audienc
 			}
 		}
 
-		// also allow audiences for CSI token requests
+		// 也允许经由 CSI 驱动请求令牌的 audience，覆盖以下链路：
 		// - pod --> ephemeral --> pvc --> pv --> csi --> driver --> tokenrequest with audience
 		// - pod --> pvc --> pv --> csi --> driver --> tokenrequest with audience
 		// - pod --> csi --> driver --> tokenrequest with audience
@@ -819,7 +814,7 @@ func (p *Plugin) podReferencesAudience(ctx context.Context, pod *v1.Pod, audienc
 	return false, utilerrors.NewAggregate(errs)
 }
 
-// getCSIFromPVC returns the CSI driver name from the PVC->PV->CSI->Driver chain
+// getCSIFromPVC 沿 PVC -> PV -> CSI -> Driver 链路找出 CSI 驱动名。
 func (p *Plugin) getCSIFromPVC(ctx context.Context, namespace, claimName string) (string, error) {
 	pvc, err := p.pvcGetter.PersistentVolumeClaims(namespace).Get(claimName)
 	if err != nil {
@@ -834,7 +829,7 @@ func (p *Plugin) getCSIFromPVC(ctx context.Context, namespace, claimName string)
 	}
 
 	if p.csiTranslator.IsPVMigratable(pv) {
-		// For in-tree PV, we need to convert ("translate") the PV to CSI before checking the driver name.
+		// 树内 PV 需先转换为 CSI 表示，才能读到驱动名。
 		translatedPV, err := p.csiTranslator.TranslateInTreePVToCSI(klog.FromContext(ctx), pv)
 		if err != nil {
 			return "", err
@@ -847,6 +842,7 @@ func (p *Plugin) getCSIFromPVC(ctx context.Context, namespace, claimName string)
 	return "", nil
 }
 
+// csiDriverHasAudience 检查指定 CSI 驱动的 TokenRequests 是否包含给定 audience。
 func (p *Plugin) csiDriverHasAudience(driverName, audience string) (bool, error) {
 	driver, err := p.csiDriverGetter.Get(driverName)
 	if err != nil {
@@ -861,6 +857,7 @@ func (p *Plugin) csiDriverHasAudience(driverName, audience string) (bool, error)
 	return false, nil
 }
 
+// admitPodCertificateRequest 校验节点提交的 PodCertificateRequest 与运行中的 Pod 及 ServiceAccount 是否一致。
 func (p *Plugin) admitPodCertificateRequest(ctx context.Context, nodeName string, a admission.Attributes) error {
 	if !p.podCertificateRequestsEnabled {
 		return admission.NewForbidden(a, fmt.Errorf("PodCertificateRequest feature gate is disabled"))
@@ -881,7 +878,7 @@ func (p *Plugin) admitPodCertificateRequest(ctx context.Context, nodeName string
 		return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 	}
 
-	// Cross check the node name and node UID with the node that made the request.
+	// 交叉核对请求中声明的节点名和 UID 与请求方身份。
 	if string(req.Spec.NodeName) != nodeName {
 		return admission.NewForbidden(a, fmt.Errorf("PodCertificateRequest.Spec.NodeName=%q, which is not the requesting node %q", req.Spec.NodeName, nodeName))
 	}
@@ -893,11 +890,11 @@ func (p *Plugin) admitPodCertificateRequest(ctx context.Context, nodeName string
 		return admission.NewForbidden(a, fmt.Errorf("while retrieving node %q named in the PodCertificateRequest: %w", req.Spec.NodeName, err))
 	}
 	if node.ObjectMeta.UID != req.Spec.NodeUID {
-		// Could be caused by informer lag.  Don't return Forbidden to indicate that retries may succeed.
+		// 可能只是 informer 缓存滞后，不返回 Forbidden，以便重试有机会成功。
 		return fmt.Errorf("PodCertificateRequest for pod %q names node UID %q, inconsistent with the running node (%q)", namespace+"/"+req.Spec.PodName, req.Spec.NodeUID, node.ObjectMeta.UID)
 	}
 
-	// Cross-check that the pod is a real pod, running on the node.
+	// 确认请求指向的 Pod 真实存在且运行在该节点上。
 	pod, err := p.podsGetter.Pods(namespace).Get(req.Spec.PodName)
 	if apierrors.IsNotFound(err) {
 		return fmt.Errorf("while retrieving pod %q named in the PodCertificateRequest: %w", namespace+"/"+req.Spec.PodName, err)
@@ -906,37 +903,36 @@ func (p *Plugin) admitPodCertificateRequest(ctx context.Context, nodeName string
 		return admission.NewForbidden(a, fmt.Errorf("while retrieving pod %q named in the PodCertificateRequest: %w", namespace+"/"+req.Spec.PodName, err))
 	}
 	if req.Spec.PodUID != pod.ObjectMeta.UID {
-		// Could be caused by informer lag.  Don't return Forbidden to indicate that retries may succeed.
+		// 可能只是 informer 缓存滞后，不返回 Forbidden，以便重试有机会成功。
 		return fmt.Errorf("PodCertificateRequest for pod %q contains pod UID (%q) which differs from running pod %q", namespace+"/"+req.Spec.PodName, req.Spec.PodUID, string(pod.ObjectMeta.UID))
 	}
 	if pod.Spec.NodeName != string(req.Spec.NodeName) {
 		return admission.NewForbidden(a, fmt.Errorf("pod %q is not running on node %q named in the PodCertificateRequest", namespace+"/"+req.Spec.PodName, req.Spec.NodeName))
 	}
 
-	// Mirror pods don't get pod certificates.
+	// 静态 Pod 不颁发 Pod 证书。
 	if _, isMirror := pod.Annotations[api.MirrorPodAnnotationKey]; isMirror {
 		return admission.NewForbidden(a, fmt.Errorf("pod %q is a mirror pod", namespace+"/"+req.Spec.PodName))
 	}
 
 	if req.Spec.ServiceAccountName != pod.Spec.ServiceAccountName {
-		// We can outright forbid because this cannot be caused by informer lag (the UIDs match)
+		// UID 已匹配，故不可能是缓存滞后导致，可以直接拒绝。
 		return admission.NewForbidden(a, fmt.Errorf("PodCertificateRequest for pod %q contains serviceAccountName (%q) that differs from running pod (%q)", namespace+"/"+req.Spec.PodName, req.Spec.ServiceAccountName, pod.Spec.ServiceAccountName))
 	}
 	sa, err := p.serviceAccountGetter.ServiceAccounts(namespace).Get(req.Spec.ServiceAccountName)
 	if apierrors.IsNotFound(err) {
-		// Could be caused by informer lag.  Don't return Forbidden to indicate that retries may succeed.
+		// 可能只是 informer 缓存滞后，不返回 Forbidden，以便重试有机会成功。
 		return fmt.Errorf("while retrieving service account %q named in the PodCertificateRequest: %w", namespace+"/"+req.Spec.ServiceAccountName, err)
 	}
 	if err != nil {
 		return admission.NewForbidden(a, fmt.Errorf("while retrieving service account %q named in the PodCertificateRequest: %w", namespace+"/"+req.Spec.ServiceAccountName, err))
 	}
 	if req.Spec.ServiceAccountUID != sa.ObjectMeta.UID {
-		// Could be caused by informer lag.  Don't return Forbidden to indicate that retries may succeed.
+		// 可能只是 informer 缓存滞后，不返回 Forbidden，以便重试有机会成功。
 		return fmt.Errorf("PodCertificateRequest for pod %q names service account UID %q, which differs from the running service account (%q)", namespace+"/"+req.Spec.PodName, req.Spec.ServiceAccountUID, sa.ObjectMeta.UID)
 	}
 
-	// Does this node have a reason to be requesting this service account /
-	// signername combo?
+	// 最后确认节点确有理由请求该 ServiceAccount 与签名者的组合。
 	if err := p.validateNodePodCertificateSigner(ctx, pod, req, a); err != nil {
 		return admission.NewForbidden(a, err)
 	}
@@ -944,16 +940,16 @@ func (p *Plugin) admitPodCertificateRequest(ctx context.Context, nodeName string
 	return nil
 }
 
+// validateNodePodCertificateSigner 确认 Pod 挂载了对应签名者的证书卷，或节点具备显式授权。
 func (p *Plugin) validateNodePodCertificateSigner(ctx context.Context, pod *v1.Pod, req *certapi.PodCertificateRequest, a admission.Attributes) error {
-	// Direct reference to service account / signer combo.
+	// Pod 直接声明了该签名者，则无需额外授权。
 	if podHasPodCertificateVolumeForSigner(pod, req.Spec.SignerName) {
 		return nil
 	}
 
-	// Check for authorization, similar to validateNodeServiceAccountAudience.
+	// 否则回退到鉴权检查，逻辑类似 validateNodeServiceAccountAudience。
 
-	// RBAC can't handle resources that contain slashes.  Apply the same munging
-	// that we use for encoding signerNames into ClusterTrustBundle names.
+	// RBAC 无法处理含斜杠的资源名，沿用将 signerName 编码进 ClusterTrustBundle 名称时的替换规则。
 	mungedSignerName := strings.ReplaceAll(req.Spec.SignerName, "/", ":")
 
 	attrs := buildAuthorizerAttributes(
@@ -964,8 +960,8 @@ func (p *Plugin) validateNodePodCertificateSigner(ctx context.Context, pod *v1.P
 	)
 
 	authorized, _, err := p.authz.Authorize(ctx, attrs)
-	// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
-	// following the same pattern as withAuthorization (ref: https://github.com/kubernetes/kubernetes/blob/2b025e645975d6d51bf38c008f972c632cf49657/staging/src/k8s.io/apiserver/pkg/endpoints/filters/authorization.go#L71-L91)
+	// RBAC 等鉴权器可能在求值出错的情况下仍允许请求，因此先检查决策再看错误。
+	// 与 withAuthorization 保持同样顺序（ref: https://github.com/kubernetes/kubernetes/blob/2b025e645975d6d51bf38c008f972c632cf49657/staging/src/k8s.io/apiserver/pkg/endpoints/filters/authorization.go#L71-L91）
 	if authorized == authorizer.DecisionAllow {
 		return nil
 	}
@@ -975,6 +971,7 @@ func (p *Plugin) validateNodePodCertificateSigner(ctx context.Context, pod *v1.P
 	return fmt.Errorf("pod %q does not mount a podCertificate projected volume for signer %q", a.GetNamespace()+"/"+req.Spec.PodName, req.Spec.SignerName)
 }
 
+// buildAuthorizerAttributes 根据准入属性构造鉴权所需的属性记录。
 func buildAuthorizerAttributes(a admission.Attributes, verb, resource, name string) authorizer.AttributesRecord {
 	return authorizer.AttributesRecord{
 		User:            a.GetUserInfo(),
@@ -988,6 +985,7 @@ func buildAuthorizerAttributes(a admission.Attributes, verb, resource, name stri
 	}
 }
 
+// podHasPodCertificateVolumeForSigner 检查 Pod 是否挂载了指定签名者的 podCertificate 卷。
 func podHasPodCertificateVolumeForSigner(pod *v1.Pod, signerName string) bool {
 	for i := range pod.Spec.Volumes {
 		if pod.Spec.Volumes[i].Projected == nil {
@@ -1003,15 +1001,16 @@ func podHasPodCertificateVolumeForSigner(pod *v1.Pod, signerName string) bool {
 	return false
 }
 
+// admitLease 限制节点只能访问自己名下、位于专用系统命名空间中的 Lease。
 func (p *Plugin) admitLease(nodeName string, a admission.Attributes) error {
-	// the request must be against the system namespace reserved for node leases
+	// Lease 必须位于节点专用的系统命名空间。
 	if a.GetNamespace() != api.NamespaceNodeLease {
 		return admission.NewForbidden(a, fmt.Errorf("can only access leases in the %q system namespace", api.NamespaceNodeLease))
 	}
 
-	// the request must come from a node with the same name as the lease
+	// 请求方节点名必须与 Lease 名一致。
 	if a.GetOperation() == admission.Create {
-		// a.GetName() won't return the name on create, so we drill down to the proposed object
+		// 创建时 a.GetName() 为空，只能从请求对象取名字。
 		lease, ok := a.GetObject().(*coordapi.Lease)
 		if !ok {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
@@ -1028,10 +1027,11 @@ func (p *Plugin) admitLease(nodeName string, a admission.Attributes) error {
 	return nil
 }
 
+// admitCSINode 限制节点只能操作同名 CSINode，并管控 status 子资源的使用。
 func (p *Plugin) admitCSINode(nodeName string, a admission.Attributes) error {
-	// the request must come from a node with the same name as the CSINode object
+	// 请求方节点名必须与 CSINode 对象名一致。
 	if a.GetOperation() == admission.Create {
-		// a.GetName() won't return the name on create, so we drill down to the proposed object
+		// 创建时 a.GetName() 为空，需从请求对象提取名字。
 		accessor, err := meta.Accessor(a.GetObject())
 		if err != nil {
 			return admission.NewForbidden(a, fmt.Errorf("unable to access the object name"))
@@ -1055,7 +1055,7 @@ func (p *Plugin) admitCSINode(nodeName string, a admission.Attributes) error {
 	return nil
 }
 
-// admitCSINodeStatus ensures a node cannot modify CSINode Spec via the status subresource.
+// admitCSINodeStatus 确保节点无法通过 status 子资源修改 CSINode 的 Spec。
 func (p *Plugin) admitCSINodeStatus(nodeName string, a admission.Attributes) error {
 	switch a.GetOperation() {
 	case admission.Update:
@@ -1076,14 +1076,12 @@ func (p *Plugin) admitCSINodeStatus(nodeName string, a admission.Attributes) err
 	}
 }
 
+// admitResourceSlice 校验节点创建或删除的 ResourceSlice 是否声明了本节点名。
 func (p *Plugin) admitResourceSlice(nodeName string, a admission.Attributes) error {
-	// The create request must come from a node with the same name as the NodeName field.
-	// Same when deleting an object.
+	// 创建或删除时，ResourceSlice 的 NodeName 必须与请求方节点一致。
 	//
-	// Other requests get checked by the node authorizer. The checks here are necessary
-	// because the node authorizer does not know the object content for a create request
-	// and not each deleted object in a DeleteCollection. DeleteCollection checks each
-	// individual object.
+	// 其他操作由节点鉴权器检查。这里仍需额外校验，因为鉴权器无法看到创建对象的内容，
+	// 也无法逐一检查 DeleteCollection 中被删除的每个对象。
 	switch a.GetOperation() {
 	case admission.Create:
 		slice, ok := a.GetObject().(*resource.ResourceSlice)
@@ -1108,11 +1106,10 @@ func (p *Plugin) admitResourceSlice(nodeName string, a admission.Attributes) err
 	return nil
 }
 
+// admitCSR 限制节点创建的 kubelet 相关 CSR 使用与自身节点名对应的 CN。
 func (p *Plugin) admitCSR(nodeName string, a admission.Attributes) error {
-	// Create requests for Kubelet serving signer and Kube API server client
-	// kubelet signer with a CN that begins with "system:node:" must have a CN
-	// that is exactly the node's name.
-	// Other CSR attributes get checked in CSR validation by the signer.
+	// 对于 kubelet 服务端和 API server 客户端签名者，以 "system:node:" 开头的 CN
+	// 必须精确等于节点名。其他 CSR 属性由签名者在校验阶段检查。
 	if a.GetOperation() != admission.Create {
 		return nil
 	}

@@ -38,15 +38,15 @@ import (
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 )
 
-// TestPodTopology verifies the pod topology admission plugin works as expected.
+// TestPodTopology 验证拓扑标签准入插件在 Pod 与 Binding 两种路径下的行为。
 func TestPodTopology(t *testing.T) {
 	tests := []struct {
-		name                  string               // name of the test case.
-		bindingTarget         *api.ObjectReference // target being bound to. Defaults to a valid node with the provided labels.
-		targetNodeLabels      map[string]string    // list of labels set on the node being bound to.
-		existingBindingLabels map[string]string    // list of labels that are set on the Binding prior to admission (aka by the client/scheduler)
-		expectedBindingLabels map[string]string    // list of labels that we expect to be set on the Binding after admission.
-		featureDisabled       bool                 // configure whether the SetPodTopologyLabels feature gate should be disabled.
+		name                  string               // 测试用例名称。
+		bindingTarget         *api.ObjectReference // 绑定目标；为 nil 时使用带指定标签的默认节点。
+		targetNodeLabels      map[string]string    // 目标节点上的标签。
+		existingBindingLabels map[string]string    // 准入前 Binding 上已有的标签（由客户端/调度器设置）。
+		expectedBindingLabels map[string]string    // 准入后期望 Binding 上存在的标签。
+		featureDisabled       bool                 // 是否禁用 SetPodTopologyLabels 特性门控。
 	}{
 		{
 			name: "copies topology.kubernetes.io/zone and region labels to binding labels",
@@ -54,7 +54,7 @@ func TestPodTopology(t *testing.T) {
 				"topology.kubernetes.io/zone":      "zone1",
 				"topology.kubernetes.io/region":    "region1",
 				"topology.kubernetes.io/arbitrary": "something",
-				"non-topology.kubernetes.io/label": "something", // verify we don't unexpectedly copy non topology.kubernetes.io labels.
+				"non-topology.kubernetes.io/label": "something", // 非 topology.kubernetes.io 前缀的标签不应被复制。
 			},
 			expectedBindingLabels: map[string]string{
 				"topology.kubernetes.io/zone":   "zone1",
@@ -126,7 +126,7 @@ func TestPodTopology(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, kubefeatures.PodTopologyLabelsAdmission, !test.featureDisabled)
 
 			t.Run("using Pod directly (update)", func(t *testing.T) {
-				// set up the client and informers
+				// 准备客户端与 informer。
 				mockClient := fake.NewSimpleClientset(namespace, node)
 				handler, informerFactory, err := newHandlerForTest(mockClient)
 				if err != nil {
@@ -153,7 +153,7 @@ func TestPodTopology(t *testing.T) {
 			})
 
 			t.Run("using Pod directly (create)", func(t *testing.T) {
-				// set up the client and informers
+				// 准备客户端与 informer。
 				mockClient := fake.NewSimpleClientset(namespace, node)
 				handler, informerFactory, err := newHandlerForTest(mockClient)
 				if err != nil {
@@ -179,7 +179,7 @@ func TestPodTopology(t *testing.T) {
 			})
 
 			t.Run("using Binding subresource", func(t *testing.T) {
-				// Pod we bind during test cases.
+				// 测试中被绑定的 Pod。
 				existingPod := &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "testPod", Namespace: namespace.Name},
 					Spec:       corev1.PodSpec{},
@@ -193,7 +193,7 @@ func TestPodTopology(t *testing.T) {
 				defer close(stopCh)
 				informerFactory.Start(stopCh)
 
-				// create and submit a Binding object
+				// 构造并提交 Binding 对象。
 				target := test.bindingTarget
 				if target == nil {
 					target = &api.ObjectReference{
@@ -222,7 +222,7 @@ func TestPodTopology(t *testing.T) {
 	}
 }
 
-// newHandlerForTest returns the admission controller configured for testing.
+// newHandlerForTest 创建并完成测试用准入控制器的初始化。
 func newHandlerForTest(c kubernetes.Interface) (*Plugin, informers.SharedInformerFactory, error) {
 	factory := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	handler := NewPodTopologyPlugin(defaultConfig) // todo: write additional test cases with non-default config.

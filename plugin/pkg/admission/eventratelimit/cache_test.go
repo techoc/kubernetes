@@ -23,6 +23,7 @@ import (
 	"k8s.io/utils/lru"
 )
 
+// TestSingleCache 验证 singleCache 对任意 key 都返回同一个限流器。
 func TestSingleCache(t *testing.T) {
 	rateLimiter := flowcontrol.NewTokenBucketRateLimiter(1., 1)
 	cache := singleCache{
@@ -37,6 +38,7 @@ func TestSingleCache(t *testing.T) {
 	}
 }
 
+// TestLRUCache 验证 lruCache 的命中与淘汰行为，淘汰后重新加入会创建新的限流器。
 func TestLRUCache(t *testing.T) {
 	rateLimiters := []flowcontrol.RateLimiter{
 		flowcontrol.NewTokenBucketRateLimiter(1., 1),

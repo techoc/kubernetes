@@ -46,6 +46,7 @@ import (
 	v1 "k8s.io/kubernetes/pkg/apis/core/v1"
 )
 
+// getComputeResourceList 按给定的 CPU 与内存数量构造资源列表，空字符串表示不设置该资源。
 func getComputeResourceList(cpu, memory string) api.ResourceList {
 	res := api.ResourceList{}
 	if cpu != "" {
@@ -57,6 +58,7 @@ func getComputeResourceList(cpu, memory string) api.ResourceList {
 	return res
 }
 
+// getStorageResourceList 按给定的存储数量构造资源列表，空字符串表示不设置该资源。
 func getStorageResourceList(storage string) api.ResourceList {
 	res := api.ResourceList{}
 	if storage != "" {
@@ -65,6 +67,7 @@ func getStorageResourceList(storage string) api.ResourceList {
 	return res
 }
 
+// getResourceRequirements 把请求与限额打包成 ResourceRequirements，便于测试里直接引用。
 func getResourceRequirements(requests, limits api.ResourceList) api.ResourceRequirements {
 	res := api.ResourceRequirements{}
 	res.Requests = requests
@@ -72,6 +75,7 @@ func getResourceRequirements(requests, limits api.ResourceList) api.ResourceRequ
 	return res
 }
 
+// getVolumeResourceRequirements 把请求与限额打包成卷的资源需求，供 PVC 用例使用。
 func getVolumeResourceRequirements(requests, limits api.ResourceList) api.VolumeResourceRequirements {
 	res := api.VolumeResourceRequirements{}
 	res.Requests = requests
@@ -79,7 +83,7 @@ func getVolumeResourceRequirements(requests, limits api.ResourceList) api.Volume
 	return res
 }
 
-// createLimitRange creates a limit range with the specified data
+// createLimitRange 按指定数据构造 LimitRange，并转成外部版本，因为 admission 处理的是 v1 对象。
 func createLimitRange(limitType api.LimitType, min, max, defaultLimit, defaultRequest, maxLimitRequestRatio api.ResourceList) corev1.LimitRange {
 	internalLimitRage := api.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
@@ -104,6 +108,7 @@ func createLimitRange(limitType api.LimitType, min, max, defaultLimit, defaultRe
 	return externalLimitRange
 }
 
+// validLimitRange 返回同时含 Pod 与容器限制的 LimitRange，并带上默认值，供默认值测试使用。
 func validLimitRange() corev1.LimitRange {
 	internalLimitRange := api.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
@@ -132,6 +137,7 @@ func validLimitRange() corev1.LimitRange {
 	return externalLimitRange
 }
 
+// validLimitRangeNoDefaults 返回不带默认值的 LimitRange，用于验证校验逻辑不会偷偷补默认值。
 func validLimitRangeNoDefaults() corev1.LimitRange {
 	internalLimitRange := api.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
@@ -158,12 +164,14 @@ func validLimitRangeNoDefaults() corev1.LimitRange {
 	return externalLimitRange
 }
 
+// validPodWithPodLevelResources 在普通 Pod 上补一层 Pod 级资源，用于验证按 Pod 总量做的限制检查。
 func validPodWithPodLevelResources(name string, numContainers int, containerResources api.ResourceRequirements, podResources api.ResourceRequirements) api.Pod {
 	pod := validPod(name, numContainers, containerResources)
 	pod.Spec.Resources = &podResources
 	return pod
 }
 
+// validPod 构造含指定数量容器的 Pod，各容器共用同一份资源需求。
 func validPod(name string, numContainers int, resources api.ResourceRequirements) api.Pod {
 	pod := api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -180,6 +188,7 @@ func validPod(name string, numContainers int, resources api.ResourceRequirements
 	return pod
 }
 
+// validPodInit 给 Pod 追加若干 init 容器，便于按 init 容器的最大资源做校验。
 func validPodInit(pod api.Pod, resources ...api.ResourceRequirements) api.Pod {
 	for i := 0; i < len(resources); i++ {
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, api.Container{
@@ -191,6 +200,7 @@ func validPodInit(pod api.Pod, resources ...api.ResourceRequirements) api.Pod {
 	return pod
 }
 
+// TestDefaultContainerResourceRequirements 验证从 LimitRange 提取容器默认请求与限额。
 func TestDefaultContainerResourceRequirements(t *testing.T) {
 	limitRange := validLimitRange()
 	expected := api.ResourceRequirements{
@@ -206,6 +216,7 @@ func TestDefaultContainerResourceRequirements(t *testing.T) {
 	}
 }
 
+// verifyAnnotation 断言 Pod 上 LimitRanger 写入的注解内容与预期一致。
 func verifyAnnotation(t *testing.T, pod *api.Pod, expected string) {
 	a, ok := pod.ObjectMeta.Annotations[limitRangerAnnotation]
 	if !ok {
@@ -216,16 +227,18 @@ func verifyAnnotation(t *testing.T, pod *api.Pod, expected string) {
 	}
 }
 
+// expectNoAnnotation 断言 Pod 上没有 LimitRanger 注解，即没有发生默认值填充。
 func expectNoAnnotation(t *testing.T, pod *api.Pod) {
 	if a, ok := pod.ObjectMeta.Annotations[limitRangerAnnotation]; ok {
 		t.Errorf("Expected no annotation but got %v", a)
 	}
 }
 
+// TestMergePodResourceRequirements 验证默认值只填补缺省项，已指定的资源不动且不会留下注解。
 func TestMergePodResourceRequirements(t *testing.T) {
 	limitRange := validLimitRange()
 
-	// pod with no resources enumerated should get each resource from default request
+	// 资源项全空时，请求与限额都应从 LimitRange 的默认值补齐。
 	expected := getResourceRequirements(getComputeResourceList("", ""), getComputeResourceList("", ""))
 	pod := validPod("empty-resources", 1, expected)
 	defaultRequirements := defaultContainerResourceRequirements(&limitRange)
@@ -238,7 +251,7 @@ func TestMergePodResourceRequirements(t *testing.T) {
 	}
 	verifyAnnotation(t, &pod, "LimitRanger plugin set: cpu, memory request for container foo-0; cpu, memory limit for container foo-0")
 
-	// pod with some resources enumerated should only merge empty
+	// 部分资源已指定时，只补空缺项，不动已填写的内存请求值。
 	input := getResourceRequirements(getComputeResourceList("", "512Mi"), getComputeResourceList("", ""))
 	pod = validPodInit(validPod("limit-memory", 1, input), input)
 	expected = api.ResourceRequirements{
@@ -263,7 +276,7 @@ func TestMergePodResourceRequirements(t *testing.T) {
 	}
 	verifyAnnotation(t, &pod, "LimitRanger plugin set: cpu request for container foo-0; cpu, memory limit for container foo-0")
 
-	// pod with all resources enumerated should not merge anything
+	// 全部资源都已指定时不应合入默认值，也不应写入注解。
 	input = getResourceRequirements(getComputeResourceList("100m", "512Mi"), getComputeResourceList("200m", "1G"))
 	initInputs := []api.ResourceRequirements{getResourceRequirements(getComputeResourceList("200m", "1G"), getComputeResourceList("400m", "2G"))}
 	pod = validPodInit(validPod("limit-memory", 1, input), initInputs...)
@@ -284,6 +297,7 @@ func TestMergePodResourceRequirements(t *testing.T) {
 	expectNoAnnotation(t, &pod)
 }
 
+// TestPodLimitFunc 覆盖 Pod 与容器的 min/max/ratio 限制，含 init 容器、临时存储和 Pod 级资源。
 func TestPodLimitFunc(t *testing.T) {
 	type testCase struct {
 		pod                      api.Pod
@@ -711,6 +725,7 @@ func TestPodLimitFunc(t *testing.T) {
 	}
 }
 
+// withRestartableInitContainer 追加一个可重启的 init 容器，其资源也参与 Pod 上限计算。
 func withRestartableInitContainer(requests, limits api.ResourceList, pod api.Pod) api.Pod {
 	policyAlways := api.ContainerRestartPolicyAlways
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers,
@@ -723,6 +738,7 @@ func withRestartableInitContainer(requests, limits api.ResourceList, pod api.Pod
 	return pod
 }
 
+// getLocalStorageResourceList 按给定的临时存储数量构造资源列表，空字符串表示不设置。
 func getLocalStorageResourceList(ephemeralStorage string) api.ResourceList {
 	res := api.ResourceList{}
 	if ephemeralStorage != "" {
@@ -731,6 +747,7 @@ func getLocalStorageResourceList(ephemeralStorage string) api.ResourceList {
 	return res
 }
 
+// TestPodLimitFuncApplyDefault 验证 Mutate 阶段把默认值写入容器与 init 容器的请求和限额。
 func TestPodLimitFuncApplyDefault(t *testing.T) {
 	limitRange := validLimitRange()
 	testPod := validPodInit(validPod("foo", 1, getResourceRequirements(api.ResourceList{}, api.ResourceList{})), getResourceRequirements(api.ResourceList{}, api.ResourceList{}))
@@ -782,6 +799,7 @@ func TestPodLimitFuncApplyDefault(t *testing.T) {
 	}
 }
 
+// TestLimitRangerIgnoresSubresource 验证创建时做校验，而更新及子资源更新不触发 LimitRanger 校验。
 func TestLimitRangerIgnoresSubresource(t *testing.T) {
 	limitRange := validLimitRangeNoDefaults()
 	mockClient := newMockClientForTest([]corev1.LimitRange{limitRange})
@@ -811,6 +829,7 @@ func TestLimitRangerIgnoresSubresource(t *testing.T) {
 	}
 }
 
+// TestLimitRangerAllowPodResize 验证 resize 子资源更新仍按 LimitRange 校验并拒绝超限 Pod。
 func TestLimitRangerAllowPodResize(t *testing.T) {
 	limitRange := validLimitRangeNoDefaults()
 	mockClient := newMockClientForTest([]corev1.LimitRange{limitRange})
@@ -828,6 +847,7 @@ func TestLimitRangerAllowPodResize(t *testing.T) {
 	}
 }
 
+// TestLimitRangerAdmitPod 验证 Admit/Validate 流程及处于终止中的 Pod 会被跳过校验。
 func TestLimitRangerAdmitPod(t *testing.T) {
 	limitRange := validLimitRangeNoDefaults()
 	mockClient := newMockClientForTest([]corev1.LimitRange{limitRange})
@@ -856,7 +876,7 @@ func TestLimitRangerAdmitPod(t *testing.T) {
 		t.Errorf("Should have ignored calls to any subresource of pod %v", err)
 	}
 
-	// a pod that is undergoing termination should never be blocked
+	// 终止中的 Pod 不再接受校验，避免删除流程被 LimitRange 卡住。
 	terminatingPod := validPod("terminatingPod", 1, api.ResourceRequirements{})
 	now := metav1.Now()
 	terminatingPod.DeletionTimestamp = &now
@@ -866,7 +886,7 @@ func TestLimitRangerAdmitPod(t *testing.T) {
 	}
 }
 
-// newMockClientForTest creates a mock client that returns a client configured for the specified list of limit ranges
+// newMockClientForTest 构造返回指定 LimitRange 列表的 fake 客户端，列表版本号由条目数量决定。
 func newMockClientForTest(limitRanges []corev1.LimitRange) *fake.Clientset {
 	mockClient := &fake.Clientset{}
 	mockClient.AddReactor("list", "limitranges", func(action core.Action) (bool, runtime.Object, error) {
@@ -884,7 +904,7 @@ func newMockClientForTest(limitRanges []corev1.LimitRange) *fake.Clientset {
 	return mockClient
 }
 
-// newHandlerForTest returns a handler configured for testing.
+// newHandlerForTest 返回已初始化并接入 fake informer 的 handler。
 func newHandlerForTest(c clientset.Interface) (*LimitRanger, informers.SharedInformerFactory, error) {
 	f := informers.NewSharedInformerFactory(c, 5*time.Minute)
 	handler, err := NewLimitRanger(&DefaultLimitRangerActions{})
@@ -897,6 +917,7 @@ func newHandlerForTest(c clientset.Interface) (*LimitRanger, informers.SharedInf
 	return handler, f, err
 }
 
+// validPersistentVolumeClaim 构造带指定卷资源需求的 PVC，供 PVC 限制用例使用。
 func validPersistentVolumeClaim(name string, resources api.VolumeResourceRequirements) api.PersistentVolumeClaim {
 	pvc := api.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -907,6 +928,7 @@ func validPersistentVolumeClaim(name string, resources api.VolumeResourceRequire
 	return pvc
 }
 
+// TestPersistentVolumeClaimLimitFunc 验证 PVC 存储请求在 LimitRange 的 min/max 范围内才被放行。
 func TestPersistentVolumeClaimLimitFunc(t *testing.T) {
 	type testCase struct {
 		pvc        api.PersistentVolumeClaim
@@ -958,7 +980,7 @@ func TestPersistentVolumeClaimLimitFunc(t *testing.T) {
 	}
 }
 
-// TestLimitRanger_GetLimitRangesFixed22422 Fixed Admission controllers can cause unnecessary significant load on apiserver #22422
+// TestLimitRanger_GetLimitRangesFixed22422 复现 #22422：并发 Admission 曾把 apiserver 打满，这里验证 singleflight 合并同命名空间查询。
 func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 	limitRange := validLimitRangeNoDefaults()
 	limitRanges := []corev1.LimitRange{limitRange}
@@ -989,7 +1011,7 @@ func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 			value.Namespace = action.GetNamespace()
 			limitRangeList.Items = append(limitRangeList.Items, value)
 		}
-		// make the handler slow so concurrent calls exercise the singleflight
+		// 故意拖慢 list，让并发调用重叠，从而真正走到 singleflight 合并路径。
 		time.Sleep(time.Second)
 		return true, limitRangeList, nil
 	})
@@ -1006,7 +1028,7 @@ func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < 10; i++ {
 		wg.Add(2)
-		// simulating concurrent calls after a cache failure
+		// 模拟缓存失效后同一命名空间涌进来的并发查询。
 		go func() {
 			defer wg.Done()
 			ret, err := handler.GetLimitRanges(attributes)
@@ -1020,7 +1042,7 @@ func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 			}
 		}()
 
-		// simulation of different namespaces is not a call
+		// 另一个命名空间对应另一组并发调用，不应被合并进去。
 		go func() {
 			defer wg.Done()
 			ret, err := handler.GetLimitRanges(attributesTest1)
@@ -1035,11 +1057,9 @@ func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 		}()
 	}
 
-	// and here we wait for all the goroutines
+	// 等待全部并发查询结束再统计调用次数。
 	wg.Wait()
-	// since all the calls with the same namespace will be holded, they must be catched on the singleflight group,
-	// There are two different sets of namespace calls
-	// hence only 2
+	// 同一命名空间的调用会被 singleflight 合并，两个命名空间各只剩一次真实 list。
 	if testCount != 1 {
 		t.Errorf("Expected 1 limit range call, got %d", testCount)
 	}
@@ -1047,7 +1067,7 @@ func TestLimitRanger_GetLimitRangesFixed22422(t *testing.T) {
 		t.Errorf("Expected 1 limit range call, got %d", test1Count)
 	}
 
-	// invalidate the cache
+	// 主动清掉缓存，确认下次查询会重新打一次 apiserver。
 	handler.liveLookupCache.Remove(attributes.GetNamespace())
 	_, err = handler.GetLimitRanges(attributes)
 	if err != nil {

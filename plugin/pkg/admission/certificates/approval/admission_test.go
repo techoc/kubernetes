@@ -31,6 +31,7 @@ import (
 	certificatesapi "k8s.io/kubernetes/pkg/apis/certificates"
 )
 
+// TestPlugin_Validate 验证审批准入插件按 signerName 做授权判定。
 func TestPlugin_Validate(t *testing.T) {
 	tests := map[string]struct {
 		attributes  admission.Attributes
@@ -134,6 +135,7 @@ func TestPlugin_Validate(t *testing.T) {
 	}
 }
 
+// fakeAuthorizer 是测试用的授权器，仅接受预设的动词与 signerName。
 type fakeAuthorizer struct {
 	t           *testing.T
 	verb        string
@@ -142,6 +144,7 @@ type fakeAuthorizer struct {
 	err         error
 }
 
+// Authorize 按预设条件判定授权结果，不匹配则返回拒绝并说明原因。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	if f.err != nil {
 		return f.decision, "forced error", f.err
@@ -167,6 +170,7 @@ func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) 
 	return f.decision, "", nil
 }
 
+// testAttributes 只实现被测代码用到的 Attributes 方法，其余由嵌入的 nil 接口兜底。
 type testAttributes struct {
 	resource    schema.GroupResource
 	subresource string
@@ -174,33 +178,41 @@ type testAttributes struct {
 	obj, oldObj runtime.Object
 	name        string
 
-	admission.Attributes // nil panic if any other methods called
+	// 调用到其他方法时会因接口为 nil 而 panic，测试故意不实现它们。
+	admission.Attributes
 }
 
+// GetResource 返回测试用资源（版本信息被忽略）。
 func (t *testAttributes) GetResource() schema.GroupVersionResource {
 	return t.resource.WithVersion("ignored")
 }
 
+// GetSubresource 返回测试用子资源名。
 func (t *testAttributes) GetSubresource() string {
 	return t.subresource
 }
 
+// GetObject 返回新对象。
 func (t *testAttributes) GetObject() runtime.Object {
 	return t.obj
 }
 
+// GetOldObject 返回旧对象。
 func (t *testAttributes) GetOldObject() runtime.Object {
 	return t.oldObj
 }
 
+// GetName 返回对象名。
 func (t *testAttributes) GetName() string {
 	return t.name
 }
 
+// GetOperation 返回测试用操作类型。
 func (t *testAttributes) GetOperation() admission.Operation {
 	return t.operation
 }
 
+// GetUserInfo 返回占位用户信息。
 func (t *testAttributes) GetUserInfo() user.Info {
 	return &user.DefaultInfo{Name: "ignored"}
 }

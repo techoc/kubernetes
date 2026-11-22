@@ -37,9 +37,9 @@ func init() {
 	install.Install(scheme)
 }
 
-// LoadConfiguration loads the provided configuration.
+// loadConfiguration 加载并校验配置；未提供配置时返回默认配置。
 func loadConfiguration(config io.Reader) (*internalapi.Configuration, error) {
-	// if no config is provided, return a default configuration
+	// 未提供配置时使用 scheme 生成的默认值，避免依赖外部配置文件。
 	if config == nil {
 		externalConfig := &versionedapi.Configuration{}
 		scheme.Default(externalConfig)
@@ -49,7 +49,7 @@ func loadConfiguration(config io.Reader) (*internalapi.Configuration, error) {
 		}
 		return internalConfig, nil
 	}
-	// we have a config so parse it.
+	// 有配置则按通用解码器解码为内部版本。
 	data, err := io.ReadAll(config)
 	if err != nil {
 		return nil, err

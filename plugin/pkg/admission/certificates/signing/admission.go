@@ -32,28 +32,28 @@ import (
 	"k8s.io/kubernetes/pkg/certauthorization"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是本准入插件的名称。
 const PluginName = "CertificateSigning"
 
-// Register registers a plugin
+// Register 向插件注册表注册本准入插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(), nil
 	})
 }
 
-// Plugin holds state for and implements the admission plugin.
+// Plugin 持有并实现证书签名准入插件所需的状态。
 type Plugin struct {
 	*admission.Handler
 	authz authorizer.UnconditionalAuthorizer
 }
 
-// SetUnconditionalAuthorizer sets the authorizer.
+// SetUnconditionalAuthorizer 设置用于签名权限检查的授权器。
 func (p *Plugin) SetUnconditionalAuthorizer(authz authorizer.UnconditionalAuthorizer) {
 	p.authz = authz
 }
 
-// ValidateInitialization ensures an authorizer is set.
+// ValidateInitialization 确认授权器已注入。
 func (p *Plugin) ValidateInitialization() error {
 	if p.authz == nil {
 		return fmt.Errorf("%s requires an authorizer", PluginName)
@@ -64,20 +64,19 @@ func (p *Plugin) ValidateInitialization() error {
 var _ admission.ValidationInterface = &Plugin{}
 var _ genericadmissioninit.WantsUnconditionalAuthorizer = &Plugin{}
 
-// NewPlugin creates a new CSR approval admission plugin
+// NewPlugin 创建新的 CSR 签名准入插件实例。
 func NewPlugin() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Update),
 	}
 }
 
+// csrGroupResource 是插件关心的 CSR 资源标识。
 var csrGroupResource = api.Resource("certificatesigningrequests")
 
-// Validate verifies that the requesting user has permission to sign
-// CertificateSigningRequests for the specified signerName.
+// Validate 校验请求用户是否有权为指定 signerName 签名 CertificateSigningRequest。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore all calls to anything other than 'certificatesigningrequests/status'.
-	// Ignore all operations other than UPDATE.
+	// 只关心 CSR 的 status 子资源更新，其他请求直接放行。
 	if a.GetSubresource() != "status" ||
 		a.GetResource().GroupResource() != csrGroupResource {
 		return nil
@@ -92,7 +91,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return admission.NewForbidden(a, fmt.Errorf("expected type CertificateSigningRequest, got: %T", a.GetObject()))
 	}
 
-	// only run if the status.certificate or status.conditions field has been changed
+	// 证书和条件都没变时无需鉴权，避免误伤其他 status 字段更新。
 	if reflect.DeepEqual(oldCSR.Status.Certificate, csr.Status.Certificate) && apiequality.Semantic.DeepEqual(oldCSR.Status.Conditions, csr.Status.Conditions) {
 		return nil
 	}

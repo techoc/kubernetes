@@ -27,8 +27,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// TestAdmission verifies all create requests for pods result in every container's image pull policy
-// set to Always
+// TestAdmission 验证 Pod 创建时所有容器与镜像卷的拉取策略都会被改为 Always。
 func TestAdmission(t *testing.T) {
 	namespace := "test"
 	handler := admissiontesting.WithReinvocationTesting(t, &AlwaysPullImages{})
@@ -75,6 +74,7 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
+// TestValidate 验证 Validate 会拒绝非 Always 的镜像拉取策略并汇总所有字段错误。
 func TestValidate(t *testing.T) {
 	namespace := "test"
 	handler := &AlwaysPullImages{}
@@ -121,8 +121,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestOtherResources ensures that this admission controller is a no-op for other resources,
-// subresources, and non-pods.
+// TestOtherResources 验证插件对其他资源、子资源不生效；对象类型错误时才报错。
 func TestOtherResources(t *testing.T) {
 	namespace := "testnamespace"
 	name := "testname"
@@ -188,8 +187,7 @@ func TestOtherResources(t *testing.T) {
 
 }
 
-// TestUpdatePod ensures that this admission controller is a no-op for update pod if no
-// images were changed in the new pod spec.
+// TestUpdatePod 验证镜像未变时不改写拉取策略，镜像变化时才重新应用 Always。
 func TestUpdatePod(t *testing.T) {
 	namespace := "testnamespace"
 	name := "testname"
@@ -201,7 +199,7 @@ func TestUpdatePod(t *testing.T) {
 			},
 		},
 	}
-	// only add new annotation
+	// 仅改注解，镜像不变
 	pod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -216,7 +214,7 @@ func TestUpdatePod(t *testing.T) {
 			},
 		},
 	}
-	// add new label and change image
+	// 镜像变化，应重新触发改写
 	podWithNewImage := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

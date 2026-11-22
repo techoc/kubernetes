@@ -24,7 +24,7 @@ import (
 	internalapi "k8s.io/kubernetes/plugin/pkg/admission/podtolerationrestriction/apis/podtolerationrestriction"
 )
 
-// ValidateConfiguration validates the configuration.
+// ValidateConfiguration 校验配置中的默认容忍与白名单容忍是否合法。
 func ValidateConfiguration(config *internalapi.Configuration) error {
 	allErrs := field.ErrorList{}
 	fldpath := field.NewPath("podtolerationrestriction")

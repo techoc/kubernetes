@@ -18,68 +18,53 @@ package v1alpha1
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// LimitType is the type of the limit (e.g., per-namespace)
+// LimitType 表示限流类型（例如按命名空间限流）。
 type LimitType string
 
 const (
-	// ServerLimitType is a type of limit where there is one bucket shared by
-	// all of the event queries received by the API Server.
+	// ServerLimitType 类型的限流只有一个桶，由 API Server 收到的所有事件查询共享。
 	ServerLimitType LimitType = "Server"
-	// NamespaceLimitType is a type of limit where there is one bucket used by
-	// each namespace
+	// NamespaceLimitType 类型的限流为每个命名空间使用一个桶。
 	NamespaceLimitType LimitType = "Namespace"
-	// UserLimitType is a type of limit where there is one bucket used by each
-	// user
+	// UserLimitType 类型的限流为每个用户使用一个桶。
 	UserLimitType LimitType = "User"
-	// SourceAndObjectLimitType is a type of limit where there is one bucket used
-	// by each combination of source and involved object of the event.
+	// SourceAndObjectLimitType 类型的限流为事件的来源与涉及对象的每种组合使用一个桶。
 	SourceAndObjectLimitType LimitType = "SourceAndObject"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Configuration provides configuration for the EventRateLimit admission
-// controller.
+// Configuration 为 EventRateLimit 准入控制器提供配置。
 type Configuration struct {
 	metav1.TypeMeta `json:""`
 
-	// limits are the limits to place on event queries received.
-	// Limits can be placed on events received server-wide, per namespace,
-	// per user, and per source+object.
-	// At least one limit is required.
+	// limits 是对收到的事件查询施加的限流规则。
+	// 可以针对服务器范围、按命名空间、按用户以及按来源+对象收到的事件设置限流。
+	// 至少需要配置一条限流规则。
 	Limits []Limit `json:"limits"`
 }
 
-// Limit is the configuration for a particular limit type
+// Limit 是某一种限流类型的配置。
 type Limit struct {
-	// type is the type of limit to which this configuration applies
+	// type 是本配置适用的限流类型。
 	Type LimitType `json:"type"`
 
-	// qps is the number of event queries per second that are allowed for this
-	// type of limit. The qps and burst fields are used together to determine if
-	// a particular event query is accepted. The qps determines how many queries
-	// are accepted once the burst amount of queries has been exhausted.
+	// qps 是该限流类型每秒允许的事件查询数。qps 与 burst 字段共同决定某个事件查询是否被接受。
+	// 当 burst 额度用尽后，qps 决定每秒允许多少查询通过。
 	QPS int32 `json:"qps"`
 
-	// burst is the burst number of event queries that are allowed for this type
-	// of limit. The qps and burst fields are used together to determine if a
-	// particular event query is accepted. The burst determines the maximum size
-	// of the allowance granted for a particular bucket. For example, if the burst
-	// is 10 and the qps is 3, then the admission control will accept 10 queries
-	// before blocking any queries. Every second, 3 more queries will be allowed.
-	// If some of that allowance is not used, then it will roll over to the next
-	// second, until the maximum allowance of 10 is reached.
+	// burst 是该限流类型允许的突发事件查询数。qps 与 burst 共同决定某个事件查询是否被接受。
+	// burst 决定单个桶可获得的最大额度。例如 burst 为 10、qps 为 3 时，
+	// 准入控制会先接受 10 个查询，之后才开始阻塞；每秒再放行 3 个查询。
+	// 未用完的额度会结转到下一秒，直到达到 10 的最大额度为止。
 	Burst int32 `json:"burst"`
 
-	// cacheSize is the size of the LRU cache for this type of limit. If a bucket
-	// is evicted from the cache, then the allowance for that bucket is reset. If
-	// more queries are later received for an evicted bucket, then that bucket
-	// will re-enter the cache with a clean slate, giving that bucket a full
-	// allowance of burst queries.
+	// cacheSize 是该限流类型 LRU 缓存的大小。桶一旦被缓存淘汰，其额度即被重置；
+	// 之后若再收到该桶的查询，它会以全新状态重新进入缓存，获得完整的 burst 额度。
 	//
-	// The default cache size is 4096.
+	// 默认缓存大小为 4096。
 	//
-	// If limitType is 'server', then cacheSize is ignored.
+	// 若 limitType 为 'server'，则 cacheSize 被忽略。
 	// +optional
 	CacheSize int32 `json:"cacheSize,omitempty"`
 }

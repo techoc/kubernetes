@@ -24,41 +24,41 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 表示准入插件的名称。
 const PluginName = "AlwaysAdmit"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewAlwaysAdmit(), nil
 	})
 }
 
-// alwaysAdmit is an implementation of admission.Interface which always says yes to an admit request.
+// alwaysAdmit 是 admission.Interface 的实现，对任何准入请求都一概放行。
 type alwaysAdmit struct{}
 
 var _ admission.MutationInterface = alwaysAdmit{}
 var _ admission.ValidationInterface = alwaysAdmit{}
 
-// Admit makes an admission decision based on the request attributes
+// Admit 根据请求属性做出准入决定；这里始终放行。
 func (alwaysAdmit) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	return nil
 }
 
-// Validate makes an admission decision based on the request attributes.  It is NOT allowed to mutate.
+// Validate 根据请求属性做出准入决定，且不允许修改对象；这里始终放行。
 func (alwaysAdmit) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	return nil
 }
 
-// Handles returns true if this admission controller can handle the given operation
-// where operation can be one of CREATE, UPDATE, DELETE, or CONNECT
+// Handles 返回该准入控制器是否能处理给定的操作，
+// 操作可以是 CREATE、UPDATE、DELETE 或 CONNECT；这里始终返回 true。
 func (alwaysAdmit) Handles(operation admission.Operation) bool {
 	return true
 }
 
-// NewAlwaysAdmit creates a new always admit admission handler
+// NewAlwaysAdmit 创建一个始终放行的准入处理器。
 func NewAlwaysAdmit() admission.Interface {
-	// DEPRECATED: AlwaysAdmit admit all admission request, it is no use.
+	// DEPRECATED: AlwaysAdmit 放行所有准入请求，已无实际用途。
 	klog.Warningf("%s admission controller is deprecated. "+
 		"Please remove this controller from your configuration files and scripts.", PluginName)
 	return new(alwaysAdmit)

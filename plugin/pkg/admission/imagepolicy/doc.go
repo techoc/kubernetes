@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package imagepolicy checks a webhook for image admission
+// Package imagepolicy 通过 webhook 检查镜像准入。
 package imagepolicy

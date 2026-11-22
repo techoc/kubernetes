@@ -33,7 +33,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestResizeAdmission 测试 Pod 原地垂直扩缩容的准入校验，覆盖 Linux/Windows 节点、
+// 可分配资源上限、未绑定节点与节点缺失等场景。
 func TestResizeAdmission(t *testing.T) {
+	// 用 LabelOSStable 标记操作系统；插件据此拒绝非 Linux 节点上的扩缩容。
 	linuxNode := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "linux-node",
@@ -102,6 +105,7 @@ func TestResizeAdmission(t *testing.T) {
 			oldPod:      testPod,
 			newPod: func() *core.Pod {
 				p := testPod.DeepCopy()
+				// 递增 Generation 才会触发 resize 校验；否则插件直接放行。
 				p.Generation = 2
 				p.Spec.Containers[0].Resources.Requests[core.ResourceCPU] = resource.MustParse("2")
 				return p
@@ -129,7 +133,7 @@ func TestResizeAdmission(t *testing.T) {
 			newPod: func() *core.Pod {
 				p := testPod.DeepCopy()
 				p.Generation = 2
-				p.Spec.Containers[0].Resources.Requests[core.ResourceCPU] = resource.MustParse("10") // Would fail if checked
+				p.Spec.Containers[0].Resources.Requests[core.ResourceCPU] = resource.MustParse("10") // 若校验生效则会失败
 				return p
 			},
 			expectErr: false,
@@ -142,7 +146,7 @@ func TestResizeAdmission(t *testing.T) {
 			newPod: func() *core.Pod {
 				p := testPod.DeepCopy()
 				p.Generation = 1
-				p.Spec.Containers[0].Resources.Requests[core.ResourceCPU] = resource.MustParse("10") // Would fail if checked
+				p.Spec.Containers[0].Resources.Requests[core.ResourceCPU] = resource.MustParse("10") // 若校验生效则会失败
 				return p
 			},
 			expectErr: false,
@@ -255,11 +259,13 @@ func TestResizeAdmission(t *testing.T) {
 			plugin, err := NewPlugin()
 			require.NoError(t, err)
 			plugin.SetExternalKubeInformerFactory(informerFactory)
+			// 特性开关默认关闭，显式打开才能进入 resize 校验路径。
 			plugin.inPlacePodVerticalScalingEnabled = true
 
 			stopCh := make(chan struct{})
 			defer close(stopCh)
 			informerFactory.Start(stopCh)
+			// 等缓存同步完成再校验，否则插件读不到预置的节点对象。
 			informerFactory.WaitForCacheSync(stopCh)
 
 			newPodObj := tc.newPod()
@@ -291,6 +297,8 @@ func TestResizeAdmission(t *testing.T) {
 	}
 }
 
+// TestValidateRequestsWithinAllocatable 测试请求资源是否超出节点可分配量的独立校验函数，
+// 覆盖 CPU、内存、Pod 级 Overhead 以及 Pod 级资源覆盖容器请求的情形。
 func TestValidateRequestsWithinAllocatable(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -361,7 +369,7 @@ func TestValidateRequestsWithinAllocatable(t *testing.T) {
 				corev1.ResourceMemory: resource.MustParse("256Mi"),
 			},
 			expectedErr: true,
-			// 500Mi = 524288000 bytes, 256Mi = 268435456 bytes
+			// 500Mi = 524288000 字节，256Mi = 268435456 字节
 			expectedMsg: "memory, requested: 524288000, allocatable: 268435456",
 		},
 		{
@@ -389,7 +397,7 @@ func TestValidateRequestsWithinAllocatable(t *testing.T) {
 				corev1.ResourceMemory: resource.MustParse("200Mi"),
 			},
 			expectedErr: true,
-			// CPU: 150m + 100m = 250m. Mem: 150Mi + 100Mi = 250Mi (262144000 bytes)
+			// CPU：150m + 100m = 250m；内存：150Mi + 100Mi = 250Mi（262144000 字节）
 			expectedMsg: "cpu, requested: 250, allocatable: 200",
 		},
 		{

@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin
+	// PluginName 是本准入控制器插件的名称。
 	PluginName = "StorageObjectInUseProtection"
 )
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		plugin := newPlugin()
@@ -42,14 +42,14 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// storageProtectionPlugin holds state for and implements the admission plugin.
+// storageProtectionPlugin 保存状态并实现该准入插件。
 type storageProtectionPlugin struct {
 	*admission.Handler
 }
 
 var _ admission.Interface = &storageProtectionPlugin{}
 
-// newPlugin creates a new admission plugin.
+// newPlugin 创建一个新的准入插件。
 func newPlugin() *storageProtectionPlugin {
 	return &storageProtectionPlugin{
 		Handler: admission.NewHandler(admission.Create),
@@ -62,11 +62,10 @@ var (
 	vacResource = storageapi.Resource("volumeattributesclasses")
 )
 
-// Admit sets finalizer on all PVCs(PVs). The finalizer is removed by
-// PVCProtectionController(PVProtectionController) when it's not referenced.
+// Admit 给所有 PVC（PV）加上 finalizer；当对象不再被引用时，
+// 由 PVCProtectionController（PVProtectionController）移除该 finalizer。
 //
-// This prevents users from deleting a PVC that's used by a running pod.
-// This also prevents admin from deleting a PV that's bound by a PVC
+// 这样可防止用户删除仍被运行中 Pod 使用的 PVC，也防止管理员删除仍被 PVC 绑定的 PV。
 func (c *storageProtectionPlugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	switch a.GetResource().GroupResource() {
 	case pvResource:
@@ -84,19 +83,21 @@ func (c *storageProtectionPlugin) Admit(ctx context.Context, a admission.Attribu
 	}
 }
 
+// admitPV 为 PV 添加保护 finalizer，非 PV 或已有 finalizer 时跳过。
 func (c *storageProtectionPlugin) admitPV(a admission.Attributes) error {
+	// 子资源操作不会创建新的 PV，无需处理。
 	if len(a.GetSubresource()) != 0 {
 		return nil
 	}
 
 	pv, ok := a.GetObject().(*api.PersistentVolume)
-	// if we can't convert the obj to PV, just return
+	// 无法转换为 PV 说明不是本插件关心的对象，直接放行。
 	if !ok {
 		return nil
 	}
 	for _, f := range pv.Finalizers {
 		if f == volumeutil.PVProtectionFinalizer {
-			// Finalizer is already present, nothing to do
+			// finalizer 已存在，无需重复添加。
 			return nil
 		}
 	}
@@ -106,20 +107,22 @@ func (c *storageProtectionPlugin) admitPV(a admission.Attributes) error {
 	return nil
 }
 
+// admitPVC 为 PVC 添加保护 finalizer，非 PVC 或已有 finalizer 时跳过。
 func (c *storageProtectionPlugin) admitPVC(a admission.Attributes) error {
+	// 子资源操作不会创建新的 PVC，无需处理。
 	if len(a.GetSubresource()) != 0 {
 		return nil
 	}
 
 	pvc, ok := a.GetObject().(*api.PersistentVolumeClaim)
-	// if we can't convert the obj to PVC, just return
+	// 无法转换为 PVC 说明不是本插件关心的对象，直接放行。
 	if !ok {
 		return nil
 	}
 
 	for _, f := range pvc.Finalizers {
 		if f == volumeutil.PVCProtectionFinalizer {
-			// Finalizer is already present, nothing to do
+			// finalizer 已存在，无需重复添加。
 			return nil
 		}
 	}
@@ -129,20 +132,22 @@ func (c *storageProtectionPlugin) admitPVC(a admission.Attributes) error {
 	return nil
 }
 
+// admitVAC 为 VAC 添加保护 finalizer，非 VAC 或已有 finalizer 时跳过。
 func (c *storageProtectionPlugin) admitVAC(a admission.Attributes) error {
+	// 子资源操作不会创建新的 VAC，无需处理。
 	if len(a.GetSubresource()) != 0 {
 		return nil
 	}
 
 	vac, ok := a.GetObject().(*storageapi.VolumeAttributesClass)
-	// if we can't convert the obj to VAC, just return
+	// 无法转换为 VAC 说明不是本插件关心的对象，直接放行。
 	if !ok {
 		klog.V(2).Infof("can't convert the obj to VAC to %s", vac.Name)
 		return nil
 	}
 	for _, f := range vac.Finalizers {
 		if f == volumeutil.VACProtectionFinalizer {
-			// Finalizer is already present, nothing to do
+			// finalizer 已存在，无需重复添加。
 			return nil
 		}
 	}

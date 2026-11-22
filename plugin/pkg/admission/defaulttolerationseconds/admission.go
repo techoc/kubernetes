@@ -31,22 +31,22 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是本准入插件的名称。
 const PluginName = "DefaultTolerationSeconds"
 
 var (
-	// tolerationSecondsMutex protects registration and read in InspectFeatureGates, which is
-	// good enough for concurrent use in integration tests as long as the command
-	// line flags are not actually used by some test. In commands the registration,
-	// parsing and InspectFeatureGates are serialized.
+	// tolerationSecondsMutex 保护标志注册与 InspectFeatureGates 中的读取。
+	// 只要集成测试不真正使用命令行标志，这个粒度足以保证并发安全；
+	// 在真实命令里注册、解析和 InspectFeatureGates 是串行的。
 	tolerationSecondsMutex sync.RWMutex
 
 	defaultNotReadyTolerationSeconds    = int64(300)
 	defaultUnreachableTolerationSeconds = int64(300)
 )
 
+// RegisterFlags 向标志集注册两个默认容忍时长标志。
 func RegisterFlags(fs *pflag.FlagSet) {
-	// Indirect writes of the default value!
+	// 标志直接写入默认值的变量，必须持锁以防与 InspectFeatureGates 并发读冲突。
 	tolerationSecondsMutex.Lock()
 	defer tolerationSecondsMutex.Unlock()
 
@@ -58,19 +58,15 @@ func RegisterFlags(fs *pflag.FlagSet) {
 			" that is added by default to every pod that does not already have such a toleration.")
 }
 
-// Register registers a plugin
+// Register 向插件注册表注册本准入插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewDefaultTolerationSeconds(), nil
 	})
 }
 
-// Plugin contains the client used by the admission controller
-// It will add default tolerations for every pod
-// that tolerate taints `notReady:NoExecute` and `unreachable:NoExecute`,
-// with tolerationSeconds of 300s.
-// If the pod already specifies a toleration for taint `notReady:NoExecute`
-// or `unreachable:NoExecute`, the plugin won't touch it.
+// Plugin 为每个 Pod 补上容忍 notReady:NoExecute 和 unreachable:NoExecute 污点的
+// 默认容忍（tolerationSeconds 默认 300 秒）；Pod 已有对应容忍时不做改动。
 type Plugin struct {
 	*admission.Handler
 	notReadyToleration    api.Toleration
@@ -80,16 +76,16 @@ type Plugin struct {
 var _ admission.MutationInterface = &Plugin{}
 var _ initializer.WantsFeatures = &Plugin{}
 
-// NewDefaultTolerationSeconds creates a new instance of the DefaultTolerationSeconds admission controller
+// NewDefaultTolerationSeconds 创建 DefaultTolerationSeconds 准入控制器实例。
 func NewDefaultTolerationSeconds() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 	}
 }
 
-// InspectFeatureGates runs after command-line flags have been parsed
+// InspectFeatureGates 在命令行标志解析后读取默认值，构建默认容忍对象。
 func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
-	// Read the default values while holding a read lock.
+	// 命令行标志可能并发写入默认值，读取时须持读锁。
 	tolerationSecondsMutex.RLock()
 	defer tolerationSecondsMutex.RUnlock()
 
@@ -110,7 +106,7 @@ func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	}
 }
 
-// ValidateInitialization validates the Plugin was initialized properly
+// ValidateInitialization 确认插件已完成初始化（默认容忍已设置）。
 func (p *Plugin) ValidateInitialization() error {
 	if p.notReadyToleration == (api.Toleration{}) {
 		return fmt.Errorf("%s was not initialized correctly, notReadyToleration is not set", PluginName)
@@ -121,14 +117,14 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// Admit makes an admission decision based on the request attributes
+// Admit 为缺少对应容忍的 Pod 追加默认容忍。
 func (p *Plugin) Admit(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return nil
 	}
 
 	if len(attributes.GetSubresource()) > 0 {
-		// only run the checks below on pods proper and not subresources
+		// 子资源更新不涉及 Pod spec，跳过。
 		return nil
 	}
 

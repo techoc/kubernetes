@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package runtimeclass contains an admission controller for modifying and validating new Pods to
-// take RuntimeClass into account. For RuntimeClass definitions which describe an overhead associated
-// with running a pod, this admission controller will set the pod.Spec.Overhead field accordingly. This
-// field should only be set through this controller, so validation will be carried out to ensure the pod's
-// value matches what is defined in the coresponding RuntimeClass.
+// Package runtimeclass 包含一个准入控制器，用于根据 RuntimeClass 修改和校验新建的 Pod。
+// 对于声明了运行 Pod 额外开销的 RuntimeClass，该控制器会相应地设置 pod.Spec.Overhead。
+// 该字段只允许由此控制器设置，因此校验阶段会确保 Pod 上的值与对应 RuntimeClass 中的定义一致。
 package runtimeclass
 
 import (
@@ -42,20 +40,19 @@ import (
 	"k8s.io/kubernetes/pkg/util/tolerations"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 表示该准入插件的名称。
 const PluginName = "RuntimeClass"
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewRuntimeClass(), nil
 	})
 }
 
-// RuntimeClass is an implementation of admission.Interface.
-// It looks at all new pods and sets pod.Spec.Overhead if a RuntimeClass is specified which
-// defines an Overhead. If pod.Spec.Overhead is set but a RuntimeClass with matching overhead is
-// not specified, the pod is rejected.
+// RuntimeClass 是 admission.Interface 的一个实现。
+// 它检查所有新建 Pod，若指定的 RuntimeClass 定义了开销，则设置 pod.Spec.Overhead。
+// 若 Pod 已设置 Overhead 但指定的 RuntimeClass 未定义匹配的开销，则拒绝该 Pod。
 type RuntimeClass struct {
 	*admission.Handler
 	runtimeClassLister nodev1listers.RuntimeClassLister
@@ -68,19 +65,19 @@ var _ admission.ValidationInterface = &RuntimeClass{}
 var _ genericadmissioninitailizer.WantsExternalKubeInformerFactory = &RuntimeClass{}
 var _ genericadmissioninitailizer.WantsExternalKubeClientSet = &RuntimeClass{}
 
-// SetExternalKubeClientSet sets the client for the plugin
+// SetExternalKubeClientSet 设置插件使用的客户端。
 func (r *RuntimeClass) SetExternalKubeClientSet(client kubernetes.Interface) {
 	r.runtimeClassClient = client.NodeV1().RuntimeClasses()
 }
 
-// SetExternalKubeInformerFactory implements the WantsExternalKubeInformerFactory interface.
+// SetExternalKubeInformerFactory 实现 WantsExternalKubeInformerFactory 接口。
 func (r *RuntimeClass) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	runtimeClassInformer := f.Node().V1().RuntimeClasses()
 	r.SetReadyFunc(runtimeClassInformer.Informer().HasSynced)
 	r.runtimeClassLister = runtimeClassInformer.Lister()
 }
 
-// ValidateInitialization implements the WantsExternalKubeInformerFactory interface.
+// ValidateInitialization 校验初始化结果，确保 lister 与 client 均已注入。
 func (r *RuntimeClass) ValidateInitialization() error {
 	if r.runtimeClassLister == nil {
 		return fmt.Errorf("missing RuntimeClass lister")
@@ -91,9 +88,9 @@ func (r *RuntimeClass) ValidateInitialization() error {
 	return nil
 }
 
-// Admit makes an admission decision based on the request attributes
+// Admit 根据请求属性作出准入决策，将 RuntimeClass 中的开销和调度约束写入 Pod。
 func (r *RuntimeClass) Admit(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore all calls to subresources or resources other than pods.
+	// 只处理 Pod 主资源，子资源无需注入字段。
 	if shouldIgnore(attributes) {
 		return nil
 	}
@@ -113,9 +110,9 @@ func (r *RuntimeClass) Admit(ctx context.Context, attributes admission.Attribute
 	return nil
 }
 
-// Validate makes sure that pod adhere's to RuntimeClass's definition
+// Validate 确保 Pod 的 Overhead 与 RuntimeClass 的定义一致。
 func (r *RuntimeClass) Validate(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore all calls to subresources or resources other than pods.
+	// 只处理 Pod 主资源，子资源无需注入字段。
 	if shouldIgnore(attributes) {
 		return nil
 	}
@@ -131,14 +128,14 @@ func (r *RuntimeClass) Validate(ctx context.Context, attributes admission.Attrib
 	return nil
 }
 
-// NewRuntimeClass creates a new RuntimeClass admission control handler
+// NewRuntimeClass 创建一个新的 RuntimeClass 准入处理器。
 func NewRuntimeClass() *RuntimeClass {
 	return &RuntimeClass{
 		Handler: admission.NewHandler(admission.Create),
 	}
 }
 
-// prepareObjects returns pod and runtimeClass types from the given admission attributes
+// prepareObjects 从准入属性中提取 Pod，并按其指定的 RuntimeClass 名称查找对应对象。
 func (r *RuntimeClass) prepareObjects(ctx context.Context, attributes admission.Attributes) (pod *api.Pod, runtimeClass *nodev1.RuntimeClass, err error) {
 	pod, ok := attributes.GetObject().(*api.Pod)
 	if !ok {
@@ -149,32 +146,33 @@ func (r *RuntimeClass) prepareObjects(ctx context.Context, attributes admission.
 		return pod, nil, nil
 	}
 
-	// get RuntimeClass object
+	// 从缓存读取 RuntimeClass。
 	runtimeClass, err = r.runtimeClassLister.Get(*pod.Spec.RuntimeClassName)
 	if apierrors.IsNotFound(err) {
-		// if not found, our informer cache could be lagging, do a live lookup
+		// 缓存可能滞后，回退到实时查询以避免误拒。
 		runtimeClass, err = r.runtimeClassClient.Get(ctx, *pod.Spec.RuntimeClassName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return pod, nil, admission.NewForbidden(attributes, fmt.Errorf("pod rejected: RuntimeClass %q not found", *pod.Spec.RuntimeClassName))
 		}
 	}
 
-	// return the pod and runtimeClass.
+	// 返回解析出的 Pod 与 RuntimeClass。
 	return pod, runtimeClass, err
 }
 
+// setOverhead 将 RuntimeClass 中定义的 PodFixed 开销写入 Pod，并拒绝用户自行设置的不一致开销。
 func setOverhead(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.RuntimeClass) (err error) {
 	if runtimeClass == nil || runtimeClass.Overhead == nil {
 		return nil
 	}
 
-	// convert to internal type and assign to pod's Overhead
+	// 先转换到内部类型再进行比较和赋值。
 	nodeOverhead := &node.Overhead{}
 	if err = apinodev1.Convert_v1_Overhead_To_node_Overhead(runtimeClass.Overhead, nodeOverhead, nil); err != nil {
 		return err
 	}
 
-	// reject pod if Overhead is already set that differs from what is defined in RuntimeClass
+	// 用户显式设置的 Overhead 必须与 RuntimeClass 定义一致，防止绕过管控。
 	if len(pod.Spec.Overhead) > 0 && !apiequality.Semantic.DeepEqual(nodeOverhead.PodFixed, pod.Spec.Overhead) {
 		return admission.NewForbidden(a, fmt.Errorf("pod rejected: Pod's Overhead doesn't match RuntimeClass's defined Overhead"))
 	}
@@ -184,12 +182,14 @@ func setOverhead(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.Runt
 	return nil
 }
 
+// setScheduling 将 RuntimeClass 的 nodeSelector 与 tolerations 合并到 Pod，
+// 节点选择冲突时拒绝，以保证 Pod 只被调度到该运行时可用的节点。
 func setScheduling(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.RuntimeClass) (err error) {
 	if runtimeClass == nil || runtimeClass.Scheduling == nil {
 		return nil
 	}
 
-	// convert to internal type and assign to pod's Scheduling
+	// 转换到内部类型后再合并到 Pod，确保比较时使用统一的表示。
 	nodeScheduling := &node.Scheduling{}
 	if err = apinodev1.Convert_v1_Scheduling_To_node_Scheduling(runtimeClass.Scheduling, nodeScheduling, nil); err != nil {
 		return err
@@ -201,6 +201,7 @@ func setScheduling(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.Ru
 		newNodeSelector = runtimeNodeSelector
 	} else {
 		for key, runtimeClassValue := range runtimeNodeSelector {
+			// 同一 key 上不允许用户值与运行时要求冲突。
 			if podValue, ok := newNodeSelector[key]; ok && podValue != runtimeClassValue {
 				return admission.NewForbidden(a, fmt.Errorf("conflict: runtimeClass.scheduling.nodeSelector[%s] = %s; pod.spec.nodeSelector[%s] = %s", key, runtimeClassValue, key, podValue))
 			}
@@ -216,9 +217,11 @@ func setScheduling(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.Ru
 	return nil
 }
 
+// validateOverhead 校验 Pod 的 Overhead 与 RuntimeClass 定义一致，
+// 并拒绝没有对应 RuntimeClass 定义却自行设置 Overhead 的 Pod。
 func validateOverhead(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1.RuntimeClass) (err error) {
 	if runtimeClass != nil && runtimeClass.Overhead != nil {
-		// If the Overhead set doesn't match what is provided in the RuntimeClass definition, reject the pod
+		// 开销不匹配则拒绝，避免用户绕过 admission 自行设置。
 		nodeOverhead := &node.Overhead{}
 		if err := apinodev1.Convert_v1_Overhead_To_node_Overhead(runtimeClass.Overhead, nodeOverhead, nil); err != nil {
 			return err
@@ -227,7 +230,7 @@ func validateOverhead(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1
 			return admission.NewForbidden(a, fmt.Errorf("pod rejected: Pod's Overhead doesn't match RuntimeClass's defined Overhead"))
 		}
 	} else {
-		// If RuntimeClass with Overhead is not defined but an Overhead is set for pod, reject the pod
+		// 没有对应的开销定义却设置了开销，视为非法。
 		if pod.Spec.Overhead != nil {
 			return admission.NewForbidden(a, fmt.Errorf("pod rejected: Pod Overhead set without corresponding RuntimeClass defined Overhead"))
 		}
@@ -236,8 +239,9 @@ func validateOverhead(a admission.Attributes, pod *api.Pod, runtimeClass *nodev1
 	return nil
 }
 
+// shouldIgnore 判断请求是否无需处理：仅 Pod 主资源需要关注。
 func shouldIgnore(attributes admission.Attributes) bool {
-	// Ignore all calls to subresources or resources other than pods.
+	// 子资源或非 Pod 资源不注入也不校验相关字段。
 	if len(attributes.GetSubresource()) != 0 || attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return true
 	}

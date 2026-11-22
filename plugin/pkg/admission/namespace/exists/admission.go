@@ -31,19 +31,19 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 表示准入插件的名称。
 const PluginName = "NamespaceExists"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewExists(), nil
 	})
 }
 
-// Exists is an implementation of admission.Interface.
-// It rejects all incoming requests in a namespace context if the namespace does not exist.
-// It is useful in deployments that want to enforce pre-declaration of a Namespace resource.
+// Exists 是 admission.Interface 的实现。
+// 若命名空间不存在，它拒绝所有带命名空间上下文的传入请求。
+// 适用于要求预先声明 Namespace 资源的部署场景。
 type Exists struct {
 	*admission.Handler
 	client          kubernetes.Interface
@@ -54,16 +54,15 @@ var _ admission.ValidationInterface = &Exists{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Exists{})
 var _ = genericadmissioninitializer.WantsExternalKubeClientSet(&Exists{})
 
-// Validate makes an admission decision based on the request attributes
+// Validate 根据请求属性做出准入决定。
 func (e *Exists) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// if we're here, then we've already passed authentication, so we're allowed to do what we're trying to do
-	// if we're here, then the API server has found a route, which means that if we have a non-empty namespace
-	// its a namespaced resource.
+	// 能走到这里说明已经通过认证，且 API Server 已找到路由；因此若命名空间非空，
+	// 说明这是命名空间级资源，需要继续校验其命名空间是否存在。
 	if len(a.GetNamespace()) == 0 || a.GetKind().GroupKind() == api.Kind("Namespace") {
 		return nil
 	}
 
-	// we need to wait for our caches to warm
+	// 缓存未预热前不能做判断，否则会把存在的命名空间误判为不存在。
 	if !e.WaitForReady() {
 		return admission.NewForbidden(a, fmt.Errorf("not yet ready to handle request"))
 	}
@@ -75,7 +74,7 @@ func (e *Exists) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return errors.NewInternalError(err)
 	}
 
-	// in case of latency in our caches, make a call direct to storage to verify that it truly exists or not
+	// 缓存可能有延迟，直接查一次存储，确认命名空间确实不存在。
 	_, err = e.client.CoreV1().Namespaces().Get(context.TODO(), a.GetNamespace(), metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -87,26 +86,26 @@ func (e *Exists) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
-// NewExists creates a new namespace exists admission control handler
+// NewExists 创建一个新的命名空间存在性准入处理器。
 func NewExists() *Exists {
 	return &Exists{
 		Handler: admission.NewHandler(admission.Create, admission.Update, admission.Delete),
 	}
 }
 
-// SetExternalKubeClientSet implements the WantsExternalKubeClientSet interface.
+// SetExternalKubeClientSet 实现 WantsExternalKubeClientSet 接口。
 func (e *Exists) SetExternalKubeClientSet(client kubernetes.Interface) {
 	e.client = client
 }
 
-// SetExternalKubeInformerFactory implements the WantsExternalKubeInformerFactory interface.
+// SetExternalKubeInformerFactory 实现 WantsExternalKubeInformerFactory 接口。
 func (e *Exists) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	e.namespaceLister = namespaceInformer.Lister()
 	e.SetReadyFunc(namespaceInformer.Informer().HasSynced)
 }
 
-// ValidateInitialization implements the InitializationValidator interface.
+// ValidateInitialization 实现 InitializationValidator 接口，校验依赖已注入。
 func (e *Exists) ValidateInitialization() error {
 	if e.namespaceLister == nil {
 		return fmt.Errorf("missing namespaceLister")

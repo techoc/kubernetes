@@ -32,15 +32,14 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是该准入插件的名称。
 const PluginName = "OwnerReferencesPermissionEnforcement"
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
-		// the pods/status endpoint is ignored by this plugin since old kubelets
-		// corrupt them.  the pod status strategy ensures status updates cannot mutate
-		// ownerRef.
+		// 旧版 kubelet 会破坏 pods/status 数据，因此本插件忽略该端点；
+		// pod status 策略已确保状态更新无法修改 ownerRef。
 		whiteList := []whiteListItem{
 			{
 				groupResource: schema.GroupResource{Resource: "pods"},
@@ -54,7 +53,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// gcPermissionsEnforcement is an implementation of admission.Interface.
+// gcPermissionsEnforcement 校验 ownerReference 修改权限的准入插件实现。
 type gcPermissionsEnforcement struct {
 	*admission.Handler
 
@@ -62,21 +61,20 @@ type gcPermissionsEnforcement struct {
 
 	restMapper meta.RESTMapper
 
-	// items in this whitelist are ignored upon admission.
-	// any item in this list must protect against ownerRef mutations
-	// via strategy enforcement.
+	// 白名单中的资源在准入时跳过检查；
+	// 其中每一项必须通过策略保证 ownerRef 不会被修改。
 	whiteList []whiteListItem
 }
 
 var _ admission.ValidationInterface = &gcPermissionsEnforcement{}
 
-// whiteListItem describes an entry in a whitelist ignored by gc permission enforcement.
+// whiteListItem 描述 GC 权限检查白名单中的一项。
 type whiteListItem struct {
 	groupResource schema.GroupResource
 	subresource   string
 }
 
-// isWhiteListed returns true if the specified item is in the whitelist.
+// isWhiteListed 判断指定资源和子资源是否在白名单中。
 func (a *gcPermissionsEnforcement) isWhiteListed(groupResource schema.GroupResource, subresource string) bool {
 	for _, item := range a.whiteList {
 		if item.groupResource == groupResource && item.subresource == subresource {
@@ -86,20 +84,20 @@ func (a *gcPermissionsEnforcement) isWhiteListed(groupResource schema.GroupResou
 	return false
 }
 
+// Validate 校验修改 ownerReference 及 blockOwnerDeletion 的用户是否具备相应删除权限。
 func (a *gcPermissionsEnforcement) Validate(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// // if the request is in the whitelist, we skip mutation checks for this resource.
+	// 白名单中的请求跳过修改检查。
 	if a.isWhiteListed(attributes.GetResource().GroupResource(), attributes.GetSubresource()) {
 		return nil
 	}
 
-	// if we aren't changing owner references, then the edit is always allowed
+	// 未修改 ownerReference 时无需额外鉴权，直接放行。
 	if !isChangingOwnerReference(attributes.GetObject(), attributes.GetOldObject()) {
 		return nil
 	}
 
-	// if you are creating a thing, you should always be allowed to set an owner ref since you logically had the power
-	// to never create it.  We still need to check block owner deletion below, because the power to delete does not
-	// imply the power to prevent deletion on other resources.
+	// 创建时用户可以自由设置 ownerRef：他不创建该对象就不会产生后果。
+	// 但删除权限并不等于阻止其他资源被删除的权限，因此下面仍需检查 blockOwnerDeletion。
 	if attributes.GetOperation() != admission.Create {
 		deleteAttributes := authorizer.AttributesRecord{
 			User:            attributes.GetUserInfo(),
@@ -119,18 +117,17 @@ func (a *gcPermissionsEnforcement) Validate(ctx context.Context, attributes admi
 		}
 	}
 
-	// Further check if the user is setting ownerReference.blockOwnerDeletion to
-	// true. If so, only allows the change if the user has delete permission of
-	// the _OWNER_
+	// 若用户将 ownerReference.blockOwnerDeletion 设为 true，
+	// 只有当用户对 _OWNER_ 有删除权限时才允许修改。
 	newBlockingRefs := newBlockingOwnerDeletionRefs(attributes.GetObject(), attributes.GetOldObject())
 	if len(newBlockingRefs) == 0 {
 		return nil
 	}
 
-	// There can be a case where a restMapper tries to hit discovery endpoints and times out if the network is inaccessible.
-	// This can prevent creating the pod to run the network to be able to do discovery and it appears as a timeout, not a rejection.
-	// Because the timeout is wrapper on admission/request, we can run a single check to see if the user can finalize any
-	// possible resource.
+	// 网络不可用时 restMapper 访问 discovery 端点可能超时，
+	// 导致用于打通网络的 Pod 无法创建，且表现为请求超时而非明确拒绝。
+	// 由于超时包裹在 admission/request 外层，这里先做一次通用检查：
+	// 若用户可为任意资源设置 finalizer，则无需再逐一做 RESTMapping。
 	if decision, _, _ := a.authorizer.Authorize(ctx, finalizeAnythingRecord(attributes.GetUserInfo())); decision == authorizer.DecisionAllow {
 		return nil
 	}
@@ -140,9 +137,8 @@ func (a *gcPermissionsEnforcement) Validate(ctx context.Context, attributes admi
 		if err != nil {
 			return admission.NewForbidden(attributes, fmt.Errorf("cannot set blockOwnerDeletion in this case because cannot find RESTMapping for APIVersion %s Kind %s: %v", ref.APIVersion, ref.Kind, err))
 		}
-		// Multiple records are returned if ref.Kind could map to multiple
-		// resources. User needs to have delete permission on all the
-		// matched Resources.
+		// ref.Kind 可能映射到多个资源，因此会返回多条记录；
+		// 用户必须对所有匹配的资源都有相应权限。
 		for _, record := range records {
 			decision, reason, err := a.authorizer.Authorize(ctx, record)
 			if decision != authorizer.DecisionAllow {
@@ -155,10 +151,11 @@ func (a *gcPermissionsEnforcement) Validate(ctx context.Context, attributes admi
 
 }
 
+// isChangingOwnerReference 判断新旧对象的 ownerReference 是否发生变化。
 func isChangingOwnerReference(newObj, oldObj runtime.Object) bool {
 	newMeta, err := meta.Accessor(newObj)
 	if err != nil {
-		// if we don't have objectmeta, we don't have the object reference
+		// 拿不到 ObjectMeta 也就无从判断 ownerReference，按未变化处理。
 		return false
 	}
 
@@ -167,11 +164,11 @@ func isChangingOwnerReference(newObj, oldObj runtime.Object) bool {
 	}
 	oldMeta, err := meta.Accessor(oldObj)
 	if err != nil {
-		// if we don't have objectmeta, we don't have the object reference
+		// 拿不到 ObjectMeta 也就无从判断 ownerReference，按未变化处理。
 		return false
 	}
 
-	// compare the old and new.  If they aren't the same, then we're trying to change an ownerRef
+	// 比较新旧 ownerReference：不同则说明试图修改。
 	oldOwners := oldMeta.GetOwnerReferences()
 	newOwners := newMeta.GetOwnerReferences()
 	if len(oldOwners) != len(newOwners) {
@@ -186,6 +183,8 @@ func isChangingOwnerReference(newObj, oldObj runtime.Object) bool {
 	return false
 }
 
+// finalizeAnythingRecord 构造“可更新任意资源 finalizers”的鉴权请求，
+// 用于短路检查用户是否拥有通用 finalizer 权限。
 func finalizeAnythingRecord(userInfo user.Info) authorizer.AttributesRecord {
 	return authorizer.AttributesRecord{
 		User:            userInfo,
@@ -200,9 +199,9 @@ func finalizeAnythingRecord(userInfo user.Info) authorizer.AttributesRecord {
 	}
 }
 
-// Translates ref to a DeleteAttribute deleting the object referred by the ref.
-// OwnerReference only records the object kind, which might map to multiple
-// resources, so multiple DeleteAttribute might be returned.
+// ownerRefToDeleteAttributeRecords 将 ref 转换为针对其所指对象的鉴权记录。
+// OwnerReference 只记录对象 Kind，可能映射到多个资源，
+// 因此可能返回多条记录，用户需对所有记录都有权限。
 func (a *gcPermissionsEnforcement) ownerRefToDeleteAttributeRecords(ref metav1.OwnerReference, attributes admission.Attributes) ([]authorizer.AttributesRecord, error) {
 	var ret []authorizer.AttributesRecord
 	groupVersion, err := schema.ParseGroupVersion(ref.APIVersion)
@@ -226,7 +225,7 @@ func (a *gcPermissionsEnforcement) ownerRefToDeleteAttributeRecords(ref metav1.O
 			Path:            "",
 		}
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			// if the owner is namespaced, it must be in the same namespace as the dependent is.
+			// 命名空间级 owner 必须与依赖对象位于同一命名空间。
 			ar.Namespace = attributes.GetNamespace()
 		}
 		ret = append(ret, ar)
@@ -234,7 +233,7 @@ func (a *gcPermissionsEnforcement) ownerRefToDeleteAttributeRecords(ref metav1.O
 	return ret, nil
 }
 
-// only keeps the blocking refs
+// blockingOwnerRefs 只保留 blockOwnerDeletion 为 true 的 ownerReference。
 func blockingOwnerRefs(refs []metav1.OwnerReference) []metav1.OwnerReference {
 	var ret []metav1.OwnerReference
 	for _, ref := range refs {
@@ -245,6 +244,7 @@ func blockingOwnerRefs(refs []metav1.OwnerReference) []metav1.OwnerReference {
 	return ret
 }
 
+// indexByUID 按 UID 建立 ownerReference 索引，便于与旧对象逐一比对。
 func indexByUID(refs []metav1.OwnerReference) map[types.UID]metav1.OwnerReference {
 	ret := make(map[types.UID]metav1.OwnerReference)
 	for _, ref := range refs {
@@ -253,12 +253,12 @@ func indexByUID(refs []metav1.OwnerReference) map[types.UID]metav1.OwnerReferenc
 	return ret
 }
 
-// Returns new blocking ownerReferences, and references whose blockOwnerDeletion
-// field is changed from nil or false to true.
+// newBlockingOwnerDeletionRefs 返回新增的阻塞型 ownerReference，
+// 以及 blockOwnerDeletion 从 nil/false 变为 true 的引用。
 func newBlockingOwnerDeletionRefs(newObj, oldObj runtime.Object) []metav1.OwnerReference {
 	newMeta, err := meta.Accessor(newObj)
 	if err != nil {
-		// if we don't have objectmeta, we don't have the object reference
+		// 拿不到 ObjectMeta 也就无从判断 ownerReference。
 		return nil
 	}
 	newRefs := newMeta.GetOwnerReferences()
@@ -272,7 +272,7 @@ func newBlockingOwnerDeletionRefs(newObj, oldObj runtime.Object) []metav1.OwnerR
 	}
 	oldMeta, err := meta.Accessor(oldObj)
 	if err != nil {
-		// if we don't have objectmeta, treat it as if all the ownerReference are newly created
+		// 拿不到旧对象的 ObjectMeta，只能把所有阻塞型引用都当作新增的。
 		return blockingNewRefs
 	}
 
@@ -281,7 +281,7 @@ func newBlockingOwnerDeletionRefs(newObj, oldObj runtime.Object) []metav1.OwnerR
 	for _, ref := range blockingNewRefs {
 		oldRef, ok := indexedOldRefs[ref.UID]
 		if !ok {
-			// if ref is newly added, and it's blocking, then returns it.
+			// 新增且阻塞删除的引用需要鉴权。
 			ret = append(ret, ref)
 			continue
 		}
@@ -293,14 +293,17 @@ func newBlockingOwnerDeletionRefs(newObj, oldObj runtime.Object) []metav1.OwnerR
 	return ret
 }
 
+// SetUnconditionalAuthorizer 注入鉴权器。
 func (a *gcPermissionsEnforcement) SetUnconditionalAuthorizer(authorizer authorizer.UnconditionalAuthorizer) {
 	a.authorizer = authorizer
 }
 
+// SetRESTMapper 注入 RESTMapper，用于解析 ownerReference 到具体资源。
 func (a *gcPermissionsEnforcement) SetRESTMapper(restMapper meta.RESTMapper) {
 	a.restMapper = restMapper
 }
 
+// ValidateInitialization 确保鉴权器和 RESTMapper 均已注入。
 func (a *gcPermissionsEnforcement) ValidateInitialization() error {
 	if a.authorizer == nil {
 		return fmt.Errorf("missing authorizer")

@@ -21,30 +21,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "podtolerationrestriction.admission.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// localSchemeBuilder 和 AddToScheme 将保留在 k8s.io/kubernetes 中。
 
-	// SchemeBuilder is a pointer used to call AddToScheme
+	// SchemeBuilder 是用于调用 AddToScheme 的指针。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is used to register the types to API encoding/decoding machinery
+	// AddToScheme 用于向 API 编解码机制注册类型。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手工编写的函数；生成函数的注册在生成文件中完成。
+	// 分离注册使代码在生成文件缺失时也能编译。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
+// addKnownTypes 向 scheme 注册本包已知的类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Configuration{},

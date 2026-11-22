@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package security contains admission plugins specific to cluster security.
+// Package security 包含与集群安全相关的准入插件。
 package security

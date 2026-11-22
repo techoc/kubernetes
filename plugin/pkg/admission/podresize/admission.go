@@ -38,21 +38,23 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin.
+	// PluginName 是本准入控制器插件的名称。
 	PluginName = "PodResizeValidator"
 
-	ReasonNodeCapacity        metav1.CauseType = "NodeCapacity"
+	// ReasonNodeCapacity 表示节点可分配资源不足。
+	ReasonNodeCapacity metav1.CauseType = "NodeCapacity"
+	// ReasonUnsupportedPlatform 表示当前平台不支持 Pod 原地调整。
 	ReasonUnsupportedPlatform metav1.CauseType = "UnsupportedPlatform"
 )
 
-// Register registers a plugin.
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin()
 	})
 }
 
-// Plugin is an admission controller that validates pod resize requests against the node's capabilities.
+// Plugin 是根据节点能力校验 Pod 调整请求的准入控制器。
 type Plugin struct {
 	*admission.Handler
 	nodeLister                       corev1listers.NodeLister
@@ -62,26 +64,27 @@ type Plugin struct {
 var _ admission.ValidationInterface = &Plugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Plugin{})
 
-// New creates a new ResizeValidator admission plugin
+// NewPlugin 创建一个新的 ResizeValidator 准入插件。
 func NewPlugin() (*Plugin, error) {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Update),
 	}, nil
 }
 
-// SetExternalKubeInformerFactory sets the informer factory for the plugin.
+// SetExternalKubeInformerFactory 为插件设置 informer 工厂。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	nodeInformer := f.Core().V1().Nodes()
 	p.nodeLister = nodeInformer.Lister()
+	// 缓存未同步前无法可靠查询节点，故等待同步完成再就绪。
 	p.SetReadyFunc(nodeInformer.Informer().HasSynced)
 }
 
-// InspectFeatureGates sets the feature gates for the plugin.
+// InspectFeatureGates 读取插件关心的特性开关。
 func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	p.inPlacePodVerticalScalingEnabled = featureGates.Enabled(features.InPlacePodVerticalScaling)
 }
 
-// ValidateInitialization ensures that the plugin is properly initialized.
+// ValidateInitialization 确保插件已正确初始化。
 func (p *Plugin) ValidateInitialization() error {
 	if p.nodeLister == nil {
 		return fmt.Errorf("missing node lister for %s", PluginName)
@@ -90,9 +93,9 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// Validate is the core of the admission controller logic.
+// Validate 是准入控制器的核心逻辑。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore if the feature gate is not enabled.
+	// 特性未开启时不介入。
 	if !p.inPlacePodVerticalScalingEnabled {
 		return nil
 	}
@@ -101,12 +104,12 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return nil
 	}
 
-	// We only care about Pod updates.
+	// 只关心 Pod 更新。
 	if a.GetResource().GroupResource() != core.Resource("pods") {
 		return nil
 	}
 
-	// Only validate updates to the custom "resize" subresource.
+	// 只校验自定义的 "resize" 子资源更新。
 	if a.GetSubresource() != "resize" {
 		return nil
 	}
@@ -115,7 +118,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return errors.NewBadRequest(fmt.Sprintf("expected a pod but got a %T", a.GetObject()))
 	}
 
-	// We only care about pods that are already bound to a node.
+	// 未绑定到节点的 Pod 无从校验节点能力，直接放行。
 	if len(pod.Spec.NodeName) == 0 {
 		return nil
 	}
@@ -125,7 +128,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return errors.NewBadRequest(fmt.Sprintf("expected an old pod but got a %T", a.GetOldObject()))
 	}
 
-	// Since generation is only incremented when the spec changes, we can skip validation if it doesnt.
+	// generation 仅在 spec 变化时递增，未变化则无需校验。
 	if oldPod.Generation == pod.Generation {
 		return nil
 	}
@@ -137,6 +140,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return p.validatePodResize(pod, a)
 }
 
+// validatePodResize 校验目标节点是否支持并容纳本次调整。
 func (p *Plugin) validatePodResize(pod *core.Pod, a admission.Attributes) error {
 	node, err := p.nodeLister.Get(pod.Spec.NodeName)
 	if err != nil {
@@ -146,12 +150,12 @@ func (p *Plugin) validatePodResize(pod *core.Pod, a admission.Attributes) error 
 		return admission.NewForbidden(a, fmt.Errorf("failed to get node %q: %w", pod.Spec.NodeName, err))
 	}
 
-	// If the node is not a linux node, reject the update.
+	// 非 Linux 节点不支持原地调整。
 	if err := validateLinuxNode(node); err != nil {
 		return resizeValidationError(a, err, ReasonUnsupportedPlatform)
 	}
 
-	// If the new requests are larger than the node allocatable, reject the update.
+	// 新请求量超过节点可分配资源时拒绝。
 	if err := validateNodeAllocatable(pod, node); err != nil {
 		return resizeValidationError(a, err, ReasonNodeCapacity)
 	}
@@ -159,9 +163,9 @@ func (p *Plugin) validatePodResize(pod *core.Pod, a admission.Attributes) error 
 	return nil
 }
 
-// Returns nil if the pod's resource requests fit within the node's allocatable, err otherwise.
+// validateNodeAllocatable 在 Pod 请求量不超过节点可分配资源时返回 nil，否则返回错误。
 func validateNodeAllocatable(pod *core.Pod, node *corev1.Node) error {
-	// Convert internal to external pods for the helper library.
+	// 辅助库只接受外部版本类型，需先做内部到外部的转换。
 	podV1 := &corev1.Pod{}
 	if err := v1.Convert_core_Pod_To_v1_Pod(pod, podV1, nil); err != nil {
 		return errors.NewBadRequest(fmt.Sprintf("failed to convert pod: %v", err))
@@ -169,9 +173,9 @@ func validateNodeAllocatable(pod *core.Pod, node *corev1.Node) error {
 	return validateRequestsWithinAllocatable(podV1, node.Status.Allocatable)
 }
 
-// Returns nil if the node is a linux node, err otherwise.
+// validateLinuxNode 在节点为 Linux 时返回 nil，否则返回错误。
 func validateLinuxNode(node *corev1.Node) error {
-	// This label should always be populated.
+	// 该标签正常情况下总会被填充；缺失时按 Linux 处理。
 	val, ok := node.Labels[corev1.LabelOSStable]
 	if !ok || val == "linux" {
 		return nil
@@ -179,6 +183,7 @@ func validateLinuxNode(node *corev1.Node) error {
 	return fmt.Errorf("pod resize is only supported on linux nodes, node %q is %q", node.Name, val)
 }
 
+// resizeValidationError 构造带指定原因的禁止错误，便于客户端定位拒绝原因。
 func resizeValidationError(a admission.Attributes, err error, reason metav1.CauseType) error {
 	forbiddenErr := admission.NewForbidden(a, err)
 	var statusErr *errors.StatusError
@@ -191,8 +196,7 @@ func resizeValidationError(a admission.Attributes, err error, reason metav1.Caus
 	return forbiddenErr
 }
 
-// validateRequestsWithinAllocatable returns an error if the pod requests exceed the allocatable
-// capacity.
+// validateRequestsWithinAllocatable 在 Pod 请求量超过可分配容量时返回错误。
 func validateRequestsWithinAllocatable(pod *corev1.Pod, allocatable corev1.ResourceList) error {
 	cpuAllocatable := allocatable.Cpu()
 	memAllocatable := allocatable.Memory()

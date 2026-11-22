@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package podtolerationrestriction 定义 PodTolerationRestriction 准入插件的内部配置类型。
+// 配置由集群级默认 toleration 与白名单 toleration 两部分组成。
 package podtolerationrestriction

@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podtopologylabels is a plugin that mutates `pod/binding` requests
-// by copying the `topology.kubernetes.io/{zone,region}` labels from the assigned Node
-// object (in the Binding being admitted) onto the Binding so that it can be
-// persisted onto the Pod object when the Pod is being scheduled.
-// Requests for the regular `pods` resource that set the `spec.nodeName` will
-// also trigger the plugin to copy the labels as described.
-// If the binding target is NOT a Node object, no action is taken.
-// If the referenced Node object does not exist, no action is taken.
+// Package podtopologylabels 是一个变更 `pod/binding` 请求的插件：
+// 它从待准入的 Binding 中所指定的 Node 对象上复制
+// `topology.kubernetes.io/{zone,region}` 标签到 Binding，
+// 以便 Pod 被调度时这些标签能持久化到 Pod 对象上。
+// 对设置了 `spec.nodeName` 的普通 `pods` 资源的请求，
+// 该插件同样会按上述方式复制标签。
+// 若绑定目标不是 Node 对象，则不执行任何操作。
+// 若引用的 Node 对象不存在，同样不执行任何操作。
 package podtopologylabels

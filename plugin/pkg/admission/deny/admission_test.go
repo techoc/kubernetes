@@ -26,6 +26,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestAdmission 验证创建请求会被始终拒绝插件驳回转。
 func TestAdmission(t *testing.T) {
 	handler := admissiontesting.WithReinvocationTesting(t, NewAlwaysDeny().(*alwaysDeny))
 	err := handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, api.Kind("kind").WithVersion("version"), "namespace", "name", api.Resource("resource").WithVersion("version"), "subresource", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
@@ -34,6 +35,7 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
+// TestHandles 验证插件声明支持所有准入操作。
 func TestHandles(t *testing.T) {
 	handler := NewAlwaysDeny()
 	tests := []admission.Operation{admission.Create, admission.Connect, admission.Update, admission.Delete}

@@ -22,30 +22,31 @@ import (
 )
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是 scheme 构建器，包含本 API 包需要执行的 scheme 初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is used to register the types to API encoding/decoding machinery
+	// AddToScheme 用于把这些类型注册到 API 的编解码机制中。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "eventratelimit.admission.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受一个未限定的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受一个未限定的资源名，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
+// addKnownTypes 向 scheme 注册本包已知的类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
-	// TODO this will get cleaned up with the scheme types are fixed
+	// TODO 待 scheme 类型修复后清理此处
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Configuration{},
 	)

@@ -14,16 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package antiaffinity provides the LimitPodHardAntiAffinityTopology
-// admission controller. It rejects any pod that specifies "hard"
-// (RequiredDuringScheduling) anti-affinity with a TopologyKey other
-// than v1.LabelHostname.  Because anti-affinity is symmetric, without
-// this admission controller, a user could maliciously or accidentally
-// specify that their pod (once it has scheduled) should block other
-// pods from scheduling into the same zone or some other large
-// topology, essentially DoSing the cluster.  In the future we will
-// address this problem more fully by using quota and priority, but
-// for now this admission controller provides a simple protection, on
-// the assumption that the only legitimate use of hard pod
-// anti-affinity is to exclude other pods from the same node.
+// Package antiaffinity 提供 LimitPodHardAntiAffinityTopology 准入控制器。
+// 它拒绝所有指定了 TopologyKey 非 v1.LabelHostname 的“硬”
+// (RequiredDuringScheduling) 反亲和性的 Pod。由于反亲和性是对称的，
+// 若没有该控制器，用户可能恶意或无意地指定自己的 Pod（一旦调度完成）
+// 阻止其他 Pod 调度到同一 zone 或更大的拓扑域中，等同于对集群发起 DoS。
+// 将来会通过配额和优先级更完整地解决该问题，但目前该控制器提供一种简单保护：
+// 假定硬 Pod 反亲和性的唯一合法用途就是排除同一节点上的其他 Pod。
 package antiaffinity

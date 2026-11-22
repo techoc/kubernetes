@@ -42,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/quota/v1/install"
 )
 
+// getResourceList 根据 CPU/内存字符串构造资源列表，空字符串表示不设置该项。
 func getResourceList(cpu, memory string) api.ResourceList {
 	res := api.ResourceList{}
 	if cpu != "" {
@@ -53,6 +54,7 @@ func getResourceList(cpu, memory string) api.ResourceList {
 	return res
 }
 
+// getResourceRequirements 由请求与限制列表构造容器资源需求。
 func getResourceRequirements(requests, limits api.ResourceList) api.ResourceRequirements {
 	res := api.ResourceRequirements{}
 	res.Requests = requests
@@ -60,6 +62,7 @@ func getResourceRequirements(requests, limits api.ResourceList) api.ResourceRequ
 	return res
 }
 
+// getVolumeResourceRequirements 由请求与限制列表构造卷资源需求。
 func getVolumeResourceRequirements(requests, limits api.ResourceList) api.VolumeResourceRequirements {
 	res := api.VolumeResourceRequirements{}
 	res.Requests = requests
@@ -67,6 +70,7 @@ func getVolumeResourceRequirements(requests, limits api.ResourceList) api.Volume
 	return res
 }
 
+// validPod 构造一个位于 test 命名空间、含指定数量容器的 Pod。
 func validPod(name string, numContainers int, resources api.ResourceRequirements) *api.Pod {
 	pod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -82,6 +86,7 @@ func validPod(name string, numContainers int, resources api.ResourceRequirements
 	return pod
 }
 
+// validPodWithPriority 构造带指定优先级的 Pod，空优先级名表示不设置。
 func validPodWithPriority(name string, numContainers int, resources api.ResourceRequirements, priorityClass string) *api.Pod {
 	pod := validPod(name, numContainers, resources)
 	if priorityClass != "" {
@@ -90,6 +95,7 @@ func validPodWithPriority(name string, numContainers int, resources api.Resource
 	return pod
 }
 
+// validPersistentVolumeClaim 构造一个位于 test 命名空间的 PVC。
 func validPersistentVolumeClaim(name string, resources api.VolumeResourceRequirements) *api.PersistentVolumeClaim {
 	return &api.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -99,11 +105,14 @@ func validPersistentVolumeClaim(name string, resources api.VolumeResourceRequire
 	}
 }
 
+// createHandler 用默认配置构造并初始化配额准入插件。
 func createHandler(kubeClient kubernetes.Interface, informerFactory informers.SharedInformerFactory, stopCh chan struct{}) (*resourcequota.QuotaAdmission, error) {
 	return createHandlerWithConfig(kubeClient, informerFactory, nil, stopCh)
 }
 
+// createHandlerWithConfig 按给定配置构造插件并注入初始化器，返回已校验的实例。
 func createHandlerWithConfig(kubeClient kubernetes.Interface, informerFactory informers.SharedInformerFactory, config *resourcequotaapi.Configuration, stopCh chan struct{}) (*resourcequota.QuotaAdmission, error) {
+	// nil 配置等价于空配置：插件对配额没有特殊限制。
 	if config == nil {
 		config = &resourcequotaapi.Configuration{}
 	}
@@ -126,7 +135,7 @@ func createHandlerWithConfig(kubeClient kubernetes.Interface, informerFactory in
 	return handler, admission.ValidateInitialization(handler)
 }
 
-// TestAdmissionIgnoresDelete verifies that the admission controller ignores delete operations
+// TestAdmissionIgnoresDelete 验证准入控制器忽略删除操作。
 func TestAdmissionIgnoresDelete(t *testing.T) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -146,9 +155,8 @@ func TestAdmissionIgnoresDelete(t *testing.T) {
 	}
 }
 
-// TestAdmissionIgnoresSubresources verifies that the admission controller ignores subresources
-// It verifies that creation of a pod that would have exceeded quota is properly failed
-// It verifies that create operations to a subresource that would have exceeded quota would succeed
+// TestAdmissionIgnoresSubresources 验证准入控制器忽略子资源：超限 Pod 的正常创建会被拒绝，
+// 而针对同一 Pod 的子资源创建请求则放行。
 func TestAdmissionIgnoresSubresources(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{}
 	resourceQuota.Name = "quota"
@@ -182,7 +190,7 @@ func TestAdmissionIgnoresSubresources(t *testing.T) {
 	}
 }
 
-// TestAdmitBelowQuotaLimit verifies that a pod when created has its usage reflected on the quota
+// TestAdmitBelowQuotaLimit 验证 Pod 创建后其资源用量会被计入配额。
 func TestAdmitBelowQuotaLimit(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -258,8 +266,7 @@ func TestAdmitBelowQuotaLimit(t *testing.T) {
 	}
 }
 
-// TestAdmitDryRun verifies that a pod when created with dry-run doesn not have its usage reflected on the quota
-// and that dry-run requests can still be rejected if they would exceed the quota
+// TestAdmitDryRun 验证 dry-run 请求不更新配额用量，但超限时仍会被拒绝。
 func TestAdmitDryRun(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -306,9 +313,9 @@ func TestAdmitDryRun(t *testing.T) {
 	}
 }
 
-// TestAdmitHandlesOldObjects verifies that admit handles updates correctly with old objects
+// TestAdmitHandlesOldObjects 验证带旧对象的更新能被正确处理：旧对象用于计算用量差值。
 func TestAdmitHandlesOldObjects(t *testing.T) {
-	// in this scenario, the old quota was based on a service type=loadbalancer
+	// 本场景中旧配额按 LoadBalancer 类型 Service 计费
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
 		Status: corev1.ResourceQuotaStatus{
@@ -325,7 +332,7 @@ func TestAdmitHandlesOldObjects(t *testing.T) {
 		},
 	}
 
-	// start up quota system
+	// 启动配额系统
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
@@ -339,7 +346,7 @@ func TestAdmitHandlesOldObjects(t *testing.T) {
 
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
 
-	// old service was a load balancer, but updated version is a node port.
+	// 旧 Service 是 LoadBalancer，更新后变成 NodePort。
 	existingService := &api.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "service", Namespace: "test", ResourceVersion: "1"},
 		Spec:       api.ServiceSpec{Type: api.ServiceTypeLoadBalancer},
@@ -359,7 +366,7 @@ func TestAdmitHandlesOldObjects(t *testing.T) {
 		t.Errorf("Expected a client action")
 	}
 
-	// the only action should have been to update the quota (since we should not have fetched the previous item)
+	// 唯一的动作应是更新配额状态：无需额外读取前一个版本对象。
 	expectedActionSet := sets.NewString(
 		strings.Join([]string{"update", "resourcequotas", "status"}, "-"),
 	)
@@ -371,13 +378,12 @@ func TestAdmitHandlesOldObjects(t *testing.T) {
 		t.Errorf("Expected actions:\n%v\n but got:\n%v\nDifference:\n%v", expectedActionSet, actionSet, expectedActionSet.Difference(actionSet))
 	}
 
-	// verify usage decremented the loadbalancer, and incremented the nodeport, but kept the service the same.
+	// 校验 LoadBalancer 用量减一、NodePort 加一，Service 总数不变。
 	decimatedActions := removeListWatch(kubeClient.Actions())
 	lastActionIndex := len(decimatedActions) - 1
 	usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
 
-	// Verify service usage. Since we don't add negative values, the corev1.ResourceServicesLoadBalancers
-	// will remain on last reported value
+	// 用量不写入负值，因此 LoadBalancer 用量保持上次上报值。
 	expectedUsage := corev1.ResourceQuota{
 		Status: corev1.ResourceQuotaStatus{
 			Hard: corev1.ResourceList{
@@ -402,6 +408,7 @@ func TestAdmitHandlesOldObjects(t *testing.T) {
 	}
 }
 
+// TestAdmitHandlesNegativePVCUpdates 验证 PVC 请求变小（负增量）时无需更新配额。
 func TestAdmitHandlesNegativePVCUpdates(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -417,7 +424,7 @@ func TestAdmitHandlesNegativePVCUpdates(t *testing.T) {
 		},
 	}
 
-	// start up quota system
+	// 启动配额系统
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
@@ -454,6 +461,7 @@ func TestAdmitHandlesNegativePVCUpdates(t *testing.T) {
 	}
 }
 
+// TestAdmitHandlesPVCUpdates 验证 PVC 扩容时配额用量按新请求值更新。
 func TestAdmitHandlesPVCUpdates(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -469,7 +477,7 @@ func TestAdmitHandlesPVCUpdates(t *testing.T) {
 		},
 	}
 
-	// start up quota system
+	// 启动配额系统
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
@@ -506,7 +514,7 @@ func TestAdmitHandlesPVCUpdates(t *testing.T) {
 		t.Errorf("Expected a client action")
 	}
 
-	// the only action should have been to update the quota (since we should not have fetched the previous item)
+	// 唯一的动作应是更新配额状态：无需额外读取前一个版本对象。
 	expectedActionSet := sets.NewString(
 		strings.Join([]string{"update", "resourcequotas", "status"}, "-"),
 	)
@@ -544,9 +552,9 @@ func TestAdmitHandlesPVCUpdates(t *testing.T) {
 
 }
 
-// TestAdmitHandlesCreatingUpdates verifies that admit handles updates which behave as creates
+// TestAdmitHandlesCreatingUpdates 验证旧对象 ResourceVersion 为空的更新会被当作创建处理。
 func TestAdmitHandlesCreatingUpdates(t *testing.T) {
-	// in this scenario, there is an existing service
+	// 本场景中已存在一个 Service
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
 		Status: corev1.ResourceQuotaStatus{
@@ -563,7 +571,7 @@ func TestAdmitHandlesCreatingUpdates(t *testing.T) {
 		},
 	}
 
-	// start up quota system
+	// 启动配额系统
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
@@ -577,7 +585,7 @@ func TestAdmitHandlesCreatingUpdates(t *testing.T) {
 
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
 
-	// old service didn't exist, so this update is actually a create
+	// 旧 Service 没有 ResourceVersion，说明这次 update 实为创建。
 	oldService := &api.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "service", Namespace: "test", ResourceVersion: ""},
 		Spec:       api.ServiceSpec{Type: api.ServiceTypeLoadBalancer},
@@ -597,7 +605,7 @@ func TestAdmitHandlesCreatingUpdates(t *testing.T) {
 		t.Errorf("Expected a client action")
 	}
 
-	// the only action should have been to update the quota (since we should not have fetched the previous item)
+	// 唯一的动作应是更新配额状态：无需额外读取前一个版本对象。
 	expectedActionSet := sets.NewString(
 		strings.Join([]string{"update", "resourcequotas", "status"}, "-"),
 	)
@@ -609,7 +617,7 @@ func TestAdmitHandlesCreatingUpdates(t *testing.T) {
 		t.Errorf("Expected actions:\n%v\n but got:\n%v\nDifference:\n%v", expectedActionSet, actionSet, expectedActionSet.Difference(actionSet))
 	}
 
-	// verify that the "old" object was ignored for calculating the new usage
+	// 校验计算新用量时忽略了“旧”对象。
 	decimatedActions := removeListWatch(kubeClient.Actions())
 	lastActionIndex := len(decimatedActions) - 1
 	usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
@@ -637,7 +645,7 @@ func TestAdmitHandlesCreatingUpdates(t *testing.T) {
 	}
 }
 
-// TestAdmitExceedQuotaLimit verifies that if a pod exceeded allowed usage that its rejected during admission.
+// TestAdmitExceedQuotaLimit 验证 Pod 超出配额上限时在准入阶段被拒绝。
 func TestAdmitExceedQuotaLimit(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -673,9 +681,8 @@ func TestAdmitExceedQuotaLimit(t *testing.T) {
 	}
 }
 
-// TestAdmitEnforceQuotaConstraints verifies that if a quota tracks a particular resource that that resource is
-// specified on the pod.  In this case, we create a quota that tracks cpu request, memory request, and memory limit.
-// We ensure that a pod that does not specify a memory limit that it fails in admission.
+// TestAdmitEnforceQuotaConstraints 验证配额跟踪某资源时 Pod 必须显式指定该资源：
+// 此处配额跟踪 CPU/内存请求和内存限制，未声明内存限制的 Pod 应准入失败。
 func TestAdmitEnforceQuotaConstraints(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -706,7 +713,7 @@ func TestAdmitEnforceQuotaConstraints(t *testing.T) {
 	}
 
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
-	// verify all values are specified as required on the quota
+	// Pod 缺少内存限制，不满足配额要求的字段完整性。
 	newPod := validPod("not-allowed-pod", 1, getResourceRequirements(getResourceList("100m", "2Gi"), getResourceList("200m", "")))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPod, nil, api.Kind("Pod").WithVersion("version"), newPod.Namespace, newPod.Name, corev1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
@@ -714,7 +721,7 @@ func TestAdmitEnforceQuotaConstraints(t *testing.T) {
 	}
 }
 
-// TestAdmitPodInNamespaceWithoutQuota ensures that if a namespace has no quota, that a pod can get in
+// TestAdmitPodInNamespaceWithoutQuota 验证命名空间无配额时 Pod 可以正常准入。
 func TestAdmitPodInNamespaceWithoutQuota(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "other", ResourceVersion: "124"},
@@ -745,7 +752,7 @@ func TestAdmitPodInNamespaceWithoutQuota(t *testing.T) {
 		t.Errorf("Error occurred while creating admission plugin: %v", err)
 	}
 
-	// Add to the index
+	// 配额属于 other 命名空间，仅加入索引供插件查询。
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
 	newPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("100m", "2Gi"), getResourceList("200m", "")))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPod, nil, api.Kind("Pod").WithVersion("version"), newPod.Namespace, newPod.Name, corev1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
@@ -754,9 +761,8 @@ func TestAdmitPodInNamespaceWithoutQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitBelowTerminatingQuotaLimit ensures that terminating pods are charged to the right quota.
-// It creates a terminating and non-terminating quota, and creates a terminating pod.
-// It ensures that the terminating quota is incremented, and the non-terminating quota is not.
+// TestAdmitBelowTerminatingQuotaLimit 验证 terminating Pod 的费用只计入 terminating 配额：
+// 同时创建两种范围的配额，带 activeDeadlineSeconds 的 Pod 只增加前者用量。
 func TestAdmitBelowTerminatingQuotaLimit(t *testing.T) {
 	resourceQuotaNonTerminating := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-non-terminating", Namespace: "test", ResourceVersion: "124"},
@@ -808,7 +814,7 @@ func TestAdmitBelowTerminatingQuotaLimit(t *testing.T) {
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuotaNonTerminating)
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuotaTerminating)
 
-	// create a pod that has an active deadline
+	// activeDeadlineSeconds 使 Pod 落入 terminating 范围。
 	newPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("100m", "2Gi"), getResourceList("", "")))
 	activeDeadlineSeconds := int64(30)
 	newPod.Spec.ActiveDeadlineSeconds = &activeDeadlineSeconds
@@ -835,7 +841,7 @@ func TestAdmitBelowTerminatingQuotaLimit(t *testing.T) {
 	lastActionIndex := len(decimatedActions) - 1
 	usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
 
-	// ensure only the quota-terminating was updated
+	// 只应更新 terminating 配额。
 	if usage.Name != resourceQuotaTerminating.Name {
 		t.Errorf("Incremented the wrong quota, expected %v, actual %v", resourceQuotaTerminating.Name, usage.Name)
 	}
@@ -864,13 +870,11 @@ func TestAdmitBelowTerminatingQuotaLimit(t *testing.T) {
 	}
 }
 
-// TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated ensures that terminating pods are charged to the right quota.
-// It creates a terminating and non-terminating quota, and changes an existing pod to be terminating.
-// It ensures that the terminating quota is incremented, and the non-terminating quota is not.
+// TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated 验证 Pod 更新后落入 terminating 范围时，
+// 费用只计入 terminating 配额。
 //
-// The Quota admission is intended to fail "high" in this case, and depends on a controller reconciling actual persisted
-// use to lower / free the reserved quota. We need always overcount in the admission plugin if something later causes
-// the request to be rejected, so you can not reduce quota with requests that aren't completed.
+// 此处配额准入故意“多算”：若请求后续被拒，预留的配额无法自动回收，依赖控制器对账实际用量来释放。
+// 因此宁可高估也不能低估，否则未完成的请求也能缩减配额。
 func TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated(t *testing.T) {
 	resourceQuotaNonTerminating := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-non-terminating", Namespace: "test", ResourceVersion: "124"},
@@ -928,7 +932,7 @@ func TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated(t *testing.T) {
 		t.Errorf("Error occurred while adding resource quota to the indexer: %v", err)
 	}
 
-	// old pod belonged to the non-terminating scope, but updated version belongs to the terminating scope
+	// 旧 Pod 属于 non-terminating，更新后属于 terminating。
 	existingPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("100m", "2Gi"), getResourceList("", "")))
 	existingPod.ResourceVersion = "1"
 	newPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("100m", "2Gi"), getResourceList("", "")))
@@ -957,7 +961,7 @@ func TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated(t *testing.T) {
 	lastActionIndex := len(decimatedActions) - 1
 	usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
 
-	// ensure only the quota-terminating was updated
+	// 只应更新 terminating 配额。
 	if usage.Name != resourceQuotaTerminating.Name {
 		t.Errorf("Incremented the wrong quota, expected %v, actual %v", resourceQuotaTerminating.Name, usage.Name)
 	}
@@ -986,9 +990,8 @@ func TestAdmitBelowTerminatingQuotaLimitWhenPodScopeUpdated(t *testing.T) {
 	}
 }
 
-// TestAdmitBelowVolumeAttributesClassQuotaLimit ensures that pvcs with a given vac are charged to the right quota.
-// It creates a glod and silver quota, and creates a pvc with the glod class.
-// It ensures that the glod quota is incremented, and the silver quota is not.
+// TestAdmitBelowVolumeAttributesClassQuotaLimit 验证指定 VAC 的 PVC 只计入对应配额：
+// gold 与 silver 配额并存时，gold 类 PVC 只增加 gold 配额用量。
 func TestAdmitBelowVolumeAttributesClassQuotaLimit(t *testing.T) {
 	classGold := "gold"
 	classSilver := "silver"
@@ -1061,7 +1064,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimit(t *testing.T) {
 		t.Errorf("Error occurred while adding resource quota to the indexer: %v", err)
 	}
 
-	// create a pvc that references the gold class
+	// 创建一个引用 gold 类的 PVC。
 	newPvc := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 	newPvc.Spec.VolumeAttributesClassName = &classGold
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPvc, nil, api.Kind("PersistentVolumeClaim").WithVersion("version"), newPvc.Namespace, newPvc.Name, corev1.Resource("persistentvolumeclaims").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
@@ -1087,7 +1090,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimit(t *testing.T) {
 	lastActionIndex := len(decimatedActions) - 1
 	usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
 
-	// ensure only the quota-gold was updated
+	// 只应更新 gold 配额。
 	if usage.Name != resourceQuotaGold.Name {
 		t.Errorf("Incremented the wrong quota, expected %v, actual %v", resourceQuotaGold.Name, usage.Name)
 	}
@@ -1114,13 +1117,11 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimit(t *testing.T) {
 	}
 }
 
-// TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated ensures that pvcs with a given vac are charged to the right quota.
-// It creates three quotas, gold, silver, and copper, and changes the pvc to reference the different classes.
-// It ensures that the expected quota is incremented, and others are not.
+// TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated 验证 PVC 切换 VAC 类后，
+// 费用只计入新类对应的配额；gold/silver/copper 三个配额中只有预期的那个被更新。
 //
-// The Quota admission is intended to fail "high" in this case, and depends on a controller reconciling actual persisted
-// use to lower / free the reserved quota. We need always overcount in the admission plugin if something later causes
-// the request to be rejected, so you can not reduce quota with requests that aren't completed.
+// 此处配额准入故意“多算”：若请求后续被拒，预留的配额无法自动回收，依赖控制器对账实际用量来释放。
+// 因此宁可高估也不能低估，否则未完成的请求也能缩减配额。
 func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing.T) {
 	classGold := "gold"
 	classSilver := "silver"
@@ -1225,12 +1226,12 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			desc:           "update the desired class of a pvc from nil to gold",
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc didn't reference any class
+				// 旧 PVC 未引用任何类。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Status.Phase = api.ClaimBound
 
-				// updated version references a single class: gold.
+				// 更新后引用单一类 gold。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classGold
 				newPVC.Status.Phase = api.ClaimBound
@@ -1247,13 +1248,13 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			subresource:    "status",
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced a single class: gold.
+				// 旧 PVC 引用单一类 gold。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classGold
 				existingPVC.Status.Phase = api.ClaimBound
 
-				// updated version references a single class: gold. same as the old pvc.
+				// 更新后仍引用单一类 gold，与旧 PVC 相同。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classGold
 				newPVC.Status.Phase = api.ClaimBound
@@ -1268,14 +1269,14 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			subresource:    "status",
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced a single class: gold.
+				// 旧 PVC 引用单一类 gold。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classGold
 				existingPVC.Status.Phase = api.ClaimBound
 				existingPVC.Status.ModifyVolumeStatus = &api.ModifyVolumeStatus{TargetVolumeAttributesClassName: classGold}
 
-				// updated version references a single class: gold. same as the old pvc.
+				// 更新后仍引用单一类 gold，与旧 PVC 相同。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classGold
 				newPVC.Status.Phase = api.ClaimBound
@@ -1289,14 +1290,14 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			desc:           "update the desired class of a pvc from gold to silver",
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced the gold class
+				// 旧 PVC 引用 gold 类。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classGold
 				existingPVC.Status.Phase = api.ClaimBound
 				existingPVC.Status.CurrentVolumeAttributesClassName = &classGold
 
-				// updated version references two different classes: silver and gold.
+				// 更新后引用两个类：silver 与 gold。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classSilver
 				newPVC.Status.Phase = api.ClaimBound
@@ -1314,14 +1315,14 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			subresource:    "status",
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced two different classes: silver and gold.
+				// 旧 PVC 引用两个类：silver 与 gold。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classSilver
 				existingPVC.Status.Phase = api.ClaimBound
 				existingPVC.Status.CurrentVolumeAttributesClassName = &classGold
 
-				// updated version references two different classes: silver and gold. same as the old pvc.
+				// 更新后仍引用 silver 与 gold，与旧 PVC 相同。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classSilver
 				newPVC.Status.Phase = api.ClaimBound
@@ -1336,7 +1337,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			desc:           "update the desired class of a pvc from silver to copper",
 			existingQuotas: []runtime.Object{resourceQuotaGold, resourceQuotaSilver, resourceQuotaCopper},
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced two different classes: silver and gold.
+				// 旧 PVC 引用两个类：silver 与 gold。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classSilver
@@ -1344,7 +1345,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 				existingPVC.Status.ModifyVolumeStatus = &api.ModifyVolumeStatus{TargetVolumeAttributesClassName: classSilver}
 				existingPVC.Status.CurrentVolumeAttributesClassName = &classGold
 
-				// updated version references three different classes: copper, silver and gold.
+				// 更新后引用三个类：copper、silver 与 gold。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classCopper
 				newPVC.Status.Phase = api.ClaimBound
@@ -1382,14 +1383,14 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			}},
 			subresource: "status",
 			claims: func() (*api.PersistentVolumeClaim, *api.PersistentVolumeClaim) {
-				// old pvc referenced a single class: gold.
+				// 旧 PVC 引用单一类 gold。
 				existingPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				existingPVC.ResourceVersion = "1"
 				existingPVC.Spec.VolumeAttributesClassName = &classGold
 				existingPVC.Status.Phase = api.ClaimBound
 				existingPVC.Status.CurrentVolumeAttributesClassName = &classGold
 
-				// updated version references two different classes: silver and gold.
+				// 更新后引用两个类：silver 与 gold。
 				newPVC := validPersistentVolumeClaim("allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 				newPVC.Spec.VolumeAttributesClassName = &classGold
 				newPVC.Status.Phase = api.ClaimBound
@@ -1467,7 +1468,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 			lastActionIndex := len(decimatedActions) - 1
 			usage := decimatedActions[lastActionIndex].(testcore.UpdateAction).GetObject().(*corev1.ResourceQuota)
 
-			// ensure only the exoected quota was updated
+			// 只应更新预期的那个配额。
 			if usage.Name != testCase.expectedQuotaName {
 				t.Errorf("Incremented the wrong quota, expected %v, actual %v", testCase.expectedQuotaName, usage.Name)
 			}
@@ -1484,8 +1485,7 @@ func TestAdmitBelowVolumeAttributesClassQuotaLimitWhenPVCScopeUpdated(t *testing
 	}
 }
 
-// TestAdmitBelowBestEffortQuotaLimit creates a best effort and non-best effort quota.
-// It verifies that best effort pods are properly scoped to the best effort quota document.
+// TestAdmitBelowBestEffortQuotaLimit 验证 BestEffort Pod 的费用只计入 BestEffort 配额。
 func TestAdmitBelowBestEffortQuotaLimit(t *testing.T) {
 	resourceQuotaBestEffort := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-besteffort", Namespace: "test", ResourceVersion: "124"},
@@ -1529,7 +1529,7 @@ func TestAdmitBelowBestEffortQuotaLimit(t *testing.T) {
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuotaBestEffort)
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuotaNotBestEffort)
 
-	// create a pod that is best effort because it does not make a request for anything
+	// 未声明任何请求，Pod 属于 BestEffort。
 	newPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("", ""), getResourceList("", "")))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPod, nil, api.Kind("Pod").WithVersion("version"), newPod.Namespace, newPod.Name, corev1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err != nil {
@@ -1573,9 +1573,10 @@ func TestAdmitBelowBestEffortQuotaLimit(t *testing.T) {
 	}
 }
 
+// removeListWatch 过滤掉 client 为维护缓存而产生的 list/watch 动作。
 func removeListWatch(in []testcore.Action) []testcore.Action {
 	decimatedActions := []testcore.Action{}
-	// list and watch resource quota is done to maintain our cache, so that's expected.  Remove them from results
+	// list/watch 配额是缓存同步的固定噪声，与被测行为无关。
 	for i := range in {
 		if in[i].Matches("list", "resourcequotas") || in[i].Matches("watch", "resourcequotas") {
 			continue
@@ -1586,8 +1587,7 @@ func removeListWatch(in []testcore.Action) []testcore.Action {
 	return decimatedActions
 }
 
-// TestAdmitBestEffortQuotaLimitIgnoresBurstable validates that a besteffort quota does not match a resource
-// guaranteed pod.
+// TestAdmitBestEffortQuotaLimitIgnoresBurstable 验证 BestEffort 配额不匹配有资源请求的 Pod。
 func TestAdmitBestEffortQuotaLimitIgnoresBurstable(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-besteffort", Namespace: "test", ResourceVersion: "124"},
@@ -1627,8 +1627,7 @@ func TestAdmitBestEffortQuotaLimitIgnoresBurstable(t *testing.T) {
 	}
 }
 
-// TestAdmissionSetsMissingNamespace verifies that if an object lacks a
-// namespace, it will be set.
+// TestAdmissionSetsMissingNamespace 验证对象缺少命名空间时会被填入请求中的命名空间。
 func TestAdmissionSetsMissingNamespace(t *testing.T) {
 	namespace := "test"
 	resourceQuota := &corev1.ResourceQuota{
@@ -1657,7 +1656,7 @@ func TestAdmissionSetsMissingNamespace(t *testing.T) {
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
 	newPod := validPod("pod-without-namespace", 1, getResourceRequirements(getResourceList("1", "2Gi"), getResourceList("", "")))
 
-	// unset the namespace
+	// 故意清空命名空间，验证插件会回填。
 	newPod.ObjectMeta.Namespace = ""
 
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPod, nil, api.Kind("Pod").WithVersion("version"), namespace, newPod.Name, corev1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
@@ -1669,7 +1668,7 @@ func TestAdmissionSetsMissingNamespace(t *testing.T) {
 	}
 }
 
-// TestAdmitRejectsNegativeUsage verifies that usage for any measured resource cannot be negative.
+// TestAdmitRejectsNegativeUsage 验证资源用量不能为负：负数 PVC 存储请求被拒绝，正常值放行。
 func TestAdmitRejectsNegativeUsage(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -1696,14 +1695,14 @@ func TestAdmitRejectsNegativeUsage(t *testing.T) {
 	}
 
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
-	// verify quota rejects negative pvc storage requests
+	// 负数存储请求应被拒绝。
 	newPvc := validPersistentVolumeClaim("not-allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("-1Gi")}, api.ResourceList{}))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPvc, nil, api.Kind("PersistentVolumeClaim").WithVersion("version"), newPvc.Namespace, newPvc.Name, corev1.Resource("persistentvolumeclaims").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected an error because the pvc has negative storage usage")
 	}
 
-	// verify quota accepts non-negative pvc storage requests
+	// 非负存储请求应放行。
 	newPvc = validPersistentVolumeClaim("not-allowed-pvc", getVolumeResourceRequirements(api.ResourceList{api.ResourceStorage: resource.MustParse("1Gi")}, api.ResourceList{}))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPvc, nil, api.Kind("PersistentVolumeClaim").WithVersion("version"), newPvc.Namespace, newPvc.Name, corev1.Resource("persistentvolumeclaims").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err != nil {
@@ -1711,7 +1710,7 @@ func TestAdmitRejectsNegativeUsage(t *testing.T) {
 	}
 }
 
-// TestAdmitWhenUnrelatedResourceExceedsQuota verifies that if resource X exceeds quota, it does not prohibit resource Y from admission.
+// TestAdmitWhenUnrelatedResourceExceedsQuota 验证一种资源超配额不影响其他资源的准入。
 func TestAdmitWhenUnrelatedResourceExceedsQuota(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -1739,7 +1738,7 @@ func TestAdmitWhenUnrelatedResourceExceedsQuota(t *testing.T) {
 
 	informerFactory.Core().V1().ResourceQuotas().Informer().GetIndexer().Add(resourceQuota)
 
-	// create a pod that should pass existing quota
+	// Service 已超额，但 Pod 用量未超额，应放行。
 	newPod := validPod("allowed-pod", 1, getResourceRequirements(getResourceList("", ""), getResourceList("", "")))
 	err = handler.Validate(context.TODO(), admission.NewAttributesRecord(newPod, nil, api.Kind("Pod").WithVersion("version"), newPod.Namespace, newPod.Name, corev1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err != nil {
@@ -1747,7 +1746,7 @@ func TestAdmitWhenUnrelatedResourceExceedsQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedResourceNoQuota verifies if a limited resource is configured with no quota, it cannot be consumed.
+// TestAdmitLimitedResourceNoQuota 验证受限资源在没有覆盖它的配额时不可被消费。
 func TestAdmitLimitedResourceNoQuota(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	stopCh := make(chan struct{})
@@ -1755,7 +1754,7 @@ func TestAdmitLimitedResourceNoQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable consumption of cpu unless there is a covering quota.
+	// 没有覆盖配额时禁止消费受限资源。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
@@ -1777,7 +1776,7 @@ func TestAdmitLimitedResourceNoQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedResourceNoQuotaIgnoresNonMatchingResources shows it ignores non matching resources in config.
+// TestAdmitLimitedResourceNoQuotaIgnoresNonMatchingResources 验证不匹配的受限资源配置不会影响 Pod 准入。
 func TestAdmitLimitedResourceNoQuotaIgnoresNonMatchingResources(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	stopCh := make(chan struct{})
@@ -1785,7 +1784,7 @@ func TestAdmitLimitedResourceNoQuotaIgnoresNonMatchingResources(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable consumption of cpu unless there is a covering quota.
+	// 没有覆盖配额时禁止消费受限资源。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
@@ -1807,7 +1806,7 @@ func TestAdmitLimitedResourceNoQuotaIgnoresNonMatchingResources(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedResourceWithQuota verifies if a limited resource is configured with quota, it can be consumed.
+// TestAdmitLimitedResourceWithQuota 验证受限资源存在覆盖配额时可以消费。
 func TestAdmitLimitedResourceWithQuota(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -1827,13 +1826,12 @@ func TestAdmitLimitedResourceWithQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable consumption of cpu unless there is a covering quota.
-	// disable consumption of cpu unless there is a covering quota.
+	// 没有覆盖配额时禁止消费受限资源。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
 				Resource:      "pods",
-				MatchContains: []string{"requests.cpu"}, // match on "requests.cpu" only
+				MatchContains: []string{"requests.cpu"}, // 只匹配 requests.cpu
 			},
 		},
 	}
@@ -1851,7 +1849,7 @@ func TestAdmitLimitedResourceWithQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedResourceWithMultipleQuota verifies if a limited resource is configured with quota, it can be consumed if one matches.
+// TestAdmitLimitedResourceWithMultipleQuota 验证多个配额中只要有一个匹配，受限资源即可消费。
 func TestAdmitLimitedResourceWithMultipleQuota(t *testing.T) {
 	resourceQuota1 := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota1", Namespace: "test", ResourceVersion: "124"},
@@ -1882,13 +1880,12 @@ func TestAdmitLimitedResourceWithMultipleQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable consumption of cpu unless there is a covering quota.
-	// disable consumption of cpu unless there is a covering quota.
+	// 没有覆盖配额时禁止消费受限资源。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
 				Resource:      "pods",
-				MatchContains: []string{"requests.cpu"}, // match on "requests.cpu" only
+				MatchContains: []string{"requests.cpu"}, // 只匹配 requests.cpu
 			},
 		},
 	}
@@ -1907,7 +1904,7 @@ func TestAdmitLimitedResourceWithMultipleQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedResourceWithQuotaThatDoesNotCover verifies if a limited resource is configured the quota must cover the resource.
+// TestAdmitLimitedResourceWithQuotaThatDoesNotCover 验证配额必须真正覆盖受限资源，否则消费仍被拒绝。
 func TestAdmitLimitedResourceWithQuotaThatDoesNotCover(t *testing.T) {
 	resourceQuota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "test", ResourceVersion: "124"},
@@ -1927,13 +1924,12 @@ func TestAdmitLimitedResourceWithQuotaThatDoesNotCover(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable consumption of cpu unless there is a covering quota.
-	// disable consumption of cpu unless there is a covering quota.
+	// 没有覆盖配额时禁止消费受限资源。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
 				Resource:      "pods",
-				MatchContains: []string{"cpu"}, // match on "cpu" only
+				MatchContains: []string{"cpu"}, // 只匹配 cpu
 			},
 		},
 	}
@@ -1951,7 +1947,7 @@ func TestAdmitLimitedResourceWithQuotaThatDoesNotCover(t *testing.T) {
 	}
 }
 
-// TestAdmitLimitedScopeWithQuota verifies if a limited scope is configured the quota must cover the resource.
+// TestAdmitLimitedScopeWithCoverQuota 验证受限范围配置下，必须有覆盖该范围（及资源）的配额才能准入。
 func TestAdmitLimitedScopeWithCoverQuota(t *testing.T) {
 	testCases := []struct {
 		description  string
@@ -2016,7 +2012,7 @@ func TestAdmitLimitedScopeWithCoverQuota(t *testing.T) {
 								Operator:  corev1.ScopeSelectorOpExists,
 							},
 						},
-						MatchContains: []string{"requests.cpu"}, // match on "requests.cpu" only
+						MatchContains: []string{"requests.cpu"}, // 只匹配 requests.cpu
 					},
 				},
 			},
@@ -2615,7 +2611,7 @@ func TestAdmitLimitedScopeWithCoverQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitZeroDeltaUsageWithoutCoveringQuota verifies that resource quota is not required for zero delta requests.
+// TestAdmitZeroDeltaUsageWithoutCoveringQuota 验证用量增量为零的更新无需覆盖配额。
 func TestAdmitZeroDeltaUsageWithoutCoveringQuota(t *testing.T) {
 
 	kubeClient := fake.NewSimpleClientset()
@@ -2624,7 +2620,7 @@ func TestAdmitZeroDeltaUsageWithoutCoveringQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable services unless there is a covering quota.
+	// 没有覆盖配额时禁止创建 Service。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
@@ -2654,7 +2650,7 @@ func TestAdmitZeroDeltaUsageWithoutCoveringQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitRejectIncreaseUsageWithoutCoveringQuota verifies that resource quota is required for delta requests that increase usage.
+// TestAdmitRejectIncreaseUsageWithoutCoveringQuota 验证增加用量的更新必须有覆盖配额，否则被拒绝。
 func TestAdmitRejectIncreaseUsageWithoutCoveringQuota(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	stopCh := make(chan struct{})
@@ -2662,7 +2658,7 @@ func TestAdmitRejectIncreaseUsageWithoutCoveringQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable services unless there is a covering quota.
+	// 没有覆盖配额时禁止创建 Service。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{
@@ -2695,7 +2691,7 @@ func TestAdmitRejectIncreaseUsageWithoutCoveringQuota(t *testing.T) {
 	}
 }
 
-// TestAdmitAllowDecreaseUsageWithoutCoveringQuota verifies that resource quota is not required for delta requests that decrease usage.
+// TestAdmitAllowDecreaseUsageWithoutCoveringQuota 验证减少用量的更新无需覆盖配额。
 func TestAdmitAllowDecreaseUsageWithoutCoveringQuota(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	stopCh := make(chan struct{})
@@ -2703,7 +2699,7 @@ func TestAdmitAllowDecreaseUsageWithoutCoveringQuota(t *testing.T) {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// disable services unless there is a covering quota.
+	// 没有覆盖配额时禁止创建 Service。
 	config := &resourcequotaapi.Configuration{
 		LimitedResources: []resourcequotaapi.LimitedResource{
 			{

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package defaultingressclass 提供 DefaultIngressClass 准入控制器：
+// 为未指定 class 的 Ingress 设置集群默认 IngressClass。
 package defaultingressclass
 
 import (
@@ -35,11 +37,11 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin
+	// PluginName 是本准入控制器的名称。
 	PluginName = "DefaultIngressClass"
 )
 
-// Register registers a plugin
+// Register 向 apiserver 注册本插件的工厂函数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		plugin := newPlugin()
@@ -47,7 +49,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// classDefaulterPlugin holds state for and implements the admission plugin.
+// classDefaulterPlugin 持有 IngressClass lister，实现默认 IngressClass 的准入逻辑。
 type classDefaulterPlugin struct {
 	*admission.Handler
 	lister networkingv1listers.IngressClassLister
@@ -57,22 +59,22 @@ var _ admission.Interface = &classDefaulterPlugin{}
 var _ admission.MutationInterface = &classDefaulterPlugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&classDefaulterPlugin{})
 
-// newPlugin creates a new admission plugin.
+// newPlugin 创建一个默认 IngressClass 准入插件实例。
 func newPlugin() *classDefaulterPlugin {
 	return &classDefaulterPlugin{
 		Handler: admission.NewHandler(admission.Create),
 	}
 }
 
-// SetExternalKubeInformerFactory sets a lister and readyFunc for this
-// classDefaulterPlugin using the provided SharedInformerFactory.
+// SetExternalKubeInformerFactory 用给定的 SharedInformerFactory 为插件设置
+// IngressClass lister，并把缓存同步就绪作为 readyFunc。
 func (a *classDefaulterPlugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	informer := f.Networking().V1().IngressClasses()
 	a.lister = informer.Lister()
 	a.SetReadyFunc(informer.Informer().HasSynced)
 }
 
-// ValidateInitialization ensures lister is set.
+// ValidateInitialization 检查 lister 已正确注入。
 func (a *classDefaulterPlugin) ValidateInitialization() error {
 	if a.lister == nil {
 		return fmt.Errorf("missing lister")
@@ -80,8 +82,7 @@ func (a *classDefaulterPlugin) ValidateInitialization() error {
 	return nil
 }
 
-// Admit sets the default value of a Ingress's class if the user did not specify
-// a class.
+// Admit 为用户未指定 class 的 Ingress 设置默认 IngressClass。
 func (a *classDefaulterPlugin) Admit(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	if attr.GetResource().GroupResource() != networkingv1.Resource("ingresses") {
 		return nil
@@ -92,18 +93,18 @@ func (a *classDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 	}
 
 	ingress, ok := attr.GetObject().(*networking.Ingress)
-	// if we can't convert then we don't handle this object so just return
+	// 类型转换失败说明不是本插件处理的对象，直接放行。
 	if !ok {
 		klog.V(3).Infof("Expected Ingress resource, got: %v", attr.GetKind())
 		return errors.NewInternalError(fmt.Errorf("Expected Ingress resource, got: %v", attr.GetKind()))
 	}
 
-	// IngressClassName field has been set, no need to set a default value.
+	// 已显式指定 IngressClassName，不再覆盖用户的选择。
 	if ingress.Spec.IngressClassName != nil {
 		return nil
 	}
 
-	// Ingress class annotation has been set, no need to set a default value.
+	// 已通过旧注解指定 class，保持兼容，不再设置默认值。
 	if _, ok := ingress.Annotations[networkingv1beta1.AnnotationIngressClass]; ok {
 		return nil
 	}
@@ -115,7 +116,7 @@ func (a *classDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 		return admission.NewForbidden(attr, err)
 	}
 
-	// No default class specified, no need to set a default value.
+	// 集群里没有默认 IngressClass，保持原样。
 	if defaultClass == nil {
 		return nil
 	}
@@ -125,7 +126,8 @@ func (a *classDefaulterPlugin) Admit(ctx context.Context, attr admission.Attribu
 	return nil
 }
 
-// getDefaultClass returns the default IngressClass from the store, or nil.
+// getDefaultClass 从 lister 中返回默认 IngressClass；不存在时返回 nil。
+// 存在多个默认 class 时取创建时间最新的，时间相同则按名称排序取确定结果。
 func getDefaultClass(lister networkingv1listers.IngressClassLister) (*networkingv1.IngressClass, error) {
 	list, err := lister.List(labels.Everything())
 	if err != nil {

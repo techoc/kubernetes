@@ -30,19 +30,19 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是准入插件的名称。
 const PluginName = "EventRateLimit"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName,
 		func(config io.Reader) (admission.Interface, error) {
-			// load the configuration provided (if any)
+			// 加载提供的配置（如果有）。
 			configuration, err := LoadConfiguration(config)
 			if err != nil {
 				return nil, err
 			}
-			// validate the configuration (if any)
+			// 校验配置（如果有），尽早暴露错误配置。
 			if configuration != nil {
 				if errs := validation.ValidateConfiguration(configuration); len(errs) != 0 {
 					return nil, errs.ToAggregate()
@@ -52,18 +52,17 @@ func Register(plugins *admission.Plugins) {
 		})
 }
 
-// Plugin implements an admission controller that can enforce event rate limits
+// Plugin 实现可执行事件限流的准入控制器。
 type Plugin struct {
 	*admission.Handler
-	// limitEnforcers is the collection of limit enforcers. There is one limit enforcer for each
-	// active limit type. As there are 4 limit types, the length of the array will be at most 4.
-	// The array is read-only after construction.
+	// limitEnforcers 是限流执行器的集合，每种启用的限流类型对应一个。
+	// 限流类型共 4 种，因此切片长度最多为 4；构造完成后只读。
 	limitEnforcers []*limitEnforcer
 }
 
 var _ admission.ValidationInterface = &Plugin{}
 
-// newEventRateLimit configures an admission controller that can enforce event rate limits
+// newEventRateLimit 构造按配置执行事件限流的准入控制器。
 func newEventRateLimit(config *eventratelimitapi.Configuration, clock flowcontrol.Clock) (*Plugin, error) {
 	limitEnforcers := make([]*limitEnforcer, 0, len(config.Limits))
 	for _, limitConfig := range config.Limits {
@@ -82,22 +81,20 @@ func newEventRateLimit(config *eventratelimitapi.Configuration, clock flowcontro
 	return eventRateLimitAdmission, nil
 }
 
-// Validate makes admission decisions while enforcing event rate limits
+// Validate 在执行事件限流的同时作出准入决策。
 func (a *Plugin) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// ignore all operations that do not correspond to an Event kind
+	// 只处理 Event Kind，其他资源直接放行。
 	if attr.GetKind().GroupKind() != api.Kind("Event") {
 		return nil
 	}
 
-	// ignore all requests that specify dry-run
-	// because they don't correspond to any calls to etcd,
-	// they should not be affected by the ratelimit
+	// dry-run 请求不会写入 etcd，因此不应消耗限流配额。
 	if attr.IsDryRun() {
 		return nil
 	}
 
 	var errors []error
-	// give each limit enforcer a chance to reject the event
+	// 逐个执行限流检查；任一执行器拒绝即记录错误。
 	for _, enforcer := range a.limitEnforcers {
 		if err := enforcer.accept(attr); err != nil {
 			errors = append(errors, err)

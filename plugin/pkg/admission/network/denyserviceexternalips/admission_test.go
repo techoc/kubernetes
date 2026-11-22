@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// makeSvc 构造带指定 externalIPs 的测试 Service。
 func makeSvc(externalIPs ...string) *core.Service {
 	svc := &core.Service{}
 	svc.Namespace = "test-ns"
@@ -35,6 +36,7 @@ func makeSvc(externalIPs ...string) *core.Service {
 	return svc
 }
 
+// TestAdmission 验证准入插件只拒绝新增或变更 externalIPs 的请求。
 func TestAdmission(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -86,6 +88,7 @@ func TestAdmission(t *testing.T) {
 
 			var op admission.Operation
 			var opt runtime.Object
+			// 无旧对象说明是创建请求，否则按更新请求构造属性。
 			if tc.oldSvc == nil {
 				op = admission.Create
 				opt = &metav1.CreateOptions{}

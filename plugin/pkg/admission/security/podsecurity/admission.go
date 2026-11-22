@@ -23,7 +23,7 @@ import (
 	"io"
 	"sync"
 
-	// install conversions for types we need to convert
+	// 导入 install 包以注册所需类型的转换函数。
 	_ "k8s.io/kubernetes/pkg/apis/apps/install"
 	_ "k8s.io/kubernetes/pkg/apis/batch/install"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
@@ -55,17 +55,17 @@ import (
 	"k8s.io/pod-security-admission/policy"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是插件名称字符串。
 const PluginName = "PodSecurity"
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(reader io.Reader) (admission.Interface, error) {
 		return newPlugin(reader)
 	})
 }
 
-// Plugin holds state for and implements the admission plugin.
+// Plugin 保存状态并实现该准入插件。
 type Plugin struct {
 	*admission.Handler
 
@@ -88,8 +88,9 @@ var (
 	defaultRecorderInit sync.Once
 )
 
+// getDefaultRecorder 返回全局共享的指标记录器，仅初始化并注册一次。
 func getDefaultRecorder() metrics.Recorder {
-	// initialize and register to legacy metrics once
+	// 只初始化并注册一次，避免重复注册触发 panic。
 	defaultRecorderInit.Do(func() {
 		defaultRecorder = metrics.NewPrometheusRecorder(podsecurityadmissionapi.GetAPIVersion())
 		defaultRecorder.MustRegister(legacyregistry.MustRegister)
@@ -97,7 +98,7 @@ func getDefaultRecorder() metrics.Recorder {
 	return defaultRecorder
 }
 
-// newPlugin creates a new admission plugin.
+// newPlugin 创建一个新的准入插件。
 func newPlugin(reader io.Reader) (*Plugin, error) {
 	config, err := podsecurityconfigloader.LoadFromReader(reader)
 	if err != nil {
@@ -114,7 +115,7 @@ func newPlugin(reader io.Reader) (*Plugin, error) {
 	}, nil
 }
 
-// SetExternalKubeInformerFactory registers an informer
+// SetExternalKubeInformerFactory 注册 informer 并据此更新委托对象。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	p.namespaceLister = namespaceInformer.Lister()
@@ -123,14 +124,15 @@ func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactor
 	p.updateDelegate()
 }
 
-// SetExternalKubeClientSet sets the plugin's client
+// SetExternalKubeClientSet 设置插件使用的客户端。
 func (p *Plugin) SetExternalKubeClientSet(client kubernetes.Interface) {
 	p.client = client
 	p.updateDelegate()
 }
 
+// updateDelegate 在依赖齐备后配置委托的 PodSecurity 准入对象。
 func (p *Plugin) updateDelegate() {
-	// return early if we don't have what we need to set up the admission delegate
+	// 依赖尚未注入完整，等下一次调用再配置；否则 evaluator 会基于错误的版本创建。
 	if p.namespaceLister == nil {
 		return
 	}
@@ -158,6 +160,7 @@ func (p *Plugin) updateDelegate() {
 	}
 }
 
+// InspectEffectiveVersion 记录生效版本，并在模拟版本与二进制版本不同时传给策略评估器。
 func (p *Plugin) InspectEffectiveVersion(version compatibility.EffectiveVersion) {
 	p.inspectedEffectiveVersion = true
 	binaryVersion := version.BinaryVersion()
@@ -169,7 +172,7 @@ func (p *Plugin) InspectEffectiveVersion(version compatibility.EffectiveVersion)
 	}
 }
 
-// ValidateInitialization ensures all required options are set
+// ValidateInitialization 确保所有必需项都已设置。
 func (p *Plugin) ValidateInitialization() error {
 	if !p.inspectedEffectiveVersion {
 		return fmt.Errorf("%s did not see effective version", PluginName)
@@ -190,6 +193,7 @@ var (
 	}
 )
 
+// Validate 对 Pod 及包含 PodSpec 的资源执行 PodSecurity 策略检查。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	gr := a.GetResource().GroupResource()
 	if !applicableResources[gr] && !p.delegate.PodSpecExtractor.HasPodSpec(gr) {
@@ -210,9 +214,9 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		audit.AddAuditAnnotations(ctx, annotations...)
 	}
 	if !result.Allowed {
-		// start with a generic forbidden error
+		// 先构造一个通用的禁止错误，再用策略库返回的详细信息覆盖。
 		retval := admission.NewForbidden(a, errors.New("Not allowed by PodSecurity")).(*apierrors.StatusError)
-		// use message/reason/details/code from admission library if populated
+		// 策略库若给出了更具体的信息，优先使用，保证错误信息可读。
 		if result.Result != nil {
 			if len(result.Result.Message) > 0 {
 				retval.ErrStatus.Message = result.Result.Message
@@ -232,6 +236,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
+// lazyConvertingAttributes 包装准入属性，仅在实际需要时才把内部类型转换为版本化类型。
 type lazyConvertingAttributes struct {
 	admission.Attributes
 
@@ -244,6 +249,7 @@ type lazyConvertingAttributes struct {
 	convertedOldObjectError error
 }
 
+// GetObject 返回转换后的对象，转换只执行一次。
 func (l *lazyConvertingAttributes) GetObject() (runtime.Object, error) {
 	l.convertObjectOnce.Do(func() {
 		l.convertedObject, l.convertedObjectError = convert(l.Attributes.GetObject())
@@ -251,6 +257,7 @@ func (l *lazyConvertingAttributes) GetObject() (runtime.Object, error) {
 	return l.convertedObject, l.convertedObjectError
 }
 
+// GetOldObject 返回转换后的旧对象，转换只执行一次。
 func (l *lazyConvertingAttributes) GetOldObject() (runtime.Object, error) {
 	l.convertOldObjectOnce.Do(func() {
 		l.convertedOldObject, l.convertedOldObjectError = convert(l.Attributes.GetOldObject())
@@ -258,14 +265,17 @@ func (l *lazyConvertingAttributes) GetOldObject() (runtime.Object, error) {
 	return l.convertedOldObject, l.convertedOldObjectError
 }
 
+// GetOperation 返回版本化后的操作类型。
 func (l *lazyConvertingAttributes) GetOperation() admissionv1.Operation {
 	return admissionv1.Operation(l.Attributes.GetOperation())
 }
 
+// GetUserName 返回发起请求的用户名。
 func (l *lazyConvertingAttributes) GetUserName() string {
 	return l.GetUserInfo().GetName()
 }
 
+// convert 将内部版本对象转换为版本化对象，供 PodSecurity 策略库处理。
 func convert(in runtime.Object) (runtime.Object, error) {
 	var out runtime.Object
 	switch in.(type) {

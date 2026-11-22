@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// newOverheadValidPod 构造用于开销测试的 Pod，可指定容器数量、资源需求和是否预置 Overhead。
 func newOverheadValidPod(name string, numContainers int, resources core.ResourceRequirements, setOverhead bool) *core.Pod {
 	pod := &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -60,6 +61,7 @@ func newOverheadValidPod(name string, numContainers int, resources core.Resource
 	return pod
 }
 
+// newSchedulingValidPod 构造带指定节点选择器和容忍的 Pod，用于调度注入测试。
 func newSchedulingValidPod(name string, nodeSelector map[string]string, tolerations []core.Toleration) *core.Pod {
 	return &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
@@ -70,6 +72,7 @@ func newSchedulingValidPod(name string, nodeSelector map[string]string, tolerati
 	}
 }
 
+// getGuaranteedRequirements 返回 limits 与 requests 相等的 Guaranteed 级资源需求。
 func getGuaranteedRequirements() core.ResourceRequirements {
 	resources := core.ResourceList{
 		core.ResourceName(core.ResourceCPU):    resource.MustParse("1"),
@@ -79,6 +82,7 @@ func getGuaranteedRequirements() core.ResourceRequirements {
 	return core.ResourceRequirements{Limits: resources, Requests: resources}
 }
 
+// TestSetOverhead 验证 Overhead 注入逻辑对已设置值的一致性检查。
 func TestSetOverhead(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -168,6 +172,7 @@ func TestSetOverhead(t *testing.T) {
 	}
 }
 
+// TestSetScheduling 验证调度字段合并及节点选择器冲突检测。
 func TestSetScheduling(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -312,12 +317,14 @@ func TestSetScheduling(t *testing.T) {
 	}
 }
 
+// NewObjectInterfacesForTest 构造测试所需的 ObjectInterfaces。
 func NewObjectInterfacesForTest() admission.ObjectInterfaces {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	return admission.NewObjectInterfacesFromScheme(scheme)
 }
 
+// newRuntimeClassForTest 按参数决定是否注入 lister 和 client，用于模拟不同初始化状态。
 func newRuntimeClassForTest(
 	addLister bool,
 	listerObject *nodev1.RuntimeClass,
@@ -346,6 +353,7 @@ func newRuntimeClassForTest(
 	return runtimeClass
 }
 
+// TestValidateInitialization 验证缺少必要依赖时初始化校验会报错。
 func TestValidateInitialization(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -381,6 +389,7 @@ func TestValidateInitialization(t *testing.T) {
 	}
 }
 
+// TestAdmit 验证 RuntimeClass 从缓存或客户端两种途径的解析逻辑。
 func TestAdmit(t *testing.T) {
 	runtimeClassName := "runtimeClassName"
 
@@ -441,6 +450,7 @@ func TestAdmit(t *testing.T) {
 	}
 }
 
+// TestValidate 验证插件校验 Pod Overhead 与 RuntimeClass 定义的一致性。
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -505,6 +515,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestValidateOverhead 覆盖 Overhead 缺失、不匹配和匹配三种校验路径。
 func TestValidateOverhead(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the experimental API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 安装实验性 API 组，使其可作为所有 API 编解码机制的一个选项。
 package install
 
 import (
@@ -25,7 +24,7 @@ import (
 	versionedapi "k8s.io/kubernetes/plugin/pkg/admission/eventratelimit/apis/eventratelimit/v1alpha1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并把相关类型加入 scheme。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(internalapi.AddToScheme(scheme))
 	utilruntime.Must(versionedapi.AddToScheme(scheme))

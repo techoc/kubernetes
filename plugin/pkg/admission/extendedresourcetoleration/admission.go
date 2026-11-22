@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package extendedresourcetoleration 提供 ExtendedResourceToleration 准入控制器：
+// 为请求扩展资源的 Pod 自动添加对应的 toleration。
 package extendedresourcetoleration
 
 import (
@@ -28,37 +30,37 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是本准入插件的名称。
 const PluginName = "ExtendedResourceToleration"
 
-// Register is called by the apiserver to register the plugin factory.
+// Register 由 apiserver 调用，注册本插件的工厂函数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return newExtendedResourceToleration(), nil
 	})
 }
 
-// newExtendedResourceToleration creates a new instance of the ExtendedResourceToleration admission controller.
+// newExtendedResourceToleration 创建一个 ExtendedResourceToleration 准入控制器实例。
 func newExtendedResourceToleration() *plugin {
 	return &plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 	}
 }
 
-// Make sure we are implementing the interface.
+// 编译期断言：plugin 实现 MutationInterface。
 var _ admission.MutationInterface = &plugin{}
 
+// plugin 是 ExtendedResourceToleration 准入控制器的内部实现。
 type plugin struct {
 	*admission.Handler
 }
 
-// Admit updates the toleration of a pod based on the resources requested by it.
-// If an extended resource of name "example.com/device" is requested, it adds
-// a toleration with key "example.com/device", operator "Exists" and effect "NoSchedule".
-// The rationale for this is described in:
-// https://github.com/kubernetes/kubernetes/issues/55080
+// Admit 根据 Pod 请求的资源更新其 toleration。
+// 若请求了名为 "example.com/device" 的扩展资源，则添加 key 为 "example.com/device"、
+// operator 为 "Exists"、effect 为 "NoSchedule" 的 toleration。
+// 设计理由见：https://github.com/kubernetes/kubernetes/issues/55080
 func (p *plugin) Admit(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore all calls to subresources or resources other than pods.
+	// 子资源请求和非 Pod 资源都不在本插件管辖范围内。
 	if len(attributes.GetSubresource()) != 0 || attributes.GetResource().GroupResource() != core.Resource("pods") {
 		return nil
 	}
@@ -84,8 +86,7 @@ func (p *plugin) Admit(ctx context.Context, attributes admission.Attributes, o a
 		}
 	}
 
-	// Doing .List() so that we get a stable sorted list.
-	// This allows us to test adding tolerations for multiple extended resources.
+	// 用 .List() 取得稳定有序的资源名，保证多扩展资源场景下添加 toleration 的顺序可预测、可测试。
 	for _, resource := range resources.List() {
 		helper.AddOrUpdateTolerationInPod(pod, &core.Toleration{
 			Key:      resource,

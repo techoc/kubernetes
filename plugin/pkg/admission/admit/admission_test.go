@@ -26,6 +26,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestAdmissionNonNilAttribute 验证准入处理器能接受属性非 nil 的请求。
 func TestAdmissionNonNilAttribute(t *testing.T) {
 	handler := admissiontesting.WithReinvocationTesting(t, NewAlwaysAdmit().(*alwaysAdmit))
 	err := handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, api.Kind("kind").WithVersion("version"), "namespace", "name", api.Resource("resource").WithVersion("version"), "subresource", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
@@ -34,6 +35,7 @@ func TestAdmissionNonNilAttribute(t *testing.T) {
 	}
 }
 
+// TestAdmissionNilAttribute 验证 AlwaysAdmit 对 nil 属性也不报错。
 func TestAdmissionNilAttribute(t *testing.T) {
 	handler := NewAlwaysAdmit()
 	err := handler.(*alwaysAdmit).Admit(context.TODO(), nil, nil)
@@ -42,6 +44,7 @@ func TestAdmissionNilAttribute(t *testing.T) {
 	}
 }
 
+// TestHandles 验证处理器声明支持全部准入操作。
 func TestHandles(t *testing.T) {
 	handler := NewAlwaysAdmit()
 	tests := []admission.Operation{admission.Create, admission.Connect, admission.Update, admission.Delete}

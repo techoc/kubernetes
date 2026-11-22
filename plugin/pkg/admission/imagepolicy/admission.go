@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package imagepolicy contains an admission controller that configures a webhook to which policy
-// decisions are delegated.
+// Package imagepolicy 包含一个准入控制器，可配置 webhook 并将策略决策委托给它。
 package imagepolicy
 
 import (
@@ -40,26 +39,23 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	api "k8s.io/kubernetes/pkg/apis/core"
 
-	// install the clientgo image policy API for use with api registry
+	// 注册 client-go 镜像策略 API 以便 api registry 使用。
 	_ "k8s.io/kubernetes/pkg/apis/imagepolicy/install"
 )
 
-// PluginName indicates name of admission plugin.
+// PluginName 是准入插件的名称。
 const PluginName = "ImagePolicyWebhook"
 const ephemeralcontainers = "ephemeralcontainers"
 
-// AuditKeyPrefix is used as the prefix for all audit keys handled by this
-// pluggin. Some well known suffixes are listed below.
+// AuditKeyPrefix 是本插件所有审计 key 的前缀，常见后缀见下方常量。
 var AuditKeyPrefix = strings.ToLower(PluginName) + ".image-policy.k8s.io/"
 
 const (
-	// ImagePolicyFailedOpenKeySuffix in an annotation indicates the image
-	// review failed open when the image policy webhook backend connection
-	// failed.
+	// ImagePolicyFailedOpenKeySuffix 作为注解后缀时，表示 webhook 后端连接失败，
+	// 镜像审查以 fail-open 方式放行。
 	ImagePolicyFailedOpenKeySuffix string = "failed-open"
 
-	// ImagePolicyAuditRequiredKeySuffix in an annotation indicates the pod
-	// should be audited.
+	// ImagePolicyAuditRequiredKeySuffix 作为注解后缀时，表示该 Pod 需要被审计。
 	ImagePolicyAuditRequiredKeySuffix string = "audit-required"
 )
 
@@ -67,7 +63,7 @@ var (
 	groupVersions = []schema.GroupVersion{v1alpha1.SchemeGroupVersion}
 )
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		newImagePolicyWebhook, err := NewImagePolicyWebhook(config)
@@ -78,7 +74,7 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 实现 admission.Interface。
 type Plugin struct {
 	*admission.Handler
 	webhook       *webhook.GenericWebhook
@@ -90,6 +86,7 @@ type Plugin struct {
 
 var _ admission.ValidationInterface = &Plugin{}
 
+// statusTTL 根据审查结果返回对应的缓存有效期。
 func (a *Plugin) statusTTL(status v1alpha1.ImageReviewStatus) time.Duration {
 	if status.Allowed {
 		return a.allowTTL
@@ -97,7 +94,7 @@ func (a *Plugin) statusTTL(status v1alpha1.ImageReviewStatus) time.Duration {
 	return a.denyTTL
 }
 
-// Filter out annotations that don't match *.image-policy.k8s.io/*
+// filterAnnotations 过滤掉不匹配 *.image-policy.k8s.io/* 的注解。
 func (a *Plugin) filterAnnotations(allAnnotations map[string]string) map[string]string {
 	annotations := make(map[string]string)
 	for k, v := range allAnnotations {
@@ -108,7 +105,7 @@ func (a *Plugin) filterAnnotations(allAnnotations map[string]string) map[string]
 	return annotations
 }
 
-// Function to call on webhook failure; behavior determined by defaultAllow flag
+// webhookError 处理 webhook 调用失败；放行还是拒绝由 defaultAllow 决定。
 func (a *Plugin) webhookError(pod *api.Pod, attributes admission.Attributes, err error) error {
 	if err != nil {
 		klog.V(2).Infof("error contacting webhook backend: %s", err)
@@ -131,9 +128,9 @@ func (a *Plugin) webhookError(pod *api.Pod, attributes admission.Attributes, err
 	return nil
 }
 
-// Validate makes an admission decision based on the request attributes
+// Validate 根据请求属性作出准入决策。
 func (a *Plugin) Validate(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// Ignore all calls to subresources other than ephemeralcontainers or calls to resources other than pods.
+	// 只处理 Pod 及 ephemeralcontainers 子资源请求。
 	subresource := attributes.GetSubresource()
 	if (subresource != "" && subresource != ephemeralcontainers) || attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return nil
@@ -144,7 +141,7 @@ func (a *Plugin) Validate(ctx context.Context, attributes admission.Attributes, 
 		return apierrors.NewBadRequest("Resource was marked with kind Pod but was unable to be converted")
 	}
 
-	// Build list of ImageReviewContainerSpec
+	// 根据操作类型收集待审查的镜像列表。
 	var imageReviewContainerSpecs []v1alpha1.ImageReviewContainerSpec
 	if subresource == "" {
 		containers := make([]api.Container, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
@@ -175,7 +172,9 @@ func (a *Plugin) Validate(ctx context.Context, attributes admission.Attributes, 
 	return nil
 }
 
+// admitPod 向 webhook 发起镜像审查，并将结果应用到当前请求。
 func (a *Plugin) admitPod(ctx context.Context, pod *api.Pod, attributes admission.Attributes, review *v1alpha1.ImageReview) error {
+	// 以审查请求内容为缓存键，避免对相同输入重复调用 webhook。
 	cacheKey, err := json.Marshal(review.Spec)
 	if err != nil {
 		return err
@@ -202,6 +201,7 @@ func (a *Plugin) admitPod(ctx context.Context, pod *api.Pod, attributes admissio
 		a.responseCache.Add(string(cacheKey), review.Status, a.statusTTL(review.Status))
 	}
 
+	// 将 webhook 返回的审计注解透传到审计事件中。
 	for k, v := range review.Status.AuditAnnotations {
 		if err := attributes.AddAnnotation(AuditKeyPrefix+k, v); err != nil {
 			klog.Warningf("failed to set admission audit annotation %s to %s: %v", AuditKeyPrefix+k, v, err)
@@ -216,43 +216,41 @@ func (a *Plugin) admitPod(ctx context.Context, pod *api.Pod, attributes admissio
 	return nil
 }
 
-// NewImagePolicyWebhook a new ImagePolicyWebhook plugin from the provided config file.
-// The config file is specified by --admission-control-config-file and has the
-// following format for a webhook:
+// NewImagePolicyWebhook 根据提供的配置文件创建一个新的 ImagePolicyWebhook 插件。
+// 配置文件由 --admission-control-config-file 指定，webhook 部分的格式如下：
 //
 //	{
 //	  "imagePolicy": {
 //	     "kubeConfigFile": "path/to/kubeconfig/for/backend",
-//	     "allowTTL": 30,           # time in s to cache approval
-//	     "denyTTL": 30,            # time in s to cache denial
-//	     "retryBackoff": 500,      # time in ms to wait between retries
-//	     "defaultAllow": true      # determines behavior if the webhook backend fails
+//	     "allowTTL": 30,           # 批准结果的缓存秒数
+//	     "denyTTL": 30,            # 拒绝结果的缓存秒数
+//	     "retryBackoff": 500,      # 重试间隔毫秒数
+//	     "defaultAllow": true      # webhook 后端失败时的默认行为
 //	  }
 //	}
 //
-// The config file may be json or yaml.
+// 配置文件可以是 json 或 yaml 格式。
 //
-// The kubeconfig property refers to another file in the kubeconfig format which
-// specifies how to connect to the webhook backend.
+// kubeconfig 属性指向另一个 kubeconfig 格式的文件，用于指定如何连接 webhook 后端。
 //
-// The kubeconfig's cluster field is used to refer to the remote service, user refers to the returned authorizer.
+// kubeconfig 的 cluster 字段指向远程服务，user 字段指向返回结果的鉴权主体。
 //
-//	# clusters refers to the remote service.
+//	# clusters 指向远程服务。
 //	clusters:
 //	- name: name-of-remote-imagepolicy-service
 //	  cluster:
-//	    certificate-authority: /path/to/ca.pem      # CA for verifying the remote service.
-//	    server: https://images.example.com/policy # URL of remote service to query. Must use 'https'.
+//	    certificate-authority: /path/to/ca.pem      # 校验远程服务的 CA。
+//	    server: https://images.example.com/policy # 待查询的远程服务 URL，必须使用 'https'。
 //
-//	# users refers to the API server's webhook configuration.
+//	# users 指向 API server 的 webhook 配置。
 //	users:
 //	- name: name-of-api-server
 //	  user:
-//	    client-certificate: /path/to/cert.pem # cert for the webhook plugin to use
-//	    client-key: /path/to/key.pem          # key matching the cert
+//	    client-certificate: /path/to/cert.pem # webhook 插件使用的证书
+//	    client-key: /path/to/key.pem          # 与证书匹配的私钥
 //
-// For additional HTTP configuration, refer to the kubeconfig documentation
-// http://kubernetes.io/v1.1/docs/user-guide/kubeconfig-file.html.
+// 更多 HTTP 配置请参考 kubeconfig 文档
+// http://kubernetes.io/v1.1/docs/user-guide/kubeconfig-file.html。
 func NewImagePolicyWebhook(configFile io.Reader) (*Plugin, error) {
 	if configFile == nil {
 		return nil, fmt.Errorf("no config specified")

@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	// PluginName is the name of pvc resize admission plugin
+	// PluginName 是 PVC 扩容准入插件的名称。
 	PluginName = "PersistentVolumeClaimResize"
 )
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		plugin := newPlugin()
@@ -46,25 +46,28 @@ var _ admission.Interface = &persistentVolumeClaimResize{}
 var _ admission.ValidationInterface = &persistentVolumeClaimResize{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&persistentVolumeClaimResize{})
 
+// persistentVolumeClaimResize 校验 PVC 扩容请求是否合法。
 type persistentVolumeClaimResize struct {
 	*admission.Handler
 
 	scLister storagev1listers.StorageClassLister
 }
 
+// newPlugin 创建 PVC 扩容准入插件实例，仅处理 Update 操作。
 func newPlugin() *persistentVolumeClaimResize {
 	return &persistentVolumeClaimResize{
 		Handler: admission.NewHandler(admission.Update),
 	}
 }
 
+// SetExternalKubeInformerFactory 获取 StorageClass lister，并在其同步完成后才标记插件就绪。
 func (pvcr *persistentVolumeClaimResize) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	scInformer := f.Storage().V1().StorageClasses()
 	pvcr.scLister = scInformer.Lister()
 	pvcr.SetReadyFunc(scInformer.Informer().HasSynced)
 }
 
-// ValidateInitialization ensures lister is set.
+// ValidateInitialization 确保 StorageClass lister 已设置。
 func (pvcr *persistentVolumeClaimResize) ValidateInitialization() error {
 	if pvcr.scLister == nil {
 		return fmt.Errorf("missing storageclass lister")
@@ -72,6 +75,7 @@ func (pvcr *persistentVolumeClaimResize) ValidateInitialization() error {
 	return nil
 }
 
+// Validate 拒绝未绑定 PVC 的扩容，以及存储类未显式允许扩容的 PVC 扩容请求。
 func (pvcr *persistentVolumeClaimResize) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	if a.GetResource().GroupResource() != api.Resource("persistentvolumeclaims") {
 		return nil
@@ -82,7 +86,7 @@ func (pvcr *persistentVolumeClaimResize) Validate(ctx context.Context, a admissi
 	}
 
 	pvc, ok := a.GetObject().(*api.PersistentVolumeClaim)
-	// if we can't convert then we don't handle this object so just return
+	// 类型转换失败意味着不是本插件关心的对象，直接放行。
 	if !ok {
 		return nil
 	}
@@ -102,8 +106,7 @@ func (pvcr *persistentVolumeClaimResize) Validate(ctx context.Context, a admissi
 		return admission.NewForbidden(a, fmt.Errorf("Only bound persistent volume claims can be expanded"))
 	}
 
-	// Growing Persistent volumes is only allowed for PVCs for which their StorageClass
-	// explicitly allows it
+	// 只有存储类显式允许扩容的 PVC 才能扩容。
 	if !pvcr.allowResize(pvc, oldPvc) {
 		return admission.NewForbidden(a, fmt.Errorf("only dynamically provisioned pvc can be resized and "+
 			"the storageclass that provisions the pvc must support resize"))
@@ -112,8 +115,8 @@ func (pvcr *persistentVolumeClaimResize) Validate(ctx context.Context, a admissi
 	return nil
 }
 
-// Growing Persistent volumes is only allowed for PVCs for which their StorageClass
-// explicitly allows it.
+// allowResize 判断 PVC 的存储类在扩容前后未被修改，且该存储类显式允许扩容。
+// 存储类为空或查询失败都视为不允许，避免误放行动态制备之外的 PVC。
 func (pvcr *persistentVolumeClaimResize) allowResize(pvc, oldPvc *api.PersistentVolumeClaim) bool {
 	pvcStorageClass := apihelper.GetPersistentVolumeClaimClass(pvc)
 	oldPvcStorageClass := apihelper.GetPersistentVolumeClaimClass(oldPvc)

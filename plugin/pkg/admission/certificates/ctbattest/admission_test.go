@@ -34,6 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestPluginValidate 验证 ClusterTrustBundle 准入插件的校验逻辑。
 func TestPluginValidate(t *testing.T) {
 	tests := []struct {
 		description                      string
@@ -280,6 +281,7 @@ func TestPluginValidate(t *testing.T) {
 	}
 }
 
+// fakeAuthorizer 模拟授权器，校验请求属性并返回预设决定。
 type fakeAuthorizer struct {
 	t           *testing.T
 	verb        string
@@ -288,6 +290,7 @@ type fakeAuthorizer struct {
 	err         error
 }
 
+// Authorize 校验请求属性，匹配预设条件后返回设定的授权决定。
 func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	if f.err != nil {
 		return f.decision, "forced error", f.err
@@ -313,6 +316,7 @@ func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) 
 	return f.decision, "", nil
 }
 
+// testAttributes 提供测试所需的最小准入属性实现，其余方法由内嵌接口占位，调用会 panic。
 type testAttributes struct {
 	resource    schema.GroupResource
 	subresource string
@@ -320,33 +324,40 @@ type testAttributes struct {
 	obj, oldObj runtime.Object
 	name        string
 
-	admission.Attributes // nil panic if any other methods called
+	admission.Attributes // 其他方法未被覆盖，一旦被调用会因 nil 而 panic
 }
 
+// GetResource 返回测试设定的资源。
 func (t *testAttributes) GetResource() schema.GroupVersionResource {
 	return t.resource.WithVersion("ignored")
 }
 
+// GetSubresource 返回测试设定的子资源。
 func (t *testAttributes) GetSubresource() string {
 	return t.subresource
 }
 
+// GetObject 返回测试设定的对象。
 func (t *testAttributes) GetObject() runtime.Object {
 	return t.obj
 }
 
+// GetOldObject 返回测试设定的旧对象。
 func (t *testAttributes) GetOldObject() runtime.Object {
 	return t.oldObj
 }
 
+// GetName 返回测试设定的名称。
 func (t *testAttributes) GetName() string {
 	return t.name
 }
 
+// GetOperation 返回测试设定的操作类型。
 func (t *testAttributes) GetOperation() admission.Operation {
 	return t.operation
 }
 
+// GetUserInfo 返回占位用户信息。
 func (t *testAttributes) GetUserInfo() user.Info {
 	return &user.DefaultInfo{Name: "ignored"}
 }

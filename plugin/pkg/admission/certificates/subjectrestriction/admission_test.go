@@ -32,6 +32,7 @@ import (
 	certificatesapi "k8s.io/kubernetes/pkg/apis/certificates"
 )
 
+// TestPlugin_Validate 校验插件在不同资源、子资源、signerName 和 CSR 内容下的准入判断。
 func TestPlugin_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -114,7 +115,9 @@ func TestPlugin_Validate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 空 Plugin 即可：Validate 不依赖任何初始化状态。
 			p := &Plugin{}
+			// 错误统一转字符串比较，避免依赖具体错误类型。
 			if err := p.Validate(context.TODO(), tt.a, nil); errStr(err) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -122,42 +125,51 @@ func TestPlugin_Validate(t *testing.T) {
 	}
 }
 
+// testAttributes 是 admission.Attributes 的最小实现，只覆盖 Validate 会调用的方法。
 type testAttributes struct {
 	resource    schema.GroupResource
 	subresource string
 	obj         runtime.Object
 	name        string
 
-	admission.Attributes // nil panic if any other methods called
+	// 嵌入 nil 接口：若调用了未实现的方法，直接 panic 暴露出来。
+	admission.Attributes
 }
 
+// GetResource 返回测试用的资源，版本字段对校验逻辑无影响。
 func (t *testAttributes) GetResource() schema.GroupVersionResource {
 	return t.resource.WithVersion("ignored")
 }
 
+// GetSubresource 返回测试用的子资源名。
 func (t *testAttributes) GetSubresource() string {
 	return t.subresource
 }
 
+// GetObject 返回测试用的对象。
 func (t *testAttributes) GetObject() runtime.Object {
 	return t.obj
 }
 
+// GetName 返回测试用的对象名。
 func (t *testAttributes) GetName() string {
 	return t.name
 }
 
+// errStr 将错误转为字符串；空错误返回空串，便于直接和期望值比较。
 func errStr(err error) string {
 	if err == nil {
 		return ""
 	}
 	es := err.Error()
+	// 空错误消息无法与期望值区分，视为无效测试输入。
 	if len(es) == 0 {
 		panic("invalid empty error")
 	}
 	return es
 }
 
+// pemWithGroup 生成 Subject.Organization 为指定组的 PEM 编码 CSR。
 func pemWithGroup(group string) []byte {
 	template := &x509.CertificateRequest{
 		Subject: pkix.Name{

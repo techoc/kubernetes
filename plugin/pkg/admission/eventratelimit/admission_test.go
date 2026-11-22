@@ -38,7 +38,7 @@ const (
 	nonEventKind = "NonEvent"
 )
 
-// attributesForRequest generates the admission.Attributes that for the specified request
+// attributesForRequest 根据给定请求构造 admission.Attributes。
 func attributesForRequest(rq request) admission.Attributes {
 	return admission.NewAttributesRecord(
 		rq.event,
@@ -54,6 +54,7 @@ func attributesForRequest(rq request) admission.Attributes {
 		&user.DefaultInfo{Name: rq.username})
 }
 
+// request 描述一次待准入的请求及其期望结果。
 type request struct {
 	kind      string
 	namespace string
@@ -64,6 +65,7 @@ type request struct {
 	dryRun    bool
 }
 
+// newRequest 创建默认会被接受的请求。
 func newRequest(kind string) request {
 	return request{
 		kind:     kind,
@@ -71,24 +73,29 @@ func newRequest(kind string) request {
 	}
 }
 
+// newEventRequest 创建 Event 类型的请求。
 func newEventRequest() request {
 	return newRequest(eventKind)
 }
 
+// newNonEventRequest 创建非 Event 类型的请求。
 func newNonEventRequest() request {
 	return newRequest(nonEventKind)
 }
 
+// withNamespace 设置请求的命名空间。
 func (r request) withNamespace(namespace string) request {
 	r.namespace = namespace
 	return r
 }
 
+// withEvent 设置请求携带的 Event 对象。
 func (r request) withEvent(event *api.Event) request {
 	r.event = event
 	return r
 }
 
+// withEventComponent 设置 Event 的 source component。
 func (r request) withEventComponent(component string) request {
 	return r.withEvent(&api.Event{
 		Source: api.EventSource{
@@ -97,29 +104,32 @@ func (r request) withEventComponent(component string) request {
 	})
 }
 
+// withDryRun 设置请求是否为 dry-run。
 func (r request) withDryRun(dryRun bool) request {
 	r.dryRun = dryRun
 	return r
 }
 
+// withUser 设置发起请求的用户名。
 func (r request) withUser(name string) request {
 	r.username = name
 	return r
 }
 
+// blocked 将请求的期望结果设为被限流拒绝。
 func (r request) blocked() request {
 	r.accepted = false
 	return r
 }
 
-// withDelay will adjust the clock to simulate the specified delay, in seconds
+// withDelay 调整模拟时钟，按秒推进指定时长。
 func (r request) withDelay(delayInSeconds int) request {
 	r.delay = time.Duration(delayInSeconds) * time.Second
 	return r
 }
 
-// createSourceAndObjectKeyInclusionRequests creates a series of requests that can be used
-// to test that a particular part of the event is included in the source+object key
+// createSourceAndObjectKeyInclusionRequests 构造一组请求，
+// 用于验证 Event 的某个字段是否参与 source+object key 的计算。
 func createSourceAndObjectKeyInclusionRequests(eventFactory func(label string) *api.Event) []request {
 	return []request{
 		newEventRequest().withEvent(eventFactory("A")),
@@ -128,6 +138,7 @@ func createSourceAndObjectKeyInclusionRequests(eventFactory func(label string) *
 	}
 }
 
+// TestEventRateLimiting 覆盖服务器、命名空间、用户及 source+object 各层级的限流行为。
 func TestEventRateLimiting(t *testing.T) {
 	cases := []struct {
 		name                     string
@@ -286,7 +297,7 @@ func TestEventRateLimiting(t *testing.T) {
 				newEventRequest().withNamespace("A"),
 				newEventRequest().withNamespace("B").blocked(),
 				newEventRequest().withNamespace("A").blocked(),
-				// This should clear out namespace B from the lru cache
+				// 新命名空间 C 会把 B 从 LRU 缓存中挤出。
 				newEventRequest().withNamespace("C"),
 				newEventRequest().withNamespace("A").blocked(),
 				newEventRequest().withNamespace("B"),
@@ -368,7 +379,7 @@ func TestEventRateLimiting(t *testing.T) {
 				newEventRequest().withEventComponent("A"),
 				newEventRequest().withEventComponent("B").blocked(),
 				newEventRequest().withEventComponent("A").blocked(),
-				// This should clear out component B from the lru cache
+				// 新 component C 会把 B 从 LRU 缓存中挤出。
 				newEventRequest().withEventComponent("C"),
 				newEventRequest().withEventComponent("A").blocked(),
 				newEventRequest().withEventComponent("B"),

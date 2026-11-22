@@ -44,6 +44,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestConvert 验证所有受支持资源的内部类型都能转换为外部类型并提取 PodSpec。
 func TestConvert(t *testing.T) {
 	extractor := podsecurityadmission.DefaultPodSpecExtractor{}
 	internalTypes := map[schema.GroupResource]runtime.Object{
@@ -76,6 +77,7 @@ func TestConvert(t *testing.T) {
 	}
 }
 
+// BenchmarkVerifyPod 测量不同 Namespace 强制策略下 Pod 和工作负载的校验开销。
 func BenchmarkVerifyPod(b *testing.B) {
 	p, err := newPlugin(nil)
 	if err != nil {
@@ -184,6 +186,7 @@ func BenchmarkVerifyPod(b *testing.B) {
 	}
 }
 
+// BenchmarkVerifyNamespace 测量 Namespace 标签变更时批量重校验 Pod 的开销。
 func BenchmarkVerifyNamespace(b *testing.B) {
 	p, err := newPlugin(nil)
 	if err != nil {
@@ -214,6 +217,7 @@ func BenchmarkVerifyNamespace(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	// OwnerReference 结构和数量参照社区可扩展性阈值设定，保证压测数据接近真实规模。
 	// https://github.com/kubernetes/community/blob/master/sig-scalability/configs-and-limits/thresholds.md#kubernetes-thresholds
 	ownerA := metav1.OwnerReference{
 		APIVersion: "apps/v1",
@@ -230,7 +234,7 @@ func BenchmarkVerifyNamespace(b *testing.B) {
 		Controller: ptr.To(true),
 	}
 
-	// number of warnings printed for the entire namespace
+	// Namespace 级别本身会产生一条警告，Pod 的警告可能被合并或逐条输出。
 	namespaceWarningCount := 1
 
 	podCount := 3000
@@ -247,7 +251,7 @@ func BenchmarkVerifyNamespace(b *testing.B) {
 		case 1:
 			v1PodCopy.OwnerReferences = []metav1.OwnerReference{ownerB}
 		default:
-			// no owner references
+			// 三分之一的 Pod 不设 OwnerReference。
 		}
 		objects = append(objects, v1PodCopy)
 	}
@@ -285,23 +289,25 @@ func BenchmarkVerifyNamespace(b *testing.B) {
 		if err := p.Validate(ctxWithRecorder, attrs, nil); err != nil {
 			b.Fatal(err)
 		}
-		// should either be a single aggregated warning, or a unique warning per pod
+		// 警告可能合并成一条，也可能每个 Pod 各输出一条。
 		if dc.count != (1+namespaceWarningCount) && dc.count != (podCount+namespaceWarningCount) {
 			b.Fatalf("expected either %d or %d warnings, got %d", 1+namespaceWarningCount, podCount+namespaceWarningCount, dc.count)
 		}
-		// warning should contain the runAsNonRoot issue
+		// 测试用的 Pod 违反 runAsNonRoot，警告中必须包含该问题。
 		if e, a := "runAsNonRoot", dc.text; !strings.Contains(a, e) {
 			b.Fatalf("expected warning containing %q, got %q", e, a)
 		}
 	}
 }
 
+// dummyRecorder 记录基准测试中产生的警告数量和内容。
 type dummyRecorder struct {
 	count int
 	agent string
 	text  string
 }
 
+// AddWarning 实现 warning.Recorder，累计警告并保留最后一次的内容。
 func (r *dummyRecorder) AddWarning(agent, text string) {
 	r.count++
 	r.agent = agent

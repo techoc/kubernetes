@@ -39,10 +39,10 @@ import (
 	pluginapi "k8s.io/kubernetes/plugin/pkg/admission/podtolerationrestriction/apis/podtolerationrestriction"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是该插件的名称。
 const PluginName = "PodTolerationRestriction"
 
-// Register registers a plugin
+// Register 注册该插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		pluginConfig, err := loadConfiguration(config)
@@ -53,10 +53,12 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// The annotation keys for default and whitelist of tolerations
+// 命名空间注解中默认容忍与容忍白名单的键名。
 const (
+	// NSDefaultTolerations 是命名空间默认容忍的注解键。
 	NSDefaultTolerations string = "scheduler.alpha.kubernetes.io/defaultTolerations"
-	NSWLTolerations      string = "scheduler.alpha.kubernetes.io/tolerationsWhitelist"
+	// NSWLTolerations 是命名空间容忍白名单的注解键。
+	NSWLTolerations string = "scheduler.alpha.kubernetes.io/tolerationsWhitelist"
 )
 
 var _ admission.MutationInterface = &Plugin{}
@@ -64,7 +66,7 @@ var _ admission.ValidationInterface = &Plugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Plugin{})
 var _ = genericadmissioninitializer.WantsExternalKubeClientSet(&Plugin{})
 
-// Plugin contains the client used by the admission controller
+// Plugin 持有准入控制器所需的客户端、namespace lister 与插件配置。
 type Plugin struct {
 	*admission.Handler
 	client          kubernetes.Interface
@@ -72,7 +74,7 @@ type Plugin struct {
 	pluginConfig    *pluginapi.Configuration
 }
 
-// Admit checks the admission policy and triggers corresponding actions
+// Admit 为 Pod 合并命名空间/集群默认容忍，并校验最终容忍是否满足白名单。
 func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	if shouldIgnore(a) {
 		return nil
@@ -90,8 +92,7 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 			return err
 		}
 
-		// If the namespace has not specified its default tolerations,
-		// fall back to cluster's default tolerations.
+		// 命名空间未配置默认容忍时，退回集群级默认容忍。
 		if ts == nil {
 			ts = p.pluginConfig.Default
 		}
@@ -106,14 +107,14 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 			Effect:   api.TaintEffectNoSchedule,
 		})
 	}
-	// Final merge of tolerations irrespective of pod type.
+	// 无论 Pod 类型如何，最终都合并一次容忍列表。
 	if len(extraTolerations) > 0 {
 		pod.Spec.Tolerations = tolerations.MergeTolerations(pod.Spec.Tolerations, extraTolerations)
 	}
 	return p.Validate(ctx, a, o)
 }
 
-// Validate we can obtain a whitelist of tolerations
+// Validate 校验 Pod 的容忍列表是否满足命名空间或集群级白名单。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	if shouldIgnore(a) {
 		return nil
@@ -123,7 +124,7 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		return admission.NewForbidden(a, fmt.Errorf("not yet ready to handle request"))
 	}
 
-	// whitelist verification.
+	// 白名单校验。
 	pod := a.GetObject().(*api.Pod)
 	if len(pod.Spec.Tolerations) > 0 {
 		whitelist, err := p.getNamespaceTolerationsWhitelist(a.GetNamespace())
@@ -132,15 +133,14 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 			return err
 		}
 
-		// If the namespace has not specified its tolerations whitelist,
-		// fall back to cluster's whitelist of tolerations.
+		// 命名空间未配置白名单时，退回集群级白名单。
 		if whitelist == nil {
 			whitelist = p.pluginConfig.Whitelist
 			whitelistScope = "cluster"
 		}
 
 		if len(whitelist) > 0 {
-			// check if the merged pod tolerations satisfy its namespace whitelist
+			// 检查合并后的 Pod 容忍是否满足对应命名空间的白名单。
 			if !tolerations.VerifyAgainstWhitelist(pod.Spec.Tolerations, whitelist) {
 				return fmt.Errorf("pod tolerations (possibly merged with namespace default tolerations) conflict with its %s whitelist", whitelistScope)
 			}
@@ -150,13 +150,14 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
+// shouldIgnore 判断请求是否无需本插件处理：非 Pod、Pod 子资源或类型不匹配都跳过。
 func shouldIgnore(a admission.Attributes) bool {
 	resource := a.GetResource().GroupResource()
 	if resource != api.Resource("pods") {
 		return true
 	}
 	if a.GetSubresource() != "" {
-		// only run the checks below on pods proper and not subresources
+		// 只检查 Pod 本体，不检查子资源。
 		return true
 	}
 
@@ -170,7 +171,7 @@ func shouldIgnore(a admission.Attributes) bool {
 	return false
 }
 
-// NewPodTolerationsPlugin initializes a Plugin
+// NewPodTolerationsPlugin 用给定配置创建并初始化一个 Plugin。
 func NewPodTolerationsPlugin(pluginConfig *pluginapi.Configuration) *Plugin {
 	return &Plugin{
 		Handler:      admission.NewHandler(admission.Create, admission.Update),
@@ -178,12 +179,12 @@ func NewPodTolerationsPlugin(pluginConfig *pluginapi.Configuration) *Plugin {
 	}
 }
 
-// SetExternalKubeClientSet sets th client
+// SetExternalKubeClientSet 注入 Kubernetes 客户端，用于缓存未命中时直查存储。
 func (p *Plugin) SetExternalKubeClientSet(client kubernetes.Interface) {
 	p.client = client
 }
 
-// SetExternalKubeInformerFactory initializes the Informer Factory
+// SetExternalKubeInformerFactory 初始化 namespace informer，并在其同步完成后标记插件就绪。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	p.namespaceLister = namespaceInformer.Lister()
@@ -191,7 +192,7 @@ func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactor
 
 }
 
-// ValidateInitialization checks the object is properly initialized
+// ValidateInitialization 检查所需依赖均已注入。
 func (p *Plugin) ValidateInitialization() error {
 	if p.namespaceLister == nil {
 		return fmt.Errorf("missing namespaceLister")
@@ -202,11 +203,12 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// in exceptional cases, this can result in two live calls, but once the cache catches up, that will stop.
+// getNamespace 先从缓存读取命名空间，未命中时直查存储。
+// 极端情况下可能产生两次实时查询，但缓存追上后即会停止。
 func (p *Plugin) getNamespace(nsName string) (*corev1.Namespace, error) {
 	namespace, err := p.namespaceLister.Get(nsName)
 	if errors.IsNotFound(err) {
-		// in case of latency in our caches, make a call direct to storage to verify that it truly exists or not
+		// 缓存可能存在延迟，直接查存储确认命名空间是否真的不存在。
 		namespace, err = p.client.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
@@ -221,6 +223,7 @@ func (p *Plugin) getNamespace(nsName string) (*corev1.Namespace, error) {
 	return namespace, nil
 }
 
+// getNamespaceDefaultTolerations 读取命名空间的默认容忍注解。
 func (p *Plugin) getNamespaceDefaultTolerations(nsName string) ([]api.Toleration, error) {
 	ns, err := p.getNamespace(nsName)
 	if err != nil {
@@ -229,6 +232,7 @@ func (p *Plugin) getNamespaceDefaultTolerations(nsName string) ([]api.Toleration
 	return extractNSTolerations(ns, NSDefaultTolerations)
 }
 
+// getNamespaceTolerationsWhitelist 读取命名空间的容忍白名单注解。
 func (p *Plugin) getNamespaceTolerationsWhitelist(nsName string) ([]api.Toleration, error) {
 	ns, err := p.getNamespace(nsName)
 	if err != nil {
@@ -237,24 +241,23 @@ func (p *Plugin) getNamespaceTolerationsWhitelist(nsName string) ([]api.Tolerati
 	return extractNSTolerations(ns, NSWLTolerations)
 }
 
-// extractNSTolerations extracts default or whitelist of tolerations from
-// following namespace annotations keys: "scheduler.alpha.kubernetes.io/defaultTolerations"
-// and "scheduler.alpha.kubernetes.io/tolerationsWhitelist". If these keys are
-// unset (nil), extractNSTolerations returns nil. If the value to these
-// keys are set to empty, an empty toleration is returned, otherwise
-// configured tolerations are returned.
+// extractNSTolerations 从命名空间的注解中提取默认容忍或白名单。
+// 注解键包括 "scheduler.alpha.kubernetes.io/defaultTolerations"
+// 和 "scheduler.alpha.kubernetes.io/tolerationsWhitelist"。
+// 键未设置时返回 nil；值为空时返回空列表；否则返回解析后的容忍列表。
+// 区分“未设置”和“空列表”很关键：前者表示回退到集群配置，后者表示显式禁用。
 func extractNSTolerations(ns *corev1.Namespace, key string) ([]api.Toleration, error) {
-	// if a namespace does not have any annotations
+	// 命名空间没有任何注解。
 	if len(ns.Annotations) == 0 {
 		return nil, nil
 	}
 
-	// if NSWLTolerations or NSDefaultTolerations does not exist
+	// 注解键不存在。
 	if _, ok := ns.Annotations[key]; !ok {
 		return nil, nil
 	}
 
-	// if value is set to empty
+	// 注解值为空，视为显式配置的空列表。
 	if len(ns.Annotations[key]) == 0 {
 		return []api.Toleration{}, nil
 	}

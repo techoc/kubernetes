@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package ctbattest 提供 ClusterTrustBundleAttest 准入控制器：
+// 校验用户是否有权为指定 signerName attest ClusterTrustBundle。
 package ctbattest
 
 import (
@@ -33,19 +35,20 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac"
 )
 
+// PluginName 是本准入插件的名称。
 const PluginName = "ClusterTrustBundleAttest"
 
+// Register 向 apiserver 注册本插件的工厂函数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(), nil
 	})
 }
 
-// Plugin is the ClusterTrustBundle attest plugin.
+// Plugin 是 ClusterTrustBundle attest 插件。
 //
-// In order to create or update a ClusterTrustBundle that sets signerName,
-// you must have the following permission: group=certificates.k8s.io
-// resource=signers resourceName=<the signer name> verb=attest.
+// 创建或更新设置了 signerName 的 ClusterTrustBundle 时，用户必须具备如下权限：
+// group=certificates.k8s.io、resource=signers、resourceName=<签名者名称>、verb=attest。
 type Plugin struct {
 	*admission.Handler
 	authz authorizer.UnconditionalAuthorizer
@@ -59,24 +62,25 @@ var _ admission.InitializationValidator = &Plugin{}
 var _ genericadmissioninit.WantsUnconditionalAuthorizer = &Plugin{}
 var _ genericadmissioninit.WantsFeatures = &Plugin{}
 
+// NewPlugin 创建一个 ClusterTrustBundleAttest 准入插件实例。
 func NewPlugin() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 	}
 }
 
-// SetUnconditionalAuthorizer sets the plugin's authorizer.
+// SetUnconditionalAuthorizer 注入插件使用的 authorizer。
 func (p *Plugin) SetUnconditionalAuthorizer(authz authorizer.UnconditionalAuthorizer) {
 	p.authz = authz
 }
 
-// InspectFeatureGates implements WantsFeatures.
+// InspectFeatureGates 实现 WantsFeatures，读取 ClusterTrustBundle 特性开关。
 func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	p.enabled = featureGates.Enabled(features.ClusterTrustBundle)
 	p.inspectedFeatureGates = true
 }
 
-// ValidateInitialization checks that the plugin was initialized correctly.
+// ValidateInitialization 检查插件已正确注入 authorizer 并读取了特性开关。
 func (p *Plugin) ValidateInitialization() error {
 	if p.authz == nil {
 		return fmt.Errorf("%s requires an authorizer", PluginName)
@@ -87,8 +91,10 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
+// clusterTrustBundleGroupResource 是本插件关注的 ClusterTrustBundle 资源标识。
 var clusterTrustBundleGroupResource = api.Resource("clustertrustbundles")
 
+// Validate 校验用户是否有权对带 signerName 的 ClusterTrustBundle 执行 attest。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, _ admission.ObjectInterfaces) error {
 	if !p.enabled {
 		return nil
@@ -102,16 +108,14 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, _ admissi
 		return admission.NewForbidden(a, fmt.Errorf("expected type ClusterTrustBundle, got: %T", a.GetOldObject()))
 	}
 
-	// Unlike CSRs, it's OK to validate against the *new* object, because
-	// updates to signer name will be rejected during validation.
+	// 与 CSR 不同，这里可以直接校验新对象：signerName 的修改会被校验环节拒绝。
 
-	// If signer name isn't specified, we don't need to perform the
-	// attest check.
+	// 没有 signerName 就无需做 attest 校验。
 	if newBundle.Spec.SignerName == "" {
 		return nil
 	}
 
-	// Skip the attest check when the semantics of the bundle are unchanged to support storage migration and GC workflows
+	// 对象语义未变时跳过 attest 校验，避免阻塞存储迁移和 GC 流程。
 	if a.GetOperation() == admission.Update && rbac.IsOnlyMutatingGCFields(a.GetObject(), a.GetOldObject(), kapihelper.Semantic) {
 		return nil
 	}

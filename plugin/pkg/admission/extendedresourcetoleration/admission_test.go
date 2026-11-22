@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
+// TestAdmit 验证请求扩展资源的 Pod 会被自动添加对应容忍。
 func TestAdmit(t *testing.T) {
 
 	plugin := admissiontesting.WithReinvocationTesting(t, newExtendedResourceToleration())
@@ -226,7 +227,7 @@ func TestAdmit(t *testing.T) {
 						containerRequestingExtendedResource2,
 					},
 					Tolerations: []core.Toleration{
-						// Note the order, it's sorted by the Key
+						// 注意顺序：按 Key 排序后的结果。
 						{
 							Key:      extendedResource2,
 							Operator: core.TolerationOpExists,
@@ -367,6 +368,7 @@ func TestAdmit(t *testing.T) {
 	}
 }
 
+// TestHandles 验证插件只处理包含扩展资源请求的 Pod。
 func TestHandles(t *testing.T) {
 	plugin := newExtendedResourceToleration()
 	tests := map[admission.Operation]bool{

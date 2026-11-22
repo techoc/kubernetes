@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package serviceaccount enforces all pods having an associated serviceaccount,
-// and all containers mounting the API token for that serviceaccount at a known location
+// Package serviceaccount 强制所有 Pod 关联一个 ServiceAccount，
+// 并要求所有容器在约定位置挂载该 ServiceAccount 的 API 令牌。
 package serviceaccount

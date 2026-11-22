@@ -22,6 +22,7 @@ import (
 	eventratelimitapi "k8s.io/kubernetes/plugin/pkg/admission/eventratelimit/apis/eventratelimit"
 )
 
+// TestValidateConfiguration 验证各类限流配置的合法性检查结果。
 func TestValidateConfiguration(t *testing.T) {
 	cases := []struct {
 		name           string

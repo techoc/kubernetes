@@ -67,6 +67,7 @@ imagePolicy:
   defaultAllow: {{ .DefaultAllow }}
 `
 
+// TestNewFromConfig 验证从各种 kubeconfig 模板加载插件时的成功与失败情况。
 func TestNewFromConfig(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -194,7 +195,7 @@ current-context: default
 	}
 
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.msg, func(t *testing.T) {
 			err := func() error {
 				tempfile, err := os.CreateTemp("", "")
@@ -240,7 +241,7 @@ current-context: default
 					return fmt.Errorf("failed to execute test template: %v", err)
 				}
 
-				// Create a new admission controller
+				// 创建准入控制器。
 				configFile, err := os.Open(pc)
 				if err != nil {
 					return fmt.Errorf("failed to read test config: %v", err)
@@ -260,13 +261,13 @@ current-context: default
 	}
 }
 
-// Service mocks a remote service.
+// Service 模拟远端 webhook 服务。
 type Service interface {
 	Review(*v1alpha1.ImageReview)
 	HTTPStatusCode() int
 }
 
-// NewTestServer wraps a Service as an httptest.Server.
+// NewTestServer 将 Service 包装成 httptest.Server，并按参数配置 TLS。
 func NewTestServer(s Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	var tlsConfig *tls.Config
 	if cert != nil {
@@ -326,17 +327,18 @@ func NewTestServer(s Service, cert, key, caCert []byte) (*httptest.Server, error
 	return server, nil
 }
 
-// A service that can be set to allow all or deny all authorization requests.
+// mockService 是可配置为全部允许或全部拒绝的模拟 webhook 服务。
 type mockService struct {
 	allow          bool
 	statusCode     int
 	outAnnotations map[string]string
 }
 
+// Review 按当前策略填写审核结果，并对特定镜像名做硬编码覆盖。
 func (m *mockService) Review(r *v1alpha1.ImageReview) {
 	r.Status.Allowed = m.allow
 
-	// hardcoded overrides
+	// 对特定镜像名做硬编码覆盖。
 	if r.Spec.Containers[0].Image == "good" {
 		r.Status.Allowed = true
 	}
@@ -353,12 +355,17 @@ func (m *mockService) Review(r *v1alpha1.ImageReview) {
 
 	r.Status.AuditAnnotations = m.outAnnotations
 }
-func (m *mockService) Allow()              { m.allow = true }
-func (m *mockService) Deny()               { m.allow = false }
+
+// Allow 将服务切换为全部允许。
+func (m *mockService) Allow() { m.allow = true }
+
+// Deny 将服务切换为全部拒绝。
+func (m *mockService) Deny() { m.allow = false }
+
+// HTTPStatusCode 返回服务当前配置的 HTTP 状态码。
 func (m *mockService) HTTPStatusCode() int { return m.statusCode }
 
-// newImagePolicyWebhook creates a temporary kubeconfig file from the provided arguments and attempts to load
-// a new newImagePolicyWebhook from it.
+// newImagePolicyWebhook 根据参数生成临时 kubeconfig，并尝试加载一个新的 webhook 插件。
 func newImagePolicyWebhook(callbackURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration, defaultAllow bool) (*Plugin, error) {
 	tempfile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -423,6 +430,7 @@ func newImagePolicyWebhook(callbackURL string, clientCert, clientKey, ca []byte,
 	return wh, err
 }
 
+// TestTLSConfig 验证客户端与服务端各种 TLS 配置组合下的准入结果。
 func TestTLSConfig(t *testing.T) {
 	tests := []struct {
 		test                            string
@@ -461,13 +469,13 @@ func TestTLSConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Plugin does not support insecure configurations.
+			// 插件不支持非安全连接。
 			test:    "Server is using insecure connection",
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.test, func(t *testing.T) {
 			service := new(mockService)
 			service.statusCode = 200
@@ -487,7 +495,7 @@ func TestTLSConfig(t *testing.T) {
 			pod := goodPod(strconv.Itoa(rand.Intn(1000)))
 			attr := admission.NewAttributesRecord(pod, nil, api.Kind("Pod").WithVersion("version"), "namespace", "", api.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, &user.DefaultInfo{})
 
-			// Allow all and see if we get an error.
+			// 先设为全部允许，检查是否出现预期错误。
 			service.Allow()
 
 			err = wh.Validate(context.TODO(), attr, nil)
@@ -519,6 +527,7 @@ func TestTLSConfig(t *testing.T) {
 	}
 }
 
+// webhookCacheTestCase 描述一次 webhook 缓存行为的测试期望。
 type webhookCacheTestCase struct {
 	statusCode         int
 	expectedErr        bool
@@ -526,6 +535,7 @@ type webhookCacheTestCase struct {
 	expectedCached     bool
 }
 
+// testWebhookCacheCases 按顺序执行一组缓存场景并校验每次的鉴权结果。
 func testWebhookCacheCases(t *testing.T, serv *mockService, wh *Plugin, attr admission.Attributes, tests []webhookCacheTestCase) {
 	for _, test := range tests {
 		serv.statusCode = test.statusCode
@@ -549,8 +559,7 @@ func testWebhookCacheCases(t *testing.T, serv *mockService, wh *Plugin, attr adm
 	}
 }
 
-// TestWebhookCache verifies that error responses from the server are not
-// cached, but successful responses are.
+// TestWebhookCache 验证错误响应不入缓存，成功响应会被缓存。
 func TestWebhookCache(t *testing.T) {
 	serv := new(mockService)
 	s, err := NewTestServer(serv, serverCert, serverKey, caCert)
@@ -559,7 +568,7 @@ func TestWebhookCache(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Create an admission controller that caches successful responses.
+	// 创建会缓存成功响应的准入控制器。
 	wh, err := newImagePolicyWebhook(s.URL, clientCert, clientKey, caCert, 200, false)
 	if err != nil {
 		t.Fatal(err)
@@ -580,7 +589,7 @@ func TestWebhookCache(t *testing.T) {
 
 	testWebhookCacheCases(t, serv, wh, attr, tests)
 
-	// For a different request, webhook should be called again.
+	// 换成另一个请求时，缓存不应命中，webhook 会被再次调用。
 	tests = []webhookCacheTestCase{
 		{statusCode: 500, expectedErr: true, expectedAuthorized: false, expectedCached: false},
 		{statusCode: 200, expectedErr: false, expectedAuthorized: true, expectedCached: false},
@@ -591,6 +600,7 @@ func TestWebhookCache(t *testing.T) {
 	testWebhookCacheCases(t, serv, wh, attr, tests)
 }
 
+// TestContainerCombinations 验证不同容器类型与子资源组合下的准入行为。
 func TestContainerCombinations(t *testing.T) {
 	tests := []struct {
 		test                 string
@@ -875,7 +885,7 @@ func TestContainerCombinations(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.test, func(t *testing.T) {
 			service := new(mockService)
 			service.statusCode = 200
@@ -919,17 +929,19 @@ func TestContainerCombinations(t *testing.T) {
 	}
 }
 
-// fakeAttributes decorate kadmission.Attributes. It's used to trace the added annotations.
+// fakeAttributes 装饰 admission.Attributes，用于记录新增的注解。
 type fakeAttributes struct {
 	admission.Attributes
 	annotations map[string]string
 }
 
+// AddAnnotation 记录注解后委托给被包装的 Attributes。
 func (f fakeAttributes) AddAnnotation(k, v string) error {
 	f.annotations[k] = v
 	return f.Attributes.AddAnnotation(k, v)
 }
 
+// TestDefaultAllow 验证后端不可达时 defaultAllow 的 fail-open 行为及注解标记。
 func TestDefaultAllow(t *testing.T) {
 	tests := []struct {
 		test                               string
@@ -969,7 +981,7 @@ func TestDefaultAllow(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.test, func(t *testing.T) {
 			service := new(mockService)
 			service.statusCode = 500
@@ -1031,11 +1043,12 @@ func TestDefaultAllow(t *testing.T) {
 	}
 }
 
-// A service that can record annotations sent to it
+// annotationService 记录 webhook 收到的注解。
 type annotationService struct {
 	annotations map[string]string
 }
 
+// Review 记录请求中的注解并允许该请求。
 func (a *annotationService) Review(r *v1alpha1.ImageReview) {
 	a.annotations = make(map[string]string)
 	for k, v := range r.Spec.Annotations {
@@ -1043,9 +1056,14 @@ func (a *annotationService) Review(r *v1alpha1.ImageReview) {
 	}
 	r.Status.Allowed = true
 }
-func (a *annotationService) HTTPStatusCode() int            { return 200 }
+
+// HTTPStatusCode 返回成功状态码。
+func (a *annotationService) HTTPStatusCode() int { return 200 }
+
+// Annotations 返回最近一次请求中记录到的注解。
 func (a *annotationService) Annotations() map[string]string { return a.annotations }
 
+// TestAnnotationFiltering 验证只有符合前缀规则的注解会被发送给 webhook。
 func TestAnnotationFiltering(t *testing.T) {
 	tests := []struct {
 		test           string
@@ -1077,7 +1095,7 @@ func TestAnnotationFiltering(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.test, func(t *testing.T) {
 			service := new(annotationService)
 
@@ -1112,6 +1130,7 @@ func TestAnnotationFiltering(t *testing.T) {
 	}
 }
 
+// TestReturnedAnnotationAdd 验证 webhook 返回的注解会被加到审计注解中。
 func TestReturnedAnnotationAdd(t *testing.T) {
 	tests := []struct {
 		test                string
@@ -1168,7 +1187,7 @@ func TestReturnedAnnotationAdd(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包包裹，使 defer 在每次循环迭代结束时立即执行。
 		t.Run(tt.test, func(t *testing.T) {
 			service := new(mockService)
 			service.statusCode = 200
@@ -1209,6 +1228,7 @@ func TestReturnedAnnotationAdd(t *testing.T) {
 	}
 }
 
+// goodPod 创建一个仅包含指定镜像的测试 Pod。
 func goodPod(containerID string) *api.Pod {
 	return &api.Pod{
 		Spec: api.PodSpec{

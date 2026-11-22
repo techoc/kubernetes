@@ -36,9 +36,9 @@ func init() {
 	install.Install(scheme)
 }
 
-// LoadConfiguration loads the provided configuration.
+// LoadConfiguration 从给定的 reader 加载配置；未提供配置时返回默认配置。
 func LoadConfiguration(config io.Reader) (*eventratelimitapi.Configuration, error) {
-	// if no config is provided, return a default configuration
+	// 没传配置时用 scheme 填默认值，再转成内部版本，避免下游处理 nil。
 	if config == nil {
 		externalConfig := &eventratelimitv1alpha1.Configuration{}
 		scheme.Default(externalConfig)
@@ -48,7 +48,7 @@ func LoadConfiguration(config io.Reader) (*eventratelimitapi.Configuration, erro
 		}
 		return internalConfig, nil
 	}
-	// we have a config so parse it.
+	// 有配置则按 API 版本解码，解码结果统一为内部配置类型。
 	data, err := io.ReadAll(config)
 	if err != nil {
 		return nil, err

@@ -27,26 +27,25 @@ import (
 )
 
 const (
-	// PluginName is the name of the plugin.
+	// PluginName 是插件的名称。
 	PluginName = "TaintNodesByCondition"
 )
 
-// Register registers a plugin
+// Register 注册插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin(), nil
 	})
 }
 
-// NewPlugin creates a new NodeTaint admission plugin.
-// This plugin identifies requests from nodes
+// NewPlugin 创建一个新的 NodeTaint 准入插件，用于识别来自节点的请求。
 func NewPlugin() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create),
 	}
 }
 
-// Plugin holds state for and implements the admission plugin.
+// Plugin 保存状态并实现该准入插件。
 type Plugin struct {
 	*admission.Handler
 }
@@ -59,9 +58,9 @@ var (
 	nodeResource = api.Resource("nodes")
 )
 
-// Admit is the main function that checks node identity and adds taints as needed.
+// Admit 检查节点身份并在必要时添加污点。
 func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// Our job is just to taint nodes.
+	// 本插件只负责给节点打污点，其他资源和子资源直接放行。
 	if a.GetResource().GroupResource() != nodeResource || a.GetSubresource() != "" {
 		return nil
 	}
@@ -71,15 +70,13 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 		return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 	}
 
-	// Taint node with NotReady taint at creation. This is needed to make sure
-	// that nodes are added to the cluster with the NotReady taint. Otherwise,
-	// a new node may receive the taint with some delay causing pods to be
-	// scheduled on a not-ready node. Node controller will remove the taint
-	// when the node becomes ready.
+	// 创建节点时打上 NotReady 污点，确保节点入群时即为 NotReady。否则新节点可能延迟收到污点，
+	// 导致 Pod 被调度到尚未就绪的节点上；节点就绪后由节点控制器移除该污点。
 	addNotReadyTaint(node)
 	return nil
 }
 
+// addNotReadyTaint 为节点添加 NotReady 污点，已存在则不重复添加。
 func addNotReadyTaint(node *api.Node) {
 	notReadyTaint := api.Taint{
 		Key:    v1.TaintNodeNotReady,
@@ -87,7 +84,7 @@ func addNotReadyTaint(node *api.Node) {
 	}
 	for _, taint := range node.Spec.Taints {
 		if taint.MatchTaint(notReadyTaint) {
-			// the taint already exists.
+			// 污点已存在，无需重复添加。
 			return
 		}
 	}

@@ -41,6 +41,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestAdmission 验证 Pod 更新时按节点声明的特性进行校验的各类场景。
 func TestAdmission(t *testing.T) {
 	nodeWithFeature := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
@@ -202,7 +203,7 @@ func TestAdmission(t *testing.T) {
 			featureGateEnabled: true,
 			componentVersion:   "1.35.0",
 			registeredFeatures: []ndf.Feature{
-				// Feature max version less than component version
+				// 特性最大版本低于组件版本，说明已 GA，不再需要节点声明。
 				createMockFeature(t, "TestFeature", false, "1.34.0"),
 			},
 			expectErr: false,
@@ -277,6 +278,7 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
+// TestNodeAllocatableResourceSliceAdmission 验证 ResourceSlice 中节点可分配资源的映射校验。
 func TestNodeAllocatableResourceSliceAdmission(t *testing.T) {
 	nodeNameWithFeature := "node-with-feature"
 	nodeNameWithFeature2 := "node-with-feature-2"

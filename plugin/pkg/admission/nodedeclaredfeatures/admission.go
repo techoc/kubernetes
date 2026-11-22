@@ -43,18 +43,18 @@ import (
 )
 
 const (
-	// PluginName is the name of this admission controller plugin.
+	// PluginName 是本准入控制器插件的名称。
 	PluginName = "NodeDeclaredFeatureValidator"
 )
 
-// Register registers a plugin.
+// Register 向插件注册表注册本准入插件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewPlugin()
 	})
 }
 
-// Plugin is an admission controller that validates pod updates against node capabilities.
+// Plugin 是依据节点已声明能力校验 Pod 更新的准入控制器。
 type Plugin struct {
 	*admission.Handler
 	nodeLister                             corev1listers.NodeLister
@@ -68,7 +68,7 @@ var _ admission.ValidationInterface = &Plugin{}
 var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Plugin{})
 var _ genericadmissioninitializer.WantsFeatures = &Plugin{}
 
-// New creates a new Plugin admission plugin
+// NewPlugin 创建一个新的 Plugin 准入插件实例。
 func NewPlugin() (*Plugin, error) {
 	ver, err := versionutil.Parse(version.Get().String())
 	if err != nil {
@@ -81,20 +81,20 @@ func NewPlugin() (*Plugin, error) {
 	}, nil
 }
 
-// SetExternalKubeInformerFactory sets the informer factory for the plugin.
+// SetExternalKubeInformerFactory 为插件设置 informer 工厂，并等待 Node informer 完成首次同步。
 func (p *Plugin) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	nodeInformer := f.Core().V1().Nodes()
 	p.nodeLister = f.Core().V1().Nodes().Lister()
 	p.SetReadyFunc(nodeInformer.Informer().HasSynced)
 }
 
-// SetFeatures sets the feature gates for the plugin.
+// InspectFeatureGates 记录插件关心的特性开关状态。
 func (p *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	p.nodeDeclaredFeatureGateEnabled = featureGates.Enabled(features.NodeDeclaredFeatures)
 	p.draNodeAllocatableResourcesGateEnabled = featureGates.Enabled(features.DRANodeAllocatableResources)
 }
 
-// ValidateInitialization ensures that the plugin is properly initialized.
+// ValidateInitialization 确认插件已正确初始化。
 func (p *Plugin) ValidateInitialization() error {
 	if p.nodeLister == nil {
 		return fmt.Errorf("missing node lister for %s", PluginName)
@@ -106,9 +106,9 @@ func (p *Plugin) ValidateInitialization() error {
 	return nil
 }
 
-// Validate is the core of the admission controller logic.
+// Validate 是本准入控制器的核心校验逻辑。
 func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
-	// Ignore if the feature gate is not enabled.
+	// 特性未开启时完全放行，避免影响未启用该特性的集群。
 	if !p.nodeDeclaredFeatureGateEnabled {
 		return nil
 	}
@@ -126,13 +126,13 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
+// validatePod 校验 Pod 更新是否仍与其所在节点声明的能力兼容。
 func (p *Plugin) validatePod(a admission.Attributes) error {
 	if a.GetOperation() != admission.Update {
 		return nil
 	}
 
-	// Only validate updates to the main pod spec (subresource == "")
-	// or the custom "resize" subresource.
+	// 只有主 spec 和 resize 子资源会改变调度/能力诉求，其余子资源无需校验。
 	subresource := a.GetSubresource()
 	if subresource != "" && subresource != "resize" {
 		return nil
@@ -141,7 +141,7 @@ func (p *Plugin) validatePod(a admission.Attributes) error {
 	if !ok {
 		return errors.NewBadRequest(fmt.Sprintf("expected a pod but got a %T", a.GetObject()))
 	}
-	// We only care about pods that are already bound to a node.
+	// 未绑定的 Pod 尚无节点可供比对，等绑定时再校验。
 	if len(pod.Spec.NodeName) == 0 {
 		return nil
 	}
@@ -151,7 +151,7 @@ func (p *Plugin) validatePod(a admission.Attributes) error {
 	}
 
 	if oldPod.Generation == pod.Generation {
-		// since generation is only incremented when the spec changes, we can skip validation if it doesnt.
+		// generation 只在 spec 变化时递增，未变则无需重新校验。
 		return nil
 	}
 
@@ -162,8 +162,9 @@ func (p *Plugin) validatePod(a admission.Attributes) error {
 	return p.validatePodUpdate(pod, oldPod, a)
 }
 
+// validatePodUpdate 推断更新引入的能力诉求，并与目标节点的已声明能力比对。
 func (p *Plugin) validatePodUpdate(pod, oldPod *core.Pod, a admission.Attributes) error {
-	// Convert internal to external pods for the helper library.
+	// 辅助库基于 v1 外部类型工作，先做内部到外部转换。
 	podV1 := &corev1.Pod{}
 	if err := v1.Convert_core_Pod_To_v1_Pod(pod, podV1, nil); err != nil {
 		return errors.NewBadRequest(fmt.Sprintf("failed to convert pod: %v", err))
@@ -178,7 +179,7 @@ func (p *Plugin) validatePodUpdate(pod, oldPod *core.Pod, a admission.Attributes
 	if err != nil {
 		return admission.NewForbidden(a, fmt.Errorf("failed to infer pod capability requirements: %w", err))
 	}
-	// If there are no specific feature requirements for this update, we're done.
+	// 更新未引入任何能力诉求时无需查节点。
 	if reqs.IsEmpty() {
 		return nil
 	}
@@ -200,6 +201,7 @@ func (p *Plugin) validatePodUpdate(pod, oldPod *core.Pod, a admission.Attributes
 	return nil
 }
 
+// validateResourceSlice 校验 ResourceSlice 的创建与更新。
 func (p *Plugin) validateResourceSlice(a admission.Attributes) error {
 	if a.GetOperation() != admission.Create && a.GetOperation() != admission.Update {
 		return nil
@@ -213,18 +215,17 @@ func (p *Plugin) validateResourceSlice(a admission.Attributes) error {
 	return p.validateNodeAllocatableDRA(slice, a)
 }
 
+// validateNodeAllocatableDRA 校验 DRA 设备的节点可分配资源声明。
 func (p *Plugin) validateNodeAllocatableDRA(slice *apisresource.ResourceSlice, a admission.Attributes) error {
-	// cluster with the feature disabled.
+	// 特性关闭时集群不消费此类声明，无需校验。
 	if !p.draNodeAllocatableResourcesGateEnabled {
 		return nil
 	}
 
 	var nodes []*corev1.Node
 	var nodesErr error
-	// listAllNodes  queries and caches the node list once per admission check
-	// to avoid redundant scans when multiple devices in the slice
-	// require selector or multi-node matching. Called only if any of the
-	// device has selector or allNodes enabled.
+	// 单次准入检查只列一次节点并缓存：多个设备可能都要做选择器/多节点匹配，
+	// 重复列举没有意义；仅在确有设备用到选择器或 allNodes 时才调用。
 	listAllNodes := func() ([]*corev1.Node, error) {
 		if nodes != nil || nodesErr != nil {
 			return nodes, nodesErr
@@ -293,6 +294,7 @@ func (p *Plugin) validateNodeAllocatableDRA(slice *apisresource.ResourceSlice, a
 	return nil
 }
 
+// validateNodeAllocatableDRADeclaredFeature 校验单个节点是否声明了 DRA 节点可分配资源特性。
 func (p *Plugin) validateNodeAllocatableDRADeclaredFeature(node *corev1.Node, a admission.Attributes) error {
 	if !slices.Contains(node.Status.DeclaredFeatures, dranodeallocatableresources.DRANodeAllocatableResourcesFeature) {
 		return admission.NewForbidden(a, fmt.Errorf("node %q does not support %s feature", node.Name, dranodeallocatableresources.DRANodeAllocatableResourcesFeature))
@@ -300,6 +302,7 @@ func (p *Plugin) validateNodeAllocatableDRADeclaredFeature(node *corev1.Node, a 
 	return nil
 }
 
+// validateNodeAllocatableDRAMultiNodeDevice 校验多节点设备命中的每个节点都支持该特性。
 func (p *Plugin) validateNodeAllocatableDRAMultiNodeDevice(nodes []*corev1.Node, nodeSelector *core.NodeSelector, allNodes bool, a admission.Attributes) error {
 	var selector *nodeaffinity.NodeSelector
 	if nodeSelector != nil {
