@@ -30,4 +30,8 @@ limitations under the License.
 // The LoggingAlphaOptions and LoggingBetaOptions feature gates control whether
 // these unstable features can get enabled. This can be used to ensure that
 // command invocations do not accidentally rely on unstable features.
+//
+// Package v1 是日志组件的配置 API。单一版本、只做向后兼容的字段追加；
+// 不稳定能力由 LoggingAlphaOptions、LoggingBetaOptions 两个特性门控把关，
+// 避免命令行参数在无意中依赖尚未稳定的行为。
 package v1

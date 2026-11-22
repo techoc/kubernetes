@@ -22,8 +22,11 @@ import (
 	"time"
 )
 
+// RotationStub 是丢弃写入内容的空写入器，仅用于测试。
 type RotationStub struct{}
 
+// OpenStub 与 Open 签名一致，但只打印参数并返回桩写入器，
+// 使 kube-log-runner 的测试可以验证参数传递而不产生真实文件。
 func OpenStub(filePath string, flushInterval time.Duration, maxSize int64, maxAge time.Duration) (io.WriteCloser, error) {
 	w := &RotationStub{}
 	fmt.Printf("filePath: %s, flushInterval: %s, maxSize: %d, maxAge: %s", filePath, flushInterval, maxSize, maxAge)
@@ -31,10 +34,12 @@ func OpenStub(filePath string, flushInterval time.Duration, maxSize int64, maxAg
 }
 
 // write func to satisfy io.writer interface
+// Write 报告写入成功但不保留任何数据。
 func (w *RotationStub) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Close 是空操作，满足 io.WriteCloser。
 func (w *RotationStub) Close() error {
 	return nil
 }

@@ -18,6 +18,8 @@ limitations under the License.
 
 package v1
 
+// setSlogDefaultLogger 在 Go < 1.21 时没有 slog 可用，因此什么都不做。
+// 该文件通过构建标签保证旧版本编译通过。
 func setSlogDefaultLogger() {
 	// Do nothing when build with Go < 1.21.
 }

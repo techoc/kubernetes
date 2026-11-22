@@ -16,6 +16,10 @@ limitations under the License.
 
 // Package datapol contains functions to determine if objects contain sensitive
 // data to e.g. make decisions on whether to log them or not.
+//
+// Package datapol 判断对象是否包含敏感数据（如密钥、token），
+// 用于决定能否安全地将其写入日志。
+// 判定依据是字段上的 datapolicy 标签以及值是否为零值。
 package datapol
 
 import (
@@ -27,6 +31,10 @@ import (
 
 // Verify returns a list of the datatypes contained in the argument that can be
 // considered sensitive w.r.t. to logging
+//
+// Verify 返回参数中命中敏感数据标签的类型名列表；nil 表示未发现敏感数据。
+// 反射遍历任意对象可能 panic（例如未导出字段、非法值），因此这里统一 recover：
+// 日志安全检查不应让业务进程崩溃。
 func Verify(value interface{}) []string {
 	defer func() {
 		if r := recover(); r != nil {
@@ -41,6 +49,8 @@ func Verify(value interface{}) []string {
 	return datatypes(t)
 }
 
+// datatypes 递归遍历值，先看当前类型是否有有效标签，再按 kind 深入。
+// 只检查非零值：零值字段即使带标签也不构成泄露。
 func datatypes(v reflect.Value) []string {
 	if types := byType(v.Type()); len(types) > 0 {
 		// Slices, and maps can be nil or empty, only the nil case is zero
@@ -57,6 +67,7 @@ func datatypes(v reflect.Value) []string {
 	}
 	switch v.Kind() {
 	case reflect.Interface:
+		// 接口需解引用后才能看到真实类型与字段。
 		return datatypes(v.Elem())
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < v.Len(); i++ {
@@ -65,6 +76,7 @@ func datatypes(v reflect.Value) []string {
 			}
 		}
 	case reflect.Map:
+		// 键和值都需要检查；任一命中即视为敏感。
 		mapIter := v.MapRange()
 		for mapIter.Next() {
 			k := mapIter.Key()
@@ -82,6 +94,8 @@ func datatypes(v reflect.Value) []string {
 
 		for i := 0; i < numField; i++ {
 			f := t.Field(i)
+			// 指针字段的价值取决于其指向内容，交给普通递归处理会 panic；
+			// 这里的语义是只对直接内嵌的结构体字段应用 datapolicy。
 			if f.Type.Kind() == reflect.Pointer {
 				continue
 			}

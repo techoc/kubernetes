@@ -21,6 +21,8 @@ import (
 )
 
 // DefBuckets is a wrapper for prometheus.DefBuckets
+//
+// 重新导出而非直接引用，便于调用方只依赖 component-base 的 metrics 包。
 var DefBuckets = prometheus.DefBuckets
 
 // LinearBuckets is a wrapper for prometheus.LinearBuckets.
@@ -44,6 +46,8 @@ func ExponentialBucketsRange(min, max float64, count int) []float64 {
 }
 
 // MergeBuckets merges buckets together
+//
+// 结果从 1 个元素开始，第一个桶固定为 0，作为最低边界；调用方依赖这一前缀。
 func MergeBuckets(buckets ...[]float64) []float64 {
 	result := make([]float64, 1)
 	for _, s := range buckets {

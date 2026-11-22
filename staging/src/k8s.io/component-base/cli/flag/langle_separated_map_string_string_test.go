@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestStringLangleSeparatedMapStringString 验证 String() 输出为逗号分隔的 key<value，
+// 且 nil map 与空 map 都输出空串。
 func TestStringLangleSeparatedMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {
@@ -43,6 +45,8 @@ func TestStringLangleSeparatedMapStringString(t *testing.T) {
 	}
 }
 
+// TestSetLangleSeparatedMapStringString 覆盖 Set 的累积与默认值清除语义：
+// 首次设置丢弃默认值、多次调用累加、容忍空格与尾随逗号，并校验错误信息。
 func TestSetLangleSeparatedMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {
@@ -113,6 +117,7 @@ func TestSetLangleSeparatedMapStringString(t *testing.T) {
 			"no target (nil pointer to map[string]string)"},
 	}
 	for _, c := range cases {
+		// 每个用例复用同一个 nilMap，先复位避免用例间串数据。
 		nilMap = nil
 		t.Run(c.desc, func(t *testing.T) {
 			var err error
@@ -137,6 +142,7 @@ func TestSetLangleSeparatedMapStringString(t *testing.T) {
 	}
 }
 
+// TestEmptyLangleSeparatedMapStringString 验证 Empty() 对 nil 与空 map 返回 true。
 func TestEmptyLangleSeparatedMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {

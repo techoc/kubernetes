@@ -26,6 +26,9 @@ import (
 )
 
 // TestConfigureAndRun tests configureAndRun with various flag inputs.
+//
+// 通过管道捕获 stdout，比较“是否设置了日志文件/分流/flush 等标志”时的输出差异。
+// 注意测试使用 OpenStub，它只打印参数而不真正写文件。
 func TestConfigureAndRun(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -33,16 +36,19 @@ func TestConfigureAndRun(t *testing.T) {
 		outputWanted string
 	}{
 		{
+			// 没有 -log-file 时直接把子进程输出透传到 stdout。
 			name:         "No_log-file_flag",
 			commandLine:  []string{"echo", "hello"},
 			outputWanted: "hello\n",
 		},
 		{
+			// 其他日志参数在未设置 -log-file 时被忽略，行为与上一用例一致。
 			name:         "No_log-file_flag_with_extra_other_flags",
 			commandLine:  []string{"-flush-interval=5s", "-log-file-size=1Gi", "-log-file-age=24h30m", "echo", "hello"},
 			outputWanted: "hello\n",
 		},
 		{
+			// 只设置文件时，Stub 打印默认参数。
 			name:         "log-file_flag_only",
 			commandLine:  []string{"-log-file=test.log", "echo", "hello"},
 			outputWanted: "filePath: test.log, flushInterval: 0s, maxSize: 0, maxAge: 0s",
@@ -58,6 +64,7 @@ func TestConfigureAndRun(t *testing.T) {
 			outputWanted: "filePath: test.log, flushInterval: 1m0s, maxSize: 15000000, maxAge: 0s",
 		},
 		{
+			// 小写 m 被 quantity 解析为 milli，最终截断为 1 字节，用于固定该边界行为。
 			name:         "Invalid_CPU_format_log-file-size_flag",
 			commandLine:  []string{"-log-file=test.log", "-flush-interval=5s", "-log-file-size=125m", "echo", "hello"},
 			outputWanted: "filePath: test.log, flushInterval: 5s, maxSize: 1, maxAge: 0s",
@@ -68,6 +75,7 @@ func TestConfigureAndRun(t *testing.T) {
 			outputWanted: "filePath: test.log, flushInterval: 5s, maxSize: 1073741824, maxAge: 24h30m0s",
 		},
 		{
+			// -also-stdout 让日志既写文件又透传到 stdout，故输出包含 Stub 参数行和子进程输出。
 			name:         "log-file_flag_with_enable-flush_flag_and_log-file-size_flag_and_log-file-age_flag_and_also-stdout_flag",
 			commandLine:  []string{"-log-file=test.log", "-flush-interval=5s", "-log-file-size=1500", "-log-file-age=24h30m", "-also-stdout", "echo", "hello"},
 			outputWanted: "filePath: test.log, flushInterval: 5s, maxSize: 1500, maxAge: 24h30m0shello\n",
@@ -81,6 +89,7 @@ func TestConfigureAndRun(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 每个用例重新初始化 flag 集合，避免前一个用例的标志状态泄漏。
 			resetFlags()
 			err := flag.CommandLine.Parse(tt.commandLine)
 			if err != nil {
@@ -134,6 +143,7 @@ func TestConfigureAndRun(t *testing.T) {
 	}
 }
 
+// TestNegativeConfigureAndRun 验证失败路径：缺少命令、非法或负数的大小/时长。
 func TestNegativeConfigureAndRun(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -182,6 +192,7 @@ func TestNegativeConfigureAndRun(t *testing.T) {
 
 func resetFlags() {
 	// Reinitialize the flag to the default value
+	// 重建 flag.CommandLine 并重新注册，确保默认值恢复初始状态。
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	initFlags()
 }

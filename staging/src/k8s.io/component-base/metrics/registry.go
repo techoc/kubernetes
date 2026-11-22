@@ -44,6 +44,10 @@ var (
 
 // shouldHide is used to check if a specific metric with deprecated version should be hidden
 // according to metrics deprecation lifecycle.
+//
+// 隐藏规则：超过弃用宽限期后隐藏（不注册、不暴露），但仍保留定义以便版本升级时
+// 有机会展示并提醒用户更新监控。宽限期按稳定性级别分别为 STABLE 3 个、BETA 1 个、
+// ALPHA/INTERNAL 0 个 minor 版本。
 func shouldHide(stabilityLevel StabilityLevel, currentVersion *semver.Version, deprecatedVersion *semver.Version) bool {
 	hiddenMinor := deprecatedVersion.Minor + deprecationPeriodMinorVersions(stabilityLevel)
 
@@ -98,6 +102,8 @@ func isDeprecated(currentVersion, deprecatedVersion semver.Version) bool {
 
 // Registerable is an interface for a collector metric which we
 // will register with KubeRegistry.
+//
+// Create 由注册表在注册时调用，决定该指标在当前版本下是可见还是隐藏。
 type Registerable interface {
 	prometheus.Collector
 
@@ -111,6 +117,7 @@ type Registerable interface {
 	FQName() string
 }
 
+// resettable 标记可清零的指标；注册表在 Reset 时统一调用。
 type resettable interface {
 	Reset()
 }
@@ -146,6 +153,9 @@ type KubeRegistry interface {
 // kubeRegistry is a wrapper around a prometheus registry-type object. Upon initialization
 // the kubernetes binary version information is loaded into the registry object, so that
 // automatic behavior can be configured for metric versioning.
+//
+// hiddenCollectors 保存当前版本应隐藏的指标，stableCollectors 保存需要按 StableCollector
+// 语义重新评估的自定义收集器；两者分开是因为重新注册方式不同。
 type kubeRegistry struct {
 	PromRegistry
 	version              semver.Version
@@ -163,6 +173,8 @@ type kubeRegistry struct {
 // already registered Collectors — do not fulfill the consistency and
 // uniqueness criteria described in the documentation of metric.Desc.
 func (kr *kubeRegistry) Register(c Registerable) error {
+	// Create 返回 false 表示该指标在当前版本被隐藏：记录名称，等待
+	// ShowHiddenMetricsForVersion 时再启用。
 	if c.Create(&kr.version) {
 		defer kr.addResettable(c)
 		return kr.PromRegistry.Register(c)
@@ -188,6 +200,7 @@ func (kr *kubeRegistry) Gatherer() prometheus.Gatherer {
 func (kr *kubeRegistry) MustRegister(cs ...Registerable) {
 	metrics := make([]prometheus.Collector, 0, len(cs))
 	for _, c := range cs {
+		// 先筛选可见指标，再一次性交给 prometheus，避免部分注册的状态。
 		if c.Create(&kr.version) {
 			metrics = append(metrics, c)
 			kr.addResettable(c)
@@ -200,6 +213,7 @@ func (kr *kubeRegistry) MustRegister(cs ...Registerable) {
 
 // CustomRegister registers a new custom collector.
 func (kr *kubeRegistry) CustomRegister(c StableCollector) error {
+	// 先登记到 stableCollectors，确保隐藏指标在重新启用时仍能找到该收集器。
 	kr.trackStableCollectors(c)
 	defer kr.addResettable(c)
 	if c.Create(&kr.version, c) {
@@ -229,6 +243,7 @@ func (kr *kubeRegistry) CustomMustRegister(cs ...StableCollector) {
 //
 // Deprecated
 func (kr *kubeRegistry) RawMustRegister(cs ...prometheus.Collector) {
+	// 绕过版本/稳定性检查，直接注册；仍加入 reset 列表以保持 Reset 语义一致。
 	kr.PromRegistry.MustRegister(cs...)
 	for _, c := range cs {
 		kr.addResettable(c)
@@ -240,6 +255,7 @@ func (kr *kubeRegistry) RawMustRegister(cs ...prometheus.Collector) {
 func (kr *kubeRegistry) addResettable(i interface{}) {
 	kr.resetLock.Lock()
 	defer kr.resetLock.Unlock()
+	// 只有实现了 resettable 的收集器才需要登记，其他类型静默跳过。
 	if resettable, ok := i.(resettable); ok {
 		kr.resettables = append(kr.resettables, resettable)
 	}
@@ -284,6 +300,9 @@ func (kr *kubeRegistry) trackStableCollectors(cs ...StableCollector) {
 }
 
 // enableHiddenCollectors will re-register all the hidden collectors.
+//
+// 在 --show-hidden-metrics-for-version 生效路径上调用：先 ClearState 清除隐藏标记，
+// 再通过 MustRegister 重新走可见性判定。
 func (kr *kubeRegistry) enableHiddenCollectors() {
 	if len(kr.hiddenCollectors) == 0 {
 		return
@@ -327,6 +346,7 @@ func (kr *kubeRegistry) enableHiddenStableCollectors() {
 
 // Reset invokes Reset on all metrics that are resettable.
 func (kr *kubeRegistry) Reset() {
+	// RLock 即可：Reset 只遍历切片，登记新指标时由写锁保护追加。
 	kr.resetLock.RLock()
 	defer kr.resetLock.RUnlock()
 	for _, r := range kr.resettables {
@@ -337,6 +357,8 @@ func (kr *kubeRegistry) Reset() {
 // BuildVersion is a helper function that can be easily mocked.
 var BuildVersion = version.Get
 
+// newKubeRegistry 以指定版本创建注册表并登记到全局列表，
+// 供 show-hidden-metrics 配置对所有注册表统一生效。
 func newKubeRegistry(v apimachineryversion.Info) *kubeRegistry {
 	r := &kubeRegistry{
 		PromRegistry:     prometheus.NewRegistry(),
@@ -353,11 +375,14 @@ func newKubeRegistry(v apimachineryversion.Info) *kubeRegistry {
 }
 
 // NewKubeRegistry creates a new vanilla Registry
+//
+// 使用当前二进制的构建版本初始化，指标可见性据此判定。
 func NewKubeRegistry() KubeRegistry {
 	r := newKubeRegistry(BuildVersion())
 	return r
 }
 
+// RegisterMetaMetrics 注册描述注册表自身的元指标（已注册、已禁用、隐藏、基数等）。
 func (r *kubeRegistry) RegisterMetaMetrics() {
 	r.MustRegister(registeredMetricsTotal)
 	r.MustRegister(disabledMetricsTotal)

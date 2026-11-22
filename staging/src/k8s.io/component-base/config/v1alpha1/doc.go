@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 下面的 gengo 标签驱动 make update：生成 deepcopy、本包到内部
+// k8s.io/component-base/config 的 conversion，以及 OpenAPI model。
+// 包级文档（为什么存在 v1alpha1 这一层）见 register.go，避免重复。
+
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/component-base/config
 // +k8s:openapi-gen=true

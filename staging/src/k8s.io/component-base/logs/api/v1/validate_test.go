@@ -28,6 +28,9 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+// TestValidation 验证 LoggingConfiguration 的校验规则：
+// 格式名合法、verbosity 上限、vmodule 的 pattern/verbosity、JSON 格式受
+// LoggingAlphaOptions gate 保护、flushFrequency 必须为正。
 func TestValidation(t *testing.T) {
 	jsonOptionsEnabled := LoggingConfiguration{
 		Format: "text",
@@ -158,12 +161,14 @@ func TestValidation(t *testing.T) {
 		},
 	}
 
+	// 未显式提供 feature gate、path 的用例默认使用推荐配置和全局 gate。
 	for name, test := range testcases {
 		t.Run(name, func(t *testing.T) {
 			featureGate := test.featureGate
 			if featureGate == nil {
 				featureGate = defaultFeatureGate
 			}
+			// 先填充推荐默认值，确保只校验测试真正想覆盖的字段。
 			SetRecommendedLoggingConfiguration(&test.config)
 			err := Validate(&test.config, featureGate, test.path)
 			if len(err) == 0 {

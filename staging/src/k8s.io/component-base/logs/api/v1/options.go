@@ -44,6 +44,7 @@ import (
 const (
 	// LogFlushFreqDefault is the default for the corresponding command line
 	// parameter.
+	// 5 秒是在日志时效性与 I/O 开销之间的折中，也是历史默认值。
 	LogFlushFreqDefault = 5 * time.Second
 )
 
@@ -67,11 +68,13 @@ func NewLoggingConfiguration() *LoggingConfiguration {
 // Binaries and unit tests can override that behavior.
 var ReapplyHandling = ReapplyHandlingError
 
+// ReapplyHandlingType 控制重复调用 ValidateAndApply 时的策略。
 type ReapplyHandlingType int
 
 const (
 	// ReapplyHandlingError is the default: calling ValidateAndApply or
 	// ValidateAndApplyWithOptions again returns an error.
+	// 默认拒绝重复应用：日志配置涉及全局 logger，热切换可能导致数据竞争。
 	ReapplyHandlingError ReapplyHandlingType = iota
 	// ReapplyHandlingIgnoreUnchanged silently ignores any additional calls of
 	// ValidateAndApply or ValidateAndApplyWithOptions if the configuration
@@ -109,6 +112,7 @@ func ValidateAndApplyWithOptions(c *LoggingConfiguration, options *LoggingOption
 
 // LoggingOptions can be used with ValidateAndApplyWithOptions to override
 // certain global defaults.
+// 通过注入 writer 让测试能够捕获输出，而不去重定向进程的 stdout/stderr。
 type LoggingOptions struct {
 	// ErrorStream can be used to override the os.Stderr default.
 	ErrorStream io.Writer
@@ -120,10 +124,12 @@ type LoggingOptions struct {
 // ValidateAndApplyAsField is a variant of ValidateAndApply that should be used
 // when the LoggingConfiguration is embedded in some larger configuration
 // structure.
+// fldPath 用于把错误定位到外层配置结构中的具体字段。
 func ValidateAndApplyAsField(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) error {
 	return validateAndApply(c, nil, featureGate, fldPath)
 }
 
+// validateAndApply 先做完整校验，全部通过后才应用，避免部分配置生效。
 func validateAndApply(c *LoggingConfiguration, options *LoggingOptions, featureGate featuregate.FeatureGate, fldPath *field.Path) error {
 	errs := Validate(c, featureGate, fldPath)
 	if len(errs) > 0 {
@@ -144,6 +150,7 @@ func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldP
 	if c.Format != DefaultLogFormat {
 		// WordSepNormalizeFunc is just a guess. Commands should use it,
 		// but we cannot know for sure.
+		// 非 text 格式会忽略 -v 之外的 klog flag，这里把“用户设置了却不会生效”的 flag 报错。
 		allFlags := unsupportedLoggingFlags(cliflag.WordSepNormalizeFunc)
 		for _, f := range allFlags {
 			if f.DefValue != f.Value.String() {
@@ -155,6 +162,7 @@ func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldP
 	if err != nil {
 		errs = append(errs, field.Invalid(fldPath.Child("format"), c.Format, "Unsupported log format"))
 	} else if format != nil {
+		// 非稳定格式受 feature gate 控制；未提供 gate 时使用该格式定义中的默认值。
 		if format.feature != LoggingStableOptions {
 			enabled := featureGates()[format.feature][len(featureGates()[format.feature])-1].Default
 			if featureGate != nil {
@@ -171,10 +179,12 @@ func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldP
 		errs = append(errs, field.Invalid(fldPath.Child("verbosity"), c.Verbosity, fmt.Sprintf("Must be <= %d", math.MaxInt32)))
 	}
 	vmoduleFldPath := fldPath.Child("vmodule")
+	// vmodule 依赖 text 格式的源代码位置信息；其它格式下无法按文件过滤。
 	if len(c.VModule) > 0 && c.Format != "" && c.Format != "text" {
 		errs = append(errs, field.Forbidden(vmoduleFldPath, "Only supported for text log format"))
 	}
 	for i, item := range c.VModule {
+		// 空 pattern 会匹配所有文件，等于全局提级，视为配置错误。
 		if item.FilePattern == "" {
 			errs = append(errs, field.Required(vmoduleFldPath.Index(i), "File pattern must not be empty"))
 		}
@@ -192,11 +202,13 @@ func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldP
 
 func validateFormatOptions(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
+	// text 与 JSON 的路由选项相同，但命名空间不同，错误路径需分别定位。
 	errs = append(errs, validateTextOptions(c, featureGate, fldPath.Child("text"))...)
 	errs = append(errs, validateJSONOptions(c, featureGate, fldPath.Child("json"))...)
 	return errs
 }
 
+// validateTextOptions 校验 text 格式的 alpha 选项是否被 gate 允许。
 func validateTextOptions(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if gate := LoggingAlphaOptions; c.Options.Text.SplitStream && !featureEnabled(featureGate, gate) {
@@ -208,6 +220,7 @@ func validateTextOptions(c *LoggingConfiguration, featureGate featuregate.Featur
 	return errs
 }
 
+// validateJSONOptions 校验 JSON 格式的 alpha 选项是否被 gate 允许。
 func validateJSONOptions(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if gate := LoggingAlphaOptions; c.Options.JSON.SplitStream && !featureEnabled(featureGate, gate) {
@@ -219,6 +232,8 @@ func validateJSONOptions(c *LoggingConfiguration, featureGate featuregate.Featur
 	return errs
 }
 
+// featureEnabled 在 featureGate 为 nil 时返回 false：
+// 未提供 gate 的调用方（例如只做静态校验的工具）应使用默认关闭值。
 func featureEnabled(featureGate featuregate.FeatureGate, feature featuregate.Feature) bool {
 	enabled := false
 	if featureGate != nil {
@@ -227,6 +242,8 @@ func featureEnabled(featureGate featuregate.FeatureGate, feature featuregate.Fea
 	return enabled
 }
 
+// apply 把配置落地到 klog/全局 logger。该函数修改进程级状态，
+// 因此必须在启动早期、没有其它 goroutine 调用日志函数时执行。
 func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate featuregate.FeatureGate) error {
 	p := &parameters{
 		C:                        c,
@@ -237,6 +254,7 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 		p.ContextualLoggingEnabled = featureGate.Enabled(ContextualLogging)
 	}
 
+	// 用原子指针记录已应用参数，以便按 ReapplyHandling 策略拒绝或忽略重复应用。
 	oldP := applyParameters.Load()
 	if oldP != nil {
 		switch ReapplyHandling {
@@ -254,10 +272,12 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 	applyParameters.Store(p)
 
 	// if log format not exists, use nil loggr
+	// 未注册的格式（理论上已被 Validate 拦截）退回 klog 默认 logger。
 	format, _ := logRegistry.get(c.Format)
 	if format.factory == nil {
 		klog.ClearLogger()
 	} else {
+		// 未注入 options 时使用进程真实的 stdout/stderr。
 		if options == nil {
 			options = &LoggingOptions{
 				ErrorStream: os.Stderr,
@@ -266,6 +286,7 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 		}
 		log, control := format.factory.Create(*c, *options)
 		if control.SetVerbosityLevel != nil {
+			// 注册回调，让 GlogSetter 等动态调级入口能同步到新 logger。
 			setverbositylevel.Mutex.Lock()
 			defer setverbositylevel.Mutex.Unlock()
 			setverbositylevel.Callbacks = append(setverbositylevel.Callbacks, control.SetVerbosityLevel)
@@ -274,11 +295,13 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 			klog.ContextualLogger(p.ContextualLoggingEnabled),
 			klog.FlushLogger(control.Flush),
 		}
+		// textlogger 支持 klog 的缓冲写入路径，保留后可减少格式化开销。
 		if writer, ok := log.GetSink().(textlogger.KlogBufferWriter); ok {
 			opts = append(opts, klog.WriteKlogBuffer(writer.WriteKlogBuffer))
 		}
 		klog.SetLoggerWithOptions(log, opts...)
 	}
+	// 同步 verbosity 与 vmodule 到 klog flag 状态，使运行期反射读取一致。
 	if err := loggingFlags.Lookup("v").Value.Set(VerbosityLevelPflag(&c.Verbosity).String()); err != nil {
 		return fmt.Errorf("internal error while setting klog verbosity: %v", err)
 	}
@@ -286,11 +309,13 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 		return fmt.Errorf("internal error while setting klog vmodule: %v", err)
 	}
 	setSlogDefaultLogger()
+	// 用配置的间隔重启 flush daemon；InitLogs 可能已用默认间隔启动过一次。
 	klog.StartFlushDaemon(c.FlushFrequency.Duration.Duration)
 	klog.EnableContextualLogging(p.ContextualLoggingEnabled)
 	return nil
 }
 
+// parameters 是已应用配置的快照，用于判断是否重复应用。
 type parameters struct {
 	C                        *LoggingConfiguration
 	Options                  *LoggingOptions
@@ -310,6 +335,7 @@ func ResetForTest(featureGate featuregate.FeatureGate) error {
 	}
 
 	// This makes it possible to call apply again without triggering errors.
+	// 先清空快照，再应用默认配置，否则会触发“重复应用”错误。
 	applyParameters.Store(nil)
 
 	// Restore defaults. Shouldn't fail, but check anyway.
@@ -345,6 +371,8 @@ type flagSet interface {
 }
 
 // goFlagSet implements flagSet for a stdlib flag.FlagSet.
+// goFlagSet 把标准库 FlagSet 适配为 flagSet；
+// 标准库不支持 shorthand，VarP 退化为 Var。
 type goFlagSet struct {
 	*flag.FlagSet
 }
@@ -364,6 +392,7 @@ func addFlags(c *LoggingConfiguration, fs flagSet) {
 	formats := logRegistry.list()
 	fs.StringVar(&c.Format, "logging-format", c.Format, fmt.Sprintf("Sets the log format. Permitted formats: %s.", formats))
 	// No new log formats should be added after generation is of flag options
+	// 冻结注册表，确保 --help 展示的格式集合与后续实际可选集合一致。
 	logRegistry.freeze()
 
 	fs.DurationVar(&c.FlushFrequency.Duration.Duration, LogFlushFreqFlagName, c.FlushFrequency.Duration.Duration, "Maximum number of seconds between log flushes")
@@ -375,6 +404,7 @@ func addFlags(c *LoggingConfiguration, fs flagSet) {
 
 	// JSON options. We only register them if "json" is a valid format. The
 	// config file API however always has them.
+	// JSON 格式由可选包注册，未导入时不要暴露无效 flag。
 	if _, err := logRegistry.get("json"); err == nil {
 		fs.BoolVar(&c.Options.JSON.SplitStream, "log-json-split-stream", false, "[Alpha] In JSON format, write error messages to stderr and info messages to stdout. The default is to write a single stream to stdout. Enable the LoggingAlphaOptions feature gate to use this.")
 		fs.Var(&c.Options.JSON.InfoBufferSize, "log-json-info-buffer-size", "[Alpha] In JSON format with split output streams, the info messages can be buffered for a while to increase performance. The default value of zero bytes disables buffering. The size can be specified as number of bytes (512), multiples of 1000 (1K), multiples of 1024 (2Ki), or powers of those (3M, 4G, 5Mi, 6Gi). Enable the LoggingAlphaOptions feature gate to use this.")
@@ -388,6 +418,7 @@ func addFlags(c *LoggingConfiguration, fs flagSet) {
 // may set custom defaults and then should call this function to add the
 // global defaults.
 func SetRecommendedLoggingConfiguration(c *LoggingConfiguration) {
+	// 只在未设置时填充，允许调用方先设置自定义默认值。
 	if c.Format == "" {
 		c.Format = "text"
 	}
@@ -402,6 +433,7 @@ func SetRecommendedLoggingConfiguration(c *LoggingConfiguration) {
 func setRecommendedOutputRouting(o *OutputRoutingOptions) {
 	var empty resource.QuantityValue
 	if o.InfoBufferSize == empty {
+		// 显式构造 0 而非保留零值，确保 JSON 序列化为 "0" 且反射比较一致。
 		o.InfoBufferSize = resource.QuantityValue{
 			// This is similar, but not quite the same as a default
 			// constructed instance.
@@ -418,6 +450,7 @@ func setRecommendedOutputRouting(o *OutputRoutingOptions) {
 var loggingFlags pflag.FlagSet
 
 func init() {
+	// 捕获 klog flag 的默认值，供 Validate 判断用户是否修改了非 text 格式不支持的选项。
 	var fs flag.FlagSet
 	klogflags.Init(&fs)
 	loggingFlags.AddGoFlagSet(&fs)

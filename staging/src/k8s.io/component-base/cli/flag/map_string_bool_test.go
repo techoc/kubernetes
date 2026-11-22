@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestStringMapStringBool 验证 MapStringBool 的 String() 输出：
+// nil 与空 map 都渲染为空串，多项按排序后的 "k=true" 连接。
 func TestStringMapStringBool(t *testing.T) {
 	var nilMap map[string]bool
 	cases := []struct {
@@ -43,6 +45,8 @@ func TestStringMapStringBool(t *testing.T) {
 	}
 }
 
+// TestSetMapStringBool 验证 Set 的解析语义：空输入清空、重复 Set 累加、
+// 非法布尔值和缺失 "=" 会返回可定位的错误。
 func TestSetMapStringBool(t *testing.T) {
 	var nilMap map[string]bool
 	cases := []struct {
@@ -52,21 +56,21 @@ func TestSetMapStringBool(t *testing.T) {
 		expect *MapStringBool
 		err    string
 	}{
-		// we initialize the map with a default key that should be cleared by Set
+		// 用默认键初始化 map，Set 应将其清除。
 		{"clears defaults", []string{""},
 			NewMapStringBool(&map[string]bool{"default": true}),
 			&MapStringBool{
 				initialized: true,
 				Map:         &map[string]bool{},
 			}, ""},
-		// make sure we still allocate for "initialized" maps where Map was initially set to a nil map
+		// 已初始化的对象即使底层 map 为 nil，也要分配后再写入。
 		{"allocates map if currently nil", []string{""},
 			&MapStringBool{initialized: true, Map: &nilMap},
 			&MapStringBool{
 				initialized: true,
 				Map:         &map[string]bool{},
 			}, ""},
-		// for most cases, we just reuse nilMap, which should be allocated by Set, and is reset before each test case
+		// 大多数用例复用 nilMap，由 Set 分配，并在每个用例前重置。
 		{"empty", []string{""},
 			NewMapStringBool(&nilMap),
 			&MapStringBool{
@@ -85,12 +89,14 @@ func TestSetMapStringBool(t *testing.T) {
 				initialized: true,
 				Map:         &map[string]bool{"one": true, "two": false},
 			}, ""},
+		// 多次 Set 调用应累加而不是覆盖。
 		{"two keys, multiple Set invocations", []string{"one=true", "two=false"},
 			NewMapStringBool(&nilMap),
 			&MapStringBool{
 				initialized: true,
 				Map:         &map[string]bool{"one": true, "two": false},
 			}, ""},
+		// 逗号后的空格应被裁剪掉。
 		{"two keys with space", []string{"one=true, two=false"},
 			NewMapStringBool(&nilMap),
 			&MapStringBool{
@@ -120,6 +126,7 @@ func TestSetMapStringBool(t *testing.T) {
 		nilMap = nil
 		t.Run(c.desc, func(t *testing.T) {
 			var err error
+			// 依次应用所有输入，遇到错误即停止。
 			for _, val := range c.vals {
 				err = c.start.Set(val)
 				if err != nil {
@@ -141,6 +148,7 @@ func TestSetMapStringBool(t *testing.T) {
 	}
 }
 
+// TestEmptyMapStringBool 验证 Empty()：nil 或空 map 视为空，任意键存在即非空。
 func TestEmptyMapStringBool(t *testing.T) {
 	var nilMap map[string]bool
 	cases := []struct {

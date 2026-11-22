@@ -30,6 +30,7 @@ func VModuleConfigurationPflag(value *VModuleConfiguration) pflag.Value {
 	return vmoduleConfigurationPFlag{value}
 }
 
+// vmoduleConfigurationPFlag 把 -vmodule 的 "pattern=N,..." 语法适配到 pflag。
 type vmoduleConfigurationPFlag struct {
 	value *VModuleConfiguration
 }
@@ -61,6 +62,7 @@ func (wrapper vmoduleConfigurationPFlag) Set(value string) error {
 		}
 		pattern := patLev[0]
 		// 31 instead of 32 to ensure that it also fits into int32.
+		// 与 klog 保持一致，避免超出 int32 范围导致下游截断。
 		v, err := strconv.ParseUint(patLev[1], 10, 31)
 		if err != nil {
 			return fmt.Errorf("parsing verbosity in %q: %v", pat, err)
@@ -70,6 +72,7 @@ func (wrapper vmoduleConfigurationPFlag) Set(value string) error {
 	return nil
 }
 
+// Type 返回 pflag 展示用的类型名。
 func (wrapper vmoduleConfigurationPFlag) Type() string {
 	return "pattern=N,..."
 }
@@ -80,10 +83,12 @@ func VerbosityLevelPflag(value *VerbosityLevel) pflag.Value {
 	return verbosityLevelPflag{value}
 }
 
+// verbosityLevelPflag 把单个 verbosity 等级适配到 pflag。
 type verbosityLevelPflag struct {
 	value *VerbosityLevel
 }
 
+// String 输出十进制等级；nil 视为 0，避免 flag 帮助信息 panic。
 func (wrapper verbosityLevelPflag) String() string {
 	if wrapper.value == nil {
 		return "0"
@@ -91,6 +96,7 @@ func (wrapper verbosityLevelPflag) String() string {
 	return strconv.FormatInt(int64(*wrapper.value), 10)
 }
 
+// Get 实现 pflag.Getter，供需要反射读取标志值的调用方使用。
 func (wrapper verbosityLevelPflag) Get() interface{} {
 	if wrapper.value == nil {
 		return VerbosityLevel(0)
@@ -98,6 +104,7 @@ func (wrapper verbosityLevelPflag) Get() interface{} {
 	return *wrapper.value
 }
 
+// Set 解析十进制等级；限制为 31 位以与 klog 的 int32 语义兼容。
 func (wrapper verbosityLevelPflag) Set(value string) error {
 	// Limited to int32 for compatibility with klog.
 	v, err := strconv.ParseUint(value, 10, 31)
@@ -108,6 +115,7 @@ func (wrapper verbosityLevelPflag) Set(value string) error {
 	return nil
 }
 
+// Type 返回 pflag 展示用的类型名。
 func (wrapper verbosityLevelPflag) Type() string {
 	return "Level"
 }

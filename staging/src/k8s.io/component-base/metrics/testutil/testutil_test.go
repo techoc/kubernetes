@@ -23,6 +23,8 @@ import (
 	"k8s.io/component-base/metrics"
 )
 
+// TestNewFakeKubeRegistry 验证 fake registry 按模拟版本过滤指标：
+// 正常指标输出、已弃用的 BETA 指标带弃用信息、低于弃用版本的隐藏指标不输出。
 func TestNewFakeKubeRegistry(t *testing.T) {
 	registryVersion := "1.18.0"
 	counter := metrics.NewCounter(
@@ -80,6 +82,7 @@ func TestNewFakeKubeRegistry(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个用例使用独立的 registry，避免指标名冲突。
 			registry := NewFakeKubeRegistry(registryVersion)
 			registry.MustRegister(tc.metric)
 			if err := GatherAndCompare(registry, strings.NewReader(tc.expected), tc.metric.FQName()); err != nil {

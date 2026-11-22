@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package version 汇总 Kubernetes 二进制的版本信息。
+//
+// 大部分字段由构建系统通过 -ldflags -X 注入，源码中的值只是占位；
+// dynamicGitVersion 是唯一可在运行期被 --version=vX.Y.Z 覆盖的字段。
 package version
 
 import (
@@ -27,9 +31,16 @@ import (
 // what code a binary was built from.
 // The caller should use BinaryMajor and BinaryMinor to determine
 // the binary version. The Major and Minor fields are still set by git version for backwards compatibility.
+//
+// Get 返回整个代码库的版本信息，供调用方判断二进制是由哪份代码构建的。
+// 判断二进制版本应使用 BinaryMajor/BinaryMinor；Major/Minor 仍沿用 git
+// 版本中的值，仅为兼容旧调用方。
 func Get() apimachineryversion.Info {
 	// These variables typically come from -ldflags settings and in
 	// their absence fallback to the settings in ./base.go
+	//
+	// 这些变量通常来自 -ldflags -X；未注入时回退到 base.go 中的占位值。
+	// dynamicGitVersion 用 atomic.Value 存储，因为它可能被 --version 标志改写。
 	return apimachineryversion.Info{
 		Major:        gitMajor,
 		Minor:        gitMinor,

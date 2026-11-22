@@ -29,6 +29,8 @@ var (
 	testedMetrics = []string{"kubernetes_feature_enabled"}
 )
 
+// TestObserveHealthcheck 验证 RecordFeatureInfo 输出的 gauge 值：
+// enabled 映射为 1、disabled 映射为 0，且阶段标签原样保留。
 func TestObserveHealthcheck(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetFeatureInfoMetric()
@@ -66,6 +68,7 @@ func TestObserveHealthcheck(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
+			// 每个子用例结束后清空指标，避免上一个用例的序列残留。
 			defer ResetFeatureInfoMetric()
 			RecordFeatureInfo(context.Background(), test.name, test.stage, test.enabled)
 

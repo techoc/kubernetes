@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供配置类型在不同 API 版本间往返的通用测试辅助。
+// 它基于 scheme 中已注册的全部版本，自动为 testdata 下的用例生成交叉编解码测试。
 package testing
 
 import (
@@ -29,15 +31,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// RoundTripTest runs roundtrip tests for given scheme
+// RoundTripTest 为给定 scheme 运行往返测试，测试数据来自 testdata。
 func RoundTripTest(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) {
 	tc := GetRoundtripTestCases(t, scheme, codecs)
 	RunTestsOnYAMLData(t, tc)
 }
 
-// GetRoundtripTestCases returns the testcases for roundtrip testing for given scheme
+// GetRoundtripTestCases 为给定 scheme 生成往返测试用例。
+// 对每个 GroupKind 的任意输入/输出版本组合，从 testdata/<Kind>/roundtrip/<case>
+// 读取对应的 YAML 作为输入与期望输出。
 func GetRoundtripTestCases(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) []TestCase {
 	cases := []TestCase{}
+	// 收集每个 GroupKind 已注册的外部版本（内部版本不参与编解码）。
 	versionsForKind := map[schema.GroupKind][]string{}
 	for gvk := range scheme.AllKnownTypes() {
 		if gvk.Version != runtime.APIVersionInternal {
@@ -75,35 +80,35 @@ func GetRoundtripTestCases(t *testing.T, scheme *runtime.Scheme, codecs serializ
 	return cases
 }
 
+// roundTrip 执行单个往返用例：解码输入、编码、再解码，并逐项比对。
 func roundTrip(t *testing.T, tc TestCase) {
 	object := decodeYAML(t, tc.in, tc.codec)
 
-	// original object of internal type
+	// original 保存内部类型对象的原始形态，用于检测编码是否意外修改了对象。
 	original := object
 
-	// encode (serialize) the object using the provided codec
+	// 用给定 codec 序列化对象。
 	data, err := runtime.Encode(tc.codec, object)
 	if err != nil {
 		t.Fatalf("failed to encode object: %v", err)
 	}
 
-	// ensure that the encoding should not alter the object
+	// 编码不应修改原对象（例如填充默认值或重排字段）。
 	if !apiequality.Semantic.DeepEqual(original, object) {
 		t.Fatalf("encode altered the object, diff (- want, + got): \n%v", cmp.Diff(original, object))
 	}
 
-	// decode (deserialize) the encoded data back into an object
+	// 把编码结果解码回对象。
 	obj2, err := runtime.Decode(tc.codec, data)
 	if err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
 
-	// ensure that the object produced from decoding the encoded data is equal
-	// to the original object
+	// 解码得到的对象必须与原始对象语义相等。
 	if !apiequality.Semantic.DeepEqual(original, obj2) {
 		t.Fatalf("object was not the same after roundtrip, diff (- want, + got):\n%v", cmp.Diff(object, obj2))
 	}
 
-	// match with the input file, checks if they're the same after roundtrip
+	// 与输入文件对比，确认往返后的输出与期望一致。
 	matchOutputFile(t, data, tc.out)
 }

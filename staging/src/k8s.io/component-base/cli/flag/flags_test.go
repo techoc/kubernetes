@@ -26,6 +26,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// FakeLogger 实现 logr.LogSink，把 Info 与 Error 分别写入缓冲区，
+// 以便断言归一化函数是否产生了预期日志。
 type FakeLogger struct {
 	logr.Logger
 	infoBuffer  bytes.Buffer
@@ -45,6 +47,8 @@ func (logger *FakeLogger) WithName(name string) logr.LogSink                    
 
 var _ logr.LogSink = &FakeLogger{}
 
+// TestWordSepNormalizeFunc 验证 WordSepNormalizeFunc 只做下划线到短横线的替换，
+// 且这是静默行为（不产生任何日志）。
 func TestWordSepNormalizeFunc(t *testing.T) {
 	cases := []struct {
 		flagName         string
@@ -59,6 +63,7 @@ func TestWordSepNormalizeFunc(t *testing.T) {
 			expectedFlagName: "foo-bar",
 		},
 		{
+			// 下划线被统一成短横线，保证 flag 风格一致。
 			flagName:         "foo_bar",
 			expectedFlagName: "foo-bar",
 		},
@@ -75,6 +80,8 @@ func TestWordSepNormalizeFunc(t *testing.T) {
 	}
 }
 
+// TestWarnWordSepNormalizeFunc 验证带告警的版本：仅当确实发生
+// 下划线替换时才输出一条提示，正常名称保持安静。
 func TestWarnWordSepNormalizeFunc(t *testing.T) {
 	cases := []struct {
 		flagName         string
@@ -92,6 +99,7 @@ func TestWarnWordSepNormalizeFunc(t *testing.T) {
 			expectedWarning:  "",
 		},
 		{
+			// 告警文本属于对外可见输出，改动会破坏用户脚本的匹配。
 			flagName:         "foo_bar",
 			expectedFlagName: "foo-bar",
 			expectedWarning:  "using an underscore in a flag name is not supported. foo_bar has been converted to foo-bar.",

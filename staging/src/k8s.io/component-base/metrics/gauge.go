@@ -28,6 +28,7 @@ import (
 
 // Gauge is our internal representation for our wrapping struct around prometheus
 // gauges. kubeGauge implements both kubeCollector and KubeGauge.
+// 未注册前底层是一个共享的 no-op，注册时才替换为真正的 prometheus.Gauge。
 type Gauge struct {
 	GaugeMetric
 	*GaugeOpts
@@ -43,6 +44,7 @@ var _ kubeCollector = &Gauge{}
 // However, the object returned will not measure anything unless the collector is first
 // registered, since the metric is lazily instantiated.
 func NewGauge(opts *GaugeOpts) *Gauge {
+	// 空 stability level 默认为 ALPHA，避免未声明稳定性时被当作 STABLE。
 	opts.StabilityLevel.setDefaults()
 
 	kc := &Gauge{
@@ -68,6 +70,7 @@ func (g *Gauge) DeprecatedVersion() *semver.Version {
 // initializeMetric invocation creates the actual underlying Gauge. Until this method is called
 // the underlying gauge is a no-op.
 func (g *Gauge) initializeMetric() {
+	// 稳定性与弃用信息通过 Help 前缀暴露，故必须在构造 prometheus 描述符前附加。
 	g.GaugeOpts.annotateStabilityLevel()
 	// this actually creates the underlying prometheus gauge.
 	g.setPrometheusGauge(prometheus.NewGauge(g.GaugeOpts.toPromGaugeOpts()))
@@ -76,6 +79,7 @@ func (g *Gauge) initializeMetric() {
 // initializeDeprecatedMetric invocation creates the actual (but deprecated) Gauge. Until this method
 // is called the underlying gauge is a no-op.
 func (g *Gauge) initializeDeprecatedMetric() {
+	// 先标记弃用，使 Help 带上弃用版本，再按普通路径创建。
 	g.GaugeOpts.markDeprecated()
 	g.initializeMetric()
 }
@@ -103,11 +107,13 @@ var _ kubeCollector = &GaugeVec{}
 // registered, since the metric is lazily instantiated, and only members extracted after
 // registration will actually measure anything.
 func NewGaugeVec(opts *GaugeOpts, labels []string) *GaugeVec {
+	// 与 Gauge 相同，未声明稳定性时按 ALPHA 处理。
 	opts.StabilityLevel.setDefaults()
 
 	fqName := BuildFQName(opts.Namespace, opts.Subsystem, opts.Name)
 
 	cv := &GaugeVec{
+		// 初始用 noop 占位；注册前取子指标不会创建永久驻留的内存对象。
 		GaugeVec:       noopGaugeVec,
 		GaugeOpts:      opts,
 		originalLabels: labels,
@@ -138,6 +144,7 @@ func (v *GaugeVec) initializeDeprecatedMetric() {
 
 func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	if !v.IsCreated() {
+		// 隐藏指标返回 noop 且无错误；未注册返回 noop + ErrIsNotRegistered。
 		if v.IsHidden() {
 			return noop, nil
 		}
@@ -145,6 +152,7 @@ func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	}
 
 	// Initialize label allow lists if not already initialized
+	// 允许列表可能在指标创建之后才被加载，因此用 Once 延迟绑定。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -154,6 +162,7 @@ func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	})
 
 	// Constrain label values to allowed values
+	// 把不在允许列表中的标签值替换为 "unexpected"，以限制指标基数。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
@@ -161,6 +170,7 @@ func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	return v.GetMetricWithLabelValues(lvs...)
 }
 
+// DeleteLabelValuesChecked 仅在指标已创建时才能删除；未注册时按“无可删”处理。
 func (v *GaugeVec) DeleteLabelValuesChecked(lvs ...string) (bool, error) {
 	if !v.IsCreated() {
 		if v.IsHidden() {
@@ -189,12 +199,14 @@ func (v *GaugeVec) DeleteLabelValuesChecked(lvs ...string) (bool, error) {
 // has been registered to a metrics registry.
 func (v *GaugeVec) WithLabelValues(lvs ...string) GaugeMetric {
 	ans, err := v.WithLabelValuesChecked(lvs...)
+	// 未注册不算错误（返回 noop），其它错误（如标签数量不符）则 panic。
 	if err == nil || ErrIsNotRegistered(err) {
 		return ans
 	}
 	panic(err)
 }
 
+// DeleteLabelValues 删除指定标签值的子指标；未注册时返回 false。
 func (v *GaugeVec) DeleteLabelValues(lvs ...string) bool {
 	ans, err := v.DeleteLabelValuesChecked(lvs...)
 	if err == nil || ErrIsNotRegistered(err) {
@@ -203,6 +215,7 @@ func (v *GaugeVec) DeleteLabelValues(lvs ...string) bool {
 	panic(err)
 }
 
+// WithChecked 与 WithLabelValuesChecked 类似，但使用完整的标签 map。
 func (v *GaugeVec) WithChecked(labels map[string]string) (GaugeMetric, error) {
 	if !v.IsCreated() {
 		if v.IsHidden() {
@@ -273,6 +286,7 @@ func (v *GaugeVec) ResetLabelAllowLists() {
 func newGaugeFunc(opts *GaugeOpts, function func() float64, v semver.Version) GaugeFunc {
 	g := NewGauge(opts)
 
+	// 隐藏的 GaugeFunc 返回 nil，调用方据此避免注册一个永远不产出的 collector。
 	if !g.Create(&v) {
 		return nil
 	}
@@ -305,6 +319,7 @@ func (v *GaugeVec) InterfaceWithContext(ctx context.Context) GaugeVecMetric {
 }
 
 // GaugeVecWithContext is the wrapper of GaugeVec with context.
+// 目前 context 仅被保存而不参与指标操作，保留它是为了 API 一致性。
 type GaugeVecWithContext struct {
 	*GaugeVec
 	ctx context.Context

@@ -34,13 +34,17 @@ import (
 )
 
 var (
+	// disabledMetrics 保存被 --disabled-metrics 关闭的指标全名；
+	// 用读写锁保护，因为配置可在运行期被应用。
 	disabledMetricsLock sync.RWMutex
 	disabledMetrics     = map[string]struct{}{}
-	showHiddenOnce      sync.Once
-	showHidden          atomic.Bool
+	// showHidden 只允许被开启一次：一旦开启，后续调用应无副作用。
+	showHiddenOnce sync.Once
+	showHidden     atomic.Bool
 )
 
 var (
+	// disabledMetricsTotal 记录被关闭的指标数量，便于确认配置是否意外拦截了指标。
 	disabledMetricsTotal = NewCounter(
 		&CounterOpts{
 			Name:           "disabled_metrics_total",
@@ -49,6 +53,7 @@ var (
 		},
 	)
 
+	// hiddenMetricsTotal 记录被隐藏的弃用指标数量。
 	hiddenMetricsTotal = NewCounter(
 		&CounterOpts{
 			Name:           "hidden_metrics_total",
@@ -57,6 +62,8 @@ var (
 		},
 	)
 
+	// 当标签值不在 allow list 中而被替换为 "unexpected" 时计数，
+	// 用于发现基数失控或配置不匹配。
 	cardinalityEnforcementUnexpectedCategorizationsTotal = NewCounter(
 		&CounterOpts{
 			Name:           "cardinality_enforcement_unexpected_categorizations_total",
@@ -67,8 +74,9 @@ var (
 )
 
 // Options has all parameters needed for exposing metrics from components
+// Options 汇集暴露组件指标所需的参数，可直接嵌入组件的配置结构。
 type Options struct {
-	// Configuration serialization is omitted here since the parent is never expected to be embedded.
+	// 这里省略配置的序列化：父配置不会嵌入该类型，避免字段重复暴露。
 	v1.MetricsConfiguration `json:"-"`
 }
 
@@ -112,7 +120,7 @@ func SetShowHidden() {
 	showHiddenOnce.Do(func() {
 		showHidden.Store(true)
 
-		// re-register collectors that has been hidden in phase of last registry.
+		// 上一轮注册时被隐藏的 collector 需要重新启用，否则已创建的指标仍不可见。
 		for _, r := range registries {
 			r.enableHiddenCollectors()
 			r.enableHiddenStableCollectors()
@@ -132,13 +140,14 @@ func ShouldShowHidden() bool {
 func SetDisabledMetrics(names []string) {
 	for _, name := range names {
 		func(name string) {
-			// An empty metric name is not a valid Prometheus metric.
+			// 空名称不是合法的 Prometheus 指标名，忽略以免污染禁用集合。
 			if name == "" {
 				klog.Warningf("Attempted to disable an empty metric name, ignoring.")
 				return
 			}
 			disabledMetricsLock.Lock()
 			defer disabledMetricsLock.Unlock()
+			// 只在首次禁用时计数，重复配置不重复累加。
 			if _, ok := disabledMetrics[name]; !ok {
 				disabledMetrics[name] = struct{}{}
 				disabledMetricsTotal.Inc()
@@ -147,10 +156,13 @@ func SetDisabledMetrics(names []string) {
 	}
 }
 
+// MetricLabelAllowList 保存某个指标的 标签名 -> 允许值集合 映射。
 type MetricLabelAllowList struct {
 	labelToAllowList map[string]sets.Set[string]
 }
 
+// ConstrainToAllowedList 按位置约束标签值：越界值替换为 "unexpected" 并计数。
+// 位置约束依赖 labelNameList 与 labelValueList 顺序一致（即 Desc 的字段顺序）。
 func (allowList *MetricLabelAllowList) ConstrainToAllowedList(labelNameList, labelValueList []string) {
 	for index, value := range labelValueList {
 		name := labelNameList[index]
@@ -163,6 +175,7 @@ func (allowList *MetricLabelAllowList) ConstrainToAllowedList(labelNameList, lab
 	}
 }
 
+// ConstrainLabelMap 对 map 形式的标签执行同样的允许值约束。
 func (allowList *MetricLabelAllowList) ConstrainLabelMap(labels map[string]string) {
 	for name, value := range labels {
 		if allowValues, ok := allowList.labelToAllowList[name]; ok {
@@ -174,6 +187,7 @@ func (allowList *MetricLabelAllowList) ConstrainLabelMap(labels map[string]strin
 	}
 }
 
+// SetLabelAllowList 注册内联的 allow list 配置。key 的格式为 "<metricName>,<labelName>"。
 func SetLabelAllowList(allowListMapping map[string]string) {
 	if len(allowListMapping) == 0 {
 		klog.Errorf("empty allow-list mapping supplied, ignoring.")
@@ -200,6 +214,7 @@ func SetLabelAllowList(allowListMapping map[string]string) {
 	}
 }
 
+// SetLabelAllowListFromManifest 从 YAML 清单读取 allow list 配置并注册。
 func SetLabelAllowListFromManifest(manifest string) {
 	if manifest == "" {
 		klog.Errorf("The manifest file is empty, ignoring.")
@@ -226,10 +241,12 @@ func Apply(c *v1.MetricsConfiguration) {
 		return
 	}
 
+	// 只要配置了展示隐藏指标的版本，就开启展示开关（版本合法性在 Validate 中检查）。
 	if len(c.ShowHiddenMetricsForVersion) > 0 {
 		SetShowHidden()
 	}
 	SetDisabledMetrics(c.DisabledMetrics)
+	// 内联映射优先于清单文件；两者互斥已由 Validate 保证。
 	if c.AllowListMapping != nil {
 		SetLabelAllowList(c.AllowListMapping)
 	} else {

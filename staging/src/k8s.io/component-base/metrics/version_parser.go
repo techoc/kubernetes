@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	// 只匹配 v<major>.<minor>.<patch> 前缀，忽略预发布/构建元数据，
+	// 因为指标弃用判断只关心主版本号。
 	versionRegexpString = `^v(\d+\.\d+\.\d+)`
 )
 
@@ -33,6 +35,7 @@ var (
 	versionRe = regexp.MustCompile(versionRegexpString)
 )
 
+// parseSemver 解析可选的语义化版本：空字符串表示“未设置”，返回 nil 而非错误。
 func parseSemver(s string) *semver.Version {
 	if s != "" {
 		sv := semver.MustParse(s)
@@ -40,6 +43,9 @@ func parseSemver(s string) *semver.Version {
 	}
 	return nil
 }
+
+// parseVersion 从 apimachinery 的版本信息中提取 semver。
+// 版本串不符合预期时 panic：这是构建期配置错误，不应在运行时静默降级。
 func parseVersion(ver apimachineryversion.Info) semver.Version {
 	matches := versionRe.FindAllStringSubmatch(ver.String(), -1)
 

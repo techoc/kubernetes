@@ -33,25 +33,33 @@ import (
 // while still allowing the distribution of key-value pairs across multiple flag invocations.
 // For example: `--flag "a:hello" --flag "b:again" --flag "b:beautiful" --flag "c:world"` results in `{"a": ["hello"], "b": ["again", "beautiful"], "c": ["world"]}`
 type ColonSeparatedMultimapStringString struct {
-	Multimap             *map[string][]string
+	Multimap *map[string][]string
+	// initialized 记录是否已发生过一次 Set；首次 Set 会先清空默认值。
 	initialized          bool // set to true after the first Set call
 	allowDefaultEmptyKey bool
 }
 
 // NewColonSeparatedMultimapStringString takes a pointer to a map[string][]string and returns the
 // ColonSeparatedMultimapStringString flag parsing shim for that map.
+//
+// 接收指针而非 map 值，使 pflag 在解析时能就地替换整个 map。
 func NewColonSeparatedMultimapStringString(m *map[string][]string) *ColonSeparatedMultimapStringString {
 	return &ColonSeparatedMultimapStringString{Multimap: m}
 }
 
 // NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey takes a pointer to a map[string][]string and returns the
 // ColonSeparatedMultimapStringString flag parsing shim for that map. It allows default empty key with no colon in the flag.
+//
+// 用于那些“无键值”本身有意义的场景：缺省键写成单个值，归入空字符串键。
 func NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey(m *map[string][]string) *ColonSeparatedMultimapStringString {
 	return &ColonSeparatedMultimapStringString{Multimap: m, allowDefaultEmptyKey: true}
 }
 
 // Set implements github.com/spf13/pflag.Value
+//
+// 首次调用清空默认值，之后追加；这样单次 --flag 覆盖默认，而多次 --flag 又能合并。
 func (m *ColonSeparatedMultimapStringString) Set(value string) error {
+	// 未绑定 map 时无法解析，尽早报错而不是静默丢弃。
 	if m.Multimap == nil {
 		return fmt.Errorf("no target (nil pointer to map[string][]string)")
 	}
@@ -61,12 +69,14 @@ func (m *ColonSeparatedMultimapStringString) Set(value string) error {
 		m.initialized = true
 	}
 	for _, pair := range strings.Split(value, ",") {
+		// 容忍尾部逗号等空项。
 		if len(pair) == 0 {
 			continue
 		}
 		kv := strings.SplitN(pair, ":", 2)
 		var k, v string
 		if m.allowDefaultEmptyKey && len(kv) == 1 {
+			// 无冒号：值归入空键，兼容只需值列表的调用方。
 			v = strings.TrimSpace(kv[0])
 		} else {
 			if len(kv) != 2 {
@@ -75,12 +85,15 @@ func (m *ColonSeparatedMultimapStringString) Set(value string) error {
 			k = strings.TrimSpace(kv[0])
 			v = strings.TrimSpace(kv[1])
 		}
+		// 同名键的顺序即命令行出现顺序。
 		(*m.Multimap)[k] = append((*m.Multimap)[k], v)
 	}
 	return nil
 }
 
 // String implements github.com/spf13/pflag.Value
+//
+// 输出按键排序、键内保持值顺序，保证同一配置的字符串表示稳定（便于测试与日志比对）。
 func (m *ColonSeparatedMultimapStringString) String() string {
 	type kv struct {
 		k string
@@ -104,11 +117,15 @@ func (m *ColonSeparatedMultimapStringString) String() string {
 }
 
 // Type implements github.com/spf13/pflag.Value
+//
+// 名称会出现在帮助文本和错误信息中。
 func (m *ColonSeparatedMultimapStringString) Type() string {
 	return "colonSeparatedMultimapStringString"
 }
 
 // Empty implements OmitEmpty
+//
+// 实现 omitempty 判定：空 map 视为未设置，避免默认空值进入序列化输出。
 func (m *ColonSeparatedMultimapStringString) Empty() bool {
 	return len(*m.Multimap) == 0
 }

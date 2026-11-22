@@ -28,6 +28,8 @@ import (
 
 // Histogram is our internal representation for our wrapping struct around prometheus
 // histograms. Summary implements both kubeCollector and ObserverMetric
+// Histogram 是对 prometheus Histogram 的包装，同时实现 kubeCollector 与 ObserverMetric。
+// 注册前为 noop，首次注册时才真正创建底层直方图。
 type Histogram struct {
 	ObserverMetric
 	*HistogramOpts
@@ -41,12 +43,14 @@ type exemplarHistogramMetric struct {
 	delegate ObserverMetric
 }
 
+// exemplarHistogramVec 把带 context 的 vec 成员与具体 observer 绑定，用于附加 exemplar。
 type exemplarHistogramVec struct {
 	*HistogramVecWithContext
 	observer prometheus.Observer
 }
 
 // Observe attaches an exemplar to the metric and then calls the delegate.
+// Observe 在 context 中存在已采样 span 时附上 trace_id/span_id，否则普通观测。
 func (e *exemplarHistogramMetric) Observe(v float64) {
 	if m, ok := e.delegate.(prometheus.ExemplarObserver); ok {
 		maybeSpanCtx := trace.SpanContextFromContext(e.ctx)
@@ -92,7 +96,7 @@ func (h *Histogram) DeprecatedVersion() *semver.Version {
 // and stores a reference to it
 func (h *Histogram) initializeMetric() {
 	h.HistogramOpts.annotateStabilityLevel()
-	// this actually creates the underlying prometheus histogram.
+	// 这里才真正创建底层 prometheus histogram。
 	h.setPrometheusHistogram(prometheus.NewHistogram(h.HistogramOpts.toPromHistogramOpts()))
 }
 
@@ -104,6 +108,7 @@ func (h *Histogram) initializeDeprecatedMetric() {
 }
 
 // WithContext allows the normal Histogram metric to pass in context. The context is no-op now.
+// WithContext 返回带 context 的包装，观测时可携带 trace exemplar。
 func (h *Histogram) WithContext(ctx context.Context) ObserverMetric {
 	return &exemplarHistogramMetric{ctx: ctx, delegate: h.ObserverMetric}
 }
@@ -143,11 +148,13 @@ func (v *HistogramVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.HistogramOpts.DeprecatedVersion)
 }
 
+// initializeMetric 创建真正的 prometheus HistogramVec。
 func (v *HistogramVec) initializeMetric() {
 	v.HistogramOpts.annotateStabilityLevel()
 	v.HistogramVec = prometheus.NewHistogramVec(v.HistogramOpts.toPromHistogramOpts(), v.originalLabels)
 }
 
+// initializeDeprecatedMetric 为弃用指标创建 HistogramVec，先标注弃用版本。
 func (v *HistogramVec) initializeDeprecatedMetric() {
 	v.HistogramOpts.markDeprecated()
 	v.initializeMetric()
@@ -173,7 +180,7 @@ func (v *HistogramVec) WithLabelValues(lvs ...string) ObserverMetric {
 		return noop
 	}
 
-	// Initialize label allow lists if not already initialized
+	// 首次使用时从全局 allow list 初始化，避免每次调用都加读锁。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -182,7 +189,7 @@ func (v *HistogramVec) WithLabelValues(lvs ...string) ObserverMetric {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label values to allowed values
+	// 把不在允许列表中的标签值替换为 "unexpected"，限制基数。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
@@ -198,7 +205,6 @@ func (v *HistogramVec) With(labels map[string]string) ObserverMetric {
 		return noop
 	}
 
-	// Initialize label allow lists if not already initialized
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -207,7 +213,7 @@ func (v *HistogramVec) With(labels map[string]string) ObserverMetric {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label map to allowed values
+	// map 形式的标签同样收敛到允许值。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainLabelMap(labels)
 	}
@@ -225,6 +231,7 @@ func (v *HistogramVec) With(labels map[string]string) ObserverMetric {
 // This pattern avoids the common pitfall where arguments to deferred functions are evaluated
 // immediately, which would result in incorrect timing measurements.
 func (v *HistogramVec) ObserveSince(start time.Time, lvs ...string) func() {
+	// 真正的耗时在返回函数被调用时计算，而不是在 defer 时；否则测到的只是零。
 	return func() {
 		v.WithLabelValues(lvs...).Observe(time.Since(start).Seconds())
 	}
@@ -239,7 +246,7 @@ func (v *HistogramVec) ObserveSince(start time.Time, lvs ...string) func() {
 // that case.
 func (v *HistogramVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
+		return false // 未创建指标，自然也没有删除任何成员
 	}
 	return v.HistogramVec.Delete(labels)
 }
@@ -274,10 +281,13 @@ type HistogramVecWithContext struct {
 	ctx context.Context
 }
 
+// Observe 观测一次，并在有已采样 span 时附加 exemplar。
 func (h *exemplarHistogramVec) Observe(v float64) {
 	h.withExemplar(v)
 }
 
+// withExemplar 在 observer 支持 exemplar 且 span 已采样时带 trace 观察，
+// 否则退回普通 Observe。
 func (h *exemplarHistogramVec) withExemplar(v float64) {
 	if m, ok := h.observer.(prometheus.ExemplarObserver); ok {
 		maybeSpanCtx := trace.SpanContextFromContext(h.HistogramVecWithContext.ctx)

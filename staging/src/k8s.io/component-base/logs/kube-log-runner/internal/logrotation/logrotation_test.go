@@ -23,6 +23,9 @@ import (
 	"time"
 )
 
+// TestLogrotationWrite 覆盖四种配置组合：
+// 不轮转、仅按大小轮转、按大小轮转并按 maxAge 清理、以及带刷新间隔的完整组合。
+// 通过写入超过 maxSize 的数据触发轮转，再用过期的 modtime 触发异步清理。
 func TestLogrotationWrite(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -83,6 +86,7 @@ func TestLogrotationWrite(t *testing.T) {
 			maxSize := tt.maxSize
 			maxAge := tt.maxAge
 
+			// Open 返回的写入器会在 Close 时刷新并停止后台协程。
 			rotationFile, err := Open(logFilePath, flushInterval, maxSize, maxAge)
 			if err != nil {
 				t.Fatalf("Failed to open RotationFile: %v", err)
@@ -94,6 +98,7 @@ func TestLogrotationWrite(t *testing.T) {
 				}
 			})
 
+			// 首次写入未超过阈值，应直接落盘且不发生轮转。
 			testData := []byte("This is a test log entry.")
 			n, err := rotationFile.Write(testData)
 			if err != nil {
@@ -113,6 +118,7 @@ func TestLogrotationWrite(t *testing.T) {
 			}
 
 			// Write more data to trigger rotation
+			// 写入 1MB 使总大小超过 maxSize（同样是 1MB），断言在写入后发生轮转。
 			largeData := make([]byte, 1024*1024) // 1 MB
 			n, err = rotationFile.Write(largeData)
 			if err != nil {
@@ -140,6 +146,7 @@ func TestLogrotationWrite(t *testing.T) {
 					t.Fatalf("Failed to read new log file: %v", err)
 				}
 				// Rotation after the write, new log file should be empty
+				// 轮转在写入完成后触发，数据都落在轮转文件里，新文件保持为空。
 				if len(newContent) != 0 {
 					t.Errorf("Expected new log file content to be 0 bytes, but got %d bytes", len(newContent))
 				}
@@ -169,6 +176,7 @@ func TestLogrotationWrite(t *testing.T) {
 			}
 
 			// Check if rotated file was able to be cleaned up
+			// 把已有轮转文件的 mtime 改到 10 天前，使其超过 maxAge，供下一轮清理删除。
 			if len(rotatedFiles) != 0 {
 				err = os.Chtimes(rotatedFiles[0], time.Now(), time.Now().AddDate(0, 0, -10))
 				if err != nil {
@@ -204,6 +212,7 @@ func TestLogrotationWrite(t *testing.T) {
 			} else {
 				if tt.cleanupExpected {
 					// clean up is performed in a async goroutine, wait for it to finish
+					// 清理是异步的，轮询等待文件数降到 1，最多 5 秒；固定 sleep 会让测试不稳定。
 					end := time.Now().Add(5 * time.Second)
 					for time.Now().Before(end) {
 						rotatedFiles2, err = filepath.Glob(filepath.Join(tmpDir, "test-*.log"))

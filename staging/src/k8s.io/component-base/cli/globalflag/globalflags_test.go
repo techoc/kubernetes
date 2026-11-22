@@ -29,6 +29,8 @@ import (
 	"k8s.io/component-base/logs"
 )
 
+// TestAddGlobalFlags 验证 AddGlobalFlags 注册的 flag 集合与全局 flag 一致：
+// 它会从标准库 flag 和 logs 包注册的 flag 推导期望集合，再做正向与负向匹配。
 func TestAddGlobalFlags(t *testing.T) {
 	namedFlagSets := &cliflag.NamedFlagSets{}
 	nfs := namedFlagSets.FlagSet("global")
@@ -40,7 +42,7 @@ func TestAddGlobalFlags(t *testing.T) {
 		actualFlag = append(actualFlag, flag.Name)
 	})
 
-	// Get all flags from flags.CommandLine, except flag `test.*`.
+	// 从 flag.CommandLine 收集期望 flag，但排除测试框架注入的 test.*。
 	wantedFlag := []string{"help"}
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	logs.AddFlags(pflag.CommandLine)
@@ -56,6 +58,8 @@ func TestAddGlobalFlags(t *testing.T) {
 		t.Errorf("[Default]: expected %+v, got %+v", wantedFlag, actualFlag)
 	}
 
+	// 后续用例通过期望是否相等来检查实际集合的匹配/不匹配：
+	// matchExpected=true 表示期望与实际“不应”相等。
 	tests := []struct {
 		expectedFlag  []string
 		matchExpected bool

@@ -32,6 +32,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestReapply 覆盖 ReapplyHandling 的三种情况：
+// 首次应用成功；默认策略下再次应用报错；忽略未变策略下相同配置通过、修改后仍报错。
 func TestReapply(t *testing.T) {
 	oldReapplyHandling := ReapplyHandling
 	defer func() {
@@ -60,6 +62,8 @@ func TestReapply(t *testing.T) {
 	}
 }
 
+// TestOptions 验证 flag 解析后的配置与 ValidateAndApply 的错误集合，
+// 包括默认 text、显式 text 与不支持的格式。
 func TestOptions(t *testing.T) {
 	newOptions := NewLoggingConfiguration()
 	testcases := []struct {
@@ -117,6 +121,8 @@ func TestOptions(t *testing.T) {
 	}
 }
 
+// TestFlagSet 快照 --help 文本，确保 pflag、标准 flag 与 AddGoFlags
+// 三种注册方式产出的选项名、类型和默认值保持一致。
 func TestFlagSet(t *testing.T) {
 	t.Run("pflag", func(t *testing.T) {
 		newOptions := NewLoggingConfiguration()
@@ -217,6 +223,8 @@ $`, buffer.String())
 	})
 }
 
+// TestContextualLogging 验证 ContextualLogging gate 开启/关闭时
+// klog.FromContext/NewContext 以及 logger 派生函数的行为差异。
 func TestContextualLogging(t *testing.T) {
 	t.Run("enabled", func(t *testing.T) {
 		testContextualLogging(t, true)
@@ -227,6 +235,8 @@ func TestContextualLogging(t *testing.T) {
 	})
 }
 
+// testContextualLogging 应用配置后检查 klog 的上下文语义：
+// 开启时从 context 取回 logger 并派生新 logger；关闭时这些操作退化为空操作。
 func testContextualLogging(t *testing.T, enabled bool) {
 	var err error
 

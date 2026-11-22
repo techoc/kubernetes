@@ -30,9 +30,12 @@ import (
 )
 
 const (
+	// testComponent 是测试中模拟的第二个组件名，与 "kube" 区分。
 	testComponent = "test"
 )
 
+// TestEffectiveVersionRegistry 验证注册/查询的幂等边界：未注册返回 nil，
+// 重复注册同一组件必须失败且不覆盖已有版本。
 func TestEffectiveVersionRegistry(t *testing.T) {
 	r := NewComponentGlobalsRegistry()
 	ver1 := NewEffectiveVersionFromString("1.31", "", "")
@@ -56,6 +59,8 @@ func TestEffectiveVersionRegistry(t *testing.T) {
 	}
 }
 
+// testRegistry 构造一个含 kube 与 test 两个组件的注册表。
+// 两个组件的版本线（1.x 与 2.x）刻意不同，便于验证标志与门控按组件隔离。
 func testRegistry(t *testing.T) *componentGlobalsRegistry {
 	r := NewComponentGlobalsRegistry()
 	verKube := NewEffectiveVersionFromString("1.31.1-beta.0.353", "1.31", "1.30")
@@ -102,6 +107,7 @@ func testRegistry(t *testing.T) *componentGlobalsRegistry {
 	return r
 }
 
+// TestVersionFlagOptions 验证帮助文本中的版本取值区间按组件正确生成。
 func TestVersionFlagOptions(t *testing.T) {
 	r := testRegistry(t)
 	emuVers := strings.Join(r.unsafeVersionFlagOptions(true), ",")
@@ -116,6 +122,8 @@ func TestVersionFlagOptions(t *testing.T) {
 	}
 }
 
+// TestVersionFlagOptionsWithMapping 验证被映射接管的组件不再出现在标志取值提示中，
+// 因为它已不能通过命令行设置。
 func TestVersionFlagOptionsWithMapping(t *testing.T) {
 	r := testRegistry(t)
 	utilruntime.Must(r.SetVersionMapping(testComponent, DefaultKubeComponent,
@@ -132,6 +140,8 @@ func TestVersionFlagOptionsWithMapping(t *testing.T) {
 	}
 }
 
+// TestVersionedFeatureGateFlags 验证 --feature-gates 帮助文本会按组件排序汇总特性，
+// 且只展示当前模拟版本下可见的特性（如 testB 在 2.7 之前不可见）。
 func TestVersionedFeatureGateFlags(t *testing.T) {
 	r := testRegistry(t)
 	known := strings.Join(r.unsafeKnownFeatures(), "\n")
@@ -148,6 +158,9 @@ func TestVersionedFeatureGateFlags(t *testing.T) {
 	}
 }
 
+// TestFlags 覆盖三个标志的端到端解析与生效：
+// 版本默认前缀、重复项、补丁号、未注册组件、门控前缀混用、锁定/未知特性，
+// 以及多次 AddFlags 之间配置是否被意外重置。
 func TestFlags(t *testing.T) {
 	tests := []struct {
 		name                                string
@@ -311,6 +324,7 @@ func TestFlags(t *testing.T) {
 		},
 		{
 			name: "feature gates config should accumulate across multiple flag sets",
+			// 同一注册表被两次挂到不同 FlagSet 上解析，配置应累积而不是被清空。
 			setupRegistry: func(r *componentGlobalsRegistry) error {
 				fs := pflag.NewFlagSet("setupTestflag", pflag.ContinueOnError)
 				r.AddFlags(fs)
@@ -323,6 +337,7 @@ func TestFlags(t *testing.T) {
 		},
 		{
 			name: "feature gates config should be overridden when set multiple times one the same feature",
+			// 同一特性后出现的标志值覆盖先前的值。
 			setupRegistry: func(r *componentGlobalsRegistry) error {
 				fs := pflag.NewFlagSet("setupTestflag", pflag.ContinueOnError)
 				r.AddFlags(fs)
@@ -347,6 +362,7 @@ func TestFlags(t *testing.T) {
 			err := fs.Parse(test.flags)
 			if err == nil {
 				// AddFlags again to check whether there is no resetting on the config.
+				// 第二次 AddFlags 不得清空已解析的配置。
 				fs = pflag.NewFlagSet("testflag2", pflag.ContinueOnError)
 				r.AddFlags(fs)
 				err = r.Set()
@@ -386,6 +402,8 @@ func TestFlags(t *testing.T) {
 	}
 }
 
+// TestVersionMapping 验证映射链 test1→test2→test3 的初始推导，
+// 以及之后通过标志修改链头版本时，下游组件如何重新计算。
 func TestVersionMapping(t *testing.T) {
 	r := NewComponentGlobalsRegistry()
 	ver1 := NewEffectiveVersionFromString("0.58", "", "")
@@ -437,6 +455,8 @@ func TestVersionMapping(t *testing.T) {
 	assertVersionEqualTo(t, r.EffectiveVersionFor("test3").MinCompatibilityVersion(), "2.7")
 }
 
+// TestVersionMappingWithMultipleDependency 验证一个组件只允许一个上游映射，
+// 第二次为 test2 设置不同来源必须报错。
 func TestVersionMappingWithMultipleDependency(t *testing.T) {
 	r := NewComponentGlobalsRegistry()
 	ver1 := NewEffectiveVersionFromString("0.58", "", "")
@@ -467,6 +487,8 @@ func TestVersionMappingWithMultipleDependency(t *testing.T) {
 	}
 }
 
+// TestVersionMappingWithCyclicDependency 验证形成环的映射（test3→test1）会被拒绝，
+// 否则版本传播时将无限循环。
 func TestVersionMappingWithCyclicDependency(t *testing.T) {
 	r := NewComponentGlobalsRegistry()
 	ver1 := NewEffectiveVersionFromString("0.58", "", "")
@@ -501,6 +523,8 @@ func TestVersionMappingWithCyclicDependency(t *testing.T) {
 	}
 }
 
+// TestAddMetrics 验证 version_info 指标包含 binary/emulation/min_compat 三个标签。
+// 使用 legacyregistry 默认 gatherer，因此断言的是全局指标输出。
 func TestAddMetrics(t *testing.T) {
 	r := NewComponentGlobalsRegistry()
 	ver1 := NewEffectiveVersionFromString("0.58", "", "")
@@ -525,6 +549,7 @@ func TestAddMetrics(t *testing.T) {
 	}
 }
 
+// assertVersionEqualTo 断言版本相等；失败时输出期望值与实际值，方便定位映射公式问题。
 func assertVersionEqualTo(t *testing.T, ver *version.Version, expectedVer string) {
 	if ver.EqualTo(version.MustParse(expectedVer)) {
 		return
@@ -532,6 +557,8 @@ func assertVersionEqualTo(t *testing.T, ver *version.Version, expectedVer string
 	t.Errorf("expected: %s, got %s", expectedVer, ver.String())
 }
 
+// Test_enabledAlphaFeatures 只返回“处于 Alpha 且已启用”的特性，
+// beta 特性与显式关闭的 alpha 特性都不应出现在结果中。
 func Test_enabledAlphaFeatures(t *testing.T) {
 	features := map[featuregate.Feature]featuregate.FeatureSpec{
 		"myFeat": {

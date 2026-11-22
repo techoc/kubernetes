@@ -25,6 +25,8 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestSummary 验证 Summary 的注册与采集：未弃用指标带稳定性前缀，
+// 弃用指标按级别决定是否隐藏，并确认 Observe 后样本数正确。
 func TestSummary(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -38,6 +40,7 @@ func TestSummary(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
+		// 未弃用指标：Help 只带稳定性前缀。
 		// Non-deprecated metrics
 		{
 			desc: "ALPHA metric non deprecated",
@@ -75,6 +78,7 @@ func TestSummary(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] summary help message",
 		},
+		// 弃用指标：Help 追加弃用版本；ALPHA 弃用会被隐藏，其余仍暴露。
 		// Deprecated metrics
 		{
 			desc: "ALPHA metric deprecated",
@@ -115,6 +119,7 @@ func TestSummary(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) summary help message",
 		},
+		// 隐藏指标：不再产生任何输出，Help 不会被标注。
 		// Hidden metrics
 		{
 			desc: "ALPHA metric hidden",
@@ -171,6 +176,7 @@ func TestSummary(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
+			// 每次 Observe 都应使样本数递增，验证 summary 真的在统计。
 			// let's increment the counter and verify that the metric still works
 			c.Observe(1)
 			c.Observe(2)
@@ -189,6 +195,8 @@ func TestSummary(t *testing.T) {
 	}
 }
 
+// TestSummaryVec 验证 SummaryVec 按标签值创建独立成员，
+// 并复用与 Summary 相同的稳定性/弃用/隐藏规则。
 func TestSummaryVec(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -203,6 +211,7 @@ func TestSummaryVec(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
+		// 未弃用指标：Help 只带稳定性前缀。
 		// Non-deprecated metrics
 		{
 			desc: "ALPHA metric non deprecated",
@@ -243,6 +252,7 @@ func TestSummaryVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] summary help message",
 		},
+		// 弃用指标：Help 追加弃用版本；ALPHA 弃用会被隐藏，其余仍暴露。
 		// Deprecated metrics
 		{
 			desc: "ALPHA metric deprecated",
@@ -285,6 +295,7 @@ func TestSummaryVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) summary help message",
 		},
+		// 隐藏指标：不再产生任何输出，Help 不会被标注。
 		// Hidden metrics
 		{
 			desc: "ALPHA metric hidden",
@@ -344,6 +355,7 @@ func TestSummaryVec(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
+			// 每个新的标签组合都会创建一个成员，已存在的组合复用。
 			// let's increment the counter and verify that the metric still works
 			c.WithLabelValues("1", "3").Observe(1.0)
 			c.WithLabelValues("2", "3").Observe(1.0)
@@ -360,6 +372,8 @@ func TestSummaryVec(t *testing.T) {
 	}
 }
 
+// TestSummaryWithLabelValueAllowList 验证标签 allow list：允许值保持原样，
+// 越界值被替换为 "unexpected"，从而把高基数标签收敛到有限集合。
 func TestSummaryWithLabelValueAllowList(t *testing.T) {
 	labelAllowValues := map[string]string{
 		"namespace_subsystem_metric_allowlist_test,label_a": "allowed",

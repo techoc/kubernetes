@@ -24,7 +24,11 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestRunningManagedControllers 验证 running_managed_controllers 能反映
+// 控制器的启动/停止：启动时为 1，停止后回落到 0 而不是删除该序列，
+// 这样监控端仍能看到某控制器曾经运行过。
 func TestRunningManagedControllers(t *testing.T) {
+	// 清理全局指标，避免与其他测试（或本测试重跑）相互污染。
 	controllerInstanceCount.Reset()
 
 	Register()

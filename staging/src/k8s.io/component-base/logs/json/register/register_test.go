@@ -30,6 +30,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestJSONFlag 确认导入 register 后 --logging-format 的帮助文本列出 json，
+// 且标注其受 LoggingBetaOptions gate 控制。
 func TestJSONFlag(t *testing.T) {
 	c := logsapi.NewLoggingConfiguration()
 	fs := pflag.NewFlagSet("addflagstest", pflag.ContinueOnError)
@@ -43,6 +45,9 @@ func TestJSONFlag(t *testing.T) {
 	}
 }
 
+// TestJSONFormatRegister 验证 JSON 格式的 gate 语义：
+// 默认 beta gate 下可用、全部关闭时被拒绝、全部开启时可用，
+// 以及 ContextualLogging 决定 klog 背景 logger 是 klogr 还是 zapr。
 func TestJSONFormatRegister(t *testing.T) {
 	config := logsapi.NewLoggingConfiguration()
 	klogr := klog.Background()
@@ -140,6 +145,7 @@ func TestJSONFormatRegister(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 保存并恢复 klog 全局状态，避免用例间相互污染。
 			state := klog.CaptureState()
 			defer state.Restore()
 			c := logsapi.NewLoggingConfiguration()

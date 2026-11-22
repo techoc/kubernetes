@@ -24,6 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestTypes 验证标准库类型到数据策略标签的映射：
+// http.Header/Cookie 中含 token（以及 password）字段，x509.Certificate 携带密钥材料。
+// 这些标签用于在日志输出时识别并脱敏敏感字段。
 func TestTypes(t *testing.T) {
 	testcases := []struct {
 		value  interface{}

@@ -28,6 +28,8 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 )
 
+// TestTimingHistogram 针对单一 TimingHistogram，验证不同稳定性/弃用状态下
+// 指标是否暴露、Help 前缀与弃用标注，以及 Set/Add 对计数与积分的计算。
 func TestTimingHistogram(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -182,6 +184,7 @@ func TestTimingHistogram(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			registry := newKubeRegistry(version1_15Alpha1)
 			t0 := time.Now()
+			// 假时钟让“经过时间”可控，从而精确断言加权观测的计数与总和。
 			clk := testclock.NewFakePassiveClock(t0)
 			c := NewTestableTimingHistogram(clk.Now, test.TimingHistogramOpts)
 			registry.MustRegister(c)
@@ -196,6 +199,7 @@ func TestTimingHistogram(t *testing.T) {
 			if !ok || gm1 != c.PrometheusTimingHistogram {
 				t.Error("Unexpected metric", m1, c.PrometheusTimingHistogram)
 			}
+			// TimingHistogram 每次 Collect 只应产出一个指标。
 			m2, ok := <-metricChan
 			if ok {
 				t.Error("Unexpected second metric", m2)
@@ -210,6 +214,7 @@ func TestTimingHistogram(t *testing.T) {
 			}
 
 			// let's exercise the metric and check that it still works
+			// 三段不同持续时间/值：计数为各段纳秒数之和，总和为“值×时长”的积分。
 			v0 := test.TimingHistogramOpts.InitialValue
 			dt1 := time.Nanosecond
 			t1 := t0.Add(dt1)
@@ -241,6 +246,8 @@ func TestTimingHistogram(t *testing.T) {
 	}
 }
 
+// TestTimingHistogramVec 验证带标签的 TimingHistogramVec：
+// 指标暴露/Help 规则与单值版本一致，并检查不同标签子指标的积分独立累计。
 func TestTimingHistogramVec(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -417,6 +424,7 @@ func TestTimingHistogramVec(t *testing.T) {
 			cm1.Set(v0)
 
 			if test.expectedMetricCount > 0 {
+				// 只用 Checked 版本，确保注册后才能取得真实子指标。
 				metricChan := make(chan prometheus.Metric, 2)
 				c.Collect(metricChan)
 				close(metricChan)
@@ -465,6 +473,8 @@ func TestTimingHistogramVec(t *testing.T) {
 	}
 }
 
+// TestTimingHistogramWithLabelValueAllowList 验证标签值允许列表：
+// 未列出的值会被替换为 "unexpected"，从而限制指标基数。
 func TestTimingHistogramWithLabelValueAllowList(t *testing.T) {
 	labelAllowValues := map[string]string{
 		"namespace_subsystem_metric_allowlist_test,label_a": "allowed",
@@ -560,6 +570,7 @@ func TestTimingHistogramWithLabelValueAllowList(t *testing.T) {
 	}
 }
 
+// BenchmarkTimingHistogram 测量单值 TimingHistogram 的 Set/积分开销。
 func BenchmarkTimingHistogram(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -582,6 +593,7 @@ func BenchmarkTimingHistogram(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingHistogramVecEltCached 测量已缓存子指标的写入路径。
 func BenchmarkTimingHistogramVecEltCached(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -609,6 +621,8 @@ func BenchmarkTimingHistogramVecEltCached(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingHistogramVecEltFetched 测量每次 WithLabelValues 查找再写入的路径，
+// 用于对比缓存的收益。
 func BenchmarkTimingHistogramVecEltFetched(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -632,6 +646,8 @@ func BenchmarkTimingHistogramVecEltFetched(b *testing.B) {
 	}
 }
 
+// TestUnregisteredVec 验证未注册向量返回 noop 与 ErrIsNotRegistered，
+// 而不是创建驻留内存的永久子指标。
 func TestUnregisteredVec(t *testing.T) {
 	hv := NewTestableTimingHistogramVec(time.Now, &TimingHistogramOpts{
 		Namespace:    "testns",
@@ -651,6 +667,8 @@ func TestUnregisteredVec(t *testing.T) {
 	}
 }
 
+// TestBadValues 验证标签数量与向量定义不符时返回普通错误（非 ErrIsNotRegistered），
+// 且不产生真实子指标。
 func TestBadValues(t *testing.T) {
 	hv := NewTestableTimingHistogramVec(time.Now, &TimingHistogramOpts{
 		Namespace:    "testns",

@@ -24,17 +24,21 @@ import (
 )
 
 var (
+	// 注册只应发生一次；重复注册到同一个 Registry 会 panic。
 	installOnce          = sync.Once{}
 	installWithResetOnce = sync.Once{}
 )
 
+// mux 抽象出 http.ServeMux 的最小能力，便于测试替换。
 type mux interface {
 	Handle(path string, handler http.Handler)
 }
 
+// SLIMetrics 以只读方式暴露 SLI 指标。
 type SLIMetrics struct{}
 
 // Install adds the DefaultMetrics handler
+// Install 在 /metrics/slis 路径挂载 SLI 指标；Register 通过 sync.Once 保证只执行一次。
 func (s SLIMetrics) Install(m mux) {
 	installOnce.Do(func() {
 		Register(Registry)
@@ -42,9 +46,11 @@ func (s SLIMetrics) Install(m mux) {
 	m.Handle("/metrics/slis", metrics.HandlerFor(Registry, metrics.HandlerOpts{}))
 }
 
+// SLIMetricsWithReset 在 DELETE 请求时重置 SLI 指标，供测试或运维清理使用。
 type SLIMetricsWithReset struct{}
 
 // Install adds the DefaultMetrics handler
+// Install 与 SLIMetrics.Install 类似，但使用支持 DELETE 复位的 handler。
 func (s SLIMetricsWithReset) Install(m mux) {
 	installWithResetOnce.Do(func() {
 		Register(Registry)

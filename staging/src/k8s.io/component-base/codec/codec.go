@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package codec 提供按需构造宽松编解码器（禁用 strict decoding）的辅助函数，
+// 供组件在特定 API 版本上跳过未知字段校验。
 package codec
 
 import (
@@ -23,11 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// NewLenientSchemeAndCodecs constructs a CodecFactory with strict decoding
-// disabled, that has only the Schemes registered into it which are passed
-// and added via AddToScheme functions. This can be used to skip strict decoding
-// a specific version only.
+// NewLenientSchemeAndCodecs 构造一个禁用 strict decoding 的 CodecFactory，
+// 其中只注册通过 AddToScheme 函数传入的类型。
+// 典型用途是仅对某个特定 API 版本跳过 strict decoding，而不影响其他版本。
 func NewLenientSchemeAndCodecs(addToSchemeFns ...func(s *runtime.Scheme) error) (*runtime.Scheme, *serializer.CodecFactory, error) {
+	// 使用独立 scheme，避免污染进程内共享的全局 scheme。
 	lenientScheme := runtime.NewScheme()
 	for _, s := range addToSchemeFns {
 		if err := s(lenientScheme); err != nil {

@@ -30,5 +30,8 @@ limitations under the License.
 // `k8s.io/component-base/metrics/api/v1.MetricsConfiguration` as the former contains functions to apply and validate
 // the configuration, which in turn rely on members of the same package, which cannot be moved,
 // or imported (cyclic dependency) here.
+//
+// 中文补充：本包只定义配置数据结构，不包含校验与生效逻辑；
+// 后者位于 k8s.io/component-base/metrics，以免形成循环依赖。
 
 package v1

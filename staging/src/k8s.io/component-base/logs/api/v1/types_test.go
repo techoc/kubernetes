@@ -31,6 +31,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestVModule 覆盖 -vmodule 解析：正常模式、逗号分隔、尾随逗号、
+// 缺失等号/空 pattern/负数/超出 int32，以及 String() 的规范化回显。
 func TestVModule(t *testing.T) {
 	testcases := []struct {
 		arg         string
@@ -128,6 +130,7 @@ func TestVModule(t *testing.T) {
 
 // TestCompatibility ensures that a) valid JSON remains valid and has the same
 // effect and b) that new fields are covered by the test data.
+// all-fields 用例通过反射检查确保新增字段被 fixture 覆盖，避免兼容性测试漏测。
 func TestCompatibility(t *testing.T) {
 	testcases := map[string]struct {
 		// fixture holds a representation of a LoggingConfiguration struct in JSON format.
@@ -234,6 +237,7 @@ func TestCompatibility(t *testing.T) {
 // notZero asserts that i is not the zero value for its type
 // and repeats that check recursively for all pointers,
 // structs, maps, arrays, and slices.
+// 跳过未导出字段和 json:"-" 字段，因为它们本就不参与序列化。
 func notZeroRecursive(t *testing.T, i interface{}, path string) bool {
 	typeOfI := reflect.TypeOf(i)
 
@@ -287,6 +291,8 @@ func notZeroRecursive(t *testing.T, i interface{}, path string) bool {
 	return valid
 }
 
+// TestTimeOrMetaDuration_UnmarshalJSON 验证 flushFrequency 同时接受
+// 字符串时长（"1s"）与纳秒整数，并保持原有序列化形式。
 func TestTimeOrMetaDuration_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		name   string

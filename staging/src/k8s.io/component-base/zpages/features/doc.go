@@ -19,4 +19,7 @@ limitations under the License.
 // availability and behavior of various zpages within Kubernetes components.
 // New zpages added to Kubernetes components should utilize this feature set
 // to ensure proper management of their availability.
+//
+// 该特性集独立于组件主特性集，使 zpages 的启停可以单独演进，也便于
+// 在模拟旧版本时关闭新端点。
 package features

@@ -28,10 +28,13 @@ import (
 )
 
 // Float64Slice is a slice of float64 that sorts by magnitude
+//
+// 按绝对值排序，使浮点求和结果与顺序无关且可重复（正负抵消对误差影响最小）。
 type Float64Slice []float64
 
 func (fs Float64Slice) Len() int { return len(fs) }
 
+// Less 比较绝对值而非原值，减少累加时的相消误差。
 func (fs Float64Slice) Less(i, j int) bool { return math.Abs(fs[i]) < math.Abs(fs[j]) }
 
 func (fs Float64Slice) Swap(i, j int) { fs[i], fs[j] = fs[j], fs[i] }
@@ -51,6 +54,9 @@ type weightedHistogramSpecFunc func() (wh WeightedObserver, upperBounds []float6
 // considerations of spilling from sumHot to sumCold.
 // The ObserveWithWeight calls to the various histograms are interleaved to check
 // that there is no interference between them.
+//
+// 期望值按“值与桶上界的关系”独立计算，再与实测的桶计数、样本数、样本和比较；
+// 样本和允许 1e-13 的相对误差（见 issue 120112）。
 func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFunc) {
 	var whos []weightedHistogramObs
 	expectations := []whExerciseExpectation{}
@@ -78,6 +84,7 @@ func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFu
 			}
 			ee.count += multipliedWeight
 		}
+		// 交错调用多次，覆盖 sumHot 向 sumCold 溢出（spill）的路径。
 		for idx, ub := range upperBounds {
 			var val float64
 			if idx > 0 {
@@ -131,6 +138,7 @@ func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFu
 		}
 		for j := 0; j < len(ee.buckets) && j < len(actualBuckets); j++ {
 			actualUB := actualBuckets[j].GetUpperBound()
+			// 桶计数是累积值，因此每次观测都要加到 idx 及其之后的所有桶。
 			actualCount := actualBuckets[j].GetCumulativeCount()
 			if ee.upperBounds[j] != actualUB {
 				t.Errorf("At idx=%d, bucket %d, expected upper bound %v but got %v, err=%v", idx, j, ee.upperBounds[j], actualUB, actualUB-ee.upperBounds[j])
@@ -166,6 +174,7 @@ type whExerciseExpectation struct {
 	count       uint64
 }
 
+// whosPick 随机取出一条待执行的观测，用末尾元素填补空位，避免删除导致搬移。
 func whosPick(whos []weightedHistogramObs) ([]weightedHistogramObs, weightedHistogramObs) {
 	n := len(whos)
 	if n < 2 {
@@ -177,6 +186,8 @@ func whosPick(whos []weightedHistogramObs) ([]weightedHistogramObs, weightedHist
 	return whos[:n-1], ans
 }
 
+// TestOneWeightedHistogram 覆盖固定桶数与随机桶上界两种场景；
+// 随机用例使用递增上界，贴近真实直方图的构造方式。
 func TestOneWeightedHistogram(t *testing.T) {
 	// First, some literal test cases
 	for _, testCase := range []struct {
@@ -228,6 +239,8 @@ func TestOneWeightedHistogram(t *testing.T) {
 	}
 }
 
+// TestWeightedHistogramVec 对两个使用不同标签集的向量交错观测，
+// 验证 WithLabelValues 与 With 返回的序列互不干扰。
 func TestWeightedHistogramVec(t *testing.T) {
 	ubs1 := []float64{0.07, 1.3, 1e6}
 	vec1 := NewWeightedHistogramVec(WeightedHistogramOpts{
@@ -266,6 +279,7 @@ func TestWeightedHistogramVec(t *testing.T) {
 	)
 }
 
+// BenchmarkWeightedHistogram 测量带权观测的写入开销。
 func BenchmarkWeightedHistogram(b *testing.B) {
 	b.StopTimer()
 	wh, err := NewWeightedHistogram(WeightedHistogramOpts{
@@ -286,6 +300,8 @@ func BenchmarkWeightedHistogram(b *testing.B) {
 	}
 }
 
+// BenchmarkHistogram 是对照组：标准 prometheus 直方图的写入开销，
+// 用于评估 WeightedHistogram 的额外成本。
 func BenchmarkHistogram(b *testing.B) {
 	b.StopTimer()
 	hist := prometheus.NewHistogram(prometheus.HistogramOpts{

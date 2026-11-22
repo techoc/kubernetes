@@ -26,6 +26,7 @@ import (
 type ValueType int
 
 // Possible values for the ValueType enum.
+// 取值刻意与 prometheus.ValueType 对齐，以便直接做类型转换。
 const (
 	_ ValueType = iota
 	CounterValue
@@ -33,6 +34,7 @@ const (
 	UntypedValue
 )
 
+// toPromValueType 转换为 prometheus 的枚举，两者数值一一对应。
 func (vt *ValueType) toPromValueType() prometheus.ValueType {
 	return prometheus.ValueType(*vt)
 }
@@ -40,6 +42,7 @@ func (vt *ValueType) toPromValueType() prometheus.ValueType {
 // NewLazyConstMetric is a helper of MustNewConstMetric.
 //
 // Note: If the metrics described by the desc is hidden, the metrics will not be created.
+// 隐藏指标返回 nil，调用方需要容忍 nil，避免把已弃用指标重新暴露出来。
 func NewLazyConstMetric(desc *Desc, valueType ValueType, value float64, labelValues ...string) Metric {
 	if desc.IsHidden() {
 		return nil
@@ -50,6 +53,7 @@ func NewLazyConstMetric(desc *Desc, valueType ValueType, value float64, labelVal
 // NewConstMetric is a helper of NewConstMetric.
 //
 // Note: If the metrics described by the desc is hidden, the metrics will not be created.
+// 隐藏指标返回 (nil, nil)，表示“按策略不创建”，而不是错误。
 func NewConstMetric(desc *Desc, valueType ValueType, value float64, labelValues ...string) (Metric, error) {
 	if desc.IsHidden() {
 		return nil, nil
@@ -61,6 +65,7 @@ func NewConstMetric(desc *Desc, valueType ValueType, value float64, labelValues 
 //
 // Warning: the Metric 'm' must be the one created by NewLazyConstMetric(),
 // otherwise, no stability guarantees would be offered.
+// 因为 NewLazyConstMetric 可能返回 nil，这里显式短路，避免把 nil 传给 prometheus。
 func NewLazyMetricWithTimestamp(t time.Time, m Metric) Metric {
 	if m == nil {
 		return nil

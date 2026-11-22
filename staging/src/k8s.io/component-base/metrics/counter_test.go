@@ -32,6 +32,9 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestCounter 验证单个 Counter 的暴露与累加：
+// 期望的 HELP 前缀反映稳定性级别；已弃用/已隐藏的指标要么带弃用说明，
+// 要么完全不暴露。
 func TestCounter(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -199,6 +202,8 @@ func TestCounter(t *testing.T) {
 	}
 }
 
+// TestCounterVec 验证带 label 的 Counter 在部分指标被隐藏时，
+// 其余 label 组合仍能正常计数与暴露。
 func TestCounterVec(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -371,6 +376,9 @@ func TestCounterVec(t *testing.T) {
 	}
 }
 
+// TestCounterWithLabelValueAllowList 验证 allow list 的约束：
+// 不在允许列表中的 label 值会被替换为固定值（unexpected），
+// 从而限制指标基数。
 func TestCounterWithLabelValueAllowList(t *testing.T) {
 	labelAllowValues := map[string]string{
 		"namespace_subsystem_metric_allowlist_test,label_a": "allowed",
@@ -415,6 +423,7 @@ func TestCounterWithLabelValueAllowList(t *testing.T) {
 			})
 			c := NewCounterVec(opts, labels)
 			registry.MustRegister(c)
+			// allow list 必须在取出子指标之前设置，否则不会生效。
 			SetLabelAllowList(labelAllowValues)
 			for _, lv := range test.labelValues {
 				c.WithLabelValues(lv...).Inc()
@@ -449,8 +458,11 @@ func TestCounterWithLabelValueAllowList(t *testing.T) {
 	}
 }
 
+// TestCounterWithExemplar 验证 WithContext 会把 trace/span 信息作为
+// exemplar 附加到指标上，供监控系统关联调用链。
 func TestCounterWithExemplar(t *testing.T) {
 	// Set exemplar.
+	// 生成 16 字节的确定 ID；offset 用于让 traceID 与 spanID 不同。
 	fn := func(offset int) []byte {
 		arr := make([]byte, 16)
 		for i := 0; i < 16; i++ {
@@ -482,6 +494,7 @@ func TestCounterWithExemplar(t *testing.T) {
 	registry.MustRegister(counter)
 
 	// Call underlying exemplar methods.
+	// 三种调用方式都应命中同一个 counter 并携带 exemplar。
 	counter.WithContext(ctxForSpanCtx).Add(toAdd)
 	counter.WithContext(ctxForSpanCtx).Inc()
 	counter.WithContext(ctxForSpanCtx).Inc()
@@ -544,6 +557,9 @@ func TestCounterWithExemplar(t *testing.T) {
 // where c.ctx is written concurrently with reads in withExemplar method.
 // This test simulates the real authentication flow that triggers the race:
 // x509.AuthenticateRequest -> union.AuthenticateRequest -> group.AuthenticateRequest
+//
+// 该测试必须在 -race 下运行才有意义：它并发地写 WithContext 的 ctx
+// 与读 exemplar，验证修复后不再存在数据竞争。
 func TestCounterConcurrentWithContextRace(t *testing.T) {
 	opts := &CounterOpts{
 		Namespace: "apiserver",
@@ -617,7 +633,6 @@ func TestCounterConcurrentWithContextRace(t *testing.T) {
 
 // simulateX509AuthenticateRequestCounter simulates the call path from x509 authenticator
 func simulateX509AuthenticateRequestCounter(c CounterMetric, ctx context.Context, iteration int) {
-	// Simulate the authentication request processing that calls WithContext
 	if cWithCtx, ok := c.(*Counter); ok {
 		cWithCtx.WithContext(ctx)
 	}

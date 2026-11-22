@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// stdlib 示例演示如何同时使用标准库 log 风格的 klog 与 component-base 的
+// 日志配置 API，包括特性门控驱动的上下文日志。
 package main
 
 import (
@@ -35,6 +37,7 @@ import (
 
 func main() {
 	// Set up command line, including a feature gate parameter and logging options.
+	// 使用独立的 FeatureGate 实例而非全局默认值，示例之间互不影响。
 	featureGate := featuregate.NewFeatureGate()
 	runtime.Must(logsapi.AddFeatureGates(featureGate))
 	flag.Var(featureGate, "feature-gate",
@@ -52,6 +55,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// 示例程序不接受位置参数，出现即说明调用方式有误，直接退出。
 	args := flag.CommandLine.Args()
 	if len(args) > 0 {
 		fmt.Fprintf(os.Stderr, "Unexpected additional command line arguments:\n    %s\n", strings.Join(args, "\n    "))
@@ -59,6 +63,7 @@ func main() {
 	}
 
 	// Initialize contextual logging.
+	// 给 logger 取名字并附加固定字段，演示回调和调用链中的上下文传递。
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "example"), "foo", "bar")
 	ctx := klog.NewContext(context.Background(), logger)
 

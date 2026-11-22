@@ -24,6 +24,8 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestVersionParsing 验证从 GitVersion 中提取 major.minor.patch 的逻辑：
+// 解析结果用于判定指标弃用/隐藏状态，后缀（alpha、commit 等）不参与比较。
 func TestVersionParsing(t *testing.T) {
 	var tests = []struct {
 		desc            string
@@ -31,11 +33,13 @@ func TestVersionParsing(t *testing.T) {
 		expectedVersion string
 	}{
 		{
+			// 带预发布后缀的版本应只保留核心三元组。
 			"v1.15.0-alpha-1.12345",
 			"v1.15.0-alpha-1.12345",
 			"1.15.0",
 		},
 		{
+			// 默认占位版本同样要能解析，避免测试构建或 git archive 构建失败。
 			"Parse out defaulted string",
 			"v0.0.0-master",
 			"0.0.0",

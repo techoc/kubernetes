@@ -30,6 +30,7 @@ import (
 )
 
 // TestCase defines a testcase for roundtrip and defaulting tests
+// name 用作子测试名；in/out 为相对测试数据目录的 YAML 文件路径。
 type TestCase struct {
 	name, in, out string
 	codec         runtime.Codec
@@ -45,6 +46,7 @@ func RunTestsOnYAMLData(t *testing.T, tests []TestCase) {
 	}
 }
 
+// decodeYAML 读取并解码 YAML 文件；解码失败视为测试数据错误，直接终止。
 func decodeYAML(t *testing.T, path string, codec runtime.Codec) runtime.Object {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -60,6 +62,8 @@ func decodeYAML(t *testing.T, path string, codec runtime.Codec) runtime.Object {
 	return object
 }
 
+// getCodecForGV 为指定 GroupVersion 选择 YAML 序列化器；
+// 传入 nil 作为目标版本表示仅做解码，不强制转换。
 func getCodecForGV(codecs serializer.CodecFactory, gv schema.GroupVersion) (runtime.Codec, error) {
 	mediaType := runtime.ContentTypeYAML
 	serializerInfo, ok := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), mediaType)
@@ -70,6 +74,8 @@ func getCodecForGV(codecs serializer.CodecFactory, gv schema.GroupVersion) (runt
 	return codec, nil
 }
 
+// matchOutputFile 比较输出与期望文件；可用 UPDATE_COMPONENTCONFIG_FIXTURE_DATA=true
+// 重新生成兼容性测试数据。文件缺失同样视为需要更新。
 func matchOutputFile(t *testing.T, actual []byte, expectedFilePath string) {
 	expected, err := os.ReadFile(expectedFilePath)
 	if err != nil && !os.IsNotExist(err) {
@@ -93,6 +99,7 @@ func matchOutputFile(t *testing.T, actual []byte, expectedFilePath string) {
 	}
 	if needsUpdate {
 		if os.Getenv(updateEnvVar) == "true" {
+			// 递归创建目录，允许新增 API 组的 fixture 首次生成。
 			if err := os.MkdirAll(filepath.Dir(expectedFilePath), 0755); err != nil {
 				t.Fatal(err)
 			}

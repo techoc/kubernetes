@@ -28,6 +28,8 @@ import (
 )
 
 var (
+	// labelValueAllowLists 以 "metric,label" 为键保存允许值集合；
+	// 并发读写由 allowListLock 保护。
 	labelValueAllowLists = map[string]*MetricLabelAllowList{}
 	allowListLock        sync.RWMutex
 )
@@ -46,6 +48,8 @@ func ResetLabelValueAllowLists() {
 //
 // Name must be set to a non-empty string. DeprecatedVersion is defined only
 // if the metric for which this options applies is, in fact, deprecated.
+//
+// deprecateOnce/annotateOnce 保证 Help 文本只被改写一次，即使多次创建同名指标。
 type KubeOpts struct {
 	Namespace                     string
 	Subsystem                     string
@@ -90,6 +94,8 @@ const (
 )
 
 // setDefaults takes 'ALPHA' in case of empty.
+//
+// 未声明稳定性时按最弱保证（ALPHA）处理，避免指标被误当作稳定接口。
 func (sl *StabilityLevel) setDefaults() {
 	switch *sl {
 	case "":
@@ -103,6 +109,8 @@ func (sl *StabilityLevel) setDefaults() {
 type CounterOpts KubeOpts
 
 // Modify help description on the metric description.
+//
+// 使用 sync.Once 防止同一 Opts 被重复创建时 Help 前缀叠加。
 func (o *CounterOpts) markDeprecated() {
 	o.deprecateOnce.Do(func() {
 		o.Help = fmt.Sprintf("(Deprecated since %v) %v", o.DeprecatedVersion, o.Help)
@@ -111,6 +119,8 @@ func (o *CounterOpts) markDeprecated() {
 
 // annotateStabilityLevel annotates help description on the metric description with the stability level
 // of the metric
+//
+// 稳定性级别会出现在 /metrics 的 HELP 中，便于告警规则与升级评估直接识别。
 func (o *CounterOpts) annotateStabilityLevel() {
 	o.annotateOnce.Do(func() {
 		o.Help = fmt.Sprintf("[%v] %v", o.StabilityLevel, o.Help)
@@ -133,6 +143,8 @@ func (o *CounterOpts) toPromCounterOpts() prometheus.CounterOpts {
 type GaugeOpts KubeOpts
 
 // Modify help description on the metric description.
+//
+// 与 CounterOpts 相同，Once 保证 Help 只改写一次。
 func (o *GaugeOpts) markDeprecated() {
 	o.deprecateOnce.Do(func() {
 		o.Help = fmt.Sprintf("(Deprecated since %v) %v", o.DeprecatedVersion, o.Help)
@@ -163,6 +175,8 @@ func (o *GaugeOpts) toPromGaugeOpts() prometheus.GaugeOpts {
 // mandatory to set Name to a non-empty string. All other fields are optional
 // and can safely be left at their zero value, although it is strongly
 // encouraged to set a Help string.
+//
+// Buckets 为经典直方图边界；启用原生直方图时两者会同时暴露。
 type HistogramOpts struct {
 	Namespace                     string
 	Subsystem                     string
@@ -179,6 +193,8 @@ type HistogramOpts struct {
 }
 
 // Modify help description on the metric description.
+//
+// 与 CounterOpts 一致，Once 保证 Help 只改写一次。
 func (o *HistogramOpts) markDeprecated() {
 	o.deprecateOnce.Do(func() {
 		o.Help = fmt.Sprintf("(Deprecated since %v) %v", o.DeprecatedVersion, o.Help)
@@ -207,6 +223,8 @@ func (o *HistogramOpts) toPromHistogramOpts() prometheus.HistogramOpts {
 
 	// When native histograms are enabled, configure exponential bucket options
 	// to expose metrics in both classic and native histogram formats.
+	//
+	// 保留经典 Buckets 以兼容旧采集器，同时附加原生直方图参数供支持它的远端存储使用。
 	if internalmetrics.NativeHistogramsEnabled() {
 		nativeOpts := internalmetrics.NativeHistogramConfig()
 		opts.NativeHistogramBucketFactor = nativeOpts.BucketFactor
@@ -220,6 +238,8 @@ func (o *HistogramOpts) toPromHistogramOpts() prometheus.HistogramOpts {
 // mandatory to set Name to a non-empty string. All other fields are optional
 // and can safely be left at their zero value, although it is strongly
 // encouraged to set a Help string.
+//
+// InitialValue 用于预置未观测时的初始值，避免依赖该指标的告警在启动瞬间误触发。
 type TimingHistogramOpts struct {
 	Namespace                     string
 	Subsystem                     string
@@ -270,6 +290,8 @@ func (o *TimingHistogramOpts) toPromHistogramOpts() promext.TimingHistogramOpts 
 // optional and can safely be left at their zero value, it is recommended to set
 // a help string and to explicitly set the Objectives field to the desired value
 // as the default value will change in the upcoming v0.10 of the library.
+//
+// Objectives 为空时使用 defObjectives，以维持旧版 quantile 行为。
 type SummaryOpts struct {
 	Namespace                     string
 	Subsystem                     string
@@ -289,6 +311,8 @@ type SummaryOpts struct {
 }
 
 // Modify help description on the metric description.
+//
+// 与 CounterOpts 一致，Once 保证 Help 只改写一次。
 func (o *SummaryOpts) markDeprecated() {
 	o.deprecateOnce.Do(func() {
 		o.Help = fmt.Sprintf("(Deprecated since %v) %v", o.DeprecatedVersion, o.Help)
@@ -306,6 +330,7 @@ func (o *SummaryOpts) annotateStabilityLevel() {
 // Deprecated: DefObjectives will not be used as the default objectives in
 // v1.0.0 of the library. The default Summary will have no quantiles then.
 var (
+	// defObjectives 是 prometheus v1 之前的默认 quantile，保留以维持兼容。
 	defObjectives = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
 )
 

@@ -26,10 +26,15 @@ import (
 )
 
 var (
+	// 采样率以“每百万”为单位，避免浮点数；上限即 100% 采样。
 	maxSamplingRatePerMillion = int32(1000000)
 )
 
 // ValidateTracingConfiguration validates the tracing configuration
+//
+// ValidateTracingConfiguration 只校验显式设置的可选字段；配置为 nil
+// 表示未启用 tracing，直接视为合法。
+// 返回字段路径化的错误，便于在 --config 校验时定位到具体字段。
 func ValidateTracingConfiguration(traceConfig *TracingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if traceConfig == nil {
@@ -44,6 +49,7 @@ func ValidateTracingConfiguration(traceConfig *TracingConfiguration, featureGate
 	return allErrs
 }
 
+// validateSamplingRate 校验采样率落在 [0, 1e6] 内；负数与超过 100% 都无意义。
 func validateSamplingRate(rate int32, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if rate < 0 {
@@ -61,6 +67,8 @@ func validateSamplingRate(rate int32, fldPath *field.Path) field.ErrorList {
 	return errs
 }
 
+// validateEndpoint 校验 gRPC collector 端点。
+// 未写 scheme 时按 dns:// 处理，因此裸 host:port 也是合法输入。
 func validateEndpoint(endpoint string, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if !strings.Contains(endpoint, "//") {
@@ -74,6 +82,7 @@ func validateEndpoint(endpoint string, fldPath *field.Path) field.ErrorList {
 		))
 		return errs
 	}
+	// gRPC 的 naming 只支持这几种 scheme；其他值会在运行期失败，提前拒绝。
 	switch url.Scheme {
 	case "dns":
 	case "unix":

@@ -37,6 +37,8 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+// TestClientGOMetrics 验证 client-go 各钩子（请求、重试、exec 插件、传输缓存）
+// 都能落到对应的 Prometheus 指标，且标签名与 HELP 文本稳定。
 func TestClientGOMetrics(t *testing.T) {
 	tests := []struct {
 		description string
@@ -113,6 +115,7 @@ func TestClientGOMetrics(t *testing.T) {
 			// Since prometheus' gatherer is global, other tests may have updated
 			// metrics already, so we need to reset them prior to running this test.
 			// This also implies that we can't run this test in parallel with other tests.
+			// 全局注册表意味着必须串行执行并先清零，否则计数会与断言期望不一致。
 			resetter.Reset()
 			test.update()
 
@@ -123,6 +126,8 @@ func TestClientGOMetrics(t *testing.T) {
 	}
 }
 
+// TestTransportCAReloadsMetric 覆盖 CA 重载的成功/失败与各类原因组合，
+// 确认 result 与 reason 两个标签都被正确传递。
 func TestTransportCAReloadsMetric(t *testing.T) {
 	tests := []struct {
 		description string
@@ -211,6 +216,7 @@ func TestTransportCAReloadsMetric(t *testing.T) {
 			// Since prometheus' gatherer is global, other tests may have updated
 			// metrics already, so we need to reset them prior to running this test.
 			// This also implies that we can't run this test in parallel with other tests.
+			// 全局注册表意味着必须串行执行并先清零，否则计数会与断言期望不一致。
 			resetter.Reset()
 			test.update()
 
@@ -221,6 +227,8 @@ func TestTransportCAReloadsMetric(t *testing.T) {
 	}
 }
 
+// TestTransportCleanupMetrics 验证传输缓存 GC 相关计数：
+// 取消回调调用次数，以及删除入口时 deleted/skipped 两种结果。
 func TestTransportCleanupMetrics(t *testing.T) {
 	t.Run("cleanup cancel calls", func(t *testing.T) {
 		transportCertRotationGCCalls.Reset()

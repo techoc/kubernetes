@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	// 以下常量直接转发 Prometheus 的默认值，供调用方在构造 SummaryOpts 时引用。
 	DefAgeBuckets = prometheus.DefAgeBuckets
 	DefBufCap     = prometheus.DefBufCap
 	DefMaxAge     = prometheus.DefMaxAge
@@ -45,6 +46,9 @@ type Summary struct {
 // will be measured until the summary is registered somewhere.
 //
 // Deprecated: as per the metrics overhaul KEP
+//
+// 构造阶段先把底层实现设为 noop；只有注册后 lazyMetric 才会创建真正的
+// Prometheus Summary，这样未注册的指标不会占用内存。
 func NewSummary(opts *SummaryOpts) *Summary {
 	opts.StabilityLevel.setDefaults()
 
@@ -70,6 +74,8 @@ func (s *Summary) DeprecatedVersion() *semver.Version {
 
 // initializeMetric invokes the actual prometheus.Summary object instantiation
 // and stores a reference to it
+//
+// 注册时调用：先给 Help 打上稳定性前缀，再创建底层对象。
 func (s *Summary) initializeMetric() {
 	s.SummaryOpts.annotateStabilityLevel()
 	// this actually creates the underlying prometheus gauge.
@@ -78,6 +84,8 @@ func (s *Summary) initializeMetric() {
 
 // initializeDeprecatedMetric invokes the actual prometheus.Summary object instantiation
 // but modifies the Help description prior to object instantiation.
+//
+// 弃用指标的 Help 会追加 "(Deprecated since ...)"，便于使用者从 /metrics 直接发现。
 func (s *Summary) initializeDeprecatedMetric() {
 	s.SummaryOpts.markDeprecated()
 	s.initializeMetric()
@@ -106,6 +114,8 @@ type SummaryVec struct {
 // registration will actually measure anything.
 //
 // Deprecated: as per the metrics overhaul KEP
+//
+// 注册前通过 WithLabelValues 拿到的只是永久 noop，不会在内存中累积子指标。
 func NewSummaryVec(opts *SummaryOpts, labels []string) *SummaryVec {
 	opts.StabilityLevel.setDefaults()
 
@@ -125,11 +135,13 @@ func (v *SummaryVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.SummaryOpts.DeprecatedVersion)
 }
 
+// initializeMetric 在注册时创建真正的 SummaryVec。
 func (v *SummaryVec) initializeMetric() {
 	v.SummaryOpts.annotateStabilityLevel()
 	v.SummaryVec = prometheus.NewSummaryVec(v.SummaryOpts.toPromSummaryOpts(), v.originalLabels)
 }
 
+// initializeDeprecatedMetric 先标记弃用再创建，使 Help 带上弃用说明。
 func (v *SummaryVec) initializeDeprecatedMetric() {
 	v.SummaryOpts.markDeprecated()
 	v.initializeMetric()
@@ -150,12 +162,15 @@ func (v *SummaryVec) initializeDeprecatedMetric() {
 // values (same order as the VariableLabels in Desc). If that combination of
 // label values is accessed for the first time, a new ObserverMetric is created IFF the summaryVec
 // has been registered to a metrics registry.
+//
+// 未注册时返回 noop；注册后才按 allow list 约束 label 值并创建真实子指标。
 func (v *SummaryVec) WithLabelValues(lvs ...string) ObserverMetric {
 	if !v.IsCreated() {
 		return noop
 	}
 
 	// Initialize label allow lists if not already initialized
+	// 只读取全局 allow list 快照，加读锁即可。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -175,6 +190,8 @@ func (v *SummaryVec) WithLabelValues(lvs ...string) ObserverMetric {
 // must match those of the VariableLabels in Desc). If that label map is
 // accessed for the first time, a new ObserverMetric is created IFF the summaryVec has
 // been registered to a metrics registry.
+//
+// With 与 WithLabelValues 语义相同，只是以 map 形式传参。
 func (v *SummaryVec) With(labels map[string]string) ObserverMetric {
 	if !v.IsCreated() {
 		return noop
@@ -225,6 +242,8 @@ func (v *SummaryVec) ResetLabelAllowLists() {
 }
 
 // WithContext returns wrapped SummaryVec with context
+//
+// 当前实现只保存 ctx，为将来接入 exemplar 预留接口。
 func (v *SummaryVec) WithContext(ctx context.Context) *SummaryVecWithContext {
 	return &SummaryVecWithContext{
 		ctx:        ctx,

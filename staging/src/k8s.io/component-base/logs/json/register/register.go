@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package register 通过导入副作用注册 JSON 日志格式。
+// 组件只需空白导入本包，即可在 --logging-format=json 时获得 JSON 输出；
+// 注册由 LoggingBetaOptions gate 控制，因此格式仍属于 Beta 能力。
 package register
 
 import (
@@ -22,7 +25,7 @@ import (
 )
 
 func init() {
-	// JSON format is optional klog format
+	// JSON 是 klog 的可选格式；注册失败说明格式名冲突，属于编程错误。
 	if err := logsapi.RegisterLogFormat(logsapi.JSONLogFormat, json.Factory{}, logsapi.LoggingBetaOptions); err != nil {
 		panic(err)
 	}

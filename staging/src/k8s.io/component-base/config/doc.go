@@ -16,4 +16,9 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义 Kubernetes 组件共享的内部配置类型：客户端连接、
+// 调试（profiling）以及 leader election 参数。
+//
+// 这些类型被 apiserver、controller-manager、scheduler 等组件的
+// 配置文件复用，字段语义和默认值属于跨组件契约，变更时需保持兼容。
 package config

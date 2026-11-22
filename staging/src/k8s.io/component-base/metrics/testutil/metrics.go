@@ -42,6 +42,7 @@ var (
 // This directly exposes Prometheus types. Test code may
 // use those via type aliases provided by this package
 // instead of imorting the Prometheus packages (https://github.com/kubernetes/kubernetes/issues/89267).
+// 以指标名分组的样本集合，便于按名字断言而不必处理完整 MetricFamily。
 type Metrics map[string]Samples
 type Samples = model.Samples
 type Sample = model.Sample
@@ -71,6 +72,8 @@ func (m *Metrics) Equal(o Metrics) bool {
 	for k := range o {
 		rightKeySet = append(rightKeySet, k)
 	}
+	// map 遍历顺序随机，这里依赖 Equal 前的 key 集合比较结果；
+	// 调用方通常来自同一构造路径，顺序一致。
 	if !reflect.DeepEqual(leftKeySet, rightKeySet) {
 		return false
 	}
@@ -103,6 +106,7 @@ func ParseMetrics(data string, output *Metrics) error {
 				// Expected loop termination condition.
 				return nil
 			}
+			// 非 EOF 错误目前被忽略：文本格式中不认识的样本不应中断整个断言。
 			continue
 		}
 		for _, metric := range v {
@@ -117,10 +121,12 @@ func ParseMetrics(data string, output *Metrics) error {
 // proto messages in a map where the metric names are the keys, along with any
 // error encountered.
 func TextToMetricFamilies(in io.Reader) (map[string]*dto.MetricFamily, error) {
+	// UTF8Validation 允许指标名包含 Prometheus 新规范中的 UTF-8 字符。
 	textParser := expfmt.NewTextParser(model.UTF8Validation)
 	return textParser.TextToMetricFamilies(in)
 }
 
+// MetricFamilyToText 把 DTO 序列化回文本格式，便于生成期望输出。
 func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err error) {
 	return expfmt.MetricFamilyToText(out, in)
 }
@@ -149,6 +155,7 @@ func PrintSample(sample *model.Sample) string {
 // ComputeHistogramDelta computes the change in histogram metric for a selected label.
 // Results are stored in after samples
 func ComputeHistogramDelta(before, after model.Samples, label model.LabelName) {
+	// 以“目标标签 + le”为键对齐前后样本，只对能匹配上的桶求差。
 	beforeSamplesMap := make(map[string]*model.Sample)
 	for _, bSample := range before {
 		beforeSamplesMap[makeKey(bSample.Metric[label], bSample.Metric["le"])] = bSample
@@ -160,6 +167,7 @@ func ComputeHistogramDelta(before, after model.Samples, label model.LabelName) {
 	}
 }
 
+// makeKey 用不会出现在标签值中的分隔符拼接复合键。
 func makeKey(a, b model.LabelValue) string {
 	return string(a) + "___" + string(b)
 }
@@ -227,6 +235,7 @@ func (vec HistogramVec) GetAggregatedSampleSum() float64 {
 func (vec HistogramVec) Quantile(q float64) float64 {
 	var buckets []bucket
 
+	// 第一个直方图确定桶边界，后续直方图只把计数累加到对应桶上。
 	for i, hist := range vec {
 		for j, bckt := range hist.Bucket {
 			if i == 0 {
@@ -254,12 +263,14 @@ func (vec HistogramVec) Quantile(q float64) float64 {
 
 // Average computes wrapped histograms' average value.
 func (vec HistogramVec) Average() float64 {
+	// 空直方图时返回 NaN（0/0），提醒调用方数据缺失。
 	return vec.GetAggregatedSampleSum() / float64(vec.GetAggregatedSampleCount())
 }
 
 // Validate makes sure the wrapped histograms have all necessary fields set and with valid values.
 func (vec HistogramVec) Validate() error {
 	bucketSize := 0
+	// 所有子直方图必须桶数一致，否则聚合与分位数计算会错位。
 	for i, hist := range vec {
 		if err := hist.Validate(); err != nil {
 			return err
@@ -312,6 +323,7 @@ func histogramVecFromMetricFamilies(metricFamilies []*dto.MetricFamily, metricNa
 	}
 
 	vec := make(HistogramVec, 0)
+	// 只保留满足标签过滤条件的直方图。
 	for _, metric := range metricFamily.GetMetric() {
 		if LabelsMatch(metric, lvMap) {
 			if hist := metric.GetHistogram(); hist != nil {
@@ -328,6 +340,7 @@ type bucket struct {
 	count      float64
 }
 
+// bucketQuantile 在累积桶上做线性插值，语义与 Prometheus 的 histogram_quantile 一致。
 func bucketQuantile(q float64, buckets []bucket) float64 {
 	if q < 0 {
 		return math.Inf(-1)
@@ -352,6 +365,7 @@ func bucketQuantile(q float64, buckets []bucket) float64 {
 	}
 
 	// linear approximation of b-th bucket
+	// 在目标桶内按计数比例做线性插值；这是 Prometheus 的既有近似策略。
 	brank := rank - buckets[b-1].count
 	bSize := buckets[b].upperBound - buckets[b-1].upperBound
 	bCount := buckets[b].count - buckets[b-1].count
@@ -390,6 +404,7 @@ func (hist *Histogram) Average() float64 {
 
 // Validate makes sure the wrapped histogram has all necessary fields set and with valid values.
 func (hist *Histogram) Validate() error {
+	// 计数/总和为零通常意味着指标未被使用或采集失败，测试中视为无效数据。
 	if hist.SampleCount == nil || hist.GetSampleCount() == 0 {
 		return fmt.Errorf("nil or empty histogram SampleCount")
 	}
@@ -455,6 +470,7 @@ func LabelsMatch(metric *dto.Metric, labelFilter map[string]string) bool {
 	}
 
 	// length comparison then match key to values in the maps
+	// 过滤条件是子集语义：指标可以带额外标签。
 	if len(labelFilter) > len(metricLabels) {
 		return false
 	}
@@ -503,6 +519,7 @@ func GetCounterValuesFromGatherer(gatherer metrics.Gatherer, metricName string, 
 	return values, nil
 }
 
+// findMetricFamily 按名称线性查找；指标家族数量通常很小，无需建索引。
 func findMetricFamily(metricFamilies []*dto.MetricFamily, metricName string) *dto.MetricFamily {
 	for _, mFamily := range metricFamilies {
 		if mFamily.GetName() == metricName {

@@ -32,6 +32,8 @@ import (
 )
 
 // TestZapLoggerInfo test ZapLogger json info format
+// 逐条比对固定时间的 JSON 输出，覆盖普通键值、zap 强类型字段、
+// 非法键、duration、WithName、重复键与 NamespacedName 的序列化。
 func TestZapLoggerInfo(t *testing.T) {
 	timeNow = func() time.Time {
 		return time.Date(1970, time.January, 1, 0, 0, 0, 123, time.UTC)
@@ -121,6 +123,7 @@ func TestZapLoggerInfo(t *testing.T) {
 }
 
 // TestZapLoggerEnabled test ZapLogger enabled
+// 验证 V(n).Enabled() 与配置的 verbosity 阈值一致。
 func TestZapLoggerEnabled(t *testing.T) {
 	verbosityLevel := 10
 	sampleInfoLogger, _ := NewJSONLogger(logsapi.VerbosityLevel(verbosityLevel), nil, nil, nil)
@@ -137,6 +140,7 @@ func TestZapLoggerEnabled(t *testing.T) {
 }
 
 // TestZapLoggerV test ZapLogger V set log level func
+// 对每个等级检查是否输出，并核对输出中的 v 字段。
 func TestZapLoggerV(t *testing.T) {
 	timeNow = func() time.Time {
 		return time.Date(1970, time.January, 1, 0, 0, 0, 123, time.UTC)
@@ -179,6 +183,7 @@ func TestZapLoggerV(t *testing.T) {
 }
 
 // TestZapLoggerError test ZapLogger json error format
+// error 以 "err" 字段附加，且不包含 v 字段。
 func TestZapLoggerError(t *testing.T) {
 	var buffer bytes.Buffer
 	writer := zapcore.AddSync(&buffer)
@@ -201,6 +206,8 @@ func TestZapLoggerError(t *testing.T) {
 	}
 }
 
+// TestZapLoggerStreams 验证 error 与 info 分别写入独立的 writer，
+// 对应 split stream 模式下 stderr/stdout 的分流。
 func TestZapLoggerStreams(t *testing.T) {
 	var infoBuffer, errorBuffer bytes.Buffer
 	log, _ := NewJSONLogger(0, zapcore.AddSync(&infoBuffer), zapcore.AddSync(&errorBuffer), nil)
@@ -233,6 +240,7 @@ func TestZapLoggerStreams(t *testing.T) {
 	}
 }
 
+// testBuff 统计写入次数，用于判断某条日志是否真正输出。
 type testBuff struct {
 	writeCount int
 }

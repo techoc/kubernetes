@@ -25,11 +25,13 @@ import (
 
 // StableCollector extends the prometheus.Collector interface to allow customization of the
 // metric registration process, it's especially intend to be used in scenario of custom collector.
+// 在注册时由 registry 调用 Create，按当前版本决定描述符是注册、隐藏还是忽略。
 type StableCollector interface {
 	prometheus.Collector
 
 	// DescribeWithStability sends the super-set of all possible metrics.Desc collected
 	// by this StableCollector to the provided channel.
+	// 实现者需在 Create 前上报全部描述符，registry 才能统一做稳定性筛选。
 	DescribeWithStability(chan<- *Desc)
 
 	// CollectWithStability sends each collected metrics.Metric via the provide channel.
@@ -52,7 +54,8 @@ type BaseStableCollector struct {
 	descriptors  map[string]*Desc // stores all descriptors by pair<fqName, Desc>, these are collected from DescribeWithStability().
 	registerable map[string]*Desc // stores registerable descriptors by pair<fqName, Desc>, is a subset of descriptors.
 	hidden       map[string]*Desc // stores hidden descriptors by pair<fqName, Desc>, is a subset of descriptors.
-	self         StableCollector
+	// self 指回外层 collector，用于回调其 DescribeWithStability/CollectWithStability。
+	self StableCollector
 }
 
 // DescribeWithStability sends all descriptors to the provided channel.
@@ -63,6 +66,7 @@ func (bsc *BaseStableCollector) DescribeWithStability(ch chan<- *Desc) {
 
 // Describe sends all descriptors to the provided channel.
 // It intended to be called by prometheus registry.
+// 只发送已通过稳定性筛选的描述符，隐藏指标不会出现在这里。
 func (bsc *BaseStableCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range bsc.registerable {
 		ch <- d.toPrometheusDesc()
@@ -76,6 +80,7 @@ func (bsc *BaseStableCollector) CollectWithStability(ch chan<- Metric) {
 }
 
 // Collect is called by the Prometheus registry when collecting metrics.
+// 用 goroutine 桥接回调式接口与通道式 Collect，同时过滤隐藏指标（nil）。
 func (bsc *BaseStableCollector) Collect(ch chan<- prometheus.Metric) {
 	mch := make(chan Metric)
 
@@ -94,6 +99,7 @@ func (bsc *BaseStableCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// add 登记描述符；名称缺失或重复都是编程错误，直接 panic。
 func (bsc *BaseStableCollector) add(d *Desc) {
 	if len(d.fqName) == 0 {
 		panic("nameless metrics will be not allowed")
@@ -111,6 +117,7 @@ func (bsc *BaseStableCollector) add(d *Desc) {
 }
 
 // Init intends to be called by registry.
+// 通过通道收集实现方上报的描述符，允许实现方在独立 goroutine 中生产。
 func (bsc *BaseStableCollector) init(self StableCollector) {
 	bsc.self = self
 
@@ -127,6 +134,7 @@ func (bsc *BaseStableCollector) init(self StableCollector) {
 	}
 }
 
+// trackRegistrableDescriptor 记录将对外暴露的描述符。
 func (bsc *BaseStableCollector) trackRegistrableDescriptor(d *Desc) {
 	if bsc.registerable == nil {
 		bsc.registerable = make(map[string]*Desc)
@@ -135,6 +143,7 @@ func (bsc *BaseStableCollector) trackRegistrableDescriptor(d *Desc) {
 	bsc.registerable[d.fqName] = d
 }
 
+// trackHiddenDescriptor 记录被隐藏的描述符，供 HiddenMetrics 查询。
 func (bsc *BaseStableCollector) trackHiddenDescriptor(d *Desc) {
 	if bsc.hidden == nil {
 		bsc.hidden = make(map[string]*Desc)
@@ -149,6 +158,7 @@ func (bsc *BaseStableCollector) trackHiddenDescriptor(d *Desc) {
 func (bsc *BaseStableCollector) Create(version *semver.Version, self StableCollector) bool {
 	bsc.init(self)
 
+	// 对每个描述符执行稳定性判定，分入可注册或隐藏两类。
 	for _, d := range bsc.descriptors {
 		d.create(version)
 		if d.IsHidden() {
@@ -158,6 +168,7 @@ func (bsc *BaseStableCollector) Create(version *semver.Version, self StableColle
 		}
 	}
 
+	// 全部指标都被隐藏时整体忽略该 collector，避免空壳注册。
 	if len(bsc.registerable) > 0 {
 		return true
 	}
@@ -172,6 +183,7 @@ func (bsc *BaseStableCollector) ClearState() {
 		d.ClearState()
 	}
 
+	// 重置所有缓存，使下一次 Create 能按新版本重新判定。
 	bsc.descriptors = nil
 	bsc.registerable = nil
 	bsc.hidden = nil
@@ -180,6 +192,7 @@ func (bsc *BaseStableCollector) ClearState() {
 
 // HiddenMetrics tells the list of hidden metrics with fqName.
 func (bsc *BaseStableCollector) HiddenMetrics() (fqNames []string) {
+	// 对 map 做 range 顺序不确定，调用方若需稳定顺序应自行排序。
 	for i := range bsc.hidden {
 		fqNames = append(fqNames, bsc.hidden[i].fqName)
 	}

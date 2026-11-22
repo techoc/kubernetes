@@ -28,9 +28,11 @@ const (
 )
 
 var (
+	// 在 init 时复制 processStart，后续用它检测该全局值是否被意外改写。
 	processStartTestCopy = &processStart
 )
 
+// TestProcessStartTimeHeader 验证 /metrics 响应头中的进程启动时间与实际启动时间一致。
 func TestProcessStartTimeHeader(t *testing.T) {
 	now := GetProcessStart()
 	handler := Handler()
@@ -47,6 +49,7 @@ func TestProcessStartTimeHeader(t *testing.T) {
 
 // processStart must never be reassigned after init.
 // This test ensures processStart doesn't change across calls
+// 若 processStart 被改写，抓取端计算的进程运行时长会出现跳变，因此单独守护。
 func TestProcessStartImmutable(t *testing.T) {
 	if *processStartTestCopy != processStart {
 		t.Errorf("processStart test values differ: %v != %v", processStartTestCopy, processStart)

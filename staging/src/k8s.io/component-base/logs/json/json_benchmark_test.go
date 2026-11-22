@@ -23,8 +23,11 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// writer 是所有基准共用的丢弃型 write syncer，避免 I/O 干扰测量。
 var writer = zapcore.AddSync(&writeSyncer{})
 
+// BenchmarkInfoLoggerInfo 测量并行 Info 调用的吞吐，
+// 键值覆盖字符串、整数、浮点、Unicode、结构体与未导出字段。
 func BenchmarkInfoLoggerInfo(b *testing.B) {
 	logger, _ := NewJSONLogger(0, writer, nil, nil)
 	b.ResetTimer()
@@ -54,6 +57,7 @@ func BenchmarkInfoLoggerInfo(b *testing.B) {
 	})
 }
 
+// BenchmarkZapLoggerError 测量带 error 的并行 Error 调用开销。
 func BenchmarkZapLoggerError(b *testing.B) {
 	logger, _ := NewJSONLogger(0, writer, nil, nil)
 	b.ResetTimer()
@@ -84,6 +88,7 @@ func BenchmarkZapLoggerError(b *testing.B) {
 	})
 }
 
+// BenchmarkZapLoggerV 测量 verbosity 检查（V(1)）通过后的 Info 路径。
 func BenchmarkZapLoggerV(b *testing.B) {
 	logger, _ := NewJSONLogger(1, writer, nil, nil)
 	b.ResetTimer()
@@ -113,6 +118,7 @@ func BenchmarkZapLoggerV(b *testing.B) {
 	})
 }
 
+// writeSyncer 丢弃写入内容，用于隔离日志序列化本身的性能。
 type writeSyncer struct{}
 
 var _ zapcore.WriteSyncer = (*writeSyncer)(nil)

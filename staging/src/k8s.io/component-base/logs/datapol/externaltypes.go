@@ -23,6 +23,7 @@ import (
 )
 
 var (
+	// 预取标准库类型的 reflect.Type，避免在热路径上重复计算。
 	httpHeader      = reflect.TypeOf(http.Header{})
 	httpCookie      = reflect.TypeOf(http.Cookie{})
 	x509Certificate = reflect.TypeOf(x509.Certificate{})
@@ -30,17 +31,23 @@ var (
 
 // GlobalDatapolicyMapping returns the list of sensitive datatypes are embedded
 // in types not native to Kubernetes.
+//
+// 标准库类型无法携带 datapolicy 标签，因此在此集中声明其敏感字段类别，
+// 供日志脱敏检查识别。
 func GlobalDatapolicyMapping(v interface{}) []string {
 	return byType(reflect.TypeOf(v))
 }
 
+// byType 按标准库类型返回敏感数据类别；未列出的类型返回 nil。
 func byType(t reflect.Type) []string {
 	switch t {
 	case httpHeader:
+		// Header 可能包含 Authorization/Cookie 等凭据。
 		return []string{"password", "token"}
 	case httpCookie:
 		return []string{"token"}
 	case x509Certificate:
+		// 证书里的公钥本身不是秘密，但私钥材料常与之关联，按 security-key 处理。
 		return []string{"security-key"}
 	default:
 		return nil

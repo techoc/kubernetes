@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestAPIVersionRegexp 覆盖 APIVersionRegexp 的边界：
+// 必须是 v<数字>[alpha|beta<数字>]，且 alpha/beta 只能出现其一。
 func TestAPIVersionRegexp(t *testing.T) {
 	testCases := []struct {
 		name       string

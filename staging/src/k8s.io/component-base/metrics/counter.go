@@ -29,6 +29,8 @@ import (
 
 // Counter is our internal representation for our wrapping struct around prometheus
 // counters. Counter implements both kubeCollector and CounterMetric.
+// Counter 是对 prometheus Counter 的包装，同时实现 kubeCollector 与 CounterMetric。
+// 指标在首次注册前是惰性 noop，未注册时不会真正计数，也不会泄露到内存中。
 type Counter struct {
 	CounterMetric
 	*CounterOpts
@@ -40,6 +42,7 @@ type Counter struct {
 var _ Metric = &Counter{}
 
 // exemplarCounterMetric holds a context to extract exemplar labels from, and a counter metric to attach them to. It implements the metricWithExemplar interface.
+// exemplarCounterMetric 把 context 中的 trace/span 信息作为 exemplar 附加到计数上。
 type exemplarCounterMetric struct {
 	ctx      context.Context
 	delegate CounterMetric
@@ -55,20 +58,24 @@ func NewCounter(opts *CounterOpts) *Counter {
 		CounterOpts: opts,
 		lazyMetric:  lazyMetric{stabilityLevel: opts.StabilityLevel},
 	}
+	// 先挂 noop 实现：未注册前调用 Add/Inc 不产生任何开销。
 	kc.setPrometheusCounter(noop)
 	kc.lazyInit(kc, BuildFQName(opts.Namespace, opts.Subsystem, opts.Name))
 	return kc
 }
 
+// Desc 返回底层 prometheus Desc。
 func (c *Counter) Desc() *prometheus.Desc {
 	return c.metric.Desc()
 }
 
+// Write 把当前值写出到 dto.Metric，供 testutil 等工具读取。
 func (c *Counter) Write(to *dto.Metric) error {
 	return c.metric.Write(to)
 }
 
 // Reset resets the underlying prometheus Counter to start counting from 0 again
+// Reset 将底层计数器清零；未创建时直接返回，避免无意义地替换 noop。
 func (c *Counter) Reset() {
 	if !c.IsCreated() {
 		return
@@ -77,37 +84,44 @@ func (c *Counter) Reset() {
 }
 
 // setPrometheusCounter sets the underlying CounterMetric object, i.e. the thing that does the measurement.
+// setPrometheusCounter 同时更新 selfCollector，使 Describe/Collect 指向同一个实现。
 func (c *Counter) setPrometheusCounter(counter prometheus.Counter) {
 	c.CounterMetric = counter
 	c.initSelfCollection(counter)
 }
 
 // DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 解析并返回弃用版本；未配置时返回 nil。
 func (c *Counter) DeprecatedVersion() *semver.Version {
 	return parseSemver(c.CounterOpts.DeprecatedVersion)
 }
 
 // initializeMetric invocation creates the actual underlying Counter. Until this method is called
 // the underlying counter is a no-op.
+// initializeMetric 在注册时创建真正的 prometheus Counter，并在 Help 中标注稳定性级别。
 func (c *Counter) initializeMetric() {
 	c.CounterOpts.annotateStabilityLevel()
-	// this actually creates the underlying prometheus counter.
+	// 这里才真正创建底层 prometheus counter。
 	c.setPrometheusCounter(prometheus.NewCounter(c.CounterOpts.toPromCounterOpts()))
 }
 
 // initializeDeprecatedMetric invocation creates the actual (but deprecated) Counter. Until this method
 // is called the underlying counter is a no-op.
+// initializeDeprecatedMetric 为已弃用指标创建 counters，并在 Help 中追加弃用说明。
 func (c *Counter) initializeDeprecatedMetric() {
 	c.CounterOpts.markDeprecated()
 	c.initializeMetric()
 }
 
 // WithContext allows the normal Counter metric to pass in context.
+// WithContext 返回带 context 的包装，用于把 trace 信息作为 exemplar 上报。
 func (c *Counter) WithContext(ctx context.Context) CounterMetric {
 	return &exemplarCounterMetric{ctx: ctx, delegate: c.CounterMetric}
 }
 
 // Add attaches an exemplar to the metric and then calls the delegate.
+// Add 先检查 context 中是否有已采样的 span；有则附带 trace_id/span_id 作为 exemplar，
+// 否则退化为普通 Add，避免抽样数据缺失时影响指标本身。
 func (e *exemplarCounterMetric) Add(v float64) {
 	if m, ok := e.delegate.(prometheus.ExemplarAdder); ok {
 		maybeSpanCtx := trace.SpanContextFromContext(e.ctx)
@@ -125,12 +139,14 @@ func (e *exemplarCounterMetric) Add(v float64) {
 }
 
 // Inc attaches an exemplar to the metric and then calls the delegate.
+// Inc 是 Add(1) 的便捷写法。
 func (e *exemplarCounterMetric) Inc() {
 	e.Add(1)
 }
 
 // CounterVec is the internal representation of our wrapping struct around prometheus
 // counterVecs. CounterVec implements both kubeCollector and CounterVecMetric.
+// CounterVec 是对 prometheus CounterVec 的包装；注册前成员提取返回固定 noop。
 type CounterVec struct {
 	*prometheus.CounterVec
 	*CounterOpts
@@ -196,12 +212,13 @@ func (v *CounterVec) initializeDeprecatedMetric() {
 // values (same order as the VariableLabels in Desc). If that combination of
 // label values is accessed for the first time, a new Counter is created IFF the counterVec
 // has been registered to a metrics registry.
+// 未注册时返回共享的 noop；注册后才会真正创建成员，并按 allow list 约束标签值。
 func (v *CounterVec) WithLabelValues(lvs ...string) CounterMetric {
 	if !v.IsCreated() {
-		return noop // return no-op counter
+		return noop // 返回 noop counter
 	}
 
-	// Initialize label allow lists if not already initialized
+	// 首次使用时从全局 allow list 初始化，避免每次调用都加读锁。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -210,7 +227,7 @@ func (v *CounterVec) WithLabelValues(lvs ...string) CounterMetric {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label values to allowed values
+	// 把不在允许列表中的标签值替换为 "unexpected"，限制基数。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
@@ -224,7 +241,7 @@ func (v *CounterVec) WithLabelValues(lvs ...string) CounterMetric {
 // been registered to a metrics registry.
 func (v *CounterVec) With(labels map[string]string) CounterMetric {
 	if !v.IsCreated() {
-		return noop // return no-op counter
+		return noop // 返回 noop counter
 	}
 
 	v.initializeLabelAllowListsOnce.Do(func() {
@@ -235,6 +252,7 @@ func (v *CounterVec) With(labels map[string]string) CounterMetric {
 		allowListLock.RUnlock()
 	})
 
+	// map 形式的标签同样要收敛到允许值，并在越界时计数。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainLabelMap(labels)
 	}
@@ -251,7 +269,7 @@ func (v *CounterVec) With(labels map[string]string) CounterMetric {
 // that case.
 func (v *CounterVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
+		return false // 未创建指标，自然也没有删除任何成员
 	}
 	return v.CounterVec.Delete(labels)
 }
@@ -273,6 +291,7 @@ func (v *CounterVec) ResetLabelAllowLists() {
 }
 
 // WithContext returns wrapped CounterVec with context
+// WithContext 返回带 context 的 vec 包装，子指标的 Observe/Add 会携带 exemplar。
 func (v *CounterVec) WithContext(ctx context.Context) *CounterVecWithContext {
 	return &CounterVecWithContext{
 		ctx:        ctx,

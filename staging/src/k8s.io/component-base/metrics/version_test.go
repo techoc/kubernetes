@@ -26,11 +26,14 @@ import (
 	"k8s.io/component-base/version"
 )
 
+// TestRegisterBuildInfo 验证 RegisterBuildInfo 注册的 kubernetes_build_info
+// 带有全部构建信息 label 且取值恒为 1；这是构建信息指标的核心契约。
 func TestRegisterBuildInfo(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 
 	metrics.RegisterBuildInfo(registry)
 
+	// 期望值直接取自 version.Get()，保证与实际构建环境一致而非硬编码。
 	info := version.Get()
 
 	want := fmt.Sprintf(`

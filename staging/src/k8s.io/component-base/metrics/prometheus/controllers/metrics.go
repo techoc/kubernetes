@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controllers 提供描述受管控制器运行位置与数量的指标，
+// 用于在多个管理器中判断某个控制器实际由谁运行。
 package controllers
 
 import (
@@ -24,6 +26,7 @@ import (
 )
 
 var (
+	// once 保证指标只注册一次，多个组件调用 Register 不会重复注册同一 GaugeVec。
 	once                    sync.Once
 	controllerInstanceCount = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
@@ -37,6 +40,7 @@ var (
 
 // ControllerManagerMetrics is a proxy to set controller manager specific metrics.
 type ControllerManagerMetrics struct {
+	// manager 标识指标来源（如 kube-controller-manager 或 cloud controller 管理器）。
 	manager string
 }
 
@@ -49,6 +53,8 @@ func NewControllerManagerMetrics(manager string) *ControllerManagerMetrics {
 }
 
 // Register controller manager metrics.
+//
+// 由组件在初始化时调用；实际注册动作只执行一次。
 func Register() {
 	once.Do(func() {
 		legacyregistry.MustRegister(controllerInstanceCount)
@@ -63,6 +69,8 @@ func (a *ControllerManagerMetrics) ControllerStarted(name string) {
 }
 
 // ControllerStopped sets the controllerInstanceCount to 0.
+//
+// 同样使用 Set 而非 Dec：异常退出可能没有对应的 Started/Stopped 配对，直接归零更可靠。
 func (a *ControllerManagerMetrics) ControllerStopped(name string) {
 	controllerInstanceCount.With(k8smetrics.Labels{"name": name, "manager": a.manager}).Set(float64(0))
 }

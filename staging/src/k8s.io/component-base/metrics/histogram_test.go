@@ -32,6 +32,8 @@ import (
 	internalmetrics "k8s.io/component-base/metrics/internal"
 )
 
+// TestHistogram 验证单个 Histogram 的暴露、Collect 只发出自身，
+// 以及多次 Observe 后样本计数正确；同时覆盖弃用/隐藏的 HELP 行为。
 func TestHistogram(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -180,6 +182,7 @@ func TestHistogram(t *testing.T) {
 			registry.MustRegister(c)
 			cm := c.ObserverMetric.(prometheus.Metric)
 
+			// Collect 应只发出被注册的那个成员，且 channel 中不再有第二个元素。
 			metricChan := make(chan prometheus.Metric, 2)
 			c.Collect(metricChan)
 			close(metricChan)
@@ -201,6 +204,7 @@ func TestHistogram(t *testing.T) {
 			}
 
 			// let's increment the counter and verify that the metric still works
+			// 无论是否隐藏，底层观测都应被记录；隐藏只影响是否暴露。
 			c.Observe(1)
 			c.Observe(2)
 			c.Observe(3)
@@ -218,6 +222,8 @@ func TestHistogram(t *testing.T) {
 	}
 }
 
+// TestHistogramVec 验证带 label 的 Histogram：不同 label 组合产生独立成员，
+// 已隐藏的指标不会被 Gather 返回。
 func TestHistogramVec(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -362,6 +368,7 @@ func TestHistogramVec(t *testing.T) {
 			registry := newKubeRegistry(version1_15Alpha1)
 			c := NewHistogramVec(test.HistogramOpts, test.labels)
 			registry.MustRegister(c)
+			// 先取一个成员并观测，确保注册后的懒加载路径被走到。
 			ov12 := c.WithLabelValues("1", "2")
 			cm1 := ov12.(prometheus.Metric)
 			ov12.Observe(1.0)
@@ -405,6 +412,8 @@ func TestHistogramVec(t *testing.T) {
 	}
 }
 
+// TestHistogramWithLabelValueAllowList 验证 allow list 对 histogram 同样生效：
+// 未授权的 label 值被替换为 unexpected，从而限制序列基数。
 func TestHistogramWithLabelValueAllowList(t *testing.T) {
 	labelAllowValues := map[string]string{
 		"namespace_subsystem_metric_allowlist_test,label_a": "allowed",
@@ -483,6 +492,8 @@ func TestHistogramWithLabelValueAllowList(t *testing.T) {
 	}
 }
 
+// TestHistogramWithExemplar 验证 WithContext 把 trace/span 附着到
+// 观测值落入的桶上。
 func TestHistogramWithExemplar(t *testing.T) {
 	// Arrange.
 	traceID := trace.TraceID([]byte("trace-0000-xxxxx"))
@@ -570,6 +581,8 @@ func TestHistogramWithExemplar(t *testing.T) {
 	}
 }
 
+// TestHistogramVecWithExemplar 验证带 label 的 histogram 也能正确
+// 携带 exemplar（WithContext 返回的包装器需把 ctx 传到底层）。
 func TestHistogramVecWithExemplar(t *testing.T) {
 	// Arrange.
 	traceID := trace.TraceID([]byte("trace-0000-xxxxx"))
@@ -662,6 +675,8 @@ func TestHistogramVecWithExemplar(t *testing.T) {
 // where h.ctx is written concurrently with reads in withExemplar method.
 // This test simulates the real authentication flow that triggers the race:
 // x509.AuthenticateRequest -> union.AuthenticateRequest -> group.AuthenticateRequest
+//
+// 与 Counter 的版本相同：在 -race 下并发读写 ctx，验证竞争已消除。
 func TestHistogramConcurrentWithContextRace(t *testing.T) {
 	opts := &HistogramOpts{
 		Namespace: "apiserver",
@@ -771,7 +786,11 @@ func createContextWithSpan(traceID, spanID string) (context.Context, trace.Span)
 	return ctx, span
 }
 
+// TestNativeHistogramMetricCollection 验证 native histogram 开关：
+// 无论是否启用，经典桶与样本计数都必须存在；启用时额外产生
+// Schema/PositiveSpan 等原生直方图数据。
 func TestNativeHistogramMetricCollection(t *testing.T) {
+	// 保存并恢复全局开关，避免影响其他测试。
 	originalEnabled := internalmetrics.NativeHistogramsEnabled()
 	defer func() {
 		internalmetrics.SetNativeHistogramsEnabled(originalEnabled)
@@ -833,6 +852,7 @@ func TestNativeHistogramMetricCollection(t *testing.T) {
 			require.NotNil(t, histogram, "Expected histogram metric")
 
 			// Verify classic buckets are always present
+			// 经典桶是向后兼容的基础，native 模式不能取代它。
 			assert.NotEmpty(t, histogram.GetBucket(), "Classic buckets should always be present")
 
 			// Verify sample count matches observed values

@@ -32,19 +32,26 @@ import (
 )
 
 // APIVersionRegexp is the regular expression that matches with valid apiversion
+//
+// 只接受 vN、vNalphaM、vNbetaM 三种形式，用于拒绝内部版本和随意命名的版本。
 var APIVersionRegexp = regexp.MustCompile(`^v\d+((alpha|beta){1}\d+)?$`)
 
 // ComponentConfigPackage is used in APIGroup Testing
+//
+// 描述待校验的组件配置包；AllowedTags 与 AllowedNonstandardJSONNames 用于白名单
+// 那些因历史原因无法满足命名约定的字段。
 type ComponentConfigPackage struct {
-	ComponentName               string
-	GroupName                   string
-	SchemeGroupVersion          schema.GroupVersion
-	AddToScheme                 func(*runtime.Scheme) error
+	ComponentName      string
+	GroupName          string
+	SchemeGroupVersion schema.GroupVersion
+	AddToScheme        func(*runtime.Scheme) error
+	// SkipTests 按校验函数名跳过特定检查，供个别包规避无法修复的历史问题。
 	SkipTests                   sets.String
 	AllowedTags                 map[reflect.Type]bool
 	AllowedNonstandardJSONNames map[reflect.Type]string
 }
 
+// testingFunc 是所有校验函数的统一签名，便于按名称注册与跳过。
 type testingFunc func(*runtime.Scheme, *ComponentConfigPackage) error
 
 const (
@@ -57,6 +64,7 @@ const (
 	verifyInternalAPIVersion        = "verifyInternalAPIVersion"
 )
 
+// testingFuncs 是外部与内部包共用的基础校验集合；名称同时作为 SkipTests 的键。
 var testingFuncs = map[string]testingFunc{
 	verifyTagNaming:        verifyTagNamingFunc,
 	verifyGroupNameSuffix:  verifyGroupNameSuffixFunc,
@@ -71,6 +79,8 @@ var testingFuncs = map[string]testingFunc{
 // Test that the API version follows the right pattern and isn't internal
 // Test that addKnownTypes and AddToScheme registers at least one type and doesn't error
 // Test that the GroupName is named correctly (based on ComponentName), and there is a {Component}Configuration kind in the scheme
+//
+// 外部版本额外要求版本号符合 vN(alpha|beta)M 模式。
 func VerifyExternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	scheme, err := setup(pkginfo)
 	if err != nil {
@@ -89,6 +99,8 @@ func VerifyExternalTypePackage(pkginfo *ComponentConfigPackage) error {
 // API version should be internal
 // Test that addKnownTypes and AddToScheme registers at least one type and doesn't error
 // Test that the GroupName is named correctly (based on ComponentName), and there is a {Component}Configuration kind in the scheme
+//
+// 内部版本不允许 json 标签、版本号必须为 __internal，并且必须存在 {Component}Configuration 类型。
 func VerifyInternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	scheme, err := setup(pkginfo)
 	if err != nil {
@@ -101,7 +113,9 @@ func VerifyInternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	return runFuncs(scheme, pkginfo, extraFns)
 }
 
+// setup 校验参数完整性并构建 scheme；任何一步失败都视为测试自身配置错误。
 func setup(pkginfo *ComponentConfigPackage) (*runtime.Scheme, error) {
+	// 缺少任一必填项都说明调用方没有正确构造 pkginfo，先于后续校验报错。
 	if len(pkginfo.ComponentName) == 0 ||
 		len(pkginfo.GroupName) == 0 ||
 		pkginfo.SchemeGroupVersion.Empty() ||
@@ -113,12 +127,15 @@ func setup(pkginfo *ComponentConfigPackage) (*runtime.Scheme, error) {
 	if err := pkginfo.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("AddToScheme must not return an error: %v", err)
 	}
+	// 空 scheme 说明 AddToScheme 什么也没注册，后续检查会全部失去意义。
 	if len(scheme.AllKnownTypes()) == 0 {
 		return nil, fmt.Errorf("AddToScheme doesn't register any type")
 	}
 	return scheme, nil
 }
 
+// runFuncs 执行基础校验与额外校验，汇总所有错误一次性返回，
+// 避免修复一个问题后又暴露下一个。
 func runFuncs(scheme *runtime.Scheme, pkginfo *ComponentConfigPackage, extraFns map[string]testingFunc) error {
 	verifyFns := []testingFunc{}
 	for name, fn := range testingFuncs {
@@ -142,14 +159,18 @@ func runFuncs(scheme *runtime.Scheme, pkginfo *ComponentConfigPackage, extraFns 
 	return errors.NewAggregate(errs)
 }
 
+// verifyTagNamingFunc 检查结构体字段的 json 标签名与 Go 字段名一致（除白名单例外）。
 func verifyTagNamingFunc(scheme *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	return apinamingtest.VerifyTagNaming(scheme, pkginfo.AllowedTags, pkginfo.AllowedNonstandardJSONNames)
 }
 
+// verifyGroupNameSuffixFunc 检查所有组的名称以 k8s.io 结尾。
 func verifyGroupNameSuffixFunc(scheme *runtime.Scheme, _ *ComponentConfigPackage) error {
 	return apinamingtest.VerifyGroupNames(scheme, sets.NewString())
 }
 
+// verifyGroupNameMatchFunc 检查声明的 GroupName 与 SchemeGroupVersion 中的组一致，
+// 两者不一致通常意味着 register.go 里的常量写错。
 func verifyGroupNameMatchFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	if pkginfo.GroupName != pkginfo.SchemeGroupVersion.Group {
 		return fmt.Errorf("GroupName must be equal to SchemeGroupVersion.Group, GroupName: %v,SchemeGroupVersion.Group: %v",
@@ -158,6 +179,7 @@ func verifyGroupNameMatchFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPackage
 	return nil
 }
 
+// verifyCorrectGroupNameFunc 要求组名严格等于 "<component>.config.k8s.io"（组件名去连字符、小写）。
 func verifyCorrectGroupNameFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	desiredGroupName := fmt.Sprintf("%s.config.k8s.io", lowercaseWithoutDashes(pkginfo.ComponentName))
 	if pkginfo.SchemeGroupVersion.Group != desiredGroupName {
@@ -167,6 +189,7 @@ func verifyCorrectGroupNameFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPacka
 	return nil
 }
 
+// verifyComponentConfigKindExistsFunc 要求内部 scheme 中存在 {Component}Configuration 类型。
 func verifyComponentConfigKindExistsFunc(scheme *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	expectedKind := fmt.Sprintf("%sConfiguration", dashesToCapitalCase(pkginfo.ComponentName))
 	expectedGVK := pkginfo.SchemeGroupVersion.WithKind(expectedKind)
@@ -180,6 +203,7 @@ func verifyComponentConfigKindExistsFunc(scheme *runtime.Scheme, pkginfo *Compon
 	return nil
 }
 
+// verifyExternalAPIVersionFunc 要求外部版本号匹配 APIVersionRegexp。
 func verifyExternalAPIVersionFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	if !APIVersionRegexp.MatchString(pkginfo.SchemeGroupVersion.Version) {
 		return fmt.Errorf("invalid API version %q, must match %q", pkginfo.SchemeGroupVersion.Version, APIVersionRegexp.String())
@@ -187,6 +211,7 @@ func verifyExternalAPIVersionFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPac
 	return nil
 }
 
+// verifyInternalAPIVersionFunc 要求版本号恰为 runtime.APIVersionInternal（"__internal"）。
 func verifyInternalAPIVersionFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPackage) error {
 	if pkginfo.SchemeGroupVersion.Version != runtime.APIVersionInternal {
 		return fmt.Errorf("internal API version must be %q, got %q",
@@ -195,10 +220,12 @@ func verifyInternalAPIVersionFunc(_ *runtime.Scheme, pkginfo *ComponentConfigPac
 	return nil
 }
 
+// lowercaseWithoutDashes 把组件名转为组名片段：全小写且去掉连字符。
 func lowercaseWithoutDashes(str string) string {
 	return strings.Replace(strings.ToLower(str), "-", "", -1)
 }
 
+// dashesToCapitalCase 把 kebab-case 组件名转成 Kind 用的 PascalCase。
 func dashesToCapitalCase(str string) string {
 	segments := strings.Split(str, "-")
 	result := ""

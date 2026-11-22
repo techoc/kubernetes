@@ -34,6 +34,7 @@ registration process. Defer metric initialization until Create() is called, whic
 delegates to the underlying metric's initializeMetric or initializeDeprecatedMetric
 method call depending on whether the metric is deprecated or not.
 */
+// 中文补充：把“是否创建、是否弃用、是否隐藏”的决策推迟到注册时，注册表才能拿到版本。
 type kubeCollector interface {
 	Collector
 	lazyKubeMetric
@@ -65,17 +66,20 @@ implements kubeCollector to get deferred registration behavior. You must call la
 with the kubeCollector itself as an argument.
 */
 type lazyMetric struct {
-	fqName              string
-	isDeprecated        atomic.Bool
-	isHidden            atomic.Bool
-	isCreated           bool
-	createLock          sync.RWMutex
+	fqName string
+	// 弃用/隐藏状态用 atomic.Bool，因为 Enabled 风格的读取在运行期无锁并发。
+	isDeprecated atomic.Bool
+	isHidden     atomic.Bool
+	isCreated    bool
+	createLock   sync.RWMutex
+	// createOnce/markDeprecationOnce 保证 Create 与弃用判定只执行一次（ClearState 后可重置）。
 	markDeprecationOnce sync.Once
 	createOnce          sync.Once
 	self                kubeCollector
 	stabilityLevel      StabilityLevel
 }
 
+// IsCreated 报告指标是否已经实例化。
 func (r *lazyMetric) IsCreated() bool {
 	r.createLock.RLock()
 	defer r.createLock.RUnlock()
@@ -131,6 +135,7 @@ func (r *lazyMetric) IsHidden() bool {
 	return r.isHidden.Load()
 }
 
+// IsDeprecated 报告指标是否已进入弃用期（仍可能对外暴露）。
 func (r *lazyMetric) IsDeprecated() bool {
 	return r.isDeprecated.Load()
 }
@@ -141,6 +146,7 @@ func (r *lazyMetric) IsDeprecated() bool {
 // hidden. Furthermore, this function no-opts and returns true if metric is already
 // created.
 func (r *lazyMetric) Create(version *semver.Version) bool {
+	// version 为 nil 表示调用方不关心弃用隐藏，只做实例化。
 	if version != nil {
 		r.preprocessMetric(*version)
 	}
@@ -149,6 +155,7 @@ func (r *lazyMetric) Create(version *semver.Version) bool {
 		return false
 	}
 
+	// 双重检查 + Once：并发注册时只初始化一次底层指标。
 	r.createOnce.Do(func() {
 		r.createLock.Lock()
 		defer r.createLock.Unlock()
@@ -159,6 +166,7 @@ func (r *lazyMetric) Create(version *semver.Version) bool {
 			r.self.initializeMetric()
 		}
 	})
+	// 记录注册指标数，按稳定性与弃用版本打标签，便于观察指标治理进度。
 	sl := r.stabilityLevel
 	deprecatedV := r.self.DeprecatedVersion()
 	dv := ""
@@ -175,6 +183,7 @@ func (r *lazyMetric) ClearState() {
 	r.createLock.Lock()
 	defer r.createLock.Unlock()
 
+	// 复位所有一次性标志，使指标可以按新的版本重新判定与实例化。
 	r.isDeprecated.Store(false)
 	r.isHidden.Store(false)
 	r.isCreated = false
@@ -193,6 +202,7 @@ allows you to satisfy the Collector interface automatically if you already satis
 
 For reference: https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/collector.go#L98-L120
 */
+// selfCollector 让实现 Metric 的结构体自动获得 Collector 行为：Describe/Collect 都转发给自身。
 type selfCollector struct {
 	metric prometheus.Metric
 }
@@ -201,15 +211,18 @@ func (c *selfCollector) initSelfCollection(m prometheus.Metric) {
 	c.metric = m
 }
 
+// Describe 转发到被包装指标的描述符。
 func (c *selfCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.metric.Desc()
 }
 
+// Collect 把自身作为唯一指标发送。
 func (c *selfCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- c.metric
 }
 
 // no-op vecs for convenience
+// 这些零值 vec 只作为占位，解引用会 panic，因此只会被类型断言后从不实际使用。
 var noopCounterVec = &prometheus.CounterVec{}
 var noopHistogramVec = &prometheus.HistogramVec{}
 var noopTimingHistogramVec = &promext.TimingHistogramVec{}
@@ -218,6 +231,7 @@ var noopGaugeVec = &prometheus.GaugeVec{}
 // just use a convenience struct for all the no-ops
 var noop = &noopMetric{}
 
+// noopMetric 实现所有指标操作的空版本，未注册或隐藏指标返回它以避免 nil 检查。
 type noopMetric struct{}
 
 func (noopMetric) Inc()                              {}

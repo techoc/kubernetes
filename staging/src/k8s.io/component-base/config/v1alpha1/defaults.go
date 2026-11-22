@@ -32,7 +32,10 @@ import (
 // as defaulting in the scheme is done as part of the conversion, and there would
 // be no easy way to opt-out. Instead, if you want to use this defaulting method
 // run it in your wrapper struct of this type in its `SetDefaults_` method.
+//
+// 默认值刻意保持保守：租约 15s、续约 10s、重试 2s，在多数部署下能容忍短暂网络抖动。
 func RecommendedDefaultLeaderElectionConfiguration(obj *LeaderElectionConfiguration) {
+	// 仅当字段为零值时才填充，避免覆盖调用方或配置文件已提供的值。
 	zero := metav1.Duration{}
 	if obj.LeaseDuration == zero {
 		obj.LeaseDuration = metav1.Duration{Duration: 15 * time.Second}
@@ -46,6 +49,7 @@ func RecommendedDefaultLeaderElectionConfiguration(obj *LeaderElectionConfigurat
 	if obj.ResourceLock == "" {
 		// TODO(#80289): Figure out how to migrate to LeaseLock at this point.
 		//   This will most probably require going through EndpointsLease first.
+		// 保留 Endpoints 锁作为默认，是因为直接切换会影响仍在用旧锁的组件。
 		obj.ResourceLock = EndpointsResourceLock
 	}
 	if obj.LeaderElect == nil {
@@ -62,6 +66,8 @@ func RecommendedDefaultLeaderElectionConfiguration(obj *LeaderElectionConfigurat
 // as defaulting in the scheme is done as part of the conversion, and there would
 // be no easy way to opt-out. Instead, if you want to use this defaulting method
 // run it in your wrapper struct of this type in its `SetDefaults_` method.
+//
+// 默认使用 protobuf 并提供 50 QPS/100 Burst 的宽松限流，适合控制平面内部通信。
 func RecommendedDefaultClientConnectionConfiguration(obj *ClientConnectionConfiguration) {
 	if len(obj.ContentType) == 0 {
 		obj.ContentType = "application/vnd.kubernetes.protobuf"
@@ -83,6 +89,8 @@ func RecommendedDefaultClientConnectionConfiguration(obj *ClientConnectionConfig
 // as defaulting in the scheme is done as part of the conversion, and there would
 // be no easy way to opt-out. Instead, if you want to use this defaulting method
 // run it in your wrapper struct of this type in its `SetDefaults_` method.
+//
+// 默认开启 profiling：pprof 端点开销低，且是排查线上问题的常规手段。
 func RecommendedDebuggingConfiguration(obj *DebuggingConfiguration) {
 	if obj.EnableProfiling == nil {
 		obj.EnableProfiling = ptr.To(true) // profile debugging is cheap to have exposed and standard on kube binaries
@@ -91,6 +99,8 @@ func RecommendedDebuggingConfiguration(obj *DebuggingConfiguration) {
 
 // NewRecommendedDebuggingConfiguration returns the current recommended DebuggingConfiguration.
 // This may change between releases as recommendations shift.
+//
+// 返回独立副本，调用方可安全修改而不影响其他使用者。
 func NewRecommendedDebuggingConfiguration() *DebuggingConfiguration {
 	ret := &DebuggingConfiguration{}
 	RecommendedDebuggingConfiguration(ret)

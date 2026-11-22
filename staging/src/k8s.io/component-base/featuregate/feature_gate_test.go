@@ -34,6 +34,9 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestFeatureGateFlag 验证普通 feature gate 的 flag 解析：
+// 默认值生效、AllAlpha/AllBeta 批量开关、单项覆盖批量开关（与先后顺序无关）、
+// 已锁定 gate 无法被改动、未知 gate 报错。
 func TestFeatureGateFlag(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -282,6 +285,8 @@ func TestFeatureGateFlag(t *testing.T) {
 	}
 }
 
+// TestFeatureGateOverride 验证 Set 多次调用的覆盖语义：后一次只改显式提到的 gate，
+// 未提及的 gate 保持上一次的值。
 func TestFeatureGateOverride(t *testing.T) {
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
@@ -317,6 +322,7 @@ func TestFeatureGateOverride(t *testing.T) {
 	}
 }
 
+// TestFeatureGateFlagDefaults 验证未解析 flag 时直接使用各 gate 的 Default。
 func TestFeatureGateFlagDefaults(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -338,6 +344,8 @@ func TestFeatureGateFlagDefaults(t *testing.T) {
 	}
 }
 
+// TestFeatureGateKnownFeatures 验证 KnownFeatures 只列出 Alpha/Beta gate，
+// 已 GA 与 Deprecated 的 gate 不再出现在用户可见列表中。
 func TestFeatureGateKnownFeatures(t *testing.T) {
 	// gates for testing
 	const (
@@ -364,6 +372,8 @@ func TestFeatureGateKnownFeatures(t *testing.T) {
 	assert.NotContains(t, known, testDeprecatedGate)
 }
 
+// TestFeatureGateSetFromMap 验证 SetFromMap 的 map 形式设置：未知 gate 报错，
+// 锁定 gate 设置成非锁定值时拒绝，锁定值本身则允许（无变化）。
 func TestFeatureGateSetFromMap(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -482,6 +492,8 @@ func TestFeatureGateSetFromMap(t *testing.T) {
 	}
 }
 
+// TestFeatureGateMetrics 验证 AddMetrics 把每个 gate 的阶段与启用状态导出为
+// kubernetes_feature_enabled gauge；先重置指标以免受其他测试注册影响。
 func TestFeatureGateMetrics(t *testing.T) {
 	// gates for testing
 	featuremetrics.ResetFeatureInfoMetric()
@@ -516,6 +528,8 @@ func TestFeatureGateMetrics(t *testing.T) {
 	}
 }
 
+// TestFeatureGateString 验证 String() 输出排序后的 "gate=value" 列表，
+// 可直接作为 --feature-gates 的值复用。
 func TestFeatureGateString(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -567,6 +581,9 @@ func TestFeatureGateString(t *testing.T) {
 	}
 }
 
+// TestFeatureGateOverrideDefault 覆盖 OverrideDefault 的语义：
+// 覆盖影响有效默认值、可跨 DeepCopy 保留、反映在 KnownFeatures 中、
+// 不能改锁定默认值、不覆盖显式设置、阻止重复注册，且在加入 flag set 后拒绝修改。
 func TestFeatureGateOverrideDefault(t *testing.T) {
 	t.Run("overrides take effect", func(t *testing.T) {
 		f := NewFeatureGate()
@@ -713,6 +730,9 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 }
 
+// TestVersionedFeatureGateFlag 验证带版本的 feature gate 在模拟版本 1.28、
+// 二进制版本 1.29 下的 flag 解析：每个 gate 的默认值/阶段按模拟版本选取，
+// 模拟版本中仍是 PreAlpha 的 gate 不能被设置，锁定 gate 仍不可改。
 func TestVersionedFeatureGateFlag(t *testing.T) {
 	// gates for testing
 	const testGAGate Feature = "TestGA"
@@ -1029,6 +1049,8 @@ func TestVersionedFeatureGateFlag(t *testing.T) {
 	}
 }
 
+// TestVersionedFeatureGateOverride 验证带版本 gate 的 Set 覆盖行为，
+// 并确认模拟版本不能回退到低于已注册规格的版本。
 func TestVersionedFeatureGateOverride(t *testing.T) {
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
@@ -1080,6 +1102,9 @@ func TestVersionedFeatureGateOverride(t *testing.T) {
 	}
 }
 
+// TestVersionedFeatureGateFlagDefaults 验证模拟版本为 1.28 时各带版本 gate
+// 选取到的是 1.28 对应的规格（包括还未进入 Beta 而显示为 PreAlpha/0.0 的情况），
+// 并检查 GetAll 的返回集合。
 func TestVersionedFeatureGateFlagDefaults(t *testing.T) {
 	// gates for testing
 	const testGAGate Feature = "TestGA"
@@ -1140,6 +1165,9 @@ func TestVersionedFeatureGateFlagDefaults(t *testing.T) {
 	}
 }
 
+// TestVersionedFeatureGateKnownFeatures 验证 KnownFeatures 在带版本 gate 下的过滤规则：
+// 未来版本的 PreAlpha 与已 GA/Deprecated 的 gate 不列出；带最小兼容版本要求的 gate
+// 会附加 "--min-compatibility-version>=x.y" 提示。
 func TestVersionedFeatureGateKnownFeatures(t *testing.T) {
 	// gates for testing
 	const (
@@ -1210,6 +1238,9 @@ func TestVersionedFeatureGateKnownFeatures(t *testing.T) {
 	assert.NotContains(t, known, testDeprecatedGateNoVersion)
 }
 
+// TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion 验证：
+// 同一个 gate 在不同最小兼容版本下会展示不同的默认值/阶段描述，
+// 从而让用户清楚模拟不同版本时 gate 的可用性差异。
 func TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion(t *testing.T) {
 	// gates for testing
 	const (
@@ -1302,6 +1333,8 @@ func TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion(t *testing.T) {
 	assert.ElementsMatch(t, f.KnownFeatures(), knownExpected)
 }
 
+// TestVersionedFeatureGateMetrics 验证带版本 gate 导出的指标阶段取自模拟版本对应的
+// 规格（例如 1.28 下仍为 ALPHA 的 gate），而不是二进制版本对应的阶段。
 func TestVersionedFeatureGateMetrics(t *testing.T) {
 	// gates for testing
 	featuremetrics.ResetFeatureInfoMetric()
@@ -1350,6 +1383,9 @@ func TestVersionedFeatureGateMetrics(t *testing.T) {
 	}
 }
 
+// TestVersionedFeatureGateOverrideDefault 覆盖带版本 gate 的默认值覆盖语义：
+// 覆盖随模拟版本变化、可按版本覆盖、跨 DeepCopy 隔离、不能越过锁定默认值，
+// 也不能覆盖尚未在模拟版本生效的 gate。
 func TestVersionedFeatureGateOverrideDefault(t *testing.T) {
 	t.Run("overrides take effect", func(t *testing.T) {
 		f := NewVersionedFeatureGate(version.MustParse("1.29"))
@@ -1596,6 +1632,9 @@ func TestVersionedFeatureGateOverrideDefault(t *testing.T) {
 	})
 }
 
+// TestFeatureGateMinCompatibilityVersion 验证最小兼容版本决定 gate 的默认值与
+// 阶段：未达到 gate 自身最小兼容版本时 gate 保持禁用；达到后按规格默认启用，
+// 同时 KnownFeatures 不再显示兼容性提示。
 func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 	const testCompatGateA Feature = "TestCompatA"
 	const testCompatGateB Feature = "TestCompatB"
@@ -1681,6 +1720,8 @@ func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 	require.Error(t, f.Set(string(testCompatGateC)+"=false"))
 }
 
+// TestFeatureSpecAtEmulationAndMinCompatVersion 验证按模拟版本与最小兼容版本
+// 选取规格的规则：优先满足最小兼容版本要求的最早规格；低于所有规格时返回 PreAlpha。
 func TestFeatureSpecAtEmulationAndMinCompatVersion(t *testing.T) {
 	specs := VersionedSpecs{
 		{Version: version.MustParse("1.25"), Default: false, PreRelease: Alpha},
@@ -1743,6 +1784,8 @@ func TestFeatureSpecAtEmulationAndMinCompatVersion(t *testing.T) {
 	}
 }
 
+// TestCopyKnownFeatures 验证 DeepCopyAndReset 产生的副本：
+// 保留 gate 规格与默认值覆盖，但不继承显式设置的值，也不包含之后新增的 gate。
 func TestCopyKnownFeatures(t *testing.T) {
 	f := NewFeatureGate()
 	require.NoError(t, f.Add(map[Feature]FeatureSpec{"FeatureA": {Default: false}, "FeatureB": {Default: false}}))
@@ -1766,6 +1809,8 @@ func TestCopyKnownFeatures(t *testing.T) {
 	}
 }
 
+// TestExplicitlySet 验证 ExplicitlySet 只对命令行中直接出现的 gate 返回 true；
+// AllAlpha/AllBeta 只改变被批量覆盖的 gate 的值，不让它们变为“显式设置”。
 func TestExplicitlySet(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -1859,6 +1904,8 @@ func TestExplicitlySet(t *testing.T) {
 	}
 }
 
+// TestResetFeatureValueToDefault 验证 ResetFeatureValueToDefault 只清除某个 gate
+// 的显式设置而保留其他 gate；切换模拟版本后会重新按新版本计算默认值。
 func TestResetFeatureValueToDefault(t *testing.T) {
 	// gates for testing
 	const testAlphaGate Feature = "TestAlpha"
@@ -1914,10 +1961,14 @@ func TestResetFeatureValueToDefault(t *testing.T) {
 	assert.False(t, f.Enabled("TestBeta"))
 }
 
+// TestAddVersioned 验证带版本 gate 规格的注册校验：
+// 阶段只能单向推进、版本必须递增且不含 patch、同一版本可有多条但只有
+// MinCompatibilityVersion 不同、锁定状态不可回退、未知格式一律报错。
 func TestAddVersioned(t *testing.T) {
 	// gates for testing
 	const testAGate Feature = "TestA"
 	const testBGate Feature = "TestB"
+	// 表中每个用例描述一种规格序列；expectError 为 true 表示该序列应被拒绝。
 	tests := []struct {
 		name        string
 		expectError bool
@@ -2243,6 +2294,7 @@ func TestAddVersioned(t *testing.T) {
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("AddVersioned-%s", test.name), func(t *testing.T) {
 			f := NewFeatureGate()
+			// 先注册 TestB，确保冲突检测不受注册顺序影响。
 			err := f.AddVersioned(map[Feature]VersionedSpecs{
 				testBGate: {
 					{Version: version.MustParse("1.27"), Default: false, PreRelease: Alpha},
@@ -2261,6 +2313,9 @@ func TestAddVersioned(t *testing.T) {
 	}
 }
 
+// TestAddDependencies 验证 feature gate 依赖关系的注册校验：
+// 依赖对象必须已注册、不能成环、接受合并且幂等；同时要求依赖双方的稳定性
+// 与默认启用状态不出现“高级依赖低级”的倒置，并禁止闭合后再新增依赖。
 func TestAddDependencies(t *testing.T) {
 	const (
 		// Test features
@@ -2504,6 +2559,8 @@ func TestAddDependencies(t *testing.T) {
 	}
 }
 
+// TestValidateDependencies 验证 Set 时依赖一致性检查：启用的 gate 不能依赖
+// 已禁用的 gate，检查沿依赖链递归进行，未启用的 gate 不产生错误。
 func TestValidateDependencies(t *testing.T) {
 	const (
 		featureA Feature = "FeatureA"

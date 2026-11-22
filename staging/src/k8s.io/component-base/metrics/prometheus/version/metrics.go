@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package version 注册 kubernetes_build_info 指标，用于对外暴露二进制的构建信息。
+//
+// 该指标是 "constant 1" 型 gauge：值恒为 1，全部信息都放在 label 中，
+// 便于按版本、平台等维度做聚合与告警。
 package version
 
 import (
@@ -23,6 +27,8 @@ import (
 )
 
 var (
+	// buildInfo 恒为 1，label 携带构建时的版本信息。
+	// 保持 BETA：label 集合的变更受 metrics 稳定性策略约束。
 	buildInfo = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Name:           "kubernetes_build_info",
@@ -34,8 +40,12 @@ var (
 )
 
 // RegisterBuildInfo registers the build and version info in a metadata metric in prometheus
+//
+// init 在包导入时完成注册并立即写入唯一一条样本：
+// 构建信息在进程生命周期内不会变化，因此不存在后续更新。
 func init() {
 	info := version.Get()
+	// 使用 legacyregistry，确保默认 /metrics 端点无需额外配置即可看到该指标。
 	legacyregistry.MustRegister(buildInfo)
 	buildInfo.WithLabelValues(info.Major, info.Minor, info.GitVersion, info.GitCommit, info.GitTreeState, info.BuildDate, info.GoVersion, info.Compiler, info.Platform).Set(1)
 }

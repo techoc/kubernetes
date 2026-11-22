@@ -28,13 +28,16 @@ import (
 )
 
 var (
+	// labelExpr、metricNameExpr 遵循 Prometheus 的标签/指标命名规则，
+	// 用于在配置加载阶段尽早拒绝非法名称。
 	labelExpr                = `[a-zA-Z_][a-zA-Z0-9_]*`
 	metricNameExpr           = `[a-zA-Z_:][a-zA-Z0-9_:]*`
 	allowListMappingKeyRegex = regexp.MustCompile(`^` + metricNameExpr + `,` + labelExpr + `$`)
 	metricNameRegex          = regexp.MustCompile(`^` + metricNameExpr + `$`)
 )
 
-// Validate validates a MetricsConfiguration.
+// Validate 校验 MetricsConfiguration 的各字段，并检查互斥项：
+// allowListMapping 与 allowListMappingManifest 不能同时设置。
 func Validate(c *MetricsConfiguration, currentVersion semver.Version, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if c == nil {
@@ -44,6 +47,7 @@ func Validate(c *MetricsConfiguration, currentVersion semver.Version, fldPath *f
 	errs = append(errs, validateDisabledMetrics(c.DisabledMetrics, fldPath.Child("disabledMetrics"))...)
 	errs = append(errs, validateAllowListMapping(c.AllowListMapping, fldPath.Child("allowListMapping"))...)
 	errs = append(errs, validateAllowListMappingManifest(c.AllowListMappingManifest, fldPath.Child("allowListMappingManifest"))...)
+	// 两种来源会互相覆盖，同时出现时语义不明确，直接拒绝。
 	if c.AllowListMapping != nil && c.AllowListMappingManifest != "" {
 		errs = append(errs, field.Invalid(fldPath, c, "cannot specify both allowListMapping and allowListMappingManifest"))
 	}
@@ -51,6 +55,7 @@ func Validate(c *MetricsConfiguration, currentVersion semver.Version, fldPath *f
 	return errs
 }
 
+// validateAllowListMapping 校验映射 key 必须是 "<metricName>,<labelName>" 格式。
 func validateAllowListMapping(allowListMapping map[string]string, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	for k := range allowListMapping {
@@ -81,6 +86,7 @@ func validateAllowListMappingManifest(allowListMappingManifestPath string, fldPa
 	if err != nil {
 		return append(errs, field.Invalid(fldPath, allowListMappingManifestPath, fmt.Errorf("failed to parse allow list manifest: %w", err).Error()))
 	}
+	// 清单内容与内联映射使用同一套 key 规则，避免两份配置语义不一致。
 	allowListMappingErrs := validateAllowListMapping(allowListMapping, fldPath)
 	if len(allowListMappingErrs) > 0 {
 		return append(errs, field.Invalid(fldPath, allowListMappingManifestPath, fmt.Sprintf("invalid allow list mapping in manifest: %v", allowListMappingErrs)))
@@ -89,6 +95,7 @@ func validateAllowListMappingManifest(allowListMappingManifestPath string, fldPa
 	return errs
 }
 
+// validateDisabledMetrics 要求被禁用的指标名是完整限定名（符合 Prometheus 命名规则）。
 func validateDisabledMetrics(names []string, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	for _, name := range names {
@@ -100,6 +107,9 @@ func validateDisabledMetrics(names []string, fldPath *field.Path) field.ErrorLis
 	return errs
 }
 
+// validateShowHiddenMetricsVersion 只允许省略或填写上一个次版本：
+// 展示隐藏指标的目的是让人在上一个版本中注意到即将被移除的指标，
+// 因此其他版本没有意义。
 func validateShowHiddenMetricsVersion(currentVersion semver.Version, targetVersionStr string, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if targetVersionStr == "" {
@@ -114,7 +124,8 @@ func validateShowHiddenMetricsVersion(currentVersion semver.Version, targetVersi
 	return errs
 }
 
-// ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly validates the ShowHiddenMetricsForVersion field.
+// ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly 校验 Kubelet 旧版字段
+// showHiddenMetricsForVersion。保留它是为了兼容 Kubelet 逐字段暴露配置的历史。
 // TODO: This is kept here for backward compatibility in Kubelet (as metrics configuration fields were exposed on an individual basis earlier).
 // TODO: Revisit this after Kubelet supports the new metrics configuration API: https://github.com/kubernetes/kubernetes/pull/123426
 func ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly(currentVersion semver.Version, targetVersionStr string) error {

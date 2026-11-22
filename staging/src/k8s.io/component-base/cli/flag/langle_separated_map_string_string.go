@@ -25,6 +25,9 @@ import (
 // LangleSeparatedMapStringString can be set from the command line with the format `--flag "string<string"`.
 // Multiple comma-separated key-value pairs in a single invocation are supported. For example: `--flag "a<foo,b<bar"`.
 // Multiple flag invocations are supported. For example: `--flag "a<foo" --flag "b<foo"`.
+//
+// LangleSeparatedMapStringString 用 "<" 而非 "=" 分隔键值，
+// 适用于值中可能包含 "=" 的场合（例如 HTTP 头之类的映射）。
 type LangleSeparatedMapStringString struct {
 	Map         *map[string]string
 	initialized bool // set to true after first Set call
@@ -32,11 +35,15 @@ type LangleSeparatedMapStringString struct {
 
 // NewLangleSeparatedMapStringString takes a pointer to a map[string]string and returns the
 // LangleSeparatedMapStringString flag parsing shim for that map
+//
+// 与 MapStringString 一样，首次 Set 会清空调用方提供的默认值。
 func NewLangleSeparatedMapStringString(m *map[string]string) *LangleSeparatedMapStringString {
 	return &LangleSeparatedMapStringString{Map: m}
 }
 
 // String implements github.com/spf13/pflag.Value
+//
+// 按键排序输出，保证帮助信息与测试结果稳定。
 func (m *LangleSeparatedMapStringString) String() string {
 	pairs := []string{}
 	for k, v := range *m.Map {
@@ -47,6 +54,8 @@ func (m *LangleSeparatedMapStringString) String() string {
 }
 
 // Set implements github.com/spf13/pflag.Value
+//
+// 支持逗号分隔的多对；每对只按第一个 "<" 切分，值中可以继续包含 "<"。
 func (m *LangleSeparatedMapStringString) Set(value string) error {
 	if m.Map == nil {
 		return fmt.Errorf("no target (nil pointer to map[string]string)")
@@ -57,6 +66,7 @@ func (m *LangleSeparatedMapStringString) Set(value string) error {
 		m.initialized = true
 	}
 	for _, s := range strings.Split(value, ",") {
+		// 跳过空片段（例如尾随逗号）。
 		if len(s) == 0 {
 			continue
 		}
@@ -77,6 +87,8 @@ func (*LangleSeparatedMapStringString) Type() string {
 }
 
 // Empty implements OmitEmpty
+//
+// Empty 决定帮助信息是否省略默认值。
 func (m *LangleSeparatedMapStringString) Empty() bool {
 	return len(*m.Map) == 0
 }

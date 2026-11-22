@@ -30,6 +30,9 @@ import (
 
 // resetMetricsGlobalState resets all global state used by metrics tests.
 // NOTE: This should be called at the start of tests and in cleanup to ensure test isolation.
+//
+// 指标实现大量使用包级全局状态（懒加载、隐藏开关、allow list），
+// 因此每个用例前后都必须重置，否则用例之间的结果会互相影响。
 func resetMetricsGlobalState(t *testing.T) {
 	resetter := func() {
 		hiddenMetricsTotal.Reset()
@@ -56,6 +59,7 @@ func resetMetricsGlobalState(t *testing.T) {
 }
 
 var (
+	// 基准版本 1.15 用于构造“已弃用/已隐藏”的判定场景。
 	v115         = semver.MustParse("1.15.0")
 	alphaCounter = NewCounter(
 		&CounterOpts{
@@ -98,6 +102,9 @@ var (
 	)
 )
 
+// TestShouldHide 覆盖不同稳定性级别下的隐藏规则：
+// INTERNAL 一旦弃用即隐藏；BETA 弃用后隐藏；STABLE 弃用 3 个小版本后隐藏。
+// 另外覆盖 alpha 预发布阶段（.0/.1）对 minor 比较的特殊处理。
 func TestShouldHide(t *testing.T) {
 	currentV1_17 := parseSemver("1.17.0")
 	currentV1_18Alpha0 := parseSemver("1.18.0-alpha.0")
@@ -292,6 +299,8 @@ func TestShouldHide(t *testing.T) {
 	}
 }
 
+// TestRegister 验证注册后的懒加载状态：已创建的指标随注册而创建，
+// 已弃用/已隐藏的指标不会被创建；重复注册返回 AlreadyRegisteredError。
 func TestRegister(t *testing.T) {
 	resetMetricsGlobalState(t)
 
@@ -363,6 +372,8 @@ func TestRegister(t *testing.T) {
 	}
 }
 
+// TestMustRegister 验证 MustRegister 的语义：与 Register 不同，
+// 重复注册同一个指标会 panic。
 func TestMustRegister(t *testing.T) {
 	resetMetricsGlobalState(t)
 
@@ -425,6 +436,8 @@ func TestMustRegister(t *testing.T) {
 
 }
 
+// TestRegistryReset 验证 Reset 只清空可重置的指标（counter vec），
+// 普通 gauge 的当前值保持不变。
 func TestRegistryReset(t *testing.T) {
 	currentVersion := apimachineryversion.Info{
 		Major:      "1",
@@ -444,6 +457,7 @@ func TestRegistryReset(t *testing.T) {
 
 	registry.MustRegister(resettableMetric)
 	registry.MustRegister(nonResettableMetric)
+	// 构造两个 label 序列并让 two 计数为 2，便于验证重置后整体消失。
 	resettableMetric.WithLabelValues("one").Inc()
 	resettableMetric.WithLabelValues("two").Inc()
 	resettableMetric.WithLabelValues("two").Inc()
@@ -464,6 +478,7 @@ func TestRegistryReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry.Reset()
+	// 重置后只应剩下不可重置的 gauge。
 	if err := testutil.GatherAndCompare(registry, strings.NewReader(nonResettableOutput), "reset_metric", "not_reset_metric"); err != nil {
 		t.Fatal(err)
 	}

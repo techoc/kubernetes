@@ -40,6 +40,8 @@ import (
 //
 // Commands like kubectl where logging is not normally part of the runtime output
 // should use RunNoErrOutput instead and deal with the returned error themselves.
+//
+// Run 返回进程退出码：0 表示成功，1 表示解析或执行失败。
 func Run(cmd *cobra.Command) int {
 	if logsInitialized, err := run(cmd); err != nil {
 		// If the error is about flag parsing, then printing that error
@@ -78,14 +80,19 @@ func Run(cmd *cobra.Command) int {
 
 // RunNoErrOutput is a version of Run which returns the cobra command error
 // instead of printing it.
+// 适用于自行控制输出格式的命令（如 kubectl）。
 func RunNoErrOutput(cmd *cobra.Command) error {
 	_, err := run(cmd)
 	return err
 }
 
+// run 完成所有命令共用的启动准备：日志 flush、flag 归一化、
+// 错误用法打印策略、注入日志初始化钩子，最后执行命令。
 func run(cmd *cobra.Command) (logsInitialized bool, err error) {
+	// 无论成功失败都要冲刷日志，避免进程退出时丢失尾部日志。
 	defer logs.FlushLogs()
 
+	// 允许用下划线代替连字符，兼容历史命令行写法。
 	cmd.SetGlobalNormalizationFunc(cliflag.WordSepNormalizeFunc)
 
 	// When error printing is enabled for the Cobra command, a flag parse
@@ -103,6 +110,7 @@ func run(cmd *cobra.Command) (logsInitialized bool, err error) {
 	// We don't change the behavior for those.
 	if !cmd.SilenceUsage {
 		cmd.SilenceUsage = true
+		// 仅在 flag 解析失败时重新启用 usage，使“先 usage 后错误”的布局只发生在解析错误上。
 		cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 			// Re-enable usage printing.
 			c.SilenceUsage = false
@@ -114,10 +122,13 @@ func run(cmd *cobra.Command) (logsInitialized bool, err error) {
 	cmd.SilenceErrors = true
 
 	// This is idempotent.
+	// 重复调用安全；命令自行注册过同名 flag 时不会覆盖。
 	logs.AddFlags(cmd.PersistentFlags())
 
 	// Inject logs.InitLogs after command line parsing into one of the
 	// PersistentPre* functions. Also inform about race detection, if enabled.
+	// 保留命令已有的 PersistentPreRun(E)，在其前面插入日志初始化，
+	// 从而确保日志配置在业务逻辑运行前生效。
 	switch {
 	case cmd.PersistentPreRun != nil:
 		pre := cmd.PersistentPreRun

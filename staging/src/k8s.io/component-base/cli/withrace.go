@@ -22,6 +22,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// logRaceDetection 在竞态检测构建下输出提示，便于运维识别带额外开销的二进制。
+// 无 race 构建的对应实现见 withoutrace.go。
 func logRaceDetection() {
 	// Only called if race detection is built in.
 	klog.Info("Data race detection enabled")

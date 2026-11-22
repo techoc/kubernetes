@@ -21,8 +21,12 @@ import (
 )
 
 // ClientConnectionConfiguration contains details for constructing a client.
+//
+// 供各组件在自身配置文件中嵌入，统一控制连接 apiserver 的 kubeconfig、内容类型与限流参数。
 type ClientConnectionConfiguration struct {
 	// kubeconfig is the path to a KubeConfig file.
+	//
+	// 为空时客户端使用 in-cluster 配置。
 	Kubeconfig string
 	// acceptContentTypes defines the Accept header sent by clients when connecting to a server, overriding the
 	// default value of 'application/json'. This field will control all connections to the server used by a particular
@@ -31,6 +35,8 @@ type ClientConnectionConfiguration struct {
 	// contentType is the content type used when sending data to the server from this client.
 	ContentType string
 	// qps controls the number of queries per second allowed for this connection.
+	//
+	// 与 Burst 共同构成客户端令牌桶限流。
 	QPS float32
 	// burst allows extra queries to accumulate when a client is exceeding its rate.
 	Burst int32
@@ -42,6 +48,8 @@ type LeaderElectionConfiguration struct {
 	// leaderElect enables a leader election client to gain leadership
 	// before executing the main loop. Enable this when running replicated
 	// components for high availability.
+	//
+	// 关闭后所有副本都会同时执行主循环，仅适用于单副本或无竞争场景。
 	LeaderElect bool
 	// leaseDuration is the duration that non-leader candidates will wait
 	// after observing a leadership renewal until attempting to acquire
@@ -64,6 +72,8 @@ type LeaderElectionConfiguration struct {
 	ResourceLock string
 	// resourceName indicates the name of resource object that will be used to lock
 	// during leader election cycles.
+	//
+	// 多个组件共享同一锁类型时，必须使用不同名字以避免互相抢占。
 	ResourceName string
 	// resourceNamespace indicates the namespace of resource object that will be used to lock
 	// during leader election cycles.
@@ -76,5 +86,7 @@ type DebuggingConfiguration struct {
 	EnableProfiling bool
 	// enableContentionProfiling enables block profiling, if
 	// enableProfiling is true.
+	//
+	// 仅在 EnableProfiling 为真时生效，因为两者共享 pprof HTTP handler。
 	EnableContentionProfiling bool
 }

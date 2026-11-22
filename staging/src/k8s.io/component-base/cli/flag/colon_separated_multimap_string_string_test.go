@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestStringColonSeparatedMultimapStringString 验证 String() 的输出：
+// 每个键值对展开成 "key:value"，多个值重复键，且排序保证结果稳定。
 func TestStringColonSeparatedMultimapStringString(t *testing.T) {
 	var nilMap map[string][]string
 	cases := []struct {
@@ -30,6 +32,7 @@ func TestStringColonSeparatedMultimapStringString(t *testing.T) {
 	}{
 		{"nil", NewColonSeparatedMultimapStringString(&nilMap), ""},
 		{"empty", NewColonSeparatedMultimapStringString(&map[string][]string{}), ""},
+		// 空键合法，序列化后表现为以 ":" 开头。
 		{"empty key", NewColonSeparatedMultimapStringString(
 			&map[string][]string{
 				"": {"foo"},
@@ -46,6 +49,7 @@ func TestStringColonSeparatedMultimapStringString(t *testing.T) {
 				"two": {"bar"},
 			}),
 			"one:foo,two:bar"},
+		// 同一个键的多个值会被拆成多个键值对，并按值排序。
 		{"two keys, multiple items in one key", NewColonSeparatedMultimapStringString(
 			&map[string][]string{
 				"one": {"foo", "baz"},
@@ -70,6 +74,8 @@ func TestStringColonSeparatedMultimapStringString(t *testing.T) {
 	}
 }
 
+// TestSetColonSeparatedMultimapStringString 验证 Set 的解析、合并与错误路径：
+// 空串表示清空、缺冒号在默认配置下报错、多次 Set 会累加到同一 map。
 func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 	var nilMap map[string][]string
 	cases := []struct {
@@ -79,25 +85,26 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 		expect *ColonSeparatedMultimapStringString
 		err    string
 	}{
-		// we initialize the map with a default key that should be cleared by Set
+		// 用默认键初始化 map，Set 应将其清除。
 		{"clears defaults", []string{""},
 			NewColonSeparatedMultimapStringString(&map[string][]string{"default": {}}),
 			&ColonSeparatedMultimapStringString{
 				initialized: true,
 				Multimap:    &map[string][]string{}}, ""},
-		// make sure we still allocate for "initialized" multimaps where Multimap was initially set to a nil map
+		// 即使 Map 初始为 nil，已初始化的对象也要为其分配底层 map。
 		{"allocates map if currently nil", []string{""},
 			&ColonSeparatedMultimapStringString{initialized: true, Multimap: &nilMap},
 			&ColonSeparatedMultimapStringString{
 				initialized: true,
 				Multimap:    &map[string][]string{},
 			}, ""},
-		// for most cases, we just reuse nilMap, which should be allocated by Set, and is reset before each test case
+		// 大多数用例复用 nilMap，由 Set 分配，并在每个用例前重置。
 		{"empty", []string{""},
 			NewColonSeparatedMultimapStringString(&nilMap),
 			&ColonSeparatedMultimapStringString{
 				initialized: true,
 				Multimap:    &map[string][]string{}}, ""},
+		// 默认不允许空键，缺冒号即视为格式错误。
 		{"empty key no colon", []string{"foo"},
 			NewColonSeparatedMultimapStringString(&nilMap),
 			&ColonSeparatedMultimapStringString{
@@ -105,6 +112,7 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 				Multimap: &map[string][]string{
 					"": {"foo"},
 				}}, "malformed pair, expect string:string"},
+		// AllowDefaultEmptyKey 模式下没有冒号的值归入空键，而不是报错。
 		{"empty key no colon allowed", []string{"foo"},
 			NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey(&nilMap),
 			&ColonSeparatedMultimapStringString{
@@ -135,6 +143,7 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 					"one": {"foo"},
 					"two": {"bar"},
 				}}, ""},
+		// 逗号后的空格应被裁剪掉。
 		{"two keys with space", []string{"one:foo, two:bar"},
 			NewColonSeparatedMultimapStringString(&nilMap),
 			&ColonSeparatedMultimapStringString{
@@ -160,6 +169,7 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 					"b": {"again", "beautiful"},
 					"c": {"world"},
 				}}, ""},
+		// 多次 Set 调用应累加而不是覆盖。
 		{"three keys, multiple items in one key, multiple Set invocations", []string{"a:hello,b:again", "c:world", "b:beautiful"},
 			NewColonSeparatedMultimapStringString(&nilMap),
 			&ColonSeparatedMultimapStringString{
@@ -183,6 +193,7 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 		nilMap = nil
 		t.Run(c.desc, func(t *testing.T) {
 			var err error
+			// 依次应用所有输入，遇到错误即停止。
 			for _, val := range c.vals {
 				err = c.start.Set(val)
 				if err != nil {
@@ -204,6 +215,8 @@ func TestSetColonSeparatedMultimapStringString(t *testing.T) {
 	}
 }
 
+// TestRoundTripColonSeparatedMultimapStringString 验证 Set 后再 String 的往返：
+// 无论输入如何分组，输出都应归一化为按键、值排序后的规范形式。
 func TestRoundTripColonSeparatedMultimapStringString(t *testing.T) {
 	cases := []struct {
 		desc   string
@@ -235,6 +248,8 @@ func TestRoundTripColonSeparatedMultimapStringString(t *testing.T) {
 	}
 }
 
+// TestEmptyColonSeparatedMultimapStringString 验证 Empty()：未初始化或没有
+// 任何键时返回 true，存在键（即使值为空列表）时返回 false。
 func TestEmptyColonSeparatedMultimapStringString(t *testing.T) {
 	var nilMap map[string][]string
 	cases := []struct {

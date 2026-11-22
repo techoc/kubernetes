@@ -27,6 +27,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestGlogSetter 验证 GlogSetter 在 klog、json、text 三种格式下都能在运行时
+// 调整 verbosity：初始级别 1 的日志被丢弃，调高后再写则出现输出。
 func TestGlogSetter(t *testing.T) {
 	testcases := map[string]struct {
 		init func(t *testing.T)
@@ -67,6 +69,7 @@ func TestGlogSetter(t *testing.T) {
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
+			// 保存并恢复 klog 全局状态，避免子测试之间互相污染。
 			state := klog.CaptureState()
 			t.Cleanup(state.Restore)
 			tmpdir := t.TempDir()
@@ -75,6 +78,7 @@ func TestGlogSetter(t *testing.T) {
 			defer func() {
 				os.Stderr = oldStderr
 			}()
+			// 把 stderr 重定向到临时文件，以便直接断言输出内容。
 			newStderr, err := os.Create(tmpfile)
 			if err != nil {
 				t.Fatalf("Unexpected error creating temp file: %v", err)
@@ -88,6 +92,7 @@ func TestGlogSetter(t *testing.T) {
 			}()
 			tc.init(t)
 
+			// 默认 verbosity 为 0，级别 1 的日志不应产生任何输出。
 			// First write with default verbosity level of 0 -> no output.
 			tc.write()
 			klog.Flush()

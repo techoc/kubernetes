@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// TestConfigz 覆盖 /configz 端点：Set 后可见、再次 Set 覆盖旧值、Delete 后输出空对象，
+// 并校验响应的 Content-Type。
 func TestConfigz(t *testing.T) {
 	v, err := New("testing")
 	if err != nil {
@@ -36,6 +38,8 @@ func TestConfigz(t *testing.T) {
 	if err := v.Set(&unstructured.Unstructured{Object: map[string]any{"apiVersion": "example.com/v1", "kind": "Blah"}}); err != nil {
 		t.Fatal(err)
 	}
+
+	// 使用真实 HTTP 服务器验证 handler 的完整序列化输出，而非直接调用内部函数。
 
 	s := httptest.NewServer(http.HandlerFunc(handle))
 	defer s.Close()
@@ -56,6 +60,7 @@ func TestConfigz(t *testing.T) {
 	if err := v.Set(&unstructured.Unstructured{Object: map[string]any{"apiVersion": "example.com/v1", "kind": "Bing"}}); err != nil {
 		t.Fatal(err)
 	}
+	// 重新 Set 应替换而非累加，保证 /configz 始终反映最新配置。
 	resp, err = http.Get(s.URL + "/configz")
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -70,6 +75,7 @@ func TestConfigz(t *testing.T) {
 	}
 
 	Delete("testing")
+	// 删除后应输出空 JSON 对象，而不是报错或返回旧值。
 	resp, err = http.Get(s.URL + "/configz")
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -87,6 +93,8 @@ func TestConfigz(t *testing.T) {
 	}
 }
 
+// TestConfigzWithAPIVersionAndKind 验证 apiVersion/kind 以及其他字段都原样序列化，
+// 不做裁剪或重排。
 func TestConfigzWithAPIVersionAndKind(t *testing.T) {
 	cfg := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -125,6 +133,8 @@ func TestConfigzWithAPIVersionAndKind(t *testing.T) {
 	Delete("testobj")
 }
 
+// TestConfigzErrors 验证 Set 对配置对象的合法性要求：
+// 非 nil、必须有 kind、必须使用外部 group/version。
 func TestConfigzErrors(t *testing.T) {
 	v, err := New("errors")
 	if err != nil {
@@ -172,6 +182,7 @@ func TestConfigzErrors(t *testing.T) {
 	}
 }
 
+// TestDuplicateNew 验证同名配置不能重复注册，防止不同代码路径悄悄覆盖同一份配置。
 func TestDuplicateNew(t *testing.T) {
 	name := "duplicate"
 	v1, err := New(name)

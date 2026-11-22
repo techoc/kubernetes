@@ -20,10 +20,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// EndpointsResourceLock 是历史默认的 leader election 资源锁类型；
+// 新组件应使用 leases，保留该常量仅为兼容旧配置。
 const EndpointsResourceLock = "endpoints"
 
 // LeaderElectionConfiguration defines the configuration of leader election
 // clients for components that can run with leader election enabled.
+//
+// LeaderElectionConfiguration 描述启用了 leader election 的组件的选主参数。
+// 仅当 LeaderElect 为 true 时其余字段才有意义（默认化与校验也据此跳过）。
 type LeaderElectionConfiguration struct {
 	// leaderElect enables a leader election client to gain leadership
 	// before executing the main loop. Enable this when running replicated
@@ -57,6 +62,9 @@ type LeaderElectionConfiguration struct {
 }
 
 // DebuggingConfiguration holds configuration for Debugging related features.
+//
+// DebuggingConfiguration 控制 pprof 相关端点；两个开关都是指针，
+// 以区分“未配置（走默认值）”与“显式设为 false”。
 type DebuggingConfiguration struct {
 	// enableProfiling enables profiling via web interface host:port/debug/pprof/
 	EnableProfiling *bool `json:"enableProfiling,omitempty"`
@@ -66,6 +74,9 @@ type DebuggingConfiguration struct {
 }
 
 // ClientConnectionConfiguration contains details for constructing a client.
+//
+// ClientConnectionConfiguration 是构造 client-go 配置所需的公共参数；
+// 内部版本位于 k8s.io/component-base/config，此处是对外暴露的版本。
 type ClientConnectionConfiguration struct {
 	// kubeconfig is the path to a KubeConfig file.
 	Kubeconfig string `json:"kubeconfig"`

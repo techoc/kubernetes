@@ -17,6 +17,9 @@ limitations under the License.
 package flag
 
 // StringFlag is a string flag compatible with flags and pflags that keeps track of whether it had a value supplied or not.
+//
+// StringFlag 是兼容 flag/pflag 的字符串标志，额外记录用户是否显式设置过：
+// 组件常需要区分“未提供”与“提供了默认值”，二者在配置合并时含义不同。
 type StringFlag struct {
 	// If Set has been invoked this value is true
 	provided bool
@@ -24,22 +27,28 @@ type StringFlag struct {
 	value string
 }
 
+// NewStringFlag 返回以 defaultVal 作为初始值的 StringFlag。
+// 初始值不算“已提供”，Provided 仍为 false。
 func NewStringFlag(defaultVal string) StringFlag {
 	return StringFlag{value: defaultVal}
 }
 
+// Default 在解析前改写默认值；不影响 provided 标志。
 func (f *StringFlag) Default(value string) {
 	f.value = value
 }
 
+// String 实现 pflag.Value 接口，返回当前值。
 func (f StringFlag) String() string {
 	return f.value
 }
 
+// Value 返回当前字符串值。
 func (f StringFlag) Value() string {
 	return f.value
 }
 
+// Set 实现 pflag.Value：记录值并标记用户已提供该标志。
 func (f *StringFlag) Set(value string) error {
 	f.value = value
 	f.provided = true
@@ -47,10 +56,12 @@ func (f *StringFlag) Set(value string) error {
 	return nil
 }
 
+// Provided 报告用户是否显式设置过该标志。
 func (f StringFlag) Provided() bool {
 	return f.provided
 }
 
+// Type 实现 pflag.Value 接口，用于帮助信息中显示类型名。
 func (f *StringFlag) Type() string {
 	return "string"
 }

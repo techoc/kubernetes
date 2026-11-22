@@ -27,6 +27,8 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+// TestSpecialGates 验证 AllAlpha/AllBeta 这些“特殊门控”的覆盖语义：
+// 打开特殊门控会同时翻转所有对应阶段的普通门控，但不影响 GA 门控。
 func TestSpecialGates(t *gotest.T) {
 	gate := featuregate.NewFeatureGate()
 	gate.Add(map[featuregate.Feature]featuregate.FeatureSpec{
@@ -73,6 +75,7 @@ func TestSpecialGates(t *gotest.T) {
 	}
 	expect(t, gate, before)
 	t.Cleanup(func() {
+		// 所有覆盖应已在各自 Cleanup 中恢复；这里做最后校验，然后清空全局记录。
 		expect(t, gate, before)
 		cleanup()
 	})
@@ -120,6 +123,7 @@ func TestSpecialGates(t *gotest.T) {
 	})
 }
 
+// expect 逐项断言门控当前值；失败信息包含门控名与期望值。
 func expect(t *gotest.T, gate featuregate.FeatureGate, expect map[featuregate.Feature]bool) {
 	t.Helper()
 	for k, v := range expect {
@@ -129,6 +133,8 @@ func expect(t *gotest.T, gate featuregate.FeatureGate, expect map[featuregate.Fe
 	}
 }
 
+// TestSetFeatureGateInTest 验证子测试中的覆盖：
+// 普通子测试继承父测试的覆盖；子测试可以临时改写，退出后自动恢复。
 func TestSetFeatureGateInTest(t *gotest.T) {
 	gate := featuregate.NewFeatureGate()
 	err := gate.Add(map[featuregate.Feature]featuregate.FeatureSpec{
@@ -142,24 +148,30 @@ func TestSetFeatureGateInTest(t *gotest.T) {
 
 	assert.True(t, gate.Enabled("feature"))
 	t.Run("Subtest", func(t *gotest.T) {
+		// 子测试默认继承父测试设置的值。
 		assert.True(t, gate.Enabled("feature"))
 	})
 
 	t.Run("ParallelSubtest", func(t *gotest.T) {
 		assert.True(t, gate.Enabled("feature"))
 		// Calling t.Parallel in subtest will resume the main test body
+		// 父测试会在子测试暂停后继续执行，因此这里仍能看到覆盖值。
 		t.Parallel()
 		assert.True(t, gate.Enabled("feature"))
 	})
 	assert.True(t, gate.Enabled("feature"))
 
 	t.Run("OverwriteInSubtest", func(t *gotest.T) {
+		// 子测试内的覆盖在子测试结束后由 Cleanup 自动恢复。
 		SetFeatureGateDuringTest(t, gate, "feature", false)
 		assert.False(t, gate.Enabled("feature"))
 	})
 	assert.True(t, gate.Enabled("feature"))
 }
 
+// TestSetFeatureGatesInTestWithDependencies 覆盖依赖关系处理：
+// 关闭某门控会自动关闭依赖它的门控；但不会自动开启依赖，
+// 且与显式设置冲突时必须报错。
 func TestSetFeatureGatesInTestWithDependencies(t *gotest.T) {
 	const (
 		alphaFeature      = "AlphaFeature"
@@ -289,6 +301,7 @@ func TestSetFeatureGatesInTestWithDependencies(t *gotest.T) {
 }
 
 func TestSpecialGatesVersioned(t *gotest.T) {
+	// 使用带版本的门控：不同仿真版本下同一门控的默认值可能不同。
 	originalEmulationVersion := version.MustParse("1.31")
 	gate := featuregate.NewVersionedFeatureGate(originalEmulationVersion)
 
@@ -369,6 +382,7 @@ func TestSpecialGatesVersioned(t *gotest.T) {
 	expect(t, gate, before)
 
 	t.Run("OverwriteInSubtestAtDifferentVersion", func(t *gotest.T) {
+		// 切换到 1.28 后，beta 门控按该版本的规格取默认值。
 		SetFeatureGateEmulationVersionDuringTest(t, gate, version.MustParse("1.28"))
 		SetFeatureGateDuringTest(t, gate, "AllAlpha", true)
 		expect(t, gate, map[featuregate.Feature]bool{
@@ -387,6 +401,8 @@ func TestSpecialGatesVersioned(t *gotest.T) {
 
 }
 
+// TestDetectLeakToMainTest 验证子测试调用 t.Parallel 后覆盖会泄漏到父测试，
+// 第二次设置不同值时应被并发检测捕获（Fatal）。
 func TestDetectLeakToMainTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	gate := featuregate.NewFeatureGate()
@@ -411,6 +427,8 @@ func TestDetectLeakToMainTest(t *gotest.T) {
 	assert.True(t, fakeT.fatalRecorded)
 }
 
+// TestDetectLeakToOtherSubtest 验证泄漏到同级子测试也能被检测到：
+// 第二个子测试看到的是上一个子测试遗留的值。
 func TestDetectLeakToOtherSubtest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	gate := featuregate.NewFeatureGate()
@@ -437,6 +455,8 @@ func TestDetectLeakToOtherSubtest(t *gotest.T) {
 	})
 }
 
+// TestCannotDetectLeakFromSubtest 记录已知局限：若父测试先设置过同一门控，
+// 子测试的并行覆盖无法与父测试区分，检测不到。
 func TestCannotDetectLeakFromSubtest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	gate := featuregate.NewFeatureGate()
@@ -455,6 +475,8 @@ func TestCannotDetectLeakFromSubtest(t *gotest.T) {
 	assert.True(t, gate.Enabled("feature"))
 }
 
+// TestCannotDetectLeakFromTwoSubtestsWithDifferentFeatures 说明检测按门控粒度：
+// 两个子测试并行修改不同门控时互不干扰，因此不会报错。
 func TestCannotDetectLeakFromTwoSubtestsWithDifferentFeatures(t *gotest.T) {
 	t.Cleanup(cleanup)
 	gate := featuregate.NewFeatureGate()
@@ -488,6 +510,8 @@ func TestCannotDetectLeakFromTwoSubtestsWithDifferentFeatures(t *gotest.T) {
 	})
 }
 
+// TestDetectEmulationVersionLeakToMainTest 与门控值泄漏同理，
+// 仿真版本也会泄漏，并在第二次设置不同版本时被检测。
 func TestDetectEmulationVersionLeakToMainTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmulationVersion := version.MustParse("1.31")
@@ -511,6 +535,8 @@ func TestDetectEmulationVersionLeakToMainTest(t *gotest.T) {
 	assert.True(t, fakeT.fatalRecorded)
 }
 
+// TestNoLeakFromSameEmulationVersionToMainTest 验证设置相同版本不会误报：
+// 值未发生变化时，并发检测应放行。
 func TestNoLeakFromSameEmulationVersionToMainTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmulationVersion := version.MustParse("1.31")
@@ -531,6 +557,8 @@ func TestNoLeakFromSameEmulationVersionToMainTest(t *gotest.T) {
 	SetFeatureGateEmulationVersionDuringTest(t, gate, originalEmulationVersion)
 }
 
+// TestDetectEmulationVersionLeakToOtherSubtest 验证版本泄漏到同级子测试
+// 时同样会被检测。
 func TestDetectEmulationVersionLeakToOtherSubtest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmulationVersion := version.MustParse("1.31")
@@ -556,6 +584,8 @@ func TestDetectEmulationVersionLeakToOtherSubtest(t *gotest.T) {
 	})
 }
 
+// TestSetFeatureGateVersionsInTest 验证同时设置仿真版本与最小兼容版本：
+// 嵌套子测试可以继续收窄，退出后逐层恢复。
 func TestSetFeatureGateVersionsInTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmuVer := version.MustParse("1.31")
@@ -595,6 +625,7 @@ func TestSetFeatureGateVersionsInTest(t *gotest.T) {
 	assert.True(t, gate.MinCompatibilityVersion().EqualTo(newMinCompatVer))
 }
 
+// TestDetectVersionsLeakToMainTest 验证版本对泄漏到父测试时的检测。
 func TestDetectVersionsLeakToMainTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmuVer := version.MustParse("1.31")
@@ -624,6 +655,7 @@ func TestDetectVersionsLeakToMainTest(t *gotest.T) {
 	assert.True(t, fakeT.fatalRecorded)
 }
 
+// TestNoLeakFromSameVersionsToMainTest 验证相同版本对不会触发并发冲突。
 func TestNoLeakFromSameVersionsToMainTest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmuVer := version.MustParse("1.31")
@@ -650,6 +682,8 @@ func TestNoLeakFromSameVersionsToMainTest(t *gotest.T) {
 	SetFeatureGateVersionsDuringTest(t, gate, originalEmuVer, originalMinCompatVer)
 }
 
+// TestDetectVersionsLeakToOtherSubtest 验证不同版本对在同一层级子测试间
+// 互相干扰时能被检测。
 func TestDetectVersionsLeakToOtherSubtest(t *gotest.T) {
 	t.Cleanup(cleanup)
 	originalEmuVer := version.MustParse("1.31")
@@ -680,6 +714,8 @@ func TestDetectVersionsLeakToOtherSubtest(t *gotest.T) {
 	})
 }
 
+// ignoreFatalT 把 Fatal/Fatalf 降级为记录，使测试可以断言
+// “本应触发 Fatal”的路径而不会真的中止进程。
 type ignoreFatalT struct {
 	*gotest.T
 	fatalRecorded bool
@@ -699,6 +735,7 @@ func (f *ignoreFatalT) Fatalf(format string, args ...any) {
 	f.T.Logf("[IGNORED Fatalf] "+format, args...)
 }
 
+// ignoreErrorT 在 ignoreFatalT 基础上把 Error/Errorf 也降级为记录。
 type ignoreErrorT struct {
 	*ignoreFatalT
 	errorRecorded bool
@@ -718,6 +755,7 @@ func (f *ignoreErrorT) Errorf(format string, args ...any) {
 	f.T.Logf("[IGNORED Errorf] "+format, args...)
 }
 
+// cleanup 重置包级全局状态，保证各测试之间互不影响。
 func cleanup() {
 	featureFlagOverride = map[featuregate.Feature]string{}
 	versionsOverride = ""

@@ -27,6 +27,9 @@ import (
 	"k8s.io/component-base/logs"
 )
 
+// init 在包导入时把 klog 的 Go flag 绑定到标准库 flag.CommandLine，
+// 让测试程序无需显式初始化即可使用 -v、-vmodule 等日志参数。
+// 放在 init 中是因为 Go 测试框架和 Ginkgo 都会在 main 之前解析 flag.CommandLine。
 func init() {
 	logs.AddGoFlags(flag.CommandLine)
 }

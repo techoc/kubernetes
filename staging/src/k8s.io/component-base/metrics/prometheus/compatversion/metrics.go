@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package compatversion 暴露组件的版本兼容信息指标，
+// 便于运维同时观测二进制版本、模拟版本与最低兼容版本。
 package compatversion
 
 import (
@@ -25,6 +27,7 @@ import (
 
 var (
 	// compatVersionInfo is a Prometheus Gauge metrics used for recording the current emulation and binary version of a component.
+	// 以恒为 1 的 gauge 携带版本标签，便于用 PromQL 做版本分布统计。
 	compatVersionInfo = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
 			Name: "version_info",
@@ -37,10 +40,13 @@ var (
 	)
 )
 
+// ResetCompatVersionInfoMetric 清空所有版本指标，主要用于测试。
 func ResetCompatVersionInfoMetric() {
 	compatVersionInfo.Reset()
 }
 
+// RecordCompatVersionInfo 记录某个组件的版本信息。
+// 使用 WithContext 以在 tracing 开启时把 trace 信息作为 exemplar 带上。
 func RecordCompatVersionInfo(ctx context.Context, component, binary, emulation, minCompat string) {
 	compatVersionInfo.WithContext(ctx).WithLabelValues(component, binary, emulation, minCompat).Set(1)
 }

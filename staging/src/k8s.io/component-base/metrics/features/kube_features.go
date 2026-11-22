@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package features 定义 component-base/metrics 使用的 feature gate。
+// 这些 gate 由各组件在启动时注册并应用，metrics 子系统据此切换实验性行为。
 package features
 
 import (
@@ -31,9 +33,12 @@ const (
 	// Enables native histogram support for Kubernetes metrics.
 	// When enabled, histogram metrics will be exposed in both classic
 	// and native histogram formats.
+	// 开启后同时输出经典桶与原生直方图，便于抓取端逐步迁移而不破坏旧消费者。
 	NativeHistograms featuregate.Feature = "NativeHistograms"
 )
 
+// featureGates 返回本包 gate 的版本化定义：
+// 1.36 引入为 alpha（默认关闭），1.37 转为 beta 并默认开启。
 func featureGates() map[featuregate.Feature]featuregate.VersionedSpecs {
 	return map[featuregate.Feature]featuregate.VersionedSpecs{
 		NativeHistograms: {
@@ -51,6 +56,8 @@ func AddFeatureGates(mutableFeatureGate featuregate.MutableVersionedFeatureGate)
 // ApplyFeatureGates propagates the current feature gate state to the metrics
 // subsystem. It must be called after feature gates are finalised and before
 // any histogram metrics are registered.
+// 把 gate 状态写入 metrics 内部的原子开关；因此调用时机必须早于直方图注册，
+// 否则已按旧状态创建的指标不会补发原生直方图。
 func ApplyFeatureGates(featureGate featuregate.FeatureGate) {
 	internalmetrics.SetNativeHistogramsEnabled(featureGate.Enabled(NativeHistograms))
 }

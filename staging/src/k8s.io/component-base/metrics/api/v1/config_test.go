@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestValidateShowHiddenMetricsVersion 验证 showHiddenMetricsForVersion 的格式：
+// 只接受紧邻当前版本的 minor 版本（无 patch），防止用户长期隐藏指标。
 func TestValidateShowHiddenMetricsVersion(t *testing.T) {
 	currentVersion := semver.MustParse("1.17.0")
 
@@ -73,6 +75,8 @@ func TestValidateShowHiddenMetricsVersion(t *testing.T) {
 	}
 }
 
+// TestValidateDisabledMetrics 验证 disabledMetrics 中每一项都是合法的
+// Prometheus 指标名；空列表合法。
 func TestValidateDisabledMetrics(t *testing.T) {
 	var tests = []struct {
 		name          string
@@ -113,6 +117,8 @@ func TestValidateDisabledMetrics(t *testing.T) {
 	}
 }
 
+// TestValidateAllowListMapping 验证 allow list 的 key 必须是
+// "指标名,标签名" 形式；任一部分非法都应报错。
 func TestValidateAllowListMapping(t *testing.T) {
 	var tests = []struct {
 		name          string
@@ -161,6 +167,8 @@ func TestValidateAllowListMapping(t *testing.T) {
 	}
 }
 
+// TestValidate 验证整体配置的互斥关系：allowListMapping 与
+// allowListMappingManifest 不能同时指定，其余组合应通过。
 func TestValidate(t *testing.T) {
 	currentVersion := semver.MustParse("1.17.0")
 

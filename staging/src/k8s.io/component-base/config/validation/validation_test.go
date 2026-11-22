@@ -25,6 +25,8 @@ import (
 	"k8s.io/component-base/config"
 )
 
+// TestValidateClientConnectionConfiguration 覆盖客户端连接参数校验：
+// QPS 允许为负（部分客户端用负值表示不限速），但 Burst 必须非负。
 func TestValidateClientConnectionConfiguration(t *testing.T) {
 	validConfig := &config.ClientConnectionConfiguration{
 		AcceptContentTypes: "application/json",
@@ -68,6 +70,9 @@ func TestValidateClientConnectionConfiguration(t *testing.T) {
 	}
 }
 
+// TestValidateLeaderElectionConfiguration 覆盖 leader election 的参数约束：
+// 未启用时不校验其余字段；启用时要求时长非零且 renewDeadline 严格小于
+// leaseDuration（等于会导致竞选无法稳定），并要求锁资源三元组完整。
 func TestValidateLeaderElectionConfiguration(t *testing.T) {
 	validConfig := &config.LeaderElectionConfiguration{
 		ResourceLock:      "leases",

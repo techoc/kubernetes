@@ -32,20 +32,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// kmeta 模拟带 name/namespace 的 Kubernetes 对象，用于测试 KObj/KObjSlice。
 type kmeta struct {
 	Name, Namespace string
 }
 
+// GetName 实现 klog.KMetadata。
 func (k kmeta) GetName() string {
 	return k.Name
 }
 
+// GetNamespace 实现 klog.KMetadata。
 func (k kmeta) GetNamespace() string {
 	return k.Namespace
 }
 
 var _ klog.KMetadata = kmeta{}
 
+// TestKlogIntegration 验证 klog 各级别/各函数在 JSON logger 下的字段：
+// msg、v、结构化键值，以及 KObj/KObjSlice 展开为 name/namespace。
 func TestKlogIntegration(t *testing.T) {
 	timeNow = func() time.Time {
 		return time.Date(1970, time.January, 1, 0, 0, 0, 123, time.UTC)
@@ -270,6 +275,7 @@ func TestKlogIntegration(t *testing.T) {
 }
 
 // TestKlogV test klog -v(--verbose) func available with json logger
+// 设置 -v 后逐级调用，验证只有 V(j) <= v 时才写出。
 func TestKlogV(t *testing.T) {
 	var buffer testBuff
 	writer := zapcore.AddSync(&buffer)

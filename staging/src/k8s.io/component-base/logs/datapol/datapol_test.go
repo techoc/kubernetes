@@ -26,21 +26,26 @@ import (
 )
 
 const (
+	// marker 用作会被检验的敏感字符串，出现即代表脱敏失败。
 	marker = "hunter2"
 )
 
+// withDatapolTag 演示通过 datapolicy 标签声明敏感字段。
 type withDatapolTag struct {
 	Key string `json:"key" datapolicy:"password"`
 }
 
+// withExternalType 演示标准库类型（http.Header）经由 GlobalDatapolicyMapping 被识别。
 type withExternalType struct {
 	Header http.Header `json:"header"`
 }
 
+// noDatapol 无敏感标签且字段值看起来像密码，用于验证“不会被误判”。
 type noDatapol struct {
 	Key string `json:"key"`
 }
 
+// 以下结构验证敏感类型嵌套在不同容器中的检测能力。
 type datapolInMember struct {
 	secrets withDatapolTag
 }
@@ -53,10 +58,13 @@ type datapolInMap struct {
 	secrets map[string]withDatapolTag
 }
 
+// datapolBehindPointer 用于记录已知限制：遍历结构体字段时会跳过指针类型字段。
 type datapolBehindPointer struct {
 	secrets *withDatapolTag
 }
 
+// TestValidate 验证 datapol.Verify 对字段值、嵌套容器与标准库类型的判定，
+// 以及格式化输出是否与“是否检测到敏感数据”的结论一致。
 func TestValidate(t *testing.T) {
 	testcases := []struct {
 		name      string
@@ -142,6 +150,7 @@ func TestValidate(t *testing.T) {
 		if !assert.ElementsMatch(t, tc.expect, res) {
 			t.Errorf("Wrong set of tags for %q. expect %v, got %v", tc.name, tc.expect, res)
 		}
+		// badFilter 用例专门验证“未标记敏感”的结构会被原样打印，不能反过来要求脱敏。
 		if !tc.badFilter {
 			formatted := fmt.Sprintf("%v", tc.value)
 			if strings.Contains(formatted, marker) != (len(tc.expect) > 0) {

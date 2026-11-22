@@ -32,6 +32,7 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// TB 是 *testing.T 与 *testing.B 共用的最小接口，便于辅助函数同时服务测试和基准测试。
 type TB interface {
 	Logf(format string, args ...any)
 	Errorf(format string, args ...any)
@@ -49,6 +50,8 @@ type GathererFunc = prometheus.GathererFunc
 // CollectAndCompare registers the provided Collector with a newly created
 // pedantic Registry. It then does the same as GatherAndCompare, gathering the
 // metrics from the pedantic Registry.
+//
+// 先 lint 再比较：格式不规范的指标即使数值正确也会让测试失败，以便尽早发现。
 func CollectAndCompare(c metrics.Collector, expected io.Reader, metricNames ...string) error {
 	lintProblems, err := testutil.CollectAndLint(c, metricNames...)
 	if err != nil {
@@ -65,6 +68,8 @@ func CollectAndCompare(c metrics.Collector, expected io.Reader, metricNames ...s
 // it to an expected output read from the provided Reader in the Prometheus text
 // exposition format. If any metricNames are provided, only metrics with those
 // names are compared.
+//
+// 同样先执行 lint，保证测试使用的期望文本符合 Prometheus 命名与 HELP 规范。
 func GatherAndCompare(g metrics.Gatherer, expected io.Reader, metricNames ...string) error {
 	lintProblems, err := testutil.GatherAndLint(g, metricNames...)
 	if err != nil {
@@ -81,6 +86,7 @@ func GatherAndCompare(g metrics.Gatherer, expected io.Reader, metricNames ...str
 // registry. It then does the same as GatherAndCompare, gathering the
 // metrics from the pedantic Registry.
 func CustomCollectAndCompare(c metrics.StableCollector, expected io.Reader, metricNames ...string) error {
+	// 使用新注册表隔离，避免与其他测试共享的全局指标互相干扰。
 	registry := metrics.NewKubeRegistry()
 	registry.CustomMustRegister(c)
 
@@ -98,6 +104,7 @@ func ScrapeAndCompare(url string, expected io.Reader, metricNames ...string) err
 // It should only be used in testing scenario especially for the deprecated metrics.
 // The input version format should be `major.minor.patch`, e.g. '1.18.0'.
 func NewFakeKubeRegistry(ver string) metrics.KubeRegistry {
+	// 临时替换 BuildVersion，创建后立即恢复，避免影响并发创建的注册表。
 	backup := metrics.BuildVersion
 	defer func() {
 		metrics.BuildVersion = backup
@@ -112,6 +119,8 @@ func NewFakeKubeRegistry(ver string) metrics.KubeRegistry {
 	return metrics.NewKubeRegistry()
 }
 
+// AssertVectorCount 在全局默认注册表中统计指定指标、匹配标签的 counter 值之和，
+// 用于断言“某个标签组合下的事件次数”。
 func AssertVectorCount(t TB, name string, labelFilter map[string]string, wantCount int) {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
@@ -142,6 +151,7 @@ func AssertVectorCount(t TB, name string, labelFilter map[string]string, wantCou
 	}
 }
 
+// AssertHistogramTotalCount 与 AssertVectorCount 类似，但累加直方图的 SampleCount。
 func AssertHistogramTotalCount(t TB, name string, labelFilter map[string]string, wantCount int) {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
@@ -188,6 +198,7 @@ func AssertHasNativeHistogram(t TB, mf *dto.MetricFamily, labelFilter map[string
 		}
 
 		if h.Schema == nil {
+			// Schema 为 nil 表示该序列仍是经典直方图，原生桶未启用。
 			t.Errorf("expected native histogram data to be present for metric %q with labels %v", mf.GetName(), labelFilter)
 		}
 
@@ -213,6 +224,7 @@ func ScrapeMetricsProto(url string, client *http.Client) (map[string]*dto.Metric
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	// Request protobuf format to get native histogram data
+	// 文本格式无法完整表达原生直方图的 span/schema，因此必须协商 protobuf。
 	req.Header.Set("Accept", string(expfmt.NewFormat(expfmt.TypeProtoDelim)))
 
 	resp, err := client.Do(req)

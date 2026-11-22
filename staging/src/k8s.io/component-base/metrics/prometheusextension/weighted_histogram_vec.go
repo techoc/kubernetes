@@ -22,6 +22,7 @@ import (
 
 // WeightedObserverVec is a bunch of WeightedObservers that have the same
 // Desc and are distinguished by the values for their variable labels.
+// 与 prometheus.HistogramVec 的区别仅在于 Observe 接受带权重的样本。
 type WeightedObserverVec interface {
 	GetMetricWith(prometheus.Labels) (WeightedObserver, error)
 	GetMetricWithLabelValues(lvs ...string) (WeightedObserver, error)
@@ -39,6 +40,8 @@ type WeightedHistogramVec struct {
 var _ WeightedObserverVec = &WeightedHistogramVec{}
 var _ prometheus.Collector = &WeightedHistogramVec{}
 
+// NewWeightedHistogramVec 构造带可变标签的加权直方图集合。
+// 借助 prometheus.NewMetricVec 的标签校验与缓存，子指标在首次访问时惰性创建。
 func NewWeightedHistogramVec(opts WeightedHistogramOpts, labelNames ...string) *WeightedHistogramVec {
 	desc := prometheus.NewDesc(
 		prometheus.BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
@@ -57,6 +60,7 @@ func NewWeightedHistogramVec(opts WeightedHistogramOpts, labelNames ...string) *
 	}
 }
 
+// GetMetricWith 按完整标签集获取子指标；标签不匹配时返回错误。
 func (hv *WeightedHistogramVec) GetMetricWith(labels prometheus.Labels) (WeightedObserver, error) {
 	metric, err := hv.MetricVec.GetMetricWith(labels)
 	if metric != nil {
@@ -65,6 +69,7 @@ func (hv *WeightedHistogramVec) GetMetricWith(labels prometheus.Labels) (Weighte
 	return nil, err
 }
 
+// GetMetricWithLabelValues 按位置标签值获取子指标。
 func (hv *WeightedHistogramVec) GetMetricWithLabelValues(lvs ...string) (WeightedObserver, error) {
 	metric, err := hv.MetricVec.GetMetricWithLabelValues(lvs...)
 	if metric != nil {
@@ -73,6 +78,7 @@ func (hv *WeightedHistogramVec) GetMetricWithLabelValues(lvs ...string) (Weighte
 	return nil, err
 }
 
+// With 是 GetMetricWith 的 panic 版本，适用于标签集合已知正确的调用点。
 func (hv *WeightedHistogramVec) With(labels prometheus.Labels) WeightedObserver {
 	h, err := hv.GetMetricWith(labels)
 	if err != nil {
@@ -81,6 +87,7 @@ func (hv *WeightedHistogramVec) With(labels prometheus.Labels) WeightedObserver 
 	return h
 }
 
+// WithLabelValues 是 GetMetricWithLabelValues 的 panic 版本。
 func (hv *WeightedHistogramVec) WithLabelValues(lvs ...string) WeightedObserver {
 	h, err := hv.GetMetricWithLabelValues(lvs...)
 	if err != nil {
@@ -89,6 +96,7 @@ func (hv *WeightedHistogramVec) WithLabelValues(lvs ...string) WeightedObserver 
 	return h
 }
 
+// CurryWith 预绑定部分标签，返回新的向量视图（共享底层子指标缓存）。
 func (hv *WeightedHistogramVec) CurryWith(labels prometheus.Labels) (WeightedObserverVec, error) {
 	vec, err := hv.MetricVec.CurryWith(labels)
 	if vec != nil {
@@ -97,6 +105,7 @@ func (hv *WeightedHistogramVec) CurryWith(labels prometheus.Labels) (WeightedObs
 	return nil, err
 }
 
+// MustCurryWith 是 CurryWith 的 panic 版本。
 func (hv *WeightedHistogramVec) MustCurryWith(labels prometheus.Labels) WeightedObserverVec {
 	vec, err := hv.CurryWith(labels)
 	if err != nil {

@@ -14,9 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics 是 Kubernetes 组件统一的指标门面：封装 prometheus 客户端，
+// 在注册时按 stability level（ALPHA/BETA/STABLE）与弃用版本过滤指标，
+// 并提供计时直方图、原生直方图等扩展。
+// 组件通过 metrics 与 legacyregistry 暴露 /metrics，避免直接依赖 prometheus 的注册语义。
 package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
 // Labels represents a collection of label name -> value mappings.
+// 底层类型与 prometheus.Labels 一致，便于在 metrics 与 prometheus 两套 API 间传递；
+// 但它是独立类型，跨包传递时需显式转换。
 type Labels prometheus.Labels

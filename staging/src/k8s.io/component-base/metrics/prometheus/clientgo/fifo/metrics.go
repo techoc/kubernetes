@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fifo 把 client-go informer 的 FIFO 队列指标接入 Kubernetes 的
+// legacyregistry，包括排队数量、处理延迟和 store 的 resourceVersion。
+// 包被导入时只安装 provider，实际注册延迟到首次创建 informer 时，
+// 以确保注册发生在 feature gate 状态传播之后。
 package fifo
 
 import (
@@ -27,6 +31,7 @@ import (
 var (
 	subsystem = "informer"
 
+	// fifoQueuedItems 记录 FIFO 中当前排队的事件数。
 	fifoQueuedItems = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
 			Subsystem:      subsystem,
@@ -36,6 +41,7 @@ var (
 		},
 		[]string{"name", "group", "version", "resource"},
 	)
+	// fifoProcessingLatency 记录事件出队后的处理耗时，桶按常见处理时间分布设置。
 	fifoProcessingLatency = k8smetrics.NewHistogramVec(
 		&k8smetrics.HistogramOpts{
 			Subsystem:      subsystem,
@@ -46,6 +52,8 @@ var (
 		},
 		[]string{"name", "group", "version", "resource"},
 	)
+	// storeResourceVersion 以 15 位有效数字暴露 store 的 resourceVersion，
+	// 避免 float 精度丢失导致版本号显示错误。
 	storeResourceVersion = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
 			Subsystem:      subsystem,
@@ -82,11 +90,15 @@ func Register() {
 		legacyregistry.MustRegister(fifoProcessingLatency)
 		legacyregistry.MustRegister(storeResourceVersion)
 	})
+	// 重复设置 provider 是幂等的，保证直接调用 Register 的旧用法仍有效。
 	cache.SetInformerMetricsProvider(informerMetricsProvider{})
 }
 
+// informerMetricsProvider 实现 cache 的指标 provider 接口，
+// 每个 factory 方法返回绑定到具体 informer 的指标句柄。
 type informerMetricsProvider struct{}
 
+// NewQueuedItemMetric 返回指定 informer 的排队数量 gauge。
 func (informerMetricsProvider) NewQueuedItemMetric(id cache.InformerNameAndResource) cache.GaugeMetric {
 	Register()
 	return &reservedGaugeMetric{
@@ -100,6 +112,7 @@ func (informerMetricsProvider) NewQueuedItemMetric(id cache.InformerNameAndResou
 	}
 }
 
+// NewProcessingLatencyMetric 返回指定 informer 的处理延迟 histogram。
 func (informerMetricsProvider) NewProcessingLatencyMetric(id cache.InformerNameAndResource) cache.HistogramMetric {
 	Register()
 	return &reservedHistogramMetric{
@@ -113,6 +126,7 @@ func (informerMetricsProvider) NewProcessingLatencyMetric(id cache.InformerNameA
 	}
 }
 
+// NewStoreResourceVersionMetric 返回指定 informer 的 store resourceVersion gauge。
 func (informerMetricsProvider) NewStoreResourceVersionMetric(id cache.InformerNameAndResource) cache.GaugeMetric {
 	Register()
 	return &reservedGaugeMetric{
@@ -134,6 +148,7 @@ type reservedGaugeMetric struct {
 	gauge cache.GaugeMetric
 }
 
+// Set 仅在 informer 标识仍被占用时更新，防止已关闭 informer 的指标复活。
 func (r *reservedGaugeMetric) Set(value float64) {
 	if r.id.Reserved() {
 		r.gauge.Set(value)
@@ -148,6 +163,7 @@ type reservedHistogramMetric struct {
 	histogram cache.HistogramMetric
 }
 
+// Observe 仅在标识仍被占用时记录，理由同上。
 func (r *reservedHistogramMetric) Observe(value float64) {
 	if r.id.Reserved() {
 		r.histogram.Observe(value)

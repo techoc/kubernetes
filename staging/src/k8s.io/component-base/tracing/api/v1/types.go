@@ -22,11 +22,15 @@ type TracingConfiguration struct {
 	// The connection is insecure, and does not currently support TLS.
 	// Recommended is unset, and endpoint is the otlp grpc default, localhost:4317.
 	// +optional
+	//
+	// 接受 host:port、dns:// 与 unix:// 形式；http(s):// 前缀会被校验拒绝。
 	Endpoint *string `json:"endpoint,omitempty"`
 
 	// SamplingRatePerMillion is the number of samples to collect per million spans.
 	// Recommended is unset. If unset, sampler respects its parent span's sampling
 	// rate, but otherwise never samples.
 	// +optional
+	//
+	// 未设置时沿用父 span 的采样决策；取值超出 [0,1000000] 会被校验拒绝。
 	SamplingRatePerMillion *int32 `json:"samplingRatePerMillion,omitempty"`
 }

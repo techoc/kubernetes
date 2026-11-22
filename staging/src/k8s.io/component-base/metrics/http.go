@@ -25,6 +25,8 @@ import (
 )
 
 var (
+	// processStartedAt 用于 promhttp 计算进程启动相关指标；
+	// 在包初始化时取一次，之后保持不变。
 	processStartedAt time.Time
 )
 
@@ -58,6 +60,7 @@ const (
 // zero value of HandlerOpts is a reasonable default.
 type HandlerOpts promhttp.HandlerOpts
 
+// toPromhttpHandlerOpts 把内部类型转回 promhttp 类型，并注入进程启动时间。
 func (ho *HandlerOpts) toPromhttpHandlerOpts() promhttp.HandlerOpts {
 	ho.ProcessStartTime = processStartedAt
 	return promhttp.HandlerOpts(*ho)
@@ -74,11 +77,14 @@ func HandlerFor(reg Gatherer, opts HandlerOpts) http.Handler {
 }
 
 // HandlerWithReset return an http.Handler with Reset
+//
+// DELETE 请求会清空注册表中的指标，仅用于测试或调试；生产端点通常不应暴露此能力。
 func HandlerWithReset(reg KubeRegistry, opts HandlerOpts) http.Handler {
 	defaultHandler := promhttp.HandlerFor(reg, opts.toPromhttpHandlerOpts())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			reg.Reset()
+			// 返回固定文本，便于测试断言重置确实发生。
 			io.WriteString(w, "metrics reset\n")
 			return
 		}

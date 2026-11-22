@@ -29,6 +29,7 @@ import (
 // variants of them.
 
 // Collector defines a subset of prometheus.Collector interface methods
+// 只固定这里用到的方法，避免 prometheus 上游新增方法时破坏兼容性。
 type Collector interface {
 	Describe(chan<- *prometheus.Desc)
 	Collect(chan<- prometheus.Metric)
@@ -46,18 +47,21 @@ type Metric interface {
 // "counters" are represented by Gauges.
 
 // CounterMetric is an interface which defines a subset of the interface provided by prometheus.Counter
+// 只暴露单调递增操作，避免调用方误用 Set/Dec 破坏 counter 语义。
 type CounterMetric interface {
 	Inc()
 	Add(float64)
 }
 
 // CounterVecMetric is an interface which prometheus.CounterVec satisfies.
+// 允许按标签取子 counter；未注册时返回 noop 而非 panic。
 type CounterVecMetric interface {
 	WithLabelValues(...string) CounterMetric
 	With(prometheus.Labels) CounterMetric
 }
 
 // GaugeMetric is an interface which defines a subset of the interface provided by prometheus.Gauge
+// 包含 Write，便于测试直接读取 DTO 而不经过完整 Gather。
 type GaugeMetric interface {
 	Set(float64)
 	Inc()
@@ -68,6 +72,7 @@ type GaugeMetric interface {
 }
 
 // GaugeVecMetric is a collection of Gauges that differ only in label values.
+// 与 prometheus 默认行为不同：注册前取子指标返回 noop，避免未注册指标永久驻留内存。
 type GaugeVecMetric interface {
 	// Default Prometheus Vec behavior is that member extraction results in creation of a new element
 	// if one with the unique label values is not found in the underlying stored metricMap.
@@ -132,6 +137,7 @@ type ObserverMetric interface {
 
 // PromRegistry is an interface which implements a subset of prometheus.Registerer and
 // prometheus.Gatherer interfaces
+// 同时提供注册与抓取能力，便于用单一对象替换 prometheus 默认 registry。
 type PromRegistry interface {
 	Register(prometheus.Collector) error
 	MustRegister(...prometheus.Collector)
@@ -155,13 +161,17 @@ type Registerer interface {
 // provided function.
 //
 // To create GaugeFunc instances, use NewGaugeFunc.
+// 同时实现 Metric 与 Collector，使它可以像普通 gauge 一样被读取或被注册。
 type GaugeFunc interface {
 	Metric
 	Collector
 }
 
+// ErrIsNotRegistered 判断错误是否表示“向量尚未注册”。
+// 调用方据此区分可忽略的未注册状态与真正的标签错误。
 func ErrIsNotRegistered(err error) bool {
 	return err == errNotRegistered
 }
 
+// errNotRegistered 作为哨兵值比较，调用方不应依赖其字符串内容。
 var errNotRegistered = errors.New("metric vec is not registered yet")

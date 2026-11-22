@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package klogflags 只注册 Kubernetes 组件仍支持的 klog flag（-v、-vmodule），
+// 屏蔽其余 klog 专有 flag，落实 KEP-2845 的弃用约定。
 package klogflags
 
 import (
@@ -27,6 +29,7 @@ import (
 // See
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components.
 func Init(fs *flag.FlagSet) {
+	// 先让 klog 把所有 flag 注册到临时集合，再按白名单挑选，避免污染调用方。
 	var allFlags flag.FlagSet
 	klog.InitFlags(&allFlags)
 	if fs == nil {

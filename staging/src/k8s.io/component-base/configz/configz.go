@@ -63,6 +63,7 @@ import (
 const DefaultConfigzPath = "/configz"
 
 var (
+	// configsGuard 保护 configs：HTTP handler 读取与组件启动时注册可能并发。
 	configsGuard sync.RWMutex
 	configs      = map[string]*Config{}
 )
@@ -75,16 +76,19 @@ type Config struct {
 
 // InstallHandler adds an HTTP handler on the given mux for the "/configz"
 // endpoint which serves all registered ComponentConfigs in JSON format.
+// 可多次调用（例如不同 mux），注册的是同一个全局处理逻辑。
 func InstallHandler(m mux) {
 	m.Handle(DefaultConfigzPath, http.HandlerFunc(handle))
 }
 
+// mux 抽象 http.ServeMux 的最小接口，便于测试。
 type mux interface {
 	Handle(string, http.Handler)
 }
 
 // New creates a Config object with the given name. Each Config is registered
 // with this package's "/configz" handler.
+// 名称重复会报错，避免同一组件配置被两处覆盖。
 func New(name string) (*Config, error) {
 	configsGuard.Lock()
 	defer configsGuard.Unlock()
@@ -105,6 +109,8 @@ func Delete(name string) {
 }
 
 // Set sets the ComponentConfig for this Config.
+// 只接受带外部 GroupVersion 的对象：内部版本没有稳定的 JSON 表示，
+// 直接暴露会随实现变化而破坏消费者。
 func (v *Config) Set(val runtime.Object) error {
 	configsGuard.Lock()
 	defer configsGuard.Unlock()
@@ -130,12 +136,14 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.val)
 }
 
+// handle 把内部错误转换为 500 响应。
 func handle(w http.ResponseWriter, r *http.Request) {
 	if err := write(w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
+// write 在锁内完成序列化快照，避免长时间持锁阻塞配置更新。
 func write(w http.ResponseWriter) error {
 	var b []byte
 	var err error
@@ -147,6 +155,7 @@ func write(w http.ResponseWriter) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling json: %v", err)
 	}
+	// nosniff 防止浏览器把配置内容当作其它 MIME 类型执行。
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, err = w.Write(b)

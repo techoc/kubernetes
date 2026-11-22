@@ -25,6 +25,9 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// TestNamedCertKeyArrayFlag 验证 tls-sni-cert-key 这类可重复 flag 的行为：
+// 每次出现解析一个证书项，空白被裁剪，重复出现会累加而非覆盖，格式错误则
+// 在 Parse 阶段返回带具体原因的错误。
 func TestNamedCertKeyArrayFlag(t *testing.T) {
 	tests := []struct {
 		args       []string
@@ -116,6 +119,7 @@ func TestNamedCertKeyArrayFlag(t *testing.T) {
 
 		fs.Var(NewNamedCertKeyArray(&nkcs), "tls-sni-cert-key", "usage")
 
+		// 每个 args 元素都展开成一次独立的 flag，模拟命令行重复传参。
 		args := []string{}
 		for _, a := range test.args {
 			args = append(args, fmt.Sprintf("--tls-sni-cert-key=%s", a))
@@ -131,6 +135,7 @@ func TestNamedCertKeyArrayFlag(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("%d: expected nil error, got %v", i, err)
 		}
+		// 错误用例也检查解析结果：失败的 Set 不应把半成品写入目标 slice。
 		if !reflect.DeepEqual(nkcs, test.expected) {
 			t.Errorf("%d: expected %+v, got %+v", i, test.expected, nkcs)
 		}

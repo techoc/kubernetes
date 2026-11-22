@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testutil 提供指标相关的测试辅助：抓取对比、Prometheus 规范 lint 等。
 package testutil
 
 import (
@@ -29,6 +30,9 @@ import (
 // The original entries come from the existing metrics when we introduce promlint.
 // We setup this list for allow and not fail on the current violations.
 // Generally speaking, you need to fix the problem for a new metric rather than add it into the list.
+//
+// exceptionMetrics 是豁免清单：引入 promlint 时存量指标已存在违规，
+// 为不阻塞 CI 而逐项放行。新增指标不应加入此表，应直接修正命名。
 var exceptionMetrics = []string{
 	// k8s.io/apiserver/pkg/server/egressselector
 	"apiserver_egress_dialer_dial_failure_count", // counter metrics should have "_total" suffix
@@ -99,14 +103,19 @@ var exceptionMetrics = []string{
 }
 
 // A Problem is an issue detected by a Linter.
+//
+// 本类型是对 promlint.Problem 的别名式包装，便于统一格式化输出。
 type Problem promlint.Problem
 
+// String 输出 "指标名:问题描述"，方便直接拼进错误信息。
 func (p *Problem) String() string {
 	return fmt.Sprintf("%s:%s", p.Metric, p.Text)
 }
 
 // A Linter is a Prometheus metrics linter.  It identifies issues with metric
 // names, types, and metadata, and reports them to the caller.
+//
+// Linter 在 promlint 之上叠加 kube 的豁免清单。
 type Linter struct {
 	promLinter *promlint.Linter
 }
@@ -114,6 +123,8 @@ type Linter struct {
 // Lint performs a linting pass, returning a slice of Problems indicating any
 // issues found in the metrics stream.  The slice is sorted by metric name
 // and issue description.
+//
+// 过滤掉豁免指标后再返回，调用方只需关注真正需要修的问题。
 func (l *Linter) Lint() ([]Problem, error) {
 	promProblems, err := l.promLinter.Lint()
 	if err != nil {
@@ -150,6 +161,7 @@ func NewPromLinter(r io.Reader) *Linter {
 	}
 }
 
+// mergeProblems 把多个问题拼成单行，用作错误消息主体。
 func mergeProblems(problems []Problem) string {
 	var problemsMsg []string
 
@@ -161,6 +173,8 @@ func mergeProblems(problems []Problem) string {
 }
 
 // shouldIgnore returns true if metric in the exception list, otherwise returns false.
+//
+// 包级版本供没有 Linter 实例的调用路径使用。
 func shouldIgnore(metricName string) bool {
 	for i := range exceptionMetrics {
 		if metricName == exceptionMetrics[i] {
@@ -172,6 +186,8 @@ func shouldIgnore(metricName string) bool {
 }
 
 // GetLintError will ignore the metrics in exception list and converts lint problem to error.
+//
+// GetLintError 把过滤后的剩余问题聚合成一个 error；没有问题时返回 nil。
 func GetLintError(problems []promlint.Problem) error {
 	var filteredProblems []Problem
 	for _, problem := range problems {
@@ -190,6 +206,8 @@ func GetLintError(problems []promlint.Problem) error {
 }
 
 // CheckUnusedExceptions returns an error if any metric in exceptionMetrics did not have any lint problems.
+//
+// 若某个豁免项已不再违规，说明可以把它从清单中删除；该检查防止清单无限膨胀。
 func CheckUnusedExceptions(problems []promlint.Problem) error {
 	usedExceptions := make(map[string]bool)
 	for _, p := range problems {

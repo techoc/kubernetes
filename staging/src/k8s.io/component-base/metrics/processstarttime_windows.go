@@ -22,6 +22,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// GetProcessStart 返回当前进程的启动时间（Unix 秒）。
+// Windows 通过 GetProcessTimes 读取创建时间，该时间以 100ns 为单位。
 func GetProcessStart() (float64, error) {
 	processHandle := windows.CurrentProcess()
 
@@ -29,5 +31,6 @@ func GetProcessStart() (float64, error) {
 	if err := windows.GetProcessTimes(processHandle, &creationTime, &exitTime, &kernelTime, &userTime); err != nil {
 		return 0, err
 	}
+	// Filetime.Nanoseconds() 返回自 1601 年起的纳秒数；换算成秒与 Unix 时间一致。
 	return float64(creationTime.Nanoseconds() / 1e9), nil
 }

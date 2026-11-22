@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package featuregate 实现 Kubernetes 的 feature gate 机制：按特性名开启或关闭实验性行为。
+//
+// Gate 支持版本化定义（VersionedSpecs），结合 emulationVersion 与 minCompatibilityVersion
+// 选择当前生效的规格，并可通过 --feature-gates 或 SetFromMap 覆盖默认值。
+// 未注册的特性名会被拒绝，避免拼写错误静默生效。
 package featuregate
 
 import (
@@ -39,9 +44,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// Feature 是特性开关的名称，同时也是 --feature-gates 中的键。
 type Feature string
 
 const (
+	// flagName 是命令行上承载 gate 集合的 flag 名。
 	flagName = "feature-gates"
 
 	// allAlphaGate is a global toggle for alpha features. Per-feature key
@@ -59,18 +66,22 @@ const (
 
 var (
 	// The generic features.
+	// AllAlpha/AllBeta 是虚拟 gate，本身不承载行为，只在解析时批量设置对应成熟度的特性。
 	defaultFeatures = map[Feature]VersionedSpecs{
 		allAlphaGate: {{Default: false, PreRelease: Alpha, Version: version.MajorMinor(0, 0)}},
 		allBetaGate:  {{Default: false, PreRelease: Beta, Version: version.MajorMinor(0, 0)}},
 	}
 
 	// Special handling for a few gates.
+	// 只对未被显式设置的特性生效，因此显式 key 总是优先于 AllAlpha/AllBeta。
 	specialFeatures = map[Feature]func(known map[Feature]VersionedSpecs, enabled map[Feature]bool, val bool, emuVer, minCompatVer *version.Version){
 		allAlphaGate: setUnsetAlphaGates,
 		allBetaGate:  setUnsetBetaGates,
 	}
 )
 
+// FeatureSpec 描述一个特性在一个版本区间内的默认值、成熟度和兼容性要求。
+// 多个 FeatureSpec 按 Version 升序排列构成 VersionedSpecs。
 type FeatureSpec struct {
 	// Default is the default enablement state for the feature
 	Default bool
@@ -106,6 +117,8 @@ type FeatureSpec struct {
 	MinCompatibilityVersion *version.Version
 }
 
+// HelpString 生成特性在 --help 中的说明。
+// GA/Deprecated/PreAlpha 不展示：它们要么无需配置，要么在当前版本不可用。
 func (spec *FeatureSpec) HelpString(featureName Feature, includeCompatVer bool) string {
 	if spec.PreRelease == GA || spec.PreRelease == Deprecated || spec.PreRelease == PreAlpha {
 		return ""
@@ -117,19 +130,24 @@ func (spec *FeatureSpec) HelpString(featureName Feature, includeCompatVer bool) 
 	return s
 }
 
+// VersionedSpecs 是一个特性按版本升序排列的规格列表。
 type VersionedSpecs []FeatureSpec
 
+// Len/Less/Swap 实现 sort.Interface，供版本化规格排序使用。
 func (g VersionedSpecs) Len() int { return len(g) }
 func (g VersionedSpecs) Less(i, j int) bool {
 	return g[i].Version.LessThan(g[j].Version)
 }
 func (g VersionedSpecs) Swap(i, j int) { g[i], g[j] = g[j], g[i] }
 
+// PromotionVersionMapping 记录各成熟度对应的推广版本，供文档和工具使用。
 type PromotionVersionMapping map[prerelease]string
 
+// prerelease 是特性的成熟度级别；作为独立类型便于在比较和排序中区分。
 type prerelease string
 
 const (
+	// PreAlpha 表示在当前模拟版本下尚不可用的特性，Enabled 查询返回 false。
 	PreAlpha = prerelease("PRE-ALPHA")
 	// Values for PreRelease.
 	Alpha = prerelease("ALPHA")
@@ -137,12 +155,15 @@ const (
 	GA    = prerelease("")
 
 	// Deprecated
+	// 终态：特性已移除，仅为兼容旧配置保留名称并给出告警。
 	Deprecated = prerelease("DEPRECATED")
 )
 
 // FeatureGate indicates whether a given feature is enabled or not
+// 只读视图，组件用它查询开关状态，而不参与注册和配置。
 type FeatureGate interface {
 	// Enabled returns true if the key is enabled.
+	// 未注册的特性会 panic；这是刻意的，以便尽早暴露拼写错误。
 	Enabled(key Feature) bool
 	// KnownFeatures returns a slice of strings describing the FeatureGate's known features.
 	KnownFeatures() []string
@@ -158,10 +179,12 @@ type FeatureGate interface {
 
 // MutableFeatureGate parses and stores flag gates for known features from
 // a string like feature1=true,feature2=false,...
+// 提供注册、修改和 flag 绑定能力；调用方通常只持有 FeatureGate。
 type MutableFeatureGate interface {
 	FeatureGate
 
 	// AddFlag adds a flag for setting global feature gates to the specified FlagSet.
+	// 注册后 gate 集合被冻结，不能再 Add 新特性。
 	AddFlag(fs *pflag.FlagSet)
 	// Close sets closed to true, and prevents subsequent calls to Add
 	Close()
@@ -200,6 +223,7 @@ type MutableFeatureGateWithLogger interface {
 // MutableVersionedFeatureGate parses and stores flag gates for known features from
 // a string like feature1=true,feature2=false,...
 // MutableVersionedFeatureGate sets options based on the emulated version of the featured gate.
+// 版本化 gate 同时维护 emulationVersion 与 minCompatibilityVersion，用于版本模拟和跨组件兼容性。
 type MutableVersionedFeatureGate interface {
 	MutableFeatureGate
 	// EmulationVersion returns the version the feature gate is set to emulate.
@@ -261,9 +285,11 @@ type MutableVersionedFeatureGateWithLogger interface {
 type featureGate struct {
 	featureGateName string
 
+	// special 映射 AllAlpha/AllBeta 等需要批量展开的虚拟 gate 到其处理函数。
 	special map[Feature]func(map[Feature]VersionedSpecs, map[Feature]bool, bool, *version.Version, *version.Version)
 
 	// lock guards writes to all below fields.
+	// 读路径依赖 atomic.Value，因此锁只保护写入（注册、重新应用）。
 	lock sync.Mutex
 	// known holds a map[Feature]FeatureSpec
 	known atomic.Value
@@ -273,11 +299,13 @@ type featureGate struct {
 	// enabledRaw holds a raw map[string]bool of the parsed flag.
 	// It keeps the original values of "special" features like "all alpha gates",
 	// while enabled keeps the values of all resolved features.
+	// 保留原始输入是 SetEmulationVersion 后重新展开的基础。
 	enabledRaw atomic.Value
 	// closed is set to true when AddFlag is called, and prevents subsequent calls to Add
 	closed bool
 	// queriedFeatures stores all the features that have been queried through the Enabled interface.
 	// It is reset when SetEmulationVersion is called.
+	// 用于在切换模拟版本时告警“已查询过的特性值发生了变化”。
 	queriedFeatures         atomic.Value
 	emulationVersion        atomic.Pointer[version.Version]
 	minCompatibilityVersion atomic.Pointer[version.Version]
@@ -286,6 +314,8 @@ type featureGate struct {
 var _ MutableVersionedFeatureGateWithLogger = &featureGate{}
 var _ MutableFeatureGateWithLogger = &featureGate{}
 
+// setUnsetAlphaGates 把尚未显式设置的 alpha 特性设为 val。
+// 已存在 enabled 中的项不覆盖，从而保证单特性设置优先于 AllAlpha。
 func setUnsetAlphaGates(known map[Feature]VersionedSpecs, enabled map[Feature]bool, val bool, emuVer, minCompatVer *version.Version) {
 	for k, v := range known {
 		if k == "AllAlpha" || k == "AllBeta" {
@@ -300,6 +330,7 @@ func setUnsetAlphaGates(known map[Feature]VersionedSpecs, enabled map[Feature]bo
 	}
 }
 
+// setUnsetBetaGates 与 setUnsetAlphaGates 相同，作用于 beta 特性。
 func setUnsetBetaGates(known map[Feature]VersionedSpecs, enabled map[Feature]bool, val bool, emuVer, minCompatVer *version.Version) {
 	for k, v := range known {
 		if k == "AllAlpha" || k == "AllBeta" {
@@ -328,13 +359,17 @@ func NewVersionedFeatureGate(emulationVersion *version.Version) *featureGate {
 	return NewVersionedFeatureGateWithMinCompatibility(emulationVersion, emulationVersion.SubtractMinor(1))
 }
 
+// NewVersionedFeatureGateWithMinCompatibility 用给定的模拟版本和最低兼容版本构造 gate。
+// 最低兼容版本默认取模拟版本前一个小版本，符合 Kubernetes 的控制面版本偏移约定。
 func NewVersionedFeatureGateWithMinCompatibility(emulationVersion, minCompatibilityVersion *version.Version) *featureGate {
+	// 从默认的 AllAlpha/AllBeta 定义开始，调用方再通过 AddVersioned 注册自己的特性。
 	known := map[Feature]VersionedSpecs{}
 	for k, v := range defaultFeatures {
 		known[k] = v
 	}
 
 	f := &featureGate{
+		// 从调用栈推导名称，便于在日志和错误里区分不同的 gate 实例。
 		featureGateName: naming.GetNameFromCallsite(internalPackages...),
 		special:         specialFeatures,
 	}
@@ -349,6 +384,7 @@ func NewVersionedFeatureGateWithMinCompatibility(emulationVersion, minCompatibil
 }
 
 // NewFeatureGate creates a feature gate with the current binary version.
+// 以 DefaultKubeBinaryVersion 作为模拟版本，适合普通组件使用。
 func NewFeatureGate() *featureGate {
 	binaryVersison := version.MustParse(baseversion.DefaultKubeBinaryVersion)
 	return NewVersionedFeatureGate(binaryVersison)
@@ -365,11 +401,13 @@ func (f *featureGate) Set(value string) error {
 // Set parses a string of the form "key1=value1,key2=value2,..." into a
 // map[string]bool of known keys or returns an error.
 func (f *featureGate) SetWithLogger(logger klog.Logger, value string) error {
+	// WithCallStackHelper 让 klog 输出的调用栈省略本包装层，告警定位到真实调用方。
 	helper, logger := logger.WithCallStackHelper()
 	helper()
 
 	m := make(map[string]bool)
 	for _, s := range strings.Split(value, ",") {
+		// 容忍尾随逗号产生的空项。
 		if len(s) == 0 {
 			continue
 		}
@@ -389,6 +427,7 @@ func (f *featureGate) SetWithLogger(logger klog.Logger, value string) error {
 }
 
 // Validate checks if the flag gates are valid at the emulated version.
+// 在真正应用前复用同一套解析/依赖校验逻辑，且不修改任何状态。
 func (f *featureGate) Validate() []error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -402,6 +441,7 @@ func (f *featureGate) Validate() []error {
 }
 
 // unsafeSetFromMap stores flag gates for known features from a map[string]bool into an enabled map.
+// 调用方需持有 f.lock 或确保没有并发写；函数名中的 unsafe 即指这一前提。
 func (f *featureGate) unsafeSetFromMap(logger klog.Logger, enabled map[Feature]bool, m map[string]bool, emulationVersion, minCompatibilityVersion *version.Version) []error {
 	helper, logger := logger.WithCallStackHelper()
 	helper()
@@ -427,11 +467,13 @@ func (f *featureGate) unsafeSetFromMap(logger klog.Logger, enabled map[Feature]b
 			continue
 		}
 		// Handle "special" features like "all alpha gates"
+		// 特殊 gate 只展开其它特性，自身也记录在 enabled 中以便 String() 回显。
 		if fn, found := f.special[key]; found {
 			fn(known, enabled, v, emulationVersion, minCompatibilityVersion)
 			enabled[key] = v
 			continue
 		}
+		// PreAlpha 特性在模拟版本下尚不存在，显式设置视为错误而非静默忽略。
 		if featureSpec.PreRelease == PreAlpha {
 			errs = append(errs, fmt.Errorf("cannot set feature gate %v to %v, feature is PreAlpha at emulated version %s, min compatibility version %s", k, v, emulationVersion, minCompatibilityVersion))
 			continue
@@ -450,6 +492,7 @@ func (f *featureGate) unsafeSetFromMap(logger klog.Logger, enabled map[Feature]b
 	}
 
 	// If enabled features were set successfully, validate them against the dependencies.
+	// 只有在本次输入全部合法后才检查依赖，避免对错误输入连带报出依赖错误。
 	dependencies := *f.dependencies.Load()
 	for feature, deps := range dependencies {
 		if !featureEnabled(feature, enabled, known, emulationVersion, minCompatibilityVersion) {
@@ -486,6 +529,7 @@ func (f *featureGate) SetFromMapWithLogger(logger klog.Logger, m map[string]bool
 	defer f.lock.Unlock()
 
 	// Copy existing state
+	// 先复制再修改，保证失败时旧状态保持不变（原子值不可原地修改）。
 	enabled := map[Feature]bool{}
 	for k, v := range f.enabled.Load().(map[Feature]bool) {
 		enabled[k] = v
@@ -506,6 +550,7 @@ func (f *featureGate) SetFromMapWithLogger(logger klog.Logger, m map[string]bool
 	errs := f.unsafeSetFromMap(logger, enabled, enabledRaw, f.EmulationVersion(), f.MinCompatibilityVersion())
 	if len(errs) == 0 {
 		// Persist changes
+		// 仅在所有输入合法时提交，避免部分应用造成状态不一致。
 		f.enabled.Store(enabled)
 		logger.V(1).Info("Updated", "featureGates", enabled)
 	}
@@ -513,6 +558,7 @@ func (f *featureGate) SetFromMapWithLogger(logger klog.Logger, m map[string]bool
 }
 
 // String returns a string containing all enabled feature gates, formatted as "key1=value1,key2=value2,...".
+// 排序后输出，便于测试比较和 flag 回显稳定。
 func (f *featureGate) String() string {
 	pairs := []string{}
 	for k, v := range f.enabled.Load().(map[Feature]bool) {
@@ -538,6 +584,8 @@ func (f *featureGate) Add(features map[Feature]FeatureSpec) error {
 }
 
 // AddVersioned adds versioned feature specs to the featureGate.
+// 注册时做完整的一致性校验（版本单调、兼容性版本、成熟度不回退等），
+// 以免错误的特性生命周期定义流入发布版本。
 func (f *featureGate) AddVersioned(features map[Feature]VersionedSpecs) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -632,6 +680,7 @@ func (f *featureGate) AddVersioned(features map[Feature]VersionedSpecs) error {
 			wasLockedToDefault = wasLockedToDefault || spec.LockToDefault
 		}
 		if existingSpec, found := known[name]; found {
+			// 幂等：重复注册完全相同的规格是允许的（多个包可能都声明同一 gate）。
 			if reflect.DeepEqual(existingSpec, completedSpecs) {
 				continue
 			}
@@ -640,12 +689,14 @@ func (f *featureGate) AddVersioned(features map[Feature]VersionedSpecs) error {
 		known[name] = completedSpecs
 	}
 	// Persist updated state
+	// 所有特性校验通过后一次性提交，避免注册到一半的中间状态。
 	f.known.Store(known)
 
 	return nil
 }
 
 // AddDependencies adds feature gate dependencies.
+// 依赖在注册时校验并保存；Enabled 不会再次检查，因此错误的依赖必须在启动期暴露。
 func (f *featureGate) AddDependencies(dependencies map[Feature][]Feature) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -663,6 +714,7 @@ func (f *featureGate) AddDependencies(dependencies map[Feature][]Feature) error 
 	}
 
 	// Sort and compact all dependency lists.
+	// 去重并排序，使校验结果与注册顺序无关。
 	for k, v := range dependencies {
 		slices.Sort(v)
 		dependencies[k] = slices.Compact(v)
@@ -704,6 +756,7 @@ func (f *featureGate) AddDependencies(dependencies map[Feature][]Feature) error 
 	}
 
 	// Check for cycles
+	// 用 DFS 三色标记检测环：visited 为当前递归栈，finished 为已完成节点。
 	visited := map[Feature]bool{}
 	finished := map[Feature]bool{}
 	var detectCycles func(Feature) error
@@ -752,6 +805,7 @@ func stabilityOrder(p prerelease) int {
 	}
 }
 
+// Dependencies 返回已知依赖的副本，调用方修改不会影响 gate 内部状态。
 func (f *featureGate) Dependencies() map[Feature][]Feature {
 	return maps.Clone(*f.dependencies.Load())
 }
@@ -761,6 +815,8 @@ func (f *featureGate) OverrideDefault(name Feature, override bool) error {
 	return f.OverrideDefaultWithLogger(klog.Background(), name, override)
 }
 
+// OverrideDefaultWithLogger 在显式 logger 下覆盖某个特性的默认值。
+// 不允许在 AddFlag 之后调用，避免命令行帮助与实际默认值不一致。
 func (f *featureGate) OverrideDefaultWithLogger(logger klog.Logger, name Feature, override bool) error {
 	helper, logger := logger.WithCallStackHelper()
 	helper()
@@ -778,6 +834,8 @@ func (f *featureGate) OverrideDefaultAtVersionWithLogger(logger klog.Logger, nam
 	return f.overrideDefaultAtEmulationAndMinCompatVersion(logger, name, override, ver, nil)
 }
 
+// overrideDefaultAtEmulationAndMinCompatVersion 是各类 OverrideDefault 的公共实现。
+// 只修改选中规格的 Default，不影响历史版本区间。
 func (f *featureGate) overrideDefaultAtEmulationAndMinCompatVersion(logger klog.Logger, name Feature, override bool, emuVer, minCompatVer *version.Version) error {
 	helper, logger := logger.WithCallStackHelper()
 	helper()
@@ -816,6 +874,7 @@ func (f *featureGate) overrideDefaultAtEmulationAndMinCompatVersion(logger klog.
 }
 
 // GetAll returns a copy of the map of known feature names to feature specs for the current emulationVersion.
+// PreAlpha 特性不会出现在结果中，因为它们在当前模拟版本下不存在。
 func (f *featureGate) GetAll() map[Feature]FeatureSpec {
 	retval := map[Feature]FeatureSpec{}
 	f.lock.Lock()
@@ -835,6 +894,7 @@ func (f *featureGate) GetAll() map[Feature]FeatureSpec {
 }
 
 // GetAllVersioned returns a copy of the map of known feature names to versioned feature specs.
+// 返回浅拷贝的切片副本，调用方可以安全地增删元素。
 func (f *featureGate) GetAllVersioned() map[Feature]VersionedSpecs {
 	retval := map[Feature]VersionedSpecs{}
 	for k, v := range f.known.Load().(map[Feature]VersionedSpecs) {
@@ -865,6 +925,7 @@ func (f *featureGate) SetEmulationVersionAndMinCompatibilityVersionWithLogger(lo
 	helper, logger := logger.WithCallStackHelper()
 	helper()
 
+	// 无变化时直接返回，避免无谓地重建 enabled 并丢弃 queriedFeatures。
 	if emulationVersion.EqualTo(f.EmulationVersion()) && minCompatibilityVersion.EqualTo(f.MinCompatibilityVersion()) {
 		return nil
 	}
@@ -878,9 +939,11 @@ func (f *featureGate) SetEmulationVersionAndMinCompatibilityVersionWithLogger(lo
 		enabledRaw[k] = v
 	}
 	// enabled map should be reset whenever emulationVersion is changed.
+	// 因为默认值随版本变化，必须在新的版本下重新展开 enabledRaw。
 	enabled := map[Feature]bool{}
 	errs := f.unsafeSetFromMap(logger, enabled, enabledRaw, emulationVersion, minCompatibilityVersion)
 
+	// 对已经查询过的特性做差异告警：值变了意味着组件行为可能在切版本后悄然改变。
 	queriedFeatures := f.queriedFeatures.Load().(sets.Set[Feature])
 	known := f.known.Load().(map[Feature]VersionedSpecs)
 	for feature := range queriedFeatures {
@@ -905,6 +968,7 @@ func (f *featureGate) EmulationVersion() *version.Version {
 	return f.emulationVersion.Load()
 }
 
+// MinCompatibilityVersion 返回当前维护兼容性的最低控制面版本。
 func (f *featureGate) MinCompatibilityVersion() *version.Version {
 	return f.minCompatibilityVersion.Load()
 }
@@ -919,6 +983,8 @@ func (f *featureGate) featureSpec(key Feature) (FeatureSpec, error) {
 	return FeatureSpec{}, fmt.Errorf("feature %q is not registered in FeatureGate %q", key, f.featureGateName)
 }
 
+// unsafeRecordQueried 记录被查询过的特性。复制后再写入原子值，
+// 避免并发 Enabled 调用竞争同一个 set。
 func (f *featureGate) unsafeRecordQueried(key Feature) {
 	queriedFeatures := f.queriedFeatures.Load().(sets.Set[Feature])
 	if _, ok := queriedFeatures[key]; ok {
@@ -930,6 +996,8 @@ func (f *featureGate) unsafeRecordQueried(key Feature) {
 	f.queriedFeatures.Store(newQueriedFeatures)
 }
 
+// featureEnabled 解析特性的最终状态：显式设置优先，否则取当前版本规格的默认值。
+// 未注册的特性直接 panic，这是调用方编程错误而非运行时可恢复条件。
 func featureEnabled(key Feature, enabled map[Feature]bool, known map[Feature]VersionedSpecs, emulationVersion, minCompatibilityVersion *version.Version) bool {
 	// check explicitly set enabled list
 	if v, ok := enabled[key]; ok {
@@ -955,6 +1023,9 @@ func (f *featureGate) featureSpecAtEmulationAndMinCompatVersion(v VersionedSpecs
 	return featureSpecAtEmulationAndMinCompatVersion(v, f.EmulationVersion(), f.MinCompatibilityVersion())
 }
 
+// featureSpecAtEmulationAndMinCompatVersion 二分（线性）查找适用于给定版本的规格：
+// 选择 Version 不大于模拟版本、且 MinCompatibilityVersion 已满足的最高条目；
+// 都不满足时返回 PreAlpha，表示该版本下特性不可用。
 func featureSpecAtEmulationAndMinCompatVersion(v VersionedSpecs, emulationVersion, minCompatibilityVersion *version.Version) *FeatureSpec {
 	i := len(v) - 1
 	if minCompatibilityVersion == nil {
@@ -990,6 +1061,7 @@ func (f *featureGate) AddFlag(fs *pflag.FlagSet) {
 	// Not all components expose a feature gates flag using this AddFlag method, and
 	// in the future, all components will completely stop exposing a feature gates flag,
 	// in favor of componentconfig.
+	// 先冻结 gate 集合，确保 --help 列出的选项与运行时注册的特性一致。
 	f.Close()
 
 	known := f.KnownFeatures()
@@ -998,6 +1070,7 @@ func (f *featureGate) AddFlag(fs *pflag.FlagSet) {
 		"Options are:\n"+strings.Join(known, "\n"))
 }
 
+// AddMetrics 把当前特性状态上报为指标，供监控特性使用情况。
 func (f *featureGate) AddMetrics() {
 	for feature, featureSpec := range f.GetAll() {
 		featuremetrics.RecordFeatureInfo(context.Background(), string(feature), string(featureSpec.PreRelease), f.Enabled(feature))
@@ -1010,11 +1083,13 @@ func (f *featureGate) KnownFeatures() []string {
 	var known []string
 	for k, v := range f.known.Load().(map[Feature]VersionedSpecs) {
 		if k == "AllAlpha" || k == "AllBeta" {
+			// 虚拟 gate 使用首个规格描述（其版本固定为 0.0）。
 			known = append(known, fmt.Sprintf("%s=true|false (%s - default=%t)", k, v[0].PreRelease, v[0].Default))
 			continue
 		}
 		featureSpec := f.featureSpecAtEmulationAndMinCompatVersion(v)
 		featureSpecStr := featureSpec.HelpString(k, false)
+		// 同时计算“最低兼容版本等于模拟版本”时的描述，用于展示依赖兼容版本的默认值。
 		featureSpecMinCompatMode := featureSpecAtEmulationAndMinCompatVersion(v, f.EmulationVersion(), f.EmulationVersion())
 		featureSpecMinCompatModeStr := featureSpecMinCompatMode.HelpString(k, true)
 		if reflect.DeepEqual(featureSpec, featureSpecMinCompatMode) {
@@ -1041,6 +1116,7 @@ func (f *featureGate) KnownFeatures() []string {
 // DeepCopyAndReset copies all the registered features of the FeatureGate object, with all the known features and overrides,
 // and resets all the enabled status of the new feature gate.
 // This is useful for creating a new instance of feature gate without inheriting all the enabled configurations of the base feature gate.
+// 与 DeepCopy 不同，它不复制 enabled/enabledRaw，适合“只继承定义、重新应用配置”的场景。
 func (f *featureGate) DeepCopyAndReset() MutableVersionedFeatureGate {
 	fg := NewVersionedFeatureGateWithMinCompatibility(f.EmulationVersion(), f.MinCompatibilityVersion())
 	known := f.GetAllVersioned()
@@ -1072,6 +1148,7 @@ func (f *featureGate) DeepCopy() MutableVersionedFeatureGate {
 	// Construct a new featureGate around the copied state.
 	// Note that specialFeatures is treated as immutable by convention,
 	// and we maintain the value of f.closed across the copy.
+	// queriedFeatures 重置：副本尚未被任何调用方查询。
 	fg := &featureGate{
 		special: specialFeatures,
 		closed:  f.closed,
@@ -1089,12 +1166,14 @@ func (f *featureGate) DeepCopy() MutableVersionedFeatureGate {
 // ExplicitlySet returns true if the feature value is explicitly set instead of
 // being derived from the default values or special features.
 func (f *featureGate) ExplicitlySet(name Feature) bool {
+	// enabledRaw 只保存用户输入，因此可直接作为“是否显式设置”的依据。
 	enabledRaw := f.enabledRaw.Load().(map[string]bool)
 	_, ok := enabledRaw[string(name)]
 	return ok
 }
 
 // ResetFeatureValueToDefault resets the value of the feature back to the default value.
+// 从 enabled 与 enabledRaw 中同时删除，使其重新由默认值或 AllAlpha/AllBeta 展开。
 func (f *featureGate) ResetFeatureValueToDefault(name Feature) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()

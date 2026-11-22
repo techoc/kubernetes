@@ -35,8 +35,13 @@ const (
 
 // The alpha or beta level of structs is the highest stability level of any field
 // inside it. Feature gates will get checked during LoggingConfiguration.ValidateAndApply.
+//
+// 结构体的 alpha/beta 级别取其内部字段的最高不稳定级别；
+// LoggingConfiguration.ValidateAndApply 会据此检查特性门控是否允许启用。
 
 // LoggingConfiguration contains logging options.
+//
+// LoggingConfiguration 描述组件的日志行为，通常由 --config 或命令行标志填充。
 type LoggingConfiguration struct {
 	// Format Flag specifies the structure of log messages.
 	// default value of format is `text`
@@ -63,6 +68,9 @@ type LoggingConfiguration struct {
 
 // TimeOrMetaDuration is present only for backwards compatibility for the
 // flushFrequency field, and new fields should use metav1.Duration.
+//
+// TimeOrMetaDuration 仅为 flushFrequency 字段的向后兼容而保留：
+// 旧版本接受整数纳秒，新版本同时接受时长字符串。
 type TimeOrMetaDuration struct {
 	// Duration holds the duration
 	Duration metav1.Duration
@@ -70,6 +78,8 @@ type TimeOrMetaDuration struct {
 	SerializeAsString bool `json:"-"`
 }
 
+// MarshalJSON 按解析时的形态回写：字符串输入继续输出字符串，
+// 整数输入继续输出整数纳秒，避免配置文件往返后格式改变。
 func (t TimeOrMetaDuration) MarshalJSON() ([]byte, error) {
 	if t.SerializeAsString {
 		return t.Duration.MarshalJSON()
@@ -79,6 +89,7 @@ func (t TimeOrMetaDuration) MarshalJSON() ([]byte, error) {
 	}
 }
 
+// UnmarshalJSON 依据首字符是否为引号区分新旧两种编码。
 func (t *TimeOrMetaDuration) UnmarshalJSON(b []byte) error {
 	if len(b) > 0 && b[0] == '"' {
 		// string values unmarshal as metav1.Duration
@@ -93,6 +104,8 @@ func (t *TimeOrMetaDuration) UnmarshalJSON(b []byte) error {
 }
 
 // FormatOptions contains options for the different logging formats.
+//
+// 所有格式的选项都放在同一结构体里并全部校验，但只有被选中格式的选项会生效。
 type FormatOptions struct {
 	// [Alpha] Text contains options for logging format "text".
 	// Only available when the LoggingAlphaOptions feature gate is enabled.
@@ -104,11 +117,13 @@ type FormatOptions struct {
 
 // TextOptions contains options for logging format "text".
 type TextOptions struct {
+	// 内嵌输出路由选项，JSON 中直接展开为 splitStream 等字段。
 	OutputRoutingOptions `json:""`
 }
 
 // JSONOptions contains options for logging format "json".
 type JSONOptions struct {
+	// 与 text 共用输出路由选项，保证两种格式的流分离语义一致。
 	OutputRoutingOptions `json:""`
 }
 
@@ -127,6 +142,8 @@ type OutputRoutingOptions struct {
 
 // VModuleConfiguration is a collection of individual file names or patterns
 // and the corresponding verbosity threshold.
+//
+// 列表按顺序生效；同名模式重复出现时由 klog 的 vmodule 解析决定优先级。
 type VModuleConfiguration []VModuleItem
 
 // VModuleItem defines verbosity for one or more files which match a certain
@@ -143,4 +160,6 @@ type VModuleItem struct {
 }
 
 // VerbosityLevel represents a klog or logr verbosity threshold.
+//
+// 数值越大日志越详细；0 只输出最重要的消息，错误消息不受该阈值影响。
 type VerbosityLevel uint32

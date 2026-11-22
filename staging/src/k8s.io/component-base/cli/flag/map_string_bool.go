@@ -38,6 +38,8 @@ func NewMapStringBool(m *map[string]bool) *MapStringBool {
 }
 
 // String implements github.com/spf13/pflag.Value
+// String 以排序后的 key=value 形式输出，保证同一 map 的 String 结果稳定，
+// 便于测试与 flag 默认值展示。
 func (m *MapStringBool) String() string {
 	if m == nil || m.Map == nil {
 		return ""
@@ -51,16 +53,19 @@ func (m *MapStringBool) String() string {
 }
 
 // Set implements github.com/spf13/pflag.Value
+// Set 支持逗号分隔的多对 key=value；首次调用会清空默认值。
 func (m *MapStringBool) Set(value string) error {
 	if m.Map == nil {
 		return fmt.Errorf("no target (nil pointer to map[string]bool)")
 	}
 	if !m.initialized || *m.Map == nil {
 		// clear default values, or allocate if no existing map
+		// 只有第一次显式设置才清空，后续调用要保留之前累积的键值。
 		*m.Map = make(map[string]bool)
 		m.initialized = true
 	}
 	for _, s := range strings.Split(value, ",") {
+		// 容忍尾随逗号等空项。
 		if len(s) == 0 {
 			continue
 		}
@@ -85,6 +90,7 @@ func (*MapStringBool) Type() string {
 }
 
 // Empty implements OmitEmpty
+// Empty 报告 map 是否为空，供 pflag 决定是否在 usage 中省略零值。
 func (m *MapStringBool) Empty() bool {
 	return len(*m.Map) == 0
 }

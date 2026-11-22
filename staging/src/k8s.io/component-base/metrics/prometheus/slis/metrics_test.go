@@ -26,11 +26,15 @@ import (
 )
 
 var (
+	// 只比较这两个 SLI 指标，忽略 registry 中其他内容。
 	testedMetrics = []string{"kubernetes_healthcheck", "kubernetes_healthchecks_total"}
 )
 
+// TestObserveHealthcheck 验证：gauge 在连续观测中会被最新状态覆盖，
+// 而 counter 保留历史各状态的累计值（先 error 后 success，两者都存在）。
 func TestObserveHealthcheck(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
+	// 测试结束后重置全局指标，避免污染其他用例。
 	defer registry.Reset()
 	defer ResetHealthMetrics()
 	Register(registry)

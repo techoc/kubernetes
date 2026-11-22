@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestValidateTracingConfiguration 覆盖采样率边界（0..1000000）与端点格式：
+// 允许 host:port、dns://、unix://，拒绝 http:// 与非法 URL。
 func TestValidateTracingConfiguration(t *testing.T) {
 	samplingRate := int32(12378)
 	negativeRate := int32(-1)
@@ -51,6 +53,7 @@ func TestValidateTracingConfiguration(t *testing.T) {
 			},
 		},
 		{
+			// 注意用例名沿用 sampling-rate-negative，实际测的是超过上限。
 			name:        "sampling-rate-negative",
 			expectError: true,
 			contents: &TracingConfiguration{

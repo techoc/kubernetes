@@ -26,6 +26,8 @@ import (
 	internalmetrics "k8s.io/component-base/metrics/internal"
 )
 
+// TestDefaultStabilityLevel 验证空稳定性级别默认落到 ALPHA，
+// 而显式的 INTERNAL/STABLE 保持不变。
 func TestDefaultStabilityLevel(t *testing.T) {
 	var tests = []struct {
 		name        string
@@ -63,6 +65,7 @@ func TestDefaultStabilityLevel(t *testing.T) {
 	}
 }
 
+// TestConstrainToAllowedList 验证位置标签值约束：不在允许列表中的值被替换为 "unexpected"。
 func TestConstrainToAllowedList(t *testing.T) {
 	allowList := &MetricLabelAllowList{
 		labelToAllowList: map[string]sets.Set[string]{
@@ -96,6 +99,7 @@ func TestConstrainToAllowedList(t *testing.T) {
 	}
 }
 
+// TestConstrainLabelMap 验证 map 形式的标签值约束，行为与位置标签一致。
 func TestConstrainLabelMap(t *testing.T) {
 	allowList := &MetricLabelAllowList{
 		labelToAllowList: map[string]sets.Set[string]{
@@ -140,6 +144,8 @@ func TestConstrainLabelMap(t *testing.T) {
 	}
 }
 
+// TestSetLabelAllowListFromManifest 覆盖 manifest 的解析：
+// 合法格式按指标/标签分组，文件不存在或格式非法时返回空表而非报错。
 func TestSetLabelAllowListFromManifest(t *testing.T) {
 	tests := []struct {
 		name                       string
@@ -209,6 +215,7 @@ metric2,label2: v3`,
 	}
 }
 
+// TestResetLabelValueAllowLists 验证全局允许列表被清空。
 func TestResetLabelValueAllowLists(t *testing.T) {
 	labelValueAllowLists = map[string]*MetricLabelAllowList{
 		"metric1": {
@@ -227,9 +234,12 @@ func TestResetLabelValueAllowLists(t *testing.T) {
 	assert.Empty(t, labelValueAllowLists)
 }
 
+// TestToPromHistogramOptsWithNativeHistograms 验证 NativeHistograms 开关
+// 只在开启时设置 prometheus 的原生直方图参数，且经典桶始终保留。
 func TestToPromHistogramOptsWithNativeHistograms(t *testing.T) {
 	originalEnabled := internalmetrics.NativeHistogramsEnabled()
 	defer func() {
+		// 恢复全局开关，避免影响同包其它测试。
 		internalmetrics.SetNativeHistogramsEnabled(originalEnabled)
 	}()
 

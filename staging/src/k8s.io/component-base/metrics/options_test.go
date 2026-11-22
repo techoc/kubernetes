@@ -27,6 +27,9 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestEnableHiddenMetrics 验证 SetShowHidden 前后，已过弃用宽限期的 STABLE 指标
+// 从不可采集变为可采集，并同步更新 hidden_metrics_total。
+// 覆盖 Register 与 MustRegister 两条注册路径。
 func TestEnableHiddenMetrics(t *testing.T) {
 	resetMetricsGlobalState(t)
 
@@ -94,12 +97,14 @@ func TestEnableHiddenMetrics(t *testing.T) {
 				_ = registry.Register(tc.counter)
 			}
 
+			// 隐藏的 counter 尚未初始化，Inc 是空操作，不会出现在采集结果中。
 			tc.counter.Inc() // no-ops, because counter hasn't been initialized
 			if err := testutil.GatherAndCompare(registry, strings.NewReader(""), tc.fqName); err != nil {
 				t.Fatal(err)
 			}
 
 			SetShowHidden()
+			// showHidden 是全局一次性状态，测试结束必须复位，否则影响其他用例。
 			defer func() {
 				showHiddenOnce = sync.Once{}
 				showHidden.Store(false)
@@ -113,6 +118,8 @@ func TestEnableHiddenMetrics(t *testing.T) {
 	}
 }
 
+// TestEnableHiddenStableCollector 验证自定义 StableCollector 中隐藏的指标在
+// SetShowHidden 后重新注册：全部隐藏与部分隐藏两种组合。
 func TestEnableHiddenStableCollector(t *testing.T) {
 	var currentVersion = apimachineryversion.Info{
 		Major:      "1",
@@ -192,6 +199,7 @@ func TestEnableHiddenStableCollector(t *testing.T) {
 			}
 
 			// refresh descriptors to share with cases.
+			// Desc 在用例间共享，重新启用后需清掉隐藏标记，避免污染下一个用例。
 			for _, d := range tc.descriptors {
 				d.ClearState()
 			}
@@ -199,6 +207,8 @@ func TestEnableHiddenStableCollector(t *testing.T) {
 	}
 }
 
+// TestShowHiddenMetric 验证在 showHidden 置位后才注册的指标也会立即可见，
+// 说明可见性判定发生在注册时而非创建时。
 func TestShowHiddenMetric(t *testing.T) {
 	resetMetricsGlobalState(t)
 
@@ -233,10 +243,13 @@ func TestShowHiddenMetric(t *testing.T) {
 	assert.Lenf(t, ms, expectedMetricCount, "Got %v metrics, Want: %v metrics", len(ms), expectedMetricCount)
 }
 
+// TestDisabledMetrics 验证 --disabled-metrics：重复项去重后 disabled_metrics_total 为 1，
+// 被禁用的指标不进入采集结果，而其他指标不受影响。
 func TestDisabledMetrics(t *testing.T) {
 	resetMetricsGlobalState(t)
 
 	o := NewOptions()
+	// 重复项用于验证内部按集合去重。
 	o.DisabledMetrics = []string{"should_be_disabled", "should_be_disabled"} // should be deduplicated (disabled_metrics_total == 1)
 	currentVersion := apimachineryversion.Info{
 		Major:      "1",

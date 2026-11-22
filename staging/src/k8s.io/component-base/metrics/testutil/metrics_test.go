@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// samples2Histogram 把原始样本按上界构造成 dto.Histogram，仅用于测试期望值。
+// 样本严格小于上界才计入该桶，与 Prometheus 的累积桶语义一致。
 func samples2Histogram(samples []float64, upperBounds []float64) Histogram {
 	histogram := dto.Histogram{
 		SampleCount: ptr.To[uint64](0),
@@ -57,6 +59,8 @@ func samples2Histogram(samples []float64, upperBounds []float64) Histogram {
 	}
 }
 
+// TestHistogramQuantile 验证直方图分位数插值，覆盖重复值、随机值、
+// 最后一桶为空以及最后一桶上界为 +Inf 的边界情况。
 func TestHistogramQuantile(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -125,6 +129,8 @@ func TestHistogramQuantile(t *testing.T) {
 	}
 }
 
+// TestHistogramValidate 验证 Histogram.Validate 对 SampleCount/SampleSum/桶结构的
+// 空值与非法值检查。
 func TestHistogramValidate(t *testing.T) {
 	tests := []struct {
 		name string
@@ -228,6 +234,8 @@ func TestHistogramValidate(t *testing.T) {
 	}
 }
 
+// TestLabelsMatch 验证标签过滤是“子集匹配”：过滤条件中的所有标签都必须存在且值相等，
+// 指标额外携带的标签不影响匹配；空过滤条件恒为真。
 func TestLabelsMatch(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -316,6 +324,7 @@ func TestLabelsMatch(t *testing.T) {
 	}
 }
 
+// TestHistogramVec_GetAggregatedSampleCount 验证把多个序列的样本数相加；nil 与零值均为 0。
 func TestHistogramVec_GetAggregatedSampleCount(t *testing.T) {
 	tests := []struct {
 		name string
@@ -362,6 +371,7 @@ func TestHistogramVec_GetAggregatedSampleCount(t *testing.T) {
 	}
 }
 
+// TestHistogramVec_GetAggregatedSampleSum 验证把多个序列的样本和相加。
 func TestHistogramVec_GetAggregatedSampleSum(t *testing.T) {
 	tests := []struct {
 		name string
@@ -407,6 +417,8 @@ func TestHistogramVec_GetAggregatedSampleSum(t *testing.T) {
 	}
 }
 
+// TestHistogramVec_Quantile 验证多序列聚合后的分位数：结果四舍五入到两位小数再比较，
+// 避免浮点表示的微小差异导致误报。
 func TestHistogramVec_Quantile(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -462,6 +474,8 @@ func TestHistogramVec_Quantile(t *testing.T) {
 	}
 }
 
+// TestHistogramVec_Validate 验证聚合序列必须具有相同的桶结构，
+// 否则无法做有意义的分位数合并。
 func TestHistogramVec_Validate(t *testing.T) {
 	tests := []struct {
 		name string
@@ -516,6 +530,8 @@ func TestHistogramVec_Validate(t *testing.T) {
 	}
 }
 
+// TestGetHistogramVecFromGatherer 验证按标签过滤后提取直方图序列，
+// 覆盖单标签与双标签过滤，并比较完整桶数据。
 func TestGetHistogramVecFromGatherer(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -593,6 +609,8 @@ func TestGetHistogramVecFromGatherer(t *testing.T) {
 	}
 }
 
+// TestGetCounterValuesFromGatherer 验证按标签过滤并按键标签值展开 counter 值；
+// 覆盖不存在指标、过滤无命中、未知键标签等边界。
 func TestGetCounterValuesFromGatherer(t *testing.T) {
 	namespace := "namespace"
 	subsystem := "subsystem"

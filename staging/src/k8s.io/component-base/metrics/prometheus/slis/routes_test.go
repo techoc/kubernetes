@@ -23,14 +23,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// mockMux 记录 Install 注册的路径，替代真实 ServeMux。
 type mockMux struct {
 	handledPaths []string
 }
 
+// Handle 实现 Install 所需的最小 mux 接口。
 func (m *mockMux) Handle(path string, handler http.Handler) {
 	m.handledPaths = append(m.handledPaths, path)
 }
 
+// TestSLIMetrics_Install 验证 Install 会把 /metrics/slis 挂到 mux；
+// 重复调用会重复注册，说明 Install 本身不做幂等保护，调用方需自行保证一次。
 func TestSLIMetrics_Install(t *testing.T) {
 	m := &mockMux{}
 	s := SLIMetrics{}
@@ -40,5 +44,6 @@ func TestSLIMetrics_Install(t *testing.T) {
 
 	s.Install(m)
 	// Assert that the path is registered twice for the 2 calls made to Install().
+	// 固定记录该行为：路径会重复挂载，而不是被去重。
 	assert.Equal(t, []string{"/metrics/slis", "/metrics/slis"}, m.handledPaths, "Should handle the path twice.")
 }

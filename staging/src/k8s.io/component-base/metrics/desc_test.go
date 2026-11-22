@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 )
 
+// TestDescCreate 验证 Desc.create 在不同稳定性/弃用组合下的行为：
+// Alpha/Stable 正常创建、已弃用会标注版本、隐藏的指标不创建。
 func TestDescCreate(t *testing.T) {
 	currentVersion := parseVersion(version.Info{
 		Major:      "1",
@@ -101,6 +103,8 @@ func TestDescCreate(t *testing.T) {
 	}
 }
 
+// TestDescClearState 验证 ClearState 把 created/deprecated/hidden 状态全部复位，
+// 使同一个 Desc 能重新注册。
 func TestDescClearState(t *testing.T) {
 	currentVersion := parseVersion(version.Info{
 		Major:      "1",

@@ -23,6 +23,9 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// TestNewTracker 验证根据底层标志的能力选择包装类型：
+// 实现了 IsBoolFlag 的走 BoolTrackerValue，其余走 TrackerValue，
+// 两者都共享同一个 provided 指针。
 func TestNewTracker(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -65,6 +68,8 @@ func TestNewTracker(t *testing.T) {
 	}
 }
 
+// TestNewTrackerPanics 验证非法参数（nil 值或 nil provided）在构造期
+// 立即 panic，避免把错误拖延到解析阶段。
 func TestNewTrackerPanics(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -129,6 +134,8 @@ func TestTrackerValue_String(t *testing.T) {
 	}
 }
 
+// TestTrackerValue_Set 验证 Set 成功时把 provided 置为 true，
+// 底层 Set 返回错误时不改动 provided——失败不应被误认为“用户已提供”。
 func TestTrackerValue_Set(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -184,6 +191,8 @@ func TestTrackerValue_Set(t *testing.T) {
 	}
 }
 
+// TestTrackerValue_MultipleSetCalls 验证多次 Set 的行为：
+// 首次成功后 provided 保持 true；后续 Set 失败不会把已提供的状态改回 false。
 func TestTrackerValue_MultipleSetCalls(t *testing.T) {
 	provided := false
 	mock := &boolFlagMockValue{val: "initial"}
@@ -241,6 +250,7 @@ func TestTrackerValue_Type(t *testing.T) {
 	}
 }
 
+// boolFlagMockValue 模拟布尔型 pflag.Value，可注入错误与类型名。
 type boolFlagMockValue struct {
 	val    string
 	typ    string
@@ -265,6 +275,7 @@ func (m *boolFlagMockValue) IsBoolFlag() bool {
 	return m.isBool
 }
 
+// nonBoolFlagMockValue 模拟普通（非布尔）pflag.Value。
 type nonBoolFlagMockValue struct {
 	val string
 	typ string

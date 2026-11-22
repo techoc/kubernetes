@@ -23,18 +23,22 @@ import (
 var (
 	// pre-defined feature gates with the features from this package in a
 	// certain state (default, all enabled, all disabled).
+	// 预先构造三种状态，供测试验证“某特性关闭时行为不同”而无需各自搭建 gate。
 	defaultFeatureGate, enabledFeatureGate, disabledFeatureGate featuregate.FeatureGate
 )
 
 func init() {
+	// 先注册本包声明的全部 feature gate，得到默认状态的实例。
 	mutable := featuregate.NewFeatureGate()
 	if err := AddFeatureGates(mutable); err != nil {
 		panic(err)
 	}
 	defaultFeatureGate = mutable
+	// DeepCopy 保证后续对 enabled/disabled 的修改不会串到默认实例上。
 	enabled := mutable.DeepCopy()
 	disabled := mutable.DeepCopy()
 	for feature := range mutable.GetAll() {
+		// 逐项设置，避免硬编码 feature 名称导致新增 gate 后测试覆盖不全。
 		if err := enabled.SetFromMap(map[string]bool{string(feature): true}); err != nil {
 			panic(err)
 		}

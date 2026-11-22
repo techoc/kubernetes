@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package compatibility 维护各控制平面组件的“模拟版本/最小兼容版本/特性门控”全局状态，
+// 使组件能够以自身二进制版本之外的版本语义运行，从而支持版本偏差（version skew）。
 package compatibility
 
 import (
@@ -34,23 +36,31 @@ import (
 
 const (
 	// DefaultKubeComponent is the component name for k8s control plane components.
+	//
+	// 未在 --emulated-version / --feature-gates 中写组件前缀时默认归到 "kube"。
 	DefaultKubeComponent = "kube"
 
+	// klogLevel 统一调试日志级别，避免在各处重复魔法数字。
 	klogLevel = 2
 )
 
+// VersionMapping 把源组件版本映射为目标组件版本；返回 nil 视为映射错误。
 type VersionMapping func(from *version.Version) *version.Version
 
 // ComponentGlobals stores the global variables for a component for easy access, including feature gate and effective version.
 type ComponentGlobals struct {
+	// effectiveVersion 描述组件的二进制、模拟与最小兼容版本。
 	effectiveVersion MutableEffectiveVersion
-	featureGate      featuregate.MutableVersionedFeatureGate
+	// featureGate 是受版本约束的特性门控，其可用阶段随 effectiveVersion 变化。
+	featureGate featuregate.MutableVersionedFeatureGate
 
 	// componentVersionMapping contains the mapping from the version of this component
 	// to the version of another component.
 	componentVersionMapping map[string]VersionMapping
 	// dependentComponentVersion stores whether or not this component's version is dependent through mapping on another component.
 	// If true, the emulation/minCompatibility version cannot be set from the flag, or version mapping from another component.
+	//
+	// 单向依赖标志：设为 true 后忽略本组件的版本标志，强制由映射推导，避免两个来源冲突。
 	dependentComponentVersion bool
 }
 
@@ -90,6 +100,7 @@ type ComponentGlobalsRegistry interface {
 }
 
 type componentGlobalsRegistry struct {
+	// componentGlobals 按组件名保存全局变量；所有读写都需持有 mutex。
 	componentGlobals map[string]*ComponentGlobals
 	mutex            sync.RWMutex
 	// emulationVersionConfig stores the list of component name to emulation version set from the flag.
@@ -106,11 +117,14 @@ type componentGlobalsRegistry struct {
 	featureGatesConfig map[string][]string
 	// featureGatesConfigFlags stores a pointer to the flag value, allowing other commands
 	// to append to the feature gates configuration rather than overwriting it
+	//
+	// 缓存 flag 值对象，保证重复调用 AddFlags 时共享同一份解析结果。
 	featureGatesConfigFlags *cliflag.ColonSeparatedMultimapStringString
 	// set stores if the Set() function for the registry is already called.
 	set bool
 }
 
+// NewComponentGlobalsRegistry 创建空的注册表；调用方随后需 Register 各组件并调用 Set 生效。
 func NewComponentGlobalsRegistry() *componentGlobalsRegistry {
 	return &componentGlobalsRegistry{
 		componentGlobals:              make(map[string]*ComponentGlobals),
@@ -120,6 +134,8 @@ func NewComponentGlobalsRegistry() *componentGlobalsRegistry {
 	}
 }
 
+// AddMetrics 为每个已注册组件记录一次版本信息指标，通常在启动后期调用一次。
+// 无 effectiveVersion 的条目跳过，避免空指针。
 func (r *componentGlobalsRegistry) AddMetrics() {
 	for name, globals := range r.componentGlobals {
 		effectiveVersion := globals.effectiveVersion
@@ -130,6 +146,7 @@ func (r *componentGlobalsRegistry) AddMetrics() {
 	}
 }
 
+// Reset 清空全部注册状态；主要用于测试或需要重新解析标志的场景。
 func (r *componentGlobalsRegistry) Reset() {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -141,6 +158,7 @@ func (r *componentGlobalsRegistry) Reset() {
 	r.set = false
 }
 
+// EffectiveVersionFor 返回组件已注册的 EffectiveVersion；未注册返回 nil。
 func (r *componentGlobalsRegistry) EffectiveVersionFor(component string) EffectiveVersion {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
@@ -151,6 +169,7 @@ func (r *componentGlobalsRegistry) EffectiveVersionFor(component string) Effecti
 	return globals.effectiveVersion
 }
 
+// FeatureGateFor 返回组件已注册的特性门控；未注册返回 nil。
 func (r *componentGlobalsRegistry) FeatureGateFor(component string) featuregate.FeatureGate {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
@@ -161,6 +180,8 @@ func (r *componentGlobalsRegistry) FeatureGateFor(component string) featuregate.
 	return globals.featureGate
 }
 
+// unsafeRegister 在调用方已持锁的前提下执行注册。
+// 注册时即把版本信息同步给特性门控，保证在任何 Enabled 查询之前门控已知晓版本约束。
 func (r *componentGlobalsRegistry) unsafeRegister(component string, effectiveVersion MutableEffectiveVersion, featureGate featuregate.MutableVersionedFeatureGate) error {
 	if _, ok := r.componentGlobals[component]; ok {
 		return fmt.Errorf("component globals of %s already registered", component)
@@ -180,6 +201,7 @@ func (r *componentGlobalsRegistry) unsafeRegister(component string, effectiveVer
 	return nil
 }
 
+// Register 注册组件的版本与门控；重复注册或 effectiveVersion 为 nil 返回错误。
 func (r *componentGlobalsRegistry) Register(component string, effectiveVersion MutableEffectiveVersion, featureGate featuregate.MutableVersionedFeatureGate) error {
 	if effectiveVersion == nil {
 		return fmt.Errorf("cannot register nil effectiveVersion")
@@ -189,6 +211,8 @@ func (r *componentGlobalsRegistry) Register(component string, effectiveVersion M
 	return r.unsafeRegister(component, effectiveVersion, featureGate)
 }
 
+// ComponentGlobalsOrRegister 返回已存在的全局变量，否则注册并返回传入值。
+// 供多个初始化路径以幂等方式共享同一组件注册。
 func (r *componentGlobalsRegistry) ComponentGlobalsOrRegister(component string, effectiveVersion MutableEffectiveVersion, featureGate featuregate.MutableVersionedFeatureGate) (MutableEffectiveVersion, featuregate.MutableVersionedFeatureGate) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -200,6 +224,7 @@ func (r *componentGlobalsRegistry) ComponentGlobalsOrRegister(component string, 
 	return effectiveVersion, featureGate
 }
 
+// unsafeKnownFeatures 汇总所有组件的特性名（形如 component:Feature），排序后用于帮助文本。
 func (r *componentGlobalsRegistry) unsafeKnownFeatures() []string {
 	var known []string
 	for component, globals := range r.componentGlobals {
@@ -214,6 +239,8 @@ func (r *componentGlobalsRegistry) unsafeKnownFeatures() []string {
 	return known
 }
 
+// unsafeVersionFlagOptions 生成“component=允许范围”列表；跳过被版本映射接管的组件，
+// 因为这些组件不接受来自标志的版本设置。
 func (r *componentGlobalsRegistry) unsafeVersionFlagOptions(isEmulation bool) []string {
 	var vs []string
 	for component, globals := range r.componentGlobals {
@@ -230,6 +257,11 @@ func (r *componentGlobalsRegistry) unsafeVersionFlagOptions(isEmulation bool) []
 	return vs
 }
 
+// AddFlags 注册 --emulated-version、--min-compatibility-version 与 --feature-gates。
+//
+// 解析阶段只把原始字符串暂存到配置字段，真正的生效推迟到 Set()，以满足
+// “先版本、再最小兼容版本、最后特性门控”的顺序要求。注册前会关闭已有门控，
+// 防止在标志值确定前被并发读取而造成不一致。
 func (r *componentGlobalsRegistry) AddFlags(fs *pflag.FlagSet) {
 	if r == nil {
 		return
@@ -266,6 +298,7 @@ func (r *componentGlobalsRegistry) AddFlags(fs *pflag.FlagSet) {
 		"Options are:\n"+strings.Join(r.unsafeKnownFeatures(), "\n"))
 }
 
+// componentVersion 是版本传播队列中的元素，把组件名与待设置版本配对。
 type componentVersion struct {
 	component string
 	ver       *version.Version
@@ -273,6 +306,9 @@ type componentVersion struct {
 
 // getFullVersionConfig expands the given version config with registered version mapping,
 // and returns the map of component to Version.
+//
+// 以 BFS 方式沿版本映射传播：显式配置的组件入队，其映射出的下游组件继续入队。
+// 若同一组件被设置两次，说明映射图存在环或重复依赖，直接报错。
 func (r *componentGlobalsRegistry) getFullVersionConfig(
 	versionConfigMap map[string]*version.Version) (map[string]*version.Version, error) {
 	result := map[string]*version.Version{}
@@ -286,6 +322,7 @@ func (r *componentGlobalsRegistry) getFullVersionConfig(
 	}
 	for len(setQueue) > 0 {
 		cv := setQueue[0]
+		// 已访问过仍再次入队 = 映射成环，必须拒绝以避免无限循环。
 		if _, visited := result[cv.component]; visited {
 			return result, fmt.Errorf("setting version of %s more than once, probably version mapping loop", cv.component)
 		}
@@ -303,6 +340,8 @@ func (r *componentGlobalsRegistry) getFullVersionConfig(
 	return result, nil
 }
 
+// toVersionMap 解析 "component=major.minor" 形式的标志值；无组件前缀时归到 kube。
+// 仅允许 major.minor：补丁号在版本偏差语义中无意义，也会让映射变得脆弱。
 func toVersionMap(versionConfig []string) (map[string]*version.Version, error) {
 	m := map[string]*version.Version{}
 	for _, compVer := range versionConfig {
@@ -321,9 +360,11 @@ func toVersionMap(versionConfig []string) (map[string]*version.Version, error) {
 		if err != nil {
 			return m, err
 		}
+		// 补丁版本不参与兼容性判定，出现即为配置错误。
 		if ver.Patch() != 0 {
 			return m, fmt.Errorf("patch version not allowed, got: %s=%s", k, ver.String())
 		}
+		// 同一组件重复出现会让结果依赖顺序，直接拒绝。
 		if existingVer, ok := m[k]; ok {
 			return m, fmt.Errorf("duplicate version flag, %s=%s and %s=%s", k, existingVer.String(), k, ver.String())
 		}
@@ -332,6 +373,8 @@ func toVersionMap(versionConfig []string) (map[string]*version.Version, error) {
 	return m, nil
 }
 
+// SetFallback 在 Set 尚未调用时补做一次，并输出警告。
+// 这是给未正确初始化注册表的调用方的兜底，避免零值语义静默生效。
 func (r *componentGlobalsRegistry) SetFallback() error {
 	r.mutex.Lock()
 	set := r.set
@@ -344,6 +387,10 @@ func (r *componentGlobalsRegistry) SetFallback() error {
 	return r.Set()
 }
 
+// Set 解析暂存的标志值并依次应用：模拟版本 → 最小兼容版本 → 特性门控。
+//
+// 顺序不可颠倒：门控的可用阶段取决于前两者，提前设置会得到错误结果。
+// 返回错误后注册表可能处于部分应用状态，调用方不应继续启动。
 func (r *componentGlobalsRegistry) Set() error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -357,6 +404,7 @@ func (r *componentGlobalsRegistry) Set() error {
 			return fmt.Errorf("component not registered: %s", comp)
 		}
 		// only components without any dependencies can be set from the flag.
+		// 被映射接管的组件若同时由标志设置，会产生两个事实来源。
 		if r.componentGlobals[comp].dependentComponentVersion {
 			return fmt.Errorf("EmulationVersion of %s is set by mapping, cannot set it by flag", comp)
 		}
@@ -364,6 +412,7 @@ func (r *componentGlobalsRegistry) Set() error {
 	if emulationVersions, err := r.getFullVersionConfig(emulationVersionConfigMap); err != nil {
 		return err
 	} else {
+		// 先设置模拟版本，供后续最小兼容版本与门控计算使用。
 		for comp, ver := range emulationVersions {
 			r.componentGlobals[comp].effectiveVersion.SetEmulationVersion(ver)
 		}
@@ -390,6 +439,7 @@ func (r *componentGlobalsRegistry) Set() error {
 		}
 	}
 	// Set feature gate emulation version before setting feature gate flag values.
+	// 门控内部按版本过滤特性，必须先知道版本再应用布尔值，否则可能启用不该存在的特性。
 	for comp, globals := range r.componentGlobals {
 		if globals.featureGate == nil {
 			continue
@@ -401,6 +451,7 @@ func (r *componentGlobalsRegistry) Set() error {
 	}
 	for comp, fg := range r.featureGatesConfig {
 		if comp == "" {
+			// 空前缀等价于 kube；两种写法混用会让同一组件出现两组配置，故拒绝。
 			if _, ok := r.featureGatesConfig[DefaultKubeComponent]; ok {
 				return fmt.Errorf("set kube feature gates with default empty prefix or kube: prefix consistently, do not mix use")
 			}
@@ -422,6 +473,10 @@ func (r *componentGlobalsRegistry) Set() error {
 	return nil
 }
 
+// Validate 对所有组件执行版本与门控校验，并汇总错误。
+//
+// 另外对“模拟旧版本却启用 alpha 特性”的组合发出警告：这通常意味着用户
+// 显式打开了模拟版本中不存在的特性，属于不受支持的配置。
 func (r *componentGlobalsRegistry) Validate() []error {
 	var errs []error
 	r.mutex.Lock()
@@ -436,6 +491,7 @@ func (r *componentGlobalsRegistry) Validate() []error {
 		binaryVersion := globals.effectiveVersion.BinaryVersion()
 		emulatedVersion := globals.effectiveVersion.EmulationVersion()
 		if binaryVersion.GreaterThan(emulatedVersion) {
+			// 只有向下模拟时才可能出现“旧版本 + 新 alpha 特性”的矛盾组合。
 			if enabled := enabledAlphaFeatures(features, globals); len(enabled) != 0 {
 				klog.Warningf("component has alpha features enabled in emulated version, this is unsupported: features=%v", enabled)
 			}
@@ -444,6 +500,7 @@ func (r *componentGlobalsRegistry) Validate() []error {
 	return errs
 }
 
+// enabledAlphaFeatures 返回当前已启用的 alpha 特性名，供 Validate 生成告警。
 func enabledAlphaFeatures(features map[featuregate.Feature]featuregate.FeatureSpec, globals *ComponentGlobals) []string {
 	var enabled []string
 	for feat, featSpec := range features {
@@ -454,6 +511,11 @@ func enabledAlphaFeatures(features map[featuregate.Feature]featuregate.FeatureSp
 	return enabled
 }
 
+// SetVersionMapping 建立 fromComponent → toComponent 的版本映射。
+//
+// 一旦建立，toComponent 的版本只能由映射推导，不再接受命令行标志；
+// 同时限制每个组件最多有一个上游，防止依赖关系含糊。
+// f 为 nil 时视作无操作，便于调用方按需传入可选映射。
 func (r *componentGlobalsRegistry) SetVersionMapping(fromComponent, toComponent string, f VersionMapping) error {
 	if f == nil {
 		return nil
@@ -468,6 +530,7 @@ func (r *componentGlobalsRegistry) SetVersionMapping(fromComponent, toComponent 
 		return fmt.Errorf("component not registered: %s", toComponent)
 	}
 	// check multiple dependency
+	// 每个组件只允许一个上游，否则版本来源不确定。
 	if r.componentGlobals[toComponent].dependentComponentVersion {
 		return fmt.Errorf("mapping of %s already exists from another component", toComponent)
 	}
@@ -479,6 +542,7 @@ func (r *componentGlobalsRegistry) SetVersionMapping(fromComponent, toComponent 
 	}
 	versionMapping[toComponent] = f
 	klog.V(klogLevel).Infof("setting the default EmulationVersion of %s based on mapping from the default EmulationVersion of %s", toComponent, fromComponent)
+	// 立即用源组件当前版本推导一次，使映射在 Set 之前就有一致初值。
 	defaultFromVersion := r.componentGlobals[fromComponent].effectiveVersion.EmulationVersion()
 	emulationVersions, err := r.getFullVersionConfig(map[string]*version.Version{fromComponent: defaultFromVersion})
 	if err != nil {

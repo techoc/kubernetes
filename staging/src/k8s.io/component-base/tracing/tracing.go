@@ -36,7 +36,7 @@ func Start(ctx context.Context, name string, attributes ...attribute.KeyValue) (
 	ctx, otelSpan := trace.SpanFromContext(ctx).TracerProvider().Tracer(instrumentationScope).Start(ctx, name, trace.WithAttributes(attributes...))
 	// If there is already a utiltrace span in the context, use that as our parent span.
 	utilSpan := utiltrace.FromContext(ctx).Nest(name, attributesToFields(attributes)...)
-	// Set the trace as active in the context so that subsequent Start calls create nested spans.
+	// 把 utiltrace span 放回 context，使后续 Start 调用形成嵌套层级。
 	return utiltrace.ContextWithTrace(ctx, utilSpan), &Span{
 		otelSpan: otelSpan,
 		utilSpan: utilSpan,
@@ -53,6 +53,7 @@ type Span struct {
 }
 
 // AddEvent adds a point-in-time event with a name and attributes.
+// 事件同时写入两种 span；utilSpan 为 nil 时只写 OpenTelemetry。
 func (s *Span) AddEvent(name string, attributes ...attribute.KeyValue) {
 	s.otelSpan.AddEvent(name, trace.WithAttributes(attributes...))
 	if s.utilSpan != nil {
@@ -61,6 +62,7 @@ func (s *Span) AddEvent(name string, attributes ...attribute.KeyValue) {
 }
 
 // End ends the span, and logs if the span duration is greater than the logThreshold.
+// 只对 utiltrace 做阈值日志：OpenTelemetry 的采样由 SDK 决定。
 func (s *Span) End(logThreshold time.Duration) {
 	s.otelSpan.End()
 	if s.utilSpan != nil {
@@ -74,6 +76,8 @@ func (s *Span) RecordError(err error, attributes ...attribute.KeyValue) {
 	s.otelSpan.RecordError(err, trace.WithAttributes(attributes...))
 }
 
+// attributesToFields 把 OpenTelemetry attribute 转成 utiltrace 的字段，
+// 保持两套实现的日志内容一致。
 func attributesToFields(attributes []attribute.KeyValue) []utiltrace.Field {
 	fields := make([]utiltrace.Field, len(attributes))
 	for i := range attributes {
@@ -93,6 +97,7 @@ func SpanFromContext(ctx context.Context) *Span {
 }
 
 // ContextWithSpan returns a context with the Span included in the context.
+// 两种 span 必须同时写入，否则后续 SpanFromContext 只能拿到其中一种。
 func ContextWithSpan(ctx context.Context, s *Span) context.Context {
 	return trace.ContextWithSpan(utiltrace.ContextWithTrace(ctx, s.utilSpan), s.otelSpan)
 }

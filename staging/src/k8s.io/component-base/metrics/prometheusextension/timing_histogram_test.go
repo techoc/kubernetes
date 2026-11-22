@@ -25,6 +25,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
+// TestTimingHistogramNonMonotonicBuckets 验证桶上界不满足严格递增
+// （含重复、乱序、中间出现 +Inf）时构造失败，避免运行期行为不确定。
 func TestTimingHistogramNonMonotonicBuckets(t *testing.T) {
 	testCases := map[string][]float64{
 		"not strictly monotonic":  {1, 2, 2, 3},
@@ -43,6 +45,8 @@ func TestTimingHistogramNonMonotonicBuckets(t *testing.T) {
 	}
 }
 
+// exerciseTimingHistogramAndCollector 组合数据面与采集面的校验：
+// 先按时间线注入值，再检查 Collect 发出的指标集合与期望一致。
 func exerciseTimingHistogramAndCollector(th GaugeOps, t0 time.Time, clk *unsyncFakeClock, collect func(chan<- prometheus.Metric), expectCollection ...GaugeOps) func(t *testing.T) {
 	return func(t *testing.T) {
 		exerciseTimingHistogramData(t, th, t0, clk)
@@ -50,8 +54,11 @@ func exerciseTimingHistogramAndCollector(th GaugeOps, t0 time.Time, clk *unsyncF
 	}
 }
 
+// exerciseTimingHistogramCollector 把 Collect 的输出与期望集合逐项比对，
+// 使用 findAndRemove 保证不重不漏（顺序无关）。
 func exerciseTimingHistogramCollector(t *testing.T, collect func(chan<- prometheus.Metric), expectCollection []GaugeOps) {
 	remainingCollection := expectCollection
+	// Collect 可能阻塞，放到独立 goroutine 并关闭 channel 以便 range 结束。
 	metch := make(chan prometheus.Metric)
 	go func() {
 		collect(metch)
@@ -79,6 +86,9 @@ var thTestV0 float64 = 0.25
 // value=v1 for t1 <= t <= t2 where v1 = 0.75 and t2 = t1 + 1 microsecond
 // value=v2 for t2 <= t <= t3 where v2 = 1.25 and t3 = t2 + 1 millisecond
 // value=v3 for t3 <= t <= t4 where v3 = 0.65 and t4 = t3 + 1 second
+//
+// 预期样本计数等于经过的总纳秒数，样本和等于每段“值×时长”之和；
+// 桶的累计计数按值落入的区间累加，用以验证时间积分而非简单观测计数。
 func exerciseTimingHistogramData(t *testing.T, th GaugeOps, t0 time.Time, clk *unsyncFakeClock) {
 	t1 := t0.Add(time.Nanosecond)
 	v0 := thTestV0
@@ -134,6 +144,7 @@ func exerciseTimingHistogramData(t *testing.T, th GaugeOps, t0 time.Time, clk *u
 func tDiff(hi, lo time.Time) float64 { return float64(hi.Sub(lo)) }
 
 func findAndRemove(metrics []GaugeOps, seek GaugeOps) ([]GaugeOps, bool) {
+	// 指针比较即可：同一 label 组合在多处取到的是同一对象。
 	for idx, metric := range metrics {
 		if metric == seek {
 			return append(append([]GaugeOps{}, metrics[:idx]...), metrics[idx+1:]...), true
@@ -142,6 +153,7 @@ func findAndRemove(metrics []GaugeOps, seek GaugeOps) ([]GaugeOps, bool) {
 	return metrics, false
 }
 
+// TestTimeIntegrationDirect 用假时钟驱动非 vec 的 timing histogram。
 func TestTimeIntegrationDirect(t *testing.T) {
 	t0 := time.Now()
 	clk := &unsyncFakeClock{t0}
@@ -158,6 +170,9 @@ func TestTimeIntegrationDirect(t *testing.T) {
 	t.Run("non-vec", exerciseTimingHistogramAndCollector(th, t0, clk, th.Collect, th))
 }
 
+// TestTimingHistogramVec 验证 vec 的 label 缓存与隔离：
+// 相同 label 的两次获取返回同一对象，不同 label 互不影响；
+// 每次 Collect 都应返回此前创建的全部元素。
 func TestTimingHistogramVec(t *testing.T) {
 	t0 := time.Now()
 	clk := &unsyncFakeClock{t0}
@@ -187,6 +202,7 @@ func TestTimingHistogramVec(t *testing.T) {
 	t.Run("th2", exerciseTimingHistogramAndCollector(th3, t0, clk, vec.Collect, th1, th2, th3))
 }
 
+// unsyncFakeClock 是不带同步的假时钟；测试为单 goroutine，无需加锁。
 type unsyncFakeClock struct {
 	now time.Time
 }
@@ -199,6 +215,8 @@ func (ufc *unsyncFakeClock) SetTime(now time.Time) {
 	ufc.now = now
 }
 
+// BenchmarkTimingHistogramDirect 测量直接调用 Set 的耗时，
+// 作为 vec 两条路径的基线。
 func BenchmarkTimingHistogramDirect(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -220,6 +238,8 @@ func BenchmarkTimingHistogramDirect(b *testing.B) {
 		x = (x + i) % 23
 	}
 }
+
+// BenchmarkTimingHistogramVecEltCached 测量提前缓存元素后反复 Set 的耗时。
 func BenchmarkTimingHistogramVecEltCached(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()
@@ -241,6 +261,8 @@ func BenchmarkTimingHistogramVecEltCached(b *testing.B) {
 	}
 }
 
+// BenchmarkTimingHistogramVecEltFetched 测量每次调用 WithLabelValues 再 Set 的耗时，
+// 用于评估 label map 查找的开销。
 func BenchmarkTimingHistogramVecEltFetched(b *testing.B) {
 	b.StopTimer()
 	now := time.Now()

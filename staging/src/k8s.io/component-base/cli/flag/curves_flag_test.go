@@ -22,6 +22,9 @@ import (
 	"testing"
 )
 
+// TestTLSCurvePreferences 覆盖曲线 ID 到 tls.CurveID 的转换，
+// 重点在于：空输入保持 nil、重复/越界/未知 ID 必须报错，
+// 以及现行 Go 支持的所有标准曲线都能正确映射。
 func TestTLSCurvePreferences(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -40,6 +43,7 @@ func TestTLSCurvePreferences(t *testing.T) {
 			expected: []tls.CurveID{tls.X25519},
 		},
 		{
+			// 空和非 nil 输入都返回 nil，语义上等同于“使用 Go 默认值”。
 			name:     "empty input",
 			input:    []int32{},
 			expected: nil,
@@ -50,6 +54,7 @@ func TestTLSCurvePreferences(t *testing.T) {
 			expected: nil,
 		},
 		{
+			// 包含后量子曲线 X25519MLKEM768，确保新增标准曲线同样被接受。
 			name:     "all standard curves",
 			input:    []int32{23, 24, 25, 29, 4588},
 			expected: []tls.CurveID{tls.CurveP256, tls.CurveP384, tls.CurveP521, tls.X25519, tls.X25519MLKEM768},

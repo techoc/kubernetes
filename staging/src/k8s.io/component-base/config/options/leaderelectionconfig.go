@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package options 提供把 component-base 配置结构体绑定到 pflag 的辅助函数。
 package options
 
 import (
@@ -22,6 +23,9 @@ import (
 )
 
 // BindLeaderElectionFlags binds the LeaderElectionConfiguration struct fields to a flagset
+//
+// 每个标志都以结构体当前值作为默认值，因此可以先加载配置文件、再绑定标志，
+// 从而让命令行覆盖配置文件而不是恢复内置默认。
 func BindLeaderElectionFlags(l *config.LeaderElectionConfiguration, fs *pflag.FlagSet) {
 	fs.BoolVar(&l.LeaderElect, "leader-elect", l.LeaderElect, ""+
 		"Start a leader election client and gain leadership before "+
@@ -33,6 +37,7 @@ func BindLeaderElectionFlags(l *config.LeaderElectionConfiguration, fs *pflag.Fl
 		"slot. This is effectively the maximum duration that a leader can be stopped "+
 		"before it is replaced by another candidate. This is only applicable if leader "+
 		"election is enabled.")
+	// renewDeadline 必须小于 leaseDuration，否则在租约过期前就可能失去领导权。
 	fs.DurationVar(&l.RenewDeadline.Duration, "leader-elect-renew-deadline", l.RenewDeadline.Duration, ""+
 		"The interval between attempts by the acting master to renew a leadership slot "+
 		"before it stops leading. This must be less than the lease duration. "+
@@ -40,6 +45,7 @@ func BindLeaderElectionFlags(l *config.LeaderElectionConfiguration, fs *pflag.Fl
 	fs.DurationVar(&l.RetryPeriod.Duration, "leader-elect-retry-period", l.RetryPeriod.Duration, ""+
 		"The duration the clients should wait between attempting acquisition and renewal "+
 		"of a leadership. This is only applicable if leader election is enabled.")
+	// 目前仅支持 leases；保留字符串形式是为了未来兼容其他锁类型。
 	fs.StringVar(&l.ResourceLock, "leader-elect-resource-lock", l.ResourceLock, ""+
 		"The type of resource object that is used for locking during "+
 		"leader election. Supported options are 'leases'.")

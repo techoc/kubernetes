@@ -26,18 +26,24 @@ import (
 )
 
 // DefaultingTest run defaulting tests for given scheme
+//
+// 测试数据位于各包 testdata/<Kind>/before|after/<version>.yaml，
+// 通过 YAML 解码比较默认化前后结果，覆盖编解码与默认化两条路径。
 func DefaultingTest(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) {
 	cases := GetDefaultingTestCases(t, scheme, codecs)
 	RunTestsOnYAMLData(t, cases)
 }
 
 // GetDefaultingTestCases returns defaulting testcases for given scheme
+//
+// 内部版本跳过：它们不是用户可见的序列化格式，默认化通过外部版本完成。
 func GetDefaultingTestCases(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) []TestCase {
 	cases := []TestCase{}
 	for gvk := range scheme.AllKnownTypes() {
 		if gvk.Version == runtime.APIVersionInternal {
 			continue
 		}
+		// 每个 Kind 的外部版本共用同一组 before/after 目录，文件名按版本区分。
 		beforeDir := fmt.Sprintf("testdata/%s/before", gvk.Kind)
 		afterDir := fmt.Sprintf("testdata/%s/after", gvk.Kind)
 		filename := fmt.Sprintf("%s.yaml", gvk.Version)

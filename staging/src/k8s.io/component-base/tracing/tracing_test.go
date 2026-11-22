@@ -38,6 +38,8 @@ func init() {
 	_ = flag.CommandLine.Lookup("v").Value.Set("2")
 }
 
+// TestOpenTelemetryTracing 验证 Start/AddEvent/RecordError/ContextWithSpan 在
+// OpenTelemetry 下生成正确的父子层级与事件序列。
 func TestOpenTelemetryTracing(t *testing.T) {
 	// Setup OpenTelemetry for testing
 	fakeRecorder := tracetest.NewSpanRecorder()
@@ -126,6 +128,8 @@ func TestOpenTelemetryTracing(t *testing.T) {
 	}
 }
 
+// TestUtilTracing 验证同一套 API 在 k8s.io/utils/trace 下的行为：
+// 子 span 结束时不打印，父 span 结束时才一次性输出嵌套结构。
 func TestUtilTracing(t *testing.T) {
 	var buf bytes.Buffer
 	klog.SetOutput(&buf)
@@ -178,6 +182,7 @@ func TestUtilTracing(t *testing.T) {
 	}
 }
 
+// TestContextNoPanic 验证空 context 取出的 span 可安全调用，不会触发 nil panic。
 func TestContextNoPanic(t *testing.T) {
 	ctx := context.Background()
 	// Make sure calling functions on spans from context doesn't panic

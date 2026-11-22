@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package restclient 把 client-go 的 REST 客户端监控钩子接到 Prometheus。
+//
+// 导入本包即安装适配器；真正的指标注册被推迟到第一次构造 REST client 时
+// （metrics.EnsureRegistered），避免在特性门控生效前读取全局状态。
 package restclient
 
 import (
@@ -53,6 +57,8 @@ var (
 		[]string{"host"},
 	)
 
+	// requestSize/responseSize 的桶按 64B 到 16MB 指数分布，
+	// 覆盖从空响应到较大 list 的常见范围。
 	requestSize = k8smetrics.NewHistogramVec(
 		&k8smetrics.HistogramOpts{
 			Name:           "rest_client_request_size_bytes",
@@ -103,8 +109,12 @@ var (
 		[]string{"code", "verb", "host"},
 	)
 
+	// execPluginCertTTLAdapter 缓存最近一次看到的最短证书过期时间；
+	// GaugeFunc 在抓取时再计算 TTL，因此需要一个可变的共享指针。
 	execPluginCertTTLAdapter = &expiryToTTLAdapter{}
 
+	// execPluginCertTTL 以 TTL 形式暴露证书剩余有效期：
+	// 无证书时返回 +Inf，已过期时为负值。
 	execPluginCertTTL = k8smetrics.NewGaugeFunc(
 		&k8smetrics.GaugeOpts{
 			Name: "rest_client_exec_plugin_ttl_seconds",
@@ -245,6 +255,8 @@ func init() {
 		TransportCertRotationGCCalls: &transportCertRotationGCCallsAdapter{m: transportCertRotationGCCalls},
 		TransportCacheGCCalls:        &transportCacheGCCallsAdapter{m: transportCacheGCCalls},
 		RegisterFn: func() {
+			// 这里集中注册，是因为 client-go 的 metrics 包要求延迟到
+			// EnsureRegistered 调用时再触碰 legacyregistry。
 			legacyregistry.MustRegister(requestLatency)
 			legacyregistry.MustRegister(requestSize)
 			legacyregistry.MustRegister(responseSize)
@@ -267,6 +279,7 @@ type latencyAdapter struct {
 	m *k8smetrics.HistogramVec
 }
 
+// Observe 记录一次请求延迟；EnsureRegistered 保证注册已完成后再取子指标。
 func (l *latencyAdapter) Observe(ctx context.Context, verb string, u url.URL, latency time.Duration) {
 	metrics.EnsureRegistered()
 	l.m.WithContext(ctx).WithLabelValues(verb, u.Host).Observe(latency.Seconds())
@@ -276,6 +289,7 @@ type resolverLatencyAdapter struct {
 	m *k8smetrics.HistogramVec
 }
 
+// Observe 记录 DNS 解析延迟。
 func (l *resolverLatencyAdapter) Observe(ctx context.Context, host string, latency time.Duration) {
 	metrics.EnsureRegistered()
 	l.m.WithContext(ctx).WithLabelValues(host).Observe(latency.Seconds())
@@ -285,6 +299,7 @@ type sizeAdapter struct {
 	m *k8smetrics.HistogramVec
 }
 
+// Observe 记录请求/响应字节数。
 func (s *sizeAdapter) Observe(ctx context.Context, verb string, host string, size float64) {
 	metrics.EnsureRegistered()
 	s.m.WithContext(ctx).WithLabelValues(verb, host).Observe(size)
@@ -294,15 +309,18 @@ type resultAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 累加按状态码、方法、host 分组的请求次数。
 func (r *resultAdapter) Increment(ctx context.Context, code, method, host string) {
 	metrics.EnsureRegistered()
 	r.m.WithContext(ctx).WithLabelValues(code, method, host).Inc()
 }
 
 type expiryToTTLAdapter struct {
+	// 并发安全由调用方保证；这里只保存最近写入的过期时间。
 	e *time.Time
 }
 
+// Set 更新证书过期时间；实际 TTL 在 GaugeFunc 抓取时计算。
 func (e *expiryToTTLAdapter) Set(expiry *time.Time) {
 	metrics.EnsureRegistered()
 	e.e = expiry
@@ -312,6 +330,7 @@ type rotationAdapter struct {
 	m *k8smetrics.Histogram
 }
 
+// Observe 记录证书轮转前的存活时长（秒）。
 func (r *rotationAdapter) Observe(d time.Duration) {
 	metrics.EnsureRegistered()
 	r.m.Observe(d.Seconds())
@@ -321,6 +340,7 @@ type callsAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 记录 exec 插件调用，标签为退出码与调用状态。
 func (r *callsAdapter) Increment(code int, callStatus string) {
 	metrics.EnsureRegistered()
 	r.m.WithLabelValues(fmt.Sprintf("%d", code), callStatus).Inc()
@@ -330,6 +350,7 @@ type policyAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 记录策略允许/拒绝插件的判断次数。
 func (r *policyAdapter) Increment(status string) {
 	metrics.EnsureRegistered()
 	r.m.WithLabelValues(status).Inc()
@@ -339,6 +360,7 @@ type retryAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// IncrementRetry 记录一次请求重试。
 func (r *retryAdapter) IncrementRetry(ctx context.Context, code, method, host string) {
 	metrics.EnsureRegistered()
 	r.m.WithContext(ctx).WithLabelValues(code, method, host).Inc()
@@ -348,6 +370,7 @@ type transportCacheAdapter struct {
 	m *k8smetrics.Gauge
 }
 
+// Observe 设置 transport 缓存当前条目数。
 func (t *transportCacheAdapter) Observe(value int) {
 	metrics.EnsureRegistered()
 	t.m.Set(float64(value))
@@ -357,6 +380,7 @@ type transportCacheCallsAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 记录获取 transport 的结果（hit/miss 等）。
 func (t *transportCacheCallsAdapter) Increment(result string) {
 	metrics.EnsureRegistered()
 	t.m.WithLabelValues(result).Inc()
@@ -366,6 +390,7 @@ type transportCAReloadsAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 记录 CA 重载尝试及其结果/原因。
 func (t *transportCAReloadsAdapter) Increment(result, reason string) {
 	metrics.EnsureRegistered()
 	t.m.WithLabelValues(result, reason).Inc()
@@ -375,6 +400,7 @@ type transportCertRotationGCCallsAdapter struct {
 	m *k8smetrics.Counter
 }
 
+// Increment 记录证书轮转 goroutine 因 transport 被 GC 而取消的次数。
 func (t *transportCertRotationGCCallsAdapter) Increment() {
 	metrics.EnsureRegistered()
 	t.m.Inc()
@@ -384,6 +410,7 @@ type transportCacheGCCallsAdapter struct {
 	m *k8smetrics.CounterVec
 }
 
+// Increment 记录 transport 缓存 GC 清理的尝试结果。
 func (t *transportCacheGCCallsAdapter) Increment(result string) {
 	metrics.EnsureRegistered()
 	t.m.WithLabelValues(result).Inc()

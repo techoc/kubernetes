@@ -25,6 +25,8 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestResetHandler 验证 HandlerWithReset：GET 正常返回空指标体，
+// DELETE 清空注册表并返回确认文本。
 func TestResetHandler(t *testing.T) {
 	currentVersion := apimachineryversion.Info{
 		Major:      "1",

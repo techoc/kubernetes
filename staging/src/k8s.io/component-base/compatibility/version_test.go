@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
+// TestValidate 覆盖版本范围校验的关键边界：
+// patch 差异不参与判断；模拟版本不得超过二进制版本；最低兼容版本不得超过模拟版本；
+// 两个版本都不得低于各自 floor。
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name                         string
@@ -100,6 +103,8 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestSetEmulationVersion 验证设置模拟版本时，最低兼容版本按“少一个次版本”推导，
+// 并在触及下限时截断为下限本身。
 func TestSetEmulationVersion(t *testing.T) {
 	tests := []struct {
 		name                          string
@@ -147,6 +152,8 @@ func TestSetEmulationVersion(t *testing.T) {
 	}
 }
 
+// TestSetMinCompatibilityVersion 验证显式设置最低兼容版本的效果，并确认：
+// 再次调用 SetEmulationVersion 会把该值重置回默认推导值。
 func TestSetMinCompatibilityVersion(t *testing.T) {
 	tests := []struct {
 		name                         string
@@ -208,6 +215,8 @@ func TestSetMinCompatibilityVersion(t *testing.T) {
 	}
 }
 
+// TestInfo 验证 Info() 把三个版本映射到 apimachineryversion.Info 的
+// Major/Minor/Emulation*/MinCompatibility* 字段，并覆盖空版本与带预发布后缀的情况。
 func TestInfo(t *testing.T) {
 	tests := []struct {
 		name                          string

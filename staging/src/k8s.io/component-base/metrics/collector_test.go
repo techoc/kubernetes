@@ -28,12 +28,15 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// testCustomCollector 是 StableCollector 的测试实现：
+// 固定一组 Desc，Collect 时每个 Desc 输出一个值为 1 的 gauge。
 type testCustomCollector struct {
 	BaseStableCollector
 
 	descriptors []*Desc
 }
 
+// newTestCustomCollector 用给定 Desc 构造测试收集器。
 func newTestCustomCollector(ds ...*Desc) *testCustomCollector {
 	c := &testCustomCollector{}
 	c.descriptors = append(c.descriptors, ds...)
@@ -41,18 +44,22 @@ func newTestCustomCollector(ds ...*Desc) *testCustomCollector {
 	return c
 }
 
+// DescribeWithStability 把全部 Desc 送入通道，供注册表做唯一性校验。
 func (tc *testCustomCollector) DescribeWithStability(ch chan<- *Desc) {
 	for i := range tc.descriptors {
 		ch <- tc.descriptors[i]
 	}
 }
 
+// CollectWithStability 为每个 Desc 产出一个常量 gauge，便于断言 HELP/TYPE 文本。
 func (tc *testCustomCollector) CollectWithStability(ch chan<- Metric) {
 	for i := range tc.descriptors {
 		ch <- NewLazyConstMetric(tc.descriptors[i], GaugeValue, 1, "value")
 	}
 }
 
+// TestBaseCustomCollector 验证 StableCollector 注册后：
+// 各稳定性级别 HELP 带前缀，deprecated 指标显示弃用版本，超过宽限期的 hidden 指标不出现。
 func TestBaseCustomCollector(t *testing.T) {
 	var currentVersion = apimachineryversion.Info{
 		Major:      "1",
@@ -102,6 +109,8 @@ func TestBaseCustomCollector(t *testing.T) {
 	}
 }
 
+// TestInvalidCustomCollector 验证无名字指标和重名指标会在 MustRegister 时 panic，
+// 避免坏指标静默进入注册表。
 func TestInvalidCustomCollector(t *testing.T) {
 	var currentVersion = apimachineryversion.Info{
 		Major:      "1",
@@ -164,11 +173,13 @@ func TestCustomCollectorClearState(t *testing.T) {
 	benchmarkA := newTestCustomCollector(alphaDesc, stableDesc, deprecatedDesc, hiddenDesc)
 	benchmarkB := newTestCustomCollector(alphaDesc, stableDesc, deprecatedDesc, hiddenDesc)
 
+	// Create 会在收集器上标记隐藏/弃用状态；ClearState 应把这些状态全部还原。
 	if benchmarkA.Create(&currentVersion, benchmarkA) == false {
 		t.Fatal("collector should be created")
 	}
 	benchmarkA.ClearState()
 
+	// 用同样构造的干净副本比较，防止将来新增字段后忘记在 ClearState 中重置。
 	if !reflect.DeepEqual(*benchmarkA, *benchmarkB) {
 		t.Fatal("custom collector state hasn't be fully cleared")
 	}

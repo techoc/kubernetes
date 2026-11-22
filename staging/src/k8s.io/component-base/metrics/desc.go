@@ -29,6 +29,8 @@ import (
 // Desc is a prometheus.Desc extension.
 //
 // Use NewDesc to create new Desc instances.
+// Desc 扩展了 prometheus.Desc，额外携带稳定性级别与弃用信息。
+// 创建被延迟到注册时，以便注册时才知道当前版本并判断是否隐藏。
 type Desc struct {
 	// fqName has been built from Namespace, Subsystem, and Name.
 	fqName string
@@ -49,9 +51,10 @@ type Desc struct {
 	// deprecatedVersion represents in which version this metric be deprecated.
 	deprecatedVersion string
 
-	isDeprecated        bool
-	isHidden            bool
-	isCreated           bool
+	isDeprecated bool
+	isHidden     bool
+	isCreated    bool
+	// createLock 保护 isCreated 等状态的读写；其余 Once 保证各阶段只执行一次。
 	createLock          sync.RWMutex
 	markDeprecationOnce sync.Once
 	createOnce          sync.Once
@@ -93,6 +96,7 @@ func (d *Desc) String() string {
 		return d.promDesc.String()
 	}
 
+	// 未创建时临时构造 desc 仅用于展示，不会产生注册副作用。
 	return prometheus.NewDesc(d.fqName, d.help, d.variableLabels, prometheus.Labels(d.constLabels)).String()
 }
 
@@ -107,6 +111,8 @@ func (d *Desc) DeprecatedVersion() *semver.Version {
 
 }
 
+// determineDeprecationStatus 依据当前版本计算弃用/隐藏状态。
+// 隐藏判定仅执行一次；若用户显式要求展示隐藏指标，则保持可见并告警。
 func (d *Desc) determineDeprecationStatus(currentVersion semver.Version) {
 	deprecatedVersion := d.DeprecatedVersion()
 	if deprecatedVersion == nil {
@@ -154,7 +160,7 @@ func (d *Desc) create(version *semver.Version) bool {
 		d.determineDeprecationStatus(*version)
 	}
 
-	// let's not create if this metric is slated to be hidden
+	// 已决定隐藏的指标不创建，避免出现在输出中。
 	if d.IsHidden() {
 		return false
 	}
@@ -163,6 +169,7 @@ func (d *Desc) create(version *semver.Version) bool {
 		defer d.createLock.Unlock()
 
 		d.isCreated = true
+		// 弃用指标在 Help 中额外标注，方便用户发现并迁移。
 		if d.IsDeprecated() {
 			d.initializeDeprecatedDesc()
 		} else {
@@ -174,6 +181,7 @@ func (d *Desc) create(version *semver.Version) bool {
 
 // ClearState will clear all the states marked by Create.
 // It intends to be used for re-register a hidden metric.
+// 重置所有状态与 Once，使同一个 Desc 可以被重新注册（例如测试中换 registry）。
 func (d *Desc) ClearState() {
 	d.isDeprecated = false
 	d.isHidden = false
@@ -189,25 +197,29 @@ func (d *Desc) ClearState() {
 	d.promDesc = nil
 }
 
+// markDeprecated 在 Help 前加上 "(Deprecated since <version>)"，只添加一次。
 func (d *Desc) markDeprecated() {
 	d.deprecateOnce.Do(func() {
 		d.annotatedHelp = fmt.Sprintf("(Deprecated since %s) %s", d.deprecatedVersion, d.annotatedHelp)
 	})
 }
 
+// annotateStabilityLevel 在 Help 前加上如 "[ALPHA]" 的稳定性标记，只添加一次。
 func (d *Desc) annotateStabilityLevel() {
 	d.annotateOnce.Do(func() {
 		d.annotatedHelp = fmt.Sprintf("[%v] %v", d.stabilityLevel, d.annotatedHelp)
 	})
 }
 
+// initialize 创建真正的 prometheus.Desc；Help 已包含稳定性/弃用标注。
 func (d *Desc) initialize() {
 	d.annotateStabilityLevel()
 
-	// this actually creates the underlying prometheus desc.
+	// 这里才真正创建底层 prometheus desc。
 	d.promDesc = prometheus.NewDesc(d.fqName, d.annotatedHelp, d.variableLabels, prometheus.Labels(d.constLabels))
 }
 
+// initializeDeprecatedDesc 为弃用指标创建 Desc，先标注弃用版本再初始化。
 func (d *Desc) initializeDeprecatedDesc() {
 	d.markDeprecated()
 	d.initialize()

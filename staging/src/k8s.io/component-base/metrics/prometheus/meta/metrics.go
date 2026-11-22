@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package meta 定义描述指标系统自身行为的元指标：
+// 已注册/已禁用/已隐藏指标的数量，用于监控指标配置是否符合预期。
 package meta
 
 import (
@@ -21,6 +23,7 @@ import (
 )
 
 var (
+	// RegisteredMetrics 按稳定性级别与弃用版本统计已注册的指标数。
 	RegisteredMetrics = k8smetrics.NewCounterVec(
 		&k8smetrics.CounterOpts{
 			Name:           "registered_metrics_total",
@@ -30,6 +33,7 @@ var (
 		[]string{"stability_level", "deprecated_version"},
 	)
 
+	// DisabledMetricsTotal 统计被 --disabled-metrics 关闭的指标数。
 	DisabledMetricsTotal = k8smetrics.NewCounter(
 		&k8smetrics.CounterOpts{
 			Name:           "disabled_metrics_total",
@@ -38,6 +42,7 @@ var (
 		},
 	)
 
+	// HiddenMetricsTotal 统计因弃用而隐藏的指标数。
 	HiddenMetricsTotal = k8smetrics.NewCounter(
 		&k8smetrics.CounterOpts{
 			Name:           "hidden_metrics_total",

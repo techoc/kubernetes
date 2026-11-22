@@ -19,6 +19,7 @@ package metrics
 import "k8s.io/component-base/version"
 
 var (
+	// buildInfo 以恒为 1 的 gauge 携带构建元数据，是判断集群内组件版本分布的标准入口。
 	buildInfo = NewGaugeVec(
 		&GaugeOpts{
 			Name:           "kubernetes_build_info",
@@ -33,5 +34,6 @@ var (
 func RegisterBuildInfo(r KubeRegistry) {
 	info := version.Get()
 	r.MustRegister(buildInfo)
+	// 注册后立即写入一次，保证首个抓取周期就能得到完整信息。
 	buildInfo.WithLabelValues(info.Major, info.Minor, info.GitVersion, info.GitCommit, info.GitTreeState, info.BuildDate, info.GoVersion, info.Compiler, info.Platform).Set(1)
 }

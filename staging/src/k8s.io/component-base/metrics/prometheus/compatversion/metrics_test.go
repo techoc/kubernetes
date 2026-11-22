@@ -29,6 +29,8 @@ var (
 	testedMetrics = []string{"version_info"}
 )
 
+// TestRecordCompatVersionInfo 验证 version_info 指标的三组版本标签
+// （binary/emulation/min_compat）按传入值输出，且值为 1。
 func TestRecordCompatVersionInfo(t *testing.T) {
 	RecordCompatVersionInfo(context.Background(), "name", "1.28", "1.27", "1.26")
 	want := `# HELP version_info [ALPHA] Provides the compatibility version info of the component. The component label is the name of the component, usually kube, but is relevant for aggregated-apiservers.

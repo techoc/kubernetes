@@ -16,9 +16,9 @@ limitations under the License.
 
 package flag
 
-// OmitEmpty is an interface for flags to report whether their underlying value
-// is "empty." If a flag implements OmitEmpty and returns true for a call to Empty(),
-// it is assumed that flag may be omitted from the command line.
+// OmitEmpty 是 flag 值用来报告自身是否为“空”的接口。
+// 若某 flag 实现 OmitEmpty 且 Empty() 返回 true，调用方可认为该 flag
+// 可以不出现在命令行中——例如在生成部署清单时略去默认值。
 type OmitEmpty interface {
 	Empty() bool
 }

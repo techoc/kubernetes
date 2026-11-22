@@ -14,13 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package slis 暴露 Kubernetes SLI（service level indicator）健康检查指标。
+//
+// 两个指标都是 STABLE：名称与 label 属于对外契约，监控系统依赖其稳定性。
 package slis
 
 import (
 	"context"
+
 	k8smetrics "k8s.io/component-base/metrics"
 )
 
+// HealthcheckStatus 是健康检查结果，取值直接作为 counter 的 label，
+// 因此只允许 success/error 两种，避免基数失控。
 type HealthcheckStatus string
 
 const (
@@ -52,17 +58,22 @@ var (
 	)
 )
 
+// Register 把健康检查指标注册到给定 registry，并顺带注册进程启动时间，
+// 后者是计算 SLI 速率所需的分母。
 func Register(registry k8smetrics.KubeRegistry) {
 	registry.Register(healthcheck)
 	registry.Register(healthchecksTotal)
 	_ = k8smetrics.RegisterProcessStartTime(registry.Register)
 }
 
+// ResetHealthMetrics 清空两个指标的序列；仅供测试做隔离使用。
 func ResetHealthMetrics() {
 	healthcheck.Reset()
 	healthchecksTotal.Reset()
 }
 
+// ObserveHealthcheck 记录一次健康检查：gauge 反映当前状态（success=1，
+// 其余为 0），counter 累加该状态的次数，便于同时看瞬时状态与历史比例。
 func ObserveHealthcheck(ctx context.Context, name string, healthcheckType string, status HealthcheckStatus) error {
 	if status == Success {
 		healthcheck.WithContext(ctx).WithLabelValues(name, healthcheckType).Set(1)

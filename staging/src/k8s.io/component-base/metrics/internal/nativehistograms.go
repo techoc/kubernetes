@@ -20,6 +20,8 @@ package internal
 
 import "sync/atomic"
 
+// nativeHistogramsEnabled 由特性门控在启动时写入；使用原子变量，
+// 使指标构造路径可以在无锁情况下确定是否需要原生直方图配置。
 var nativeHistogramsEnabled atomic.Bool
 
 // NativeHistogramOptions holds the bucket configuration options for native histograms.
@@ -52,6 +54,8 @@ func NativeHistogramsEnabled() bool {
 }
 
 // NativeHistogramConfig returns the default bucket configuration for native histograms.
+//
+// 返回配置副本；当前所有指标共用同一组参数，便于统一调整精度与内存开销。
 func NativeHistogramConfig() NativeHistogramOptions {
 	return defaultNativeHistogramOptions
 }

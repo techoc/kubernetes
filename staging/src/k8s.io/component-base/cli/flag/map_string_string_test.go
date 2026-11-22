@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestStringMapStringString 验证 String() 的稳定输出：键排序、
+// nil 与空 map 都输出空串。
 func TestStringMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {
@@ -43,6 +45,8 @@ func TestStringMapStringString(t *testing.T) {
 	}
 }
 
+// TestSetMapStringString 覆盖 Set 的边界：首次设置清除默认值、
+// nil map 的惰性分配、NoSplit 下逗号作为普通字符、空白与错误输入。
 func TestSetMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {
@@ -159,6 +163,8 @@ func TestSetMapStringString(t *testing.T) {
 	}
 }
 
+// TestEmptyMapStringString 验证 Empty() 只取决于 map 长度，
+// nil 与空 map 都视为空。
 func TestEmptyMapStringString(t *testing.T) {
 	var nilMap map[string]string
 	cases := []struct {

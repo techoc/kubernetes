@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil/promlint"
 )
 
+// TestLinter 验证 NewPromLinter 能识别典型规范问题（如 gauge 使用 _total 后缀）。
+// 例外清单中的指标不在单测覆盖，由 e2e 负责。
 func TestLinter(t *testing.T) {
 	var tests = []struct {
 		name   string
@@ -62,6 +64,7 @@ func TestLinter(t *testing.T) {
 	}
 }
 
+// TestMergeProblems 验证多个问题时合并为 "metric:text" 逗号分隔的稳定字符串。
 func TestMergeProblems(t *testing.T) {
 	problemOne := Problem{
 		Metric: "metric_one",
@@ -105,6 +108,8 @@ func TestMergeProblems(t *testing.T) {
 	}
 }
 
+// TestCheckUnusedExceptions 验证例外清单必须“确实有违规”：
+// 清单中存在但当前没有违规的指标会报错，促使清单随问题修复而清理。
 func TestCheckUnusedExceptions(t *testing.T) {
 	// Save original exceptionMetrics
 	origExceptions := exceptionMetrics

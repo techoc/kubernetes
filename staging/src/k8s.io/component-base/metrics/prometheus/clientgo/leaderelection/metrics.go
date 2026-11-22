@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package leaderelection 把 client-go leader election 的指标接入 legacyregistry。
+// 注册延迟到首次构造 LeaderMetric 时，避免在 feature gate 尚未生效前创建指标。
 package leaderelection
 
 import (
@@ -25,6 +27,7 @@ import (
 )
 
 var (
+	// leaderGauge 以 1/0 表示本实例当前是否为对应 lease 的持有者。
 	leaderGauge = k8smetrics.NewGaugeVec(&k8smetrics.GaugeOpts{
 		Name:           "leader_election_master_status",
 		StabilityLevel: k8smetrics.ALPHA,
@@ -33,6 +36,7 @@ var (
 	// A cumulative counter should be sufficient to get a rough ratio of slow path
 	// exercised given the leader election frequency is specified explicitly. So that
 	// to avoid the overhead to report a counter exercising fastpath.
+	// 慢路径计数器：按名称累计，用于估算慢路径比例；快路径不计数以省开销。
 	leaderSlowpathCounter = k8smetrics.NewCounterVec(&k8smetrics.CounterOpts{
 		Name:           "leader_election_slowpath_total",
 		StabilityLevel: k8smetrics.ALPHA,
@@ -50,6 +54,7 @@ func init() {
 	leaderelection.SetProvider(prometheusMetricsProvider{})
 }
 
+// prometheusMetricsProvider 实现 client-go 的 leader election 指标 provider。
 type prometheusMetricsProvider struct{}
 
 // register registers leaderelection metrics with the legacy registry. It is
@@ -62,24 +67,29 @@ func register() {
 	})
 }
 
+// NewLeaderMetric 返回绑定到上述指标的适配器，并确保指标已注册。
 func (prometheusMetricsProvider) NewLeaderMetric() leaderelection.LeaderMetric {
 	register()
 	return &leaderAdapter{gauge: leaderGauge, counter: leaderSlowpathCounter}
 }
 
+// leaderAdapter 把 client-go 的 LeaderMetric 回调映射到 gauge/counter。
 type leaderAdapter struct {
 	gauge   *k8smetrics.GaugeVec
 	counter *k8smetrics.CounterVec
 }
 
+// On 表示获得领导权。
 func (s *leaderAdapter) On(name string) {
 	s.gauge.WithLabelValues(name).Set(1.0)
 }
 
+// Off 表示失去领导权。
 func (s *leaderAdapter) Off(name string) {
 	s.gauge.WithLabelValues(name).Set(0.0)
 }
 
+// SlowpathExercised 记录一次慢路径续约。
 func (s *leaderAdapter) SlowpathExercised(name string) {
 	s.counter.WithLabelValues(name).Inc()
 }

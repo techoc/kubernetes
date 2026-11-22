@@ -27,5 +27,10 @@ limitations under the License.
 //
 // The "v1" package name is just a reminder that API compatibility rules apply,
 // not an indication of the stability of all features covered by it.
+//
+// Package v1 是 tracing 的配置 API。这里只保留一个版本，后续新增字段必须
+// 向后兼容；alpha/beta 字段可以存在，但默认值必须让特性保持关闭，
+// 这样未显式配置的组件升级后行为不变。
+// 包名中的 v1 只表示适用 API 兼容性规则，并不代表其中所有特性都已稳定。
 
 package v1

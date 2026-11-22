@@ -16,6 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main 演示如何通过 component-base 配置同时初始化 klog 与 slog：
+// 在 Go 1.21+ 上，日志配置会同时作用于标准库 slog。
 package main
 
 import (
@@ -41,18 +43,19 @@ import (
 var featureGate = featuregate.NewFeatureGate()
 
 func main() {
+	// 日志格式相关 feature gate 必须在注册 flag 之前加入，否则解析会失败。
 	runtime.Must(logsapi.AddFeatureGates(featureGate))
 	command := NewLoggerCommand()
 	code := cli.Run(command)
 	os.Exit(code)
 }
 
+// NewLoggerCommand 构造演示命令，注册日志 flag 与 feature gate flag。
 func NewLoggerCommand() *cobra.Command {
 	c := logsapi.NewLoggingConfiguration()
 	cmd := &cobra.Command{
 		Run: func(cmd *cobra.Command, args []string) {
-			// This configures the global logger in klog *and* slog, if compiled
-			// with Go >= 1.21.
+			// 该调用在 Go >= 1.21 时会同时配置 klog 与全局 slog logger。
 			logs.InitLogs()
 			if err := logsapi.ValidateAndApply(c, featureGate); err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -63,7 +66,7 @@ func NewLoggerCommand() *cobra.Command {
 				os.Exit(1)
 			}
 
-			// Produce some output. Special types used by Kubernetes work.
+			// 输出一些示例，展示 Kubernetes 特殊类型在 slog/klog 中的渲染方式。
 			podRef := klog.KObj(&metav1.ObjectMeta{Name: "some-pod", Namespace: "some-namespace"})
 			podRefs := klog.KObjSlice([]interface{}{
 				&metav1.ObjectMeta{Name: "some-pod", Namespace: "some-namespace"},
@@ -79,7 +82,7 @@ func NewLoggerCommand() *cobra.Command {
 		},
 	}
 	if err := logsapi.AddFeatureGates(featureGate); err != nil {
-		// Shouldn't happen.
+		// 正常情况下不会失败；重复注册才可能触发。
 		panic(err)
 	}
 	featureGate.AddFlag(cmd.Flags())

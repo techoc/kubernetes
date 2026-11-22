@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package prometheus sets the workqueue DefaultMetricsFactory to produce
+// prometheus metrics. To use this package, you just have to import it.
+//
+// Package prometheus 把 workqueue 的默认指标工厂替换为 Prometheus 实现；
+// 作为副作用导入（import _）即完成安装，无需调用方显式初始化。
 package workqueue
 
 import (
@@ -24,10 +29,10 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// Package prometheus sets the workqueue DefaultMetricsFactory to produce
-// prometheus metrics. To use this package, you just have to import it.
-
 // Metrics subsystem and keys used by the workqueue.
+//
+// 指标名与 client-go 约定的 key 一一对应；workqueue 只持有这些字符串，
+// 具体指标类型与 label 由本包决定。
 const (
 	WorkQueueSubsystem         = "workqueue"
 	DepthKey                   = "depth"
@@ -40,6 +45,7 @@ const (
 )
 
 var (
+	// depth 与其余指标一样按队列名打 label，便于区分不同控制器的工作队列。
 	depth = k8smetrics.NewGaugeVec(&k8smetrics.GaugeOpts{
 		Subsystem:      WorkQueueSubsystem,
 		Name:           DepthKey,
@@ -95,13 +101,18 @@ var (
 		Help:           "Total number of retries handled by workqueue",
 	}, []string{"name"})
 
+	// metrics 是注册时需要全部挂到 legacyregistry 的集合，
+	// 集中列出可避免新增指标时漏注册。
 	metrics = []k8smetrics.Registerable{
 		depth, adds, latency, workDuration, unfinished, longestRunningProcessor, retries,
 	}
 
+	// registerOnce 保证注册只执行一次：多个 workqueue 会并发调用 provider 工厂方法。
 	registerOnce sync.Once
 )
 
+// prometheusMetricsProvider 是 workqueue.MetricsProvider 的实现，
+// 每个方法创建/获取对应 workqueue 名称的指标句柄。
 type prometheusMetricsProvider struct {
 }
 
@@ -125,36 +136,43 @@ func register() {
 	})
 }
 
+// NewDepthMetric 返回给定队列的 depth gauge；调用前确保已完成注册。
 func (prometheusMetricsProvider) NewDepthMetric(name string) workqueue.GaugeMetric {
 	register()
 	return depth.WithLabelValues(name)
 }
 
+// NewAddsMetric 返回给定队列的入队计数 counter。
 func (prometheusMetricsProvider) NewAddsMetric(name string) workqueue.CounterMetric {
 	register()
 	return adds.WithLabelValues(name)
 }
 
+// NewLatencyMetric 返回条目在队列中等待时长的 histogram。
 func (prometheusMetricsProvider) NewLatencyMetric(name string) workqueue.HistogramMetric {
 	register()
 	return latency.WithLabelValues(name)
 }
 
+// NewWorkDurationMetric 返回处理单条目耗时的 histogram。
 func (prometheusMetricsProvider) NewWorkDurationMetric(name string) workqueue.HistogramMetric {
 	register()
 	return workDuration.WithLabelValues(name)
 }
 
+// NewUnfinishedWorkSecondsMetric 返回尚未被 work_duration 观测到的在途工作秒数。
 func (prometheusMetricsProvider) NewUnfinishedWorkSecondsMetric(name string) workqueue.SettableGaugeMetric {
 	register()
 	return unfinished.WithLabelValues(name)
 }
 
+// NewLongestRunningProcessorSecondsMetric 返回最长运行中处理器的持续秒数。
 func (prometheusMetricsProvider) NewLongestRunningProcessorSecondsMetric(name string) workqueue.SettableGaugeMetric {
 	register()
 	return longestRunningProcessor.WithLabelValues(name)
 }
 
+// NewRetriesMetric 返回给定队列的重试次数 counter。
 func (prometheusMetricsProvider) NewRetriesMetric(name string) workqueue.CounterMetric {
 	register()
 	return retries.WithLabelValues(name)

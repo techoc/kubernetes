@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package logrotation 实现按大小轮转、按时间清理的日志 writer，
+// 供 kube-log-runner 重定向容器日志时使用。
 package logrotation
 
 import (
@@ -25,12 +27,13 @@ import (
 	"time"
 )
 
+// timeLayout 是轮转后文件名中的时间戳格式，便于人工识别与清理时解析。
 const timeLayout string = "20060102-150405"
 
 type rotationFile struct {
-	// required, the max size of the log file in bytes, 0 means no rotation
+	// maxSize 是日志文件的最大字节数；0 表示不轮转。
 	maxSize int64
-	// required, the max age of the log file, 0 means no cleanup
+	// maxAge 是日志文件的最大保留时长；0 表示不清理。
 	maxAge        time.Duration
 	filePath      string
 	mut           sync.Mutex
@@ -40,6 +43,8 @@ type rotationFile struct {
 	flushInterval time.Duration
 }
 
+// Open 以追加方式打开（必要时创建）日志文件，并返回可轮转/清理的 writer。
+// maxSize 为 0 关闭轮转；maxAge 为 0 关闭清理；flushInterval 为 0 表示不主动 fsync。
 func Open(filePath string, flushInterval time.Duration, maxSize int64, maxAge time.Duration) (io.WriteCloser, error) {
 	w := &rotationFile{
 		filePath:      filePath,
@@ -57,6 +62,7 @@ func Open(filePath string, flushInterval time.Duration, maxSize int64, maxAge ti
 
 	w.lasSyncTime = time.Now()
 
+	// 以已有文件的当前大小作为起点，否则续写时轮转判断会偏小。
 	if w.maxSize > 0 {
 		info, err := os.Stat(w.filePath)
 		if err != nil {
@@ -68,7 +74,7 @@ func Open(filePath string, flushInterval time.Duration, maxSize int64, maxAge ti
 	return w, nil
 }
 
-// Write implements the io.Writer interface.
+// Write 实现 io.Writer。写操作串行化，并在需要时执行 fsync 与轮转。
 func (w *rotationFile) Write(p []byte) (n int, err error) {
 	w.mut.Lock()
 	defer w.mut.Unlock()
@@ -78,6 +84,7 @@ func (w *rotationFile) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 
+	// 按间隔 fsync，兼顾日志持久性与写放大；不能每条都 sync。
 	if w.flushInterval > 0 && time.Since(w.lasSyncTime) >= w.flushInterval {
 		err = w.file.Sync()
 		if err != nil {
@@ -89,7 +96,7 @@ func (w *rotationFile) Write(p []byte) (n int, err error) {
 	if w.maxSize > 0 {
 		w.currentSize += int64(len(p))
 
-		// if file size over maxsize rotate the log file
+		// 达到上限即轮转；轮转后新文件从 0 重新累计。
 		if w.currentSize >= w.maxSize {
 			err = w.rotate()
 			if err != nil {
@@ -101,15 +108,17 @@ func (w *rotationFile) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// rotate 把当前文件重命名为带时间戳的归档文件，并为后续写入创建新文件。
 func (w *rotationFile) rotate() error {
-	// Get the file extension
+	// 取扩展名，归档文件名形如 <basename>-<timestamp><ext>。
 	ext := filepath.Ext(w.filePath)
 
-	// Remove the extension from the filename
+	// 去掉扩展名，便于拼接时间戳。
 	pathWithoutExt := strings.TrimSuffix(w.filePath, ext)
 
 	rotateFilePath := pathWithoutExt + "-" + time.Now().Format(timeLayout) + ext
 
+	// 同一秒内多次触发轮转可能得到相同文件名；此时直接返回，避免覆盖。
 	if w.filePath == rotateFilePath {
 		return nil
 	}
@@ -131,6 +140,7 @@ func (w *rotationFile) rotate() error {
 
 	w.currentSize = 0
 
+	// 清理放到后台执行，避免阻塞日志写入路径。
 	if w.maxAge > 0 {
 		go func() {
 			err = w.clean(pathWithoutExt, ext)
@@ -144,6 +154,8 @@ func (w *rotationFile) rotate() error {
 // <basename>-<timestamp><ext>.
 // This should be safe enough to avoid false deletion.
 // This will work for multiple restarts of the same program.
+// clean 只删除文件名中时间戳可解析且修改时间早于 maxAge 的归档文件，
+// 从而避免误删同目录下的其他文件。
 func (w *rotationFile) clean(pathWithoutExt string, ext string) error {
 	ageTime := time.Now().Add(-w.maxAge)
 
@@ -158,7 +170,7 @@ func (w *rotationFile) clean(pathWithoutExt string, ext string) error {
 	err = nil
 	for _, v := range dir {
 		if strings.HasPrefix(v.Name(), basename) && strings.HasSuffix(v.Name(), ext) {
-			// Remove the prefix and suffix
+			// 去掉前缀和后缀，只留时间戳用于格式校验。
 			trimmed := strings.TrimPrefix(v.Name(), basename)
 			trimmed = strings.TrimSuffix(trimmed, ext)
 
@@ -167,14 +179,14 @@ func (w *rotationFile) clean(pathWithoutExt string, ext string) error {
 				info, errInfo := v.Info()
 				if errInfo != nil {
 					err = errInfo
-					// Ignore the error while continue with the next clenup
+					// 单个文件信息读取失败不阻断其余文件的清理。
 					continue
 				}
 
 				if ageTime.After(info.ModTime()) {
 					err = os.Remove(filepath.Join(directory, v.Name()))
 					if err != nil {
-						// Ignore the error while continue with the next clenup
+						// 单个文件删除失败同样继续处理后续文件。
 						continue
 					}
 				}
@@ -186,11 +198,12 @@ func (w *rotationFile) clean(pathWithoutExt string, ext string) error {
 	return err
 }
 
+// Close 先 fsync 再关闭文件，确保退出前缓冲数据落盘。
 func (w *rotationFile) Close() error {
 	w.mut.Lock()
 	defer w.mut.Unlock()
 
-	// Explicitly call file.Sync() to ensure data is written to disk
+	// 显式 Sync，保证数据写入磁盘。
 	err := w.file.Sync()
 	if err != nil {
 		return err

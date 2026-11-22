@@ -36,6 +36,7 @@ import (
 const vmoduleUsage = " (only works for the default text log format)"
 
 var (
+	// packageFlags 保存 klog flag 的定义，作为 AddFlags/AddGoFlags 注册的来源。
 	packageFlags = flag.NewFlagSet("logging", flag.ContinueOnError)
 
 	// Periodic flushing gets configured either via the global flag
@@ -44,14 +45,17 @@ var (
 )
 
 func init() {
+	// klog 只在初始化时暴露 flag；后续按需复制到不同 FlagSet。
 	klogflags.Init(packageFlags)
 	packageFlags.DurationVar(&logFlushFreq, logsapi.LogFlushFreqFlagName, logsapi.LogFlushFreqDefault, "Maximum number of seconds between log flushes")
 }
 
+// addFlagsOptions 收集 AddFlags 的可选项。
 type addFlagsOptions struct {
 	skipLoggingConfigurationFlags bool
 }
 
+// Option 是 AddFlags/AddGoFlags 的配置函数。
 type Option func(*addFlagsOptions)
 
 // SkipLoggingConfigurationFlags must be used as option for AddFlags when
@@ -65,6 +69,7 @@ func SkipLoggingConfigurationFlags() Option {
 
 // Options is an alias for LoggingConfiguration to comply with component-base
 // conventions.
+// 别名（而非新类型）使组件可以按习惯使用 logs.Options 而无需转换。
 type Options = logsapi.LoggingConfiguration
 
 // NewOptions is an alias for NewLoggingConfiguration.
@@ -96,8 +101,10 @@ func AddFlags(fs *pflag.FlagSet, opts ...Option) {
 			if o.skipLoggingConfigurationFlags {
 				return
 			}
+			// vmodule 仅 text 格式有效，提前在 usage 中说明以免误用。
 			pf.Usage += vmoduleUsage
 		}
+		// 不覆盖命令已显式注册的同名 flag。
 		if fs.Lookup(pf.Name) == nil {
 			fs.AddFlag(pf)
 		}
@@ -132,6 +139,7 @@ func AddGoFlags(fs *flag.FlagSet, opts ...Option) {
 			}
 			usage += vmoduleUsage
 		}
+		// 标准库 FlagSet 不支持 pflag 的类型元数据，只能复用底层 Value。
 		fs.Var(f.Value, f.Name, usage)
 	})
 }
@@ -141,6 +149,7 @@ type KlogWriter struct{}
 
 // Write implements the io.Writer interface.
 func (writer KlogWriter) Write(data []byte) (n int, err error) {
+	// 深度 1 跳过本包装层，使 caller 指向实际的 log.Printf 调用点。
 	klog.InfoDepth(1, string(data))
 	return len(data), nil
 }
@@ -159,6 +168,7 @@ func (writer KlogWriter) Write(data []byte) (n int, err error) {
 //     with Options and call Options.ValidateAndApply with the FeatureGate;
 //     k8s.io/component-base/logs/example/cmd demonstrates how to do that
 func InitLogs() {
+	// 让标准库 log 的输出进入 klog，统一格式与级别。
 	log.SetOutput(KlogWriter{})
 	log.SetFlags(0)
 
@@ -187,6 +197,7 @@ func NewLogger(prefix string) *log.Logger {
 // GlogSetter modifies the verbosity threshold for the entire program.
 // Some components have HTTP-based APIs for invoking this at runtime.
 func GlogSetter(val string) (string, error) {
+	// 先解析为 uint32 以便回调使用，再交给 klog.Level 做实际校验。
 	v, err := strconv.ParseUint(val, 10, 32)
 	if err != nil {
 		return "", err
@@ -197,6 +208,7 @@ func GlogSetter(val string) (string, error) {
 		return "", fmt.Errorf("failed set klog.logging.verbosity %s: %v", val, err)
 	}
 
+	// 同步通知已注册的 logger 实现（如 zapr），使动态调级对所有输出生效。
 	setverbositylevel.Mutex.Lock()
 	defer setverbositylevel.Mutex.Unlock()
 	for _, cb := range setverbositylevel.Callbacks {

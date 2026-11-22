@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main 是 component-base/logs 的可运行示例：
+// 演示如何通过 cli.Run 串联 feature gate、日志配置 flag 与 contextual logging。
 package main
 
 import (
@@ -37,6 +39,8 @@ import (
 
 var featureGate = featuregate.NewFeatureGate()
 
+// main 与真实组件一致：先注册特性门控，再交给 cli.Run 统一处理
+// flag 解析、日志初始化和信号/退出码转换。
 func main() {
 	runtime.Must(logsapi.AddFeatureGates(featureGate))
 	command := NewLoggerCommand()
@@ -44,6 +48,9 @@ func main() {
 	os.Exit(code)
 }
 
+// NewLoggerCommand 构造示例命令。
+// 日志配置与 feature gate 的 flag 在构造时注册，实际生效则在 Run 中调用
+// ValidateAndApply 完成，从而保证解析完成后再落配置。
 func NewLoggerCommand() *cobra.Command {
 	c := logsapi.NewLoggingConfiguration()
 	cmd := &cobra.Command{
@@ -59,6 +66,7 @@ func NewLoggerCommand() *cobra.Command {
 			}
 
 			// Initialize contextual logging.
+			// 命名 logger 并附加固定键值，展示如何通过 context 传递，而非依赖全局 logger。
 			logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "example"), "foo", "bar")
 			ctx := klog.NewContext(context.Background(), logger)
 

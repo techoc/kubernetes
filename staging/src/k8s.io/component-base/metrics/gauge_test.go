@@ -27,6 +27,8 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
+// TestGauge 以 1.15 alpha 为当前版本，验证标量 Gauge 在
+// 未弃用/弃用/隐藏三类状态下的可见性与 HELP 文本，并确认 Set 后采集值正确。
 func TestGauge(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -174,6 +176,7 @@ func TestGauge(t *testing.T) {
 			}
 
 			// let's increment the counter and verify that the metric still works
+			// 虽然注释沿用了 counter 的说法，这里实际验证 Gauge 的 Set 覆盖语义。
 			c.Set(100)
 			c.Set(101)
 			expected := 101
@@ -190,6 +193,8 @@ func TestGauge(t *testing.T) {
 	}
 }
 
+// TestGaugeVec 验证带标签的 GaugeVec：可见性规则与标量 Gauge 相同，
+// 且不同标签组合会生成独立的指标序列。
 func TestGaugeVec(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -355,6 +360,8 @@ func TestGaugeVec(t *testing.T) {
 	}
 }
 
+// TestGaugeFunc 验证由回调函数驱动值的 GaugeFunc：隐藏指标不会被初始化，
+// 回调只在采集时调用，且 HELP/TYPE 输出与普通 Gauge 一致。
 func TestGaugeFunc(t *testing.T) {
 	version1_15Alpha1 := apimachineryversion.Info{
 		Major:      "1",
@@ -516,6 +523,8 @@ namespace_subsystem_metric_deprecated 1
 	}
 }
 
+// TestGaugeWithLabelValueAllowList 验证标签值白名单：未在允许列表中的值会被替换为
+// "unexpected" 占位符，从而限制高基数标签对指标规模的冲击。
 func TestGaugeWithLabelValueAllowList(t *testing.T) {
 	labelAllowValues := map[string]string{
 		"namespace_subsystem_metric_allowlist_test,label_a": "allowed",
@@ -594,6 +603,8 @@ func TestGaugeWithLabelValueAllowList(t *testing.T) {
 	}
 }
 
+// TestGaugeVecDeleteLabelValues 验证 DeleteLabelValues 的返回值与删除效果，
+// 并覆盖隐藏指标下删除不生效的边界情况。
 func TestGaugeVecDeleteLabelValues(t *testing.T) {
 	version := apimachineryversion.Info{
 		Major:      "1",
@@ -781,6 +792,8 @@ func TestGaugeVecDeleteLabelValues(t *testing.T) {
 	}
 }
 
+// TestGaugeVecDeleteLabelValuesChecked 是 DeleteLabelValues 的带错误返回版本，
+// 行为应完全一致，同时始终返回 nil error。
 func TestGaugeVecDeleteLabelValuesChecked(t *testing.T) {
 	version := apimachineryversion.Info{
 		Major:      "1",

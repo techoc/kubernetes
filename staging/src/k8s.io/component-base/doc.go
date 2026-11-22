@@ -14,4 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package componentbase 提供 Kubernetes 各控制面组件共用的基础库：
+// 命令行 flag 解析、日志、metrics、tracing、feature gate 与版本兼容性处理。
+// 各组件通过 staging 目录下的子包引用这些能力，以保持行为一致。
 package componentbase
