@@ -15,4 +15,8 @@ limitations under the License.
 */
 
 // Package v2 contains definition of kms-plugin's gRPC service.
+//
+// Package v2 定义 KMS v2 插件的 gRPC 服务（由 api.proto 生成）。
+// 相比 v1，v2 增加了 Status 健康状态轮询、key ID 与 annotations 字段，
+// 支持 apiserver 判断数据是否因密钥轮换而过期（staleness）。
 package v2

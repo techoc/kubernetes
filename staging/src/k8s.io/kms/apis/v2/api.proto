@@ -21,70 +21,97 @@ package v2;
 option go_package = "k8s.io/kms/apis/v2";
 
 // This service defines the public APIs for remote KMS provider.
+// KeyManagementService 定义 KMS v2 提供者对外的 gRPC 服务。
 service KeyManagementService {
     // this API is meant to be polled
+    // Status RPC：供 apiserver 定期轮询，获取插件健康状态与当前写入密钥。
     rpc Status(StatusRequest) returns (StatusResponse) {}
 
     // Execute decryption operation in KMS provider.
+    // Decrypt RPC：在 KMS 提供者中执行解密操作。
     rpc Decrypt(DecryptRequest) returns (DecryptResponse) {}
     // Execute encryption operation in KMS provider.
+    // Encrypt RPC：在 KMS 提供者中执行加密操作。
     rpc Encrypt(EncryptRequest) returns (EncryptResponse) {}
 }
 
+// StatusRequest 是状态查询请求，当前为空消息（无需参数）。
 message StatusRequest {}
 
+// StatusResponse 返回插件的版本、健康状态与当前写入密钥，用于判断数据是否过期。
 message StatusResponse {
     // Version of the KMS gRPC plugin API. Must equal v2 to v2beta1 (v2 is recommended, but both are equivalent).
+    // version 是 KMS gRPC API 版本，取 v2 或 v2beta1（推荐 v2，二者等价）。
     string version = 1;
     // Any value other than "ok" is failing healthz.  On failure, the associated API server healthz endpoint will contain this value as part of the error message.
+    // healthz 为 "ok" 表示健康；其他值均视为健康检查失败，并会出现在 apiserver 的 healthz 错误信息中。
     string healthz = 2;
     // the current write key, used to determine staleness of data updated via value.Transformer.TransformFromStorage.
     // keyID must satisfy the following constraints:
     // 1. The keyID is not empty.
     // 2. The size of keyID is less than 1 kB.
+    // key_id 是当前写入密钥，用于判断经 TransformFromStorage 读取的数据是否已过期（需要重写）。
+    // 约束：非空，且大小小于 1 kB。
     string key_id = 3;
 }
 
+// DecryptRequest 是解密请求：携带密文、请求 UID、加密时的 key ID 与 annotations。
 message DecryptRequest {
     // The data to be decrypted.
+    // ciphertext 是待解密的密文。
     bytes ciphertext = 1;
     // UID is a unique identifier for the request.
+    // uid 是请求唯一标识，便于插件侧追踪与幂等处理。
     string uid = 2;
     // The keyID that was provided to the apiserver during encryption.
     // This represents the KMS KEK that was used to encrypt the data.
+    // key_id 是加密时返回给 apiserver 的密钥标识，即实际用于加密数据的 KMS KEK。
     string key_id = 3;
     // Additional metadata that was sent by the KMS plugin during encryption.
+    // annotations 是加密时由插件附带并随密文一起存储的元数据。
     map<string, bytes> annotations = 4;
 }
 
+// DecryptResponse 是解密响应，包含还原后的明文。
 message DecryptResponse {
     // The decrypted data.
+    // plaintext 是解密得到的明文字节。
     bytes plaintext = 1;
 }
 
+// EncryptRequest 是加密请求：携带待加密明文与请求 UID。
 message EncryptRequest {
     // The data to be encrypted.
+    // plaintext 是待加密的明文字节。
     bytes plaintext = 1;
     // UID is a unique identifier for the request.
+    // uid 是请求唯一标识。
     string uid = 2;
 }
 
+// EncryptResponse 是加密响应，包含密文、key ID 与随密文存储的 annotations。
 message EncryptResponse {
     // The encrypted data.
     // ciphertext must satisfy the following constraints:  
     // 1. The ciphertext is not empty.  
     // 2. The ciphertext is less than 1 kB.
+    // ciphertext 是加密后的密文，约束：非空且小于 1 kB。
     bytes ciphertext = 1;
     // The KMS key ID used to encrypt the data. This must always refer to the KMS KEK and not any local KEKs that may be in use.
     // This can be used to inform staleness of data updated via value.Transformer.TransformFromStorage.
     // keyID must satisfy the following constraints:
     // 1. The keyID is not empty.
     // 2. The size of keyID is less than 1 kB.
+    // key_id 是加密使用的 KMS KEK 标识（不能是本地 KEK），可用于判断数据存储是否过期。
+    // 约束：非空且小于 1 kB。
     string key_id = 2;
     // Additional metadata to be stored with the encrypted data.
     // This data is stored in plaintext in etcd. KMS plugin implementations are responsible for pre-encrypting any sensitive data.
     // Annotations must satisfy the following constraints:
     //  1. Annotation key must be a fully qualified domain name that conforms to the definition in DNS (RFC 1123).
     //  2. The size of annotations keys + values is less than 32 kB.
+    // annotations 是随密文存储的附加元数据，在 etcd 中以明文保存，
+    // 因此敏感数据必须由插件自行预先加密。
+    // 约束：key 必须是符合 RFC 1123 的完全限定域名；所有 key+value 总大小小于 32 kB。
     map<string, bytes> annotations = 3;
 }

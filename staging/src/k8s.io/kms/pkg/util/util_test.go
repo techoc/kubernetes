@@ -21,7 +21,9 @@ import (
 	"testing"
 )
 
+// TestParseEndpoint 验证 ParseEndpoint 能正确提取普通 socket 路径与 Linux 抽象命名空间地址。
 func TestParseEndpoint(t *testing.T) {
+	// 表驱动：desc 用例名，endpoint 输入，want 期望返回的路径。
 	testCases := []struct {
 		desc     string
 		endpoint string
@@ -52,7 +54,9 @@ func TestParseEndpoint(t *testing.T) {
 	}
 }
 
+// TestParseEndpointError 验证非法端点（空字符串、非 unix scheme）会被拒绝并返回预期错误。
 func TestParseEndpointError(t *testing.T) {
+	// 表驱动：desc 用例名，endpoint 输入，wantErr 期望错误文本片段。
 	testCases := []struct {
 		desc     string
 		endpoint string
