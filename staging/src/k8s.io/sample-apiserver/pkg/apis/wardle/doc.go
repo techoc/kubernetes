@@ -18,4 +18,5 @@ limitations under the License.
 // +groupName=wardle.example.com
 
 // Package wardle is the internal version of the API.
+// 本包只放内部类型，供外部版本转换时复用。
 package wardle

@@ -22,7 +22,9 @@ import (
 )
 
 // WantsInternalWardleInformerFactory defines a function which sets InformerFactory for admission plugins that need it
+// 需要 informer 的插件实现它，初始化器据此注入共享工厂。
 type WantsInternalWardleInformerFactory interface {
 	SetInternalWardleInformerFactory(informers.SharedInformerFactory)
+	// 同时要求 Validate，确保工厂在插件开始工作前已经就绪。
 	admission.InitializationValidator
 }

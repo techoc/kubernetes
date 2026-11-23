@@ -26,7 +26,9 @@ import (
 )
 
 // NewREST returns a RESTStorage object that will work against API services.
+// 存储层只认内部类型，外部版本在 HTTP 层完成转换。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*registry.REST, error) {
+	// 同一份策略同时负责创建、更新和删除，校验规则不会因操作而异。
 	strategy := NewStrategy(scheme)
 
 	store := &genericregistry.Store{
@@ -40,12 +42,15 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*reg
 		UpdateStrategy: strategy,
 		DeleteStrategy: strategy,
 
+		// 默认转换器只给 name 和创建时间，示例够用，要加列就替换掉它。
 		// TODO: define table converter that exposes more than name/creation timestamp
 		TableConvertor: rest.NewDefaultTableConvertor(wardle.Resource("flunders")),
 	}
+	// AttrFunc 提供命名空间/名称属性，供策略判断和索引使用。
 	options := &generic.StoreOptions{RESTOptions: optsGetter, AttrFunc: GetAttrs}
 	if err := store.CompleteWithOptions(options); err != nil {
 		return nil, err
 	}
+	// 用公共 REST 包装层承载 Store，新增资源时只需换掉策略与类型。
 	return &registry.REST{Store: store}, nil
 }

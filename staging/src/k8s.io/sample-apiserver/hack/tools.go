@@ -17,6 +17,8 @@ limitations under the License.
 */
 
 // This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 本文件带 tools 构建标签，只在构建脚本里生效，不会进入正式二进制。
 package tools
 
+// 空白导入让 code-generator 保留在依赖图里，便于生成器可复现地运行。
 import _ "k8s.io/code-generator"

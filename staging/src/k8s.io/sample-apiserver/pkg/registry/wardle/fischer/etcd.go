@@ -26,6 +26,7 @@ import (
 )
 
 // NewREST returns a RESTStorage object that will work against API services.
+// 用通用 Store 接上策略与后端选项，启动时的选项校验错误在这里就暴露出来。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*registry.REST, error) {
 	strategy := NewStrategy(scheme)
 
@@ -41,8 +42,10 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*reg
 		DeleteStrategy: strategy,
 
 		// TODO: define table converter that exposes more than name/creation timestamp
+		// 默认 converter 只够 kubectl get 显示基本信息，够示例演示用。
 		TableConvertor: rest.NewDefaultTableConvertor(wardle.Resource("fischers")),
 	}
+	// AttrFunc 让后端按标签和字段过滤，GET 列表不必先反序列化全部对象。
 	options := &generic.StoreOptions{RESTOptions: optsGetter, AttrFunc: GetAttrs}
 	if err := store.CompleteWithOptions(options); err != nil {
 		return nil, err

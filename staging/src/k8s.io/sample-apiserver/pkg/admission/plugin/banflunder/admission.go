@@ -32,6 +32,7 @@ import (
 )
 
 // Register registers a plugin
+// 插件名需和配置里的名字一致；config 在这里被忽略，因为禁用名单来自 Fischer 对象而非插件配置。
 func Register(plugins *admission.Plugins) {
 	plugins.Register("BanFlunder", func(config io.Reader) (admission.Interface, error) {
 		return New()
@@ -39,16 +40,19 @@ func Register(plugins *admission.Plugins) {
 }
 
 // DisallowFlunder is a ban flunder admission plugin
+// 内嵌 Handler 复用准入链的标准处理，lister 只读本地缓存，不直接打 apiserver。
 type DisallowFlunder struct {
 	*admission.Handler
 	lister listers.FischerLister
 }
 
+// 编译期断言：缺了注入接口时，初始化器不会给插件装 lister，准入时会一直等不到就绪。
 var _ = wardleinitializer.WantsInternalWardleInformerFactory(&DisallowFlunder{})
 
 // Admit ensures that the object in-flight is of kind Flunder.
 // In addition checks that the Name is not on the banned list.
 // The list is stored in Fischers API objects.
+// 非 Flunder 直接放行；缓存没同步前宁可拒绝，也不能因名单为空就放行后补判。
 func (d *DisallowFlunder) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	// we are only interested in flunders
 	if a.GetKind().GroupKind() != wardle.Kind("Flunder") {
@@ -86,12 +90,14 @@ func (d *DisallowFlunder) Admit(ctx context.Context, a admission.Attributes, o a
 
 // SetInternalWardleInformerFactory gets Lister from SharedInformerFactory.
 // The lister knows how to lists Fischers.
+// 就绪条件绑定 HasSynced：没同步完的缓存是空的，拿它判禁用名单会漏放。
 func (d *DisallowFlunder) SetInternalWardleInformerFactory(f informers.SharedInformerFactory) {
 	d.lister = f.Wardle().V1alpha1().Fischers().Lister()
 	d.SetReadyFunc(f.Wardle().V1alpha1().Fischers().Informer().HasSynced)
 }
 
 // ValidateInitialization checks whether the plugin was correctly initialized.
+// 由初始化链在启动时调用，早失败好过运行时对每个请求返回同样的错误。
 func (d *DisallowFlunder) ValidateInitialization() error {
 	if d.lister == nil {
 		return fmt.Errorf("missing fischer lister")
@@ -100,6 +106,7 @@ func (d *DisallowFlunder) ValidateInitialization() error {
 }
 
 // New creates a new ban flunder admission plugin
+// 只拦创建：已存在的 Flunder 名字不因后来新增禁用项而被追溯处理。
 func New() (*DisallowFlunder, error) {
 	return &DisallowFlunder{
 		Handler: admission.NewHandler(admission.Create),

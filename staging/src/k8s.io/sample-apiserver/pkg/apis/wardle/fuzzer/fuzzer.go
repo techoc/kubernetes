@@ -24,14 +24,18 @@ import (
 )
 
 // Funcs returns the fuzzer functions for the apps api group.
+// 随机值必须落在校验规则之内，否则 round-trip 测试会因对象本身非法而失败。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
+		// 先让 randfill 填原始值，再修正成互斥引用与匹配的 referenceType。
 		func(s *wardle.FlunderSpec, c randfill.Continue) {
 			c.FillNoCustom(s) // fuzz self without calling this function again
 
+			// 两个引用字段不能同时有值，保留 FlunderReference、清掉另一个。
 			if len(s.FlunderReference) != 0 && len(s.FischerReference) != 0 {
 				s.FischerReference = ""
 			}
+			// 根据保留下来的引用字段反推类型；两者都为空时类型也置空。
 			if len(s.FlunderReference) != 0 {
 				s.ReferenceType = wardle.FlunderReferenceType
 			} else if len(s.FischerReference) != 0 {

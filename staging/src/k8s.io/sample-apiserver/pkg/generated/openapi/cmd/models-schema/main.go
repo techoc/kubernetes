@@ -27,6 +27,7 @@ import (
 )
 
 // Outputs openAPI schema JSON containing the schema definitions in zz_generated.openapi.go.
+// 输出走 stdout，便于生成脚本直接重定向到文件。
 func main() {
 	err := output()
 	if err != nil {
@@ -35,6 +36,7 @@ func main() {
 	}
 }
 
+// 集中生成 schema 而不是逐类型手写，保证定义和生成代码同步。
 func output() error {
 	refFunc := func(name string) spec.Ref {
 		return spec.MustCreateRef(fmt.Sprintf("#/definitions/%s", name))
@@ -47,6 +49,7 @@ func output() error {
 		// This is done by looking up an extension that marks the embedded v2
 		// schema, and, if the v2 schema is found, make it the resulting schema for
 		// the type.
+		// 有的定义同时带 v3 和 v2，优先取 v2 以免下游拿到混合版本。
 		if schema, ok := v.Schema.Extensions[common.ExtensionV2Schema]; ok {
 			if v2Schema, isOpenAPISchema := schema.(spec.Schema); isOpenAPISchema {
 				schemaDefs[k] = v2Schema

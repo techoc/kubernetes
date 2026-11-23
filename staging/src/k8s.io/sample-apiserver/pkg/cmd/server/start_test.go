@@ -25,7 +25,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// 覆盖映射的等价、回退、封顶与无映射四种情况。
 func TestWardleEmulationVersionToKubeEmulationVersion(t *testing.T) {
+	// 期望值基于测试专用二进制版本推导，避免把当前版本号写死在用例里。
 	defaultKubeEffectiveVersion := compatibility.DefaultKubeEffectiveVersionForTest()
 
 	testCases := []struct {
@@ -54,11 +56,13 @@ func TestWardleEmulationVersionToKubeEmulationVersion(t *testing.T) {
 			expectedKubeEmulationVer: defaultKubeEffectiveVersion.BinaryVersion(),
 		},
 		{
+			// 主版本不匹配，期望值为 nil。
 			desc:               "no mapping",
 			wardleEmulationVer: version.MajorMinor(2, 10),
 		},
 	}
 
+	// 用子测试区分版本组合，失败时直接定位到具体场景。
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			mappedKubeEmulationVer := WardleVersionToKubeVersion(tc.wardleEmulationVer)

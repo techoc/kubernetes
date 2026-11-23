@@ -25,9 +25,11 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+// 集中安装内部版本和外部版本，调用方无需知道各版本包的存在。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(wardle.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	// v1beta1 排在前面：发现和默认编码都用第一个版本，示例里它更新。
 	utilruntime.Must(scheme.SetVersionPriority(v1beta1.SchemeGroupVersion, v1alpha1.SchemeGroupVersion))
 }
