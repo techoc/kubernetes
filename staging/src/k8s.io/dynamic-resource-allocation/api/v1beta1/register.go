@@ -21,6 +21,8 @@ import (
 )
 
 var (
+	// localSchemeBuilder 复用 v1beta1 API 自带的 SchemeBuilder 承载转换函数注册；
+	// AddToScheme 是构造器入口，调用后 scheme 即可使用这些转换函数。
 	localSchemeBuilder = &v1beta1.SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )

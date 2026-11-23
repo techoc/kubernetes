@@ -29,10 +29,14 @@ import (
 	resourceapi "k8s.io/api/resource/v1"
 )
 
+// TestGetPCIeRootAttributePCIBusID 表驱动测试 GetPCIeRootAttributeByPCIBusID。
+// 输入为 PCI BDF 地址及模拟的 sysfs 符号链接，覆盖合法链接、空/非法地址、不存在的设备、
+// 链接目标前缀错误与后缀错误等场景；断言返回的字符串属性或错误信息符合预期。
 func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 	pcieRoot := "pci0000:00"
 	intermediateBusID := "0000:01:00.0"
 	pciBusID := "0000:02:00.0"
+	// 合法输入下期望得到 pci0000:00 的字符串属性。
 	expectedAttribute := DeviceAttribute{
 		Name:  StandardDeviceAttributePCIeRoot,
 		Value: resourceapi.DeviceAttribute{StringValue: ptr.To(pcieRoot)},
@@ -114,12 +118,15 @@ func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// per docs, the testing package ensures cleanup, so no need to do that ourselves
+			// 每个用例使用独立临时目录，由 setup 构造设备文件与 bus/pci/devices 下的符号链接。
 			testMachinePath := t.TempDir()
 			if test.testMachineSetup != nil {
 				test.testMachineSetup(t, testMachinePath)
 			}
+			// 把被测函数指向模拟的 sysfs 根目录。
 			got, err := GetPCIeRootAttributeByPCIBusID(test.address, WithFSFromRoot(testMachinePath))
 			if test.expectsError {
+				// 错误路径：断言确实出错且错误信息包含预期子串。
 				if err == nil {
 					t.Errorf("Expected error but got none")
 					return
@@ -130,6 +137,7 @@ func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 				}
 				return
 			}
+			// 成功路径：断言无错误且返回属性与期望一致。
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -140,8 +148,12 @@ func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 	}
 }
 
+// TestGetPCIBusIDAttribute 表驱动测试 GetPCIBusIDAttribute：
+// 该函数只做 BDF 格式校验并原样封装为字符串属性，故用例覆盖合法地址、空地址与非法格式；
+// 断言成功时返回属性正确，失败时错误信息包含预期子串。
 func TestGetPCIBusIDAttribute(t *testing.T) {
 	pciBusID := "0000:02:00.0"
+	// 合法输入下期望原样返回该 BDF 字符串属性。
 	expectedAttribute := DeviceAttribute{
 		Name:  StandardDeviceAttributePCIBusID,
 		Value: resourceapi.DeviceAttribute{StringValue: ptr.To(pciBusID)},
@@ -175,6 +187,7 @@ func TestGetPCIBusIDAttribute(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := GetPCIBusIDAttribute(test.address)
 			if test.expectsError {
+				// 错误路径：断言出错且错误信息包含预期子串。
 				if err == nil {
 					t.Errorf("Expected error but got none")
 					return
@@ -185,6 +198,7 @@ func TestGetPCIBusIDAttribute(t *testing.T) {
 				}
 				return
 			}
+			// 成功路径：断言返回的 BDF 字符串属性与期望一致。
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -195,6 +209,7 @@ func TestGetPCIBusIDAttribute(t *testing.T) {
 	}
 }
 
+// mkDirAll 是测试辅助函数：递归创建目录，失败即终止测试。
 func mkDirAll(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0755); err != nil {
@@ -202,6 +217,7 @@ func mkDirAll(t *testing.T, path string) {
 	}
 }
 
+// touchFile 是测试辅助函数：先创建父目录，再创建一个空文件，失败即终止测试。
 func touchFile(t *testing.T, path string) {
 	t.Helper()
 	mkDirAll(t, filepath.Dir(path))
@@ -210,6 +226,7 @@ func touchFile(t *testing.T, path string) {
 	}
 }
 
+// createSymlink 是测试辅助函数：创建从 link 指向 target 的符号链接，失败即终止测试。
 func createSymlink(t *testing.T, target, link string) {
 	t.Helper()
 	if err := os.Symlink(target, link); err != nil {

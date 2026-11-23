@@ -23,4 +23,10 @@ limitations under the License.
 // [ErrNotImplemented] error. It would be necessary to convert the patch or
 // apply configuration, which is close to impossible (patch) and more code
 // (apply configuration).
+//
+// client 包在 client-go 之上提供一层包装，使调用方始终使用最新的
+// resource.k8s.io API 类型；底层会在最新类型与 apiserver 实际支持的版本之间转换。
+//
+// Patch 与 Server-Side Apply 不受支持，会返回 [ErrNotImplemented]：
+// 前者需要跨版本转换补丁内容，几乎无法实现；后者则需要额外代码转换 apply 配置。
 package client

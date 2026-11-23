@@ -30,25 +30,35 @@ import (
 
 // ExtendedResourceCache maintains a global cache of extended resource to device class mappings,
 // based on informer events. For that it implements the cache.ResourceEventHandler interface.
+// ExtendedResourceCache 基于 informer 事件维护“扩展资源名 → DeviceClass”的全局缓存，
+// 为此实现了 cache.ResourceEventHandler 接口，可注册为 DeviceClass 事件的处理器。
 type ExtendedResourceCache struct {
+	// logger 用于记录日志，handlers 是缓存处理后需要依次通知的附加事件处理器。
 	logger   klog.Logger
 	handlers []cache.ResourceEventHandler
 
+	// mutex 保护下面两个映射的并发读写。
 	mutex sync.RWMutex
 	// resourceName2class maps extended resource name to device class
+	// resourceName2class 保存扩展资源名到 DeviceClass 的正向映射。
 	resourceName2class map[v1.ResourceName]*resourceapi.DeviceClass
 	// class2ResourceName maps device class name to extended resource name
+	// class2ResourceName 保存 DeviceClass 名称到显式扩展资源名的反向映射。
 	class2ResourceName map[string]string
 }
 
+// 编译期断言：ExtendedResourceCache 必须实现 cache.ResourceEventHandler 接口。
 var _ cache.ResourceEventHandler = &ExtendedResourceCache{}
 
 // NewExtendedResourceCache creates a new ExtendedResourceCache instance. The caller
 // is responsible for registering the instance as a handler of DeviceClass events.
 //
 // Additional event handlers may be registered here or via AddEventHandler.
+// NewExtendedResourceCache 创建一个缓存实例并初始化两个映射；调用方需负责把它注册为 DeviceClass 事件处理器。
+// 附加事件处理器可在此处传入，也可随后通过 AddEventHandler 注册。
 func NewExtendedResourceCache(logger klog.Logger, handlers ...cache.ResourceEventHandler) *ExtendedResourceCache {
 	cache := &ExtendedResourceCache{
+		// 保存日志器与初始处理器列表，并初始化双向映射。
 		logger:             logger,
 		handlers:           handlers,
 		resourceName2class: make(map[v1.ResourceName]*resourceapi.DeviceClass),
@@ -65,6 +75,8 @@ func NewExtendedResourceCache(logger klog.Logger, handlers ...cache.ResourceEven
 //
 // Not thread-safe, must be called *before* adding the cache itself to an
 // informer.
+// AddEventHandler 追加一个在缓存处理完事件后被调用的处理器；多个处理器按注册顺序调用，
+// 处理器内可调用 GetDeviceClass。该方法非线程安全，必须在把缓存注册到 informer 之前调用。
 func (c *ExtendedResourceCache) AddEventHandler(handler cache.ResourceEventHandler) {
 	c.handlers = append(c.handlers, handler)
 }
@@ -74,10 +86,14 @@ func (c *ExtendedResourceCache) AddEventHandler(handler cache.ResourceEventHandl
 //
 // This (and only this) method may be called on a nil ExtendedResourceCache. The nil
 // instance always returns nil.
+// GetDeviceClass 按扩展资源名返回对应的 DeviceClass，找不到时返回 nil。
+// 这是唯一可在 nil 缓存实例上调用的方法：nil 实例恒返回 nil。
 func (c *ExtendedResourceCache) GetDeviceClass(resourceName v1.ResourceName) *resourceapi.DeviceClass {
+	// nil 接收者保护，便于调用方无条件使用缓存实例。
 	if c == nil {
 		return nil
 	}
+	// 读操作加读锁，支持并发读取。
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 	return c.resourceName2class[resourceName]
@@ -85,10 +101,12 @@ func (c *ExtendedResourceCache) GetDeviceClass(resourceName v1.ResourceName) *re
 
 // GetExtendedResource returns the extended resource name for the given device class name.
 // Returns empty string if the class name is not found in the cache.
+// GetExtendedResource 按 DeviceClass 名称返回其显式扩展资源名，找不到（或接收者为 nil）时返回空字符串。
 func (c *ExtendedResourceCache) GetExtendedResource(className string) string {
 	if c == nil {
 		return ""
 	}
+	// 读反向映射同样需要读锁。
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -96,23 +114,29 @@ func (c *ExtendedResourceCache) GetExtendedResource(className string) string {
 }
 
 // OnAdd handles the addition of a new device class.
+// OnAdd 处理 DeviceClass 新增事件：先同步两张映射，再按注册顺序通知附加处理器。
 func (c *ExtendedResourceCache) OnAdd(obj interface{}, isInInitialList bool) {
+	// 类型断言失败时记录错误并忽略该事件。
 	deviceClass, ok := obj.(*resourceapi.DeviceClass)
 	if !ok {
 		utilruntime.HandleErrorWithLogger(c.logger, nil, "Expected DeviceClass", "actual", fmt.Sprintf("%T", obj))
 		return
 	}
 	c.logger.V(5).Info("DeviceClass added", "deviceClass", klog.KObj(deviceClass))
+	// 新增时无需清理旧映射，传入 nil 作为旧对象。
 	c.updateResourceName2class(deviceClass, nil)
 	c.updateClass2ResourceName(deviceClass)
 
+	// 缓存更新完成后再通知附加处理器，保证其中可查到最新映射。
 	for _, handler := range c.handlers {
 		handler.OnAdd(obj, isInInitialList)
 	}
 }
 
 // OnUpdate handles updates to an existing device class.
+// OnUpdate 处理 DeviceClass 更新事件：用新旧对象同步映射（旧对象用于清理已变更的映射），再通知附加处理器。
 func (c *ExtendedResourceCache) OnUpdate(oldObj, newObj interface{}) {
+	// 新旧对象都必须是 DeviceClass，否则记录错误并忽略。
 	deviceClass, ok := newObj.(*resourceapi.DeviceClass)
 	if !ok {
 		utilruntime.HandleErrorWithLogger(c.logger, nil, "Expected DeviceClass", "actual", fmt.Sprintf("%T", newObj))
@@ -124,6 +148,7 @@ func (c *ExtendedResourceCache) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 	c.logger.V(5).Info("DeviceClass updated", "deviceClass", klog.KObj(deviceClass))
+	// 先按旧对象清理、再按新对象写入，保证映射变更原子生效。
 	c.updateResourceName2class(deviceClass, oldDeviceClass)
 	c.updateClass2ResourceName(deviceClass)
 
@@ -133,7 +158,9 @@ func (c *ExtendedResourceCache) OnUpdate(oldObj, newObj interface{}) {
 }
 
 // OnDelete handles deletion of a device class.
+// OnDelete 处理 DeviceClass 删除事件：先从两张映射中移除相关条目，再通知附加处理器。
 func (c *ExtendedResourceCache) OnDelete(obj interface{}) {
+	// informer 可能以墓碑对象交付删除事件，这里取出其中的真实对象。
 	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 		obj = tombstone.Obj
 	}
@@ -154,6 +181,8 @@ func (c *ExtendedResourceCache) OnDelete(obj interface{}) {
 // updateResourceName2class updates the cache with the device class mapping.
 // It first removes any existing mappings for this device class to handle
 // ExtendedResourceName changes, then adds the new mappings.
+// updateResourceName2class 更新“扩展资源名 → DeviceClass”映射：先清理旧对象对应的映射以应对扩展资源名变更，
+// 再写入新映射。若多个类声明同一扩展资源名，则优先创建时间更新者，时间相同取名称较小者。
 func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDeviceClass *resourceapi.DeviceClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -169,11 +198,15 @@ func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDevi
 	// unique and also cannot appear in a different class as ExtendedResourceName
 	// (prevented by validation), so we don't need to do the same check for
 	// implicit mappings.
+	// 多个 DeviceClass 可能声明同一个显式扩展资源名（迁移期常见）：优先创建时间较新者，名称作平局判据。
+	// 隐式映射 deviceclass.resource.kubernetes.io/<类名> 天然唯一，且校验保证不会被其他类用作显式名，
+	// 因此无需为隐式映射做同样的冲突检查。
 	var classWithSameExtendedResourceName *resourceapi.DeviceClass
 	if newDeviceClass.Spec.ExtendedResourceName != nil {
 		classWithSameExtendedResourceName = c.resourceName2class[v1.ResourceName(*newDeviceClass.Spec.ExtendedResourceName)]
 	}
 	if classWithSameExtendedResourceName != nil {
+		// 按创建时间比较：新类更旧或同名同时间且名称不更小时，放弃本次更新。
 		switch cmp.Compare(newDeviceClass.CreationTimestamp.UnixNano(), classWithSameExtendedResourceName.CreationTimestamp.UnixNano()) {
 		case -1:
 			// New class is older, keep the current more recent one.
@@ -187,6 +220,7 @@ func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDevi
 	}
 
 	// Remove old mappings first to handle ExtendedResourceName changes
+	// 删除旧对象的隐式映射与旧的显式映射，避免残留过期条目。
 	if oldDeviceClass != nil {
 		delete(c.resourceName2class, v1.ResourceName(resourceapi.ResourceDeviceClassPrefix+oldDeviceClass.Name))
 		if oldDeviceClass.Spec.ExtendedResourceName != nil {
@@ -195,6 +229,7 @@ func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDevi
 	}
 
 	// Add new mappings
+	// 写入新对象的显式映射。
 	if newDeviceClass.Spec.ExtendedResourceName != nil {
 		c.resourceName2class[v1.ResourceName(*newDeviceClass.Spec.ExtendedResourceName)] = newDeviceClass
 		c.logger.V(5).Info("Updated extended resource cache for explicit mapping",
@@ -202,6 +237,7 @@ func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDevi
 			"deviceClass", newDeviceClass.Name)
 	}
 	// Always add the default mapping
+	// 无论是否声明显式名，都要写入默认的隐式映射。
 	defaultResourceName := v1.ResourceName(resourceapi.ResourceDeviceClassPrefix + newDeviceClass.Name)
 	c.resourceName2class[defaultResourceName] = newDeviceClass
 	c.logger.V(5).Info("Updated extended resource cache for default mapping",
@@ -210,10 +246,12 @@ func (c *ExtendedResourceCache) updateResourceName2class(newDeviceClass, oldDevi
 }
 
 // updateClass2ResourceName updates the cache with the device class mapping.
+// updateClass2ResourceName 更新“DeviceClass 名 → 扩展资源名”反向映射；若类不再声明扩展资源名，则删除对应条目。
 func (c *ExtendedResourceCache) updateClass2ResourceName(deviceClass *resourceapi.DeviceClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	// 未声明显式扩展资源名时清理旧映射。
 	if deviceClass.Spec.ExtendedResourceName == nil {
 		delete(c.class2ResourceName, deviceClass.Name)
 		return
@@ -226,6 +264,8 @@ func (c *ExtendedResourceCache) updateClass2ResourceName(deviceClass *resourceap
 // removeResourceName2class removes the device class mapping from the cache.
 // It searches for all mappings to the given device class name and removes them,
 // because the ExtendedResourceName in the deviceClass object may be stale.
+// removeResourceName2class 从正向映射中删除该 DeviceClass 的隐式映射与显式映射；
+// 由于传入对象上的扩展资源名可能已过期，删除时不依赖它遍历，而是按名称直接删除。
 func (c *ExtendedResourceCache) removeResourceName2class(deviceClass *resourceapi.DeviceClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -233,6 +273,7 @@ func (c *ExtendedResourceCache) removeResourceName2class(deviceClass *resourceap
 	// Remove the default mapping
 	delete(c.resourceName2class, v1.ResourceName(resourceapi.ResourceDeviceClassPrefix+deviceClass.Name))
 	// Remove the explicit mapping
+	// 若对象上仍带有扩展资源名，也一并删除该显式映射。
 	if deviceClass.Spec.ExtendedResourceName != nil {
 		delete(c.resourceName2class, v1.ResourceName(*deviceClass.Spec.ExtendedResourceName))
 	}
@@ -241,6 +282,7 @@ func (c *ExtendedResourceCache) removeResourceName2class(deviceClass *resourceap
 }
 
 // removeClass2ResourceName removes the device class mapping from the cache.
+// removeClass2ResourceName 从反向映射中删除指定 DeviceClass 的条目。
 func (c *ExtendedResourceCache) removeClass2ResourceName(deviceClass *resourceapi.DeviceClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

@@ -22,10 +22,14 @@ import (
 	"testing"
 )
 
+// TestWithFSFromRoot 验证 WithFSFromRoot 以真实 /sys 为根创建的文件系统可读。
+// 测试输入为固定的 /sys 路径，读取其中自 sysfs 早期就存在的标准文件 devices/system/cpu/online；
+// 断言读取成功且内容非空。
 func TestWithFSFromRoot(t *testing.T) {
 	mc := machine{}
 	// we are using real files from sysfs pseudofs, but we are using files which
 	// are standard since pretty much the inception of sysfs
+	// 使用真实 /sys 作为根，仅读取长期稳定存在的标准文件以避免环境差异。
 	mod := WithFSFromRoot("/sys")
 	mod(&mc)
 
@@ -34,6 +38,7 @@ func TestWithFSFromRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot read %q: %v", srcPath, err)
 	}
+	// 断言读到的 CPU 在线列表非空。
 	if len(got) == 0 {
 		t.Fatalf("empty content in %q", srcPath)
 	}

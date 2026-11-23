@@ -22,4 +22,7 @@ limitations under the License.
 
 // Package v1beta2 provides conversion code between the v1beta2 version of the resource API
 // and the latest API version.
+// 本包提供 resource API 的 v1beta2 版本与最新版本之间的转换代码。
+// 其中 conversion-gen 标记指明：以 k8s.io/api/resource/v1 作为外部（最新）类型版本，
+// 并以 k8s.io/api/resource/v1beta2 作为需要生成转换代码的旧版本。
 package v1beta2

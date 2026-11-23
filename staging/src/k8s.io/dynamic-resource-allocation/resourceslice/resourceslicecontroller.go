@@ -52,6 +52,7 @@ import (
 const (
 	// poolNameIndex is the name for the ResourceSlice store's index function,
 	// which is to index by ResourceSlice.Spec.Pool.Name
+	// poolNameIndex 是 ResourceSlice 存储索引函数的名称，索引键为 ResourceSlice.Spec.Pool.Name。
 	poolNameIndex = "poolName"
 
 	// Including adds in the mutation cache is not safe: We could add a slice, store it,
@@ -59,6 +60,7 @@ const (
 	// Then the obsolete slice remains in the mutation cache.
 	//
 	// To mitigate this, we use a TTL and check a pool again once added slices expire.
+	// DefaultMutationCacheTTL 是变更缓存中新增条目的存活时长；因缓存中的对象可能已被他人删除而 informer 无法感知，故需设置 TTL 并在过期后重新检查 pool。
 	DefaultMutationCacheTTL = time.Minute
 
 	// DefaultSyncDelay defines how long to wait between receiving the most recent
@@ -66,6 +68,7 @@ const (
 	// should be up-to-date (matters mostly for deletes because an out-dated cache
 	// causes redundant delete API calls) and not too long that a human mistake
 	// doesn't get fixed while that human is waiting for it.
+	// DefaultSyncDelay 定义收到最新 informer 事件到再次同步之间的等待时长。
 	DefaultSyncDelay = 30 * time.Second
 
 	// resourceSliceIndexMinLength is the minimum length of the encoded index in the
@@ -73,9 +76,11 @@ const (
 	//
 	// If the encoded highest index for a slice needs more characters, all slices will
 	// use a longer index prefix to ensure that lexicographic sorting still works.
+	// resourceSliceIndexMinLength 是 ResourceSlice 名称中编码索引的最小长度；当最高索引需要更多字符时，所有切片统一使用更长前缀以保持字典序排序有效。
 	resourceSliceIndexMinLength = 5
 
 	// nameSeparator is used to separate parts of the ResourceSlice name.
+	// nameSeparator 用于分隔 ResourceSlice 名称的各个部分。
 	nameSeparator = "-"
 )
 
@@ -83,7 +88,9 @@ const (
 // ResourceSlice objects. It supports node-local and network-attached
 // resources. A DRA driver for node-local resources typically runs this
 // controller as part of its kubelet plugin.
+// Controller 将单个驱动的资源信息同步为 ResourceSlice 对象，支持节点本地资源与网络附加资源。
 type Controller struct {
+	// 控制器的基本字段：cancel 用于取消后台活动并携带原因，driverName 为 DRA 驱动名称，owner 为属主资源（可为 nil），resourceClient 与 coreClient 分别用于访问 ResourceSlice 与核心资源，wg 等待后台 goroutine 退出。
 	cancel         func(cause error)
 	driverName     string
 	owner          *Owner
@@ -91,6 +98,7 @@ type Controller struct {
 	coreClient     cgocore.CoreV1Interface
 	wg             sync.WaitGroup
 	// The queue is keyed with the pool name that needs work.
+	// queue 是工作队列，以 pool 名称为键；sliceStore 为带变更跟踪的本地缓存，mutationCacheTTL 为其条目 TTL，syncDelay 为事件到同步的延迟，errorHandler 在发布出错时调用（默认仅记录日志）。
 	queue            workqueue.TypedRateLimitingInterface[string]
 	sliceStore       cache.MutationCache
 	mutationCacheTTL time.Duration
@@ -110,32 +118,39 @@ type Controller struct {
 	//
 	// The key is the pool name. This makes each time entry
 	// unique for syncPool calls for the pool.
+	// lastAddByPool 记录每个 pool 最近一次创建 ResourceSlice 的时间，键为 pool 名称。
 	lastAddByPool map[string]time.Time
 
 	// Must use atomic access...
+	// 计数器，必须原子访问：numCreates 统计创建数，numUpdates 统计更新数，numDeletes 统计删除数。
 	numCreates int64
 	numUpdates int64
 	numDeletes int64
 
+	// mutex 保护 resources 等共享字段的并发访问。
 	mutex sync.RWMutex
 
 	// When receiving updates from the driver, the entire pointer replaced,
 	// so it is okay to not do a deep copy of it when reading it. Only reading
 	// the pointer itself must be protected by a read lock.
+	// resources 是期望的资源状态；更新时整体替换指针，因此读取时只需读锁保护指针本身。
 	resources *DriverResources
 
 	// Optional pool name to reconcile.
+	// reconcilePoolWithName 是仅协调的 pool 名称，为空表示默认行为。
 	reconcilePoolWithName string
 
 	// usePoolNameFieldSelector is disabled when the API server rejects the
 	// spec.pool.name field selector. Access must be atomic because List and Watch
 	// can run concurrently.
+	// usePoolNameFieldSelector 标记是否可在字段选择器中使用 spec.pool.name；List 与 Watch 可能并发访问，需原子读写。
 	usePoolNameFieldSelector atomic.Bool
 }
 
 // +k8s:deepcopy-gen=true
 
 // DriverResources is a complete description of all resources synchronized by the controller.
+// DriverResources 是控制器需要同步的全部资源的完整描述。
 type DriverResources struct {
 	// Each driver may manage different resource pools.
 	//
@@ -144,23 +159,28 @@ type DriverResources struct {
 	// have binding conditions are tried last, then by name.
 	// So the name can also be used to indicate preference
 	// when a driver publishes more than one pool.
+	// Pools 以 pool 名称为键，描述每个资源池。
 	Pools map[string]Pool
 }
 
 // +k8s:deepcopy-gen=true
 
 // Pool is the collection of devices belonging to the same pool.
+// Pool 是属于同一资源池的设备集合。
 type Pool struct {
 	// NodeSelector may be different for each pool. Must not get set together
 	// with Resources.NodeName, Slices.PerDeviceNodeSelection or AllNodes.
+	// NodeSelector 指定该 pool 的节点选择器，不可与其他节点选择字段同时设置。
 	NodeSelector *v1.NodeSelector
 
 	// AllNodes may be different for each pool. Must not get set together
 	// with Resources.NodeName, Slices.PerDeviceNodeSelection or NodeSelector.
+	// AllNodes 表示是否将 slice 发布到所有节点，不可与其他节点选择字段同时设置。
 	AllNodes bool
 
 	// Generation can be left at zero. It gets bumped up automatically
 	// by the controller.
+	// Generation 可由驱动留零，控制器会自动递增。
 	Generation int64
 
 	// Slices is a list of all ResourceSlices that the driver
@@ -193,20 +213,24 @@ type Pool struct {
 	// is empty. "Empty pool" is different from "no pool"
 	// because it shows that the driver is up-and-running
 	// and simply doesn't have any devices.
+	// Slices 是驱动希望为该 pool 发布的全部 ResourceSlice；列表顺序决定分配优先级。
 	Slices []Slice
 }
 
 // +k8s:deepcopy-gen=true
 
 // Slice is turned into one ResourceSlice by the controller.
+// Slice 会被控制器转换为一个 ResourceSlice。
 type Slice struct {
 	// Devices lists all devices which are part of the slice.
+	// Devices 列出该 slice 的全部设备，SharedCounters 列出可供设备引用的共享计数器集合，PerDeviceNodeSelection 表示是否按设备粒度选择节点。
 	Devices                []resourceapi.Device
 	SharedCounters         []resourceapi.CounterSet
 	PerDeviceNodeSelection *bool
 	// PartitionTypeAttribute names the device attribute whose value labels each
 	// device's partition type. Only effective when the DRAPartitionableDevicesType
 	// feature is enabled; dropped by the apiserver otherwise.
+	// PartitionTypeAttribute 指定标识设备分区类型的属性名，仅在对应特性开启时生效；SkipNodeOperations 列出需要跳过的节点操作。
 	PartitionTypeAttribute *resourceapi.FullyQualifiedName
 	SkipNodeOperations     []resourceapi.SkipNodeOperation
 }
@@ -215,7 +239,9 @@ type Slice struct {
 
 // Owner is the resource which is meant to be listed as owner of the resource slices.
 // For a node the UID may be left blank. The controller will look it up automatically.
+// Owner 描述 ResourceSlice 的属主资源；Node 类型属主的 UID 可留空，由控制器自动查找。
 type Owner struct {
+	// Owner 的字段：APIVersion 为属主资源的 API 版本，Kind 为类型，Name 为名称，UID 为 UID。
 	APIVersion string
 	Kind       string
 	Name       string
@@ -223,32 +249,39 @@ type Owner struct {
 }
 
 // StartController constructs a new controller and starts it.
+// StartController 构造并启动控制器。
 func StartController(ctx context.Context, options Options) (*Controller, error) {
 	logger := klog.FromContext(ctx)
+	// 创建控制器实例，失败则包装错误返回。
 	c, err := newController(ctx, options)
 	if err != nil {
 		return nil, fmt.Errorf("create controller: %w", err)
 	}
 
 	logger.V(3).Info("Starting")
+	// 登记后台 goroutine，便于 Stop 等待。
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
 		defer logger.V(3).Info("Stopping")
+		// 在后台运行同步循环。
 		c.run(ctx)
 	}()
 	return c, nil
 }
 
 // Options contains various optional settings for [StartController].
+// Options 是 StartController 的可选配置。
 type Options struct {
 	// DriverName is the required name of the DRA driver.
 	// Must be a DNS subdomain and should end with a DNS domain
 	// owned by the vendor of the driver. It should use only lower case characters.
+	// DriverName 是必需的驱动名称，须为 DNS 子域且通常使用小写字母。
 	DriverName string
 
 	// KubeClient is used to read Node objects (if necessary) and to access
 	// ResourceSlices. It must be specified.
+	// KubeClient 用于读取 Node 与访问 ResourceSlice，必须提供。
 	KubeClient kubernetes.Interface
 
 	// If the owner is a v1.Node, then the NodeName field in the
@@ -260,16 +293,20 @@ type Options struct {
 	// therefore it is optional. A driver without a owner must take
 	// care that remaining slices get deleted manually as part of
 	// a driver uninstall because garbage collection won't work.
+	// Owner 指定属主；Node 属主时 UID 可省略，由控制器自动查询。
 	Owner *Owner
 
 	// This is the initial desired set of slices. Nil means "no resources".
+	// Resources 是初始期望的 slice 集合，nil 表示无资源。
 	Resources *DriverResources
 
 	// Queue can be used to override the default work queue implementation.
+	// Queue 可覆盖默认的工作队列实现。
 	Queue workqueue.TypedRateLimitingInterface[string]
 
 	// MutationCacheTTL can be used to change the default TTL of one minute.
 	// See source code for details.
+	// MutationCacheTTL 可覆盖变更缓存的默认 TTL（一分钟）。
 	MutationCacheTTL *time.Duration
 
 	// SyncDelay defines how long to wait between receiving the most recent
@@ -279,6 +316,7 @@ type Options struct {
 	// (matter mostly for deletes because an out-dated cache causes
 	// redundant delete API calls) and not too long that a human mistake
 	// doesn't get fixed while that human is waiting for it.
+	// SyncDelay 可覆盖事件到同步的默认延迟（30 秒）。
 	SyncDelay *time.Duration
 
 	// ErrorHandler will get called whenever the controller encounters
@@ -297,6 +335,7 @@ type Options struct {
 	//
 	// The default is [utilruntime.HandleErrorWithContext] which just logs
 	// the problem.
+	// ErrorHandler 在发布出错时被调用；默认仅记录日志。
 	ErrorHandler func(ctx context.Context, err error, msg string)
 
 	// ReconcilePoolWithName limits reconciliation to a single pool.
@@ -312,32 +351,41 @@ type Options struct {
 	// its own ResourceSlices.
 	//
 	// Empty means the default behavior.
+	// ReconcilePoolWithName 将协调限制在单个 pool；为空表示默认行为。
 	ReconcilePoolWithName string
 }
 
 // DroppedFieldsError is reported through the ErrorHandler in [Options] if
 // a slice could not be published exactly as desired by the driver.
+// DroppedFieldsError 表示 apiserver 丢弃了驱动期望发布的某些字段。
 type DroppedFieldsError struct {
+	// PoolName 为发生字段丢弃的 pool 名称，SliceIndex 为对应 slice 的索引，DesiredSlice 与 ActualSlice 分别为期望与实际对象，用于推断被丢弃的字段。
 	PoolName                  string
 	SliceIndex                int
 	DesiredSlice, ActualSlice *resourceapi.ResourceSlice
 }
 
+// Error 实现 error 接口，给出字段被丢弃的错误信息及可能相关的已禁用特性。
 func (err *DroppedFieldsError) Error() string {
 	// We cannot depend on go-cmp to include a diff here (not suitable for production code).
 	// The diff might be too large, too. But we can make some educated guesses....
+	// 先推测哪些特性被禁用，用于错误信息。
 	disabled := err.DisabledFeatures()
+	// 若推测不出，则标记为 unknown。
 	if len(disabled) == 0 {
 		// If we get here, DisabledFeatures needs to be updated.
 		disabled = []string{"unknown"}
 	}
+	// 汇总 pool、slice 索引与疑似禁用的特性。
 	return fmt.Sprintf("pool %q, slice #%d: some fields were dropped by the apiserver, probably because these features are disabled: %s", err.PoolName, err.SliceIndex, strings.Join(disabled, " "))
 }
 
+// DisabledFeatures 通过对比期望与实际对象，推断哪些特性被禁用导致字段丢失。
 func (err *DroppedFieldsError) DisabledFeatures() []string {
 	var disabled []string
 
 	// Both slices should have the same number of devices, but better check it.
+	// 污点数量变少：DRADeviceTaints 可能被禁用。
 	for i := 0; i < len(err.DesiredSlice.Spec.Devices) && i < len(err.ActualSlice.Spec.Devices); i++ {
 		if len(err.DesiredSlice.Spec.Devices[i].Taints) > len(err.ActualSlice.Spec.Devices[i].Taints) {
 			disabled = append(disabled, "DRADeviceTaints")
@@ -347,10 +395,12 @@ func (err *DroppedFieldsError) DisabledFeatures() []string {
 
 	// Dropped fields for partitionable devices can be found either directly on the ResourceSlice spec
 	// or within devices.
+	// 可分区设备字段：PerDeviceNodeSelection 或 SharedCounters 发生变化。
 	if ptr.Deref(err.DesiredSlice.Spec.PerDeviceNodeSelection, false) && !ptr.Deref(err.ActualSlice.Spec.PerDeviceNodeSelection, false) ||
 		len(err.DesiredSlice.Spec.SharedCounters) > len(err.ActualSlice.Spec.SharedCounters) {
 		disabled = append(disabled, "DRAPartitionableDevices")
 	} else {
+		// 否则检查设备内的 ConsumesCounters 数量变化。
 		for i := 0; i < len(err.DesiredSlice.Spec.Devices) && i < len(err.ActualSlice.Spec.Devices); i++ {
 			if len(err.DesiredSlice.Spec.Devices[i].ConsumesCounters) != len(err.ActualSlice.Spec.Devices[i].ConsumesCounters) {
 				disabled = append(disabled, "DRAPartitionableDevices")
@@ -361,6 +411,7 @@ func (err *DroppedFieldsError) DisabledFeatures() []string {
 
 	// The number of binding conditions for both slices should be the same. If they differ,
 	// it indicates that the DRADeviceBindingConditions feature is disabled.
+	// BindingConditions 数量不一致：DRADeviceBindingConditions 可能被禁用。
 	for i := 0; i < len(err.DesiredSlice.Spec.Devices) && i < len(err.ActualSlice.Spec.Devices); i++ {
 		if len(err.DesiredSlice.Spec.Devices[i].BindingConditions) != len(err.ActualSlice.Spec.Devices[i].BindingConditions) ||
 			len(err.DesiredSlice.Spec.Devices[i].BindingFailureConditions) != len(err.ActualSlice.Spec.Devices[i].BindingFailureConditions) {
@@ -370,6 +421,7 @@ func (err *DroppedFieldsError) DisabledFeatures() []string {
 	}
 
 	// Dropped fields for consumable capacity can be detected with allowMultipleAllocations flag without looking at individual device capacity.
+	// AllowMultipleAllocations 丢失：DRAConsumableCapacity 可能被禁用。
 	for i := 0; i < len(err.DesiredSlice.Spec.Devices) && i < len(err.ActualSlice.Spec.Devices); i++ {
 		if err.DesiredSlice.Spec.Devices[i].AllowMultipleAllocations != nil && err.ActualSlice.Spec.Devices[i].AllowMultipleAllocations == nil {
 			disabled = append(disabled, "DRAConsumableCapacity")
@@ -378,10 +430,12 @@ func (err *DroppedFieldsError) DisabledFeatures() []string {
 	}
 
 	// PartitionTypeAttribute is dropped when DRAPartitionableDevicesType is disabled.
+	// PartitionTypeAttribute 丢失：DRAPartitionableDevicesType 可能被禁用。
 	if err.DesiredSlice.Spec.PartitionTypeAttribute != nil && err.ActualSlice.Spec.PartitionTypeAttribute == nil {
 		disabled = append(disabled, "DRAPartitionableDevicesType")
 	}
 
+	// SkipNodeOperations 丢失：DRAOptionalNodeOperations 可能被禁用。
 	if len(err.DesiredSlice.Spec.SkipNodeOperations) > 0 && len(err.ActualSlice.Spec.SkipNodeOperations) == 0 {
 		disabled = append(disabled, "DRAOptionalNodeOperations")
 	}
@@ -389,6 +443,7 @@ func (err *DroppedFieldsError) DisabledFeatures() []string {
 	// Compatibility groups are dropped from within a device counter consumption,
 	// so a shorter list there (while the consumption itself is preserved)
 	// indicates that the DRADeviceCompatibilityGroups feature is disabled.
+	// 计数器消费中的 CompatibilityGroups 变少：DRADeviceCompatibilityGroups 可能被禁用。
 compatibilityGroups:
 	for i := 0; i < len(err.DesiredSlice.Spec.Devices) && i < len(err.ActualSlice.Spec.Devices); i++ {
 		desired := err.DesiredSlice.Spec.Devices[i].ConsumesCounters
@@ -401,17 +456,23 @@ compatibilityGroups:
 		}
 	}
 
+	// 返回所有推测出的已禁用特性。
 	return disabled
 }
 
+// 编译期断言：DroppedFieldsError 实现 error 接口。
 var _ error = &DroppedFieldsError{}
 
 // Stop cancels all background activity and blocks until the controller has stopped.
+// Stop 取消所有后台活动，并阻塞直到控制器完全停止。
 func (c *Controller) Stop() {
+	// 允许对 nil 控制器调用 Stop。
 	if c == nil {
 		return
 	}
+	// 触发取消，通知所有后台 goroutine。
 	c.cancel(errors.New("ResourceSlice controller was asked to stop"))
+	// 等待后台 goroutine 退出。
 	c.wg.Wait()
 }
 
@@ -420,17 +481,21 @@ func (c *Controller) Stop() {
 // The controller is doing a deep copy, so the caller may update
 // the instance once Update returns. Nil is valid and the same
 // as an empty resources struct.
+// Update 设置期望的资源状态；控制器会做深拷贝，调用方可在返回后复用该对象。
 func (c *Controller) Update(resources *DriverResources) {
+	// 加写锁保护 resources 与队列的更新。
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	// Sync all old pools..
+	// 先把所有旧 pool 入队，以便同步时删除不再需要的 slice。
 	if c.resources != nil {
 		for poolName := range c.resources.Pools {
 			c.queue.Add(poolName)
 		}
 	}
 
+	// nil 视为空资源集合。
 	if resources == nil {
 		c.resources = &DriverResources{}
 	} else {
@@ -438,6 +503,7 @@ func (c *Controller) Update(resources *DriverResources) {
 		// Having additional pools is considered an error. However, an empty pool list
 		// is intentionally allowed and treated as "no slices to publish", which matches
 		// the default controller behavior.
+		// 单 pool 协调模式下校验 pool 数量是否合法。
 		if c.reconcilePoolWithName != "" {
 			_, ok := resources.Pools[c.reconcilePoolWithName]
 			if (ok && len(resources.Pools) > 1) || !ok && len(resources.Pools) > 0 {
@@ -448,11 +514,13 @@ func (c *Controller) Update(resources *DriverResources) {
 			}
 		}
 
+		// 深拷贝后保存，并对污点时间做秒级取整。
 		c.resources = resources.DeepCopy()
 		roundTaintTimeAdded(c.resources)
 	}
 
 	// ... and the new ones (might be the same).
+	// 再把所有新 pool 入队（可能与旧 pool 相同）。
 	for poolName := range c.resources.Pools {
 		c.queue.Add(poolName)
 	}
@@ -461,12 +529,14 @@ func (c *Controller) Update(resources *DriverResources) {
 // roundTaintTimeAdded rounds all timestamps to seconds because that is all
 // that we can store. Without this we would get semantic differences between
 // desired and actual stored slice.
+// roundTaintTimeAdded 将所有污点时间取整到秒，因为 API 只能存储秒级精度，避免期望与实际对象出现语义差异。
 func roundTaintTimeAdded(resources *DriverResources) {
 	for _, pool := range resources.Pools {
 		for _, slice := range pool.Slices {
 			for _, device := range slice.Devices {
 				for _, taint := range device.Taints {
 					if taint.TimeAdded != nil {
+						// 按秒取整，消除往返产生的精度差异。
 						taint.TimeAdded.Time = taint.TimeAdded.Time.Round(time.Second)
 					}
 				}
@@ -476,8 +546,10 @@ func roundTaintTimeAdded(resources *DriverResources) {
 }
 
 // GetStats provides some insights into operations of the controller.
+// GetStats 返回控制器各类操作的计数快照。
 func (c *Controller) GetStats() Stats {
 	s := Stats{
+		// 原子读取各计数器，保证并发安全。
 		NumCreates: atomic.LoadInt64(&c.numCreates),
 		NumUpdates: atomic.LoadInt64(&c.numUpdates),
 		NumDeletes: atomic.LoadInt64(&c.numDeletes),
@@ -485,17 +557,23 @@ func (c *Controller) GetStats() Stats {
 	return s
 }
 
+// Stats 汇总控制器创建、更新、删除 ResourceSlice 的次数。
 type Stats struct {
 	// NumCreates counts the number of ResourceSlices that got created.
+	// NumCreates 统计创建的 ResourceSlice 数量。
 	NumCreates int64
 	// NumUpdates counts the number of ResourceSlices that got update.
+	// NumUpdates 统计更新的 ResourceSlice 数量。
 	NumUpdates int64
 	// NumDeletes counts the number of ResourceSlices that got deleted.
+	// NumDeletes 统计删除的 ResourceSlice 数量。
 	NumDeletes int64
 }
 
 // newController creates a new controller.
+// newController 创建控制器（不启动）。
 func newController(ctx context.Context, options Options) (*Controller, error) {
+	// 校验必需参数：KubeClient 与驱动名。
 	if options.KubeClient == nil {
 		return nil, errors.New("KubeClient is nil")
 	}
@@ -503,8 +581,10 @@ func newController(ctx context.Context, options Options) (*Controller, error) {
 		return nil, errors.New("DRA driver name is empty")
 	}
 
+	// 创建可携带取消原因的上下文。
 	ctx, cancel := context.WithCancelCause(ctx)
 
+	// 初始化控制器各字段，未显式指定的配置使用默认值。
 	c := &Controller{
 		cancel:                cancel,
 		resourceClient:        draclient.New(options.KubeClient),
@@ -518,49 +598,61 @@ func newController(ctx context.Context, options Options) (*Controller, error) {
 		lastAddByPool:         make(map[string]time.Time),
 		reconcilePoolWithName: options.ReconcilePoolWithName,
 	}
+	// 未提供队列时使用默认的限速队列。
 	if c.queue == nil {
 		c.queue = workqueue.NewTypedRateLimitingQueueWithConfig(
 			workqueue.DefaultTypedControllerRateLimiter[string](),
 			workqueue.TypedRateLimitingQueueConfig[string]{Name: "node_resource_slices"},
 		)
 	}
+	// 未提供错误处理器时默认仅记录日志。
 	if c.errorHandler == nil {
 		c.errorHandler = func(ctx context.Context, err error, msg string) {
 			utilruntime.HandleErrorWithContext(ctx, err, msg)
 		}
 	}
+	// 仅单 pool 协调模式默认启用 poolName 字段选择器。
 	c.usePoolNameFieldSelector.Store(c.reconcilePoolWithName != "")
+	// 初始化 informer 并等待缓存同步。
 	if err := c.initInformer(ctx); err != nil {
 		return nil, err
 	}
 
+	// 设置初始期望状态并将相关 pool 入队。
 	c.Update(options.Resources)
 
 	return c, nil
 }
 
 // initInformer initializes the informer used to watch for changes to the resources slice.
+// initInformer 初始化用于监听 ResourceSlice 变化的 informer，并等待其缓存完成同步。
 func (c *Controller) initInformer(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 
+	// 构造字段选择器：始终按驱动名过滤，节点本地资源额外按节点名过滤。
 	fieldSelector := func(includePoolName bool) string {
 		// We always filter by driver name, by node name only for node-local resources.
+		// 按驱动名、节点名（可选）与 pool 名（可选）构建选择器。
 		selector := fields.Set{
 			resourceapi.ResourceSliceSelectorDriver:   c.driverName,
 			resourceapi.ResourceSliceSelectorNodeName: "",
 		}
+		// 仅节点属主且非单 pool 协调模式时，按节点名过滤。
 		if c.owner != nil && c.owner.APIVersion == "v1" && c.owner.Kind == "Node" && c.reconcilePoolWithName == "" {
 			selector[resourceapi.ResourceSliceSelectorNodeName] = c.owner.Name
 		}
+		// 单 pool 协调模式下额外按 pool 名过滤。
 		if includePoolName {
 			selector[resourceapi.ResourceSliceSelectorPoolName] = c.reconcilePoolWithName
 		}
 
 		return selector.String()
 	}
+	// 将字段选择器写入 ListOptions。
 	tweakListOptions := func(options *metav1.ListOptions, includePoolName bool) {
 		options.FieldSelector = fieldSelector(includePoolName)
 	}
+	// 建立按 pool 名索引的索引器。
 	indexers := cache.Indexers{
 		poolNameIndex: func(obj interface{}) ([]string, error) {
 			slice, ok := obj.(*resourceapi.ResourceSlice)
@@ -570,29 +662,36 @@ func (c *Controller) initInformer(ctx context.Context) error {
 			return []string{slice.Spec.Pool.Name}, nil
 		},
 	}
+	// 创建共享 informer 并禁用周期性 resync（同步是确定性的，重复无意义）。
 	informer := cache.NewSharedIndexInformer(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
+			// List 回调：若服务端不支持 poolName 字段选择器则回退到客户端过滤。
 			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+				// 读取是否启用 poolName 字段选择器。
 				usePoolNameFieldSelector := c.usePoolNameFieldSelector.Load()
 				tweakListOptions(&options, usePoolNameFieldSelector)
 				slices, err := c.resourceClient.ResourceSlices().List(ctx, options)
+				// 服务端拒绝该选择器时，关闭开关并重试。
 				if err != nil && usePoolNameFieldSelector && isUnsupportedPoolNameFieldSelector(err) {
 					c.usePoolNameFieldSelector.Store(false)
 					usePoolNameFieldSelector = false
 					tweakListOptions(&options, usePoolNameFieldSelector)
 					slices, err = c.resourceClient.ResourceSlices().List(ctx, options)
 				}
+				// 记录 List 成功或失败的日志。
 				if err == nil {
 					logger.V(5).Info("Listed ResourceSlices", "resourceAPI", c.resourceClient.CurrentAPI(), "numSlices", len(slices.Items), "listMeta", slices.ListMeta)
 				} else {
 					logger.V(5).Info("Listed ResourceSlices", "resourceAPI", c.resourceClient.CurrentAPI(), "err", err)
 				}
 
+				// 回退到客户端过滤时，仅保留目标 pool 的 slice。
 				if err == nil && c.reconcilePoolWithName != "" && !usePoolNameFieldSelector {
 					retainSlicesByPoolName(slices, c.reconcilePoolWithName)
 				}
 				return slices, err
 			},
+			// Watch 回调：同样支持字段选择器回退与客户端过滤。
 			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 				usePoolNameFieldSelector := c.usePoolNameFieldSelector.Load()
 				tweakListOptions(&options, usePoolNameFieldSelector)
@@ -603,8 +702,10 @@ func (c *Controller) initInformer(ctx context.Context) error {
 					tweakListOptions(&options, usePoolNameFieldSelector)
 					w, err = c.resourceClient.ResourceSlices().Watch(ctx, options)
 				}
+				// 记录 Watch 启动结果。
 				logger.V(5).Info("Started watching ResourceSlices", "resourceAPI", c.resourceClient.CurrentAPI(), "err", err)
 
+				// 用包装 watcher 在客户端按 pool 名过滤事件。
 				if err == nil && c.reconcilePoolWithName != "" && !usePoolNameFieldSelector {
 					return filterSliceWatchByPoolName(ctx, w, c.reconcilePoolWithName), nil
 				}
@@ -620,8 +721,11 @@ func (c *Controller) initInformer(ctx context.Context) error {
 		0,
 		indexers,
 	)
+	// 使用变更缓存跟踪新增与更新的对象，避免重复创建。
 	c.sliceStore = cache.NewIntegerResourceVersionMutationCache(logger, informer.GetStore(), informer.GetIndexer(), c.mutationCacheTTL, true /* includeAdds */)
+	// 注册事件处理器：增删改都会把对应 pool 延迟入队。
 	handler, err := informer.AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
+		// 新增事件：登记对象并调度延迟同步。
 		AddFunc: func(obj any) {
 			slice, ok := obj.(*resourceapi.ResourceSlice)
 			if !ok {
@@ -632,6 +736,7 @@ func (c *Controller) initInformer(ctx context.Context) error {
 			c.queue.AddAfter(slice.Spec.Pool.Name, c.syncDelay)
 			logger.V(5).Info("Scheduled sync", "poolName", slice.Spec.Pool.Name, "at", time.Now().Add(c.syncDelay))
 		},
+		// 更新事件：登记新对象并调度同步；pool 名变化时两个 pool 都要同步。
 		UpdateFunc: func(old, new any) {
 			oldSlice, ok := old.(*resourceapi.ResourceSlice)
 			if !ok {
@@ -654,6 +759,7 @@ func (c *Controller) initInformer(ctx context.Context) error {
 				logger.V(5).Info("Scheduled sync", "poolName", newSlice.Spec.Pool.Name, "at", time.Now().Add(c.syncDelay))
 			}
 		},
+		// 删除事件：处理墓碑对象，登记删除并调度同步。
 		DeleteFunc: func(obj any) {
 			if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 				obj = tombstone.Obj
@@ -668,18 +774,24 @@ func (c *Controller) initInformer(ctx context.Context) error {
 			logger.V(5).Info("Scheduled sync", "poolName", slice.Spec.Pool.Name, "at", time.Now().Add(c.syncDelay))
 		},
 	}, cache.HandlerOptions{Logger: &logger})
+	// 事件处理器注册失败则包装错误返回。
 	if err != nil {
 		return fmt.Errorf("registering event handler on the ResourceSlice informer: %w", err)
 	}
 	// Start informer and wait for our cache to be populated.
+	// 启动 informer 并等待事件处理器完成初始同步。
 	logger.V(3).Info("Starting ResourceSlice informer and waiting for it to sync")
+	// 登记 informer goroutine。
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
 		defer logger.V(3).Info("ResourceSlice informer has stopped")
+		// informer 退出时关闭工作队列。
 		defer c.queue.ShutDown() // Once we get here, we must have been asked to stop.
+		// 运行 informer 直到上下文取消。
 		informer.RunWithContext(ctx)
 	}()
+	// 轮询等待同步完成，期间响应上下文取消。
 	for !handler.HasSynced() {
 		select {
 		case <-time.After(time.Second):
@@ -687,25 +799,34 @@ func (c *Controller) initInformer(ctx context.Context) error {
 			return fmt.Errorf("sync ResourceSlice informer: %w", context.Cause(ctx))
 		}
 	}
+	// informer 已同步，可以开始处理工作项。
 	logger.V(3).Info("ResourceSlice informer has synced")
 	return nil
 }
 
 // run is running in the background.
+// run 在后台持续处理工作队列，直到队列关闭。
 func (c *Controller) run(ctx context.Context) {
+	// 循环处理下一个工作项，返回 false 表示队列已关闭。
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 取出一个 pool 并执行同步；出错时限速重试。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
+	// 从队列取出待同步的 pool 名称。
 	poolName, shutdown := c.queue.Get()
+	// 队列已关闭，停止处理。
 	if shutdown {
 		return false
 	}
+	// 无论成功与否都标记该项处理完成。
 	defer c.queue.Done(poolName)
 	logger := klog.FromContext(ctx)
 
+	// 带上 poolName 日志字段执行同步。
 	err := c.syncPool(klog.NewContext(ctx, klog.LoggerWithValues(logger, "poolName", poolName)), poolName)
+	// 同步失败：上报错误并限速重试。
 	if err != nil {
 		c.errorHandler(ctx, err, "processing ResourceSlice objects")
 		c.queue.AddRateLimited(poolName)
@@ -714,6 +835,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		// It will be retried.
 		return true
 	}
+	// 成功则清除该 pool 的重试退避记录。
 	c.queue.Forget(poolName)
 	return true
 }
@@ -721,13 +843,18 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 // syncPool processes one pool. Only runs inside a single worker, so there
 // is no need for locking except when accessing c.resources, which may
 // be updated at any time by the user of the controller.
+// syncPool 处理单个 pool；因只有一个 worker，除访问 c.resources 外无需加锁。
 func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 	logger := klog.FromContext(ctx)
+	// 记录同步开始时间，用于判断缓存条目是否已过期。
 	start := time.Now()
 
 	// Gather information about the actual and desired state.
+	// 收集实际状态（缓存中的 slice）与期望状态（驱动提供的 resources）。
 	var slices []*resourceapi.ResourceSlice
+	// 按 pool 名从变更缓存中取出所有相关 slice。
 	objs, err := c.sliceStore.ByIndex(poolNameIndex, poolName)
+	// 读取缓存失败。
 	if err != nil {
 		return fmt.Errorf("retrieve ResourceSlice objects: %w", err)
 	}
@@ -737,18 +864,24 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		}
 	}
 	var resources *DriverResources
+	// 加读锁快照期望状态。
 	c.mutex.RLock()
 	resources = c.resources
 	c.mutex.RUnlock()
+	// 校验期望状态，错误仅上报而不重试。
 	if err := validateDriverResources(resources); err != nil {
 		c.errorHandler(ctx, err, "pool validation failed")
 		// We only report the error through the error handler to prevent
 		// the controller from retrying.
+		// 校验失败只上报一次，不把 pool 重新入队导致无限重试。
 		return nil
 	}
 
+	// 查找该 pool 的期望定义。
 	pool, ok := resources.Pools[poolName]
+	// pool 已不存在。
 	if !ok {
+		// 仍有残留 slice，需要全部删除。
 		if len(slices) > 0 {
 			// All are obsolete, pool does not exist anymore.
 			logger.V(5).Info("Removing resource slices after pool removal")
@@ -763,12 +896,17 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 	// Retrieve node object to get UID?
 	// The result gets cached and is expected to not change while
 	// the controller runs.
+	// 若属主是 Node，确定 NodeName 并在 UID 缺失时查询并缓存它。
 	var nodeName string
+	// 仅 Node 属主需要此处理。
 	if c.owner != nil && c.owner.APIVersion == "v1" && c.owner.Kind == "Node" {
+		// 单 pool 协调模式不设置 NodeName。
 		if c.reconcilePoolWithName == "" {
 			nodeName = c.owner.Name
 		}
+		// UID 为空时查询 Node 对象，结果在控制器生命周期内缓存。
 		if c.owner.UID == "" {
+			// 查询失败则包装错误返回。
 			node, err := c.coreClient.Nodes().Get(ctx, c.owner.Name, metav1.GetOptions{})
 			if err != nil {
 				return fmt.Errorf("retrieve node %q: %w", c.owner.Name, err)
@@ -779,6 +917,7 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 	}
 
 	// Determine highest generation.
+	// 找出当前所有 slice 中的最大 generation。
 	var generation int64
 	for _, slice := range slices {
 		if slice.Spec.Pool.Generation > generation {
@@ -788,23 +927,28 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 
 	// Classify existing slices. If an existing slice has wrong generation
 	// or doesn't match a desired index, it's obsolete.
+	// 将现有 slice 分类：按索引匹配期望项，generation 落后或索引无效/重复的视为过期。
 	currentSliceForDesiredSlice := make(map[int]*resourceapi.ResourceSlice, len(pool.Slices))
 	obsoleteSlices := make([]*resourceapi.ResourceSlice, 0, len(slices))
 	expectedPrefixLength := getIndexLength(len(pool.Slices))
 
+	// 遍历现有 slice 进行分类。
 	for _, slice := range slices {
 		// Wrong generation is always obsolete.
+		// generation 小于最高值的 slice 直接判为过期。
 		if slice.Spec.Pool.Generation < generation {
 			obsoleteSlices = append(obsoleteSlices, slice)
 			continue
 		}
 
+		// 从名称前缀解码索引，失败则视为无法匹配。
 		index, err := decodeIndex(slice.Name, expectedPrefixLength)
 		if err != nil {
 			logger.V(5).Info("Unmatched existing slice (invalid name)", "slice", klog.KObj(slice), "err", err)
 			obsoleteSlices = append(obsoleteSlices, slice)
 			continue
 		}
+		// 索引落在期望范围内时，首个匹配项作为当前 slice。
 		if index >= 0 && index < len(pool.Slices) {
 			if _, ok := currentSliceForDesiredSlice[index]; !ok {
 				currentSliceForDesiredSlice[index] = slice
@@ -812,11 +956,13 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 				continue
 			}
 		}
+		// 其余（重复或越界）归入过期列表。
 		obsoleteSlices = append(obsoleteSlices, slice)
 		logger.V(5).Info("Unmatched existing slice (obsolete)", "slice", klog.KObj(slice))
 	}
 
 	// Desired metadata which must be set in each slice.
+	// 计算每个 slice 都必须设置的元数据，以及新增 slice 的数量。
 	resourceSliceCount := len(pool.Slices)
 	numMatchedSlices := len(currentSliceForDesiredSlice)
 	numNewSlices := resourceSliceCount - numMatchedSlices
@@ -827,10 +973,13 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 	}
 
 	// Now for each desired slice, figure out which of them are changed.
+	// 逐项比较，找出内容发生变化、需要更新的 slice。
 	changedDesiredSlices := sets.New[int]()
+	// 比较元数据、节点选择器、设备、计数器等字段。
 	for i, currentSlice := range currentSliceForDesiredSlice {
 		// Reordering entries is a difference and causes an update even if the
 		// entries are the same.
+		// 注意：条目顺序变化也算差异，会触发更新。
 		if !apiequality.Semantic.DeepEqual(&currentSlice.Spec.Pool, &desiredPool) ||
 			!apiequality.Semantic.DeepEqual(currentSlice.Spec.NodeSelector, pool.NodeSelector) ||
 			ptr.Deref(currentSlice.Spec.AllNodes, false) != pool.AllNodes ||
@@ -843,6 +992,7 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 			logger.V(5).Info("Need to update slice", "slice", klog.KObj(currentSlice), "matchIndex", i)
 		}
 	}
+	// 记录分类与比较结果。
 	logger.V(5).Info("Completed comparison",
 		"numObsolete", len(obsoleteSlices),
 		"numMatchedSlices", len(currentSliceForDesiredSlice),
@@ -850,40 +1000,51 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		"numNewSlices", numNewSlices,
 	)
 
+	// 根据驱动请求与变更规模决定 generation 是否递增。
 	bumpedGeneration := false
+	// 三种情况：驱动指定更大值、最多一次更新可保持原值、否则递增。
 	switch {
+	// 驱动显式要求更大的 generation。
 	case pool.Generation > generation:
 		// Bump up the generation if the driver asked for it, or
 		// start with a non-zero generation.
 		generation = pool.Generation
 		bumpedGeneration = true
 		logger.V(5).Info("Bumped generation to driver-provided generation", "generation", generation)
+	// 没有新增且最多一次更新时保持 generation。
 	case numNewSlices == 0 && len(changedDesiredSlices) <= 1:
 		logger.V(5).Info("Kept generation because at most one update API call is necessary", "generation", generation)
+	// 其他情况递增 generation，保证原子发布。
 	default:
 		generation++
 		bumpedGeneration = true
 		logger.V(5).Info("Bumped generation by one", "generation", generation)
 	}
+	// 将最终 generation 写入期望 pool 元数据。
 	desiredPool.Generation = generation
 
 	// First delete obsolete slices. If the desired slices are faulty, then it's still better to
 	// remove devices that the driver no longer has, even if we cannot publish the new ones.
+	// 先删除过期 slice：即使新 slice 有问题，也应先移除驱动不再拥有的设备。
 	if err := c.removeSlices(ctx, obsoleteSlices); err != nil {
 		return fmt.Errorf("remove slices: %w", err)
 	}
 
 	// Update existing slices.
+	// 更新内容变化或 generation 提升的现有 slice。
 	for i, currentSlice := range currentSliceForDesiredSlice {
+		// 未变化且 generation 未提升则跳过。
 		if !changedDesiredSlices.Has(i) && !bumpedGeneration {
 			continue
 		}
+		// 深拷贝后改写各字段，保留服务端填充的信息。
 		slice := currentSlice.DeepCopy()
 		slice.Spec.Pool = desiredPool
 		// No need to set the node name. If it was different, we wouldn't
 		// have listed the existing slice.
 		//
 		// When adding new fields here, then also extend sliceStored.
+		// 无需设置 NodeName；若不一致，之前的列表就不会包含该 slice。
 		slice.Spec.NodeSelector = pool.NodeSelector
 		slice.Spec.AllNodes = refIfNotZero(pool.AllNodes)
 		slice.Spec.SharedCounters = pool.Slices[i].SharedCounters
@@ -891,24 +1052,32 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		slice.Spec.PartitionTypeAttribute = pool.Slices[i].PartitionTypeAttribute
 		slice.Spec.SkipNodeOperations = pool.Slices[i].SkipNodeOperations
 		// Preserve TimeAdded from existing device, if there is a matching device and taint.
+		// 保留匹配设备的原有 TimeAdded，避免无谓变更。
 		slice.Spec.Devices = copyTaintTimeAdded(slice.Spec.Devices, pool.Slices[i].Devices)
 
+		// 调用 API 更新，失败则返回错误触发重试。
 		actualSlice, err := c.resourceClient.ResourceSlices().Update(ctx, slice, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("update resource slice: %w", err)
 		}
 		logger.V(5).Info("Updated existing resource slice", "slice", klog.KObj(slice))
+		// 更新成功后累加计数。
 		atomic.AddInt64(&c.numUpdates, 1)
+		// 将服务端实际结果登记到变更缓存，并对齐期望状态。
 		c.sliceStored(ctx, "update ResourceSlice", poolName, pool, i, slice, actualSlice)
 	}
 
 	// Create new slices.
+	// 为尚无对应 slice 的期望项创建新对象。
 	added := false
+	// 遍历所有期望 slice。
 	for i := 0; i < len(pool.Slices); i++ {
+		// 已通过更新处理的跳过。
 		if _, ok := currentSliceForDesiredSlice[i]; ok {
 			// Was handled above through an update.
 			continue
 		}
+		// 存在属主时设置 ownerReference。
 		var ownerReferences []metav1.OwnerReference
 		if c.owner != nil {
 			ownerReferences = append(ownerReferences,
@@ -925,10 +1094,12 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		// [index encoded as base16 string]-[driver name]-[owner name (if not nil)]-
 		// This ensures that the index is at the beginning of the name,
 		// and the API server handles uniqueness by appending a random suffix.
+		// 生成名称以索引的十六进制前缀、驱动名、属主名开头，API 服务器追加随机后缀保证唯一。
 		generateName := encodeIndex(i, expectedPrefixLength) + nameSeparator + c.driverName + nameSeparator
 		if c.owner != nil {
 			generateName += c.owner.Name + nameSeparator
 		}
+		// 构造待创建的 ResourceSlice。
 		slice := &resourceapi.ResourceSlice{
 			ObjectMeta: metav1.ObjectMeta{
 				OwnerReferences: ownerReferences,
@@ -957,26 +1128,35 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		//
 		// Using a https://pkg.go.dev/k8s.io/client-go/tools/cache#MutationCache
 		// avoids that.
+		// 使用变更缓存避免因 informer 尚未看到新建对象而重复创建。
+		// 调用 API 创建，失败则返回错误触发重试。
 		actualSlice, err := c.resourceClient.ResourceSlices().Create(ctx, slice, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("create resource slice: %w", err)
 		}
 		logger.V(5).Info("Created new resource slice", "slice", klog.KObj(actualSlice))
+		// 创建成功后累加计数。
 		atomic.AddInt64(&c.numCreates, 1)
+		// 标记本次同步有新增，需记录时间以安排复核。
 		added = true
+		// 对齐期望状态与实际存储结果。
 		c.sliceStored(ctx, "create ResourceSlice", poolName, pool, i, slice, actualSlice)
 	}
 
+	// 处理变更缓存的过期复核逻辑。
 	now := time.Now()
+	// 有新增则记录时间。
 	if added {
 		c.lastAddByPool[poolName] = now
 		logger.V(5).Info("Added slices")
+		// 距上次新增已超过 TTL 则清理记录，不再复核。
 	} else if lastAdd, ok := c.lastAddByPool[poolName]; ok && start.After(lastAdd.Add(c.mutationCacheTTL)) {
 		// This sync started after the last add expired from the cache,
 		// so we are done and don't need to check again.
 		delete(c.lastAddByPool, poolName)
 		logger.V(5).Info("Done with re-syncing")
 	}
+	// 仍在 TTL 内则安排在过期时刻再次同步。
 	if lastAdd, ok := c.lastAddByPool[poolName]; ok {
 		// Need to check again.
 		//
@@ -987,6 +1167,7 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 		// to the time taken by the mutation cache when the slice was added, so we
 		// can be sure that any sync running at this time will not see the added
 		// slice because it will be expired.
+		// 计算复核时间并延迟入队。
 		when := lastAdd.Add(c.mutationCacheTTL)
 		c.queue.AddAfter(poolName, when.Sub(now))
 		logger.V(5).Info("Scheduled re-sync", "at", when)
@@ -995,10 +1176,13 @@ func (c *Controller) syncPool(ctx context.Context, poolName string) error {
 	return nil
 }
 
+// removeSlices 删除给定的过期 slice，忽略已不存在的对象。
 func (c *Controller) removeSlices(ctx context.Context, slices []*resourceapi.ResourceSlice) error {
 	logger := klog.FromContext(ctx)
 
+	// 逐项删除。
 	for _, slice := range slices {
+		// 通过 UID 与 ResourceVersion 前置条件避免误删同名的新对象。
 		options := metav1.DeleteOptions{
 			Preconditions: &metav1.Preconditions{
 				UID:             &slice.UID,
@@ -1013,14 +1197,20 @@ func (c *Controller) removeSlices(ctx context.Context, slices []*resourceapi.Res
 		// If this happens, we get a "not found error" and nothing
 		// changes on the server. The only downside is the extra API
 		// call. This isn't as bad as extra creates.
+		// 刚删除后缓存可能尚未更新，重复删除会得到 NotFound，忽略即可。
+		// 调用 API 删除。
 		err := c.resourceClient.ResourceSlices().Delete(ctx, slice.Name, options)
+		// 根据结果区分成功、NotFound 与其他错误。
 		switch {
 		case err == nil:
+			// 删除成功，累加计数。
 			logger.V(5).Info("Deleted obsolete resource slice", "slice", klog.KObj(slice), "deleteOptions", options)
 			atomic.AddInt64(&c.numDeletes, 1)
 		case apierrors.IsNotFound(err):
+			// 已被删除，忽略。
 			logger.V(5).Info("Resource slice was already deleted earlier", "slice", klog.KObj(slice))
 		default:
+			// 其他错误返回并触发重试。
 			return fmt.Errorf("delete resource slice: %w", err)
 		}
 	}
@@ -1031,11 +1221,14 @@ func (c *Controller) removeSlices(ctx context.Context, slices []*resourceapi.Res
 // sliceStored gets called after creating or updating a slice.
 // The slice might have been modified during the roundtrip
 // through the apiserver.
+// sliceStored 在创建或更新后调用，用服务端返回的对象校正本地期望状态并登记到变更缓存。
 func (c *Controller) sliceStored(ctx context.Context, msg string, poolName string, pool Pool, sliceIndex int, desiredSlice, actualSlice *resourceapi.ResourceSlice) {
+	// 将实际对象登记进变更缓存，避免重复操作。
 	c.sliceStore.Mutation(actualSlice)
 
 	// One difference is normal: the apiserver may have added TimeAdded to taints.
 	// This mutates desiredSlice for the DeepEqual below.
+	// 服务端可能补填 TimeAdded，先同步回期望对象以便后续比较。
 	if copyServerDefaults(desiredSlice, actualSlice) {
 		pool.Slices[sliceIndex].Devices = actualSlice.Spec.Devices
 	}
@@ -1046,6 +1239,7 @@ func (c *Controller) sliceStored(ctx context.Context, msg string, poolName strin
 	// update again, etc.  To break that cycle, update our
 	// desired state of the world so that it matches what
 	// we can store.
+	// 若字段被丢弃，更新期望状态使其与实际一致，避免反复触发更新。
 	if !apiequality.Semantic.DeepEqual(desiredSlice.Spec.PerDeviceNodeSelection, actualSlice.Spec.PerDeviceNodeSelection) ||
 		!apiequality.Semantic.DeepEqual(desiredSlice.Spec.SharedCounters, actualSlice.Spec.SharedCounters) ||
 		!apiequality.Semantic.DeepEqual(desiredSlice.Spec.PartitionTypeAttribute, actualSlice.Spec.PartitionTypeAttribute) ||
@@ -1057,6 +1251,7 @@ func (c *Controller) sliceStored(ctx context.Context, msg string, poolName strin
 		pool.Slices[sliceIndex].SkipNodeOperations = actualSlice.Spec.SkipNodeOperations
 		pool.Slices[sliceIndex].Devices = actualSlice.Spec.Devices
 
+		// 构造字段丢弃错误并上报。
 		err := &DroppedFieldsError{
 			PoolName:     poolName,
 			SliceIndex:   sliceIndex,
@@ -1067,13 +1262,16 @@ func (c *Controller) sliceStored(ctx context.Context, msg string, poolName strin
 	}
 }
 
+// copyServerDefaults 把服务端补填的 TimeAdded 拷贝回期望对象，返回是否发生了修改。
 func copyServerDefaults(desiredSlice, actualSlice *resourceapi.ResourceSlice) bool {
 	copied := false
 
 	// Should have the same length and entries in the same order.
+	// 按位置遍历设备与污点，只补填缺失的 TimeAdded。
 	for i := 0; i < len(desiredSlice.Spec.Devices) && i < len(actualSlice.Spec.Devices); i++ {
 		for e := 0; e < len(desiredSlice.Spec.Devices[i].Taints) && e < len(actualSlice.Spec.Devices[i].Taints); e++ {
 			if desiredSlice.Spec.Devices[i].Taints[e].TimeAdded == nil && actualSlice.Spec.Devices[i].Taints[e].TimeAdded != nil {
+				// 首次修改时先深拷贝 Spec，避免污染共享对象。
 				if !copied {
 					desiredSlice.Spec = *desiredSlice.Spec.DeepCopy()
 					copied = true
@@ -1088,28 +1286,36 @@ func copyServerDefaults(desiredSlice, actualSlice *resourceapi.ResourceSlice) bo
 // copyTaintTimeAdded copies existing TimeAdded values from one slice into
 // the other if the other one doesn't have it for a taint. Both input
 // slices are read-only.
+// copyTaintTimeAdded 从 from 中为 to 的匹配设备补填缺失的 TimeAdded；两个输入切片只读。
 func copyTaintTimeAdded(from, to []resourceapi.Device) []resourceapi.Device {
+	// 克隆目标切片，保持输入只读。
 	to = slices.Clone(to)
+	// 按设备名查找匹配的旧设备。
 	for i, toDevice := range to {
 		index := slices.IndexFunc(from, func(fromDevice resourceapi.Device) bool {
 			return fromDevice.Name == toDevice.Name
 		})
+		// 没有匹配设备则跳过。
 		if index < 0 {
 			// No matching device.
 			continue
 		}
 		fromDevice := from[index]
+		// 遍历目标设备的污点。
 		for j, toTaint := range toDevice.Taints {
+			// 已设置 TimeAdded 则跳过。
 			if toTaint.TimeAdded != nil {
 				// Already set.
 				continue
 			}
 			// Preserve the old TimeAdded if all other fields are the same.
+			// 仅当其他字段完全一致时保留旧的 TimeAdded。
 			index := slices.IndexFunc(fromDevice.Taints, func(fromTaint resourceapi.DeviceTaint) bool {
 				return toTaint.Key == fromTaint.Key &&
 					toTaint.Value == fromTaint.Value &&
 					toTaint.Effect == fromTaint.Effect
 			})
+			// 没有匹配旧污点则跳过。
 			if index < 0 {
 				// No matching old taint.
 				continue
@@ -1117,6 +1323,7 @@ func copyTaintTimeAdded(from, to []resourceapi.Device) []resourceapi.Device {
 			// In practice, devices are unlikely to have many
 			// taints.  Just clone the entire device before we
 			// motify it, it's unlikely that we do this more than once.
+			// 修改前深拷贝整个设备（污点通常很少）。
 			to[i] = *toDevice.DeepCopy()
 			to[i].Taints[j].TimeAdded = fromDevice.Taints[index].TimeAdded
 		}
@@ -1129,32 +1336,40 @@ func copyTaintTimeAdded(from, to []resourceapi.Device) []resourceapi.Device {
 // a nil DeviceTaint.TimeAdded is equal to a non-nil time.
 // Also, rounding to full seconds (caused by round-tripping) is
 // tolerated.
+// DevicesDeepEqual 比较设备切片，语义类似 apiequality.Semantic.DeepEqual，但容忍 TimeAdded 为 nil 或秒级取整差异。
 func DevicesDeepEqual(a, b []resourceapi.Device) bool {
 	return devicesSemantic.DeepEqual(a, b)
 }
 
+// devicesSemantic 是在标准语义相等性副本上追加了设备污点比较规则的实例。
 var devicesSemantic = func() conversion.Equalities {
 	semantic := apiequality.Semantic.Copy()
+	// 注册自定义比较函数，失败则直接 panic（发生在初始化期）。
 	if err := semantic.AddFunc(deviceTaintEqual); err != nil {
 		panic(err)
 	}
 	return semantic
 }()
 
+// deviceTaintEqual 比较两个设备污点，TimeAdded 相差在 1 秒内视为相等。
 func deviceTaintEqual(a, b resourceapi.DeviceTaint) bool {
+	// 两侧都有时间时比较差值，超过 1 秒判为不等。
 	if a.TimeAdded != nil && b.TimeAdded != nil {
 		delta := b.TimeAdded.Time.Sub(a.TimeAdded.Time)
 		if delta < -time.Second || delta > time.Second {
 			return false
 		}
 	}
+	// 其余字段必须完全一致。
 	return a.Key == b.Key &&
 		a.Value == b.Value &&
 		a.Effect == b.Effect
 }
 
+// refIfNotZero 对非零值返回其指针，零值返回 nil，便于写入可选指针字段。
 func refIfNotZero[T comparable](t T) *T {
 	var zero T
+	// 零值返回 nil。
 	if t == zero {
 		return nil
 	}
@@ -1164,6 +1379,7 @@ func refIfNotZero[T comparable](t T) *T {
 // getIndexLength calculates the minimum required prefix length to represent
 // the highest possible index (numSlices - 1) in base16. It ensures a minimum
 // length of resourceSliceIndexMinLength.
+// getIndexLength 计算用十六进制表示最大索引所需的最小前缀长度，并保证不小于 resourceSliceIndexMinLength。
 func getIndexLength(numSlices int) int {
 	hexLen := len(strconv.FormatInt(int64(numSlices-1), 16))
 
@@ -1173,7 +1389,9 @@ func getIndexLength(numSlices int) int {
 // decodeIndex parses a hex-encoded prefix of length expectedLength from name.
 // It returns the parsed integer, or -1 and an error if the format is invalid
 // or the value overflows.
+// decodeIndex 从名称中解析定长十六进制前缀作为索引，格式非法或溢出时返回错误。
 func decodeIndex(name string, expectedLength int) (int, error) {
+	// 定位分隔符，其位置必须等于预期前缀长度。
 	idx := strings.Index(name, nameSeparator)
 	if idx != expectedLength {
 		return -1, fmt.Errorf("invalid index length or missing separator")
@@ -1183,6 +1401,7 @@ func decodeIndex(name string, expectedLength int) (int, error) {
 	// ParseInt handles invalid digits and overflow automatically by returning an error.
 	// Using '0' for bitSize makes it architecture-aware (32 or 64-bit).
 	// The result is always non-negative because name starting with "-" would result in invalid index length.
+	// 按十六进制解析前缀，ParseInt 自动处理非法字符与溢出。
 	res, err := strconv.ParseInt(prefix, 16, 0)
 	if err != nil {
 		return -1, fmt.Errorf("failed to parse index: %w", err)
@@ -1193,11 +1412,14 @@ func decodeIndex(name string, expectedLength int) (int, error) {
 
 // encodeIndex encodes an integer into a deterministic base16 string,
 // padded to the expectedLength.
+// encodeIndex 将索引编码为定长的十六进制字符串，不足位补零。
 func encodeIndex(index int, expectedLength int) string {
 	return fmt.Sprintf("%0*x", expectedLength, index)
 }
 
+// retainSlicesByPoolName 在客户端从列表中移除不属于目标 pool 的 slice。
 func retainSlicesByPoolName(sliceList *resourceapi.ResourceSliceList, poolName string) {
+	// 原地过滤，仅保留目标 pool 的对象。
 	sliceList.Items = slices.DeleteFunc(sliceList.Items, func(slice resourceapi.ResourceSlice) bool {
 		return slice.Spec.Pool.Name != poolName
 	})
@@ -1205,21 +1427,29 @@ func retainSlicesByPoolName(sliceList *resourceapi.ResourceSliceList, poolName s
 
 // isUnsupportedPoolNameFieldSelector is needed for backwards compatibility.
 // The client-side list and watch filtering fallback can be removed in the future.
+// isUnsupportedPoolNameFieldSelector 判断错误是否表示服务端不支持 poolName 字段选择器（用于兼容旧版本）。
 func isUnsupportedPoolNameFieldSelector(err error) bool {
 	return apierrors.IsBadRequest(err)
 }
 
+// filterSliceWatchByPoolName 包装 watch，仅转发目标 pool 的 ResourceSlice 事件，其他事件（如错误、书签）始终放行。
 func filterSliceWatchByPoolName(ctx context.Context, w watch.Interface, poolName string) watch.Interface {
+	// 用匹配函数过滤事件对象。
 	return newWrapWatcher(ctx, w, func(event watch.Event) bool {
+		// 非 ResourceSlice 事件（如错误事件）直接放行。
 		resourceSlice, ok := event.Object.(*resourceapi.ResourceSlice)
 		if !ok {
 			// things like error events
+			// 例如 error 事件。
 			return true
 		}
+		// 书签等事件的空对象直接放行。
 		if resourceSlice == nil || (resourceSlice.Name == "" && resourceSlice.Spec.Pool.Name == "") {
 			// things like bookmark events
+			// 例如 bookmark 事件。
 			return true
 		}
+		// 仅保留 pool 名匹配的事件。
 		return resourceSlice.Spec.Pool.Name == poolName
 	})
 }

@@ -30,14 +30,20 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestResourceClaimIsFor 验证 IsForPod 与 IsForPodGroup 的所有权校验：
+// 覆盖 Pod/PodGroup 所有者、非所有者、无所有者、跨命名空间、不同 API 版本
+// 以及 acceptPodGroup 开关等场景，并断言精确的错误文本。
 func TestResourceClaimIsFor(t *testing.T) {
+	// uid 计数器与 newUID 生成稳定且互不相同的 UID。
 	uid := 0
 	newUID := func() types.UID {
 		uid++
 		return types.UID(fmt.Sprintf("%d", uid))
 	}
+	// isController 用于构造控制器类型的所有者引用。
 	isController := true
 
+	// podWithPodGroup 返回深拷贝并设置所属 PodGroup 的 Pod。
 	podWithPodGroup := func(pod *v1.Pod, podGroupName string) *v1.Pod {
 		pod = pod.DeepCopy()
 		pod.Spec.SchedulingGroup = &v1.PodSchedulingGroup{
@@ -46,6 +52,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 		return pod
 	}
 
+	// 非所有者的 Pod 与 PodGroup。
 	podNotOwner := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -60,6 +67,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			UID:       newUID(),
 		},
 	}
+	// 作为所有者的 Pod 与 PodGroup。
 	podOwner := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -74,6 +82,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			UID:       newUID(),
 		},
 	}
+	// 没有任何所有者的 claim。
 	claimNoOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -81,6 +90,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			UID:       newUID(),
 		},
 	}
+	// 由 Pod 拥有的 claim。
 	claimWithOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -94,6 +104,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		},
 	}
+	// 由 PodGroup 拥有的 claim，所有者引用带完整 API 组、类型与名称。
 	claimWithPodGroupOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -110,6 +121,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		},
 	}
+	// 所有者为 PodGroup 但 API 版本不同的 claim，用于验证版本被忽略。
 	claimWithOtherVersionPodGroupOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -126,6 +138,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		},
 	}
+	// 位于其他命名空间、由 Pod 拥有的 claim。
 	userClaimWithOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "user-namespace",
@@ -139,6 +152,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		},
 	}
+	// 位于其他命名空间、由 PodGroup 拥有的 claim。
 	userClaimWithPodGroupOwner := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "user-namespace",
@@ -153,60 +167,72 @@ func TestResourceClaimIsFor(t *testing.T) {
 		},
 	}
 
+	// 子测试：IsForPod 的各种场景。
 	t.Run("Pod", func(t *testing.T) {
+		// expectedError 为空表示期望校验通过，否则期望错误文本精确匹配。
 		testcases := map[string]struct {
 			pod            *v1.Pod
 			claim          *resourceapi.ResourceClaim
 			acceptPodGroup bool
 			expectedError  string
 		}{
+			// claim 由该 Pod 拥有，应通过。
 			"owned": {
 				pod:   podOwner,
 				claim: claimWithOwner,
 			},
+			// claim 归另一个 Pod 所有，应报“Pod is not owner”。
 			"other-pod": {
 				pod:           podNotOwner,
 				claim:         claimWithOwner,
 				expectedError: `ResourceClaim kube-system/claimWithOwner was not created for Pod kube-system/podNotOwner (Pod is not owner)`,
 			},
+			// claim 无所有者，应报错。
 			"no-owner": {
 				pod:           podOwner,
 				claim:         claimNoOwner,
 				expectedError: `ResourceClaim kube-system/claimNoOwner was not created for Pod kube-system/podOwner (Pod is not owner)`,
 			},
+			// 允许 PodGroup 所有者但 Pod 未声明所属组，仍按普通场景报错。
 			"accept-podgroup-without-podgroup": {
 				pod:            podOwner,
 				claim:          claimNoOwner,
 				expectedError:  `ResourceClaim kube-system/claimNoOwner was not created for Pod kube-system/podOwner (Pod is not owner)`,
 				acceptPodGroup: true,
 			},
+			// claim 与 Pod 命名空间不同，应报命名空间不一致。
 			"different-namespace": {
 				pod:           podOwner,
 				claim:         userClaimWithOwner,
 				expectedError: `ResourceClaim user-namespace/userClaimWithOwner is not in the same namespace as Pod kube-system/podOwner`,
 			},
+			// Pod 声明了所属组且 claim 由该组拥有，允许时应通过。
 			"owned-by-podgroup": {
 				pod:            podWithPodGroup(podOwner, podGroupOwner.Name),
 				claim:          claimWithPodGroupOwner,
 				acceptPodGroup: true,
 			},
+			// 所有者引用的 API 版本不同但组、类型与名称一致，仍应通过。
 			"owned-by-podgroup-other-api-version": {
 				pod:            podWithPodGroup(podOwner, podGroupOwner.Name),
 				claim:          claimWithOtherVersionPodGroupOwner,
 				acceptPodGroup: true,
 			},
+			// claim 由另一个 PodGroup 拥有，应报错并带上 Pod 声明的组名。
 			"other-podgroup": {
 				pod:            podWithPodGroup(podOwner, podGroupNotOwner.Name),
 				claim:          claimWithPodGroupOwner,
 				expectedError:  `ResourceClaim kube-system/claimWithPodGroupOwner was not created for Pod kube-system/podOwner (neither Pod nor PodGroup podGroupNotOwner is the owner)`,
 				acceptPodGroup: true,
 			},
+			// Pod 声明了组但 claim 无所有者，应报错。
 			"no-podgroup-owner": {
 				pod:            podWithPodGroup(podOwner, podGroupOwner.Name),
 				claim:          claimNoOwner,
 				expectedError:  `ResourceClaim kube-system/claimNoOwner was not created for Pod kube-system/podOwner (neither Pod nor PodGroup podGroupOwner is the owner)`,
 				acceptPodGroup: true,
 			},
+			// claim 位于其他命名空间，应报命名空间不一致。
 			"different-podgroup-namespace": {
 				pod:            podWithPodGroup(podOwner, podGroupOwner.Name),
 				claim:          userClaimWithPodGroupOwner,
@@ -215,6 +241,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		}
 
+		// 逐个子测试执行校验，按期望断言无错误或精确的错误文本。
 		for name, tc := range testcases {
 			t.Run(name, func(t *testing.T) {
 				err := IsForPod(tc.pod, tc.claim, tc.acceptPodGroup)
@@ -228,26 +255,32 @@ func TestResourceClaimIsFor(t *testing.T) {
 		}
 	})
 
+	// 子测试：IsForPodGroup 的各种场景。
 	t.Run("PodGroup", func(t *testing.T) {
+		// 同样以 expectedError 是否为空区分通过与失败。
 		testcases := map[string]struct {
 			pod           *schedulingapi.PodGroup
 			claim         *resourceapi.ResourceClaim
 			expectedError string
 		}{
+			// claim 由该 PodGroup 拥有，应通过。
 			"owned": {
 				pod:   podGroupOwner,
 				claim: claimWithPodGroupOwner,
 			},
+			// claim 归另一个 PodGroup 所有，应报错（用例名沿用 other-pod）。
 			"other-pod": {
 				pod:           podGroupNotOwner,
 				claim:         claimWithPodGroupOwner,
 				expectedError: `ResourceClaim kube-system/claimWithPodGroupOwner was not created for PodGroup kube-system/podGroupNotOwner (PodGroup is not owner)`,
 			},
+			// claim 无所有者，应报错。
 			"no-owner": {
 				pod:           podGroupOwner,
 				claim:         claimNoOwner,
 				expectedError: `ResourceClaim kube-system/claimNoOwner was not created for PodGroup kube-system/podGroupOwner (PodGroup is not owner)`,
 			},
+			// claim 与 PodGroup 命名空间不同，应报错。
 			"different-namespace": {
 				pod:           podGroupOwner,
 				claim:         userClaimWithPodGroupOwner,
@@ -255,6 +288,7 @@ func TestResourceClaimIsFor(t *testing.T) {
 			},
 		}
 
+		// 执行校验并断言结果。
 		for name, tc := range testcases {
 			t.Run(name, func(t *testing.T) {
 				err := IsForPodGroup(tc.pod, tc.claim)
@@ -269,13 +303,17 @@ func TestResourceClaimIsFor(t *testing.T) {
 	})
 }
 
+// TestIsReservedForPod 验证 IsReservedForPod：覆盖 Pod UID 直接匹配、多个预留对象、
+// PodGroup 预留（含特性开关关闭）、Pod 与 PodGroup 混合预留等场景。
 func TestIsReservedForPod(t *testing.T) {
+	// UID 生成器。
 	uid := 0
 	newUID := func() types.UID {
 		uid++
 		return types.UID(fmt.Sprintf("%d", uid))
 	}
 
+	// 用于预留判定的 Pod 与 PodGroup 测试对象。
 	podNotReserved := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -319,6 +357,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 没有任何预留的 claim。
 	claimNoReservation := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -328,6 +367,7 @@ func TestIsReservedForPod(t *testing.T) {
 		Status: resourceapi.ResourceClaimStatus{},
 	}
 
+	// 为 podReserved 预留的 claim。
 	claimWithReservation := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -343,6 +383,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 构造带所属 PodGroup 的 Pod。
 	podWithPodGroup := func(pod *v1.Pod, podGroupName string) *v1.Pod {
 		pod = pod.DeepCopy()
 		pod.Spec.SchedulingGroup = &v1.PodSchedulingGroup{
@@ -351,6 +392,7 @@ func TestIsReservedForPod(t *testing.T) {
 		return pod
 	}
 
+	// 为 podGroupReserved 预留的 claim，包含 API 组、资源类型、名称与 UID。
 	claimWithPodGroupReservation := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -369,6 +411,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 同时为两个 Pod 预留的 claim。
 	claimWithMultipleReservations := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -387,6 +430,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 同时为两个 PodGroup 预留的 claim。
 	claimWithMultiplePodGroupReservations := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -411,6 +455,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 同时为 Pod 与 PodGroup 预留的 claim。
 	claimWithReservationsForPodAndPodGroup := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
@@ -429,67 +474,79 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// acceptPodGroup 控制是否接受 PodGroup 预留，expectedResult 为期望判定结果。
 	testcases := map[string]struct {
 		pod            *v1.Pod
 		claim          *resourceapi.ResourceClaim
 		acceptPodGroup bool
 		expectedResult bool
 	}{
+		// 无预留且 Pod 未被预留，期望 false。
 		"not-reserved": {
 			pod:            podNotReserved,
 			claim:          claimNoReservation,
 			expectedResult: false,
 		},
+		// UID 直接命中，期望 true。
 		"reserved-for-pod": {
 			pod:            podReserved,
 			claim:          claimWithReservation,
 			expectedResult: true,
 		},
+		// 预留的是其他 Pod，期望 false。
 		"reserved-for-other-pod": {
 			pod:            podNotReserved,
 			claim:          claimWithReservation,
 			expectedResult: false,
 		},
+		// 多个预留中包含该 Pod，期望 true。
 		"multiple-reservations-including-pod": {
 			pod:            podReserved,
 			claim:          claimWithMultipleReservations,
 			expectedResult: true,
 		},
+		// 多个预留中不包含该 Pod，期望 false。
 		"multiple-reservations-excluding-pod": {
 			pod:            podNotReserved,
 			claim:          claimWithMultipleReservations,
 			expectedResult: false,
 		},
+		// Pod 属于被预留的 PodGroup 且开关开启，期望 true。
 		"reserved-for-podgroup": {
 			pod:            podWithPodGroup(podNotReserved, podGroupReserved.Name),
 			claim:          claimWithPodGroupReservation,
 			acceptPodGroup: true,
 			expectedResult: true,
 		},
+		// 同样的 PodGroup 预留但开关关闭，期望 false。
 		"podgroup-disabled": {
 			pod:            podWithPodGroup(podNotReserved, podGroupReserved.Name),
 			claim:          claimWithPodGroupReservation,
 			acceptPodGroup: false,
 			expectedResult: false,
 		},
+		// Pod 自身或所属 PodGroup 任一命中即可，期望 true。
 		"reserved-for-pod-and-podgroup": {
 			pod:            podWithPodGroup(podReserved, podGroupReserved.Name),
 			claim:          claimWithReservationsForPodAndPodGroup,
 			acceptPodGroup: true,
 			expectedResult: true,
 		},
+		// 预留的是其他 PodGroup，期望 false。
 		"reserved-for-other-podgroup": {
 			pod:            podWithPodGroup(podNotReserved, podGroupNotReserved.Name),
 			claim:          claimWithReservation,
 			acceptPodGroup: true,
 			expectedResult: false,
 		},
+		// 多个 PodGroup 预留中包含所属组，期望 true。
 		"multiple-reservations-including-podgroup": {
 			pod:            podWithPodGroup(podNotReserved, podGroupReserved.Name),
 			claim:          claimWithMultiplePodGroupReservations,
 			acceptPodGroup: true,
 			expectedResult: true,
 		},
+		// 多个 PodGroup 预留中不包含所属组，期望 false。
 		"multiple-reservations-excluding-podgroup": {
 			pod:            podWithPodGroup(podNotReserved, podGroupNotReserved.Name),
 			claim:          claimWithMultiplePodGroupReservations,
@@ -498,6 +555,7 @@ func TestIsReservedForPod(t *testing.T) {
 		},
 	}
 
+	// 调用被测函数并断言结果。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			result := IsReservedForPod(tc.pod, tc.claim, tc.acceptPodGroup)
@@ -506,7 +564,11 @@ func TestIsReservedForPod(t *testing.T) {
 	}
 }
 
+// TestName 验证 Name 的三类返回：直接引用返回名称且不校验所有权；
+// 模板生成在状态中找到时返回名称并要求校验所有权；
+// 状态缺失或字段未设置时返回包装了预定义错误的错误。
 func TestName(t *testing.T) {
+	// expectedName 为期望名称，expectedCheck 为是否需要校验所有权，expectedError 为期望错误。
 	testcases := map[string]struct {
 		pod           *v1.Pod
 		podClaim      *v1.PodResourceClaim
@@ -514,6 +576,7 @@ func TestName(t *testing.T) {
 		expectedCheck bool
 		expectedError error
 	}{
+		// 直接引用：返回给定名称，无需所有权校验。
 		"resource-claim-name-set": {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -528,6 +591,7 @@ func TestName(t *testing.T) {
 			expectedCheck: false,
 			expectedError: nil,
 		},
+		// 模板生成且状态中有同名条目：返回状态中的名称，需校验所有权。
 		"resource-claim-template-name-set-and-status-found": {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -551,6 +615,7 @@ func TestName(t *testing.T) {
 			expectedCheck: true,
 			expectedError: nil,
 		},
+		// 状态中缺少对应条目：返回包装 ErrClaimNotFound 的错误。
 		"resource-claim-template-name-set-but-status-not-found": {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -574,6 +639,7 @@ func TestName(t *testing.T) {
 			expectedCheck: false,
 			expectedError: fmt.Errorf(`pod "default/test-pod": %w`, ErrClaimNotFound),
 		},
+		// 两个引用字段都未设置：返回包装 ErrAPIUnsupported 的错误。
 		"neither-resource-claim-name-nor-template-name-set": {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -590,6 +656,7 @@ func TestName(t *testing.T) {
 		},
 	}
 
+	// 无错误时断言名称与校验标记；有错误时断言错误文本。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			name, check, err := Name(tc.pod, tc.podClaim)
@@ -604,7 +671,10 @@ func TestName(t *testing.T) {
 	}
 }
 
+// TestNameFromPodGroup 验证 NameFromPodGroup 的三类返回，语义与 TestName 一致，
+// 错误中改为包含 PodGroup 信息。
 func TestNameFromPodGroup(t *testing.T) {
+	// 用例字段含义与 TestName 相同。
 	testcases := map[string]struct {
 		podGroup      *schedulingapi.PodGroup
 		podGroupClaim *schedulingapi.PodGroupResourceClaim
@@ -612,6 +682,7 @@ func TestNameFromPodGroup(t *testing.T) {
 		expectedCheck bool
 		expectedError error
 	}{
+		// 直接引用：返回名称，无需校验所有权。
 		"resource-claim-name-set": {
 			podGroup: &schedulingapi.PodGroup{
 				ObjectMeta: metav1.ObjectMeta{
@@ -626,6 +697,7 @@ func TestNameFromPodGroup(t *testing.T) {
 			expectedCheck: false,
 			expectedError: nil,
 		},
+		// 模板生成且状态命中：返回名称并要求校验所有权。
 		"resource-claim-template-name-set-and-status-found": {
 			podGroup: &schedulingapi.PodGroup{
 				ObjectMeta: metav1.ObjectMeta{
@@ -649,6 +721,7 @@ func TestNameFromPodGroup(t *testing.T) {
 			expectedCheck: true,
 			expectedError: nil,
 		},
+		// 状态中缺少条目：返回包装 ErrClaimNotFound 的错误。
 		"resource-claim-template-name-set-but-status-not-found": {
 			podGroup: &schedulingapi.PodGroup{
 				ObjectMeta: metav1.ObjectMeta{
@@ -672,6 +745,7 @@ func TestNameFromPodGroup(t *testing.T) {
 			expectedCheck: false,
 			expectedError: fmt.Errorf("PodGroup default/test-podgroup: %w", ErrClaimNotFound),
 		},
+		// 两个引用字段都未设置：返回包装 ErrAPIUnsupported 的错误。
 		"neither-resource-claim-name-nor-template-name-set": {
 			podGroup: &schedulingapi.PodGroup{
 				ObjectMeta: metav1.ObjectMeta{
@@ -688,6 +762,7 @@ func TestNameFromPodGroup(t *testing.T) {
 		},
 	}
 
+	// 断言名称、校验标记或错误文本。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			name, check, err := NameFromPodGroup(tc.podGroup, tc.podGroupClaim)
@@ -702,7 +777,11 @@ func TestNameFromPodGroup(t *testing.T) {
 	}
 }
 
+// TestBindTo 验证 BindTo：没有匹配 PodGroup 时绑定到 Pod；
+// 当 Pod 的 claim 与 PodGroup 的 claim 在名称及引用字段上完全一致时绑定到 PodGroup；
+// 同时覆盖 API 不支持、Pod 与组不匹配及部分字段不匹配的情况。
 func TestBindTo(t *testing.T) {
+	// 命名空间、Pod 名与 UID 等公共测试数据。
 	namespace := "my-namespace"
 	podName := "my-pod"
 	podUID := types.UID("pod-uid")
@@ -713,6 +792,7 @@ func TestBindTo(t *testing.T) {
 	claimName := "my-claim"
 	resourceClaimName := new("my-resource-claim")
 
+	// 声明属于 my-podgroup 的 Pod。
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
@@ -725,6 +805,7 @@ func TestBindTo(t *testing.T) {
 			},
 		},
 	}
+	// 期望得到的 Pod 消费者引用。
 	podReservation := resourceapi.ResourceClaimConsumerReference{
 		APIGroup: v1.GroupName,
 		Resource: "pods",
@@ -732,6 +813,7 @@ func TestBindTo(t *testing.T) {
 		UID:      podUID,
 	}
 
+	// 构造带指定 claim 列表的 PodGroup。
 	podGroupWithClaims := func(claims ...schedulingapi.PodGroupResourceClaim) *schedulingapi.PodGroup {
 		podGroup := &schedulingapi.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
@@ -745,6 +827,7 @@ func TestBindTo(t *testing.T) {
 		}
 		return podGroup
 	}
+	// 期望得到的 PodGroup 消费者引用。
 	podGroupReservation := resourceapi.ResourceClaimConsumerReference{
 		APIGroup: schedulingapi.GroupName,
 		Resource: "podgroups",
@@ -752,6 +835,7 @@ func TestBindTo(t *testing.T) {
 		UID:      podGroupUID,
 	}
 
+	// expected 为期望的消费者引用，expectedError 为期望错误。
 	tests := map[string]struct {
 		pod           *v1.Pod
 		podGroup      *schedulingapi.PodGroup
@@ -759,6 +843,7 @@ func TestBindTo(t *testing.T) {
 		expected      resourceapi.ResourceClaimConsumerReference
 		expectedError error
 	}{
+		// Pod 的 claim 两个引用字段都未设置，期望 ErrAPIUnsupported。
 		"unsupported API in Pod": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -767,6 +852,7 @@ func TestBindTo(t *testing.T) {
 			},
 			expectedError: fmt.Errorf("Pod my-namespace/my-pod claim my-claim: %w", ErrAPIUnsupported),
 		},
+		// 没有匹配 PodGroup（此处为 nil）时绑定到 Pod。
 		"Pod claim with ResourceClaimName": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -775,6 +861,7 @@ func TestBindTo(t *testing.T) {
 			},
 			expected: podReservation,
 		},
+		// 模板引用的 claim 同样绑定到 Pod。
 		"Pod claim with ResourceClaimTemplateName": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -783,6 +870,7 @@ func TestBindTo(t *testing.T) {
 			},
 			expected: podReservation,
 		},
+		// 与 PodGroup 的 claim 完全一致，绑定到 PodGroup。
 		"Pod claim with ResourceClaimName matching PodGroup": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -795,6 +883,7 @@ func TestBindTo(t *testing.T) {
 			}),
 			expected: podGroupReservation,
 		},
+		// 模板名与 PodGroup claim 一致，绑定到 PodGroup。
 		"Pod claim with ResourceClaimTemplateName matching PodGroup": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -807,6 +896,7 @@ func TestBindTo(t *testing.T) {
 			}),
 			expected: podGroupReservation,
 		},
+		// Pod 所属组与传入 PodGroup 的命名空间不同，应报错。
 		"Wrong PodGroup namespace for Pod": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -816,6 +906,7 @@ func TestBindTo(t *testing.T) {
 			podGroup:      &schedulingapi.PodGroup{ObjectMeta: metav1.ObjectMeta{Namespace: "not-" + namespace, Name: podGroupName}},
 			expectedError: fmt.Errorf("Pod my-namespace/my-pod belongs to PodGroup my-namespace/my-podgroup, not PodGroup not-my-namespace/my-podgroup"),
 		},
+		// Pod 所属组与传入 PodGroup 的名称不同，应报错。
 		"Wrong PodGroup name for Pod": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -825,6 +916,7 @@ func TestBindTo(t *testing.T) {
 			podGroup:      &schedulingapi.PodGroup{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "not-" + podGroupName}},
 			expectedError: fmt.Errorf("Pod my-namespace/my-pod belongs to PodGroup my-namespace/my-podgroup, not PodGroup my-namespace/not-my-podgroup"),
 		},
+		// PodGroup 中没有匹配的 claim，回退绑定到 Pod。
 		"No matching claim in PodGroup": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -837,6 +929,7 @@ func TestBindTo(t *testing.T) {
 			),
 			expected: podReservation,
 		},
+		// 多条 claim 中有一条完全匹配，绑定到 PodGroup。
 		"Find matching claim in PodGroup": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -850,6 +943,7 @@ func TestBindTo(t *testing.T) {
 			),
 			expected: podGroupReservation,
 		},
+		// claim 名称不同，不算匹配，绑定到 Pod。
 		"Claim name mismatch": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -864,6 +958,7 @@ func TestBindTo(t *testing.T) {
 			),
 			expected: podReservation,
 		},
+		// ResourceClaimName 不同，不算匹配，绑定到 Pod。
 		"Claim resourceClaimName mismatch": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -878,6 +973,7 @@ func TestBindTo(t *testing.T) {
 			),
 			expected: podReservation,
 		},
+		// ResourceClaimTemplateName 不同，不算匹配，绑定到 Pod。
 		"Claim resourceClaimTemplateName mismatch": {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
@@ -894,6 +990,7 @@ func TestBindTo(t *testing.T) {
 		},
 	}
 
+	// 执行 BindTo 并断言消费者引用或错误文本。
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			actual, err := BindTo(test.pod, test.podGroup, test.podClaim)
@@ -907,21 +1004,25 @@ func TestBindTo(t *testing.T) {
 	}
 }
 
+// TestBaseRequestRef 验证 BaseRequestRef：顶级请求原样返回，子请求返回斜杠前的父请求名。
 func TestBaseRequestRef(t *testing.T) {
 	testcases := map[string]struct {
 		requestRef             string
 		expectedBaseRequestRef string
 	}{
+		// 输入 foo 无子请求，期望返回自身。
 		"valid-no-subrequest": {
 			requestRef:             "foo",
 			expectedBaseRequestRef: "foo",
 		},
+		// 输入 foo/bar，期望返回父请求 foo。
 		"valid-subrequest": {
 			requestRef:             "foo/bar",
 			expectedBaseRequestRef: "foo",
 		},
 	}
 
+	// 断言提取的基础请求名。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			baseRequestRef := BaseRequestRef(tc.requestRef)
@@ -930,12 +1031,17 @@ func TestBaseRequestRef(t *testing.T) {
 	}
 }
 
+// TestConfigForResult 验证 ConfigForResult 的过滤规则：只保留 opaque 非空、
+// 且 Requests 为空（匹配所有）、直接命中请求名或命中父请求名的配置；
+// 同时验证不同来源的配置都能返回，而不匹配的配置被排除。
 func TestConfigForResult(t *testing.T) {
+	// deviceConfigurations 为候选配置，result 为分配结果，expectedConfigs 为期望保留的配置。
 	testcases := map[string]struct {
 		deviceConfigurations []resourceapi.DeviceAllocationConfiguration
 		result               resourceapi.DeviceRequestAllocationResult
 		expectedConfigs      []resourceapi.DeviceAllocationConfiguration
 	}{
+		// opaque 为 nil 的配置应被过滤掉，期望结果为 nil。
 		"opaque-nil": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -952,6 +1058,7 @@ func TestConfigForResult(t *testing.T) {
 			},
 			expectedConfigs: nil,
 		},
+		// Requests 为空表示匹配所有请求，配置应被保留。
 		"empty-requests-match-all": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -980,6 +1087,7 @@ func TestConfigForResult(t *testing.T) {
 				},
 			},
 		},
+		// Requests 包含完整请求名时匹配，配置应被保留。
 		"match-regular-request": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -1012,6 +1120,7 @@ func TestConfigForResult(t *testing.T) {
 				},
 			},
 		},
+		// 子请求 foo/bar 可由父请求名 foo 对应的配置匹配。
 		"match-parent-request-for-subrequest": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -1044,6 +1153,7 @@ func TestConfigForResult(t *testing.T) {
 				},
 			},
 		},
+		// 完整子请求名 foo/bar 的配置匹配；foo/not-bar 的配置不匹配，被排除。
 		"match-subrequest": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -1087,6 +1197,7 @@ func TestConfigForResult(t *testing.T) {
 				},
 			},
 		},
+		// 类来源与 claim 来源的两条配置均匹配，应按原顺序全部返回。
 		"match-both-source-class-and-claim": {
 			deviceConfigurations: []resourceapi.DeviceAllocationConfiguration{
 				{
@@ -1143,6 +1254,7 @@ func TestConfigForResult(t *testing.T) {
 		},
 	}
 
+	// 调用 ConfigForResult 并断言过滤结果。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			configs := ConfigForResult(tc.deviceConfigurations, tc.result)

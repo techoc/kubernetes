@@ -33,10 +33,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// deviceClassResolver 是供测试使用的窄接口，只暴露按扩展资源名查询 DeviceClass 的能力，
+// 便于把 nil 缓存实例当作接口值来验证 nil 接收者行为。
 type deviceClassResolver interface {
 	GetDeviceClass(resourceName v1.ResourceName) *resourceapi.DeviceClass
 }
 
+// TestNil 验证 nil 的 ExtendedResourceCache 实例通过接口调用 GetDeviceClass 时返回 nil 而不 panic。
+// 输入为 nil 缓存与任意资源名，断言返回结果为 nil。
 func TestNil(t *testing.T) {
 	var cache *ExtendedResourceCache
 	var resolver deviceClassResolver = cache
@@ -45,8 +49,12 @@ func TestNil(t *testing.T) {
 	}
 }
 
+// TestHandlers 验证附加事件处理器的注册顺序与调用时机：
+// 构造两个处理器并依次通过构造参数和 AddEventHandler 注册，输入为 Add/Update/Delete 三类事件；
+// 断言处理器按注册顺序各被调用一次、收到正确的事件对象，且第二个处理器中能查到缓存已更新的状态。
 func TestHandlers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 用计数器记录各处理器的调用顺序与次数。
 	var numAdd, numUpdate, numDelete int
 
 	resourceName := v1.ResourceName("example.com/gpu")
@@ -135,13 +143,20 @@ func TestHandlers(t *testing.T) {
 			}
 		},
 	}
+	// 第二个处理器通过 AddEventHandler 注册，排在构造参数中的第一个处理器之后。
 	erCache.AddEventHandler(secondHandler)
 
+	// 依次触发三类事件，观察两个处理器的调用顺序及缓存查询状态。
 	erCache.OnAdd(class, false)
 	erCache.OnUpdate(class, updatedClass)
 	erCache.OnDelete(updatedClass)
 }
 
+// TestExtendedResourceCache 在 synctest 的受控时钟下运行 testExtendedResourceCache，
+// 以便可靠地等待 informer 后台协程处理完事件。
+// testExtendedResourceCache 通过 fake 客户端与 informer 端到端验证缓存行为：
+// 输入为若干带不同创建时间与扩展资源名的 DeviceClass，以及更新、删除操作；
+// 断言显式映射、隐式默认映射、冲突时的新旧与名称优先级、映射变更与删除清理均符合预期。
 func TestExtendedResourceCache(t *testing.T) { synctest.Test(t, testExtendedResourceCache) }
 func testExtendedResourceCache(t *testing.T) {
 	tCtx, client, cache := setup(t)
@@ -310,6 +325,10 @@ func testExtendedResourceCache(t *testing.T) {
 	}
 }
 
+// TestDeviceClassMapping 在 synctest 受控时钟下运行 testDeviceClassMapping。
+// testDeviceClassMapping 通过 fake 客户端验证“DeviceClass 名 → 扩展资源名”反向映射：
+// 输入为带显式资源名的 gpu-class 与无显式资源名的 tpu-class，随后更新并删除 gpu-class；
+// 断言只有显式声明的类出现在反向映射中，且更新、删除后映射相应变更或消失。
 func TestDeviceClassMapping(t *testing.T) { synctest.Test(t, testDeviceClassMapping) }
 func testDeviceClassMapping(t *testing.T) {
 	tCtx, client, cache := setup(t)
@@ -377,6 +396,9 @@ func testDeviceClassMapping(t *testing.T) {
 	}
 }
 
+// setup 为测试搭建 fake 客户端 + DeviceClass informer + ExtendedResourceCache，
+// 注册事件处理器、启动并等待缓存同步，最后返回上下文、客户端与缓存实例。
+// 清理函数会先取消上下文再关闭 informer，确保后台协程退出。
 func setup(t *testing.T) (context.Context, *fake.Clientset, *ExtendedResourceCache) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -412,6 +434,7 @@ func setup(t *testing.T) (context.Context, *fake.Clientset, *ExtendedResourceCac
 	// To work around that, we wait here for the goroutines which
 	// are involved in setting up the watch *before* creating
 	// DeviceClasses.
+	// 等待 observe/watch 相关协程就绪，规避 fake 客户端的 watch 竞态，之后测试再创建对象。
 	synctest.Wait()
 
 	return ctx, client, ec

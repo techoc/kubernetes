@@ -22,4 +22,8 @@ limitations under the License.
 
 // Package v1beta1 provides conversion code between the v1beta1 version of the resource API
 // and the latest API version.
+//
+// v1beta1 包提供资源 API 的 v1beta1 版本与最新版本（v1）之间的转换代码，
+// 主要弥补两版本在 DeviceRequest、Device、ResourceSliceSpec 等结构上的差异：
+// 例如把 v1beta1 的顶层请求字段折叠进 v1 的 Exactly，以及把 BasicDevice 拆平。
 package v1beta1

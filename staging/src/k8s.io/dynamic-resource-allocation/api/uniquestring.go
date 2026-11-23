@@ -22,32 +22,43 @@ import (
 )
 
 // NullUniqueString is a UniqueString which contains no string.
+// NullUniqueString 是不包含任何字符串的 UniqueString 零值。
 var NullUniqueString UniqueString
 
 // UniqueString is a wrapper around [unique.Handle[string]].
+// UniqueString 是对 [unique.Handle[string]] 的包装，比较更快，作为 map 键时更高效。
 type UniqueString unique.Handle[string]
 
 // Returns the string that is stored in the UniqueString.
 // If the UniqueString is null, the empty string is returned.
+// String 返回 UniqueString 中保存的字符串；若为零值则返回空字符串。
 func (us UniqueString) String() string {
+	// 零值直接返回空字符串。
 	if us == NullUniqueString {
 		return ""
 	}
+	// 从唯一句柄中取出底层字符串。
 	return unique.Handle[string](us).Value()
 }
 
 // MarshalJSON is primarily useful for pretty-printing as JSON or YAML.
+// MarshalJSON 将 UniqueString 编码为其底层字符串，主要用于 JSON/YAML 的美观打印。
 func (us UniqueString) MarshalJSON() ([]byte, error) {
+	// 委托 json.Marshal 编码 String 得到的字符串。
 	return json.Marshal(us.String())
 }
 
 // MarshalText allows UniqueString to be used as the key in maps
 // without causing problems for logging.
+// MarshalText 使 UniqueString 可用作 map 键，且在日志中正常显示。
 func (us UniqueString) MarshalText() ([]byte, error) {
+	// 将底层字符串转换为字节切片作为文本表示。
 	return []byte(us.String()), nil
 }
 
 // MakeUniqueString constructs a new unique string.
+// MakeUniqueString 将字符串驻留为唯一句柄并构造一个 UniqueString。
 func MakeUniqueString(str string) UniqueString {
+	// 通过 unique.Make 驻留字符串后包装为 UniqueString。
 	return UniqueString(unique.Make(str))
 }

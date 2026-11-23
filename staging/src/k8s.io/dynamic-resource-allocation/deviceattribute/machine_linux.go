@@ -22,9 +22,12 @@ import (
 )
 
 const (
+	// SysfsRoot 是 Linux 上 sysfs 伪文件系统的默认挂载点。
 	SysfsRoot = "/sys"
 )
 
+// initDefaultMachine 把 mc 的 sysfs 初始化为以 SysfsRoot 为根的只读文件系统。
 func initDefaultMachine(mc *machine) {
+	// 通过 os.DirFS 打开 /sys，并断言其实现 ReadLinkFS 以支持读取符号链接。
 	mc.sysfs = os.DirFS(SysfsRoot).(fs.ReadLinkFS)
 }

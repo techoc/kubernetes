@@ -22,6 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/apitesting/roundtrip"
 )
 
+// TestRoundTrip 测试元数据 API 组所有注册类型的往返（round-trip）转换。
+// 输入：Install 作为注册函数，传入 nil 表示使用默认的 fuzzer/值生成方式。
+// 断言由 roundtrip.RoundTripTestForAPIGroup 辅助函数完成：它会把每个版本化类型与内部类型
+// 反复转换（fuzz → 转换到内部 → 转回版本 → 比较），要求转回后的对象与原始对象一致，
+// 以此保证各版本与内部表示之间的转换不丢失信息。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, Install, nil)
 }

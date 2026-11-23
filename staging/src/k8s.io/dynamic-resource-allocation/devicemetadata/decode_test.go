@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package devicemetadata 本文件包含 devicemetadata 包的单元测试，
+// 覆盖 JSON 流解码、解码选项以及元数据文件与目录的读取合并逻辑。
 package devicemetadata
 
 import (
@@ -37,6 +39,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 以下是各测试共享的合法元数据夹具：validInternal 为内部类型期望值，
+// validV1Alpha1 / validV1Beta1 为对应版本化对象，validV1Alpha1JSON / validV1Beta1JSON
+// 是它们序列化后带换行符的 JSON 字节流，用作解码输入。
 var (
 	validInternal = &metadata.DeviceMetadata{
 		ObjectMeta: metav1.ObjectMeta{
@@ -109,24 +114,34 @@ var (
 	validV1Beta1JSON = mustMarshal(validV1Beta1)
 )
 
+// mustMarshal 把对象序列化为 JSON，失败时直接 panic；末尾追加换行符以模拟按行分隔的元数据流。
 func mustMarshal(obj interface{}) []byte {
 	data, err := json.Marshal(obj)
 	if err != nil {
+		// 测试夹具必须可序列化，否则视为测试编写错误。
 		panic(err)
 	}
+	// 追加换行符，便于多个对象拼接成 JSON 流。
 	return append(data, '\n')
 }
 
+// TestDecodeMetadataFromStream 测试流解码的各种场景：
+// 不同版本之间的相互转换、多版本流、未知版本跳过、以及各类畸形输入产生的错误。
+// 每个用例在开启和关闭校验两种模式下各运行一次，并按需断言解码结果、校验错误与 GVK。
 func TestDecodeMetadataFromStream(t *testing.T) {
+	// 未知版本（v99/v100）：应被静默跳过；缺少 kind 的未知版本则属于错误。
 	unknownVersionJSON := `{"apiVersion":"metadata.k8s.io/v99","kind":"DeviceMetadata","metadata":{"name":"test"}}` + "\n"
 	unknownV2JSON := `{"apiVersion":"metadata.k8s.io/v100","kind":"DeviceMetadata","metadata":{"name":"test"}}` + "\n"
 	unknownVersionMissingKindJSON := `{"apiVersion":"metadata.k8s.io/v99","metadata":{"name":"test"}}` + "\n"
+	// 已注册版本但缺少 kind / apiVersion，以及字段类型错误的输入：均应致命报错。
 	missingKindJSON := `{"apiVersion":"metadata.resource.k8s.io/v1alpha1","metadata":{"name":"test"}}` + "\n"
 	missingApiversionJSON := `{"kind":"DeviceMetadata","metadata":{"name":"test"}}` + "\n"
 	malformedV1Alpha1JSON := `{"apiVersion":"metadata.resource.k8s.io/v1alpha1","kind":"DeviceMetadata","metadata":{"name":"test"},"requests":"this-should-be-an-array"}` + "\n"
 
+	// podClaimName 非法的输入，用于验证声明式校验能捕获错误。
 	invalidV1Alpha1JSON := `{"apiVersion":"metadata.resource.k8s.io/v1alpha1","kind":"DeviceMetadata","metadata":{"name":"test"},"podClaimName":"%!$#"}`
 	invalidV1Beta1JSON := `{"apiVersion":"metadata.resource.k8s.io/v1beta1","kind":"DeviceMetadata","metadata":{"name":"test"},"podClaimName":"%!$#"}`
+	// 非法输入对应的内部类型期望值：数据仍被解码，但校验结果应报错。
 	invalidInternal := &metadata.DeviceMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -134,6 +149,8 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 		PodClaimName: new("%!$#"),
 	}
 
+	// 表驱动用例：isInvalid 标记对象能否通过校验，streamInput 为输入 JSON 流，
+	// dest 为目标类型，expected 为期望解码结果，expectError / expectGVK 为期望错误与 GVK。
 	testcases := map[string]struct {
 		isInvalid   bool
 		streamInput []byte
@@ -292,10 +309,12 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 		},
 	}
 
+	// 遍历所有用例，每个用例都同时测试开启与关闭校验两条路径。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			for _, withValidation := range []bool{true, false} {
 				t.Run(fmt.Sprintf("with-validation-%v", withValidation), func(t *testing.T) {
+					// 按需注册校验结果选项，用独立副本作为解码目标以免影响其他子测试。
 					var opts []DecodeMetadataOption
 					var validationResult error
 					if withValidation {
@@ -303,6 +322,7 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 					}
 					dest := tc.dest.DeepCopyObject()
 					err := DecodeMetadataFromStream(json.NewDecoder(bytes.NewReader(tc.streamInput)), dest, opts...)
+					// 期望报错时，断言错误非空且包含预期子串。
 					if tc.expectError != "" {
 						if err == nil {
 							t.Fatalf("expected error containing %q, got nil", tc.expectError)
@@ -316,10 +336,12 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 						t.Fatalf("DecodeMetadataFromStream: %v", err)
 					}
 
+					// 断言解码出的对象与期望值完全一致。
 					if diff := cmp.Diff(tc.expected, dest); diff != "" {
 						t.Errorf("metadata mismatch (-want +got):\n%s", diff)
 					}
 
+					// 校验结果断言：仅当开启校验且输入非法时应当报错。
 					if withValidation && tc.isInvalid && validationResult == nil {
 						t.Errorf("validation did not fail as expected")
 					}
@@ -327,6 +349,7 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 						t.Errorf("unexpected validation error: %v", validationResult)
 					}
 
+					// 需要校验 GVK 时，再解码一次并通过选项捕获实际 GVK 进行比对。
 					if tc.expectGVK != nil {
 						var gvk schema.GroupVersionKind
 						dest := tc.dest.DeepCopyObject()
@@ -344,8 +367,11 @@ func TestDecodeMetadataFromStream(t *testing.T) {
 	}
 }
 
+// TestReadMetadata 测试单文件读取：合法文件能解码为内部类型，
+// 文件缺失与空对象（无 apiVersion）分别产生对应错误，且错误信息中包含文件路径。
 func TestReadMetadata(t *testing.T) {
 	dir := t.TempDir()
+	// 写入一个合法的元数据文件。
 	validFile := filepath.Join(dir, "valid", "metadata.json")
 	if err := os.MkdirAll(filepath.Dir(validFile), 0755); err != nil {
 		t.Fatalf("create test dir: %v", err)
@@ -354,6 +380,7 @@ func TestReadMetadata(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
+	// 写入一个空 JSON 对象：不含 apiVersion，应导致解码失败。
 	emptyObjectFile := filepath.Join(dir, "empty-object", "metadata.json")
 	if err := os.MkdirAll(filepath.Dir(emptyObjectFile), 0755); err != nil {
 		t.Fatalf("create test dir: %v", err)
@@ -362,6 +389,7 @@ func TestReadMetadata(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
+	// 合法文件解码后的期望内部类型结果。
 	expectedInternal := &metadata.DeviceMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "my-claim",
@@ -382,6 +410,7 @@ func TestReadMetadata(t *testing.T) {
 		}},
 	}
 
+	// 表驱动用例：path 为待读取文件，expected 为期望结果，expectError 为期望错误信息子串。
 	testcases := map[string]struct {
 		path        string
 		expected    *metadata.DeviceMetadata
@@ -401,10 +430,12 @@ func TestReadMetadata(t *testing.T) {
 		},
 	}
 
+	// 逐一读取文件并核对错误或解码结果。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			dm, err := readMetadata(tc.path)
 
+			// 期望错误时：断言错误非空且包含预期子串。
 			if tc.expectError != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.expectError)
@@ -418,6 +449,7 @@ func TestReadMetadata(t *testing.T) {
 				t.Fatalf("readMetadata: %v", err)
 			}
 
+			// 断言解码结果符合预期。
 			if diff := cmp.Diff(tc.expected, dm); diff != "" {
 				t.Errorf("metadata mismatch (-want +got):\n%s", diff)
 			}
@@ -425,9 +457,12 @@ func TestReadMetadata(t *testing.T) {
 	}
 }
 
+// TestReadRequestDir 测试目录合并逻辑：单个/多个驱动的元数据、同名请求跨驱动合并、
+// 忽略非匹配文件、保留 PodClaimName，以及空目录或不存在的目录报错。
 func TestReadRequestDir(t *testing.T) {
 	dir := t.TempDir()
 
+	// 期望的内部类型请求：gpu 与 nic，以及另一个驱动提供的同名 gpu 请求。
 	gpuInternal := metadata.DeviceMetadataRequest{
 		Name: "gpu",
 		Devices: []metadata.Device{{
@@ -439,6 +474,7 @@ func TestReadRequestDir(t *testing.T) {
 			},
 		}},
 	}
+	// 另一个驱动提供的同名 gpu 请求，用于验证跨驱动合并设备列表。
 	gpuAltInternal := metadata.DeviceMetadataRequest{
 		Name: "gpu",
 		Devices: []metadata.Device{{
@@ -447,6 +483,7 @@ func TestReadRequestDir(t *testing.T) {
 			Name:   "gpu-1",
 		}},
 	}
+	// 不同名的 nic 请求，用于验证多请求共存。
 	nicInternal := metadata.DeviceMetadataRequest{
 		Name: "nic",
 		Devices: []metadata.Device{{
@@ -456,6 +493,7 @@ func TestReadRequestDir(t *testing.T) {
 		}},
 	}
 
+	// 各驱动写入的元数据文件 JSON 内容（v1alpha1 序列化结果）。
 	gpuJSON := mustMarshal(&v1alpha1.DeviceMetadata{
 		TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "DeviceMetadata"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-claim", Namespace: "default", UID: "uid-1234", Generation: 1},
@@ -471,6 +509,7 @@ func TestReadRequestDir(t *testing.T) {
 			}},
 		}},
 	})
+	// nic 请求对应的元数据文件。
 	nicJSON := mustMarshal(&v1alpha1.DeviceMetadata{
 		TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "DeviceMetadata"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-claim", Namespace: "default", UID: "uid-1234", Generation: 1},
@@ -479,6 +518,7 @@ func TestReadRequestDir(t *testing.T) {
 			Devices: []v1alpha1.Device{{Driver: "nic.example.com", Pool: "worker-0", Name: "nic-0"}},
 		}},
 	})
+	// 主驱动写入三个请求，其中 gpu-0 与 gpu-1 会与次驱动的同名请求合并。
 	primaryDriverJSON := mustMarshal(&v1alpha1.DeviceMetadata{
 		TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "DeviceMetadata"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-claim", Namespace: "default", UID: "uid-1234", Generation: 1},
@@ -518,6 +558,7 @@ func TestReadRequestDir(t *testing.T) {
 			},
 		},
 	})
+	// 次驱动写入两个与主驱动同名的请求，用于验证设备列表追加。
 	secondaryDriverJSON := mustMarshal(&v1alpha1.DeviceMetadata{
 		TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "DeviceMetadata"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-claim", Namespace: "default", UID: "uid-1234", Generation: 1},
@@ -532,6 +573,7 @@ func TestReadRequestDir(t *testing.T) {
 			},
 		},
 	})
+	// 带 PodClaimName 的元数据文件，用于验证合并时保留该字段。
 	podClaimJSON := mustMarshal(&v1alpha1.DeviceMetadata{
 		TypeMeta:     metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "DeviceMetadata"},
 		ObjectMeta:   metav1.ObjectMeta{Name: "my-claim", Namespace: "default", UID: "uid-1234", Generation: 1},
@@ -542,6 +584,7 @@ func TestReadRequestDir(t *testing.T) {
 		}},
 	})
 
+	// writeFile 在子目录中写入一个文件并返回该子目录路径，便于构造不同测试场景。
 	writeFile := func(subdir, name string, data []byte) string {
 		p := filepath.Join(dir, subdir)
 		if err := os.MkdirAll(p, 0755); err != nil {
@@ -553,16 +596,23 @@ func TestReadRequestDir(t *testing.T) {
 		return p
 	}
 
+	// 单驱动目录：仅一个元数据文件。
 	singleDir := writeFile("single", "gpu.example.com"+metadata.MetadataFileSuffix, gpuJSON)
+	// 多驱动目录：两个驱动各写一个文件。
 	multiDir := writeFile("multi", "gpu.example.com"+metadata.MetadataFileSuffix, gpuJSON)
 	writeFile("multi", "nic.example.com"+metadata.MetadataFileSuffix, nicJSON)
+	// 同名请求目录：两个驱动写入部分同名的请求，验证设备合并。
 	sameRequestNameDir := writeFile("same-request-name", "gpu.example.com"+metadata.MetadataFileSuffix, primaryDriverJSON)
 	writeFile("same-request-name", "mlx.example.com"+metadata.MetadataFileSuffix, secondaryDriverJSON)
+	// 空目录：只有一个不相关的 txt 文件，不应被匹配为元数据。
 	emptyDir := writeFile("empty", "unrelated.txt", []byte("not metadata"))
+	// 混合目录：一个合法元数据文件加一个不相关的 json 文件，后者应被忽略。
 	mixedDir := writeFile("mixed", "gpu.example.com"+metadata.MetadataFileSuffix, gpuJSON)
 	writeFile("mixed", "unrelated.json", []byte(`{"foo":"bar"}`))
+	// PodClaimName 目录：验证合并结果保留 pod 本地声明名。
 	podClaimDir := writeFile("podclaim", "gpu.example.com"+metadata.MetadataFileSuffix, podClaimJSON)
 
+	// 表驱动用例：dir 为待读取目录，expected 为期望合并结果，expectError 为期望错误子串。
 	testcases := map[string]struct {
 		dir         string
 		expected    *metadata.DeviceMetadata
@@ -625,10 +675,12 @@ func TestReadRequestDir(t *testing.T) {
 		},
 	}
 
+	// 遍历目录用例，核对报错或合并后的元数据结果。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			dm, err := readRequestDir(tc.dir)
 
+			// 期望错误时：断言错误非空且包含预期子串。
 			if tc.expectError != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.expectError)
@@ -642,6 +694,7 @@ func TestReadRequestDir(t *testing.T) {
 				t.Fatalf("readRequestDir: %v", err)
 			}
 
+			// 断言合并结果符合预期。
 			if diff := cmp.Diff(tc.expected, dm); diff != "" {
 				t.Errorf("metadata mismatch (-want +got):\n%s", diff)
 			}

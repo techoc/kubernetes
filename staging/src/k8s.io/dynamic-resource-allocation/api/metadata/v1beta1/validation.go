@@ -25,16 +25,22 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// ValidateCustom_Device_Attributes 对 Device.Attributes 执行自定义校验：
+// 按语义深比较识别发生变化的属性项，并复用 v1 API 的 DeviceAttribute 校验器逐项校验。
 func ValidateCustom_Device_Attributes(
 	ctx context.Context, op operation.Operation, fldPath *field.Path,
 	obj, oldObj map[resourceapi.QualifiedName]resourceapi.DeviceAttribute,
 ) field.ErrorList {
+	// 逐 map 值校验：值未发生语义变化时跳过，变化/new 的值交给 v1 校验器检查。
 	return validate.EachMapVal(ctx, op, fldPath, obj, oldObj, validate.SemanticDeepEqual, resourceapi.Validate_DeviceAttribute)
 }
 
+// ValidateCustom_Device_NetworkData 对 Device.NetworkData 执行自定义校验：
+// 直接委托给 v1 API 生成的 NetworkDeviceData 校验器，保持两个版本的规则一致。
 func ValidateCustom_Device_NetworkData(
 	ctx context.Context, op operation.Operation, fldPath *field.Path,
 	obj, oldObj *resourceapi.NetworkDeviceData,
 ) field.ErrorList {
+	// NetworkData 是指针字段，新旧值及必填性判断一并交给 v1 校验器处理。
 	return resourceapi.Validate_NetworkDeviceData(ctx, op, fldPath, obj, oldObj)
 }

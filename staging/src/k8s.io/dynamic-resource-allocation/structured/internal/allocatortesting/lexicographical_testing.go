@@ -25,6 +25,10 @@ import (
 )
 
 // TestLexicographicalAllocator runs tests which depend on lexicographical sorting.
+// TestLexicographicalAllocator 运行一组依赖"字典序排序"行为的分配测试。
+// 这些用例验证：当输入的 ResourceSlice / DevicePool / Device 顺序被打乱时，
+// 分配器仍按名称的字典序（而非输入顺序）选择设备，从而保证不同实现产生一致结果。
+// supportedFeatures 与 newAllocator 由具体的分配器实现传入。
 func TestLexicographicalAllocator(t *testing.T,
 	supportedFeatures Features,
 	newAllocator func(
@@ -35,7 +39,10 @@ func TestLexicographicalAllocator(t *testing.T,
 		slices []*resourceapi.ResourceSlice,
 		celCache *cel.Cache,
 	) (Allocator, error)) {
+	// 定义测试用例集合：每个用例打乱输入顺序，期望按字典序选出设备。
 	testcases := map[string]AllocatorTestCase{
+		// 场景一：池的字典序。输入顺序为 pool3、pool2、pool1，
+		// 期望先选 pool1 再选 pool2，证明按池名字典序而非输入顺序分配。
 		"lexicographical-sorting-pools": {
 			claimsToAllocate: objects(claimWithRequests(claim0, nil, request(req0, classA, 2))),
 			classes:          objects(class(classA, driverA)),
@@ -53,6 +60,9 @@ func TestLexicographicalAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool2, device1, false),
 			)},
 		},
+		// 场景二：带 binding conditions 的池排序。
+		// 期望没有 binding conditions 的池（pool2/pool3）排在带条件的 pool1 之前，
+		// 且带条件的设备被选中时其条件要原样反映到结果中。
 		"lexicographical-sorting-pools-with-binding-conditions": {
 			features: Features{
 				DeviceBindingAndStatus: true,
@@ -75,6 +85,8 @@ func TestLexicographicalAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool3, device3, false),
 			)},
 		},
+		// 场景三：同一池内 ResourceSlice 的字典序。
+		// 输入顺序为 slice3、slice2、slice1，期望先选 slice1 再选 slice2 中的设备。
 		"lexicographical-sorting-slices": {
 			claimsToAllocate: objects(claimWithRequests(claim0, nil, request(req0, classA, 2))),
 			classes:          objects(class(classA, driverA)),
@@ -92,6 +104,9 @@ func TestLexicographicalAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
 			)},
 		},
+		// 场景四：带 binding conditions 的 slice 排序。
+		// 期望先选无条件的 slice2/slice3 中的设备；当选中带条件的 device1 时，
+		// 结果中必须携带其 bindingConditions / bindingFailureConditions。
 		"lexicographical-sorting-slices-with-binding-conditions": {
 			features: Features{
 				DeviceBindingAndStatus: true,
@@ -121,5 +136,6 @@ func TestLexicographicalAllocator(t *testing.T,
 		},
 	}
 
+	// 复用通用测试运行器执行所有用例。
 	RunTestAllocator(t, supportedFeatures, newAllocator, testcases)
 }

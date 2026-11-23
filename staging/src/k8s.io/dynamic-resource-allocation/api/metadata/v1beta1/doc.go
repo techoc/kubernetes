@@ -22,4 +22,7 @@ limitations under the License.
 // Package v1beta1 contains the v1beta1 serialization format for DRA device
 // metadata. These types include JSON tags and are used for reading/writing
 // metadata files on disk.
+//
+// v1beta1 包定义 DRA 设备元数据的 v1beta1 序列化格式：类型带有 JSON 标签，
+// 用于读写磁盘上的元数据文件，并作为对外版本与内部版本之间转换的起点。
 package v1beta1

@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package dynamicresourceallocation contains helper packages for the dynamic
 // resource allocation feature.
+// 本包（及其子包）为动态资源分配（DRA）特性提供辅助工具，
+// 包括 API 版本转换以及领导者选举等可复用组件。
 package dynamicresourceallocation

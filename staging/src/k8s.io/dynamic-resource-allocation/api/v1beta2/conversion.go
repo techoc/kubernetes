@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1beta2 中的版本转换代码主要由 conversion-gen 生成，集中放在 zz_generated.conversion.go。
+// 本文件用于放置需要手写的补充转换逻辑；当前没有手写转换函数，仅声明包。
 package v1beta2

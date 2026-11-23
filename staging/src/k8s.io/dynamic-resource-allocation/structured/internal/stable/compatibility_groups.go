@@ -30,25 +30,36 @@ import (
 // pool's other devices, too. Whether any of the devices are already allocated
 // is deliberately irrelevant, keeping the outcome independent of allocation
 // order. This lets the feature be enabled later without deleting pods.
+// sliceUsesCompatibilityGroups 判断切片中是否有设备在其计数器消费声明里携带兼容组。
+// 只要任一 ConsumesCounters 条目声明了兼容组即返回 true；否则返回 false。
 func sliceUsesCompatibilityGroups(slice *resourceapi.ResourceSlice) bool {
+	// 遍历切片中的所有设备。
 	for _, device := range slice.Spec.Devices {
+		// 检查该设备的每一次计数器消费。
 		for _, deviceCounterConsumption := range device.ConsumesCounters {
+			// 一旦发现有兼容组声明即可提前返回。
 			if len(deviceCounterConsumption.CompatibilityGroups) > 0 {
 				return true
 			}
 		}
 	}
+	// 没有任何设备声明兼容组。
 	return false
 }
 
 // slicesWithoutCompatibilityGroups returns the slices which do not match
 // sliceUsesCompatibilityGroups, preserving their order.
+// slicesWithoutCompatibilityGroups 过滤掉声明了兼容组的切片，并按原顺序保留其余切片。
 func slicesWithoutCompatibilityGroups(slices []*resourceapi.ResourceSlice) []*resourceapi.ResourceSlice {
+	// 预分配结果容量，最多与输入等长。
 	filtered := make([]*resourceapi.ResourceSlice, 0, len(slices))
+	// 保持输入切片的相对顺序。
 	for _, slice := range slices {
+		// 使用兼容组的切片需要被排除。
 		if sliceUsesCompatibilityGroups(slice) {
 			continue
 		}
+		// 保留不使用兼容组的切片。
 		filtered = append(filtered, slice)
 	}
 	return filtered

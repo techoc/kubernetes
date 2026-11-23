@@ -24,6 +24,8 @@ import (
 )
 
 // subsystem is intentionally generic because these metrics are exposed in kube-controller-manager and kube-scheduler.
+// subsystem 为指标子系统名称。这里故意使用通用名称，
+// 因为该指标会同时由 kube-controller-manager 与 kube-scheduler 暴露。
 const subsystem = "dynamic_resource_allocation"
 
 var (
@@ -32,6 +34,9 @@ var (
 	// categorized by their creation status and admin access.
 	// Used by kube-controller-manager and kube-scheduler, so
 	// the component where this metric gets collected is another dimension.
+	// ResourceClaimCreate 记录 ResourceClaim 创建请求的总数，
+	// 按创建状态、是否管理员访问、所属 API 组与类型（Pod 或 scheduling.k8s.io/PodGroup）分类。
+	// 由于它由 kube-controller-manager 与 kube-scheduler 共同采集，采集组件本身构成另一个区分维度。
 	ResourceClaimCreate = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -39,14 +44,19 @@ var (
 			Help:           "Number of ResourceClaims creation requests, categorized by creation status, admin access, and owning API group and kind (either Pod or scheduling.k8s.io/PodGroup)",
 			StabilityLevel: metrics.ALPHA,
 		},
+		// 标签维度：创建状态、管理员访问、所有者 API 组与所有者类型。
 		[]string{"status", "admin_access", "owner_api_group", "owner_api_kind"},
 	)
 )
 
+// registerMetrics 保证指标只注册一次，避免重复注册导致 panic。
 var registerMetrics sync.Once
 
 // RegisterMetrics registers ResourceClaim metrics.
+// RegisterMetrics 将 ResourceClaim 创建计数指标注册到 legacyregistry。
+// 借助 sync.Once，即使并发调用也只会执行一次注册。
 func RegisterMetrics() {
+	// 仅第一次调用时执行注册逻辑。
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(ResourceClaimCreate)
 	})
