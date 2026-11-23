@@ -24,6 +24,8 @@ option go_package = "k8s.io/externaljwt/apis/v1";
 import "google/protobuf/timestamp.proto";
 
 // This service is served by a process on a local Unix Domain Socket.
+// ExternalJWTSigner 是外部 JWT 签名器服务，由本地 Unix Domain Socket 上的进程提供。
+// kube-apiserver 通过它完成 service account token 的签发与验签密钥获取。
 service ExternalJWTSigner {
     // Sign takes a serialized JWT payload, and returns the serialized header and
     // signature. The caller can then assemble the JWT from the header, payload,
@@ -31,6 +33,9 @@ service ExternalJWTSigner {
     // `base64url(header) + "." + base64url(payload)` with signing key.
     //
     // The plugin MUST set a key id in the returned JWT header.
+  // Sign RPC：对 JWT payload 签名，返回 header 与 signature，调用方自行拼装三段式 JWT。
+  // 签名内容是对 `base64url(header) + "." + base64url(payload)` 用私钥计算得出。
+  // 注意：插件必须在返回的 JWT header 中设置 kid（key id），否则 kube-apiserver 无法选择验签公钥。
     rpc Sign(SignJWTRequest) returns (SignJWTResponse) {}
   
     // FetchKeys returns the set of public keys that are trusted to sign
@@ -38,19 +43,26 @@ service ExternalJWTSigner {
     //   - Every time it tries to validate a JWT from the service account issuer with an unknown key ID, and
     //   - Periodically, so it can serve reasonably-up-to-date keys from the OIDC
     //     JWKs endpoint.
+  // FetchKeys RPC：返回可信的验签公钥集合。kube-apiserver 在两种情况下调用：
+  //  1. 校验 token 时遇到未知 kid；
+  //  2. 定期刷新，以保证 OIDC JWKs 端点能提供较新的公钥。
     rpc FetchKeys(FetchKeysRequest) returns (FetchKeysResponse) {}
     
     // Metadata is meant to be called once on startup.
     // Enables sharing metadata with kube-apiserver (eg: the max token lifetime that signer supports)
+  // Metadata RPC：仅在启动时调用一次，用于向 kube-apiserver 通告签名器能力（如最大 token 有效期）。
     rpc Metadata(MetadataRequest) returns (MetadataResponse) {}
   }
-  
+
+// SignJWTRequest 是签名请求，只包含待签名的 JWT payload（第二段）。
   message SignJWTRequest {
     // URL-safe base64 wrapped payload to be signed.
     // Exactly as it appears in the second segment of the JWT
+    // claims 是 URL 安全的 base64 编码 payload，与 JWT 第二段完全一致。
     string claims = 1;
   }
-  
+
+// SignJWTResponse 是签名响应，返回 JWT 的第一段（header）与第三段（signature）。
   message SignJWTResponse {
     // header must contain only alg, kid, typ claims.
     // typ must be “JWT”.
@@ -58,46 +70,63 @@ service ExternalJWTSigner {
     // alg must be one of the algorithms supported by kube-apiserver (currently RS256, ES256, ES384, ES512).
     // header cannot have any additional data that kube-apiserver does not recognize.
     // Already wrapped in URL-safe base64, exactly as it appears in the first segment of the JWT.
+    // header 是 URL 安全 base64 编码的 JWT 第一段，只允许 alg/kid/typ 三个声明：
+    // typ 必须为 "JWT"；kid 非空且不超过 1024 字符，且对应公钥不能被排除在 OIDC discovery 之外；
+    // alg 必须是 kube-apiserver 支持的算法（当前 RS256/ES256/ES384/ES512）；
+    // 不能包含 kube-apiserver 无法识别的额外字段。
     string header = 1;
   
     // The signature for the JWT.
     // Already wrapped in URL-safe base64, exactly as it appears in the final segment of the JWT.
+    // signature 是 JWT 的签名（第三段），同样是 URL 安全 base64 编码。
     string signature = 2;
   }
-  
+
+// FetchKeysRequest 是获取验签公钥的请求，当前为空消息（无需参数）。
   message FetchKeysRequest {}
-  
+
+// FetchKeysResponse 返回验签公钥集合及刷新提示信息。
   message FetchKeysResponse {
+    // keys 是可信公钥列表。
     repeated Key keys = 1;
   
     // The timestamp when this data was pulled from the authoritative source of
     // truth for verification keys.
     // kube-apiserver can export this from metrics, to enable end-to-end SLOs.
+    // data_timestamp 是这些密钥从权威来源拉取的时间戳，kube-apiserver 可将其导出为指标以支撑端到端 SLO。
     google.protobuf.Timestamp data_timestamp = 2;
   
     // refresh interval for verification keys to pick changes if any.
     // any value <= 0 is considered a misconfiguration.
+    // refresh_hint_seconds 是建议的刷新间隔（秒）；<= 0 被视为配置错误。
     int64 refresh_hint_seconds = 3;
   }
-  
+
+// Key 描述一个用于验签的公钥。
   message Key {
     // A unique identifier for this key.
     // Length must be <=1024.
+    // key_id 是密钥的唯一标识（对应 JWT header 中的 kid），长度不超过 1024。
     string key_id = 1;
   
     // The public key, PKIX-serialized.
     // must be a public key supported by kube-apiserver (currently RSA 256 or ECDSA 256/384/521)
+    // key 是 PKIX 序列化的公钥字节，必须是 kube-apiserver 支持的算法（当前 RSA 256 或 ECDSA 256/384/521）。
     bytes key = 2;
   
     // Set only for keys that are not used to sign bound tokens.
     // eg: supported keys for legacy tokens.
     // If set, key is used for verification but excluded from OIDC discovery docs.
     // if set, external signer should not use this key to sign a JWT.
+    // exclude_from_oidc_discovery 为 true 时，该密钥仅用于验签（例如兼容旧 token），
+    // 不会出现在 OIDC discovery 文档中，且签名器不应使用它签发新 JWT。
     bool exclude_from_oidc_discovery = 3;
   }
-  
+
+// MetadataRequest 是能力查询请求，当前为空消息（无需参数）。
   message MetadataRequest {}
-  
+
+// MetadataResponse 返回签名器的能力信息，供 kube-apiserver 做默认值与校验。
   message MetadataResponse {
     // used by kube-apiserver for defaulting/validation of JWT lifetime while accounting for configuration flag values:
     // 1. `--service-account-max-token-expiration`
@@ -108,5 +137,6 @@ service ExternalJWTSigner {
     // * If `--service-account-extend-token-expiration` is true, the extended expiration is `min(1 year, max_token_expiration_seconds)`.
     //
     // `max_token_expiration_seconds` must be at least 600s.
+    // max_token_expiration_seconds 是签名器支持的最大 token 有效期（秒），必须至少 600 秒。
     int64 max_token_expiration_seconds = 1;
   }
