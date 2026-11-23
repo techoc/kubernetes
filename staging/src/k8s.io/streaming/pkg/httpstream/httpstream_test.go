@@ -24,6 +24,8 @@ import (
 	"testing"
 )
 
+// 最小 ResponseWriter 桩：只记录头与状态码，便于断言 Handshake 写出的内容。
+// 用指针保存状态码，区分“未写入”与“写入了 0”。
 type responseWriter struct {
 	header     http.Header
 	statusCode *int
@@ -40,6 +42,7 @@ func (r *responseWriter) Header() http.Header {
 }
 
 func (r *responseWriter) WriteHeader(code int) {
+	// 取局部变量地址，避免复用循环变量导致记录的状态码串味。
 	r.statusCode = &code
 }
 
@@ -47,6 +50,7 @@ func (r *responseWriter) Write([]byte) (int, error) {
 	return 0, nil
 }
 
+// 用表驱动覆盖协议协商的成功与失败分支，并核对失败时写回的 HTTP 状态码与响应头。
 func TestHandshake(t *testing.T) {
 	tests := map[string]struct {
 		clientProtocols    []string
@@ -77,6 +81,7 @@ func TestHandshake(t *testing.T) {
 			expectedStatusCode: http.StatusForbidden,
 		},
 		"no common protocol with comma separated list": {
+			// 客户端把多个协议塞进同一个头，服务端必须拆开逐个比较。
 			clientProtocols:    []string{"c, d"},
 			serverProtocols:    []string{"a", "b"},
 			expectedProtocol:   "",
@@ -89,6 +94,7 @@ func TestHandshake(t *testing.T) {
 			expectedProtocol: "b",
 		},
 		"common protocol with comma separated list": {
+			// 即使 b 不在首个位置，也要从逗号列表里挑出与服务端匹配的协议。
 			clientProtocols:  []string{"b, c"},
 			serverProtocols:  []string{"a", "b"},
 			expectedProtocol: "b",
@@ -124,6 +130,7 @@ func TestHandshake(t *testing.T) {
 					t.Fatalf("%s: w.statusCode: expected %d, got %d", name, e, a)
 				}
 				if test.expectedStatusCode == http.StatusForbidden {
+					// 协商失败时把服务端可接受的协议列表回给客户端，便于其重试。
 					if e, a := test.serverProtocols, w.Header()[HeaderAcceptedProtocolVersions]; !reflect.DeepEqual(e, a) {
 						t.Fatalf("%s: accepted server protocols: expected %v, got %v", name, e, a)
 					}
@@ -151,6 +158,7 @@ func TestHandshake(t *testing.T) {
 		})
 	}
 
+	// 服务端协议列表为空属于配置错误，应该 panic 而不是静默拒绝所有客户端。
 	t.Run("empty server protocols should panic", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
@@ -164,6 +172,7 @@ func TestHandshake(t *testing.T) {
 	})
 }
 
+// 覆盖 errors.As 的穿透行为：被 fmt.Errorf 包裹的 UpgradeFailureError 也应识别为升级失败。
 func TestIsUpgradeFailureError(t *testing.T) {
 	testCases := map[string]struct {
 		err      error
@@ -201,6 +210,7 @@ func TestIsUpgradeFailureError(t *testing.T) {
 	}
 }
 
+// 按错误文本匹配已知的 HTTPS 代理报错，确保误判不会掩盖真正的升级失败原因。
 func TestIsHTTPSProxyError(t *testing.T) {
 	testCases := map[string]struct {
 		err      error

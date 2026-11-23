@@ -37,6 +37,8 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
+// 让同一个 handler 既能模拟升级成功，也能模拟四种升级失败（缺头、状态码不对等），
+// 避免为每种错误情形单独写一套服务端。
 type serverHandlerConfig struct {
 	shouldError      bool
 	statusCode       int
@@ -44,6 +46,8 @@ type serverHandlerConfig struct {
 	upgradeHeader    string
 }
 
+// shouldError 为真时按配置伪造响应头，用来验证客户端会把它们判为升级失败；
+// 为假时才真正跑一遍 SPDY 握手，并回显收到的第一条流。
 func serverHandler(t *testing.T, config serverHandlerConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if config.shouldError {
@@ -58,6 +62,8 @@ func serverHandler(t *testing.T, config serverHandlerConfig) http.HandlerFunc {
 			return
 		}
 
+		// 通过 channel 把新流从回调里交给主 goroutine：回调在 SPDY 收帧 goroutine 上执行，
+		// 直接在里面做读写会和后面的 io.Copy 抢同一个流。
 		streamCh := make(chan httpstream.Stream)
 
 		responseUpgrader := NewResponseUpgrader()
@@ -75,8 +81,11 @@ func serverHandler(t *testing.T, config serverHandlerConfig) http.HandlerFunc {
 	}
 }
 
+// 用一个类型同时表示“造 HTTP 服务”和“造 HTTPS 服务”，测试表就能只换工厂不改流程。
 type serverFunc func(http.Handler) *httptest.Server
 
+// 同时覆盖普通转发和 CONNECT 隧道两种代理行为，并记录 hook 观察到的请求信息，
+// 这样测试能在同一次请求里校验代理是否被用到、以及认证头是否正确。
 type testHTTPProxyHandler struct {
 	handlerDone sync.WaitGroup
 	hook        func(*http.Request) bool
@@ -84,6 +93,7 @@ type testHTTPProxyHandler struct {
 	t           testing.TB
 }
 
+// hook 返回 false 代表这条请求该被代理拒绝；用它来触发客户端侧的错误分支。
 func newTestHTTPProxyHandler(t testing.TB, hook func(*http.Request) bool) *testHTTPProxyHandler {
 	return &testHTTPProxyHandler{
 		hook: hook,
@@ -97,6 +107,8 @@ func newTestHTTPProxyHandler(t testing.TB, hook func(*http.Request) bool) *testH
 	}
 }
 
+// WaitGroup 包住整个 ServeHTTP：CONNECT 隧道会 hijack 连接并长时间阻塞，
+// 测试结束时必须先等 handler 退出，再关掉连接，避免把 t.Logf 打到已结束的测试上。
 func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handlerDone.Add(1)
 	defer h.handlerDone.Done()
@@ -108,6 +120,8 @@ func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reque
 		}
 	}
 
+	// 普通请求交给 ReverseProxy；只有 CONNECT 需要自己拨号并接管原始字节流，
+	// 因为ReverseProxy 不会把 TCP 连接转换成隧道。
 	if req.Method != http.MethodConnect {
 		h.httpProxy.ServeHTTP(rw, req)
 		return
@@ -128,6 +142,8 @@ func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reque
 		return
 	}
 
+	// 200 必须先写：Hijack 之后 net/http 不再代写响应，
+	// 而客户端只有在收到 200 后才会把连接当作隧道使用。
 	rw.WriteHeader(http.StatusOK)
 	conn, brw, err := hj.Hijack()
 	if err != nil {
@@ -140,6 +156,8 @@ func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reque
 		h.t.Logf("failed to flush pending writes, host=%s: %v", req.Host, err)
 		return
 	}
+	// 只转发 Hijack 前已经读进 bufio.Reader 的部分，后续字节交给下面的双向 io.Copy，
+	// 否则预读数据会丢失，隧道里的第一条 SPDY 帧就不完整了。
 	if _, err := io.Copy(sconn, io.LimitReader(brw, int64(brw.Reader.Buffered()))); err != nil {
 		h.t.Logf("failed to flush buffered reads, host=%s: %v", req.Host, err)
 		return
@@ -158,10 +176,14 @@ func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reque
 	wg.Wait()
 }
 
+// CONNECT 隧道的生命周期由客户端决定，必须等它退出再拆测试环境；
+// 否则关掉 httptest.Server 时上面的 io.Copy 还在跑，容易报 use of closed connection。
 func (h *testHTTPProxyHandler) Wait() {
 	h.handlerDone.Wait()
 }
 
+// 证书里的主机名是 example.com，配合 InsecureSkipVerify 和 hostname verification
+// 两种客户端配置，就能分别测出“信任但跳过校验”与“严格校验失败”两条路径。
 func httpsServerInvalidHostname(t *testing.T) serverFunc {
 	return func(h http.Handler) *httptest.Server {
 		cert, err := tls.X509KeyPair(exampleCert, exampleKey)
@@ -177,6 +199,8 @@ func httpsServerInvalidHostname(t *testing.T) serverFunc {
 	}
 }
 
+// 用同时覆盖 127.0.0.1/::1 的证书，让走 IP 的 httptest.Server 也能通过主机名校验；
+// 和 invalidHostname 版本一对，专门验证 RootCAs 配置生效的情况。
 func httpsServerValidHostname(t *testing.T) serverFunc {
 	return func(h http.Handler) *httptest.Server {
 		cert, err := tls.X509KeyPair(localhostCert, localhostKey)
@@ -192,6 +216,8 @@ func httpsServerValidHostname(t *testing.T) serverFunc {
 	}
 }
 
+// 把测试证书做成 RootCAs 传给客户端，这样 TLS 校验走的是显式信任链，
+// 既不依赖系统证书库，也不会受运行环境影响。
 func localhostCertPool(t *testing.T) *x509.CertPool {
 	localhostPool := x509.NewCertPool()
 
@@ -202,6 +228,8 @@ func localhostCertPool(t *testing.T) *x509.CertPool {
 }
 
 // be sure to unset environment variable https_proxy (if exported) before testing, otherwise the testing will fail unexpectedly.
+// 表驱动覆盖直连、HTTP/HTTPS 代理、代理链路里任意一跳是 HTTPS 的组合，
+// 重点验证 InsecureSkipVerify/RootCAs 与代理认证的交互；下面还会回写一条消息确认流可用。
 func TestRoundTripAndNewConnection(t *testing.T) {
 	localhostPool := localhostCertPool(t)
 
@@ -390,6 +418,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 
 	for k, testCase := range testCases {
 		t.Run(k, func(t *testing.T) {
+			// 每个子用例都起自己的 server/proxy，避免并行时共享监听端口和状态。
 			server := testCase.serverFunc(serverHandler(
 				t, serverHandlerConfig{
 					shouldError:      testCase.shouldError,
@@ -419,6 +448,8 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 			var proxyCalledWithHost string
 			var proxyCalledWithAuth bool
 			var proxyCalledWithAuthHeader string
+			// 不依赖环境变量里的代理设置，直接把 transport 的 proxier 替换成测试专用的，
+			// 顺带记录它看到的 host 和认证头，用于后面的断言。
 			if testCase.proxyServerFunc != nil {
 				proxyHandler := newTestHTTPProxyHandler(t, func(req *http.Request) bool {
 					proxyCalledWithHost = req.Host
@@ -450,6 +481,8 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 
 			resp, err := client.Do(req)
 			var conn httpstream.Connection
+			// 只有 Do 成功才继续建连：升级响应由 NewConnection 二次校验，
+			// 失败用例里 err 可能出现在两个阶段中的任意一个。
 			if err == nil {
 				conn, err = spdyTransport.NewConnection(resp)
 			}
@@ -471,6 +504,8 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 				t.Fatalf("error creating client stream: %s", err)
 			}
 
+			// 回显一轮 “hello”，同时验证流的读写两端都通了，
+			// 而不只是 HTTP 头看起来像一次成功的升级。
 			n, err := stream.Write([]byte("hello"))
 			if err != nil {
 				t.Fatalf("error writing to stream: %s", err)
@@ -511,6 +546,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 					t.Fatalf("expected proxy auth \"%s:%s\", got \"%s:%s\"", expectedUsername, expectedPassword, username, password)
 				}
 			} else if proxyCalledWithAuth {
+				// 没配代理认证就不该凭空多出 Proxy-Authorization 头。
 				t.Fatalf("proxy authorization unexpected, got %q", proxyCalledWithAuthHeader)
 			}
 		})
@@ -518,6 +554,8 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 }
 
 // Tests SpdyRoundTripper constructors
+// 专测配置项之间的互斥关系：UpgradeTransport 与 TLS/Proxier 不能同时给，
+// 同时确认构造函数返回的 TLS 配置符合预期、不会被悄悄改写。
 func TestRoundTripConstuctor(t *testing.T) {
 	testCases := map[string]struct {
 		tlsConfig         *tls.Config
@@ -585,6 +623,9 @@ func TestRoundTripConstuctor(t *testing.T) {
 	}
 }
 
+// NO_PROXY 支持 CIDR 是 Kubernetes 环境的现实需求（Pod/Service 网段），
+// 标准库的 httpproxy 只认域名和 IP；这个测试确认 CIDR 内的目标绕过代理、其余仍走 delegate。
+// 同时把小写 no_proxy 清空，避免系统上已有的小写值干扰判定。
 func TestProxierWithNoProxyCIDR(t *testing.T) {
 	t.Setenv("NO_PROXY", "10.0.0.0/8,2001:db8::/32")
 	t.Setenv("no_proxy", "")
@@ -600,6 +641,8 @@ func TestProxierWithNoProxyCIDR(t *testing.T) {
 		return expectedProxy, nil
 	}
 
+	// delegateCalls 同时用来证明命中 CIDR 时根本没有走到标准库的代理解析，
+	// 而不只是返回了 nil 结果。
 	proxier := newProxierWithNoProxyCIDR(delegate)
 
 	req, err := http.NewRequest(http.MethodGet, "https://10.1.2.3", nil)
@@ -669,15 +712,20 @@ func TestProxierWithNoProxyCIDR(t *testing.T) {
 	}
 }
 
+// 借 SOCKS5 的 Rewriter 钩子把客户端实际使用的认证方式和目标地址抠出来，
+// 让测试能断言 SpdyRoundTripper 确实走了代理、且把认证信息传到了 SOCKS5 层。
 type Interceptor struct {
 	Authorization       socks5.AuthContext
 	proxyCalledWithHost *string
 }
 
+// 返回的是 SOCKS5 协议里的 method 编号和用户名密码等 payload，
+// 测试据此区分“无认证”(0) 和“用户名密码认证”(2)。
 func (i *Interceptor) GetAuthContext() (int, map[string]string) {
 	return int(i.Authorization.Method), i.Authorization.Payload
 }
 
+// Rewrite 不改写目标地址，只记录它；返回原 DestAddr 保证连接仍按客户端请求转发。
 func (i *Interceptor) Rewrite(ctx context.Context, req *socks5.Request) (context.Context, *socks5.AddrSpec) {
 	*i.proxyCalledWithHost = req.DestAddr.Address()
 	i.Authorization = socks5.AuthContext(*req.AuthContext)
@@ -685,9 +733,13 @@ func (i *Interceptor) Rewrite(ctx context.Context, req *socks5.Request) (context
 }
 
 // be sure to unset environment variable https_proxy (if exported) before testing, otherwise the testing will fail unexpectedly.
+// 与 HTTP 代理测试对称，这里专门覆盖 socks5:// 代理：认证有无、目标 HTTP/HTTPS 的组合，
+// 并通过 Interceptor 校验 SOCKS5 握手阶段真正收到的 method 与目标地址。
 func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 	localhostPool := localhostCertPool(t)
 
+	// creds 为 nil 表示不需要认证；非 nil 时构造 UserPassAuthenticator，
+	// 这样同一个工厂就能覆盖代理要求认证和客户端提供认证两类场景。
 	socks5Server := func(creds *socks5.StaticCredentials, interceptor *Interceptor) *socks5.Server {
 		var conf *socks5.Config
 		if creds != nil {
@@ -770,6 +822,7 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 每个用例自建 server 与 SOCKS5 监听，避免共享端口和状态串味。
 			server := testCase.serverFunc(serverHandler(
 				t, serverHandlerConfig{
 					shouldError:      testCase.shouldError,
@@ -802,6 +855,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 				}, interceptor)
 			}
 
+			// closed 通道区分“测试正常结束导致的连接关闭”和真正的 ServeConn 错误，
+			// 避免已结束的子用例还在 t.Errorf。
 			closed := make(chan struct{})
 			isClosed := func() bool {
 				select {
@@ -818,6 +873,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 			}
 			defer l.Close()
 
+			// 只接受一条连接就够了：每个子用例只发一次请求，
+			// SOCKS5 服务器本身会在 ServeConn 里处理后续复用。
 			go func(shoulderror bool) {
 				conn, err := l.Accept()
 				if err != nil {
@@ -840,6 +897,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 					t.Errorf("ServeConn error: %s", err)
 				}
 			}(testCase.shouldError)
+			// 直接把 proxier 指向本地 SOCKS5 监听，不依赖环境变量，
+			// 并把代理 URL 的用户信息填上客户端提供的认证数据。
 			spdyTransport.proxier = func(proxierReq *http.Request) (*url.URL, error) {
 				proxierCalled = true
 				return &url.URL{
@@ -880,6 +939,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 				t.Fatalf("error creating client stream: %s", err)
 			}
 
+			// 回显一轮 “hello”，同时验证流的读写两端都通了，
+			// 而不只是 HTTP 头看起来像一次成功的升级。
 			n, err := stream.Write([]byte("hello"))
 			if err != nil {
 				t.Fatalf("error writing to stream: %s", err)
@@ -914,6 +975,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 
 			authMethod, authUser := interceptor.GetAuthContext()
 
+			// 从 SOCKS5 层反向验证客户端确实把认证信息带上了：
+			// 有配置时期望 method=2（UserPass）且用户名正确，无配置时 method=0 且无 payload。
 			if testCase.proxyAuth != nil {
 				expectedSocks5AuthMethod := 2
 				expectedSocks5AuthUser := "proxyuser"
@@ -935,11 +998,15 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 			}
 
 			// The channel must be closed before any of the connections are closed
+			// 先通知 Accept/ServeConn 的 goroutine“这是正常收尾”，再让 defer 关连接，
+			// 否则关闭本身会被当成 ServeConn 错误报出来。
 			close(closed)
 		})
 	}
 }
 
+// 已取消的 context 必须在 Dial 阶段就被尊重，HTTP 和 HTTPS 两条路径都不能漏；
+// 否则取消请求后底层 TCP 连接还会傻傻地等超时。
 func TestRoundTripPassesContextToDialer(t *testing.T) {
 	urls := []string{"http://127.0.0.1:1233/", "https://127.0.0.1:1233/"}
 	for _, u := range urls {

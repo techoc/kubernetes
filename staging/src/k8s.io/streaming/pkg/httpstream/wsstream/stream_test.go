@@ -31,6 +31,8 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+// 基本往返：确认 Reader 把底层 io.Reader 的内容原样送进 WebSocket，
+// 不因分块或帧边界改变字节序列。
 func TestStream(t *testing.T) {
 	input := "some random text"
 	//nolint:logcheck // Intentionally uses the old API.
@@ -45,6 +47,8 @@ func TestStream(t *testing.T) {
 	}
 }
 
+// ping=true 时应先发一个空帧再发数据帧；逐帧读而不是 io.ReadAll，
+// 因为合并字节流之后无法判断空帧是否真的存在。
 func TestStreamPing(t *testing.T) {
 	input := "some random text"
 	//nolint:logcheck // Intentionally uses the old API.
@@ -59,6 +63,8 @@ func TestStreamPing(t *testing.T) {
 	}
 }
 
+// 协商到 base64 子协议后，线上应看到编码后的文本而不是原始字节；
+// 这保证不支持二进制帧的中间代理也能传输流内容。
 func TestStreamBase64(t *testing.T) {
 	input := "some random text"
 	encoded := base64.StdEncoding.EncodeToString([]byte(input))
@@ -73,6 +79,8 @@ func TestStreamBase64(t *testing.T) {
 	}
 }
 
+// 版本化子协议同样要按各自的 Binary 配置选编码方式；
+// 手工列一张带 v1/v2 的协议表，避免把版本号当成编码方式的隐含条件。
 func TestStreamVersionedBase64(t *testing.T) {
 	input := "some random text"
 	encoded := base64.StdEncoding.EncodeToString([]byte(input))
@@ -95,6 +103,8 @@ func TestStreamVersionedBase64(t *testing.T) {
 	}
 }
 
+// 复用 Conn 测试的协商表，确认 Reader 的握手逻辑与 Conn 一致；
+// 两边共用一份表，协议规则变更时不会出现只有一侧跟进的漂移。
 func TestStreamVersionedCopy(t *testing.T) {
 	for i, test := range versionTests() {
 		func() {
@@ -107,6 +117,8 @@ func TestStreamVersionedCopy(t *testing.T) {
 			input := "some random text"
 			//nolint:logcheck // Intentionally uses the old API.
 			r := NewReader(bytes.NewBuffer([]byte(input)), true, supportedProtocols)
+			// Copy 通过 r.err 把结果送回调用方；握手失败时服务端写 503，
+			// 让客户端的 DialConfig 拿到错误，从而覆盖表里的 error 场景。
 			s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				err := r.Copy(w, req)
 				if err != nil {
@@ -142,6 +154,8 @@ func TestStreamVersionedCopy(t *testing.T) {
 	}
 }
 
+// 底层 io.Reader 返回非 EOF 错误时，已经读到的内容仍应送达客户端，
+// 错误再通过 Copy 的返回值上报；验证“部分数据不丢”。
 func TestStreamError(t *testing.T) {
 	input := "some random text"
 	errs := &errorReader{
@@ -163,6 +177,8 @@ func TestStreamError(t *testing.T) {
 	}
 }
 
+// 底层 Reader panic 不应带崩整个进程：注入一个只做 recover 的 handleCrash，
+// 验证 panic 被拦在流的 goroutine 内且不会污染已写出的数据。
 func TestStreamSurvivesPanic(t *testing.T) {
 	input := "some random text"
 	errs := &errorReader{
@@ -176,6 +192,7 @@ func TestStreamSurvivesPanic(t *testing.T) {
 	r := NewReader(errs, false, NewDefaultReaderProtocols())
 
 	// do not call runtime.HandleCrash() in handler. Otherwise, the tests are interrupted.
+	// 真正的 HandleCrash 会重新抛出，把测试进程也一起干掉；这里只验证吞掉 panic 后流的表现。
 	r.handleCrash = func(_ context.Context, additionalHandlers ...func(context.Context, interface{})) { recover() }
 
 	data, err := readWebSocket(r, t, nil)
@@ -187,7 +204,10 @@ func TestStreamSurvivesPanic(t *testing.T) {
 	}
 }
 
+// 客户端在流还没读完时关连接是竞态高发场景：重复多次，
+// 确认服务端不会因为写已关闭的 socket 而卡死或返回莫名其妙的错误。
 func TestStreamClosedDuringRead(t *testing.T) {
+	// 循环 25 次是为了覆盖“关闭发生在读间隙”和“关闭发生在写间隙”等不同时序。
 	for i := 0; i < 25; i++ {
 		ch := make(chan struct{})
 		input := "some random text"
@@ -217,6 +237,8 @@ func TestStreamClosedDuringRead(t *testing.T) {
 	}
 }
 
+// 可控的假 Reader：按预设分块返回数据，耗尽后再返回错误、panic 或阻塞，
+// 便于分别模拟正常分块、读取失败和客户端提前关闭三种情形。
 type errorReader struct {
 	reads        [][]byte
 	err          error
@@ -224,6 +246,8 @@ type errorReader struct {
 	pause        chan struct{}
 }
 
+// 数据块全部吐完才走异常路径：pause 用于把“返回错误”推迟到测试明确放行时，
+// 从而制造客户端先关连接、服务端仍在读的窗口。
 func (r *errorReader) Read(p []byte) (int, error) {
 	if len(r.reads) == 0 {
 		if r.pause != nil {
@@ -240,6 +264,9 @@ func (r *errorReader) Read(p []byte) (int, error) {
 	return len(next), nil
 }
 
+// 起一个临时服务端跑 Reader.Copy，返回客户端读到的全部字节和 Copy 的错误。
+// 用 channel 传 Copy 结果是因为它在 HTTP handler 的 goroutine 里返回，
+// 与测试主体的时序完全独立。
 func readWebSocket(r *Reader, t *testing.T, fn func(*websocket.Conn), protocols ...string) ([]byte, error) {
 	errCh := make(chan error, 1)
 	s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -266,6 +293,8 @@ func readWebSocket(r *Reader, t *testing.T, fn func(*websocket.Conn), protocols 
 	return data, <-errCh
 }
 
+// 逐帧校验工具：readWebSocket 把字节拼接后无法区分帧边界，
+// 需要确认 ping 空帧、数据帧各自独立时用这个版本。
 func expectWebSocketFrames(r *Reader, t *testing.T, fn func(*websocket.Conn), frames [][]byte, protocols ...string) error {
 	errCh := make(chan error, 1)
 	s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -294,6 +323,7 @@ func expectWebSocketFrames(r *Reader, t *testing.T, fn func(*websocket.Conn), fr
 			return fmt.Errorf("frame %d did not match expected: %v", data, err)
 		}
 	}
+	// 数据发完后应正常关闭，多出来的帧说明发送端多写了一次。
 	var data []byte
 	if err := websocket.Message.Receive(ws, &data); err != io.EOF {
 		return fmt.Errorf("expected no more frames: %v (%v)", err, data)

@@ -28,13 +28,18 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+// 把 httptest.Server 的启动和地址提取合在一起：所有测试都要拿这个地址
+// 去拨号，重复两行样板只会让真正要验证的握手/帧格式逻辑被淹没。
 func newServer(handler http.Handler) (*httptest.Server, string) {
 	server := httptest.NewServer(handler)
 	serverAddr := server.Listener.Addr().String()
 	return server, serverAddr
 }
 
+// 覆盖原始二进制帧下的全部通道方向组合，并验证帧首字节确实是通道号：
+// 只要编码或方向判断错一处，客户端读到的内容就会带上错误的字节或卡住。
 func TestRawConn(t *testing.T) {
+	// 五种通道各测一种情形：双向、双向（服务端发）、忽略、只读、只写。
 	channels := []ChannelType{ReadWriteChannel, ReadWriteChannel, IgnoreChannel, ReadChannel, WriteChannel}
 	conn := NewConn(NewDefaultChannelProtocols(channels))
 
@@ -49,10 +54,13 @@ func TestRawConn(t *testing.T) {
 	}
 	defer client.Close()
 
+	// io.ReadAll 要等到对端关闭管道才返回，而关闭发生在接收循环退出后；
+	// 等 ready 只保证通道已建好，不能保证数据已经送达。
 	<-conn.ready
 	wg := sync.WaitGroup{}
 
 	// verify we can read a client write
+	// 放在 goroutine 里等：写入下一行才触发服务端投递，顺序颠倒会永远等不到 EOF。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -66,6 +74,7 @@ func TestRawConn(t *testing.T) {
 		}
 	}()
 
+	// 客户端写入时手工拼上通道字节 0，验证服务端按帧首字节分发而非按连接顺序分发。
 	if n, err := client.Write(append([]byte{0}, []byte("client")...)); err != nil || n != 7 {
 		t.Fatalf("%d: %v", n, err)
 	}
@@ -79,6 +88,7 @@ func TestRawConn(t *testing.T) {
 		}
 	}()
 
+	// 期望读到 7 字节而不是 6：通道字节也在线上，容易被漏算。
 	data := make([]byte, 1024)
 	if n, err := io.ReadAtLeast(client, data, 6); n != 7 || err != nil {
 		t.Fatalf("%d: %v", n, err)
@@ -116,6 +126,8 @@ func TestRawConn(t *testing.T) {
 	wg.Wait()
 }
 
+// 同 TestRawConn 的收发路径，但走文本子协议：重点验证通道号变成 '0'/'1'
+// 字符、载荷被 base64 编解码，且线上帧长度随编码结果变化。
 func TestBase64Conn(t *testing.T) {
 	conn := NewConn(NewDefaultChannelProtocols([]ChannelType{ReadWriteChannel, ReadWriteChannel}))
 	s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -127,6 +139,7 @@ func TestBase64Conn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 必须显式声明子协议，否则会协商到默认的二进制通道协议。
 	config.Protocol = []string{"base64.channel.k8s.io"}
 	client, err := websocket.DialConfig(config)
 	if err != nil {
@@ -149,6 +162,7 @@ func TestBase64Conn(t *testing.T) {
 		}
 	}()
 
+	// 通道号写成字符 '0' 而非字节 0；服务端若忘记减 '0' 就会索引到不存在的通道。
 	clientData := base64.StdEncoding.EncodeToString([]byte("client"))
 	if n, err := client.Write(append([]byte{'0'}, clientData...)); err != nil || n != len(clientData)+1 {
 		t.Fatalf("%d: %v", n, err)
@@ -162,6 +176,8 @@ func TestBase64Conn(t *testing.T) {
 		}
 	}()
 
+	// "server" 编码后是 8 字节，加上通道字符共 9 字节；硬编码长度能顺带
+	// 抓到“服务端忘了 base64 编码”这类错误，否则内容断言才会失败得更晚。
 	data := make([]byte, 1024)
 	if n, err := io.ReadAtLeast(client, data, 9); n != 9 || err != nil {
 		t.Fatalf("%d: %v", n, err)
@@ -176,6 +192,8 @@ func TestBase64Conn(t *testing.T) {
 	wg.Wait()
 }
 
+// 握手场景的通用表：supported 描述服务端允许哪些协议及其编码，
+// requested 是客户端提议列表，expected 是应当协商出的协议；error 表示预期握手失败。
 type versionTest struct {
 	supported map[string]bool // protocol -> binary
 	requested []string
@@ -183,6 +201,8 @@ type versionTest struct {
 	expected  string
 }
 
+// 这张表被 Conn 和 Reader 两边的版本测试共用，保证两种实现遵循同一套协商规则。
+// 特别覆盖“提议多个协议时选服务端认识的最后一个”和“空协议名兜底”两种边界。
 func versionTests() []versionTest {
 	const (
 		binary = true
@@ -226,6 +246,8 @@ func versionTests() []versionTest {
 	}
 }
 
+// 用 versionTests 驱动真实的 HTTP/WebSocket 握手，验证协议协商结果，
+// 而不是只测内部的 handshake 辅助函数——后者无法暴露 ServeHTTP 时序上的竞态。
 func TestVersionedConn(t *testing.T) {
 	for i, test := range versionTests() {
 		func() {
@@ -239,6 +261,8 @@ func TestVersionedConn(t *testing.T) {
 			conn := NewConn(supportedProtocols)
 			// note that it's not enough to wait for conn.ready to avoid a race here. Hence,
 			// we use a channel.
+			// ready 关闭时 selectedProtocol 可能还没被赋值；用带同步语义的 channel
+			// 传值，才能确保读到的是 Open 真正返回的协议。
 			selectedProtocol := make(chan string)
 			s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				p, _, _ := conn.Open(w, req)
@@ -272,6 +296,8 @@ func TestVersionedConn(t *testing.T) {
 	}
 }
 
+// 逐项验证“升级头 + 子协议列表”的组合判断，重点是区分头名的大小写不敏感
+// 和头值的大小写敏感：把两者混为一谈会误放行错误版本的客户端。
 func TestIsWebSocketRequestWithStreamCloseProtocol(t *testing.T) {
 	tests := map[string]struct {
 		headers  map[string]string
@@ -315,6 +341,7 @@ func TestIsWebSocketRequestWithStreamCloseProtocol(t *testing.T) {
 			},
 			expected: true,
 		},
+		// 头名大小写无关，头值大小写敏感：这一项正是为了锁住该差异。
 		"Websocket connection upgrade headers with wrong case v5 protocol is false": {
 			headers: map[string]string{
 				"Connection":            "upgrade",
@@ -381,6 +408,8 @@ func TestIsWebSocketRequestWithStreamCloseProtocol(t *testing.T) {
 	}
 }
 
+// 只认 V5 精确拼写的判断表；V4 及更早版本不支持半关闭信号，
+// 大小写变形同样不能被接受，否则会错误启用关闭帧解析逻辑。
 func TestProtocolSupportsStreamClose(t *testing.T) {
 	tests := map[string]struct {
 		protocol string

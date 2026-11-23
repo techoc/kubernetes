@@ -30,6 +30,8 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
+// 用一对 io.Copy 搭一个纯转发代理，模拟真实链路上的中间节点。
+// 端口通过 channel 回传，避免测试里硬编码监听地址。
 func runProxy(t *testing.T, backendUrl string, proxyUrl chan<- string, proxyDone chan<- struct{}, errCh chan<- error) {
 	listener, err := net.Listen("tcp4", "localhost:0")
 	if err != nil {
@@ -53,6 +55,7 @@ func runProxy(t *testing.T, backendUrl string, proxyUrl chan<- string, proxyDone
 	}
 	defer backendConn.Close()
 
+	// 双向转发各占一个 goroutine，等待两者都退出才算代理任务完成。
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -71,6 +74,7 @@ func runProxy(t *testing.T, backendUrl string, proxyUrl chan<- string, proxyDone
 	proxyDone <- struct{}{}
 }
 
+// 服务端在收到流并看到应答帧发出后主动读一次，确认对端关闭能及时传播过来。
 func runServer(t *testing.T, backendUrl chan<- string, serverDone chan<- struct{}, errCh chan<- error) {
 	listener, err := net.Listen("tcp4", "localhost:0")
 	if err != nil {
@@ -101,6 +105,7 @@ func runServer(t *testing.T, backendUrl chan<- string, serverDone chan<- struct{
 
 	stream := <-streamChan
 	replySent := <-replySentChan
+	// 等应答帧真正发出再读，保证读取结果反映的是对端关闭而不是时序巧合。
 	<-replySent
 
 	buf := make([]byte, 1)
@@ -110,6 +115,7 @@ func runServer(t *testing.T, backendUrl chan<- string, serverDone chan<- struct{
 		return
 	}
 
+	// 再等 spdystream 层确认底层连接已撤掉，避免只看到应用层关闭。
 	<-spdyConn.CloseChan()
 	raw := spdyConn.(*connection).conn
 	if err := raw.Wait(15 * time.Second); err != nil {
@@ -119,9 +125,11 @@ func runServer(t *testing.T, backendUrl chan<- string, serverDone chan<- struct{
 	serverDone <- struct{}{}
 }
 
+// 回归测试：客户端关闭连接后，经代理转发的链路两端都应立刻感知，而不是等超时。
 func TestConnectionCloseIsImmediateThroughAProxy(t *testing.T) {
 	errCh := make(chan error)
 
+	// 缓冲为 1，便于两个 goroutine 各自通知完成而不互相阻塞。
 	serverDone := make(chan struct{}, 1)
 	backendUrlChan := make(chan string)
 	go runServer(t, backendUrlChan, serverDone, errCh)
@@ -154,6 +162,7 @@ func TestConnectionCloseIsImmediateThroughAProxy(t *testing.T) {
 		t.Fatalf("client: error creating spdy connection: %v", err)
 	}
 
+	// 先建一条流，让关闭行为与实际使用路径一致。
 	if _, err := spdyConn.CreateStream(http.Header{}); err != nil {
 		t.Fatalf("client: error creating stream: %v", err)
 	}
@@ -164,6 +173,7 @@ func TestConnectionCloseIsImmediateThroughAProxy(t *testing.T) {
 		t.Fatalf("client: timed out waiting for connection closure: %v", err)
 	}
 
+	// 用总超时兜底，避免关闭传播失效时测试永久挂住。
 	expired := time.NewTimer(15 * time.Second)
 	defer expired.Stop()
 	i := 0
@@ -182,7 +192,9 @@ func TestConnectionCloseIsImmediateThroughAProxy(t *testing.T) {
 	}
 }
 
+// 验证保活 Ping 双向发送，且不会干扰正常流上的数据读写。
 func TestConnectionPings(t *testing.T) {
+	// 周期设短些，让测试在数秒内就能观察到足够多的 Ping。
 	const pingPeriod = 10 * time.Millisecond
 	timeout := time.After(10 * time.Second)
 
@@ -210,6 +222,7 @@ func TestConnectionPings(t *testing.T) {
 			return
 		}
 
+		// 原子计数，因为 Ping 回调与断言分别在不同 goroutine 中执行。
 		var pingsSent int64
 		srvSPDYConn := newConnection(
 			spdyConn,
@@ -220,6 +233,7 @@ func TestConnectionPings(t *testing.T) {
 			},
 			pingPeriod,
 			func() (time.Duration, error) {
+				// 返回零延迟由 Ping 循环自行按周期调度，这里只关心次数。
 				atomic.AddInt64(&pingsSent, 1)
 				return 0, nil
 			})
@@ -291,6 +305,7 @@ func TestConnectionPings(t *testing.T) {
 	}
 }
 
+// 只实现 Stream 接口所需的桩，用于验证流的登记/移除逻辑而不牵涉真实网络。
 type fakeStream struct{ id uint32 }
 
 func (*fakeStream) Read(p []byte) (int, error)  { return 0, nil }
@@ -300,6 +315,7 @@ func (*fakeStream) Reset() error                { return nil }
 func (*fakeStream) Headers() http.Header        { return nil }
 func (f *fakeStream) Identifier() uint32        { return f.id }
 
+// 覆盖 RemoveStreams 的边界：不存在的流、批量移除、以及 nil 入参都不能引发 panic。
 func TestConnectionRemoveStreams(t *testing.T) {
 	c := &connection{streams: make(map[uint32]httpstream.Stream)}
 	stream0 := &fakeStream{id: 0}

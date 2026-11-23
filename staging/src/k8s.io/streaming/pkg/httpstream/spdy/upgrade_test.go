@@ -22,7 +22,9 @@ import (
 	"testing"
 )
 
+// 验证只有 Connection 与 Upgrade 两个头都合法时升级才会成功，否则应回错误响应。
 func TestUpgradeResponse(t *testing.T) {
+	// 四个组合覆盖“双缺、单缺、双全”，确认服务端不会在头不全时误判为升级请求。
 	testCases := []struct {
 		connectionHeader string
 		upgradeHeader    string
@@ -51,8 +53,10 @@ func TestUpgradeResponse(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
+		// 每个用例起一个独立测试服务器，避免连接状态在用例之间串扰。
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			upgrader := NewResponseUpgrader()
+			// 这里只关心是否升级成功，流处理回调传 nil 即可。
 			conn := upgrader.UpgradeResponse(w, req, nil)
 			haveErr := conn == nil
 			if e, a := testCase.shouldError, haveErr; e != a {

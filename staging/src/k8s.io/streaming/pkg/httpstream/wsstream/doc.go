@@ -66,4 +66,11 @@ limitations under the License.
 //	WRITE []byte{0, 102, 111, 111, 10} # send "foo\n" on channel 0 (STDIN)
 //	WRITE []byte{255, 0}               # send CLOSE signal (STDIN)
 //	CLOSE
+//
+// 本包对子协议版本采取“先协商、后解码”的策略：Conn 和 Reader 都把子协议名映射到
+// 配置表，握手时只接受表中列出的协议，之后编码方式就固定下来。这样新增协议版本
+// 只需往配置表里加一项，而不必在收发循环里堆叠条件判断。
+//
+// 通道编号按字节上限留出了 255 作为控制字节；文本化的 base64 变体把同样的编号
+// 写成字符，所以两者共用一套通道布局，只有载荷编码不同。
 package wsstream
