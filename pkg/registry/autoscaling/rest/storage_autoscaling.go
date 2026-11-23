@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件负责装配 rest API Group 的版本资源映射，并按资源启用配置注册 REST Storage。
 package rest
 
 import (
@@ -32,6 +33,7 @@ import (
 
 type RESTStorageProvider struct{}
 
+// NewRESTStorage 初始化 API Group 元信息，按版本构建资源存储映射，并遵循 API 资源启用配置。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(autoscaling.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -63,6 +65,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 构建当前 API Group v1 版本的资源到 REST Storage 映射，仅注册启用的资源及其子资源。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, storageGetter hpaStorageGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -79,6 +82,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v2Storage 构建 autoscaling/v2 的 REST Storage 映射，并注册 HPA 主资源及 status 子资源。
 func (p RESTStorageProvider) v2Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, storageGetter hpaStorageGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -97,6 +101,7 @@ func (p RESTStorageProvider) v2Storage(apiResourceConfigSource serverstorage.API
 
 type hpaStorageGetter func() (*horizontalpodautoscalerstore.REST, *horizontalpodautoscalerstore.StatusREST, error)
 
+// GroupName 返回 API Group 名称，供 API Server 注册资源组和版本路由使用。
 func (p RESTStorageProvider) GroupName() string {
 	return autoscaling.GroupName
 }

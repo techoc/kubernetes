@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 horizontalpodautoscaler 的 REST Strategy，控制创建/更新字段处理、业务校验、告警和 Status 子资源边界。
 package horizontalpodautoscaler
 
 import (
@@ -145,6 +146,7 @@ func (autoscalerStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime
 	return nil
 }
 
+// AllowUnconditionalUpdate 决定是否允许不带 ResourceVersion 前置条件的更新；false 会保留乐观并发控制。
 func (autoscalerStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -171,6 +173,7 @@ func (autoscalerStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
+// PrepareForUpdate 在更新校验前恢复不可由该路径修改的字段，并处理特性门控字段的向前/向后兼容。
 func (autoscalerStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newAutoscaler := obj.(*autoscaling.HorizontalPodAutoscaler)
 	oldAutoscaler := old.(*autoscaling.HorizontalPodAutoscaler)
@@ -178,6 +181,7 @@ func (autoscalerStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	newAutoscaler.Spec = oldAutoscaler.Spec
 }
 
+// ValidateUpdate 结合新旧对象执行更新校验，检查不可变字段、字段约束和兼容性。
 func (autoscalerStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateHorizontalPodAutoscalerStatusUpdate(obj.(*autoscaling.HorizontalPodAutoscaler), old.(*autoscaling.HorizontalPodAutoscaler))
 }
@@ -187,6 +191,7 @@ func (autoscalerStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old r
 	return nil
 }
 
+// validationOptionsForHorizontalPodAutoscaler 根据新旧 HPA 对象构造 Spec 校验选项；更新时允许兼容旧对象中已存在但当前规则不再接受的字段。
 func validationOptionsForHorizontalPodAutoscaler(newHPA, oldHPA *autoscaling.HorizontalPodAutoscaler) validation.HorizontalPodAutoscalerSpecValidationOptions {
 	opts := validation.HorizontalPodAutoscalerSpecValidationOptions{
 		MinReplicasLowerBound:           1,
@@ -245,6 +250,7 @@ func dropDisabledFields(newHPA, oldHPA *autoscaling.HorizontalPodAutoscaler) {
 	}
 }
 
+// toleranceInUse 判断 HPA 是否显式使用指标容差配置，帮助区分默认值与用户主动配置。
 func toleranceInUse(hpa *autoscaling.HorizontalPodAutoscaler) bool {
 	if hpa == nil || hpa.Spec.Behavior == nil {
 		return false

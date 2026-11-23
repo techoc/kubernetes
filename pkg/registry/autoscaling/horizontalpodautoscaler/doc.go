@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package horizontalpodautoscaler：HorizontalPodAutoscaler（HPA）定义工作负载的期望副本数，并根据 CPU、内存或自定义指标计算扩缩容建议。
 package horizontalpodautoscaler
