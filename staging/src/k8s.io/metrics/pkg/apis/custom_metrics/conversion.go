@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
+// Convert_v1_ObjectReference_To_custom_metrics_ObjectReference 手工逐字段复制：
+// 两个结构字段同名，但来自不同包，生成的转换无法直接覆盖。
 func Convert_v1_ObjectReference_To_custom_metrics_ObjectReference(in *v1.ObjectReference, out *ObjectReference, s conversion.Scope) error {
 	out.APIVersion = in.APIVersion
 
@@ -33,6 +35,8 @@ func Convert_v1_ObjectReference_To_custom_metrics_ObjectReference(in *v1.ObjectR
 	return nil
 }
 
+// Convert_custom_metrics_ObjectReference_To_v1_ObjectReference 是上述转换的逆过程，
+// 同样只搬运字段，不解析引用 Target 对应的实际对象。
 func Convert_custom_metrics_ObjectReference_To_v1_ObjectReference(in *ObjectReference, out *v1.ObjectReference, s conversion.Scope) error {
 	out.APIVersion = in.APIVersion
 

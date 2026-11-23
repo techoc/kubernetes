@@ -23,24 +23,30 @@ import (
 )
 
 // GroupName is the group name use in this package
+// 中文说明：与内部版本共用同一 group，仅 version 字段不同。
 const GroupName = "metrics.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 中文说明：这是对外稳定版本，供新版客户端直接使用。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource
+// 中文说明：补全 group 后构造请求路径，避免泄漏到调用方去拼接。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
 	// SchemeBuilder points to a list of functions added to Scheme.
+	// 中文说明：集中保存本版本的注册函数，便于按需组合。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme applies all the stored functions to the scheme.
+	// 中文说明：对外提供统一注册入口，调用方不感知内部 builder。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// 中文说明：除了本版本的指标类型，还需注册 metav1，保证 ListMeta 等内嵌类型可解码。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&NodeMetrics{},

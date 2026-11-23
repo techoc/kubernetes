@@ -16,6 +16,7 @@ limitations under the License.
 
 // Package install installs the experimental API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+// 本包只负责注册，不定义类型；让编码解码组件共享同一份 scheme 配置。
 package install
 
 import (
@@ -27,6 +28,7 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+// 把 v1 放在优先级列表首位，确保编码时默认输出最新稳定版本。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(metrics.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))

@@ -25,6 +25,8 @@ import (
 	eclient "k8s.io/metrics/pkg/client/external_metrics"
 )
 
+// FakeExternalMetricsClient 复用 client-go 的 testing.Fake，只负责记录 action；
+// 具体返回值由测试通过 reactor 注入，不在这里模拟真实指标后端。
 type FakeExternalMetricsClient struct {
 	testing.Fake
 }
@@ -36,11 +38,13 @@ func (c *FakeExternalMetricsClient) NamespacedMetrics(namespace string) eclient.
 	}
 }
 
+// fakeNamespacedMetrics 预绑定 namespace，让接口调用签名与真实客户端保持一致。
 type fakeNamespacedMetrics struct {
 	Fake *FakeExternalMetricsClient
 	ns   string
 }
 
+// List 把标签选择器编码进 ListOptions，使 reactor 能像校验真实请求一样校验过滤条件。
 func (m *fakeNamespacedMetrics) List(metricName string, metricSelector labels.Selector) (*v1beta1.ExternalMetricValueList, error) {
 	resource := schema.GroupResource{
 		Group:    v1beta1.SchemeGroupVersion.Group,

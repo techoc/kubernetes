@@ -30,6 +30,7 @@ type MetricIdentifier struct {
 	// this metric, and will generally just be the selector passed in to
 	// the query used to fetch this metric.
 	// When left blank, only the metric's Name will be used to gather metrics.
+	// 标签留空时只按名字取数，与内部版本保持一致。
 	// +optional
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,2,opt,name=selector"`
 }
@@ -37,6 +38,7 @@ type MetricIdentifier struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // MetricValueList is a list of values for a given metric for some set of objects
+// 每个元素对应一个对象；空列表表示无匹配项。
 type MetricValueList struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -52,6 +54,7 @@ type MetricValue struct {
 	metav1.TypeMeta `json:""`
 
 	// a reference to the described object
+	// 直接复用 core/v1 的引用类型，线上格式与 Kubernetes 对象引用保持一致。
 	DescribedObject v1.ObjectReference `json:"describedObject" protobuf:"bytes,1,name=describedObject"`
 
 	Metric MetricIdentifier `json:"metric" protobuf:"bytes,2,name=metric"`
@@ -63,28 +66,34 @@ type MetricValue struct {
 	// which these metrics were calculated, when returning rate
 	// metrics calculated from cumulative metrics (or zero for
 	// non-calculated instantaneous metrics).
+	// 速率值依赖窗口才能还原累积量，瞬时值的该字段为零。
 	WindowSeconds *int64 `json:"windowSeconds,omitempty" protobuf:"bytes,4,opt,name=windowSeconds"`
 
 	// the value of the metric for this
+	// Quantity 保留精度和单位，避免客户端提前舍入。
 	Value resource.Quantity `json:"value" protobuf:"bytes,5,name=value"`
 }
 
 // AllObjects is a wildcard used to select metrics
 // for all objects matching the given label selector
+// 显式通配符让「全部对象」的语义不依赖空选择器。
 const AllObjects = "*"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // MetricListOptions is used to select metrics by their label selectors
+// 对象标签与指标标签是两个不同维度，分别由下面两个选择器控制。
 type MetricListOptions struct {
 	metav1.TypeMeta `json:""`
 
 	// A selector to restrict the list of returned objects by their labels.
 	// Defaults to everything.
+	// 这里匹配对象标签；留空即不过滤对象。
 	// +optional
 	LabelSelector string `json:"labelSelector,omitempty" protobuf:"bytes,1,opt,name=labelSelector"`
 
 	// A selector to restrict the list of returned metrics by their labels
+	// 匹配指标自身的标签，用于区分同名指标的多条序列。
 	// +optional
 	MetricLabelSelector string `json:"metricLabelSelector,omitempty" protobuf:"bytes,2,opt,name=metricLabelSelector"`
 }

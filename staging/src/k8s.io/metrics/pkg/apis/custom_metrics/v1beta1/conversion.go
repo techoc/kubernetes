@@ -21,7 +21,10 @@ import (
 	"k8s.io/metrics/pkg/apis/custom_metrics"
 )
 
+// Convert_v1beta1_MetricValue_To_custom_metrics_MetricValue 补全自动生成的转换：
+// v1beta1 把指标名和标签平铺在顶层，内部版本则收进 Metric 字段。
 func Convert_v1beta1_MetricValue_To_custom_metrics_MetricValue(in *MetricValue, out *custom_metrics.MetricValue, s conversion.Scope) error {
+	// 自动转换只覆盖同名字段，指标标识需要手工重排。
 	if err := autoConvert_v1beta1_MetricValue_To_custom_metrics_MetricValue(in, out, s); err != nil {
 		return err
 	}
@@ -30,6 +33,8 @@ func Convert_v1beta1_MetricValue_To_custom_metrics_MetricValue(in *MetricValue, 
 	return nil
 }
 
+// Convert_custom_metrics_MetricValue_To_v1beta1_MetricValue 做反向转换，
+// 把内部版本的 Metric 拆回顶层的 MetricName 和 Selector。
 func Convert_custom_metrics_MetricValue_To_v1beta1_MetricValue(in *custom_metrics.MetricValue, out *MetricValue, s conversion.Scope) error {
 	if err := autoConvert_custom_metrics_MetricValue_To_v1beta1_MetricValue(in, out, s); err != nil {
 		return err

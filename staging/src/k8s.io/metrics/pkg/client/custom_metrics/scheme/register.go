@@ -27,20 +27,26 @@ import (
 )
 
 // GroupName is the group name use in this package.
+// 中文说明：直接复用 API 包里的常量，避免客户端与服务端对 group 名产生分歧。
 const GroupName = cmv1beta1.GroupName
 
 // SchemeGroupVersion is group version used to register these objects.
+// 中文说明：客户端 scheme 用内部版本做中枢，外部版本在请求时再协商。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Scheme is the runtime.Scheme to which all custom metrics api types are registered.
+// 中文说明：这里注册所有版本的类型，使客户端能在版本间做转换。
 var Scheme = runtime.NewScheme()
 
 // Codecs provides access to encoding and decoding for the scheme.
+// 中文说明：编解码工厂按 scheme 中注册的类型创建序列化器。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
 // ParameterCodec handles versioning of objects that are converted to query parameters.
+// 中文说明：查询参数里的 LabelSelector 等对象需要按版本编码成字符串。
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 
+// 中文说明：把 metav1 的基础类型和本组各版本类型一起注册，保证解码器认识所有内嵌类型。
 func init() {
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
 	AddToScheme(Scheme)

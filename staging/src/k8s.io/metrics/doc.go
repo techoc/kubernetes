@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件是 metrics 模块的根声明；具体 API 类型按 group/version 分放在 pkg/apis 下。
+
 package metrics

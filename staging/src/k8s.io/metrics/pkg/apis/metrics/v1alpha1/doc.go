@@ -23,4 +23,5 @@ limitations under the License.
 // +groupName=metrics.k8s.io
 
 // Package v1alpha1 is the v1alpha1 version of the metrics API.
+// 本包保留历史版本，供尚未迁移的客户端继续解码旧版本指标对象。
 package v1alpha1

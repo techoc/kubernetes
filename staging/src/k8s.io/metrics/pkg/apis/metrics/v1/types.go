@@ -37,16 +37,19 @@ type NodeMetrics struct {
 
 	// The following fields define time interval from which metrics were
 	// collected from the interval [Timestamp-Window, Timestamp].
+	// 速率指标必须结合窗口才能还原原始累积量，窗口为零表示瞬时采样。
 	Timestamp metav1.Time     `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
 	Window    metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
 
 	// The memory usage is the memory working set.
+	// working set 排除可回收缓存，比 RSS 更贴近实际内存压力。
 	Usage v1.ResourceList `json:"usage" protobuf:"bytes,4,rep,name=usage,casttype=k8s.io/api/core/v1.ResourceList,castkey=k8s.io/api/core/v1.ResourceName,castvalue=k8s.io/apimachinery/pkg/api/resource.Quantity"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // NodeMetricsList is a list of NodeMetrics.
+// 列表不保证节点顺序，消费者应按名字自行匹配。
 type NodeMetricsList struct {
 	metav1.TypeMeta `json:""`
 	// Standard list metadata.
@@ -63,6 +66,7 @@ type NodeMetricsList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PodMetrics sets resource usage metrics of a pod.
+// Pod 的采样窗口对所有容器一致，便于把容器用量加总到 Pod 级别。
 type PodMetrics struct {
 	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
@@ -72,10 +76,12 @@ type PodMetrics struct {
 
 	// The following fields define time interval from which metrics were
 	// collected from the interval [Timestamp-Window, Timestamp].
+	// 速率指标必须结合窗口才能还原原始累积量，窗口为零表示瞬时采样。
 	Timestamp metav1.Time     `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
 	Window    metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
 
 	// Metrics for all containers are collected within the same time window.
+	// 同一批容器共享采样窗口，所以列表被声明为原子整体，避免部分更新混用不同窗口。
 	// +listType=atomic
 	Containers []ContainerMetrics `json:"containers" protobuf:"bytes,4,rep,name=containers"`
 }
@@ -83,6 +89,7 @@ type PodMetrics struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PodMetricsList is a list of PodMetrics.
+// 同样不保证顺序；跨 Pod 汇总时注意时间戳是否对齐。
 type PodMetricsList struct {
 	metav1.TypeMeta `json:""`
 	// Standard list metadata.
@@ -96,7 +103,9 @@ type PodMetricsList struct {
 // ContainerMetrics sets resource usage metrics of a container.
 type ContainerMetrics struct {
 	// Container name corresponding to the one from pod.spec.containers.
+	// 名字与 pod.spec.containers 对齐，便于按名关联用量和容器定义。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 	// The memory usage is the memory working set.
+	// working set 排除可回收缓存，比 RSS 更贴近实际内存压力。
 	Usage v1.ResourceList `json:"usage" protobuf:"bytes,2,rep,name=usage,casttype=k8s.io/api/core/v1.ResourceList,castkey=k8s.io/api/core/v1.ResourceName,castvalue=k8s.io/apimachinery/pkg/api/resource.Quantity"`
 }

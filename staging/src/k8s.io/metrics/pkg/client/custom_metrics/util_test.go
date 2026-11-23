@@ -29,7 +29,10 @@ import (
 	cmv1beta2 "k8s.io/metrics/pkg/apis/custom_metrics/v1beta2"
 )
 
+// TestMetricConverter 验证内部 MetricListOptions 能被转换成各版本对外结构，
+// 且指标标签选择器不会在转换中丢失。
 func TestMetricConverter(t *testing.T) {
+	// 每个用例对应一个受支持的版本，同时校验 TypeMeta 和选择器。
 	testCases := []struct {
 		name     string
 		group    schema.GroupVersion
@@ -55,10 +58,12 @@ func TestMetricConverter(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			// 每次新建转换器，避免用例之间通过共享状态相互影响。
 			metricConverter := NewMetricConverter()
 			opts := &cmint.MetricListOptions{MetricLabelSelector: "foo"}
 			res, err := metricConverter.ConvertListOptionsToVersion(opts, test.group)
 			require.NoError(t, err)
+			// 整体比较，连 TypeMeta 一并校验，防止只转字段却漏掉版本信息。
 			require.Equal(t, test.expected, res)
 		})
 	}

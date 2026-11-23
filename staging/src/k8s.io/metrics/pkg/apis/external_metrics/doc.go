@@ -18,4 +18,5 @@ limitations under the License.
 // +groupName=external.metrics.k8s.io
 
 // Package external_metrics adds support for defining external metrics.
+// 本包定义外部指标的内部类型；对外版本化结构由子包提供。
 package external_metrics

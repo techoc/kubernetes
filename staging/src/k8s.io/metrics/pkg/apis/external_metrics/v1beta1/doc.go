@@ -21,4 +21,7 @@ limitations under the License.
 // +k8s:openapi-model-package=io.k8s.metrics.pkg.apis.external_metrics.v1beta1
 
 // Package v1beta1 is the v1beta1 version of the external metrics API.
+//
+// 中文说明：本文件只承载该版本的生成指令，真正的指标结构与注册逻辑在其他文件里；
+// 外部指标由外部适配器提供，与集群内资源指标走不同的 API group。
 package v1beta1

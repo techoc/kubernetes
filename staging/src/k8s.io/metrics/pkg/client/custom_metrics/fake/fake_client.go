@@ -27,12 +27,15 @@ import (
 	cmclient "k8s.io/metrics/pkg/client/custom_metrics"
 )
 
+// GetForActionImpl 把指标名和标签选择器塞进标准 Get action。
+// 这样 fake 的 reactor 才能像真实 API 那样按子资源（指标名）区分请求。
 type GetForActionImpl struct {
 	testing.GetAction
 	MetricName    string
 	LabelSelector labels.Selector
 }
 
+// GetForAction 暴露自定义指标查询特有的参数，便于 reactor 对 Action 做类型断言。
 type GetForAction interface {
 	testing.GetAction
 	GetMetricName() string
@@ -47,10 +50,12 @@ func (i GetForActionImpl) GetLabelSelector() labels.Selector {
 	return i.LabelSelector
 }
 
+// GetSubresource 让指标名在 action 层面充当子资源，匹配真实的自定义指标 URL 形态。
 func (i GetForActionImpl) GetSubresource() string {
 	return i.MetricName
 }
 
+// DeepCopy 单独复制标签选择器：它是接口，沿用同一个引用会让测试 reactor 意外共享可变状态。
 func (i GetForActionImpl) DeepCopy() testing.Action {
 	var labelSelector labels.Selector
 	if i.LabelSelector != nil {
@@ -63,6 +68,8 @@ func (i GetForActionImpl) DeepCopy() testing.Action {
 	}
 }
 
+// NewGetForAction 构造 namespaced 查询对应的 action。
+// 复用的客户端只认 v1beta2 端点，因此这里统一套一层 v1beta2 的 group 名。
 func NewGetForAction(groupKind schema.GroupKind, namespace, name string, metricName string, labelSelector labels.Selector) GetForActionImpl {
 	// the version doesn't matter
 	gvk := groupKind.WithVersion("")
@@ -82,6 +89,7 @@ func NewGetForAction(groupKind schema.GroupKind, namespace, name string, metricN
 	}
 }
 
+// NewRootGetForAction 构造集群级（无 namespace）查询对应的 action。
 func NewRootGetForAction(groupKind schema.GroupKind, name string, metricName string, labelSelector labels.Selector) GetForActionImpl {
 	// the version doesn't matter
 	gvk := groupKind.WithVersion("")
@@ -101,6 +109,8 @@ func NewRootGetForAction(groupKind schema.GroupKind, name string, metricName str
 	}
 }
 
+// FakeCustomMetricsClient 只记录 action，不实现指标查询逻辑；
+// 结果由测试通过 PrependReactor 提供，方便校验请求参数而不是校验数据本身。
 type FakeCustomMetricsClient struct {
 	testing.Fake
 }
@@ -118,11 +128,13 @@ func (c *FakeCustomMetricsClient) NamespacedMetrics(namespace string) cmclient.M
 	}
 }
 
+// fakeNamespacedMetrics 把 namespace 预先绑定到接口上，调用方不必每个方法重复传。
 type fakeNamespacedMetrics struct {
 	Fake *FakeCustomMetricsClient
 	ns   string
 }
 
+// GetForObject 强制要求 reactor 返回恰好一项：单对象查询返回多项说明适配器实现有问题。
 func (m *fakeNamespacedMetrics) GetForObject(groupKind schema.GroupKind, name string, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValue, error) {
 	obj, err := m.Fake.
 		Invokes(NewGetForAction(groupKind, m.ns, name, metricName, nil), &v1beta2.MetricValueList{})
@@ -150,6 +162,7 @@ func (m *fakeNamespacedMetrics) GetForObjects(groupKind schema.GroupKind, select
 	return obj.(*v1beta2.MetricValueList), err
 }
 
+// fakeRootScopedMetrics 走 RootGet action，对应不带 namespace 的集群级指标路径。
 type fakeRootScopedMetrics struct {
 	Fake *FakeCustomMetricsClient
 }

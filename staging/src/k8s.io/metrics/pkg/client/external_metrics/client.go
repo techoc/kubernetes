@@ -28,6 +28,7 @@ import (
 	"k8s.io/metrics/pkg/apis/external_metrics/v1beta1"
 )
 
+// externalMetricsClient 是对 rest.Interface 的薄封装，便于替换底层传输做测试。
 type externalMetricsClient struct {
 	client rest.Interface
 }
@@ -38,6 +39,7 @@ func New(client rest.Interface) ExternalMetricsClient {
 	}
 }
 
+// NewForConfig 修改配置的副本，避免调用方传入的 Config 被限流器和序列化设置污染。
 func NewForConfig(c *rest.Config) (ExternalMetricsClient, error) {
 	configShallowCopy := *c
 	if configShallowCopy.RateLimiter == nil && configShallowCopy.QPS > 0 {
@@ -61,6 +63,7 @@ func NewForConfig(c *rest.Config) (ExternalMetricsClient, error) {
 	return New(client), nil
 }
 
+// NewForConfigOrDie 用于配置错误即为程序初始化失败的场景，例如启动时构建客户端。
 func NewForConfigOrDie(c *rest.Config) ExternalMetricsClient {
 	client, err := NewForConfig(c)
 	if err != nil {
@@ -76,11 +79,13 @@ func (c *externalMetricsClient) NamespacedMetrics(namespace string) MetricsInter
 	}
 }
 
+// namespacedMetrics 把 namespace 固化到接口实例，调用方只需关心指标名和选择器。
 type namespacedMetrics struct {
 	client    *externalMetricsClient
 	namespace string
 }
 
+// List 直接把指标名当作资源路径，因为外部指标 API 没有对应的 Kubernetes 对象类型。
 func (m *namespacedMetrics) List(metricName string, metricSelector labels.Selector) (*v1beta1.ExternalMetricValueList, error) {
 	res := &v1beta1.ExternalMetricValueList{}
 	err := m.client.client.Get().

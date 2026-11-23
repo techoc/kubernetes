@@ -27,6 +27,7 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+// 中文说明：用 v1beta1 作为首选版本，保证服务端协商时优先返回兼容性更好的表示。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(custom_metrics.AddToScheme(scheme))
 	utilruntime.Must(v1beta2.AddToScheme(scheme))

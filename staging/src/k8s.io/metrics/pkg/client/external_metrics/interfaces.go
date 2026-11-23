@@ -22,19 +22,23 @@ import (
 )
 
 // ExternalMetricsClient is a client for fetching external metrics.
+// 只暴露必要的窄接口，调用方无法依赖具体实现，便于替换后端。
 type ExternalMetricsClient interface {
 	NamespacedMetricsGetter
 }
 
 // NamespacedMetricsGetter provides access to an interface for fetching
 // metrics in a particular namespace.
+// 外部指标总是带命名空间上下文，接口层面就强制调用方提供。
 type NamespacedMetricsGetter interface {
 	NamespacedMetrics(namespace string) MetricsInterface
 }
 
 // MetricsInterface provides access to external metrics.
+// 命名空间已由上一层绑定，这里只需指标名和标签选择器。
 type MetricsInterface interface {
 	// List fetches the metric for the given namespace that maches the given
 	// metricSelector.
+	// 选择器由调用方构造，服务端按标签精确匹配时间序列；同名不同标签的值会分别返回。
 	List(metricName string, metricSelector labels.Selector) (*v1beta1.ExternalMetricValueList, error)
 }
