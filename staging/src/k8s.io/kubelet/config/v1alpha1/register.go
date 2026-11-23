@@ -22,19 +22,24 @@ import (
 )
 
 // GroupName is the group name used in this package
+// GroupName 是本包 API 所属的组名，kubelet 配置对象都归在 kubelet.config.k8s.io 下。
 const GroupName = "kubelet.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 把组名与 v1alpha1 版本号组合成 scheme 注册时使用的 GroupVersion。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 延迟收集本包的类型注册函数，避免包初始化顺序带来的副作用。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是 SchemeBuilder 的公开入口，调用方通过它把本组版本注册到自有 scheme。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
 // addKnownTypes registers known types to the given scheme
+// addKnownTypes 只列出本版本实际存在的对象，scheme 依赖它完成序列化时的类型查找。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CredentialProviderConfig{},

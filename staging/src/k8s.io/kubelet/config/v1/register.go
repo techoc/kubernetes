@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件把稳定版 kubelet 配置对象注册进 scheme，
+// 供 kubelet 启动时按 apiVersion 解析配置文件。
 package v1
 
 import (
@@ -22,19 +24,31 @@ import (
 )
 
 // GroupName is the group name used in this package
+//
+// GroupName 是节点本地配置的 API 组名，与集群 API 组隔离，
+// 表明此类对象只由 kubelet 自己消费。
 const GroupName = "kubelet.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// SchemeGroupVersion 标识本组稳定版本，是 scheme 中类型注册的键。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	//
+	// SchemeBuilder 把类型注册函数打包，便于与其他 API 包组合后一次性注册。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	//
+	// AddToScheme 是 SchemeBuilder.AddToScheme 的别名，调用方用它完成注册。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
 // addKnownTypes registers known types to the given scheme
+//
+// addKnownTypes 只登记本版本实际支持的配置类型，
+// 遗漏任何类型都会让包含该类型的配置文件无法反序列化。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CredentialProviderConfig{},

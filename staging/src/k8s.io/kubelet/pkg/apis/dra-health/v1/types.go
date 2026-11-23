@@ -16,6 +16,7 @@ limitations under the License.
 
 package v1
 
+// 本文件定义 DRA 资源健康服务的版本标识常量。
 const (
 	// DRAResourceHealthService needs to be listed in the "supported versions"
 	// array during plugin registration by a DRA plugin which provides
@@ -23,5 +24,8 @@ const (
 	//
 	// It must be exactly [DRAResourceHealth_ServiceDesc.ServiceName], which
 	// is enforced by TestServiceNameConstants.
+	//
+	// 该字符串必须与 gRPC 服务描述中的 ServiceName 完全一致，否则 kubelet 无法在注册阶段识别插件提供的健康服务；
+	// 由 TestServiceNameConstants 守住这条约束。
 	DRAResourceHealthService = "v1.DRAResourceHealth"
 )

@@ -16,9 +16,15 @@ limitations under the License.
 
 package v1beta1
 
+// 本文件定义注册协议中插件类型标识：kubelet 用它区分 API 版本与注册流程，
+// 字符串值属于线上协议契约，不能随意改名。
 const (
 	// CSIPlugin identifier for registered CSI plugins
+	//
+	// 标识 CSI 存储插件，值为历史协议约定，改动会破坏与存量插件的握手。
 	CSIPlugin = "CSIPlugin"
 	// DevicePlugin identifier for registered device plugins
+	//
+	// 标识设备插件（GPU、SR-IOV 等），与 CSI 共用同一套注册服务但类型不同。
 	DevicePlugin = "DevicePlugin"
 )

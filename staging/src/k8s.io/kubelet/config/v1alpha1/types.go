@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包是 kubelet 配置组（kubelet.config.k8s.io）的 alpha 版本，
+// 保留旧版配置的解码能力；字段语义与 v1 保持一致，升级时通过 scheme 转换迁移。
 package v1alpha1
 
 import (
@@ -25,6 +27,10 @@ import (
 // CredentialProviderConfig is the configuration containing information about
 // each exec credential provider. Kubelet reads this configuration from disk and enables
 // each provider as specified by the CredentialProvider type.
+//
+// CredentialProviderConfig 是 kubelet 从磁盘读取的镜像凭证插件配置。
+// 配置本身不参与 API server 存储，只在 kubelet 启动时加载，
+// 因此使用 TypeMeta 而非 ObjectMeta。
 type CredentialProviderConfig struct {
 	metav1.TypeMeta `json:""`
 
@@ -38,6 +44,9 @@ type CredentialProviderConfig struct {
 
 // CredentialProvider represents an exec plugin to be invoked by the kubelet. The plugin is only
 // invoked when an image being pulled matches the images handled by the plugin (see matchImages).
+//
+// CredentialProvider 描述一个可被 kubelet 调用的 exec 插件；
+// 是否调用由 MatchImages 决定，避免每个镜像都启动外部进程。
 type CredentialProvider struct {
 	// name is the required name of the credential provider. It must match the name of the
 	// provider executable as seen by the kubelet. The executable must be in the kubelet's
@@ -92,6 +101,9 @@ type CredentialProvider struct {
 
 // ExecEnvVar is used for setting environment variables when executing an exec-based
 // credential plugin.
+//
+// ExecEnvVar 用 Name/Value 而非 KEY=VALUE 字符串，
+// 便于 kubelet 安全地合并环境变量并检测重名。
 type ExecEnvVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -100,6 +112,9 @@ type ExecEnvVar struct {
 // ImagePullIntent is a record of the kubelet attempting to pull an image.
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//
+// ImagePullIntent 在发起拉取前落盘，记录 kubelet “打算拉哪个镜像”；
+// 崩溃恢复时据此和 ImagePulledRecord 对比，判断拉取是否已完成。
 type ImagePullIntent struct {
 	metav1.TypeMeta `json:""`
 
@@ -116,6 +131,9 @@ type ImagePullIntent struct {
 // image represented by this record is being requested.
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//
+// ImagePulledRecord 保存一次成功拉取所用的凭证索引，
+// 让后续拉取在凭证失效前无需再次调用外部插件。
 type ImagePulledRecord struct {
 	metav1.TypeMeta `json:""`
 
@@ -142,6 +160,9 @@ type ImagePulledRecord struct {
 }
 
 // ImagePullCredentials describe credentials that can be used to pull an image.
+//
+// ImagePullCredentials 只存凭证的坐标与哈希，不存明文凭证：
+// 文件落盘后可安全读取，同时靠哈希判断 Secret 内容是否变化、缓存是否失效。
 type ImagePullCredentials struct {
 	// KuberneteSecretCoordinates is an index of coordinates of all the kubernetes
 	// secrets that were used to pull the image.
@@ -165,6 +186,9 @@ type ImagePullCredentials struct {
 
 // ImagePullSecret is a representation of a Kubernetes secret object coordinates along
 // with a credential hash of the pull secret credentials this object contains.
+//
+// ImagePullSecret 用 UID + Namespace + Name 唯一定位 Secret；
+// 加上 CredentialHash 是为了在 Secret 被更新后让缓存的凭证自动失效。
 type ImagePullSecret struct {
 	UID       string `json:"uid"`
 	Namespace string `json:"namespace"`
@@ -177,6 +201,9 @@ type ImagePullSecret struct {
 
 // ImagePullServiceAccount is a representation of a Kubernetes service account object coordinates
 // for which the kubelet sent service account token to the credential provider plugin for image pull credentials.
+//
+// ImagePullServiceAccount 记录曾把哪个 ServiceAccount 的 token 交给插件，
+// 便于 token 轮换后按对象坐标重新获取，而不是盲目重试所有账号。
 type ImagePullServiceAccount struct {
 	UID       string `json:"uid"`
 	Namespace string `json:"namespace"`

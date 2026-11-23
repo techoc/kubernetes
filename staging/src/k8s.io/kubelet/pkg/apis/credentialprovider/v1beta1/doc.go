@@ -19,4 +19,6 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=credentialprovider.kubelet.k8s.io
 
+// 本文件仅为生成器提供包级指令：本包是 exec 凭据插件 API 的 v1beta1 版本，
+// 通过指令转换到内部版本 credentialprovider.kubelet.k8s.io，API 对象定义在同包 types.go。
 package v1beta1

@@ -26,6 +26,9 @@ import (
 // the service names declared in the generated gRPC code. The constants are
 // what plugins advertise during registration and what the kubelet matches
 // against, so they must stay in sync with the gRPC service definitions.
+//
+// 常量若与生成代码不一致，插件注册时的版本匹配会静默失败，
+// 这类问题在真机上表现为健康检查“没有数据”，很难定位。
 func TestServiceNameConstants(t *testing.T) {
 	if DRAResourceHealthService != DRAResourceHealth_ServiceDesc.ServiceName {
 		t.Errorf("v1.DRAResourceHealthService = %q, want generated service name %q", DRAResourceHealthService, DRAResourceHealth_ServiceDesc.ServiceName)

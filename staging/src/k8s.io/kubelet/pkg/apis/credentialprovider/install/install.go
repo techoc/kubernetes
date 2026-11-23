@@ -26,6 +26,8 @@ import (
 )
 
 // Install registers the credentialprovider.kubelet.k8s.io APIs into the given scheme.
+// Install 按 v1alpha1、v1beta1、v1 的顺序注册，并把最新注册的版本设为优先级最高，
+// 这样 scheme 在解码未指定版本的凭据插件配置时默认使用最新 API。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(credentialprovider.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))

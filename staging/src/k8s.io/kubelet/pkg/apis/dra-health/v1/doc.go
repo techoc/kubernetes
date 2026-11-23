@@ -16,4 +16,7 @@ limitations under the License.
 
 // Package v1 contains the stable implementation of the DRA health gRPC
 // interface. It supersedes v1alpha1.
+//
+// 本包是 DRA 设备健康检查 gRPC 接口的稳定版本，与 v1alpha1 共用同一份 proto。
+// v1alpha1 的转换与兼容包装放在本包中，便于过渡期后一处删除。
 package v1

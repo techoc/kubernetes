@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包定义 kubelet 与镜像凭证 exec 插件之间通信的内部版本类型。
+// 对外版本（v1/v1beta1/v1alpha1）通过 conversion 与此处互转，
+// 这样 kubelet 核心代码不必随支持版本的增减而改动。
 package credentialprovider
 
 import (
@@ -25,6 +28,9 @@ import (
 // CredentialProviderRequest includes the image that the kubelet requires authentication for.
 // Kubelet will pass this request object to the plugin via stdin. In general, plugins should
 // prefer responding with the same apiVersion they were sent.
+//
+// CredentialProviderRequest 是内部规范版本：ServiceAccountToken 等新字段只在此处存在，
+// 版本转换时会按对端支持情况裁剪，避免把敏感信息发给旧插件。
 type CredentialProviderRequest struct {
 	metav1.TypeMeta
 
@@ -45,6 +51,8 @@ type CredentialProviderRequest struct {
 	ServiceAccountAnnotations map[string]string
 }
 
+// PluginCacheKeyType 决定凭证缓存粒度：过细则缓存命中率低，
+// 过粗则可能把 A 仓库的凭证用于 B 仓库，因此只允许插件显式选择三档之一。
 type PluginCacheKeyType string
 
 const (
@@ -66,6 +74,9 @@ const (
 // CredentialProviderResponse holds credentials that the kubelet should use for the specified
 // image provided in the original request. Kubelet will read the response from the plugin via stdout.
 // This response should be set to the same apiVersion as CredentialProviderRequest.
+//
+// CredentialProviderResponse 是插件返回的凭证集合：
+// 缓存相关的两个字段决定“何时需要再问插件”，Auth 决定“用哪组凭证去试”。
 type CredentialProviderResponse struct {
 	metav1.TypeMeta
 
@@ -117,6 +128,9 @@ type CredentialProviderResponse struct {
 // AuthConfig contains authentication information for a container registry.
 // Only username/password based authentication is supported today, but more authentication
 // mechanisms may be added in the future.
+//
+// AuthConfig 只包含用户名/密码，是插件与 kubelet 约定的最小交集；
+// 空字符串是合法值，表示匿名或未设置，不应被当作无效响应丢弃。
 type AuthConfig struct {
 	// username is the username used for authenticating to the container registry
 	// An empty username is valid.

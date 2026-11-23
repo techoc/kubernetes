@@ -23,19 +23,26 @@ import (
 )
 
 // GroupName is the group name use in this package
+//
+// 组名与内部版本保持一致，各版本只靠 Version 区分，便于跨版本转换与注册。
 const GroupName = "credentialprovider.kubelet.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// 请求/响应类型只在本版本下注册，序列化器靠 GVK 选择解码目标。
 var (
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 	localSchemeBuilder = &SchemeBuilder
 )
 
 var (
+	// SchemeBuilder 聚合本包的类型注册函数；AddToScheme 是给外部调用的统一入口。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 注册本版本类型，并补上 metav1 的通用类型，
+// 这样 TypeMeta 里的 kind/apiVersion 才能被正确识别。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&CredentialProviderRequest{},

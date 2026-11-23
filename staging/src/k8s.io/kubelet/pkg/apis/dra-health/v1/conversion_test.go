@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件守护 v1 与 v1alpha1 之间手写转换的正确性：kubelet 通过转换包装同时服务两个版本，
+// 一旦两个 proto 的字段或取值出现偏差，旧版本客户端拿到的健康状态就会失真。
+
 package v1
 
 import (
@@ -34,6 +37,7 @@ import (
 	v1alpha1 "k8s.io/kubelet/pkg/apis/dra-health/v1alpha1"
 )
 
+// sampleResponse 构造一条同时含健康与不健康设备的响应，覆盖转换时两种健康状态的取值。
 func sampleResponse() *NodeWatchResourcesResponse {
 	return &NodeWatchResourcesResponse{
 		Devices: []*DeviceHealth{
@@ -54,6 +58,8 @@ func sampleResponse() *NodeWatchResourcesResponse {
 	}
 }
 
+// TestNodeWatchResourcesResponseToV1Alpha1 逐字段比对转换结果，
+// 确保旧版本客户端拿到的设备标识与健康信息不丢失。
 func TestNodeWatchResourcesResponseToV1Alpha1(t *testing.T) {
 	in := sampleResponse()
 	out := NodeWatchResourcesResponseToV1Alpha1(in)
@@ -77,9 +83,13 @@ func TestNodeWatchResourcesResponseToV1Alpha1(t *testing.T) {
 	}
 }
 
+// TestHealthStatusValuesMatch 校验两个版本的枚举数值一致：转换代码直接做 int32 强转，
+// 数值一旦错位，健康状态就会被静默解释成另一种含义。
 func TestHealthStatusValuesMatch(t *testing.T) {
 	// The enums must share the same numeric values for the int32 conversion to
 	// be correct.
+	//
+	// 强转依赖数值相同；枚举定义顺序若被调整，这里会先于线上流量报错。
 	cases := []struct {
 		v1    HealthStatus
 		alpha v1alpha1.HealthStatus
@@ -99,6 +109,8 @@ func TestHealthStatusValuesMatch(t *testing.T) {
 // diverged: a field added to one proto but not the other, or with a different
 // number, name, kind, or cardinality. The v1alpha1 serving support relies on
 // the two protos staying wire-identical.
+//
+// 按字段号查找而不是按位置比对，才能发现“字段号变了”这类在线上最难排查的偏差。
 func requireSameSchema(t *testing.T, a, b protoreflect.MessageDescriptor) {
 	t.Helper()
 	aFields, bFields := a.Fields(), b.Fields()
@@ -125,6 +137,8 @@ func requireSameSchema(t *testing.T, a, b protoreflect.MessageDescriptor) {
 
 // TestSchemasMatch catches a field being added to the v1 proto without also
 // being added to v1alpha1 (or vice versa).
+//
+// 转换按线格式等价实现；任何一侧单独加字段都会破坏这个前提。
 func TestSchemasMatch(t *testing.T) {
 	requireSameSchema(t,
 		(&NodeWatchResourcesRequest{}).ProtoReflect().Descriptor(),
@@ -138,6 +152,8 @@ func TestSchemasMatch(t *testing.T) {
 // reflection, recursing into nested and repeated messages. Because it
 // discovers fields dynamically, a field added to the proto later is filled
 // automatically without updating this test.
+//
+// 用反射遍历描述符而非写死字段，是为了让新加字段自动进入回归范围。
 func fillMessage(t *testing.T, m protoreflect.Message) {
 	t.Helper()
 	fields := m.Descriptor().Fields()
@@ -163,6 +179,8 @@ func fillMessage(t *testing.T, m protoreflect.Message) {
 	}
 }
 
+// nonZeroScalar 为任意标量生成一个非零值：零值字段在 protobuf 里不会被序列化，
+// 用零值测试等于什么都没测。
 func nonZeroScalar(t *testing.T, fd protoreflect.FieldDescriptor) protoreflect.Value {
 	t.Helper()
 	switch fd.Kind() {
@@ -199,6 +217,8 @@ func nonZeroScalar(t *testing.T, fd protoreflect.FieldDescriptor) protoreflect.V
 // makes this test fail: the v1 and v1alpha1 protos are wire-identical, so a
 // lossless conversion must marshal to exactly the same bytes as the input.
 // Both directions are checked.
+//
+// 比较序列化字节而非结构体相等：字节相同才算真正保真，字段默认值差异不会蒙混过关。
 func TestConversionFidelity(t *testing.T) {
 	in := &NodeWatchResourcesResponse{}
 	fillMessage(t, in.ProtoReflect())
@@ -227,6 +247,8 @@ func TestConversionFidelity(t *testing.T) {
 	}
 }
 
+// TestConversionNilSafe 守住两个边界：nil 输入要原样返回 nil，缺 DeviceIdentifier 的设备
+// 不能被解引用成 panic，因为健康检查数据来自外部插件，字段可能缺失。
 func TestConversionNilSafe(t *testing.T) {
 	if got := NodeWatchResourcesResponseToV1Alpha1(nil); got != nil {
 		t.Errorf("expected nil, got %v", got)
@@ -243,6 +265,8 @@ func TestConversionNilSafe(t *testing.T) {
 
 // fakeV1HealthServer is a minimal v1 health server which sends one
 // response and then closes the stream.
+//
+// 发一条就关流，正好让测试能同时验证数据转发和流结束语义。
 type fakeV1HealthServer struct {
 	UnimplementedDRAResourceHealthServer
 }
@@ -255,6 +279,8 @@ func (f *fakeV1HealthServer) NodeWatchResources(_ *NodeWatchResourcesRequest, sr
 // through [V1ServerWrapper] can be consumed by a plain v1alpha1 client
 // over a real gRPC connection. This is how the kubeletplugin helper serves
 // the older v1alpha1 API to kubelets which do not support v1 yet.
+//
+// 走真实 unix socket 而不是直接调包装方法，是为了连 gRPC 服务注册和流转发一起验证。
 func TestV1ServerWrapper(t *testing.T) {
 	addr := path.Join(t.TempDir(), "drahealth.sock")
 	listener, err := net.Listen("unix", addr)

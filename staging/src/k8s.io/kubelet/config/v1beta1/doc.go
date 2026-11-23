@@ -20,4 +20,6 @@ limitations under the License.
 
 // +groupName=kubelet.config.k8s.io
 
+// 本文件仅为代码生成器提供包级指令，声明 kubelet.config.k8s.io 下的 v1beta1 版本 API。
+// 这里不定义任何类型；KubeletConfiguration 等真正的 kubeconfig 结构在同包的 types.go 中。
 package v1beta1

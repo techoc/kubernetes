@@ -22,6 +22,8 @@ import (
 
 // ServiceAccountTokenCacheType is the type of cache key used for caching credentials returned by the plugin
 // when the service account token is used.
+//
+// 缓存粒度决定“哪些 Pod 可以共享拉取凭据”：粒度太粗会串用凭据，太细则每次拉取都要重新执行插件。
 type ServiceAccountTokenCacheType string
 
 const (
@@ -29,11 +31,15 @@ const (
 	// on a per-token basis. This should be set if the returned credential's lifetime is limited
 	// to the input service account token's lifetime.
 	// For example, this must be used when returning the input service account token directly as a pull credential.
+	//
+	// 透传 token 时必须按 token 缓存，否则 token 过期后旧凭据还会被命中。
 	TokenServiceAccountTokenCacheType ServiceAccountTokenCacheType = "Token"
 	// ServiceAccountServiceAccountTokenCacheType means the kubelet will cache returned credentials
 	// on a per-serviceaccount basis. This should be set if the plugin's credential retrieval logic
 	// depends only on the service account and not on pod-specific claims.
 	// Use this when the returned credential is valid for all pods using the same service account.
+	//
+	// 插件凭据与 Pod 声明无关时才可用此粒度，用 Pod 特有声明换来的凭据不能这样共享。
 	ServiceAccountServiceAccountTokenCacheType ServiceAccountTokenCacheType = "ServiceAccount"
 )
 
@@ -42,6 +48,8 @@ const (
 // CredentialProviderConfig is the configuration containing information about
 // each exec credential provider. Kubelet reads this configuration from disk and enables
 // each provider as specified by the CredentialProvider type.
+//
+// 配置文件从磁盘读取，插件列表的顺序会影响凭据优先级，不能随意重排。
 type CredentialProviderConfig struct {
 	metav1.TypeMeta `json:""`
 
@@ -50,16 +58,22 @@ type CredentialProviderConfig struct {
 	// from all providers will be returned to the kubelet. If multiple providers are called
 	// for a single image, the results are combined. If providers return overlapping
 	// auth keys, the value from the provider earlier in this list is attempted first.
+	//
+	// 多个插件命中同一镜像时结果会合并，靠前的插件优先尝试，因此顺序即优先级。
 	Providers []CredentialProvider `json:"providers"`
 }
 
 // CredentialProvider represents an exec plugin to be invoked by the kubelet. The plugin is only
 // invoked when an image being pulled matches the images handled by the plugin (see matchImages).
+//
+// 仅在镜像匹配时执行插件，避免每次拉取都启动外部进程。
 type CredentialProvider struct {
 	// name is the required name of the credential provider. It must match the name of the
 	// provider executable as seen by the kubelet. The executable must be in the kubelet's
 	// bin directory (set by the --image-credential-provider-bin-dir flag).
 	// Required to be unique across all providers.
+	//
+	// 必须与 kubelet bin 目录下的可执行文件名一致，且全局唯一，否则无法定位插件。
 	Name string `json:"name"`
 
 	// matchImages is a required list of strings used to match against images in order to
@@ -85,15 +99,21 @@ type CredentialProvider struct {
 	//   - gcr.io
 	//   - *.*.registry.io
 	//   - registry.io:8080/path
+	//
+	// 通配符只覆盖域名段，不给端口和路径用，就是为了避免匹配范围失控导致凭据泄露。
 	MatchImages []string `json:"matchImages"`
 
 	// defaultCacheDuration is the default duration the plugin will cache credentials in-memory
 	// if a cache duration is not provided in the plugin response. This field is required.
+	//
+	// 作为插件未声明 TTL 时的兜底，防止插件每次拉取都被执行。
 	DefaultCacheDuration *metav1.Duration `json:"defaultCacheDuration"`
 
 	// Required input version of the exec CredentialProviderRequest. The returned CredentialProviderResponse
 	// MUST use the same encoding version as the input. Current supported values are:
 	// - credentialprovider.kubelet.k8s.io/v1
+	//
+	// 输入输出版本必须一致，插件才能确定怎样编解码请求体。
 	APIVersion string `json:"apiVersion"`
 
 	// Arguments to pass to the command when executing it.
@@ -103,6 +123,8 @@ type CredentialProvider struct {
 	// Env defines additional environment variables to expose to the process. These
 	// are unioned with the host's environment, as well as variables client-go uses
 	// to pass argument to the plugin.
+	//
+	// 与宿主环境合并而非替换，插件才能继承 PATH、证书位置等运行时变量。
 	// +optional
 	Env []ExecEnvVar `json:"env,omitempty"`
 
@@ -124,13 +146,20 @@ type CredentialProvider struct {
 	// credentials in kubelet and the plugin will be invoked for every image pull. This does result in
 	// token generation overhead for every image pull, but it is the only way to ensure that the
 	// credentials are not shared across pods (even if they are using the same service account).
+	//
+	// 缓存只按服务账号维度，不按 Pod 维度：同账号的多个 Pod 会共享凭据，
+	// 需要严格隔离的插件应把 cacheDuration 设为 0 或按 token 缓存。
 	// +optional
 	TokenAttributes *ServiceAccountTokenAttributes `json:"tokenAttributes,omitempty"`
 }
 
 // ServiceAccountTokenAttributes is the configuration for the service account token that will be passed to the plugin.
+//
+// 让插件按需索取服务账号信息，而不是默认把 token 交给所有插件。
 type ServiceAccountTokenAttributes struct {
 	// serviceAccountTokenAudience is the intended audience for the projected service account token.
+	//
+	// audience 限定 token 只能给目标插件使用，降低 token 被挪作他用的风险。
 	// +required
 	ServiceAccountTokenAudience string `json:"serviceAccountTokenAudience"`
 
@@ -142,6 +171,8 @@ type ServiceAccountTokenAttributes struct {
 	// If the plugin's credential retrieval logic depends only on the service account and not on pod-specific claims,
 	// then the plugin can set this to "ServiceAccount". In this case, the kubelet will cache returned credentials
 	// on a per-serviceaccount basis. Use this when the returned credential is valid for all pods using the same service account.
+	//
+	// 拿不准插件凭据的生命周期时选 "Token" 更稳妥，代价是每个 token 单独缓存。
 	// +required
 	CacheType ServiceAccountTokenCacheType `json:"cacheType"`
 
@@ -150,6 +181,8 @@ type ServiceAccountTokenAttributes struct {
 	// If set to false, kubelet will invoke the plugin even if the pod does not have a service account
 	// and will not include a token in the CredentialProviderRequest in that scenario. This is useful for plugins that
 	// are used to pull images for pods without service accounts (e.g., static pods).
+	//
+	// 静态 Pod 没有服务账号，设为 false 才能让插件仍被调用，只是不带 token。
 	// +required
 	RequireServiceAccount *bool `json:"requireServiceAccount"`
 
@@ -164,6 +197,9 @@ type ServiceAccountTokenAttributes struct {
 	// If non-empty, requireServiceAccount must be set to true.
 	// Keys in this list must be unique.
 	// This list needs to be mutually exclusive with optionalServiceAccountAnnotationKeys.
+	//
+	// 必需的注解缺失就不调用插件，相当于让服务账号自己声明是否启用该插件；
+	// 与可选注解列表互斥，避免同一键被两种语义同时解释。
 	// +optional
 	// +listType=set
 	RequiredServiceAccountAnnotationKeys []string `json:"requiredServiceAccountAnnotationKeys,omitempty"`
@@ -176,6 +212,8 @@ type ServiceAccountTokenAttributes struct {
 	// This field is optional and may be empty. Plugins may use this field to extract
 	// additional information required to fetch credentials.
 	// Keys in this list must be unique.
+	//
+	// 可选注解交由插件自己校验：缺失不会阻止调用，适合插件自行决定宽松程度的场景。
 	// +optional
 	// +listType=set
 	OptionalServiceAccountAnnotationKeys []string `json:"optionalServiceAccountAnnotationKeys,omitempty"`
@@ -183,6 +221,8 @@ type ServiceAccountTokenAttributes struct {
 
 // ExecEnvVar is used for setting environment variables when executing an exec-based
 // credential plugin.
+//
+// 只描述需要注入的变量，值可为字面量；敏感信息应交给插件从安全来源读取。
 type ExecEnvVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`

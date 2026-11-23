@@ -27,6 +27,9 @@ limitations under the License.
 // era: three releases of transition for the kubelet's client-side fallback,
 // and the end of the supported version skew for kubelets without v1 support.
 
+// 本文件只在版本过渡期存在：v1 与 v1alpha1 的 proto 完全一致，
+// 因此转换只是逐字段拷贝；真正重要的是两侧的 server/client 包装，
+// 让驱动只实现新版本、kubelet 只处理新版本类型，同时仍能与旧版本对等端通信。
 package v1
 
 import (
@@ -39,6 +42,8 @@ import (
 
 // --- message conversion ---
 
+// deviceIdentifierToV1Alpha1 把 v1 设备标识转换为 v1alpha1。
+// 两版字段一一对应，nil 输入原样返回 nil，避免把“未指定”变成空对象。
 func deviceIdentifierToV1Alpha1(in *DeviceIdentifier) *v1alpha1.DeviceIdentifier {
 	if in == nil {
 		return nil
@@ -49,6 +54,8 @@ func deviceIdentifierToV1Alpha1(in *DeviceIdentifier) *v1alpha1.DeviceIdentifier
 	}
 }
 
+// deviceIdentifierFromV1Alpha1 是 deviceIdentifierToV1Alpha1 的反向转换，
+// 同样保持 nil 语义，供 client 包装处理旧驱动的响应。
 func deviceIdentifierFromV1Alpha1(in *v1alpha1.DeviceIdentifier) *DeviceIdentifier {
 	if in == nil {
 		return nil
@@ -59,6 +66,8 @@ func deviceIdentifierFromV1Alpha1(in *v1alpha1.DeviceIdentifier) *DeviceIdentifi
 	}
 }
 
+// deviceHealthToV1Alpha1 把单个设备的健康状态转换为旧版。
+// HealthStatus 虽是不同包中的类型，但底层枚举值一致，可直接强转。
 func deviceHealthToV1Alpha1(in *DeviceHealth) *v1alpha1.DeviceHealth {
 	if in == nil {
 		return nil
@@ -72,6 +81,8 @@ func deviceHealthToV1Alpha1(in *DeviceHealth) *v1alpha1.DeviceHealth {
 	}
 }
 
+// deviceHealthFromV1Alpha1 是 deviceHealthToV1Alpha1 的反向转换，
+// 用于把旧驱动的响应喂给只认识 v1 类型的 kubelet 代码。
 func deviceHealthFromV1Alpha1(in *v1alpha1.DeviceHealth) *DeviceHealth {
 	if in == nil {
 		return nil
@@ -86,6 +97,9 @@ func deviceHealthFromV1Alpha1(in *v1alpha1.DeviceHealth) *DeviceHealth {
 }
 
 // NodeWatchResourcesResponseToV1Alpha1 converts a v1 response to v1alpha1.
+//
+// NodeWatchResourcesResponseToV1Alpha1 逐元素转换设备列表；
+// 保留 nil 切片与空切片的区分，因为二者对“无设备”和“未上报”含义不同。
 func NodeWatchResourcesResponseToV1Alpha1(in *NodeWatchResourcesResponse) *v1alpha1.NodeWatchResourcesResponse {
 	if in == nil {
 		return nil
@@ -101,6 +115,9 @@ func NodeWatchResourcesResponseToV1Alpha1(in *NodeWatchResourcesResponse) *v1alp
 }
 
 // NodeWatchResourcesResponseFromV1Alpha1 converts a v1alpha1 response to v1.
+//
+// NodeWatchResourcesResponseFromV1Alpha1 是响应转换的反向路径，
+// 与 server 包装配合让 kubelet 的客户端不必感知驱动实际使用的版本。
 func NodeWatchResourcesResponseFromV1Alpha1(in *v1alpha1.NodeWatchResourcesResponse) *NodeWatchResourcesResponse {
 	if in == nil {
 		return nil
@@ -121,14 +138,22 @@ func NodeWatchResourcesResponseFromV1Alpha1(in *v1alpha1.NodeWatchResourcesRespo
 // interface by wrapping a v1 [DRAResourceHealthServer]. The kubelet helper
 // registers it so that a driver which only implements the v1 health server
 // also serves the older v1alpha1 API.
+//
+// V1ServerWrapper 是适配层：老 kubelet 连上来时仍看到 v1alpha1 接口，
+// 而驱动侧只需实现 v1，过渡期结束后可整体删除。
 type V1ServerWrapper struct {
+	// 嵌入 Unsafe 接口使未来新增 RPC 时本类型仍满足接口约束，
+	// 未实现的方法走 protobuf 默认行为，而不是编译期失败。
 	v1alpha1.UnsafeDRAResourceHealthServer
 	// Server is the v1 health server provided by the DRA driver.
 	Server DRAResourceHealthServer
 }
 
+// 编译期断言：包装器必须满足 v1alpha1 服务端接口，避免接口演进时悄然失效。
 var _ v1alpha1.DRAResourceHealthServer = V1ServerWrapper{}
 
+// NodeWatchResources 忽略旧版请求内容（两版请求均为空消息），
+// 把 v1 服务的响应经流适配器转换后写回旧版连接。
 func (w V1ServerWrapper) NodeWatchResources(_ *v1alpha1.NodeWatchResourcesRequest, stream v1alpha1.DRAResourceHealth_NodeWatchResourcesServer) error {
 	return w.Server.NodeWatchResources(&NodeWatchResourcesRequest{}, &v1ToV1alpha1ServerStream{ServerStream: stream})
 }
@@ -136,12 +161,18 @@ func (w V1ServerWrapper) NodeWatchResources(_ *v1alpha1.NodeWatchResourcesReques
 // v1ToV1alpha1ServerStream adapts a v1alpha1 server stream so that a
 // v1 server implementation can send v1 responses which are converted
 // to v1alpha1 before being written to the wire.
+//
+// v1ToV1alpha1ServerStream 用组合而非重新实现整个 gRPC 流接口：
+// 只覆盖 Send 做类型转换，其余方法委托给底层流。
 type v1ToV1alpha1ServerStream struct {
 	grpc.ServerStream
 }
 
+// 编译期断言：适配器必须满足 v1 服务端流接口。
 var _ DRAResourceHealth_NodeWatchResourcesServer = &v1ToV1alpha1ServerStream{}
 
+// Send 在写 wire 前把 v1 响应转换为 v1alpha1，
+// 这样驱动代码无需知道自己正被老 kubelet 调用。
 func (s *v1ToV1alpha1ServerStream) Send(resp *NodeWatchResourcesResponse) error {
 	return s.ServerStream.SendMsg(NodeWatchResourcesResponseToV1Alpha1(resp))
 }
@@ -156,13 +187,19 @@ func (s *v1ToV1alpha1ServerStream) Send(resp *NodeWatchResourcesResponse) error 
 // TODO(harche): remove in 1.40, together with the kubelet's v1alpha1 client
 // support. It exists as a three release transition (1.37 through 1.39) for
 // drivers which shipped a v1alpha1 health server before v1 existed.
+//
+// V1Alpha1ClientWrapper 把旧版客户端包装成 v1 客户端：
+// 上层 kubelet 逻辑只写 v1 代码，版本差异被限制在这个适配层内。
 type V1Alpha1ClientWrapper struct {
 	// Client talks to a plugin that implements the v1alpha1 health server.
 	Client v1alpha1.DRAResourceHealthClient
 }
 
+// 编译期断言：包装器必须满足 v1 客户端接口。
 var _ DRAResourceHealthClient = V1Alpha1ClientWrapper{}
 
+// NodeWatchResources 用空的旧版请求建立流（两版请求都无字段），
+// 再把返回的流包装成 v1 视图；错误原样透传，避免丢失 gRPC 状态信息。
 func (w V1Alpha1ClientWrapper) NodeWatchResources(ctx context.Context, _ *NodeWatchResourcesRequest, opts ...grpc.CallOption) (DRAResourceHealth_NodeWatchResourcesClient, error) {
 	stream, err := w.Client.NodeWatchResources(ctx, &v1alpha1.NodeWatchResourcesRequest{}, opts...)
 	if err != nil {
@@ -174,12 +211,18 @@ func (w V1Alpha1ClientWrapper) NodeWatchResources(ctx context.Context, _ *NodeWa
 // v1alpha1ToV1ClientStream adapts a v1alpha1 client stream so that the
 // kubelet can receive v1 responses converted from the v1alpha1 messages
 // sent by the plugin.
+//
+// v1alpha1ToV1ClientStream 只覆盖 Recv 做消息转换，
+// 其余 gRPC 流操作沿用嵌入的 ClientStream。
 type v1alpha1ToV1ClientStream struct {
 	grpc.ClientStream
 }
 
+// 编译期断言：适配器必须满足 v1 客户端流接口。
 var _ DRAResourceHealth_NodeWatchResourcesClient = &v1alpha1ToV1ClientStream{}
 
+// Recv 读取一条旧版消息并转换为 v1 响应；
+// 流结束或出错时直接返回原错误，让调用方正常处理 EOF。
 func (s *v1alpha1ToV1ClientStream) Recv() (*NodeWatchResourcesResponse, error) {
 	var msg v1alpha1.NodeWatchResourcesResponse
 	if err := s.ClientStream.RecvMsg(&msg); err != nil {

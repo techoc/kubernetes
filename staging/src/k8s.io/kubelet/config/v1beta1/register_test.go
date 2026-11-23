@@ -22,6 +22,10 @@ import (
 	componentconfigtesting "k8s.io/component-base/config/testing"
 )
 
+// TestComponentConfigSetup 校验本包的类型注册符合组件配置的通用约定。
+//
+// 这类测试能在配置类型新增字段或改动 scheme 注册后第一时间发现缺失的
+// deepcopy/defaulting 实现，避免问题拖到 kubelet 启动时才暴露。
 func TestComponentConfigSetup(t *testing.T) {
 	pkginfo := &componentconfigtesting.ComponentConfigPackage{
 		ComponentName:      "kubelet",

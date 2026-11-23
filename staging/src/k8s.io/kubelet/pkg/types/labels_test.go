@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件覆盖 labels.go 里的 label 取值函数：这些 key 来自容器运行时上报的标签，
+// 拼错或大小写不符都会让容器/Pod 元数据丢失。
+
 package types
 
 import (
@@ -22,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestGetContainerName 校验按约定 key 取容器名，防止标签常量漂移。
 func TestGetContainerName(t *testing.T) {
 	var cases = []struct {
 		labels        map[string]string
@@ -46,6 +50,7 @@ func TestGetContainerName(t *testing.T) {
 	}
 }
 
+// TestGetPodName 确保 Pod 名能从运行时标签中原样取回。
 func TestGetPodName(t *testing.T) {
 	var cases = []struct {
 		labels  map[string]string
@@ -70,6 +75,7 @@ func TestGetPodName(t *testing.T) {
 	}
 }
 
+// TestGetPodUID 校验 UID 标签的 key，UID 是跨重建区分 Pod 的唯一依据。
 func TestGetPodUID(t *testing.T) {
 	var cases = []struct {
 		labels map[string]string
@@ -94,6 +100,7 @@ func TestGetPodUID(t *testing.T) {
 	}
 }
 
+// TestGetPodNamespace 校验命名空间标签的 key，缺了它会让同名 Pod 混淆。
 func TestGetPodNamespace(t *testing.T) {
 	var cases = []struct {
 		labels       map[string]string

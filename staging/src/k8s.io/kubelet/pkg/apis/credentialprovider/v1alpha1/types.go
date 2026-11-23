@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件保留 v1alpha1 的凭据协议结构供内部版本转换使用：
+// 新版请求里的服务账号 token 与注解没有对应的 alpha 字段，转换时被有意丢弃。
+
 package v1alpha1
 
 import (
@@ -25,28 +28,39 @@ import (
 // CredentialProviderRequest includes the image that the kubelet requires authentication for.
 // Kubelet will pass this request object to the plugin via stdin. In general, plugins should
 // prefer responding with the same apiVersion they were sent.
+//
+// 旧协议只带镜像信息；需要服务账号 token 的插件必须使用 v1。
 type CredentialProviderRequest struct {
 	metav1.TypeMeta `json:""`
 
 	// image is the container image that is being pulled as part of the
 	// credential provider plugin request. Plugins may optionally parse the image
 	// to extract any information required to fetch credentials.
+	//
+	// 镜像字符串是旧协议里唯一的输入，插件只能靠它决定凭据。
 	Image string `json:"image"`
 }
 
+// PluginCacheKeyType 控制凭据缓存粒度，值域必须与 v1 保持一致以便跨版本转换。
 type PluginCacheKeyType string
 
 const (
 	// ImagePluginCacheKeyType means the kubelet will cache credentials on a per-image basis,
 	// using the image passed from the kubelet directly as the cache key. This includes
 	// the registry domain, port (if specified), and path but does not include tags or SHAs.
+	//
+	// 按仓库镜像缓存，不含 tag/SHA，同一仓库的多个 tag 共用凭据。
 	ImagePluginCacheKeyType PluginCacheKeyType = "Image"
 	// RegistryPluginCacheKeyType means the kubelet will cache credentials on a per-registry basis.
 	// The cache key will be based on the registry domain and port (if present) parsed from the requested image.
+	//
+	// 凭据只与仓库相关时用此粒度，避免为同仓库的每个镜像重复调用插件。
 	RegistryPluginCacheKeyType PluginCacheKeyType = "Registry"
 	// GlobalPluginCacheKeyType means the kubelet will cache credentials for all images that
 	// match for a given plugin. This cache key should only be returned by plugins that do not use
 	// the image input at all.
+	//
+	// 与镜像无关的凭据才用此粒度，否则会在不同仓库之间误用。
 	GlobalPluginCacheKeyType PluginCacheKeyType = "Global"
 )
 
@@ -55,18 +69,24 @@ const (
 // CredentialProviderResponse holds credentials that the kubelet should use for the specified
 // image provided in the original request. Kubelet will read the response from the plugin via stdout.
 // This response should be set to the same apiVersion as CredentialProviderRequest.
+//
+// 响应结构与 v1 相同，仍是 stdout 输出；保留独立类型只为兼容旧序列化路径。
 type CredentialProviderResponse struct {
 	metav1.TypeMeta `json:""`
 
 	// cacheKeyType indiciates the type of caching key to use based on the image provided
 	// in the request. There are three valid values for the cache key type: Image, Registry, and
 	// Global. If an invalid value is specified, the response will NOT be used by the kubelet.
+	//
+	// 缓存粒度非法就废弃整份响应，不猜测插件意图。
 	CacheKeyType PluginCacheKeyType `json:"cacheKeyType"`
 
 	// cacheDuration indicates the duration the provided credentials should be cached for.
 	// The kubelet will use this field to set the in-memory cache duration for credentials
 	// in the AuthConfig. If null, the kubelet will use defaultCacheDuration provided in
 	// CredentialProviderConfig. If set to 0, the kubelet will not cache the provided AuthConfig.
+	//
+	// 0 表示每次拉取都调用插件，适合短时效凭据；缺省则使用配置文件里的兜底时长。
 	// +optional
 	CacheDuration *metav1.Duration `json:"cacheDuration,omitempty"`
 
@@ -99,6 +119,8 @@ type CredentialProviderResponse struct {
 	//   - gcr.io
 	//   - *.*.registry.io
 	//   - registry.io:8080/path
+	//
+	// 多键匹配时优先尝试更具体（更长、非通配）的键，避免通用凭据盖掉特化凭据。
 	// +optional
 	Auth map[string]AuthConfig `json:"auth,omitempty"`
 }
@@ -106,6 +128,8 @@ type CredentialProviderResponse struct {
 // AuthConfig contains authentication information for a container registry.
 // Only username/password based authentication is supported today, but more authentication
 // mechanisms may be added in the future.
+//
+// 空用户名/密码合法，表示匿名拉取或凭据由仓库侧的其他机制提供。
 type AuthConfig struct {
 	// username is the username used for authenticating to the container registry
 	// An empty username is valid.

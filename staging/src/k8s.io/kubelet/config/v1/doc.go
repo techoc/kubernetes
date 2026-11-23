@@ -20,4 +20,6 @@ limitations under the License.
 
 // +groupName=kubelet.config.k8s.io
 
+// 本包是 kubelet 配置组的稳定版本，提供 KubeletConfiguration 等对象，
+// 由 kubelet 从本地文件加载。上面的指令分别驱动 deepcopy/openapi 代码生成与 API 组名标注。
 package v1

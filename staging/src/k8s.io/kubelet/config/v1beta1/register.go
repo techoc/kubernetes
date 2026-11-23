@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件负责把 kubelet 配置对象注册到 runtime scheme，
+// 使配置文件反序列化时能根据 apiVersion 找到对应 Go 类型。
 package v1beta1
 
 import (
@@ -22,19 +24,31 @@ import (
 )
 
 // GroupName is the group name used in this package
+//
+// GroupName 是 kubelet 本地配置的 API 组，与集群 API 组分开，
+// 说明这些对象由节点上的 kubelet 自行解析，不经过 API server。
 const GroupName = "kubelet.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// SchemeGroupVersion 把组名与版本绑定，作为 scheme 中类型注册的唯一键。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	//
+	// SchemeBuilder 延迟执行 addKnownTypes，便于调用方按需组合多个 API 包的注册逻辑。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	// AddToScheme is a global function that registers this API group & version to a scheme
+	//
+	// AddToScheme 是 SchemeBuilder.AddToScheme 的便捷别名，供外部包一行完成注册。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
 // addKnownTypes registers known types to the given scheme
+//
+// addKnownTypes 列出本版本所有可反序列化的对象；
+// 每新增一种配置对象都要在此登记，否则 kubelet 读取配置时会因“未知类型”失败。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&KubeletConfiguration{},

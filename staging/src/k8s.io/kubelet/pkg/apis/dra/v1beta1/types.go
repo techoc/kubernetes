@@ -20,5 +20,8 @@ const (
 	// DRAPluginService needs to be listed in the "supported versions"
 	// array during plugin registration by a DRA plugin which provides
 	// an implementation of the v1beta1 DRAPlugin service.
+	//
+	// 该值是插件注册时相互识别的版本标识；与生成代码里的服务名保持一致，
+	// kubelet 才能按同一版本建立连接。
 	DRAPluginService = "v1beta1.DRAPlugin"
 )

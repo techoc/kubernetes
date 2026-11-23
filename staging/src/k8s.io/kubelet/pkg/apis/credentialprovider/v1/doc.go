@@ -19,4 +19,6 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=credentialprovider.kubelet.k8s.io
 
+// 本包是镜像凭证插件 API 的稳定版本，通过 stdin/stdout 与 exec 插件交换 JSON。
+// 上面的指令分别驱动 deepcopy/conversion/defaulter 代码生成与 API 组名标注。
 package v1

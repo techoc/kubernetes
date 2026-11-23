@@ -20,4 +20,13 @@ limitations under the License.
 
 // +groupName=kubelet.config.k8s.io
 
+// 本包是 kubelet 配置（KubeletConfiguration）的 v1alpha1 外部版本，
+// 独立于 k8s.io/kubelet/pkg/apis 下的 API 组：配置由 kubelet 自己从磁盘读取，
+// 不经过 apiserver 的常规资源存取路径。
+// 上方指令分别开启 deepcopy、OpenAPI 生成并指定模型包名与 API 组名，
+// 保证生成的客户端模型与本包类型保持一致。
+// 指令 +k8s:deepcopy-gen=package 为包内类型生成 DeepCopy 方法；
+// 指令 +k8s:openapi-gen=true 与 +k8s:openapi-model-package 决定 OpenAPI 模型输出位置；
+// 指令 +groupName 决定生成代码的 API 组标识。
+
 package v1alpha1

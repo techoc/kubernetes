@@ -16,9 +16,13 @@ limitations under the License.
 
 package v1alpha1
 
+// 本文件定义插件注册协议 v1alpha1 版本中的插件类型标识。
+// 与 v1 版本相比，这里只有 CSI 和 Device Plugin 两种，因为 DRA 是后来才加入的。
 const (
 	// CSIPlugin identifier for registered CSI plugins
+	// CSIPlugin 标识 CSI（Container Storage Interface）存储插件。
 	CSIPlugin = "CSIPlugin"
 	// DevicePlugin identifier for registered device plugins
+	// DevicePlugin 标识传统的 Device Plugin（如 GPU、FPGA 设备插件）。
 	DevicePlugin = "DevicePlugin"
 )

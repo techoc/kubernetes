@@ -30,5 +30,7 @@ const (
 	// the kubelet helper serves v1alpha1 as well via a conversion wrapper so
 	// that kubelets which only support v1alpha1 can still consume health
 	// updates. See the v1 package for the conversion code.
+	//
+	// 字符串值不能改：早期插件把此值硬编码进注册信息，改了就无法向后兼容。
 	DRAResourceHealthService = "v1alpha1.DRAResourceHealth"
 )

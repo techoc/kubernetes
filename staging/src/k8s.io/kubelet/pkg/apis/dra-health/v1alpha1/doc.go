@@ -22,4 +22,7 @@ limitations under the License.
 // This intentionally does not use a "Deprecated:" marker: the kubelet and
 // the kubeletplugin helper have to keep using this package while it is
 // supported, and the marker would flag those imports in linters.
+//
+// 已弃用：v1alpha1 与 v1 使用相同的 proto，仅保留用于兼容仍在跑旧版的 kubelet 与驱动。
+// 过渡期结束后整包删除；此处刻意不加 Deprecated 标记，否则会被 linter 误报。
 package v1alpha1

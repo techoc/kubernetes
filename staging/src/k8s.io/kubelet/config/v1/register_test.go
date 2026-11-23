@@ -22,6 +22,8 @@ import (
 	componentconfigtesting "k8s.io/component-base/config/testing"
 )
 
+// TestComponentConfigSetup 用 component-base 的通用校验器检查 v1 外部配置包，
+// 确保 scheme 注册、类型转换与默认值符合 component config 的约定。
 func TestComponentConfigSetup(t *testing.T) {
 	pkginfo := &componentconfigtesting.ComponentConfigPackage{
 		ComponentName:      "kubelet",
