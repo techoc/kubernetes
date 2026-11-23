@@ -23,6 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestFeatureMapper 同时覆盖三个映射入口，因为它们的契约不同：
+// MapSorted/MustMapSorted 遇到未知 feature 必须拒绝，TryMap 要跳过，
+// Unmap 则要把 bit 还原成名字。用例里的 unknown 分别放在开头、中间、结尾，
+// 就是为了保证双指针扫描在所有位置都不会提前漏检或误报。
 func TestFeatureMapper(t *testing.T) {
 	features := []string{"a", "b", "c", "d"}
 	mapper := NewFeatureMapper(features)
@@ -31,7 +35,7 @@ func TestFeatureMapper(t *testing.T) {
 		name        string
 		input       []string
 		expectError bool
-		expectedSet sets.Set[int] // indices in features
+		expectedSet sets.Set[int] // 期望被置位的特征下标（对应 features 的下标）
 	}{
 		{
 			name:        "Empty input",
@@ -75,7 +79,7 @@ func TestFeatureMapper(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test TryMap
+			// 宽松映射：未知特征被忽略，逐位核对结果是否与期望集合一致。
 			fs := mapper.TryMap(tt.input)
 			for i, known := range features {
 				expected := tt.expectedSet.Has(i)
@@ -85,7 +89,7 @@ func TestFeatureMapper(t *testing.T) {
 				}
 			}
 
-			// Test MapSorted
+			// 严格映射：按 expectError 决定是断言报错还是与宽松映射结果一致。
 			fs2, err := mapper.MapSorted(tt.input)
 			if tt.expectError {
 				if err == nil {
@@ -100,7 +104,7 @@ func TestFeatureMapper(t *testing.T) {
 				}
 			}
 
-			// Test MustMapSorted
+			// 便捷封装：错误路径断言 panic，正常路径断言结果与宽松映射一致。
 			if tt.expectError {
 				func() {
 					defer func() {
@@ -117,7 +121,7 @@ func TestFeatureMapper(t *testing.T) {
 				}
 			}
 
-			// Test Unmap and UnmapSparse
+			// 逆向映射：校验名字数量与内容；报错路径只要求结果来自输入。
 			unmapped, err := mapper.Unmap(fs)
 			if err != nil {
 				t.Fatalf("unexpected Unmap error: %v", err)
@@ -126,8 +130,8 @@ func TestFeatureMapper(t *testing.T) {
 				t.Errorf("len(unmapped) = %d, want %d", len(unmapped), tt.expectedSet.Len())
 			}
 			if tt.expectError {
-				// If there's an error, just verify that the unmapped results of TryMap are
-				// contained within the input.
+				// TryMap 在报错路径上会返回“成功映射的那部分”，这里只要求这部分
+				// 来自输入，不强求完整，因为未知项的具体跳过策略不在本测试的契约里。
 				inputSets := sets.New(tt.input...)
 				for _, u := range unmapped {
 					if !inputSets.Has(u) {

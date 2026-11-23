@@ -20,4 +20,7 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// localSchemeBuilder 留作本包类型注册到 Scheme 的入口。
+// 目前没有需要注册的类型（IR 类型是纯内存结构，不参与 API 序列化），
+// 但保留它能为将来新增类型提供一致的位置，避免届时改动调用方。
 var localSchemeBuilder = &runtime.SchemeBuilder{}

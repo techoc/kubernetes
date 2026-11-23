@@ -43,6 +43,9 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestNewNodeLease 用假时钟固定续租时间，使期望值可以精确比较；
+// 用例覆盖新建和基于已有对象刷新两条路径，因为两者对 ownerReference 的处理不同：
+// 新建依赖后置钩子补全，刷新则必须保留已有的引用。
 func TestNewNodeLease(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	node := &corev1.Node{
@@ -58,6 +61,8 @@ func TestNewNodeLease(t *testing.T) {
 		expect     *coordinationv1.Lease
 	}{
 		{
+			// 场景一：全新租约且集群里没有 Node 对象。钩子补不到 ownerReference，
+			// 期望对象只有基本字段，不带任何引用。
 			desc: "nil base without node",
 			controller: &controller{
 				client:               fake.NewSimpleClientset(),
@@ -80,6 +85,8 @@ func TestNewNodeLease(t *testing.T) {
 			},
 		},
 		{
+			// 场景二：全新租约且 Node 存在，后置钩子应当补齐 ownerReference，
+			// 同时 spec 里写入持有者、时长和当前续租时间。
 			desc: "nil base with node",
 			controller: &controller{
 				client:               fake.NewSimpleClientset(node),
@@ -110,6 +117,8 @@ func TestNewNodeLease(t *testing.T) {
 			},
 		},
 		{
+			// 场景三：已有租约但缺 ownerReference。刷新时既要补上引用，
+			// 也要把过期的 renewTime 推进到当前时间。
 			desc: "non-nil base without owner ref, renew time is updated",
 			controller: &controller{
 				client:               fake.NewSimpleClientset(node),
@@ -149,6 +158,8 @@ func TestNewNodeLease(t *testing.T) {
 			},
 		},
 		{
+			// 场景四：已有租约且已带 ownerReference。刷新应原样保留引用，只更新 renewTime，
+			// 确保 DeepCopy 不会把已有元数据弄丢。
 			desc: "non-nil base with owner ref, renew time is updated",
 			controller: &controller{
 				client:               fake.NewSimpleClientset(node),
@@ -196,6 +207,7 @@ func TestNewNodeLease(t *testing.T) {
 			},
 		},
 		{
+			// 场景五：配置里的租约时长变了，刷新时必须把 base 里的旧值同步为最新值（456）。
 			desc: "non-nil base with owner ref, lease duration is updated",
 			controller: &controller{
 				client:               fake.NewSimpleClientset(node),
@@ -250,6 +262,8 @@ func TestNewNodeLease(t *testing.T) {
 			tc.controller.newLeasePostProcessFunc = setNodeOwnerFunc(logger, tc.controller.client, node.Name)
 			tc.controller.leaseNamespace = corev1.NamespaceNodeLease
 			newLease, _ := tc.controller.newLease(tc.base)
+			// 地址不同是硬性要求：调用方会持有 base 作为冲突重试的基准，
+			// 若就地修改会让一次失败的请求污染后续构造。
 			if newLease == tc.base {
 				t.Fatalf("the new lease must be newly allocated, but got same address as base")
 			}
@@ -260,6 +274,9 @@ func TestNewNodeLease(t *testing.T) {
 	}
 }
 
+// TestRetryUpdateNodeLease 通过 fake client 的 reactor 精确控制每次 UPDATE 的返回，
+// 重点验证两件事：冲突时会重新 GET 而不是无限重试旧版本；连续失败才会触发
+// onRepeatedHeartbeatFailure，避免一次抖动就当作心跳异常上报。
 func TestRetryUpdateNodeLease(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -279,6 +296,7 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 		client                     *fake.Clientset
 	}{
 		{
+			// 场景一：UPDATE 一次成功，不应报错，也不该触发重复失败回调。
 			desc: "no errors",
 			updateReactor: func(action clienttesting.Action) (bool, runtime.Object, error) {
 				return true, &coordinationv1.Lease{}, nil
@@ -289,6 +307,7 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 			client:                     fake.NewSimpleClientset(node),
 		},
 		{
+			// 场景二：UPDATE 持续返回服务端超时，重试耗尽后应当返回错误。
 			desc: "connection errors",
 			updateReactor: func(action clienttesting.Action) (bool, runtime.Object, error) {
 				return true, nil, noConnectionUpdateErr
@@ -299,6 +318,8 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 			client:                     fake.NewSimpleClientset(node),
 		},
 		{
+			// 场景三：先瞬时错误再乐观锁冲突。冲突后应重新 GET 最新版本并最终更新成功，
+			// 且第一次失败不应触发“连续失败”回调。
 			desc: "optimistic lock errors",
 			updateReactor: func() func(action clienttesting.Action) (bool, runtime.Object, error) {
 				i := 0
@@ -317,12 +338,16 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 			getReactor: func(action clienttesting.Action) (bool, runtime.Object, error) {
 				return true, &coordinationv1.Lease{}, nil
 			},
+			// 冲突重试场景里第一次失败不该触发回调，所以用 Fatalf 把它钉死。
 			onRepeatedHeartbeatFailure: func() { t.Fatalf("onRepeatedHeartbeatFailure called") },
 			expectErr:                  false,
 			client:                     fake.NewSimpleClientset(node),
 		},
 		{
+			// 场景四：节点不存在导致后置钩子失败，期望没有任何 UPDATE 请求发出。
 			desc: "node not found errors",
+			// 节点不存在时后置钩子会失败，此时不应发出任何 UPDATE；
+			// 用 Fatalf 而不是返回错误，是为了抓住“错误被吞掉但请求照发”的实现退化。
 			updateReactor: func(action clienttesting.Action) (bool, runtime.Object, error) {
 				t.Fatalf("lease was updated when node does not exist!")
 				return true, nil, nil
@@ -353,6 +378,7 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 				onRepeatedHeartbeatFailure: tc.onRepeatedHeartbeatFailure,
 				newLeasePostProcessFunc:    setNodeOwnerFunc(logger, cl, node.Name),
 			}
+			// 按用例声明核对最终是否报错：既覆盖重试成功，也覆盖重试耗尽仍失败的路径。
 			if err := c.retryUpdateLease(ctx, nil); tc.expectErr != (err != nil) {
 				t.Fatalf("got %v, expected %v", err != nil, tc.expectErr)
 			}
@@ -360,6 +386,9 @@ func TestRetryUpdateNodeLease(t *testing.T) {
 	}
 }
 
+// TestUpdateUsingLatestLease 覆盖 sync 的快路径与回退路径：缓存的 latestLease
+// 更新成功时不应发 GET；失败时才回退到 ensureLease 重新查证租约是否存在。
+// 断言 resourceVersion 是为了确认最终缓存的是最新一次写入返回的对象。
 func TestUpdateUsingLatestLease(t *testing.T) {
 	nodeName := "foo"
 	node := &corev1.Node{
@@ -372,6 +401,8 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 	notFoundErr := apierrors.NewNotFound(coordinationv1.Resource("lease"), nodeName)
 	internalErr := apierrors.NewInternalError(errors.New("unreachable code"))
 
+	// makeLease 构造只带名字与 resourceVersion 的最小租约，便于在各 reactor 和断言间
+	// 用版本号追踪对象是否被正确刷新。
 	makeLease := func(name, resourceVersion string) *coordinationv1.Lease {
 		return &coordinationv1.Lease{
 			ObjectMeta: metav1.ObjectMeta{
@@ -393,6 +424,7 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 		expectLeaseResourceVersion string
 	}{
 		{
+			// 场景一：没有缓存且租约不存在，走创建路径；成功后 latestLease 应缓存新对象（RV=1）。
 			desc:          "latestLease is nil and need to create",
 			existingObjs:  []runtime.Object{node},
 			latestLease:   nil,
@@ -407,6 +439,8 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 			expectLeaseResourceVersion: "1",
 		},
 		{
+			// 场景二：同样走创建路径，但 Node 不存在导致后置钩子失败，创建被跳过，
+			// latestLease 应保持 nil。
 			desc:          "latestLease is nil and need to create, node doesn't exist",
 			existingObjs:  nil,
 			latestLease:   nil,
@@ -421,6 +455,7 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 			expectLeaseResourceVersion: "1",
 		},
 		{
+			// 场景三：无缓存但租约已存在，走 GET + UPDATE；缓存应更新为 UPDATE 返回的版本（RV=2）。
 			desc:         "latestLease is nil and need to update",
 			existingObjs: []runtime.Object{node},
 			latestLease:  nil,
@@ -434,6 +469,7 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 			expectLeaseResourceVersion: "2",
 		},
 		{
+			// 场景四：缓存命中走快路径直接 UPDATE，不发 GET；缓存更新为返回值（RV=2）。
 			desc:         "latestLease exist and need to update",
 			existingObjs: []runtime.Object{node},
 			latestLease:  makeLease(nodeName, "1"),
@@ -444,6 +480,8 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 			expectLeaseResourceVersion: "2",
 		},
 		{
+			// 先用缓存版本更新失败，再让回退路径拿到一个更新的版本，
+			// 验证 sync 最终把 latestLease 刷新成回退后写入返回的对象。
 			desc:         "update with latest lease failed",
 			existingObjs: []runtime.Object{node},
 			latestLease:  makeLease(nodeName, "1"),
@@ -495,6 +533,8 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 
 			c.sync(ctx)
 
+			// 断言缓存状态：期望有缓存时核对 resourceVersion（确认缓存的是最新写入），
+			// 期望无缓存时确认缓存仍为 nil（钩子失败时不应留下半成品）。
 			if tc.expectLatestLease {
 				if tc.expectLeaseResourceVersion != c.latestLease.ResourceVersion {
 					t.Fatalf("latestLease RV got %v, expected %v", c.latestLease.ResourceVersion, tc.expectLeaseResourceVersion)
@@ -508,9 +548,10 @@ func TestUpdateUsingLatestLease(t *testing.T) {
 	}
 }
 
-// TestStopDoesNotBlockWhenLeaseCannotBeCreated verifies that Stop returns
-// while sync is retrying a lease create that will never succeed. sync holds
-// the reconciling lock across the retries, so Stop must interrupt them.
+// TestStopDoesNotBlockWhenLeaseCannotBeCreated 验证：即使 sync 正在重试一个永远不会成功的租约创建，
+// Stop 也必须及时返回。sync 在整个重试期间持有 reconcilingLock，所以 Stop 必须能打断它。
+// 用 channel 观测第一次 CREATE，是为了确保测试确实停在重试循环内部，
+// 而不是碰巧在两次重试的间隙里通过了停机检查。
 func TestStopDoesNotBlockWhenLeaseCannotBeCreated(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -529,8 +570,8 @@ func TestStopDoesNotBlockWhenLeaseCannotBeCreated(t *testing.T) {
 		10*time.Millisecond, "foo", corev1.NamespaceNodeLease, nil)
 	go c.Run(ctx)
 
-	// Wait until sync is inside the create retry loop, holding the
-	// reconciling lock.
+	// 等到 sync 真正进入创建重试循环并持有 reconcilingLock，
+	// 确保后续对 Stop 的检验发生在最坏时序下。
 	select {
 	case <-retrying:
 	case <-time.After(wait.ForeverTestTimeout):
@@ -549,18 +590,21 @@ func TestStopDoesNotBlockWhenLeaseCannotBeCreated(t *testing.T) {
 		t.Fatal("Stop() did not return while lease creation keeps failing")
 	}
 
-	// Stop must be safe to call more than once.
+	// Stop 必须可以安全地重复调用。
+	// 再次调用用于验证 stopOnce：重复 close 同一个 channel 会 panic。
 	c.Stop()
 }
 
-// setNodeOwnerFunc helps construct a newLeasePostProcessFunc which sets
-// a node OwnerReference to the given lease object
+// setNodeOwnerFunc 构造一个 newLeasePostProcessFunc，用于给租约对象补上指向对应节点的
+// OwnerReference。
+// 这里把“每次续租都尝试补 ownerReference”做成后置钩子，而不是控制器内置逻辑，
+// 是因为节点 UID 在首次创建租约时未必查得到；即使钩子报错，创建路径也会吞掉错误、
+// 下一轮再试，而更新路径照常提交，让心跳业务优先于附加元数据。
 func setNodeOwnerFunc(logger klog.Logger, c clientset.Interface, nodeName string) func(lease *coordinationv1.Lease) error {
 	return func(lease *coordinationv1.Lease) error {
-		// Setting owner reference needs node's UID. Note that it is different from
-		// kubelet.nodeRef.UID. When lease is initially created, it is possible that
-		// the connection between master and node is not ready yet. So try to set
-		// owner reference every time when renewing the lease, until successful.
+		// 设置 ownerReference 需要节点的 UID，注意它与 kubelet.nodeRef.UID 并不是一回事。
+		// 租约首次创建时，master 与 node 之间的连接可能还没就绪，暂时查不到节点；
+		// 所以每次续租都重新尝试补一次，直到成功为止。
 		if len(lease.OwnerReferences) == 0 {
 			if node, err := c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{}); err == nil {
 				lease.OwnerReferences = []metav1.OwnerReference{

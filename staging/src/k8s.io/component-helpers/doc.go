@@ -14,4 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package componenthelpers 本身不承载任何逻辑，只是给 k8s.io/component-helpers/... 这棵
+// 目录树一个可导入的 Go 包名，使 go list、依赖校验等工具能把它当作正式的 module 根处理。
+// 真正可复用的代码按领域分散在 apps、auth、node、storage 等子包里。
 package componenthelpers

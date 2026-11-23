@@ -18,6 +18,7 @@ package reconciliation
 
 import (
 	"context"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,15 +26,18 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
-// tryEnsureNamespace gets or creates the given namespace while ignoring forbidden errors.
-// It is a best effort attempt as the user may not be able to get or create namespaces.
-// This allows us to handle flows where the user can only mutate roles and role bindings.
+// tryEnsureNamespace 尽力确保 namespace 存在：先查后建，并忽略 Forbidden 错误。
+// 这里吞掉 Forbidden 是刻意的：权限模型允许只授予角色和角色绑定的写权限，
+// 若把命名空间不可读也当成致命错误，这类受限用户就完全用不了对账流程。
+// 其他意外错误（例如服务端不可达）仍要向上抛，避免掩盖真实故障。
 func tryEnsureNamespace(client corev1client.NamespaceInterface, namespace string) error {
 	_, getErr := client.Get(context.TODO(), namespace, metav1.GetOptions{})
 	if getErr == nil {
 		return nil
 	}
 
+	// NotFound 是接下来要创建的正常前提，Forbidden 代表权限受限只能继续尝试；
+	// 其余错误说明这次读取本身就不可信，不应再盲目发起创建。
 	if fatalGetErr := utilerrors.FilterOut(getErr, apierrors.IsNotFound, apierrors.IsForbidden); fatalGetErr != nil {
 		return fatalGetErr
 	}
@@ -41,5 +45,7 @@ func tryEnsureNamespace(client corev1client.NamespaceInterface, namespace string
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	_, createErr := client.Create(context.TODO(), ns, metav1.CreateOptions{})
 
+	// AlreadyExists 可能来自创建与查询之间的竞态，Forbidden 是预期中的权限受限；
+	// 两者都算目标已达成，不值得让调用方重试。
 	return utilerrors.FilterOut(createErr, apierrors.IsAlreadyExists, apierrors.IsForbidden)
 }

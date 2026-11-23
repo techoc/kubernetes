@@ -22,6 +22,8 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
+// TestRequirements 防止实现和声明脱节：Requirements 是调度侧推断节点能力的依据，
+// 一旦忘记声明特性门，Discover 的结果就无从解释。
 func TestRequirements(t *testing.T) {
 	feature := &draNodeAllocatableResourcesFeature{}
 	if feature.Name() != DRANodeAllocatableResourcesFeature {
@@ -37,6 +39,8 @@ func TestRequirements(t *testing.T) {
 	}
 }
 
+// TestDiscover 覆盖特性门开、关两端：该特性完全由门控决定，
+// 任何一端出错都会让节点能力声明对整个集群失真。
 func TestDiscover(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -69,6 +73,9 @@ func TestDiscover(t *testing.T) {
 	}
 }
 
+// TestInferForSchedulingAndUpdate 锁定两个推断方法恒为 false：
+// 节点是否具备该能力只由门控决定，Pod 本身无法表达需求，
+// 一旦这里返回 true，就会把不相关的 Pod 也标记为需要该特性。
 func TestInferForSchedulingAndUpdate(t *testing.T) {
 	feature := &draNodeAllocatableResourcesFeature{}
 	podInfo := &types.PodInfo{}
@@ -80,6 +87,8 @@ func TestInferForSchedulingAndUpdate(t *testing.T) {
 	}
 }
 
+// TestMaxVersion 断言没有版本上限：该能力与 Kubernetes 版本无关，
+// 若误设上限，高版本集群会错误地不再声明这个特性。
 func TestMaxVersion(t *testing.T) {
 	feature := &draNodeAllocatableResourcesFeature{}
 	if feature.MaxVersion() != nil {

@@ -26,14 +26,16 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
-// TestPodPriority tests PodPriority function.
+// TestPodPriority 验证 PodPriority 在 priority 为 nil 与显式设置两种情形下的返回值。
 func TestPodPriority(t *testing.T) {
 	p := int32(20)
+	// 表驱动用例：name 为用例名，pod 为输入 Pod，expectedPriority 为期望返回的优先级。
 	tests := []struct {
 		name             string
 		pod              *v1.Pod
 		expectedPriority int32
 	}{
+		// 未设置 priority 的 Pod 必须取默认 0，否则会被误当成高优先级参与抢占。
 		{
 			name: "no priority pod resolves to static default priority",
 			pod: &v1.Pod{
@@ -62,12 +64,18 @@ func TestPodPriority(t *testing.T) {
 	}
 }
 
+// TestMatchNodeSelectorTerms 覆盖标签与字段选择的交叉情况：
+// 两类约束在同一 term 内是“与”，多个 term 之间是“或”。
+// 故意构造“同名 key 放在 label 而非 field 里”的用例，
+// 确保实现不会把 label 和 metadata.name 这类字段混为一谈。
 func TestMatchNodeSelectorTerms(t *testing.T) {
+	// args 聚合一次匹配调用所需的两个输入：nodeSelector 为节点选择器，node 为待匹配的节点。
 	type args struct {
 		nodeSelector *v1.NodeSelector
 		node         *v1.Node
 	}
 
+	// 表驱动用例：name 为用例名，args 为输入参数，want 为期望的匹配结果（true 表示匹配）。
 	tests := []struct {
 		name string
 		args args
@@ -113,6 +121,7 @@ func TestMatchNodeSelectorTerms(t *testing.T) {
 			},
 			want: true,
 		},
+		// metadata.name 是单值字段，In 里给多个值不可能成立。
 		{
 			name: "invalid node field requirement",
 			args: args{
@@ -232,6 +241,7 @@ func TestMatchNodeSelectorTerms(t *testing.T) {
 			},
 			want: false,
 		},
+		// 两个 term 分别只看 label 和 field；label 不匹配时仍可凭 field 命中。
 		{
 			name: "multi-selector was set, both node fields and labels (one mismatched)",
 			args: args{
@@ -262,6 +272,7 @@ func TestMatchNodeSelectorTerms(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 本测试只关心匹配结果，error 用 _ 丢弃（非法选择器场景由其他用例覆盖）。
 			if got, _ := MatchNodeSelectorTerms(tt.args.node, tt.args.nodeSelector); got != tt.want {
 				t.Errorf("MatchNodeSelectorTermsORed() = %v, want %v", got, tt.want)
 			}
@@ -269,15 +280,20 @@ func TestMatchNodeSelectorTerms(t *testing.T) {
 	}
 }
 
-// TestMatchNodeSelectorTermsStateless ensures MatchNodeSelectorTerms()
-// is invoked in a "stateless" manner, i.e. nodeSelector should NOT
-// be deeply modified after invoking
+// TestMatchNodeSelectorTermsStateless 确保 MatchNodeSelectorTerms 以“无状态”方式调用，
+// 即调用后 nodeSelector（包括其嵌套字段）不应被深度修改。
+//
+// 同一个 NodeSelector 会被多个调度周期、多个节点重复使用。若匹配时重排 Values
+// 或原地改字段，会污染其他调用方，甚至影响缓存中的 Pod 模板。
+// 用例特别包含乱序 Values，目的是发现“排序后忘还原”这类隐蔽的就地修改。
 func TestMatchNodeSelectorTermsStateless(t *testing.T) {
+	// args 聚合一次匹配调用所需的两个输入：nodeSelector 为节点选择器，node 为待匹配的节点。
 	type args struct {
 		nodeSelector *v1.NodeSelector
 		node         *v1.Node
 	}
 
+	// 表驱动用例：name 为用例名，args 为输入参数，want 为匹配后 nodeSelector 应保持的原样。
 	tests := []struct {
 		name string
 		args args
@@ -541,15 +557,22 @@ func TestMatchNodeSelectorTermsStateless(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, _ = MatchNodeSelectorTerms(tt.args.node, tt.args.nodeSelector)
 			if !apiequality.Semantic.DeepEqual(tt.args.nodeSelector, tt.want) {
-				// fail when tt.args.nodeSelector is deeply modified
+				// 一旦 nodeSelector 被深度修改就判失败。
+				// 断言的是输入对象本身，而不是返回值：只要匹配过程碰过输入就算失败。
 				t.Errorf("MatchNodeSelectorTerms() got = %v, want %v", tt.args.nodeSelector, tt.want)
 			}
 		})
 	}
 }
 
+// TestGetAvoidPodsFromNode 验证 GetAvoidPodsFromNodeAnnotations 的行为，
+// 同时覆盖合法注解、缺省注解和格式损坏三种情况。
+// 注解内容是序列化的 JSON，解析失败必须报错而不是当成空配置：
+// 静默忽略会让本应避免的 Pod 照常落到节点上。
 func TestGetAvoidPodsFromNode(t *testing.T) {
 	controllerFlag := true
+	// 表驱动用例：node 为待读取注解的节点，expectValue 为期望的避让配置，
+	// expectErr 表示是否期望 JSON 解析报错。
 	testCases := []struct {
 		node        *v1.Node
 		expectValue v1.AvoidPods
@@ -605,8 +628,9 @@ func TestGetAvoidPodsFromNode(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			// 故意截断 JSON 结构，验证解析错误会向上传播。
 			node: &v1.Node{
-				// Missing end symbol of "podController" and "podSignature"
+				// 故意缺失 "podController" 与 "podSignature" 的结束符号，构造非法 JSON。
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
 						v1.PreferAvoidPodsAnnotationKey: `
@@ -630,6 +654,7 @@ func TestGetAvoidPodsFromNode(t *testing.T) {
 		},
 	}
 
+	// 逐一校验：错误出现与否是否符合 expectErr，解析结果是否与期望值深度相等。
 	for i, tc := range testCases {
 		v, err := GetAvoidPodsFromNodeAnnotations(tc.node.Annotations)
 		if err == nil && tc.expectErr {
@@ -644,8 +669,17 @@ func TestGetAvoidPodsFromNode(t *testing.T) {
 	}
 }
 
+// TestFindMatchingUntoleratedTaint 验证 FindMatchingUntoleratedTaint 的判定逻辑，
+// 覆盖过滤器、容忍匹配以及数值比较操作符三大块。
+// 关键不变量是：只有“过滤后仍未被任何 toleration 覆盖的 taint”才构成阻碍；
+// 空 taint 集永远可通过，过滤器把所有 taint 排除掉也视为可通过。
+// 数值用例还验证了非法值会报错，而不是被当成不匹配后静默放过。
 func TestFindMatchingUntoleratedTaint(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 表驱动用例字段：description 为用例描述；tolerations 为容忍列表；taints 为污点列表；
+	// applyFilter 为污点过滤函数；expectTolerated 表示期望是否全部被容忍；
+	// expectError 表示是否期望出错（数值比较遇到非法值）；
+	// enableComparisonOperatorsFG 控制数值比较操作符特性开关。
 	testCases := []struct {
 		description                 string
 		tolerations                 []v1.Toleration
@@ -711,6 +745,7 @@ func TestFindMatchingUntoleratedTaint(t *testing.T) {
 			applyFilter:     func(t *v1.Taint) bool { return false },
 			expectTolerated: true,
 		},
+		// applyFilter 为 nil 时语义是“不过滤任何 taint”，而不是“全部排除”。
 		{
 			description: "no filterFunc indicated, means all taints apply to the filter, tolerations don't match taints, expect untolerated",
 			tolerations: []v1.Toleration{
@@ -814,6 +849,7 @@ func TestFindMatchingUntoleratedTaint(t *testing.T) {
 			expectTolerated:             false,
 			enableComparisonOperatorsFG: true,
 		},
+		// 非数字值无法与数值阈值比较，应当报错；否则调用方无法区分“不满足”和“数据坏了”。
 		{
 			description: "numeric Gt operator with non-numeric taint value, expect not tolerated",
 			tolerations: []v1.Toleration{
@@ -838,6 +874,7 @@ func TestFindMatchingUntoleratedTaint(t *testing.T) {
 		},
 	}
 
+	// 对每个用例，将“期望是否全部容忍”与函数返回的 untolerated 取反结果做比较。
 	for _, tc := range testCases {
 		_, untolerated := FindMatchingUntoleratedTaint(logger, tc.taints, tc.tolerations, tc.applyFilter, tc.enableComparisonOperatorsFG)
 		if tc.expectTolerated != !untolerated {

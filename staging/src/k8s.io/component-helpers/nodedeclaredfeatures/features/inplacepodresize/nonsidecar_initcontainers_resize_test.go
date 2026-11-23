@@ -24,6 +24,8 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
+// TestInitContainerResizeFeatureDiscover 验证 Discover 仅看 feature gate，
+// 开/关两个取值足以覆盖开关行为。
 func TestInitContainerResizeFeatureDiscover(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -53,6 +55,8 @@ func TestInitContainerResizeFeatureDiscover(t *testing.T) {
 	}
 }
 
+// TestNonSidecarInitContainerResizeFeatureInferForScheduling 验证调度推断恒为 false：
+// 原地调整 init container 资源属于更新期能力，调度时无从判断。
 func TestNonSidecarInitContainerResizeFeatureInferForScheduling(t *testing.T) {
 	f := &nonSidecarInitContainerResizeFeature{}
 	podInfo := &types.PodInfo{Spec: &v1.PodSpec{}}
@@ -61,9 +65,20 @@ func TestNonSidecarInitContainerResizeFeatureInferForScheduling(t *testing.T) {
 	}
 }
 
+// TestNonSidecarInitContainerResizeFeatureInferForUpdate 验证更新推断只关注普通 init container：
+// 只有非 sidecar 的 Resources 发生变化才返回 true；
+// sidecar（RestartPolicy=Always）的改动由 kubelet 单独处理，不应触发该特性需求。
 func TestNonSidecarInitContainerResizeFeatureInferForUpdate(t *testing.T) {
+	// sidecar 与普通 init container 的唯一区别是 restartPolicy，
+	// 测试中据此构造两个对照组，验证 sidecar 的改动不会触发该特性。
 	restartAlways := v1.ContainerRestartPolicyAlways
 
+	// 各用例的语义：
+	// NoChanges —— 资源配置没变，无需求；
+	// InitContainerResourceChanged —— 普通 init container 资源变化，应触发；
+	// SidecarContainerResourceChanged_Ignored —— sidecar 资源变化由 kubelet 单独处理，不触发；
+	// MixedContainers_OnlyInitChanged —— 混合场景下只有普通 init 变化，应触发；
+	// MixedContainers_OnlySidecarChanged_Ignored —— 混合场景下只有 sidecar 变化，不触发。
 	tests := []struct {
 		name       string
 		oldPodInfo *types.PodInfo

@@ -24,10 +24,12 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
-// SetFrameworkDuringTest overrides the global default nodedeclaredfeatures.Framework for the
-// duration of the test.
+// SetFrameworkDuringTest 在测试期间临时替换全局的默认 nodedeclaredfeatures.Framework，
+// 并通过 tb.Cleanup 在测试结束后恢复原值。
 func SetFrameworkDuringTest(tb testing.TB, framework nodedeclaredfeatures.Framework) {
 	tb.Helper()
+	// DefaultFramework 是包级可变全局，测试之间必须互不污染。
+	// 用 Cleanup 而不是在测试末尾手动恢复，即使测试失败或提前 Fatal 也能还原现场。
 	originalDefaultFramework := nodedeclaredfeatures.DefaultFramework
 	nodedeclaredfeatures.DefaultFramework = &framework
 	tb.Cleanup(func() {
@@ -36,9 +38,10 @@ func SetFrameworkDuringTest(tb testing.TB, framework nodedeclaredfeatures.Framew
 	})
 }
 
-// NewMockFramework generates a map of mock features with the given names, and creates a Framework
-// with those features registered.
+// NewMockFramework 根据给定名字生成一组 MockFeature，并创建一个注册了这些特性的 Framework。
+// 第二个返回值是"名字 -> mock 对象"的映射，便于测试按需配置某个特性的行为。
 func NewMockFramework(tb testing.TB, features ...string) (nodedeclaredfeatures.Framework, map[string]*MockFeature) {
+	// 先排序，让相同名字集合以固定顺序注册到 Framework 中，避免注册顺序影响测试结果。
 	slices.Sort(features)
 	var allFeatures []types.Feature
 	mockFeatures := map[string]*MockFeature{}

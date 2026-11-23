@@ -25,94 +25,92 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SchedulingPolicyOption enumerates the scheduling policies a controller opts
-// into. The allow-list rejects any policy not listed, so building-block
-// additions stay denied until a controller extends its list.
+// SchedulingPolicyOption 是控制器可以选择启用的调度策略枚举。
+// 采用白名单而非黑名单：新增策略默认拒绝，必须由控制器显式加入列表后才生效，
+// 避免新能力在控制器尚未验证前被悄悄启用。
 type SchedulingPolicyOption int
 
 const (
-	// BasicPolicy allows the Basic scheduling policy.
+	// BasicPolicy 表示允许使用 Basic（基础）调度策略。
 	BasicPolicy SchedulingPolicyOption = iota
-	// GangPolicy allows the Gang scheduling policy.
+	// GangPolicy 表示允许使用 Gang（成组）调度策略。
 	GangPolicy
 )
 
-// DisruptionModeOption enumerates the disruption modes a controller opts into.
+// DisruptionModeOption 是控制器可以选择启用的中断模式枚举，
+// 采用与调度策略相同的白名单思路：控制器只声明自己支持的模式，未列入的模式一律拒绝。
 type DisruptionModeOption int
 
 const (
-	// SingleMode allows the Single disruption mode.
+	// SingleMode 表示允许使用 Single（逐个）中断模式。
 	SingleMode DisruptionModeOption = iota
-	// AllMode allows the All disruption mode.
+	// AllMode 表示允许使用 All（整体）中断模式。
 	AllMode
 )
 
-// BuildOptions carries the identity of the Workload object that BuildWorkload
-// produces, plus the controller's scheduling allow-lists.
+// BuildOptions 携带 BuildWorkload 生成的 Workload 对象的身份信息，以及控制器的调度白名单。
 type BuildOptions struct {
 	Name      string
 	Namespace string
-	// optional owner reference for garbage collection
+	// Owner 是可选的 ownerReference，用于垃圾回收。
+	// 它指向控制器对象，靠 ownerRef 让 Workload 随父对象一起被回收；
+	// 为空时 build 阶段直接报错，避免产出无人管理的孤儿对象。
 	Owner *metav1.OwnerReference
 
-	// AllowedPolicies is the set of scheduling policies the controller opts
-	// into. Validate rejects any policy outside this set. An empty set allows
-	// nothing.
+	// AllowedPolicies 是控制器声明允许的调度策略集合。
+	// Validate 会拒绝集合之外的任何策略；空集合表示什么都不允许。
 	AllowedPolicies []SchedulingPolicyOption
-	// AllowedDisruptionModes is the set of disruption modes the controller opts
-	// into. Validate rejects any mode outside this set. An empty set allows
-	// nothing.
+	// AllowedDisruptionModes 是控制器声明允许的中断模式集合。
+	// Validate 会拒绝集合之外的任何模式；空集合表示什么都不允许。
 	AllowedDisruptionModes []DisruptionModeOption
 
-	// DisableDeclarativeValidation skips running declarative validation on the
-	// input building blocks. In-tree controllers like Job disable this because
-	// their own APIServer validation already runs it.
+	// DisableDeclarativeValidation 表示跳过对输入 building block 运行声明式校验。
+	// 像 Job 这样的 in-tree 控制器会将其置为 true，因为它们的 APIServer 校验已经跑过这些规则。
 	DisableDeclarativeValidation bool
 }
 
-// Builder turns a controller's WorkloadItem tree into scheduler-facing objects.
-// Construct it once with NewBuilder, then call Validate, BuildWorkload, and
-// NewPodGroup as needed.
+// Builder 把控制器的 WorkloadItem 树编译成调度侧对象，并缓存编译结果。
+// 先用 NewBuilder（或 NewBuilderFromExistingWorkload）构造一次，然后按需调用
+// Validate、BuildWorkload、NewPodGroup 等方法。其中若干字段采用惰性初始化，
+// 目的是让同一个 Builder 能生成多个 PodGroup 而不重复编译。
 type Builder struct {
 	root *WorkloadItem
 	opts BuildOptions
 
-	// workload caches the Workload compiled by BuildWorkload so multiple
-	// PodGroups can be materialized without recompiling.
+	// workload 缓存 BuildWorkload 的编译结果，使多个 PodGroup 可以复用同一份编译产物。
 	workload *schedulingv1beta1.Workload
 
-	// existingWorkload is a persisted Workload supplied to
-	// NewBuilderFromExistingWorkload. When set, NewPodGroup materializes from it,
-	// BuildWorkload is refused so a caller can't recompile over a persisted or
-	// parent-authored Workload, and Validate is refused too because the persisted
-	// object already passed apiserver validation and there is no tree to check.
+	// existingWorkload 是经 NewBuilderFromExistingWorkload 传入的已持久化 Workload。
+	// 设置后：NewPodGroup 从它物化对象；BuildWorkload 被拒绝，防止调用方重新编译
+	// 一个已持久化或由父控制器编写的 Workload；Validate 同样被拒绝，因为该对象
+	// 已通过 apiserver 校验，且没有可供校验的 WorkloadItem 树。
 	existingWorkload *schedulingv1beta1.Workload
 
-	// podGroupTemplateIndex and compositePodGroupTemplateIndex cache template
-	// lookups by name. They are built lazily on the first matching
-	// materialization call and reused so repeated NewPodGroup/NewCompositePodGroup
-	// calls resolve in O(1) instead of rescanning the workload's template tree.
+	// podGroupTemplateIndex 与 compositePodGroupTemplateIndex 按名字缓存模板，
+	// 在首次物化调用时惰性构建并复用，使反复调用 NewPodGroup/NewCompositePodGroup
+	// 的查找为 O(1)，无需每次重新扫描 Workload 的模板树。
 	podGroupTemplateIndex          map[string]*schedulingv1beta1.PodGroupTemplate
 	compositePodGroupTemplateIndex map[string]*schedulingv1beta1.CompositePodGroupTemplate
 }
 
-// NewBuilder returns a Builder for the given WorkloadItem tree and options.
+// NewBuilder 为给定的 WorkloadItem 树和选项创建一个 Builder，
+// 适用于从 WorkloadItem 树现场编译 Workload 的控制器。
+// 这里只保存输入而不立即编译，把解析推迟到 BuildWorkload，使调用方可以先校验再构建。
 func NewBuilder(root *WorkloadItem, opts BuildOptions) *Builder {
 	return &Builder{root: root, opts: opts}
 }
 
-// NewBuilderFromExistingWorkload returns a Builder that materializes PodGroups
-// from an already-persisted Workload rather than compiling one from a
-// WorkloadItem tree. Use it when a parent controller (or a hand-authored
-// template) owns and compiled the Workload. BuildWorkload and Validate are both
-// refused; only NewPodGroup is meaningful, using opts.Owner for the PodGroup's
-// controller ownerRef.
+// NewBuilderFromExistingWorkload 返回一个从已持久化 Workload 物化 PodGroup 的 Builder，
+// 而不是从 WorkloadItem 树编译新对象。当 Workload 由父控制器（或手写模板）拥有并编译时，
+// 应使用此构造函数。此时 BuildWorkload 与 Validate 都会被拒绝，只有 NewPodGroup 有意义；
+// PodGroup 的 controller ownerRef 取自 opts.Owner。
 func NewBuilderFromExistingWorkload(workload *schedulingv1beta1.Workload, opts BuildOptions) *Builder {
 	return &Builder{opts: opts, existingWorkload: workload}
 }
 
-// BuildWorkload compiles the WorkloadItem tree into a Workload, sets its
-// identity and controllerRef, and caches the result.
+// BuildWorkload 把 WorkloadItem 树编译成 Workload，设置其身份信息和 controllerRef，
+// 并缓存结果。从既有 Workload 构造的 Builder 会拒绝编译，
+// 防止覆盖持久化对象或父控制器编写的内容。
 func (b *Builder) BuildWorkload() (*schedulingv1beta1.Workload, error) {
 	if b.existingWorkload != nil {
 		return nil, fmt.Errorf("BuildWorkload is not available on a Builder created from an existing Workload: it materializes from the supplied Workload")
@@ -128,15 +126,17 @@ func (b *Builder) BuildWorkload() (*schedulingv1beta1.Workload, error) {
 	return wl, nil
 }
 
-// NewPodGroup materializes a runtime PodGroup from the named PodGroupTemplate of
-// the Builder's Workload. The template is resolved through a name index built
-// lazily on first use and reused across calls.
+// NewPodGroup 从 Builder 的 Workload 中按名字取出 PodGroupTemplate，
+// 物化出一个运行时 PodGroup。模板通过惰性构建的名字索引解析，并在多次调用间复用。
+// 报错信息会带上可用模板名列表，方便定位是名字写错还是模板根本没编译进去。
 func (b *Builder) NewPodGroup(podGroupName, templateName string) (*schedulingv1beta1.PodGroup, error) {
 	workload, err := b.resolveWorkload()
 	if err != nil {
 		return nil, err
 	}
 	if b.podGroupTemplateIndex == nil {
+		// 首次使用时才按名字建索引，让只生成单个 PodGroup 的调用方
+		// 不必为建立索引付出额外代价。
 		b.podGroupTemplateIndex = indexPodGroupTemplates(workload)
 	}
 	tmpl := b.podGroupTemplateIndex[templateName]
@@ -146,11 +146,9 @@ func (b *Builder) NewPodGroup(podGroupName, templateName string) (*schedulingv1b
 	return newPodGroup(workload, tmpl, podGroupName, b.resolveOwners()), nil
 }
 
-// NewCompositePodGroup materializes a runtime CompositePodGroup from the named
-// CompositePodGroupTemplate of the Builder's Workload. The template is resolved
-// through a name index built lazily on first use and reused across calls. Parent
-// linkage (spec.parentCompositePodGroupName) and the child (Composite)PodGroups
-// are left to the caller.
+// NewCompositePodGroup 从 Builder 的 Workload 中按名字取出 CompositePodGroupTemplate，
+// 物化出一个运行时 CompositePodGroup。模板通过惰性构建的名字索引解析并复用。
+// 父级关联（spec.parentCompositePodGroupName）以及子级 (Composite)PodGroup 由调用方自行填充。
 func (b *Builder) NewCompositePodGroup(compositePodGroupName, templateName string) (*schedulingv1alpha3.CompositePodGroup, error) {
 	workload, err := b.resolveWorkload()
 	if err != nil {
@@ -166,10 +164,10 @@ func (b *Builder) NewCompositePodGroup(compositePodGroupName, templateName strin
 	return newCompositePodGroup(workload, tmpl, compositePodGroupName, b.resolveOwners())
 }
 
-// resolveWorkload returns the Workload that NewPodGroup and
-// NewCompositePodGroup materialize from: the supplied existing Workload if the
-// Builder was constructed from one, otherwise the Workload compiled by
-// BuildWorkload. It errors when neither is available.
+// resolveWorkload 统一处理“从既有对象生成”和“从树编译”两条路径，
+// 让 NewPodGroup、NewCompositePodGroup 等物化方法无需关心 Builder 是怎么构造的。
+// 若 Builder 来自既有对象则返回该对象，否则返回 BuildWorkload 的编译结果；
+// 两者都不可用时报错。
 func (b *Builder) resolveWorkload() (*schedulingv1beta1.Workload, error) {
 	if b.existingWorkload != nil {
 		return b.existingWorkload, nil
@@ -180,8 +178,8 @@ func (b *Builder) resolveWorkload() (*schedulingv1beta1.Workload, error) {
 	return b.workload, nil
 }
 
-// resolveOwners returns the ownerReferences to stamp on a materialized
-// (Composite)PodGroup, or nil when no controller owner is configured.
+// resolveOwners 返回要打到物化出的 (Composite)PodGroup 上的 ownerReferences；
+// 未配置 controller owner 时返回 nil。
 func (b *Builder) resolveOwners() []metav1.OwnerReference {
 	if b.opts.Owner != nil {
 		return []metav1.OwnerReference{*b.opts.Owner}
@@ -189,8 +187,8 @@ func (b *Builder) resolveOwners() []metav1.OwnerReference {
 	return nil
 }
 
-// build compiles the tree and sets the Workload's identity. It fails fast,
-// returning the first error it encounters.
+// build 编译 WorkloadItem 树并设置 Workload 的身份信息，采用快速失败策略：
+// 遇到第一个错误就立即返回。
 func (b *Builder) build() (*schedulingv1beta1.Workload, error) {
 	spec, err := compileWorkloadItemTree(b.root)
 	if err != nil {
@@ -206,9 +204,13 @@ func (b *Builder) build() (*schedulingv1beta1.Workload, error) {
 	}
 
 	if b.opts.Owner == nil {
+		// 没有 owner 的 Workload 不会随控制器对象一起删除，容易变成孤儿，
+		// 所以在构建时硬性拒绝，而不是留下隐患到运行期。
 		return nil, fmt.Errorf("a Workload must be owned by its controller for garbage collection")
 	}
 
+	// 从 owner 的 apiVersion 拆出 Group，供 Workload 的 ControllerRef 使用。
+	// 解析失败直接报错，避免把无法识别的 owner 写进对象。
 	gv, err := schema.ParseGroupVersion(b.opts.Owner.APIVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner apiVersion %q: %w", b.opts.Owner.APIVersion, err)
@@ -224,21 +226,22 @@ func (b *Builder) build() (*schedulingv1beta1.Workload, error) {
 	return wl, nil
 }
 
-// isComposite reports whether the item is a composite node (a group-of-groups
-// compiled into a CompositePodGroupTemplate) rather than a leaf (compiled into a
-// single PodGroupTemplate).
+// isComposite 判断 item 是否为复合节点（即“组的组”，编译成 CompositePodGroupTemplate），
+// 而非叶子节点（编译成单个 PodGroupTemplate）。
+// 以是否有子节点作为区分依据，是整棵树递归分叉的标准：
+// 有子节点编译成 CompositePodGroupTemplate，否则编译成单个 PodGroupTemplate。
 func isComposite(item *WorkloadItem) bool {
 	return len(item.Children) > 0
 }
 
-// compileWorkloadItemTree compiles the root item into the WorkloadSpec it
-// produces. A composite root yields a single CompositePodGroupTemplate (whose
-// children are compiled recursively); a leaf root yields a single
-// PodGroupTemplate. Build fills in the object identity separately.
+// compileWorkloadItemTree 把根节点编译成 WorkloadSpec。
+// 若根节点是复合节点，则生成一个 CompositePodGroupTemplate（其子节点递归编译）；
+// 若是叶子节点，则生成一个 PodGroupTemplate。对象的身份信息由 build 单独填充。
 func compileWorkloadItemTree(root *WorkloadItem) (schedulingv1beta1.WorkloadSpec, error) {
 	var spec schedulingv1beta1.WorkloadSpec
 
 	if err := validateWorkloadItemTree(root); err != nil {
+		// 编译前先校验整棵树，避免带着重复名字或非法的输入组合编译出不可用的对象。
 		return spec, err
 	}
 
@@ -260,25 +263,23 @@ func compileWorkloadItemTree(root *WorkloadItem) (schedulingv1beta1.WorkloadSpec
 	return spec, nil
 }
 
-// compilePodGroupTemplate resolves a leaf item's config, runs its callbacks,
-// then compiles it into a single PodGroupTemplate.
+// compilePodGroupTemplate 解析叶子节点配置、运行其回调，然后编译成单个 PodGroupTemplate。
 func compilePodGroupTemplate(item *WorkloadItem) (schedulingv1beta1.PodGroupTemplate, error) {
-	// resolveSchedulingConfig also runs the item's callbacks.
+	// resolveSchedulingConfig 内部也会运行 item 的回调。
 	resolved := resolveSchedulingConfig(item)
 
 	return buildLeafTemplate(item.Name, resolved)
 }
 
-// resolveSchedulingConfig merges DefaultConfig with the mapped Input then runs
-// the item's callbacks against the merged result to apply controller defaulting.
-// It selects the composite or leaf input mapper based on whether the item is a
-// composite node, so the same defaulting/callback machinery serves both paths.
-// Inputs are deep-copied so callbacks can't mutate the caller's configs. The
-// resolved config is passed to each callback to read and mutate, and is
-// returned once every callback has run.
+// resolveSchedulingConfig 把 DefaultConfig 与映射后的 Input 合并，再对合并结果
+// 运行 item 的回调以应用控制器专属的默认值。
+// 它根据 item 是否为复合节点选择对应的输入映射器，因此默认值合并与回调机制
+// 对叶子和复合两条路径是同一套。配置会先深拷贝，避免回调改动调用方的配置。
+// 解析后的配置依次传给每个回调读写，所有回调执行完毕后返回。
 func resolveSchedulingConfig(item *WorkloadItem) *SchedulingConfig {
 	resolved := item.DefaultConfig.DeepCopy()
 	if resolved == nil {
+		// 默认配置可缺省，补一个空配置让后续字段赋值不用处处判空。
 		resolved = &SchedulingConfig{}
 	}
 
@@ -305,6 +306,8 @@ func resolveSchedulingConfig(item *WorkloadItem) *SchedulingConfig {
 
 	for _, cb := range item.Callbacks {
 		if cb != nil {
+			// 回调在用户配置合并之后运行，作为控制器做最后默认化的位置；
+			// 跳过 nil 便于调用方按需拼接回调列表。
 			cb(resolved)
 		}
 	}
@@ -312,11 +315,12 @@ func resolveSchedulingConfig(item *WorkloadItem) *SchedulingConfig {
 	return resolved
 }
 
-// buildLeafTemplate converts a resolved config into one PodGroupTemplate.
+// buildLeafTemplate 把解析后的配置转换成一个 PodGroupTemplate。
 func buildLeafTemplate(name string, cfg *SchedulingConfig) (schedulingv1beta1.PodGroupTemplate, error) {
 	tmpl := schedulingv1beta1.PodGroupTemplate{Name: name}
 
 	if cfg == nil {
+		// 空配置等价于“全部走默认值”，统一走一份代码路径。
 		cfg = &SchedulingConfig{}
 	}
 
@@ -351,10 +355,9 @@ func buildLeafTemplate(name string, cfg *SchedulingConfig) (schedulingv1beta1.Po
 	return tmpl, nil
 }
 
-// compileSchedulingPolicy maps the IR policy onto the API policy. A nil
-// policy resolves to Basic; Gang requires a MinCount resolved beforehand so it
-// can populate the non-pointer API field. The minCount>=1 bound is a structural
-// constraint enforced by declarative validation, so it is not repeated here.
+// compileSchedulingPolicy 把 IR 的调度策略映射为 API 策略。nil 策略解析为 Basic；
+// Gang 要求事先解析出 MinCount，才能填充 API 中非指针的 MinCount 字段。
+// minCount>=1 的取值约束由声明式校验保证，这里不重复检查。
 func compileSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.PodGroupSchedulingPolicy, error) {
 	basic := schedulingv1beta1.PodGroupSchedulingPolicy{
 		Basic: &schedulingv1beta1.BasicSchedulingPolicy{},
@@ -364,9 +367,8 @@ func compileSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.PodGro
 		return basic, nil
 	}
 
-	// The basic/gang union is enforced by declarative validation when the
-	// compiled Workload is submitted, only the compile-time invariant that a
-	// resolved gang policy carries a minCount value is checked here.
+	// basic/gang 的 union 约束在编译后的 Workload 提交时由声明式校验负责，
+	// 这里只检查编译期不变量：已解析的 gang 策略必须带有 minCount 值。
 	switch {
 	case policy.Gang != nil:
 		if policy.Gang.MinCount == nil {
@@ -376,15 +378,14 @@ func compileSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.PodGro
 			Gang: &schedulingv1beta1.GangSchedulingPolicy{MinCount: *policy.Gang.MinCount},
 		}, nil
 	default:
-		// nil policy, Basic only, or an empty policy all resolve to Basic.
+		// nil 策略、仅 Basic 或空策略都解析为 Basic。
 		return basic, nil
 	}
 }
 
-// compileCompositePodGroupTemplate resolves a composite item's config, runs its
-// callbacks, and compiles it into a CompositePodGroupTemplate, recursing into
-// each child (composite children become nested CompositePodGroupTemplates, leaf
-// children become PodGroupTemplates).
+// compileCompositePodGroupTemplate 解析复合节点的配置、运行其回调，
+// 并编译成 CompositePodGroupTemplate；同时对每个子节点递归处理
+// （复合子节点变成嵌套的 CompositePodGroupTemplate，叶子子节点变成 PodGroupTemplate）。
 func compileCompositePodGroupTemplate(item *WorkloadItem) (schedulingv1beta1.CompositePodGroupTemplate, error) {
 	resolved := resolveSchedulingConfig(item)
 
@@ -437,12 +438,10 @@ func compileCompositePodGroupTemplate(item *WorkloadItem) (schedulingv1beta1.Com
 	return tmpl, nil
 }
 
-// compileCompositeSchedulingPolicy maps the IR policy onto the composite API
-// policy. A nil policy resolves to Basic; Gang requires a MinCount resolved
-// beforehand so it can populate the required MinGroupCount field (the IR reuses
-// GangSchedulingPolicy.MinCount to carry the composite minGroupCount value). The
-// minGroupCount>=1 bound is a structural constraint enforced by declarative
-// validation, so it is not repeated here.
+// compileCompositeSchedulingPolicy 把 IR 调度策略映射为复合类型的 API 策略。
+// nil 策略解析为 Basic；Gang 要求事先解析出 MinCount，才能填充必填的 MinGroupCount 字段
+// （IR 复用 GangSchedulingPolicy.MinCount 来承载复合的 minGroupCount 值）。
+// minGroupCount>=1 的取值约束由声明式校验保证，这里不重复检查。
 func compileCompositeSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.CompositePodGroupSchedulingPolicy, error) {
 	basic := schedulingv1beta1.CompositePodGroupSchedulingPolicy{
 		Basic: &schedulingv1beta1.CompositeBasicSchedulingPolicy{},
@@ -452,9 +451,8 @@ func compileCompositeSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1bet
 		return basic, nil
 	}
 
-	// The basic/gang union is enforced by declarative validation when the
-	// compiled Workload is submitted, only the compile-time invariant that a
-	// resolved gang policy carries a minGroupCount value is checked here.
+	// basic/gang 的 union 约束在提交时由声明式校验负责，
+	// 这里只检查编译期不变量：已解析的 gang 策略必须带有 minGroupCount 值。
 	switch {
 	case policy.Gang != nil:
 		if policy.Gang.MinCount == nil {
@@ -467,14 +465,14 @@ func compileCompositeSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1bet
 			},
 		}, nil
 	default:
-		// nil policy, Basic only, or an empty policy all resolve to Basic.
+		// nil 策略、仅 Basic 或空策略都解析为 Basic。
 		return basic, nil
 	}
 }
 
-// compileDisruptionMode maps the IR disruption mode onto the leaf API mode. The
-// exactly-one-of union is enforced by declarative validation when the compiled
-// Workload is submitted, so a mode with neither member set compiles to nil.
+// compileDisruptionMode 把 IR 的中断模式映射为叶子节点的 API 模式。
+// “恰好一个成员非空”的 union 约束在编译后的 Workload 提交时由声明式校验负责，
+// 因此两个成员都未设置的模式会被编译成 nil。
 func compileDisruptionMode(dm *DisruptionMode) *schedulingv1beta1.DisruptionMode {
 	switch {
 	case dm.All != nil:
@@ -486,6 +484,8 @@ func compileDisruptionMode(dm *DisruptionMode) *schedulingv1beta1.DisruptionMode
 	}
 }
 
+// compileResourceClaims 把内部 IR 的资源声明逐项映射到 API 类型；
+// 只搬运字段，不做校验，取值合法性交给声明式校验处理。
 func compileResourceClaims(claims []ResourceClaim) []schedulingv1beta1.PodGroupResourceClaim {
 	result := make([]schedulingv1beta1.PodGroupResourceClaim, len(claims))
 	for i := range claims {
@@ -498,10 +498,9 @@ func compileResourceClaims(claims []ResourceClaim) []schedulingv1beta1.PodGroupR
 	return result
 }
 
-// compileCompositeDisruptionMode maps the IR disruption mode onto the composite
-// API mode. The exactly-one-of union is enforced by declarative validation when
-// the compiled Workload is submitted, so a mode with neither member set compiles
-// to nil.
+// compileCompositeDisruptionMode 把 IR 的中断模式映射为复合节点的 API 模式。
+// “恰好一个成员非空”的 union 约束在编译后的 Workload 提交时由声明式校验负责，
+// 因此两个成员都未设置的模式会被编译成 nil。
 func compileCompositeDisruptionMode(dm *DisruptionMode) *schedulingv1beta1.CompositeDisruptionMode {
 	switch {
 	case dm.All != nil:

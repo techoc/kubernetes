@@ -22,11 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// newPodGroup materializes a runtime PodGroup from the given PodGroupTemplate,
-// which BuildWorkload does not create. The template's scheduling fields are
-// deep-copied into the spec, workloadRef points back at the template, and the
-// PodGroup lands in the workload's namespace. Template lookup is the caller's
-// responsibility (the Builder resolves it through a cached name index).
+// newPodGroup 根据给定的 PodGroupTemplate 物化出一个运行时 PodGroup
+// （BuildWorkload 本身不会创建 PodGroup）。模板的调度字段会被深拷贝进 spec，
+// workloadRef 指回模板本身，PodGroup 落在 Workload 所在的命名空间。
+// 模板查找由调用方负责（Builder 通过缓存的名字索引完成）。
+// 模板字段一律深拷贝，是因为 Workload 缓存在 Builder 里会被反复使用；
+// 运行时 PodGroup 如果被外部改动，不能反过来改坏模板。
 func newPodGroup(workload *schedulingv1beta1.Workload, tmpl *schedulingv1beta1.PodGroupTemplate, podGroupName string, owners []metav1.OwnerReference) *schedulingv1beta1.PodGroup {
 	spec := schedulingv1beta1.PodGroupSpec{
 		WorkloadRef: &schedulingv1beta1.WorkloadReference{
@@ -44,6 +45,7 @@ func newPodGroup(workload *schedulingv1beta1.Workload, tmpl *schedulingv1beta1.P
 			tmpl.ResourceClaims[i].DeepCopyInto(&spec.ResourceClaims[i])
 		}
 	}
+	// 指针字段重新分配而不是共享地址，避免运行时对象与模板共享同一个可写位置。
 	if tmpl.Priority != nil {
 		spec.Priority = new(*tmpl.Priority)
 	}
@@ -58,8 +60,10 @@ func newPodGroup(workload *schedulingv1beta1.Workload, tmpl *schedulingv1beta1.P
 	}
 }
 
-// newCompositePodGroup materializes a runtime CompositePodGroup from the given
-// CompositePodGroupTemplate, which BuildWorkload does not create.
+// newCompositePodGroup 根据给定的 CompositePodGroupTemplate 物化出一个运行时
+// CompositePodGroup（BuildWorkload 本身不会创建它）。
+// 这里要把 v1beta1 模板转换成 v1alpha3 运行时对象，是因为 CompositePodGroup
+// 目前在 alpha 版本提供；转换函数的错误必须向上传播，否则会物化出缺字段的对象。
 func newCompositePodGroup(workload *schedulingv1beta1.Workload, tmpl *schedulingv1beta1.CompositePodGroupTemplate,
 	compositePodGroupName string, owners []metav1.OwnerReference) (*schedulingv1alpha3.CompositePodGroup, error) {
 	spec := schedulingv1alpha3.CompositePodGroupSpec{
@@ -97,16 +101,14 @@ func newCompositePodGroup(workload *schedulingv1beta1.Workload, tmpl *scheduling
 		},
 		Spec: spec,
 	}
-	// The generated Convert_* helpers are shallow (unsafe.Pointer) copies, so
-	// the spec still aliases the template's Gang/Topology pointers. DeepCopy
-	// before returning so the caller can mutate the CompositePodGroup without
-	// corrupting the Workload template cached in the Builder.
+	// 生成的 Convert_* 辅助函数只做浅拷贝（unsafe.Pointer），
+	// 因此 spec 仍与模板的 Gang/Topology 指针共享存储。返回前再 DeepCopy 一次，
+	// 这样调用方修改 CompositePodGroup 时不会破坏缓存在 Builder 中的 Workload 模板。
 	return cpg.DeepCopy(), nil
 }
 
-// indexPodGroupTemplates maps every leaf PodGroupTemplate by name for O(1)
-// lookup. The Builder builds it once and reuses it across materializations
-// rather than rescanning the slice on every NewPodGroup call.
+// indexPodGroupTemplates 按名字为每个叶子 PodGroupTemplate 建立索引，实现 O(1) 查找。
+// Builder 只构建一次并在多次物化间复用，避免每次调用 NewPodGroup 都重新扫描切片。
 func indexPodGroupTemplates(workload *schedulingv1beta1.Workload) map[string]*schedulingv1beta1.PodGroupTemplate {
 	index := make(map[string]*schedulingv1beta1.PodGroupTemplate, len(workload.Spec.PodGroupTemplates))
 	for i := range workload.Spec.PodGroupTemplates {
@@ -115,6 +117,8 @@ func indexPodGroupTemplates(workload *schedulingv1beta1.Workload) map[string]*sc
 	return index
 }
 
+// podGroupTemplateNames 收集所有叶子模板名，给错误信息提供候选名字列表，
+// 让拼错模板名的用户能直接看到可用值，而不是只收到一句“模板不存在”。
 func podGroupTemplateNames(workload *schedulingv1beta1.Workload) []string {
 	names := make([]string, len(workload.Spec.PodGroupTemplates))
 	for i := range workload.Spec.PodGroupTemplates {
@@ -123,8 +127,7 @@ func podGroupTemplateNames(workload *schedulingv1beta1.Workload) []string {
 	return names
 }
 
-// walkCompositePodGroupTemplates invokes visit for every template in the
-// composite tree, in pre-order.
+// walkCompositePodGroupTemplates 以先序遍历的方式对复合模板树中的每个模板调用 visit。
 func walkCompositePodGroupTemplates(tmpls []schedulingv1beta1.CompositePodGroupTemplate,
 	visit func(*schedulingv1beta1.CompositePodGroupTemplate)) {
 	for i := range tmpls {
@@ -133,11 +136,10 @@ func walkCompositePodGroupTemplates(tmpls []schedulingv1beta1.CompositePodGroupT
 	}
 }
 
-// indexCompositePodGroupTemplates maps every CompositePodGroupTemplate in the
-// workload's composite tree by name. Template names are unique across the whole
-// Workload, so the flat map is unambiguous. The Builder builds it once and
-// reuses it across materializations rather than re-walking the tree on every
-// NewCompositePodGroup call.
+// indexCompositePodGroupTemplates 按名字为 Workload 复合模板树中的每个
+// CompositePodGroupTemplate 建立索引。模板名在整个 Workload 内唯一，
+// 因此用扁平的 map 不会产生歧义。Builder 只构建一次并在多次物化间复用，
+// 避免每次调用 NewCompositePodGroup 都重新遍历整棵树。
 func indexCompositePodGroupTemplates(workload *schedulingv1beta1.Workload) map[string]*schedulingv1beta1.CompositePodGroupTemplate {
 	index := map[string]*schedulingv1beta1.CompositePodGroupTemplate{}
 	walkCompositePodGroupTemplates(workload.Spec.CompositePodGroupTemplates,
@@ -147,8 +149,8 @@ func indexCompositePodGroupTemplates(workload *schedulingv1beta1.Workload) map[s
 	return index
 }
 
-// compositePodGroupTemplateNames lists every CompositePodGroupTemplate name in
-// the workload's composite template tree, for error messages.
+// compositePodGroupTemplateNames 列出 Workload 复合模板树中每个
+// CompositePodGroupTemplate 的名字，用于拼装错误信息中的候选列表。
 func compositePodGroupTemplateNames(workload *schedulingv1beta1.Workload) []string {
 	var names []string
 	walkCompositePodGroupTemplates(workload.Spec.CompositePodGroupTemplates,

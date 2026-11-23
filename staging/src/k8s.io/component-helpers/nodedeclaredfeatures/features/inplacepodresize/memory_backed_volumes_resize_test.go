@@ -24,6 +24,8 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
+// TestMemoryBackedVolumesResizeFeatureDiscover 覆盖门控两端：
+// 内存卷的原地扩缩容完全由一个特性门控制，没有额外的节点状态探测。
 func TestMemoryBackedVolumesResizeFeatureDiscover(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -53,6 +55,8 @@ func TestMemoryBackedVolumesResizeFeatureDiscover(t *testing.T) {
 	}
 }
 
+// TestMemoryBackedVolumesResizeFeatureInferForScheduling 锁定调度推断恒为 false：
+// 该特性只在更新时才有意义，调度阶段 PodSpec 里还没有“变更前”的卷可供比较。
 func TestMemoryBackedVolumesResizeFeatureInferForScheduling(t *testing.T) {
 	f := &memoryBackedVolumesResizeFeature{}
 	podInfo := &types.PodInfo{Spec: &v1.PodSpec{}}
@@ -61,10 +65,24 @@ func TestMemoryBackedVolumesResizeFeatureInferForScheduling(t *testing.T) {
 	}
 }
 
+// TestMemoryBackedVolumesResizeFeatureInferForUpdate 的核心是把“真正需要该特性的变更”
+// 和“应该交给常规校验处理的非法变更”区分开：
+// 只有同一个内存卷的 SizeLimit 发生变化才返回 true；
+// 增删卷、改名、换介质、空 SizeLimit 等都不属于这里要声明的能力，
+// 否则会把非法 patch 误标成节点能力需求。
 func TestMemoryBackedVolumesResizeFeatureInferForUpdate(t *testing.T) {
 	quantity100Mi := resource.MustParse("100Mi")
 	quantity200Mi := resource.MustParse("200Mi")
 
+	// 各用例的语义：
+	// NoChanges —— 卷完全没变，无需求；
+	// SizeLimitIncreased / SizeLimitDecreased —— 内存卷大小变化，应触发；
+	// DefaultMedium_Ignored —— 默认介质不是 Memory，不算内存卷；
+	// NonEmptyDirVolume_Ignored —— 非 emptyDir 卷不在范围内；
+	// VolumeCountMismatch_Ignored —— 卷数量变化属于增删，交给标准校验；
+	// VolumeNameMismatch_Ignored —— 卷名变化属于非法修改，交给标准校验；
+	// NilSizeLimit_Ignored —— 任一侧 SizeLimit 为空，不是扩容；
+	// MultipleVolumes_OneResizableMemoryBackedVolumeResized —— 多卷混合，只要一个内存卷变大小就触发。
 	tests := []struct {
 		name       string
 		oldPodInfo *types.PodInfo

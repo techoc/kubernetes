@@ -25,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestVolumeIsForPod 验证 VolumeIsForPod 用 UID 而非名字来判定所有权。
+// 用递增的 UID 生成器而不是硬编码字符串，是为了让每个对象身份唯一，
+// 避免测试因为名字相同而意外通过；同时显式构造“同为 controller 但 UID 不同”的情况，
+// 确保不会把同名 Pod 误认成所有者。
 func TestVolumeIsForPod(t *testing.T) {
 	uid := 0
 	newUID := func() types.UID {
@@ -100,6 +104,8 @@ func TestVolumeIsForPod(t *testing.T) {
 			pvc:           pvcNoOwner,
 			expectedError: `PVC kube-system/pvcNoOwner was not created for pod kube-system/podOwner (pod is not owner)`,
 		},
+		// 名字和所有者都对，但命名空间不同仍然不算属于该 Pod：
+		// 归属判断必须同时匹配 UID 与 namespace，防止跨命名空间的误用。
 		"different-namespace": {
 			pod:           podOwner,
 			pvc:           userPVCWithOwner,
@@ -107,6 +113,8 @@ func TestVolumeIsForPod(t *testing.T) {
 		},
 	}
 
+	// 每个用例既校验“该不该报错”，也校验报错文本本身：
+	// 错误信息会直接返回给用户，必须在没有额外上下文时就能说明问题出在哪对 pod/pvc。
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			err := VolumeIsForPod(tc.pod, tc.pvc)

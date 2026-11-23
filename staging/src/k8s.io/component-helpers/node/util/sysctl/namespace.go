@@ -14,73 +14,91 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package sysctl 提供 sysctl 参数名的命名空间判定。
+//
+// 判定结果用于按命名空间白名单过滤 kubelet 允许设置的 sysctl，
+// 避免把具备节点级作用域的参数下放给 pod 设置。
 package sysctl
 
 import (
 	"strings"
 )
 
-// Namespace represents a kernel namespace name.
+// Namespace 表示 Linux 内核命名空间的名称。
+//
+// 采用字符串类型而非枚举常量集合，是为了能在 map 键、白名单和日志中
+// 直接使用内核文档里的命名空间名（如 "Net"）。
 type Namespace string
 
+// 这里只列举与 pod 级 sysctl 安全判定相关的命名空间：
+// 其他内核命名空间的参数一律不允许在 pod 级别设置，因此无需在此建模。
 const (
-	// refer to https://man7.org/linux/man-pages/man7/ipc_namespaces.7.html
-	// the Linux IPC namespace
+	// IPCNamespace 对应 Linux IPC 命名空间，涵盖信号量、共享内存和消息队列类 sysctl。
+	// 参考 https://man7.org/linux/man-pages/man7/ipc_namespaces.7.html
 	IPCNamespace = Namespace("IPC")
 
-	// refer to https://man7.org/linux/man-pages/man7/network_namespaces.7.html
-	// the network namespace
+	// NetNamespace 对应网络命名空间，涵盖 net.* 系列 sysctl。
+	// 参考 https://man7.org/linux/man-pages/man7/network_namespaces.7.html
 	NetNamespace = Namespace("Net")
 
-	// refer to https://man7.org/linux/man-pages/man7/uts_namespaces.7.html
-	// the UTS namespace
+	// UTSNamespace 对应 UTS（主机名/域名）命名空间，例如 kernel.domainname。
+	// 参考 https://man7.org/linux/man-pages/man7/uts_namespaces.7.html
 	UTSNamespace = Namespace("UTS")
 
-	// refer to https://man7.org/linux/man-pages/man7/user_namespaces.7.html
-	// the User namespace
+	// UserNamespace 对应 user 命名空间，例如 user.max_user_namespaces。
+	// 参考 https://man7.org/linux/man-pages/man7/user_namespaces.7.html
 	UserNamespace = Namespace("User")
 
-	// the zero value if no namespace is known
+	// UnknownNamespace 表示“未知命名空间”的零值。
+	// 零值天然表示未识别：未列入白名单的参数默认拿不到任何命名空间授权。
 	UnknownNamespace = Namespace("")
 )
 
+// nameToNamespace 是精确匹配表：每个条目把一个具体的 sysctl 名称映射到已知命名空间。
+// 之所以单独列出精确项，是因为它们不服从所在前缀的通用规则，必须优先判定。
 var nameToNamespace = map[string]Namespace{
-	// UTS namespace parameters
+	// UTS 命名空间参数：主机名/域名可以按 pod 隔离。
 	"kernel.domainname": UTSNamespace,
-	// kernel semaphore parameters: SEMMSL, SEMMNS, SEMOPM, and SEMMNI.
+	// 内核信号量参数：SEMMSL、SEMMNS、SEMOPM、SEMMNI。
 	"kernel.sem": IPCNamespace,
-	// kernel shared memory limits include shmall, shmmax, shmmni, and shm_rmid_forced.
+	// 内核共享内存限制：shmall、shmmax、shmmni、shm_rmid_forced。
 	"kernel.shmall":          IPCNamespace,
 	"kernel.shmmax":          IPCNamespace,
 	"kernel.shmmni":          IPCNamespace,
 	"kernel.shm_rmid_forced": IPCNamespace,
-	// make backward compatibility  to know the namespace of kernel.shm*
+	// kernel.shm* 的整类前缀项，兼容旧客户端查询这类参数的命名空间。
 	"kernel.shm": IPCNamespace,
-	// kernel messages include msgmni, msgmax and msgmnb.
+	// 内核消息队列参数：msgmni、msgmax、msgmnb。
 	"kernel.msgmax": IPCNamespace,
 	"kernel.msgmnb": IPCNamespace,
 	"kernel.msgmni": IPCNamespace,
-	// make backward compatibility to know the namespace of kernel.msg*
+	// kernel.msg* 的整类前缀项，兼容旧客户端查询这类参数的命名空间。
 	"kernel.msg": IPCNamespace,
 }
 
+// prefixToNamespace 是前缀匹配表：按整类参数（如 net.*）判定命名空间，
+// 避免逐个枚举内核中可能出现的具体键。
 var prefixToNamespace = map[string]Namespace{
+	// 所有 net.* 参数都属于网络命名空间。
 	"net": NetNamespace,
-	// mqueue filesystem provides the necessary kernel features to enable the creation
-	// of a user space library that implements the POSIX message queues API.
+	// fs.mqueue 文件系统提供实现 POSIX 消息队列 API 所需的内核特性，
+	// 其 sysctl 同样受 IPC 命名空间约束。
 	"fs.mqueue": IPCNamespace,
-	// user namespace sysctls
+	// user 命名空间下的 sysctl。
 	"user": UserNamespace,
 }
 
-// namespaceOf returns the namespace of the Linux kernel for a sysctl, or
-// unknownNamespace if the sysctl is not known to be namespaced.
-// The second return is prefixed bool.
-// It returns true if the key is prefixed with a key in the prefix map
+// namespaceOf 返回给定 sysctl 所属的 Linux 内核命名空间；
+// 对未知（非命名空间化）的参数返回 UnknownNamespace。
+//
+// 注意本函数只返回命名空间；是否按前缀匹配由调用方 GetNamespace 另行判定。
+// 先查精确表再查前缀表：精确条目（如 kernel.sem）属于特例，
+// 若改成前缀规则会误伤同前缀的其他参数。
 func namespaceOf(val string) Namespace {
 	if ns, found := nameToNamespace[val]; found {
 		return ns
 	}
+	// 比较时补上 "."，避免 "net" 误匹配 "netfilter.*" 之类不相关的键。
 	for p, ns := range prefixToNamespace {
 		if strings.HasPrefix(val, p+".") {
 			return ns
@@ -89,22 +107,18 @@ func namespaceOf(val string) Namespace {
 	return UnknownNamespace
 }
 
-// GetNamespace extracts information from a sysctl string. It returns:
-//  1. The sysctl namespace, which can be one of the following: IPC, Net, or unknown.
-//  2. sysctlOrPrefix: the prefix of the sysctl parameter until the first '*'.
-//     If there is no '*', it will be the original string.
-//  3. 'prefixed' is set to true if the sysctl parameter contains '*' or it is in the prefixToNamespace key list, in most cases, it is a suffix *.
+// GetNamespace 从 sysctl 字符串中提取命名空间信息。
+// 它返回三个值：ns 是参数所属的命名空间（IPC、Net、UTS、User 或 Unknown）；
+// sysctlOrPrefix 是截掉第一个 '*' 及其后内容后的参数名（无 '*' 时即原名）；
+// prefixed 表示参数是否使用了通配前缀（含 '*'），多数情况下 '*' 位于末尾。
 //
-// For example, if the input sysctl is 'net.ipv6.neigh.*', GetNamespace will return:
-// - The Net namespace
-// - The sysctlOrPrefix as 'net.ipv6.neigh'
-// - 'prefixed' set to true
+// 例如输入 "net.ipv6.neigh.*"，返回 NetNamespace、"net.ipv6.neigh"、true；
+// 输入 "net.ipv6.conf.all.disable_ipv6"，返回 NetNamespace、原名、false。
 //
-// For the input sysctl 'net.ipv6.conf.all.disable_ipv6', GetNamespace will return:
-// - The Net namespace
-// - The sysctlOrPrefix as 'net.ipv6.conf.all.disable_ipv6'
-// - 'prefixed' set to false.
+// 带 '*' 的参数必须先截掉通配部分再判命名空间：白名单按前缀授权，
+// 判定依据应是匹配的前缀，而不是带通配符的原始串。
 func GetNamespace(sysctl string) (ns Namespace, sysctlOrPrefix string, prefixed bool) {
+	// 先归一化名称（如替换分隔符），保证后续匹配基于统一格式。
 	sysctlOrPrefix = NormalizeName(sysctl)
 	firstIndex := strings.IndexAny(sysctlOrPrefix, "*")
 	if firstIndex != -1 {

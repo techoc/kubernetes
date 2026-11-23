@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package examples 提供 workloadbuilder 的可执行示例，展示从构造 WorkloadItem、
+// 校验、编译 Workload 到物化 PodGroup 的完整调用顺序，以及被拒绝时的错误形态。
 package examples
 
 import (
@@ -27,13 +29,14 @@ import (
 	workloadbuilder "k8s.io/component-helpers/scheduling/schedulingv1/workloadbuilder"
 )
 
-// ExampleOutOfTreeControllerValidation shows how an out-of-tree controller
-// validates its scheduling API at admission. It records each building block and
-// the field path where it lives in the WorkloadItem's Input, then calls
-// Builder.Validate, which runs declarative validation on the building blocks
-// followed by the complex checks that DV cannot express. In-tree controllers
-// get DV from the apiserver, so they instead set
-// BuildOptions.DisableDeclarativeValidation.
+// ExampleOutOfTreeControllerValidation 演示 out-of-tree 控制器如何在准入阶段校验自己的
+// 调度 API：它把每个 building block 及其在控制器 API 中的字段路径记录到 WorkloadItem
+// 的 Input 中，然后调用 Builder.Validate——后者先对 building block 运行声明式校验，
+// 再执行 DV 无法表达的复杂校验。in-tree 控制器由 apiserver 提供 DV，
+// 因此改为设置 BuildOptions.DisableDeclarativeValidation。
+// 把这些步骤写成一个可运行的 Example，而不只是文档，是因为 builder 的调用顺序
+// （先记录字段路径，再构造 item，最后 Validate）很容易被误用；示例的输出断言
+// 会在测试里直接暴露路径拼错或校验被跳过的情况。
 func ExampleOutOfTreeControllerValidation() {
 	ctx := context.Background()
 	schedulingPath := field.NewPath("spec", "scheduling")
@@ -56,10 +59,11 @@ func ExampleOutOfTreeControllerValidation() {
 			DisruptionMode: workloadbuilder.DisruptionModeInput{PodGroupData: mode, PathElements: []string{"disruptionMode"}},
 		},
 	}
-	// The zero ValidationInput validates a create. On an update, the controller
-	// passes ValidationInput{OldRoot: oldItem} so DV runs the update-time checks
-	// (i.e. immutability) against the previously persisted item; the operation is
-	// inferred from OldRoot being non-nil.
+	// 零值 ValidationInput 表示校验一次创建（create）。更新（update）时，控制器传入
+	// ValidationInput{OldRoot: oldItem}，使 DV 针对之前持久化的 item 运行更新期校验
+	// （即不可变性检查）；操作类型由 OldRoot 是否为 nil 推断。
+	// 这里传入 Owner 只是为了满足 BuildOptions；校验阶段只关心字段合法性，
+	// 身份信息的构造是 Build 阶段的事。
 	allErrs := workloadbuilder.NewBuilder(item, workloadbuilder.BuildOptions{
 		Owner:                  &metav1.OwnerReference{APIVersion: "batch/v1", Kind: "Job", Name: "worker", UID: "job-uid"},
 		AllowedPolicies:        []workloadbuilder.SchedulingPolicyOption{workloadbuilder.BasicPolicy, workloadbuilder.GangPolicy},
@@ -76,34 +80,36 @@ func ExampleOutOfTreeControllerValidation() {
 	// rejected: spec.scheduling.disruptionMode: Invalid value: "": the disruptionMode `all` is not supported with the Basic scheduling policy
 }
 
-// ExampleJobControllerE2E shows the end-to-end flow a controller uses to turn its
-// user-facing scheduling API into a scheduler-facing Workload and a runtime
-// PodGroup. It mirrors what the built-in Job controller does for a single Job:
-// map spec.scheduling, layer it over a controller default, default the gang
-// minCount to the Job's parallelism, compile the Workload, then materialize the
-// PodGroup from the compiled template.
+// ExampleJobControllerE2E 演示控制器把面向用户的调度 API 转换为调度器侧 Workload
+// 和运行时 PodGroup 的端到端流程。它复刻了内置 Job 控制器处理单个 Job 的做法：
+// 映射 spec.scheduling、叠加控制器默认值、把 gang 的 minCount 默认成 Job 的 parallelism、
+// 编译 Workload，再从编译出的模板物化 PodGroup。
+// 整套流程拆成“记录输入 -> 叠加默认值 -> 构造 builder -> Validate -> Build -> 物化”六步，
+// 是为了对应控制器里真实的处理阶段；任何一步被跳过，后续对象就会缺字段或路径。
 func ExampleJobControllerE2E() {
-	// The Job's parallelism, used to default an unset gang minCount.
+	// Job 的 parallelism，用于在 gang 未设置 minCount 时提供默认值。
 	parallelism := int32(4)
 
-	// 1. Record the user's spec.scheduling (here: gang with no minCount, pinned
-	//    to a single node per topology) as the versioned building blocks paired
-	//    with the field paths where the controller embeds them. A nil sub-field
-	//    is left nil so it can fall back to the controller default field-by-field.
+	// 1. 记录用户的 spec.scheduling（这里是一个没有 minCount 的 gang，
+	//    并按拓扑固定到单个节点），作为版本化 building block，
+	//    并配上它们在控制器 API 中的字段路径。子字段为 nil 时保持 nil，
+	//    以便按字段粒度回退到控制器默认值。
 	userInput := workloadbuilder.WorkloadInput{
 		Policy: workloadbuilder.PolicyInput{PodGroupData: &schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy{
-			Gang: &schedulingv1alpha3.WorkloadPodGroupGangSchedulingPolicy{}, // minCount defaulted below
+			Gang: &schedulingv1alpha3.WorkloadPodGroupGangSchedulingPolicy{}, // minCount 在下面的回调中补默认值
 		}, PathElements: []string{"schedulingPolicy"}},
 		Constraints: workloadbuilder.ConstraintsInput{PodGroupData: &schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints{
 			Topology: []schedulingv1alpha3.TopologyConstraint{{Key: "kubernetes.io/hostname"}},
 		}, PathElements: []string{"schedulingConstraints"}},
-		// DisruptionMode and ResourceClaims left unset: use the defaults.
+		// DisruptionMode 与 ResourceClaims 不设置：使用默认值。
 	}
 
-	// 2. Assemble the single-node workload tree: a controller default (Basic),
-	//    the user's intent layered on top, and a callback that defaults the gang
-	//    minCount to the Job's parallelism when the user left it unset. The
-	//    callback mutates only the resolved config, never the caller's inputs.
+	// 2. 组装单节点 workload 树：控制器默认值（Basic）、叠加其上的用户意图，
+	//    以及一个在用户未设置时把 gang minCount 默认成 Job parallelism 的回调。
+	//    回调只修改解析后的配置，绝不动调用方传入的输入。
+	// 默认配置做成独立字段而不是写死在 builder 里，是为了让不同控制器
+	// 按各自策略提供基线；回调只在最后作用于解析后的配置，
+	// 因此调用方传入的 versioned 对象不会被偷偷改写。
 	item := &workloadbuilder.WorkloadItem{
 		Name:          "trainer-pgt-0",
 		Path:          field.NewPath("spec", "scheduling"),
@@ -119,10 +125,8 @@ func ExampleJobControllerE2E() {
 		},
 	}
 
-	// 3. Construct the builder with the Workload's identity, the controller
-	//    ownerRef (which becomes spec.controllerRef, used to discover the
-	//    Workload and drive garbage collection), and the controller's scheduling
-	//    allow-lists.
+	// 3. 用 Workload 的身份信息、控制器的 ownerRef（它会成为 spec.controllerRef，
+	//    用于发现 Workload 并驱动垃圾回收）以及控制器的调度白名单构造 builder。
 	owner := &metav1.OwnerReference{APIVersion: "batch/v1", Kind: "Job", Name: "trainer", UID: "job-uid"}
 	builder := workloadbuilder.NewBuilder(item, workloadbuilder.BuildOptions{
 		Name:                   "trainer-wl",
@@ -130,29 +134,30 @@ func ExampleJobControllerE2E() {
 		Owner:                  owner,
 		AllowedPolicies:        []workloadbuilder.SchedulingPolicyOption{workloadbuilder.BasicPolicy, workloadbuilder.GangPolicy},
 		AllowedDisruptionModes: []workloadbuilder.DisruptionModeOption{workloadbuilder.SingleMode, workloadbuilder.AllMode},
-		// The Job apiserver already runs declarative validation on the building
-		// blocks, so the in-tree controller opts out of running it again here and
-		// Validate performs only the complex controller-policy checks.
+		// Job 的 apiserver 已经对 building block 跑过声明式校验，
+		// 因此这个 in-tree 控制器选择不在这里重复运行，Validate 只执行复杂的控制器策略检查。
+		// 不关掉的话同一套规则会在 apiserver 和控制器里各跑一遍，
+		// 既浪费时间还可能因两处版本不同给出互相矛盾的错误。
 		DisableDeclarativeValidation: true,
 	})
 
-	// 4. Run the complex controller-policy checks. Structural building-block
-	// validation already ran at the apiserver, so it is disabled above.
+	// 4. 执行复杂的控制器策略检查。building block 的结构校验已在 apiserver 跑过，
+	//    因此在上面通过 DisableDeclarativeValidation 关闭。
 	if errs := builder.Validate(context.Background(), workloadbuilder.ValidationInput{}); len(errs) > 0 {
 		fmt.Printf("validation failed: %v\n", errs.ToAggregate())
 		return
 	}
 
-	// 5. Compile the Workload. The result is cached so PodGroups can be
-	//    materialized without recompiling.
+	// 5. 编译 Workload。结果会被缓存，后续物化 PodGroup 无需重新编译。
+	// 编译结果缓存在 builder 里，是因为一个 Workload 可能派生出多个 PodGroup，
+	// 每次都重新编译既费 CPU，也可能让不同 PodGroup 拿到不一致的模板。
 	workload, err := builder.BuildWorkload()
 	if err != nil {
 		fmt.Printf("build failed: %v\n", err)
 		return
 	}
 
-	// 6. Materialize the runtime PodGroup from the compiled template. It is owned
-	//    by the builder's configured owner.
+	// 6. 从编译出的模板物化运行时 PodGroup，其 owner 取自 builder 配置的 owner。
 	podGroup, err := builder.NewPodGroup("trainer-pg", item.Name)
 	if err != nil {
 		fmt.Printf("podgroup failed: %v\n", err)
@@ -176,16 +181,15 @@ func ExampleJobControllerE2E() {
 	// PodGroup ml/trainer-pg -> workload=trainer-wl template=trainer-pgt-0 gang minCount=4
 }
 
-// ExampleDelegatedPodGroupFromExistingWorkload shows how a controller
-// materializes a runtime PodGroup from a Workload it did not compile. A parent
-// controller (or a hand-authored template) owns and already persisted the
-// Workload, so it is the source of truth: NewBuilderFromExistingWorkload takes
-// that Workload directly and the child controller supplies no scheduling inputs
-// of its own. Validate is a no-op (the persisted object already passed apiserver
-// validation) and BuildWorkload is refused so the object is never recompiled
-// over. This mirrors the Job controller's delegated PodGroup mode.
+// ExampleDelegatedPodGroupFromExistingWorkload 演示控制器如何从自己没有编译过的
+// Workload 物化运行时 PodGroup。Workload 由父控制器（或手写模板）拥有并已持久化，
+// 它就是事实来源：NewBuilderFromExistingWorkload 直接接收该 Workload，子控制器不提供
+// 任何自己的调度输入。Validate 是空操作（持久化对象已通过 apiserver 校验），
+// BuildWorkload 会被拒绝，确保该对象不会被重新编译覆盖。这对应 Job 控制器的委托式 PodGroup 模式。
+// 这个例子存在的意义是区分两种所有权：Workload 属于父控制器，PodGroup 属于子控制器。
+// 子控制器只有“按现有模板物化”的权限，不能反过来重建父控制器的对象。
 func ExampleDelegatedPodGroupFromExistingWorkload() {
-	// A parent controller already compiled and persisted this Workload.
+	// 父控制器已经编译并持久化了这个 Workload。
 	parentWorkload := &schedulingv1beta1.Workload{
 		ObjectMeta: metav1.ObjectMeta{Name: "trainer-wl", Namespace: "ml", UID: "wl-uid"},
 		Spec: schedulingv1beta1.WorkloadSpec{
@@ -197,23 +201,25 @@ func ExampleDelegatedPodGroupFromExistingWorkload() {
 		},
 	}
 
-	// The child controller owns only the PodGroup, so it passes its own ownerRef.
+	// 子控制器只拥有 PodGroup，因此传入自己的 ownerRef。
 	owner := &metav1.OwnerReference{APIVersion: "batch/v1", Kind: "Job", Name: "trainer-worker", UID: "job-uid"}
 	builder := workloadbuilder.NewBuilderFromExistingWorkload(parentWorkload, workloadbuilder.BuildOptions{Owner: owner})
 
-	// Validate is a no-op for a builder created from an existing Workload.
+	// 对从既有 Workload 构造的 Builder 来说，Validate 是空操作。
 	if errs := builder.Validate(context.Background(), workloadbuilder.ValidationInput{}); len(errs) > 0 {
 		fmt.Printf("unexpected validation errors: %v\n", errs.ToAggregate())
 		return
 	}
 
-	// BuildWorkload is refused so the parent-authored Workload is never recompiled.
+	// BuildWorkload 会被拒绝，因此父控制器编写的 Workload 永远不会被重新编译。
+	// 这里是刻意调用一个注定失败的方法，用示例输出证明“拒绝重编译”确实生效，
+	// 而不是靠文档承诺。
 	if _, err := builder.BuildWorkload(); err != nil {
 		fmt.Println("BuildWorkload refused for existing Workload")
 	}
 
-	// Only NewPodGroup is meaningful: it copies the persisted template's fields
-	// (here priorityClassName and the gang minCount) into the runtime PodGroup.
+	// 只有 NewPodGroup 是有意义的：它把持久化模板的字段
+	// （这里是 priorityClassName 和 gang minCount）拷贝到运行时 PodGroup 中。
 	podGroup, err := builder.NewPodGroup("trainer-pg", "trainer-pgt-0")
 	if err != nil {
 		fmt.Printf("podgroup failed: %v\n", err)

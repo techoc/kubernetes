@@ -14,10 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package corev1 defines functions which should satisfy one of the following:
+// Package corev1 定义满足以下条件的函数：
 //
-// - Be used by more than one core component (kube-scheduler, kubelet, kube-apiserver, etc.)
-// - Be used by a core component and another kubernetes project (cluster-autoscaler, descheduler)
+// - 被多个核心组件（kube-scheduler、kubelet、kube-apiserver 等）共同使用；
+// - 或者被一个核心组件与另一个 Kubernetes 项目（cluster-autoscaler、descheduler）共同使用。
 //
-// And be a scheduling feature.
+// 并且这些函数都属于调度（scheduling）相关的特性。
+//
+// 这里强调“被多个调用方复用”的门槛，是为了防止把只服务单一组件的逻辑塞进公共包；
+// 否则后续任何一处改动都要重新验证所有使用方，维护成本会被无限放大。
+//
+// 之所以按 core/v1 而非按组件命名，是为了对应 API 版本：
+// 调度相关的辅助函数若依赖特定 API 版本，就放到同级版本化子包中。
 package corev1

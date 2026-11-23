@@ -30,7 +30,8 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
-// mockFeature is a mock implementation of the Feature interface for testing.
+// mockFeature 用字段函数代替真实实现，让每个测试只提供关心的判定逻辑。
+// 缺省行为刻意设为"可被发现但不产生要求"，减少用例样板。
 type mockFeature struct {
 	name               string
 	discover           func(cfg *types.NodeConfiguration) bool
@@ -40,32 +41,45 @@ type mockFeature struct {
 	requirements       func() *FeatureRequirements
 }
 
+// Name 返回 mock 特性的名字。
 func (f *mockFeature) Name() string { return f.name }
+
+// Discover 未配置时默认返回 true，让用例只需关心自己要验证的分支。
 func (f *mockFeature) Discover(cfg *types.NodeConfiguration) bool {
 	if f.discover != nil {
 		return f.discover(cfg)
 	}
 	return true
 }
+
+// InferForScheduling 未配置时默认返回 false（不产生调度要求）。
 func (f *mockFeature) InferForScheduling(podInfo *types.PodInfo) bool {
 	if f.inferForScheduling != nil {
 		return f.inferForScheduling(podInfo)
 	}
 	return false
 }
+
+// InferForUpdate 未配置时默认返回 false（不产生更新要求）。
 func (f *mockFeature) InferForUpdate(oldPodInfo, newPodInfo *types.PodInfo) bool {
 	if f.inferForUpdate != nil {
 		return f.inferForUpdate(oldPodInfo, newPodInfo)
 	}
 	return false
 }
-func (f *mockFeature) MaxVersion() *version.Version       { return f.maxVersion }
+
+// MaxVersion 返回用例配置的版本上限，nil 表示无上限。
+func (f *mockFeature) MaxVersion() *version.Version { return f.maxVersion }
+
+// Requirements 返回用例配置的依赖；未配置时调用会 panic，提醒测试补齐期望。
 func (f *mockFeature) Requirements() *FeatureRequirements { return f.requirements() }
 
+// mockFeatureGate 是 FeatureGate 的极简 map 实现，供发现逻辑测试使用。
 type mockFeatureGate struct {
 	features map[string]bool
 }
 
+// Enabled 查询 gate 是否打开；未配置的 gate 返回 false。
 func (m *mockFeatureGate) Enabled(key string) bool {
 	if m.features == nil {
 		return false
@@ -73,10 +87,13 @@ func (m *mockFeatureGate) Enabled(key string) bool {
 	return m.features[key]
 }
 
+// newMockFeatureGate 根据给定的 gate 状态表构造 mock。
 func newMockFeatureGate(features map[string]bool) *mockFeatureGate {
 	return &mockFeatureGate{features: features}
 }
 
+// newTestFramework 只按名字造特性，用于匹配类测试。
+// New 本身不排序入参之外的东西，这里先排序是为了让预期列表稳定。
 func newTestFramework(features ...string) *Framework {
 	slices.Sort(features)
 
@@ -88,6 +105,7 @@ func newTestFramework(features ...string) *Framework {
 	return New(allFeatures)
 }
 
+// 发现逻辑涉及开关、排序和版本上限三条规则，逐个用例固定住行为。
 func TestDiscoverNodeFeatures(t *testing.T) {
 	featureMaxVersion := version.MustParse("1.38.0")
 	registry := []types.Feature{
@@ -139,7 +157,7 @@ func TestDiscoverNodeFeatures(t *testing.T) {
 					string("feature-b"): true,
 				}),
 			},
-			expected: []string{"FeatureA", "FeatureB"}, // Should be sorted
+			expected: []string{"FeatureA", "FeatureB"}, // 注册表按名字排序，输出必须有序
 		},
 		{
 			name: "no features enabled",
@@ -157,7 +175,7 @@ func TestDiscoverNodeFeatures(t *testing.T) {
 				FeatureGates: newMockFeatureGate(map[string]bool{string("feature-a"): true}),
 				Version:      featureMaxVersion.AddMinor(1),
 			},
-			expected: []string{}, // Not published
+			expected: []string{}, // 版本超出上限，特性不应被对外声明
 		},
 		{
 			name: "feature past max version - pre-release version",
@@ -165,7 +183,7 @@ func TestDiscoverNodeFeatures(t *testing.T) {
 				FeatureGates: newMockFeatureGate(map[string]bool{string("feature-a"): true}),
 				Version:      version.MustParse("1.39.0-alpha.2.39+049eafd34dfbd2"),
 			},
-			expected: []string{}, // Not published
+			expected: []string{}, // 版本超出上限，特性不应被对外声明
 		},
 	}
 
@@ -179,6 +197,7 @@ func TestDiscoverNodeFeatures(t *testing.T) {
 	}
 }
 
+// 调度推断要同时考虑 Pod 内容、目标版本以及 nil 版本的参数错误。
 func TestInferForPodScheduling(t *testing.T) {
 	inferPodlevelResources := func(p *types.PodInfo) bool {
 		return p.Spec.Resources != nil
@@ -198,7 +217,7 @@ func TestInferForPodScheduling(t *testing.T) {
 		Spec:       v1.PodSpec{},
 	}
 
-	// defaultMockRequirements is a helper to provide default requirements with a dummy gate.
+	// 提供一个带占位 gate 的默认依赖，避免每个用例重复构造。
 	defaultMockRequirements := func() *FeatureRequirements {
 		return &FeatureRequirements{
 			EnabledFeatureGates: []string{"pod-level-resources"},
@@ -330,6 +349,7 @@ func TestInferForPodScheduling(t *testing.T) {
 	}
 }
 
+// 更新推断以新旧 Pod 的差异为输入，覆盖变化、无变化及版本上限情形。
 func TestInferForPodUpdate(t *testing.T) {
 	inferResize := func(oldPodInfo, newPodInfo *types.PodInfo) bool {
 		oldCPU := oldPodInfo.Spec.Containers[0].Resources.Requests.Cpu()
@@ -359,7 +379,7 @@ func TestInferForPodUpdate(t *testing.T) {
 	podWith1CPU := basePod("1")
 	podWith2CPU := basePod("2")
 
-	// defaultMockRequirements is a helper to provide default requirements with a dummy gate.
+	// 统一的默认依赖信息，仅用于让 mock 特性的 Requirements() 有返回值。
 	defaultMockRequirements := func() *FeatureRequirements {
 		return &FeatureRequirements{
 			EnabledFeatureGates: []string{"inplace-pod-resize"},
@@ -482,6 +502,9 @@ func TestInferForPodUpdate(t *testing.T) {
 	}
 }
 
+// TestMatchNode 覆盖匹配的核心语义：要求全部满足/部分缺失/全部缺失/无要求，
+// 并对同一组数据分别调用 MatchNode 与 MatchNodeFeatureSet，确保两个入口行为一致。
+// 最后单独验证 node 为 nil 时返回错误。
 func TestMatchNode(t *testing.T) {
 	framework := newTestFramework("feature-a", "feature-b", "feature-c")
 	testCases := []struct {
@@ -530,6 +553,7 @@ func TestMatchNode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 两个入口共享判定核心，用同一组数据分别跑一遍防止行为分叉。
 			matchVariations := []string{"MatchNode", "MatchNodeFeatureSet"}
 			for _, variationName := range matchVariations {
 				t.Run(variationName, func(t *testing.T) {
@@ -564,7 +588,7 @@ func TestMatchNode(t *testing.T) {
 		})
 	}
 
-	// Test nil node
+	// 单独验证 nil 节点：必须先判空，不能解引用。
 	_, err := framework.MatchNode(framework.MustMapSorted([]string{"feature-a"}), nil)
 	if err == nil {
 		t.Fatalf("MatchNode should return an error for a nil node")

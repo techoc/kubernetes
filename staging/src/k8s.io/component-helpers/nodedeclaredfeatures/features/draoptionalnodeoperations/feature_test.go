@@ -22,6 +22,8 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures/types"
 )
 
+// TestDiscover 验证 Discover 的结果完全由 feature gate 决定，
+// 因此开/关两个取值各测一次，确保开关能直接反映到节点的已声明特性上。
 func TestDiscover(t *testing.T) {
 	tests := []struct {
 		name    string

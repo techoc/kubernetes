@@ -24,9 +24,11 @@ import (
 	"k8s.io/component-helpers/scheduling/corev1"
 )
 
-// PersistentVolumeClaimHasClass returns true if given claim has set StorageClassName field.
+// PersistentVolumeClaimHasClass 在给定 PVC 设置了 StorageClassName 字段时返回 true。
+// beta 注解优先于 spec 字段，是为了兼容旧对象：老版本把存储类写在注解里，
+// 新版才用 StorageClassName，两者可能同时存在且以注解为准。
 func PersistentVolumeClaimHasClass(claim *v1.PersistentVolumeClaim) bool {
-	// Use beta annotation first
+	// 先读 beta 注解：存量的老对象只认这个字段，新版字段可能还不存在
 	if _, found := claim.Annotations[v1.BetaStorageClassAnnotation]; found {
 		return true
 	}
@@ -38,10 +40,11 @@ func PersistentVolumeClaimHasClass(claim *v1.PersistentVolumeClaim) bool {
 	return false
 }
 
-// GetPersistentVolumeClaimClass returns StorageClassName. If no storage class was
-// requested, it returns "".
+// GetPersistentVolumeClaimClass 返回 StorageClassName；如果未请求存储类，则返回 ""。
+// 返回空串代表未指定存储类，调用方据此走默认 StorageClass 的逻辑；
+// 仍然先读 beta 注解，与 HasClass 的判定口径保持一致。
 func GetPersistentVolumeClaimClass(claim *v1.PersistentVolumeClaim) string {
-	// Use beta annotation first
+	// 先读 beta 注解：存量的老对象只认这个字段，新版字段可能还不存在
 	if class, found := claim.Annotations[v1.BetaStorageClassAnnotation]; found {
 		return class
 	}
@@ -53,9 +56,11 @@ func GetPersistentVolumeClaimClass(claim *v1.PersistentVolumeClaim) string {
 	return ""
 }
 
-// GetPersistentVolumeClass returns StorageClassName.
+// GetPersistentVolumeClass 返回 StorageClassName。
+// PV 侧同样兼容 beta 注解，但 spec 字段是普通字符串而非指针，
+// 空串本身就表示未指定，所以不需要额外的 nil 判断。
 func GetPersistentVolumeClass(volume *v1.PersistentVolume) string {
-	// Use beta annotation first
+	// 先读 beta 注解：存量的老对象只认这个字段，新版字段可能还不存在
 	if class, found := volume.Annotations[v1.BetaStorageClassAnnotation]; found {
 		return class
 	}
@@ -63,8 +68,11 @@ func GetPersistentVolumeClass(volume *v1.PersistentVolume) string {
 	return volume.Spec.StorageClassName
 }
 
-// CheckNodeAffinity looks at the PV node affinity, and checks if the node has the same corresponding labels
-// This ensures that we don't mount a volume that doesn't belong to this node
+// CheckNodeAffinity 检查 PV 的节点亲和性，判断节点是否具有对应的标签，
+// 确保不会挂载不属于该节点的卷。
+//
+// 用节点标签临时构造一个 Node 对象来复用 MatchNodeSelectorTerms，是为了跟调度器
+// 用完全相同的选择器语义；两边如果各写一套匹配逻辑，迟早会出现“调度允许但挂载失败”的不一致。
 func CheckNodeAffinity(pv *v1.PersistentVolume, nodeLabels map[string]string) error {
 	if pv.Spec.NodeAffinity == nil {
 		return nil

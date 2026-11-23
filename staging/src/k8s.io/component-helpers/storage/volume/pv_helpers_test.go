@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件验证 PV 匹配的两类决策：
+// 延迟绑定模式判断（取决于 StorageClass），以及按 claim/node 找可用卷
+// （同时受容量、访问模式、node affinity、预绑定关系和 VAC 影响）。
 package volume
 
 import (
@@ -41,6 +44,9 @@ var (
 	modeWait      = storagev1.VolumeBindingWaitForFirstConsumer
 )
 
+// makePVCClass 构造只带 StorageClassName 的 PVC，用来驱动延迟绑定模式判断。
+// 参数用指针是为了能表示 nil（未指定类）与指向空串（显式关闭动态供应）两种语义，
+// 这与生产代码里 StorageClassName *string 的建模保持一致。
 func makePVCClass(scName *string) *v1.PersistentVolumeClaim {
 	claim := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -54,6 +60,8 @@ func makePVCClass(scName *string) *v1.PersistentVolumeClaim {
 	return claim
 }
 
+// makeStorageClass 构造用于测试的 StorageClass，核心是 VolumeBindingMode 字段。
+// mode 允许为 nil，用于验证“class 存在但未设置绑定模式”被当作错误配置处理。
 func makeStorageClass(scName string, mode *storagev1.VolumeBindingMode) *storagev1.StorageClass {
 	return &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -63,6 +71,8 @@ func makeStorageClass(scName string, mode *storagev1.VolumeBindingMode) *storage
 	}
 }
 
+// 覆盖五种情况：无 StorageClass、class 不存在、class 未设置 mode、
+// immediate 与 wait 模式。其中 class 存在但 mode 为 nil 被视为错误配置。
 func TestDelayBindingMode(t *testing.T) {
 	tests := map[string]struct {
 		pvc         *v1.PersistentVolumeClaim
@@ -122,7 +132,10 @@ func TestDelayBindingMode(t *testing.T) {
 	}
 }
 
-// makeVolumeNodeAffinity returns a VolumeNodeAffinity for given key and value.
+// makeNodeAffinity 根据给定的 key 和 value 构造 VolumeNodeAffinity。
+//
+// 只构造一个 In 表达式：测试只需要表达“这个卷只能去某节点”，
+// 不需要覆盖完整的 NodeSelector 语法。
 func makeNodeAffinity(key string, value string) *v1.VolumeNodeAffinity {
 	return &v1.VolumeNodeAffinity{
 		Required: &v1.NodeSelector{
@@ -141,6 +154,8 @@ func makeNodeAffinity(key string, value string) *v1.VolumeNodeAffinity {
 	}
 }
 
+// 表驱动覆盖匹配成功/失败与排除列表，并针对 VAC 特性开关开/关分别跑一遍。
+// 复用的 PV 列表会被 volumesWithVAC 深拷贝后再加 VAC，避免场景间相互污染。
 func TestFindMatchVolumeWithNode(t *testing.T) {
 	volumes := []*v1.PersistentVolume{
 		makeTestVolume("local-small", "local001", "5G", true, nil),
@@ -283,7 +298,8 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 			node:       node1,
 			vacEnabled: []bool{true},
 		},
-		"fail-vac": { // claim has a given vac and volumes don't have the same vac.
+		"fail-vac": { // PVC 指定了 VAC，但候选卷的 VAC 都与之不同
+			// 精确匹配失败，不应绑定
 			expectedMatch: "",
 			volumes:       volumes,
 			claim: makeTestPersistentVolumeClaim("claim01", "100G", []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}, func(pvc *v1.PersistentVolumeClaim) {
@@ -292,7 +308,8 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 			node:       node1,
 			vacEnabled: []bool{true},
 		},
-		"fail-prebound-vac": { // claim has a given vac and volume name but the given volume has a different vac.
+		"fail-prebound-vac": { // PVC 指定了 VAC 和卷名，但指定卷的 VAC 不同
+			// 预绑定卷同样要校验 VAC：用户指定了卷名也不能绕过类不匹配的限制
 			expectedMatch: "",
 			volumes:       volumesWithVAC(classGold, volumes),
 			claim: makeTestPersistentVolumeClaim("claim02", "100G", []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}, func(pvc *v1.PersistentVolumeClaim) {
@@ -301,7 +318,8 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 			node:       node1,
 			vacEnabled: []bool{true},
 		},
-		"fail-on-error": { // claim has a given vac when feature-gate is disabled.
+		"fail-on-error": { // 特性门关闭时 PVC 却声明了 VAC
+			// 显式报错，不能静默降级去匹配忽略 VAC 的卷
 			expectedMatch: "",
 			expectErr:     true,
 			volumes:       volumes,
@@ -311,7 +329,8 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 			node:       node1,
 			vacEnabled: []bool{false},
 		},
-		"fail-volumes-vac": { // claim has no vac and all volumes have vac when feature-gate is disabled.
+		"fail-volumes-vac": { // 特性门关闭时 PVC 无 VAC，而所有卷都带 VAC
+			// 这些卷可能是状态残留，全部跳过，避免悄悄忽略属性诉求而误绑
 			expectedMatch: "",
 			volumes:       volumesWithVAC(classGold, volumes),
 			claim:         makeTestPersistentVolumeClaim("claim01", "100G", []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}, nil),
@@ -320,6 +339,8 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 		},
 	}
 
+	// 每个场景按 vacEnabled 列表跑多次：同一个匹配逻辑在特性开关开/关下行为不同，
+	// 必须分别验证，尤其要确认门关时带 VAC 的请求会报错、PV 带 VAC 会被跳过。
 	for name, scenario := range scenarios {
 		for _, enabled := range scenario.vacEnabled {
 			name := fmt.Sprintf("[VolumeAttributiesClass: %v] %s", enabled, name)
@@ -343,6 +364,9 @@ func TestFindMatchVolumeWithNode(t *testing.T) {
 	}
 }
 
+// makeTestPersistentVolumeClaim 构造匹配测试用的 PVC：指定名字、容量、访问模式，
+// 默认绑定到 "wait" 存储类、Filesystem 模式，与 volumes 里 PV 的默认配置对齐。
+// modfn 是可选的函数钩子，让个别用例能改写 VAC 等字段而不必复制整段构造逻辑。
 func makeTestPersistentVolumeClaim(name string, size string, accessMode []v1.PersistentVolumeAccessMode, modfn func(*v1.PersistentVolumeClaim)) *v1.PersistentVolumeClaim {
 	fs := v1.PersistentVolumeFilesystem
 	sc := "wait"
@@ -370,6 +394,10 @@ func makeTestPersistentVolumeClaim(name string, size string, accessMode []v1.Per
 	return pvc
 }
 
+// makeTestVolume 构造匹配测试用的 PV。
+// available 为 false 时不设置 Phase，模拟“非 Available”状态以覆盖状态过滤分支；
+// modfn 是可选项钩子，用于给单个卷追加类名、亲和性或 ClaimRef 等差异。
+// 注意 UID 与 name 分开传入：测试里按 UID 校验期望匹配结果，按 name 构造排除列表。
 func makeTestVolume(uid types.UID, name string, capacity string, available bool, modfn func(*v1.PersistentVolume)) *v1.PersistentVolume {
 	var status v1.PersistentVolumeStatus
 	if available {

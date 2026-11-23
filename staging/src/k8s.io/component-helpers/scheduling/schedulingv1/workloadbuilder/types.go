@@ -22,221 +22,227 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// SchedulingConfig is the hierarchy-agnostic intermediate representation of a
-// group's scheduling configuration, decoupled from the leaf/composite API
-// split.
+// SchedulingConfig 是与层级无关的调度配置中间表示（IR），
+// 把调度语义从 leaf/composite 的 API 拆分中解耦出来。
+//
+// leaf 与 composite 在 API 里是两套结构，但编译成 Workload 时关心的调度语义
+// （策略、约束、中断模式等）完全一致。引入这层与层级无关的 IR，是为了让默认合并、
+// callback 处理和模板编译只需实现一遍；nil 字段一律表示“继承默认值”或“不设置”，
+// 而不是空配置。
 //
 // +k8s:deepcopy-gen=true
 type SchedulingConfig struct {
-	// Policy selects the scheduling mode; nil resolves to Basic.
+	// Policy 选择调度模式；nil 时解析为 Basic。
 	Policy *SchedulingPolicy
 
-	// Constraints holds placement constraints such as topology; nil means the
-	// group has no placement constraints.
+	// Constraints 保存拓扑等放置约束；nil 表示该组没有放置约束。
 	Constraints *SchedulingConstraints
 
-	// DisruptionMode selects how the group's pods are disrupted; nil leaves the
-	// mode unset so the scheduler default applies.
+	// DisruptionMode 选择组内 Pod 的中断方式；nil 表示不设置，由调度器使用默认值。
 	DisruptionMode *DisruptionMode
 
-	// ResourceClaims lists dynamic resource claims shared across the group.
+	// ResourceClaims 列出组内共享的动态资源声明。
 	ResourceClaims []ResourceClaim
 
-	// PriorityClassName is copied onto the compiled PodGroupTemplate so a
-	// PodGroup materialized from it inherits the group's priority.
+	// PriorityClassName 会被拷贝到编译出的 PodGroupTemplate，
+	// 使从该模板物化的 PodGroup 继承本组的优先级。
 	PriorityClassName string
 }
 
-// SchedulingPolicy selects the scheduling mode. Exactly one field must be set.
+// SchedulingPolicy 选择调度模式，必须且只能设置其中一个字段。
+//
+// 用“多个可选字段 + 恰好一个非空”而不是枚举，是为了让每种策略能携带自己的参数
+// （比如 gang 的 MinCount），同时让校验器可以用 union 规则统一检查互斥性。
 //
 // +k8s:deepcopy-gen=true
 type SchedulingPolicy struct {
-	// Basic selects standard Kubernetes pod-by-pod scheduling.
+	// Basic 表示使用标准的 Kubernetes 逐个 Pod 调度。
 	Basic *BasicSchedulingPolicy
 
-	// Gang selects all-or-nothing scheduling.
+	// Gang 表示使用 all-or-nothing（全有或全无）的成组调度。
 	Gang *GangSchedulingPolicy
 }
 
-// BasicSchedulingPolicy indicates standard Kubernetes pod-by-pod scheduling.
+// BasicSchedulingPolicy 表示标准的 Kubernetes 逐个 Pod 调度。
 //
 // +k8s:deepcopy-gen=true
 type BasicSchedulingPolicy struct{}
 
-// GangSchedulingPolicy defines all-or-nothing scheduling parameters.
+// GangSchedulingPolicy 定义 all-or-nothing 成组调度的参数。
 //
 // +k8s:deepcopy-gen=true
 type GangSchedulingPolicy struct {
-	// MinCount may be nil for a callback to default (e.g. to a Job's
-	// parallelism); it must be positive before Build compiles the template.
+	// MinCount 可以为 nil，留给回调按控制器语义补默认值
+	// （例如取 Job 的 parallelism）；但在 Build 编译模板前它必须为正数。
+	// 用指针而非 int32 是为了区分“用户没写”（留给 callback 补默认）
+	// 与“显式写了 0”（非法值，必须被声明式校验拦下）。
 	MinCount *int32
 }
 
-// SchedulingConstraints holds placement constraints such as topology.
+// SchedulingConstraints 保存拓扑等放置约束。
 //
 // +k8s:deepcopy-gen=true
 type SchedulingConstraints struct {
-	// Topology lists the topology constraints applied to the group's pods.
+	// Topology 列出施加在组内 Pod 上的拓扑约束。
 	Topology []schedulingv1beta1.TopologyConstraint
 }
 
-// DisruptionMode selects how pods are disrupted. Exactly one field must be set.
+// DisruptionMode 选择 Pod 的中断方式，必须且只能设置其中一个字段。
 //
 // +k8s:deepcopy-gen=true
 type DisruptionMode struct {
-	// Single indicates pods can be disrupted independently.
+	// Single 表示各 Pod 可以独立被中断。
 	Single *SingleDisruptionMode
 
-	// All indicates all pods must be disrupted together.
+	// All 表示所有 Pod 必须一起被中断。
 	All *AllDisruptionMode
 }
 
-// SingleDisruptionMode indicates pods can be disrupted independently.
+// SingleDisruptionMode 表示各 Pod 可以独立被中断。
 //
 // +k8s:deepcopy-gen=true
 type SingleDisruptionMode struct{}
 
-// AllDisruptionMode indicates all pods must be disrupted together.
+// AllDisruptionMode 表示所有 Pod 必须一起被中断。
 //
 // +k8s:deepcopy-gen=true
 type AllDisruptionMode struct{}
 
-// ResourceClaim references a shared dynamic resource claim.
-// Exactly one of ResourceClaimName or ResourceClaimTemplateName must be set.
+// ResourceClaim 引用一个共享的动态资源声明。
+// ResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其中一个。
 //
 // +k8s:deepcopy-gen=true
 type ResourceClaim struct {
-	// Name uniquely identifies this claim within the group.
+	// Name 在组内唯一标识这条资源声明。
 	Name string
 
-	// ResourceClaimName references an existing ResourceClaim by name.
+	// ResourceClaimName 按名字引用一个已存在的 ResourceClaim。
 	ResourceClaimName *string
 
-	// ResourceClaimTemplateName references a ResourceClaimTemplate by name from
-	// which a per-group ResourceClaim is generated.
+	// ResourceClaimTemplateName 按名字引用一个 ResourceClaimTemplate，
+	// 由该模板为本组生成对应的 ResourceClaim。
 	ResourceClaimTemplateName *string
 }
 
-// SchedulingConfigFunc post-processes the merged SchedulingConfig after the
-// default/user merge.
+// SchedulingConfigFunc 在默认值与用户输入合并之后，对 SchedulingConfig 做后处理。
+//
+// 控制器常有一些依赖自身语义的默认值（例如把 gang 的 MinCount 设为 Job 的
+// parallelism），这类逻辑无法放进通用的默认配置。用回调钩子把这个差异留给控制器，
+// 同时保证它在“默认值 + 用户输入”合并之后运行，不会被后续合并覆盖。
 type SchedulingConfigFunc func(*SchedulingConfig)
 
-// WorkloadItem is a node in a controller's logical workload.
+// WorkloadItem 是控制器逻辑 Workload 中的一个节点。
 //
-// When a WorkloadItem is passed as ValidationInput.OldRoot, only Name and Input
-// are consulted. DefaultConfig, Callbacks, and Input.*.PathElements are ignored
-// because the resolved config and error paths come from the new root.
+// 树形结构直接映射控制器的组合关系——有 Children 的节点编译成 composite 模板，
+// 没有的编译成 leaf 模板。Input 里保留原始版本化对象和字段路径，是为了让声明式校验报错
+// 能精确指回控制器的 API 字段，而不是指向 IR 内部。
+//
+// 当某个 WorkloadItem 作为 ValidationInput.OldRoot 传入时，只会读取它的 Name 与 Input；
+// DefaultConfig、Callbacks 以及 Input.*.PathElements 都会被忽略，
+// 因为解析后的配置和错误路径都来自新的根（root）。
 type WorkloadItem struct {
-	// Name identifies this component. It becomes the PodGroupTemplate name and
-	// must be non-empty.
+	// Name 标识该组件，会作为 PodGroupTemplate 的名字，必须非空。
 	Name string
 
-	// Path is the field path at which this item's scheduling blocks are embedded
-	// in the controller's API. For instance, for a Job this is "spec.scheduling".
+	// Path 是该项的调度 building block 在控制器 API 中嵌入位置的字段路径。
+	// 例如对 Job 来说是 "spec.scheduling"。
 	Path *field.Path
 
-	// DefaultConfig is the controller's default config for this node, used for
-	// any field the user left unset.
+	// DefaultConfig 是控制器为该节点提供的默认配置，用于用户未设置的任何字段。
 	DefaultConfig *SchedulingConfig
 
-	// Input holds the user's intent for this node as the original versioned API
-	// objects and their associated field paths for precise declarative
-	// validation and error reporting. The nil fields fall back to DefaultConfig.
+	// Input 以原始版本化 API 对象的形式保存用户对该节点的意图，
+	// 并附带对应的字段路径，用于精确的声明式校验与错误定位。
+	// 为 nil 的字段会回退到 DefaultConfig。
 	Input WorkloadInput
 
-	// Callbacks run in order against the resolved config after the
-	// default/user merge.
+	// Callbacks 在默认值/用户输入合并之后，按顺序作用于解析后的配置。
 	Callbacks []SchedulingConfigFunc
 
-	// Children holds the logical sub-components of this node.
-	//   - len(Children) > 0 makes this a composite node, compiled into a
-	//     CompositePodGroupTemplate whose children are compiled recursively.
-	//   - len(Children) == 0 makes this a leaf node, compiled into a single
-	//     PodGroupTemplate.
+	// Children 保存该节点的逻辑子组件。
+	//   - len(Children) > 0 表示这是复合节点，编译成 CompositePodGroupTemplate，
+	//     其子节点递归编译。
+	//   - len(Children) == 0 表示这是叶子节点，编译成单个 PodGroupTemplate。
 	//
-	// A composite node carries the group-of-groups scheduling policy in its own
-	// Input/DefaultConfig (via WorkloadInput.Policy.CompositePodGroupData) and
-	// does not own pods directly.
+	// 复合节点通过自己的 Input/DefaultConfig（即 WorkloadInput.Policy.CompositePodGroupData）
+	// 承载 group-of-groups 调度策略，它本身不直接拥有 Pod。
 	Children []*WorkloadItem
 }
 
-// WorkloadInput bundles the leaf-level building blocks a controller embeds
-// in its own API. The zero value means "nothing set", so callers only
-// populate the blocks they care about.
+// WorkloadInput 聚合了控制器嵌入到自身 API 中的叶子级 building block。
+// 零值表示“什么都没设置”，因此调用方只需填充自己关心的 block。
+//
+// 每个 building block 都同时携带数据和 PathElements，把“值”与“它在控制器 API 中的位置”
+// 绑在一起。这样校验错误信息能返回到用户填写的字段，而不是一个对控制器用户毫无意义的
+// 内部路径。
 type WorkloadInput struct {
-	// Policy is the scheduling policy building block and its field path.
+	// Policy 是调度策略 building block 及其字段路径。
 	Policy PolicyInput
 
-	// Constraints is the scheduling constraints building block and its field path.
+	// Constraints 是调度约束 building block 及其字段路径。
 	Constraints ConstraintsInput
 
-	// DisruptionMode is the disruption mode building block and its field path.
+	// DisruptionMode 是中断模式 building block 及其字段路径。
 	DisruptionMode DisruptionModeInput
 
-	// ResourceClaims is the resource claims building block and its field path.
+	// ResourceClaims 是资源声明 building block 及其字段路径。
 	ResourceClaims ResourceClaimsInput
 }
 
-// PolicyInput wraps the scheduling policy building block with its field path.
+// PolicyInput 把调度策略 building block 连同其字段路径一起封装。
 //
-// A node is either a leaf or a composite: at most one of PodGroupData and
-// CompositePodGroupData should be set. PodGroupData is consulted for leaf nodes
-// (len(WorkloadItem.Children) == 0) and CompositePodGroupData for composite
-// nodes (len(WorkloadItem.Children) > 0).
+// 这里的“至多设置一个”属于输入合法性，与 IR 层 SchedulingPolicy 的“恰好一个”不同——
+// 用户可能什么都没填（此时走默认配置）。校验器必须把两者分别检查，不能混为一谈。
+//
+// 一个节点要么是叶子要么是复合：PodGroupData 与 CompositePodGroupData 至多设置一个。
+// 叶子节点（len(WorkloadItem.Children) == 0）使用 PodGroupData，
+// 复合节点（len(WorkloadItem.Children) > 0）使用 CompositePodGroupData。
 type PolicyInput struct {
-	// PodGroupData is the Workload scheduling policy info for a leaf PodGroup.
+	// PodGroupData 是叶子 PodGroup 的 Workload 调度策略信息。
 	PodGroupData *schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy
 
-	// CompositePodGroupData is the group-of-groups scheduling policy info for a
-	// composite CompositePodGroup node.
+	// CompositePodGroupData 是复合 CompositePodGroup 节点的 group-of-groups 调度策略信息。
 	CompositePodGroupData *schedulingv1alpha3.WorkloadCompositePodGroupSchedulingPolicy
 
-	// PathElements is the path, relative to the WorkloadItem's Path, at
-	// which this building block is embedded in the controller's API. When
-	// empty, errors are reported directly at the item's Path.
+	// PathElements 是该 building block 相对于 WorkloadItem.Path 的路径，
+	// 表示它在控制器 API 中的嵌入位置。为空时错误直接报告在 item 的 Path 上。
 	PathElements []string
 }
 
-// ConstraintsInput wraps the scheduling constraints building block with its field path.
-//
-// A node is either a leaf or a composite, at most one of PodGroupData and
-// CompositePodGroupData should be set.
+// ConstraintsInput 把调度约束 building block 连同其字段路径一起封装。
+// 一个节点要么是叶子要么是复合，PodGroupData 与 CompositePodGroupData 至多设置一个。
 type ConstraintsInput struct {
-	// PodGroupData is the Workload scheduling constraints info for a leaf PodGroup.
+	// PodGroupData 是叶子 PodGroup 的 Workload 调度约束信息。
 	PodGroupData *schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints
 
-	// CompositePodGroupData is the scheduling constraints info for a composite
-	// CompositePodGroup node.
+	// CompositePodGroupData 是复合 CompositePodGroup 节点的调度约束信息。
 	CompositePodGroupData *schedulingv1alpha3.WorkloadCompositePodGroupSchedulingConstraints
 
-	// PathElements is the path, relative to the WorkloadItem's Path, at which
-	// this building block is embedded in the controller's API; see PolicyInput.PathElements.
+	// PathElements 是该 building block 相对于 WorkloadItem.Path 的路径，
+	// 表示它在控制器 API 中的嵌入位置；语义同 PolicyInput.PathElements。
 	PathElements []string
 }
 
-// DisruptionModeInput wraps the disruption mode building block with its field path.
-//
-// A node is either a leaf or a composite, at most one of PodGroupData and
-// CompositePodGroupData should be set.
+// DisruptionModeInput 把中断模式 building block 连同其字段路径一起封装。
+// 一个节点要么是叶子要么是复合，PodGroupData 与 CompositePodGroupData 至多设置一个。
 type DisruptionModeInput struct {
-	// PodGroupData is the Workload disruption mode info for a leaf PodGroup.
+	// PodGroupData 是叶子 PodGroup 的 Workload 中断模式信息。
 	PodGroupData *schedulingv1alpha3.WorkloadPodGroupDisruptionMode
 
-	// CompositePodGroupData is the disruption mode info for a composite
-	// CompositePodGroup node.
+	// CompositePodGroupData 是复合 CompositePodGroup 节点的中断模式信息。
 	CompositePodGroupData *schedulingv1alpha3.WorkloadCompositePodGroupDisruptionMode
 
-	// PathElements is the path, relative to the WorkloadItem's Path, at which
-	// this building block is embedded in the controller's API.
+	// PathElements 是该 building block 相对于 WorkloadItem.Path 的路径，
+	// 表示它在控制器 API 中的嵌入位置。
 	PathElements []string
 }
 
-// ResourceClaimsInput wraps the resource claims building block with its field path.
+// ResourceClaimsInput 把资源声明 building block 连同其字段路径一起封装。
 type ResourceClaimsInput struct {
-	// PodGroupData is the list of Workload resource claims for the PodGroup.
+	// PodGroupData 是 PodGroup 的 Workload 资源声明列表。
 	PodGroupData []schedulingv1alpha3.WorkloadPodGroupResourceClaim
 
-	// PathElements is the path, relative to the WorkloadItem's Path, at which
-	// this building block is embedded in the controller's API; see PolicyInput.PathElements.
+	// PathElements 是该 building block 相对于 WorkloadItem.Path 的路径，
+	// 表示它在控制器 API 中的嵌入位置；语义同 PolicyInput.PathElements。
 	PathElements []string
 }

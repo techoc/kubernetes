@@ -25,6 +25,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// gangWorkload 构造一份字段齐全的 Workload，作为“模板应被完整复制”的基准样本。
 func gangWorkload() *schedulingv1beta1.Workload {
 	return &schedulingv1beta1.Workload{
 		ObjectMeta: metav1.ObjectMeta{Name: "job-abc", Namespace: "training"},
@@ -46,6 +47,8 @@ func gangWorkload() *schedulingv1beta1.Workload {
 	}
 }
 
+// TestNewPodGroup 既检查模板字段是否完整复制到 PodGroup，
+// 也检查生成对象是否与模板共享底层内存（深拷贝是否到位）。
 func TestNewPodGroup(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -56,6 +59,7 @@ func TestNewPodGroup(t *testing.T) {
 		verify       func(t *testing.T, wl *schedulingv1beta1.Workload, pg *schedulingv1beta1.PodGroup)
 	}{
 		{
+			// 完整复制用例：名字、命名空间、ownerRef、workloadRef 以及全部调度字段都要核对。
 			name:     "materializes every field from the template",
 			workload: gangWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.PodGroupTemplate {
@@ -101,6 +105,7 @@ func TestNewPodGroup(t *testing.T) {
 			},
 		},
 		{
+			// 深拷贝用例：改动生成对象后，模板原值不能被改写。
 			name:     "does not alias the workload template",
 			workload: gangWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.PodGroupTemplate {
@@ -108,7 +113,8 @@ func TestNewPodGroup(t *testing.T) {
 			},
 			podGroupName: "pg",
 			verify: func(t *testing.T, wl *schedulingv1beta1.Workload, pg *schedulingv1beta1.PodGroup) {
-				// Mutating the PodGroup must not leak back into the template.
+				// 修改 PodGroup 不得回写到模板。
+				// 逐个改写指针指向的值和切片元素，确认生成对象与模板没有共享底层内存。
 				pg.Spec.SchedulingPolicy.Gang.MinCount = 99
 				pg.Spec.SchedulingConstraints.Topology[0].Key = "changed"
 				pg.Spec.ResourceClaims[0].Name = "changed"
@@ -139,6 +145,7 @@ func TestNewPodGroup(t *testing.T) {
 	}
 }
 
+// compositeWorkload 构造含有嵌套子节点的复合模板样本，用于验证递归结构的复制行为。
 func compositeWorkload() *schedulingv1beta1.Workload {
 	return &schedulingv1beta1.Workload{
 		ObjectMeta: metav1.ObjectMeta{Name: "job-abc", Namespace: "training"},
@@ -161,6 +168,8 @@ func compositeWorkload() *schedulingv1beta1.Workload {
 	}
 }
 
+// TestNewCompositePodGroup 覆盖顶层与嵌套模板的物化、owner 可选性，
+// 以及复合对象同样不能通过修改反过来污染模板。
 func TestNewCompositePodGroup(t *testing.T) {
 	owners := []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "Job", Name: "job", UID: "job-uid"}}
 	tests := []struct {
@@ -173,6 +182,7 @@ func TestNewCompositePodGroup(t *testing.T) {
 		verify func(t *testing.T, wl *schedulingv1beta1.Workload, cpg *schedulingv1alpha3.CompositePodGroup)
 	}{
 		{
+			// 顶层复合模板：核对身份、ownerRef、workloadRef 与调度字段是否完整复制。
 			name:     "materializes a top-level composite template",
 			workload: compositeWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.CompositePodGroupTemplate {
@@ -205,6 +215,7 @@ func TestNewCompositePodGroup(t *testing.T) {
 			},
 		},
 		{
+			// 嵌套复合模板：验证递归结构中的子节点也能被正确物化（此处为 Basic 策略）。
 			name:     "materializes a nested composite template",
 			workload: compositeWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.CompositePodGroupTemplate {
@@ -219,6 +230,7 @@ func TestNewCompositePodGroup(t *testing.T) {
 			},
 		},
 		{
+			// 未配置 owner 时：生成对象不应带任何 ownerReferences。
 			name:     "omits ownerReferences when none are configured",
 			workload: compositeWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.CompositePodGroupTemplate {
@@ -232,6 +244,7 @@ func TestNewCompositePodGroup(t *testing.T) {
 			},
 		},
 		{
+			// 深拷贝用例：改动 CompositePodGroup 后，模板原值必须保持不变。
 			name:     "does not alias the workload template",
 			workload: compositeWorkload(),
 			pickTemplate: func(wl *schedulingv1beta1.Workload) *schedulingv1beta1.CompositePodGroupTemplate {
@@ -239,7 +252,8 @@ func TestNewCompositePodGroup(t *testing.T) {
 			},
 			cpgName: "cpg",
 			verify: func(t *testing.T, wl *schedulingv1beta1.Workload, cpg *schedulingv1alpha3.CompositePodGroup) {
-				// Mutating the CompositePodGroup must not leak back into the template.
+				// 修改 CompositePodGroup 不得回写到模板。
+				// 与 PodGroup 用例同理，改动生成对象不应污染复合模板。
 				cpg.Spec.SchedulingPolicy.Gang.MinGroupCount = 99
 				*cpg.Spec.Priority = 1
 
@@ -256,6 +270,7 @@ func TestNewCompositePodGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 转换函数可能报错，先确保物化成功再执行字段检查。
 			cpg, err := newCompositePodGroup(tt.workload, tt.pickTemplate(tt.workload), tt.cpgName, tt.owners)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
