@@ -22,6 +22,11 @@ import (
 	componentconfigtesting "k8s.io/component-base/config/testing"
 )
 
+// TestComponentConfigSetup 校验本包符合 component-base 对组件配置 API 包的约定。
+//
+// 这类配置包的结构高度模板化：组名、组版本、SchemeBuilder/AddToScheme、已知类型，
+// 漏掉任何一项都可能在运行时才表现为「无法解码配置」。把约定写成测试，
+// 可以在改动注册代码时尽早发现问题，而不必等到 kube-proxy 启动。
 func TestComponentConfigSetup(t *testing.T) {
 	pkginfo := &componentconfigtesting.ComponentConfigPackage{
 		ComponentName:      "kube-proxy",
