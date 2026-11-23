@@ -16,4 +16,11 @@ limitations under the License.
 
 // Package remote contains gRPC implementation of internalapi.RuntimeService
 // and internalapi.ImageManagerService.
+//
+// Package cri 提供 CRI（Container Runtime Interface，容器运行时接口）的远程 gRPC 客户端实现。
+// 主要入口包括：
+//   - remote_runtime.go：RuntimeService 的远程客户端，管理 PodSandbox 与容器的生命周期；
+//   - remote_image.go：ImageManagerService 的远程客户端，负责镜像查询与拉取；
+//   - logs：基于 CRI 流式接口获取容器日志；
+//   - util：按平台解析运行时端点（unix socket / npipe / tcp）并建立连接。
 package cri

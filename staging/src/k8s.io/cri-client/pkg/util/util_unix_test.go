@@ -24,12 +24,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestParseEndpoint 验证 parseEndpoint 对各类端点 URL 的解析结果。
+// 覆盖合法的 unix/tcp URL，以及 npipe、未知协议、含空格的非法 URL 等错误场景。
 func TestParseEndpoint(t *testing.T) {
 	tests := []struct {
-		endpoint         string
-		expectError      bool
-		expectedProtocol string
-		expectedAddr     string
+		endpoint         string // 输入端点
+		expectError      bool   // 是否期望解析出错
+		expectedProtocol string // 期望的协议名
+		expectedAddr     string // 期望的地址
 	}{
 		{
 			endpoint:         "unix:///tmp/s1.sock",
@@ -57,6 +59,7 @@ func TestParseEndpoint(t *testing.T) {
 		},
 	}
 
+	// 逐个用例解析：先断言协议名，再按是否期望错误分别断言 err 与地址。
 	for _, test := range tests {
 		protocol, addr, err := parseEndpoint(test.endpoint)
 		assert.Equal(t, test.expectedProtocol, protocol)
@@ -70,11 +73,13 @@ func TestParseEndpoint(t *testing.T) {
 
 }
 
+// TestGetAddressAndDialer 验证 GetAddressAndDialer 对 unix 端点返回正确路径，
+// 并对 tcp/https/http 以及拼写错误的 scheme 返回错误（类 Unix 平台只支持 unix socket）。
 func TestGetAddressAndDialer(t *testing.T) {
 	tests := []struct {
-		endpoint     string
-		expectError  bool
-		expectedAddr string
+		endpoint     string // 输入端点
+		expectError  bool   // 是否期望出错
+		expectedAddr string // 期望返回的地址
 	}{
 		{
 			endpoint:     "unix:///tmp/s1.sock",
@@ -106,6 +111,7 @@ func TestGetAddressAndDialer(t *testing.T) {
 	}
 	for _, test := range tests {
 		// just test addr and err
+		// 这里只关心返回的地址和错误，忽略拨号函数本身。
 		addr, _, err := GetAddressAndDialer(test.endpoint)
 		if test.expectError {
 			assert.Error(t, err, "expected error during parsing %s", test.endpoint)
