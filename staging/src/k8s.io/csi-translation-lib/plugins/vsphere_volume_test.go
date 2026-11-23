@@ -28,9 +28,12 @@ import (
 	_ "k8s.io/klog/v2/ktesting/init"
 )
 
+// TestTranslatevSphereInTreeStorageClassToCSI 验证 StorageClass 的参数与拓扑翻译：
+// 参数改名、未知参数丢弃、迁移标志注入以及 GA/Beta zone 键转换。
 func TestTranslatevSphereInTreeStorageClassToCSI(t *testing.T) {
 	translator := NewvSphereCSITranslator()
 	logger, _ := ktesting.NewTestContext(t)
+	// 构造 GA/Beta 两种 zone 标签选择器，以及期望的 CSI 拓扑选择器。
 	topologySelectorTerm := v1.TopologySelectorTerm{MatchLabelExpressions: []v1.TopologySelectorLabelRequirement{
 		{
 			Key:    v1.LabelTopologyZone,
@@ -56,57 +59,68 @@ func TestTranslatevSphereInTreeStorageClassToCSI(t *testing.T) {
 		expErr bool
 	}{
 		{
+			// nil StorageClass 应报错。
 			name:   "expect error when sc is nil",
 			sc:     nil,
 			expSc:  nil,
 			expErr: true,
 		},
 		{
+			// 即使没有参数，也要注入迁移标志。
 			name:  "translate with no parameter",
 			sc:    NewStorageClass(map[string]string{}, nil),
 			expSc: NewStorageClass(map[string]string{paramcsiMigration: "true"}, nil),
 		},
 		{
+			// 未知参数被丢弃，仅保留迁移标志。
 			name:  "translate with unknown parameter",
 			sc:    NewStorageClass(map[string]string{"unknownparam": "value"}, nil),
 			expSc: NewStorageClass(map[string]string{paramcsiMigration: "true"}, nil),
 		},
 		{
+			// datastore 应改名为 datastore-migrationparam。
 			name:  "translate with storagepolicyname and datastore",
 			sc:    NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", "datastore": "vsanDatastore"}, nil),
 			expSc: NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", "datastore-migrationparam": "vsanDatastore", paramcsiMigration: "true"}, nil),
 		},
 		{
+			// fstype 改名为 CSI 的 fstype 参数键。
 			name:  "translate with fstype",
 			sc:    NewStorageClass(map[string]string{"fstype": "ext4"}, nil),
 			expSc: NewStorageClass(map[string]string{"csi.storage.k8s.io/fstype": "ext4", paramcsiMigration: "true"}, nil),
 		},
 		{
+			// 两项同时出现时应都保留。
 			name:  "translate with storagepolicyname and fstype",
 			sc:    NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", "fstype": "ext4"}, nil),
 			expSc: NewStorageClass(map[string]string{"csi.storage.k8s.io/fstype": "ext4", "storagepolicyname": "test-policy-name", paramcsiMigration: "true"}, nil),
 		},
 		{
+			// GA zone 拓扑选择器应改为 vSphere CSI 拓扑键。
 			name:  "translate with no parameter and allowedTopology",
 			sc:    NewStorageClass(map[string]string{}, []v1.TopologySelectorTerm{topologySelectorTerm}),
 			expSc: NewStorageClass(map[string]string{paramcsiMigration: "true"}, []v1.TopologySelectorTerm{expectedTopologySelectorTerm}),
 		},
 		{
+			// 参数与拓扑需要同时翻译。
 			name:  "translate with storagepolicyname and allowedTopology",
 			sc:    NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name"}, []v1.TopologySelectorTerm{topologySelectorTerm}),
 			expSc: NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", paramcsiMigration: "true"}, []v1.TopologySelectorTerm{expectedTopologySelectorTerm}),
 		},
 		{
+			// Beta zone 标签同样要改为 CSI 拓扑键。
 			name:  "translate with storagepolicyname and allowedTopology beta labels",
 			sc:    NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name"}, []v1.TopologySelectorTerm{topologySelectorTermWithBetaLabels}),
 			expSc: NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", paramcsiMigration: "true"}, []v1.TopologySelectorTerm{expectedTopologySelectorTerm}),
 		},
 		{
+			// vSAN 原始参数改名，并叠加迁移标志与拓扑翻译。
 			name:  "translate with raw vSAN policy parameters, datastore and diskformat",
 			sc:    NewStorageClass(map[string]string{"hostfailurestotolerate": "2", "datastore": "vsanDatastore", "diskformat": "thin"}, []v1.TopologySelectorTerm{topologySelectorTerm}),
 			expSc: NewStorageClass(map[string]string{"hostfailurestotolerate-migrationparam": "2", "datastore-migrationparam": "vsanDatastore", "diskformat-migrationparam": "thin", paramcsiMigration: "true"}, []v1.TopologySelectorTerm{expectedTopologySelectorTerm}),
 		},
 		{
+			// 覆盖所有支持的参数，验证完整映射。
 			name:  "translate with all parameters",
 			sc:    NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", "datastore": "test-datastore-name", "fstype": "ext4", "diskformat": "thin", "hostfailurestotolerate": "1", "forceprovisioning": "yes", "cachereservation": "25", "diskstripes": "4", "objectspacereservation": "10", "iopslimit": "32"}, []v1.TopologySelectorTerm{topologySelectorTerm}),
 			expSc: NewStorageClass(map[string]string{"storagepolicyname": "test-policy-name", "datastore-migrationparam": "test-datastore-name", "csi.storage.k8s.io/fstype": "ext4", "diskformat-migrationparam": "thin", "hostfailurestotolerate-migrationparam": "1", "forceprovisioning-migrationparam": "yes", "cachereservation-migrationparam": "25", "diskstripes-migrationparam": "4", "objectspacereservation-migrationparam": "10", "iopslimit-migrationparam": "32", paramcsiMigration: "true"}, []v1.TopologySelectorTerm{expectedTopologySelectorTerm}),
@@ -114,6 +128,7 @@ func TestTranslatevSphereInTreeStorageClassToCSI(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Logf("Testing %v", tc.name)
+		// 逐例执行转换并比较结果。
 		got, err := translator.TranslateInTreeStorageClassToCSI(logger, tc.sc)
 		if err != nil && !tc.expErr {
 			t.Errorf("Did not expect error but got: %v", err)
@@ -128,6 +143,8 @@ func TestTranslatevSphereInTreeStorageClassToCSI(t *testing.T) {
 	}
 }
 
+// TestTranslateVSphereCSIPVToInTree 验证 CSI PV 到树内 PV 的反向转换，
+// 覆盖卷路径还原、错误分支以及 CSI 拓扑到树内标签的转换。
 func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 	translator := NewvSphereCSITranslator()
 	cases := []struct {
@@ -137,12 +154,14 @@ func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 		expErr   bool
 	}{
 		{
+			// nil PV 应报错。
 			name:     "expect error when pv is nil",
 			csiPV:    nil,
 			intreePV: nil,
 			expErr:   true,
 		},
 		{
+			// 缺少 CSI 来源应报错。
 			name: "expect error when pv.Spec.CSI is nil",
 			csiPV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -159,6 +178,7 @@ func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 			expErr:   true,
 		},
 		{
+			// 正常情况：VolumePath 取自 initialvolumefilepath 属性，FSType 保留。
 			name: "translate valid vSphere CSI PV to vSphere in-tree PV",
 			csiPV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -196,6 +216,7 @@ func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 			expErr: false,
 		},
 		{
+			// 带 CSI 拓扑的 PV 应转换为树内标签与 NodeAffinity。
 			name: "translate valid vSphere CSI PV with topology Node Affinity rules to vSphere CSI PV with topology labels",
 			csiPV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -277,6 +298,7 @@ func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Logf("Testing %v", tc.name)
+		// 逐例执行反向转换并比较结果。
 		got, err := translator.TranslateCSIPVToInTree(tc.csiPV)
 		if err != nil && !tc.expErr {
 			t.Errorf("Did not expect error but got: %v", err)
@@ -292,6 +314,8 @@ func TestTranslateVSphereCSIPVToInTree(t *testing.T) {
 	}
 }
 
+// TestTranslateVSphereInTreePVToCSI 验证树内 PV 到 CSI PV 的转换，
+// 覆盖卷路径作为 VolumeHandle、策略名写入卷属性以及 zone/region 标签转换。
 func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 	translator := NewvSphereCSITranslator()
 	logger, _ := ktesting.NewTestContext(t)
@@ -302,12 +326,14 @@ func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 		expErr   bool
 	}{
 		{
+			// 缺少 VsphereVolume 来源应报错。
 			name:     "expect error when in-tree vsphere PV is nil",
 			intreePV: &v1.PersistentVolume{},
 			csiPV:    nil,
 			expErr:   true,
 		},
 		{
+			// 正常情况：VolumePath 成为 VolumeHandle，策略名进入卷属性。
 			name: "translate valid vSphere in-tree PV to vSphere CSI PV",
 			intreePV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -345,6 +371,7 @@ func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 			expErr: false,
 		},
 		{
+			// Beta 标签应转换为 CSI 拓扑 NodeAffinity，原标签保留。
 			name: "translate valid vSphere in-tree PV with beta topology labels to vSphere CSI PV",
 			intreePV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -404,6 +431,7 @@ func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 			expErr: false,
 		},
 		{
+			// GA 标签同样转换为 CSI 拓扑。
 			name: "translate valid vSphere in-tree PV with GA topology labels to vSphere CSI PV",
 			intreePV: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
@@ -466,6 +494,7 @@ func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Logf("Testing %v", tc.name)
+		// 逐例执行转换并比较结果。
 		got, err := translator.TranslateInTreePVToCSI(logger, tc.intreePV)
 		if err != nil && !tc.expErr {
 			t.Errorf("Did not expect error but got: %v", err)
@@ -481,6 +510,8 @@ func TestTranslateVSphereInTreePVToCSI(t *testing.T) {
 	}
 }
 
+// TestTranslatevSphereInTreeInlineVolumeToCSI 验证 vSphere 内联卷转换，
+// 包括缺少来源时的错误分支和 PV 名称/来源字段的生成。
 func TestTranslatevSphereInTreeInlineVolumeToCSI(t *testing.T) {
 	translator := NewvSphereCSITranslator()
 	logger, _ := ktesting.NewTestContext(t)
@@ -491,12 +522,14 @@ func TestTranslatevSphereInTreeInlineVolumeToCSI(t *testing.T) {
 		expErr       bool
 	}{
 		{
+			// 没有 VsphereVolume 的内联卷应报错。
 			name:         "expect error when inline vsphere volume is nil",
 			inlinevolume: &v1.Volume{},
 			csiPV:        nil,
 			expErr:       true,
 		},
 		{
+			// 正常情况：生成 CSI PV，名称由驱动名与卷路径拼接。
 			name: "translate valid in-tree vsphere volume to vSphere CSI PV",
 			inlinevolume: &v1.Volume{
 				Name: "inlinevolume",
@@ -528,6 +561,7 @@ func TestTranslatevSphereInTreeInlineVolumeToCSI(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Logf("Testing %v", tc.name)
+		// 逐例执行转换；该测试单独处理错误分支，随后才做结果比较。
 		got, err := translator.TranslateInTreeInlineVolumeToCSI(logger, tc.inlinevolume, "")
 		if err == nil && tc.expErr {
 			t.Errorf("Expected error, but did not get one.")

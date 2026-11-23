@@ -27,6 +27,9 @@ import (
 )
 
 var (
+	// inTreePlugins 维护 CSI 驱动名到树内插件翻译器的映射，是本包所有翻译与查询能力的注册表。
+	// key 是 CSI 驱动名（如 ebs.csi.aws.com），value 是对应插件的翻译器实现。
+	// 新增受支持插件时，只需在此处注册。
 	inTreePlugins = map[string]plugins.InTreePlugin{
 		plugins.GCEPDDriverName:     plugins.NewGCEPersistentDiskCSITranslator(),
 		plugins.AWSEBSDriverName:    plugins.NewAWSElasticBlockStoreCSITranslator(),
@@ -41,18 +44,34 @@ var (
 // CSITranslator translates in-tree storage API objects to their equivalent CSI
 // API objects. It also provides many helper functions to determine whether
 // translation logic exists and the mappings between "in-tree plugin <-> csi driver"
+//
+// CSITranslator 是树内（in-tree）存储 API 对象到等价 CSI API 对象的翻译器。
+// 它同时提供一组辅助方法，用于判断某种插件是否存在翻译逻辑，
+// 以及"树内插件名 <-> CSI 驱动名"之间的双向映射。
+// 本类型是无状态的，所有查询都基于包级的 inTreePlugins 注册表。
 type CSITranslator struct{}
 
 // New creates a new CSITranslator which does real translation
 // for "in-tree plugins <-> csi drivers"
+//
+// New 创建一个执行真实翻译工作的 CSITranslator 实例。
 func New() CSITranslator {
 	return CSITranslator{}
 }
 
 // TranslateInTreeStorageClassToCSI takes in-tree Storage Class
 // and translates it to a set of parameters consumable by CSI plugin
+//
+// TranslateInTreeStorageClassToCSI 把树内 StorageClass 的 parameters 翻译为 CSI 插件可消费的参数。
+//
+// 处理流程：
+//  1. 先对入参 StorageClass 做 DeepCopy，避免修改调用方对象；
+//  2. 遍历注册表，按树内插件名找到对应翻译器；
+//  3. 委托该插件完成具体参数转换；找不到则返回错误。
 func (CSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, inTreePluginName string, sc *storage.StorageClass) (*storage.StorageClass, error) {
+	// 深拷贝，保证输入对象不被修改。
 	newSC := sc.DeepCopy()
+	// 按树内插件名在注册表中查找翻译器。
 	for _, curPlugin := range inTreePlugins {
 		if inTreePluginName == curPlugin.GetInTreePluginName() {
 			return curPlugin.TranslateInTreeStorageClassToCSI(logger, newSC)
@@ -64,11 +83,21 @@ func (CSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, inTree
 // TranslateInTreeInlineVolumeToCSI takes a inline volume and will translate
 // the in-tree volume source to a CSIPersistentVolumeSource (wrapped in a PV)
 // if the translation logic has been implemented.
+//
+// TranslateInTreeInlineVolumeToCSI 把 Pod 中的内联卷（inline volume）翻译为一个包装好的 PV，
+// 其 PersistentVolumeSource 为对应的 CSI 卷源。
+// podNamespace 用于构造需要命名空间信息的卷（如 Azure File 的 Secret 引用）。
+//
+// 特殊处理：内联卷只支持 Filesystem 卷模式，不支持 Block。
+// 由于内联卷不经过常规 PV 初始化流程（那一步会填充 VolumeMode），
+// 因此这里需要显式地把未设置的 VolumeMode 补为 Filesystem。
 func (CSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
+	// 空指针防御。
 	if volume == nil {
 		return nil, fmt.Errorf("persistent volume was nil")
 	}
 	for _, curPlugin := range inTreePlugins {
+		// 由各插件判断自己是否支持该内联卷。
 		if curPlugin.CanSupportInline(volume) {
 			pv, err := curPlugin.TranslateInTreeInlineVolumeToCSI(logger, volume, podNamespace)
 			if err != nil {
@@ -79,6 +108,7 @@ func (CSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume
 			// translator, set it to Filesystem here.
 			// This is only necessary for inline volumes as the default PV
 			// initialization that populates VolumeMode does not apply to inline volumes.
+			// 插件翻译器未显式设置 VolumeMode 时，在这里补上默认值 Filesystem。
 			if pv.Spec.VolumeMode == nil {
 				volumeMode := v1.PersistentVolumeFilesystem
 				pv.Spec.VolumeMode = &volumeMode
@@ -93,10 +123,20 @@ func (CSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume
 // the in-tree source to a CSI Source if the translation logic
 // has been implemented. The input persistent volume will not
 // be modified
+//
+// TranslateInTreePVToCSI 把树内 PV 的卷源翻译为 CSI 卷源，返回新的 PV 对象。
+// 入参 pv 不会被修改：方法内部先做 DeepCopy，再交给具体插件翻译。
+//
+// 流程：
+//  1. 空指针检查；
+//  2. 深拷贝 PV；
+//  3. 遍历注册表，用 CanSupport 找到支持该 PV 的插件；
+//  4. 委托插件完成翻译；找不到则返回错误。
 func (CSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	if pv == nil {
 		return nil, errors.New("persistent volume was nil")
 	}
+	// 深拷贝，保证输入 PV 不被修改。
 	copiedPV := pv.DeepCopy()
 	for _, curPlugin := range inTreePlugins {
 		if curPlugin.CanSupport(copiedPV) {
@@ -109,11 +149,22 @@ func (CSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.Persisten
 // TranslateCSIPVToInTree takes a PV with a CSI PersistentVolume Source and will translate
 // it to a in-tree Persistent Volume Source for the specific in-tree volume specified
 // by the `Driver` field in the CSI Source. The input PV object will not be modified.
+//
+// TranslateCSIPVToInTree 是 TranslateInTreePVToCSI 的逆向操作：
+// 根据 CSI 卷源中的 Driver 字段找到对应插件，把 CSI PV 翻译回树内 PV。
+// 入参同样不会被修改（内部做 DeepCopy）。
+//
+// 流程：
+//  1. 检查 pv 及其 CSI 卷源是否为空；
+//  2. 深拷贝 PV；
+//  3. 按 CSI.Driver 在注册表中查找插件并委托翻译；找不到则返回错误。
 func (CSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	if pv == nil || pv.Spec.CSI == nil {
 		return nil, errors.New("CSI persistent volume was nil")
 	}
+	// 深拷贝，保证输入 PV 不被修改。
 	copiedPV := pv.DeepCopy()
+	// 这里用 map 的 key（CSI 驱动名）直接匹配，比遍历更高效。
 	for driverName, curPlugin := range inTreePlugins {
 		if copiedPV.Spec.CSI.Driver == driverName {
 			return curPlugin.TranslateCSIPVToInTree(copiedPV)
@@ -124,6 +175,8 @@ func (CSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.Persis
 
 // IsMigratableIntreePluginByName tests whether there is migration logic for the in-tree plugin
 // whose name matches the given name
+//
+// IsMigratableIntreePluginByName 判断给定名称的树内插件是否存在对应的迁移（翻译）逻辑。
 func (CSITranslator) IsMigratableIntreePluginByName(inTreePluginName string) bool {
 	for _, curPlugin := range inTreePlugins {
 		if curPlugin.GetInTreePluginName() == inTreePluginName {
@@ -135,6 +188,9 @@ func (CSITranslator) IsMigratableIntreePluginByName(inTreePluginName string) boo
 
 // IsMigratedCSIDriverByName tests whether there exists an in-tree plugin with logic
 // to migrate to the CSI driver with given name
+//
+// IsMigratedCSIDriverByName 判断是否存在某个树内插件可以迁移到给定名称的 CSI 驱动。
+// 直接以驱动名查询注册表即可。
 func (CSITranslator) IsMigratedCSIDriverByName(csiPluginName string) bool {
 	if _, ok := inTreePlugins[csiPluginName]; ok {
 		return true
@@ -143,6 +199,13 @@ func (CSITranslator) IsMigratedCSIDriverByName(csiPluginName string) bool {
 }
 
 // GetInTreePluginNameFromSpec returns the plugin name
+//
+// GetInTreePluginNameFromSpec 从 PV 或内联 Volume 中识别其所属的树内插件名。
+// pv 与 vol 至少提供一个：优先检查 pv，否则检查 vol；两者都为 nil 时返回错误。
+//
+// 识别方式与 Translate 系列一致：
+//   - PV：调用插件的 CanSupport；
+//   - 内联 Volume：调用插件的 CanSupportInline。
 func (CSITranslator) GetInTreePluginNameFromSpec(pv *v1.PersistentVolume, vol *v1.Volume) (string, error) {
 	if pv != nil {
 		for _, curPlugin := range inTreePlugins {
@@ -165,6 +228,9 @@ func (CSITranslator) GetInTreePluginNameFromSpec(pv *v1.PersistentVolume, vol *v
 
 // GetCSINameFromInTreeName returns the name of a CSI driver that supersedes the
 // in-tree plugin with the given name
+//
+// GetCSINameFromInTreeName 根据树内插件名查询取代它的 CSI 驱动名。
+// 由于注册表以 CSI 驱动名为 key，这里需要遍历 value 进行反向查找。
 func (CSITranslator) GetCSINameFromInTreeName(pluginName string) (string, error) {
 	for csiDriverName, curPlugin := range inTreePlugins {
 		if curPlugin.GetInTreePluginName() == pluginName {
@@ -176,6 +242,9 @@ func (CSITranslator) GetCSINameFromInTreeName(pluginName string) (string, error)
 
 // GetInTreeNameFromCSIName returns the name of the in-tree plugin superseded by
 // a CSI driver with the given name
+//
+// GetInTreeNameFromCSIName 根据 CSI 驱动名查询被其取代的树内插件名。
+// 可直接用驱动名在注册表中查表，再取插件的 GetInTreePluginName。
 func (CSITranslator) GetInTreeNameFromCSIName(pluginName string) (string, error) {
 	if plugin, ok := inTreePlugins[pluginName]; ok {
 		return plugin.GetInTreePluginName(), nil
@@ -184,6 +253,8 @@ func (CSITranslator) GetInTreeNameFromCSIName(pluginName string) (string, error)
 }
 
 // IsPVMigratable tests whether there is migration logic for the given Persistent Volume
+//
+// IsPVMigratable 判断给定 PV 是否是某个可迁移树内插件的卷。
 func (CSITranslator) IsPVMigratable(pv *v1.PersistentVolume) bool {
 	for _, curPlugin := range inTreePlugins {
 		if curPlugin.CanSupport(pv) {
@@ -194,6 +265,8 @@ func (CSITranslator) IsPVMigratable(pv *v1.PersistentVolume) bool {
 }
 
 // IsInlineMigratable tests whether there is Migration logic for the given Inline Volume
+//
+// IsInlineMigratable 判断给定内联 Volume 是否是某个可迁移树内插件的卷。
 func (CSITranslator) IsInlineMigratable(vol *v1.Volume) bool {
 	for _, curPlugin := range inTreePlugins {
 		if curPlugin.CanSupportInline(vol) {
@@ -204,6 +277,10 @@ func (CSITranslator) IsInlineMigratable(vol *v1.Volume) bool {
 }
 
 // RepairVolumeHandle generates a correct volume handle based on node ID information.
+//
+// RepairVolumeHandle 根据节点 ID 修复（生成）正确的 volume handle。
+// 某些 CSI 驱动的 volume handle 中编码了节点信息，迁移时需要按当前节点重写；
+// 具体规则由各插件自行实现，未注册的驱动返回错误。
 func (CSITranslator) RepairVolumeHandle(driverName, volumeHandle, nodeID string) (string, error) {
 	if plugin, ok := inTreePlugins[driverName]; ok {
 		return plugin.RepairVolumeHandle(volumeHandle, nodeID)

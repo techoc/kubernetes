@@ -26,6 +26,8 @@ import (
 	_ "k8s.io/klog/v2/ktesting/init"
 )
 
+// TestTranslateCinderInTreeStorageClassToCSI 验证 Cinder StorageClass 的翻译：
+// 普通参数与 availability 原样保留，fstype 改名，AllowedTopologies 的 zone 键改用 CSI 拓扑键。
 func TestTranslateCinderInTreeStorageClassToCSI(t *testing.T) {
 	translator := NewOpenStackCinderCSITranslator()
 	logger, _ := ktesting.NewTestContext(t)
@@ -37,27 +39,32 @@ func TestTranslateCinderInTreeStorageClassToCSI(t *testing.T) {
 		expErr bool
 	}{
 		{
+			// 普通参数应原样保留。
 			name:  "translate normal",
 			sc:    NewStorageClass(map[string]string{"foo": "bar"}, nil),
 			expSc: NewStorageClass(map[string]string{"foo": "bar"}, nil),
 		},
 		{
+			// 空参数表转换后仍为空参数表。
 			name:  "translate empty map",
 			sc:    NewStorageClass(map[string]string{}, nil),
 			expSc: NewStorageClass(map[string]string{}, nil),
 		},
 
 		{
+			// fstype 键应改名为 CSI 的 fstype 参数键。
 			name:  "translate with fstype",
 			sc:    NewStorageClass(map[string]string{"fstype": "ext3"}, nil),
 			expSc: NewStorageClass(map[string]string{"csi.storage.k8s.io/fstype": "ext3"}, nil),
 		},
 		{
+			// availability 是驱动原生支持的参数，不应被转成 AllowedTopologies。
 			name:  "translate with topology in parameters (no translation expected)",
 			sc:    NewStorageClass(map[string]string{"availability": "nova"}, nil),
 			expSc: NewStorageClass(map[string]string{"availability": "nova"}, nil),
 		},
 		{
+			// AllowedTopologies 中的 zone 键应替换为 Cinder CSI 的拓扑键。
 			name:  "translate with topology",
 			sc:    NewStorageClass(map[string]string{}, generateToplogySelectors(v1.LabelFailureDomainBetaZone, []string{"nova"})),
 			expSc: NewStorageClass(map[string]string{}, generateToplogySelectors(CinderTopologyKey, []string{"nova"})),
@@ -66,6 +73,7 @@ func TestTranslateCinderInTreeStorageClassToCSI(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Logf("Testing %v", tc.name)
+		// 逐例执行转换，并校验错误预期与结果深比较。
 		got, err := translator.TranslateInTreeStorageClassToCSI(logger, tc.sc)
 		if err != nil && !tc.expErr {
 			t.Errorf("Did not expect error but got: %v", err)

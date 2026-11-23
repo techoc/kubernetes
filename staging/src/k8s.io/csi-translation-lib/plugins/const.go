@@ -18,4 +18,7 @@ package plugins
 
 // Matches the delimiter LabelMultiZoneDelimiter used by k8s.io/cloud-provider/volume and is mirrored here to avoid a large dependency
 // labelMultiZoneDelimiter separates zones for volumes
+// labelMultiZoneDelimiter 是卷标签中分隔多个 zone 的分隔符（"__"）。
+// 它与 k8s.io/cloud-provider/volume 中的 LabelMultiZoneDelimiter 保持一致，
+// 这里镜像一份定义是为了避免引入整个 cloud-provider 依赖。
 const labelMultiZoneDelimiter = "__"
