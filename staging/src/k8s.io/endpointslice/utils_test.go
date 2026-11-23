@@ -37,6 +37,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestNewEndpointSlice 测试 newEndpointSlice 根据 Service 与 endpointMeta 构造 EndpointSlice 的正确性。
+// 输入覆盖无标签、带标签、无头、多标签、试图劫持保留标签、带注解的 Service；
+// 断言生成 slice 的标签、GenerateName、OwnerReferences、Namespace、Ports、AddressType 与空 Endpoints。
 func TestNewEndpointSlice(t *testing.T) {
 	ipAddressType := discovery.AddressTypeIPv4
 	portName := "foo"
@@ -59,6 +62,7 @@ func TestNewEndpointSlice(t *testing.T) {
 	gvk := schema.GroupVersionKind{Version: "v1", Kind: "Service"}
 	ownerRef := metav1.NewControllerRef(&service, gvk)
 
+	// 表驱动用例：name 为用例名，updateSvc 用于定制基础 Service，expectedSlice 为期望生成的 EndpointSlice。
 	testCases := []struct {
 		name          string
 		updateSvc     func(svc v1.Service) v1.Service // given basic valid services, each test case can customize them
@@ -156,6 +160,7 @@ func TestNewEndpointSlice(t *testing.T) {
 				Endpoints:   []discovery.Endpoint{},
 			},
 		},
+		// 安全组：Service 试图覆盖保留标签时应被忽略，仍使用真实 Service 名与控制器名。
 		{
 			name: "Evil service hijacking endpoint slices labels",
 			updateSvc: func(svc v1.Service) v1.Service {
@@ -209,15 +214,22 @@ func TestNewEndpointSlice(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 使用测试上下文提供的 logger。
 			logger, _ := ktesting.NewTestContext(t)
+			// 按用例定制基础 Service。
 			svc := tc.updateSvc(service)
+			// 调用被测函数生成 EndpointSlice。
 			generatedSlice := newEndpointSlice(logger, &svc, &endpointMeta, controllerName)
+			// 断言生成结果与期望的 slice 完全一致。
 			assert.EqualValues(t, tc.expectedSlice, generatedSlice)
 		})
 	}
 
 }
 
+// TestPodToEndpoint 测试 podToEndpoint 在各种 Pod 状态下生成 Endpoint 的正确性。
+// 输入涵盖就绪/未就绪、终止中、多 IP、带节点标签、带 hostname，以及 publishNotReadyAddresses 场景；
+// 断言地址列表以及 Ready/Serving/Terminating 条件、NodeName、Zone、Hostname、TargetRef 均符合预期。
 func TestPodToEndpoint(t *testing.T) {
 	ns := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", ns)
@@ -245,6 +257,8 @@ func TestPodToEndpoint(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：name 为用例名，pod/node/svc 为输入，expectedEndpoint 为期望的 Endpoint，
+	// publishNotReadyAddresses 标记是否开启发布未就绪地址。
 	testCases := []struct {
 		name                     string
 		pod                      *v1.Pod
@@ -333,6 +347,7 @@ func TestPodToEndpoint(t *testing.T) {
 				},
 			},
 		},
+		// 拓扑组：验证从 Node 标签写入 Zone，以及按地址类型筛选多 IP 地址。
 		{
 			name: "Ready pod + node labels",
 			pod:  readyPod,
@@ -377,6 +392,7 @@ func TestPodToEndpoint(t *testing.T) {
 				},
 			},
 		},
+		// 主机名组：Pod subdomain 与 Service 匹配时应写入 Hostname。
 		{
 			name: "Ready pod + hostname",
 			pod:  readyPodHostname,
@@ -420,6 +436,7 @@ func TestPodToEndpoint(t *testing.T) {
 				},
 			},
 		},
+		// 终止组：即便仍在 serving，终止中的 Pod 也不应被标记为 Ready（除非开启发布未就绪地址）。
 		{
 			name: "Ready terminating pod",
 			pod:  readyTerminatingPod,
@@ -464,7 +481,9 @@ func TestPodToEndpoint(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 按 IPv4 地址类型调用被测函数生成 Endpoint。
 			endpoint := podToEndpoint(testCase.pod, testCase.node, testCase.svc, discovery.AddressTypeIPv4)
+			// 深比较生成的 Endpoint 与期望值，不一致则报错。
 			if !reflect.DeepEqual(testCase.expectedEndpoint, endpoint) {
 				t.Errorf("Expected endpoint: %+v, got: %+v", testCase.expectedEndpoint, endpoint)
 			}
@@ -472,7 +491,11 @@ func TestPodToEndpoint(t *testing.T) {
 	}
 }
 
+// TestServiceControllerKey 测试 ServiceControllerKey 从 EndpointSlice 推导 Service controller key 的行为。
+// 输入包括 nil slice、缺少 service-name 标签的空 slice、以及带命名空间与标签的合法 slice；
+// 断言返回的错误与 key（如 "ns/svc"）符合预期。
 func TestServiceControllerKey(t *testing.T) {
+	// 表驱动用例：endpointSlice 为输入，expectedKey 为期望的 key，expectedErr 为期望的错误。
 	testCases := map[string]struct {
 		endpointSlice *discovery.EndpointSlice
 		expectedKey   string
@@ -504,10 +527,13 @@ func TestServiceControllerKey(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 调用被测函数，得到推导出的 key 与可能的错误。
 			actualKey, actualErr := ServiceControllerKey(tc.endpointSlice)
+			// 断言错误与期望一致（含 nil 的情况）。
 			if !reflect.DeepEqual(actualErr, tc.expectedErr) {
 				t.Errorf("Expected %s, got %s", tc.expectedErr, actualErr)
 			}
+			// 断言 key 与期望一致。
 			if actualKey != tc.expectedKey {
 				t.Errorf("Expected %s, got %s", tc.expectedKey, actualKey)
 			}
@@ -515,9 +541,14 @@ func TestServiceControllerKey(t *testing.T) {
 	}
 }
 
+// TestGetEndpointPorts 测试 getEndpointPorts 从 Service 与 Pod 生成 EndpointPort 列表的正确性。
+// 输入覆盖 AppProtocol、命名端口、可重启 sidecar init 容器端口，以及普通容器与 sidecar 同名端口的竞争场景；
+// 断言端口数量与各 EndpointPort 的 Name/Port/Protocol/AppProtocol 均符合预期。
 func TestGetEndpointPorts(t *testing.T) {
+	// sidecar init 容器所需的 Always 重启策略。
 	restartPolicyAlways := v1.ContainerRestartPolicyAlways
 
+	// 表驱动用例：service/pod 为输入，expectedPorts 为期望的 EndpointPort 列表。
 	testCases := map[string]struct {
 		service       *v1.Service
 		pod           *v1.Pod
@@ -587,6 +618,7 @@ func TestGetEndpointPorts(t *testing.T) {
 				AppProtocol: ptr.To("https"),
 			}},
 		},
+		// sidecar 组：命名端口可在 restartPolicy=Always 的 init 容器中解析，普通容器优先。
 		"service with named port for restartable init container": {
 			service: &v1.Service{
 				Spec: v1.ServiceSpec{
@@ -673,13 +705,16 @@ func TestGetEndpointPorts(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 使用测试上下文提供的 logger 调用被测函数。
 			logger, _ := ktesting.NewTestContext(t)
 			actualPorts := getEndpointPorts(logger, tc.service, tc.pod)
 
+			// 先断言端口数量一致，数量不符直接终止当前用例。
 			if len(actualPorts) != len(tc.expectedPorts) {
 				t.Fatalf("Expected %d ports, got %d", len(tc.expectedPorts), len(actualPorts))
 			}
 
+			// 再逐个深比较端口内容。
 			for i, actualPort := range actualPorts {
 				if !reflect.DeepEqual(&actualPort, tc.expectedPorts[i]) {
 					t.Errorf("Expected port: %+v, got %+v", tc.expectedPorts[i], &actualPort)
@@ -689,6 +724,9 @@ func TestGetEndpointPorts(t *testing.T) {
 	}
 }
 
+// TestSetEndpointSliceLabels 测试 setEndpointSliceLabels 计算 slice 标签及是否变化的正确性。
+// 输入覆盖空/非空 slice、有/无标签、无头与 ClusterIP Service、保留标签冲突及恶意劫持场景；
+// 断言返回的标签集合符合预期，且 updated 标记准确反映非保留标签是否变化。
 func TestSetEndpointSliceLabels(t *testing.T) {
 
 	service := v1.Service{
@@ -700,6 +738,8 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：name 为用例名，epSlice 为现有 slice，updateSvc 用于定制 Service，
+	// expectedLabels/expectedUpdate 分别为期望标签与是否需要更新。
 	testCases := []struct {
 		name           string
 		epSlice        *discovery.EndpointSlice
@@ -907,6 +947,7 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 			},
 			expectedUpdate: true,
 		},
+		// 安全组：Service 试图写入保留标签时被忽略，不会误报需要更新。
 		{
 			name: "Evil service trying to hijack slice labels only well-known slice labels",
 			epSlice: &discovery.EndpointSlice{
@@ -962,10 +1003,14 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 使用测试上下文提供的 logger，并按用例定制 Service。
 			logger, _ := ktesting.NewTestContext(t)
 			svc := tc.updateSvc(service)
+			// 调用被测函数，得到新标签与是否需要更新。
 			labels, updated := setEndpointSliceLabels(logger, tc.epSlice, &svc, controllerName)
+			// 断言是否需要更新的标记与期望一致。
 			assert.EqualValues(t, tc.expectedUpdate, updated)
+			// 断言计算出的标签集合与期望一致。
 			assert.EqualValues(t, tc.expectedLabels, labels)
 		})
 	}
@@ -973,13 +1018,18 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 }
 
 // Test helpers
+// 测试辅助函数
 
+// newPod 创建测试用 Pod：按 n 命名并生成 IP（1.2.3.<4+n>），
+// 依据 ready 设置 PodReady 条件，依据 terminating 决定是否设置删除时间戳。
 func newPod(n int, namespace string, ready bool, nPorts int, terminating bool) *v1.Pod {
+	// 根据 ready 参数决定 PodReady 条件的状态。
 	status := v1.ConditionTrue
 	if !ready {
 		status = v1.ConditionFalse
 	}
 
+	// 终止中（terminating）的 Pod 设置删除时间戳，否则为 nil。
 	var deletionTimestamp *metav1.Time
 	if terminating {
 		deletionTimestamp = &metav1.Time{
@@ -987,6 +1037,7 @@ func newPod(n int, namespace string, ready bool, nPorts int, terminating bool) *
 		}
 	}
 
+	// 构造 Pod：包含基础容器、节点名、Pod IP 与就绪条件。
 	p := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1019,9 +1070,12 @@ func newPod(n int, namespace string, ready bool, nPorts int, terminating bool) *
 	return p
 }
 
+// newClientset 创建带预置 reactor 的 fake clientset：
+// create 时为 GenerateName 补随机后缀并置 Generation=1，update 时递增 Generation。
 func newClientset() *fake.Clientset {
 	client := fake.NewSimpleClientset()
 
+	// create reactor：模拟 apiserver 根据 GenerateName 生成真实名称。
 	client.PrependReactor("create", "endpointslices", k8stesting.ReactionFunc(func(action k8stesting.Action) (bool, runtime.Object, error) {
 		endpointSlice := action.(k8stesting.CreateAction).GetObject().(*discovery.EndpointSlice)
 
@@ -1033,6 +1087,7 @@ func newClientset() *fake.Clientset {
 
 		return false, endpointSlice, nil
 	}))
+	// update reactor：模拟 apiserver 更新对象时递增 Generation。
 	client.PrependReactor("update", "endpointslices", k8stesting.ReactionFunc(func(action k8stesting.Action) (bool, runtime.Object, error) {
 		endpointSlice := action.(k8stesting.CreateAction).GetObject().(*discovery.EndpointSlice)
 		endpointSlice.Generation++
@@ -1042,12 +1097,16 @@ func newClientset() *fake.Clientset {
 	return client
 }
 
+// newServiceAndEndpointMeta 创建测试用 Service 与对应的 endpointMeta：
+// Service 使用数字 targetPort 80 与 IPv4 地址族，两者端口协议均为 TCP。
 func newServiceAndEndpointMeta(name, namespace string) (v1.Service, endpointMeta) {
+	// 端口 80 的 IntOrString 形式，供 targetPort 与 endpointMeta 共用。
 	portNameIntStr := intstr.IntOrString{
 		Type:   intstr.Int,
 		IntVal: 80,
 	}
 
+	// 构造带 UID、端口、selector 与 IPFamilies 的基础 Service。
 	svc := v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -1065,6 +1124,7 @@ func newServiceAndEndpointMeta(name, namespace string) (v1.Service, endpointMeta
 		},
 	}
 
+	// 构造与 Service 匹配的 endpointMeta：IPv4 地址类型与对应的端口定义。
 	endpointMeta := endpointMeta{
 		addressType: discovery.AddressTypeIPv4,
 		ports: []discovery.EndpointPort{{
@@ -1077,10 +1137,14 @@ func newServiceAndEndpointMeta(name, namespace string) (v1.Service, endpointMeta
 	return svc, endpointMeta
 }
 
+// newEmptyEndpointSlice 创建一个空的 EndpointSlice：名称由 Service 名与序号 n 组成，
+// 带指向 Service 的 OwnerReference，端口与地址类型取自 endpointMeta。
 func newEmptyEndpointSlice(n int, namespace string, endpointMeta endpointMeta, svc v1.Service) *discovery.EndpointSlice {
+	// 构造指向 Service 的控制器 OwnerReference。
 	gvk := schema.GroupVersionKind{Version: "v1", Kind: "Service"}
 	ownerRef := metav1.NewControllerRef(&svc, gvk)
 
+	// 返回端点列表为空的 slice。
 	return &discovery.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            fmt.Sprintf("%s-%d", svc.Name, n),
@@ -1093,7 +1157,11 @@ func newEmptyEndpointSlice(n int, namespace string, endpointMeta endpointMeta, s
 	}
 }
 
+// TestSupportedServiceAddressType 测试 getAddressTypesForService 推断 Service 地址类型的行为。
+// 输入覆盖 IPv4/IPv6/双栈 Service、IPFamilies 为空的升级场景、以及有无 selector 的 headless Service；
+// 断言返回的地址类型集合数量与内容均符合预期。
 func TestSupportedServiceAddressType(t *testing.T) {
+	// 表驱动用例：name 为用例名，service 为输入，expectedAddressTypes 为期望的地址类型集合。
 	testCases := []struct {
 		name                 string
 		service              v1.Service
@@ -1119,6 +1187,7 @@ func TestSupportedServiceAddressType(t *testing.T) {
 				},
 			},
 		},
+		// 正常推断组：IPFamilies 已填写时直接按协议族推断（含 v4/v6 及双栈顺序无关）。
 		{
 			name:                 "v4 service",
 			expectedAddressTypes: []discovery.AddressType{discovery.AddressTypeIPv4},
@@ -1155,6 +1224,7 @@ func TestSupportedServiceAddressType(t *testing.T) {
 				},
 			},
 		},
+		// headless 回退组：无 IPFamilies 时默认按双栈处理，避免误删 slice 中断流量。
 		{
 			name:                 "headless with no selector and no families (old api-server)",
 			expectedAddressTypes: []discovery.AddressType{discovery.AddressTypeIPv6, discovery.AddressTypeIPv4},
@@ -1202,14 +1272,18 @@ func TestSupportedServiceAddressType(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 使用测试上下文提供的 logger 调用被测函数。
 			logger, _ := ktesting.NewTestContext(t)
 			addressTypes := getAddressTypesForService(logger, &testCase.service)
+			// 先断言地址类型数量一致。
 			if len(addressTypes) != len(testCase.expectedAddressTypes) {
 				t.Fatalf("expected count address types %v got %v", len(testCase.expectedAddressTypes), len(addressTypes))
 			}
 
 			// compare
+			// 逐个确认期望的地址类型确实出现在结果集合中。
 			for _, expectedAddressType := range testCase.expectedAddressTypes {
+				// 在结果集合中查找当前期望的地址类型。
 				found := false
 				for key := range addressTypes {
 					if key == expectedAddressType {
@@ -1226,7 +1300,11 @@ func TestSupportedServiceAddressType(t *testing.T) {
 	}
 }
 
+// Test_hintsEnabled 测试 hintsEnabled 根据注解判断是否启用拓扑感知提示的行为。
+// 输入覆盖空注解、无关注解、旧/新注解取值为 enabled、aUto、auto、Auto、disabled 等情形，
+// 以及新旧注解同时存在时旧注解优先的场景；断言返回值与期望一致。
 func Test_hintsEnabled(t *testing.T) {
+	// 表驱动用例：name 为用例名，annotations 为输入注解，expectEnabled 为期望的启用状态。
 	testCases := []struct {
 		name          string
 		annotations   map[string]string
@@ -1239,6 +1317,7 @@ func Test_hintsEnabled(t *testing.T) {
 		annotations:   map[string]string{"topology-hints": "enabled"},
 		expectEnabled: false,
 	}, {
+		// 旧注解组：只有 "auto"/"Auto" 视为启用，其余取值均不启用。
 		name:          "hints annotation == enabled",
 		annotations:   map[string]string{v1.DeprecatedAnnotationTopologyAwareHints: "enabled"},
 		expectEnabled: false,
@@ -1259,6 +1338,7 @@ func Test_hintsEnabled(t *testing.T) {
 		annotations:   map[string]string{v1.DeprecatedAnnotationTopologyAwareHints: "disabled"},
 		expectEnabled: false,
 	}, {
+		// 新注解组：AnnotationTopologyMode 的行为与旧注解一致。
 		name:          "mode annotation == enabled",
 		annotations:   map[string]string{v1.AnnotationTopologyMode: "enabled"},
 		expectEnabled: false,
@@ -1299,6 +1379,7 @@ func Test_hintsEnabled(t *testing.T) {
 		annotations:   map[string]string{v1.AnnotationTopologyMode: "disabled"},
 		expectEnabled: false,
 	}, {
+		// 优先级组：新旧注解同时存在时，以旧注解（hints）为准。
 		name:          "mode annotation == disabled, hints annotation == auto",
 		annotations:   map[string]string{v1.AnnotationTopologyMode: "disabled", v1.DeprecatedAnnotationTopologyAwareHints: "auto"},
 		expectEnabled: true,
@@ -1309,7 +1390,9 @@ func Test_hintsEnabled(t *testing.T) {
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 调用被测函数判断是否启用拓扑提示。
 			actualEnabled := hintsEnabled(tc.annotations)
+			// 断言实际启用状态与期望一致。
 			if actualEnabled != tc.expectEnabled {
 				t.Errorf("Expected %t, got %t", tc.expectEnabled, actualEnabled)
 			}
@@ -1317,8 +1400,14 @@ func Test_hintsEnabled(t *testing.T) {
 	}
 }
 
+// TestFindPort 测试 FindPort 根据 ServicePort 的 targetPort 在 Pod 中定位容器端口的行为。
+// 输入覆盖数字 targetPort、字符串命名端口、协议不匹配、sidecar init 容器端口，
+// 以及应用容器与 sidecar 同名端口竞争等场景；断言返回端口值及解析是否成功。
 func TestFindPort(t *testing.T) {
+	// sidecar init 容器所需的 Always 重启策略。
 	restartAlways := v1.ContainerRestartPolicyAlways
+	// 表驱动用例：name 为用例名，containers/initContainers 为 Pod 中的容器，
+	// port 为 targetPort，expected 为期望端口，pass 表示是否应成功解析。
 	testCases := []struct {
 		name           string
 		containers     []v1.Container
@@ -1327,6 +1416,7 @@ func TestFindPort(t *testing.T) {
 		expected       int
 		pass           bool
 	}{{
+		// 数字端口组：targetPort 为数字时直接返回，无需查看容器。
 		name:       "valid int, no ports",
 		containers: []v1.Container{{}},
 		port:       intstr.FromInt32(93),
@@ -1347,6 +1437,7 @@ func TestFindPort(t *testing.T) {
 		expected: 93,
 		pass:     true,
 	}, {
+		// 命名端口组：按名称与协议在普通容器中匹配。
 		name:       "valid str, no ports",
 		containers: []v1.Container{{}},
 		port:       intstr.FromString("p"),
@@ -1471,6 +1562,7 @@ func TestFindPort(t *testing.T) {
 			pass:     true,
 		},
 		{
+			// sidecar 组：restartPolicy=Always 的 init 容器命名端口可被解析，普通容器优先。
 			name: "Sidecar initContainer named port",
 			initContainers: []v1.Container{{
 				RestartPolicy: &restartAlways,
@@ -1532,14 +1624,18 @@ func TestFindPort(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 用用例中的容器构造 Pod 与 ServicePort，调用被测函数解析端口。
 		port, err := FindPort(&v1.Pod{Spec: v1.PodSpec{Containers: tc.containers, InitContainers: tc.initContainers}},
 			&v1.ServicePort{Protocol: "TCP", TargetPort: tc.port})
+		// 本应成功却报错则失败。
 		if err != nil && tc.pass {
 			t.Errorf("unexpected error for %s: %v", tc.name, err)
 		}
+		// 本应失败却成功解析则失败。
 		if err == nil && !tc.pass {
 			t.Errorf("unexpected non-error for %s: %d", tc.name, port)
 		}
+		// 断言解析出的端口值与期望一致。
 		if port != tc.expected {
 			t.Errorf("wrong result for %s: expected %d, got %d", tc.name, tc.expected, port)
 		}

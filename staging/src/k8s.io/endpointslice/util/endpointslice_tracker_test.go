@@ -26,8 +26,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestEndpointSliceTrackerUpdate 验证 Update 后 Has/ShouldSync 的判定，
+// 以及 generation 被正确记录。
 func TestEndpointSliceTrackerUpdate(t *testing.T) {
 	epSlice1 := &discovery.EndpointSlice{
+		// 基础 EndpointSlice：ns1/svc1，generation=1。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "example-1",
 			Namespace:  "ns1",
@@ -38,17 +41,21 @@ func TestEndpointSliceTrackerUpdate(t *testing.T) {
 	}
 
 	epSlice1DifferentNS := epSlice1.DeepCopy()
+	// 不同命名空间的副本。
 	epSlice1DifferentNS.Namespace = "ns2"
 	epSlice1DifferentNS.UID = "diff-ns"
 
 	epSlice1DifferentService := epSlice1.DeepCopy()
+	// 不同 Service 的副本。
 	epSlice1DifferentService.Labels[discovery.LabelServiceName] = "svc2"
 	epSlice1DifferentService.UID = "diff-svc"
 
 	epSlice1NewerGen := epSlice1.DeepCopy()
+	// generation 更大的副本。
 	epSlice1NewerGen.Generation = 2
 
 	testCases := map[string]struct {
+		// 用例覆盖同一分片、不同命名空间、不同 Service、更大 generation 四种情况。
 		updateParam      *discovery.EndpointSlice
 		checksParam      *discovery.EndpointSlice
 		expectHas        bool
@@ -86,6 +93,7 @@ func TestEndpointSliceTrackerUpdate(t *testing.T) {
 	}
 
 	for name, tc := range testCases {
+		// 逐例更新跟踪器并断言 Has、ShouldSync 与内部 generation。
 		t.Run(name, func(t *testing.T) {
 			esTracker := NewEndpointSliceTracker()
 			esTracker.Update(tc.updateParam)
@@ -96,6 +104,7 @@ func TestEndpointSliceTrackerUpdate(t *testing.T) {
 				t.Errorf("tc.tracker.ShouldSync(%+v) == %t, expected %t", tc.checksParam, esTracker.ShouldSync(tc.checksParam), tc.expectShouldSync)
 			}
 			serviceNN := types.NamespacedName{Namespace: epSlice1.Namespace, Name: "svc1"}
+			// 直接检查内部映射，确认记录落在 svc1/ns1 下。
 			gfs, ok := esTracker.generationsByService[serviceNN]
 			if !ok {
 				t.Fatalf("expected tracker to have generations for %s Service", serviceNN.Name)
@@ -111,8 +120,11 @@ func TestEndpointSliceTrackerUpdate(t *testing.T) {
 	}
 }
 
+// TestEndpointSliceTrackerStaleSlices 覆盖空跟踪器、generation 新旧、
+// 期望删除与分片缺失等场景，验证 StaleSlices 的判定。
 func TestEndpointSliceTrackerStaleSlices(t *testing.T) {
 	epSlice1 := &discovery.EndpointSlice{
+		// 基础分片及其更大 generation、带删除时间戳的副本。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "example-1",
 			Namespace:  "ns1",
@@ -129,6 +141,7 @@ func TestEndpointSliceTrackerStaleSlices(t *testing.T) {
 	epTerminatingSlice.DeletionTimestamp = ptr.To(metav1.Now())
 
 	testCases := []struct {
+		// 每个用例自带跟踪器状态、Service、分片列表与期望值。
 		name         string
 		tracker      *EndpointSliceTracker
 		serviceParam *v1.Service
@@ -215,6 +228,7 @@ func TestEndpointSliceTrackerStaleSlices(t *testing.T) {
 	}}
 
 	for _, tc := range testCases {
+		// 逐例调用 StaleSlices 并比对期望。
 		t.Run(tc.name, func(t *testing.T) {
 			actualNewer := tc.tracker.StaleSlices(tc.serviceParam, tc.slicesParam)
 			if actualNewer != tc.expectNewer {
@@ -224,7 +238,10 @@ func TestEndpointSliceTrackerStaleSlices(t *testing.T) {
 	}
 }
 func TestEndpointSliceTrackerDeletion(t *testing.T) {
+	// TestEndpointSliceTrackerDeletion 验证 ExpectDeletion 与 HandleDeletion
+	// 在不同命名空间/Service/generation 下的行为。
 	epSlice1 := &discovery.EndpointSlice{
+		// 准备基准分片及其变体。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "example-1",
 			Namespace:  "ns1",
@@ -246,6 +263,7 @@ func TestEndpointSliceTrackerDeletion(t *testing.T) {
 	epSlice1NewerGen.Generation = 2
 
 	testCases := map[string]struct {
+		// 用例指定期望删除、检查、实际删除的对象及三个期望结果。
 		expectDeletionParam        *discovery.EndpointSlice
 		checksParam                *discovery.EndpointSlice
 		deleteParam                *discovery.EndpointSlice
@@ -312,6 +330,7 @@ func TestEndpointSliceTrackerDeletion(t *testing.T) {
 	}
 
 	for name, tc := range testCases {
+		// 先 Update 基准分片，再 ExpectDeletion，然后逐项断言。
 		t.Run(name, func(t *testing.T) {
 			esTracker := NewEndpointSliceTracker()
 			esTracker.Update(epSlice1)
@@ -324,9 +343,11 @@ func TestEndpointSliceTrackerDeletion(t *testing.T) {
 				t.Errorf("esTracker.ShouldSync(%+v) == %t, expected %t", tc.checksParam, esTracker.ShouldSync(tc.checksParam), tc.expectShouldSync)
 			}
 			if esTracker.HandleDeletion(epSlice1) != tc.expectedHandleDeletionResp {
+				// HandleDeletion 按原始分片调用，检查返回值是否符合预期。
 				t.Errorf("esTracker.ShouldSync(%+v) == %t, expected %t", epSlice1, esTracker.HandleDeletion(epSlice1), tc.expectedHandleDeletionResp)
 			}
 			if esTracker.Has(epSlice1) != false {
+				// 删除后 Has 应为 false。
 				t.Errorf("esTracker.Has(%+v) == %t, expected false", epSlice1, esTracker.Has(epSlice1))
 			}
 
@@ -334,10 +355,14 @@ func TestEndpointSliceTrackerDeletion(t *testing.T) {
 	}
 }
 
+// TestEndpointSliceTrackerDeleteService 验证 DeleteService 只清除目标 Service 的记录，
+// 不影响其他命名空间或 Service。
 func TestEndpointSliceTrackerDeleteService(t *testing.T) {
 	svcName1, svcNS1 := "svc1", "ns1"
+	// 准备两个 Service 的命名空间与名称。
 	svcName2, svcNS2 := "svc2", "ns2"
 	epSlice1 := &discovery.EndpointSlice{
+		// 基准分片属于 svc1/ns1。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "example-1",
 			Namespace:  svcNS1,
@@ -347,6 +372,7 @@ func TestEndpointSliceTrackerDeleteService(t *testing.T) {
 	}
 
 	testCases := map[string]struct {
+		// 用例覆盖删除同一 Service、不同命名空间、不同 Service。
 		updateParam        *discovery.EndpointSlice
 		deleteServiceParam *types.NamespacedName
 		expectHas          bool
@@ -376,6 +402,7 @@ func TestEndpointSliceTrackerDeleteService(t *testing.T) {
 	}
 
 	for name, tc := range testCases {
+		// 逐例更新后删除指定 Service，并断言 Has/ShouldSync 与保留的 generation。
 		t.Run(name, func(t *testing.T) {
 			esTracker := NewEndpointSliceTracker()
 			esTracker.Update(tc.updateParam)
@@ -387,6 +414,7 @@ func TestEndpointSliceTrackerDeleteService(t *testing.T) {
 				t.Errorf("tc.tracker.ShouldSync(%+v) == %t, expected %t", tc.updateParam, esTracker.ShouldSync(tc.updateParam), tc.expectShouldSync)
 			}
 			if tc.expectGeneration != 0 {
+				// 仅在期望保留记录时检查内部 generation。
 				serviceNN := types.NamespacedName{Namespace: epSlice1.Namespace, Name: "svc1"}
 				gfs, ok := esTracker.generationsByService[serviceNN]
 				if !ok {

@@ -32,8 +32,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDetermineNeededServiceUpdates 验证 determineNeededServiceUpdates 在 podChanged 为 false/true 时，
+// 分别返回新旧 Service 集合的对称差集与并集。
 func TestDetermineNeededServiceUpdates(t *testing.T) {
 	testCases := []struct {
+		// 表驱动用例：a、b 为新旧 Service 集合，xor/union 为两种模式下的期望结果。
 		name  string
 		a     sets.Set[string]
 		b     sets.Set[string]
@@ -85,13 +88,16 @@ func TestDetermineNeededServiceUpdates(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
+		// 遍历用例，分别在 Pod 未变化和已变化时断言结果。
 		t.Run(testCase.name, func(t *testing.T) {
+			// podChanged=false：期望对称差集。
 			retval := determineNeededServiceUpdates(testCase.a, testCase.b, false)
 			if !retval.Equal(testCase.xor) {
 				t.Errorf("%s (with podChanged=false): expected: %v  got: %v", testCase.name, sets.List(testCase.xor), sets.List(retval))
 			}
 
 			retval = determineNeededServiceUpdates(testCase.a, testCase.b, true)
+			// podChanged=true：期望并集。
 			if !retval.Equal(testCase.union) {
 				t.Errorf("%s (with podChanged=true): expected: %v  got: %v", testCase.name, sets.List(testCase.union), sets.List(retval))
 			}
@@ -99,14 +105,18 @@ func TestDetermineNeededServiceUpdates(t *testing.T) {
 	}
 }
 
+// TestShouldPodBeInEndpoints 覆盖终态、无 IP、终止中、多 IP 等 Pod，
+// 验证 ShouldPodBeInEndpoints 是否应将其纳入 endpoint。
 func TestShouldPodBeInEndpoints(t *testing.T) {
 	testCases := []struct {
+		// 用例包含 Pod 对象、includeTerminating 开关与期望结果。
 		name               string
 		pod                *v1.Pod
 		expected           bool
 		includeTerminating bool
 	}{
 		// Pod should not be in endpoints:
+		// 以下场景不应出现在 endpoint 中。
 		{
 			name: "Failed pod with Never RestartPolicy",
 			pod: &v1.Pod{
@@ -190,6 +200,7 @@ func TestShouldPodBeInEndpoints(t *testing.T) {
 			expected: false,
 		},
 		// Pod should be in endpoints:
+		// 以下场景应出现在 endpoint 中。
 		{
 			name: "Pending pod with Never RestartPolicy",
 			pod: &v1.Pod{
@@ -262,6 +273,7 @@ func TestShouldPodBeInEndpoints(t *testing.T) {
 	}
 
 	for _, test := range testCases {
+		// 逐例调用被测函数并比对期望布尔值。
 		t.Run(test.name, func(t *testing.T) {
 			result := ShouldPodBeInEndpoints(test.pod, test.includeTerminating)
 			if result != test.expected {
@@ -271,8 +283,11 @@ func TestShouldPodBeInEndpoints(t *testing.T) {
 	}
 }
 
+// TestShouldSetHostname 验证 hostname 设置条件：Pod 有 hostname、
+// subdomain 与 Service 名称相同且命名空间一致。
 func TestShouldSetHostname(t *testing.T) {
 	testCases := map[string]struct {
+		// 以名称索引的用例，包含 Pod、Service 与期望值。
 		pod      *v1.Pod
 		service  *v1.Service
 		expected bool
@@ -300,6 +315,7 @@ func TestShouldSetHostname(t *testing.T) {
 	}
 
 	for name, testCase := range testCases {
+		// 逐例调用并断言。
 		t.Run(name, func(t *testing.T) {
 			result := ShouldSetHostname(testCase.pod, testCase.service)
 			if result != testCase.expected {
@@ -309,6 +325,7 @@ func TestShouldSetHostname(t *testing.T) {
 	}
 }
 
+// genSimplePod 构造仅含命名空间、hostname 与 subdomain 的简单 Pod，供 hostname 测试使用。
 func genSimplePod(namespace, hostname, subdomain string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -321,6 +338,7 @@ func genSimplePod(namespace, hostname, subdomain string) *v1.Pod {
 	}
 }
 
+// genSimpleSvc 构造仅含命名空间与名称的简单 Service。
 func genSimpleSvc(namespace, name string) *v1.Service {
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -330,9 +348,13 @@ func genSimpleSvc(namespace, name string) *v1.Service {
 	}
 }
 
+// TestGetPodServicesToUpdate 用带选择器的 Service 与不同标签的 Pod，
+// 验证 GetPodUpdateProjectionKey 与 GetServicesToUpdate 能找到匹配的 Service。
 func TestGetPodServicesToUpdate(t *testing.T) {
+	// 创建 fake informer 工厂用于提供 Service lister。
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 	for i := 0; i < 3; i++ {
+		// 预置 3 个 Service，分别按 app=test-i 选择 Pod。
 		service := &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("service-%d", i),
@@ -347,6 +369,7 @@ func TestGetPodServicesToUpdate(t *testing.T) {
 		fakeInformerFactory.Core().V1().Services().Informer().GetStore().Add(service)
 	}
 	var pods []*v1.Pod
+	// 预置 5 个 Pod，其中前 3 个能匹配到 Service。
 	for i := 0; i < 5; i++ {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -362,6 +385,7 @@ func TestGetPodServicesToUpdate(t *testing.T) {
 	}
 
 	tests := []struct {
+		// 期望前 3 个 Pod 各匹配一个 Service，后 2 个为空集。
 		name   string
 		pod    *v1.Pod
 		expect sets.Set[string]
@@ -393,6 +417,7 @@ func TestGetPodServicesToUpdate(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// 逐例生成投影键并查询需要更新的 Service。
 		t.Run(test.name, func(t *testing.T) {
 			services, err := GetServicesToUpdate(fakeInformerFactory.Core().V1().Services().Lister(), GetPodUpdateProjectionKey(test.pod, nil))
 			if err != nil {
@@ -404,8 +429,11 @@ func TestGetPodServicesToUpdate(t *testing.T) {
 	}
 }
 
+// BenchmarkGetPodServicesToUpdate 在 1000 个 Service 的场景下，
+// 测量查询 Pod 所属 Service 的性能。
 func BenchmarkGetPodServicesToUpdate(b *testing.B) {
 	// init fake service informer.
+	// 初始化带 1000 个 Service 的 fake informer。
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 	for i := 0; i < 1000; i++ {
 		service := &v1.Service{
@@ -423,6 +451,7 @@ func BenchmarkGetPodServicesToUpdate(b *testing.B) {
 	}
 
 	pod := &v1.Pod{
+		// 构造只匹配 service-0 的 Pod。
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "test-pod-0",
@@ -432,9 +461,12 @@ func BenchmarkGetPodServicesToUpdate(b *testing.B) {
 		},
 	}
 
+	// 期望结果只包含 test/service-0。
 	expect := sets.NewString("test/service-0")
 	b.ResetTimer()
+	// 重置计时器，排除初始化开销。
 	for i := 0; i < b.N; i++ {
+		// 压测循环：查询结果数量应与期望一致。
 		services, err := GetServicesToUpdate(fakeInformerFactory.Core().V1().Services().Lister(), GetPodUpdateProjectionKey(pod, nil))
 		if err != nil {
 			b.Fatalf("Error from GetServicesToUpdate(): %v", err)
@@ -445,8 +477,11 @@ func BenchmarkGetPodServicesToUpdate(b *testing.B) {
 	}
 }
 
+// Test_podChanged 用 modifier 修改原始 Pod 的副本，
+// 验证 podEndpointsChanged 对 Pod 字段与标签变化的判定。
 func Test_podChanged(t *testing.T) {
 	testCases := []struct {
+		// 每条用例通过 modifier 施加一种变化，并给出两个期望布尔值。
 		testName      string
 		modifier      func(*v1.Pod, *v1.Pod)
 		podChanged    bool
@@ -581,6 +616,7 @@ func Test_podChanged(t *testing.T) {
 	}
 
 	orig := &v1.Pod{
+		// 原始 Pod 带有标签、Ready=False 条件，作为各用例的基准。
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "pod",
@@ -594,6 +630,7 @@ func Test_podChanged(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 深拷贝基准对象后施加变更，再调用被测函数比对两个返回值。
 		t.Run(tc.testName, func(t *testing.T) {
 			old := orig.DeepCopy()
 			new := old.DeepCopy()
@@ -610,8 +647,11 @@ func Test_podChanged(t *testing.T) {
 	}
 }
 
+// TestEndpointsEqualBeyondHash 验证节点名、区域、条件、TargetRef 变化对相等判定的影响，
+// 并确认 TargetRef 的 ResourceVersion 差异被忽略。
 func TestEndpointsEqualBeyondHash(t *testing.T) {
 	tests := []struct {
+		// 用例包含两个 Endpoint 与期望的相等结果。
 		name     string
 		ep1      *discovery.Endpoint
 		ep2      *discovery.Endpoint
@@ -819,6 +859,7 @@ func TestEndpointsEqualBeyondHash(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		// 逐例调用被测函数并断言。
 		t.Run(tt.name, func(t *testing.T) {
 			if got := EndpointsEqualBeyondHash(tt.ep1, tt.ep2); got != tt.expected {
 				t.Errorf("EndpointsEqualBeyondHash() = %v, want %v", got, tt.expected)
@@ -827,27 +868,34 @@ func TestEndpointsEqualBeyondHash(t *testing.T) {
 	}
 }
 
+// A 是用于深度哈希测试的简单结构体（值类型字段）。
 type A struct {
 	x int
 	y string
 }
 
+// B 是包含切片与映射字段的深度哈希测试结构体。
 type B struct {
 	x []int
 	y map[string]bool
 }
 
+// C 与 A 字段相同但实现了 String 方法，用于观察格式化行为对哈希的影响。
 type C struct {
 	x int
 	y string
 }
 
+// String 返回 C 的自定义字符串表示。
 func (c C) String() string {
 	return fmt.Sprintf("%d:%s", c.x, c.y)
 }
 
+// TestDeepHashObject 用多种类型（标量、切片、映射、指针、自定义类型）
+// 验证 deepHashObject 的确定性与可重复性。
 func TestDeepHashObject(t *testing.T) {
 	successCases := []func() interface{}{
+		// 覆盖各类可哈希对象的构造函数。
 		func() interface{} { return 8675309 },
 		func() interface{} { return "Jenny, I got your number" },
 		func() interface{} { return []string{"eight", "six", "seven"} },
@@ -866,6 +914,7 @@ func TestDeepHashObject(t *testing.T) {
 	}
 
 	for _, tc := range successCases {
+		// 对每个对象多次哈希，断言同一输入始终得到相同结果。
 		hasher1 := adler32.New()
 		deepHashObject(hasher1, tc())
 		hash1 := hasher1.Sum32()
@@ -875,6 +924,7 @@ func TestDeepHashObject(t *testing.T) {
 			t.Fatalf("hash of the same object (%q) produced different results: %d vs %d", toString(tc()), hash1, hash2)
 		}
 		for i := 0; i < 100; i++ {
+			// 用两个不同的 hasher 交叉验证 100 次。
 			hasher2 := adler32.New()
 
 			deepHashObject(hasher1, tc())
@@ -895,22 +945,29 @@ func TestDeepHashObject(t *testing.T) {
 	}
 }
 
+// toString 返回对象的格式化字符串，仅用于测试失败信息。
 func toString(obj interface{}) string {
 	return dump.Pretty(obj)
 }
 
+// wheel 是 TestDeepObjectPointer 使用的轮子对象。
 type wheel struct {
 	radius uint32
 }
 
+// unicycle 包含指针与映射字段，用于验证深度哈希会展开指针指向的值。
+// primaryWheel 为指向轮子的指针；licencePlateID 为车牌标识；tags 为附加标签。
 type unicycle struct {
 	primaryWheel   *wheel
 	licencePlateID string
 	tags           map[string]string
 }
 
+// TestDeepObjectPointer 验证 deepHashObject 会解引用指针：
+// 不同指针但相同值得到相同哈希，值不同则哈希不同。
 func TestDeepObjectPointer(t *testing.T) {
 	// Arrange
+	// 准备三个对象，其中两个轮子值相同但指针不同。
 	wheel1 := wheel{radius: 17}
 	wheel2 := wheel{radius: 22}
 	wheel3 := wheel{radius: 17}
@@ -920,11 +977,13 @@ func TestDeepObjectPointer(t *testing.T) {
 	myUni3 := unicycle{licencePlateID: "blah", primaryWheel: &wheel3, tags: map[string]string{"color": "blue", "name": "john"}}
 
 	// Run it more than once to verify determinism of hasher.
+	// 重复 100 次以验证哈希器的确定性。
 	for i := 0; i < 100; i++ {
 		hasher1 := adler32.New()
 		hasher2 := adler32.New()
 		hasher3 := adler32.New()
 		// Act
+		// 分别计算三个对象的哈希。
 		deepHashObject(hasher1, myUni1)
 		hash1 := hasher1.Sum32()
 		deepHashObject(hasher1, myUni1)
@@ -935,6 +994,7 @@ func TestDeepObjectPointer(t *testing.T) {
 		hash3 := hasher3.Sum32()
 
 		// Assert
+		// 断言重复哈希一致、不同值的哈希不同、相同值的哈希相同。
 		if hash1 != hash1a {
 			t.Errorf("repeated hash of the same object produced different results: %d vs %d", hash1, hash1a)
 		}
@@ -949,10 +1009,13 @@ func TestDeepObjectPointer(t *testing.T) {
 	}
 }
 
+// TestNewPortMapKey_NilVsEmptySlice 验证 nil 切片与空切片生成相同的 PortMapKey。
 func TestNewPortMapKey_NilVsEmptySlice(t *testing.T) {
 	var nilPorts []discovery.EndpointPort
+	// 分别构造 nil 与空端口切片。
 	emptyPorts := []discovery.EndpointPort{}
 
+	// 生成两个键并断言相等。
 	nilKey := NewPortMapKey(nilPorts)
 	emptyKey := NewPortMapKey(emptyPorts)
 
