@@ -20,4 +20,17 @@ limitations under the License.
 
 // +groupName=kubecontrollermanager.config.k8s.io
 
+// Package v1alpha1 定义 kube-controller-manager 对外暴露的配置文件 API。
+//
+// 这里放的是配置对象而不是运行时对象：它们描述“控制器管理器应该如何启动”，
+// 由二进制启动时从文件反序列化，不经过 API Server，也不需要走准入或持久化流程。
+// 之所以单独成组（kubecontrollermanager.config.k8s.io）并带 v1alpha1 版本，
+// 是为了让配置结构能独立于控制器实现演进，同时保留后续兼容与升级的路径。
+//
+// 指令 +k8s:deepcopy-gen=package 要求为本包所有类型生成 DeepCopy 方法，
+// 因为配置对象会被当作 runtime.Object 参与 scheme 的注册与拷贝；
+// 指令 +k8s:openapi-gen=true 与 +k8s:openapi-model-package=... 让生成器产出
+// OpenAPI 模型，供文档与外部工具按固定模型包名引用；
+// 指令 +groupName=... 声明 API 组名，生成的类型注册代码据此确定 group/version。
+// 这些指令必须原样保留，生成物由 make update 统一刷新，不要手工改动。
 package v1alpha1
