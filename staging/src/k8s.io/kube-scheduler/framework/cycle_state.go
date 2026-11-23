@@ -24,9 +24,15 @@ import (
 
 var (
 	// ErrNotFound is the not found error message.
+	//
+	// 单例 error 让调用方可以用 errors.Is 直接比较，不必构造带相同文本的新 error；
+	// 文本本身只是给人看的。
 	ErrNotFound = errors.New("not found")
 )
 
+// 强制实现 Clone 而不是让各插件自行决定何时复制，是因为 PreFilter 的增量 AddPod/RemovePod
+// 会在克隆出的 state 上反复试探同一份预计算结果：深拷贝太贵，不拷贝又会在试探间串改数据，
+// 所以接口约定「该浅的浅、该独立的独立」，把取舍交给最懂数据的插件。
 // StateData is a generic type for arbitrary data stored in CycleState.
 type StateData interface {
 	// Clone is an interface to make a copy of StateData. For performance reasons,
@@ -40,6 +46,9 @@ type StateKey string
 
 // CycleState provides a mechanism for plugins to store and retrieve arbitrary data.
 // StateData stored by one plugin can be read, altered, or deleted by another plugin.
+//
+// 不做锁保护是刻意的性能取舍：调度周期内 state 基本是单线程顺序访问，
+// 加互斥只会让每个 Read/Write 都付出无谓代价；信任插件是这套设计的前提。
 // CycleState does not provide any data protection, as all plugins are assumed to be
 // trusted.
 type CycleState interface {
@@ -92,6 +101,9 @@ type CycleState interface {
 	Delete(key StateKey)
 	// Clone creates a copy of CycleState and returns its pointer. Clone returns
 	// nil if the context being cloned is nil.
+	//
+	// 克隆整个 state 是为了支撑抢占等场景：在不污染原始状态的前提下，
+	// 反复把候选 Pod 放上/移出节点做可行性试探。
 	Clone() CycleState
 	// IsPodGroupSchedulingCycle returns true if this cycle is a pod group scheduling cycle.
 	// If set to false, it means that the pod referencing this CycleState either passed the pod group cycle
@@ -111,6 +123,10 @@ type CycleState interface {
 // scoped to a single placement candidate within a pod group scheduling cycle.
 // Data stored in PlacementCycleState is shared across all pods scheduled within the same
 // placement iteration and is passed to ScorePlacement for that placement.
+//
+// 与 CycleState 同理，这里也不加锁：placement 维度的数据在同一个调度周期内按候选逐个处理，
+// 并发读写并不是常态。它单独存在而非复用 CycleState，是为了让数据的生命周期
+// 精确对齐「同一个 placement 的所有 Pod」——跨 placement 自动隔离，省去插件自己带 placement 前缀。
 // PlacementCycleState does not provide any data protection, as all plugins are assumed to be
 // trusted.
 type PlacementCycleState interface {
@@ -138,6 +154,10 @@ type PlacementCycleState interface {
 
 // PodGroupCycleState provides a mechanism for plugins that operate on pod groups to store and retrieve arbitrary data.
 // StateData stored by one plugin can be read, altered, or deleted by another plugin that operates on a pod group.
+//
+// pod group 状态同样不做保护：只有处理同一组的插件会访问它。
+// 它比 PlacementCycleState 再高一层的意义在于让组级插件共享一份跨 placement 的结论，
+// 而不用塞进每个 Pod 各自的 CycleState 重复计算。
 // PodGroupCycleState does not provide any data protection, as all plugins are assumed to be
 // trusted.
 type PodGroupCycleState interface {
@@ -161,5 +181,8 @@ type PodGroupCycleState interface {
 
 	// GetParentPlacementCycleState returns PlacementCycleState of the parent composite pod group.
 	// If there is no parent, returns nil.
+	//
+	// 复合 pod group 的组可能是嵌套的，子组做决策时需要借用父 placement 的上下文；
+	// 没有父组就返回 nil，调用方应当先判空再用。
 	GetParentPlacementCycleState() PlacementCycleState
 }

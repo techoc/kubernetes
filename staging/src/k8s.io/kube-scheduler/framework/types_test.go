@@ -26,11 +26,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// hostPortInfoParam 只是一组测试输入，字段顺序刻意和 Add/Remove 的参数顺序不同，
+// 这样每个用例都得显式写出协议、IP、端口，避免位置参数读起来不知所以。
 type hostPortInfoParam struct {
 	protocol, ip string
 	port         int32
 }
 
+// 端口 0 和负数是非法值，这里也塞进输入：它们不该进 map，
+// 否则冲突检查会对永远用不上的端口报警。
 func TestHostPortInfo_AddRemove(t *testing.T) {
 	tests := []struct {
 		desc    string
@@ -138,6 +142,8 @@ func TestHostPortInfo_AddRemove(t *testing.T) {
 	}
 }
 
+// 空 IP/协议代表“通配”，因此要同时覆盖两个方向：
+// 通配检查能命中已登记的具体项，具体检查也能命中已登记的通配项。
 func TestHostPortInfo_Check(t *testing.T) {
 	tests := []struct {
 		desc   string
@@ -240,6 +246,8 @@ func TestHostPortInfo_Check(t *testing.T) {
 	}
 }
 
+// namespace 为空表示 Pod 自己的命名空间，namespaceSelector 存在时则由标签选出，
+// 两者都为空时的默认行为最容易搞错，所以单列一个用例钉住。
 func TestGetNamespacesFromPodAffinityTerm(t *testing.T) {
 	tests := []struct {
 		name string

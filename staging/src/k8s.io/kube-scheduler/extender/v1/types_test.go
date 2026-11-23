@@ -32,6 +32,10 @@ import (
 // TestCompatibility verifies that the types in extender/v1 can be successfully encoded to json and decoded back, even when lowercased,
 // since these types were written around JSON tags and we need to enforce consistency on them now.
 // @TODO(88634): v2 of these types should be defined with proper JSON tags to enforce field casing to a single approach
+// 这里逐一固定每种扩展协议结构体的 JSON 输出，而不是只测“能不能往返”：
+// 这些类型没有显式 json tag，字段名大小写直接来自 Go 字段名，一旦改动就会破坏与既有 extender 的兼容性。
+// 额外做一次小写化再反序列化，是因为历史上有些 extender 依赖大小写不敏感的匹配行为，
+// 测试把它当作必须维持的对外契约锁住。
 func TestCompatibility(t *testing.T) {
 	testcases := []struct {
 		emptyObj   interface{}
@@ -96,6 +100,8 @@ func TestCompatibility(t *testing.T) {
 		},
 	}
 
+	// 每个用例都跑三件事：确认编码格式、确认小写输入能解码、确认解码后与原对象完全一致。
+	// 用空对象作为解码目标，避免原有字段值掩盖解码失败。
 	for _, tc := range testcases {
 		t.Run(reflect.TypeOf(tc.obj).String(), func(t *testing.T) {
 			data, err := json.Marshal(tc.obj)

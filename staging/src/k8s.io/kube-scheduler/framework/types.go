@@ -34,6 +34,9 @@ import (
 
 // ActionType is an integer to represent one type of resource change.
 // Different ActionTypes can be bit-wised to compose new semantics.
+//
+// 用位掩码表示资源变更，使插件可以同时注册“多个细分事件”（例如一次声明所有节点更新），
+// 而调度器在分发时仍能快速判断某个事件是否命中。
 type ActionType int64
 
 // Constants for ActionTypes.
@@ -44,11 +47,16 @@ const (
 	Add ActionType = 1 << iota
 	Delete
 
+	// 各细分事件必须是独立的单比特位，才能用按位或组合成下面的 Update 和 All。
+	// 这样插件注册一个组合事件，调度器分发时按位测试即可，无需逐个比较。
+
 	// UpdateNodeXYZ is only applicable for Node events.
 	// If you use UpdateNodeXYZ,
 	// your plugin's QueueingHint is only executed for the specific sub-Update event.
 	// It's better to narrow down the scope of the event by using them instead of just using Update event
 	// for better performance in requeueing.
+	// 细分节点更新事件，让插件只关心真正会影响自己的那部分变化，
+	// 避免每次节点状态抖动都触发无意义的重新入队。
 	UpdateNodeAllocatable
 	UpdateNodeLabel
 	// UpdateNodeTaint is an update for node's taints or node.Spec.Unschedulable.
@@ -65,6 +73,7 @@ const (
 	// your plugin's QueueingHint is only executed for the specific sub-Update event.
 	// It's better to narrow down the scope of the event by using them instead of Update event
 	// for better performance in requeueing.
+	// 同理，Pod 的更新按字段细分；重入队本身有开销，越早过滤掉无关事件越好。
 	UpdatePodLabel
 	// UpdatePodScaleDown is an update for pod's scale down (i.e., any resource request is reduced).
 	UpdatePodScaleDown
@@ -80,15 +89,21 @@ const (
 	UpdatePodGeneratedResourceClaim
 
 	All ActionType = 1<<iota - 1
+	// All 是所有已定义比特的并集，新增 ActionType 时它会自动扩展，无需手动维护。
 
 	// Use the general Update type if you don't either know or care the specific sub-Update type to use.
+	// Update 是各细分更新位的并集，供不关心具体更新内容的插件使用；
+	// 用组合位而非单独一个新位，保证细分事件也能命中宽泛订阅。
 	Update = UpdateNodeAllocatable | UpdateNodeLabel | UpdateNodeTaint | UpdateNodeCondition | UpdateNodeAnnotation | UpdateNodeDeclaredFeature | UpdateNodePreemptionPolicy | UpdatePodLabel | UpdatePodScaleDown | UpdatePodScaleUp | UpdatePodToleration | UpdatePodSchedulingGatesEliminated | UpdatePodGeneratedResourceClaim
 
 	// None is a special ActionType that is only used internally.
+	// 零值表示“没有任何动作”，作为无效值哨兵，避免把空事件误判成某种变更。
 	None ActionType = 0
 )
 
 func (a ActionType) String() string {
+	// 组合位（如 Update、All）单独匹配，保证日志和指标里出现的是可读的组合名，
+	// 而不是一长串按位或出来的数字。
 	switch a {
 	case Add:
 		return "Add"
@@ -127,10 +142,14 @@ func (a ActionType) String() string {
 	}
 
 	// Shouldn't reach here.
+	// 未知位返回空串，方便调用方把它当无效值过滤掉，而不是打印出误导性的数字。
 	return ""
 }
 
 // EventResource is basically short for group/version/kind, which can uniquely represent a particular API resource.
+//
+// 用字符串标识资源类型，既覆盖内置资源也覆盖扩展资源（带 group 前缀），
+// 插件注册事件时无需依赖具体的 Go 类型。
 type EventResource string
 
 // Constants for GVKs.
@@ -162,13 +181,18 @@ const (
 	//
 	// There is one general pod resource: Pod, that contains three specific pod resources: AssignedPod, UnscheduledPod, and TargetPod.
 	// Plugins can and are expected to register to specific pod events for better performance.
+	// Pod 是宽泛兜底项，只有无法判断该关心哪类 Pod 时才用它。
 	Pod EventResource = "Pod"
 	// AssignedPod resource is associated with the cluster event that gets triggered when a scheduled pod is updated.
+	// 已绑定的 Pod 变化通常意味着资源占用变化，影响正在排队的其他 Pod。
 	AssignedPod EventResource = "AssignedPod"
 	// UnscheduledPod resource is associated with the cluster event that gets triggered when an unscheduled pod is updated, other than the target pod.
+	// 其他待调度 Pod 的变化，可能让某个被拒绝的 Pod 重新有机会（例如它们释放了竞争资源）。
 	UnscheduledPod EventResource = "UnscheduledPod"
 	// TargetPod resource is associated with the cluster event that gets triggered when an unscheduled pod itself is updated.
+	// 被拒绝的 Pod 自身变化最直接：之前因资源过大被拒，调小请求后就能重新入队。
 	TargetPod EventResource = "TargetPod"
+	// 把 Pod 拆成三类，是为了让 QueueingHint 只评估相关的 Pod 集合，减少重入队计算量。
 
 	Node                  EventResource = "Node"
 	PersistentVolume      EventResource = "PersistentVolume"
@@ -191,9 +215,13 @@ const (
 	//
 	// Meanwhile, if the coming clusterEvent is a wildcard one, all pods
 	// will be moved from unschedulablePod pool to activeQ/backoffQ forcibly.
+	// 通配符绕过 QueueingHint 直接全量重入队，代价高，只在确实无法定位具体资源时使用。
 	WildCard EventResource = "*"
 )
 
+// ClusterEventWithHint 把“发生了什么”和“怎么判断要不要重调度”绑在一起注册。
+//
+// 这样插件注册事件时就自带过滤逻辑，调度器不必为每种事件再回头查一遍插件实现。
 type ClusterEventWithHint struct {
 	Event ClusterEvent
 	// QueueingHintFn is executed for the Pod rejected by this plugin when the above Event happens,
@@ -201,9 +229,12 @@ type ClusterEventWithHint struct {
 	// It's an optional field. If not set,
 	// the scheduling of Pods will be always retried with backoff when this Event happens.
 	// (the same as Queue)
+	// 两级过滤：PreQueueingHintFn 先粗筛出可能受影响的 Pod，QueueingHintFn 再逐个精筛，
+	// 避免对每个事件都遍历全部不可调度 Pod。
 	QueueingHintFn QueueingHintFn
 	// PreQueueingHintFn is called once per event to narrow the set of pods to evaluate with QueueingHint.
 	// If set, only pods identified in the returned PreQueueingHintResult are checked.
+	// 粗筛成本低、精度差，精筛成本高；分两层是为了在事件很多时省下大量精筛调用。
 	PreQueueingHintFn PreQueueingHintFn
 }
 
@@ -218,11 +249,17 @@ type ClusterEventWithHint struct {
 //   - For example, the given event is "Node deleted", the `oldObj` will be that deleted Node.
 //   - `oldObj` is nil if the event is add event.
 //   - `newObj` is nil if the event is delete event.
+//
+// 错误一律按 Queue 处理，是故意偏向“多调度一次”而非“漏调度”：
+// 宁可多付出一次调度周期，也不能让本可运行的 Pod 永久卡在不可调度队列里。
 type QueueingHintFn func(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (QueueingHint, error)
 
 // PreQueueingHintResult is the return value of PreQueueingHintFn.
 // When AllPods is true, all unschedulable pods are evaluated (existing behavior).
 // When AllPods is false, only pods listed in Pods are evaluated.
+//
+// 两种模式兼顾兼容与性能：不实现粗筛的插件走 AllPods 保持旧行为，
+// 能精确定位的插件只列出候选，减少后续逐 Pod 判断的开销。
 type PreQueueingHintResult struct {
 	AllPods bool
 	Pods    []types.NamespacedName
@@ -236,8 +273,13 @@ type PreQueueingHintResult struct {
 //
 // - oldObj is the old object in update events, or the deleted object in delete events.
 // - newObj is the new/added object. It is nil for delete events.
+//
+// 出错时退化为 AllPods，与 QueueingHintFn 一样遵循“漏调度比多调度更糟”的原则。
+// 删除对象未知时不调用，是因为此时没有可用信息做粗筛，调用也不会得到有意义的结果。
 type PreQueueingHintFn func(logger klog.Logger, oldObj, newObj interface{}) (PreQueueingHintResult, error)
 
+// QueueingHint 只表达“要不要重新入队”这一种决策，
+// 细节判断留给插件，避免调度器理解每种插件的业务语义。
 type QueueingHint int
 
 const (
@@ -262,6 +304,8 @@ func (s QueueingHint) String() string {
 // ClusterEvent abstracts how a system resource's state gets changed.
 // Resource represents the standard API resources such as Pod, Node, etc.
 // ActionType denotes the specific change such as Add, Update or Delete.
+// ClusterEvent 是插件与调度队列之间的通用事件格式。
+// CustomLabel 让少数没有对应 GVK 的事件（如超时）也能进入同一套指标体系。
 type ClusterEvent struct {
 	Resource   EventResource
 	ActionType ActionType
@@ -273,6 +317,7 @@ type ClusterEvent struct {
 }
 
 // Label is used for logging and metrics.
+// Label 生成稳定的指标标签；自定义标签优先，保证特殊事件不会污染通用事件的标签维度。
 func (ce ClusterEvent) Label() string {
 	if ce.CustomLabel != "" {
 		return ce.CustomLabel
@@ -282,6 +327,9 @@ func (ce ClusterEvent) Label() string {
 }
 
 // NodeInfo is node level aggregated information.
+// NodeInfo 把节点及其上所有 Pod 的聚合信息缓存成一份快照视图。
+// 预计算这些派生数据，是因为 Filter/Score 阶段会被频繁调用，每次重算代价过高。
+// generation 字段让快照可以判断数据是否变化，从而跳过不必要的克隆。
 type NodeInfo interface {
 	// Node returns overall information about this node.
 	Node() *v1.Node
@@ -335,6 +383,8 @@ type NodeInfo interface {
 
 // QueuedEntityInfo is an interface that represents a schedulable entity in the scheduling queue.
 // It can be a single Pod (QueuedPodInfo) or a group of Pods (QueuedPodGroupInfo).
+// QueuedEntityInfo 统一单个 Pod 和 PodGroup 的队列元数据。
+// 队列的排序、退避和统计只需要这些共性字段，不需要知道实体具体是 Pod 还是组。
 type QueuedEntityInfo interface {
 	// Type returns the type of the entity.
 	Type() EntityKeyType
@@ -391,6 +441,8 @@ type QueuedEntityInfo interface {
 // PodInfo is a wrapper to a Pod with additional pre-computed information to
 // accelerate processing. This information is typically immutable (e.g., pre-processed
 // inter-pod affinity selectors).
+// PodInfo 缓存预处理过的亲和性条件：选择器解析一次后可反复使用。
+// 亲和性在调度期间不变，所以这些派生数据可以安全地共享给多个插件。
 type PodInfo interface {
 	// GetPod returns the wrapped Pod
 	GetPod() *v1.Pod
@@ -528,6 +580,8 @@ func GetPodAntiAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm)
 }
 
 // Resource is a collection of compute resources.
+// Resource 用 int64 的毫核/字节数表达资源量，避免浮点误差在比较和累加时累积。
+// 方法集合刻意保持最小，只覆盖调度器真正需要的读取与取最大值操作。
 type Resource interface {
 	GetMilliCPU() int64
 	GetMemory() int64
@@ -571,6 +625,8 @@ type ProtocolPort struct {
 }
 
 // NewProtocolPort creates a ProtocolPort instance.
+// NewProtocolPort 把 TCP 作为缺省协议，因为绝大多数端口冲突检查都发生在 TCP 上；
+// 由构造函数统一补全，后续 Add/Remove/CheckConflict 才能只比较规范化的键。
 func NewProtocolPort(protocol string, port int32) *ProtocolPort {
 	pp := &ProtocolPort{
 		Protocol: protocol,
@@ -588,6 +644,8 @@ func NewProtocolPort(protocol string, port int32) *ProtocolPort {
 type HostPortInfo map[string]map[ProtocolPort]struct{}
 
 // Add adds (ip, protocol, port) to HostPortInfo
+// Add 用两层 map 记录 (ip, protocol, port) 三元组，
+// 这样检查冲突时可以先按 ip 定位，再按协议端口查找，省去全表扫描。
 func (h HostPortInfo) Add(ip, protocol string, port int32) {
 	if port <= 0 {
 		return
@@ -607,6 +665,7 @@ func (h HostPortInfo) Add(ip, protocol string, port int32) {
 }
 
 // Remove removes (ip, protocol, port) from HostPortInfo
+// Remove 在最后一个端口被移除时连 ip 键一起删掉，避免残留空 map 让 Len 和冲突检查多走分支。
 func (h HostPortInfo) Remove(ip, protocol string, port int32) {
 	if port <= 0 {
 		return
@@ -634,6 +693,8 @@ func (h HostPortInfo) Len() int {
 
 // CheckConflict checks if the input (ip, protocol, port) conflicts with the existing
 // ones in HostPortInfo.
+// CheckConflict 必须双向检查：绑定 0.0.0.0 会占用所有 IP，
+// 而绑定具体 IP 时也要看是否已有 0.0.0.0 的监听，否则会漏判冲突。
 func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 	if port <= 0 {
 		return false
@@ -666,6 +727,7 @@ func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 }
 
 // sanitize the parameters
+// sanitize 把空值归一成默认值，让上层传入的零值也能得到符合直觉的结果。
 func (h HostPortInfo) sanitize(ip, protocol *string) {
 	if len(*ip) == 0 {
 		*ip = DefaultBindAllHostIP
@@ -686,6 +748,8 @@ const (
 
 // PodGroupInfo is a wrapper around the PodGroup API object together with a list of unscheduled pods that belong to the pod group.
 // Typically used as an input to pod group scheduling cycle plugins.
+// PodGroupInfo 把 API 对象与当前待调度 Pod 列表打包，供 pod group 调度周期的插件使用。
+// 区分普通组和复合组，是因为后者没有对应的单一 API 对象，需要从子组聚合信息。
 type PodGroupInfo interface {
 	// GetUnscheduledPods returns pods that are currently being considered for scheduling.
 	// The order of the pods is deterministic and based on signature, priority and timestamp.
@@ -713,6 +777,8 @@ type PodGroupInfo interface {
 // Placement determines the resources to be considered when scheduling a pod group.
 // Pod group scheduling cycle can check multiple placements and select the one that results
 // in the best pod assignments.
+// Placement 描述一次候选放置方案，名字仅用于诊断，不参与调度语义。
+// 把候选节点集合限制在 Placement 内，便于对同一组尝试多种放置并比较优劣。
 type Placement struct {
 	// Name uniquely identifies the placement.
 	// This is used for diagnostics and debugability.
@@ -724,6 +790,8 @@ type Placement struct {
 }
 
 // ProposedAssignment associates pod of a pod group with a proposed node assignment, determined in pod group scheduling cycle.
+// ProposedAssignment 保存 pod group 调度周期中的临时结果；
+// CycleState 一并带出，让后续阶段能复用当时的计算数据而不必重新计算。
 type ProposedAssignment interface {
 	// GetPod returns the pod that has the proposed node assignment.
 	GetPod() *v1.Pod
@@ -747,6 +815,8 @@ type PodGroupAssignments struct {
 }
 
 // EntityKey uniquely identifies a specific instance of an entity (like PodGroup or CompositePodGroup).
+// EntityKey 用 (类型, 命名空间, 名字) 三元组区分不同实体，
+// 因为同名的 Pod 和 PodGroup 可以同时存在，不能只用名字做键。
 type EntityKey struct {
 	Type      EntityKeyType
 	Name      string
@@ -765,12 +835,15 @@ func (ek EntityKey) GetType() EntityKeyType {
 	return ek.Type
 }
 
+// String 按“类型/命名空间/名字”拼接，作为键时比单独的 Name 更不容易碰撞。
 func (ek EntityKey) String() string {
 	return fmt.Sprintf("%s/%s/%s", ek.Type, ek.Namespace, ek.Name)
 }
 
 // MustParseEntityKey returns the entity key for a given key.
 // It should be only used in tests.
+// MustParseEntityKey 对非法输入返回零值而不是 panic，方便在测试和日志解析里宽容处理坏数据；
+// “Must”只是命名习惯，调用方仍需检查返回值是否有效。
 func MustParseEntityKey(key string) EntityKey {
 	parts := strings.Split(key, "/")
 	if len(parts) != 3 {
@@ -780,6 +853,7 @@ func MustParseEntityKey(key string) EntityKey {
 }
 
 // PodKey returns the key for a pod.
+// 下面几个构造函数集中管理 EntityKey 的类型字段，避免调用方手写字符串时拼错类型。
 func PodKey(namespace, name string) EntityKey {
 	return EntityKey{Type: PodKeyType, Namespace: namespace, Name: name}
 }

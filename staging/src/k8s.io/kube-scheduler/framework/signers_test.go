@@ -26,6 +26,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// 同时覆盖普通容器和 init 容器，并故意放入乱序与重复端口：
+// 前者确认两类容器都算进签名，后者确认规范化后输出稳定。
 func TestHostPortsSigner(t *testing.T) {
 	tests := []struct {
 		name string
@@ -86,6 +88,7 @@ func TestHostPortsSigner(t *testing.T) {
 	}
 }
 
+// 容忍列表按 Key/Value 排序，但副本不去重；这里同时验证排序结果和不丢条目。
 func TestTolerationsSigner(t *testing.T) {
 	tests := []struct {
 		name string
@@ -139,6 +142,8 @@ func TestTolerationsSigner(t *testing.T) {
 	}
 }
 
+// ConfigMap 和 Secret 卷必须被忽略：它们每个 Pod 都不同，却不影响调度，
+// 留着会让任何两个 Pod 的签名都对不上。
 func TestVolumesSigner(t *testing.T) {
 	hostPath := v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/tmp"}}
 	emptyDir := v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}
@@ -199,6 +204,8 @@ func TestVolumesSigner(t *testing.T) {
 	}
 }
 
+// 空亲和性与 nil 亲和性必须区分：前者返回空结构，后者返回 nil。
+// “affinity unsorted” 用例把 term、Values、偏好项全打乱，确认结果只取决于语义。
 func TestNodeAffinitySigner(t *testing.T) {
 	table := []struct {
 		name        string

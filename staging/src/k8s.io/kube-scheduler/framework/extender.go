@@ -24,6 +24,10 @@ import (
 // Extender is an interface for external processes to influence scheduling
 // decisions made by Kubernetes. This is typically needed for resources not directly
 // managed by Kubernetes.
+//
+// 这套接口是 HTTP extender 的抽象：调度器把远程调用包成本地方法，
+// 上层调度流程就不必关心对端是进程内插件还是另一个服务。
+// 各 Is* 方法让调度器在每次循环里跳过未实现的回调，省掉无谓的远程请求。
 type Extender interface {
 	// Name returns a unique name that identifies the extender.
 	Name() string
@@ -63,6 +67,8 @@ type Extender interface {
 	// The possible changes made by extender may include:
 	//   1. Subset of given candidate nodes after preemption phase of extender.
 	//   2. A different set of victim pod for every given candidate node after preemption phase of extender.
+	// 抢占结果先由调度器算出，再交给 extender 复核：外部资源不在调度器视图里，
+	// 只有 extender 知道抢掉这些 Pod 是否真的能腾出它管理的资源。
 	ProcessPreemption(
 		pod *v1.Pod,
 		nodeNameToVictims map[string]*extenderv1.Victims,
@@ -75,5 +81,7 @@ type Extender interface {
 	// IsIgnorable returns true indicates scheduling should not fail when this extender
 	// is unavailable. This gives scheduler ability to fail fast and tolerate non-critical extenders as well.
 	// Both Filter and Bind actions are supported.
+	// 把“可忽略”做成开关，是为了区分关键扩展和非关键扩展：
+	// 前者挂了必须中止调度，后者挂了直接跳过，避免一个旁路服务拖垮整个集群的调度。
 	IsIgnorable() bool
 }

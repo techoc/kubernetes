@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// 分值边界供外部实现对齐：超出范围的分数会被调度器夹住，
+// 约定清楚边界可以避免 extender 误以为打分越高就一定能压过内置插件。
 const (
 	// MinExtenderPriority defines the min priority value for extender.
 	MinExtenderPriority int64 = 0
@@ -35,6 +37,8 @@ type ExtenderPreemptionResult struct {
 }
 
 // ExtenderPreemptionArgs represents the arguments needed by the extender to preempt pods on nodes.
+// 抢占参数要同时支持“全量节点对象”和“只有节点名”两种形态，
+// 由 NodeCacheCapable 决定填哪一份，避免 extender 已缓存节点信息时还要重复传输。
 type ExtenderPreemptionArgs struct {
 	// Pod being scheduled
 	Pod *v1.Pod
@@ -48,12 +52,18 @@ type ExtenderPreemptionArgs struct {
 //
 //	pods:  a group of pods expected to be preempted.
 //	numPDBViolations: the count of violations of PodDisruptionBudget
+//
+// PDB 违规数单独记一份，是因为调度器要在“抢到足够资源”和“少破坏可用性”之间权衡，
+// 光看被抢的 Pod 列表算不出这个代价。
 type Victims struct {
 	Pods             []*v1.Pod
 	NumPDBViolations int64
 }
 
 // MetaPod represent identifier for a v1.Pod
+//
+// 只传 UID 而不传整个 Pod：extender 声明自己缓存了集群状态，就该按 UID 自己查，
+// 省下的序列化开销在大规模抢占时很可观。
 type MetaPod struct {
 	UID string
 }
@@ -70,6 +80,9 @@ type MetaVictims struct {
 
 // ExtenderArgs represents the arguments needed by the extender to filter/prioritize
 // nodes for a pod.
+//
+// 过滤和打分共用同一套参数：两个阶段关心的是同一个 Pod 与候选节点集合，
+// 分开定义只会让 extender 多写一遍解析逻辑。
 type ExtenderArgs struct {
 	// Pod being scheduled
 	Pod *v1.Pod
@@ -82,9 +95,15 @@ type ExtenderArgs struct {
 }
 
 // FailedNodesMap represents the filtered out nodes, with node names and failure messages
+//
+// 用 map 而不是列表：同一批节点可能既被过滤又被判为不可解，
+// 调度器还要按节点名快速查原因，map 正好满足这两个用途。
 type FailedNodesMap map[string]string
 
 // ExtenderFilterResult represents the results of a filter call to an extender
+//
+// 失败节点拆成“可抢占挽回”和“不可解”两类：前者还能走抢占流程，
+// 后者直接放弃，免得对注定放不下的节点白做一轮抢占。
 type ExtenderFilterResult struct {
 	// Filtered set of nodes where the pod can be scheduled; to be populated
 	// only if Extender.NodeCacheCapable == false
@@ -103,6 +122,9 @@ type ExtenderFilterResult struct {
 }
 
 // ExtenderBindingArgs represents the arguments to an extender for binding a pod to a node.
+//
+// 这里带的是 PodUID 而不是 Pod 对象：绑定时刻的权威状态在 API server，
+// extender 凭名字加 UID 去操作，能挡住旧 Pod 重名导致的误绑定。
 type ExtenderBindingArgs struct {
 	// PodName is the name of the pod being bound
 	PodName string
@@ -121,6 +143,9 @@ type ExtenderBindingResult struct {
 }
 
 // HostPriority represents the priority of scheduling to a particular host, higher priority is better.
+//
+// 分数与权重分开传：调度器先把 extender 分数乘上权重再与内置插件得分相加，
+// 这样管理员调权重就能改变 extender 在总排名里的话语权，而不用改外部实现。
 type HostPriority struct {
 	// Name of the host
 	Host string

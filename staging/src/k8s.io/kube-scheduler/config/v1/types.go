@@ -27,6 +27,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// 这里的默认值同时被 CLI 标志和配置文件解码器使用。把锁对象身份固定成常量，
+// 是为了让多个 scheduler 副本在选主时指向同一个资源；改其中任何一个都会导致
+// 副本之间互相看不见对方的锁。
 const (
 	// SchedulerDefaultLockObjectNamespace defines default scheduler lock object namespace ("kube-system")
 	SchedulerDefaultLockObjectNamespace string = metav1.NamespaceSystem
@@ -41,6 +44,9 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // KubeSchedulerConfiguration configures a scheduler
+//
+// 这是 scheduler 的顶层配置对象。它用指针字段表示“未指定则沿用默认值”，
+// 这样配置文件只写少量覆盖项，其余仍走程序默认值；布尔值则没有这层区分。
 type KubeSchedulerConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -99,6 +105,10 @@ type KubeSchedulerConfiguration struct {
 }
 
 // DecodeNestedObjects decodes plugin args for known types.
+//
+// PluginConfig.Args 是 RawExtension，普通的 scheme 解码不会进去。插件参数的类型
+// 要等到按插件名拼出 GVK 之后才知道，所以这里单独走一遍。严格解码错误先收集再
+// 合并返回，目的是把所有位置的问题一次性报全，而不是遇到第一个就停。
 func (c *KubeSchedulerConfiguration) DecodeNestedObjects(d runtime.Decoder) error {
 	var strictDecodingErrs []error
 	for i := range c.Profiles {
@@ -136,6 +146,9 @@ func (c *KubeSchedulerConfiguration) EncodeNestedObjects(e runtime.Encoder) erro
 }
 
 // KubeSchedulerProfile is a scheduling profile.
+//
+// Profile 把“用哪些插件”和“插件怎么配”绑定在一个调度器名字上。同一进程里
+// 可以并存多套插件组合，Pod 通过 spec.schedulerName 选一套，互不影响。
 type KubeSchedulerProfile struct {
 	// SchedulerName is the name of the scheduler associated to this profile.
 	// If SchedulerName matches with the pod's "spec.schedulerName", then the pod
@@ -176,6 +189,9 @@ type KubeSchedulerProfile struct {
 // omitted from the config, then the default set of plugins is used for that extension point.
 // Enabled plugins are called in the order specified here, after default plugins. If they need to
 // be invoked before default plugins, default plugins must be disabled and re-enabled here in desired order.
+//
+// 把扩展点列成显式字段而不是 map，好处是配置结构固定、可生成代码，
+// 也让“某个扩展点没写”明确表示沿用默认插件集。
 type Plugins struct {
 	// PreEnqueue is a list of plugins that should be invoked before adding pods to the scheduling queue.
 	PreEnqueue PluginSet `json:"preEnqueue,omitempty"`
@@ -246,6 +262,9 @@ type Plugins struct {
 
 // PluginSet specifies enabled and disabled plugins for an extension point.
 // If an array is empty, missing, or nil, default plugins at that extension point will be used.
+//
+// Enabled 与 Disabled 分开而不是只给一个列表，是为了让“默认插件 + 追加/剔除”
+// 这种增量配置成为常态；全量替换则通过 Disabled: ['*'] 表达。
 type PluginSet struct {
 	// Enabled specifies plugins that should be enabled in addition to default plugins.
 	// If the default plugin is also configured in the scheduler config file, the weight of plugin will
@@ -271,6 +290,9 @@ type Plugin struct {
 // PluginConfig specifies arguments that should be passed to a plugin at the time of initialization.
 // A plugin that is invoked at multiple extension points is initialized once. Args can have arbitrary structure.
 // It is up to the plugin to process these Args.
+//
+// Args 用 RawExtension 而非固定结构，是因为参数形状归插件自己定义；
+// 配置 API 无需认识每个插件的参数类型就能把它们原样带进来。
 type PluginConfig struct {
 	// Name defines the name of plugin being configured
 	Name string `json:"name"`
@@ -281,6 +303,8 @@ type PluginConfig struct {
 func (c *PluginConfig) decodeNestedObjects(d runtime.Decoder) error {
 	gvk := SchemeGroupVersion.WithKind(c.Name + "Args")
 	// dry-run to detect and skip out-of-tree plugin args.
+	// 树外插件不会注册进这个 scheme；先用空输入探一次，未注册就直接放过，
+	// 把参数的解释权留给插件自己。
 	if _, _, err := d.Decode(nil, &gvk, nil); runtime.IsNotRegisteredError(err) {
 		return nil
 	}
@@ -314,6 +338,8 @@ func (c *PluginConfig) encodeNestedObjects(e runtime.Encoder) error {
 	// The <e> encoder might be a YAML encoder, but the parent encoder expects
 	// JSON output, so we convert YAML back to JSON.
 	// This is a no-op if <e> produces JSON.
+	// 外层配置按 JSON 结构拼装，内层编码器却是可替换的；这里做一次归一，
+	// 免得 RawExtension 里塞进一段 YAML 文本破坏外层输出。
 	json, err := yaml.YAMLToJSON(buf.Bytes())
 	if err != nil {
 		return err
@@ -324,6 +350,9 @@ func (c *PluginConfig) encodeNestedObjects(e runtime.Encoder) error {
 
 // Extender holds the parameters used to communicate with the extender. If a verb is unspecified/empty,
 // it is assumed that the extender chose not to provide that extension.
+//
+// 每个动词独立配置，调度器靠空字符串判断该扩展点是否存在，这样外部进程可以
+// 只实现自己关心的少数几个回调，不必凑齐整套接口。
 type Extender struct {
 	// URLPrefix at which the extender is available
 	URLPrefix string `json:"urlPrefix"`
@@ -410,6 +439,9 @@ type ExtenderTLSConfig struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // DynamicResourcesArgs holds arguments used to configure the DynamicResources plugin.
+//
+// DRA 的过滤成本随 ResourceClaim 数量和设备复杂度变化，不设上限时一个 Pod 就可能
+// 拖住整个调度循环。这两个超时把最坏情况兜住，又允许管理员按实测指标收紧。
 type DynamicResourcesArgs struct {
 	metav1.TypeMeta `json:""`
 
@@ -470,5 +502,7 @@ type DynamicResourcesArgs struct {
 	BindingTimeout *metav1.Duration `json:"bindingTimeout,omitempty"`
 }
 
+// 两个默认值分开声明：过滤是每次调度都要走的热路径，给 10 秒足够兜底；
+// 绑定要等设备上报就绪条件，周期长得多，默认放到 10 分钟。
 const DynamicResourcesFilterTimeoutDefault = 10 * time.Second
 const DynamicResourcesBindingTimeoutDefault = 600 * time.Second

@@ -26,9 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// 共享的 Status 实例，用于验证“同一个指针”以及错误链包装后的相等性判断。
 var errorStatus = NewStatus(Error, "internal error")
 var statusWithErr = AsStatus(errors.New("internal error"))
 
+// Status 是插件之间传递调度结果的主要载体，零值 nil 被约定为成功。
+// 测试覆盖每种 Code 及其对应的判定方法，重点锁住 nil 与 Success 等价这一隐式约定。
 func TestStatus(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -124,6 +127,8 @@ func TestStatus(t *testing.T) {
 	}
 }
 
+// PreFilterResult.Merge 对节点名集合取交集：每个插件的过滤结果都会进一步缩小候选集。
+// 表中特意覆盖 nil 与空集合的不同组合，防止把“未设置”误解为“无限制”而放大候选集。
 func TestPreFilterResultMerge(t *testing.T) {
 	tests := map[string]struct {
 		receiver *PreFilterResult
@@ -179,6 +184,9 @@ func TestPreFilterResultMerge(t *testing.T) {
 	}
 }
 
+// Equal 用于比较插件前后两次调度结果，决定是否要把 Pod 重新入队。
+// 实践中容易被错误链包装，因此这里专门验证包装后的 Error 状态仍被视为相等，
+// 而两个仅消息相同的独立 error 不相等，避免把偶发错误误判成持续状态。
 func TestIsStatusEqual(t *testing.T) {
 	tests := []struct {
 		name string

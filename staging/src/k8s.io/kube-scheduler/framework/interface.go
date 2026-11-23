@@ -40,8 +40,13 @@ import (
 )
 
 // Code is the Status code/type which is returned from plugins.
+//
+// 把插件结果抽象成一组语义码而非 bool+error，是因为不同失败原因对应调度队列完全不同的处理策略：
+// 有的要退避、有的要进 PostFilter 尝试抢占、有的只是暂时等待。
+// 用 int 而非 string 是为了让状态码比较走整数运算，省去每次判等都做字符串匹配。
 type Code int
 
+// 这组码是插件与调度器运行时之间的协议：插件只能从中选，运行时只认这些值决定后续动作。
 // These are predefined codes used in a Status.
 // Note: when you add a new status, you have to add it in `codes` slice below.
 const (
@@ -100,9 +105,13 @@ const (
 	Pending
 )
 
+// 字符串表与枚举值用位置一一对应，避免再维护一张 map；代价是新增状态时必须在两处同步插入，
+// 所以注释特意强调顺序不能乱。
 // This list should be exactly the same as the codes iota defined above in the same order.
 var codes = []string{"Success", "Error", "Unschedulable", "UnschedulableAndUnresolvable", "Wait", "Skip", "Pending"}
 
+// 按索引直取字符串，是建立在上面「两处顺序必须一致」的约定之上的；
+// 这样 String() 是 O(1)，无需分支或查表结构。
 func (c Code) String() string {
 	return codes[c]
 }
@@ -112,6 +121,9 @@ func (c Code) String() string {
 // When the status code is not Success, the reasons should explain why.
 // And, when code is Success, all the other fields should be empty.
 // NOTE: A nil Status is also considered as Success.
+//
+// 把 code、理由、错误、插件名收进一个结构体，是为了让插件用一套统一方式表达结果；
+// 字段私有则是为了强制通过方法构造，保证 code 与 reasons/err 的搭配不会自相矛盾。
 type Status struct {
 	code    Code
 	reasons []string
@@ -126,6 +138,8 @@ func (s *Status) WithError(err error) *Status {
 	return s
 }
 
+// nil Status 视作 Success，是为了让插件在一切正常时直接返回 nil，
+// 不必每次都构造一个 &Status{code: Success} 对象。
 // Code returns code of the Status.
 func (s *Status) Code() Code {
 	if s == nil {
@@ -134,6 +148,8 @@ func (s *Status) Code() Code {
 	return s.code
 }
 
+// 把多条 reason 用逗号拼成一句，是给日志和事件消费的；
+// 程序若要逐条判断，应走 Reasons() 而不是解析这个字符串。
 // Message returns a concatenated message on reasons of the Status.
 func (s *Status) Message() string {
 	if s == nil {
@@ -159,6 +175,8 @@ func (s *Status) Plugin() string {
 	return s.plugin
 }
 
+// 把 err 的文本放在 reasons 最前面，是为了让错误原因在展示时最醒目，
+// 同时避免调用方为了拿错误文本再单独读 err 字段。
 // Reasons returns reasons of the Status.
 func (s *Status) Reasons() []string {
 	if s.err != nil {
@@ -187,6 +205,8 @@ func (s *Status) IsSkip() bool {
 	return s.Code() == Skip
 }
 
+// 把 Pending 也归为 rejected，是因为调度周期确实没有走到绑定；
+// 但它与真正失败的区别由退避策略单独处理，而不是在这个判定里区分。
 // IsRejected returns true if "Status" is Unschedulable (Unschedulable, UnschedulableAndUnresolvable, or Pending).
 func (s *Status) IsRejected() bool {
 	code := s.Code()
@@ -198,6 +218,8 @@ func (s *Status) IsError() bool {
 	return s.Code() == Error
 }
 
+// Wait 和 Skip 不算错误，是因为它们都是正常控制流：前者等外部放行，后者本插件不处理。
+// 优先返回内嵌 err 而非重新构造，是为了保留原始错误链供 errors.Is/As 使用。
 // AsError returns nil if the status is a success, a wait or a skip; otherwise returns an "error" object
 // with a concatenated message on reasons of the Status.
 func (s *Status) AsError() error {
@@ -210,6 +232,8 @@ func (s *Status) AsError() error {
 	return errors.New(s.Message())
 }
 
+// 比较 err 时用 EquateErrors，是因为测试里两个错误只要语义等价即可，
+// 不必是同一个实例；plugin 字段也参与比较，因为同一个失败由谁报告是行为的一部分。
 // Equal checks equality of two statuses. This is useful for testing with
 // cmp.Equal.
 func (s *Status) Equal(x *Status) bool {
@@ -232,6 +256,8 @@ func (s *Status) String() string {
 	return s.Message()
 }
 
+// 深拷贝 reasons 切片而共享 err，是因为 error 对象通常是不可变的，
+// 而切片会被 AppendReason 继续追加，不拷贝就会在副本间串改。
 // Clone clones the entire Status and returns a copy.
 func (s *Status) Clone() *Status {
 	return &Status{
@@ -242,6 +268,7 @@ func (s *Status) Clone() *Status {
 	}
 }
 
+// 构造函数只填 code 和 reasons，正是前面「成功时其他字段应为空」这条约定的体现。
 // NewStatus makes a Status out of the given arguments and returns its pointer.
 func NewStatus(code Code, reasons ...string) *Status {
 	s := &Status{
@@ -251,6 +278,8 @@ func NewStatus(code Code, reasons ...string) *Status {
 	return s
 }
 
+// nil error 返回 nil status，是和「nil 即成功」的惯例保持一致；
+// 非 nil 一律归为 Error 而非 Unschedulable，因为到这里还不知道失败是否与调度可行性有关。
 // AsStatus wraps an error in a Status.
 func AsStatus(err error) *Status {
 	if err == nil {
@@ -262,6 +291,8 @@ func AsStatus(err error) *Status {
 	}
 }
 
+// 只暴露只读视图，是为了让抢占插件能看到每个节点在 Filter 阶段为何失败，
+// 又不能改这份记录——它是所有 PostFilter 插件共享的判断依据。
 // NodeToStatusReader is a read-only interface of NodeToStatus passed to each PostFilter plugin.
 type NodeToStatusReader interface {
 	// Get returns the status for given nodeName.
@@ -282,6 +313,9 @@ type NodeScore struct {
 }
 
 // NodePluginScores is a struct with node name and scores for that node.
+//
+// 把原始分和归一化后的分都保留下来，是为了让调试和扩展插件能看到分数是怎么来的，
+// 而不只看到一个已经被权重和归一化加工过的终值。
 type NodePluginScores struct {
 	// Name is node name.
 	Name string
@@ -337,6 +371,8 @@ const (
 	MaxTotalScore int64 = math.MaxInt64
 )
 
+// 区分「不改」和「覆盖」两种模式，是因为插件有时只需要保留已有提名，
+// 有时又必须明确清掉或改写它；单一字符串字段无法表达「这次不动」的意图。
 type NominatingMode int
 
 const (
@@ -344,11 +380,15 @@ const (
 	ModeOverride
 )
 
+// 提名信息被独立成结构体，是因为它同时被抢占结果、Pod 状态更新和缓存操作复用；
+// 拆散成多个参数会在这些调用点之间反复传递、也容易出现只传了一半的情况。
 type NominatingInfo struct {
 	NominatedNodeName string
 	NominatingMode    NominatingMode
 }
 
+// 对 nil 接收者返回 ModeNoop，是为了让调用方无需先判空就能安全读取模式；
+// 「没有提名信息」在语义上就等价于「什么都不做」。
 func (ni *NominatingInfo) Mode() NominatingMode {
 	if ni == nil {
 		return ModeNoop
@@ -386,6 +426,8 @@ type PodInPreBind interface {
 	MarkPrebound() bool
 }
 
+// 让 PreFilter 提前缩小候选节点集，是为了把原本要在 Filter 阶段逐节点跑的昂贵检查
+// 在 O(1) 时间内砍掉大半；nil 表示「我不裁剪」，让各插件可以独立决定是否参与。
 // PreFilterResult wraps needed info for scheduler framework to act upon PreFilter phase.
 type PreFilterResult struct {
 	// The set of nodes that should be considered downstream; if nil then
@@ -393,10 +435,14 @@ type PreFilterResult struct {
 	NodeNames sets.Set[string]
 }
 
+// nil 接收者和 nil NodeNames 都视作「不限制」，是为了让未实现该能力的插件
+// 直接返回 nil 即可，框架无需再做特殊判空。
 func (p *PreFilterResult) AllNodes() bool {
 	return p == nil || p.NodeNames == nil
 }
 
+// 多个 PreFilter 的结果取交集，是因为每个插件都在声明「只考虑这些节点」；
+// 必须同时满足所有插件才算候选。两边都放手时返回 nil，避免无谓地构造一个空结果。
 func (p *PreFilterResult) Merge(in *PreFilterResult) *PreFilterResult {
 	if p.AllNodes() && in.AllNodes() {
 		return nil
@@ -416,11 +462,15 @@ func (p *PreFilterResult) Merge(in *PreFilterResult) *PreFilterResult {
 	return &r
 }
 
+// 把提名信息嵌进结果，是为了让抢占插件把「谁让位给谁」的结论传回框架，
+// 由框架统一写回 Pod 状态，而不是各插件各自改 API。
 // PostFilterResult wraps needed info for scheduler framework to act upon PostFilter phase.
 type PostFilterResult struct {
 	*NominatingInfo
 }
 
+// 增加一个轻量预检阶段，是为了在真正执行昂贵的 PreBind 前先问一句「这个插件要不要处理」；
+// 框架据此把连续声明可并行的插件分组并发执行，缩短绑定路径的串行等待。
 // PreBindPreFlightResult wraps needed info for scheduler framework to act upon PreBindPreFlight phase.
 type PreBindPreFlightResult struct {
 	// AllowParallel indicates whether this plugin's PreBind method can be run
@@ -439,6 +489,8 @@ type Plugin interface {
 	Name() string
 }
 
+// 在入队前就拦截，是为了把「这个 Pod 现在根本不该调度」的判断提前到事件处理路径上，
+// 免得它占用调度周期才被发现不合格。
 // PreEnqueuePlugin is an interface that must be implemented by "PreEnqueue" plugins.
 // These plugins are called prior to adding Pods to activeQ or backoffQ.
 // Note: an preEnqueue plugin is expected to be lightweight and efficient, so it's not expected to
@@ -455,6 +507,7 @@ type PreEnqueuePlugin interface {
 // LessFunc is the function to sort entity info
 type LessFunc func(entity1, entity2 QueuedEntityInfo) bool
 
+// 只允许一个排序插件，是因为队列顺序必须是一个全序；多个插件各排各的无法合成确定的优先级。
 // QueueSortPlugin is an interface that must be implemented by "QueueSort" plugins.
 // These plugins are used to sort entities in the scheduling queue. Only one queue sort
 // plugin may be enabled at a time.
@@ -464,6 +517,8 @@ type QueueSortPlugin interface {
 	Less(QueuedEntityInfo, QueuedEntityInfo) bool
 }
 
+// 让插件自己声明「哪些事件能让被它拒绝的 Pod 重新可调度」，是为了把无效重试挡在队列之外；
+// 不实现也能工作，但框架只能退回保守的全量重排，效率差得多。
 // EnqueueExtensions is an optional interface that plugins can implement to efficiently
 // move unschedulable Pods in internal scheduling queues.
 // In the scheduler, Pods can be unschedulable by PreEnqueue, PreFilter, Filter, Reserve, and Permit plugins,
@@ -494,9 +549,14 @@ type EnqueueExtensions interface {
 	// Do not change the result during runtime, for example, based on the cluster's state etc.
 	//
 	// Appropriate implementation of this function will make Pod's re-scheduling accurate and performant.
+	//
+	// 只在启动时求值一次，是为了让事件处理器集合固定下来；
+	// 运行期随集群状态变化会让「谁监听了什么」变得不可追踪。
 	EventsToRegister(context.Context) ([]ClusterEventWithHint, error)
 }
 
+// 提供增量 AddPod/RemovePod，是为了在抢占等场景里不必对每个候选节点重跑完整的 PreFilter；
+// 但传入的 NodeInfo 可能是共享对象，所以实现必须只读它，否则会污染其他节点的可行性判断。
 // PreFilterExtensions is an interface that is included in plugins that allow specifying
 // callbacks to make incremental updates to its supposedly pre-calculated
 // state.
@@ -514,6 +574,8 @@ type PreFilterExtensions interface {
 	RemovePod(ctx context.Context, state CycleState, podToSchedule *v1.Pod, podInfoToRemove PodInfo, nodeInfo NodeInfo) *Status
 }
 
+// 作为调度周期的第一个扩展点，PreFilter 的失败会直接终止本轮；
+// 把能在这里算好的状态提前算好，后面每个节点才不用重复同样的推导。
 // PreFilterPlugin is an interface that must be implemented by "PreFilter" plugins.
 // These plugins are called at the beginning of the scheduling cycle. Plugins that implement PreFilterPlugin should
 // also implement SignPlugin to enable batching optimizations.
@@ -535,9 +597,14 @@ type PreFilterPlugin interface {
 	// AddPod/RemovePod will only be called after PreFilter, possibly on a cloned
 	// CycleState, and may call those functions more than once before calling
 	// Filter again on a specific node.
+	//
+	// 用单独的 getter 而非把方法塞进主接口，是为了让不需要增量的插件保持简单；
+	// 框架只在提供扩展时才在 NodeInfo 变化后回调它们。
 	PreFilterExtensions() PreFilterExtensions
 }
 
+// Filter 是每个候选节点都要过的一道关；把「硬约束」放这里、把「偏好」留给 Score，
+// 是为了让不可行的节点尽早出局，不浪费后面的打分开销。
 // FilterPlugin is an interface for Filter plugins. These plugins are called at the
 // filter extension point for filtering out hosts that cannot run a pod.
 // This concept used to be called 'predicate' in the original scheduler.
@@ -570,9 +637,14 @@ type FilterPlugin interface {
 	// context gets canceled when a sufficient number of suitable
 	// nodes have been found and searching for more isn't necessary
 	// anymore.
+	//
+	// 要求插件读传入的 nodeInfo 而非全局快照，是因为抢占场景下这个对象可能是
+	// 「假想移走若干 Pod 后」的副本；从快照另查会得到与当前试探不一致的答案。
 	Filter(ctx context.Context, state CycleState, pod *v1.Pod, nodeInfo NodeInfo) *Status
 }
 
+// PostFilter 是「常规筛选全失败后的补救」扩展点，抢占正是典型实现；
+// 把它和 Filter 分开，是为了让补救逻辑只在真的需要时才运行。
 // PostFilterPlugin is an interface for "PostFilter" plugins. These plugins are called
 // after a pod cannot be scheduled.
 type PostFilterPlugin interface {
@@ -594,18 +666,27 @@ type PostFilterPlugin interface {
 	// Optionally, a non-nil PostFilterResult may be returned along with a Success status. For example,
 	// a preemption plugin may choose to return nominatedNodeName, so that framework can reuse that to update the
 	// preemptor pod's .spec.status.nominatedNodeName field.
+	//
+	// 框架即使看到所有节点都 UnschedulableAndUnresolvable 也仍会调用 PostFilter，
+	// 因此插件自己必须尊重这个状态码，否则会把补救花在根本不可能成功的节点上。
 	PostFilter(ctx context.Context, state CycleState, pod *v1.Pod, filteredNodeStatusMap NodeToStatusReader) (*PostFilterResult, *Status)
 }
 
+// 把 pod group 的可行性检查做成可传入的函数，是为了让 PostFilter 插件
+// 在各种补救方案里复用同一套判定，而不是各自实现一遍「这组 Pod 到底能不能一起放下」。
 // PodGroupSchedulingFunc is a function that will be run to check feasibility of a pod group scheduling.
 type PodGroupSchedulingFunc func(ctx context.Context) (*PodGroupAssignments, *Status)
 
+// 按 Pod 记录提名而非整个组共用一个，是因为组里每个 Pod 最终被安排到哪个节点可能不同，
+// 抢占后的状态更新必须逐个 Pod 精确落回。
 // PodGroupPostFilterResult stores information about nominated nodes for a pod group.
 type PodGroupPostFilterResult struct {
 	// NominatingInfos maps pods in the pod group to their nominated node info. It only contains pods that have a nominated node.
 	NominatingInfos map[types.NamespacedName]*NominatingInfo
 }
 
+// 组级补救比单 Pod 复杂：一个节点对单个 Pod 可行，不代表对整个组可行；
+// 所以单独设一个扩展点，拿到的是组级状态和整组可行性函数。
 // PodGroupPostFilterPlugin is an interface for "PodGroupPostFilter" plugins. These plugins are called
 // after a PodGroup cannot be scheduled.
 type PodGroupPostFilterPlugin interface {
@@ -624,6 +705,8 @@ type PodGroupPostFilterPlugin interface {
 	PodGroupPostFilter(ctx context.Context, state PodGroupCycleState, pgInfo PodGroupInfo, pgSchedulingFunc PodGroupSchedulingFunc) (*PodGroupPostFilterResult, *Status)
 }
 
+// 作为纯信息扩展点，PreScore 让插件在打分前统一预处理（如算亲和性矩阵），
+// 避免每个 Score 插件对同一批节点各算一遍。
 // PreScorePlugin is an interface for "PreScore" plugin. PreScore is an
 // informational extension point. Plugins will be called with a list of nodes
 // that passed the filtering phase. A plugin may use this data to update internal
@@ -639,6 +722,8 @@ type PreScorePlugin interface {
 	PreScore(ctx context.Context, state CycleState, pod *v1.Pod, nodes []NodeInfo) *Status
 }
 
+// 归一化单独抽出来，是因为各插件的原始分制可能完全不同；
+// 先各自归一化到统一区间，加权求和才有意义。
 // ScoreExtensions is an interface for Score extended functionality.
 type ScoreExtensions interface {
 	// NormalizeScore is called for all node scores produced by the same plugin's "Score"
@@ -647,6 +732,8 @@ type ScoreExtensions interface {
 	NormalizeScore(ctx context.Context, state CycleState, p *v1.Pod, scores NodeScoreList) *Status
 }
 
+// Score 只处理已通过 Filter 的节点：再对不可行节点打分没有意义，
+// 所以接口签名里拿到的是过滤后的节点集合。
 // ScorePlugin is an interface that must be implemented by "Score" plugins to rank
 // nodes that passed the filtering phase. Plugins that implement ScorePlugin should
 // also implement SignPlugin to enable batching optimizations.
@@ -658,9 +745,13 @@ type ScorePlugin interface {
 	Score(ctx context.Context, state CycleState, p *v1.Pod, nodeInfo NodeInfo) (int64, *Status)
 
 	// ScoreExtensions returns a ScoreExtensions interface if it implements one, or nil if does not.
+	//
+	// 与 PreFilterExtensions 同理，用可选 getter 让不需要归一化的插件不必实现空方法。
 	ScoreExtensions() ScoreExtensions
 }
 
+// Reserve 是把「决定用这个节点」通知给插件状态的时机，位于打分之后、真正绑定之前；
+// 放在这里而非绑定后，是为了让资源预留能尽早生效，并在后续失败时有明确的回滚点。
 // ReservePlugin is an interface for plugins with Reserve and Unreserve
 // methods. These are meant to update the state of the plugin. This concept
 // used to be called 'assume' in the original scheduler. These plugins should
@@ -678,9 +769,14 @@ type ReservePlugin interface {
 	// in a later phase. The Unreserve method implementation must be idempotent
 	// and may be called by the scheduler even if the corresponding Reserve
 	// method for the same plugin was not called.
+	//
+	// 要求幂等且允许「没 Reserve 过也被调用」，是因为失败可能发生在任意后续阶段；
+	// 调用方不应被迫追踪到底走到哪一步才敢回滚。
 	Unreserve(ctx context.Context, state CycleState, p *v1.Pod, nodeName string)
 }
 
+// PreBind 执行真正有外部副作用的操作（如创建卷）；用 PreBindPreFlight 先筛一遍，
+// 是为了别对「根本不归我管」的 Pod 白做这些重活。
 // PreBindPlugin is an interface that must be implemented by "PreBind" plugins.
 // These plugins are called before a pod being scheduled.
 type PreBindPlugin interface {
@@ -698,6 +794,7 @@ type PreBindPlugin interface {
 	PreBind(ctx context.Context, state CycleState, p *v1.Pod, nodeName string) *Status
 }
 
+// 绑定成功后再通知插件清理状态；放在这里是因为只有此刻才能确认 Pod 真的落到了节点上。
 // PostBindPlugin is an interface that must be implemented by "PostBind" plugins.
 // These plugins are called after a pod is successfully bound to a node.
 type PostBindPlugin interface {
@@ -709,6 +806,8 @@ type PostBindPlugin interface {
 	PostBind(ctx context.Context, state CycleState, p *v1.Pod, nodeName string)
 }
 
+// Permit 提供绑定前的最后一道闸门，允许插件把 Pod 挂起等待外部条件；
+// 它带着超时返回，是为了避免把绑定流程无限期卡住。
 // PermitPlugin is an interface that must be implemented by "Permit" plugins.
 // These plugins are called before a pod is bound to a node.
 type PermitPlugin interface {
@@ -722,6 +821,8 @@ type PermitPlugin interface {
 	Permit(ctx context.Context, state CycleState, p *v1.Pod, nodeName string) (*Status, time.Duration)
 }
 
+// 允许多个 Bind 插件按序尝试、谁接手就终止后续，是为了支持不同绑定策略共存；
+// 不接手的插件用 Skip 表态，框架才能继续往下问。
 // BindPlugin is an interface that must be implemented by "Bind" plugins. Bind
 // plugins are used to bind a pod to a Node.
 type BindPlugin interface {
@@ -735,6 +836,8 @@ type BindPlugin interface {
 	Bind(ctx context.Context, state CycleState, p *v1.Pod, nodeName string) *Status
 }
 
+// 签名按「片段」而非一个整体来定义，是为了让多个插件各自贡献自己关心的维度，
+// 框架再去重合并；同 key 只留一个，插件就能安全复用别人的片段而不怕冲突。
 // A portion of a pod signature. The sign fragments from all plugins are combined
 // together to create a unified signature.
 type SignFragment struct {
@@ -761,9 +864,14 @@ type SignFragment struct {
 	Value any
 }
 
+// 用字节串而非结构体表示最终签名，是为了能直接当缓存键比较和哈希；
+// 插件的 Value 必须是可 JSON 序列化的，正是为保证同一 Pod 每次得到同样的字节。
 // The signature for a given pod after all of the results from plugins are consolidated.
 type PodSignature []byte
 
+// 签名用于批处理优化：若两个 Pod 的签名相同，调度结果可以复用，省掉重复的 Filter/Score。
+// 只要有一个参与筛选或打分的核心插件不实现它，批处理就只能整体关闭——否则会拿到不完整的签名，
+// 误把结果不同的 Pod 当成相同。
 // SignPlugin is an interface that should be implemented by plugins that either filter or score
 // pods to enable batching and gang scheduling optimizations.
 // Each plugin returns SignFragments used to build a single signature per pod entering the scheduling cycle,
@@ -785,9 +893,15 @@ type SignPlugin interface {
 	//   - Error: the signer hits something _unexpected_ and cannot build sign(s). A framework runtime just
 	//     proceeds with scheduling this pod without opportunistic batching optimization like Unschedulable,
 	//     but just report errors to logs.
+	//
+	// Error 与 Unschedulable 都只让这个 Pod 退出批处理，正常调度照旧；
+	// 区别仅在于 Error 还会记日志。把「优化不可用」和「Pod 本身不可调度」分开，
+	// 是为了避免签名插件的实现失误影响正常调度路径。
 	SignPod(ctx context.Context, pod *v1.Pod) ([]SignFragment, *Status)
 }
 
+// 允许 placement 重叠，是因为同一批资源可能以不同方式划给 pod group；
+// 交给后续打分再挑最优，比在生成阶段就武断去重更灵活。
 // GeneratePlacementsResult represents the result of the PlacementGeneratePlugin.
 type GeneratePlacementsResult struct {
 	// Placements is the set of placements that the plugin wants to partition the resources into.
@@ -797,6 +911,8 @@ type GeneratePlacementsResult struct {
 	Placements []*Placement
 }
 
+// 把「候选资源集合从哪来」做成扩展点，是为了让不同拓扑/资源策略的插件都能参与，
+// 框架只负责收集候选再交给打分阶段。
 // PlacementGeneratePlugin is an interface for plugins that generate candidate Placements.
 type PlacementGeneratePlugin interface {
 	Plugin
@@ -806,6 +922,8 @@ type PlacementGeneratePlugin interface {
 	GeneratePlacements(ctx context.Context, state PodGroupCycleState, podGroup PodGroupInfo, parentPlacement *Placement) (*GeneratePlacementsResult, *Status)
 }
 
+// 分数与 placement 一起存，是因为归一化阶段需要拿到「这个分是哪个候选的」，
+// 才能原地更新对应项而不打乱顺序。
 // PlacementScore stores result of a placement score plugin to be later used for normalization.
 type PlacementScore struct {
 	// Placement is the placement for which the score was computed
@@ -814,6 +932,8 @@ type PlacementScore struct {
 	Score int64
 }
 
+// 与节点 Score 一样，placement 打分也需要先归一化再加权；
+// 接口形状对齐是为了让两处逻辑可以共用同一套处理惯例。
 // PlacementScoreExtensions is an interface for PlacementScore extended functionality.
 type PlacementScoreExtensions interface {
 	// NormalizePlacementScore is called for all placement scores produced by the same plugin's "ScorePlacement"
@@ -822,6 +942,8 @@ type PlacementScoreExtensions interface {
 	NormalizePlacementScore(ctx context.Context, state PodGroupCycleState, podGroup PodGroupInfo, placementScores []PlacementScore) *Status
 }
 
+// 只对「对组内足够多 Pod 都可行」的 placement 打分，是为了避免把分数浪费在
+// 一眼就不满足 gang 约束的候选上；打分越高代表越适合整组落地。
 // PlacementScorePlugin is an interface for plugins that score feasible Placements.
 type PlacementScorePlugin interface {
 	Plugin
@@ -838,6 +960,8 @@ type PlacementScorePlugin interface {
 	PlacementScoreExtensions() PlacementScoreExtensions
 }
 
+// Handle 在插件初始化时一次性注入，避免插件自己去抓全局单例；
+// 这样框架可以精确控制每个插件能看到哪些能力，测试时也容易替换成假的。
 // Handle provides data and some tools that plugins can use. It is
 // passed to the plugin factories at the time of plugin initialization. Plugins
 // must store and use this handle to call framework functions.
@@ -861,14 +985,23 @@ type Handle interface {
 	//   otherwise, they might make a decision based on stale information.
 	//
 	// Instead, they should use the resources getting from Informer created from SharedInformerFactory().
+	//
+	// 快照只在调度周期开始时生成并保持到 Permit 结束，是为了让一次调度内的所有插件
+	// 看到同一个一致视图；正因如此，它才不能用在绑定阶段或队列提示里——那些地方需要的是最新或实时数据。
 	SnapshotSharedLister() SharedLister
 
 	// MutableSnapshotSharedLister returns a lister that supports mutating the snapshot.
 	// It extends SharedLister interface.
 	// Only PodGroupPostFilter extension point can use this.
+	//
+	// 可变更快照被显式限定在 PodGroupPostFilter：只有组级补救需要在同一周期内
+	// 「假设性改动 + 回滚」地试探多个 placement，其他扩展点拿到它只会增加误用风险。
 	MutableSnapshotSharedLister() MutableSnapshotSharedLister
 
 	// IterateOverWaitingPods acquires a read lock and iterates over the WaitingPods map.
+	//
+	// 用回调而非返回切片，是为了让框架在持有读锁期间完成遍历，
+	// 不必把内部 map 的引用暴露给插件造成并发隐患。
 	IterateOverWaitingPods(callback func(WaitingPod))
 
 	// GetWaitingPod returns a waiting pod given its UID.
@@ -888,12 +1021,18 @@ type Handle interface {
 	RemovePodInPreBind(uid types.UID)
 
 	// ClientSet returns a kubernetes clientSet.
+	//
+	// 暴露客户端给插件做必要的 API 操作，但放在 Handle 上是为了统一配置来源，
+	// 免得每个插件各自建一个 client、连错集群或证书过期都不知道。
 	ClientSet() clientset.Interface
 
 	// KubeConfig returns the raw kube config.
 	KubeConfig() *restclient.Config
 
 	// EventRecorder returns an event recorder.
+	//
+	// 事件记录器由框架统一提供，保证事件格式和上报目标一致；
+	// 插件不必也不应自己拼接事件投递逻辑。
 	EventRecorder() events.EventRecorderLogger
 
 	SharedInformerFactory() informers.SharedInformerFactory
@@ -917,14 +1056,23 @@ type Handle interface {
 
 	// APIDispatcher returns a APIDispatcher that can be used to dispatch API calls directly.
 	// This is non-nil if the SchedulerAsyncAPICalls feature gate is enabled.
+	//
+	// 只在异步 API 特性开启时非 nil，是为了让未开启该特性的部署完全不引入异步路径；
+	// 插件用前须判空，编译期无法强制这一点。
 	APIDispatcher() APIDispatcher
 
 	// APICacher returns an APICacher that coordinates API calls with the scheduler's internal cache.
 	// Use this to ensure the scheduler's view of the cluster remains consistent.
 	// This is non-nil if the SchedulerAsyncAPICalls feature gate is enabled.
+	//
+	// 与 APIDispatcher 配套：调度器要「先改缓存再异步落库」时，
+	// 必须通过它来发请求，才能保证内部状态和 API 的最终结果一致。
 	APICacher() APICacher
 
 	// ProfileName returns the profile name associated to a profile.
+	//
+	// 插件从 Handle 就能知道自己属于哪个 profile，不必靠外部注入或硬编码配置名；
+	// 同一个二进制里跑多 profile 时，这点尤其重要。
 	ProfileName() string
 
 	// PodGroupManager provides an interface for runtime information about pod groups from scheduler's cache.
@@ -934,12 +1082,16 @@ type Handle interface {
 	SignPod(ctx context.Context, pod *v1.Pod) PodSignature
 }
 
+// 把并行执行抽象成组件注入，是为了让插件在 CPU 充裕时并行处理节点，
+// 而测试环境或低配部署可以替换成串行实现，行为无需分叉。
 // Parallelizer helps run scheduling operations in parallel chunks where possible, to improve performance and CPU utilization.
 type Parallelizer interface {
 	// Until executes the given func doWorkPiece in parallel chunks, if applicable. Max number of chunks is param pieces.
 	Until(ctx context.Context, pieces int, doWorkPiece workqueue.DoWorkPieceFunc, operation string)
 }
 
+// 抽象出激活操作，是为了让抢占等插件能把被抢占受害者重新推回队列，
+// 而不必直接依赖队列的具体实现类型。
 // PodActivator abstracts operations in the scheduling queue.
 type PodActivator interface {
 	// Activate moves the given pods to activeQ.
@@ -947,9 +1099,14 @@ type PodActivator interface {
 	// the wildcard event is registered so that the pod will be requeued when it comes back.
 	// But, if a pod isn't found in unschedulableEntities or backoffQ and it's not in-flight (i.e., completely unknown pod),
 	// Activate would ignore the pod.
+	//
+	// 对「完全不认识」的 Pod 直接忽略，是因为队列里可能已经没有它的记录；
+	// 但在途（in-flight）的 Pod 要登记通配事件，等它回来时再重新入队，避免漏调度。
 	Activate(logger klog.Logger, pods map[string]*v1.Pod)
 }
 
+// 提名关系是抢占的核心数据：谁被选中、谁让位，都靠它维护；
+// 做成接口是为了让 DRA 等场景能注入不同的存储实现。
 // PodNominator abstracts operations to maintain nominated Pods.
 type PodNominator interface {
 	// AddNominatedPod adds the given pod to the nominator or
@@ -963,6 +1120,8 @@ type PodNominator interface {
 	NominatedPodsForNode(nodeName string) []PodInfo
 }
 
+// 抢占 PostFilter 需要反复问「如果移走这些 Pod，目标 Pod 能不能落下」；
+// PluginsRunner 把 Filter/Score/Reserve 等执行能力抽象出来，便于复用和替换实现。
 // PluginsRunner abstracts operations to run some plugins.
 // This is used by preemption PostFilter plugins when evaluating the feasibility of
 // scheduling the pod on nodes when certain running pods get evicted.

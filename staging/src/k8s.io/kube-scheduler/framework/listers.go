@@ -28,17 +28,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// 把 List/Get 包成接口而不是直接暴露 informer lister，是因为调度器需要的是「经过聚合的 NodeInfo」
+// （节点上跑着哪些 Pod、资源画像等），原始 informer 数据远不够用；
+// 同时插件只应看到快照口径的数据，避免各自去拼装、口径不一。
 // NodeInfoLister interface represents anything that can list/get NodeInfo objects from node name.
 type NodeInfoLister interface {
 	// List returns the list of NodeInfos.
 	List() ([]NodeInfo, error)
 	// HavePodsWithAffinityList returns the list of NodeInfos of nodes with pods with inter-pod (anti-)affinity terms.
+	//
+	// 单独维护「有亲和性 Pod 的节点」这个子集，是为了让 PreFilter 在扫描亲和性约束时
+	// 只遍历可能相关的节点，不必对全量节点做 O(n) 检查。
 	HavePodsWithAffinityList() ([]NodeInfo, error)
 	// HavePodsWithRequiredAntiAffinityList returns the list of NodeInfos of nodes with pods with required inter-pod anti-affinity terms.
 	HavePodsWithRequiredAntiAffinityList() ([]NodeInfo, error)
 	// HavePodsWithRequiredNonHostScopedAntiAffinityList returns nodes containing pods that require a wider topology scan (topologyKey other than hostname).
 	// PreFilter uses this to identify existing pods whose non-hostname scoped anti-affinity rules might conflict with the incoming pod, allowing it to skip scanning nodes that cannot possibly conflict.
 	// It returns an empty list and no error if the InterPodAffinityHostnameFastPath feature gate is disabled.
+	//
+	// 非 hostname 作用域的反亲和需要跨拓扑域扫描，代价高得多；
+	// 单独列出这类节点，PreFilter 就能先快速排除不可能冲突的节点。
 	HavePodsWithRequiredNonHostScopedAntiAffinityList() ([]NodeInfo, error)
 	// Get returns the NodeInfo of the given node name.
 	Get(nodeName string) (NodeInfo, error)
@@ -48,9 +57,14 @@ type NodeInfoLister interface {
 type StorageInfoLister interface {
 	// IsPVCUsedByPods returns true/false on whether the PVC is used by one or more scheduled pods,
 	// keyed in the format "namespace/name".
+	//
+	// 把 PVC 使用情况做成只读查询，是为了让 VolumeBinding 插件判断能否安全迁移/释放卷时，
+	// 依据的是调度器已 Assume 的 Pod 视角，而不是可能滞后或与实际绑定不一致的外部状态。
 	IsPVCUsedByPods(key string) bool
 }
 
+// 把一组 lister 收进一个聚合接口，是为了让 Handle 只暴露一个入口；
+// 新增 lister 时只改这里和实现，不必动所有插件的签名。
 // SharedLister groups scheduler-specific listers.
 type SharedLister interface {
 	NodeInfos() NodeInfoLister
@@ -71,6 +85,9 @@ type PodGroupLister interface {
 	Get(namespace, name string) (*schedulingapi.PodGroup, error)
 }
 
+// 可变更快照只开放给 PodGroupPostFilter：抢占/重排需要「假设移走某些 Pod 后」试探多种方案，
+// 又必须在同一调度周期内恢复原状，否则会污染后续插件看到的世界。
+// 限制只有一个 session，是因为快照是共享可变状态，并发会话没法保证回滚到正确基线。
 // MutableSnapshotSharedLister interface represents a lister that allows mutating snapshot and restoring it afterwards.
 // It extends SharedLister interface.
 // Only PodGroupPostFilter extension point can use this.
@@ -80,12 +97,18 @@ type MutableSnapshotSharedLister interface {
 	// It is used for operations requiring modifying snapshot state for checking multiple scenarios.
 	// There can be only one mutation session at the moment.
 	// If StartMutations() is called, EndMutations() must be called in the same scheduling cycle.
+	//
+	// 把「开始试探」做成显式方法而非隐式构造，是为了强制调用方配对 EndMutations；
+	// 整个周期内只允许一个 session，省去多会话叠加时基线难以定义的麻烦。
 	StartMutations() error
 	// EndMutations ends the mutation session and restores the snapshot state to the one before StartMutations.
 	EndMutations() error
 	// AddPod adds a given pod to the snapshot.
 	// AddPod should be called only if the mutation was started via StartMutations.
 	// This function is not thread safe, so it should be executed when no other routines can write/read from the snapshot.
+	//
+	// 明确要求非线程安全，是因为快照会被多个插件共享；
+	// 若允许并发写，Read 到的中间态会让试探结果失去意义，索性把同步责任交给调用方。
 	AddPod(podInfo PodInfo, nodeName string) error
 	// RemovePod removes a given pod from the snapshot.
 	// RemovePod should be called only if the mutation was started via StartMutations.
@@ -118,6 +141,8 @@ type CSINodeLister interface {
 	Get(name string) (*storagev1.CSINode, error)
 }
 
+// 把「应用 DeviceTaint 规则」的口径收进 lister 内部，是为了让调度器与 DRA 驱动
+// 对同一份 ResourceSlice 的看法一致；否则每个调用方各做一遍 taint 过滤，迟早出现分歧。
 // ResourceSliceLister can be used to obtain ResourceSlices.
 type ResourceSliceLister interface {
 	// ListWithDeviceTaintRules returns a list of all ResourceSlices with DeviceTaintRules applied
@@ -137,6 +162,8 @@ type DeviceClassLister interface {
 	Get(className string) (*resourceapi.DeviceClass, error)
 }
 
+// 在 informer 缓存之外再叠一层内存追踪，是为了填平「API 已改、informer 还没更新」的时间窗：
+// 绑定阶段分配的 claim 必须立刻对后续调度可见，否则同一 claim 会被重复分配。
 // ResourceClaimTracker can be used to obtain ResourceClaims, and track changes to ResourceClaims in-memory.
 //
 // If the claims are meant to be allocated in the API during the binding phase (when used by scheduler), the tracker helps avoid
@@ -147,6 +174,9 @@ type DeviceClassLister interface {
 type ResourceClaimTracker interface {
 	// List lists ResourceClaims. The result is guaranteed to immediately include any changes made via AssumeClaimAfterAPICall(),
 	// and SignalClaimPendingAllocation().
+	//
+	// 保证 List 立即反映 Assume/Pending 变更，是为了避免调度周期读到旧状态而做出错误分配决策；
+	// 若依赖 informer 的最终一致性，窗口期内的竞争几乎无法避免。
 	List() ([]*resourceapi.ResourceClaim, error)
 	// Get works like List(), but for a single claim.
 	Get(namespace, claimName string) (*resourceapi.ResourceClaim, error)
@@ -162,6 +192,9 @@ type ResourceClaimTracker interface {
 	// If the claim already has a pending allocation, then the allocation becomes shared. The same number of SignalClaimPendingAllocation() callers
 	// for a given claimUID is expected to eventually call MaybeRemoveClaimPendingAllocation() for that claimUID.
 	// This change is immediately reflected in the result of List() and the other accessors.
+	//
+	// 引用计数式的 pending 状态，是因为多个 Pod 可能同时依赖同一笔即将发生的分配；
+	// 等所有调用方都显式撤销后再清理，才不会提前释放别的 Pod 仍在等待的资源。
 	SignalClaimPendingAllocation(claimUID types.UID, allocatedClaim *resourceapi.ResourceClaim) error
 	// ClaimHasPendingAllocation answers whether a given claim has a pending allocation during the binding phase. It can be used to avoid
 	// race conditions in subsequent scheduling phases.
@@ -176,6 +209,9 @@ type ResourceClaimTracker interface {
 	// AssumeClaimAfterAPICall signals to the tracker that an API call modifying the given ResourceClaim was made in the binding phase, and the
 	// changes should be reflected in informers very soon. This change is immediately reflected in the result of List() and the other accessors.
 	// This mechanism can be used to avoid race conditions between the informer update and subsequent scheduling phases.
+	//
+	// Assume 是乐观更新：先按「请求会成功」推进调度，失败再回滚。
+	// 这样无需等待 informer 回灌就能继续下一轮调度，代价是必须提供成对的 Restore。
 	AssumeClaimAfterAPICall(claim *resourceapi.ResourceClaim) error
 	// AssumedClaimRestore signals to the tracker that something went wrong with the API call modifying the given ResourceClaim, and
 	// the changes won't be reflected in informers after all. List() and the other accessors immediately stop reflecting the assumed change,
@@ -191,6 +227,8 @@ type DeviceClassResolver interface {
 	GetDeviceClass(resourceName v1.ResourceName) *resourceapi.DeviceClass
 }
 
+// 做成可替换的管理器，是为了让 Cluster Autoscaler 这类只用调度阶段的调用方
+// 能注入模拟的 DRA 状态；默认实现走 API，模拟场景则在内存里伪造对象。
 // SharedDRAManager can be used to obtain DRA objects, and track modifications to them in-memory - mainly by the DRA plugin.
 // The plugin's default implementation obtains the objects from the API. A different implementation can be
 // plugged into the framework in order to simulate the state of DRA objects. For example, Cluster Autoscaler
@@ -202,6 +240,8 @@ type SharedDRAManager interface {
 	DeviceClassResolver() DeviceClassResolver
 }
 
+// 与 SharedDRAManager 同理：抽象出来是为了让模拟调度能替换 CSINode 的数据来源，
+// 而不必真的连 apiserver。
 // CSIManager can be used to obtain CSINode objects, and track changes to CSINode objects in-memory.
 // The plugin's default implementation obtains the objects from the API. A different implementation can be
 // plugged into the framework in order to simulate the state of CSINode objects. For example, Cluster Autoscaler
@@ -210,6 +250,8 @@ type CSIManager interface {
 	CSINodes() CSINodeLister
 }
 
+// 把组相关的 lister 和层级快照构造收在一个接口里，是因为 pod group 可以嵌套；
+// 调用方需要沿层级向上追溯时，入口集中在这里比散落各处更可控。
 // PodGroupManager provides an interface for runtime information about pod groups in the scheduler cache.
 type PodGroupManager interface {
 	// PodGroupStates returns the PodGroupStateLister.
@@ -221,11 +263,16 @@ type PodGroupManager interface {
 	// CompositePodGroups returns the CompositePodGroupLister.
 	CompositePodGroups() CompositePodGroupLister
 	// BuildHierarchySnapshotFromPod builds a hierarchy snapshot from the given pod.
+	//
+	// 从 Pod 反推出整棵组层级并生成快照，是为了让后续决策基于同一时刻的一致视图，
+	// 而不是多次查询缓存时组关系已经变了。
 	BuildHierarchySnapshotFromPod(pod *v1.Pod) (PodGroupManager, error)
 	// GetRootKeyForGroup returns the root key of the given EntityKey.
 	GetRootKeyForGroup(key EntityKey) (EntityKey, bool, error)
 }
 
+// 把 assumed 和 assigned 分开统计，是因为两者处在调度流程的不同阶段：
+// 前者刚过 Reserve、尚未真正绑定，后者已落盘； gang scheduling 判断「够不够数」时需要区分。
 // PodGroupState provides an interface to view the state of a single pod group.
 type PodGroupState interface {
 	// AllPods returns the UIDs of all pods known to the scheduler for this group.
@@ -235,6 +282,9 @@ type PodGroupState interface {
 	// UnscheduledPods returns all pods that are unscheduled for this group,
 	// i.e., are neither assumed nor assigned.
 	// The returned map type corresponds to the argument of the PodActivator.Activate method.
+	//
+	// 直接返回 Pod 指针映射而非 UID 集合，是因为它要作为 PodActivator.Activate 的入参；
+	// 形状对齐可以避免调用方再转换一遍，也减少中途对象被替换的可能。
 	UnscheduledPods() map[string]*v1.Pod
 	// AssumedPods returns the UIDs of all pods for this group in the "assumed" state,
 	// i.e., passed the Reserve gate.
