@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// statefulSetStrategy implements verification logic for Replication StatefulSets.
+// statefulSetStrategy 定义 StatefulSet 主资源策略，处理 Pod 模板、PVC 模板、更新策略和 Feature Gate 兼容。
 type statefulSetStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -69,6 +69,7 @@ func (statefulSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.
 }
 
 // PrepareForCreate clears the status of an StatefulSet before creation.
+// 创建时重置 Status、初始化 Generation，并清理禁用的 StatefulSet 字段与 PodTemplate 字段。
 func (statefulSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	statefulSet := obj.(*apps.StatefulSet)
 	// create cannot set status
@@ -81,6 +82,7 @@ func (statefulSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obj
 }
 
 // maxUnavailableInUse returns true if StatefulSet's maxUnavailable set(used)
+// maxUnavailableInUse 判断旧 StatefulSet 是否已配置 RollingUpdate.MaxUnavailable，用于关闭特性时保留已有字段。
 func maxUnavailableInUse(statefulset *apps.StatefulSet) bool {
 	if statefulset == nil {
 		return false
@@ -93,6 +95,7 @@ func maxUnavailableInUse(statefulset *apps.StatefulSet) bool {
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 更新时恢复 Status，按旧对象使用情况清理禁用字段；任何 Spec 变化都会递增 Generation。
 func (statefulSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	oldStatefulSet := old.(*apps.StatefulSet)
@@ -117,6 +120,8 @@ func (statefulSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtim
 //	if !utilfeature.DefaultFeatureGate.Enabled(features.MyFeature) && !myFeatureInUse(oldSvc) {
 //	    newSvc.Spec.MyFeature = nil
 //	}
+//
+// Feature Gate 关闭时仅丢弃此前未使用的 MaxUnavailable，避免升级后破坏旧对象已有配置。
 func dropStatefulSetDisabledFields(newSS *apps.StatefulSet, oldSS *apps.StatefulSet) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MaxUnavailableStatefulSet) && !maxUnavailableInUse(oldSS) {
 		if newSS.Spec.UpdateStrategy.RollingUpdate != nil {
@@ -126,6 +131,7 @@ func dropStatefulSetDisabledFields(newSS *apps.StatefulSet, oldSS *apps.Stateful
 }
 
 // Validate validates a new StatefulSet.
+// 创建时必须使用合法 ServiceName 和 PVC 模板；Recreate 更新策略则按对应 Feature Gate 决定是否允许。
 func (statefulSetStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	statefulSet := obj.(*apps.StatefulSet)
 	opts := pod.GetValidationOptionsFromPodTemplate(&statefulSet.Spec.Template, nil)
@@ -160,6 +166,7 @@ func (statefulSetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时对历史不可变字段采用兼容校验：旧 ServiceName/PVC 模板即使当前规则不合法，也不因无关更新而被拒绝。
 func (statefulSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	oldStatefulSet := old.(*apps.StatefulSet)
@@ -200,7 +207,7 @@ type statefulSetStatusStrategy struct {
 	statefulSetStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 专门处理 statefulsets/status；它允许控制器更新副本状态，但不能更改 Spec。
 var StatusStrategy = statefulSetStatusStrategy{Strategy}
 
 // GetResetFields returns the set of fields that get reset by the strategy
@@ -214,6 +221,7 @@ func (statefulSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fiel
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// 状态子资源恢复旧 Spec，再单独校验 Status 字段。
 func (statefulSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	oldStatefulSet := old.(*apps.StatefulSet)

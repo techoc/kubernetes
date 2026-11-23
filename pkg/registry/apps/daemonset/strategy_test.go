@@ -35,6 +35,7 @@ const (
 	namespace     = "test-namespace"
 )
 
+// TestSelectorImmutability 验证 DaemonSet Selector 创建后不可变更。
 func TestSelectorImmutability(t *testing.T) {
 	tests := []struct {
 		requestInfo       genericapirequest.RequestInfo
@@ -96,6 +97,7 @@ func TestSelectorImmutability(t *testing.T) {
 	}
 }
 
+// TestValidateToleratingBadLabels 验证更新兼容历史 Selector 中的非法 Label 值，同时阻止新增非法值。
 func TestValidateToleratingBadLabels(t *testing.T) {
 	oldObj := newDaemonSetWithSelectorLabels(map[string]string{"a": "b"}, 1)
 	oldObj.Spec.Selector.MatchExpressions = []metav1.LabelSelectorRequirement{{Key: "key", Operator: metav1.LabelSelectorOpNotIn, Values: []string{"bad value"}}}

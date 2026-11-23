@@ -50,7 +50,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// DeploymentStorage includes dummy storage for Deployments and for Scale subresource.
+// DeploymentStorage 聚合 Deployment 主资源、Status、Scale 和 Rollback 四个 REST 入口。
 type DeploymentStorage struct {
 	Deployment *REST
 	Status     *StatusREST
@@ -59,6 +59,7 @@ type DeploymentStorage struct {
 }
 
 // ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 声明不同 apps API 版本中副本字段在父资源里的路径，供 Scale ManagedFields 在父子资源间转换。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInDeployment
 }
@@ -71,6 +72,7 @@ var replicasPathInDeployment = managedfields.ResourcePathMappings{
 }
 
 // NewStorage returns new instance of DeploymentStorage.
+// NewStorage 组合主资源、Status、Scale 和 Rollback；Scale 与 Rollback 复用 Deployment 的底层 Store。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (DeploymentStorage, error) {
 	deploymentRest, deploymentStatusRest, deploymentRollbackRest, err := NewREST(optsGetter)
 	if err != nil {
@@ -91,6 +93,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against deployments.
+// NewREST 装配通用 Store，并为 Status 子资源复制 Store 后替换 UpdateStrategy，限制它只能写 Status。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, *RollbackREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &apps.Deployment{} },
@@ -202,6 +205,7 @@ func (r *RollbackREST) Destroy() {
 var _ = rest.NamedCreater(&RollbackREST{})
 
 // Create runs rollback for deployment
+// Create 校验 DeploymentRollback 请求后，通过更新 Deployment.Spec.RollbackTo 触发控制器执行回滚。
 func (r *RollbackREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	rollback, ok := obj.(*apps.DeploymentRollback)
 	if !ok {
@@ -245,6 +249,7 @@ func (r *RollbackREST) rollbackDeployment(ctx context.Context, deploymentID stri
 	return nil
 }
 
+// setDeploymentRollback 用 GuaranteedUpdate 基于最新 Deployment 合并回滚 Annotation 并写入 RollbackTo，避免并发更新覆盖。
 func (r *RollbackREST) setDeploymentRollback(ctx context.Context, deploymentID string, config *apps.RollbackConfig, annotations map[string]string, dryRun bool) (*apps.Deployment, error) {
 	dKey, err := r.store.KeyFunc(ctx, deploymentID)
 	if err != nil {
@@ -279,6 +284,7 @@ var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
 // GroupVersionKind returns GroupVersionKind for Deployment Scale object
+// 根据调用方使用的 Deployment API 版本返回对应 Scale GVK，保持旧版本客户端的内容协商兼容。
 func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	switch containingGV {
 	case extensionsv1beta1.SchemeGroupVersion:
@@ -304,6 +310,7 @@ func (r *ScaleREST) Destroy() {
 }
 
 // Get retrieves object from Scale storage.
+// Get 从 Deployment 读取副本期望值与状态值，再投影为 autoscaling.Scale 对象。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
 	if err != nil {
@@ -318,6 +325,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 }
 
 // Update alters scale subset of Deployment object.
+// Update 将 Scale 子资源请求适配成 Deployment 更新，并强制禁止通过 scale 子资源创建对象。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
 		ctx,
@@ -368,6 +376,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 }
 
 // scaleFromDeployment returns a scale subresource for a deployment.
+// scaleFromDeployment 把 Deployment 的副本数、Selector 和元数据映射成 autoscaling.Scale 返回给客户端。
 func scaleFromDeployment(deployment *apps.Deployment) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {
@@ -393,7 +402,7 @@ func scaleFromDeployment(deployment *apps.Deployment) (*autoscaling.Scale, error
 	}, nil
 }
 
-// scaleUpdatedObjectInfo transforms existing deployment -> existing scale -> new scale -> new deployment
+// scaleUpdatedObjectInfo 适配器负责 Deployment → Scale → 修改后的 Scale → Deployment 的转换，同时同步子资源 ManagedFields。
 type scaleUpdatedObjectInfo struct {
 	name           string
 	reqObjInfo     rest.UpdatedObjectInfo
@@ -404,6 +413,7 @@ func (i *scaleUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.reqObjInfo.Preconditions()
 }
 
+// UpdatedObject 先从父对象提取 Scale 和子资源 ManagedFields，执行客户端变更/校验，再把 replicas 和字段所有权写回父对象。
 func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	deployment, ok := oldObj.DeepCopyObject().(*apps.Deployment)
 	if !ok {

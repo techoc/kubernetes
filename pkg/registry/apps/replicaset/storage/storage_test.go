@@ -87,6 +87,7 @@ func validNewReplicaSet() *apps.ReplicaSet {
 
 var validReplicaSet = *validNewReplicaSet()
 
+// TestCreate 验证 ReplicaSet 主资源经过通用 RESTStorage 后成功持久化。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -144,6 +145,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(validNewReplicaSet())
 }
 
+// TestGenerationNumber 确认 Spec 变化递增 Generation，而 Status 变化不会错误递增。
 func TestGenerationNumber(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -245,6 +247,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestScaleGet 验证 Scale 子资源从 ReplicaSet 正确投影副本数和标签选择器。
 func TestScaleGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -291,6 +294,7 @@ func TestScaleGet(t *testing.T) {
 	}
 }
 
+// TestScaleUpdate 验证通过 Scale 子资源修改副本数会持久化到 ReplicaSet.Spec.Replicas。
 func TestScaleUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -337,6 +341,7 @@ func TestScaleUpdate(t *testing.T) {
 	}
 }
 
+// TestStatusUpdate 验证 ReplicaSet 状态子资源的字段重置和更新行为。
 func TestStatusUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

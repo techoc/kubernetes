@@ -41,6 +41,7 @@ const (
 	namespace      = "test-namespace"
 )
 
+// TestReplicaSetStrategy 验证 ReplicaSet 创建/更新策略、Status 重置和 Generation 变化。
 func TestReplicaSetStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {
@@ -96,6 +97,7 @@ func TestReplicaSetStrategy(t *testing.T) {
 	}
 }
 
+// TestReplicaSetStatusStrategy 验证 replicasets/status 只写入 Status，不允许改动 Spec。
 func TestReplicaSetStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {
@@ -154,6 +156,7 @@ func TestReplicaSetStatusStrategy(t *testing.T) {
 	}
 }
 
+// TestReplicaSetStatusStrategyWithDeploymentReplicaSetTerminatingReplicas 验证 TerminatingReplicas 受 Feature Gate 和旧值使用情况控制。
 func TestReplicaSetStatusStrategyWithDeploymentReplicaSetTerminatingReplicas(t *testing.T) {
 	tests := []struct {
 		name                                          string
@@ -218,6 +221,7 @@ func TestReplicaSetStatusStrategyWithDeploymentReplicaSetTerminatingReplicas(t *
 	}
 }
 
+// TestSelectorImmutability 确认 ReplicaSet Selector 在创建后不可通过更新修改。
 func TestSelectorImmutability(t *testing.T) {
 	tests := []struct {
 		requestInfo       genericapirequest.RequestInfo

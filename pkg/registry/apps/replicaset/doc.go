@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package replicaset provides Registry interface and it's RESTStorage
+// Package replicaset 提供 ReplicaSet 的 REST 写入策略、字段选择器和存储接口。
 // implementation for storing ReplicaSet api objects.
 package replicaset

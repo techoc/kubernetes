@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controllerrevision 提供 ControllerRevision 历史快照对象的 REST 写入策略和存储接口。
 package controllerrevision

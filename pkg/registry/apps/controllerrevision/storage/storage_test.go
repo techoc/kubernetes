@@ -32,6 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// TestCreate 验证 ControllerRevision 快照对象可正常创建并持久化。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -56,6 +57,7 @@ func TestCreate(t *testing.T) {
 		nilData)
 }
 
+// TestUpdate 验证 ControllerRevision 更新经过专用策略和内容校验。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -114,6 +116,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(newControllerRevision("valid", metav1.NamespaceDefault, newObject(), 0))
 }
 
+// TestWatch 验证 ControllerRevision 的 Watch 事件可以通过通用存储层正确返回。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

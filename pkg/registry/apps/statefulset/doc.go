@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package statefulset 提供 StatefulSet 的 REST 写入策略、更新策略校验和持久化入口。
 package statefulset

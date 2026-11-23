@@ -27,12 +27,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/apps/controllerrevision"
 )
 
-// REST implements a RESTStorage for ControllerRevision
+// REST 实现 ControllerRevision 的通用 RESTStorage；快照数据按控制器提供的对象内容存入后端。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work with ControllerRevision objects.
+// NewREST 创建 ControllerRevision Store，注册对象类型、资源名、版本策略和表格输出器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &apps.ControllerRevision{} },
@@ -46,6 +47,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 
 		TableConvertor: printerstorage.TableConvertor{TableGenerator: printers.NewTableGenerator().With(printersinternal.AddHandlers)},
 	}
+	// 将统一 RESTOptions 注入通用 Store，确定 ControllerRevision 的 etcd 前缀和序列化存储行为。
 	options := &generic.StoreOptions{RESTOptions: optsGetter}
 	if err := store.CompleteWithOptions(options); err != nil {
 		return nil, err

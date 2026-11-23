@@ -35,12 +35,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// deploymentStrategy implements behavior for Deployments.
+// deploymentStrategy 定义 Deployment 主资源的写入策略，负责状态隔离、Generation、Pod 模板兼容和校验。
 type deploymentStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
+// Strategy 是 Deployment 主资源的默认 REST 策略；删除时使用级联删除策略，清理其 ReplicaSet/Pod 依赖。
 // Strategy is the default logic that applies when creating and updating Deployment
 // objects via the REST API.
 var Strategy = deploymentStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
@@ -49,6 +50,7 @@ var Strategy = deploymentStrategy{rest.DeclarativeValidation{Scheme: legacyschem
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
 // DefaultGarbageCollectionPolicy returns DeleteDependents for all currently served versions.
+// 删除 Deployment 时默认级联删除其控制器依赖对象，避免遗留 ReplicaSet。
 func (deploymentStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.DeleteDependents
 }
@@ -71,6 +73,7 @@ func (deploymentStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.S
 }
 
 // PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// 创建时由 API Server 初始化 Status 和 Generation，再按 Feature Gate 清理 PodTemplate 中不可用字段。
 func (deploymentStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	deployment := obj.(*apps.Deployment)
 	deployment.Status = apps.DeploymentStatus{}
@@ -107,6 +110,7 @@ func (deploymentStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 更新时先恢复服务端维护的 Status，再清理禁用字段；Spec 或 Annotations 变化都会递增 Generation。
 func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDeployment := obj.(*apps.Deployment)
 	oldDeployment := old.(*apps.Deployment)
@@ -114,6 +118,7 @@ func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime
 
 	pod.DropDisabledTemplateFields(&newDeployment.Spec.Template, &oldDeployment.Spec.Template)
 
+	// Generation 用于区分期望状态版本：Spec 变化代表控制器需要观察新的目标状态；Annotations 也会复制到 ReplicaSet，因此同样递增。
 	// Spec updates bump the generation so that we can distinguish between
 	// scaling events and template changes, annotation updates bump the generation
 	// because annotations are copied from deployments to their replica sets.
@@ -124,6 +129,7 @@ func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 同时校验新对象与新旧 PodTemplate，处理不可变字段和模板兼容规则。
 func (deploymentStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newDeployment := obj.(*apps.Deployment)
 	oldDeployment := old.(*apps.Deployment)
@@ -153,7 +159,7 @@ type deploymentStatusStrategy struct {
 	deploymentStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 专门处理 deployments/status；只允许修改状态，不能借此改动 Spec 或 Labels。
 var StatusStrategy = deploymentStatusStrategy{Strategy}
 
 // GetResetFields returns the set of fields that get reset by the strategy
@@ -168,6 +174,7 @@ func (deploymentStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// 状态更新恢复旧 Spec/Labels，并清理当前 Feature Gate 不允许且旧对象也未使用的状态字段。
 func (deploymentStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDeployment := obj.(*apps.Deployment)
 	oldDeployment := old.(*apps.Deployment)
@@ -187,6 +194,7 @@ func (deploymentStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old r
 }
 
 // dropDisabledStatusFields removes disabled fields from the deployment status.
+// 关闭 TerminatingReplicas 特性时，仅当旧状态未使用该字段才清除，保证已有对象升级期间兼容。
 func dropDisabledStatusFields(deploymentStatus, oldDeploymentStatus *apps.DeploymentStatus) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DeploymentReplicaSetTerminatingReplicas) &&
 		(oldDeploymentStatus == nil || oldDeploymentStatus.TerminatingReplicas == nil) {

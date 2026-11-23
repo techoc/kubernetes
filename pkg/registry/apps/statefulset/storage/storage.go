@@ -44,7 +44,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// StatefulSetStorage includes dummy storage for StatefulSets, and their Status and Scale subresource.
+// StatefulSetStorage 聚合 StatefulSet 主资源、Status 和 Scale 子资源。
 type StatefulSetStorage struct {
 	StatefulSet *REST
 	Status      *StatusREST
@@ -52,6 +52,7 @@ type StatefulSetStorage struct {
 }
 
 // ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 声明 apps/v1 与历史版本中 replicas 字段的父资源路径，供 Scale ManagedFields 映射使用。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInStatefulSet
 }
@@ -64,6 +65,7 @@ var replicasPathInStatefulSet = managedfields.ResourcePathMappings{
 }
 
 // NewStorage returns new instance of StatefulSetStorage.
+// NewStorage 将 StatefulSet 主资源、Status 和 Scale Handler 组合到同一个存储对象中。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (StatefulSetStorage, error) {
 	statefulSetRest, statefulSetStatusRest, err := NewREST(optsGetter)
 	if err != nil {
@@ -83,6 +85,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against statefulsets.
+// NewREST 创建 StatefulSet 通用 Store，并为 Status 子资源复制 Store 后设置独立策略。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &apps.StatefulSet{} },
@@ -102,6 +105,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 		return nil, nil, err
 	}
 
+	// Status 子资源共享底层 Storage，但只使用 StatusStrategy 接受状态字段写入。
 	statusStore := *store
 	statusStore.UpdateStrategy = statefulset.StatusStrategy
 	statusStore.ResetFieldsStrategy = statefulset.StatusStrategy
@@ -194,6 +198,7 @@ func (r *ScaleREST) Destroy() {
 }
 
 // Get retrieves object from Scale storage.
+// Get 将 StatefulSet 当前副本期望值、运行值和 Selector 投影为标准 Scale 对象。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
 	if err != nil {
@@ -208,6 +213,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 }
 
 // Update alters scale subset of StatefulSet object.
+// Update 将客户端 Scale 更新转换为 StatefulSet 父资源更新，最终只改变 Spec.Replicas 及对应 ManagedFields。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
 		ctx,
@@ -258,6 +264,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 }
 
 // scaleFromStatefulSet returns a scale subresource for a statefulset.
+// scaleFromStatefulSet 将 StatefulSet 的副本数、Selector 和元数据转为 autoscaling.Scale。
 func scaleFromStatefulSet(ss *apps.StatefulSet) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
 	if err != nil {
@@ -293,6 +300,7 @@ func (i *scaleUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.reqObjInfo.Preconditions()
 }
 
+// UpdatedObject 在 StatefulSet/Scale 两种对象视图之间转换，校验请求、处理 ManagedFields，再把副本数写回父对象。
 func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	statefulset, ok := oldObj.DeepCopyObject().(*apps.StatefulSet)
 	if !ok {

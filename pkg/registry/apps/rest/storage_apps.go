@@ -31,10 +31,11 @@ import (
 	statefulsetstore "k8s.io/kubernetes/pkg/registry/apps/statefulset/storage"
 )
 
-// StorageProvider is a struct for apps REST storage.
+// StorageProvider 负责装配 apps API Group 的 RESTStorage，并根据 APIResourceConfigSource 决定注册哪些资源。
 type StorageProvider struct{}
 
 // NewRESTStorage returns APIGroupInfo object.
+// NewRESTStorage 创建 apps APIGroupInfo，并将已启用资源的 v1 REST 接口挂入版本化 StorageMap。
 func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(apps.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -49,10 +50,11 @@ func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.AP
 	return apiGroupInfo, nil
 }
 
+// v1Storage 按资源开关逐个创建 Storage；主资源、status、scale 等子资源分别使用独立 REST Handler。
 func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// deployments
+	// Deployment 同时提供主资源、状态子资源和 scale 子资源；Rollback 作为历史兼容动作在该 Storage 内实现。
 	if resource := "deployments"; apiResourceConfigSource.ResourceEnabled(appsapiv1.SchemeGroupVersion.WithResource(resource)) {
 		deploymentStorage, err := deploymentstore.NewStorage(restOptionsGetter)
 		if err != nil {
@@ -63,7 +65,7 @@ func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIReso
 		storage[resource+"/scale"] = deploymentStorage.Scale
 	}
 
-	// statefulsets
+	// StatefulSet 提供主资源、状态和 scale 子资源，Replica 数量修改最终映射回 Spec.Replicas。
 	if resource := "statefulsets"; apiResourceConfigSource.ResourceEnabled(appsapiv1.SchemeGroupVersion.WithResource(resource)) {
 		statefulSetStorage, err := statefulsetstore.NewStorage(restOptionsGetter)
 		if err != nil {
@@ -74,7 +76,7 @@ func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIReso
 		storage[resource+"/scale"] = statefulSetStorage.Scale
 	}
 
-	// daemonsets
+	// DaemonSet 暴露主资源与状态子资源；当前该资源没有独立 scale Handler。
 	if resource := "daemonsets"; apiResourceConfigSource.ResourceEnabled(appsapiv1.SchemeGroupVersion.WithResource(resource)) {
 		daemonSetStorage, daemonSetStatusStorage, err := daemonsetstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -84,7 +86,7 @@ func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIReso
 		storage[resource+"/status"] = daemonSetStatusStorage
 	}
 
-	// replicasets
+	// ReplicaSet 提供主资源、状态和 scale 子资源。
 	if resource := "replicasets"; apiResourceConfigSource.ResourceEnabled(appsapiv1.SchemeGroupVersion.WithResource(resource)) {
 		replicaSetStorage, err := replicasetstore.NewStorage(restOptionsGetter)
 		if err != nil {
@@ -95,7 +97,7 @@ func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIReso
 		storage[resource+"/scale"] = replicaSetStorage.Scale
 	}
 
-	// controllerrevisions
+	// ControllerRevision 仅注册历史快照主资源，不暴露 scale/status 子资源。
 	if resource := "controllerrevisions"; apiResourceConfigSource.ResourceEnabled(appsapiv1.SchemeGroupVersion.WithResource(resource)) {
 		historyStorage, err := controllerrevisionsstore.NewREST(restOptionsGetter)
 		if err != nil {

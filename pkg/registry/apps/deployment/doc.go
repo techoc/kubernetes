@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package deployment 负责 Deployment 的 REST 写入策略、字段校验、状态隔离与持久化入口。
 package deployment

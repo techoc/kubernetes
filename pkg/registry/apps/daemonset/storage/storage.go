@@ -32,12 +32,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for DaemonSets
+// REST 实现 DaemonSet 主资源的 RESTStorage；Status 子资源使用单独的 Strategy 副本。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against DaemonSets.
+// NewREST 创建 DaemonSet Store，并使用 StatusStrategy 派生状态更新存储，确保主资源和状态写入边界分离。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &apps.DaemonSet{} },
@@ -57,6 +58,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 		return nil, nil, err
 	}
 
+	// Status Handler 复用 etcd 存储配置，但替换写入策略，避免 /status 更新 Spec。
 	statusStore := *store
 	statusStore.UpdateStrategy = daemonset.StatusStrategy
 	statusStore.ResetFieldsStrategy = daemonset.StatusStrategy
@@ -101,6 +103,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 固定 forceAllowCreate=false，状态子资源只能更新已有 DaemonSet，不能在更新时隐式创建。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

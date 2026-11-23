@@ -48,6 +48,7 @@ import (
 )
 
 // ReplicaSetStorage includes dummy storage for ReplicaSets and for Scale subresource.
+// ReplicaSetStorage 聚合 ReplicaSet 主资源、Status 和 Scale 子资源。
 type ReplicaSetStorage struct {
 	ReplicaSet *REST
 	Status     *StatusREST
@@ -55,6 +56,7 @@ type ReplicaSetStorage struct {
 }
 
 // ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 描述各 API 版本下 replicas 字段在 ReplicaSet 父对象中的位置，供 ManagedFields 转换使用。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInReplicaSet
 }
@@ -66,6 +68,7 @@ var replicasPathInReplicaSet = managedfields.ResourcePathMappings{
 }
 
 // NewStorage returns new instance of ReplicaSetStorage.
+// NewStorage 将主资源、Status 和 Scale Handler 组合起来；三个端点共享同一持久化 Store。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (ReplicaSetStorage, error) {
 	replicaSetRest, replicaSetStatusRest, err := NewREST(optsGetter)
 	if err != nil {
@@ -85,6 +88,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against ReplicaSet.
+// NewREST 创建 ReplicaSet 通用 Store，并复制 Store 配置给 Status 子资源以替换为专用更新策略。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &apps.ReplicaSet{} },
@@ -200,6 +204,7 @@ func (r *ScaleREST) Destroy() {
 }
 
 // Get retrieves object from Scale storage.
+// Get 从 ReplicaSet 投影 Scale：Spec.Replicas 表示期望副本数，Status.Replicas 表示当前副本数。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
 	if err != nil {
@@ -214,6 +219,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 }
 
 // Update alters scale subset of ReplicaSet object.
+// Update 将 Scale 请求适配到 ReplicaSet 父对象更新流程，并返回更新后的 Scale 表示。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
 		ctx,
@@ -264,6 +270,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 }
 
 // scaleFromReplicaSet returns a scale subresource for a replica set.
+// scaleFromReplicaSet 将 ReplicaSet 的副本数、Selector 和对象元数据转换为标准 autoscaling.Scale。
 func scaleFromReplicaSet(rs *apps.ReplicaSet) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 	if err != nil {
@@ -299,6 +306,7 @@ func (i *scaleUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.reqObjInfo.Preconditions()
 }
 
+// UpdatedObject 在父 ReplicaSet 与 Scale 视图间转换，校验 UID/资源版本并同步 ManagedFields 后写回 Spec.Replicas。
 func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	replicaset, ok := oldObj.DeepCopyObject().(*apps.ReplicaSet)
 	if !ok {

@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// daemonSetStrategy implements verification logic for daemon sets.
+// daemonSetStrategy 定义 DaemonSet 主资源策略，重点管理 Pod 模板版本 TemplateGeneration 与对象 Generation。
 type daemonSetStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -67,6 +67,7 @@ func (daemonSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 }
 
 // PrepareForCreate clears the status of a daemon set before creation.
+// 创建时清空 Status、初始化 Generation/TemplateGeneration，并清理 PodTemplate 中被关闭的字段。
 func (daemonSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	daemonSet := obj.(*apps.DaemonSet)
 	daemonSet.Status = apps.DaemonSetStatus{}
@@ -80,6 +81,7 @@ func (daemonSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Objec
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 更新时恢复 Status 和服务端维护的 TemplateGeneration；模板变化时两种 Generation 都递增，其他 Spec 变化只递增对象 Generation。
 func (daemonSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDaemonSet := obj.(*apps.DaemonSet)
 	oldDaemonSet := old.(*apps.DaemonSet)
@@ -103,6 +105,7 @@ func (daemonSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	//
 	// TODO: Any changes to a part of the object that represents desired state (labels,
 	// annotations etc) should also increment the generation.
+	// PodTemplateGeneration 专门标记模板版本，DaemonSet Controller 可据此判断是否需要触发新一轮 Pod 替换。
 	if !apiequality.Semantic.DeepEqual(oldDaemonSet.Spec.Template, newDaemonSet.Spec.Template) {
 		newDaemonSet.Spec.TemplateGeneration = oldDaemonSet.Spec.TemplateGeneration + 1
 		newDaemonSet.Generation = oldDaemonSet.Generation + 1
@@ -137,6 +140,7 @@ func (daemonSetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新校验允许兼容旧对象中历史上无效的 Selector Label 值，但仍校验本次更新规则。
 func (daemonSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newDaemonSet := obj.(*apps.DaemonSet)
 	oldDaemonSet := old.(*apps.DaemonSet)
@@ -167,7 +171,7 @@ type daemonSetStatusStrategy struct {
 	daemonSetStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 专门处理 daemonsets/status；恢复完整 Spec，防止状态写入覆盖期望配置。
 var StatusStrategy = daemonSetStatusStrategy{Strategy}
 
 // GetResetFields returns the set of fields that get reset by the strategy
@@ -180,6 +184,7 @@ func (daemonSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldp
 	}
 }
 
+// 状态子资源只接受 Status 变化，Spec 始终从旧对象恢复。
 func (daemonSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDaemonSet := obj.(*apps.DaemonSet)
 	oldDaemonSet := old.(*apps.DaemonSet)

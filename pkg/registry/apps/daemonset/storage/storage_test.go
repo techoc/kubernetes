@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd，并同时构造 DaemonSet 主资源和 Status REST Handler。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, apps.GroupName)
 	restOptions := generic.RESTOptions{
@@ -74,6 +75,7 @@ func newValidDaemonSet() *apps.DaemonSet {
 
 var validDaemonSet = newValidDaemonSet()
 
+// TestCreate 验证 DaemonSet 主资源创建和 Pod 模板校验。
 func TestCreate(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -101,6 +103,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 DaemonSet Spec 更新及 Generation/TemplateGeneration 维护。
 func TestUpdate(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -182,6 +185,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证 DaemonSet Status 子资源只更新状态字段。
 func TestUpdateStatus(t *testing.T) {
 	storage, statusStorage, server := newStorage(t)
 	defer server.Terminate(t)

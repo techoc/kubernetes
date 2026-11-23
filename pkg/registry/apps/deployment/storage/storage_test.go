@@ -91,6 +91,7 @@ func validNewDeployment() *apps.Deployment {
 
 var validDeployment = *validNewDeployment()
 
+// TestCreate 验证 Deployment 主资源通过 etcd RESTStorage 创建，并执行名称/对象校验。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -194,6 +195,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestScaleGet 验证 Deployment 的 Scale 视图能正确读取期望副本数、当前副本数和 Selector。
 func TestScaleGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -236,6 +238,7 @@ func TestScaleGet(t *testing.T) {
 	}
 }
 
+// TestScaleUpdate 验证 Scale 子资源更新最终写回 Deployment.Spec.Replicas。
 func TestScaleUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -275,6 +278,7 @@ func TestScaleUpdate(t *testing.T) {
 	}
 }
 
+// TestStatusUpdate 验证 Status 子资源只更新 Deployment.Status，不覆盖 Spec。
 func TestStatusUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -312,6 +316,7 @@ func TestStatusUpdate(t *testing.T) {
 	}
 }
 
+// TestEtcdCreateDeploymentRollback 验证 Rollback 子资源把回滚目标写入 Deployment，交由控制器执行回滚。
 func TestEtcdCreateDeploymentRollback(t *testing.T) {
 	testCases := map[string]struct {
 		rollback apps.DeploymentRollback
@@ -375,6 +380,7 @@ func TestEtcdCreateDeploymentRollback(t *testing.T) {
 	}
 }
 
+// TestCreateDeploymentRollbackValidation 覆盖回滚对象字段和 URL 名称不匹配等非法请求。
 func TestCreateDeploymentRollbackValidation(t *testing.T) {
 	storage, server := newStorage(t)
 	rollbackStorage := storage.Rollback

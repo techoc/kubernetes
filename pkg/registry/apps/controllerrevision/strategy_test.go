@@ -28,18 +28,21 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestStrategy_NamespaceScoped 确认 ControllerRevision 是 Namespace 作用域资源。
 func TestStrategy_NamespaceScoped(t *testing.T) {
 	if !Strategy.NamespaceScoped() {
 		t.Error("ControllerRevision strategy must be namespace scoped")
 	}
 }
 
+// TestStrategy_AllowCreateOnUpdate 确认更新接口不能在对象不存在时退化为创建。
 func TestStrategy_AllowCreateOnUpdate(t *testing.T) {
 	if Strategy.AllowCreateOnUpdate(context.Background()) {
 		t.Error("ControllerRevision should not be created on update")
 	}
 }
 
+// TestStrategy_Validate 验证 ControllerRevision 创建时对快照内容和 Revision 元数据的校验。
 func TestStrategy_Validate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	var (
@@ -76,6 +79,7 @@ func TestStrategy_Validate(t *testing.T) {
 	}
 }
 
+// TestStrategy_ValidateUpdate 验证 ControllerRevision 更新前后的数据和版本字段约束。
 func TestStrategy_ValidateUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	var (

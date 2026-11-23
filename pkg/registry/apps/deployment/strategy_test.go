@@ -41,6 +41,7 @@ const (
 	namespace      = "test-namespace"
 )
 
+// TestStatusUpdates 验证 Deployment Status 子资源能更新状态，但不会接受 Spec 变更。
 func TestStatusUpdates(t *testing.T) {
 	tests := []struct {
 		old      runtime.Object
@@ -67,6 +68,7 @@ func TestStatusUpdates(t *testing.T) {
 	}
 }
 
+// TestStatusUpdatesWithDeploymentReplicaSetTerminatingReplicas 验证 TerminatingReplicas 特性关闭时对旧状态字段的兼容保留。
 func TestStatusUpdatesWithDeploymentReplicaSetTerminatingReplicas(t *testing.T) {
 	tests := []struct {
 		name                                          string
@@ -157,6 +159,7 @@ func newDeployment(labels, annotations map[string]string) *apps.Deployment {
 	}
 }
 
+// TestSelectorImmutability 确认 Deployment 的 Selector 创建后不可随普通更新改变。
 func TestSelectorImmutability(t *testing.T) {
 	tests := []struct {
 		requestInfo       genericapirequest.RequestInfo
@@ -293,6 +296,7 @@ func newDeploymentWithHugePageValue(resourceName api.ResourceName, value resourc
 	}
 }
 
+// TestDeploymentStrategyValidate 覆盖 Deployment 创建时 Spec、Selector 和 PodTemplate 的校验规则。
 func TestDeploymentStrategyValidate(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -313,6 +317,7 @@ func TestDeploymentStrategyValidate(t *testing.T) {
 	}
 }
 
+// TestDeploymentStrategyValidateUpdate 验证更新时不可变字段及 PodTemplate 兼容校验。
 func TestDeploymentStrategyValidateUpdate(t *testing.T) {
 	tests := []struct {
 		name          string

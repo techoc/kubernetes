@@ -37,6 +37,7 @@ import (
 
 var ignoreErrValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
 
+// TestStatefulSetStrategy 覆盖 StatefulSet 创建/更新默认值、不可变字段和 PodTemplate 校验。
 func TestStatefulSetStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {
@@ -276,6 +277,7 @@ func TestStatefulSetStrategy(t *testing.T) {
 	}
 }
 
+// TestStatefulSetStatusStrategy 验证状态更新不会修改 StatefulSet.Spec。
 func TestStatefulSetStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {
@@ -376,6 +378,7 @@ func makeValidStatefulSetWithUpdateStrategy(strategyType apps.StatefulSetUpdateS
 }
 
 // TestDropStatefulSetDisabledFields tests if the drop functionality is working fine or not
+// TestDropStatefulSetDisabledFields 验证 MaxUnavailable 特性关闭时，新字段被清理而旧对象已使用的值继续保留。
 func TestDropStatefulSetDisabledFields(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -438,6 +441,7 @@ func TestDropStatefulSetDisabledFields(t *testing.T) {
 	}
 }
 
+// TestStatefulSetStrategy_RecreateStrategy_Validate 验证 Recreate 更新策略仅在 Feature Gate 允许时可用于创建。
 func TestStatefulSetStrategy_RecreateStrategy_Validate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 
@@ -476,6 +480,7 @@ func TestStatefulSetStrategy_RecreateStrategy_Validate(t *testing.T) {
 
 }
 
+// TestStatefulSetStrategy_RecreateStrategy_ValidateUpdate 验证更新时兼容既有 Recreate 配置，并遵循当前 Feature Gate。
 func TestStatefulSetStrategy_RecreateStrategy_ValidateUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 

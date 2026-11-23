@@ -41,6 +41,7 @@ import (
 )
 
 // TODO: allow for global factory override
+// newStorage 创建带 etcd 测试后端的 StatefulSet/Status/Scale 存储组合。
 func newStorage(t *testing.T) (StatefulSetStorage, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, apps.GroupName)
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage, Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "statefulsets"}
@@ -104,6 +105,7 @@ func TestCreate(t *testing.T) {
 
 // TODO: Test updates to spec when we allow them.
 
+// TestStatusUpdate 验证 StatefulSet Status 子资源不能修改 Spec。
 func TestStatusUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -210,6 +212,7 @@ func TestShortNames(t *testing.T) {
 	registrytest.AssertShortNames(t, storage.StatefulSet, expected)
 }
 
+// TestScaleGet 验证 Scale 返回 StatefulSet 的期望副本数、当前副本数和 Selector。
 func TestScaleGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -255,6 +258,7 @@ func TestScaleGet(t *testing.T) {
 	}
 }
 
+// TestScaleUpdate 验证通过 Scale 子资源修改 StatefulSet 的副本数并保持其他 Spec 不变。
 func TestScaleUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
