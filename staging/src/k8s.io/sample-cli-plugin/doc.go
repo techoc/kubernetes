@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package samplecliplugin 作为 sample-cli-plugin 模块的根包存在，主要用于占位，
+// 便于该模块拥有独立的包路径与发布边界；实际命令实现位于 pkg/cmd 子包。
 package samplecliplugin
