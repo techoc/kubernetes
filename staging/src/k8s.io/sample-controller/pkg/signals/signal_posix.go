@@ -23,4 +23,5 @@ import (
 	"syscall"
 )
 
+// POSIX 平台同时响应 Ctrl+C 和 kill 默认信号，覆盖交互式与进程管理器两种停止方式。
 var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}

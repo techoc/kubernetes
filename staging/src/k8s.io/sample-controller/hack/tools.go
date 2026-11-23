@@ -17,6 +17,10 @@ limitations under the License.
 */
 
 // This package imports things required by build scripts, to force `go mod` to see them as dependencies
+//
+// 本文件用 tools 构建标签隔离，正常编译不会引入 code-generator；
+// 这样它只作为依赖声明存在，不进入运行时的二进制。
+// 空导入是刻意的：只为让 go mod 记录依赖，不使用包里的任何符号。
 package tools
 
 import _ "k8s.io/code-generator"

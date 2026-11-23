@@ -27,15 +27,21 @@ import (
 )
 
 // Outputs openAPI schema JSON containing the schema definitions in zz_generated.openapi.go.
+//
+// 本文件位于 generated 目录下的 cmd 子目录，属于手写工具而非生成产物：
+// 它读取生成好的定义并输出稳定的 v2 schema，供其他工具或校验流程消费。
 func main() {
 	err := output()
 	if err != nil {
+		// 写到 stderr 而不是 stdout，避免错误信息混进本该是纯 JSON 的输出里。
 		fmt.Fprintf(os.Stderr, "Failed: %v", err) // nolint:errcheck
 		os.Exit(1)
 	}
 }
 
+// output 把生成的内嵌定义整理成 OpenAPI v2 文档写到标准输出。
 func output() error {
+	// 引用统一指向本地 definitions，输出的 schema 才能被独立解析、不依赖外部地址。
 	refFunc := func(name string) spec.Ref {
 		return spec.MustCreateRef(fmt.Sprintf("#/definitions/%s", name))
 	}
@@ -47,6 +53,9 @@ func output() error {
 		// This is done by looking up an extension that marks the embedded v2
 		// schema, and, if the v2 schema is found, make it the resulting schema for
 		// the type.
+		//
+		// 生成器可能同时给出 v3 主 schema 和内嵌的 v2 版本；下游约定只接受 v2，
+		// 所以这里优先取内嵌版本，拿不到才回退到主 schema。
 		if schema, ok := v.Schema.Extensions[common.ExtensionV2Schema]; ok {
 			if v2Schema, isOpenAPISchema := schema.(spec.Schema); isOpenAPISchema {
 				schemaDefs[k] = v2Schema

@@ -20,4 +20,5 @@ import (
 	"os"
 )
 
+// Windows 没有 SIGTERM；Ctrl+C（以及 Ctrl+Break）统一表现为 os.Interrupt。
 var shutdownSignals = []os.Signal{os.Interrupt}
