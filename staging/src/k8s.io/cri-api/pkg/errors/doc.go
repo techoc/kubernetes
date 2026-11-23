@@ -16,4 +16,8 @@ limitations under the License.
 
 // Package errors provides helper functions for use by the kubelet
 // to deal with CRI errors.
+//
+// Package errors 提供 kubelet 处理 CRI（容器运行时接口）错误时所需的辅助函数。
+// 由于 CRI 基于 gRPC 实现，容器运行时返回的错误通常是 gRPC status 错误；
+// 本包封装了常见的错误判定逻辑，使调用方无需直接依赖 gRPC status 的细节。
 package errors

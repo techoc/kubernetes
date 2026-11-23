@@ -19,4 +19,7 @@ limitations under the License.
 package v1
 
 // 1.27 marshals the replacement char without escaping
+// stdlibSerializedReplacementChar 定义在 Go 1.27 及之后版本下，encoding/json 对 UTF-8 替代字符（U+FFFD）
+// 序列化后的结果：直接输出替代字符本身，不再做 \u 转义。
+// 该文件通过 //go:build go1.27 约束，仅在 Go 1.27 及之后生效，与 api_json_126_test.go 互斥。
 const stdlibSerializedReplacementChar = "\ufffd"
