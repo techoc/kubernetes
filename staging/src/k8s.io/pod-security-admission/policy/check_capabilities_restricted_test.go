@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 1.25 起 Windows Pod 直接放行；这里的用例专门防止 Windows 分支被后续改动破坏。
 func TestCapabilitiesRestricted_1_25(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -62,6 +63,7 @@ func TestCapabilitiesRestricted_1_25(t *testing.T) {
 			allowed:      false,
 		},
 	}
+	// 多容器同时违规时，drop 与 add 的诊断合并后按分号分隔。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := capabilitiesRestricted_1_25(&tc.pod.ObjectMeta, &tc.pod.Spec)
@@ -78,6 +80,7 @@ func TestCapabilitiesRestricted_1_25(t *testing.T) {
 	}
 }
 
+// 旧版本行为单独测：没有 OS 字段也能按 Linux 规则拒绝。
 func TestCapabilitiesRestricted_1_22(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件占位，供后续为该版本的默认值函数补测试；默认值行为由生成的测试覆盖。
+
 package v1alpha1

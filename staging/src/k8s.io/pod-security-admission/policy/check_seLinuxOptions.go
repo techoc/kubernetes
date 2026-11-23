@@ -51,12 +51,16 @@ spec.initContainers[*].securityContext.seLinuxOptions.role
 **Allowed Values:** undefined/empty
 */
 
+// 这里的字段清单既是实现约束也是文档：新增可写 SELinux 字段时，得先决定它在基线里的处置。
+
 func init() {
 	addCheck(CheckSELinuxOptions)
 }
 
 // CheckSELinuxOptions returns a baseline level check
 // that limits seLinuxOptions type, user, and role values in 1.0+
+// 1.31 单列一个版本，是因为那之后才补进 container_engine_t 这个合法 type；
+// 老版本仍按旧白名单判，避免历史策略的判定结果被后来的放宽改动改写。
 func CheckSELinuxOptions() Check {
 	return Check{
 		ID:    "seLinuxOptions",
@@ -75,10 +79,12 @@ func CheckSELinuxOptions() Check {
 }
 
 var (
+	// 空串代表未指定；把白名单写死而不是用「已知的坏值」取反，是为了遇到新 type 时默认拒绝。
 	selinuxAllowedTypes1_0  = sets.New("", "container_t", "container_init_t", "container_kvm_t")
 	selinuxAllowedTypes1_31 = sets.New("", "container_t", "container_init_t", "container_kvm_t", "container_engine_t")
 )
 
+// podMetadata 参数在这里用不上，保留它是为了符合 CheckPod 的统一签名。
 func seLinuxOptions1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	return seLinuxOptions(podMetadata, podSpec, selinuxAllowedTypes1_0)
 }
@@ -87,16 +93,21 @@ func seLinuxOptions1_31(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec)
 	return seLinuxOptions(podMetadata, podSpec, selinuxAllowedTypes1_31)
 }
 
+// 把 Pod 级和容器级选项交给同一段逻辑，只是记录来源时分开——报错要指到具体是谁设的。
 func seLinuxOptions(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec, allowedTypes sets.Set[string]) CheckResult {
 	var (
 		// sources that set bad seLinuxOptions
+		// 用名字而不是数量汇总，用户才能定位到需要改的那个容器。
 		badSetters []string
 
 		// invalid type values set
+		// 用 set 去重，多个容器设同一个非法 type 时只报一次。
 		badTypes = sets.NewString()
 		// was user set?
+		// 只需一个布尔标记：详情里说「不许设」就够了，不必把每个值都列出来。
 		setUser = false
 		// was role set?
+		// 同上，role 的取值本身不是诊断重点。
 		setRole = false
 	)
 
@@ -143,6 +154,7 @@ func seLinuxOptions(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec, all
 	}
 
 	if len(badSetters) > 0 {
+		// 先列违规字段再列违规值，两段拼起来才能既说明「谁」也说明「错在哪」。
 		var badData []string
 		if len(badTypes) > 0 {
 			badData = append(badData, fmt.Sprintf(

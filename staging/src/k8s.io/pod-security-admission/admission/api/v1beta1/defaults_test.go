@@ -15,3 +15,5 @@ limitations under the License.
 */
 
 package v1beta1
+
+// 本文件验证 v1beta1 的默认值行为：缺省配置必须保持最宽松的 privileged/latest。

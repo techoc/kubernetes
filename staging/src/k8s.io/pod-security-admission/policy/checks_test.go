@@ -23,12 +23,15 @@ import (
 )
 
 // TestValidChecks ensures that all registered checks are valid.
+// 除了结构合法性，还要确认每个 override 都指向真实存在的检查——
+// 写错 ID 的 override 不会报错，只会在运行时悄悄失效。
 func TestValidChecks(t *testing.T) {
 	allChecks := append(DefaultChecks(), ExperimentalChecks()...)
 
 	assert.NoError(t, validateChecks(allChecks))
 
 	// Ensure that all overrides map to existing checks.
+	// 先把 ID 收成集合，再核对每个 override，避免 O(n²) 的逐个查找。
 	allIDs := map[CheckID]bool{}
 	for _, check := range allChecks {
 		allIDs[check.ID] = true

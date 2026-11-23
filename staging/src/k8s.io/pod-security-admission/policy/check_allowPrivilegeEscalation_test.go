@@ -23,6 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 1.25 版本重点验证 Windows Pod 的豁免，未指定 OS 的 Linux Pod 仍按原规则拒绝。
 func TestAllowPrivilegeEscalation_1_25(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -82,6 +83,7 @@ func TestAllowPrivilegeEscalation_1_25(t *testing.T) {
 	}
 }
 
+// 1.8 版本无 OS 概念，nil SecurityContext 与显式 true 一样都要拒绝。
 func TestAllowPrivilegeEscalation_1_8(t *testing.T) {
 	tests := []struct {
 		name         string

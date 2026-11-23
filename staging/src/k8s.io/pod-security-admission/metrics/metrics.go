@@ -16,6 +16,8 @@ limitations under the License.
 
 package metrics
 
+// 本文件把准入结果映射到固定标签的 Prometheus 计数器，供审计与告警使用。
+
 import (
 	"strconv"
 	"strings"
@@ -37,15 +39,18 @@ const (
 	DecisionDeny  = "deny"  // Policy evaluated, request denied
 )
 
+// Decision 与 Mode 作为独立类型，避免调用方把任意字符串传进录制接口污染指标标签。
 type Decision string
 type Mode string
 
+// Recorder 抽象出指标上报，测试里可以换成假实现而不依赖 Prometheus registry。
 type Recorder interface {
 	RecordEvaluation(Decision, api.LevelVersion, Mode, api.Attributes)
 	RecordExemption(api.Attributes)
 	RecordError(fatal bool, attrs api.Attributes)
 }
 
+// apiVersion 用来判断策略版本是“未来版本”，防止指标基数随 API 升级无限增长。
 type PrometheusRecorder struct {
 	apiVersion api.Version
 
@@ -74,12 +79,14 @@ func NewPrometheusRecorder(version api.Version) *PrometheusRecorder {
 	}
 }
 
+// MustRegister 让调用方决定注册到哪个 registry；注册失败由传入函数决定如何处理。
 func (r *PrometheusRecorder) MustRegister(registerFunc func(...metrics.Registerable)) {
 	registerFunc(r.evaluationsCounter)
 	registerFunc(r.exemptionsCounter)
 	registerFunc(r.errorsCounter)
 }
 
+// Reset 主要用于测试：多个用例共享 registry 时需要清掉上一轮的计数。
 func (r *PrometheusRecorder) Reset() {
 	r.evaluationsCounter.Reset()
 	r.exemptionsCounter.Reset()
@@ -88,9 +95,11 @@ func (r *PrometheusRecorder) Reset() {
 
 func (r *PrometheusRecorder) RecordEvaluation(decision Decision, policy api.LevelVersion, evalMode Mode, attrs api.Attributes) {
 	var version string
+	// privileged 没有版本差异，和 latest 归到同一个标签，避免产生无意义的版本序列。
 	if policy.Version.Latest() || policy.Level == api.LevelPrivileged { // Privileged is always effectively latest.
 		version = "latest"
 	} else {
+		// 超出当前 API 版本的策略统一记为 future，防止每次发版都新增一组时间序列。
 		if !r.apiVersion.Older(policy.Version) {
 			version = policy.Version.String()
 		} else {
@@ -139,6 +148,7 @@ func resourceLabel(resource schema.GroupVersionResource) string {
 		return "namespace"
 	default:
 		// Assume any other resource is a valid input to pod-security, and therefore a controller.
+		// 用固定值兜底，避免把任意 CRD 的 group/resource 原样当标签导致基数爆炸。
 		return "controller"
 	}
 }
@@ -151,6 +161,7 @@ func operationLabel(op admissionv1.Operation) string {
 		return "update"
 	default:
 		// This is a slower operation, but never used in the default implementation.
+		// 保留通用分支供非默认实现使用；标签值统一小写，保持命名一致。
 		return strings.ToLower(string(op))
 	}
 }
@@ -179,6 +190,7 @@ func (l *exemptionsLabels) labels() []string {
 	return []string{l.operation, l.resource, l.subresource}
 }
 
+// 缓存热路径标签对应的 CounterMetric，免去每次评估都做字符串拼接和 map 查找。
 type evaluationsCounter struct {
 	*metrics.CounterVec
 
@@ -200,6 +212,7 @@ func newEvaluationsCounter() *evaluationsCounter {
 	}
 }
 
+// 读锁覆盖 Inc 全过程：Reset 会清空 map，不能在锁外持有指针。
 func (c *evaluationsCounter) CachedInc(l evaluationsLabels) {
 	c.cacheLock.RLock()
 	defer c.cacheLock.RUnlock()
@@ -229,6 +242,7 @@ func (c *evaluationsCounter) Reset() {
 	c.populateCache()
 }
 
+// 只缓存默认实现真正常用的标签组合，其余走慢路径即可。
 func (c *evaluationsCounter) populateCache() {
 	labelsToCache := []evaluationsLabels{
 		{decision: "allow", level: "privileged", version: "latest", mode: "enforce", operation: "create", resource: "pod", subresource: ""},
@@ -239,6 +253,7 @@ func (c *evaluationsCounter) populateCache() {
 	}
 }
 
+// 与 evaluationsCounter 同理：豁免路径同样高频，值得单独缓存计数句柄。
 type exemptionsCounter struct {
 	*metrics.CounterVec
 
@@ -260,6 +275,7 @@ func newExemptionsCounter() *exemptionsCounter {
 	}
 }
 
+// 读锁保证 Reset 重新填充缓存前不会有旧指针被使用。
 func (c *exemptionsCounter) CachedInc(l exemptionsLabels) {
 	c.cacheLock.RLock()
 	defer c.cacheLock.RUnlock()
@@ -289,6 +305,7 @@ func (c *exemptionsCounter) Reset() {
 	c.populateCache()
 }
 
+// 默认实现只产生 pod/controller 的 create/update 豁免，缓存这四种组合足够。
 func (c *exemptionsCounter) populateCache() {
 	labelsToCache := []exemptionsLabels{
 		{operation: "create", resource: "pod", subresource: ""},

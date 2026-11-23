@@ -24,6 +24,8 @@ import (
 	"k8s.io/pod-security-admission/cmd/webhook/server"
 )
 
+// 本文件只做进程入口：命令构建交给 server 包，cli.Run 负责信号处理与错误输出。
+// 用返回的 code 退出而非直接返回，是为了让 webhook 的退出状态对部署方可见。
 func main() {
 	command := server.NewServerCommand()
 	code := cli.Run(command)

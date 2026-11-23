@@ -38,12 +38,14 @@ spec.initContainers[*].ports[*].hostPort
 **Allowed Values:** undefined/0
 */
 
+// 通过 init 自注册，避免在检查器列表中手写每一项。
 func init() {
 	addCheck(CheckHostPorts)
 }
 
 // CheckHostPorts returns a baseline level check
 // that forbids any host ports in 1.0+
+// 占用宿主机端口会绕过 Pod 网络隔离，因此基线级别从 1.0 起一律禁止。
 func CheckHostPorts() Check {
 	return Check{
 		ID:    "hostPorts",
@@ -57,6 +59,7 @@ func CheckHostPorts() Check {
 	}
 }
 
+// hostPorts_1_0 汇总所有违规容器与被占用的端口，便于一次给出完整拒绝原因。
 func hostPorts_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badContainers []string
 	forbiddenHostPorts := sets.NewString()

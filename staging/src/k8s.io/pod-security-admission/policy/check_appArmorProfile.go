@@ -46,11 +46,14 @@ spec.ephemeralContainers[*].securityContext.appArmorProfile.type
 **Allowed Values:** 'RuntimeDefault', 'Localhost', undefined
 */
 func init() {
+	// 自动注册到默认检查集合，使基线策略开箱即用地阻止关闭 AppArmor 的配置。
 	addCheck(CheckAppArmorProfile)
 }
 
 // CheckAppArmorProfile returns a baseline level check
 // that limits the value of AppArmor profiles in 1.0+
+// 同时兼容旧的注解写法与新的 appArmorProfile 字段：
+// 集群升级期间两种写法可能并存，任一方式设置越界配置都应被拦截。
 func CheckAppArmorProfile() Check {
 	return Check{
 		ID:    "appArmorProfile",
@@ -64,12 +67,17 @@ func CheckAppArmorProfile() Check {
 	}
 }
 
+// allowedAnnotationValue 判断旧注解形式的 profile 是否安全：
+// 空值表示回落到默认 profile，runtime/default 与 localhost/ 前缀都不会关闭内核强制访问控制，
+// 其余写法（尤其是 unconfined）可能绕过默认保护。
 func allowedAnnotationValue(profile string) bool {
 	return len(profile) == 0 ||
 		profile == corev1.DeprecatedAppArmorBetaProfileRuntimeDefault ||
 		strings.HasPrefix(profile, corev1.DeprecatedAppArmorBetaProfileNamePrefix)
 }
 
+// allowedProfileType 只放行 RuntimeDefault 与 Localhost：
+// Unconfined 会主动关闭 AppArmor，与基线“不得禁用默认 profile”的目标直接冲突。
 func allowedProfileType(profile corev1.AppArmorProfileType) bool {
 	switch profile {
 	case corev1.AppArmorProfileTypeRuntimeDefault,
@@ -80,6 +88,8 @@ func allowedProfileType(profile corev1.AppArmorProfileType) bool {
 	}
 }
 
+// appArmorProfile_1_0 把 Pod 级、容器级字段与旧注解汇总到一次检查里。
+// 注解按 key 排序后再输出，保证同一份 Pod 的拒绝详情稳定一致，便于审计与比对。
 func appArmorProfile_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badSetters []string // things that explicitly set appArmorProfile.type to a bad value
 	badValues := sets.NewString()
@@ -119,6 +129,7 @@ func appArmorProfile_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec
 		}
 	}
 
+	// 注解的 key 是无序 map 遍历得到的，排序后才能给出确定性的拒绝原因，便于测试断言与日志比对。
 	badValueList := badValues.List()
 	if len(forbiddenAnnotations) > 0 {
 		sort.Strings(forbiddenAnnotations)

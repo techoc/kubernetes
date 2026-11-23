@@ -40,6 +40,9 @@ const updateEnvVar = "UPDATE_POD_SECURITY_FIXTURE_DATA"
 // When adding new versions or checks, serialized fixtures can be updated by running:
 //
 //	UPDATE_POD_SECURITY_FIXTURE_DATA=true go test k8s.io/pod-security-admission/test
+//
+// 这里同时校验“内存中的 fixture 已全部落盘”和“磁盘上没有遗留 fixture”，
+// 否则改了生成器却忘记重跑时，差异只会出现在没被覆盖的版本目录里。
 func TestFixtures(t *testing.T) {
 	expectedFiles := sets.NewString("testdata/README.md")
 
@@ -58,12 +61,15 @@ func TestFixtures(t *testing.T) {
 			failDir := filepath.Join("testdata", string(level), fmt.Sprintf("v1.%d", version), "fail")
 
 			// render the minimal valid pod fixture
+			// 先给出各版本/级别的最小合法 Pod，后续 pass/fail fixture 都基于它做单点 tweak，
+			// 才能把失败原因收敛到被测字段上。
 			osNeutralPod, err := GetMinimalValidPod(level, api.MajorMinorVersion(1, version))
 			if err != nil {
 				t.Fatal(err)
 			}
 			expectedFiles.Insert(testFixtureFile(t, passDir, "base", osNeutralPod))
 			// Don't generate OS specific pods when version < 1.25 as pod os field based restriction is not enabled.
+			// 只为 restricted 生成 OS 变体：该检查是 restricted 独有的，baseline 不需要这些文件。
 			if level == api.LevelRestricted && version >= podOSBasedRestrictionEnabledVersion {
 				linuxPod, err := GetMinimalValidLinuxPod(level, api.MajorMinorVersion(1, version))
 				if err != nil {
@@ -79,6 +85,7 @@ func TestFixtures(t *testing.T) {
 			}
 
 			// render check-specific fixtures
+			// 按版本取实际启用的检查集合，新增检查只要注册了生成器就会自动获得覆盖。
 			checkIDs, err := checksForLevelAndVersion(defaultChecks, level, api.MajorMinorVersion(1, version))
 			if err != nil {
 				t.Fatal(err)
@@ -131,6 +138,7 @@ func TestFixtures(t *testing.T) {
 
 }
 
+// 文件名即 Pod 名，便于从失败的 YAML 直接定位是哪个 fixture；深拷贝避免改名污染共享的基准 Pod。
 func testFixtureFile(t *testing.T, dir, name string, pod *corev1.Pod) string {
 	filename := filepath.Join(dir, name+".yaml")
 	pod = pod.DeepCopy()
@@ -148,6 +156,7 @@ func testFixtureFile(t *testing.T, dir, name string, pod *corev1.Pod) string {
 	}
 
 	// clean up noise in fixtures
+	// 空 resources/status 是序列化样板，删掉后 fixture 的可读差异只剩真正被测的字段。
 	yamlData = []byte(strings.ReplaceAll(string(yamlData), "    resources: {}\n", ""))
 	yamlData = []byte(strings.ReplaceAll(string(yamlData), "status: {}\n", ""))
 

@@ -22,6 +22,7 @@ import (
 
 // tweak makes a copy of in, passes it to f(), and returns the result.
 // the input is not modified.
+// 每个用例都从同一个基准 Pod 派生，改动互不污染；用深拷贝避免共享指针被 f 修改。
 func tweak(in *corev1.Pod, f func(copy *corev1.Pod)) *corev1.Pod {
 	out := in.DeepCopy()
 	f(out)
@@ -29,6 +30,7 @@ func tweak(in *corev1.Pod, f func(copy *corev1.Pod)) *corev1.Pod {
 }
 
 // ensureSecurityContext ensures the pod and all initContainers and containers have a non-nil security context.
+// 测试里要区分“字段没设置”和“整层对象缺失”，先补齐对象才能只测字段语义。
 func ensureSecurityContext(p *corev1.Pod) *corev1.Pod {
 	p = p.DeepCopy()
 	if p.Spec.SecurityContext == nil {
@@ -48,6 +50,7 @@ func ensureSecurityContext(p *corev1.Pod) *corev1.Pod {
 }
 
 // ensureSELinuxOptions ensures the pod and all initContainers and containers have a non-nil seLinuxOptions.
+// 与 ensureSecurityContext 组合使用，才能在不同层级的 SELinux 选项上构造差异用例。
 func ensureSELinuxOptions(p *corev1.Pod) *corev1.Pod {
 	p = ensureSecurityContext(p)
 	if p.Spec.SecurityContext.SELinuxOptions == nil {
@@ -67,6 +70,7 @@ func ensureSELinuxOptions(p *corev1.Pod) *corev1.Pod {
 }
 
 // ensureAnnotation makes sure that pod.Annotations is never nil
+// 注解夹具需要往里写键值，先初始化 map 才能避免赋值 panic。
 func ensureAnnotation(pod *corev1.Pod) *corev1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}

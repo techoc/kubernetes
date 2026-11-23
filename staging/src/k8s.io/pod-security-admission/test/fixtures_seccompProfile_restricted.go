@@ -28,10 +28,12 @@ alpha annotation (up to v.1.19) and the securityContext.seccompProfile field (v1
 The check implementation looks at the appropriate value based on version.
 */
 
+// 因此下面的夹具只构造字段形式，helper 会同步生成对应的注解形式。
 func init() {
 	fixtureData_restricted_1_19 := fixtureGenerator{
 		expectErrorSubstring: "seccompProfile",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
+			// 先把各层 securityContext 补齐，才能稳定地设置字段值。
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
 				tweak(p, func(p *corev1.Pod) {
@@ -50,6 +52,7 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
+				// restricted 档要求所有层级都显式设置，缺省即视为违规。
 				// unset everywhere
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = nil
@@ -78,6 +81,7 @@ func init() {
 		},
 	}
 
+	// seccomp 字段从 v1.19 才引入，因此夹具从该版本起注册。
 	registerFixtureGenerator(
 		fixtureKey{level: api.LevelRestricted, version: api.MajorMinorVersion(1, 19), check: "seccompProfile_restricted"},
 		fixtureData_restricted_1_19,

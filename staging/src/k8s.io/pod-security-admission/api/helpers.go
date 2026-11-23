@@ -27,12 +27,15 @@ import (
 	"k8s.io/component-base/version"
 )
 
+// 策略版本要么是一个具体的 1.x，要么是 latest；latest 单独用布尔位表示，
+// 避免把“跟随最新”伪装成一个永远追不上的数字。
 type Version struct {
 	major  int
 	minor  int
 	latest bool
 }
 
+// String 的返回值会出现在审计事件和错误信息里，latest 用字面量比展开成某个具体版本号更诚实。
 func (v Version) String() string {
 	if v.latest {
 		return "latest"
@@ -54,6 +57,7 @@ func (v *Version) Older(other Version) bool {
 	return v.minor < other.minor
 }
 
+// 以下访问器只暴露读取能力：Version 的比较语义由本包集中控制，外部不能拼出半合法的版本值。
 func (v *Version) Major() int {
 	return v.major
 }
@@ -69,6 +73,7 @@ func MajorMinorVersion(major, minor int) Version {
 }
 
 // GetAPIVersion get the version of apiServer and return the version major and minor
+// 解析失败时返回零值而非 latest：宁可退回最保守的 v0.0，也不能把不认识的版本当成“永远最新”。
 func GetAPIVersion() Version {
 	var err error
 	v := Version{}
@@ -89,6 +94,7 @@ func GetAPIVersion() Version {
 	return v
 }
 
+// latest 跟随的是策略实现所能提供的最新规则，而非调用方构建时写死的版本号。
 func LatestVersion() Version {
 	return Version{latest: true}
 }
@@ -96,6 +102,7 @@ func LatestVersion() Version {
 // ParseLevel returns the level that should be evaluated.
 // level must be "privileged", "baseline", or "restricted".
 // if level does not match one of those strings, "restricted" and an error is returned.
+// 返回值始终是可用级别：出错时收紧到 restricted，避免解析失败反而放宽准入。
 func ParseLevel(level string) (Level, error) {
 	switch Level(level) {
 	case LevelPrivileged, LevelBaseline, LevelRestricted:
@@ -106,6 +113,7 @@ func ParseLevel(level string) (Level, error) {
 }
 
 // Valid checks whether the level l is a valid level.
+// 未识别的级别必须视为无效，这样上游校验不会悄悄把它当成某个已知级别处理。
 func (l *Level) Valid() bool {
 	switch *l {
 	case LevelPrivileged, LevelBaseline, LevelRestricted:
@@ -115,11 +123,13 @@ func (l *Level) Valid() bool {
 	}
 }
 
+// 限制为 1.x 且 x 无前导零：同一版本只能有一种写法，缓存键 comparisons 才不会把 v1.01 当成两个版本。
 var versionRegexp = regexp.MustCompile(`^v1\.([0-9]|[1-9][0-9]*)$`)
 
 // ParseVersion returns the policy version that should be evaluated.
 // version must be "latest" or "v1.x".
 // If version does not match one of those patterns, the latest version and an error is returned.
+// 这里出错回退到 latest 而非零值：策略解析失败时按当前规则执行，行为可预测且不会误判所有检查都不适用。
 func ParseVersion(version string) (Version, error) {
 	if version == "latest" {
 		return Version{latest: true}, nil
@@ -135,6 +145,7 @@ func ParseVersion(version string) (Version, error) {
 	return Version{major: 1, minor: versionNumber}, nil
 }
 
+// 匿名嵌入让 LevelVersion 可直接当 Level/Version 使用，同时保证比较时两者必须同时相等。
 type LevelVersion struct {
 	Level
 	Version
@@ -146,6 +157,7 @@ func (lv LevelVersion) String() string {
 
 // Equivalent determines whether two LevelVersions are functionally equivalent. LevelVersions are
 // considered equivalent if both are privileged, or both levels & versions are equal.
+// privileged 模式不执行任何检查，因此版本差异没有意义，无需比较。
 func (lv *LevelVersion) Equivalent(other *LevelVersion) bool {
 	return (lv.Level == LevelPrivileged && other.Level == LevelPrivileged) ||
 		(lv.Level == other.Level && lv.Version == other.Version)
@@ -163,6 +175,7 @@ func (p *Policy) String() string {
 
 // Equivalent determines whether two policies are functionally equivalent. Policies are considered
 // equivalent if all 3 modes are considered equivalent.
+// 三种模式逐一看待，避免只比 enforce 就断言策略相同，而忽略 audit/warn 的配置漂移。
 func (p *Policy) Equivalent(other *Policy) bool {
 	return p.Enforce.Equivalent(&other.Enforce) && p.Audit.Equivalent(&other.Audit) && p.Warn.Equivalent(&other.Warn)
 }
@@ -178,6 +191,8 @@ func (p *Policy) FullyPrivileged() bool {
 // falling back to the provided defaults when a label is unspecified. A valid policy is always
 // returned, even when an error is returned. If labels cannot be parsed correctly, the values of
 // "restricted" and "latest" are used for level and version respectively.
+// audit/warn 的非法级别分别回退到 privileged，与 enforce 的收紧回退不同：它们不阻塞准入，
+// 按宽松处理可以避免用错误配置产生大量误导性的审计告警。
 func PolicyToEvaluate(labels map[string]string, defaults Policy) (Policy, field.ErrorList) {
 	var (
 		err  error

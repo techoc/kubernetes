@@ -48,6 +48,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaultExtractPodSpec 覆盖所有内建控制器类型，确保能从各自模板中取出同一 PodSpec；
+// 同时验证非 Pod 资源会被拒绝，避免误把 Service 等对象当作 Pod 检查。
 func TestDefaultExtractPodSpec(t *testing.T) {
 	metadata := metav1.ObjectMeta{
 		Name: "foo-pod",
@@ -155,6 +157,8 @@ func TestDefaultExtractPodSpec(t *testing.T) {
 	assert.Error(t, err, "service should not have an extractable pod spec")
 }
 
+// TestDefaultHasPodSpec 确认白名单只含已知带 Pod 模板的资源，
+// 未知资源不会被误判，从而跳过无意义的 Pod 校验。
 func TestDefaultHasPodSpec(t *testing.T) {
 	podLikeResources := []schema.GroupResource{
 		corev1.Resource("pods"),
@@ -182,6 +186,8 @@ func TestDefaultHasPodSpec(t *testing.T) {
 	}
 }
 
+// testEvaluator 用注解传递预期结果，省去为每种判定单独实现评估器；
+// delay 用于模拟慢评估，验证超时后能提前返回。
 type testEvaluator struct {
 	lv api.LevelVersion
 
@@ -200,6 +206,8 @@ func (t *testEvaluator) EvaluatePod(lv api.LevelVersion, meta *metav1.ObjectMeta
 	}
 }
 
+// testNamespaceGetter 以 map 模拟命名空间查询，缺失时返回 NotFound，
+// 便于测试命名空间不存在时的处理路径。
 type testNamespaceGetter map[string]*corev1.Namespace
 
 func (t testNamespaceGetter) GetNamespace(ctx context.Context, name string) (*corev1.Namespace, error) {
@@ -210,6 +218,8 @@ func (t testNamespaceGetter) GetNamespace(ctx context.Context, name string) (*co
 	}
 }
 
+// testPodLister 记录是否被调用，用来验证只有真正收紧策略时才列 Pod；
+// delay 用于触发超时与部分评估的场景。
 type testPodLister struct {
 	called bool
 	pods   []*corev1.Pod
@@ -227,6 +237,8 @@ func (t *testPodLister) ListPods(ctx context.Context, namespace string) ([]*core
 	return t.pods, nil
 }
 
+// TestValidateNamespace 关注命名空间标签变更：只在策略收紧时才需要列出现有 Pod，
+// 放宽、no-op 与非法标签的场景分别验证短路与错误路径。
 func TestValidateNamespace(t *testing.T) {
 	testcases := []struct {
 		name                 string
@@ -254,6 +266,7 @@ func TestValidateNamespace(t *testing.T) {
 		expectWarnings []string
 	}{
 		// creation tests, just validate labels
+		// 创建时无需检查存量 Pod，仅校验标签取值是否合法。
 		{
 			name:           "create privileged",
 			newLabels:      map[string]string{api.EnforceLevelLabel: string(api.LevelPrivileged), api.EnforceVersionLabel: "v1.0"},
@@ -298,6 +311,7 @@ func TestValidateNamespace(t *testing.T) {
 		},
 
 		// update tests that don't tighten effective policy, no pod list/evaluate
+		// 放宽或保持策略不会让存量 Pod 变成违规，可跳过昂贵的列 Pod 步骤。
 		{
 			name:           "update no-op",
 			newLabels:      map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted), api.EnforceVersionLabel: "v1.0"},
@@ -372,6 +386,7 @@ func TestValidateNamespace(t *testing.T) {
 		},
 
 		// update tests that introduce labels errors
+		// 标签错误不能被当作放宽处理，必须在变更时立即报错。
 		{
 			name:           "update malformed level",
 			newLabels:      map[string]string{api.EnforceLevelLabel: "unknown"},
@@ -390,6 +405,7 @@ func TestValidateNamespace(t *testing.T) {
 		},
 
 		// update tests that tighten effective policy
+		// 收紧时必须评估存量 Pod，警告要汇总违规信息并受数量与超时上限约束。
 		{
 			name:           "update to implicit restricted",
 			newLabels:      map[string]string{},
@@ -418,6 +434,7 @@ func TestValidateNamespace(t *testing.T) {
 				"runtimeclass3pod: message, message2",
 			},
 		},
+		// 列 Pod 超时仍允许变更，但需给出警告而非阻断命名空间更新。
 		{
 			name:           "timeout on list",
 			newLabels:      map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted)},
@@ -429,6 +446,7 @@ func TestValidateNamespace(t *testing.T) {
 				`failed to list pods while checking new PodSecurity enforce level`,
 			},
 		},
+		// 评估超时时只统计已完成的 Pod，并在警告中说明检查未覆盖全部存量 Pod。
 		{
 			name:            "timeout on evaluate",
 			newLabels:       map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted)},
@@ -443,6 +461,7 @@ func TestValidateNamespace(t *testing.T) {
 				`noruntimeclasspod (and 1 other pod): message`,
 			},
 		},
+		// 即使没有超时，也要限制评估的 Pod 数量，避免大规模命名空间阻塞准入。
 		{
 			name:      "bound number of pods",
 			newLabels: map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted)},
@@ -617,6 +636,8 @@ func TestValidateNamespace(t *testing.T) {
 	}
 }
 
+// TestValidatePodAndController 用同一组 Pod 用例分别驱动 Pod 与 Deployment 校验，
+// 验证控制器只给出警告而 Pod 会被强制拒绝，同时覆盖豁免、解码失败与更新审计。
 func TestValidatePodAndController(t *testing.T) {
 	const (
 		exemptNs        = "exempt-ns"
@@ -705,6 +726,7 @@ func TestValidatePodAndController(t *testing.T) {
 	evaluator, err := policy.NewEvaluator(policy.DefaultChecks(), nil)
 	assert.NoError(t, err)
 
+	// 本表同时描述 Pod 与 Deployment 的期望：deployment 永远非强制，因此用 skip 字段区分差异。
 	type testCase struct {
 		desc string
 
@@ -737,6 +759,7 @@ func TestValidatePodAndController(t *testing.T) {
 		expectAudit   api.Level
 	}
 	podCases := []testCase{
+		// 子资源请求不应触发 Pod 安全校验，避免干扰状态更新等内部操作。
 		{
 			desc:          "ignored subresource",
 			namespace:     restrictedNs,
@@ -866,6 +889,7 @@ func TestValidatePodAndController(t *testing.T) {
 			expectEnforce: api.LevelRestricted,
 			expectError:   true,
 		},
+		// 强制拒绝时仍记录 warn/audit 决策，便于观测同一违规在三种模式下的表现。
 		{
 			desc:          "enforce deny",
 			namespace:     restrictedNs,
@@ -1060,12 +1084,14 @@ func TestValidatePodAndController(t *testing.T) {
 	}
 }
 
+// FakeRecorder 把指标调用留存为内存记录，便于断言评估、豁免与错误事件是否发生。
 type FakeRecorder struct {
 	evaluations []MetricsRecord
 	exemptions  []MetricsRecord
 	errors      []MetricsRecord
 }
 
+// MetricsRecord 只保留断言所需的字段，跳过完整的属性对象以减少比较噪音。
 type MetricsRecord struct {
 	ObjectName   string
 	EvalDecision metrics.Decision
@@ -1084,6 +1110,8 @@ func (r *FakeRecorder) RecordError(_ bool, attrs api.Attributes) {
 	r.errors = append(r.errors, MetricsRecord{ObjectName: attrs.GetName()})
 }
 
+// TestPrioritizePods 验证排序会让不同控制器的 Pod 先于同一控制器的副本出现，
+// 从而在评估数量受限时覆盖更多违规来源。
 func TestPrioritizePods(t *testing.T) {
 	isController := true
 	sampleOwnerReferences := []struct {
@@ -1141,6 +1169,8 @@ func TestPrioritizePods(t *testing.T) {
 	}
 }
 
+// TestExemptNamespaceWarning 检查豁免警告只暴露 PodSecurity 相关标签，
+// 防止命名空间上的其它敏感标签被写进警告信息。
 func TestExemptNamespaceWarning(t *testing.T) {
 	privileged := api.LevelVersion{
 		Level:   api.LevelPrivileged,
@@ -1246,6 +1276,7 @@ func TestExemptNamespaceWarning(t *testing.T) {
 	}
 }
 
+// testAttributes 在标准属性之上注入解码错误，模拟请求体损坏而无法反序列化的场景。
 type testAttributes struct {
 	api.AttributesRecord
 

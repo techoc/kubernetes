@@ -16,6 +16,8 @@ limitations under the License.
 
 package test
 
+// 本文件为 hostPorts 检查生成基准/受限共用的测试夹具：区分“声明了端口”和“占用了主机端口”。
+
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/pod-security-admission/api"
@@ -30,6 +32,7 @@ containerFields: []string{
 */
 
 func init() {
+	// 失败夹具覆盖普通容器、init 容器和混合端口，确保检查不走漏任何一类容器。
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "hostPort",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
@@ -61,6 +64,7 @@ func init() {
 					}
 				}),
 				// check initContainer
+				// init 容器同样会占用宿主端口，不能只检查普通容器。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.InitContainers[0].Ports = []corev1.ContainerPort{
 						{

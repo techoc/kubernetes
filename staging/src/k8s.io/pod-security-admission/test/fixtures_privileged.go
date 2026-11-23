@@ -23,6 +23,7 @@ import (
 )
 
 /*
+字段路径留档待补进反射式测试；privileged 只看容器级字段，所以清单里没有 Pod 级路径。
 TODO: include field paths in reflect-based unit test
 
 containerFields: []string{
@@ -31,6 +32,7 @@ containerFields: []string{
 
 */
 
+// fail 用例同时清掉 allowPrivilegeEscalation，确保报错只由 privileged=true 引起，不被其他检查干扰。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {

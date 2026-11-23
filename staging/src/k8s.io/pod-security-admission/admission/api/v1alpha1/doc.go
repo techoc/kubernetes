@@ -21,4 +21,6 @@ limitations under the License.
 // +groupName=pod-security.admission.config.k8s.io
 
 // Package v1alpha1 contains PodSecurity admission configuration file types
+//
+// 本包是配置文件格式的旧版本，仅保留用于读取已有文件；新配置应写到 v1。
 package v1alpha1

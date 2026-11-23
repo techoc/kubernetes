@@ -43,11 +43,14 @@ any value if "hostUsers" is false
 */
 
 func init() {
+	// 注册到默认集合，使受限策略默认禁止以 root 身份运行容器。
 	addCheck(CheckRunAsUser)
 }
 
 // CheckRunAsUser returns a restricted level check
 // that forbides runAsUser=0 in 1.23+
+// 按版本注册两套实现：1.35 起用户命名空间成为稳定特性，
+// 放宽规则不再依赖 Alpha 特性门控，因此需要独立的版本化检查。
 func CheckRunAsUser() Check {
 	return Check{
 		ID:    "runAsUser",
@@ -69,6 +72,8 @@ func runAsUser1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 	// See KEP-127: https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
 	// In the 1.23 policy, this relaxation was gated on a perma-alpha feature gate.
 	// Instead of relaxing 1.0 policy, drop the relaxation there, and add it unconditionally here.
+	// 用户命名空间把容器内 root 映射为节点上的非 root，此时 runAsUser=0 不再意味着节点提权，
+	// 所以 1.35 版本无需特性门控即可放行，但仍要复用 1.23 的实现处理非命名空间 Pod。
 	if relaxPolicyForUserNamespacePod(podSpec) {
 		return CheckResult{Allowed: true}
 	}
@@ -76,6 +81,8 @@ func runAsUser1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 
 }
 
+// runAsUser1_23 只检查显式设为 0 的情况：
+// 未设置字段交由运行时的默认非 root 策略处理，策略本身不替用户做隐式推断。
 func runAsUser1_23(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// things that explicitly set runAsUser=0
 	var badSetters []string
@@ -104,6 +111,7 @@ func runAsUser1_23(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 		)
 	}
 	// pod or containers explicitly set runAsUser=0
+	// 统一汇总 Pod 级与容器级的违规者，让用户一次看到所有需要修改的位置。
 	if len(badSetters) > 0 {
 		return CheckResult{
 			Allowed:         false,

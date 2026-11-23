@@ -27,6 +27,8 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
+// TestCheckRegistry 用伪造的检查函数验证版本展开与覆盖逻辑：
+// 每个检查按 "<ID>:<版本>" 回报，断言结果列表即可看出各版本实际生效的是哪条规则。
 func TestCheckRegistry(t *testing.T) {
 	checks := []Check{
 		generateCheck("a", api.LevelBaseline, []string{"v1.0"}),
@@ -38,6 +40,7 @@ func TestCheckRegistry(t *testing.T) {
 		withOverrides(generateCheck("g", api.LevelRestricted, []string{"v1.10"}), []CheckID{"a"}),
 		withOverrides(generateCheck("h", api.LevelRestricted, []string{"v1.0"}), []CheckID{"b"}),
 	}
+	// 同一个检查在不同版本覆盖不同 baseline 检查，验证覆盖关系按版本生效而非全局生效。
 	multiOverride := generateCheck("i", api.LevelRestricted, []string{"v1.10", "v1.21"})
 	multiOverride.Versions[0].OverrideCheckIDs = []CheckID{"c"}
 	multiOverride.Versions[1].OverrideCheckIDs = []CheckID{"d"}
@@ -63,11 +66,14 @@ func TestCheckRegistry(t *testing.T) {
 		{api.LevelRestricted, "latest", []string{"c:v1.10", "e:v1.0", "f:v1.21", "g:v1.10", "h:v1.0", "i:v1.21"}},
 		{api.LevelRestricted, "v1.10000", []string{"c:v1.10", "e:v1.0", "f:v1.21", "g:v1.10", "h:v1.0", "i:v1.21"}},
 	}
+	// 远超缓存上限的版本应回落到已知最新结果，而不是查表落空。
 	for _, test := range levelCases {
 		test.Run(t, reg)
 	}
 }
 
+// TestCheckRegistry_NoBaseline 只注册 restricted 检查，仍允许它声明对 baseline ID 的覆盖。
+// 这样插件式场景里不存在的 baseline 检查不会被误当成校验错误。
 func TestCheckRegistry_NoBaseline(t *testing.T) {
 	checks := []Check{
 		generateCheck("e", api.LevelRestricted, []string{"v1.0"}),
@@ -95,6 +101,8 @@ func TestCheckRegistry_NoBaseline(t *testing.T) {
 	}
 }
 
+// TestCheckRegistry_NoRestricted 没有 restricted 检查时，restricted 档应与 baseline 完全一致。
+// 这是 restricted 作为 baseline 超集但不强制要求新增检查的语义保证。
 func TestCheckRegistry_NoRestricted(t *testing.T) {
 	checks := []Check{
 		generateCheck("a", api.LevelBaseline, []string{"v1.0"}),
@@ -123,6 +131,8 @@ func TestCheckRegistry_NoRestricted(t *testing.T) {
 	}
 }
 
+// TestCheckRegistry_Empty 空检查表也必须能构造出可用的 Evaluator，
+// 避免完全禁用策略检查时准入控制器启动失败。
 func TestCheckRegistry_Empty(t *testing.T) {
 	reg, err := NewEvaluator(nil, nil)
 	require.NoError(t, err)
@@ -141,12 +151,15 @@ func TestCheckRegistry_Empty(t *testing.T) {
 	}
 }
 
+// registryTestCase 描述一次评估请求的输入与期望命中的检查列表。
 type registryTestCase struct {
 	level           api.Level
 	version         string
 	expectedReasons []string
 }
 
+// Run 把期望列表与实际检查结果的 ForbiddenReason 逐一比对，
+// 用伪造检查回报的 "<ID>:<版本>" 字符串即可定位展开或覆盖是否出错。
 func (tc *registryTestCase) Run(t *testing.T, registry Evaluator) {
 	t.Run(fmt.Sprintf("%s:%s", tc.level, tc.version), func(t *testing.T) {
 		results := registry.EvaluatePod(api.LevelVersion{Level: tc.level, Version: versionOrPanic(tc.version)}, nil, nil)
@@ -160,6 +173,8 @@ func (tc *registryTestCase) Run(t *testing.T, registry Evaluator) {
 	})
 }
 
+// generateCheck 造出一批检查，每个版本的检查回报 "<ID>:<版本>"。
+// 这样测试结果能直接显示是哪个检查的哪个实现被启用。
 func generateCheck(id CheckID, level api.Level, versions []string) Check {
 	c := Check{
 		ID:    id,
@@ -179,6 +194,7 @@ func generateCheck(id CheckID, level api.Level, versions []string) Check {
 	return c
 }
 
+// withOverrides 给检查的所有版本统一加覆盖列表，方便构造简单的覆盖用例。
 func withOverrides(c Check, overrides []CheckID) Check {
 	for i := range c.Versions {
 		c.Versions[i].OverrideCheckIDs = overrides
@@ -186,6 +202,7 @@ func withOverrides(c Check, overrides []CheckID) Check {
 	return c
 }
 
+// versionOrPanic 只用于测试：版本串写错属于用例自身错误，直接 panic 便于定位。
 func versionOrPanic(v string) api.Version {
 	ver, err := api.ParseVersion(v)
 	if err != nil {

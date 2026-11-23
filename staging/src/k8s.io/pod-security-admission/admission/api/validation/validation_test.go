@@ -30,6 +30,7 @@ type (
 	}
 )
 
+// 每类非法值只挑一个代表：错误文案用 "..." 占位，这里只校验字段路径和值，不绑定具体提示措辞。
 const (
 	invalidValueUppercase = "TEST"
 	invalidValueChars     = "_&$%#"
@@ -39,8 +40,10 @@ const (
 )
 
 func TestValidatePodSecurityConfiguration(t *testing.T) {
+	// 只断言错误数量、类型和出错值：逐条比对完整 ErrorList 会让无关的文案改动打翻这个测试。
 	tests := []test{
 		// defaults
+		// 第一个用例塞满各类非法 exemptions，第二个用例专测 defaults 的六个字段，一次覆盖两条校验分支。
 		{
 			expectedErrList: field.ErrorList{
 				field.Invalid(exemptionsPath("namespaces", 0), invalidValueEmpty, "..."),
@@ -133,11 +136,13 @@ func TestValidatePodSecurityConfiguration(t *testing.T) {
 }
 
 // defaultsPath returns the appropriate defaults path
+// 单独构造路径，避免测试里重复硬编码字段层级写错位置。
 func defaultsPath(child string) *field.Path {
 	return field.NewPath("defaults", child)
 }
 
 // exemptionsPath returns the appropriate defaults path
+// 带 Index 是因为 exemptions 里每一项都要报出具体下标，便于定位是哪一条被拒。
 func exemptionsPath(child string, i int) *field.Path {
 	return field.NewPath("exemptions", child).Index(i)
 }

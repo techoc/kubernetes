@@ -41,6 +41,7 @@ var (
 	levels     = []api.Level{api.LevelPrivileged, api.LevelBaseline, api.LevelRestricted}
 
 	// Map of resource types to test to expected label value.
+	// 指标刻意把各种控制器收敛成同一个 resource 标签，避免标签基数随工作负载类型暴涨。
 	resourceExpectations = map[schema.GroupVersionResource]string{
 		corev1.SchemeGroupVersion.WithResource("pods"):        "pod",
 		appsv1.SchemeGroupVersion.WithResource("deployments"): "controller",
@@ -48,6 +49,7 @@ var (
 	}
 
 	// Map of versions to expected label value (compared against testVersion).
+	// 只有 latest/当前/过去三种取值；比测试版本新的统一归到 future，同样是为了压标签基数。
 	versionExpectations = map[string]string{
 		"latest": "latest",
 		"v1.22":  "v1.22",
@@ -57,6 +59,7 @@ var (
 	testVersion = api.MajorMinorVersion(1, 23)
 )
 
+// 遍历决策/模式/操作/等级/版本/资源的笛卡尔积，确保每个标签组合都能产出预期序列。
 func TestRecordEvaluation(t *testing.T) {
 	recorder := NewPrometheusRecorder(testVersion)
 	registry := testutil.NewFakeKubeRegistry("1.23.0")
@@ -73,6 +76,8 @@ func TestRecordEvaluation(t *testing.T) {
 								Operation: op,
 							})
 
+							// privileged 不做任何检查，版本标签统一记成 latest；
+							// 否则同一个含义会散成一堆不同的版本序列。
 							if level == api.LevelPrivileged {
 								expectedVersion = "latest"
 							}
@@ -81,6 +86,7 @@ func TestRecordEvaluation(t *testing.T) {
         	            	# TYPE pod_security_evaluations_total counter
 							pod_security_evaluations_total{decision="%s",mode="%s",policy_level="%s",policy_version="%s",request_operation="%s",resource="%s",subresource=""} 1
 							`, decision, mode, level, expectedVersion, strings.ToLower(string(op)), expectedResource)
+							// 预置的零值序列也要算进期望，否则 GatherAndCompare 会漏比。
 							expected = expectCachedMetrics("pod_security_evaluations_total", expected)
 
 							assert.NoError(t, testutil.GatherAndCompare(registry, bytes.NewBufferString(expected), "pod_security_evaluations_total"))
@@ -94,6 +100,7 @@ func TestRecordEvaluation(t *testing.T) {
 	}
 }
 
+// 豁免也要计数，才能区分「策略放行了」和「请求根本没进策略引擎」。
 func TestRecordExemption(t *testing.T) {
 	recorder := NewPrometheusRecorder(testVersion)
 	registry := testutil.NewFakeKubeRegistry("1.23.0")
@@ -123,6 +130,8 @@ func TestRecordExemption(t *testing.T) {
 	}
 }
 
+// 致命和非致命错误用 fatal 标签分开：后者会退回 latest restricted 继续评估，
+// 运维需要能把这类「降级但仍在工作」的情况和彻底失败区分开。
 func TestRecordError(t *testing.T) {
 	recorder := NewPrometheusRecorder(testVersion)
 	registry := testutil.NewFakeKubeRegistry("1.23.0")
@@ -150,6 +159,7 @@ func TestRecordError(t *testing.T) {
 	}
 }
 
+// 测试用例里的版本串都是常量，解析不了就是测试自己写错了，直接 panic 比静默跳过好。
 func levelVersion(level api.Level, version string) api.LevelVersion {
 	lv := api.LevelVersion{Level: level}
 	var err error
@@ -160,6 +170,7 @@ func levelVersion(level api.Level, version string) api.LevelVersion {
 }
 
 // The cached metrics should always be present (value 0 if not counted).
+// 这些序列是 recorder 注册时预热的，断言里必须显式带上 0 值，才能确认没被意外漏掉。
 var expectedCachedMetrics = map[string][]string{
 	"pod_security_evaluations_total": {
 		`pod_security_evaluations_total{decision="allow",mode="enforce",policy_level="privileged",policy_version="latest",request_operation="create",resource="pod",subresource=""}`,
@@ -173,6 +184,7 @@ var expectedCachedMetrics = map[string][]string{
 	},
 }
 
+// 把预置的零值序列补进期望文本，并去掉缩进差异，保证排序比较不受格式影响。
 func expectCachedMetrics(metricName, expected string) string {
 	expectations := strings.Split(strings.TrimSpace(expected), "\n")
 	for i, expectation := range expectations {
@@ -186,6 +198,7 @@ func expectCachedMetrics(metricName, expected string) string {
 }
 
 // addZeroExpectation adds the mixin as an empty sample if not already present.
+// 只有当前断言里还没出现过这个标签组合时才补 0，避免覆盖掉真正的非零计数。
 func addZeroExpectation(currentExpectations []string, mixin string) []string {
 	for _, current := range currentExpectations {
 		if strings.HasPrefix(current, mixin) {

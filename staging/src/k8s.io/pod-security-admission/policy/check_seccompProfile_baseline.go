@@ -44,6 +44,7 @@ spec.initContainers[*].securityContext.seccompProfile.type
 
 **Allowed Values:** 'RuntimeDefault', 'Localhost', undefined
 */
+// 两个注解键分别对应 Pod 级和容器级设置；前缀拼接容器名即可定位对应容器的配置。
 const (
 	annotationKeyPod             = "seccomp.security.alpha.kubernetes.io/pod"
 	annotationKeyContainerPrefix = "container.seccomp.security.alpha.kubernetes.io/"
@@ -52,9 +53,12 @@ const (
 )
 
 func init() {
+	// 在包初始化时注册，构造 Evaluator 时无需调用方显式列出每一项检查。
 	addCheck(CheckSeccompBaseline)
 }
 
+// CheckSeccompBaseline 提供 baseline 档的 seccomp 检查：
+// v1.19 前看注解，之后看 securityContext.seccompProfile 字段。
 func CheckSeccompBaseline() Check {
 	return Check{
 		ID:    checkSeccompBaselineID,
@@ -72,11 +76,15 @@ func CheckSeccompBaseline() Check {
 	}
 }
 
+// validSeccomp 只放行两种不会绕过隔离的类型：localhost 和 runtime/default。
+// Unconfined 会让容器拿到过多系统调用权限，必须拒绝。
 func validSeccomp(t corev1.SeccompProfileType) bool {
 	return t == corev1.SeccompProfileTypeLocalhost ||
 		t == corev1.SeccompProfileTypeRuntimeDefault
 }
 
+// validSeccompAnnotationValue 放行新旧两种默认档取值以及 localhost 前缀，
+// 保留 docker/default 是为了兼容 v1.19 之前按旧约定写配置的用户。
 func validSeccompAnnotationValue(v string) bool {
 	return v == corev1.SeccompProfileRuntimeDefault ||
 		v == corev1.DeprecatedSeccompProfileDockerDefault ||
@@ -84,6 +92,7 @@ func validSeccompAnnotationValue(v string) bool {
 }
 
 // seccompProfileBaseline_1_0 checks baseline policy on seccomp alpha annotation
+// 只检查显式设置的注解；没写注解由运行时自行决定，不算违规。
 func seccompProfileBaseline_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	forbidden := sets.NewString()
 
@@ -118,8 +127,10 @@ func seccompProfileBaseline_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.
 }
 
 // seccompProfileBaseline_1_19 checks baseline policy on securityContext.seccompProfile field
+// 新字段语义与旧注解不同，单独实现一套检查，避免历史行为被悄悄改变。
 func seccompProfileBaseline_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// things that explicitly set seccompProfile.type to a bad value
+	// 分别记录 Pod 级和容器级的违规来源，报错时用户能直接定位该改哪一层。
 	var badSetters []string
 	badValues := sets.NewString()
 
@@ -155,6 +166,7 @@ func seccompProfileBaseline_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1
 		)
 	}
 	// pod or containers explicitly set bad seccompProfiles
+	// 同时汇总所有违规值，用户一次就能看清哪些取值不被允许，不必逐个容器试错。
 	if len(badSetters) > 0 {
 		return CheckResult{
 			Allowed:         false,

@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	// 这两个字符串被多处比较，集中定义避免拼写漂移导致检查失效。
 	capabilityAll            = "ALL"
 	capabilityNetBindService = "NET_BIND_SERVICE"
 )
@@ -49,6 +50,7 @@ spec.initContainers[*].securityContext.capabilities.add
 undefined / empty
 "NET_BIND_SERVICE"
 */
+// 本文件实现 capabilities 的受限级检查；Windows Pod 在 1.25 版本起直接跳过。
 
 func init() {
 	addCheck(CheckCapabilitiesRestricted)
@@ -76,6 +78,7 @@ func CheckCapabilitiesRestricted() Check {
 	}
 }
 
+// 未设置 capabilities 等于没 drop ALL，按违规处理；restricted 要求显式收敛权限。
 func capabilitiesRestricted_1_22(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var (
 		containersMissingDropAll  []string
@@ -135,6 +138,7 @@ func capabilitiesRestricted_1_22(podMetadata *metav1.ObjectMeta, podSpec *corev1
 	return CheckResult{Allowed: true}
 }
 
+// Windows 容器不支持 Linux capabilities，检查它们只会产生无法修复的拒绝。
 func capabilitiesRestricted_1_25(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// Pod API validation would have failed if podOS == Windows and if capabilities have been set.
 	// We can admit the Windows pod even if capabilities has not been set.

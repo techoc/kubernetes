@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// latest 和具体的 v1.x 走同一套解析，避免「latest」在调用处被特殊处理成一个魔数。
 func TestParseVersion(t *testing.T) {
 	successes := map[string]Version{
 		"latest":   LatestVersion(),
@@ -39,6 +40,7 @@ func TestParseVersion(t *testing.T) {
 		})
 	}
 
+	// 这些串分别覆盖：乱写、空值、主版本不对、缺小版本、缺 v 前缀。
 	failures := []string{
 		"foo",
 		"",
@@ -54,6 +56,8 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
+// Equivalent 服务于「策略是否真的变了」的判断，所以重点是等价关系，
+// 不是 Go 结构体的逐字段相等。
 func TestLevelVersionEquals(t *testing.T) {
 	t.Run("a LevelVersion should be equal to itself", func(t *testing.T) {
 		for _, l := range []Level{LevelPrivileged, LevelBaseline, LevelRestricted} {
@@ -86,6 +90,7 @@ func TestLevelVersionEquals(t *testing.T) {
 			}
 		}
 	})
+	// privileged 没有要执行的检查，版本号对它没有意义，所以不同版本也算等价。
 	t.Run("different privileged versions should be equal", func(t *testing.T) {
 		for _, v1 := range []Version{LatestVersion(), MajorMinorVersion(1, 18), MajorMinorVersion(1, 30)} {
 			for _, v2 := range []Version{MajorMinorVersion(1, 16), MajorMinorVersion(1, 13)} {
@@ -97,6 +102,7 @@ func TestLevelVersionEquals(t *testing.T) {
 	})
 }
 
+// 只要 enforce/warn/audit 三个维度里有一个收紧过，整条策略就不算完全 privileged。
 func TestPolicyEquals(t *testing.T) {
 	privileged := Policy{
 		Enforce: LevelVersion{LevelPrivileged, LatestVersion()},
@@ -118,6 +124,7 @@ func TestPolicyEquals(t *testing.T) {
 	assert.False(t, privileged.Equivalent(&baseline), "privileged != baseline")
 }
 
+// 标签之间是独立解析的：某个标签写错只回退那一个维度，不能把整条策略打回 privileged。
 func TestPolicyToEvaluate(t *testing.T) {
 	privilegedLV := LevelVersion{
 		Level:   LevelPrivileged,
@@ -251,6 +258,7 @@ func TestPolicyToEvaluate(t *testing.T) {
 }
 
 // makeLabels turns the kev-value pairs into a labels map[string]string.
+// 额外塞一个无关标签，用来验证解析器只挑自己认得的键。
 func makeLabels(kvs ...string) map[string]string {
 	if len(kvs)%2 != 0 {
 		panic("makeLabels called with mismatched key-values")

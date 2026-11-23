@@ -66,17 +66,21 @@ spec.volumes[*].storageos
 */
 
 func init() {
+	// 通过 init 自动注册，确保策略评估器默认就能加载这条受限级别检查。
 	addCheck(CheckRestrictedVolumes)
 }
 
 // CheckRestrictedVolumes returns a restricted level check
 // that limits usage of specific volume types in 1.0+
+// 这条检查取代 1.25 之前的 hostPathVolumes：与其只封禁 hostPath，
+// 不如显式列出允许的内联卷类型，新增卷源时默认拒绝，避免白名单被动放宽。
 func CheckRestrictedVolumes() Check {
 	return Check{
 		ID:    "restrictedVolumes",
 		Level: api.LevelRestricted,
 		Versions: []VersionedCheck{
 			{
+				// 本检查完全覆盖 hostPathVolumes 的语义，声明覆盖可避免两条检查重复报告同一违规。
 				MinimumVersion:   api.MajorMinorVersion(1, 0),
 				CheckPod:         restrictedVolumes_1_0,
 				OverrideCheckIDs: []CheckID{checkHostPathVolumesID},
@@ -85,10 +89,13 @@ func CheckRestrictedVolumes() Check {
 	}
 }
 
+// restrictedVolumes_1_0 用白名单而非黑名单判定：只放行有限的内联卷类型，
+// 其余一律拒绝。这样新增卷源时默认不突破受限策略，而无需每次同步更新黑名单。
 func restrictedVolumes_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badVolumes []string
 	badVolumeTypes := sets.NewString()
 
+	// 按“白名单跳过、其余收集”遍历，避免在一份长长的禁止列表里漏掉新增字段。
 	for _, volume := range podSpec.Volumes {
 		switch {
 		case volume.ConfigMap != nil,
@@ -149,11 +156,13 @@ func restrictedVolumes_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSp
 			case volume.StorageOS != nil:
 				badVolumeTypes.Insert("storageos")
 			default:
+				// 无法识别的卷源不能因“不在已知黑名单”而被放过；归入 unknown 保持默认拒绝。
 				badVolumeTypes.Insert("unknown")
 			}
 		}
 	}
 
+	// 只在确有违规时构造详细信息；通过路径保持零分配，避免热路径上的格式化开销。
 	if len(badVolumes) > 0 {
 		return CheckResult{
 			Allowed:         false,

@@ -23,6 +23,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestWindowsHostProcess 验证 Windows hostProcess 检查的判定边界：
+// Pod 级设置 true 或容器级显式 true 都要拒绝，而 nil、false、空 WindowsOptions
+// 都不算违规，避免把“未设置”误判成开启宿主进程权限。
 func TestWindowsHostProcess(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -31,6 +34,8 @@ func TestWindowsHostProcess(t *testing.T) {
 		expectDetail string
 	}{
 		{
+			// 同一 Pod 内混合多种 SecurityContext 形态，
+			// 一次运行即可确认只有显式 true 的容器被列入拒绝详情。
 			name: "host process",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				SecurityContext: &corev1.PodSecurityContext{

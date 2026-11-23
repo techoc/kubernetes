@@ -21,10 +21,12 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
+// 由生成的 register/defaults 代码回调，把默认值逻辑挂到 scheme 上。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// 缺省全部落到 privileged/latest：最宽松的起点让未配置的 namespace 保持原有准入行为。
 func SetDefaults_PodSecurityDefaults(obj *PodSecurityDefaults) {
 	if len(obj.Enforce) == 0 {
 		obj.Enforce = string(api.LevelPrivileged)

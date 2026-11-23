@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 诊断消息里统一用双引号包住列表项，空列表返回空串以免留下悬空的引号。
 func joinQuote(items []string) string {
 	if len(items) == 0 {
 		return ""
@@ -29,6 +30,7 @@ func joinQuote(items []string) string {
 	return `"` + strings.Join(items, `", "`) + `"`
 }
 
+// 让错误详情里的单复数与实际数量一致，避免“1 containers”这种噪音。
 func pluralize(singular, plural string, count int) string {
 	if count == 1 {
 		return singular

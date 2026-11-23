@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 同一个 Pod 里混放 nil、默认、Unmasked、其他值，一次就把判定边界跑完；
+// 第二个用例专门验证 userns 打开后规则放宽——这是 baseline 在 1.35 的行为。
 func TestProcMountBaseline(t *testing.T) {
 	defaultValue := corev1.DefaultProcMount
 	unmaskedValue := corev1.UnmaskedProcMount
@@ -52,6 +54,7 @@ func TestProcMountBaseline(t *testing.T) {
 			expectDetail:  `containers "d", "e" must not set securityContext.procMount to "Unmasked", "other"`,
 		},
 		{
+			// HostUsers=false 表示启用 userns，此时 Unmasked 不再算违规。
 			name: "procMount with userns",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Containers: []corev1.Container{

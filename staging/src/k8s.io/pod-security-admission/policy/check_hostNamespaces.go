@@ -35,6 +35,7 @@ spec.hostIPC
 
 **Allowed Values:** undefined, false
 */
+// 本文件检查共享宿主机命名空间；三项独立判定，全部汇总到同一条原因中。
 
 func init() {
 	addCheck(CheckHostNamespaces)
@@ -42,6 +43,7 @@ func init() {
 
 // CheckHostNamespaces returns a baseline level check
 // that prohibits host namespaces in 1.0+
+// 策略自 1.0 起稳定，暂无按版本分支的必要。
 func CheckHostNamespaces() Check {
 	return Check{
 		ID:    "hostNamespaces",
@@ -55,6 +57,7 @@ func CheckHostNamespaces() Check {
 	}
 }
 
+// 逐项收集所有违规字段，用户一次就能看到需要清理的全部命名空间共享配置。
 func hostNamespaces_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var hostNamespaces []string
 

@@ -23,6 +23,7 @@ import (
 	policyapi "k8s.io/pod-security-admission/api"
 )
 
+// 必填字段缺失时统一用这个哨兵错误，方便上层按字段来源聚合错误。
 var requiredErr = fmt.Errorf("required")
 
 // TODO: deduplicate against PolicyToEvaluate
@@ -79,6 +80,8 @@ func ToPolicy(defaults PodSecurityDefaults) (policyapi.Policy, error) {
 }
 
 // appendErr is a helper function to collect field-specific errors.
+//
+// 把字段名前缀到错误上，配置校验失败时用户能直接定位到具体字段。
 func appendErr(errs []error, err error, field string) []error {
 	if err != nil {
 		return append(errs, fmt.Errorf("%s: %s", field, err.Error()))

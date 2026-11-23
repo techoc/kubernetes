@@ -54,12 +54,16 @@ Host field is restricted in the probes and lifecycle handlers.
 Allowed Values: "", undefined/null
 */
 
+// 探针和生命周期回调里的 host 会让 kubelet 去访问节点上的服务，等于绕开 Pod 的网络隔离；
+// 这里的 host 列出的是所有能触发这种访问的位置，改动字段清单前先确认没有漏项。
+
 func init() {
 	addCheck(CheckHostProbesAndHostLifecycle)
 }
 
 // CheckHostProbesAndHostLifecycle returns a baseline level check
 // that forbids setting host field in probes and lifecycle handlers in 1.34+
+// 从 1.34 起才算违规：此前这些字段不算基线违规，老版本策略不能套用新规则。
 func CheckHostProbesAndHostLifecycle() Check {
 	return Check{
 		ID:    "hostProbesAndHostLifecycle",
@@ -73,11 +77,14 @@ func CheckHostProbesAndHostLifecycle() Check {
 	}
 }
 
+// podMetadata 不参与判定，签名对齐 CheckPod 以便统一装配。
+// 用 set 分别收集容器名和违规 host，同一 host 出现在多个探针里也只报一次。
 func hostProbesAndHostLifecycleV1Dot34(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	badContainers := sets.New[string]()
 	forbidden := sets.New[string]()
 	visitContainers(podSpec, func(container *corev1.Container) {
 		// Check probes
+		// 三种探针都要查：漏掉任何一种都会给违规配置留下入口。
 		if badHosts := getForbiddenHostProbes(container.LivenessProbe); len(badHosts) > 0 {
 			badContainers.Insert(container.Name)
 			forbidden.Insert(badHosts...)
@@ -92,6 +99,7 @@ func hostProbesAndHostLifecycleV1Dot34(podMetadata *metav1.ObjectMeta, podSpec *
 		}
 
 		// Check lifecycle handlers
+		// 生命周期回调同样在节点上执行，风险与探针相同，不能只查探针就放过。
 		if container.Lifecycle != nil {
 			if badHosts := getForbiddenHostLifecycle(container.Lifecycle.PostStart); len(badHosts) > 0 {
 				badContainers.Insert(container.Name)
@@ -121,6 +129,8 @@ func hostProbesAndHostLifecycleV1Dot34(podMetadata *metav1.ObjectMeta, podSpec *
 	return CheckResult{Allowed: true}
 }
 
+// 只把非空的 host 当违规——空串表示用 Pod IP，不指向节点。
+// HTTPGet 和 TCPSocket 同时设了就都记下来，不提前 break，方便一次报全。
 func getForbiddenHostProbes(probe *corev1.Probe) []string {
 	var badHosts []string
 	if probe == nil {
@@ -135,6 +145,7 @@ func getForbiddenHostProbes(probe *corev1.Probe) []string {
 	return badHosts
 }
 
+// 与探针共用判定口径，只是入参类型不同——lifecycle 走的是 LifecycleHandler。
 func getForbiddenHostLifecycle(handler *corev1.LifecycleHandler) []string {
 	var badHosts []string
 	if handler == nil {

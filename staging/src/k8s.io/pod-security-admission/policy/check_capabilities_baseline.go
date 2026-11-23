@@ -37,7 +37,9 @@ undefined / empty
 values from the default set "AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE","FOWNER", "FSETID", "KILL", "MKNOD", "NET_BIND_SERVICE", "SETFCAP", "SETGID", "SETPCAP", "SETUID", "SYS_CHROOT"
 */
 
+// 这里只约束 add 列表而非 drop：丢弃能力只会收紧权限，没有提权风险。
 func init() {
+	// 包初始化即注册，构造 Evaluator 时无需逐个列出检查。
 	addCheck(CheckCapabilitiesBaseline)
 }
 
@@ -45,6 +47,7 @@ const checkCapabilitiesBaselineID CheckID = "capabilities_baseline"
 
 // CheckCapabilitiesBaseline returns a baseline level check
 // that limits the capabilities that can be added in 1.0+
+// 白名单来自运行时默认能力集，额外增加能力等于扩大攻击面。
 func CheckCapabilitiesBaseline() Check {
 	return Check{
 		ID:    checkCapabilitiesBaselineID,
@@ -58,6 +61,7 @@ func CheckCapabilitiesBaseline() Check {
 	}
 }
 
+// 能力集合用 set 存储，判断某项是否越界是 O(1)，避免逐个字符串比较。
 var (
 	capabilities_allowed_1_0 = sets.NewString(
 		"AUDIT_WRITE",
@@ -76,8 +80,10 @@ var (
 	)
 )
 
+// capabilitiesBaseline_1_0 逐个容器检查新增能力，未声明 capabilities 的容器直接放行。
 func capabilitiesBaseline_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badContainers []string
+	// 汇总所有越界能力名，报错时一次列全，用户不必逐个容器排查。
 	nonDefaultCapabilities := sets.NewString()
 	visitContainers(podSpec, func(container *corev1.Container) {
 		if container.SecurityContext != nil && container.SecurityContext.Capabilities != nil {

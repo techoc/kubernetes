@@ -22,6 +22,7 @@ import (
 )
 
 /*
+字段路径清单暂留在注释里：反射式测试还没接上，先把要覆盖的字段记下来，避免实现时遗漏 type/user/role 中的任一处。
 TODO: include field paths in reflect-based unit test
 
 podFields: []string{
@@ -36,6 +37,7 @@ containerFields: []string{
 },
 */
 
+// type 只允许三个容器域取值，user/role 完全禁止自定义；pass/fail 两组 fixture 分别钉住这两条规则。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "seLinuxOptions",

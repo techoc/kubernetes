@@ -54,6 +54,8 @@ spec.securityContext.sysctls[*].name
 
 */
 
+// 白名单按版本递增而非一次到位：sysctl 的安全性判定依赖当时内核与运行时的隔离能力，
+// 旧策略必须保持原样，否则收紧级别的老集群会突然放行新 sysctl。
 func init() {
 	addCheck(CheckSysctls)
 }
@@ -88,6 +90,8 @@ func CheckSysctls() Check {
 	}
 }
 
+// 每个版本在上一版基础上并集扩展，而不是另起一份完整名单；重复项会让版本差异难以审阅，
+// 也容易在新增 sysctl 时漏更新旧版本。
 var (
 	sysctlsAllowedV1Dot0 = sets.NewString(
 		"kernel.shm_rmid_forced",
@@ -115,6 +119,7 @@ var (
 	))
 )
 
+// 各版本函数只是绑定不同的白名单；CheckPod 签名统一，策略框架才能在运行时按最低版本挑选实现。
 func sysctlsV1Dot0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	return sysctls(podMetadata, podSpec, sysctlsAllowedV1Dot0)
 }
@@ -136,6 +141,7 @@ func sysctlsV1Dot37(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Che
 }
 
 func sysctls(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec, sysctls_allowed_set sets.String) CheckResult {
+	// 收集全部违规项而非遇错即返回，拒绝信息里才能一次列出所有 sysctl，省去用户逐个重试。
 	var forbiddenSysctls []string
 
 	if podSpec.SecurityContext != nil {

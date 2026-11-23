@@ -23,6 +23,7 @@ import (
 )
 
 /*
+字段路径留档待补进反射式测试；这里覆盖 Pod 与容器两级设置，以及完全未设置的情况。
 TODO: include field paths in reflect-based unit test
 
 podFields: []string{
@@ -34,6 +35,7 @@ containerFields: []string{
 
 */
 
+// 只在 Pod 或所有容器上显式为 true 才算通过；未设置与显式 false 都会让 root 容器有机会启动，故判失败。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{

@@ -25,6 +25,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 )
 
+// 共享响应对象会被多个用例返回，这里在全部测试后检查它们没被就地修改。
 func TestMain(m *testing.M) {
 	sharedResponses := map[string]*admissionv1.AdmissionResponse{
 		"sharedAllowedResponse":                        sharedAllowedResponse,
@@ -34,6 +35,7 @@ func TestMain(m *testing.M) {
 		"sharedAllowedByRuntimeClassExemptionResponse": sharedAllowedByRuntimeClassExemptionResponse,
 	}
 	sharedResponseCopies := map[string]*admissionv1.AdmissionResponse{}
+	// 先深拷贝快照，测试结束后再比较，避免把“被修改过”误判为“本来就相等”。
 	for name, response := range sharedResponses {
 		sharedResponseCopies[name] = response.DeepCopy()
 	}

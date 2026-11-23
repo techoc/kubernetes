@@ -24,11 +24,13 @@ import (
 func init() {
 	appArmorFixture_1_0 := fixtureGenerator{
 		expectErrorSubstring: "forbidden AppArmor profile",
+		// 通过样例覆盖自定义 profile 与运行时默认 profile，确认检查只拦 unconfined。
 		generatePass: func(pod *corev1.Pod, _ api.Level) []*corev1.Pod {
 			pod = ensureAnnotation(pod)
 			return []*corev1.Pod{
 				// container with runtime/default annotation
 				// container with localhost/foo annotation
+				// 注意这里复用了 containers[0] 的名字给 init container 注解，测试只关心注解内容本身。
 				tweak(pod, func(copy *corev1.Pod) {
 					containerName := copy.Spec.Containers[0].Name
 					copy.Annotations[corev1.DeprecatedAppArmorBetaContainerAnnotationKeyPrefix+containerName] = "runtime/default"
@@ -38,6 +40,7 @@ func init() {
 				}),
 			}
 		},
+		// 分别给普通容器与 init 容器设置 unconfined，确保二者都会被检查到。
 		generateFail: func(pod *corev1.Pod) []*corev1.Pod {
 			pod = ensureAnnotation(pod)
 			return []*corev1.Pod{

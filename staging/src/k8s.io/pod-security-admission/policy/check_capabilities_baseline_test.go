@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// baseline 只禁止非默认 capabilities，允许缺失 drop；用例据此构造仅含 add 的 Pod。
 func TestCapabilitiesBaseline(t *testing.T) {
 	tests := []struct {
 		name         string

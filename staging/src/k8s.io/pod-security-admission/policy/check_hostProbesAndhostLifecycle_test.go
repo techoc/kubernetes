@@ -25,6 +25,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestHostProbesAndHostLifecycleEmulation 验证主机探测/生命周期检查的版本模拟开关：
+// 该限制是 1.34 才加入基线的，因此模拟 1.34 及以上版本时才会拒绝显式 host，
+// 模拟更早版本时必须放行，防止旧版本配置被新策略追溯性拒绝。
 func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -56,10 +59,13 @@ func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 			}
 
 			// pod that uses a probe with an explicit host
+			// 显式 host 是触发该检查的必要条件；留空时探测目标是 Pod IP，属于安全用法。
 			podMetadata := &metav1.ObjectMeta{}
 			podSpec := &corev1.PodSpec{Containers: []corev1.Container{{StartupProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Host: "localhost"}}}}}}
 
 			// evaluating "version=latest" and "version=1.34" should only allow if the host check is not active
+			// 用 "latest" 和 "1.34" 两个版本交叉验证，确保模拟版本只影响模拟目标版本之前的历史策略，
+			// 而不会改变当前版本自身的判断。
 			expectAllowed := tc.hostCheckActive == false
 			if result := AggregateCheckResults(e.EvaluatePod(api.LevelVersion{Level: api.LevelBaseline, Version: api.LatestVersion()}, podMetadata, podSpec)); result.Allowed != expectAllowed {
 				t.Fatalf("evaluating with 'latest' expected allowed=%v, got %v: %v", expectAllowed, result.Allowed, result.ForbiddenReasons)
@@ -69,6 +75,8 @@ func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 			}
 
 			// evaluating "version=1.33" should always allow
+			// 1.33 早于该限制引入的版本，无论模拟开关如何都必须放行，
+			// 这是防止策略被追溯应用到旧版本的关键回归点。
 			if result := AggregateCheckResults(e.EvaluatePod(api.LevelVersion{Level: api.LevelBaseline, Version: api.MajorMinorVersion(1, 33)}, podMetadata, podSpec)); !result.Allowed {
 				t.Fatalf("evaluating with '1.33' expected allowed=true, got %v: %v", result.Allowed, result.ForbiddenReasons)
 			}
@@ -77,6 +85,9 @@ func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 
 }
 
+// TestHostProbesAndHostLifecycle 覆盖 1.34 引入的显式 host 限制的各类取值形态：
+// localhost、环回地址、任意域名、IPv4/IPv6，并覆盖三种探测与两种生命周期钩子，
+// 确保无论 host 写在哪个字段都会被同一条规则捕获。
 func TestHostProbesAndHostLifecycle(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -85,6 +96,7 @@ func TestHostProbesAndHostLifecycle(t *testing.T) {
 		expectDetail string
 	}{
 		{
+			// host 留空时探测走 Pod IP，不引入节点网络访问，因此应当被基线策略允许。
 			name: "valid pod with unset hosts",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -110,6 +122,8 @@ func TestHostProbesAndHostLifecycle(t *testing.T) {
 			}},
 		},
 		{
+			// 环回地址（含 IPv6 ::1）与 localhost 都指向节点自身，
+			// 是绕过 Pod 网络边界访问节点服务的最常见写法，必须拒绝。
 			name: "invalid pod with local host IP as probe host",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -222,6 +236,8 @@ func TestHostProbesAndHostLifecycle(t *testing.T) {
 			expectDetail: `container "e" uses probe or lifecycle host "another.invalid.host"`,
 		},
 		{
+			// 多容器场景验证诊断信息按容器名和 host 去重汇总，
+			// 便于用户一次定位所有违规点，而不是逐个修正后再提交。
 			name: "multiple containers with multiple invalid hosts",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -281,6 +297,8 @@ func TestHostProbesAndHostLifecycle(t *testing.T) {
 			expectDetail: `container "a" uses probe or lifecycle host "2001:4860:4860::8888"`,
 		},
 		{
+			// initContainer 与常规容器受同一策略约束；
+			// init 阶段往往拥有更高权限，遗漏这一路会成为提权入口。
 			name: "invalid host in initcontainer",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				InitContainers: []corev1.Container{

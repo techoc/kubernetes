@@ -31,6 +31,8 @@ containerFields: []string{
 
 */
 
+// 本文件注册 allowPrivilegeEscalation 检查的失败夹具。
+// Windows 上不支持该字段，故显式跳过；nil 安全上下文等同未显式关闭提权，需被视为违规。
 func init() {
 	fixtureData_1_8 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {

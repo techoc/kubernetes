@@ -26,6 +26,8 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
+// 放行响应不含动态内容，复用同一实例可避免每次准入请求都分配一个新对象；
+// 各豁免/特权分支的审计注解在 init 中一次性写入，调用方只读，不会互相污染。
 var (
 	sharedAllowedResponse                        = allowedResponse()
 	sharedAllowedPrivilegedResponse              = allowedResponse()
@@ -34,6 +36,8 @@ var (
 	sharedAllowedByRuntimeClassExemptionResponse = allowedResponse()
 )
 
+// 在 init 中给各共享响应一次性写入审计注解：
+// 审计日志据此区分“普通放行”与“因豁免/特权而放行”，便于事后追溯策略为何未生效。
 func init() {
 	sharedAllowedPrivilegedResponse.AuditAnnotations = map[string]string{
 		api.EnforcedPolicyAnnotationKey: api.LevelVersion{Level: api.LevelPrivileged, Version: api.LatestVersion()}.String(),
@@ -44,11 +48,14 @@ func init() {
 }
 
 // allowedResponse is the response used when the admission decision is allow.
+// 构造只置 Allowed=true，不附加审计注解；需要记录放行原因的分支使用 init 中准备好的共享实例。
 func allowedResponse() *admissionv1.AdmissionResponse {
 	return &admissionv1.AdmissionResponse{Allowed: true}
 }
 
 // forbiddenResponse is the response used when the admission decision is deny for policy violations.
+// 用 Forbidden 而非普通错误构造 Result，让客户端收到语义明确的 403，
+// 错误信息中带出具体违规理由，用户无需翻看服务端日志即可知道如何整改。
 func forbiddenResponse(attrs api.Attributes, err error) *admissionv1.AdmissionResponse {
 	return &admissionv1.AdmissionResponse{
 		Allowed: false,
@@ -57,6 +64,7 @@ func forbiddenResponse(attrs api.Attributes, err error) *admissionv1.AdmissionRe
 }
 
 // invalidResponse is the response used for namespace requests when namespace labels are invalid.
+// 命名空间标签写错属于请求格式问题而非策略违规，用 Invalid（422）返回才能与策略拒绝区分开。
 func invalidResponse(attrs api.Attributes, fieldErrors field.ErrorList) *admissionv1.AdmissionResponse {
 	return &admissionv1.AdmissionResponse{
 		Allowed: false,
@@ -65,6 +73,8 @@ func invalidResponse(attrs api.Attributes, fieldErrors field.ErrorList) *admissi
 }
 
 // errorResponse is the response used to capture generic errors.
+// 把内部错误细节放到审计注解而非 Result 消息中：既能在审计日志里排查，
+// 又不会把可能敏感的底层细节直接回显给请求方。
 func errorResponse(err error, status *metav1.Status) *admissionv1.AdmissionResponse {
 	var errDetail string
 	if err != nil {

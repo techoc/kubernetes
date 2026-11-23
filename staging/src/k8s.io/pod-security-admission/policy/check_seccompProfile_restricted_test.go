@@ -22,7 +22,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 1.25 开始 Pod OS 字段生效，Windows Pod 不受 seccomp 约束；表里的 windows/linux 用例即为该分支的回归锁。
 func TestSeccompProfileRestricted_1_25(t *testing.T) {
+	// allowed 省略时按拒绝处理，校验 reason/detail 文本可防止提示信息被无意改坏。
 	tests := []struct {
 		name         string
 		pod          *corev1.Pod
@@ -120,6 +122,7 @@ func TestSeccompProfileRestricted_1_25(t *testing.T) {
 	}
 }
 
+// 1.19 的旧版实现不感知 Pod OS 字段，只验证 seccomp 字段语义；与 1.25 版本共用同一批期望文本。
 func TestSeccompProfileRestricted_1_19(t *testing.T) {
 	tests := []struct {
 		name         string

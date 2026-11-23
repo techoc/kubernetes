@@ -34,8 +34,10 @@ containerFields: []string{
 
 */
 
+// 上述 TODO 保留原始意图：反射式单测尚未覆盖字段路径，当前靠下面的显式夹具保证行为。
 func init() {
 
+	// runAsUser 限制从 v1.23 起生效，夹具按该版本注册。
 	fixtureData_1_23 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			p = ensureSecurityContext(p)

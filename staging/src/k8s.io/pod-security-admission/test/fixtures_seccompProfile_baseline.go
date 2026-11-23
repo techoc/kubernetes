@@ -28,11 +28,15 @@ alpha annotation (up to v.1.19) and the securityContext.seccompProfile field (v1
 The check implementation looks at the appropriate value based on version.
 */
 
+// 两个版本各注册一份生成器：1.0 用注解模拟 seccomp，1.19 用原生字段，
+// 这样升级过程中旧 Pod 的注解写法仍有对应 fixture 兜底。
 func init() {
 	fixtureData_baseline_1_0 := fixtureGenerator{
 		expectErrorSubstring: "seccompProfile",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			// don't generate fixtures if minimal valid pod already has seccomp config
+			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
+			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
 			if val, ok := p.Annotations[annotationKeyPod]; ok &&
 				val == corev1.SeccompProfileRuntimeDefault {
 				return nil
@@ -46,6 +50,7 @@ func init() {
 					// container-level localhost
 					p.Annotations[annotationKeyContainer(p.Spec.Containers[0])] = corev1.SeccompLocalhostProfileNamePrefix + "testing"
 					// init-container unset
+					// init container 故意留空：未显式声明时允许继承 Pod 级配置，这是必须的通过场景。
 				}),
 			}
 		},
@@ -69,6 +74,7 @@ func init() {
 		expectErrorSubstring: "seccompProfile",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			// don't generate fixtures if minimal valid pod already has seccomp config
+			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
 			if p.Spec.SecurityContext != nil &&
 				p.Spec.SecurityContext.SeccompProfile != nil &&
 				p.Spec.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeRuntimeDefault {
@@ -83,6 +89,7 @@ func init() {
 					// container-level localhost
 					p.Spec.Containers[0].SecurityContext.SeccompProfile = seccompProfileRuntimeDefault
 					// init-container unset
+					// init container 故意留空：未显式声明时允许继承 Pod 级配置，这是必须的通过场景。
 				}),
 			}
 		},

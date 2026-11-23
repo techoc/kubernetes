@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 放行用例覆盖旧注解和新字段两条路径：字段优先，但旧注解不能因此被误判。
 func TestCheckAppArmor_Allowed(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -95,6 +96,7 @@ func TestCheckAppArmor_Allowed(t *testing.T) {
 	}
 }
 
+// 拒绝用例同时校验 reason 和 detail，避免消息里暗示错误的字段名误导用户。
 func TestCheckAppArmor_Forbidden(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -164,6 +166,7 @@ func TestCheckAppArmor_Forbidden(t *testing.T) {
 			expectDetail: `container "bar" must not set AppArmor profile type to "Unconfined"`,
 		},
 		{
+			// 旧注解按容器名索引，空名字段也要被检查，否则会漏掉非法 profile。
 			name: "multiple containers",
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

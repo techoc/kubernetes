@@ -25,6 +25,7 @@ import (
 TODO: include field paths in reflect-based unit test
 */
 
+// 本文件为 hostNamespaces 检查注册夹具，逐个打开宿主命名空间以验证检查能定位到具体字段。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{

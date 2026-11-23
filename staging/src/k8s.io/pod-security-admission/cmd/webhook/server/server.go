@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 // Package server implements a Server object for running the admission controller as a webhook server.
+//
+// 本包只负责把 admission 逻辑挂到 HTTP 上，策略判断本身由 admission 包完成。
 package server
 
 import (
@@ -52,6 +54,7 @@ import (
 	"k8s.io/pod-security-admission/policy"
 )
 
+// AdmissionReview 请求体通常远小于此值，限制上限主要是防止恶意大包把 webhook 内存打满。
 const maxRequestSize = int64(3 * 1024 * 1024)
 
 // NewSchedulerCommand creates a *cobra.Command object with default parameters and registryOptions
@@ -78,6 +81,7 @@ Security Standards.`,
 	return cmd
 }
 
+// 用信号处理器把进程退出信号转成 context 取消，让两个 Serve 能一起优雅关闭。
 func runServer(ctx context.Context, opts *options.Options) error {
 	config, err := LoadConfig(opts)
 	if err != nil {
@@ -99,6 +103,7 @@ func runServer(ctx context.Context, opts *options.Options) error {
 	return server.Start(ctx)
 }
 
+// Server 聚合监听配置、informers 和准入代理；把依赖塞进一个结构便于 Start 统一生命周期。
 type Server struct {
 	secureServing   *apiserver.SecureServingInfo
 	insecureServing *apiserver.DeprecatedInsecureServingInfo
@@ -110,6 +115,7 @@ type Server struct {
 	metricsRegistry compbasemetrics.KubeRegistry
 }
 
+// 先等监听器退出再等已有连接处理完，避免日志里出现“还在收请求但已宣布退出”的假象。
 func (s *Server) Start(ctx context.Context) error {
 	s.informerFactory.Start(ctx.Done())
 	logger := klog.FromContext(ctx)
@@ -151,6 +157,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
+// HandleValidate 严格只接受 v1 AdmissionReview：API server 期望相同 kind 的响应，Kind 不一致必须早退。
 func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 	defer utilruntime.HandleCrash(func(_ interface{}) {
 		// Assume the crash happened before the response was written.
@@ -169,6 +176,7 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 		logger.V(2).Info("Invalid timeout", "error", err)
 	} else if ok {
 		var cancel context.CancelFunc
+		// 调用方给的 timeout 只约束本次校验；取消时释放，防止超时后 goroutine 泄漏。
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
@@ -181,6 +189,7 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer r.Body.Close()
+	// 先限量再 ReadAll：直接读无限 body 会让单个请求拖垮服务。
 	limitedReader := &io.LimitedReader{R: r.Body, N: maxRequestSize}
 	if body, err = io.ReadAll(limitedReader); err != nil {
 		logger.Error(err, "unable to read the body from the incoming request")
@@ -228,6 +237,8 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 // Config holds the loaded options.Options used to set up the webhook server.
+//
+// 内部 Config 与命令行 Options 分开：后者可以被校验和修改，前者只承载已生效的配置。
 type Config struct {
 	SecureServing     *apiserver.SecureServingInfo
 	InsecureServing   *apiserver.DeprecatedInsecureServingInfo
@@ -236,6 +247,8 @@ type Config struct {
 }
 
 // LoadConfig loads the Config from the Options.
+//
+// 客户端 QPS 和 Burst 单独设置，避免 webhook 在批量准入时被 client-go 默认限流拖慢。
 func LoadConfig(opts *options.Options) (*Config, error) {
 	if errs := opts.Validate(); len(errs) > 0 {
 		return nil, utilerrors.NewAggregate(errs)
@@ -263,6 +276,8 @@ func LoadConfig(opts *options.Options) (*Config, error) {
 }
 
 // Setup creates an Admission object to handle the admission logic.
+//
+// 这里只注册 namespace informer：Pod 安全配置按 namespace 匹配，其它 informer 用不上。
 func Setup(c *Config) (*Server, error) {
 	s := &Server{
 		secureServing:   c.SecureServing,
@@ -286,6 +301,7 @@ func Setup(c *Config) (*Server, error) {
 		return nil, fmt.Errorf("could not create PodSecurityRegistry: %w", err)
 	}
 	metrics := metrics.NewPrometheusRecorder(api.GetAPIVersion())
+	// 独立 registry 避免把 webhook 指标和进程默认指标混在一起，/metrics 只暴露关心的部分。
 	s.metricsRegistry = compbasemetrics.NewKubeRegistry()
 	metrics.MustRegister(s.metricsRegistry.MustRegister)
 
@@ -308,6 +324,7 @@ func Setup(c *Config) (*Server, error) {
 	return s, nil
 }
 
+// 响应码固定 200，真正的拒绝信息放在 AdmissionResponse 里；否则 API server 会当成 webhook 故障。
 func writeResponse(w http.ResponseWriter, review *admissionv1.AdmissionReview) {
 	// Webhooks should always respond with a 200 HTTP status code when an AdmissionResponse can be sent.
 	// In an error case, the true status code is captured in the response.result.code
@@ -322,6 +339,8 @@ func writeResponse(w http.ResponseWriter, review *admissionv1.AdmissionReview) {
 // value if specified by the user.
 // If a timeout is not specified the function returns false and err is set to nil
 // If the value specified is malformed then the function returns false and err is set
+//
+// timeout 只是可选的性能保护；非法值直接忽略，不让格式错误挡住正常的准入请求。
 func parseTimeout(req *http.Request) (time.Duration, bool, error) {
 	value := req.URL.Query().Get("timeout")
 	if value == "" {

@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 把 pod 级和多个容器的违规合并到一条消息，便于用户一次改完。
 func TestSELinuxOptions(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -30,6 +31,7 @@ func TestSELinuxOptions(t *testing.T) {
 		expectDetail string
 	}{
 		{
+			// 白名单 type 和非法 type 混在一起，确保只报非法项。
 			name: "invalid pod and containers",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				SecurityContext: &corev1.PodSecurityContext{
@@ -140,6 +142,7 @@ func TestSELinuxOptions(t *testing.T) {
 			expectDetail: `pod set forbidden securityContext.seLinuxOptions: type "bad"`,
 		},
 		{
+			// user/role 在 restricted 下完全禁止，不能只靠 type 属性判断。
 			name: "bad user",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				SecurityContext: &corev1.PodSecurityContext{

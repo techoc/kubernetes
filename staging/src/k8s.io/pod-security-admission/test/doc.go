@@ -16,3 +16,5 @@ limitations under the License.
 
 // Package test contains tests for PodSecurity admission
 package test
+
+// 本包提供 PodSecurity 检查的共享测试夹具：按检查项注册生成器，供策略测试与一致性测试复用。

@@ -21,10 +21,13 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
+// addDefaultingFuncs 把默认值函数挂到 scheme 上，解码配置时自动补全空字段。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_PodSecurityDefaults 把未指定的级别与版本填成最宽松值，
+// 保证老配置文件升级后仍能被接受，不会因为新增字段而突然拒绝 Pod。
 func SetDefaults_PodSecurityDefaults(obj *PodSecurityDefaults) {
 	if len(obj.Enforce) == 0 {
 		obj.Enforce = string(api.LevelPrivileged)

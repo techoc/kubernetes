@@ -40,6 +40,7 @@ true
 undefined/null at container-level if pod-level is set to true
 any value if "hostUsers" is false
 */
+// 本文件定义 runAsNonRoot 检查；1.35 起对启用 user namespace 的 Pod 放宽，其余沿用 1.0 逻辑。
 
 func init() {
 	addCheck(CheckRunAsNonRoot)
@@ -47,6 +48,7 @@ func init() {
 
 // CheckRunAsNonRoot returns a restricted level check
 // that requires runAsNonRoot=true in 1.0+
+// 版本列表按时间递增，求值时选Version不晚于策略版本的最新一条。
 func CheckRunAsNonRoot() Check {
 	return Check{
 		ID:    "runAsNonRoot",
@@ -68,6 +70,7 @@ func runAsNonRoot1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) C
 	// See KEP-127: https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
 	// In the 1.0 policy, this relaxation was gated on a perma-alpha feature gate.
 	// Instead of relaxing 1.0 policy, drop the relaxation there, and add it unconditionally here.
+	// 旧版本策略保持不变，只在新版本放开：已固化的基线不应被追溯改写。
 	if relaxPolicyForUserNamespacePod(podSpec) {
 		return CheckResult{Allowed: true}
 	}
@@ -75,6 +78,7 @@ func runAsNonRoot1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) C
 	return runAsNonRoot1_0(podMetadata, podSpec)
 }
 
+// 显式填 false 与仅未填写要分开报：前者是明确违规，后者需提示补齐设置。
 func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// things that explicitly set runAsNonRoot=false
 	var badSetters []string
@@ -91,6 +95,7 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 	// containers that explicitly set runAsNonRoot=false
 	var explicitlyBadContainers []string
 	// containers that didn't set runAsNonRoot and aren't caught by a pod-level runAsNonRoot=true
+	// 容器未填时允许继承 Pod 级设置，但显式 false 不能被 Pod 级 true 覆盖。
 	var implicitlyBadContainers []string
 
 	visitContainers(podSpec, func(container *corev1.Container) {
@@ -120,6 +125,7 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 		)
 	}
 	// pod or containers explicitly set runAsNonRoot=false
+	// 显式错误优先报出，避免用户只补齐遗漏项后仍被提示。
 	if len(badSetters) > 0 {
 		return CheckResult{
 			Allowed:         false,
@@ -129,6 +135,7 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 	}
 
 	// pod didn't set runAsNonRoot and not all containers opted into runAsNonRoot
+	// 既没有 Pod 级兜底、容器自身也没开启，需提示至少一处显式设为 true。
 	if len(implicitlyBadContainers) > 0 {
 		return CheckResult{
 			Allowed:         false,

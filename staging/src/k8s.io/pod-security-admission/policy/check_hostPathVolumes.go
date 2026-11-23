@@ -34,14 +34,19 @@ spec.volumes[*].hostPath
 **Allowed Values:** undefined/null
 */
 
+// hostPath 直接把节点文件系统挂进容器，等于把节点暴露给工作负载；这一项是基线里最硬的禁令之一，
+// 没有「安全子集」可放行，所以判定只看字段有没有设置。
+
 func init() {
 	addCheck(CheckHostPathVolumes)
 }
 
+// 单独命名为常量，是为了让其它 check 能通过 OverrideCheckIDs 精确引用到这一项。
 const checkHostPathVolumesID CheckID = "hostPathVolumes"
 
 // CheckHostPathVolumes returns a baseline level check
 // that requires hostPath=undefined/null in 1.0+
+// 从 1.0 起就有这条规则，故没有版本分支。
 func CheckHostPathVolumes() Check {
 	return Check{
 		ID:    checkHostPathVolumesID,
@@ -55,9 +60,11 @@ func CheckHostPathVolumes() Check {
 	}
 }
 
+// podMetadata 用不上，仅为满足 CheckPod 的函数签名而保留。
 func hostPathVolumes_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var hostVolumes []string
 
+	// 报错里带卷名而不是卷定义，用户才找得到是哪个 volume 需要删掉。
 	for _, volume := range podSpec.Volumes {
 		if volume.HostPath != nil {
 			hostVolumes = append(hostVolumes, volume.Name)

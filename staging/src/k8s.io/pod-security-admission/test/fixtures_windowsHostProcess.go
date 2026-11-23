@@ -34,6 +34,8 @@ containerFields: []string{
 
 */
 
+// 本文件为 windowsHostProcess 检查注册夹具：仅覆盖失败场景，
+// 因为最小合法 Pod 已经代表所有允许组合；待 hostProcess GA 后再补显式 false 的用例。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{

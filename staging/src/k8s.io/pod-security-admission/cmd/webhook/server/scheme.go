@@ -26,6 +26,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
+// webhook 只需要解码 AdmissionReview 以及被审查的 Workload 对象，
+// 注册范围刻意收窄，避免把无关 API 类型拉进这个独立二进制。
 var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
@@ -33,6 +35,7 @@ func init() {
 	addToScheme(scheme)
 }
 
+// 用 Must 包裹注册：scheme 缺类型只会在收到请求时才暴露，不如在启动时直接失败。
 func addToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))

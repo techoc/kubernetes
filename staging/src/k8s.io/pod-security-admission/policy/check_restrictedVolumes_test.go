@@ -22,6 +22,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// TestRestrictedVolumes 用一个 Pod 同时放入允许、禁用和未知三类卷，
+// 验证禁用类型与未知类型都被拒绝，且错误信息按名称/类型排序稳定。
 func TestRestrictedVolumes(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -45,6 +47,7 @@ func TestRestrictedVolumes(t *testing.T) {
 					{Name: "a9", VolumeSource: corev1.VolumeSource{Image: &corev1.ImageVolumeSource{}}},
 
 					// known restricted types
+					// 每种禁用类型各占一个卷，期望详情里按卷名完整列出。
 					{Name: "b1", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{}}},
 					{Name: "b2", VolumeSource: corev1.VolumeSource{GCEPersistentDisk: &corev1.GCEPersistentDiskVolumeSource{}}},
 					{Name: "b3", VolumeSource: corev1.VolumeSource{AWSElasticBlockStore: &corev1.AWSElasticBlockStoreVolumeSource{}}},
@@ -68,6 +71,7 @@ func TestRestrictedVolumes(t *testing.T) {
 					{Name: "b21", VolumeSource: corev1.VolumeSource{StorageOS: &corev1.StorageOSVolumeSource{}}},
 
 					// unknown type
+					// 空 VolumeSource 无法识别类型，按未知类型处理，不能因类型缺失而放行。
 					{Name: "c1", VolumeSource: corev1.VolumeSource{}},
 				},
 			}},

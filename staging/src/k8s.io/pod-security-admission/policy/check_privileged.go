@@ -33,6 +33,7 @@ spec.initContainers[*].securityContext.privileged
 
 Allowed Values: false, undefined/null
 */
+// 本文件检查特权容器；只有显式设为 true 才算违规，未设置按默认禁用处理。
 
 func init() {
 	addCheck(CheckPrivileged)
@@ -40,6 +41,7 @@ func init() {
 
 // CheckPrivileged returns a baseline level check
 // that forbids privileged=true in 1.0+
+// 作为基线检查，同时在基线与受限策略下生效。
 func CheckPrivileged() Check {
 	return Check{
 		ID:    "privileged",
@@ -53,6 +55,7 @@ func CheckPrivileged() Check {
 	}
 }
 
+// 遍历所有容器形态，避免临时容器绕过特权检查。
 func privileged_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badContainers []string
 	visitContainers(podSpec, func(container *corev1.Container) {

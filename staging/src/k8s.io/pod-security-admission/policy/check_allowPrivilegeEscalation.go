@@ -34,6 +34,7 @@ spec.initContainers[*].securityContext.allowPrivilegeEscalation
 
 **Allowed Values:** false
 */
+// 本文件检查 allowPrivilegeEscalation；Windows Pod 因接口差异自 1.25 起单独豁免。
 
 func init() {
 	addCheck(CheckAllowPrivilegeEscalation)
@@ -41,6 +42,7 @@ func init() {
 
 // CheckAllowPrivilegeEscalation returns a restricted level check
 // that requires allowPrivilegeEscalation=false in 1.8+
+// 新版本复用旧版实现，仅为 Windows 场景增加豁免，避免复制检查逻辑。
 func CheckAllowPrivilegeEscalation() Check {
 	return Check{
 		ID:    "allowPrivilegeEscalation",
@@ -54,6 +56,7 @@ func CheckAllowPrivilegeEscalation() Check {
 			},
 			{
 				// Starting 1.25, windows pods would be exempted from this check using pod.spec.os field when set to windows.
+				// 版本化而非直接改旧实现，保证 1.8 策略的历史判定不被改写。
 				MinimumVersion: api.MajorMinorVersion(1, 25),
 				CheckPod:       allowPrivilegeEscalation_1_25,
 			},
@@ -61,6 +64,7 @@ func CheckAllowPrivilegeEscalation() Check {
 	}
 }
 
+// 未设置与设置为 true 都视为违规：宽松默认值会放大提权风险，必须显式关掉。
 func allowPrivilegeEscalation_1_8(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badContainers []string
 	visitContainers(podSpec, func(container *corev1.Container) {
@@ -86,6 +90,7 @@ func allowPrivilegeEscalation_1_8(podMetadata *metav1.ObjectMeta, podSpec *corev
 func allowPrivilegeEscalation_1_25(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// Pod API validation would have failed if podOS == Windows and if privilegeEscalation has been set.
 	// We can admit the Windows pod even if privilegeEscalation has not been set.
+	// Windows 上该字段语义不同，API 校验已挡住显式开启的情况，这里无需重复判定。
 	if podSpec.OS != nil && podSpec.OS.Name == corev1.Windows {
 		return CheckResult{Allowed: true}
 	}

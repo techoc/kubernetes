@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 覆盖 1.0 中基于旧注解的 seccomp 判定：pod 级与容器级注解都要检查。
 func TestSeccompProfileBaseline_1_0(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -93,6 +94,8 @@ func TestSeccompProfileBaseline_1_0(t *testing.T) {
 	}
 }
 
+// 1.19 改看 securityContext.seccompProfile.type：只拒绝 Unconfined，
+// 未设置与 RuntimeDefault 都允许，避免把默认继承误判为违规。
 func TestSeccompProfileBaseline_1_19(t *testing.T) {
 	tests := []struct {
 		name         string

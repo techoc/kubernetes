@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 0 表示未占用主机端口，只有非零值才算违规；用例顺便检查多容器去重。
 func TestHostPort(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -41,6 +42,7 @@ func TestHostPort(t *testing.T) {
 			expectDetail: `container "b" uses hostPort 20`,
 		},
 		{
+			// 多个容器使用相同端口时只报一次，避免消息重复刷屏。
 			name: "multiple containers, multiple host port",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Containers: []corev1.Container{

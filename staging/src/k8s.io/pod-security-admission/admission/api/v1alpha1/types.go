@@ -20,6 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object 使生成代码为该类型实现 DeepCopyObject，
+// 从而满足 runtime.Object 接口并参与 scheme 编解码。
+// 本文件保留旧版配置结构，仅供读取历史配置文件并转换到 v1，新代码应使用 v1。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type PodSecurityConfiguration struct {
@@ -29,6 +32,7 @@ type PodSecurityConfiguration struct {
 	Exemptions PodSecurityExemptions `json:"exemptions"`
 }
 
+// PodSecurityDefaults 保存未打标签命名空间所采用的默认级别与版本。
 type PodSecurityDefaults struct {
 	Enforce        string `json:"enforce,omitempty"`
 	EnforceVersion string `json:"enforce-version,omitempty"`

@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestRunAsUser 验证 1.35 版检查只拒绝 root 用户，并覆盖 Pod 级与容器级的取值。
+// hostUsers=false 的 Pod 不受该限制，因为用户命名空间已隔离 UID 0。
 func TestRunAsUser(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -31,6 +33,7 @@ func TestRunAsUser(t *testing.T) {
 		expectReason  string
 		expectDetail  string
 	}{
+		// Pod 级设置为 root 时无需逐容器判断，直接拒绝整个 Pod。
 		{
 			name: "pod runAsUser=0",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
@@ -62,6 +65,7 @@ func TestRunAsUser(t *testing.T) {
 			}},
 			expectAllowed: true,
 		},
+		// 混合场景中只应列出违规容器，避免把使用非零 UID 的容器也算进去。
 		{
 			name: "containers runAsUser=0",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
@@ -90,6 +94,7 @@ func TestRunAsUser(t *testing.T) {
 			}},
 			expectAllowed: true,
 		},
+		// 用户命名空间使容器内的 root 不等同于宿主 root，因此放行。
 		{
 			name: "host users false allowed",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{

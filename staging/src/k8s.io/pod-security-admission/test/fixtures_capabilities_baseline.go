@@ -30,6 +30,7 @@ containerFields: []string{
 */
 
 // ensureCapabilities ensures the pod and all initContainers and containers have a non-nil capabilities.
+// 夹具只需改动 add 字段，先补齐 capabilities 结构可让下游 tweak 不必层层判空。
 func ensureCapabilities(p *corev1.Pod) *corev1.Pod {
 	p = ensureSecurityContext(p)
 	for i := range p.Spec.Containers {
@@ -45,11 +46,15 @@ func ensureCapabilities(p *corev1.Pod) *corev1.Pod {
 	return p
 }
 
+// 基线只允许一组受控的 capability，这里用最小化的通过集合与多个失败变体
+// 分别验证白名单本身、initContainer 覆盖，以及大小写/CAP_ 前缀等别名写法不能绕过检查。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "capabilities",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			// don't generate fixtures if minimal valid pod drops ALL
+			// 若最小合法 Pod 已 drop ALL，再 add 任何 capability 都可能被策略拒绝，
+			// 此时返回空集合比强行构造一个“通过”用例更准确。
 			if p.Spec.Containers[0].SecurityContext != nil && p.Spec.Containers[0].SecurityContext.Capabilities != nil {
 				for _, capability := range p.Spec.Containers[0].SecurityContext.Capabilities.Drop {
 					if capability == corev1.Capability("ALL") {
@@ -83,10 +88,12 @@ func init() {
 					p.Spec.InitContainers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
 				}),
 				// case-difference
+				// 能力名大小写敏感，小写写法不应被当作合法能力而放行。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"chown"}
 				}),
 				// CAP_ prefix
+				// 内核工具常带 CAP_ 前缀，白名单按裸名匹配，因此这种别名也不能绕过检查。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"CAP_CHOWN"}
 				}),

@@ -14,5 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 命名空间标签是 PodSecurity 准入的入口，本包把标签键、取值与解析逻辑收在一处，
+// 让准入侧和策略侧共享同一套解释，避免各处重复解析标签时产生分歧。
+
 // Package api contains constants and helpers for PodSecurity admission label keys and values
 package api

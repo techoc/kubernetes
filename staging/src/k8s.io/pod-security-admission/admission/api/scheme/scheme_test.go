@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件预留给 scheme 装配的回归测试：注册遗漏会导致配置对象无法编解码。
 package scheme

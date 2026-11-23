@@ -22,7 +22,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// 1.0 的白名单只有五项，这里锁死最初的安全 sysctl 集合；虚构名字 a/b 用来验证多个违规项的拼接顺序。
 func TestSysctls(t *testing.T) {
+	// allowed 省略即视为 false：表中大多数用例都是拒绝场景。
 	tests := []struct {
 		name         string
 		pod          *corev1.Pod
@@ -42,6 +44,7 @@ func TestSysctls(t *testing.T) {
 			expectDetail: `a, b`,
 		},
 		{
+			// 后续版本新增的“安全” sysctl，不能倒灌到旧版本策略里。
 			name: "new supported sysctls not supported: net.ipv4.ip_local_reserved_ports",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				SecurityContext: &corev1.PodSecurityContext{
@@ -140,6 +143,7 @@ func TestSysctls(t *testing.T) {
 	}
 }
 
+// 1.27 只放宽 ip_local_reserved_ports，防止“新增白名单顺手放行所有网络 sysctl”的回退。
 func TestSysctls_1_27(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -190,6 +194,7 @@ func TestSysctls_1_27(t *testing.T) {
 	}
 }
 
+// 1.29 新增四项 TCP keepalive / timeout，逐项列出避免实现时用前缀匹配蒙混过关。
 func TestSysctls_1_29(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -267,6 +272,7 @@ func TestSysctls_1_29(t *testing.T) {
 	}
 }
 
+// 1.32 放行 tcp_rmem / tcp_wmem，保留最早的禁止用例作为回归基线。
 func TestSysctls_1_32(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -326,6 +332,7 @@ func TestSysctls_1_32(t *testing.T) {
 	}
 }
 
+// 1.37 新增两项拥塞控制相关 sysctl，沿用同样的表格驱动断言，避免为每个版本复制校验逻辑。
 func TestSysctls_1_37(t *testing.T) {
 	tests := []struct {
 		name         string

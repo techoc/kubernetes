@@ -21,4 +21,5 @@ limitations under the License.
 // +groupName=pod-security.admission.config.k8s.io
 
 // Package v1beta1 contains PodSecurity admission configuration file types
+// 本包只定义配置文件里的类型；真正注册进 scheme 的逻辑在 register.go，生成器负责 deepcopy/defaulting 等实现。
 package v1beta1

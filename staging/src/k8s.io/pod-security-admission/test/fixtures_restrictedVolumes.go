@@ -22,15 +22,18 @@ import (
 )
 
 func init() {
+	// 通过 init 注册到全局表，测试框架按 level/version/check 三元组查找对应夹具。
 	// volumeType := "ext4"
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "restricted volume types",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			return []*corev1.Pod{
 				// pod that has all allowed volume types
+				// 把允许类型集中到一个 Pod，一次断言即可覆盖整张白名单。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Volumes = []corev1.Volume{
 						{Name: "volume0", VolumeSource: corev1.VolumeSource{}}, // implicit empty dir
+						// 空 VolumeSource 表示隐式 emptyDir，也要被识别为允许类型。
 						{Name: "volume1", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 						{Name: "volume2", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test"}}},
 						{Name: "volume3", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "test"}}},
@@ -48,6 +51,7 @@ func init() {
 			}
 		},
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
+			// 每个禁用类型各造一个 Pod，便于定位具体是哪类卷触发拒绝。
 			return []*corev1.Pod{
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Volumes = []corev1.Volume{{Name: "volume1", VolumeSource: corev1.VolumeSource{GCEPersistentDisk: &corev1.GCEPersistentDiskVolumeSource{PDName: "test"}}}}
@@ -113,6 +117,7 @@ func init() {
 		},
 	}
 
+	// 从 v1.0 起生效且各版本规则未变，只需注册一个版本，后续版本会复用这组夹具。
 	registerFixtureGenerator(
 		fixtureKey{level: api.LevelRestricted, version: api.MajorMinorVersion(1, 0), check: "restrictedVolumes"},
 		fixtureData_1_0,

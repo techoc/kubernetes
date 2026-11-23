@@ -31,6 +31,7 @@ var (
 	Scheme = runtime.NewScheme()
 
 	// Codecs provides access to encoding and decoding for the scheme.
+	// 开启严格解码：配置里拼错或多余的字段必须报错，不能被静默忽略后套用默认值。
 	Codecs = serializer.NewCodecFactory(Scheme, serializer.EnableStrict)
 )
 
@@ -39,6 +40,7 @@ func init() {
 }
 
 // AddToScheme builds the podsecurity scheme using all known versions of the podsecurity api.
+// 版本优先级按 v1 -> v1beta1 -> v1alpha1 排列，旧配置仍可读取，但序列化时一律输出首选版本。
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(podsecurityapi.AddToScheme(scheme))
 	utilruntime.Must(podsecurityv1alpha1.AddToScheme(scheme))

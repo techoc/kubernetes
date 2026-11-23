@@ -37,6 +37,7 @@ spec.initContainers[*].securityContext.windowsOptions.hostProcess
 **Allowed Values:** undefined / false
 */
 
+// hostProcess 让容器以宿主身份运行，等同于绕过容器隔离边界；nil 与 false 都安全，只有显式 true 才拒绝。
 func init() {
 	addCheck(CheckWindowsHostProcess)
 }
@@ -57,6 +58,7 @@ func CheckWindowsHostProcess() Check {
 }
 
 func windowsHostProcess_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+	// 先逐容器再查 Pod 级，最后统一拼错误信息；分两步是为了让 “pod and containers ...” 的措辞稳定。
 	var badContainers []string
 	visitContainers(podSpec, func(container *corev1.Container) {
 		if container.SecurityContext != nil &&
@@ -76,6 +78,7 @@ func windowsHostProcess_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodS
 	}
 
 	// pod or containers explicitly set hostProcess=true
+	// 即使在 Linux Pod 上这几个字段也没意义，但设置它们仍是显式的高危意图，统一拒绝避免平台差异。
 	var forbiddenSetters []string
 	if podSpecForbidden {
 		forbiddenSetters = append(forbiddenSetters, "pod")

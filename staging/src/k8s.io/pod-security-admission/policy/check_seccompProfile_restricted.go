@@ -40,11 +40,13 @@ spec.initContainers[*].securityContext.seccompProfile.type
 Note: container-level fields may be undefined if pod-level field is specified.
 
 */
+// 本文件把 seccomp 要求做成版本化检查；1.25 分支隔离 Windows Pod，避免误拒。
 
 func init() {
 	addCheck(CheckSeccompProfileRestricted)
 }
 
+// 1.19 之前 seccompProfile 字段不存在，检查从该版本开始才有意义。
 func CheckSeccompProfileRestricted() Check {
 	return Check{
 		ID:    "seccompProfile_restricted",
@@ -68,6 +70,7 @@ func CheckSeccompProfileRestricted() Check {
 // seccompProfileRestricted_1_19 checks restricted policy on securityContext.seccompProfile field
 func seccompProfileRestricted_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// things that explicitly set seccompProfile.type to a bad value
+	// 显式非法值需要列出具体取值，帮助用户定位到要改的字段。
 	var badSetters []string
 	badValues := sets.NewString()
 
@@ -104,6 +107,7 @@ func seccompProfileRestricted_1_19(podMetadata *metav1.ObjectMeta, podSpec *core
 		}
 	})
 
+	// 容器名和 pod 分别收集，最后拼成一句诊断，避免每个容器单独报一次。
 	if len(explicitlyBadContainers) > 0 {
 		badSetters = append(
 			badSetters,
@@ -128,6 +132,7 @@ func seccompProfileRestricted_1_19(podMetadata *metav1.ObjectMeta, podSpec *core
 	}
 
 	// pod didn't set seccompProfile and not all containers opted into seccompProfile
+	// 未显式声明也必须拒绝：restricted 要求明确选择 RuntimeDefault/Localhost，而不是依赖运行时默认行为。
 	if len(implicitlyBadContainers) > 0 {
 		return CheckResult{
 			Allowed:         false,

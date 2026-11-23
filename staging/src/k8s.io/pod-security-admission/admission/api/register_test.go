@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件属于 admission/api 包，专门验证配置对象在各版本 scheme 中的注册与转换。
+// 注册正确与否决定准入控制器能否从配置文件反序列化出策略对象，因此用独立测试守住这条链路。
 package api

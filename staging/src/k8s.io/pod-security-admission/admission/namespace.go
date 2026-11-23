@@ -26,22 +26,27 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
+// NamespaceGetterFromClient 只用客户端查询，适用于不需要 informer 的场景。
 func NamespaceGetterFromClient(client kubernetes.Interface) NamespaceGetter {
 	return &namespaceGetter{client: client}
 }
 
+// NamespaceGetterFromListerAndClient 先查本地缓存再回源，减轻 apiserver 压力。
 func NamespaceGetterFromListerAndClient(lister corev1listers.NamespaceLister, client kubernetes.Interface) NamespaceGetter {
 	return &namespaceGetter{lister: lister, client: client}
 }
 
+// namespaceGetter 组合缓存与直连两种查询路径，构造方式决定查询顺序。
 type namespaceGetter struct {
 	lister corev1listers.NamespaceLister
 	client kubernetes.Interface
 }
 
+// GetNamespace 优先读 informer 缓存；只有缓存里查不到该对象时才回源到 apiserver。
 func (n *namespaceGetter) GetNamespace(ctx context.Context, name string) (namespace *corev1.Namespace, err error) {
 	if n.lister != nil {
 		namespace, err := n.lister.Get(name)
+		// 只有 NotFound 才回源，其他错误（例如缓存未同步）原样返回，避免掩盖故障。
 		if err == nil || !apierrors.IsNotFound(err) {
 			return namespace, err
 		}

@@ -29,6 +29,8 @@ podFields: []string{
 },
 */
 
+// 本文件的夹具按 sysctl 白名单的扩容版本逐段登记：
+// 每新增一批被允许的 sysctl，就用新版本生成器覆盖，旧版本生成器继续为更早版本服务。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "forbidden sysctl",
@@ -42,6 +44,7 @@ func init() {
 				// sysctls with name="kernel.shm_rmid_forced" ,"net.ipv4.ip_local_port_range"
 				// "net.ipv4.tcp_syncookies", "net.ipv4.ping_group_range",
 				// "net.ipv4.ip_unprivileged_port_start"
+				// 这里逐项列出白名单，是为了在内核允许集合变化时能立刻发现夹具与实现脱节。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "kernel.shm_rmid_forced", Value: "0"},
@@ -59,6 +62,7 @@ func init() {
 			}
 			return []*corev1.Pod{
 				// sysctls with out of allowed name
+				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -100,6 +104,7 @@ func init() {
 			}
 			return []*corev1.Pod{
 				// sysctls with out of allowed name
+				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -146,6 +151,7 @@ func init() {
 			}
 			return []*corev1.Pod{
 				// sysctls with out of allowed name
+				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -181,6 +187,7 @@ func init() {
 			}
 			return []*corev1.Pod{
 				// sysctls with out of allowed name
+				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -192,6 +199,8 @@ func init() {
 		fixtureDataV1Dot32,
 	)
 
+	// 1.37 新增 tcp_slow_start_after_idle 与 tcp_notsent_lowat 两项白名单，
+	// 需单独注册以免旧版本夹具误把新 sysctl 判为合法。
 	fixtureDataV1Dot37 := fixtureGenerator{
 		expectErrorSubstring: "forbidden sysctl",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
@@ -216,6 +225,7 @@ func init() {
 			}
 			return []*corev1.Pod{
 				// sysctls with out of allowed name
+				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),

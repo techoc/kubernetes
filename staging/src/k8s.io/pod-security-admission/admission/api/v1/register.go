@@ -22,6 +22,7 @@ import (
 )
 
 // GroupName is the group name use in this package
+// 本常量与 SchemeGroupVersion 组合，决定配置文件解码时匹配的 API 组。
 const GroupName = "pod-security.admission.config.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
@@ -42,6 +43,8 @@ func init() {
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
+// addKnownTypes 只注册手写类型，生成的转换与深拷贝函数在生成文件中注册，
+// 这样在生成文件缺失时本包仍可编译。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&PodSecurityConfiguration{},
