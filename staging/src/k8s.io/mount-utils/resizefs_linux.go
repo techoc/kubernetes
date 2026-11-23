@@ -32,16 +32,19 @@ const (
 )
 
 // ResizeFs Provides support for resizing file systems
+// 通过外部命令扩容，便于在测试中替换执行器；exec 可注入假实现用于测试。
 type ResizeFs struct {
 	exec utilexec.Interface
 }
 
 // NewResizeFs returns new instance of resizer
+// 生产代码传入真实执行器，测试中传入 fake。
 func NewResizeFs(exec utilexec.Interface) *ResizeFs {
 	return &ResizeFs{exec: exec}
 }
 
 // Resize perform resize of file system
+// 按探测到的文件系统类型选择工具；未格式化时不扩容，交给 mkfs 使用整盘。
 func (resizefs *ResizeFs) Resize(devicePath string, deviceMountPath string) (bool, error) {
 	format, err := getDiskFormat(resizefs.exec, devicePath)
 	if err != nil {
@@ -67,6 +70,7 @@ func (resizefs *ResizeFs) Resize(devicePath string, deviceMountPath string) (boo
 	return false, fmt.Errorf("ResizeFS.Resize - resize of format %s is not supported for device %s mounted at %s", format, devicePath, deviceMountPath)
 }
 
+// extResize 对 ext3/ext4 扩容；resize2fs 接受设备路径而非挂载点。
 func (resizefs *ResizeFs) extResize(devicePath string) (bool, error) {
 	output, err := resizefs.exec.Command("resize2fs", devicePath).CombinedOutput()
 	if err == nil {
@@ -78,6 +82,7 @@ func (resizefs *ResizeFs) extResize(devicePath string) (bool, error) {
 	return false, resizeError
 }
 
+// xfsResize 接受挂载点；xfs_growfs 依赖已挂载的文件系统，不能传块设备。
 func (resizefs *ResizeFs) xfsResize(deviceMountPath string) (bool, error) {
 	args := []string{"-d", deviceMountPath}
 	output, err := resizefs.exec.Command("xfs_growfs", args...).CombinedOutput()
@@ -91,6 +96,7 @@ func (resizefs *ResizeFs) xfsResize(deviceMountPath string) (bool, error) {
 	return false, resizeError
 }
 
+// btrfsResize 同样针对挂载点操作，resize max 让文件系统占满可用空间。
 func (resizefs *ResizeFs) btrfsResize(deviceMountPath string) (bool, error) {
 	args := []string{"filesystem", "resize", "max", deviceMountPath}
 	output, err := resizefs.exec.Command("btrfs", args...).CombinedOutput()
@@ -104,6 +110,7 @@ func (resizefs *ResizeFs) btrfsResize(deviceMountPath string) (bool, error) {
 	return false, resizeError
 }
 
+// NeedResize 先排除只读和未格式化的设备，再按文件系统类型判断是否需要扩容。
 func (resizefs *ResizeFs) NeedResize(devicePath string, deviceMountPath string) (bool, error) {
 	// Do nothing if device is mounted as readonly
 	readonly, err := resizefs.getDeviceRO(devicePath)
@@ -152,6 +159,7 @@ func (resizefs *ResizeFs) NeedResize(devicePath string, deviceMountPath string) 
 	}
 }
 
+// getDeviceSize 读取块设备字节数；命令输出非数字时视为探测失败。
 func (resizefs *ResizeFs) getDeviceSize(devicePath string) (uint64, error) {
 	output, err := resizefs.exec.Command(blockDev, "--getsize64", devicePath).CombinedOutput()
 	outStr := strings.TrimSpace(string(output))
@@ -165,6 +173,7 @@ func (resizefs *ResizeFs) getDeviceSize(devicePath string) (uint64, error) {
 	return size, nil
 }
 
+// getBtrfsSize 从 superblock dump 提取块大小与总字节数；缺任一项都无法判断扩容空间。
 func (resizefs *ResizeFs) getBtrfsSize(devicePath string) (uint64, uint64, error) {
 	output, err := resizefs.exec.Command("btrfs", "inspect-internal", "dump-super", "-f", devicePath).CombinedOutput()
 	if err != nil {
@@ -182,6 +191,7 @@ func (resizefs *ResizeFs) getBtrfsSize(devicePath string) (uint64, uint64, error
 	return blockSize, totalBytes, nil
 }
 
+// parseBtrfsInfoOutput 逐行按空白切分，忽略格式不符的行以兼容不同 btrfs 版本输出。
 func (resizefs *ResizeFs) parseBtrfsInfoOutput(cmdOutput string, blockSizeKey string, totalBytesKey string) (uint64, uint64, error) {
 	lines := strings.Split(cmdOutput, "\n")
 	var blockSize, blockCount uint64
@@ -210,6 +220,7 @@ func (resizefs *ResizeFs) parseBtrfsInfoOutput(cmdOutput string, blockSizeKey st
 	return blockSize, blockCount, err
 }
 
+// getDeviceRO 读取 blockdev 的只读位；只读设备扩容会失败，需提前拦截。
 func (resizefs *ResizeFs) getDeviceRO(devicePath string) (bool, error) {
 	output, err := resizefs.exec.Command(blockDev, "--getro", devicePath).CombinedOutput()
 	outStr := strings.TrimSpace(string(output))

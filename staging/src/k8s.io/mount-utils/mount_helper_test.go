@@ -25,6 +25,7 @@ import (
 	"testing"
 )
 
+// 覆盖清理挂载点的各条分支：正常、路径不存在、损坏挂载与非损坏错误。
 func TestDoCleanupMountPoint(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skipf("not supported on GOOS=%s", runtime.GOOS)
@@ -41,6 +42,7 @@ func TestDoCleanupMountPoint(t *testing.T) {
 		// and error if the prepare function encountered a fatal error.
 		prepareMnt func(base string) (MountPoint, error, error)
 		// Function that prepares the FakeMounter for the test.
+		// 允许个别用例调整 mounter 开关，例如启用跳过挂载点检查。
 		prepareMntr func(mntr *FakeMounter)
 		expectErr   bool
 	}{
@@ -142,11 +144,13 @@ func TestDoCleanupMountPoint(t *testing.T) {
 	}
 }
 
+// 只判断目录是否存在，具体错误交给调用方断言。
 func validateDirExists(dir string) error {
 	_, err := os.ReadDir(dir)
 	return err
 }
 
+// 区分“确实不存在”和“其它读取错误”，避免把权限问题误判为清理成功。
 func validateDirNotExists(dir string) error {
 	_, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {

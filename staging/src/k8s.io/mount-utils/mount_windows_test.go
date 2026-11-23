@@ -29,6 +29,7 @@ import (
 	testingexec "k8s.io/utils/exec/testing"
 )
 
+// makeLink 走系统 mklink 而非 os.Symlink，因为 Windows 需要管理员权限且链接类型不同。
 func makeLink(link, target string) error {
 	if output, err := exec.Command("cmd", "/c", "mklink", "/D", link, target).CombinedOutput(); err != nil {
 		return fmt.Errorf("mklink failed: %v, link(%q) target(%q) output: %q", err, link, target, string(output))
@@ -36,6 +37,7 @@ func makeLink(link, target string) error {
 	return nil
 }
 
+// removeLink 用 rmdir 删除目录链接，与 mklink /D 创建的链接类型配对。
 func removeLink(link string) error {
 	if output, err := exec.Command("cmd", "/c", "rmdir", link).CombinedOutput(); err != nil {
 		return fmt.Errorf("rmdir failed: %v, output: %q", err, string(output))
@@ -43,6 +45,7 @@ func removeLink(link string) error {
 	return nil
 }
 
+// setEquivalent 忽略顺序比较挂载引用，因为系统返回的枚举顺序不保证稳定。
 func setEquivalent(set1, set2 []string) bool {
 	map1 := make(map[string]bool)
 	map2 := make(map[string]bool)
@@ -67,6 +70,7 @@ func setEquivalent(set1, set2 []string) bool {
 }
 
 // this func must run in admin mode, otherwise it will fail
+// 真实查询依赖系统挂载表，普通权限下跳过即可，不在测试里提权。
 func TestGetMountRefs(t *testing.T) {
 	tests := []struct {
 		mountPath    string
@@ -91,6 +95,7 @@ func TestGetMountRefs(t *testing.T) {
 	}
 }
 
+// TestPathWithinBase 覆盖父目录、同级前缀和含 .. 的路径，防止目录逃逸。
 func TestPathWithinBase(t *testing.T) {
 	tests := []struct {
 		fullPath       string
@@ -131,6 +136,7 @@ func TestPathWithinBase(t *testing.T) {
 	}
 }
 
+// TestIsLikelyNotMountPoint 逐个构造目录、符号链接和 junction，覆盖 Windows 上常见的挂载伪装。
 func TestIsLikelyNotMountPoint(t *testing.T) {
 	mounter := Mounter{"fake/path"}
 
@@ -236,6 +242,7 @@ func TestIsLikelyNotMountPoint(t *testing.T) {
 	}
 }
 
+// TestFormatAndMount 用假执行器检查命令序列，不触碰真实磁盘。
 func TestFormatAndMount(t *testing.T) {
 	tests := []struct {
 		device       string
@@ -302,6 +309,7 @@ func TestFormatAndMount(t *testing.T) {
 	}
 }
 
+// TestNewSMBMapping 校验参数缺失时必须失败，避免生成无效的凭据对象。
 func TestNewSMBMapping(t *testing.T) {
 	tests := []struct {
 		username    string
@@ -339,6 +347,7 @@ func TestNewSMBMapping(t *testing.T) {
 	}
 }
 
+// TestIsValidPath 区分盘符路径和普通相对路径，防止把两者都当成 SMB 目标。
 func TestIsValidPath(t *testing.T) {
 	tests := []struct {
 		remotepath     string
@@ -369,6 +378,7 @@ func TestIsValidPath(t *testing.T) {
 	}
 }
 
+// TestIsAccessDeniedError 按输出文本识别权限错误，这类错误需要区别于普通失败。
 func TestIsAccessDeniedError(t *testing.T) {
 	tests := []struct {
 		err            error

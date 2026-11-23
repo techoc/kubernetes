@@ -26,6 +26,7 @@ import (
 	fakeexec "k8s.io/utils/exec/testing"
 )
 
+// TestGetFileSystemSize 用真实 btrfs dump 输出验证解析，缺字段时必须报错而不是返回 0。
 func TestGetFileSystemSize(t *testing.T) {
 	cmdOutputSuccessBtrfs := `superblock: bytenr=65536, device=/dev/loop0
 	---------------------------------------------------------
@@ -303,6 +304,8 @@ func TestGetFileSystemSize(t *testing.T) {
 		})
 	}
 }
+
+// TestNeedResize 覆盖只读、已满足大小和不支持的文件系统等分支，确保不会误扩容。
 func TestNeedResize(t *testing.T) {
 	testcases := []struct {
 		name            string

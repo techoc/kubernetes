@@ -38,6 +38,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 覆盖 /proc/mounts 解析的正常路径与格式错误分支。
 func TestReadProcMountsFrom(t *testing.T) {
 	successCase := `/dev/0 /path/to/0 type0 flags 0 0
 /dev/1    /path/to/1   type1	flags 1 1
@@ -77,6 +78,7 @@ func TestReadProcMountsFrom(t *testing.T) {
 	}
 }
 
+// 逐字段比较，避免依赖结构体可能新增的字段导致误判。
 func mountPointsEqual(a, b *MountPoint) bool {
 	if a.Device != b.Device || a.Path != b.Path || a.Type != b.Type || !reflect.DeepEqual(a.Opts, b.Opts) || a.Pass != b.Pass || a.Freq != b.Freq {
 		return false
@@ -84,6 +86,7 @@ func mountPointsEqual(a, b *MountPoint) bool {
 	return true
 }
 
+// 验证按设备号找出同一块盘的所有引用点。
 func TestGetMountRefs(t *testing.T) {
 	fm := NewFakeMounter(
 		[]MountPoint{
@@ -124,6 +127,7 @@ func TestGetMountRefs(t *testing.T) {
 	}
 }
 
+// 把切片当集合比较，因为挂载引用的返回顺序并不保证稳定。
 func setEquivalent(set1, set2 []string) bool {
 	map1 := make(map[string]bool)
 	map2 := make(map[string]bool)
@@ -147,6 +151,7 @@ func setEquivalent(set1, set2 []string) bool {
 	return true
 }
 
+// 确认同一设备多处挂载时，引用计数与设备名都能正确返回。
 func TestGetDeviceNameFromMount(t *testing.T) {
 	fm := NewFakeMounter(
 		[]MountPoint{
@@ -179,6 +184,7 @@ func TestGetDeviceNameFromMount(t *testing.T) {
 	}
 }
 
+// 从具体挂载点反查同一设备上的其它挂载点。
 func TestGetMountRefsByDev(t *testing.T) {
 	fm := NewFakeMounter(
 		[]MountPoint{
@@ -215,6 +221,7 @@ func TestGetMountRefsByDev(t *testing.T) {
 	}
 }
 
+// 覆盖父子路径、前缀误判及 .. 回退等边界，防止路径逃逸被漏检。
 func TestPathWithinBase(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -302,6 +309,7 @@ func TestPathWithinBase(t *testing.T) {
 	}
 }
 
+// 用固定的 findmnt 输出验证各类共享挂载场景下的引用搜索。
 func TestSearchMountPoints(t *testing.T) {
 	base := `
 19 25 0:18 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
@@ -456,6 +464,7 @@ func TestSearchMountPoints(t *testing.T) {
 	}
 }
 
+// 验证挂载参数中敏感选项被遮蔽，同时辅助标志与普通选项完整保留。
 func TestSensitiveMountOptions(t *testing.T) {
 	// Arrange
 	testcases := []struct {
@@ -541,6 +550,7 @@ func TestSensitiveMountOptions(t *testing.T) {
 	}
 }
 
+// 确认 systemd 探测在初始化后留下可用的判定结果。
 func TestHasSystemd(t *testing.T) {
 	mounter := &Mounter{}
 	_ = mounter.hasSystemd()
@@ -549,6 +559,7 @@ func TestHasSystemd(t *testing.T) {
 	}
 }
 
+// 精确匹配单个参数项，避免子串误判。
 func mountArgsContainString(t *testing.T, mountArgs []string, wanted string) bool {
 	for _, mountArg := range mountArgs {
 		if mountArg == wanted {
@@ -558,6 +569,7 @@ func mountArgsContainString(t *testing.T, mountArgs []string, wanted string) boo
 	return false
 }
 
+// 只在 -o 之后的参数中查找选项，防止命中源路径等同名字符串。
 func mountArgsContainOption(t *testing.T, mountArgs []string, option string) bool {
 	optionsIndex := -1
 	for i, s := range mountArgs {
@@ -574,6 +586,7 @@ func mountArgsContainOption(t *testing.T, mountArgs []string, option string) boo
 	return strings.Contains(mountArgs[optionsIndex], option)
 }
 
+// 用伪造的 umount 输出验证“未挂载”安全行为的判定，避免依赖宿主机实际 umount 版本。
 func TestDetectSafeNotMountedBehavior(t *testing.T) {
 	// Example output for umount from util-linux 2.30.2
 	notMountedOutput := "umount: /foo: not mounted."
@@ -620,6 +633,7 @@ func TestDetectSafeNotMountedBehavior(t *testing.T) {
 	}
 }
 
+// 覆盖卸载时的几类典型错误，确认只有预期情形被当作可忽略。
 func TestCheckUmountError(t *testing.T) {
 	target := "/test/path"
 	withSafeNotMountedBehavior := true
@@ -662,6 +676,7 @@ func TestCheckUmountError(t *testing.T) {
 }
 
 // TODO https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
+// 用受控的假命令验证格式化并发上限：多余请求应排队等待而非同时执行。
 func TestFormatConcurrency(t *testing.T) {
 	const (
 		formatCount    = 5
@@ -764,6 +779,7 @@ func TestFormatConcurrency(t *testing.T) {
 }
 
 // TODO https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
+// 验证等待超时的排队请求最终会被放行，避免格式化请求永久挂起。
 func TestFormatTimeout(t *testing.T) {
 	const (
 		formatCount    = 5
@@ -825,24 +841,29 @@ func TestFormatTimeout(t *testing.T) {
 
 // Replicate some types found in "golang.org/x/exp/constraints"
 // to avoid a dependency on that package.
+// 只在测试里用到的整数约束，避免为一个简单辅助函数引入额外依赖。
 type Signed interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64
 }
 
+// 各平台的 Statfs_t.Flags 底层类型不同，这里统一覆盖无符号整数。
 type Unsigned interface {
 	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 
+// 合并有符号与无符号约束，供进制转换辅助函数复用。
 type Integer interface {
 	Signed | Unsigned
 }
 
 // Some platforms define unix.Statfs_t.Flags differently.  Our need here is
 // pretty constrained, so some aggressive type-conversion is OK.
+// 泛型转换让同一份测试代码能在不同体系结构的 Flags 类型上编译。
 func mkStatfsFlags[T1 Integer, T2 Integer](orig T1, add T2) T1 {
 	return orig | T1(add)
 }
 
+// 验证从 Statfs 标志位推导出的绑定挂载选项，注意结果需排序后比较。
 func TestGetBindMountOptions(t *testing.T) {
 	var testCases = map[string]struct {
 		flags        int32 // smallest size used by any platform we care about
@@ -881,6 +902,7 @@ func TestGetBindMountOptions(t *testing.T) {
 	}
 }
 
+// 构造可注入输出、错误与副作用的假命令动作，供并发与错误路径测试复用。
 func makeFakeCommandAction(stdout string, err error, cmdFn func()) testexec.FakeCommandAction {
 	c := testexec.FakeCmd{
 		CombinedOutputScript: []testexec.FakeAction{
@@ -897,6 +919,7 @@ func makeFakeCommandAction(stdout string, err error, cmdFn func()) testexec.Fake
 	}
 }
 
+// 覆盖普通目录、符号链接及悬空链接等情形，同时用绝对路径与相对路径各跑一遍。
 func TestIsLikelyNotMountPoint(t *testing.T) {
 	mounter := Mounter{"fake/path", ptr.To(true), true, true}
 

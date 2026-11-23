@@ -25,6 +25,7 @@ import (
 	"testing"
 )
 
+// 每个用例写独立临时文件，避免并行测试时互相覆盖 mountinfo 内容。
 func writeFile(t *testing.T, content string) string {
 	filename := filepath.Join(t.TempDir(), "mountinfo")
 	err := os.WriteFile(filename, []byte(content), 0o600)
@@ -34,6 +35,8 @@ func writeFile(t *testing.T, content string) string {
 	return filename
 }
 
+// 用一份真实宿主的 mountinfo 快照，覆盖 bind mount、cgroup、带引号选项等形态；
+// 按 ID 定位条目而非按行号，前提是快照里 ID 不重复。
 func TestParseMountInfo(t *testing.T) {
 	info := `62 0 253:0 / / rw,relatime shared:1 - ext4 /dev/mapper/ssd-root rw,seclabel,data=ordered
 78 62 0:41 / /tmp rw,nosuid,nodev shared:30 - tmpfs tmpfs rw,seclabel
@@ -79,6 +82,7 @@ func TestParseMountInfo(t *testing.T) {
 `
 	filename := writeFile(t, info)
 
+	// 只断言关心的条目，快照里其余挂载点不参与比较。
 	tests := []struct {
 		name         string
 		id           int
@@ -227,6 +231,8 @@ func TestParseMountInfo(t *testing.T) {
 	}
 }
 
+// malformed 输入必须给出带原始行的错误，方便定位是哪一行坏了；
+// 期望信息里保留字段名，避免只报 invalid syntax 让人猜。
 func TestBadParseMountInfo(t *testing.T) {
 	tests := []struct {
 		info         string
@@ -318,7 +324,9 @@ func TestBadParseMountInfo(t *testing.T) {
 	}
 }
 
+// 测试与基准共用同一组用例：基准测的是同一判定路径，避免两边逻辑漂移。
 func testIsMountPointMatch(t testing.TB) {
+	// 覆盖 deleted 后缀、空路径和前缀相似的路径，专门盯 TrimSuffix 的边界。
 	mpCases := []struct {
 		mp, dir string
 		res     bool
@@ -340,10 +348,12 @@ func testIsMountPointMatch(t testing.TB) {
 	}
 }
 
+// 轻量入口，断言集中在 testIsMountPointMatch 里。
 func TestIsMountPointMatch(t *testing.T) {
 	testIsMountPointMatch(t)
 }
 
+// 复用功能测试用例，保证基准数字对应实际使用的判定逻辑。
 func BenchmarkIsMountPointMatch(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		testIsMountPointMatch(b)

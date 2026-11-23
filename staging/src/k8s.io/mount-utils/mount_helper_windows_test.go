@@ -22,6 +22,7 @@ import (
 	"testing"
 )
 
+// Linux 风格路径要转成带盘符的反斜杠路径；这里覆盖纯正斜杠、混合斜杠和根目录三种输入。
 func TestNormalizeWindowsPath(t *testing.T) {
 	path := `/var/lib/kubelet/pods/146f8428-83e7-11e7-8dd4-000d3a31dac4/volumes/kubernetes.io~azure-disk`
 	normalizedPath := NormalizeWindowsPath(path)
@@ -42,7 +43,9 @@ func TestNormalizeWindowsPath(t *testing.T) {
 	}
 }
 
+// 磁盘号只接受十进制数字；invalid 一例用来确认非数字输入被拒绝。
 func TestValidateDiskNumber(t *testing.T) {
+	// 99/100/200 都要放行：Windows 磁盘号不局限于两位。
 	tests := []struct {
 		diskNum     string
 		expectError bool

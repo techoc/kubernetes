@@ -26,16 +26,20 @@ import (
 	testingexec "k8s.io/utils/exec/testing"
 )
 
+// ErrorMounter 按调用顺序返回预设错误，用来模拟挂载在不同阶段失败。
+// errIndex 指向下一次挂载应返回的错误；err 可短于调用次数，其余情况走 FakeMounter 的默认行为。
 type ErrorMounter struct {
 	*FakeMounter
 	errIndex int
 	err      []error
 }
 
+// Mount 保持与 MountSensitive 相同的失败序列，便于两种入口共用用例。
 func (mounter *ErrorMounter) Mount(source string, target string, fstype string, options []string) error {
 	return mounter.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
+// MountSensitive 先消费预设错误再回退到 FakeMounter，避免污染真实挂载状态。
 func (mounter *ErrorMounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	i := mounter.errIndex
 	mounter.errIndex++
@@ -45,6 +49,9 @@ func (mounter *ErrorMounter) MountSensitive(source string, target string, fstype
 	return mounter.FakeMounter.Mount(source, target, fstype, options)
 }
 
+// ExecArgs 描述一次预期命令及其输出，用于构造 FakeExec 的脚本。
+// command 为预期执行的命令名，args 为预期参数且顺序必须与实际调用一致；
+// output 作为命令的标准输出返回，err 模拟命令失败，例如 blkid 的退出码。
 type ExecArgs struct {
 	command string
 	args    []string
@@ -52,6 +59,7 @@ type ExecArgs struct {
 	err     error
 }
 
+// TestSafeFormatAndMount 用假命令覆盖探测、格式化和挂载全流程，同时校验敏感选项脱敏。
 func TestSafeFormatAndMount(t *testing.T) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		t.Skipf("not supported on GOOS=%s", runtime.GOOS)
@@ -285,6 +293,7 @@ func TestSafeFormatAndMount(t *testing.T) {
 	}
 }
 
+// makeFakeCmd 把预期命令与参数闭包起来，忽略调用方实际传入的值以免误判。
 func makeFakeCmd(fakeCmd *testingexec.FakeCmd, cmd string, args ...string) testingexec.FakeCommandAction {
 	c := cmd
 	a := args
@@ -294,6 +303,7 @@ func makeFakeCmd(fakeCmd *testingexec.FakeCmd, cmd string, args ...string) testi
 	}
 }
 
+// makeFakeOutput 固定返回预设的输出和错误，模拟命令执行结果。
 func makeFakeOutput(output string, err error) testingexec.FakeAction {
 	o := output
 	return func() ([]byte, []byte, error) {

@@ -24,6 +24,7 @@ import (
 	"time"
 )
 
+// bind 挂载拆两步：先只做 bind，再补 -o 选项；这里验证选项被分到正确的阶段。
 func TestMakeBindOpts(t *testing.T) {
 	tests := []struct {
 		mountOption         []string
@@ -61,7 +62,10 @@ func TestMakeBindOpts(t *testing.T) {
 	}
 }
 
+// 敏感选项里也可能混进 bind/remount，判定阶段时两类输入都得看，否则会漏判。
+// 敏感值只能留在敏感重挂载那组，普通重挂载选项里不该出现密码。
 func TestMakeBindOptsSensitive(t *testing.T) {
+	// 每行是一组输入与期望的四元结果，重点看 bind/remount 被剔除后的去向。
 	tests := []struct {
 		mountOptions                 []string
 		sensitiveMountOptions        []string
@@ -78,6 +82,7 @@ func TestMakeBindOptsSensitive(t *testing.T) {
 			expectedRemountOpts:          []string{},
 			expectedSensitiveRemountOpts: []string{"user=foo", "pass=bar"},
 		},
+		// bind 藏在敏感选项里，仍应识别为 bind mount。
 		{
 			mountOptions:                 []string{"vers=2", "ro", "_netdev"},
 			sensitiveMountOptions:        []string{"user=foo", "pass=bar", "bind"},
@@ -139,6 +144,7 @@ func TestMakeBindOptsSensitive(t *testing.T) {
 	}
 }
 
+// 不只要确认密码没出现，还要确认占位符数量与敏感项数一致：只掩码一部分同样危险。
 func TestOptionsForLogging(t *testing.T) {
 	testcases := []struct {
 		options          []string
@@ -161,6 +167,7 @@ func TestOptionsForLogging(t *testing.T) {
 		{},
 	}
 
+	// 覆盖只有敏感项、只有普通项、两者都空等组合，防止实现只处理某一种输入。
 	for _, v := range testcases {
 		maskedStr := sanitizedOptionsForLogging(v.options, v.sensitiveOptions)
 
@@ -178,9 +185,11 @@ func TestOptionsForLogging(t *testing.T) {
 	}
 }
 
+// 0 与负数表示不启用限流；只有正数才建信号量，免得每次格式化都背着同步开销。
 func TestWithMaxConcurrentFormat(t *testing.T) {
 	const timeout = 1 * time.Minute
 
+	// 同时校验容量与超时值，避免"有限流但超时为零"这种半成品配置。
 	tests := []struct {
 		max     int
 		wantSem bool
