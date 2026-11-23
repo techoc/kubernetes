@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package cronjob provides Registry interface and it's RESTStorage
 // implementation for storing CronJob api objects.
+// Package cronjob 提供 CronJob 的 REST 写入策略、JobTemplate 校验、状态子资源和存储实现。
 package cronjob

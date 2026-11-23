@@ -34,13 +34,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// JobStorage includes dummy storage for Job.
+// JobStorage 聚合 Job 主资源与 Status 子资源的 REST Handler。
 type JobStorage struct {
 	Job    *REST
 	Status *StatusREST
 }
 
-// NewStorage creates a new JobStorage against etcd.
+// NewStorage 创建 Job 主资源与状态存储，并将两者组装成统一 JobStorage。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (JobStorage, error) {
 	jobRest, jobStatusRest, err := NewREST(optsGetter)
 	if err != nil {
@@ -61,7 +61,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against Jobs.
+// NewREST 配置 Job 主资源 Store 与选择器/表格转换，并复制 Store 为 Status 子资源安装 StatusStrategy。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &batch.Job{} },
@@ -97,6 +97,7 @@ func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
+// Delete 在 batch/v1 默认孤儿化传播且用户未显式指定策略时发出 Warning，再委托通用 Store 执行删除。
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	//nolint:staticcheck // SA1019 backwards compatibility
 	//nolint: staticcheck
@@ -109,6 +110,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 	return r.Store.Delete(ctx, name, deleteValidation, options)
 }
 
+// DeleteCollection 对批量删除同样提示默认孤儿化行为，之后由通用 Store 执行集合删除。
 func (r *REST) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, deleteOptions *metav1.DeleteOptions, listOptions *internalversion.ListOptions) (runtime.Object, error) {
 	//nolint:staticcheck // SA1019 backwards compatibility
 	if deleteOptions.PropagationPolicy == nil && deleteOptions.OrphanDependents == nil &&
@@ -142,6 +144,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 使用 StatusStrategy 且固定禁止 update-on-create，保证 /status 只能修改已存在 Job 的状态字段。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

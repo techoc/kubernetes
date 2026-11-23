@@ -33,6 +33,7 @@ import (
 )
 
 // TODO: allow for global factory override
+// newStorage 启动隔离 etcd 并构造 CronJob 主资源/Status REST Handler。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorageForResource(t, batch.SchemeGroupVersion.WithResource("cronjobs").GroupResource())
 	restOptions := generic.RESTOptions{
@@ -68,6 +69,7 @@ func validNewCronJob() *batch.CronJob {
 	}
 }
 
+// TestCreate 验证 CronJob 创建时的 Schedule、JobTemplate 及对象元数据校验。
 func TestCreate(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -91,6 +93,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 CronJob 更新经过 JobTemplate 和调度字段的兼容校验。
 func TestUpdate(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -139,6 +142,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewCronJob())
 }
 
+// TestWatch 验证 CronJob 创建/更新后可经通用 etcd Watch 接口通知订阅者。
 func TestWatch(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)

@@ -46,6 +46,7 @@ import (
 var ignoreErrValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
 
 // TestJobStrategy_PrepareForUpdate tests various scenarios for PrepareForUpdate
+// TestJobStrategy_PrepareForUpdate 覆盖 Job Spec 更新时的 Generation、暂停 Job 模板可变性和 Feature Gate 字段清理。
 func TestJobStrategy_PrepareForUpdate(t *testing.T) {
 	validSelector := getValidLabelSelector()
 	validPodTemplateSpec := getValidPodTemplateSpecForSelector(validSelector)
@@ -475,6 +476,7 @@ func TestJobStrategy_PrepareForUpdate(t *testing.T) {
 }
 
 // TestJobStrategy_PrepareForCreate tests various scenarios for PrepareForCreate
+// TestJobStrategy_PrepareForCreate 验证新 Job 自动生成 selector/模板标签、重置 Status 并初始化 Generation。
 func TestJobStrategy_PrepareForCreate(t *testing.T) {
 	validSelector := getValidLabelSelector()
 	validPodTemplateSpec := getValidPodTemplateSpecForSelector(validSelector)
@@ -711,6 +713,7 @@ func TestJobStrategy_GarbageCollectionPolicy(t *testing.T) {
 	}
 }
 
+// TestJobStrategy_ValidateUpdate 覆盖 Job 不可变字段、暂停 Job 允许的调度指令/资源更新以及旧字段兼容。
 func TestJobStrategy_ValidateUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	validSelector := &metav1.LabelSelector{
@@ -1874,6 +1877,7 @@ func TestStrategy_ResetFields(t *testing.T) {
 	}
 }
 
+// TestJobStatusStrategy_ResetFields 确认 batch/v1 的 Status 子资源会重置 Spec，防止经状态接口更改期望状态。
 func TestJobStatusStrategy_ResetFields(t *testing.T) {
 	resetFields := StatusStrategy.GetResetFields()
 	if len(resetFields) != 1 {
@@ -1979,6 +1983,7 @@ func TestStatusStrategy_PrepareForUpdate(t *testing.T) {
 	}
 }
 
+// TestStatusStrategy_ValidateUpdate 验证 JobManagedBy 模式下对终态回退、完成索引、失败索引和时间戳的强化约束。
 func TestStatusStrategy_ValidateUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	validSelector := &metav1.LabelSelector{

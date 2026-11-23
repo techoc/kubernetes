@@ -40,6 +40,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 创建真实 etcd 测试后端及 Job 主资源/Status 存储。
 func newStorage(t *testing.T) (*JobStorage, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, batch.GroupName)
 	restOptions := generic.RESTOptions{
@@ -192,6 +193,7 @@ func (r *dummyRecorder) getWarning() string {
 
 var _ warning.Recorder = &dummyRecorder{}
 
+// TestJobDeletion 验证删除 Job 时的默认孤儿化兼容策略、显式传播策略及用户 Warning。
 func TestJobDeletion(t *testing.T) {
 	orphanDependents := true
 	orphanDeletionPropagation := metav1.DeletePropagationOrphan
@@ -315,6 +317,7 @@ func TestJobDeletion(t *testing.T) {
 	}
 }
 
+// TestGet 验证通过通用 RESTStorage 按名称读取持久化 Job。
 func TestGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

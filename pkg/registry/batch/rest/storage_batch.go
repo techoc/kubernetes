@@ -28,8 +28,10 @@ import (
 	jobstore "k8s.io/kubernetes/pkg/registry/batch/job/storage"
 )
 
+// RESTStorageProvider 负责装配 batch API Group，并根据资源启用配置注册 Job/CronJob 主资源和 Status 子资源。
 type RESTStorageProvider struct{}
 
+// NewRESTStorage 创建 batch APIGroupInfo，并将已启用版本的资源 REST Handler 放入 VersionedResourcesStorageMap。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(batch.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -44,6 +46,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 按资源启用开关创建 Job/CronJob Store，并为每个主资源同时注册 /status 子资源。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 

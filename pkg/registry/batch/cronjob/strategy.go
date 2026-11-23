@@ -40,17 +40,18 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// cronJobStrategy implements verification logic for Replication Controllers.
+// cronJobStrategy 定义 CronJob 主资源写入策略，负责调度配置、JobTemplate 字段清理、Generation 和状态隔离。
 type cronJobStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating CronJob objects.
+// Strategy 是 CronJob 主资源的默认 REST 策略；删除传播策略按 API 版本保留历史兼容行为。
 var Strategy = cronJobStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 // DefaultGarbageCollectionPolicy returns OrphanDependents for batch/v1beta1 for backwards compatibility,
 // and DeleteDependents for all other versions.
+// batch/v1beta1 为兼容旧客户端默认孤儿化删除；当前版本默认级联删除 CronJob 创建的 Job。
 func (cronJobStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	var groupVersion schema.GroupVersion
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
@@ -86,6 +87,7 @@ func (cronJobStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set 
 }
 
 // PrepareForCreate clears the status of a scheduled job before creation.
+// 创建时清空 CronJob Status、初始化 Generation，并清理 JobTemplate 与其内嵌 PodTemplate 中被禁用的字段。
 func (cronJobStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	cronJob := obj.(*batch.CronJob)
 	cronJob.Status = batch.CronJobStatus{}
@@ -98,6 +100,7 @@ func (cronJobStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object)
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 更新时沿用旧 Status，按 Feature Gate 清理 JobTemplate 字段；Spec 任何语义变化都会递增 Generation。
 func (cronJobStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCronJob := obj.(*batch.CronJob)
 	oldCronJob := old.(*batch.CronJob)
@@ -115,6 +118,7 @@ func (cronJobStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Ob
 }
 
 // Validate validates a new scheduled job.
+// Validate 除 Cron 表达式/时区、并发策略和历史记录限制外，还使用 PodTemplate 选项验证内嵌 JobTemplate。
 func (cronJobStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	cronJob := obj.(*batch.CronJob)
 	opts := pod.GetValidationOptionsFromPodTemplate(&cronJob.Spec.JobTemplate.Spec.Template, nil)
@@ -154,6 +158,7 @@ func (cronJobStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 对比新旧 JobTemplate 与调度字段，检查不可变约束及历史 API 兼容规则。
 func (cronJobStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCronJob := obj.(*batch.CronJob)
 	oldCronJob := old.(*batch.CronJob)
@@ -163,6 +168,7 @@ func (cronJobStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Obje
 }
 
 // WarningsOnUpdate returns warnings for the given update.
+// Schedule 使用旧 TZ/CRON_TZ 写法时发出弃用 Warning；建议通过 spec.timeZone 设置时区。
 func (cronJobStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newCronJob := obj.(*batch.CronJob)
@@ -196,6 +202,7 @@ func (cronJobStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 	}
 }
 
+// /status 子资源只允许调度控制器更新 LastScheduleTime、Active 和 Conditions 等状态，Spec 从旧对象恢复。
 func (cronJobStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newJob := obj.(*batch.CronJob)
 	oldJob := old.(*batch.CronJob)

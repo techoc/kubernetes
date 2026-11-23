@@ -143,6 +143,7 @@ func TestCronJobStrategy_ValidateUpdate_GangMinCount(t *testing.T) {
 	}
 }
 
+// TestCronJobStrategy 验证创建/更新策略对 Status、Generation、JobTemplate 和调度字段的处理。
 func TestCronJobStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {
@@ -232,6 +233,7 @@ func TestCronJobStrategy(t *testing.T) {
 	}
 }
 
+// TestCronJobStatusStrategy 验证 status 子资源只能改变 CronJob.Status，不能修改调度表达式或 JobTemplate。
 func TestCronJobStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {
@@ -315,6 +317,7 @@ func TestCronJobStatusStrategy_ResetFields(t *testing.T) {
 	}
 }
 
+// TestCronJobStrategy_WarningsOnCreate 验证 CronJob 名称、JobTemplate 和时间配置产生的创建告警。
 func TestCronJobStrategy_WarningsOnCreate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 
@@ -363,6 +366,7 @@ func TestCronJobStrategy_WarningsOnCreate(t *testing.T) {
 	}
 }
 
+// TestCronJobStrategy_WarningsOnUpdate 验证 JobTemplate 变化时的 Pod 警告及 Schedule 中 TZ/CRON_TZ 的弃用提示。
 func TestCronJobStrategy_WarningsOnUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	now := metav1.Now()
