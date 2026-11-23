@@ -26,6 +26,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// 用最小 handler 模拟后端：只实现 ETag/304 协议，把下载逻辑和真实 apiserver
+// 的路由、认证隔离开，让 ETag 相关分支可以单独验证。
 type handlerTest struct {
 	etag string
 	data []byte
@@ -47,6 +49,8 @@ func (h handlerTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(h.data)
 }
 
+// 老版本 apiserver 不认识 /openapi/v2，会以 403 回应，而不是标准的 404；
+// 保留这个模拟实现是为了以后能复现并覆盖这种回退场景，避免适配逻辑被无意改坏。
 type handlerDeprecatedTest struct {
 	etag string
 	data []byte
@@ -73,6 +77,8 @@ func (h handlerDeprecatedTest) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	w.Write(h.data)
 }
 
+// 把 spec、ETag 和 error 一起断言，是因为下载结果的三者组合才有意义：
+// 304 时不应返回 spec 但应保留 ETag，否则缓存命中判定会出错。
 func assertDownloadedSpec(actualSpec *spec.Swagger, actualEtag string, err error,
 	expectedSpecID string, expectedEtag string) error {
 	if err != nil {

@@ -25,6 +25,12 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 中文补充：内部版本（apiregistration）是转换的中枢，v1/v1beta1 才是线上传输的线格式，
+// 三者都注册进来，scheme 才能在内部对象和外部版本之间来回转换。
+// 把 v1 排在 v1beta1 前面，是为了让客户端协商版本时默认拿到更稳定的那一个。
+// 注册失败意味着 scheme 从根上不可用，所以用 Must 在启动时直接失败，
+// 而不是带着残缺的 scheme 继续对外服务。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(apiregistration.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))

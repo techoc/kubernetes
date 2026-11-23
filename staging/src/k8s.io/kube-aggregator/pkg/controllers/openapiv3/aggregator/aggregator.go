@@ -42,9 +42,15 @@ import (
 	v2aggregator "k8s.io/kube-aggregator/pkg/controllers/openapi/aggregator"
 )
 
+// 更新一个从未注册过的 APIService 属于调用方错误，而不是"稍后重试就好"的瞬态故障。
+// 用哨兵错误单独标识这种情况，调用方就能把它和真正的下载失败区分开。
 var ErrAPIServiceNotFound = errors.New("resource not found")
 
 // SpecProxier proxies OpenAPI V3 requests to their respective APIService
+// 这个接口把"按 APIService 管理文档"和"对外提供 HTTP 服务"解耦：
+// 控制器只依赖这组方法，不需要知道内部是 map 还是别的存储。
+// 更新方法带 error 而删除方法不带，是因为更新要真正去后端拉文档，
+// 可能失败；删除只是本地状态变更，没有可失败的步骤。
 type SpecProxier interface {
 	AddUpdateAPIService(handler http.Handler, apiService *v1.APIService)
 	// UpdateAPIServiceSpec updates the APIService. It returns ErrAPIServiceNotFound if the APIService doesn't exist.
@@ -53,6 +59,10 @@ type SpecProxier interface {
 	GetAPIServiceNames() []string
 }
 
+// 本地委托链里的 handler 没有对应的 APIService 对象，只能凭空造一个名字。
+// 用专用前缀是为了让它们能和真实的 APIService 区分开：
+// 控制器据此知道这些名字不该拿去查 APIService API。
+// 后面用递增编号区分同一条链上的不同层，补零只是让这些内部名字看起来整齐。
 const (
 	aggregatorUser                = "system:aggregator"
 	specDownloadTimeout           = 60 * time.Second
@@ -81,6 +91,9 @@ func (s *specProxier) GetAPIServiceNames() []string {
 }
 
 // BuildAndRegisterAggregator registered OpenAPI aggregator handler. This function is not thread safe as it only being called on startup.
+// 启动时要把三类来源塞进同一张表：聚合器自身的类型、委托链上的各层 handler、
+// 以及负责把 V2 文档转成 V3 的兜底服务。它们都不是来自 APIService API，
+// 所以这里用内部名字伪装成 APIService，后续就能复用同一套同步与聚合逻辑。
 func BuildAndRegisterAggregator(downloader Downloader, delegationTarget server.DelegationTarget, aggregatorService *restful.Container, openAPIConfig *common.OpenAPIV3Config, pathHandler common.PathHandlerByGroupVersion) (SpecProxier, error) {
 	s := &specProxier{
 		apiServiceInfo: map[string]*openAPIV3APIServiceInfo{},
@@ -90,6 +103,8 @@ func BuildAndRegisterAggregator(downloader Downloader, delegationTarget server.D
 	if aggregatorService != nil && openAPIConfig != nil {
 		// Make native types exposed by aggregator available to the aggregated
 		// OpenAPI (normal handle is disabled by skipOpenAPIInstallation option)
+		// 通用 server 的默认 OpenAPI handler 被关掉了，这里单独装一个 V3 路由，
+		// 目的只是把自己的类型文档收进来，而不是对外提供服务。
 		aggregatorLocalServiceName := "k8s_internal_local_kube_aggregator_types"
 		v3Mux := mux.NewPathRecorderMux(aggregatorLocalServiceName)
 		_ = routes.OpenAPI{
@@ -104,6 +119,8 @@ func BuildAndRegisterAggregator(downloader Downloader, delegationTarget server.D
 		s.UpdateAPIServiceSpec(aggregatorLocalServiceName)
 	}
 
+	// 委托链是一条链表，从当前层一路往下走；每层 handler 可能提供不同的
+	// group/version，必须逐层注册，不能只取最内层，否则聚合文档会缺东西。
 	i := 1
 	for delegate := delegationTarget; delegate != nil; delegate = delegate.NextDelegate() {
 		handler := delegate.UnprotectedHandler()
@@ -136,6 +153,8 @@ func (s *specProxier) AddUpdateAPIService(handler http.Handler, apiservice *v1.A
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
 	// If the APIService is being updated, use the existing struct.
+	// 保留同一个结构体指针是有意为之：上面缓存的 etag 等状态要留着，
+	// 下次同步才能带上 If-None-Match 走 304 分支，不必重新下载整份文档。
 	if apiServiceInfo, ok := s.apiServiceInfo[apiservice.Name]; ok {
 		apiServiceInfo.apiService = *apiservice
 		apiServiceInfo.handler = handler
@@ -147,6 +166,9 @@ func (s *specProxier) AddUpdateAPIService(handler http.Handler, apiservice *v1.A
 	}
 }
 
+// V3 文档的路径形如 apis/<group>/<version>，而 APIService 里 Group 和 Version
+// 是分开存的；这个函数把两者拼成 V3 发现文档使用的 key。
+// 两个字段都为空时返回空串，对应核心组的特殊路径。
 func getGroupVersionStringFromAPIService(apiService v1.APIService) string {
 	if apiService.Spec.Group == "" && apiService.Spec.Version == "" {
 		return ""
@@ -162,6 +184,10 @@ func (s *specProxier) UpdateAPIServiceSpec(apiServiceName string) error {
 	return s.updateAPIServiceSpecLocked(apiServiceName)
 }
 
+// 同步分两条路：优先拿 V3 发现文档，拿不到（404）才退回 V2 下载再转换。
+// 一旦发现文档存在就记住这个事实，后续同步不再重复探测；
+// 反过来，一旦判定为旧后端就一直走 V2，直到该 APIService 被重新注册。
+// 调用方必须持有写锁：这里会改写 etag、discovery 和转换器状态。
 func (s *specProxier) updateAPIServiceSpecLocked(apiServiceName string) error {
 	apiService, exists := s.apiServiceInfo[apiServiceName]
 	if !exists {
@@ -173,6 +199,7 @@ func (s *specProxier) updateAPIServiceSpecLocked(apiServiceName string) error {
 		if err != nil {
 			return err
 		}
+		// 404 说明后端只支持 V2 文档，这不是错误，而是切换到兼容路径的信号。
 		if httpStatus == http.StatusNotFound {
 			apiService.isLegacyAPIService = true
 		} else {
@@ -187,6 +214,9 @@ func (s *specProxier) updateAPIServiceSpecLocked(apiServiceName string) error {
 		return err
 	}
 	apiService.etag = etag
+	// 304 表示后端文档没变，此时 etag 已刷新但内容无需重算；
+	// 只有真正返回 200 才做有损的 V2→V3 转换，并顺带刷新转换器自己的发现文档——
+	// 因为客户端拿到的 V3 文档最终是由那个 handler 提供的。
 	if httpStatus == http.StatusOK {
 		v3Spec := openapiconv.ConvertV2ToV3(v2Spec)
 		s.openAPIV2ConverterHandler.UpdateGroupVersion(getGroupVersionStringFromAPIService(apiService.apiService), v3Spec)
@@ -218,6 +248,8 @@ type openAPIV3APIServiceInfo struct {
 	// These fields are only used if the /openapi/v3 endpoint is not served by an APIService
 	// Legacy APIService indicates that an APIService does not support OpenAPI V3, and the OpenAPI V2
 	// will be downloaded, converted to V3 (lossy), and served by the aggregator
+	// etag 记录"上次拿到的文档版本"：带上它后端才能用 304 回答"没变化"，
+	// 省掉每次同步都重新下载整份 V2 文档的开销。
 	etag               string
 	isLegacyAPIService bool
 }
@@ -228,12 +260,17 @@ func (s *specProxier) RemoveAPIServiceSpec(apiServiceName string) {
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
 	if apiServiceInfo, ok := s.apiServiceInfo[apiServiceName]; ok {
+		// 如果这个 APIService 的文档是由 V2 转换来的，还得把它从转换器里删掉，
+		// 否则转换器会继续对外提供一份已经下线的 group/version 文档。
 		s.openAPIV2ConverterHandler.DeleteGroupVersion(getGroupVersionStringFromAPIService(apiServiceInfo.apiService))
 		_ = s.updateAPIServiceSpecLocked(openAPIV2Converter)
 		delete(s.apiServiceInfo, apiServiceName)
 	}
 }
 
+// 根发现文档是各 APIService 发现结果的并集。这里按 key 直接覆盖，
+// 同名 group/version 冲突时谁赢取决于 map 遍历顺序；正常情况下
+// 同一个 GroupVersion 只有一个权威 APIService，所以没做额外仲裁。
 func (s *specProxier) getOpenAPIV3Root() handler3.OpenAPIV3Discovery {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
@@ -255,6 +292,8 @@ func (s *specProxier) getOpenAPIV3Root() handler3.OpenAPIV3Discovery {
 }
 
 // handleDiscovery is the handler for OpenAPI V3 Discovery
+// 用 ServeContent 而不是直接 Write，是为了让它顺手处理条件请求：
+// 客户端带上 If-Modified-Since 时有机会拿到 304，不必重复下载整份发现文档。
 func (s *specProxier) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	merged := s.getOpenAPIV3Root()
 	j, err := json.Marshal(&merged)
@@ -268,6 +307,9 @@ func (s *specProxier) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGroupVersion is the OpenAPI V3 handler for a specified group/version
+// 这里不自行构造文档，而是把请求直接转给对应 APIService 的 handler：
+// 具体 schema 只有后端最清楚，聚合器只负责路由。
+// 找到匹配就立刻返回，没找到才落到 404。
 func (s *specProxier) handleGroupVersion(w http.ResponseWriter, r *http.Request) {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
@@ -295,6 +337,8 @@ func (s *specProxier) handleGroupVersion(w http.ResponseWriter, r *http.Request)
 }
 
 // Register registers the OpenAPI V3 Discovery and GroupVersion handlers
+// 精确路径挂发现文档，前缀路径挂具体 group/version 文档。
+// 两个 handler 都套了 metrics 包装，调用方拿到的是同一个可观测的路由入口。
 func (s *specProxier) register(handler common.PathHandlerByGroupVersion) {
 	handler.Handle("/openapi/v3", metrics.InstrumentHandlerFunc("GET",
 		/* group = */ "",

@@ -26,11 +26,14 @@ import (
 	"k8s.io/kube-openapi/pkg/handler3"
 )
 
+// 假后端同时模拟发现文档和带 hash 的具体文档，并把 etag 作为 hash 写进 URL，
+// 这样下载器拿到的路径和真实后端返回的发现文档形状一致。
 type handlerTest struct {
 	etag string
 	data []byte
 }
 
+// 编译期断言：这个测试替身必须能被当 http.Handler 传给下载器。
 var _ http.Handler = handlerTest{}
 
 func (h handlerTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +53,7 @@ func (h handlerTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/openapi/v3/apis/group/version" {
+		// 带上 If-None-Match 时返回 304，用来验证调用方能否识别"文档没变"。
 		if len(h.etag) > 0 {
 			w.Header().Add("Etag", h.etag)
 		}
@@ -64,6 +68,8 @@ func (h handlerTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// 只验根发现文档这一步：它能正确解析出 group/version 及其链接，
+// 聚合器才有依据决定后续该往哪个路径发请求。
 func TestDownloadOpenAPISpec(t *testing.T) {
 	s := Downloader{}
 

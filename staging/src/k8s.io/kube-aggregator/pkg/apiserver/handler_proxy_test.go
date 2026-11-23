@@ -64,6 +64,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 记录被代理请求的关键信息，让测试能断言“请求确实到达后端且头被正确改写”。
 type targetHTTPHandler struct {
 	called  bool
 	headers map[string][]string
@@ -86,6 +87,8 @@ func (d *targetHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// 在请求上下文里注入 user 和 RequestInfo，模拟真实 apiserver 前置过滤器已经做过的工作，
+// 这样 handler 里的鉴权与路由逻辑才能被走通。
 func contextHandler(handler http.Handler, user user.Info) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
@@ -105,6 +108,8 @@ func contextHandler(handler http.Handler, user user.Info) http.Handler {
 	})
 }
 
+// 绕过真实的 service 解析，直接返回指定的目标地址或错误，
+// 让代理测试无需 Kubernetes 服务环境就能覆盖解析失败分支。
 type mockedRouter struct {
 	destinationHost string
 	err             error
@@ -118,6 +123,8 @@ func emptyCert() []byte {
 	return []byte{}
 }
 
+// 表驱动覆盖代理的主路径与异常路径：无目标、无用户、TLS 校验开关两种组合、
+// 服务不可用、解析失败、证书不匹配，以及特性开关对 X-Remote-Uid 头的影响。
 func TestProxyHandler(t *testing.T) {
 	tests := map[string]struct {
 		user       user.Info
@@ -398,6 +405,7 @@ func TestProxyHandler(t *testing.T) {
 	target := &targetHTTPHandler{}
 	for name, tc := range tests {
 		target.Reset()
+		// 每个用例都重置默认 registry，避免上一个用例的计数器影响下一个用例的断言。
 		legacyregistry.Reset()
 
 		t.Run(name, func(t *testing.T) {
@@ -430,6 +438,8 @@ func TestProxyHandler(t *testing.T) {
 
 			if tc.apiService != nil {
 				handler.updateAPIService(tc.apiService)
+				// 把刚写入的 handlingInfo 读出再存回一次；
+				// 这里不改动内容，只是沿用测试里惯用的同步写法。
 				curr := handler.handlingInfo.Load().(proxyHandlingInfo)
 				handler.handlingInfo.Store(curr)
 			}
@@ -460,6 +470,7 @@ func TestProxyHandler(t *testing.T) {
 				return
 			}
 			// this varies every test
+			// 该头包含本次测试服务器的地址，每次都不同，无法写进固定期望值。
 			delete(target.headers, "X-Forwarded-Host")
 			if e, a := tc.expectedHeaders, target.headers; !reflect.DeepEqual(e, a) {
 				t.Errorf("expected != got %v", cmp.Diff(e, a))
@@ -483,6 +494,7 @@ func TestProxyHandler(t *testing.T) {
 	}
 }
 
+// 记录拨号次数，用来断言 egress selector 配置的拨号器确实被用到。
 type mockEgressDialer struct {
 	called int
 }
@@ -513,6 +525,8 @@ func newBrokenDialerAndSelector() (*mockEgressDialer, *egressselector.EgressSele
 	return dialer, es
 }
 
+// 通过 websocket 升级请求验证代理在 Upgrade 场景下的行为：
+// 证书校验是否生效、egress selector 是否被使用、用户身份头是否透传。
 func TestProxyUpgrade(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RemoteRequestHeaderUID, true)
 
@@ -686,6 +700,7 @@ func TestProxyUpgrade(t *testing.T) {
 			defer ws.Close()
 
 			// if the egressselector is configured assume it has to be called
+			// 配置了 egress selector 就必须走它的拨号器，否则代理绕过了网络策略约束。
 			if dialer != nil && dialer.called != 1 {
 				t.Errorf("expect egress dialer gets called %d times, got %d", 1, dialer.called)
 			}
@@ -835,9 +850,12 @@ f0vRPPCK7dpPGOX9x8Oz7K7QiOEvFL3Mv1sWBEnl5lSkK8gdBhi6St9RRBGimt2H
 S+8g5OWupiWGF6qN+XX5WgYyuipW8mVRaROj8Vyl7JSiwu6KHfZ8RQ==
 -----END RSA PRIVATE KEY-----`)
 
+// 后端故意不返回，验证代理为新请求设置的超时上下文确实会生效，
+// 客户端最终收到 503 且错误里包含 deadline exceeded。
 func TestGetContextForNewRequest(t *testing.T) {
 	done := make(chan struct{})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		// 阻塞到测试结束才返回，确保代理只能因超时而结束这次请求。
 		<-done // never return so that we're certain to return base on timeout
 	}))
 	defer server.Close()
@@ -860,6 +878,7 @@ func TestGetContextForNewRequest(t *testing.T) {
 	defer proxyServer.Close()
 
 	// normal clients will not be setting a timeout, don't set one here.  Our proxy logic should construct this for us
+	// 故意不设置客户端超时，用来证明超时完全由代理自己构造的上下文提供。
 	resp, err := proxyServer.Client().Get(proxyServer.URL + "/apis/group/version")
 	if err != nil {
 		t.Fatal(err)
@@ -877,6 +896,8 @@ func TestGetContextForNewRequest(t *testing.T) {
 
 }
 
+// 验证请求经过代理后，后端收到的 traceparent 头能被还原出有效的远端 span，
+// 且 span ID / trace ID 与本地记录的一致，说明代理正确透传了追踪上下文。
 func TestTracerProvider(t *testing.T) {
 	fakeRecorder := tracetest.NewSpanRecorder()
 	otelTracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(fakeRecorder))
@@ -939,6 +960,7 @@ func TestTracerProvider(t *testing.T) {
 	}
 
 	t.Log("Ensure the target server received the traceparent header")
+	// 后端只有拿到 traceparent 才能还原出远端 span，因此先确认这个头确实传到了。
 	id, ok := target.headers["Traceparent"]
 	if !ok {
 		t.Error("expected traceparent header")
@@ -953,6 +975,8 @@ func TestTracerProvider(t *testing.T) {
 	span := trace.SpanFromContext(ctx)
 
 	t.Log("Ensure that the span context is valid and remote")
+	// 必须是远端 span，才能证明这个上下文是从 traceparent 头还原的，
+	// 而不是测试进程里自己新起的 span。
 	if !span.SpanContext().IsValid() {
 		t.Error("expected valid span context")
 		return
@@ -976,6 +1000,8 @@ func TestTracerProvider(t *testing.T) {
 	}
 
 	t.Log("Ensure that the expected spans were recorded when sending a request through the proxy")
+	// 期望两条 span：过滤层记录的客户端 GET 和代理内部的 GET，
+	// 顺序固定，所以用 DeepEqual 一次性比较。
 	expectedSpanNames := []string{"HTTP GET", "GET"}
 	spanNames := []string{}
 	for _, span := range fakeRecorder.Ended() {
@@ -987,6 +1013,8 @@ func TestTracerProvider(t *testing.T) {
 	}
 }
 
+// 验证审计 ID 能随代理请求透传：原请求带则新请求也要带，原请求没有则不应凭空生成，
+// 避免审计日志中出现不一致的关联 ID。
 func TestNewRequestForProxyWithAuditID(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1039,6 +1067,7 @@ func TestNewRequestForProxyWithAuditID(t *testing.T) {
 func TestProxyCertReload(t *testing.T) {
 	// STEP 1: set up a backend server that will require the client certificate
 	//         this server uses clientCaCrt() to validate the client certificate
+	// 后端强制校验客户端证书，这样代理换证书前后的行为差异才能被观察到。
 	backendHandler := &targetHTTPHandler{}
 	backendServer := httptest.NewUnstartedServer(backendHandler)
 	if cert, err := tls.X509KeyPair(backendCertificate(), backendKey()); err != nil {
@@ -1053,6 +1082,7 @@ func TestProxyCertReload(t *testing.T) {
 	defer backendServer.Close()
 
 	// STEP 2: set up the aggregator that will use an invalid certificate (it won't be validated by the clientCA) to auth against the backend server
+	// 先把后端证书当作客户端证书使用，它无法通过 clientCA 校验，预期第一次请求得到 503。
 	aggregatorHandler := &proxyHandler{
 		localDelegate:   http.NewServeMux(),
 		serviceResolver: &mockedRouter{destinationHost: backendServer.Listener.Addr().String()},
@@ -1109,6 +1139,7 @@ func TestProxyCertReload(t *testing.T) {
 
 	// STEP 3: swap the certificate used by the aggregator to auth against the backend server and verify the request passes
 	//         note that this step uses the certificate that can be validated by the backend server with clientCaCrt()
+	// 直接改写磁盘上的证书文件并重新 RunOnce，模拟外部证书轮转后代理自动加载新证书。
 	writeCerts(certFile, keyFile, clientCert(), clientKey(), t)
 	err = certProvider.RunOnce(ctx)
 	if err != nil {
@@ -1125,6 +1156,8 @@ func TestProxyCertReload(t *testing.T) {
 	}
 }
 
+// 实现流控初始化信号接口，SignalCount 用原子交换读取并清零，
+// 便于断言在两次读取之间信号到底触发了几次。
 type fcInitSignal struct {
 	nSignals int32
 }
@@ -1140,6 +1173,8 @@ func (s *fcInitSignal) Signal() {
 func (s *fcInitSignal) Wait() {
 }
 
+// 包装 net.Listener，在后端接受连接的瞬间记录流控信号是否已触发；
+// 因为连接建立发生在真正转发请求时，所以这个时点能反映代理是否发出了初始化信号。
 type hookedListener struct {
 	l        net.Listener
 	onAccept func()
@@ -1161,6 +1196,8 @@ func (wl *hookedListener) Addr() net.Addr {
 	return wl.l.Addr()
 }
 
+// 验证只有“非本地且服务可用”的代理请求才会触发流控初始化信号；
+// 本地请求和服务不可用的请求都不应触发，升级请求仍要触发。
 func TestFlowControlSignal(t *testing.T) {
 	for _, tc := range []struct {
 		Name           string
@@ -1260,6 +1297,7 @@ func TestFlowControlSignal(t *testing.T) {
 	}
 }
 
+// 证书轮转测试需要临时目录存放可写证书文件，目录名带前缀便于失败后定位残留。
 func getCertAndKeyPaths(t *testing.T) (string, string, string) {
 	dir, err := os.MkdirTemp(os.TempDir(), "k8s-test-handler-proxy-cert")
 	if err != nil {
@@ -1279,6 +1317,8 @@ func writeCerts(certFile, keyFile string, certContent, keyContent []byte, t *tes
 	}
 }
 
+// 从 registry 中按名字取出唯一的 counter 值；找不到时返回 -1，
+// 让调用方用一个哨兵值区分“指标未注册”与“指标值为 0”。
 func getSingleCounterValueFromRegistry(t *testing.T, r metrics.Gatherer, name string) int {
 	mfs, err := r.Gather()
 	if err != nil {
@@ -1300,6 +1340,7 @@ func getSingleCounterValueFromRegistry(t *testing.T, r metrics.Gatherer, name st
 	return -1
 }
 
+// 统一从 testdata 目录读取证书/密钥文件，避免每个辅助函数重复拼接路径。
 func readTestFile(filename string) []byte {
 	data, err := os.ReadFile("testdata/" + filename)
 	if err != nil {
@@ -1309,6 +1350,8 @@ func readTestFile(filename string) []byte {
 }
 
 // cert and ca for client auth
+// 这一组辅助函数把双向 TLS 测试所需的证书集中命名，
+// 用例里只出现语义化函数名，不直接写死文件名。
 func clientCert() []byte { return readTestFile("client.pem") }
 
 func clientKey() []byte { return readTestFile("client-key.pem") }

@@ -45,11 +45,15 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 端口常量集中定义，是因为"Service 上的端口"和"EndpointSlice 里的端口名"
+// 必须对齐：控制器正是拿这个名字去端点里找可用地址，写错名字就会被判为不可用。
 const (
 	testServicePort     int32 = 1234
 	testServicePortName       = "testPort"
 )
 
+// 故意给 EndpointSlice 起一个和 Service 不同的名字，只靠 label 关联，
+// 这样能验证控制器是按 service-name label 而不是按对象名查找端点。
 func newEndpointSlice(namespace, serviceName string) *discoveryv1.EndpointSlice {
 	return &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -62,6 +66,7 @@ func newEndpointSlice(namespace, serviceName string) *discoveryv1.EndpointSlice 
 	}
 }
 
+// 构造一个默认就绪、带地址的端点，作为"后端可用"用例的基线数据。
 func newEndpointSliceWithAddress(namespace, serviceName string, port int32, portName string) *discoveryv1.EndpointSlice {
 	slice := newEndpointSlice(namespace, serviceName)
 	slice.Endpoints = []discoveryv1.Endpoint{{
@@ -74,6 +79,8 @@ func newEndpointSliceWithAddress(namespace, serviceName string, port int32, port
 	return slice
 }
 
+// 和上面那个构造器唯一的区别是 Ready=false：专门用来验证
+// "端点存在但还没就绪"不会被当成可用后端。
 func newUnreadyEndpointSliceWithAddress(namespace, serviceName string, port int32, portName string) *discoveryv1.EndpointSlice {
 	slice := newEndpointSlice(namespace, serviceName)
 	slice.Endpoints = []discoveryv1.Endpoint{{
@@ -101,12 +108,16 @@ func newService(namespace, name string, port int32, portName string) *v1.Service
 	}
 }
 
+// 本地 APIService 没有任何 Service 引用：控制器对它直接标为可用，
+// 不需要走后面的服务发现检查。
 func newLocalAPIService(name string) *apiregistration.APIService {
 	return &apiregistration.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 }
 
+// 从 "version.group" 格式的名字里反推出 Group 和 Version，
+// 正好对应 APIService 命名约定，省得每个用例手工填两遍相同信息。
 func newRemoteAPIService(name string) *apiregistration.APIService {
 	return &apiregistration.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -122,11 +133,15 @@ func newRemoteAPIService(name string) *apiregistration.APIService {
 	}
 }
 
+// 用最小接口而不是 *testing.T，是为了让同一个 setup 既能给单元测试用，
+// 也能给后面的 benchmark（*testing.B）用。
 type T interface {
 	Fatalf(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 }
 
+// 搭一个"够用"的控制器：indexer 代替 informer cache，fake client 代替真实 API，
+// testServer 代替后端 discovery 服务。这样测试能专注在可用性判定逻辑上。
 func setupAPIServices(t T, apiServices []runtime.Object) (*AvailableConditionController, *fake.Clientset) {
 	fakeClient := fake.NewSimpleClientset()
 	apiServiceIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
@@ -159,6 +174,8 @@ func setupAPIServices(t T, apiServices []runtime.Object) (*AvailableConditionCon
 			// We want a fairly tight requeue time.  The controller listens to the API, but because it relies on the routability of the
 			// service network, it is possible for an external, non-watchable factor to affect availability.  This keeps
 			// the maximum disruption time to a minimum, but it does prevent hot loops.
+			// 这个队列配置本身不属于被测逻辑，只是让 setup 能构造出完整控制器；
+			// 你也可以把它看成生产配置的缩小版：起步快、上限低，方便测试里观察重试。
 			workqueue.NewTypedItemExponentialFailureRateLimiter[string](5*time.Millisecond, 30*time.Second),
 			workqueue.TypedRateLimitingQueueConfig[string]{Name: "AvailableConditionController"},
 		),
@@ -170,6 +187,8 @@ func setupAPIServices(t T, apiServices []runtime.Object) (*AvailableConditionCon
 	return &c, fakeClient
 }
 
+// 这个基准不追单个 sync 的耗时，而是反复增删更新 Service，
+// 看控制器的缓存索引在"大量无关 Service 旁边夹着少数相关 Service"时的表现。
 func BenchmarkBuildCache(b *testing.B) {
 	apiServiceName := "remote.group"
 	// model 1 APIService pointing at a given service, and 30 pointing at local group/versions
@@ -198,6 +217,8 @@ func BenchmarkBuildCache(b *testing.B) {
 	}
 }
 
+// 只确认"建好缓存后同步一次，确实只产生一条写状态的动作"：
+// 缓存构建本身正确与否体现在后续用例里，这里先把基本链路打通。
 func TestBuildCache(t *testing.T) {
 	tests := []struct {
 		name string
@@ -232,6 +253,10 @@ func TestBuildCache(t *testing.T) {
 	}
 }
 
+// 可用性判定的主表驱动用例：从"本地服务直接可用"到各种失败原因
+// （找不到 Service、端口不对、没有端点、端点没就绪、后端返回异常状态码），
+// 每个用例对应一条明确的 Reason/Message。
+// 把后端状态做成可配置字段，是为了让所有分支共用同一套断言逻辑。
 func TestSync(t *testing.T) {
 	tests := []struct {
 		name string
@@ -505,10 +530,14 @@ type fakeServiceResolver struct {
 	url string
 }
 
+// 直接把请求指向测试 server，跳过 Service 到 ClusterIP 的解析过程；
+// 解析器要验证的是"可用性判定"，不是 DNS/iptables 那部分。
 func (f *fakeServiceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
 	return url.Parse(f.url)
 }
 
+// 状态没变化就不该写 API：这个优化能避免每个同步周期都产生一次无谓的 Update，
+// 进而避免无休止的 watch 事件回环。
 func TestUpdateAPIServiceStatus(t *testing.T) {
 	foo := &apiregistration.APIService{Status: apiregistration.APIServiceStatus{Conditions: []apiregistration.APIServiceCondition{{Type: "foo"}}}}
 	bar := &apiregistration.APIService{Status: apiregistration.APIServiceStatus{Conditions: []apiregistration.APIServiceCondition{{Type: "bar"}}}}
@@ -539,6 +568,9 @@ func emptyCert() []byte {
 	return []byte{}
 }
 
+// 后端返回错误响应后，HTTP 连接不能被留在空闲池里：
+// 那些连接指向的可能是已经被替换掉的后端，留着会在后续请求里继续制造失败。
+// 这里借助 ConnState 回调观察连接关闭事件，而不是去窥探 client 内部状态。
 func TestCloseIdleConnections(t *testing.T) {
 	apiServiceName := "remote.group"
 	apiServices := []runtime.Object{newRemoteAPIService(apiServiceName)}

@@ -36,6 +36,9 @@ import (
 
 // apisHandler serves the `/apis` endpoint.
 // This is registered as a filter so that it never collides with any explicitly registered endpoints
+//
+// 中文补充：/apis 的组列表是动态的，来自 APIService 对象而不是静态路由表；
+// 用 filter（UnlistedHandle）注册，就不会和某个具体组显式注册的 handler 抢路径。
 type apisHandler struct {
 	codecs         serializer.CodecFactory
 	lister         listers.APIServiceLister
@@ -43,6 +46,8 @@ type apisHandler struct {
 }
 
 func discoveryGroup(enabledVersions sets.String) metav1.APIGroup {
+	// 中文补充：聚合层自己的组必须出现在发现列表里，而且 v1 恒为首选版本；
+	// v1beta1 是否列出取决于它被启用了没有，不能凭空宣称支持。
 	retval := metav1.APIGroup{
 		Name: apiregistrationv1api.GroupName,
 		Versions: []metav1.GroupVersionForDiscovery{
@@ -76,6 +81,8 @@ func (r *apisHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	apiServices, err := r.lister.List(labels.Everything())
 	if err != nil {
+		// 中文补充：lister 读的是本地缓存，失败几乎只可能是缓存损坏，
+		// 这时给 500 比返回半截发现文档更诚实，客户端可以稍后重试。
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -96,6 +103,9 @@ func (r *apisHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // convertToDiscoveryAPIGroup takes apiservices in a single group and returns a discovery compatible object.
 // if none of the services are available, it will return nil.
+//
+// 中文补充：输入理论上只含一个组，但再去一次排序是为了直接复用"组内版本优先级"
+// 的排序规则；取 [0] 即该组的全部版本，排好序后第一个自然成为 PreferredVersion。
 func convertToDiscoveryAPIGroup(apiServices []*apiregistrationv1api.APIService) *metav1.APIGroup {
 	apiServicesByGroup := apiregistrationv1apihelper.SortedByGroupAndVersion(apiServices)[0]
 
@@ -125,6 +135,10 @@ func convertToDiscoveryAPIGroup(apiServices []*apiregistrationv1api.APIService) 
 }
 
 // apiGroupHandler serves the `/apis/<group>` endpoint.
+//
+// 中文补充：和 /apis 不同，这里针对单个组；如果本组没有任何 APIService，
+// 就把请求委托给 delegate——因为该组可能由底层 apiserver 直接提供，
+// 聚合层只是路过，不该擅自返回 404。
 type apiGroupHandler struct {
 	codecs    serializer.CodecFactory
 	groupName string
@@ -136,6 +150,8 @@ type apiGroupHandler struct {
 
 func (r *apiGroupHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	apiServices, err := r.lister.List(labels.Everything())
+	// 中文补充：lister 偶尔会返回带 HTTP 语义的 StatusError，
+	// 原样透传状态码比统一压成 500 更贴近客户端预期（例如 403）。
 	if statusErr, ok := err.(*apierrors.StatusError); ok {
 		responsewriters.WriteRawJSON(int(statusErr.Status().Code), statusErr.Status(), w)
 		return
@@ -153,12 +169,16 @@ func (r *apiGroupHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(apiServicesForGroup) == 0 {
+		// 中文补充：没有对应的 APIService，说明这个组不属于聚合层管辖，
+		// 交回 delegate 处理；这覆盖了 APIService 刚被删除、路由还没撤销的窗口。
 		r.delegate.ServeHTTP(w, req)
 		return
 	}
 
 	discoveryGroup := convertToDiscoveryAPIGroup(apiServicesForGroup)
 	if discoveryGroup == nil {
+		// 中文补充：走到这里说明有 APIService 但没有可展示的版本，
+		// 返回 404 而非 500，表示"这个组当前没有发现信息"。
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}

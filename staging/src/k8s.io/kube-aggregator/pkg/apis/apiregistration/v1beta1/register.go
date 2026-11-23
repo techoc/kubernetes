@@ -23,12 +23,16 @@ import (
 )
 
 // GroupName is the API group for apiregistration
+// 与 internal 版本保持同一个组名，只在 Version 上区分；同一资源在不同版本间的转换依赖这一点。
 const GroupName = "apiregistration.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+// 这是对外暴露的 v1beta1 版本；客户端请求该版本时由 scheme 解码为对应结构体，
+// 再经转换函数变成 internal 版本供组件内部使用。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 // Resource takes an unqualified resource and returns back a Group qualified GroupResource
+// 把裸资源名补上 group 与 version，用于生成该版本下的资源引用。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
@@ -37,9 +41,12 @@ var (
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
 	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// 区分公开 SchemeBuilder 与 localSchemeBuilder：前者可被外部包追加注册函数，
+	// 后者由本包 init 使用，把手写注册与生成代码注册分开，避免两者互相覆盖。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// 对外的统一注册入口；调用方拿到的是绑定了本包 builder 的函数，无需了解内部指针。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
@@ -47,10 +54,15 @@ func init() {
 	// We only register manually written functions here. The registration of the
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的注册函数与默认值函数；generated 的 deepcopy/conversion 等在各自的
+	// zz_generated 文件中注册。这样即使生成文件暂时缺失，本文件仍能编译，便于本地开发。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
 // Adds the list of known types to the given scheme.
+// 注册单对象与列表两种 Kind，保证 list/watch 请求能正确解码。
+// 额外调用 metav1.AddToGroupVersion 注册 ListMeta、Time 等元类型，
+// 这是外部版本必需的（internal 版本不需要），否则响应中的 metadata 字段无法解析。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&APIService{},

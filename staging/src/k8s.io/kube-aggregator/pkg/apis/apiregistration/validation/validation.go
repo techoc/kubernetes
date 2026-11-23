@@ -33,7 +33,12 @@ import (
 )
 
 // ValidateAPIService validates that the APIService is correctly defined.
+// 这里不只是逐字段检错：APIService 有两条隐含约束必须在对象级别才能检查——
+// 名字必须等于 version.group，以及本地服务和远程服务的合法配置互斥。
+// 校验器返回错误列表而不是首个错误，是为了让调用方一次看到所有问题。
 func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIService) field.ErrorList {
+	// 名字和 spec 的对应关系是硬约束：聚合层靠名字定位 GroupVersion，
+	// 允许两者不一致会让路由和对象身份脱节。
 	requiredName := apiService.Spec.Version + "." + apiService.Spec.Group
 
 	allErrs := validation.ValidateObjectMetaDeclaratively(ctx, operation.Create, &apiService.ObjectMeta, nil, false,
@@ -52,6 +57,8 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 		utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 
 	// in this case we allow empty group
+	// 核心 API 组历史上没有组名，它的 APIService 只能写成 v1.；
+	// 其他情况留空组名会让对象落不到任何 GroupVersion 上，所以必须拒绝。
 	if len(apiService.Spec.Group) == 0 && apiService.Spec.Version != "v1" {
 		allErrs = append(allErrs, field.Required(field.NewPath("spec", "group"), "only v1 may have an empty group and it better be legacy kube"))
 	}
@@ -72,6 +79,9 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "versionPriority"), apiService.Spec.VersionPriority, "must be positive and less than 1000"))
 	}
 
+	// Service 为空代表这是"本地"APIService：请求直接转给普通 handler 链处理，
+	// 根本不走 TLS 连接。因此任何和远端 TLS 有关的配置在这里都没有意义，
+	// 留着只会让人误以为它生效，必须显式报错。
 	if apiService.Spec.Service == nil {
 		if len(apiService.Spec.CABundle) != 0 {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "caBundle"), fmt.Sprintf("%d bytes", len(apiService.Spec.CABundle)), "local APIServices may not have a caBundle"))
@@ -91,6 +101,8 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 	if errs := utilvalidation.IsValidPortNum(int(apiService.Spec.Service.Port)); errs != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "service", "port"), apiService.Spec.Service.Port, "port is not valid: "+strings.Join(errs, ", ")))
 	}
+	// 两者同时出现时语义自相矛盾：一个说"验证证书"，一个说"别验证证书"。
+	// 与其选定一个优先级悄悄生效，不如直接拒绝，让配置意图保持清晰。
 	if apiService.Spec.InsecureSkipTLSVerify && len(apiService.Spec.CABundle) > 0 {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "insecureSkipTLSVerify"), apiService.Spec.InsecureSkipTLSVerify, "may not be true if caBundle is present"))
 	}
@@ -99,6 +111,9 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 }
 
 // ValidateAPIServiceUpdate validates an update of APIService.
+// 更新校验 = 元数据更新校验 + 完整的创建校验。Spec 里各字段之间的约束
+// （比如名字必须匹配、TLS 配置互斥）在更新后同样要成立，
+// 因此这里老老实实复用创建校验，没有"只校验变化字段"的捷径。
 func ValidateAPIServiceUpdate(ctx context.Context, newAPIService *apiregistration.APIService, oldAPIService *apiregistration.APIService) field.ErrorList {
 	allErrs := validation.ValidateObjectMetaDeclaratively(ctx, operation.Update, &newAPIService.ObjectMeta, &oldAPIService.ObjectMeta, false, nil, field.NewPath("metadata"), utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 	allErrs = append(allErrs, ValidateAPIService(ctx, newAPIService)...)
@@ -107,6 +122,8 @@ func ValidateAPIServiceUpdate(ctx context.Context, newAPIService *apiregistratio
 }
 
 // ValidateAPIServiceStatus validates that the APIService status is one of 'True', 'False' or 'Unknown'.
+// 状态由控制器写入，但依然要校验：一个拼错的状态值会让依赖"True/False/Unknown"
+// 三态判断的调用方失去依据。这里只管状态取值，条件的 Type、Reason 等交给别的层。
 func ValidateAPIServiceStatus(status *apiregistration.APIServiceStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -123,6 +140,8 @@ func ValidateAPIServiceStatus(status *apiregistration.APIServiceStatus, fldPath 
 }
 
 // ValidateAPIServiceStatusUpdate validates an update of the status field of APIService.
+// 状态更新走的是独立子资源，因此不校验 Spec：控制器只应被允许回写状态，
+// 用户也不该因为 Spec 里有错就改不了状态。
 func ValidateAPIServiceStatusUpdate(ctx context.Context, newAPIService *apiregistration.APIService, oldAPIService *apiregistration.APIService) field.ErrorList {
 	allErrs := validation.ValidateObjectMetaDeclaratively(ctx, operation.Update, &newAPIService.ObjectMeta, &oldAPIService.ObjectMeta, false, nil, field.NewPath("metadata"), utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 	allErrs = append(allErrs, ValidateAPIServiceStatus(&newAPIService.Status, field.NewPath("status"))...)

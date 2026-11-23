@@ -30,6 +30,9 @@ import (
 	listers "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 )
 
+// 中文补充：这几个构造器按 AutoRegisterManagedLabel 的取值区分"持续托管"（true）
+// 和"仅在启动时托管"（onstart）。标签值是控制器判断要不要接管对象的依据，
+// 所以测试用它来构造不同生命周期语义的对象，而不用手写字面量。
 func newAutoRegisterManagedAPIService(name string) *apiregistrationv1.APIService {
 	return &apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{AutoRegisterManagedLabel: string("true")}},
@@ -57,6 +60,9 @@ func newAPIService(name string) *apiregistrationv1.APIService {
 	}
 }
 
+// 中文补充：这些 check 函数断言 fake client 收到的动作：
+// 没有动作代表控制器认为无需变更；Create/Update/Delete 各自校验动作类型和对象内容。
+// 允许"零动作"是为了兼容幂等场景——控制器重跑时不应反复写 API。
 func checkForNothing(name string, client *fake.Clientset) error {
 	if len(client.Actions()) > 0 {
 		return fmt.Errorf("unexpected action: %v", client.Actions())
@@ -148,6 +154,13 @@ func checkForDelete(name string, client *fake.Clientset) error {
 	return nil
 }
 
+// TestSync 覆盖自动注册控制器的核心状态机：
+// 只有带托管标签且配对上 AddAPIServiceToSync 请求的 APIService 才会被创建/纠正/删除。
+//
+// 中文补充：表格里的 addAPIServices/updateAPIServices 表示 informer 看到的现状，
+// addSyncAPIServices/delSyncAPIServices 表示外部组件声明的期望，
+// alreadySynced/presentAtStart 则模拟"onstart"这种一次性语义的历史状态。
+// 分开这些维度，才能验证"现状变化"和"期望变化"两条触发路径的交叉行为。
 func TestSync(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -180,6 +193,8 @@ func TestSync(t *testing.T) {
 			expectedResults:    checkForCreate,
 		},
 		{
+			// 中文补充：重复添加同一个对象不应 panic，也不应产生多余的写操作；
+			// 控制器按名字去重，调用方可能来自多个 goroutine。
 			name:               "duplicate AddAPIServiceToSync don't panic",
 			apiServiceName:     "foo",
 			addAPIServices:     []*apiregistrationv1.APIService{newAutoRegisterManagedAPIService("foo")},
@@ -216,6 +231,8 @@ func TestSync(t *testing.T) {
 			expectedResults:    checkForDelete,
 		},
 		{
+			// 中文补充：用户改了托管对象的 Spec 时控制器必须"踩回去"（stomp），
+			// 托管标签意味着内容由组件声明决定，不接受手动改动漂移。
 			name:               "modifying it should result in stomping",
 			apiServiceName:     "foo",
 			addAPIServices:     []*apiregistrationv1.APIService{},

@@ -62,12 +62,16 @@ import (
 )
 
 // making sure we only register metrics once into legacy registry
+// 中文补充：一个进程里可以创建多个 APIAggregator（比如测试里），
+// 但 legacy registry 的指标只能注册一次，否则会 panic；用 Once 兜住这个约束。
 var registerIntoLegacyRegistryOnce sync.Once
 
 func init() {
 	// we need to add the options (like ListOptions) to empty v1
 	metav1.AddToGroupVersion(aggregatorscheme.Scheme, schema.GroupVersion{Group: "", Version: "v1"})
 
+	// 中文补充：发现端点返回的是 Status/APIGroupList 等核心元类型，
+	// 它们属于无组的 v1，必须显式注册才能在协商编码时被识别。
 	unversioned := schema.GroupVersion{Group: "", Version: "v1"}
 	aggregatorscheme.Scheme.AddUnversionedTypes(unversioned,
 		&metav1.Status{},
@@ -86,6 +90,9 @@ const (
 )
 
 // ExtraConfig represents APIServices-specific configuration
+//
+// 中文补充：这些是聚合层独有的配置，跟 generic apiserver 的通用配置分开，
+// 便于把 kube-aggregator 作为库嵌入到其他 control plane 时按需替换。
 type ExtraConfig struct {
 	// PeerAdvertiseAddress is the IP for this kube-apiserver which is used by peer apiservers to route a request
 	// to this apiserver. This happens in cases where the peer is not able to serve the request due to
@@ -129,6 +136,9 @@ type completedConfig struct {
 }
 
 // CompletedConfig same as Config, just to swap private object.
+//
+// 中文补充：把私有类型藏在导出结构里，外部包只能拿到实例、无法自行构造，
+// 从而保证 CompletedConfig 一定经过 Complete 的校验和补全。
 type CompletedConfig struct {
 	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedConfig
@@ -139,6 +149,9 @@ type runnable interface {
 }
 
 // preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+//
+// 中文补充：用类型系统把"先 PrepareRun 再 Run"的顺序约束编码进 API，
+// 因为直接暴露 Run 的话调用方很容易漏掉 OpenAPI/handler 的准备步骤。
 type preparedAPIAggregator struct {
 	*APIAggregator
 	runnable runnable
@@ -165,6 +178,8 @@ type APIAggregator struct {
 
 	// lister is used to add group handling for /apis/<group> aggregator lookups based on
 	// controller state
+	// 中文补充：发现请求直接读 lister 缓存，不查 API，避免 /apis 的延迟
+	// 受 APIService 存储可用性影响，也防止发现流量放大到后端。
 	lister listers.APIServiceLister
 
 	// Information needed to determine routing for the aggregator
@@ -203,6 +218,8 @@ func (cfg *Config) Complete() CompletedConfig {
 
 	// the kube aggregator wires its own discovery mechanism
 	// TODO eventually collapse this by extracting all of the discovery out
+	// 中文补充：generic server 自带的发现只会列它自己注册的资源，
+	// 而聚合层要按 APIService 动态拼装发现文档，两者会互相覆盖，所以必须关掉前者。
 	c.GenericConfig.EnableDiscovery = false
 
 	return CompletedConfig{&c}
@@ -222,6 +239,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	informerFactory := informers.NewSharedInformerFactory(
 		apiregistrationClient,
 		5*time.Minute, // this is effectively used as a refresh interval right now.  Might want to do something nicer later on.
+		// 中文补充：这里的值被当作 resync 周期使用；APIService 变动很少，
+		// 且注册控制器自己关心事件，5 分钟只作为兜底重放。
 	)
 
 	// apiServiceRegistrationControllerInitiated is closed when APIServiceRegistrationController has finished "installing" all known APIServices.
@@ -229,11 +248,18 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	// Before it might have resulted in a 404 response which could have serious consequences for some controllers like  GC and NS
 	//
 	// Note that the APIServiceRegistrationController waits for APIServiceInformer to synced before doing its work.
+	// 中文补充：这个 channel 同时是"路由已就绪"的信号，
+	// 注册到 mux completion 机制后，健康检查和发现请求会等它关闭再放行。
+	// 否则启动瞬间一个 /apis/foo 请求可能撞上尚未注册的路由，得到 404，
+	// 对 GC、namespace 控制器这类把 404 当"对象消失"的调用方后果很严重。
 	apiServiceRegistrationControllerInitiated := make(chan struct{})
 	if err := genericServer.RegisterMuxAndDiscoveryCompleteSignal("APIServiceRegistrationControllerInitiated", apiServiceRegistrationControllerInitiated); err != nil {
 		return nil, err
 	}
 
+	// 中文补充：拨号器有两个来源，优先级是 egress selector > 显式传入的 ProxyTransport。
+	// 前者是集群级的出网管控，后者是嵌入场景下的定制入口；
+	// 都为空时走 transport 默认拨号，不需要 DialHolder。
 	var proxyTransportDial *transport.DialHolder
 	if c.GenericConfig.EgressSelector != nil {
 		egressDialer, err := c.GenericConfig.EgressSelector.Lookup(egressselector.Cluster.AsNetworkContext())
@@ -268,6 +294,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 		return nil, err
 	}
 
+	// 中文补充：从实际装进来的 storage 反推启用的版本，而不是读配置常量，
+	// 这样发现文档只包含真正可服务的版本；配置关掉了某版本就不会对外宣称支持。
 	enabledVersions := sets.NewString()
 	for v := range apiGroupInfo.VersionedResourcesStorageMap {
 		enabledVersions.Insert(v)
@@ -278,6 +306,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 
 	codecs := aggregatorscheme.Codecs
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.CBORServingAndStorage) {
+		// 中文补充：CBOR 是可选的线格式，开关打开时单独造一个 codec factory，
+		// 不改全局的 aggregatorscheme.Codecs，避免影响其他未适配 CBOR 的路径。
 		codecs = serializer.NewCodecFactory(aggregatorscheme.Scheme, serializer.WithSerializer(cbor.NewSerializerInfo))
 	}
 
@@ -297,6 +327,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	}
 
 	apisHandlerWithAggregationSupport := aggregated.WrapAggregatedDiscoveryToHandler(apisHandler, s.GenericAPIServer.AggregatedDiscoveryGroupManager, s.GenericAPIServer.PeerAggregatedDiscoveryManager)
+	// 中文补充：/apis 精确匹配走带聚合（含资源）的发现处理器，
+	// /apis/ 前缀和其他方法走原始处理器；两者分开注册避免相互覆盖。
 	s.GenericAPIServer.Handler.NonGoRestfulMux.Handle("/apis", apisHandlerWithAggregationSupport)
 	s.GenericAPIServer.Handler.NonGoRestfulMux.UnlistedHandle("/apis/", apisHandler)
 
@@ -311,6 +343,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 		if err := aggregatorProxyCerts.RunOnce(context.Background()); err != nil {
 			return nil, err
 		}
+		// 中文补充：后端 APIService 靠这份客户端证书识别代理身份，
+		// 证书轮换时必须通知注册控制器刷新 proxy handler，否则会继续用旧证书。
 		aggregatorProxyCerts.AddListener(apiserviceRegistrationController)
 		s.proxyCurrentCertKeyContent = aggregatorProxyCerts.CurrentCertKeyContent
 
@@ -328,6 +362,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 
 	// create shared (remote and local) availability metrics
 	// TODO: decouple from legacyregistry
+	// 中文补充：local 和 remote 两个控制器共用同一组指标，避免同名指标被注册两次；
+	// Once 还顺带处理了一个进程里创建多个 aggregator 的情况。
 	metrics := availabilitymetrics.New()
 	registerIntoLegacyRegistryOnce.Do(func() { err = metrics.Register(legacyregistry.Register, legacyregistry.CustomRegister) })
 	if err != nil {
@@ -335,6 +371,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	}
 
 	// always run local availability controller
+	// 中文补充：local 的判活不依赖 Service/EndpointSlice，任何部署形态都能跑，
+	// 所以即使 remote 控制器被禁用，它也必须启动。
 	local, err := localavailability.New(
 		informerFactory.Apiregistration().V1().APIServices(),
 		apiregistrationClient.ApiregistrationV1(),
@@ -374,6 +412,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 
 	s.GenericAPIServer.AddPostStartHookOrDie("apiservice-registration-controller", func(context genericapiserver.PostStartHookContext) error {
 		go apiserviceRegistrationController.Run(context.Done(), apiServiceRegistrationControllerInitiated)
+		// 中文补充：post start hook 故意阻塞到路由注册完成，
+		// 这样 /healthz 和 mux  ready 信号才会等到 APIService 全部就位后才放行。
 		select {
 		case <-context.Done():
 		case <-apiServiceRegistrationControllerInitiated:
@@ -385,6 +425,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	s.discoveryAggregationController = NewDiscoveryManager(
 		// Use aggregator as the source name to avoid overwriting native/CRD
 		// groups
+		// 中文补充：发现文档按来源分区合并，用独立的 AggregatorSource 才能
+		// 保证聚合层写入的组不会覆盖 native/CRD 自己上报的同名组。
 		s.GenericAPIServer.AggregatedDiscoveryGroupManager.WithSource(aggregated.AggregatorSource),
 	)
 
@@ -424,6 +466,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 			// Wait for apiserver-identity to exist first before updating storage
 			// versions, to avoid storage version GC accidentally garbage-collecting
 			// storage versions.
+			// 中文补充：StorageVersion GC 用 Lease 判断实例是否存活，
+			// 自己的 Lease 还没建好就去写 StorageVersion，容易被当成孤儿清掉。
 			kubeClient, err := kubernetes.NewForConfig(hookContext.LoopbackClientConfig)
 			if err != nil {
 				return err
@@ -448,6 +492,9 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 			// case, the reconciliation ensures future storage migration still works. If nothing gets
 			// changed, the reconciliation update is a noop and gets short-circuited by the apiserver,
 			// therefore won't change the resource version and trigger storage migration.
+			// 中文补充：这里刻意做成"反复写但内容相同"的调和循环，
+			// 依赖 apiserver 对 no-op 更新短路（不改 resourceVersion）来保证安全；
+			// 真被误删时又能自愈，不需要额外的修复机制。
 			go wait.PollImmediateUntil(10*time.Minute, func() (bool, error) {
 				// All apiservers (aggregator-apiserver, kube-apiserver, apiextensions-apiserver)
 				// share the same generic apiserver config. The same StorageVersion manager is used
@@ -471,8 +518,14 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 
 // PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec &
 // aggregated discovery document and calling the generic PrepareRun.
+//
+// 中文补充：PrepareRun 与 NewWithDelegate 分两段，是因为 OpenAPI 聚合器
+// 依赖 delegate 先注册完自己的 handler；构造期拿不到这些信息，
+// 只能等 PrepareRun 时再搭建，同时仍需赶在 /healthz 安装前挂好 post start hook。
 func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 	// add post start hook before generic PrepareRun in order to be before /healthz installation
+	// 中文补充：/healthz 是在 generic PrepareRun 里装的，hook 必须排在它前面，
+	// 否则 OpenAPI 聚合 controller 启动前健康检查就已经通过了。
 	if s.openAPIConfig != nil {
 		s.GenericAPIServer.AddPostStartHookOrDie("apiservice-openapi-controller", func(context genericapiserver.PostStartHookContext) error {
 			go s.openAPIAggregationController.Run(context.Done())
@@ -490,6 +543,8 @@ func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 	prepared := s.GenericAPIServer.PrepareRun()
 
 	// delay OpenAPI setup until the delegate had a chance to setup their OpenAPI handlers
+	// 中文补充：BuildAndRegisterAggregator 需要读取 GoRestfulContainer 里已注册的
+	// WebServices，delegate 若还没准备好，得到的规范会缺内容，所以顺序不能提前。
 	if s.openAPIConfig != nil {
 		specDownloader := openapiaggregator.NewDownloader()
 		openAPIAggregator, err := openapiaggregator.BuildAndRegisterAggregator(
@@ -522,14 +577,22 @@ func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 }
 
 func (s preparedAPIAggregator) Run(ctx context.Context) error {
+	// 中文补充：只能拿到 preparedAPIAggregator 的实例，也就保证了 PrepareRun
+	// 一定先于 Run 被调用；这里只是把调用转发给 generic server。
 	return s.runnable.RunWithContext(ctx)
 }
 
 // AddAPIService adds an API service.  It is not thread-safe, so only call it on one thread at a time please.
 // It's a slow moving API, so its ok to run the controller on a single thread
+//
+// 中文补充：整个函数就是一次"注册路由"：APIService 新增时挂上 proxy handler，
+// 更新时刷新已有 handler。APIService 变动是很慢的事件，单线程跑控制器即可，
+// 这样就不用给 proxyHandlers 和 handledGroupVersions 加锁。
 func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 	// if the proxyHandler already exists, it needs to be updated. The aggregation bits do not
 	// since they are wired against listers because they require multiple resources to respond
+	// 中文补充：OpenAPI/发现聚合走 lister 读全量对象，不依赖单个 handler 的引用，
+	// 所以只在首次注册时把它们接进来；更新靠 lister 里的新对象自然生效。
 	if proxyHandler, exists := s.proxyHandlers[apiService.Name]; exists {
 		proxyHandler.updateAPIService(apiService)
 		if s.openAPIAggregationController != nil {
@@ -540,6 +603,8 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 		}
 		// Forward calls to discovery manager to update discovery document
 		if s.discoveryAggregationController != nil {
+			// 中文补充：发现文档只在 APIService 可用时才宣称支持其版本，
+			// 但真正用来代理请求的 handler 不应被改动，所以用副本标记可用状态。
 			handlerCopy := *proxyHandler
 			handlerCopy.setServiceAvailable()
 			s.discoveryAggregationController.AddAPIService(apiService, &handlerCopy)
@@ -583,6 +648,8 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 	}
 
 	// if we've already registered the path with the handler, we don't want to do it again.
+	// 中文补充：组级发现端点一个组只需注册一次；handledGroupVersions 顺带记录
+	// 该组下已出现过的版本，删除最后一个版本时才知道何时该把这个端点摘掉。
 	versions, exist := s.handledGroupVersions[apiService.Spec.Group]
 	if exist {
 		versions.Insert(apiService.Spec.Version)
@@ -591,6 +658,8 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 
 	codecs := aggregatorscheme.Codecs
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.CBORServingAndStorage) {
+		// 中文补充：组级发现处理器也要和 /apis 处理器用同一套 codec，
+		// 否则客户端在 CBOR 模式下访问组端点会拿到不可解析的响应。
 		codecs = serializer.NewCodecFactory(aggregatorscheme.Scheme, serializer.WithSerializer(cbor.NewSerializerInfo))
 	}
 
@@ -611,6 +680,9 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 
 // RemoveAPIService removes the APIService from being handled.  It is not thread-safe, so only call it on one thread at a time please.
 // It's a slow moving API, so it's ok to run the controller on a single thread.
+//
+// 中文补充：这是 AddAPIService 的逆过程，但多了一步组级端点的引用计数：
+// 同组还有其他版本在跑时，不能因为删掉一个版本就撤销组发现路径。
 func (s *APIAggregator) RemoveAPIService(apiServiceName string) {
 	// Forward calls to discovery manager to update discovery document
 	if s.discoveryAggregationController != nil {
@@ -634,6 +706,8 @@ func (s *APIAggregator) RemoveAPIService(apiServiceName string) {
 	}
 	delete(s.proxyHandlers, apiServiceName)
 
+	// 中文补充：同组其他版本还在，组级发现路径就必须保留；
+	// 只有最后一个版本删掉后才真正 Unregister，避免误伤其他版本。
 	versions, exist := s.handledGroupVersions[version.Group]
 	if !exist {
 		return
@@ -652,6 +726,8 @@ func (s *APIAggregator) RemoveAPIService(apiServiceName string) {
 func DefaultAPIResourceConfigSource() *serverstorage.ResourceConfig {
 	ret := serverstorage.NewResourceConfig()
 	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha versions in the list.
+	// 中文补充：alpha 版本默认不开，是为了避免升级后 API 行为随默认值漂移；
+	// 想要 alpha 的人显式配置启用，风险自负。
 	ret.EnableVersions(
 		v1.SchemeGroupVersion,
 		v1beta1.SchemeGroupVersion,

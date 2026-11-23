@@ -21,6 +21,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // APIServiceList is a list of APIService objects.
+// 资源列表类型之所以存在，是因为 APIService 是集群级资源，列表接口需要统一的类型元数据和分页信息；
+// 它的 Items 保存的是对象值而非指针，以保持与其他 k8s 列表类型一致的序列化形态。
 type APIServiceList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
@@ -38,6 +40,8 @@ type ServiceReference struct {
 	// Default to 443 for backward compatibility.
 	// `port` should be a valid port number (1-65535, inclusive).
 	// +optional
+	// 内部类型用 int32 零值表示“未指定”，对外版本则多用指针区分；
+	// 默认值机制在进入内部类型前把缺省端口归一到 443。
 	Port int32
 }
 
@@ -49,6 +53,8 @@ type APIServiceSpec struct {
 	// If the Service is nil, that means the handling for the API groupversion is handled locally on this server.
 	// The call will simply delegate to the normal handler chain to be fulfilled.
 	// +optional
+	// 把 Service 留空作为“本地组”的标记，避免为内置 API 再维护一份自指的服务引用；
+	// 代理层据此走委托链而非发起真正的网络转发。
 	Service *ServiceReference
 	// Group is the API group name this server hosts
 	Group string
@@ -62,6 +68,8 @@ type APIServiceSpec struct {
 	// If unspecified, system trust roots on the apiserver are used.
 	// +listType=atomic
 	// +optional
+	// CA 包视为原子整体而非可合并列表，因为它表示一份完整的信任根集合，
+	// 逐元素合并会产生难以推理的中间信任状态。
 	CABundle []byte
 
 	// GroupPriorityMinimum is the priority this group should have at least. Higher priority means that the group is preferred by clients over lower priority ones.
@@ -70,6 +78,8 @@ type APIServiceSpec struct {
 	// The secondary sort is based on the alphabetical comparison of the name of the object.  (v1.bar before v1.foo)
 	// We'd recommend something like: *.k8s.io (except extensions) at 18000 and
 	// PaaSes (OpenShift, Deis) are recommended to be in the 2000s
+	// 组级优先级与版本级优先级分开，是为了让同一组内的所有版本共享一次“组排序”，
+	// 再在组内按较小粒度的 VersionPriority 决定首选版本。
 	GroupPriorityMinimum int32
 
 	// VersionPriority controls the ordering of this API version inside of its group.  Must be greater than zero.
@@ -82,6 +92,8 @@ type APIServiceSpec struct {
 	// by GA > beta > alpha (where GA is a version with no suffix such as beta or alpha), and then by comparing major
 	// version, then minor version. An example sorted list of versions:
 	// v10, v2, v1, v11beta2, v10beta3, v3beta1, v12alpha1, v11alpha2, foo1, foo10.
+	// 对“kube 风格”版本号做专门解析，是因为纯字典序会把 v10 排在 v2 之前；
+	// 识别 GA/beta/alpha 后，才能让稳定版本天然优先于预发布版本。
 	VersionPriority int32
 }
 
@@ -92,6 +104,8 @@ type ConditionStatus string
 // "ConditionFalse" means a resource is not in the condition; "ConditionUnknown" means kubernetes
 // can't decide if a resource is in the condition or not. In the future, we could add other
 // intermediate conditions, e.g. ConditionDegraded.
+// 条件状态保留 Unknown 三态，是为了区分“明确不可用”和“控制器还没法判断”，
+// 这样状态同步方不会因为一次探测失败就武断地下结论。
 const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
@@ -118,6 +132,8 @@ type APIServiceCondition struct {
 	// Unique, one-word, CamelCase reason for the condition's last transition.
 	Reason string
 	// Human-readable message indicating details about last transition.
+	// 把 Reason（机器可读）与 Message（人可读）拆开，是因为两者消费方不同：
+	// 控制器按 Reason 做判断，人则看 Message 排查问题。
 	Message string
 }
 
@@ -126,6 +142,8 @@ type APIServiceStatus struct {
 	// Current service state of apiService.
 	// +listType=map
 	// +listMapKey=type
+	// 指令 +listType=map 与 +listMapKey=type 一起使用，使得不同控制器并发更新时
+	// 按条件类型做合并，而不是相互覆盖整份条件列表。
 	Conditions []APIServiceCondition
 }
 
@@ -135,12 +153,19 @@ type APIServiceStatus struct {
 
 // APIService represents a server for a particular GroupVersion.
 // Name must be "version.group".
+// 对象名固定为“版本.组”的形式，是为了让名字本身就能被解析出 Group/Version，
+// 从而免去在spec之外再存一份重复标识。
+// 指令 +genclient:nonNamespaced 说明它是集群级资源：聚合层面对的是整个集群的 API 组，
+// 不存在按命名空间隔离的意义。
 type APIService struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
 	// Spec contains information for locating and communicating with a server
+	// Spec 描述期望的静态配置，由用户/安装器提供。
 	Spec APIServiceSpec
 	// Status contains derived information about an API server
+	// Status 描述控制器探测出来的运行状态，与 Spec 分开存放，
+	// 这样状态更新不会意外改动用户声明的配置。
 	Status APIServiceStatus
 }

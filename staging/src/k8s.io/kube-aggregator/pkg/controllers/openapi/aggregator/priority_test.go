@@ -23,6 +23,8 @@ import (
 	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
+// 构造只关心排序字段的 APIService，svc 为 nil 表示本地服务，
+// 便于在同一组用例里同时覆盖本地与远端服务的排序分支。
 func newAPIServiceForTest(name, group string, minGroupPriority, versionPriority int32, svc *apiregistrationv1.ServiceReference) *apiregistrationv1.APIService {
 	r := apiregistrationv1.APIService{}
 	r.Spec.Group = group
@@ -33,6 +35,8 @@ func newAPIServiceForTest(name, group string, minGroupPriority, versionPriority 
 	return &r
 }
 
+// 只比较名字，避免断言被其他字段干扰；用 DeepEqual 而非字符串拼接，
+// 这样顺序和数量差异都能在失败信息里直接看出来。
 func assertSortedServices(t *testing.T, actual []*apiregistrationv1.APIService, expectedNames []string) {
 	actualNames := []string{}
 	for _, a := range actual {
@@ -43,6 +47,8 @@ func assertSortedServices(t *testing.T, actual []*apiregistrationv1.APIService, 
 	}
 }
 
+// 期望顺序体现了两条规则：本地服务（svc 为 nil）排在最前，
+// 其余按 GroupPriorityMinimum 降序；同优先级再按版本优先级和名字决定先后。
 func TestAPIServiceSort(t *testing.T) {
 	list := []*apiregistrationv1.APIService{
 		newAPIServiceForTest("FirstService", "Group1", 10, 5, &apiregistrationv1.ServiceReference{}),

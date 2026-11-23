@@ -23,6 +23,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// 指标暴露的是不可用状态而不是“可用布尔值”：正常情况下应该没有时间序列，
+// 这样告警只需要匹配出现的条目，不必为大量健康的 APIService 维护常量序列。
 func TestAPIServiceAvailabilityCollection(t *testing.T) {
 	collector := newAvailabilityCollector()
 
@@ -44,6 +46,8 @@ func TestAPIServiceAvailabilityCollection(t *testing.T) {
 
 	collector.ClearState()
 
+	// Forget 必须把标签对应的序列彻底移除；只置零会让已经恢复的服务
+	// 永远以 0 的形式留在指标里，告警规则就无从区分“恢复”和“从未出现”。
 	collector.ForgetAPIService(availableAPIService)
 	collector.ForgetAPIService(unavailableAPIService)
 

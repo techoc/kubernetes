@@ -28,10 +28,15 @@ import (
 	apiregistrationv1beta1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
+// 聚合 API 的对象既要经 protobuf/JSON 在 apiserver 之间传递，也要经过
+// unstructured 形态被动态客户端处理。这里用 fuzz 往返验证两条路径不丢字段，
+// 否则客户端读写 scalar 字段时可能悄悄拿不到值。
 func TestRoundtripToUnstructured(t *testing.T) {
 	scheme := runtime.NewScheme()
 	install.Install(scheme)
 
+	// 只跳过元信息里的 options 类型：它们没有对应的内部版本，
+	// 走通用的 internal -> external -> unstructured 往返没有意义。
 	roundtrip.RoundtripToUnstructured(t, scheme, fuzzer.MergeFuzzerFuncs(), sets.New(
 		apiregistrationv1.SchemeGroupVersion.WithKind("CreateOptions"),
 		apiregistrationv1.SchemeGroupVersion.WithKind("PatchOptions"),

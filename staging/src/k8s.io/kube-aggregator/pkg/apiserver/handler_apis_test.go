@@ -35,6 +35,8 @@ import (
 	listers "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 )
 
+// TestAPIs 验证 /apis 的发现列表：聚合层自己的组永远排第一，
+// 其余组按组优先级、组内版本按版本优先级排序，即便 APIService 不可用也会列出。
 func TestAPIs(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -54,6 +56,8 @@ func TestAPIs(t *testing.T) {
 			},
 		},
 		{
+			// 中文补充：只启用 v1 时，发现结果里不应冒出 v1beta1，
+			// 防止把关闭的版本对外宣称成可用。
 			name:        "v1 only",
 			enabled:     sets.NewString("v1"),
 			apiservices: []*apiregistration.APIService{},
@@ -137,6 +141,9 @@ func TestAPIs(t *testing.T) {
 			},
 		},
 		{
+			// 中文补充：同一个 foo 组里 v1 的组优先级是 20、v2 是 1，
+			// 但期望结果仍把 v2 列为首选——组内排序只看 VersionPriority，
+			// 组优先级是用来给"组"排序的，不能混用。
 			name:    "sorting",
 			enabled: sets.NewString("v1", "v1beta1"),
 			apiservices: []*apiregistration.APIService{
@@ -253,6 +260,9 @@ func TestAPIs(t *testing.T) {
 			},
 		},
 		{
+			// 中文补充：Available=False 的 APIService 仍出现在发现列表里，
+			// 这样客户端能发现这个组的存在，只是代理还不可用；
+			// 可用性由状态字段表达，不靠"从发现列表消失"来暗示。
 			name:    "unavailable service",
 			enabled: sets.NewString("v1", "v1beta1"),
 			apiservices: []*apiregistration.APIService{
@@ -333,6 +343,8 @@ func TestAPIs(t *testing.T) {
 	}
 }
 
+// TestAPIGroupMissing 验证组级发现处理器在没有对应 APIService 时一律委托给 delegate，
+// 而不管路径带不带尾斜杠、组名是否存在；这保证底层 apiserver 的组不会被吞掉。
 func TestAPIGroupMissing(t *testing.T) {
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	handler := &apiGroupHandler{
@@ -375,6 +387,8 @@ func TestAPIGroupMissing(t *testing.T) {
 	}
 }
 
+// TestAPIGroup 验证 /apis/<group> 的结果只含指定组的版本，
+// 且组内排序独立于其他组——混入的 bar 组对象不应影响 foo 的首选版本。
 func TestAPIGroup(t *testing.T) {
 	tests := []struct {
 		name        string

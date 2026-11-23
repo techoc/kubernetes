@@ -33,16 +33,20 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试用的固定端口，仅用于构造远端 ServiceReference，不会发起真实连接。
 const (
 	testServicePort int32 = 1234
 )
 
+// 本地 APIService 以 Service 为空为标志，控制器应直接把它标记为可用。
 func newLocalAPIService(name string) *apiregistration.APIService {
 	return &apiregistration.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 }
 
+// 远端 APIService 必须带上 Service 引用，控制器才会跳过本地可用性逻辑；
+// 名字按“版本.组”拆分填入 Spec，与真实对象的命名约定一致。
 func newRemoteAPIService(name string) *apiregistration.APIService {
 	return &apiregistration.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -58,6 +62,8 @@ func newRemoteAPIService(name string) *apiregistration.APIService {
 	}
 }
 
+// 验证 sync 只对本地 APIService 写入 Available=True 的状态，
+// 对远端对象则不产生任何更新动作，因为远端可用性由另一个控制器负责。
 func TestSync(t *testing.T) {
 	tests := []struct {
 		name string
@@ -108,6 +114,8 @@ func TestSync(t *testing.T) {
 			}
 
 			// ought to have one action writing status
+			// 用动作数量判断“是否写过状态”：写状态时只应产生一次 Update，
+			// 完全不写时则没有任何动作，这样也能顺带捕获多余 API 调用。
 			if e, a := tc.expectedAction, len(fakeClient.Actions()) == 1; e != a {
 				t.Fatalf("%v expected %v, got %v", tc.name, e, fakeClient.Actions())
 			}
@@ -141,6 +149,8 @@ func TestSync(t *testing.T) {
 	}
 }
 
+// 新旧状态相同时不应发更新请求，只有条件发生变化才写回；
+// 这里用两个只有条件类型不同的对象来制造“无变化”和“有变化”两种输入。
 func TestUpdateAPIServiceStatus(t *testing.T) {
 	foo := &apiregistration.APIService{Status: apiregistration.APIServiceStatus{Conditions: []apiregistration.APIServiceCondition{{Type: "foo"}}}}
 	bar := &apiregistration.APIService{Status: apiregistration.APIServiceStatus{Conditions: []apiregistration.APIServiceCondition{{Type: "bar"}}}}

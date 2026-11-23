@@ -23,6 +23,8 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/install"
 )
 
+// 全局 scheme 让 apiserver、REST 存储和客户端共用同一份类型注册表；
+// 序列化、反序列化和版本转换都依赖它，分散注册会导致各处可用的类型不一致。
 var (
 	// Scheme defines methods for serializing and deserializing API objects.
 	Scheme = runtime.NewScheme()
@@ -31,6 +33,8 @@ var (
 	Codecs = serializer.NewCodecFactory(Scheme)
 )
 
+// 放在 init 而不是由每个调用方显式注册，避免某个调用路径漏注册后
+// 只在反序列化特定版本时才出错；代价是这个包一旦被导入就完成注册。
 func init() {
 	install.Install(Scheme)
 }

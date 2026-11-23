@@ -44,10 +44,14 @@ const (
 	aggregatorComponent string = "aggregator"
 )
 
+// 证书函数而不是固定字节：证书轮换时只需换掉函数返回的字节，
+// 不必重建代理 handler，正在处理的请求也不会读到半新半旧的凭证。
 type certKeyFunc func() ([]byte, []byte)
 
 // proxyHandler provides a http.Handler which will proxy traffic to locations
 // specified by items implementing Redirector.
+// 每个 handler 只对应一个 GroupVersion；路由在更上层完成，这里只负责
+// 按缓存的 handlingInfo 决定本地处理还是转发到后端服务。
 type proxyHandler struct {
 	// localDelegate is used to satisfy local APIServices
 	localDelegate http.Handler
@@ -59,6 +63,8 @@ type proxyHandler struct {
 	// Endpoints based routing to map from cluster IP to routable IP
 	serviceResolver ServiceResolver
 
+	// 整个处理信息作为一个值原子替换：请求要么看到旧配置要么看到新配置，
+	// 不会在 APIService 更新过程中读到互相矛盾的 service、证书和可用状态。
 	handlingInfo atomic.Value
 
 	// reject to forward redirect response
@@ -68,6 +74,8 @@ type proxyHandler struct {
 	tracerProvider tracing.TracerProvider
 }
 
+// 代理所需的全部不可变状态被打包成一个快照，由上面的 atomic.Value 整体换出。
+// 这样请求路径上不需要加锁，控制循环重建配置时也不会让请求看到中间态。
 type proxyHandlingInfo struct {
 	// local indicates that this APIService is locally satisfied
 	local bool
@@ -86,6 +94,8 @@ type proxyHandlingInfo struct {
 	// namespace is the namespace the service lives in
 	serviceNamespace string
 	// serviceAvailable indicates this APIService is available or not
+	// 状态检查在请求路径上只是快速开关：真正的健康检查由状态控制器异步做，
+	// 这里只按结果决定快速返回 503，避免请求洪峰时再去探测后端。
 	serviceAvailable bool
 	// servicePort is the port of the service this handler proxies to
 	servicePort int32

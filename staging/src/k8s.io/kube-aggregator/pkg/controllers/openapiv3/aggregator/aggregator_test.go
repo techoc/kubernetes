@@ -40,6 +40,9 @@ import (
 	kubeopenapispec "k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// testV3APIService 模拟一个只暴露 V3 OpenAPI 的聚合服务。
+// 同时处理根文档（给出 group/version 的链接）和具体版本的 spec 请求，
+// 并支持 ETag/304，用来验证聚合器是否正确透传缓存语义。
 type testV3APIService struct {
 	etag string
 	data []byte
@@ -78,6 +81,8 @@ func (h testV3APIService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// testV2APIService 模拟一个只提供 legacy V2 spec 的聚合服务，
+// 用来验证聚合器会把 V2 转换成 V3 后对外暴露。
 type testV2APIService struct{}
 
 var _ http.Handler = testV2APIService{}
@@ -91,6 +96,8 @@ func (h testV2APIService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(404)
 }
 
+// TestV2APIService 验证只提供 V2 spec 的 APIService 也能出现在 V3 发现文档中，
+// 且取回的文档已转换成 V3；最后再确认移除该 APIService 后对应路径消失。
 func TestV2APIService(t *testing.T) {
 	downloader := Downloader{}
 	pathHandler := mux.NewPathRecorderMux("aggregator_test")
@@ -147,6 +154,8 @@ func TestV2APIService(t *testing.T) {
 	}
 }
 
+// TestV3APIService 验证原生 V3 spec 能被原样聚合：
+// 发现文档里有对应路径，且取回的内容与 APIService 提供的字节完全一致。
 func TestV3APIService(t *testing.T) {
 	downloader := Downloader{}
 
@@ -189,6 +198,9 @@ func TestV3APIService(t *testing.T) {
 	assert.ElementsMatch(t, []string{openAPIV2Converter, apiService.Name}, apiServiceNames)
 }
 
+// TestV3RootAPIService 验证聚合层自身（local/root）的 API 类型也能出现在 V3 文档中。
+// 用一个 go-restful WebService 提供 APIService 的 OpenAPI 定义，
+// 检查最终文档的 operationId、$ref 等细节，确保本地类型与远端类型走的是同一套 V3 聚合流程。
 func TestV3RootAPIService(t *testing.T) {
 	ws := new(restful.WebService)
 	{
@@ -237,6 +249,9 @@ func TestV3RootAPIService(t *testing.T) {
 	assert.ElementsMatch(t, []string{"k8s_internal_local_kube_aggregator_types", openAPIV2Converter}, apiServiceNames)
 }
 
+// TestOpenAPIRequestMetrics 验证两种请求都会被计入 apiserver_request_total：
+// 访问 V3 根文档、以及访问某个 group/version 的 spec，分别对应不同的 subresource 标签。
+// 先 Reset 再用 GatherAndCompare 校验累计值，避免测试间指标相互干扰。
 func TestOpenAPIRequestMetrics(t *testing.T) {
 	metrics.Register()
 	metrics.Reset()
@@ -297,6 +312,8 @@ apiserver_request_total{code="200",component="",dry_run="",group="",resource="",
 
 }
 
+// sendReq 用内存 ResponseWriter 直接打 handler，省去起真实 HTTP 服务器；
+// 测试只关心聚合器返回的字节内容，不关心网络传输。
 func sendReq(t *testing.T, handler http.Handler, path string) []byte {
 	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
@@ -307,12 +324,16 @@ func sendReq(t *testing.T, handler http.Handler, path string) []byte {
 	return writer.Data()
 }
 
+// getTestAPIServiceOpenAPIDefinitions 为测试构造最小的 OpenAPI 定义表，
+// 只声明 APIService 这一种类型；忽略 ReferenceCallback 是因为测试定义不需要递归解析引用。
 func getTestAPIServiceOpenAPIDefinitions(_ openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
 	return map[string]openapicommon.OpenAPIDefinition{
 		"io.k8s.kube-aggregator.pkg.apis.apiregistration.v1.APIService": buildTestAPIServiceOpenAPIDefinition(),
 	}
 }
 
+// buildTestAPIServiceOpenAPIDefinition 返回一个“够用即可”的类型定义：
+// 只描述 Kind 和 object 类型，因为测试断言只比对文档结构，不关心完整字段。
 func buildTestAPIServiceOpenAPIDefinition() openapicommon.OpenAPIDefinition {
 	return openapicommon.OpenAPIDefinition{
 		Schema: kubeopenapispec.Schema{

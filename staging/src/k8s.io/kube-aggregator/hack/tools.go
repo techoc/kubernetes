@@ -17,6 +17,9 @@ limitations under the License.
 */
 
 // This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 这个包配合 tools build tag 使用，正常构建时会被排除。
+// 之所以只做空导入，是为了让 go mod 把这些仅由构建脚本使用的工具也纳入依赖管理，
+// 避免它们在执行 make update 等目标时因不在 go.mod 中而被剔除。
 package tools
 
 import _ "k8s.io/code-generator"

@@ -31,6 +31,9 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// 聚合文档至少要保证两件事：被委托方已有的路径还在，聚合器自身的
+// apiregistration 路径也被并进来。这条是最小的冒烟测试，
+// 后面的用例都在这个基线上叠加增删改。
 func TestBasicPathsMerged(t *testing.T) {
 	mux := http.NewServeMux()
 	delegationHandlers := []http.Handler{
@@ -56,6 +59,9 @@ func TestBasicPathsMerged(t *testing.T) {
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
 
+// 这个用例把 ADD 和 UPDATE 串起来：先注册一个 APIService 的路径，
+// 再替换它的 spec 并重新触发同步，最后确认旧路径消失、新路径出现。
+// 关键是验证更新走的是"替换"而不是"追加"，否则过期路径会一直挂在聚合文档里。
 func TestAddUpdateAPIService(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -133,6 +139,10 @@ func TestAddUpdateAPIService(t *testing.T) {
 // Tests that an APIService that registers OpenAPI will only have the OpenAPI
 // for its specific group version served registered.
 // See https://github.com/kubernetes/kubernetes/pull/123570 for full context.
+// 后端服务可能顺带暴露多个 group/version 的文档，但一个 APIService 只对应其中一个。
+// 这里刻意让两个 APIService 的 handler 各自夹带不属于自己的路径，
+// 验证聚合器按 APIService 声明的 GroupVersion 做裁剪，而不是照单全收。
+// 这也是上面那个 PR 修复的问题：放任不相关路径进入聚合文档会造成路由冲突。
 func TestAPIServiceOpenAPIServiceMismatch(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -227,6 +237,8 @@ func TestAPIServiceOpenAPIServiceMismatch(t *testing.T) {
 	expectNoPath(t, swagger, "/apis/a")
 }
 
+// 删除 APIService 时，它贡献的路径必须从聚合文档里同步消失，
+// 而聚合器自身的路径要保留。否则后端下线后，文档里还留着访问不到的接口。
 func TestAddRemoveAPIService(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -288,6 +300,9 @@ func TestAddRemoveAPIService(t *testing.T) {
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
 
+// 和 TestAddUpdateAPIService 不同，这里让同一个 APIService 换一个 handler，
+// 模拟后端 Pod 被替换、但 APIService 对象本身没变的场景。
+// 聚合器必须认出"名字没变、来源变了"，用新 handler 的文档覆盖旧的。
 func TestUpdateAPIService(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -362,6 +377,9 @@ func TestUpdateAPIService(t *testing.T) {
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
 
+// 某个后端拉取失败时，不能让它拖垮整个聚合文档：
+// 失败的那个跳过，其余正常后端的路径照常出现。这里同时断言同步该 APIService
+// 会返回错误，方便调用方决定是否重试，而不是静默吞掉失败。
 func TestFailingAPIServiceSkippedAggregation(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -444,6 +462,8 @@ func TestFailingAPIServiceSkippedAggregation(t *testing.T) {
 	expectPath(t, swagger, "/apis/success/v1/")
 }
 
+// 后端从失败恢复到正常之后，它贡献的路径要重新出现在聚合文档里。
+// 这个用例盯的是状态翻转：失败时的"跳过"不能被缓存成永久决定。
 func TestAPIServiceFailSuccessTransition(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -510,6 +530,9 @@ func TestAPIServiceFailSuccessTransition(t *testing.T) {
 	expectPath(t, swagger, "/apis/apiservicegroup/v1/")
 }
 
+// 注册 APIService 是元数据操作，不该同步等待后端返回文档：
+// 后端可能很慢甚至挂掉，同步等待会把整个聚合器的控制循环卡住。
+// 这里用 5 秒延迟的 handler 和 2 秒超时把这条约束钉死。
 func TestFailingAPIServiceDoesNotBlockAdd(t *testing.T) {
 	mux := http.NewServeMux()
 	var delegationHandlers []http.Handler
@@ -573,6 +596,8 @@ func TestFailingAPIServiceDoesNotBlockAdd(t *testing.T) {
 	expectNoPath(t, swagger, "/apis/failed/v1/")
 }
 
+// 这个假后端把"慢响应""返回错误""正常返回"三种行为放在一个结构里，
+// 测试只要改字段就能组合出需要的场景，不必为每个场景写一个新的 handler。
 type openAPIHandler struct {
 	delaySeconds int
 	openapi      *spec.Swagger
@@ -593,6 +618,8 @@ func (o *openAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// 每次请求都建一个临时 server，是为了让测试直接走真实的 HTTP 路径，
+// 而不是绕过 handler 去读内部结构——聚合文档最终就是经这条路径交给客户端的。
 func fetchOpenAPI(mux *http.ServeMux) (*spec.Swagger, error) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -615,6 +642,8 @@ func fetchOpenAPI(mux *http.ServeMux) (*spec.Swagger, error) {
 	return swagger, err
 }
 
+// 把"构造聚合器 + 注册路由"收成一个函数，保证每个用例测到的都是
+// 客户端真正能访问到的那套 handler，避免有人忘了调 register 而测了个空壳。
 func buildAndRegisterSpecAggregator(delegationHandlers []http.Handler, mux common.PathHandler) *specAggregator {
 	downloader := NewDownloader()
 	aggregatorSpec := &spec.Swagger{

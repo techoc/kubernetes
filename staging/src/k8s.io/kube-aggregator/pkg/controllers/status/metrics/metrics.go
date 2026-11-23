@@ -32,6 +32,8 @@ import (
  * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
  * the metric stability policy.
  */
+// 所有指标默认都是 ALPHA 稳定性：升稳定级别意味着承诺跨多个版本兼容，
+// 因此由组件所有者显式决定，而不是在代码里随手提升。
 var (
 	unavailableGaugeDesc = metrics.NewDesc(
 		"aggregator_unavailable_apiservice",
@@ -43,12 +45,15 @@ var (
 	)
 )
 
+// 把一次性计数器与持续采集的 gauge 放在同一结构里，是因为它们都由同一个
+// APIService 可用性控制器驱动；嵌入 collector 让本类型直接满足 StableCollector。
 type Metrics struct {
 	unavailableCounter *metrics.CounterVec
 
 	*availabilityCollector
 }
 
+// 构造函数不注册指标，由调用方决定注册到哪个 registry，便于测试里使用独立 registry。
 func New() *Metrics {
 	return &Metrics{
 		unavailableCounter: metrics.NewCounterVec(
@@ -64,6 +69,8 @@ func New() *Metrics {
 }
 
 // Register registers apiservice availability metrics.
+// 两类指标走不同注册入口：普通计数器走 registrationFunc，
+// 而需要自定义 Describe/Collect 的 gauge 走 StableCollector 入口。
 func (m *Metrics) Register(
 	registrationFunc func(metrics.Registerable) error,
 	customRegistrationFunc func(metrics.StableCollector) error,
@@ -86,6 +93,8 @@ func (m *Metrics) UnavailableCounter(apiServiceName, reason string) metrics.Coun
 	return m.unavailableCounter.WithLabelValues(apiServiceName, reason)
 }
 
+// 用一个 map 保存每个 APIService 的布尔可用性，Collect 时再转换成 gauge；
+// 这样 gauge 数量随对象数量变化，无需预先为每个可能的对象创建指标。
 type availabilityCollector struct {
 	metrics.BaseStableCollector
 
@@ -94,6 +103,8 @@ type availabilityCollector struct {
 }
 
 // SetUnavailableGauge set the metrics so that it reflect the current state base on availability of the given service
+// gauge 表示“当前状态”，所以每次收到 APIService 都无条件覆盖旧值，
+// 不存在累加语义。
 func (m *Metrics) SetUnavailableGauge(newAPIService *apiregistrationv1.APIService) {
 	if apiregistrationv1apihelper.IsAPIServiceConditionTrue(newAPIService, apiregistrationv1.Available) {
 		m.SetAPIServiceAvailable(newAPIService.Name)
@@ -104,12 +115,15 @@ func (m *Metrics) SetUnavailableGauge(newAPIService *apiregistrationv1.APIServic
 }
 
 // SetUnavailableCounter increases the metrics only if the given service is unavailable and its APIServiceCondition has changed
+// 计数器只在“从可用变为不可用”的瞬间自增，避免同一段不可用时间内重复计数；
+// 因此必须同时拿到新旧对象来判断状态是否真的翻转。
 func (m *Metrics) SetUnavailableCounter(originalAPIService, newAPIService *apiregistrationv1.APIService) {
 	wasAvailable := apiregistrationv1apihelper.IsAPIServiceConditionTrue(originalAPIService, apiregistrationv1.Available)
 	isAvailable := apiregistrationv1apihelper.IsAPIServiceConditionTrue(newAPIService, apiregistrationv1.Available)
 	statusChanged := isAvailable != wasAvailable
 
 	if statusChanged && !isAvailable {
+		// 新条件可能尚未写入 Reason，退化到 UnknownReason 而不是丢掉这次计数。
 		reason := "UnknownReason"
 		if newCondition := apiregistrationv1apihelper.GetAPIServiceConditionByType(newAPIService, apiregistrationv1.Available); newCondition != nil {
 			reason = newCondition.Reason
@@ -119,6 +133,7 @@ func (m *Metrics) SetUnavailableCounter(originalAPIService, newAPIService *apire
 }
 
 // Check if apiServiceStatusCollector implements necessary interface.
+// 编译期断言，防止接口签名变化后 collector 仍被注册却不被调用。
 var _ metrics.StableCollector = &availabilityCollector{}
 
 func newAvailabilityCollector() *availabilityCollector {
@@ -138,6 +153,8 @@ func (c *availabilityCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	defer c.mtx.RUnlock()
 
 	for apiServiceName, isAvailable := range c.availabilities {
+		// 指标名是“unavailable”，所以不可用时报 1、可用时报 0；
+		// 反过来看起来更直观，但与指标语义保持一致更重要。
 		gaugeValue := 1.0
 		if isAvailable {
 			gaugeValue = 0.0
@@ -161,6 +178,8 @@ func (c *availabilityCollector) SetAPIServiceUnavailable(apiServiceKey string) {
 	c.setAPIServiceAvailability(apiServiceKey, false)
 }
 
+// 写操作统一走这里，保证对 map 的访问都在同一把写锁下完成；
+// 读侧 Collect 用 RLock，允许并发抓取指标。
 func (c *availabilityCollector) setAPIServiceAvailability(apiServiceKey string, availability bool) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -169,6 +188,8 @@ func (c *availabilityCollector) setAPIServiceAvailability(apiServiceKey string, 
 }
 
 // ForgetAPIService removes the availability gauge of the given apiservice.
+// APIService 删除后必须清理，否则 gauge 会永远停留在最后一次看到的状态，
+// 让监控看到已不存在的对象。
 func (c *availabilityCollector) ForgetAPIService(apiServiceKey string) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()

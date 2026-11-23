@@ -39,6 +39,10 @@ import (
 )
 
 // AvailableConditionController handles checking the availability of registered local API services.
+//
+// 中文补充：local 指 Spec.Service 为空、请求由 delegate 直接处理的 APIService。
+// 它们不做网络探测，因此这里只负责把 Available 条件维持为真，
+// 与远端可用性控制器形成互补：后者才需要真正探活。
 type AvailableConditionController struct {
 	apiServiceClient apiregistrationclient.APIServicesGetter
 
@@ -55,6 +59,10 @@ type AvailableConditionController struct {
 }
 
 // New returns a new local availability AvailableConditionController.
+//
+// 中文补充：resync 周期设得比一般控制器短，是因为本地路由是否可用受外部网络可达性影响，
+// 仅靠 watch APIService 变更发现不了这类退化；定时重读状态能更快恢复。
+// 见注释里链接的议题。
 func New(
 	apiServiceInformer informers.APIServiceInformer,
 	apiServiceClient apiregistrationclient.APIServicesGetter,
@@ -77,6 +85,9 @@ func New(
 	// allows us to detect health in a more timely fashion when network connectivity to
 	// nodes is snipped, but the network still attempts to route there.  See
 	// https://github.com/openshift/origin/issues/17159#issuecomment-341798063
+	// 中文补充：local APIService 数量很少，所以定时全量 resync 的开销可接受；
+	// 用 AddEventHandlerWithResyncPeriod 返回的 Registration 取 HasSynced，
+	// 是为了确认 handler 真的被调过，而不只是 informer 的 store 填满了。
 	apiServiceHandler, _ := apiServiceInformer.Informer().AddEventHandlerWithResyncPeriod(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.addAPIService,
@@ -92,6 +103,8 @@ func New(
 }
 
 func (c *AvailableConditionController) sync(key string) error {
+	// 中文补充：删除事件也会入队，对象此时可能已经不存在；
+	// Forget 对应 metric 的清理，避免出现"对象没了但指标还在"的幽灵数据。
 	originalAPIService, err := c.apiServiceLister.Get(key)
 	if apierrors.IsNotFound(err) {
 		c.metrics.ForgetAPIService(key)
@@ -107,6 +120,8 @@ func (c *AvailableConditionController) sync(key string) error {
 	}
 
 	// local API services are always considered available
+	// 中文补充：只在副本上改状态，lister 缓存里的对象不能被写；
+	// 而且 UpdateStatus 前后要拿原始对象比较，副本正是为了保留这个对比基准。
 	apiService := originalAPIService.DeepCopy()
 	apiregistrationv1apihelper.SetAPIServiceCondition(apiService, apiregistrationv1apihelper.NewLocalAvailableAPIServiceCondition())
 	_, err = c.updateAPIServiceStatus(originalAPIService, apiService)
@@ -125,6 +140,8 @@ func (c *AvailableConditionController) updateAPIServiceStatus(originalAPIService
 
 	orig := apiregistrationv1apihelper.GetAPIServiceConditionByType(originalAPIService, apiregistrationv1.Available)
 	now := apiregistrationv1apihelper.GetAPIServiceConditionByType(newAPIService, apiregistrationv1.Available)
+	// 中文补充：缺失的 Available 条件按 Unknown 处理，这样和显式的 Unknown 状态
+	// 在日志里呈现一致；真正决定是否写回还是靠上面的 DeepEqual。
 	unknown := apiregistrationv1.APIServiceCondition{
 		Type:   apiregistrationv1.Available,
 		Status: apiregistrationv1.ConditionUnknown,
@@ -149,6 +166,9 @@ func (c *AvailableConditionController) updateAPIServiceStatus(originalAPIService
 }
 
 // Run starts the AvailableConditionController loop which manages the availability condition of API services.
+//
+// 中文补充：多个 worker 是安全的，因为同一 key 会被 workqueue 去重且串行处理；
+// 增加 worker 只是为了不因某个慢请求拖住其他 APIService。
 func (c *AvailableConditionController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -186,6 +206,7 @@ func (c *AvailableConditionController) processNextWorkItem() bool {
 
 	err := c.syncFn(key)
 	if err == nil {
+		// 中文补充：成功后清掉失败次数，退避重新归零，避免偶发抖动留下长尾延迟。
 		c.queue.Forget(key)
 		return true
 	}
@@ -209,6 +230,8 @@ func (c *AvailableConditionController) updateAPIService(oldObj, _ interface{}) {
 }
 
 func (c *AvailableConditionController) deleteAPIService(obj interface{}) {
+	// 中文补充：watch 的删除事件可能给 DeletedFinalStateUnknown 墓碑而不是原对象，
+	// 因为 informer 可能错过了DELETE；再解一层才能拿到名字，否则这里的入队会漏掉。
 	castObj, ok := obj.(*apiregistrationv1.APIService)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)

@@ -31,20 +31,30 @@ import (
 )
 
 const (
+	// 中文补充：远端规范的拉取比较贵，成功后果断拉长到分钟级；
+	// 本地 delegate 的规范基本是内存操作，一秒一次也无所谓，能更快跟上变化。
+	// 失败时按指数退避，上限一小时，避免后端长时间不可用时无限重试打爆它。
 	successfulUpdateDelay      = time.Minute
 	successfulUpdateDelayLocal = time.Second
 	failedUpdateMaxExpDelay    = time.Hour
 )
 
+// 中文补充：把"下一次该怎么调度"作为 sync 的返回值而不是让 sync 自己操作队列，
+// 好处是决策逻辑可测试，队列操作集中在 processNextWorkItem 一处。
 type syncAction int
 
 const (
+	// 中文补充：三种动作分别对应"按固定间隔再试""按退避再试""对象没了不用再试"。
 	syncRequeue syncAction = iota
 	syncRequeueRateLimited
 	syncNothing
 )
 
 // AggregationController periodically checks the list of group-versions handled by each APIService and updates the discovery page periodically
+//
+// 中文补充：OpenAPI v3 规范是周期性拉取而不是 watch 驱动的——APIService 的变化
+// 只能说明"该重新拉了"，并不能告诉你远端规范的内容；内容只能靠定时同步获得。
+// syncHandler 做成字段是为了在单测里替换掉真实的下载逻辑。
 type AggregationController struct {
 	openAPIAggregationManager aggregator.SpecProxier
 	queue                     workqueue.TypedRateLimitingInterface[string]
@@ -66,6 +76,8 @@ func NewAggregationController(openAPIAggregationManager aggregator.SpecProxier) 
 	c.syncHandler = c.sync
 
 	// update each service at least once, also those which are not coming from APIServices, namely local services
+	// 中文补充：local delegate 不会触发 AddAPIService，所以启动时主动入队一次，
+	// 否则这部分规范永远不会被拉取；延后一秒是给 generic server 的初始化留点时间。
 	for _, name := range openAPIAggregationManager.GetAPIServiceNames() {
 		c.queue.AddAfter(name, time.Second)
 	}
@@ -118,6 +130,8 @@ func (c *AggregationController) processNextWorkItem(logger klog.Logger) bool {
 
 	action, err := c.syncHandler(key)
 	if err == nil {
+		// 中文补充：成功后清掉失败计数，下一次退避重新从最小值开始；
+		// 否则偶发失败会让这个 key 长期停留在很长的退避间隔上。
 		c.queue.Forget(key)
 	} else {
 		utilruntime.HandleError(fmt.Errorf("loading OpenAPI spec for %q failed with: %v", key, err))
@@ -143,6 +157,8 @@ func (c *AggregationController) processNextWorkItem(logger klog.Logger) bool {
 }
 
 func (c *AggregationController) sync(key string) (syncAction, error) {
+	// 中文补充：ErrAPIServiceNotFound 说明对象已被删除，属于正常收敛路径，
+	// 不当成错误上报也不再入队；其他错误才走退避重试。
 	if err := c.openAPIAggregationManager.UpdateAPIServiceSpec(key); err != nil {
 		if err == aggregator.ErrAPIServiceNotFound {
 			return syncNothing, nil
@@ -153,6 +169,9 @@ func (c *AggregationController) sync(key string) (syncAction, error) {
 }
 
 // AddAPIService adds a new API Service to OpenAPI Aggregation.
+//
+// 中文补充：local APIService 没有可拉取的远端规范，启动时已在构造函数里统一入队，
+// 这里再入队只会产生重复项，因此直接跳过。
 func (c *AggregationController) AddAPIService(handler http.Handler, apiService *v1.APIService) {
 	if apiService.Spec.Service == nil {
 		return
@@ -171,6 +190,8 @@ func (c *AggregationController) UpdateAPIService(handler http.Handler, apiServic
 	if c.queue.NumRequeues(key) > 0 {
 		// The item has failed before. Remove it from failure queue and
 		// update it in a second
+		// 中文补充：配置刚变更过，之前失败的原因很可能已经消失，
+		// 没必要让它继续按旧的长退避等待；清掉失败记录，一秒后立刻重试。
 		c.queue.Forget(key)
 		c.queue.AddAfter(key, time.Second)
 	}
@@ -181,5 +202,7 @@ func (c *AggregationController) RemoveAPIService(apiServiceName string) {
 	c.openAPIAggregationManager.RemoveAPIServiceSpec(apiServiceName)
 	// This will only remove it if it was failing before. If it was successful, processNextWorkItem will figure it out
 	// and will not add it again to the queue.
+	// 中文补充： Forget 只清失败计数，不会撤销已经 AddAfter 的定时项；
+	// 那一项到点后 sync 会拿到 ErrAPIServiceNotFound 并自然收敛。
 	c.queue.Forget(apiServiceName)
 }

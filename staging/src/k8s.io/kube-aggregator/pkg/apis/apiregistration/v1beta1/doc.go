@@ -14,6 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 指令 +k8s:deepcopy-gen=package 为包内类型生成 DeepCopy 方法；
+// 指令 +k8s:protobuf-gen=package 生成 protobuf 序列化代码；
+// 指令 +k8s:conversion-gen=k8s.io/kube-aggregator/pkg/apis/apiregistration 生成内部版本与本版本之间的转换；
+// 指令 +k8s:openapi-gen=true 生成 OpenAPI 定义；
+// 指令 +k8s:defaulter-gen=TypeMeta 只为内嵌 TypeMeta 的资源类型生成默认值函数；
+// 指令 +k8s:prerelease-lifecycle-gen=true 生成预发布生命周期元数据；
+// 指令 +k8s:openapi-model-package=io.k8s.kube-aggregator.pkg.apis.apiregistration.v1beta1
+// 指定本包生成模型的 OpenAPI 包名，避免同名类型在不同版本间撞名。
+// 指令 +groupName=apiregistration.k8s.io 声明这个包对外服务的 API 组名。
+// 这些指令都在包注释之前，生成器认的就是这个位置；下面另起一段写包本身是做什么的。
+
 // +k8s:deepcopy-gen=package
 // +k8s:protobuf-gen=package
 // +k8s:conversion-gen=k8s.io/kube-aggregator/pkg/apis/apiregistration

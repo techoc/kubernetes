@@ -21,6 +21,9 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// regeneration 指标用于观察 OpenAPI v2 规范重建的频率与耗时；
+// 计数按 APIService 和触发原因拆分，便于定位是哪个聚合 API 的变动引发了重建，
+// 而耗时只按原因拆分，避免高基数标签。
 var (
 	regenerationCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -41,6 +44,8 @@ var (
 )
 
 func init() {
+	// 在包初始化时注册，保证使用该包的二进制只要导入就暴露这些指标，
+	// 不需要每个调用方显式注册；MustRegister 在重复注册时直接 panic 以便尽早发现错误。
 	legacyregistry.MustRegister(regenerationCounter)
 	legacyregistry.MustRegister(regenerationDurationGauge)
 }
